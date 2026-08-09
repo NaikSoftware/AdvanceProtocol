@@ -16,3 +16,17 @@ static func entry_cost(unit: Unit, penalty: int) -> int:
 
 static func entry_cost_at(unit: Unit, board: Board, p: Vector2i) -> int:
 	return entry_cost(unit, board.penalty_at(p))
+
+static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos: Vector2i) -> int:
+	## §3.4. Цілі числа, без тригонометрії.
+	var v: Vector2i = attacker_pos - target_pos
+	if v == Vector2i.ZERO:
+		return UnitTypes.ArmourSector.FRONT
+	var f: Vector2i = Board.DIRS_8[target_facing]
+	var dot: int = f.x * v.x + f.y * v.y
+	var len_sq_f: int = f.x * f.x + f.y * f.y
+	var len_sq_v: int = v.x * v.x + v.y * v.y
+	var cos2_scaled: int = (dot * dot << 5) / (len_sq_f * len_sq_v)
+	if cos2_scaled <= 16:
+		return UnitTypes.ArmourSector.SIDE
+	return UnitTypes.ArmourSector.REAR if dot < 0 else UnitTypes.ArmourSector.FRONT
