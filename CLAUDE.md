@@ -169,15 +169,20 @@ The AP cost is what makes this a trade rather than free damage: a unit that fire
 its own turn, and cannot move or shoot when its owner's turn comes. It also means a unit can
 retaliate at most once per round — after the first, it no longer has the AP to qualify.
 
-**Retaliation deliberately does not require the retaliator to see its attacker**, even though an
-ordinary shot does. Being shot at is knowing where the shot came from; demanding separate vision
-would mean a unit could be fired on and have no right to answer in the direction it was hit from.
-The reference gates its counter-attack on AP, range and class only, and this matches it. The
-asymmetry is a decision, not an oversight — record it here if it is ever revisited.
+**The retaliator must be able to see its attacker.** A return shot obeys the same visibility rule
+as any other shot: the original attacker's tile has to be visible to the retaliating player at
+that moment. The reference gates its counter-attack on AP, range and class alone, and this is a
+deliberate departure from it — recorded here as §4 requires.
 
-One consequence is worth knowing, because it is a real tactic rather than a quirk: artillery has
-range 5 and vision 3, so a gun duel at range 5 is mutual even though neither piece can see the
-other. That is counter-battery fire, and it is a fair thing for the game to have.
+The consequence is the point: **an attacker the defender cannot see fires with impunity.** That
+makes vision a weapon rather than a convenience, and it gives the roster's asymmetries teeth:
+
+- Artillery has range 5 and vision 3. Firing from maximum range at something that has no spotter
+  covering the gun is genuinely free — and two guns at range 5 do *not* trade, because neither
+  sees the other. Counter-battery fire needs eyes, not just range.
+- Infantry sees furthest (5) of anything in the game. A rifle squad forward of the line is what
+  turns your armour's shots into safe ones and the enemy's into answered ones.
+- Killing the enemy's spotters is therefore an attack on their ability to shoot back at all.
 
 This reshapes the economics of shooting, and that is the point:
 
