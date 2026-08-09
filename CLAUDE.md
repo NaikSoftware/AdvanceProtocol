@@ -148,6 +148,38 @@ Keep it that way unless a playtest says otherwise — it keeps the two-zone UI h
 
 **Minimum damage is 10.** Nothing is ever fully immune.
 
+### 3.3.1 Retaliation
+
+**A target that survives a shot fires back, immediately, in the same exchange.** Confirmed against
+the reference (`class_1.java`, the attack state machine: after the shot resolves, if the target's
+HP is still above zero the roles swap and the same damage path runs in reverse).
+
+```
+Retaliation
+  triggers  : an attack resolved and the target is still alive
+  requires  : retaliator has >= fire_cost AP, and the original attacker is within
+              the retaliator's range; ENGINEER never retaliates (it has no weapon)
+  damage    : the ordinary damage formula, no reduction — armour sector computed
+              from the original attacker's facing, as for any shot
+  cost      : sets the retaliator's AP to 0, exactly as firing does
+  frequency : at most once per exchange; a retaliation never provokes another
+```
+
+The AP cost is what makes this a trade rather than free damage: a unit that fires back has spent
+its own turn, and cannot move or shoot when its owner's turn comes. It also means a unit can
+retaliate at most once per round — after the first, it no longer has the AP to qualify.
+
+This reshapes the economics of shooting, and that is the point:
+
+- Firing on a healthy target inside its range invites a full-strength answer.
+- Artillery finally has a concrete reason to hold maximum range: at 5 against a tank's 4, it
+  shoots without reply. The same is true of the drone strike at range 5.
+- Finishing a wounded unit becomes a rule rather than a habit — the dead do not shoot back.
+- Flanking costs more than it did: closing to a side or rear arc usually puts you inside the
+  target's own range.
+
+Retaliation damage feeds the retaliator's class veterancy pool like any other damage.
+
 ### 3.4 Directional armour
 
 Each unit carries three armour values: `front`, `side`, `rear`. The sector is chosen from the

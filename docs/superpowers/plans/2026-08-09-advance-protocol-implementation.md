@@ -2603,6 +2603,45 @@ git commit -m "feat(core): fire command with armour sector preview"
 
 ---
 
+### Task 1.14b: Відповідний вогонь (§3.3.1)
+
+**Files:**
+- Modify: `core/commands/fire_command.gd` (спільний хвіст)
+- Modify: `core/commands/drone_command.gd`
+- Modify: `core/events.gd`
+- Test: `tests/core/test_retaliation.gd`
+
+**Interfaces:**
+- Produces:
+  - `Events.ShotRetaliated(attacker_id: int, target_id: int, sector: int)` — окремий клас,
+    а не прапорець у `ShotFired`: вигляд мусить відрізняти відповідь від пострілу, не
+    здогадуючись про це з порядку подій.
+  - `FireCommand._retaliate(state, original_attacker: Unit, target: Unit) -> Array[Events.BattleEvent]`
+
+Механіка з §3.3.1: ціль, яка вижила, стріляє у відповідь тим самим кидком, якщо в неї
+лишилось `>= fire_cost` AP і атакувальник у її дальності; інженер не відповідає ніколи.
+Відповідь обнуляє AP відповідача (`exhaust()`), тож вона коштує йому власного ходу — і
+саме тому відповісти можна щонайбільше раз за раунд.
+
+**Відповідь не породжує відповіді.** Реалізується прямим викликом розрахунку шкоди, а не
+рекурсивним `apply()` — інакше два юніти в дальності одне одного розстріляли б один одного
+до смерті за один постріл.
+
+Викликається і з `FireCommand`, і з `DroneCommand`: дрон — теж атака, і якщо ціль
+дотягується до штурмового відділення, вона відповідає. На практиці дальність дрона 5
+переважає дальність усієї техніки, тож це рідкість — але правило одне, без винятків.
+
+- [ ] **Step 1: Написати падаючий тест** — `tests/core/test_retaliation.gd`
+- [ ] **Step 2: Додати `ShotRetaliated` у `core/events.gd`** (і у вичерпний тест конструкторів)
+- [ ] **Step 3: Реалізувати `_retaliate` і підключити до обох команд**
+- [ ] **Step 4: Запустити — усе має пройти, коміт**
+
+```bash
+git commit -m "feat(core): retaliation fire from a surviving target"
+```
+
+---
+
 ### Task 1.15: `DroneCommand` — удар дроном штурмового відділення
 
 **Files:**
