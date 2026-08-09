@@ -2230,6 +2230,16 @@ class_name Command
 extends RefCounted
 ## База для всіх дій. validate() повертає порожній рядок, якщо дія дозволена,
 ## або ключ перекладу помилки — щоб UI показав причину без власної логіки правил.
+##
+## Конвенція для КОЖНОЇ команди, без винятків:
+##   1. `apply()` починається з `assert(validate(state) == "", ...)`. Диспетчера,
+##      який гарантував би порядок, поки немає, тож інваріант тримає assert.
+##   2. `apply()` не перераховує правила, які вже вирішив `validate()`, але й не
+##      довіряє їм наосліп у release-збірці, де assert вирізано: кожне звернення
+##      до значення, що існує лише для валідної дії, має безпечний запасний шлях,
+##      і цей шлях ніколи не буває вигіднішим за легальну дію.
+##   3. Перевірка `state.is_over()` — у validate() кожної команди. Матч, що
+##      завершився, не приймає жодних дій.
 
 func validate(_state: BattleState) -> String:
 	return "ERR_NOT_IMPLEMENTED"
@@ -2255,6 +2265,8 @@ static func create(p_unit_id: int, p_target: Vector2i, p_facing: int) -> MoveCom
 	return c
 
 func validate(state: BattleState) -> String:
+	if state.is_over():
+		return "ERR_MATCH_OVER"
 	var u: Unit = state.get_unit(unit_id)
 	if u == null or not u.is_alive():
 		return "ERR_NO_SUCH_UNIT"
@@ -2272,13 +2284,18 @@ func validate(state: BattleState) -> String:
 	return ""
 
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
+	assert(validate(state) == "", "apply() без успішного validate()")
 	var out: Array[Events.BattleEvent] = []
 	var u: Unit = state.get_unit(unit_id)
 	var occupied: Dictionary = state.occupied_map()
 	occupied.erase(u.pos)
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	var path: Array[Vector2i] = Pathing.path_to(zones, target)
-	var spent: int = zones.cost_to(target)
+	# cost_to() кличеться лише під can_reach(). У release-збірці assert вирізано,
+	# тож недосяжна ціль повернула б −1, а spend_ap(−1) ДОДАВ би юнітові очко дії:
+	# нелегальний хід ставав би вигіднішим за легальний. Запасний шлях — списати
+	# все, що є: помилка не має винагороджуватись.
+	var spent: int = zones.cost_to(target) if zones.can_reach(target) else u.ap
 
 	var final_facing: int = facing
 	if final_facing < 0:
@@ -2290,7 +2307,12 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	u.facing = final_facing
 	u.spend_ap(spent)
 
-	out.append(Events.UnitMoved.new(unit_id, path, final_facing))
+	# Поворот на місці — це UnitTurned, а не UnitMoved з порожнім шляхом:
+	# інакше вигляд мусив би сам розрізняти ці випадки за довжиною масиву.
+	if path.is_empty():
+		out.append(Events.UnitTurned.new(unit_id, final_facing))
+	else:
+		out.append(Events.UnitMoved.new(unit_id, path, final_facing))
 	out.append(Events.ApChanged.new(unit_id, u.ap))
 	out.append_array(state.refresh_vision(u.owner))
 	# міни під ногами обробляються в Task 1.16 — там сюди додається виклик Mines.step_on()
