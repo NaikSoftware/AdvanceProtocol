@@ -2467,8 +2467,31 @@ func test_preview_reports_sector_and_bounds() -> void:
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)   # дивиться на схід, атака зі заходу
 	var p: Dictionary = FireCommand.preview(state, a.id, t.id)
 	assert_eq(p["sector"], UnitTypes.ArmourSector.REAR)
-	assert_true(p["min"] <= p["max"])
-	assert_true(p["min"] >= Rules.MIN_DAMAGE)
+	# Конкретні числа, а не `min <= max`: остання перевірка не може впасти за
+	# побудовою, бо обидва значення походять з одного джерела. Середній танк (95)
+	# по кормі легкої машини (броня 10), ветеранство 0:
+	#   мін = 0.75*95 + 0 − (0.75*10 + rand_max(2)) = 61.75 → 61
+	#   макс = 0.75*95 + rand_max(23) − (0.75*10 + 0)  = 86.75 → 86
+	assert_eq(p["min"], 61, "нижня межа — нульовий кидок атаки і максимальний кидок броні")
+	assert_eq(p["max"], 86, "верхня межа — максимальний кидок атаки і нульовий кидок броні")
+
+func test_preview_brackets_every_real_roll_and_is_tight() -> void:
+	# Прев'ю бреше в обидва боки однаково погано: завузько — гравець ризикує
+	# наосліп, зашироко — прогноз марний. Тому перевіряємо і охоплення, і щільність.
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	var p: Dictionary = FireCommand.preview(state, a.id, t.id)
+	var seen_min: bool = false
+	var seen_max: bool = false
+	for s in 400:
+		var r := RandomNumberGenerator.new()
+		r.seed = s
+		var v: int = Rules.compute_damage(r, a, t, 0, p["sector"], Rules.distance_sq(a.pos, t.pos))
+		assert_between(v, p["min"], p["max"], "жоден реальний кидок не виходить за межі прев\'ю")
+		seen_min = seen_min or v == p["min"]
+		seen_max = seen_max or v == p["max"]
+	assert_true(seen_min, "нижня межа досяжна, а не вигадана із запасом")
+	assert_true(seen_max, "верхня межа досяжна — інакше прев\'ю занижує ризик")
 
 func test_preview_does_not_disturb_the_rng() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
@@ -2556,24 +2579,18 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	return out
 
 static func preview(state: BattleState, unit_id: int, target_id: int) -> Dictionary:
-	## Аналітичні межі, без жодного кидка — RNG матчу тут не чіпається.
+	## Точні межі формули, без жодного кидка — RNG матчу тут не чіпається.
+	## Межі бере Rules.damage_bounds(), а не перебір сідів: 64 проби давали
+	## заниженy стелю (для арти по танку простір результатів — тисячі комбінацій,
+	## і справжній максимум у вибірку майже ніколи не потрапляв). Гравцеві не
+	## можна показувати хибно вузький діапазон у мить, коли він приймає рішення.
 	var a: Unit = state.get_unit(unit_id)
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
 	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
-	var lo := RandomNumberGenerator.new()
-	var hi := RandomNumberGenerator.new()
-	var lo_value: int = Rules.MIN_DAMAGE
-	var hi_value: int = Rules.MIN_DAMAGE
-	# Межі знаходяться перебором сідів: формула монотонна за кожним кидком,
-	# але множники роблять аналітичний вивід крихким — 64 проби дають стабільні межі.
-	for s in 64:
-		lo.seed = s
-		var v: int = Rules.compute_damage(lo, a, t, level, sector, dist_sq)
-		lo_value = v if s == 0 else mini(lo_value, v)
-		hi_value = v if s == 0 else maxi(hi_value, v)
-	return {"sector": sector, "min": lo_value, "max": hi_value}
+	var bounds: Vector2i = Rules.damage_bounds(a, t, level, sector, dist_sq)
+	return {"sector": sector, "min": bounds.x, "max": bounds.y}
 ```
 
 - [ ] **Step 4: Запустити — усе має пройти, коміт**
