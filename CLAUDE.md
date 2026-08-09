@@ -169,6 +169,16 @@ The AP cost is what makes this a trade rather than free damage: a unit that fire
 its own turn, and cannot move or shoot when its owner's turn comes. It also means a unit can
 retaliate at most once per round — after the first, it no longer has the AP to qualify.
 
+**Retaliation deliberately does not require the retaliator to see its attacker**, even though an
+ordinary shot does. Being shot at is knowing where the shot came from; demanding separate vision
+would mean a unit could be fired on and have no right to answer in the direction it was hit from.
+The reference gates its counter-attack on AP, range and class only, and this matches it. The
+asymmetry is a decision, not an oversight — record it here if it is ever revisited.
+
+One consequence is worth knowing, because it is a real tactic rather than a quirk: artillery has
+range 5 and vision 3, so a gun duel at range 5 is mutual even though neither piece can see the
+other. That is counter-battery fire, and it is a fair thing for the game to have.
+
 This reshapes the economics of shooting, and that is the point:
 
 - Firing on a healthy target inside its range invites a full-strength answer.
