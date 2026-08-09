@@ -123,3 +123,22 @@ func test_rng_state_round_trip_matches_fresh_draws() -> void:
 		actual.append(Rules.roll(b.rng, 1000))
 
 	assert_eq(actual, expected, "після відновлення RNG продовжує, а не перезапускає послідовність")
+
+func test_to_dict_snapshot_is_immune_to_later_mutation() -> void:
+	## to_dict() мусить копіювати кожен per-player масив, а не посилатись на живий.
+	## Інакше знімок, узятий на ходу 3, тихо почне повідомляти про розкриття міни
+	## чи елімінацію, що сталися на ходу 7 — той самий клас бага, що й витік туману,
+	## лише через інші двері (реплей замість збереження).
+	var a: BattleState = _populated_state()
+	var snapshot: Dictionary = BattleSerializer.to_dict(a)
+
+	var mine: Mines.Mine = a.mines[0]
+	mine.known_to[1] = true
+	a.objectives[0].seen_by[0] = true
+	a.eliminated[1] = true
+
+	var snap_mine: Dictionary = snapshot["mines"][0]
+	assert_false((snap_mine["known_to"] as Array)[1], "знімок не бачить пізнішого розкриття міни")
+	var snap_obj: Dictionary = snapshot["objectives"][0]
+	assert_false((snap_obj["seen_by"] as Array)[0], "знімок не бачить пізнішого виявлення цілі")
+	assert_false((snapshot["eliminated"] as Array)[1], "знімок не бачить пізнішої елімінації")

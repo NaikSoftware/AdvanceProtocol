@@ -25,10 +25,10 @@ static func to_dict(state: BattleState) -> Dictionary:
 		})
 	var mines: Array = []
 	for m in state.mines:
-		mines.append({"x": m.pos.x, "y": m.pos.y, "owner": m.owner, "known_to": m.known_to})
+		mines.append({"x": m.pos.x, "y": m.pos.y, "owner": m.owner, "known_to": m.known_to.duplicate()})
 	var objectives: Array = []
 	for o in state.objectives:
-		objectives.append({"x": o.pos.x, "y": o.pos.y, "owner": o.owner, "intact": o.intact, "seen_by": o.seen_by})
+		objectives.append({"x": o.pos.x, "y": o.pos.y, "owner": o.owner, "intact": o.intact, "seen_by": o.seen_by.duplicate()})
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
@@ -47,7 +47,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"seed_value": state.seed_value,
 		"rng_state": str(state.rng.state),
 		"winner": state.winner,
-		"eliminated": state.eliminated,
+		"eliminated": state.eliminated.duplicate(),
 		"next_unit_id": state._next_unit_id,
 		"units": units, "mines": mines, "objectives": objectives,
 		"vision": vision, "veterancy": veterancy,
@@ -71,7 +71,6 @@ static func from_dict(data: Dictionary) -> BattleState:
 	state.turn_number = int(data["turn_number"])
 	state.seed_value = int(data["seed_value"])
 	state.rng = RandomNumberGenerator.new()
-	state.rng.seed = state.seed_value
 	state.rng.state = int(data["rng_state"])
 	state.winner = int(data["winner"])
 
