@@ -72,6 +72,20 @@ func test_elimination_is_detected_and_reported() -> void:
 	assert_true(s.is_over())
 	assert_eq(s.winner, 0)
 
+func test_match_ends_in_a_draw_when_nobody_survives() -> void:
+	# Досяжно не лише взаємним знищенням: карта, де жоден гравець не має юнітів,
+	# дає цей стан на першій же перевірці. Без цього матч зависав би назавжди.
+	var state: BattleState = BattleState.create(Board.create(8, 8, Terrain.GroundState.DRY), 2, 1)
+	var events: Array[Events.BattleEvent] = state.check_elimination()
+	assert_true(state.is_over(), "матч мусить завершитися, а не зависнути")
+	assert_eq(state.winner, BattleState.DRAW, "нічия — не те саме, що незавершена гра")
+	var ended: bool = false
+	for e in events:
+		if e is Events.MatchEnded:
+			ended = true
+			assert_eq((e as Events.MatchEnded).winner, BattleState.DRAW)
+	assert_true(ended, "MatchEnded має бути в подіях")
+
 func test_each_player_gets_its_own_vision() -> void:
 	var s: BattleState = _state(3)
 	assert_eq(s.vision.size(), 3)
