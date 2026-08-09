@@ -1087,7 +1087,10 @@ func _max(a: Array[int]) -> int:
 	return m
 
 func test_damage_never_below_ten() -> void:
-	var s: Array[int] = _samples(INF_RIFLE, HEAVY_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
+	# Сценарій має справді впиратися в підлогу: легка машина (60) у лоб важкому танку (56)
+	# дає 45 + rand(0,15) − 42 − rand(0,14), тобто здебільшого відʼємне число.
+	# Піхота тут не годиться: вона броню ігнорує, тож 0.75*15 = 11.25 → 11, і 10 недосяжне.
+	var s: Array[int] = _samples(LIGHT_CAR, HEAVY_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
 	assert_eq(_min(s), 10, "§3.3: мінімум 10, ніщо не є невразливим")
 
 func test_infantry_ignores_armour_entirely() -> void:
@@ -1105,7 +1108,10 @@ func test_infantry_base_range_band() -> void:
 func test_infantry_close_assault_is_quadruple() -> void:
 	var far: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
 	var close: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 2)
-	assert_eq(_min(close), _min(far) * 4, "§3.3: dist_sq <= 2 множить на 4")
+	# ×4 множить float ДО єдиного int() наприкінці: int(11.25*4) = 45, а не int(11.25)*4 = 44.
+	# Тому рівність тут хибна — правильне співвідношення має люфт на зрізання.
+	assert_between(_min(close), _min(far) * 4, _min(far) * 4 + 3,
+		"§3.3: dist_sq <= 2 множить на 4, з поправкою на зрізання int()")
 
 func test_close_assault_boundary_is_dist_sq_two() -> void:
 	var at_two: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 2)
@@ -1115,7 +1121,9 @@ func test_close_assault_boundary_is_dist_sq_two() -> void:
 func test_veterancy_adds_one_eighth_of_attack_per_level() -> void:
 	var v0: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 0, UnitTypes.ArmourSector.REAR, 9)
 	var v4: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 4, UnitTypes.ArmourSector.REAR, 9)
-	assert_eq(_min(v4) - _min(v0), 95 * 4 / 8, "+A*V/8")
+	# 95*4/8 у GDScript — це ціле 47, а у формулі член float: 47.5. Зрізання наприкінці
+	# дає різницю 47 або 48 залежно від дробової частини бази, тож фіксуємо обидва.
+	assert_between(_min(v4) - _min(v0), 47, 48, "+A*V/8 = 47.5")
 
 func test_engineers_get_no_veterancy_bonus() -> void:
 	var v0: Array[int] = _samples(ENGINEER, LIGHT_CAR, 0, UnitTypes.ArmourSector.FRONT, 9)
@@ -1144,9 +1152,12 @@ func test_artillery_halved_against_light_vehicles() -> void:
 	assert_true(_min(vs_light) < _min(vs_tank), "легка техніка отримує половину")
 
 func test_armour_piercing_quartered_against_infantry() -> void:
+	# Порівняння має ізолювати саме ділення на 4, тож обидві цілі мають нульову броню
+	# в обраному секторі: у польової гармати корма 0, у піхоти броні немає взагалі.
+	# (Порівняння з лобом легкої машини (27) змішувало б /4 з відніманням броні.)
 	var vs_inf: Array[int] = _samples(MEDIUM_TANK, INF_RIFLE, 0, UnitTypes.ArmourSector.FRONT, 9)
-	var vs_light: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 0, UnitTypes.ArmourSector.FRONT, 9)
-	assert_true(_min(vs_inf) * 3 < _min(vs_light), "§3.3: танк/арта по піхоті — /4")
+	var vs_gun: Array[int] = _samples(MEDIUM_TANK, FIELD_GUN, 0, UnitTypes.ArmourSector.REAR, 9)
+	assert_true(_min(vs_inf) * 3 < _min(vs_gun), "§3.3: танк/арта по піхоті — /4")
 
 func test_light_vehicles_do_not_take_the_infantry_penalty() -> void:
 	# §3.9: саме тому легка техніка — відповідь на дронарів
