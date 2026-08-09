@@ -2,7 +2,10 @@ class_name Mines
 extends RefCounted
 ## §3.11. Видимість міни ведеться на гравця — так само, як туман тайлів.
 
-const DAMAGE: int = 120
+## §4: у референсі (`class_1.method_105`) міна завдає `90 + rand(0, 90)`, а не фіксовану
+## величину. Пласке число зробило б міну єдиним джерелом шкоди в грі, яке не кидається.
+const DAMAGE_BASE: int = 90
+const DAMAGE_ROLL: int = 90
 const REVEAL_RADIUS: int = 1
 
 class Mine extends RefCounted:
@@ -56,7 +59,7 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 		return out
 	state.mines.erase(m)
 	out.append(Events.MineTriggered.new(m.pos, unit.id))
-	var applied: int = mini(DAMAGE, unit.hp)
+	var applied: int = mini(DAMAGE_BASE + Rules.roll(state.rng, DAMAGE_ROLL), unit.hp)
 	unit.hp -= applied
 	out.append(Events.DamageDealt.new(unit.id, applied, unit.hp))
 	if not unit.is_alive():

@@ -114,3 +114,19 @@ func test_a_minefield_cannot_be_crossed_by_stopping_past_it() -> void:
 	MoveCommand.create(u.id, Vector2i(4, 5), -1).apply(state)
 	assert_eq(u.pos, Vector2i(1, 5), "рух обривається на міні, а не проходить крізь неї")
 	assert_true(state.mines.is_empty(), "міна витрачена")
+
+func test_a_unit_killed_by_a_mine_stops_contributing_vision() -> void:
+	# Пришпилює те, що відхилений фінд рев'ю намагався б "полагодити" —
+	# обгорнути виклики видимості/розкриття міни в if u.is_alive(): це саме
+	# та зміна, яку не можна вносити, бо вона лишає видимість мертвого юніта
+	# на дошці. refresh_vision() після смерті — обов'язковий виклик, не зайвий.
+	var u: Unit = state.add_unit(0, 0, Vector2i(0, 5), 2)   # піхота, vision 5
+	u.hp = 90   # гарантована смерть: міна тепер завдає 90 + rand(0, 90), капується по hp юніта
+	state.refresh_vision(0)
+	assert_true(state.vision[0].is_visible(Vector2i(5, 5)),
+		"передумова: юніт бачить (5,5) з (0,5) — vision 5, dist_sq точно на межі")
+	Mines.place(state, Vector2i(1, 5), 1)
+	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+	assert_false(u.is_alive(), "передумова: міна гарантовано вбиває при hp <= 90")
+	assert_false(state.vision[0].is_visible(Vector2i(5, 5)),
+		"мертвий юніт не має продовжувати світити видимість")
