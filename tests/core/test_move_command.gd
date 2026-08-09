@@ -115,6 +115,90 @@ func test_a_minefield_cannot_be_crossed_by_stopping_past_it() -> void:
 	assert_eq(u.pos, Vector2i(1, 5), "рух обривається на міні, а не проходить крізь неї")
 	assert_true(state.mines.is_empty(), "міна витрачена")
 
+func test_several_partial_moves_cost_the_same_as_one_direct_move() -> void:
+	# §3.2, «рух витрачається, а не фіксується»: два часткові кроки мусять коштувати
+	# рівно стільки ж AP, скільки один прямий хід на ту саму сумарну відстань.
+	# Медіум танк (id 5): max_ap 48, cross_country 12; на дорозі penalty 0, тож
+	# entry_cost = max(10, 10+0-12) = 10 за тайл — підлога зрізає cross_country
+	# повністю, і кожен тайл коштує однаково незалежно від того, скільки їх лишилось.
+	# Два кроки по 2 тайли: 20 + 20 = 40 AP, як і прямий хід на 4 тайли.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	MoveCommand.create(u.id, Vector2i(2, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(4, 5), -1).apply(state)
+	assert_eq(u.pos, Vector2i(4, 5))
+	assert_eq(u.ap, 8, "48 - (20 + 20) = 8 — точно як один прямий хід на 4 тайли")
+
+func test_partial_moves_leave_enough_ap_to_fire() -> void:
+	# Суть правила: зони — про сумарно витрачений AP, а не про кількість окремих
+	# рухів. 48 - (10 + 10) = 28 AP лишається, це >= fire_cost 20 — золота зона,
+	# і постріл після двох часткових рухів мусить лишатись легальним.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	var target: Unit = state.add_unit(0, 1, Vector2i(4, 5), 0)
+	state.begin_turn()
+	MoveCommand.create(u.id, Vector2i(1, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(2, 5), -1).apply(state)
+	assert_eq(u.ap, 28, "48 - (10 + 10) = 28")
+	var fire: FireCommand = FireCommand.create(u.id, target.id)
+	assert_eq(fire.validate(state), "")
+	var before_hp: int = target.hp
+	fire.apply(state)
+	assert_true(target.hp < before_hp, "постріл після часткових рухів дійсно влучає")
+
+func test_partial_moves_into_the_red_zone_forecloses_firing() -> void:
+	# 48 - (20 + 10) = 18 AP лишається, це < fire_cost 20 — червона зона: постріл
+	# має бути відхилений, і причина мусить бути саме нестача AP, з точним кодом.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	var target: Unit = state.add_unit(0, 1, Vector2i(9, 9), 0)
+	MoveCommand.create(u.id, Vector2i(2, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+	assert_eq(u.ap, 18, "48 - (20 + 10) = 18")
+	assert_eq(FireCommand.create(u.id, target.id).validate(state), "ERR_NOT_ENOUGH_AP")
+
+func test_firing_after_partial_moves_forecloses_further_movement() -> void:
+	# §3.2: постріл — єдине, що завершує активність юніта, незалежно від того,
+	# скількома окремими кроками він до цього рухався. На відміну від
+	# test_unit_that_fired_cannot_move (де прапорець виставлений напряму через
+	# u.exhaust()), тут has_fired виникає зі справжнього FireCommand.apply() після
+	# двох часткових рухів, і перевіряється точний код відмови, а не лише його
+	# непорожність.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	var target: Unit = state.add_unit(0, 1, Vector2i(4, 5), 0)
+	state.begin_turn()
+	MoveCommand.create(u.id, Vector2i(1, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(2, 5), -1).apply(state)
+	FireCommand.create(u.id, target.id).apply(state)
+	assert_eq(MoveCommand.create(u.id, Vector2i(3, 5), -1).validate(state), "ERR_ALREADY_FIRED")
+
+func test_zones_predict_whether_firing_is_legal_after_the_move() -> void:
+	# Звʼязує обіцянку UI (Pathing.compute_zones) із фактичною поведінкою команд:
+	# золота зона мусить означати рівно "після ходу лишиться AP на постріл", а
+	# червона — рівно "не лишиться".
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	var occupied: Dictionary = state.occupied_map()
+	occupied.erase(u.pos)
+	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
+	var gold: Vector2i = Vector2i(2, 5)   # 2 тайли дороги = 20 AP, лишається 28 >= 20
+	var red: Vector2i = Vector2i(3, 5)    # 3 тайли дороги = 30 AP, лишається 18 < 20
+	assert_true(zones.move_and_fire.has(gold), "передумова: (2,5) — золота зона")
+	assert_true(zones.move_only.has(red), "передумова: (3,5) — червона зона")
+
+	var target: Unit = state.add_unit(0, 1, Vector2i(5, 5), 0)
+	state.begin_turn()
+	MoveCommand.create(u.id, gold, -1).apply(state)
+	assert_eq(FireCommand.create(u.id, target.id).validate(state), "",
+		"золота зона: постріл лишається легальним після ходу")
+
+	var b2: Board = Board.create(10, 10, Terrain.GroundState.DRY)
+	for x in 10:
+		b2.set_kind(Vector2i(x, 5), Terrain.Kind.ROAD)
+	var state2: BattleState = BattleState.create(b2, 2, 11)
+	var u2: Unit = state2.add_unit(5, 0, Vector2i(0, 5), 2)
+	var target2: Unit = state2.add_unit(0, 1, Vector2i(5, 5), 0)
+	state2.begin_turn()
+	MoveCommand.create(u2.id, red, -1).apply(state2)
+	assert_eq(FireCommand.create(u2.id, target2.id).validate(state2), "ERR_NOT_ENOUGH_AP",
+		"червона зона: рух зʼїв AP, потрібний на постріл")
+
 func test_a_unit_killed_by_a_mine_stops_contributing_vision() -> void:
 	# Пришпилює те, що відхилений фінд рев'ю намагався б "полагодити" —
 	# обгорнути виклики видимості/розкриття міни в if u.is_alive(): це саме
