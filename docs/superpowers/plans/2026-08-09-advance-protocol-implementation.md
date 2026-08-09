@@ -1319,7 +1319,13 @@ func test_road_reaches_further_than_rough_ground() -> void:
 		forest.set_kind(Vector2i(x, 5), Terrain.Kind.FOREST)
 	var tank_forest: Unit = Unit.create(2, 5, 0, Vector2i(0, 5), 2)
 	var z_forest: Pathing.Zones = Pathing.compute_zones(forest, tank_forest, {})
-	assert_true(z_road.cost_to(Vector2i(4, 5)) < z_forest.cost_to(Vector2i(4, 5)))
+	# Ціль має бути досяжною обома шляхами, інакше порівнюються не вартості:
+	# лісом це 18 AP за тайл при бюджеті 48, тож (4,5) коштує 72 і недосяжна,
+	# а cost_to() віддає сентинел −1, і будь-яке `<` мовчки стає істиною.
+	var target := Vector2i(2, 5)
+	assert_true(z_road.can_reach(target), "дорогою сюди дістатися можна")
+	assert_true(z_forest.can_reach(target), "лісом теж можна, тільки дорожче")
+	assert_true(z_road.cost_to(target) < z_forest.cost_to(target))
 
 func test_infantry_ignores_terrain() -> void:
 	var b: Board = _open_board()
