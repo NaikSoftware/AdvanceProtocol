@@ -28,8 +28,9 @@ func test_caps_at_five() -> void:
 
 func test_classes_are_independent() -> void:
 	var v: Veterancy = Veterancy.create()
-	v.add_damage(INF, 500)
+	v.add_damage(INF, 1500)
 	assert_eq(v.level_of(TANK), 0, "пули не течуть між класами")
+	assert_eq(v.xp[TANK], 0, "у чужому пулі не має бути жодного XP")
 
 func test_tank_progresses_slower_than_infantry() -> void:
 	var a: Veterancy = Veterancy.create()
