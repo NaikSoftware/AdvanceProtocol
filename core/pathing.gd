@@ -13,6 +13,11 @@ class Zones extends RefCounted:
 		return cost.has(p)
 
 	func cost_to(p: Vector2i) -> int:
+		## Викликати лише після can_reach(). Недосяжний тайл — це помилка виклику,
+		## а не значення: −1 мовчки перевертає будь-яке порівняння `<`, і саме так
+		## двічі падали тести цього завдання. Assert вирізається в release-збірці,
+		## тож там лишається −1 як мʼяка деградація замість падіння на телефоні.
+		assert(cost.has(p), "cost_to() для недосяжного тайла: %v" % p)
 		return cost.get(p, -1)
 
 static func compute_zones(board: Board, unit: Unit, occupied: Dictionary) -> Zones:
@@ -47,7 +52,7 @@ static func compute_zones(board: Board, unit: Unit, occupied: Dictionary) -> Zon
 			frontier.append(n)
 
 	var fire_cost: int = unit.fire_cost()
-	for p in z.cost:
+	for p: Vector2i in z.cost:
 		var left: int = unit.ap - z.cost[p]
 		if left >= fire_cost:
 			z.move_and_fire.append(p)
