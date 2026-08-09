@@ -392,18 +392,10 @@ Two rules about using it:
 | Tests | GUT, run headless |
 | 3D assets | GLB, generated via the `asset-manager` skill |
 
-**Godot is not on `PATH` on this machine.** The binary is:
-
-```
-/home/naik/Downloads/Godot_v4.7.1-stable_linux.x86_64
-```
-
-The Godot MCP server defaults to `/usr/bin/godot` and will fail with `ENOENT` until `GODOT_PATH`
-points at the path above.
+If Godot is not on `PATH`, point `$GODOT` at the binary and set `GODOT_PATH` to the same value —
+the Godot MCP server defaults to `/usr/bin/godot` and fails with `ENOENT` otherwise.
 
 ```bash
-export GODOT=/home/naik/Downloads/Godot_v4.7.1-stable_linux.x86_64
-
 $GODOT --path .                                   # run
 $GODOT --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit   # tests
 $GODOT --headless --path . --export-release "Android" build/advance-protocol.apk
