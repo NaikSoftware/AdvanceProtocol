@@ -1986,7 +1986,12 @@ var rng: RandomNumberGenerator = null
 var vision: Array[Vision] = []
 var veterancy: Array[Veterancy] = []
 var eliminated: Array[bool] = []
-var winner: int = -1
+## Матч триває, доки winner == NO_WINNER. DRAW потрібен окремим значенням, бо −1
+## уже зайняте «ще триває»: без нього нічия була б невідрізненна від незавершеної гри.
+const NO_WINNER: int = -1
+const DRAW: int = -2
+
+var winner: int = NO_WINNER
 var mines: Array = []                     # заповнюється в Task 1.16
 var objectives: Array = []                # заповнюється в Task 1.17
 var _next_unit_id: int = 1
@@ -2041,7 +2046,7 @@ func occupied_map() -> Dictionary:
 	return out
 
 func is_over() -> bool:
-	return winner >= 0
+	return winner != NO_WINNER
 
 func begin_turn() -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []
@@ -2059,6 +2064,9 @@ func refresh_vision(player: int) -> Array[Events.BattleEvent]:
 	return [Events.TileRevealed.new(player, revealed)] as Array[Events.BattleEvent]
 
 func advance_player() -> int:
+	## Якщо живих не лишилось, цикл нічого не знайде і поверне вибулого гравця.
+	## Викликати лише коли матч ще триває — це стверджується, а не мовчиться.
+	assert(not is_over(), "advance_player() після завершення матчу")
 	var next: int = active_player
 	for i in player_count:
 		next = (next + 1) % player_count
@@ -2078,8 +2086,13 @@ func check_elimination() -> Array[Events.BattleEvent]:
 	for p in player_count:
 		if not eliminated[p]:
 			alive.append(p)
-	if alive.size() == 1 and winner < 0:
-		winner = alive[0]
+	# `<= 1`, а не `== 1`: якщо живих не лишилось жодного, матч мусить усе одно
+	# завершитися. Інакше winner навіки лишається NO_WINNER, is_over() ніколи не
+	# стає істиною, а advance_player() повертає вибулого гравця — матч зависає
+	# без жодного легального активного гравця. Досяжно не лише взаємним
+	# знищенням, а й картою, де двоє гравців стартують без юнітів.
+	if alive.size() <= 1 and winner == NO_WINNER:
+		winner = alive[0] if alive.size() == 1 else DRAW
 		out.append(Events.MatchEnded.new(winner))
 	return out
 ```
