@@ -851,9 +851,17 @@ func test_roll_is_zero_for_non_positive() -> void:
 
 func test_roll_stays_within_inclusive_bounds() -> void:
 	var r := _rng(12345)
+	var saw_low: bool = false
+	var saw_high: bool = false
 	for i in 500:
 		var v: int = Rules.roll(r, 10)
 		assert_between(v, 0, 10)
+		saw_low = saw_low or v == 0
+		saw_high = saw_high or v == 10
+	# Самої лише перевірки діапазону мало: вона однаково пройде і для [0,9], і для [1,10].
+	# roll() — єдине джерело випадковості в грі, тож обидва кінці мають бути доведені.
+	assert_true(saw_low, "0 має випадати — межа включна")
+	assert_true(saw_high, "n має випадати — межа включна")
 
 func test_roll_is_deterministic_for_same_seed() -> void:
 	var a: Array[int] = []
@@ -1617,6 +1625,13 @@ func test_every_event_describes_itself() -> void:
 		assert_false(e.describe().is_empty())
 ```
 
+Плюс третій тест, який конструює **всі 21 тип** зі списку в **Interfaces** явними викликами
+конструкторів і для кожного перевіряє `is Events.BattleEvent` та непорожній `describe()`.
+Двох тестів вище недостатньо: вони чіпають 5 типів із 21, а цей файл існує саме як контракт
+для всіх подальших завдань — перейменоване поле чи переставлений аргумент у решті 16 класів
+проїхали б мовчки. Виклики конструкторів виписуються дослівно, не генеруються рефлексією:
+сам виклик і є перевіркою.
+
 - [ ] **Step 2: Запустити — має впасти**
 
 - [ ] **Step 3: Реалізувати `core/events.gd`**
@@ -1745,8 +1760,12 @@ func test_caps_at_five() -> void:
 
 func test_classes_are_independent() -> void:
 	var v: Veterancy = Veterancy.create()
-	v.add_damage(INF, 500)
+	v.add_damage(INF, 1500)
+	# Самої лише перевірки рівня мало: перший поріг танка — 1000, тож 500 XP, що
+	# протекли б із піхоти, однаково лишили б рівень 0. Тому 1500 (вистачило б на
+	# рівень танка) і пряма перевірка пулу.
 	assert_eq(v.level_of(TANK), 0, "пули не течуть між класами")
+	assert_eq(v.xp[TANK], 0, "у чужому пулі не має бути жодного XP")
 
 func test_tank_progresses_slower_than_infantry() -> void:
 	var a: Veterancy = Veterancy.create()
