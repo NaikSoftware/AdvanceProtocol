@@ -89,6 +89,14 @@ Impassable tiles are modelled as an infinite penalty, not as a special case in t
 once per turn, and firing ends its activity. This is the central tension of a turn: how far can I
 go and still shoot?
 
+**Movement is spent, not committed.** A unit may move several times in one turn, in as many
+separate steps as it likes, for as long as AP remains — walk two tiles, look around, walk two
+more. Only firing ends it. Nothing tracks "has already moved", and nothing may: after each step
+the two zones are simply recomputed from the unit's new position and remaining AP, so the gold
+zone shrinks as the unit spends. The same applies to the engineer's verbs, which cost `fire_cost`
+and end the unit's activity exactly as a shot does. Every AP-consuming action other than movement
+is therefore a decision to stop moving.
+
 **The two movement zones** are therefore the primary UI of the game:
 
 | zone | meaning | suggested colour |
