@@ -8,3 +8,14 @@
 build/
 *.translation
 export_presets.cfg
+
+# Godot import sidecars.
+# Safe today: the only ones generated are for prototyping-resources/, which holds
+# concept art, not game assets. The vendored addons/gut/ ones are already tracked
+# and stay tracked — .gitignore does not untrack anything.
+#
+# REVISIT WHEN assets/ FILLS UP: for real game assets a .import file carries the
+# resource UID, and dropping it means every clone regenerates its own, which can
+# break scene references. At that point narrow this to prototyping-resources/*.import
+# and commit the ones under assets/.
+*.import
