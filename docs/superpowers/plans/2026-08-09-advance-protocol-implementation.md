@@ -1931,6 +1931,8 @@ func test_begin_turn_refills_only_active_players_units() -> void:
 	assert_eq(mine.ap, mine.max_ap())
 	assert_eq(theirs.ap, 0, "чужі юніти чекають свого ходу")
 
+## Порядок подій у begin_turn перевіряється теж: TurnStarted мусить іти перед
+## TileRevealed, інакше вигляд відкриє тайли ще до того, як оголосить чий хід.
 func test_begin_turn_emits_turn_started() -> void:
 	var s: BattleState = _state()
 	s.add_unit(0, 0, Vector2i(5, 5), 0)
@@ -1954,12 +1956,30 @@ func test_elimination_is_detected_and_reported() -> void:
 	var b: Unit = s.add_unit(0, 1, Vector2i(8, 8), 0)
 	b.hp = 0
 	var events: Array = s.check_elimination()
-	var kinds: Array[String] = []
-	for e in events:
-		kinds.append(e.describe())
 	assert_true(s.eliminated[1])
 	assert_true(s.is_over())
 	assert_eq(s.winner, 0)
+	# Порядок подій — теж контракт: вигляд програє їх послідовно, і повідомити
+	# про кінець матчу раніше за вибуття гравця означало б зіпсувати подачу.
+	var eliminated_at: int = -1
+	var ended_at: int = -1
+	for i in events.size():
+		if events[i] is Events.PlayerEliminated:
+			eliminated_at = i
+		elif events[i] is Events.MatchEnded:
+			ended_at = i
+	assert_true(eliminated_at >= 0 and ended_at > eliminated_at,
+		"PlayerEliminated має передувати MatchEnded")
+
+func test_match_ends_in_a_draw_when_nobody_survives() -> void:
+	# Досяжно не лише взаємним знищенням: карта, де жоден гравець не має юнітів,
+	# дає цей стан на першій же перевірці. Без DRAW матч зависав би назавжди —
+	# winner лишався б NO_WINNER, is_over() ніколи не істина, а advance_player()
+	# повертав би вибулого гравця.
+	var s: BattleState = _state()
+	var events: Array = s.check_elimination()
+	assert_true(s.is_over(), "матч мусить завершитися, а не зависнути")
+	assert_eq(s.winner, BattleState.DRAW, "нічия — не те саме, що незавершена гра")
 
 func test_each_player_gets_its_own_vision() -> void:
 	var s: BattleState = _state(3)
