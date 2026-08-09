@@ -111,6 +111,7 @@ func test_a_whole_match_runs_through_commands_only() -> void:
 	# розібратись чому, а не піднімати ліміт).
 	var guard: int = 0
 	var shots_fired: int = 0
+	var total_retaliations: int = 0
 	while enemy.is_alive() and guard < GUARD_MAX:
 		guard += 1
 		if s.active_player != 0:
@@ -121,11 +122,15 @@ func test_a_whole_match_runs_through_commands_only() -> void:
 			var shot_events: Array[Events.BattleEvent] = cmd.apply(s)
 			shots_fired += 1
 			log.append_array(shot_events)
-			# Обмін закінчується: одна відповідь щонайбільше, ніколи не ланцюг.
-			# §3.3.1 — той самий інваріант, який tests/core/test_retaliation.gd
-			# пришпилює структурно (_retaliate() ніколи не викликає apply()
-			# рекурсивно); тут ми перевіряємо його на живому end-to-end обміні.
-			assert_true(_count(shot_events, Events.ShotRetaliated) <= 1,
+			# Термінація обміну доведена СТРУКТУРНО в
+			# tests/core/test_retaliation.gd (_retaliate() ніде не викликає
+			# apply() рекурсивно — рекурсія неможлива за побудовою графа
+			# викликів, не лише "не трапляється" через AP чи дальність). Це тут
+			# — не те місце, де це доводиться, а живий контроль на реальному
+			# сценарії: обмін пострілами мусить завершуватись, а не ланцюжити.
+			var retaliations_here: int = _count(shot_events, Events.ShotRetaliated)
+			total_retaliations += retaliations_here
+			assert_true(retaliations_here <= 1,
 				"обмін пострілами мусить завершуватись — не ланцюг взаємних відповідей")
 		log.append_array(EndTurnCommand.create().apply(s))
 
@@ -134,6 +139,14 @@ func test_a_whole_match_runs_through_commands_only() -> void:
 	assert_false(enemy.is_alive(), "танк мав дотиснути бронеавтомобіль — гірший випадок гарантує це до guard")
 	assert_true(tank.is_alive(), "гірший випадок відповідей (6*32=192) << 400 hp — танк мусив дожити")
 	assert_true(shots_fired <= 6, "гірша межа 45 шкоди/постріл на 250 hp -> не більш ніж 6 пострілів")
+	# Без цього `<= 1` вище проходить так само на нулі, як і на одиниці — а
+	# геометрія цього сценарію вже один раз випадково потрапляла в мертву зону
+	# "дальність без зору" (див. звіт задачі 1.19) і давала нуль відповідей,
+	# мовчки знецінюючи перевірку термінації. total_retaliations >= 1 фіксує,
+	# що обмін дійсно стався бодай раз, а не лише "ніколи не перевищив ліміт".
+	assert_true(total_retaliations >= 1,
+		"цей сценарій мав спричинити принаймні одну відповідь: інакше `<= 1` вище " +
+		"проходить на нулі й перевіряє порожнечу")
 
 	assert_true(s.is_over())
 	assert_eq(s.winner, 0)
