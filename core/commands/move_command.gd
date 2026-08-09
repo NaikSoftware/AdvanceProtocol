@@ -39,29 +39,44 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	occupied.erase(u.pos)
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	var path: Array[Vector2i] = Pathing.path_to(zones, target)
+
+	# §3.11: перший замінований тайл на шляху зупиняє рух — інакше мінне поле
+	# можна було б переїхати, просто не зупиняючись на ньому. Умова тут мусить
+	# бути рівно тою, за якою детонує Mines.step_on(), інакше рух обірветься
+	# там, де нічого не вибухне, або вибухне там, де рух не обірвався.
+	var stop_index: int = -1
+	for i in path.size():
+		var m: Mines.Mine = Mines.mine_at(state, path[i])
+		if m != null and m.owner != u.owner:
+			stop_index = i
+			break
+	var walked: Array[Vector2i] = path if stop_index < 0 else path.slice(0, stop_index + 1)
+	var final_pos: Vector2i = target if walked.is_empty() else walked[walked.size() - 1]
+
 	# cost_to() кличеться лише під can_reach(). У release-збірці assert вирізано,
 	# тож недосяжна ціль повернула б −1, а spend_ap(−1) ДОДАВ би юнітові очко дії:
 	# нелегальний хід ставав би вигіднішим за легальний. Запасний шлях — списати
 	# все, що є: помилка не має винагороджуватись.
-	var spent: int = zones.cost_to(target) if zones.can_reach(target) else u.ap
+	var spent: int = zones.cost_to(final_pos) if zones.can_reach(final_pos) else u.ap
 
 	var final_facing: int = facing
 	if final_facing < 0:
 		final_facing = Board.facing_towards(
-			path[path.size() - 2] if path.size() >= 2 else u.pos,
-			target) if not path.is_empty() else u.facing
+			walked[walked.size() - 2] if walked.size() >= 2 else u.pos,
+			final_pos) if not walked.is_empty() else u.facing
 
-	u.pos = target
+	u.pos = final_pos
 	u.facing = final_facing
 	u.spend_ap(spent)
 
 	# Поворот на місці — це UnitTurned, а не UnitMoved з порожнім шляхом:
 	# інакше вигляд мусив би сам розрізняти ці випадки за довжиною масиву.
-	if path.is_empty():
+	if walked.is_empty():
 		out.append(Events.UnitTurned.new(unit_id, final_facing))
 	else:
-		out.append(Events.UnitMoved.new(unit_id, path, final_facing))
+		out.append(Events.UnitMoved.new(unit_id, walked, final_facing))
 	out.append(Events.ApChanged.new(unit_id, u.ap))
+	out.append_array(Mines.step_on(state, u))
+	out.append_array(Mines.reveal_near(state, u.owner))
 	out.append_array(state.refresh_vision(u.owner))
-	# міни під ногами обробляються в Task 1.16 — там сюди додається виклик Mines.step_on()
 	return out

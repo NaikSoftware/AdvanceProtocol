@@ -96,3 +96,21 @@ func test_turn_in_place_emits_unit_turned_not_unit_moved_and_costs_no_ap() -> vo
 			has_moved = true
 	assert_true(has_turned, "поворот на місці — це UnitTurned")
 	assert_false(has_moved, "порожній шлях не повинен породжувати UnitMoved")
+
+func test_moving_onto_an_enemy_mine_detonates_it() -> void:
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	Mines.place(state, Vector2i(2, 5), 1)
+	var before: int = u.hp
+	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+	assert_true(u.hp < before, "§3.11: наїзд на нерозкриту міну — підрив")
+	assert_eq(u.pos, Vector2i(2, 5),
+		"міна спрацьовує одразу — юніт лишається на тайлі підриву, а не доходить до (3,5)")
+
+func test_a_minefield_cannot_be_crossed_by_stopping_past_it() -> void:
+	# Найважливіший тест цього завдання: якби детонував лише кінцевий тайл,
+	# міну можна було б просто переїхати, і вся механіка заборони руху зникла б.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	Mines.place(state, Vector2i(1, 5), 1)
+	MoveCommand.create(u.id, Vector2i(4, 5), -1).apply(state)
+	assert_eq(u.pos, Vector2i(1, 5), "рух обривається на міні, а не проходить крізь неї")
+	assert_true(state.mines.is_empty(), "міна витрачена")
