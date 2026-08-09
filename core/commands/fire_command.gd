@@ -64,8 +64,12 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	if not target.is_alive():
 		out.append(Events.UnitDestroyed.new(target.id, target.pos))
 		out.append_array(state.check_elimination())
-	for p in state.player_count:
-		out.append_array(state.refresh_vision(p))
+		# Смерть цілі може відкрити/закрити огляд будь-кому — усі гравці.
+		# Інакше, як MoveCommand.apply(), оновлюємо лише огляд атакуючого.
+		for p in state.player_count:
+			out.append_array(state.refresh_vision(p))
+	else:
+		out.append_array(state.refresh_vision(attacker.owner))
 	return out
 
 static func preview(state: BattleState, unit_id: int, target_id: int) -> Dictionary:
@@ -75,15 +79,5 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
 	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
-	var lo := RandomNumberGenerator.new()
-	var hi := RandomNumberGenerator.new()
-	var lo_value: int = Rules.MIN_DAMAGE
-	var hi_value: int = Rules.MIN_DAMAGE
-	# Межі знаходяться перебором сідів: формула монотонна за кожним кидком,
-	# але множники роблять аналітичний вивід крихким — 64 проби дають стабільні межі.
-	for s in 64:
-		lo.seed = s
-		var v: int = Rules.compute_damage(lo, a, t, level, sector, dist_sq)
-		lo_value = v if s == 0 else mini(lo_value, v)
-		hi_value = v if s == 0 else maxi(hi_value, v)
-	return {"sector": sector, "min": lo_value, "max": hi_value}
+	var bounds: Vector2i = Rules.damage_bounds(a, t, level, sector, dist_sq)
+	return {"sector": sector, "min": bounds.x, "max": bounds.y}

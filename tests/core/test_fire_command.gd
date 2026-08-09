@@ -35,7 +35,7 @@ func test_invisible_target_cannot_be_shot() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(0, 0), 2)   # арта, vision 3, range 5
 	var t: Unit = state.add_unit(2, 1, Vector2i(4, 0), 2)
 	state.begin_turn()
-	assert_ne(FireCommand.create(a.id, t.id).validate(state), "",
+	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_TARGET_NOT_VISIBLE",
 		"§3.5: стріляти можна лише по тому, що бачиш")
 
 func test_friendly_fire_is_rejected() -> void:
@@ -85,8 +85,28 @@ func test_preview_reports_sector_and_bounds() -> void:
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)   # дивиться на схід, атака зі заходу
 	var p: Dictionary = FireCommand.preview(state, a.id, t.id)
 	assert_eq(p["sector"], UnitTypes.ArmourSector.REAR)
-	assert_true(p["min"] <= p["max"])
-	assert_true(p["min"] >= Rules.MIN_DAMAGE)
+	assert_eq(p["min"], 61, "нижня межа — нульовий кидок атаки і максимальний кидок броні")
+	assert_eq(p["max"], 86, "верхня межа — максимальний кидок атаки і нульовий кидок броні")
+
+func test_preview_bounds_bracket_every_real_roll() -> void:
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	var p: Dictionary = FireCommand.preview(state, a.id, t.id)
+	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
+	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
+	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
+	var seen_min: int = p["max"]
+	var seen_max: int = p["min"]
+	for s in 400:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = s
+		var dmg: int = Rules.compute_damage(rng, a, t, level, sector, dist_sq)
+		assert_true(dmg >= p["min"] and dmg <= p["max"],
+			"%d поза межами прев'ю [%d, %d]" % [dmg, p["min"], p["max"]])
+		seen_min = mini(seen_min, dmg)
+		seen_max = maxi(seen_max, dmg)
+	assert_eq(seen_min, p["min"], "нижня межа має бути реально досяжною, не лише теоретичною")
+	assert_eq(seen_max, p["max"], "верхня межа має бути реально досяжною, не лише теоретичною")
 
 func test_preview_does_not_disturb_the_rng() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
