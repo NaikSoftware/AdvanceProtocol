@@ -2381,9 +2381,16 @@ func before_each() -> void:
 	state = BattleState.create(Board.create(12, 12, Terrain.GroundState.DRY), 2, 7)
 	state.active_player = 0
 
+## Юніти додаються ПІСЛЯ before_each, а туман рахується лише в begin_turn(),
+## тож кожен тест, який очікує легальний постріл, мусить викликати state.begin_turn()
+## після розстановки. Без цього vision[0] лишається порожнім — і тести відхилення
+## проходять із НЕПРАВИЛЬНОЇ причини (ціль невидима), нічого насправді не перевіряючи.
+## Саме тому кожен тест відхилення звіряє конкретний ключ помилки, а не просто «не порожньо».
+
 func test_fire_deals_damage_and_zeroes_ap() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
 	var before: int = t.hp
 	assert_eq(FireCommand.create(a.id, t.id).validate(state), "")
 	FireCommand.create(a.id, t.id).apply(state)
@@ -2394,6 +2401,7 @@ func test_fire_deals_damage_and_zeroes_ap() -> void:
 func test_fire_emits_shot_then_damage() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
 	var events: Array = FireCommand.create(a.id, t.id).apply(state)
 	assert_true(events[0] is Events.ShotFired)
 	assert_true(events[1] is Events.DamageDealt)
@@ -2401,7 +2409,8 @@ func test_fire_emits_shot_then_damage() -> void:
 func test_out_of_range_is_rejected() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(0, 0), 2)   # range 4
 	var t: Unit = state.add_unit(2, 1, Vector2i(11, 11), 2)
-	assert_ne(FireCommand.create(a.id, t.id).validate(state), "")
+	state.begin_turn()
+	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_OUT_OF_RANGE")
 
 func test_invisible_target_cannot_be_shot() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(0, 0), 2)   # арта, vision 3, range 5
@@ -2413,22 +2422,27 @@ func test_invisible_target_cannot_be_shot() -> void:
 func test_friendly_fire_is_rejected() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var f: Unit = state.add_unit(5, 0, Vector2i(5, 4), 2)
-	assert_ne(FireCommand.create(a.id, f.id).validate(state), "")
+	state.begin_turn()
+	assert_eq(FireCommand.create(a.id, f.id).validate(state), "ERR_FRIENDLY_FIRE")
 
 func test_engineer_cannot_fire() -> void:
 	var e: Unit = state.add_unit(11, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(5, 4), 2)
-	assert_ne(FireCommand.create(e.id, t.id).validate(state), "", "§3.6: інженер не має зброї")
+	state.begin_turn()
+	assert_eq(FireCommand.create(e.id, t.id).validate(state), "ERR_NO_WEAPON",
+		"§3.6: інженер не має зброї")
 
 func test_second_shot_in_a_turn_is_rejected() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
-	assert_ne(FireCommand.create(a.id, t.id).validate(state), "")
+	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_NOT_ENOUGH_AP")
 
 func test_kill_emits_destruction_and_checks_victory() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 6)
+	state.begin_turn()
 	t.hp = 1
 	var events: Array = FireCommand.create(a.id, t.id).apply(state)
 	var destroyed: bool = false
@@ -2444,6 +2458,7 @@ func test_kill_emits_destruction_and_checks_victory() -> void:
 func test_damage_feeds_the_attackers_class_pool() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
 	assert_true(state.veterancy[0].xp[UnitTypes.UnitClass.TANK] > 0)
 
@@ -2899,7 +2914,32 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 
 - [ ] **Step 4: Підключити до `MoveCommand.apply`**
 
-Замінити коментар-заглушку в кінці `apply()`:
+**Міна спрацьовує одразу, на першому ж пройденому тайлі, а не лише в кінцевій клітинці.**
+Інакше мінне поле можна було б безкарно перетинати, зупиняючись одразу за ним, і міни
+перестали б бути засобом заборони руху — вони стали б лотереєю для того, хто випадково
+зупинився саме там. Юніт зупиняється на тайлі підриву: під ним щойно вибухнуло.
+
+Тому `apply()` не просто телепортує юніт у `target`, а проходить шлях і шукає перший
+замінований тайл. Предикат обрізання мусить бути **точно тією самою умовою**, за якою
+детонує `Mines.step_on()` (`міна існує` і `її власник — не той, хто йде`), інакше шлях
+обірветься там, де вибуху не буде, або навпаки.
+
+```gdscript
+	# Перший замінований тайл на шляху зупиняє рух.
+	var stop_index: int = -1
+	for i in path.size():
+		var m: Mines.Mine = Mines.mine_at(state, path[i])
+		if m != null and m.owner != u.owner:
+			stop_index = i
+			break
+	var walked: Array[Vector2i] = path if stop_index < 0 else path.slice(0, stop_index + 1)
+	var final_pos: Vector2i = target if walked.is_empty() else walked[walked.size() - 1]
+	var spent: int = zones.cost_to(final_pos) if zones.can_reach(final_pos) else u.ap
+```
+
+`walked` іде в `UnitMoved` замість повного `path`, `final_pos` — у `u.pos`, і лише після
+цього викликається `step_on`, який дивиться на `u.pos`. Порядок подій: рух → AP → підрив
+→ розкриття сусідніх мін → перерахунок туману.
 
 ```gdscript
 	out.append_array(Mines.step_on(state, u))
@@ -2917,6 +2957,17 @@ func test_moving_onto_an_enemy_mine_detonates_it() -> void:
 	var before: int = u.hp
 	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
 	assert_true(u.hp < before, "§3.11: наїзд на нерозкриту міну — підрив")
+	assert_eq(u.pos, Vector2i(2, 5),
+		"міна спрацьовує одразу — юніт лишається на тайлі підриву, а не доходить до (3,5)")
+
+func test_a_minefield_cannot_be_crossed_by_stopping_past_it() -> void:
+	# Найважливіший тест цього завдання: якби детонував лише кінцевий тайл,
+	# міну можна було б просто переїхати, і вся механіка заборони руху зникла б.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	Mines.place(state, Vector2i(1, 5), 1)
+	MoveCommand.create(u.id, Vector2i(4, 5), -1).apply(state)
+	assert_eq(u.pos, Vector2i(1, 5), "рух обривається на міні, а не проходить крізь неї")
+	assert_true(state.mines.is_empty(), "міна витрачена")
 ```
 
 - [ ] **Step 5: Запустити — усе має пройти, коміт**
