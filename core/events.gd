@@ -37,6 +37,20 @@ class ShotFired extends BattleEvent:
 	func describe() -> String:
 		return "ShotFired(%d -> %d, sector=%d)" % [attacker_id, target_id, sector]
 
+class ShotRetaliated extends BattleEvent:
+	## §3.3.1: ціль, що вижила, стріляє у відповідь. Окремий клас, а не
+	## прапорець у ShotFired — вигляд мусить відрізняти відповідь від
+	## пострілу, не здогадуючись про це з порядку подій.
+	var attacker_id: int
+	var target_id: int
+	var sector: int
+	func _init(p_attacker_id: int, p_target_id: int, p_sector: int) -> void:
+		attacker_id = p_attacker_id
+		target_id = p_target_id
+		sector = p_sector
+	func describe() -> String:
+		return "ShotRetaliated(%d -> %d, sector=%d)" % [attacker_id, target_id, sector]
+
 class DroneLaunched extends BattleEvent:
 	var attacker_id: int
 	var target_id: int

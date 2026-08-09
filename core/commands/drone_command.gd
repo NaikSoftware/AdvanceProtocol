@@ -48,4 +48,6 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	out.append(Events.DroneLaunched.new(unit_id, target_id, a.drones_left))
 	out.append_array(FireCommand._resolve_damage(state, a, t, Rules.drone_damage(state.rng)))
 	out.append(Events.ApChanged.new(unit_id, 0))
+	if t.is_alive():
+		out.append_array(FireCommand._retaliate(state, a, t))
 	return out
