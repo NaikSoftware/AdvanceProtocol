@@ -11,9 +11,15 @@ func test_roll_is_zero_for_non_positive() -> void:
 
 func test_roll_stays_within_inclusive_bounds() -> void:
 	var r := _rng(12345)
+	var saw_low: bool = false
+	var saw_high: bool = false
 	for i in 500:
 		var v: int = Rules.roll(r, 10)
 		assert_between(v, 0, 10)
+		saw_low = saw_low or v == 0
+		saw_high = saw_high or v == 10
+	assert_true(saw_low, "0 має випадати — межа включна")
+	assert_true(saw_high, "n має випадати — межа включна")
 
 func test_roll_is_deterministic_for_same_seed() -> void:
 	var a: Array[int] = []
