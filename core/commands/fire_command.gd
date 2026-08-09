@@ -58,6 +58,9 @@ static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit
 	## а той, своєю чергою, ніколи не викликає _retaliate(). Тобто в графі викликів
 	## немає шляху назад до _retaliate() — рекурсія неможлива структурно, а не лише
 	## відсутня випадково через AP чи дальність.
+	##
+	## Порядок перевірок навмисно дзеркалить validate(): живість/клас, AP, дальність,
+	## зір — так обидва читаються однаково.
 	var out: Array[Events.BattleEvent] = []
 	if not target.is_alive() or not original_attacker.is_alive():
 		return out
@@ -66,6 +69,13 @@ static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit
 	if target.has_fired or target.ap < target.fire_cost():
 		return out
 	if not Rules.in_radius(target.pos, original_attacker.pos, target.attack_range()):
+		return out
+	if not state.vision[target.owner].is_visible(original_attacker.pos):
+		# §3.3.1 (переглянуто): відповідач мусить бачити атакувальника — той самий
+		# закон видимості, що й для будь-якого пострілу, але власним зором цілі
+		# (target.owner), а не зором того, хто стріляв першим. Це навмисний відхід
+		# від референсу, який гейтить контратаку лише на AP, дальність і клас —
+		# зафіксовано в CLAUDE.md §3.3.1/§4, не "виправляти" назад до референсу.
 		return out
 
 	var sector: int = Rules.armour_sector(original_attacker.facing, original_attacker.pos, target.pos)
