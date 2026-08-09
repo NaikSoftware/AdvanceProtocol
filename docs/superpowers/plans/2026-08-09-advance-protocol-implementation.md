@@ -1011,8 +1011,12 @@ static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos
 	var dot: int = f.x * v.x + f.y * v.y
 	var len_sq_f: int = f.x * f.x + f.y * f.y
 	var len_sq_v: int = v.x * v.x + v.y * v.y
-	var cos2_scaled: int = (dot * dot << 5) / (len_sq_f * len_sq_v)
-	if cos2_scaled <= 16:
+	# cos²θ <= 1/2, тобто 45° і ширше — межа сектора SIDE.
+	# Порівняння перехресним множенням, а не діленням: варіант зі зсувом на 32 і
+	# порогом 16 обрізався цілочисловим діленням і зсовував смугу cos² ∈ [0.5, 0.53125)
+	# (кути 43.1°–45°) у SIDE. Розбіжність двох форм починається аж із 23.35 тайла,
+	# тож жодного досяжного пострілу вона не міняла, але ця форма точна й без ділення.
+	if 2 * dot * dot <= len_sq_f * len_sq_v:
 		return UnitTypes.ArmourSector.SIDE
 	return UnitTypes.ArmourSector.REAR if dot < 0 else UnitTypes.ArmourSector.FRONT
 ```

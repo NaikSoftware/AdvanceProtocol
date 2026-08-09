@@ -152,10 +152,19 @@ angle between the target's facing vector and the vector from target to attacker:
 Implement with integer dot products against the 8 unit direction vectors, no trigonometry:
 
 ```
-d = attacker_dir_index_relative_to_target_facing
-cos2_scaled = (dot*dot << 5) / len_sq_a / len_sq_b
-sector = SIDE if cos2_scaled <= 16 else (REAR if dot < 0 else FRONT)
+v   = attacker_pos - target_pos
+f   = DIRS_8[target_facing]
+dot = f.x*v.x + f.y*v.y
+sector = SIDE if 2*dot*dot <= len_sq_f * len_sq_v      # cos²θ <= 1/2, i.e. 45° or wider
+         else (REAR if dot < 0 else FRONT)
 ```
+
+The comparison is cross-multiplied rather than divided. An earlier form of this rule scaled
+`cos²` by 32 and compared against 16; integer division truncated the quotient, so the band
+`cos² ∈ [0.5, 0.53125)` — angles between 43.1° and 45° — fell into SIDE when it belonged to
+FRONT or REAR. The two forms first disagree at a separation of 23.35 tiles, which no weapon in
+the game can reach (longest range is 5), so this changes no shot that can actually be taken. The
+cross-multiplied form is kept because it is exact, has no division, and cannot drift.
 
 Flanking is the main skill expression in the game. The UI must always show which sector a shot
 will land in **before** the player commits.
