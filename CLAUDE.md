@@ -388,6 +388,16 @@ Two rules about using it:
 - **Vision shape.** Euclidean radius here. Confirm against the original before tuning vision
   values, since a diamond and a circle of the same radius are very different maps.
 
+- **Mines detonate on traversal, and mine damage is a roll.** Confirmed against `class_1.method_105`,
+  which is called from the movement driver after *every* single-tile hop rather than once at the
+  destination: when it finds a marker it applies `90 + rand(0, 90)` to the mover, consumes the
+  marker, and returns `true`, which halts the path at that tile. So a minefield cannot be crossed
+  by stopping past it, and the unit stops where it detonated — this project matches. The damage
+  band is `90..180`, not the flat 120 the plan originally invented; adopted, because a flat number
+  would make mines the only damage source in the game that does not roll. Caveat worth knowing:
+  in the original the per-tile marker table appears to be shared between mines and objectives, so
+  the two may not be distinct concepts there. They are distinct here.
+
 - **Terrain penalties are widely spaced, and tracked vehicles ignore open ground.** Confirmed
   against `GameCanvas.method_68`: the original uses six buckets — `0` road, `5`, `10` ordinary
   ground, `20` rough, `100` built-up, `1000` impassable — and `method_70` is exactly
