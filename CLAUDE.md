@@ -464,7 +464,32 @@ docs/
 
 ---
 
-## 7. Rendering and mobile budget
+## 7. Agent Team workflow
+
+**Primary mode: work in Agent Team mode.** Spawn child agents for implementation, research,
+verification and other separable subtasks. Keep the main context focused on analyzing child-agent
+results, making decisions, integrating outputs and validating the final state.
+
+Choose the child-agent model based on the task:
+
+| task | model |
+| --- | --- |
+| Simple, mechanical work | Sonnet |
+| Complex reasoning, architecture, tricky implementation | Opus |
+| Image generation and visual asset work | Agy |
+| Cross-model review and independent verification | Agy |
+
+Coordination rules:
+
+- Give every child agent a discrete subtask with clear inputs, outputs and acceptance criteria.
+- Use separate worktrees/branches when several child agents modify the repo in parallel.
+- Ask child agents to report concise findings, changed files, validation commands and blockers.
+- Do not let child agents make final product/design calls independently; the main context decides.
+- The main context owns integration, review, final validation and any user-facing summary.
+
+---
+
+## 8. Rendering and mobile budget
 
 The camera is a fixed orthographic rig, roughly 45° yaw and 50–55° pitch. Pan and clamped zoom
 only; no free rotation (90° snaps are acceptable if playtests ask for them). Because the angle is
@@ -492,7 +517,7 @@ skill** — read it before generating anything, and do not duplicate its guidanc
 
 ---
 
-## 8. Conventions
+## 9. Conventions
 
 - Typed GDScript everywhere: `var hp: int = 0`, `func fire(target: Unit) -> Array[BattleEvent]:`.
 - `snake_case` files and members, `PascalCase` for `class_name`.
@@ -507,7 +532,7 @@ skill** — read it before generating anything, and do not duplicate its guidanc
 
 ---
 
-## 9. Before you build something
+## 10. Before you build something
 
 - If it changes a number a player can be killed by, it belongs in `core/` and it needs a test.
 - If the rule cannot be shown in the UI, reconsider the rule.
