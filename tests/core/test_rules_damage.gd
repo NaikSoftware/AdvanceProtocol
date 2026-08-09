@@ -79,7 +79,9 @@ func test_flanking_beats_frontal_fire() -> void:
 
 func test_artillery_bonus_against_tanks() -> void:
 	var vs_tank: Array[int] = _samples(FIELD_GUN, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 25)
-	assert_true(_max(vs_tank) > _min(vs_tank), "§3.3: проти танка додається rand(0, A/2)")
+	# Без бонусу максимум недосяжний вище 0.75*200 + 50 - 0.75*37 = 172.25 -> 172.
+	# Усе, що більше, може дати лише додатковий rand(0, A/2) проти танка.
+	assert_true(_max(vs_tank) > 172, "§3.3: проти танка додається rand(0, A/2)")
 
 func test_artillery_minimum_range_penalty() -> void:
 	var close: Array[int] = _samples(FIELD_GUN, LIGHT_CAR, 0, UnitTypes.ArmourSector.FRONT, 4)
