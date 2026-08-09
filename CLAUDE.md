@@ -455,6 +455,15 @@ input → intent → Command → Rules.validate() → Rules.apply() → [BattleE
 - The view consumes events and plays them back over time. **The view never computes an outcome.**
   If a shell is in flight for 400 ms, the damage was already decided before it left the barrel.
 
+**Events are not filtered per player, and that is a debt online would call in.** `apply()` returns
+one ordered list describing everything that happened. In hot-seat this is harmless: one screen,
+one active player, and the board is blanked at the handover. But some events carry information
+their subject should not have — `MineTriggered` reveals that a mine existed to anyone replaying
+the list, and the same will be true of anything that fires on an opponent's turn. If online ever
+happens, the transport cannot broadcast this list as-is; it needs a per-observer filter, and the
+place to build it is here in `core/`, not in the view. Keep that in mind when adding event types:
+an event that only the acting player may see should be recognisable as such.
+
 **Determinism.** One `RandomNumberGenerator`, seeded per match and stored in `BattleState`. Every
 roll goes through a single `Rules.roll()` helper. Never call the global `randi()` / `randf()`
 anywhere in `core/`.
