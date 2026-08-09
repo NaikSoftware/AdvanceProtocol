@@ -33,6 +33,11 @@ decoration.
   this game is that each player has their own fog on a shared screen, with remembered terrain
   drawn dimmed and *without* live units (§3.5). The concept dodges it by making the map a floating
   diorama island on a neutral background.
-- Infantry is drawn as several separate figures. A squad is **one model on the tile** (§3.6) — for
-  draw calls and for grid readability.
 - Top-left is a menu button where a turn indicator belongs.
+
+**Not a defect, though it looks like one at first glance:** the infantry is drawn as a small group
+of figures rather than a lone soldier. That is correct and wanted — a squad should look like a
+squad. §3.6 asks for *one asset per tile* (one mesh, one draw call, one tile footprint), not one
+figure; several figures sharing a base satisfy it. What would be wrong is independently instanced
+and animated soldiers, or a group spilling over a tile boundary so you cannot tell which square
+the unit is on. Neither happens here.

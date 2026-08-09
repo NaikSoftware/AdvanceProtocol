@@ -269,8 +269,15 @@ this table is documentation only.
 | 11 | engineer squad | ENG | 0 | 68 | 200 | 1 | 20 | 10/5/5 | −5 | 3 |
 | 12 | engineer vehicle | ENG | 0 | 76 | 200 | 1 | 30 | 10/5/5 | −5 | 3 |
 
-Squad-level units (infantry, engineers) are represented by a **single model on the tile**, not a
-crowd — draw-call budget, and it keeps the grid readable.
+Squad-level units (infantry, engineers) are **one asset per tile** — one mesh, one draw call, one
+tile footprint. That mesh may well sculpt three or four figures sharing a base, and it should: a
+squad is a squad, and a lone figure reads as the wrong thing. What is forbidden is several
+*independently instanced and animated* soldiers per unit, which multiplies the draw-call cost of
+the most numerous class in the game, and any arrangement that spills across a tile boundary, which
+makes it ambiguous which tile the unit occupies.
+
+The test is the one from §1: at ~100 px from directly above, it must read as a single unit
+standing on a single square.
 
 **Tank mobility is strictly ordered** light → medium → tank destroyer → heavy, in both AP and
 cross-country. A heavy that outruns a medium makes armour a free choice; the heavy's 56 front
