@@ -39,3 +39,20 @@ func test_facing_towards_matches_dirs8() -> void:
 func test_neighbours_are_clipped_to_board() -> void:
 	assert_eq(_board().neighbours4(Vector2i(0, 0)).size(), 2)
 	assert_eq(_board().neighbours4(Vector2i(3, 3)).size(), 4)
+
+func test_out_of_bounds_does_not_alias_to_real_tiles() -> void:
+	# Verify out-of-bounds coordinates are impassable, not aliasing onto real tiles
+	var b: Board = _board()
+	# Set a known kind at (0, 1) and at the last tile (7, 5)
+	b.set_kind(Vector2i(0, 1), Terrain.Kind.FOREST)
+	b.set_kind(Vector2i(7, 5), Terrain.Kind.WATER)
+	# Out-of-bounds (width, 0) would alias to (0, 1) if not guarded: index 8 = 0*8 + 8 = 8, wraps to last=47? No, 1*8+0 = 8
+	# Out-of-bounds (-1, 0) would alias to (7, -1) wrapping? Actually -1 wraps to last element (47)
+	# Test that these out-of-bounds are impassable, not affected by real tiles
+	assert_false(b.is_passable(Vector2i(-1, 0)), "negative x should be impassable")
+	assert_false(b.is_passable(Vector2i(8, 0)), "x >= width should be impassable")
+	assert_false(b.is_passable(Vector2i(0, -1)), "negative y should be impassable")
+	assert_false(b.is_passable(Vector2i(0, 6)), "y >= height should be impassable")
+	# Verify the real tiles were not corrupted
+	assert_eq(b.kind_at(Vector2i(0, 1)), Terrain.Kind.FOREST)
+	assert_eq(b.kind_at(Vector2i(7, 5)), Terrain.Kind.WATER)

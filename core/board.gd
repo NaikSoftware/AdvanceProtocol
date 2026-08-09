@@ -31,6 +31,7 @@ func in_bounds(p: Vector2i) -> bool:
 	return p.x >= 0 and p.y >= 0 and p.x < width and p.y < height
 
 func _index(p: Vector2i) -> int:
+	assert(in_bounds(p), "board access out of bounds: %v" % p)
 	return p.y * width + p.x
 
 func kind_at(p: Vector2i) -> int:
