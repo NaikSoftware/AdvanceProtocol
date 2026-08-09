@@ -388,6 +388,21 @@ Two rules about using it:
 - **Vision shape.** Euclidean radius here. Confirm against the original before tuning vision
   values, since a diamond and a circle of the same radius are very different maps.
 
+- **Terrain penalties are widely spaced, and tracked vehicles ignore open ground.** Confirmed
+  against `GameCanvas.method_68`: the original uses six buckets — `0` road, `5`, `10` ordinary
+  ground, `20` rough, `100` built-up, `1000` impassable — and `method_70` is exactly
+  `max(10, 10 + penalty - cross_country)`. Two consequences are easy to get wrong and were
+  briefly got wrong here:
+  - **The spacing is load-bearing.** With `cross_country` in the 5–13 band, any penalty below
+    about 13 vanishes under the floor of 10. A compressed table (0–14) makes *every* terrain
+    free for *every* tank, and the whole off-road model quietly stops existing.
+  - **A medium tank pays the floor on open field, and that is correct.** Field is 10 against a
+    cross-country of 12. Roads matter for wheels, artillery and engineers, not for tracks on
+    open ground — do not "fix" this by inflating the field penalty.
+  - Built-up terrain at 100 is effectively impassable to vehicles (a 48 AP tank cannot pay 98)
+    while infantry still walks in at the floor of 10. Buildings are therefore infantry ground
+    by arithmetic rather than by a special case. This is emergent, and it is worth keeping.
+
 ---
 
 ## 5. Tech stack

@@ -480,22 +480,27 @@ enum GroundState { DRY, MUD, FROZEN }
 
 const IMPASSABLE: int = 1_000_000
 
+## Шкала взята з референсу (§4), `GameCanvas.method_68`: там рівно шість кошиків —
+## 0 (дорога), 5, 10 (базовий ґрунт), 20 (пересічена місцевість), 100 (забудова)
+## і 1000 (непрохідно). Стискати їх не можна: при cross_country 5–13 будь-який
+## штраф, менший за 13, повністю зникає під підлогою у max(10, 10 + p - cc), і
+## техніка перестає відчувати місцевість узагалі.
 const _BASE_PENALTY: Dictionary = {
 	Kind.ROAD: 0,
 	Kind.BRIDGE: 0,
-	Kind.FIELD: 4,
-	Kind.HILL: 8,
-	Kind.RUBBLE: 10,
-	Kind.FOREST: 12,
-	Kind.BUILDING: 14,
+	Kind.RUBBLE: 5,
+	Kind.FIELD: 10,
+	Kind.HILL: 20,
+	Kind.FOREST: 20,
+	Kind.BUILDING: 100,
 	Kind.MARSH: IMPASSABLE,
 	Kind.WATER: IMPASSABLE,
 	Kind.BRIDGE_DESTROYED: IMPASSABLE,
 }
 
-const _MUD_OFFSET: int = 8
-const _FROZEN_OFFSET: int = -3
-const _FROZEN_MARSH_PENALTY: int = 12
+const _MUD_OFFSET: int = 10
+const _FROZEN_OFFSET: int = -5
+const _FROZEN_MARSH_PENALTY: int = 20
 
 static func is_road(kind: int) -> bool:
 	return kind == Kind.ROAD or kind == Kind.BRIDGE
@@ -1302,12 +1307,19 @@ func test_start_tile_is_reachable_at_zero_cost() -> void:
 	assert_eq(z.cost_to(Vector2i(4, 4)), 0)
 	assert_true(z.move_and_fire.has(Vector2i(4, 4)), "стояти на місці й стріляти завжди можна")
 
-func test_road_reaches_further_than_field() -> void:
+func test_road_reaches_further_than_rough_ground() -> void:
+	# Порівнювати треба з пересіченою місцевістю, а не з чистим полем: у референсі
+	# поле коштує 10, а середній танк має cross_country 12, тож max(10, 10+10-12)
+	# упирається в підлогу — гусенична техніка відкритого поля не помічає, і це
+	# автентична поведінка, а не баг. Дорогу видно там, де штраф справді кусає.
 	var tank_road: Unit = Unit.create(1, 5, 0, Vector2i(0, 5), 2)
 	var z_road: Pathing.Zones = Pathing.compute_zones(_road_board(), tank_road, {})
-	var tank_field: Unit = Unit.create(2, 5, 0, Vector2i(0, 5), 2)
-	var z_field: Pathing.Zones = Pathing.compute_zones(_open_board(), tank_field, {})
-	assert_true(z_road.cost_to(Vector2i(4, 5)) < z_field.cost_to(Vector2i(4, 5)))
+	var forest: Board = _open_board()
+	for x in 10:
+		forest.set_kind(Vector2i(x, 5), Terrain.Kind.FOREST)
+	var tank_forest: Unit = Unit.create(2, 5, 0, Vector2i(0, 5), 2)
+	var z_forest: Pathing.Zones = Pathing.compute_zones(forest, tank_forest, {})
+	assert_true(z_road.cost_to(Vector2i(4, 5)) < z_forest.cost_to(Vector2i(4, 5)))
 
 func test_infantry_ignores_terrain() -> void:
 	var b: Board = _open_board()
