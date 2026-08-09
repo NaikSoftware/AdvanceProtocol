@@ -281,6 +281,13 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
 The assault squad (#1) is otherwise identical to the rifle squad. What separates it is a
 **drone strike**: a separate action, not a modifier on its normal attack.
 
+**The visibility requirement below currently has no bite, and that is worth knowing.** The assault
+squad's vision is 5 and the drone's range is 5, and vision is a plain radius with no line-of-sight
+occlusion — so any target a drone can reach is already inside the squad's own vision. The check is
+kept because it states the intent and because it starts mattering the moment those numbers
+diverge (a longer drone range, a shorter infantry vision, or occlusion ever being added). Do not
+read it as protection the game is currently relying on.
+
 ```
 Drone strike
   requires  : target is currently visible to the attacking player
