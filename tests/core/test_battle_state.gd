@@ -39,6 +39,7 @@ func test_begin_turn_emits_turn_started() -> void:
 	s.add_unit(0, 0, Vector2i(5, 5), 0)
 	var events: Array = s.begin_turn()
 	assert_true(events[0] is Events.TurnStarted)
+	assert_true(events[1] is Events.TileRevealed, "туман активного гравця має розкритись слідом за початком ходу")
 
 func test_rng_is_seeded_and_reproducible() -> void:
 	var a: BattleState = BattleState.create(Board.create(4, 4, 0), 2, 99)
@@ -57,9 +58,16 @@ func test_elimination_is_detected_and_reported() -> void:
 	var b: Unit = s.add_unit(0, 1, Vector2i(8, 8), 0)
 	b.hp = 0
 	var events: Array = s.check_elimination()
-	var kinds: Array[String] = []
-	for e in events:
-		kinds.append(e.describe())
+	var eliminated_index: int = -1
+	var ended_index: int = -1
+	for i in events.size():
+		if events[i] is Events.PlayerEliminated:
+			eliminated_index = i
+		elif events[i] is Events.MatchEnded:
+			ended_index = i
+	assert_ne(eliminated_index, -1, "має бути подія PlayerEliminated")
+	assert_ne(ended_index, -1, "має бути подія MatchEnded")
+	assert_true(eliminated_index < ended_index, "PlayerEliminated має передувати MatchEnded")
 	assert_true(s.eliminated[1])
 	assert_true(s.is_over())
 	assert_eq(s.winner, 0)
