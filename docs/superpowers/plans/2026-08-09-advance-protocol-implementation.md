@@ -764,6 +764,10 @@ func in_bounds(p: Vector2i) -> bool:
 	return p.x >= 0 and p.y >= 0 and p.x < width and p.y < height
 
 func _index(p: Vector2i) -> int:
+	## Один запобіжник на обидва аксесори. `assert` вирізається в release-збірці,
+	## тож у гарячому циклі Dijkstra він нічого не коштує. Контракт «за межами
+	## дошки — непрохідно» тримають penalty_at()/is_passable(), а не ці два методи.
+	assert(in_bounds(p), "board access out of bounds: %v" % p)
 	return p.y * width + p.x
 
 func kind_at(p: Vector2i) -> int:
