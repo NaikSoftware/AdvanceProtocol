@@ -1,0 +1,18 @@
+config_version=5
+
+[application]
+config/name="Advance Protocol"
+config/features=PackedStringArray("4.7", "Mobile")
+run/low_processor_mode=true
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/handheld/orientation="landscape"
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

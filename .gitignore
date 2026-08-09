@@ -3,3 +3,8 @@
 !.env.example
 .claude/settings.local.json
 .superpowers/
+
+.godot/
+build/
+*.translation
+export_presets.cfg
