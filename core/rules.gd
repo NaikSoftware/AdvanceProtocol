@@ -30,3 +30,50 @@ static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos
 	if cos2_scaled <= 16:
 		return UnitTypes.ArmourSector.SIDE
 	return UnitTypes.ArmourSector.REAR if dot < 0 else UnitTypes.ArmourSector.FRONT
+
+const MIN_DAMAGE: int = 10
+
+static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: Unit,
+		veterancy_level: int, sector: int, dist_sq: int) -> int:
+	## §3.3. Порядок множників критичний — не переставляти.
+	var a: int = attacker.attack()
+	var ac: int = attacker.unit_class()
+	var tc: int = target.unit_class()
+
+	var dmg: float = 0.75 * float(a) + float(roll(rng, a / 4))
+
+	if ac != UnitTypes.UnitClass.ENGINEER:
+		dmg += float(a * veterancy_level) / 8.0
+
+	if ac == UnitTypes.UnitClass.INFANTRY:
+		if dist_sq <= 2:
+			dmg *= 4.0
+		# броня не віднімається взагалі
+	else:
+		var r: int = target.armour(sector)
+		dmg -= 0.75 * float(r) + float(roll(rng, r / 4))
+
+	if ac == UnitTypes.UnitClass.ARTILLERY:
+		if tc == UnitTypes.UnitClass.TANK:
+			dmg += float(roll(rng, a / 2))
+		if dist_sq <= 4:
+			dmg /= 2.0
+		if tc == UnitTypes.UnitClass.LIGHT_VEHICLE:
+			dmg /= 2.0
+
+	if tc == UnitTypes.UnitClass.INFANTRY and (ac == UnitTypes.UnitClass.TANK or ac == UnitTypes.UnitClass.ARTILLERY):
+		dmg /= 4.0
+
+	return maxi(MIN_DAMAGE, int(dmg))
+
+static func drone_damage(rng: RandomNumberGenerator) -> int:
+	## §3.9. Броня ігнорується повністю: дрон заходить згори, сектор не рахується.
+	return 120 + roll(rng, 60)
+
+static func distance_sq(a: Vector2i, b: Vector2i) -> int:
+	var d: Vector2i = a - b
+	return d.x * d.x + d.y * d.y
+
+static func in_radius(a: Vector2i, b: Vector2i, r: int) -> bool:
+	## §3.1: евклідів радіус, порівняння квадратів — без sqrt.
+	return distance_sq(a, b) <= r * r
