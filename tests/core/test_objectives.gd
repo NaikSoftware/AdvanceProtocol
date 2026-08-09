@@ -29,7 +29,7 @@ func test_holding_enough_objectives_wins_the_match() -> void:
 	state.add_unit(0, 1, Vector2i(10, 10), 0)
 	for i in 3:
 		Objectives.add(state, Vector2i(i, 0), 0)
-	var events: Array = Objectives.check_victory(state, 3)
+	var events: Array[Events.BattleEvent] = Objectives.check_victory(state, 3)
 	assert_eq(state.winner, 0)
 	assert_true(events.size() > 0)
 

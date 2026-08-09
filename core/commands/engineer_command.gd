@@ -77,11 +77,19 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 		Action.CLEAR_MINE:
 			out.append_array(Mines.clear(state, target_pos))
 		Action.DEMOLISH_BRIDGE:
-			state.board.set_kind(target_pos, Terrain.Kind.BRIDGE_DESTROYED)
-			out.append(Events.BridgeChanged.new(target_pos, true))
+			# Той самий запобіжник, що й для REPAIR_UNIT/CAPTURE_OBJECTIVE нижче:
+			# без цієї перевірки релізний виклик apply() без validate() перетворив би
+			# звичайне поле на непрохідний BRIDGE_DESTROYED — це не «нічого не
+			# сталося за AP», а мапа, переформована з нізвідки. Подія теж під
+			# охороною: BridgeChanged для мосту, що не змінився, змусила б вигляд
+			# анімувати брехню.
+			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE:
+				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE_DESTROYED)
+				out.append(Events.BridgeChanged.new(target_pos, true))
 		Action.REPAIR_BRIDGE:
-			state.board.set_kind(target_pos, Terrain.Kind.BRIDGE)
-			out.append(Events.BridgeChanged.new(target_pos, false))
+			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE_DESTROYED:
+				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE)
+				out.append(Events.BridgeChanged.new(target_pos, false))
 		Action.REPAIR_UNIT:
 			# assert(validate()) вище гарантує ціль у debug-збірці; у релізі, де
 			# assert вирізано, unit_at() досі може повернути null. Мовчазний

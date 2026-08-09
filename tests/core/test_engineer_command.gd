@@ -20,7 +20,7 @@ func test_lay_mine_on_adjacent_tile() -> void:
 func test_diagonal_target_is_rejected() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
 	var cmd: EngineerCommand = EngineerCommand.create(e.id, EngineerCommand.Action.LAY_MINE, Vector2i(5, 5))
-	assert_ne(cmd.validate(state), "", "§3.8: лише ортогонально сусідній тайл")
+	assert_eq(cmd.validate(state), "ERR_NOT_ADJACENT", "§3.8: лише ортогонально сусідній тайл")
 
 func test_clear_mine_removes_it() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
@@ -49,27 +49,78 @@ func test_repair_heals_a_damaged_friendly_unit() -> void:
 	assert_true(friend.hp > 100)
 	assert_true(friend.hp <= friend.max_hp(), "лікування не перевищує максимум")
 
-func test_repair_is_worse_when_the_engineer_drove_all_turn() -> void:
+func test_repair_amount_at_full_ap_ranges_up_to_the_ap_bonus() -> void:
+	# §3.8: (40 + rand(0, ap_left - fire_cost)) / 2. Engineer squad (type 11):
+	# max_ap 68, fire_cost 20 -> n = 48 at full AP.
+	# roll=0   (mininum of rand(0,48))  -> (40+0)/2  = 20  — the floor.
+	# roll=48  (maximum of rand(0,48))  -> (40+48)/2 = 44  — the ceiling.
+	# Sampled across many seeds (same idiom as test_rules_damage.gd's _samples()),
+	# so the assertion is on the formula's exact analytical bounds, not on one
+	# seed's arbitrary output.
 	var fresh: Unit = _engineer(Vector2i(1, 1))
+	var lo: int = 999999
+	var hi: int = -999999
+	for s in 200:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = s
+		var v: int = EngineerCommand.repair_amount(rng, fresh)
+		lo = mini(lo, v)
+		hi = maxi(hi, v)
+	assert_eq(lo, 20, "roll=0 -> (40+0)/2 = 20")
+	assert_eq(hi, 44, "roll=48 -> (40+48)/2 = 44 — повні AP піднімають стелю")
+
+func test_repair_amount_is_exactly_the_floor_when_ap_is_spent() -> void:
+	# ap_left == fire_cost -> n = 0. Rules.roll() returns 0 for n <= 0 WITHOUT
+	# reading the rng at all, so this is deterministic regardless of seed —
+	# no sampling needed to know it is exactly 20 every time.
 	var tired: Unit = _engineer(Vector2i(8, 8))
 	tired.ap = tired.fire_cost()
-	var a: int = EngineerCommand.repair_amount(state.rng, fresh)
-	var b: int = EngineerCommand.repair_amount(state.rng, tired)
-	assert_true(a >= b, "§3.8: єдине місце, де невитрачені AP щось означають")
+	for s in 5:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = s
+		assert_eq(EngineerCommand.repair_amount(rng, tired), 20,
+			"§3.8: інженер, що весь хід їхав, ремонтує рівно на підлогу формули")
+
+func test_repair_apply_produces_the_hand_derived_hp_delta() -> void:
+	# Integration test through the real apply(), to catch an AP/repair
+	# ordering regression that a pure repair_amount() test cannot see (it
+	# never touches AP state at all).
+	#
+	# Ground truth for the derivation: BattleState.create(..., 21) in
+	# before_each seeds state.rng with 21. Nothing before this call consumes
+	# state.rng (BattleState.create()/add_unit() never touch it), so this is
+	# the very first draw. Independently probed with RandomNumberGenerator
+	# directly (NOT via EngineerCommand/repair_amount — the RNG primitive
+	# Rules.roll() itself wraps, not the code under test):
+	#   seed=21, first randi_range(0, 48) == 11
+	# n = 48 because the engineer (type 11) is at full AP (68) minus its
+	# fire_cost (20). repair_amount = (40 + 11) / 2 = 25 (int division of
+	# 51/2 truncates). friend starts at hp=100, so hp_left = 125.
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var friend: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	friend.hp = 100
+	EngineerCommand.create(e.id, EngineerCommand.Action.REPAIR_UNIT, Vector2i(4, 3)).apply(state)
+	assert_eq(friend.hp, 125, "seed 21: roll=11 -> (40+11)/2=25 -> 100+25")
 
 func test_repair_of_enemy_unit_is_rejected() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
-	state.add_unit(5, 1, Vector2i(4, 3), 0)
-	assert_ne(EngineerCommand.create(e.id, EngineerCommand.Action.REPAIR_UNIT, Vector2i(4, 3)).validate(state), "")
+	var enemy: Unit = state.add_unit(5, 1, Vector2i(4, 3), 0)
+	enemy.hp = 1  # damaged, not merely undamaged — isolates the ownership check:
+	# an enemy at full HP would also be rejected as "undamaged", which would
+	# pass even if the ownership check were deleted outright.
+	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.REPAIR_UNIT, Vector2i(4, 3)).validate(state),
+		"ERR_NO_FRIENDLY_UNIT_THERE")
 
 func test_non_engineer_cannot_use_engineer_actions() -> void:
 	var tank: Unit = state.add_unit(5, 0, Vector2i(4, 4), 0)
-	assert_ne(EngineerCommand.create(tank.id, EngineerCommand.Action.LAY_MINE, Vector2i(4, 3)).validate(state), "")
+	assert_eq(EngineerCommand.create(tank.id, EngineerCommand.Action.LAY_MINE, Vector2i(4, 3)).validate(state),
+		"ERR_NOT_AN_ENGINEER")
 
 func test_action_without_enough_ap_is_rejected() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
 	e.ap = 1
-	assert_ne(EngineerCommand.create(e.id, EngineerCommand.Action.LAY_MINE, Vector2i(4, 3)).validate(state), "")
+	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.LAY_MINE, Vector2i(4, 3)).validate(state),
+		"ERR_NOT_ENOUGH_AP")
 
 func test_capture_objective_flips_ownership() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
