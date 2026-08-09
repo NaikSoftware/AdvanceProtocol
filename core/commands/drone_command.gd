@@ -30,7 +30,7 @@ func validate(state: BattleState) -> String:
 		return "ERR_NO_DRONES_LEFT"
 	if a.has_fired or a.ap < a.fire_cost():
 		return "ERR_NOT_ENOUGH_AP"
-	if t.unit_class() == UnitTypes.UnitClass.INFANTRY:
+	if not UnitTypes.is_vehicle(t.unit_class()):
 		return "ERR_DRONE_CANNOT_TARGET_INFANTRY"
 	if not Rules.in_radius(a.pos, t.pos, RANGE):
 		return "ERR_OUT_OF_RANGE"
