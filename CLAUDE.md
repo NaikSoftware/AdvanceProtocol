@@ -242,9 +242,13 @@ at all times, offsetting off-road penalty. Roads are never affected — that is 
 When something here is ambiguous, contradictory, or missing — and the answer matters for balance
 or feel — **check how the original did it before inventing an answer.**
 
-Reference of record, reverse-engineered Java MIDP sources:
-<https://github.com/NaikSoftware/Blitzkrieg>. Where to look, which obfuscated fields map to what,
-and every finding recovered so far: **[docs/reference/blitzkrieg.md](docs/reference/blitzkrieg.md)**.
+Reference of record: **<https://github.com/NaikSoftware/Blitzkrieg>** — decompiled Java J2ME/MIDP
+sources of *Blitzkrieg II*, obfuscated. **That repository carries its own `docs/`** describing what
+the original does — code map, level format and board sizes, stat tables, fog model — and that is
+where a new finding about the original goes.
+
+What the original means *for this project* — adopted, rejected, and why:
+**[docs/reference/blitzkrieg.md](docs/reference/blitzkrieg.md)**.
 
 - **It is a reference, not a dependency.** No code and no assets are copied from it.
 - **It is not automatically right.** It has quirks that look like bugs, and this project departs

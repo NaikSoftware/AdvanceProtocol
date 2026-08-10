@@ -10,6 +10,14 @@ matters for balance or feel — **check how the original did it before inventing
 Reference of record, reverse-engineered Java MIDP sources:
 <https://github.com/NaikSoftware/Blitzkrieg>
 
+**That repository now documents itself.** Findings about *what the original does* — the code map,
+the level format and board sizes, the stat tables, the fog model — live in its own `docs/`, one
+file per subsystem, each claim cited and marked measured or inferred. Read those first; they are
+more complete than the summaries below, and new findings belong there rather than here.
+
+**This file keeps only what the original means for Advance Protocol** — what was adopted, what was
+rejected, and why. A fact about the original with no decision attached belongs upstream.
+
 Where to look (the code is obfuscated; these are the mappings that have already been recovered):
 
 | file | what is in it |
@@ -33,6 +41,37 @@ Two rules about using it:
   finding in this file rather than silently matching or silently ignoring it.
 
 ### Findings from the reference
+
+- **The original opens the map with an aircraft, and this project has no analogue — which makes our
+  fog last *longer* than the original's, not shorter.** This is the most consequential thing found
+  in the reference so far and it was missed until the fog model had already been copied.
+
+  `field_178 == 0` is the **Scout plane**, a player action rather than a unit. It flies down a
+  chosen column and calls the vision flood at radius 4 **at every row it crosses**, clearing a
+  nine-tile-wide band the full height of the map — **180 of `levelm`'s 400 tiles, 45% of the board,
+  from one action available on turn one.** Its cooldown is 4 turns and the availability flag is
+  never cleared after use, so it is reusable roughly every fifth turn, not a one-off. Artillery
+  covering the flight path can shoot it down.
+
+  The number that matters: with the plane, one player's grid is **73% clear on turn one**. Without
+  it, ground scouting alone reaches 29% on turn one and 52% by turn five. So the original's fog was
+  never sustained by scouts at all — the plane was the reveal mechanism, and the permanent `seen`
+  grid was cheap for it because the map was open almost immediately anyway.
+
+  **Two consequences for [§3.5](../rules/vision-and-fog.md).** First, an earlier worry that
+  permanent `seen` collapses the fog "within a few turns" was wrong by a wide margin, and the
+  measured curve is now in that document. Second, if an air-recon action is ever proposed here, it
+  is not a small addition — on the reference's board sizes it is the single largest reveal in the
+  game, and adding it would move our fog from "constrains the first five to eight turns" to
+  "constrains turn one".
+
+- **Boards are small and hard-capped.** Per-map dimensions live in the first two bytes of each level
+  file; the eleven bundled maps run 256–400 tiles (16×16 to 20×20), and static allocations cap any
+  board at **20×22 tiles and twenty units total**. Starting forces are baked into the level — no
+  purchase step — and player 0 gets 2–7 units, five on the hot-seat map, one of each class. Sizing
+  guidance for our own maps is derived from this and written out in
+  [§3.5](../rules/vision-and-fog.md); it does **not** conclude "copy their board size", because
+  their boards were built for a 176-pixel screen and for a game that had the Scout plane.
 
 - **Tank → artillery damage is quartered in the original — confirmed, and deliberately not
   adopted.** `class_3.method_160` carries a distinct `>>= 2` branch for attacker `TANK` against

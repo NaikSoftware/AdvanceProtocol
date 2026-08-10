@@ -47,22 +47,46 @@ this document lean on *not* being seen, and all three weaken as a match goes on:
 None of that is a defect; it is what "scouted stays open" means. It is written down so nobody
 later reads §3.3.1 and concludes vision is doing more work than it is.
 
-**And the first-order consequence, which is bigger than all three and must not be discovered in
-playtest.** `seen` grows by roughly `(2·vision + 1) × path_length` tiles per moving unit per turn.
-With a handful of units of vision 3–5 each covering three to six tiles a turn, `seen` approaches
-the whole board within a few turns. **From that point the fog hides only mines.** Every enemy unit
-is permanently visible, shootable, inspectable and able to retaliate, with no spotter anywhere.
+**How long the fog actually lasts — measured, not guessed.** An earlier version of this section
+asserted that `seen` "approaches the whole board within a few turns", which was arithmetic done in
+the head and it was wrong. The reference was then simulated properly: its real eleven maps, real
+starting rosters, real terrain costs, and the exact diamond applied at every tile entered. On
+boards of 256–400 tiles with a five-unit force, one player's grid opens like this:
 
-Read plainly: **hiding enemy positions is an opening mechanic, not a standing one.** Retreating
-into fog is impossible. Ambush is impossible. What the handover gate protects in the late game is
-mine locations, AP residue and intent — not position. That is a real narrowing of pillar 2, and it
-is the direct price of making reconnaissance permanent; the reference makes the same trade.
+| | turn 1 | turn 3 | turn 5 | turn 10 | turn 20 |
+| --- | --- | --- | --- | --- | --- |
+| advancing on the enemy | 29% | 42% | 52% | 66% | 81% |
+| deliberately fanning out to scout | 37% | 66% | 85% | 95% | 97% |
 
-It is recorded rather than corrected, because correcting it means re-fogging tiles, which takes
-back what a dead scout bought and is exactly the model this project moved away from. If playtest
-says the late game is too transparent, the dial to reach for is **map size against roster size** —
-a board nobody can sweep keeps unscouted ground on it — not a decay rule on `seen`. No maps exist
-yet, so the crossover turn is unmeasured.
+So **the fog is a real constraint for roughly the first five to eight turns** and largely spent by
+turn fifteen to twenty. Not "a few turns", and not "most of the match" either. The binding
+constraint is not board size but the roster: **the vision-5 unit moves 3 tiles a turn, the fast
+units see 3, and artillery covers 1.**
+
+The end state is still what matters for design. Once `seen` has spread, **the fog hides only
+mines** — every enemy unit is permanently visible, shootable, inspectable and able to fire back,
+with no spotter anywhere. Retreating into fog and ambush both stop being available. What the
+handover gate protects late is mine locations, AP residue and intent, not position. That is a real
+narrowing of pillar 2 and it is the price of permanent reconnaissance.
+
+**The dial is map size against roster size, and it is now quantified** (§4). With about five units,
+coverage scales with force size × tiles moved, so doubling the roster is close to halving the board:
+
+| board | tiles | turn 5 | turn 10 | turn 20 |
+| --- | --- | --- | --- | --- |
+| 16×16 | 256 | 48% | 76% | 88% |
+| 20×20 | 400 | 28% | 51% | 79% |
+| 24×24 | 576 | 21% | 44% | 69% |
+| 28×28 | 784 | 14% | 29% | 52% |
+| 32×32 | 1024 | 13% | 27% | 50% |
+
+**Under ~350 tiles the fog is short-lived. The crossover for "still matters at turn 10" is around
+576 tiles (24×24). At 784–1024 tiles half the board is still dark at turn 20.** Hand-made maps
+should be sized against that table rather than against the reference's boards, which were built
+for a 176-pixel screen.
+
+Re-fogging is still not the answer if the late game feels transparent: it takes back what a dead
+scout bought, which is the whole reason this model was chosen.
 **`ERR_TARGET_NOT_VISIBLE` no longer describes its own condition.** It now means "the target stands
 on ground you have never scouted". The identifier is kept because localisation may key on it, but
 the UA and EN strings must be written against the *meaning*, not the name — "you have not scouted
