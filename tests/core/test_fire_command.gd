@@ -48,18 +48,70 @@ func test_range_is_the_circle_and_not_the_vision_diamond() -> void:
 	assert_true(Rules.in_radius(gun.pos, t.pos, gun.attack_range()), "передумова: у колі дальності 5")
 	assert_false(Rules.in_vision_diamond(gun.pos, t.pos, gun.attack_range()),
 		"передумова: поза ромбом того ж радіуса — саме тут дві форми розходяться")
-	assert_true(state.vision[0].is_visible(t.pos), "передумова: коригувальник підсвічує ціль")
+	assert_true(state.vision[0].is_seen(t.pos), "передумова: коригувальник розвідав тайл цілі")
 
 	assert_eq(FireCommand.create(gun.id, t.id).validate(state), "",
 		"§3.1: дальність — коло; ромб огляду тут не при чому")
 
 
 func test_invisible_target_cannot_be_shot() -> void:
+	# §3.5: гейт — РОЗВІДАНА земля (seen), а не чийсь ромб просто зараз. Арта (огляд 3)
+	# сама до (4,0) не дістає оком, ходів ще не було, тож цей тайл гравець 0 не
+	# розвідував жодного разу — і саме тому пострілу немає. Над розвіданою землею
+	# та сама геометрія дала б законний постріл: див.
+	# test_a_tile_scouted_earlier_stays_shootable_with_nobody_watching().
 	var a: Unit = state.add_unit(9, 0, Vector2i(0, 0), 2)   # арта, vision 3, range 5
 	var t: Unit = state.add_unit(2, 1, Vector2i(4, 0), 2)
 	state.begin_turn()
+	assert_false(state.vision[0].is_seen(t.pos), "передумова: тайл цілі не розвідано")
 	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_TARGET_NOT_VISIBLE",
-		"§3.5: стріляти можна лише по тому, що бачиш")
+		"§3.5: стріляти можна лише по землі, яку ти хоч раз розвідав")
+
+# --- §3.5: розвідка незворотна ----------------------------------------------------
+#
+# Спільна геометрія наступної пари. Гармата (#9: дальність 5, огляд 3) стоїть на
+# (5,10); ворожий середній танк — на (5,5), тобто dist_sq 25 <= 25 у колі дальності
+# і 5 > 3 поза власним оком гармати. Стрілецьке відділення (#0, огляд 5) на (5,1)
+# накриває (5,5) ромбом 4 і потім ЙДЕ ГЕТЬ: 3 тайли поля по 10 AP з наявних 30, і
+# з (2,1) до танка вже 3 + 4 = 7 > 5. Після цього танка не бачить НІХТО з гравця 0.
+#
+# Різниця між двома тестами рівно одна — чи було відділення на дошці. Це і є ціна
+# правила: розвідка купується один раз і не повертається.
+
+func test_a_tile_scouted_earlier_stays_shootable_with_nobody_watching() -> void:
+	var gun: Unit = state.add_unit(9, 0, Vector2i(5, 10), 0)
+	var t: Unit = state.add_unit(5, 1, Vector2i(5, 5), 0)
+	var scout: Unit = state.add_unit(0, 0, Vector2i(5, 1), 4)
+	state.start()
+	state.begin_turn()
+	assert_true(state.vision[0].is_seen(t.pos), "передумова: розвідник накрив тайл танка")
+
+	MoveCommand.create(scout.id, Vector2i(2, 1), -1).apply(state)
+	assert_eq(scout.pos, Vector2i(2, 1), "передумова: 3 тайли поля по 10 — рівно 30 AP")
+	assert_false(state.vision[0].is_visible(t.pos),
+		"передумова: за танком більше не стежить ніхто — ані розвідник, ані гармата (5 > 3)")
+	assert_true(state.vision[0].is_seen(t.pos), "§3.5: розвідане лишається розвіданим")
+
+	var before: int = t.hp
+	assert_eq(FireCommand.create(gun.id, t.id).validate(state), "",
+		"§3.5: по ворогові на давно розвіданій землі стріляти можна без жодного ока поруч")
+	FireCommand.create(gun.id, t.id).apply(state)
+	assert_true(t.hp < before, "і постріл справді доходить")
+	assert_true(t.is_alive(), "макс. ~300 шкоди проти 400 hp — танк виживає, це не предмет тесту")
+
+func test_the_same_shot_is_illegal_over_ground_nobody_ever_scouted() -> void:
+	# Та сама пара, без розвідника. Єдина причина відмови — (5,5) не бачив ніхто й
+	# ніколи: саме на такій землі §3.3.1 і лишає безкарність.
+	var gun: Unit = state.add_unit(9, 0, Vector2i(5, 10), 0)
+	var t: Unit = state.add_unit(5, 1, Vector2i(5, 5), 0)
+	state.start()
+	state.begin_turn()
+
+	assert_true(Rules.in_radius(gun.pos, t.pos, gun.attack_range()), "передумова: у колі дальності 5")
+	assert_false(state.vision[0].is_seen(t.pos), "передумова: землі під танком не розвідували")
+	assert_eq(FireCommand.create(gun.id, t.id).validate(state), "ERR_TARGET_NOT_VISIBLE",
+		"§3.5: нерозвідана земля — єдине, що лишилося непроглядним")
+
 
 func test_friendly_fire_is_rejected() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)

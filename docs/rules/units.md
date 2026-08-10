@@ -81,19 +81,24 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
 The assault squad (#1) is otherwise identical to the rifle squad. What separates it is a
 **drone strike**: a separate action, not a modifier on its normal attack.
 
-**The visibility requirement below is real, and it is real because of geometry rather than
-numbers.** The squad's vision and the drone's range are both 5 — but range is a circle and vision
-is a diamond ([§3.1](movement-and-terrain.md)), so the drone out-reaches the squad's own eyes on every diagonal. A target at
-`(3, 4)` is inside the drone's range and outside the squad's vision, and the strike is refused
-unless *someone else* is spotting it.
+**The visibility requirement below asks whether the ground was ever scouted, not whether anyone is
+watching it now** ([§3.5](vision-and-fog.md)). Over scouted ground it is therefore inert: the drone
+reaches anything inside its circle. It bites only where nobody on that side has ever been — which
+is most of the board on turn one and very little of it by turn ten.
 
-That is the intended shape of the action: the longest reach in the game is also the one most
-dependent on the rest of your force. An earlier version of this document noted the check had no
-bite, which was true while both shapes were circles.
+This paragraph has been wrong twice, in opposite directions, and both errors are instructive. It
+first claimed the check had no bite at all, which was true while range and vision were both circles
+of radius 5. It was then rewritten to claim the check was load-bearing because range is a circle
+and vision a diamond, so a target at `(3, 4)` sits inside the drone's reach and outside the squad's
+own eyes — true of the *diamond*, but the gate never read the diamond once `seen` became the rule.
+What survives is smaller and worth stating plainly: **the drone cannot be fired into ground your
+side has never looked at.** Opening reconnaissance is what unlocks it; after that, ammunition and
+the no-infantry rule are the only things holding it back.
 
 ```
 Drone strike
-  requires  : target is currently visible to the attacking player
+  requires  : the target's tile has been scouted by the attacking player (§3.5) —
+              ever, not necessarily right now
   targets   : vehicle classes only — LIGHT_VEHICLE, TANK, ARTILLERY, ENGINEER
               (a drone cannot be used against infantry)
   range     : 5                       # out-reaches every direct-fire unit in the game

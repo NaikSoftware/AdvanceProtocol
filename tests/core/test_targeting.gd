@@ -131,7 +131,7 @@ func test_invisible_enemy_cannot_be_inspected() -> void:
 
 	assert_true(Rules.in_radius(enemy.pos, my_gun.pos, enemy.attack_range()), "передумова: гармата у дальності 3")
 	assert_true(Rules.in_vision_diamond(enemy.pos, my_gun.pos, enemy.vision()), "передумова: і у ромбі огляду 5")
-	assert_false(state.vision[0].is_visible(enemy.pos), "передумова: я цього ворога не бачу")
+	assert_false(state.vision[0].is_seen(enemy.pos), "передумова: землі під цим ворогом я не розвідував")
 	assert_eq(Targeting.threatened_units(state, enemy.id, 0).size(), 0, "§3.13: туман діє і на огляд ворога")
 
 	# А щойно ворог стає видимим — прогноз зʼявляється.
@@ -139,6 +139,29 @@ func test_invisible_enemy_cannot_be_inspected() -> void:
 	state.start()
 	assert_true(state.vision[0].is_visible(enemy.pos), "передумова: тепер бачу")
 	assert_has(_ids(Targeting.threatened_units(state, enemy.id, 0)), my_gun.id)
+
+
+func test_an_enemy_on_ground_scouted_earlier_can_still_be_inspected() -> void:
+	# §3.5 + §3.13: гейт огляду — розвідана земля, а не чийсь ромб просто зараз.
+	# Та сама пара, що й у тесті вище (відділення на (4,4) тримає мою гармату на
+	# (6,6): зсув (2,2) — dist_sq 8 <= 9 у його дальності 3 і 4 <= 5 у його ромбі,
+	# тоді як моя гармата з оглядом 3 його не бачить). Розвідку робить моє стрілецьке
+	# відділення з (4,8) — 4 тайли ромба до ворога — і одразу ЙДЕ ГЕТЬ на (4,11):
+	# 3 тайли поля по 10 з 30 AP, після чого до ворога вже 7 > 5.
+	var enemy: Unit = state.add_unit(0, 1, Vector2i(4, 4), 2)
+	var my_gun: Unit = state.add_unit(9, 0, Vector2i(6, 6), 2)
+	var scout: Unit = state.add_unit(0, 0, Vector2i(4, 8), 4)
+	state.start()
+	state.begin_turn()
+	assert_true(state.vision[0].is_seen(enemy.pos), "передумова: розвідник накрив тайл ворога")
+
+	MoveCommand.create(scout.id, Vector2i(4, 11), -1).apply(state)
+	assert_eq(scout.pos, Vector2i(4, 11), "передумова: 3 тайли поля по 10 — рівно 30 AP")
+	assert_false(state.vision[0].is_visible(enemy.pos), "передумова: зараз за ворогом не стежить ніхто")
+	assert_true(state.vision[0].is_seen(enemy.pos), "передумова: але землю під ним колись розвідали")
+
+	assert_has(_ids(Targeting.threatened_units(state, enemy.id, 0)), my_gun.id,
+		"§3.5: ворог на розвіданій землі лишається оглядним — і його прогноз теж")
 
 
 func test_own_units_are_never_a_threat_to_their_owner() -> void:
@@ -389,13 +412,35 @@ func test_invisible_enemy_squad_carries_no_drone_forecast() -> void:
 	state.start()
 	state.begin_turn()
 
-	assert_false(state.vision[0].is_visible(squad.pos), "передумова: загону не видно")
+	assert_false(state.vision[0].is_seen(squad.pos), "передумова: землі під загоном я не розвідував")
 	assert_eq(Targeting.drone_threatened_units(state, squad.id, 0).size(), 0, "туман діє і на дронове кільце")
 
 	state.add_unit(0, 0, Vector2i(2, 4), 2)                        # моя піхота, огляд 5
 	state.start()
 	assert_true(state.vision[0].is_visible(squad.pos), "передумова: тепер бачу")
 	assert_has(_ids(Targeting.drone_threatened_units(state, squad.id, 0)), tank.id)
+
+
+func test_an_enemy_squad_on_ground_scouted_earlier_still_carries_a_drone_forecast() -> void:
+	# Дзеркало test_an_enemy_on_ground_scouted_earlier_can_still_be_inspected() для
+	# дронового кільця: гейт огляду — розвідана земля, і в цьому запиті теж.
+	# Штурмове відділення на (2,2); мій танк на (5,4) — зсув (3,2): dist_sq 13 <= 25
+	# у дальності дрона і 5 <= 5 у ромбі відділення, тоді як власний огляд танка (4)
+	# до відділення не дістає (5 > 4). Розвідник з (2,6) накриває (2,2) і йде на (2,9).
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	var tank: Unit = state.add_unit(5, 0, Vector2i(5, 4), 2)
+	var scout: Unit = state.add_unit(0, 0, Vector2i(2, 6), 4)
+	state.start()
+	state.begin_turn()
+	assert_true(state.vision[0].is_seen(squad.pos), "передумова: розвідник накрив тайл відділення")
+
+	MoveCommand.create(scout.id, Vector2i(2, 9), -1).apply(state)
+	assert_eq(scout.pos, Vector2i(2, 9), "передумова: 3 тайли поля по 10 — рівно 30 AP")
+	assert_false(state.vision[0].is_visible(squad.pos), "передумова: зараз за відділенням не стежить ніхто")
+	assert_true(state.vision[0].is_seen(squad.pos), "передумова: але землю під ним колись розвідали")
+
+	assert_has(_ids(Targeting.drone_threatened_units(state, squad.id, 0)), tank.id,
+		"§3.5/§3.9: розвідане не забувається — дронове кільце лишається видимим гравцеві")
 
 
 func test_own_squad_is_never_a_drone_threat_to_its_owner() -> void:

@@ -9,16 +9,22 @@ extends RefCounted
 ## саме зі стану — видимість гравця, черга ходу, живі юніти — тож класти їх туди
 ## означало б втягнути BattleState у модуль, який навмисно про нього не знає.
 ##
-## Обвідна вогню — це ПЕРЕТИН двох різних форм (§3.1): коло дальності
-## (Rules.in_radius) і ромб огляду (Rules.in_vision_diamond). §3.13 забороняє
-## відтворювати цю геометрію в рендерері — вона лишається в core/.
+## Обвідна вогню для СВОГО юніта — це коло дальності (Rules.in_radius), перетнуте
+## з розвіданою землею (Vision.is_seen, §3.5), а не з ромбом огляду: розвідка
+## незворотна, тож ромб вирішує лише, як швидко та земля відкривається. §3.13
+## забороняє відтворювати цю геометрію в рендерері — вона лишається в core/.
 ##
-## «Рівно тут» — лише про два прогнози, threatened_units() і
-## drone_threatened_units(): тільки вони будують перетин самі, бо міряють ромб
-## ОДНИМ юнітом, а такого предиката більше ніде немає. У firing_targets() і
-## drone_targets() перетин уже зібраний деінде: коло живе у check_shot()/
-## check_strike(), а ромб — у Vision.recompute(), яка наповнює мережу власника.
-## Вони цю геометрію не повторюють, і повторювати не мають.
+## Ромб (Rules.in_vision_diamond) лишається рівно у двох прогнозах — threatened_units()
+## і drone_threatened_units(). Там він міряється ОДНИМ ворожим юнітом навмисно: сітка
+## seen його власника — прихована інформація, і читати її означало б видати, де в
+## нього очі. Тому прогноз є ПІДЛОГОЮ, а не стелею (див. нижче), і після переходу
+## правил на seen він став ще нижчою підлогою, ніж був: ворог справді дістає всюди,
+## куди ходила його розвідка, а не лише в межах власного ромба. UI зобовʼязаний
+## казати це вголос (§3.13) — і саме тому цю геометрію не можна «підтягнути» до
+## правил, підставивши сюди state.vision[e.owner].
+##
+## У firing_targets() і drone_targets() ця обвідна не будується заново: коло живе
+## у check_shot()/check_strike(), а seen — у самій сітці гравця.
 
 
 static func firing_targets(state: BattleState, unit_id: int) -> Array[Unit]:
@@ -113,7 +119,8 @@ static func threatened_units(state: BattleState, unit_id: int, observer: int) ->
 		return out  # свої своїх не обстрілюють — тут нема чого прогнозувати
 	if e.unit_class() == UnitTypes.UnitClass.ENGINEER:
 		return out  # §3.6: у інженера немає зброї, отже й загрози від нього немає
-	if not state.vision[observer].is_visible(e.pos):
+	# §3.5: оглянути можна юніт на розвіданій землі — той самий гейт, що й у пострілу.
+	if not state.vision[observer].is_seen(e.pos):
 		return out
 
 	var reach: int = e.attack_range()
@@ -162,7 +169,8 @@ static func drone_threatened_units(state: BattleState, unit_id: int, observer: i
 		return out
 	if e.drones_left <= 0:
 		return out  # §3.9: боєкомплект скінчився назавжди — дронової загрози немає
-	if not state.vision[observer].is_visible(e.pos):
+	# §3.5: той самий гейт огляду, що й у threatened_units(), — розвідана земля.
+	if not state.vision[observer].is_seen(e.pos):
 		return out
 
 	var eyes: int = e.vision()

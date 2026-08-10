@@ -84,8 +84,31 @@ func test_invisible_target_is_rejected() -> void:
 	var t: Unit = state.add_unit(5, 1, Vector2i(5, 6), 2)
 	state.begin_turn()
 	assert_true(Rules.in_radius(a.pos, t.pos, DroneCommand.RANGE), "передумова: у межах дальності дрона")
+	assert_false(state.vision[0].is_seen(t.pos), "передумова: тайл цілі не розвідано жодного разу")
 	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "ERR_TARGET_NOT_VISIBLE",
-		"§3.9: ціль має бути видима гравцеві просто зараз")
+		"§3.9/§3.5: ціль має стояти на розвіданій землі — над нею ця перевірка інертна")
+
+func test_the_same_diagonal_stays_unlocked_after_the_spotter_leaves() -> void:
+	# §3.5: коригувальник не мусить стояти поруч вічно — розвідка незворотна, і
+	# §3.9 над розвіданою землею вже нічого не ріже. Та сама діагональ, що й вище:
+	# стрілецьке відділення з (5,3) накриває (5,6) ромбом 3, потім їде на (2,3)
+	# (3 тайли поля по 10 з 30 AP), звідки до цілі вже 3 + 3 = 6 > 5. Саме́ штурмове
+	# відділення цілі не бачить ніколи (7 > 5), і все одно бʼє.
+	var a: Unit = _assault(Vector2i(2, 2))
+	var t: Unit = state.add_unit(5, 1, Vector2i(5, 6), 2)
+	var scout: Unit = state.add_unit(0, 0, Vector2i(5, 3), 4)
+	state.start()
+	state.begin_turn()
+	assert_true(state.vision[0].is_seen(t.pos), "передумова: коригувальник розвідав тайл цілі")
+
+	MoveCommand.create(scout.id, Vector2i(2, 3), -1).apply(state)
+	assert_eq(scout.pos, Vector2i(2, 3), "передумова: 3 тайли поля по 10 — рівно 30 AP")
+	assert_false(state.vision[0].is_visible(t.pos), "передумова: зараз за ціллю не стежить ніхто")
+	assert_true(state.vision[0].is_seen(t.pos), "передумова: але землю під нею колись розвідали")
+
+	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "",
+		"§3.9/§3.5: над розвіданою землею перевірка видимості інертна — удар лишається законним")
+
 
 func test_a_spotter_unlocks_the_diagonal_the_squad_cannot_see() -> void:
 	# §3.9: найдовша рука в грі — і найзалежніша від решти війська. Той самий
@@ -102,7 +125,7 @@ func test_a_spotter_unlocks_the_diagonal_the_squad_cannot_see() -> void:
 		"передумова: 3 + 4 = 7 > 5 — власним оглядом відділення цілі не бачить")
 	state.add_unit(0, 0, Vector2i(5, 4), 2)   # стрілецьке відділення-коригувальник
 	state.refresh_vision(0)
-	assert_true(state.vision[0].is_visible(t.pos), "коригувальник накрив тайл цілі")
+	assert_true(state.vision[0].is_seen(t.pos), "коригувальник розвідав тайл цілі")
 	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "",
 		"§3.9: з коригувальником той самий удар дозволено")
 

@@ -19,6 +19,44 @@ func test_objective_becomes_known_once_observed() -> void:
 	Objectives.refresh_seen(state, 0)
 	assert_true(Objectives.at(state, Vector2i(3, 3)).seen_by[0])
 
+func test_an_objective_scouted_by_a_unit_that_died_is_still_remembered() -> void:
+	# §3.5/§3.10: гейт «ціль побачено» — розвідана земля, а не погляд просто зараз.
+	# Реальний розрив між цими двома є, і ось він: BattleState.start() праймить
+	# видимість УСІМ, але Objectives.refresh_seen() з нього не викликається — вона
+	# чекає на begin_turn() свого гравця. Якщо розвідник гине між цими двома
+	# моментами, під visible ціль не позначилася б НІКОЛИ, хоч гравець і дивився
+	# на неї від першої хвилини матчу. Розвідка незворотна — і це теж має пережити
+	# смерть розвідника.
+	#
+	# Гравець 1: стрілецьке відділення (огляд 5, hp 100) на (5,5) за 2 тайли від
+	# цілі, і танк на (10,10), від якого до цілі 6 > 4 — після смерті відділення на
+	# (5,7) не дивиться ніхто. Гравець 0: гармата (#9, atk 200, дальність 5, огляд 3)
+	# на (5,2), тобто рівно за 3 тайли — і бачить, і дістає. §3.3 ділить шкоду
+	# артилерії по піхоті на 4, тож із dist_sq 9 постріл дає (150 + [0,50])/4 =
+	# [37, 50] — здоровому відділенню цього мало, і hp навмисно збито до 30, щоб
+	# смерть була гарантованою, а тест не залежав від сіда.
+	var idx: int = Objectives.add(state, Vector2i(5, 7), -1)
+	var scout: Unit = state.add_unit(0, 1, Vector2i(5, 5), 0)
+	scout.hp = 30
+	state.add_unit(5, 1, Vector2i(10, 10), 0)
+	var gun: Unit = state.add_unit(9, 0, Vector2i(5, 2), 4)
+	state.start()
+	assert_true(state.vision[1].is_seen(Vector2i(5, 7)), "передумова: розвідник накрив тайл цілі")
+	assert_false(state.objectives[idx].seen_by[1],
+		"передумова: start() праймить видимість, але цілі не позначає — це робить begin_turn()")
+
+	state.active_player = 0
+	state.begin_turn()
+	FireCommand.create(gun.id, scout.id).apply(state)
+	assert_false(scout.is_alive(), "передумова: піхота без броні гине від гармати")
+	assert_false(state.vision[1].is_visible(Vector2i(5, 7)),
+		"передумова: після смерті розвідника на тайл цілі не дивиться ніхто")
+
+	EndTurnCommand.create().apply(state)   # хід гравця 1: саме тут біжить refresh_seen()
+	assert_eq(state.active_player, 1, "передумова: хід перейшов до гравця 1")
+	assert_true(state.objectives[idx].seen_by[1],
+		"§3.5: ціль на розвіданій землі памʼятається, навіть коли того, хто її бачив, уже нема")
+
 func test_map_cannot_exceed_fifteen_objectives() -> void:
 	for i in 15:
 		assert_true(Objectives.add(state, Vector2i(i, 0), -1) >= 0)

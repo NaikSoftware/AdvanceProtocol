@@ -55,12 +55,28 @@ Two rules about using it:
   original's own UI draws it as a 360° arc. The two metrics are genuinely different in the source;
   this is not a decompilation artefact.
 
-- **The original has no "visible now" grid, and this project deliberately does.** `field_172` is a
-  single permanent *seen* grid: it is initialised to fogged and every later write clears it, never
-  re-fogs. Enemy unit rendering and target selection test that same grid — so in the original, once
-  a tile has ever been revealed, units standing on it are visible **forever**. [§3.5](../rules/vision-and-fog.md)'s two grids
-  (`visible` and `seen`) are a departure, and the one this game's hidden information rests on.
-  Remembered terrain without live unit positions is the entire point of the fog model here.
+- **The original gates everything on a single permanent *seen* grid — matched, after this project
+  first departed from it and then reversed.** `field_172` is initialised to fogged and every later
+  write clears it, never re-fogs. Enemy unit rendering and target selection test that same grid, so
+  in the original, once a tile has ever been revealed, units standing on it are visible **forever**.
+
+  This entry previously recorded the opposite decision, and the reversal is worth reading rather
+  than just noting. [§3.5](../rules/vision-and-fog.md) does keep two grids — but `seen` is the one
+  the rules read, and `visible` exists only to extend it, so the *behaviour* is the original's. The
+  earlier version gated firing, retaliation, inspection and move planning on live vision, which
+  made an enemy vanish the moment your last spotter looked away.
+
+  What settled it is that permanence is what makes reconnaissance an investment. Under live vision,
+  a scout that dies has bought you nothing; under `seen`, it has bought you everything it saw, and
+  the scout car earns its place in the roster. The price is real and is written out in
+  [§3.5](../rules/vision-and-fog.md): impunity from being unseen decays as the match runs, because
+  the ground nobody has scouted only ever shrinks.
+
+  **Two grids are still not pointless.** `visible` remains the live-vision highlight the view will
+  draw, and it is what mine detection reads ([§3.11](../rules/vision-and-fog.md)) — a sapper
+  searches where it stands, not everywhere it has ever been. That is the one place this project
+  keeps a live-vision rule, and it is deliberate: it is also the one thing the fog still hides once
+  `seen` has spread across the board.
 
 - **Only engineers detect enemy mines** (`class_1`, guarded on `field_250 == 4`). Adopted ([§3.11](../rules/vision-and-fog.md)).
   Two deliberate differences:

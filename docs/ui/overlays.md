@@ -26,8 +26,10 @@ range bound to hold-a-key.
 Tapping an enemy shows *its* range and which of **your** units stand inside it. With retaliation
 ([§3.3.1](../rules/combat.md)) that is not a convenience, it is the information the central decision of a turn rests on:
 firing on a healthy target inside its range invites a full-strength answer, and you cannot judge
-that without seeing the answer's reach. Fog still applies — a unit you cannot see cannot be
-inspected.
+that without seeing the answer's reach. Fog still applies — a unit standing on ground you have
+never scouted cannot be inspected ([§3.5](../rules/vision-and-fog.md)). Note that this is a weaker
+bar than it sounds: once the ground has been scouted, the enemy on it stays inspectable whether or
+not anyone of yours is still watching.
 
 **Own unit and enemy unit are gated differently, and this is a deliberate departure from the
 reference.**
@@ -64,9 +66,12 @@ trading one flaw for another — and the matchup triangle wants it anyway, since
 squad with infantry is a response to a threat that has to be known to be live.
 
 The drone's marks obey the action's own rules, not the ordinary shot's: vehicle classes only, so
-the observer's infantry is never marked as a drone target, and the same vision diamond gates it as
-everything else. For **your own** squad the ring answers the same question as the gun's — what can
-I hit right now — so ammunition gates it too: a squad out of drones has no drone ring.
+the observer's infantry is never marked as a drone target. **Two different gates are in play here
+and they must not be confused.** Whether a unit can be *inspected at all* is decided by `seen`; the
+marks drawn inside an inspected **enemy's** ring are computed from that unit's own vision diamond,
+because the forecast may not read its owner's network (below). For **your own** squad the ring
+answers the same question as the gun's — what can I hit right now — so ammunition gates it too: a
+squad out of drones has no drone ring.
 
 **The drone is where the floor understates the most, and the UI copy should say so.** A strike
 needs the *owner's* vision like any other shot, so a squad whose network sees a tank outside its
@@ -91,12 +96,25 @@ own vision, which is information the player could work out by hand from a public
 position they can already see.
 
 The consequence must be stated in the UI rather than hidden: **the marks are a floor, not a
-ceiling.** A unit not marked can still be shot, if the enemy has eyes you have not found. That is
-the honest version — the alternative is an overlay that quietly leaks the position of scouts.
+ceiling.** A unit not marked can still be shot. That is the honest version — the alternative is an
+overlay that quietly leaks the position of scouts.
 
-Both computations belong in `core/` and neither may be re-derived in the view. The envelope is the
-intersection of a circle and a diamond ([§3.1](../rules/movement-and-terrain.md)); a second implementation of that geometry in the
-renderer is exactly the drift this document exists to prevent.
+**The gap is much wider than "the enemy might have a spotter you have not found", and it widens as
+the match runs.** The forecast measures the inspected unit's reach with its own vision diamond,
+because that is all it may read. The enemy's *real* reach is their range circle intersected with
+their `seen` grid ([§3.5](../rules/vision-and-fog.md)) — a grid that only grows, and that by
+mid-match may cover most of the board. So by then a tank forecast as threatening a handful of tiles
+is in practice threatening everything inside its circle. The UI copy must not promise more than
+"these are certainly in danger"; a player who reads the unmarked tiles as safe will be wrong, and
+increasingly wrong the longer the match goes on.
+
+Both computations belong in `core/` and neither may be re-derived in the view. **The envelope is a
+range circle intersected with the observer's `seen` grid** ([§3.5](../rules/vision-and-fog.md)) —
+*not* a circle intersected with a vision diamond, which is what this paragraph used to say and what
+a renderer would most plausibly guess. The diamond appears in exactly one place here: the marks
+inside an enemy's ring, which are deliberately computed from that unit alone. A second
+implementation of either geometry in the renderer is exactly the drift this document exists to
+prevent.
 
 **The movement zones are drawn from the fog-filtered occupancy, which is also what the move is
 planned against** ([§3.2](../rules/movement-and-terrain.md)). The overlay and the order agree by

@@ -75,12 +75,12 @@ worked examples, the arguments, the balance reasoning — is in [`docs/rules/`](
 | weapon range | Euclidean circle | `dx*dx + dy*dy <= r*r` — squared, never `sqrt` |
 | vision | Manhattan diamond | `abs(dx) + abs(dy) <= r` |
 
-A diamond of radius `r` sits inside the circle of radius `r`, and firing requires visibility, so
-**the effective firing envelope is the intersection** — the diamond, wherever vision is the
-tighter of the two. A unit is unconstrained exactly when it sees further than it shoots — on the
-current roster the rifle squad and the engineer. This is a property of the weapon, not the class:
-the assault squad's rifle is unconstrained, while its **drone** loses more envelope than anything
-else in the game.
+**What may be fired on is decided by `seen` (§3.5), not by the diamond.** Over ground your side has
+already scouted the weapon's full circle is available; the diamond governs how fast `seen` grows.
+It constrains shooting only on **unscouted** ground, where a unit spots for itself — and there a
+diamond of radius `r` sits inside the circle of radius `r`, so the envelope is the diamond. A unit
+is unconstrained even then exactly when it sees further than it shoots: on the current roster the
+rifle squad and the engineer.
 
 ### 3.2 Action points → [details](docs/rules/movement-and-terrain.md)
 
@@ -140,10 +140,15 @@ product against the target's facing. No trigonometry, no division.
 
 - **The fog hides enemy units and their mines — never the map.** Terrain is public from the first
   turn, at full brightness. Hiding the ground would make the two movement zones lie, since a
-  contour bending around unscouted obstacles is itself a tell.
-- Every player keeps **two grids**: `visible` (in someone's vision right now) and `seen` (ever
-  scouted). `seen` is what the fog tint is drawn from — the map is legible everywhere, and the tint
-  says "none of yours has been here".
+  contour bending around unscouted obstacles is itself a tell. **It hides enemy units only until
+  the ground under them is scouted**, and since scouting is permanent, by mid-match it hides little
+  but mines — an opening mechanic, not a standing one. See the linked document.
+- Every player keeps **two grids**, and **`seen` is the one the rules read**: a tile ever scouted
+  stays scouted, and an enemy standing on it is visible, shootable, inspectable and able to fire
+  back. `visible` (inside a vision diamond right now) exists only to extend `seen`.
+- **Scouting is permanent and one-way** — a scout that dies on turn two has still bought you
+  everything it saw. The cost is that impunity from being unseen (§3.3.1) applies only to ground
+  the enemy has *never* scouted, and shrinks as the match goes on. See the linked document.
 - Recomputed for the active player from scratch at turn start and after every move step.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not

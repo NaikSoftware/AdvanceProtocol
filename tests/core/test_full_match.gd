@@ -271,7 +271,7 @@ func test_state_survives_a_save_load_mid_match() -> void:
 # turn — before player 1 has ever had a begin_turn() of their own to compute
 # an honest vision grid. Without start(), vision[1] is still the all-zero
 # grid BattleState.create() built, FireCommand._retaliate() gates the
-# counter-shot on state.vision[target.owner].is_visible(...), and this shot
+# counter-shot on state.vision[target.owner].is_seen(...), and this shot
 # would go answered by nobody. This is the exact defect fixed by priming
 # every player's vision once, up front, via start().
 #

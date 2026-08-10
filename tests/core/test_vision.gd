@@ -57,6 +57,25 @@ func test_seen_is_sticky_but_visible_is_not() -> void:
 	assert_false(v.is_visible(Vector2i(2, 2)), "visible перебудовується з нуля")
 	assert_true(v.is_seen(Vector2i(2, 2)), "seen памʼятає назавжди")
 
+func test_seen_never_shrinks_even_when_the_scout_dies() -> void:
+	# §3.5: seen — храповик, і саме тому правила читають його, а не visible.
+	# Розвідник, що загинув, однаково лишив власникові все, що встиг побачити:
+	# після його смерті visible гасне цілком, а жоден біт seen не має впасти.
+	var v: Vision = Vision.create(12, 12)
+	var u: Unit = Unit.create(1, 0, 0, Vector2i(2, 2), 0)   # піхота, огляд 5
+	v.recompute(_board(), [u], 0)
+	var before: PackedByteArray = v.seen.duplicate()
+	assert_true(before.count(1) > 0, "передумова: щось таки розвідано")
+
+	u.hp = 0
+	v.recompute(_board(), [u], 0)
+
+	assert_eq(v.visible.count(1), 0, "мертвий розвідник більше нічого не світить")
+	for i in before.size():
+		if before[i] == 1:
+			assert_eq(v.seen[i], 1, "біт seen №%d згас — розвідка не має відкочуватись" % i)
+	assert_true(v.is_seen(Vector2i(2, 2)), "і власний тайл загиблого лишається розвіданим")
+
 func test_newly_revealed_tiles_are_reported_once() -> void:
 	var v: Vision = Vision.create(12, 12)
 	var u: Unit = Unit.create(1, 0, 0, Vector2i(6, 6), 0)
@@ -64,3 +83,37 @@ func test_newly_revealed_tiles_are_reported_once() -> void:
 	assert_true(first.size() > 0)
 	var second: Array[Vector2i] = v.recompute(_board(), [u], 0)
 	assert_eq(second.size(), 0, "той самий огляд другого разу нічого не відкриває")
+
+func test_is_seen_and_is_visible_reject_out_of_bounds_coordinates() -> void:
+	# §3.5: is_seen() — гейт усіх правил, які питають «чи бачить це гравець», і
+	# сторожа _in_bounds() довго була декоративною: жодне правило is_seen() не
+	# читало. Тепер читає, і дістатись до неї легко — Objectives.add()
+	# (core/objectives.gd) не перевіряє позицію цілі, тож рукописна мапа з ціллю
+	# на від'ємній чи за-межевій координаті доводить Objectives.refresh_seen() до
+	# is_seen() з координатою поза сіткою щоходу.
+	#
+	# Масиви заповнені суцільно одиницями навмисне: _index() рахує позицію
+	# лінійно (y*width+x), тож координата, зіпсована лише по одній осі, здатна
+	# арифметично влучити у ЧУЖИЙ, цілком дійсний індекс іншого тайла. Без
+	# перевірки меж це прочитало б справжню одиницю і мовчки повернуло true —
+	# рівно ту поведінку й ловить цей тест. Точкове заповнення такої гарантії не
+	# дало б: зіпсована арифметика могла б так само влучити в нуль і тест
+	# лишився б зеленим і без guard'а.
+	var v: Vision = Vision.create(10, 10)
+	v.seen.fill(1)
+	v.visible.fill(1)
+
+	# x < 0, y лишається в межах: (-1,1) → 1*10-1 = 9 — дійсний індекс чужого тайла.
+	assert_false(v.is_seen(Vector2i(-1, 1)), "is_seen(): x < 0")
+	assert_false(v.is_visible(Vector2i(-1, 1)), "is_visible(): x < 0")
+	# x >= width, y лишається в межах: (10,0) → 0*10+10 = 10 — так само дійсний.
+	assert_false(v.is_seen(Vector2i(10, 0)), "is_seen(): x >= width")
+	assert_false(v.is_visible(Vector2i(10, 0)), "is_visible(): x >= width")
+	# y < 0: лінійний індекс не дає влучити в дійсну клітинку без переповнення
+	# й по x, тож ця пара зачіпає обидві умови одразу — саме тому вони й
+	# гейтяться однією сполучною, а не двома окремими перевірками.
+	assert_false(v.is_seen(Vector2i(10, -1)), "is_seen(): y < 0")
+	assert_false(v.is_visible(Vector2i(10, -1)), "is_visible(): y < 0")
+	# y >= height: та сама причина, дзеркально.
+	assert_false(v.is_seen(Vector2i(-1, 10)), "is_seen(): y >= height")
+	assert_false(v.is_visible(Vector2i(-1, 10)), "is_visible(): y >= height")

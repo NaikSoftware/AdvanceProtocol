@@ -32,7 +32,10 @@ static func refresh_seen(state: BattleState, player: int) -> Array[Events.Battle
 	for o in state.objectives:
 		if o.seen_by[player]:
 			continue
-		if state.vision[player].is_visible(o.pos):
+		# §3.5: seen, а не visible — ціль позначається відомою від самого факту, що
+		# землю під нею колись розвідали. Різниця мала (seen_by і так незворотне),
+		# але гейт мусить бути той самий, що й у решті правил.
+		if state.vision[player].is_seen(o.pos):
 			o.seen_by[player] = true
 			out.append(Events.TileRevealed.new(player, [o.pos] as Array[Vector2i]))
 	return out

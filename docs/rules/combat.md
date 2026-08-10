@@ -75,19 +75,28 @@ what the code or the reference did; it was a rationale written into the spec rat
 of it, and it is corrected here rather than implemented, on the owner's call.
 
 **The retaliator must be able to see its attacker.** A return shot obeys the same visibility rule
-as any other shot: the original attacker's tile has to be visible to the retaliating player at
-that moment. The reference gates its counter-attack on AP, range and class alone, and this is a
-deliberate departure from it — recorded here as [§4](../reference/blitzkrieg.md) requires.
+as any other shot, and that rule reads `seen` ([§3.5](vision-and-fog.md)): the original attacker's
+tile has to be **ground the retaliating player has scouted at some point** — not ground anyone is
+watching right now. The reference gates its counter-attack on AP, range and class alone, and
+requiring visibility at all is a deliberate departure from it, recorded in
+[§4](../reference/blitzkrieg.md).
 
-The consequence is the point: **an attacker the defender cannot see fires with impunity.** That
-makes vision a weapon rather than a convenience, and it gives the roster's asymmetries teeth:
+The consequence is the point: **an attacker the defender has never scouted fires with impunity.**
+That makes reconnaissance a weapon rather than a convenience — but it is an **opening-game**
+weapon, and the wording matters, because an earlier version of this section said "cannot see at
+that moment" and meant something much stronger and much more permanent.
 
-- Artillery has range 5 and vision 3. Firing from maximum range at something that has no spotter
-  covering the gun is genuinely free — and two guns at range 5 do *not* trade, because neither
-  sees the other. Counter-battery fire needs eyes, not just range.
-- Infantry sees furthest (5) of anything in the game. A rifle squad forward of the line is what
-  turns your armour's shots into safe ones and the enemy's into answered ones.
-- Killing the enemy's spotters is therefore an attack on their ability to shoot back at all.
+Scouting is one-way, so the ground a player has never looked at only ever shrinks. Impunity is
+widest on turn one and close to gone by the time both sides have driven across the map:
+
+- Artillery has range 5 and vision 3, and firing from maximum range at a gun whose owner has never
+  scouted your firing position is genuinely free. Two guns at range 5 do not trade **while the
+  ground between them is unscouted** — once either side has swept it, they trade normally, and
+  counter-battery fire becomes a question of who shoots first rather than who has eyes.
+- Infantry sees furthest (5) of anything in the game, which makes it the fastest opener of ground
+  rather than the permanent enabler of everyone else's shots.
+- Killing the enemy's spotters no longer takes their vision away — what they have scouted, they
+  keep. It slows the *growth* of what they can shoot at, which is worth most early and least late.
 
 This reshapes the economics of shooting, and that is the point:
 

@@ -27,8 +27,10 @@ func validate(state: BattleState) -> String:
 	# §3.5: планування — з того, що гравець знає, а не з того, що є. Тайл, зайнятий
 	# невидимим ворогом, лишається законною ціллю: команда проходить перевірку, а
 	# рух зупиниться перед ним у apply(). Помилки на це немає навмисно — вона
-	# повідомляла б рівно те, чого гравець не має знати.
-	var occupied: Dictionary = state.visible_occupied_map(u.owner)
+	# повідомляла б рівно те, чого гравець не має знати. «Невидимим» тут означає
+	# «на нерозвіданій землі»: ворог на давно розвіданому тайлі у карту знання
+	# входить, і маршрут законно його обходить.
+	var occupied: Dictionary = state.known_occupied_map(u.owner)
 	occupied.erase(u.pos)
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	if not zones.can_reach(target):
@@ -41,7 +43,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	var u: Unit = state.get_unit(unit_id)
 	# Маршрут будується з тієї ж неправдивої карти, що й у validate(): гравець веде
 	# юніт крізь землю, яка ВИГЛЯДАЄ порожньою. Правда перевіряється потайлово нижче.
-	var occupied: Dictionary = state.visible_occupied_map(u.owner)
+	var occupied: Dictionary = state.known_occupied_map(u.owner)
 	occupied.erase(u.pos)
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	var path: Array[Vector2i] = Pathing.path_to(zones, target)

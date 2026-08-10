@@ -107,7 +107,9 @@ func test_attacker_outside_retaliators_range_is_not_hit_back() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(0, 0), 2)
 	var t: Unit = state.add_unit(6, 1, Vector2i(5, 0), 6)
 	state.begin_turn()
-	state.vision[0].visible.fill(1)  # дальність, не зір, — предмет цього тесту
+	# Предмет тесту — дальність, не зір, тож гейт зору прибирається з дороги явно:
+	# §3.5 гейтить постріл на seen (розвідана земля), тож заливається саме seen.
+	state.vision[0].seen.fill(1)
 	assert_eq(Rules.distance_sq(a.pos, t.pos), 25)
 	assert_eq(FireCommand.create(a.id, t.id).validate(state), "")
 	var attacker_hp_before: int = a.hp
@@ -147,7 +149,7 @@ func test_retaliators_reach_is_the_circle_and_not_a_vision_diamond() -> void:
 	assert_true(Rules.in_radius(t.pos, a.pos, t.attack_range()), "передумова: у колі дальності 4")
 	assert_false(Rules.in_vision_diamond(t.pos, a.pos, t.attack_range()),
 		"передумова: поза ромбом того ж радіуса — саме тут дві форми розходяться")
-	assert_true(state.vision[t.owner].is_visible(a.pos), "передумова: мережа відповідача атакувальника бачить")
+	assert_true(state.vision[t.owner].is_seen(a.pos), "передумова: відповідач тайл атакувальника розвідав")
 	assert_eq(FireCommand.create(a.id, t.id).validate(state), "", "передумова: постріл законний")
 
 	var attacker_hp_before: int = a.hp
@@ -272,13 +274,16 @@ func test_retaliator_that_cannot_see_the_attacker_does_not_retaliate() -> void:
 	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 6)
 	state.begin_turn()
 	# Навмисно НЕ викликаємо state.refresh_vision(t.owner): для цього класу
-	# (зір 4 == дальність 4) "у дальності, але не видно" ніколи не виникає з
+	# (зір 4 == дальність 4) "у дальності, але не розвідано" ніколи не виникає з
 	# чесно перерахованого зору — лише з того, що зір гравця 1 ще жодного разу
-	# не рахувався (стан до його першого ходу). Гасимо явно, а не покладаємось
-	# на дефолтний нуль BattleState.create(), щоб тест не зламався мовчки, якщо
-	# дефолт колись зміниться.
+	# не рахувався (стан до його першого ходу), тобто його seen порожній і тайл
+	# атакувальника він не розвідував ЖОДНОГО разу. Гасимо обидві сітки явно, а не
+	# покладаємось на дефолтний нуль BattleState.create(), щоб тест не зламався
+	# мовчки, якщо дефолт колись зміниться.
 	state.vision[t.owner].visible.fill(0)
-	assert_false(state.vision[t.owner].is_visible(a.pos), "передумова: відповідач не бачить атакувальника")
+	state.vision[t.owner].seen.fill(0)
+	assert_false(state.vision[t.owner].is_seen(a.pos),
+		"передумова: відповідач тайла атакувальника не розвідував — §3.5 гейтить саме seen")
 	assert_true(t.ap >= t.fire_cost() and Rules.in_radius(t.pos, a.pos, t.attack_range()),
 		"передумова: AP і дальність цілком дозволяли б відповідь")
 	var attacker_hp_before: int = a.hp
@@ -297,9 +302,13 @@ func test_retaliator_that_cannot_see_the_attacker_does_not_retaliate() -> void:
 # perfectly honest play, no fog hack needed:
 #   - attacker's shot: 25 <= 5^2 = 25, in range.
 #   - target's own range is also 5, so 25 <= 25 — in range to retaliate.
-#   - target's own vision is 3, so 25 > 3^2 = 9 — NOT visible. That mismatch
+#   - target's own vision is 3, so 25 > 3^2 = 9 — the attacker's tile has never
+#     entered player 1's `seen` (§3.5: the rules read `seen`, and this is the
+#     opening turn, so player 1 has scouted nothing else). That mismatch
 #     (range 5, vision 3) is exactly CLAUDE.md §3.3.1's own example: "two guns
-#     at range 5 do not trade, because neither sees the other."
+#     at range 5 do not trade, because neither sees the other." Post-§3.5 that
+#     impunity is an OPENING-game weapon: once player 1 has ever scouted (0,0),
+#     the same exchange trades. See docs/rules/vision-and-fog.md.
 #
 # Opening shot, FRONT sector (target faces the attacker), artillery-vs-
 # artillery (no TANK bonus, no minimum-range halving at dist_sq 25, target
@@ -313,16 +322,66 @@ func test_artillery_at_max_range_takes_no_return_fire_because_target_cannot_see_
 	state.begin_turn()
 	# Гарматний зір (3) не дістає до відстані 5 і для самого атакувальника —
 	# те саме, чому у case 4 (test_attacker_outside_retaliators_range...)
-	# зір гравця 0 форсується вручну: предмет цього тесту — зір ЦІЛІ, не
-	# зір атакувальника, тож той гейт треба прибрати з дороги явно.
-	state.vision[0].visible.fill(1)
+	# знання гравця 0 форсується вручну: предмет цього тесту — знання ЦІЛІ, не
+	# знання атакувальника, тож той гейт треба прибрати з дороги явно. Заливається
+	# seen, бо §3.5 гейтить постріл саме ним; visible лишається як є.
+	state.vision[0].seen.fill(1)
 	state.refresh_vision(t.owner)  # зір гравця 1 чесно порахований — і все одно не дістає до 25
 	assert_eq(Rules.distance_sq(a.pos, t.pos), 25)
 	assert_eq(FireCommand.create(a.id, t.id).validate(state), "")
 	assert_true(Rules.in_radius(t.pos, a.pos, t.attack_range()), "передумова: у межах дальності цілі")
-	assert_false(state.vision[t.owner].is_visible(a.pos), "передумова: поза зором цілі (3^2=9 < 25)")
+	assert_false(state.vision[t.owner].is_seen(a.pos),
+		"передумова: гравець 1 тайла (0,0) НІКОЛИ не розвідував — ромб огляду 3 туди не дістає")
 	var attacker_hp_before: int = a.hp
 	var events: Array = FireCommand.create(a.id, t.id).apply(state)
 	assert_true(t.is_alive(), "188 макс. шкоди < 200 hp")
 	assert_null(_shot_retaliated(events), "§3.3.1: гармата поза зором цілі — відповіді немає")
 	assert_eq(a.hp, attacker_hp_before)
+
+# ---------------------------------------------------------------------------
+# 12. Зворотний бік case 11 і ціна §3.5: та сама безвідповідна арта перестає бути
+# безвідповідною, щойно супротивник РОЗВІДАВ ту землю — навіть якщо на момент
+# пострілу на неї не дивиться ніхто.
+#
+# Дві гармати (#9: дальність 5, огляд 3, hp 200, лоб 15) на (2,2) і (2,7):
+# dist_sq 25 <= 25 в обидва боки, а огляд 3 не дістає ні туди, ні звідти. Розвідку
+# робить бронеавтомобіль гравця 1 (#2: огляд 3, ap 68, cross 5 -> поле по 15): з
+# (2,4) до (2,2) рівно 2 тайли ромба, тобто на start() тайл атакувальника входить
+# у seen гравця 1. Далі авто йде на (6,4) — 4 тайли по 15 з 68 AP, — і від (2,2)
+# опиняється за 4 + 2 = 6 > 3, тож visible його вже не накриває.
+#
+# Обидва постріли — FRONT (обидві гармати дивляться одна на одну), бонусів немає:
+#   bounds: [135, 188] < 200 hp — обидві сторони переживають обмін.
+func test_retaliation_comes_from_ground_scouted_earlier_with_nobody_watching() -> void:
+	var a: Unit = state.add_unit(9, 0, Vector2i(2, 2), 4)   # південь — лоб до цілі
+	var t: Unit = state.add_unit(9, 1, Vector2i(2, 7), 0)   # північ — лоб до атакувальника
+	var scout: Unit = state.add_unit(2, 1, Vector2i(2, 4), 0)
+	state.start()
+	assert_true(state.vision[t.owner].is_seen(a.pos), "передумова: авто розвідало тайл атакувальника")
+
+	# Хід гравця 1: розвідник їде геть від щойно розвіданого тайла.
+	state.active_player = 1
+	state.begin_turn()
+	MoveCommand.create(scout.id, Vector2i(6, 4), -1).apply(state)
+	assert_eq(scout.pos, Vector2i(6, 4), "передумова: 4 тайли поля по 15 — 60 з 68 AP")
+
+	# Хід гравця 0. Знання АТАКУВАЛЬНИКА — не предмет тесту (його огляд 3 теж не
+	# дістає до 5), тож цей гейт прибирається з дороги явно, як у case 4 і 11.
+	state.active_player = 0
+	state.begin_turn()
+	state.vision[0].seen.fill(1)
+
+	assert_false(Rules.in_vision_diamond(t.pos, a.pos, t.vision()),
+		"передумова: власним оком ціль атакувальника не бачить — 5 > 3")
+	assert_false(state.vision[t.owner].is_visible(a.pos),
+		"передумова: і жоден інший юніт гравця 1 на цей тайл зараз не дивиться")
+	assert_true(state.vision[t.owner].is_seen(a.pos),
+		"передумова: але колись розвідала — а розвідка незворотна (§3.5)")
+	assert_true(Rules.in_radius(t.pos, a.pos, t.attack_range()), "передумова: дальність відповіді дозволяє")
+
+	var attacker_hp_before: int = a.hp
+	var events: Array = FireCommand.create(a.id, t.id).apply(state)
+	assert_true(t.is_alive(), "188 макс. шкоди < 200 hp — є кому відповідати")
+	assert_not_null(_shot_retaliated(events),
+		"§3.3.1 + §3.5: безкарність діє лише над землею, якої супротивник не розвідував НІКОЛИ")
+	assert_true(a.hp < attacker_hp_before, "відповідь мусить дійти")

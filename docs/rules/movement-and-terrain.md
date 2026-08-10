@@ -23,19 +23,26 @@ A gun fires in a straight line, so its reach is a circle. A scout covers ground 
 the same shape as movement, which is what makes a vision radius legible: it is a step count, not
 an abstract distance.
 
-Confirmed against the reference, which does exactly this ([§4](../reference/blitzkrieg.md)). Two consequences worth stating
-because they are easy to mistake for bugs:
+Confirmed against the reference, which does exactly this ([§4](../reference/blitzkrieg.md)). One
+consequence is worth stating because it is easy to mistake for a bug:
 
-- **The two shapes disagree on diagonals, and a unit can have a target in range that it cannot
-  see.** At radius 5 the circle covers 81 tiles and the diamond 61; a tile at `(3, 4)` is inside
-  a range-5 circle and outside a vision-5 diamond. Since firing requires visibility, the effective
-  firing envelope is the *intersection* of the two.
-- **This is what gives [§3.9](units.md)'s drone visibility check its teeth.** It was inert while both shapes
-  were circles of radius 5.
+- **The two shapes disagree on diagonals, so a unit can have a target inside its range circle that
+  it cannot see for itself.** At radius 5 the circle covers 81 tiles and the diamond 61; a tile at
+  `(3, 4)` is inside a range-5 circle and outside a vision-5 diamond.
 
-A diamond of radius `r` is always contained in the circle of radius `r`, so **the intersection is
-just the vision diamond** wherever vision is the tighter of the two. In tile counts, for a unit
-firing on what it can see by itself, with no spotter:
+An earlier version of this passage drew two further conclusions from that, and both are now wrong:
+that the firing envelope is the intersection of circle and diamond, and that this is what gives
+[§3.9](units.md)'s drone visibility check its teeth. Neither survives, because **what may be fired
+on is not decided by the diamond at all.**
+
+**What decides it is `seen`** ([§3.5](vision-and-fog.md)) — every
+tile the player has ever scouted, permanently — so over ground your side has already crossed, the
+weapon's full circle is available and the diamond does not constrain it at all. The diamond decides
+how fast `seen` grows, not what you may shoot.
+
+So the table below is **the opening-turns picture**: a unit alone on fresh ground, spotting for
+itself, with nothing scouted yet. A diamond of radius `r` sits inside the circle of radius `r`, so
+there the intersection is just the diamond:
 
 | class | range | vision | envelope was | is now | |
 | --- | --- | --- | --- | --- | --- |
@@ -52,12 +59,15 @@ table above because it has no weapon to draw an envelope for). Note that this is
 reason as the rifle squad's, while its **drone** loses more than anything else in the game. Being
 infantry is not a shield here; out-ranging your own eyes is what costs you.
 
-The rifle squad, then, is the only thing on the board whose whole envelope is always usable —
-because it is the only one that sees further
-than it shoots. Everything else now has corners of its own weapon envelope that it cannot use
-unaided. That is the same argument [§3.3.1](combat.md) makes about retaliation, arriving from a different
-direction: the rifle squad forward of the line is what lets the rest of your force use its full
-reach, and killing the enemy's spotters shrinks their guns rather than merely blinding them.
+On fresh ground, then, the rifle squad is the only thing on the board whose whole envelope is
+usable, and everything else has corners of its own weapon it cannot reach unaided. **That state
+does not last.** Because scouting is permanent, those corners open up for good as soon as anyone
+crosses them, and by mid-match most of the roster is firing its full circle.
+
+So the rifle squad forward of the line is what lets the rest of your force *open* its full reach,
+not what sustains it — and killing the enemy's spotters slows how fast their guns grow rather than
+taking anything back. This is the same shape as the retaliation argument in
+[§3.3.1](combat.md), and it decays the same way and for the same reason.
 
 ## Action points
 

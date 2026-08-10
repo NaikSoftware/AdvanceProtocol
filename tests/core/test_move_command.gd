@@ -212,7 +212,7 @@ func test_zones_predict_whether_firing_is_legal_after_the_move() -> void:
 	# червона — рівно "не лишиться".
 	#
 	# Зайнятість береться саме та, з якої зони будує сам MoveCommand
-	# (visible_occupied_map), а не всезнаюча occupied_map() — і геометрія навмисно
+	# (known_occupied_map), а не всезнаюча occupied_map() — і геометрія навмисно
 	# підібрана так, щоб ця різниця мала зуби. Невидимий ворог сидить на (5,5), тобто
 	# на дорозі МІЖ стартом і червоним тайлом (6,5). За всезнаючою картою (6,5) із зон
 	# просто випав би — обхід полем коштує 89 AP при наявних 68, — і UI намалював би
@@ -223,10 +223,10 @@ func test_zones_predict_whether_firing_is_legal_after_the_move() -> void:
 	var u: Unit = state.add_unit(3, 0, Vector2i(0, 5), 2)
 	var target: Unit = state.add_unit(0, 1, Vector2i(5, 5), 6)
 	state.start()
-	assert_false(state.vision[0].is_visible(Vector2i(5, 5)),
-		"передумова: ворога на (5,5) з (0,5) не видно — 5 кроків проти огляду 3")
+	assert_false(state.vision[0].is_seen(Vector2i(5, 5)),
+		"передумова: (5,5) не розвідано — 5 кроків проти огляду 3, і ходів ще не було")
 
-	var occupied: Dictionary = state.visible_occupied_map(u.owner)
+	var occupied: Dictionary = state.known_occupied_map(u.owner)
 	occupied.erase(u.pos)
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	var gold: Vector2i = Vector2i(2, 5)   # 2 тайли дороги = 20 AP, лишається 48 >= 18
@@ -302,8 +302,8 @@ func test_a_hidden_enemy_on_the_path_halts_the_mover_one_tile_short() -> void:
 	var u: Unit = state.add_unit(3, 0, Vector2i(0, 5), 2)
 	state.add_unit(0, 1, Vector2i(5, 5), 6)
 	state.start()
-	assert_false(state.vision[0].is_visible(Vector2i(5, 5)),
-		"передумова: ворога на (5,5) з (0,5) не видно — 5 тайлів проти огляду 3")
+	assert_false(state.vision[0].is_seen(Vector2i(5, 5)),
+		"передумова: (5,5) не розвідано — 5 тайлів проти огляду 3, і ходів ще не було")
 
 	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(6, 5), -1)
 	assert_eq(cmd.validate(state), "", "крізь порожню НА ВИГЛЯД землю планувати можна")
@@ -369,6 +369,31 @@ func test_a_seen_enemy_puts_the_ground_behind_it_out_of_range() -> void:
 
 	assert_eq(MoveCommand.create(u.id, Vector2i(6, 5), -1).validate(state), "ERR_OUT_OF_RANGE",
 		"видимий ворог справді перекриває дорогу вже на етапі планування")
+
+func test_an_enemy_on_ground_scouted_earlier_still_blocks_the_plan() -> void:
+	# §3.5: карта зайнятості (BattleState.known_occupied_map) читає seen, а не visible.
+	# Та сама геометрія, що й у тесті вище, з однією різницею: розвідник накриває
+	# (5,5) на start(), а потім ЙДЕ ГЕТЬ. Стрілецьке відділення (огляд 5, ap 30) з
+	# (5,1) робить 3 тайли поля по 10 і з (2,1) до ворога вже 3 + 4 = 7 > 5.
+	#
+	# Після цього за ворогом не стежить ніхто — і якби планування бралося з visible,
+	# (6,5) знову став би «вільним», а гравець дізнався б про ворога лише недоїздом,
+	# втративши AP на хід, який гра йому щойно обіцяла. Розвідка не забувається.
+	var u: Unit = state.add_unit(3, 0, Vector2i(0, 5), 2)
+	state.add_unit(0, 1, Vector2i(5, 5), 6)
+	var scout: Unit = state.add_unit(0, 0, Vector2i(5, 1), 4)
+	state.start()
+	state.begin_turn()
+	assert_true(state.vision[0].is_seen(Vector2i(5, 5)), "передумова: розвідник накрив тайл ворога")
+
+	MoveCommand.create(scout.id, Vector2i(2, 1), -1).apply(state)
+	assert_eq(scout.pos, Vector2i(2, 1), "передумова: 3 тайли поля по 10 — рівно 30 AP")
+	assert_false(state.vision[0].is_visible(Vector2i(5, 5)),
+		"передумова: зараз за ворогом не стежить ніхто")
+	assert_true(state.vision[0].is_seen(Vector2i(5, 5)), "§3.5: розвідане лишається розвіданим")
+
+	assert_eq(MoveCommand.create(u.id, Vector2i(6, 5), -1).validate(state), "ERR_OUT_OF_RANGE",
+		"ворог на розвіданій землі перекриває дорогу вже на етапі планування")
 
 func test_a_seen_enemy_is_routed_around_at_planning_time() -> void:
 	# Дві дорожні смуги, щоб обхід був по кишені: прямо (0,5)→(4,5) — 4 тайли по 10,
@@ -468,8 +493,8 @@ func test_a_blocked_first_step_turns_in_place_instead_of_moving() -> void:
 	# витримати — цикл ходу не має права припускати, що перший крок точно відбудеться.
 	var u: Unit = state.add_unit(3, 0, Vector2i(0, 5), 2)
 	state.add_unit(0, 1, Vector2i(1, 5), 6)
-	assert_false(state.vision[0].is_visible(Vector2i(1, 5)),
-		"передумова: видимість не праймлена, сусід невидимий")
+	assert_false(state.vision[0].is_seen(Vector2i(1, 5)),
+		"передумова: сітки не праймлені, сусідній тайл не розвідано")
 	var before: int = u.ap
 
 	var events: Array = MoveCommand.create(u.id, Vector2i(2, 5), 6).apply(state)
@@ -488,6 +513,24 @@ func test_a_blocked_first_step_turns_in_place_instead_of_moving() -> void:
 	assert_not_null(blocked, "обрив на першому кроці мусить назвати себе")
 	assert_eq(blocked.unit_id, u.id)
 	assert_eq(blocked.pos, Vector2i(1, 5), "названо тайл, у який не ввійшли")
+
+func test_a_friendly_unit_blocks_planning_even_before_start() -> void:
+	# Коментар над BattleState.known_occupied_map() каже прямо: свої юніти входять
+	# у мапу знання БЕЗУМОВНО, а не через кеш видимості (vision[player].is_seen) —
+	# бо той кеш порожній до першого start()/begin_turn(), а власна техніка юніта
+	# від нього не залежить. Стан тут навмисне НЕ праймлений — так само, як і в
+	# test_a_blocked_first_step_turns_in_place_instead_of_moving вище, — щоб
+	# зробити цю різницю відчутною: якби своїх пускали в мапу лише через seen,
+	# сусідній свій юніт зник би з планування рівно там, де кеш іще порожній.
+	var u: Unit = state.add_unit(3, 0, Vector2i(0, 5), 2)
+	var blocker: Unit = state.add_unit(5, 0, Vector2i(1, 5), 6)   # свій юніт, не ворог
+	assert_false(state.vision[0].is_seen(blocker.pos),
+		"передумова: сітки не праймлені — власного сусіда тут навмисне не розвідано")
+
+	assert_true(state.known_occupied_map(u.owner).has(blocker.pos),
+		"свій юніт займає мапу знання незалежно від seen — саме це стверджує коментар над known_occupied_map()")
+	assert_eq(MoveCommand.create(u.id, blocker.pos, -1).validate(state), "ERR_OUT_OF_RANGE",
+		"і тому хід на тайл свого ж юніта відхиляється вже на етапі планування — не лише під час проходу")
 
 func test_the_walk_reveals_the_ground_it_passes_not_only_the_ground_it_ends_on() -> void:
 	# §3.5: туман оновлюється НА КОЖНОМУ кроці. Сапер (огляд 3) їде дорогою; міна на
