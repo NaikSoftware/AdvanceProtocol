@@ -32,7 +32,10 @@ static func refresh_seen(state: BattleState, player: int) -> Array[Events.Battle
 	for o in state.objectives:
 		if o.seen_by[player]:
 			continue
-		if state.vision[player].is_visible(o.pos):
+		# §3.5: seen, а не visible — ціль позначається відомою від самого факту, що
+		# землю під нею колись розвідали. Різниця мала (seen_by і так незворотне),
+		# але гейт мусить бути той самий, що й у решті правил.
+		if state.vision[player].is_seen(o.pos):
 			o.seen_by[player] = true
 			out.append(Events.TileRevealed.new(player, [o.pos] as Array[Vector2i]))
 	return out
@@ -44,13 +47,32 @@ static func held_by(state: BattleState, player: int) -> int:
 			n += 1
 	return n
 
-static func check_victory(state: BattleState, hold_target: int) -> Array[Events.BattleEvent]:
+static func check_victory(state: BattleState, player: int, hold_target: int) -> Array[Events.BattleEvent]:
+	## §3.10: умову цілей заявляє рівно один гравець — той, чий хід щойно
+	## завершився. Гравець передається явно, а не читається зі state.active_player,
+	## бо «чий хід закінчився» — властивість моменту виклику, а не стану: викликач
+	## робить це ДО advance_player(), і функція не має залежати від того порядку.
+	##
+	## Перебір усіх гравців тут раніше означав, що при двох утримувачах перемагав
+	## менший індекс — порядок циклу замість правила. Нічия не розвʼязується, а
+	## стає недосяжною: бути тим, чий хід щойно завершився, може лише один.
+	##
+	## Другий ефект менший, але справжній: перемогу більше не присуджують
+	## наприкінці ЧУЖОГО ходу за достатнє утримання, яке склалося саме собою —
+	## гравець заявляє його сам, на власному кінці ходу.
+	##
+	## Чого ця зміна НЕ дає, бо раніше тут стояло протилежне: вона не змушує
+	## «дожити» до свого ходу із захопленою ціллю. Захоплення — дія інженера, а
+	## інженер ходить лише на ході свого власника, тож захоплення і заявка
+	## потрапляють в один хід: узяв останню ціль — виграв на кінці цього ж ходу,
+	## без відповіді супротивника. Щоб перемогу треба було втримати, потрібне
+	## окреме правило (ціль не рахується в хід, коли змінила власника) — це нова
+	## механіка, а не наслідок цієї, і її свідомо не робимо до плейтесту.
 	if state.is_over() or hold_target <= 0:
 		return []
-	for p in state.player_count:
-		if state.eliminated[p]:
-			continue
-		if held_by(state, p) >= hold_target:
-			state.winner = p
-			return [Events.MatchEnded.new(p)] as Array[Events.BattleEvent]
-	return []
+	if state.eliminated[player]:
+		return []
+	if held_by(state, player) < hold_target:
+		return []
+	state.winner = player
+	return [Events.MatchEnded.new(player)] as Array[Events.BattleEvent]

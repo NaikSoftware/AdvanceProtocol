@@ -22,6 +22,7 @@ func test_every_event_type_constructs_and_describes() -> void:
 	var all_events: Array = [
 		Events.UnitMoved.new(1, [Vector2i(0, 0), Vector2i(1, 0)], 2),
 		Events.UnitTurned.new(1, 3),
+		Events.MoveBlocked.new(1, Vector2i(2, 0)),
 		Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT),
 		Events.ShotRetaliated.new(2, 1, UnitTypes.ArmourSector.SIDE),
 		Events.DroneLaunched.new(1, 2, 1),

@@ -14,10 +14,16 @@ static func create(p_unit_id: int, p_target_id: int) -> DroneCommand:
 	return c
 
 func validate(state: BattleState) -> String:
+	return check_strike(state, state.get_unit(unit_id), state.get_unit(target_id))
+
+static func check_strike(state: BattleState, a: Unit, t: Unit) -> String:
+	## Єдине місце, де живе законність дронового удару — дзеркало
+	## FireCommand.check_shot() і рівно з тієї ж причини: validate() тут тонка
+	## обгортка, а Targeting.drone_targets() (§3.13) викликає саме цю функцію, а не
+	## власну копію умов. Оверлей «куди я можу вдарити дроном» мусить збігатися з
+	## валідацією до останньої перевірки, інакше він обіцяє удар, який гра відхилить.
 	if state.is_over():
 		return "ERR_MATCH_OVER"
-	var a: Unit = state.get_unit(unit_id)
-	var t: Unit = state.get_unit(target_id)
 	if a == null or not a.is_alive():
 		return "ERR_NO_SUCH_UNIT"
 	if t == null or not t.is_alive():
@@ -36,7 +42,11 @@ func validate(state: BattleState) -> String:
 		return "ERR_DRONE_CANNOT_TARGET_INFANTRY"
 	if not Rules.in_radius(a.pos, t.pos, RANGE):
 		return "ERR_OUT_OF_RANGE"
-	if not state.vision[a.owner].is_visible(t.pos):
+	# §3.5: той самий гейт, що й у check_shot(), — seen, а не visible. Над розвіданою
+	# землею ця перевірка інертна (§3.9 у docs/rules/vision-and-fog.md) і кусає лише
+	# там, де ніхто з цього боку ще не був. Лишається саме тому: дрон не має бити
+	# в тайл, про який власник не знає нічого.
+	if not state.vision[a.owner].is_seen(t.pos):
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 

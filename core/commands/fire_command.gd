@@ -11,10 +11,16 @@ static func create(p_unit_id: int, p_target_id: int) -> FireCommand:
 	return c
 
 func validate(state: BattleState) -> String:
+	return check_shot(state, state.get_unit(unit_id), state.get_unit(target_id))
+
+static func check_shot(state: BattleState, a: Unit, t: Unit) -> String:
+	## Єдине місце, де живе законність пострілу. validate() — тонка обгортка над
+	## цією функцією, і Targeting.firing_targets() (§3.13) викликає рівно її ж,
+	## а не власну копію умов: оверлей «по кому я можу вистрілити» мусить збігатися
+	## з валідацією до останньої перевірки, інакше він бреше гравцеві про постріл,
+	## який той ось-ось підтвердить. Продубльована умова тут — це і є дефект.
 	if state.is_over():
 		return "ERR_MATCH_OVER"
-	var a: Unit = state.get_unit(unit_id)
-	var t: Unit = state.get_unit(target_id)
 	if a == null or not a.is_alive():
 		return "ERR_NO_SUCH_UNIT"
 	if t == null or not t.is_alive():
@@ -31,7 +37,11 @@ func validate(state: BattleState) -> String:
 		return "ERR_NOT_ENOUGH_AP"
 	if not Rules.in_radius(a.pos, t.pos, a.attack_range()):
 		return "ERR_OUT_OF_RANGE"
-	if not state.vision[a.owner].is_visible(t.pos):
+	# §3.5: гейт — seen, а не visible. Розвідка незворотна, тож обвідна вогню — це
+	# коло дальності, перетнуте з РОЗВІДАНОЮ землею, а не з чиїмось ромбом огляду
+	# просто зараз. Ромб вирішує, як швидко та земля відкривається, і обмежує
+	# постріл лише над тайлами, куди не ступала жодна нога цього гравця.
+	if not state.vision[a.owner].is_seen(t.pos):
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 
@@ -72,12 +82,16 @@ static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit
 		return out
 	if not Rules.in_radius(target.pos, original_attacker.pos, target.attack_range()):
 		return out
-	if not state.vision[target.owner].is_visible(original_attacker.pos):
+	if not state.vision[target.owner].is_seen(original_attacker.pos):
 		# §3.3.1 (переглянуто): відповідач мусить бачити атакувальника — той самий
-		# закон видимості, що й для будь-якого пострілу, але власним зором цілі
+		# закон видимості, що й для будь-якого пострілу, але власним знанням цілі
 		# (target.owner), а не зором того, хто стріляв першим. Це навмисний відхід
 		# від референсу, який гейтить контратаку лише на AP, дальність і клас —
 		# зафіксовано в CLAUDE.md §3.3.1/§4, не "виправляти" назад до референсу.
+		#
+		# «Не бачить» тут означає seen (§3.5): тайл, якого власник цілі не розвідував
+		# ЖОДНОГО разу. Безкарність від цього не зникає, але стає зброєю дебюту —
+		# з ходами розвідана земля росте, і стріляти без відповіді стає нізвідки.
 		return out
 
 	var sector: int = Rules.armour_sector(original_attacker.facing, original_attacker.pos, target.pos)

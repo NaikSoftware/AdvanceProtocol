@@ -24,8 +24,14 @@ decoration.
   touches the numbers, so it must always be visible.
 - **Unit card** with silhouette, HP bar and AP pips; **one greyed-out action button**, because a
   rule that cannot be shown in the UI is a rule to reconsider (§10).
-- **No national markings, flags or identifiable real vehicles.** The setting is deliberately not
-  fixed yet (§2), so everything is an era-neutral archetype.
+- **No national markings, flags or identifiable real vehicles.** That prohibition is permanent —
+  the sides are fictional and stay fictional (§2).
+
+**What the next pass must change, now that the setting is fixed.** This image was generated while
+§2 was still open, so it is era-agnostic by default rather than by design. The setting is now
+**near-future conventional war between fictional states** — so the next concept needs composite
+and slat armour, thermal optics, digital-pattern camouflage and modern infantry kit, none of which
+this image commits to.
 
 **What it gets wrong — fix on the next pass:**
 
