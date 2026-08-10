@@ -1,0 +1,2 @@
+# Concept art, not game content. Keeps Godot from importing it as a resource
+# and from generating .import sidecars in here.

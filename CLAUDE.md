@@ -89,6 +89,14 @@ Impassable tiles are modelled as an infinite penalty, not as a special case in t
 once per turn, and firing ends its activity. This is the central tension of a turn: how far can I
 go and still shoot?
 
+**Movement is spent, not committed.** A unit may move several times in one turn, in as many
+separate steps as it likes, for as long as AP remains — walk two tiles, look around, walk two
+more. Only firing ends it. Nothing tracks "has already moved", and nothing may: after each step
+the two zones are simply recomputed from the unit's new position and remaining AP, so the gold
+zone shrinks as the unit spends. The same applies to the engineer's verbs, which cost `fire_cost`
+and end the unit's activity exactly as a shot does. Every AP-consuming action other than movement
+is therefore a decision to stop moving.
+
 **The two movement zones** are therefore the primary UI of the game:
 
 | zone | meaning | suggested colour |
@@ -140,6 +148,63 @@ Keep it that way unless a playtest says otherwise — it keeps the two-zone UI h
 
 **Minimum damage is 10.** Nothing is ever fully immune.
 
+### 3.3.1 Retaliation
+
+**A target that survives a shot fires back, immediately, in the same exchange.** Confirmed against
+the reference (`class_1.java`, the attack state machine: after the shot resolves, if the target's
+HP is still above zero the roles swap and the same damage path runs in reverse).
+
+```
+Retaliation
+  triggers  : an attack resolved and the target is still alive
+  requires  : retaliator has >= fire_cost AP, and the original attacker is within
+              the retaliator's range; ENGINEER never retaliates (it has no weapon)
+  damage    : the ordinary damage formula, no reduction — armour sector computed
+              from the original attacker's facing, as for any shot
+  cost      : sets the retaliator's AP to 0, exactly as firing does
+  frequency : at most once per exchange; a retaliation never provokes another
+```
+
+**What the AP cost actually buys, stated carefully because it is easy to overclaim.** Firing back
+zeroes the retaliator's AP for the remainder of the *attacker's* turn, so it cannot answer a second
+shot before its own turn comes round. It does **not** cost the unit its own turn: `refill_ap()`
+restores both AP and the fired flag at the start of its owner's turn, exactly as the reference
+does. A unit that retaliated moves and shoots normally when its turn arrives.
+
+So retaliation is close to free for the defender, and deliberately so — the cost of shooting falls
+on the *attacker*, who takes a full-strength answer for opening fire on a healthy target inside its
+range. The defender's only exposure is that it cannot answer twice in the same round.
+
+An earlier version of this section claimed the retaliator forfeits its next turn. That was never
+what the code or the reference did; it was a rationale written into the spec rather than read out
+of it, and it is corrected here rather than implemented, on the owner's call.
+
+**The retaliator must be able to see its attacker.** A return shot obeys the same visibility rule
+as any other shot: the original attacker's tile has to be visible to the retaliating player at
+that moment. The reference gates its counter-attack on AP, range and class alone, and this is a
+deliberate departure from it — recorded here as §4 requires.
+
+The consequence is the point: **an attacker the defender cannot see fires with impunity.** That
+makes vision a weapon rather than a convenience, and it gives the roster's asymmetries teeth:
+
+- Artillery has range 5 and vision 3. Firing from maximum range at something that has no spotter
+  covering the gun is genuinely free — and two guns at range 5 do *not* trade, because neither
+  sees the other. Counter-battery fire needs eyes, not just range.
+- Infantry sees furthest (5) of anything in the game. A rifle squad forward of the line is what
+  turns your armour's shots into safe ones and the enemy's into answered ones.
+- Killing the enemy's spotters is therefore an attack on their ability to shoot back at all.
+
+This reshapes the economics of shooting, and that is the point:
+
+- Firing on a healthy target inside its range invites a full-strength answer.
+- Artillery finally has a concrete reason to hold maximum range: at 5 against a tank's 4, it
+  shoots without reply. The same is true of the drone strike at range 5.
+- Finishing a wounded unit becomes a rule rather than a habit — the dead do not shoot back.
+- Flanking costs more than it did: closing to a side or rear arc usually puts you inside the
+  target's own range.
+
+Retaliation damage feeds the retaliator's class veterancy pool like any other damage.
+
 ### 3.4 Directional armour
 
 Each unit carries three armour values: `front`, `side`, `rear`. The sector is chosen from the
@@ -152,10 +217,19 @@ angle between the target's facing vector and the vector from target to attacker:
 Implement with integer dot products against the 8 unit direction vectors, no trigonometry:
 
 ```
-d = attacker_dir_index_relative_to_target_facing
-cos2_scaled = (dot*dot << 5) / len_sq_a / len_sq_b
-sector = SIDE if cos2_scaled <= 16 else (REAR if dot < 0 else FRONT)
+v   = attacker_pos - target_pos
+f   = DIRS_8[target_facing]
+dot = f.x*v.x + f.y*v.y
+sector = SIDE if 2*dot*dot <= len_sq_f * len_sq_v      # cos²θ <= 1/2, i.e. 45° or wider
+         else (REAR if dot < 0 else FRONT)
 ```
+
+The comparison is cross-multiplied rather than divided. An earlier form of this rule scaled
+`cos²` by 32 and compared against 16; integer division truncated the quotient, so the band
+`cos² ∈ [0.5, 0.53125)` — angles between 43.1° and 45° — fell into SIDE when it belonged to
+FRONT or REAR. The two forms first disagree at a separation of 23.35 tiles, which no weapon in
+the game can reach (longest range is 5), so this changes no shot that can actually be taken. The
+cross-multiplied form is kept because it is exact, has no division, and cannot drift.
 
 Flanking is the main skill expression in the game. The UI must always show which sector a shot
 will land in **before** the player commits.
@@ -205,8 +279,15 @@ this table is documentation only.
 | 11 | engineer squad | ENG | 0 | 68 | 200 | 1 | 20 | 10/5/5 | −5 | 3 |
 | 12 | engineer vehicle | ENG | 0 | 76 | 200 | 1 | 30 | 10/5/5 | −5 | 3 |
 
-Squad-level units (infantry, engineers) are represented by a **single model on the tile**, not a
-crowd — draw-call budget, and it keeps the grid readable.
+Squad-level units (infantry, engineers) are **one asset per tile** — one mesh, one draw call, one
+tile footprint. That mesh may well sculpt three or four figures sharing a base, and it should: a
+squad is a squad, and a lone figure reads as the wrong thing. What is forbidden is several
+*independently instanced and animated* soldiers per unit, which multiplies the draw-call cost of
+the most numerous class in the game, and any arrangement that spills across a tile boundary, which
+makes it ambiguous which tile the unit occupies.
+
+The test is the one from §1: at ~100 px from directly above, it must read as a single unit
+standing on a single square.
 
 **Tank mobility is strictly ordered** light → medium → tank destroyer → heavy, in both AP and
 cross-country. A heavy that outruns a medium makes armour a free choice; the heavy's 56 front
@@ -264,6 +345,13 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
 The assault squad (#1) is otherwise identical to the rifle squad. What separates it is a
 **drone strike**: a separate action, not a modifier on its normal attack.
 
+**The visibility requirement below currently has no bite, and that is worth knowing.** The assault
+squad's vision is 5 and the drone's range is 5, and vision is a plain radius with no line-of-sight
+occlusion — so any target a drone can reach is already inside the squad's own vision. The check is
+kept because it states the intent and because it starts mattering the moment those numbers
+diverge (a longer drone range, a shorter infantry vision, or occlusion ever being added). Do not
+read it as protection the game is currently relying on.
+
 ```
 Drone strike
   requires  : target is currently visible to the attacking player
@@ -310,6 +398,20 @@ Victory, checked at end of turn:
 
 Last player standing wins. In 3-player games an eliminated player is skipped in the turn order,
 and the match continues between the remaining two.
+
+**A map with no objective condition sets `hold_target` to 0**, and then only annihilation can end
+the match. Most maps will set it; a pure annihilation map will not.
+
+**When both conditions resolve on the same end of turn, elimination decides.** Not because it is
+better, but because it is unconditional: a player with no units is out of the match whatever the
+map says, whereas an objective hold is a condition the map opted into. In practice the two almost
+always name the same winner — a player who has just lost their last unit is not holding anything —
+so this rule exists to make the rare case deterministic rather than to express a preference.
+
+**Open question, deliberately left open:** if two players simultaneously satisfy the objective
+condition in a three-player match, the lower player index currently wins. That is index order, not
+a rule. It needs a real answer — most objectives held, or a shared draw — before three-player maps
+with a low `hold_target` are designed.
 
 ### 3.11 Mines
 
@@ -379,6 +481,31 @@ Two rules about using it:
 - **Vision shape.** Euclidean radius here. Confirm against the original before tuning vision
   values, since a diamond and a circle of the same radius are very different maps.
 
+- **Mines detonate on traversal, and mine damage is a roll.** Confirmed against `class_1.method_105`,
+  which is called from the movement driver after *every* single-tile hop rather than once at the
+  destination: when it finds a marker it applies `90 + rand(0, 90)` to the mover, consumes the
+  marker, and returns `true`, which halts the path at that tile. So a minefield cannot be crossed
+  by stopping past it, and the unit stops where it detonated — this project matches. The damage
+  band is `90..180`, not the flat 120 the plan originally invented; adopted, because a flat number
+  would make mines the only damage source in the game that does not roll. Caveat worth knowing:
+  in the original the per-tile marker table appears to be shared between mines and objectives, so
+  the two may not be distinct concepts there. They are distinct here.
+
+- **Terrain penalties are widely spaced, and tracked vehicles ignore open ground.** Confirmed
+  against `GameCanvas.method_68`: the original uses six buckets — `0` road, `5`, `10` ordinary
+  ground, `20` rough, `100` built-up, `1000` impassable — and `method_70` is exactly
+  `max(10, 10 + penalty - cross_country)`. Two consequences are easy to get wrong and were
+  briefly got wrong here:
+  - **The spacing is load-bearing.** With `cross_country` in the 5–13 band, any penalty below
+    about 13 vanishes under the floor of 10. A compressed table (0–14) makes *every* terrain
+    free for *every* tank, and the whole off-road model quietly stops existing.
+  - **A medium tank pays the floor on open field, and that is correct.** Field is 10 against a
+    cross-country of 12. Roads matter for wheels, artillery and engineers, not for tracks on
+    open ground — do not "fix" this by inflating the field penalty.
+  - Built-up terrain at 100 is effectively impassable to vehicles (a 48 AP tank cannot pay 98)
+    while infantry still walks in at the floor of 10. Buildings are therefore infantry ground
+    by arithmetic rather than by a special case. This is emergent, and it is worth keeping.
+
 ---
 
 ## 5. Tech stack
@@ -430,6 +557,15 @@ input → intent → Command → Rules.validate() → Rules.apply() → [BattleE
   (`UnitMoved`, `ShotFired`, `DamageDealt`, `UnitDestroyed`, `TileRevealed`, `MineTriggered`…).
 - The view consumes events and plays them back over time. **The view never computes an outcome.**
   If a shell is in flight for 400 ms, the damage was already decided before it left the barrel.
+
+**Events are not filtered per player, and that is a debt online would call in.** `apply()` returns
+one ordered list describing everything that happened. In hot-seat this is harmless: one screen,
+one active player, and the board is blanked at the handover. But some events carry information
+their subject should not have — `MineTriggered` reveals that a mine existed to anyone replaying
+the list, and the same will be true of anything that fires on an opponent's turn. If online ever
+happens, the transport cannot broadcast this list as-is; it needs a per-observer filter, and the
+place to build it is here in `core/`, not in the view. Keep that in mind when adding event types:
+an event that only the acting player may see should be recognisable as such.
 
 **Determinism.** One `RandomNumberGenerator`, seeded per match and stored in `BattleState`. Every
 roll goes through a single `Rules.roll()` helper. Never call the global `randi()` / `randf()`

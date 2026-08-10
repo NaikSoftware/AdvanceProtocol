@@ -1,0 +1,7 @@
+# GUT is vendored, not written here: 257 files of third-party test framework
+# against ~90 of ours. Marking it keeps GitHub from counting it in the language
+# stats and collapses it in pull-request diffs, so review reads our code.
+addons/gut/** linguist-vendored
+
+# Generated concept art, not source.
+prototyping-resources/*.jpg linguist-generated

@@ -2,3 +2,12 @@
 .env.*
 !.env.example
 .claude/settings.local.json
+.superpowers/
+
+.godot/
+build/
+*.translation
+export_presets.cfg
+
+# Concept art only — Godot regenerates these on import; nothing here is game content.
+prototyping-resources/*.import

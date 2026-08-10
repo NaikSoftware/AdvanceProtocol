@@ -480,22 +480,27 @@ enum GroundState { DRY, MUD, FROZEN }
 
 const IMPASSABLE: int = 1_000_000
 
+## Шкала взята з референсу (§4), `GameCanvas.method_68`: там рівно шість кошиків —
+## 0 (дорога), 5, 10 (базовий ґрунт), 20 (пересічена місцевість), 100 (забудова)
+## і 1000 (непрохідно). Стискати їх не можна: при cross_country 5–13 будь-який
+## штраф, менший за 13, повністю зникає під підлогою у max(10, 10 + p - cc), і
+## техніка перестає відчувати місцевість узагалі.
 const _BASE_PENALTY: Dictionary = {
 	Kind.ROAD: 0,
 	Kind.BRIDGE: 0,
-	Kind.FIELD: 4,
-	Kind.HILL: 8,
-	Kind.RUBBLE: 10,
-	Kind.FOREST: 12,
-	Kind.BUILDING: 14,
+	Kind.RUBBLE: 5,
+	Kind.FIELD: 10,
+	Kind.HILL: 20,
+	Kind.FOREST: 20,
+	Kind.BUILDING: 100,
 	Kind.MARSH: IMPASSABLE,
 	Kind.WATER: IMPASSABLE,
 	Kind.BRIDGE_DESTROYED: IMPASSABLE,
 }
 
-const _MUD_OFFSET: int = 8
-const _FROZEN_OFFSET: int = -3
-const _FROZEN_MARSH_PENALTY: int = 12
+const _MUD_OFFSET: int = 10
+const _FROZEN_OFFSET: int = -5
+const _FROZEN_MARSH_PENALTY: int = 20
 
 static func is_road(kind: int) -> bool:
 	return kind == Kind.ROAD or kind == Kind.BRIDGE
@@ -764,6 +769,10 @@ func in_bounds(p: Vector2i) -> bool:
 	return p.x >= 0 and p.y >= 0 and p.x < width and p.y < height
 
 func _index(p: Vector2i) -> int:
+	## Один запобіжник на обидва аксесори. `assert` вирізається в release-збірці,
+	## тож у гарячому циклі Dijkstra він нічого не коштує. Контракт «за межами
+	## дошки — непрохідно» тримають penalty_at()/is_passable(), а не ці два методи.
+	assert(in_bounds(p), "board access out of bounds: %v" % p)
 	return p.y * width + p.x
 
 func kind_at(p: Vector2i) -> int:
@@ -847,9 +856,17 @@ func test_roll_is_zero_for_non_positive() -> void:
 
 func test_roll_stays_within_inclusive_bounds() -> void:
 	var r := _rng(12345)
+	var saw_low: bool = false
+	var saw_high: bool = false
 	for i in 500:
 		var v: int = Rules.roll(r, 10)
 		assert_between(v, 0, 10)
+		saw_low = saw_low or v == 0
+		saw_high = saw_high or v == 10
+	# Самої лише перевірки діапазону мало: вона однаково пройде і для [0,9], і для [1,10].
+	# roll() — єдине джерело випадковості в грі, тож обидва кінці мають бути доведені.
+	assert_true(saw_low, "0 має випадати — межа включна")
+	assert_true(saw_high, "n має випадати — межа включна")
 
 func test_roll_is_deterministic_for_same_seed() -> void:
 	var a: Array[int] = []
@@ -999,8 +1016,12 @@ static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos
 	var dot: int = f.x * v.x + f.y * v.y
 	var len_sq_f: int = f.x * f.x + f.y * f.y
 	var len_sq_v: int = v.x * v.x + v.y * v.y
-	var cos2_scaled: int = (dot * dot << 5) / (len_sq_f * len_sq_v)
-	if cos2_scaled <= 16:
+	# cos²θ <= 1/2, тобто 45° і ширше — межа сектора SIDE.
+	# Порівняння перехресним множенням, а не діленням: варіант зі зсувом на 32 і
+	# порогом 16 обрізався цілочисловим діленням і зсовував смугу cos² ∈ [0.5, 0.53125)
+	# (кути 43.1°–45°) у SIDE. Розбіжність двох форм починається аж із 23.35 тайла,
+	# тож жодного досяжного пострілу вона не міняла, але ця форма точна й без ділення.
+	if 2 * dot * dot <= len_sq_f * len_sq_v:
 		return UnitTypes.ArmourSector.SIDE
 	return UnitTypes.ArmourSector.REAR if dot < 0 else UnitTypes.ArmourSector.FRONT
 ```
@@ -1071,7 +1092,10 @@ func _max(a: Array[int]) -> int:
 	return m
 
 func test_damage_never_below_ten() -> void:
-	var s: Array[int] = _samples(INF_RIFLE, HEAVY_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
+	# Сценарій має справді впиратися в підлогу: легка машина (60) у лоб важкому танку (56)
+	# дає 45 + rand(0,15) − 42 − rand(0,14), тобто здебільшого відʼємне число.
+	# Піхота тут не годиться: вона броню ігнорує, тож 0.75*15 = 11.25 → 11, і 10 недосяжне.
+	var s: Array[int] = _samples(LIGHT_CAR, HEAVY_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
 	assert_eq(_min(s), 10, "§3.3: мінімум 10, ніщо не є невразливим")
 
 func test_infantry_ignores_armour_entirely() -> void:
@@ -1089,7 +1113,10 @@ func test_infantry_base_range_band() -> void:
 func test_infantry_close_assault_is_quadruple() -> void:
 	var far: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
 	var close: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 2)
-	assert_eq(_min(close), _min(far) * 4, "§3.3: dist_sq <= 2 множить на 4")
+	# ×4 множить float ДО єдиного int() наприкінці: int(11.25*4) = 45, а не int(11.25)*4 = 44.
+	# Тому рівність тут хибна — правильне співвідношення має люфт на зрізання.
+	assert_between(_min(close), _min(far) * 4, _min(far) * 4 + 3,
+		"§3.3: dist_sq <= 2 множить на 4, з поправкою на зрізання int()")
 
 func test_close_assault_boundary_is_dist_sq_two() -> void:
 	var at_two: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 2)
@@ -1099,7 +1126,9 @@ func test_close_assault_boundary_is_dist_sq_two() -> void:
 func test_veterancy_adds_one_eighth_of_attack_per_level() -> void:
 	var v0: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 0, UnitTypes.ArmourSector.REAR, 9)
 	var v4: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 4, UnitTypes.ArmourSector.REAR, 9)
-	assert_eq(_min(v4) - _min(v0), 95 * 4 / 8, "+A*V/8")
+	# 95*4/8 у GDScript — це ціле 47, а у формулі член float: 47.5. Зрізання наприкінці
+	# дає різницю 47 або 48 залежно від дробової частини бази, тож фіксуємо обидва.
+	assert_between(_min(v4) - _min(v0), 47, 48, "+A*V/8 = 47.5")
 
 func test_engineers_get_no_veterancy_bonus() -> void:
 	var v0: Array[int] = _samples(ENGINEER, LIGHT_CAR, 0, UnitTypes.ArmourSector.FRONT, 9)
@@ -1128,9 +1157,12 @@ func test_artillery_halved_against_light_vehicles() -> void:
 	assert_true(_min(vs_light) < _min(vs_tank), "легка техніка отримує половину")
 
 func test_armour_piercing_quartered_against_infantry() -> void:
+	# Порівняння має ізолювати саме ділення на 4, тож обидві цілі мають нульову броню
+	# в обраному секторі: у польової гармати корма 0, у піхоти броні немає взагалі.
+	# (Порівняння з лобом легкої машини (27) змішувало б /4 з відніманням броні.)
 	var vs_inf: Array[int] = _samples(MEDIUM_TANK, INF_RIFLE, 0, UnitTypes.ArmourSector.FRONT, 9)
-	var vs_light: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 0, UnitTypes.ArmourSector.FRONT, 9)
-	assert_true(_min(vs_inf) * 3 < _min(vs_light), "§3.3: танк/арта по піхоті — /4")
+	var vs_gun: Array[int] = _samples(MEDIUM_TANK, FIELD_GUN, 0, UnitTypes.ArmourSector.REAR, 9)
+	assert_true(_min(vs_inf) * 3 < _min(vs_gun), "§3.3: танк/арта по піхоті — /4")
 
 func test_light_vehicles_do_not_take_the_infantry_penalty() -> void:
 	# §3.9: саме тому легка техніка — відповідь на дронарів
@@ -1275,12 +1307,25 @@ func test_start_tile_is_reachable_at_zero_cost() -> void:
 	assert_eq(z.cost_to(Vector2i(4, 4)), 0)
 	assert_true(z.move_and_fire.has(Vector2i(4, 4)), "стояти на місці й стріляти завжди можна")
 
-func test_road_reaches_further_than_field() -> void:
+func test_road_reaches_further_than_rough_ground() -> void:
+	# Порівнювати треба з пересіченою місцевістю, а не з чистим полем: у референсі
+	# поле коштує 10, а середній танк має cross_country 12, тож max(10, 10+10-12)
+	# упирається в підлогу — гусенична техніка відкритого поля не помічає, і це
+	# автентична поведінка, а не баг. Дорогу видно там, де штраф справді кусає.
 	var tank_road: Unit = Unit.create(1, 5, 0, Vector2i(0, 5), 2)
 	var z_road: Pathing.Zones = Pathing.compute_zones(_road_board(), tank_road, {})
-	var tank_field: Unit = Unit.create(2, 5, 0, Vector2i(0, 5), 2)
-	var z_field: Pathing.Zones = Pathing.compute_zones(_open_board(), tank_field, {})
-	assert_true(z_road.cost_to(Vector2i(4, 5)) < z_field.cost_to(Vector2i(4, 5)))
+	var forest: Board = _open_board()
+	for x in 10:
+		forest.set_kind(Vector2i(x, 5), Terrain.Kind.FOREST)
+	var tank_forest: Unit = Unit.create(2, 5, 0, Vector2i(0, 5), 2)
+	var z_forest: Pathing.Zones = Pathing.compute_zones(forest, tank_forest, {})
+	# Ціль має бути досяжною обома шляхами, інакше порівнюються не вартості:
+	# лісом це 18 AP за тайл при бюджеті 48, тож (4,5) коштує 72 і недосяжна,
+	# а cost_to() віддає сентинел −1, і будь-яке `<` мовчки стає істиною.
+	var target := Vector2i(2, 5)
+	assert_true(z_road.can_reach(target), "дорогою сюди дістатися можна")
+	assert_true(z_forest.can_reach(target), "лісом теж можна, тільки дорожче")
+	assert_true(z_road.cost_to(target) < z_forest.cost_to(target))
 
 func test_infantry_ignores_terrain() -> void:
 	var b: Board = _open_board()
@@ -1352,6 +1397,11 @@ class Zones extends RefCounted:
 		return cost.has(p)
 
 	func cost_to(p: Vector2i) -> int:
+		## Викликати лише після can_reach(). Недосяжний тайл — це помилка виклику,
+		## а не значення: −1 мовчки перевертає будь-яке порівняння `<`, і саме так
+		## двічі падали тести цього завдання. Assert вирізається в release-збірці,
+		## тож там лишається −1 як мʼяка деградація замість падіння на телефоні.
+		assert(cost.has(p), "cost_to() для недосяжного тайла: %v" % p)
 		return cost.get(p, -1)
 
 static func compute_zones(board: Board, unit: Unit, occupied: Dictionary) -> Zones:
@@ -1386,7 +1436,7 @@ static func compute_zones(board: Board, unit: Unit, occupied: Dictionary) -> Zon
 			frontier.append(n)
 
 	var fire_cost: int = unit.fire_cost()
-	for p in z.cost:
+	for p: Vector2i in z.cost:
 		var left: int = unit.ap - z.cost[p]
 		if left >= fire_cost:
 			z.move_and_fire.append(p)
@@ -1613,6 +1663,13 @@ func test_every_event_describes_itself() -> void:
 		assert_false(e.describe().is_empty())
 ```
 
+Плюс третій тест, який конструює **всі 21 тип** зі списку в **Interfaces** явними викликами
+конструкторів і для кожного перевіряє `is Events.BattleEvent` та непорожній `describe()`.
+Двох тестів вище недостатньо: вони чіпають 5 типів із 21, а цей файл існує саме як контракт
+для всіх подальших завдань — перейменоване поле чи переставлений аргумент у решті 16 класів
+проїхали б мовчки. Виклики конструкторів виписуються дослівно, не генеруються рефлексією:
+сам виклик і є перевіркою.
+
 - [ ] **Step 2: Запустити — має впасти**
 
 - [ ] **Step 3: Реалізувати `core/events.gd`**
@@ -1741,8 +1798,12 @@ func test_caps_at_five() -> void:
 
 func test_classes_are_independent() -> void:
 	var v: Veterancy = Veterancy.create()
-	v.add_damage(INF, 500)
+	v.add_damage(INF, 1500)
+	# Самої лише перевірки рівня мало: перший поріг танка — 1000, тож 500 XP, що
+	# протекли б із піхоти, однаково лишили б рівень 0. Тому 1500 (вистачило б на
+	# рівень танка) і пряма перевірка пулу.
 	assert_eq(v.level_of(TANK), 0, "пули не течуть між класами")
+	assert_eq(v.xp[TANK], 0, "у чужому пулі не має бути жодного XP")
 
 func test_tank_progresses_slower_than_infantry() -> void:
 	var a: Veterancy = Veterancy.create()
@@ -1870,6 +1931,8 @@ func test_begin_turn_refills_only_active_players_units() -> void:
 	assert_eq(mine.ap, mine.max_ap())
 	assert_eq(theirs.ap, 0, "чужі юніти чекають свого ходу")
 
+## Порядок подій у begin_turn перевіряється теж: TurnStarted мусить іти перед
+## TileRevealed, інакше вигляд відкриє тайли ще до того, як оголосить чий хід.
 func test_begin_turn_emits_turn_started() -> void:
 	var s: BattleState = _state()
 	s.add_unit(0, 0, Vector2i(5, 5), 0)
@@ -1893,12 +1956,30 @@ func test_elimination_is_detected_and_reported() -> void:
 	var b: Unit = s.add_unit(0, 1, Vector2i(8, 8), 0)
 	b.hp = 0
 	var events: Array = s.check_elimination()
-	var kinds: Array[String] = []
-	for e in events:
-		kinds.append(e.describe())
 	assert_true(s.eliminated[1])
 	assert_true(s.is_over())
 	assert_eq(s.winner, 0)
+	# Порядок подій — теж контракт: вигляд програє їх послідовно, і повідомити
+	# про кінець матчу раніше за вибуття гравця означало б зіпсувати подачу.
+	var eliminated_at: int = -1
+	var ended_at: int = -1
+	for i in events.size():
+		if events[i] is Events.PlayerEliminated:
+			eliminated_at = i
+		elif events[i] is Events.MatchEnded:
+			ended_at = i
+	assert_true(eliminated_at >= 0 and ended_at > eliminated_at,
+		"PlayerEliminated має передувати MatchEnded")
+
+func test_match_ends_in_a_draw_when_nobody_survives() -> void:
+	# Досяжно не лише взаємним знищенням: карта, де жоден гравець не має юнітів,
+	# дає цей стан на першій же перевірці. Без DRAW матч зависав би назавжди —
+	# winner лишався б NO_WINNER, is_over() ніколи не істина, а advance_player()
+	# повертав би вибулого гравця.
+	var s: BattleState = _state()
+	var events: Array = s.check_elimination()
+	assert_true(s.is_over(), "матч мусить завершитися, а не зависнути")
+	assert_eq(s.winner, BattleState.DRAW, "нічия — не те саме, що незавершена гра")
 
 func test_each_player_gets_its_own_vision() -> void:
 	var s: BattleState = _state(3)
@@ -1925,7 +2006,12 @@ var rng: RandomNumberGenerator = null
 var vision: Array[Vision] = []
 var veterancy: Array[Veterancy] = []
 var eliminated: Array[bool] = []
-var winner: int = -1
+## Матч триває, доки winner == NO_WINNER. DRAW потрібен окремим значенням, бо −1
+## уже зайняте «ще триває»: без нього нічия була б невідрізненна від незавершеної гри.
+const NO_WINNER: int = -1
+const DRAW: int = -2
+
+var winner: int = NO_WINNER
 var mines: Array = []                     # заповнюється в Task 1.16
 var objectives: Array = []                # заповнюється в Task 1.17
 var _next_unit_id: int = 1
@@ -1980,7 +2066,7 @@ func occupied_map() -> Dictionary:
 	return out
 
 func is_over() -> bool:
-	return winner >= 0
+	return winner != NO_WINNER
 
 func begin_turn() -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []
@@ -1998,6 +2084,9 @@ func refresh_vision(player: int) -> Array[Events.BattleEvent]:
 	return [Events.TileRevealed.new(player, revealed)] as Array[Events.BattleEvent]
 
 func advance_player() -> int:
+	## Якщо живих не лишилось, цикл нічого не знайде і поверне вибулого гравця.
+	## Викликати лише коли матч ще триває — це стверджується, а не мовчиться.
+	assert(not is_over(), "advance_player() після завершення матчу")
 	var next: int = active_player
 	for i in player_count:
 		next = (next + 1) % player_count
@@ -2017,8 +2106,13 @@ func check_elimination() -> Array[Events.BattleEvent]:
 	for p in player_count:
 		if not eliminated[p]:
 			alive.append(p)
-	if alive.size() == 1 and winner < 0:
-		winner = alive[0]
+	# `<= 1`, а не `== 1`: якщо живих не лишилось жодного, матч мусить усе одно
+	# завершитися. Інакше winner навіки лишається NO_WINNER, is_over() ніколи не
+	# стає істиною, а advance_player() повертає вибулого гравця — матч зависає
+	# без жодного легального активного гравця. Досяжно не лише взаємним
+	# знищенням, а й картою, де двоє гравців стартують без юнітів.
+	if alive.size() <= 1 and winner == NO_WINNER:
+		winner = alive[0] if alive.size() == 1 else DRAW
 		out.append(Events.MatchEnded.new(winner))
 	return out
 ```
@@ -2136,6 +2230,16 @@ class_name Command
 extends RefCounted
 ## База для всіх дій. validate() повертає порожній рядок, якщо дія дозволена,
 ## або ключ перекладу помилки — щоб UI показав причину без власної логіки правил.
+##
+## Конвенція для КОЖНОЇ команди, без винятків:
+##   1. `apply()` починається з `assert(validate(state) == "", ...)`. Диспетчера,
+##      який гарантував би порядок, поки немає, тож інваріант тримає assert.
+##   2. `apply()` не перераховує правила, які вже вирішив `validate()`, але й не
+##      довіряє їм наосліп у release-збірці, де assert вирізано: кожне звернення
+##      до значення, що існує лише для валідної дії, має безпечний запасний шлях,
+##      і цей шлях ніколи не буває вигіднішим за легальну дію.
+##   3. Перевірка `state.is_over()` — у validate() кожної команди. Матч, що
+##      завершився, не приймає жодних дій.
 
 func validate(_state: BattleState) -> String:
 	return "ERR_NOT_IMPLEMENTED"
@@ -2161,6 +2265,8 @@ static func create(p_unit_id: int, p_target: Vector2i, p_facing: int) -> MoveCom
 	return c
 
 func validate(state: BattleState) -> String:
+	if state.is_over():
+		return "ERR_MATCH_OVER"
 	var u: Unit = state.get_unit(unit_id)
 	if u == null or not u.is_alive():
 		return "ERR_NO_SUCH_UNIT"
@@ -2178,13 +2284,18 @@ func validate(state: BattleState) -> String:
 	return ""
 
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
+	assert(validate(state) == "", "apply() без успішного validate()")
 	var out: Array[Events.BattleEvent] = []
 	var u: Unit = state.get_unit(unit_id)
 	var occupied: Dictionary = state.occupied_map()
 	occupied.erase(u.pos)
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	var path: Array[Vector2i] = Pathing.path_to(zones, target)
-	var spent: int = zones.cost_to(target)
+	# cost_to() кличеться лише під can_reach(). У release-збірці assert вирізано,
+	# тож недосяжна ціль повернула б −1, а spend_ap(−1) ДОДАВ би юнітові очко дії:
+	# нелегальний хід ставав би вигіднішим за легальний. Запасний шлях — списати
+	# все, що є: помилка не має винагороджуватись.
+	var spent: int = zones.cost_to(target) if zones.can_reach(target) else u.ap
 
 	var final_facing: int = facing
 	if final_facing < 0:
@@ -2196,7 +2307,12 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	u.facing = final_facing
 	u.spend_ap(spent)
 
-	out.append(Events.UnitMoved.new(unit_id, path, final_facing))
+	# Поворот на місці — це UnitTurned, а не UnitMoved з порожнім шляхом:
+	# інакше вигляд мусив би сам розрізняти ці випадки за довжиною масиву.
+	if path.is_empty():
+		out.append(Events.UnitTurned.new(unit_id, final_facing))
+	else:
+		out.append(Events.UnitMoved.new(unit_id, path, final_facing))
 	out.append(Events.ApChanged.new(unit_id, u.ap))
 	out.append_array(state.refresh_vision(u.owner))
 	# міни під ногами обробляються в Task 1.16 — там сюди додається виклик Mines.step_on()
@@ -2265,9 +2381,16 @@ func before_each() -> void:
 	state = BattleState.create(Board.create(12, 12, Terrain.GroundState.DRY), 2, 7)
 	state.active_player = 0
 
+## Юніти додаються ПІСЛЯ before_each, а туман рахується лише в begin_turn(),
+## тож кожен тест, який очікує легальний постріл, мусить викликати state.begin_turn()
+## після розстановки. Без цього vision[0] лишається порожнім — і тести відхилення
+## проходять із НЕПРАВИЛЬНОЇ причини (ціль невидима), нічого насправді не перевіряючи.
+## Саме тому кожен тест відхилення звіряє конкретний ключ помилки, а не просто «не порожньо».
+
 func test_fire_deals_damage_and_zeroes_ap() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
 	var before: int = t.hp
 	assert_eq(FireCommand.create(a.id, t.id).validate(state), "")
 	FireCommand.create(a.id, t.id).apply(state)
@@ -2278,6 +2401,7 @@ func test_fire_deals_damage_and_zeroes_ap() -> void:
 func test_fire_emits_shot_then_damage() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
 	var events: Array = FireCommand.create(a.id, t.id).apply(state)
 	assert_true(events[0] is Events.ShotFired)
 	assert_true(events[1] is Events.DamageDealt)
@@ -2285,7 +2409,8 @@ func test_fire_emits_shot_then_damage() -> void:
 func test_out_of_range_is_rejected() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(0, 0), 2)   # range 4
 	var t: Unit = state.add_unit(2, 1, Vector2i(11, 11), 2)
-	assert_ne(FireCommand.create(a.id, t.id).validate(state), "")
+	state.begin_turn()
+	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_OUT_OF_RANGE")
 
 func test_invisible_target_cannot_be_shot() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(0, 0), 2)   # арта, vision 3, range 5
@@ -2297,22 +2422,27 @@ func test_invisible_target_cannot_be_shot() -> void:
 func test_friendly_fire_is_rejected() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var f: Unit = state.add_unit(5, 0, Vector2i(5, 4), 2)
-	assert_ne(FireCommand.create(a.id, f.id).validate(state), "")
+	state.begin_turn()
+	assert_eq(FireCommand.create(a.id, f.id).validate(state), "ERR_FRIENDLY_FIRE")
 
 func test_engineer_cannot_fire() -> void:
 	var e: Unit = state.add_unit(11, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(5, 4), 2)
-	assert_ne(FireCommand.create(e.id, t.id).validate(state), "", "§3.6: інженер не має зброї")
+	state.begin_turn()
+	assert_eq(FireCommand.create(e.id, t.id).validate(state), "ERR_NO_WEAPON",
+		"§3.6: інженер не має зброї")
 
 func test_second_shot_in_a_turn_is_rejected() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
-	assert_ne(FireCommand.create(a.id, t.id).validate(state), "")
+	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_NOT_ENOUGH_AP")
 
 func test_kill_emits_destruction_and_checks_victory() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 6)
+	state.begin_turn()
 	t.hp = 1
 	var events: Array = FireCommand.create(a.id, t.id).apply(state)
 	var destroyed: bool = false
@@ -2328,6 +2458,7 @@ func test_kill_emits_destruction_and_checks_victory() -> void:
 func test_damage_feeds_the_attackers_class_pool() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
 	assert_true(state.veterancy[0].xp[UnitTypes.UnitClass.TANK] > 0)
 
@@ -2336,8 +2467,31 @@ func test_preview_reports_sector_and_bounds() -> void:
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)   # дивиться на схід, атака зі заходу
 	var p: Dictionary = FireCommand.preview(state, a.id, t.id)
 	assert_eq(p["sector"], UnitTypes.ArmourSector.REAR)
-	assert_true(p["min"] <= p["max"])
-	assert_true(p["min"] >= Rules.MIN_DAMAGE)
+	# Конкретні числа, а не `min <= max`: остання перевірка не може впасти за
+	# побудовою, бо обидва значення походять з одного джерела. Середній танк (95)
+	# по кормі легкої машини (броня 10), ветеранство 0:
+	#   мін = 0.75*95 + 0 − (0.75*10 + rand_max(2)) = 61.75 → 61
+	#   макс = 0.75*95 + rand_max(23) − (0.75*10 + 0)  = 86.75 → 86
+	assert_eq(p["min"], 61, "нижня межа — нульовий кидок атаки і максимальний кидок броні")
+	assert_eq(p["max"], 86, "верхня межа — максимальний кидок атаки і нульовий кидок броні")
+
+func test_preview_brackets_every_real_roll_and_is_tight() -> void:
+	# Прев'ю бреше в обидва боки однаково погано: завузько — гравець ризикує
+	# наосліп, зашироко — прогноз марний. Тому перевіряємо і охоплення, і щільність.
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	var p: Dictionary = FireCommand.preview(state, a.id, t.id)
+	var seen_min: bool = false
+	var seen_max: bool = false
+	for s in 400:
+		var r := RandomNumberGenerator.new()
+		r.seed = s
+		var v: int = Rules.compute_damage(r, a, t, 0, p["sector"], Rules.distance_sq(a.pos, t.pos))
+		assert_between(v, p["min"], p["max"], "жоден реальний кидок не виходить за межі прев\'ю")
+		seen_min = seen_min or v == p["min"]
+		seen_max = seen_max or v == p["max"]
+	assert_true(seen_min, "нижня межа досяжна, а не вигадана із запасом")
+	assert_true(seen_max, "верхня межа досяжна — інакше прев\'ю занижує ризик")
 
 func test_preview_does_not_disturb_the_rng() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
@@ -2425,24 +2579,18 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	return out
 
 static func preview(state: BattleState, unit_id: int, target_id: int) -> Dictionary:
-	## Аналітичні межі, без жодного кидка — RNG матчу тут не чіпається.
+	## Точні межі формули, без жодного кидка — RNG матчу тут не чіпається.
+	## Межі бере Rules.damage_bounds(), а не перебір сідів: 64 проби давали
+	## заниженy стелю (для арти по танку простір результатів — тисячі комбінацій,
+	## і справжній максимум у вибірку майже ніколи не потрапляв). Гравцеві не
+	## можна показувати хибно вузький діапазон у мить, коли він приймає рішення.
 	var a: Unit = state.get_unit(unit_id)
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
 	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
-	var lo := RandomNumberGenerator.new()
-	var hi := RandomNumberGenerator.new()
-	var lo_value: int = Rules.MIN_DAMAGE
-	var hi_value: int = Rules.MIN_DAMAGE
-	# Межі знаходяться перебором сідів: формула монотонна за кожним кидком,
-	# але множники роблять аналітичний вивід крихким — 64 проби дають стабільні межі.
-	for s in 64:
-		lo.seed = s
-		var v: int = Rules.compute_damage(lo, a, t, level, sector, dist_sq)
-		lo_value = v if s == 0 else mini(lo_value, v)
-		hi_value = v if s == 0 else maxi(hi_value, v)
-	return {"sector": sector, "min": lo_value, "max": hi_value}
+	var bounds: Vector2i = Rules.damage_bounds(a, t, level, sector, dist_sq)
+	return {"sector": sector, "min": bounds.x, "max": bounds.y}
 ```
 
 - [ ] **Step 4: Запустити — усе має пройти, коміт**
@@ -2451,6 +2599,45 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 ./run_tests.sh -gtest=res://tests/core/test_fire_command.gd
 git add core/commands/fire_command.gd tests/core/test_fire_command.gd
 git commit -m "feat(core): fire command with armour sector preview"
+```
+
+---
+
+### Task 1.14b: Відповідний вогонь (§3.3.1)
+
+**Files:**
+- Modify: `core/commands/fire_command.gd` (спільний хвіст)
+- Modify: `core/commands/drone_command.gd`
+- Modify: `core/events.gd`
+- Test: `tests/core/test_retaliation.gd`
+
+**Interfaces:**
+- Produces:
+  - `Events.ShotRetaliated(attacker_id: int, target_id: int, sector: int)` — окремий клас,
+    а не прапорець у `ShotFired`: вигляд мусить відрізняти відповідь від пострілу, не
+    здогадуючись про це з порядку подій.
+  - `FireCommand._retaliate(state, original_attacker: Unit, target: Unit) -> Array[Events.BattleEvent]`
+
+Механіка з §3.3.1: ціль, яка вижила, стріляє у відповідь тим самим кидком, якщо в неї
+лишилось `>= fire_cost` AP і атакувальник у її дальності; інженер не відповідає ніколи.
+Відповідь обнуляє AP відповідача (`exhaust()`), тож вона коштує йому власного ходу — і
+саме тому відповісти можна щонайбільше раз за раунд.
+
+**Відповідь не породжує відповіді.** Реалізується прямим викликом розрахунку шкоди, а не
+рекурсивним `apply()` — інакше два юніти в дальності одне одного розстріляли б один одного
+до смерті за один постріл.
+
+Викликається і з `FireCommand`, і з `DroneCommand`: дрон — теж атака, і якщо ціль
+дотягується до штурмового відділення, вона відповідає. На практиці дальність дрона 5
+переважає дальність усієї техніки, тож це рідкість — але правило одне, без винятків.
+
+- [ ] **Step 1: Написати падаючий тест** — `tests/core/test_retaliation.gd`
+- [ ] **Step 2: Додати `ShotRetaliated` у `core/events.gd`** (і у вичерпний тест конструкторів)
+- [ ] **Step 3: Реалізувати `_retaliate` і підключити до обох команд**
+- [ ] **Step 4: Запустити — усе має пройти, коміт**
+
+```bash
+git commit -m "feat(core): retaliation fire from a surviving target"
 ```
 
 ---
@@ -2545,11 +2732,18 @@ func test_drone_costs_all_remaining_ap() -> void:
 	assert_true(a.has_fired)
 
 func test_invisible_target_is_rejected() -> void:
+	# Цей стан сьогодні недосяжний чесною грою, і тест про це чесно каже.
+	# Зір штурмового відділення — 5, дальність дрона — 5, а туман ведеться ПО ТАЙЛАХ
+	# і без перекриття перешкодами. Тому будь-яка ціль у межах дальності стоїть на
+	# видимому тайлі, і гілка ERR_TARGET_NOT_VISIBLE недосяжна доти, доки ці два
+	# числа рівні. Попередня версія тесту ставила ціль на 6 тайлів і насправді
+	# перевіряла ERR_OUT_OF_RANGE, тобто не перевіряла нічого.
+	# Гасимо туман вручну: гілка має працювати на той день, коли числа розійдуться.
 	var a: Unit = _assault(Vector2i(2, 2))
-	var t: Unit = state.add_unit(5, 1, Vector2i(2, 7), 2)   # 5 тайлів, але поза vision 5? ні — рівно на межі
-	t.pos = Vector2i(2, 8)
+	var t: Unit = state.add_unit(5, 1, Vector2i(2, 6), 2)   # 4 тайли — усередині дальності
 	state.begin_turn()
-	assert_ne(DroneCommand.create(a.id, t.id).validate(state), "",
+	state.vision[0].visible.fill(0)
+	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "ERR_TARGET_NOT_VISIBLE",
 		"§3.9: ціль має бути видима гравцеві просто зараз")
 
 func test_drone_damage_feeds_infantry_pool() -> void:
@@ -2642,7 +2836,7 @@ git commit -m "feat(core): drone strike with ammo and infantry immunity"
   - `Mines.mine_at(state, pos: Vector2i) -> Mines.Mine`
   - `Mines.reveal_near(state, player: int) -> Array[Events.BattleEvent]` — розкриває міни в радіусі 1 від юнітів гравця
   - `Mines.step_on(state, unit: Unit) -> Array[Events.BattleEvent]`
-  - `Mines.DAMAGE: int = 120`
+  - `Mines.DAMAGE_BASE: int = 90` і `Mines.DAMAGE_ROLL: int = 90` — шкода `90 + rand(0, 90)`
   - `Mines.is_known(state, pos: Vector2i, player: int) -> bool`
 
 - [ ] **Step 1: Написати падаючий тест**
@@ -2718,7 +2912,10 @@ class_name Mines
 extends RefCounted
 ## §3.11. Видимість міни ведеться на гравця — так само, як туман тайлів.
 
-const DAMAGE: int = 120
+## §4: у референсі (`class_1.method_105`) міна завдає `90 + rand(0, 90)`, а не фіксовану
+## величину. Пласке число зробило б міну єдиним джерелом шкоди в грі, яке не кидається.
+const DAMAGE_BASE: int = 90
+const DAMAGE_ROLL: int = 90
 const REVEAL_RADIUS: int = 1
 
 class Mine extends RefCounted:
@@ -2772,7 +2969,7 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 		return out
 	state.mines.erase(m)
 	out.append(Events.MineTriggered.new(m.pos, unit.id))
-	var applied: int = mini(DAMAGE, unit.hp)
+	var applied: int = mini(DAMAGE_BASE + Rules.roll(state.rng, DAMAGE_ROLL), unit.hp)
 	unit.hp -= applied
 	out.append(Events.DamageDealt.new(unit.id, applied, unit.hp))
 	if not unit.is_alive():
@@ -2783,7 +2980,32 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 
 - [ ] **Step 4: Підключити до `MoveCommand.apply`**
 
-Замінити коментар-заглушку в кінці `apply()`:
+**Міна спрацьовує одразу, на першому ж пройденому тайлі, а не лише в кінцевій клітинці.**
+Інакше мінне поле можна було б безкарно перетинати, зупиняючись одразу за ним, і міни
+перестали б бути засобом заборони руху — вони стали б лотереєю для того, хто випадково
+зупинився саме там. Юніт зупиняється на тайлі підриву: під ним щойно вибухнуло.
+
+Тому `apply()` не просто телепортує юніт у `target`, а проходить шлях і шукає перший
+замінований тайл. Предикат обрізання мусить бути **точно тією самою умовою**, за якою
+детонує `Mines.step_on()` (`міна існує` і `її власник — не той, хто йде`), інакше шлях
+обірветься там, де вибуху не буде, або навпаки.
+
+```gdscript
+	# Перший замінований тайл на шляху зупиняє рух.
+	var stop_index: int = -1
+	for i in path.size():
+		var m: Mines.Mine = Mines.mine_at(state, path[i])
+		if m != null and m.owner != u.owner:
+			stop_index = i
+			break
+	var walked: Array[Vector2i] = path if stop_index < 0 else path.slice(0, stop_index + 1)
+	var final_pos: Vector2i = target if walked.is_empty() else walked[walked.size() - 1]
+	var spent: int = zones.cost_to(final_pos) if zones.can_reach(final_pos) else u.ap
+```
+
+`walked` іде в `UnitMoved` замість повного `path`, `final_pos` — у `u.pos`, і лише після
+цього викликається `step_on`, який дивиться на `u.pos`. Порядок подій: рух → AP → підрив
+→ розкриття сусідніх мін → перерахунок туману.
 
 ```gdscript
 	out.append_array(Mines.step_on(state, u))
@@ -2801,6 +3023,17 @@ func test_moving_onto_an_enemy_mine_detonates_it() -> void:
 	var before: int = u.hp
 	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
 	assert_true(u.hp < before, "§3.11: наїзд на нерозкриту міну — підрив")
+	assert_eq(u.pos, Vector2i(2, 5),
+		"міна спрацьовує одразу — юніт лишається на тайлі підриву, а не доходить до (3,5)")
+
+func test_a_minefield_cannot_be_crossed_by_stopping_past_it() -> void:
+	# Найважливіший тест цього завдання: якби детонував лише кінцевий тайл,
+	# міну можна було б просто переїхати, і вся механіка заборони руху зникла б.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	Mines.place(state, Vector2i(1, 5), 1)
+	MoveCommand.create(u.id, Vector2i(4, 5), -1).apply(state)
+	assert_eq(u.pos, Vector2i(1, 5), "рух обривається на міні, а не проходить крізь неї")
+	assert_true(state.mines.is_empty(), "міна витрачена")
 ```
 
 - [ ] **Step 5: Запустити — усе має пройти, коміт**
