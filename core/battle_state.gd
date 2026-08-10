@@ -111,6 +111,18 @@ func begin_turn() -> Array[Events.BattleEvent]:
 		u.refill_ap()
 	out.append_array(refresh_vision(active_player))
 	out.append_array(Objectives.refresh_seen(self, active_player))
+	## §3.11: пошук мін — властивість присутності, а не руху. Доти єдиним
+	## викликачем Mines.reveal_near() був MoveCommand, тож сапер, який нікуди не
+	## пішов, не знаходив нічого: ворожа міна за крок від нього лишалася б
+	## невидимою весь матч, хоч і стоїть усередині його ромба огляду.
+	## Це свідомий відхід від референсу (§4), де пошук теж прив'язаний до руху.
+	##
+	## Прохід — рівно за активного гравця: чужі міни чужим не відкриваються, і за
+	## гравця, чий хід не йде, ніхто не шукає. Повторної події не буде — reveal_near()
+	## пропускає міну, вже позначену known_to[player]. Стоїть ПІСЛЯ refresh_vision()
+	## з тієї ж причини, що й у MoveCommand: MineRevealed не має випереджати
+	## TileRevealed свого тайла.
+	out.append_array(Mines.reveal_near(self, active_player))
 	return out
 
 func refresh_vision(player: int) -> Array[Events.BattleEvent]:

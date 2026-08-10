@@ -76,7 +76,28 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	else:
 		out.append(Events.UnitMoved.new(unit_id, walked, final_facing))
 	out.append(Events.ApChanged.new(unit_id, u.ap))
-	out.append_array(Mines.step_on(state, u))
-	out.append_array(Mines.reveal_near(state, u.owner))
+
+	# §3.5/§6: туман оновлюється ЩОЙНО юніт став на нове місце — до всього, що
+	# на тому тайлі станеться. Інакше подія про тайл (MineTriggered, MineRevealed)
+	# випереджає TileRevealed цього ж тайла, і вигляд, програючи список по черзі,
+	# малює вибух чи міну на клітинці, яка для гравця ще в тумані. Кінцевий стан
+	# від порядку не залежить — залежить рівно потік подій, а він і є контрактом
+	# з виглядом.
 	out.append_array(state.refresh_vision(u.owner))
+	out.append_array(Mines.step_on(state, u))
+	# Смерть на міні гасить власний огляд юніта, тож перерахунок потрібен ще раз —
+	# і лише на цій гілці: нових тайлів він не відкриває, отже й подій не додає,
+	# але visible мертвого юніта мусить згаснути.
+	if not u.is_alive():
+		out.append_array(state.refresh_vision(u.owner))
+	# Стоїть ПІСЛЯ перерахунку туману: розкрита міна завжди лежить на тайлі, який
+	# гравець бачить, і потік подій має говорити те саме, що й кінцевий стан.
+	out.append_array(Mines.reveal_near(state, u.owner))
+	# §3.10: цілі підкоряються туману, як і все інше, — а отже мусять позначатися
+	# побаченими там само, де оновлюється туман. Доти єдиним викликачем
+	# refresh_seen() був begin_turn(), тож ціль, повз яку юніт проїхав СЕРЕДИНОЮ
+	# ходу, не позначалася до початку наступного ходу цього гравця — а якщо юніт
+	# до того встиг відійти, не позначалася ніколи. Виходила розбіжність усередині
+	# одного тайла: місцевість гравець памʼятає, а ціль на ній — ні.
+	out.append_array(Objectives.refresh_seen(state, u.owner))
 	return out

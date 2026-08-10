@@ -18,6 +18,21 @@ func test_move_costs_ap_and_moves_the_unit() -> void:
 	assert_true(u.ap < before)
 	assert_true(events[0] is Events.UnitMoved)
 
+func test_an_objective_passed_mid_turn_is_remembered_without_waiting_for_the_next_turn() -> void:
+	# §3.10: цілі підкоряються туману, отже позначатися побаченими мусять там само,
+	# де оновлюється туман. Доти refresh_seen() викликався лише з begin_turn(), тож
+	# ціль, побачена серед ходу, не памʼяталася — а якби юніт до наступного ходу
+	# відійшов, не запамʼяталася б узагалі.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	var idx: int = Objectives.add(state, Vector2i(6, 5), 1)
+	state.start()
+	assert_false(state.objectives[idx].seen_by[0], "передумова: ціль поза оглядом до ходу")
+
+	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+
+	assert_true(state.objectives[idx].seen_by[0],
+		"ціль, побачену серед ходу, памʼятаємо одразу, а не з наступного begin_turn()")
+
 func test_move_sets_explicit_facing() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	MoveCommand.create(u.id, Vector2i(3, 5), 6).apply(state)
@@ -198,6 +213,41 @@ func test_zones_predict_whether_firing_is_legal_after_the_move() -> void:
 	MoveCommand.create(u2.id, red, -1).apply(state2)
 	assert_eq(FireCommand.create(u2.id, target2.id).validate(state2), "ERR_NOT_ENOUGH_AP",
 		"червона зона: рух зʼїв AP, потрібний на постріл")
+
+func _index_of_tile_revealed(events: Array, player: int, tile: Vector2i) -> int:
+	for i in events.size():
+		var e: Variant = events[i]
+		if e is Events.TileRevealed and e.player == player and tile in e.tiles:
+			return i
+	return -1
+
+func _index_of_mine_revealed(events: Array, player: int, tile: Vector2i) -> int:
+	for i in events.size():
+		var e: Variant = events[i]
+		if e is Events.MineRevealed and e.player == player and e.pos == tile:
+			return i
+	return -1
+
+func test_mine_revealed_comes_after_the_tile_it_sits_on_is_revealed() -> void:
+	# §3.5/§6: вигляд програє список подій по порядку, тож порядок — це контракт,
+	# а не косметика. Сапер їде дорогою і з нової позиції вперше бачить і тайл
+	# (7,5), і міну на ньому. Розкриття міни мусить іти ПІСЛЯ TileRevealed цього
+	# тайла — інакше вигляд один крок малює міну на клітинці, що ще в тумані.
+	# Кінцевий стан однаковий за будь-якого порядку, тому перевіряти треба саме
+	# індекси подій.
+	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # сапер, огляд 3
+	Mines.place(state, Vector2i(7, 5), 1)
+	state.begin_turn()
+	assert_false(Mines.is_known(state, Vector2i(7, 5), 0),
+		"передумова: з (0,5) до міни 7 тайлів — сапер її ще не бачить")
+	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5), -1).apply(state)
+	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли дороги по 15 AP — 60 з 68")
+	var tile_at: int = _index_of_tile_revealed(events, 0, Vector2i(7, 5))
+	var mine_at: int = _index_of_mine_revealed(events, 0, Vector2i(7, 5))
+	assert_true(tile_at >= 0, "передумова: тайл міни розкрито саме цим рухом")
+	assert_true(mine_at >= 0, "передумова: міна знайдена саме цим рухом")
+	assert_true(tile_at < mine_at,
+		"MineRevealed не має випереджати TileRevealed свого тайла (%d проти %d)" % [mine_at, tile_at])
 
 func test_a_unit_killed_by_a_mine_stops_contributing_vision() -> void:
 	# Пришпилює те, що відхилений фінд рев'ю намагався б "полагодити" —

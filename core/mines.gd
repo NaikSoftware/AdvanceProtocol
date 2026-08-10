@@ -46,6 +46,12 @@ static func reveal_near(state: BattleState, player: int) -> Array[Events.BattleE
 	## тайлі, який гравець і справді бачить. Без сапера попереду колона заходить
 	## у мінне поле наосліп — це й перетворює мінування на загрозу, а сапера
 	## дає підставу вести вперед, а не тримати позаду.
+	##
+	## Викликати ЛИШЕ після BattleState.refresh_vision(player) — інакше твердження
+	## вище справджується для кінцевого стану, але не для потоку подій: MineRevealed
+	## вийде раніше за TileRevealed свого тайла, і вигляд намалює міну в тумані.
+	## Пошук ведеться і на початку ходу власника (BattleState.begin_turn()), і після
+	## кожного кроку (MoveCommand.apply()): це властивість присутності, не руху.
 	var out: Array[Events.BattleEvent] = []
 	for u in state.units_of(player):
 		if u.unit_class() != UnitTypes.UnitClass.ENGINEER:

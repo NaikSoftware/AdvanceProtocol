@@ -182,7 +182,9 @@ Objectives obey fog. Checked at end of turn: an opponent has no units left, **or
 objective condition is met.
 
 - **The objective condition is checked for one player only — the one whose turn just ended.**
-  Elimination stays global. You claim an objective win on your own turn, so it has to be survived.
+  Elimination stays global. This makes a simultaneous objective win unreachable rather than
+  tie-broken. It does **not** make a captured objective something you must survive a round to
+  keep — see the linked document.
 - A map with no objective condition sets `hold_target` to 0.
 - When both conditions resolve together, **elimination decides**.
 
@@ -209,6 +211,9 @@ at all times, offsetting off-road penalty. Roads are never affected — that is 
 - An enemy's marks ignore its AP and are computed from **that unit alone**, never from its owner's
   vision network — the network is hidden, and drawing from it would reveal unseen spotters. The
   forecast is therefore **a floor, not a ceiling**, and the UI must say so.
+- **The drone strike gets its own ring and its own marks**, and an enemy squad's remaining drones
+  count towards the threat it is shown to pose. Ammo is already public (§3.9), so this leaks
+  nothing, and omitting it would under-report the most dangerous action in the game.
 - Both computations live in `core/`. **Neither may be re-derived in the view.**
 
 ---

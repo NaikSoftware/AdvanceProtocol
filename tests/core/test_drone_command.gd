@@ -93,11 +93,18 @@ func test_a_spotter_unlocks_the_diagonal_the_squad_cannot_see() -> void:
 	# чужа піхота. Саме це мала на увазі вимога видимості.
 	var a: Unit = _assault(Vector2i(2, 2))
 	var t: Unit = state.add_unit(5, 1, Vector2i(5, 6), 2)
-	state.add_unit(0, 0, Vector2i(5, 4), 2)   # стрілецьке відділення-коригувальник
 	state.begin_turn()
-	assert_true(state.vision[0].is_visible(t.pos), "передумова: коригувальник накрив тайл цілі")
+	# Обидві половини потрібні. Раніше тест ставив коригувальника одразу і
+	# перевіряв лише дозвіл — а такий тест проходить і тоді, коли огляд знову коло:
+	# під колом відділення бачить (5,6) саме́ (dist_sq 25 <= 25), і коригувальник
+	# нічого не доводить. Відмова ДО нього — і є доказ, що ромб справді ріже.
+	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "ERR_TARGET_NOT_VISIBLE",
+		"передумова: 3 + 4 = 7 > 5 — власним оглядом відділення цілі не бачить")
+	state.add_unit(0, 0, Vector2i(5, 4), 2)   # стрілецьке відділення-коригувальник
+	state.refresh_vision(0)
+	assert_true(state.vision[0].is_visible(t.pos), "коригувальник накрив тайл цілі")
 	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "",
-		"§3.9: з коригувальником удар дозволено")
+		"§3.9: з коригувальником той самий удар дозволено")
 
 func test_drone_damage_feeds_infantry_pool() -> void:
 	var a: Unit = _assault(Vector2i(2, 2))

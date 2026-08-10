@@ -35,7 +35,15 @@ lower player index won, which is loop order rather than a rule. Rather than pick
 tie is made unreachable: only one player can ever be the one whose turn just ended, so two players
 can never claim on the same check.
 
-The side effect is the better half of the change. Capturing the winning objective no longer ends
-the match on the spot — you have to still be holding it when your next turn ends, and every
-opponent gets a full round to take it back or kill the engineer standing on it. A victory you have
-to survive is worth more than one you trigger.
+The second effect is smaller but real: a player is no longer handed the match at *someone else's*
+end of turn. A holding that was already sufficient — a map that starts a player above
+`hold_target`, or an opponent demolishing their way below it — is now claimed by that player at
+their own end of turn rather than announced during a turn they were not playing.
+
+**What this change does *not* buy, stated because an earlier version of this document claimed it
+did:** it does not make you survive a round to keep a captured objective. Capture is an engineer
+action and engineers only act on their owner's turn, so the capture and the claim fall inside the
+same turn — take the last objective and you win at the end of that turn, with no opponent
+response. Making a victory something you have to survive would need a separate rule (an objective
+not counting on the turn it changed hands), and that is a new mechanic, not a consequence of this
+one. Left undone deliberately, pending playtest.

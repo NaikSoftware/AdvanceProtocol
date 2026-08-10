@@ -187,8 +187,18 @@ func test_a_destroyed_unit_is_never_returned() -> void:
 	assert_false(victim.is_alive(), "передумова: ціль знищено")
 	assert_false(state.is_over(), "передумова: матч триває")
 
-	assert_does_not_have(_ids(Targeting.firing_targets(state, other.id)), victim.id, "по мертвому не стріляють")
+	# Через validate(), а не лише через запит. firing_targets() перебирає
+	# state.alive_units(), тож мертвої цілі він не побачив би й без перевірки
+	# всередині check_shot() — сам по собі він цю умову не прикриває, і прибрана
+	# перевірка живості лишила б FireCommand.validate() здатним прийняти труп.
+	# Тому головне твердження тут — саме команда.
+	assert_eq(FireCommand.create(other.id, victim.id).validate(state), "ERR_NO_SUCH_TARGET",
+		"по мертвому не стріляють — і це має ловити сам check_shot()")
+	assert_does_not_have(_ids(Targeting.firing_targets(state, other.id)), victim.id,
+		"а оверлей не має його показувати")
 	assert_eq(Targeting.threatened_units(state, victim.id, 0).size(), 0, "мертвий ворог не загрожує")
+	assert_eq(Targeting.drone_threatened_units(state, victim.id, 0).size(), 0,
+		"мертвий ворог не загрожує й дроном")
 
 
 # --- збіг з FireCommand.validate() -----------------------------------------------
@@ -219,23 +229,232 @@ func test_a_unit_of_the_idle_player_has_no_targets() -> void:
 		"не свій хід — стріляти не можна, і оверлей це повторює")
 
 
+# --- §3.9 + §3.13: дрон має власне кільце і власні позначки ----------------------
+#
+# Тип 1 — штурмове відділення: гармата дальністю 3, огляд 5, два дрони.
+# Дрон дістає на 5 (коло) і так само гейтиться ромбом огляду.
+
+func test_enemy_squad_with_drones_threatens_a_tank_its_gun_cannot_reach() -> void:
+	# Головний тест Job 1. Загін, намальований як загроза на 3, насправді дістає
+	# дроном на 5 — і саме по танку, який він за §3.3.1 бʼє без відповіді.
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	var my_eyes: Unit = state.add_unit(0, 0, Vector2i(2, 4), 2)   # огляд 5 — бачить загін
+	var tank: Unit = state.add_unit(5, 0, Vector2i(7, 2), 2)
+	state.start()
+	state.begin_turn()
+
+	assert_false(Rules.in_radius(squad.pos, tank.pos, squad.attack_range()),
+		"передумова: звичайна гармата загону танк не дістає")
+	assert_true(state.vision[0].is_visible(squad.pos), "передумова: загін видно")
+
+	assert_does_not_have(_ids(Targeting.threatened_units(state, squad.id, 0)), tank.id,
+		"звичайний прогноз танк не позначає — дальність 3")
+	assert_has(_ids(Targeting.drone_threatened_units(state, squad.id, 0)), tank.id,
+		"§3.13: дрон дістає на 5, і прогноз мусить це показати")
+	assert_has(_ids(Targeting.threatened_units(state, squad.id, 0)), my_eyes.id,
+		"а звичайне кільце лишається тим самим")
+
+
+func test_enemy_squad_with_no_drones_left_poses_no_drone_threat() -> void:
+	# §3.9: боєкомплект не поповнюється до кінця матчу, тож загін без дронів
+	# прогнозується на своїй звичайній дальності й не далі.
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	state.add_unit(0, 0, Vector2i(2, 4), 2)
+	var tank: Unit = state.add_unit(5, 0, Vector2i(7, 2), 2)
+	state.start()
+	state.begin_turn()
+	assert_has(_ids(Targeting.drone_threatened_units(state, squad.id, 0)), tank.id, "передумова: дрони є")
+
+	squad.drones_left = 0
+	assert_eq(Targeting.drone_threatened_units(state, squad.id, 0).size(), 0,
+		"§3.9: дронів немає — дронової загрози немає")
+
+
+func test_a_rifle_squad_never_carries_a_drone_threat() -> void:
+	# Той самий загін, але тип 0: дронів нуль від народження (§3.6).
+	var rifles: Unit = state.add_unit(0, 1, Vector2i(2, 2), 2)
+	state.add_unit(0, 0, Vector2i(2, 4), 2)
+	state.add_unit(5, 0, Vector2i(7, 2), 2)
+	state.start()
+	state.begin_turn()
+
+	assert_eq(Targeting.drone_threatened_units(state, rifles.id, 0).size(), 0,
+		"§3.6: дрони лише у штурмового відділення")
+
+
+func test_drone_forecast_never_marks_the_observers_infantry() -> void:
+	# §3.9: по піхоті дрон не працює, і саме це — головна контргра проти нього.
+	# Піхота стоїть упритул, тобто в дальності обох дій; звичайне кільце її бере.
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	var my_infantry: Unit = state.add_unit(0, 0, Vector2i(2, 4), 2)
+	state.start()
+	state.begin_turn()
+
+	assert_true(Rules.in_radius(squad.pos, my_infantry.pos, DroneCommand.RANGE),
+		"передумова: піхота в дальності дрона")
+	assert_has(_ids(Targeting.threatened_units(state, squad.id, 0)), my_infantry.id,
+		"передумова: звичайним пострілом вона під загрозою")
+	assert_does_not_have(_ids(Targeting.drone_threatened_units(state, squad.id, 0)), my_infantry.id,
+		"§3.9: дрон по піхоті не працює — позначки бути не може")
+
+
+func test_drone_forecast_ignores_the_enemys_ap_and_fired_flag() -> void:
+	# §3.13: AP ворога — прихований залишок дій, до свого ходу він однаково буде
+	# з повним AP. На відміну від боєкомплекту, який публічний і не поповнюється.
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	state.add_unit(0, 0, Vector2i(2, 4), 2)
+	var tank: Unit = state.add_unit(5, 0, Vector2i(7, 2), 2)
+	state.start()
+	state.begin_turn()
+
+	squad.exhaust()
+	assert_has(_ids(Targeting.drone_threatened_units(state, squad.id, 0)), tank.id,
+		"§3.13: AP і has_fired оглянутого ворога навмисно не перевіряються")
+
+
+func test_drone_forecast_stops_at_the_vision_diamond_too() -> void:
+	# §3.1: дальність — коло, огляд — ромб, і дрон гейтиться перетином, як усе інше.
+	# Зсув (3, 4): 9 + 16 = 25 <= 25 у колі, 3 + 4 = 7 > 5 поза ромбом.
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	state.add_unit(0, 0, Vector2i(2, 4), 2)
+	var straight: Unit = state.add_unit(5, 0, Vector2i(2, 7), 2)    # зсув (0, 5)
+	var diagonal: Unit = state.add_unit(5, 0, Vector2i(5, 6), 2)    # зсув (3, 4)
+	state.start()
+	state.begin_turn()
+
+	assert_true(Rules.in_radius(squad.pos, diagonal.pos, DroneCommand.RANGE), "передумова: у колі дальності 5")
+	assert_false(Rules.in_vision_diamond(squad.pos, diagonal.pos, squad.vision()), "передумова: поза ромбом огляду 5")
+
+	var ids: Array[int] = _ids(Targeting.drone_threatened_units(state, squad.id, 0))
+	assert_has(ids, straight.id, "по прямій рівно 5 — у перетині обох форм")
+	assert_does_not_have(ids, diagonal.id, "§3.1: у колі, але поза ромбом — не позначається")
+
+
+func test_drone_forecast_does_not_widen_when_the_enemy_has_a_spotter() -> void:
+	# Антивитік для дрона. Танк стоїть у дальності дрона, але поза ромбом самого
+	# загону; ворожий коригувальник поруч із танком підсвічує його для МЕРЕЖІ.
+	# Якби прогноз брав state.vision[owner], позначка видала б розвідника.
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	state.add_unit(0, 0, Vector2i(2, 4), 2)                        # мої очі на загін
+	state.add_unit(0, 1, Vector2i(5, 8), 2)                        # ворожий коригувальник
+	var diagonal: Unit = state.add_unit(5, 0, Vector2i(5, 6), 2)   # зсув (3, 4) від загону
+	state.start()
+	state.begin_turn()
+
+	assert_true(state.vision[1].is_visible(diagonal.pos), "передумова: МЕРЕЖА супротивника танк бачить")
+	assert_does_not_have(_ids(Targeting.drone_threatened_units(state, squad.id, 0)), diagonal.id,
+		"§3.13: прогноз рахується власним ромбом загону, не мережею власника")
+
+
+func test_invisible_enemy_squad_carries_no_drone_forecast() -> void:
+	# §3.13: «юніт, якого ти не бачиш, оглянути не можна» — туман діє і тут.
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	var tank: Unit = state.add_unit(5, 0, Vector2i(7, 2), 2)       # огляд 4 < 5 до загону
+	state.start()
+	state.begin_turn()
+
+	assert_false(state.vision[0].is_visible(squad.pos), "передумова: загону не видно")
+	assert_eq(Targeting.drone_threatened_units(state, squad.id, 0).size(), 0, "туман діє і на дронове кільце")
+
+	state.add_unit(0, 0, Vector2i(2, 4), 2)                        # моя піхота, огляд 5
+	state.start()
+	assert_true(state.vision[0].is_visible(squad.pos), "передумова: тепер бачу")
+	assert_has(_ids(Targeting.drone_threatened_units(state, squad.id, 0)), tank.id)
+
+
+func test_own_squad_is_never_a_drone_threat_to_its_owner() -> void:
+	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
+	state.add_unit(5, 1, Vector2i(4, 2), 2)
+	state.add_unit(5, 0, Vector2i(9, 9), 2)
+	state.start()
+	assert_eq(Targeting.drone_threatened_units(state, squad.id, 1).size(), 0,
+		"свої своїх не бомблять — прогнозувати нема чого")
+
+
+# --- збіг з DroneCommand.validate() ----------------------------------------------
+
+func test_drone_targets_agrees_with_drone_command_validate() -> void:
+	var squad: Unit = state.add_unit(1, 0, Vector2i(2, 2), 2)
+	state.add_unit(5, 1, Vector2i(7, 2), 2)     # танк рівно на 5 — законна ціль
+	state.add_unit(2, 1, Vector2i(4, 2), 2)     # бронеавтомобіль зблизька
+	state.add_unit(0, 1, Vector2i(3, 2), 2)     # піхота — дроном не можна
+	state.add_unit(5, 1, Vector2i(5, 6), 2)     # зсув (3, 4): у колі, поза ромбом
+	state.add_unit(11, 1, Vector2i(2, 6), 2)    # інженер — теж «техніка» (§3.9)
+	state.add_unit(1, 0, Vector2i(3, 3), 2)     # свій — не ціль
+	state.start()
+	state.begin_turn()
+
+	var ids: Array[int] = _ids(Targeting.drone_targets(state, squad.id))
+	assert_true(ids.size() > 0, "передумова: хоч одна законна ціль є")
+	for u in state.alive_units():
+		var legal: bool = DroneCommand.create(squad.id, u.id).validate(state) == ""
+		assert_eq(ids.has(u.id), legal, "оверлей і validate() мусять збігатися для юніта %d" % u.id)
+
+
+func test_drone_targets_follows_the_commands_own_gates() -> void:
+	# Кожен гейт дії окремо: боєкомплект, has_fired/AP і чий зараз хід.
+	var squad: Unit = state.add_unit(1, 0, Vector2i(2, 2), 2)
+	state.add_unit(5, 1, Vector2i(5, 2), 2)
+	state.start()
+	state.begin_turn()
+	assert_eq(Targeting.drone_targets(state, squad.id).size(), 1, "передумова: удар законний")
+
+	squad.drones_left = 0
+	assert_eq(Targeting.drone_targets(state, squad.id).size(), 0, "§3.9: боєкомплект скінчився")
+
+	squad.drones_left = 2
+	squad.has_fired = false
+	squad.ap = squad.fire_cost() - 1
+	assert_eq(Targeting.drone_targets(state, squad.id).size(), 0, "§3.2: не вистачає AP на удар")
+
+	# exhaust() гасить і прапорець, і AP, тож сам по собі він не показує, ЯКА з двох
+	# умов спрацювала. Розводимо їх, як у тесті звичайного пострілу вище: повний AP
+	# при піднятому has_fired — стан, якого в грі не буває, але лише він ізолює прапорець.
+	squad.exhaust()
+	squad.ap = squad.max_ap()
+	assert_eq(Targeting.drone_targets(state, squad.id).size(), 0,
+		"§3.2: одна дія за хід, навіть із повним AP")
+
+	squad.refill_ap()
+	state.active_player = 1
+	assert_eq(Targeting.drone_targets(state, squad.id).size(), 0, "не свій хід — удару немає")
+
+
+func test_a_rifle_squad_has_no_drone_targets() -> void:
+	var rifles: Unit = state.add_unit(0, 0, Vector2i(2, 2), 2)
+	state.add_unit(5, 1, Vector2i(5, 2), 2)
+	state.start()
+	state.begin_turn()
+	assert_eq(Targeting.drone_targets(state, rifles.id).size(), 0, "§3.6: у стрілецького відділення дронів немає")
+
+
 # --- чистота ---------------------------------------------------------------------
 
 func test_queries_do_not_touch_the_state() -> void:
 	var tank: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var enemy: Unit = state.add_unit(5, 1, Vector2i(6, 4), 2)
+	var squad: Unit = state.add_unit(1, 0, Vector2i(4, 6), 2)
+	var enemy_squad: Unit = state.add_unit(1, 1, Vector2i(6, 6), 2)
 	state.start()
 	state.begin_turn()
 
 	var rng_state: int = state.rng.state
-	var before: Array = [tank.ap, tank.hp, tank.has_fired, enemy.ap, enemy.hp, enemy.has_fired]
+	var before: Array = [tank.ap, tank.hp, tank.has_fired, enemy.ap, enemy.hp, enemy.has_fired,
+		squad.drones_left, enemy_squad.drones_left]
 
 	var first: Array[int] = _ids(Targeting.firing_targets(state, tank.id))
 	var first_threat: Array[int] = _ids(Targeting.threatened_units(state, enemy.id, 0))
+	var first_drone: Array[int] = _ids(Targeting.drone_targets(state, squad.id))
+	var first_drone_threat: Array[int] = _ids(Targeting.drone_threatened_units(state, enemy_squad.id, 0))
 	var second: Array[int] = _ids(Targeting.firing_targets(state, tank.id))
 	var second_threat: Array[int] = _ids(Targeting.threatened_units(state, enemy.id, 0))
+	var second_drone: Array[int] = _ids(Targeting.drone_targets(state, squad.id))
+	var second_drone_threat: Array[int] = _ids(Targeting.drone_threatened_units(state, enemy_squad.id, 0))
 
 	assert_eq(first, second, "запит детермінований")
 	assert_eq(first_threat, second_threat, "запит детермінований")
-	assert_eq([tank.ap, tank.hp, tank.has_fired, enemy.ap, enemy.hp, enemy.has_fired], before, "запит нічого не мутує")
+	assert_eq(first_drone, second_drone, "дроновий запит детермінований")
+	assert_eq(first_drone_threat, second_drone_threat, "дроновий прогноз детермінований")
+	assert_eq([tank.ap, tank.hp, tank.has_fired, enemy.ap, enemy.hp, enemy.has_fired,
+		squad.drones_left, enemy_squad.drones_left], before, "запит нічого не мутує")
 	assert_eq(state.rng.state, rng_state, "запит не чіпає RNG матчу")

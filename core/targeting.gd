@@ -29,12 +29,32 @@ static func firing_targets(state: BattleState, unit_id: int) -> Array[Unit]:
 	##
 	## Дроновий удар (§3.9) сюди навмисно не входить: це окрема дія з власною
 	## дальністю, власним списком дозволених класів і власним боєкомплектом, тож
-	## і оверлей у неї окремий. Змішати їх означало б показати гравцеві приціл
-	## там, де звичайного пострілу немає.
+	## і оверлей у неї окремий — див. drone_targets(). Змішати їх означало б
+	## показати гравцеві приціл там, де звичайного пострілу немає.
 	var out: Array[Unit] = []
 	var a: Unit = state.get_unit(unit_id)
 	for t in state.alive_units():
 		if FireCommand.check_shot(state, a, t) == "":
+			out.append(t)
+	return out
+
+
+static func drone_targets(state: BattleState, unit_id: int) -> Array[Unit]:
+	## §3.13, рядок «свій юніт», але для дронового удару (§3.9): по кому цей загін
+	## може вдарити дроном ПРЯМО ЗАРАЗ. Окрема функція, а не домішок до
+	## firing_targets(), бо §3.13 дає дрону власне кільце і власні позначки: у нього
+	## інша дальність, інший список дозволених класів і власний боєкомплект, і
+	## показати приціл звичайного пострілу там, де законний лише дрон (або навпаки),
+	## означало б збрехати про те, ЯКА дія відбудеться.
+	##
+	## Умови тут не переписані: єдине джерело — DroneCommand.check_strike(), та сама
+	## функція, крізь яку йде DroneCommand.validate(). Тому боєкомплект, AP,
+	## has_fired, чий хід, клас цілі, дальність і видимість перевіряються рівно так,
+	## як їх перевірить сама дія, і розійтися вони структурно не можуть.
+	var out: Array[Unit] = []
+	var a: Unit = state.get_unit(unit_id)
+	for t in state.alive_units():
+		if DroneCommand.check_strike(state, a, t) == "":
 			out.append(t)
 	return out
 
@@ -62,6 +82,9 @@ static func threatened_units(state: BattleState, unit_id: int, observer: int) ->
 	##
 	## Сам оглянутий юніт має бути видимий гравцеві observer: «юніт, якого ти не
 	## бачиш, оглянути не можна» (§3.13) — туман тут діє, як і всюди.
+	##
+	## Загроза від дрона сюди не входить — вона окремим запитом,
+	## drone_threatened_units(), бо це окрема дія з окремим кільцем (§3.13).
 	var out: Array[Unit] = []
 	var e: Unit = state.get_unit(unit_id)
 	if e == null or not e.is_alive():
@@ -79,6 +102,56 @@ static func threatened_units(state: BattleState, unit_id: int, observer: int) ->
 	var eyes: int = e.vision()
 	for u in state.units_of(observer):
 		if not Rules.in_radius(e.pos, u.pos, reach):
+			continue
+		if not Rules.in_vision_diamond(e.pos, u.pos, eyes):
+			continue
+		out.append(u)
+	return out
+
+
+static func drone_threatened_units(state: BattleState, unit_id: int, observer: int) -> Array[Unit]:
+	## §3.13 + §3.9: та сама «ким я ризикую» для оглянутого ворога, але для дронового
+	## удару. Окремий запит, а не додаток до threatened_units(), бо дрон — окрема дія
+	## з окремим кільцем: він дістає на 5 там, де гармата загону дістає на 3, ігнорує
+	## броню повністю і за §3.3.1 бʼє без відповіді. Позначка «гармата» і позначка
+	## «дрон» означають для гравця різні речі, тож приходять різними масивами й
+	## малюються різними кільцями — злити їх в один список означало б стерти саме ту
+	## різницю, заради якої оверлей існує.
+	##
+	## Не показати їх було б гірше за витік: загін, намальований як загроза на 3,
+	## насправді дістає на 5 — і недооцінка падає рівно на ті юніти, які він убиває.
+	##
+	## Усі три властивості прогнозу зі threatened_units() чинні й тут: AP і has_fired
+	## не перевіряються, видимість рахується ВЛАСНИМ ромбом цього юніта (ніколи не
+	## state.vision[owner]), і сам оглянутий юніт має бути видимий гравцеві observer.
+	##
+	## А от боєкомплект перевіряється — і це НЕ суперечність із «AP не дивимось».
+	## Різниця в тому, що саме показ віддає гравцеві:
+	##   * AP — прихований залишок дій, яких гравець міг не бачити (ворог відповів на
+	##     чужому ході, за ширмою передачі пристрою), і до свого ходу він однаково
+	##     буде з повним AP: показувати нема чого й не можна;
+	##   * лишок дронів — ПУБЛІЧНА величина: §3.9 вимагає, щоб він завжди був видимий
+	##     на самому юніті, тож прогноз тут нічого не відкриває. І, на відміну від AP,
+	##     він не поповнюється до кінця матчу — загін без дронів не набуде їх до свого
+	##     ходу, отже дронової загрози від нього не буде вже ніколи.
+	var out: Array[Unit] = []
+	var e: Unit = state.get_unit(unit_id)
+	if e == null or not e.is_alive():
+		return out
+	if observer < 0 or observer >= state.vision.size():
+		return out
+	if e.owner == observer:
+		return out
+	if e.drones_left <= 0:
+		return out  # §3.9: боєкомплект скінчився назавжди — дронової загрози немає
+	if not state.vision[observer].is_visible(e.pos):
+		return out
+
+	var eyes: int = e.vision()
+	for u in state.units_of(observer):
+		if not UnitTypes.is_vehicle(u.unit_class()):
+			continue  # §3.9: по піхоті дрон не працює — і це головна контргра проти нього
+		if not Rules.in_radius(e.pos, u.pos, DroneCommand.RANGE):
 			continue
 		if not Rules.in_vision_diamond(e.pos, u.pos, eyes):
 			continue

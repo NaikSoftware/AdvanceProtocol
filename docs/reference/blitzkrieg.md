@@ -63,9 +63,16 @@ Two rules about using it:
   Remembered terrain without live unit positions is the entire point of the fog model here.
 
 - **Only engineers detect enemy mines** (`class_1`, guarded on `field_250 == 4`). Adopted ([§3.11](../rules/vision-and-fog.md)).
-  One deliberate difference: the original tests that radius as a Euclidean circle even though its
-  fog is a diamond, which can reveal a mine on a tile the player cannot see. This project uses the
-  vision diamond for both, so a revealed mine is always on a visible tile.
+  Two deliberate differences:
+  - The original tests that radius as a Euclidean circle even though its fog is a diamond, which
+    can reveal a mine on a tile the player cannot see. This project uses the vision diamond for
+    both, so a revealed mine is always on a visible tile.
+  - **The original's search is triggered exclusively by the movement driver** — the detection call
+    sits in the same per-hop routine as the mine-detonation check, so an engineer that does not
+    move searches nothing. Here the search also runs at the start of the owning player's turn, so
+    a stationary engineer sweeps its own vision diamond every turn. §3.11 describes detection as a
+    property of presence rather than of movement, and a sapper standing one tile from a mine and
+    never noticing it reads as a bug rather than as a rule.
 
 - **The fire radius is a hold-to-peek overlay in the original, and it inspects enemies too.**
   Bound to `#` (`GameCanvas` keeps held keys as a bitmask; bit 128), drawn only while the key is

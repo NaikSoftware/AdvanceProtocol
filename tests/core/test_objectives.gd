@@ -63,6 +63,11 @@ func test_an_eliminated_player_cannot_claim_the_objectives() -> void:
 	for i in 3:
 		Objectives.add(state, Vector2i(i, 0), 0)
 	state.eliminated[0] = true
+	# Передумова записана явно: вибулий гравець ТРИМАЄ достатньо цілей, тож єдине,
+	# що стоїть між ним і перемогою, — перевірка eliminated. Без цього рядка тест
+	# лишався б істинним і тоді, коли гравець просто нічого не тримає, і мовчки
+	# перестав би пришпилювати те, що названо в його імені.
+	assert_eq(Objectives.held_by(state, 0), 3, "передумова: умову цілей виконано")
 	Objectives.check_victory(state, 0, 3)
 	assert_eq(state.winner, BattleState.NO_WINNER, "вибулий гравець не заявляє умову цілей")
 

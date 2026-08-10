@@ -37,6 +37,31 @@ reference.**
 | your own | always, even at 0 AP | enemies it can fire on **right now** — range, visibility and AP all checked |
 | an enemy | always | your units inside its range and seen by **that unit alone** — **AP deliberately not checked** |
 
+**The drone strike counts as reach, for both rows.** It is a separate action with its own range,
+its own list of legal targets and its own ammunition ([§3.9](../rules/units.md)), so it gets its
+own ring and its own marks rather than being folded into the ordinary shot — showing a firing
+mark where no ordinary shot exists would be a lie about a different action.
+
+For an inspected **enemy** assault squad that still has drones, the forecast must include them.
+Leaving them out under-reports the single most dangerous action in the game, and does so precisely
+for the units it endangers: a squad shown as a range-3 threat actually reaches 5, ignores armour
+entirely, and by [§3.3.1](../rules/combat.md) shoots without reply. **This leaks nothing** — the
+remaining drone count is required to be visible on the unit at all times (§3.9), so it is already
+public. A squad with no drones left is forecast at its ordinary range and no further.
+
+The drone's marks obey the action's own rules, not the ordinary shot's: vehicle classes only, so
+the observer's infantry is never marked as a drone target, and the same vision diamond gates it as
+everything else. For **your own** squad the ring answers the same question as the gun's — what can
+I hit right now — so ammunition gates it too: a squad out of drones has no drone ring.
+
+**The drone is where the floor understates the most, and the UI copy should say so.** A strike
+needs the *owner's* vision like any other shot, so a squad whose network sees a tank outside its
+own diamond genuinely can hit it — and the forecast, computed from that one squad alone, will not
+mark it. The gap between forecast and reality is therefore widest on exactly the action that
+ignores armour, out-reaches everything, and draws no reply. Under-reporting is still the right
+trade against leaking where the spotters are, but the player must be told that the drone ring is
+the squad's *unaided* reach, not its real one.
+
 The reference gates both on the shooter's current AP. For an enemy that leaks state: AP is only
 refilled at the start of its owner's turn, so "this unit is spent" is the residue of actions you
 may not have witnessed — it retaliated on someone else's turn, behind the handover gate. It is
