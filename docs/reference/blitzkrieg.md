@@ -15,7 +15,7 @@ Where to look (the code is obfuscated; these are the mappings that have already 
 | file | what is in it |
 | --- | --- |
 | `src/defpackage/class_3.java` | the unit — stat tables in `<clinit>`, damage in `method_160`, armour sector in `method_159`, engineer verbs in `method_16x–17x` |
-| `src/defpackage/class_1.java` | the player — objectives, veterancy thresholds and level-up in `method_97` |
+| `src/defpackage/class_1.java` | the player — objectives, experience thresholds and level-up in `method_97` |
 | `src/defpackage/class_2.java` | AI player, extends the player class |
 | `src/defpackage/GameCanvas.java` | board, terrain cost (`method_70`), rendering, save format |
 

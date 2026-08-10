@@ -183,7 +183,7 @@ class ObjectiveDestroyed extends BattleEvent:
 	func describe() -> String:
 		return "ObjectiveDestroyed(index=%d)" % [index]
 
-class VeterancyGained extends BattleEvent:
+class ExperienceGained extends BattleEvent:
 	var player: int
 	var unit_class: int
 	var level: int
@@ -192,7 +192,7 @@ class VeterancyGained extends BattleEvent:
 		unit_class = p_unit_class
 		level = p_level
 	func describe() -> String:
-		return "VeterancyGained(player=%d, class=%d, level=%d)" % [player, unit_class, level]
+		return "ExperienceGained(player=%d, class=%d, level=%d)" % [player, unit_class, level]
 
 class ApChanged extends BattleEvent:
 	var unit_id: int

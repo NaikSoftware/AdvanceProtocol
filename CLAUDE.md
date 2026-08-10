@@ -170,7 +170,7 @@ is documentation. Two invariants hold there and are tested:
 Squad-level units are **one asset per tile** — one mesh, one draw call, one tile footprint. That
 mesh may sculpt three or four figures sharing a base, and it should.
 
-### 3.7 Veterancy → [thresholds](docs/rules/combat.md)
+### 3.7 Experience → [thresholds](docs/rules/combat.md)
 
 Per unit class, per player, earned by damage dealt. Levels 0→5, each worth `+A/8` damage.
 Engineers have none. **In skirmish it is per match** and does not persist.

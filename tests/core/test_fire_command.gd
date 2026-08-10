@@ -153,7 +153,7 @@ func test_damage_feeds_the_attackers_class_pool() -> void:
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
 	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
-	assert_true(state.veterancy[0].xp[UnitTypes.UnitClass.TANK] > 0)
+	assert_true(state.experience[0].xp[UnitTypes.UnitClass.TANK] > 0)
 
 func test_preview_reports_sector_and_bounds() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
@@ -169,7 +169,7 @@ func test_preview_bounds_bracket_every_real_roll() -> void:
 	var p: Dictionary = FireCommand.preview(state, a.id, t.id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
+	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var seen_min: int = p["max"]
 	var seen_max: int = p["min"]
 	for s in 400:

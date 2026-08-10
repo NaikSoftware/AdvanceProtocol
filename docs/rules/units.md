@@ -131,4 +131,4 @@ The resulting triangle is the spine of the game's matchups, and it is worth prot
 are the answer to a drone squad precisely because they are the one armoured class that does *not*
 take the ÷4 penalty against infantry.
 
-Veterancy from drone damage accrues to the `INFANTRY` pool like any other infantry damage.
+Experience from drone damage accrues to the `INFANTRY` pool like any other infantry damage.

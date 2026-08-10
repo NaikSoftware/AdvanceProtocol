@@ -1,4 +1,4 @@
-class_name Veterancy
+class_name Experience
 extends RefCounted
 ## §3.7. Прогрес — на клас і на гравця, за завдану шкоду. У скірміші — на матч.
 
@@ -15,8 +15,8 @@ const THRESHOLDS: Dictionary = {
 var xp: Array[int] = [0, 0, 0, 0, 0]
 var level: Array[int] = [0, 0, 0, 0, 0]
 
-static func create() -> Veterancy:
-	return Veterancy.new()
+static func create() -> Experience:
+	return Experience.new()
 
 func level_of(unit_class: int) -> int:
 	return level[unit_class]

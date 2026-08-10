@@ -46,7 +46,7 @@ core/                           # чисті правила, без нодів
   rules.gd                      # roll, entry_cost, armour_sector, damage
   pathing.gd                    # Dijkstra flood fill, дві зони, реконструкція шляху
   vision.gd                     # visible/seen на гравця
-  veterancy.gd                  # пули XP, пороги, рівні
+  experience.gd                  # пули XP, пороги, рівні
   objectives.gd                 # маркери цілей, захоплення, умова перемоги
   mines.gd                      # укладання, розкриття по гравцях, підрив
   events.gd                     # усі типи BattleEvent
@@ -66,7 +66,7 @@ game/                           # сцени Godot
     settings_service.gd         # мова, гучність, якість — збереження в user://
   battle/
     battle_screen.tscn/.gd      # корінь бойового екрана
-    board_view.tscn/.gd         # інстансинг тайлів, туман
+    board_view.tscn/.gd         # інстансинг тайлів і підсвіток; місцевості туман не стосується
     unit_view.tscn/.gd          # один юніт: модель, поворот, HP-бар, значки
     zone_overlay.gd             # дві зони руху
     target_overlay.gd           # цілі, сектор броні, прогноз шкоди
@@ -1046,8 +1046,10 @@ git commit -m "feat(core): integer armour sector resolution"
 - Consumes: `Unit`, `UnitTypes`, `Rules.roll`, `Rules.armour_sector`
 - Produces:
   - `Rules.MIN_DAMAGE: int = 10`
-  - `Rules.compute_damage(rng, attacker: Unit, target: Unit, veterancy_level: int, sector: int, dist_sq: int) -> int`
+  - `Rules.compute_damage(rng, attacker: Unit, target: Unit, experience_level: int, sector: int, dist_sq: int) -> int`
   - `Rules.drone_damage(rng) -> int`
+  - `Rules.distance_sq`, `Rules.in_radius` — **дальність зброї**, евклідове коло
+  - `Rules.distance_manhattan`, `Rules.in_vision_diamond` — **огляд**, манхеттенський ромб
 
 Це найважливіша функція в проєкті. Тести тут перевіряють **межі, а не одне число**: кидок робить результат діапазоном, тож золоті тести фіксують мінімум і максимум формули та кожен множник окремо.
 
@@ -1073,10 +1075,10 @@ func _rng(s: int) -> RandomNumberGenerator:
 func _u(type_id: int) -> Unit:
 	return Unit.create(1, type_id, 0, Vector2i.ZERO, 0)
 
-func _samples(attacker_type: int, target_type: int, vet: int, sector: int, dist_sq: int) -> Array[int]:
+func _samples(attacker_type: int, target_type: int, pool: int, sector: int, dist_sq: int) -> Array[int]:
 	var out: Array[int] = []
 	for s in 200:
-		out.append(Rules.compute_damage(_rng(s), _u(attacker_type), _u(target_type), vet, sector, dist_sq))
+		out.append(Rules.compute_damage(_rng(s), _u(attacker_type), _u(target_type), pool, sector, dist_sq))
 	return out
 
 func _min(a: Array[int]) -> int:
@@ -1123,17 +1125,17 @@ func test_close_assault_boundary_is_dist_sq_two() -> void:
 	var at_three: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 3)
 	assert_true(_min(at_two) > _min(at_three), "діагональний сусід (dist_sq=2) ще штурм, dist_sq=3 вже ні")
 
-func test_veterancy_adds_one_eighth_of_attack_per_level() -> void:
+func test_experience_adds_one_eighth_of_attack_per_level() -> void:
 	var v0: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 0, UnitTypes.ArmourSector.REAR, 9)
 	var v4: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 4, UnitTypes.ArmourSector.REAR, 9)
 	# 95*4/8 у GDScript — це ціле 47, а у формулі член float: 47.5. Зрізання наприкінці
 	# дає різницю 47 або 48 залежно від дробової частини бази, тож фіксуємо обидва.
 	assert_between(_min(v4) - _min(v0), 47, 48, "+A*V/8 = 47.5")
 
-func test_engineers_get_no_veterancy_bonus() -> void:
+func test_engineers_get_no_experience_bonus() -> void:
 	var v0: Array[int] = _samples(ENGINEER, LIGHT_CAR, 0, UnitTypes.ArmourSector.FRONT, 9)
 	var v5: Array[int] = _samples(ENGINEER, LIGHT_CAR, 5, UnitTypes.ArmourSector.FRONT, 9)
-	assert_eq(_min(v0), _min(v5), "§3.3: інженер не отримує бонусу ветеранства")
+	assert_eq(_min(v0), _min(v5), "§3.3: інженер не отримує бонусу за досвід")
 
 func test_flanking_beats_frontal_fire() -> void:
 	var front: Array[int] = _samples(MEDIUM_TANK, HEAVY_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
@@ -1193,7 +1195,7 @@ func test_damage_is_deterministic_per_seed() -> void:
 const MIN_DAMAGE: int = 10
 
 static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: Unit,
-		veterancy_level: int, sector: int, dist_sq: int) -> int:
+		experience_level: int, sector: int, dist_sq: int) -> int:
 	## §3.3. Порядок множників критичний — не переставляти.
 	var a: int = attacker.attack()
 	var ac: int = attacker.unit_class()
@@ -1202,7 +1204,7 @@ static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: U
 	var dmg: float = 0.75 * float(a) + float(roll(rng, a / 4))
 
 	if ac != UnitTypes.UnitClass.ENGINEER:
-		dmg += float(a * veterancy_level) / 8.0
+		dmg += float(a * experience_level) / 8.0
 
 	if ac == UnitTypes.UnitClass.INFANTRY:
 		if dist_sq <= 2:
@@ -1234,9 +1236,30 @@ static func distance_sq(a: Vector2i, b: Vector2i) -> int:
 	return d.x * d.x + d.y * d.y
 
 static func in_radius(a: Vector2i, b: Vector2i, r: int) -> bool:
-	## §3.1: евклідів радіус, порівняння квадратів — без sqrt.
+	## §3.1: ДАЛЬНІСТЬ ЗБРОЇ — евклідове коло, порівняння квадратів, без sqrt.
+	## Не для огляду: той міряється ромбом, див. in_vision_diamond().
 	return distance_sq(a, b) <= r * r
+
+static func distance_manhattan(a: Vector2i, b: Vector2i) -> int:
+	var d: Vector2i = a - b
+	return absi(d.x) + absi(d.y)
+
+static func in_vision_diamond(a: Vector2i, b: Vector2i, r: int) -> bool:
+	## §3.1: ОГЛЯД — манхеттенський ромб, а не коло. Це лічильник кроків по
+	## 4-напрямковій сітці: «за три тайли» означає за три ходи, тож огляд має ту
+	## саму форму, що й рух, і радіус читається як число кроків.
+	##
+	## Розбіжність з in_radius() на діагоналях — не похибка, а сенс поділу:
+	## (3, 4) лежить у колі радіуса 5 і поза ромбом радіуса 5, тож ціль буває
+	## в межах дальності й водночас невидимою. Постріл вимагає видимості, отже
+	## справжня обвідна вогню — перетин двох форм. Назви двох предикатів
+	## навмисне не схожі — сплутати їх на місці виклику не має бути можливо.
+	return distance_manhattan(a, b) <= r
 ```
+
+**Дві форми, і плутати їх не можна (§3.1).** Дальність зброї — коло, огляд — ромб; таблиця
+в §3.1 `CLAUDE.md` задає це прямо. Ромб — вужчий на діагоналях, тож на нерозвіданій землі,
+де юніт світить сам собі, обвідною вогню є саме він.
 
 - [ ] **Step 4: Запустити — усе має пройти**
 
@@ -1472,7 +1495,7 @@ git commit -m "feat(core): Dijkstra flood fill for the two movement zones"
 - Test: `tests/core/test_vision.gd`
 
 **Interfaces:**
-- Consumes: `Board`, `Unit`, `Rules.in_radius`
+- Consumes: `Board`, `Unit`, `Rules.in_vision_diamond`
 - Produces:
   - `Vision` (RefCounted, по одному екземпляру на гравця): `visible: PackedByteArray`, `seen: PackedByteArray`
     - `Vision.create(width: int, height: int) -> Vision`
@@ -1499,11 +1522,26 @@ func test_unit_sees_its_own_radius() -> void:
 	assert_true(v.is_visible(Vector2i(6, 1)), "рівно 5 тайлів — усередині")
 	assert_false(v.is_visible(Vector2i(6, 0)), "6 тайлів — уже ні")
 
-func test_vision_is_euclidean_not_diamond() -> void:
+func test_vision_is_a_diamond_not_a_circle() -> void:
+	# §3.1: огляд міряється манхеттенською відстанню — це лічильник кроків по
+	# 4-напрямковій сітці, тож огляд має ту саму форму, що й рух.
+	var v: Vision = Vision.create(12, 12)
+	var inf: Unit = Unit.create(1, 0, 0, Vector2i(6, 6), 0)   # огляд 5
+	v.recompute(_board(), [inf], 0)
+	assert_false(v.is_visible(Vector2i(9, 9)), "|3|+|3| = 6 > 5 — поза ромбом, хоч dist_sq 18 <= 25")
+	assert_true(v.is_visible(Vector2i(8, 9)), "|2|+|3| = 5 — рівно на межі ромба")
+
+func test_a_tile_inside_the_range_circle_can_lie_outside_the_vision_diamond() -> void:
+	# §3.1: розбіжність двох форм на діагоналі — не похибка, а правило.
+	# (9, 10) від (6, 6) — це dist_sq 25 <= 25 (усередині кола дальності 5)
+	# і 3 + 4 = 7 > 5 (поза ромбом огляду 5).
+	assert_true(Rules.in_radius(Vector2i(6, 6), Vector2i(9, 10), 5), "передумова: у колі дальності 5")
+	assert_false(Rules.in_vision_diamond(Vector2i(6, 6), Vector2i(9, 10), 5), "передумова: поза ромбом огляду 5")
 	var v: Vision = Vision.create(12, 12)
 	var inf: Unit = Unit.create(1, 0, 0, Vector2i(6, 6), 0)
 	v.recompute(_board(), [inf], 0)
-	assert_true(v.is_visible(Vector2i(9, 9)), "dist_sq 18 <= 25 — коло, не ромб")
+	assert_false(v.is_visible(Vector2i(9, 10)),
+		"§3.1: ціль буває в межах пострілу і водночас невидимою — обвідна вогню це перетин двох форм")
 
 func test_only_own_units_contribute() -> void:
 	var v: Vision = Vision.create(12, 12)
@@ -1579,12 +1617,17 @@ func recompute(board: Board, units: Array[Unit], player: int) -> Array[Vector2i]
 		if u.owner != player or not u.is_alive():
 			continue
 		var r: int = u.vision()
+		# §3.1: огляд — ромб. Рамка сканування лишається квадратною навмисне:
+		# ромб — її підмножина, а форма живе рівно в одному місці — у предикаті
+		# Rules.in_vision_diamond(). Звузити dx до |dy| означало б продублювати
+		# ту саму геометрію тут, де вона мовчки розійдеться з предикатом при
+		# наступній зміні.
 		for dy in range(-r, r + 1):
 			for dx in range(-r, r + 1):
 				var p: Vector2i = u.pos + Vector2i(dx, dy)
 				if not board.in_bounds(p):
 					continue
-				if not Rules.in_radius(u.pos, p, r):
+				if not Rules.in_vision_diamond(u.pos, p, r):
 					continue
 				var i: int = _index(p)
 				visible[i] = 1
@@ -1628,7 +1671,7 @@ git commit -m "feat(core): per-player fog of war with sticky seen grid"
   - `UnitRepaired(unit_id: int, amount: int, hp_left: int)`
   - `ObjectiveCaptured(index: int, owner: int)`
   - `ObjectiveDestroyed(index: int)`
-  - `VeterancyGained(player: int, unit_class: int, level: int)`
+  - `ExperienceGained(player: int, unit_class: int, level: int)`
   - `ApChanged(unit_id: int, ap: int)`
   - `TurnEnded(player: int)`
   - `TurnStarted(player: int, turn_number: int)`
@@ -1747,25 +1790,25 @@ git commit -m "feat(core): battle event vocabulary"
 
 ---
 
-### Task 1.11: `core/veterancy.gd`
+### Task 1.11: `core/experience.gd`
 
 **Files:**
-- Create: `core/veterancy.gd`
-- Test: `tests/core/test_veterancy.gd`
+- Create: `core/experience.gd`
+- Test: `tests/core/test_experience.gd`
 
 **Interfaces:**
 - Consumes: `UnitTypes.UnitClass`
 - Produces:
-  - `Veterancy` (RefCounted, по одному на гравця): `xp: Array[int]` (5 пулів за індексом класу), `level: Array[int]`
-    - `Veterancy.create() -> Veterancy`
-    - `veterancy.add_damage(unit_class: int, amount: int) -> int` — повертає новий рівень; підвищення можливе кілька разів за виклик
-    - `veterancy.level_of(unit_class: int) -> int`
-    - `Veterancy.THRESHOLDS: Dictionary` — пороги з §3.7
+  - `Experience` (RefCounted, по одному на гравця): `xp: Array[int]` (5 пулів за індексом класу), `level: Array[int]`
+    - `Experience.create() -> Experience`
+    - `experience.add_damage(unit_class: int, amount: int) -> int` — повертає новий рівень; підвищення можливе кілька разів за виклик
+    - `experience.level_of(unit_class: int) -> int`
+    - `Experience.THRESHOLDS: Dictionary` — пороги з §3.7
   - Максимальний рівень — 5.
 
 - [ ] **Step 1: Написати падаючий тест**
 
-`tests/core/test_veterancy.gd`:
+`tests/core/test_experience.gd`:
 
 ```gdscript
 extends GutTest
@@ -1775,29 +1818,29 @@ const TANK := UnitTypes.UnitClass.TANK
 const ENG := UnitTypes.UnitClass.ENGINEER
 
 func test_starts_at_zero() -> void:
-	assert_eq(Veterancy.create().level_of(INF), 0)
+	assert_eq(Experience.create().level_of(INF), 0)
 
 func test_first_infantry_threshold_is_150() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	assert_eq(v.add_damage(INF, 149), 0)
 	assert_eq(v.add_damage(INF, 1), 1, "150 сумарно — рівень 1")
 
 func test_threshold_is_subtracted_not_reset() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	v.add_damage(INF, 200)
 	assert_eq(v.xp[INF], 50, "§3.7: пул зменшується на поріг, залишок переноситься")
 
 func test_multiple_levels_in_one_hit() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	assert_eq(v.add_damage(INF, 600), 2, "150 + 375 = 525 <= 600")
 
 func test_caps_at_five() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	assert_eq(v.add_damage(INF, 1_000_000), 5)
 	assert_eq(v.add_damage(INF, 1_000_000), 5, "вище пʼятого не росте")
 
 func test_classes_are_independent() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	v.add_damage(INF, 1500)
 	# Самої лише перевірки рівня мало: перший поріг танка — 1000, тож 500 XP, що
 	# протекли б із піхоти, однаково лишили б рівень 0. Тому 1500 (вистачило б на
@@ -1806,23 +1849,23 @@ func test_classes_are_independent() -> void:
 	assert_eq(v.xp[TANK], 0, "у чужому пулі не має бути жодного XP")
 
 func test_tank_progresses_slower_than_infantry() -> void:
-	var a: Veterancy = Veterancy.create()
-	var b: Veterancy = Veterancy.create()
+	var a: Experience = Experience.create()
+	var b: Experience = Experience.create()
 	a.add_damage(INF, 1000)
 	b.add_damage(TANK, 1000)
 	assert_true(a.level_of(INF) > b.level_of(TANK))
 
 func test_engineers_never_level() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	assert_eq(v.add_damage(ENG, 1_000_000), 0, "§3.7: інженери шкоди не завдають і рівнів не мають")
 ```
 
 - [ ] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/veterancy.gd`**
+- [ ] **Step 3: Реалізувати `core/experience.gd`**
 
 ```gdscript
-class_name Veterancy
+class_name Experience
 extends RefCounted
 ## §3.7. Прогрес — на клас і на гравця, за завдану шкоду. У скірміші — на матч.
 
@@ -1839,8 +1882,8 @@ const THRESHOLDS: Dictionary = {
 var xp: Array[int] = [0, 0, 0, 0, 0]
 var level: Array[int] = [0, 0, 0, 0, 0]
 
-static func create() -> Veterancy:
-	return Veterancy.new()
+static func create() -> Experience:
+	return Experience.new()
 
 func level_of(unit_class: int) -> int:
 	return level[unit_class]
@@ -1862,9 +1905,9 @@ func add_damage(unit_class: int, amount: int) -> int:
 - [ ] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
-./run_tests.sh -gtest=res://tests/core/test_veterancy.gd
-git add core/veterancy.gd tests/core/test_veterancy.gd
-git commit -m "feat(core): per-class veterancy pools and thresholds"
+./run_tests.sh -gtest=res://tests/core/test_experience.gd
+git add core/experience.gd tests/core/test_experience.gd
+git commit -m "feat(core): per-class experience pools and thresholds"
 ```
 
 ---
@@ -1876,9 +1919,9 @@ git commit -m "feat(core): per-class veterancy pools and thresholds"
 - Test: `tests/core/test_battle_state.gd`
 
 **Interfaces:**
-- Consumes: `Board`, `Unit`, `Vision`, `Veterancy`, `Events`
+- Consumes: `Board`, `Unit`, `Vision`, `Experience`, `Events`
 - Produces:
-  - `BattleState` (RefCounted): `board: Board`, `units: Dictionary` (`int -> Unit`), `player_count: int`, `active_player: int`, `turn_number: int`, `rng: RandomNumberGenerator`, `seed_value: int`, `vision: Array[Vision]`, `veterancy: Array[Veterancy]`, `eliminated: Array[bool]`, `winner: int` (−1 доки триває), `_next_unit_id: int`
+  - `BattleState` (RefCounted): `board: Board`, `units: Dictionary` (`int -> Unit`), `player_count: int`, `active_player: int`, `turn_number: int`, `rng: RandomNumberGenerator`, `seed_value: int`, `vision: Array[Vision]`, `experience: Array[Experience]`, `eliminated: Array[bool]`, `winner: int` (−1 доки триває), `_next_unit_id: int`
     - `BattleState.create(board: Board, player_count: int, seed_value: int) -> BattleState`
     - `state.add_unit(type_id: int, owner: int, pos: Vector2i, facing: int) -> Unit`
     - `state.unit_at(p: Vector2i) -> Unit` (або `null`)
@@ -2004,7 +2047,7 @@ var turn_number: int = 1
 var seed_value: int = 0
 var rng: RandomNumberGenerator = null
 var vision: Array[Vision] = []
-var veterancy: Array[Veterancy] = []
+var experience: Array[Experience] = []
 var eliminated: Array[bool] = []
 ## Матч триває, доки winner == NO_WINNER. DRAW потрібен окремим значенням, бо −1
 ## уже зайняте «ще триває»: без нього нічия була б невідрізненна від незавершеної гри.
@@ -2025,7 +2068,7 @@ static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleSt
 	s.rng.seed = p_seed
 	for i in p_player_count:
 		s.vision.append(Vision.create(p_board.width, p_board.height))
-		s.veterancy.append(Veterancy.create())
+		s.experience.append(Experience.create())
 		s.eliminated.append(false)
 	return s
 
@@ -2354,14 +2397,14 @@ git commit -m "feat(core): move and end-turn commands"
 
 ---
 
-### Task 1.14: `FireCommand` — постріл, ветеранство, знищення
+### Task 1.14: `FireCommand` — постріл, досвід, знищення
 
 **Files:**
 - Create: `core/commands/fire_command.gd`
 - Test: `tests/core/test_fire_command.gd`
 
 **Interfaces:**
-- Consumes: `BattleState`, `Rules`, `Veterancy`, `Events`
+- Consumes: `BattleState`, `Rules`, `Experience`, `Events`
 - Produces:
   - `FireCommand.create(unit_id: int, target_id: int) -> FireCommand`
   - `FireCommand.preview(state: BattleState, unit_id: int, target_id: int) -> Dictionary` — `{"sector": int, "min": int, "max": int}`, для показу прогнозу **до** підтвердження (§3.4: сектор має бути видно завжди)
@@ -2460,7 +2503,7 @@ func test_damage_feeds_the_attackers_class_pool() -> void:
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
 	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
-	assert_true(state.veterancy[0].xp[UnitTypes.UnitClass.TANK] > 0)
+	assert_true(state.experience[0].xp[UnitTypes.UnitClass.TANK] > 0)
 
 func test_preview_reports_sector_and_bounds() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
@@ -2469,7 +2512,7 @@ func test_preview_reports_sector_and_bounds() -> void:
 	assert_eq(p["sector"], UnitTypes.ArmourSector.REAR)
 	# Конкретні числа, а не `min <= max`: остання перевірка не може впасти за
 	# побудовою, бо обидва значення походять з одного джерела. Середній танк (95)
-	# по кормі легкої машини (броня 10), ветеранство 0:
+	# по кормі легкої машини (броня 10), досвід 0:
 	#   мін = 0.75*95 + 0 − (0.75*10 + rand_max(2)) = 61.75 → 61
 	#   макс = 0.75*95 + rand_max(23) − (0.75*10 + 0)  = 86.75 → 86
 	assert_eq(p["min"], 61, "нижня межа — нульовий кидок атаки і максимальний кидок броні")
@@ -2550,7 +2593,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
+	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var dmg: int = Rules.compute_damage(state.rng, a, t, level, sector, dist_sq)
 
 	a.exhaust()
@@ -2566,10 +2609,10 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	target.hp -= applied
 	out.append(Events.DamageDealt.new(target.id, applied, target.hp))
 
-	var before: int = state.veterancy[attacker.owner].level_of(attacker.unit_class())
-	var after: int = state.veterancy[attacker.owner].add_damage(attacker.unit_class(), applied)
+	var before: int = state.experience[attacker.owner].level_of(attacker.unit_class())
+	var after: int = state.experience[attacker.owner].add_damage(attacker.unit_class(), applied)
 	if after != before:
-		out.append(Events.VeterancyGained.new(attacker.owner, attacker.unit_class(), after))
+		out.append(Events.ExperienceGained.new(attacker.owner, attacker.unit_class(), after))
 
 	if not target.is_alive():
 		out.append(Events.UnitDestroyed.new(target.id, target.pos))
@@ -2588,7 +2631,7 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
+	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var bounds: Vector2i = Rules.damage_bounds(a, t, level, sector, dist_sq)
 	return {"sector": sector, "min": bounds.x, "max": bounds.y}
 ```
@@ -2752,7 +2795,7 @@ func test_drone_damage_feeds_infantry_pool() -> void:
 	t.hp = 10_000
 	state.begin_turn()
 	DroneCommand.create(a.id, t.id).apply(state)
-	assert_true(state.veterancy[0].xp[UnitTypes.UnitClass.INFANTRY] > 0)
+	assert_true(state.experience[0].xp[UnitTypes.UnitClass.INFANTRY] > 0)
 ```
 
 - [ ] **Step 2: Запустити — має впасти**
@@ -3412,7 +3455,7 @@ func _populated_state() -> BattleState:
 	s.add_unit(11, 2, Vector2i(2, 6), 0)
 	Mines.place(s, Vector2i(5, 5), 0)
 	Objectives.add(s, Vector2i(4, 0), 1)
-	s.veterancy[0].add_damage(UnitTypes.UnitClass.TANK, 1200)
+	s.experience[0].add_damage(UnitTypes.UnitClass.TANK, 1200)
 	s.turn_number = 4
 	s.active_player = 2
 	return s
@@ -3428,7 +3471,7 @@ func test_round_trip_preserves_everything() -> void:
 	assert_eq(b.active_player, 2)
 	assert_eq(b.mines.size(), 1)
 	assert_eq(b.objectives.size(), 1)
-	assert_eq(b.veterancy[0].level_of(UnitTypes.UnitClass.TANK), a.veterancy[0].level_of(UnitTypes.UnitClass.TANK))
+	assert_eq(b.experience[0].level_of(UnitTypes.UnitClass.TANK), a.experience[0].level_of(UnitTypes.UnitClass.TANK))
 
 func test_unit_fields_survive() -> void:
 	var a: BattleState = _populated_state()
@@ -3507,9 +3550,9 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
-	var veterancy: Array = []
-	for vet in state.veterancy:
-		veterancy.append({"xp": vet.xp, "level": vet.level})
+	var experience: Array = []
+	for pool in state.experience:
+		experience.append({"xp": pool.xp, "level": pool.level})
 	return {
 		"version": VERSION,
 		"board": {
@@ -3525,7 +3568,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"eliminated": state.eliminated,
 		"next_unit_id": state._next_unit_id,
 		"units": units, "mines": mines, "objectives": objectives,
-		"vision": vision, "veterancy": veterancy,
+		"vision": vision, "experience": experience,
 	}
 ```
 
@@ -3820,31 +3863,38 @@ git commit -m "feat(game): fixed isometric camera rig with clamped pan and zoom"
 
 ---
 
-### Task 2.3: `board_view` — рендер тайлів і туману
+### Task 2.3: `board_view` — рендер тайлів
 
 **Files:**
 - Create: `game/battle/board_view.tscn`
 - Create: `game/battle/board_view.gd`
 
 **Interfaces:**
-- Consumes: `Board`, `Vision`, `IsoCameraRig.cell_to_world`
+- Consumes: `Board`, `IsoCameraRig.cell_to_world`
 - Produces:
   - `BoardView.build(board: Board) -> void` — інстансує `MultiMeshInstance3D` на кожен вид тайлу (один draw call на вид, а не на тайл)
-  - `BoardView.apply_fog(vision: Vision) -> void` — три стани тайлу: невидимий (не рендериться), памʼятний (приглушений колір, без юнітів), видимий (повний)
   - `BoardView.highlight_tiles(tiles: Array[Vector2i], color: Color, layer: int) -> void`
   - `BoardView.clear_highlights(layer: int) -> void`
 
 Три шари підсвітки: `LAYER_ZONES`, `LAYER_TARGETS`, `LAYER_SELECTION` — щоб зони не гасили підсвітку цілі.
 
+**`BoardView` не має `apply_fog` і не споживає `Vision` узагалі.** §3.5: туман ховає ворожі
+юніти та їхні міни — **ніколи не карту**. Місцевість публічна з першого ходу й на повній
+яскравості, тож ані «невидимого», ані «памʼятного» стану тайлу не існує. Приглушений тайл був
+би підказкою сам собою, а головне — дві зони руху (§3.2) малюються контуром по всій дошці, і
+контур, що огинає нерозвідану перешкоду, видає її не гірше за сам тайл. Ховати з карти —
+робота Task 2.4 і Task 2.10, і стосується вона юнітів, а не землі.
+
 - [ ] **Step 1: Побудувати сцену з `MultiMeshInstance3D` на вид тайлу**
-- [ ] **Step 2: Реалізувати `apply_fog` через колір інстансу мультимешу (`INSTANCE_CUSTOM`)**
+- [ ] **Step 2: Реалізувати `highlight_tiles` через колір інстансу мультимешу (`INSTANCE_CUSTOM`)**
 - [ ] **Step 3: Ручна перевірка**
 
 ```bash
 $GODOT --path . game/battle/battle_screen.tscn
 ```
 
-Очікується: дошка 16×12, дорога читається, за межами огляду тайли не малюються.
+Очікується: дошка 16×12, дорога читається, усю місцевість намальовано на повну — нерозвіданої
+ділянки на карті немає в жодному стані гри.
 
 - [ ] **Step 4: Коміт**
 
@@ -3868,6 +3918,16 @@ $GODOT --path . game/battle/battle_screen.tscn
   - `UnitView.set_dimmed(dimmed: bool) -> void` — для юнітів, які вже відстрілялись
 
 Силует розпізнається з висоти на ~100 px (§1.5): піхота — низький вузький блок, легка техніка — плаский подовжений, танк — масивний із виступом ствола, арта — довгий тонкий ствол, інженер — коробка з жовтою смугою. Кольори гравців — на матеріалі корпусу, не на всьому меші.
+
+**Туман живе тут, а не в `BoardView` (§3.5).** Ховається юніт, а не земля під ним, і вирішує
+це не сам `UnitView`, а власник контейнера (Task 2.10): ворожий юніт має вузол тоді й лише
+тоді, коли він є в `state.known_occupied_map(active_player)`. Дві деталі, які не можна
+переплутати:
+
+- гейт — `Vision.is_seen`, а не `is_visible`. Розвідка незворотна, і ворог на давно
+  розвіданій землі лишається видимим, навіть коли її ніхто не накриває ромбом зараз;
+- невидимий ворог **не має вузла взагалі** — не тьмяніє, не лишає силуету, не займає місця
+  в жодному шарі. Приглушений «останній відомий» юніт — це витік, а не зручність.
 
 - [ ] **Step 1: Сцена з примітивами на кожен клас**
 - [ ] **Step 2: Твіни руху й повороту**
@@ -3983,6 +4043,7 @@ HUD показує постійно: номер ходу, активного г�
 - дошка повністю затулена непрозорою панеллю до підтвердження;
 - жодної анімації «проїзду» повз екран — нічого не видно ані до, ані під час;
 - камера рецентрується на першому юніті гравця, що заходить, **до** зняття панелі, щоб позиція камери попереднього гравця не видала його розташування;
+- вузли ворожих юнітів перебудовуються під знання гравця, що заходить, теж **до** зняття панелі: місцевість нікуди не дівається (§3.5), тож єдине, що взагалі є на дошці таємного, — це юніти, і перший кадр нового ходу не сміє показати їх за чужим `seen`;
 - кнопки «пропустити» не існує.
 
 - [ ] **Step 1: Тест: після `show_for` панель непрозора і `visible`, події вводу дошки заблоковані**
@@ -4016,6 +4077,7 @@ $GODOT --path .
 - вибір юніта показує дві зони різними кольорами;
 - рух списує саме стільки AP, скільки показував шлях;
 - постріл показує сектор броні до підтвердження й обнуляє AP після;
+- місцевість видно повністю з першого ходу, а ворожий юніт на нерозвіданій землі не має на дошці жодного сліду (§3.5);
 - між ходами зʼявляється гейт, і після нього на екрані немає нічого з попереднього гравця;
 - знищення юніта прибирає його з дошки, а матч завершується екраном результату.
 
@@ -4132,7 +4194,7 @@ func test_every_error_key_is_translated() -> void:
 
 Пауза: продовжити, зберегти й вийти, налаштування, здатися. Збереження — через `BattleSerializer.save_to("user://save.json")`; «Продовжити» в головному меню читає цей файл.
 
-Екран результату: переможець, підсумок по гравцях (втрати, завдана шкода, утримані цілі, досягнуті рівні ветеранства), кнопки «Реванш» (той самий матч, новий сід) і «В меню».
+Екран результату: переможець, підсумок по гравцях (втрати, завдана шкода, утримані цілі, досягнуті рівні досвіду), кнопки «Реванш» (той самий матч, новий сід) і «В меню».
 
 Важливо: пауза не має показувати нічого, що належить неактивному гравцеві. Це той самий інваріант, що й гейт передачі.
 
@@ -4156,7 +4218,7 @@ func test_every_error_key_is_translated() -> void:
 | 4.4 | Дронова дія | `game/ui/drone_button.gd` | окрема кнопка, а не режим стрільби; показує залишок дронів і радіус 5; ціль-піхота підсвічена як заборонена з причиною |
 | 4.5 | Міни в інтерфейсі | `game/battle/mine_layer.gd` | свої міни видно завжди, розкриті чужі — окремою іконкою, нерозкриті не рендеряться взагалі й не мають жодного натяку в жодному шарі |
 | 4.6 | Цілі та їхній стан | `game/battle/objective_view.gd` | значок власника, стан «зруйновано»; ціль зʼявляється лише коли `seen_by[active_player]` |
-| 4.7 | Індикатор ветеранства | `game/ui/hud.gd` | рівень класу активного гравця видно в інспекторі, підвищення показується подією |
+| 4.7 | Індикатор досвіду | `game/ui/hud.gd` | рівень класу активного гравця видно в інспекторі, підвищення показується подією |
 | 4.8 | Три гравці | `game/battle/battle_screen.gd` | усунутий гравець пропускається; гейт передачі називає правильного наступного; матч триває між двома, що лишились |
 | 4.9 | Умова перемоги по цілях | `game/battle/battle_screen.gd` | «утримай N з M» перевіряється в кінці ходу, HUD показує лічильник для активного гравця |
 | 4.10 | Комплект карт | `maps/*.tres` | не менше 5 карт: мостова, міська, відкрита, лісова, гірська; кожна грається на 2 і на 3 гравці |
@@ -4175,7 +4237,7 @@ func test_every_error_key_is_translated() -> void:
 | --- | --- | --- |
 | 5.1 | Пайплайн ассетів через скіл `asset-manager` | прочитано скіл, зафіксовано полібюджети, один тестовий GLB проходить від промпта до сцени |
 | 5.2 | 13 моделей юнітів | силует читається з фіксованого кута; низи не моделюються (їх ніколи не видно); бюджет тримається |
-| 5.3 | Набір тайлів терену | 10 видів із §Terrain.Kind, тайлінг без видимого шва |
+| 5.3 | Набір тайлів місцевості | 10 видів із §Terrain.Kind, тайлінг без видимого шва |
 | 5.4 | Матеріали й вологість | `roughness`+`normal` як параметр, керований контролером погоди |
 | 5.5 | Запікання світла карт | статичне освітлення запечене, одне спрямоване джерело з тінями лише для юнітів |
 | 5.6 | Час доби як пресет карти | 4 пресети, жоден **не торкається жодного числа** — це тільки світло |
@@ -4199,7 +4261,7 @@ func test_every_error_key_is_translated() -> void:
 | 6.4 | Цілі й умова перемоги | `tools/map_editor/objective_tool.gd` | до 15 маркерів (§3.10), поле «утримати N» |
 | 6.5 | Стан ґрунту й пресет часу доби | `tools/map_editor/map_props.gd` | вибір із трьох станів, попередній перегляд освітлення |
 | 6.6 | Збереження й завантаження | `tools/map_editor/map_io.gd` | запис `MapData` у `user://maps/`, читання назад без втрат — тест на круговий обіг |
-| 6.7 | Валідація карти | `tools/map_editor/map_validator.gd` | не дає зберегти карту, де в гравця немає юнітів, старт заблоковано непрохідним тереном, або цілей більше за 15 |
+| 6.7 | Валідація карти | `tools/map_editor/map_validator.gd` | не дає зберегти карту, де в гравця немає юнітів, старт заблоковано непрохідною місцевістю, або цілей більше за 15 |
 | 6.8 | Тест-запуск із редактора | `tools/map_editor/editor_screen.gd` | кнопка «Зіграти» стартує матч на поточній карті без збереження |
 
 ---
@@ -4241,13 +4303,13 @@ func test_every_error_key_is_translated() -> void:
 
 | розділ CLAUDE.md | де реалізовано |
 | --- | --- |
-| §3.1 сітка, 4-напрямний рух, 8-напрямний фейсинг, евклідів радіус | 1.4 (`Board.DIRS_4/DIRS_8`), 1.7 (`Rules.in_radius`), 1.8 (тест на діагоналі) |
+| §3.1 сітка, 4-напрямний рух, 8-напрямний фейсинг, коло дальності проти ромба огляду | 1.4 (`Board.DIRS_4/DIRS_8`), 1.7 (`Rules.in_radius` і `Rules.in_vision_diamond`), 1.8 (тест на діагоналі), 1.9 (ромб в огляді) |
 | §3.2 AP, вартість входу, дві зони | 1.5, 1.8 |
 | §3.3 формула шкоди | 1.7, золоті тести |
 | §3.4 напрямна броня | 1.6; показ сектора до підтвердження — 2.7, 2.8 |
-| §3.5 огляд і туман, гейт передачі | 1.9, 2.9 |
+| §3.5 огляд і туман, гейт передачі | 1.9; туман ховає юнітів, а не місцевість — 2.3, 2.4; гейт — 2.9 |
 | §3.6 класи й ростер, інваріант броні, порядок мобільності танків | 1.2 |
-| §3.7 ветеранство | 1.11 |
+| §3.7 досвід | 1.11 |
 | §3.8 верби інженера | 1.17; інтерфейс — 4.2, 4.3 |
 | §3.9 дрон | 1.15; інтерфейс і показ боєзапасу — 4.4, 2.4 |
 | §3.10 цілі й перемога | 1.17; інтерфейс — 4.6, 4.9 |
@@ -4259,8 +4321,8 @@ func test_every_error_key_is_translated() -> void:
 | §8 рендер і бюджет | 2.2–2.5, 5.5, 5.9, 5.11, 7.5–7.7 |
 | §9 конвенції, локалізація, тести | Global Constraints, 3.1, тести в кожному завданні Фази 1 |
 
-**Прогалини, свідомо залишені поза планом:** ШІ-опонент, кампанія, онлайн — §2 виносить їх за межі v1. Персистентні профілі ветеранства — §3.7 привʼязує їх до кампанії.
+**Прогалини, свідомо залишені поза планом:** ШІ-опонент, кампанія, онлайн — §2 виносить їх за межі v1. Персистентні профілі досвіду — §3.7 привʼязує їх до кампанії.
 
 **Узгодженість типів:** `attack_range` (не `range`) скрізь; `unit_class` (не `class`); `Pathing.Zones.cost_to` повертає `-1` для недосяжного, і всі споживачі спершу питають `can_reach`; `validate()` всюди повертає `String` (порожній = дозволено); `apply()` всюди повертає `Array[Events.BattleEvent]`; `FireCommand._resolve_damage` — єдиний шлях нанесення шкоди, спільний для пострілу й дрона.
 
-**Відкриті питання з §4, які план не закриває і не має закривати:** шкода танка по артилерії залишена ×1.0; форма зони огляду — евклідова. Обидва чекають плейтесту, а не рішення в коді.
+**Відкриті питання з §4, які план не закриває і не має закривати:** шкода танка по артилерії залишена ×1.0 — чекає плейтесту, а не рішення в коді.

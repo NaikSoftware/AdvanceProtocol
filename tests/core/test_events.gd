@@ -37,7 +37,7 @@ func test_every_event_type_constructs_and_describes() -> void:
 		Events.UnitRepaired.new(4, 20, 80),
 		Events.ObjectiveCaptured.new(0, 1),
 		Events.ObjectiveDestroyed.new(1),
-		Events.VeterancyGained.new(0, UnitTypes.UnitClass.TANK, 2),
+		Events.ExperienceGained.new(0, UnitTypes.UnitClass.TANK, 2),
 		Events.ApChanged.new(1, 30),
 		Events.TurnEnded.new(0),
 		Events.TurnStarted.new(1, 5),
