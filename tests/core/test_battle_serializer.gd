@@ -28,6 +28,12 @@ func test_round_trip_preserves_everything() -> void:
 	assert_eq(b.objectives.size(), 1)
 	assert_eq(b.veterancy[0].level_of(UnitTypes.UnitClass.TANK), a.veterancy[0].level_of(UnitTypes.UnitClass.TANK))
 
+func test_objective_hold_target_round_trips() -> void:
+	var a: BattleState = _populated_state()
+	a.objective_hold_target = 5
+	var b: BattleState = BattleSerializer.from_dict(BattleSerializer.to_dict(a))
+	assert_eq(b.objective_hold_target, 5)
+
 func test_unit_fields_survive() -> void:
 	var a: BattleState = _populated_state()
 	var assault: Unit = a.get_unit(2)

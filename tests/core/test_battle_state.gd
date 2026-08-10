@@ -41,6 +41,18 @@ func test_begin_turn_emits_turn_started() -> void:
 	assert_true(events[0] is Events.TurnStarted)
 	assert_true(events[1] is Events.TileRevealed, "туман активного гравця має розкритись слідом за початком ходу")
 
+func test_begin_turn_reveals_objectives_only_for_the_active_player() -> void:
+	# §3.10: цілі підкоряються туману. begin_turn() мусить прогнати
+	# Objectives.refresh_seen() для гравця, чий хід починається, — і нікого
+	# більше, точнісінько як refresh_vision() вище.
+	var s: BattleState = _state(2)
+	Objectives.add(s, Vector2i(5, 5), -1)
+	s.add_unit(0, 0, Vector2i(5, 5), 0)
+	s.active_player = 0
+	s.begin_turn()
+	assert_true(Objectives.at(s, Vector2i(5, 5)).seen_by[0], "активний гравець бачить ціль біля свого юніта")
+	assert_false(Objectives.at(s, Vector2i(5, 5)).seen_by[1], "чужий туман не рухається чужим ходом")
+
 func test_rng_is_seeded_and_reproducible() -> void:
 	var a: BattleState = BattleState.create(Board.create(4, 4, 0), 2, 99)
 	var b: BattleState = BattleState.create(Board.create(4, 4, 0), 2, 99)

@@ -49,6 +49,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"winner": state.winner,
 		"eliminated": state.eliminated.duplicate(),
 		"next_unit_id": state._next_unit_id,
+		"objective_hold_target": state.objective_hold_target,
 		"units": units, "mines": mines, "objectives": objectives,
 		"vision": vision, "veterancy": veterancy,
 	}
@@ -79,6 +80,7 @@ static func from_dict(data: Dictionary) -> BattleState:
 		state.eliminated.append(bool(e))
 
 	state._next_unit_id = int(data["next_unit_id"])
+	state.objective_hold_target = int(data["objective_hold_target"])
 
 	state.units.clear()
 	for u_data in (data["units"] as Array):
