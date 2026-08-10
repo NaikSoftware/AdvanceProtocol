@@ -25,7 +25,9 @@ func validate(state: BattleState) -> String:
 		return "ERR_FRIENDLY_FIRE"
 	if a.unit_class() == UnitTypes.UnitClass.ENGINEER:
 		return "ERR_NO_WEAPON"
-	if a.has_fired or a.ap < a.fire_cost():
+	if a.has_fired:
+		return "ERR_ALREADY_FIRED"
+	if a.ap < a.fire_cost():
 		return "ERR_NOT_ENOUGH_AP"
 	if not Rules.in_radius(a.pos, t.pos, a.attack_range()):
 		return "ERR_OUT_OF_RANGE"
@@ -106,8 +108,7 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 		out.append_array(state.check_elimination())
 		# Смерть цілі може відкрити/закрити огляд будь-кому — усі гравці.
 		# Інакше, як MoveCommand.apply(), оновлюємо лише огляд атакуючого.
-		for p in state.player_count:
-			out.append_array(state.refresh_vision(p))
+		out.append_array(state.refresh_vision_all())
 	else:
 		out.append_array(state.refresh_vision(attacker.owner))
 	return out

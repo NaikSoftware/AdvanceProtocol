@@ -55,7 +55,7 @@ func test_second_shot_in_a_turn_is_rejected() -> void:
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
 	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
-	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_NOT_ENOUGH_AP")
+	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_ALREADY_FIRED")
 
 func test_kill_emits_destruction_and_checks_victory() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(4, 4), 2)

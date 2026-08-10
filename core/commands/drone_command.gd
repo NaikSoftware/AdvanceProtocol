@@ -28,7 +28,9 @@ func validate(state: BattleState) -> String:
 		return "ERR_FRIENDLY_FIRE"
 	if a.drones_left <= 0:
 		return "ERR_NO_DRONES_LEFT"
-	if a.has_fired or a.ap < a.fire_cost():
+	if a.has_fired:
+		return "ERR_ALREADY_FIRED"
+	if a.ap < a.fire_cost():
 		return "ERR_NOT_ENOUGH_AP"
 	if not UnitTypes.is_vehicle(t.unit_class()):
 		return "ERR_DRONE_CANNOT_TARGET_INFANTRY"

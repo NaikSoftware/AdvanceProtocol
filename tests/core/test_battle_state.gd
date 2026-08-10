@@ -90,3 +90,30 @@ func test_each_player_gets_its_own_vision() -> void:
 	var s: BattleState = _state(3)
 	assert_eq(s.vision.size(), 3)
 	assert_ne(s.vision[0], s.vision[1], "жодного спільного об'єкта туману")
+
+func test_create_does_not_prime_vision() -> void:
+	# start() не можна викликати з create(): юніти додаються ПІСЛЯ create(),
+	# тож приймінг там праймив би порожню дошку без жодного юніта.
+	var s: BattleState = _state()
+	s.add_unit(5, 0, Vector2i(4, 4), 2)
+	assert_false(s.vision[0].is_visible(Vector2i(4, 4)), "create() сам по собі не рахує зір")
+
+func test_start_primes_every_players_vision_before_their_first_turn() -> void:
+	var s: BattleState = _state(3)
+	s.add_unit(5, 0, Vector2i(1, 1), 0)
+	s.add_unit(5, 1, Vector2i(8, 8), 0)
+	s.add_unit(5, 2, Vector2i(5, 5), 0)
+	s.start()
+	assert_true(s.vision[0].is_visible(Vector2i(1, 1)), "гравець 0 бачить свій юніт одразу після start()")
+	assert_true(s.vision[1].is_visible(Vector2i(8, 8)), "гравець 1 теж — а не лише активний гравець")
+	assert_true(s.vision[2].is_visible(Vector2i(5, 5)), "і гравець 2 — жоден не лишається нульовою сіткою")
+
+func test_start_discards_its_own_reveal_events() -> void:
+	# §BattleState.start(): ці тайли не є щойно розкритими для гравця, чий хід
+	# ось-ось почнеться — вони не мають потрапляти у потік подій як
+	# TileRevealed для гравців, які зараз не діють. start() повертає void.
+	var s: BattleState = _state()
+	s.add_unit(5, 0, Vector2i(4, 4), 0)
+	s.start()
+	assert_true(s.vision[0].is_seen(Vector2i(4, 4)),
+		"seen усе одно оновлюється — лише подія про це не повертається назовні")

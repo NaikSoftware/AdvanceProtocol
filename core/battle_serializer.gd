@@ -34,7 +34,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
 	var veterancy: Array = []
 	for vet in state.veterancy:
-		veterancy.append({"xp": vet.xp, "level": vet.level})
+		veterancy.append({"xp": vet.xp.duplicate(), "level": vet.level.duplicate()})
 	return {
 		"version": VERSION,
 		"board": {

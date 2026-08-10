@@ -51,3 +51,15 @@ func test_impassable_stays_impassable_for_everyone() -> void:
 	var infantry: Unit = Unit.create(1, 0, 0, Vector2i.ZERO, 0)
 	assert_true(Rules.entry_cost(infantry, Terrain.IMPASSABLE) >= Terrain.IMPASSABLE,
 		"непрохідність — це нескінченний штраф, а не спецвипадок у мувері")
+
+func test_terrain_penalty_never_lands_in_the_gap_between_ordinary_and_impassable() -> void:
+	# entry_cost()'s `penalty >= Terrain.IMPASSABLE` guard is only safe because
+	# Terrain.penalty() never returns a value between the ordinary maximum
+	# (~30 base, ~110 with mud) and 1_000_000. Pin that assumption here so a
+	# future mid-range penalty (say, 5000) fails this build instead of quietly
+	# tricking entry_cost() into treating a merely-expensive tile as passable.
+	for kind in Terrain.Kind.values():
+		for gs in Terrain.GroundState.values():
+			var p: int = Terrain.penalty(kind, gs)
+			var ok: bool = p < 1000 or p == Terrain.IMPASSABLE
+			assert_true(ok, "Kind %d x GroundState %d: penalty %d потрапив у заборонений проміжок" % [kind, gs, p])

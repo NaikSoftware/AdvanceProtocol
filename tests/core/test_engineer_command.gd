@@ -127,3 +127,21 @@ func test_capture_objective_flips_ownership() -> void:
 	Objectives.add(state, Vector2i(4, 3), -1)
 	EngineerCommand.create(e.id, EngineerCommand.Action.CAPTURE_OBJECTIVE, Vector2i(4, 3)).apply(state)
 	assert_eq(Objectives.at(state, Vector2i(4, 3)).owner, 0)
+
+func test_demolish_objective_marks_it_destroyed() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	Objectives.add(state, Vector2i(4, 3), 1)
+	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).validate(state), "")
+	EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).apply(state)
+	assert_false(Objectives.at(state, Vector2i(4, 3)).intact)
+
+func test_demolishing_an_already_destroyed_objective_is_rejected() -> void:
+	# Без цієї перевірки друге підривання того самого об'єкта валідувалось би,
+	# спалювало б увесь хід інженера і випускало б другий ObjectiveDestroyed —
+	# подію, яку вигляду нема чого анімувати вдруге.
+	var e: Unit = _engineer(Vector2i(4, 4))
+	Objectives.add(state, Vector2i(4, 3), 1)
+	var o: Objectives.Objective = Objectives.at(state, Vector2i(4, 3))
+	o.intact = false
+	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).validate(state),
+		"ERR_NOTHING_TO_DEMOLISH")

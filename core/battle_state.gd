@@ -18,8 +18,8 @@ var vision: Array[Vision] = []
 var veterancy: Array[Veterancy] = []
 var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
-var mines: Array = []                     # заповнюється в Task 1.16
-var objectives: Array = []                # заповнюється в Task 1.17
+var mines: Array[Mines.Mine] = []
+var objectives: Array[Objectives.Objective] = []
 var _next_unit_id: int = 1
 
 static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleState:
@@ -34,6 +34,28 @@ static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleSt
 		s.veterancy.append(Veterancy.create())
 		s.eliminated.append(false)
 	return s
+
+func start() -> void:
+	## Праймить видимість КОЖНОГО гравця рівно один раз, до першого begin_turn().
+	## Без цього vision[p] лишається порожньою сіткою нулів аж до першого ходу
+	## гравця p — а FireCommand._retaliate() гейтить відповідь саме на
+	## state.vision[target.owner].is_visible(...), тож юніти гравців, чий хід
+	## ще не наставав, не можуть відповісти на постріл узагалі. У грі на 2
+	## гравці це робить увесь відкривний хід гравця 0 безкарним; у грі на 3 —
+	## гравець 2 не може відповісти цілий перший раунд.
+	##
+	## Не можна викликати з create(): юніти додаються ПІСЛЯ create(), тож
+	## приймінг там прайм би порожню дошку. Викликати рівно один раз, після
+	## того як усі юніти вже додані, і до першого begin_turn().
+	##
+	## Повернені події тут навмисно ВІДКИДАЮТЬСЯ, а не повертаються викликачу:
+	## ці тайли не є щойно розкритими для гравця, чий хід ось-ось почнеться —
+	## begin_turn() для нього прийде окремим TileRevealed. Повернути їх звідси
+	## означало б випустити TileRevealed для гравців, які зараз не діють, у
+	## потік подій, призначений для показу того, що бачить активний гравець.
+	## Не "виправляти" це на повернення подій пізніше без нового рішення.
+	for p in player_count:
+		refresh_vision(p)
 
 func add_unit(type_id: int, owner: int, pos: Vector2i, facing: int) -> Unit:
 	var u: Unit = Unit.create(_next_unit_id, type_id, owner, pos, facing)
@@ -90,6 +112,18 @@ func refresh_vision(player: int) -> Array[Events.BattleEvent]:
 	if revealed.is_empty():
 		return []
 	return [Events.TileRevealed.new(player, revealed)] as Array[Events.BattleEvent]
+
+func refresh_vision_all() -> Array[Events.BattleEvent]:
+	## Vision.recompute() читає ЛИШЕ живі юніти самого player — жоден чужий
+	## юніт на нього не впливає. Тож єдине, що взагалі здатне змінити чужу
+	## видимість, — це смерть чийогось юніта (той юніт перестає світити власну
+	## видимість власникові). Усюди, де дія не може нікого вбити, оновлювати
+	## варто лише видимість того, чий це юніт; лише на гілці, де хтось
+	## помирає, потрібен прохід по всіх гравцях — саме це робить цей метод.
+	var out: Array[Events.BattleEvent] = []
+	for p in player_count:
+		out.append_array(refresh_vision(p))
+	return out
 
 func advance_player() -> int:
 	assert(not is_over(), "advance_player() після завершення матчу")

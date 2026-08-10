@@ -29,7 +29,9 @@ func validate(state: BattleState) -> String:
 		return "ERR_NOT_YOUR_UNIT"
 	if e.unit_class() != UnitTypes.UnitClass.ENGINEER:
 		return "ERR_NOT_AN_ENGINEER"
-	if e.has_fired or e.ap < e.fire_cost():
+	if e.has_fired:
+		return "ERR_ALREADY_FIRED"
+	if e.ap < e.fire_cost():
 		return "ERR_NOT_ENOUGH_AP"
 	if not state.board.in_bounds(target_pos):
 		return "ERR_OFF_BOARD"
@@ -64,6 +66,8 @@ func validate(state: BattleState) -> String:
 				return "ERR_NO_OBJECTIVE_THERE"
 			if action == Action.CAPTURE_OBJECTIVE and (o.owner == e.owner or not o.intact):
 				return "ERR_NOTHING_TO_CAPTURE"
+			if action == Action.DEMOLISH_OBJECTIVE and not o.intact:
+				return "ERR_NOTHING_TO_DEMOLISH"
 	return ""
 
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
@@ -117,6 +121,8 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 
 	e.exhaust()
 	out.append(Events.ApChanged.new(unit_id, 0))
-	for p in state.player_count:
-		out.append_array(state.refresh_vision(p))
+	# BattleState.refresh_vision_all()'s doc: лише смерть чужого юніта здатна
+	# змінити чужу видимість. Жодна з дій вище не може відняти HP (REPAIR_UNIT
+	# лише додає) — тож досить оновити видимість власника юніта, що діяв.
+	out.append_array(state.refresh_vision(e.owner))
 	return out

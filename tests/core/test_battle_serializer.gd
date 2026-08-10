@@ -136,9 +136,14 @@ func test_to_dict_snapshot_is_immune_to_later_mutation() -> void:
 	mine.known_to[1] = true
 	a.objectives[0].seen_by[0] = true
 	a.eliminated[1] = true
+	var snap_vet_xp: Array = (snapshot["veterancy"][0]["xp"] as Array).duplicate()
+	var snap_vet_level: Array = (snapshot["veterancy"][0]["level"] as Array).duplicate()
+	a.veterancy[0].add_damage(UnitTypes.UnitClass.INFANTRY, 500)
 
 	var snap_mine: Dictionary = snapshot["mines"][0]
 	assert_false((snap_mine["known_to"] as Array)[1], "знімок не бачить пізнішого розкриття міни")
 	var snap_obj: Dictionary = snapshot["objectives"][0]
 	assert_false((snap_obj["seen_by"] as Array)[0], "знімок не бачить пізнішого виявлення цілі")
 	assert_false((snapshot["eliminated"] as Array)[1], "знімок не бачить пізнішої елімінації")
+	assert_eq(snapshot["veterancy"][0]["xp"], snap_vet_xp, "знімок не бачить пізнішого набору досвіду")
+	assert_eq(snapshot["veterancy"][0]["level"], snap_vet_level, "знімок не бачить пізнішого підвищення рівня")

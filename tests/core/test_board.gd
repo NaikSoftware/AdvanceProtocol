@@ -46,9 +46,9 @@ func test_out_of_bounds_does_not_alias_to_real_tiles() -> void:
 	# Set a known kind at (0, 1) and at the last tile (7, 5)
 	b.set_kind(Vector2i(0, 1), Terrain.Kind.FOREST)
 	b.set_kind(Vector2i(7, 5), Terrain.Kind.WATER)
-	# Out-of-bounds (width, 0) would alias to (0, 1) if not guarded: index 8 = 0*8 + 8 = 8, wraps to last=47? No, 1*8+0 = 8
-	# Out-of-bounds (-1, 0) would alias to (7, -1) wrapping? Actually -1 wraps to last element (47)
-	# Test that these out-of-bounds are impassable, not affected by real tiles
+	# Out-of-bounds coordinates must be rejected outright, not folded into the
+	# flat tile index (y * width + x), where they could silently alias onto a
+	# real tile's data (e.g. (8, 0) would land on the same index as (0, 1)).
 	assert_false(b.is_passable(Vector2i(-1, 0)), "negative x should be impassable")
 	assert_false(b.is_passable(Vector2i(8, 0)), "x >= width should be impassable")
 	assert_false(b.is_passable(Vector2i(0, -1)), "negative y should be impassable")
