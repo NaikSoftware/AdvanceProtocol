@@ -97,6 +97,11 @@ else in the game.
 - **The two movement zones are the primary UI of the game:** gold = reachable with `>= fire_cost`
   AP left, red = reachable but cannot act. Recomputed after every action that changes AP or
   occupancy.
+- **A move is planned from what the player can see, and walked one tile at a time.** Planning and
+  the zones use fog-filtered occupancy; the walk checks the truth and **stops on the tile before**
+  anything it could not see. AP is charged only for tiles actually entered. Planning against the
+  true occupancy would leak — the route would detour around an invisible enemy and give away
+  where it stands.
 
 ### 3.3 Combat → [formula and worked reasoning](docs/rules/combat.md)
 
@@ -133,8 +138,12 @@ product against the target's facing. No trigonometry, no division.
 
 ### 3.5 Vision and fog of war → [details](docs/rules/vision-and-fog.md)
 
-- Every player keeps **two grids**: `visible` (in someone's vision right now) and `seen`
-  (remembered terrain, drawn dimmed, **without** live unit positions).
+- **The fog hides enemy units and their mines — never the map.** Terrain is public from the first
+  turn, at full brightness. Hiding the ground would make the two movement zones lie, since a
+  contour bending around unscouted obstacles is itself a tell.
+- Every player keeps **two grids**: `visible` (in someone's vision right now) and `seen` (ever
+  scouted). `seen` is what the fog tint is drawn from — the map is legible everywhere, and the tint
+  says "none of yours has been here".
 - Recomputed for the active player from scratch at turn start and after every move step.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not
@@ -194,8 +203,10 @@ objective condition is met.
 ### 3.11 Mines → [details](docs/rules/vision-and-fog.md)
 
 Laid by engineers, invisible to everyone except the owner, **found only by an engineer** within
-its own vision diamond. Driving onto an unrevealed mine detonates it — **on entry, not at the
-destination**, so a minefield cannot be crossed by stopping past it.
+its own vision diamond — searched at the start of its owner's turn and from **every tile it passes
+through**, not only the one it stops on. Driving onto an unrevealed mine detonates it — **on entry,
+not at the destination**, so a minefield cannot be crossed by stopping past it. A tile occupied by
+a unit is never entered, so a blocker standing on a mine keeps it from going off.
 
 ### 3.12 Weather, time of day, and ground state → [details](docs/rules/movement-and-terrain.md)
 

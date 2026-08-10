@@ -98,16 +98,17 @@ Both computations belong in `core/` and neither may be re-derived in the view. T
 intersection of a circle and a diamond ([§3.1](../rules/movement-and-terrain.md)); a second implementation of that geometry in the
 renderer is exactly the drift this document exists to prevent.
 
-**The movement zones need a display query of their own, and Phase 2 must not skip it.** They are
-computed by `Pathing.compute_zones(board, unit, occupied)`, and `BattleState.occupied_map()`
-returns **every** live unit — including ones the active player cannot see. That is correct for the
-rules path, because a hidden enemy really does block movement. Handing the same map to the overlay
-leaks: an invisible unit punches a unit-shaped hole in the gold contour and tells the player
-exactly where it stands.
+**The movement zones are drawn from the fog-filtered occupancy, which is also what the move is
+planned against** ([§3.2](../rules/movement-and-terrain.md)). The overlay and the order agree by
+construction: what you are shown as reachable is exactly what the game will attempt.
 
-So there are two occupancies, not one: **unfiltered for deciding what a move costs, fog-filtered
-for deciding what to draw**, and a `core/` entry point owns the filtered one — never the view. The
-zones drawn from it are, like the enemy forecast above, a best case: a path shown as open can turn
-out to be blocked by something you had not seen, and the move stops short. That is the honest
-failure, and it is the trade this whole section makes — a player may be surprised by what they
-could not know, but never informed by it.
+That matters more than it looks. Had the zones been drawn from the true occupancy — every live
+unit, including invisible ones — an unseen enemy would punch a unit-shaped hole in the gold
+contour and give away its position. Had the *order* been planned against the true occupancy
+instead, the route would silently detour around it, which leaks the same fact in a subtler and
+harder-to-notice way.
+
+So the zones are, like the enemy forecast above, a **best case**: a path shown as open can turn
+out to be blocked by something you had not seen, and the move stops on the tile before it. That is
+the honest failure, and it is the trade this whole section makes — a player may be surprised by
+what they could not know, but never informed by it.

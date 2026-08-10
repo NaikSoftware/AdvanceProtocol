@@ -89,6 +89,35 @@ zone shrinks as the unit spends. The same applies to the engineer's verbs, which
 and end the unit's activity exactly as a shot does. Every AP-consuming action other than movement
 is therefore a decision to stop moving.
 
+**A move is planned from what you can see, and walked one tile at a time.** These are two separate
+occupancies and conflating them is a bug in either direction:
+
+- **Planning** — the zones, the path, and whether a destination is reachable at all — uses the full
+  terrain, which is public (§3.5), and only the **units** the moving player can currently see, plus
+  their own. Ground that looks empty is planned through. Terrain never surprises a move; only an
+  enemy can.
+- **Walking** uses the truth. Before entering each tile the mover checks what is really there; if
+  a unit it could not see is standing in the way, the move **stops on the tile before it** and
+  ends. Vision is recomputed at every step, so whatever emerged is visible from that moment on.
+
+This is the same shape as the mine rule (§3.11), and deliberately so: the unit stops where reality
+contradicted the plan. **AP is charged only for tiles actually entered** — a move cut short is
+never more expensive than the distance covered.
+
+**Walking sees, and what it saw is kept.** Because vision is recomputed at every tile rather than
+once on arrival, a unit that drives past something and carries on has still seen it: the terrain
+enters that player's `seen` grid, an engineer's mine search runs from every tile it passed, and an
+objective glimpsed in the middle of the route is remembered. Recomputing only at the destination
+would silently discard all of it — the unit would arrive having learned nothing about the ground
+it had just crossed. This is a rules consequence rather than a presentation detail, and it is the
+reason the refresh is inside the walk loop and not after it.
+
+The alternative, planning against the true occupancy, is what a naive implementation does and it
+leaks: the route silently detours around an invisible enemy, and the shape of the detour tells the
+player exactly where it stands. Worse, the leak is *invisible to the person leaking it* — nothing
+on screen says "an enemy is here", the path merely bends. **A destination that is really occupied
+by a unit you cannot see is therefore a legal order**, not an error; you give it, and you find out.
+
 **The two movement zones** are therefore the primary UI of the game:
 
 | zone | meaning | suggested colour |

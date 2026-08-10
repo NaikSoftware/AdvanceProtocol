@@ -26,6 +26,28 @@ class UnitTurned extends BattleEvent:
 	func describe() -> String:
 		return "UnitTurned(unit=%d, facing=%d)" % [unit_id, facing]
 
+class MoveBlocked extends BattleEvent:
+	## §3.2/§3.5: хід урвався ПЕРЕД тайлом, у який юніт не зміг увійти. Окремий клас,
+	## а не висновок вигляду: інакше вигляд мусив би звіряти наказ гравця з довжиною
+	## UnitMoved.path, щоб зрозуміти, доїхали чи ні, — а обрив на першому ж кроці не
+	## відрізнити взагалі, бо він дає той самий UnitTurned, що й навмисний поворот на
+	## місці. Причина та сама, що й у ShotRetaliated: вигляд не має здогадуватись про
+	## подію з порядку чи довжини сусідніх.
+	##
+	## Несе тайл, але НЕ того, хто на ньому стоїть, і це межа навмисна. Тайл гравець
+	## і так бачить: юніт спиняється ортогонально поруч із ним, а найменший огляд у
+	## грі — ромб радіуса 3 (§3.5), тож сусідній тайл лежить усередині огляду самого
+	## мовця. Id блокувальника такої підстави не має — постріл у відповідь і показ
+	## ворога гейтяться на visible, і подія не має бути обхідним шляхом до того, що
+	## гравець мусив би заслужити оком.
+	var unit_id: int
+	var pos: Vector2i
+	func _init(p_unit_id: int, p_pos: Vector2i) -> void:
+		unit_id = p_unit_id
+		pos = p_pos
+	func describe() -> String:
+		return "MoveBlocked(unit=%d, at %s)" % [unit_id, pos]
+
 class ShotFired extends BattleEvent:
 	var attacker_id: int
 	var target_id: int
