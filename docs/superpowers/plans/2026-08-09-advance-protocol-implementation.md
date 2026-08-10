@@ -1048,6 +1048,8 @@ git commit -m "feat(core): integer armour sector resolution"
   - `Rules.MIN_DAMAGE: int = 10`
   - `Rules.compute_damage(rng, attacker: Unit, target: Unit, veterancy_level: int, sector: int, dist_sq: int) -> int`
   - `Rules.drone_damage(rng) -> int`
+  - `Rules.distance_sq`, `Rules.in_radius` — **дальність зброї**, евклідове коло
+  - `Rules.distance_manhattan`, `Rules.in_vision_diamond` — **огляд**, манхеттенський ромб
 
 Це найважливіша функція в проєкті. Тести тут перевіряють **межі, а не одне число**: кидок робить результат діапазоном, тож золоті тести фіксують мінімум і максимум формули та кожен множник окремо.
 
@@ -1234,9 +1236,30 @@ static func distance_sq(a: Vector2i, b: Vector2i) -> int:
 	return d.x * d.x + d.y * d.y
 
 static func in_radius(a: Vector2i, b: Vector2i, r: int) -> bool:
-	## §3.1: евклідів радіус, порівняння квадратів — без sqrt.
+	## §3.1: ДАЛЬНІСТЬ ЗБРОЇ — евклідове коло, порівняння квадратів, без sqrt.
+	## Не для огляду: той міряється ромбом, див. in_vision_diamond().
 	return distance_sq(a, b) <= r * r
+
+static func distance_manhattan(a: Vector2i, b: Vector2i) -> int:
+	var d: Vector2i = a - b
+	return absi(d.x) + absi(d.y)
+
+static func in_vision_diamond(a: Vector2i, b: Vector2i, r: int) -> bool:
+	## §3.1: ОГЛЯД — манхеттенський ромб, а не коло. Це лічильник кроків по
+	## 4-напрямковій сітці: «за три тайли» означає за три ходи, тож огляд має ту
+	## саму форму, що й рух, і радіус читається як число кроків.
+	##
+	## Розбіжність з in_radius() на діагоналях — не похибка, а сенс поділу:
+	## (3, 4) лежить у колі радіуса 5 і поза ромбом радіуса 5, тож ціль буває
+	## в межах дальності й водночас невидимою. Постріл вимагає видимості, отже
+	## справжня обвідна вогню — перетин двох форм. Назви двох предикатів
+	## навмисне не схожі — сплутати їх на місці виклику не має бути можливо.
+	return distance_manhattan(a, b) <= r
 ```
+
+**Дві форми, і плутати їх не можна (§3.1).** Дальність зброї — коло, огляд — ромб; таблиця
+в §3.1 `CLAUDE.md` задає це прямо. Ромб — вужчий на діагоналях, тож на нерозвіданій землі,
+де юніт світить сам собі, обвідною вогню є саме він.
 
 - [ ] **Step 4: Запустити — усе має пройти**
 
@@ -1472,7 +1495,7 @@ git commit -m "feat(core): Dijkstra flood fill for the two movement zones"
 - Test: `tests/core/test_vision.gd`
 
 **Interfaces:**
-- Consumes: `Board`, `Unit`, `Rules.in_radius`
+- Consumes: `Board`, `Unit`, `Rules.in_vision_diamond`
 - Produces:
   - `Vision` (RefCounted, по одному екземпляру на гравця): `visible: PackedByteArray`, `seen: PackedByteArray`
     - `Vision.create(width: int, height: int) -> Vision`
@@ -1499,11 +1522,26 @@ func test_unit_sees_its_own_radius() -> void:
 	assert_true(v.is_visible(Vector2i(6, 1)), "рівно 5 тайлів — усередині")
 	assert_false(v.is_visible(Vector2i(6, 0)), "6 тайлів — уже ні")
 
-func test_vision_is_euclidean_not_diamond() -> void:
+func test_vision_is_a_diamond_not_a_circle() -> void:
+	# §3.1: огляд міряється манхеттенською відстанню — це лічильник кроків по
+	# 4-напрямковій сітці, тож огляд має ту саму форму, що й рух.
+	var v: Vision = Vision.create(12, 12)
+	var inf: Unit = Unit.create(1, 0, 0, Vector2i(6, 6), 0)   # огляд 5
+	v.recompute(_board(), [inf], 0)
+	assert_false(v.is_visible(Vector2i(9, 9)), "|3|+|3| = 6 > 5 — поза ромбом, хоч dist_sq 18 <= 25")
+	assert_true(v.is_visible(Vector2i(8, 9)), "|2|+|3| = 5 — рівно на межі ромба")
+
+func test_a_tile_inside_the_range_circle_can_lie_outside_the_vision_diamond() -> void:
+	# §3.1: розбіжність двох форм на діагоналі — не похибка, а правило.
+	# (9, 10) від (6, 6) — це dist_sq 25 <= 25 (усередині кола дальності 5)
+	# і 3 + 4 = 7 > 5 (поза ромбом огляду 5).
+	assert_true(Rules.in_radius(Vector2i(6, 6), Vector2i(9, 10), 5), "передумова: у колі дальності 5")
+	assert_false(Rules.in_vision_diamond(Vector2i(6, 6), Vector2i(9, 10), 5), "передумова: поза ромбом огляду 5")
 	var v: Vision = Vision.create(12, 12)
 	var inf: Unit = Unit.create(1, 0, 0, Vector2i(6, 6), 0)
 	v.recompute(_board(), [inf], 0)
-	assert_true(v.is_visible(Vector2i(9, 9)), "dist_sq 18 <= 25 — коло, не ромб")
+	assert_false(v.is_visible(Vector2i(9, 10)),
+		"§3.1: ціль буває в межах пострілу і водночас невидимою — обвідна вогню це перетин двох форм")
 
 func test_only_own_units_contribute() -> void:
 	var v: Vision = Vision.create(12, 12)
@@ -1579,12 +1617,17 @@ func recompute(board: Board, units: Array[Unit], player: int) -> Array[Vector2i]
 		if u.owner != player or not u.is_alive():
 			continue
 		var r: int = u.vision()
+		# §3.1: огляд — ромб. Рамка сканування лишається квадратною навмисне:
+		# ромб — її підмножина, а форма живе рівно в одному місці — у предикаті
+		# Rules.in_vision_diamond(). Звузити dx до |dy| означало б продублювати
+		# ту саму геометрію тут, де вона мовчки розійдеться з предикатом при
+		# наступній зміні.
 		for dy in range(-r, r + 1):
 			for dx in range(-r, r + 1):
 				var p: Vector2i = u.pos + Vector2i(dx, dy)
 				if not board.in_bounds(p):
 					continue
-				if not Rules.in_radius(u.pos, p, r):
+				if not Rules.in_vision_diamond(u.pos, p, r):
 					continue
 				var i: int = _index(p)
 				visible[i] = 1
@@ -3842,9 +3885,6 @@ git commit -m "feat(game): fixed isometric camera rig with clamped pan and zoom"
 контур, що огинає нерозвідану перешкоду, видає її не гірше за сам тайл. Ховати з карти —
 робота Task 2.4 і Task 2.10, і стосується вона юнітів, а не землі.
 
-*Раніше тут стояли три стани тайлу з нерендереним «за межами огляду». Це передувало правці
-§3.5 (коміти `2b4090f`, `d1aae72`); за правилом преамбули плану — правий `CLAUDE.md`.*
-
 - [ ] **Step 1: Побудувати сцену з `MultiMeshInstance3D` на вид тайлу**
 - [ ] **Step 2: Реалізувати `highlight_tiles` через колір інстансу мультимешу (`INSTANCE_CUSTOM`)**
 - [ ] **Step 3: Ручна перевірка**
@@ -4263,7 +4303,7 @@ func test_every_error_key_is_translated() -> void:
 
 | розділ CLAUDE.md | де реалізовано |
 | --- | --- |
-| §3.1 сітка, 4-напрямний рух, 8-напрямний фейсинг, евклідів радіус | 1.4 (`Board.DIRS_4/DIRS_8`), 1.7 (`Rules.in_radius`), 1.8 (тест на діагоналі) |
+| §3.1 сітка, 4-напрямний рух, 8-напрямний фейсинг, коло дальності проти ромба огляду | 1.4 (`Board.DIRS_4/DIRS_8`), 1.7 (`Rules.in_radius` і `Rules.in_vision_diamond`), 1.8 (тест на діагоналі), 1.9 (ромб в огляді) |
 | §3.2 AP, вартість входу, дві зони | 1.5, 1.8 |
 | §3.3 формула шкоди | 1.7, золоті тести |
 | §3.4 напрямна броня | 1.6; показ сектора до підтвердження — 2.7, 2.8 |
@@ -4285,4 +4325,4 @@ func test_every_error_key_is_translated() -> void:
 
 **Узгодженість типів:** `attack_range` (не `range`) скрізь; `unit_class` (не `class`); `Pathing.Zones.cost_to` повертає `-1` для недосяжного, і всі споживачі спершу питають `can_reach`; `validate()` всюди повертає `String` (порожній = дозволено); `apply()` всюди повертає `Array[Events.BattleEvent]`; `FireCommand._resolve_damage` — єдиний шлях нанесення шкоди, спільний для пострілу й дрона.
 
-**Відкриті питання з §4, які план не закриває і не має закривати:** шкода танка по артилерії залишена ×1.0; форма зони огляду — евклідова. Обидва чекають плейтесту, а не рішення в коді.
+**Відкриті питання з §4, які план не закриває і не має закривати:** шкода танка по артилерії залишена ×1.0 — чекає плейтесту, а не рішення в коді.
