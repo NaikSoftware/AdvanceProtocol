@@ -165,9 +165,19 @@ Retaliation
   frequency : at most once per exchange; a retaliation never provokes another
 ```
 
-The AP cost is what makes this a trade rather than free damage: a unit that fires back has spent
-its own turn, and cannot move or shoot when its owner's turn comes. It also means a unit can
-retaliate at most once per round — after the first, it no longer has the AP to qualify.
+**What the AP cost actually buys, stated carefully because it is easy to overclaim.** Firing back
+zeroes the retaliator's AP for the remainder of the *attacker's* turn, so it cannot answer a second
+shot before its own turn comes round. It does **not** cost the unit its own turn: `refill_ap()`
+restores both AP and the fired flag at the start of its owner's turn, exactly as the reference
+does. A unit that retaliated moves and shoots normally when its turn arrives.
+
+So retaliation is close to free for the defender, and deliberately so — the cost of shooting falls
+on the *attacker*, who takes a full-strength answer for opening fire on a healthy target inside its
+range. The defender's only exposure is that it cannot answer twice in the same round.
+
+An earlier version of this section claimed the retaliator forfeits its next turn. That was never
+what the code or the reference did; it was a rationale written into the spec rather than read out
+of it, and it is corrected here rather than implemented, on the owner's call.
 
 **The retaliator must be able to see its attacker.** A return shot obeys the same visibility rule
 as any other shot: the original attacker's tile has to be visible to the retaliating player at
