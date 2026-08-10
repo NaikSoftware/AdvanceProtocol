@@ -1,0 +1,60 @@
+# What the board shows, and when
+
+The detail behind §3.13 of CLAUDE.md — the movement zones, the fire radius, and unit inspection.
+
+[back to CLAUDE.md](../../CLAUDE.md)
+
+Two overlays answer two different questions, and they are deliberately not shown the same way.
+
+**The movement zones are always on** ([§3.2](../rules/movement-and-terrain.md)), for the selected unit only, recomputed after every
+action. **Drawn as two nested contours, not as filled tiles.** A fill would hide the terrain and
+the battle scars underneath, and those are both the atmosphere budget ([§8](../art-direction.md)) and real information —
+the map is supposed to tell you where the fighting has been. Contours are also cheaper on a phone
+screen and do not fight the fog, which is itself a darkening of tiles.
+
+The reference draws these zones the same way, as contours, and splits them on exactly the same
+test (`remaining_ap >= fire_cost`). It colours them green and red; this project keeps gold and red
+from §3.2, because red/green is the most common colour-vision deficiency and the two zones are the
+primary UI of the game.
+
+**The fire radius is on demand: tap a unit to see its reach.** Not always on — it would sit on top
+of both movement zones as a third overlay on a phone screen. Movement is what you are choosing
+continuously; range is a question you ask occasionally. The reference makes the same split, with
+range bound to hold-a-key.
+
+**Any visible unit can be inspected, including an enemy's.** This is the feature worth porting.
+Tapping an enemy shows *its* range and which of **your** units stand inside it. With retaliation
+([§3.3.1](../rules/combat.md)) that is not a convenience, it is the information the central decision of a turn rests on:
+firing on a healthy target inside its range invites a full-strength answer, and you cannot judge
+that without seeing the answer's reach. Fog still applies — a unit you cannot see cannot be
+inspected.
+
+**Own unit and enemy unit are gated differently, and this is a deliberate departure from the
+reference.**
+
+| inspecting | ring | marked units |
+| --- | --- | --- |
+| your own | always, even at 0 AP | enemies it can fire on **right now** — range, visibility and AP all checked |
+| an enemy | always | your units inside its range and seen by **that unit alone** — **AP deliberately not checked** |
+
+The reference gates both on the shooter's current AP. For an enemy that leaks state: AP is only
+refilled at the start of its owner's turn, so "this unit is spent" is the residue of actions you
+may not have witnessed — it retaliated on someone else's turn, behind the handover gate. It is
+also the less useful reading. What you want from an enemy is the **threat forecast** — who does
+this thing hit when its turn comes — and it will have full AP by then regardless. So an enemy's
+marks answer "who is in danger", and your own unit's marks answer "what can I shoot now".
+
+**An enemy's marks are computed from that unit alone, never from its owner's vision.** A shot
+needs the *owner's* vision, not the shooter's — a spotter elsewhere on the map extends what the
+whole force can fire on (§3.3.1). But that network is hidden, and drawing marks from it would
+reveal that an unseen spotter exists. So the forecast uses only the inspected unit's own range and
+own vision, which is information the player could work out by hand from a public roster and a
+position they can already see.
+
+The consequence must be stated in the UI rather than hidden: **the marks are a floor, not a
+ceiling.** A unit not marked can still be shot, if the enemy has eyes you have not found. That is
+the honest version — the alternative is an overlay that quietly leaks the position of scouts.
+
+Both computations belong in `core/` and neither may be re-derived in the view. The envelope is the
+intersection of a circle and a diamond ([§3.1](../rules/movement-and-terrain.md)); a second implementation of that geometry in the
+renderer is exactly the drift this document exists to prevent.
