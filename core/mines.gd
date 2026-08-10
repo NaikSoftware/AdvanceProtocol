@@ -6,7 +6,6 @@ extends RefCounted
 ## величину. Пласке число зробило б міну єдиним джерелом шкоди в грі, яке не кидається.
 const DAMAGE_BASE: int = 90
 const DAMAGE_ROLL: int = 90
-const REVEAL_RADIUS: int = 1
 
 class Mine extends RefCounted:
 	var pos: Vector2i
@@ -42,12 +41,19 @@ static func clear(state: BattleState, pos: Vector2i) -> Array[Events.BattleEvent
 	return [Events.MineCleared.new(pos)] as Array[Events.BattleEvent]
 
 static func reveal_near(state: BattleState, player: int) -> Array[Events.BattleEvent]:
+	## §3.11: чужу міну знаходить ЛИШЕ сапер, і то в межах власного огляду —
+	## того самого ромба, що й туман тайлів, тож розкрита міна завжди лежить на
+	## тайлі, який гравець і справді бачить. Без сапера попереду колона заходить
+	## у мінне поле наосліп — це й перетворює мінування на загрозу, а сапера
+	## дає підставу вести вперед, а не тримати позаду.
 	var out: Array[Events.BattleEvent] = []
 	for u in state.units_of(player):
+		if u.unit_class() != UnitTypes.UnitClass.ENGINEER:
+			continue
 		for m in state.mines:
 			if m.known_to[player]:
 				continue
-			if Rules.in_radius(u.pos, m.pos, REVEAL_RADIUS):
+			if Rules.in_vision_diamond(u.pos, m.pos, u.vision()):
 				m.known_to[player] = true
 				out.append(Events.MineRevealed.new(m.pos, player))
 	return out

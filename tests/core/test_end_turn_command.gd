@@ -29,6 +29,25 @@ func test_holding_the_target_ends_the_match_at_end_of_turn() -> void:
 			ended += 1
 	assert_eq(ended, 1, "рівно одна подія MatchEnded")
 
+func test_objective_victory_waits_for_the_holders_own_end_of_turn() -> void:
+	# §3.10: цілі утримує гравець 1, а хід завершує гравець 0 — заявити умову
+	# може лише той, чий хід щойно скінчився. Раніше перебір усіх гравців
+	# оголосив би переможцем гравця 1 вже на цьому виклику. Побічний ефект, заради
+	# якого зміну й зроблено: узяту ціль треба ще втримати до власного кінця ходу,
+	# і супротивник встигає її відбити.
+	var s: BattleState = _state()
+	_two_survivors(s)
+	for i in 3:
+		Objectives.add(s, Vector2i(i, 0), 1)
+	s.objective_hold_target = 3
+	s.active_player = 0
+	EndTurnCommand.create().apply(s)
+	assert_false(s.is_over(), "не твій хід — не твоя заявка")
+	assert_eq(s.active_player, 1, "передумова: хід перейшов до утримувача")
+	EndTurnCommand.create().apply(s)
+	assert_true(s.is_over(), "а на власному кінці ходу — перемога")
+	assert_eq(s.winner, 1)
+
 func test_holding_objectives_never_wins_when_target_is_unset() -> void:
 	# Негативний контроль: objective_hold_target лишається дефолтним 0 —
 	# анігіляційна мапа без умови цілей не повинна завершитись, скільки б

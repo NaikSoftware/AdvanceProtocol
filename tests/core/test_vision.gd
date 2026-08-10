@@ -11,11 +11,27 @@ func test_unit_sees_its_own_radius() -> void:
 	assert_true(v.is_visible(Vector2i(6, 1)), "рівно 5 тайлів — усередині")
 	assert_false(v.is_visible(Vector2i(6, 0)), "6 тайлів — уже ні")
 
-func test_vision_is_euclidean_not_diamond() -> void:
+func test_vision_is_a_diamond_not_a_circle() -> void:
+	# §3.1: цей тест перевернуто навмисне — раніше він стверджував протилежне.
+	# Зламалася не реалізація, а передумова: огляд більше не коло. Ромб — це
+	# лічильник кроків по 4-напрямковій сітці, тож огляд має ту саму форму, що й рух.
+	var v: Vision = Vision.create(12, 12)
+	var inf: Unit = Unit.create(1, 0, 0, Vector2i(6, 6), 0)   # огляд 5
+	v.recompute(_board(), [inf], 0)
+	assert_false(v.is_visible(Vector2i(9, 9)), "|3|+|3| = 6 > 5 — поза ромбом, хоч dist_sq 18 <= 25")
+	assert_true(v.is_visible(Vector2i(8, 9)), "|2|+|3| = 5 — рівно на межі ромба")
+
+func test_a_tile_inside_the_range_circle_can_lie_outside_the_vision_diamond() -> void:
+	# §3.1: розбіжність двох форм на діагоналі — не похибка, а правило.
+	# (9, 10) від (6, 6) — це dist_sq 25 <= 25 (усередині кола дальності 5)
+	# і 3 + 4 = 7 > 5 (поза ромбом огляду 5).
+	assert_true(Rules.in_radius(Vector2i(6, 6), Vector2i(9, 10), 5), "передумова: у колі дальності 5")
+	assert_false(Rules.in_vision_diamond(Vector2i(6, 6), Vector2i(9, 10), 5), "передумова: поза ромбом огляду 5")
 	var v: Vision = Vision.create(12, 12)
 	var inf: Unit = Unit.create(1, 0, 0, Vector2i(6, 6), 0)
 	v.recompute(_board(), [inf], 0)
-	assert_true(v.is_visible(Vector2i(9, 9)), "dist_sq 18 <= 25 — коло, не ромб")
+	assert_false(v.is_visible(Vector2i(9, 10)),
+		"§3.1: ціль буває в межах пострілу і водночас невидимою — обвідна вогню це перетин двох форм")
 
 func test_only_own_units_contribute() -> void:
 	var v: Vision = Vision.create(12, 12)

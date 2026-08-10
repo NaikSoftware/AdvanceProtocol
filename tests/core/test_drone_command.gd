@@ -73,19 +73,31 @@ func test_drone_costs_all_remaining_ap() -> void:
 	assert_true(a.has_fired)
 
 func test_invisible_target_is_rejected() -> void:
-	# Цей стан сьогодні недосяжний чесною грою, і тест про це чесно каже.
-	# Зір штурмового відділення — 5, дальність дрона — 5, а туман ведеться ПО ТАЙЛАХ
-	# і без перекриття перешкодами. Тому будь-яка ціль у межах дальності стоїть на
-	# видимому тайлі, і гілка ERR_TARGET_NOT_VISIBLE недосяжна доти, доки ці два
-	# числа рівні. Попередня версія тесту ставила ціль на 6 тайлів і насправді
-	# перевіряла ERR_OUT_OF_RANGE, тобто не перевіряла нічого.
-	# Гасимо туман вручну: гілка має працювати на той день, коли числа розійдуться.
+	# Ціль пересунуто з (2, 6) на (5, 6), а ручне гасіння туману
+	# (state.vision[0].visible.fill(0)) прибрано: після §3.1 ця гілка досяжна
+	# чесною грою, і тест більше не потребує милиці. Дальність — коло, огляд —
+	# ромб, тож на діагоналі дрон дістає далі, ніж бачить власне відділення:
+	# (3, 4) від стрільця — це dist_sq 25 <= 25 у межах дальності 5 і 3 + 4 = 7 > 5
+	# поза оглядом 5. Стара версія коментаря стверджувала, що гілка недосяжна;
+	# це було правдою, лише поки обидві форми були колами.
 	var a: Unit = _assault(Vector2i(2, 2))
-	var t: Unit = state.add_unit(5, 1, Vector2i(2, 6), 2)   # 4 тайли — усередині дальності
+	var t: Unit = state.add_unit(5, 1, Vector2i(5, 6), 2)
 	state.begin_turn()
-	state.vision[0].visible.fill(0)
+	assert_true(Rules.in_radius(a.pos, t.pos, DroneCommand.RANGE), "передумова: у межах дальності дрона")
 	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "ERR_TARGET_NOT_VISIBLE",
 		"§3.9: ціль має бути видима гравцеві просто зараз")
+
+func test_a_spotter_unlocks_the_diagonal_the_squad_cannot_see() -> void:
+	# §3.9: найдовша рука в грі — і найзалежніша від решти війська. Той самий
+	# постріл, що його відхилено вище, стає легальним, щойно ціль підсвічує
+	# чужа піхота. Саме це мала на увазі вимога видимості.
+	var a: Unit = _assault(Vector2i(2, 2))
+	var t: Unit = state.add_unit(5, 1, Vector2i(5, 6), 2)
+	state.add_unit(0, 0, Vector2i(5, 4), 2)   # стрілецьке відділення-коригувальник
+	state.begin_turn()
+	assert_true(state.vision[0].is_visible(t.pos), "передумова: коригувальник накрив тайл цілі")
+	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "",
+		"§3.9: з коригувальником удар дозволено")
 
 func test_drone_damage_feeds_infantry_pool() -> void:
 	var a: Unit = _assault(Vector2i(2, 2))

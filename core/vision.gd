@@ -34,12 +34,19 @@ func recompute(board: Board, units: Array[Unit], player: int) -> Array[Vector2i]
 		if u.owner != player or not u.is_alive():
 			continue
 		var r: int = u.vision()
+		# §3.1: огляд — ромб. Рамка сканування лишається квадратною навмисне:
+		# ромб — її підмножина, а форма живе рівно в одному місці — у предикаті
+		# Rules.in_vision_diamond(). Звузити dx до |dy| означало б продублювати
+		# ту саму геометрію тут, де вона мовчки розійдеться з предикатом при
+		# наступній зміні. Найгірший випадок у грі — r = 5: рамка 11×11 = 121
+		# клітинка проти 61 у ромбі, тобто 60 порожніх ітерацій на юніт, і то
+		# лише при перерахунку огляду. Дешевше за ризик розсинхрону двох копій.
 		for dy in range(-r, r + 1):
 			for dx in range(-r, r + 1):
 				var p: Vector2i = u.pos + Vector2i(dx, dy)
 				if not board.in_bounds(p):
 					continue
-				if not Rules.in_radius(u.pos, p, r):
+				if not Rules.in_vision_diamond(u.pos, p, r):
 					continue
 				var i: int = _index(p)
 				visible[i] = 1

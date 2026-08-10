@@ -40,16 +40,31 @@ is downstream of that.
 own — fog of war plus directional armour makes for a hard search problem — and it must not be
 allowed to distort the combat model before the combat model is proven in hot-seat.
 
-**Setting is deliberately open.** The rules model is era-agnostic. It describes *archetypes* —
-infantry, light vehicles, tanks, artillery, engineers — not specific historical machines, and
-nothing in `core/` encodes a period. The unit names in §3.6 are role labels, free to be renamed
-once a setting exists.
+### Setting — fixed
 
-This is a live decision with one hard deadline: **the setting must be fixed before asset
-generation starts.** It determines every model prompt, every material, and the whole lighting and
-audio brief — cheap to decide now, expensive to revisit once a few dozen models exist. Until
-then: keep terminology neutral in code, data and UI, and do not name a real army, nation or
-vehicle anywhere.
+**Near-future conventional war, roughly the 2030s, between fictional states.** Decided ahead of
+asset generation, which is the deadline that mattered: the setting drives every model prompt,
+every material, and the whole lighting and audio brief.
+
+It follows the rules rather than leading them. The drone strike (§3.9) is already load-bearing —
+it is one corner of the matchup triangle — and a contemporary setting simply *has* drones. The
+alternative was a mid-century setting with a weapon that does not belong to it, which is a rule
+bent to fit a mood; here the mood fits the rules.
+
+What this fixes, concretely:
+
+- **Materials:** modern composite and appliqué armour, slat cages, rubber-padded tracks, thermal
+  optics, antenna clusters. Not riveted plate.
+- **Palette:** contemporary digital-pattern camouflage, low-saturation greys, greens and tans.
+  Dust, rain and mud are the only things that dirty a vehicle.
+- **Light and audio:** overcast northern-European daylight as the default preset, turbine and
+  diesel notes, radio chatter as texture rather than language.
+- **Infantry:** plate carriers, ballistic helmets, optics on rifles.
+
+What stays forbidden, exactly as before: **no real army, nation, flag, insignia or identifiable
+vehicle**, anywhere in code, data, UI or assets. The sides are fictional and stay fictional.
+Era-neutrality in the *rules* also stands — nothing in `core/` encodes a period, and the unit
+names in §3.6 remain role labels. The setting is an art-direction decision, not a rules one.
 
 ---
 
@@ -64,8 +79,45 @@ This section is the game. It is written out in full because it is the part that 
   Facing exists solely to feed the armour model.
 - Logical coordinates are integer `(x, y)`. World space maps to `(x, 0, y)` in Godot; the camera
   supplies the isometric look, the grid itself is axis-aligned. Never bake the 45° into the data.
-- Range and vision use **Euclidean radius**, compared as squared distance to avoid `sqrt`:
-  `dx*dx + dy*dy <= r*r`.
+**Range and vision are measured differently, and that is deliberate.**
+
+| | shape | test |
+| --- | --- | --- |
+| weapon range | Euclidean circle | `dx*dx + dy*dy <= r*r` — squared, never `sqrt` |
+| vision | Manhattan diamond | `abs(dx) + abs(dy) <= r` |
+
+A gun fires in a straight line, so its reach is a circle. A scout covers ground on foot, and on a
+4-directional grid "three tiles away" means three *moves* away — a diamond. Vision therefore has
+the same shape as movement, which is what makes a vision radius legible: it is a step count, not
+an abstract distance.
+
+Confirmed against the reference, which does exactly this (§4). Two consequences worth stating
+because they are easy to mistake for bugs:
+
+- **The two shapes disagree on diagonals, and a unit can have a target in range that it cannot
+  see.** At radius 5 the circle covers 81 tiles and the diamond 61; a tile at `(3, 4)` is inside
+  a range-5 circle and outside a vision-5 diamond. Since firing requires visibility, the effective
+  firing envelope is the *intersection* of the two.
+- **This is what gives §3.9's drone visibility check its teeth.** It was inert while both shapes
+  were circles of radius 5.
+
+A diamond of radius `r` is always contained in the circle of radius `r`, so **the intersection is
+just the vision diamond** wherever vision is the tighter of the two. In tile counts, for a unit
+firing on what it can see by itself, with no spotter:
+
+| class | range | vision | envelope was | is now | |
+| --- | --- | --- | --- | --- | --- |
+| infantry (rifle) | 3 | 5 | 29 | **29** | unchanged |
+| light vehicle | 3 | 3 | 29 | 25 | −4 |
+| tank | 4 | 4 | 49 | 41 | −8 |
+| artillery | 5 | 3 | 29 | 25 | −4 |
+| drone strike | 5 | 5 | 81 | 61 | −20 |
+
+**Infantry is the only class this does not touch**, because it is the only one that sees further
+than it shoots. Everything else now has corners of its own weapon envelope that it cannot use
+unaided. That is the same argument §3.3.1 makes about retaliation, arriving from a different
+direction: the rifle squad forward of the line is what lets the rest of your force use its full
+reach, and killing the enemy's spotters shrinks their guns rather than merely blinding them.
 
 ### 3.2 Action points
 
@@ -236,8 +288,9 @@ will land in **before** the player commits.
 
 ### 3.5 Vision and fog of war
 
-- Each unit has a `vision` radius. Infantry sees furthest (5), artillery least (3) — scouts are
-  infantry, not vehicles.
+- Each unit has a `vision` radius, measured as a Manhattan diamond (§3.1) — a step count on the
+  4-directional grid, not the same shape as weapon range. Infantry sees furthest (5), artillery
+  least (3) — scouts are infantry, not vehicles.
 - Every player keeps **two grids**: `visible` (in someone's vision right now) and `seen` (ever
   observed — remembered terrain, drawn dimmed, without live unit positions).
 - Visibility is recomputed for the active player from scratch at the start of their turn and after
@@ -345,12 +398,15 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
 The assault squad (#1) is otherwise identical to the rifle squad. What separates it is a
 **drone strike**: a separate action, not a modifier on its normal attack.
 
-**The visibility requirement below currently has no bite, and that is worth knowing.** The assault
-squad's vision is 5 and the drone's range is 5, and vision is a plain radius with no line-of-sight
-occlusion — so any target a drone can reach is already inside the squad's own vision. The check is
-kept because it states the intent and because it starts mattering the moment those numbers
-diverge (a longer drone range, a shorter infantry vision, or occlusion ever being added). Do not
-read it as protection the game is currently relying on.
+**The visibility requirement below is real, and it is real because of geometry rather than
+numbers.** The squad's vision and the drone's range are both 5 — but range is a circle and vision
+is a diamond (§3.1), so the drone out-reaches the squad's own eyes on every diagonal. A target at
+`(3, 4)` is inside the drone's range and outside the squad's vision, and the strike is refused
+unless *someone else* is spotting it.
+
+That is the intended shape of the action: the longest reach in the game is also the one most
+dependent on the rest of your force. An earlier version of this document noted the check had no
+bite, which was true while both shapes were circles.
 
 ```
 Drone strike
@@ -408,17 +464,33 @@ map says, whereas an objective hold is a condition the map opted into. In practi
 always name the same winner — a player who has just lost their last unit is not holding anything —
 so this rule exists to make the rare case deterministic rather than to express a preference.
 
-**Open question, deliberately left open:** if two players simultaneously satisfy the objective
-condition in a three-player match, the lower player index currently wins. That is index order, not
-a rule. It needs a real answer — most objectives held, or a shared draw — before three-player maps
-with a low `hold_target` are designed.
+**The objective condition is checked for one player only: the one whose turn just ended.**
+Elimination is still checked globally — a player with no units is out whoever was playing — but an
+objective win is claimed, not awarded, and you claim it on your own turn.
+
+This closes what used to be an open question here. If two players both held enough objectives, the
+lower player index won, which is loop order rather than a rule. Rather than pick a tie-break, the
+tie is made unreachable: only one player can ever be the one whose turn just ended, so two players
+can never claim on the same check.
+
+The side effect is the better half of the change. Capturing the winning objective no longer ends
+the match on the spot — you have to still be holding it when your next turn ends, and every
+opponent gets a full round to take it back or kill the engineer standing on it. A victory you have
+to survive is worth more than one you trigger.
 
 ### 3.11 Mines
 
 - Laid by engineers, invisible to everyone except the owner.
-- A mine becomes visible to a player once one of their units passes near it — visibility is
-  **per player**, tracked on the mine, exactly like tile fog.
+- **Only an engineer finds an enemy mine**, and it finds one within its own `vision` radius —
+  the same diamond as tile fog (§3.1), so a revealed mine is always on a tile you can actually
+  see. Visibility is **per player**, tracked on the mine, exactly like tile fog.
 - Driving onto an unrevealed mine detonates it.
+
+The engineer restriction is the reference's rule and it is adopted deliberately (§4). It is what
+makes a minefield a threat rather than an inconvenience: without a sapper leading, a column drives
+in blind, and the engineer finally has a reason to be at the front of the advance rather than
+behind it. The trade is that the radius is the engineer's full vision (3) rather than one tile —
+fewer units can search, but the one that can, searches properly.
 
 ### 3.12 Weather, time of day, and ground state
 
@@ -473,13 +545,47 @@ Two rules about using it:
   knowingly departs, it says so. When you consult it and find something surprising, record the
   finding in this file rather than silently matching or silently ignoring it.
 
-### Known open questions
+### Findings from the reference
 
-- **Tank → artillery damage.** The original quarters it, which inverts the expected relationship
-  (an unarmoured, immobile gun ought to be easy meat for a tank). Left at ×1.0 here. Do not
-  "fix" this in either direction without a playtest.
-- **Vision shape.** Euclidean radius here. Confirm against the original before tuning vision
-  values, since a diamond and a circle of the same radius are very different maps.
+- **Tank → artillery damage is quartered in the original — confirmed, and deliberately not
+  adopted.** `class_3.method_160` carries a distinct `>>= 2` branch for attacker `TANK` against
+  target `ARTILLERY`, separate from the `÷4` that both tanks and artillery take against infantry.
+  This project stays at ×1.0, and the reason is now stronger than the original "an unarmoured
+  immobile gun ought to be easy meat" instinct: **retaliation (§3.3.1) did not exist when that
+  note was written.** With both rules together, a tank firing on a field gun deals the floor of 10
+  and takes a full-strength answer from a 200-attack weapon — roughly 120 through medium frontal
+  armour. Tanks would strictly lose every exchange they started against artillery, nothing but
+  infantry could threaten a gun, and the §3.9 triangle would collapse. Two rules that are each
+  defensible alone are not defensible together; this is the one that goes.
+
+- **Vision is a Manhattan diamond, weapon range is a Euclidean circle — confirmed and adopted**
+  (§3.1). This closes the open question that used to sit here. Vision is not a distance comparison
+  at all in the original: `class_1.method_121` is a recursive 4-directional flood fill with a
+  decrementing budget seeded from the unit's `vision`, and its only guard is a bounds check — no
+  terrain, no line-of-sight occlusion. A tile is reached with budget `vision − manhattan_distance`,
+  so it is revealed exactly when `|dx| + |dy| <= vision`. Range, by contrast, is
+  `method_175(x, y) <= range²` in `class_3.method_164` — a true squared-Euclidean test, and the
+  original's own UI draws it as a 360° arc. The two metrics are genuinely different in the source;
+  this is not a decompilation artefact.
+
+- **The original has no "visible now" grid, and this project deliberately does.** `field_172` is a
+  single permanent *seen* grid: it is initialised to fogged and every later write clears it, never
+  re-fogs. Enemy unit rendering and target selection test that same grid — so in the original, once
+  a tile has ever been revealed, units standing on it are visible **forever**. §3.5's two grids
+  (`visible` and `seen`) are a departure, and the one this game's hidden information rests on.
+  Remembered terrain without live unit positions is the entire point of the fog model here.
+
+- **Only engineers detect enemy mines** (`class_1`, guarded on `field_250 == 4`). Adopted (§3.11).
+  One deliberate difference: the original tests that radius as a Euclidean circle even though its
+  fog is a diamond, which can reveal a mine on a tile the player cannot see. This project uses the
+  vision diamond for both, so a revealed mine is always on a visible tile.
+
+- **The original's own stat tables violate two of §3.6's invariants.** Its max-AP table makes the
+  **heavy tank the fastest** of all four tanks (56, against the medium's 44), and its armour table
+  has **rear thicker than side on every tank**. §3.6 rejects both on purpose — mobility must pay
+  for armour, and flanking must be rewarded or the game's main skill expression inverts. Recorded
+  here so the departure stays a known one rather than being "corrected" toward the reference by
+  someone checking the tables later.
 
 - **Mines detonate on traversal, and mine damage is a roll.** Confirmed against `class_1.method_105`,
   which is called from the movement driver after *every* single-tile hop rather than once at the

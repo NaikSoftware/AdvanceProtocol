@@ -44,13 +44,22 @@ static func held_by(state: BattleState, player: int) -> int:
 			n += 1
 	return n
 
-static func check_victory(state: BattleState, hold_target: int) -> Array[Events.BattleEvent]:
+static func check_victory(state: BattleState, player: int, hold_target: int) -> Array[Events.BattleEvent]:
+	## §3.10: умову цілей заявляє рівно один гравець — той, чий хід щойно
+	## завершився. Гравець передається явно, а не читається зі state.active_player,
+	## бо «чий хід закінчився» — властивість моменту виклику, а не стану: викликач
+	## робить це ДО advance_player(), і функція не має залежати від того порядку.
+	##
+	## Перебір усіх гравців тут раніше означав, що при двох утримувачах перемагав
+	## менший індекс — порядок циклу замість правила. Нічия не розвʼязується, а
+	## стає недосяжною: бути тим, чий хід щойно завершився, може лише один.
+	## Побічний ефект — кращий за саме виправлення: узяту ціль треба ще втримати
+	## до власного наступного кінця ходу, і кожен супротивник встигає її відбити.
 	if state.is_over() or hold_target <= 0:
 		return []
-	for p in state.player_count:
-		if state.eliminated[p]:
-			continue
-		if held_by(state, p) >= hold_target:
-			state.winner = p
-			return [Events.MatchEnded.new(p)] as Array[Events.BattleEvent]
-	return []
+	if state.eliminated[player]:
+		return []
+	if held_by(state, player) < hold_target:
+		return []
+	state.winner = player
+	return [Events.MatchEnded.new(player)] as Array[Events.BattleEvent]

@@ -19,7 +19,13 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	# кінця ходу, елімінація вирішує першою — той самий детермінований
 	# tie-break, що й усередині check_elimination() між одним переможцем і
 	# нічиєю.
-	out.append_array(Objectives.check_victory(state, state.objective_hold_target))
+	#
+	# §3.10: елімінація лишається глобальною — гравець без юнітів вибуває, чий би
+	# хід не йшов, — а умову цілей заявляє рівно один гравець. Виклик стоїть ДО
+	# advance_player() нижче, тож state.active_player тут — це той, чий хід щойно
+	# завершився, і саме він передається явно. Пересунути цей рядок за
+	# advance_player() означало б перевіряти вже наступного гравця.
+	out.append_array(Objectives.check_victory(state, state.active_player, state.objective_hold_target))
 	if state.is_over():
 		return out
 	var previous: int = state.active_player
