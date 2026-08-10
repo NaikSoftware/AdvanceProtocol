@@ -36,8 +36,8 @@ The detail behind §3.5 and §3.11 of CLAUDE.md — what each player can see, an
 this document lean on *not* being seen, and all three weaken as a match goes on:
 
 - **§3.3.1's impunity** — "an attacker the defender cannot see fires with impunity" — now means
-  ground the defender has **never scouted**. That is most of the map on turn one and very little of
-  it by turn ten. Artillery firing without reply is an opening-game weapon, not a permanent one.
+  ground the defender has **never scouted**, and that only ever shrinks. How quickly depends on map
+  size against roster size, which is a map-design question and is not settled here.
 - **The firing envelope** is the range circle intersected with `seen`, not with the vision diamond.
   The diamond still decides how fast the map opens, which is why infantry's 5 matters — but it no
   longer decides what you may shoot.
@@ -47,22 +47,6 @@ this document lean on *not* being seen, and all three weaken as a match goes on:
 None of that is a defect; it is what "scouted stays open" means. It is written down so nobody
 later reads §3.3.1 and concludes vision is doing more work than it is.
 
-**And the first-order consequence, which is bigger than all three and must not be discovered in
-playtest.** `seen` grows by roughly `(2·vision + 1) × path_length` tiles per moving unit per turn.
-With a handful of units of vision 3–5 each covering three to six tiles a turn, `seen` approaches
-the whole board within a few turns. **From that point the fog hides only mines.** Every enemy unit
-is permanently visible, shootable, inspectable and able to retaliate, with no spotter anywhere.
-
-Read plainly: **hiding enemy positions is an opening mechanic, not a standing one.** Retreating
-into fog is impossible. Ambush is impossible. What the handover gate protects in the late game is
-mine locations, AP residue and intent — not position. That is a real narrowing of pillar 2, and it
-is the direct price of making reconnaissance permanent; the reference makes the same trade.
-
-It is recorded rather than corrected, because correcting it means re-fogging tiles, which takes
-back what a dead scout bought and is exactly the model this project moved away from. If playtest
-says the late game is too transparent, the dial to reach for is **map size against roster size** —
-a board nobody can sweep keeps unscouted ground on it — not a decay rule on `seen`. No maps exist
-yet, so the crossover turn is unmeasured.
 **`ERR_TARGET_NOT_VISIBLE` no longer describes its own condition.** It now means "the target stands
 on ground you have never scouted". The identifier is kept because localisation may key on it, but
 the UA and EN strings must be written against the *meaning*, not the name — "you have not scouted
