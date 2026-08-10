@@ -399,6 +399,20 @@ Victory, checked at end of turn:
 Last player standing wins. In 3-player games an eliminated player is skipped in the turn order,
 and the match continues between the remaining two.
 
+**A map with no objective condition sets `hold_target` to 0**, and then only annihilation can end
+the match. Most maps will set it; a pure annihilation map will not.
+
+**When both conditions resolve on the same end of turn, elimination decides.** Not because it is
+better, but because it is unconditional: a player with no units is out of the match whatever the
+map says, whereas an objective hold is a condition the map opted into. In practice the two almost
+always name the same winner — a player who has just lost their last unit is not holding anything —
+so this rule exists to make the rare case deterministic rather than to express a preference.
+
+**Open question, deliberately left open:** if two players simultaneously satisfy the objective
+condition in a three-player match, the lower player index currently wins. That is index order, not
+a rule. It needs a real answer — most objectives held, or a shared draw — before three-player maps
+with a low `hold_target` are designed.
+
 ### 3.11 Mines
 
 - Laid by engineers, invisible to everyone except the owner.
