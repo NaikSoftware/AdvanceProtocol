@@ -1,16 +1,16 @@
 # Combat
 
-The detail behind §3.3, §3.3.1, §3.4 and §3.7 of CLAUDE.md — the damage formula, retaliation, directional armour and veterancy.
+The detail behind §3.3, §3.3.1, §3.4 and §3.7 of CLAUDE.md — the damage formula, retaliation, directional armour and experience.
 
 [back to CLAUDE.md](../../CLAUDE.md)
 
-Damage, in order. `A` = attacker's `attack`, `V` = attacker's class veterancy level (§3.7):
+Damage, in order. `A` = attacker's `attack`, `V` = attacker's class experience level (§3.7):
 
 ```
 dmg  = 0.75*A + rand(0, A/4)
 
 if attacker.class != ENGINEER:
-    dmg += A * V / 8                        # +12.5% per veterancy level
+    dmg += A * V / 8                        # +12.5% per experience level
 
 if attacker.class == INFANTRY:
     if dist_sq <= 2: dmg *= 4               # close assault — grenades, demolition charges
@@ -107,7 +107,7 @@ This reshapes the economics of shooting, and that is the point:
 - Flanking costs more than it did: closing to a side or rear arc usually puts you inside the
   target's own range.
 
-Retaliation damage feeds the retaliator's class veterancy pool like any other damage.
+Retaliation damage feeds the retaliator's class experience pool like any other damage.
 
 ## Directional armour
 
@@ -138,7 +138,7 @@ cross-multiplied form is kept because it is exact, has no division, and cannot d
 Flanking is the main skill expression in the game. The UI must always show which sector a shot
 will land in **before** the player commits.
 
-## Veterancy
+## Experience
 
 Progression is **per unit class, per player**, and it is earned by fighting, not bought.
 
@@ -154,6 +154,6 @@ TANK          1000,  2500,  6250, 15625, 39063
 ARTILLERY     2000,  5000, 12500, 31250, 78125
 ```
 
-- Engineers have no veterancy (they deal no damage).
-- In skirmish, veterancy is **per match** — it starts at 0 and does not persist between matches.
+- Engineers have no experience (they deal no damage).
+- In skirmish, experience is **per match** — it starts at 0 and does not persist between matches.
   Persistent profiles belong with the campaign, not before it.

@@ -52,7 +52,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
+	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var dmg: int = Rules.compute_damage(state.rng, a, t, level, sector, dist_sq)
 
 	a.exhaust()
@@ -96,7 +96,7 @@ static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit
 
 	var sector: int = Rules.armour_sector(original_attacker.facing, original_attacker.pos, target.pos)
 	var dist_sq: int = Rules.distance_sq(target.pos, original_attacker.pos)
-	var level: int = state.veterancy[target.owner].level_of(target.unit_class())
+	var level: int = state.experience[target.owner].level_of(target.unit_class())
 	var dmg: int = Rules.compute_damage(state.rng, target, original_attacker, level, sector, dist_sq)
 
 	target.exhaust()
@@ -112,10 +112,10 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	target.hp -= applied
 	out.append(Events.DamageDealt.new(target.id, applied, target.hp))
 
-	var before: int = state.veterancy[attacker.owner].level_of(attacker.unit_class())
-	var after: int = state.veterancy[attacker.owner].add_damage(attacker.unit_class(), applied)
+	var before: int = state.experience[attacker.owner].level_of(attacker.unit_class())
+	var after: int = state.experience[attacker.owner].add_damage(attacker.unit_class(), applied)
 	if after != before:
-		out.append(Events.VeterancyGained.new(attacker.owner, attacker.unit_class(), after))
+		out.append(Events.ExperienceGained.new(attacker.owner, attacker.unit_class(), after))
 
 	if not target.is_alive():
 		out.append(Events.UnitDestroyed.new(target.id, target.pos))
@@ -133,6 +133,6 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
+	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var bounds: Vector2i = Rules.damage_bounds(a, t, level, sector, dist_sq)
 	return {"sector": sector, "min": bounds.x, "max": bounds.y}

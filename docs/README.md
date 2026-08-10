@@ -9,7 +9,7 @@ CLAUDE.md section it expands.
 | file | the question it answers |
 | --- | --- |
 | [rules/movement-and-terrain.md](rules/movement-and-terrain.md) | How does a unit cross the board, what does a tile cost, and what do the two movement zones mean? (§3.1, §3.2, §3.12) |
-| [rules/combat.md](rules/combat.md) | How much damage does a shot do, who shoots back, which armour plate is hit, and how does veterancy change it? (§3.3, §3.3.1, §3.4, §3.7) |
+| [rules/combat.md](rules/combat.md) | How much damage does a shot do, who shoots back, which armour plate is hit, and how does experience change it? (§3.3, §3.3.1, §3.4, §3.7) |
 | [rules/units.md](rules/units.md) | What is in the roster, what are its invariants, and what can an engineer or a drone squad do? (§3.6, §3.8, §3.9) |
 | [rules/vision-and-fog.md](rules/vision-and-fog.md) | What can each player see, what is remembered, and who finds a mine? (§3.5, §3.11) |
 | [rules/objectives.md](rules/objectives.md) | How is a match won, and what happens when two conditions resolve at once? (§3.10) |

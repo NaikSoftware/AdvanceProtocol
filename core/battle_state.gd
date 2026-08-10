@@ -15,7 +15,7 @@ var turn_number: int = 1
 var seed_value: int = 0
 var rng: RandomNumberGenerator = null
 var vision: Array[Vision] = []
-var veterancy: Array[Veterancy] = []
+var experience: Array[Experience] = []
 var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
 var mines: Array[Mines.Mine] = []
@@ -37,7 +37,7 @@ static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleSt
 	s.rng.seed = p_seed
 	for i in p_player_count:
 		s.vision.append(Vision.create(p_board.width, p_board.height))
-		s.veterancy.append(Veterancy.create())
+		s.experience.append(Experience.create())
 		s.eliminated.append(false)
 	return s
 

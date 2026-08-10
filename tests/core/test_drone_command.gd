@@ -135,4 +135,4 @@ func test_drone_damage_feeds_infantry_pool() -> void:
 	t.hp = 10_000
 	state.begin_turn()
 	DroneCommand.create(a.id, t.id).apply(state)
-	assert_true(state.veterancy[0].xp[UnitTypes.UnitClass.INFANTRY] > 0)
+	assert_true(state.experience[0].xp[UnitTypes.UnitClass.INFANTRY] > 0)

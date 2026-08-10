@@ -46,7 +46,7 @@ core/                           # чисті правила, без нодів
   rules.gd                      # roll, entry_cost, armour_sector, damage
   pathing.gd                    # Dijkstra flood fill, дві зони, реконструкція шляху
   vision.gd                     # visible/seen на гравця
-  veterancy.gd                  # пули XP, пороги, рівні
+  experience.gd                  # пули XP, пороги, рівні
   objectives.gd                 # маркери цілей, захоплення, умова перемоги
   mines.gd                      # укладання, розкриття по гравцях, підрив
   events.gd                     # усі типи BattleEvent
@@ -1046,7 +1046,7 @@ git commit -m "feat(core): integer armour sector resolution"
 - Consumes: `Unit`, `UnitTypes`, `Rules.roll`, `Rules.armour_sector`
 - Produces:
   - `Rules.MIN_DAMAGE: int = 10`
-  - `Rules.compute_damage(rng, attacker: Unit, target: Unit, veterancy_level: int, sector: int, dist_sq: int) -> int`
+  - `Rules.compute_damage(rng, attacker: Unit, target: Unit, experience_level: int, sector: int, dist_sq: int) -> int`
   - `Rules.drone_damage(rng) -> int`
   - `Rules.distance_sq`, `Rules.in_radius` — **дальність зброї**, евклідове коло
   - `Rules.distance_manhattan`, `Rules.in_vision_diamond` — **огляд**, манхеттенський ромб
@@ -1075,10 +1075,10 @@ func _rng(s: int) -> RandomNumberGenerator:
 func _u(type_id: int) -> Unit:
 	return Unit.create(1, type_id, 0, Vector2i.ZERO, 0)
 
-func _samples(attacker_type: int, target_type: int, vet: int, sector: int, dist_sq: int) -> Array[int]:
+func _samples(attacker_type: int, target_type: int, pool: int, sector: int, dist_sq: int) -> Array[int]:
 	var out: Array[int] = []
 	for s in 200:
-		out.append(Rules.compute_damage(_rng(s), _u(attacker_type), _u(target_type), vet, sector, dist_sq))
+		out.append(Rules.compute_damage(_rng(s), _u(attacker_type), _u(target_type), pool, sector, dist_sq))
 	return out
 
 func _min(a: Array[int]) -> int:
@@ -1125,17 +1125,17 @@ func test_close_assault_boundary_is_dist_sq_two() -> void:
 	var at_three: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 3)
 	assert_true(_min(at_two) > _min(at_three), "діагональний сусід (dist_sq=2) ще штурм, dist_sq=3 вже ні")
 
-func test_veterancy_adds_one_eighth_of_attack_per_level() -> void:
+func test_experience_adds_one_eighth_of_attack_per_level() -> void:
 	var v0: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 0, UnitTypes.ArmourSector.REAR, 9)
 	var v4: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 4, UnitTypes.ArmourSector.REAR, 9)
 	# 95*4/8 у GDScript — це ціле 47, а у формулі член float: 47.5. Зрізання наприкінці
 	# дає різницю 47 або 48 залежно від дробової частини бази, тож фіксуємо обидва.
 	assert_between(_min(v4) - _min(v0), 47, 48, "+A*V/8 = 47.5")
 
-func test_engineers_get_no_veterancy_bonus() -> void:
+func test_engineers_get_no_experience_bonus() -> void:
 	var v0: Array[int] = _samples(ENGINEER, LIGHT_CAR, 0, UnitTypes.ArmourSector.FRONT, 9)
 	var v5: Array[int] = _samples(ENGINEER, LIGHT_CAR, 5, UnitTypes.ArmourSector.FRONT, 9)
-	assert_eq(_min(v0), _min(v5), "§3.3: інженер не отримує бонусу ветеранства")
+	assert_eq(_min(v0), _min(v5), "§3.3: інженер не отримує бонусу за досвід")
 
 func test_flanking_beats_frontal_fire() -> void:
 	var front: Array[int] = _samples(MEDIUM_TANK, HEAVY_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
@@ -1195,7 +1195,7 @@ func test_damage_is_deterministic_per_seed() -> void:
 const MIN_DAMAGE: int = 10
 
 static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: Unit,
-		veterancy_level: int, sector: int, dist_sq: int) -> int:
+		experience_level: int, sector: int, dist_sq: int) -> int:
 	## §3.3. Порядок множників критичний — не переставляти.
 	var a: int = attacker.attack()
 	var ac: int = attacker.unit_class()
@@ -1204,7 +1204,7 @@ static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: U
 	var dmg: float = 0.75 * float(a) + float(roll(rng, a / 4))
 
 	if ac != UnitTypes.UnitClass.ENGINEER:
-		dmg += float(a * veterancy_level) / 8.0
+		dmg += float(a * experience_level) / 8.0
 
 	if ac == UnitTypes.UnitClass.INFANTRY:
 		if dist_sq <= 2:
@@ -1671,7 +1671,7 @@ git commit -m "feat(core): per-player fog of war with sticky seen grid"
   - `UnitRepaired(unit_id: int, amount: int, hp_left: int)`
   - `ObjectiveCaptured(index: int, owner: int)`
   - `ObjectiveDestroyed(index: int)`
-  - `VeterancyGained(player: int, unit_class: int, level: int)`
+  - `ExperienceGained(player: int, unit_class: int, level: int)`
   - `ApChanged(unit_id: int, ap: int)`
   - `TurnEnded(player: int)`
   - `TurnStarted(player: int, turn_number: int)`
@@ -1790,25 +1790,25 @@ git commit -m "feat(core): battle event vocabulary"
 
 ---
 
-### Task 1.11: `core/veterancy.gd`
+### Task 1.11: `core/experience.gd`
 
 **Files:**
-- Create: `core/veterancy.gd`
-- Test: `tests/core/test_veterancy.gd`
+- Create: `core/experience.gd`
+- Test: `tests/core/test_experience.gd`
 
 **Interfaces:**
 - Consumes: `UnitTypes.UnitClass`
 - Produces:
-  - `Veterancy` (RefCounted, по одному на гравця): `xp: Array[int]` (5 пулів за індексом класу), `level: Array[int]`
-    - `Veterancy.create() -> Veterancy`
-    - `veterancy.add_damage(unit_class: int, amount: int) -> int` — повертає новий рівень; підвищення можливе кілька разів за виклик
-    - `veterancy.level_of(unit_class: int) -> int`
-    - `Veterancy.THRESHOLDS: Dictionary` — пороги з §3.7
+  - `Experience` (RefCounted, по одному на гравця): `xp: Array[int]` (5 пулів за індексом класу), `level: Array[int]`
+    - `Experience.create() -> Experience`
+    - `experience.add_damage(unit_class: int, amount: int) -> int` — повертає новий рівень; підвищення можливе кілька разів за виклик
+    - `experience.level_of(unit_class: int) -> int`
+    - `Experience.THRESHOLDS: Dictionary` — пороги з §3.7
   - Максимальний рівень — 5.
 
 - [ ] **Step 1: Написати падаючий тест**
 
-`tests/core/test_veterancy.gd`:
+`tests/core/test_experience.gd`:
 
 ```gdscript
 extends GutTest
@@ -1818,29 +1818,29 @@ const TANK := UnitTypes.UnitClass.TANK
 const ENG := UnitTypes.UnitClass.ENGINEER
 
 func test_starts_at_zero() -> void:
-	assert_eq(Veterancy.create().level_of(INF), 0)
+	assert_eq(Experience.create().level_of(INF), 0)
 
 func test_first_infantry_threshold_is_150() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	assert_eq(v.add_damage(INF, 149), 0)
 	assert_eq(v.add_damage(INF, 1), 1, "150 сумарно — рівень 1")
 
 func test_threshold_is_subtracted_not_reset() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	v.add_damage(INF, 200)
 	assert_eq(v.xp[INF], 50, "§3.7: пул зменшується на поріг, залишок переноситься")
 
 func test_multiple_levels_in_one_hit() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	assert_eq(v.add_damage(INF, 600), 2, "150 + 375 = 525 <= 600")
 
 func test_caps_at_five() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	assert_eq(v.add_damage(INF, 1_000_000), 5)
 	assert_eq(v.add_damage(INF, 1_000_000), 5, "вище пʼятого не росте")
 
 func test_classes_are_independent() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	v.add_damage(INF, 1500)
 	# Самої лише перевірки рівня мало: перший поріг танка — 1000, тож 500 XP, що
 	# протекли б із піхоти, однаково лишили б рівень 0. Тому 1500 (вистачило б на
@@ -1849,23 +1849,23 @@ func test_classes_are_independent() -> void:
 	assert_eq(v.xp[TANK], 0, "у чужому пулі не має бути жодного XP")
 
 func test_tank_progresses_slower_than_infantry() -> void:
-	var a: Veterancy = Veterancy.create()
-	var b: Veterancy = Veterancy.create()
+	var a: Experience = Experience.create()
+	var b: Experience = Experience.create()
 	a.add_damage(INF, 1000)
 	b.add_damage(TANK, 1000)
 	assert_true(a.level_of(INF) > b.level_of(TANK))
 
 func test_engineers_never_level() -> void:
-	var v: Veterancy = Veterancy.create()
+	var v: Experience = Experience.create()
 	assert_eq(v.add_damage(ENG, 1_000_000), 0, "§3.7: інженери шкоди не завдають і рівнів не мають")
 ```
 
 - [ ] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/veterancy.gd`**
+- [ ] **Step 3: Реалізувати `core/experience.gd`**
 
 ```gdscript
-class_name Veterancy
+class_name Experience
 extends RefCounted
 ## §3.7. Прогрес — на клас і на гравця, за завдану шкоду. У скірміші — на матч.
 
@@ -1882,8 +1882,8 @@ const THRESHOLDS: Dictionary = {
 var xp: Array[int] = [0, 0, 0, 0, 0]
 var level: Array[int] = [0, 0, 0, 0, 0]
 
-static func create() -> Veterancy:
-	return Veterancy.new()
+static func create() -> Experience:
+	return Experience.new()
 
 func level_of(unit_class: int) -> int:
 	return level[unit_class]
@@ -1905,9 +1905,9 @@ func add_damage(unit_class: int, amount: int) -> int:
 - [ ] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
-./run_tests.sh -gtest=res://tests/core/test_veterancy.gd
-git add core/veterancy.gd tests/core/test_veterancy.gd
-git commit -m "feat(core): per-class veterancy pools and thresholds"
+./run_tests.sh -gtest=res://tests/core/test_experience.gd
+git add core/experience.gd tests/core/test_experience.gd
+git commit -m "feat(core): per-class experience pools and thresholds"
 ```
 
 ---
@@ -1919,9 +1919,9 @@ git commit -m "feat(core): per-class veterancy pools and thresholds"
 - Test: `tests/core/test_battle_state.gd`
 
 **Interfaces:**
-- Consumes: `Board`, `Unit`, `Vision`, `Veterancy`, `Events`
+- Consumes: `Board`, `Unit`, `Vision`, `Experience`, `Events`
 - Produces:
-  - `BattleState` (RefCounted): `board: Board`, `units: Dictionary` (`int -> Unit`), `player_count: int`, `active_player: int`, `turn_number: int`, `rng: RandomNumberGenerator`, `seed_value: int`, `vision: Array[Vision]`, `veterancy: Array[Veterancy]`, `eliminated: Array[bool]`, `winner: int` (−1 доки триває), `_next_unit_id: int`
+  - `BattleState` (RefCounted): `board: Board`, `units: Dictionary` (`int -> Unit`), `player_count: int`, `active_player: int`, `turn_number: int`, `rng: RandomNumberGenerator`, `seed_value: int`, `vision: Array[Vision]`, `experience: Array[Experience]`, `eliminated: Array[bool]`, `winner: int` (−1 доки триває), `_next_unit_id: int`
     - `BattleState.create(board: Board, player_count: int, seed_value: int) -> BattleState`
     - `state.add_unit(type_id: int, owner: int, pos: Vector2i, facing: int) -> Unit`
     - `state.unit_at(p: Vector2i) -> Unit` (або `null`)
@@ -2047,7 +2047,7 @@ var turn_number: int = 1
 var seed_value: int = 0
 var rng: RandomNumberGenerator = null
 var vision: Array[Vision] = []
-var veterancy: Array[Veterancy] = []
+var experience: Array[Experience] = []
 var eliminated: Array[bool] = []
 ## Матч триває, доки winner == NO_WINNER. DRAW потрібен окремим значенням, бо −1
 ## уже зайняте «ще триває»: без нього нічия була б невідрізненна від незавершеної гри.
@@ -2068,7 +2068,7 @@ static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleSt
 	s.rng.seed = p_seed
 	for i in p_player_count:
 		s.vision.append(Vision.create(p_board.width, p_board.height))
-		s.veterancy.append(Veterancy.create())
+		s.experience.append(Experience.create())
 		s.eliminated.append(false)
 	return s
 
@@ -2397,14 +2397,14 @@ git commit -m "feat(core): move and end-turn commands"
 
 ---
 
-### Task 1.14: `FireCommand` — постріл, ветеранство, знищення
+### Task 1.14: `FireCommand` — постріл, досвід, знищення
 
 **Files:**
 - Create: `core/commands/fire_command.gd`
 - Test: `tests/core/test_fire_command.gd`
 
 **Interfaces:**
-- Consumes: `BattleState`, `Rules`, `Veterancy`, `Events`
+- Consumes: `BattleState`, `Rules`, `Experience`, `Events`
 - Produces:
   - `FireCommand.create(unit_id: int, target_id: int) -> FireCommand`
   - `FireCommand.preview(state: BattleState, unit_id: int, target_id: int) -> Dictionary` — `{"sector": int, "min": int, "max": int}`, для показу прогнозу **до** підтвердження (§3.4: сектор має бути видно завжди)
@@ -2503,7 +2503,7 @@ func test_damage_feeds_the_attackers_class_pool() -> void:
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
 	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
-	assert_true(state.veterancy[0].xp[UnitTypes.UnitClass.TANK] > 0)
+	assert_true(state.experience[0].xp[UnitTypes.UnitClass.TANK] > 0)
 
 func test_preview_reports_sector_and_bounds() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
@@ -2512,7 +2512,7 @@ func test_preview_reports_sector_and_bounds() -> void:
 	assert_eq(p["sector"], UnitTypes.ArmourSector.REAR)
 	# Конкретні числа, а не `min <= max`: остання перевірка не може впасти за
 	# побудовою, бо обидва значення походять з одного джерела. Середній танк (95)
-	# по кормі легкої машини (броня 10), ветеранство 0:
+	# по кормі легкої машини (броня 10), досвід 0:
 	#   мін = 0.75*95 + 0 − (0.75*10 + rand_max(2)) = 61.75 → 61
 	#   макс = 0.75*95 + rand_max(23) − (0.75*10 + 0)  = 86.75 → 86
 	assert_eq(p["min"], 61, "нижня межа — нульовий кидок атаки і максимальний кидок броні")
@@ -2593,7 +2593,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
+	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var dmg: int = Rules.compute_damage(state.rng, a, t, level, sector, dist_sq)
 
 	a.exhaust()
@@ -2609,10 +2609,10 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	target.hp -= applied
 	out.append(Events.DamageDealt.new(target.id, applied, target.hp))
 
-	var before: int = state.veterancy[attacker.owner].level_of(attacker.unit_class())
-	var after: int = state.veterancy[attacker.owner].add_damage(attacker.unit_class(), applied)
+	var before: int = state.experience[attacker.owner].level_of(attacker.unit_class())
+	var after: int = state.experience[attacker.owner].add_damage(attacker.unit_class(), applied)
 	if after != before:
-		out.append(Events.VeterancyGained.new(attacker.owner, attacker.unit_class(), after))
+		out.append(Events.ExperienceGained.new(attacker.owner, attacker.unit_class(), after))
 
 	if not target.is_alive():
 		out.append(Events.UnitDestroyed.new(target.id, target.pos))
@@ -2631,7 +2631,7 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var level: int = state.veterancy[a.owner].level_of(a.unit_class())
+	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var bounds: Vector2i = Rules.damage_bounds(a, t, level, sector, dist_sq)
 	return {"sector": sector, "min": bounds.x, "max": bounds.y}
 ```
@@ -2795,7 +2795,7 @@ func test_drone_damage_feeds_infantry_pool() -> void:
 	t.hp = 10_000
 	state.begin_turn()
 	DroneCommand.create(a.id, t.id).apply(state)
-	assert_true(state.veterancy[0].xp[UnitTypes.UnitClass.INFANTRY] > 0)
+	assert_true(state.experience[0].xp[UnitTypes.UnitClass.INFANTRY] > 0)
 ```
 
 - [ ] **Step 2: Запустити — має впасти**
@@ -3455,7 +3455,7 @@ func _populated_state() -> BattleState:
 	s.add_unit(11, 2, Vector2i(2, 6), 0)
 	Mines.place(s, Vector2i(5, 5), 0)
 	Objectives.add(s, Vector2i(4, 0), 1)
-	s.veterancy[0].add_damage(UnitTypes.UnitClass.TANK, 1200)
+	s.experience[0].add_damage(UnitTypes.UnitClass.TANK, 1200)
 	s.turn_number = 4
 	s.active_player = 2
 	return s
@@ -3471,7 +3471,7 @@ func test_round_trip_preserves_everything() -> void:
 	assert_eq(b.active_player, 2)
 	assert_eq(b.mines.size(), 1)
 	assert_eq(b.objectives.size(), 1)
-	assert_eq(b.veterancy[0].level_of(UnitTypes.UnitClass.TANK), a.veterancy[0].level_of(UnitTypes.UnitClass.TANK))
+	assert_eq(b.experience[0].level_of(UnitTypes.UnitClass.TANK), a.experience[0].level_of(UnitTypes.UnitClass.TANK))
 
 func test_unit_fields_survive() -> void:
 	var a: BattleState = _populated_state()
@@ -3550,9 +3550,9 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
-	var veterancy: Array = []
-	for vet in state.veterancy:
-		veterancy.append({"xp": vet.xp, "level": vet.level})
+	var experience: Array = []
+	for pool in state.experience:
+		experience.append({"xp": pool.xp, "level": pool.level})
 	return {
 		"version": VERSION,
 		"board": {
@@ -3568,7 +3568,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"eliminated": state.eliminated,
 		"next_unit_id": state._next_unit_id,
 		"units": units, "mines": mines, "objectives": objectives,
-		"vision": vision, "veterancy": veterancy,
+		"vision": vision, "experience": experience,
 	}
 ```
 
@@ -4194,7 +4194,7 @@ func test_every_error_key_is_translated() -> void:
 
 Пауза: продовжити, зберегти й вийти, налаштування, здатися. Збереження — через `BattleSerializer.save_to("user://save.json")`; «Продовжити» в головному меню читає цей файл.
 
-Екран результату: переможець, підсумок по гравцях (втрати, завдана шкода, утримані цілі, досягнуті рівні ветеранства), кнопки «Реванш» (той самий матч, новий сід) і «В меню».
+Екран результату: переможець, підсумок по гравцях (втрати, завдана шкода, утримані цілі, досягнуті рівні досвіду), кнопки «Реванш» (той самий матч, новий сід) і «В меню».
 
 Важливо: пауза не має показувати нічого, що належить неактивному гравцеві. Це той самий інваріант, що й гейт передачі.
 
@@ -4218,7 +4218,7 @@ func test_every_error_key_is_translated() -> void:
 | 4.4 | Дронова дія | `game/ui/drone_button.gd` | окрема кнопка, а не режим стрільби; показує залишок дронів і радіус 5; ціль-піхота підсвічена як заборонена з причиною |
 | 4.5 | Міни в інтерфейсі | `game/battle/mine_layer.gd` | свої міни видно завжди, розкриті чужі — окремою іконкою, нерозкриті не рендеряться взагалі й не мають жодного натяку в жодному шарі |
 | 4.6 | Цілі та їхній стан | `game/battle/objective_view.gd` | значок власника, стан «зруйновано»; ціль зʼявляється лише коли `seen_by[active_player]` |
-| 4.7 | Індикатор ветеранства | `game/ui/hud.gd` | рівень класу активного гравця видно в інспекторі, підвищення показується подією |
+| 4.7 | Індикатор досвіду | `game/ui/hud.gd` | рівень класу активного гравця видно в інспекторі, підвищення показується подією |
 | 4.8 | Три гравці | `game/battle/battle_screen.gd` | усунутий гравець пропускається; гейт передачі називає правильного наступного; матч триває між двома, що лишились |
 | 4.9 | Умова перемоги по цілях | `game/battle/battle_screen.gd` | «утримай N з M» перевіряється в кінці ходу, HUD показує лічильник для активного гравця |
 | 4.10 | Комплект карт | `maps/*.tres` | не менше 5 карт: мостова, міська, відкрита, лісова, гірська; кожна грається на 2 і на 3 гравці |
@@ -4309,7 +4309,7 @@ func test_every_error_key_is_translated() -> void:
 | §3.4 напрямна броня | 1.6; показ сектора до підтвердження — 2.7, 2.8 |
 | §3.5 огляд і туман, гейт передачі | 1.9; туман ховає юнітів, а не місцевість — 2.3, 2.4; гейт — 2.9 |
 | §3.6 класи й ростер, інваріант броні, порядок мобільності танків | 1.2 |
-| §3.7 ветеранство | 1.11 |
+| §3.7 досвід | 1.11 |
 | §3.8 верби інженера | 1.17; інтерфейс — 4.2, 4.3 |
 | §3.9 дрон | 1.15; інтерфейс і показ боєзапасу — 4.4, 2.4 |
 | §3.10 цілі й перемога | 1.17; інтерфейс — 4.6, 4.9 |
@@ -4321,7 +4321,7 @@ func test_every_error_key_is_translated() -> void:
 | §8 рендер і бюджет | 2.2–2.5, 5.5, 5.9, 5.11, 7.5–7.7 |
 | §9 конвенції, локалізація, тести | Global Constraints, 3.1, тести в кожному завданні Фази 1 |
 
-**Прогалини, свідомо залишені поза планом:** ШІ-опонент, кампанія, онлайн — §2 виносить їх за межі v1. Персистентні профілі ветеранства — §3.7 привʼязує їх до кампанії.
+**Прогалини, свідомо залишені поза планом:** ШІ-опонент, кампанія, онлайн — §2 виносить їх за межі v1. Персистентні профілі досвіду — §3.7 привʼязує їх до кампанії.
 
 **Узгодженість типів:** `attack_range` (не `range`) скрізь; `unit_class` (не `class`); `Pathing.Zones.cost_to` повертає `-1` для недосяжного, і всі споживачі спершу питають `can_reach`; `validate()` всюди повертає `String` (порожній = дозволено); `apply()` всюди повертає `Array[Events.BattleEvent]`; `FireCommand._resolve_damage` — єдиний шлях нанесення шкоди, спільний для пострілу й дрона.
 

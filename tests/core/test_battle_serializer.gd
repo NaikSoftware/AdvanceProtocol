@@ -10,7 +10,7 @@ func _populated_state() -> BattleState:
 	s.add_unit(11, 2, Vector2i(2, 6), 0)
 	Mines.place(s, Vector2i(5, 5), 0)
 	Objectives.add(s, Vector2i(4, 0), 1)
-	s.veterancy[0].add_damage(UnitTypes.UnitClass.TANK, 1200)
+	s.experience[0].add_damage(UnitTypes.UnitClass.TANK, 1200)
 	s.turn_number = 4
 	s.active_player = 2
 	return s
@@ -26,7 +26,7 @@ func test_round_trip_preserves_everything() -> void:
 	assert_eq(b.active_player, 2)
 	assert_eq(b.mines.size(), 1)
 	assert_eq(b.objectives.size(), 1)
-	assert_eq(b.veterancy[0].level_of(UnitTypes.UnitClass.TANK), a.veterancy[0].level_of(UnitTypes.UnitClass.TANK))
+	assert_eq(b.experience[0].level_of(UnitTypes.UnitClass.TANK), a.experience[0].level_of(UnitTypes.UnitClass.TANK))
 
 func test_objective_hold_target_round_trips() -> void:
 	var a: BattleState = _populated_state()
@@ -142,14 +142,14 @@ func test_to_dict_snapshot_is_immune_to_later_mutation() -> void:
 	mine.known_to[1] = true
 	a.objectives[0].seen_by[0] = true
 	a.eliminated[1] = true
-	var snap_vet_xp: Array = (snapshot["veterancy"][0]["xp"] as Array).duplicate()
-	var snap_vet_level: Array = (snapshot["veterancy"][0]["level"] as Array).duplicate()
-	a.veterancy[0].add_damage(UnitTypes.UnitClass.INFANTRY, 500)
+	var snap_xp: Array = (snapshot["experience"][0]["xp"] as Array).duplicate()
+	var snap_level: Array = (snapshot["experience"][0]["level"] as Array).duplicate()
+	a.experience[0].add_damage(UnitTypes.UnitClass.INFANTRY, 500)
 
 	var snap_mine: Dictionary = snapshot["mines"][0]
 	assert_false((snap_mine["known_to"] as Array)[1], "знімок не бачить пізнішого розкриття міни")
 	var snap_obj: Dictionary = snapshot["objectives"][0]
 	assert_false((snap_obj["seen_by"] as Array)[0], "знімок не бачить пізнішого виявлення цілі")
 	assert_false((snapshot["eliminated"] as Array)[1], "знімок не бачить пізнішої елімінації")
-	assert_eq(snapshot["veterancy"][0]["xp"], snap_vet_xp, "знімок не бачить пізнішого набору досвіду")
-	assert_eq(snapshot["veterancy"][0]["level"], snap_vet_level, "знімок не бачить пізнішого підвищення рівня")
+	assert_eq(snapshot["experience"][0]["xp"], snap_xp, "знімок не бачить пізнішого набору досвіду")
+	assert_eq(snapshot["experience"][0]["level"], snap_level, "знімок не бачить пізнішого підвищення рівня")

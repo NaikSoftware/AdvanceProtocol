@@ -32,9 +32,9 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
-	var veterancy: Array = []
-	for vet in state.veterancy:
-		veterancy.append({"xp": vet.xp.duplicate(), "level": vet.level.duplicate()})
+	var experience: Array = []
+	for pool in state.experience:
+		experience.append({"xp": pool.xp.duplicate(), "level": pool.level.duplicate()})
 	return {
 		"version": VERSION,
 		"board": {
@@ -51,7 +51,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"next_unit_id": state._next_unit_id,
 		"objective_hold_target": state.objective_hold_target,
 		"units": units, "mines": mines, "objectives": objectives,
-		"vision": vision, "veterancy": veterancy,
+		"vision": vision, "experience": experience,
 	}
 
 static func from_dict(data: Dictionary) -> BattleState:
@@ -122,16 +122,16 @@ static func from_dict(data: Dictionary) -> BattleState:
 		v.seen = PackedByteArray(v_data["seen"])
 		state.vision.append(v)
 
-	state.veterancy.clear()
-	for vet_data in (data["veterancy"] as Array):
-		var vet := Veterancy.new()
-		vet.xp.clear()
-		for x in (vet_data["xp"] as Array):
-			vet.xp.append(int(x))
-		vet.level.clear()
-		for l in (vet_data["level"] as Array):
-			vet.level.append(int(l))
-		state.veterancy.append(vet)
+	state.experience.clear()
+	for pool_data in (data["experience"] as Array):
+		var pool := Experience.new()
+		pool.xp.clear()
+		for x in (pool_data["xp"] as Array):
+			pool.xp.append(int(x))
+		pool.level.clear()
+		for l in (pool_data["level"] as Array):
+			pool.level.append(int(l))
+		state.experience.append(pool)
 
 	return state
 

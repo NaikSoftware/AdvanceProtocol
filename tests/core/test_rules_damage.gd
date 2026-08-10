@@ -15,10 +15,10 @@ func _rng(s: int) -> RandomNumberGenerator:
 func _u(type_id: int) -> Unit:
 	return Unit.create(1, type_id, 0, Vector2i.ZERO, 0)
 
-func _samples(attacker_type: int, target_type: int, vet: int, sector: int, dist_sq: int) -> Array[int]:
+func _samples(attacker_type: int, target_type: int, level: int, sector: int, dist_sq: int) -> Array[int]:
 	var out: Array[int] = []
 	for s in 200:
-		out.append(Rules.compute_damage(_rng(s), _u(attacker_type), _u(target_type), vet, sector, dist_sq))
+		out.append(Rules.compute_damage(_rng(s), _u(attacker_type), _u(target_type), level, sector, dist_sq))
 	return out
 
 func _min(a: Array[int]) -> int:
@@ -60,15 +60,15 @@ func test_close_assault_boundary_is_dist_sq_two() -> void:
 	var at_three: Array[int] = _samples(INF_RIFLE, MEDIUM_TANK, 0, UnitTypes.ArmourSector.FRONT, 3)
 	assert_true(_min(at_two) > _min(at_three), "діагональний сусід (dist_sq=2) ще штурм, dist_sq=3 вже ні")
 
-func test_veterancy_adds_one_eighth_of_attack_per_level() -> void:
+func test_experience_adds_one_eighth_of_attack_per_level() -> void:
 	var v0: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 0, UnitTypes.ArmourSector.REAR, 9)
 	var v4: Array[int] = _samples(MEDIUM_TANK, LIGHT_CAR, 4, UnitTypes.ArmourSector.REAR, 9)
 	assert_between(_min(v4) - _min(v0), 47, 48, "+A*V/8 = 47.5")
 
-func test_engineers_get_no_veterancy_bonus() -> void:
+func test_engineers_get_no_experience_bonus() -> void:
 	var v0: Array[int] = _samples(ENGINEER, LIGHT_CAR, 0, UnitTypes.ArmourSector.FRONT, 9)
 	var v5: Array[int] = _samples(ENGINEER, LIGHT_CAR, 5, UnitTypes.ArmourSector.FRONT, 9)
-	assert_eq(_min(v0), _min(v5), "§3.3: інженер не отримує бонусу ветеранства")
+	assert_eq(_min(v0), _min(v5), "§3.3: інженер не отримує бонусу за досвід")
 
 func test_flanking_beats_frontal_fire() -> void:
 	var front: Array[int] = _samples(MEDIUM_TANK, HEAVY_TANK, 0, UnitTypes.ArmourSector.FRONT, 9)
