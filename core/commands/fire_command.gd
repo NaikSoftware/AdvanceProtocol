@@ -11,10 +11,16 @@ static func create(p_unit_id: int, p_target_id: int) -> FireCommand:
 	return c
 
 func validate(state: BattleState) -> String:
+	return check_shot(state, state.get_unit(unit_id), state.get_unit(target_id))
+
+static func check_shot(state: BattleState, a: Unit, t: Unit) -> String:
+	## Єдине місце, де живе законність пострілу. validate() — тонка обгортка над
+	## цією функцією, і Targeting.firing_targets() (§3.13) викликає рівно її ж,
+	## а не власну копію умов: оверлей «по кому я можу вистрілити» мусить збігатися
+	## з валідацією до останньої перевірки, інакше він бреше гравцеві про постріл,
+	## який той ось-ось підтвердить. Продубльована умова тут — це і є дефект.
 	if state.is_over():
 		return "ERR_MATCH_OVER"
-	var a: Unit = state.get_unit(unit_id)
-	var t: Unit = state.get_unit(target_id)
 	if a == null or not a.is_alive():
 		return "ERR_NO_SUCH_UNIT"
 	if t == null or not t.is_alive():
