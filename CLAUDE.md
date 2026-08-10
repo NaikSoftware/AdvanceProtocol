@@ -77,8 +77,10 @@ worked examples, the arguments, the balance reasoning — is in [`docs/rules/`](
 
 A diamond of radius `r` sits inside the circle of radius `r`, and firing requires visibility, so
 **the effective firing envelope is the intersection** — the diamond, wherever vision is the
-tighter of the two. Infantry is the only class this does not constrain, being the only one that
-sees further than it shoots.
+tighter of the two. A unit is unconstrained exactly when it sees further than it shoots — on the
+current roster the rifle squad and the engineer. This is a property of the weapon, not the class:
+the assault squad's rifle is unconstrained, while its **drone** loses more envelope than anything
+else in the game.
 
 ### 3.2 Action points → [details](docs/rules/movement-and-terrain.md)
 

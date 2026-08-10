@@ -45,7 +45,15 @@ firing on what it can see by itself, with no spotter:
 | artillery | 5 | 3 | 29 | 25 | −4 |
 | drone strike | 5 | 5 | 81 | 61 | −20 |
 
-**Infantry is the only class this does not touch**, because it is the only one that sees further
+**A unit is untouched exactly when it sees further than it shoots**, which on the current roster
+means the rifle squad (vision 5, range 3) and the engineer (vision 3, range 1 — absent from the
+table above because it has no weapon to draw an envelope for). Note that this is a property of the
+*weapon*, not of the class: the assault squad's ordinary rifle fire is untouched for the same
+reason as the rifle squad's, while its **drone** loses more than anything else in the game. Being
+infantry is not a shield here; out-ranging your own eyes is what costs you.
+
+The rifle squad, then, is the only thing on the board whose whole envelope is always usable —
+because it is the only one that sees further
 than it shoots. Everything else now has corners of its own weapon envelope that it cannot use
 unaided. That is the same argument [§3.3.1](combat.md) makes about retaliation, arriving from a different
 direction: the rifle squad forward of the line is what lets the rest of your force use its full

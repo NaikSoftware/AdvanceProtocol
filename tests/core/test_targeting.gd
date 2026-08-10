@@ -145,8 +145,44 @@ func test_own_units_are_never_a_threat_to_their_owner() -> void:
 	var gun: Unit = state.add_unit(9, 1, Vector2i(2, 2), 2)
 	state.add_unit(0, 1, Vector2i(3, 2), 2)
 	state.start()
+	# Хід — гравця 1, інакше запит зупинила б охорона observer != active_player, і
+	# тест доводив би не те: перевіряти треба саме гілку «свій юніт».
+	state.active_player = 1
 	assert_eq(Targeting.threatened_units(state, gun.id, 1).size(), 0,
 		"свої своїх не обстрілюють — прогнозувати нема чого")
+
+
+func test_forecast_refuses_an_observer_who_is_not_the_active_player() -> void:
+	# Антивитік. observer — це «хто дивиться на дошку», а дивиться рівно активний
+	# гравець. Підставивши супротивника, викликач проскакував повз перевірку
+	# e.owner == observer, читав ЧУЖУ мережу і отримував units_of(супротивника) —
+	# живі юніти ворога на справжніх позиціях, тобто рівно те, що §3.13 забороняє.
+	var mine: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var theirs: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.start()
+	state.begin_turn()
+
+	assert_eq(state.active_player, 0, "передумова: хід мій")
+	assert_has(_ids(Targeting.threatened_units(state, theirs.id, 0)), mine.id,
+		"передумова: у чесний бік запит працює")
+	assert_true(state.vision[1].is_visible(mine.pos),
+		"передумова: мережа супротивника мій танк бачить — тільки охорона й тримає цей запит")
+
+	assert_eq(Targeting.threatened_units(state, mine.id, 1).size(), 0,
+		"§3.13: чужим observer не буває — мережу супротивника читати не можна")
+
+
+func test_drone_forecast_refuses_an_observer_who_is_not_the_active_player() -> void:
+	# Дзеркало попереднього тесту для дронового прогнозу — та сама діра.
+	var squad: Unit = state.add_unit(1, 0, Vector2i(2, 2), 2)
+	var theirs: Unit = state.add_unit(5, 1, Vector2i(5, 2), 2)
+	state.start()
+	state.begin_turn()
+
+	assert_true(state.vision[1].is_visible(squad.pos), "передумова: мережа супротивника загін бачить")
+	assert_true(UnitTypes.is_vehicle(theirs.unit_class()), "передумова: танк — законна ціль дрона")
+	assert_eq(Targeting.drone_threatened_units(state, squad.id, 1).size(), 0,
+		"§3.13: і дроновий прогноз не віддає чужу мережу")
 
 
 # --- §3.6: інженер без зброї -----------------------------------------------------
@@ -367,6 +403,9 @@ func test_own_squad_is_never_a_drone_threat_to_its_owner() -> void:
 	state.add_unit(5, 1, Vector2i(4, 2), 2)
 	state.add_unit(5, 0, Vector2i(9, 9), 2)
 	state.start()
+	# Як і у звичайному прогнозі: хід має бути гравця 1, інакше запит зупиняє
+	# охорона observer != active_player, а не гілка «свій юніт».
+	state.active_player = 1
 	assert_eq(Targeting.drone_threatened_units(state, squad.id, 1).size(), 0,
 		"свої своїх не бомблять — прогнозувати нема чого")
 
@@ -378,9 +417,13 @@ func test_drone_targets_agrees_with_drone_command_validate() -> void:
 	state.add_unit(5, 1, Vector2i(7, 2), 2)     # танк рівно на 5 — законна ціль
 	state.add_unit(2, 1, Vector2i(4, 2), 2)     # бронеавтомобіль зблизька
 	state.add_unit(0, 1, Vector2i(3, 2), 2)     # піхота — дроном не можна
-	state.add_unit(5, 1, Vector2i(5, 6), 2)     # зсув (3, 4): у колі, поза ромбом
+	# Зсув (3, 4) від загону: у колі дальності 5, але поза ВЛАСНИМ ромбом загону.
+	# Ціллю він усе одно є — свій постріл гейтиться мережею власника (§3.3.1), а
+	# другий загін у (3, 3) накриває цей тайл (3 + 2 = 5). Тобто цей рядок — не
+	# виняток, а протилежне: приклад того, як коригувальник відкриває діагональ.
+	state.add_unit(5, 1, Vector2i(5, 6), 2)
 	state.add_unit(11, 1, Vector2i(2, 6), 2)    # інженер — теж «техніка» (§3.9)
-	state.add_unit(1, 0, Vector2i(3, 3), 2)     # свій — не ціль
+	state.add_unit(1, 0, Vector2i(3, 3), 2)     # свій — не ціль, і водночас коригувальник
 	state.start()
 	state.begin_turn()
 

@@ -45,9 +45,26 @@ mark where no ordinary shot exists would be a lie about a different action.
 For an inspected **enemy** assault squad that still has drones, the forecast must include them.
 Leaving them out under-reports the single most dangerous action in the game, and does so precisely
 for the units it endangers: a squad shown as a range-3 threat actually reaches 5, ignores armour
-entirely, and by [§3.3.1](../rules/combat.md) shoots without reply. **This leaks nothing** — the
-remaining drone count is required to be visible on the unit at all times (§3.9), so it is already
-public. A squad with no drones left is forecast at its ordinary range and no further.
+entirely, and by [§3.3.1](../rules/combat.md) shoots without reply. A squad with no drones left is
+forecast at its ordinary range and no further.
+
+**Open question — whether gating the forecast on ammunition leaks, in three-player matches.** An
+earlier version of this document asserted it leaks nothing, reasoning that §3.9 requires the
+remaining drone count to be visible on the unit at all times. That is a *legibility* rule about
+the owning player's UI, and reading it as "the count is public to everyone" is an interpretation,
+not something §3.9 says.
+
+In a two-player match it makes no difference: you witnessed every strike your opponent made, so
+you know the count either way. In a three-player match you did not — player 1 can spend a drone on
+player 2 behind the handover gate, and player 0's forecast would then silently drop the drone ring
+on that squad, reporting an action player 0 never saw. That is the same shape as the AP residue
+this document refuses to show, and it deserves the same answer rather than the opposite one.
+
+Two ways out, and the choice is a rules decision rather than a UI one: **make the remaining drone
+count explicitly public** on any visible unit — which the matchup triangle arguably wants anyway,
+since screening with infantry is a response to a *live* threat — or **stop gating the enemy
+forecast on ammunition**, over-reporting a spent squad forever rather than leaking. Until it is
+decided, the code gates on ammunition and the leak exists in three-player only.
 
 The drone's marks obey the action's own rules, not the ordinary shot's: vehicle classes only, so
 the observer's infantry is never marked as a drone target, and the same vision diamond gates it as
@@ -83,3 +100,17 @@ the honest version — the alternative is an overlay that quietly leaks the posi
 Both computations belong in `core/` and neither may be re-derived in the view. The envelope is the
 intersection of a circle and a diamond ([§3.1](../rules/movement-and-terrain.md)); a second implementation of that geometry in the
 renderer is exactly the drift this document exists to prevent.
+
+**The movement zones need a display query of their own, and Phase 2 must not skip it.** They are
+computed by `Pathing.compute_zones(board, unit, occupied)`, and `BattleState.occupied_map()`
+returns **every** live unit — including ones the active player cannot see. That is correct for the
+rules path, because a hidden enemy really does block movement. Handing the same map to the overlay
+leaks: an invisible unit punches a unit-shaped hole in the gold contour and tells the player
+exactly where it stands.
+
+So there are two occupancies, not one: **unfiltered for deciding what a move costs, fog-filtered
+for deciding what to draw**, and a `core/` entry point owns the filtered one — never the view. The
+zones drawn from it are, like the enemy forecast above, a best case: a path shown as open can turn
+out to be blocked by something you had not seen, and the move stops short. That is the honest
+failure, and it is the trade this whole section makes — a player may be surprised by what they
+could not know, but never informed by it.

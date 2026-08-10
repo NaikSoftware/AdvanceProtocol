@@ -117,6 +117,46 @@ func test_attacker_outside_retaliators_range_is_not_hit_back() -> void:
 	assert_eq(a.hp, attacker_hp_before)
 
 # ---------------------------------------------------------------------------
+# 4b. The retaliator's reach is the range CIRCLE, not a vision diamond.
+#
+# §3.1: дальність — коло (dist_sq <= r*r), огляд — ромб (|dx| + |dy| <= r).
+# Дві форми розходяться рівно на діагоналях, тож пін вимагає обміну, у якому
+# атакувальник лежить у колі відповідача й поза ромбом того самого радіуса.
+#
+# Два середні танки (#5: atk 95, hp 400, range 4, vision 4, armour 37/27/18) із
+# зсувом (3, 2): 9 + 4 = 13 <= 16 у колі, але 3 + 2 = 5 > 4 у ромбі. Обидва зі
+# зсувом бачать один одного не самі, а коригувальниками — стрілецькими
+# відділеннями (#0, огляд 5), по одному на гравця: §3.3.1 гейтить і постріл, і
+# відповідь на МЕРЕЖУ власника, а не на зір самого стрільця.
+#
+# Обидва дивляться на схід (facing 2), тож перший постріл лягає в REAR цілі, а
+# відповідь — у FRONT атакувальника:
+#   постріл:  0.75*95 + roll(0,23) - (0.75*18 + roll(0,4)) = 57.75 + [0,23] - [0,4]
+#             bounds: [53, 80]
+#   відповідь: 0.75*95 + roll(0,23) - (0.75*37 + roll(0,9)) = 43.5 + [0,23] - [0,9]
+#             bounds: [34, 66]
+# Обидва боки << 400 hp — і атакувальник, і ціль виживають обмін.
+func test_retaliators_reach_is_the_circle_and_not_a_vision_diamond() -> void:
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)   # схід
+	var t: Unit = state.add_unit(5, 1, Vector2i(7, 6), 2)   # схід
+	state.add_unit(0, 0, Vector2i(7, 8), 2)                 # мій коригувальник на ціль
+	state.add_unit(0, 1, Vector2i(4, 7), 2)                 # їхній коригувальник на атакувальника
+	state.begin_turn()
+	state.refresh_vision(t.owner)
+
+	assert_true(Rules.in_radius(t.pos, a.pos, t.attack_range()), "передумова: у колі дальності 4")
+	assert_false(Rules.in_vision_diamond(t.pos, a.pos, t.attack_range()),
+		"передумова: поза ромбом того ж радіуса — саме тут дві форми розходяться")
+	assert_true(state.vision[t.owner].is_visible(a.pos), "передумова: мережа відповідача атакувальника бачить")
+	assert_eq(FireCommand.create(a.id, t.id).validate(state), "", "передумова: постріл законний")
+
+	var attacker_hp_before: int = a.hp
+	var events: Array = FireCommand.create(a.id, t.id).apply(state)
+	assert_true(t.is_alive(), "80 макс. шкоди << 400 hp — є кому відповідати")
+	assert_not_null(_shot_retaliated(events), "§3.1: дальність відповіді — коло, а не ромб")
+	assert_true(a.hp < attacker_hp_before, "відповідь мусить дійти")
+
+# ---------------------------------------------------------------------------
 # 5. An engineer never retaliates, even with AP and range to spare.
 #
 # Rifle squad (#0, INFANTRY) fires at an adjacent engineer squad (#11,

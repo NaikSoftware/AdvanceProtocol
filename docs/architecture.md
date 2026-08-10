@@ -49,11 +49,18 @@ anywhere in `core/`.
 project.godot
 core/                    # pure rules — no Node, no scene tree, no rendering
   battle_state.gd
+  board.gd
   unit.gd
   unit_types.gd          # the stat table — source of truth
   terrain.gd
-  rules.gd               # damage, terrain cost, armour sector, vision
+  rules.gd               # damage, terrain cost, armour sector, the two distance metrics
   pathing.gd             # Dijkstra flood fill for the two movement zones
+  vision.gd              # per-player visible/seen grids
+  targeting.gd           # read-only queries behind the board overlays (§3.13)
+  mines.gd
+  objectives.gd
+  veterancy.gd
+  battle_serializer.gd
   commands/
   events.gd
 game/                    # Godot scenes and nodes

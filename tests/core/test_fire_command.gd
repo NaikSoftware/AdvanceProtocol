@@ -31,6 +31,29 @@ func test_out_of_range_is_rejected() -> void:
 	state.begin_turn()
 	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_OUT_OF_RANGE")
 
+func test_range_is_the_circle_and_not_the_vision_diamond() -> void:
+	# §3.1: дальність міряється КОЛОМ (dist_sq <= r*r), огляд — ромбом. Дві форми
+	# розходяться саме на діагоналях, тож пін потрібен на цілі, яка лежить у колі
+	# й поза ромбом того самого радіуса.
+	#
+	# Гармата (#9: дальність 5, огляд 3) у (2,2), ціль у (5,6): зсув (3,4), тобто
+	# 9 + 16 = 25 <= 25 у колі, але 3 + 4 = 7 > 5 у ромбі. Власного огляду гармати
+	# (3) сюди не вистачає, тож законним постріл робить стрілецьке відділення —
+	# §3.3.1: постріл гейтиться мережею власника, а не зором самого стрільця.
+	var gun: Unit = state.add_unit(9, 0, Vector2i(2, 2), 2)
+	var t: Unit = state.add_unit(5, 1, Vector2i(5, 6), 2)
+	state.add_unit(0, 0, Vector2i(5, 4), 2)   # коригувальник: огляд 5, до цілі 2
+	state.begin_turn()
+
+	assert_true(Rules.in_radius(gun.pos, t.pos, gun.attack_range()), "передумова: у колі дальності 5")
+	assert_false(Rules.in_vision_diamond(gun.pos, t.pos, gun.attack_range()),
+		"передумова: поза ромбом того ж радіуса — саме тут дві форми розходяться")
+	assert_true(state.vision[0].is_visible(t.pos), "передумова: коригувальник підсвічує ціль")
+
+	assert_eq(FireCommand.create(gun.id, t.id).validate(state), "",
+		"§3.1: дальність — коло; ромб огляду тут не при чому")
+
+
 func test_invisible_target_cannot_be_shot() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(0, 0), 2)   # арта, vision 3, range 5
 	var t: Unit = state.add_unit(2, 1, Vector2i(4, 0), 2)

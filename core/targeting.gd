@@ -10,8 +10,15 @@ extends RefCounted
 ## означало б втягнути BattleState у модуль, який навмисно про нього не знає.
 ##
 ## Обвідна вогню — це ПЕРЕТИН двох різних форм (§3.1): коло дальності
-## (Rules.in_radius) і ромб огляду (Rules.in_vision_diamond). Ця геометрія має
-## існувати рівно тут; §3.13 прямо забороняє відтворювати її в рендерері.
+## (Rules.in_radius) і ромб огляду (Rules.in_vision_diamond). §3.13 забороняє
+## відтворювати цю геометрію в рендерері — вона лишається в core/.
+##
+## «Рівно тут» — лише про два прогнози, threatened_units() і
+## drone_threatened_units(): тільки вони будують перетин самі, бо міряють ромб
+## ОДНИМ юнітом, а такого предиката більше ніде немає. У firing_targets() і
+## drone_targets() перетин уже зібраний деінде: коло живе у check_shot()/
+## check_strike(), а ромб — у Vision.recompute(), яка наповнює мережу власника.
+## Вони цю геометрію не повторюють, і повторювати не мають.
 
 
 static func firing_targets(state: BattleState, unit_id: int) -> Array[Unit]:
@@ -89,7 +96,18 @@ static func threatened_units(state: BattleState, unit_id: int, observer: int) ->
 	var e: Unit = state.get_unit(unit_id)
 	if e == null or not e.is_alive():
 		return out
-	if observer < 0 or observer >= state.vision.size():
+	if observer != state.active_player:
+		# observer — це «хто дивиться на дошку», а на дошку дивиться рівно той, чий
+		# зараз хід (§3.5: гейт передачі пристрою). Без цієї перевірки параметр стає
+		# дірою, яка вивертає інваріант модуля навиворіт: підставивши супротивника
+		# за observer, викликач проскакує повз e.owner == observer нижче, читає
+		# ЧУЖУ мережу state.vision[observer] і отримує units_of(observer) — живі
+		# юніти супротивника на справжніх позиціях. Це рівно те читання, яке
+		# заборонено вище і в docs/ui/overlays.md.
+		#
+		# Заразом ця перевірка накриває і межі масиву: active_player завжди
+		# валідний індекс у state.vision, тож окремої перевірки діапазону більше
+		# не потрібно.
 		return out
 	if e.owner == observer:
 		return out  # свої своїх не обстрілюють — тут нема чого прогнозувати
@@ -138,8 +156,8 @@ static func drone_threatened_units(state: BattleState, unit_id: int, observer: i
 	var e: Unit = state.get_unit(unit_id)
 	if e == null or not e.is_alive():
 		return out
-	if observer < 0 or observer >= state.vision.size():
-		return out
+	if observer != state.active_player:
+		return out  # та сама діра, що й у threatened_units() — див. пояснення там
 	if e.owner == observer:
 		return out
 	if e.drones_left <= 0:
@@ -151,6 +169,13 @@ static func drone_threatened_units(state: BattleState, unit_id: int, observer: i
 	for u in state.units_of(observer):
 		if not UnitTypes.is_vehicle(u.unit_class()):
 			continue  # §3.9: по піхоті дрон не працює — і це головна контргра проти нього
+		# Наступна перевірка сьогодні надлишкова, і це варто знати: ромб радіуса r —
+		# підмножина кола того ж r (|dx|+|dy| <= r ⇒ dx²+dy² <= r²), а єдиний юніт
+		# із дронами — штурмове відділення з оглядом 5 = DroneCommand.RANGE, тож ромб
+		# нижче вже все відсік. Тестом це не пінується: прибрати рядок — еквівалентна
+		# мутація, поведінки вона не змінює. Лишається як явна межа дії: щойно огляд і
+		# дальність дрона розійдуться (довший дрон, коротший огляд, оклюзія), вона
+		# почне різати, і без неї кільце збрехало б.
 		if not Rules.in_radius(e.pos, u.pos, DroneCommand.RANGE):
 			continue
 		if not Rules.in_vision_diamond(e.pos, u.pos, eyes):

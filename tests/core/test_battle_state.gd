@@ -121,11 +121,25 @@ func test_start_primes_every_players_vision_before_their_first_turn() -> void:
 	assert_true(s.vision[2].is_visible(Vector2i(5, 5)), "і гравець 2 — жоден не лишається нульовою сіткою")
 
 func test_start_discards_its_own_reveal_events() -> void:
-	# §BattleState.start(): ці тайли не є щойно розкритими для гравця, чий хід
-	# ось-ось почнеться — вони не мають потрапляти у потік подій як
-	# TileRevealed для гравців, які зараз не діють. start() повертає void.
+	# §BattleState.start(): один спільний потік подій (§6) не має чим розділити
+	# гравців, тож повернути звідси TileRevealed кожного означало б витік. start()
+	# тому повертає void — і платить за це тим, що початкового туману з потоку
+	# подій не зібрати взагалі: seen уже виставлений, отже ПЕРШИЙ begin_turn()
+	# не має чого відкривати. Вигляд зобовʼязаний засіяти туман зі стану.
+	#
+	# Друге твердження тут — головне: без нього тест проходить і тоді, коли
+	# start() починає повертати події назовні або перестає праймити чужий seen.
 	var s: BattleState = _state()
 	s.add_unit(5, 0, Vector2i(4, 4), 0)
 	s.start()
 	assert_true(s.vision[0].is_seen(Vector2i(4, 4)),
 		"seen усе одно оновлюється — лише подія про це не повертається назовні")
+
+	var events: Array[Events.BattleEvent] = s.begin_turn()
+	var revealed: int = 0
+	for e in events:
+		if e is Events.TileRevealed:
+			revealed += 1
+	assert_eq(revealed, 0,
+		"перший begin_turn() не відкриває нічого — start() уже виставив seen, і це навмисно")
+	assert_true(events.size() > 0 and events[0] is Events.TurnStarted, "лишається сам TurnStarted")
