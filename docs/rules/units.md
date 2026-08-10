@@ -110,7 +110,12 @@ This is deliberately the single most dangerous thing a 100 HP unit can do. Three
 it from breaking the game, and **none of them may be removed without replacing it with another**:
 
 - **Ammo.** Two strikes per squad, ever. Unlimited armour-deletion at range 5 would make tanks
-  unplayable. The remaining drone count must be visible on the unit at all times.
+  unplayable. **The remaining drone count is public.** It is shown on the unit at all times, to
+  every player who can see that unit — not only to its owner. That is a deliberate rules decision,
+  not merely a UI one: the counter-play to a drone squad is to screen it with infantry or to rush
+  it, and both are decisions about whether the threat is still live. A hidden counter would also
+  be unknowable rather than bluffable in a three-player match, since a drone spent on the third
+  player happens behind the handover gate where nobody else can count it.
 - **It cannot touch infantry.** A drone squad screened by rifle squads is a hard problem, and that
   is the intended counter-play.
 - **The squad is still infantry.** 100 HP, no armour, 3 tiles of movement, and it is fully exposed

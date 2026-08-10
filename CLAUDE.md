@@ -170,6 +170,7 @@ an objective. Repair is the one place where unspent AP matters.
 ### 3.9 Drone strike — assault squad only → [details](docs/rules/units.md)
 
 Range 5, `120 + rand(0, 60)`, **armour ignored entirely**, vehicles only, **2 per squad per match**.
+The remaining count is **public** — shown on any visible squad to every player, not just its owner.
 Deliberately the most dangerous thing a 100 HP unit can do. Three constraints keep it in check —
 ammo, it cannot touch infantry, and the squad is still infantry — and **none may be removed
 without replacing it with another.**
@@ -214,8 +215,8 @@ at all times, offsetting off-road penalty. Roads are never affected — that is 
   vision network — the network is hidden, and drawing from it would reveal unseen spotters. The
   forecast is therefore **a floor, not a ceiling**, and the UI must say so.
 - **The drone strike gets its own ring and its own marks**, and an enemy squad's remaining drones
-  count towards the threat it is shown to pose. Ammo is already public (§3.9), so this leaks
-  nothing, and omitting it would under-report the most dangerous action in the game.
+  count towards the threat it is shown to pose. The count is public by rule (§3.9), so reading it
+  reveals nothing; omitting it would under-report the most dangerous action in the game.
 - Both computations live in `core/`. **Neither may be re-derived in the view.**
 
 ---
