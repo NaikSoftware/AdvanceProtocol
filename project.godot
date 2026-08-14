@@ -27,3 +27,9 @@ window/handheld/orientation="landscape"
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
+
+[autoload]
+
+SettingsService="*res://game/autoload/settings_service.gd"
+MatchService="*res://game/autoload/match_service.gd"
+SceneRouter="*res://game/autoload/scene_router.gd"
