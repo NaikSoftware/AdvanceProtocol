@@ -100,6 +100,35 @@ func test_pressing_confirm_emits_confirmed_exactly_once() -> void:
 	assert_signal_emit_count(gate, "confirmed", 1)
 
 
+## Ruling review, finding 1: поки гейт видимий, Task 2.10 виконує
+## рецентрування камери й перебудову вузлів (крок 2a/2b контракту) — і саме
+## в це вікно кнопка лишається на екрані, увімкнена. Звичайний подвійний
+## тап на телефоні не сміє відкрити хід двічі.
+func test_second_press_before_show_for_is_called_again_emits_nothing_more() -> void:
+	gate.show_for(0)
+	watch_signals(gate)
+	var button: Button = gate.get_node("%ConfirmButton") as Button
+
+	button.pressed.emit()
+	button.pressed.emit()
+	button.pressed.emit()
+
+	assert_signal_emit_count(gate, "confirmed", 1,
+		"перше натискання мусить вимкнути кнопку — другий і третій дотик не мають довести до другого confirmed")
+	assert_true(button.disabled, "кнопка мусить лишитись вимкненою після одного натискання")
+
+
+func test_show_for_re_enables_the_confirm_button_for_the_next_player() -> void:
+	gate.show_for(0)
+	var button: Button = gate.get_node("%ConfirmButton") as Button
+	button.pressed.emit()
+	assert_true(button.disabled, "передумова: перше підтвердження вимкнуло кнопку")
+
+	gate.show_for(1)
+
+	assert_false(button.disabled, "новий show_for мусить дати наступному гравцеві новий шанс натиснути")
+
+
 func test_confirmed_signal_carries_no_unexpected_extra_emissions_from_construction() -> void:
 	# Інстанціація сцени сама по собі (before_each) не мусила нічого
 	# емітити — сигнал ще не спостерігався там, тож тут доводимо це чере
