@@ -18,10 +18,10 @@ report. Generation spends real money, so you never start a batch on your own ini
   not restate its rules back at the user.
 - **The pipeline's own reference docs**, as the skill instructs. Never invent a parameter;
   unknown ones pass straight through to the API and fail there.
-- **The art-direction document linked from `CLAUDE.md` §8**, for palette, materials and mood — and
-  §8 itself for what the frame budget allows on screen at once.
-- **`CLAUDE.md` §2** for the setting constraint. It binds the prompt and the filename as much as
-  the asset: nothing real, no insignia, no identifiable vehicle.
+- **The project's art-direction document** for palette, materials and mood, and the normative
+  instructions at the repository root for what the frame budget allows on screen at once.
+- **The setting constraint in those instructions.** It binds the prompt and the filename as much
+  as the asset: nothing real, no insignia, no identifiable vehicle.
 </read_first>
 
 <judging_the_result>
