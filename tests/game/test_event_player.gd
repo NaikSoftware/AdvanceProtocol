@@ -1,10 +1,12 @@
 extends GutTest
 ## Task 2.6: EventPlayer програє впорядкований потік подій core/ так, як
 ## вирішив core/ — без власних розрахунків. Тут перевіряємо: повноту
-## таблиці обробників (R6, проти списку, добутого з самого core/events.gd),
-## збереження порядку, контракт is_playing()/playback_finished, легальний
-## no-op для юніта поза туманом (R18) і поведінку повторного виклику play()
-## під час програвання.
+## таблиці обробників і самого розгалуження диспетчеризації (R6/R20, обидва
+## проти списку, добутого з самого core/events.gd), збереження порядку,
+## контракт is_playing()/playback_finished, легальний no-op для юніта поза
+## туманом (R18), максимум HP винятково з ростера, ніколи з наглянутого
+## трафіку подій (R19), і поведінку повторного виклику play() під час
+## програвання.
 ##
 ## Твіни прокручуються вручну через Tween.custom_step (той самий прийом, що
 ## й tests/game/test_unit_view.gd) — await на реальному сигналі тут не
@@ -80,6 +82,13 @@ func test_handlers_table_covers_every_concrete_event_class_in_events_gd() -> voi
 ## play() без застрягання на "необроблений тип" — жодна подія тут не
 ## посилається на існуючий юніт, тож усі обробники відпрацюють як no-op,
 ## і единий провал буде саме пропущена гілка диспетчеризації.
+##
+## R20: масив екземплярів нижче написаний вручну (GDScript не вміє
+## сконструювати анонімний вкладений клас за рядком з назвою — та сама
+## причина, чому в event_player.gd є if/elif), але його ПОКРИТТЯ перевіряємо
+## не рахунком, а звіркою з тим самим джерело-похідним списком імен, що й
+## HANDLERS (R6) — інакше 24-й клас міг би непомітно пройти повз і
+## HANDLERS.size(), і розмір цього масиву, лишивши _dispatch без гілки.
 func test_dispatch_handles_every_concrete_event_instance_without_falling_through() -> void:
 	var all_events: Array[Events.BattleEvent] = [
 		Events.UnitMoved.new(1, [Vector2i(0, 0)], 0),
@@ -106,7 +115,21 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.PlayerEliminated.new(2),
 		Events.MatchEnded.new(0),
 	]
-	assert_eq(all_events.size(), EventPlayer.HANDLERS.size(), "перевіряємо рівно стільки ж екземплярів, скільки записів у HANDLERS")
+
+	# Script.get_script_constant_map() дає ім'я → сам об'єкт вкладеного
+	# класу (перевірено окремо: те саме посилання, що й Events.X, і те, що
+	# instance.get_script() повертає для екземпляра цього класу) — тож
+	# можна звірити покриття імен без ручного реєстру "ім'я -> конструктор".
+	var expected_names: Array[String] = _event_class_names_from_source()
+	var constant_map: Dictionary = load("res://core/events.gd").get_script_constant_map()
+	for name in expected_names:
+		var covered: bool = false
+		for event in all_events:
+			if event.get_script() == constant_map.get(name):
+				covered = true
+				break
+		assert_true(covered, "у масиві екземплярів для перевірки диспетчеризації бракує %s" % name)
+
 	await player.play(all_events)
 	assert_false(player.is_playing(), "порожній лукап без жодного видимого юніта все одно доводить масив до кінця")
 
@@ -154,26 +177,28 @@ func test_is_playing_true_during_animated_playback_and_signal_fires_after() -> v
 
 # --- Порядок програвання ---------------------------------------------------
 
-## Порядок доводимо на побічному ефекті, чутливому до послідовності:
-## DamageDealt без відомого максимуму бере hp_left+amount за максимум,
-## UnitRepaired без відомого максимуму бере hp_left. Якщо ушкодження
-## відіграється першим (як у масиві), другий виклик (ремонт) успадковує вже
-## встановлений максимум — підсумкове відношення інше, ніж було б при
-## переставлених подіях. Так тест ловить перестановку, а не лише «щось
-## відбулось».
+## R19: максимум завжди йде з ростера, тож він однаковий незалежно від
+## порядку — порядок довше не можна довести через нього (стара версія цього
+## тесту так і робила, і ruling R19/finding 2 це якраз і закрили). Натомість
+## доводимо порядок через "останній елемент масиву визначає кінцевий
+## стан": два DamageDealt на той самий юніт із різним hp_left — якби
+## перестановка сталась, на екрані лишився б hp_left не з того виклику.
 func test_play_preserves_event_order() -> void:
 	var view: UnitView = _spawn_view(1)
-	player = EventPlayer.new(func(unit_id: int) -> UnitView:
-		return view if unit_id == 1 else null)
+	var unit := _unit(1)
+	player = EventPlayer.new(
+		func(unit_id: int) -> UnitView: return view if unit_id == 1 else null,
+		func(unit_id: int) -> Unit: return unit if unit_id == 1 else null)
 
 	var events: Array[Events.BattleEvent] = [
-		Events.DamageDealt.new(1, 50, 50),   # -> максимум зафіксовано як 100
-		Events.UnitRepaired.new(1, 20, 70),  # -> використовує вже відомий максимум 100
+		Events.DamageDealt.new(1, 40, 60),
+		Events.DamageDealt.new(1, 30, 30),
 	]
 	await player.play(events)
 
-	assert_almost_eq(view._hp_bar.scale.x, 0.7, 0.001,
-		"у правильному порядку ремонт після ушкодження мусить дати 70/100, а не 70/70")
+	var expected_ratio: float = 30.0 / float(unit.max_hp())
+	assert_almost_eq(view._hp_bar.scale.x, expected_ratio, 0.001,
+		"кінцевий стан мусить відповідати останній події масиву (hp_left=30), не першій (hp_left=60)")
 
 
 ## Пряме доведення порядку через журнал резолюцій лукапа: масив із різними
@@ -228,10 +253,13 @@ func test_play_awaits_animation_before_dispatching_next_event() -> void:
 
 func test_event_naming_unknown_unit_id_is_skipped_without_error_and_rest_still_plays() -> void:
 	var view: UnitView = _spawn_view(2)
-	# Лукап навмисно не знає unit_id=1 — імітує ворога поза `seen` (§3.5):
-	# core/ однаково шле подію, вузла для неї просто нема.
-	player = EventPlayer.new(func(unit_id: int) -> UnitView:
-		return view if unit_id == 2 else null)
+	var unit_2 := _unit(2)
+	# Лукапи навмисно не знають unit_id=1 — імітує ворога поза `seen` (§3.5):
+	# core/ однаково шле подію, вузла (і запису в ростері для показу) для
+	# неї просто нема.
+	player = EventPlayer.new(
+		func(unit_id: int) -> UnitView: return view if unit_id == 2 else null,
+		func(unit_id: int) -> Unit: return unit_2 if unit_id == 2 else null)
 
 	var events: Array[Events.BattleEvent] = [
 		Events.DamageDealt.new(1, 10, 90),  # юніт поза туманом — має тихо пропуститись
@@ -239,7 +267,8 @@ func test_event_naming_unknown_unit_id_is_skipped_without_error_and_rest_still_p
 	]
 	await player.play(events)
 
-	assert_almost_eq(view._hp_bar.scale.x, 0.7, 0.001, "подія для видимого юніта після пропущеної мусить все одно застосуватись")
+	var expected_ratio: float = 70.0 / float(unit_2.max_hp())
+	assert_almost_eq(view._hp_bar.scale.x, expected_ratio, 0.001, "подія для видимого юніта після пропущеної мусить все одно застосуватись")
 
 
 func test_no_lookup_injected_is_also_a_legal_no_op() -> void:

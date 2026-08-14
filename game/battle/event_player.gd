@@ -10,6 +10,12 @@ extends RefCounted
 ## юнітів з'являється лише в Task 2.10, тож лукап — параметр конструктора, а
 ## не жорстке посилання. Відсутній вузол (юніт поза `seen`, §3.5) —
 ## легальний no-op: подія просто нічого не малює, гра продовжується.
+##
+## R19: максимальне HP береться з ростера (`Unit.max_hp()` → `UnitTypes`),
+## ніколи не вираховується з наглянутого трафіку подій. `core/` вирішує,
+## вигляд показує — а зібраний з DamageDealt/UnitRepaired максимум був би
+## рішенням цього файлу, забороненим архітектурою. Тому другий інжектований
+## лукап, `_unit_lookup` (той самий контейнер Task 2.10, інша грань).
 
 signal playback_finished
 
@@ -50,21 +56,15 @@ const HANDLERS: Dictionary = {
 const _MOVE_STEP_DURATION: float = 0.12
 
 var _unit_view_lookup: Callable
+## R19: unit_id → Unit (той самий Task 2.10 контейнер, друга грань лукапу).
+## Дає доступ до `Unit.max_hp()` — єдиного дозволеного джерела максимуму.
+var _unit_lookup: Callable
 var _is_playing: bool = false
 
-## unit_id → найбільше спостережене HP. DamageDealt/UnitRepaired несуть лише
-## hp_left і amount — core/ не дублює статичний max_hp у кожній події (він і
-## так живе в Unit.max_hp()). Перше ж влучання по свіжому юніту дає точний
-## максимум (hp_left + amount, коли ще нічого не пропущено), і ми тримаємо
-## позначку "найбільше з коли-небудь баченого" — вона самовиправляється:
-## навіть якщо перша ж подія прийшла для вже пошкодженого (поза туманом)
-## юніта, наступне спостереження з більшим числом підніме позначку до
-## правильної. Це бухгалтерія показу, не рішення про результат бою.
-var _max_hp_by_unit: Dictionary = {}
 
-
-func _init(unit_view_lookup: Callable = Callable()) -> void:
+func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable()) -> void:
 	_unit_view_lookup = unit_view_lookup
+	_unit_lookup = unit_lookup
 
 
 ## Послідовно програє масив подій, чекаючи кожну анімацію, перш ніж почати
@@ -102,6 +102,32 @@ func _resolve_unit_view(unit_id: int) -> UnitView:
 	if result is UnitView:
 		return result
 	return null
+
+
+## R19: 0 означає "не резолвилось" (лукап не інжектовано, або він не знає
+## цей id) — викликач трактує це як легальний no-op, той самий дух, що й
+## R18, а не як справжній нульовий максимум.
+func _resolve_max_hp(unit_id: int) -> int:
+	if not _unit_lookup.is_valid():
+		return 0
+	var result: Variant = _unit_lookup.call(unit_id)
+	if result is Unit:
+		return result.max_hp()
+	return 0
+
+
+## Спільна бухгалтерія DamageDealt і UnitRepaired: обидві події несуть лише
+## `unit_id`/`hp_left`, обидві мають показати той самий пропорційний
+## HP-бар. Максимум завжди з ростера (R19) — ніколи не виводиться з самих
+## подій.
+func _apply_hp_update(unit_id: int, hp_left: int) -> void:
+	var view: UnitView = _resolve_unit_view(unit_id)
+	if view == null:
+		return
+	var max_hp: int = _resolve_max_hp(unit_id)
+	if max_hp <= 0:
+		return
+	view.set_hp(hp_left, max_hp)
 
 
 ## Єдина точка розгалуження за типом події. Anonymous вкладені класи
@@ -214,15 +240,8 @@ func _handle_drone_launched(event: Events.DroneLaunched) -> Variant:
 	return null
 
 
-## Див. коментар біля _max_hp_by_unit: подія не несе max_hp, тож
-## відновлюємо його як позначку "найбільше з коли-небудь баченого".
 func _handle_damage_dealt(event: Events.DamageDealt) -> Variant:
-	var view: UnitView = _resolve_unit_view(event.unit_id)
-	if view == null:
-		return null
-	var max_hp: int = maxi(_max_hp_by_unit.get(event.unit_id, 0), event.hp_left + event.amount)
-	_max_hp_by_unit[event.unit_id] = max_hp
-	view.set_hp(event.hp_left, max_hp)
+	_apply_hp_update(event.unit_id, event.hp_left)
 	return null
 
 
@@ -270,16 +289,8 @@ func _handle_bridge_changed(_event: Events.BridgeChanged) -> Variant:
 	return null
 
 
-## Див. коментар біля _max_hp_by_unit. Ремонт не може підняти HP вище
-## справжнього максимуму, тож hp_left — безпечна нижня оцінка максимуму,
-## коли позначки ще нема.
 func _handle_unit_repaired(event: Events.UnitRepaired) -> Variant:
-	var view: UnitView = _resolve_unit_view(event.unit_id)
-	if view == null:
-		return null
-	var max_hp: int = maxi(_max_hp_by_unit.get(event.unit_id, 0), event.hp_left)
-	_max_hp_by_unit[event.unit_id] = max_hp
-	view.set_hp(event.hp_left, max_hp)
+	_apply_hp_update(event.unit_id, event.hp_left)
 	return null
 
 
