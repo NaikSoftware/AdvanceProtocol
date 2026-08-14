@@ -42,8 +42,11 @@ var _zone_overlay: ZoneOverlay
 var _is_playing_check: Callable
 
 var _selected_unit: Unit = null
-## Зони вибраного юніта — пораховані один раз при виборі (select_unit), а не
-## на кожен тап: tap_cell() лише читає їх (can_reach/cost_to/path_to).
+## Зони вибраного юніта — пораховані при виборі (select_unit) і наново після
+## кожної підтвердженої дії (_sync_after_action, R23+ревʼю), а не на кожен
+## тап: tap_cell() сам лише читає їх (can_reach/cost_to/path_to). Інваріант —
+## _zones завжди описує ПОТОЧНІ позицію й AP _selected_unit, ніколи ту, що
+## була на момент select_unit().
 var _zones: Pathing.Zones = null
 ## Порожній словник means «нема дії, що чекає підтвердження». Не null:
 ## confirm_pending()/cancel_pending() перевіряють is_empty(), а не тип змінної.
@@ -69,14 +72,22 @@ func select_unit(unit: Unit) -> void:
 	_pending = {}
 	_selected_unit = unit
 	selection_changed.emit(unit)
+	_recompute_zones_for_selected()
 
+
+## Перераховує _zones для ПОТОЧНОГО _selected_unit і синхронізує оверлей —
+## спільне тіло для select_unit() (нова вибрана) і _sync_after_action()
+## (та сама вибрана, але щойно змінені позиція/AP). Свідомо не чіпає
+## selection_changed чи _selected_unit — той, хто вибраний, тут не міняється,
+## лише те, що про нього пораховано.
+func _recompute_zones_for_selected() -> void:
 	var state: BattleState = _match_service.state
-	if unit != null and unit.is_alive() and unit.owner == state.active_player:
+	if _selected_unit != null and _selected_unit.is_alive() and _selected_unit.owner == state.active_player:
 		# R5: known, ніколи occupied_map() — це і є весь зміст ruling'у.
-		var occupied: Dictionary = state.known_occupied_map(unit.owner)
-		occupied.erase(unit.pos)  # власний тайл юніта завжди прохідний для нього самого
-		_zones = Pathing.compute_zones(state.board, unit, occupied)
-		_zone_overlay.show_for(unit, _zones)
+		var occupied: Dictionary = state.known_occupied_map(_selected_unit.owner)
+		occupied.erase(_selected_unit.pos)  # власний тайл юніта завжди прохідний для нього самого
+		_zones = Pathing.compute_zones(state.board, _selected_unit, occupied)
+		_zone_overlay.show_for(_selected_unit, _zones)
 	else:
 		_zones = null
 		_zone_overlay.clear()
@@ -144,6 +155,29 @@ func confirm_pending() -> void:
 	# означала б розбіжність між прев'ю й правилами — дефект, який варто
 	# піймати одразу, а не проковтнути мовчки.
 	assert(err == "", "confirm_pending() підтвердив дію, яку core/ відхилив: %s" % err)
+	if err == "":
+		_sync_after_action()
+
+
+## Огляд, знайдений на ревʼю: MoveCommand/FireCommand щойно змінили позицію
+## й AP вибраного юніта (а рух через міну чи відповідь на постріл (§3.3.1)
+## можуть його і вбити), тож _zones, пораховані ПРИ ВИБОРІ, більше не
+## описують нинішній стан. Без цього виклику наступний тап планує від
+## клітинки, де юніта вже нема, і показує AP, якого вже нема, — а підтвердити
+## таку дію submit() відмовиться, і трапиться саме assert() кількома рядками
+## вище.
+##
+## Юніт лишається ВИБРАНИМ (жодного selection_changed) — це той самий юніт,
+## лише щойно порахований наново; HUD (Task 2.8) слухає цей сигнал як «змінився
+## обʼєкт вибору», а не «змінилось щось про нього». Смерть — інша річ: тоді
+## обʼєкта вибору більше немає, і _deselect() каже про це правдиво.
+func _sync_after_action() -> void:
+	if _selected_unit == null:
+		return
+	if not _selected_unit.is_alive():
+		_deselect()
+		return
+	_recompute_zones_for_selected()
 
 
 func cancel_pending() -> void:

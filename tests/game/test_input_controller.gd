@@ -228,6 +228,84 @@ func test_select_unit_ignored_while_playback_is_running() -> void:
 	assert_eq(overlay.show_for_calls, 0, "select_unit() під час програвання теж мусить бути no-op — R24 каже «кожен тап»")
 
 
+# --- Ревʼю: _zones мусять описувати ПОТОЧНИЙ стан, не стан на момент вибору --
+#
+# Знахідка ревʼю: до фіксу _zones рахувалися рівно один раз, у select_unit(),
+# і ніколи не оновлювалися після confirm_pending() — хоча MoveCommand і
+# FireCommand щойно змінили позицію й AP того самого юніта. §3.2 називає цей
+# сценарій прямо: «Movement is spent, not committed. A unit may move in as
+# many separate steps as its AP allows» — це не рідкісний край, а звичайний
+# хід «рух-рух» чи «рух-постріл» одним юнітом.
+
+
+func test_confirm_move_then_tap_computes_zone_from_new_position_and_ap() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)  # medium tank, ap 48, cc 12
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	controller.tap_cell(Vector2i(6, 5))  # вхід у поле коштує max(10,10+10-12)=10
+	controller.confirm_pending()
+	assert_eq(u.pos, Vector2i(6, 5), "передумова: юніт справді пересунувся")
+	assert_eq(u.ap, 38, "передумова: 48 - 10")
+
+	# Сам факт другого show_for() — доказ, що зони перераховані, а не лишились
+	# із моменту select_unit(): без фіксу цей лічильник застряг би на 1.
+	assert_eq(overlay.show_for_calls, 2, "confirm_pending() мусить перерахувати зони того самого юніта")
+	assert_eq(overlay.last_zones.origin, Vector2i(6, 5), "нові зони мусять мати початком НОВУ позицію, а не стару")
+
+	controller.tap_cell(Vector2i(7, 5))  # ще один крок від нової позиції, cost 10
+
+	assert_eq(_previews.size(), 2)
+	var p: Dictionary = _previews[1]
+	assert_eq(p["target"], Vector2i(7, 5))
+	assert_eq(p["ap_left"], 28, "38 - 10, порахований від НОВОЇ позиції й АП, а не від 48 - 20 крізь стару")
+	assert_eq(p["path"], [Vector2i(7, 5)] as Array[Vector2i],
+		"шлях зі свіжих зон — один крок від (6,5); зі старих зон вийшло б два кроки крізь клітинку, де юніт уже стоїть")
+
+
+func test_confirm_shot_then_tap_does_not_reach_stale_zone_tiles() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)  # medium tank, ap 48, fire_cost 20
+	# Інженер ніколи не відповідає (§3.6/§3.3.1) — атакувальник гарантовано
+	# лишається живим, тож перевіряється рівно нульовий AP, а не смерть.
+	var target: Unit = service.state.add_unit(11, 1, Vector2i(6, 5), 0)  # engineer squad
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	# Передумова: (7,5) — усередині ЗІ старого AP=48 зони (2 клітинки, cost 20).
+	assert_true(overlay.last_zones.can_reach(Vector2i(7, 5)), "передумова: клітинка в зоні до пострілу")
+	controller.tap_cell(target.pos)
+
+	controller.confirm_pending()
+
+	assert_true(u.has_fired, "передумова: постріл справді стався")
+	assert_eq(u.ap, 0, "exhaust() обнуляє AP (§3.2)")
+	assert_true(u.is_alive(), "передумова: інженер не відповідає — атакувальник живий")
+	assert_false(overlay.last_zones.can_reach(Vector2i(7, 5)),
+		"нульовий AP не мусить лишати в силі клітину зі старої, дозаданої зони")
+
+	var previews_before: int = _previews.size()
+	controller.tap_cell(Vector2i(7, 5))
+
+	assert_eq(_previews.size(), previews_before,
+		"тап по клітинці поза (тепер порожньою) зоною — no-op; жодного прев'ю з від'ємним ap_left")
+
+
+func test_unit_that_dies_to_retaliation_clears_selection_cleanly() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(2, 0, Vector2i(5, 5), 0)  # armoured car
+	u.hp = 1  # §3.3 MIN_DAMAGE=10 — будь-яка відповідь гарантовано вбиває
+	var target: Unit = service.state.add_unit(8, 1, Vector2i(6, 5), 0)  # heavy tank, відповідає
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	controller.tap_cell(target.pos)
+
+	controller.confirm_pending()
+
+	assert_false(u.is_alive(), "передумова: важкий танк відповів і вбив")
+	assert_eq(_selections.back(), null, "смерть вибраного юніта мусить зняти вибір, а не лишити висячий Unit")
+	assert_true(overlay.clear_calls > 0, "оверлей мусить бути очищений, коли обʼєкта вибору більше нема")
+
+
 # --- R5: фог-безпечне планування ------------------------------------------
 
 ## Броньований автомобіль (id=2): AP 68, cross_country 5, тому вхід у звичайне
