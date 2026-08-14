@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/camera/iso_camera_rig.gd" id="1_rig"]
+
+[node name="IsoCameraRig" type="Node3D"]
+script = ExtResource("1_rig")
+
+[node name="Yaw" type="Node3D" parent="."]
+rotation_degrees = Vector3(0, 45, 0)
+
+[node name="Camera3D" type="Camera3D" parent="Yaw"]
+position = Vector3(0, 20, 16)
+rotation_degrees = Vector3(-52, 0, 0)
+current = true
