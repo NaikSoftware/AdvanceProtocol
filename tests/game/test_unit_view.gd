@@ -39,13 +39,58 @@ func test_bind_picks_a_distinct_silhouette_per_class() -> void:
 	assert_eq(seen_sizes.size(), type_ids.size(), "кожен клас мусить мати власний, ні на який інший не схожий силует")
 
 
+## R14: face() твінується (не клацає миттєво), тож перевіряємо ціль твіна
+## через custom_step — той самий прийом, що й для move_along/play_destroyed,
+## а не читаємо rotation_degrees.y одразу після виклику.
 func test_face_produces_eight_distinct_orientations() -> void:
 	view.bind(_unit(5))
 	var seen: Dictionary = {}
 	for d in 8:
 		view.face(d)
+		view._face_tween.custom_step(10.0)
 		seen[view.rotation_degrees.y] = true
 	assert_eq(seen.size(), 8, "вісім напрямків мусять дати вісім різних поворотів")
+
+
+## R14: з 315° (NW) на 0°/360° (N) — сусідні напрямки через межу кола.
+## Короткий шлях — 45°; в обхід було б 315°. Перевіряємо саму подорож
+## (різницю між початковим і кінцевим кутом), а не конкретне число з
+## формули найкоротшої дельти — інакше тест лише повторив би реалізацію.
+func test_face_takes_the_short_way_around_the_wrap() -> void:
+	view.bind(_unit(5))
+	view.face(7)  # NW, 315°
+	view._face_tween.custom_step(10.0)
+	var start: float = view.rotation_degrees.y
+
+	view.face(0)  # N, 0°/360° — прямий сусід NW через межу 360°/0°
+	view._face_tween.custom_step(10.0)
+	var travelled: float = absf(view.rotation_degrees.y - start)
+
+	assert_true(travelled <= 180.0, "поворот через межу кола мусить іти коротким шляхом (45°), не в обхід (315°)")
+
+
+## Другий face(), що прийшов поки перший ще крутиться, не мусить лишити два
+## твіни, які тягнуть rotation_degrees.y кожен у свій бік — переривання
+## вбиває попередній твін і замінює його новим.
+func test_face_interrupting_face_kills_the_previous_tween() -> void:
+	view.bind(_unit(5))
+	view.face(1)
+	var first_tween: Tween = view._face_tween
+
+	view.face(3)  # перериваємо на півдорозі новим поворотом
+	assert_false(first_tween.is_valid(), "перший твін мусить бути вбитий другим face(), а не лишитись живим")
+	assert_ne(view._face_tween, first_tween, "після переривання лишається лише новий твін")
+	view._face_tween.custom_step(10.0)
+
+	# Контрольний вузол без переривання — довести, що фінальна ціль та сама,
+	# що й у чистого виклику face(3), а не проміжний стан першого твіна.
+	var reference: Node3D = UnitViewScene.instantiate()
+	add_child_autofree(reference)
+	reference.bind(_unit(5))
+	reference.face(3)
+	reference._face_tween.custom_step(10.0)
+
+	assert_eq(view.rotation_degrees.y, reference.rotation_degrees.y, "фінальний поворот — ціль останнього виклику face(), не проміжний")
 
 
 func test_set_hp_reflects_ratio_including_full_and_zero() -> void:

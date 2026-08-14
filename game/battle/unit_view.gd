@@ -22,6 +22,10 @@ const _DIM_FACTOR: float = 0.45
 
 const _DESTROY_DURATION: float = 0.6
 
+## R14: хід чекає на гравця, не навпаки — поворот твінується, але лишається
+## коротким, щоб не виглядав як затримка вводу.
+const _FACE_TURN_DURATION: float = 0.15
+
 ## Розмір Hull-меша на клас — і сама причина, чому силуети не сплутати
 ## (§1.5): піхота низька й вузька, легка техніка плаский подовжений блок,
 ## танк масивний, арта витягнута під довгий ствол, інженер — компактна
@@ -53,6 +57,9 @@ var facing: int = 0
 var _hull_material: StandardMaterial3D
 var _base_hull_color: Color = Color.WHITE
 var _drones_left: int = 0
+## Живий твін останнього face(); тримаємо посилання, щоб наступний виклик
+## міг убити цей замість того, щоб два твіни змагались за rotation_degrees.y.
+var _face_tween: Tween
 
 
 func _ready() -> void:
@@ -85,10 +92,25 @@ func move_along(path: Array[Vector2i], duration_per_step: float) -> Signal:
 	return tween.finished
 
 
+## R14: поворот твінується, а не клацає миттєво — «Твіни руху й повороту»
+## (Task 2.4, Step 2) називає поворот окремо від руху, і атмосфера (§1.4) не
+## терпить дерев'яного корпусу. Гравець на це не чекає (сигнатура лишається
+## void, виклик fire-and-forget), тож твін лишається коротким.
 func face(direction: int) -> void:
 	assert(direction >= 0 and direction < 8, "напрямок поза межами 8 фейсингів: %d" % direction)
 	facing = direction
-	rotation_degrees.y = float(direction) * _DEGREES_PER_FACING
+	var current: float = rotation_degrees.y
+	var target: float = float(direction) * _DEGREES_PER_FACING
+	# Найкоротший шлях, не абсолютний кут: з 350° у 10° крутимось на +20°,
+	# а не в обхід на -340°. Стандартна формула найкоротшої дельти кута.
+	var delta: float = fposmod(target - current + 180.0, 360.0) - 180.0
+
+	# Другий face() під час першого — це заміна, а не перегони: попередній
+	# твін вбиваємо, інакше обидва тягнутимуть той самий rotation_degrees.y.
+	if _face_tween != null and _face_tween.is_valid():
+		_face_tween.kill()
+	_face_tween = create_tween()
+	_face_tween.tween_property(self, "rotation_degrees:y", current + delta, _FACE_TURN_DURATION)
 
 
 func set_hp(hp: int, max_hp: int) -> void:
