@@ -23,9 +23,21 @@ func test_zoom_is_clamped() -> void:
 	assert_true(rig.zoom_level <= rig.MAX_ZOOM)
 
 func test_pan_is_clamped_to_board() -> void:
-	rig.pan(Vector2(1000, 1000))
+	rig.pan(Vector2(0, 2000))
 	var focus: Vector3 = rig.global_position
-	assert_true(focus.x <= 22.0 and focus.z <= 22.0, "камера не тікає з карти")
+	assert_almost_eq(focus.x, 21.0, 0.01, "R12: межа — (board_size - 1) + BOARD_MARGIN, не board_size + BOARD_MARGIN")
+	assert_almost_eq(focus.z, 21.0, 0.01, "R12: межа — (board_size - 1) + BOARD_MARGIN, не board_size + BOARD_MARGIN")
+
+## R13: дельта — це палець на екрані, не світові осі; ріг мусить сам повернути
+## її на свій yaw. Рух лише по одній екранній осі, що не зрушив би обидві
+## світові осі, доводив би, що поворот не застосовується (кут "просочився"
+## би назовні, у контролер вводу — саме те, що §3.1 забороняє).
+func test_pan_rotates_screen_delta_by_the_rig_yaw() -> void:
+	rig.center_on(Vector2i(10, 10))
+	rig.pan(Vector2(1, 0))
+	var focus: Vector3 = rig.global_position
+	assert_false(is_equal_approx(focus.x, 10.0), "рух по одній осі екрана мусить зрушити фокус по світовому x")
+	assert_false(is_equal_approx(focus.z, 10.0), "і по світовому z — це і є сенс 45°-рига (R13)")
 
 func test_center_on_moves_focus() -> void:
 	rig.center_on(Vector2i(10, 10))
