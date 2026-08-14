@@ -1,0 +1,54 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/ui/handover_gate.gd" id="1_gate"]
+
+[node name="HandoverGate" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+visible = false
+script = ExtResource("1_gate")
+
+[node name="Panel" type="ColorRect" parent="."]
+unique_name_in_owner = true
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+color = Color(0.03, 0.03, 0.04, 1.0)
+
+[node name="Content" type="CenterContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="Body" type="VBoxContainer" parent="Content"]
+theme_override_constants/separation = 24
+alignment = 1
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="Content/Body"]
+horizontal_alignment = 1
+text = "handover_pass_device"
+
+[node name="PlayerRow" type="HBoxContainer" parent="Content/Body"]
+alignment = 1
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="PlayerCaption" type="Label" parent="Content/Body/PlayerRow"]
+text = "handover_incoming_player"
+
+[node name="PlayerValue" type="Label" parent="Content/Body/PlayerRow"]
+unique_name_in_owner = true
+
+[node name="ConfirmButton" type="Button" parent="Content/Body"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 64)
+size_flags_horizontal = 4
+text = "handover_confirm"
