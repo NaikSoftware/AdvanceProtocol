@@ -48,6 +48,25 @@ func pan(delta: Vector2) -> void:
 	var world_delta: Vector3 = Vector3(delta.x, 0.0, delta.y).rotated(Vector3.UP, deg_to_rad(YAW_DEGREES))
 	global_position = _clamp_to_bounds(global_position + world_delta)
 
+## Task 2.10: тап по екрану -> клітинка дошки. Перетин променя камери з
+## площиною y=0, де лежать центри тайлів (§3.1 — дошка сама лишається
+## непорушеною площиною, 45° тут лише повертає, звідки дивиться камера).
+## Лишається тут, а не в battle_screen.gd: уся екранна геометрія рига — в
+## одному місці, і жоден інший файл не тримає власної копії цієї проєкції.
+func screen_point_to_cell(screen_pos: Vector2) -> Vector2i:
+	var origin: Vector3 = _camera.project_ray_origin(screen_pos)
+	var dir: Vector3 = _camera.project_ray_normal(screen_pos)
+	if is_zero_approx(dir.y):
+		# Промінь паралельний площині дошки — перетину нема. Деградує на
+		# свідомо позадошкову клітинку: Board.in_bounds() відкидає її самим
+		# викликачем, а не діленням на нуль тут.
+		return Vector2i(-1, -1)
+	var t: float = -origin.y / dir.y
+	if t < 0.0:
+		return Vector2i(-1, -1)
+	return world_to_cell(origin + dir * t)
+
+
 func center_on(cell: Vector2i) -> void:
 	global_position = _clamp_to_bounds(cell_to_world(cell))
 

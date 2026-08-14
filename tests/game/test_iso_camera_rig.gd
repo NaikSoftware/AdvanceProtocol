@@ -43,3 +43,29 @@ func test_center_on_moves_focus() -> void:
 	rig.center_on(Vector2i(10, 10))
 	assert_almost_eq(rig.global_position.x, 10.0, 0.01)
 	assert_almost_eq(rig.global_position.z, 10.0, 0.01)
+
+
+## Task 2.10: тап по екрану мусить перетворюватись на клітинку дошки САМЕ тут
+## (game/camera/), а не десь у battle_screen.gd — §1 non-goals і R13 разом:
+## уся екранна геометрія 45°-рига лишається в одному місці. Раунд-трип через
+## справжню проєкцію камери (unproject_position -> screen_point_to_cell), а не
+## ручний перерахунок математики променя в самому тесті — так тест ловить
+## розбіжність з реальною Camera3D, а не з переказом її формул.
+func test_screen_point_to_cell_round_trips_through_camera_projection() -> void:
+	rig.center_on(Vector2i(10, 10))
+	var camera: Camera3D = rig.get_node("Yaw/Camera3D")
+	for c in [Vector2i(10, 10), Vector2i(5, 12), Vector2i(15, 8)]:
+		var world: Vector3 = rig.cell_to_world(c)
+		var screen: Vector2 = camera.unproject_position(world)
+		assert_eq(rig.screen_point_to_cell(screen), c, "клітинка %s мусить пережити проєкцію туди й назад" % c)
+
+
+func test_screen_point_to_cell_degrades_safely_when_the_ray_never_meets_the_board_plane() -> void:
+	# Промінь, паралельний площині y=0 (камера дивиться рівно вперед, без
+	# нахилу вниз), не має перетину з нею взагалі — деградація мусить бути
+	# безпечним значенням поза дошкою (Board.in_bounds() завжди false), а не
+	# діленням на нуль чи крашем.
+	var camera: Camera3D = rig.get_node("Yaw/Camera3D")
+	camera.rotation_degrees = Vector3.ZERO
+	var cell: Vector2i = rig.screen_point_to_cell(Vector2(640, 360))
+	assert_false(Board.create(20, 20, Terrain.GroundState.DRY).in_bounds(cell))
