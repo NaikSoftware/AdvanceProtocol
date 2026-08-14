@@ -75,6 +75,29 @@ func test_build_is_idempotent() -> void:
 	assert_eq(total, board.width * board.height, "повторний build не мусить подвоювати інстанси")
 
 
+## Кольор інстансу мультимешу не читається назад під headless (див. коментар
+## угорі файлу), але шлях, яким він туди потрапляє, — звичайні властивості
+## Resource, і вони читаються справно. Перевіряємо кожен інстанс, який
+## справді створив build(), а не лише перший-ліпший: вид, якому забракло
+## матеріалу чи use_colors, — це саме та безмовна поломка, яку має ловити
+## цей тест.
+func test_build_wires_every_kind_instance_for_instance_color_paint() -> void:
+	var board := _two_kind_board()
+	view.build(board)
+	var mmis := _multimesh_children()
+	assert_true(mmis.size() > 0, "передумова: дошка має хоч один вид")
+	for mmi in mmis:
+		assert_true(mmi.multimesh.use_colors, "%s: без use_colors set_instance_color — no-op, підсвітка мовчки зникає" % mmi.name)
+		assert_true(mmi.material_override is StandardMaterial3D, "%s: колір інстансу нема куди читати без матеріалу" % mmi.name)
+		assert_true(mmi.material_override.vertex_color_use_as_albedo, "%s: без vertex_color_use_as_albedo колір інстансу не доходить до альбедо" % mmi.name)
+		assert_true(mmi.multimesh.mesh is BoxMesh, "%s: тайл мусить лишатись дешевим примітивом" % mmi.name)
+
+
+## Далі — підсвітка перевіряється через власний стан BoardView (bookkeeping)
+## і через щойно перевірене підключення до мультимешу (wiring), а не через
+## сам намальований результат: колір інстансу мультимешу не читається назад
+## під headless (коментар угорі файлу), тож «а чи справді видно потрібний
+## колір на екрані» лишається за Task 2.10.
 func test_highlight_layers_are_independent() -> void:
 	var board := _two_kind_board()
 	view.build(board)
