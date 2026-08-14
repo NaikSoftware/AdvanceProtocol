@@ -28,6 +28,19 @@ extends Node3D
 
 const _UnitViewScene := preload("res://game/battle/unit_view.tscn")
 
+## R1: єдина точка запуску, коли ЦЮ сцену показує сам двигун — вона стоїть
+## run/main_scene у project.godot, і жоден інший виклик .setup() поки не
+## існує: SceneRouter.goto_battle() (game/autoload/scene_router.gd) лише
+## змінює сцену й не має точки ін'єкції MapData (це Phase 3, менюшна робота,
+## навмисно лишена їй, а не цьому файлу). Без резервного старту тут пряме
+## відкриття сцени в редакторі чи `$GODOT --path .` лишає _controller null —
+## дошка стоїть порожня, і жоден тап нічого не робить.
+##
+## Фіксований сід (не randi() — §6 CLAUDE.md, детермінізм): це запасний,
+## а не бойовий шлях, тож повторюваність важливіша за різноманіття.
+const _FALLBACK_SEED: int = 1
+const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
+
 @onready var _camera_rig: IsoCameraRig = %CameraRig
 @onready var _board_view: BoardView = %BoardView
 @onready var _units: Node3D = %Units
@@ -53,6 +66,33 @@ var _unit_views: Dictionary = {}
 ## синглтон MatchService), або власний інстанс для ізольованого тесту — той
 ## самий прийом, що вже усталений у tests/game/test_input_controller.gd і
 ## tests/game/test_hud.gd.
+## Резервний вхід для запуску сцени напряму (project.godot: run/main_scene).
+## Без нього `$GODOT --path .` піднімає порожню дошку: setup() — єдине, що
+## будує дошку, наповнює стан і створює контролер, а викликати його нема кому,
+## бо SceneRouter.goto_battle() йде через change_scene_to_file() і не має куди
+## передати MapData. Фазі 3 лишається обидва шляхи: ін'єктувати мапу до входу
+## сцени в дерево або дорастити роутеру параметр.
+##
+## Гейт — саме `current_scene == self`, а не «чи вже є _controller». Сцена,
+## запущена як головна, — це рівно той випадок, для якого резерв існує; сцена,
+## доданa дочірнім вузлом (кожен тест у tests/game/test_battle_screen.gd), —
+## ніколи. Перевірка на _controller цього не розрізняє: у тесті вона бачить
+## null (setup() йде наступним рядком, уже після входу в дерево) і піднімає
+## другий, фоновий матч на автозавантаженому MatchService поверх ізольованого
+## інстансу теста. Відкласти її через call_deferred теж не рятує — відкладений
+## виклик приходить у вже звільнений вузол.
+func _ready() -> void:
+	if get_tree().current_scene != self:
+		return
+	_start_fallback_match_if_not_injected()
+
+
+func _start_fallback_match_if_not_injected() -> void:
+	if _controller != null:
+		return
+	setup(_FallbackMap, 2, _FALLBACK_SEED)
+
+
 func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null) -> void:
 	_match_service = match_service if match_service != null else MatchService
 

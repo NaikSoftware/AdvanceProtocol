@@ -219,6 +219,42 @@ func test_screen_tap_resolves_through_camera_rig_to_the_tapped_cell() -> void:
 	assert_eq(selections[0], unit)
 
 
+# --- _ready(): запуск без ін'єкції --------------------------------------
+#
+# project.godot ставить цю сцену як run/main_scene, і жоден інший виклик
+# .setup() у грі поки не існує (SceneRouter.goto_battle() лише міняє сцену,
+# без точки ін'єкції MapData — Phase 3). Без цього тесту сцена, запущена
+# напряму, лишається інертною: порожня дошка, порожні _unit_views, null
+# _controller — і жоден тап по екрану нічого не робить.
+
+func test_fallback_entry_starts_a_default_match_from_the_shipped_map() -> void:
+	var screen: Node3D = _screen()
+	# _ready() гейтить резерв на `current_scene == self`, а сцена, додана
+	# дочірнім вузлом у тесті, головною ніколи не буває — тож перевіряємо тут
+	# сам резервний вхід, а не гейт. Гейт перевіряє тест нижче.
+	screen._start_fallback_match_if_not_injected()
+
+	var board_view: Node3D = screen.get_node("%BoardView")
+	assert_true(board_view.get_child_count() > 0, "резервний вхід мусить побудувати дошку")
+
+	var units: Node3D = screen.get_node("%Units")
+	assert_true(units.get_child_count() > 0, "резервний вхід мусить розставити юнітів на дошці")
+
+	assert_not_null(screen.input_controller(), "резервний вхід мусить підняти InputController")
+
+
+## Гейт — половина, що захищає решту сьогоднішнього набору: без нього кожен
+## тест цього файла отримував би другий, фоновий матч на автозавантаженому
+## MatchService поверх власного ізольованого інстансу.
+func test_ready_does_not_start_a_match_when_the_scene_is_not_the_current_one() -> void:
+	var screen: Node3D = _screen()
+
+	assert_null(screen.input_controller(),
+		"сцена, додана дочірнім вузлом, не мусить піднімати резервний матч у _ready()")
+	assert_eq(screen.get_node("%Units").get_child_count(), 0,
+		"а отже й жодного юніта на дошці")
+
+
 func test_handover_gate_sits_as_the_last_child_of_a_full_rect_canvas_layer() -> void:
 	# game/ui/handover_gate.gd, крок 5 контракту: гейт мусить бути прямим
 	# нащадком CanvasLayer, останнім серед сиблінгів над дошкою — інакше він
