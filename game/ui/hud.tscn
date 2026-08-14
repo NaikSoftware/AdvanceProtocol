@@ -1,0 +1,146 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/ui/hud.gd" id="1_hud"]
+[ext_resource type="PackedScene" path="res://game/ui/unit_inspector.tscn" id="2_inspector"]
+
+[node name="Hud" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_hud")
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 56
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 56
+theme_override_constants/margin_bottom = 24
+
+[node name="Layout" type="VBoxContainer" parent="SafeArea"]
+theme_override_constants/separation = 12
+mouse_filter = 2
+
+[node name="TopBar" type="HBoxContainer" parent="SafeArea/Layout"]
+theme_override_constants/separation = 16
+mouse_filter = 2
+
+[node name="TurnCaption" type="Label" parent="SafeArea/Layout/TopBar"]
+text = "hud_turn"
+
+[node name="TurnValue" type="Label" parent="SafeArea/Layout/TopBar"]
+unique_name_in_owner = true
+
+[node name="PlayerCaption" type="Label" parent="SafeArea/Layout/TopBar"]
+text = "hud_player"
+
+[node name="PlayerValue" type="Label" parent="SafeArea/Layout/TopBar"]
+unique_name_in_owner = true
+
+[node name="TopSpacer" type="Control" parent="SafeArea/Layout/TopBar"]
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="GroundStateIcon" type="ColorRect" parent="SafeArea/Layout/TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="GroundStateLabel" type="Label" parent="SafeArea/Layout/TopBar"]
+unique_name_in_owner = true
+
+[node name="Middle" type="HBoxContainer" parent="SafeArea/Layout"]
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="MiddleSpacer" type="Control" parent="SafeArea/Layout/Middle"]
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Inspector" parent="SafeArea/Layout/Middle" instance=ExtResource("2_inspector")]
+unique_name_in_owner = true
+
+[node name="BottomBar" type="HBoxContainer" parent="SafeArea/Layout"]
+theme_override_constants/separation = 16
+mouse_filter = 2
+
+[node name="SelectionRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+theme_override_constants/separation = 8
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="ApCaption" type="Label" parent="SafeArea/Layout/BottomBar/SelectionRow"]
+text = "hud_ap"
+
+[node name="ApValue" type="Label" parent="SafeArea/Layout/BottomBar/SelectionRow"]
+unique_name_in_owner = true
+
+[node name="DronesRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar/SelectionRow"]
+unique_name_in_owner = true
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="DronesCaption" type="Label" parent="SafeArea/Layout/BottomBar/SelectionRow/DronesRow"]
+text = "hud_drones"
+
+[node name="DronesValue" type="Label" parent="SafeArea/Layout/BottomBar/SelectionRow/DronesRow"]
+unique_name_in_owner = true
+
+[node name="PreviewShotBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+theme_override_constants/separation = 8
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="PreviewSectorCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewShotBox"]
+text = "hud_armour_sector"
+
+[node name="PreviewSectorValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewShotBox"]
+unique_name_in_owner = true
+
+[node name="PreviewDamageCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewShotBox"]
+text = "hud_damage"
+
+[node name="PreviewDamageValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewShotBox"]
+unique_name_in_owner = true
+
+[node name="PreviewMoveBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+theme_override_constants/separation = 8
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="PreviewApCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewMoveBox"]
+text = "hud_ap_left"
+
+[node name="PreviewApValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewMoveBox"]
+unique_name_in_owner = true
+
+[node name="BottomSpacer" type="Control" parent="SafeArea/Layout/BottomBar"]
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="CancelButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 64)
+text = "hud_cancel"
+
+[node name="ConfirmButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 64)
+disabled = true
+text = "hud_confirm"
+
+[node name="EndTurnButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 64)
+text = "hud_end_turn"
