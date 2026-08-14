@@ -129,6 +129,10 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 				covered = true
 				break
 		assert_true(covered, "у масиві екземплярів для перевірки диспетчеризації бракує %s" % name)
+	# Разом із перевіркою покриття вище це дає бієкцію: рівно один екземпляр
+	# на кожен конкретний клас із джерела, без дублів і без зайвих.
+	assert_eq(all_events.size(), expected_names.size(),
+		"екземплярів мусить бути рівно стільки, скільки конкретних класів у core/events.gd")
 
 	await player.play(all_events)
 	assert_false(player.is_playing(), "порожній лукап без жодного видимого юніта все одно доводить масив до кінця")
@@ -203,6 +207,10 @@ func test_play_preserves_event_order() -> void:
 
 ## Пряме доведення порядку через журнал резолюцій лукапа: масив із різними
 ## unit_id мусить дати той самий порядок звернень до лукапа.
+##
+## Послідовність навмисно НЕ паліндром ([1, 2, 2], не [2, 1, 2]): перевірено
+## мутацією — на паліндромі повний розворот масиву подій проходив цей тест
+## непоміченим, а розворот і є найімовірніша поломка порядку.
 func test_play_resolves_units_in_array_order_not_reshuffled() -> void:
 	var view_a: UnitView = _spawn_view(1)
 	var view_b: UnitView = _spawn_view(2)
@@ -216,13 +224,13 @@ func test_play_resolves_units_in_array_order_not_reshuffled() -> void:
 		return null)
 
 	var events: Array[Events.BattleEvent] = [
-		Events.DamageDealt.new(2, 10, 90),
 		Events.DamageDealt.new(1, 10, 90),
+		Events.DamageDealt.new(2, 10, 90),
 		Events.DamageDealt.new(2, 10, 80),
 	]
 	await player.play(events)
 
-	assert_eq(resolved_order, [2, 1, 2], "порядок звернень до лукапа мусить точно повторювати порядок масиву подій")
+	assert_eq(resolved_order, [1, 2, 2], "порядок звернень до лукапа мусить точно повторювати порядок масиву подій")
 
 
 ## Доводить, що play() справді ЧЕКАЄ анімацію (не лише запускає її) —
@@ -280,6 +288,55 @@ func test_no_lookup_injected_is_also_a_legal_no_op() -> void:
 	]
 	await player.play(events)
 	assert_false(player.is_playing(), "порожній лукап не має завадити програванню завершитись")
+
+
+# --- R19: максимум HP — з ростера, ніколи з трафіку подій -----------------
+
+## Пряме доведення R19. DamageDealt несе hp_left і amount, і спокуса вивести
+## максимум як їхню суму велика (попередня реалізація так і робила) — але
+## сума правдива лише для першого влучання по неушкодженому юніту, а вигляд
+## не має права вирішувати число, яким показує чужий стан. Ростер — єдине
+## джерело: Unit.max_hp() → core/unit_types.gd.
+func test_hp_bar_reads_max_hp_from_the_roster_not_from_event_traffic() -> void:
+	var view: UnitView = _spawn_view(1)
+	var unit := _unit(1)
+	player = EventPlayer.new(
+		func(unit_id: int) -> UnitView: return view if unit_id == 1 else null,
+		func(unit_id: int) -> Unit: return unit if unit_id == 1 else null)
+
+	# Захист самого тесту: якби ростер випадково давав рівно hp_left+amount,
+	# різниця між двома джерелами зникла б і тест перестав би щось доводити.
+	assert_ne(unit.max_hp(), 150, "тест втрачає сенс, якщо ростерний максимум збігається з hp_left+amount")
+
+	var damage: Array[Events.BattleEvent] = [Events.DamageDealt.new(1, 50, 100)]
+	await player.play(damage)
+	assert_almost_eq(view._hp_bar.scale.x, 100.0 / float(unit.max_hp()), 0.001,
+		"бар мусить показати 100 із ростерного максимуму, а не із виведених з події 150")
+
+	# Друге програвання окремим викликом: ремонт бере той самий ростерний
+	# максимум, а не пам'ять про попередні події (її більше немає — і не має
+	# з'явитись знову).
+	var repair: Array[Events.BattleEvent] = [Events.UnitRepaired.new(1, 100, 200)]
+	await player.play(repair)
+	assert_almost_eq(view._hp_bar.scale.x, 200.0 / float(unit.max_hp()), 0.001,
+		"ремонт читає той самий ростер; будь-який стан, накопичений між викликами play(), дав би інше число")
+
+
+## Грань R18/R19: вузол є, а ростерного лукапа нема — максимум невідомий,
+## тож малювати нічого. Тихий no-op, не помилка й не порожній бар: бар
+## лишається тим, що поставив bind().
+func test_hp_event_without_unit_lookup_leaves_the_bar_untouched() -> void:
+	var view: UnitView = _spawn_view(1)
+	player = EventPlayer.new(func(unit_id: int) -> UnitView:
+		return view if unit_id == 1 else null)
+
+	var events: Array[Events.BattleEvent] = [
+		Events.DamageDealt.new(1, 50, 100),
+	]
+	await player.play(events)
+
+	assert_almost_eq(view._hp_bar.scale.x, 1.0, 0.001,
+		"без ростерного лукапа максимум невідомий — бар не оновлюється й лишається таким, яким його поставив bind()")
 
 
 # --- Повторний виклик play() під час програвання --------------------------
