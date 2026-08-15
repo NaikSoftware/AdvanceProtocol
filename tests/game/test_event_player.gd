@@ -287,6 +287,25 @@ func test_play_awaits_animation_before_dispatching_next_event() -> void:
 	assert_false(player.is_playing(), "по завершенню обох подій програвання закінчено")
 
 
+# --- §3.3.1: відповідь мусить бути ВИДНО --------------------------------
+
+## Скарга власника: «атака у відповідь не відбувається». Core її проводив —
+## німим був вигляд: обидва обробники пострілу були no-op, тож обмін читався
+## як два тихі стрибки HP-барів. Тест тримає саме те, що поламалось: той, хто
+## відповів, мусить це ПОКАЗАТИ, і показ мусить бути очікуваним (Signal), бо
+## інакше відповідь злипнеться з першим пострілом в один кадр.
+func test_retaliation_is_animated_on_the_retaliator_and_is_awaited() -> void:
+	var view: UnitView = _spawn_view(2)
+	player = EventPlayer.new(func(unit_id: int) -> UnitView:
+		return view if unit_id == 2 else null)
+
+	player.play([Events.ShotRetaliated.new(2, 1, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
+	assert_true(player.is_playing(), "відповідь мусить триматися твіном, а не проскакувати за один кадр")
+
+	_finish_all_processed_tweens()
+	assert_false(player.is_playing(), "після твіна програвання мусить завершитись")
+
+
 # --- R18: юніт поза туманом — легальний no-op -----------------------------
 
 func test_event_naming_unknown_unit_id_is_skipped_without_error_and_rest_still_plays() -> void:

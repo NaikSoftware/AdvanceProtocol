@@ -184,3 +184,24 @@ Two rules about using it:
   call: there is no cursor and no hold-a-key on a touch screen, so an info screen is a tap and a
   dismissal away, and §1.5 wants every number that decides a fight legible without one. Recorded so
   the placement stays a known departure rather than being "corrected" toward the reference later.
+
+- **Retaliation is gated on the retaliator's *leftover* AP — confirmed, and kept.** Asked directly
+  by the owner after a play test where nothing ever fired back. The counter-attack is state `13` of
+  `class_1`'s attack machine: the shot resolves in state `12`, and if the target still has HP
+  (`field_170.field_259 > 0`) the machine queues `field_168 = 13`, swaps the two unit references
+  (`class_1:444-448`, attacker becomes target), turns the retaliator onto its attacker, and then
+  gates the answer on `class_1:395` → `class_3.method_162` → `method_164(...) && field_248 >=
+  field_258` — **in range, not an engineer, and current AP at least the fire cost.** `field_248` is
+  live AP, not the maximum, and `class_1.method_107` (turn start) refills only the slice
+  `field_159 .. field_159 + field_160`, i.e. **that player's own units**. A unit that spent its AP
+  advancing therefore cannot answer during the enemy's turn, in the original exactly as here.
+
+  The fire-cost table is identical too (`class_3:507`, `{10,10,18,18,18,20,20,25,20,14,14,20,30}`),
+  so the thresholds are not merely analogous, they are the same numbers.
+
+  **What this costs at the table, since it is not obvious:** a tank has 48 AP, pays 20 to fire and
+  10 per clear tile, so four tiles of advance leave 8 and no answer, while two tiles leave 28 and a
+  full-strength one. The threshold is exactly the gold movement zone of
+  [§3.2](../rules/movement-and-terrain.md) — **stopping in gold keeps both this turn's shot and the
+  right to answer; the red zone is disarmed until the unit's own turn.** The rule was already drawn
+  on the board; nobody had said out loud that it was also the retaliation rule.
