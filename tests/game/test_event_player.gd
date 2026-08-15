@@ -201,9 +201,11 @@ func test_unit_moved_event_sets_final_facing_from_the_event_not_last_step_direct
 	player.play(events)
 	_finish_all_processed_tweens()
 
-	# fposmod: формула найкоротшого шляху законно лишає значення поза
-	# [0, 360) — той самий кут, коротшим шляхом (див. UnitView.face()/R14).
-	assert_almost_eq(fposmod(view.rotation_degrees.y, 360.0), fposmod(6.0 * 45.0, 360.0), 0.001,
+	# Перевіряємо НАПРЯМОК У СВІТІ, а не градуси: звірка кута з формулою
+	# `facing * 45` колись уже пропустила помилку зі знаком, бо тест повторював
+	# ту саму помилку, що й код. Board.DIRS_8 — незалежне джерело правди.
+	var fwd: Vector3 = -view.transform.basis.z
+	assert_eq(Vector2i(roundi(fwd.x), roundi(fwd.z)), Board.DIRS_8[6],
 		"фінальна орієнтація мусить прийти з event.facing, не з напрямку кроку")
 
 

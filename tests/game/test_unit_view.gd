@@ -102,7 +102,7 @@ func test_bind_sets_facing_instantly_without_animating() -> void:
 	# almost_eq, не eq: Godot зберігає обертання як Basis, тож round-trip
 	# градуси->радіани->Basis->градуси на цьому значенні вносить похибку
 	# порядку 1e-5° (перевірено — не наслідок нашої формули).
-	assert_almost_eq(view.rotation_degrees.y, 5.0 * 45.0, 0.001, "bind() мусить виставити факінг миттєво, без твіна")
+	_assert_faces(view, 5, "bind() мусить виставити факінг миттєво, без твіна")
 	assert_true(view._face_tween == null or not view._face_tween.is_valid(), "bind() не має лишати живий твін повороту")
 
 
@@ -118,7 +118,7 @@ func test_bind_kills_a_live_face_tween_from_previous_bind() -> void:
 
 	view.bind(_unit(5, 0, Vector2i(0, 0), 2))
 	assert_false(live_tween.is_valid(), "повторний bind() мусить убити живий твін попереднього повороту")
-	assert_almost_eq(view.rotation_degrees.y, 2.0 * 45.0, 0.001, "новий bind() виставляє факінг миттєво, ігноруючи недограний твін")
+	_assert_faces(view, 2, "новий bind() виставляє факінг миттєво, ігноруючи недограний твін")
 
 
 func test_set_hp_reflects_ratio_including_full_and_zero() -> void:
@@ -262,11 +262,11 @@ func test_move_along_turns_the_unit_at_each_step() -> void:
 
 	tween.custom_step(0.25)  # рівно перший крок: доворот + рух
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "перший крок довозить до першої клітинки")
-	assert_eq(view.rotation_degrees.y, 2.0 * 45.0, "після кроку на схід юніт дивиться на схід (facing=2)")
+	_assert_faces(view, 2, "після кроку на схід юніт дивиться на схід (facing=2)")
 
 	tween.custom_step(0.25)  # рівно другий крок: доворот + рух
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "другий крок довозить до другої клітинки")
-	assert_eq(view.rotation_degrees.y, 4.0 * 45.0, "після кроку на південь юніт дивиться на південь (facing=4)")
+	_assert_faces(view, 4, "після кроку на південь юніт дивиться на південь (facing=4)")
 
 
 ## Баг-звіт: «на старті вибираю танк, вказую їхати вперед — він їде спиною».
@@ -283,7 +283,7 @@ func test_move_along_turns_in_place_before_moving_when_direction_reverses() -> v
 
 	tween.custom_step(0.15)  # рівно тривалість довороту на місці, ще без руху
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(0, 0)), "поки триває доворот, юніт мусить лишатись на стартовій клітинці — не їхати заднім ходом")
-	assert_eq(view.rotation_degrees.y, 0.0, "доворот на 180° мусить завершитись ДО того, як юніт зрушить з місця")
+	_assert_faces(view, 0, "доворот на 180° мусить завершитись ДО того, як юніт зрушить з місця")
 
 	tween.custom_step(0.1)  # рівно duration_per_step руху
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(0, -1)), "після довороту юніт доїжджає до цільової клітинки носом уперед")
@@ -316,7 +316,7 @@ func test_move_along_turns_in_place_at_a_route_turn_not_only_at_the_start() -> v
 
 	tween.custom_step(0.15)  # доворот на другому кроці (схід -> південь), позиція ще на першій клітинці
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "доворот на повороті маршруту теж іде ДО руху в нову клітинку")
-	assert_eq(view.rotation_degrees.y, 4.0 * 45.0, "доворот на повороті маршруту завершується перед в'їздом у клітинку")
+	_assert_faces(view, 4, "доворот на повороті маршруту завершується перед в'їздом у клітинку")
 
 	tween.custom_step(0.1)
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "після довороту юніт доїжджає до другої клітинки")
@@ -335,8 +335,7 @@ func test_move_along_final_facing_overrides_last_step_direction() -> void:
 	# fposmod: формула найкоротшого шляху (та сама, що й у face()) законно
 	# лишає значення поза [0, 360) — наприклад -90.0 замість еквівалентного
 	# 270.0 — це той самий кут, коротшим шляхом.
-	assert_almost_eq(fposmod(view.rotation_degrees.y, 360.0), fposmod(6.0 * 45.0, 360.0), 0.001,
-		"фінальна орієнтація — переданий facing, а не напрямок останнього кроку")
+	_assert_faces(view, 6, "фінальна орієнтація — переданий facing, а не напрямок останнього кроку")
 
 
 func test_move_along_with_empty_path_still_finishes_without_moving() -> void:
@@ -365,3 +364,16 @@ func test_no_fog_shaped_method_and_no_vision_reference() -> void:
 	assert_false(view.has_method("is_visible_to"), "видимість вирішує Task 2.10, не цей вузол")
 	var source: String = FileAccess.get_file_as_string("res://game/battle/unit_view.gd")
 	assert_false(source.contains("Vision"), "UnitView не має споживати Vision узагалі")
+
+
+## Перевіряємо НАПРЯМОК У СВІТІ, а не число градусів. Саме звірка кута з
+## формулою `facing * 45` і дозволила помилці зі знаком прожити стільки: тест
+## повторював ту саму помилку, що й код, і тому був завжди зелений. Board.DIRS_8
+## — незалежне джерело правди, і воно ловить дзеркальний схід/захід.
+func _forward_cell_dir(view: UnitView) -> Vector2i:
+	var f: Vector3 = -view.transform.basis.z
+	return Vector2i(roundi(f.x), roundi(f.z))
+
+
+func _assert_faces(view: UnitView, facing: int, msg: String) -> void:
+	assert_eq(_forward_cell_dir(view), Board.DIRS_8[facing], msg)

@@ -13,6 +13,17 @@ extends Node3D
 ## Крок факінгу: вісім напрямків Board.DIRS_8 рівномірно по колу.
 const _DEGREES_PER_FACING: float = 45.0
 
+## Board.DIRS_8 іде ЗА годинниковою стрілкою (0 N, 2 E, 4 S, 6 W), а поворот
+## навколо Y у Godot — ПРОТИ. Тому знак обовʼязковий: `facing * 45` збігається
+## з правдою лише для N і S, а схід зі заходом міняє місцями — юніт, що їде на
+## схід, показує корму. Перевірено в рушії перебором усіх восьми напрямків.
+##
+## Чому це прожило довго: і ствол, і стрілка-девтул — діти того самого вузла,
+## тож вони крутились разом і виглядали узгодженими між собою. Помилку видно
+## лише порівнянням з НАПРЯМКОМ РУХУ, а не з іншою деталлю силуету.
+static func _degrees_for_facing(direction: int) -> float:
+	return -float(direction) * _DEGREES_PER_FACING
+
 ## §3.9: 2 дрони на загін за матч — більше ніколи не буває, тож це стеля
 ## відображення, а не число з ростера.
 const _MAX_DRONES: int = 2
@@ -164,7 +175,7 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		var is_last_step: bool = i == path.size() - 1
 		var step_facing: int = Board.facing_towards(current_cell, cell)
 		var target_facing: int = final_facing if (is_last_step and final_facing >= 0) else step_facing
-		var target_degrees: float = float(target_facing) * _DEGREES_PER_FACING
+		var target_degrees: float = _degrees_for_facing(target_facing)
 		var delta: float = fposmod(target_degrees - predicted_degrees + 180.0, 360.0) - 180.0
 
 		# set_parallel(false) перед КОЖНИМ tween_property нижче — кожен виклик
@@ -198,7 +209,7 @@ func face(direction: int) -> void:
 	assert(direction >= 0 and direction < 8, "напрямок поза межами 8 фейсингів: %d" % direction)
 	facing = direction
 	var current: float = rotation_degrees.y
-	var target: float = float(direction) * _DEGREES_PER_FACING
+	var target: float = _degrees_for_facing(direction)
 	# Найкоротший шлях, не абсолютний кут: з 350° у 10° крутимось на +20°,
 	# а не в обхід на -340°. Стандартна формула найкоротшої дельти кута.
 	var delta: float = fposmod(target - current + 180.0, 360.0) - 180.0
@@ -220,7 +231,7 @@ func _set_facing_instant(direction: int) -> void:
 	if _face_tween != null and _face_tween.is_valid():
 		_face_tween.kill()
 	facing = direction
-	rotation_degrees.y = float(direction) * _DEGREES_PER_FACING
+	rotation_degrees.y = _degrees_for_facing(direction)
 
 
 func set_hp(hp: int, max_hp: int) -> void:
