@@ -785,3 +785,89 @@ func test_handover_gate_sits_as_the_last_child_of_a_full_rect_canvas_layer() -> 
 	assert_true(gate.get_parent() is CanvasLayer, "гейт мусить бути прямим нащадком CanvasLayer")
 	var siblings: Array[Node] = gate.get_parent().get_children()
 	assert_eq(siblings[siblings.size() - 1], gate, "гейт мусить бути останнім сиблінгом — над рештою UI, коли видимий")
+
+
+# --- Баг-звіт: тимчасова стрілка факінгу (unit_view.gd, ЧАСОВИЙ ДЕВТУЛ) ----
+#
+# Скарга: стрілка зникає з УСІХ юнітів одразу після вибору одного з них, і
+# лишається відсутньою після підтвердженого ходу. Наявні тести (test_unit_view.gd)
+# цього не ловлять — вони перевіряють вузол одразу після bind(), у відриві
+# від дошки, зон і рекону battle_screen. Тест нижче збирає рівно той шлях,
+# яким користується гравець: setup() → тап-вибір (піднімає ZoneOverlay,
+# §3.13) → підтверджений рух (rebuild усіх вузлів, battle_screen.gd:538) —
+# і на кожному кроці перевіряє, що DebugFacingArrow лишається в дереві й
+# видимим на КОЖНОМУ юніті дошки, не лише вибраному.
+#
+# Розслідування (не здогад): пряма інспекція вузла одразу після select_unit()
+# показала стрілку на місці (visible=true, той самий інстанс, коректні mesh/
+# material/transform) — вузол ніхто не знищує (гіпотеза «а» не підтвердилась).
+# ZoneOverlay.show_for()/BoardView.highlight_tiles() теж не додають жодної
+# нової геометрії — вони перефарбовують КОЛІР уже наявних інстансів тайлової
+# MultiMesh (board_view.gd:81-86, set_instance_color), а не створюють нові
+# площини; стрілка (y≈0.32–0.52 світових) і верх тайлу (y=0.05) розділені
+# набагато більше, ніж будь-яка типова товщина z-fighting (гіпотеза «б» теж
+# не підтвердилась). Пряма перевірка в реальному вікні (spectacle+xdotool,
+# NVIDIA Vulkan Forward Mobile) на кількох свіжих запусках гри не відтворила
+# зникнення: кількість маджента-пікселів лишалась незмінною (621) одразу
+# після старту, одразу після вибору танка, і зростала (625) після
+# підтвердженого ходу — а не падала до нуля. Тест нижче фіксує це як
+# регресійний бар'єр на рівні збірки сцени (не лише unit_view.gd у відриві),
+# щоб будь-яке майбутнє регресійне зникнення впало тут одразу.
+func _finish_all_processed_tweens() -> void:
+	for t in Engine.get_main_loop().get_processed_tweens():
+		if t.is_valid():
+			t.custom_step(10.0)
+
+
+func _arrow_of(screen: Node3D, unit_id: int) -> MeshInstance3D:
+	var view: Node3D = screen.unit_view_for(unit_id)
+	if view == null:
+		return null
+	return view.get_node_or_null("Silhouette/DebugFacingArrow")
+
+
+func test_facing_arrow_survives_selection_zone_overlay_and_a_confirmed_move() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(10, 10)
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 0},  # той, кого виберемо й посунемо
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 4), "facing": 0},  # свій, лишається невибраним
+		{"type_id": 5, "owner": 1, "pos": Vector2i(8, 8), "facing": 0},  # поза ромбом огляду — без вузла, не заважає лічбі
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+
+	var moved: Unit = service.state.units_of(0)[0]
+	var bystander: Unit = service.state.units_of(0)[1]
+
+	# Передумова: стрілка на місці одразу після setup(), на обох юнітах.
+	assert_not_null(_arrow_of(screen, moved.id), "передумова: стрілка мусить бути на щойно зібраному юніті")
+	assert_true(_arrow_of(screen, moved.id).visible)
+	assert_not_null(_arrow_of(screen, bystander.id), "передумова: стрілка мусить бути й на другому юніті")
+	assert_true(_arrow_of(screen, bystander.id).visible)
+
+	# Крок 1 — тап-вибір: піднімає ZoneOverlay (нові кольори тайлів під
+	# юнітом і навколо), рекону вузлів немає — стрілка мусить лишитись і на
+	# вибраному, і на невибраному юніті.
+	screen.input_controller().tap_cell(moved.pos)
+
+	assert_not_null(_arrow_of(screen, moved.id), "стрілка на вибраному юніті не мусить зникнути після тап-вибору")
+	assert_true(_arrow_of(screen, moved.id).visible, "стрілка на вибраному юніті мусить лишатись visible=true")
+	assert_not_null(_arrow_of(screen, bystander.id), "стрілка на НЕвибраному юніті не мусить зникнути від чужого вибору")
+	assert_true(_arrow_of(screen, bystander.id).visible, "стрілка на НЕвибраному юніті мусить лишатись visible=true")
+
+	# Крок 2 — підтверджений рух: викликає повний rebuild (battle_screen.gd
+	# _rebuild_units_for_active_player) — старі UnitView знищуються, нові
+	# збираються через bind(), який заново додає стрілку. Тягнемо tween
+	# вручну (той самий прийом, що й tests/game/test_event_player.gd) —
+	# жодного реального очікування в headless-тесті.
+	screen.input_controller().tap_cell(Vector2i(3, 2))  # у зоні move_and_fire, one step east
+	screen.input_controller().confirm_pending()
+	_finish_all_processed_tweens()
+
+	assert_eq(service.state.get_unit(moved.id).pos, Vector2i(3, 2), "передумова: рух справді відбувся")
+	assert_not_null(_arrow_of(screen, moved.id), "стрілка мусить пережити rebuild після підтвердженого ходу")
+	assert_true(_arrow_of(screen, moved.id).visible, "стрілка на щойно посунутому юніті мусить лишатись visible=true")
+	assert_not_null(_arrow_of(screen, bystander.id), "стрілка стороннього юніта теж мусить пережити rebuild")
+	assert_true(_arrow_of(screen, bystander.id).visible, "стрілка стороннього юніта мусить лишатись visible=true")

@@ -157,6 +157,76 @@ func test_set_drones_shows_count_regardless_of_owner() -> void:
 	assert_false(view_a._drone_icon.visible, "нуль дронів — лічильник ховається")
 
 
+## Задача 2 (тимчасовий девтул, поки нема справжніх моделей): стрілка напряму
+## мусить бути на КОЖНОМУ юніті — і своєму, і чужому — незалежно від owner.
+## Напрямок чужого юніта й так публічний (§3.13), тож це не витік інформації.
+func test_bind_adds_a_temporary_debug_facing_arrow_for_any_owner() -> void:
+	view.bind(_unit(5, 0))
+	assert_not_null(view.get_node_or_null("Silhouette/DebugFacingArrow"), "стрілка мусить з'явитись на власному юніті")
+
+	var enemy_view: Node3D = UnitViewScene.instantiate()
+	add_child_autofree(enemy_view)
+	enemy_view.bind(_unit(5, 1))
+	assert_not_null(enemy_view.get_node_or_null("Silhouette/DebugFacingArrow"), "стрілка мусить з'явитись і на ворожому юніті — це девтул, не ігрова інформація")
+
+
+## Стрілка — інструмент розробника, не ігрова позначка власника: колір мусить
+## лишатись тим самим для будь-якого owner (на відміну від Hull, який фарбує
+## _PLAYER_COLORS), і не збігатись з жодним кольором, що вже зайнятий іншою
+## семантикою на юніті (гравець, HP-бар, лічильник дронів, жовта смуга
+## інженера) — інакше стрілка «зливається з корпусом» усупереч вимозі.
+func test_debug_facing_arrow_color_is_owner_independent_and_visually_distinct() -> void:
+	var view_a: Node3D = UnitViewScene.instantiate()
+	var view_b: Node3D = UnitViewScene.instantiate()
+	add_child_autofree(view_a)
+	add_child_autofree(view_b)
+	view_a.bind(_unit(5, 0))
+	view_b.bind(_unit(5, 1))
+
+	var arrow_a: MeshInstance3D = view_a.get_node("Silhouette/DebugFacingArrow")
+	var arrow_b: MeshInstance3D = view_b.get_node("Silhouette/DebugFacingArrow")
+	var color_a: Color = (arrow_a.material_override as StandardMaterial3D).albedo_color
+	var color_b: Color = (arrow_b.material_override as StandardMaterial3D).albedo_color
+	assert_eq(color_a, color_b, "колір стрілки не має гілки на власника")
+
+	for player_color in UnitView._PLAYER_COLORS:
+		assert_ne(color_a, player_color, "колір стрілки не має збігатись із жодним кольором гравця")
+	assert_ne(color_a, Color("d9b23a"), "колір стрілки не має збігатись із жовтим (смуга інженера/лічильник дронів)")
+
+
+## Стрілка сидить на даху корпусу — нижче HP-бару й лічильника дронів
+## (обидва billboard-спрайти, підняті над корпусом саме для читабельності),
+## інакше вона перекривала б їх, порушуючи вимогу.
+func test_debug_facing_arrow_sits_below_hp_bar_and_drone_icon() -> void:
+	view.bind(_unit(5))  # TANK — найвищий Hull (0.50) із наявних класів
+	var arrow: MeshInstance3D = view.get_node("Silhouette/DebugFacingArrow")
+	assert_true(arrow.position.y < view._hp_bar.position.y, "стрілка мусить лишатись нижче HP-бару")
+	assert_true(arrow.position.y < view._drone_icon.position.y, "стрілка мусить лишатись нижче лічильника дронів")
+
+
+## Стрілка вказує вперед так само, як ствол (_build_barrel) — у локальний
+## -Z, ще ДО повороту вузла (rotation_degrees.y=0 одразу після bind()) — той
+## самий локальний перед, що й у решти силуету.
+func test_debug_facing_arrow_points_toward_local_front_like_the_barrel() -> void:
+	view.bind(_unit(5))
+	var arrow: MeshInstance3D = view.get_node("Silhouette/DebugFacingArrow")
+	var arrays: Array = arrow.mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var min_z: float = INF
+	for v in vertices:
+		min_z = minf(min_z, v.z)
+	assert_true(min_z < 0.0, "вершина-носик стрілки мусить лежати в локальному -Z, як і ствол")
+
+
+## Задача 2, вимога «легко прибрати одним рухом»: одна очевидна точка
+## вимкнення, а не десяток вкраплень по коду — рівно ОДНЕ місце будує
+## стрілку (виклик _build_facing_arrow), а не кілька розкиданих додавань.
+func test_debug_facing_arrow_has_a_single_build_call_site() -> void:
+	var source: String = FileAccess.get_file_as_string("res://game/battle/unit_view.gd")
+	var call_count: int = source.count("_build_facing_arrow(")
+	assert_eq(call_count, 2, "рівно одне визначення й рівно один виклик _build_facing_arrow — жодних розкиданих додавань стрілки по файлу")
+
+
 func test_set_dimmed_toggles_and_is_reversible() -> void:
 	view.bind(_unit(5))
 	var base_color: Color = view._hull_material.albedo_color
@@ -179,35 +249,77 @@ func test_move_along_tweens_position_to_final_cell() -> void:
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "після прокрутки твіна юніт стоїть на останній клітинці шляху")
 
 
-## Виправлення 2: юніт довертається на кожному кроці шляху, паралельно з
-## рухом (Board.facing_towards, чиста функція core/). Крок 1 — на схід
-## (facing=2), крок 2 — на південь (facing=4); прокручуємо твін по одному
-## кроку за раз, щоб зловити орієнтацію саме там, де вона мала б змінитись.
+## Виправлення 3: юніт довертається НА МІСЦІ ПЕРЕД кожним кроком шляху, що
+## справді міняє напрямок (Board.facing_towards, чиста функція core/), а не
+## паралельно з рухом. Крок 1 — на схід (facing=2), крок 2 — на південь
+## (facing=4); обидва — доворот (_FACE_TURN_DURATION=0.15) стартовий з
+## facing=0, тож кожен крок шляху займає 0.15+0.1=0.25с сумарно.
 func test_move_along_turns_the_unit_at_each_step() -> void:
 	view.bind(_unit(5, 0, Vector2i(0, 0), 0))  # дивиться на північ (facing=0)
 	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1)]
 	var finished: Signal = view.move_along(path, 0.1)
 	var tween: Tween = finished.get_object()
 
-	tween.custom_step(0.1)  # рівно перший крок
+	tween.custom_step(0.25)  # рівно перший крок: доворот + рух
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "перший крок довозить до першої клітинки")
 	assert_eq(view.rotation_degrees.y, 2.0 * 45.0, "після кроку на схід юніт дивиться на схід (facing=2)")
 
-	tween.custom_step(0.1)  # рівно другий крок
+	tween.custom_step(0.25)  # рівно другий крок: доворот + рух
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "другий крок довозить до другої клітинки")
 	assert_eq(view.rotation_degrees.y, 4.0 * 45.0, "після кроку на південь юніт дивиться на південь (facing=4)")
 
 
-## Поворот іде ПАРАЛЕЛЬНО з рухом, не додаючи часу до кроку: рівно
-## path.size() * duration_per_step повністю прокручує твін до кінця шляху.
-## Якби поворот додавав час послідовно, цієї прокрутки не вистачило б.
-func test_move_along_turning_does_not_add_time_to_the_step() -> void:
-	view.bind(_unit(5, 0, Vector2i(0, 0), 0))
-	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1)]
+## Баг-звіт: «на старті вибираю танк, вказую їхати вперед — він їде спиною».
+## Причина — минула версія тягнула поворот і рух паралельно в тому самому
+## кроці, тож юніт в'їжджав у нову клітинку носом ще в СТАРУ сторону і лише
+## дорогою довертався; на 180° це виглядає рівно як заднiй хід. Правильно —
+## юніт спершу довертається НА МІСЦІ (позиція не зрушена), і лише потім їде;
+## позиція мусить лишитись у стартовій клітинці, поки триває лише поворот.
+func test_move_along_turns_in_place_before_moving_when_direction_reverses() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 4))  # дивиться на південь (facing=4)
+	var path: Array[Vector2i] = [Vector2i(0, -1)]  # крок на північ — рівно 180° від поточного факінгу
 	var finished: Signal = view.move_along(path, 0.1)
 	var tween: Tween = finished.get_object()
-	tween.custom_step(0.2)
-	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "рух і поворот ідуть паралельно — сумарний час лишається path.size() * duration_per_step")
+
+	tween.custom_step(0.15)  # рівно тривалість довороту на місці, ще без руху
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(0, 0)), "поки триває доворот, юніт мусить лишатись на стартовій клітинці — не їхати заднім ходом")
+	assert_eq(view.rotation_degrees.y, 0.0, "доворот на 180° мусить завершитись ДО того, як юніт зрушить з місця")
+
+	tween.custom_step(0.1)  # рівно duration_per_step руху
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(0, -1)), "після довороту юніт доїжджає до цільової клітинки носом уперед")
+
+
+## Поворот додає час рівно тоді, коли кут справді змінюється (на старті руху
+## й на поворотах маршруту) — і НЕ додає жодного часу на прямій ділянці, де
+## напрямок кроку співпадає з уже виставленим факінгом. Юніт уже дивиться на
+## схід (facing=2, той самий, що й перший крок шляху) — обидва кроки йдуть
+## строго на схід, тож жодного довороту не потрібно взагалі.
+func test_move_along_adds_no_time_when_direction_does_not_change() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 2))  # вже дивиться на схід (facing=2)
+	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(2, 0)]  # обидва кроки — на схід
+	var finished: Signal = view.move_along(path, 0.1)
+	var tween: Tween = finished.get_object()
+	tween.custom_step(0.2)  # рівно path.size() * duration_per_step, без жодного довороту
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(2, 0)), "без жодного повороту сумарний час лишається path.size() * duration_per_step")
+
+
+## Поворот маршруту (не старт) теж мусить довертати ПЕРЕД рухом у клітинку,
+## де напрямок міняється — не лише перший крок шляху.
+func test_move_along_turns_in_place_at_a_route_turn_not_only_at_the_start() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 2))  # дивиться на схід (facing=2) — перший крок не потребує довороту
+	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1)]  # схід, потім поворот на південь
+	var finished: Signal = view.move_along(path, 0.1)
+	var tween: Tween = finished.get_object()
+
+	tween.custom_step(0.1)  # перший крок — без довороту, рівно duration_per_step
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "перший крок співпадає з поточним факінгом — жодної паузи")
+
+	tween.custom_step(0.15)  # доворот на другому кроці (схід -> південь), позиція ще на першій клітинці
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "доворот на повороті маршруту теж іде ДО руху в нову клітинку")
+	assert_eq(view.rotation_degrees.y, 4.0 * 45.0, "доворот на повороті маршруту завершується перед в'їздом у клітинку")
+
+	tween.custom_step(0.1)
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "після довороту юніт доїжджає до другої клітинки")
 
 
 ## MoveCommand.facing (core/commands/move_command.gd) — явний параметр, і
