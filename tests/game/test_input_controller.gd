@@ -37,6 +37,7 @@ var overlay: SpyZoneOverlay
 var controller: InputController
 var _selections: Array = []
 var _previews: Array[Dictionary] = []
+var _pending_cleared_count: int = 0
 
 
 func before_each() -> void:
@@ -46,8 +47,10 @@ func before_each() -> void:
 	controller = InputController.new(service, overlay)
 	_selections = []
 	_previews = []
+	_pending_cleared_count = 0
 	controller.selection_changed.connect(func(u: Unit) -> void: _selections.append(u))
 	controller.action_preview.connect(func(p: Dictionary) -> void: _previews.append(p))
+	controller.pending_cleared.connect(func() -> void: _pending_cleared_count += 1)
 
 
 func _start(width: int = 20, height: int = 20) -> void:
@@ -137,6 +140,59 @@ func test_cancel_pending_clears_pending_and_submits_nothing() -> void:
 	controller.confirm_pending()
 	assert_eq(u.pos, Vector2i(5, 5))
 	assert_true(service.take_events().is_empty())
+
+
+## Підсвітка шляху (task 2, PathOverlay) слухає рівно цей сигнал, щоб зняти
+## намальований маршрут, коли гравець скасовує дію — без нього шлях лишався
+## б на екрані для дії, якої вже нема.
+func test_cancel_pending_emits_pending_cleared() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	controller.tap_cell(Vector2i(6, 5))
+	_pending_cleared_count = 0  # скинути емісію від select_unit() вище — цікавить лише cancel
+
+	controller.cancel_pending()
+
+	assert_eq(_pending_cleared_count, 1, "cancel_pending() мусить повідомити слухачів, що прев'ю знято")
+
+
+## Той самий сигнал мусить прийти й після успішного підтвердження — юніт
+## лишається вибраним (жодного selection_changed, input_controller.gd:174),
+## тож це єдиний спосіб для PathOverlay дізнатись, що щойно намальований
+## шлях уже пройдено і його треба зняти.
+func test_confirm_pending_emits_pending_cleared_without_disturbing_preview_count() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(_previews.size(), 1, "передумова: рівно одне прев'ю руху")
+	_pending_cleared_count = 0  # скинути емісію від select_unit() вище — цікавить лише confirm
+
+	controller.confirm_pending()
+
+	assert_eq(_pending_cleared_count, 1, "confirm_pending() мусить повідомити слухачів, що прев'ю знято")
+	assert_eq(_previews.size(), 1, "pending_cleared — окремий сигнал; action_preview не мусить отримати зайвий запис")
+
+
+## select_unit() теж скидає _pending (input_controller.gd:72) — та сама
+## гарантія мусить діяти й тут: перемикання вибору без жодної дії не лишає
+## PathOverlay зі старим шляхом чужого юніта.
+func test_select_unit_emits_pending_cleared_without_disturbing_preview_count() -> void:
+	_start()
+	var a: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	var b: Unit = service.state.add_unit(5, 0, Vector2i(10, 10), 0)
+	_begin_and_drain()
+	controller.tap_cell(a.pos)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(_previews.size(), 1, "передумова: рівно одне прев'ю руху для a")
+
+	controller.tap_cell(b.pos)
+
+	assert_eq(_previews.size(), 1, "action_preview не мусить отримати зайвий запис від select_unit()")
+	assert_true(_pending_cleared_count >= 1, "select_unit() мусить повідомити, що старий pending знято")
 
 
 # --- Ціль: прев'ю пострілу --------------------------------------------------

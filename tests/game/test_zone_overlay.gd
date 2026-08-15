@@ -2,8 +2,14 @@ extends GutTest
 ## Task 2.5, ruling R16: жива сцена battle_screen.tscn зʼявляється лише в
 ## Task 2.10, тож перевірка тут — headless, той самий прийом, що й
 ## tests/game/test_board_view.gd (ruling R4): підсвітка перевіряється через
-## власний стан BoardView (_layer_highlights), бо колір інстансу мультимешу
+## власний стан BoardView (_contour_segments), бо колір інстансу мультимешу
 ## не читається назад під headless-запуском.
+##
+## R15 → PO-скарга «контурно, не заливкою»: ZoneOverlay малює РЕБРА зони
+## (BoardView.draw_contour), а не тайли (BoardView.highlight_tiles). Головний
+## доказ — _layer_highlights для LAYER_ZONES лишається порожнім завжди
+## (test_show_for_never_touches_the_tile_fill_layer нижче): це і відрізняє
+## контур від fill структурно, без єдиного знімка екрана.
 
 const BoardViewScene := preload("res://game/battle/board_view.tscn")
 
@@ -30,8 +36,20 @@ func _zones(origin: Vector2i, move_and_fire: Array[Vector2i], move_only: Array[V
 	return z
 
 
-func _painted(layer: int) -> Dictionary:
-	return board_view._layer_highlights[layer]
+func _segments(layer: int) -> Array:
+	return board_view.contour_segments(layer)
+
+
+## cell -> Array[Vector2i] напрямків, для яких намальована риска — зручно для
+## тестів, яким байдужий сам напрямок, лише факт «цей тайл на контурі».
+func _dirs_by_cell(layer: int) -> Dictionary:
+	var out: Dictionary = {}
+	for seg in _segments(layer):
+		var cell: Vector2i = seg["cell"]
+		if not out.has(cell):
+			out[cell] = [] as Array[Vector2i]
+		out[cell].append(seg["dir"])
+	return out
 
 
 func test_show_for_paints_only_zones_layer() -> void:
@@ -40,10 +58,26 @@ func test_show_for_paints_only_zones_layer() -> void:
 	var mo: Array[Vector2i] = [Vector2i(11, 10)]
 	overlay.show_for(_unit(origin), _zones(origin, mf, mo))
 
-	assert_true(_painted(board_view.LAYER_ZONES).has(Vector2i(10, 10)), "золота зона мусить бути намальована")
-	assert_true(_painted(board_view.LAYER_ZONES).has(Vector2i(11, 10)), "червона зона мусить бути намальована")
-	assert_eq(_painted(board_view.LAYER_TARGETS).size(), 0, "show_for не мусить чіпати шар цілей")
-	assert_eq(_painted(board_view.LAYER_SELECTION).size(), 0, "show_for не мусить чіпати шар вибору")
+	var by_cell: Dictionary = _dirs_by_cell(board_view.LAYER_ZONES)
+	assert_true(by_cell.has(Vector2i(10, 10)), "золота зона мусить бути намальована")
+	assert_true(by_cell.has(Vector2i(11, 10)), "червона зона мусить бути намальована")
+	assert_eq(_segments(board_view.LAYER_TARGETS).size(), 0, "show_for не мусить чіпати шар цілей")
+	assert_eq(_segments(board_view.LAYER_SELECTION).size(), 0, "show_for не мусить чіпати шар вибору")
+	assert_eq(_segments(board_view.LAYER_PATH).size(), 0, "show_for не мусить чіпати шар шляху")
+
+
+## Головний доказ Task 1: контур ЗОН ніколи не є заливкою тайла. Якби
+## show_for() досі викликав highlight_tiles(), цей запис зʼявився б тут.
+func test_show_for_never_touches_the_tile_fill_layer() -> void:
+	var origin := Vector2i(10, 10)
+	var block: Array[Vector2i] = []
+	for x in range(9, 12):
+		for y in range(9, 12):
+			block.append(Vector2i(x, y))
+	overlay.show_for(_unit(origin), _zones(origin, block, []))
+
+	assert_eq(board_view._layer_highlights[board_view.LAYER_ZONES].size(), 0,
+		"зона руху — контур, не заливка: _layer_highlights мусить лишитись порожнім")
 
 
 func test_show_for_uses_correct_colors_per_zone() -> void:
@@ -52,13 +86,18 @@ func test_show_for_uses_correct_colors_per_zone() -> void:
 	var mo: Array[Vector2i] = [Vector2i(11, 10)]
 	overlay.show_for(_unit(origin), _zones(origin, mf, mo))
 
-	assert_eq(_painted(board_view.LAYER_ZONES)[Vector2i(10, 10)], ZoneOverlay.COLOR_MOVE_AND_FIRE)
-	assert_eq(_painted(board_view.LAYER_ZONES)[Vector2i(11, 10)], ZoneOverlay.COLOR_MOVE_ONLY)
+	for seg in _segments(board_view.LAYER_ZONES):
+		if seg["cell"] == Vector2i(10, 10):
+			assert_eq(seg["color"], ZoneOverlay.COLOR_MOVE_AND_FIRE)
+		elif seg["cell"] == Vector2i(11, 10):
+			assert_eq(seg["color"], ZoneOverlay.COLOR_MOVE_ONLY)
 
 
 ## Тест доводить саме контур, а не «намальовано хоч щось»: суцільний 3x3
 ## блок у одній зоні має внутрішню клітинку без жодного сусіда ззовні — вона
-## не має потрапити на дошку, тоді як усі вісім країв мусять.
+## не мусить отримати жодної риски, тоді як усі вісім країв мусять отримати
+## бодай одну. Рівно 12 риск разом: чотири кутові тайли мають по 2 ребра
+## назовні, чотири серединні — по 1 (§3.2, DIRS_4 — лише ортогональні сусіди).
 func test_contour_omits_interior_tile_of_a_solid_block() -> void:
 	var origin := Vector2i(5, 5)
 	var block: Array[Vector2i] = []
@@ -68,17 +107,17 @@ func test_contour_omits_interior_tile_of_a_solid_block() -> void:
 	var mo: Array[Vector2i] = block.duplicate()
 	overlay.show_for(_unit(origin), _zones(origin, [], mo))
 
-	var painted: Dictionary = _painted(board_view.LAYER_ZONES)
-	assert_false(painted.has(Vector2i(5, 5)), "центр суцільного блоку — не контур, всі сусіди в тій самій зоні")
+	var by_cell: Dictionary = _dirs_by_cell(board_view.LAYER_ZONES)
+	assert_false(by_cell.has(Vector2i(5, 5)), "центр суцільного блоку — не контур, всі сусіди в тій самій зоні")
 	for cell in block:
 		if cell != Vector2i(5, 5):
-			assert_true(painted.has(cell), "%s: край блоку мусить бути в контурі" % cell)
-	assert_eq(painted.size(), 8, "рівно вісім країв 3x3 блоку, без центру")
+			assert_true(by_cell.has(cell), "%s: край блоку мусить мати хоч одну риску" % cell)
+	assert_eq(_segments(board_view.LAYER_ZONES).size(), 12, "рівно 12 риск на периметрі 3x3 блоку, без центру")
 
 
 ## Золота зона (внутрішній 3x3) і червона зона (кільце навколо неї) торкаються
-## по межі — дотична золота клітинка не має бути «проковтнута» червоною і
-## навпаки.
+## по межі — на дотичному ребрі мусить лишитись РІВНО ДВІ риски (по одній з
+## кожного боку), а не одна змішана й не жодної.
 func test_nested_zones_touch_without_swallowing_each_other() -> void:
 	var origin := Vector2i(10, 10)
 	var gold: Array[Vector2i] = []
@@ -93,12 +132,22 @@ func test_nested_zones_touch_without_swallowing_each_other() -> void:
 				red.append(p)
 	overlay.show_for(_unit(origin), _zones(origin, gold, red))
 
-	var painted: Dictionary = _painted(board_view.LAYER_ZONES)
-	# (11,10) золотий правий край внутрішнього блоку, (12,10) — сусідній
-	# червоний тайл кільця відразу зовні — точка дотику двох контурів.
-	assert_eq(painted[Vector2i(11, 10)], ZoneOverlay.COLOR_MOVE_AND_FIRE, "золота межа лишається золотою біля червоної")
-	assert_eq(painted[Vector2i(12, 10)], ZoneOverlay.COLOR_MOVE_ONLY, "червона межа лишається червоною біля золотої")
-	assert_false(painted.has(origin), "центр золотого блоку — суцільна внутрішність, не контур")
+	var gold_edge := {"cell": Vector2i(11, 10), "dir": Vector2i(1, 0)}
+	var red_edge := {"cell": Vector2i(12, 10), "dir": Vector2i(-1, 0)}
+	var found_gold := false
+	var found_red := false
+	for seg in _segments(board_view.LAYER_ZONES):
+		if seg["cell"] == gold_edge["cell"] and seg["dir"] == gold_edge["dir"]:
+			assert_eq(seg["color"], ZoneOverlay.COLOR_MOVE_AND_FIRE, "золота риска на дотичному ребрі лишається золотою")
+			found_gold = true
+		if seg["cell"] == red_edge["cell"] and seg["dir"] == red_edge["dir"]:
+			assert_eq(seg["color"], ZoneOverlay.COLOR_MOVE_ONLY, "червона риска на дотичному ребрі лишається червоною")
+			found_red = true
+	assert_true(found_gold, "золота сторона дотичного ребра мусить мати власну риску")
+	assert_true(found_red, "червона сторона дотичного ребра мусить мати власну риску")
+
+	var by_cell: Dictionary = _dirs_by_cell(board_view.LAYER_ZONES)
+	assert_false(by_cell.has(origin), "центр золотого блоку — суцільна внутрішність, не контур")
 
 
 func test_clear_removes_overlay_and_leaves_other_layers_alone() -> void:
@@ -110,38 +159,39 @@ func test_clear_removes_overlay_and_leaves_other_layers_alone() -> void:
 	var origin := Vector2i(10, 10)
 	var mf: Array[Vector2i] = [Vector2i(10, 10)]
 	overlay.show_for(_unit(origin), _zones(origin, mf, []))
-	assert_true(_painted(board_view.LAYER_ZONES).size() > 0, "передумова: зона намальована")
+	assert_true(_segments(board_view.LAYER_ZONES).size() > 0, "передумова: зона намальована")
 
 	overlay.clear()
-	assert_eq(_painted(board_view.LAYER_ZONES).size(), 0, "clear() мусить прибрати весь шар зон")
-	assert_true(_painted(board_view.LAYER_TARGETS).has(target_cell), "clear() не мусить чіпати шар цілей")
-	assert_true(_painted(board_view.LAYER_SELECTION).has(selection_cell), "clear() не мусить чіпати шар вибору")
+	assert_eq(_segments(board_view.LAYER_ZONES).size(), 0, "clear() мусить прибрати весь контур зон")
+	assert_true(board_view._layer_highlights[board_view.LAYER_TARGETS].has(target_cell), "clear() не мусить чіпати шар цілей")
+	assert_true(board_view._layer_highlights[board_view.LAYER_SELECTION].has(selection_cell), "clear() не мусить чіпати шар вибору")
 
 
 ## §3.2: «перемальовується після кожної дії» — другий show_for підряд
-## замінює попередню зону, а не додає до неї.
+## замінює попередній контур, а не додає до нього.
 func test_show_for_called_twice_replaces_not_accumulates() -> void:
 	var origin_a := Vector2i(2, 2)
 	var origin_b := Vector2i(15, 15)
 	overlay.show_for(_unit(origin_a), _zones(origin_a, [origin_a], []))
-	assert_true(_painted(board_view.LAYER_ZONES).has(origin_a))
+	assert_true(_dirs_by_cell(board_view.LAYER_ZONES).has(origin_a))
 
 	overlay.show_for(_unit(origin_b), _zones(origin_b, [origin_b], []))
-	var painted: Dictionary = _painted(board_view.LAYER_ZONES)
-	assert_false(painted.has(origin_a), "стара зона мусить зникнути, а не лишитись поруч із новою")
-	assert_true(painted.has(origin_b), "нова зона мусить бути намальована")
-	assert_eq(painted.size(), 1, "жодного накопичення між викликами")
+	var by_cell: Dictionary = _dirs_by_cell(board_view.LAYER_ZONES)
+	assert_false(by_cell.has(origin_a), "стара зона мусить зникнути, а не лишитись поруч із новою")
+	assert_true(by_cell.has(origin_b), "нова зона мусить бути намальована")
 
 
 func test_show_for_handles_single_tile_zone() -> void:
 	var origin := Vector2i(5, 5)
 	overlay.show_for(_unit(origin), _zones(origin, [origin], []))
-	var painted: Dictionary = _painted(board_view.LAYER_ZONES)
-	assert_eq(painted.size(), 1, "один тайл — весь він і є контур")
-	assert_eq(painted[origin], ZoneOverlay.COLOR_MOVE_AND_FIRE)
+	var segments: Array = _segments(board_view.LAYER_ZONES)
+	assert_eq(segments.size(), 4, "один тайл — усі чотири боки на контурі")
+	for seg in segments:
+		assert_eq(seg["cell"], origin)
+		assert_eq(seg["color"], ZoneOverlay.COLOR_MOVE_AND_FIRE)
 
 
 func test_show_for_handles_empty_zones_without_crashing() -> void:
 	var origin := Vector2i(5, 5)
 	overlay.show_for(_unit(origin), _zones(origin, [], []))
-	assert_eq(_painted(board_view.LAYER_ZONES).size(), 0, "порожні зони — порожній контур, без падіння")
+	assert_eq(_segments(board_view.LAYER_ZONES).size(), 0, "порожні зони — порожній контур, без падіння")

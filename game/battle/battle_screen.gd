@@ -50,6 +50,7 @@ const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
 var _match_service: Node = null
 var _controller: InputController = null
 var _zone_overlay: ZoneOverlay = null
+var _path_overlay: PathOverlay = null
 var _event_player: EventPlayer = null
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
@@ -148,8 +149,16 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
 
 	_zone_overlay = ZoneOverlay.new(_board_view)
+	_path_overlay = PathOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"))
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
+	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
+	# але власний шар і власний сигнал: action_preview малює його для прев'ю
+	# руху, pending_cleared знімає його на скасуванні/підтвердженні/новому
+	# виборі — саме там, де InputController уже гарантує, що _pending більше
+	# не описує жодної дії (input_controller.gd, _clear_pending()).
+	_controller.action_preview.connect(_path_overlay.show_preview)
+	_controller.pending_cleared.connect(_path_overlay.clear)
 
 	_hud.bind(_match_service.state)
 	_hud.attach_controller(_controller)

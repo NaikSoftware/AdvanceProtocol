@@ -167,3 +167,76 @@ func test_no_apply_fog_and_no_vision_reference() -> void:
 	assert_false(view.has_method("apply_fog"), "BoardView не ховає місцевість — apply_fog їй не потрібен")
 	var source: String = FileAccess.get_file_as_string("res://game/battle/board_view.gd")
 	assert_false(source.contains("Vision"), "BoardView не має споживати Vision узагалі")
+
+
+# --- Контур (§3.13, PO-скарга: «контурно, не заливкою») -------------------
+#
+# draw_contour() — окремий механізм від highlight_tiles(): сегмент {cell, dir,
+# color} малює тонку риску вздовж ОДНОГО ребра тайла, а не перефарбовує весь
+# тайл. Головний доказ, що це не заливка: намальований контур НІКОЛИ не
+# лишає сліду в _layer_highlights (тому старий механізм і зберігається окремо
+# в тестах вище — щоб було з чим порівняти).
+
+func _edge(cell: Vector2i, dir: Vector2i, color: Color) -> Dictionary:
+	return {"cell": cell, "dir": dir, "color": color}
+
+
+func test_draw_contour_never_touches_the_tile_fill_layer() -> void:
+	var board := _two_kind_board()
+	view.build(board)
+	var segments: Array[Dictionary] = [_edge(Vector2i(0, 0), Vector2i(1, 0), Color.YELLOW)]
+
+	view.draw_contour(segments, view.LAYER_ZONES)
+
+	assert_eq(view._layer_highlights[view.LAYER_ZONES].size(), 0,
+		"контур не мусить лишати запис у _layer_highlights — інакше це знову заливка")
+
+
+func test_draw_contour_stores_segments_for_that_layer_only() -> void:
+	var board := _two_kind_board()
+	view.build(board)
+	var zone_segments: Array[Dictionary] = [_edge(Vector2i(0, 0), Vector2i(1, 0), Color.YELLOW)]
+	var path_segments: Array[Dictionary] = [_edge(Vector2i(1, 0), Vector2i(0, 1), Color.WHITE)]
+
+	view.draw_contour(zone_segments, view.LAYER_ZONES)
+	view.draw_contour(path_segments, view.LAYER_PATH)
+
+	assert_eq(view.contour_segments(view.LAYER_ZONES), zone_segments)
+	assert_eq(view.contour_segments(view.LAYER_PATH), path_segments)
+
+
+func test_draw_contour_replaces_not_accumulates() -> void:
+	var board := _two_kind_board()
+	view.build(board)
+	var first: Array[Dictionary] = [_edge(Vector2i(0, 0), Vector2i(1, 0), Color.YELLOW)]
+	view.draw_contour(first, view.LAYER_ZONES)
+
+	var second: Array[Dictionary] = [_edge(Vector2i(1, 0), Vector2i(0, 1), Color.RED)]
+	view.draw_contour(second, view.LAYER_ZONES)
+
+	assert_eq(view.contour_segments(view.LAYER_ZONES), second, "другий виклик мусить замінити, а не додати")
+
+
+func test_clear_contour_empties_segments_and_frees_the_mesh_node() -> void:
+	var board := _two_kind_board()
+	view.build(board)
+	var first: Array[Dictionary] = [_edge(Vector2i(0, 0), Vector2i(1, 0), Color.YELLOW)]
+	view.draw_contour(first, view.LAYER_ZONES)
+
+	view.clear_contour(view.LAYER_ZONES)
+
+	assert_eq(view.contour_segments(view.LAYER_ZONES).size(), 0)
+
+
+func test_clear_contour_on_empty_layer_does_not_crash() -> void:
+	var board := _two_kind_board()
+	view.build(board)
+	view.clear_contour(view.LAYER_ZONES)
+	assert_eq(view.contour_segments(view.LAYER_ZONES).size(), 0)
+
+
+func test_draw_contour_with_empty_segments_draws_nothing() -> void:
+	var board := _two_kind_board()
+	view.build(board)
+	view.draw_contour([] as Array[Dictionary], view.LAYER_ZONES)
+	assert_eq(view.contour_segments(view.LAYER_ZONES).size(), 0)

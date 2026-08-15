@@ -22,6 +22,13 @@ extends RefCounted
 
 signal selection_changed(unit: Unit)
 signal action_preview(preview: Dictionary)
+## Прев'ю щойно знято — скасовано, підтверджено, або перекрито новим вибором
+## (усі три шляхи проходять крізь _clear_pending() нижче). action_preview НЕ
+## підходить для цього: він рахує «рівно одне прев'ю на дію» (усталений
+## контракт, tests/game/test_input_controller.gd), а тут потрібен сигнал, що
+## сам факт відсутності прев'ю змінився — окремий слухач (PathOverlay) знімає
+## підсвітку шляху рівно на нього, не займаючи action_preview.
+signal pending_cleared
 
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
@@ -69,7 +76,7 @@ func select_unit(unit: Unit) -> void:
 	if _is_playing():
 		return  # R24: «кожен тап» — і прямий виклик теж тап
 
-	_pending = {}
+	_clear_pending()
 	_selected_unit = unit
 	selection_changed.emit(unit)
 	_recompute_zones_for_selected()
@@ -145,7 +152,7 @@ func confirm_pending() -> void:
 	if _pending.is_empty():
 		return
 	var command: Command = _build_command(_pending)
-	_pending = {}
+	_clear_pending()
 	if command == null:
 		return
 	var err: String = _match_service.submit(command)
@@ -181,7 +188,17 @@ func _sync_after_action() -> void:
 
 
 func cancel_pending() -> void:
+	_clear_pending()
+
+
+## Єдина точка, де _pending скидається до «нема дії, що чекає підтвердження»
+## (select_unit(), confirm_pending(), cancel_pending(), _deselect() — усі
+## чотири крізь неї): pending_cleared емітується рівно тут, один раз на
+## кожен реальний скид, а не розкидано по викликах, де його легко забути в
+## п'ятому.
+func _clear_pending() -> void:
 	_pending = {}
+	pending_cleared.emit()
 
 
 func _build_command(pending: Dictionary) -> Command:
@@ -230,7 +247,7 @@ func _maybe_set_pending_shot(state: BattleState, target: Unit) -> void:
 func _deselect() -> void:
 	_selected_unit = null
 	_zones = null
-	_pending = {}
+	_clear_pending()
 	_zone_overlay.clear()
 	selection_changed.emit(null)
 
