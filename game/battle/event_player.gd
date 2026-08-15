@@ -219,19 +219,25 @@ func _handle_move_blocked(_event: Events.MoveBlocked) -> Variant:
 	return null
 
 
-## Постріл і влучання показує DamageDealt (HP-бар) та, за потреби,
-## UnitDestroyed. Власного снаряда/спалаху ще нема — жоден із спожитих
-## інтерфейсів (BoardView/UnitView/IsoCameraRig) його не дає, а вигадувати
-## нову механіку без узгодження заборонено CLAUDE.md §10. Свідомий no-op до
-## задачі, яка додасть проєктильний вигляд.
-func _handle_shot_fired(_event: Events.ShotFired) -> Variant:
-	return null
+## Снаряда досі нема, але тиша тут коштувала дорого: обидва постріли були
+## no-op, тож увесь обмін виглядав як два безшумні стрибки HP-барів, і
+## відповідь (§3.3.1) власник прочитав як «не працює». Поштовх силуету — це
+## не нова механіка (§10), а показ уже вирішеної події.
+func _handle_shot_fired(event: Events.ShotFired) -> Variant:
+	return _play_shot(event.attacker_id)
 
 
-## Та сама причина, що й у _handle_shot_fired — відповідь ще не має
-## власного проєктильного вигляду в цьому зрізі.
-func _handle_shot_retaliated(_event: Events.ShotRetaliated) -> Variant:
-	return null
+## Awaited окремо від пострілу вище — саме ця пауза й робить відповідь
+## видимою як ДРУГИЙ постріл, а не як частину першого.
+func _handle_shot_retaliated(event: Events.ShotRetaliated) -> Variant:
+	return _play_shot(event.attacker_id)
+
+
+func _play_shot(shooter_id: int) -> Variant:
+	var view: UnitView = _resolve_unit_view(shooter_id)
+	if view == null:
+		return null
+	return view.play_shot()
 
 
 ## §3.9: залишок дронів публічний і має готовий візуал — UnitView.set_drones.

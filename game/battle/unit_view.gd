@@ -6,9 +6,7 @@ extends Node3D
 ## Туман живе не тут. `UnitView` не читає й не питає клітинкову видимість — вирішує, чи
 ## існувати цьому вузлу взагалі, власник контейнера (Task 2.10): ворожий
 ## юніт отримує вузол лише коли він є в known_occupied_map активного
-## гравця (§3.5). Невидимий ворог не тьмяніє і не лишає силует — у нього
-## просто нема вузла. `set_dimmed` нижче — про інше: про свій юніт, який
-## уже відстрілявся цей хід.
+## гравця (§3.5). Невидимий ворог не лишає силует — у нього просто нема вузла.
 
 ## Крок факінгу: вісім напрямків Board.DIRS_8 рівномірно по колу.
 const _DEGREES_PER_FACING: float = 45.0
@@ -40,10 +38,16 @@ const _HP_BAR_SIZE: Vector2i = Vector2i(48, 6)
 const _HP_BAR_FRAME_COLOR: Color = Color("14120f")
 const _HP_BAR_BACK_COLOR: Color = Color("3b3833")
 
-## Наскільки темніє корпус юніта, що вже відстрілявся.
-const _DIM_FACTOR: float = 0.45
-
 const _DESTROY_DURATION: float = 0.6
+
+## Постріл і відповідь (§3.3.1): короткий поштовх силуету. Скарга власника —
+## «атака у відповідь не відбувається»: вона відбувалась, але на дошці її було
+## видно рівно як тихий стрибок HP-бара свого юніта, і найдорожче правило гри
+## читалось як зламане. Це не снаряд (його ще нема), це мінімальний такт «цей
+## юніт вистрілив» — і саме він відділяє відповідь від власного пострілу.
+const _SHOT_PUNCH_SCALE: float = 1.18
+const _SHOT_PUNCH_UP: float = 0.07
+const _SHOT_PUNCH_DOWN: float = 0.13
 
 ## R14: хід чекає на гравця, не навпаки — поворот твінується, але лишається
 ## коротким, щоб не виглядав як затримка вводу.
@@ -115,7 +119,6 @@ var facing: int = 0
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
 var _hull_material: StandardMaterial3D
-var _base_hull_color: Color = Color.WHITE
 var _drones_left: int = 0
 ## Останнє показане співвідношення HP. Джерело правди замість колишнього
 ## _hp_bar.scale.x — заливка тепер намальована ВСЕРЕДИНІ текстури, тож
@@ -148,7 +151,6 @@ func bind(unit: Unit) -> void:
 	_set_facing_instant(unit.facing)
 	set_hp(unit.hp, unit.max_hp())
 	set_drones(unit.drones_left)
-	set_dimmed(unit.has_fired)
 	# Свіжий (чи перебудований) вузол не є ціллю жодного прев'ю: прев'ю живе в
 	# InputController і перебудову не переживає — лишити приціл увімкненим
 	# означало б показувати намір, якого вже немає.
@@ -323,25 +325,19 @@ func set_targeted(targeted: bool) -> void:
 	_crosshair.visible = targeted
 
 
+## Твінує _silhouette, а не self: self.scale належить play_destroyed(), і два
+## твіни на одну властивість змагались би на пострілі, який убиває.
+func play_shot() -> Signal:
+	var tween: Tween = create_tween()
+	tween.tween_property(_silhouette, "scale", Vector3.ONE * _SHOT_PUNCH_SCALE, _SHOT_PUNCH_UP)
+	tween.tween_property(_silhouette, "scale", Vector3.ONE, _SHOT_PUNCH_DOWN)
+	return tween.finished
+
+
 func play_destroyed() -> Signal:
 	var tween: Tween = create_tween()
 	tween.tween_property(self, "scale", Vector3.ZERO, _DESTROY_DURATION)
 	return tween.finished
-
-
-## Для свого юніта, який уже витратив AP на постріл цей хід (§3.2) — і
-## більше ні для чого. Туман сюди не потрапляє свідомо: невидимого ворога
-## не тьмянять, у нього просто нема вузла (Task 2.10, §3.5) — «останній
-## відомий» приглушений юніт був би витоком, а не зручністю. Якщо колись
-## захочеться підв'язати цей метод до видимості — це і є та помилка, про
-## яку попереджає коментар зверху файлу.
-func set_dimmed(dimmed: bool) -> void:
-	if _hull_material == null:
-		return
-	var target_color: Color = _base_hull_color
-	if dimmed:
-		target_color = _base_hull_color * Color(_DIM_FACTOR, _DIM_FACTOR, _DIM_FACTOR, 1.0)
-	_hull_material.albedo_color = target_color
 
 
 func _build_silhouette(unit_class: int, owner: int) -> void:
@@ -359,8 +355,7 @@ func _build_silhouette(unit_class: int, owner: int) -> void:
 	hull.position.y = hull_size.y * 0.5
 
 	_hull_material = StandardMaterial3D.new()
-	_base_hull_color = _PLAYER_COLORS[owner % _PLAYER_COLORS.size()]
-	_hull_material.albedo_color = _base_hull_color
+	_hull_material.albedo_color = _PLAYER_COLORS[owner % _PLAYER_COLORS.size()]
 	hull.material_override = _hull_material
 	_silhouette.add_child(hull)
 

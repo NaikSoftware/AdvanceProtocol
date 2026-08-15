@@ -66,9 +66,17 @@ shot before its own turn comes round. It does **not** cost the unit its own turn
 restores both AP and the fired flag at the start of its owner's turn, exactly as the reference
 does. A unit that retaliated moves and shoots normally when its turn arrives.
 
-So retaliation is close to free for the defender, and deliberately so — the cost of shooting falls
-on the *attacker*, who takes a full-strength answer for opening fire on a healthy target inside its
-range. The defender's only exposure is that it cannot answer twice in the same round.
+**Retaliation is not free for the defender, and this paragraph used to say it was.** The AP that
+gates the answer is whatever the unit *did not spend on its own turn*, so the price is paid in
+advance, in movement. A tank has 48 AP, fires for 20 and pays 10 per clear tile: four tiles of
+advance leave 8 and no answer at all; two leave 28 and a full-strength one. **The threshold is
+exactly the gold movement zone of [§3.2](movement-and-terrain.md)** — a unit that stops in gold
+keeps this turn's shot *and* the right to answer, a unit that runs into red is disarmed until its
+own turn. Confirmed against the reference, which gates its counter-attack on live AP the same way
+and refills only the active player's units ([§4](../reference/blitzkrieg.md)); kept on the owner's
+call after a play test where nothing fired back.
+
+The defender's other exposure is that it cannot answer twice in the same round.
 
 An earlier version of this section claimed the retaliator forfeits its next turn. That was never
 what the code or the reference did; it was a rationale written into the spec rather than read out
