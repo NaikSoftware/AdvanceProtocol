@@ -22,7 +22,12 @@ Where to look (the code is obfuscated; these are the mappings that have already 
 Field-name mappings recovered so far, for `class_3`: `field_221` attack · `field_222` vision ·
 `field_223` max AP · `field_224` max HP · `field_225` range · `field_226` fire cost ·
 `field_227` armour F/S/R · `field_228` cross-country · `field_248` current AP · `field_250` class
-index · `field_259` current HP. `GameCanvas.method_2(n)` is `rand(0, n)`, returning 0 for `n <= 0`.
+index · `field_257` this unit's max HP · `field_259` current HP. `GameCanvas.method_2(n)` is
+`rand(0, n)`, returning 0 for `n <= 0`.
+
+Note the two max-HP fields: `field_224` is the per-class stat table, `field_257` is the copy taken
+at construction (`field_259 = field_257 = field_224[type]`, `class_3:342`) and is what the renderer
+divides by and what repair clamps to. Anything reading "max HP" reads the per-unit copy.
 
 Two rules about using it:
 
@@ -149,3 +154,33 @@ Two rules about using it:
   deciding the tap was an attack. Here the turn is tied to the action instead: you turn because you
   fired. A turn granted for merely surviving, or for a tap, would be a free reorientation on someone
   else's turn for doing nothing.
+
+- **The HP bar on the board is a dark full-width track with a left-aligned fill drawn over it, and
+  it carries no numbers — confirmed, and adopted with one departure.** `GameCanvas.method_26` draws
+  a bar of width `w` at `3 px` above the unit, `3 px` tall; the board loop calls it **twice**, first
+  with `setColor(0)` and an explicit `field_57 - 1` (one full tile width, black) for *every* unit,
+  then with `-1` for each player's units in turn, which makes the routine compute
+  `(field_57 - 1) * hp / max`. So the black pass is the empty track and the second pass is the fill,
+  growing from the **left edge**, never shrinking toward the centre. Proportions are roughly `20×3`
+  px on a `240×320` screen — almost a tile wide and as thin as the display allows.
+
+  Adopted for [§3.13](../ui/overlays.md)'s unit marks: the bar is `48×6` px of texture at
+  `pixel_size 0.02` (≈ `0.96 × 0.12` world, near a full tile), a 1 px frame, a dark empty track, and
+  a fill that starts at the left inner edge. **All of it in one texture on one `Sprite3D`** — three
+  stacked billboard sprites at the same height would z-fight and rotate about three different
+  centres, and §8 CLAUDE.md is counting draw calls.
+
+  **Departure: the fill colour.** The original colours the fill by *owner* (`0x0000AC` for the first
+  player's units, `0xAC0000` for the second) — the bar is a friend/foe marker that happens to encode
+  length. Here the hull already carries the owner's colour, so the bar is free to spend its colour on
+  the state that changes: red→green by HP ratio. Reading the original as "HP bars should be red and
+  green" would be backwards — that red is a side, not a wound.
+
+- **The `current/max` numerals exist in the original, but on the unit info screen, not over the
+  unit.** Screen state `34` draws a `210×7` `drawRect` frame with a `207×4` green fill inset by 2 px
+  — the same framed thin bar, an order of magnitude wider — and above it the two numbers, drawn as
+  digit sprites either side of a hand-drawn diagonal `drawLine`, i.e. `88/400` assembled by hand.
+  This project puts both the framed bar and the numerals over the unit on the board, by the owner's
+  call: there is no cursor and no hold-a-key on a touch screen, so an info screen is a tap and a
+  dismissal away, and §1.5 wants every number that decides a fight legible without one. Recorded so
+  the placement stays a known departure rather than being "corrected" toward the reference later.

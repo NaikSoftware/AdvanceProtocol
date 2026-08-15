@@ -121,20 +121,124 @@ func test_bind_kills_a_live_face_tween_from_previous_bind() -> void:
 	_assert_faces(view, 2, "новий bind() виставляє факінг миттєво, ігноруючи недограний твін")
 
 
+## Колір, прогнаний через ту саму 8-бітну текстуру, що й у виду: RGBA8
+## квантує 0.5 у 127/255, тож пряме порівняння з Color.RED.lerp(...) було б
+## хибно-червоним не через баг реалізації, а через формат зберігання.
+func _as_rgba8(color: Color) -> Color:
+	var image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
+	image.fill(color)
+	return image.get_pixel(0, 0)
+
+
+func _hp_bar_image(unit_view: UnitView) -> Image:
+	return unit_view._hp_bar.texture.get_image()
+
+
 func test_set_hp_reflects_ratio_including_full_and_zero() -> void:
 	view.bind(_unit(5))
 	view.set_hp(400, 400)
-	assert_eq(view._hp_bar.scale.x, 1.0, "повне HP — повна смуга")
+	assert_eq(view.hp_ratio(), 1.0, "повне HP — повна смуга")
 	view.set_hp(0, 400)
-	assert_eq(view._hp_bar.scale.x, 0.0, "нуль HP — порожня смуга")
+	assert_eq(view.hp_ratio(), 0.0, "нуль HP — порожня смуга")
 	view.set_hp(200, 400)
-	assert_eq(view._hp_bar.scale.x, 0.5, "проміжне HP — пропорційна смуга")
+	assert_eq(view.hp_ratio(), 0.5, "проміжне HP — пропорційна смуга")
 
 
 func test_set_hp_handles_zero_max_hp_without_dividing_by_zero() -> void:
 	view.bind(_unit(5))
 	view.set_hp(0, 0)
-	assert_eq(view._hp_bar.scale.x, 0.0, "max_hp=0 не мусить кинути помилку ділення на нуль")
+	assert_eq(view.hp_ratio(), 0.0, "max_hp=0 не мусить кинути помилку ділення на нуль")
+
+
+## Скарга власника: «полоска квадратна, має бути тонша і довша, з рамкою».
+## Рамка й тло — всередині ОДНІЄЇ текстури, а не три накладені спрайти
+## (z-fighting білбордів на одній висоті + бюджет ~100 draw call'ів, §8).
+func test_hp_bar_texture_is_framed_and_long_not_square() -> void:
+	view.bind(_unit(5))
+	view.set_hp(200, 400)
+	var image: Image = _hp_bar_image(view)
+	# Точні числа, не «принаймні вшестеро довша»: мʼяка нерівність лишалась би
+	# зеленою і для 36×6, хоча форма задана рівно як 48×6, — тобто стерегла б
+	# менше, ніж обіцяє її ж назва.
+	assert_eq(Vector2i(image.get_width(), image.get_height()), Vector2i(48, 6),
+		"смуга мусить бути рівно 48×6 — довга й тонка, а не квадрат")
+	assert_eq(image.get_pixel(0, 0), _as_rgba8(UnitView._HP_BAR_FRAME_COLOR), "лівий верхній кут — рамка")
+	assert_eq(image.get_pixel(image.get_width() - 1, image.get_height() - 1), _as_rgba8(UnitView._HP_BAR_FRAME_COLOR),
+		"правий нижній кут — рамка")
+	assert_eq(image.get_pixel(1, image.get_height() / 2), _as_rgba8(Color.RED.lerp(Color.GREEN, 0.5)),
+		"всередині, від лівого краю — заливка кольору поточного співвідношення")
+
+
+## Смуга витрачається ЗЛІВА НАПРАВО (як у референсі), а не стискається до
+## центру — саме те, що робив старий scale.x.
+func test_hp_bar_fill_runs_from_the_left_edge_and_shrinks_rightwards() -> void:
+	view.bind(_unit(5))
+	var mid_y: int = _hp_bar_image(view).get_height() / 2
+	var width: int = _hp_bar_image(view).get_width()
+
+	view.set_hp(400, 400)
+	assert_eq(_hp_bar_image(view).get_pixel(width - 2, mid_y), _as_rgba8(Color.GREEN),
+		"повне HP — заливка доходить до внутрішнього правого краю")
+
+	view.set_hp(200, 400)
+	assert_eq(_hp_bar_image(view).get_pixel(1, mid_y), _as_rgba8(Color.RED.lerp(Color.GREEN, 0.5)),
+		"половина HP — лівий внутрішній піксель усе ще залитий")
+	assert_eq(_hp_bar_image(view).get_pixel(width - 2, mid_y), _as_rgba8(UnitView._HP_BAR_BACK_COLOR),
+		"половина HP — правий внутрішній піксель порожній")
+
+	view.set_hp(0, 400)
+	assert_eq(_hp_bar_image(view).get_pixel(1, mid_y), _as_rgba8(UnitView._HP_BAR_BACK_COLOR),
+		"нуль HP — жодного пікселя заливки, лише тло")
+
+
+## Точна ширина заливки, а не «десь приблизно»: рамка забирає рівно по
+## одному пікселю з кожного боку, тож внутрішня ширина — width-2.
+func test_hp_bar_fill_width_is_exactly_the_ratio_of_the_inner_width() -> void:
+	view.bind(_unit(5))
+	view.set_hp(100, 400)  # рівно чверть
+	var image: Image = _hp_bar_image(view)
+	var mid_y: int = image.get_height() / 2
+	var filled: int = 0
+	for x in range(1, image.get_width() - 1):
+		if image.get_pixel(x, mid_y) != _as_rgba8(UnitView._HP_BAR_BACK_COLOR):
+			filled += 1
+	# Число написане явно, а не зібране тією ж формулою, що й код: 48 пікселів
+	# текстури, рамка по 1 з кожного боку, чверть від 46 — це 12. Очікування,
+	# пораховане тим самим roundi(inner * ratio), лишалось би зеленим і при
+	# зміненій рамці, і при підміні roundi на floori, тобто повторювало б код
+	# замість перевіряти його (та сама пастка, що вже ловила цей проєкт на
+	# факінгу).
+	assert_eq(filled, 12, "чверть від внутрішніх 46 пікселів — це рівно 12 залитих")
+
+
+## «Треба вказати скільки було і скільки стало, по типу 88/400» — числа
+## поточне/максимум, тим самим текстом, який справді видно на екрані.
+func test_hp_label_shows_current_over_max() -> void:
+	view.bind(_unit(5))
+	view.set_hp(88, 400)
+	assert_eq(view._hp_label.text, "88/400", "підпис мусить показувати поточне HP і максимум")
+	view.set_hp(0, 400)
+	assert_eq(view._hp_label.text, "0/400", "знищений юніт показує нуль, а не порожній підпис")
+
+
+## Підпис мусить читатись на світлій місцевості — без контуру світлі цифри
+## губляться (§1.5: кожне правило-число мусить бути видиме).
+func test_hp_label_has_an_outline_and_billboards() -> void:
+	view.bind(_unit(5))
+	assert_true(view._hp_label.outline_size > 0, "цифри без контуру губляться на світлому тлі")
+	assert_ne(view._hp_label.outline_modulate, view._hp_label.modulate, "контур мусить контрастувати із самими цифрами")
+	assert_ne(view._hp_label.billboard, BaseMaterial3D.BILLBOARD_DISABLED, "підпис мусить дивитись у камеру, як і сама смуга")
+
+
+## Стереже ПОРЯДОК трьох висот у сцені: смуга, над нею підпис, ще вище
+## лічильник дронів. Свідомо НЕ перевіряє перекриття габаритів — порівнюються
+## центри вузлів, тож роздутий контур підпису чи масштаб іконки дронів цей тест
+## не спіймає (назва раніше обіцяла саме це й уводила в оману). Реальні
+## габарити Label3D headless не міряються; це лишається на око в живому вікні.
+func test_hp_label_and_drone_icon_are_stacked_above_the_bar_in_order() -> void:
+	view.bind(_unit(5))
+	assert_true(view._hp_bar.position.y < view._hp_label.position.y, "підпис сидить над смугою")
+	assert_true(view._hp_label.position.y < view._drone_icon.position.y, "лічильник дронів сидить над підписом")
 
 
 ## §3.9: залишок дронів публічний — метод навіть не має доступу до owner,
@@ -225,6 +329,61 @@ func test_debug_facing_arrow_has_a_single_build_call_site() -> void:
 	var source: String = FileAccess.get_file_as_string("res://game/battle/unit_view.gd")
 	var call_count: int = source.count("_build_facing_arrow(")
 	assert_eq(call_count, 2, "рівно одне визначення й рівно один виклик _build_facing_arrow — жодних розкиданих додавань стрілки по файлу")
+
+
+## Скарга власника: «якщо я клікнув для атаки на чужого юніта, то треба це
+## якось позначити». Приціл — власність цього вузла, але НЕ його рішення:
+## вмикає його контейнер із готового прев'ю (battle_screen), тож тут
+## перевіряється лише сам перемикач і те, що свіжий вузол ніколи не
+## народжується вже прицільованим.
+func test_crosshair_is_hidden_by_default_and_after_bind() -> void:
+	assert_false(view._crosshair.visible, "свіжий вузол не мусить бути прицільований")
+	view.set_targeted(true)
+	view.bind(_unit(5))
+	assert_false(view._crosshair.visible, "bind() мусить лишати приціл згашеним — новий юніт не ціль")
+
+
+func test_set_targeted_toggles_the_crosshair() -> void:
+	view.bind(_unit(5))
+	view.set_targeted(true)
+	assert_true(view._crosshair.visible, "позначена ціль мусить показувати приціл")
+	view.set_targeted(false)
+	assert_false(view._crosshair.visible, "знята позначка мусить гасити приціл")
+
+
+## Приціл читається поверх корпусу, але мусить лишатись нижче HP-бару й
+## лічильника дронів — ті вже підняті над силуетом саме заради читабельності
+## (§1.5), і накладання перетворило б обидва на кашу на телефоні.
+func test_crosshair_sits_below_hp_bar_and_drone_icon() -> void:
+	view.bind(_unit(5))
+	assert_true(view._crosshair.position.y < view._hp_bar.position.y, "приціл мусить лишатись нижче HP-бару")
+	assert_true(view._crosshair.position.y < view._drone_icon.position.y, "приціл мусить лишатись нижче лічильника дронів")
+
+
+## Колір прицілу — рівно той самий, яким UnitInspector.MODULATE_HIT підсвічує
+## сектор влучання (game/ui/unit_inspector.gd:40): один сигнал «сюди
+## прилетить» на панелі й на дошці, а не два різні кольори про одне влучання.
+func test_crosshair_uses_the_same_hit_colour_as_the_inspector_sector() -> void:
+	view.bind(_unit(5))
+	assert_eq(view._crosshair.modulate, Color("ff7a4a"), "приціл мусить нести рівно колір влучання UnitInspector.MODULATE_HIT")
+	assert_eq(view._crosshair.modulate, UnitInspector.MODULATE_HIT, "і саме той самий, а не схожий")
+
+
+## Форма, а не пляма: процедурна текстура мусить лишати центр порожнім (крізь
+## приціл видно сам силует, який гравець і намагається впізнати, §1.5) і при
+## цьому щось таки малювати. Порожня чи суцільна текстура — обидві помилки
+## виглядають на дошці як «приціл не працює», і жоден інший тест їх не ловить.
+func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
+	var image: Image = view._crosshair.texture.get_image()
+	assert_eq(image.get_pixel(image.get_width() / 2, image.get_height() / 2).a, 0.0, "центр прицілу мусить лишатись прозорим")
+	var opaque: int = 0
+	for y in image.get_height():
+		for x in image.get_width():
+			if image.get_pixel(x, y).a > 0.5:
+				opaque += 1
+	var total: int = image.get_width() * image.get_height()
+	assert_true(opaque > 0, "текстура прицілу не мусить бути порожньою")
+	assert_true(opaque < total / 2, "і не мусить бути залитим квадратом")
 
 
 func test_set_dimmed_toggles_and_is_reversible() -> void:

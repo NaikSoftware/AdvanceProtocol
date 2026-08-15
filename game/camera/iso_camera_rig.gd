@@ -5,6 +5,14 @@ extends Node3D
 ## сам корінь рига, дочірній Yaw несе поворот на 45°, лише щоб дати камері
 ## погляд; жодна з цих обертань не потрапляє у клітинкові координати.
 
+## Екранна геометрія рига змінилась — усе, що прив'язане до клітинки дошки, але
+## живе на екрані (панель характеристик у game/ui/hud.gd), мусить перерахувати
+## своє місце. Сигнал, а не опитування щокадру: §8 — поки ніхто не рухає
+## камеру, екран статичний, і підписник не сміє тратити на нього кадри.
+## Емітиться ЛИШЕ на справжню зміну global_position чи zoom_level (див.
+## _notify_view_changed()), інакше він виродився б у той самий _process.
+signal view_changed
+
 const MIN_ZOOM: float = 6.0
 const MAX_ZOOM: float = 20.0
 ## §3.13/§1: панорама обмежена межами дошки з полем в 2 тайли — гравець не
@@ -71,12 +79,19 @@ var _held: bool = false
 
 var _recenter_tween: Tween = null
 
+## Знімок того, що вже відзвітовано view_changed. Порівняння з ним — єдине
+## місце, де вирішується, чи сигнал взагалі потрібен.
+var _reported_position: Vector3 = Vector3.ZERO
+var _reported_zoom: float = 0.0
+
 func _ready() -> void:
 	_yaw.rotation_degrees.y = YAW_DEGREES
 	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	_camera.size = zoom_level
 	_zoom_target = zoom_level
 	_prev_frame_position = global_position
+	_reported_position = global_position
+	_reported_zoom = zoom_level
 	# Немає що доганяти й нема інерції в спокої — _process() вмикається
 	# лише на час активної анімації (zoom_by/pan/end_pan/fly_to нижче), не
 	# висить постійно.
@@ -146,6 +161,7 @@ func pan(delta: Vector2) -> void:
 		return
 	var world_delta: Vector3 = (from as Vector3) - (to as Vector3)
 	global_position = _clamp_to_bounds(global_position + world_delta)
+	_notify_view_changed()
 	set_process(true)  # хоч один кадр _process() мусить пропрацювати, щоб виміряти швидкість для можливого end_pan()
 
 ## Вхід кличе begin_hold() рівно на натиск (тап чи пан — байдуже) і
@@ -226,6 +242,14 @@ func screen_point_to_cell(screen_pos: Vector2) -> Vector2i:
 		return Vector2i(-1, -1)
 	return world_to_cell(origin + dir * t)
 
+## Зворотний бік screen_point_to_cell(): світова точка -> екранна. Тут із тієї
+## самої причини, що й вона, — жоден інший файл не тримає власної копії цієї
+## проєкції, тож і Camera3D назовні не віддається: викликач (game/ui/hud.gd,
+## прив'язка панелі до клітинки юніта) отримує рівно точку, а не камеру, і
+## разом із нею не отримує можливості завести другу геометрію рига.
+func unproject(world: Vector3) -> Vector2:
+	return _camera.unproject_position(world)
+
 
 ## Миттєве рецентрування — єдиний виклик, дозволений на гейті передачі ходу
 ## (game/ui/handover_gate.gd, крок 2a контракту): камера мусить опинитись на
@@ -239,6 +263,7 @@ func center_on(cell: Vector2i) -> void:
 	if _recenter_tween != null and _recenter_tween.is_valid():
 		_recenter_tween.kill()
 	global_position = _clamp_to_bounds(cell_to_world(cell))
+	_notify_view_changed()
 
 ## Плавне рецентрування (розгін-гальмування) для всього, що НЕ гейт —
 ## початковий показ дошки, наведення на вибраний юніт у межах ходу.
@@ -253,6 +278,10 @@ func fly_to(cell: Vector2i) -> Tween:
 	_recenter_tween = create_tween()
 	_recenter_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_recenter_tween.tween_property(self, "global_position", target, RECENTER_DURATION)
+	# Позицію тут рухає твін, а не код рига — помітити цей рух ріг може лише у
+	# власному _process(), тож на час польоту той мусить лишатись увімкненим
+	# (умова виходу в _process() знає про твін окремим доданком).
+	set_process(true)
 	return _recenter_tween
 
 ## factor > 1 — звужуємось (зум ін), factor < 1 — розширюємось (зум аут);
@@ -303,12 +332,39 @@ func _process(delta: float) -> void:
 
 	_update_zoom(delta)
 	_update_inertia(delta)
+	# Один звіт на кадр покриває всі три анімовані джерела руху — зум, інерцію
+	# і твін fly_to() — замість трьох окремих викликів у кожному з них.
+	_notify_view_changed()
 	# _held утримує процес живим, навіть коли нічого не анімується — рівно
 	# для того, щоб нерухомий, але притиснутий палець продовжував гасити
 	# _pan_velocity до нуля щокадру (замір швидкості вище), а не заморожував
 	# її на останньому значенні, отриманому з живого руху.
-	if is_equal_approx(zoom_level, _zoom_target) and not _inertia_active and not _held:
+	if is_equal_approx(zoom_level, _zoom_target) and not _inertia_active and not _held \
+			and not _flying():
 		set_process(false)
+
+## is_running(), а не is_valid(), і формулювання тут важливе, бо попереднє було
+## неправдиве. Заміряно зондом на Godot 4.7.1: твін, догляданий SceneTree, після
+## завершення дає valid=false, running=false — тобто на is_valid() ріг у живій
+## грі теж вийшов би з _process(). Валідним вичерпаний твін лишається рівно
+## тоді, коли його докрутили вручну через custom_step() — а це наш тестовий
+## стенд (tests/game/test_iso_camera_rig.gd). Отже is_running() тут не рятує від
+## бага в грі, він робить умову правдивою в ОБОХ середовищах, і саме тому
+## test_the_rig_stops_processing_once_the_flight_is_over узагалі щось стереже.
+## is_valid() лишається там, де він і був, — у вбивці попереднього польоту.
+func _flying() -> bool:
+	return _recenter_tween != null and _recenter_tween.is_running()
+
+## Порівняння зі знімком, а не голе emit: підписник (панель характеристик у
+## HUD) перемальовує себе на кожен сигнал, тож «камера не рухалась» мусить
+## коштувати рівно нічого.
+func _notify_view_changed() -> void:
+	if global_position.is_equal_approx(_reported_position) \
+			and is_equal_approx(zoom_level, _reported_zoom):
+		return
+	_reported_position = global_position
+	_reported_zoom = zoom_level
+	view_changed.emit()
 
 func _clamp_to_bounds(pos: Vector3) -> Vector3:
 	var min_edge: float = -BOARD_MARGIN

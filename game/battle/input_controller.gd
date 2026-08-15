@@ -73,7 +73,7 @@ func _init(match_service: Node, zone_overlay: ZoneOverlay, is_playing_check: Cal
 ## АКТИВНОГО гравця: рахувати їх для чужого чи мертвого юніта означало б
 ## намалювати рух там, де жодного законного ходу для нього немає.
 func select_unit(unit: Unit) -> void:
-	if _is_playing():
+	if _input_blocked():
 		return  # R24: «кожен тап» — і прямий виклик теж тап
 
 	_clear_pending()
@@ -111,7 +111,7 @@ func _recompute_zones_for_selected() -> void:
 ## Усе, що не відповідає жодному з цих чотирьох пунктів, — легальний no-op:
 ## контролер не «вгадує», чого хотів гравець, коли модель мовчить.
 func tap_cell(cell: Vector2i) -> void:
-	if _is_playing():
+	if _input_blocked():
 		return  # R24: ввід заблокований, доки триває програвання
 
 	var state: BattleState = _match_service.state
@@ -149,6 +149,8 @@ func tap_cell(cell: Vector2i) -> void:
 ## R23: другий тап (кнопка HUD, Task 2.8) — єдиний спосіб дії. Ніщо інше в
 ## цьому файлі не викликає MatchService.submit().
 func confirm_pending() -> void:
+	if _input_blocked():
+		return
 	if _pending.is_empty():
 		return
 	var command: Command = _build_command(_pending)
@@ -254,3 +256,25 @@ func _deselect() -> void:
 
 func _is_playing() -> bool:
 	return _is_playing_check.is_valid() and bool(_is_playing_check.call())
+
+
+## Ввід не приймається взагалі — дві незалежні причини, один запобіжник на всі
+## три точки входу (select_unit, tap_cell, confirm_pending).
+##
+## R24 (програвання) — перша половина, вона тут була й раніше. Друга —
+## завершений матч, і це той самий дефект іншим боком: core/ гейтить на
+## state.is_over() УСІ команди (move_command.gd:16, fire_command.gd:22,
+## drone_command.gd:25, engineer_command.gd:23, end_turn_command.gd:8), тож
+## після перемоги будь-яке підтверджене прев'ю повернулось би помилкою й
+## упало на assert нижче — рівно баг власника. Правильна відповідь — не
+## пропонувати дії, яку правила вже відхиляють; assert лишається як стереже.
+##
+## confirm_pending() досі не перевіряв навіть _is_playing() — окрема діра,
+## закрита цим же рядком, а не окремим.
+##
+## Екран результату — Phase 3 (§10 CLAUDE.md), не цей файл: поки що дошка
+## просто завмирає. state може бути null до start_match() — це легальний стан
+## для контролера, створеного до матчу, а не «матч завершено».
+func _input_blocked() -> bool:
+	var state: BattleState = _match_service.state
+	return _is_playing() or (state != null and state.is_over())
