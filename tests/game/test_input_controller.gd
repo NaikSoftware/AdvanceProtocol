@@ -284,6 +284,38 @@ func test_select_unit_ignored_while_playback_is_running() -> void:
 	assert_eq(overlay.show_for_calls, 0, "select_unit() під час програвання теж мусить бути no-op — R24 каже «кожен тап»")
 
 
+# --- Матч завершено: ввід не приймається взагалі -------------------------
+#
+# Баг власника: «дограв, убив усіх юнітів противника і гра крешнулась» на
+# assert у battle_screen.gd. Корінь — не кнопка кінця ходу: core/ гейтить на
+# state.is_over() УСІ команди (move/fire/drone/engineer/end_turn), тож після
+# перемоги вигляд і далі пропонує дію, яку правила вже відхиляють, і кожен
+# підтверджений намір падає на assert. Відповідь та сама, що й у R24: після
+# завершення матчу вигляд перестає приймати ввід — не гасить кожну кнопку
+# окремо.
+
+func test_selection_and_taps_are_ignored_once_the_match_is_over() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	# Гравець 1 не має жодного юніта — перший же кінець ходу вибиває його й
+	# завершує матч (core/battle_state.gd, check_elimination). Справжній шлях
+	# ядра, не підставлений winner.
+	service.submit(EndTurnCommand.create())
+	service.take_events()
+	assert_true(service.state.is_over(), "передумова: матч справді завершився")
+	assert_eq(service.state.active_player, 0, "передумова: хід не передався — EndTurnCommand вийшов раніше")
+
+	controller.select_unit(u)
+	controller.tap_cell(u.pos)
+	controller.tap_cell(Vector2i(6, 5))
+
+	assert_eq(overlay.show_for_calls, 0, "після завершення матчу вибір не мусить нічого рахувати й малювати")
+	assert_true(_selections.is_empty(), "жодного selection_changed після завершення матчу")
+	assert_true(_previews.is_empty(), "жодного прев'ю дії, яку core/ уже відхиляє")
+	assert_true(service.take_events().is_empty(), "і жодної команди в ядро")
+
+
 # --- Ревʼю: _zones мусять описувати ПОТОЧНИЙ стан, не стан на момент вибору --
 #
 # Знахідка ревʼю: до фіксу _zones рахувалися рівно один раз, у select_unit(),

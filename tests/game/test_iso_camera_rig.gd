@@ -283,6 +283,99 @@ func test_fling_stops_cleanly_at_the_hard_bound_without_jitter() -> void:
 	assert_almost_eq(rig.global_position.z, 21.0, 0.01,
 		"після клемпа позиція не сіпається туди-сюди навколо межі — швидкість по z загашена одразу")
 
+# --- view_changed: єдиний спосіб для вигляду дізнатись, що екран поїхав ------
+#
+# Прив'язані до дошки елементи HUD (панель характеристик, game/ui/hud.gd) не
+# сміють опитувати камеру щокадру (§8 — екран здебільшого статичний, батарея
+# це фіча), тож ріг сам звітує про кожну зміну своєї екранної геометрії. Джерел
+# руху рівно п'ять — і кожне мусить дати сигнал, інакше панель відклеїться саме
+# на тому русі, який забули.
+
+func test_pan_reports_that_the_view_changed() -> void:
+	rig.center_on(Vector2i(10, 10))
+	watch_signals(rig)
+
+	rig.pan(Vector2(40.0, 0.0))
+
+	assert_signal_emitted(rig, "view_changed")
+
+func test_zoom_reports_that_the_view_changed() -> void:
+	rig.center_on(Vector2i(10, 10))
+	watch_signals(rig)
+
+	rig.zoom_by(0.5)
+	simulate(rig, 5, 1.0 / 60.0)
+
+	assert_signal_emitted(rig, "view_changed")
+
+func test_inertia_reports_that_the_view_changed() -> void:
+	rig.center_on(Vector2i(10, 10))
+	_drag_frames(Vector2(20.0, 0.0), 8)
+	rig.end_pan()
+	assert_true(rig._inertia_active, "передумова: кидок стартував")
+	watch_signals(rig)
+
+	simulate(rig, 3, 1.0 / 60.0)
+
+	assert_signal_emitted(rig, "view_changed")
+
+func test_center_on_reports_that_the_view_changed() -> void:
+	rig.center_on(Vector2i(0, 0))
+	watch_signals(rig)
+
+	rig.center_on(Vector2i(10, 10))
+
+	assert_signal_emitted(rig, "view_changed")
+
+## fly_to() рухає позицію ТВІНОМ, а не власним кодом рига, тож єдине місце, де
+## ріг може помітити цей рух, — його ж _process(). Тому check_is_processing
+## тут true: якби ріг вимикав _process() на час польоту (а він вимикав — умова
+## виходу нижче знала лише про зум, інерцію й палець), simulate() не покликав
+## би _process() взагалі й сигнал не пролунав би жодного разу за весь політ.
+func test_fly_to_reports_that_the_view_changed_while_the_tween_runs() -> void:
+	rig.center_on(Vector2i(0, 0))
+	watch_signals(rig)
+	var tween: Tween = rig.fly_to(Vector2i(19, 19))
+
+	tween.custom_step(0.1)
+	simulate(rig, 1, 1.0 / 60.0, true)
+
+	assert_signal_emitted(rig, "view_changed")
+
+## §8: політ скінчився — ріг мусить знову замовкнути, інакше утримання
+## _process() заради твіна перетворює тимчасову анімацію на постійну роботу
+## щокадру.
+func test_the_rig_stops_processing_once_the_flight_is_over() -> void:
+	var tween: Tween = rig.fly_to(Vector2i(19, 19))
+	tween.custom_step(10.0)
+
+	simulate(rig, 2, 1.0 / 60.0)
+
+	assert_false(rig.is_processing(), "після завершення польоту ріг не мусить лишатись у _process")
+
+## Сигнал без цієї умови був би просто «щокадру»: підписник перерахував би
+## позицію панелі на нерухомій камері й повернув би витрату, задля уникнення
+## якої сигнал і заведений.
+func test_a_camera_that_did_not_move_reports_nothing() -> void:
+	rig.center_on(Vector2i(10, 10))
+	watch_signals(rig)
+
+	rig.center_on(Vector2i(10, 10))
+	rig.pan(Vector2.ZERO)
+	simulate(rig, 3, 1.0 / 60.0)
+
+	assert_signal_not_emitted(rig, "view_changed")
+
+## R13: уся екранна геометрія рига живе в одному файлі (див. коментар над
+## screen_point_to_cell()). Зворотний бік тієї ж проєкції — світова точка на
+## екран — мусить бути тут же, а не другою копією у HUD, і мусить збігатися з
+## screen_point_to_cell() туди й назад.
+func test_unproject_round_trips_with_screen_point_to_cell() -> void:
+	rig.center_on(Vector2i(10, 10))
+	for c in [Vector2i(10, 10), Vector2i(5, 12), Vector2i(15, 8)]:
+		assert_eq(rig.screen_point_to_cell(rig.unproject(rig.cell_to_world(c))), c,
+			"клітинка %s мусить пережити unproject() і назад" % c)
+
 func test_screen_point_to_cell_round_trips_through_camera_projection() -> void:
 	rig.center_on(Vector2i(10, 10))
 	var camera: Camera3D = rig.get_node("Yaw/Camera3D")

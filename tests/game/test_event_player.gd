@@ -231,7 +231,7 @@ func test_play_preserves_event_order() -> void:
 	await player.play(events)
 
 	var expected_ratio: float = 30.0 / float(unit.max_hp())
-	assert_almost_eq(view._hp_bar.scale.x, expected_ratio, 0.001,
+	assert_almost_eq(view.hp_ratio(), expected_ratio, 0.001,
 		"кінцевий стан мусить відповідати останній події масиву (hp_left=30), не першій (hp_left=60)")
 
 
@@ -306,7 +306,7 @@ func test_event_naming_unknown_unit_id_is_skipped_without_error_and_rest_still_p
 	await player.play(events)
 
 	var expected_ratio: float = 70.0 / float(unit_2.max_hp())
-	assert_almost_eq(view._hp_bar.scale.x, expected_ratio, 0.001, "подія для видимого юніта після пропущеної мусить все одно застосуватись")
+	assert_almost_eq(view.hp_ratio(), expected_ratio, 0.001, "подія для видимого юніта після пропущеної мусить все одно застосуватись")
 
 
 func test_no_lookup_injected_is_also_a_legal_no_op() -> void:
@@ -340,15 +340,19 @@ func test_hp_bar_reads_max_hp_from_the_roster_not_from_event_traffic() -> void:
 
 	var damage: Array[Events.BattleEvent] = [Events.DamageDealt.new(1, 50, 100)]
 	await player.play(damage)
-	assert_almost_eq(view._hp_bar.scale.x, 100.0 / float(unit.max_hp()), 0.001,
+	assert_almost_eq(view.hp_ratio(), 100.0 / float(unit.max_hp()), 0.001,
 		"бар мусить показати 100 із ростерного максимуму, а не із виведених з події 150")
+	# Той самий контракт, але текстом, який справді видно на екрані: 150
+	# праворуч від скісної означало б, що максимум вивели з трафіку подій.
+	assert_eq(view._hp_label.text, "100/%d" % unit.max_hp(),
+		"підпис мусить називати ростерний максимум, а не hp_left+amount із події")
 
 	# Друге програвання окремим викликом: ремонт бере той самий ростерний
 	# максимум, а не пам'ять про попередні події (її більше немає — і не має
 	# з'явитись знову).
 	var repair: Array[Events.BattleEvent] = [Events.UnitRepaired.new(1, 100, 200)]
 	await player.play(repair)
-	assert_almost_eq(view._hp_bar.scale.x, 200.0 / float(unit.max_hp()), 0.001,
+	assert_almost_eq(view.hp_ratio(), 200.0 / float(unit.max_hp()), 0.001,
 		"ремонт читає той самий ростер; будь-який стан, накопичений між викликами play(), дав би інше число")
 
 
@@ -365,7 +369,7 @@ func test_hp_event_without_unit_lookup_leaves_the_bar_untouched() -> void:
 	]
 	await player.play(events)
 
-	assert_almost_eq(view._hp_bar.scale.x, 1.0, 0.001,
+	assert_almost_eq(view.hp_ratio(), 1.0, 0.001,
 		"без ростерного лукапа максимум невідомий — бар не оновлюється й лишається таким, яким його поставив bind()")
 
 

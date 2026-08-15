@@ -28,6 +28,18 @@ static func _degrees_for_facing(direction: int) -> float:
 ## відображення, а не число з ростера.
 const _MAX_DRONES: int = 2
 
+## Розмір текстури HP-смуги в пікселях. Довга й тонка (8:1), а не квадрат:
+## при pixel_size=0.02 виходить 0.96×0.12 світової одиниці — майже на всю
+## ширину тайла, як у референсі (там смуга рівно `tile_width - 1` завширшки
+## і 3 px заввишки).
+const _HP_BAR_SIZE: Vector2i = Vector2i(48, 6)
+
+## Рамка й порожнє тло — всередині ТІЄЇ САМОЇ текстури, що й заливка.
+## Три накладені білборд-спрайти на одній висоті дали б z-fighting і три
+## різні центри обертання, а §8 тримає бюджет ~100 draw call'ів на екран.
+const _HP_BAR_FRAME_COLOR: Color = Color("14120f")
+const _HP_BAR_BACK_COLOR: Color = Color("3b3833")
+
 ## Наскільки темніє корпус юніта, що вже відстрілявся.
 const _DIM_FACTOR: float = 0.45
 
@@ -79,21 +91,36 @@ const _DEBUG_SHOW_FACING_ARROW: bool = true
 const _DEBUG_ARROW_COLOR: Color = Color("ff26d6")
 
 ## Трохи вище даху корпусу (уникнути z-fighting граней), і однозначно нижче
-## HpBar (y=1.1) / DroneIcon (y=1.35) з unit_view.tscn — стрілка не має
-## перекривати жоден із них.
+## HpBar (y=1.1) / HpLabel (y=1.3) / DroneIcon (y=1.6) з unit_view.tscn —
+## стрілка не має перекривати жоден із них.
 const _DEBUG_ARROW_Y_OFFSET: float = 0.02
 ## --- ЧАСОВИЙ ДЕВТУЛ (Задача 2), кінець блоку констант -------------------
+
+## Колір прицілу — рівно UnitInspector.MODULATE_HIT (game/ui/unit_inspector.gd:40),
+## і не випадково: коментар там уже називає цей зв'язок («той самий сигнал
+## “сюди прилетить”, що й у прицілі») — колір був зарезервований під цей приціл
+## ще до того, як приціл з'явився. Два різні кольори про одне влучання читались
+## би як два різні повідомлення: панель каже «сюди», дошка каже щось інше.
+## Константа продубльована, а не імпортована з game/ui/: вигляд дошки не
+## залежить від HUD — тест звіряє обидва значення й упаде, якщо вони розійдуться.
+const _CROSSHAIR_COLOR: Color = Color("ff7a4a")
 
 ## Поточний факінг (0..7, порядок Board.DIRS_8). Читається ззовні для UI цілей.
 var facing: int = 0
 
 @onready var _silhouette: Node3D = $Silhouette
+@onready var _crosshair: Sprite3D = $Crosshair
 @onready var _hp_bar: Sprite3D = $HpBar
+@onready var _hp_label: Label3D = $HpLabel
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
 var _hull_material: StandardMaterial3D
 var _base_hull_color: Color = Color.WHITE
 var _drones_left: int = 0
+## Останнє показане співвідношення HP. Джерело правди замість колишнього
+## _hp_bar.scale.x — заливка тепер намальована ВСЕРЕДИНІ текстури, тож
+## масштаб вузла більше нічого про HP не каже.
+var _hp_ratio: float = 1.0
 ## Живий твін останнього face(); тримаємо посилання, щоб наступний виклик
 ## міг убити цей замість того, щоб два твіни змагались за rotation_degrees.y.
 var _face_tween: Tween
@@ -101,9 +128,14 @@ var _face_tween: Tween
 
 func _ready() -> void:
 	# Заступники текстур: суцільний колір замість реального арту, той самий
-	# підхід, що й нейтральні кольори тайлів у BoardView.
-	_hp_bar.texture = _flat_texture(Color.WHITE)
+	# підхід, що й нейтральні кольори тайлів у BoardView. HP-смуга сюди не
+	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
+	# з кожного bind().
 	_drone_icon.texture = _flat_texture(Color("d9b23a"))
+	# Форма — біла, колір дає modulate (той самий прийом, що й у HP-барі вище):
+	# одне місце, де живе _CROSSHAIR_COLOR, і його видно в інспекторі.
+	_crosshair.texture = _crosshair_texture()
+	_crosshair.modulate = _CROSSHAIR_COLOR
 
 
 func bind(unit: Unit) -> void:
@@ -117,6 +149,10 @@ func bind(unit: Unit) -> void:
 	set_hp(unit.hp, unit.max_hp())
 	set_drones(unit.drones_left)
 	set_dimmed(unit.has_fired)
+	# Свіжий (чи перебудований) вузол не є ціллю жодного прев'ю: прев'ю живе в
+	# InputController і перебудову не переживає — лишити приціл увімкненим
+	# означало б показувати намір, якого вже немає.
+	set_targeted(false)
 
 
 ## Баг-звіт (виправлення 3): «вибираю танк, вказую їхати вперед — він їде
@@ -234,12 +270,40 @@ func _set_facing_instant(direction: int) -> void:
 	rotation_degrees.y = _degrees_for_facing(direction)
 
 
+## Миттєво, без твінів: сцена перебудовує ВСІ вузли юнітів після кожної дії
+## (див. коментар у bind()), тож анімована смуга щоразу починала б з нуля.
 func set_hp(hp: int, max_hp: int) -> void:
 	var ratio: float = 0.0
 	if max_hp > 0:
 		ratio = clampf(float(hp) / float(max_hp), 0.0, 1.0)
-	_hp_bar.scale.x = ratio
-	_hp_bar.modulate = Color.RED.lerp(Color.GREEN, ratio)
+	_hp_ratio = ratio
+	# Гра покрокова — перемальовувати 48×6 пікселів на кожну зміну HP дешевше,
+	# ніж тримати кеш текстур і стежити за його інвалідацією.
+	_hp_bar.texture = _hp_bar_texture(ratio)
+	# Білий: колір тепер живе всередині текстури (рамка, тло й заливка мають
+	# кожен свій), і modulate поверх нього перефарбував би й рамку теж.
+	_hp_bar.modulate = Color.WHITE
+	_hp_label.text = "%d/%d" % [hp, max_hp]
+
+
+## Єдине джерело правди про показане HP — для UI й тестів. Колишнє
+## _hp_bar.scale.x більше нічого не означає (§бриф, скарга власника).
+func hp_ratio() -> float:
+	return _hp_ratio
+
+
+## Рамка (1 px по периметру), темне тло всередині й заливка від ЛІВОГО краю
+## завширшки ratio — одна текстура, один спрайт. Заливка росте зліва
+## направо, як у референсі; старий scale.x стискав смугу до центру.
+static func _hp_bar_texture(ratio: float) -> ImageTexture:
+	var image := Image.create(_HP_BAR_SIZE.x, _HP_BAR_SIZE.y, false, Image.FORMAT_RGBA8)
+	image.fill(_HP_BAR_FRAME_COLOR)
+	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
+	image.fill_rect(inner, _HP_BAR_BACK_COLOR)
+	var fill_width: int = roundi(float(inner.size.x) * ratio)
+	if fill_width > 0:
+		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), Color.RED.lerp(Color.GREEN, ratio))
+	return ImageTexture.create_from_image(image)
 
 
 ## §3.9: залишок дронів публічний — показується на будь-якому видимому
@@ -249,6 +313,14 @@ func set_drones(count: int) -> void:
 	_drones_left = clampi(count, 0, _MAX_DRONES)
 	_drone_icon.visible = _drones_left > 0
 	_drone_icon.scale = Vector3.ONE * (0.5 + 0.25 * float(_drones_left))
+
+
+## Ціль прев'ю пострілу, яке гравець ще не підтвердив (§3.13): вузол лише
+## вмикає позначку, ніколи не вирішує, чи він ціль. Рішення приходить готовим
+## із InputController.action_preview крізь контейнер (battle_screen) — вигляд
+## не питає ні дальності, ні видимості, ні шкоди (§6 CLAUDE.md).
+func set_targeted(targeted: bool) -> void:
+	_crosshair.visible = targeted
 
 
 func play_destroyed() -> Signal:
@@ -377,6 +449,35 @@ func _build_facing_arrow(hull_size: Vector3) -> MeshInstance3D:
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	arrow.material_override = mat
 	return arrow
+
+
+## Кільце з чотирма рисками, що дивляться до центру — форма, а не пляма:
+## на ~100 px силуету (§1.5) суцільна крапка читалась би як маркер юніта, а
+## приціл мусить читатись як приціл із одного погляду. Мальовано в код, як і
+## решта заступників тут (_flat_texture нижче), поки нема справжнього арту.
+static func _crosshair_texture(size: int = 32) -> ImageTexture:
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(1.0, 1.0, 1.0, 0.0))
+	var center: float = float(size - 1) * 0.5
+	var radius: float = float(size) * 0.42
+	var thickness: float = float(size) * 0.045
+	for y in size:
+		for x in size:
+			var dx: float = float(x) - center
+			var dy: float = float(y) - center
+			var distance: float = sqrt(dx * dx + dy * dy)
+			var on_ring: bool = absf(distance - radius) <= thickness
+			# Риски йдуть по осях від кільця всередину і НЕ доходять до центру
+			# (distance > radius * 0.4) — перехрестя посеред корпусу ховало б
+			# сам силует, який гравець і намагається впізнати.
+			var on_tick: bool = (
+				distance < radius
+				and distance > radius * 0.4
+				and (absf(dx) <= thickness or absf(dy) <= thickness)
+			)
+			if on_ring or on_tick:
+				image.set_pixel(x, y, Color.WHITE)
+	return ImageTexture.create_from_image(image)
 
 
 static func _flat_texture(color: Color, size: int = 8) -> ImageTexture:

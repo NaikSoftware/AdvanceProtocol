@@ -186,6 +186,51 @@ func test_end_turn_button_submits_exactly_one_end_turn_command() -> void:
 	assert_true(service.submitted[0] is EndTurnCommand, "і саме EndTurnCommand — не будь-яку іншу")
 
 
+## Сценарій власника дослівно: «дограв, убив усіх юнітів противника і гра
+## крешнулась» на assert(err == "") у _on_end_turn_pressed(). Постріл убиває
+## останній юніт гравця 1 → FireCommand кличе check_elimination()
+## (core/commands/fire_command.gd:166) → winner виставлено ще ДО того, як
+## гравець торкнувся кнопки → EndTurnCommand.validate() повертає ERR_MATCH_OVER.
+##
+## assert лишається на місці й не пом'якшується: він стереже розбіжність
+## вигляду з правилами і спіймав цей баг рівно так, як мав. Правильний
+## результат — щоб до нього не доходило, бо вигляд не пропонує відхиленої дії.
+## Екран результату — Phase 3 (§10 CLAUDE.md); тут дошка просто завмирає.
+func test_end_turn_after_the_last_enemy_dies_submits_nothing_and_does_not_crash() -> void:
+	var service := SpyMatchService.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 0},  # medium tank
+		{"type_id": 2, "owner": 1, "pos": Vector2i(3, 2), "facing": 0},  # останній юніт гравця 1
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+
+	var shooter: Unit = service.state.units_of(0)[0]
+	var victim: Unit = service.state.units_of(1)[0]
+	victim.hp = 1  # §3.3: MIN_DAMAGE = 10, тож будь-яке влучання гарантовано вбиває
+
+	screen.input_controller().tap_cell(shooter.pos)
+	screen.input_controller().tap_cell(victim.pos)
+	screen.input_controller().confirm_pending()
+	# Тягнемо твіни вручну (той самий прийом, що й у test_event_player.gd):
+	# без цього програвання смерті лишається в польоті, is_playing() ще true, і
+	# кнопку кінця ходу гейтив би R24, а не завершений матч — тест перевіряв би
+	# не те.
+	_finish_all_processed_tweens()
+
+	assert_false(victim.is_alive(), "передумова: останній юніт гравця 1 знищений")
+	assert_true(service.state.is_over(), "передумова: матч завершився ще на пострілі")
+	var submitted_before: int = service.submitted.size()
+
+	var end_turn_button: Button = screen.get_node("%Hud").get_node("%EndTurnButton")
+	end_turn_button.pressed.emit()
+
+	assert_eq(service.submitted.size(), submitted_before,
+		"після завершення матчу натискання «завершити хід» не сміє дійти до core/ узагалі")
+
+
 # --- Тап по дошці: екранна точка -> клітинка -> InputController -----------
 #
 # game/ui/handover_gate.gd, крок 4 контракту: маршрутизація тапів дошки
@@ -826,6 +871,96 @@ func _arrow_of(screen: Node3D, unit_id: int) -> MeshInstance3D:
 	return view.get_node_or_null("Silhouette/DebugFacingArrow")
 
 
+# --- Скарга власника: тап по ворогові для пострілу мусить позначити ЦІЛЬ ---
+#
+# Раніше прев'ю пострілу було видно лише в нижній панелі HUD (сектор і межі
+# шкоди), а на самій дошці ціль не позначалась ніяк. Приціл малює вигляд із
+# готового прев'ю InputController — жодного перерахунку дальності, видимості
+# чи шкоди тут немає й не сміє з'явитись (§6 CLAUDE.md).
+
+func _crosshair_visible(screen: Node3D, unit_id: int) -> bool:
+	var view: Node3D = screen.unit_view_for(unit_id)
+	assert_not_null(view, "передумова: вузол юніта %d мусить бути на дошці" % unit_id)
+	return view._crosshair.visible
+
+
+## Танки стоять поруч: обидва в ромбі огляду один одного і в межах пострілу,
+## тож тап по ворогові справді дає прев'ю пострілу, а не no-op.
+func _screen_with_two_adjacent_tanks(service: Node) -> Node3D:
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(3, 2), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	return screen
+
+
+func test_shot_preview_marks_exactly_the_target_and_nobody_else() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_with_two_adjacent_tanks(service)
+	var shooter: Unit = service.state.units_of(0)[0]
+	var target: Unit = service.state.units_of(1)[0]
+
+	screen.input_controller().tap_cell(shooter.pos)
+	assert_false(_crosshair_visible(screen, target.id), "передумова: сам вибір стрільця ще нічого не прицілює")
+
+	screen.input_controller().tap_cell(target.pos)
+
+	assert_true(_crosshair_visible(screen, target.id), "прев'ю пострілу мусить поставити приціл на ціль")
+	assert_false(_crosshair_visible(screen, shooter.id), "і ні на кого більше — стрілець не ціль")
+
+
+func test_cancel_pending_clears_the_crosshair() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_with_two_adjacent_tanks(service)
+	var shooter: Unit = service.state.units_of(0)[0]
+	var target: Unit = service.state.units_of(1)[0]
+
+	screen.input_controller().tap_cell(shooter.pos)
+	screen.input_controller().tap_cell(target.pos)
+	assert_true(_crosshair_visible(screen, target.id), "передумова: приціл стоїть")
+
+	screen.input_controller().cancel_pending()
+
+	assert_false(_crosshair_visible(screen, target.id), "скасування прев'ю мусить зняти приціл")
+
+
+func test_selecting_another_unit_clears_the_crosshair() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_with_two_adjacent_tanks(service)
+	var shooter: Unit = service.state.units_of(0)[0]
+	var target: Unit = service.state.units_of(1)[0]
+
+	screen.input_controller().tap_cell(shooter.pos)
+	screen.input_controller().tap_cell(target.pos)
+	assert_true(_crosshair_visible(screen, target.id), "передумова: приціл стоїть")
+
+	screen.input_controller().select_unit(null)
+
+	assert_false(_crosshair_visible(screen, target.id), "новий вибір мусить зняти приціл попереднього прев'ю")
+
+
+## Прев'ю РУХУ — теж action_preview, але воно нікого не прицілює: приціл
+## належить рівно ActionType.SHOT.
+func test_move_preview_does_not_mark_anyone() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_with_two_adjacent_tanks(service)
+	var shooter: Unit = service.state.units_of(0)[0]
+	var target: Unit = service.state.units_of(1)[0]
+
+	screen.input_controller().tap_cell(shooter.pos)
+	screen.input_controller().tap_cell(Vector2i(2, 3))  # порожня клітинка в зоні руху
+
+	assert_false(_crosshair_visible(screen, target.id), "прев'ю руху не сміє прицілювати ворога")
+	assert_false(_crosshair_visible(screen, shooter.id), "ані самого юніта, що рухається")
+
+
 func test_facing_arrow_survives_selection_zone_overlay_and_a_confirmed_move() -> void:
 	var service: Node = MatchServiceScript.new()
 	add_child_autofree(service)
@@ -871,3 +1006,42 @@ func test_facing_arrow_survives_selection_zone_overlay_and_a_confirmed_move() ->
 	assert_true(_arrow_of(screen, moved.id).visible, "стрілка на щойно посунутому юніті мусить лишатись visible=true")
 	assert_not_null(_arrow_of(screen, bystander.id), "стрілка стороннього юніта теж мусить пережити rebuild")
 	assert_true(_arrow_of(screen, bystander.id).visible, "стрілка стороннього юніта мусить лишатись visible=true")
+
+
+# --- Панель характеристик їде за юнітом (скарга власника) -------------------
+
+## Проводка, а не сама поведінка: те, що панель уміє ставати на місце, стереже
+## tests/game/test_hud.gd, а те, що ріг повідомляє про рух, —
+## tests/game/test_iso_camera_rig.gd. Тут перевіряється рівно один рядок
+## setup(): що сцена бою справді звела ці двоє докупи. Без нього обидві
+## половини лишаються зеленими, а на екрані панель стоїть як стояла.
+##
+## Перевіряється САМЕ З'ЄДНАННЯ, а не зсув панелі в пікселях — і це свідомий
+## відкат від першої, нестабільної версії цього тесту. Та рухала камеру й
+## порівнювала позицію до/після, але під headless юніт проєктується за межі
+## екрана, панель у обох замірах упирається в той самий кут клемпа, і результат
+## залежав від того, чи встиг крокнути твін fly_to() із setup(). Тест то
+## зеленів, то ні, тобто не стеріг нічого. Поведінку (панель справді їде за
+## юнітом і не накриває ні його, ні кнопки) тримає tests/game/test_hud.gd на
+## ригу, яким сам і керує; тут лишається рівно те, чого немає більше ніде —
+## факт, що сцена бою звела ріг із HUD.
+func test_inspector_follows_the_camera_because_setup_wires_it() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(12, 12)
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	var hud: Node = screen.get_node("%Hud")
+	var wired_to_hud: bool = false
+	for connection in rig.view_changed.get_connections():
+		if (connection["callable"] as Callable).get_object() == hud:
+			wired_to_hud = true
+			break
+
+	assert_true(wired_to_hud,
+		"setup() мусить підписати HUD на рух камери — без цього рядка обидві половини лишаються зеленими, а на екрані панель стоїть як стояла")

@@ -12,6 +12,7 @@ mouse_filter = 2
 script = ExtResource("1_hud")
 
 [node name="SafeArea" type="MarginContainer" parent="."]
+unique_name_in_owner = true
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
@@ -59,14 +60,8 @@ unique_name_in_owner = true
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="MiddleSpacer" type="Control" parent="SafeArea/Layout/Middle"]
-size_flags_horizontal = 3
-mouse_filter = 2
-
-[node name="Inspector" parent="SafeArea/Layout/Middle" instance=ExtResource("2_inspector")]
-unique_name_in_owner = true
-
 [node name="BottomBar" type="HBoxContainer" parent="SafeArea/Layout"]
+unique_name_in_owner = true
 theme_override_constants/separation = 16
 mouse_filter = 2
 
@@ -144,3 +139,7 @@ text = "hud_confirm"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(160, 64)
 text = "hud_end_turn"
+
+[node name="Inspector" parent="." instance=ExtResource("2_inspector")]
+unique_name_in_owner = true
+mouse_filter = 2

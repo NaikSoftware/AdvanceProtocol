@@ -11,6 +11,14 @@ extends GutTest
 
 const HudScene := preload("res://game/ui/hud.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
+const RigScene := preload("res://game/camera/iso_camera_rig.tscn")
+
+## Поля безпеки з hud.tscn (SafeArea): панель, прив'язана до клітинки юніта,
+## не сміє заїхати під виріз екрана, скільки б камеру не відводили від юніта.
+const SAFE_LEFT: float = 56.0
+const SAFE_TOP: float = 24.0
+const SAFE_RIGHT: float = 56.0
+const SAFE_BOTTOM: float = 24.0
 
 ## Той самий прийом, що й у tests/game/test_input_controller.gd: шпигун замість
 ## справжнього ZoneOverlay, бо той тягне за собою живий BoardView із MultiMesh,
@@ -340,6 +348,93 @@ func _collect_buttons(node: Node, out: Array[Button]) -> void:
 		_collect_buttons(child, out)
 
 
+# --- Панель характеристик прив'язана до юніта, а не до кута екрана ----------
+#
+# Скарга власника: «якщо рухати камеру, вікно з характеристиками юніта
+# лишається на місці». Панель належить ВИБРАНОМУ ЮНІТУ, тож мусить їхати
+# разом із дошкою — і при цьому не вилазити за поля безпеки.
+#
+# Зв'язка збирається тут вручну (ріг + HUD + attach_camera), бо жива
+# battle_screen.tscn проводить її своїм рядком, а перевіряти треба сам контракт
+# HUD, а не сцену.
+
+func _rig_for(unit: Unit) -> IsoCameraRig:
+	var rig: IsoCameraRig = RigScene.instantiate()
+	add_child_autofree(rig)
+	rig.set_bounds(Vector2i(12, 12))
+	rig.center_on(unit.pos)
+	return rig
+
+
+func test_inspector_moves_with_the_camera() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	var rig: IsoCameraRig = _rig_for(u)
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.show_selection(u)
+	var before: Vector2 = _inspector().position
+
+	rig.pan(Vector2(120.0, 0.0))
+
+	assert_ne(_inspector().position, before,
+		"панель прив'язана до юніта: поїхала камера — поїхала й вона (позиція лишилась %s)" % before)
+
+
+## Юніт у дальньому кутку, камера відведена від нього до упору — екранна точка
+## юніта опиняється ЗА верхнім краєм екрана. Панель мусить притиснутись рівно
+## до поля безпеки, а не поїхати за ним слідом у нікуди.
+func test_inspector_is_clamped_to_the_safe_area_when_its_unit_is_off_screen() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 0), 0)
+	var rig: IsoCameraRig = _rig_for(u)
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.show_selection(u)
+
+	for i in 50:
+		rig.pan(Vector2(0.0, -2000.0))
+
+	assert_eq(_inspector().position.y, SAFE_TOP,
+		"панель мусить стати рівно на верхнє поле безпеки (56/24 з hud.tscn), а не піти за юнітом за екран")
+	var panel := Rect2(_inspector().position, _inspector().size)
+	var safe := Rect2(SAFE_LEFT, SAFE_TOP,
+		hud.size.x - SAFE_LEFT - SAFE_RIGHT, hud.size.y - SAFE_TOP - SAFE_BOTTOM)
+	assert_true(safe.encloses(panel),
+		"панель %s мусить цілком уміститись у полях безпеки %s" % [panel, safe])
+
+
+func test_inspector_stays_hidden_when_nothing_is_selected_even_with_a_camera_attached() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	var rig: IsoCameraRig = _rig_for(u)
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.show_selection(u)
+	assert_true(_inspector().visible, "передумова: панель показана")
+
+	hud.show_selection(null)
+	rig.pan(Vector2(120.0, 0.0))
+
+	assert_false(_inspector().visible, "без вибору панель схована — і рух камери її не воскрешає")
+
+
+## §8: панель їде за камерою на СИГНАЛ рига, не в _process. Той самий бюджет,
+## що й у test_hud_does_no_per_frame_work нижче, але вже з прив'язаною камерою
+## і живим вибором — тобто в стані, у якому спокуса опитувати камеру щокадру
+## найбільша.
+func test_a_camera_bound_inspector_still_does_no_per_frame_work() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	hud.bind(state)
+	hud.attach_camera(_rig_for(u))
+	hud.show_selection(u)
+
+	assert_false(hud.is_processing(), "правила й показ не живуть у _process (§9)")
+	assert_false(hud.is_physics_processing())
+	assert_false(_inspector().is_processing())
+
+
 func test_hud_does_no_per_frame_work() -> void:
 	assert_false(hud.is_processing(), "правила й показ не живуть у _process (§9)")
 	assert_false(hud.is_physics_processing())
@@ -414,6 +509,28 @@ func test_end_turn_button_reports_the_press_and_submits_nothing_itself() -> void
 		"HUD не подає команд сам — рішення про кінець ходу належить сцені бою")
 
 
+## Баг власника: після знищення останнього ворожого юніта натискання «завершити
+## хід» падало на assert у battle_screen.gd, бо EndTurnCommand.validate()
+## повертає ERR_MATCH_OVER (core/commands/end_turn_command.gd:8). Кнопка не сміє
+## пропонувати дію, яку правила вже відхиляють. Матч завершується справжнім
+## шляхом ядра: гравець 1 без юнітів вибуває на першому ж кінці ходу.
+func test_end_turn_button_is_disabled_once_the_match_is_over() -> void:
+	var state: BattleState = _state()
+	state.add_unit(5, 0, Vector2i(3, 3), 0)
+	_service.begin()
+	_service.take_events()
+	hud.bind(state)
+	hud.attach_match_service(_service)
+	var button := hud.get_node("%EndTurnButton") as Button
+	assert_false(button.disabled, "передумова: поки матч триває, кінець ходу доступний")
+
+	_service.submit(EndTurnCommand.create())
+
+	assert_true(state.is_over(), "передумова: гравець 1 без юнітів — матч завершився")
+	assert_true(button.disabled,
+		"після завершення матчу кнопка кінця ходу мусить бути вимкнена — core/ цю команду вже відхиляє")
+
+
 # --- Прив'язка до MatchService ----------------------------------------------
 
 func test_events_ready_refreshes_turn_number_and_the_selected_units_ap() -> void:
@@ -432,3 +549,74 @@ func test_events_ready_refreshes_turn_number_and_the_selected_units_ap() -> void
 	assert_lt(u.ap, ap_before, "передумова: рух справді витратив AP")
 	assert_eq(_label("ApValue").text, str(u.ap),
 		"після події AP на екрані мусить бути нинішнім, а не тим, що був при виборі")
+
+
+## Дефект, знайдений на ЖИВОМУ екрані, не в тесті: коли юніт близько до правого
+## краю, панель праворуч уже не влазить, і сам по собі clampf зсовував її вліво
+## — рівно на той юніт, який вона описує (танк зникав під власними
+## характеристиками разом зі своєю HP-смугою). Правильна поведінка — стати з
+## ІНШОГО боку від юніта, і лише потім затискатись у поля безпеки.
+##
+## Перевіряється зовнішня правда, а не формула коду: точка прив'язки береться
+## тим самим публічним unproject() рига, а далі стверджується геометрія —
+## прямокутник панелі не сміє містити цю точку.
+func test_inspector_flips_to_the_other_side_instead_of_covering_its_own_unit() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	var rig: IsoCameraRig = _rig_for(u)
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.show_selection(u)
+
+	# Відводимо камеру до упору так, щоб юніт поїхав до правого краю екрана.
+	for i in 50:
+		rig.pan(Vector2(2000.0, 0.0))
+
+	var anchor: Vector2 = rig.unproject(
+		IsoCameraRig.cell_to_world(u.pos) + Vector3(0.0, Hud.INSPECTOR_LIFT, 0.0))
+	var panel := Rect2(_inspector().position, _inspector().size)
+	assert_gt(anchor.x + Hud.INSPECTOR_GAP + panel.size.x,
+		hud.size.x - SAFE_RIGHT,
+		"передумова: юніт мусить стояти так, щоб праворуч від нього панель уже не влазила")
+	assert_false(panel.has_point(anchor),
+		"панель %s накрила точку прив'язки власного юніта %s — вона мусила стати з іншого боку" % [panel, anchor])
+	assert_lt(panel.end.x, anchor.x,
+		"панель мусить цілком лежати ЛІВІШЕ юніта, коли праворуч місця нема")
+
+
+## Знахідка ревʼю, і найдорожча з усіх: нижньою межею клемпа був НИЗ поля
+## безпеки, а рядок дій живе всередині нього. Панель малюється поверх усього
+## HUD, тож «влізла в безпечну зону» й «не накрила кнопки» — різні твердження,
+## і перше було істинним саме тоді, коли друге хибне. Ціна: кнопка підтвердження
+## — єдиний легальний шлях до дії (§6), і гравець, вибравши юніта в нижній
+## частині кадру, тицяв би в неї наосліп.
+##
+## Юніт у дальньому кутку, камера — у протилежному: під ізо-ракурсом обидві
+## додатні осі йдуть униз екрана, тож юніт гарантовано проєктується нижче
+## рядка кнопок. Це і є передумова, і вона перевіряється явно — інакше тест
+## лишався б зеленим, ніколи не діставши до самого клемпа.
+func test_inspector_never_covers_the_action_buttons() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(11, 11), 0)
+	var rig: IsoCameraRig = _rig_for(u)
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.show_selection(u)
+	# Розкладка контейнерів рахується не миттєво, а клемп міряє реальний
+	# прямокутник рядка кнопок.
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	rig.center_on(Vector2i(0, 0))
+
+	var bar: Control = hud.get_node("%BottomBar")
+	var bar_top: float = bar.get_global_rect().position.y - hud.get_global_rect().position.y
+	var anchor: Vector2 = rig.unproject(
+		IsoCameraRig.cell_to_world(u.pos) + Vector3(0.0, Hud.INSPECTOR_LIFT, 0.0))
+	var panel := Rect2(_inspector().position, _inspector().size)
+
+	assert_gt(bar_top, 0.0, "передумова: розкладка порахована й рядок кнопок має власну висоту")
+	assert_gt(anchor.y, bar_top,
+		"передумова: юніт мусить проєктуватись НИЖЧЕ верху рядка кнопок, інакше клемп не задіяний")
+	assert_lte(panel.end.y, bar_top,
+		"панель %s заїхала на рядок кнопок (його верх — %s): кнопку підтвердження мусить бути видно" % [panel, bar_top])

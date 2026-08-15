@@ -159,10 +159,21 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# не описує жодної дії (input_controller.gd, _clear_pending()).
 	_controller.action_preview.connect(_path_overlay.show_preview)
 	_controller.pending_cleared.connect(_path_overlay.clear)
+	# Скарга власника: прев'ю пострілу було видно лише числами в нижній панелі,
+	# а сама ціль на дошці не позначалась ніяк. Ті самі два сигнали, що й у
+	# шляху вище: action_preview ставить приціл, pending_cleared знімає.
+	_controller.action_preview.connect(_on_action_preview)
+	_controller.pending_cleared.connect(_clear_all_crosshairs)
 
 	_hud.bind(_match_service.state)
 	_hud.attach_controller(_controller)
 	_hud.attach_match_service(_match_service)
+	# Панель характеристик належить вибраному юніту, а не куту екрана (скарга
+	# власника: «рухаю камеру — вікно лишається на місці»). Прив'язка йде після
+	# bind() навмисно: attach_camera() одразу ставить панель на місце, а робити
+	# це до того, як HUD узагалі знає стан, означало б рахувати позицію без
+	# вибору й без дошки.
+	_hud.attach_camera(_camera_rig)
 	_hud.end_turn_pressed.connect(_on_end_turn_pressed)
 
 	_gate.confirmed.connect(_on_gate_confirmed)
@@ -187,6 +198,32 @@ func unit_view_for(unit_id: int) -> UnitView:
 
 func input_controller() -> InputController:
 	return _controller
+
+
+## §3.13/§6: прев'ю приходить готовим — тут лише читається "target_id" і
+## вмикається позначка. Жодного перерахунку дальності, сектора чи шкоди:
+## рішення, що постріл узагалі можливий, уже прийняв InputController крізь
+## Targeting/FireCommand.preview().
+##
+## Гасимо ВСІ перед тим, як увімкнути потрібний: два прев'ю пострілу поспіль
+## (гравець перебирає цілі) інакше лишили б приціл на попередній — pending_cleared
+## між ними не приходить, бо _pending не скидається, а перезаписується.
+func _on_action_preview(preview: Dictionary) -> void:
+	_clear_all_crosshairs()
+	if preview.is_empty() or int(preview["type"]) != InputController.ActionType.SHOT:
+		return
+	# Ціль може й не мати вузла — фог вирішує це окремо (§3.5), і вигляд не
+	# сперечається з ним.
+	var target_view: UnitView = unit_view_for(int(preview["target_id"]))
+	if target_view != null:
+		target_view.set_targeted(true)
+
+
+## Без окремого поля з id останньої цілі: _unit_views — це юніти одного екрана
+## бою, зайвий стан тут дорожчий за прохід словником.
+func _clear_all_crosshairs() -> void:
+	for id in _unit_views:
+		(_unit_views[id] as UnitView).set_targeted(false)
 
 
 ## game/ui/handover_gate.gd, крок 4 контракту (обов'язковий): маршрутизація
@@ -478,8 +515,13 @@ func _unit_for(unit_id: int) -> Unit:
 	return _match_service.state.get_unit(unit_id)
 
 
+## HUD вимикає кнопку кінця ходу, щойно матч завершився (hud.gd, refresh()), —
+## але рішення лишається тут: сигнал end_turn_pressed може прийти й не від тієї
+## кнопки, а покладатися на її стан означало б довіряти вигляду те, що вже
+## вирішили правила (EndTurnCommand.validate() → ERR_MATCH_OVER). assert нижче
+## не пом'якшено навмисно: він стереже розбіжність вигляду з правилами.
 func _on_end_turn_pressed() -> void:
-	if _event_player.is_playing():
+	if _event_player.is_playing() or _match_service.state.is_over():
 		return
 	var err: String = _match_service.submit(EndTurnCommand.create())
 	assert(err == "", "HUD дозволив кінець ходу, який core/ відхилив: %s" % err)

@@ -42,8 +42,21 @@ const GROUND_STATE_COLORS: Dictionary = {
 	Terrain.GroundState.FROZEN: Color("9fd0e8"),
 }
 
+## Панель характеристик стоїть ПОРУЧ із юнітом, а не поверх нього: зсув у
+## екранних пікселях від точки, у яку проєктується його клітинка. x — убік від
+## силуету, y — по центру панелі проти юніта (див. _reposition_inspector()).
+##
+## Було 40, стало 96 на прохання власника — «малюється дуже близько до юніта,
+## треба трохи поодаль». Число живе тут одне, тож відстань підбирається рівно
+## цим рядком, без правок у геометрії нижче.
+const INSPECTOR_GAP: float = 96.0
+## Підйом точки прив'язки над площиною дошки: клітинка лежить у y=0, а сам
+## юніт має висоту, і панель, приклеєна до підлоги, перекривала б його ноги.
+const INSPECTOR_LIFT: float = 1.0
+
 var _state: BattleState = null
 var _controller: InputController = null
+var _camera_rig: IsoCameraRig = null
 var _selected_unit: Unit = null
 ## −1 — «гравця ще не показували жодного разу». Потрібне окремим значенням, бо
 ## 0 — це справжній гравець, а перехід до нового гравця мусить прибрати з
@@ -67,6 +80,14 @@ var _shown_player: int = -1
 @onready var _cancel_button: Button = %CancelButton
 @onready var _end_turn_button: Button = %EndTurnButton
 @onready var _inspector: UnitInspector = %Inspector
+## Поля безпеки читаються з того самого вузла, що їх і задає (§9: одне джерело
+## правди) — панель поза цим контейнером, але поважає ті самі межі, бо виріз
+## екрана однаково не питає, у контейнері вузол чи ні.
+@onready var _safe_area: MarginContainer = %SafeArea
+## Рядок дій — і нижня межа для панелі характеристик. Поля безпеки самі по собі
+## тут не рятують: кнопки живуть УСЕРЕДИНІ них, а панель малюється поверх усього
+## HUD, тож «влізла в безпечну зону» й «не накрила кнопки» — різні твердження.
+@onready var _bottom_bar: HBoxContainer = %BottomBar
 
 
 func _ready() -> void:
@@ -95,6 +116,12 @@ func refresh() -> void:
 	_turn_value.text = str(_state.turn_number)
 	_apply_ground_state(_state.board.ground_state)
 	set_active_player(_state.active_player)
+	# Матч завершився — core/ відхиляє EndTurnCommand разом з усіма іншими
+	# (ERR_MATCH_OVER, core/commands/end_turn_command.gd:8), тож кнопка не сміє
+	# пропонувати дію, яку правила вже не приймають. refresh() підписаний на
+	# events_ready (attach_match_service), тож це спрацьовує одразу після пакета
+	# подій, що завершив матч. Екран результату — Phase 3 (§10 CLAUDE.md).
+	_end_turn_button.disabled = _state.is_over()
 	_render_selection()
 
 
@@ -156,6 +183,17 @@ func attach_controller(controller: InputController) -> void:
 	controller.action_preview.connect(show_preview)
 
 
+## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.
+## Панель характеристик належить вибраному юніту, а не куту екрана: власник
+## назвав це багом — «якщо рухати камеру, вікно з характеристиками лишається на
+## місці». Підписка на view_changed, а не опитування рига щокадру: §8 — поки
+## ніхто не возить камеру, HUD не сміє коштувати жодного кадру.
+func attach_camera(rig: IsoCameraRig) -> void:
+	_camera_rig = rig
+	rig.view_changed.connect(_reposition_inspector)
+	_reposition_inspector()
+
+
 ## MatchService (Task 2.1) навмисно без class_name, тож тип тут Node, а виклик
 ## динамічний — той самий прийом, що в input_controller.gd:37.
 ##
@@ -187,6 +225,68 @@ func _render_selection() -> void:
 	_drones_row.visible = int(_selected_unit.type()["drones"]) > 0
 	_drones_value.text = str(_selected_unit.drones_left)
 	_inspector.show_unit(_selected_unit)
+	# Рівно тут, а не в _reposition_inspector(): вміст панелі змінюється тільки
+	# на цьому шляху, а позиція перераховується ще й на кожен кадр руху камери
+	# (view_changed). Перерахунок мінімального розміру PanelContainer з усім його
+	# деревом міток на кожен кадр кидка пальцем — робота ні за що.
+	_inspector.reset_size()
+	_reposition_inspector()
+
+
+## Чому %Inspector у hud.tscn — пряма дитина Hud, а не вузол SafeArea/Layout
+## (коментар тут, бо в .tscn коментар не переживе першого ж перезбереження
+## редактором): панель належить вибраному юніту, тож її місце рахується тут, а
+## контейнер його б негайно перезаписав своїм. Оголошена в сцені останньою —
+## отже, малюється поверх решти HUD. mouse_filter=IGNORE там же: панель тепер
+## висить над самою дошкою, і тапи по клітинках під нею мусять доходити до
+## _unhandled_input() сцени бою, а не гинути в PanelContainer'і.
+##
+## Місце панелі рахується з ЛОГІЧНОЇ клітинки юніта крізь проєкцію самого рига
+## (IsoCameraRig.unproject) — жодної власної копії екранної геометрії тут нема
+## і бути не може (R13). Викликається рівно на три речі: рух камери
+## (view_changed), зміну вибору і refresh() — не щокадру.
+func _reposition_inspector() -> void:
+	if _camera_rig == null or _selected_unit == null or not _inspector.visible:
+		return
+	var anchor: Vector2 = _camera_rig.unproject(
+		IsoCameraRig.cell_to_world(_selected_unit.pos) + Vector3(0.0, INSPECTOR_LIFT, 0.0))
+	var panel: Vector2 = _inspector.size
+	var left: float = float(_safe_area.get_theme_constant("margin_left"))
+	var top: float = float(_safe_area.get_theme_constant("margin_top"))
+	var right: float = size.x - float(_safe_area.get_theme_constant("margin_right")) - panel.x
+	# Нижня межа — ВЕРХ рядка кнопок, а не низ поля безпеки. Кнопки лежать
+	# усередині безпечної зони, а панель малюється поверх усього HUD, тож
+	# «панель у безпечній зоні» не означає «кнопки видно». Ціна помилки конкретна:
+	# єдиний легальний шлях до дії — кнопка підтвердження (§6), і гравець,
+	# вибравши юніта в нижній третині кадру, тицяв би в неї наосліп.
+	var bottom: float = _bottom_bar_top() - panel.y
+	# Бік ВИБИРАЄТЬСЯ, а не затискається, і це не косметика. Сам по собі clampf
+	# нижче, коли праворуч місця вже не лишилось, тягне панель уліво — тобто
+	# рівно НА той юніт, який вона описує: на живому екрані танк зникав під
+	# власними характеристиками разом зі своєю HP-смугою. Тому спершу дзеркалимо
+	# панель на протилежний бік від юніта, і лише те, що не влізло й там,
+	# віддаємо клемпу.
+	var x: float = anchor.x + INSPECTOR_GAP
+	if x > right:
+		x = anchor.x - INSPECTOR_GAP - panel.x
+	# maxf у верхній межі: на вузькому екрані панель може не влізти між полями
+	# взагалі, і тоді clampf із min > max віддав би саме max — тобто виштовхнув
+	# би її за протилежний край. Хай радше стирчить із безпечного кута.
+	_inspector.position = Vector2(
+		clampf(x, left, maxf(left, right)),
+		clampf(anchor.y - panel.y * 0.5, top, maxf(top, bottom)))
+
+
+## Верх рядка кнопок у координатах самого HUD. Через глобальний прямокутник, а
+## не через position: BottomBar лежить на два контейнери вглиб, і його position
+## відлічується від Layout, а не звідси. Поки розкладка ще не порахована (перший
+## кадр, або тест одразу після add_child) прямокутник вироджений — тоді чесніше
+## віддати нижнє поле безпеки, ніж нуль, який притиснув би панель до стелі.
+func _bottom_bar_top() -> float:
+	var bar: Rect2 = _bottom_bar.get_global_rect()
+	if bar.size.y <= 0.0:
+		return size.y - float(_safe_area.get_theme_constant("margin_bottom"))
+	return bar.position.y - get_global_rect().position.y
 
 
 func _clear_preview() -> void:
