@@ -386,14 +386,21 @@ func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
 	assert_true(opaque < total / 2, "і не мусить бути залитим квадратом")
 
 
-func test_set_dimmed_toggles_and_is_reversible() -> void:
-	view.bind(_unit(5))
+## Корпус фарбує ВЛАСНИК і більше ніщо. Раніше bind() ще й приглушував
+## корпус юніта, який уже стріляв, — власник цього не замовляв і прибрав
+## («прибери приглушення взагалі»). Тест тримає саме це: жоден стан юніта,
+## крім власника, не має права чіпати колір корпусу.
+func test_hull_colour_comes_from_owner_and_nothing_else() -> void:
+	var fresh := _unit(5)
+	view.bind(fresh)
 	var base_color: Color = view._hull_material.albedo_color
-	view.set_dimmed(true)
-	var dimmed_color: Color = view._hull_material.albedo_color
-	assert_ne(dimmed_color, base_color, "приглушення мусить змінити колір корпусу")
-	view.set_dimmed(false)
-	assert_eq(view._hull_material.albedo_color, base_color, "зняття приглушення повертає точнісінько вихідний колір")
+
+	var fired := _unit(5)
+	fired.exhaust()
+	fired.hp = fired.max_hp() / 2
+	view.bind(fired)
+	assert_eq(view._hull_material.albedo_color, base_color,
+		"постріл і поранення не мусять міняти колір корпусу")
 
 
 ## Await на tween.finished крихкий у headless-тестах — прокручуємо твін
