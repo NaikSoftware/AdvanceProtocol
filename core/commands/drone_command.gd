@@ -55,6 +55,14 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []
 	var a: Unit = state.get_unit(unit_id)
 	var t: Unit = state.get_unit(target_id)
+	# КРОК 1, той самий, що й у FireCommand.apply(): удар орієнтує загін на ціль
+	# ПЕРЕД ударом. Правило навмисно формулюється одним реченням без винятку для
+	# дрона — «постріл орієнтує стрільця на ціль», — хоча сьогодні це числово
+	# інертно: броня піхоти 0/0/0, тож сектор відповіді по загону нічого не важить.
+	# Інертність — стан ростеру, а не властивість правила; тримати тут виняток
+	# означало б заводити другу редакцію правила заради нуля.
+	out.append_array(FireCommand._turn_towards(a, t.pos))
+
 	a.drones_left -= 1
 	a.exhaust()
 	out.append(Events.DroneLaunched.new(unit_id, target_id, a.drones_left))

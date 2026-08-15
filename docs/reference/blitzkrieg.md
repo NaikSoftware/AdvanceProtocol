@@ -131,3 +131,21 @@ Two rules about using it:
   - Built-up terrain at 100 is effectively impassable to vehicles (a 48 AP tank cannot pay 98)
     while infantry still walks in at the floor of 10. Buildings are therefore infantry ground
     by arithmetic rather than by a special case. This is emergent, and it is worth keeping.
+
+- **Firing turns the shooter, and so does answering — confirmed, adopted.** Facing there is real
+  state, not a sprite: `field_247` is what the armour-sector routine reads. The attack state machine
+  starts the attacker rotating onto its target *before* entering the state that resolves damage
+  (animated one octant per tick, and damage waits for it). That state reads the target's sector from
+  its old facing; only afterwards do the roles swap and the survivor rotate onto the original
+  attacker, with the return shot after that.
+
+  Both consequences are adopted: flanking keeps full value, and the return shot always lands on the
+  attacker's front — direction snaps to the nearest of eight, at most 22.5° off, inside the 45°
+  front cone.
+
+  **Two details deliberately not adopted.** The original turns the survivor whenever it lives — the
+  swap happens before it is known whether an answer is even legal, so a unit with no AP or out of
+  range still turns. It also turns the selected unit toward any enemy the player taps, before
+  deciding the tap was an attack. Here the turn is tied to the action instead: you turn because you
+  fired. A turn granted for merely surviving, or for a tap, would be a free reorientation on someone
+  else's turn for doing nothing.
