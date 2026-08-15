@@ -11,9 +11,15 @@ config_version=5
 [application]
 
 config/name="Advance Protocol"
+run/main_scene="res://game/battle/battle_screen.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 run/low_processor_mode=true
-run/main_scene="res://game/battle/battle_screen.tscn"
+
+[autoload]
+
+SettingsService="*res://game/autoload/settings_service.gd"
+MatchService="*res://game/autoload/match_service.gd"
+SceneRouter="*res://game/autoload/scene_router.gd"
 
 [display]
 
@@ -23,14 +29,12 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation="landscape"
 
+[input_devices]
+
+pointing/emulate_mouse_from_touch=false
+
 [rendering]
 
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/vram_compression/import_etc2_astc=true
-
-[autoload]
-
-SettingsService="*res://game/autoload/settings_service.gd"
-MatchService="*res://game/autoload/match_service.gd"
-SceneRouter="*res://game/autoload/scene_router.gd"
