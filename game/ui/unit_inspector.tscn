@@ -1,0 +1,111 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/ui/unit_inspector.gd" id="1_inspector"]
+
+[node name="UnitInspector" type="PanelContainer"]
+size_flags_vertical = 4
+script = ExtResource("1_inspector")
+
+[node name="Body" type="VBoxContainer" parent="."]
+theme_override_constants/separation = 6
+mouse_filter = 2
+
+[node name="StatName" type="Label" parent="Body"]
+unique_name_in_owner = true
+
+[node name="ClassRow" type="HBoxContainer" parent="Body"]
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="ClassCaption" type="Label" parent="Body/ClassRow"]
+text = "hud_class"
+
+[node name="StatClass" type="Label" parent="Body/ClassRow"]
+unique_name_in_owner = true
+
+[node name="HpRow" type="HBoxContainer" parent="Body"]
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="HpCaption" type="Label" parent="Body/HpRow"]
+text = "hud_hp"
+
+[node name="StatHp" type="Label" parent="Body/HpRow"]
+unique_name_in_owner = true
+
+[node name="ApRow" type="HBoxContainer" parent="Body"]
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="ApCaption" type="Label" parent="Body/ApRow"]
+text = "hud_ap"
+
+[node name="StatAp" type="Label" parent="Body/ApRow"]
+unique_name_in_owner = true
+
+[node name="AttackRow" type="HBoxContainer" parent="Body"]
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="AttackCaption" type="Label" parent="Body/AttackRow"]
+text = "hud_attack"
+
+[node name="StatAttack" type="Label" parent="Body/AttackRow"]
+unique_name_in_owner = true
+
+[node name="RangeRow" type="HBoxContainer" parent="Body"]
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="RangeCaption" type="Label" parent="Body/RangeRow"]
+text = "hud_range"
+
+[node name="StatRange" type="Label" parent="Body/RangeRow"]
+unique_name_in_owner = true
+
+[node name="VisionRow" type="HBoxContainer" parent="Body"]
+theme_override_constants/separation = 8
+mouse_filter = 2
+
+[node name="VisionCaption" type="Label" parent="Body/VisionRow"]
+text = "hud_vision"
+
+[node name="StatVision" type="Label" parent="Body/VisionRow"]
+unique_name_in_owner = true
+
+[node name="ArmourCaption" type="Label" parent="Body"]
+text = "hud_armour"
+
+[node name="ArmourRow" type="HBoxContainer" parent="Body"]
+theme_override_constants/separation = 16
+mouse_filter = 2
+
+[node name="FrontColumn" type="VBoxContainer" parent="Body/ArmourRow"]
+mouse_filter = 2
+
+[node name="FrontCaption" type="Label" parent="Body/ArmourRow/FrontColumn"]
+text = "hud_sector_front"
+
+[node name="ArmourFront" type="Label" parent="Body/ArmourRow/FrontColumn"]
+unique_name_in_owner = true
+horizontal_alignment = 1
+
+[node name="SideColumn" type="VBoxContainer" parent="Body/ArmourRow"]
+mouse_filter = 2
+
+[node name="SideCaption" type="Label" parent="Body/ArmourRow/SideColumn"]
+text = "hud_sector_side"
+
+[node name="ArmourSide" type="Label" parent="Body/ArmourRow/SideColumn"]
+unique_name_in_owner = true
+horizontal_alignment = 1
+
+[node name="RearColumn" type="VBoxContainer" parent="Body/ArmourRow"]
+mouse_filter = 2
+
+[node name="RearCaption" type="Label" parent="Body/ArmourRow/RearColumn"]
+text = "hud_sector_rear"
+
+[node name="ArmourRear" type="Label" parent="Body/ArmourRow/RearColumn"]
+unique_name_in_owner = true
+horizontal_alignment = 1

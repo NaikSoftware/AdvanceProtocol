@@ -121,7 +121,9 @@ them. The shape it produces, which is the intended one:
 
 **A target that survives a shot fires back immediately, in the same exchange**, at full strength,
 if it has the AP, the range, and **can see its attacker**. Engineers never retaliate. It costs the
-retaliator its AP for the rest of the attacker's turn, not its own next turn.
+retaliator its AP for the rest of the attacker's turn, not its own next turn. **A retaliator turns
+to face its attacker after the damage lands, never before** (§3.4), and only when it actually
+fired back.
 
 The consequence is the point: **an attacker the defender cannot see fires with impunity.** Vision
 is a weapon, not a convenience.
@@ -134,6 +136,10 @@ product against the target's facing. No trigonometry, no division.
 - **`front >= side >= rear` for every unit. Hard invariant, enforced by a test.** If a rear plate
   is thicker than a side plate, flanking is punished instead of rewarded and the most
   skill-expressive move in the game becomes a mistake.
+- **Firing turns the shooter; being shot does not turn the target.** The attacker turns before its
+  own shot resolves; a retaliator turns only **after** the damage lands, and only if it answered.
+  The order is the rule — inverting it deletes flanking. Consequences, costs and the whole-unit
+  (not turret-only) decision are in the linked document.
 - The UI must always show which sector a shot will land in **before** the player commits.
 
 ### 3.5 Vision and fog of war → [details](docs/rules/vision-and-fog.md)
@@ -187,7 +193,8 @@ Range 5, `120 + rand(0, 60)`, **armour ignored entirely**, vehicles only, **2 pe
 The remaining count is **public** — shown on any visible squad to every player, not just its owner.
 Deliberately the most dangerous thing a 100 HP unit can do. Three constraints keep it in check —
 ammo, it cannot touch infantry, and the squad is still infantry — and **none may be removed
-without replacing it with another.**
+without replacing it with another.** The strike orients the squad onto its target like any other
+attack (§3.4), even though it computes no armour sector — the rule has no exception.
 
 The triangle it produces is the spine of the game's matchups:
 **drones beat tanks → light vehicles beat infantry → tanks beat light vehicles.**

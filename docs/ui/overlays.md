@@ -31,6 +31,16 @@ never scouted cannot be inspected ([§3.5](../rules/vision-and-fog.md)). Note th
 bar than it sounds: once the ground has been scouted, the enemy on it stays inspectable whether or
 not anyone of yours is still watching.
 
+**Forecast the answer against your front, not your current facing.** Firing turns the shooter onto
+its target first, so retaliation always lands frontally. Quoting a side or rear figure here would be
+wrong in the one place the number decides whether to open fire at all.
+
+The sector shown for **your own** shot stays honest — the target has not turned yet. What is new is
+that it is the last time that sector is free: a target that answers ends up facing you, so the same
+shot from the same tile next turn finds its front. The UI must not leave a player thinking a flank
+keeps paying. The retaliator's turn is animated, not snapped, on the watching player's screen — it
+is the only thing that explains, in the moment, why the flank stopped working.
+
 **Own unit and enemy unit are gated differently, and this is a deliberate departure from the
 reference.**
 

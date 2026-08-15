@@ -45,15 +45,49 @@ static func check_shot(state: BattleState, a: Unit, t: Unit) -> String:
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 
+static func _turn_towards(shooter: Unit, at: Vector2i) -> Array[Events.BattleEvent]:
+	## Постріл орієнтує стрільця на ціль. Це НАСЛІДОК пострілу, ніколи не
+	## передумова: дуги вогню в грі немає, розворот не коштує AP, не може «не
+	## вдатися» і не бере участі в жодній перевірці законності — тому він живе тут,
+	## а не у validate()/check_shot().
+	##
+	## Подія йде лише тоді, коли обличчя СПРАВДІ змінилось: UnitTurned означає
+	## «юніт повернувся», а не «юніт вистрілив». Порожній розворот у потоці був би
+	## анімацією нізвідки і змусив би вигляд самому відсіювати шум.
+	var out: Array[Events.BattleEvent] = []
+	var new_facing: int = Board.facing_towards(shooter.pos, at)
+	if new_facing == shooter.facing:
+		return out
+	shooter.facing = new_facing
+	out.append(Events.UnitTurned.new(shooter.id, new_facing))
+	return out
+
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	assert(validate(state) == "", "apply() без успішного validate()")
 	var out: Array[Events.BattleEvent] = []
 	var a: Unit = state.get_unit(unit_id)
 	var t: Unit = state.get_unit(target_id)
+	# ПОРЯДОК КРОКІВ 1–3 — головне в цій функції, і саме його ламатимуть.
+	#
+	# КРОК 2 (лічиться першим, застосовується другим): сектор вхідного пострілу
+	# береться від СТАРОЇ орієнтації цілі. Ціль не повертається передом до удару —
+	# інакше флангування, найвиразніший хід у грі (§3.4), знецінилось би до нуля:
+	# будь-який удар у корму сам себе перетворював би на лобовий.
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
 	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var dmg: int = Rules.compute_damage(state.rng, a, t, level, sector, dist_sq)
+
+	# КРОК 1: атакувальник розвертається на ціль ПЕРЕД своїм пострілом. Наслідок
+	# навмисний — відповідь (§3.3.1) прилетить йому вже в НОВИЙ сектор, і
+	# геометрично це завжди лоб: прив'язка до 8 напрямків дає похибку щонайбільше
+	# 22.5°, а поріг SIDE потребує більшого. Стріляти по комусь означає підставити
+	# йому лоб, і це ціна першого пострілу.
+	#
+	# Розворот не чіпає RNG, тож його можна ставити після обчислення dmg, не
+	# зсуваючи потік випадкових чисел; сектор вище рахується від t.facing і
+	# a.pos, яких розворот атакувальника не торкається взагалі.
+	out.append_array(_turn_towards(a, t.pos))
 
 	a.exhaust()
 	out.append(Events.ShotFired.new(unit_id, target_id, sector))
@@ -93,6 +127,16 @@ static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit
 		# ЖОДНОГО разу. Безкарність від цього не зникає, але стає зброєю дебюту —
 		# з ходами розвідана земля росте, і стріляти без відповіді стає нізвідки.
 		return out
+
+	# КРОК 3, і його місце тут — не деталь. _retaliate() викликається вже ПІСЛЯ
+	# _resolve_damage(), тобто після застосування шкоди, а всі гейти вище вже
+	# пройдено — отже відповідач розвертається рівно тоді, коли відповідь СПРАВДІ
+	# відбувається. Пересунути розворот вище (до гейтів) означало б крутити ціль
+	# від самого факту отриманої шкоди, а це витік: орієнтація цілі показала б,
+	# звідки прилетіло, навіть коли її власник стрільця ніколи не розвідував.
+	# Безкарність невидимої атаки (§3.3.1) пішла б каналом, якого туман не
+	# фільтрує взагалі (§6, «known debt» про нефільтровані події).
+	out.append_array(_turn_towards(target, original_attacker.pos))
 
 	var sector: int = Rules.armour_sector(original_attacker.facing, original_attacker.pos, target.pos)
 	var dist_sq: int = Rules.distance_sq(target.pos, original_attacker.pos)

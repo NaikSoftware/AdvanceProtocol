@@ -39,6 +39,13 @@ happens, the transport cannot broadcast this list as-is; it needs a per-observer
 place to build it is here in `core/`, not in the view. Keep that in mind when adding event types:
 an event that only the acting player may see should be recognisable as such.
 
+**Facing is a second leak, and a per-observer event filter will not close it.** An attack now turns
+a unit whose owner is not playing, and the turn is still on the board afterwards — the leak is in
+the state, not in the event. Three-player case: A fires on B's tank from ground C has never scouted;
+B's tank turns to answer, and on C's turn that bearing points straight at a unit of A's that C
+cannot see. Accepted for hot-seat v1. Online must filter facing as **state**, and not in the view —
+the view cannot know whose turn a given facing came from.
+
 **Determinism.** One `RandomNumberGenerator`, seeded per match and stored in `BattleState`. Every
 roll goes through a single `Rules.roll()` helper. Never call the global `randi()` / `randf()`
 anywhere in `core/`.

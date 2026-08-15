@@ -2126,6 +2126,15 @@ func refresh_vision(player: int) -> Array[Events.BattleEvent]:
 		return []
 	return [Events.TileRevealed.new(player, revealed)] as Array[Events.BattleEvent]
 
+func refresh_vision_all() -> Array[Events.BattleEvent]:
+	## Те саме для всіх гравців. Потрібне лише там, де хтось міг загинути: чужу
+	## видимість здатна змінити тільки смерть юніта — recompute() читає виключно
+	## живі юніти самого player.
+	var out: Array[Events.BattleEvent] = []
+	for p in player_count:
+		out.append_array(refresh_vision(p))
+	return out
+
 func advance_player() -> int:
 	## Якщо живих не лишилось, цикл нічого не знайде і поверне вибулого гравця.
 	## Викликати лише коли матч ще триває — це стверджується, а не мовчиться.
@@ -2408,8 +2417,13 @@ git commit -m "feat(core): move and end-turn commands"
 - Produces:
   - `FireCommand.create(unit_id: int, target_id: int) -> FireCommand`
   - `FireCommand.preview(state: BattleState, unit_id: int, target_id: int) -> Dictionary` — `{"sector": int, "min": int, "max": int}`, для показу прогнозу **до** підтвердження (§3.4: сектор має бути видно завжди)
+  - `FireCommand._turn_towards(shooter: Unit, at: Vector2i) -> Array[Events.BattleEvent]` — спільний розворот для пострілу, дрона й відповіді (Task 1.14b)
+
+**Постріл орієнтує стрільця на ціль.** Розворот — наслідок пострілу, ніколи не передумова: дуг вогню в грі немає, він не коштує AP, не може «не вдатися» і не бере участі в жодній перевірці, тому живе в `apply()`, а не у `validate()`. Ціль при цьому не повертається: її сектор броні береться від орієнтації, яку вона мала **на момент пострілу**, інакше флангування (§3.4) знецінилось би до нуля — будь-який удар у корму сам себе робив би лобовим. `UnitTurned` іде **лише** тоді, коли обличчя справді змінилося: стрілець, що вже дивиться на ціль, не повертається й події не дає. Це навмисно не так, як у `MoveCommand`, де подія безумовна.
 
 Прев'ю не використовує `state.rng` — воно рахує межі формули аналітично, підставляючи 0 і максимум замість кидків. Інакше показ прогнозу зсував би послідовність RNG і ламав детермінізм.
+
+**Законність пострілу живе в одній статичній `check_shot(state, a, t)`, а `validate()` — тонка обгортка над нею** (те саме для удару: `DroneCommand.check_strike()`). Це не стиль: `core/targeting.gd` (§3.13) будує оверлеї «по кому я можу вистрілити» і «куди можу вдарити дроном», перебираючи живих юнітів рівно через ці функції, а не через власну копію умов — розійтися підсвітка й валідація тоді не можуть структурно. Два інші запити того ж файлу — прогноз загрози від оглянутого ворога (звичайної і дронової) — навмисно рахуються **інакше**: AP і `has_fired` не перевіряються, а видимість береться власним ромбом цього одного юніта, ніколи не мережею `state.vision[e.owner]`, бо мережа — прихована інформація. Тому прогноз — підлога, а не стеля.
 
 - [ ] **Step 1: Написати падаючий тест**
 
@@ -2480,7 +2494,7 @@ func test_second_shot_in_a_turn_is_rejected() -> void:
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
 	state.begin_turn()
 	FireCommand.create(a.id, t.id).apply(state)
-	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_NOT_ENOUGH_AP")
+	assert_eq(FireCommand.create(a.id, t.id).validate(state), "ERR_ALREADY_FIRED")
 
 func test_kill_emits_destruction_and_checks_victory() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(4, 4), 2)
@@ -2567,8 +2581,13 @@ static func create(p_unit_id: int, p_target_id: int) -> FireCommand:
 	return c
 
 func validate(state: BattleState) -> String:
-	var a: Unit = state.get_unit(unit_id)
-	var t: Unit = state.get_unit(target_id)
+	return check_shot(state, state.get_unit(unit_id), state.get_unit(target_id))
+
+static func check_shot(state: BattleState, a: Unit, t: Unit) -> String:
+	## Єдине місце, де живе законність пострілу: validate() — тонка обгортка над нею,
+	## і `Targeting.firing_targets()` кличе рівно цю ж функцію.
+	if state.is_over():
+		return "ERR_MATCH_OVER"
 	if a == null or not a.is_alive():
 		return "ERR_NO_SUCH_UNIT"
 	if t == null or not t.is_alive():
@@ -2579,22 +2598,53 @@ func validate(state: BattleState) -> String:
 		return "ERR_FRIENDLY_FIRE"
 	if a.unit_class() == UnitTypes.UnitClass.ENGINEER:
 		return "ERR_NO_WEAPON"
-	if a.has_fired or a.ap < a.fire_cost():
+	if a.has_fired:
+		return "ERR_ALREADY_FIRED"
+	if a.ap < a.fire_cost():
 		return "ERR_NOT_ENOUGH_AP"
 	if not Rules.in_radius(a.pos, t.pos, a.attack_range()):
 		return "ERR_OUT_OF_RANGE"
-	if not state.vision[a.owner].is_visible(t.pos):
+	# §3.5: гейт — seen, а не visible. Розвідка незворотна, тож обвідна вогню — це
+	# коло дальності, перетнуте з РОЗВІДАНОЮ землею, а не з чиїмось ромбом огляду
+	# просто зараз.
+	if not state.vision[a.owner].is_seen(t.pos):
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 
+static func _turn_towards(shooter: Unit, at: Vector2i) -> Array[Events.BattleEvent]:
+	## Подія йде лише тоді, коли обличчя СПРАВДІ змінилось: UnitTurned означає
+	## «юніт повернувся», а не «юніт вистрілив». Порожній розворот у потоці був би
+	## анімацією нізвідки і змусив би вигляд самому відсіювати шум.
+	var out: Array[Events.BattleEvent] = []
+	var new_facing: int = Board.facing_towards(shooter.pos, at)
+	if new_facing == shooter.facing:
+		return out
+	shooter.facing = new_facing
+	out.append(Events.UnitTurned.new(shooter.id, new_facing))
+	return out
+
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
+	assert(validate(state) == "", "apply() без успішного validate()")
 	var out: Array[Events.BattleEvent] = []
 	var a: Unit = state.get_unit(unit_id)
 	var t: Unit = state.get_unit(target_id)
+	# Сектор вхідного пострілу лічиться ПЕРШИМ і від СТАРОЇ орієнтації цілі: ціль не
+	# повертається передом до удару, інакше флангування (§3.4) знецінилось би до нуля.
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
 	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var dmg: int = Rules.compute_damage(state.rng, a, t, level, sector, dist_sq)
+
+	# Атакувальник розвертається на ціль ПЕРЕД тим, як його постріл вважається
+	# вирішеним. Наслідок навмисний: відповідь (§3.3.1) прилетить йому вже в НОВИЙ
+	# сектор, і геометрично це завжди лоб — прив'язка до 8 напрямків дає похибку
+	# щонайбільше 22.5°, а поріг SIDE потребує більшого. Стріляти по комусь означає
+	# підставити йому лоб, і це ціна першого пострілу.
+	#
+	# Розворот не чіпає RNG, тож його місце після обчислення dmg не зсуває потік
+	# випадкових чисел; сектор вище рахується від t.facing і a.pos, яких розворот
+	# атакувальника не торкається взагалі.
+	out.append_array(_turn_towards(a, t.pos))
 
 	a.exhaust()
 	out.append(Events.ShotFired.new(unit_id, target_id, sector))
@@ -2617,8 +2667,11 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	if not target.is_alive():
 		out.append(Events.UnitDestroyed.new(target.id, target.pos))
 		out.append_array(state.check_elimination())
-	for p in state.player_count:
-		out.append_array(state.refresh_vision(p))
+		# Смерть цілі може відкрити/закрити огляд будь-кому — усі гравці.
+		# Інакше, як MoveCommand.apply(), оновлюємо лише огляд атакуючого.
+		out.append_array(state.refresh_vision_all())
+	else:
+		out.append_array(state.refresh_vision(attacker.owner))
 	return out
 
 static func preview(state: BattleState, unit_id: int, target_id: int) -> Dictionary:
@@ -2674,6 +2727,40 @@ git commit -m "feat(core): fire command with armour sector preview"
 дотягується до штурмового відділення, вона відповідає. На практиці дальність дрона 5
 переважає дальність усієї техніки, тож це рідкість — але правило одне, без винятків.
 
+**Порядок кроків усередині `_retaliate()` фіксований, і саме він найлегше ламається:**
+
+1. **Спершу всі гейти** — живість обох, клас (інженер не відповідає ніколи), `has_fired`
+   і AP, дальність, і зір відповідача на атакувальника (`state.vision[target.owner].is_seen`).
+   Не пройшов бодай один — функція виходить, і відповідач **не розвертається взагалі**.
+2. **Розворот відповідача** на атакувальника, з `UnitTurned`. Свою шкоду він на цей момент
+   уже отримав — вона лягла у викликача, до входу сюди. Тобто передом до удару він не
+   ставав; він довертається, щоб відповісти.
+3. **Сектор і шкода по атакувальнику** — від його **вже нової** орієнтації, отриманої
+   в кроці 1 його власної атаки. Тому відповідь завжди б'є в лоб.
+
+Розворот прив'язаний до факту **відповіді**, а не до факту отриманої шкоди: ціль, яка
+вижила, але відповісти не змогла (немає AP, поза дальністю, інженер, не бачить
+атакувальника), лишається дивитись туди, куди дивилась.
+
+**Що тут ламається найлегше:** розворот мусить лишатись НИЖЧЕ гейтів. Винесений вище, він
+стає витоком — орієнтація цілі покаже, звідки прилетіло, навіть якщо її власник стрільця
+ніколи не розвідував, і безкарність невидимої атаки (§3.3.1) піде каналом, якого туман не
+фільтрує. Порядок кроків 2 і 3 між собою чисел не змінює (свій сектор відповідач рахує від
+атакувальника, не від себе), тож помилку тут покаже не тест на шкоду, а лише перегляд коду
+(§6, «known debt» про нефільтровані події).
+
+Підключення — останні рядки `apply()`, однакові в обох командах (у `DroneCommand` — через `FireCommand._retaliate`); після цієї задачі постріл застосовується так:
+
+```gdscript
+	a.exhaust()
+	out.append(Events.ShotFired.new(unit_id, target_id, sector))
+	out.append_array(_resolve_damage(state, a, t, dmg))
+	out.append(Events.ApChanged.new(unit_id, 0))
+	if t.is_alive():
+		out.append_array(_retaliate(state, a, t))
+	return out
+```
+
 - [ ] **Step 1: Написати падаючий тест** — `tests/core/test_retaliation.gd`
 - [ ] **Step 2: Додати `ShotRetaliated` у `core/events.gd`** (і у вичерпний тест конструкторів)
 - [ ] **Step 3: Реалізувати `_retaliate` і підключити до обох команд**
@@ -2692,7 +2779,7 @@ git commit -m "feat(core): retaliation fire from a surviving target"
 - Test: `tests/core/test_drone_command.gd`
 
 **Interfaces:**
-- Consumes: `FireCommand._resolve_damage`, `Rules.drone_damage`
+- Consumes: `FireCommand._resolve_damage`, `FireCommand._turn_towards`, `Rules.drone_damage`
 - Produces: `DroneCommand.create(unit_id: int, target_id: int) -> DroneCommand`, `DroneCommand.RANGE: int = 5`
 
 - [ ] **Step 1: Написати падаючий тест**
@@ -2819,8 +2906,13 @@ static func create(p_unit_id: int, p_target_id: int) -> DroneCommand:
 	return c
 
 func validate(state: BattleState) -> String:
-	var a: Unit = state.get_unit(unit_id)
-	var t: Unit = state.get_unit(target_id)
+	return check_strike(state, state.get_unit(unit_id), state.get_unit(target_id))
+
+static func check_strike(state: BattleState, a: Unit, t: Unit) -> String:
+	## Дзеркало FireCommand.check_shot() і з тієї ж причини: `Targeting.drone_targets()`
+	## кличе саме її, тож оверлей і валідація не можуть розійтися.
+	if state.is_over():
+		return "ERR_MATCH_OVER"
 	if a == null or not a.is_alive():
 		return "ERR_NO_SUCH_UNIT"
 	if t == null or not t.is_alive():
@@ -2831,20 +2923,32 @@ func validate(state: BattleState) -> String:
 		return "ERR_FRIENDLY_FIRE"
 	if a.drones_left <= 0:
 		return "ERR_NO_DRONES_LEFT"
-	if a.has_fired or a.ap < a.fire_cost():
+	if a.has_fired:
+		return "ERR_ALREADY_FIRED"
+	if a.ap < a.fire_cost():
 		return "ERR_NOT_ENOUGH_AP"
-	if t.unit_class() == UnitTypes.UnitClass.INFANTRY:
+	if not UnitTypes.is_vehicle(t.unit_class()):
 		return "ERR_DRONE_CANNOT_TARGET_INFANTRY"
 	if not Rules.in_radius(a.pos, t.pos, RANGE):
 		return "ERR_OUT_OF_RANGE"
-	if not state.vision[a.owner].is_visible(t.pos):
+	# §3.5: той самий гейт, що й у FireCommand, — seen, а не visible.
+	if not state.vision[a.owner].is_seen(t.pos):
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
+	assert(validate(state) == "", "apply() без успішного validate()")
 	var out: Array[Events.BattleEvent] = []
 	var a: Unit = state.get_unit(unit_id)
 	var t: Unit = state.get_unit(target_id)
+	# Той самий крок, що й у FireCommand.apply(): удар орієнтує загін на ціль ПЕРЕД
+	# ударом. Правило формулюється одним реченням без винятку для дрона — «постріл
+	# орієнтує стрільця на ціль», — хоча сьогодні це числово інертно: броня піхоти
+	# 0/0/0, тож сектор відповіді по загону нічого не важить. Інертність — стан
+	# ростеру, а не властивість правила; виняток тут завів би другу редакцію правила
+	# заради нуля.
+	out.append_array(FireCommand._turn_towards(a, t.pos))
+
 	a.drones_left -= 1
 	a.exhaust()
 	out.append(Events.DroneLaunched.new(unit_id, target_id, a.drones_left))
@@ -3106,7 +3210,7 @@ git commit -m "feat(core): mines with per-player reveal and detonation on entry"
   - `Objectives.at(state, pos: Vector2i) -> Objectives.Objective`
   - `Objectives.refresh_seen(state, player: int) -> Array[Events.BattleEvent]` — ціль стає відомою, щойно гравець її побачив (§3.10)
   - `Objectives.held_by(state, player: int) -> int`
-  - `Objectives.check_victory(state, hold_target: int) -> Array[Events.BattleEvent]`
+  - `Objectives.check_victory(state, player: int, hold_target: int) -> Array[Events.BattleEvent]`
   - `EngineerCommand.Action` — enum `{ LAY_MINE, CLEAR_MINE, REPAIR_BRIDGE, DEMOLISH_BRIDGE, REPAIR_UNIT, CAPTURE_OBJECTIVE, DEMOLISH_OBJECTIVE }`
   - `EngineerCommand.create(unit_id: int, action: int, target_pos: Vector2i) -> EngineerCommand`
   - `EngineerCommand.repair_amount(rng, engineer: Unit) -> int` — `(40 + rand(0, ap_left - fire_cost)) / 2`
@@ -3232,7 +3336,7 @@ func test_holding_enough_objectives_wins_the_match() -> void:
 	state.add_unit(0, 1, Vector2i(10, 10), 0)
 	for i in 3:
 		Objectives.add(state, Vector2i(i, 0), 0)
-	var events: Array = Objectives.check_victory(state, 3)
+	var events: Array = Objectives.check_victory(state, 0, 3)
 	assert_eq(state.winner, 0)
 	assert_true(events.size() > 0)
 
@@ -3281,7 +3385,8 @@ static func refresh_seen(state: BattleState, player: int) -> Array[Events.Battle
 	for o in state.objectives:
 		if o.seen_by[player]:
 			continue
-		if state.vision[player].is_visible(o.pos):
+		# §3.5: seen, а не visible — гейт мусить бути той самий, що й у решті правил.
+		if state.vision[player].is_seen(o.pos):
 			o.seen_by[player] = true
 			out.append(Events.TileRevealed.new(player, [o.pos] as Array[Vector2i]))
 	return out
@@ -3293,15 +3398,17 @@ static func held_by(state: BattleState, player: int) -> int:
 			n += 1
 	return n
 
-static func check_victory(state: BattleState, hold_target: int) -> Array[Events.BattleEvent]:
-	if state.is_over() or hold_target <= 0:
+## §3.10: умову цілей заявляє рівно один гравець — той, чий хід щойно завершився.
+## Передається явно, а не береться зі state.active_player: викликач робить це ДО
+## передачі ходу. Перебір усіх гравців давав перемогу меншому індексу при двох
+## утримувачах — порядок циклу замість правила; так одночасна перемога стає
+## недосяжною, а не розв'язується нічиєю.
+static func check_victory(state: BattleState, player: int, hold_target: int) -> Array[Events.BattleEvent]:
+	if state.is_over() or hold_target <= 0 or state.eliminated[player]:
 		return []
-	for p in state.player_count:
-		if state.eliminated[p]:
-			continue
-		if held_by(state, p) >= hold_target:
-			state.winner = p
-			return [Events.MatchEnded.new(p)] as Array[Events.BattleEvent]
+	if held_by(state, player) >= hold_target:
+		state.winner = player
+		return [Events.MatchEnded.new(player)] as Array[Events.BattleEvent]
 	return []
 ```
 
@@ -4322,6 +4429,8 @@ func test_every_error_key_is_translated() -> void:
 | §9 конвенції, локалізація, тести | Global Constraints, 3.1, тести в кожному завданні Фази 1 |
 
 **Прогалини, свідомо залишені поза планом:** ШІ-опонент, кампанія, онлайн — §2 виносить їх за межі v1. Персистентні профілі досвіду — §3.7 привʼязує їх до кампанії.
+
+**Окреме обертання вежі, без корпусу, — ВІДКЛАДЕНО і не обіцяно.** У першій версії постріл повертає юніта цілком (Task 1.14). Варіант виникав не випадково: броня рахується від корпусу, тож нерухомий корпус зберіг би флангування повністю — стрілець не підставляв би лоб самим фактом пострілу. Відкрите питання, яке його й тримає поза планом: у артилерії й піхоти вежі немає, тож правило довелося б писати у двох редакціях.
 
 **Узгодженість типів:** `attack_range` (не `range`) скрізь; `unit_class` (не `class`); `Pathing.Zones.cost_to` повертає `-1` для недосяжного, і всі споживачі спершу питають `can_reach`; `validate()` всюди повертає `String` (порожній = дозволено); `apply()` всюди повертає `Array[Events.BattleEvent]`; `FireCommand._resolve_damage` — єдиний шлях нанесення шкоди, спільний для пострілу й дрона.
 

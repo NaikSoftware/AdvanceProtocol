@@ -109,6 +109,42 @@ This reshapes the economics of shooting, and that is the point:
 
 Retaliation damage feeds the retaliator's class experience pool like any other damage.
 
+## Facing in an exchange
+
+Firing turns the shooter. Being shot does not turn the target. The order is the rule:
+
+1. The attacker turns onto its target, **before** its shot resolves.
+2. The target is hit in the sector it faced **when the shot was fired** — it has not turned yet, so
+   flanking pays in full.
+3. A retaliator turns onto its attacker **after** the damage lands, and only if it actually fired
+   back. No AP, out of range, an engineer, or an attacker it cannot see — no answer, no turn.
+4. The drone strike turns the squad too, though it computes no sector. One rule, no exceptions.
+
+Turning is free and is never an action on its own. A shooter already facing its target does not
+turn — the turn event means the facing changed, not that someone fired.
+
+**Retaliation therefore always lands on the attacker's front.** Arithmetic, not tendency: facing
+snaps to one of eight directions, at most 22.5° off, and the front sector runs to 45°, so the return
+vector cannot leave it. You cannot shoot from a flank and be answered in one.
+
+The whole unit turns, hull included. Turning only a turret was considered and deferred — armour
+rides on the hull, so a fixed hull would keep flanking paying in full. That is a different rule, not
+a different animation.
+
+**What it costs:** a static flank is now a one-shot asset. The defender ends the exchange pointed at
+whoever shot it, for zero AP, on someone else's turn — so the second through fourth shots from the
+same tile are worth 24–52% less than the first.
+
+**What it buys:** orientation becomes steerable. A cheap shot from one axis pulls the target's front
+onto itself; the real shot comes from another axis into the plate that just swung away, up to +94%
+better. Position stops meaning *hold the rear arc* and starts meaning *choose which arc they show
+you* — a play with two units in it instead of one. That is the trade, and it is why the cost is
+accepted rather than softened.
+
+**Watch in playtest:** an armoured car needed 10 shots to kill a heavy tank and now needs 31, mostly
+sitting on the damage floor. The floor invariant holds; whether light vehicles should be this
+helpless against heavy armour is a question for the table, not the formula.
+
 ## Directional armour
 
 Each unit carries three armour values: `front`, `side`, `rear`. The sector is chosen from the
