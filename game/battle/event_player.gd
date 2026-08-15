@@ -195,7 +195,10 @@ func _handle_unit_moved(event: Events.UnitMoved) -> Variant:
 	var view: UnitView = _resolve_unit_view(event.unit_id)
 	if view == null:
 		return null
-	return view.move_along(event.path, _MOVE_STEP_DURATION)
+	# event.facing має останнє слово (MoveCommand приймає явний facing, який
+	# може навмисно відрізнятись від напрямку останнього кроку шляху) — тож
+	# прокидається окремо від самого path.
+	return view.move_along(event.path, _MOVE_STEP_DURATION, event.facing)
 
 
 func _handle_unit_turned(event: Events.UnitTurned) -> Variant:

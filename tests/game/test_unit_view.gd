@@ -93,6 +93,34 @@ func test_face_interrupting_face_kills_the_previous_tween() -> void:
 	assert_eq(view.rotation_degrees.y, reference.rotation_degrees.y, "фінальний поворот — ціль останнього виклику face(), не проміжний")
 
 
+## Виправлення 1: свіжий вузол не мав попередньої орієнтації, з якої мало б
+## сенс анімувати «доведення» — bind() виставляє факінг миттєво, не через
+## твінований face().
+func test_bind_sets_facing_instantly_without_animating() -> void:
+	var unit := _unit(5, 0, Vector2i(2, 3), 5)
+	view.bind(unit)
+	# almost_eq, не eq: Godot зберігає обертання як Basis, тож round-trip
+	# градуси->радіани->Basis->градуси на цьому значенні вносить похибку
+	# порядку 1e-5° (перевірено — не наслідок нашої формули).
+	assert_almost_eq(view.rotation_degrees.y, 5.0 * 45.0, 0.001, "bind() мусить виставити факінг миттєво, без твіна")
+	assert_true(view._face_tween == null or not view._face_tween.is_valid(), "bind() не має лишати живий твін повороту")
+
+
+## Перебудова вузлів (battle_screen._rebuild_units_for_active_player) створює
+## новий UnitView і одразу кличе bind() — але контракт тут перевіряється й на
+## живому вузлі: повторний bind() під час незавершеного face()-твіна мусить
+## убити його, а не лишити два джерела правди для rotation_degrees.y.
+func test_bind_kills_a_live_face_tween_from_previous_bind() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 0))
+	view.face(4)  # запускаємо твін, який ще не встиг дограти
+	var live_tween: Tween = view._face_tween
+	assert_true(live_tween.is_valid())
+
+	view.bind(_unit(5, 0, Vector2i(0, 0), 2))
+	assert_false(live_tween.is_valid(), "повторний bind() мусить убити живий твін попереднього повороту")
+	assert_almost_eq(view.rotation_degrees.y, 2.0 * 45.0, 0.001, "новий bind() виставляє факінг миттєво, ігноруючи недограний твін")
+
+
 func test_set_hp_reflects_ratio_including_full_and_zero() -> void:
 	view.bind(_unit(5))
 	view.set_hp(400, 400)
@@ -149,6 +177,54 @@ func test_move_along_tweens_position_to_final_cell() -> void:
 	assert_not_null(tween, "move_along мусить повертати сигнал живого твіна")
 	tween.custom_step(10.0)
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "після прокрутки твіна юніт стоїть на останній клітинці шляху")
+
+
+## Виправлення 2: юніт довертається на кожному кроці шляху, паралельно з
+## рухом (Board.facing_towards, чиста функція core/). Крок 1 — на схід
+## (facing=2), крок 2 — на південь (facing=4); прокручуємо твін по одному
+## кроку за раз, щоб зловити орієнтацію саме там, де вона мала б змінитись.
+func test_move_along_turns_the_unit_at_each_step() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 0))  # дивиться на північ (facing=0)
+	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1)]
+	var finished: Signal = view.move_along(path, 0.1)
+	var tween: Tween = finished.get_object()
+
+	tween.custom_step(0.1)  # рівно перший крок
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "перший крок довозить до першої клітинки")
+	assert_eq(view.rotation_degrees.y, 2.0 * 45.0, "після кроку на схід юніт дивиться на схід (facing=2)")
+
+	tween.custom_step(0.1)  # рівно другий крок
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "другий крок довозить до другої клітинки")
+	assert_eq(view.rotation_degrees.y, 4.0 * 45.0, "після кроку на південь юніт дивиться на південь (facing=4)")
+
+
+## Поворот іде ПАРАЛЕЛЬНО з рухом, не додаючи часу до кроку: рівно
+## path.size() * duration_per_step повністю прокручує твін до кінця шляху.
+## Якби поворот додавав час послідовно, цієї прокрутки не вистачило б.
+func test_move_along_turning_does_not_add_time_to_the_step() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 0))
+	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1)]
+	var finished: Signal = view.move_along(path, 0.1)
+	var tween: Tween = finished.get_object()
+	tween.custom_step(0.2)
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "рух і поворот ідуть паралельно — сумарний час лишається path.size() * duration_per_step")
+
+
+## MoveCommand.facing (core/commands/move_command.gd) — явний параметр, і
+## подія несе його як останнє слово: фінальна орієнтація мусить бути саме
+## ним, навіть коли він навмисно відрізняється від напрямку останнього кроку.
+func test_move_along_final_facing_overrides_last_step_direction() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 0))
+	var path: Array[Vector2i] = [Vector2i(1, 0)]  # крок на схід (facing=2)
+	var finished: Signal = view.move_along(path, 0.1, 6)  # явний фінальний facing — захід
+	var tween: Tween = finished.get_object()
+	tween.custom_step(10.0)
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "позиція визначається шляхом, не фінальним факінгом")
+	# fposmod: формула найкоротшого шляху (та сама, що й у face()) законно
+	# лишає значення поза [0, 360) — наприклад -90.0 замість еквівалентного
+	# 270.0 — це той самий кут, коротшим шляхом.
+	assert_almost_eq(fposmod(view.rotation_degrees.y, 360.0), fposmod(6.0 * 45.0, 360.0), 0.001,
+		"фінальна орієнтація — переданий facing, а не напрямок останнього кроку")
 
 
 func test_move_along_with_empty_path_still_finishes_without_moving() -> void:

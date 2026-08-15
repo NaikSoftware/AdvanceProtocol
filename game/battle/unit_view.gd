@@ -72,7 +72,11 @@ func _ready() -> void:
 func bind(unit: Unit) -> void:
 	position = IsoCameraRig.cell_to_world(unit.pos)
 	_build_silhouette(unit.unit_class(), unit.owner)
-	face(unit.facing)
+	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
+	# не має попередньої орієнтації, з якої мало б сенс анімувати «доведення» —
+	# твінований face() тут дав би видиме crank-довертання щоразу, коли дошка
+	# перебудовується. Миттєве виставлення, не face().
+	_set_facing_instant(unit.facing)
 	set_hp(unit.hp, unit.max_hp())
 	set_drones(unit.drones_left)
 	set_dimmed(unit.has_fired)
@@ -80,15 +84,65 @@ func bind(unit: Unit) -> void:
 
 ## Твін по шляху, повертає tween.finished. AP і туман сюди не заглядають —
 ## контролер вирішує, коли рухати, view лише показує вже прийняте рішення.
-func move_along(path: Array[Vector2i], duration_per_step: float) -> Signal:
+##
+## Юніт довертається на кожному кроці (рішення продукту): напрямок кроку йде
+## з Board.facing_towards (чиста функція core/) від клітинки, з якої юніт
+## справді стартує цей крок, а не з event.path[0] — walked у події не несе
+## стартову клітинку (лише пройдені), тож єдине надійне джерело — власна
+## поточна position вузла. Поворот тягнеться в тому самому tween_property, що
+## й рух, у паралельній групі — не додає часу до кроку.
+##
+## final_facing — останнє слово (§бриф): MoveCommand приймає явний facing, і
+## він може навмисно відрізнятись від напрямку останнього кроку. -1 (типово)
+## означає «немає окремого фінального facing» — орієнтація лишається такою,
+## якою її поставив останній крок шляху.
+func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: int = -1) -> Signal:
+	# Той самий власник rotation_degrees.y, що й face()/_set_facing_instant()
+	# (_face_tween): цей твін теж крутить її (паралельно з рухом, нижче), тож
+	# перш ніж почати свій, він убиває будь-який живий твін від попереднього
+	# face() — інакше «доворот на місці, і одразу рух» лишає два твіни на
+	# тій самій властивості. І сам зберігається в _face_tween ПІСЛЯ створення,
+	# щоб наступний face()/_set_facing_instant() міг убити вже ЙОГО, а не
+	# лишити рух і новий поворот змагатись за той самий кут (ревʼю, дрібний
+	# блокер — раніше цей твін ніде не зберігався взагалі).
+	if _face_tween != null and _face_tween.is_valid():
+		_face_tween.kill()
 	var tween: Tween = create_tween()
+	_face_tween = tween
 	if path.is_empty():
 		# Твін без жодного кроку міг би ніколи не подати finished — гарантований
 		# нульовий інтервал забезпечує, що сигнал таки настане.
 		tween.tween_interval(0.0)
-	else:
-		for cell in path:
-			tween.tween_property(self, "position", IsoCameraRig.cell_to_world(cell), duration_per_step)
+		return tween.finished
+
+	var current_cell: Vector2i = IsoCameraRig.world_to_cell(position)
+	# Твін ще не виконався в момент побудови графа нижче — rotation_degrees.y
+	# лишиться незмінним аж до реального програвання, тож цю величину
+	# доводиться передбачати самим, а не перечитувати властивість між кроками
+	# (той самий прийом найкоротшої дельти, що й у face()).
+	var predicted_degrees: float = rotation_degrees.y
+	for i in path.size():
+		var cell: Vector2i = path[i]
+		var is_last_step: bool = i == path.size() - 1
+		var step_facing: int = Board.facing_towards(current_cell, cell)
+		var target_facing: int = final_facing if (is_last_step and final_facing >= 0) else step_facing
+		var target_degrees: float = float(target_facing) * _DEGREES_PER_FACING
+		var delta: float = fposmod(target_degrees - predicted_degrees + 180.0, 360.0) - 180.0
+		predicted_degrees += delta
+
+		# Tween призначає нову послідовну сходинку лише додаванню, зробленому
+		# ПОКИ parallel вимкнено — сам виклик set_parallel(false) без append
+		# між ним і наступним set_parallel(true) кордону не ставить. Тож рух
+		# додається першим (вимкнено — нова сходинка), а поворот — другим
+		# (увімкнено — та сама сходинка), інакше обидва кроки шляху злипаються
+		# в один часовий відрізок.
+		tween.set_parallel(false)
+		tween.tween_property(self, "position", IsoCameraRig.cell_to_world(cell), duration_per_step)
+		tween.set_parallel(true)
+		tween.tween_property(self, "rotation_degrees:y", predicted_degrees, duration_per_step)
+
+		current_cell = cell
+		facing = target_facing
 	return tween.finished
 
 
@@ -111,6 +165,18 @@ func face(direction: int) -> void:
 		_face_tween.kill()
 	_face_tween = create_tween()
 	_face_tween.tween_property(self, "rotation_degrees:y", current + delta, _FACE_TURN_DURATION)
+
+
+## Виправлення 1: bind() кличе це замість face() — щойно створений (чи
+## перебудований) вузол не має орієнтації, з якої мало б сенс довертатись, і
+## гасить будь-який живий _face_tween, щоб не лишити два джерела правди для
+## rotation_degrees.y.
+func _set_facing_instant(direction: int) -> void:
+	assert(direction >= 0 and direction < 8, "напрямок поза межами 8 фейсингів: %d" % direction)
+	if _face_tween != null and _face_tween.is_valid():
+		_face_tween.kill()
+	facing = direction
+	rotation_degrees.y = float(direction) * _DEGREES_PER_FACING
 
 
 func set_hp(hp: int, max_hp: int) -> void:

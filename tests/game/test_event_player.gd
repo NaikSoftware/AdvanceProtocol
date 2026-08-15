@@ -179,6 +179,34 @@ func test_is_playing_true_during_animated_playback_and_signal_fires_after() -> v
 	assert_false(player.is_playing(), "is_playing() мусить стати false не пізніше playback_finished — вікна, де воно false, а анімація ще йде, бути не може")
 
 
+# --- Виправлення 2: UnitMoved несе facing, і подія має останнє слово ------
+
+## core/events.gd.UnitMoved.facing існує саме для цього: MoveCommand може
+## передати явний facing, що відрізняється від напрямку останнього кроку
+## шляху. _handle_unit_moved мусить прокинути event.facing у move_along, а
+## не покластися на напрямок останнього кроку (facing=2, схід), який тут
+## навмисно суперечить події (facing=6, захід).
+func test_unit_moved_event_sets_final_facing_from_the_event_not_last_step_direction() -> void:
+	var view: UnitView = _spawn_view(1, 5, 0, Vector2i(0, 0))
+	player = EventPlayer.new(func(unit_id: int) -> UnitView:
+		return view if unit_id == 1 else null)
+
+	var events: Array[Events.BattleEvent] = [
+		Events.UnitMoved.new(1, [Vector2i(1, 0)], 6),
+	]
+	# Не await: UnitMoved анімується (move_along повертає живий tween.finished),
+	# а очікування реального сигналу в headless-тесті — саме та пастка, що
+	# описана нагорі файлу. Прокручуємо вручну, той самий прийом, що й в
+	# усіх інших тестах цього файлу з анімованою подією.
+	player.play(events)
+	_finish_all_processed_tweens()
+
+	# fposmod: формула найкоротшого шляху законно лишає значення поза
+	# [0, 360) — той самий кут, коротшим шляхом (див. UnitView.face()/R14).
+	assert_almost_eq(fposmod(view.rotation_degrees.y, 360.0), fposmod(6.0 * 45.0, 360.0), 0.001,
+		"фінальна орієнтація мусить прийти з event.facing, не з напрямку кроку")
+
+
 # --- Порядок програвання ---------------------------------------------------
 
 ## R19: максимум завжди йде з ростера, тож він однаковий незалежно від
