@@ -269,7 +269,7 @@ and every finding recovered so far: **[docs/reference/blitzkrieg.md](docs/refere
 | Renderer | Mobile (Vulkan); `gl_compatibility` fallback for old devices |
 | Targets | Android and iOS, **landscape** |
 | Tests | GUT, run headless |
-| 3D assets | GLB, generated via the `asset-manager` skill |
+| 3D assets | GLB, generated via `asset-manager`, edited via `3d-modelling` |
 
 If Godot is not on `PATH`, point `$GODOT` at the binary and set `GODOT_PATH` to the same value —
 the Godot MCP server defaults to `/usr/bin/godot` and fails with `ENOENT` otherwise.
@@ -345,7 +345,9 @@ Turn-based means the screen is usually static: enable low-processor mode and dro
 hard when nothing is animating. Battery life is a feature for a game passed between people.
 
 3D asset generation, poly budgets and the GLB pipeline are covered by the **`asset-manager`
-skill** — read it before generating anything.
+skill** — read it before generating anything. Editing an existing mesh — scale, origin, facing,
+decimation, baking — is the **`3d-modelling` skill**; it carries the world-scale numbers an asset
+must hit (one tile = 1.0 unit, ground at `y = 0`, front along `−Z`).
 
 ---
 
