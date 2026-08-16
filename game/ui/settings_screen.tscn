@@ -1,0 +1,171 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://game/ui/settings_screen.gd" id="1_settings"]
+[ext_resource type="Theme" path="res://game/ui/theme/ap_theme.tres" id="2_theme"]
+
+[sub_resource type="ButtonGroup" id="quality_group"]
+
+[node name="SettingsScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_settings")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.062, 0.075, 0.086, 1)
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 48
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 48
+theme_override_constants/margin_bottom = 32
+
+[node name="Center" type="CenterContainer" parent="SafeArea"]
+layout_mode = 2
+
+[node name="Card" type="PanelContainer" parent="SafeArea/Center"]
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+
+[node name="Body" type="VBoxContainer" parent="SafeArea/Center/Card"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Title" type="Label" parent="SafeArea/Center/Card/Body"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.9, 0.74, 1)
+theme_override_font_sizes/font_size = 32
+text = "settings_title"
+
+[node name="Sep" type="HSeparator" parent="SafeArea/Center/Card/Body"]
+layout_mode = 2
+
+[node name="LanguageRow" type="HBoxContainer" parent="SafeArea/Center/Card/Body"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Caption" type="Label" parent="SafeArea/Center/Card/Body/LanguageRow"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 4
+text = "settings_language"
+
+[node name="LangUk" type="Button" parent="SafeArea/Center/Card/Body/LanguageRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Українська"
+
+[node name="LangEn" type="Button" parent="SafeArea/Center/Card/Body/LanguageRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "English"
+
+[node name="MusicRow" type="HBoxContainer" parent="SafeArea/Center/Card/Body"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Caption" type="Label" parent="SafeArea/Center/Card/Body/MusicRow"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 4
+text = "settings_music"
+
+[node name="MusicSlider" type="HSlider" parent="SafeArea/Center/Card/Body/MusicRow"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+max_value = 1.0
+step = 0.01
+value = 0.8
+
+[node name="SfxRow" type="HBoxContainer" parent="SafeArea/Center/Card/Body"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Caption" type="Label" parent="SafeArea/Center/Card/Body/SfxRow"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 4
+text = "settings_sfx"
+
+[node name="SfxSlider" type="HSlider" parent="SafeArea/Center/Card/Body/SfxRow"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+max_value = 1.0
+step = 0.01
+value = 0.9
+
+[node name="QualityRow" type="HBoxContainer" parent="SafeArea/Center/Card/Body"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Caption" type="Label" parent="SafeArea/Center/Card/Body/QualityRow"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 4
+text = "settings_quality"
+
+[node name="QLow" type="Button" parent="SafeArea/Center/Card/Body/QualityRow"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_group = SubResource("quality_group")
+text = "settings_quality_low"
+
+[node name="QMed" type="Button" parent="SafeArea/Center/Card/Body/QualityRow"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+button_group = SubResource("quality_group")
+text = "settings_quality_medium"
+
+[node name="QHigh" type="Button" parent="SafeArea/Center/Card/Body/QualityRow"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_group = SubResource("quality_group")
+text = "settings_quality_high"
+
+[node name="Gap" type="Control" parent="SafeArea/Center/Card/Body"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+
+[node name="Footer" type="HBoxContainer" parent="SafeArea/Center/Card/Body"]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="SafeArea/Center/Card/Body/Footer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 52)
+layout_mode = 2
+text = "common_back"
+
+[node name="Spacer" type="Control" parent="SafeArea/Center/Card/Body/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3

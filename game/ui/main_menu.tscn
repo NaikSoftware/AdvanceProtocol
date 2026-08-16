@@ -1,0 +1,265 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://game/ui/main_menu.gd" id="1_menu"]
+[ext_resource type="Theme" path="res://game/ui/theme/ap_theme.tres" id="2_theme"]
+[ext_resource type="Texture2D" path="res://assets/ui/menu_background.jpg" id="3_bg"]
+[ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="4_title"]
+[ext_resource type="Shader" path="res://game/ui/shaders/rain.gdshader" id="7_rain"]
+
+[sub_resource type="Gradient" id="left_grad"]
+offsets = PackedFloat32Array(0, 1)
+colors = PackedColorArray(0.03, 0.04, 0.05, 0.92, 0.03, 0.04, 0.05, 0)
+
+[sub_resource type="GradientTexture2D" id="left_tex"]
+gradient = SubResource("left_grad")
+width = 256
+height = 4
+fill_from = Vector2(0, 0)
+fill_to = Vector2(0.62, 0)
+
+[sub_resource type="Gradient" id="vign_grad"]
+offsets = PackedFloat32Array(0, 0.55, 1)
+colors = PackedColorArray(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.75)
+
+[sub_resource type="GradientTexture2D" id="vign_tex"]
+gradient = SubResource("vign_grad")
+width = 512
+height = 512
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="ShaderMaterial" id="rain_mat"]
+shader = ExtResource("7_rain")
+shader_parameter/density = 110.0
+shader_parameter/fall_speed = 0.9
+shader_parameter/angle = 0.14
+shader_parameter/streak_length = 0.18
+shader_parameter/opacity = 0.16
+shader_parameter/wind = 0.08
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_menu")
+
+[node name="Background" type="Control" parent="."]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Photo" type="TextureRect" parent="Background"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("3_bg")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="FireGlow" type="Control" parent="Background"]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Smoke" type="Control" parent="Background"]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Rain" type="ColorRect" parent="Background"]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+material = SubResource("rain_mat")
+color = Color(1, 1, 1, 1)
+
+[node name="Darken" type="ColorRect" parent="Background"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.02, 0.03, 0.04, 0.22)
+
+[node name="LeftScrim" type="TextureRect" parent="Background"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = SubResource("left_tex")
+expand_mode = 1
+stretch_mode = 0
+
+[node name="Vignette" type="TextureRect" parent="Background"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = SubResource("vign_tex")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="FlashTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+one_shot = true
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 64
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 64
+theme_override_constants/margin_bottom = 40
+
+[node name="Row" type="HBoxContainer" parent="SafeArea"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="MenuColumn" type="VBoxContainer" parent="SafeArea/Row"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 4
+theme_override_constants/separation = 12
+mouse_filter = 2
+
+[node name="Title" type="Label" parent="SafeArea/Row/MenuColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.9, 0.74, 1)
+theme_override_fonts/font = ExtResource("4_title")
+theme_override_font_sizes/font_size = 40
+text = "app_title"
+
+[node name="Gap" type="Control" parent="SafeArea/Row/MenuColumn"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ContinueButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "menu_continue"
+
+[node name="NewMatchButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "menu_new_match"
+
+[node name="SettingsButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "menu_settings"
+
+[node name="AboutButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "menu_about"
+
+[node name="QuitButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "menu_quit"
+
+[node name="Version" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -160.0
+offset_top = -44.0
+offset_right = -24.0
+offset_bottom = -20.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.4, 0.44, 0.48, 1)
+theme_override_font_sizes/font_size = 14
+text = "v0.1"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="AboutPanel" type="CenterContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="AboutPanel"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="Card" type="PanelContainer" parent="AboutPanel"]
+custom_minimum_size = Vector2(480, 0)
+layout_mode = 2
+
+[node name="Body" type="VBoxContainer" parent="AboutPanel/Card"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="AboutTitle" type="Label" parent="AboutPanel/Card/Body"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.9, 0.74, 1)
+theme_override_font_sizes/font_size = 28
+text = "menu_about"
+
+[node name="AboutText" type="Label" parent="AboutPanel/Card/Body"]
+layout_mode = 2
+text = "about_body"
+autowrap_mode = 2
+
+[node name="AboutBackButton" type="Button" parent="AboutPanel/Card/Body"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "common_back"
