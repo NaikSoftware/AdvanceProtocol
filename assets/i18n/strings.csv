@@ -68,3 +68,38 @@ unit_class_light_vehicle,Легка техніка,Light vehicle
 unit_class_tank,Танк,Tank
 unit_class_artillery,Артилерія,Artillery
 unit_class_engineer,Сапери,Engineers
+app_title,Протокол Наступу,Advance Protocol
+common_back,Назад,Back
+menu_continue,Продовжити,Continue
+menu_new_match,Новий матч,New match
+menu_settings,Налаштування,Settings
+menu_about,Про гру,About
+menu_quit,Вийти,Quit
+setup_title,Новий матч,New match
+setup_players,Гравці,Players
+setup_map,Карта,Map
+setup_ground,Ґрунт,Ground
+setup_colours,Кольори,Colours
+setup_start,Почати,Start
+settings_title,Налаштування,Settings
+settings_language,Мова,Language
+settings_music,Музика,Music
+settings_sfx,Звуки,Sound
+settings_quality,Якість,Quality
+settings_quality_low,Низька,Low
+settings_quality_medium,Середня,Medium
+settings_quality_high,Висока,High
+pause_title,Пауза,Paused
+pause_resume,Продовжити,Resume
+pause_save_quit,Зберегти й вийти,Save and quit
+pause_settings,Налаштування,Settings
+pause_surrender,Здатися,Surrender
+results_title,Матч завершено,Match over
+results_winner,Переможець,Winner
+results_losses,Втрати,Losses
+results_damage,Завдана шкода,Damage dealt
+results_objectives,Утримані цілі,Objectives held
+results_levels,Рівні досвіду,Experience levels
+results_rematch,Реванш,Rematch
+results_to_menu,В меню,To menu
+about_body,Мобільна покрокова тактика. Хот-сит на 2–3 гравці.,Mobile turn-based tactics. Hot-seat for 2–3 players.
