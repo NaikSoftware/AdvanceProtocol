@@ -35,6 +35,7 @@ fill_to = Vector2(1, 0.5)
 shader = ExtResource("8_puddles")
 shader_parameter/puddle_mask = ExtResource("9_puddle_mask")
 shader_parameter/image_aspect = 1.79297
+shader_parameter/horizon_v = 0.42
 
 [sub_resource type="ShaderMaterial" id="rain_mat"]
 shader = ExtResource("7_rain")
