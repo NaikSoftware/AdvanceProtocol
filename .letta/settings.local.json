@@ -1,0 +1,17 @@
+{
+  "lastAgent": "agent-local-bc86a5d1-fa2f-40ef-83d3-ef14709621bb",
+  "sessionsByServer": {
+    "local:/home/naik/.letta/lc-local-backend": {
+      "agentId": "agent-local-bc86a5d1-fa2f-40ef-83d3-ef14709621bb",
+      "conversationId": "local-conv-3"
+    },
+    "api.letta.com": {
+      "agentId": "agent-4ef8db73-927f-4a13-8c25-3723e843fa8d",
+      "conversationId": "default"
+    }
+  },
+  "lastSession": {
+    "agentId": "agent-local-bc86a5d1-fa2f-40ef-83d3-ef14709621bb",
+    "conversationId": "local-conv-3"
+  }
+}
