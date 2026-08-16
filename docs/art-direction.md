@@ -53,5 +53,43 @@ Techniques that buy atmosphere cheaply here:
 Turn-based means the screen is usually static — enable low-processor mode and drop the frame rate
 hard when nothing is animating. Battery life is a feature for a game passed between people.
 
+## Effects — fire, explosions, smoke
+
+Never one technique. A single explosion is four or five layers, each one the cheapest thing that
+does its job:
+
+| layer | technique | what it buys |
+| --- | --- | --- |
+| the mass of smoke and flame | `GPUParticles3D`, billboarded quads | motion, spread, lifetime |
+| the look of one particle | **flipbook** sprite atlas (8×8) in the particle shader | rolling, turning smoke — without it these are blobs |
+| depth | soft particles (depth fade), dissolve by a noise mask | the quad stops cutting the ground on a hard line, and dies by burning away rather than by alpha |
+| the flash | an `OmniLight3D` for 3–5 frames plus emissive on the particle | the only part that actually hits the eye |
+| heat haze | screen-texture refraction on one quad | cheap, and it is what reads as expensive |
+| the scar | `Decal` (crater, scorching) plus debris meshes | statics, not particles — see §8 |
+
+The thing that is not obvious: **good fire is not simulated at runtime, it is simulated offline and
+baked into a flipbook.** EmberGen or Blender's Mantaflow run the real fluid sim, render 64 frames
+into an atlas, and the game plays one quad with a shader. This is what AAA does too. Procedural
+noise in a shader looks like a gas hob, not like an ammunition rack going up.
+
+What our own constraints add on top:
+
+- **Overdraw is the killer, not particle count.** Twenty large half-transparent quads covering half
+  the screen cost more than five hundred small ones. So: fewer particles, larger atlas, better
+  flipbook.
+- **A smoke column standing for three turns must not be a particle system.** It is a mesh (cone or
+  ribbon) with a shader — scrolling noise on the UV plus a vertex wobble. Otherwise five wrecks are
+  five systems simulating forever, and the frame rate never drops between turns — and dropping it
+  is the battery budget above.
+- The explosion itself is `one_shot`, lives ~1.5 s, then `queue_free`. Setting `emitting = false`
+  is not enough; the particles stay in frame.
+- Craters and scorching are `Decal` nodes, not quads laid over the ground — quads z-fight on slopes.
+
+Off the table on mobile Vulkan: volumetric smoke, raymarching, GPU particle collision against the
+SDF, and more than one effect sampling `screen_texture` at a time.
+
+Build order when this comes up: the **smoke column first** — it is persistent, and persistence is
+what makes it atmosphere ([§8](../CLAUDE.md), battle scars) — and the explosion after it.
+
 3D asset generation, poly budgets and the GLB pipeline are covered by the **`asset-manager`
 skill** — read it before generating anything, and do not duplicate its guidance here.
