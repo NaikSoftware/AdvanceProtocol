@@ -5,8 +5,10 @@ extends Control
 ##
 ## Уся навігація — крізь SceneRouter (єдина точка перемикання сцен, §6).
 ##
-## Фон живий (Background: Photo → FireGlow → Smoke → Rain → Darken →
+## Фон живий (Background: Photo → Puddles → FireGlow → Smoke → Rain → Darken →
 ## LeftScrim → Vignette) поверх статичного живопису — дощ малює GPU-шейдер;
+## брижі від крапель у намальованих калюжах — теж шейдер (puddle_ripples), він
+## заломлює вже намальоване під ним Photo, тож мусить стояти одразу над ним;
 ## вогонь і дим на горизонті збираються цим скриптом у _ready() з масиву
 ## FIRE_POINTS (виміряних по картині): кожна точка — вогняні частинки (полум'я
 ## + іскри) під FireGlow і окрема колонка диму GPUParticles2D під Smoke.

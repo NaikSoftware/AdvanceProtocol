@@ -1,6 +1,7 @@
 extends GutTest
-## Головне меню оживає: дощ + дим + мерехтіння/спалахи пожеж поверх статичної
-## картинки (Background/FireGlow, Smoke, Rain). Тут — лише те, що безпечно
+## Головне меню оживає: дощ + брижі в калюжах + дим + мерехтіння/спалахи пожеж
+## поверх статичної картинки (Background/Puddles, FireGlow, Smoke, Rain). Тут —
+## лише те, що безпечно
 ## перевірити headless: кепування частоти кадрів (§8 CLAUDE.md, «battery life
 ## is a feature»), детермінований розкид «спалахів» за затравленим RNG,
 ## і структура фонових шарів. Сам дрейф диму й мерехтіння шейдера — рух на
@@ -125,7 +126,7 @@ func test_next_flash_wait_reproduces_exact_seeded_value() -> void:
 	assert_eq(got, expected.randf_range(MainMenu.FLASH_INTERVAL_MIN, MainMenu.FLASH_INTERVAL_MAX))
 
 
-# --- Структура шарів (Task brief: Photo → FireGlow → Smoke → Rain → …) ---
+# --- Структура шарів (Photo → Puddles → FireGlow → Smoke → Rain → …) ---
 
 func test_background_layer_order() -> void:
 	add_child_autofree(menu)
@@ -134,7 +135,57 @@ func test_background_layer_order() -> void:
 	for child in background.get_children():
 		names.append(String(child.name))
 
-	assert_eq(names, ["Photo", "FireGlow", "Smoke", "Rain", "Darken", "LeftScrim", "Vignette"])
+	assert_eq(names, ["Photo", "Puddles", "FireGlow", "Smoke", "Rain", "Darken",
+		"LeftScrim", "Vignette"])
+
+
+# --- Брижі від крапель у калюжах ------------------------------------------
+
+func test_puddle_ripples_have_a_mask_texture() -> void:
+	# Без маски шейдер бачить усюди нуль і сам себе вимикає (discard) — ефект
+	# зникає МОВЧКИ, без жодної помилки в логах. Тому перевіряємо саме це.
+	add_child_autofree(menu)
+	var puddles: ColorRect = menu.get_node("Background/Puddles")
+	var mat: ShaderMaterial = puddles.material
+
+	assert_not_null(mat, "шар калюж має ShaderMaterial")
+	var mask: Texture2D = mat.get_shader_parameter("puddle_mask")
+	assert_not_null(mask, "шейдеру брижів потрібна маска калюж")
+	assert_true(mask.get_width() > 0 and mask.get_height() > 0,
+		"маска калюж має бути непорожньою текстурою")
+
+
+func test_puddle_mask_aspect_matches_the_background_painting() -> void:
+	# Шейдер САМ повторює KEEP_ASPECT_COVERED фонової картини, щоб маска лягла
+	# на намальовані калюжі за будь-якого аспекту вікна — і для цього знає її
+	# пропорції окремою уніформою. Якщо картину колись замінять на іншу за
+	# пропорціями, а уніформу забудуть, маска поїде і брижі підуть по багну.
+	# Ламатись це має тут, а не на очах у гравця.
+	add_child_autofree(menu)
+	var puddles: ColorRect = menu.get_node("Background/Puddles")
+	var declared: float = puddles.material.get_shader_parameter("image_aspect")
+	var photo: TextureRect = menu.get_node("Background/Photo")
+	var actual: float = float(photo.texture.get_width()) / float(photo.texture.get_height())
+
+	assert_almost_eq(declared, actual, 0.001,
+		"image_aspect має збігатися з пропорціями menu_background.jpg")
+
+
+func test_puddle_ripples_are_drawn_under_the_darkening_layers() -> void:
+	# Брижі — частина картини, а не поверх неї: їх мають приглушувати ті самі
+	# Darken/LeftScrim/Vignette, що й усе інше. Інакше вони світитимуть крізь
+	# затемнення й читатимуться як наклейки.
+	add_child_autofree(menu)
+	var background: Node = menu.get_node("Background")
+	var order: Array[String] = []
+	for child in background.get_children():
+		order.append(String(child.name))
+
+	assert_true(order.find("Puddles") > order.find("Photo"),
+		"калюжі малюються ПІСЛЯ картини")
+	for above in ["Darken", "LeftScrim", "Vignette"]:
+		assert_true(order.find("Puddles") < order.find(above),
+			"калюжі мають бути ПІД шаром %s" % above)
 
 
 func test_smoke_layer_has_one_capped_particle_emitter_per_fire_point() -> void:
