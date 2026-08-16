@@ -11,3 +11,6 @@ export_presets.cfg
 
 # Concept art only — Godot regenerates these on import; nothing here is game content.
 prototyping-resources/*.import
+
+# Local session state — per-machine, not project content.
+.letta/settings.local.json
