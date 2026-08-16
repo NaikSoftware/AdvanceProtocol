@@ -90,7 +90,7 @@ func test_bind_puts_turn_number_active_player_and_ground_state_on_screen() -> vo
 
 	assert_eq(_label("TurnValue").text, "7", "номер ходу читається з turn_number")
 	assert_eq(_label("PlayerValue").text, "2", "активний гравець показується як 1-based номер")
-	assert_eq(_label("GroundStateLabel").text, "hud_ground_mud", "ґрунт — підписана іконка (§3.12)")
+	assert_eq(_label("GroundStateLabel").text, tr("hud_ground_mud"), "ґрунт — підписана іконка (§3.12)")
 	assert_true(_label("GroundStateLabel").is_visible_in_tree(), "підпис ґрунту видимий постійно")
 	assert_true(hud.get_node("%GroundStateIcon").is_visible_in_tree(), "іконка ґрунту видима постійно")
 
@@ -102,8 +102,8 @@ func test_ground_state_icon_and_label_follow_the_board_not_a_default() -> void:
 
 	hud.bind(_state(Terrain.GroundState.DRY))
 
-	assert_eq(frozen_key, "hud_ground_frozen")
-	assert_eq(_label("GroundStateLabel").text, "hud_ground_dry")
+	assert_eq(frozen_key, tr("hud_ground_frozen"))
+	assert_eq(_label("GroundStateLabel").text, tr("hud_ground_dry"))
 	assert_ne((hud.get_node("%GroundStateIcon") as ColorRect).color, frozen_color,
 		"іконка мусить відрізнятися кольором між станами, інакше вона нічого не каже")
 
@@ -141,7 +141,7 @@ func test_show_preview_shot_displays_the_payload_sector_and_both_damage_bounds()
 	# дефолтом і провалюється тут.
 	hud.show_preview(_shot_preview(UnitTypes.ArmourSector.REAR, 37, 91))
 
-	assert_eq(_label("PreviewSectorValue").text, "hud_sector_rear")
+	assert_eq(_label("PreviewSectorValue").text, tr("hud_sector_rear"))
 	assert_true(_label("PreviewSectorValue").is_visible_in_tree())
 	var damage: String = _label("PreviewDamageValue").text
 	assert_true(damage.contains("37"), "нижня межа мусить бути на екрані як є: %s" % damage)
@@ -153,7 +153,7 @@ func test_show_preview_shot_displays_the_payload_sector_and_both_damage_bounds()
 	# Другий сектор тим самим шляхом — доказ, що показується саме payload.
 	hud.show_preview(_shot_preview(UnitTypes.ArmourSector.SIDE, 12, 20))
 
-	assert_eq(_label("PreviewSectorValue").text, "hud_sector_side")
+	assert_eq(_label("PreviewSectorValue").text, tr("hud_sector_side"))
 	assert_eq(_inspector().highlighted_sector(), UnitTypes.ArmourSector.SIDE)
 
 
@@ -261,7 +261,7 @@ func test_inspector_shows_roster_stats_and_three_armour_numbers() -> void:
 	var insp: UnitInspector = _inspector()
 	var t: Dictionary = UnitTypes.get_type(5)
 	assert_true(insp.is_visible_in_tree())
-	assert_eq((insp.get_node("%StatName") as Label).text, t["name_key"], "назва — ключ ростера, не рядок")
+	assert_eq((insp.get_node("%StatName") as Label).text, tr(t["name_key"]), "назва — перекладена назва з ростера")
 	assert_eq((insp.get_node("%StatHp") as Label).text, "210/%d" % int(t["max_hp"]))
 	assert_eq((insp.get_node("%StatAttack") as Label).text, str(int(t["attack"])))
 	assert_eq((insp.get_node("%StatRange") as Label).text, str(int(t["attack_range"])))
@@ -295,10 +295,19 @@ func test_inspector_highlights_exactly_one_armour_sector() -> void:
 
 # --- R29: жоден підпис не є захардкодженим рядком ----------------------------
 
-## Ключі перекладу лишаються ключами, доки CSV не існує (R29), тож на екрані
-## видно рівно те, що піде в CSV. Усе інше — числа. Будь-який «Хід:» чи «Damage»
-## провалює цей тест.
+## R29: жоден підпис не є захардкодженим рядком. Доки CSV не було, це перевірялось
+## тим, що на екрані лежать самі ключі. Тепер частина підписів резолвиться через tr()
+## у коді (значення), частина лишається сирим ключем зі сцени під авто-переклад —
+## обидва легітимні. Оракул — сам CSV: кожен нечисловий підпис мусить бути або ключем,
+## або перекладом ОДНІЄЇ зафіксованої мови. Локаль фіксуємо навмисно: якби брали обидві
+## колонки, захардкоджене «Damage» співпало б із en-перекладом і прослизнуло, хоч під uk
+## відрендерилось би не тією мовою. Тепер «Damage» під uk — не ключ і не uk-значення — падіння.
+## Межа методу: рядок, захардкоджений РІВНО як uk-значення («Багно»), відрізнити від tr()
+## сканом уже неможливо — це структурне обмеження перегляду готового тексту, не діра тесту.
 func test_no_user_facing_label_is_a_hard_coded_literal() -> void:
+	var prev_locale := TranslationServer.get_locale()
+	TranslationServer.set_locale("uk")
+
 	var state: BattleState = _state(Terrain.GroundState.MUD)
 	var squad: Unit = state.add_unit(1, 0, Vector2i(3, 3), 0)
 	hud.bind(state)
@@ -309,16 +318,34 @@ func test_no_user_facing_label_is_a_hard_coded_literal() -> void:
 	_collect_texts(hud, texts)
 
 	assert_gt(texts.size(), 15, "обхід дерева мусить справді щось знайти, інакше тест порожній")
-	var key_re := RegEx.create_from_string("^[a-z][a-z0-9_]*_[a-z0-9_]+$")
-	var roster_re := RegEx.create_from_string("^UNIT_[A-Z_]+$")
 	var numeric_re := RegEx.create_from_string("^[0-9 /.%–-]+$")
+	var known := _csv_keys_and_locale("uk")
 	for text in texts:
-		if text.is_empty():
+		if text.is_empty() or numeric_re.search(text) != null:
 			continue
-		var ok: bool = key_re.search(text) != null \
-			or roster_re.search(text) != null \
-			or numeric_re.search(text) != null
-		assert_true(ok, "«%s» — не ключ перекладу і не число (§9, R29)" % text)
+		assert_true(known.has(text),
+			"«%s» — не число, не ключ і не uk-переклад (§9, R29)" % text)
+
+	TranslationServer.set_locale(prev_locale)
+
+
+## Ключі CSV плюс переклади ОДНІЄЇ мови — оракул для R29. Читається з файлу, а не з
+## коду HUD, тож не дзеркалить те, що перевіряє. locale: "uk" → колонка 1, "en" → 2.
+func _csv_keys_and_locale(locale: String) -> Dictionary:
+	var known := {}
+	var f := FileAccess.open("res://assets/i18n/strings.csv", FileAccess.READ)
+	assert_not_null(f, "не відкривається strings.csv — джерело локалізації зникло")
+	var header := f.get_csv_line()  # keys,uk,en
+	var col := header.find(locale)
+	assert_gt(col, 0, "у CSV немає колонки мови %s" % locale)
+	while not f.eof_reached():
+		var row := f.get_csv_line()
+		if row.size() > col:
+			if not row[0].is_empty():
+				known[row[0]] = true  # ключ
+			if not row[col].is_empty():
+				known[row[col]] = true  # переклад цієї мови
+	return known
 
 
 func _collect_texts(node: Node, out: Array[String]) -> void:

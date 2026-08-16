@@ -1,0 +1,70 @@
+keys,uk,en
+UNIT_RIFLE_SQUAD,Стрілецьке відділення,Rifle Squad
+UNIT_ASSAULT_SQUAD,Штурмове відділення,Assault Squad
+UNIT_ENGINEER_SQUAD,Інженерне відділення,Engineer Squad
+UNIT_ENGINEER_VEHICLE,Інженерна машина,Engineer Vehicle
+UNIT_SCOUT_CAR,Розвідувальна машина,Scout Car
+UNIT_ARMOURED_CAR,Бронеавтомобіль,Armoured Car
+UNIT_TROOP_CARRIER,Бронетранспортер,Troop Carrier
+UNIT_LIGHT_TANK,Легкий танк,Light Tank
+UNIT_MEDIUM_TANK,Середній танк,Medium Tank
+UNIT_HEAVY_TANK,Важкий танк,Heavy Tank
+UNIT_TANK_DESTROYER,Винищувач танків,Tank Destroyer
+UNIT_FIELD_GUN,Польова гармата,Field Gun
+UNIT_HOWITZER,Гаубиця,Howitzer
+ERR_NO_SUCH_UNIT,Немає такого юніта,No such unit
+ERR_NOT_YOUR_UNIT,Це не ваш юніт,Not your unit
+ERR_ALREADY_FIRED,Юніт уже стріляв цього ходу,Unit has already fired this turn
+ERR_OFF_BOARD,За межами поля,Off the board
+ERR_OUT_OF_RANGE,Поза дальністю,Out of range
+ERR_NO_SUCH_TARGET,Немає такої цілі,No such target
+ERR_FRIENDLY_FIRE,Не можна стріляти по своїх,Cannot fire on a friendly unit
+ERR_NO_WEAPON,Юніт без зброї,Unit has no weapon
+ERR_NOT_ENOUGH_AP,Недостатньо очок дії,Not enough action points
+ERR_TARGET_NOT_VISIBLE,Ціль не видно,Target is not visible
+ERR_NO_DRONES_LEFT,Дронів не лишилось,No drones left
+ERR_DRONE_CANNOT_TARGET_INFANTRY,Дрон не б'є піхоту,Drone cannot target infantry
+ERR_NOT_AN_ENGINEER,Це не сапер,Unit is not an engineer
+ERR_NOT_ADJACENT,Ціль не на сусідній клітинці,Target is not on an adjacent tile
+ERR_MINE_ALREADY_THERE,Тут уже є міна,A mine is already here
+ERR_TILE_OCCUPIED,Клітинка зайнята,Tile is occupied
+ERR_NO_MINE_THERE,Тут немає міни,There is no mine here
+ERR_NO_BRIDGE_THERE,Тут немає мосту,There is no bridge here
+ERR_NOTHING_TO_REPAIR,Нема чого ремонтувати,Nothing to repair
+ERR_NOTHING_TO_DEMOLISH,Нема чого зносити,Nothing to demolish
+ERR_NO_FRIENDLY_UNIT_THERE,Тут немає вашого юніта,No friendly unit here
+ERR_UNIT_UNDAMAGED,Юніт не пошкоджений,Unit is undamaged
+ERR_NO_OBJECTIVE_THERE,Тут немає цілі,There is no objective here
+ERR_NOTHING_TO_CAPTURE,Нема чого захоплювати,Nothing to capture
+ERR_NOT_IMPLEMENTED,Ще не реалізовано,Not implemented
+ERR_MATCH_OVER,Матч завершено,The match is over
+hud_turn,Хід,Turn
+hud_player,Гравець,Player
+hud_ap,ОД,AP
+hud_ap_left,Залишок ОД,AP left
+hud_hp,Міцність,HP
+hud_armour,Броня,Armour
+hud_armour_sector,Сектор броні,Armour sector
+hud_sector_front,Лоб,Front
+hud_sector_side,Борт,Side
+hud_sector_rear,Корма,Rear
+hud_range,Дальність,Range
+hud_vision,Огляд,Vision
+hud_attack,Атака,Attack
+hud_damage,Шкода,Damage
+hud_drones,Дрони,Drones
+hud_class,Клас,Class
+hud_confirm,Підтвердити,Confirm
+hud_cancel,Скасувати,Cancel
+hud_end_turn,Завершити хід,End turn
+hud_ground_dry,Сухо,Dry
+hud_ground_mud,Багно,Mud
+hud_ground_frozen,Мерзлота,Frozen
+handover_pass_device,Передайте пристрій,Pass the device
+handover_incoming_player,Наступний гравець,Incoming player
+handover_confirm,Готово,Ready
+unit_class_infantry,Піхота,Infantry
+unit_class_light_vehicle,Легка техніка,Light vehicle
+unit_class_tank,Танк,Tank
+unit_class_artillery,Артилерія,Artillery
+unit_class_engineer,Сапери,Engineers
