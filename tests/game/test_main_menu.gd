@@ -1,6 +1,7 @@
 extends GutTest
-## Головне меню оживає: дощ + дим + мерехтіння/спалахи пожеж поверх статичної
-## картинки (Background/FireGlow, Smoke, Rain). Тут — лише те, що безпечно
+## Головне меню оживає: дощ + брижі в калюжах + дим + мерехтіння/спалахи пожеж
+## поверх статичної картинки (Background/Puddles, FireGlow, Smoke, Rain). Тут —
+## лише те, що безпечно
 ## перевірити headless: кепування частоти кадрів (§8 CLAUDE.md, «battery life
 ## is a feature»), детермінований розкид «спалахів» за затравленим RNG,
 ## і структура фонових шарів. Сам дрейф диму й мерехтіння шейдера — рух на
@@ -125,8 +126,12 @@ func test_next_flash_wait_reproduces_exact_seeded_value() -> void:
 	assert_eq(got, expected.randf_range(MainMenu.FLASH_INTERVAL_MIN, MainMenu.FLASH_INTERVAL_MAX))
 
 
-# --- Структура шарів (Task brief: Photo → FireGlow → Smoke → Rain → …) ---
+# --- Структура шарів (Photo → Puddles → FireGlow → Smoke → Rain → …) ---
 
+## Порядок шарів не косметика, і найдорожче коштує позиція Puddles:
+## над Photo — бо брижі є частиною намальованої води; під Darken/LeftScrim/
+## Vignette — бо їх має приглушувати те саме, що й решту картини, інакше вони
+## світять крізь затемнення й читаються як наклейки поверх фону.
 func test_background_layer_order() -> void:
 	add_child_autofree(menu)
 	var background: Node = menu.get_node("Background")
@@ -134,7 +139,72 @@ func test_background_layer_order() -> void:
 	for child in background.get_children():
 		names.append(String(child.name))
 
-	assert_eq(names, ["Photo", "FireGlow", "Smoke", "Rain", "Darken", "LeftScrim", "Vignette"])
+	assert_eq(names, ["Photo", "Puddles", "FireGlow", "Smoke", "Rain", "Darken",
+		"LeftScrim", "Vignette"])
+
+
+# --- Брижі від крапель у калюжах ------------------------------------------
+
+func test_puddle_mask_marks_a_sane_amount_of_water_below_the_horizon() -> void:
+	# Без води в масці шейдер усюди бачить нуль і сам себе вимикає (discard):
+	# ефект зникає МОВЧКИ, без жодної помилки в логах. Сценарій не вигаданий —
+	# досить замінити фонову картину й перегенерувати маску тулою
+	# tools/gen_puddle_mask.py, не переміривши зони: всі вони опиняться на
+	# суходолі, маска вийде майже чорна, а текстура — цілком «валідна».
+	# Тому перевіряємо ВМІСТ, а не існування й розміри.
+	add_child_autofree(menu)
+	var puddles: ColorRect = menu.get_node("Background/Puddles")
+	var mat: ShaderMaterial = puddles.material
+	assert_not_null(mat, "шар калюж має ShaderMaterial")
+
+	var mask: Texture2D = mat.get_shader_parameter("puddle_mask")
+	assert_not_null(mask, "шейдеру брижів потрібна маска калюж")
+	var img: Image = mask.get_image()
+	assert_not_null(img, "маска має віддавати Image для перевірки")
+
+	var width: int = img.get_width()
+	var height: int = img.get_height()
+	# Крок 2 — 66 тис. проб замість 264 тис.: маска розмита, дрібніше не треба,
+	# а суцільний обхід помітно сповільнив би сюїту.
+	var step: int = 2
+	var water: int = 0
+	var sampled: int = 0
+	var topmost_water_v: float = 1.0
+	for y in range(0, height, step):
+		for x in range(0, width, step):
+			sampled += 1
+			if img.get_pixel(x, y).r > 0.5:
+				water += 1
+				topmost_water_v = minf(topmost_water_v, float(y) / float(height))
+
+	var share: float = float(water) / float(sampled)
+	assert_true(share > 0.004,
+		"маска має справді містити воду, інакше брижі зникають мовчки (частка %.4f)" % share)
+	assert_true(share < 0.15,
+		"маска не має заливати пів кадру — це вже не калюжі (частка %.4f)" % share)
+
+	# Вода вище лінії горизонту — певна ознака, що зони поїхали: шейдер там
+	# краплі й так відсікає, тож такі пікселі маски нічого не малюють.
+	var horizon: float = mat.get_shader_parameter("horizon_v")
+	assert_true(topmost_water_v > horizon,
+		"вода в масці не має бути вище горизонту %.2f (найвища %.3f)"
+			% [horizon, topmost_water_v])
+
+
+func test_puddle_mask_aspect_matches_the_background_painting() -> void:
+	# Шейдер САМ повторює KEEP_ASPECT_COVERED фонової картини, щоб маска лягла
+	# на намальовані калюжі за будь-якого аспекту вікна — і для цього знає її
+	# пропорції окремою уніформою. Якщо картину колись замінять на іншу за
+	# пропорціями, а уніформу забудуть, маска поїде і брижі підуть по багну.
+	# Ламатись це має тут, а не на очах у гравця.
+	add_child_autofree(menu)
+	var puddles: ColorRect = menu.get_node("Background/Puddles")
+	var declared: float = puddles.material.get_shader_parameter("image_aspect")
+	var photo: TextureRect = menu.get_node("Background/Photo")
+	var actual: float = float(photo.texture.get_width()) / float(photo.texture.get_height())
+
+	assert_almost_eq(declared, actual, 0.001,
+		"image_aspect має збігатися з пропорціями menu_background.jpg")
 
 
 func test_smoke_layer_has_one_capped_particle_emitter_per_fire_point() -> void:

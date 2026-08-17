@@ -1,10 +1,12 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://game/ui/main_menu.gd" id="1_menu"]
 [ext_resource type="Theme" path="res://game/ui/theme/ap_theme.tres" id="2_theme"]
 [ext_resource type="Texture2D" path="res://assets/ui/menu_background.jpg" id="3_bg"]
 [ext_resource type="FontFile" path="res://assets/fonts/RussoOne-Regular.ttf" id="4_title"]
 [ext_resource type="Shader" path="res://game/ui/shaders/rain.gdshader" id="7_rain"]
+[ext_resource type="Shader" path="res://game/ui/shaders/puddle_ripples.gdshader" id="8_puddles"]
+[ext_resource type="Texture2D" path="res://assets/ui/puddle_mask.png" id="9_puddle_mask"]
 
 [sub_resource type="Gradient" id="left_grad"]
 offsets = PackedFloat32Array(0, 1)
@@ -28,6 +30,12 @@ height = 512
 fill = 1
 fill_from = Vector2(0.5, 0.5)
 fill_to = Vector2(1, 0.5)
+
+[sub_resource type="ShaderMaterial" id="puddle_mat"]
+shader = ExtResource("8_puddles")
+shader_parameter/puddle_mask = ExtResource("9_puddle_mask")
+shader_parameter/image_aspect = 1.79297
+shader_parameter/horizon_v = 0.42
 
 [sub_resource type="ShaderMaterial" id="rain_mat"]
 shader = ExtResource("7_rain")
@@ -66,6 +74,17 @@ mouse_filter = 2
 texture = ExtResource("3_bg")
 expand_mode = 1
 stretch_mode = 6
+
+[node name="Puddles" type="ColorRect" parent="Background"]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+material = SubResource("puddle_mat")
+color = Color(1, 1, 1, 1)
 
 [node name="FireGlow" type="Control" parent="Background"]
 unique_name_in_owner = true
