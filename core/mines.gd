@@ -41,10 +41,10 @@ static func clear(state: BattleState, pos: Vector2i) -> Array[Events.BattleEvent
 	return [Events.MineCleared.new(pos)] as Array[Events.BattleEvent]
 
 static func reveal_near(state: BattleState, player: int) -> Array[Events.BattleEvent]:
-	## §3.11: чужу міну знаходить ЛИШЕ сапер, і то в межах власного огляду —
+	## §3.11: чужу міну знаходить ЛИШЕ інженер, і то в межах власного огляду —
 	## того самого ромба, що й туман тайлів, тож розкрита міна завжди лежить на
-	## тайлі, який гравець і справді бачить. Без сапера попереду колона заходить
-	## у мінне поле наосліп — це й перетворює мінування на загрозу, а сапера
+	## тайлі, який гравець і справді бачить. Без інженера попереду колона заходить
+	## у мінне поле наосліп — це й перетворює мінування на загрозу, а інженера
 	## дає підставу вести вперед, а не тримати позаду.
 	##
 	## Викликати ЛИШЕ після BattleState.refresh_vision(player) — інакше твердження
@@ -73,7 +73,7 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 	out.append(Events.MineTriggered.new(m.pos, unit.id))
 	var applied: int = mini(DAMAGE_BASE + Rules.roll(state.rng, DAMAGE_ROLL), unit.hp)
 	unit.hp -= applied
-	# Шкода міни зараховується власнику міни, але не в досвід — сапер його не має (§3.7).
+	# Шкода міни зараховується власнику міни, але не в досвід — інженер його не має (§3.7).
 	state.damage_dealt[m.owner] += applied
 	out.append(Events.DamageDealt.new(unit.id, applied, unit.hp))
 	if not unit.is_alive():

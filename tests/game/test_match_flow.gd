@@ -288,7 +288,7 @@ func test_summary_numbers_from_constructed_state() -> void:
 
 func test_summary_credits_a_mine_kill_to_the_mine_owner() -> void:
 	var s: BattleState = BattleState.create(Board.create(6, 6, Terrain.GroundState.DRY), 2, 1)
-	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # сапер p0 — досвіду не має
+	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # інженер p0 — досвіду не має
 	var victim: Unit = s.add_unit(2, 1, Vector2i(3, 3), 0)
 	victim.hp = 10
 	Mines.place(s, Vector2i(3, 3), 0)

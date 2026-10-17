@@ -165,7 +165,7 @@ func test_retaliators_reach_is_the_circle_and_not_a_vision_diamond() -> void:
 # ---------------------------------------------------------------------------
 # 5. An engineer never retaliates, even with AP and range to spare.
 #
-# Rifle squad (#0, INFANTRY) fires at an adjacent engineer squad (#11,
+# Rifle squad (#0, INFANTRY) fires at an adjacent engineer vehicle (#11,
 # hp 200) — close assault (dist_sq = 1 <= 2) quadruples the hit, but
 # infantry ignores armour entirely:
 #   dmg = (0.75*15 + roll(0,3)) * 4 = (11.25 + [0,3]) * 4 = 45 + 4*[0,3]

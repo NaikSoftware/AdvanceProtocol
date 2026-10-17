@@ -281,18 +281,18 @@ func _index_of_mine_revealed(events: Array, player: int, tile: Vector2i) -> int:
 
 func test_mine_revealed_comes_after_the_tile_it_sits_on_is_revealed() -> void:
 	# §3.5/§6: вигляд програє список подій по порядку, тож порядок — це контракт,
-	# а не косметика. Сапер їде дорогою і з нової позиції вперше бачить і тайл
+	# а не косметика. Інженер їде дорогою і з нової позиції вперше бачить і тайл
 	# (7,5), і міну на ньому. Розкриття міни мусить іти ПІСЛЯ TileRevealed цього
 	# тайла — інакше вигляд один крок малює міну на клітинці, що ще в тумані.
 	# Кінцевий стан однаковий за будь-якого порядку, тому перевіряти треба саме
 	# індекси подій.
-	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # сапер, огляд 3
+	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # інженер, огляд 3
 	Mines.place(state, Vector2i(7, 5), 1)
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(7, 5), 0),
-		"передумова: з (0,5) до міни 7 тайлів — сапер її ще не бачить")
+		"передумова: з (0,5) до міни 7 тайлів — інженер її ще не бачить")
 	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5), -1).apply(state)
-	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли дороги по 15 AP — 60 з 68")
+	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли дороги по 15 AP — 60 з 76")
 	var tile_at: int = _index_of_tile_revealed(events, 0, Vector2i(7, 5))
 	var mine_at: int = _index_of_mine_revealed(events, 0, Vector2i(7, 5))
 	assert_true(tile_at >= 0, "передумова: тайл міни розкрито саме цим рухом")
@@ -543,7 +543,7 @@ func test_a_friendly_unit_blocks_planning_even_before_start() -> void:
 		"і тому хід на тайл свого ж юніта відхиляється вже на етапі планування — не лише під час проходу")
 
 func test_the_walk_reveals_the_ground_it_passes_not_only_the_ground_it_ends_on() -> void:
-	# §3.5: туман оновлюється НА КОЖНОМУ кроці. Сапер (огляд 3) їде дорогою; міна на
+	# §3.5: туман оновлюється НА КОЖНОМУ кроці. Інженер (огляд 3) їде дорогою; міна на
 	# (1,2) лежить за 3 тайли ромба від (1,5) — тобто видима рівно з ПЕРШОГО кроку — і
 	# за 6 тайлів від кінцевої (4,5), тобто з кінця шляху не видна взагалі. Якщо
 	# перерахунок робити раз, після ходу, цю міну не знайде ніхто й ніколи.
@@ -551,14 +551,14 @@ func test_the_walk_reveals_the_ground_it_passes_not_only_the_ground_it_ends_on()
 	# Перевіряються обидві половини контракту (§6): і стан (міна відома), і порядок
 	# подій — MineRevealed не має випереджати TileRevealed свого тайла, і на середині
 	# шляху так само, як і в кінці.
-	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # сапер: ap 68, дорога по 15
+	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # інженерна машина: ap 76, дорога по 15
 	Mines.place(state, Vector2i(1, 2), 1)
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(1, 2), 0), "передумова: з (0,5) міни не видно")
 
 	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5), -1).apply(state)
 
-	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли по 15 — 60 з 68")
+	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли по 15 — 60 з 76")
 	assert_false(state.vision[0].is_visible(Vector2i(1, 2)),
 		"передумова: з кінцевої (4,5) тайл міни вже поза оглядом")
 	assert_true(Mines.is_known(state, Vector2i(1, 2), 0),
@@ -674,7 +674,7 @@ func test_an_own_mine_is_not_an_obstacle() -> void:
 	assert_eq(u.hp, u.max_hp(), "своя міна під власником не вибухає")
 
 func test_an_engineer_that_finds_a_mine_mid_walk_stops_in_front_of_it() -> void:
-	# Сапер (огляд 3, 15 AP за тайл дороги) з (0,5) до (4,5); ворожа міна на (4,5)
+	# Інженер (огляд 3, 15 AP за тайл дороги) з (0,5) до (4,5); ворожа міна на (4,5)
 	# поза ромбом на старті (4 > 3), але знаходиться вже з першого кроку (1,5).
 	# Далі план веде просто на неї — хід мусить спинитися на (3,5), як перед
 	# невидимим юнітом, а не вʼїхати в щойно знайдену міну.
@@ -691,7 +691,7 @@ func test_an_engineer_that_finds_a_mine_mid_walk_stops_in_front_of_it() -> void:
 	assert_eq(eng.pos, Vector2i(3, 5), "спинився на тайлі перед міною")
 	assert_eq(eng.hp, eng.max_hp(), "без шкоди")
 	assert_not_null(Mines.mine_at(state, Vector2i(4, 5)), "міна не спрацювала")
-	assert_eq(before_ap - eng.ap, 45, "оплачено лише 3 тайли, у які сапер увійшов")
+	assert_eq(before_ap - eng.ap, 45, "оплачено лише 3 тайли, у які інженер увійшов")
 	var blocked_at: int = -1
 	for i in events.size():
 		assert_false(events[i] is Events.MineTriggered, "жодного підриву")

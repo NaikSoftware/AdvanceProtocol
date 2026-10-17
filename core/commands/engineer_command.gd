@@ -52,7 +52,7 @@ func validate(state: BattleState) -> String:
 			if state.board.kind_at(target_pos) != Terrain.Kind.BRIDGE:
 				return "ERR_NO_BRIDGE_THERE"
 			# Рішення власника: ворога на мосту можна скинути разом із мостом, свого — ні.
-			# Сусідній тайл завжди в ромбі огляду сапера, тож відмова нічого не виказує.
+			# Сусідній тайл завжди в ромбі огляду інженера, тож відмова нічого не виказує.
 			var on_bridge: Unit = state.unit_at(target_pos)
 			if on_bridge != null and on_bridge.owner == e.owner:
 				return "ERR_TILE_OCCUPIED"
@@ -96,8 +96,8 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE_DESTROYED)
 				out.append(Events.BridgeChanged.new(target_pos, true))
 				# Ворог на мосту падає разом із ним (рішення власника): та сама низка
-				# подій, що й від смертельного влучання. Шкода — власникові сапера, як
-				# від міни, але не в досвід: сапер його не має (§3.7).
+				# подій, що й від смертельного влучання. Шкода — власникові інженера, як
+				# від міни, але не в досвід: інженер його не має (§3.7).
 				var victim: Unit = state.unit_at(target_pos)
 				if victim != null:
 					state.damage_dealt[e.owner] += victim.hp

@@ -356,7 +356,7 @@ func test_confirm_shot_then_tap_does_not_reach_stale_zone_tiles() -> void:
 	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)  # medium tank, ap 48, fire_cost 20
 	# Інженер ніколи не відповідає (§3.6/§3.3.1) — атакувальник гарантовано
 	# лишається живим, тож перевіряється рівно нульовий AP, а не смерть.
-	var target: Unit = service.state.add_unit(11, 1, Vector2i(6, 5), 0)  # engineer squad
+	var target: Unit = service.state.add_unit(11, 1, Vector2i(6, 5), 0)  # engineer vehicle
 	_begin_and_drain()
 	controller.tap_cell(u.pos)
 	# Передумова: (7,5) — усередині ЗІ старого AP=48 зони (2 клітинки, cost 20).

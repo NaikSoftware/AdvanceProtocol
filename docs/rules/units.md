@@ -32,10 +32,12 @@ this table is documentation only.
 | 8 | heavy tank | TANK | 121 | 40 | 350 | 4 | 20 | 56/25/20 | 9 | 4 |
 | 9 | field gun | ARTY | 200 | 24 | 200 | 5 | 14 | 15/0/0 | 6 | 3 |
 | 10 | howitzer | ARTY | 180 | 24 | 200 | 5 | 14 | 15/0/0 | 6 | 3 |
-| 11 | engineer squad | ENG | 0 | 68 | 200 | 1 | 20 | 10/5/5 | −5 | 3 |
-| 12 | engineer vehicle | ENG | 0 | 76 | 200 | 1 | 30 | 10/5/5 | −5 | 3 |
+| 11 | engineer vehicle | ENG | 0 | 76 | 200 | 1 | 30 | 10/5/5 | −5 | 3 |
 
-Squad-level units (infantry, engineers) are **one asset per tile** — one mesh, one draw call, one
+There is no engineer squad (owner ruling): the only engineer is the vehicle, so mud slows it like
+any other vehicle (§3.12).
+
+Squad-level units (infantry) are **one asset per tile** — one mesh, one draw call, one
 tile footprint. That mesh may well sculpt three or four figures sharing a base, and it should: a
 squad is a squad, and a lone figure reads as the wrong thing. What is forbidden is several
 *independently instanced and animated* soldiers per unit, which multiplies the draw-call cost of

@@ -11,9 +11,9 @@ func test_mine_is_visible_only_to_owner() -> void:
 	assert_false(Mines.is_known(state, Vector2i(5, 5), 1), "§3.11: для решти вона невидима")
 
 func test_an_engineer_passing_near_reveals_the_mine_for_that_player_only() -> void:
-	# Сапера тут не «підсунуто, щоб тест проходив»: до §3.11 розкривав будь-який
+	# Інженера тут не «підсунуто, щоб тест проходив»: до §3.11 розкривав будь-який
 	# юніт, і в цій ролі стояло стрілецьке відділення (тип 0). Тепер шукати вміє
-	# лише сапер, тож юніт замінено на тип 11 — сама перевірка (розкриття ведеться
+	# лише інженер, тож юніт замінено на тип 11 — сама перевірка (розкриття ведеться
 	# на гравця, а не глобально) лишилась тою самою.
 	state = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 3, 5)
 	Mines.place(state, Vector2i(5, 5), 0)
@@ -23,7 +23,7 @@ func test_an_engineer_passing_near_reveals_the_mine_for_that_player_only() -> vo
 	assert_false(Mines.is_known(state, Vector2i(5, 5), 2), "розкриття — на гравця, як і туман")
 
 func test_only_an_engineer_finds_an_enemy_mine() -> void:
-	# §3.11: без сапера попереду колона заходить у мінне поле наосліп. Стрілецьке
+	# §3.11: без інженера попереду колона заходить у мінне поле наосліп. Стрілецьке
 	# відділення стоїть УПРИТУЛ до міни й однаково її не бачить — попри те, що його
 	# огляд (5) накриває тайл із запасом. Шукає клас, а не відстань.
 	Mines.place(state, Vector2i(5, 5), 0)
@@ -31,18 +31,18 @@ func test_only_an_engineer_finds_an_enemy_mine() -> void:
 	state.add_unit(5, 1, Vector2i(4, 5), 0)     # середній танк, теж поруч
 	Mines.reveal_near(state, 1)
 	assert_false(Mines.is_known(state, Vector2i(5, 5), 1),
-		"§3.11: чужу міну знаходить лише сапер")
+		"§3.11: чужу міну знаходить лише інженер")
 
 func test_an_engineer_finds_a_mine_across_its_whole_vision() -> void:
-	# §3.11: радіус — власний огляд сапера (3), а не один тайл, і міряється
+	# §3.11: радіус — власний огляд інженера (3), а не один тайл, і міряється
 	# ромбом. Три тайли — усередині; чотири — уже ні.
 	Mines.place(state, Vector2i(5, 5), 0)
 	var eng: Unit = state.add_unit(11, 1, Vector2i(5, 9), 0)   # |0|+|4| = 4 — задалеко
 	Mines.reveal_near(state, 1)
-	assert_false(Mines.is_known(state, Vector2i(5, 5), 1), "4 тайли — поза оглядом сапера")
+	assert_false(Mines.is_known(state, Vector2i(5, 5), 1), "4 тайли — поза оглядом інженера")
 	eng.pos = Vector2i(5, 8)                                   # |0|+|3| = 3 — рівно на межі
 	Mines.reveal_near(state, 1)
-	assert_true(Mines.is_known(state, Vector2i(5, 5), 1), "3 тайли — сапер бачить")
+	assert_true(Mines.is_known(state, Vector2i(5, 5), 1), "3 тайли — інженер бачить")
 
 func test_engineer_search_uses_the_diamond_not_the_circle() -> void:
 	# §3.11 через §3.1: (2, 2) від міни — це 2+2 = 4 > 3 поза ромбом, хоча
@@ -59,7 +59,7 @@ func test_engineer_search_uses_the_diamond_not_the_circle() -> void:
 	eng.pos = Vector2i(7, 5)
 	Mines.reveal_near(state, 1)
 	assert_true(Mines.is_known(state, Vector2i(5, 5), 1),
-		"§3.11: радіус пошуку — власний огляд сапера (3), а не один тайл")
+		"§3.11: радіус пошуку — власний огляд інженера (3), а не один тайл")
 
 func _count_mine_revealed(events: Array) -> int:
 	var n: int = 0
@@ -70,15 +70,15 @@ func _count_mine_revealed(events: Array) -> int:
 
 func test_a_stationary_engineer_searches_at_the_start_of_its_owners_turn() -> void:
 	# §3.11: пошук — властивість присутності, а не руху. Доки єдиним викликачем
-	# Mines.reveal_near() був MoveCommand, сапер, який нікуди не пішов, не знаходив
+	# Mines.reveal_near() був MoveCommand, інженер, який нікуди не пішов, не знаходив
 	# нічого — ворожа міна за три тайли від нього, всередині його ж ромба огляду,
-	# лишалася невидимою весь матч. Сапер тут навмисно НЕ рухається.
+	# лишалася невидимою весь матч. Інженер тут навмисно НЕ рухається.
 	Mines.place(state, Vector2i(5, 8), 1)
-	state.add_unit(11, 0, Vector2i(5, 5), 0)   # сапер, огляд 3: |0| + |3| = 3, рівно на межі
+	state.add_unit(11, 0, Vector2i(5, 5), 0)   # інженер, огляд 3: |0| + |3| = 3, рівно на межі
 	state.active_player = 0
 	var events: Array = state.begin_turn()
 	assert_true(Mines.is_known(state, Vector2i(5, 8), 0),
-		"§3.11: сапер шукає на початку свого ходу, навіть не зрушивши з місця")
+		"§3.11: інженер шукає на початку свого ходу, навіть не зрушивши з місця")
 
 	var tile_at: int = -1
 	var mine_at: int = -1
@@ -97,19 +97,19 @@ func test_a_stationary_engineer_searches_at_the_start_of_its_owners_turn() -> vo
 		"уже відома міна не породжує події вдруге")
 
 func test_the_start_of_turn_sweep_searches_only_for_the_active_player() -> void:
-	# §3.11 через §3.5: розкриття ведеться на гравця, як і туман. Сапер гравця 0
+	# §3.11 через §3.5: розкриття ведеться на гравця, як і туман. Інженер гравця 0
 	# стоїть упритул до міни, але хід іде гравця 1 — не має розкритись нікому:
-	# ні тому, чий хід не йде, ні тому, у кого сапера немає взагалі.
+	# ні тому, чий хід не йде, ні тому, у кого інженера немає взагалі.
 	state = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 3, 5)
 	Mines.place(state, Vector2i(5, 8), 2)
-	state.add_unit(11, 0, Vector2i(5, 5), 0)   # сапер гравця 0
-	state.add_unit(0, 1, Vector2i(1, 1), 0)    # у гравця 1 — саме піхота, не сапер
+	state.add_unit(11, 0, Vector2i(5, 5), 0)   # інженер гравця 0
+	state.add_unit(0, 1, Vector2i(1, 1), 0)    # у гравця 1 — саме піхота, не інженер
 	state.active_player = 1
 	var events: Array = state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(5, 8), 0),
 		"за гравця, чий хід не йде, ніхто не шукає")
 	assert_false(Mines.is_known(state, Vector2i(5, 8), 1),
-		"чужий сапер не шукає за тебе")
+		"чужий інженер не шукає за тебе")
 	assert_eq(_count_mine_revealed(events), 0)
 
 func test_driving_onto_an_unknown_mine_detonates_it() -> void:
@@ -151,7 +151,7 @@ func test_mine_can_kill_and_end_the_match() -> void:
 	assert_true(ended)
 
 func test_mine_damage_is_credited_to_the_mine_owner() -> void:
-	# Сапер досвіду не має (§3.7), тож шкода міни йде лише в damage_dealt власника.
+	# Інженер досвіду не має (§3.7), тож шкода міни йде лише в damage_dealt власника.
 	Mines.place(state, Vector2i(5, 5), 0)
 	var u: Unit = state.add_unit(5, 1, Vector2i(5, 5), 0)
 	var before: int = u.hp
