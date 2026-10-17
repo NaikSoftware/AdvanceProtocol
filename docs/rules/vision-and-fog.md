@@ -62,8 +62,8 @@ open and is then told they cannot see it will read the game as broken.
 
 - Laid by engineers, invisible to everyone except the owner.
 - **The search runs at the start of the engineer's owner's turn and from every tile the engineer
-  passes through** — not only from the tile it stops on. A sapper sweeps as it advances, so a mine
-  glimpsed in the middle of a route is found even if the engineer drives on past it.
+  passes through** — not only from the tile it stops on. An engineer sweeps as it advances, so a
+  mine glimpsed in the middle of a route is found even if the engineer drives on past it.
 - **A tile occupied by a unit is never entered** (§3.2), so a unit standing on a mine keeps it from
   detonating: whoever is blocked stops in front and takes nothing, and the mine stays buried.
 - **Only an engineer finds an enemy mine**, and it finds one within its own `vision` radius —
@@ -77,7 +77,7 @@ open and is then told they cannot see it will read the game as broken.
   as for an unseen unit, and pays only for the tiles it entered.
 
 The engineer restriction is the reference's rule and it is adopted deliberately ([§4](../reference/blitzkrieg.md)). It is what
-makes a minefield a threat rather than an inconvenience: without a sapper leading, a column drives
-in blind, and the engineer finally has a reason to be at the front of the advance rather than
+makes a minefield a threat rather than an inconvenience: without an engineer leading, a column
+drives in blind, and the engineer finally has a reason to be at the front of the advance rather than
 behind it. The trade is that the radius is the engineer's full vision (3) rather than one tile —
 fewer units can search, but the one that can, searches properly.
