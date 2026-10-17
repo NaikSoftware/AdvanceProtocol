@@ -15,6 +15,13 @@ static func entry_cost(unit: Unit, penalty: int) -> int:
 	return maxi(10, 10 + penalty - unit.cross_country())
 
 static func entry_cost_at(unit: Unit, board: Board, p: Vector2i) -> int:
+	# Рішення власника (§3.12): сапер у багні — як піхота, надбавка MUD його не
+	# стосується. Виняток за класом в одному місці, де юніт зустрічає стан ґрунту, —
+	# не матриця юніт×місцевість (§3.2). Піхоті він не потрібен: її cross_country 80
+	# і так тримає її на підлозі 10.
+	if unit.unit_class() == UnitTypes.UnitClass.ENGINEER and board.ground_state == Terrain.GroundState.MUD \
+			and board.in_bounds(p):
+		return entry_cost(unit, Terrain.penalty(board.kind_at(p), Terrain.GroundState.DRY))
 	return entry_cost(unit, board.penalty_at(p))
 
 static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos: Vector2i) -> int:

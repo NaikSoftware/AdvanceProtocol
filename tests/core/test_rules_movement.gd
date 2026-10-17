@@ -47,6 +47,27 @@ func test_engineer_is_the_worst_offroad() -> void:
 	assert_true(Rules.entry_cost(engineer, 12) > Rules.entry_cost(medium, 12),
 		"§3.6: інженер живе на дорогах")
 
+func _field_cost(unit: Unit, ground_state: int) -> int:
+	var b: Board = Board.create(3, 3, ground_state)
+	b.set_kind(Vector2i(1, 1), Terrain.Kind.FIELD)
+	return Rules.entry_cost_at(unit, b, Vector2i(1, 1))
+
+## Рішення власника: сапер у багні — як піхота, надбавка MUD його не стосується.
+## Поле: штраф 10 сухе, 20 у багні; сапер cross_country −5 → 25 і (без винятку) 35.
+func test_mud_does_not_slow_the_engineer_squad() -> void:
+	var engineer: Unit = Unit.create(1, 11, 0, Vector2i.ZERO, 0)
+	assert_eq(_field_cost(engineer, Terrain.GroundState.DRY), 25, "передумова: суше поле — 10 + 10 + 5")
+	assert_eq(_field_cost(engineer, Terrain.GroundState.MUD), 25, "багно саперу не додає нічого")
+
+func test_mud_still_slows_a_tank() -> void:
+	var medium: Unit = Unit.create(1, 5, 0, Vector2i.ZERO, 0)
+	assert_true(_field_cost(medium, Terrain.GroundState.MUD) > _field_cost(medium, Terrain.GroundState.DRY),
+		"гусениці в багні платять більше")
+
+func test_frozen_ground_is_unchanged_for_the_engineer() -> void:
+	var engineer: Unit = Unit.create(1, 11, 0, Vector2i.ZERO, 0)
+	assert_eq(_field_cost(engineer, Terrain.GroundState.FROZEN), 20, "мерзле поле: 10 + 5 + 5, як і досі")
+
 func test_impassable_stays_impassable_for_everyone() -> void:
 	var infantry: Unit = Unit.create(1, 0, 0, Vector2i.ZERO, 0)
 	assert_true(Rules.entry_cost(infantry, Terrain.IMPASSABLE) >= Terrain.IMPASSABLE,
