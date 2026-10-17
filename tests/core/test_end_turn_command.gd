@@ -48,7 +48,7 @@ func test_objective_victory_waits_for_the_holders_own_end_of_turn() -> void:
 	assert_eq(s.winner, 1)
 
 func test_holding_objectives_never_wins_when_target_is_unset() -> void:
-	# Негативний контроль: objective_hold_target лишається дефолтним 0 —
+	# Негативний контроль: objective_hold_target лишається типовим 0 —
 	# анігіляційна мапа без умови цілей не повинна завершитись, скільки б
 	# цілей гравець не утримував.
 	var s: BattleState = _state()
@@ -60,11 +60,11 @@ func test_holding_objectives_never_wins_when_target_is_unset() -> void:
 	assert_false(s.is_over(), "objective_hold_target=0 означає «немає умови перемоги за цілі»")
 
 func test_elimination_beats_the_objective_condition_on_the_same_end_of_turn() -> void:
-	# §3.10: коли обидві умови розвʼязуються на тому самому кінці ходу, вирішує
+	# §3.10: коли обидві умови розв'язуються на тому самому кінці ходу, вирішує
 	# елімінація — вона безумовна, а утримання цілей мапа лише опційно заявляє.
 	# Тут це не збіг двох переможців, а суперечка: гравець 0 утримує всі три цілі
 	# й водночас не має жодного юніта. Порядок викликів у EndTurnCommand — єдине,
-	# що тримає правильну відповідь: Objectives.check_victory() гейтить на
+	# що тримає правильну відповідь: Objectives.check_victory() залежить від
 	# state.eliminated[player], а той прапорець піднімає саме check_elimination().
 	# Переставити виклики місцями — і матч коронує гравця, якого вже немає на мапі.
 	var s: BattleState = _state()

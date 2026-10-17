@@ -134,7 +134,7 @@ func test_invisible_enemy_cannot_be_inspected() -> void:
 	assert_false(state.vision[0].is_seen(enemy.pos), "передумова: землі під цим ворогом я не розвідував")
 	assert_eq(Targeting.threatened_units(state, enemy.id, 0).size(), 0, "§3.13: туман діє і на огляд ворога")
 
-	# А щойно ворог стає видимим — прогноз зʼявляється.
+	# А щойно ворог стає видимим — прогноз з'являється.
 	state.add_unit(0, 0, Vector2i(4, 8), 2)   # моя піхота, огляд 5
 	state.start()
 	assert_true(state.vision[0].is_visible(enemy.pos), "передумова: тепер бачу")
@@ -142,7 +142,7 @@ func test_invisible_enemy_cannot_be_inspected() -> void:
 
 
 func test_an_enemy_on_ground_scouted_earlier_can_still_be_inspected() -> void:
-	# §3.5 + §3.13: гейт огляду — розвідана земля, а не чийсь ромб просто зараз.
+	# §3.5 + §3.13: умова огляду — розвідана земля, а не чийсь ромб просто зараз.
 	# Та сама пара, що й у тесті вище (відділення на (4,4) тримає мою гармату на
 	# (6,6): зсув (2,2) — dist_sq 8 <= 9 у його дальності 3 і 4 <= 5 у його ромбі,
 	# тоді як моя гармата з оглядом 3 його не бачить). Розвідку робить моє стрілецьке
@@ -291,11 +291,11 @@ func test_a_unit_of_the_idle_player_has_no_targets() -> void:
 # --- §3.9 + §3.13: дрон має власне кільце і власні позначки ----------------------
 #
 # Тип 1 — штурмове відділення: гармата дальністю 3, огляд 5, два дрони.
-# Дрон дістає на 5 (коло) і так само гейтиться ромбом огляду.
+# Дрон дістає на 5 (коло) і так само обмежується ромбом огляду.
 
 func test_enemy_squad_with_drones_threatens_a_tank_its_gun_cannot_reach() -> void:
 	# Головний тест Job 1. Загін, намальований як загроза на 3, насправді дістає
-	# дроном на 5 — і саме по танку, який він за §3.3.1 бʼє без відповіді.
+	# дроном на 5 — і саме по танку, який він за §3.3.1 б'є без відповіді.
 	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
 	var my_eyes: Unit = state.add_unit(0, 0, Vector2i(2, 4), 2)   # огляд 5 — бачить загін
 	var tank: Unit = state.add_unit(5, 0, Vector2i(7, 2), 2)
@@ -372,7 +372,7 @@ func test_drone_forecast_ignores_the_enemys_ap_and_fired_flag() -> void:
 
 
 func test_drone_forecast_stops_at_the_vision_diamond_too() -> void:
-	# §3.1: дальність — коло, огляд — ромб, і дрон гейтиться перетином, як усе інше.
+	# §3.1: дальність — коло, огляд — ромб, і дрон обмежується перетином, як усе інше.
 	# Зсув (3, 4): 9 + 16 = 25 <= 25 у колі, 3 + 4 = 7 > 5 поза ромбом.
 	var squad: Unit = state.add_unit(1, 1, Vector2i(2, 2), 2)
 	state.add_unit(0, 0, Vector2i(2, 4), 2)
@@ -423,7 +423,7 @@ func test_invisible_enemy_squad_carries_no_drone_forecast() -> void:
 
 func test_an_enemy_squad_on_ground_scouted_earlier_still_carries_a_drone_forecast() -> void:
 	# Дзеркало test_an_enemy_on_ground_scouted_earlier_can_still_be_inspected() для
-	# дронового кільця: гейт огляду — розвідана земля, і в цьому запиті теж.
+	# дронового кільця: умова огляду — розвідана земля, і в цьому запиті теж.
 	# Штурмове відділення на (2,2); мій танк на (5,4) — зсув (3,2): dist_sq 13 <= 25
 	# у дальності дрона і 5 <= 5 у ромбі відділення, тоді як власний огляд танка (4)
 	# до відділення не дістає (5 > 4). Розвідник з (2,6) накриває (2,2) і йде на (2,9).
@@ -463,7 +463,7 @@ func test_drone_targets_agrees_with_drone_command_validate() -> void:
 	state.add_unit(2, 1, Vector2i(4, 2), 2)     # бронеавтомобіль зблизька
 	state.add_unit(0, 1, Vector2i(3, 2), 2)     # піхота — дроном не можна
 	# Зсув (3, 4) від загону: у колі дальності 5, але поза ВЛАСНИМ ромбом загону.
-	# Ціллю він усе одно є — свій постріл гейтиться мережею власника (§3.3.1), а
+	# Ціллю він усе одно є — свій постріл залежить від мережі власника (§3.3.1), а
 	# другий загін у (3, 3) накриває цей тайл (3 + 2 = 5). Тобто цей рядок — не
 	# виняток, а протилежне: приклад того, як коригувальник відкриває діагональ.
 	state.add_unit(5, 1, Vector2i(5, 6), 2)
@@ -480,7 +480,7 @@ func test_drone_targets_agrees_with_drone_command_validate() -> void:
 
 
 func test_drone_targets_follows_the_commands_own_gates() -> void:
-	# Кожен гейт дії окремо: боєкомплект, has_fired/AP і чий зараз хід.
+	# Кожна умова дії окремо: боєкомплект, has_fired/AP і чий зараз хід.
 	var squad: Unit = state.add_unit(1, 0, Vector2i(2, 2), 2)
 	state.add_unit(5, 1, Vector2i(5, 2), 2)
 	state.start()

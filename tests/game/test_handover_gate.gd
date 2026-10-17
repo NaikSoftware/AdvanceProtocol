@@ -100,7 +100,7 @@ func test_pressing_confirm_emits_confirmed_exactly_once() -> void:
 	assert_signal_emit_count(gate, "confirmed", 1)
 
 
-## Ruling review, finding 1: поки гейт видимий, Task 2.10 виконує
+## Рев'ю рішення, знахідка 1: поки гейт видимий, Task 2.10 виконує
 ## рецентрування камери й перебудову вузлів (крок 2a/2b контракту) — і саме
 ## в це вікно кнопка лишається на екрані, увімкнена. Звичайний подвійний
 ## тап на телефоні не сміє відкрити хід двічі.
@@ -131,7 +131,7 @@ func test_show_for_re_enables_the_confirm_button_for_the_next_player() -> void:
 
 func test_confirmed_signal_carries_no_unexpected_extra_emissions_from_construction() -> void:
 	# Інстанціація сцени сама по собі (before_each) не мусила нічого
-	# емітити — сигнал ще не спостерігався там, тож тут доводимо це чере
+	# надсилати — сигнал ще не спостерігався там, тож тут доводимо це чере
 	# другий екземпляр, спостережений одразу.
 	var fresh: HandoverGate = GateScene.instantiate()
 	add_child_autofree(fresh)
@@ -161,7 +161,7 @@ func _collect_buttons(node: Node, out: Array[Button]) -> void:
 
 func test_announced_player_is_the_one_passed_in() -> void:
 	# Гравець 2 (індекс 2), навмисно не 0 — захардкоджене значення пройшло б
-	# тест із дефолтом і провалюється тут.
+	# тест із типовим значенням і провалюється тут.
 	gate.show_for(2)
 
 	var player_value: Label = gate.get_node("%PlayerValue") as Label

@@ -1,8 +1,8 @@
 # Advance Protocol
 
 Mobile-first, turn-based tactical warfare. Two or three players share **one device** and pass it
-between turns (hot-seat / pass-and-play). Godot 4, 3D geometry under a fixed isometric camera,
-realistic art direction.
+between turns (hot-seat / pass-and-play). Godot 4, 3D geometry under a fixed orthographic camera
+with an isometric-style view, realistic art direction.
 
 There is no action layer. Nothing happens in real time, nothing is reflex-tested. The two things
 that carry the game are **tactical depth** and **atmosphere**, and every technical decision below
@@ -269,7 +269,7 @@ and every finding recovered so far: **[docs/reference/blitzkrieg.md](docs/refere
 | Renderer | Mobile (Vulkan); `gl_compatibility` fallback for old devices |
 | Targets | Android and iOS, **landscape** |
 | Tests | GUT, run headless |
-| 3D assets | GLB, generated via `asset-manager`, edited via `3d-modelling` |
+| 3D assets | GLB, generated with `asset-manager`, edited with `3d-modelling` |
 
 If Godot is not on `PATH`, point `$GODOT` at the binary and set `GODOT_PATH` to the same value —
 the Godot MCP server defaults to `/usr/bin/godot` and fails with `ENOENT` otherwise.

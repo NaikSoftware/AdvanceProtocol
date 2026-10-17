@@ -72,7 +72,7 @@ advance, in movement. A tank has 48 AP, fires for 20 and pays 10 per clear tile:
 advance leave 8 and no answer at all; two leave 28 and a full-strength one. **The threshold is
 exactly the gold movement zone of [§3.2](movement-and-terrain.md)** — a unit that stops in gold
 keeps this turn's shot *and* the right to answer, a unit that runs into red is disarmed until its
-own turn. Confirmed against the reference, which gates its counter-attack on live AP the same way
+own turn. Confirmed against the reference, which gates its retaliation on live AP the same way
 and refills only the active player's units ([§4](../reference/blitzkrieg.md)); kept on the owner's
 call after a play test where nothing fired back.
 
@@ -85,7 +85,7 @@ of it, and it is corrected here rather than implemented, on the owner's call.
 **The retaliator must be able to see its attacker.** A return shot obeys the same visibility rule
 as any other shot, and that rule reads `seen` ([§3.5](vision-and-fog.md)): the original attacker's
 tile has to be **ground the retaliating player has scouted at some point** — not ground anyone is
-watching right now. The reference gates its counter-attack on AP, range and class alone, and
+watching right now. The reference gates its retaliation on AP, range and class alone, and
 requiring visibility at all is a deliberate departure from it, recorded in
 [§4](../reference/blitzkrieg.md).
 

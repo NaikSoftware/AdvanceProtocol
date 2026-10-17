@@ -19,10 +19,10 @@ func test_move_costs_ap_and_moves_the_unit() -> void:
 	assert_true(events[0] is Events.UnitMoved)
 
 func test_an_objective_passed_mid_turn_is_remembered_without_waiting_for_the_next_turn() -> void:
-	# §3.10: цілі підкоряються туману, отже позначатися побаченими мусять там само,
+	# §3.10: цілі підкоряються туману, отже позначатися розвіданими мусять там само,
 	# де оновлюється туман. Доти refresh_seen() викликався лише з begin_turn(), тож
-	# ціль, побачена серед ходу, не памʼяталася — а якби юніт до наступного ходу
-	# відійшов, не запамʼяталася б узагалі.
+	# ціль, розвідана серед ходу, не пам'яталася — а якби юніт до наступного ходу
+	# відійшов, не запам'яталася б узагалі.
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	var idx: int = Objectives.add(state, Vector2i(6, 5), 1)
 	state.start()
@@ -50,7 +50,7 @@ func test_cannot_move_beyond_ap() -> void:
 
 func test_cannot_move_onto_another_unit() -> void:
 	# Ворог, ЯКОГО ВИДНО: планування бачить його тайл зайнятим, і ціль відхиляється.
-	# start() тут обовʼязковий — без нього vision порожня, ворог невидимий, і хід на
+	# start() тут обов'язковий — без нього vision порожня, ворог невидимий, і хід на
 	# його тайл став би законним (див. test_a_hidden_enemy_on_the_destination_...).
 	#
 	# Це опис правила, а не сторожа переходу на туманну зайнятість: видимий ворог
@@ -207,7 +207,7 @@ func test_firing_after_partial_moves_forecloses_further_movement() -> void:
 	assert_eq(MoveCommand.create(u.id, Vector2i(3, 5), -1).validate(state), "ERR_ALREADY_FIRED")
 
 func test_zones_predict_whether_firing_is_legal_after_the_move() -> void:
-	# Звʼязує обіцянку UI (Pathing.compute_zones) із фактичною поведінкою команд:
+	# Зв'язує обіцянку UI (Pathing.compute_zones) із фактичною поведінкою команд:
 	# золота зона мусить означати рівно "після ходу лишиться AP на постріл", а
 	# червона — рівно "не лишиться".
 	#
@@ -271,12 +271,12 @@ func _index_of_mine_revealed(events: Array, player: int, tile: Vector2i) -> int:
 
 func test_mine_revealed_comes_after_the_tile_it_sits_on_is_revealed() -> void:
 	# §3.5/§6: вигляд програє список подій по порядку, тож порядок — це контракт,
-	# а не косметика. Сапер їде дорогою і з нової позиції вперше бачить і тайл
+	# а не косметика. Інженер їде дорогою і з нової позиції вперше бачить і тайл
 	# (7,5), і міну на ньому. Розкриття міни мусить іти ПІСЛЯ TileRevealed цього
-	# тайла — інакше вигляд один крок малює міну на клітинці, що ще в тумані.
+	# тайла — інакше вигляд один крок малює міну на тайлі, що ще в тумані.
 	# Кінцевий стан однаковий за будь-якого порядку, тому перевіряти треба саме
 	# індекси подій.
-	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # сапер, огляд 3
+	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # інженер, огляд 3
 	Mines.place(state, Vector2i(7, 5), 1)
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(7, 5), 0),
@@ -296,7 +296,7 @@ func test_mine_revealed_comes_after_the_tile_it_sits_on_is_revealed() -> void:
 # дорозі entry_cost = max(10, 10+0-7) = 10, тобто рівно 6 тайлів ходу. Ворог стоїть
 # на (5,5) — за 5 тайлів від старту, а це поза ромбом огляду 3, отже його не видно
 # доти, доки транспортер не підійде на три тайли. Саме ця пара чисел (досяжність 6
-# проти огляду 3) і робить «ворог зʼявився з туману» можливим станом гри.
+# проти огляду 3) і робить «ворог з'явився з туману» можливим станом гри.
 
 func test_a_hidden_enemy_on_the_path_halts_the_mover_one_tile_short() -> void:
 	var u: Unit = state.add_unit(3, 0, Vector2i(0, 5), 2)
@@ -401,7 +401,7 @@ func test_a_seen_enemy_is_routed_around_at_planning_time() -> void:
 	# отже юніт мусить ПРИЙТИ куди просили, заплативши за гак, а не спинитися перед ним.
 	#
 	# Знову ж таки: ворога видно, тож обидві карти зайнятості дають той самий гак —
-	# тест описує форму обходу, а не пришпилює вибір карти.
+	# тест описує форму обходу, а не фіксує вибір карти.
 	var b: Board = Board.create(10, 10, Terrain.GroundState.DRY)
 	for x in 10:
 		b.set_kind(Vector2i(x, 4), Terrain.Kind.ROAD)
@@ -470,7 +470,7 @@ func test_the_mine_tile_is_paid_for_and_the_tiles_beyond_it_are_not() -> void:
 
 func test_a_blocker_standing_on_a_mine_stops_the_move_without_setting_it_off() -> void:
 	# Зіткнення двох правил на одному тайлі. Виграє зайнятість: юніт, який не може
-	# туди вʼїхати, не може там і підірватися — міна лишається лежати цілою.
+	# туди в'їхати, не може там і підірватися — міна лишається лежати цілою.
 	var u: Unit = state.add_unit(3, 0, Vector2i(0, 5), 2)
 	state.add_unit(0, 1, Vector2i(5, 5), 6)
 	Mines.place(state, Vector2i(5, 5), 1)
@@ -533,7 +533,7 @@ func test_a_friendly_unit_blocks_planning_even_before_start() -> void:
 		"і тому хід на тайл свого ж юніта відхиляється вже на етапі планування — не лише під час проходу")
 
 func test_the_walk_reveals_the_ground_it_passes_not_only_the_ground_it_ends_on() -> void:
-	# §3.5: туман оновлюється НА КОЖНОМУ кроці. Сапер (огляд 3) їде дорогою; міна на
+	# §3.5: туман оновлюється НА КОЖНОМУ кроці. Інженер (огляд 3) їде дорогою; міна на
 	# (1,2) лежить за 3 тайли ромба від (1,5) — тобто видима рівно з ПЕРШОГО кроку — і
 	# за 6 тайлів від кінцевої (4,5), тобто з кінця шляху не видна взагалі. Якщо
 	# перерахунок робити раз, після ходу, цю міну не знайде ніхто й ніколи.
@@ -541,7 +541,7 @@ func test_the_walk_reveals_the_ground_it_passes_not_only_the_ground_it_ends_on()
 	# Перевіряються обидві половини контракту (§6): і стан (міна відома), і порядок
 	# подій — MineRevealed не має випереджати TileRevealed свого тайла, і на середині
 	# шляху так само, як і в кінці.
-	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # сапер: ap 68, дорога по 15
+	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # інженер: ap 68, дорога по 15
 	Mines.place(state, Vector2i(1, 2), 1)
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(1, 2), 0), "передумова: з (0,5) міни не видно")
@@ -564,7 +564,7 @@ func test_a_unit_seen_from_the_middle_of_the_walk_is_seen_from_that_moment() -> 
 	# Той самий контракт, але про юніта, а не про міну: ворог на (5,5) входить в огляд
 	# на другому кроці (з (2,5) до нього рівно 3), і TileRevealed його тайла мусить
 	# стояти в потоці РАНІШЕ за туман наступних кроків — тобто прибути тоді, коли він
-	# справді зʼявився, а не однією купою в кінці ходу.
+	# справді з'явився, а не однією купою в кінці ходу.
 	var u: Unit = state.add_unit(3, 0, Vector2i(0, 5), 2)
 	state.add_unit(0, 1, Vector2i(5, 5), 6)
 	state.start()
@@ -581,7 +581,7 @@ func test_a_unit_seen_from_the_middle_of_the_walk_is_seen_from_that_moment() -> 
 	assert_true(state.vision[0].is_visible(Vector2i(5, 5)), "і в стані ворог теж видимий")
 
 func test_a_unit_killed_by_a_mine_stops_contributing_vision() -> void:
-	# Пришпилює те, що відхилений фінд рев'ю намагався б "полагодити" —
+	# Фіксує те, що відхилене зауваження рев'ю пропонувало "полагодити" —
 	# обгорнути виклики видимості/розкриття міни в if u.is_alive(): це саме
 	# та зміна, яку не можна вносити, бо вона лишає видимість мертвого юніта
 	# на дошці. refresh_vision() після смерті — обов'язковий виклик, не зайвий.

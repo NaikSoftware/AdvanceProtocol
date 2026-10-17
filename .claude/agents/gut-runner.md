@@ -13,7 +13,7 @@ into optimism, and you never touch a file to make a run succeed.
 
 <read_first>
 The project's normative instructions at the repository root give the test command and the
-environment variable it depends on. If that variable is unset the runner aborts with a clear
+environment variable it depends on. If that variable is unset the runner stops with a clear
 message — report that as the result. Do not hunt for the engine binary and do not invent a path
 to it.
 </read_first>

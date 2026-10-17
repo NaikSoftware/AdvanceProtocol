@@ -1,6 +1,6 @@
 extends Node
 ## Task 3.4: налаштування гравця у user://settings.cfg (ConfigFile).
-## Гучність і якість лише зберігаються — споживачі зʼявляться у Фазі 5.
+## Гучність і якість лише зберігаються — споживачі з'являться у Фазі 5.
 
 const PATH: String = "user://settings.cfg"
 const QUALITY_MAX: int = 2

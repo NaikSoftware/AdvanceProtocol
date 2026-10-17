@@ -42,7 +42,7 @@ static func check_strike(state: BattleState, a: Unit, t: Unit) -> String:
 		return "ERR_DRONE_CANNOT_TARGET_INFANTRY"
 	if not Rules.in_radius(a.pos, t.pos, RANGE):
 		return "ERR_OUT_OF_RANGE"
-	# §3.5: той самий гейт, що й у check_shot(), — seen, а не visible. Над розвіданою
+	# §3.5: та сама перевірка, що й у check_shot(), — `seen`, а не `visible`. Над розвіданою
 	# землею ця перевірка інертна (§3.9 у docs/rules/vision-and-fog.md) і кусає лише
 	# там, де ніхто з цього боку ще не був. Лишається саме тому: дрон не має бити
 	# в тайл, про який власник не знає нічого.

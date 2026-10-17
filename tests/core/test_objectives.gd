@@ -20,7 +20,7 @@ func test_objective_becomes_known_once_observed() -> void:
 	assert_true(Objectives.at(state, Vector2i(3, 3)).seen_by[0])
 
 func test_an_objective_scouted_by_a_unit_that_died_is_still_remembered() -> void:
-	# §3.5/§3.10: гейт «ціль побачено» — розвідана земля, а не погляд просто зараз.
+	# §3.5/§3.10: умова «ціль побачено» — розвідана земля, а не погляд просто зараз.
 	# Реальний розрив між цими двома є, і ось він: BattleState.start() праймить
 	# видимість УСІМ, але Objectives.refresh_seen() з нього не викликається — вона
 	# чекає на begin_turn() свого гравця. Якщо розвідник гине між цими двома
@@ -104,7 +104,7 @@ func test_an_eliminated_player_cannot_claim_the_objectives() -> void:
 	# Передумова записана явно: вибулий гравець ТРИМАЄ достатньо цілей, тож єдине,
 	# що стоїть між ним і перемогою, — перевірка eliminated. Без цього рядка тест
 	# лишався б істинним і тоді, коли гравець просто нічого не тримає, і мовчки
-	# перестав би пришпилювати те, що названо в його імені.
+	# перестав би фіксувати те, що названо в його імені.
 	assert_eq(Objectives.held_by(state, 0), 3, "передумова: умову цілей виконано")
 	Objectives.check_victory(state, 0, 3)
 	assert_eq(state.winner, BattleState.NO_WINNER, "вибулий гравець не заявляє умову цілей")
