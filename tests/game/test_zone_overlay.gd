@@ -6,10 +6,8 @@ extends GutTest
 ## не читається назад під headless-запуском.
 ##
 ## R15 → PO-скарга «контурно, не заливкою»: ZoneOverlay малює РЕБРА зони
-## (BoardView.draw_contour), а не тайли (суцільний квадрат на тайл). Головний
-## доказ — _layer_highlights для LAYER_ZONES лишається порожнім завжди
-## (test_show_for_never_touches_the_tile_fill_layer нижче): це і відрізняє
-## контур від fill структурно, без єдиного знімка екрана.
+## (BoardView.draw_contour), а не тайли: перевіряються сегменти контуру
+## (ребра), а не знімок екрана.
 
 const BoardViewScene := preload("res://game/battle/board_view.tscn")
 

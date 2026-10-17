@@ -297,16 +297,19 @@ func hp_ratio() -> float:
 ## завширшки ratio — одна текстура, один спрайт. Заливка росте зліва
 ## направо, як у референсі; старий scale.x стискав смугу до центру.
 static func _hp_bar_texture(ratio: float) -> ImageTexture:
-	var key: Array = ["hp", ratio]
+	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
+	var fill_width: int = roundi(float(inner.size.x) * ratio)
+	# Ключ — ціла ширина заливки: різних текстур не більше, ніж пікселів смуги.
+	var key: Array = ["hp", fill_width]
 	if _texture_cache.has(key):
 		return _texture_cache[key]
 	var image := Image.create(_HP_BAR_SIZE.x, _HP_BAR_SIZE.y, false, Image.FORMAT_RGBA8)
 	image.fill(_HP_BAR_FRAME_COLOR)
-	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
 	image.fill_rect(inner, _HP_BAR_BACK_COLOR)
-	var fill_width: int = roundi(float(inner.size.x) * ratio)
 	if fill_width > 0:
-		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), Color.RED.lerp(Color.GREEN, ratio))
+		# Колір з показаної ширини, а не з ratio: одна ширина — один вигляд.
+		var shown: float = float(fill_width) / float(inner.size.x)
+		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), Color.RED.lerp(Color.GREEN, shown))
 	_texture_cache[key] = ImageTexture.create_from_image(image)
 	return _texture_cache[key]
 

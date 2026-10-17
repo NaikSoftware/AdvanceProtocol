@@ -476,13 +476,24 @@ func test_app_paused_and_close_request_save_running_match() -> void:
 			BattleSerializer.to_dict(_service.state), "у файлі рівно живий стан")
 
 
-func test_app_paused_after_match_over_writes_no_save() -> void:
+func test_app_paused_after_match_over_deletes_stale_autosave() -> void:
 	await _two_riflemen()
-	_service.state.winner = 0
-	assert_true(_service.state.is_over())
-	DirAccess.remove_absolute(TEST_SAVE)
 	_screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
-	assert_false(FileAccess.file_exists(TEST_SAVE), "завершений матч не зберігається")
+	assert_true(FileAccess.file_exists(TEST_SAVE), "передумова: автозбереження посеред матчу")
+	_service.state.winner = 0
+	_screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	assert_false(FileAccess.file_exists(TEST_SAVE), "завершений матч не можна продовжити")
+
+
+## Гейт передачі: «назад» не відкриває паузу під ним (її побачив би гравець, що заходить).
+func test_back_gesture_does_nothing_behind_the_handover_gate() -> void:
+	await _two_riflemen()
+	await _end_turn()
+	assert_true(_gate().visible)
+	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	assert_false(_screen.get_node("%PauseMenu").visible)
+	await _confirm_gate()
+	assert_false(_screen.get_node("%PauseMenu").visible, "і після гейта пауза не чекає")
 
 
 ## Кидок дошки гравцем A + швидкий End Turn: після гейта камера стоїть рівно на юніті B і не дрейфує.

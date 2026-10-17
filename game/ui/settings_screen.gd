@@ -64,8 +64,9 @@ func _on_quality_pressed(level: int) -> void:
 
 
 func _on_slider_released(_changed: bool) -> void:
-	_dirty = false
-	_persist.call()
+	if _dirty:
+		_dirty = false
+		_persist.call()
 
 
 func _on_back_pressed() -> void:

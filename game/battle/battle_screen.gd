@@ -263,11 +263,14 @@ func _exit_tree() -> void:
 
 
 ## Жест «назад»: пауза відкрита — закриваємо як Resume, інакше відкриваємо.
-## Згортання/закриття застосунку — автозбереження (save_current сам відмовляє
-## завершеному матчу). Гейт при Continue вмикається наявним шляхом, нічого не відкриваємо.
+## Згортання/закриття застосунку — автозбереження (save_current сам видаляє
+## збереження завершеного матчу, тож застарілий автосейв не воскресить виграний бій). Гейт при Continue вмикається наявним шляхом, нічого не відкриваємо.
 func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_WM_GO_BACK_REQUEST:
+			# Гейт передачі: пауза під ним дісталась би гравцеві, що заходить.
+			if _gate.visible:
+				return
 			# Закриваємо верхній оверлей: налаштування, інакше пауза.
 			if is_instance_valid(_settings) and not _settings.is_queued_for_deletion():
 				_settings.get_node("%BackButton").pressed.emit()
@@ -276,7 +279,7 @@ func _notification(what: int) -> void:
 			else:
 				_pause.show()
 		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST:
-			if _match_service != null and _match_service.state != null and not _match_service.state.is_over():
+			if _match_service != null and _match_service.state != null:
 				_match_service.save_current(save_path)
 
 
