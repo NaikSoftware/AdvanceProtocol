@@ -154,6 +154,7 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	var out: Array[Events.BattleEvent] = []
 	var applied: int = mini(dmg, target.hp)
 	target.hp -= applied
+	state.damage_dealt[attacker.owner] += applied
 	out.append(Events.DamageDealt.new(target.id, applied, target.hp))
 
 	var before: int = state.experience[attacker.owner].level_of(attacker.unit_class())

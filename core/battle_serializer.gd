@@ -52,6 +52,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"objective_hold_target": state.objective_hold_target,
 		"units": units, "mines": mines, "objectives": objectives,
 		"vision": vision, "experience": experience,
+		"damage_dealt": state.damage_dealt.duplicate(),
 	}
 
 static func from_dict(data: Dictionary) -> BattleState:
@@ -132,6 +133,12 @@ static func from_dict(data: Dictionary) -> BattleState:
 		for l in (pool_data["level"] as Array):
 			pool.level.append(int(l))
 		state.experience.append(pool)
+
+	# Збереження до появи лічильника поля не мають — рахуємо з нуля, а не відмовляємо.
+	state.damage_dealt.clear()
+	var dealt: Array = data.get("damage_dealt", [])
+	for p in state.player_count:
+		state.damage_dealt.append(int(dealt[p]) if p < dealt.size() else 0)
 
 	return state
 
