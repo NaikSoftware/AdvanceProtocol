@@ -94,6 +94,9 @@ pause_resume,Продовжити,Resume
 pause_save_quit,Зберегти й вийти,Save and quit
 pause_settings,Налаштування,Settings
 pause_surrender,Здатися,Surrender
+pause_surrender_confirm,Здатися? Ви вибуваєте з матчу. У грі на двох він завершиться.,Surrender? You drop out of the match. In a two-player game it ends.
+pause_surrender_yes,Так - здатися,Yes - surrender
+pause_surrender_cancel,Скасувати,Cancel
 results_title,Матч завершено,Match over
 results_winner,Переможець,Winner
 results_losses,Втрати,Losses

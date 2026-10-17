@@ -312,8 +312,13 @@ func _map3() -> MapData:
 	return m
 
 
+func _confirm_surrender(pause: Control) -> void:
+	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+	(pause.get_node("%ConfirmYesButton") as Button).pressed.emit()
+
+
 func _surrender(screen: BattleScreen) -> void:
-	(screen.get_node("%PauseMenu").get_node("%SurrenderButton") as Button).pressed.emit()
+	_confirm_surrender(screen.get_node("%PauseMenu"))
 	for i in 6:
 		_finish_all_processed_tweens()
 		await wait_process_frames(1)
@@ -492,6 +497,37 @@ func test_surrender_while_events_play_keeps_pause_open() -> void:
 	var pause: Control = screen.get_node("%PauseMenu")
 	pause.show()
 
-	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+	_confirm_surrender(pause)
 
 	assert_true(pause.visible, "заблоковане натискання не зникає мовчки")
+
+
+func test_surrender_button_only_asks_and_cancel_does_not_concede() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, service)
+	var pause: Control = screen.get_node("%PauseMenu")
+	pause.show()
+
+	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+	assert_false(service.state.is_over(), "саме натискання лише питає")
+	assert_true(pause.get_node("%ConfirmBox").visible)
+	assert_false(pause.get_node("%ResumeButton").visible)
+
+	(pause.get_node("%ConfirmCancelButton") as Button).pressed.emit()
+	assert_false(service.state.is_over())
+	assert_false(pause.get_node("%ConfirmBox").visible)
+	assert_true(pause.get_node("%SurrenderButton").visible)
+	assert_true(pause.visible)
+
+
+func test_reopening_pause_resets_confirm_state() -> void:
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, _service())
+	var pause: Control = screen.get_node("%PauseMenu")
+	pause.show()
+	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+	pause.hide()
+	pause.show()
+	assert_false(pause.get_node("%ConfirmBox").visible)
+	assert_true(pause.get_node("%SurrenderButton").visible)
