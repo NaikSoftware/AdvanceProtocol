@@ -424,6 +424,7 @@ func test_loading_a_finished_save_fails_and_continue_hides() -> void:
 	assert_false(menu.continue_saved(b, TEST_SAVE))
 	assert_null(b.state)
 	assert_false((menu.get_node("%ContinueButton") as Button).visible)
+	assert_false(FileAccess.file_exists(TEST_SAVE), "мертве збереження прибирається")
 
 
 func test_save_failure_keeps_pause_open_and_shows_error() -> void:

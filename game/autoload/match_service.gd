@@ -96,7 +96,11 @@ func delete_save(path: String) -> void:
 
 func load_saved(path: String) -> bool:
 	var loaded: BattleState = BattleSerializer.load_from(path)
-	if loaded == null or loaded.is_over():
+	if loaded == null:
+		return false
+	if loaded.is_over():
+		# Інакше «Продовжити» з'являється знову при кожному поверненні в меню.
+		delete_save(path)
 		return false
 	state = loaded
 	players = loaded.player_count
