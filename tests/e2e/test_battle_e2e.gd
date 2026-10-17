@@ -301,14 +301,14 @@ func test_retaliation_ap_cost_is_for_attackers_turn_only() -> void:
 
 
 func test_engineer_never_retaliates() -> void:
-	# Танк (95) по сапері (броня front 10), сід 7: кидки 11 (0..23) і 1 (0..2):
+	# Танк (95) по інженері (броня front 10), сід 7: кидки 11 (0..23) і 1 (0..2):
 	# int(71.25 + 11 - (7.5 + 1)) = 73 -> 200 - 73 = 127.
-	# Впритул: радіус сапера 1, тож лише так відсутність відповіді — наслідок правила, а не дальності.
+	# Впритул: радіус інженера 1, тож лише так відсутність відповіді — наслідок правила, а не дальності.
 	await _boot(9, 7, [_spawn(MEDIUM_TANK, 0, Vector2i(4, 2), E), _spawn(ENGINEER, 1, Vector2i(4, 3), N)])
 	await _act(Vector2i(4, 2), Vector2i(4, 3))
 	var eng: Unit = _unit(2)
 	assert_eq(eng.hp, 127)
-	assert_eq(eng.ap, 68, "сапер не витрачає AP на відповідь")
+	assert_eq(eng.ap, 76, "інженерна машина (max_ap 76) не витрачає AP на відповідь")
 	assert_eq(eng.facing, N, "і не повертається")
 	assert_eq(_unit(1).hp, 400)
 	assert_eq(_events_of(Events.ShotRetaliated).size(), 0)
@@ -400,7 +400,7 @@ func test_turn_cycle_gate_fog_and_ap_restore() -> void:
 	assert_null(_screen.unit_view_for(2))
 
 
-## Два важкі танки (атака 121) по саперу (200 HP, броня front 10), обидва вогонь з півночі
+## Два важкі танки (атака 121) по інженеру (200 HP, броня front 10), обидва вогонь з півночі
 ## -> лоб. Кидки сіда 7 (межі 0..30, 0..2): постріл 1 -> 90, 2 -> 85, 3 -> 82
 ## (int(90.75 + r - (7.5 + r2))). 200 -> 110 -> 25 -> третій постріл (82) добиває:
 ## застосовується лише 25 (min(dmg, hp)).
@@ -429,6 +429,6 @@ func test_play_to_elimination_ends_match() -> void:
 	assert_eq(_service.state.winner, 0)
 	assert_signal_emitted(_screen, "match_finished")
 	assert_true((_hud().get_node("%EndTurnButton") as Button).disabled, "після кінця матчу ходу не завершити")
-	assert_eq(_events_of(Events.ShotRetaliated).size(), 0, "сапер за весь бій жодного разу не відповів")
+	assert_eq(_events_of(Events.ShotRetaliated).size(), 0, "інженер за весь бій жодного разу не відповів")
 
 

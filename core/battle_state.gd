@@ -144,6 +144,19 @@ func known_occupied_map(player: int) -> Dictionary:
 			out[u.pos] = u.id
 	return out
 
+func known_blocked_map(player: int) -> Dictionary:
+	## Те, з чого ПЛАНУЄТЬСЯ хід (§3.2): known_occupied_map() плюс відомі гравцеві
+	## ворожі міни. Рішення власника (§3.11): знайдена міна — перешкода, її обʼїжджають,
+	## як зайнятий тайл, а не наступають на неї наосліп після того, як інженер її вже
+	## показав. Окремий метод, а не домішка в known_occupied_map(): ту читають види
+	## юнітів і чекають там лише id юнітів. Значення для міни — −1, бо юніта там немає.
+	## Своя міна сюди не входить — під власником вона не вибухає (Mines.step_on()).
+	var out: Dictionary = known_occupied_map(player)
+	for m in mines:
+		if m.owner != player and m.known_to[player] and not out.has(m.pos):
+			out[m.pos] = -1
+	return out
+
 func is_over() -> bool:
 	return winner != NO_WINNER
 
@@ -203,6 +216,31 @@ func advance_player() -> int:
 		if not eliminated[next]:
 			break
 	return next
+
+func pass_turn() -> Array[Events.BattleEvent]:
+	## Спільний хвіст EndTurnCommand і ConcedeCommand: хід переходить до наступного
+	## гравця в колі. Одне місце, бо обидва шляхи кінчають хід атакувальника, і обидва
+	## мусять повертати AP тим, хто відповідав йому вогнем.
+	##
+	## §3.3.1: відповідь коштує AP «до кінця ходу атакувальника». begin_turn() поповнює
+	## лише юніти активного гравця, тож у грі на трьох відповідач лишався б без AP і
+	## весь хід наступного суперника. Повертаємо ДО begin_turn(): у грі на двох той
+	## однаково поповнить власника, і повернення там нічого не змінює. ApChanged не
+	## випускається — вигляд AP із потоку не читає (event_player), а HUD бере його зі
+	## стану.
+	# Усі юніти, не лише живі: відповідач, якого добили пізніше того ж ходу, не має
+	# нести застарілий запис далі (і в збереження).
+	for id in units:
+		var u: Unit = units[id]
+		if u.ap_before_retaliation >= 0 and u.is_alive():
+			u.ap = u.ap_before_retaliation
+			u.has_fired = false
+		u.ap_before_retaliation = -1
+	var previous: int = active_player
+	active_player = advance_player()
+	if active_player <= previous:
+		turn_number += 1
+	return begin_turn()
 
 func check_elimination() -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []

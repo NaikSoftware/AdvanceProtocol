@@ -51,6 +51,11 @@ func validate(state: BattleState) -> String:
 		Action.DEMOLISH_BRIDGE:
 			if state.board.kind_at(target_pos) != Terrain.Kind.BRIDGE:
 				return "ERR_NO_BRIDGE_THERE"
+			# Рішення власника: ворога на мосту можна скинути разом із мостом, свого — ні.
+			# Сусідній тайл завжди в ромбі огляду інженера, тож відмова нічого не виказує.
+			var on_bridge: Unit = state.unit_at(target_pos)
+			if on_bridge != null and on_bridge.owner == e.owner:
+				return "ERR_TILE_OCCUPIED"
 		Action.REPAIR_BRIDGE:
 			if state.board.kind_at(target_pos) != Terrain.Kind.BRIDGE_DESTROYED:
 				return "ERR_NOTHING_TO_REPAIR"
@@ -90,6 +95,16 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE:
 				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE_DESTROYED)
 				out.append(Events.BridgeChanged.new(target_pos, true))
+				# Ворог на мосту падає разом із ним (рішення власника): та сама низка
+				# подій, що й від смертельного влучання. Шкода — власникові інженера, як
+				# від міни, але не в досвід: інженер його не має (§3.7).
+				var victim: Unit = state.unit_at(target_pos)
+				if victim != null:
+					state.damage_dealt[e.owner] += victim.hp
+					out.append(Events.DamageDealt.new(victim.id, victim.hp, 0))
+					victim.hp = 0
+					out.append(Events.UnitDestroyed.new(victim.id, victim.pos))
+					out.append_array(state.check_elimination())
 		Action.REPAIR_BRIDGE:
 			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE_DESTROYED:
 				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE)
@@ -122,7 +137,9 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	e.exhaust()
 	out.append(Events.ApChanged.new(unit_id, 0))
 	# BattleState.refresh_vision_all()'s doc: лише смерть чужого юніта здатна
-	# змінити чужу видимість. Жодна з дій вище не може відняти HP (REPAIR_UNIT
-	# лише додає) — тож досить оновити видимість власника юніта, що діяв.
-	out.append_array(state.refresh_vision(e.owner))
+	# змінити чужу видимість. Убити може тільки підрив мосту з ворогом на ньому —
+	# тоді прохід по всіх гравцях; решта дій HP не віднімає, і досить оновити
+	# видимість власника юніта, що діяв.
+	var killed: bool = out.any(func(ev: Events.BattleEvent) -> bool: return ev is Events.UnitDestroyed)
+	out.append_array(state.refresh_vision_all() if killed else state.refresh_vision(e.owner))
 	return out

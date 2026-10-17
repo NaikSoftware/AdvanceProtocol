@@ -20,7 +20,7 @@ func test_set_and_read_kind() -> void:
 	assert_eq(b.penalty_at(Vector2i(2, 2)), Terrain.penalty(Terrain.Kind.FOREST, Terrain.GroundState.DRY))
 
 func test_out_of_bounds_is_impassable() -> void:
-	assert_false(_board().is_passable(Vector2i(-1, 0)))
+	assert_false(_board().penalty_at(Vector2i(-1, 0)) < Terrain.IMPASSABLE)
 
 func test_movement_is_four_directional() -> void:
 	assert_eq(Board.DIRS_4.size(), 4, "§3.1: рух лише ортогональний")
@@ -49,10 +49,10 @@ func test_out_of_bounds_does_not_alias_to_real_tiles() -> void:
 	# Out-of-bounds coordinates must be rejected outright, not folded into the
 	# flat tile index (y * width + x), where they could silently alias onto a
 	# real tile's data (e.g. (8, 0) would land on the same index as (0, 1)).
-	assert_false(b.is_passable(Vector2i(-1, 0)), "negative x should be impassable")
-	assert_false(b.is_passable(Vector2i(8, 0)), "x >= width should be impassable")
-	assert_false(b.is_passable(Vector2i(0, -1)), "negative y should be impassable")
-	assert_false(b.is_passable(Vector2i(0, 6)), "y >= height should be impassable")
+	assert_false(b.penalty_at(Vector2i(-1, 0)) < Terrain.IMPASSABLE, "negative x should be impassable")
+	assert_false(b.penalty_at(Vector2i(8, 0)) < Terrain.IMPASSABLE, "x >= width should be impassable")
+	assert_false(b.penalty_at(Vector2i(0, -1)) < Terrain.IMPASSABLE, "negative y should be impassable")
+	assert_false(b.penalty_at(Vector2i(0, 6)) < Terrain.IMPASSABLE, "y >= height should be impassable")
 	# Verify the real tiles were not corrupted
 	assert_eq(b.kind_at(Vector2i(0, 1)), Terrain.Kind.FOREST)
 	assert_eq(b.kind_at(Vector2i(7, 5)), Terrain.Kind.WATER)

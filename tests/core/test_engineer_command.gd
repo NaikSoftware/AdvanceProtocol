@@ -33,7 +33,59 @@ func test_demolish_bridge_reshapes_the_map() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
 	EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(4, 3)).apply(state)
 	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE_DESTROYED)
-	assert_false(state.board.is_passable(Vector2i(4, 3)))
+	assert_false(state.board.penalty_at(Vector2i(4, 3)) < Terrain.IMPASSABLE)
+
+## Рішення власника: міст підривається разом із ворогом, що на ньому стоїть, —
+## юніт гине, шкода зараховується власникові інженера (без досвіду, §3.7). Свій юніт
+## на мосту — заборона: інженер не скидає своїх у річку.
+func test_demolishing_a_bridge_under_an_enemy_destroys_it() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var enemy: Unit = state.add_unit(5, 1, Vector2i(4, 3), 0)
+	var reserve: Unit = state.add_unit(5, 1, Vector2i(9, 9), 0)
+	var hp_before: int = enemy.hp
+	var cmd: EngineerCommand = EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(4, 3))
+	assert_eq(cmd.validate(state), "", "ворог на мосту не заважає підриву")
+	var events: Array = cmd.apply(state)
+
+	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE_DESTROYED)
+	assert_false(enemy.is_alive(), "юніт на підірваному мосту гине")
+	assert_eq(state.damage_dealt[0], hp_before, "уся решта hp — на рахунок власника інженера")
+	# Не лише клас ENGINEER (у нього порогів нема, тож там завжди 0): жоден клас
+	# гравця 0 не мусить отримати за це вбивство досвіду.
+	assert_eq(state.experience[0].xp, [0, 0, 0, 0, 0] as Array[int], "підрив мосту не дає досвіду жодному класу")
+	var dealt: int = -1
+	var destroyed: int = -1
+	for i in events.size():
+		if events[i] is Events.DamageDealt and events[i].unit_id == enemy.id:
+			dealt = i
+			assert_eq(events[i].amount, hp_before)
+		if events[i] is Events.UnitDestroyed and events[i].unit_id == enemy.id:
+			destroyed = i
+	assert_true(dealt >= 0 and destroyed > dealt, "DamageDealt, потім UnitDestroyed — як від смертельного влучання")
+	assert_true(reserve.is_alive() and not state.is_over(), "у гравця 1 лишився юніт — матч триває")
+
+func test_demolishing_a_bridge_under_the_last_enemy_unit_ends_the_match() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.add_unit(5, 1, Vector2i(4, 3), 0)
+	var events: Array = EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(4, 3)).apply(state)
+	assert_eq(state.winner, 0, "останній юніт гравця 1 загинув — check_elimination() завершує матч")
+	var eliminated: bool = false
+	for ev in events:
+		if ev is Events.PlayerEliminated and ev.player == 1:
+			eliminated = true
+	assert_true(eliminated, "PlayerEliminated у потоці подій")
+
+func test_demolishing_a_bridge_under_an_own_unit_is_rejected() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var own: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	var cmd: EngineerCommand = EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(4, 3))
+	assert_eq(cmd.validate(state), "ERR_TILE_OCCUPIED")
+	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE, "міст цілий")
+	assert_true(own.is_alive())
+	assert_eq(e.ap, e.max_ap(), "AP не списано")
 
 func test_repair_bridge_restores_it() -> void:
 	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE_DESTROYED)
@@ -50,10 +102,10 @@ func test_repair_heals_a_damaged_friendly_unit() -> void:
 	assert_true(friend.hp <= friend.max_hp(), "лікування не перевищує максимум")
 
 func test_repair_amount_at_full_ap_ranges_up_to_the_ap_bonus() -> void:
-	# §3.8: (40 + rand(0, ap_left - fire_cost)) / 2. Engineer squad (type 11):
-	# max_ap 68, fire_cost 20 -> n = 48 at full AP.
-	# roll=0   (mininum of rand(0,48))  -> (40+0)/2  = 20  — the floor.
-	# roll=48  (maximum of rand(0,48))  -> (40+48)/2 = 44  — the ceiling.
+	# §3.8: (40 + rand(0, ap_left - fire_cost)) / 2. Engineer vehicle (type 11):
+	# max_ap 76, fire_cost 30 -> n = 46 at full AP.
+	# roll=0   (mininum of rand(0,46))  -> (40+0)/2  = 20  — the floor.
+	# roll=46  (maximum of rand(0,46))  -> (40+46)/2 = 43  — the ceiling.
 	# Sampled across many seeds (same idiom as test_rules_damage.gd's _samples()),
 	# so the assertion is on the formula's exact analytical bounds, not on one
 	# seed's arbitrary output.
@@ -67,7 +119,7 @@ func test_repair_amount_at_full_ap_ranges_up_to_the_ap_bonus() -> void:
 		lo = mini(lo, v)
 		hi = maxi(hi, v)
 	assert_eq(lo, 20, "roll=0 -> (40+0)/2 = 20")
-	assert_eq(hi, 44, "roll=48 -> (40+48)/2 = 44 — повні AP піднімають стелю")
+	assert_eq(hi, 43, "roll=46 -> (40+46)/2 = 43 — повні AP піднімають стелю")
 
 func test_repair_amount_is_exactly_the_floor_when_ap_is_spent() -> void:
 	# ap_left == fire_cost -> n = 0. Rules.roll() returns 0 for n <= 0 WITHOUT
@@ -92,15 +144,15 @@ func test_repair_apply_produces_the_hand_derived_hp_delta() -> void:
 	# the very first draw. Independently probed with RandomNumberGenerator
 	# directly (NOT via EngineerCommand/repair_amount — the RNG primitive
 	# Rules.roll() itself wraps, not the code under test):
-	#   seed=21, first randi_range(0, 48) == 11
-	# n = 48 because the engineer (type 11) is at full AP (68) minus its
-	# fire_cost (20). repair_amount = (40 + 11) / 2 = 25 (int division of
-	# 51/2 truncates). friend starts at hp=100, so hp_left = 125.
+	#   seed=21, first randi_range(0, 46) == 41
+	# n = 46 because the engineer vehicle (type 11) is at full AP (76) minus its
+	# fire_cost (30). repair_amount = (40 + 41) / 2 = 40 (int division of
+	# 81/2 truncates). friend starts at hp=100, so hp_left = 140.
 	var e: Unit = _engineer(Vector2i(4, 4))
 	var friend: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
 	friend.hp = 100
 	EngineerCommand.create(e.id, EngineerCommand.Action.REPAIR_UNIT, Vector2i(4, 3)).apply(state)
-	assert_eq(friend.hp, 125, "seed 21: roll=11 -> (40+11)/2=25 -> 100+25")
+	assert_eq(friend.hp, 140, "seed 21: roll=41 -> (40+41)/2=40 -> 100+40")
 
 func test_repair_of_enemy_unit_is_rejected() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))

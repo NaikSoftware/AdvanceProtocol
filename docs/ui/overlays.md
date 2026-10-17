@@ -126,9 +126,10 @@ inside an enemy's ring, which are deliberately computed from that unit alone. A 
 implementation of either geometry in the renderer is exactly the drift this document exists to
 prevent.
 
-**The movement zones are drawn from the fog-filtered occupancy, which is also what the move is
-planned against** ([§3.2](../rules/movement-and-terrain.md)). The overlay and the order agree by
-construction: what you are shown as reachable is exactly what the game will attempt.
+**The movement zones are drawn from the fog-filtered occupancy plus the enemy mines you already
+know of, which is also what the move is planned against** ([§3.2](../rules/movement-and-terrain.md),
+[§3.11](../rules/vision-and-fog.md)). The overlay and the order agree by construction: what you
+are shown as reachable is exactly what the game will attempt.
 
 That matters more than it looks. Had the zones been drawn from the true occupancy — every live
 unit, including invisible ones — an unseen enemy would punch a unit-shaped hole in the gold

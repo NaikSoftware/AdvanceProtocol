@@ -356,7 +356,7 @@ func test_confirm_shot_then_tap_does_not_reach_stale_zone_tiles() -> void:
 	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)  # medium tank, ap 48, fire_cost 20
 	# Інженер ніколи не відповідає (§3.6/§3.3.1) — атакувальник гарантовано
 	# лишається живим, тож перевіряється рівно нульовий AP, а не смерть.
-	var target: Unit = service.state.add_unit(11, 1, Vector2i(6, 5), 0)  # engineer squad
+	var target: Unit = service.state.add_unit(11, 1, Vector2i(6, 5), 0)  # engineer vehicle
 	_begin_and_drain()
 	controller.tap_cell(u.pos)
 	# Передумова: (7,5) — усередині ЗІ старого AP=48 зони (2 тайли, cost 20).
@@ -420,3 +420,21 @@ func test_zone_uses_known_occupancy_not_true_occupancy() -> void:
 	assert_not_null(overlay.last_zones)
 	assert_true(overlay.last_zones.can_reach(enemy.pos),
 		"зона мусить включати клітинку невидимого ворога — вона порахована проти known_occupied_map(), не occupied_map()")
+
+
+## §3.11, рішення власника: знайдена ворожа міна — перешкода, і контур зони
+## мусить її обгинати рівно так, як MoveCommand її обʼїжджає. Невідома міна в
+## зону потрапляє — інакше форма контуру виказала б її (§3.5).
+func test_zone_excludes_a_known_enemy_mine_but_not_an_unknown_one() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)  # medium tank, owner 0
+	Mines.place(service.state, Vector2i(5, 6), 1)
+	Mines.place(service.state, Vector2i(6, 5), 1)
+	Mines.mine_at(service.state, Vector2i(5, 6)).known_to[0] = true
+	_begin_and_drain()
+
+	controller.tap_cell(u.pos)
+
+	assert_not_null(overlay.last_zones)
+	assert_false(overlay.last_zones.can_reach(Vector2i(5, 6)), "відома ворожа міна — не в зоні")
+	assert_true(overlay.last_zones.can_reach(Vector2i(6, 5)), "невідома міна не видна формою зони")

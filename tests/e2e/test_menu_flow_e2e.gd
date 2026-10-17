@@ -152,7 +152,7 @@ func _move_one_unit() -> bool:
 	var state: BattleState = MatchService.state
 	var viewport_rect: Rect2 = get_viewport().get_visible_rect().grow(-120.0)
 	for u: Unit in state.units_of(state.active_player):
-		var occ: Dictionary = state.known_occupied_map(u.owner)
+		var occ: Dictionary = state.known_blocked_map(u.owner)
 		occ.erase(u.pos)
 		var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occ)
 		var upos: Vector2 = rig.unproject(IsoCameraRig.cell_to_world(u.pos))

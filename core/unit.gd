@@ -11,6 +11,11 @@ var hp: int = 0
 var ap: int = 0
 var drones_left: int = 0
 var has_fired: bool = false
+## §3.3.1: AP перед відповіддю вогнем, −1 — не відповідав. Відповідь забирає AP лише
+## до кінця ходу атакувальника, а не до власного ходу юніта: у грі на трьох між ними
+## ходить ще один суперник. has_fired окремо не зберігається — відповідає лише юніт
+## з has_fired == false, тож після повернення AP він знову false.
+var ap_before_retaliation: int = -1
 
 static func create(p_id: int, p_type_id: int, p_owner: int, p_pos: Vector2i, p_facing: int) -> Unit:
 	var u := Unit.new()

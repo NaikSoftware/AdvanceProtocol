@@ -90,8 +90,9 @@ func select_unit(unit: Unit) -> void:
 func _recompute_zones_for_selected() -> void:
 	var state: BattleState = _match_service.state
 	if _selected_unit != null and _selected_unit.is_alive() and _selected_unit.owner == state.active_player:
-		# R5: known, ніколи occupied_map() — це і є весь зміст рішення.
-		var occupied: Dictionary = state.known_occupied_map(_selected_unit.owner)
+		# R5: known, ніколи occupied_map() — це і є весь зміст рішення. Те саме
+		# джерело, що й у MoveCommand: разом із відомими ворожими мінами (§3.11).
+		var occupied: Dictionary = state.known_blocked_map(_selected_unit.owner)
 		occupied.erase(_selected_unit.pos)  # власний тайл юніта завжди прохідний для нього самого
 		_zones = Pathing.compute_zones(state.board, _selected_unit, occupied)
 		_zone_overlay.show_for(_selected_unit, _zones)

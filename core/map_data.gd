@@ -37,7 +37,13 @@ func to_board() -> Board:
 	return board
 
 
-func populate(state: BattleState) -> void:
+## Повертає false і не додає НІЧОГО, якщо старт юніта має facing поза 0..7: так само,
+## як BattleSerializer відкидає збереження цілим, а не відкриває його частково.
+func populate(state: BattleState) -> bool:
+	for spawn in spawns:
+		var f: int = int(spawn.get("facing", 0))
+		if f < 0 or f > 7:
+			return false
 	for spawn in spawns:
 		state.add_unit(
 			int(spawn["type_id"]),
@@ -50,3 +56,4 @@ func populate(state: BattleState) -> void:
 		# карта заявляє лише де вони стоять, не хто ними володіє на старті.
 		Objectives.add(state, pos, -1)
 	state.objective_hold_target = hold_target
+	return true

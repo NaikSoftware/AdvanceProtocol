@@ -40,10 +40,9 @@ const TYPES: Array[Dictionary] = [
 	{"id": 10, "name_key": "UNIT_HOWITZER", "unit_class": UnitClass.ARTILLERY,
 	 "attack": 180, "max_ap": 24, "max_hp": 200, "attack_range": 5, "fire_cost": 14,
 	 "armour": [15, 0, 0], "cross_country": 6, "vision": 3, "drones": 0},
-	{"id": 11, "name_key": "UNIT_ENGINEER_SQUAD", "unit_class": UnitClass.ENGINEER,
-	 "attack": 0, "max_ap": 68, "max_hp": 200, "attack_range": 1, "fire_cost": 20,
-	 "armour": [10, 5, 5], "cross_country": -5, "vision": 3, "drones": 0},
-	{"id": 12, "name_key": "UNIT_ENGINEER_VEHICLE", "unit_class": UnitClass.ENGINEER,
+	# Рішення власника: інженерного відділення немає, інженер — лише машина. Id — це
+	# індекс у масиві, тому машина посіла 11; збереження з типом 12 відкидаються.
+	{"id": 11, "name_key": "UNIT_ENGINEER_VEHICLE", "unit_class": UnitClass.ENGINEER,
 	 "attack": 0, "max_ap": 76, "max_hp": 200, "attack_range": 1, "fire_cost": 30,
 	 "armour": [10, 5, 5], "cross_country": -5, "vision": 3, "drones": 0},
 ]

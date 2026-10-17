@@ -1,7 +1,6 @@
 keys,uk,en
 UNIT_RIFLE_SQUAD,Стрілецьке відділення,Rifle Squad
 UNIT_ASSAULT_SQUAD,Штурмове відділення,Assault Squad
-UNIT_ENGINEER_SQUAD,Інженерне відділення,Engineer Squad
 UNIT_ENGINEER_VEHICLE,Інженерна машина,Engineer Vehicle
 UNIT_SCOUT_CAR,Розвідувальна машина,Scout Car
 UNIT_ARMOURED_CAR,Бронеавтомобіль,Armoured Car
@@ -16,6 +15,7 @@ ERR_NO_SUCH_UNIT,Немає такого юніта,No such unit
 ERR_NOT_YOUR_UNIT,Це не ваш юніт,Not your unit
 ERR_ALREADY_FIRED,Юніт уже стріляв цього ходу,Unit has already fired this turn
 ERR_OFF_BOARD,За межами поля,Off the board
+ERR_BAD_FACING,Недійсний напрямок,Invalid facing
 ERR_OUT_OF_RANGE,Поза дальністю,Out of range
 ERR_NO_SUCH_TARGET,Немає такої цілі,No such target
 ERR_FRIENDLY_FIRE,Не можна стріляти по своїх,Cannot fire on a friendly unit
@@ -24,7 +24,7 @@ ERR_NOT_ENOUGH_AP,Недостатньо очок дії,Not enough action point
 ERR_TARGET_NOT_VISIBLE,Ціль не видно,Target is not visible
 ERR_NO_DRONES_LEFT,Дронів не лишилось,No drones left
 ERR_DRONE_CANNOT_TARGET_INFANTRY,Дрон не б'є піхоту,Drone cannot target infantry
-ERR_NOT_AN_ENGINEER,Це не сапер,Unit is not an engineer
+ERR_NOT_AN_ENGINEER,Це не інженер,Unit is not an engineer
 ERR_NOT_ADJACENT,Ціль не на сусідній клітинці,Target is not on an adjacent tile
 ERR_MINE_ALREADY_THERE,Тут уже є міна,A mine is already here
 ERR_TILE_OCCUPIED,Клітинка зайнята,Tile is occupied
@@ -67,7 +67,7 @@ unit_class_infantry,Піхота,Infantry
 unit_class_light_vehicle,Легка техніка,Light vehicle
 unit_class_tank,Танк,Tank
 unit_class_artillery,Артилерія,Artillery
-unit_class_engineer,Сапери,Engineers
+unit_class_engineer,Інженери,Engineers
 app_title,Протокол Наступу,Advance Protocol
 common_back,Назад,Back
 menu_continue,Продовжити,Continue

@@ -19,18 +19,18 @@ func test_frozen_makes_offroad_cheaper() -> void:
 	assert_true(frozen < dry, "мерзла земля дешевша")
 
 func test_marsh_is_impassable_until_frozen() -> void:
-	assert_false(Terrain.is_passable(Terrain.Kind.MARSH, Terrain.GroundState.DRY))
-	assert_false(Terrain.is_passable(Terrain.Kind.MARSH, Terrain.GroundState.MUD))
-	assert_true(Terrain.is_passable(Terrain.Kind.MARSH, Terrain.GroundState.FROZEN),
+	assert_false(Terrain.penalty(Terrain.Kind.MARSH, Terrain.GroundState.DRY) < Terrain.IMPASSABLE)
+	assert_false(Terrain.penalty(Terrain.Kind.MARSH, Terrain.GroundState.MUD) < Terrain.IMPASSABLE)
+	assert_true(Terrain.penalty(Terrain.Kind.MARSH, Terrain.GroundState.FROZEN) < Terrain.IMPASSABLE,
 		"§3.12: на морозі болото стає прохідним")
 
 func test_water_is_never_passable() -> void:
 	for gs in [Terrain.GroundState.DRY, Terrain.GroundState.MUD, Terrain.GroundState.FROZEN]:
-		assert_false(Terrain.is_passable(Terrain.Kind.WATER, gs), "лід по воді — окрема фіча, не зараз")
+		assert_false(Terrain.penalty(Terrain.Kind.WATER, gs) < Terrain.IMPASSABLE, "лід по воді — окрема фіча, не зараз")
 
 func test_destroyed_bridge_is_impassable() -> void:
-	assert_true(Terrain.is_passable(Terrain.Kind.BRIDGE, Terrain.GroundState.DRY))
-	assert_false(Terrain.is_passable(Terrain.Kind.BRIDGE_DESTROYED, Terrain.GroundState.DRY))
+	assert_true(Terrain.penalty(Terrain.Kind.BRIDGE, Terrain.GroundState.DRY) < Terrain.IMPASSABLE)
+	assert_false(Terrain.penalty(Terrain.Kind.BRIDGE_DESTROYED, Terrain.GroundState.DRY) < Terrain.IMPASSABLE)
 
 func test_penalty_never_negative() -> void:
 	for kind in Terrain.Kind.values():

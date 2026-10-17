@@ -143,6 +143,7 @@ static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit
 	var level: int = state.experience[target.owner].level_of(target.unit_class())
 	var dmg: int = Rules.compute_damage(state.rng, target, original_attacker, level, sector, dist_sq)
 
+	target.ap_before_retaliation = target.ap  # повертається в BattleState.pass_turn()
 	target.exhaust()
 	out.append(Events.ShotRetaliated.new(target.id, original_attacker.id, sector))
 	out.append_array(_resolve_damage(state, target, original_attacker, dmg))
