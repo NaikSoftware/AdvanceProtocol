@@ -389,3 +389,15 @@ func test_retaliation_comes_from_ground_scouted_earlier_with_nobody_watching() -
 	assert_not_null(_shot_retaliated(events),
 		"§3.3.1 + §3.5: безкарність діє лише над землею, якої супротивник не розвідував НІКОЛИ")
 	assert_true(a.hp < attacker_hp_before, "відповідь мусить дійти")
+
+func test_retaliation_adds_to_the_retaliators_tally() -> void:
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 6)
+	state.begin_turn()
+	state.refresh_vision(t.owner)
+	var a_before: int = a.hp
+	var t_before: int = t.hp
+	FireCommand.create(a.id, t.id).apply(state)
+	assert_true(a.hp < a_before, "передумова: відповідь була")
+	assert_eq(state.damage_dealt[1], a_before - a.hp, "шкода відповіді — гравцю-відповідачу")
+	assert_eq(state.damage_dealt[0], t_before - t.hp)

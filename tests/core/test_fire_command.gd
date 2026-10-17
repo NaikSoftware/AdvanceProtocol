@@ -194,3 +194,20 @@ func test_preview_does_not_disturb_the_rng() -> void:
 	state.rng.seed = state.seed_value
 	Rules.roll(state.rng, 1000)
 	assert_eq(after, Rules.roll(state.rng, 1000), "прев'ю не має споживати кидки")
+
+func test_fire_adds_applied_damage_to_the_shooters_tally() -> void:
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	state.begin_turn()
+	var before: int = t.hp
+	FireCommand.create(a.id, t.id).apply(state)
+	assert_eq(state.damage_dealt[0], before - t.hp, "підсумок рахує фактично завдану шкоду")
+	assert_eq(state.damage_dealt[1], 0)
+
+func test_overkill_is_capped_at_the_targets_hp_in_the_tally() -> void:
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
+	t.hp = 5
+	state.begin_turn()
+	FireCommand.create(a.id, t.id).apply(state)
+	assert_eq(state.damage_dealt[0], 5)

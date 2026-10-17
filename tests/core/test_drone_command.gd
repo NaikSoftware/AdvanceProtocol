@@ -136,3 +136,11 @@ func test_drone_damage_feeds_infantry_pool() -> void:
 	state.begin_turn()
 	DroneCommand.create(a.id, t.id).apply(state)
 	assert_true(state.experience[0].xp[UnitTypes.UnitClass.INFANTRY] > 0)
+
+func test_drone_damage_adds_to_the_squad_owners_tally() -> void:
+	var a: Unit = _assault(Vector2i(2, 2))
+	var t: Unit = state.add_unit(8, 1, Vector2i(6, 2), 2)
+	state.begin_turn()
+	var before: int = t.hp
+	DroneCommand.create(a.id, t.id).apply(state)
+	assert_eq(state.damage_dealt[0], before - t.hp)

@@ -19,8 +19,8 @@ var router: Node = null
 
 
 ## Рядок на гравця: втрати (мертві юніти), завдана шкода, утримані цілі, рівні
-## досвіду за класами. Шкода: Experience.xp зберігає лише залишок після
-## підвищень рівня, тож повна сума = залишок + пороги вже пройдених рівнів.
+## досвіду за класами. Шкода — з state.damage_dealt, а не з досвіду: міни
+## шкодять, але досвіду саперу не дають.
 static func summarize(state: BattleState) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	for p in state.player_count:
@@ -29,18 +29,13 @@ static func summarize(state: BattleState) -> Array[Dictionary]:
 			if u.owner == p and not u.is_alive():
 				losses += 1
 		var pool: Experience = state.experience[p]
-		var damage: int = 0
 		var levels: Array[int] = []
 		for c in UnitTypes.UnitClass.values():
-			var spent: int = 0
-			for i in pool.level[c]:
-				spent += int(Experience.THRESHOLDS[c][i])
-			damage += pool.xp[c] + spent
 			levels.append(pool.level[c])
 		rows.append({
 			"player": p,
 			"losses": losses,
-			"damage": damage,
+			"damage": state.damage_dealt[p],
 			"objectives": Objectives.held_by(state, p),
 			"levels": levels,
 		})
