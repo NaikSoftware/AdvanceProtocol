@@ -217,6 +217,28 @@ func advance_player() -> int:
 			break
 	return next
 
+func pass_turn() -> Array[Events.BattleEvent]:
+	## Спільний хвіст EndTurnCommand і ConcedeCommand: хід переходить до наступного
+	## гравця в колі. Одне місце, бо обидва шляхи кінчають хід атакувальника, і обидва
+	## мусять повертати AP тим, хто відповідав йому вогнем.
+	##
+	## §3.3.1: відповідь коштує AP «до кінця ходу атакувальника». begin_turn() поповнює
+	## лише юніти активного гравця, тож у грі на трьох відповідач лишався б без AP і
+	## весь хід наступного суперника. Повертаємо ДО begin_turn(): у грі на двох той
+	## однаково поповнить власника, і повернення там нічого не змінює. ApChanged не
+	## випускається — вигляд AP із потоку не читає (event_player), а HUD бере його зі
+	## стану.
+	for u in alive_units():
+		if u.ap_before_retaliation >= 0:
+			u.ap = u.ap_before_retaliation
+			u.has_fired = false
+			u.ap_before_retaliation = -1
+	var previous: int = active_player
+	active_player = advance_player()
+	if active_player <= previous:
+		turn_number += 1
+	return begin_turn()
+
 func check_elimination() -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []
 	for p in player_count:

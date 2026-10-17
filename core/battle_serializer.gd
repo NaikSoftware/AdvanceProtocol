@@ -22,6 +22,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 			"id": u.id, "type_id": u.type_id, "owner": u.owner,
 			"x": u.pos.x, "y": u.pos.y, "facing": u.facing,
 			"hp": u.hp, "ap": u.ap, "drones_left": u.drones_left, "has_fired": u.has_fired,
+			"ap_before_retaliation": u.ap_before_retaliation,
 		})
 	var mines: Array = []
 	for m in state.mines:
@@ -95,6 +96,8 @@ static func from_dict(data: Dictionary) -> BattleState:
 		u.ap = int(u_data["ap"])
 		u.drones_left = int(u_data["drones_left"])
 		u.has_fired = bool(u_data["has_fired"])
+		# Старі збереження поля не мають — там ніхто й не чекає повернення AP.
+		u.ap_before_retaliation = int(u_data.get("ap_before_retaliation", -1))
 		state.units[u.id] = u
 
 	state.mines.clear()

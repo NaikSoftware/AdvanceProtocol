@@ -62,7 +62,9 @@ Retaliation
 
 **What the AP cost actually buys, stated carefully because it is easy to overclaim.** Firing back
 zeroes the retaliator's AP for the remainder of the *attacker's* turn, so it cannot answer a second
-shot before its own turn comes round. It does **not** cost the unit its own turn: `refill_ap()`
+shot before the attacker's turn ends. When that turn ends, the AP it had before answering comes
+back, so in a three-player game it can answer the next opponent too. It does **not** cost the unit
+its own turn: `refill_ap()`
 restores both AP and the fired flag at the start of its owner's turn, exactly as the reference
 does. A unit that retaliated moves and shoots normally when its turn arrives.
 
@@ -76,7 +78,7 @@ own turn. Confirmed against the reference, which gates its counter-attack on liv
 and refills only the active player's units ([§4](../reference/blitzkrieg.md)); kept on the owner's
 call after a play test where nothing fired back.
 
-The defender's other exposure is that it cannot answer twice in the same round.
+The defender's other exposure is that it cannot answer twice in the same attacker's turn.
 
 An earlier version of this section claimed the retaliator forfeits its next turn. That was never
 what the code or the reference did; it was a rationale written into the spec rather than read out

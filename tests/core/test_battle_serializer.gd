@@ -57,6 +57,21 @@ func test_unit_fields_survive() -> void:
 	assert_true(restored.has_fired)
 	assert_eq(restored.facing, assault.facing)
 
+func test_ap_before_retaliation_round_trips() -> void:
+	var a: BattleState = _populated_state()
+	a.get_unit(1).ap_before_retaliation = 28
+	var b: BattleState = BattleSerializer.from_dict(BattleSerializer.to_dict(a))
+	assert_eq(b.get_unit(1).ap_before_retaliation, 28)
+	assert_eq(b.get_unit(2).ap_before_retaliation, -1, "юніт, що не відповідав, лишається без запису")
+
+func test_a_save_without_ap_before_retaliation_loads_as_unset() -> void:
+	var d: Dictionary = BattleSerializer.to_dict(_populated_state())
+	for u_data in d["units"]:
+		u_data.erase("ap_before_retaliation")
+	var b: BattleState = BattleSerializer.from_dict(d)
+	assert_not_null(b, "старі збереження мусять відкриватися")
+	assert_eq(b.get_unit(1).ap_before_retaliation, -1)
+
 func test_fog_is_restored_per_player() -> void:
 	var a: BattleState = _populated_state()
 	for p in a.player_count:

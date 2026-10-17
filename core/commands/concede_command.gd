@@ -22,11 +22,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	# кінець ходу, і той, хто здається, не може нею ж заявити перемогу за цілі.
 	if state.is_over():
 		return out
-	# Далі — дослівно хвіст EndTurnCommand: advance_player() вже пропускає
+	# Далі — той самий хвіст, що в EndTurnCommand: advance_player() вже пропускає
 	# щойно вибулого, тож хід іде до наступного гравця в колі.
-	var previous: int = state.active_player
-	state.active_player = state.advance_player()
-	if state.active_player <= previous:
-		state.turn_number += 1
-	out.append_array(state.begin_turn())
+	out.append_array(state.pass_turn())
 	return out

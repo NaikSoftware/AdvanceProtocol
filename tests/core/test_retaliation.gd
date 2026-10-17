@@ -401,3 +401,54 @@ func test_retaliation_adds_to_the_retaliators_tally() -> void:
 	assert_true(a.hp < a_before, "передумова: відповідь була")
 	assert_eq(state.damage_dealt[1], a_before - a.hp, "шкода відповіді — гравцю-відповідачу")
 	assert_eq(state.damage_dealt[0], t_before - t.hp)
+
+# ---------------------------------------------------------------------------
+# §3.3.1: відповідь коштує AP лише до кінця ходу АТАКУВАЛЬНИКА. У грі на трьох
+# наступний хід — іншого суперника, і відповідач мусить мати чим відповісти й
+# йому, якщо до першої відповіді мав >= fire_cost.
+#
+# Важкий танк (#8: ap 40, fire_cost 20, hp 350, огляд 4, дальність 4) гравця 0 на
+# (5,5); середні танки (#5: atk 95) гравця 1 на (5,2)/(4,2) і гравця 2 на (5,8) —
+# у ромбі огляду й у радіусі. Шкода середнього (до ~66 у лоб, до ~95+ у борт) не
+# вбиває 350 hp ні з першого, ні з другого пострілу.
+
+func _three_player_heavy() -> Dictionary:
+	var s: BattleState = BattleState.create(Board.create(16, 16, Terrain.GroundState.DRY), 3, 11)
+	var heavy: Unit = s.add_unit(8, 0, Vector2i(5, 5), 0)
+	var p1: Unit = s.add_unit(5, 1, Vector2i(5, 2), 4)
+	var p1b: Unit = s.add_unit(5, 1, Vector2i(4, 2), 4)
+	var p2: Unit = s.add_unit(5, 2, Vector2i(5, 8), 0)
+	s.start()
+	s.active_player = 1
+	s.begin_turn()
+	return {"state": s, "heavy": heavy, "p1": p1, "p1b": p1b, "p2": p2}
+
+func test_a_retaliator_answers_the_next_opponent_in_a_three_player_game() -> void:
+	var f: Dictionary = _three_player_heavy()
+	var s: BattleState = f["state"]
+	var heavy: Unit = f["heavy"]
+	assert_eq(_count_retaliations(FireCommand.create(f["p1"].id, heavy.id).apply(s)), 1,
+		"передумова: важкий відповідає гравцю 1")
+	assert_eq(heavy.ap, 0, "передумова: відповідь забрала AP на хід атакувальника")
+	EndTurnCommand.create().apply(s)
+	assert_eq(s.active_player, 2, "передумова: хід гравця 2, а не власника танка")
+	assert_eq(heavy.ap, 40, "після ходу атакувальника AP повертається до стану перед відповіддю")
+	var events: Array = FireCommand.create(f["p2"].id, heavy.id).apply(s)
+	assert_eq(_count_retaliations(events), 1, "важкий відповідає й гравцю 2")
+
+func test_a_retaliator_still_cannot_answer_twice_in_the_same_attackers_turn() -> void:
+	var f: Dictionary = _three_player_heavy()
+	var s: BattleState = f["state"]
+	var heavy: Unit = f["heavy"]
+	assert_eq(_count_retaliations(FireCommand.create(f["p1"].id, heavy.id).apply(s)), 1, "передумова")
+	var events: Array = FireCommand.create(f["p1b"].id, heavy.id).apply(s)
+	assert_eq(_count_retaliations(events), 0, "другий постріл того самого ходу — без відповіді")
+
+func test_concede_also_returns_the_retaliators_ap() -> void:
+	var f: Dictionary = _three_player_heavy()
+	var s: BattleState = f["state"]
+	var heavy: Unit = f["heavy"]
+	FireCommand.create(f["p1"].id, heavy.id).apply(s)
+	ConcedeCommand.create().apply(s)
+	assert_eq(s.active_player, 2, "передумова: хід перейшов до гравця 2")
+	assert_eq(heavy.ap, 40, "хід атакувальника скінчився здачею — і AP так само повертається")
