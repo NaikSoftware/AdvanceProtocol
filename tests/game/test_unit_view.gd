@@ -1,5 +1,5 @@
 extends GutTest
-## Task 2.4, ruling R11: живий бій зʼявляється лише в Task 2.10, тож усе тут —
+## Task 2.4, рішення R11: живий бій з'являється лише в Task 2.10, тож усе тут —
 ## headless перевірка вузла самого по собі: силует за класом, поворот,
 ## HP-бар, лічильник дронів, приглушення і твіни. Останній тест — контракт
 ## тумана: UnitView не читає Vision і не приховує ворога сам (§3.5) —
@@ -29,7 +29,7 @@ func test_bind_places_node_at_cell_world_position() -> void:
 ## розмір Hull-меша, який справді зібрав bind(), а не число, продубльоване
 ## з _HULL_SIZES у самому unit_view.gd.
 func test_bind_picks_a_distinct_silhouette_per_class() -> void:
-	var type_ids: Array[int] = [0, 2, 5, 9, 11]  # по одному представнику на кожен з пʼяти класів
+	var type_ids: Array[int] = [0, 2, 5, 9, 11]  # по одному представнику на кожен з п'яти класів
 	var seen_sizes: Dictionary = {}
 	for type_id in type_ids:
 		view.bind(_unit(type_id))
@@ -157,7 +157,7 @@ func test_hp_bar_texture_is_framed_and_long_not_square() -> void:
 	view.bind(_unit(5))
 	view.set_hp(200, 400)
 	var image: Image = _hp_bar_image(view)
-	# Точні числа, не «принаймні вшестеро довша»: мʼяка нерівність лишалась би
+	# Точні числа, не «принаймні вшестеро довша»: м'яка нерівність лишалась би
 	# зеленою і для 36×6, хоча форма задана рівно як 48×6, — тобто стерегла б
 	# менше, ніж обіцяє її ж назва.
 	assert_eq(Vector2i(image.get_width(), image.get_height()), Vector2i(48, 6),
@@ -261,7 +261,7 @@ func test_set_drones_shows_count_regardless_of_owner() -> void:
 	assert_false(view_a._drone_icon.visible, "нуль дронів — лічильник ховається")
 
 
-## Задача 2 (тимчасовий девтул, поки нема справжніх моделей): стрілка напряму
+## Task 2 (тимчасовий інструмент розробника, поки нема справжніх моделей): стрілка напряму
 ## мусить бути на КОЖНОМУ юніті — і своєму, і чужому — незалежно від owner.
 ## Напрямок чужого юніта й так публічний (§3.13), тож це не витік інформації.
 func test_bind_adds_a_temporary_debug_facing_arrow_for_any_owner() -> void:
@@ -322,7 +322,7 @@ func test_debug_facing_arrow_points_toward_local_front_like_the_barrel() -> void
 	assert_true(min_z < 0.0, "вершина-носик стрілки мусить лежати в локальному -Z, як і ствол")
 
 
-## Задача 2, вимога «легко прибрати одним рухом»: одна очевидна точка
+## Task 2, вимога «легко прибрати одним рухом»: одна очевидна точка
 ## вимкнення, а не десяток вкраплень по коду — рівно ОДНЕ місце будує
 ## стрілку (виклик _build_facing_arrow), а не кілька розкиданих додавань.
 func test_debug_facing_arrow_has_a_single_build_call_site() -> void:
@@ -437,10 +437,10 @@ func test_move_along_turns_the_unit_at_each_step() -> void:
 
 ## Баг-звіт: «на старті вибираю танк, вказую їхати вперед — він їде спиною».
 ## Причина — минула версія тягнула поворот і рух паралельно в тому самому
-## кроці, тож юніт в'їжджав у нову клітинку носом ще в СТАРУ сторону і лише
-## дорогою довертався; на 180° це виглядає рівно як заднiй хід. Правильно —
+## кроці, тож юніт в'їжджав у новий тайл носом ще в СТАРУ сторону і лише
+## дорогою довертався; на 180° це виглядає рівно як задній хід. Правильно —
 ## юніт спершу довертається НА МІСЦІ (позиція не зрушена), і лише потім їде;
-## позиція мусить лишитись у стартовій клітинці, поки триває лише поворот.
+## позиція мусить лишитись у стартовому тайлі, поки триває лише поворот.
 func test_move_along_turns_in_place_before_moving_when_direction_reverses() -> void:
 	view.bind(_unit(5, 0, Vector2i(0, 0), 4))  # дивиться на південь (facing=4)
 	var path: Array[Vector2i] = [Vector2i(0, -1)]  # крок на північ — рівно 180° від поточного факінгу
@@ -457,7 +457,7 @@ func test_move_along_turns_in_place_before_moving_when_direction_reverses() -> v
 
 ## Поворот додає час рівно тоді, коли кут справді змінюється (на старті руху
 ## й на поворотах маршруту) — і НЕ додає жодного часу на прямій ділянці, де
-## напрямок кроку співпадає з уже виставленим факінгом. Юніт уже дивиться на
+## напрямок кроку збігається з уже виставленим факінгом. Юніт уже дивиться на
 ## схід (facing=2, той самий, що й перший крок шляху) — обидва кроки йдуть
 ## строго на схід, тож жодного довороту не потрібно взагалі.
 func test_move_along_adds_no_time_when_direction_does_not_change() -> void:
@@ -469,7 +469,7 @@ func test_move_along_adds_no_time_when_direction_does_not_change() -> void:
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(2, 0)), "без жодного повороту сумарний час лишається path.size() * duration_per_step")
 
 
-## Поворот маршруту (не старт) теж мусить довертати ПЕРЕД рухом у клітинку,
+## Поворот маршруту (не старт) теж мусить довертати ПЕРЕД рухом у тайл,
 ## де напрямок міняється — не лише перший крок шляху.
 func test_move_along_turns_in_place_at_a_route_turn_not_only_at_the_start() -> void:
 	view.bind(_unit(5, 0, Vector2i(0, 0), 2))  # дивиться на схід (facing=2) — перший крок не потребує довороту
@@ -480,7 +480,7 @@ func test_move_along_turns_in_place_at_a_route_turn_not_only_at_the_start() -> v
 	tween.custom_step(0.1)  # перший крок — без довороту, рівно duration_per_step
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "перший крок співпадає з поточним факінгом — жодної паузи")
 
-	tween.custom_step(0.15)  # доворот на другому кроці (схід -> південь), позиція ще на першій клітинці
+	tween.custom_step(0.15)  # доворот на другому кроці (схід -> південь), позиція ще на першому тайлі
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "доворот на повороті маршруту теж іде ДО руху в нову клітинку")
 	_assert_faces(view, 4, "доворот на повороті маршруту завершується перед в'їздом у клітинку")
 

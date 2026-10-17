@@ -179,21 +179,21 @@ Two rules about using it:
 - **The `current/max` numerals exist in the original, but on the unit info screen, not over the
   unit.** Screen state `34` draws a `210×7` `drawRect` frame with a `207×4` green fill inset by 2 px
   — the same framed thin bar, an order of magnitude wider — and above it the two numbers, drawn as
-  digit sprites either side of a hand-drawn diagonal `drawLine`, i.e. `88/400` assembled by hand.
+  digit sprites either side of a hand-drawn diagonal `drawLine`, that is `88/400` assembled by hand.
   This project puts both the framed bar and the numerals over the unit on the board, by the owner's
   call: there is no cursor and no hold-a-key on a touch screen, so an info screen is a tap and a
   dismissal away, and §1.5 wants every number that decides a fight legible without one. Recorded so
   the placement stays a known departure rather than being "corrected" toward the reference later.
 
 - **Retaliation is gated on the retaliator's *leftover* AP — confirmed, and kept.** Asked directly
-  by the owner after a play test where nothing ever fired back. The counter-attack is state `13` of
+  by the owner after a play test where nothing ever fired back. The retaliation is state `13` of
   `class_1`'s attack machine: the shot resolves in state `12`, and if the target still has HP
   (`field_170.field_259 > 0`) the machine queues `field_168 = 13`, swaps the two unit references
   (`class_1:444-448`, attacker becomes target), turns the retaliator onto its attacker, and then
   gates the answer on `class_1:395` → `class_3.method_162` → `method_164(...) && field_248 >=
   field_258` — **in range, not an engineer, and current AP at least the fire cost.** `field_248` is
   live AP, not the maximum, and `class_1.method_107` (turn start) refills only the slice
-  `field_159 .. field_159 + field_160`, i.e. **that player's own units**. A unit that spent its AP
+  `field_159 .. field_159 + field_160`, that is **that player's own units**. A unit that spent its AP
   advancing therefore cannot answer during the enemy's turn, in the original exactly as here.
 
   The fire-cost table is identical too (`class_3:507`, `{10,10,18,18,18,20,20,25,20,14,14,20,30}`),

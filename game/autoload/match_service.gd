@@ -48,11 +48,11 @@ func start_match(board: Board, player_count: int, seed_value: int) -> void:
 	_queue.clear()
 
 func begin() -> void:
-	## Друга фаза старту, обовʼязкова: core/battle_state.gd:44 документує, що
+	## Друга фаза старту, обов'язкова: core/battle_state.gd:44 документує, що
 	## state.start() не можна виконати всередині create(), бо юніти додаються
 	## ПІСЛЯ create(), а без start() vision[p] лишається порожньою сіткою для
 	## кожного гравця, чий хід ще не наставав, — і саме тому FireCommand._retaliate()
-	## гейтить відповідь на state.vision[target.owner].is_seen(...), його юніти
+	## залежить від state.vision[target.owner].is_seen(...); без нього юніти
 	## не можуть відповісти на постріл узагалі. Виклик — рівно один раз, після
 	## того як усі юніти вже додані, і до першого take_events().
 	state.start()

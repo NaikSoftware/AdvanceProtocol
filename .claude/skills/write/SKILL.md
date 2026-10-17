@@ -169,7 +169,7 @@ Title: one Ukrainian phrase naming the user-visible result — no type prefix (r
 
 | | rule |
 | --- | --- |
-| apostrophe | **ASCII `'`** everywhere — comments, commits, docs, `strings.csv`. Matches Godot's and git's uk translations and most of the repo; one character keeps `grep` working. Don't churn existing `ʼ`. |
+| apostrophe | **ASCII `'`** everywhere — comments, commits, docs, `strings.csv`. Matches Godot's and git's uk translations and most of the repo; one character keeps `grep` working. |
 | quotes | «ялинки» in prose; nested „лапки“ inside «»; straight `"` only in code and CSV fields |
 | dash | `—` with spaces. A hyphen is never a dash (`Так - здатися` ✗) |
 | ranges | `–` without spaces: `2–3 гравці`, `0–5` |
@@ -249,14 +249,13 @@ Unit names: the `UNIT_*` rows of `strings.csv` are the source of truth — quote
 
 ## 10. Known inconsistencies — don't copy them
 
-- `ʼ` vs `'` mixed across `core/` and `game/` (rule: `'` from now on).
-- Comments say «бік» / «тил»; the UI says «Борт» / «Корма».
+Comments and docs follow this skill (terminology pass, 2026-10-17). What still deviates is
+outside them — string literals:
+
 - `ERR_*` strings say «сапер»; the unit is «інженер».
 - `pause_surrender_yes` uses a hyphen as a dash: «Так - здатися».
 - «очок дії» (UI) vs «очки дій» (Ukrainian wargame usage) — not settled; keep the UI's form.
-- Tech terms with two or three variants in comments: інстанс / екземпляр, дефолтний / типовий,
-  вьюпорт / в'юпорт / `Viewport`, оверлей / накладка, нода / вузол, ассет / асет, емітить /
-  надсилає. `terms-uk.md` names the one to use.
+- Assertion messages in `tests/` still carry `ʼ` and old terms (сапер, клітинка, інстанс).
 
 Fix these when you touch the line anyway; don't open a sweep without asking.
 

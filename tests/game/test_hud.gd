@@ -1,5 +1,5 @@
 extends GutTest
-## Task 2.8, R28: HUD і інспектор — headless. Жива battle_screen.tscn зʼявляється
+## Task 2.8, R28: HUD і інспектор — headless. Жива battle_screen.tscn з'являється
 ## лише в Task 2.10, тож сцена HUD інстанціюється тут напряму, а перевіряється
 ## рівно те, що побачить гравець: текст і видимість вузлів, а не внутрішні поля
 ## скрипта.
@@ -13,7 +13,7 @@ const HudScene := preload("res://game/ui/hud.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 const RigScene := preload("res://game/camera/iso_camera_rig.tscn")
 
-## Поля безпеки з hud.tscn (SafeArea): панель, прив'язана до клітинки юніта,
+## Поля безпеки з hud.tscn (SafeArea): панель, прив'язана до тайла юніта,
 ## не сміє заїхати під виріз екрана, скільки б камеру не відводили від юніта.
 const SAFE_LEFT: float = 56.0
 const SAFE_TOP: float = 24.0
@@ -138,7 +138,7 @@ func test_show_preview_shot_displays_the_payload_sector_and_both_damage_bounds()
 	hud.bind(_state())
 
 	# Сектор навмисно НЕ FRONT (0): захардкоджене значення пройшло б тест із
-	# дефолтом і провалюється тут.
+	# типовим значенням і провалюється тут.
 	hud.show_preview(_shot_preview(UnitTypes.ArmourSector.REAR, 37, 91))
 
 	assert_eq(_label("PreviewSectorValue").text, tr("hud_sector_rear"))
@@ -502,7 +502,7 @@ func test_shot_preview_from_the_real_controller_shows_its_sector_and_bounds() ->
 	var state: BattleState = _state()
 	var u: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
 	# Ціль дивиться на північ (facing 0), стрілець стоїть південніше — постріл
-	# іде в корму, тобто сектор навмисно не дефолтний.
+	# іде в корму, тобто сектор навмисно не типовий.
 	var enemy: Unit = state.add_unit(5, 1, Vector2i(3, 2), 0)
 	_service.begin()
 	_service.take_events()
@@ -611,7 +611,7 @@ func test_inspector_flips_to_the_other_side_instead_of_covering_its_own_unit() -
 		"панель мусить цілком лежати ЛІВІШЕ юніта, коли праворуч місця нема")
 
 
-## Знахідка ревʼю, і найдорожча з усіх: нижньою межею клемпа був НИЗ поля
+## Знахідка рев'ю, і найдорожча з усіх: нижньою межею клемпа був НИЗ поля
 ## безпеки, а рядок дій живе всередині нього. Панель малюється поверх усього
 ## HUD, тож «влізла в безпечну зону» й «не накрила кнопки» — різні твердження,
 ## і перше було істинним саме тоді, коли друге хибне. Ціна: кнопка підтвердження

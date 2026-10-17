@@ -91,7 +91,7 @@ func test_enemy_unit_outside_known_occupied_map_has_no_node() -> void:
 
 func test_enemy_on_seen_ground_has_a_node_even_when_not_currently_visible() -> void:
 	# Гейт — is_seen, не is_visible (§3.5): розвідка незворотна. Тут це
-	# перевіряється напряму, підмінюючи сітку видимості так, щоб клітинка
+	# перевіряється напряму, підмінюючи сітку видимості так, щоб тайл
 	# була seen, але НЕ visible просто зараз — саме та відмінність, яку
 	# ловить is_seen() і яку прогледів би is_visible().
 	var service: Node = MatchServiceScript.new()
@@ -146,7 +146,7 @@ func test_handover_rebuilds_units_and_recenters_camera_before_gate_lifts() -> vo
 	# Лямбда захоплює локальні змінні КОПІЄЮ значення на момент створення
 	# (GDScript), тож будь-яке присвоєння всередині watcher() на зовнішні
 	# bool/int не поширилося б назовні — Dictionary лишається тим самим
-	# обʼєктом за посиланням, і саме тому спостереження записується сюди.
+	# об'єктом за посиланням, і саме тому спостереження записується сюди.
 	var observation: Dictionary = {"observed": false, "gate_was_visible": false}
 	var watcher := func(_n: Node) -> void:
 		observation["observed"] = true
@@ -216,7 +216,7 @@ func test_end_turn_after_the_last_enemy_dies_submits_nothing_and_does_not_crash(
 	screen.input_controller().confirm_pending()
 	# Тягнемо твіни вручну (той самий прийом, що й у test_event_player.gd):
 	# без цього програвання смерті лишається в польоті, is_playing() ще true, і
-	# кнопку кінця ходу гейтив би R24, а не завершений матч — тест перевіряв би
+	# кнопку кінця ходу блокував би R24, а не завершений матч — тест перевіряв би
 	# не те.
 	_finish_all_processed_tweens()
 
@@ -231,12 +231,12 @@ func test_end_turn_after_the_last_enemy_dies_submits_nothing_and_does_not_crash(
 		"після завершення матчу натискання «завершити хід» не сміє дійти до core/ узагалі")
 
 
-# --- Тап по дошці: екранна точка -> клітинка -> InputController -----------
+# --- Тап по дошці: екранна точка -> тайл -> InputController -----------
 #
 # game/ui/handover_gate.gd, крок 4 контракту: маршрутизація тапів дошки
 # зобов'язана йти крізь _unhandled_input(), інакше STOP-фільтр гейта нічого
 # не блокує. Тут перевіряється рівно та половина, що належить цьому файлу —
-# резолв екранної точки в клітинку і передача в InputController.tap_cell();
+# резолв екранної точки в тайл і передача в InputController.tap_cell();
 # те, що гейт справді ковтає ввід GUI-системою раніше за _unhandled_input, —
 # уже доведено власними тестами game/ui/handover_gate.gd (STOP-фільтр,
 # повнорозмірні anchors) і документованою поведінкою рушія, а не тут.
@@ -274,7 +274,7 @@ func test_screen_tap_resolves_through_camera_rig_to_the_tapped_cell() -> void:
 
 func test_fallback_entry_starts_a_default_match_from_the_shipped_map() -> void:
 	var screen: Node3D = _screen()
-	# _ready() гейтить резерв на `current_scene == self`, а сцена, додана
+	# _ready() вмикає резерв лише за умови `current_scene == self`, а сцена, додана
 	# дочірнім вузлом у тесті, головною ніколи не буває — тож перевіряємо тут
 	# сам резервний вхід, а не гейт. Гейт перевіряє тест нижче.
 	screen._start_fallback_match_if_not_injected()
@@ -290,7 +290,7 @@ func test_fallback_entry_starts_a_default_match_from_the_shipped_map() -> void:
 
 ## Гейт — половина, що захищає решту сьогоднішнього набору: без нього кожен
 ## тест цього файла отримував би другий, фоновий матч на автозавантаженому
-## MatchService поверх власного ізольованого інстансу.
+## MatchService поверх власного ізольованого екземпляра.
 func test_ready_does_not_start_a_match_when_the_scene_is_not_the_current_one() -> void:
 	var screen: Node3D = _screen()
 
@@ -412,7 +412,7 @@ func test_drag_forwards_the_raw_screen_delta_to_pan_unmodified() -> void:
 		"драг мусить пройти крізь pan() рівно з екранною дельтою, без жодного перетворення в battle_screen.gd")
 
 
-## Регресія на блокері з ревʼю: раніше _advance_drag() пану вав БЕЗУМОВНО, ще
+## Регресія на блокері з рев'ю: раніше _advance_drag() пану вав БЕЗУМОВНО, ще
 ## до перетину порога — тремтіння пальця в межах «ще тапу» встигало зсунути
 ## камеру. Тепер порогу не досягнуто — камера не мусить зрушити НІ НА ПІКСЕЛЬ.
 func test_pan_does_not_apply_before_the_drag_threshold_is_crossed() -> void:
@@ -434,19 +434,19 @@ func test_pan_does_not_apply_before_the_drag_threshold_is_crossed() -> void:
 		"рух під порогом — ще тап, а не пан: камера не сміє зрушити взагалі")
 
 
-## Той самий репро, що знайшло ревʼю: тремтіння пальця під порогом, потім
+## Той самий репро, що знайшло рев'ю: тремтіння пальця під порогом, потім
 ## відпускання — мусить лишитись тапом, вибрати юніт САМЕ під точкою натиску,
 ## а не під точкою відпускання.
 ##
-## Ревʼю показало, що попередня версія цього тесту не могла впасти взагалі:
-## натиск лежав рівно в ЦЕНТРІ клітинки, і тремтіння в кілька пікселів
-## заокруглювалось у ТУ САМУ клітинку незалежно від того, яку з двох точок
+## Рев'ю показало, що попередня версія цього тесту не могла впасти взагалі:
+## натиск лежав рівно в ЦЕНТРІ тайла, і тремтіння в кілька пікселів
+## заокруглювалось у ТОЙ САМИЙ тайл незалежно від того, яку з двох точок
 ## бере _handle_tap_at_screen_position() — тест був зеленим і зі старою, і з
 ## новою поведінкою, нічого не стережучи. Тут натиск лежить впритул до межі
-## клітинки (0.49 замість 0.5 — ще на боці юніта) і на максимальному
+## тайла (0.49 замість 0.5 — ще на боці юніта) і на максимальному
 ## наближенні (MIN_ZOOM — найбільше пікселів на світову одиницю), а
 ## передумова (assert_ne нижче) доводить перед основною перевіркою, що
-## press- і jitter-точки таки округлюються у РІЗНІ клітинки — інакше сама
+## press- і jitter-точки таки округлюються у РІЗНІ тайли — інакше сама
 ## передумова впала б голосно, а не мовчки пропустила тест.
 func test_tap_resolves_from_the_press_position_not_the_release_position() -> void:
 	var service: Node = MatchServiceScript.new()
@@ -526,7 +526,7 @@ func test_magnify_gesture_zooms_in_and_clamps_at_min_zoom() -> void:
 		"пінч розведенням пальців (factor>1) мусить наближати й теж клемпитись знизу")
 
 
-## Регресія на блокері з ревʼю: Control-дерево (MOUSE_FILTER_STOP гейта)
+## Регресія на блокері з рев'ю: Control-дерево (MOUSE_FILTER_STOP гейта)
 ## зупиняє InputEventMouse*/ScreenTouch/ScreenDrag, але НЕ InputEventMagnifyGesture
 ## — той не належить до типів, які GUI-система вважає "вхідними для елемента".
 ## Без явної перевірки видимості гейта в _on_magnify_gesture() зум крізь
@@ -592,7 +592,7 @@ func test_screen_drag_pans_without_calling_tap_cell() -> void:
 
 # --- Мультитач: другий палець не рве жест першого, а стартує щипок --------
 #
-# Блокер з ревʼю: InputEventScreenTouch/ScreenDrag.index ніде не читався.
+# Блокер з рев'ю: InputEventScreenTouch/ScreenDrag.index ніде не читався.
 # Репро: палець A вниз -> драг 100px -> палець B вниз -> палець A вгору давав
 # спрацьований ТАП попри драг, і _pointer_down=false лишав пан мертвим до
 # наступного свіжого натиску. Тести нижче ведуть стан по index явно.
@@ -674,7 +674,7 @@ func test_pinch_between_two_touches_zooms_and_second_finger_release_resumes_sing
 		"після завершення щипка один палець, що лишився, мусить одразу вести звичайний пан")
 
 
-## Ревʼю, головна поломка 3: підняття другого пальця запускало СВІЖИЙ
+## Рев'ю, головна поломка 3: підняття другого пальця запускало СВІЖИЙ
 ## одно-пальцевий натиск (_begin_pointer_press() без жодного переміщення), і
 ## коли останній палець теж піднімався, не перетнувши поріг драга — а щипок
 ## завжди й закінчується саме так — виклик ішов у обробку тапу. Рецензент
@@ -699,7 +699,7 @@ func test_pinch_ending_by_lifting_both_fingers_does_not_select_a_unit() -> void:
 	var selections: Array = []
 	screen.input_controller().selection_changed.connect(func(u: Unit) -> void: selections.append(u))
 
-	# Два пальці на клітинці юніта, розводимо (щипок), піднімаємо ОБИДВА —
+	# Два пальці на тайлі юніта, розводимо (щипок), піднімаємо ОБИДВА —
 	# жоден не перетинає поріг драга, бо щипок завжди закінчується саме так.
 	var a: Vector2 = unit_screen_pos
 	var b: Vector2 = unit_screen_pos + Vector2(20.0, 0.0)
@@ -714,7 +714,7 @@ func test_pinch_ending_by_lifting_both_fingers_does_not_select_a_unit() -> void:
 		"завершення щипка НЕ сміє вибирати юніт, під яким воно закінчилось — щипок закінчується без жодного тапу")
 
 
-## Ревʼю, дрібний блокер: третій дотик (долоня чи великий палець при
+## Рев'ю, дрібний блокер: третій дотик (долоня чи великий палець при
 ## передачі пристрою з рук у руки — реальний сценарій, §1 CLAUDE.md) не
 ## сміє додаватись у стан жесту взагалі. Стара версія додавала його в
 ## _touch_positions, і коли БУДЬ-ЯКИЙ з трьох пальців потім підіймався,
@@ -759,7 +759,7 @@ func test_third_finger_does_not_disturb_an_active_pinch_or_hang_the_camera() -> 
 
 # --- dp-поріг: діленням на content_scale_factor вікна, не множенням -------
 #
-# Регресія на блокері з ревʼю: при факторі > 1 події доходять у МЕНШОМУ
+# Регресія на блокері з рев'ю: при факторі > 1 події доходять у МЕНШОМУ
 # логічному просторі — фіксований dp-поріг мусить ділитись на фактор, а
 # множення (як було раніше) робило поріг у кілька разів товщим за задумані
 # ~10dp.
@@ -781,7 +781,7 @@ func test_drag_threshold_divides_by_the_windows_content_scale_factor() -> void:
 	assert_almost_eq(threshold_at_2x, threshold_at_1x / 2.0, 0.001)
 
 
-## Регресія на блокері з ревʼю: дефолт `true` синтезує ще й
+## Регресія на блокері з рев'ю: типове значення `true` синтезує ще й
 ## InputEventMouseMotion/MouseButton поверх кожного ScreenTouch/ScreenDrag —
 ## обидва потоки доходили б до _unhandled_input(), і пан застосовувався б
 ## двічі за один рух пальця. project.godot вимикає це явно.
@@ -790,7 +790,7 @@ func test_touch_to_mouse_emulation_is_disabled_project_wide() -> void:
 		"кожен дотик не сміє синтезувати ще й мишачу подію — battle_screen.gd веде окремі, повні шляхи для миші й дотику")
 
 
-## Явна перевірка (не лише побічний ефект іншого тесту, як просило ревʼю):
+## Явна перевірка (не лише побічний ефект іншого тесту, як просило рев'ю):
 ## гейт передачі ходу — єдине місце, де рецентрування лишається телепортом,
 ## і симуляція кадрів ПІСЛЯ confirmed не сміє зрушити камеру ще далі —
 ## інакше десь у цьому шляху лишився б fly_to()/Tween.
@@ -823,7 +823,7 @@ func test_gate_recenter_never_animates_even_across_later_frames() -> void:
 
 func test_handover_gate_sits_as_the_last_child_of_a_full_rect_canvas_layer() -> void:
 	# game/ui/handover_gate.gd, крок 5 контракту: гейт мусить бути прямим
-	# нащадком CanvasLayer, останнім серед сиблінгів над дошкою — інакше він
+	# нащадком CanvasLayer, останнім серед сусідніх вузлів над дошкою — інакше він
 	# або не отримує вхід першим, або показує дошку навколо/поверх себе.
 	var screen: Node3D = _screen()
 	var gate: Control = screen.get_node("%HandoverGate")
@@ -832,7 +832,7 @@ func test_handover_gate_sits_as_the_last_child_of_a_full_rect_canvas_layer() -> 
 	assert_eq(siblings[siblings.size() - 1], gate, "гейт мусить бути останнім сиблінгом — над рештою UI, коли видимий")
 
 
-# --- Баг-звіт: тимчасова стрілка факінгу (unit_view.gd, ЧАСОВИЙ ДЕВТУЛ) ----
+# --- Баг-звіт: тимчасова стрілка факінгу (unit_view.gd, ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА) ----
 #
 # Скарга: стрілка зникає з УСІХ юнітів одразу після вибору одного з них, і
 # лишається відсутньою після підтвердженого ходу. Наявні тести (test_unit_view.gd)
@@ -844,10 +844,10 @@ func test_handover_gate_sits_as_the_last_child_of_a_full_rect_canvas_layer() -> 
 # видимим на КОЖНОМУ юніті дошки, не лише вибраному.
 #
 # Розслідування (не здогад): пряма інспекція вузла одразу після select_unit()
-# показала стрілку на місці (visible=true, той самий інстанс, коректні mesh/
+# показала стрілку на місці (visible=true, той самий екземпляр, коректні mesh/
 # material/transform) — вузол ніхто не знищує (гіпотеза «а» не підтвердилась).
 # ZoneOverlay.show_for()/BoardView.highlight_tiles() теж не додають жодної
-# нової геометрії — вони перефарбовують КОЛІР уже наявних інстансів тайлової
+# нової геометрії — вони перефарбовують КОЛІР уже наявних екземплярів тайлової
 # MultiMesh (board_view.gd:81-86, set_instance_color), а не створюють нові
 # площини; стрілка (y≈0.32–0.52 світових) і верх тайлу (y=0.05) розділені
 # набагато більше, ніж будь-яка типова товщина z-fighting (гіпотеза «б» теж
@@ -955,7 +955,7 @@ func test_move_preview_does_not_mark_anyone() -> void:
 	var target: Unit = service.state.units_of(1)[0]
 
 	screen.input_controller().tap_cell(shooter.pos)
-	screen.input_controller().tap_cell(Vector2i(2, 3))  # порожня клітинка в зоні руху
+	screen.input_controller().tap_cell(Vector2i(2, 3))  # порожній тайл в зоні руху
 
 	assert_false(_crosshair_visible(screen, target.id), "прев'ю руху не сміє прицілювати ворога")
 	assert_false(_crosshair_visible(screen, shooter.id), "ані самого юніта, що рухається")

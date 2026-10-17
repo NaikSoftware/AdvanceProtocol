@@ -1,14 +1,14 @@
 extends GutTest
-## Task 2.3, ruling R4: жива сцена battle_screen.tscn зʼявляється лише в Task
+## Task 2.3, рішення R4: жива сцена battle_screen.tscn з'являється лише в Task
 ## 2.10, тож перевірка тут — headless, не «увімкнути гру й подивитись».
 ##
 ## Підсвітка перевіряється через власний стан BoardView (_layer_highlights,
 ## _resolve_color), а не через читання кольору назад з MultiMesh: під
 ## headless-запуском (`--headless`, дамі-рендерер) RenderingServer не зберігає
-## буфер інстансів мультимешу — set_instance_color/set_instance_transform не
+## буфер екземплярів мультимешу — set_instance_color/set_instance_transform не
 ## кидають помилку, але get_instance_color/get_instance_transform одразу
-## після них повертають дефолт (чорний/нульовий), навіть після кадру. Це
-## перевірено окремо поза GUT. Структурні перевірки (кількість інстансів)
+## після них повертають типове значення (чорний/нульовий), навіть після кадру. Це
+## перевірено окремо поза GUT. Структурні перевірки (кількість екземплярів)
 ## лишаються — instance_count це звичайна властивість ресурсу, а не буфер RS.
 
 const BoardViewScene := preload("res://game/battle/board_view.tscn")
@@ -75,9 +75,9 @@ func test_build_is_idempotent() -> void:
 	assert_eq(total, board.width * board.height, "повторний build не мусить подвоювати інстанси")
 
 
-## Кольор інстансу мультимешу не читається назад під headless (див. коментар
+## Колір екземпляра мультимешу не читається назад під headless (див. коментар
 ## угорі файлу), але шлях, яким він туди потрапляє, — звичайні властивості
-## Resource, і вони читаються справно. Перевіряємо кожен інстанс, який
+## Resource, і вони читаються справно. Перевіряємо кожен екземпляр, який
 ## справді створив build(), а не лише перший-ліпший: вид, якому забракло
 ## матеріалу чи use_colors, — це саме та безмовна поломка, яку має ловити
 ## цей тест.
@@ -95,7 +95,7 @@ func test_build_wires_every_kind_instance_for_instance_color_paint() -> void:
 
 ## Далі — підсвітка перевіряється через власний стан BoardView (bookkeeping)
 ## і через щойно перевірене підключення до мультимешу (wiring), а не через
-## сам намальований результат: колір інстансу мультимешу не читається назад
+## сам намальований результат: колір екземпляра мультимешу не читається назад
 ## під headless (коментар угорі файлу), тож «а чи справді видно потрібний
 ## колір на екрані» лишається за Task 2.10.
 func test_highlight_layers_are_independent() -> void:
@@ -155,13 +155,13 @@ func test_highlight_tiles_ignores_cells_outside_the_board() -> void:
 	view.build(board)
 	var outside := Vector2i(99, 99)
 	# Не мусить впасти — і не мусить лишити слід у жодному шарі, бо такої
-	# клітинки на дошці немає.
+	# тайла на дошці немає.
 	view.highlight_tiles([outside] as Array[Vector2i], Color.RED, view.LAYER_SELECTION)
 	assert_false(view._layer_highlights[view.LAYER_SELECTION].has(outside))
 
 
 ## §3.5: туман ховає юнітів і міни, ніколи не карту. BoardView не має і не
-## може мати уявлення про клітинкову видимість — інакше місцевість перестане
+## може мати уявлення про тайлову видимість — інакше місцевість перестане
 ## бути публічною.
 func test_no_apply_fog_and_no_vision_reference() -> void:
 	assert_false(view.has_method("apply_fog"), "BoardView не ховає місцевість — apply_fog їй не потрібен")

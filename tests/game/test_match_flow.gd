@@ -1,6 +1,6 @@
 extends GutTest
 ## Task 3.3 + 3.5: конфіг матчу доходить до бою; пауза, збереження,
-## «Продовжити», кінець матчу й екран результату. Усе на ізольованих інстансах
+## «Продовжити», кінець матчу й екран результату. Усе на ізольованих екземплярах
 ## MatchService і тестових шляхах user:// — справжній save.json не чіпаємо.
 
 const BattleScreenScene := preload("res://game/battle/battle_screen.tscn")
@@ -223,7 +223,7 @@ func _finish_match(service: Node, screen: BattleScreen) -> void:
 	screen.input_controller().tap_cell(shooter.pos)
 	screen.input_controller().tap_cell(victim.pos)
 	screen.input_controller().confirm_pending()
-	# Твіни програвача зʼявляються між кадрами — підганяємо їх поки черга не спорожніє.
+	# Твіни програвача з'являються між кадрами — підганяємо їх поки черга не спорожніє.
 	for i in 6:
 		_finish_all_processed_tweens()
 		await wait_process_frames(1)
@@ -288,7 +288,7 @@ func test_summary_numbers_from_constructed_state() -> void:
 
 func test_summary_credits_a_mine_kill_to_the_mine_owner() -> void:
 	var s: BattleState = BattleState.create(Board.create(6, 6, Terrain.GroundState.DRY), 2, 1)
-	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # сапер p0 — досвіду не має
+	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # інженер p0 — досвіду не має
 	var victim: Unit = s.add_unit(2, 1, Vector2i(3, 3), 0)
 	victim.hp = 10
 	Mines.place(s, Vector2i(3, 3), 0)
@@ -419,7 +419,7 @@ func test_start_button_configures_the_service_and_removes_the_old_save() -> void
 	assert_false(FileAccess.file_exists(TEST_SAVE + ".map"))
 
 
-# --- Ревʼю: завершений матч, збій запису, реванш, блокування здачі -----------
+# --- Рев'ю: завершений матч, збій запису, реванш, блокування здачі -----------
 
 func test_save_quit_after_match_ended_leaves_no_save_and_goes_to_results() -> void:
 	var service: Node = _service()
