@@ -16,8 +16,7 @@ Five classes drive all the matchup rules above:
 | `ARTILLERY` | longest reach, biggest hit, helpless up close and very slow |
 | `ENGINEER` | no weapon; mines, demining, bridges, repair |
 
-Starting balance table. Once `core/unit_types.gd` exists **that file is the source of truth** and
-this table is documentation only.
+Balance table. **`core/unit_types.gd` is the source of truth**; this table is documentation only.
 
 | # | unit | class | atk | ap | hp | range | fire | armour F/S/R | x-country | vision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -62,9 +61,9 @@ flanking model rests on it: if a rear plate is thicker than a side plate, going 
 an enemy is punished instead of rewarded, and the most skill-expressive move in the game becomes a
 mistake.
 
-**The whole roster satisfies this today, and it is a hard invariant from here on.** Once
-`core/unit_types.gd` exists it gets a test that walks every entry and asserts the ordering — a new
-unit that violates it is a failing build, not a balance discussion.
+**The whole roster satisfies this today, and it is a hard invariant.** A test walks every entry of
+`core/unit_types.gd` and asserts the ordering — a new unit that violates it is a failing build, not
+a balance discussion.
 
 ## Engineers
 

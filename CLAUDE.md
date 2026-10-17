@@ -99,9 +99,9 @@ rifle squad and the engineer.
   occupancy.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
   the zones use fog-filtered occupancy plus known enemy mines; the walk checks the truth and
-  **stops on the tile before** anything it could not see or an engineer has just found. AP is charged only for tiles actually entered. Planning against the
-  true occupancy would leak — the route would detour around an invisible enemy and give away
-  where it stands.
+  **stops on the tile before** anything it could not see or an engineer has just found. AP is
+  charged only for tiles actually entered. Planning against the true occupancy would leak — the
+  route would detour around an invisible enemy and give away where it stands.
 
 ### 3.3 Combat → [formula and worked reasoning](docs/rules/combat.md)
 
@@ -185,7 +185,8 @@ Engineers have none. **In skirmish it is per match** and does not persist.
 
 No gun; a verb list instead. All actions are on an **orthogonally adjacent** tile and cost
 `fire_cost` AP: lay/clear mine, repair/demolish bridge (an enemy on it dies; a friendly unit
-on it forbids the demolition), repair a friendly unit, capture/demolish an objective. Repair is the one place where unspent AP matters.
+on it forbids the demolition), repair a friendly unit, capture/demolish an objective. Repair is
+the one place where unspent AP matters.
 
 ### 3.9 Drone strike — assault squad only → [details](docs/rules/units.md)
 
