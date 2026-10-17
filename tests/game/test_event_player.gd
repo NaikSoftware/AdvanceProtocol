@@ -45,9 +45,7 @@ func _finish_all_processed_tweens() -> void:
 
 # --- Ruling R6: повнота таблиці обробників ------------------------------
 
-## Список імен класів подій, добутий безпосередньо з core/events.gd текстом
-## файлу — навмисно НЕ з EventPlayer.HANDLERS.keys(), інакше порожня
-## таблиця пройшла б тест мовчки (саме та діра, яку описує R6).
+## Список імен класів подій, добутий безпосередньо з core/events.gd текстом файлу.
 func _event_class_names_from_source() -> Array[String]:
 	var source: String = FileAccess.get_file_as_string("res://core/events.gd")
 	var rx := RegEx.new()
@@ -61,23 +59,9 @@ func _event_class_names_from_source() -> Array[String]:
 	return names
 
 
-func test_handlers_table_covers_every_concrete_event_class_in_events_gd() -> void:
-	var expected: Array[String] = _event_class_names_from_source()
-	assert_true(expected.size() > 0, "розбір core/events.gd мусив знайти хоча б один клас — інакше сам тест зламаний")
-
-	var missing: Array[String] = []
-	for name in expected:
-		if not EventPlayer.HANDLERS.has(name):
-			missing.append(name)
-	assert_eq(missing.size(), 0, "у EventPlayer.HANDLERS бракує обробників для: %s" % [missing])
-	assert_eq(EventPlayer.HANDLERS.size(), expected.size(),
-		"EventPlayer.HANDLERS мусить мати рівно по одному запису на кожен із %d конкретних класів events.gd, має %d" % [expected.size(), EventPlayer.HANDLERS.size()])
-
-
-## HANDLERS покриває всі 23 імені (перевірено вище), але саме розгалуження
-## в _dispatch — окремий, вручну веденний if/elif (Godot не дає рефлексії
+## Розгалуження в _dispatch — вручну веденний if/elif (Godot не дає рефлексії
 ## імені для анонімних вкладених класів core/events.gd). Ця перевірка ловить
-## розсинхрон між ними: по одному екземпляру кожного з 23 конкретних класів
+## пропущену гілку: по одному екземпляру кожного з 23 конкретних класів
 ## (той самий набір, що й tests/core/test_events.gd) мусить пройти через
 ## play() без застрягання на "необроблений тип" — жодна подія тут не
 ## посилається на існуючий юніт, тож усі обробники відпрацюють як no-op,
@@ -86,9 +70,9 @@ func test_handlers_table_covers_every_concrete_event_class_in_events_gd() -> voi
 ## R20: масив екземплярів нижче написаний вручну (GDScript не вміє
 ## сконструювати анонімний вкладений клас за рядком з назвою — та сама
 ## причина, чому в event_player.gd є if/elif), але його ПОКРИТТЯ перевіряємо
-## не рахунком, а звіркою з тим самим джерело-похідним списком імен, що й
-## HANDLERS (R6) — інакше 24-й клас міг би непомітно пройти повз і
-## HANDLERS.size(), і розмір цього масиву, лишивши _dispatch без гілки.
+## не рахунком, а звіркою зі списком імен, добутим з самого events.gd (R6) —
+## інакше 24-й клас міг би непомітно пройти повз розмір цього масиву,
+## лишивши _dispatch без гілки.
 func test_dispatch_handles_every_concrete_event_instance_without_falling_through() -> void:
 	var all_events: Array[Events.BattleEvent] = [
 		Events.UnitMoved.new(1, [Vector2i(0, 0)], 0),
@@ -136,12 +120,6 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 
 	await player.play(all_events)
 	assert_false(player.is_playing(), "порожній лукап без жодного видимого юніта все одно доводить масив до кінця")
-
-
-func test_every_event_type_has_a_handler() -> void:
-	for name in EventPlayer.HANDLERS.keys():
-		assert_true(player.has_method(EventPlayer.HANDLERS[name]),
-			"подія %s не має обробника — вона мовчки зникне з екрана" % name)
 
 
 # --- is_playing() / playback_finished контракт ---------------------------
