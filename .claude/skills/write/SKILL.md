@@ -1,6 +1,6 @@
 ---
 name: write
-description: Use when writing any prose for this project — code comments, doc comments, commit messages, PR titles and descriptions, review replies, docs under docs/, CLAUDE.md, skill and agent files, or localisation strings in assets/i18n/strings.csv. Covers which language goes where, technical English and Ukrainian style, typography, and the project's fixed terminology in both languages.
+description: Use when writing any prose for this project — code comments, doc comments, commit messages, PR titles and descriptions, review replies, docs under docs/, CLAUDE.md, skill and agent files, or localisation strings in assets/i18n/strings.csv. Covers which language goes where, technical terminology in Ukrainian and English (programming, testing, git, Godot, rendering, wargame), style, typography, and the game's own rules vocabulary.
 ---
 
 # Writing for Advance Protocol
@@ -10,6 +10,14 @@ Write that, in the language the slot requires, with the project's words — and 
 
 The rules below come from the sources at the end and from what the repository already does.
 Where the two disagree, the reason is stated.
+
+**Terminology is the core of this skill.** Before writing, open the glossary for the language:
+
+- [`terms-uk.md`](terms-uk.md) — programming, testing, git, Godot and rendering terms in Ukrainian,
+  sourced from Godot/git/Blender translations and this repo's usage: translate, loanword, or code.
+- [`terms-en.md`](terms-en.md) — precise English: confused pairs, exact Godot names, wargame
+  vocabulary, requirement words.
+- §8 below — the game's own rules vocabulary in both languages.
 
 ## 1. Which language where
 
@@ -168,14 +176,16 @@ Title: one Ukrainian phrase naming the user-visible result — no type prefix (r
 | numbers | decimal comma `2,5`; thousands with a space `1 000` |
 | case | no English Title Case in Ukrainian — buttons, headings, unit names all sentence case |
 
-### Technical words
+### Technical words → [`terms-uk.md`](terms-uk.md)
 
-- Code names stay Latin and in `code`: `Command`, `BattleEvent`, `seen`, `visible`, `AP`, `GUT`,
-  `GLB`, `e2e`. Don't transliterate them (`евент` ✗).
-- Dev words that have a Ukrainian form use it: тест, гілка, коміт, злиття, сховище (or
-  репозиторій), збирання, кеш, вузол, сцена, сигнал, подія, виклик, збереження, налаштування,
-  застарілий (deprecated), типовий (default).
-- In the repo's prose «вигляд» (presentation layer, `game/`) and `core/` (not «ядро»).
+- Anything with a name in code goes in backticks, Latin: `Command`, `BattleEvent`, `seen`,
+  `visible`, `Viewport`, `null`. Identifiers in prose without backticks (`seen 23`, `null 11` in
+  the repo today) are a slip.
+- Otherwise the standard Ukrainian term (вузол, подія, екземпляр, типовий); a loanword only where
+  developers don't use the official one (коміт, репозиторій, асет, меш).
+- No English stems with Ukrainian endings: емітить, пофіксити, лукап, креш, девтул.
+- «вигляд» is the presentation layer (`game/`), `core/` is the rules layer — not «ядро», not
+  «шар показу».
 
 ## 8. Project terminology
 
@@ -244,6 +254,9 @@ Unit names: the `UNIT_*` rows of `strings.csv` are the source of truth — quote
 - `ERR_*` strings say «сапер»; the unit is «інженер».
 - `pause_surrender_yes` uses a hyphen as a dash: «Так - здатися».
 - «очок дії» (UI) vs «очки дій» (Ukrainian wargame usage) — not settled; keep the UI's form.
+- Tech terms with two or three variants in comments: інстанс / екземпляр, дефолтний / типовий,
+  вьюпорт / в'юпорт / `Viewport`, оверлей / накладка, нода / вузол, ассет / асет, емітить /
+  надсилає. `terms-uk.md` names the one to use.
 
 Fix these when you touch the line anyway; don't open a sweep without asking.
 
