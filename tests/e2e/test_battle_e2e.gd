@@ -558,3 +558,21 @@ func test_locale_change_refreshes_hud_and_inspector_labels() -> void:
 		assert_eq(hud._inspector._name_label.text, texts[loc][1], "назва юніта в інспекторі: %s" % loc)
 	assert_ne(texts["uk"], texts["en"], "передумова: переклади справді різні")
 	TranslationServer.set_locale(prev)
+
+
+## «Назад» закриває верхній оверлей: налаштування над паузою -> лише налаштування.
+func test_back_gesture_closes_settings_overlay_first_leaving_pause() -> void:
+	await _two_riflemen()
+	var pause: Control = _screen.get_node("%PauseMenu")
+	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	pause.settings_requested.emit()
+	var settings: SettingsScreen = _screen._settings
+	assert_not_null(settings)
+	# Не пишемо в справжній user://settings.cfg.
+	settings._persist = func() -> void: pass
+	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	assert_true(settings.is_queued_for_deletion(), "перший «назад» закрив налаштування")
+	assert_true(pause.visible, "пауза лишилась")
+	await get_tree().process_frame
+	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	assert_false(pause.visible, "другий «назад» закрив паузу")

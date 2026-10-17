@@ -58,6 +58,8 @@ var save_path: String = MatchService.SAVE_PATH
 
 var _match_service: Node = null
 var _prev_quit_on_go_back: bool = true
+## Відкритий оверлей налаштувань (null, поки не відкривали).
+var _settings: SettingsScreen = null
 var _controller: InputController = null
 var _zone_overlay: ZoneOverlay = null
 var _path_overlay: PathOverlay = null
@@ -266,7 +268,10 @@ func _exit_tree() -> void:
 func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_WM_GO_BACK_REQUEST:
-			if _pause.visible:
+			# Закриваємо верхній оверлей: налаштування, інакше пауза.
+			if is_instance_valid(_settings) and not _settings.is_queued_for_deletion():
+				_settings.get_node("%BackButton").pressed.emit()
+			elif _pause.visible:
 				_pause.hide()
 			else:
 				_pause.show()
@@ -279,9 +284,9 @@ func _notification(what: int) -> void:
 ## (стан, вигляд, відкрита пауза) лишається під ними як є, тож нічого не треба
 ## автозберігати й відновлювати. «Назад» у оверлеї просто закриває його.
 func _open_settings() -> void:
-	var settings: SettingsScreen = preload("res://game/ui/settings_screen.tscn").instantiate()
-	settings.overlay = true
-	_ui.add_child(settings)
+	_settings = preload("res://game/ui/settings_screen.tscn").instantiate()
+	_settings.overlay = true
+	_ui.add_child(_settings)
 
 
 ## Здача йде тим самим шляхом, що й кінець ходу: команда → події → програвач.

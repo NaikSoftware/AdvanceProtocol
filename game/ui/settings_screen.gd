@@ -9,6 +9,8 @@ extends Control
 
 var overlay: bool = false
 ## Запис налаштувань; змінна, щоб тест не писав у справжній user://settings.cfg.
+## Є незбережена зміна повзунка (клавіатура/геймпад не дають drag_ended).
+var _dirty: bool = false
 var _persist: Callable = func() -> void: SettingsService.save()
 
 @onready var _uk_button: Button = %LangUk
@@ -23,12 +25,14 @@ func _ready() -> void:
 	_uk_button.pressed.connect(_on_language_pressed.bind("uk"))
 	_en_button.pressed.connect(_on_language_pressed.bind("en"))
 	_music.value_changed.connect(func(v: float) -> void:
+		_dirty = true
 		SettingsService.music_volume = v)
 	# Диск — лише по відпусканню: value_changed іде на кожен піксель драгу.
-	_music.drag_ended.connect(func(_changed: bool) -> void: _persist.call())
+	_music.drag_ended.connect(_on_slider_released)
 	_sfx.value_changed.connect(func(v: float) -> void:
+		_dirty = true
 		SettingsService.sfx_volume = v)
-	_sfx.drag_ended.connect(func(_changed: bool) -> void: _persist.call())
+	_sfx.drag_ended.connect(_on_slider_released)
 	for i in _quality.size():
 		_quality[i].pressed.connect(_on_quality_pressed.bind(i))
 	%BackButton.pressed.connect(_on_back_pressed)
@@ -59,9 +63,16 @@ func _on_quality_pressed(level: int) -> void:
 	SettingsService.save()
 
 
-func _on_back_pressed() -> void:
-	# Клавіатурна зміна повзунка не дає drag_ended — зберігаємо при виході.
+func _on_slider_released(_changed: bool) -> void:
+	_dirty = false
 	_persist.call()
+
+
+func _on_back_pressed() -> void:
+	# Клавіатурна зміна повзунка не дає drag_ended — зберігаємо при виході,
+	# але лише якщо є що зберігати (зайвий запис на кожен вихід не потрібен).
+	if _dirty:
+		_persist.call()
 	if overlay:
 		queue_free()
 	else:

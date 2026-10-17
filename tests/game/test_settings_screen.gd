@@ -43,3 +43,17 @@ func test_back_persists() -> void:
 	(_screen.get_node("%MusicSlider") as HSlider).value = 0.2
 	_screen._on_back_pressed()
 	assert_eq(_saves, 1)
+
+
+func test_back_without_changes_or_after_drag_end_does_not_save() -> void:
+	var scr := preload("res://game/ui/settings_screen.tscn").instantiate() as SettingsScreen
+	add_child_autofree(scr)
+	scr.overlay = true
+	var n: Array = [0]
+	scr._persist = func() -> void: n[0] += 1
+	var music: HSlider = scr.get_node("%MusicSlider")
+	music.value = 0.3
+	music.drag_ended.emit(true)
+	assert_eq(n[0], 1)
+	scr._on_back_pressed()
+	assert_eq(n[0], 1, "після drag_ended нічого незбереженого — Назад не пише вдруге")
