@@ -133,6 +133,7 @@ var _gesture_had_pinch: bool = false
 func _ready() -> void:
 	_pause.settings_requested.connect(_open_settings)
 	_pause.save_quit_requested.connect(_on_save_quit)
+	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
 	if get_tree().current_scene != self:
 		return
@@ -250,6 +251,16 @@ func _open_settings() -> void:
 	var settings: SettingsScreen = preload("res://game/ui/settings_screen.tscn").instantiate()
 	settings.overlay = true
 	_ui.add_child(settings)
+
+
+## Здача йде тим самим шляхом, що й кінець ходу: команда → події → програвач.
+## 2 гравці — MatchEnded → результат; 3 — TurnStarted → гейт наступного гравця.
+func _on_surrender() -> void:
+	_pause.hide()
+	if _event_player.is_playing() or _match_service.state.is_over():
+		return
+	var err: String = _match_service.submit(ConcedeCommand.create())
+	assert(err == "", "core/ відхилив здачу: %s" % err)
 
 
 func _on_save_quit() -> void:

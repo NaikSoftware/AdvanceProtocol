@@ -5,12 +5,13 @@ extends Control
 ## непрозорий scrim на всю дошку, а не напівпрозора панель збоку.
 ##
 ## Кнопки лише повідомляють сигналами; що робити — вирішує сцена бою, яка
-## володіє станом (збереження, оверлей налаштувань). «Здатися» поки лишається
-## як було — з'єднається, коли в core/ зʼявиться команда капітуляції.
+## володіє станом (збереження, оверлей налаштувань). «Здатися» — без
+## підтвердження: в проєкті немає усталеного шаблону діалогу підтвердження.
 
 signal resume_requested
 signal settings_requested
 signal save_quit_requested
+signal surrender_requested
 
 @onready var _resume_button: Button = %ResumeButton
 
@@ -19,7 +20,7 @@ func _ready() -> void:
 	_resume_button.pressed.connect(_on_resume_pressed)
 	%SaveQuitButton.pressed.connect(save_quit_requested.emit)
 	%SettingsButton.pressed.connect(settings_requested.emit)
-	%SurrenderButton.pressed.connect(SceneRouter.goto_results)
+	%SurrenderButton.pressed.connect(surrender_requested.emit)
 
 
 func _on_resume_pressed() -> void:

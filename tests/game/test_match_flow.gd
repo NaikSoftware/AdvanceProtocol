@@ -289,13 +289,89 @@ func test_results_screen_shows_winner_and_rows_for_every_player() -> void:
 func test_setup_screen_choice_reaches_the_service() -> void:
 	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
 	add_child_autofree(setup)
-	(setup.get_node("%P3") as Button).button_pressed = true
 	(setup.get_node("%Mud") as Button).button_pressed = true
 	var service: Node = _service()
 
 	assert_true(setup.configure_from_choice(service))
 
 	assert_eq(service.map_path, MAP_PATH)
-	assert_eq(service.players, 3)
+	assert_eq(service.players, 2)
 	assert_eq(service.ground_state, Terrain.GroundState.MUD)
 	assert_eq(service.launch_mode, MatchServiceScript.Launch.NEW)
+
+
+# --- Здача з паузи ---------------------------------------------------------
+
+func _map3() -> MapData:
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(4, 1), "facing": 0},
+		{"type_id": 5, "owner": 2, "pos": Vector2i(1, 4), "facing": 0},
+	] as Array[Dictionary]
+	return m
+
+
+func _surrender(screen: BattleScreen) -> void:
+	(screen.get_node("%PauseMenu").get_node("%SurrenderButton") as Button).pressed.emit()
+	for i in 6:
+		_finish_all_processed_tweens()
+		await wait_process_frames(1)
+
+
+func test_surrender_in_two_player_match_ends_it_and_goes_to_results() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, service)
+	service.save_current(TEST_SAVE)
+	watch_signals(screen)
+
+	await _surrender(screen)
+
+	assert_true(service.state.is_over())
+	assert_eq(service.state.winner, 1)
+	assert_signal_emitted(screen, "match_finished")
+	assert_false(FileAccess.file_exists(TEST_SAVE))
+	assert_false(screen.get_node("%PauseMenu").visible)
+
+
+func test_surrender_in_three_player_match_hands_over_to_next_player() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map3(), 3, 1, service)
+	watch_signals(screen)
+
+	await _surrender(screen)
+
+	assert_false(service.state.is_over())
+	assert_eq(service.state.active_player, 1)
+	assert_signal_not_emitted(screen, "match_finished")
+	assert_true(screen.get_node("%HandoverGate").visible)
+	assert_false(screen.get_node("%PauseMenu").visible)
+
+
+# --- Налаштування: 3 гравці лише на карті з 3 спавнами -----------------------
+
+func test_three_players_offered_only_when_map_has_three_owners() -> void:
+	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
+	add_child_autofree(setup)
+	var map: MapData = load(MAP_PATH)
+	var owners: Dictionary = {}
+	for s in map.spawns:
+		owners[int(s["owner"])] = true
+	assert_eq(owners.has(2), false, "передумова: поставна карта без спавнів третього")
+
+	assert_true((setup.get_node("%P3") as Button).disabled)
+	(setup.get_node("%P3") as Button).button_pressed = true
+	assert_false(setup.configure_from_choice(_service()), "3 гравці на карті без третього — не стартує")
+
+
+func test_start_removes_the_old_save() -> void:
+	# delete_save стирає і файл, і сайдкар
+	var service: Node = _service()
+	service.state = BattleState.create(Board.create(2, 2, 0), 2, 1)
+	service.map_path = MAP_PATH
+	service.save_current(TEST_SAVE)
+	service.delete_save(TEST_SAVE)
+	assert_false(FileAccess.file_exists(TEST_SAVE))
+	assert_false(FileAccess.file_exists(TEST_SAVE + ".map"))

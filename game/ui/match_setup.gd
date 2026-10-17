@@ -18,6 +18,8 @@ var _map_paths: Array[String] = []
 
 func _ready() -> void:
 	_populate_maps()
+	_map_options.item_selected.connect(func(_i: int) -> void: _sync_player_options())
+	_sync_player_options()
 	%BackButton.pressed.connect(SceneRouter.goto_main_menu)
 	%StartButton.pressed.connect(_on_start_pressed)
 
@@ -37,14 +39,38 @@ func _populate_maps() -> void:
 		_map_options.add_item(map_name.trim_suffix(".tres"))
 
 
+## Тримачі гравців — не з карти, а з її спавнів: мапа без юнітів третього
+## гравця не дає запустити матч утрьох (гравець без юнітів — безглуздя).
+func _sync_player_options() -> void:
+	var can3: bool = _selected_map_supports_3()
+	%P3.disabled = not can3
+	if not can3 and %P3.button_pressed:
+		%P2.button_pressed = true
+
+
+func _selected_map_supports_3() -> bool:
+	if _map_paths.is_empty():
+		return false
+	var map: MapData = load(_map_paths[_map_options.selected]) as MapData
+	var owners: Dictionary = {}
+	for spawn in map.spawns:
+		owners[int(spawn["owner"])] = true
+	return owners.has(0) and owners.has(1) and owners.has(2)
+
+
 func _on_start_pressed() -> void:
 	if configure_from_choice(MatchService):
+		# Новий матч витісняє старе збереження: інакше «Продовжити» після виходу
+		# з нового, незбереженого матчу відновило б зовсім інший.
+		MatchService.delete_save(MatchService.SAVE_PATH)
 		SceneRouter.goto_battle()
 
 
 ## Переносить вибір гравця в сервіс; сід випадковий (configure без сіда).
 func configure_from_choice(service: Node) -> bool:
 	if _map_paths.is_empty():
+		return false
+	if _chosen_players() == 3 and not _selected_map_supports_3():
 		return false
 	service.configure(_map_paths[_map_options.selected], _chosen_players(), _chosen_ground())
 	return true
