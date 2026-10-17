@@ -23,6 +23,13 @@ func _ready() -> void:
 	%SurrenderButton.pressed.connect(surrender_requested.emit)
 
 
+## Збій збереження: лишаємось у паузі й кажемо про це (ключ перекладу).
+func show_error(key: String) -> void:
+	%ErrorLabel.text = key
+	%ErrorLabel.visible = true
+
+
 func _on_resume_pressed() -> void:
+	%ErrorLabel.visible = false
 	visible = false
 	resume_requested.emit()

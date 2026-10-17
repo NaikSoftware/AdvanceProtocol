@@ -366,12 +366,131 @@ func test_three_players_offered_only_when_map_has_three_owners() -> void:
 	assert_false(setup.configure_from_choice(_service()), "3 гравці на карті без третього — не стартує")
 
 
-func test_start_removes_the_old_save() -> void:
-	# delete_save стирає і файл, і сайдкар
+func test_start_button_configures_the_service_and_removes_the_old_save() -> void:
 	var service: Node = _service()
 	service.state = BattleState.create(Board.create(2, 2, 0), 2, 1)
 	service.map_path = MAP_PATH
 	service.save_current(TEST_SAVE)
-	service.delete_save(TEST_SAVE)
+	assert_true(FileAccess.file_exists(TEST_SAVE))
+	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
+	setup.match_service = service
+	setup.save_path = TEST_SAVE
+	add_child_autofree(setup)
+	watch_signals(setup)
+
+	(setup.get_node("%StartButton") as Button).pressed.emit()
+
+	assert_signal_emitted(setup, "started")
+	assert_eq(service.launch_mode, MatchServiceScript.Launch.NEW)
 	assert_false(FileAccess.file_exists(TEST_SAVE))
 	assert_false(FileAccess.file_exists(TEST_SAVE + ".map"))
+
+
+# --- Ревʼю: завершений матч, збій запису, реванш, блокування здачі -----------
+
+func test_save_quit_after_match_ended_leaves_no_save_and_goes_to_results() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, service)
+	await _finish_match(service, screen)
+	watch_signals(screen)
+
+	(screen.get_node("%PauseMenu").get_node("%SaveQuitButton") as Button).pressed.emit()
+
+	assert_false(FileAccess.file_exists(TEST_SAVE))
+	assert_signal_emitted(screen, "match_finished")
+	assert_signal_not_emitted(screen, "left_to_menu")
+
+
+func test_save_current_refuses_a_finished_match_and_removes_old_save() -> void:
+	var service: Node = _service()
+	_screen().setup(_map(), 2, 1, service)
+	service.save_current(TEST_SAVE)
+	service.state.winner = 0
+
+	assert_ne(service.save_current(TEST_SAVE), OK)
+	assert_false(FileAccess.file_exists(TEST_SAVE))
+
+
+func test_loading_a_finished_save_fails_and_continue_hides() -> void:
+	var a: Node = _service()
+	_screen().setup(_map(), 2, 1, a)
+	a.state.winner = 0
+	BattleSerializer.save_to(a.state, TEST_SAVE)  # так міг лишитися старий файл
+	var menu: MainMenu = MainMenuScene.instantiate()
+	add_child_autofree(menu)
+	var b: Node = _service()
+
+	assert_false(menu.continue_saved(b, TEST_SAVE))
+	assert_null(b.state)
+	assert_false((menu.get_node("%ContinueButton") as Button).visible)
+
+
+func test_save_failure_keeps_pause_open_and_shows_error() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, service)
+	screen.save_path = "user://no_such_dir/save.json"
+	watch_signals(screen)
+	var pause: Control = screen.get_node("%PauseMenu")
+	pause.show()
+
+	(pause.get_node("%SaveQuitButton") as Button).pressed.emit()
+
+	assert_signal_not_emitted(screen, "left_to_menu")
+	assert_true(pause.visible)
+	assert_true((pause.get_node("%ErrorLabel") as Label).visible)
+
+
+class SpyRouter extends Node:
+	var calls: Array[String] = []
+	func goto_battle() -> void: calls.append("battle")
+	func goto_match_setup() -> void: calls.append("setup")
+	func goto_main_menu() -> void: calls.append("menu")
+
+
+func _rematch_calls(service: Node) -> Array[String]:
+	service.state = BattleState.create(Board.create(2, 2, 0), service.players, 1)
+	service.state.winner = 0
+	var router := SpyRouter.new()
+	add_child_autofree(router)
+	var screen: ResultsScreen = ResultsScene.instantiate()
+	screen.match_service = service
+	screen.router = router
+	add_child_autofree(screen)
+	(screen.get_node("%RematchButton") as Button).pressed.emit()
+	return router.calls
+
+
+func test_rematch_goes_to_setup_when_map_is_missing_or_unknown() -> void:
+	var service: Node = _service()
+	service.configure("res://maps/renamed_away.tres", 2, Terrain.GroundState.DRY, 1)
+	assert_eq(_rematch_calls(service), ["setup"] as Array[String])
+	var unknown: Node = _service()
+	unknown.configure("", 2, Terrain.GroundState.DRY, 1)
+	assert_eq(_rematch_calls(unknown), ["setup"] as Array[String])
+
+
+func test_rematch_goes_to_setup_when_map_cannot_host_the_players() -> void:
+	var service: Node = _service()
+	service.configure(MAP_PATH, 3, Terrain.GroundState.DRY, 1)
+	assert_eq(_rematch_calls(service), ["setup"] as Array[String])
+
+
+func test_rematch_on_a_valid_map_starts_the_battle() -> void:
+	var service: Node = _service()
+	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY, 1)
+	assert_eq(_rematch_calls(service), ["battle"] as Array[String])
+
+
+func test_surrender_while_events_play_keeps_pause_open() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, service)
+	service.state.winner = 0  # заблоковано: матч уже скінчився
+	var pause: Control = screen.get_node("%PauseMenu")
+	pause.show()
+
+	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+
+	assert_true(pause.visible, "заблоковане натискання не зникає мовчки")

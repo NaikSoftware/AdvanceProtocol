@@ -10,6 +10,13 @@ extends Control
 ## Колір гравців на екрані поки лише показується: у бойовому вигляді його ніхто
 ## не споживає, тож у конфіг він не йде.
 
+## Старт матчу налаштовано; у справжньому запуску веде в бій (тести підміняють).
+signal started
+
+## null — автолоад; тести підставляють свій сервіс і шлях збереження.
+var match_service: Node = null
+var save_path: String = MatchService.SAVE_PATH
+
 const MAPS_DIR: String = "res://maps"
 
 @onready var _map_options: OptionButton = %MapOptions
@@ -17,6 +24,10 @@ var _map_paths: Array[String] = []
 
 
 func _ready() -> void:
+	if match_service == null:
+		match_service = MatchService
+	if get_tree().current_scene == self:
+		started.connect(SceneRouter.goto_battle)
 	_populate_maps()
 	_map_options.item_selected.connect(func(_i: int) -> void: _sync_player_options())
 	_sync_player_options()
@@ -51,19 +62,28 @@ func _sync_player_options() -> void:
 func _selected_map_supports_3() -> bool:
 	if _map_paths.is_empty():
 		return false
-	var map: MapData = load(_map_paths[_map_options.selected]) as MapData
+	return map_supports(load(_map_paths[_map_options.selected]) as MapData, 3)
+
+
+## Карта придатна на N гравців, лише якщо кожен із них має хоч один спавн.
+static func map_supports(map: MapData, player_count: int) -> bool:
+	if map == null:
+		return false
 	var owners: Dictionary = {}
 	for spawn in map.spawns:
 		owners[int(spawn["owner"])] = true
-	return owners.has(0) and owners.has(1) and owners.has(2)
+	for p in player_count:
+		if not owners.has(p):
+			return false
+	return true
 
 
 func _on_start_pressed() -> void:
-	if configure_from_choice(MatchService):
+	if configure_from_choice(match_service):
 		# Новий матч витісняє старе збереження: інакше «Продовжити» після виходу
 		# з нового, незбереженого матчу відновило б зовсім інший.
-		MatchService.delete_save(MatchService.SAVE_PATH)
-		SceneRouter.goto_battle()
+		match_service.delete_save(save_path)
+		started.emit()
 
 
 ## Переносить вибір гравця в сервіс; сід випадковий (configure без сіда).

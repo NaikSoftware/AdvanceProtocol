@@ -14,6 +14,8 @@ const CLASS_KEYS: Array[String] = [
 
 ## Підміняється тестом до додавання у дерево; null — автолоад.
 var match_service: Node = null
+## Те саме для навігації: null — автолоад SceneRouter.
+var router: Node = null
 
 
 ## Рядок на гравця: втрати (мертві юніти), завдана шкода, утримані цілі, рівні
@@ -48,8 +50,10 @@ static func summarize(state: BattleState) -> Array[Dictionary]:
 func _ready() -> void:
 	if match_service == null:
 		match_service = MatchService
+	if router == null:
+		router = SceneRouter
 	%RematchButton.pressed.connect(_on_rematch_pressed)
-	%ToMenuButton.pressed.connect(SceneRouter.goto_main_menu)
+	%ToMenuButton.pressed.connect(func() -> void: router.goto_main_menu())
 	var state: BattleState = match_service.state
 	if state == null:
 		return
@@ -102,5 +106,13 @@ func _cell(table: GridContainer, text: String, colour: Color, align: HorizontalA
 
 
 func _on_rematch_pressed() -> void:
+	# Реванш можливий лише на карті, яку ще можна завантажити і яка тягне
+	# стільки гравців; інакше — до налаштувань, а не в падіння чи чужий матч.
+	var map: MapData = null
+	if match_service.map_path != "" and ResourceLoader.exists(match_service.map_path):
+		map = load(match_service.map_path) as MapData
+	if not MatchSetup.map_supports(map, match_service.players):
+		router.goto_match_setup()
+		return
 	match_service.rematch()
-	SceneRouter.goto_battle()
+	router.goto_battle()

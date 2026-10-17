@@ -111,3 +111,4 @@ results_class_infantry,Піхота,Infantry
 results_class_light_vehicle,Легка техніка,Light vehicles
 results_class_tank,Танки,Tanks
 results_class_artillery,Артилерія,Artillery
+pause_save_failed,Не вдалося зберегти,Could not save

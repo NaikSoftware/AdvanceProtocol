@@ -74,7 +74,12 @@ func take_events() -> Array[Events.BattleEvent]:
 
 ## Карта в серіалізаторі (core/) не живе, а «Реванш» після «Продовжити» без неї
 ## не знає, що грати, — тож шлях до карти лежить окремим файлом поруч.
+## Завершений матч не зберігається (і старе збереження стирається): інакше
+## «Продовжити» вічно відновлювало б гру, якої вже нема.
 func save_current(path: String) -> Error:
+	if state.is_over():
+		delete_save(path)
+		return ERR_UNAVAILABLE
 	var err: Error = BattleSerializer.save_to(state, path)
 	if err == OK and map_path != "":
 		var f: FileAccess = FileAccess.open(path + ".map", FileAccess.WRITE)
@@ -91,7 +96,7 @@ func delete_save(path: String) -> void:
 
 func load_saved(path: String) -> bool:
 	var loaded: BattleState = BattleSerializer.load_from(path)
-	if loaded == null:
+	if loaded == null or loaded.is_over():
 		return false
 	state = loaded
 	players = loaded.player_count

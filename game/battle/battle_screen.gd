@@ -167,7 +167,9 @@ func _start_fallback_match_if_not_injected() -> void:
 func launch(match_service: Node) -> void:
 	var map: MapData = _FallbackMap
 	if match_service.map_path != "":
-		map = load(match_service.map_path) as MapData
+		map = (load(match_service.map_path) as MapData) if ResourceLoader.exists(match_service.map_path) else null
+		if map == null:
+			map = _FallbackMap
 	setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state)
 	match_service.launch_mode = MatchService.Launch.NONE
 
@@ -256,15 +258,25 @@ func _open_settings() -> void:
 ## Здача йде тим самим шляхом, що й кінець ходу: команда → події → програвач.
 ## 2 гравці — MatchEnded → результат; 3 — TurnStarted → гейт наступного гравця.
 func _on_surrender() -> void:
-	_pause.hide()
+	# Заблоковано — пауза лишається відкритою, натискання не зникає мовчки.
 	if _event_player.is_playing() or _match_service.state.is_over():
 		return
+	_pause.hide()
 	var err: String = _match_service.submit(ConcedeCommand.create())
 	assert(err == "", "core/ відхилив здачу: %s" % err)
 
 
 func _on_save_quit() -> void:
-	_match_service.save_current(save_path)
+	# Пауза досяжна й під час показу MatchEnded: завершений матч веде в результат,
+	# як і в match_finished, а не в меню з мертвим збереженням.
+	if _match_service.state.is_over():
+		_match_service.delete_save(save_path)
+		match_finished.emit()
+		return
+	var err: Error = _match_service.save_current(save_path)
+	if err != OK:
+		_pause.show_error("pause_save_failed")
+		return
 	left_to_menu.emit()
 
 
