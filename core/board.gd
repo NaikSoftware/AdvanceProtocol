@@ -45,9 +45,6 @@ func penalty_at(p: Vector2i) -> int:
 		return Terrain.IMPASSABLE
 	return Terrain.penalty(kind_at(p), ground_state)
 
-func is_passable(p: Vector2i) -> bool:
-	return penalty_at(p) < Terrain.IMPASSABLE
-
 func neighbours4(p: Vector2i) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	for d in DIRS_4:

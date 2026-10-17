@@ -33,7 +33,7 @@ func test_demolish_bridge_reshapes_the_map() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
 	EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(4, 3)).apply(state)
 	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE_DESTROYED)
-	assert_false(state.board.is_passable(Vector2i(4, 3)))
+	assert_false(state.board.penalty_at(Vector2i(4, 3)) < Terrain.IMPASSABLE)
 
 ## Рішення власника: міст підривається разом із ворогом, що на ньому стоїть, —
 ## юніт гине, шкода зараховується власникові сапера (без досвіду, §3.7). Свій юніт

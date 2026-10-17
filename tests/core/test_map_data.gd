@@ -119,9 +119,9 @@ func test_skirmish_bridge_map_loads_and_populates_a_sane_match() -> void:
 
 	var board: Board = m.to_board()
 	# Річка блокує брід поза мостом, а сам міст — прохідний.
-	assert_false(board.is_passable(Vector2i(8, 0)), "річка непрохідна поза мостом")
-	assert_true(board.is_passable(Vector2i(8, 5)), "міст мусить лишатися прохідним")
-	assert_true(board.is_passable(Vector2i(8, 6)), "міст мусить лишатися прохідним")
+	assert_false(board.penalty_at(Vector2i(8, 0)) < Terrain.IMPASSABLE, "річка непрохідна поза мостом")
+	assert_true(board.penalty_at(Vector2i(8, 5)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
+	assert_true(board.penalty_at(Vector2i(8, 6)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
 
 	var state: BattleState = BattleState.create(board, 2, 1)
 	m.populate(state)
@@ -130,4 +130,4 @@ func test_skirmish_bridge_map_loads_and_populates_a_sane_match() -> void:
 	assert_eq(state.units_of(1).size(), 3)
 	for u in state.alive_units():
 		assert_true(board.in_bounds(u.pos), "жоден спавн не мусить лежати поза дошкою")
-		assert_true(board.is_passable(u.pos), "жоден спавн не мусить стояти на непрохідному тайлі")
+		assert_true(board.penalty_at(u.pos) < Terrain.IMPASSABLE, "жоден спавн не мусить стояти на непрохідному тайлі")

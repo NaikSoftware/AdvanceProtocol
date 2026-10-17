@@ -233,14 +233,14 @@ func test_demolished_bridge_cuts_the_map_in_two() -> void:
 	s.start()
 	s.begin_turn()
 
-	assert_true(s.board.is_passable(Vector2i(8, 6)), "передумова: міст ще цілий")
+	assert_true(s.board.penalty_at(Vector2i(8, 6)) < Terrain.IMPASSABLE, "передумова: міст ще цілий")
 	var demolish: EngineerCommand = EngineerCommand.create(
 		engineer.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(8, 6))
 	assert_eq(demolish.validate(s), "")
 	var events: Array[Events.BattleEvent] = demolish.apply(s)
 	assert_true(_count(events, Events.BridgeChanged) == 1)
 	assert_eq(s.board.kind_at(Vector2i(8, 6)), Terrain.Kind.BRIDGE_DESTROYED)
-	assert_false(s.board.is_passable(Vector2i(8, 6)))
+	assert_false(s.board.penalty_at(Vector2i(8, 6)) < Terrain.IMPASSABLE)
 
 	var tank: Unit = s.add_unit(5, 0, Vector2i(6, 6), 2)
 	tank.ap = 10_000  # див. коментар вище — лише для покриття Pathing, не для бою.
