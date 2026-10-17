@@ -268,7 +268,6 @@ func _notification(what: int) -> void:
 		NOTIFICATION_WM_GO_BACK_REQUEST:
 			if _pause.visible:
 				_pause.hide()
-				_pause.resume_requested.emit()
 			else:
 				_pause.show()
 		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST:

@@ -9,7 +9,6 @@ extends Control
 ## підміняє кнопки панеллю підтвердження в тій самій картці (без ОС-діалогів);
 ## surrender_requested летить лише з «Так».
 
-signal resume_requested
 signal settings_requested
 signal save_quit_requested
 signal surrender_requested
@@ -44,4 +43,3 @@ func show_error(key: String) -> void:
 
 func _on_resume_pressed() -> void:
 	visible = false
-	resume_requested.emit()

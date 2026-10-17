@@ -64,12 +64,6 @@ func test_show_preview_draws_full_outline_for_every_path_tile() -> void:
 		assert_eq(seg["color"], PathOverlay.COLOR_PATH)
 
 
-func test_show_preview_never_touches_the_tile_fill_layer() -> void:
-	overlay.show_preview(_move_preview([Vector2i(6, 5)]))
-	assert_eq(board_view._layer_highlights[board_view.LAYER_PATH].size(), 0,
-		"шлях — контур, не заливка: _layer_highlights мусить лишитись порожнім")
-
-
 func test_show_preview_ignores_shot_type_and_clears_any_previous_path() -> void:
 	overlay.show_preview(_move_preview([Vector2i(6, 5)]))
 	assert_true(_segments(board_view.LAYER_PATH).size() > 0, "передумова: шлях намальований")

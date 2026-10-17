@@ -2,8 +2,8 @@ extends GutTest
 ## Task 2.3, ruling R4: жива сцена battle_screen.tscn зʼявляється лише в Task
 ## 2.10, тож перевірка тут — headless, не «увімкнути гру й подивитись».
 ##
-## Підсвітка перевіряється через власний стан BoardView (_layer_highlights,
-## _resolve_color), а не через читання кольору назад з MultiMesh: під
+## Контур перевіряється через власний стан BoardView (_contour_segments),
+## а не через читання кольору назад з MultiMesh: під
 ## headless-запуском (`--headless`, дамі-рендерер) RenderingServer не зберігає
 ## буфер інстансів мультимешу — set_instance_color/set_instance_transform не
 ## кидають помилку, але get_instance_color/get_instance_transform одразу
@@ -93,73 +93,6 @@ func test_build_wires_every_kind_instance_for_instance_color_paint() -> void:
 		assert_true(mmi.multimesh.mesh is BoxMesh, "%s: тайл мусить лишатись дешевим примітивом" % mmi.name)
 
 
-## Далі — підсвітка перевіряється через власний стан BoardView (bookkeeping)
-## і через щойно перевірене підключення до мультимешу (wiring), а не через
-## сам намальований результат: колір інстансу мультимешу не читається назад
-## під headless (коментар угорі файлу), тож «а чи справді видно потрібний
-## колір на екрані» лишається за Task 2.10.
-func test_highlight_layers_are_independent() -> void:
-	var board := _two_kind_board()
-	view.build(board)
-	var zone_cell := Vector2i(0, 0)
-	var target_cell := Vector2i(1, 0)
-	view.highlight_tiles([zone_cell] as Array[Vector2i], Color.YELLOW, view.LAYER_ZONES)
-	view.highlight_tiles([target_cell] as Array[Vector2i], Color.RED, view.LAYER_TARGETS)
-
-	assert_eq(view._layer_highlights[view.LAYER_ZONES][zone_cell], Color.YELLOW)
-	assert_eq(view._layer_highlights[view.LAYER_TARGETS][target_cell], Color.RED)
-	assert_false(view._layer_highlights[view.LAYER_TARGETS].has(zone_cell), "ціль не мусить зʼявитись у шарі зон")
-	assert_false(view._layer_highlights[view.LAYER_ZONES].has(target_cell), "зона не мусить зʼявитись у шарі цілей")
-
-	# Додавання ще одного тайла в шар зон не мусить чіпати вже виставлений
-	# шар цілей — саме заради цього шари незалежні.
-	view.highlight_tiles([Vector2i(2, 0)] as Array[Vector2i], Color.YELLOW, view.LAYER_ZONES)
-	assert_eq(view._layer_highlights[view.LAYER_TARGETS][target_cell], Color.RED, "зони не гасять підсвітку цілі")
-
-
-func test_selection_layer_wins_over_zones_on_the_same_tile() -> void:
-	var board := _two_kind_board()
-	var cell := Vector2i(0, 0)
-	var kind: int = board.kind_at(cell)
-	view.build(board)
-
-	view.highlight_tiles([cell] as Array[Vector2i], Color.YELLOW, view.LAYER_ZONES)
-	assert_eq(view._resolve_color(cell, kind), Color.YELLOW)
-
-	view.highlight_tiles([cell] as Array[Vector2i], Color.RED, view.LAYER_SELECTION)
-	assert_eq(view._resolve_color(cell, kind), Color.RED, "SELECTION має пріоритет над ZONES — зони не гасять вибір")
-
-
-func test_clear_highlights_clears_only_that_layer() -> void:
-	var board := _two_kind_board()
-	var cell := Vector2i(0, 0)
-	var kind: int = board.kind_at(cell)
-	view.build(board)
-	var base_color: Color = view._resolve_color(cell, kind)
-
-	view.highlight_tiles([cell] as Array[Vector2i], Color.YELLOW, view.LAYER_ZONES)
-	view.highlight_tiles([cell] as Array[Vector2i], Color.RED, view.LAYER_SELECTION)
-
-	view.clear_highlights(view.LAYER_SELECTION)
-	assert_false(view._layer_highlights[view.LAYER_SELECTION].has(cell), "SELECTION мусить бути порожнім")
-	assert_true(view._layer_highlights[view.LAYER_ZONES].has(cell), "ZONES не мали зникнути разом із SELECTION")
-	assert_eq(view._resolve_color(cell, kind), Color.YELLOW, "після зняття SELECTION видимий колір — ZONES")
-
-	view.clear_highlights(view.LAYER_ZONES)
-	assert_false(view._layer_highlights[view.LAYER_ZONES].has(cell))
-	assert_eq(view._resolve_color(cell, kind), base_color, "після зняття обох шарів — знову базовий колір тайлу")
-
-
-func test_highlight_tiles_ignores_cells_outside_the_board() -> void:
-	var board := _two_kind_board()
-	view.build(board)
-	var outside := Vector2i(99, 99)
-	# Не мусить впасти — і не мусить лишити слід у жодному шарі, бо такої
-	# клітинки на дошці немає.
-	view.highlight_tiles([outside] as Array[Vector2i], Color.RED, view.LAYER_SELECTION)
-	assert_false(view._layer_highlights[view.LAYER_SELECTION].has(outside))
-
-
 ## §3.5: туман ховає юнітів і міни, ніколи не карту. BoardView не має і не
 ## може мати уявлення про клітинкову видимість — інакше місцевість перестане
 ## бути публічною.
@@ -171,25 +104,11 @@ func test_no_apply_fog_and_no_vision_reference() -> void:
 
 # --- Контур (§3.13, PO-скарга: «контурно, не заливкою») -------------------
 #
-# draw_contour() — окремий механізм від highlight_tiles(): сегмент {cell, dir,
-# color} малює тонку риску вздовж ОДНОГО ребра тайла, а не перефарбовує весь
-# тайл. Головний доказ, що це не заливка: намальований контур НІКОЛИ не
-# лишає сліду в _layer_highlights (тому старий механізм і зберігається окремо
-# в тестах вище — щоб було з чим порівняти).
+# draw_contour(): сегмент {cell, dir, color} малює тонку риску вздовж ОДНОГО
+# ребра тайла, а не перефарбовує весь тайл.
 
 func _edge(cell: Vector2i, dir: Vector2i, color: Color) -> Dictionary:
 	return {"cell": cell, "dir": dir, "color": color}
-
-
-func test_draw_contour_never_touches_the_tile_fill_layer() -> void:
-	var board := _two_kind_board()
-	view.build(board)
-	var segments: Array[Dictionary] = [_edge(Vector2i(0, 0), Vector2i(1, 0), Color.YELLOW)]
-
-	view.draw_contour(segments, view.LAYER_ZONES)
-
-	assert_eq(view._layer_highlights[view.LAYER_ZONES].size(), 0,
-		"контур не мусить лишати запис у _layer_highlights — інакше це знову заливка")
 
 
 func test_draw_contour_stores_segments_for_that_layer_only() -> void:

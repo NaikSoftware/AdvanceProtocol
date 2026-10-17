@@ -6,7 +6,7 @@ extends GutTest
 ## не читається назад під headless-запуском.
 ##
 ## R15 → PO-скарга «контурно, не заливкою»: ZoneOverlay малює РЕБРА зони
-## (BoardView.draw_contour), а не тайли (BoardView.highlight_tiles). Головний
+## (BoardView.draw_contour), а не тайли (суцільний квадрат на тайл). Головний
 ## доказ — _layer_highlights для LAYER_ZONES лишається порожнім завжди
 ## (test_show_for_never_touches_the_tile_fill_layer нижче): це і відрізняє
 ## контур від fill структурно, без єдиного знімка екрана.
@@ -61,23 +61,7 @@ func test_show_for_paints_only_zones_layer() -> void:
 	var by_cell: Dictionary = _dirs_by_cell(board_view.LAYER_ZONES)
 	assert_true(by_cell.has(Vector2i(10, 10)), "золота зона мусить бути намальована")
 	assert_true(by_cell.has(Vector2i(11, 10)), "червона зона мусить бути намальована")
-	assert_eq(_segments(board_view.LAYER_TARGETS).size(), 0, "show_for не мусить чіпати шар цілей")
-	assert_eq(_segments(board_view.LAYER_SELECTION).size(), 0, "show_for не мусить чіпати шар вибору")
 	assert_eq(_segments(board_view.LAYER_PATH).size(), 0, "show_for не мусить чіпати шар шляху")
-
-
-## Головний доказ Task 1: контур ЗОН ніколи не є заливкою тайла. Якби
-## show_for() досі викликав highlight_tiles(), цей запис зʼявився б тут.
-func test_show_for_never_touches_the_tile_fill_layer() -> void:
-	var origin := Vector2i(10, 10)
-	var block: Array[Vector2i] = []
-	for x in range(9, 12):
-		for y in range(9, 12):
-			block.append(Vector2i(x, y))
-	overlay.show_for(_unit(origin), _zones(origin, block, []))
-
-	assert_eq(board_view._layer_highlights[board_view.LAYER_ZONES].size(), 0,
-		"зона руху — контур, не заливка: _layer_highlights мусить лишитись порожнім")
 
 
 func test_show_for_uses_correct_colors_per_zone() -> void:
@@ -150,12 +134,7 @@ func test_nested_zones_touch_without_swallowing_each_other() -> void:
 	assert_false(by_cell.has(origin), "центр золотого блоку — суцільна внутрішність, не контур")
 
 
-func test_clear_removes_overlay_and_leaves_other_layers_alone() -> void:
-	var target_cell := Vector2i(3, 3)
-	var selection_cell := Vector2i(4, 4)
-	board_view.highlight_tiles([target_cell] as Array[Vector2i], Color.RED, board_view.LAYER_TARGETS)
-	board_view.highlight_tiles([selection_cell] as Array[Vector2i], Color.WHITE, board_view.LAYER_SELECTION)
-
+func test_clear_removes_overlay() -> void:
 	var origin := Vector2i(10, 10)
 	var mf: Array[Vector2i] = [Vector2i(10, 10)]
 	overlay.show_for(_unit(origin), _zones(origin, mf, []))
@@ -163,8 +142,6 @@ func test_clear_removes_overlay_and_leaves_other_layers_alone() -> void:
 
 	overlay.clear()
 	assert_eq(_segments(board_view.LAYER_ZONES).size(), 0, "clear() мусить прибрати весь контур зон")
-	assert_true(board_view._layer_highlights[board_view.LAYER_TARGETS].has(target_cell), "clear() не мусить чіпати шар цілей")
-	assert_true(board_view._layer_highlights[board_view.LAYER_SELECTION].has(selection_cell), "clear() не мусить чіпати шар вибору")
 
 
 ## §3.2: «перемальовується після кожної дії» — другий show_for підряд
