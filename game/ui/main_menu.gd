@@ -19,7 +19,8 @@ extends Control
 ## горизонті (тайм-реалізація дешевша за шейдер для рідкісної нерегулярної
 ## події) і перф-бюджет (§8 CLAUDE.md — «battery life is a feature»).
 
-const SAVE_PATH: String = "user://save.json"
+## Тести підміняють до входу в дерево (ставлять save_path перед add_child).
+var save_path: String = MatchService.SAVE_PATH
 
 ## Перф-бюджет: анімований фон не має саджати батарею. Поки меню активне,
 ## кепуємо кадри й вимикаємо low-processor mode (інакше він може заморозити
@@ -96,7 +97,7 @@ var _effect_markers: Array[Dictionary] = []
 func _ready() -> void:
 	# «Продовжити» показуємо лише коли є що продовжувати — задісейблена кнопка
 	# лише смітить екран, тож ховаємо її повністю, якщо збереження немає.
-	_continue_button.visible = FileAccess.file_exists(SAVE_PATH)
+	_continue_button.visible = FileAccess.file_exists(save_path)
 	# «Вийти» не має сенсу у веб-збірці — там немає куди виходити.
 	_quit_button.visible = not OS.has_feature("web")
 	_about_panel.visible = false
@@ -132,8 +133,8 @@ func _on_continue_pressed() -> void:
 
 ## Завантажує збереження в сервіс і лишає бою відновити вигляд. Невдача (файл
 ## зникнув або зіпсований) — не падіння: «Продовжити» просто зникає.
-func continue_saved(service: Node = MatchService, path: String = SAVE_PATH) -> bool:
-	var ok: bool = service.load_saved(path)
+func continue_saved(service: Node = MatchService, path: String = "") -> bool:
+	var ok: bool = service.load_saved(path if path != "" else save_path)
 	if not ok:
 		_continue_button.visible = false
 	return ok
