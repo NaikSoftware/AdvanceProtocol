@@ -198,6 +198,9 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_match_service.start_match(board, player_count, seed_value)
 	if not map_data.populate(_match_service.state):
 		push_error("BattleScreen: карта відхилена — напрям поза 0..7")
+		# Порожній матч не мусить пережити відмову: автозбереження в _notification
+		# записало б його, і «Продовжити» вело б у бій без юнітів.
+		_match_service.state = null
 		left_to_menu.emit()
 		return false
 	_match_service.begin()

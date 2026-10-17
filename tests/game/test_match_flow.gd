@@ -92,8 +92,10 @@ func test_broken_map_refuses_to_start_and_returns_to_menu() -> void:
 	assert_push_error("напрям")
 	assert_false(started)
 	assert_signal_emitted(screen, "left_to_menu")
-	assert_eq(service.state.units.size(), 0)
+	assert_null(service.state, "порожній матч не лишається для автозбереження")
 	assert_null(screen.input_controller(), "begin() і проводку вигляду пропущено")
+	screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	assert_false(FileAccess.file_exists(_test_save), "відмова не пише збереження")
 
 
 func test_configure_without_seed_draws_a_random_one() -> void:
