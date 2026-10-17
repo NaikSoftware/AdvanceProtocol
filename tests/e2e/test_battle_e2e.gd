@@ -469,20 +469,20 @@ func test_quit_on_go_back_is_restored_when_screen_leaves() -> void:
 func test_app_paused_and_close_request_save_running_match() -> void:
 	await _two_riflemen()
 	for what: int in [Node.NOTIFICATION_APPLICATION_PAUSED, Node.NOTIFICATION_WM_CLOSE_REQUEST]:
-		DirAccess.remove_absolute(TEST_SAVE)
+		DirAccess.remove_absolute(_test_save)
 		_screen.notification(what)
-		assert_true(FileAccess.file_exists(TEST_SAVE), "збереження після сповіщення %d" % what)
-		assert_eq(BattleSerializer.to_dict(BattleSerializer.load_from(TEST_SAVE)),
+		assert_true(FileAccess.file_exists(_test_save), "збереження після сповіщення %d" % what)
+		assert_eq(BattleSerializer.to_dict(BattleSerializer.load_from(_test_save)),
 			BattleSerializer.to_dict(_service.state), "у файлі рівно живий стан")
 
 
 func test_app_paused_after_match_over_deletes_stale_autosave() -> void:
 	await _two_riflemen()
 	_screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
-	assert_true(FileAccess.file_exists(TEST_SAVE), "передумова: автозбереження посеред матчу")
+	assert_true(FileAccess.file_exists(_test_save), "передумова: автозбереження посеред матчу")
 	_service.state.winner = 0
 	_screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
-	assert_false(FileAccess.file_exists(TEST_SAVE), "завершений матч не можна продовжити")
+	assert_false(FileAccess.file_exists(_test_save), "завершений матч не можна продовжити")
 
 
 ## Гейт передачі: «назад» не відкриває паузу під ним (її побачив би гравець, що заходить).
