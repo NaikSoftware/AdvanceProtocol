@@ -84,7 +84,9 @@ a batch. Prefer 512–1024 textures on mobile — 2K on a crate seen at 100px is
 - **Judge the result by reading `preview.png`.** Bad geometry → `tripo redo` for a new seed
   rather than re-writing the prompt.
 - **Branch on exit codes**: 0 ok · 2 params · 3 auth · 4 credits · 5 content policy · 6 task
-  failed (credits auto-refund) · 7 network · 9 rate limit.
+  failed (credits auto-refund) · 7 network · 8 not found (task/file) · 9 rate limit.
+- **`--dry-run --json` validates the plan without spending credits** — run it before a batch or
+  an unfamiliar flag combination and read its `warnings` (e.g. params the CLI silently strips).
 - **Never invent parameters.** Unknown `-p key=value` pairs pass straight through to the API.
 - **Don't pin `--model`** beyond the p1/v3.1 choice above; the CLI's default is current.
 

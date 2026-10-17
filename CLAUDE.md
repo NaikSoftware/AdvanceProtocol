@@ -264,7 +264,7 @@ and every finding recovered so far: **[docs/reference/blitzkrieg.md](docs/refere
 
 | | |
 | --- | --- |
-| Engine | Godot **4.7.1 stable** |
+| Engine | Godot **4.7.2 stable** |
 | Language | GDScript, statically typed |
 | Renderer | Mobile (Vulkan); `gl_compatibility` fallback for old devices |
 | Targets | Android and iOS, **landscape** |
