@@ -176,3 +176,102 @@ func test_to_dict_snapshot_is_immune_to_later_mutation() -> void:
 	assert_false((snapshot["eliminated"] as Array)[1], "знімок не бачить пізнішої елімінації")
 	assert_eq(snapshot["experience"][0]["xp"], snap_xp, "знімок не бачить пізнішого набору досвіду")
 	assert_eq(snapshot["experience"][0]["level"], snap_level, "знімок не бачить пізнішого підвищення рівня")
+
+# --- Збереження, частини якого не погоджуються між собою, відкидається ------
+#
+# from_dict() повертає null, а не стан, що падає пізніше (check_elimination(),
+# туман, get_type()). «Unexpected Errors» від GUT тут теж провал: відмова мусить
+# бути тихою, без SCRIPT ERROR. Усі випадки — від справжнього збереження
+# _populated_state() (3 гравці, дошка 8×8), зіпсованого рівно в одному місці.
+
+func _save() -> Dictionary:
+	# Через JSON, як із файла: числа приходять float, і перевірки мусять це приймати.
+	return JSON.parse_string(JSON.stringify(BattleSerializer.to_dict(_populated_state())))
+
+func _assert_rejected(d: Dictionary, why: String) -> void:
+	assert_null(BattleSerializer.from_dict(d), why)
+
+func test_a_valid_save_through_json_still_loads() -> void:
+	assert_not_null(BattleSerializer.from_dict(_save()), "передумова: справжнє збереження відкривається")
+
+func test_eliminated_shorter_than_player_count_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["eliminated"] = [false]
+	_assert_rejected(d, "eliminated на 1 гравця при player_count 3 — раніше приймалось і падало в check_elimination()")
+
+func test_vision_shorter_than_player_count_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["vision"] = [d["vision"][0]]
+	_assert_rejected(d, "vision на 1 гравця при player_count 3")
+
+func test_experience_shorter_than_player_count_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["experience"] = [d["experience"][0]]
+	_assert_rejected(d, "experience на 1 гравця")
+
+func test_damage_dealt_of_the_wrong_size_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["damage_dealt"] = [1, 2]
+	_assert_rejected(d, "damage_dealt на 2 гравців при player_count 3")
+
+func test_mine_known_to_of_the_wrong_size_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["mines"][0]["known_to"] = [true]
+	_assert_rejected(d, "known_to міни на 1 гравця")
+
+func test_objective_seen_by_of_the_wrong_size_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["objectives"][0]["seen_by"] = [true, false]
+	_assert_rejected(d, "seen_by цілі на 2 гравців")
+
+func test_tiles_not_matching_the_board_size_are_rejected() -> void:
+	var d: Dictionary = _save()
+	(d["board"]["tiles"] as Array).pop_back()
+	_assert_rejected(d, "63 тайли на дошці 8×8")
+
+func test_a_vision_grid_not_matching_the_board_size_is_rejected() -> void:
+	var d: Dictionary = _save()
+	(d["vision"][1]["seen"] as Array).pop_back()
+	_assert_rejected(d, "сітка seen на 63 клітинки при дошці 8×8")
+
+func test_active_player_out_of_range_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["active_player"] = 3
+	_assert_rejected(d, "active_player 3 при трьох гравцях (0..2)")
+	d["active_player"] = -1
+	_assert_rejected(d, "active_player −1")
+
+func test_an_unknown_unit_type_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["units"][0]["type_id"] = 99
+	_assert_rejected(d, "type_id 99 немає в ростері")
+
+func test_a_facing_out_of_range_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["units"][0]["facing"] = 8
+	_assert_rejected(d, "facing 8 — поза 0..7")
+
+func test_a_missing_board_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d.erase("board")
+	_assert_rejected(d, "без board")
+
+func test_units_of_the_wrong_type_are_rejected() -> void:
+	var d: Dictionary = _save()
+	d["units"] = "units"
+	_assert_rejected(d, "units — рядок, а не масив")
+
+func test_a_unit_missing_a_field_is_rejected() -> void:
+	var d: Dictionary = _save()
+	(d["units"][0] as Dictionary).erase("hp")
+	_assert_rejected(d, "юніт без hp")
+
+func test_a_scalar_of_the_wrong_type_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["player_count"] = "3"
+	_assert_rejected(d, "player_count рядком")
+
+func test_a_unit_owner_out_of_range_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["units"][0]["owner"] = 3
+	_assert_rejected(d, "власник 3 при трьох гравцях")

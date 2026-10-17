@@ -57,7 +57,13 @@ static func to_dict(state: BattleState) -> Dictionary:
 	}
 
 static func from_dict(data: Dictionary) -> BattleState:
-	if int(data.get("version", -1)) != VERSION:
+	if not _num(data, "version") or int(data["version"]) != VERSION:
+		return null
+	# Файл збереження — межа довіри: зіпсований чи обрізаний, він інакше відкривався б
+	# і падав пізніше, далеко від причини (check_elimination(), туман, get_type()).
+	# Усе, що читається нижче, перевіряється тут, а не по дорозі, щоб відмова була
+	# тихою і цілою: або стан повністю, або null.
+	if not _is_valid(data):
 		return null
 
 	var board_data: Dictionary = data["board"]
@@ -144,6 +150,112 @@ static func from_dict(data: Dictionary) -> BattleState:
 		state.damage_dealt.append(int(dealt[p]) if p < dealt.size() else 0)
 
 	return state
+
+static func _is_valid(data: Dictionary) -> bool:
+	## Кожна частина збереження мусить погоджуватися з рештою: розміри на гравця —
+	## з player_count, сітки — з width*height, індекси — з діапазонами. JSON дає числа
+	## як float, тому числом вважається і TYPE_INT, і TYPE_FLOAT.
+	if not (_dict(data, "board") and _num(data, "player_count") and _num(data, "turn_number")
+			and _num(data, "seed_value") and _num(data, "winner") and _num(data, "next_unit_id")
+			and _num(data, "objective_hold_target")):
+		return false
+	if not (data.has("rng_state") and typeof(data["rng_state"]) == TYPE_STRING
+			and (data["rng_state"] as String).is_valid_int()):
+		return false
+	var pc: int = int(data["player_count"])
+	if pc < 1 or not _in(data, "active_player", 0, pc - 1):
+		return false
+	var winner: int = int(data["winner"])
+	if winner != BattleState.NO_WINNER and winner != BattleState.DRAW and (winner < 0 or winner >= pc):
+		return false
+
+	var board: Dictionary = data["board"]
+	if not (_num(board, "width") and _num(board, "height")
+			and _in(board, "ground_state", 0, Terrain.GroundState.size() - 1)):
+		return false
+	var w: int = int(board["width"])
+	var h: int = int(board["height"])
+	if w < 1 or h < 1 or not _nums(board, "tiles", w * h, 0, Terrain.Kind.size() - 1):
+		return false
+
+	if not _bools(data, "eliminated", pc):
+		return false
+	if data.has("damage_dealt") and not _nums(data, "damage_dealt", pc):
+		return false  # відсутність допустима (старі збереження), неправильний розмір — ні
+
+	if not _arr(data, "vision", pc):
+		return false
+	for v in (data["vision"] as Array):
+		if typeof(v) != TYPE_DICTIONARY or not _nums(v, "visible", w * h) or not _nums(v, "seen", w * h):
+			return false
+
+	var classes: int = UnitTypes.UnitClass.size()
+	if not _arr(data, "experience", pc):
+		return false
+	for pool in (data["experience"] as Array):
+		if typeof(pool) != TYPE_DICTIONARY or not _nums(pool, "xp", classes) \
+				or not _nums(pool, "level", classes, 0, Experience.MAX_LEVEL):
+			return false
+
+	if not _arr(data, "units"):
+		return false
+	for u in (data["units"] as Array):
+		if typeof(u) != TYPE_DICTIONARY:
+			return false
+		if not (_num(u, "id") and _in(u, "type_id", 0, UnitTypes.TYPES.size() - 1)
+				and _in(u, "owner", 0, pc - 1) and _in(u, "x", 0, w - 1) and _in(u, "y", 0, h - 1)
+				and _in(u, "facing", 0, 7) and _num(u, "hp") and _num(u, "ap")
+				and _num(u, "drones_left") and _bool(u, "has_fired")):
+			return false
+		if u.has("ap_before_retaliation") and not _num(u, "ap_before_retaliation"):
+			return false
+
+	if not _arr(data, "mines"):
+		return false
+	for m in (data["mines"] as Array):
+		if typeof(m) != TYPE_DICTIONARY or not (_in(m, "x", 0, w - 1) and _in(m, "y", 0, h - 1)
+				and _in(m, "owner", 0, pc - 1) and _bools(m, "known_to", pc)):
+			return false
+
+	if not _arr(data, "objectives"):
+		return false
+	for o in (data["objectives"] as Array):
+		# −1 — нейтральна ціль.
+		if typeof(o) != TYPE_DICTIONARY or not (_in(o, "x", 0, w - 1) and _in(o, "y", 0, h - 1)
+				and _in(o, "owner", -1, pc - 1) and _bool(o, "intact") and _bools(o, "seen_by", pc)):
+			return false
+	return true
+
+static func _num(d: Dictionary, key: String) -> bool:
+	return d.has(key) and (typeof(d[key]) == TYPE_INT or typeof(d[key]) == TYPE_FLOAT)
+
+static func _in(d: Dictionary, key: String, lo: int, hi: int) -> bool:
+	return _num(d, key) and int(d[key]) >= lo and int(d[key]) <= hi
+
+static func _bool(d: Dictionary, key: String) -> bool:
+	return d.has(key) and typeof(d[key]) == TYPE_BOOL
+
+static func _dict(d: Dictionary, key: String) -> bool:
+	return d.has(key) and typeof(d[key]) == TYPE_DICTIONARY
+
+static func _arr(d: Dictionary, key: String, size: int = -1) -> bool:
+	return d.has(key) and typeof(d[key]) == TYPE_ARRAY and (size < 0 or (d[key] as Array).size() == size)
+
+static func _nums(d: Dictionary, key: String, size: int, lo: int = -9223372036854775807, hi: int = 9223372036854775807) -> bool:
+	if not _arr(d, key, size):
+		return false
+	for x in (d[key] as Array):
+		if (typeof(x) != TYPE_INT and typeof(x) != TYPE_FLOAT) or int(x) < lo or int(x) > hi:
+			return false
+	return true
+
+static func _bools(d: Dictionary, key: String, size: int) -> bool:
+	if not _arr(d, key, size):
+		return false
+	for x in (d[key] as Array):
+		if typeof(x) != TYPE_BOOL:
+			return false
+	return true
 
 static func save_to(state: BattleState, path: String) -> Error:
 	var f: FileAccess = FileAccess.open(path, FileAccess.WRITE)
