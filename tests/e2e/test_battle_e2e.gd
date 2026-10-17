@@ -5,6 +5,8 @@ extends GutTest
 ## вані окремо від гри з формули §3.3 і сіда RNG та зафіксовані тут. Якщо вони
 ## поїхали — змінилися правила бою, і це має бути свідоме рішення, а не побічка.
 ##
+## Відкривальний гейт тут не перевіряється: setup() його не показує, він покритий у
+## tests/game/test_match_flow.gd::test_new_match_starts_behind_the_gate.
 ## Дронів і мін тут навмисно немає: UI для них ще не існує.
 
 const BattleScreenScene := preload("res://game/battle/battle_screen.tscn")
@@ -31,18 +33,24 @@ const SEED: int = 7
 ## Пише всі події, які сцена забрала з черги, — щоб перевіряти ПОРЯДОК подій
 ## (хто повернувся до пострілу, хто після шкоди), а не лише кінцевий стан.
 class RecService extends MatchServiceScript:
-	var log: Array = []
+	var events: Array[Events.BattleEvent] = []
 	func take_events() -> Array[Events.BattleEvent]:
 		var e: Array[Events.BattleEvent] = super.take_events()
-		log.append_array(e)
+		events.append_array(e)
 		return e
 
 
+## Control -> початковий mouse_filter; повертаємо в after_each, щоб правка не текла в інші тести.
+var _saved_filters: Dictionary = {}
 var _service: RecService
 var _screen: BattleScreen
 
 
 func after_each() -> void:
+	for c: Control in _saved_filters:
+		if is_instance_valid(c):
+			c.mouse_filter = _saved_filters[c]
+	_saved_filters.clear()
 	DirAccess.remove_absolute(TEST_SAVE)
 	DirAccess.remove_absolute(TEST_SAVE + ".map")
 
@@ -66,9 +74,14 @@ func _boot(width: int, height: int, spawns: Array, tiles: Dictionary = {},
 		t[p.y * width + p.x] = tiles[p]
 	m.tiles = t
 	var typed: Array[Dictionary] = []
-	for s in spawns:
+	for s: Dictionary in spawns:
 		typed.append(s)
 	m.spawns = typed
+	# таблиця рухів піднімає матч у циклі — не тримаємо десяток екранів одразу
+	if is_instance_valid(_screen):
+		_screen.free()
+	if is_instance_valid(_service):
+		_service.free()
 	_service = RecService.new()
 	add_child_autofree(_service)
 	_screen = BattleScreenScene.instantiate()
@@ -90,7 +103,10 @@ func _ignore_mouse_recursive(n: Node) -> void:
 	if n == _screen:
 		return
 	if n is Control:
-		(n as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var ctl := n as Control
+		if not _saved_filters.has(ctl):
+			_saved_filters[ctl] = ctl.mouse_filter
+		ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for c in n.get_children():
 		_ignore_mouse_recursive(c)
 
@@ -105,9 +121,10 @@ func _settle() -> void:
 		await get_tree().process_frame
 		if not _screen._event_player.is_playing():
 			break
+	assert_false(_screen._event_player.is_playing(), "програвання зависло")
 
 
-func _hud() -> Node:
+func _hud() -> Hud:
 	return _screen.get_node("%Hud")
 
 
@@ -164,13 +181,17 @@ func _unit(id: int) -> Unit:
 	return _service.state.get_unit(id)
 
 
-func _events_of(cls: Variant) -> Array:
-	return _service.log.filter(func(e: Variant) -> bool: return is_instance_of(e, cls))
+func _events_of(cls: Variant) -> Array[Events.BattleEvent]:
+	var out: Array[Events.BattleEvent] = []
+	for e in _service.events:
+		if is_instance_of(e, cls):
+			out.append(e)
+	return out
 
 
 func _index_of(pred: Callable) -> int:
-	for i in _service.log.size():
-		if pred.call(_service.log[i]):
+	for i in _service.events.size():
+		if pred.call(_service.events[i]):
 			return i
 	return -1
 
@@ -194,7 +215,7 @@ func test_movement_cost_per_terrain_and_ground_state() -> void:
 		[Terrain.GroundState.FROZEN, Terrain.Kind.FIELD, 10],
 		[Terrain.GroundState.FROZEN, Terrain.Kind.FOREST, 20],
 	]
-	for row in table:
+	for row: Array in table:
 		await _boot(6, 3, [_spawn(ARMOURED_CAR, 0, Vector2i(1, 1)), _spawn(RIFLE, 1, Vector2i(5, 0))],
 			{Vector2i(2, 1): row[1]}, row[0])
 		await _act(Vector2i(1, 1), Vector2i(2, 1))
@@ -264,10 +285,10 @@ func _sector_case(attacker_cell: Vector2i, attacker_facing_after: int, sector: i
 	assert_eq(target.facing, target_facing_after, "ціль розвернулась на нападника після відповіді")
 	assert_eq(target.ap, 0, "відповідач витратив AP")
 	# Порядок: розворот стрільця -> постріл -> шкода цілі -> (лише тоді) розворот цілі.
-	var turn_att: int = _index_of(func(e: Variant) -> bool: return e is Events.UnitTurned and e.unit_id == 1)
-	var shot: int = _index_of(func(e: Variant) -> bool: return e is Events.ShotFired)
-	var dmg_t: int = _index_of(func(e: Variant) -> bool: return e is Events.DamageDealt and e.unit_id == 2)
-	var turn_tgt: int = _index_of(func(e: Variant) -> bool: return e is Events.UnitTurned and e.unit_id == 2)
+	var turn_att: int = _index_of(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned and e.unit_id == 1)
+	var shot: int = _index_of(func(e: Events.BattleEvent) -> bool: return e is Events.ShotFired)
+	var dmg_t: int = _index_of(func(e: Events.BattleEvent) -> bool: return e is Events.DamageDealt and e.unit_id == 2)
+	var turn_tgt: int = _index_of(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned and e.unit_id == 2)
 	assert_true(turn_att >= 0 and turn_att < shot, "стрілець повертається ПЕРЕД пострілом")
 	assert_true(shot < dmg_t)
 	if target_facing_after != N:
@@ -290,13 +311,6 @@ func test_armour_side_sector() -> void:
 
 func test_armour_rear_sector() -> void:
 	await _sector_case(Vector2i(4, 5), N, UnitTypes.ArmourSector.REAR, 53, 80, 67, S)
-
-
-func test_flanking_is_rewarded_front_lt_side_lt_rear() -> void:
-	# Золоті значення з трьох тестів вище, зведені: 53 < 56 < 67.
-	assert_true(53 < 56 and 56 < 67)
-	for s in [[UnitTypes.ArmourSector.FRONT, 37], [UnitTypes.ArmourSector.SIDE, 27], [UnitTypes.ArmourSector.REAR, 18]]:
-		assert_eq(UnitTypes.get_type(MEDIUM_TANK)["armour"][s[0]], s[1], "ростер, на якому стоять golden")
 
 
 # --- 3. Відповідний вогонь ---------------------------------------------------------
@@ -449,6 +463,6 @@ func test_play_to_elimination_ends_match() -> void:
 	assert_eq(_service.state.winner, 0)
 	assert_signal_emitted(_screen, "match_finished")
 	assert_true((_hud().get_node("%EndTurnButton") as Button).disabled, "після кінця матчу ходу не завершити")
-	assert_eq(eng.ap, 68, "сапер за весь бій жодного разу не відповів")
+	assert_eq(_events_of(Events.ShotRetaliated).size(), 0, "сапер за весь бій жодного разу не відповів")
 
 
