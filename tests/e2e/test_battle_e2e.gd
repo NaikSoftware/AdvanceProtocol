@@ -432,3 +432,76 @@ func test_play_to_elimination_ends_match() -> void:
 	assert_eq(_events_of(Events.ShotRetaliated).size(), 0, "сапер за весь бій жодного разу не відповів")
 
 
+
+
+# --- Системний «назад», згортання застосунку, камера після гейта ---------------
+
+func _two_riflemen() -> void:
+	await _boot(10, 3, [_spawn(RIFLE, 0, Vector2i(0, 1), E), _spawn(RIFLE, 1, Vector2i(9, 1), W)])
+
+
+## Свайп «назад» на Android не мусить викидати з матчу: перший — пауза, другий — продовжити.
+func test_back_gesture_opens_pause_then_closes_it() -> void:
+	await _two_riflemen()
+	var before: Dictionary = BattleSerializer.to_dict(_service.state)
+	assert_false(get_tree().quit_on_go_back, "на екрані бою «назад» не виходить із гри")
+	var pause: Control = _screen.get_node("%PauseMenu")
+	assert_false(pause.visible)
+	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	assert_true(pause.visible, "«назад» відкриває паузу")
+	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	assert_false(pause.visible, "повторний «назад» = продовжити")
+	assert_eq(BattleSerializer.to_dict(_service.state), before, "матч не змінився")
+
+
+func test_quit_on_go_back_is_restored_when_screen_leaves() -> void:
+	var tree: SceneTree = get_tree()
+	var prev: bool = tree.quit_on_go_back
+	tree.quit_on_go_back = true
+	await _two_riflemen()
+	assert_false(tree.quit_on_go_back)
+	_screen.free()
+	assert_true(tree.quit_on_go_back, "меню знову виходить по «назад»")
+	tree.quit_on_go_back = prev
+
+
+## Згортання/закриття застосунку під час бою — автозбереження, інакше матч втрачено.
+func test_app_paused_and_close_request_save_running_match() -> void:
+	await _two_riflemen()
+	for what: int in [Node.NOTIFICATION_APPLICATION_PAUSED, Node.NOTIFICATION_WM_CLOSE_REQUEST]:
+		DirAccess.remove_absolute(TEST_SAVE)
+		_screen.notification(what)
+		assert_true(FileAccess.file_exists(TEST_SAVE), "збереження після сповіщення %d" % what)
+		assert_eq(BattleSerializer.to_dict(BattleSerializer.load_from(TEST_SAVE)),
+			BattleSerializer.to_dict(_service.state), "у файлі рівно живий стан")
+
+
+func test_app_paused_after_match_over_writes_no_save() -> void:
+	await _two_riflemen()
+	_service.state.winner = 0
+	assert_true(_service.state.is_over())
+	DirAccess.remove_absolute(TEST_SAVE)
+	_screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	assert_false(FileAccess.file_exists(TEST_SAVE), "завершений матч не зберігається")
+
+
+## Кидок дошки гравцем A + швидкий End Turn: після гейта камера стоїть рівно на юніті B і не дрейфує.
+func test_fling_then_end_turn_does_not_drift_after_gate() -> void:
+	await _two_riflemen()
+	var rig: IsoCameraRig = _screen.get_node("%CameraRig")
+	for i in 4:
+		rig.pan(Vector2(60, 0))
+		await get_tree().process_frame
+	rig.end_pan()
+	rig.zoom_by(1.5)
+	assert_true(rig._inertia_active, "передумова: дошка котиться")
+	_press(_hud().get_node("%EndTurnButton"))
+	await _settle()
+	await _confirm_gate()
+	var target: Vector3 = IsoCameraRig.cell_to_world(_service.state.units_of(1)[0].pos)
+	assert_eq(rig.global_position, target)
+	var zoom_before: float = rig.zoom_level
+	for i in 60:
+		await get_tree().process_frame
+	assert_eq(rig.global_position, target, "жодного дрейфу вздовж кидка A")
+	assert_eq(rig.zoom_level, zoom_before, "відкладений зум A не доїжджає після гейта")

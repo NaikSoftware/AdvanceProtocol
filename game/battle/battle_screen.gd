@@ -57,6 +57,7 @@ const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
 var save_path: String = MatchService.SAVE_PATH
 
 var _match_service: Node = null
+var _prev_quit_on_go_back: bool = true
 var _controller: InputController = null
 var _zone_overlay: ZoneOverlay = null
 var _path_overlay: PathOverlay = null
@@ -135,6 +136,10 @@ func _ready() -> void:
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
+	# Android «назад» інакше виходить із гри разом із матчем; на цьому екрані
+	# воно відкриває паузу. Значення меню повертає _exit_tree().
+	_prev_quit_on_go_back = get_tree().quit_on_go_back
+	get_tree().quit_on_go_back = false
 	if get_tree().current_scene != self:
 		return
 	# Маршрути виходу з бою ведуть крізь SceneRouter лише у справжньому запуску;
@@ -248,6 +253,27 @@ func _wire_view(board: Board) -> void:
 	_hud.end_turn_pressed.connect(_on_end_turn_pressed)
 
 	_gate.confirmed.connect(_on_gate_confirmed)
+
+
+func _exit_tree() -> void:
+	if get_tree() != null:
+		get_tree().quit_on_go_back = _prev_quit_on_go_back
+
+
+## Жест «назад»: пауза відкрита — закриваємо як Resume, інакше відкриваємо.
+## Згортання/закриття застосунку — автозбереження (save_current сам відмовляє
+## завершеному матчу). Гейт при Continue вмикається наявним шляхом, нічого не відкриваємо.
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			if _pause.visible:
+				_pause.hide()
+				_pause.resume_requested.emit()
+			else:
+				_pause.show()
+		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST:
+			if _match_service != null and _match_service.state != null and not _match_service.state.is_over():
+				_match_service.save_current(save_path)
 
 
 ## Налаштування з паузи відкриваються поверх бою, а не заміною сцени: бій
