@@ -8,6 +8,8 @@ extends Control
 ## його, а не веде в меню, тож матч, що чекає під ним, не губиться.
 
 var overlay: bool = false
+## Запис налаштувань; змінна, щоб тест не писав у справжній user://settings.cfg.
+var _persist: Callable = func() -> void: SettingsService.save()
 
 @onready var _uk_button: Button = %LangUk
 @onready var _en_button: Button = %LangEn
@@ -21,11 +23,12 @@ func _ready() -> void:
 	_uk_button.pressed.connect(_on_language_pressed.bind("uk"))
 	_en_button.pressed.connect(_on_language_pressed.bind("en"))
 	_music.value_changed.connect(func(v: float) -> void:
-		SettingsService.music_volume = v
-		SettingsService.save())
+		SettingsService.music_volume = v)
+	# Диск — лише по відпусканню: value_changed іде на кожен піксель драгу.
+	_music.drag_ended.connect(func(_changed: bool) -> void: _persist.call())
 	_sfx.value_changed.connect(func(v: float) -> void:
-		SettingsService.sfx_volume = v
-		SettingsService.save())
+		SettingsService.sfx_volume = v)
+	_sfx.drag_ended.connect(func(_changed: bool) -> void: _persist.call())
 	for i in _quality.size():
 		_quality[i].pressed.connect(_on_quality_pressed.bind(i))
 	%BackButton.pressed.connect(_on_back_pressed)
@@ -57,6 +60,8 @@ func _on_quality_pressed(level: int) -> void:
 
 
 func _on_back_pressed() -> void:
+	# Клавіатурна зміна повзунка не дає drag_ended — зберігаємо при виході.
+	_persist.call()
 	if overlay:
 		queue_free()
 	else:
