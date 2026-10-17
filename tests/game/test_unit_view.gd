@@ -485,7 +485,7 @@ func _assert_faces(view: UnitView, facing: int, msg: String) -> void:
 
 
 ## Перебудова юнітів після кожної дії створює десяток вузлів: текстури й
-## матеріали того самого власника мусять бути спільними інстансами.
+## матеріали того самого власника мусять бути спільними екземплярами.
 func test_views_of_same_owner_share_textures_and_materials() -> void:
 	var other: UnitView = preload("res://game/battle/unit_view.tscn").instantiate()
 	add_child_autofree(other)

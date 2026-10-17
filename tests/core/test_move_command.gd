@@ -631,7 +631,7 @@ func test_a_known_enemy_mine_is_routed_around() -> void:
 	assert_eq(cmd.validate(s), "")
 	var events: Array = cmd.apply(s)
 	var moved: Events.UnitMoved = events[0]
-	assert_false(Vector2i(2, 5) in moved.path, "відому міну обʼїжджають, а не переїжджають")
+	assert_false(Vector2i(2, 5) in moved.path, "відому міну об'їжджають, а не переїжджають")
 	assert_eq(u.pos, Vector2i(4, 5))
 	assert_eq(u.ap, 8, "68 − 6×10: заплачено за гак")
 	assert_eq(u.hp, u.max_hp(), "жодного підриву")
@@ -677,7 +677,7 @@ func test_an_engineer_that_finds_a_mine_mid_walk_stops_in_front_of_it() -> void:
 	# Інженер (огляд 3, 15 AP за тайл дороги) з (0,5) до (4,5); ворожа міна на (4,5)
 	# поза ромбом на старті (4 > 3), але знаходиться вже з першого кроку (1,5).
 	# Далі план веде просто на неї — хід мусить спинитися на (3,5), як перед
-	# невидимим юнітом, а не вʼїхати в щойно знайдену міну.
+	# невидимим юнітом, а не в'їхати в щойно знайдену міну.
 	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)
 	Mines.place(state, Vector2i(4, 5), 1)
 	state.start()

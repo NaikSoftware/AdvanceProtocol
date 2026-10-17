@@ -423,7 +423,7 @@ func test_zone_uses_known_occupancy_not_true_occupancy() -> void:
 
 
 ## §3.11, рішення власника: знайдена ворожа міна — перешкода, і контур зони
-## мусить її обгинати рівно так, як MoveCommand її обʼїжджає. Невідома міна в
+## мусить її обгинати рівно так, як MoveCommand її об'їжджає. Невідома міна в
 ## зону потрапляє — інакше форма контуру виказала б її (§3.5).
 func test_zone_excludes_a_known_enemy_mine_but_not_an_unknown_one() -> void:
 	_start()

@@ -16,7 +16,7 @@ extends GutTest
 ##    підставленим save_path (_open_menu), а перехід на нього сигналом роутера
 ##    лише доводить, що кнопка веде куди треба;
 ##  - тап по «Вийти» (QuitButton) і другий процес із --check-locale упущено: перший
-##    закрив би тестовий процес, другий замінено завантаженням свіжого інстансу
+##    закрив би тестовий процес, другий замінено завантаженням свіжого екземпляра
 ##    SettingsService із тестового config_path.
 
 const E2E := preload("res://tests/e2e/e2e_helpers.gd")
@@ -144,7 +144,7 @@ func _surrender() -> void:
 	await _click(_pause().get_node("%ConfirmYesButton"))
 
 
-## Тап по юніту, тап по досяжній сусідній клітинці, підтвердити в HUD.
+## Тап по юніту, тап по досяжному сусідньому тайлі, підтвердити в HUD.
 func _move_one_unit() -> bool:
 	var battle: BattleScreen = _battle()
 	var rig: IsoCameraRig = battle.get_node("%CameraRig")
@@ -169,7 +169,7 @@ func _move_one_unit() -> bool:
 			_e2e.click_at(upos)
 			assert_eq(battle.input_controller()._selected_unit, u, "тап вибрав юніт")
 			_e2e.click_at(cpos)
-			assert_false(battle.input_controller()._pending.is_empty(), "тап по клітинці дав прев'ю руху")
+			assert_false(battle.input_controller()._pending.is_empty(), "тап по тайлу дав прев'ю руху")
 			await _click(_hud().get_node("%ConfirmButton"))
 			await _e2e.wait_until(func() -> bool: return u.pos != start and _idle(), "юніт дійшов")
 			return u.pos == cell

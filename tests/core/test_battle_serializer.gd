@@ -232,7 +232,7 @@ func test_tiles_not_matching_the_board_size_are_rejected() -> void:
 func test_a_vision_grid_not_matching_the_board_size_is_rejected() -> void:
 	var d: Dictionary = _save()
 	(d["vision"][1]["seen"] as Array).pop_back()
-	_assert_rejected(d, "сітка seen на 63 клітинки при дошці 8×8")
+	_assert_rejected(d, "сітка seen на 63 тайли при дошці 8×8")
 
 func test_active_player_out_of_range_is_rejected() -> void:
 	var d: Dictionary = _save()

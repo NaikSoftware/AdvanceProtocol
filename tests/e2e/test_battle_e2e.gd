@@ -1,7 +1,7 @@
 extends GutTest
 ## Наскрізна регресія бою: справжня battle_screen.tscn, ізольований MatchService,
 ## ввід — реальні події миші, надіслані у viewport (екранна точка = unproject
-## центру клітинки), кнопки HUD і гейта. Усі очікувані числа — golden: порахо-
+## центру тайла), кнопки HUD і гейта. Усі очікувані числа — golden: порахо-
 ## вані окремо від гри з формули §3.3 і сіда RNG та зафіксовані тут. Якщо вони
 ## поїхали — змінилися правила бою, і це має бути свідоме рішення, а не побічка.
 ##
@@ -116,7 +116,7 @@ func _px(cell: Vector2i) -> Vector2:
 	return rig.unproject(IsoCameraRig.cell_to_world(cell))
 
 
-## Справжній тап: миша вниз/вгору в центрі клітинки через viewport.
+## Справжній тап: миша вниз/вгору в центрі тайла через viewport.
 func _tap(cell: Vector2i) -> void:
 	_e2e.click_at(_px(cell))
 
@@ -208,7 +208,7 @@ func test_movement_in_several_steps_spends_only_what_is_entered() -> void:
 	await _confirm()
 	assert_eq(car.ap, 18, "ліс 25")
 	assert_eq(car.pos, Vector2i(4, 1))
-	# Ліс 25 > 18: клітинка поза зоною — тап не створює прев'ю, кнопка лишається вимкненою.
+	# Ліс 25 > 18: тайл поза зоною — тап не створює прев'ю, кнопка лишається вимкненою.
 	_tap(Vector2i(5, 1))
 	assert_true((_hud().get_node("%ConfirmButton") as Button).disabled, "поза зоною AP")
 	assert_eq(car.pos, Vector2i(4, 1))
@@ -365,7 +365,7 @@ func test_walk_stops_before_enemy_the_planner_could_not_see() -> void:
 	var blocked: Events.MoveBlocked = _events_of(Events.MoveBlocked)[0]
 	assert_eq(blocked.pos, Vector2i(4, 1))
 	assert_eq(_unit(2).pos, Vector2i(4, 1), "ворога ніхто не зсунув")
-	assert_not_null(_screen.unit_view_for(2), "тепер тайл розвіданий — вузол зʼявився")
+	assert_not_null(_screen.unit_view_for(2), "тепер тайл розвіданий — вузол з'явився")
 
 
 # --- 8. Цикл ходів ---------------------------------------------------------------------------
@@ -518,7 +518,7 @@ func test_fling_then_end_turn_does_not_drift_after_gate() -> void:
 	assert_eq(rig.zoom_level, zoom_before, "відкладений зум A не доїжджає після гейта")
 
 
-## Скасований дотик (шторка сповіщень, відкидання долоні) — не тап: ні вибір, ні превʼю не міняються.
+## Скасований дотик (шторка сповіщень, відкидання долоні) — не тап: ні вибір, ні прев'ю не міняються.
 func test_cancelled_touch_is_not_a_tap() -> void:
 	await _two_riflemen()
 	var ctl: InputController = _screen._controller
@@ -526,7 +526,7 @@ func test_cancelled_touch_is_not_a_tap() -> void:
 	assert_not_null(ctl._selected_unit, "передумова: юніт вибрано")
 	_tap(Vector2i(2, 1))
 	var pending: Dictionary = ctl._pending.duplicate()
-	assert_false(pending.is_empty(), "передумова: є превʼю ходу")
+	assert_false(pending.is_empty(), "передумова: є прев'ю ходу")
 	var vp: Viewport = get_viewport()
 	var p: Vector2 = _px(Vector2i(3, 1))
 	for pressed in [true, false]:
@@ -536,7 +536,7 @@ func test_cancelled_touch_is_not_a_tap() -> void:
 		ev.pressed = pressed
 		ev.canceled = not pressed
 		vp.push_input(ev, true)
-	assert_eq(ctl._pending, pending, "превʼю не замінено")
+	assert_eq(ctl._pending, pending, "прев'ю не замінено")
 	assert_not_null(ctl._selected_unit)
 	assert_false(_screen._pointer_down)
 	assert_eq(_screen._active_touch_index, -1)
@@ -549,7 +549,7 @@ func test_cancelled_touch_is_not_a_tap() -> void:
 	ev2 = ev2.duplicate()
 	ev2.pressed = false
 	vp.push_input(ev2, true)
-	assert_ne(ctl._pending, pending, "справжній тап далі міняє превʼю")
+	assert_ne(ctl._pending, pending, "справжній тап далі міняє прев'ю")
 
 
 ## Зміна мови з паузи (Налаштування) лишала підписи бою старою мовою: tr() викликався раз.
