@@ -22,6 +22,10 @@ func validate(state: BattleState) -> String:
 		return "ERR_NOT_YOUR_UNIT"
 	if u.has_fired:
 		return "ERR_ALREADY_FIRED"
+	# −1 — «обличчям за рухом». Решта поза 0..7 дійшла б до Rules.armour_sector()
+	# індексом за межами Board.DIRS.
+	if facing < -1 or facing > 7:
+		return "ERR_BAD_FACING"
 	if not state.board.in_bounds(target):
 		return "ERR_OFF_BOARD"
 	# §3.5: планування — з того, що гравець знає, а не з того, що є. Тайл, зайнятий

@@ -63,6 +63,16 @@ func test_cannot_move_onto_another_unit() -> void:
 	assert_true(state.vision[0].is_visible(Vector2i(2, 5)), "передумова: ворога видно")
 	assert_ne(MoveCommand.create(a.id, Vector2i(2, 5), -1).validate(state), "")
 
+func test_a_facing_outside_the_eight_directions_is_rejected() -> void:
+	# facing 8 дійшов би до Rules.armour_sector() як індекс за межами Board.DIRS.
+	# −1 — законне «обличчям за рухом», усе інше поза 0..7 — ні.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), 8).validate(state), "ERR_BAD_FACING")
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), -2).validate(state), "ERR_BAD_FACING")
+	assert_eq(MoveCommand.create(u.id, u.pos, 8).validate(state), "ERR_BAD_FACING", "і поворот на місці теж")
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), 7).validate(state), "", "межі 0..7 законні")
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), -1).validate(state), "")
+
 func test_cannot_move_someone_elses_unit() -> void:
 	var theirs: Unit = state.add_unit(5, 1, Vector2i(0, 5), 2)
 	state.active_player = 0

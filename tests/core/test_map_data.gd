@@ -59,6 +59,28 @@ func test_populate_adds_units_from_spawns_at_declared_positions() -> void:
 	assert_eq(by_owner[1].pos, Vector2i(3, 2))
 
 
+func test_populate_rejects_a_map_with_a_spawn_facing_out_of_range() -> void:
+	# Так само, як BattleSerializer: зіпсована карта не відкривається частково —
+	# жоден юніт не додається, і facing 8 не доходить до Rules.armour_sector().
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 2},
+		{"type_id": 11, "owner": 1, "pos": Vector2i(3, 2), "facing": 8},
+	] as Array[Dictionary]
+	var state: BattleState = BattleState.create(m.to_board(), 2, 1)
+
+	assert_false(m.populate(state), "карта з facing 8 відкидається")
+	assert_eq(state.units.size(), 0, "і нічого з неї не додано")
+
+
+func test_populate_reports_success_for_a_valid_map() -> void:
+	var m: MapData = _map()
+	m.spawns = [{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 7}] as Array[Dictionary]
+	var state: BattleState = BattleState.create(m.to_board(), 2, 1)
+	assert_true(m.populate(state))
+	assert_eq(state.units.size(), 1)
+
+
 func test_populate_adds_neutral_objectives_and_sets_hold_target() -> void:
 	var m: MapData = _map()
 	m.objectives = [Vector2i(0, 0), Vector2i(3, 2)] as Array[Vector2i]

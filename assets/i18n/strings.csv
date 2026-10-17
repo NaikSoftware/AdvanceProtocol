@@ -16,6 +16,7 @@ ERR_NO_SUCH_UNIT,Немає такого юніта,No such unit
 ERR_NOT_YOUR_UNIT,Це не ваш юніт,Not your unit
 ERR_ALREADY_FIRED,Юніт уже стріляв цього ходу,Unit has already fired this turn
 ERR_OFF_BOARD,За межами поля,Off the board
+ERR_BAD_FACING,Недійсний напрямок,Invalid facing
 ERR_OUT_OF_RANGE,Поза дальністю,Out of range
 ERR_NO_SUCH_TARGET,Немає такої цілі,No such target
 ERR_FRIENDLY_FIRE,Не можна стріляти по своїх,Cannot fire on a friendly unit
