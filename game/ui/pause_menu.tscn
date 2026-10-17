@@ -82,3 +82,31 @@ layout_mode = 2
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.85, 0.5, 0.42, 1)
 text = "pause_save_failed"
+
+[node name="ConfirmBox" type="VBoxContainer" parent="Center/Card/Body"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="ConfirmLabel" type="Label" parent="Center/Card/Body/ConfirmBox"]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
+text = "pause_surrender_confirm"
+
+[node name="ConfirmYesButton" type="Button" parent="Center/Card/Body/ConfirmBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.85, 0.5, 0.42, 1)
+text = "pause_surrender_yes"
+
+[node name="ConfirmCancelButton" type="Button" parent="Center/Card/Body/ConfirmBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "pause_surrender_cancel"

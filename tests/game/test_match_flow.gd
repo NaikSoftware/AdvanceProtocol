@@ -64,6 +64,20 @@ func test_configured_seed_players_and_ground_land_in_state() -> void:
 	assert_eq(service.state.board.ground_state, Terrain.GroundState.MUD)
 
 
+func test_new_match_starts_behind_the_gate() -> void:
+	var service: Node = _service()
+	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY, 3)
+	var screen: BattleScreen = _screen()
+
+	screen.launch(service)
+
+	assert_true(screen.get_node("%HandoverGate").visible,
+		"«Почати» міг натиснути будь-хто — перший хід теж за гейтом (§3.5)")
+	assert_null(screen.unit_view_for(1), "до підтвердження гейта юнітів на дошці немає")
+	screen.get_node("%HandoverGate").confirmed.emit()
+	assert_not_null(screen.unit_view_for(1))
+
+
 func test_configure_without_seed_draws_a_random_one() -> void:
 	var service: Node = _service()
 	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY)
@@ -243,10 +257,10 @@ func _result_state() -> BattleState:
 	s.get_unit(2).hp = 0
 	s.get_unit(4).hp = 0
 	s.get_unit(5).hp = 0
-	# Танк p0: поріг 1000 -> рівень 1, лишок 250 => завдано 1250.
+	# Рівні — з досвіду, шкода — з окремого лічильника (міни досвіду не дають).
 	s.experience[0].add_damage(UnitTypes.UnitClass.TANK, 1250)
-	# Піхота p1: 150 -> L1, 375 -> L2, лишок 25 => 150+375+25 = 550.
 	s.experience[1].add_damage(UnitTypes.UnitClass.INFANTRY, 550)
+	s.damage_dealt = [1250, 550, 0] as Array[int]
 	Objectives.add(s, Vector2i(5, 5), 0)
 	Objectives.add(s, Vector2i(5, 4), 0)
 	Objectives.add(s, Vector2i(5, 3), 1)
@@ -270,6 +284,20 @@ func test_summary_numbers_from_constructed_state() -> void:
 	assert_eq(rows[2]["objectives"], 0)
 	assert_eq(rows[0]["levels"][UnitTypes.UnitClass.TANK], 1)
 	assert_eq(rows[1]["levels"][UnitTypes.UnitClass.INFANTRY], 2)
+
+
+func test_summary_credits_a_mine_kill_to_the_mine_owner() -> void:
+	var s: BattleState = BattleState.create(Board.create(6, 6, Terrain.GroundState.DRY), 2, 1)
+	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # сапер p0 — досвіду не має
+	var victim: Unit = s.add_unit(2, 1, Vector2i(3, 3), 0)
+	victim.hp = 10
+	Mines.place(s, Vector2i(3, 3), 0)
+	Mines.step_on(s, victim)
+	assert_false(victim.is_alive())
+	var rows: Array[Dictionary] = ResultsScreen.summarize(s)
+	assert_eq(rows[0]["damage"], 10, "шкода міни — власнику міни")
+	assert_eq(rows[1]["damage"], 0)
+	assert_eq(rows[1]["losses"], 1)
 
 
 func test_results_screen_shows_winner_and_rows_for_every_player() -> void:
@@ -312,8 +340,13 @@ func _map3() -> MapData:
 	return m
 
 
+func _confirm_surrender(pause: Control) -> void:
+	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+	(pause.get_node("%ConfirmYesButton") as Button).pressed.emit()
+
+
 func _surrender(screen: BattleScreen) -> void:
-	(screen.get_node("%PauseMenu").get_node("%SurrenderButton") as Button).pressed.emit()
+	_confirm_surrender(screen.get_node("%PauseMenu"))
 	for i in 6:
 		_finish_all_processed_tweens()
 		await wait_process_frames(1)
@@ -492,6 +525,37 @@ func test_surrender_while_events_play_keeps_pause_open() -> void:
 	var pause: Control = screen.get_node("%PauseMenu")
 	pause.show()
 
-	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+	_confirm_surrender(pause)
 
 	assert_true(pause.visible, "заблоковане натискання не зникає мовчки")
+
+
+func test_surrender_button_only_asks_and_cancel_does_not_concede() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, service)
+	var pause: Control = screen.get_node("%PauseMenu")
+	pause.show()
+
+	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+	assert_false(service.state.is_over(), "саме натискання лише питає")
+	assert_true(pause.get_node("%ConfirmBox").visible)
+	assert_false(pause.get_node("%ResumeButton").visible)
+
+	(pause.get_node("%ConfirmCancelButton") as Button).pressed.emit()
+	assert_false(service.state.is_over())
+	assert_false(pause.get_node("%ConfirmBox").visible)
+	assert_true(pause.get_node("%SurrenderButton").visible)
+	assert_true(pause.visible)
+
+
+func test_reopening_pause_resets_confirm_state() -> void:
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, _service())
+	var pause: Control = screen.get_node("%PauseMenu")
+	pause.show()
+	(pause.get_node("%SurrenderButton") as Button).pressed.emit()
+	pause.hide()
+	pause.show()
+	assert_false(pause.get_node("%ConfirmBox").visible)
+	assert_true(pause.get_node("%SurrenderButton").visible)

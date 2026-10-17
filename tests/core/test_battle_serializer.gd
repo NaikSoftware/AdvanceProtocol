@@ -11,6 +11,7 @@ func _populated_state() -> BattleState:
 	Mines.place(s, Vector2i(5, 5), 0)
 	Objectives.add(s, Vector2i(4, 0), 1)
 	s.experience[0].add_damage(UnitTypes.UnitClass.TANK, 1200)
+	s.damage_dealt = [1200, 0, 90] as Array[int]
 	s.turn_number = 4
 	s.active_player = 2
 	return s
@@ -27,6 +28,13 @@ func test_round_trip_preserves_everything() -> void:
 	assert_eq(b.mines.size(), 1)
 	assert_eq(b.objectives.size(), 1)
 	assert_eq(b.experience[0].level_of(UnitTypes.UnitClass.TANK), a.experience[0].level_of(UnitTypes.UnitClass.TANK))
+	assert_eq(b.damage_dealt, [1200, 0, 90] as Array[int])
+
+func test_a_save_without_damage_dealt_loads_as_zeros() -> void:
+	var d: Dictionary = BattleSerializer.to_dict(_populated_state())
+	d.erase("damage_dealt")
+	var b: BattleState = BattleSerializer.from_dict(d)
+	assert_eq(b.damage_dealt, [0, 0, 0] as Array[int], "старі збереження мусять відкриватися")
 
 func test_objective_hold_target_round_trips() -> void:
 	var a: BattleState = _populated_state()

@@ -5,8 +5,9 @@ extends Control
 ## непрозорий scrim на всю дошку, а не напівпрозора панель збоку.
 ##
 ## Кнопки лише повідомляють сигналами; що робити — вирішує сцена бою, яка
-## володіє станом (збереження, оверлей налаштувань). «Здатися» — без
-## підтвердження: в проєкті немає усталеного шаблону діалогу підтвердження.
+## володіє станом (збереження, оверлей налаштувань). «Здатися» спершу
+## підміняє кнопки панеллю підтвердження в тій самій картці (без ОС-діалогів);
+## surrender_requested летить лише з «Так».
 
 signal resume_requested
 signal settings_requested
@@ -20,7 +21,19 @@ func _ready() -> void:
 	_resume_button.pressed.connect(_on_resume_pressed)
 	%SaveQuitButton.pressed.connect(save_quit_requested.emit)
 	%SettingsButton.pressed.connect(settings_requested.emit)
-	%SurrenderButton.pressed.connect(surrender_requested.emit)
+	%SurrenderButton.pressed.connect(_set_confirming.bind(true))
+	%ConfirmCancelButton.pressed.connect(_set_confirming.bind(false))
+	%ConfirmYesButton.pressed.connect(surrender_requested.emit)
+	# Повторне відкриття паузи завжди починається зі звичайних кнопок.
+	visibility_changed.connect(_set_confirming.bind(false))
+
+
+func _set_confirming(on: bool) -> void:
+	for b: Control in [%ResumeButton, %SettingsButton, %SaveQuitButton, %SurrenderButton]:
+		b.visible = not on
+	%ConfirmBox.visible = on
+	# Помилка збереження стосується лише того відкриття паузи, у якому сталася.
+	%ErrorLabel.visible = false
 
 
 ## Збій збереження: лишаємось у паузі й кажемо про це (ключ перекладу).
@@ -30,6 +43,5 @@ func show_error(key: String) -> void:
 
 
 func _on_resume_pressed() -> void:
-	%ErrorLabel.visible = false
 	visible = false
 	resume_requested.emit()

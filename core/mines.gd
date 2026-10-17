@@ -73,6 +73,8 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 	out.append(Events.MineTriggered.new(m.pos, unit.id))
 	var applied: int = mini(DAMAGE_BASE + Rules.roll(state.rng, DAMAGE_ROLL), unit.hp)
 	unit.hp -= applied
+	# Шкода міни зараховується власнику міни, але не в досвід — сапер його не має (§3.7).
+	state.damage_dealt[m.owner] += applied
 	out.append(Events.DamageDealt.new(unit.id, applied, unit.hp))
 	if not unit.is_alive():
 		out.append(Events.UnitDestroyed.new(unit.id, unit.pos))

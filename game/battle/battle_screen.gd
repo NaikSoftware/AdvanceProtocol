@@ -172,6 +172,10 @@ func launch(match_service: Node) -> void:
 			map = _FallbackMap
 	setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state)
 	match_service.launch_mode = MatchService.Launch.NONE
+	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
+	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
+	_clear_unit_views()
+	_gate.show_for(_match_service.state.active_player)
 
 
 ## ground_state < 0 — ґрунт карти; інакше вибраний у налаштуваннях матчу.
@@ -193,9 +197,9 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
 	_rebuild_units_for_active_player()
-	# fly_to(), не center_on(): це не гейтове рецентрування (жодного гейта
-	# ще не показано, нічому витікати) — програмний рух камери мусить
-	# доводитись плавно, за мінімальною планкою.
+	# fly_to(), не center_on(): у самостійному запуску гейта немає, і програмний
+	# рух камери мусить доводитись плавно. Через launch() дошку одразу закриває
+	# гейт, а center_on() на confirmed зупиняє цей твін — витікати нічому.
 	_camera_rig.fly_to(_first_unit_cell(_match_service.state.active_player))
 	_match_service.events_ready.connect(_on_events_ready)
 
@@ -679,15 +683,19 @@ func _on_gate_confirmed() -> void:
 	_gate.visible = false
 
 
+func _clear_unit_views() -> void:
+	for id in _unit_views.keys():
+		(_unit_views[id] as UnitView).free()
+	_unit_views.clear()
+
+
 ## §3.5: повна перебудова — найпростіший спосіб гарантувати, що на дошці
 ## рівно ті вузли, які known_occupied_map(активного) дозволяє знати. Юніт, що
 ## щойно рухався, устигає доанімуватись (play() уже дочекався його твіна) до
 ## виклику цієї функції, тож перебудова не рве рух на середині кроку.
 func _rebuild_units_for_active_player() -> void:
 	var state: BattleState = _match_service.state
-	for id in _unit_views.keys():
-		(_unit_views[id] as UnitView).free()
-	_unit_views.clear()
+	_clear_unit_views()
 
 	var known: Dictionary = state.known_occupied_map(state.active_player)
 	for pos in known:

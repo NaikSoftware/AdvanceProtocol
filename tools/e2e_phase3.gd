@@ -269,6 +269,8 @@ func _flow() -> void:
 	var surrendering: int = MatchService.state.active_player
 	await _click(_hud().get_node("%PauseButton"))
 	await _click(_pause().get_node("%SurrenderButton"))
+	await _shot("15a_surrender_confirm")
+	await _click(_pause().get_node("%ConfirmYesButton"))
 	ok = await _await_scene(ResultsScreen)
 	await _shot("15_results")
 	var res: Node = _scene()
@@ -295,6 +297,7 @@ func _flow() -> void:
 		await _confirm_gate()
 	await _click(_hud().get_node("%PauseButton"))
 	await _click(_pause().get_node("%SurrenderButton"))
+	await _click(_pause().get_node("%ConfirmYesButton"))
 	ok = await _await_scene(ResultsScreen)
 	if ok:
 		await _click(_scene().get_node("%ToMenuButton"))
