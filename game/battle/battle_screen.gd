@@ -177,7 +177,8 @@ func launch(match_service: Node) -> void:
 		map = (load(match_service.map_path) as MapData) if ResourceLoader.exists(match_service.map_path) else null
 		if map == null:
 			map = _FallbackMap
-	setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state)
+	if not setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state):
+		return
 	match_service.launch_mode = MatchService.Launch.NONE
 	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
 	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
@@ -186,14 +187,19 @@ func launch(match_service: Node) -> void:
 
 
 ## ground_state < 0 — ґрунт карти; інакше вибраний у налаштуваннях матчу.
-func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null, ground_state: int = -1) -> void:
+## false — карта зламана (populate() відмовив): матч не починається, екран
+## повертає в меню; порожня дошка без кінця була б гірша за вихід.
+func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null, ground_state: int = -1) -> bool:
 	_match_service = match_service if match_service != null else MatchService
 
 	var board: Board = map_data.to_board()
 	if ground_state >= 0:
 		board.ground_state = ground_state
 	_match_service.start_match(board, player_count, seed_value)
-	map_data.populate(_match_service.state)
+	if not map_data.populate(_match_service.state):
+		push_error("BattleScreen: карта відхилена — напрям поза 0..7")
+		left_to_menu.emit()
+		return false
 	_match_service.begin()
 	# R9: ця черга — рівно TurnStarted (і, за потреби, MineRevealed) першого
 	# ходу; TileRevealed усіх гравців тут відкинуто ще у start() самим core/,
@@ -209,6 +215,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# гейт, а center_on() на confirmed зупиняє цей твін — витікати нічому.
 	_camera_rig.fly_to(_first_unit_cell(_match_service.state.active_player))
 	_match_service.events_ready.connect(_on_events_ready)
+	return true
 
 
 ## «Продовжити»: вигляд з уже завантаженого state, без нового матчу. Пристрій

@@ -78,6 +78,24 @@ func test_new_match_starts_behind_the_gate() -> void:
 	assert_not_null(screen.unit_view_for(1))
 
 
+## Карта зі зламаним напрямом: populate() відмовляє й не додає юнітів. Матч не
+## починається — повернення в меню, а не порожня дошка без кінця.
+func test_broken_map_refuses_to_start_and_returns_to_menu() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	var m: MapData = _map()
+	m.spawns = [{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 9}] as Array[Dictionary]
+	watch_signals(screen)
+
+	var started: bool = screen.setup(m, 2, 1, service)
+
+	assert_push_error("напрям")
+	assert_false(started)
+	assert_signal_emitted(screen, "left_to_menu")
+	assert_eq(service.state.units.size(), 0)
+	assert_null(screen.input_controller(), "begin() і проводку вигляду пропущено")
+
+
 func test_configure_without_seed_draws_a_random_one() -> void:
 	var service: Node = _service()
 	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY)
