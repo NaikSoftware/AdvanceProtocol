@@ -539,3 +539,22 @@ func test_cancelled_touch_is_not_a_tap() -> void:
 	ev2.pressed = false
 	vp.push_input(ev2, true)
 	assert_ne(ctl._pending, pending, "справжній тап далі міняє превʼю")
+
+
+## Зміна мови з паузи (Налаштування) лишала підписи бою старою мовою: tr() викликався раз.
+## Локаль ставимо напряму, а не кліком по кнопці: SettingsService.save() пише в реальний user://settings.cfg.
+func test_locale_change_refreshes_hud_and_inspector_labels() -> void:
+	await _two_riflemen()
+	var prev: String = TranslationServer.get_locale()
+	_tap(Vector2i(0, 1))
+	var hud: Hud = _hud()
+	var ground_key: String = Hud.GROUND_STATE_KEYS[Terrain.GroundState.DRY]
+	var name_key: String = _unit(1).type()["name_key"]
+	var texts: Dictionary = {}
+	for loc: String in ["uk", "en"]:
+		TranslationServer.set_locale(loc)
+		texts[loc] = [tr(ground_key), tr(name_key)]
+		assert_eq(hud._ground_label.text, texts[loc][0], "підпис ґрунту: %s" % loc)
+		assert_eq(hud._inspector._name_label.text, texts[loc][1], "назва юніта в інспекторі: %s" % loc)
+	assert_ne(texts["uk"], texts["en"], "передумова: переклади справді різні")
+	TranslationServer.set_locale(prev)
