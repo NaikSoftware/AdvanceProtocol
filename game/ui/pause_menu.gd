@@ -32,6 +32,8 @@ func _set_confirming(on: bool) -> void:
 	for b: Control in [%ResumeButton, %SettingsButton, %SaveQuitButton, %SurrenderButton]:
 		b.visible = not on
 	%ConfirmBox.visible = on
+	# Помилка збереження стосується лише того відкриття паузи, у якому сталася.
+	%ErrorLabel.visible = false
 
 
 ## Збій збереження: лишаємось у паузі й кажемо про це (ключ перекладу).
@@ -41,6 +43,5 @@ func show_error(key: String) -> void:
 
 
 func _on_resume_pressed() -> void:
-	%ErrorLabel.visible = false
 	visible = false
 	resume_requested.emit()
