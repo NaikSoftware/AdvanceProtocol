@@ -172,6 +172,10 @@ func launch(match_service: Node) -> void:
 			map = _FallbackMap
 	setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state)
 	match_service.launch_mode = MatchService.Launch.NONE
+	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
+	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
+	_clear_unit_views()
+	_gate.show_for(_match_service.state.active_player)
 
 
 ## ground_state < 0 — ґрунт карти; інакше вибраний у налаштуваннях матчу.
@@ -683,11 +687,15 @@ func _on_gate_confirmed() -> void:
 ## рівно ті вузли, які known_occupied_map(активного) дозволяє знати. Юніт, що
 ## щойно рухався, устигає доанімуватись (play() уже дочекався його твіна) до
 ## виклику цієї функції, тож перебудова не рве рух на середині кроку.
-func _rebuild_units_for_active_player() -> void:
-	var state: BattleState = _match_service.state
+func _clear_unit_views() -> void:
 	for id in _unit_views.keys():
 		(_unit_views[id] as UnitView).free()
 	_unit_views.clear()
+
+
+func _rebuild_units_for_active_player() -> void:
+	var state: BattleState = _match_service.state
+	_clear_unit_views()
 
 	var known: Dictionary = state.known_occupied_map(state.active_player)
 	for pos in known:

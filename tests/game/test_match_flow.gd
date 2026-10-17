@@ -64,6 +64,20 @@ func test_configured_seed_players_and_ground_land_in_state() -> void:
 	assert_eq(service.state.board.ground_state, Terrain.GroundState.MUD)
 
 
+func test_new_match_starts_behind_the_gate() -> void:
+	var service: Node = _service()
+	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY, 3)
+	var screen: BattleScreen = _screen()
+
+	screen.launch(service)
+
+	assert_true(screen.get_node("%HandoverGate").visible,
+		"«Почати» міг натиснути будь-хто — перший хід теж за гейтом (§3.5)")
+	assert_null(screen.unit_view_for(1), "до підтвердження гейта юнітів на дошці немає")
+	screen.get_node("%HandoverGate").confirmed.emit()
+	assert_not_null(screen.unit_view_for(1))
+
+
 func test_configure_without_seed_draws_a_random_one() -> void:
 	var service: Node = _service()
 	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY)
