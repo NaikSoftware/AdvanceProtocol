@@ -91,6 +91,7 @@ size_flags_vertical = 4
 text = "settings_music"
 
 [node name="MusicSlider" type="HSlider" parent="SafeArea/Center/Card/Body/MusicRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
@@ -110,6 +111,7 @@ size_flags_vertical = 4
 text = "settings_sfx"
 
 [node name="SfxSlider" type="HSlider" parent="SafeArea/Center/Card/Body/SfxRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
@@ -129,6 +131,7 @@ size_flags_vertical = 4
 text = "settings_quality"
 
 [node name="QLow" type="Button" parent="SafeArea/Center/Card/Body/QualityRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
@@ -137,6 +140,7 @@ button_group = SubResource("quality_group")
 text = "settings_quality_low"
 
 [node name="QMed" type="Button" parent="SafeArea/Center/Card/Body/QualityRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
@@ -146,6 +150,7 @@ button_group = SubResource("quality_group")
 text = "settings_quality_medium"
 
 [node name="QHigh" type="Button" parent="SafeArea/Center/Card/Body/QualityRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3

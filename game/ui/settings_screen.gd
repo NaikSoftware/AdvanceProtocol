@@ -1,19 +1,41 @@
 class_name SettingsScreen
 extends Control
-## Task 3.4 (скелет): екран налаштувань. Мова застосовується миттєво
-## (TranslationServer.set_locale — Control-и самі перекладаються на зміну
-## локалі). Гучність і якість поки лише візуальні; збереження через
-## SettingsService (user://settings.cfg) — крок логіки Task 3.4, не цей скелет.
+## Task 3.4: екран налаштувань. Мова застосовується миттєво (Control-и самі
+## перекладаються на зміну локалі); кожна зміна одразу пишеться в
+## SettingsService → user://settings.cfg, окремої кнопки «Зберегти» немає.
+##
+## overlay = true — екран відкритий поверх бою з паузи: «Назад» лише закриває
+## його, а не веде в меню, тож матч, що чекає під ним, не губиться.
+
+var overlay: bool = false
 
 @onready var _uk_button: Button = %LangUk
 @onready var _en_button: Button = %LangEn
+@onready var _music: HSlider = %MusicSlider
+@onready var _sfx: HSlider = %SfxSlider
+@onready var _quality: Array[Button] = [%QLow, %QMed, %QHigh]
 
 
 func _ready() -> void:
-	_sync_language_buttons()
+	_sync_from_service()
 	_uk_button.pressed.connect(_on_language_pressed.bind("uk"))
 	_en_button.pressed.connect(_on_language_pressed.bind("en"))
-	%BackButton.pressed.connect(SceneRouter.goto_main_menu)
+	_music.value_changed.connect(func(v: float) -> void:
+		SettingsService.music_volume = v
+		SettingsService.save())
+	_sfx.value_changed.connect(func(v: float) -> void:
+		SettingsService.sfx_volume = v
+		SettingsService.save())
+	for i in _quality.size():
+		_quality[i].pressed.connect(_on_quality_pressed.bind(i))
+	%BackButton.pressed.connect(_on_back_pressed)
+
+
+func _sync_from_service() -> void:
+	_music.set_value_no_signal(SettingsService.music_volume)
+	_sfx.set_value_no_signal(SettingsService.sfx_volume)
+	_quality[SettingsService.quality].button_pressed = true
+	_sync_language_buttons()
 
 
 func _sync_language_buttons() -> void:
@@ -23,5 +45,19 @@ func _sync_language_buttons() -> void:
 
 
 func _on_language_pressed(locale: String) -> void:
-	TranslationServer.set_locale(locale)
+	SettingsService.locale = locale
+	SettingsService.apply_locale()
+	SettingsService.save()
 	_sync_language_buttons()
+
+
+func _on_quality_pressed(level: int) -> void:
+	SettingsService.quality = level
+	SettingsService.save()
+
+
+func _on_back_pressed() -> void:
+	if overlay:
+		queue_free()
+	else:
+		SceneRouter.goto_main_menu()

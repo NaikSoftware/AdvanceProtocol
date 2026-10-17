@@ -67,6 +67,7 @@ size_flags_vertical = 4
 text = "setup_players"
 
 [node name="P2" type="Button" parent="SafeArea/Center/Card/Body/PlayersRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 48)
 layout_mode = 2
 toggle_mode = true
@@ -75,6 +76,7 @@ button_group = SubResource("players_group")
 text = "2"
 
 [node name="P3" type="Button" parent="SafeArea/Center/Card/Body/PlayersRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 48)
 layout_mode = 2
 toggle_mode = true
@@ -117,6 +119,7 @@ button_group = SubResource("ground_group")
 text = "hud_ground_dry"
 
 [node name="Mud" type="Button" parent="SafeArea/Center/Card/Body/GroundRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3
@@ -125,6 +128,7 @@ button_group = SubResource("ground_group")
 text = "hud_ground_mud"
 
 [node name="Frozen" type="Button" parent="SafeArea/Center/Card/Body/GroundRow"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
 size_flags_horizontal = 3

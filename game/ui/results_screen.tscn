@@ -51,6 +51,7 @@ theme_override_font_sizes/font_size = 20
 text = "results_title"
 
 [node name="Winner" type="Label" parent="SafeArea/Center/Card/Body"]
+unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.95, 0.9, 0.74, 1)
@@ -61,84 +62,11 @@ text = "results_winner"
 layout_mode = 2
 
 [node name="Table" type="GridContainer" parent="SafeArea/Center/Card/Body"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 24
 theme_override_constants/v_separation = 10
 columns = 3
-
-[node name="H0" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0.55, 0.6, 0.64, 1)
-text = " "
-
-[node name="H1" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-theme_override_colors/font_color = Color(0.82, 0.66, 0.32, 1)
-text = "1"
-
-[node name="H2" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-theme_override_colors/font_color = Color(0.32, 0.6, 0.62, 1)
-text = "2"
-
-[node name="LossesCap" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-text = "results_losses"
-
-[node name="LossesP1" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "—"
-
-[node name="LossesP2" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "—"
-
-[node name="DamageCap" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-text = "results_damage"
-
-[node name="DamageP1" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "—"
-
-[node name="DamageP2" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "—"
-
-[node name="ObjCap" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-text = "results_objectives"
-
-[node name="ObjP1" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "—"
-
-[node name="ObjP2" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "—"
-
-[node name="LvlCap" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-text = "results_levels"
-
-[node name="LvlP1" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "—"
-
-[node name="LvlP2" type="Label" parent="SafeArea/Center/Card/Body/Table"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "—"
 
 [node name="Gap" type="Control" parent="SafeArea/Center/Card/Body"]
 custom_minimum_size = Vector2(0, 8)

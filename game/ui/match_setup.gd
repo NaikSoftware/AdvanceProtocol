@@ -1,15 +1,21 @@
 class_name MatchSetup
 extends Control
-## Task 3.3: налаштування матчу (скелет). Обирається кількість гравців (2/3),
+## Task 3.3: налаштування матчу. Обирається кількість гравців (2/3),
 ## карта зі списку maps/, стан ґрунту й кольори гравців.
 ##
 ## Сід на екрані НЕ показується: він генерується випадково під капотом при
 ## старті матчу (детермінізм лишається — крок логіки Task 3.3). Гравцеві в
 ## хот-сит сирий сід не потрібен.
 ##
-## Скелет: розкладка й вибір працюють; фактичний виклик
-## MatchService.start_match(map.to_board(), players, seed) з тестом на те, що
-## сід потрапляє в state.seed_value — окремий крок Task 3.3, не цей скелет.
+## Колір гравців на екрані поки лише показується: у бойовому вигляді його ніхто
+## не споживає, тож у конфіг він не йде.
+
+## Старт матчу налаштовано; у справжньому запуску веде в бій (тести підміняють).
+signal started
+
+## null — автолоад; тести підставляють свій сервіс і шлях збереження.
+var match_service: Node = null
+var save_path: String = MatchService.SAVE_PATH
 
 const MAPS_DIR: String = "res://maps"
 
@@ -18,7 +24,13 @@ var _map_paths: Array[String] = []
 
 
 func _ready() -> void:
+	if match_service == null:
+		match_service = MatchService
+	if get_tree().current_scene == self:
+		started.connect(SceneRouter.goto_battle)
 	_populate_maps()
+	_map_options.item_selected.connect(func(_i: int) -> void: _sync_player_options())
+	_sync_player_options()
 	%BackButton.pressed.connect(SceneRouter.goto_main_menu)
 	%StartButton.pressed.connect(_on_start_pressed)
 
@@ -38,7 +50,59 @@ func _populate_maps() -> void:
 		_map_options.add_item(map_name.trim_suffix(".tres"))
 
 
+## Тримачі гравців — не з карти, а з її спавнів: мапа без юнітів третього
+## гравця не дає запустити матч утрьох (гравець без юнітів — безглуздя).
+func _sync_player_options() -> void:
+	var can3: bool = _selected_map_supports_3()
+	%P3.disabled = not can3
+	if not can3 and %P3.button_pressed:
+		%P2.button_pressed = true
+
+
+func _selected_map_supports_3() -> bool:
+	if _map_paths.is_empty():
+		return false
+	return map_supports(load(_map_paths[_map_options.selected]) as MapData, 3)
+
+
+## Карта придатна на N гравців, лише якщо кожен із них має хоч один спавн.
+static func map_supports(map: MapData, player_count: int) -> bool:
+	if map == null:
+		return false
+	var owners: Dictionary = {}
+	for spawn in map.spawns:
+		owners[int(spawn["owner"])] = true
+	for p in player_count:
+		if not owners.has(p):
+			return false
+	return true
+
+
 func _on_start_pressed() -> void:
-	# Реальний старт (MatchService + інʼєкція карти в бій, сід випадковий) — крок
-	# логіки Task 3.3. Скелет веде в бій, щоб потік був клікабельним для апруву UX.
-	SceneRouter.goto_battle()
+	if configure_from_choice(match_service):
+		# Новий матч витісняє старе збереження: інакше «Продовжити» після виходу
+		# з нового, незбереженого матчу відновило б зовсім інший.
+		match_service.delete_save(save_path)
+		started.emit()
+
+
+## Переносить вибір гравця в сервіс; сід випадковий (configure без сіда).
+func configure_from_choice(service: Node) -> bool:
+	if _map_paths.is_empty():
+		return false
+	if _chosen_players() == 3 and not _selected_map_supports_3():
+		return false
+	service.configure(_map_paths[_map_options.selected], _chosen_players(), _chosen_ground())
+	return true
+
+
+func _chosen_players() -> int:
+	return 3 if %P3.button_pressed else 2
+
+
+func _chosen_ground() -> int:
+	if %Mud.button_pressed:
+		return Terrain.GroundState.MUD
+	if %Frozen.button_pressed:
+		return Terrain.GroundState.FROZEN
+	return Terrain.GroundState.DRY
