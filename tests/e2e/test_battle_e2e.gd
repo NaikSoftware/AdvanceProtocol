@@ -12,7 +12,7 @@ extends GutTest
 const BattleScreenScene := preload("res://game/battle/battle_screen.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 const E2E := preload("res://tests/e2e/e2e_helpers.gd")
-const TEST_SAVE: String = "user://test_e2e_save.json"
+var _test_save: String = "user://test_e2e_save_%d.json" % OS.get_process_id()
 
 # Типи з core/unit_types.gd
 const RIFLE: int = 0
@@ -52,8 +52,8 @@ func before_each() -> void:
 
 func after_each() -> void:
 	_e2e.restore_runner_gui()
-	DirAccess.remove_absolute(TEST_SAVE)
-	DirAccess.remove_absolute(TEST_SAVE + ".map")
+	DirAccess.remove_absolute(_test_save)
+	DirAccess.remove_absolute(_test_save + ".map")
 
 
 # --- Каркас ------------------------------------------------------------------
@@ -87,7 +87,7 @@ func _boot(width: int, height: int, spawns: Array, tiles: Dictionary = {},
 	add_child_autofree(_service)
 	_screen = BattleScreenScene.instantiate()
 	add_child_autofree(_screen)
-	_screen.save_path = TEST_SAVE
+	_screen.save_path = _test_save
 	_screen.setup(m, 2, seed_value, _service, ground)
 	_e2e.ignore_runner_gui([_screen])
 	await _settle()

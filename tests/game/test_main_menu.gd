@@ -17,6 +17,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	DirAccess.remove_absolute(_save_path)
 	if is_instance_valid(menu) and not menu.is_queued_for_deletion():
 		menu.free()
 	menu = null
@@ -362,45 +363,26 @@ func test_flash_glow_fades_out_and_frees_itself() -> void:
 # Обидві гілки перевіряємо явно: тест впаде, якщо умову інвертувати
 # (`not file_exists`) — саме та регресія, яку легко пропустити.
 
-## Знімає збереження на час тесту й повертає його вміст (щоб не затерти
-## реальний save у пісочниці user://).
-func _detach_save() -> Dictionary:
-	var existed: bool = FileAccess.file_exists(MainMenu.SAVE_PATH)
-	var backup: String = ""
-	if existed:
-		backup = FileAccess.get_file_as_string(MainMenu.SAVE_PATH)
-		DirAccess.remove_absolute(MainMenu.SAVE_PATH)
-	return {"existed": existed, "backup": backup}
-
-
-func _restore_save(state: Dictionary) -> void:
-	if state["existed"]:
-		var f := FileAccess.open(MainMenu.SAVE_PATH, FileAccess.WRITE)
-		f.store_string(state["backup"])
-		f.close()
-	elif FileAccess.file_exists(MainMenu.SAVE_PATH):
-		DirAccess.remove_absolute(MainMenu.SAVE_PATH)
+## Власний шлях на процес: справжній user://save.json тест не чіпає.
+var _save_path: String = "user://test_main_menu_save_%d.json" % OS.get_process_id()
 
 
 func test_continue_button_hidden_when_no_save() -> void:
-	var saved := _detach_save()
+	menu.save_path = _save_path
 	add_child_autofree(menu)
 
 	assert_false((menu.get_node("%ContinueButton") as Button).visible,
 		"без збереження кнопку «Продовжити» треба ховати, а не лишати задісейбленою")
 
-	_restore_save(saved)
-
 
 func test_continue_button_shown_when_save_exists() -> void:
-	var saved := _detach_save()
-	var f := FileAccess.open(MainMenu.SAVE_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(_save_path, FileAccess.WRITE)
 	f.store_string("{}")
 	f.close()
 
+	menu.save_path = _save_path
 	add_child_autofree(menu)
 
 	assert_true((menu.get_node("%ContinueButton") as Button).visible,
 		"за наявності збереження «Продовжити» має бути видимою")
 
-	_restore_save(saved)

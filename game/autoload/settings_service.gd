@@ -5,6 +5,9 @@ extends Node
 const PATH: String = "user://settings.cfg"
 const QUALITY_MAX: int = 2
 
+## Куди пишуть save()/load() без явного шляху; тести підміняють, щоб не чіпати справжній файл.
+var config_path: String = PATH
+
 var locale: String = "uk"
 var music_volume: float = 0.8
 var sfx_volume: float = 0.9
@@ -18,7 +21,9 @@ func _ready() -> void:
 	self.load()  # голе load() — глобальна функція двигуна
 
 
-func save(path: String = PATH) -> Error:
+func save(path: String = "") -> Error:
+	if path == "":
+		path = config_path
 	var cfg := ConfigFile.new()
 	cfg.set_value("general", "locale", locale)
 	cfg.set_value("audio", "music_volume", music_volume)
@@ -28,7 +33,9 @@ func save(path: String = PATH) -> Error:
 
 
 ## Відсутній або зіпсований файл — не помилка: лишаються типові значення.
-func load(path: String = PATH) -> void:
+func load(path: String = "") -> void:
+	if path == "":
+		path = config_path
 	var cfg := ConfigFile.new()
 	if cfg.load(path) == OK:
 		locale = str(cfg.get_value("general", "locale", locale))

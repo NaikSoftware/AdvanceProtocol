@@ -79,7 +79,7 @@ func test_rng_continues_where_it_stopped() -> void:
 	assert_eq(Rules.roll(b.rng, 100), expected, "зберігається стан RNG, а не сід")
 
 func test_save_and_load_a_file() -> void:
-	var path := "user://test_save.json"
+	var path := "user://test_save_%d.json" % OS.get_process_id()
 	var a: BattleState = _populated_state()
 	assert_eq(BattleSerializer.save_to(a, path), OK)
 	var b: BattleState = BattleSerializer.load_from(path)
