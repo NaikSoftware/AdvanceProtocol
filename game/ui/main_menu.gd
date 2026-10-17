@@ -457,7 +457,7 @@ func _smoke_color_ramp() -> GradientTexture1D:
 
 
 ## Плавне зростання за життя (без ривка розміру) — два керуючі вузли з
-## дефолтними дотичними Curve вже дають плавний ease, не сходинку.
+## типовими дотичними Curve вже дають плавний ease, не сходинку.
 func _smoke_scale_curve() -> CurveTexture:
 	var curve := Curve.new()
 	curve.add_point(Vector2(0.0, 0.5))

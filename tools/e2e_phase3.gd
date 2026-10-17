@@ -157,7 +157,7 @@ func _confirm_gate() -> void:
 	await _wait(0.3)
 
 
-## Чекає, поки бій зʼявиться й досягне стабільного стану (сцена + кадр).
+## Чекає, поки бій з'явиться й досягне стабільного стану (сцена + кадр).
 func _await_scene(type: Variant) -> bool:
 	var ok: bool = await _until(func() -> bool: return is_instance_of(_scene(), type))
 	await _wait(0.6)
@@ -245,7 +245,7 @@ func _flow() -> void:
 		opened and _find_settings() == null and _scene() is BattleScreen and _dict() == d1 and _pause().visible,
 		"ov=%s closed=%s battle=%s same=%s pause=%s" % [opened, _find_settings() == null, _scene() is BattleScreen, _dict() == d1, _pause().visible])
 
-	# 5. Зберегти й вийти → меню з «Продовжити» → гейт → той самий стан.
+	# 5. Зберегти й вийти → меню з «Продовжити» → гейт передачі → той самий стан.
 	await _click(_pause().get_node("%SaveQuitButton"))
 	ok = await _await_scene(MainMenu)
 	menu = _scene() as MainMenu
@@ -338,7 +338,7 @@ func _find_settings() -> Node:
 	return null
 
 
-## Тап по юніту, тап по досяжній сусідній клітинці, підтвердити в HUD.
+## Тап по юніту, тап по досяжній сусідньому тайлі, підтвердити в HUD.
 func _move_one_unit() -> bool:
 	var battle: BattleScreen = _battle()
 	var rig: IsoCameraRig = battle.get_node("%CameraRig")

@@ -1,9 +1,9 @@
 extends GutTest
 ## Task 2.7: тап → намір → Command. Жива battle_screen.tscn з'являється лише в
 ## Task 2.10 (ручна перевірка «вибрав → пішов → вистрілив» відкладена туди,
-## R25), тож тут — headless перевірка контролера як чистого обʼєкта: власний
+## R25), тож тут — headless перевірка контролера як чистого об'єкта: власний
 ## MatchService на тест (той самий прийом, що й test_match_service.gd — окремий
-## інстанс, а не спільний автозавантажений синглтон, щоб тести не текли
+## екземпляр, а не спільний автозавантажений синглтон, щоб тести не текли
 ## станом одне в одного), шпигун замість справжнього ZoneOverlay.
 
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
@@ -11,7 +11,7 @@ const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 ## Шпигун замість справжнього ZoneOverlay: не тримає жодного BoardView (той
 ## вимагав би живої сцени й наштовхнувся б на ту саму MultiMesh-заглушку під
 ## headless, що й test_zone_overlay.gd, R4/R16), а лише запам'ятовує останній
-## виклик. Тест звіряється з тим, ЩО порахував InputController (сам обʼєкт
+## виклик. Тест звіряється з тим, ЩО порахував InputController (сам об'єкт
 ## Pathing.Zones), а не з тим, як воно намальоване — саме малювання вже
 ## покрите test_zone_overlay.gd.
 class SpyZoneOverlay extends ZoneOverlay:
@@ -88,7 +88,7 @@ func test_tap_on_zone_tile_sets_pending_move_and_submits_nothing() -> void:
 
 	var start_pos: Vector2i = u.pos
 	var start_ap: int = u.ap
-	var target := Vector2i(6, 5)  # сусідня клітинка, точно в межах зони танка
+	var target := Vector2i(6, 5)  # сусідній тайл, точно в межах зони танка
 
 	controller.tap_cell(target)
 
@@ -287,7 +287,7 @@ func test_select_unit_ignored_while_playback_is_running() -> void:
 # --- Матч завершено: ввід не приймається взагалі -------------------------
 #
 # Баг власника: «дограв, убив усіх юнітів противника і гра крешнулась» на
-# assert у battle_screen.gd. Корінь — не кнопка кінця ходу: core/ гейтить на
+# assert у battle_screen.gd. Корінь — не кнопка кінця ходу: core/ залежить від
 # state.is_over() УСІ команди (move/fire/drone/engineer/end_turn), тож після
 # перемоги вигляд і далі пропонує дію, яку правила вже відхиляють, і кожен
 # підтверджений намір падає на assert. Відповідь та сама, що й у R24: після
@@ -316,9 +316,9 @@ func test_selection_and_taps_are_ignored_once_the_match_is_over() -> void:
 	assert_true(service.take_events().is_empty(), "і жодної команди в ядро")
 
 
-# --- Ревʼю: _zones мусять описувати ПОТОЧНИЙ стан, не стан на момент вибору --
+# --- Рев'ю: _zones мусять описувати ПОТОЧНИЙ стан, не стан на момент вибору --
 #
-# Знахідка ревʼю: до фіксу _zones рахувалися рівно один раз, у select_unit(),
+# Знахідка рев'ю: до фіксу _zones рахувалися рівно один раз, у select_unit(),
 # і ніколи не оновлювалися після confirm_pending() — хоча MoveCommand і
 # FireCommand щойно змінили позицію й AP того самого юніта. §3.2 називає цей
 # сценарій прямо: «Movement is spent, not committed. A unit may move in as
@@ -359,7 +359,7 @@ func test_confirm_shot_then_tap_does_not_reach_stale_zone_tiles() -> void:
 	var target: Unit = service.state.add_unit(11, 1, Vector2i(6, 5), 0)  # engineer squad
 	_begin_and_drain()
 	controller.tap_cell(u.pos)
-	# Передумова: (7,5) — усередині ЗІ старого AP=48 зони (2 клітинки, cost 20).
+	# Передумова: (7,5) — усередині ЗІ старого AP=48 зони (2 тайли, cost 20).
 	assert_true(overlay.last_zones.can_reach(Vector2i(7, 5)), "передумова: клітинка в зоні до пострілу")
 	controller.tap_cell(target.pos)
 
@@ -398,12 +398,12 @@ func test_unit_that_dies_to_retaliation_clears_selection_cleanly() -> void:
 
 ## Броньований автомобіль (id=2): AP 68, cross_country 5, тому вхід у звичайне
 ## поле (penalty 10) коштує max(10, 10+10-5)=15, і чотири тайли по прямій
-## (60 AP) лишаються в межах зони. Його ромб огляду — лише 3, тож клітинка на
+## (60 AP) лишаються в межах зони. Його ромб огляду — лише 3, тож тайл на
 ## відстані Менхеттена 4 йому НЕ видна: жодна розвідка її не торкалася.
 ## Ворог, що стоїть саме там, — точний тест R5: known_occupied_map(active)
 ## не знає про нього (тайл ніколи не seen), тож зона мусить включати його
-## клітинку. occupied_map() (всезнаюча) натомість виключила б цю клітинку
-## цілком — Pathing ніколи не кладе зайняту клітинку в cost-мапу, тож
+## тайл. occupied_map() (всезнаюча) натомість виключила б цей тайл
+## цілком — Pathing ніколи не кладе зайнятий тайл в cost-мапу, тож
 ## can_reach() впав би на false, і контур зони обійшов би ворога, виказавши
 ## його самою формою дірки. Якщо хтось підмінить known_occupied_map() на
 ## occupied_map() у input_controller.gd, цей тест мусить впасти.

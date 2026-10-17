@@ -20,7 +20,7 @@ var router: Node = null
 
 ## Рядок на гравця: втрати (мертві юніти), завдана шкода, утримані цілі, рівні
 ## досвіду за класами. Шкода — з state.damage_dealt, а не з досвіду: міни
-## шкодять, але досвіду саперу не дають.
+## шкодять, але досвіду інженеру не дають.
 static func summarize(state: BattleState) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	for p in state.player_count:

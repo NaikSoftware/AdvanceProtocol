@@ -158,8 +158,8 @@ func test_target_out_of_its_own_range_does_not_turn() -> void:
 	var a: Unit = state.add_unit(9, 0, Vector2i(0, 0), 6)
 	var t: Unit = state.add_unit(6, 1, Vector2i(5, 0), 2)   # схід — кормою до атакувальника
 	state.begin_turn()
-	# Предмет тесту — дальність ВІДПОВІДІ, тож гейт знання атакувальника
-	# прибирається з дороги явно (§3.5 гейтить постріл на seen).
+	# Предмет тесту — дальність вогню у відповідь, тож обмеження знанням атакувальника
+	# прибирається з дороги явно (§3.5 обмежує постріл за `seen`).
 	state.vision[0].seen.fill(1)
 	state.refresh_vision(t.owner)
 	var ap_before: int = t.ap
@@ -182,7 +182,7 @@ func test_target_that_cannot_see_the_attacker_does_not_turn() -> void:
 	state.begin_turn()
 	# Навмисно НЕ рахуємо зір гравця 1: його seen порожній, тайла атакувальника
 	# він не розвідував ЖОДНОГО разу. Гасимо обидві сітки явно, а не покладаємось
-	# на дефолт BattleState.create() — щоб тест не зламався мовчки, якщо дефолт
+	# на типове значення BattleState.create() — щоб тест не зламався мовчки, якщо типове значення
 	# колись зміниться. Той самий прийом, що й у test_retaliation.gd, case 10.
 	state.vision[t.owner].visible.fill(0)
 	state.vision[t.owner].seen.fill(0)

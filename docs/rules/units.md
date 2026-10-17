@@ -38,7 +38,7 @@ this table is documentation only.
 Squad-level units (infantry, engineers) are **one asset per tile** — one mesh, one draw call, one
 tile footprint. That mesh may well sculpt three or four figures sharing a base, and it should: a
 squad is a squad, and a lone figure reads as the wrong thing. What is forbidden is several
-*independently instanced and animated* soldiers per unit, which multiplies the draw-call cost of
+*independently instantiated and animated* soldiers per unit, which multiplies the draw-call cost of
 the most numerous class in the game, and any arrangement that spills across a tile boundary, which
 makes it ambiguous which tile the unit occupies.
 
@@ -71,7 +71,7 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
 
 - **Lay mine** / **clear mine**
 - **Repair or demolish a bridge** — a demolished crossing reshapes the whole map, and this is the
-  single highest-leverage action in the game
+  single highest-impact action in the game
 - **Repair a damaged friendly unit** — heals `(40 + rand(0, ap_left - fire_cost)) / 2`, so an
   engineer that drove all turn repairs badly. This is the one place where unspent AP matters.
 - **Capture / demolish an objective** ([§3.10](objectives.md))

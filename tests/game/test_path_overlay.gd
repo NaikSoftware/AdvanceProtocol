@@ -1,6 +1,6 @@
 extends GutTest
 ## Підсвітка шляху (продовження Task 2.7/2.9): «клікнув юніта, клікнув
-## клітинку — до підтвердження видно маршрут». PathOverlay нічого не рахує —
+## тайл — до підтвердження видно маршрут». PathOverlay нічого не рахує —
 ## малює РІВНО те, що прийшло в preview["path"] від InputController
 ## (Pathing.path_to() зі свіжих Pathing.Zones, R5: пораховані проти
 ## known_occupied_map(), не occupied_map()). Файл тут нічого не перевіряє
@@ -9,7 +9,7 @@ extends GutTest
 ## малюється, а не переобчислюється.
 ##
 ## Живе в тій самій системі, що й ZoneOverlay: BoardView.draw_contour(), той
-## самий приз структурних тестів без єдиного знімка екрана — колір інстансу
+## самий приз структурних тестів без єдиного знімка екрана — колір екземпляра
 ## мультимешу не читається назад під headless (R4/R16).
 
 const BoardViewScene := preload("res://game/battle/board_view.tscn")
@@ -123,10 +123,10 @@ func test_path_color_differs_from_both_zone_colors() -> void:
 # Той самий сценарій, що й test_input_controller.gd
 # (test_zone_uses_known_occupancy_not_true_occupancy): броньований автомобіль
 # (vision-ромб 3) і ворог на Манхеттені 4 — за межею ромба, тож ніколи не
-# бачений і відсутній у known_occupied_map(). InputController планує зони й
-# шлях рівно проти НЕЇ (R5, input_controller.gd) — тап по клітинці ворога
+# розвіданий і відсутній у known_occupied_map(). InputController планує зони й
+# шлях рівно проти НЕЇ (R5, input_controller.gd) — тап по тайлі ворога
 ## реєструється як звичайна ціль руху (Targeting тут ні до чого — тап по
-## незнаній клітинці не резолвиться в юніта взагалі), і намальований шлях
+## незнаному тайлі не резолвиться в юніта взагалі), і намальований шлях
 ## веде РІВНО туди, прямою лінією, а не в обхід — саме тому, що PathOverlay
 ## малює дане, а не перевіряє істину.
 func test_drawn_path_reflects_the_known_board_not_the_true_one() -> void:
@@ -149,7 +149,7 @@ func test_drawn_path_reflects_the_known_board_not_the_true_one() -> void:
 	controller.action_preview.connect(overlay.show_preview)
 
 	controller.tap_cell(mover.pos)
-	controller.tap_cell(hidden_enemy.pos)  # тап по клітинці, де насправді стоїть невидимий ворог
+	controller.tap_cell(hidden_enemy.pos)  # тап по тайлі, де насправді стоїть невидимий ворог
 
 	var drawn_cells: Array = []
 	for seg in _segments(board_view.LAYER_PATH):

@@ -85,7 +85,7 @@ func test_newly_revealed_tiles_are_reported_once() -> void:
 	assert_eq(second.size(), 0, "той самий огляд другого разу нічого не відкриває")
 
 func test_is_seen_and_is_visible_reject_out_of_bounds_coordinates() -> void:
-	# §3.5: is_seen() — гейт усіх правил, які питають «чи бачить це гравець», і
+	# §3.5: is_seen() — спільна умова всіх правил, які питають «чи бачить це гравець», і
 	# сторожа _in_bounds() довго була декоративною: жодне правило is_seen() не
 	# читало. Тепер читає, і дістатись до неї легко — Objectives.add()
 	# (core/objectives.gd) не перевіряє позицію цілі, тож рукописна мапа з ціллю
@@ -109,9 +109,9 @@ func test_is_seen_and_is_visible_reject_out_of_bounds_coordinates() -> void:
 	# x >= width, y лишається в межах: (10,0) → 0*10+10 = 10 — так само дійсний.
 	assert_false(v.is_seen(Vector2i(10, 0)), "is_seen(): x >= width")
 	assert_false(v.is_visible(Vector2i(10, 0)), "is_visible(): x >= width")
-	# y < 0: лінійний індекс не дає влучити в дійсну клітинку без переповнення
+	# y < 0: лінійний індекс не дає влучити в дійсний тайл без переповнення
 	# й по x, тож ця пара зачіпає обидві умови одразу — саме тому вони й
-	# гейтяться однією сполучною, а не двома окремими перевірками.
+	# перевіряються однією сполучною, а не двома окремими перевірками.
 	assert_false(v.is_seen(Vector2i(10, -1)), "is_seen(): y < 0")
 	assert_false(v.is_visible(Vector2i(10, -1)), "is_visible(): y < 0")
 	# y >= height: та сама причина, дзеркально.
