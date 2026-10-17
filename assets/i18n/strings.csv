@@ -103,3 +103,11 @@ results_levels,Рівні досвіду,Experience levels
 results_rematch,Реванш,Rematch
 results_to_menu,В меню,To menu
 about_body,Мобільна покрокова тактика. Хот-сит на 2–3 гравці.,Mobile turn-based tactics. Hot-seat for 2–3 players.
+hud_pause,Пауза,Pause
+results_draw,Нічия,Draw
+results_player,Гравець %d,Player %d
+results_not_finished,Матч не завершено,Match not finished
+results_class_infantry,Піхота,Infantry
+results_class_light_vehicle,Легка техніка,Light vehicles
+results_class_tank,Танки,Tanks
+results_class_artillery,Артилерія,Artillery

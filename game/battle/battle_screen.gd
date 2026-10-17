@@ -26,6 +26,10 @@ extends Node3D
 ## тоді й лише тоді, коли він у known_occupied_map(активного) — жодного
 ## тьмяного «останнього відомого положення», ворог без вузла просто відсутній.
 
+## Бій закінчився / гравець вийшов у меню. Маршрутизація — у _ready (лише справжній запуск).
+signal match_finished
+signal left_to_menu
+
 const _UnitViewScene := preload("res://game/battle/unit_view.tscn")
 
 ## R1: єдина точка запуску, коли ЦЮ сцену показує сам двигун — вона стоїть
@@ -46,6 +50,11 @@ const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
 @onready var _units: Node3D = %Units
 @onready var _hud: Hud = %Hud
 @onready var _gate: HandoverGate = %HandoverGate
+@onready var _pause: PauseMenu = %PauseMenu
+@onready var _ui: CanvasLayer = $UI
+
+## Куди пише «Зберегти й вийти» і що стирає завершений матч; тести підміняють.
+var save_path: String = MatchService.SAVE_PATH
 
 var _match_service: Node = null
 var _controller: InputController = null
@@ -122,9 +131,30 @@ var _gesture_had_pinch: bool = false
 ## інстансу теста. Відкласти її через call_deferred теж не рятує — відкладений
 ## виклик приходить у вже звільнений вузол.
 func _ready() -> void:
+	_pause.settings_requested.connect(_open_settings)
+	_pause.save_quit_requested.connect(_on_save_quit)
+	_hud.pause_pressed.connect(_pause.show)
 	if get_tree().current_scene != self:
 		return
-	_start_fallback_match_if_not_injected()
+	# Маршрути виходу з бою ведуть крізь SceneRouter лише у справжньому запуску;
+	# у тестах сигнали просто спостерігаються.
+	left_to_menu.connect(SceneRouter.goto_main_menu)
+	match_finished.connect(SceneRouter.goto_results)
+	_launch_from_service_or_fallback()
+
+
+## Конфіг/завантаження, залишені MatchService меню; без них (сцена запущена
+## напряму) — резервний матч.
+func _launch_from_service_or_fallback() -> void:
+	if _controller != null:
+		return
+	match MatchService.launch_mode:
+		MatchService.Launch.NEW:
+			launch(MatchService)
+		MatchService.Launch.RESUME:
+			resume(MatchService)
+		_:
+			_start_fallback_match_if_not_injected()
 
 
 func _start_fallback_match_if_not_injected() -> void:
@@ -133,10 +163,21 @@ func _start_fallback_match_if_not_injected() -> void:
 	setup(_FallbackMap, 2, _FALLBACK_SEED)
 
 
-func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null) -> void:
+func launch(match_service: Node) -> void:
+	var map: MapData = _FallbackMap
+	if match_service.map_path != "":
+		map = load(match_service.map_path) as MapData
+	setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state)
+	match_service.launch_mode = MatchService.Launch.NONE
+
+
+## ground_state < 0 — ґрунт карти; інакше вибраний у налаштуваннях матчу.
+func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null, ground_state: int = -1) -> void:
 	_match_service = match_service if match_service != null else MatchService
 
 	var board: Board = map_data.to_board()
+	if ground_state >= 0:
+		board.ground_state = ground_state
 	_match_service.start_match(board, player_count, seed_value)
 	map_data.populate(_match_service.state)
 	_match_service.begin()
@@ -145,6 +186,29 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# тож зливати чергу безпечно — початковий туман нижче йде не з неї.
 	_match_service.take_events()
 
+	_wire_view(board)
+	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
+	# не з потоку подій, який щойно злитий вище.
+	_rebuild_units_for_active_player()
+	# fly_to(), не center_on(): це не гейтове рецентрування (жодного гейта
+	# ще не показано, нічому витікати) — програмний рух камери мусить
+	# доводитись плавно, за мінімальною планкою.
+	_camera_rig.fly_to(_first_unit_cell(_match_service.state.active_player))
+	_match_service.events_ready.connect(_on_events_ready)
+
+
+## «Продовжити»: вигляд з уже завантаженого state, без нового матчу. Пристрій
+## віддають невідомо кому, тож дошка ховається за гейтом активного гравця;
+## юніти й камера з'являються на confirmed (_on_gate_confirmed), як при передачі ходу.
+func resume(match_service: Node = null) -> void:
+	_match_service = match_service if match_service != null else MatchService
+	_wire_view(_match_service.state.board)
+	_gate.show_for(_match_service.state.active_player)
+	_match_service.events_ready.connect(_on_events_ready)
+	_match_service.launch_mode = MatchService.Launch.NONE
+
+
+func _wire_view(board: Board) -> void:
 	_board_view.build(board)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
 
@@ -178,18 +242,19 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 
 	_gate.confirmed.connect(_on_gate_confirmed)
 
-	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
-	# не з потоку подій, який щойно злитий вище.
-	_rebuild_units_for_active_player()
-	# fly_to(), не center_on(): це не гейтове рецентрування (жодного гейта
-	# ще не показано, нічому витікати) — програмний рух камери мусить
-	# доводитись плавно, за мінімальною планкою.
-	_camera_rig.fly_to(_first_unit_cell(_match_service.state.active_player))
 
-	# Підключається останнім: begin() уже відпрацював свій events_ready
-	# (нікому не почутий), і жодна дія до цього рядка не мусить проганяти
-	# анімацію чи гейт.
-	_match_service.events_ready.connect(_on_events_ready)
+## Налаштування з паузи відкриваються поверх бою, а не заміною сцени: бій
+## (стан, вигляд, відкрита пауза) лишається під ними як є, тож нічого не треба
+## автозберігати й відновлювати. «Назад» у оверлеї просто закриває його.
+func _open_settings() -> void:
+	var settings: SettingsScreen = preload("res://game/ui/settings_screen.tscn").instantiate()
+	settings.overlay = true
+	_ui.add_child(settings)
+
+
+func _on_save_quit() -> void:
+	_match_service.save_current(save_path)
+	left_to_menu.emit()
 
 
 func unit_view_for(unit_id: int) -> UnitView:
@@ -542,10 +607,19 @@ func _on_events_ready() -> void:
 	await _event_player.play(events)
 
 	var turn_started: bool = false
+	var match_ended: bool = false
 	for event in events:
 		if event is Events.TurnStarted:
 			turn_started = true
-			break
+		elif event is Events.MatchEnded:
+			match_ended = true
+
+	if match_ended:
+		# Завершену гру не можна «продовжити» — збереження стирається тут,
+		# після того як останню подію вже показано.
+		_match_service.delete_save(save_path)
+		match_finished.emit()
+		return
 
 	if turn_started:
 		# §1.2: вибір і прев'ю попереднього гравця не сміють пережити гейт —

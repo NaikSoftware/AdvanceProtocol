@@ -1,15 +1,14 @@
 class_name MatchSetup
 extends Control
-## Task 3.3: налаштування матчу (скелет). Обирається кількість гравців (2/3),
+## Task 3.3: налаштування матчу. Обирається кількість гравців (2/3),
 ## карта зі списку maps/, стан ґрунту й кольори гравців.
 ##
 ## Сід на екрані НЕ показується: він генерується випадково під капотом при
 ## старті матчу (детермінізм лишається — крок логіки Task 3.3). Гравцеві в
 ## хот-сит сирий сід не потрібен.
 ##
-## Скелет: розкладка й вибір працюють; фактичний виклик
-## MatchService.start_match(map.to_board(), players, seed) з тестом на те, що
-## сід потрапляє в state.seed_value — окремий крок Task 3.3, не цей скелет.
+## Колір гравців на екрані поки лише показується: у бойовому вигляді його ніхто
+## не споживає, тож у конфіг він не йде.
 
 const MAPS_DIR: String = "res://maps"
 
@@ -39,6 +38,25 @@ func _populate_maps() -> void:
 
 
 func _on_start_pressed() -> void:
-	# Реальний старт (MatchService + інʼєкція карти в бій, сід випадковий) — крок
-	# логіки Task 3.3. Скелет веде в бій, щоб потік був клікабельним для апруву UX.
-	SceneRouter.goto_battle()
+	if configure_from_choice(MatchService):
+		SceneRouter.goto_battle()
+
+
+## Переносить вибір гравця в сервіс; сід випадковий (configure без сіда).
+func configure_from_choice(service: Node) -> bool:
+	if _map_paths.is_empty():
+		return false
+	service.configure(_map_paths[_map_options.selected], _chosen_players(), _chosen_ground())
+	return true
+
+
+func _chosen_players() -> int:
+	return 3 if %P3.button_pressed else 2
+
+
+func _chosen_ground() -> int:
+	if %Mud.button_pressed:
+		return Terrain.GroundState.MUD
+	if %Frozen.button_pressed:
+		return Terrain.GroundState.FROZEN
+	return Terrain.GroundState.DRY

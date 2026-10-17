@@ -56,6 +56,11 @@ mouse_filter = 2
 [node name="GroundStateLabel" type="Label" parent="SafeArea/Layout/TopBar"]
 unique_name_in_owner = true
 
+[node name="PauseButton" type="Button" parent="SafeArea/Layout/TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 48)
+text = "hud_pause"
+
 [node name="Middle" type="HBoxContainer" parent="SafeArea/Layout"]
 size_flags_vertical = 3
 mouse_filter = 2

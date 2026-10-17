@@ -126,9 +126,17 @@ func _exit_tree() -> void:
 
 
 func _on_continue_pressed() -> void:
-	# Реальне завантаження збереження — Task 3.5 (MatchService.load_saved).
-	# Скелет лише веде в бій, щоб потік був клікабельним.
-	SceneRouter.goto_battle()
+	if continue_saved():
+		SceneRouter.goto_battle()
+
+
+## Завантажує збереження в сервіс і лишає бою відновити вигляд. Невдача (файл
+## зникнув або зіпсований) — не падіння: «Продовжити» просто зникає.
+func continue_saved(service: Node = MatchService, path: String = SAVE_PATH) -> bool:
+	var ok: bool = service.load_saved(path)
+	if not ok:
+		_continue_button.visible = false
+	return ok
 
 
 func _on_about_pressed() -> void:

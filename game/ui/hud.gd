@@ -24,6 +24,8 @@ extends Control
 ## завести другий шлях до core/ повз контролер. Сцена бою (Task 2.10) вирішує,
 ## що з цим робити (зокрема — гейт передачі пристрою, §3.5).
 signal end_turn_pressed
+## Пауза — оверлей сцени бою; HUD лише просить її відкрити.
+signal pause_pressed
 
 ## §3.12: стан ґрунту — правило, а не погода, тож він на екрані постійно і
 ## підписаний. Мапа ключів тримається тут, а не в core/: Terrain не знає про
@@ -79,6 +81,7 @@ var _shown_player: int = -1
 @onready var _confirm_button: Button = %ConfirmButton
 @onready var _cancel_button: Button = %CancelButton
 @onready var _end_turn_button: Button = %EndTurnButton
+@onready var _pause_button: Button = %PauseButton
 @onready var _inspector: UnitInspector = %Inspector
 ## Поля безпеки читаються з того самого вузла, що їх і задає (§9: одне джерело
 ## правди) — панель поза цим контейнером, але поважає ті самі межі, бо виріз
@@ -94,6 +97,7 @@ func _ready() -> void:
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	_cancel_button.pressed.connect(_on_cancel_pressed)
 	_end_turn_button.pressed.connect(_on_end_turn_pressed)
+	_pause_button.pressed.connect(pause_pressed.emit)
 	_clear_preview()
 	_render_selection()
 
