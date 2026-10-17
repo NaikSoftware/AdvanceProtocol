@@ -57,6 +57,9 @@ const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
 var save_path: String = MatchService.SAVE_PATH
 
 var _match_service: Node = null
+var _prev_quit_on_go_back: bool = true
+## Відкритий оверлей налаштувань (null, поки не відкривали).
+var _settings: SettingsScreen = null
 var _controller: InputController = null
 var _zone_overlay: ZoneOverlay = null
 var _path_overlay: PathOverlay = null
@@ -135,6 +138,10 @@ func _ready() -> void:
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
+	# Android «назад» інакше виходить із гри разом із матчем; на цьому екрані
+	# воно відкриває паузу. Значення меню повертає _exit_tree().
+	_prev_quit_on_go_back = get_tree().quit_on_go_back
+	get_tree().quit_on_go_back = false
 	if get_tree().current_scene != self:
 		return
 	# Маршрути виходу з бою ведуть крізь SceneRouter лише у справжньому запуску;
@@ -170,7 +177,8 @@ func launch(match_service: Node) -> void:
 		map = (load(match_service.map_path) as MapData) if ResourceLoader.exists(match_service.map_path) else null
 		if map == null:
 			map = _FallbackMap
-	setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state)
+	if not setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state):
+		return
 	match_service.launch_mode = MatchService.Launch.NONE
 	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
 	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
@@ -179,14 +187,22 @@ func launch(match_service: Node) -> void:
 
 
 ## ground_state < 0 — ґрунт карти; інакше вибраний у налаштуваннях матчу.
-func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null, ground_state: int = -1) -> void:
+## false — карта зламана (populate() відмовив): матч не починається, екран
+## повертає в меню; порожня дошка без кінця була б гірша за вихід.
+func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null, ground_state: int = -1) -> bool:
 	_match_service = match_service if match_service != null else MatchService
 
 	var board: Board = map_data.to_board()
 	if ground_state >= 0:
 		board.ground_state = ground_state
 	_match_service.start_match(board, player_count, seed_value)
-	map_data.populate(_match_service.state)
+	if not map_data.populate(_match_service.state):
+		push_error("BattleScreen: карта відхилена — напрям поза 0..7")
+		# Порожній матч не мусить пережити відмову: автозбереження в _notification
+		# записало б його, і «Продовжити» вело б у бій без юнітів.
+		_match_service.state = null
+		left_to_menu.emit()
+		return false
 	_match_service.begin()
 	# R9: ця черга — рівно TurnStarted (і, за потреби, MineRevealed) першого
 	# ходу; TileRevealed усіх гравців тут відкинуто ще у start() самим core/,
@@ -202,6 +218,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# гейт, а center_on() на confirmed зупиняє цей твін — витікати нічому.
 	_camera_rig.fly_to(_first_unit_cell(_match_service.state.active_player))
 	_match_service.events_ready.connect(_on_events_ready)
+	return true
 
 
 ## «Продовжити»: вигляд з уже завантаженого state, без нового матчу. Пристрій
@@ -250,13 +267,39 @@ func _wire_view(board: Board) -> void:
 	_gate.confirmed.connect(_on_gate_confirmed)
 
 
+func _exit_tree() -> void:
+	if get_tree() != null:
+		get_tree().quit_on_go_back = _prev_quit_on_go_back
+
+
+## Жест «назад»: пауза відкрита — закриваємо як Resume, інакше відкриваємо.
+## Згортання/закриття застосунку — автозбереження (save_current сам видаляє
+## збереження завершеного матчу, тож застарілий автосейв не воскресить виграний бій). Гейт при Continue вмикається наявним шляхом, нічого не відкриваємо.
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			# Гейт передачі: пауза під ним дісталась би гравцеві, що заходить.
+			if _gate.visible:
+				return
+			# Закриваємо верхній оверлей: налаштування, інакше пауза.
+			if is_instance_valid(_settings) and not _settings.is_queued_for_deletion():
+				_settings.get_node("%BackButton").pressed.emit()
+			elif _pause.visible:
+				_pause.hide()
+			else:
+				_pause.show()
+		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST:
+			if _match_service != null and _match_service.state != null:
+				_match_service.save_current(save_path)
+
+
 ## Налаштування з паузи відкриваються поверх бою, а не заміною сцени: бій
 ## (стан, вигляд, відкрита пауза) лишається під ними як є, тож нічого не треба
 ## автозберігати й відновлювати. «Назад» у оверлеї просто закриває його.
 func _open_settings() -> void:
-	var settings: SettingsScreen = preload("res://game/ui/settings_screen.tscn").instantiate()
-	settings.overlay = true
-	_ui.add_child(settings)
+	_settings = preload("res://game/ui/settings_screen.tscn").instantiate()
+	_settings.overlay = true
+	_ui.add_child(_settings)
 
 
 ## Здача йде тим самим шляхом, що й кінець ходу: команда → події → програвач.
@@ -440,7 +483,12 @@ func _on_screen_touch(st: InputEventScreenTouch) -> void:
 		return
 
 	if st.index == _active_touch_index:
-		_end_pointer_press(st.position)
+		# Скасований дотик (шторка, відкидання долоні) — не намір гравця: без тапу.
+		if st.canceled:
+			_pointer_down = false
+			_camera_rig.end_hold()
+		else:
+			_end_pointer_press(st.position)
 		_active_touch_index = -1
 	get_viewport().set_input_as_handled()
 

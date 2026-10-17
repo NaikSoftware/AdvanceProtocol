@@ -45,6 +45,3 @@ static func penalty(kind: int, ground_state: int) -> int:
 			return maxi(0, base + _FROZEN_OFFSET)
 		_:
 			return base
-
-static func is_passable(kind: int, ground_state: int) -> bool:
-	return penalty(kind, ground_state) < IMPASSABLE

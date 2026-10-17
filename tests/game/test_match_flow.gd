@@ -7,12 +7,12 @@ const BattleScreenScene := preload("res://game/battle/battle_screen.tscn")
 const MainMenuScene := preload("res://game/ui/main_menu.tscn")
 const ResultsScene := preload("res://game/ui/results_screen.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
-const TEST_SAVE: String = "user://test_save.json"
+var _test_save: String = "user://test_save_%d.json" % OS.get_process_id()
 const MAP_PATH: String = "res://maps/skirmish_bridge.tres"
 
 
 func after_each() -> void:
-	for p in [TEST_SAVE, TEST_SAVE + ".map"]:
+	for p in [_test_save, _test_save + ".map"]:
 		DirAccess.remove_absolute(p)
 
 
@@ -40,7 +40,7 @@ func _map() -> MapData:
 func _screen() -> BattleScreen:
 	var screen: BattleScreen = BattleScreenScene.instantiate()
 	add_child_autofree(screen)
-	screen.save_path = TEST_SAVE
+	screen.save_path = _test_save
 	return screen
 
 
@@ -78,6 +78,26 @@ func test_new_match_starts_behind_the_gate() -> void:
 	assert_not_null(screen.unit_view_for(1))
 
 
+## Карта зі зламаним напрямом: populate() відмовляє й не додає юнітів. Матч не
+## починається — повернення в меню, а не порожня дошка без кінця.
+func test_broken_map_refuses_to_start_and_returns_to_menu() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	var m: MapData = _map()
+	m.spawns = [{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 9}] as Array[Dictionary]
+	watch_signals(screen)
+
+	var started: bool = screen.setup(m, 2, 1, service)
+
+	assert_push_error("напрям")
+	assert_false(started)
+	assert_signal_emitted(screen, "left_to_menu")
+	assert_null(service.state, "порожній матч не лишається для автозбереження")
+	assert_null(screen.input_controller(), "begin() і проводку вигляду пропущено")
+	screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	assert_false(FileAccess.file_exists(_test_save), "відмова не пише збереження")
+
+
 func test_configure_without_seed_draws_a_random_one() -> void:
 	var service: Node = _service()
 	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY)
@@ -108,12 +128,12 @@ func test_save_then_continue_restores_identical_state() -> void:
 	screen.setup(_map(), 2, 9, a)
 	a.state.get_unit(1).hp = 77  # відмінність від свіжого матчу, яку збереження мусить пронести
 	a.state.get_unit(1).ap = 10
-	assert_eq(a.save_current(TEST_SAVE), OK)
+	assert_eq(a.save_current(_test_save), OK)
 
 	var b: Node = _service()
 	var menu: MainMenu = MainMenuScene.instantiate()
 	add_child_autofree(menu)
-	assert_true(menu.continue_saved(b, TEST_SAVE))
+	assert_true(menu.continue_saved(b, _test_save))
 
 	assert_eq(BattleSerializer.to_dict(b.state), BattleSerializer.to_dict(a.state))
 	assert_eq(b.launch_mode, MatchServiceScript.Launch.RESUME)
@@ -122,9 +142,9 @@ func test_save_then_continue_restores_identical_state() -> void:
 func test_resume_builds_view_from_loaded_state_behind_the_gate() -> void:
 	var a: Node = _service()
 	_screen().setup(_map(), 2, 9, a)
-	a.save_current(TEST_SAVE)
+	a.save_current(_test_save)
 	var b: Node = _service()
-	b.load_saved(TEST_SAVE)
+	b.load_saved(_test_save)
 	var before: Dictionary = BattleSerializer.to_dict(b.state)
 
 	var screen: BattleScreen = _screen()
@@ -142,12 +162,12 @@ func test_continue_without_or_with_broken_save_fails_without_crashing() -> void:
 	var menu: MainMenu = MainMenuScene.instantiate()
 	add_child_autofree(menu)
 	var b: Node = _service()
-	assert_false(menu.continue_saved(b, TEST_SAVE), "файлу нема")
+	assert_false(menu.continue_saved(b, _test_save), "файлу нема")
 
-	var f := FileAccess.open(TEST_SAVE, FileAccess.WRITE)
+	var f := FileAccess.open(_test_save, FileAccess.WRITE)
 	f.store_string("[1]")
 	f.close()
-	assert_false(menu.continue_saved(b, TEST_SAVE), "JSON, але не словник")
+	assert_false(menu.continue_saved(b, _test_save), "JSON, але не словник")
 	assert_eq(b.launch_mode, MatchServiceScript.Launch.NONE)
 	assert_false((menu.get_node("%ContinueButton") as Button).visible,
 		"невдале завантаження ховає «Продовжити»")
@@ -157,10 +177,10 @@ func test_rematch_after_continue_reuses_saved_map_path() -> void:
 	var a: Node = _service()
 	a.configure(MAP_PATH, 2, Terrain.GroundState.MUD, 3)
 	_screen().launch(a)
-	a.save_current(TEST_SAVE)
+	a.save_current(_test_save)
 
 	var b: Node = _service()
-	assert_true(b.load_saved(TEST_SAVE))
+	assert_true(b.load_saved(_test_save))
 	b.rematch()
 
 	assert_eq(b.map_path, MAP_PATH)
@@ -193,7 +213,7 @@ func test_save_and_quit_writes_the_save_and_leaves_to_menu() -> void:
 	(screen.get_node("%PauseMenu").get_node("%SaveQuitButton") as Button).pressed.emit()
 
 	assert_signal_emitted(screen, "left_to_menu")
-	var loaded: BattleState = BattleSerializer.load_from(TEST_SAVE)
+	var loaded: BattleState = BattleSerializer.load_from(_test_save)
 	assert_not_null(loaded)
 	assert_eq(BattleSerializer.to_dict(loaded), BattleSerializer.to_dict(service.state))
 
@@ -216,6 +236,17 @@ func test_settings_from_pause_opens_over_the_battle_and_back_keeps_it() -> void:
 
 # --- 3.5: кінець матчу ---------------------------------------------------
 
+## Фіксована кількість кадрів флейкала (1/10): чекаємо, поки програвач справді
+## договорить, і лише тоді перевіряємо наслідки.
+func _play_out(screen: BattleScreen) -> void:
+	for i in 300:
+		_finish_all_processed_tweens()
+		await wait_process_frames(1)
+		if not screen._event_player.is_playing():
+			return
+	assert_false(screen._event_player.is_playing(), "програвач не договорив за 300 кадрів")
+
+
 func _finish_match(service: Node, screen: BattleScreen) -> void:
 	var shooter: Unit = service.state.units_of(0)[0]
 	var victim: Unit = service.state.units_of(1)[0]
@@ -224,25 +255,23 @@ func _finish_match(service: Node, screen: BattleScreen) -> void:
 	screen.input_controller().tap_cell(victim.pos)
 	screen.input_controller().confirm_pending()
 	# Твіни програвача з'являються між кадрами — підганяємо їх поки черга не спорожніє.
-	for i in 6:
-		_finish_all_processed_tweens()
-		await wait_process_frames(1)
+	await _play_out(screen)
 
 
 func test_match_ended_deletes_save_and_goes_to_results() -> void:
 	var service: Node = _service()
 	var screen: BattleScreen = _screen()
 	screen.setup(_map(), 2, 1, service)
-	service.save_current(TEST_SAVE)
-	assert_true(FileAccess.file_exists(TEST_SAVE))
+	service.save_current(_test_save)
+	assert_true(FileAccess.file_exists(_test_save))
 	watch_signals(screen)
 
 	await _finish_match(service, screen)
 
 	assert_true(service.state.is_over())
 	assert_signal_emitted(screen, "match_finished")
-	assert_false(FileAccess.file_exists(TEST_SAVE), "завершений матч не можна продовжити")
-	assert_false(FileAccess.file_exists(TEST_SAVE + ".map"))
+	assert_false(FileAccess.file_exists(_test_save), "завершений матч не можна продовжити")
+	assert_false(FileAccess.file_exists(_test_save + ".map"))
 
 
 # --- 3.5: екран результату -----------------------------------------------
@@ -347,16 +376,14 @@ func _confirm_surrender(pause: Control) -> void:
 
 func _surrender(screen: BattleScreen) -> void:
 	_confirm_surrender(screen.get_node("%PauseMenu"))
-	for i in 6:
-		_finish_all_processed_tweens()
-		await wait_process_frames(1)
+	await _play_out(screen)
 
 
 func test_surrender_in_two_player_match_ends_it_and_goes_to_results() -> void:
 	var service: Node = _service()
 	var screen: BattleScreen = _screen()
 	screen.setup(_map(), 2, 1, service)
-	service.save_current(TEST_SAVE)
+	service.save_current(_test_save)
 	watch_signals(screen)
 
 	await _surrender(screen)
@@ -364,7 +391,7 @@ func test_surrender_in_two_player_match_ends_it_and_goes_to_results() -> void:
 	assert_true(service.state.is_over())
 	assert_eq(service.state.winner, 1)
 	assert_signal_emitted(screen, "match_finished")
-	assert_false(FileAccess.file_exists(TEST_SAVE))
+	assert_false(FileAccess.file_exists(_test_save))
 	assert_false(screen.get_node("%PauseMenu").visible)
 
 
@@ -403,11 +430,11 @@ func test_start_button_configures_the_service_and_removes_the_old_save() -> void
 	var service: Node = _service()
 	service.state = BattleState.create(Board.create(2, 2, 0), 2, 1)
 	service.map_path = MAP_PATH
-	service.save_current(TEST_SAVE)
-	assert_true(FileAccess.file_exists(TEST_SAVE))
+	service.save_current(_test_save)
+	assert_true(FileAccess.file_exists(_test_save))
 	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
 	setup.match_service = service
-	setup.save_path = TEST_SAVE
+	setup.save_path = _test_save
 	add_child_autofree(setup)
 	watch_signals(setup)
 
@@ -415,8 +442,8 @@ func test_start_button_configures_the_service_and_removes_the_old_save() -> void
 
 	assert_signal_emitted(setup, "started")
 	assert_eq(service.launch_mode, MatchServiceScript.Launch.NEW)
-	assert_false(FileAccess.file_exists(TEST_SAVE))
-	assert_false(FileAccess.file_exists(TEST_SAVE + ".map"))
+	assert_false(FileAccess.file_exists(_test_save))
+	assert_false(FileAccess.file_exists(_test_save + ".map"))
 
 
 # --- Рев'ю: завершений матч, збій запису, реванш, блокування здачі -----------
@@ -430,7 +457,7 @@ func test_save_quit_after_match_ended_leaves_no_save_and_goes_to_results() -> vo
 
 	(screen.get_node("%PauseMenu").get_node("%SaveQuitButton") as Button).pressed.emit()
 
-	assert_false(FileAccess.file_exists(TEST_SAVE))
+	assert_false(FileAccess.file_exists(_test_save))
 	assert_signal_emitted(screen, "match_finished")
 	assert_signal_not_emitted(screen, "left_to_menu")
 
@@ -438,26 +465,26 @@ func test_save_quit_after_match_ended_leaves_no_save_and_goes_to_results() -> vo
 func test_save_current_refuses_a_finished_match_and_removes_old_save() -> void:
 	var service: Node = _service()
 	_screen().setup(_map(), 2, 1, service)
-	service.save_current(TEST_SAVE)
+	service.save_current(_test_save)
 	service.state.winner = 0
 
-	assert_ne(service.save_current(TEST_SAVE), OK)
-	assert_false(FileAccess.file_exists(TEST_SAVE))
+	assert_ne(service.save_current(_test_save), OK)
+	assert_false(FileAccess.file_exists(_test_save))
 
 
 func test_loading_a_finished_save_fails_and_continue_hides() -> void:
 	var a: Node = _service()
 	_screen().setup(_map(), 2, 1, a)
 	a.state.winner = 0
-	BattleSerializer.save_to(a.state, TEST_SAVE)  # так міг лишитися старий файл
+	BattleSerializer.save_to(a.state, _test_save)  # так міг лишитися старий файл
 	var menu: MainMenu = MainMenuScene.instantiate()
 	add_child_autofree(menu)
 	var b: Node = _service()
 
-	assert_false(menu.continue_saved(b, TEST_SAVE))
+	assert_false(menu.continue_saved(b, _test_save))
 	assert_null(b.state)
 	assert_false((menu.get_node("%ContinueButton") as Button).visible)
-	assert_false(FileAccess.file_exists(TEST_SAVE), "мертве збереження прибирається")
+	assert_false(FileAccess.file_exists(_test_save), "мертве збереження прибирається")
 
 
 func test_save_failure_keeps_pause_open_and_shows_error() -> void:

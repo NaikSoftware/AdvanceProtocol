@@ -262,6 +262,10 @@ func unproject(world: Vector3) -> Vector2:
 func center_on(cell: Vector2i) -> void:
 	if _recenter_tween != null and _recenter_tween.is_valid():
 		_recenter_tween.kill()
+	# Кидок і відкладений зум попереднього гравця не смів би дотягнутись
+	# крізь гейт: дрейф після підняття гейта витікає напрям його погляду (§3.5).
+	cancel_inertia()
+	_zoom_target = zoom_level
 	global_position = _clamp_to_bounds(cell_to_world(cell))
 	_notify_view_changed()
 

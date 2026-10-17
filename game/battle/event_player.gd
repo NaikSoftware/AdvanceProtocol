@@ -19,37 +19,6 @@ extends RefCounted
 
 signal playback_finished
 
-## Назва класу події (як у core/events.gd) → назва методу-обробника.
-## R6: тест перевіряє це проти списку, добутого з самого events.gd, а не
-## проти власних ключів цього словника — інакше бракуючий обробник ніколи б
-## не впав. Порядок ключів нижче навмисно повторює порядок класів у
-## core/events.gd, щоб діагностувати розбіжність оком було легко.
-const HANDLERS: Dictionary = {
-	"UnitMoved": "_handle_unit_moved",
-	"UnitTurned": "_handle_unit_turned",
-	"MoveBlocked": "_handle_move_blocked",
-	"ShotFired": "_handle_shot_fired",
-	"ShotRetaliated": "_handle_shot_retaliated",
-	"DroneLaunched": "_handle_drone_launched",
-	"DamageDealt": "_handle_damage_dealt",
-	"UnitDestroyed": "_handle_unit_destroyed",
-	"TileRevealed": "_handle_tile_revealed",
-	"MinePlaced": "_handle_mine_placed",
-	"MineCleared": "_handle_mine_cleared",
-	"MineTriggered": "_handle_mine_triggered",
-	"MineRevealed": "_handle_mine_revealed",
-	"BridgeChanged": "_handle_bridge_changed",
-	"UnitRepaired": "_handle_unit_repaired",
-	"ObjectiveCaptured": "_handle_objective_captured",
-	"ObjectiveDestroyed": "_handle_objective_destroyed",
-	"ExperienceGained": "_handle_experience_gained",
-	"ApChanged": "_handle_ap_changed",
-	"TurnEnded": "_handle_turn_ended",
-	"TurnStarted": "_handle_turn_started",
-	"PlayerEliminated": "_handle_player_eliminated",
-	"MatchEnded": "_handle_match_ended",
-}
-
 ## Крок руху юніта тайл за тайлом (§1.4 — атмосфера читається, не
 ## пролітає повз). Той самий порядок величини, що й _FACE_TURN_DURATION у
 ## UnitView.
@@ -184,8 +153,8 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 	elif event is Events.MatchEnded:
 		return _handle_match_ended(event)
 	else:
-		# Недосяжно, поки HANDLERS (перевірено тестом на повноту, R6) і ця
-		# гілка тримаються в парі — це остання лінія оборони, не очікуваний
+		# Недосяжно, поки ланцюжок вище покриває всі класи events.gd (тест
+		# на повноту диспетчеризації) — це остання лінія оборони, не очікуваний
 		# шлях, тому push_error(), а не мовчазний null.
 		push_error("EventPlayer: необроблений тип події — %s" % event.describe())
 		return null

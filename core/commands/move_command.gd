@@ -22,6 +22,10 @@ func validate(state: BattleState) -> String:
 		return "ERR_NOT_YOUR_UNIT"
 	if u.has_fired:
 		return "ERR_ALREADY_FIRED"
+	# −1 — «обличчям за рухом». Решта поза 0..7 дійшла б до Rules.armour_sector()
+	# індексом за межами Board.DIRS.
+	if facing < -1 or facing > 7:
+		return "ERR_BAD_FACING"
 	if not state.board.in_bounds(target):
 		return "ERR_OFF_BOARD"
 	# §3.5: планування — з того, що гравець знає, а не з того, що є. Тайл, зайнятий
@@ -30,7 +34,9 @@ func validate(state: BattleState) -> String:
 	# повідомляла б рівно те, чого гравець не має знати. «Невидимим» тут означає
 	# «на нерозвіданій землі»: ворог на давно розвіданому тайлі у карту знання
 	# входить, і маршрут законно його обходить.
-	var occupied: Dictionary = state.known_occupied_map(u.owner)
+	# Відома ворожа міна — така сама перешкода, як видимий юніт (§3.11): на неї не
+	# прокладають маршрут і не роблять її ціллю.
+	var occupied: Dictionary = state.known_blocked_map(u.owner)
 	occupied.erase(u.pos)
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	if not zones.can_reach(target):
@@ -43,7 +49,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	var u: Unit = state.get_unit(unit_id)
 	# Маршрут будується з тієї ж неправдивої карти, що й у validate(): гравець веде
 	# юніт крізь землю, яка ВИГЛЯДАЄ порожньою. Правда перевіряється потайлово нижче.
-	var occupied: Dictionary = state.known_occupied_map(u.owner)
+	var occupied: Dictionary = state.known_blocked_map(u.owner)
 	occupied.erase(u.pos)
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	var path: Array[Vector2i] = Pathing.path_to(zones, target)
@@ -68,7 +74,13 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 		# Зайнятість перевіряється ДО міни на тому ж тайлі, і це свідомий вибір: юніт,
 		# який не може туди в'їхати, не може там і підірватися. Міна лишається лежати,
 		# а шкоду дістає лише той, хто справді став на неї.
-		if state.unit_at(step) != null:
+		#
+		# Відома ворожа міна спиняє так само, як невидимий юніт. Маршрут її вже
+		# обминав, тож спрацьовує це лише тоді, коли інженер знайшов міну ДОРОГОЮ
+		# (reveal_near() нижче, на попередньому кроці): знайдена міна — перешкода
+		# (§3.11), і в'їхати в неї за старим планом означало б покарати гравця за
+		# те, що він розвідав.
+		if state.unit_at(step) != null or _is_known_enemy_mine(state, step, u.owner):
 			# Обрив — це подія, а не мовчанка. Без неї вигляд відрізняв би недоїзд від
 			# коротшого наказу лише порівнянням target із довжиною шляху, а обрив на
 			# першому кроці не відрізнив би від повороту на місці ніяк. Міна собі такої
@@ -145,3 +157,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	out.append(Events.ApChanged.new(unit_id, u.ap))
 	out.append_array(trail)
 	return out
+
+static func _is_known_enemy_mine(state: BattleState, pos: Vector2i, player: int) -> bool:
+	var m: Mines.Mine = Mines.mine_at(state, pos)
+	return m != null and m.owner != player and m.known_to[player]

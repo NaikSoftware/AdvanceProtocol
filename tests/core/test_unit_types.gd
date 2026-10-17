@@ -1,7 +1,15 @@
 extends GutTest
 
-func test_roster_has_thirteen_entries() -> void:
-	assert_eq(UnitTypes.count(), 13, "ростер §3.6 має 13 записів, 0..12")
+func test_roster_has_twelve_entries() -> void:
+	assert_eq(UnitTypes.count(), 12, "ростер §3.6 має 12 записів, 0..11")
+
+func test_the_only_engineer_is_the_vehicle() -> void:
+	# Рішення власника: інженерного відділення в грі немає — лише машина, id 11.
+	var engineers: Array = []
+	for i in UnitTypes.count():
+		if UnitTypes.get_type(i)["unit_class"] == UnitTypes.UnitClass.ENGINEER:
+			engineers.append(UnitTypes.get_type(i)["name_key"])
+	assert_eq(engineers, ["UNIT_ENGINEER_VEHICLE"])
 
 func test_ids_match_indices() -> void:
 	for i in UnitTypes.count():

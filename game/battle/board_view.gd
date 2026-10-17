@@ -10,15 +10,9 @@ extends Node3D
 ## нерозвідану перешкоду, видав би її не гірше за сам тайл. Ховати юнітів —
 ## робота інших вузлів (Task 2.4, Task 2.10), не цього.
 
-## LAYER_PATH — окремий шар для підсвітки шляху (§3.13-суміжна задача): шлях
-## лежить УСЕРЕДИНІ зони руху, тобто малюється поверх її контурів, тож у
-## нього власний шар, а не спільний з LAYER_ZONES.
-enum { LAYER_ZONES, LAYER_TARGETS, LAYER_SELECTION, LAYER_PATH }
-const _LAYER_COUNT: int = 4
-
-## Пріоритет накладання шарів підсвітки: вибір цілі — найважливіший сигнал
-## гравцю просто зараз, тож жоден нижчий шар не може його погасити.
-const _LAYER_PRIORITY: Array[int] = [LAYER_SELECTION, LAYER_TARGETS, LAYER_ZONES]
+## LAYER_PATH — окремий шар для контуру шляху (§3.13): шлях лежить УСЕРЕДИНІ
+## зони руху, тобто малюється поверх її контурів, тож у нього власний шар.
+enum { LAYER_ZONES, LAYER_PATH }
 
 ## Тонкий проміжок між тайлами — щоб сітка читалась як сітка, а не суцільна
 ## плита; висота — щоб дно не збігалося із землею з z-fighting.
@@ -59,17 +53,11 @@ const _BASE_COLORS: Dictionary = {
 
 ## вид тайлу -> його MultiMeshInstance3D. Лише для видів, що реально є на дошці.
 var _instances: Dictionary = {}
-## тайл -> індекс екземпляра в мультимеші його виду.
-var _index_by_cell: Dictionary = {}
 ## тайл -> вид тайлу під ним.
 var _kind_by_cell: Dictionary = {}
-## шар -> (тайл -> колір). Кожен шар зберігає власний стан незалежно від
-## інших — це і є причина існування трьох шарів, а не одного.
-var _layer_highlights: Array[Dictionary] = [{}, {}, {}, {}]
-
 ## шар контуру -> Array[Dictionary] сегментів {cell, dir, color}, які зараз
 ## намальовані draw_contour(). Читається тестами напряму — той самий прийом,
-## що й _layer_highlights вище, і той самий привід: колір екземпляра мультимешу
+## що й решта стану вигляду: колір екземпляра мультимешу
 ## не читається назад під headless (R4/R16), тож перевіряється те, ЩО туди
 ## подали, а не намальований піксель.
 var _contour_segments: Dictionary = {}
@@ -84,10 +72,7 @@ func build(board: Board) -> void:
 	for child in get_children():
 		child.free()
 	_instances.clear()
-	_index_by_cell.clear()
 	_kind_by_cell.clear()
-	for layer in _LAYER_COUNT:
-		_layer_highlights[layer].clear()
 	# Вузли контуру щойно звільнені циклом free() вище (вони теж діти цього
 	# Node3D) — без цього _contour_nodes лишав би посилання на вже мертві
 	# вузли, і наступний clear_contour() спробував би звільнити їх удруге.
@@ -109,31 +94,14 @@ func build(board: Board) -> void:
 		var mmi := _build_kind_instance(kind, cells)
 		add_child(mmi)
 		_instances[kind] = mmi
-		for i in cells.size():
-			_index_by_cell[cells[i]] = i
-
-
-func highlight_tiles(tiles: Array[Vector2i], color: Color, layer: int) -> void:
-	for cell in tiles:
-		if not _kind_by_cell.has(cell):
-			continue
-		_layer_highlights[layer][cell] = color
-		_repaint_cell(cell)
-
-
-func clear_highlights(layer: int) -> void:
-	var cells: Array = _layer_highlights[layer].keys()
-	_layer_highlights[layer].clear()
-	for cell in cells:
-		_repaint_cell(cell)
 
 
 ## Малює контур шару з тонких рисок, а не заливкою тайлів (§3.13: «контур,
 ## не заливка» — і зони руху, і шлях мусять лишати місцевість та бойові сліди під
 ## собою видимими). Кожен сегмент — {cell: Vector2i, dir: Vector2i, color:
 ## Color}: тонка риска вздовж ребра `cell` з боку `dir`, а не перефарбування
-## всього тайла. Замінює попередній контур цього шару, як і highlight_tiles
-## заміняє — §3.2 «перемальовується після кожної дії» означає заміну.
+## всього тайла. Замінює попередній контур цього шару —
+## §3.2 «перемальовується після кожної дії» означає заміну.
 ##
 ## Один MultiMeshInstance3D на шар (не на сегмент) — ті самі draw-call міркування,
 ## що й у _build_kind_instance(): дошка складається з десятків сегментів
@@ -231,17 +199,3 @@ func _tile_material() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	return mat
-
-
-func _repaint_cell(cell: Vector2i) -> void:
-	var kind: int = _kind_by_cell[cell]
-	var mmi: MultiMeshInstance3D = _instances[kind]
-	var index: int = _index_by_cell[cell]
-	mmi.multimesh.set_instance_color(index, _resolve_color(cell, kind))
-
-
-func _resolve_color(cell: Vector2i, kind: int) -> Color:
-	for layer in _LAYER_PRIORITY:
-		if _layer_highlights[layer].has(cell):
-			return _layer_highlights[layer][cell]
-	return _BASE_COLORS.get(kind, Color.WHITE)

@@ -103,12 +103,14 @@ is therefore a decision to stop moving.
 occupancies and conflating them is a bug in either direction:
 
 - **Planning** — the zones, the path, and whether a destination is reachable at all — uses the full
-  terrain, which is public (§3.5), and only the **units** the moving player can currently see, plus
-  their own. Ground that looks empty is planned through. Terrain never surprises a move; only an
-  enemy can.
+  terrain, which is public (§3.5), the player's own units, enemy **units** standing on ground the
+  player has scouted (`seen`, §3.5), and the enemy mines the player already knows of, which are
+  obstacles (§3.11). Ground that looks empty is planned through. Terrain never surprises a move;
+  only an enemy can.
 - **Walking** uses the truth. Before entering each tile the mover checks what is really there; if
-  a unit it could not see is standing in the way, the move **stops on the tile before it** and
-  ends. Vision is recomputed at every step, so whatever emerged is visible from that moment on.
+  a unit it could not see is standing in the way, or an engineer has just found a mine there, the
+  move **stops on the tile before it** and ends. Vision is recomputed at every step, so whatever
+  emerged is visible from that moment on.
 
 This is the same shape as the mine rule (§3.11), and deliberately so: the unit stops where reality
 contradicted the plan. **AP is charged only for tiles actually entered** — a move cut short is

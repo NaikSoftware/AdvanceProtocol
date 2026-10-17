@@ -261,67 +261,6 @@ func test_set_drones_shows_count_regardless_of_owner() -> void:
 	assert_false(view_a._drone_icon.visible, "нуль дронів — лічильник ховається")
 
 
-## Task 2 (тимчасовий інструмент розробника, поки нема справжніх моделей): стрілка напряму
-## мусить бути на КОЖНОМУ юніті — і своєму, і чужому — незалежно від owner.
-## Напрямок чужого юніта й так публічний (§3.13), тож це не витік інформації.
-func test_bind_adds_a_temporary_debug_facing_arrow_for_any_owner() -> void:
-	view.bind(_unit(5, 0))
-	assert_not_null(view.get_node_or_null("Silhouette/DebugFacingArrow"), "стрілка мусить з'явитись на власному юніті")
-
-	var enemy_view: Node3D = UnitViewScene.instantiate()
-	add_child_autofree(enemy_view)
-	enemy_view.bind(_unit(5, 1))
-	assert_not_null(enemy_view.get_node_or_null("Silhouette/DebugFacingArrow"), "стрілка мусить з'явитись і на ворожому юніті — це девтул, не ігрова інформація")
-
-
-## Стрілка — інструмент розробника, не ігрова позначка власника: колір мусить
-## лишатись тим самим для будь-якого owner (на відміну від Hull, який фарбує
-## _PLAYER_COLORS), і не збігатись з жодним кольором, що вже зайнятий іншою
-## семантикою на юніті (гравець, HP-бар, лічильник дронів, жовта смуга
-## інженера) — інакше стрілка «зливається з корпусом» усупереч вимозі.
-func test_debug_facing_arrow_color_is_owner_independent_and_visually_distinct() -> void:
-	var view_a: Node3D = UnitViewScene.instantiate()
-	var view_b: Node3D = UnitViewScene.instantiate()
-	add_child_autofree(view_a)
-	add_child_autofree(view_b)
-	view_a.bind(_unit(5, 0))
-	view_b.bind(_unit(5, 1))
-
-	var arrow_a: MeshInstance3D = view_a.get_node("Silhouette/DebugFacingArrow")
-	var arrow_b: MeshInstance3D = view_b.get_node("Silhouette/DebugFacingArrow")
-	var color_a: Color = (arrow_a.material_override as StandardMaterial3D).albedo_color
-	var color_b: Color = (arrow_b.material_override as StandardMaterial3D).albedo_color
-	assert_eq(color_a, color_b, "колір стрілки не має гілки на власника")
-
-	for player_color in UnitView._PLAYER_COLORS:
-		assert_ne(color_a, player_color, "колір стрілки не має збігатись із жодним кольором гравця")
-	assert_ne(color_a, Color("d9b23a"), "колір стрілки не має збігатись із жовтим (смуга інженера/лічильник дронів)")
-
-
-## Стрілка сидить на даху корпусу — нижче HP-бару й лічильника дронів
-## (обидва billboard-спрайти, підняті над корпусом саме для читабельності),
-## інакше вона перекривала б їх, порушуючи вимогу.
-func test_debug_facing_arrow_sits_below_hp_bar_and_drone_icon() -> void:
-	view.bind(_unit(5))  # TANK — найвищий Hull (0.50) із наявних класів
-	var arrow: MeshInstance3D = view.get_node("Silhouette/DebugFacingArrow")
-	assert_true(arrow.position.y < view._hp_bar.position.y, "стрілка мусить лишатись нижче HP-бару")
-	assert_true(arrow.position.y < view._drone_icon.position.y, "стрілка мусить лишатись нижче лічильника дронів")
-
-
-## Стрілка вказує вперед так само, як ствол (_build_barrel) — у локальний
-## -Z, ще ДО повороту вузла (rotation_degrees.y=0 одразу після bind()) — той
-## самий локальний перед, що й у решти силуету.
-func test_debug_facing_arrow_points_toward_local_front_like_the_barrel() -> void:
-	view.bind(_unit(5))
-	var arrow: MeshInstance3D = view.get_node("Silhouette/DebugFacingArrow")
-	var arrays: Array = arrow.mesh.surface_get_arrays(0)
-	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var min_z: float = INF
-	for v in vertices:
-		min_z = minf(min_z, v.z)
-	assert_true(min_z < 0.0, "вершина-носик стрілки мусить лежати в локальному -Z, як і ствол")
-
-
 ## Task 2, вимога «легко прибрати одним рухом»: одна очевидна точка
 ## вимкнення, а не десяток вкраплень по коду — рівно ОДНЕ місце будує
 ## стрілку (виклик _build_facing_arrow), а не кілька розкиданих додавань.
@@ -543,3 +482,23 @@ func _forward_cell_dir(view: UnitView) -> Vector2i:
 
 func _assert_faces(view: UnitView, facing: int, msg: String) -> void:
 	assert_eq(_forward_cell_dir(view), Board.DIRS_8[facing], msg)
+
+
+## Перебудова юнітів після кожної дії створює десяток вузлів: текстури й
+## матеріали того самого власника мусять бути спільними екземплярами.
+func test_views_of_same_owner_share_textures_and_materials() -> void:
+	var other: UnitView = preload("res://game/battle/unit_view.tscn").instantiate()
+	add_child_autofree(other)
+	view.bind(_unit(5, 0))
+	other.bind(_unit(5, 0))
+	assert_same(view._crosshair.texture, other._crosshair.texture)
+	assert_same(view._hp_bar.texture, other._hp_bar.texture)
+	assert_same(view._hull_material, other._hull_material)
+	assert_same(view.get_node("Silhouette/Barrel").material_override, other.get_node("Silhouette/Barrel").material_override)
+	other.bind(_unit(5, 1))
+	assert_not_same(view._hull_material, other._hull_material, "інший власник — інший колір")
+
+
+func test_no_debug_facing_arrow_in_shipped_build() -> void:
+	view.bind(_unit(5, 0))
+	assert_null(view.get_node_or_null("Silhouette/DebugFacingArrow"))

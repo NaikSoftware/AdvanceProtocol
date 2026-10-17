@@ -85,7 +85,7 @@ const _PLAYER_COLORS: Array[Color] = [
 ## коли з'являться справжні моделі, досить (а) поставити прапорець нижче в
 ## false, або (б) видалити геть увесь цей блок разом із єдиним місцем, де
 ## стрілку будують і додають на дошку, — у _build_silhouette() нижче.
-const _DEBUG_SHOW_FACING_ARROW: bool = true
+const _DEBUG_SHOW_FACING_ARROW: bool = false
 
 ## Яскравий, ненатуральний магента — свідомо поза палітрою решти юніта
 ## (гравці — приглушені сині/червоні/зелені, інженер — жовтий, ствол —
@@ -279,8 +279,7 @@ func set_hp(hp: int, max_hp: int) -> void:
 	if max_hp > 0:
 		ratio = clampf(float(hp) / float(max_hp), 0.0, 1.0)
 	_hp_ratio = ratio
-	# Гра покрокова — перемальовувати 48×6 пікселів на кожну зміну HP дешевше,
-	# ніж тримати кеш текстур і стежити за його інвалідацією.
+	# Текстура кешована за співвідношенням (скінченна множина hp/max_hp).
 	_hp_bar.texture = _hp_bar_texture(ratio)
 	# Білий: колір тепер живе всередині текстури (рамка, тло й заливка мають
 	# кожен свій), і modulate поверх нього перефарбував би й рамку теж.
@@ -298,14 +297,21 @@ func hp_ratio() -> float:
 ## завширшки ratio — одна текстура, один спрайт. Заливка росте зліва
 ## направо, як у референсі; старий scale.x стискав смугу до центру.
 static func _hp_bar_texture(ratio: float) -> ImageTexture:
+	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
+	var fill_width: int = roundi(float(inner.size.x) * ratio)
+	# Ключ — ціла ширина заливки: різних текстур не більше, ніж пікселів смуги.
+	var key: Array = ["hp", fill_width]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
 	var image := Image.create(_HP_BAR_SIZE.x, _HP_BAR_SIZE.y, false, Image.FORMAT_RGBA8)
 	image.fill(_HP_BAR_FRAME_COLOR)
-	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
 	image.fill_rect(inner, _HP_BAR_BACK_COLOR)
-	var fill_width: int = roundi(float(inner.size.x) * ratio)
 	if fill_width > 0:
-		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), Color.RED.lerp(Color.GREEN, ratio))
-	return ImageTexture.create_from_image(image)
+		# Колір з показаної ширини, а не з ratio: одна ширина — один вигляд.
+		var shown: float = float(fill_width) / float(inner.size.x)
+		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), Color.RED.lerp(Color.GREEN, shown))
+	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]
 
 
 ## §3.9: залишок дронів публічний — показується на будь-якому видимому
@@ -354,8 +360,7 @@ func _build_silhouette(unit_class: int, owner: int) -> void:
 	hull.mesh = hull_mesh
 	hull.position.y = hull_size.y * 0.5
 
-	_hull_material = StandardMaterial3D.new()
-	_hull_material.albedo_color = _PLAYER_COLORS[owner % _PLAYER_COLORS.size()]
+	_hull_material = _shared_material(_PLAYER_COLORS[owner % _PLAYER_COLORS.size()])
 	hull.material_override = _hull_material
 	_silhouette.add_child(hull)
 
@@ -372,6 +377,21 @@ func _build_silhouette(unit_class: int, owner: int) -> void:
 		_silhouette.add_child(_build_facing_arrow(hull_size))
 
 
+## Перебудова юнітів після кожної дії створює десяток вузлів: матеріал і
+## текстури спільні між ними (один колір — один екземпляр), інакше кожен вигляд
+## платить за власний ресурс і не батчиться. Ніхто не змінює їх після створення.
+static var _material_cache: Dictionary = {}
+static var _texture_cache: Dictionary = {}
+
+
+static func _shared_material(color: Color) -> StandardMaterial3D:
+	if not _material_cache.has(color):
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = color
+		_material_cache[color] = mat
+	return _material_cache[color]
+
+
 ## Танк — короткий виступ ствола, арта — довгий тонкий ствол (§1.5): та сама
 ## деталь, різна довжина, а не два окремі меші.
 func _build_barrel(unit_class: int, hull_size: Vector3) -> MeshInstance3D:
@@ -382,9 +402,8 @@ func _build_barrel(unit_class: int, hull_size: Vector3) -> MeshInstance3D:
 	mesh.size = Vector3(0.10, 0.10, length)
 	barrel.mesh = mesh
 	barrel.position = Vector3(0.0, hull_size.y * 0.5, -(hull_size.z * 0.5 + length * 0.5))
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("2e2b27")  # нейтральний метал ствола — колір гравця сюди не йде
-	barrel.material_override = mat
+	# нейтральний метал ствола — колір гравця сюди не йде
+	barrel.material_override = _shared_material(Color("2e2b27"))
 	return barrel
 
 
@@ -395,9 +414,8 @@ func _build_stripe(hull_size: Vector3) -> MeshInstance3D:
 	mesh.size = Vector3(hull_size.x + 0.02, 0.04, hull_size.z * 0.3)
 	stripe.mesh = mesh
 	stripe.position = Vector3(0.0, hull_size.y + 0.02, 0.0)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("d9b23a")  # жовта смуга інженера — впізнавана незалежно від власника
-	stripe.material_override = mat
+	# жовта смуга інженера — впізнавана незалежно від власника
+	stripe.material_override = _shared_material(Color("d9b23a"))
 	return stripe
 
 
@@ -451,6 +469,9 @@ func _build_facing_arrow(hull_size: Vector3) -> MeshInstance3D:
 ## приціл мусить читатись як приціл із одного погляду. Мальовано в код, як і
 ## решта заступників тут (_flat_texture нижче), поки нема справжнього арту.
 static func _crosshair_texture(size: int = 32) -> ImageTexture:
+	var key: Array = ["cross", size]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	image.fill(Color(1.0, 1.0, 1.0, 0.0))
 	var center: float = float(size - 1) * 0.5
@@ -472,10 +493,15 @@ static func _crosshair_texture(size: int = 32) -> ImageTexture:
 			)
 			if on_ring or on_tick:
 				image.set_pixel(x, y, Color.WHITE)
-	return ImageTexture.create_from_image(image)
+	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]
 
 
 static func _flat_texture(color: Color, size: int = 8) -> ImageTexture:
+	var key: Array = ["flat", color, size]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	image.fill(color)
-	return ImageTexture.create_from_image(image)
+	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]

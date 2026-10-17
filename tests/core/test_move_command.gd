@@ -63,6 +63,16 @@ func test_cannot_move_onto_another_unit() -> void:
 	assert_true(state.vision[0].is_visible(Vector2i(2, 5)), "передумова: ворога видно")
 	assert_ne(MoveCommand.create(a.id, Vector2i(2, 5), -1).validate(state), "")
 
+func test_a_facing_outside_the_eight_directions_is_rejected() -> void:
+	# facing 8 дійшов би до Rules.armour_sector() як індекс за межами Board.DIRS.
+	# −1 — законне «обличчям за рухом», усе інше поза 0..7 — ні.
+	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), 8).validate(state), "ERR_BAD_FACING")
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), -2).validate(state), "ERR_BAD_FACING")
+	assert_eq(MoveCommand.create(u.id, u.pos, 8).validate(state), "ERR_BAD_FACING", "і поворот на місці теж")
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), 7).validate(state), "", "межі 0..7 законні")
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), -1).validate(state), "")
+
 func test_cannot_move_someone_elses_unit() -> void:
 	var theirs: Unit = state.add_unit(5, 1, Vector2i(0, 5), 2)
 	state.active_player = 0
@@ -280,9 +290,9 @@ func test_mine_revealed_comes_after_the_tile_it_sits_on_is_revealed() -> void:
 	Mines.place(state, Vector2i(7, 5), 1)
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(7, 5), 0),
-		"передумова: з (0,5) до міни 7 тайлів — сапер її ще не бачить")
+		"передумова: з (0,5) до міни 7 тайлів — інженер її ще не бачить")
 	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5), -1).apply(state)
-	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли дороги по 15 AP — 60 з 68")
+	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли дороги по 15 AP — 60 з 76")
 	var tile_at: int = _index_of_tile_revealed(events, 0, Vector2i(7, 5))
 	var mine_at: int = _index_of_mine_revealed(events, 0, Vector2i(7, 5))
 	assert_true(tile_at >= 0, "передумова: тайл міни розкрито саме цим рухом")
@@ -541,14 +551,14 @@ func test_the_walk_reveals_the_ground_it_passes_not_only_the_ground_it_ends_on()
 	# Перевіряються обидві половини контракту (§6): і стан (міна відома), і порядок
 	# подій — MineRevealed не має випереджати TileRevealed свого тайла, і на середині
 	# шляху так само, як і в кінці.
-	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # інженер: ap 68, дорога по 15
+	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)   # інженерна машина: ap 76, дорога по 15
 	Mines.place(state, Vector2i(1, 2), 1)
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(1, 2), 0), "передумова: з (0,5) міни не видно")
 
 	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5), -1).apply(state)
 
-	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли по 15 — 60 з 68")
+	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли по 15 — 60 з 76")
 	assert_false(state.vision[0].is_visible(Vector2i(1, 2)),
 		"передумова: з кінцевої (4,5) тайл міни вже поза оглядом")
 	assert_true(Mines.is_known(state, Vector2i(1, 2), 0),
@@ -595,3 +605,96 @@ func test_a_unit_killed_by_a_mine_stops_contributing_vision() -> void:
 	assert_false(u.is_alive(), "передумова: міна гарантовано вбиває при hp <= 90")
 	assert_false(state.vision[0].is_visible(Vector2i(5, 5)),
 		"мертвий юніт не має продовжувати світити видимість")
+
+# --- §3.11, рішення власника: відома ворожа міна — перешкода, як зайнятий тайл ---
+#
+# Геометрія — та сама, що в test_a_seen_enemy_is_routed_around_at_planning_time:
+# дві дорожні смуги, транспортер (ap 68, 10 за тайл), прямо до (4,5) — 4 тайли,
+# в обхід (2,5) — 6. Міна на (2,5) ворожа і вже знайдена гравцем 0.
+
+func _two_lane_state_with_mine(mine_owner: int, known: bool) -> BattleState:
+	var b: Board = Board.create(10, 10, Terrain.GroundState.DRY)
+	for x in 10:
+		b.set_kind(Vector2i(x, 4), Terrain.Kind.ROAD)
+		b.set_kind(Vector2i(x, 5), Terrain.Kind.ROAD)
+	var s: BattleState = BattleState.create(b, 2, 11)
+	Mines.place(s, Vector2i(2, 5), mine_owner)
+	if known:
+		Mines.mine_at(s, Vector2i(2, 5)).known_to[0] = true
+	return s
+
+func test_a_known_enemy_mine_is_routed_around() -> void:
+	var s: BattleState = _two_lane_state_with_mine(1, true)
+	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+	s.start()
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5), -1)
+	assert_eq(cmd.validate(s), "")
+	var events: Array = cmd.apply(s)
+	var moved: Events.UnitMoved = events[0]
+	assert_false(Vector2i(2, 5) in moved.path, "відому міну об'їжджають, а не переїжджають")
+	assert_eq(u.pos, Vector2i(4, 5))
+	assert_eq(u.ap, 8, "68 − 6×10: заплачено за гак")
+	assert_eq(u.hp, u.max_hp(), "жодного підриву")
+	assert_not_null(Mines.mine_at(s, Vector2i(2, 5)), "міна лишається лежати")
+
+func test_a_known_enemy_mine_tile_is_not_a_legal_destination() -> void:
+	var s: BattleState = _two_lane_state_with_mine(1, true)
+	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+	s.start()
+	assert_eq(MoveCommand.create(u.id, Vector2i(2, 5), -1).validate(s), "ERR_OUT_OF_RANGE")
+
+func test_zones_exclude_a_known_enemy_mine() -> void:
+	var s: BattleState = _two_lane_state_with_mine(1, true)
+	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+	s.start()
+	var blocked: Dictionary = s.known_blocked_map(0)
+	blocked.erase(u.pos)
+	var zones: Pathing.Zones = Pathing.compute_zones(s.board, u, blocked)
+	assert_false(zones.can_reach(Vector2i(2, 5)), "контур зони обгинає відому міну")
+	assert_false(s.known_occupied_map(0).has(Vector2i(2, 5)),
+		"мапа зайнятості юнітами міну не включає — її читають види юнітів")
+
+func test_an_unknown_enemy_mine_is_not_an_obstacle_for_planning() -> void:
+	var s: BattleState = _two_lane_state_with_mine(1, false)
+	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+	s.start()
+	assert_false(s.known_blocked_map(0).has(Vector2i(2, 5)),
+		"§3.5: невідома міна не має виказувати себе формою маршруту")
+
+func test_an_own_mine_is_not_an_obstacle() -> void:
+	var s: BattleState = _two_lane_state_with_mine(0, true)
+	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+	s.start()
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5), -1)
+	assert_eq(cmd.validate(s), "")
+	var events: Array = cmd.apply(s)
+	var moved: Events.UnitMoved = events[0]
+	assert_true(Vector2i(2, 5) in moved.path, "своя міна — не перешкода: пряма дорога")
+	assert_eq(u.ap, 28, "68 − 4×10")
+	assert_eq(u.hp, u.max_hp(), "своя міна під власником не вибухає")
+
+func test_an_engineer_that_finds_a_mine_mid_walk_stops_in_front_of_it() -> void:
+	# Інженер (огляд 3, 15 AP за тайл дороги) з (0,5) до (4,5); ворожа міна на (4,5)
+	# поза ромбом на старті (4 > 3), але знаходиться вже з першого кроку (1,5).
+	# Далі план веде просто на неї — хід мусить спинитися на (3,5), як перед
+	# невидимим юнітом, а не в'їхати в щойно знайдену міну.
+	var eng: Unit = state.add_unit(11, 0, Vector2i(0, 5), 2)
+	Mines.place(state, Vector2i(4, 5), 1)
+	state.start()
+	state.begin_turn()
+	assert_false(Mines.is_known(state, Vector2i(4, 5), 0), "передумова: на старті міну не видно")
+	var before_ap: int = eng.ap
+	var cmd: MoveCommand = MoveCommand.create(eng.id, Vector2i(4, 5), -1)
+	assert_eq(cmd.validate(state), "", "невідома міна плануванню не заважає")
+	var events: Array = cmd.apply(state)
+
+	assert_eq(eng.pos, Vector2i(3, 5), "спинився на тайлі перед міною")
+	assert_eq(eng.hp, eng.max_hp(), "без шкоди")
+	assert_not_null(Mines.mine_at(state, Vector2i(4, 5)), "міна не спрацювала")
+	assert_eq(before_ap - eng.ap, 45, "оплачено лише 3 тайли, у які інженер увійшов")
+	var blocked_at: int = -1
+	for i in events.size():
+		assert_false(events[i] is Events.MineTriggered, "жодного підриву")
+		if events[i] is Events.MoveBlocked and events[i].pos == Vector2i(4, 5):
+			blocked_at = i
+	assert_true(blocked_at >= 0, "обрив названо тією ж MoveBlocked, що й перед невидимим юнітом")
