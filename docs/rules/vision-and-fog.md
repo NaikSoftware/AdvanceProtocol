@@ -70,6 +70,11 @@ open and is then told they cannot see it will read the game as broken.
   the same diamond as tile fog (§3.1), so a revealed mine is always on a tile you can actually
   see. Visibility is **per player**, tracked on the mine, exactly like tile fog.
 - Driving onto an unrevealed mine detonates it.
+- **A known enemy mine is an obstacle** (owner ruling): planning treats it like an occupied tile,
+  so routes and both movement zones bend around it and its tile is not a legal destination. Your
+  own mines never are.
+- **An engineer that finds a mine on its route mid-walk stops in front of it**, with the same halt
+  as for an unseen unit, and pays only for the tiles it entered.
 
 The engineer restriction is the reference's rule and it is adopted deliberately ([§4](../reference/blitzkrieg.md)). It is what
 makes a minefield a threat rather than an inconvenience: without a sapper leading, a column drives

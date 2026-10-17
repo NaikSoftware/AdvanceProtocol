@@ -407,6 +407,24 @@ func test_unit_that_dies_to_retaliation_clears_selection_cleanly() -> void:
 ## can_reach() впав би на false, і контур зони обійшов би ворога, виказавши
 ## його самою формою дірки. Якщо хтось підмінить known_occupied_map() на
 ## occupied_map() у input_controller.gd, цей тест мусить впасти.
+## §3.11, рішення власника: знайдена ворожа міна — перешкода, і контур зони
+## мусить її обгинати рівно так, як MoveCommand її обʼїжджає. Невідома міна в
+## зону потрапляє — інакше форма контуру виказала б її (§3.5).
+func test_zone_excludes_a_known_enemy_mine_but_not_an_unknown_one() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)  # medium tank, owner 0
+	Mines.place(service.state, Vector2i(5, 6), 1)
+	Mines.place(service.state, Vector2i(6, 5), 1)
+	Mines.mine_at(service.state, Vector2i(5, 6)).known_to[0] = true
+	_begin_and_drain()
+
+	controller.tap_cell(u.pos)
+
+	assert_not_null(overlay.last_zones)
+	assert_false(overlay.last_zones.can_reach(Vector2i(5, 6)), "відома ворожа міна — не в зоні")
+	assert_true(overlay.last_zones.can_reach(Vector2i(6, 5)), "невідома міна не видна формою зони")
+
+
 func test_zone_uses_known_occupancy_not_true_occupancy() -> void:
 	_start()
 	var u: Unit = service.state.add_unit(2, 0, Vector2i(5, 5), 0)  # armoured car, owner 0

@@ -144,6 +144,19 @@ func known_occupied_map(player: int) -> Dictionary:
 			out[u.pos] = u.id
 	return out
 
+func known_blocked_map(player: int) -> Dictionary:
+	## Те, з чого ПЛАНУЄТЬСЯ хід (§3.2): known_occupied_map() плюс відомі гравцеві
+	## ворожі міни. Рішення власника (§3.11): знайдена міна — перешкода, її обʼїжджають,
+	## як зайнятий тайл, а не наступають на неї наосліп після того, як сапер її вже
+	## показав. Окремий метод, а не домішка в known_occupied_map(): ту читають види
+	## юнітів і чекають там лише id юнітів. Значення для міни — −1, бо юніта там немає.
+	## Своя міна сюди не входить — під власником вона не вибухає (Mines.step_on()).
+	var out: Dictionary = known_occupied_map(player)
+	for m in mines:
+		if m.owner != player and m.known_to[player] and not out.has(m.pos):
+			out[m.pos] = -1
+	return out
+
 func is_over() -> bool:
 	return winner != NO_WINNER
 
