@@ -35,6 +35,56 @@ func test_demolish_bridge_reshapes_the_map() -> void:
 	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE_DESTROYED)
 	assert_false(state.board.is_passable(Vector2i(4, 3)))
 
+## Рішення власника: міст підривається разом із ворогом, що на ньому стоїть, —
+## юніт гине, шкода зараховується власникові сапера (без досвіду, §3.7). Свій юніт
+## на мосту — заборона: сапер не скидає своїх у річку.
+func test_demolishing_a_bridge_under_an_enemy_destroys_it() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var enemy: Unit = state.add_unit(5, 1, Vector2i(4, 3), 0)
+	var reserve: Unit = state.add_unit(5, 1, Vector2i(9, 9), 0)
+	var hp_before: int = enemy.hp
+	var cmd: EngineerCommand = EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(4, 3))
+	assert_eq(cmd.validate(state), "", "ворог на мосту не заважає підриву")
+	var events: Array = cmd.apply(state)
+
+	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE_DESTROYED)
+	assert_false(enemy.is_alive(), "юніт на підірваному мосту гине")
+	assert_eq(state.damage_dealt[0], hp_before, "уся решта hp — на рахунок власника сапера")
+	assert_eq(state.experience[0].level_of(UnitTypes.UnitClass.ENGINEER), 0, "досвіду сапер не має")
+	var dealt: int = -1
+	var destroyed: int = -1
+	for i in events.size():
+		if events[i] is Events.DamageDealt and events[i].unit_id == enemy.id:
+			dealt = i
+			assert_eq(events[i].amount, hp_before)
+		if events[i] is Events.UnitDestroyed and events[i].unit_id == enemy.id:
+			destroyed = i
+	assert_true(dealt >= 0 and destroyed > dealt, "DamageDealt, потім UnitDestroyed — як від смертельного влучання")
+	assert_true(reserve.is_alive() and not state.is_over(), "у гравця 1 лишився юніт — матч триває")
+
+func test_demolishing_a_bridge_under_the_last_enemy_unit_ends_the_match() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.add_unit(5, 1, Vector2i(4, 3), 0)
+	var events: Array = EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(4, 3)).apply(state)
+	assert_eq(state.winner, 0, "останній юніт гравця 1 загинув — check_elimination() завершує матч")
+	var eliminated: bool = false
+	for ev in events:
+		if ev is Events.PlayerEliminated and ev.player == 1:
+			eliminated = true
+	assert_true(eliminated, "PlayerEliminated у потоці подій")
+
+func test_demolishing_a_bridge_under_an_own_unit_is_rejected() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var own: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	var cmd: EngineerCommand = EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(4, 3))
+	assert_eq(cmd.validate(state), "ERR_TILE_OCCUPIED")
+	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE, "міст цілий")
+	assert_true(own.is_alive())
+	assert_eq(e.ap, e.max_ap(), "AP не списано")
+
 func test_repair_bridge_restores_it() -> void:
 	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE_DESTROYED)
 	var e: Unit = _engineer(Vector2i(4, 4))

@@ -72,6 +72,10 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
 - **Lay mine** / **clear mine**
 - **Repair or demolish a bridge** — a demolished crossing reshapes the whole map, and this is the
   single highest-leverage action in the game
+  - **An enemy unit on the bridge goes down with it** (owner ruling): it is destroyed outright,
+    with the same events as a lethal hit, and its remaining HP is credited to the engineer's owner
+    as damage dealt (no experience — engineers have none). Elimination is checked at once.
+  - **A friendly unit on the bridge forbids the demolition** (`ERR_TILE_OCCUPIED`).
 - **Repair a damaged friendly unit** — heals `(40 + rand(0, ap_left - fire_cost)) / 2`, so an
   engineer that drove all turn repairs badly. This is the one place where unspent AP matters.
 - **Capture / demolish an objective** ([§3.10](objectives.md))
