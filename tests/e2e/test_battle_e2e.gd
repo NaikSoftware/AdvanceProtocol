@@ -11,6 +11,7 @@ extends GutTest
 
 const BattleScreenScene := preload("res://game/battle/battle_screen.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
+const E2E := preload("res://tests/e2e/e2e_helpers.gd")
 const TEST_SAVE: String = "user://test_e2e_save.json"
 
 # Типи з core/unit_types.gd
@@ -40,17 +41,17 @@ class RecService extends MatchServiceScript:
 		return e
 
 
-## Control -> початковий mouse_filter; повертаємо в after_each, щоб правка не текла в інші тести.
-var _saved_filters: Dictionary = {}
+var _e2e: E2E
 var _service: RecService
 var _screen: BattleScreen
 
 
+func before_each() -> void:
+	_e2e = E2E.new(self)
+
+
 func after_each() -> void:
-	for c: Control in _saved_filters:
-		if is_instance_valid(c):
-			c.mouse_filter = _saved_filters[c]
-	_saved_filters.clear()
+	_e2e.restore_runner_gui()
 	DirAccess.remove_absolute(TEST_SAVE)
 	DirAccess.remove_absolute(TEST_SAVE + ".map")
 
@@ -88,40 +89,13 @@ func _boot(width: int, height: int, spawns: Array, tiles: Dictionary = {},
 	add_child_autofree(_screen)
 	_screen.save_path = TEST_SAVE
 	_screen.setup(m, 2, seed_value, _service, ground)
-	_ignore_runner_gui()
+	_e2e.ignore_runner_gui([_screen])
 	await _settle()
 
 
-## GUT-раннер вішає на root власний GUI (RichTextLabel з виводом), який перехоплює
-## миші й не пускає її до гри — у релізі його нема. Гасимо йому mouse_filter:
-## це правка тестового середовища, а не гри.
-func _ignore_runner_gui() -> void:
-	_ignore_mouse_recursive(get_tree().root)
-
-
-func _ignore_mouse_recursive(n: Node) -> void:
-	if n == _screen:
-		return
-	if n is Control:
-		var ctl := n as Control
-		if not _saved_filters.has(ctl):
-			_saved_filters[ctl] = ctl.mouse_filter
-		ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for c in n.get_children():
-		_ignore_mouse_recursive(c)
-
-
-## Твіни камери й подій гасимо вручну (реального часу не чекаємо), доки
-## програвач не скаже, що закінчив.
+## Твіни камери й подій гасимо вручну, доки програвач не скаже, що закінчив.
 func _settle() -> void:
-	for i in 60:
-		for tw in Engine.get_main_loop().get_processed_tweens():
-			if tw.is_valid():
-				tw.custom_step(10.0)
-		await get_tree().process_frame
-		if not _screen._event_player.is_playing():
-			break
-	assert_false(_screen._event_player.is_playing(), "програвання зависло")
+	await _e2e.wait_until(func() -> bool: return not _screen._event_player.is_playing(), "програвання подій")
 
 
 func _hud() -> Hud:
@@ -144,15 +118,7 @@ func _px(cell: Vector2i) -> Vector2:
 
 ## Справжній тап: миша вниз/вгору в центрі клітинки через viewport.
 func _tap(cell: Vector2i) -> void:
-	var p: Vector2 = _px(cell)
-	for pressed in [true, false]:
-		var ev := InputEventMouseButton.new()
-		ev.button_index = MOUSE_BUTTON_LEFT
-		ev.pressed = pressed
-		ev.position = p
-		ev.global_position = p
-		ev.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
-		_screen.get_viewport().push_input(ev, true)
+	_e2e.click_at(_px(cell))
 
 
 func _confirm() -> void:
