@@ -51,7 +51,9 @@ func test_demolishing_a_bridge_under_an_enemy_destroys_it() -> void:
 	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE_DESTROYED)
 	assert_false(enemy.is_alive(), "юніт на підірваному мосту гине")
 	assert_eq(state.damage_dealt[0], hp_before, "уся решта hp — на рахунок власника інженера")
-	assert_eq(state.experience[0].level_of(UnitTypes.UnitClass.ENGINEER), 0, "досвіду інженер не має")
+	# Не лише клас ENGINEER (у нього порогів нема, тож там завжди 0): жоден клас
+	# гравця 0 не мусить отримати за це вбивство досвіду.
+	assert_eq(state.experience[0].xp, [0, 0, 0, 0, 0] as Array[int], "підрив мосту не дає досвіду жодному класу")
 	var dealt: int = -1
 	var destroyed: int = -1
 	for i in events.size():

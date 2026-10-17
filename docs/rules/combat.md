@@ -64,9 +64,9 @@ Retaliation
 zeroes the retaliator's AP for the remainder of the *attacker's* turn, so it cannot answer a second
 shot before the attacker's turn ends. When that turn ends, the AP it had before answering comes
 back, so in a three-player game it can answer the next opponent too. It does **not** cost the unit
-its own turn: `refill_ap()`
-restores both AP and the fired flag at the start of its owner's turn, exactly as the reference
-does. A unit that retaliated moves and shoots normally when its turn arrives.
+its own turn: `refill_ap()` restores both AP and the fired flag at the start of its owner's turn,
+exactly as the reference does. A unit that retaliated moves and shoots normally when its turn
+arrives.
 
 **Retaliation is not free for the defender, and this paragraph used to say it was.** The AP that
 gates the answer is whatever the unit *did not spend on its own turn*, so the price is paid in

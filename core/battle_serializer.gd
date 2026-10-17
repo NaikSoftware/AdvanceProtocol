@@ -199,6 +199,11 @@ static func _is_valid(data: Dictionary) -> bool:
 
 	if not _arr(data, "units"):
 		return false
+	# id — ключ словника units (дублікат мовчки затер би юніт), тайл — одного живого
+	# (unit_at() бачив би лише першого), а next_unit_id має бути вище за всі id, інакше
+	# наступний add_unit() видав би вже зайнятий.
+	var ids: Dictionary = {}
+	var living_at: Dictionary = {}
 	for u in (data["units"] as Array):
 		if typeof(u) != TYPE_DICTIONARY:
 			return false
@@ -209,6 +214,15 @@ static func _is_valid(data: Dictionary) -> bool:
 			return false
 		if u.has("ap_before_retaliation") and not _num(u, "ap_before_retaliation"):
 			return false
+		var id: int = int(u["id"])
+		if ids.has(id) or id >= int(data["next_unit_id"]):
+			return false
+		ids[id] = true
+		if int(u["hp"]) > 0:
+			var pos := Vector2i(int(u["x"]), int(u["y"]))
+			if living_at.has(pos):
+				return false
+			living_at[pos] = true
 
 	if not _arr(data, "mines"):
 		return false

@@ -228,11 +228,14 @@ func pass_turn() -> Array[Events.BattleEvent]:
 	## однаково поповнить власника, і повернення там нічого не змінює. ApChanged не
 	## випускається — вигляд AP із потоку не читає (event_player), а HUD бере його зі
 	## стану.
-	for u in alive_units():
-		if u.ap_before_retaliation >= 0:
+	# Усі юніти, не лише живі: відповідач, якого добили пізніше того ж ходу, не має
+	# нести застарілий запис далі (і в збереження).
+	for id in units:
+		var u: Unit = units[id]
+		if u.ap_before_retaliation >= 0 and u.is_alive():
 			u.ap = u.ap_before_retaliation
 			u.has_fired = false
-			u.ap_before_retaliation = -1
+		u.ap_before_retaliation = -1
 	var previous: int = active_player
 	active_player = advance_player()
 	if active_player <= previous:

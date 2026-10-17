@@ -275,3 +275,29 @@ func test_a_unit_owner_out_of_range_is_rejected() -> void:
 	var d: Dictionary = _save()
 	d["units"][0]["owner"] = 3
 	_assert_rejected(d, "власник 3 при трьох гравцях")
+
+# _populated_state(): юніти 1 (1,1), 2 (6,6), 3 (2,6), next_unit_id 4.
+
+func test_duplicate_unit_ids_are_rejected() -> void:
+	var d: Dictionary = _save()
+	d["units"][1]["id"] = 1
+	_assert_rejected(d, "два юніти з id 1 — другий мовчки затер би першого в словнику units")
+
+func test_two_living_units_on_one_tile_are_rejected() -> void:
+	var d: Dictionary = _save()
+	d["units"][1]["x"] = 1
+	d["units"][1]["y"] = 1
+	_assert_rejected(d, "двоє живих на (1,1) — unit_at() бачив би лише одного")
+
+func test_a_dead_unit_may_share_a_tile_with_a_living_one() -> void:
+	# Мертві лишаються в units (уламки), тож тайл під ними займає хтось інший законно.
+	var d: Dictionary = _save()
+	d["units"][1]["x"] = 1
+	d["units"][1]["y"] = 1
+	d["units"][1]["hp"] = 0
+	assert_not_null(BattleSerializer.from_dict(d))
+
+func test_next_unit_id_not_above_every_id_is_rejected() -> void:
+	var d: Dictionary = _save()
+	d["next_unit_id"] = 3
+	_assert_rejected(d, "next_unit_id 3 при наявному id 3 — наступний add_unit() видав би той самий id")

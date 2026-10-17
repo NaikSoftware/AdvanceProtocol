@@ -452,3 +452,40 @@ func test_concede_also_returns_the_retaliators_ap() -> void:
 	ConcedeCommand.create().apply(s)
 	assert_eq(s.active_player, 2, "передумова: хід перейшов до гравця 2")
 	assert_eq(heavy.ap, 40, "хід атакувальника скінчився здачею — і AP так само повертається")
+
+func test_the_ap_returned_is_what_the_retaliator_had_not_a_refill() -> void:
+	# Повне AP (40) не відрізняє повернення від поповнення. 25 — частковий залишок
+	# власного ходу (>= fire_cost 20, тож відповідь можлива): повернутися мусить
+	# рівно 25, а не max_ap.
+	var f: Dictionary = _three_player_heavy()
+	var s: BattleState = f["state"]
+	var heavy: Unit = f["heavy"]
+	heavy.ap = 25
+	assert_eq(_count_retaliations(FireCommand.create(f["p1"].id, heavy.id).apply(s)), 1, "передумова: 25 >= 20 — відповідає")
+	EndTurnCommand.create().apply(s)
+	assert_eq(s.active_player, 2, "передумова")
+	assert_eq(heavy.ap, 25, "повертається залишок перед відповіддю, а не повний запас")
+
+func test_a_spent_unit_that_did_not_retaliate_stays_spent_on_the_next_opponents_turn() -> void:
+	# Юніт гравця 0, що витратив усе на власному ході й ні на що не відповідав, на
+	# ході гравця 2 лишається з 0: pass_turn() повертає лише відповідачам.
+	var f: Dictionary = _three_player_heavy()
+	var s: BattleState = f["state"]
+	var spent: Unit = s.add_unit(5, 0, Vector2i(14, 14), 0)
+	spent.ap = 0
+	EndTurnCommand.create().apply(s)
+	assert_eq(s.active_player, 2, "передумова")
+	assert_eq(spent.ap, 0, "без відповіді нема чого повертати")
+
+func test_a_retaliator_killed_later_that_turn_keeps_no_stale_record() -> void:
+	# Відповів, а тоді загинув від другого пострілу того самого ходу: запис про AP
+	# мертвого юніта не має пережити кінець ходу (і потрапити у збереження).
+	var f: Dictionary = _three_player_heavy()
+	var s: BattleState = f["state"]
+	var heavy: Unit = f["heavy"]
+	assert_eq(_count_retaliations(FireCommand.create(f["p1"].id, heavy.id).apply(s)), 1, "передумова")
+	heavy.hp = 1
+	FireCommand.create(f["p1b"].id, heavy.id).apply(s)
+	assert_false(heavy.is_alive(), "передумова: другий постріл добиває")
+	EndTurnCommand.create().apply(s)
+	assert_eq(heavy.ap_before_retaliation, -1, "мертвий відповідач без застарілого запису")
