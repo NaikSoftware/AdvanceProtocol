@@ -466,7 +466,12 @@ func _on_screen_touch(st: InputEventScreenTouch) -> void:
 		return
 
 	if st.index == _active_touch_index:
-		_end_pointer_press(st.position)
+		# Скасований дотик (шторка, відкидання долоні) — не намір гравця: без тапу.
+		if st.canceled:
+			_pointer_down = false
+			_camera_rig.end_hold()
+		else:
+			_end_pointer_press(st.position)
 		_active_touch_index = -1
 	get_viewport().set_input_as_handled()
 

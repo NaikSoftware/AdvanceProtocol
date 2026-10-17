@@ -505,3 +505,37 @@ func test_fling_then_end_turn_does_not_drift_after_gate() -> void:
 		await get_tree().process_frame
 	assert_eq(rig.global_position, target, "жодного дрейфу вздовж кидка A")
 	assert_eq(rig.zoom_level, zoom_before, "відкладений зум A не доїжджає після гейта")
+
+
+## Скасований дотик (шторка сповіщень, відкидання долоні) — не тап: ні вибір, ні превʼю не міняються.
+func test_cancelled_touch_is_not_a_tap() -> void:
+	await _two_riflemen()
+	var ctl: InputController = _screen._controller
+	_tap(Vector2i(0, 1))
+	assert_not_null(ctl._selected_unit, "передумова: юніт вибрано")
+	_tap(Vector2i(2, 1))
+	var pending: Dictionary = ctl._pending.duplicate()
+	assert_false(pending.is_empty(), "передумова: є превʼю ходу")
+	var vp: Viewport = get_viewport()
+	var p: Vector2 = _px(Vector2i(3, 1))
+	for pressed in [true, false]:
+		var ev := InputEventScreenTouch.new()
+		ev.index = 0
+		ev.position = p
+		ev.pressed = pressed
+		ev.canceled = not pressed
+		vp.push_input(ev, true)
+	assert_eq(ctl._pending, pending, "превʼю не замінено")
+	assert_not_null(ctl._selected_unit)
+	assert_false(_screen._pointer_down)
+	assert_eq(_screen._active_touch_index, -1)
+	# звичайний дотик після скасованого знову працює
+	var ev2 := InputEventScreenTouch.new()
+	ev2.index = 0
+	ev2.position = p
+	ev2.pressed = true
+	vp.push_input(ev2, true)
+	ev2 = ev2.duplicate()
+	ev2.pressed = false
+	vp.push_input(ev2, true)
+	assert_ne(ctl._pending, pending, "справжній тап далі міняє превʼю")
