@@ -155,7 +155,7 @@ shown as a labelled icon in the HUD at all times. It offsets off-road terrain pe
 | state | off-road penalty | notes |
 | --- | --- | --- |
 | `dry` | baseline | |
-| `mud` | +heavy for anything with wheels or tracks | infantry and the engineer squad unaffected; roads become vital |
+| `mud` | +heavy for anything with wheels or tracks | infantry unaffected; roads become vital |
 | `frozen` | reduced | marsh becomes passable; ice over water is a later feature |
 
 Roads are never affected by ground state — that is the point of a road.
