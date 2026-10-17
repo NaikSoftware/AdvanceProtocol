@@ -57,6 +57,9 @@ const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
 var save_path: String = MatchService.SAVE_PATH
 
 var _match_service: Node = null
+var _prev_quit_on_go_back: bool = true
+## Відкритий оверлей налаштувань (null, поки не відкривали).
+var _settings: SettingsScreen = null
 var _controller: InputController = null
 var _zone_overlay: ZoneOverlay = null
 var _path_overlay: PathOverlay = null
@@ -135,6 +138,10 @@ func _ready() -> void:
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
+	# Android «назад» інакше виходить із гри разом із матчем; на цьому екрані
+	# воно відкриває паузу. Значення меню повертає _exit_tree().
+	_prev_quit_on_go_back = get_tree().quit_on_go_back
+	get_tree().quit_on_go_back = false
 	if get_tree().current_scene != self:
 		return
 	# Маршрути виходу з бою ведуть крізь SceneRouter лише у справжньому запуску;
@@ -250,13 +257,39 @@ func _wire_view(board: Board) -> void:
 	_gate.confirmed.connect(_on_gate_confirmed)
 
 
+func _exit_tree() -> void:
+	if get_tree() != null:
+		get_tree().quit_on_go_back = _prev_quit_on_go_back
+
+
+## Жест «назад»: пауза відкрита — закриваємо як Resume, інакше відкриваємо.
+## Згортання/закриття застосунку — автозбереження (save_current сам видаляє
+## збереження завершеного матчу, тож застарілий автосейв не воскресить виграний бій). Гейт при Continue вмикається наявним шляхом, нічого не відкриваємо.
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			# Гейт передачі: пауза під ним дісталась би гравцеві, що заходить.
+			if _gate.visible:
+				return
+			# Закриваємо верхній оверлей: налаштування, інакше пауза.
+			if is_instance_valid(_settings) and not _settings.is_queued_for_deletion():
+				_settings.get_node("%BackButton").pressed.emit()
+			elif _pause.visible:
+				_pause.hide()
+			else:
+				_pause.show()
+		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST:
+			if _match_service != null and _match_service.state != null:
+				_match_service.save_current(save_path)
+
+
 ## Налаштування з паузи відкриваються поверх бою, а не заміною сцени: бій
 ## (стан, вигляд, відкрита пауза) лишається під ними як є, тож нічого не треба
 ## автозберігати й відновлювати. «Назад» у оверлеї просто закриває його.
 func _open_settings() -> void:
-	var settings: SettingsScreen = preload("res://game/ui/settings_screen.tscn").instantiate()
-	settings.overlay = true
-	_ui.add_child(settings)
+	_settings = preload("res://game/ui/settings_screen.tscn").instantiate()
+	_settings.overlay = true
+	_ui.add_child(_settings)
 
 
 ## Здача йде тим самим шляхом, що й кінець ходу: команда → події → програвач.
@@ -440,7 +473,12 @@ func _on_screen_touch(st: InputEventScreenTouch) -> void:
 		return
 
 	if st.index == _active_touch_index:
-		_end_pointer_press(st.position)
+		# Скасований дотик (шторка, відкидання долоні) — не намір гравця: без тапу.
+		if st.canceled:
+			_pointer_down = false
+			_camera_rig.end_hold()
+		else:
+			_end_pointer_press(st.position)
 		_active_touch_index = -1
 	get_viewport().set_input_as_handled()
 

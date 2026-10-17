@@ -93,6 +93,9 @@ var _shown_player: int = -1
 @onready var _bottom_bar: HBoxContainer = %BottomBar
 
 
+var _last_preview: Dictionary = {}
+
+
 func _ready() -> void:
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	_cancel_button.pressed.connect(_on_cancel_pressed)
@@ -100,6 +103,15 @@ func _ready() -> void:
 	_pause_button.pressed.connect(pause_pressed.emit)
 	_clear_preview()
 	_render_selection()
+
+
+## Підписи, зібрані через tr() у коді (ґрунт, інспектор, сектор), не
+## перекладаються самі — після зміни мови з паузи перечитуємо їх.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		refresh()
+		if not _last_preview.is_empty():
+			show_preview(_last_preview)
 
 
 ## Стан матчу для постійної частини панелі. Тримається посиланням, а не копією:
@@ -159,6 +171,7 @@ func show_preview(preview: Dictionary) -> void:
 	# пострілу) лишилися б на екрані під час показу руху й читалися б як
 	# частина нової дії.
 	_clear_preview()
+	_last_preview = preview
 	if preview.is_empty():
 		return
 	match int(preview["type"]):
@@ -294,6 +307,7 @@ func _bottom_bar_top() -> float:
 
 
 func _clear_preview() -> void:
+	_last_preview = {}
 	_preview_shot_box.visible = false
 	_preview_move_box.visible = false
 	_confirm_button.disabled = true

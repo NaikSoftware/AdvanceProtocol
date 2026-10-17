@@ -216,6 +216,17 @@ func test_settings_from_pause_opens_over_the_battle_and_back_keeps_it() -> void:
 
 # --- 3.5: кінець матчу ---------------------------------------------------
 
+## Фіксована кількість кадрів флейкала (1/10): чекаємо, поки програвач справді
+## договорить, і лише тоді перевіряємо наслідки.
+func _play_out(screen: BattleScreen) -> void:
+	for i in 300:
+		_finish_all_processed_tweens()
+		await wait_process_frames(1)
+		if not screen._event_player.is_playing():
+			return
+	assert_false(screen._event_player.is_playing(), "програвач не договорив за 300 кадрів")
+
+
 func _finish_match(service: Node, screen: BattleScreen) -> void:
 	var shooter: Unit = service.state.units_of(0)[0]
 	var victim: Unit = service.state.units_of(1)[0]
@@ -224,9 +235,7 @@ func _finish_match(service: Node, screen: BattleScreen) -> void:
 	screen.input_controller().tap_cell(victim.pos)
 	screen.input_controller().confirm_pending()
 	# Твіни програвача з'являються між кадрами — підганяємо їх поки черга не спорожніє.
-	for i in 6:
-		_finish_all_processed_tweens()
-		await wait_process_frames(1)
+	await _play_out(screen)
 
 
 func test_match_ended_deletes_save_and_goes_to_results() -> void:
@@ -347,9 +356,7 @@ func _confirm_surrender(pause: Control) -> void:
 
 func _surrender(screen: BattleScreen) -> void:
 	_confirm_surrender(screen.get_node("%PauseMenu"))
-	for i in 6:
-		_finish_all_processed_tweens()
-		await wait_process_frames(1)
+	await _play_out(screen)
 
 
 func test_surrender_in_two_player_match_ends_it_and_goes_to_results() -> void:
