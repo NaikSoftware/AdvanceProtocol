@@ -23,7 +23,7 @@ for texture tooling, `agy` for 2D generation, `tripo` via the `asset-manager` sk
 - Weather and look change no number; `MapData.ground_state` is the only ground rule (CLAUDE.md §3.12).
 - Nothing may render a unit the active player cannot see — including reflections (spec anti-goals).
 - Prop placement is a pure function of the board: same board → identical transforms; never `Rules.roll`, never `randi()`/`randf()`.
-- Budget: < ~100 draw calls, < ~150k triangles on screen (CLAUDE.md §8). No SSR, no SSAO, no volumetric fog.
+- Budget: < ~100 draw calls on screen is the target; **triangles are soft** — owner (2026-10-18): more than ~150k is acceptable on modern phones, so measure and record, do not cut visual quality to hit 150k. Tests only guard against runaway geometry. No SSR, no SSAO, no volumetric fog.
 - Logic stays flat: units and overlays at `y = 0`; one tile = 1.0 world unit; front is `−Z`.
 - `BoardView`'s public API is frozen: `build`, `rebuild_tiles`, `draw_contour`, `clear_contour`, `contour_segments`, `draw_circles`, `circles`, `kind_at`, `LAYER_*`.
 - Render layers: layer 1 = world (ground, water, props); **layer 2 = units** (`UnitView` and its children). The reflection probe's cull mask is layer 1 only.
@@ -276,7 +276,7 @@ func test_unit_meshes_are_on_the_unit_layer_only() -> void
 
 **Interfaces:**
 - Produces: the GLBs above, each normalised with the `3d-modelling` skill: origin at the footprint centre on the ground, `y = 0` ground, front `−Z`, footprint ≤ 1.0 × 1.0 (bridge pieces exactly 1.0 along the road), houses ≤ 1.6 tall.
-- Produces: `const PROP_FACE_LIMITS: Dictionary` in the test = trees 300, rocks 300, wall_fence 400, bridge pieces 1200, houses and ruin 2000 (Tripo `-p face_limit=` uses these).
+- Produces: `const PROP_FACE_LIMITS: Dictionary` in the test = trees 600, rocks 400, wall_fence 600, bridge pieces 1500, houses and ruin 3000 (Tripo `-p face_limit=` uses these).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -317,7 +317,7 @@ func test_bridge_swaps_when_demolished() -> void
 func test_reveal_fades_the_cell_and_its_camera_side_neighbours_only() -> void
 	# forest 4×4, reveal (1,1) → faded on (1,1),(2,1),(1,2),(2,2); not faded on (0,0),(1,0),(0,1)
 func test_reveal_replaces_the_previous_set() -> void
-func test_river_props_fit_the_triangle_budget() -> void          # River with margin 0: triangle_count() <= 120000
+func test_river_props_have_no_runaway_geometry() -> void          # River with margin 0: triangle_count() <= 400000 (guard, not a budget)
 func test_one_multimesh_per_model() -> void                       # MultiMeshInstance3D children <= 11
 ```
 E2E (add to `test_river_e2e.gd`):
@@ -351,7 +351,7 @@ func test_surroundings_fill_the_view_at_max_zoom_from_every_board_corner() -> vo
 ```
 - [ ] **Step 2: Run, expect FAIL** (margin 0).
 - [ ] **Step 3: Implement.** If the river continues off both sides it must (clamped kinds already give that).
-- [ ] **Step 4: Run** suite; recheck `test_river_props_fit_the_triangle_budget` still passes **with** the margin (raise the limit to 150000 only if the on-screen count measured in Task 11 stays under budget). Screenshot River corners at MAX zoom, publish.
+- [ ] **Step 4: Run** suite; recheck `test_river_props_have_no_runaway_geometry` with the margin included. Screenshot River corners at MAX zoom, publish.
 - [ ] **Step 5: Commit** — `git commit -m "feat(board): місцевість за межами карти тоне в серпанку"`
 
 ---
@@ -405,7 +405,7 @@ func test_leaving_battle_restores_the_previous_cap() -> void
 ```
 - [ ] **Step 2: Run, expect FAIL.**
 - [ ] **Step 3: Implement**; run `$GODOT --path . -s res://tools/frame_budget.gd` (windowed, Mobile renderer).
-- [ ] **Step 4:** Draw calls < 100 and primitives < 150000 at every measured view; if not, cut (tree density, margin props, shadow casters) and re-measure. Write `docs/performance.md`. Run the suite → green.
+- [ ] **Step 4:** Draw calls < 100 at every measured view; if not, merge or cut and re-measure. Primitives are recorded, not enforced (soft budget). Write `docs/performance.md`. Run the suite → green.
 - [ ] **Step 5: Commit** — `git commit -m "perf(battle): 30 fps у спокої; заміряний бюджет кадру Річки"`
 
 ---
