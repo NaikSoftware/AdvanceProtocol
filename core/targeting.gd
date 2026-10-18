@@ -230,3 +230,40 @@ static func drone_threatened_units(state: BattleState, unit_id: int, observer: i
 			continue
 		out.append(u)
 	return out
+
+
+static func inspection(state: BattleState, unit_id: int, observer: int) -> Dictionary:
+	## §3.13: усе, що малює огляд юніта, — одним запитом, щоб вигляд не вирішував,
+	## які кільця існують. Рядки таблиці docs/ui/overlays.md:
+	##   * свій — кільце гармати завжди, навіть при 0 AP (але не для класу без
+	##     зброї), позначки — firing_targets(); кільце дрона — лише поки є дрони;
+	##   * ворог — позначки threatened_units()/drone_threatened_units(), а is_floor
+	##     лише тоді, коли є хоч одне кільце: без кільця прогнозувати нічого.
+	## Жодна умова тут не переписана — лише зібрана з уже наявних запитів.
+	var ring: Array[Vector2i] = []
+	var drone_ring: Array[Vector2i] = []
+	var marked: Array[int] = []
+	var drone_marked: Array[int] = []
+	var u: Unit = state.get_unit(unit_id)
+	var own: bool = u != null and u.owner == observer
+	if u != null and u.is_alive():
+		# §3.6: у інженера немає гармати — ні кільця, ні загрози (див. threatened_units()).
+		if u.unit_class() != UnitTypes.UnitClass.ENGINEER:
+			ring = reach_tiles(state, unit_id, u.attack_range())
+		# §3.9: лишок дронів публічний, тож гейт на ньому нічого не видає — і свому, і чужому.
+		if u.drones_left > 0:
+			drone_ring = reach_tiles(state, unit_id, DroneCommand.RANGE)
+		marked = _ids(firing_targets(state, unit_id) if own else threatened_units(state, unit_id, observer))
+		drone_marked = _ids(drone_targets(state, unit_id) if own
+			else drone_threatened_units(state, unit_id, observer))
+	return {
+		"ring": ring, "drone_ring": drone_ring, "marked": marked, "drone_marked": drone_marked,
+		"is_floor": u != null and not own and not (ring.is_empty() and drone_ring.is_empty()),
+	}
+
+
+static func _ids(units: Array[Unit]) -> Array[int]:
+	var out: Array[int] = []
+	for u in units:
+		out.append(u.id)
+	return out

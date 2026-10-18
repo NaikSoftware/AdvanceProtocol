@@ -818,3 +818,20 @@ func test_inspect_cleared_after_handover() -> void:
 	controller.select_unit(null)
 
 	assert_eq(_inspections[-1], _EMPTY_INSPECTION)
+
+
+## Фінальне рев'ю Phase 4: які кільця існують, вирішує core/ (Targeting.inspection),
+## а не контролер. Інженер без гармати не мав би білого кільця — ні свій, ні чужий.
+func test_engineer_inspection_has_no_gun_ring() -> void:
+	_start()
+	var own: Unit = service.state.add_unit(11, 0, Vector2i(5, 5), 0)
+	var enemy: Unit = service.state.add_unit(11, 1, Vector2i(6, 5), 0)
+	_begin_all_seen()
+	_watch_inspections()
+
+	controller.tap_cell(own.pos)
+	controller.inspect_unit(enemy)
+
+	assert_eq(_inspections[0], Targeting.inspection(service.state, own.id, 0))
+	assert_eq(_inspections[0]["ring"], [])
+	assert_eq(_inspections[1], _EMPTY_INSPECTION, "ворожий інженер — ні кільця, ні загрози, ні нижньої межі")

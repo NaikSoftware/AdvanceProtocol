@@ -137,3 +137,13 @@ func test_inspection_does_not_survive_the_handover_gate() -> void:
 		var v: UnitView = _e2e.screen.unit_view_for(id)
 		if v != null:
 			assert_false(v.is_threatened())
+
+
+func test_enemy_engineer_shows_no_ring_and_no_floor() -> void:
+	await _boot(11, TANK)
+	_e2e.tap(TANK)
+	await _e2e.settle()
+	assert_eq(_last["ring"], [], "§3.6: у інженера немає гармати")
+	assert_eq(_rings(), [])
+	assert_false(_view(CAR_POS).is_threatened())
+	assert_false(_floor().is_visible_in_tree())
