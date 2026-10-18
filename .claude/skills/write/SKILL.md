@@ -197,7 +197,7 @@ Title: one Ukrainian phrase naming the user-visible result — no type prefix (r
 | turn | хід | |
 | hot-seat | гра на одному пристрої | |
 | handover gate | гейт передачі | dev word; the UI says «Передайте пристрій» |
-| action points | очки дії, `AP` | UI abbreviation «ОД» |
+| action points | запас ходу, `AP` | owner's term (2026-10-18); never «ОД» / «очки дії» |
 | shot / fire | постріл / вогонь | |
 | retaliation | вогонь у відповідь, постріл у відповідь | military usage |
 | facing | напрям, `facing` | turning = поворот |
@@ -239,7 +239,7 @@ Unit names: the `UNIT_*` rows of `strings.csv` are the source of truth — quote
   ("Heavy Tank").
 - **Periods:** none on buttons, labels, headings; yes on full sentences in dialogs and hints.
 - **Errors** say what is wrong in the player's terms and, if possible, what to do. Never blame
-  ("Ви помилились" ✗). «Недостатньо очок дії», "Not enough action points".
+  ("Ви помилились" ✗). «Недостатньо запасу ходу», "Not enough action points".
 - **Address:** formal «ви», lowercase; better, no pronoun at all: «Матч збережено».
 - **Numbers in templates:** keep the number out of case agreement — «Дронів лишилось: %d», not
   «Лишилось %d дрони».
@@ -252,7 +252,6 @@ outside them — string literals:
 
 - `ERR_*` strings say «сапер»; the unit is «інженер».
 - `pause_surrender_yes` uses a hyphen as a dash: «Так - здатися».
-- «очок дії» (UI) vs «очки дій» (Ukrainian wargame usage) — not settled; keep the UI's form.
 - Assertion messages in `tests/` still carry `ʼ` and old terms (сапер, клітинка, інстанс).
 
 Fix these when you touch the line anyway; don't open a sweep without asking.
