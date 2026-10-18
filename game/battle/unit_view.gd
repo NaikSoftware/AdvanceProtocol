@@ -56,7 +56,7 @@ const _FACE_TURN_DURATION: float = 0.15
 ## Абстрактні кольори гравців-плейсхолдерів (§2 — жодного реального прапора
 ## чи армії). Індекс — Unit.owner. Колір іде лише на корпус (Hull), не на
 ## ствол чи смугу — вони нейтральні для будь-якого власника.
-const _PLAYER_COLORS: Array[Color] = [
+const PLAYER_COLORS: Array[Color] = [
 	Color("3a6ea5"),
 	Color("a54a3a"),
 	Color("5a8a4a"),
@@ -340,7 +340,7 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 	for child in _silhouette.get_children():
 		child.free()
 
-	var built := UnitSilhouettes.build(type_id, _PLAYER_COLORS[owner % _PLAYER_COLORS.size()])
+	var built := UnitSilhouettes.build(type_id, PLAYER_COLORS[owner % PLAYER_COLORS.size()])
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)
