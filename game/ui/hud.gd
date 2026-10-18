@@ -87,6 +87,12 @@ var _shown_player: int = -1
 @onready var _inspector: UnitInspector = %Inspector
 ## Верби інженера (Task 8) — лише для свого інженера активного гравця.
 @onready var _engineer_panel: EngineerPanel = %EngineerPanel
+## Дроновий удар (Task 10) — окрема кнопка, межі шкоди й радіус з core/.
+@onready var _drone_button: DroneButton = %DroneButton
+@onready var _preview_drone_box: HBoxContainer = %PreviewDroneBox
+@onready var _preview_drone_damage_value: Label = %PreviewDroneDamageValue
+@onready var _drone_range_label: Label = %DroneRangeLabel
+@onready var _drone_reason_label: Label = %DroneReasonLabel
 ## Поля безпеки читаються з того самого вузла, що їх і задає (§9: одне джерело
 ## правди) — панель поза цим контейнером, але поважає ті самі межі, бо виріз
 ## екрана однаково не питає, у контейнері вузол чи ні.
@@ -98,6 +104,8 @@ var _shown_player: int = -1
 
 
 var _last_preview: Dictionary = {}
+## Ключ причини відмови дрона ("" — рядок схований); ключ, а не текст, — для зміни мови.
+var _drone_reason_key: String = ""
 
 
 func _ready() -> void:
@@ -119,6 +127,9 @@ func _notification(what: int) -> void:
 		refresh()
 		if not _last_preview.is_empty():
 			show_preview(_last_preview)
+		_show_drone_reason(_drone_reason_key)
+		if _drone_range_label.visible:
+			_show_drone_range()
 
 
 ## Стан матчу для постійної частини панелі. Тримається посиланням, а не копією:
@@ -191,6 +202,10 @@ func show_preview(preview: Dictionary) -> void:
 			if int(preview["action"]) == EngineerCommand.Action.REPAIR_UNIT:
 				_preview_heal_value.text = "%d–%d" % [int(preview["heal_min"]), int(preview["heal_max"])]
 				_preview_repair_box.visible = true
+		InputController.ActionType.DRONE:
+			# Броня ігнорується (§3.9) — сектора немає, лише межі з Rules.drone_damage_bounds().
+			_preview_drone_damage_value.text = "%d–%d" % [int(preview["min"]), int(preview["max"])]
+			_preview_drone_box.visible = true
 		InputController.ActionType.SHOT:
 			var sector: int = int(preview["sector"])
 			_preview_sector_value.text = tr(UnitInspector.SECTOR_KEYS[sector])
@@ -221,6 +236,13 @@ func attach_controller(controller: InputController) -> void:
 	controller.targets_changed.connect(func(tiles: Array[Vector2i]) -> void:
 		_engineer_panel.set_armed(not tiles.is_empty()))
 	controller.action_refused.connect(_engineer_panel.show_reason)
+	_drone_button.pressed.connect(controller.arm_drone)
+	controller.drone_armed.connect(func(_ring: Array[Vector2i], _marks: Dictionary) -> void: _show_drone_range())
+	# disarm() завжди шле targets_changed — радіус дрона гасне разом із режимом.
+	controller.targets_changed.connect(func(_tiles: Array[Vector2i]) -> void: _drone_range_label.visible = false)
+	controller.action_refused.connect(func(reason: String) -> void:
+		if _drone_button.visible:
+			_show_drone_reason(reason))
 
 
 ## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.
@@ -262,6 +284,9 @@ func _render_selection() -> void:
 	_engineer_panel.visible = own_engineer
 	if own_engineer:
 		_engineer_panel.show_for(_state, _selected_unit)
+	# Дрон — дія, тож лише свій загін активного гравця; залишок чужого видно в рядку дронів.
+	var own: bool = _selected_unit != null and _state != null and _selected_unit.owner == _state.active_player
+	_drone_button.show_for(_selected_unit if own else null)
 	if _selected_unit == null:
 		_selection_row.visible = false
 		_inspector.clear()
@@ -353,6 +378,8 @@ func _clear_preview() -> void:
 	_preview_shot_box.visible = false
 	_preview_move_box.visible = false
 	_preview_repair_box.visible = false
+	_preview_drone_box.visible = false
+	_show_drone_reason("")
 	_confirm_button.disabled = true
 	_inspector.highlight_sector(UnitInspector.NO_SECTOR)
 
@@ -375,3 +402,14 @@ func _on_cancel_pressed() -> void:
 
 func _on_end_turn_pressed() -> void:
 	end_turn_pressed.emit()
+
+
+func _show_drone_range() -> void:
+	_drone_range_label.text = tr("hud_drone_range") % DroneCommand.RANGE
+	_drone_range_label.visible = true
+
+
+func _show_drone_reason(key: String) -> void:
+	_drone_reason_key = key
+	_drone_reason_label.text = tr(key) if key != "" else ""
+	_drone_reason_label.visible = key != ""

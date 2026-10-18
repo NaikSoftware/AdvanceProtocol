@@ -545,3 +545,17 @@ func test_silhouette_fits_one_tile() -> void:
 		assert_lte(hi.z - lo.z, 1.0, "z типу %d" % id)
 		assert_gte(lo.y, 0.0, "низ типу %d" % id)
 		root.free()
+
+
+## Task 10: заборонена ціль дрона (піхота) — окрема позначка, не приціл.
+func test_set_forbidden_toggles_its_own_mark_and_bind_clears_it() -> void:
+	view.bind(_unit(0))
+	assert_false(view._forbidden.visible, "свіжий вузол не позначений")
+	view.set_forbidden(true)
+	assert_true(view._forbidden.visible)
+	assert_false(view._crosshair.visible, "заборона — не приціл")
+	view.set_forbidden(false)
+	assert_false(view._forbidden.visible)
+	view.set_forbidden(true)
+	view.bind(_unit(0))
+	assert_false(view._forbidden.visible, "bind() знімає позначку — режим дрона перебудову не переживає")

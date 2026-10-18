@@ -119,6 +119,30 @@ func test_hud_repair_preview_fits_with_collapsed_panel(p = use_parameters(_repai
 		[] as Array[String], where)
 
 
+## Task 10: озброєний дрон — кнопка, межі шкоди, радіус і причина відмови разом —
+## влазить на кожен розмір обома мовами, кнопка ≥ 48 і не налазить на сусідні.
+func test_hud_drone_controls_fit(p = use_parameters(_repair_cases())) -> void:
+	TranslationServer.set_locale(p[1])
+	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
+	var hud := root as Hud
+	hud.show_preview({"type": InputController.ActionType.DRONE, "unit_id": 1, "target_id": 2, "min": 120, "max": 180})
+	hud._show_drone_range()
+	hud._show_drone_reason("ERR_DRONE_CANNOT_TARGET_INFANTRY")
+	await LayoutProbe.settle(self)
+	var where: String = "%s %s" % p
+	var drone: Control = root.get_node("%DroneButton")
+	assert_true(drone.is_visible_in_tree(), where)
+	for n: String in ["%PreviewDroneBox", "%DroneRangeLabel", "%DroneReasonLabel"]:
+		assert_true((root.get_node(n) as Control).is_visible_in_tree(), "%s %s" % [n, where])
+	assert_true(drone.size.x >= 48.0 and drone.size.y >= 48.0, where)
+	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
+	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
+	assert_eq(LayoutProbe.overlapping([root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")] as Array[Control]),
+		[] as Array[String], where)
+	assert_eq(LayoutProbe.overlapping([drone, root.get_node("%CancelButton"), root.get_node("%ConfirmButton"),
+		root.get_node("%EndTurnButton"), root.get_node("%EngineerPanel")] as Array[Control]), [] as Array[String], where)
+
+
 func _repair_cases() -> Array:
 	var out: Array = []
 	for size: Vector2i in LayoutProbe.SIZES:

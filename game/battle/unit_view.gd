@@ -96,12 +96,16 @@ const _DEBUG_ARROW_Y_OFFSET: float = 0.02
 ## Константа продубльована, а не імпортована з game/ui/: вигляд дошки не
 ## залежить від HUD — тест звіряє обидва значення й упаде, якщо вони розійдуться.
 const _CROSSHAIR_COLOR: Color = Color("ff7a4a")
+## Заборонена ціль дрона (§3.13): хрест, а не приціл, і інший колір — «сюди не можна»
+## мусить читатись інакше, ніж «сюди прилетить».
+const _FORBIDDEN_COLOR: Color = Color("d23c3c")
 
 ## Поточний факінг (0..7, порядок Board.DIRS_8). Читається ззовні для UI цілей.
 var facing: int = 0
 
 @onready var _silhouette: Node3D = $Silhouette
 @onready var _crosshair: Sprite3D = $Crosshair
+@onready var _forbidden: Sprite3D = $Forbidden
 @onready var _hp_bar: Sprite3D = $HpBar
 @onready var _hp_label: Label3D = $HpLabel
 @onready var _drone_icon: Sprite3D = $DroneIcon
@@ -127,6 +131,8 @@ func _ready() -> void:
 	# одне місце, де живе _CROSSHAIR_COLOR, і його видно в інспекторі.
 	_crosshair.texture = _crosshair_texture()
 	_crosshair.modulate = _CROSSHAIR_COLOR
+	_forbidden.texture = _cross_texture()
+	_forbidden.modulate = _FORBIDDEN_COLOR
 
 
 func bind(unit: Unit) -> void:
@@ -143,6 +149,7 @@ func bind(unit: Unit) -> void:
 	# InputController і перебудову не переживає — лишити приціл увімкненим
 	# означало б показувати намір, якого вже немає.
 	set_targeted(false)
+	set_forbidden(false)
 
 
 ## Баг-звіт (виправлення 3): «вибираю танк, вказую їхати вперед — він їде
@@ -319,6 +326,12 @@ func set_targeted(targeted: bool) -> void:
 	_crosshair.visible = targeted
 
 
+## Ціль, яку озброєний дрон бити не може (піхота, §3.9). Рішення — з
+## Targeting.drone_marks() крізь battle_screen; вузол лише показує.
+func set_forbidden(on: bool) -> void:
+	_forbidden.visible = on
+
+
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed(), і два
 ## твіни на одну властивість змагались би на пострілі, який убиває.
 func play_shot() -> Signal:
@@ -436,6 +449,22 @@ static func _crosshair_texture(size: int = 32) -> ImageTexture:
 			)
 			if on_ring or on_tick:
 				image.set_pixel(x, y, Color.WHITE)
+	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]
+
+
+## Діагональний хрест — той самий біло-прозорий прийом, що й приціл.
+static func _cross_texture(size: int = 32) -> ImageTexture:
+	var key: Array = ["forbid", size]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(1.0, 1.0, 1.0, 0.0))
+	var thickness: int = maxi(1, size / 10)
+	for i in range(thickness, size - thickness):
+		for t in range(-thickness, thickness + 1):
+			image.set_pixel(clampi(i + t, 0, size - 1), i, Color.WHITE)
+			image.set_pixel(clampi(size - 1 - i + t, 0, size - 1), i, Color.WHITE)
 	_texture_cache[key] = ImageTexture.create_from_image(image)
 	return _texture_cache[key]
 

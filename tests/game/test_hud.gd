@@ -320,13 +320,27 @@ func test_no_user_facing_label_is_a_hard_coded_literal() -> void:
 	assert_gt(texts.size(), 15, "обхід дерева мусить справді щось знайти, інакше тест порожній")
 	var numeric_re := RegEx.create_from_string("^[0-9 /.%–-]+$")
 	var known := _csv_keys_and_locale("uk")
+	# Task 10: «Дрон (2)» — uk-значення «Дрон (%d)» із числом, теж переклад.
+	var formats: Array[RegEx] = []
+	for k: String in known:
+		if k.contains("%d"):
+			formats.append(RegEx.create_from_string("^" + _regex_escape(k).replace("%d", "[0-9]+") + "$"))
 	for text in texts:
 		if text.is_empty() or numeric_re.search(text) != null:
+			continue
+		if formats.any(func(r: RegEx) -> bool: return r.search(text) != null):
 			continue
 		assert_true(known.has(text),
 			"«%s» — не число, не ключ і не uk-переклад (§9, R29)" % text)
 
 	TranslationServer.set_locale(prev_locale)
+
+
+func _regex_escape(t: String) -> String:
+	var out := ""
+	for c in t:
+		out += "\\" + c if "\\^$.|?*+()[]{}".contains(c) else c
+	return out
 
 
 ## Ключі CSV плюс переклади ОДНІЄЇ мови — оракул для R29. Читається з файлу, а не з

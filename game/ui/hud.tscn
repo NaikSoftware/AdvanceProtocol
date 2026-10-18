@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://game/ui/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://game/ui/unit_inspector.tscn" id="2_inspector"]
 [ext_resource type="PackedScene" path="res://game/ui/engineer_panel.tscn" id="3_engineer"]
+[ext_resource type="Script" path="res://game/ui/drone_button.gd" id="4_drone"]
 
 [node name="Hud" type="Control"]
 anchor_right = 1.0
@@ -144,6 +145,29 @@ text = "hud_heal"
 [node name="PreviewHealValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewRepairBox"]
 unique_name_in_owner = true
 
+[node name="PreviewDroneBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+theme_override_constants/separation = 8
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="PreviewDroneDamageCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewDroneBox"]
+text = "hud_damage"
+
+[node name="PreviewDroneDamageValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewDroneBox"]
+unique_name_in_owner = true
+
+[node name="DroneRangeLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+size_flags_vertical = 4
+
+[node name="DroneReasonLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+size_flags_vertical = 4
+
 [node name="ButtonRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
 size_flags_horizontal = 10
 theme_override_constants/separation = 16
@@ -153,6 +177,12 @@ mouse_filter = 2
 unique_name_in_owner = true
 custom_minimum_size = Vector2(48, 64)
 text = "hud_cancel"
+
+[node name="DroneButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(48, 64)
+script = ExtResource("4_drone")
 
 [node name="ConfirmButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
 unique_name_in_owner = true
