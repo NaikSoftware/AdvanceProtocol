@@ -8,7 +8,7 @@ script = ExtResource("1_rig")
 [node name="Yaw" type="Node3D" parent="."]
 
 [node name="Camera3D" type="Camera3D" parent="Yaw"]
-position = Vector3(0, 8.694, 8.271)
+position = Vector3(0, 16.224, 15.434)
 rotation_degrees = Vector3(-46.43, 0, 0)
 current = true
-fov = 53.130102
+fov = 30.0

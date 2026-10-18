@@ -686,6 +686,33 @@ func test_inspector_never_covers_the_action_buttons() -> void:
 		"панель %s заїхала на рядок кнопок (його верх — %s): кнопку підтвердження мусить бути видно" % [panel, bar_top])
 
 
+## Перспектива: точка позаду площини камери дзеркалиться unproject_position()
+## угору екрана — панель стрибала б під верхню смугу, хоча юніт далеко ВНИЗУ.
+func test_inspector_clamps_to_the_bottom_when_its_unit_is_behind_the_camera() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(11, 11), 0)
+	var rig: IsoCameraRig = _rig_for(u)
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	simulate(rig, 240, 1.0 / 60.0)
+	assert_eq(rig.zoom_level, IsoCameraRig.MIN_ZOOM, "передумова: найближчий зум")
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.show_selection(u)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	for i in 50:
+		rig.pan(Vector2(0.0, 300.0))
+
+	var cam: Camera3D = rig.get_node("Yaw/Camera3D")
+	assert_true(cam.is_position_behind(IsoCameraRig.cell_to_world(u.pos) + Vector3(0.0, Hud.INSPECTOR_LIFT, 0.0)),
+		"передумова: юніт позаду площини камери")
+	var bar: Control = hud.get_node("%BottomBar")
+	var bar_top: float = bar.get_global_rect().position.y - hud.get_global_rect().position.y
+	assert_eq(_inspector().position.y, bar_top - _inspector().size.y,
+		"панель мусить притиснутись до рядка кнопок унизу, а не до верхньої смуги")
+
+
 func _repair_preview(heal_min: int, heal_max: int) -> Dictionary:
 	return {"type": InputController.ActionType.ENGINEER, "unit_id": 1, "action": EngineerCommand.Action.REPAIR_UNIT,
 		"target": Vector2i(4, 3), "heal_min": heal_min, "heal_max": heal_max}
