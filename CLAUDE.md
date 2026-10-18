@@ -221,8 +221,10 @@ at all times, offsetting off-road penalty. Roads are never affected — that is 
 
 - **Movement zones: always on**, selected unit only, drawn as two nested **contours** rather than
   filled tiles, so terrain and battle scars stay visible underneath.
-- **Fire radius: on demand** — tap a unit to see its reach. **Any visible unit, including an
-  enemy's**, because with retaliation "is it safe to shoot this" is the central question of a turn.
+- **Fire radius: on demand** — press and hold a unit to see its reach, release to hide it; a tap
+  never shows it. Drawn as a **circle** of the weapon's range, with a crosshair on each unit it can
+  hit. **Any visible unit, including an enemy's**, because with retaliation "is it safe to shoot
+  this" is the central question of a turn.
 - An enemy's marks ignore its AP and are computed from **that unit alone**, never from its owner's
   vision network — the network is hidden, and drawing from it would reveal unseen spotters. The
   forecast is therefore **a floor, not a ceiling**, and the UI must say so.

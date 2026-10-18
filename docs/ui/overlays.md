@@ -17,13 +17,21 @@ test (`remaining_ap >= fire_cost`). It colours them green and red; this project 
 from §3.2, because red/green is the most common colour-vision deficiency and the two zones are the
 primary UI of the game.
 
-**The fire radius is on demand: tap a unit to see its reach.** Not always on — it would sit on top
-of both movement zones as a third overlay on a phone screen. Movement is what you are choosing
-continuously; range is a question you ask occasionally. The reference makes the same split, with
-range bound to hold-a-key.
+**The fire radius is on demand: press and hold a unit to see its reach, release to hide it.** Not
+always on — it would sit on top of both movement zones as a third overlay on a phone screen.
+Movement is what you are choosing continuously; range is a question you ask occasionally. The
+reference makes the same split, with range bound to hold-a-key; a long press is that key on a
+touch screen. **A tap never shows a ring** — a tap selects, aims, moves and turns; the hold only
+looks, and changes nothing: no selection, no move, no turn, no preview.
+
+**The ring is a geometric circle, not a contour of tiles** — as in the reference, one outline of
+radius `range` tiles centred on the middle of the unit's tile. It is the weapon's reach as the
+rule states it (§3.1, Euclidean). Which units can actually be hit inside it is what the **marks**
+say: a crosshair on each marked unit. The circle is cheap to read at a glance and does not compete
+with the two movement contours, which stay tile-shaped.
 
 **Any visible unit can be inspected, including an enemy's.** This is the feature worth porting.
-Tapping an enemy shows *its* range and which of **your** units stand inside it. With retaliation
+Holding an enemy shows *its* range and which of **your** units stand inside it. With retaliation
 ([§3.3.1](../rules/combat.md)) that is not a convenience, it is the information the central decision of a turn rests on:
 firing on a healthy target inside its range invites a full-strength answer, and you cannot judge
 that without seeing the answer's reach. Fog still applies — a unit standing on ground you have
@@ -31,11 +39,11 @@ never scouted cannot be inspected ([§3.5](../rules/vision-and-fog.md)). Note th
 bar than it sounds: once the ground has been scouted, the enemy on it stays inspectable whether or
 not anyone of yours is still watching.
 
-**The ring belongs to the unit last tapped, whatever is selected** — as in the reference, where the
-peek draws for the unit under the cursor and falls back to the selected unit over empty ground.
-Tapping an enemy while your unit is selected shows that enemy's ring and marks *and*, if the shot
-is legal, the shot preview; the movement zones stay. Tapping empty ground puts the ring back on the
-selected unit. Asking "will it answer me" is the same tap as aiming at it.
+**The ring belongs to the unit under the finger, whatever is selected** — as in the reference,
+where the peek draws for the unit under the cursor and falls back to the selected unit over empty
+ground. Holding an enemy while your unit is selected shows that enemy's ring and marks; the
+selection, its movement zones and any pending preview stay as they were. Holding empty ground
+shows the selected unit's ring, and nothing when nothing is selected.
 
 **Forecast the answer against your front, not your current facing.** Firing turns the shooter onto
 its target first, so retaliation always lands frontally. Quoting a side or rear figure here would be
@@ -124,8 +132,9 @@ is in practice threatening everything inside its circle. The UI copy must not pr
 "these are certainly in danger"; a player who reads the unmarked tiles as safe will be wrong, and
 increasingly wrong the longer the match goes on.
 
-Both computations belong in `core/` and neither may be re-derived in the view. **The envelope is a
-range circle intersected with the observer's `seen` grid** ([§3.5](../rules/vision-and-fog.md)) —
+Both computations belong in `core/` and neither may be re-derived in the view — the ring's radius
+included, which `core/` hands over alongside the marks. **What may be fired on is the range circle
+intersected with the observer's `seen` grid** ([§3.5](../rules/vision-and-fog.md)) —
 *not* a circle intersected with a vision diamond, which is what this paragraph used to say and what
 a renderer would most plausibly guess. The diamond appears in exactly one place here: the marks
 inside an enemy's ring, which are deliberately computed from that unit alone. A second

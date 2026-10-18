@@ -104,9 +104,11 @@ Two rules about using it:
   unit **under the cursor** — the hit test filters on alive and not-fogged, with no ownership
   check — falling back to the player's own selected unit when the cursor is over empty ground. The
   circle itself is gated on nothing else: a unit with 0 AP still shows it. The target crosshairs
-  inside it *are* AP-gated. [§3.13](../ui/overlays.md) adopts the on-demand split and the enemy inspection, remaps the
-  interaction to a tap because there is no cursor or key-hold on a touch screen, and departs on the
-  AP gate for enemies with the reason given there.
+  inside it *are* AP-gated. [§3.13](../ui/overlays.md) adopts the on-demand split, the enemy inspection, the fallback to the
+  selected unit and the drawing itself — a single red `drawArc` outline of radius `range × tile
+  width`, centred on the tile centre, with sprite `field_24[120]` as a crosshair on each markable
+  enemy (`GameCanvas.java:2574-2594`, range test `class_3.java:188-199`). It remaps the held key
+  to a long press, and departs on the AP gate for enemies with the reason given there.
 
 - **The original's own stat tables violate two of [§3.6](../rules/units.md)'s invariants.** Its max-AP table makes the
   **heavy tank the fastest** of all four tanks (56, against the medium's 44), and its armour table
