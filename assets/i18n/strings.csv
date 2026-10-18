@@ -52,6 +52,7 @@ hud_range,Дальність,Range
 hud_vision,Огляд,Vision
 hud_attack,Атака,Attack
 hud_damage,Шкода,Damage
+hud_heal,Ремонт,Repair
 hud_drones,Дрони,Drones
 hud_class,Клас,Class
 hud_confirm,Підтвердити,Confirm

@@ -306,3 +306,26 @@ func test_repair_bounds_bracket_actual_roll() -> void:
 		rng.seed = s
 		var r: int = EngineerCommand.repair_amount(rng, e)
 		assert_true(r >= b.x and r <= b.y, "seed %d: %d" % [s, r])
+
+## Прихована міна ворога поруч із власним інженером: begin_turn розкриває її
+## гравцеві (known_to), а LAY/CLEAR_MINE бачать її так само, як відому — жодної
+## окремої поведінки для «нерозкритої».
+func test_enemy_mine_next_to_engineer_is_known_after_begin_turn_and_statuses_match() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.add_unit(5, 1, Vector2i(9, 9), 0)
+	Mines.place(state, Vector2i(4, 3), 1)
+	state.begin_turn()
+	var mine = Mines.mine_at(state, Vector2i(4, 3))
+	assert_true(mine.known_to[0])
+	var lay: Dictionary = EngineerCommand.action_status(state, e.id, A.LAY_MINE)
+	var clear: Dictionary = EngineerCommand.action_status(state, e.id, A.CLEAR_MINE)
+	# еталон: те саме, коли міна відома заздалегідь
+	var s2: BattleState = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 2, 21)
+	s2.active_player = 0
+	var e2: Unit = s2.add_unit(11, 0, Vector2i(4, 4), 0)
+	Mines.place(s2, Vector2i(4, 3), 1)
+	Mines.mine_at(s2, Vector2i(4, 3)).known_to[0] = true
+	assert_eq(lay, EngineerCommand.action_status(s2, e2.id, A.LAY_MINE))
+	assert_eq(clear, EngineerCommand.action_status(s2, e2.id, A.CLEAR_MINE))
+	assert_false(lay["tiles"].has(Vector2i(4, 3)))
+	assert_true(clear["tiles"].has(Vector2i(4, 3)))
