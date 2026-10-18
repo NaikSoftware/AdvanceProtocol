@@ -11,10 +11,21 @@ const SCREENS: Array[String] = [
 ## Основний вміст меню на WIDE: той самий розмір, що на ПК, — не тягнеться.
 const CAPPED_CONTENT: Dictionary = {
 	"res://game/ui/main_menu.tscn": "SafeArea/Scroll/Row/MenuColumn",
-	"res://game/ui/match_setup.tscn": "SafeArea/Scroll/Center/Card",
-	"res://game/ui/settings_screen.tscn": "SafeArea/Scroll/Center/Card",
+	"res://game/ui/match_setup.tscn": "SafeArea/Frame/Scroll/Center/Card",
+	"res://game/ui/settings_screen.tscn": "SafeArea/Frame/Scroll/Center/Card",
 	"res://game/ui/pause_menu.tscn": "Scroll/Center/Card",
-	"res://game/ui/results_screen.tscn": "SafeArea/Scroll/Center/Card",
+	"res://game/ui/results_screen.tscn": "SafeArea/Frame/Scroll/Center/Card",
+}
+
+## Головні дії екрана: гравець не сміє їх шукати прокруткою. Для паузи —
+## обидва стани картки (звичайний і підтвердження «Здатися»).
+const PRIMARY_ACTIONS: Dictionary = {
+	"res://game/ui/main_menu.tscn": ["%NewMatchButton"],
+	"res://game/ui/match_setup.tscn": ["%BackButton", "%StartButton"],
+	"res://game/ui/settings_screen.tscn": ["%BackButton"],
+	"res://game/ui/results_screen.tscn": ["%ToMenuButton", "%RematchButton"],
+	"res://game/ui/pause_menu.tscn": ["%ResumeButton", "%SettingsButton", "%SaveQuitButton", "%SurrenderButton"],
+	"pause_confirm": ["%ConfirmYesButton", "%ConfirmCancelButton"],
 }
 
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
@@ -115,3 +126,27 @@ func test_hud_bottom_bar_wraps_only_when_it_must(p = use_parameters(
 func _info_row_height(root: Control) -> float:
 	return maxf((root.get_node("%SelectionRow") as Control).size.y,
 		(root.get_node("%PreviewShotBox") as Control).size.y)
+
+
+func _primary_cases() -> Array:
+	var out: Array = []
+	for key: String in PRIMARY_ACTIONS:
+		for size: Vector2i in LayoutProbe.SIZES:
+			for locale: String in LOCALES:
+				out.append([key, size, locale])
+	return out
+
+
+func test_primary_actions_never_need_scrolling(p = use_parameters(_primary_cases())) -> void:
+	TranslationServer.set_locale(p[2])
+	var key: String = p[0]
+	var confirm: bool = key == "pause_confirm"
+	var scene: String = "res://game/ui/pause_menu.tscn" if confirm else key
+	var root: Control = await _mount(scene, p[1])
+	if confirm:
+		root.get_node("%SurrenderButton").pressed.emit()
+		await LayoutProbe.settle(self)
+	var buttons: Array[Control] = []
+	for path: String in PRIMARY_ACTIONS[key]:
+		buttons.append(root.get_node(path) as Control)
+	assert_eq(LayoutProbe.clipped(root, buttons, p[1]), [] as Array[String], "%s @ %s %s" % p)

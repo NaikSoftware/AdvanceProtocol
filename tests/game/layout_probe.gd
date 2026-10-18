@@ -56,6 +56,24 @@ static func _inside_scroll(root: Control, c: Control) -> bool:
 	return false
 
 
+## Кнопки, яких не видно без прокрутки: прямокутник виходить за Viewport або за
+## будь-який ScrollContainer-предок у його нинішньому (початковому) положенні.
+static func clipped(root: Control, buttons: Array[Control], size: Vector2i) -> Array[String]:
+	var screen := Rect2(Vector2.ZERO, size).grow(0.5)
+	var out: Array[String] = []
+	for b: Control in buttons:
+		var rect: Rect2 = b.get_global_rect()
+		var ok: bool = b.is_visible_in_tree() and screen.encloses(rect)
+		var n: Node = b.get_parent()
+		while ok and n != null and n != root.get_parent():
+			if n is ScrollContainer:
+				ok = (n as Control).get_global_rect().grow(0.5).encloses(rect)
+			n = n.get_parent()
+		if not ok:
+			out.append("%s %s" % [root.get_path_to(b), rect])
+	return out
+
+
 static func small_targets(root: Control, min_px: float = 48.0) -> Array[String]:
 	var out: Array[String] = []
 	for c: Control in _visible_controls(root):

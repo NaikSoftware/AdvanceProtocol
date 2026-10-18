@@ -32,31 +32,36 @@ theme_override_constants/margin_top = 32
 theme_override_constants/margin_right = 48
 theme_override_constants/margin_bottom = 32
 
-[node name="Scroll" type="ScrollContainer" parent="SafeArea"]
+[node name="Frame" type="VBoxContainer" parent="SafeArea"]
 layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Scroll" type="ScrollContainer" parent="SafeArea/Frame"]
+layout_mode = 2
+size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="Center" type="CenterContainer" parent="SafeArea/Scroll"]
+[node name="Center" type="CenterContainer" parent="SafeArea/Frame/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="Card" type="PanelContainer" parent="SafeArea/Scroll/Center"]
+[node name="Card" type="PanelContainer" parent="SafeArea/Frame/Scroll/Center"]
 custom_minimum_size = Vector2(620, 0)
 layout_mode = 2
 
-[node name="Body" type="VBoxContainer" parent="SafeArea/Scroll/Center/Card"]
+[node name="Body" type="VBoxContainer" parent="SafeArea/Frame/Scroll/Center/Card"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="Title" type="Label" parent="SafeArea/Scroll/Center/Card/Body"]
+[node name="Title" type="Label" parent="SafeArea/Frame/Scroll/Center/Card/Body"]
 layout_mode = 2
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.6, 0.64, 0.68, 1)
 theme_override_font_sizes/font_size = 20
 text = "results_title"
 
-[node name="Winner" type="Label" parent="SafeArea/Scroll/Center/Card/Body"]
+[node name="Winner" type="Label" parent="SafeArea/Frame/Scroll/Center/Card/Body"]
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
@@ -64,35 +69,35 @@ theme_override_colors/font_color = Color(0.95, 0.9, 0.74, 1)
 theme_override_font_sizes/font_size = 40
 text = "results_winner"
 
-[node name="Sep" type="HSeparator" parent="SafeArea/Scroll/Center/Card/Body"]
+[node name="Sep" type="HSeparator" parent="SafeArea/Frame/Scroll/Center/Card/Body"]
 layout_mode = 2
 
-[node name="Table" type="GridContainer" parent="SafeArea/Scroll/Center/Card/Body"]
+[node name="Table" type="GridContainer" parent="SafeArea/Frame/Scroll/Center/Card/Body"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/h_separation = 24
 theme_override_constants/v_separation = 10
 columns = 3
 
-[node name="Gap" type="Control" parent="SafeArea/Scroll/Center/Card/Body"]
-custom_minimum_size = Vector2(0, 8)
+[node name="FooterRow" type="CenterContainer" parent="SafeArea/Frame"]
 layout_mode = 2
 
-[node name="Footer" type="HBoxContainer" parent="SafeArea/Scroll/Center/Card/Body"]
+[node name="Footer" type="HBoxContainer" parent="SafeArea/Frame/FooterRow"]
+custom_minimum_size = Vector2(620, 0)
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="ToMenuButton" type="Button" parent="SafeArea/Scroll/Center/Card/Body/Footer"]
+[node name="ToMenuButton" type="Button" parent="SafeArea/Frame/FooterRow/Footer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(160, 52)
 layout_mode = 2
 text = "results_to_menu"
 
-[node name="Spacer" type="Control" parent="SafeArea/Scroll/Center/Card/Body/Footer"]
+[node name="Spacer" type="Control" parent="SafeArea/Frame/FooterRow/Footer"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="RematchButton" type="Button" parent="SafeArea/Scroll/Center/Card/Body/Footer"]
+[node name="RematchButton" type="Button" parent="SafeArea/Frame/FooterRow/Footer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(160, 52)
 layout_mode = 2
