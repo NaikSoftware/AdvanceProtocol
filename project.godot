@@ -53,7 +53,7 @@ cloud_shadow_strength={
 "type": "float",
 "value": 0.0
 }
-sky_fallback={
+sky_reflection_gain={
 "type": "float",
 "value": 1.0
 }

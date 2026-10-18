@@ -11,8 +11,10 @@ extends MeshInstance3D
 const WATER_Y: float = 0.02
 
 const _SHADER: Shader = preload("res://game/battle/shaders/water.gdshader")
+## Дві карти нормалей брижі (tools/water_normals.py), стиснені з міпмапами.
+const _WAVE_A: Texture2D = preload("res://assets/water/water_normal_a.png")
+const _WAVE_B: Texture2D = preload("res://assets/water/water_normal_b.png")
 
-var _wave_normal: NoiseTexture2D
 
 
 func build(board: Board, margin: int, kind_map: ImageTexture) -> void:
@@ -37,19 +39,6 @@ func build(board: Board, margin: int, kind_map: ImageTexture) -> void:
 	layers = 1
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
-	if _wave_normal == null:
-		var noise := FastNoiseLite.new()
-		noise.frequency = 0.02
-		noise.fractal_octaves = 3
-		_wave_normal = NoiseTexture2D.new()
-		_wave_normal.width = 256
-		_wave_normal.height = 256
-		_wave_normal.seamless = true
-		_wave_normal.as_normal_map = true
-		_wave_normal.bump_strength = 4.0
-		_wave_normal.generate_mipmaps = true
-		_wave_normal.noise = noise
-
 	var mat := ShaderMaterial.new()
 	mat.shader = _SHADER
 	mat.set_shader_parameter("kind_map", kind_map)
@@ -57,7 +46,8 @@ func build(board: Board, margin: int, kind_map: ImageTexture) -> void:
 	mat.set_shader_parameter("water_kind", Terrain.Kind.WATER)
 	mat.set_shader_parameter("bridge_kind", Terrain.Kind.BRIDGE)
 	mat.set_shader_parameter("broken_bridge_kind", Terrain.Kind.BRIDGE_DESTROYED)
-	mat.set_shader_parameter("wave_normal", _wave_normal)
+	mat.set_shader_parameter("wave_a", _WAVE_A)
+	mat.set_shader_parameter("wave_b", _WAVE_B)
 	# shortcut: одна вісь течії на карту, бо річки на картах прямі; для звивистої
 	# річки — напрямок із карти видів на фрагмент.
 	mat.set_shader_parameter("flow_dir", Vector2(1, 0) if along_x >= along_y else Vector2(0, 1))

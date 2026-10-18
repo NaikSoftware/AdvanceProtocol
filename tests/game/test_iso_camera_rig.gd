@@ -401,11 +401,13 @@ func test_screen_point_to_cell_degrades_safely_when_the_ray_never_meets_the_boar
 func test_camera_is_perspective() -> void:
 	var camera: Camera3D = rig.get_node("Yaw/Camera3D")
 	assert_eq(camera.projection, Camera3D.PROJECTION_PERSPECTIVE)
+	assert_eq(IsoCameraRig.FOV_DEG, 42.0)
+	assert_eq(camera.fov, 42.0)
 
 func test_pitch_eases_with_zoom() -> void:
-	assert_eq(IsoCameraRig.PITCH_NEAR_DEG, 40.0)
+	assert_eq(IsoCameraRig.PITCH_NEAR_DEG, 38.0)
 	assert_eq(IsoCameraRig.PITCH_FAR_DEG, 55.0)
-	assert_eq(rig.pitch_for(IsoCameraRig.MIN_ZOOM), 40.0)
+	assert_eq(rig.pitch_for(IsoCameraRig.MIN_ZOOM), 38.0)
 	assert_eq(rig.pitch_for(IsoCameraRig.MAX_ZOOM), 55.0)
 
 func _settle_at(zoom: float) -> void:

@@ -65,19 +65,13 @@ float ripple_visibility(vec2 p) {
 	return 1.0 - smoothstep(0.1, 0.3, px);
 }
 
-// Запасне похмуре небо для води й калюж, поки в сцені немає справжнього (Task 10):
-// без нього зонд знімає лише сіре тло, і вода чорна. Лінійні кольори: обрій
-// ~sRGB 130, зеніт ~100, плюс хмарні плями, щоб відбиття лягало смугами.
-vec3 overcast_sky(vec3 r) {
-	float up = clamp(r.y, 0.0, 1.0);
-	vec3 c = mix(vec3(0.21, 0.22, 0.235), vec3(0.12, 0.13, 0.14), sqrt(up));
-	return c * (0.85 + 0.3 * fbm(r.xz / max(r.y, 0.08) * 0.6));
-}
+#include "res://game/battle/shaders/overcast_sky.gdshaderinc"
 
-// Відбиття запасного неба з френелем Шліка; n і v — світові й нормалізовані.
-vec3 overcast_reflection(vec3 n, vec3 v, float f0, float power) {
+// Відбиття похмурого неба з френелем Шліка; n і v — світові й нормалізовані,
+// t — секунди (дрейф хмар).
+vec3 overcast_reflection(vec3 n, vec3 v, float f0, float power, float t) {
 	float f = f0 + (1.0 - f0) * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), power);
-	return overcast_sky(reflect(-v, n)) * f;
+	return overcast_sky_at(reflect(-v, n), t) * f;
 }
 
 // Нахил нормалі у світовому xz -> NORMAL_MAP площини (дотична +X, бінормаль −Z).

@@ -11,4 +11,4 @@ script = ExtResource("1_rig")
 position = Vector3(0, 16.224, 15.434)
 rotation_degrees = Vector3(-46.43, 0, 0)
 current = true
-fov = 30.0
+fov = 42.0

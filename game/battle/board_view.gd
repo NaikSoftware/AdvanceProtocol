@@ -49,6 +49,8 @@ var _water: WaterSurface
 ## новий знімок посеред партії міг би захопити тимчасові вузли на дошці.
 ## §3.5: шар юнітів (UnitView.UNIT_LAYER) у cull_mask не входить ніколи.
 var _probe: ReflectionProbe
+## Скільки разів зонд просили зняти світ (створення + кожна перебудова) — для тестів.
+var probe_captures_requested: int = 0
 ## ТИМЧАСОВО, до мостів Task 8 (бетонний проліт на опорах або понтони): клітинки
 ## під плоским настилом і вісь дороги кожної — читаються тестами.
 var _placeholder_bridge_deck_cells: Array[Vector2i] = []
@@ -113,8 +115,8 @@ func build(board: Board) -> void:
 
 	_build_placeholder_bridge_deck(board)
 
-	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз: будь-яка
-	# зміна size/position/origin_offset перезняла б зонд посеред партії.
+	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз; перезйомку
+	# після перебудови просить rebuild_tiles явно (_request_probe_capture).
 	if _probe == null:
 		_probe = ReflectionProbe.new()
 		_probe.name = "ReflectionProbe"
@@ -128,6 +130,7 @@ func build(board: Board) -> void:
 		_probe.position = Vector3((board.width - 1) * 0.5, 5.0, (board.height - 1) * 0.5)
 		_probe.origin_offset = Vector3(0.0, -3.5, 0.0)
 		add_child(_probe)
+		probe_captures_requested += 1
 
 ## Малює контур шару з тонких рисок, а не заливкою тайлів (§3.13: «контур,
 ## не заливка» — і зони руху, і шлях мусять лишати місцевість та бойові сліди під
@@ -185,6 +188,7 @@ func rebuild_tiles(board: Board) -> void:
 	var kept: Dictionary = _contour_segments.duplicate()
 	var kept_circles: Dictionary = _circles.duplicate()
 	build(board)
+	_request_probe_capture()
 	for layer: int in kept:
 		var segs: Array[Dictionary] = []
 		segs.assign(kept[layer])
@@ -344,6 +348,8 @@ func _add_placeholder_multimesh(node_name: String, transforms: Array[Transform3D
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = node_name
 	mmi.multimesh = mm
+	# Земля не кидає динамічних тіней (§8): тінь — лише юнітам.
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mmi)
 
 
@@ -365,3 +371,12 @@ static func _bridge_axis(board: Board, cell: Vector2i) -> Vector2i:
 			best = axis
 			best_score = score
 	return best
+
+
+## Перезнімає світ один раз (підірваний чи відновлений міст мусить бути й у
+## відбитті). Безпечно посеред партії: накладки (OVERLAY_LAYER), юніти
+## (UnitView.UNIT_LAYER) і міни (MineLayer.MARKER_LAYER) — поза маскою зонда.
+## Повторне присвоєння UPDATE_ONCE знову позначає зонд у RenderingServer до зйомки.
+func _request_probe_capture() -> void:
+	_probe.update_mode = ReflectionProbe.UPDATE_ONCE
+	probe_captures_requested += 1

@@ -8,8 +8,8 @@ render_mode blend_mix, cull_back;
 
 global uniform float weather_wetness;
 global uniform float cloud_shadow_strength;
-// 1 — запасне похмуре небо у відбитті калюж і мокрого берега (див. water.gdshader).
-global uniform float sky_fallback;
+// Сила власного відбиття неба в калюжах і на мокрому березі (див. water.gdshader).
+global uniform float sky_reflection_gain;
 
 uniform sampler2D kind_map : filter_nearest, repeat_disable;
 // Клітинка, що відповідає пікселю (0, 0) kind_map (від'ємна при відступі).
@@ -25,7 +25,7 @@ const int FIELD = 1;
 const int HILL = 3;
 const int FOREST = 2;
 const int MUD = 5;
-// Шар берега — лише під WATER і BRIDGE_DESTROYED (GroundSurface.TEX_LAYER_FOR_KIND).
+// Шар берега (русла) — під WATER, BRIDGE і BRIDGE_DESTROYED (GroundSurface.TEX_LAYER_FOR_KIND).
 const int BANK = 7;
 
 // Підсилення альбедо шару: лісова підстилка з Task 4 майже чорна (середнє 55
@@ -207,8 +207,8 @@ void fragment() {
 	rough = mix(rough, 0.12 + 0.1 * wet * (1.0 - rv), puddle);
 	nxy = mix(nxy, ripple, puddle);
 	float mirror = max(puddle, shore * 0.5);
-	vec3 refl = mirror > 0.0 && sky_fallback > 0.0
-			? overcast_reflection(slope_to_world(ripple), normalize(CAMERA_POSITION_WORLD - world_pos), 0.03, 3.0)
+	vec3 refl = mirror > 0.0 && sky_reflection_gain > 0.0
+			? overcast_reflection(slope_to_world(ripple), normalize(CAMERA_POSITION_WORLD - world_pos), 0.03, 3.0, TIME)
 			: vec3(0.0);
 
 	if (cloud_shadow_strength > 0.0) {
@@ -217,7 +217,7 @@ void fragment() {
 	}
 
 	ALBEDO = alb;
-	EMISSION = refl * mirror * sky_fallback;
+	EMISSION = refl * mirror * sky_reflection_gain;
 	ROUGHNESS = rough;
 	NORMAL_MAP = vec3(nxy * 0.5 + 0.5, 1.0);
 }

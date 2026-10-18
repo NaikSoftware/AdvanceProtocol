@@ -1,16 +1,22 @@
-// Річка (Phase 5a, Task 6). Темна вода під дощем; відбиття — не екранний прохід
-// (без SSR, §8): радіанс зонда BoardView приходить звичайним шляхом освітлення
-// (низька шорсткість), а поки сцена без неба, власне похмуре небо додає
-// overcast_reflection під глобальним sky_fallback. Зонд не бачить шару юнітів,
-// тож у воді не буває прихованого ворога.
+// Річка (Phase 5a, Task 6). Похмура вода згори здебільшого відбиває небо: зблизька
+// темний сіро-бірюзовий сланець, здалеку — сріблястий блиск, найсвітліша смуга
+// краєвиду; темна смуга відбитого берега вздовж обох берегів. Від трави її
+// відділяє блиск, гладкість і мокра смуга берега, а не темрява.
+//
+// Відбиття — не екранний прохід (без SSR, §8): радіанс зонда BoardView приходить
+// звичайним шляхом освітлення, а основне відбиття — небо SkyRig, яке вода бере
+// напряму з тієї самої функції overcast_sky_at під глобальним sky_reflection_gain.
+// Зонд не бачить шару юнітів, тож у воді не буває прихованого ворога.
 shader_type spatial;
 // specular_disabled: під похмурим небом сонячного відблиску немає, а на дрібній
-// брижі він запалював однопіксельні іскри. Відбиття (зонд і запасне небо) лишаються.
+// брижі він запалював однопіксельні іскри. Відбиття (зонд і небо) лишаються.
 render_mode blend_mix, cull_back, depth_draw_never, specular_disabled;
 
 global uniform float weather_wetness;
-// 1 — запасне небо у відбитті; погода (Task 10) гасить його, коли дасть справжнє.
-global uniform float sky_fallback;
+// Сила власного відбиття неба. Вбудоване відбиття Godot для діелектрика не
+// перевищує ~16 % (SPECULAR = 1), і з ним річка темна; тому небо відбиваємо самі.
+// Погода (Task 10) може приглушити, типово 1.
+global uniform float sky_reflection_gain;
 
 uniform sampler2D kind_map : filter_nearest, repeat_disable;
 // Клітинка, що відповідає пікселю (0, 0) kind_map (від'ємна при відступі).
@@ -21,15 +27,27 @@ uniform int broken_bridge_kind = 9;
 uniform int bridge_kind = 8;
 // Вісь течії (одна на карту, WaterSurface.build).
 uniform vec2 flow_dir = vec2(1.0, 0.0);
-// Спільна карта нормалей, яку семплюємо двічі в різних масштабах і напрямках.
-uniform sampler2D wave_normal : hint_normal, filter_linear_mipmap, repeat_enable;
-uniform vec3 deep_color : source_color = vec3(0.05, 0.056, 0.058);
-uniform vec3 shallow_color : source_color = vec3(0.09, 0.08, 0.06);
-// Френель сильніший за водяний (F0 0.02, степінь 5): зверху під 40–55° справжня
-// вода майже не відбиває, а ціль читається саме відбитим небом удалині.
-uniform float fresnel_f0 = 0.03;
-uniform float fresnel_power = 3.0;
-uniform float reflection_gain = 1.6;
+// Дві карти нормалей брижі (tools/water_normals.py); масштаб задає fragment():
+// A — брижа ~0.6–1 м, B — ~0.25–0.4 м.
+uniform sampler2D wave_a : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D wave_b : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+// Тіло води (лінійні кольори): темна оливково-буро-сіра смуга біля берега — там у
+// воді відбивається сам берег — і сланцева глибина.
+uniform vec3 shallow_color : source_color = vec3(0.05, 0.048, 0.036);
+uniform vec3 deep_color : source_color = vec3(0.06, 0.068, 0.066);
+// Відбите небо в річці — приглушене сіро-бірюзове, не бузкове.
+uniform vec3 reflection_tint : source_color = vec3(0.95, 1.0, 0.96);
+// Частка неба у відбитті згори й під пологим кутом. Справжня вода згори відбиває
+// ~3 %, але справжнє похмуре небо в рази яскравіше за землю; небо тут
+// приглушене, тож частка завищена, щоб вода читалась як у цілі — небом.
+uniform float reflect_top = 0.26;
+uniform float reflect_grazing = 0.7;
+// Здалеку річка під похмурим небом блищить — найсвітліша смуга краєвиду; зблизька
+// лишається темним сланцем. Підсилення відбиття на віддаленні (MAX zoom).
+uniform float far_sheen = 1.2;
+// Один широкий м'який відблиск світлої частини неба: висота над обрієм і сила.
+uniform float glint_elevation_deg = 42.0;
+uniform float glint_strength = 0.9;
 
 varying vec3 world_pos;
 
@@ -57,42 +75,72 @@ void fragment() {
 		discard;
 	}
 	// Біля урізу вага росте ~3.4 на клітинку: 0.5 -> 0.72 — це зовнішні ~0.5 м
-	// мілини, де вода тоншає до нуля; глибина темніє до ~1 м від берега.
+	// мілини, де вода тоншає до нуля; темна смуга відбитого берега — ~1.5 м.
 	float shallow_fade = smoothstep(0.5, 0.72, w);
-	float depth = smoothstep(0.55, 0.85, w);
+	// Відстань від урізу в метрах (вага ~3.4 на клітинку = 8 м) і каламуть біля
+	// берега за законом Бугера–Ламберта, exp(-2·d): ~0.13 за метр від берега.
+	float bank_m = max(w - 0.5, 0.0) * 2.35;
+	float murk = exp(-2.0 * bank_m);
 
-	// Масштаб: клітинка = 8 м; карта шуму має ~5 плям на повтор.
-	// Кадр течії: a — уздовж, c — упоперек річки.
+	// Кадр течії: x — уздовж, y — упоперек річки. Масштаб: клітинка = 8 м.
 	vec2 fdir = normalize(flow_dir);
 	vec2 fperp = vec2(-fdir.y, fdir.x);
 	vec2 fp = vec2(dot(p, fdir), dot(p, fperp));
-	// Смуги течії: повтор 6.7 клітинки уздовж і 1.25 упоперек — плями ~11 x 2 м
-	// витягнуті за течією; 0.5 м/с.
-	vec2 s1 = texture(wave_normal, fp * vec2(0.15, 0.8) + vec2(TIME * 0.009, 0.0)).rg * 2.0 - 1.0;
-	// Дрібна брижа: повтор 0.3 клітинки, пляма ~0.06 (0.5 м), зносить течією 0.3 м/с.
-	vec2 s2 = texture(wave_normal, fp * 3.3 + vec2(TIME * 0.13, TIME * 0.02)).rg * 2.0 - 1.0;
-	// Назад із кадру течії у світовий xz.
-	vec2 n1 = fdir * s1.x + fperp * s1.y;
-	vec2 n2 = fdir * s2.x + fperp * s2.y;
+	// Дрібна брижа від вітру, не хвилі: річка 16 м завширшки при слабкому вітрі.
+	// Два шари однієї природи, 75/25: A — повтор 1 клітинка вздовж і 1.5 упоперек
+	// (гребені в 1.5 раза довші впоперек течії, ~0.5–0.8 м між ними), 0.8 м/с; B — ~0.25–0.4 м
+	// (0.5 x 0.67 клітинки), трохи повернутий і повільніший, щоб шари не злипались.
+	// Легке хитання UV (0.01) прибирає відчуття стрічки конвеєра.
+	vec2 wob = 0.01 * vec2(sin(fp.y * 3.0 + TIME * 0.7), cos(fp.x * 2.3 + TIME * 0.5));
+	vec2 ta = texture(wave_a, fp * vec2(1.0, 0.67) + wob + vec2(TIME * 0.1, 0.0)).rg * 2.0 - 1.0;
+	mat2 rot = mat2(vec2(0.985, 0.174), vec2(-0.174, 0.985));
+	vec2 tb = texture(wave_b, rot * fp * vec2(2.0, 1.5) - wob + vec2(TIME * 0.15, 0.0)).rg * 2.0 - 1.0;
+	// Розтяг упоперек течії зменшує нахил уздовж неї в 1.5 раза — повертаємо.
+	vec2 sf = (ta * 0.75 + tb * 0.25) * vec2(0.4, 0.27);
+	// Здалеку (піксель > ~0.1 м) гребені стишуються: інакше на віддаленні вони
+	// складаються в правильну «пральну дошку».
+	sf *= mix(1.0, 0.35, smoothstep(0.022, 0.045, length(fwidth(p))));
+	vec2 slope = fdir * sf.x + fperp * sf.y;
 	float wet = clamp(weather_wetness, 0.0, 1.0);
 	float rv = ripple_visibility(p);
-	vec2 slope = n1 * 0.45 + n2 * (0.25 + 0.2 * wet) + rain_ripples(p, TIME) * 1.2 * wet * rv;
+	slope += rain_ripples(p, TIME) * 2.0 * wet * rv;
 
+	vec3 n = slope_to_world(slope);
 	vec3 v = normalize(CAMERA_POSITION_WORLD - world_pos);
-	vec3 refl = overcast_reflection(slope_to_world(slope), v, fresnel_f0, fresnel_power);
-
-	ALBEDO = mix(shallow_color, deep_color, depth);
-	// Підлога 0.1, а не 0.04: так радіанс зонда не дрібниться на іскри.
-	// Здалеку дощ — дрібне мерехтіння: шорсткість замість рябі.
-	ROUGHNESS = 0.1 + 0.1 * wet * (1.0 - rv);
-	SPECULAR = 0.5;
-	NORMAL_MAP = slope_to_normal_map(slope);
-	vec3 e = refl * reflection_gain * sky_fallback * shallow_fade;
+	float f = mix(reflect_top, reflect_grazing, pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0));
+	// Ледь помітна довга мінливість (~5–15 м), що повільно пливе: вода не рівна,
+	// але без видимих гребенів — лише ±18 % відбиття.
+	float slow = vnoise(fp * vec2(0.6, 0.9) - vec2(TIME * 0.05, 0.0));
+	f *= 0.82 + 0.36 * slow;
+	// Біля берега у воді відбивається сам берег, а не небо: темна смуга ~1–2 м.
+	f *= 1.0 - 0.7 * exp(-1.2 * bank_m);
+	// Піксель ~0.08 м (MIN zoom) -> 0, ~0.3 м (MAX zoom) -> 1.
+	float far = smoothstep(0.012, 0.04, length(fwidth(p)));
+	vec3 sky = overcast_sky_at(reflect(-v, n), TIME) * (1.0 + far_sheen * far);
+	// Відблиск: світліша частина неба перед камерою. Напрямок — від осі камери
+	// (поворот камери сталий), тож пляма стоїть на екрані, а вода пливе під нею, як
+	// справжній відблиск при панорамуванні. Широка пляма з пригладженої нормалі —
+	// без однопіксельних іскор.
+	vec3 fwd = -INV_VIEW_MATRIX[2].xyz;
+	vec2 fh = normalize(fwd.xz);
+	float el = radians(glint_elevation_deg);
+	vec3 gdir = vec3(fh.x * cos(el), sin(el), fh.y * cos(el));
+	vec3 r_soft = reflect(-v, slope_to_world(slope * 0.3));
+	float lobe = pow(max(dot(r_soft, gdir), 0.0), 4.0);
+	sky += vec3(0.24, 0.25, 0.26) * glint_strength * lobe;
+	vec3 e = sky * reflection_tint * f * sky_reflection_gain * shallow_fade;
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
 	// Виміряно: gl_compatibility виводить EMISSION без лінійного -> sRGB (0.5 дає
 	// 128, а не 188), тож тут кодуємо самі, інакше вода там чорна.
 	e = pow(e, vec3(1.0 / 2.2));
 #endif
+
+	ALBEDO = mix(deep_color, shallow_color, murk) * (1.0 - f);
+	// Підлога 0.1, а не 0.04: так радіанс зонда не дрібниться на іскри.
+	// Здалеку дощ — дрібне мерехтіння: шорсткість замість рябі.
+	ROUGHNESS = 0.1 + 0.1 * wet * (1.0 - rv);
+	SPECULAR = 0.5;
+	NORMAL_MAP = slope_to_normal_map(slope);
 	EMISSION = e;
 	ALPHA = shallow_fade * 0.96;
 }

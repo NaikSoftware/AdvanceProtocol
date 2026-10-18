@@ -156,10 +156,14 @@ func test_a_drag_is_never_a_long_press() -> void:
 	await _boot(MEDIUM_TANK, TANK)
 	var from: Vector2 = _e2e.px(TANK)
 	_e2e._mouse_button(from, true)
+	# Тягнемо до центру екрана, не вправо: за FOV 42° танк біля правого краю, і
+	# +60 px потрапляли на смугу прокрутки вікна виводу GUT (x ≥ 1258), яка
+	# з'являється, лише коли виводу вже багато, і з'їдає рух миші.
+	var shift: Vector2 = (get_viewport().get_visible_rect().get_center() - from).normalized() * 60.0
 	var mv := InputEventMouseMotion.new()
-	mv.position = from + Vector2(60, 0)
+	mv.position = from + shift
 	mv.global_position = mv.position
-	mv.relative = Vector2(60, 0)
+	mv.relative = shift
 	mv.button_mask = MOUSE_BUTTON_MASK_LEFT
 	get_viewport().push_input(mv, true)
 	_e2e.screen._process(BattleScreen.LONG_PRESS_SEC * 2.0)

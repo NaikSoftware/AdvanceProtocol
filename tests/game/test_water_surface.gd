@@ -222,11 +222,13 @@ func test_flow_axis_follows_the_river() -> void:
 	assert_eq(mat.get_shader_parameter("flow_dir"), Vector2(0, 1), "вертикальна річка — вздовж Z")
 
 
-## Поки сцена без неба (Task 10), вода й калюжі відбивають власне похмуре небо;
-## погода гасить його глобальним uniform, щоб із справжнім небом не було подвійного.
-func test_sky_fallback_is_a_global_uniform_on_by_default() -> void:
-	assert_true(ProjectSettings.has_setting("shader_globals/sky_fallback"))
-	var entry: Dictionary = ProjectSettings.get_setting("shader_globals/sky_fallback", {})
+## Вода й калюжі відбивають небо SkyRig напряму, з власною силою відбиття:
+## вбудоване відбиття Godot для діелектрика не перевищує ~16 %. Сила — глобальний
+## uniform, який погода (Task 10) може приглушити; типово 1.
+func test_sky_reflection_gain_is_a_global_uniform_on_by_default() -> void:
+	assert_false(ProjectSettings.has_setting("shader_globals/sky_fallback"), "стару назву прибрано")
+	assert_true(ProjectSettings.has_setting("shader_globals/sky_reflection_gain"))
+	var entry: Dictionary = ProjectSettings.get_setting("shader_globals/sky_reflection_gain", {})
 	assert_eq(entry.get("type"), "float")
 	assert_eq(entry.get("value"), 1.0)
 
@@ -269,3 +271,43 @@ func test_rebuild_tiles_leaves_the_probe_box_unchanged() -> void:
 	assert_eq(probe.size, Vector3(30, 12, 26))
 	assert_eq(probe.position, Vector3(12.5, 5.0, 10.5))
 	assert_eq(probe.origin_offset, Vector3(0.0, -3.5, 0.0))
+
+
+## Дві власні карти нормалей (tools/water_normals.py), імпортовані як стиснені
+## в пам'яті відеокарти карти нормалей з міпмапами — не процедурний шум у шейдері.
+func test_wave_normals_are_vram_compressed_normal_maps() -> void:
+	view.build(_river())
+	var mat: ShaderMaterial = _waters()[0].material_override
+	for param: String in ["wave_a", "wave_b"]:
+		var tex: Texture2D = mat.get_shader_parameter(param)
+		assert_not_null(tex, param)
+		if tex == null:
+			continue
+		assert_string_starts_with(tex.resource_path, "res://assets/water/water_normal_")
+		var cfg := ConfigFile.new()
+		assert_eq(cfg.load(tex.resource_path + ".import"), OK)
+		assert_eq(cfg.get_value("params", "compress/mode"), 2, param + ": VRAM")
+		assert_eq(cfg.get_value("params", "compress/normal_map"), 1, param + ": карта нормалей")
+		assert_eq(cfg.get_value("params", "mipmaps/generate"), true, param + ": міпмапи")
+
+
+## Земля не кидає динамічних тіней (§8), тимчасові мости теж.
+func test_placeholder_bridges_cast_no_shadow() -> void:
+	var board := _river()
+	board.set_kind(Vector2i(4, 10), Terrain.Kind.BRIDGE_DESTROYED)
+	view.build(board)
+	for node_name: String in ["PlaceholderBridgeDeck", "PlaceholderBridgeRuin"]:
+		var mmi: MultiMeshInstance3D = view.get_node(node_name)
+		assert_eq(mmi.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, node_name)
+
+
+## Перебудова (підірваний міст) просить зонд перезняти світ, щоб руїни були й у
+## відбитті. Безпечно: накладки, юніти й міни — поза його маскою.
+func test_rebuild_tiles_requests_a_probe_recapture() -> void:
+	var board := _river()
+	view.build(board)
+	var before: int = view.probe_captures_requested
+	board.set_kind(Vector2i(12, 10), Terrain.Kind.BRIDGE_DESTROYED)
+	view.rebuild_tiles(board)
+	assert_eq(view.probe_captures_requested, before + 1)
+	assert_eq(view.reflection_probe().update_mode, ReflectionProbe.UPDATE_ONCE)
