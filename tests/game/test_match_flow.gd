@@ -87,6 +87,16 @@ func test_new_match_starts_behind_the_gate() -> void:
 
 ## Карта зі зламаним напрямом: populate() відмовляє й не додає юнітів. Матч не
 ## починається — повернення в меню, а не порожня дошка без кінця.
+func test_board_takes_ground_state_from_the_map() -> void:
+	var m: MapData = _map()
+	m.ground_state = Terrain.GroundState.MUD
+	var service: Node = _service()
+
+	assert_true(_screen().setup(m, 2, 1, service))
+
+	assert_eq(service.state.board.ground_state, Terrain.GroundState.MUD)
+
+
 func test_broken_map_refuses_to_start_and_returns_to_menu() -> void:
 	var service: Node = _service()
 	var screen: BattleScreen = _screen()
@@ -179,7 +189,7 @@ func test_continue_without_or_with_broken_save_fails_without_crashing() -> void:
 		"невдале завантаження ховає «Продовжити»")
 
 
-func test_rematch_after_continue_reuses_saved_map_path() -> void:
+func test_rematch_after_continue_reuses_saved_map_path_and_restores_saved_board() -> void:
 	var a: Node = _service()
 	a.configure(MAP_PATH, 2, 3)
 	_screen().launch(a)
