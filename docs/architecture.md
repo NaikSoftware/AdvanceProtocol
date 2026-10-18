@@ -66,7 +66,6 @@ core/                    # pure rules — no Node, no scene tree, no rendering
   targeting.gd           # read-only queries behind the board overlays (§3.13)
   mines.gd
   objectives.gd
-  experience.gd
   battle_serializer.gd
   commands/
   events.gd

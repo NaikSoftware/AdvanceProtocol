@@ -151,12 +151,10 @@ func test_mine_can_kill_and_end_the_match() -> void:
 	assert_true(ended)
 
 func test_mine_damage_is_credited_to_the_mine_owner() -> void:
-	# Інженер досвіду не має (§3.7), тож шкода міни йде лише в damage_dealt власника.
+	# Шкода міни йде в damage_dealt власника міни.
 	Mines.place(state, Vector2i(5, 5), 0)
 	var u: Unit = state.add_unit(5, 1, Vector2i(5, 5), 0)
 	var before: int = u.hp
 	Mines.step_on(state, u)
 	assert_eq(state.damage_dealt[0], before - u.hp)
 	assert_eq(state.damage_dealt[1], 0)
-	for c in UnitTypes.UnitClass.values():
-		assert_eq(state.experience[0].xp[c], 0, "досвід від міни не росте")

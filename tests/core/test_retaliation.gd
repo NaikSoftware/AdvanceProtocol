@@ -195,16 +195,16 @@ func test_retaliators_ap_is_zeroed_and_marked_fired() -> void:
 	assert_true(t.has_fired)
 
 # ---------------------------------------------------------------------------
-# 7. Retaliation damage feeds the retaliator's own class experience pool.
-func test_retaliation_damage_feeds_retaliators_class_pool() -> void:
+# 7. Retaliation damage is credited to the retaliator's owner.
+func test_retaliation_damage_is_credited_to_the_retaliators_owner() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 6)
 	state.begin_turn()
 	state.refresh_vision(t.owner)
-	assert_eq(state.experience[1].xp[UnitTypes.UnitClass.TANK], 0)
+	assert_eq(state.damage_dealt[1], 0)
 	FireCommand.create(a.id, t.id).apply(state)
-	assert_true(state.experience[1].xp[UnitTypes.UnitClass.TANK] > 0,
-		"шкода від відповіді йде в пул власника-відповідача (гравець 1), а не стрільця")
+	assert_true(state.damage_dealt[1] > 0,
+		"шкода від відповіді йде на рахунок власника-відповідача (гравець 1), а не стрільця")
 
 # ---------------------------------------------------------------------------
 # 8. A drone strike also provokes retaliation when the target can reach.
