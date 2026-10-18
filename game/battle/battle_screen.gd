@@ -72,12 +72,8 @@ var _event_player: EventPlayer = null
 var _unit_views: Dictionary = {}
 
 ## R13/§3.13: поріг, за яким затиснутий палець/ЛКМ перестає бути тапом і стає
-## паном камери. ~10dp, переведений у логічні пікселі `Viewport` діленням на
-## content_scale_factor вікна (_drag_threshold_px() нижче — і коментар там
-## же пояснює, чому саме ділення, не множення). Судження без усталеного
-## прецеденту в проєкті (жоден інший файл ще не рахував dp) — винесено в
-## окрему функцію нижче, щоб рішення було одним місцем, а не розмазаним по
-## обробниках подій.
+## паном камери. ~10dp = 10 логічних px, бо UiScale тримає логічний px ≈ dp
+## (_drag_threshold_px() нижче) — одне місце, а не розмазане по обробниках.
 const _DRAG_THRESHOLD_DP: float = 10.0
 
 ## Крок зуму коліщатка/пінчу за одну подію. zoom_by() сам клемпить
@@ -627,17 +623,11 @@ func _end_pointer_press(screen_pos: Vector2) -> void:
 	_handle_tap_at_screen_position(_press_screen_pos)
 
 
-## dp -> пікселі логічного простору події: `content_scale_factor` — властивість
-## `Window`, не базового `Viewport` (звернення через get_viewport() впало б,
-## якби цю сцену колись поклали в SubViewport, де такого поля нема), і при
-## факторі > 1 події приходять у МЕНШОМУ логічному просторі, тож фіксований
-## dp-поріг ділиться на фактор, а не множиться — множення давало поріг у
-## кілька разів товщий за задумані ~10dp і саме на це відкат.
+## UiScale (Task 4.1) робить логічний px ≈ dp, тож поріг у dp — це вже логічні
+## пікселі події; ділення на content_scale_factor дало б на телефоні з
+## фактором 1.627 лише ~6 dp замість задуманих 10.
 func _drag_threshold_px() -> float:
-	var factor: float = get_window().content_scale_factor
-	if factor <= 0.0:
-		factor = 1.0
-	return _DRAG_THRESHOLD_DP / factor
+	return _DRAG_THRESHOLD_DP
 
 
 ## Екранна геометрія (промінь -> тайл) живе в IsoCameraRig (game/camera/,

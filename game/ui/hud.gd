@@ -90,7 +90,7 @@ var _shown_player: int = -1
 ## Рядок дій — і нижня межа для панелі характеристик. Поля безпеки самі по собі
 ## тут не рятують: кнопки живуть УСЕРЕДИНІ них, а панель малюється поверх усього
 ## HUD, тож «влізла в безпечну зону» й «не накрила кнопки» — різні твердження.
-@onready var _bottom_bar: HBoxContainer = %BottomBar
+@onready var _bottom_bar: HFlowContainer = %BottomBar
 
 
 var _last_preview: Dictionary = {}
