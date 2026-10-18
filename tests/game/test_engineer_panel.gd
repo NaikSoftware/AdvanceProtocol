@@ -9,10 +9,16 @@ const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 const ENGINEER: int = 11
 const A := EngineerCommand.Action
 
-## Golden: підписи кнопок англійською (назва · fire_cost 30), у порядку EngineerCommand.Action.
+## Golden: підписи кнопок англійською, у порядку EngineerCommand.Action. Без ціни:
+## кожна верба коштує той самий fire_cost — рядок ціни був шумом (власник).
 const EN_LABELS: Array[String] = [
-	"Lay mine · 30 AP", "Clear mine · 30 AP", "Repair bridge · 30 AP", "Demolish bridge · 30 AP",
-	"Repair unit · 30 AP",
+	"Lay mine", "Clear mine", "Repair bridge", "Demolish bridge", "Repair unit",
+]
+## Підказка озброєної верби — що саме тапнути, у тому ж порядку.
+const EN_HINTS: Array[String] = [
+	"Tap an adjacent tile to lay a mine", "Tap an adjacent mine to clear it",
+	"Tap an adjacent broken bridge to repair it", "Tap an adjacent bridge to demolish it",
+	"Tap an adjacent friendly unit to repair it",
 ]
 ## Верби цілей на панелі немає: механіку цілей прибирає окрема задача (рішення власника).
 const VERBS: Array[int] = [A.LAY_MINE, A.CLEAR_MINE, A.REPAIR_BRIDGE, A.DEMOLISH_BRIDGE, A.REPAIR_UNIT]
@@ -46,7 +52,7 @@ func _panel() -> EngineerPanel:
 	return p
 
 
-func test_five_buttons_with_ap_cost() -> void:
+func test_five_buttons_without_ap_cost() -> void:
 	var e: Unit = _engineer()
 	var p: EngineerPanel = _panel()
 	p.show_for(_service.state, e)
@@ -90,7 +96,7 @@ func test_engineer_panel_relabels_on_locale_change() -> void:
 	await get_tree().process_frame
 	p.show_for(_service.state, e)
 	p.button_for(A.CLEAR_MINE).pressed.emit()
-	assert_eq(p.button_for(A.LAY_MINE).text, "Поставити міну · 30 ОД")
+	assert_eq(p.button_for(A.LAY_MINE).text, "Поставити міну")
 	TranslationServer.set_locale("en")
 	await get_tree().process_frame
 	assert_eq(p.button_for(A.LAY_MINE).text, EN_LABELS[0])
@@ -154,3 +160,17 @@ func test_armed_panel_collapses_to_strip_with_cancel() -> void:
 	p.set_armed(false)
 	assert_true((p.get_node("%Scroll") as Control).visible)
 	assert_false((p.get_node("%Strip") as Control).visible)
+
+
+func test_armed_verb_shows_what_to_tap() -> void:
+	var p: EngineerPanel = _panel()
+	p.show_for(_service.state, _engineer())
+	var hint: Label = p.get_node("%HintLabel")
+	assert_false(hint.visible, "не озброєно — підказки нема")
+	for i in VERBS.size():
+		p._chosen = VERBS[i]  # верба вибрана; доступність тут не важить
+		p.set_armed(true)
+		assert_true(hint.visible, EN_HINTS[i])
+		assert_eq(hint.text, EN_HINTS[i])
+		p.set_armed(false)
+		assert_false(hint.visible)

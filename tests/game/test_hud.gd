@@ -724,3 +724,33 @@ func test_arming_a_verb_over_a_pending_move_clears_the_hud_preview() -> void:
 	controller.arm_engineer(EngineerCommand.Action.LAY_MINE)
 	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
 	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)
+
+
+## Власник: «Скасувати» видно лише тоді, коли натиск щось робить — прев'ю дії або
+## озброєна верба чи дрон (InputController.has_cancelable()).
+func test_cancel_button_shown_only_when_it_does_something() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
+	var eng: Unit = state.add_unit(11, 0, Vector2i(6, 6), 0)
+	state.add_unit(5, 1, Vector2i(9, 9), 0)
+	_service.begin()
+	_service.take_events()
+	var controller := InputController.new(_service, SpyZoneOverlay.new())
+	hud.bind(state)
+	hud.attach_controller(controller)
+	var cancel: Button = hud.get_node("%CancelButton")
+	assert_false(cancel.visible, "нічого не вибрано")
+	controller.select_unit(u)
+	assert_false(cancel.visible, "лише вибір")
+	controller.tap_cell(Vector2i(4, 3))
+	assert_true(cancel.visible, "прев'ю руху")
+	cancel.pressed.emit()
+	assert_false(cancel.visible, "скасовано")
+	controller.tap_cell(Vector2i(4, 3))
+	(hud.get_node("%ConfirmButton") as Button).pressed.emit()
+	assert_false(cancel.visible, "підтверджено")
+	controller.select_unit(eng)
+	controller.arm_engineer(EngineerCommand.Action.LAY_MINE)
+	assert_true(cancel.visible, "озброєна верба")
+	controller.select_unit(null)
+	assert_false(cancel.visible, "вибір знято")

@@ -58,6 +58,11 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(48, 48)
 text = "hud_cancel"
 
+[node name="HintLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+visible = false
+autowrap_mode = 3
+
 [node name="ReasonLabel" type="Label" parent="Root"]
 unique_name_in_owner = true
 visible = false

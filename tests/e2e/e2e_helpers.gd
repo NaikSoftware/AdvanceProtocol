@@ -205,12 +205,15 @@ func act(from: Vector2i, to: Vector2i) -> void:
 
 
 ## Верба інженера кнопками панелі: вибрати інженера, натиснути вербу, тапнути
-## тайл, підтвердити.
+## тайл, підтвердити. Міна ставиться самим тапом — без підтвердження (власник).
 func engineer_act(from: Vector2i, action: int, to: Vector2i) -> void:
 	tap(from)
 	press(engineer_panel().button_for(action))
 	tap(to)
-	await confirm()
+	if action == EngineerCommand.Action.LAY_MINE:
+		await settle()
+	else:
+		await confirm()
 
 
 func engineer_panel() -> EngineerPanel:
