@@ -117,7 +117,7 @@ func test_full_hud_fits_every_size(p = use_parameters(_sizes_by_locale())) -> vo
 func test_drone_and_threat_floor_fit_every_size(p = use_parameters(_sizes_by_locale())) -> void:
 	var size: Vector2i = p[0]
 	TranslationServer.set_locale(p[1])
-	await _boot(size, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK), _spawn(RIFLE, 1, ENEMY_INF)])
+	await _boot(size, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK), _spawn(ASSAULT, 1, ENEMY_INF)])
 	await _tap(SQUAD)
 	var drone: Control = _node("%DroneButton")
 	assert_true(drone.is_visible_in_tree(), "кнопка дрона: %s" % size)
@@ -138,6 +138,14 @@ func test_drone_and_threat_floor_fit_every_size(p = use_parameters(_sizes_by_loc
 	await _tap(ENEMY_TANK)
 	assert_true(_node("%ThreatFloorLabel").is_visible_in_tree(), "нижня межа: %s" % size)
 	_assert_fits(size, "огляд ворога %s" % size)
+	# Найтісніше: вибраний загін тапає ворожий загін із дронами — довший рядок
+	# «нижня межа» (дрон) і прев'ю пострілу в одному нижньому рядку.
+	await _tap(SQUAD)
+	await _tap(ENEMY_INF)
+	assert_true(_node("%ThreatFloorLabel").is_visible_in_tree(), "нижня межа з вибором: %s" % size)
+	assert_eq((_node("%ThreatFloorLabel") as Label).text, tr("hud_threat_floor_drone"))
+	assert_true(_node("%PreviewShotBox").is_visible_in_tree(), "прев'ю пострілу: %s" % size)
+	_assert_fits(size, "огляд ворога + постріл %s" % size)
 
 
 ## На PHONE_SMALL, з відкритою панеллю інженера, тап у центр смуги дошки вибирає

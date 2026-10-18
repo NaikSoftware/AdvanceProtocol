@@ -685,7 +685,7 @@ func test_tap_enemy_with_nothing_selected_inspects() -> void:
 	assert_eq(_selections.size(), 0, "інспекція ворога — не вибір")
 
 
-func test_tap_enemy_with_unit_selected_still_previews_shot() -> void:
+func test_tap_enemy_with_unit_selected_previews_shot_and_inspects_enemy() -> void:
 	_start()
 	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)
 	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
@@ -697,7 +697,13 @@ func test_tap_enemy_with_unit_selected_still_previews_shot() -> void:
 
 	assert_eq(_previews.size(), 1)
 	assert_eq(_previews[0]["type"], InputController.ActionType.SHOT)
-	assert_eq(_inspections.size(), 0, "прев'ю пострілу не перемикає інспекцію на ворога")
+	assert_eq(_inspections.size(), 1, "кільце — ворога під пальцем, як у референсі")
+	assert_true(_inspections[0]["is_floor"], "огляд ворога — нижня межа")
+	assert_true(_inspections[0]["marked"].has(car.id), "мій броньовик у дальності танка")
+
+	controller.tap_cell(Vector2i(11, 7))
+
+	assert_false(_inspections[-1]["is_floor"], "над порожнім — назад до свого вибраного")
 
 
 func test_own_unit_ring_shown_at_zero_ap() -> void:

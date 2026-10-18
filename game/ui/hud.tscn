@@ -71,6 +71,13 @@ mouse_filter = 2
 unique_name_in_owner = true
 visible = false
 
+[node name="ThreatFloorLabel" type="Label" parent="SafeArea/Layout/Middle"]
+unique_name_in_owner = true
+visible = false
+size_flags_horizontal = 3
+size_flags_vertical = 8
+autowrap_mode = 3
+
 [node name="BottomBar" type="HFlowContainer" parent="SafeArea/Layout"]
 unique_name_in_owner = true
 theme_override_constants/h_separation = 16
@@ -164,11 +171,6 @@ visible = false
 size_flags_vertical = 4
 
 [node name="DroneReasonLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
-unique_name_in_owner = true
-visible = false
-size_flags_vertical = 4
-
-[node name="ThreatFloorLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
 unique_name_in_owner = true
 visible = false
 size_flags_vertical = 4

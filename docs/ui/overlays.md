@@ -31,6 +31,12 @@ never scouted cannot be inspected ([§3.5](../rules/vision-and-fog.md)). Note th
 bar than it sounds: once the ground has been scouted, the enemy on it stays inspectable whether or
 not anyone of yours is still watching.
 
+**The ring belongs to the unit last tapped, whatever is selected** — as in the reference, where the
+peek draws for the unit under the cursor and falls back to the selected unit over empty ground.
+Tapping an enemy while your unit is selected shows that enemy's ring and marks *and*, if the shot
+is legal, the shot preview; the movement zones stay. Tapping empty ground puts the ring back on the
+selected unit. Asking "will it answer me" is the same tap as aiming at it.
+
 **Forecast the answer against your front, not your current facing.** Firing turns the shooter onto
 its target first, so retaliation always lands frontally. Quoting a side or rear figure here would be
 wrong in the one place the number decides whether to open fire at all.

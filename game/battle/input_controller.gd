@@ -171,9 +171,13 @@ func tap_cell(cell: Vector2i) -> void:
 			inspect_clear()
 		return
 
+	# Як у референсі: кільце — юніта під пальцем, хоч би хто був вибраний;
+	# над порожнім — назад до свого вибраного. Прев'ю пострілу від цього не залежить.
 	if tapped != null:
+		inspect_unit(tapped)
 		_maybe_set_pending_shot(state, tapped)
 		return
+	inspect_unit(_selected_unit)
 
 	if _zones != null and _zones.can_reach(cell):
 		_set_pending_move(cell)
