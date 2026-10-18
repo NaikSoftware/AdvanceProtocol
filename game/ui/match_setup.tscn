@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://game/ui/match_setup.gd" id="1_setup"]
 [ext_resource type="Theme" path="res://game/ui/theme/ap_theme.tres" id="2_theme"]
