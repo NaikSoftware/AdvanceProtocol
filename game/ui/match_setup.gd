@@ -47,7 +47,21 @@ func _populate_maps() -> void:
 		if not map_name.ends_with(".tres"):
 			continue
 		_map_paths.append("%s/%s" % [MAPS_DIR, map_name])
-		_map_options.add_item(map_name.trim_suffix(".tres"))
+		_map_options.add_item("")
+	_relabel_maps()
+
+
+## Підписи беруться з name_key карти; вибір тримається за індексом/шляхом, тож
+## зміна мови його не чіпає. Без ключа — ім'я файлу.
+func _relabel_maps() -> void:
+	for i in _map_paths.size():
+		var key: String = (load(_map_paths[i]) as MapData).name_key
+		_map_options.set_item_text(i, tr(key) if key != "" else _map_paths[i].get_file().get_basename())
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and is_node_ready():
+		_relabel_maps()
 
 
 ## Тримачі гравців — не з карти, а з її спавнів: мапа без юнітів третього

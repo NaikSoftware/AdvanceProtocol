@@ -349,9 +349,7 @@ func test_setup_screen_choice_reaches_the_service() -> void:
 	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
 	add_child_autofree(setup)
 	var options: OptionButton = setup.get_node("%MapOptions")
-	for i in options.item_count:
-		if options.get_item_text(i) == MAP_PATH.get_file().get_basename():
-			options.select(i)
+	options.select(setup._map_paths.find(MAP_PATH))
 	(setup.get_node("%Mud") as Button).button_pressed = true
 	var service: Node = _service()
 
@@ -414,6 +412,31 @@ func test_surrender_in_three_player_match_hands_over_to_next_player() -> void:
 	assert_signal_not_emitted(screen, "match_finished")
 	assert_true(screen.get_node("%HandoverGate").visible)
 	assert_false(screen.get_node("%PauseMenu").visible)
+
+
+# --- Task 4.12b: назви карт у селекторі перекладені ------------------------------
+
+func test_map_selector_shows_translated_names_and_keeps_selection_on_locale_switch() -> void:
+	var prev: String = TranslationServer.get_locale()
+	TranslationServer.set_locale("uk")
+	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
+	add_child_autofree(setup)
+	var options: OptionButton = setup.get_node("%MapOptions")
+	var idx: int = setup._map_paths.find(MAP_PATH)
+	options.select(idx)
+	assert_eq(options.get_item_text(idx), "Переправа")
+	assert_eq(options.get_item_text(setup._map_paths.find("res://maps/urban.tres")), "Місто")
+
+	TranslationServer.set_locale("en")
+	setup.notification(Node.NOTIFICATION_TRANSLATION_CHANGED)
+
+	assert_eq(options.get_item_text(idx), "River Crossing")
+	assert_eq(options.get_item_text(setup._map_paths.find("res://maps/urban.tres")), "Urban")
+	assert_eq(options.selected, idx, "вибір не злетів")
+	var service: Node = _service()
+	assert_true(setup.configure_from_choice(service))
+	assert_eq(service.map_path, MAP_PATH)
+	TranslationServer.set_locale(prev)
 
 
 # --- Налаштування: 3 гравці лише на карті з 3 спавнами -----------------------
