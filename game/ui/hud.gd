@@ -103,6 +103,9 @@ func _ready() -> void:
 	_cancel_button.pressed.connect(_on_cancel_pressed)
 	_end_turn_button.pressed.connect(_on_end_turn_pressed)
 	_pause_button.pressed.connect(pause_pressed.emit)
+	resized.connect(_fit_engineer_panel)
+	_bottom_bar.resized.connect(_fit_engineer_panel)
+	_fit_engineer_panel()
 	_clear_preview()
 	_render_selection()
 
@@ -203,6 +206,12 @@ func attach_controller(controller: InputController) -> void:
 	controller.selection_changed.connect(show_selection)
 	controller.action_preview.connect(show_preview)
 	_engineer_panel.action_chosen.connect(controller.arm_engineer)
+	_engineer_panel.cancel_pressed.connect(_on_cancel_pressed)
+	# Озброєна верба згортає панель, щоб не закривати тайли-цілі; відмова по
+	# тапу — у рядку причини.
+	controller.targets_changed.connect(func(tiles: Array[Vector2i]) -> void:
+		_engineer_panel.set_armed(not tiles.is_empty()))
+	controller.action_refused.connect(_engineer_panel.show_reason)
 
 
 ## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.
@@ -317,6 +326,17 @@ func _bottom_bar_top() -> float:
 	if bar.size.y <= 0.0:
 		return size.y - float(_safe_area.get_theme_constant("margin_bottom"))
 	return bar.position.y - get_global_rect().position.y
+
+
+## Висота, що лишається Middle між смугами (поля безпеки, TopBar, BottomBar і
+## відступи Layout), — стеля для панелі інженера. Рахується від розміру HUD, а не
+## від Middle: Middle роздувається мінімумом самої панелі.
+func _fit_engineer_panel() -> void:
+	var layout: VBoxContainer = _safe_area.get_node("Layout")
+	var top: Control = layout.get_node("TopBar")
+	_engineer_panel.max_height = size.y \
+		- float(_safe_area.get_theme_constant("margin_top")) - float(_safe_area.get_theme_constant("margin_bottom")) \
+		- top.size.y - _bottom_bar.size.y - 2.0 * float(layout.get_theme_constant("separation"))
 
 
 func _clear_preview() -> void:

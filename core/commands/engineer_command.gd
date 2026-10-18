@@ -25,10 +25,14 @@ static func repair_bounds(engineer: Unit, target: Unit) -> Vector2i:
 	return Vector2i(mini(20, missing), mini((40 + maxi(0, engineer.ap - engineer.fire_cost())) / 2, missing))
 
 static func action_status(state: BattleState, unit_id: int, action: int) -> Dictionary:
-	## Допустимі сусідні тайли дії та причина відмови (першого сусіда в порядку DIRS_4).
-	## Лише читає стан — правила беруться з validate(), не дублюються.
+	## Допустимі сусідні тайли дії та причина відмови. Лише читає стан — правила
+	## беруться з validate(), не дублюються.
+	## Причина: однакова на всіх сусідах — вона й є (так завжди виходить із причиною
+	## рівня юніта: AP, уже стріляв, не твій хід — validate() перевіряє їх першими);
+	## різні причини тайлів — жодна не головна, тож ERR_NO_ADJACENT_TARGET, а не
+	## випадкова причина першого сусіда в порядку DIRS_4.
 	var tiles: Array[Vector2i] = []
-	var reason: String = ""
+	var reasons: Dictionary = {}
 	var e: Unit = state.get_unit(unit_id)
 	for d in Board.DIRS_4:
 		var p: Vector2i = (e.pos if e != null else Vector2i.ZERO) + d
@@ -37,9 +41,12 @@ static func action_status(state: BattleState, unit_id: int, action: int) -> Dict
 		var r: String = create(unit_id, action, p).validate(state)
 		if r == "":
 			tiles.append(p)
-		elif reason == "":
-			reason = r
-	return {"tiles": tiles, "reason": "" if not tiles.is_empty() else reason}
+		else:
+			reasons[r] = true
+	var reason: String = ""
+	if tiles.is_empty():
+		reason = reasons.keys()[0] if reasons.size() == 1 else "ERR_NO_ADJACENT_TARGET"
+	return {"tiles": tiles, "reason": reason}
 
 func validate(state: BattleState) -> String:
 	if state.is_over():

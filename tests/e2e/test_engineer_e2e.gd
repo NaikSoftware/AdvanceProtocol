@@ -82,12 +82,13 @@ func test_demolish_bridge_with_enemy_on_it() -> void:
 	assert_eq(_e2e.events_of(Events.BridgeChanged).size(), 1)
 
 
-## Міст — перший сусід у порядку DIRS_4 (вгору поза дошкою, далі праворуч), тож
-## причина відмови — саме його.
+## Дошка в один рядок з інженером у куті: міст — його єдиний сусід, тож причина
+## відмови — саме мостова (з кількома сусідами різні причини дали б
+## ERR_NO_ADJACENT_TARGET).
 func test_demolish_refused_with_own_unit_on_bridge() -> void:
-	var eng_pos := Vector2i(2, 0)
-	var bridge := Vector2i(3, 0)
-	await _e2e.boot(10, 3, [_spawn(ENGINEER, 0, eng_pos), _spawn(RIFLE, 0, bridge), _spawn(RIFLE, 1, FAR)],
+	var eng_pos := Vector2i(0, 0)
+	var bridge := Vector2i(1, 0)
+	await _e2e.boot(10, 1, [_spawn(ENGINEER, 0, eng_pos), _spawn(RIFLE, 0, bridge), _spawn(RIFLE, 1, Vector2i(9, 0))],
 		{"tiles": {bridge: Terrain.Kind.BRIDGE}})
 	var eng: Unit = _state().unit_at(eng_pos)
 	_e2e.tap(eng_pos)
@@ -134,3 +135,62 @@ func test_engineer_buttons_hidden_for_non_engineer() -> void:
 	_e2e.tap(ENG)
 	await _e2e.settle()
 	assert_true(panel.is_visible_in_tree())
+
+
+## Рішення контролера: на малому телефоні озброєна верба згортає панель у смужку,
+## і кожен тайл-ціль лишається відкритим для тапу.
+func test_armed_targets_are_tappable_on_small_phone() -> void:
+	var eng_pos := Vector2i(4, 2)
+	await _e2e.boot(10, 5, [_spawn(ENGINEER, 0, eng_pos), _spawn(RIFLE, 1, Vector2i(9, 4))],
+		{"viewport_size": LayoutProbe.PHONE_SMALL})
+	var eng: Unit = _state().unit_at(eng_pos)
+	_e2e.tap(eng_pos)
+	_e2e.press(_e2e.engineer_panel().button_for(A.LAY_MINE))
+	await _e2e.settle()
+	var previews: Array[Dictionary] = []
+	_e2e.screen.input_controller().action_preview.connect(func(pv: Dictionary) -> void: previews.append(pv))
+	var tiles: Array[Vector2i] = EngineerCommand.action_status(_state(), eng.id, A.LAY_MINE)["tiles"]
+	assert_eq(tiles.size(), 4)
+	var screen_rect := Rect2(Vector2.ZERO, Vector2(LayoutProbe.PHONE_SMALL))
+	for t: Vector2i in tiles:
+		var p: Vector2 = _e2e.px(t)
+		assert_true(screen_rect.has_point(p), "%s на екрані: %s" % [t, p])
+		assert_eq(_covering(p), [] as Array[String], "тайл %s @ %s" % [t, p])
+		_e2e.tap(t)
+		await _e2e.settle()
+		assert_eq(previews.back(), {"type": InputController.ActionType.ENGINEER, "unit_id": eng.id,
+			"action": A.LAY_MINE, "target": t})
+
+
+## Усі видимі Control HUD, що перехопили б тап у точці p.
+func _covering(p: Vector2) -> Array[String]:
+	var out: Array[String] = []
+	var hud: Hud = _e2e.hud()
+	for n in hud.find_children("*", "Control", true, false):
+		var c := n as Control
+		if c.is_visible_in_tree() and c.mouse_filter != Control.MOUSE_FILTER_IGNORE and c.get_global_rect().has_point(p):
+			out.append("%s %s" % [hud.get_path_to(c), c.get_global_rect()])
+	return out
+
+
+func test_strip_cancel_and_completed_action_restore_the_panel() -> void:
+	await _boot()
+	var panel: EngineerPanel = _e2e.engineer_panel()
+	_e2e.tap(ENG)
+	_e2e.press(panel.button_for(A.LAY_MINE))
+	await _e2e.settle()
+	assert_true((panel.get_node("%Strip") as Control).visible, "озброєно — смужка")
+	_e2e.tap(Vector2i(7, 1))  # не сусід
+	await _e2e.settle()
+	assert_eq((panel.get_node("%ReasonLabel") as Label).text, tr("ERR_NOT_ADJACENT"))
+	_e2e.press(panel.get_node("%StripCancel"))
+	await _e2e.settle()
+	assert_false((panel.get_node("%Strip") as Control).visible)
+	assert_true((panel.get_node("%Scroll") as Control).visible)
+	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
+	# інженер досі вибраний — повторний тап по ньому зняв би вибір
+	_e2e.press(panel.button_for(A.LAY_MINE))
+	_e2e.tap(TARGET)
+	await _e2e.confirm()
+	assert_eq(_state().mines.size(), 1)
+	assert_false((panel.get_node("%Strip") as Control).visible, "дію виконано — смужку знято")

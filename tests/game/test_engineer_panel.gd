@@ -55,7 +55,7 @@ func test_five_buttons_with_ap_cost() -> void:
 		labels.append(p.button_for(a).text)
 	assert_eq(labels, EN_LABELS)
 	var order: Array[String] = []
-	for b in p.find_children("*", "Button", true, false):
+	for b in p.get_node("%Grid").get_children():
 		order.append((b as Button).text)
 	assert_eq(order, EN_LABELS, "рівно п'ять кнопок, у порядку Action")
 
@@ -122,3 +122,35 @@ func test_panel_fits_phone_without_overlapping_bars(p = use_parameters(_hud_case
 	assert_eq(LayoutProbe.small_targets(hud), [] as Array[String], where)
 	var bars: Array[Control] = [hud.get_node("SafeArea/Layout/TopBar"), hud.get_node("%BottomBar"), panel]
 	assert_eq(LayoutProbe.overlapping(bars), [] as Array[String], where)
+	# Ширина — не більше ~40 % екрана: решта дошки лишається тапабельною.
+	assert_true(panel.size.x <= 0.4 * size.x, "%s: ширина %s > 40 %%" % [where, panel.size.x])
+	# Висота — за вмістом, без розтягування на весь Middle.
+	var reason: Label = panel.get_node("%ReasonLabel")
+	var natural: float = (panel.get_node("%Box") as Control).get_combined_minimum_size().y \
+			+ panel.get_theme_stylebox("panel").get_minimum_size().y
+	if reason.visible:
+		natural += reason.get_combined_minimum_size().y + float(panel.get_node("%Root").get_theme_constant("separation"))
+	assert_true(panel.size.y <= natural + 1.0, "%s: висота %s > вмісту %s" % [where, panel.size.y, natural])
+	assert_true((panel.get_node("%Scroll") as Control).size.y >= 48.0, "%s: видно хоча б одну кнопку" % where)
+
+
+func test_armed_panel_collapses_to_strip_with_cancel() -> void:
+	var e: Unit = _engineer()
+	var p: EngineerPanel = _panel()
+	p.show_for(_service.state, e)
+	var cancels: Array[int] = [0]
+	p.cancel_pressed.connect(func() -> void: cancels[0] += 1)
+	p.button_for(A.LAY_MINE).pressed.emit()
+	p.set_armed(true)
+	assert_false((p.get_node("%Scroll") as Control).visible)
+	assert_true((p.get_node("%Strip") as Control).visible)
+	assert_eq((p.get_node("%ArmedLabel") as Label).text, "Lay mine")
+	var cancel: Button = p.get_node("%StripCancel")
+	assert_true(cancel.custom_minimum_size.y >= 48.0 and cancel.custom_minimum_size.x >= 48.0)
+	p.show_reason("ERR_NOT_ADJACENT")
+	assert_true((p.get_node("%ReasonLabel") as Label).is_visible_in_tree(), "причина видна й у згорнутому стані")
+	cancel.pressed.emit()
+	assert_eq(cancels[0], 1)
+	p.set_armed(false)
+	assert_true((p.get_node("%Scroll") as Control).visible)
+	assert_false((p.get_node("%Strip") as Control).visible)

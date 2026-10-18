@@ -229,7 +229,7 @@ func disarm() -> void:
 
 
 ## У режимі ENGINEER: тайл з допустимих — прев'ю верби; свій юніт — вибір
-## (знімає режим); решта — no-op, зокрема тап поза дошкою.
+## (знімає режим); решта — action_refused з причиною цього тайла.
 func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
 	if _targets.has(cell):
 		_pending = {
@@ -245,6 +245,10 @@ func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
 		var tapped: Unit = state.get_unit(known[cell])
 		if tapped != null and tapped.owner == state.active_player:
 			select_unit(tapped)
+			return
+	# Причина саме цього тайла — з validate(); несусідній тайл відмовляє раніше за
+	# будь-яку перевірку вмісту, тож нічого прихованого не видає.
+	action_refused.emit(EngineerCommand.create(_selected_unit.id, _armed_action, cell).validate(state))
 
 
 ## Єдина точка, де _pending скидається до «нема дії, що чекає підтвердження»

@@ -526,3 +526,13 @@ func test_targets_cleared_after_confirm() -> void:
 	assert_eq(service.state.mines[0].pos, Vector2i(6, 5))
 	assert_eq(e.ap, 0)
 	assert_eq(targets.back(), [] as Array[Vector2i])
+
+
+func test_tap_on_invalid_tile_in_engineer_mode_reports_its_reason() -> void:
+	_engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	var reasons: Array[String] = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.tap_cell(Vector2i(8, 5))
+	assert_eq(reasons, ["ERR_NOT_ADJACENT"] as Array[String])
+	assert_eq(_previews.size(), 0)

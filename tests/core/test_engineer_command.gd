@@ -224,12 +224,33 @@ func test_demolish_bridge_forbidden_with_own_unit_on_it() -> void:
 	state.add_unit(5, 0, Vector2i(4, 3), 0)
 	var st: Dictionary = EngineerCommand.action_status(state, e.id, A.DEMOLISH_BRIDGE)
 	assert_eq(st["tiles"], [])
-	assert_eq(st["reason"], "ERR_TILE_OCCUPIED")
+	# Сусіди відмовляють з різних причин (зайнято / немає мосту) — жодна з них не
+	# головна, тож загальна причина.
+	assert_eq(st["reason"], "ERR_NO_ADJACENT_TARGET")
+
+func test_status_unit_reason_wins_over_tile_reasons() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	e.has_fired = true
+	assert_eq(EngineerCommand.action_status(state, e.id, A.CLEAR_MINE)["reason"], "ERR_ALREADY_FIRED")
+	var foe: Unit = state.add_unit(11, 1, Vector2i(8, 8), 0)
+	assert_eq(EngineerCommand.action_status(state, foe.id, A.LAY_MINE),
+		{"tiles": [] as Array[Vector2i], "reason": "ERR_NOT_YOUR_UNIT"})
+
+func test_status_same_tile_reason_on_every_neighbour_is_kept() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	assert_eq(EngineerCommand.action_status(state, e.id, A.REPAIR_BRIDGE)["reason"], "ERR_NOTHING_TO_REPAIR")
+
+func test_status_mixed_tile_reasons_give_no_adjacent_target() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.add_unit(5, 0, Vector2i(4, 3), 0)  # неушкоджений свій танк
+	assert_eq(EngineerCommand.action_status(state, e.id, A.REPAIR_UNIT)["reason"], "ERR_NO_ADJACENT_TARGET")
 
 func test_capture_reason_for_own_objective() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
 	Objectives.add(state, Vector2i(4, 3), 0)
-	assert_eq(EngineerCommand.action_status(state, e.id, A.CAPTURE_OBJECTIVE)["reason"], "ERR_NOTHING_TO_CAPTURE")
+	assert_eq(EngineerCommand.create(e.id, A.CAPTURE_OBJECTIVE, Vector2i(4, 3)).validate(state), "ERR_NOTHING_TO_CAPTURE")
+	# решта сусідів — «немає цілі», причини різні
+	assert_eq(EngineerCommand.action_status(state, e.id, A.CAPTURE_OBJECTIVE)["reason"], "ERR_NO_ADJACENT_TARGET")
 
 func test_status_never_changes_state_or_rng() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
