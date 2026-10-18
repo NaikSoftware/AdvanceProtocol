@@ -39,6 +39,8 @@ Two rules about using it:
 
 ### Findings from the reference
 
+- **The original's experience system (thresholds and level-up in `class_1.method_97`) is deliberately not carried over.** A unit has only the parameters of its type.
+
 - **Tank → artillery damage is quartered in the original — confirmed, and deliberately not
   adopted.** `class_3.method_160` carries a distinct `>>= 2` branch for attacker `TANK` against
   target `ARTILLERY`, separate from the `÷4` that both tanks and artillery take against infantry.

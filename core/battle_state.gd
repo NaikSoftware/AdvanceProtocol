@@ -15,9 +15,7 @@ var turn_number: int = 1
 var seed_value: int = 0
 var rng: RandomNumberGenerator = null
 var vision: Array[Vision] = []
-var experience: Array[Experience] = []
-## Уся завдана шкода на гравця — для екрана результатів. Окремо від досвіду, бо
-## міни теж шкодять, а інженер досвіду не має і мати не повинен (§3.7).
+## Уся завдана шкода на гравця — для екрана результатів (разом із шкодою від мін).
 var damage_dealt: Array[int] = []
 var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
@@ -40,7 +38,6 @@ static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleSt
 	s.rng.seed = p_seed
 	for i in p_player_count:
 		s.vision.append(Vision.create(p_board.width, p_board.height))
-		s.experience.append(Experience.create())
 		s.damage_dealt.append(0)
 		s.eliminated.append(false)
 	return s

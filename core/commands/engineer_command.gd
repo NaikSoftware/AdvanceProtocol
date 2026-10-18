@@ -97,7 +97,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 				out.append(Events.BridgeChanged.new(target_pos, true))
 				# Ворог на мосту падає разом із ним (рішення власника): та сама низка
 				# подій, що й від смертельного влучання. Шкода — власникові інженера, як
-				# від міни, але не в досвід: інженер його не має (§3.7).
+				# від міни.
 				var victim: Unit = state.unit_at(target_pos)
 				if victim != null:
 					state.damage_dealt[e.owner] += victim.hp
