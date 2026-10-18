@@ -19,6 +19,8 @@ class RecService extends MatchServiceScript:
 var _t: GutTest
 var service: RecService
 var screen: BattleScreen
+## Viewport, у якому живе екран (null — viewport тесту); opts.viewport_size.
+var vp: Viewport = null
 ## Свій файл на процес: паралельні прогони ділять user://.
 var save_path: String = "user://test_e2e_save_%d.json" % OS.get_process_id()
 ## Control -> початковий mouse_filter; повертаємо в restore_runner_gui(),
@@ -100,6 +102,7 @@ func wait_until(cond: Callable, what: String, max_frames: int = 120) -> bool:
 # --- Бій ---------------------------------------------------------------------
 
 ## opts: tiles {Vector2i: Terrain.Kind} (решта — FIELD), ground (Terrain.GroundState),
+## viewport_size Vector2i (екран у SubViewport цього розміру),
 ## seed (7), players (2), objectives Array[Vector2i], hold_target int,
 ## prepare Callable(state: BattleState) — після setup(), до першого кадру тесту.
 func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void:
@@ -129,7 +132,15 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 	service = RecService.new()
 	_t.add_child_autofree(service)
 	screen = BattleScreenScene.instantiate()
-	_t.add_child_autofree(screen)
+	vp = null
+	if opts.has("viewport_size"):
+		var sub := SubViewport.new()
+		sub.size = opts["viewport_size"]
+		_t.add_child_autofree(sub)
+		sub.add_child(screen)
+		vp = sub
+	else:
+		_t.add_child_autofree(screen)
 	screen.save_path = save_path
 	screen.setup(m, opts.get("players", 2), opts.get("seed", 7), service,
 		opts.get("ground", Terrain.GroundState.DRY))
@@ -173,7 +184,7 @@ func px(cell: Vector2i) -> Vector2:
 
 ## Справжній тап: миша вниз/вгору в центрі тайла через viewport.
 func tap(cell: Vector2i) -> void:
-	click_at(px(cell))
+	click_at(px(cell), vp)
 
 
 func confirm() -> void:
@@ -196,6 +207,19 @@ func act(from: Vector2i, to: Vector2i) -> void:
 	tap(from)
 	tap(to)
 	await confirm()
+
+
+## Верба інженера кнопками панелі: вибрати інженера, натиснути вербу, тапнути
+## тайл, підтвердити.
+func engineer_act(from: Vector2i, action: int, to: Vector2i) -> void:
+	tap(from)
+	press(engineer_panel().button_for(action))
+	tap(to)
+	await confirm()
+
+
+func engineer_panel() -> EngineerPanel:
+	return hud().get_node("%EngineerPanel")
 
 
 func events_of(cls: Variant) -> Array[Events.BattleEvent]:

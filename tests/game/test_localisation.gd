@@ -68,3 +68,17 @@ func test_every_error_key_is_translated() -> void:
 		TranslationServer.set_locale(locale)
 		for key in keys:
 			assert_ne(tr(key), key, "немає перекладу %s для %s" % [key, locale])
+
+
+## Task 8: підписи панелі інженера.
+const ENGINEER_PANEL_KEYS: Array[String] = [
+	"eng_lay_mine", "eng_clear_mine", "eng_repair_bridge", "eng_demolish_bridge",
+	"eng_repair_unit", "eng_ap_cost",
+]
+
+
+func test_engineer_panel_keys_are_translated() -> void:
+	for locale in LOCALES:
+		TranslationServer.set_locale(locale)
+		for key in ENGINEER_PANEL_KEYS:
+			assert_ne(tr(key), key, "немає перекладу %s для %s" % [key, locale])

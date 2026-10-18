@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://game/ui/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://game/ui/unit_inspector.tscn" id="2_inspector"]
+[ext_resource type="PackedScene" path="res://game/ui/engineer_panel.tscn" id="3_engineer"]
 
 [node name="Hud" type="Control"]
 anchor_right = 1.0
@@ -64,6 +65,10 @@ text = "hud_pause"
 [node name="Middle" type="HBoxContainer" parent="SafeArea/Layout"]
 size_flags_vertical = 3
 mouse_filter = 2
+
+[node name="EngineerPanel" parent="SafeArea/Layout/Middle" instance=ExtResource("3_engineer")]
+unique_name_in_owner = true
+visible = false
 
 [node name="BottomBar" type="HFlowContainer" parent="SafeArea/Layout"]
 unique_name_in_owner = true

@@ -65,6 +65,7 @@ var _settings: SettingsScreen = null
 var _controller: InputController = null
 var _zone_overlay: ZoneOverlay = null
 var _path_overlay: PathOverlay = null
+var _target_overlay: TargetOverlay = null
 var _event_player: EventPlayer = null
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
@@ -236,7 +237,9 @@ func _wire_view(board: Board) -> void:
 
 	_zone_overlay = ZoneOverlay.new(_board_view)
 	_path_overlay = PathOverlay.new(_board_view)
-	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"))
+	_target_overlay = TargetOverlay.new(_board_view)
+	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
+		func() -> void: _board_view.rebuild_tiles(_match_service.state.board))
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
 	# але власний шар і власний сигнал: action_preview малює його для прев'ю
@@ -250,6 +253,8 @@ func _wire_view(board: Board) -> void:
 	# шляху вище: action_preview ставить приціл, pending_cleared знімає.
 	_controller.action_preview.connect(_on_action_preview)
 	_controller.pending_cleared.connect(_clear_all_crosshairs)
+	# Допустимі тайли верби інженера (Task 8) — готові з core/ крізь контролер.
+	_controller.targets_changed.connect(_target_overlay.show_tiles)
 
 	_hud.bind(_match_service.state)
 	_hud.attach_controller(_controller)

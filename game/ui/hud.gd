@@ -83,6 +83,8 @@ var _shown_player: int = -1
 @onready var _end_turn_button: Button = %EndTurnButton
 @onready var _pause_button: Button = %PauseButton
 @onready var _inspector: UnitInspector = %Inspector
+## Верби інженера (Task 8) — лише для свого інженера активного гравця.
+@onready var _engineer_panel: EngineerPanel = %EngineerPanel
 ## Поля безпеки читаються з того самого вузла, що їх і задає (§9: одне джерело
 ## правди) — панель поза цим контейнером, але поважає ті самі межі, бо виріз
 ## екрана однаково не питає, у контейнері вузол чи ні.
@@ -101,6 +103,9 @@ func _ready() -> void:
 	_cancel_button.pressed.connect(_on_cancel_pressed)
 	_end_turn_button.pressed.connect(_on_end_turn_pressed)
 	_pause_button.pressed.connect(pause_pressed.emit)
+	resized.connect(_fit_engineer_panel)
+	_bottom_bar.resized.connect(_fit_engineer_panel)
+	_fit_engineer_panel()
 	_clear_preview()
 	_render_selection()
 
@@ -178,6 +183,8 @@ func show_preview(preview: Dictionary) -> void:
 		InputController.ActionType.MOVE:
 			_preview_ap_value.text = str(int(preview["ap_left"]))
 			_preview_move_box.visible = true
+		InputController.ActionType.ENGINEER:
+			pass  # верба й тайл уже видно на панелі й контурі цілей
 		InputController.ActionType.SHOT:
 			var sector: int = int(preview["sector"])
 			_preview_sector_value.text = tr(UnitInspector.SECTOR_KEYS[sector])
@@ -198,6 +205,13 @@ func attach_controller(controller: InputController) -> void:
 	_controller = controller
 	controller.selection_changed.connect(show_selection)
 	controller.action_preview.connect(show_preview)
+	_engineer_panel.action_chosen.connect(controller.arm_engineer)
+	_engineer_panel.cancel_pressed.connect(_on_cancel_pressed)
+	# Озброєна верба згортає панель, щоб не закривати тайли-цілі; відмова по
+	# тапу — у рядку причини.
+	controller.targets_changed.connect(func(tiles: Array[Vector2i]) -> void:
+		_engineer_panel.set_armed(not tiles.is_empty()))
+	controller.action_refused.connect(_engineer_panel.show_reason)
 
 
 ## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.
@@ -231,6 +245,14 @@ func _render_selection() -> void:
 	# показувати AP мерця гірше, ніж не показувати нічого.
 	if _selected_unit != null and not _selected_unit.is_alive():
 		_selected_unit = null
+	# Панель верб — лише своєму інженерові активного гравця: чужі верби не
+	# дія, а їхня доступність була б підказкою про чужий стан.
+	var own_engineer: bool = _selected_unit != null and _state != null \
+			and _selected_unit.unit_class() == UnitTypes.UnitClass.ENGINEER \
+			and _selected_unit.owner == _state.active_player
+	_engineer_panel.visible = own_engineer
+	if own_engineer:
+		_engineer_panel.show_for(_state, _selected_unit)
 	if _selected_unit == null:
 		_selection_row.visible = false
 		_inspector.clear()
@@ -304,6 +326,17 @@ func _bottom_bar_top() -> float:
 	if bar.size.y <= 0.0:
 		return size.y - float(_safe_area.get_theme_constant("margin_bottom"))
 	return bar.position.y - get_global_rect().position.y
+
+
+## Висота, що лишається Middle між смугами (поля безпеки, TopBar, BottomBar і
+## відступи Layout), — стеля для панелі інженера. Рахується від розміру HUD, а не
+## від Middle: Middle роздувається мінімумом самої панелі.
+func _fit_engineer_panel() -> void:
+	var layout: VBoxContainer = _safe_area.get_node("Layout")
+	var top: Control = layout.get_node("TopBar")
+	_engineer_panel.max_height = size.y \
+		- float(_safe_area.get_theme_constant("margin_top")) - float(_safe_area.get_theme_constant("margin_bottom")) \
+		- top.size.y - _bottom_bar.size.y - 2.0 * float(layout.get_theme_constant("separation"))
 
 
 func _clear_preview() -> void:

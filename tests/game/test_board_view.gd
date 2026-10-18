@@ -159,3 +159,18 @@ func test_draw_contour_with_empty_segments_draws_nothing() -> void:
 	view.build(board)
 	view.draw_contour([] as Array[Dictionary], view.LAYER_ZONES)
 	assert_eq(view.contour_segments(view.LAYER_ZONES).size(), 0)
+
+
+## Task 8: BridgeChanged перебудовує дошку, а контури (зони, цілі) лишаються.
+func test_rebuild_tiles_shows_new_kind_and_keeps_contours() -> void:
+	var board := Board.create(4, 4, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(1, 1), Terrain.Kind.BRIDGE)
+	var bv: BoardView = BoardViewScene.instantiate()
+	add_child_autofree(bv)
+	bv.build(board)
+	var segs: Array[Dictionary] = [{"cell": Vector2i(0, 0), "dir": Vector2i(1, 0), "color": Color.RED}]
+	bv.draw_contour(segs, BoardView.LAYER_ZONES)
+	board.set_kind(Vector2i(1, 1), Terrain.Kind.BRIDGE_DESTROYED)
+	bv.rebuild_tiles(board)
+	assert_eq(bv.kind_at(Vector2i(1, 1)), Terrain.Kind.BRIDGE_DESTROYED)
+	assert_eq(bv.contour_segments(BoardView.LAYER_ZONES), segs)

@@ -396,3 +396,11 @@ func test_reentrant_play_call_is_ignored_and_first_playback_completes() -> void:
 	_finish_all_processed_tweens()
 
 	assert_false(player.is_playing(), "перше програвання таки завершується штатно")
+
+
+## Task 8: зміна мосту — перебудова дошки крізь інжектований Callable.
+func test_bridge_changed_calls_board_rebuild() -> void:
+	var calls: Array[int] = [0]
+	player = EventPlayer.new(Callable(), Callable(), func() -> void: calls[0] += 1)
+	await player.play([Events.BridgeChanged.new(Vector2i(1, 1), true)] as Array[Events.BattleEvent])
+	assert_eq(calls[0], 1)

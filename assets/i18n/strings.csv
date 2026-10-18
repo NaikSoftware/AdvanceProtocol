@@ -115,3 +115,10 @@ map_urban,Місто,Urban
 map_open,Відкрите поле,Open Field
 map_forest,Ліс,Forest
 map_mountain,Гори,Mountains
+eng_lay_mine,Поставити міну,Lay mine
+eng_clear_mine,Зняти міну,Clear mine
+eng_repair_bridge,Відновити міст,Repair bridge
+eng_demolish_bridge,Підірвати міст,Demolish bridge
+eng_repair_unit,Ремонт юніта,Repair unit
+eng_ap_cost,%d ОД,%d AP
+ERR_NO_ADJACENT_TARGET,Поруч немає придатної цілі,No valid target adjacent

@@ -29,12 +29,14 @@ signal action_preview(preview: Dictionary)
 ## сам факт відсутності прев'ю змінився — окремий слухач (PathOverlay) знімає
 ## підсвітку шляху рівно на нього, не займаючи action_preview.
 signal pending_cleared
+signal targets_changed(tiles: Array[Vector2i])
+signal action_refused(reason: String)
 
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
 ## для показу (§9/§10 CLAUDE.md, «жодних хардкод-рядків») — текст і кнопку
 ## малює HUD (Task 2.8) із цих даних.
-enum ActionType { MOVE, SHOT }
+enum ActionType { MOVE, SHOT, ENGINEER, DRONE }
 
 ## MatchService (Task 2.1) — не типізований на його клас, бо
 ## game/autoload/match_service.gd навмисно не має class_name (він
@@ -58,6 +60,10 @@ var _zones: Pathing.Zones = null
 ## Порожній словник means «нема дії, що чекає підтвердження». Не null:
 ## confirm_pending()/cancel_pending() перевіряють is_empty(), а не тип змінної.
 var _pending: Dictionary = {}
+## Озброєна верба інженера (-1 — режиму ENGINEER немає) і її допустимі тайли —
+## рівно ті, що повернув EngineerCommand.action_status() (§3.13).
+var _armed_action: int = -1
+var _targets: Array[Vector2i] = []
 
 
 func _init(match_service: Node, zone_overlay: ZoneOverlay, is_playing_check: Callable = Callable()) -> void:
@@ -77,6 +83,7 @@ func select_unit(unit: Unit) -> void:
 		return  # R24: «кожен тап» — і прямий виклик теж тап
 
 	_clear_pending()
+	disarm()
 	_selected_unit = unit
 	selection_changed.emit(unit)
 	_recompute_zones_for_selected()
@@ -116,6 +123,9 @@ func tap_cell(cell: Vector2i) -> void:
 		return  # R24: ввід заблокований, доки триває програвання
 
 	var state: BattleState = _match_service.state
+	if _armed_action >= 0:
+		_tap_in_engineer_mode(state, cell)
+		return
 	if not state.board.in_bounds(cell):
 		_deselect()
 		return
@@ -156,6 +166,7 @@ func confirm_pending() -> void:
 		return
 	var command: Command = _build_command(_pending)
 	_clear_pending()
+	disarm()
 	if command == null:
 		return
 	var err: String = _match_service.submit(command)
@@ -192,6 +203,52 @@ func _sync_after_action() -> void:
 
 func cancel_pending() -> void:
 	_clear_pending()
+	disarm()
+
+
+## Режим ENGINEER для вибраного свого інженера. Тайли й причина відмови — лише
+## з core/ (EngineerCommand.action_status), вигляд їх не виводить.
+func arm_engineer(action: int) -> void:
+	if _input_blocked() or _selected_unit == null:
+		return
+	var status: Dictionary = EngineerCommand.action_status(_match_service.state, _selected_unit.id, action)
+	var tiles: Array[Vector2i] = status["tiles"]
+	if tiles.is_empty():
+		action_refused.emit(status["reason"])
+		return
+	_clear_pending()
+	_armed_action = action
+	_targets = tiles
+	targets_changed.emit(tiles)
+
+
+func disarm() -> void:
+	_armed_action = -1
+	_targets = []
+	targets_changed.emit([] as Array[Vector2i])
+
+
+## У режимі ENGINEER: тайл з допустимих — прев'ю верби; свій юніт — вибір
+## (знімає режим); решта — action_refused з причиною цього тайла.
+func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
+	if _targets.has(cell):
+		_pending = {
+			"type": ActionType.ENGINEER,
+			"unit_id": _selected_unit.id,
+			"action": _armed_action,
+			"target": cell,
+		}
+		action_preview.emit(_pending)
+		return
+	var known: Dictionary = state.known_occupied_map(state.active_player)
+	if known.has(cell):
+		var tapped: Unit = state.get_unit(known[cell])
+		if tapped != null and tapped.owner == state.active_player:
+			select_unit(tapped)
+			return
+	# Причина саме цього тайла — з validate(); несусідній тайл відмовляє раніше за
+	# будь-яку перевірку вмісту, тож нічого прихованого не видає.
+	action_refused.emit(EngineerCommand.create(_selected_unit.id, _armed_action, cell).validate(state))
 
 
 ## Єдина точка, де _pending скидається до «нема дії, що чекає підтвердження»
@@ -212,6 +269,8 @@ func _build_command(pending: Dictionary) -> Command:
 			return MoveCommand.create(pending["unit_id"], pending["target"], -1)
 		ActionType.SHOT:
 			return FireCommand.create(pending["unit_id"], pending["target_id"])
+		ActionType.ENGINEER:
+			return EngineerCommand.create(pending["unit_id"], pending["action"], pending["target"])
 	return null
 
 
@@ -248,6 +307,7 @@ func _maybe_set_pending_shot(state: BattleState, target: Unit) -> void:
 
 
 func _deselect() -> void:
+	disarm()
 	_selected_unit = null
 	_zones = null
 	_clear_pending()

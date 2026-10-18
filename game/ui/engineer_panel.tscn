@@ -1,0 +1,64 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://game/ui/engineer_panel.gd" id="1_panel"]
+[ext_resource type="Theme" path="res://game/ui/theme/ap_theme.tres" id="2_theme"]
+
+[sub_resource type="StyleBoxFlat" id="compact"]
+content_margin_left = 8.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 8.0
+bg_color = Color(0.105, 0.125, 0.145, 0.94)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.235, 0.27, 0.305, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="EngineerPanel" type="PanelContainer"]
+size_flags_horizontal = 10
+size_flags_vertical = 0
+theme = ExtResource("2_theme")
+theme_override_styles/panel = SubResource("compact")
+script = ExtResource("1_panel")
+
+[node name="Root" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+theme_override_constants/separation = 8
+
+[node name="Scroll" type="ScrollContainer" parent="Root"]
+unique_name_in_owner = true
+horizontal_scroll_mode = 0
+
+[node name="Box" type="VBoxContainer" parent="Root/Scroll"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+
+[node name="Grid" type="GridContainer" parent="Root/Scroll/Box"]
+unique_name_in_owner = true
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 1
+
+[node name="Strip" type="HBoxContainer" parent="Root"]
+unique_name_in_owner = true
+visible = false
+theme_override_constants/separation = 8
+
+[node name="ArmedLabel" type="Label" parent="Root/Strip"]
+unique_name_in_owner = true
+size_flags_vertical = 4
+
+[node name="StripCancel" type="Button" parent="Root/Strip"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+text = "hud_cancel"
+
+[node name="ReasonLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+visible = false
+autowrap_mode = 3

@@ -12,7 +12,7 @@ extends Node3D
 
 ## LAYER_PATH — окремий шар для контуру шляху (§3.13): шлях лежить УСЕРЕДИНІ
 ## зони руху, тобто малюється поверх її контурів, тож у нього власний шар.
-enum { LAYER_ZONES, LAYER_PATH }
+enum { LAYER_ZONES, LAYER_PATH, LAYER_TARGETS }
 
 ## Тонкий проміжок між тайлами — щоб сітка читалась як сітка, а не суцільна
 ## плита; висота — щоб дно не збігалося із землею з z-fighting.
@@ -143,6 +143,23 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	mmi.material_override = _tile_material()
 	add_child(mmi)
 	_contour_nodes[layer] = mmi
+
+
+## Перебудова тайлів після зміни виду (міст підірвано чи відновлено, BridgeChanged).
+## build() знімає й контури, а зони й цілі в цю мить досі правдиві — тож
+## малюємо їх наново тими самими сегментами.
+func rebuild_tiles(board: Board) -> void:
+	var kept: Dictionary = _contour_segments.duplicate()
+	build(board)
+	for layer: int in kept:
+		var segs: Array[Dictionary] = []
+		segs.assign(kept[layer])
+		draw_contour(segs, layer)
+
+
+## Вид тайла, який зараз намальовано (-1 — тайла немає).
+func kind_at(cell: Vector2i) -> int:
+	return _kind_by_cell.get(cell, -1)
 
 
 func clear_contour(layer: int) -> void:

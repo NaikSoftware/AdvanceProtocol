@@ -438,3 +438,101 @@ func test_zone_excludes_a_known_enemy_mine_but_not_an_unknown_one() -> void:
 	assert_not_null(overlay.last_zones)
 	assert_false(overlay.last_zones.can_reach(Vector2i(5, 6)), "відома ворожа міна — не в зоні")
 	assert_true(overlay.last_zones.can_reach(Vector2i(6, 5)), "невідома міна не видна формою зони")
+
+
+# --- Task 8: режим ENGINEER -------------------------------------------------
+# Допустимі тайли беруться лише з EngineerCommand.action_status() (§3.13) —
+# контролер їх не виводить сам.
+
+const ENGINEER_TYPE: int = 11
+const LAY := EngineerCommand.Action.LAY_MINE
+
+
+func _engineer_at(pos: Vector2i) -> Unit:
+	_start()
+	var e: Unit = service.state.add_unit(ENGINEER_TYPE, 0, pos, 0)
+	_begin_and_drain()
+	controller.tap_cell(e.pos)
+	return e
+
+
+func test_arm_engineer_emits_valid_tiles() -> void:
+	_engineer_at(Vector2i(5, 5))
+	var got: Array = []
+	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: got.append(t))
+	controller.arm_engineer(LAY)
+	assert_eq(got.size(), 1)
+	assert_eq(got[0], [Vector2i(5, 4), Vector2i(6, 5), Vector2i(5, 6), Vector2i(4, 5)] as Array[Vector2i])
+
+
+func test_arm_engineer_without_tiles_refuses_with_reason() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	e.ap = 29  # fire_cost 30
+	var reasons: Array[String] = []
+	var targets: Array = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
+	controller.arm_engineer(LAY)
+	assert_eq(reasons, ["ERR_NOT_ENOUGH_AP"] as Array[String])
+	assert_eq(targets.size(), 0, "нічого не озброєно — контур цілей не показується")
+	controller.tap_cell(Vector2i(5, 4))
+	assert_ne(int(_previews.back()["type"]) if not _previews.is_empty() else -1,
+		InputController.ActionType.ENGINEER, "без озброєння тап по сусідньому тайлі — не прев'ю верби")
+
+
+func test_tap_on_valid_tile_sets_engineer_preview() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(_previews.size(), 1)
+	assert_eq(_previews[0], {"type": InputController.ActionType.ENGINEER, "unit_id": e.id,
+		"action": LAY, "target": Vector2i(6, 5)})
+
+
+func test_tap_outside_tiles_is_noop_in_engineer_mode() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	var sel_before: int = _selections.size()
+	controller.tap_cell(Vector2i(8, 5))  # поза тайлами; без режиму це було б прев'ю руху
+	controller.tap_cell(Vector2i(-1, -1))  # поза дошкою; без режиму — зняття вибору
+	assert_eq(_previews.size(), 0)
+	assert_eq(_selections.size(), sel_before)
+	controller.tap_cell(Vector2i(5, 4))
+	assert_eq(_previews.size(), 1, "режим досі озброєний")
+	assert_eq(_previews[0]["unit_id"], e.id)
+
+
+func test_selecting_another_unit_disarms() -> void:
+	_engineer_at(Vector2i(5, 5))
+	var other: Unit = service.state.add_unit(5, 0, Vector2i(9, 9), 0)
+	controller.arm_engineer(LAY)
+	var targets: Array = []
+	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
+	controller.tap_cell(other.pos)
+	assert_eq(_selections.back(), other)
+	assert_eq(targets, [[] as Array[Vector2i]])
+	controller.tap_cell(Vector2i(9, 8))
+	assert_eq(int(_previews.back()["type"]), InputController.ActionType.MOVE, "режим знятий — звичайний тап")
+
+
+func test_targets_cleared_after_confirm() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	controller.tap_cell(Vector2i(6, 5))
+	var targets: Array = []
+	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
+	controller.confirm_pending()
+	assert_eq(service.state.mines.size(), 1)
+	assert_eq(service.state.mines[0].pos, Vector2i(6, 5))
+	assert_eq(e.ap, 0)
+	assert_eq(targets.back(), [] as Array[Vector2i])
+
+
+func test_tap_on_invalid_tile_in_engineer_mode_reports_its_reason() -> void:
+	_engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	var reasons: Array[String] = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.tap_cell(Vector2i(8, 5))
+	assert_eq(reasons, ["ERR_NOT_ADJACENT"] as Array[String])
+	assert_eq(_previews.size(), 0)

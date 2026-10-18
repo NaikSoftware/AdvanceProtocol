@@ -1,7 +1,7 @@
 extends GutTest
 ## Task 4.5: міни на дошці активного гравця, наскрізно через battle_screen.tscn.
-## Панелі інженера (T8) ще немає, тож міну кладе EngineerCommand, поданий через
-## сервіс у prepare; після T8 — замінити на кнопки.
+## Міну кладе інженер кнопкою панелі (T8): тап по інженеру, «Поставити міну»,
+## тап по тайлу, підтвердження.
 
 const E2E := preload("res://tests/e2e/e2e_helpers.gd")
 
@@ -41,17 +41,10 @@ func _corridor() -> Dictionary:
 	return tiles
 
 
-func _lay_mine(state: BattleState) -> void:
-	var eng: Unit = state.unit_at(ENG_POS)
-	var err: String = _e2e.service.submit(EngineerCommand.create(eng.id, EngineerCommand.Action.LAY_MINE, MINE_POS))
-	assert_eq(err, "")
-
-
 func _boot(spawns: Array, with_mine: bool = true) -> void:
-	var opts: Dictionary = {"tiles": _corridor(), "seed": 7}
+	await _e2e.boot(8, 3, spawns, {"tiles": _corridor(), "seed": 7})
 	if with_mine:
-		opts["prepare"] = _lay_mine
-	await _e2e.boot(8, 3, spawns, opts)
+		await _e2e.engineer_act(ENG_POS, EngineerCommand.Action.LAY_MINE, MINE_POS)
 
 
 func _layer() -> MineLayer:
