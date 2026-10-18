@@ -93,11 +93,14 @@ static func reach_tiles(state: BattleState, unit_id: int, radius: int) -> Array[
 
 static func drone_marks(state: BattleState, unit_id: int) -> Dictionary:
 	## §3.13: позначки дрона, {id цілі: причина відмови або ""}. Лише для свого загону;
-	## причину дає та сама DroneCommand.check_strike(), що й валідація. Ключі — живі
+	## причину дає та сама DroneCommand.check_strike(), що й валідація. Лише для
+	## носіїв дронів (тип з "drones" > 0); для решти типів — {}. Ключі — живі
 	## вороги на seen-тайлі активного гравця в межах RANGE (решта — не показується).
 	var out: Dictionary = {}
 	var a: Unit = state.get_unit(unit_id)
 	if a == null or not a.is_alive() or a.owner != state.active_player:
+		return out
+	if int(a.type()["drones"]) <= 0:
 		return out
 	var seen: Vision = state.vision[state.active_player]
 	for t in state.alive_units():
