@@ -163,9 +163,8 @@ func _handle_unit_moved(event: Events.UnitMoved) -> Variant:
 	var view: UnitView = _resolve_unit_view(event.unit_id)
 	if view == null:
 		return null
-	# event.facing має останнє слово (MoveCommand приймає явний facing, який
-	# може навмисно відрізнятись від напрямку останнього кроку шляху) — тож
-	# прокидається окремо від самого path.
+	# event.facing має останнє слово: це фейсинг, який вирішив core/ (зараз —
+	# напрямок останнього пройденого кроку), тож прокидається окремо від path.
 	return view.move_along(event.path, _MOVE_STEP_DURATION, event.facing)
 
 

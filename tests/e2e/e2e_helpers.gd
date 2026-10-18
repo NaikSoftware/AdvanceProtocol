@@ -187,7 +187,13 @@ func tap(cell: Vector2i) -> void:
 ## Палець лишається притиснутим, доки тест не покличе release().
 func long_press(cell: Vector2i) -> void:
 	_mouse_button(px(cell), true)
+	# Крокуємо _process вручну, але лише якщо натиск справді ввімкнув кадр: інакше
+	# на пристрої довгий натиск не спрацював би ніколи (§8 — кадр лише під натиском).
+	if not screen.is_processing():
+		push_error("long_press: натиск не ввімкнув _process")
 	screen._process(BattleScreen.LONG_PRESS_SEC)
+	if screen.is_processing():
+		push_error("long_press: _process лишився ввімкненим після спрацювання")
 
 
 func release(cell: Vector2i) -> void:

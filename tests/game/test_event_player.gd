@@ -156,9 +156,8 @@ func test_is_playing_true_during_animated_playback_and_signal_fires_after() -> v
 
 # --- Виправлення 2: UnitMoved несе facing, і подія має останнє слово ------
 
-## core/events.gd.UnitMoved.facing існує саме для цього: MoveCommand може
-## передати явний facing, що відрізняється від напрямку останнього кроку
-## шляху. _handle_unit_moved мусить прокинути event.facing у move_along, а
+## core/events.gd.UnitMoved.facing існує саме для цього: фейсинг вирішує
+## core/, і вигляд не має виводити його з напрямку останнього кроку path. _handle_unit_moved мусить прокинути event.facing у move_along, а
 ## не покластися на напрямок останнього кроку (facing=2, схід), який тут
 ## навмисно суперечить події (facing=6, захід).
 func test_unit_moved_event_sets_final_facing_from_the_event_not_last_step_direction() -> void:

@@ -781,6 +781,8 @@ func _on_events_ready() -> void:
 		_controller.select_unit(null)
 		# Огляд не переживає гейт (§3.13): натиск, що тримався, тут і закінчено.
 		_cancel_peek()
+		if _pointer_down:
+			_camera_rig.end_hold()  # інакше риг крутить _process за гейтом до наступного натиску (§8)
 		_pointer_down = false
 		_gate.show_for(_match_service.state.active_player)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
