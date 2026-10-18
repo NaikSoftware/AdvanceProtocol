@@ -31,3 +31,18 @@ func test_clear_and_empty_tiles_remove_contour() -> void:
 	overlay.show_tiles([Vector2i(1, 1)] as Array[Vector2i])
 	overlay.clear()
 	assert_eq(board_view.contour_segments(BoardView.LAYER_TARGETS), [])
+
+
+## Task 14: кільця огляду — свій шар і два різні кольори, не з палітри зон руху
+## (золото/червоне) і не колір озброєних режимів.
+func test_show_rings_colours_gun_and_drone_apart_on_inspect_layer() -> void:
+	var ring: Array[Vector2i] = [Vector2i(2, 2)]
+	var drone_ring: Array[Vector2i] = [Vector2i(5, 5)]
+	overlay.show_rings(ring, drone_ring)
+	assert_eq(board_view.contour_segments(BoardView.LAYER_INSPECT),
+		ZoneOverlay._edges(ring, TargetOverlay.GUN_RING_COLOR) + ZoneOverlay._edges(drone_ring, TargetOverlay.DRONE_RING_COLOR))
+	assert_eq(board_view.contour_segments(BoardView.LAYER_TARGETS), [], "шар режимів не зачеплено")
+	var taken: Array[Color] = [ZoneOverlay.COLOR_MOVE_AND_FIRE, ZoneOverlay.COLOR_MOVE_ONLY, TargetOverlay.COLOR]
+	assert_ne(TargetOverlay.GUN_RING_COLOR, TargetOverlay.DRONE_RING_COLOR)
+	for c in [TargetOverlay.GUN_RING_COLOR, TargetOverlay.DRONE_RING_COLOR]:
+		assert_false(taken.has(c), "%s" % c)

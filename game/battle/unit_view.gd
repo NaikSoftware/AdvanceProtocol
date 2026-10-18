@@ -99,6 +99,9 @@ const _CROSSHAIR_COLOR: Color = Color("ff7a4a")
 ## Заборонена ціль дрона (§3.13): хрест, а не приціл, і інший колір — «сюди не можна»
 ## мусить читатись інакше, ніж «сюди прилетить».
 const _FORBIDDEN_COLOR: Color = Color("d23c3c")
+## Позначки огляду (§3.13) — кольори відповідних кілець, щоб читались як «у цьому кільці».
+const _THREAT_COLOR: Color = TargetOverlay.GUN_RING_COLOR
+const _DRONE_THREAT_COLOR: Color = TargetOverlay.DRONE_RING_COLOR
 
 ## Поточний факінг (0..7, порядок Board.DIRS_8). Читається ззовні для UI цілей.
 var facing: int = 0
@@ -106,6 +109,8 @@ var facing: int = 0
 @onready var _silhouette: Node3D = $Silhouette
 @onready var _crosshair: Sprite3D = $Crosshair
 @onready var _forbidden: Sprite3D = $Forbidden
+@onready var _threatened: Sprite3D = $Threatened
+@onready var _drone_threatened: Sprite3D = $DroneThreatened
 @onready var _hp_bar: Sprite3D = $HpBar
 @onready var _hp_label: Label3D = $HpLabel
 @onready var _drone_icon: Sprite3D = $DroneIcon
@@ -133,6 +138,10 @@ func _ready() -> void:
 	_crosshair.modulate = _CROSSHAIR_COLOR
 	_forbidden.texture = _cross_texture()
 	_forbidden.modulate = _FORBIDDEN_COLOR
+	_threatened.texture = _crosshair_texture()
+	_threatened.modulate = _THREAT_COLOR
+	_drone_threatened.texture = _diamond_texture()
+	_drone_threatened.modulate = _DRONE_THREAT_COLOR
 
 
 func bind(unit: Unit) -> void:
@@ -332,6 +341,25 @@ func set_forbidden(on: bool) -> void:
 	_forbidden.visible = on
 
 
+## Позначений оглядом юніта (§3.13): рішення — з Targeting крізь
+## InputController.inspected і battle_screen; вузол лише показує.
+func set_threatened(on: bool) -> void:
+	_threatened.visible = on
+
+
+func is_threatened() -> bool:
+	return _threatened.visible
+
+
+## Позначка дрона — окрема від гарматної (§3.13): юніт в обох списках несе обидві.
+func set_drone_threatened(on: bool) -> void:
+	_drone_threatened.visible = on
+
+
+func is_drone_threatened() -> bool:
+	return _drone_threatened.visible
+
+
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed(), і два
 ## твіни на одну властивість змагались би на пострілі, який убиває.
 func play_shot() -> Signal:
@@ -465,6 +493,25 @@ static func _cross_texture(size: int = 32) -> ImageTexture:
 		for t in range(-thickness, thickness + 1):
 			image.set_pixel(clampi(i + t, 0, size - 1), i, Color.WHITE)
 			image.set_pixel(clampi(size - 1 - i + t, 0, size - 1), i, Color.WHITE)
+	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]
+
+
+## Контур ромба — дронова позначка: форма, якої немає ні в прицілу, ні в хреста.
+static func _diamond_texture(size: int = 32) -> ImageTexture:
+	var key: Array = ["diamond", size]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(1.0, 1.0, 1.0, 0.0))
+	var center: float = float(size - 1) * 0.5
+	var radius: float = float(size) * 0.42
+	var thickness: float = float(size) * 0.06
+	for y in size:
+		for x in size:
+			var d: float = absf(float(x) - center) + absf(float(y) - center)
+			if absf(d - radius) <= thickness:
+				image.set_pixel(x, y, Color.WHITE)
 	_texture_cache[key] = ImageTexture.create_from_image(image)
 	return _texture_cache[key]
 

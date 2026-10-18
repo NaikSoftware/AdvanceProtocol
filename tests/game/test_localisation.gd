@@ -74,6 +74,7 @@ func test_every_error_key_is_translated() -> void:
 const ENGINEER_PANEL_KEYS: Array[String] = [
 	"eng_lay_mine", "eng_clear_mine", "eng_repair_bridge", "eng_demolish_bridge",
 	"eng_repair_unit", "eng_ap_cost", "hud_heal", "hud_drone_strike", "hud_drone_range",
+	"hud_threat_floor", "hud_threat_floor_drone",
 ]
 
 

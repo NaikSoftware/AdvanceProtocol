@@ -65,6 +65,9 @@ var _controller: InputController = null
 var _zone_overlay: ZoneOverlay = null
 var _path_overlay: PathOverlay = null
 var _target_overlay: TargetOverlay = null
+## Id, позначені останнім оглядом (InputController.inspected).
+var _threatened: Array[int] = []
+var _drone_threatened: Array[int] = []
 var _event_player: EventPlayer = null
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
@@ -258,6 +261,8 @@ func _wire_view(board: Board) -> void:
 	# готове з Targeting. disarm() завжди шле targets_changed, тож там і знімаємо.
 	_controller.drone_armed.connect(_on_drone_armed)
 	_controller.targets_changed.connect(func(_tiles: Array[Vector2i]) -> void: _clear_forbidden_marks())
+	# Огляд (Task 14, §3.13): кільця й позначки готові з Targeting крізь контролер.
+	_controller.inspected.connect(_on_inspected)
 
 	_hud.bind(_match_service.state)
 	_hud.attach_controller(_controller)
@@ -372,6 +377,23 @@ func _on_drone_armed(ring: Array[Vector2i], marks: Dictionary) -> void:
 			view.set_targeted(true)
 		else:
 			view.set_forbidden(true)
+
+
+## Позначки тримаються списком id: вузли юнітів перебудовуються після кожного
+## пакета подій (_rebuild_units_for_active_player), а огляд — ні.
+func _on_inspected(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int],
+		drone_marked: Array[int], _is_floor: bool) -> void:
+	_threatened = marked
+	_drone_threatened = drone_marked
+	_target_overlay.show_rings(ring, drone_ring)
+	_apply_threat_marks()
+
+
+func _apply_threat_marks() -> void:
+	for id: int in _unit_views:
+		var view: UnitView = _unit_views[id]
+		view.set_threatened(_threatened.has(id))
+		view.set_drone_threatened(_drone_threatened.has(id))
 
 
 func _clear_forbidden_marks() -> void:
@@ -777,6 +799,7 @@ func _rebuild_units_for_active_player() -> void:
 		_units.add_child(view)
 		view.bind(unit)
 		_unit_views[uid] = view
+	_apply_threat_marks()
 
 
 func _first_unit_cell(player: int) -> Vector2i:

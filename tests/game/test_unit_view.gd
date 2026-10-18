@@ -559,3 +559,20 @@ func test_set_forbidden_toggles_its_own_mark_and_bind_clears_it() -> void:
 	view.set_forbidden(true)
 	view.bind(_unit(0))
 	assert_false(view._forbidden.visible, "bind() знімає позначку — режим дрона перебудову не переживає")
+
+
+## Task 14: позначки огляду — гармата й дрон окремо, різні форма й колір, і юніт
+## у обох списках показує обидві.
+func test_gun_and_drone_threat_marks_are_independent_and_distinct() -> void:
+	view.bind(_unit(5))
+	view.set_threatened(true)
+	view.set_drone_threatened(true)
+	assert_true(view.is_threatened())
+	assert_true(view.is_drone_threatened())
+	view.set_threatened(false)
+	assert_false(view.is_threatened())
+	assert_true(view.is_drone_threatened(), "дронова позначка не залежить від гарматної")
+	assert_ne(view._threatened.texture, view._drone_threatened.texture, "різна форма")
+	assert_ne(view._threatened.modulate, view._drone_threatened.modulate, "різний колір")
+	assert_ne(view._drone_threatened.texture, view._forbidden.texture, "не хрест заборони")
+	assert_ne(view._threatened.transform.origin, view._drone_threatened.transform.origin, "не накладаються")
