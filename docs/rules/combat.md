@@ -1,10 +1,10 @@
 # Combat
 
-The detail behind §3.3, §3.3.1 and §3.4 of CLAUDE.md — the damage formula, retaliation and directional armour.
+The detail behind §3.3, §3.3.1, §3.4 and §3.10 of CLAUDE.md — the damage formula, retaliation, directional armour and victory.
 
 [back to CLAUDE.md](../../CLAUDE.md)
 
-Damage, in order. `A` = attacker's `attack`. A unit has only the parameters of its type — there is no experience or level bonus:
+Damage, in order. `A` = attacker's `attack`. A unit has only the parameters of its type:
 
 ```
 dmg  = 0.75*A + rand(0, A/4)
@@ -180,3 +180,10 @@ cross-multiplied form is kept because it is exact, has no division, and cannot d
 
 Flanking is the main skill expression in the game. The UI must always show which sector a shot
 will land in **before** the player commits.
+
+## Victory
+
+A player with no units left is eliminated, and the check runs the moment
+a unit falls — after a shot, a retaliation, a mine, or a demolished bridge — and again at end of
+turn. Last player standing wins. In 3-player games an eliminated player is skipped in the turn
+order, and the match continues between the remaining two.

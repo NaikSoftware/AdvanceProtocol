@@ -180,8 +180,8 @@ mesh may sculpt three or four figures sharing a base, and it should.
 
 No gun; a verb list instead. All actions are on an **orthogonally adjacent** tile and cost
 `fire_cost` AP: lay/clear mine, repair/demolish bridge (an enemy on it dies; a friendly unit
-on it forbids the demolition), repair a friendly unit, capture/demolish an objective. Repair is
-the one place where unspent AP matters.
+on it forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP
+matters.
 
 ### 3.9 Drone strike — assault squad only → [details](docs/rules/units.md)
 
@@ -195,18 +195,10 @@ attack (§3.4), even though it computes no armour sector — the rule has no exc
 The triangle it produces is the spine of the game's matchups:
 **drones beat tanks → light vehicles beat infantry → tanks beat light vehicles.**
 
-### 3.10 Objectives and victory → [details](docs/rules/objectives.md)
+### 3.10 Victory → [details](docs/rules/combat.md)
 
-Up to 15 markers per map, owned or neutral, intact or taken; an adjacent engineer flips one.
-Objectives obey fog. Checked at end of turn: an opponent has no units left, **or** the map's
-objective condition is met.
-
-- **The objective condition is checked for one player only — the one whose turn just ended.**
-  Elimination stays global. This makes a simultaneous objective win unreachable rather than
-  tie-broken. It does **not** make a captured objective something you must survive a round to
-  keep — see the linked document.
-- A map with no objective condition sets `hold_target` to 0.
-- When both conditions resolve together, **elimination decides**.
+A player with no units left is eliminated, checked the moment their last unit falls. Last player
+standing wins.
 
 ### 3.11 Mines → [details](docs/rules/vision-and-fog.md)
 

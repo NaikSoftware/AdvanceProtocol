@@ -39,7 +39,8 @@ Two rules about using it:
 
 ### Findings from the reference
 
-- **The original's experience system (thresholds and level-up in `class_1.method_97`) is deliberately not carried over.** A unit has only the parameters of its type.
+- **The original has an experience system (thresholds and level-up in `class_1.method_97`); this
+  project dropped it.** A unit has only the parameters of its type.
 
 - **Tank → artillery damage is quartered in the original — confirmed, and deliberately not
   adopted.** `class_3.method_160` carries a distinct `>>= 2` branch for attacker `TANK` against
@@ -127,11 +128,9 @@ Two rules about using it:
   opponent; only an engineer sets `field_151` (`class_1:805-815`), and `method_105` detonates on the
   table. Every slot is drawn with one sprite, `field_24[225]` (`GameCanvas:2632-2641`). Its victory
   types (`GameCanvas.method_18`) are annihilation, killing designated units, reaching a rectangle,
-  and a test on this same table inside a rectangle — none involves ownership. Owned and neutral
-  markers, and the 15-per-map cap, are this project's own; the cap was inherited from the mine
-  table. The reveal is one-way and what it shows is drawn live: a mine cleared out of sight
-  disappears for the opponent too, with no last-seen copy. This project draws objectives the same
-  way — current owner on any `seen` tile ([objectives](../rules/objectives.md)).
+  and a test on this same table inside a rectangle — none involves ownership. The reveal is one-way
+  and what it shows is drawn live: a mine cleared out of sight disappears for the opponent too,
+  with no last-seen copy. This project has no objectives either; it wins by elimination only.
 
 - **Terrain penalties are widely spaced, and tracked vehicles ignore open ground.** Confirmed
   against `GameCanvas.method_68`: the original uses six buckets — `0` road, `5`, `10` ordinary

@@ -215,8 +215,6 @@ Title: one Ukrainian phrase naming the user-visible result — no type prefix (r
 | road | дорога | |
 | mine / minefield | міна / мінне поле | |
 | drone strike | удар дрона | not «безпілотник» |
-| experience / level | досвід / рівень | |
-| objective | ціль (`Objective`) | collides with a shot's ціль — add the code name when ambiguous |
 | target (of a shot) | ціль | |
 | elimination | знищення всіх юнітів | |
 | surrender | здача, здатися | not «капітуляція» |
