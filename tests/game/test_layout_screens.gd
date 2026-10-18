@@ -151,13 +151,14 @@ func test_hud_threat_floor_fits(p = use_parameters(_repair_cases())) -> void:
 	var hud := root as Hud
 	hud.show_preview({"type": InputController.ActionType.DRONE, "unit_id": 1, "target_id": 2, "min": 120, "max": 180})
 	hud._show_drone_range()
-	hud._show_threat_floor(true)
-	await LayoutProbe.settle(self)
-	var where: String = "%s %s" % p
-	assert_true((root.get_node("%ThreatFloorLabel") as Control).is_visible_in_tree(), where)
-	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
-	assert_eq(LayoutProbe.overlapping([root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")] as Array[Control]),
-		[] as Array[String], where)
+	for drone: bool in [false, true]:
+		hud._show_threat_floor(true, drone)
+		await LayoutProbe.settle(self)
+		var where: String = "%s %s drone=%s" % [p[0], p[1], drone]
+		assert_true((root.get_node("%ThreatFloorLabel") as Control).is_visible_in_tree(), where)
+		assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
+		assert_eq(LayoutProbe.overlapping([root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")] as Array[Control]),
+			[] as Array[String], where)
 
 
 func _repair_cases() -> Array:

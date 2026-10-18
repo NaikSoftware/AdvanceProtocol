@@ -646,8 +646,10 @@ var _inspections: Array[Dictionary] = []
 
 func _watch_inspections() -> void:
 	_inspections = []
-	controller.inspected.connect(func(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int], is_floor: bool) -> void:
-		_inspections.append({"ring": ring, "drone_ring": drone_ring, "marked": marked, "is_floor": is_floor}))
+	controller.inspected.connect(func(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int],
+			drone_marked: Array[int], is_floor: bool) -> void:
+		_inspections.append({"ring": ring, "drone_ring": drone_ring, "marked": marked,
+			"drone_marked": drone_marked, "is_floor": is_floor}))
 
 
 ## Усе розвідано обома гравцями — інспекцію гейтить лише seen (§3.5).
@@ -657,7 +659,7 @@ func _begin_all_seen() -> void:
 		service.state.vision[p].seen.fill(1)
 
 
-const _EMPTY_INSPECTION: Dictionary = {"ring": [], "drone_ring": [], "marked": [], "is_floor": false}
+const _EMPTY_INSPECTION: Dictionary = {"ring": [], "drone_ring": [], "marked": [], "drone_marked": [], "is_floor": false}
 
 
 func test_tap_enemy_with_nothing_selected_inspects() -> void:
@@ -740,7 +742,54 @@ func test_own_squad_with_drones_has_drone_ring() -> void:
 	var i: Dictionary = _inspections[-1]
 	assert_eq(i["drone_ring"].size(), 81, "коло r=5")
 	assert_eq(i["drone_ring"], Targeting.reach_tiles(service.state, squad.id, DroneCommand.RANGE))
-	assert_eq(i["marked"], [tank.id])
+	assert_eq(i["marked"], [], "гармата загону дістає лише на 3")
+	assert_eq(i["drone_marked"], [tank.id])
+
+
+## §3.13: «власне кільце й власні позначки» дрона — гармата й дрон не змішуються.
+func test_own_squad_gun_and_drone_marks_are_split() -> void:
+	_start()
+	var squad: Unit = service.state.add_unit(1, 0, Vector2i(10, 10), 0)
+	var inf: Unit = service.state.add_unit(0, 1, Vector2i(10, 13), 0)  # 3 — гармата; дрон піхоту не б'є
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 15), 0)  # 5 — лише дрон
+	_begin_all_seen()
+	_watch_inspections()
+
+	controller.tap_cell(squad.pos)
+
+	assert_eq(_inspections[-1]["marked"], [inf.id])
+	assert_eq(_inspections[-1]["drone_marked"], [tank.id])
+
+
+func test_enemy_squad_gun_and_drone_threats_are_split() -> void:
+	_start()
+	var near: Unit = service.state.add_unit(5, 0, Vector2i(10, 12), 0)  # 2 — гармата й дрон
+	var far: Unit = service.state.add_unit(5, 0, Vector2i(10, 15), 0)  # 5 — лише дрон
+	var squad: Unit = service.state.add_unit(1, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	_watch_inspections()
+
+	controller.tap_cell(squad.pos)
+
+	var i: Dictionary = _inspections[-1]
+	assert_eq(i["marked"], [near.id])
+	assert_eq(i["drone_marked"], [near.id, far.id])
+	assert_true(i["is_floor"])
+
+
+## Ворог без жодного кільця (тут — на нерозвіданій землі, reach_tiles порожній)
+## нічого не прогнозує, тож і «нижньої межі» немає.
+func test_enemy_with_no_ring_is_not_a_floor() -> void:
+	_start()
+	service.state.add_unit(2, 0, Vector2i(0, 0), 0)
+	var enemy: Unit = service.state.add_unit(5, 1, Vector2i(19, 19), 0)
+	_begin_and_drain()
+	assert_false(service.state.vision[0].is_seen(enemy.pos), "передумова: земля не розвідана")
+	_watch_inspections()
+
+	controller.inspect_unit(enemy)
+
+	assert_eq(_inspections[-1], _EMPTY_INSPECTION)
 
 
 func test_inspect_cleared_on_empty_tap() -> void:

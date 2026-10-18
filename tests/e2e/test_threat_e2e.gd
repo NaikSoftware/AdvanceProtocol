@@ -44,8 +44,10 @@ func _boot(enemy_type: int, enemy_pos: Vector2i, prepare: Callable = Callable())
 			if prepare.is_valid():
 				prepare.call(st)})
 	_e2e.screen.input_controller().inspected.connect(
-		func(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int], is_floor: bool) -> void:
-			_last = {"ring": ring, "drone_ring": drone_ring, "marked": marked, "is_floor": is_floor})
+		func(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int], drone_marked: Array[int],
+				is_floor: bool) -> void:
+			_last = {"ring": ring, "drone_ring": drone_ring, "marked": marked, "drone_marked": drone_marked,
+				"is_floor": is_floor})
 
 
 func _state() -> BattleState:
@@ -83,7 +85,10 @@ func test_enemy_squad_with_drones_threatens_at_5() -> void:
 	var id: int = _state().unit_at(ENEMY_SQUAD).id
 	assert_eq(_last["drone_ring"], Targeting.reach_tiles(_state(), id, DroneCommand.RANGE))
 	assert_ne(_last["drone_ring"], [])
-	assert_true(_view(CAR_POS).is_threatened(), "броньовик на 5 — дрон")
+	assert_true(_view(CAR_POS).is_drone_threatened(), "броньовик на 5 — дрон")
+	assert_false(_view(CAR_POS).is_threatened(), "гармата загону дістає лише на 3")
+	assert_eq(_last["drone_marked"], [_state().unit_at(CAR_POS).id])
+	assert_eq(_floor().text, tr("hud_threat_floor_drone"))
 
 
 func test_enemy_squad_without_drones_does_not_threaten_at_5() -> void:
@@ -92,6 +97,8 @@ func test_enemy_squad_without_drones_does_not_threaten_at_5() -> void:
 	await _e2e.settle()
 	assert_eq(_last["drone_ring"], [])
 	assert_false(_view(CAR_POS).is_threatened())
+	assert_false(_view(CAR_POS).is_drone_threatened())
+	assert_eq(_floor().text, tr("hud_threat_floor"))
 
 
 func test_empty_tap_clears_inspection() -> void:
@@ -102,6 +109,7 @@ func test_empty_tap_clears_inspection() -> void:
 	await _e2e.settle()
 	assert_eq(_rings(), [])
 	assert_false(_view(CAR_POS).is_threatened())
+	assert_false(_view(CAR_POS).is_drone_threatened())
 	assert_false(_floor().is_visible_in_tree())
 
 

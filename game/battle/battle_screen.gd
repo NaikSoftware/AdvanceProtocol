@@ -67,6 +67,7 @@ var _path_overlay: PathOverlay = null
 var _target_overlay: TargetOverlay = null
 ## Id, позначені останнім оглядом (InputController.inspected).
 var _threatened: Array[int] = []
+var _drone_threatened: Array[int] = []
 var _event_player: EventPlayer = null
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
@@ -380,15 +381,19 @@ func _on_drone_armed(ring: Array[Vector2i], marks: Dictionary) -> void:
 
 ## Позначки тримаються списком id: вузли юнітів перебудовуються після кожного
 ## пакета подій (_rebuild_units_for_active_player), а огляд — ні.
-func _on_inspected(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int], _is_floor: bool) -> void:
+func _on_inspected(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int],
+		drone_marked: Array[int], _is_floor: bool) -> void:
 	_threatened = marked
+	_drone_threatened = drone_marked
 	_target_overlay.show_rings(ring, drone_ring)
 	_apply_threat_marks()
 
 
 func _apply_threat_marks() -> void:
 	for id: int in _unit_views:
-		(_unit_views[id] as UnitView).set_threatened(_threatened.has(id))
+		var view: UnitView = _unit_views[id]
+		view.set_threatened(_threatened.has(id))
+		view.set_drone_threatened(_drone_threatened.has(id))
 
 
 func _clear_forbidden_marks() -> void:

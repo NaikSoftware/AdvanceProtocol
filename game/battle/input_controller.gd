@@ -34,10 +34,12 @@ signal action_refused(reason: String)
 ## Режим DRONE озброєно: кільце дальності й позначки {id цілі: причина або ""} —
 ## обидва з Targeting (§3.13), вигляд лише малює.
 signal drone_armed(ring: Array[Vector2i], marks: Dictionary)
-## Огляд юніта (§3.13): кільце дальності, кільце дрона й позначені id — усе з
-## Targeting. is_floor — оглянуто ворога: позначки лише нижня межа. Порожні
-## масиви — огляд знято.
-signal inspected(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int], is_floor: bool)
+## Огляд юніта (§3.13): кільце гармати й кільце дрона та їхні позначки ОКРЕМО
+## (дрон — окрема дія з власними кільцем і позначками), усе з Targeting.
+## is_floor — оглянуто ворога з хоч одним кільцем: позначки лише нижня межа.
+## Порожні масиви — огляд знято.
+signal inspected(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int],
+		drone_marked: Array[int], is_floor: bool)
 
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
@@ -234,25 +236,31 @@ func inspect_unit(unit: Unit) -> void:
 	var ring: Array[Vector2i] = []
 	var drone_ring: Array[Vector2i] = []
 	var marked: Array[int] = []
+	var drone_marked: Array[int] = []
 	var own: bool = unit != null and unit.owner == state.active_player
 	if unit != null and unit.is_alive():
 		ring = Targeting.reach_tiles(state, unit.id, unit.attack_range())
 		if unit.drones_left > 0:
 			drone_ring = Targeting.reach_tiles(state, unit.id, DroneCommand.RANGE)
-		var hits: Array = []
-		if own:
-			hits = Targeting.firing_targets(state, unit.id) + Targeting.drone_targets(state, unit.id)
-		else:
-			hits = Targeting.threatened_units(state, unit.id, state.active_player) \
-				+ Targeting.drone_threatened_units(state, unit.id, state.active_player)
-		for u: Unit in hits:
-			if not marked.has(u.id):
-				marked.append(u.id)
-	inspected.emit(ring, drone_ring, marked, unit != null and not own)
+		var me: int = state.active_player
+		marked = _ids(Targeting.firing_targets(state, unit.id) if own
+			else Targeting.threatened_units(state, unit.id, me))
+		drone_marked = _ids(Targeting.drone_targets(state, unit.id) if own
+			else Targeting.drone_threatened_units(state, unit.id, me))
+	# Без жодного кільця прогнозувати нічого — і «нижньої межі» теж немає.
+	var is_floor: bool = unit != null and not own and not (ring.is_empty() and drone_ring.is_empty())
+	inspected.emit(ring, drone_ring, marked, drone_marked, is_floor)
 
 
 func inspect_clear() -> void:
-	inspected.emit([] as Array[Vector2i], [] as Array[Vector2i], [] as Array[int], false)
+	inspected.emit([] as Array[Vector2i], [] as Array[Vector2i], [] as Array[int], [] as Array[int], false)
+
+
+static func _ids(units: Array[Unit]) -> Array[int]:
+	var out: Array[int] = []
+	for u in units:
+		out.append(u.id)
+	return out
 
 
 func cancel_pending() -> void:
