@@ -137,8 +137,10 @@ At 0 AP it may not — and firing sets AP to 0 (§3.2), so a unit that has fired
 moving, ends the turn facing wherever that left it.
 
 This is the owner's decision (2026-10-18): a tap anywhere on the board turns the active unit there,
-so it can be pointed somewhere else after its move. Without it, facing after a move follows the
-last step of the route, and the only way to aim the front was to plan the route around it. The AP
+so it can be pointed somewhere else after its move. **A move carries no facing of its own: the unit
+always ends it facing along its last step.** An explicit facing on a move that spends the last AP
+would be a free turn at 0 AP, around the gate below — so turning in place is the only free
+reorientation, and without it the only way to aim the front was to plan the route around it. The AP
 gate is what keeps flanking a punishment: the turn is free but not unconditional, so a unit that
 spent its turn carelessly — ran into red, or fired from an exposed tile — cannot square up to the
 threat afterwards. A turn that changes nothing is refused (`ERR_ALREADY_FACING`), so the turn event

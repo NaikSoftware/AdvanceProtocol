@@ -9,13 +9,13 @@ func before_each() -> void:
 
 func test_rejected_command_produces_no_events() -> void:
 	var enemy_unit: Unit = service.state.add_unit(5, 1, Vector2i(4, 4), 0)
-	var err: String = service.submit(MoveCommand.create(enemy_unit.id, Vector2i(4, 5), -1))
+	var err: String = service.submit(MoveCommand.create(enemy_unit.id, Vector2i(4, 5)))
 	assert_ne(err, "", "чужий юніт не рухається")
 	assert_eq(service.take_events().size(), 0, "відхилена команда не змінює нічого")
 
 func test_accepted_command_queues_events() -> void:
 	var u: Unit = service.state.add_unit(5, 0, Vector2i(4, 4), 0)
-	assert_eq(service.submit(MoveCommand.create(u.id, Vector2i(4, 5), -1)), "")
+	assert_eq(service.submit(MoveCommand.create(u.id, Vector2i(4, 5))), "")
 	assert_true(service.take_events().size() > 0)
 	assert_eq(service.take_events().size(), 0, "черга спорожняється після забору")
 

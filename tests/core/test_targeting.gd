@@ -155,7 +155,7 @@ func test_an_enemy_on_ground_scouted_earlier_can_still_be_inspected() -> void:
 	state.begin_turn()
 	assert_true(state.vision[0].is_seen(enemy.pos), "передумова: розвідник накрив тайл ворога")
 
-	MoveCommand.create(scout.id, Vector2i(4, 11), -1).apply(state)
+	MoveCommand.create(scout.id, Vector2i(4, 11)).apply(state)
 	assert_eq(scout.pos, Vector2i(4, 11), "передумова: 3 тайли поля по 10 — рівно 30 AP")
 	assert_false(state.vision[0].is_visible(enemy.pos), "передумова: зараз за ворогом не стежить ніхто")
 	assert_true(state.vision[0].is_seen(enemy.pos), "передумова: але землю під ним колись розвідали")
@@ -434,7 +434,7 @@ func test_an_enemy_squad_on_ground_scouted_earlier_still_carries_a_drone_forecas
 	state.begin_turn()
 	assert_true(state.vision[0].is_seen(squad.pos), "передумова: розвідник накрив тайл відділення")
 
-	MoveCommand.create(scout.id, Vector2i(2, 9), -1).apply(state)
+	MoveCommand.create(scout.id, Vector2i(2, 9)).apply(state)
 	assert_eq(scout.pos, Vector2i(2, 9), "передумова: 3 тайли поля по 10 — рівно 30 AP")
 	assert_false(state.vision[0].is_visible(squad.pos), "передумова: зараз за відділенням не стежить ніхто")
 	assert_true(state.vision[0].is_seen(squad.pos), "передумова: але землю під ним колись розвідали")

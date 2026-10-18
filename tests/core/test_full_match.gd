@@ -76,8 +76,8 @@ func test_a_whole_match_runs_through_commands_only() -> void:
 	# --- Хід 1, гравець 0: begin_turn -> два часткові рухи (§3.2: "рух
 	# витрачається, а не фіксується") -> без пострілу цього ходу -> EndTurn.
 	log.append_array(s.begin_turn())
-	log.append_array(MoveCommand.create(tank.id, Vector2i(4, 6), 2).apply(s))
-	log.append_array(MoveCommand.create(tank.id, Vector2i(5, 6), 2).apply(s))
+	log.append_array(MoveCommand.create(tank.id, Vector2i(4, 6)).apply(s))
+	log.append_array(MoveCommand.create(tank.id, Vector2i(5, 6)).apply(s))
 	assert_eq(tank.pos, Vector2i(5, 6), "два часткові рухи довезли танк рівно туди, куди й прямий")
 	assert_eq(tank.ap, 28, "48 - (10 + 10) = 28")
 	assert_true(tank.ap >= tank.fire_cost(), "золота зона: після двох часткових рухів постріл ще можливий")
@@ -204,7 +204,7 @@ func test_mine_laid_by_one_player_is_triggered_by_the_other() -> void:
 	# інженер, і зайнятий тайл зробив би шлях недосяжним ще до самої міни —
 	# це перевірка обриву руху на міні, а не на сусідові.
 	var before_hp: int = enemy.hp
-	var events: Array[Events.BattleEvent] = MoveCommand.create(enemy.id, Vector2i(5, 3), -1).apply(s)
+	var events: Array[Events.BattleEvent] = MoveCommand.create(enemy.id, Vector2i(5, 3)).apply(s)
 
 	assert_true(enemy.hp < before_hp, "§3.11: наїзд на нерозкриту міну підриває юніт")
 	assert_eq(enemy.pos, Vector2i(4, 3), "рух обривається на міні, а не проходить крізь неї")
@@ -255,7 +255,7 @@ func test_state_survives_a_save_load_mid_match() -> void:
 	s.add_unit(2, 1, Vector2i(12, 6), 6)
 	s.start()
 	s.begin_turn()
-	MoveCommand.create(tank.id, Vector2i(5, 6), 2).apply(s)
+	MoveCommand.create(tank.id, Vector2i(5, 6)).apply(s)
 
 	var restored: BattleState = BattleSerializer.from_dict(BattleSerializer.to_dict(s))
 	assert_eq(restored.get_unit(tank.id).pos, Vector2i(5, 6))

@@ -89,4 +89,4 @@ func test_reads_nothing_about_enemies() -> void:
 func test_move_to_own_tile_cannot_turn() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
 	u.ap = 0
-	assert_eq(MoveCommand.create(u.id, u.pos, 4).validate(state), "ERR_OWN_TILE")
+	assert_eq(MoveCommand.create(u.id, u.pos).validate(state), "ERR_OWN_TILE")

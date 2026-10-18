@@ -360,9 +360,9 @@ func _clear_pending() -> void:
 func _build_command(pending: Dictionary) -> Command:
 	match pending["type"]:
 		ActionType.MOVE:
-			# facing -1: гравець тут не обирає напрямок окремо — MoveCommand
-			# сам виводить його з останнього кроку шляху (core/commands/move_command.gd).
-			return MoveCommand.create(pending["unit_id"], pending["target"], -1)
+			# Напрямок у наказі не передається: MoveCommand сам виводить його з
+			# останнього кроку шляху (core/commands/move_command.gd).
+			return MoveCommand.create(pending["unit_id"], pending["target"])
 		ActionType.SHOT:
 			return FireCommand.create(pending["unit_id"], pending["target_id"])
 		ActionType.ENGINEER:
