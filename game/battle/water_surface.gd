@@ -1,8 +1,8 @@
 class_name WaterSurface
 extends MeshInstance3D
-## Річка (Phase 5a, Task 6): одна площина над усією землею, шейдер лишає воду лише
-## на WATER і BRIDGE_DESTROYED. Цілий BRIDGE — дорога без води: земля лежить під
-## водою, тож вода на мосту затопила б настил, а не сховалась під ним.
+## Річка (Phase 5a, Task 6): одна площина над усією землею, шейдер лишає воду на
+## WATER, BRIDGE і BRIDGE_DESTROYED — річка тече й під мостом (рішення власника);
+## сам міст — окремий меш над водою (BoardView, згодом Task 8).
 ##
 ## §3.5: вода нічого не знає про туман; відбиття бере зонд BoardView, який не
 ## бачить шару юнітів.
@@ -17,10 +17,15 @@ var _wave_normal: NoiseTexture2D
 
 func build(board: Board, margin: int, kind_map: ImageTexture) -> void:
 	var has_water := false
+	# Пари сусідніх клітинок води вздовж X і вздовж Y: річка тече вздовж довшої осі.
+	var along_x := 0
+	var along_y := 0
 	for y in board.height:
 		for x in board.width:
-			var kind: int = board.kind_at(Vector2i(x, y))
-			has_water = has_water or kind == Terrain.Kind.WATER or kind == Terrain.Kind.BRIDGE_DESTROYED
+			if _is_water(board, Vector2i(x, y)):
+				has_water = true
+				along_x += 1 if _is_water(board, Vector2i(x + 1, y)) else 0
+				along_y += 1 if _is_water(board, Vector2i(x, y + 1)) else 0
 	visible = has_water
 	if not has_water:
 		return
@@ -50,6 +55,17 @@ func build(board: Board, margin: int, kind_map: ImageTexture) -> void:
 	mat.set_shader_parameter("kind_map", kind_map)
 	mat.set_shader_parameter("map_origin", Vector2(-margin, -margin))
 	mat.set_shader_parameter("water_kind", Terrain.Kind.WATER)
+	mat.set_shader_parameter("bridge_kind", Terrain.Kind.BRIDGE)
 	mat.set_shader_parameter("broken_bridge_kind", Terrain.Kind.BRIDGE_DESTROYED)
 	mat.set_shader_parameter("wave_normal", _wave_normal)
+	# shortcut: одна вісь течії на карту, бо річки на картах прямі; для звивистої
+	# річки — напрямок із карти видів на фрагмент.
+	mat.set_shader_parameter("flow_dir", Vector2(1, 0) if along_x >= along_y else Vector2(0, 1))
 	material_override = mat
+
+
+static func _is_water(board: Board, cell: Vector2i) -> bool:
+	if cell.x >= board.width or cell.y >= board.height:
+		return false
+	var kind: int = board.kind_at(cell)
+	return kind == Terrain.Kind.WATER or kind == Terrain.Kind.BRIDGE or kind == Terrain.Kind.BRIDGE_DESTROYED

@@ -21,6 +21,9 @@ enum { LAYER_ZONES, LAYER_PATH, LAYER_TARGETS, LAYER_INSPECT }
 ## у річці. Шар 2 — юніти, 3 — міни (MineLayer.MARKER_LAYER).
 const OVERLAY_LAYER: int = 4
 
+## Тимчасовий настил мостів — верх на 0.25 клітинки (~2 м) над водою.
+const PLACEHOLDER_DECK_TOP: float = 0.25
+
 ## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
 ## задумом — вона мусить читатись як лінія на межі тайла, а не як ще один
 ## пофарбований тайл. _CONTOUR_INSET відсуває риску від самого краю тайла:
@@ -46,6 +49,14 @@ var _water: WaterSurface
 ## новий знімок посеред партії міг би захопити тимчасові вузли на дошці.
 ## §3.5: шар юнітів (UnitView.UNIT_LAYER) у cull_mask не входить ніколи.
 var _probe: ReflectionProbe
+## ТИМЧАСОВО, до мостів Task 8 (бетонний проліт на опорах або понтони): клітинки
+## під плоским настилом і вісь дороги кожної — читаються тестами.
+var _placeholder_bridge_deck_cells: Array[Vector2i] = []
+var _placeholder_bridge_deck_axes: Array[Vector2i] = []
+## Руїни підірваних мостів (BRIDGE_DESTROYED) — теж тимчасово, до Task 8. Руїни не
+## зникають: гравець мусить бачити, де інженер може відновити міст.
+var _placeholder_bridge_ruin_cells: Array[Vector2i] = []
+var _placeholder_bridge_ruin_transforms: Array[Transform3D] = []
 ## тайл -> вид тайлу під ним.
 var _kind_by_cell: Dictionary = {}
 ## шар контуру -> Array[Dictionary] сегментів {cell, dir, color}, які зараз
@@ -75,6 +86,10 @@ func build(board: Board) -> void:
 	# вузли, і наступний clear_contour() спробував би звільнити їх удруге.
 	_contour_segments.clear()
 	_contour_nodes.clear()
+	_placeholder_bridge_deck_cells.clear()
+	_placeholder_bridge_deck_axes.clear()
+	_placeholder_bridge_ruin_cells.clear()
+	_placeholder_bridge_ruin_transforms.clear()
 	_circles.clear()
 	_circle_nodes.clear()
 
@@ -95,6 +110,8 @@ func build(board: Board) -> void:
 		add_child(_water)
 	var kinds: Image = _ground.kind_image()
 	_water.build(board, 0, null if kinds.is_empty() else ImageTexture.create_from_image(kinds))
+
+	_build_placeholder_bridge_deck(board)
 
 	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз: будь-яка
 	# зміна size/position/origin_offset перезняла б зонд посеред партії.
@@ -254,3 +271,97 @@ func _contour_material() -> StandardMaterial3D:
 
 func reflection_probe() -> ReflectionProbe:
 	return _probe
+
+
+## ТИМЧАСОВО — Task 8 видаляє цей метод разом із вузлами PlaceholderBridgeDeck і
+## PlaceholderBridgeRuin і ставить справжні мости (бетонний проліт на опорах або
+## понтони) та їхні руїни. Поки річка тече під мостом, без настилу гравець не
+## бачив би переправи. По одному MultiMesh — по одному draw call (§8).
+func _build_placeholder_bridge_deck(board: Board) -> void:
+	for y in board.height:
+		for x in board.width:
+			var cell := Vector2i(x, y)
+			if board.kind_at(cell) == Terrain.Kind.BRIDGE:
+				_placeholder_bridge_deck_cells.append(cell)
+				_placeholder_bridge_deck_axes.append(_bridge_axis(board, cell))
+			elif board.kind_at(cell) == Terrain.Kind.BRIDGE_DESTROYED:
+				_placeholder_bridge_ruin_cells.append(cell)
+				_add_ruin_transforms(cell, _bridge_axis(board, cell))
+	if not _placeholder_bridge_ruin_transforms.is_empty():
+		_add_placeholder_multimesh("PlaceholderBridgeRuin", _placeholder_bridge_ruin_transforms, Color(0.2, 0.19, 0.18))
+	var deck: Array[Transform3D] = []
+	for i in _placeholder_bridge_deck_cells.size():
+		var turn := Basis() if _placeholder_bridge_deck_axes[i].x != 0 else Basis(Vector3.UP, PI * 0.5)
+		var pos: Vector3 = IsoCameraRig.cell_to_world(_placeholder_bridge_deck_cells[i])
+		deck.append(Transform3D(turn * Basis.from_scale(Vector3(1.0, 0.06, 0.8)),
+				pos + Vector3(0.0, PLACEHOLDER_DECK_TOP - 0.03, 0.0)))
+	if not deck.is_empty():
+		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, Color(0.42, 0.42, 0.4))
+
+
+## Уламки однієї клітинки: дві-три плити настилу, що звисають від опор під
+## 10–25° (зовнішній край ~0.25 клітинки, де плита трималась, внутрішній — у воді),
+## і дві обрубані опори. Усе з хешу клітинки — ніколи Rules.roll чи глобальна
+## випадковість: обидва гравці мусять бачити ті самі руїни.
+func _add_ruin_transforms(cell: Vector2i, axis: Vector2i) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(cell)
+	var yaw := Basis() if axis.x != 0 else Basis(Vector3.UP, PI * 0.5)
+	var centre: Vector3 = IsoCameraRig.cell_to_world(cell)
+	var put := func(local: Vector3, tilt: Basis, size: Vector3) -> void:
+		_placeholder_bridge_ruin_transforms.append(
+				Transform3D(yaw * tilt * Basis.from_scale(size), centre + yaw * local))
+	# Плита від ближнього краю: тримається на 0.25, провисає до середини.
+	for side: float in [-1.0, 1.0]:
+		var length := rng.randf_range(0.38, 0.5)
+		var angle := deg_to_rad(rng.randf_range(10.0, 25.0))
+		var hold := PLACEHOLDER_DECK_TOP if side < 0.0 else rng.randf_range(0.1, 0.2)
+		var along := side * (0.5 - length * 0.5 * cos(angle))
+		var y := hold - length * 0.5 * sin(angle)
+		var lateral := rng.randf_range(-0.08, 0.08)
+		put.call(Vector3(along, y, lateral), Basis(Vector3.BACK, side * angle),
+				Vector3(length, 0.06, rng.randf_range(0.6, 0.75)))
+		# Обрубана опора під краєм.
+		put.call(Vector3(side * 0.44, 0.0, 0.0), Basis(), Vector3(0.14, 0.22, 0.5))
+	if rng.randf() < 0.5:
+		# Третя плита впала посередині й наполовину пішла під воду.
+		put.call(Vector3(rng.randf_range(-0.1, 0.1), -0.005, rng.randf_range(-0.1, 0.1)),
+				Basis(Vector3.RIGHT, deg_to_rad(rng.randf_range(10.0, 20.0))), Vector3(0.3, 0.06, 0.45))
+
+
+func _add_placeholder_multimesh(node_name: String, transforms: Array[Transform3D], color: Color) -> void:
+	var box := BoxMesh.new()
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.95
+	box.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = box
+	mm.instance_count = transforms.size()
+	for i in transforms.size():
+		mm.set_instance_transform(i, transforms[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = node_name
+	mmi.multimesh = mm
+	add_child(mmi)
+
+
+## Вісь дороги через міст: та, де за суцільним рядом клітинок мосту стоїть
+## дорога з обох боків. Широкий міст (кілька клітинок) так не плутає вісь із
+## сусідньою клітинкою того ж мосту. Руїни беруть ту саму вісь.
+static func _bridge_axis(board: Board, cell: Vector2i) -> Vector2i:
+	var best := Vector2i(1, 0)
+	var best_score := -1
+	for axis: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
+		var score := 0
+		for dir: Vector2i in [axis, -axis]:
+			var p := cell + dir
+			while board.in_bounds(p) and board.kind_at(p) == Terrain.Kind.BRIDGE:
+				p += dir
+			if board.in_bounds(p) and board.kind_at(p) == Terrain.Kind.ROAD:
+				score += 1
+		if score > best_score:
+			best = axis
+			best_score = score
+	return best

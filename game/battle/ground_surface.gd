@@ -12,7 +12,8 @@ const TEX_LAYERS: Array[String] = ["road", "field", "forest", "hill", "marsh", "
 
 const TEX_LAYER_FOR_KIND: Dictionary = {
 	Terrain.Kind.ROAD: 0,
-	Terrain.Kind.BRIDGE: 0,
+	# Річка тече під мостом: під цілим мостом — русло, як під водою.
+	Terrain.Kind.BRIDGE: 7,
 	Terrain.Kind.FIELD: 1,
 	Terrain.Kind.FOREST: 2,
 	Terrain.Kind.HILL: 3,

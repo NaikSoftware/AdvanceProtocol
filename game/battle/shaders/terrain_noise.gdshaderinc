@@ -64,3 +64,30 @@ float ripple_visibility(vec2 p) {
 	float px = length(fwidth(p * RIPPLE_CELLS_PER_TILE));
 	return 1.0 - smoothstep(0.1, 0.3, px);
 }
+
+// Запасне похмуре небо для води й калюж, поки в сцені немає справжнього (Task 10):
+// без нього зонд знімає лише сіре тло, і вода чорна. Лінійні кольори: обрій
+// ~sRGB 130, зеніт ~100, плюс хмарні плями, щоб відбиття лягало смугами.
+vec3 overcast_sky(vec3 r) {
+	float up = clamp(r.y, 0.0, 1.0);
+	vec3 c = mix(vec3(0.21, 0.22, 0.235), vec3(0.12, 0.13, 0.14), sqrt(up));
+	return c * (0.85 + 0.3 * fbm(r.xz / max(r.y, 0.08) * 0.6));
+}
+
+// Відбиття запасного неба з френелем Шліка; n і v — світові й нормалізовані.
+vec3 overcast_reflection(vec3 n, vec3 v, float f0, float power) {
+	float f = f0 + (1.0 - f0) * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), power);
+	return overcast_sky(reflect(-v, n)) * f;
+}
+
+// Нахил нормалі у світовому xz -> NORMAL_MAP площини (дотична +X, бінормаль −Z).
+vec3 slope_to_normal_map(vec2 s) {
+	return vec3(s.x * 0.5 + 0.5, -s.y * 0.5 + 0.5, 1.0);
+}
+
+// Нахил у світовому xz -> світова нормаль (довжину нахилу обмежено, як і в Godot,
+// що відновлює z з xy карти нормалей).
+vec3 slope_to_world(vec2 s) {
+	s *= min(1.0, 0.9 / max(length(s), 1e-4));
+	return vec3(s.x, sqrt(1.0 - dot(s, s)), s.y);
+}

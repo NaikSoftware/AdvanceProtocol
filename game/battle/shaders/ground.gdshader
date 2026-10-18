@@ -8,6 +8,8 @@ render_mode blend_mix, cull_back;
 
 global uniform float weather_wetness;
 global uniform float cloud_shadow_strength;
+// 1 — запасне похмуре небо у відбитті калюж і мокрого берега (див. water.gdshader).
+global uniform float sky_fallback;
 
 uniform sampler2D kind_map : filter_nearest, repeat_disable;
 // Клітинка, що відповідає пікселю (0, 0) kind_map (від'ємна при відступі).
@@ -23,6 +25,8 @@ const int FIELD = 1;
 const int HILL = 3;
 const int FOREST = 2;
 const int MUD = 5;
+// Шар берега — лише під WATER і BRIDGE_DESTROYED (GroundSurface.TEX_LAYER_FOR_KIND).
+const int BANK = 7;
 
 // Підсилення альбедо шару: лісова підстилка з Task 4 майже чорна (середнє 55
 // проти 75 у поля), а під деревами вона мусить читатись як бура листва.
@@ -100,8 +104,11 @@ void fragment() {
 	// Багно: поле й пагорб під станом MUD (плямами, не суцільно) і узбіччя доріг.
 	float road_w = 0.0;
 	float soil_w = 0.0;
+	// Вага води — та сама, що в масці water.gdshader (уріз на 0.5).
+	float bank_w = 0.0;
 	for (int i = 0; i < 4; i++) {
 		road_w += L[i] == ROAD ? W[i] : 0.0;
+		bank_w += L[i] == BANK ? W[i] : 0.0;
 		soil_w += (L[i] == FIELD || L[i] == HILL) ? W[i] : 0.0;
 	}
 	// Плями, а не напівпрозорий шар: півпрозоре багно поверх трави читається як
@@ -187,11 +194,22 @@ void fragment() {
 	float pthr = wet * 0.42;
 	float puddle = (1.0 - smoothstep(pthr - 0.03, pthr + 0.02, pn)) * puddle_ground;
 	alb *= mix(1.0, 0.55, puddle);
-	// Гладка калюжа (0.05) відбиває зонд BoardView звичайним шляхом освітлення —
-	// без SSR. Дощ на ній — ті самі кола, що й на річці.
+	// Мокра смуга берега: вага води росте ~3.4 на клітинку біля урізу (0.5), тож
+	// 0.1 -> 0.5 — це ~1 м суші перед водою; найтемніша й найглянцевіша при воді.
+	float shore = smoothstep(0.1, 0.45, bank_w);
+	alb *= mix(1.0, 0.6, shore);
+	rough = mix(rough, 0.15, shore);
+	// Гладка калюжа відбиває зонд BoardView звичайним шляхом освітлення — без SSR.
+	// Дощ на ній — ті самі кола, що й на річці. Підлога шорсткості 0.12: на 0.05
+	// сонце на брижі давало однопіксельні іскри.
 	float rv = puddle > 0.0 ? ripple_visibility(p) : 0.0;
-	rough = mix(rough, 0.05 + 0.12 * wet * (1.0 - rv), puddle);
-	nxy = mix(nxy, puddle > 0.0 ? rain_ripples(p, TIME) * 2.0 * wet * rv : vec2(0.0), puddle);
+	vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * 1.2 * wet * rv : vec2(0.0);
+	rough = mix(rough, 0.12 + 0.1 * wet * (1.0 - rv), puddle);
+	nxy = mix(nxy, ripple, puddle);
+	float mirror = max(puddle, shore * 0.5);
+	vec3 refl = mirror > 0.0 && sky_fallback > 0.0
+			? overcast_reflection(slope_to_world(ripple), normalize(CAMERA_POSITION_WORLD - world_pos), 0.03, 3.0)
+			: vec3(0.0);
 
 	if (cloud_shadow_strength > 0.0) {
 		float cloud = smoothstep(0.45, 0.7, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
@@ -199,6 +217,7 @@ void fragment() {
 	}
 
 	ALBEDO = alb;
+	EMISSION = refl * mirror * sky_fallback;
 	ROUGHNESS = rough;
 	NORMAL_MAP = vec3(nxy * 0.5 + 0.5, 1.0);
 }

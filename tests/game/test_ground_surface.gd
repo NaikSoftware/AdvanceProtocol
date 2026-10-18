@@ -83,7 +83,8 @@ func test_every_kind_has_a_texture_layer() -> void:
 		assert_true(GroundSurface.TEX_LAYER_FOR_KIND.has(kind), "вид %d без шару текстури" % kind)
 		var layer: int = GroundSurface.TEX_LAYER_FOR_KIND[kind]
 		assert_between(layer, 0, GroundSurface.TEX_LAYERS.size() - 1)
-	assert_eq(GroundSurface.TEX_LAYERS[GroundSurface.TEX_LAYER_FOR_KIND[Terrain.Kind.BRIDGE]], "road")
+	# Річка тече під мостом: під цілим мостом — русло, як під водою.
+	assert_eq(GroundSurface.TEX_LAYERS[GroundSurface.TEX_LAYER_FOR_KIND[Terrain.Kind.BRIDGE]], "bank")
 	assert_eq(GroundSurface.TEX_LAYERS[GroundSurface.TEX_LAYER_FOR_KIND[Terrain.Kind.WATER]], "bank")
 	assert_eq(GroundSurface.TEX_LAYERS[GroundSurface.TEX_LAYER_FOR_KIND[Terrain.Kind.BUILDING]], "rubble")
 
