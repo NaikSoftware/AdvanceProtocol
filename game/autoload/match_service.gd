@@ -16,23 +16,21 @@ var launch_mode: int = Launch.NONE
 ## map_path порожній — карта невідома (збереження без сайдкара): бій бере резервну.
 var map_path: String = ""
 var players: int = 2
-var ground_state: int = Terrain.GroundState.DRY
 var seed_value: int = 0
 var _queue: Array[Events.BattleEvent] = []
 
 ## seed_value < 0 — випадковий. Сід лишається прихованим від гравця (match_setup.gd),
 ## але живе в state.seed_value і в збереженні, тож матч відтворюваний.
-func configure(p_map_path: String, p_players: int, p_ground_state: int, p_seed: int = -1) -> void:
+func configure(p_map_path: String, p_players: int, p_seed: int = -1) -> void:
 	map_path = p_map_path
 	players = p_players
-	ground_state = p_ground_state
 	seed_value = p_seed if p_seed >= 0 else _random_seed()
 	launch_mode = Launch.NEW
 
 
 ## Той самий матч, новий сід.
 func rematch() -> void:
-	configure(map_path, players, ground_state)
+	configure(map_path, players)
 
 
 func _random_seed() -> int:
@@ -104,7 +102,6 @@ func load_saved(path: String) -> bool:
 		return false
 	state = loaded
 	players = loaded.player_count
-	ground_state = loaded.board.ground_state
 	seed_value = loaded.seed_value
 	var sidecar: String = path + ".map"
 	map_path = FileAccess.get_file_as_string(sidecar) if FileAccess.file_exists(sidecar) else ""
