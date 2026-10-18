@@ -2,7 +2,7 @@ class_name EngineerCommand
 extends Command
 ## §3.8. Верби замість гармати. Усе — на ортогонально сусідньому тайлі за fire_cost AP.
 
-enum Action { LAY_MINE, CLEAR_MINE, REPAIR_BRIDGE, DEMOLISH_BRIDGE, REPAIR_UNIT, CAPTURE_OBJECTIVE, DEMOLISH_OBJECTIVE }
+enum Action { LAY_MINE, CLEAR_MINE, REPAIR_BRIDGE, DEMOLISH_BRIDGE, REPAIR_UNIT }
 
 var unit_id: int = 0
 var action: int = Action.LAY_MINE
@@ -94,14 +94,6 @@ func validate(state: BattleState) -> String:
 				return "ERR_NO_FRIENDLY_UNIT_THERE"
 			if t.hp >= t.max_hp():
 				return "ERR_UNIT_UNDAMAGED"
-		Action.CAPTURE_OBJECTIVE, Action.DEMOLISH_OBJECTIVE:
-			var o: Objectives.Objective = Objectives.at(state, target_pos)
-			if o == null:
-				return "ERR_NO_OBJECTIVE_THERE"
-			if action == Action.CAPTURE_OBJECTIVE and (o.owner == e.owner or not o.intact):
-				return "ERR_NOTHING_TO_CAPTURE"
-			if action == Action.DEMOLISH_OBJECTIVE and not o.intact:
-				return "ERR_NOTHING_TO_DEMOLISH"
 	return ""
 
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
@@ -115,7 +107,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 		Action.CLEAR_MINE:
 			out.append_array(Mines.clear(state, target_pos))
 		Action.DEMOLISH_BRIDGE:
-			# Той самий запобіжник, що й для REPAIR_UNIT/CAPTURE_OBJECTIVE нижче:
+			# Той самий запобіжник, що й для REPAIR_UNIT нижче:
 			# без цієї перевірки релізний виклик apply() без validate() перетворив би
 			# звичайне поле на непрохідний BRIDGE_DESTROYED — це не «нічого не
 			# сталося за AP», а мапа, переформована з нізвідки. Подія теж під
@@ -149,19 +141,6 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 				var healed: int = mini(repair_amount(state.rng, e), t.max_hp() - t.hp)
 				t.hp += healed
 				out.append(Events.UnitRepaired.new(t.id, healed, t.hp))
-		Action.CAPTURE_OBJECTIVE:
-			# Той самий запобіжник: Objectives.at() лишається значенням, яке
-			# існує лише для дозволеної дії, і релізний виклик без validate()
-			# не повинен захопити ціль з нізвідки.
-			var o: Objectives.Objective = Objectives.at(state, target_pos)
-			if o != null:
-				o.owner = e.owner
-				out.append(Events.ObjectiveCaptured.new(state.objectives.find(o), e.owner))
-		Action.DEMOLISH_OBJECTIVE:
-			var od: Objectives.Objective = Objectives.at(state, target_pos)
-			if od != null:
-				od.intact = false
-				out.append(Events.ObjectiveDestroyed.new(state.objectives.find(od)))
 
 	e.exhaust()
 	out.append(Events.ApChanged.new(unit_id, 0))

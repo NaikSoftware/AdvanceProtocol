@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://game/battle/battle_screen.gd" id="1_screen"]
 [ext_resource type="PackedScene" path="res://game/camera/iso_camera_rig.tscn" id="2_camera"]
@@ -7,7 +7,6 @@
 [ext_resource type="PackedScene" path="res://game/ui/handover_gate.tscn" id="5_gate"]
 [ext_resource type="PackedScene" path="res://game/ui/pause_menu.tscn" id="6_pause"]
 [ext_resource type="Script" path="res://game/battle/mine_layer.gd" id="7_mines"]
-[ext_resource type="Script" path="res://game/battle/objective_view.gd" id="8_objs"]
 
 [node name="BattleScreen" type="Node3D"]
 script = ExtResource("1_screen")
@@ -25,10 +24,6 @@ unique_name_in_owner = true
 [node name="MineLayer" type="Node3D" parent="."]
 unique_name_in_owner = true
 script = ExtResource("7_mines")
-
-[node name="ObjectiveView" type="Node3D" parent="."]
-unique_name_in_owner = true
-script = ExtResource("8_objs")
 
 [node name="Units" type="Node3D" parent="."]
 unique_name_in_owner = true

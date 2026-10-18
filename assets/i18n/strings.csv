@@ -31,11 +31,8 @@ ERR_TILE_OCCUPIED,Клітинка зайнята,Tile is occupied
 ERR_NO_MINE_THERE,Тут немає міни,There is no mine here
 ERR_NO_BRIDGE_THERE,Тут немає мосту,There is no bridge here
 ERR_NOTHING_TO_REPAIR,Нема чого ремонтувати,Nothing to repair
-ERR_NOTHING_TO_DEMOLISH,Нема чого зносити,Nothing to demolish
 ERR_NO_FRIENDLY_UNIT_THERE,Тут немає вашого юніта,No friendly unit here
 ERR_UNIT_UNDAMAGED,Юніт не пошкоджений,Unit is undamaged
-ERR_NO_OBJECTIVE_THERE,Тут немає цілі,There is no objective here
-ERR_NOTHING_TO_CAPTURE,Нема чого захоплювати,Nothing to capture
 ERR_NOT_IMPLEMENTED,Ще не реалізовано,Not implemented
 ERR_MATCH_OVER,Матч завершено,The match is over
 hud_turn,Хід,Turn
@@ -104,7 +101,6 @@ results_title,Матч завершено,Match over
 results_winner,Переможець,Winner
 results_losses,Втрати,Losses
 results_damage,Завдана шкода,Damage dealt
-results_objectives,Утримані цілі,Objectives held
 results_rematch,Реванш,Rematch
 results_to_menu,В меню,To menu
 about_body,Мобільна покрокова тактика. Хот-сит на 2–3 гравці.,Mobile turn-based tactics. Hot-seat for 2–3 players.

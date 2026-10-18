@@ -27,9 +27,6 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var mines: Array = []
 	for m in state.mines:
 		mines.append({"x": m.pos.x, "y": m.pos.y, "owner": m.owner, "known_to": m.known_to.duplicate()})
-	var objectives: Array = []
-	for o in state.objectives:
-		objectives.append({"x": o.pos.x, "y": o.pos.y, "owner": o.owner, "intact": o.intact, "seen_by": o.seen_by.duplicate()})
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
@@ -47,8 +44,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"winner": state.winner,
 		"eliminated": state.eliminated.duplicate(),
 		"next_unit_id": state._next_unit_id,
-		"objective_hold_target": state.objective_hold_target,
-		"units": units, "mines": mines, "objectives": objectives,
+		"units": units, "mines": mines,
 		"vision": vision,
 		"damage_dealt": state.damage_dealt.duplicate(),
 	}
@@ -85,7 +81,6 @@ static func from_dict(data: Dictionary) -> BattleState:
 		state.eliminated.append(bool(e))
 
 	state._next_unit_id = int(data["next_unit_id"])
-	state.objective_hold_target = int(data["objective_hold_target"])
 
 	state.units.clear()
 	for u_data in (data["units"] as Array):
@@ -112,16 +107,6 @@ static func from_dict(data: Dictionary) -> BattleState:
 			mine.known_to.append(bool(k))
 		state.mines.append(mine)
 
-	state.objectives.clear()
-	for o_data in (data["objectives"] as Array):
-		var pos := Vector2i(int(o_data["x"]), int(o_data["y"]))
-		var obj := Objectives.Objective.new(pos, int(o_data["owner"]), state.player_count)
-		obj.intact = bool(o_data["intact"])
-		obj.seen_by.clear()
-		for sb in (o_data["seen_by"] as Array):
-			obj.seen_by.append(bool(sb))
-		state.objectives.append(obj)
-
 	state.vision.clear()
 	for v_data in (data["vision"] as Array):
 		var v := Vision.create(state.board.width, state.board.height)
@@ -142,8 +127,7 @@ static func _is_valid(data: Dictionary) -> bool:
 	## з player_count, сітки — з width*height, індекси — з діапазонами. JSON дає числа
 	## як float, тому числом вважається і TYPE_INT, і TYPE_FLOAT.
 	if not (_dict(data, "board") and _num(data, "player_count") and _num(data, "turn_number")
-			and _num(data, "seed_value") and _num(data, "winner") and _num(data, "next_unit_id")
-			and _num(data, "objective_hold_target")):
+			and _num(data, "seed_value") and _num(data, "winner") and _num(data, "next_unit_id")):
 		return false
 	if not (data.has("rng_state") and typeof(data["rng_state"]) == TYPE_STRING
 			and (data["rng_state"] as String).is_valid_int()):
@@ -209,13 +193,6 @@ static func _is_valid(data: Dictionary) -> bool:
 				and _in(m, "owner", 0, pc - 1) and _bools(m, "known_to", pc)):
 			return false
 
-	if not _arr(data, "objectives"):
-		return false
-	for o in (data["objectives"] as Array):
-		# −1 — нейтральна ціль.
-		if typeof(o) != TYPE_DICTIONARY or not (_in(o, "x", 0, w - 1) and _in(o, "y", 0, h - 1)
-				and _in(o, "owner", -1, pc - 1) and _bool(o, "intact") and _bools(o, "seen_by", pc)):
-			return false
 	return true
 
 static func _num(d: Dictionary, key: String) -> bool:

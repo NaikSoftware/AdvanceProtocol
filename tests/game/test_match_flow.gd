@@ -294,10 +294,6 @@ func _result_state() -> BattleState:
 	s.get_unit(4).hp = 0
 	s.get_unit(5).hp = 0
 	s.damage_dealt = [1250, 550, 0] as Array[int]
-	Objectives.add(s, Vector2i(5, 5), 0)
-	Objectives.add(s, Vector2i(5, 4), 0)
-	Objectives.add(s, Vector2i(5, 3), 1)
-	s.objectives[1].intact = false  # зруйнована не рахується
 	s.winner = 0
 	return s
 
@@ -312,9 +308,6 @@ func test_summary_numbers_from_constructed_state() -> void:
 	assert_eq(rows[0]["damage"], 1250)
 	assert_eq(rows[1]["damage"], 550)
 	assert_eq(rows[2]["damage"], 0)
-	assert_eq(rows[0]["objectives"], 1)
-	assert_eq(rows[1]["objectives"], 1)
-	assert_eq(rows[2]["objectives"], 0)
 
 
 func test_summary_credits_a_mine_kill_to_the_mine_owner() -> void:

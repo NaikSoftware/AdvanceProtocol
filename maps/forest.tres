@@ -99,6 +99,4 @@ spawns = Array[Dictionary]([{
 "pos": Vector2i(10, 12),
 "type_id": 4
 }])
-objectives = Array[Vector2i]([Vector2i(9, 3), Vector2i(5, 8), Vector2i(13, 8), Vector2i(9, 0)])
-hold_target = 3
 name_key = "map_forest"
