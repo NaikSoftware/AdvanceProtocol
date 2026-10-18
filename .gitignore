@@ -14,3 +14,4 @@ prototyping-resources/*.import
 
 # Local session state — per-machine, not project content.
 .letta/settings.local.json
+__pycache__/

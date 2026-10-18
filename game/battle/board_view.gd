@@ -34,6 +34,8 @@ const _CONTOUR_LENGTH: float = 0.95 - _CONTOUR_INSET * 2.0
 const _CONTOUR_Y: float = 0.07
 const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
 
+## Земля переживає build(): масиви її текстур не перевантажуються на кожен міст.
+var _ground: GroundSurface
 ## тайл -> вид тайлу під ним.
 var _kind_by_cell: Dictionary = {}
 ## шар контуру -> Array[Dictionary] сегментів {cell, dir, color}, які зараз
@@ -55,7 +57,8 @@ func build(board: Board) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, а тести це фіксують як витік.
 	for child in get_children():
-		child.free()
+		if child != _ground:
+			child.free()
 	_kind_by_cell.clear()
 	# Вузли контуру щойно звільнені циклом free() вище (вони теж діти цього
 	# Node3D) — без цього _contour_nodes лишав би посилання на вже мертві
@@ -69,11 +72,12 @@ func build(board: Board) -> void:
 		for x in board.width:
 			_kind_by_cell[Vector2i(x, y)] = board.kind_at(Vector2i(x, y))
 
-	var ground := GroundSurface.new()
-	ground.name = "Ground"
+	if _ground == null:
+		_ground = GroundSurface.new()
+		_ground.name = "Ground"
+		add_child(_ground)
 	# Відступ поза дошкою — Task 9 (оточення); поки земля рівно під дошкою.
-	ground.build(board, 0)
-	add_child(ground)
+	_ground.build(board, 0)
 
 
 ## Малює контур шару з тонких рисок, а не заливкою тайлів (§3.13: «контур,

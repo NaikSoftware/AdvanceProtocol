@@ -21,12 +21,19 @@ uniform float mud_amount = 0.0;
 const int ROAD = 0;
 const int FIELD = 1;
 const int HILL = 3;
+const int FOREST = 2;
 const int MUD = 5;
+
+// Підсилення альбедо шару: лісова підстилка з Task 4 майже чорна (середнє 55
+// проти 75 у поля), а під деревами вона мусить читатись як бура листва.
+vec3 layer_gain(int layer) {
+	return layer == FOREST ? vec3(1.45, 1.35, 1.2) : vec3(1.0);
+}
 
 // Один повтор текстури на стільки клітинок.
 uniform float tiles_per_repeat = 3.0;
 // Амплітуда збурення межі видів, у клітинках.
-uniform float border_jitter = 0.3;
+uniform float border_jitter = 0.45;
 // Напівширина переходу між видами, у частках клітинки.
 uniform float border_softness = 0.22;
 
@@ -59,6 +66,11 @@ int layer_at(ivec2 px, ivec2 size) {
 // Семпл шару без видимого повтору: регіони з різним зсувом і поворотом UV,
 // межа між ними — плавна, керована шумом і контрастом самої текстури.
 void sample_layer(int layer, vec2 uv, vec2 dx, vec2 dy, float k, out vec3 alb, out vec2 nxy) {
+	// Багно семплюємо вдвічі крупніше: його колії — найпомітніший повтор.
+	float s = layer == MUD ? 0.5 : 1.0;
+	uv *= s;
+	dx *= s;
+	dy *= s;
 	float l = k * 14.0;
 	float ia = floor(l);
 	float f = fract(l);
@@ -72,11 +84,12 @@ void sample_layer(int layer, vec2 uv, vec2 dx, vec2 dy, float k, out vec3 alb, o
 		vec3 c = vec3(r * uv + off, float(layer));
 		ab[j] = textureGrad(albedo_array, c, r * dx, r * dy).rgb;
 		vec2 n = textureGrad(normal_array, c, r * dx, r * dy).rg * 2.0 - 1.0;
-		// Повернули UV — повертаємо й нормаль назад у простір меша.
-		nb[j] = transpose(r) * n;
+		// Повернули UV — повертаємо й нормаль назад у простір меша. Не transpose(r):
+		// бінормаль PlaneMesh дивиться в −Z, а v росте в +Z, тож F·rᵀ·F = r.
+		nb[j] = r * n;
 	}
 	float t = smoothstep(0.2, 0.8, f - 0.1 * dot(ab[0] - ab[1], vec3(1.0)));
-	alb = mix(ab[0], ab[1], t);
+	alb = mix(ab[0], ab[1], t) * layer_gain(layer);
 	nxy = mix(nb[0], nb[1], t);
 }
 
@@ -115,7 +128,19 @@ void fragment() {
 	}
 	// Плями, а не напівпрозорий шар: півпрозоре багно поверх трави читається як
 	// «привид» текстури, а не як розкисла земля.
-	float mud_soil = 1.0 - smoothstep(mud_amount - 0.06, mud_amount + 0.06, fbm(p * 0.35 + 3.1) + 0.15);
+	// mud_amount — частка поля під багном далеко від доріг; біля дороги — на 0.2
+	// більше. Поріг — квантиль fbm (0.45 ≈ 30 %, 0.537 ≈ 55 %), виміряний на карті.
+	float near = 0.0;
+	near += layer_at(ivec2(floor(g + vec2(1.5, 0.0) + 0.5)), size) == ROAD ? 0.25 : 0.0;
+	near += layer_at(ivec2(floor(g - vec2(1.5, 0.0) + 0.5)), size) == ROAD ? 0.25 : 0.0;
+	near += layer_at(ivec2(floor(g + vec2(0.0, 1.5) + 0.5)), size) == ROAD ? 0.25 : 0.0;
+	near += layer_at(ivec2(floor(g - vec2(0.0, 1.5) + 0.5)), size) == ROAD ? 0.25 : 0.0;
+	near = max(near, road_w);
+	float cover = mud_amount + 0.2 * near;
+	float thr = 0.45 + (cover - 0.3) * 0.35;
+	float mud_soil = mud_amount > 0.0
+			? 1.0 - smoothstep(thr - 0.02, thr + 0.02, fbm(p * 0.35 + 3.1))
+			: 0.0;
 	float verge = 4.0 * road_w * (1.0 - road_w) * 0.7;
 	for (int i = 0; i < 4; i++) {
 		if (L[i] == FIELD || L[i] == HILL) {
@@ -181,8 +206,8 @@ void fragment() {
 	rough = mix(rough, 0.4, wet);
 	float puddle_ground = clamp((road_w + W[4]) * 1.5, 0.0, 1.0);
 	float pn = fbm(p * 0.35 + 11.0) + (lum - 0.25) * 0.35;
-	float thr = wet * 0.42;
-	float puddle = (1.0 - smoothstep(thr - 0.03, thr + 0.02, pn)) * puddle_ground;
+	float pthr = wet * 0.42;
+	float puddle = (1.0 - smoothstep(pthr - 0.03, pthr + 0.02, pn)) * puddle_ground;
 	alb *= mix(1.0, 0.55, puddle);
 	rough = mix(rough, 0.05, puddle);
 	nxy = mix(nxy, vec2(0.0), puddle);

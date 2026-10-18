@@ -54,6 +54,24 @@ func test_build_is_idempotent() -> void:
 	assert_eq(_grounds().size(), 1, "повторний build не мусить плодити землю")
 
 
+func test_build_handles_empty_board() -> void:
+	view.build(Board.create(0, 0, Terrain.GroundState.DRY))
+	assert_eq(_grounds().size(), 1)
+	assert_null(_grounds()[0].mesh, "порожня дошка — земля без меша")
+
+
+## Земля переживає перебудову (BridgeChanged): той самий вузол і ті самі масиви
+## текстур — інакше кожен підірваний міст перевантажував би 16 текстур.
+func test_rebuild_reuses_the_ground_node_and_its_textures() -> void:
+	var board := _two_kind_board()
+	view.build(board)
+	var ground: GroundSurface = _grounds()[0]
+	var albedo: Texture2DArray = (ground.material_override as ShaderMaterial).get_shader_parameter("albedo_array")
+	view.rebuild_tiles(board)
+	assert_same(_grounds()[0], ground)
+	assert_same((ground.material_override as ShaderMaterial).get_shader_parameter("albedo_array"), albedo)
+
+
 ## Підірваний міст (BridgeChanged) мусить дійти до карти видів шейдера, а
 ## контури зон, що в цю мить досі правдиві, — лишитись.
 func test_rebuild_tiles_updates_the_kind_map_and_keeps_contours() -> void:

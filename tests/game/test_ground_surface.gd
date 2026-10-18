@@ -2,6 +2,13 @@ extends GutTest
 ## Phase 5a, Task 5: суцільна земля. Шейдер GUT не компілює (дамі-рендерер),
 ## тож тут перевіряється те, що шейдер отримує: карта видів, геометрія, uniform'и.
 
+## S3TC/RGTC/BPTC на ПК, ETC2/ASTC на телефоні.
+const _VRAM_FORMATS: Array[int] = [
+	Image.FORMAT_DXT1, Image.FORMAT_DXT3, Image.FORMAT_DXT5, Image.FORMAT_RGTC_R, Image.FORMAT_RGTC_RG,
+	Image.FORMAT_BPTC_RGBA, Image.FORMAT_ETC2_RGB8, Image.FORMAT_ETC2_RG11, Image.FORMAT_ETC2_RGBA8,
+	Image.FORMAT_ASTC_4x4, Image.FORMAT_ASTC_8x8,
+]
+
 var ground: GroundSurface
 
 
@@ -89,6 +96,11 @@ func test_material_receives_the_kind_map_and_layer_table() -> void:
 	var tex := mat.get_shader_parameter("kind_map") as ImageTexture
 	assert_not_null(tex)
 	assert_eq(tex.get_size(), Vector2(4, 3))
+	var img: Image = tex.get_image()
+	var board := _board_4x3()
+	for y in 3:
+		for x in 4:
+			assert_eq(img.get_pixel(x, y).r8, board.kind_at(Vector2i(x, y)), "kind_map %d,%d" % [x, y])
 	var table: PackedInt32Array = mat.get_shader_parameter("layer_for_kind")
 	assert_eq(table.size(), Terrain.Kind.size())
 	for kind: int in Terrain.Kind.values():
@@ -103,3 +115,32 @@ func test_mud_ground_state_blends_field_and_hill_toward_mud() -> void:
 	assert_eq(mat.get_shader_parameter("mud_amount"), GroundSurface.MUD_BLEND)
 	ground.build(Board.create(2, 2, Terrain.GroundState.DRY), 0)
 	assert_eq((ground.material_override as ShaderMaterial).get_shader_parameter("mud_amount"), 0.0)
+
+
+## Мобільний бюджет (§8): стиснені шари з готовими міпмапами, жодної генерації
+## міпмап на CPU під час завантаження бою.
+func test_texture_arrays_are_vram_compressed_with_mipmaps() -> void:
+	ground.build(_board_4x3(), 0)
+	var mat := ground.material_override as ShaderMaterial
+	for param in ["albedo_array", "normal_array"]:
+		var arr: Texture2DArray = mat.get_shader_parameter(param)
+		assert_eq(arr.get_layers(), GroundSurface.TEX_LAYERS.size(), param)
+		# get_layer_data() під дамі-рендерером — null, тож формат і міпмапи — з масиву.
+		assert_has(_VRAM_FORMATS, arr.get_format(), "%s: стиснений формат" % param)
+		assert_true(arr.has_mipmaps(), "%s: міпмапи з імпорту" % param)
+
+
+## Масиви текстур (~17 МБ) живуть, поки живе земля: вийшли з бою — пам'ять повернулась.
+func test_texture_arrays_are_released_with_the_ground() -> void:
+	var g := GroundSurface.new()
+	add_child(g)
+	g.build(_board_4x3(), 0)
+	var ref: WeakRef = weakref((g.material_override as ShaderMaterial).get_shader_parameter("albedo_array"))
+	g.free()
+	assert_null(ref.get_ref())
+
+
+func test_empty_board_builds_without_errors() -> void:
+	ground.build(Board.create(0, 0, Terrain.GroundState.DRY), 0)
+	assert_null(ground.mesh)
+	assert_eq(ground.kind_image().get_size(), Vector2i(0, 0))

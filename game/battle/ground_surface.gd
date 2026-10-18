@@ -23,17 +23,18 @@ const TEX_LAYER_FOR_KIND: Dictionary = {
 	Terrain.Kind.RUBBLE: 6,
 }
 
-## Частка поля й пагорба, що при GroundState.MUD іде в текстуру багна (§3.12:
-## стан ґрунту — правило, і земля мусить його показувати, не лише іконка HUD).
-## Не 1.0: поле під багном лишається полем, ліс і дороги не змінюються.
-const MUD_BLEND: float = 0.6
+## Частка поля й пагорба, що при GroundState.MUD вкрита плямами багна далеко від
+## доріг (біля доріг шейдер додає ще 0.2). §3.12: стан ґрунту — правило, і земля
+## мусить його показувати, не лише іконка HUD; але поле лишається полем.
+const MUD_BLEND: float = 0.3
 
 const _SHADER: Shader = preload("res://game/battle/shaders/ground.gdshader")
 
-## Масиви текстур спільні для всіх екземплярів: rebuild_tiles() (підірваний міст)
-## не мусить заново вантажити 16 зображень 1024².
-static var _albedo_array: Texture2DArray
-static var _normal_array: Texture2DArray
+## Масиви текстур (~17 МБ стиснених) належать цьому вузлу: вантажаться при першому
+## build(), повторний build() (підірваний міст) їх не чіпає, а вийшли з бою —
+## звільнились разом із землею. BoardView тримає землю між перебудовами.
+var _albedo_array: Texture2DArray
+var _normal_array: Texture2DArray
 
 var _kind_image: Image
 
@@ -41,6 +42,11 @@ var _kind_image: Image
 func build(board: Board, margin: int) -> void:
 	var w: int = board.width + 2 * margin
 	var h: int = board.height + 2 * margin
+	if w <= 0 or h <= 0:
+		_kind_image = Image.new()
+		mesh = null
+		material_override = null
+		return
 	_kind_image = Image.create(w, h, false, Image.FORMAT_R8)
 	for py in h:
 		for px in w:
@@ -65,7 +71,9 @@ func build(board: Board, margin: int) -> void:
 	mat.set_shader_parameter("map_origin", Vector2(-margin, -margin))
 	mat.set_shader_parameter("layer_for_kind", table)
 	mat.set_shader_parameter("mud_amount", MUD_BLEND if board.ground_state == Terrain.GroundState.MUD else 0.0)
-	_ensure_texture_arrays()
+	if _albedo_array == null:
+		_albedo_array = _load_array("albedo")
+		_normal_array = _load_array("normal")
 	mat.set_shader_parameter("albedo_array", _albedo_array)
 	mat.set_shader_parameter("normal_array", _normal_array)
 	material_override = mat
@@ -75,21 +83,13 @@ func kind_image() -> Image:
 	return _kind_image
 
 
-static func _ensure_texture_arrays() -> void:
-	if _albedo_array == null:
-		_albedo_array = _load_array("albedo")
-		_normal_array = _load_array("normal")
-
-
 static func _load_array(suffix: String) -> Texture2DArray:
 	var images: Array[Image] = []
 	for layer_name in TEX_LAYERS:
 		var tex: Texture2D = load("res://assets/terrain/%s_%s.png" % [layer_name, suffix])
-		var img: Image = tex.get_image()
-		# Імпорт без міпмап (Task 4); без них дрібна трава на MAX-зумі мерехтить.
-		if not img.has_mipmaps():
-			img.generate_mipmaps()
-		images.append(img)
+		# Імпорт — VRAM-стиснений із міпмапами (S3TC/RGTC на ПК, ETC2 на телефоні):
+		# шари однакового формату йдуть у масив як є, без розпаковки й CPU-міпмап.
+		images.append(tex.get_image())
 	var arr := Texture2DArray.new()
 	arr.create_from_images(images)
 	return arr
