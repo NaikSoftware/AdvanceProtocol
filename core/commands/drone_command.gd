@@ -50,6 +50,24 @@ static func check_strike(state: BattleState, a: Unit, t: Unit) -> String:
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 
+static func check_launch(state: BattleState, a: Unit) -> String:
+	## Відмова, що не залежить від цілі (кнопка дрона в UI, §3.13): ті самі перевірки
+	## загону й у тому самому порядку, що й у check_strike(). Додаєш умову загону туди —
+	## додай і сюди, інакше кнопка озброїть удар, який кожен тап відхилить.
+	if state.is_over():
+		return "ERR_MATCH_OVER"
+	if a == null or not a.is_alive():
+		return "ERR_NO_SUCH_UNIT"
+	if a.owner != state.active_player:
+		return "ERR_NOT_YOUR_UNIT"
+	if a.drones_left <= 0:
+		return "ERR_NO_DRONES_LEFT"
+	if a.has_fired:
+		return "ERR_ALREADY_FIRED"
+	if a.ap < a.fire_cost():
+		return "ERR_NOT_ENOUGH_AP"
+	return ""
+
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	assert(validate(state) == "", "apply() без успішного validate()")
 	var out: Array[Events.BattleEvent] = []

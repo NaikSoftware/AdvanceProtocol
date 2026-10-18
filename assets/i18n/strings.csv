@@ -54,6 +54,8 @@ hud_attack,Атака,Attack
 hud_damage,Шкода,Damage
 hud_heal,Ремонт,Repair
 hud_drones,Дрони,Drones
+hud_drone_strike,Дрон (%d),Drone (%d)
+hud_drone_range,Радіус %d,Range %d
 hud_class,Клас,Class
 hud_confirm,Підтвердити,Confirm
 hud_cancel,Скасувати,Cancel

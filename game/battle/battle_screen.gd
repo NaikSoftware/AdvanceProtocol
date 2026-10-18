@@ -255,6 +255,10 @@ func _wire_view(board: Board) -> void:
 	_controller.pending_cleared.connect(_clear_all_crosshairs)
 	# Допустимі тайли верби інженера (Task 8) — готові з core/ крізь контролер.
 	_controller.targets_changed.connect(_target_overlay.show_tiles)
+	# Дрон (Task 10): кільце на тому самому шарі цілей і позначки на юнітах — усе
+	# готове з Targeting. disarm() завжди шле targets_changed, тож там і знімаємо.
+	_controller.drone_armed.connect(_on_drone_armed)
+	_controller.targets_changed.connect(func(_tiles: Array[Vector2i]) -> void: _clear_forbidden_marks())
 
 	_hud.bind(_match_service.state)
 	_hud.attach_controller(_controller)
@@ -348,13 +352,32 @@ func input_controller() -> InputController:
 ## між ними не приходить, бо _pending не скидається, а перезаписується.
 func _on_action_preview(preview: Dictionary) -> void:
 	_clear_all_crosshairs()
-	if preview.is_empty() or int(preview["type"]) != InputController.ActionType.SHOT:
+	if preview.is_empty() or not int(preview["type"]) in [InputController.ActionType.SHOT, InputController.ActionType.DRONE]:
 		return
 	# Ціль може й не мати вузла — фог вирішує це окремо (§3.5), і вигляд не
 	# сперечається з ним.
 	var target_view: UnitView = unit_view_for(int(preview["target_id"]))
 	if target_view != null:
 		target_view.set_targeted(true)
+
+
+## marks — {id: причина} з Targeting.drone_marks(): "" — приціл, інакше — хрест.
+## Ворог без вузла (фог) не позначається — вигляд не сперечається з туманом.
+func _on_drone_armed(ring: Array[Vector2i], marks: Dictionary) -> void:
+	_target_overlay.show_tiles(ring)
+	for id: int in marks:
+		var view: UnitView = unit_view_for(id)
+		if view == null:
+			continue
+		if marks[id] == "":
+			view.set_targeted(true)
+		else:
+			view.set_forbidden(true)
+
+
+func _clear_forbidden_marks() -> void:
+	for id in _unit_views:
+		(_unit_views[id] as UnitView).set_forbidden(false)
 
 
 ## Без окремого поля з id останньої цілі: _unit_views — це юніти одного екрана

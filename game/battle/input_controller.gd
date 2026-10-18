@@ -31,6 +31,9 @@ signal action_preview(preview: Dictionary)
 signal pending_cleared
 signal targets_changed(tiles: Array[Vector2i])
 signal action_refused(reason: String)
+## Режим DRONE озброєно: кільце дальності й позначки {id цілі: причина або ""} —
+## обидва з Targeting (§3.13), вигляд лише малює.
+signal drone_armed(ring: Array[Vector2i], marks: Dictionary)
 
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
@@ -64,6 +67,8 @@ var _pending: Dictionary = {}
 ## рівно ті, що повернув EngineerCommand.action_status() (§3.13).
 var _armed_action: int = -1
 var _targets: Array[Vector2i] = []
+## Режим DRONE: тап по ворогу — прев'ю удару, а не пострілу.
+var _drone_armed: bool = false
 
 
 func _init(match_service: Node, zone_overlay: ZoneOverlay, is_playing_check: Callable = Callable()) -> void:
@@ -125,6 +130,9 @@ func tap_cell(cell: Vector2i) -> void:
 	var state: BattleState = _match_service.state
 	if _armed_action >= 0:
 		_tap_in_engineer_mode(state, cell)
+		return
+	if _drone_armed:
+		_tap_in_drone_mode(state, cell)
 		return
 	if not state.board.in_bounds(cell):
 		_deselect()
@@ -222,8 +230,26 @@ func arm_engineer(action: int) -> void:
 	targets_changed.emit(tiles)
 
 
+## Режим DRONE для вибраного свого загону (§3.9). Окрема дія, а не перемикач
+## пострілу: без цього виклику тап по ворогу лишається пострілом.
+func arm_drone() -> void:
+	if _input_blocked() or _selected_unit == null:
+		return
+	var state: BattleState = _match_service.state
+	var reason: String = DroneCommand.check_launch(state, _selected_unit)
+	if reason != "":
+		action_refused.emit(reason)
+		return
+	_clear_pending()
+	disarm()
+	_drone_armed = true
+	drone_armed.emit(Targeting.reach_tiles(state, _selected_unit.id, DroneCommand.RANGE),
+		Targeting.drone_marks(state, _selected_unit.id))
+
+
 func disarm() -> void:
 	_armed_action = -1
+	_drone_armed = false
 	_targets = []
 	targets_changed.emit([] as Array[Vector2i])
 
@@ -256,6 +282,34 @@ func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
 	action_refused.emit(EngineerCommand.create(_selected_unit.id, _armed_action, cell).validate(state))
 
 
+## У режимі DRONE: відомий ворог — прев'ю удару або причина відмови з
+## DroneCommand.validate() (та сама check_strike, що дала позначки); свій юніт —
+## вибір (знімає режим); порожній тайл — нічого.
+func _tap_in_drone_mode(state: BattleState, cell: Vector2i) -> void:
+	var known: Dictionary = state.known_occupied_map(state.active_player)
+	if not known.has(cell):
+		return
+	var tapped: Unit = state.get_unit(known[cell])
+	if tapped == null:
+		return
+	if tapped.owner == state.active_player:
+		select_unit(tapped)
+		return
+	var reason: String = DroneCommand.create(_selected_unit.id, tapped.id).validate(state)
+	if reason != "":
+		action_refused.emit(reason)
+		return
+	var bounds: Vector2i = Rules.drone_damage_bounds()
+	_pending = {
+		"type": ActionType.DRONE,
+		"unit_id": _selected_unit.id,
+		"target_id": tapped.id,
+		"min": bounds.x,
+		"max": bounds.y,
+	}
+	action_preview.emit(_pending)
+
+
 ## Єдина точка, де _pending скидається до «нема дії, що чекає підтвердження»
 ## (select_unit(), confirm_pending(), cancel_pending(), _deselect() — усі
 ## чотири крізь неї): pending_cleared надсилається рівно тут, один раз на
@@ -276,6 +330,8 @@ func _build_command(pending: Dictionary) -> Command:
 			return FireCommand.create(pending["unit_id"], pending["target_id"])
 		ActionType.ENGINEER:
 			return EngineerCommand.create(pending["unit_id"], pending["action"], pending["target"])
+		ActionType.DRONE:
+			return DroneCommand.create(pending["unit_id"], pending["target_id"])
 	return null
 
 

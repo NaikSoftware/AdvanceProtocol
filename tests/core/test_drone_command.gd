@@ -136,3 +136,19 @@ func test_drone_damage_adds_to_the_squad_owners_tally() -> void:
 	var before: int = t.hp
 	DroneCommand.create(a.id, t.id).apply(state)
 	assert_eq(state.damage_dealt[0], before - t.hp)
+
+## Task 10: причина відмови на рівні загону (без цілі) — для кнопки дрона.
+func test_check_launch_reports_unit_level_reasons() -> void:
+	var a: Unit = _assault(Vector2i(2, 2))
+	state.add_unit(5, 1, Vector2i(5, 2), 2)
+	state.begin_turn()
+	assert_eq(DroneCommand.check_launch(state, a), "")
+	a.ap = a.fire_cost() - 1
+	assert_eq(DroneCommand.check_launch(state, a), "ERR_NOT_ENOUGH_AP")
+	a.has_fired = true
+	assert_eq(DroneCommand.check_launch(state, a), "ERR_ALREADY_FIRED")
+	a.drones_left = 0
+	assert_eq(DroneCommand.check_launch(state, a), "ERR_NO_DRONES_LEFT")
+	state.active_player = 1
+	assert_eq(DroneCommand.check_launch(state, a), "ERR_NOT_YOUR_UNIT")
+	assert_eq(DroneCommand.check_launch(state, null), "ERR_NO_SUCH_UNIT")

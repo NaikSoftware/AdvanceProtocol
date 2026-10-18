@@ -536,3 +536,86 @@ func test_tap_on_invalid_tile_in_engineer_mode_reports_its_reason() -> void:
 	controller.tap_cell(Vector2i(8, 5))
 	assert_eq(reasons, ["ERR_NOT_ADJACENT"] as Array[String])
 	assert_eq(_previews.size(), 0)
+
+
+# --- Task 10: дрон ---------------------------------------------------------
+
+## Загін P0 на (5,5); танк P1 на (8,5) (у межах і звичайного пострілу, дальність 3);
+## стрілецький P1 на (5,8).
+func _squad_scene() -> Array[Unit]:
+	_start()
+	var sq: Unit = service.state.add_unit(1, 0, Vector2i(5, 5), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(8, 5), 0)
+	var inf: Unit = service.state.add_unit(0, 1, Vector2i(5, 8), 0)
+	_begin_and_drain()
+	controller.tap_cell(sq.pos)
+	return [sq, tank, inf]
+
+
+func test_arm_drone_emits_ring_and_marks() -> void:
+	var u: Array[Unit] = _squad_scene()
+	var got: Array = []
+	controller.drone_armed.connect(func(ring: Array[Vector2i], marks: Dictionary) -> void: got.append([ring, marks]))
+	controller.arm_drone()
+	assert_eq(got.size(), 1)
+	assert_eq(got[0][0], Targeting.reach_tiles(service.state, u[0].id, DroneCommand.RANGE))
+	# Свіжа земля: коло 5 ∩ seen (діамант зору 5) = 2·5·6 + 1 = 61 тайл (§3.1).
+	assert_eq((got[0][0] as Array).size(), 61)
+	assert_eq(got[0][1], {u[1].id: "", u[2].id: "ERR_DRONE_CANNOT_TARGET_INFANTRY"})
+
+
+func test_drone_tap_on_infantry_refused_with_reason() -> void:
+	var u: Array[Unit] = _squad_scene()
+	var reasons: Array[String] = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.arm_drone()
+	controller.tap_cell(u[2].pos)
+	assert_eq(reasons, ["ERR_DRONE_CANNOT_TARGET_INFANTRY"] as Array[String])
+	assert_eq(_previews.size(), 0)
+
+
+func test_drone_tap_on_vehicle_sets_preview_120_180() -> void:
+	var u: Array[Unit] = _squad_scene()
+	controller.arm_drone()
+	controller.tap_cell(u[1].pos)
+	assert_eq(_previews, [{"type": InputController.ActionType.DRONE, "unit_id": u[0].id,
+		"target_id": u[1].id, "min": 120, "max": 180}] as Array[Dictionary])
+	controller.confirm_pending()
+	assert_eq(u[0].drones_left, 1)
+	assert_eq(u[0].ap, 0)
+
+
+func test_plain_tap_on_enemy_still_previews_shot() -> void:
+	var u: Array[Unit] = _squad_scene()
+	controller.tap_cell(u[1].pos)
+	assert_eq(_previews.size(), 1)
+	assert_eq(int(_previews[0]["type"]), InputController.ActionType.SHOT)
+
+
+func test_arm_drone_without_drones_refused() -> void:
+	var u: Array[Unit] = _squad_scene()
+	u[0].drones_left = 0
+	var reasons: Array[String] = []
+	var armed: Array = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.drone_armed.connect(func(ring: Array[Vector2i], _m: Dictionary) -> void: armed.append(ring))
+	controller.arm_drone()
+	assert_eq(reasons, ["ERR_NO_DRONES_LEFT"] as Array[String])
+	assert_eq(armed.size(), 0)
+	u[0].drones_left = 2
+	u[0].ap = 9  # fire_cost 10
+	controller.arm_drone()
+	assert_eq(reasons.back(), "ERR_NOT_ENOUGH_AP")
+	assert_eq(armed.size(), 0)
+
+
+## Рішення контролера: озброєння дрона знімає відкладений рух.
+func test_arming_drone_clears_pending_move() -> void:
+	var u: Array[Unit] = _squad_scene()
+	controller.tap_cell(Vector2i(5, 4))
+	assert_eq(int(_previews.back()["type"]), InputController.ActionType.MOVE)
+	var cleared_before: int = _pending_cleared_count
+	controller.arm_drone()
+	assert_eq(_pending_cleared_count, cleared_before + 1)
+	controller.confirm_pending()
+	assert_eq(u[0].pos, Vector2i(5, 5), "рух не відбувся")
