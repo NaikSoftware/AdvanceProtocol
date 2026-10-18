@@ -9,11 +9,18 @@ const ResultsScene := preload("res://game/ui/results_screen.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 var _test_save: String = "user://test_save_%d.json" % OS.get_process_id()
 const MAP_PATH: String = "res://maps/skirmish_bridge.tres"
+## Task 4.12: усі поставні карти тепер на трьох — карту лише на двох тест пише сам.
+var _two_owner_map: String = "user://test_two_owner_map_%d.tres" % OS.get_process_id()
 
 
 func after_each() -> void:
-	for p in [_test_save, _test_save + ".map"]:
+	for p in [_test_save, _test_save + ".map", _two_owner_map]:
 		DirAccess.remove_absolute(p)
+
+
+func _save_two_owner_map() -> String:
+	assert_eq(ResourceSaver.save(_map(), _two_owner_map), OK)
+	return _two_owner_map
 
 
 func _service() -> Node:
@@ -341,6 +348,10 @@ func test_results_screen_shows_winner_and_rows_for_every_player() -> void:
 func test_setup_screen_choice_reaches_the_service() -> void:
 	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
 	add_child_autofree(setup)
+	var options: OptionButton = setup.get_node("%MapOptions")
+	for i in options.item_count:
+		if options.get_item_text(i) == MAP_PATH.get_file().get_basename():
+			options.select(i)
 	(setup.get_node("%Mud") as Button).button_pressed = true
 	var service: Node = _service()
 
@@ -410,11 +421,10 @@ func test_surrender_in_three_player_match_hands_over_to_next_player() -> void:
 func test_three_players_offered_only_when_map_has_three_owners() -> void:
 	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
 	add_child_autofree(setup)
-	var map: MapData = load(MAP_PATH)
-	var owners: Dictionary = {}
-	for s in map.spawns:
-		owners[int(s["owner"])] = true
-	assert_eq(owners.has(2), false, "передумова: поставна карта без спавнів третього")
+	assert_false((setup.get_node("%P3") as Button).disabled, "поставні карти — на трьох")
+	setup._map_paths.assign([_save_two_owner_map()])
+	(setup.get_node("%MapOptions") as OptionButton).select(0)
+	setup._sync_player_options()
 
 	assert_true((setup.get_node("%P3") as Button).disabled)
 	(setup.get_node("%P3") as Button).button_pressed = true
@@ -529,7 +539,7 @@ func test_rematch_goes_to_setup_when_map_is_missing_or_unknown() -> void:
 
 func test_rematch_goes_to_setup_when_map_cannot_host_the_players() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 3, Terrain.GroundState.DRY, 1)
+	service.configure(_save_two_owner_map(), 3, Terrain.GroundState.DRY, 1)
 	assert_eq(_rematch_calls(service), ["setup"] as Array[String])
 
 

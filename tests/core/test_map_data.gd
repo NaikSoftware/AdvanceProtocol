@@ -115,19 +115,37 @@ func test_skirmish_bridge_map_loads_and_populates_a_sane_match() -> void:
 	assert_not_null(m, "res://maps/skirmish_bridge.tres мусить завантажуватись як MapData")
 	assert_eq(m.width, 16)
 	assert_eq(m.height, 12)
-	assert_eq(m.spawns.size(), 6, "по 3 юніти на кожного з 2 гравців")
+	assert_eq(m.spawns.size(), 18, "по 6 юнітів на кожного з 3 гравців (Task 4.12)")
 
 	var board: Board = m.to_board()
 	# Річка блокує брід поза мостом, а сам міст — прохідний.
 	assert_false(board.penalty_at(Vector2i(8, 0)) < Terrain.IMPASSABLE, "річка непрохідна поза мостом")
-	assert_true(board.penalty_at(Vector2i(8, 5)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
-	assert_true(board.penalty_at(Vector2i(8, 6)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
+	assert_true(board.penalty_at(Vector2i(8, 3)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
+	assert_true(board.penalty_at(Vector2i(8, 4)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
 
 	var state: BattleState = BattleState.create(board, 2, 1)
 	m.populate(state)
 
-	assert_eq(state.units_of(0).size(), 3)
-	assert_eq(state.units_of(1).size(), 3)
+	assert_eq(state.units_of(0).size(), 6)
+	assert_eq(state.units_of(1).size(), 6)
 	for u in state.alive_units():
 		assert_true(board.in_bounds(u.pos), "жоден спавн не мусить лежати поза дошкою")
 		assert_true(board.penalty_at(u.pos) < Terrain.IMPASSABLE, "жоден спавн не мусить стояти на непрохідному тайлі")
+
+
+# --- Task 4.12: карта на 3 гравці, зіграна вдвох -----------------------------
+
+func test_populate_skips_spawns_beyond_player_count() -> void:
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(0, 0), "facing": 2},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(3, 0), "facing": 6},
+		{"type_id": 5, "owner": 2, "pos": Vector2i(1, 2), "facing": 0},
+	] as Array[Dictionary]
+	var state: BattleState = BattleState.create(m.to_board(), 2, 1)
+
+	assert_true(m.populate(state))
+
+	assert_eq(state.units.size(), 2, "спавн гравця 3 у матчі на двох пропускається")
+	for u in state.alive_units():
+		assert_lt(u.owner, 2, "жодного юніта з owner >= player_count")
