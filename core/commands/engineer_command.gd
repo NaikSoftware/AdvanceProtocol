@@ -2,7 +2,7 @@ class_name EngineerCommand
 extends Command
 ## §3.8. Верби замість гармати. Усе — на ортогонально сусідньому тайлі за fire_cost AP.
 
-enum Action { LAY_MINE, CLEAR_MINE, REPAIR_BRIDGE, DEMOLISH_BRIDGE, REPAIR_UNIT, CAPTURE_OBJECTIVE, DEMOLISH_OBJECTIVE }
+enum Action { LAY_MINE, CLEAR_MINE, REPAIR_BRIDGE, DEMOLISH_BRIDGE, REPAIR_UNIT }
 
 var unit_id: int = 0
 var action: int = Action.LAY_MINE
@@ -18,6 +18,35 @@ static func create(p_unit_id: int, p_action: int, p_target_pos: Vector2i) -> Eng
 static func repair_amount(rng: RandomNumberGenerator, engineer: Unit) -> int:
 	## §3.8: (40 + rand(0, ap_left - fire_cost)) / 2 — інженер, що весь хід їхав, ремонтує погано.
 	return (40 + Rules.roll(rng, engineer.ap - engineer.fire_cost())) / 2
+
+static func repair_bounds(engineer: Unit, target: Unit) -> Vector2i:
+	## Межі ремонту без кидка (для панелі): x — мінімум, y — максимум, обидва з кепом на бракуючі HP.
+	var missing: int = target.max_hp() - target.hp
+	return Vector2i(mini(20, missing), mini((40 + maxi(0, engineer.ap - engineer.fire_cost())) / 2, missing))
+
+static func action_status(state: BattleState, unit_id: int, action: int) -> Dictionary:
+	## Допустимі сусідні тайли дії та причина відмови. Лише читає стан — правила
+	## беруться з validate(), не дублюються.
+	## Причина: однакова на всіх сусідах — вона й є (так завжди виходить із причиною
+	## рівня юніта: AP, уже стріляв, не твій хід — validate() перевіряє їх першими);
+	## різні причини тайлів — жодна не головна, тож ERR_NO_ADJACENT_TARGET, а не
+	## випадкова причина першого сусіда в порядку DIRS_4.
+	var tiles: Array[Vector2i] = []
+	var reasons: Dictionary = {}
+	var e: Unit = state.get_unit(unit_id)
+	for d in Board.DIRS_4:
+		var p: Vector2i = (e.pos if e != null else Vector2i.ZERO) + d
+		if e != null and not state.board.in_bounds(p):
+			continue
+		var r: String = create(unit_id, action, p).validate(state)
+		if r == "":
+			tiles.append(p)
+		else:
+			reasons[r] = true
+	var reason: String = ""
+	if tiles.is_empty():
+		reason = reasons.keys()[0] if reasons.size() == 1 else "ERR_NO_ADJACENT_TARGET"
+	return {"tiles": tiles, "reason": reason}
 
 func validate(state: BattleState) -> String:
 	if state.is_over():
@@ -65,14 +94,6 @@ func validate(state: BattleState) -> String:
 				return "ERR_NO_FRIENDLY_UNIT_THERE"
 			if t.hp >= t.max_hp():
 				return "ERR_UNIT_UNDAMAGED"
-		Action.CAPTURE_OBJECTIVE, Action.DEMOLISH_OBJECTIVE:
-			var o: Objectives.Objective = Objectives.at(state, target_pos)
-			if o == null:
-				return "ERR_NO_OBJECTIVE_THERE"
-			if action == Action.CAPTURE_OBJECTIVE and (o.owner == e.owner or not o.intact):
-				return "ERR_NOTHING_TO_CAPTURE"
-			if action == Action.DEMOLISH_OBJECTIVE and not o.intact:
-				return "ERR_NOTHING_TO_DEMOLISH"
 	return ""
 
 func apply(state: BattleState) -> Array[Events.BattleEvent]:
@@ -86,7 +107,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 		Action.CLEAR_MINE:
 			out.append_array(Mines.clear(state, target_pos))
 		Action.DEMOLISH_BRIDGE:
-			# Той самий запобіжник, що й для REPAIR_UNIT/CAPTURE_OBJECTIVE нижче:
+			# Той самий запобіжник, що й для REPAIR_UNIT нижче:
 			# без цієї перевірки релізний виклик apply() без validate() перетворив би
 			# звичайне поле на непрохідний BRIDGE_DESTROYED — це не «нічого не
 			# сталося за AP», а мапа, переформована з нізвідки. Подія теж під
@@ -97,7 +118,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 				out.append(Events.BridgeChanged.new(target_pos, true))
 				# Ворог на мосту падає разом із ним (рішення власника): та сама низка
 				# подій, що й від смертельного влучання. Шкода — власникові інженера, як
-				# від міни, але не в досвід: інженер його не має (§3.7).
+				# від міни.
 				var victim: Unit = state.unit_at(target_pos)
 				if victim != null:
 					state.damage_dealt[e.owner] += victim.hp
@@ -120,19 +141,6 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 				var healed: int = mini(repair_amount(state.rng, e), t.max_hp() - t.hp)
 				t.hp += healed
 				out.append(Events.UnitRepaired.new(t.id, healed, t.hp))
-		Action.CAPTURE_OBJECTIVE:
-			# Той самий запобіжник: Objectives.at() лишається значенням, яке
-			# існує лише для дозволеної дії, і релізний виклик без validate()
-			# не повинен захопити ціль з нізвідки.
-			var o: Objectives.Objective = Objectives.at(state, target_pos)
-			if o != null:
-				o.owner = e.owner
-				out.append(Events.ObjectiveCaptured.new(state.objectives.find(o), e.owner))
-		Action.DEMOLISH_OBJECTIVE:
-			var od: Objectives.Objective = Objectives.at(state, target_pos)
-			if od != null:
-				od.intact = false
-				out.append(Events.ObjectiveDestroyed.new(state.objectives.find(od)))
 
 	e.exhaust()
 	out.append(Events.ApChanged.new(unit_id, 0))

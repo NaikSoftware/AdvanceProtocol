@@ -7,12 +7,10 @@ extends GutTest
 ##
 ## Відкривальний гейт тут не перевіряється: setup() його не показує, він покритий у
 ## tests/game/test_match_flow.gd::test_new_match_starts_behind_the_gate.
-## Дронів і мін тут навмисно немає: UI для них ще не існує.
+## Дрони й міни тут навмисно відсутні: їх покривають test_drone_e2e.gd і test_engineer_e2e.gd.
 
-const BattleScreenScene := preload("res://game/battle/battle_screen.tscn")
-const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 const E2E := preload("res://tests/e2e/e2e_helpers.gd")
-var _test_save: String = "user://test_e2e_save_%d.json" % OS.get_process_id()
+var _test_save: String
 
 # Типи з core/unit_types.gd
 const RIFLE: int = 0
@@ -31,23 +29,12 @@ const W: int = 6
 const SEED: int = 7
 
 
-## Пише всі події, які сцена забрала з черги, — щоб перевіряти ПОРЯДОК подій
-## (хто повернувся до пострілу, хто після шкоди), а не лише кінцевий стан.
-class RecService extends MatchServiceScript:
-	var events: Array[Events.BattleEvent] = []
-	func take_events() -> Array[Events.BattleEvent]:
-		var e: Array[Events.BattleEvent] = super.take_events()
-		events.append_array(e)
-		return e
-
-
 var _e2e: E2E
-var _service: RecService
-var _screen: BattleScreen
 
 
 func before_each() -> void:
 	_e2e = E2E.new(self)
+	_test_save = _e2e.save_path
 
 
 func after_each() -> void:
@@ -65,99 +52,16 @@ func _spawn(type_id: int, owner: int, pos: Vector2i, facing: int = N) -> Diction
 ## tiles: {Vector2i: Terrain.Kind}; решта — FIELD.
 func _boot(width: int, height: int, spawns: Array, tiles: Dictionary = {},
 		ground: int = Terrain.GroundState.DRY, seed_value: int = SEED) -> void:
-	var m := MapData.new()
-	m.width = width
-	m.height = height
-	var t := PackedInt32Array()
-	t.resize(width * height)
-	t.fill(Terrain.Kind.FIELD)
-	for p: Vector2i in tiles:
-		t[p.y * width + p.x] = tiles[p]
-	m.tiles = t
-	var typed: Array[Dictionary] = []
-	for s: Dictionary in spawns:
-		typed.append(s)
-	m.spawns = typed
-	# таблиця рухів піднімає матч у циклі — не тримаємо десяток екранів одразу
-	if is_instance_valid(_screen):
-		_screen.free()
-	if is_instance_valid(_service):
-		_service.free()
-	_service = RecService.new()
-	add_child_autofree(_service)
-	_screen = BattleScreenScene.instantiate()
-	add_child_autofree(_screen)
-	_screen.save_path = _test_save
-	_screen.setup(m, 2, seed_value, _service, ground)
-	_e2e.ignore_runner_gui([_screen])
-	await _settle()
-
-
-## Твіни камери й подій гасимо вручну, доки програвач не скаже, що закінчив.
-func _settle() -> void:
-	await _e2e.wait_until(func() -> bool: return not _screen._event_player.is_playing(), "програвання подій")
-
-
-func _hud() -> Hud:
-	return _screen.get_node("%Hud")
-
-
-func _gate() -> Node:
-	return _screen.get_node("%HandoverGate")
-
-
-func _press(button: Button) -> void:
-	assert_false(button.disabled, "кнопка мусить бути натискною: %s" % button.name)
-	button.pressed.emit()
-
-
-func _px(cell: Vector2i) -> Vector2:
-	var rig: IsoCameraRig = _screen.get_node("%CameraRig")
-	return rig.unproject(IsoCameraRig.cell_to_world(cell))
-
-
-## Справжній тап: миша вниз/вгору в центрі тайла через viewport.
-func _tap(cell: Vector2i) -> void:
-	_e2e.click_at(_px(cell))
-
-
-func _confirm() -> void:
-	_press(_hud().get_node("%ConfirmButton"))
-	await _settle()
-
-
-func _end_turn() -> void:
-	_press(_hud().get_node("%EndTurnButton"))
-	await _settle()
-
-
-func _confirm_gate() -> void:
-	_press(_gate().get_node("%ConfirmButton"))
-	await _settle()
-
-
-## Вибрати юніт, тапнути ціль, підтвердити.
-func _act(from: Vector2i, to: Vector2i) -> void:
-	_tap(from)
-	_tap(to)
-	await _confirm()
+	await _e2e.boot(width, height, spawns, {"tiles": tiles, "ground": ground, "seed": seed_value})
 
 
 func _unit(id: int) -> Unit:
-	return _service.state.get_unit(id)
-
-
-func _events_of(cls: Variant) -> Array[Events.BattleEvent]:
-	var out: Array[Events.BattleEvent] = []
-	for e in _service.events:
-		if is_instance_of(e, cls):
-			out.append(e)
-	return out
+	return _e2e.service.state.get_unit(id)
 
 
 func _index_of(pred: Callable) -> int:
-	for i in _service.events.size():
-		if pred.call(_service.events[i]):
+	for i in _e2e.service.events.size():
+		if pred.call(_e2e.service.events[i]):
 			return i
 	return -1
 
@@ -184,7 +88,7 @@ func test_movement_cost_per_terrain_and_ground_state() -> void:
 	for row: Array in table:
 		await _boot(6, 3, [_spawn(ARMOURED_CAR, 0, Vector2i(1, 1)), _spawn(RIFLE, 1, Vector2i(5, 0))],
 			{Vector2i(2, 1): row[1]}, row[0])
-		await _act(Vector2i(1, 1), Vector2i(2, 1))
+		await _e2e.act(Vector2i(1, 1), Vector2i(2, 1))
 		var car: Unit = _unit(1)
 		var label: String = "ground %d, tile %d" % [row[0], row[1]]
 		assert_eq(car.pos, Vector2i(2, 1), label)
@@ -198,19 +102,19 @@ func test_movement_in_several_steps_spends_only_what_is_entered() -> void:
 		Vector2i(2, 1): Terrain.Kind.ROAD, Vector2i(4, 1): Terrain.Kind.FOREST,
 		Vector2i(5, 1): Terrain.Kind.FOREST, Vector2i(1, 0): Terrain.Kind.WATER})
 	var car: Unit = _unit(1)
-	await _act(Vector2i(1, 1), Vector2i(2, 1))
+	await _e2e.act(Vector2i(1, 1), Vector2i(2, 1))
 	assert_eq(car.ap, 58, "дорога 10")
 	# юніт лишається вибраним: повторний тап по ньому зняв би вибір
-	_tap(Vector2i(3, 1))
-	await _confirm()
+	_e2e.tap(Vector2i(3, 1))
+	await _e2e.confirm()
 	assert_eq(car.ap, 43, "поле 15 — окремий крок того ж ходу (рух витрачається, не фіксується)")
-	_tap(Vector2i(4, 1))
-	await _confirm()
+	_e2e.tap(Vector2i(4, 1))
+	await _e2e.confirm()
 	assert_eq(car.ap, 18, "ліс 25")
 	assert_eq(car.pos, Vector2i(4, 1))
 	# Ліс 25 > 18: тайл поза зоною — тап не створює прев'ю, кнопка лишається вимкненою.
-	_tap(Vector2i(5, 1))
-	assert_true((_hud().get_node("%ConfirmButton") as Button).disabled, "поза зоною AP")
+	_e2e.tap(Vector2i(5, 1))
+	assert_true((_e2e.hud().get_node("%ConfirmButton") as Button).disabled, "поза зоною AP")
 	assert_eq(car.pos, Vector2i(4, 1))
 	assert_eq(car.ap, 18)
 
@@ -233,15 +137,18 @@ func _sector_case(attacker_cell: Vector2i, attacker_facing_after: int, sector: i
 	var attacker: Unit = _unit(1)
 	var target: Unit = _unit(2)
 
-	_tap(attacker_cell)
-	_tap(target_cell)
+	_e2e.tap(attacker_cell)
+	_e2e.tap(target_cell)
 	# прев'ю до підтвердження: сектор і межі, жодних змін стану
-	assert_eq((_hud().get_node("%PreviewSectorValue") as Label).text,
+	assert_eq((_e2e.hud().get_node("%PreviewSectorValue") as Label).text,
 		tr(UnitInspector.SECTOR_KEYS[sector]))
-	assert_eq((_hud().get_node("%PreviewDamageValue") as Label).text, "%d–%d" % [lo, hi])
+	assert_eq((_e2e.hud().get_node("%PreviewDamageValue") as Label).text, "%d–%d" % [lo, hi])
 	assert_eq(target.hp, 400)
-	assert_eq(attacker.facing, E, "прев'ю не повертає")
-	await _confirm()
+	# Власник 2026-10-18: тап по цілі вже повертає стрільця до неї; сектор у прев'ю
+	# від цього не змінився — він залежить від фейсингу ЦІЛІ (§3.4).
+	assert_eq(attacker.facing, attacker_facing_after, "тап повертає стрільця на ціль")
+	assert_eq(target.facing, N, "прев'ю ціль не повертає")
+	await _e2e.confirm()
 
 	assert_eq(target.hp, 400 - dmg, "golden-шкода")
 	assert_eq(attacker.hp, 400 - 46, "відповідь у лоб")
@@ -261,9 +168,9 @@ func _sector_case(attacker_cell: Vector2i, attacker_facing_after: int, sector: i
 		assert_true(turn_tgt > dmg_t, "ціль повертається ПІСЛЯ шкоди, ніколи до")
 	else:
 		assert_eq(turn_tgt, -1, "ціль уже дивилась на нападника — події повороту нема")
-	var shot_ev: Events.ShotFired = _events_of(Events.ShotFired)[0]
+	var shot_ev: Events.ShotFired = _e2e.events_of(Events.ShotFired)[0]
 	assert_eq(shot_ev.sector, sector)
-	var retort: Events.ShotRetaliated = _events_of(Events.ShotRetaliated)[0]
+	var retort: Events.ShotRetaliated = _e2e.events_of(Events.ShotRetaliated)[0]
 	assert_eq(retort.sector, UnitTypes.ArmourSector.FRONT)
 
 
@@ -283,19 +190,19 @@ func test_armour_rear_sector() -> void:
 
 func test_retaliation_ap_cost_is_for_attackers_turn_only() -> void:
 	await _boot(9, 7, [_spawn(MEDIUM_TANK, 0, Vector2i(4, 1), E), _spawn(MEDIUM_TANK, 1, Vector2i(4, 3), N)])
-	await _act(Vector2i(4, 1), Vector2i(4, 3))
+	await _e2e.act(Vector2i(4, 1), Vector2i(4, 3))
 	var attacker: Unit = _unit(1)
 	var target: Unit = _unit(2)
 	assert_eq(attacker.ap, 0)
 	assert_eq(target.ap, 0, "відповідь коштує AP до кінця ходу атакувальника")
 	# Стрілець більше нічого не може: рух відхиляється правилами.
-	assert_eq(_service.submit(MoveCommand.create(1, Vector2i(4, 0), -1)), "ERR_ALREADY_FIRED")
-	await _settle()
+	assert_eq(_e2e.service.submit(MoveCommand.create(1, Vector2i(4, 0))), "ERR_ALREADY_FIRED")
+	await _e2e.settle()
 
-	await _end_turn()
-	assert_true(_gate().visible)
-	await _confirm_gate()
-	assert_eq(_service.state.active_player, 1)
+	await _e2e.end_turn()
+	assert_true(_e2e.gate().visible)
+	await _e2e.confirm_gate()
+	assert_eq(_e2e.service.state.active_player, 1)
 	assert_eq(target.ap, 48, "власний хід відповідача — AP знову повне")
 	assert_false(target.has_fired)
 
@@ -305,13 +212,13 @@ func test_engineer_never_retaliates() -> void:
 	# int(71.25 + 11 - (7.5 + 1)) = 73 -> 200 - 73 = 127.
 	# Впритул: радіус інженера 1, тож лише так відсутність відповіді — наслідок правила, а не дальності.
 	await _boot(9, 7, [_spawn(MEDIUM_TANK, 0, Vector2i(4, 2), E), _spawn(ENGINEER, 1, Vector2i(4, 3), N)])
-	await _act(Vector2i(4, 2), Vector2i(4, 3))
+	await _e2e.act(Vector2i(4, 2), Vector2i(4, 3))
 	var eng: Unit = _unit(2)
 	assert_eq(eng.hp, 127)
 	assert_eq(eng.ap, 76, "інженерна машина (max_ap 76) не витрачає AP на відповідь")
 	assert_eq(eng.facing, N, "і не повертається")
 	assert_eq(_unit(1).hp, 400)
-	assert_eq(_events_of(Events.ShotRetaliated).size(), 0)
+	assert_eq(_e2e.events_of(Events.ShotRetaliated).size(), 0)
 
 
 # --- 4. Невидимий нападник -----------------------------------------------------------
@@ -321,13 +228,13 @@ func test_engineer_never_retaliates() -> void:
 ## Постріл: int(71.25 + 11) = 82 (броня гармати збоку 0, кидок броні 0 -> без кидка) -> 118.
 func test_unseen_attacker_is_not_retaliated_against() -> void:
 	await _boot(9, 7, [_spawn(MEDIUM_TANK, 0, Vector2i(1, 3), E), _spawn(FIELD_GUN, 1, Vector2i(5, 3), N)])
-	await _act(Vector2i(1, 3), Vector2i(5, 3))
+	await _e2e.act(Vector2i(1, 3), Vector2i(5, 3))
 	var gun: Unit = _unit(2)
 	assert_eq(gun.hp, 200 - 82)
 	assert_eq(gun.ap, 24, "не відповіла — AP цілий")
 	assert_eq(gun.facing, N, "невидимий нападник не повертає ціль (це був би витік)")
 	assert_eq(_unit(1).hp, 400, "безкарний постріл")
-	assert_eq(_events_of(Events.ShotRetaliated).size(), 0)
+	assert_eq(_e2e.events_of(Events.ShotRetaliated).size(), 0)
 
 
 ## Те саме, але стрілецький загін гравця 1 на (3,5) розвідує (1,3) (манхеттен 4 <= 5):
@@ -336,7 +243,7 @@ func test_unseen_attacker_is_not_retaliated_against() -> void:
 func test_scouted_attacker_is_retaliated_against() -> void:
 	await _boot(9, 7, [_spawn(MEDIUM_TANK, 0, Vector2i(1, 3), E), _spawn(FIELD_GUN, 1, Vector2i(5, 3), N),
 		_spawn(RIFLE, 1, Vector2i(3, 5))])
-	await _act(Vector2i(1, 3), Vector2i(5, 3))
+	await _e2e.act(Vector2i(1, 3), Vector2i(5, 3))
 	assert_eq(_unit(2).hp, 200 - 82)
 	assert_eq(_unit(1).hp, 400 - 203)
 	assert_eq(_unit(2).ap, 0)
@@ -351,53 +258,53 @@ func test_walk_stops_before_enemy_the_planner_could_not_see() -> void:
 		road[Vector2i(x, 1)] = Terrain.Kind.ROAD
 	# Броньовик (огляд 3) на (0,1); стрілець гравця 1 на (4,1) — манхеттен 4, не розвіданий.
 	await _boot(8, 3, [_spawn(ARMOURED_CAR, 0, Vector2i(0, 1), E), _spawn(RIFLE, 1, Vector2i(4, 1))], road)
-	assert_null(_screen.unit_view_for(2), "невидимий ворог не має вузла")
+	assert_null(_e2e.screen.unit_view_for(2), "невидимий ворог не має вузла")
 
-	_tap(Vector2i(0, 1))
-	_tap(Vector2i(6, 1))
-	assert_eq((_hud().get_node("%PreviewApValue") as Label).text, "8", "план: 6 доріг по 10, лишається 8")
-	await _confirm()
+	_e2e.tap(Vector2i(0, 1))
+	_e2e.tap(Vector2i(6, 1))
+	assert_eq((_e2e.hud().get_node("%PreviewApValue") as Label).text, "8", "план: 6 доріг по 10, лишається 8")
+	await _e2e.confirm()
 
 	var car: Unit = _unit(1)
 	assert_eq(car.pos, Vector2i(3, 1), "зупинився на тайлі ПЕРЕД невидимим ворогом")
 	assert_eq(car.ap, 38, "AP лише за 3 фактично пройдені тайли: 68-30")
 	assert_eq(car.facing, E)
-	var blocked: Events.MoveBlocked = _events_of(Events.MoveBlocked)[0]
+	var blocked: Events.MoveBlocked = _e2e.events_of(Events.MoveBlocked)[0]
 	assert_eq(blocked.pos, Vector2i(4, 1))
 	assert_eq(_unit(2).pos, Vector2i(4, 1), "ворога ніхто не зсунув")
-	assert_not_null(_screen.unit_view_for(2), "тепер тайл розвіданий — вузол з'явився")
+	assert_not_null(_e2e.screen.unit_view_for(2), "тепер тайл розвіданий — вузол з'явився")
 
 
 # --- 8. Цикл ходів ---------------------------------------------------------------------------
 
 func test_turn_cycle_gate_fog_and_ap_restore() -> void:
 	await _boot(10, 3, [_spawn(RIFLE, 0, Vector2i(0, 1), E), _spawn(RIFLE, 1, Vector2i(9, 1), W)])
-	assert_null(_screen.unit_view_for(2), "ворога (манхеттен 9 > 5) не видно")
-	await _act(Vector2i(0, 1), Vector2i(1, 1))
+	assert_null(_e2e.screen.unit_view_for(2), "ворога (манхеттен 9 > 5) не видно")
+	await _e2e.act(Vector2i(0, 1), Vector2i(1, 1))
 	assert_eq(_unit(1).ap, 20, "піхота: поле = 10")
 
-	await _end_turn()
-	assert_true(_gate().visible, "передача ходу — завжди за гейтом")
-	assert_eq(_service.state.active_player, 1)
-	assert_null(_screen.unit_view_for(2), "до підтвердження гейта нічого про гравця 1 не показано")
+	await _e2e.end_turn()
+	assert_true(_e2e.gate().visible, "передача ходу — завжди за гейтом")
+	assert_eq(_e2e.service.state.active_player, 1)
+	assert_null(_e2e.screen.unit_view_for(2), "до підтвердження гейта нічого про гравця 1 не показано")
 
-	await _confirm_gate()
-	assert_false(_gate().visible)
-	assert_not_null(_screen.unit_view_for(2), "свої юніти гравця 1")
-	assert_null(_screen.unit_view_for(1), "гравець 1 ніколи не розвідував (1,1): манхеттен 8")
-	var rig: IsoCameraRig = _screen.get_node("%CameraRig")
+	await _e2e.confirm_gate()
+	assert_false(_e2e.gate().visible)
+	assert_not_null(_e2e.screen.unit_view_for(2), "свої юніти гравця 1")
+	assert_null(_e2e.screen.unit_view_for(1), "гравець 1 ніколи не розвідував (1,1): манхеттен 8")
+	var rig: IsoCameraRig = _e2e.screen.get_node("%CameraRig")
 	assert_almost_eq(rig.global_position.x, 9.0, 0.001, "камера на першому юніті гравця, що заходить")
 	assert_almost_eq(rig.global_position.z, 1.0, 0.001)
-	assert_eq(_service.state.turn_number, 1)
+	assert_eq(_e2e.service.state.turn_number, 1)
 
-	await _end_turn()
-	assert_true(_gate().visible)
-	await _confirm_gate()
-	assert_eq(_service.state.active_player, 0)
-	assert_eq(_service.state.turn_number, 2, "коло завершене — новий номер ходу")
+	await _e2e.end_turn()
+	assert_true(_e2e.gate().visible)
+	await _e2e.confirm_gate()
+	assert_eq(_e2e.service.state.active_player, 0)
+	assert_eq(_e2e.service.state.turn_number, 2, "коло завершене — новий номер ходу")
 	assert_eq(_unit(1).ap, 30, "AP відновлено до максимуму")
 	assert_eq(_unit(1).pos, Vector2i(1, 1))
-	assert_null(_screen.unit_view_for(2))
+	assert_null(_e2e.screen.unit_view_for(2))
 
 
 ## Два важкі танки (атака 121) по інженеру (200 HP, броня front 10), обидва вогонь з півночі
@@ -407,29 +314,29 @@ func test_turn_cycle_gate_fog_and_ap_restore() -> void:
 func test_play_to_elimination_ends_match() -> void:
 	await _boot(8, 6, [_spawn(HEAVY_TANK, 0, Vector2i(3, 1), E), _spawn(HEAVY_TANK, 0, Vector2i(4, 1), E),
 		_spawn(ENGINEER, 1, Vector2i(3, 3), N)])
-	watch_signals(_screen)
+	watch_signals(_e2e.screen)
 	var eng: Unit = _unit(3)
 
-	await _act(Vector2i(3, 1), Vector2i(3, 3))
+	await _e2e.act(Vector2i(3, 1), Vector2i(3, 3))
 	assert_eq(eng.hp, 110)
-	await _act(Vector2i(4, 1), Vector2i(3, 3))
+	await _e2e.act(Vector2i(4, 1), Vector2i(3, 3))
 	assert_eq(eng.hp, 25)
-	assert_false(_service.state.is_over())
+	assert_false(_e2e.service.state.is_over())
 
-	await _end_turn()
-	await _confirm_gate()
-	await _end_turn()
-	await _confirm_gate()
-	assert_eq(_service.state.turn_number, 2)
+	await _e2e.end_turn()
+	await _e2e.confirm_gate()
+	await _e2e.end_turn()
+	await _e2e.confirm_gate()
+	assert_eq(_e2e.service.state.turn_number, 2)
 	assert_eq(_unit(1).ap, 40, "важкий танк знову на ногах")
 
-	await _act(Vector2i(3, 1), Vector2i(3, 3))
+	await _e2e.act(Vector2i(3, 1), Vector2i(3, 3))
 	assert_false(eng.is_alive())
-	assert_true(_service.state.is_over())
-	assert_eq(_service.state.winner, 0)
-	assert_signal_emitted(_screen, "match_finished")
-	assert_true((_hud().get_node("%EndTurnButton") as Button).disabled, "після кінця матчу ходу не завершити")
-	assert_eq(_events_of(Events.ShotRetaliated).size(), 0, "інженер за весь бій жодного разу не відповів")
+	assert_true(_e2e.service.state.is_over())
+	assert_eq(_e2e.service.state.winner, 0)
+	assert_signal_emitted(_e2e.screen, "match_finished")
+	assert_true((_e2e.hud().get_node("%EndTurnButton") as Button).disabled, "після кінця матчу ходу не завершити")
+	assert_eq(_e2e.events_of(Events.ShotRetaliated).size(), 0, "інженер за весь бій жодного разу не відповів")
 
 
 
@@ -443,15 +350,15 @@ func _two_riflemen() -> void:
 ## Свайп «назад» на Android не мусить викидати з матчу: перший — пауза, другий — продовжити.
 func test_back_gesture_opens_pause_then_closes_it() -> void:
 	await _two_riflemen()
-	var before: Dictionary = BattleSerializer.to_dict(_service.state)
+	var before: Dictionary = BattleSerializer.to_dict(_e2e.service.state)
 	assert_false(get_tree().quit_on_go_back, "на екрані бою «назад» не виходить із гри")
-	var pause: Control = _screen.get_node("%PauseMenu")
+	var pause: Control = _e2e.screen.get_node("%PauseMenu")
 	assert_false(pause.visible)
-	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	_e2e.screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
 	assert_true(pause.visible, "«назад» відкриває паузу")
-	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	_e2e.screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
 	assert_false(pause.visible, "повторний «назад» = продовжити")
-	assert_eq(BattleSerializer.to_dict(_service.state), before, "матч не змінився")
+	assert_eq(BattleSerializer.to_dict(_e2e.service.state), before, "матч не змінився")
 
 
 func test_quit_on_go_back_is_restored_when_screen_leaves() -> void:
@@ -460,7 +367,7 @@ func test_quit_on_go_back_is_restored_when_screen_leaves() -> void:
 	tree.quit_on_go_back = true
 	await _two_riflemen()
 	assert_false(tree.quit_on_go_back)
-	_screen.free()
+	_e2e.screen.free()
 	assert_true(tree.quit_on_go_back, "меню знову виходить по «назад»")
 	tree.quit_on_go_back = prev
 
@@ -470,46 +377,46 @@ func test_app_paused_and_close_request_save_running_match() -> void:
 	await _two_riflemen()
 	for what: int in [Node.NOTIFICATION_APPLICATION_PAUSED, Node.NOTIFICATION_WM_CLOSE_REQUEST]:
 		DirAccess.remove_absolute(_test_save)
-		_screen.notification(what)
+		_e2e.screen.notification(what)
 		assert_true(FileAccess.file_exists(_test_save), "збереження після сповіщення %d" % what)
 		assert_eq(BattleSerializer.to_dict(BattleSerializer.load_from(_test_save)),
-			BattleSerializer.to_dict(_service.state), "у файлі рівно живий стан")
+			BattleSerializer.to_dict(_e2e.service.state), "у файлі рівно живий стан")
 
 
 func test_app_paused_after_match_over_deletes_stale_autosave() -> void:
 	await _two_riflemen()
-	_screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	_e2e.screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
 	assert_true(FileAccess.file_exists(_test_save), "передумова: автозбереження посеред матчу")
-	_service.state.winner = 0
-	_screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
+	_e2e.service.state.winner = 0
+	_e2e.screen.notification(Node.NOTIFICATION_APPLICATION_PAUSED)
 	assert_false(FileAccess.file_exists(_test_save), "завершений матч не можна продовжити")
 
 
 ## Гейт передачі: «назад» не відкриває паузу під ним (її побачив би гравець, що заходить).
 func test_back_gesture_does_nothing_behind_the_handover_gate() -> void:
 	await _two_riflemen()
-	await _end_turn()
-	assert_true(_gate().visible)
-	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
-	assert_false(_screen.get_node("%PauseMenu").visible)
-	await _confirm_gate()
-	assert_false(_screen.get_node("%PauseMenu").visible, "і після гейта пауза не чекає")
+	await _e2e.end_turn()
+	assert_true(_e2e.gate().visible)
+	_e2e.screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	assert_false(_e2e.screen.get_node("%PauseMenu").visible)
+	await _e2e.confirm_gate()
+	assert_false(_e2e.screen.get_node("%PauseMenu").visible, "і після гейта пауза не чекає")
 
 
 ## Кидок дошки гравцем A + швидкий End Turn: після гейта камера стоїть рівно на юніті B і не дрейфує.
 func test_fling_then_end_turn_does_not_drift_after_gate() -> void:
 	await _two_riflemen()
-	var rig: IsoCameraRig = _screen.get_node("%CameraRig")
+	var rig: IsoCameraRig = _e2e.screen.get_node("%CameraRig")
 	for i in 4:
 		rig.pan(Vector2(60, 0))
 		await get_tree().process_frame
 	rig.end_pan()
 	rig.zoom_by(1.5)
 	assert_true(rig._inertia_active, "передумова: дошка котиться")
-	_press(_hud().get_node("%EndTurnButton"))
-	await _settle()
-	await _confirm_gate()
-	var target: Vector3 = IsoCameraRig.cell_to_world(_service.state.units_of(1)[0].pos)
+	_e2e.press(_e2e.hud().get_node("%EndTurnButton"))
+	await _e2e.settle()
+	await _e2e.confirm_gate()
+	var target: Vector3 = IsoCameraRig.cell_to_world(_e2e.service.state.units_of(1)[0].pos)
 	assert_eq(rig.global_position, target)
 	var zoom_before: float = rig.zoom_level
 	for i in 60:
@@ -521,14 +428,14 @@ func test_fling_then_end_turn_does_not_drift_after_gate() -> void:
 ## Скасований дотик (шторка сповіщень, відкидання долоні) — не тап: ні вибір, ні прев'ю не міняються.
 func test_cancelled_touch_is_not_a_tap() -> void:
 	await _two_riflemen()
-	var ctl: InputController = _screen._controller
-	_tap(Vector2i(0, 1))
+	var ctl: InputController = _e2e.screen._controller
+	_e2e.tap(Vector2i(0, 1))
 	assert_not_null(ctl._selected_unit, "передумова: юніт вибрано")
-	_tap(Vector2i(2, 1))
+	_e2e.tap(Vector2i(2, 1))
 	var pending: Dictionary = ctl._pending.duplicate()
 	assert_false(pending.is_empty(), "передумова: є прев'ю ходу")
 	var vp: Viewport = get_viewport()
-	var p: Vector2 = _px(Vector2i(3, 1))
+	var p: Vector2 = _e2e.px(Vector2i(3, 1))
 	for pressed in [true, false]:
 		var ev := InputEventScreenTouch.new()
 		ev.index = 0
@@ -538,8 +445,8 @@ func test_cancelled_touch_is_not_a_tap() -> void:
 		vp.push_input(ev, true)
 	assert_eq(ctl._pending, pending, "прев'ю не замінено")
 	assert_not_null(ctl._selected_unit)
-	assert_false(_screen._pointer_down)
-	assert_eq(_screen._active_touch_index, -1)
+	assert_false(_e2e.screen._pointer_down)
+	assert_eq(_e2e.screen._active_touch_index, -1)
 	# звичайний дотик після скасованого знову працює
 	var ev2 := InputEventScreenTouch.new()
 	ev2.index = 0
@@ -557,8 +464,8 @@ func test_cancelled_touch_is_not_a_tap() -> void:
 func test_locale_change_refreshes_hud_and_inspector_labels() -> void:
 	await _two_riflemen()
 	var prev: String = TranslationServer.get_locale()
-	_tap(Vector2i(0, 1))
-	var hud: Hud = _hud()
+	_e2e.tap(Vector2i(0, 1))
+	var hud: Hud = _e2e.hud()
 	var ground_key: String = Hud.GROUND_STATE_KEYS[Terrain.GroundState.DRY]
 	var name_key: String = _unit(1).type()["name_key"]
 	var texts: Dictionary = {}
@@ -574,16 +481,16 @@ func test_locale_change_refreshes_hud_and_inspector_labels() -> void:
 ## «Назад» закриває верхній оверлей: налаштування над паузою -> лише налаштування.
 func test_back_gesture_closes_settings_overlay_first_leaving_pause() -> void:
 	await _two_riflemen()
-	var pause: Control = _screen.get_node("%PauseMenu")
-	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	var pause: Control = _e2e.screen.get_node("%PauseMenu")
+	_e2e.screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
 	pause.settings_requested.emit()
-	var settings: SettingsScreen = _screen._settings
+	var settings: SettingsScreen = _e2e.screen._settings
 	assert_not_null(settings)
 	# Не пишемо в справжній user://settings.cfg.
 	settings._persist = func() -> void: pass
-	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	_e2e.screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
 	assert_true(settings.is_queued_for_deletion(), "перший «назад» закрив налаштування")
 	assert_true(pause.visible, "пауза лишилась")
 	await get_tree().process_frame
-	_screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	_e2e.screen.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
 	assert_false(pause.visible, "другий «назад» закрив паузу")

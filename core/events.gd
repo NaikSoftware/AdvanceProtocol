@@ -167,33 +167,6 @@ class UnitRepaired extends BattleEvent:
 	func describe() -> String:
 		return "UnitRepaired(unit=%d, +%d, hp=%d)" % [unit_id, amount, hp_left]
 
-class ObjectiveCaptured extends BattleEvent:
-	var index: int
-	var owner: int
-	func _init(p_index: int, p_owner: int) -> void:
-		index = p_index
-		owner = p_owner
-	func describe() -> String:
-		return "ObjectiveCaptured(index=%d, owner=%d)" % [index, owner]
-
-class ObjectiveDestroyed extends BattleEvent:
-	var index: int
-	func _init(p_index: int) -> void:
-		index = p_index
-	func describe() -> String:
-		return "ObjectiveDestroyed(index=%d)" % [index]
-
-class ExperienceGained extends BattleEvent:
-	var player: int
-	var unit_class: int
-	var level: int
-	func _init(p_player: int, p_unit_class: int, p_level: int) -> void:
-		player = p_player
-		unit_class = p_unit_class
-		level = p_level
-	func describe() -> String:
-		return "ExperienceGained(player=%d, class=%d, level=%d)" % [player, unit_class, level]
-
 class ApChanged extends BattleEvent:
 	var unit_id: int
 	var ap: int

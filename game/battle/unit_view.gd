@@ -53,22 +53,10 @@ const _SHOT_PUNCH_DOWN: float = 0.13
 ## коротким, щоб не виглядав як затримка вводу.
 const _FACE_TURN_DURATION: float = 0.15
 
-## Розмір Hull-меша на клас — і сама причина, чому силуети не сплутати
-## (§1.5): піхота низька й вузька, легка техніка плаский подовжений блок,
-## танк масивний, арта витягнута під довгий ствол, інженер — компактна
-## коробка (жовту смугу додає _build_stripe).
-const _HULL_SIZES: Dictionary = {
-	UnitTypes.UnitClass.INFANTRY: Vector3(0.40, 0.35, 0.40),
-	UnitTypes.UnitClass.LIGHT_VEHICLE: Vector3(0.55, 0.30, 0.85),
-	UnitTypes.UnitClass.TANK: Vector3(0.75, 0.50, 0.90),
-	UnitTypes.UnitClass.ARTILLERY: Vector3(0.55, 0.35, 0.60),
-	UnitTypes.UnitClass.ENGINEER: Vector3(0.60, 0.40, 0.60),
-}
-
 ## Абстрактні кольори гравців-плейсхолдерів (§2 — жодного реального прапора
 ## чи армії). Індекс — Unit.owner. Колір іде лише на корпус (Hull), не на
 ## ствол чи смугу — вони нейтральні для будь-якого власника.
-const _PLAYER_COLORS: Array[Color] = [
+const PLAYER_COLORS: Array[Color] = [
 	Color("3a6ea5"),
 	Color("a54a3a"),
 	Color("5a8a4a"),
@@ -108,12 +96,21 @@ const _DEBUG_ARROW_Y_OFFSET: float = 0.02
 ## Константа продубльована, а не імпортована з game/ui/: вигляд дошки не
 ## залежить від HUD — тест звіряє обидва значення й упаде, якщо вони розійдуться.
 const _CROSSHAIR_COLOR: Color = Color("ff7a4a")
+## Заборонена ціль дрона (§3.13): хрест, а не приціл, і інший колір — «сюди не можна»
+## мусить читатись інакше, ніж «сюди прилетить».
+const _FORBIDDEN_COLOR: Color = Color("d23c3c")
+## Позначки огляду (§3.13) — кольори відповідних кілець, щоб читались як «у цьому кільці».
+const _THREAT_COLOR: Color = TargetOverlay.GUN_RING_COLOR
+const _DRONE_THREAT_COLOR: Color = TargetOverlay.DRONE_RING_COLOR
 
 ## Поточний факінг (0..7, порядок Board.DIRS_8). Читається ззовні для UI цілей.
 var facing: int = 0
 
 @onready var _silhouette: Node3D = $Silhouette
 @onready var _crosshair: Sprite3D = $Crosshair
+@onready var _forbidden: Sprite3D = $Forbidden
+@onready var _threatened: Sprite3D = $Threatened
+@onready var _drone_threatened: Sprite3D = $DroneThreatened
 @onready var _hp_bar: Sprite3D = $HpBar
 @onready var _hp_label: Label3D = $HpLabel
 @onready var _drone_icon: Sprite3D = $DroneIcon
@@ -139,11 +136,17 @@ func _ready() -> void:
 	# одне місце, де живе _CROSSHAIR_COLOR, і його видно в інспекторі.
 	_crosshair.texture = _crosshair_texture()
 	_crosshair.modulate = _CROSSHAIR_COLOR
+	_forbidden.texture = _cross_texture()
+	_forbidden.modulate = _FORBIDDEN_COLOR
+	_threatened.texture = _crosshair_texture()
+	_threatened.modulate = _THREAT_COLOR
+	_drone_threatened.texture = _diamond_texture()
+	_drone_threatened.modulate = _DRONE_THREAT_COLOR
 
 
 func bind(unit: Unit) -> void:
 	position = IsoCameraRig.cell_to_world(unit.pos)
-	_build_silhouette(unit.unit_class(), unit.owner)
+	_build_silhouette(unit.type_id, unit.owner)
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
 	# не має попередньої орієнтації, з якої мало б сенс анімувати «доведення» —
 	# твінований face() тут дав би видиме crank-довертання щоразу, коли дошка
@@ -155,6 +158,7 @@ func bind(unit: Unit) -> void:
 	# InputController і перебудову не переживає — лишити приціл увімкненим
 	# означало б показувати намір, якого вже немає.
 	set_targeted(false)
+	set_forbidden(false)
 
 
 ## Баг-звіт (виправлення 3): «вибираю танк, вказую їхати вперед — він їде
@@ -179,8 +183,8 @@ func bind(unit: Unit) -> void:
 ## туди ж), сходинка повороту взагалі не додається: жодної паузи там, де
 ## гравець і так їде прямо.
 ##
-## final_facing — останнє слово (§бриф): MoveCommand приймає явний facing, і
-## він може навмисно відрізнятись від напрямку останнього кроку. -1 (типово)
+## final_facing — останнє слово: фейсинг, який вирішив core/ (напрямок
+## останнього пройденого кроку), а не здогад вигляду з path. -1 (типово)
 ## означає «немає окремого фінального facing» — орієнтація лишається такою,
 ## якою її поставив останній крок шляху.
 func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: int = -1) -> Signal:
@@ -331,6 +335,31 @@ func set_targeted(targeted: bool) -> void:
 	_crosshair.visible = targeted
 
 
+## Ціль, яку озброєний дрон бити не може (піхота, §3.9). Рішення — з
+## Targeting.drone_marks() крізь battle_screen; вузол лише показує.
+func set_forbidden(on: bool) -> void:
+	_forbidden.visible = on
+
+
+## Позначений оглядом юніта (§3.13): рішення — з Targeting крізь
+## InputController.inspected і battle_screen; вузол лише показує.
+func set_threatened(on: bool) -> void:
+	_threatened.visible = on
+
+
+func is_threatened() -> bool:
+	return _threatened.visible
+
+
+## Позначка дрона — окрема від гарматної (§3.13): юніт в обох списках несе обидві.
+func set_drone_threatened(on: bool) -> void:
+	_drone_threatened.visible = on
+
+
+func is_drone_threatened() -> bool:
+	return _drone_threatened.visible
+
+
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed(), і два
 ## твіни на одну властивість змагались би на пострілі, який убиває.
 func play_shot() -> Signal:
@@ -346,29 +375,20 @@ func play_destroyed() -> Signal:
 	return tween.finished
 
 
-func _build_silhouette(unit_class: int, owner: int) -> void:
+func _build_silhouette(type_id: int, owner: int) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, і headless-тести це фіксують.
 	for child in _silhouette.get_children():
 		child.free()
 
-	var hull_size: Vector3 = _HULL_SIZES.get(unit_class, Vector3.ONE)
-	var hull := MeshInstance3D.new()
-	hull.name = "Hull"
-	var hull_mesh := BoxMesh.new()
-	hull_mesh.size = hull_size
-	hull.mesh = hull_mesh
-	hull.position.y = hull_size.y * 0.5
-
-	_hull_material = _shared_material(_PLAYER_COLORS[owner % _PLAYER_COLORS.size()])
-	hull.material_override = _hull_material
-	_silhouette.add_child(hull)
-
-	match unit_class:
-		UnitTypes.UnitClass.TANK, UnitTypes.UnitClass.ARTILLERY:
-			_silhouette.add_child(_build_barrel(unit_class, hull_size))
-		UnitTypes.UnitClass.ENGINEER:
-			_silhouette.add_child(_build_stripe(hull_size))
+	var built := UnitSilhouettes.build(type_id, PLAYER_COLORS[owner % PLAYER_COLORS.size()])
+	for part in built.get_children():
+		built.remove_child(part)
+		_silhouette.add_child(part)
+	built.free()
+	var hull := _silhouette.get_node("Hull") as MeshInstance3D
+	var hull_size: Vector3 = (hull.mesh as BoxMesh).size
+	_hull_material = hull.material_override as StandardMaterial3D
 
 	# ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2) — єдиний виклик, єдине місце, де стрілку
 	# додають на дошку. Прибрати стрілку — це прибрати рівно ці два рядки
@@ -380,43 +400,7 @@ func _build_silhouette(unit_class: int, owner: int) -> void:
 ## Перебудова юнітів після кожної дії створює десяток вузлів: матеріал і
 ## текстури спільні між ними (один колір — один екземпляр), інакше кожен вигляд
 ## платить за власний ресурс і не батчиться. Ніхто не змінює їх після створення.
-static var _material_cache: Dictionary = {}
 static var _texture_cache: Dictionary = {}
-
-
-static func _shared_material(color: Color) -> StandardMaterial3D:
-	if not _material_cache.has(color):
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = color
-		_material_cache[color] = mat
-	return _material_cache[color]
-
-
-## Танк — короткий виступ ствола, арта — довгий тонкий ствол (§1.5): та сама
-## деталь, різна довжина, а не два окремі меші.
-func _build_barrel(unit_class: int, hull_size: Vector3) -> MeshInstance3D:
-	var barrel := MeshInstance3D.new()
-	barrel.name = "Barrel"
-	var mesh := BoxMesh.new()
-	var length: float = 0.90 if unit_class == UnitTypes.UnitClass.ARTILLERY else 0.40
-	mesh.size = Vector3(0.10, 0.10, length)
-	barrel.mesh = mesh
-	barrel.position = Vector3(0.0, hull_size.y * 0.5, -(hull_size.z * 0.5 + length * 0.5))
-	# нейтральний метал ствола — колір гравця сюди не йде
-	barrel.material_override = _shared_material(Color("2e2b27"))
-	return barrel
-
-
-func _build_stripe(hull_size: Vector3) -> MeshInstance3D:
-	var stripe := MeshInstance3D.new()
-	stripe.name = "Stripe"
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(hull_size.x + 0.02, 0.04, hull_size.z * 0.3)
-	stripe.mesh = mesh
-	stripe.position = Vector3(0.0, hull_size.y + 0.02, 0.0)
-	# жовта смуга інженера — впізнавана незалежно від власника
-	stripe.material_override = _shared_material(Color("d9b23a"))
-	return stripe
 
 
 ## ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2): плаский трикутник на даху корпусу, носиком у
@@ -492,6 +476,41 @@ static func _crosshair_texture(size: int = 32) -> ImageTexture:
 				and (absf(dx) <= thickness or absf(dy) <= thickness)
 			)
 			if on_ring or on_tick:
+				image.set_pixel(x, y, Color.WHITE)
+	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]
+
+
+## Діагональний хрест — той самий біло-прозорий прийом, що й приціл.
+static func _cross_texture(size: int = 32) -> ImageTexture:
+	var key: Array = ["forbid", size]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(1.0, 1.0, 1.0, 0.0))
+	var thickness: int = maxi(1, size / 10)
+	for i in range(thickness, size - thickness):
+		for t in range(-thickness, thickness + 1):
+			image.set_pixel(clampi(i + t, 0, size - 1), i, Color.WHITE)
+			image.set_pixel(clampi(size - 1 - i + t, 0, size - 1), i, Color.WHITE)
+	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]
+
+
+## Контур ромба — дронова позначка: форма, якої немає ні в прицілу, ні в хреста.
+static func _diamond_texture(size: int = 32) -> ImageTexture:
+	var key: Array = ["diamond", size]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(1.0, 1.0, 1.0, 0.0))
+	var center: float = float(size - 1) * 0.5
+	var radius: float = float(size) * 0.42
+	var thickness: float = float(size) * 0.06
+	for y in size:
+		for x in size:
+			var d: float = absf(float(x) - center) + absf(float(y) - center)
+			if absf(d - radius) <= thickness:
 				image.set_pixel(x, y, Color.WHITE)
 	_texture_cache[key] = ImageTexture.create_from_image(image)
 	return _texture_cache[key]

@@ -78,11 +78,22 @@ var _shown_player: int = -1
 @onready var _preview_damage_value: Label = %PreviewDamageValue
 @onready var _preview_move_box: HBoxContainer = %PreviewMoveBox
 @onready var _preview_ap_value: Label = %PreviewApValue
+@onready var _preview_repair_box: HBoxContainer = %PreviewRepairBox
+@onready var _preview_heal_value: Label = %PreviewHealValue
 @onready var _confirm_button: Button = %ConfirmButton
 @onready var _cancel_button: Button = %CancelButton
 @onready var _end_turn_button: Button = %EndTurnButton
 @onready var _pause_button: Button = %PauseButton
 @onready var _inspector: UnitInspector = %Inspector
+## Верби інженера (Task 8) — лише для свого інженера активного гравця.
+@onready var _engineer_panel: EngineerPanel = %EngineerPanel
+## Дроновий удар (Task 10) — окрема кнопка, межі шкоди й радіус з core/.
+@onready var _drone_button: DroneButton = %DroneButton
+@onready var _preview_drone_box: HBoxContainer = %PreviewDroneBox
+@onready var _preview_drone_damage_value: Label = %PreviewDroneDamageValue
+@onready var _drone_range_label: Label = %DroneRangeLabel
+@onready var _drone_reason_label: Label = %DroneReasonLabel
+@onready var _threat_floor_label: Label = %ThreatFloorLabel
 ## Поля безпеки читаються з того самого вузла, що їх і задає (§9: одне джерело
 ## правди) — панель поза цим контейнером, але поважає ті самі межі, бо виріз
 ## екрана однаково не питає, у контейнері вузол чи ні.
@@ -90,10 +101,13 @@ var _shown_player: int = -1
 ## Рядок дій — і нижня межа для панелі характеристик. Поля безпеки самі по собі
 ## тут не рятують: кнопки живуть УСЕРЕДИНІ них, а панель малюється поверх усього
 ## HUD, тож «влізла в безпечну зону» й «не накрила кнопки» — різні твердження.
-@onready var _bottom_bar: HBoxContainer = %BottomBar
+@onready var _bottom_bar: HFlowContainer = %BottomBar
+@onready var _top_bar: HBoxContainer = $SafeArea/Layout/TopBar
 
 
 var _last_preview: Dictionary = {}
+## Ключ причини відмови дрона ("" — рядок схований); ключ, а не текст, — для зміни мови.
+var _drone_reason_key: String = ""
 
 
 func _ready() -> void:
@@ -101,6 +115,14 @@ func _ready() -> void:
 	_cancel_button.pressed.connect(_on_cancel_pressed)
 	_end_turn_button.pressed.connect(_on_end_turn_pressed)
 	_pause_button.pressed.connect(pause_pressed.emit)
+	resized.connect(_fit_engineer_panel)
+	_bottom_bar.resized.connect(_fit_engineer_panel)
+	_fit_engineer_panel()
+	# Межі панелі характеристик рухаються разом зі смугами й панеллю інженера
+	# (перенос рядка прев'ю, поява верб) — події, не щокадрове опитування (§8).
+	for c: Control in [_top_bar, _bottom_bar, _engineer_panel]:
+		c.item_rect_changed.connect(_reposition_inspector)
+	_engineer_panel.visibility_changed.connect(_reposition_inspector)
 	_clear_preview()
 	_render_selection()
 
@@ -112,6 +134,9 @@ func _notification(what: int) -> void:
 		refresh()
 		if not _last_preview.is_empty():
 			show_preview(_last_preview)
+		_show_drone_reason(_drone_reason_key)
+		if _drone_range_label.visible:
+			_show_drone_range()
 
 
 ## Стан матчу для постійної частини панелі. Тримається посиланням, а не копією:
@@ -151,9 +176,10 @@ func set_active_player(player: int) -> void:
 	_player_value.text = str(player + 1)
 
 
-## Вибраний юніт (null — вибору немає). Приймає будь-який юніт, не лише свій:
-## залишок дронів публічний за правилом (§3.9), тож ворожа штурмова група
-## показує його так само, як своя.
+## Вибраний юніт (null — вибору немає). Дії й AP — лише для СВОГО юніта
+## активного гравця. Ворожий юніт сюди теж може прийти, але показує тільки
+## публічне: стати й залишок дронів (§3.9). Його AP не показується ніколи — це
+## залишок дій, яких гравець міг не бачити (docs/ui/overlays.md).
 func show_selection(unit: Unit) -> void:
 	_selected_unit = unit
 	# Новий вибір скидає pending у контролері (input_controller.gd:72), тож
@@ -178,6 +204,16 @@ func show_preview(preview: Dictionary) -> void:
 		InputController.ActionType.MOVE:
 			_preview_ap_value.text = str(int(preview["ap_left"]))
 			_preview_move_box.visible = true
+		InputController.ActionType.ENGINEER:
+			# Верба й тайл уже видні на панелі й контурі цілей; ремонт додатково
+			# несе межі лікування з core/ — AP тут важить, тож гравець бачить їх.
+			if int(preview["action"]) == EngineerCommand.Action.REPAIR_UNIT:
+				_preview_heal_value.text = "%d–%d" % [int(preview["heal_min"]), int(preview["heal_max"])]
+				_preview_repair_box.visible = true
+		InputController.ActionType.DRONE:
+			# Броня ігнорується (§3.9) — сектора немає, лише межі з Rules.drone_damage_bounds().
+			_preview_drone_damage_value.text = "%d–%d" % [int(preview["min"]), int(preview["max"])]
+			_preview_drone_box.visible = true
 		InputController.ActionType.SHOT:
 			var sector: int = int(preview["sector"])
 			_preview_sector_value.text = tr(UnitInspector.SECTOR_KEYS[sector])
@@ -198,6 +234,34 @@ func attach_controller(controller: InputController) -> void:
 	_controller = controller
 	controller.selection_changed.connect(show_selection)
 	controller.action_preview.connect(show_preview)
+	# Контролер скинув pending (озброєння верби, новий вибір) — прев'ю й Confirm
+	# не мають пережити дію, якої вже немає.
+	controller.pending_cleared.connect(_clear_preview)
+	_engineer_panel.action_chosen.connect(controller.arm_engineer)
+	_engineer_panel.cancel_pressed.connect(_on_cancel_pressed)
+	# Озброєна верба згортає панель, щоб не закривати тайли-цілі; відмова по
+	# тапу — у рядку причини.
+	controller.targets_changed.connect(func(tiles: Array[Vector2i]) -> void:
+		_engineer_panel.set_armed(not tiles.is_empty()))
+	controller.action_refused.connect(_engineer_panel.show_reason)
+	_drone_button.pressed.connect(controller.arm_drone)
+	controller.drone_armed.connect(func(_c: Vector2i, _r: int, _marks: Dictionary) -> void: _show_drone_range())
+	# disarm() завжди шле targets_changed — радіус дрона гасне разом із режимом.
+	controller.targets_changed.connect(func(_tiles: Array[Vector2i]) -> void: _drone_range_label.visible = false)
+	controller.action_refused.connect(func(reason: String) -> void:
+		if _drone_button.visible:
+			_show_drone_reason(reason))
+	# Власник: «Скасувати» видно лише тоді, коли натиск щось робить. Кожна зміна
+	# прев'ю чи режиму проходить крізь один із цих сигналів, тож видимість
+	# перечитується з контролера після кожної.
+	controller.action_preview.connect(_sync_cancel.unbind(1))
+	controller.pending_cleared.connect(_sync_cancel)
+	controller.targets_changed.connect(_sync_cancel.unbind(1))
+	controller.drone_armed.connect(_sync_cancel.unbind(3))
+	_sync_cancel()
+	# §3.13: огляд ворога — позначки лише нижня межа, і UI мусить сказати це вголос.
+	controller.inspected.connect(func(i: Dictionary) -> void:
+		_show_threat_floor(i.get("is_floor", false), int(i.get("drone_radius", 0)) > 0))
 
 
 ## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.
@@ -231,17 +295,31 @@ func _render_selection() -> void:
 	# показувати AP мерця гірше, ніж не показувати нічого.
 	if _selected_unit != null and not _selected_unit.is_alive():
 		_selected_unit = null
+	# Панель верб — лише своєму інженерові активного гравця: чужі верби не
+	# дія, а їхня доступність була б підказкою про чужий стан.
+	var own_engineer: bool = _selected_unit != null and _state != null \
+			and _selected_unit.unit_class() == UnitTypes.UnitClass.ENGINEER \
+			and _selected_unit.owner == _state.active_player
+	_engineer_panel.visible = own_engineer
+	if own_engineer:
+		_engineer_panel.show_for(_state, _selected_unit)
+	# Дрон — дія, тож лише свій загін активного гравця; залишок чужого видно в рядку дронів.
+	var own: bool = _selected_unit != null and _state != null and _selected_unit.owner == _state.active_player
+	_drone_button.show_for(_selected_unit if own else null)
 	if _selected_unit == null:
 		_selection_row.visible = false
 		_inspector.clear()
 		return
 	_selection_row.visible = true
-	_ap_value.text = str(_selected_unit.ap)
+	# AP ворога — прихований залишок його дій на чужих ходах (overlays.md), не стат.
+	_ap_value.visible = own
+	_selection_row.get_node("ApCaption").visible = own
+	_ap_value.text = str(_selected_unit.ap) if own else ""
 	# Рядок дронів показується лише тому, у кого дрони бувають: «0» у танка —
 	# шум, а не інформація, бо дронів у нього немає за ростером (§3.9).
 	_drones_row.visible = int(_selected_unit.type()["drones"]) > 0
 	_drones_value.text = str(_selected_unit.drones_left)
-	_inspector.show_unit(_selected_unit)
+	_inspector.show_unit(_selected_unit, own)
 	# Рівно тут, а не в _reposition_inspector(): вміст панелі змінюється тільки
 	# на цьому шляху, а позиція перераховується ще й на кожен кадр руху камери
 	# (view_changed). Перерахунок мінімального розміру PanelContainer з усім його
@@ -269,8 +347,14 @@ func _reposition_inspector() -> void:
 		IsoCameraRig.cell_to_world(_selected_unit.pos) + Vector3(0.0, INSPECTOR_LIFT, 0.0))
 	var panel: Vector2 = _inspector.size
 	var left: float = float(_safe_area.get_theme_constant("margin_left"))
-	var top: float = float(_safe_area.get_theme_constant("margin_top"))
+	# Верхня межа — НИЗ верхньої смуги, а не поле безпеки: там ґрунт, який
+	# мусить бути видно завжди (§3.12), і кнопка паузи.
+	var top: float = _top_bar_bottom()
 	var right: float = size.x - float(_safe_area.get_theme_constant("margin_right")) - panel.x
+	# Відкрита панель інженера — така сама межа праворуч, як край поля: інакше
+	# характеристики накривають верби, які гравець саме збирається тапнути.
+	if _engineer_panel.is_visible_in_tree():
+		right = minf(right, _engineer_panel.get_global_rect().position.x - get_global_rect().position.x - panel.x)
 	# Нижня межа — ВЕРХ рядка кнопок, а не низ поля безпеки. Кнопки лежать
 	# усередині безпечної зони, а панель малюється поверх усього HUD, тож
 	# «панель у безпечній зоні» не означає «кнопки видно». Ціна помилки конкретна:
@@ -294,6 +378,14 @@ func _reposition_inspector() -> void:
 		clampf(anchor.y - panel.y * 0.5, top, maxf(top, bottom)))
 
 
+## Низ верхньої смуги в координатах HUD; до розкладки — верхнє поле безпеки.
+func _top_bar_bottom() -> float:
+	var bar: Rect2 = _top_bar.get_global_rect()
+	if bar.size.y <= 0.0:
+		return float(_safe_area.get_theme_constant("margin_top"))
+	return bar.end.y - get_global_rect().position.y
+
+
 ## Верх рядка кнопок у координатах самого HUD. Через глобальний прямокутник, а
 ## не через position: BottomBar лежить на два контейнери вглиб, і його position
 ## відлічується від Layout, а не звідси. Поки розкладка ще не порахована (перший
@@ -306,10 +398,24 @@ func _bottom_bar_top() -> float:
 	return bar.position.y - get_global_rect().position.y
 
 
+## Висота, що лишається Middle між смугами (поля безпеки, TopBar, BottomBar і
+## відступи Layout), — стеля для панелі інженера. Рахується від розміру HUD, а не
+## від Middle: Middle роздувається мінімумом самої панелі.
+func _fit_engineer_panel() -> void:
+	var layout: VBoxContainer = _safe_area.get_node("Layout")
+	var top: Control = layout.get_node("TopBar")
+	_engineer_panel.max_height = size.y \
+		- float(_safe_area.get_theme_constant("margin_top")) - float(_safe_area.get_theme_constant("margin_bottom")) \
+		- top.size.y - _bottom_bar.size.y - 2.0 * float(layout.get_theme_constant("separation"))
+
+
 func _clear_preview() -> void:
 	_last_preview = {}
 	_preview_shot_box.visible = false
 	_preview_move_box.visible = false
+	_preview_repair_box.visible = false
+	_preview_drone_box.visible = false
+	_show_drone_reason("")
 	_confirm_button.disabled = true
 	_inspector.highlight_sector(UnitInspector.NO_SECTOR)
 
@@ -330,5 +436,26 @@ func _on_cancel_pressed() -> void:
 	_clear_preview()
 
 
+func _sync_cancel() -> void:
+	_cancel_button.visible = _controller != null and _controller.has_cancelable()
+
+
 func _on_end_turn_pressed() -> void:
 	end_turn_pressed.emit()
+
+
+func _show_drone_range() -> void:
+	_drone_range_label.text = tr("hud_drone_range") % DroneCommand.RANGE
+	_drone_range_label.visible = true
+
+
+## drone — у ворога є кільце дрона: там підлога найнижча (overlays.md), і копія каже це.
+func _show_threat_floor(on: bool, drone: bool = false) -> void:
+	_threat_floor_label.text = tr("hud_threat_floor_drone" if drone else "hud_threat_floor")
+	_threat_floor_label.visible = on
+
+
+func _show_drone_reason(key: String) -> void:
+	_drone_reason_key = key
+	_drone_reason_label.text = tr(key) if key != "" else ""
+	_drone_reason_label.visible = key != ""

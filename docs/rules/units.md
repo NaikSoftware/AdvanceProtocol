@@ -75,11 +75,10 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
   single highest-impact action in the game
   - **An enemy unit on the bridge goes down with it** (owner decision): it is destroyed outright,
     with the same events as a lethal hit, and its remaining HP is credited to the engineer's owner
-    as damage dealt (no experience — engineers have none). Elimination is checked at once.
+    as damage dealt. Elimination is checked at once.
   - **A friendly unit on the bridge forbids the demolition** (`ERR_TILE_OCCUPIED`).
 - **Repair a damaged friendly unit** — heals `(40 + rand(0, ap_left - fire_cost)) / 2`, so an
   engineer that drove all turn repairs badly. This is the one place where unspent AP matters.
-- **Capture / demolish an objective** ([§3.10](objectives.md))
 
 ## Drone strike — assault squad only
 
@@ -136,4 +135,3 @@ The resulting triangle is the spine of the game's matchups, and it is worth prot
 are the answer to a drone squad precisely because they are the one armoured class that does *not*
 take the ÷4 penalty against infantry.
 
-Experience from drone damage accrues to the `INFANTRY` pool like any other infantry damage.

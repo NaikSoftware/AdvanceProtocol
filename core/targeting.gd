@@ -72,6 +72,27 @@ static func drone_targets(state: BattleState, unit_id: int) -> Array[Unit]:
 	return out
 
 
+static func drone_marks(state: BattleState, unit_id: int) -> Dictionary:
+	## §3.13: позначки дрона, {id цілі: причина відмови або ""}. Лише для свого загону;
+	## причину дає та сама DroneCommand.check_strike(), що й валідація. Лише для
+	## носіїв дронів (тип з "drones" > 0); для решти типів — {}. Ключі — живі
+	## вороги на seen-тайлі активного гравця в межах RANGE (решта — не показується).
+	var out: Dictionary = {}
+	var a: Unit = state.get_unit(unit_id)
+	if a == null or not a.is_alive() or a.owner != state.active_player:
+		return out
+	if int(a.type()["drones"]) <= 0:
+		return out
+	var seen: Vision = state.vision[state.active_player]
+	for t in state.alive_units():
+		if t.owner == a.owner or not seen.is_seen(t.pos):
+			continue
+		if not Rules.in_radius(a.pos, t.pos, DroneCommand.RANGE):
+			continue
+		out[t.id] = DroneCommand.check_strike(state, a, t)
+	return out
+
+
 static func threatened_units(state: BattleState, unit_id: int, observer: int) -> Array[Unit]:
 	## §3.13, рядок «ворожий юніт»: які юніти гравця `observer` стоять під загрозою
 	## від оглянутого ворога. Це ПРОГНОЗ на його хід, а не законність пострілу
@@ -189,4 +210,46 @@ static func drone_threatened_units(state: BattleState, unit_id: int, observer: i
 		if not Rules.in_vision_diamond(e.pos, u.pos, eyes):
 			continue
 		out.append(u)
+	return out
+
+
+static func inspection(state: BattleState, unit_id: int, observer: int) -> Dictionary:
+	## §3.13: усе, що малює огляд юніта, — одним запитом, щоб вигляд не вирішував,
+	## які кільця існують. Рядки таблиці docs/ui/overlays.md:
+	##   * свій — кільце гармати завжди, навіть при 0 AP (але не для класу без
+	##     зброї), позначки — firing_targets(); кільце дрона — лише поки є дрони;
+	##   * ворог — позначки threatened_units()/drone_threatened_units(), а is_floor
+	##     лише тоді, коли є хоч одне кільце: без кільця прогнозувати нічого.
+	## Кільце — одне геометричне коло (§3.1, евклідове) з центром у тайлі юніта:
+	## радіус у тайлах, 0 — кільця немає. Юніт на нерозвіданому для активного
+	## гравця тайлі кілець не має (§3.5) — та сама перевірка, що й у позначках.
+	## Жодна умова тут не переписана — лише зібрана з уже наявних запитів.
+	var radius: int = 0
+	var drone_radius: int = 0
+	var marked: Array[int] = []
+	var drone_marked: Array[int] = []
+	var u: Unit = state.get_unit(unit_id)
+	var own: bool = u != null and u.owner == observer
+	if u != null and u.is_alive():
+		if state.vision[state.active_player].is_seen(u.pos):
+			# §3.6: у інженера немає гармати — ні кільця, ні загрози (див. threatened_units()).
+			if u.unit_class() != UnitTypes.UnitClass.ENGINEER:
+				radius = u.attack_range()
+			# §3.9: лишок дронів публічний, тож гейт на ньому нічого не видає — і свому, і чужому.
+			if u.drones_left > 0:
+				drone_radius = DroneCommand.RANGE
+		marked = _ids(firing_targets(state, unit_id) if own else threatened_units(state, unit_id, observer))
+		drone_marked = _ids(drone_targets(state, unit_id) if own
+			else drone_threatened_units(state, unit_id, observer))
+	return {
+		"center": u.pos if u != null else Vector2i.ZERO,
+		"radius": radius, "drone_radius": drone_radius, "marked": marked, "drone_marked": drone_marked,
+		"is_floor": u != null and not own and (radius > 0 or drone_radius > 0),
+	}
+
+
+static func _ids(units: Array[Unit]) -> Array[int]:
+	var out: Array[int] = []
+	for u in units:
+		out.append(u.id)
 	return out

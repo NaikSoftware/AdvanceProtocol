@@ -86,7 +86,7 @@ func test_a_tile_scouted_earlier_stays_shootable_with_nobody_watching() -> void:
 	state.begin_turn()
 	assert_true(state.vision[0].is_seen(t.pos), "передумова: розвідник накрив тайл танка")
 
-	MoveCommand.create(scout.id, Vector2i(2, 1), -1).apply(state)
+	MoveCommand.create(scout.id, Vector2i(2, 1)).apply(state)
 	assert_eq(scout.pos, Vector2i(2, 1), "передумова: 3 тайли поля по 10 — рівно 30 AP")
 	assert_false(state.vision[0].is_visible(t.pos),
 		"передумова: за танком більше не стежить ніхто — ані розвідник, ані гармата (5 > 3)")
@@ -148,13 +148,6 @@ func test_kill_emits_destruction_and_checks_victory() -> void:
 	assert_true(destroyed)
 	assert_true(ended, "останній юніт супротивника — кінець матчу")
 
-func test_damage_feeds_the_attackers_class_pool() -> void:
-	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
-	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
-	state.begin_turn()
-	FireCommand.create(a.id, t.id).apply(state)
-	assert_true(state.experience[0].xp[UnitTypes.UnitClass.TANK] > 0)
-
 func test_preview_reports_sector_and_bounds() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)   # дивиться на схід, атака зі заходу
@@ -169,13 +162,12 @@ func test_preview_bounds_bracket_every_real_roll() -> void:
 	var p: Dictionary = FireCommand.preview(state, a.id, t.id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var level: int = state.experience[a.owner].level_of(a.unit_class())
 	var seen_min: int = p["max"]
 	var seen_max: int = p["min"]
 	for s in 400:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = s
-		var dmg: int = Rules.compute_damage(rng, a, t, level, sector, dist_sq)
+		var dmg: int = Rules.compute_damage(rng, a, t, sector, dist_sq)
 		assert_true(dmg >= p["min"] and dmg <= p["max"],
 			"%d поза межами прев'ю [%d, %d]" % [dmg, p["min"], p["max"]])
 		seen_min = mini(seen_min, dmg)

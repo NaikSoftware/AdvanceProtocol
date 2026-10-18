@@ -1,7 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://game/ui/hud.gd" id="1_hud"]
 [ext_resource type="PackedScene" path="res://game/ui/unit_inspector.tscn" id="2_inspector"]
+[ext_resource type="PackedScene" path="res://game/ui/engineer_panel.tscn" id="3_engineer"]
+[ext_resource type="Script" path="res://game/ui/drone_button.gd" id="4_drone"]
 
 [node name="Hud" type="Control"]
 anchor_right = 1.0
@@ -65,9 +67,21 @@ text = "hud_pause"
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="BottomBar" type="HBoxContainer" parent="SafeArea/Layout"]
+[node name="EngineerPanel" parent="SafeArea/Layout/Middle" instance=ExtResource("3_engineer")]
 unique_name_in_owner = true
-theme_override_constants/separation = 16
+visible = false
+
+[node name="ThreatFloorLabel" type="Label" parent="SafeArea/Layout/Middle"]
+unique_name_in_owner = true
+visible = false
+size_flags_horizontal = 3
+size_flags_vertical = 8
+autowrap_mode = 3
+
+[node name="BottomBar" type="HFlowContainer" parent="SafeArea/Layout"]
+unique_name_in_owner = true
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 8
 mouse_filter = 2
 
 [node name="SelectionRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
@@ -125,24 +139,68 @@ text = "hud_ap_left"
 [node name="PreviewApValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewMoveBox"]
 unique_name_in_owner = true
 
-[node name="BottomSpacer" type="Control" parent="SafeArea/Layout/BottomBar"]
-size_flags_horizontal = 3
+[node name="PreviewRepairBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+theme_override_constants/separation = 8
+size_flags_vertical = 4
 mouse_filter = 2
 
-[node name="CancelButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+[node name="PreviewHealCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewRepairBox"]
+text = "hud_heal"
+
+[node name="PreviewHealValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewRepairBox"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 64)
+
+[node name="PreviewDroneBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+theme_override_constants/separation = 8
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="PreviewDroneDamageCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewDroneBox"]
+text = "hud_damage"
+
+[node name="PreviewDroneDamageValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewDroneBox"]
+unique_name_in_owner = true
+
+[node name="DroneRangeLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+size_flags_vertical = 4
+
+[node name="DroneReasonLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+size_flags_vertical = 4
+
+[node name="ButtonRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+size_flags_horizontal = 10
+theme_override_constants/separation = 16
+mouse_filter = 2
+
+[node name="CancelButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(48, 48)
 text = "hud_cancel"
 
-[node name="ConfirmButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+[node name="DroneButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 64)
+visible = false
+custom_minimum_size = Vector2(48, 48)
+script = ExtResource("4_drone")
+
+[node name="ConfirmButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
 disabled = true
 text = "hud_confirm"
 
-[node name="EndTurnButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+[node name="EndTurnButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 64)
+custom_minimum_size = Vector2(48, 48)
 text = "hud_end_turn"
 
 [node name="Inspector" parent="." instance=ExtResource("2_inspector")]

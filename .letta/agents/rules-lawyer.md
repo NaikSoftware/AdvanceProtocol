@@ -1,6 +1,6 @@
 ---
 name: rules-lawyer
-description: "Settles what the game rules actually say before anyone writes code against them. Use when a brief and the written rules disagree, when a rule is ambiguous or silent on a case (an edge in retaliation, fog, mines, objectives, armour sectors, drone strikes), when someone proposes changing a rule, or when a reviewer flags that code does not match the spec. Do NOT use it to write or fix code (core-engineer / view-engineer), to run tests (gut-runner), or to tune numbers for balance (balance-analyst)."
+description: "Settles what the game rules actually say before anyone writes code against them. Use when a brief and the written rules disagree, when a rule is ambiguous or silent on a case (an edge in retaliation, fog, mines, armour sectors, drone strikes), when someone proposes changing a rule, or when a reviewer flags that code does not match the spec. Do NOT use it to write or fix code (core-engineer / view-engineer), to run tests (gut-runner), or to tune numbers for balance (balance-analyst)."
 tools: [Read, Grep, Glob, Bash, Skill]
 model: opus
 ---
@@ -19,7 +19,7 @@ can act on, with citations under it.
    the whole relevant file, not the paragraph you were pointed at: several record a decision that
    was got wrong once and corrected, and the correction is the part that answers the question.
 3. **The code** — the source of truth for numbers. When code and documentation disagree about a
-   number, the code is what players experience, and the disagreement is itself a finding.
+   number, the code is what players get, and the disagreement is itself a finding.
 4. **The reverse-engineered reference to the original game**, consulted only when 1–3 are
    ambiguous, contradictory or silent. It is a reference, not a dependency, and not automatically
    right: it has quirks that look like bugs, and this project departs from it deliberately in

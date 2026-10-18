@@ -36,7 +36,7 @@ func test_demolish_bridge_reshapes_the_map() -> void:
 	assert_false(state.board.penalty_at(Vector2i(4, 3)) < Terrain.IMPASSABLE)
 
 ## Рішення власника: міст підривається разом із ворогом, що на ньому стоїть, —
-## юніт гине, шкода зараховується власникові інженера (без досвіду, §3.7). Свій юніт
+## юніт гине, шкода зараховується власникові інженера. Свій юніт
 ## на мосту — заборона: інженер не скидає своїх у річку.
 func test_demolishing_a_bridge_under_an_enemy_destroys_it() -> void:
 	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
@@ -51,9 +51,6 @@ func test_demolishing_a_bridge_under_an_enemy_destroys_it() -> void:
 	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE_DESTROYED)
 	assert_false(enemy.is_alive(), "юніт на підірваному мосту гине")
 	assert_eq(state.damage_dealt[0], hp_before, "уся решта hp — на рахунок власника інженера")
-	# Не лише клас ENGINEER (у нього порогів нема, тож там завжди 0): жоден клас
-	# гравця 0 не мусить отримати за це вбивство досвіду.
-	assert_eq(state.experience[0].xp, [0, 0, 0, 0, 0] as Array[int], "підрив мосту не дає досвіду жодному класу")
 	var dealt: int = -1
 	var destroyed: int = -1
 	for i in events.size():
@@ -174,26 +171,140 @@ func test_action_without_enough_ap_is_rejected() -> void:
 	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.LAY_MINE, Vector2i(4, 3)).validate(state),
 		"ERR_NOT_ENOUGH_AP")
 
-func test_capture_objective_flips_ownership() -> void:
-	var e: Unit = _engineer(Vector2i(4, 4))
-	Objectives.add(state, Vector2i(4, 3), -1)
-	EngineerCommand.create(e.id, EngineerCommand.Action.CAPTURE_OBJECTIVE, Vector2i(4, 3)).apply(state)
-	assert_eq(Objectives.at(state, Vector2i(4, 3)).owner, 0)
+# --- Запити для панелі інженера (Task 4a) ---
 
-func test_demolish_objective_marks_it_destroyed() -> void:
-	var e: Unit = _engineer(Vector2i(4, 4))
-	Objectives.add(state, Vector2i(4, 3), 1)
-	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).validate(state), "")
-	EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).apply(state)
-	assert_false(Objectives.at(state, Vector2i(4, 3)).intact)
+const A := EngineerCommand.Action
 
-func test_demolishing_an_already_destroyed_objective_is_rejected() -> void:
-	# Без цієї перевірки друге підривання того самого об'єкта валідувалось би,
-	# спалювало б увесь хід інженера і випускало б другий ObjectiveDestroyed —
-	# подію, яку вигляду нема чого анімувати вдруге.
+func test_lay_mine_status_lists_free_adjacent_tiles_only() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
-	Objectives.add(state, Vector2i(4, 3), 1)
-	var o: Objectives.Objective = Objectives.at(state, Vector2i(4, 3))
-	o.intact = false
-	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).validate(state),
-		"ERR_NOTHING_TO_DEMOLISH")
+	state.add_unit(5, 1, Vector2i(4, 3), 0)
+	var st: Dictionary = EngineerCommand.action_status(state, e.id, A.LAY_MINE)
+	assert_eq(st["tiles"].size(), 3)
+	assert_false(st["tiles"].has(Vector2i(4, 3)))
+	assert_eq(st["reason"], "")
+
+func test_status_reason_when_no_ap() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	e.ap = 20
+	var st: Dictionary = EngineerCommand.action_status(state, e.id, A.LAY_MINE)
+	assert_eq(st["tiles"], [])
+	assert_eq(st["reason"], "ERR_NOT_ENOUGH_AP")
+
+func test_clear_mine_reason_without_mine() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	assert_eq(EngineerCommand.action_status(state, e.id, A.CLEAR_MINE)["reason"], "ERR_NO_MINE_THERE")
+
+func test_demolish_bridge_forbidden_with_own_unit_on_it() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	state.add_unit(5, 0, Vector2i(4, 3), 0)
+	var st: Dictionary = EngineerCommand.action_status(state, e.id, A.DEMOLISH_BRIDGE)
+	assert_eq(st["tiles"], [])
+	# Сусіди відмовляють з різних причин (зайнято / немає мосту) — жодна з них не
+	# головна, тож загальна причина.
+	assert_eq(st["reason"], "ERR_NO_ADJACENT_TARGET")
+
+func test_status_unit_reason_wins_over_tile_reasons() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	e.has_fired = true
+	assert_eq(EngineerCommand.action_status(state, e.id, A.CLEAR_MINE)["reason"], "ERR_ALREADY_FIRED")
+	var foe: Unit = state.add_unit(11, 1, Vector2i(8, 8), 0)
+	assert_eq(EngineerCommand.action_status(state, foe.id, A.LAY_MINE),
+		{"tiles": [] as Array[Vector2i], "reason": "ERR_NOT_YOUR_UNIT"})
+
+func test_status_same_tile_reason_on_every_neighbour_is_kept() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	assert_eq(EngineerCommand.action_status(state, e.id, A.REPAIR_BRIDGE)["reason"], "ERR_NOTHING_TO_REPAIR")
+
+func test_status_mixed_tile_reasons_give_no_adjacent_target() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.add_unit(5, 0, Vector2i(4, 3), 0)  # неушкоджений свій танк
+	assert_eq(EngineerCommand.action_status(state, e.id, A.REPAIR_UNIT)["reason"], "ERR_NO_ADJACENT_TARGET")
+
+func test_status_specific_reason_on_one_neighbour_still_gives_no_adjacent_target() -> void:
+	# Один сусід відмовляє своєю причиною (міна), решта — іншою (зайнято): жодна
+	# не головна, тож панель показує загальну причину, а не першу в DIRS_4.
+	var e: Unit = _engineer(Vector2i(4, 4))
+	Mines.place(state, Vector2i(4, 3), 0)
+	for p in [Vector2i(5, 4), Vector2i(4, 5), Vector2i(3, 4)]:
+		state.add_unit(5, 0, p, 0)
+	assert_eq(EngineerCommand.create(e.id, A.LAY_MINE, Vector2i(4, 3)).validate(state), "ERR_MINE_ALREADY_THERE")
+	assert_eq(EngineerCommand.action_status(state, e.id, A.LAY_MINE),
+		{"tiles": [] as Array[Vector2i], "reason": "ERR_NO_ADJACENT_TARGET"})
+
+func test_status_never_changes_state_or_rng() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var before: String = JSON.stringify(BattleSerializer.to_dict(state))
+	var rng_before: int = state.rng.state
+	for a: int in A.values():
+		EngineerCommand.action_status(state, e.id, a)
+	EngineerCommand.repair_bounds(e, e)
+	assert_eq(JSON.stringify(BattleSerializer.to_dict(state)), before)
+	assert_eq(state.rng.state, rng_before)
+
+func test_status_matches_validate_for_every_action_and_tile() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	state.board.set_kind(Vector2i(5, 4), Terrain.Kind.BRIDGE_DESTROYED)
+	Mines.place(state, Vector2i(3, 4), 1)
+	var hurt: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	hurt.hp -= 10
+	for a: int in A.values():
+		var tiles: Array = EngineerCommand.action_status(state, e.id, a)["tiles"]
+		for d in Board.DIRS_4:
+			var p: Vector2i = e.pos + d
+			assert_eq(tiles.has(p), EngineerCommand.create(e.id, a, p).validate(state) == "", "action %d tile %s" % [a, p])
+
+func test_repair_bounds_full_ap() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var t: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	t.hp = t.max_hp() - 400
+	assert_eq(e.ap, 76)
+	assert_eq(EngineerCommand.repair_bounds(e, t), Vector2i(20, 43))
+
+func test_repair_bounds_after_one_field_step() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var t: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	t.hp = t.max_hp() - 400
+	e.ap = 51
+	assert_eq(EngineerCommand.repair_bounds(e, t), Vector2i(20, 30))
+
+func test_repair_bounds_capped_by_missing_hp() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var t: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	t.hp = t.max_hp() - 12
+	assert_eq(EngineerCommand.repair_bounds(e, t), Vector2i(12, 12))
+
+func test_repair_bounds_bracket_actual_roll() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var t: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	t.hp = t.max_hp() - 400
+	var b: Vector2i = EngineerCommand.repair_bounds(e, t)
+	var rng := RandomNumberGenerator.new()
+	for s in 200:
+		rng.seed = s
+		var r: int = EngineerCommand.repair_amount(rng, e)
+		assert_true(r >= b.x and r <= b.y, "seed %d: %d" % [s, r])
+
+## Прихована міна ворога поруч із власним інженером: begin_turn розкриває її
+## гравцеві (known_to), а LAY/CLEAR_MINE бачать її так само, як відому — жодної
+## окремої поведінки для «нерозкритої».
+func test_enemy_mine_next_to_engineer_is_known_after_begin_turn_and_statuses_match() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.add_unit(5, 1, Vector2i(9, 9), 0)
+	Mines.place(state, Vector2i(4, 3), 1)
+	state.begin_turn()
+	var mine = Mines.mine_at(state, Vector2i(4, 3))
+	assert_true(mine.known_to[0])
+	var lay: Dictionary = EngineerCommand.action_status(state, e.id, A.LAY_MINE)
+	var clear: Dictionary = EngineerCommand.action_status(state, e.id, A.CLEAR_MINE)
+	# еталон: те саме, коли міна відома заздалегідь
+	var s2: BattleState = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 2, 21)
+	s2.active_player = 0
+	var e2: Unit = s2.add_unit(11, 0, Vector2i(4, 4), 0)
+	Mines.place(s2, Vector2i(4, 3), 1)
+	Mines.mine_at(s2, Vector2i(4, 3)).known_to[0] = true
+	assert_eq(lay, EngineerCommand.action_status(s2, e2.id, A.LAY_MINE))
+	assert_eq(clear, EngineerCommand.action_status(s2, e2.id, A.CLEAR_MINE))
+	assert_false(lay["tiles"].has(Vector2i(4, 3)))
+	assert_true(clear["tiles"].has(Vector2i(4, 3)))

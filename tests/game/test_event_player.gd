@@ -90,9 +90,6 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.MineRevealed.new(Vector2i(5, 5), 1),
 		Events.BridgeChanged.new(Vector2i(6, 6), true),
 		Events.UnitRepaired.new(4, 20, 80),
-		Events.ObjectiveCaptured.new(0, 1),
-		Events.ObjectiveDestroyed.new(1),
-		Events.ExperienceGained.new(0, UnitTypes.UnitClass.TANK, 2),
 		Events.ApChanged.new(1, 30),
 		Events.TurnEnded.new(0),
 		Events.TurnStarted.new(1, 5),
@@ -159,9 +156,8 @@ func test_is_playing_true_during_animated_playback_and_signal_fires_after() -> v
 
 # --- Виправлення 2: UnitMoved несе facing, і подія має останнє слово ------
 
-## core/events.gd.UnitMoved.facing існує саме для цього: MoveCommand може
-## передати явний facing, що відрізняється від напрямку останнього кроку
-## шляху. _handle_unit_moved мусить прокинути event.facing у move_along, а
+## core/events.gd.UnitMoved.facing існує саме для цього: фейсинг вирішує
+## core/, і вигляд не має виводити його з напрямку останнього кроку path. _handle_unit_moved мусить прокинути event.facing у move_along, а
 ## не покластися на напрямок останнього кроку (facing=2, схід), який тут
 ## навмисно суперечить події (facing=6, захід).
 func test_unit_moved_event_sets_final_facing_from_the_event_not_last_step_direction() -> void:
@@ -397,3 +393,11 @@ func test_reentrant_play_call_is_ignored_and_first_playback_completes() -> void:
 	_finish_all_processed_tweens()
 
 	assert_false(player.is_playing(), "перше програвання таки завершується штатно")
+
+
+## Task 8: зміна мосту — перебудова дошки крізь інжектований Callable.
+func test_bridge_changed_calls_board_rebuild() -> void:
+	var calls: Array[int] = [0]
+	player = EventPlayer.new(Callable(), Callable(), func() -> void: calls[0] += 1)
+	await player.play([Events.BridgeChanged.new(Vector2i(1, 1), true)] as Array[Events.BattleEvent])
+	assert_eq(calls[0], 1)

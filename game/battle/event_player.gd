@@ -31,7 +31,12 @@ var _unit_lookup: Callable
 var _is_playing: bool = false
 
 
-func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable()) -> void:
+## Перебудова BoardView з нинішньої Board (BridgeChanged).
+var _board_rebuild: Callable
+
+
+func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable(), board_rebuild: Callable = Callable()) -> void:
+	_board_rebuild = board_rebuild
 	_unit_view_lookup = unit_view_lookup
 	_unit_lookup = unit_lookup
 
@@ -136,12 +141,6 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_bridge_changed(event)
 	elif event is Events.UnitRepaired:
 		return _handle_unit_repaired(event)
-	elif event is Events.ObjectiveCaptured:
-		return _handle_objective_captured(event)
-	elif event is Events.ObjectiveDestroyed:
-		return _handle_objective_destroyed(event)
-	elif event is Events.ExperienceGained:
-		return _handle_experience_gained(event)
 	elif event is Events.ApChanged:
 		return _handle_ap_changed(event)
 	elif event is Events.TurnEnded:
@@ -164,9 +163,8 @@ func _handle_unit_moved(event: Events.UnitMoved) -> Variant:
 	var view: UnitView = _resolve_unit_view(event.unit_id)
 	if view == null:
 		return null
-	# event.facing має останнє слово (MoveCommand приймає явний facing, який
-	# може навмисно відрізнятись від напрямку останнього кроку шляху) — тож
-	# прокидається окремо від самого path.
+	# event.facing має останнє слово: це фейсинг, який вирішив core/ (зараз —
+	# напрямок останнього пройденого кроку), тож прокидається окремо від path.
 	return view.move_along(event.path, _MOVE_STEP_DURATION, event.facing)
 
 
@@ -260,29 +258,17 @@ func _handle_mine_revealed(_event: Events.MineRevealed) -> Variant:
 	return null
 
 
-## Зміна виду тайлу (міст цілий/зруйнований) — це BoardView.build(), а не
-## точкове перефарбовування; BoardView не дає API для зміни виду одного
-## тайлу без перебудови всієї дошки, тож поки що це no-op.
+## Зміна виду тайлу (міст цілий/зруйнований): новий вид уже записано в core/,
+## тож вигляд лише перебудовує дошку з нинішньої Board (інжектований Callable,
+## той самий прийом, що й пошуки юнітів — R18).
 func _handle_bridge_changed(_event: Events.BridgeChanged) -> Variant:
+	if _board_rebuild.is_valid():
+		_board_rebuild.call()
 	return null
 
 
 func _handle_unit_repaired(event: Events.UnitRepaired) -> Variant:
 	_apply_hp_update(event.unit_id, event.hp_left)
-	return null
-
-
-## Маркери цілей на дошці не входять до споживаних цією задачею інтерфейсів.
-func _handle_objective_captured(_event: Events.ObjectiveCaptured) -> Variant:
-	return null
-
-
-func _handle_objective_destroyed(_event: Events.ObjectiveDestroyed) -> Variant:
-	return null
-
-
-## §3.7: рівень досвіду піде в HUD (інша задача), не в анімацію на дошці.
-func _handle_experience_gained(_event: Events.ExperienceGained) -> Variant:
 	return null
 
 

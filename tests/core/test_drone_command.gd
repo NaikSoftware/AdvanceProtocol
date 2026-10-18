@@ -101,7 +101,7 @@ func test_the_same_diagonal_stays_unlocked_after_the_spotter_leaves() -> void:
 	state.begin_turn()
 	assert_true(state.vision[0].is_seen(t.pos), "передумова: коригувальник розвідав тайл цілі")
 
-	MoveCommand.create(scout.id, Vector2i(2, 3), -1).apply(state)
+	MoveCommand.create(scout.id, Vector2i(2, 3)).apply(state)
 	assert_eq(scout.pos, Vector2i(2, 3), "передумова: 3 тайли поля по 10 — рівно 30 AP")
 	assert_false(state.vision[0].is_visible(t.pos), "передумова: зараз за ціллю не стежить ніхто")
 	assert_true(state.vision[0].is_seen(t.pos), "передумова: але землю під нею колись розвідали")
@@ -129,14 +129,6 @@ func test_a_spotter_unlocks_the_diagonal_the_squad_cannot_see() -> void:
 	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "",
 		"§3.9: з коригувальником той самий удар дозволено")
 
-func test_drone_damage_feeds_infantry_pool() -> void:
-	var a: Unit = _assault(Vector2i(2, 2))
-	var t: Unit = state.add_unit(8, 1, Vector2i(5, 2), 2)
-	t.hp = 10_000
-	state.begin_turn()
-	DroneCommand.create(a.id, t.id).apply(state)
-	assert_true(state.experience[0].xp[UnitTypes.UnitClass.INFANTRY] > 0)
-
 func test_drone_damage_adds_to_the_squad_owners_tally() -> void:
 	var a: Unit = _assault(Vector2i(2, 2))
 	var t: Unit = state.add_unit(8, 1, Vector2i(6, 2), 2)
@@ -144,3 +136,39 @@ func test_drone_damage_adds_to_the_squad_owners_tally() -> void:
 	var before: int = t.hp
 	DroneCommand.create(a.id, t.id).apply(state)
 	assert_eq(state.damage_dealt[0], before - t.hp)
+
+## Task 10: причина відмови на рівні загону (без цілі) — для кнопки дрона.
+func test_check_launch_reports_unit_level_reasons() -> void:
+	var a: Unit = _assault(Vector2i(2, 2))
+	state.add_unit(5, 1, Vector2i(5, 2), 2)
+	state.begin_turn()
+	assert_eq(DroneCommand.check_launch(state, a), "")
+	a.ap = a.fire_cost() - 1
+	assert_eq(DroneCommand.check_launch(state, a), "ERR_NOT_ENOUGH_AP")
+	a.has_fired = true
+	assert_eq(DroneCommand.check_launch(state, a), "ERR_ALREADY_FIRED")
+	a.drones_left = 0
+	assert_eq(DroneCommand.check_launch(state, a), "ERR_NO_DRONES_LEFT")
+	state.active_player = 1
+	assert_eq(DroneCommand.check_launch(state, a), "ERR_NOT_YOUR_UNIT")
+	assert_eq(DroneCommand.check_launch(state, null), "ERR_NO_SUCH_UNIT")
+
+## Fix round 1: check_strike() починає з check_launch() — для кожної відмови загону
+## причина та сама, і з живою ворожою ціллю, і без цілі.
+func test_check_strike_agrees_with_check_launch_on_squad_failures() -> void:
+	var breakers: Dictionary = {
+		"ERR_NO_DRONES_LEFT": func(a: Unit) -> void: a.drones_left = 0,
+		"ERR_ALREADY_FIRED": func(a: Unit) -> void: a.has_fired = true,
+		"ERR_NOT_ENOUGH_AP": func(a: Unit) -> void: a.ap = a.fire_cost() - 1,
+		"ERR_NOT_YOUR_UNIT": func(_a: Unit) -> void: state.active_player = 1,
+		"ERR_MATCH_OVER": func(_a: Unit) -> void: state.winner = 0,
+	}
+	for reason: String in breakers:
+		before_each()
+		var a: Unit = _assault(Vector2i(2, 2))
+		var t: Unit = state.add_unit(5, 1, Vector2i(5, 2), 2)
+		state.begin_turn()
+		(breakers[reason] as Callable).call(a)
+		assert_eq(DroneCommand.check_launch(state, a), reason, reason)
+		assert_eq(DroneCommand.check_strike(state, a, t), reason, "%s з ціллю" % reason)
+		assert_eq(DroneCommand.check_strike(state, a, null), reason, "%s без цілі" % reason)

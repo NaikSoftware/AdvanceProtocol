@@ -33,7 +33,7 @@ static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos
 
 const MIN_DAMAGE: int = 10
 
-static func _damage_from_rolls(attacker: Unit, target: Unit, experience_level: int, sector: int,
+static func _damage_from_rolls(attacker: Unit, target: Unit, sector: int,
 		dist_sq: int, r_attack: int, r_armour: int, r_arty: int) -> int:
 	## §3.3. Порядок множників критичний — не переставляти. Спільне тіло для
 	## compute_damage() (справжні кидки) і damage_bounds() (підставлені межі
@@ -43,9 +43,6 @@ static func _damage_from_rolls(attacker: Unit, target: Unit, experience_level: i
 	var tc: int = target.unit_class()
 
 	var dmg: float = 0.75 * float(a) + float(r_attack)
-
-	if ac != UnitTypes.UnitClass.ENGINEER:
-		dmg += float(a * experience_level) / 8.0
 
 	if ac == UnitTypes.UnitClass.INFANTRY:
 		if dist_sq <= 2:
@@ -69,7 +66,7 @@ static func _damage_from_rolls(attacker: Unit, target: Unit, experience_level: i
 	return maxi(MIN_DAMAGE, int(dmg))
 
 static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: Unit,
-		experience_level: int, sector: int, dist_sq: int) -> int:
+		sector: int, dist_sq: int) -> int:
 	## §3.3. Порядок кидків критичний — не переставляти: атака завжди, броня —
 	## лише не для піхоти-атакера, артбонус — лише артилерія по танку.
 	var a: int = attacker.attack()
@@ -84,9 +81,9 @@ static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: U
 	if ac == UnitTypes.UnitClass.ARTILLERY and tc == UnitTypes.UnitClass.TANK:
 		r_arty = roll(rng, a / 2)
 
-	return _damage_from_rolls(attacker, target, experience_level, sector, dist_sq, r_attack, r_armour, r_arty)
+	return _damage_from_rolls(attacker, target, sector, dist_sq, r_attack, r_armour, r_arty)
 
-static func damage_bounds(attacker: Unit, target: Unit, experience_level: int, sector: int,
+static func damage_bounds(attacker: Unit, target: Unit, sector: int,
 		dist_sq: int) -> Vector2i:
 	## Прев'ю (§3.4): точні межі формули без жодного кидка. compute_damage()
 	## монотонне за кожним окремим кидком і зрізає (int()) лише один раз
@@ -107,15 +104,22 @@ static func damage_bounds(attacker: Unit, target: Unit, experience_level: int, s
 	if ac == UnitTypes.UnitClass.ARTILLERY and tc == UnitTypes.UnitClass.TANK:
 		arty_roll_max = maxi(a / 2, 0)
 
-	var lo: int = _damage_from_rolls(attacker, target, experience_level, sector, dist_sq,
+	var lo: int = _damage_from_rolls(attacker, target, sector, dist_sq,
 			0, armour_roll_max, 0)
-	var hi: int = _damage_from_rolls(attacker, target, experience_level, sector, dist_sq,
+	var hi: int = _damage_from_rolls(attacker, target, sector, dist_sq,
 			attack_roll_max, 0, arty_roll_max)
 	return Vector2i(lo, hi)
 
+const DRONE_BASE: int = 120
+const DRONE_SPREAD: int = 60
+
 static func drone_damage(rng: RandomNumberGenerator) -> int:
 	## §3.9. Броня ігнорується повністю: дрон заходить згори, сектор не рахується.
-	return 120 + roll(rng, 60)
+	return DRONE_BASE + roll(rng, DRONE_SPREAD)
+
+static func drone_damage_bounds() -> Vector2i:
+	## Межі для оверлея (min, max) — ті самі константи, що й у drone_damage().
+	return Vector2i(DRONE_BASE, DRONE_BASE + DRONE_SPREAD)
 
 static func distance_sq(a: Vector2i, b: Vector2i) -> int:
 	var d: Vector2i = a - b

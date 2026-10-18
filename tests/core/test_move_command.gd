@@ -11,41 +11,23 @@ func before_each() -> void:
 func test_move_costs_ap_and_moves_the_unit() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	var before: int = u.ap
-	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(3, 5), -1)
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(3, 5))
 	assert_eq(cmd.validate(state), "")
 	var events: Array = cmd.apply(state)
 	assert_eq(u.pos, Vector2i(3, 5))
 	assert_true(u.ap < before)
 	assert_true(events[0] is Events.UnitMoved)
 
-func test_an_objective_passed_mid_turn_is_remembered_without_waiting_for_the_next_turn() -> void:
-	# §3.10: цілі підкоряються туману, отже позначатися розвіданими мусять там само,
-	# де оновлюється туман. Доти refresh_seen() викликався лише з begin_turn(), тож
-	# ціль, розвідана серед ходу, не пам'яталася — а якби юніт до наступного ходу
-	# відійшов, не запам'яталася б узагалі.
-	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
-	var idx: int = Objectives.add(state, Vector2i(6, 5), 1)
-	state.start()
-	assert_false(state.objectives[idx].seen_by[0], "передумова: ціль поза оглядом до ходу")
-
-	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
-
-	assert_true(state.objectives[idx].seen_by[0],
-		"ціль, побачену серед ходу, памʼятаємо одразу, а не з наступного begin_turn()")
-
-func test_move_sets_explicit_facing() -> void:
-	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
-	MoveCommand.create(u.id, Vector2i(3, 5), 6).apply(state)
-	assert_eq(u.facing, 6, "гравець сам вирішує, куди дивитись — це вхід у модель броні")
-
-func test_move_without_facing_uses_last_step_direction() -> void:
+func test_move_faces_along_its_last_step() -> void:
+	# Напрямок після ходу не обирають: інакше хід, що витрачає останні AP, був би
+	# поворотом на 0 AP в обхід TurnCommand (§3.4).
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 0)
-	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(3, 5)).apply(state)
 	assert_eq(u.facing, 2, "останній крок був на схід")
 
 func test_cannot_move_beyond_ap() -> void:
 	var u: Unit = state.add_unit(9, 0, Vector2i(0, 5), 2)   # арта, ap 24
-	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(9, 5), -1)
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(9, 5))
 	assert_ne(cmd.validate(state), "", "недосяжна ціль має бути відхилена")
 
 func test_cannot_move_onto_another_unit() -> void:
@@ -61,22 +43,12 @@ func test_cannot_move_onto_another_unit() -> void:
 	state.add_unit(5, 1, Vector2i(2, 5), 2)
 	state.start()
 	assert_true(state.vision[0].is_visible(Vector2i(2, 5)), "передумова: ворога видно")
-	assert_ne(MoveCommand.create(a.id, Vector2i(2, 5), -1).validate(state), "")
-
-func test_a_facing_outside_the_eight_directions_is_rejected() -> void:
-	# facing 8 дійшов би до Rules.armour_sector() як індекс за межами Board.DIRS.
-	# −1 — законне «обличчям за рухом», усе інше поза 0..7 — ні.
-	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
-	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), 8).validate(state), "ERR_BAD_FACING")
-	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), -2).validate(state), "ERR_BAD_FACING")
-	assert_eq(MoveCommand.create(u.id, u.pos, 8).validate(state), "ERR_BAD_FACING", "і поворот на місці теж")
-	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), 7).validate(state), "", "межі 0..7 законні")
-	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), -1).validate(state), "")
+	assert_ne(MoveCommand.create(a.id, Vector2i(2, 5)).validate(state), "")
 
 func test_cannot_move_someone_elses_unit() -> void:
 	var theirs: Unit = state.add_unit(5, 1, Vector2i(0, 5), 2)
 	state.active_player = 0
-	assert_ne(MoveCommand.create(theirs.id, Vector2i(1, 5), -1).validate(state), "")
+	assert_ne(MoveCommand.create(theirs.id, Vector2i(1, 5)).validate(state), "")
 
 func test_unit_that_fired_cannot_move() -> void:
 	# Прапорець виставляється НАПРЯМУ, а не через exhaust(): той заразом обнуляє AP,
@@ -86,12 +58,12 @@ func test_unit_that_fired_cannot_move() -> void:
 	# перевіряється точний, а не «якийсь непорожній».
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	u.has_fired = true
-	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), -1).validate(state), "ERR_ALREADY_FIRED")
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5)).validate(state), "ERR_ALREADY_FIRED")
 
 func test_move_refreshes_vision() -> void:
 	var u: Unit = state.add_unit(0, 0, Vector2i(0, 5), 2)
 	state.begin_turn()
-	var events: Array = MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+	var events: Array = MoveCommand.create(u.id, Vector2i(3, 5)).apply(state)
 	var has_reveal: bool = false
 	for e in events:
 		if e is Events.TileRevealed:
@@ -112,7 +84,7 @@ func test_move_validate_rejects_when_match_is_over() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	state.check_elimination()   # у гравця 1 нема юнітів — матч завершується перемогою гравця 0
 	assert_true(state.is_over(), "передумова: матч має бути завершений")
-	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5), -1).validate(state), "ERR_MATCH_OVER")
+	assert_eq(MoveCommand.create(u.id, Vector2i(1, 5)).validate(state), "ERR_MATCH_OVER")
 
 func test_end_turn_validate_rejects_when_match_is_over() -> void:
 	state.add_unit(5, 0, Vector2i(0, 5), 2)
@@ -120,35 +92,16 @@ func test_end_turn_validate_rejects_when_match_is_over() -> void:
 	assert_true(state.is_over(), "передумова: матч має бути завершений")
 	assert_eq(EndTurnCommand.create().validate(state), "ERR_MATCH_OVER")
 
-func test_turn_in_place_emits_unit_turned_not_unit_moved_and_costs_no_ap() -> void:
+## Поворот на місці — лише TurnCommand (AP-гейт); хід на свій тайл відхилено.
+func test_move_to_own_tile_is_refused() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
-	var before: int = u.ap
-	var events: Array = MoveCommand.create(u.id, Vector2i(0, 5), 6).apply(state)
-	assert_eq(u.pos, Vector2i(0, 5), "поворот на місці не рухає юніт")
-	assert_eq(u.facing, 6)
-	assert_eq(u.ap, before, "порожній шлях не має коштувати AP")
-	var has_turned: bool = false
-	var has_moved: bool = false
-	var has_blocked: bool = false
-	for e in events:
-		if e is Events.UnitTurned:
-			has_turned = true
-		if e is Events.UnitMoved:
-			has_moved = true
-		if e is Events.MoveBlocked:
-			has_blocked = true
-	assert_true(has_turned, "поворот на місці — це UnitTurned")
-	assert_false(has_moved, "порожній шлях не повинен породжувати UnitMoved")
-	# Друга половина розрізнення (перша — у test_a_blocked_first_step_...): навмисний
-	# поворот і обрив на першому кроці дають однаковий UnitTurned, тож усе, чим вони
-	# відрізняються, — наявність MoveBlocked. Тут її бути не сміє.
-	assert_false(has_blocked, "нікого не блокували — обриву в потоці бути не може")
+	assert_eq(MoveCommand.create(u.id, Vector2i(0, 5)).validate(state), "ERR_OWN_TILE")
 
 func test_moving_onto_an_enemy_mine_detonates_it() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	Mines.place(state, Vector2i(2, 5), 1)
 	var before: int = u.hp
-	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(3, 5)).apply(state)
 	assert_true(u.hp < before, "§3.11: наїзд на нерозкриту міну — підрив")
 	assert_eq(u.pos, Vector2i(2, 5),
 		"міна спрацьовує одразу — юніт лишається на тайлі підриву, а не доходить до (3,5)")
@@ -158,7 +111,7 @@ func test_a_minefield_cannot_be_crossed_by_stopping_past_it() -> void:
 	# міну можна було б просто переїхати, і вся механіка заборони руху зникла б.
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	Mines.place(state, Vector2i(1, 5), 1)
-	MoveCommand.create(u.id, Vector2i(4, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(4, 5)).apply(state)
 	assert_eq(u.pos, Vector2i(1, 5), "рух обривається на міні, а не проходить крізь неї")
 	assert_true(state.mines.is_empty(), "міна витрачена")
 
@@ -170,8 +123,8 @@ func test_several_partial_moves_cost_the_same_as_one_direct_move() -> void:
 	# повністю, і кожен тайл коштує однаково незалежно від того, скільки їх лишилось.
 	# Два кроки по 2 тайли: 20 + 20 = 40 AP, як і прямий хід на 4 тайли.
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
-	MoveCommand.create(u.id, Vector2i(2, 5), -1).apply(state)
-	MoveCommand.create(u.id, Vector2i(4, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(2, 5)).apply(state)
+	MoveCommand.create(u.id, Vector2i(4, 5)).apply(state)
 	assert_eq(u.pos, Vector2i(4, 5))
 	assert_eq(u.ap, 8, "48 - (20 + 20) = 8 — точно як один прямий хід на 4 тайли")
 
@@ -182,8 +135,8 @@ func test_partial_moves_leave_enough_ap_to_fire() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	var target: Unit = state.add_unit(0, 1, Vector2i(4, 5), 0)
 	state.begin_turn()
-	MoveCommand.create(u.id, Vector2i(1, 5), -1).apply(state)
-	MoveCommand.create(u.id, Vector2i(2, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(1, 5)).apply(state)
+	MoveCommand.create(u.id, Vector2i(2, 5)).apply(state)
 	assert_eq(u.ap, 28, "48 - (10 + 10) = 28")
 	var fire: FireCommand = FireCommand.create(u.id, target.id)
 	assert_eq(fire.validate(state), "")
@@ -196,8 +149,8 @@ func test_partial_moves_into_the_red_zone_forecloses_firing() -> void:
 	# має бути відхилений, і причина мусить бути саме нестача AP, з точним кодом.
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	var target: Unit = state.add_unit(0, 1, Vector2i(9, 9), 0)
-	MoveCommand.create(u.id, Vector2i(2, 5), -1).apply(state)
-	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(2, 5)).apply(state)
+	MoveCommand.create(u.id, Vector2i(3, 5)).apply(state)
 	assert_eq(u.ap, 18, "48 - (20 + 10) = 18")
 	assert_eq(FireCommand.create(u.id, target.id).validate(state), "ERR_NOT_ENOUGH_AP")
 
@@ -211,10 +164,10 @@ func test_firing_after_partial_moves_forecloses_further_movement() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	var target: Unit = state.add_unit(0, 1, Vector2i(4, 5), 0)
 	state.begin_turn()
-	MoveCommand.create(u.id, Vector2i(1, 5), -1).apply(state)
-	MoveCommand.create(u.id, Vector2i(2, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(1, 5)).apply(state)
+	MoveCommand.create(u.id, Vector2i(2, 5)).apply(state)
 	FireCommand.create(u.id, target.id).apply(state)
-	assert_eq(MoveCommand.create(u.id, Vector2i(3, 5), -1).validate(state), "ERR_ALREADY_FIRED")
+	assert_eq(MoveCommand.create(u.id, Vector2i(3, 5)).validate(state), "ERR_ALREADY_FIRED")
 
 func test_zones_predict_whether_firing_is_legal_after_the_move() -> void:
 	# Зв'язує обіцянку UI (Pathing.compute_zones) із фактичною поведінкою команд:
@@ -244,7 +197,7 @@ func test_zones_predict_whether_firing_is_legal_after_the_move() -> void:
 	assert_true(zones.move_and_fire.has(gold), "передумова: (2,5) — золота зона")
 	assert_true(zones.move_only.has(red), "передумова: (6,5) — червона зона")
 
-	MoveCommand.create(u.id, gold, -1).apply(state)
+	MoveCommand.create(u.id, gold).apply(state)
 	assert_eq(u.pos, gold, "передумова: до золотого тайла ворог не дотягується")
 	assert_eq(FireCommand.create(u.id, target.id).validate(state), "",
 		"золота зона: постріл лишається легальним після ходу")
@@ -258,7 +211,7 @@ func test_zones_predict_whether_firing_is_legal_after_the_move() -> void:
 	var u2: Unit = state2.add_unit(3, 0, Vector2i(0, 5), 2)
 	var target2: Unit = state2.add_unit(0, 1, Vector2i(6, 8), 0)
 	state2.start()
-	MoveCommand.create(u2.id, red, -1).apply(state2)
+	MoveCommand.create(u2.id, red).apply(state2)
 	assert_eq(u2.pos, red, "передумова: дорога вільна, юніт справді доїхав до червоного тайла")
 	assert_true(state2.vision[0].is_visible(Vector2i(6, 8)),
 		"передумова: ціль видно й вона в дальності — відмова буде саме через AP")
@@ -291,7 +244,7 @@ func test_mine_revealed_comes_after_the_tile_it_sits_on_is_revealed() -> void:
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(7, 5), 0),
 		"передумова: з (0,5) до міни 7 тайлів — інженер її ще не бачить")
-	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5), -1).apply(state)
+	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5)).apply(state)
 	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли дороги по 15 AP — 60 з 76")
 	var tile_at: int = _index_of_tile_revealed(events, 0, Vector2i(7, 5))
 	var mine_at: int = _index_of_mine_revealed(events, 0, Vector2i(7, 5))
@@ -315,7 +268,7 @@ func test_a_hidden_enemy_on_the_path_halts_the_mover_one_tile_short() -> void:
 	assert_false(state.vision[0].is_seen(Vector2i(5, 5)),
 		"передумова: (5,5) не розвідано — 5 тайлів проти огляду 3, і ходів ще не було")
 
-	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(6, 5), -1)
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(6, 5))
 	assert_eq(cmd.validate(state), "", "крізь порожню НА ВИГЛЯД землю планувати можна")
 	cmd.apply(state)
 
@@ -334,7 +287,7 @@ func test_a_halt_names_itself_instead_of_leaving_the_view_to_infer_it() -> void:
 	state.add_unit(0, 1, Vector2i(5, 5), 6)
 	state.start()
 
-	var events: Array = MoveCommand.create(u.id, Vector2i(6, 5), -1).apply(state)
+	var events: Array = MoveCommand.create(u.id, Vector2i(6, 5)).apply(state)
 
 	var blocked: Events.MoveBlocked = null
 	for e in events:
@@ -354,7 +307,7 @@ func test_a_hidden_enemy_on_the_destination_makes_the_move_legal_but_short() -> 
 	state.add_unit(0, 1, Vector2i(5, 5), 6)
 	state.start()
 
-	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(5, 5), -1)
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(5, 5))
 	assert_eq(cmd.validate(state), "", "тайл під невидимим ворогом лишається законною ціллю")
 	cmd.apply(state)
 
@@ -377,7 +330,7 @@ func test_a_seen_enemy_puts_the_ground_behind_it_out_of_range() -> void:
 	assert_true(state.vision[0].is_visible(Vector2i(5, 5)),
 		"передумова: спостерігач на (5,1) бачить (5,5)")
 
-	assert_eq(MoveCommand.create(u.id, Vector2i(6, 5), -1).validate(state), "ERR_OUT_OF_RANGE",
+	assert_eq(MoveCommand.create(u.id, Vector2i(6, 5)).validate(state), "ERR_OUT_OF_RANGE",
 		"видимий ворог справді перекриває дорогу вже на етапі планування")
 
 func test_an_enemy_on_ground_scouted_earlier_still_blocks_the_plan() -> void:
@@ -396,13 +349,13 @@ func test_an_enemy_on_ground_scouted_earlier_still_blocks_the_plan() -> void:
 	state.begin_turn()
 	assert_true(state.vision[0].is_seen(Vector2i(5, 5)), "передумова: розвідник накрив тайл ворога")
 
-	MoveCommand.create(scout.id, Vector2i(2, 1), -1).apply(state)
+	MoveCommand.create(scout.id, Vector2i(2, 1)).apply(state)
 	assert_eq(scout.pos, Vector2i(2, 1), "передумова: 3 тайли поля по 10 — рівно 30 AP")
 	assert_false(state.vision[0].is_visible(Vector2i(5, 5)),
 		"передумова: зараз за ворогом не стежить ніхто")
 	assert_true(state.vision[0].is_seen(Vector2i(5, 5)), "§3.5: розвідане лишається розвіданим")
 
-	assert_eq(MoveCommand.create(u.id, Vector2i(6, 5), -1).validate(state), "ERR_OUT_OF_RANGE",
+	assert_eq(MoveCommand.create(u.id, Vector2i(6, 5)).validate(state), "ERR_OUT_OF_RANGE",
 		"ворог на розвіданій землі перекриває дорогу вже на етапі планування")
 
 func test_a_seen_enemy_is_routed_around_at_planning_time() -> void:
@@ -422,7 +375,7 @@ func test_a_seen_enemy_is_routed_around_at_planning_time() -> void:
 	s.start()
 	assert_true(s.vision[0].is_visible(Vector2i(2, 5)), "передумова: ворога видно")
 
-	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5), -1)
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5))
 	assert_eq(cmd.validate(s), "")
 	var events: Array = cmd.apply(s)
 
@@ -448,7 +401,7 @@ func test_ap_pays_for_the_tiles_entered_not_for_the_ones_planned() -> void:
 	state.add_unit(0, 1, Vector2i(5, 5), 6)
 	state.start()
 	var before: int = u.ap
-	var events: Array = MoveCommand.create(u.id, Vector2i(6, 5), -1).apply(state)
+	var events: Array = MoveCommand.create(u.id, Vector2i(6, 5)).apply(state)
 
 	var moved: Events.UnitMoved = events[0]
 	assert_eq(moved.path.size(), 4, "передумова: пройдено 4 тайли з 6 запланованих")
@@ -461,7 +414,7 @@ func test_the_mine_tile_is_paid_for_and_the_tiles_beyond_it_are_not() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)   # медіум: ap 48, дорога по 10
 	Mines.place(state, Vector2i(2, 5), 1)
 	state.start()
-	var events: Array = MoveCommand.create(u.id, Vector2i(4, 5), -1).apply(state)
+	var events: Array = MoveCommand.create(u.id, Vector2i(4, 5)).apply(state)
 
 	assert_eq(u.pos, Vector2i(2, 5), "передумова: підрив спиняє хід на своєму тайлі")
 	assert_eq(u.ap, 28, "48 − 2×10: тайл підриву оплачений, решта плану — ні")
@@ -487,7 +440,7 @@ func test_a_blocker_standing_on_a_mine_stops_the_move_without_setting_it_off() -
 	state.start()
 	var before: int = u.hp
 
-	MoveCommand.create(u.id, Vector2i(6, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(6, 5)).apply(state)
 
 	assert_eq(u.pos, Vector2i(4, 5), "спиняє зайнятість, а не міна")
 	assert_eq(u.hp, before, "на тайл, у який не ввійшов, юніт не підривається")
@@ -507,19 +460,19 @@ func test_a_blocked_first_step_turns_in_place_instead_of_moving() -> void:
 		"передумова: сітки не праймлені, сусідній тайл не розвідано")
 	var before: int = u.ap
 
-	var events: Array = MoveCommand.create(u.id, Vector2i(2, 5), 6).apply(state)
+	var events: Array = MoveCommand.create(u.id, Vector2i(2, 5)).apply(state)
 
 	assert_eq(u.pos, Vector2i(0, 5), "юніт не зрушив")
 	assert_eq(u.ap, before, "нічого не пройдено — нічого не списано")
-	assert_eq(u.facing, 6, "поворот усе одно відбувся")
+	assert_eq(u.facing, 2, "не зробив жодного кроку — напрямок лишився")
 	assert_true(events[0] is Events.UnitTurned, "порожній шлях — це UnitTurned")
 	var blocked: Events.MoveBlocked = null
 	for e in events:
 		assert_false(e is Events.UnitMoved, "порожнього UnitMoved бути не може")
 		if e is Events.MoveBlocked:
 			blocked = e
-	# Заголовок тут байт-у-байт такий самий, як у навмисного повороту на місці
-	# (test_turn_in_place_...), тож єдине, чим вигляд може їх розрізнити, — оця подія.
+	# Заголовок тут — той самий UnitTurned, що дає TurnCommand, тож єдине, чим вигляд
+	# може відрізнити обрив від повороту, — оця подія.
 	assert_not_null(blocked, "обрив на першому кроці мусить назвати себе")
 	assert_eq(blocked.unit_id, u.id)
 	assert_eq(blocked.pos, Vector2i(1, 5), "названо тайл, у який не ввійшли")
@@ -539,7 +492,7 @@ func test_a_friendly_unit_blocks_planning_even_before_start() -> void:
 
 	assert_true(state.known_occupied_map(u.owner).has(blocker.pos),
 		"свій юніт займає мапу знання незалежно від seen — саме це стверджує коментар над known_occupied_map()")
-	assert_eq(MoveCommand.create(u.id, blocker.pos, -1).validate(state), "ERR_OUT_OF_RANGE",
+	assert_eq(MoveCommand.create(u.id, blocker.pos).validate(state), "ERR_OUT_OF_RANGE",
 		"і тому хід на тайл свого ж юніта відхиляється вже на етапі планування — не лише під час проходу")
 
 func test_the_walk_reveals_the_ground_it_passes_not_only_the_ground_it_ends_on() -> void:
@@ -556,7 +509,7 @@ func test_the_walk_reveals_the_ground_it_passes_not_only_the_ground_it_ends_on()
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(1, 2), 0), "передумова: з (0,5) міни не видно")
 
-	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5), -1).apply(state)
+	var events: Array = MoveCommand.create(eng.id, Vector2i(4, 5)).apply(state)
 
 	assert_eq(eng.pos, Vector2i(4, 5), "передумова: 4 тайли по 15 — 60 з 76")
 	assert_false(state.vision[0].is_visible(Vector2i(1, 2)),
@@ -579,7 +532,7 @@ func test_a_unit_seen_from_the_middle_of_the_walk_is_seen_from_that_moment() -> 
 	state.add_unit(0, 1, Vector2i(5, 5), 6)
 	state.start()
 
-	var events: Array = MoveCommand.create(u.id, Vector2i(6, 5), -1).apply(state)
+	var events: Array = MoveCommand.create(u.id, Vector2i(6, 5)).apply(state)
 
 	var enemy_tile_at: int = _index_of_tile_revealed(events, 0, Vector2i(5, 5))
 	var later_tile_at: int = _index_of_tile_revealed(events, 0, Vector2i(7, 5))
@@ -601,7 +554,7 @@ func test_a_unit_killed_by_a_mine_stops_contributing_vision() -> void:
 	assert_true(state.vision[0].is_visible(Vector2i(5, 5)),
 		"передумова: юніт бачить (5,5) з (0,5) — vision 5, dist_sq точно на межі")
 	Mines.place(state, Vector2i(1, 5), 1)
-	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
+	MoveCommand.create(u.id, Vector2i(3, 5)).apply(state)
 	assert_false(u.is_alive(), "передумова: міна гарантовано вбиває при hp <= 90")
 	assert_false(state.vision[0].is_visible(Vector2i(5, 5)),
 		"мертвий юніт не має продовжувати світити видимість")
@@ -627,7 +580,7 @@ func test_a_known_enemy_mine_is_routed_around() -> void:
 	var s: BattleState = _two_lane_state_with_mine(1, true)
 	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
 	s.start()
-	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5), -1)
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5))
 	assert_eq(cmd.validate(s), "")
 	var events: Array = cmd.apply(s)
 	var moved: Events.UnitMoved = events[0]
@@ -641,7 +594,7 @@ func test_a_known_enemy_mine_tile_is_not_a_legal_destination() -> void:
 	var s: BattleState = _two_lane_state_with_mine(1, true)
 	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
 	s.start()
-	assert_eq(MoveCommand.create(u.id, Vector2i(2, 5), -1).validate(s), "ERR_OUT_OF_RANGE")
+	assert_eq(MoveCommand.create(u.id, Vector2i(2, 5)).validate(s), "ERR_OUT_OF_RANGE")
 
 func test_zones_exclude_a_known_enemy_mine() -> void:
 	var s: BattleState = _two_lane_state_with_mine(1, true)
@@ -665,7 +618,7 @@ func test_an_own_mine_is_not_an_obstacle() -> void:
 	var s: BattleState = _two_lane_state_with_mine(0, true)
 	var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
 	s.start()
-	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5), -1)
+	var cmd: MoveCommand = MoveCommand.create(u.id, Vector2i(4, 5))
 	assert_eq(cmd.validate(s), "")
 	var events: Array = cmd.apply(s)
 	var moved: Events.UnitMoved = events[0]
@@ -684,7 +637,7 @@ func test_an_engineer_that_finds_a_mine_mid_walk_stops_in_front_of_it() -> void:
 	state.begin_turn()
 	assert_false(Mines.is_known(state, Vector2i(4, 5), 0), "передумова: на старті міну не видно")
 	var before_ap: int = eng.ap
-	var cmd: MoveCommand = MoveCommand.create(eng.id, Vector2i(4, 5), -1)
+	var cmd: MoveCommand = MoveCommand.create(eng.id, Vector2i(4, 5))
 	assert_eq(cmd.validate(state), "", "невідома міна плануванню не заважає")
 	var events: Array = cmd.apply(state)
 

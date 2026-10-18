@@ -18,8 +18,6 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 		u.hp = 0
 		out.append(Events.UnitDestroyed.new(u.id, u.pos))
 	out.append_array(state.check_elimination())
-	# Objectives.check_victory() тут навмисно не викликається: здача — не
-	# кінець ходу, і той, хто здається, не може нею ж заявити перемогу за цілі.
 	if state.is_over():
 		return out
 	# Далі — той самий хвіст, що в EndTurnCommand: advance_player() вже пропускає

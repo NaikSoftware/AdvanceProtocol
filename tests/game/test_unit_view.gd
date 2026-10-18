@@ -502,3 +502,77 @@ func test_views_of_same_owner_share_textures_and_materials() -> void:
 func test_no_debug_facing_arrow_in_shipped_build() -> void:
 	view.bind(_unit(5, 0))
 	assert_null(view.get_node_or_null("Silhouette/DebugFacingArrow"))
+
+
+## Task 4.3: силует-заступник на кожен із 12 типів (до асетів Фази 5.2).
+func test_every_type_has_a_distinct_silhouette() -> void:
+	var seen := {}
+	for id in UnitTypes.count():
+		var key := var_to_str(UnitSilhouettes.spec(id))
+		assert_false(seen.has(key), "тип %d повторює силует типу %s" % [id, seen.get(key)])
+		seen[key] = id
+
+
+func _footprint(id: int) -> float:
+	var h: Vector3 = UnitSilhouettes.spec(id).hull
+	return h.x * h.z
+
+
+## Мобільність light(7) → medium(5) → TD(6) → heavy(8) за AP спадає, тож і корпус росте.
+func test_heavier_tank_has_larger_hull_footprint() -> void:
+	assert_lt(_footprint(7), _footprint(5))
+	assert_lt(_footprint(5), _footprint(6))
+	assert_lt(_footprint(6), _footprint(8))
+
+
+func test_silhouette_stays_within_four_meshes() -> void:
+	for id in UnitTypes.count():
+		var root := UnitSilhouettes.build(id, Color.RED)
+		assert_between(root.get_child_count(), 1, 4, "тип %d" % id)
+		root.free()
+
+
+func test_silhouette_fits_one_tile() -> void:
+	for id in UnitTypes.count():
+		var root := UnitSilhouettes.build(id, Color.RED)
+		var lo := Vector3(INF, INF, INF)
+		var hi := Vector3(-INF, -INF, -INF)
+		for m: MeshInstance3D in root.get_children():
+			var box: AABB = m.mesh.get_aabb()
+			lo = lo.min(m.position + box.position)
+			hi = hi.max(m.position + box.end)
+		assert_lte(hi.x - lo.x, 1.0, "x типу %d" % id)
+		assert_lte(hi.z - lo.z, 1.0, "z типу %d" % id)
+		assert_gte(lo.y, 0.0, "низ типу %d" % id)
+		root.free()
+
+
+## Task 10: заборонена ціль дрона (піхота) — окрема позначка, не приціл.
+func test_set_forbidden_toggles_its_own_mark_and_bind_clears_it() -> void:
+	view.bind(_unit(0))
+	assert_false(view._forbidden.visible, "свіжий вузол не позначений")
+	view.set_forbidden(true)
+	assert_true(view._forbidden.visible)
+	assert_false(view._crosshair.visible, "заборона — не приціл")
+	view.set_forbidden(false)
+	assert_false(view._forbidden.visible)
+	view.set_forbidden(true)
+	view.bind(_unit(0))
+	assert_false(view._forbidden.visible, "bind() знімає позначку — режим дрона перебудову не переживає")
+
+
+## Task 14: позначки огляду — гармата й дрон окремо, різні форма й колір, і юніт
+## у обох списках показує обидві.
+func test_gun_and_drone_threat_marks_are_independent_and_distinct() -> void:
+	view.bind(_unit(5))
+	view.set_threatened(true)
+	view.set_drone_threatened(true)
+	assert_true(view.is_threatened())
+	assert_true(view.is_drone_threatened())
+	view.set_threatened(false)
+	assert_false(view.is_threatened())
+	assert_true(view.is_drone_threatened(), "дронова позначка не залежить від гарматної")
+	assert_ne(view._threatened.texture, view._drone_threatened.texture, "різна форма")
+	assert_ne(view._threatened.modulate, view._drone_threatened.modulate, "різний колір")
+	assert_ne(view._drone_threatened.texture, view._forbidden.texture, "не хрест заборони")
+	assert_ne(view._threatened.transform.origin, view._drone_threatened.transform.origin, "не накладаються")

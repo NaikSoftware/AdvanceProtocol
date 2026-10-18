@@ -1,12 +1,12 @@
 class_name MapData
 extends Resource
-## Дані готової карти (Task 2.10): тайли, старт юнітів, цілі. Ресурс, не Node —
+## Дані готової карти (Task 2.10): тайли, старт юнітів. Ресурс, не Node —
 ## §6 забороняє лише вузли Godot під core/, а Resource лишається чистими даними
 ## без дерева сцени, тож правило не порушене.
 ##
 ## Дві функції, дві відповідальності: to_board() виробляє Board — саму лише
-## геометрію (§3.1), populate() наповнює вже створений BattleState — юнітів і
-## цілі. Жодна з них не створює BattleState сама: це робить MatchService.start_match()
+## геометрію (§3.1), populate() наповнює вже створений BattleState — юнітами.
+## Жодна з них не створює BattleState сама: це робить MatchService.start_match()
 ## окремим кроком (R1, task-2.10-brief.md), а populate() лише додає в те, що вже є.
 
 ## §3.12: ґрунт — правило, а не декор, тож одне значення на карту.
@@ -18,12 +18,6 @@ extends Resource
 @export var tiles: PackedInt32Array = PackedInt32Array()
 ## Кожен запис: {"type_id": int, "owner": int, "pos": Vector2i, "facing": int}.
 @export var spawns: Array[Dictionary] = []
-## §3.10: до 15 позначок на карту; карта задає лише позиції — нейтральними,
-## володіння вирішує гра, не дані карти.
-@export var objectives: Array[Vector2i] = []
-## 0 — на цій карті немає умови перемоги за цілі (те саме типове значення, що й
-## BattleState.objective_hold_target, core/battle_state.gd:24-27).
-@export var hold_target: int = 0
 ## Ключ перекладу назви карти (§9 — жодних хардкод-рядків), не сам текст.
 @export var name_key: String = ""
 
@@ -45,15 +39,14 @@ func populate(state: BattleState) -> bool:
 		if f < 0 or f > 7:
 			return false
 	for spawn in spawns:
+		# Рішення власника: карта на трьох, зіграна вдвох, просто не ставить юнітів
+		# зайвого гравця — окремих варіантів карти на кожну кількість немає.
+		if int(spawn["owner"]) >= state.player_count:
+			continue
 		state.add_unit(
 			int(spawn["type_id"]),
 			int(spawn["owner"]),
 			spawn["pos"] as Vector2i,
 			int(spawn.get("facing", 0))
 		)
-	for pos in objectives:
-		# owner -1: нейтральна ціль (Objectives.Objective, core/objectives.gd) —
-		# карта заявляє лише де вони стоять, не хто ними володіє на старті.
-		Objectives.add(state, pos, -1)
-	state.objective_hold_target = hold_target
 	return true

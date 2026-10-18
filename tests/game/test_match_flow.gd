@@ -9,11 +9,18 @@ const ResultsScene := preload("res://game/ui/results_screen.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 var _test_save: String = "user://test_save_%d.json" % OS.get_process_id()
 const MAP_PATH: String = "res://maps/skirmish_bridge.tres"
+## Task 4.12: усі поставні карти тепер на трьох — карту лише на двох тест пише сам.
+var _two_owner_map: String = "user://test_two_owner_map_%d.tres" % OS.get_process_id()
 
 
 func after_each() -> void:
-	for p in [_test_save, _test_save + ".map"]:
+	for p in [_test_save, _test_save + ".map", _two_owner_map]:
 		DirAccess.remove_absolute(p)
+
+
+func _save_two_owner_map() -> String:
+	assert_eq(ResourceSaver.save(_map(), _two_owner_map), OK)
+	return _two_owner_map
 
 
 func _service() -> Node:
@@ -52,21 +59,21 @@ func _finish_all_processed_tweens() -> void:
 
 # --- 3.3: конфіг -> бій -------------------------------------------------
 
-func test_configured_seed_players_and_ground_land_in_state() -> void:
+func test_configured_seed_players_and_map_ground_land_in_state() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 3, Terrain.GroundState.MUD, 777)
+	service.configure(MAP_PATH, 3, 777)
 	var screen: BattleScreen = _screen()
 
 	screen.launch(service)
 
 	assert_eq(service.state.seed_value, 777)
 	assert_eq(service.state.player_count, 3)
-	assert_eq(service.state.board.ground_state, Terrain.GroundState.MUD)
+	assert_eq(service.state.board.ground_state, (load(MAP_PATH) as MapData).ground_state)
 
 
 func test_new_match_starts_behind_the_gate() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY, 3)
+	service.configure(MAP_PATH, 2, 3)
 	var screen: BattleScreen = _screen()
 
 	screen.launch(service)
@@ -80,6 +87,16 @@ func test_new_match_starts_behind_the_gate() -> void:
 
 ## Карта зі зламаним напрямом: populate() відмовляє й не додає юнітів. Матч не
 ## починається — повернення в меню, а не порожня дошка без кінця.
+func test_board_takes_ground_state_from_the_map() -> void:
+	var m: MapData = _map()
+	m.ground_state = Terrain.GroundState.MUD
+	var service: Node = _service()
+
+	assert_true(_screen().setup(m, 2, 1, service))
+
+	assert_eq(service.state.board.ground_state, Terrain.GroundState.MUD)
+
+
 func test_broken_map_refuses_to_start_and_returns_to_menu() -> void:
 	var service: Node = _service()
 	var screen: BattleScreen = _screen()
@@ -100,22 +117,21 @@ func test_broken_map_refuses_to_start_and_returns_to_menu() -> void:
 
 func test_configure_without_seed_draws_a_random_one() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY)
+	service.configure(MAP_PATH, 2)
 	var first: int = service.seed_value
-	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY)
+	service.configure(MAP_PATH, 2)
 	assert_ne(service.seed_value, first, "новий матч — новий випадковий сід")
 
 
-func test_rematch_keeps_map_players_ground_and_changes_seed() -> void:
+func test_rematch_keeps_map_and_players_and_changes_seed() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 3, Terrain.GroundState.FROZEN, 5)
+	service.configure(MAP_PATH, 3, 5)
 	_screen().launch(service)
 
 	service.rematch()
 
 	assert_eq(service.map_path, MAP_PATH)
 	assert_eq(service.players, 3)
-	assert_eq(service.ground_state, Terrain.GroundState.FROZEN)
 	assert_ne(service.seed_value, 5)
 	assert_eq(service.launch_mode, MatchServiceScript.Launch.NEW)
 
@@ -173,10 +189,11 @@ func test_continue_without_or_with_broken_save_fails_without_crashing() -> void:
 		"невдале завантаження ховає «Продовжити»")
 
 
-func test_rematch_after_continue_reuses_saved_map_path() -> void:
+func test_rematch_after_continue_reuses_saved_map_path_and_restores_saved_board() -> void:
 	var a: Node = _service()
-	a.configure(MAP_PATH, 2, Terrain.GroundState.MUD, 3)
+	a.configure(MAP_PATH, 2, 3)
 	_screen().launch(a)
+	a.state.board.ground_state = Terrain.GroundState.MUD  # збереження несе свою дошку
 	a.save_current(_test_save)
 
 	var b: Node = _service()
@@ -184,7 +201,7 @@ func test_rematch_after_continue_reuses_saved_map_path() -> void:
 	b.rematch()
 
 	assert_eq(b.map_path, MAP_PATH)
-	assert_eq(b.ground_state, Terrain.GroundState.MUD)
+	assert_eq(b.state.board.ground_state, Terrain.GroundState.MUD)
 
 
 # --- 3.5: пауза ----------------------------------------------------------
@@ -286,14 +303,7 @@ func _result_state() -> BattleState:
 	s.get_unit(2).hp = 0
 	s.get_unit(4).hp = 0
 	s.get_unit(5).hp = 0
-	# Рівні — з досвіду, шкода — з окремого лічильника (міни досвіду не дають).
-	s.experience[0].add_damage(UnitTypes.UnitClass.TANK, 1250)
-	s.experience[1].add_damage(UnitTypes.UnitClass.INFANTRY, 550)
 	s.damage_dealt = [1250, 550, 0] as Array[int]
-	Objectives.add(s, Vector2i(5, 5), 0)
-	Objectives.add(s, Vector2i(5, 4), 0)
-	Objectives.add(s, Vector2i(5, 3), 1)
-	s.objectives[1].intact = false  # зруйнована не рахується
 	s.winner = 0
 	return s
 
@@ -308,16 +318,11 @@ func test_summary_numbers_from_constructed_state() -> void:
 	assert_eq(rows[0]["damage"], 1250)
 	assert_eq(rows[1]["damage"], 550)
 	assert_eq(rows[2]["damage"], 0)
-	assert_eq(rows[0]["objectives"], 1)
-	assert_eq(rows[1]["objectives"], 1)
-	assert_eq(rows[2]["objectives"], 0)
-	assert_eq(rows[0]["levels"][UnitTypes.UnitClass.TANK], 1)
-	assert_eq(rows[1]["levels"][UnitTypes.UnitClass.INFANTRY], 2)
 
 
 func test_summary_credits_a_mine_kill_to_the_mine_owner() -> void:
 	var s: BattleState = BattleState.create(Board.create(6, 6, Terrain.GroundState.DRY), 2, 1)
-	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # інженер p0 — досвіду не має
+	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # інженер p0
 	var victim: Unit = s.add_unit(2, 1, Vector2i(3, 3), 0)
 	victim.hp = 10
 	Mines.place(s, Vector2i(3, 3), 0)
@@ -346,14 +351,14 @@ func test_results_screen_shows_winner_and_rows_for_every_player() -> void:
 func test_setup_screen_choice_reaches_the_service() -> void:
 	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
 	add_child_autofree(setup)
-	(setup.get_node("%Mud") as Button).button_pressed = true
+	var options: OptionButton = setup.get_node("%MapOptions")
+	options.select(setup._map_paths.find(MAP_PATH))
 	var service: Node = _service()
 
 	assert_true(setup.configure_from_choice(service))
 
 	assert_eq(service.map_path, MAP_PATH)
 	assert_eq(service.players, 2)
-	assert_eq(service.ground_state, Terrain.GroundState.MUD)
 	assert_eq(service.launch_mode, MatchServiceScript.Launch.NEW)
 
 
@@ -410,16 +415,40 @@ func test_surrender_in_three_player_match_hands_over_to_next_player() -> void:
 	assert_false(screen.get_node("%PauseMenu").visible)
 
 
+# --- Task 4.12b: назви карт у селекторі перекладені ------------------------------
+
+func test_map_selector_shows_translated_names_and_keeps_selection_on_locale_switch() -> void:
+	var prev: String = TranslationServer.get_locale()
+	TranslationServer.set_locale("uk")
+	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
+	add_child_autofree(setup)
+	var options: OptionButton = setup.get_node("%MapOptions")
+	var idx: int = setup._map_paths.find(MAP_PATH)
+	options.select(idx)
+	assert_eq(options.get_item_text(idx), "Переправа")
+	assert_eq(options.get_item_text(setup._map_paths.find("res://maps/urban.tres")), "Місто")
+
+	TranslationServer.set_locale("en")
+	setup.notification(Node.NOTIFICATION_TRANSLATION_CHANGED)
+
+	assert_eq(options.get_item_text(idx), "River Crossing")
+	assert_eq(options.get_item_text(setup._map_paths.find("res://maps/urban.tres")), "Urban")
+	assert_eq(options.selected, idx, "вибір не злетів")
+	var service: Node = _service()
+	assert_true(setup.configure_from_choice(service))
+	assert_eq(service.map_path, MAP_PATH)
+	TranslationServer.set_locale(prev)
+
+
 # --- Налаштування: 3 гравці лише на карті з 3 спавнами -----------------------
 
 func test_three_players_offered_only_when_map_has_three_owners() -> void:
 	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
 	add_child_autofree(setup)
-	var map: MapData = load(MAP_PATH)
-	var owners: Dictionary = {}
-	for s in map.spawns:
-		owners[int(s["owner"])] = true
-	assert_eq(owners.has(2), false, "передумова: поставна карта без спавнів третього")
+	assert_false((setup.get_node("%P3") as Button).disabled, "поставні карти — на трьох")
+	setup._map_paths.assign([_save_two_owner_map()])
+	(setup.get_node("%MapOptions") as OptionButton).select(0)
+	setup._sync_player_options()
 
 	assert_true((setup.get_node("%P3") as Button).disabled)
 	(setup.get_node("%P3") as Button).button_pressed = true
@@ -525,22 +554,22 @@ func _rematch_calls(service: Node) -> Array[String]:
 
 func test_rematch_goes_to_setup_when_map_is_missing_or_unknown() -> void:
 	var service: Node = _service()
-	service.configure("res://maps/renamed_away.tres", 2, Terrain.GroundState.DRY, 1)
+	service.configure("res://maps/renamed_away.tres", 2, 1)
 	assert_eq(_rematch_calls(service), ["setup"] as Array[String])
 	var unknown: Node = _service()
-	unknown.configure("", 2, Terrain.GroundState.DRY, 1)
+	unknown.configure("", 2, 1)
 	assert_eq(_rematch_calls(unknown), ["setup"] as Array[String])
 
 
 func test_rematch_goes_to_setup_when_map_cannot_host_the_players() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 3, Terrain.GroundState.DRY, 1)
+	service.configure(_save_two_owner_map(), 3, 1)
 	assert_eq(_rematch_calls(service), ["setup"] as Array[String])
 
 
 func test_rematch_on_a_valid_map_starts_the_battle() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY, 1)
+	service.configure(MAP_PATH, 2, 1)
 	assert_eq(_rematch_calls(service), ["battle"] as Array[String])
 
 

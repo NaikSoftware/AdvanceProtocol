@@ -159,3 +159,74 @@ func test_draw_contour_with_empty_segments_draws_nothing() -> void:
 	view.build(board)
 	view.draw_contour([] as Array[Dictionary], view.LAYER_ZONES)
 	assert_eq(view.contour_segments(view.LAYER_ZONES).size(), 0)
+
+
+## Task 8: BridgeChanged перебудовує дошку, а контури (зони, цілі) лишаються.
+func test_rebuild_tiles_shows_new_kind_and_keeps_contours() -> void:
+	var board := Board.create(4, 4, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(1, 1), Terrain.Kind.BRIDGE)
+	var bv: BoardView = BoardViewScene.instantiate()
+	add_child_autofree(bv)
+	bv.build(board)
+	var segs: Array[Dictionary] = [{"cell": Vector2i(0, 0), "dir": Vector2i(1, 0), "color": Color.RED}]
+	bv.draw_contour(segs, BoardView.LAYER_ZONES)
+	board.set_kind(Vector2i(1, 1), Terrain.Kind.BRIDGE_DESTROYED)
+	bv.rebuild_tiles(board)
+	assert_eq(bv.kind_at(Vector2i(1, 1)), Terrain.Kind.BRIDGE_DESTROYED)
+	assert_eq(bv.contour_segments(BoardView.LAYER_ZONES), segs)
+
+
+# --- Кільце огляду — одне геометричне коло (§3.13, docs/ui/overlays.md) ----------
+
+func _circle_nodes() -> Array[MeshInstance3D]:
+	var out: Array[MeshInstance3D] = []
+	for child in view.get_children():
+		if child is MeshInstance3D and not child is MultiMeshInstance3D:
+			out.append(child)
+	return out
+
+
+## Радіус у тайлах = радіус у світі (тайл — 1.0), центр — середина тайла юніта.
+func test_draw_circles_makes_one_ring_per_circle_centred_on_the_tile() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	var circles: Array[Dictionary] = [{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE}]
+
+	view.draw_circles(circles, BoardView.LAYER_INSPECT)
+
+	assert_eq(view.circles(BoardView.LAYER_INSPECT), circles)
+	var nodes: Array[MeshInstance3D] = _circle_nodes()
+	assert_eq(nodes.size(), 1, "одне коло — один вузол, один draw call")
+	var ring: MeshInstance3D = nodes[0]
+	assert_eq(ring.position.x, 4.0)
+	assert_eq(ring.position.z, 6.0)
+	var torus: TorusMesh = ring.mesh as TorusMesh
+	assert_not_null(torus)
+	assert_almost_eq((torus.inner_radius + torus.outer_radius) * 0.5, 3.0, 0.0001, "середня лінія — рівно 3 тайли")
+	assert_eq(view.contour_segments(BoardView.LAYER_INSPECT), [], "коло — не контур тайлів")
+
+
+func test_draw_circles_replaces_and_empty_clears_only_that_layer() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	view.draw_circles([{"center": Vector2i(1, 1), "radius": 5, "color": Color.RED}] as Array[Dictionary], BoardView.LAYER_TARGETS)
+	view.draw_circles([{"center": Vector2i(2, 2), "radius": 3, "color": Color.WHITE},
+		{"center": Vector2i(2, 2), "radius": 5, "color": Color.PURPLE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	view.draw_circles([{"center": Vector2i(3, 3), "radius": 4, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_eq(_circle_nodes().size(), 2, "заміна, а не накопичення")
+
+	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
+
+	assert_eq(view.circles(BoardView.LAYER_INSPECT), [])
+	assert_eq(_circle_nodes().size(), 1, "коло іншого шару лишилось")
+	assert_eq(view.circles(BoardView.LAYER_TARGETS).size(), 1)
+
+
+func test_rebuild_tiles_keeps_circles() -> void:
+	var board := Board.create(10, 10, Terrain.GroundState.DRY)
+	view.build(board)
+	var circles: Array[Dictionary] = [{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE}]
+	view.draw_circles(circles, BoardView.LAYER_INSPECT)
+
+	view.rebuild_tiles(board)
+
+	assert_eq(view.circles(BoardView.LAYER_INSPECT), circles)
+	assert_eq(_circle_nodes().size(), 1)

@@ -757,28 +757,26 @@ func test_third_finger_does_not_disturb_an_active_pinch_or_hang_the_camera() -> 
 		"після третього пальця й завершення щипка палець, що лишився, усе ще мусить вести пан")
 
 
-# --- dp-поріг: діленням на content_scale_factor вікна, не множенням -------
+# --- dp-поріг: 10 логічних px, без поправки на content_scale_factor ------
 #
-# Регресія на блокері з рев'ю: при факторі > 1 події доходять у МЕНШОМУ
-# логічному просторі — фіксований dp-поріг мусить ділитись на фактор, а
-# множення (як було раніше) робило поріг у кілька разів товщим за задумані
-# ~10dp.
+# Task 4.1: UiScale робить логічний px ≈ dp, тож поріг ~10dp — це рівно
+# 10 логічних px за будь-якого фактора. Ділення на фактор (як було) після
+# появи UiScale давало б на телефоні ~6 px — тремтіння пальця ставало б паном.
 
-func test_drag_threshold_divides_by_the_windows_content_scale_factor() -> void:
+func test_drag_threshold_is_ten_logical_px_at_any_content_scale_factor() -> void:
 	var screen: Node3D = _screen()
 	screen._start_fallback_match_if_not_injected()
 	var window: Window = screen.get_window()
 	var original_factor: float = window.content_scale_factor
 
-	window.content_scale_factor = 2.0
-	var threshold_at_2x: float = screen._drag_threshold_px()
+	window.content_scale_factor = 1.627
+	var threshold_scaled: float = screen._drag_threshold_px()
 	window.content_scale_factor = 1.0
 	var threshold_at_1x: float = screen._drag_threshold_px()
 	window.content_scale_factor = original_factor
 
-	assert_true(threshold_at_2x < threshold_at_1x,
-		"більший content_scale_factor мусить дати МЕНШИЙ поріг у логічних пікселях події (ділення, не множення)")
-	assert_almost_eq(threshold_at_2x, threshold_at_1x / 2.0, 0.001)
+	assert_eq(threshold_scaled, 10.0)
+	assert_eq(threshold_at_1x, 10.0)
 
 
 ## Регресія на блокері з рев'ю: типове значення `true` синтезує ще й

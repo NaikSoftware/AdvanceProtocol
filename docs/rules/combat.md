@@ -1,16 +1,13 @@
 # Combat
 
-The detail behind §3.3, §3.3.1, §3.4 and §3.7 of CLAUDE.md — the damage formula, retaliation, directional armour and experience.
+The detail behind §3.3, §3.3.1, §3.4 and §3.10 of CLAUDE.md — the damage formula, retaliation, directional armour and victory.
 
 [back to CLAUDE.md](../../CLAUDE.md)
 
-Damage, in order. `A` = attacker's `attack`, `V` = attacker's class experience level (§3.7):
+Damage, in order. `A` = attacker's `attack`. A unit has only the parameters of its type:
 
 ```
 dmg  = 0.75*A + rand(0, A/4)
-
-if attacker.class != ENGINEER:
-    dmg += A * V / 8                        # +12.5% per experience level
 
 if attacker.class == INFANTRY:
     if dist_sq <= 2: dmg *= 4               # close assault — grenades, demolition charges
@@ -117,7 +114,7 @@ This reshapes the economics of shooting, and that is the point:
 - Flanking costs more than it did: closing to a side or rear arc usually puts you inside the
   target's own range.
 
-Retaliation damage feeds the retaliator's class experience pool like any other damage.
+Retaliation damage is credited to the retaliator's owner tally like any other damage.
 
 ## Facing in an exchange
 
@@ -130,8 +127,24 @@ Firing turns the shooter. Being shot does not turn the target. The order is the 
    back. No AP, out of range, an engineer, or an attacker it cannot see — no answer, no turn.
 4. The drone strike turns the squad too, though it computes no sector. One rule, no exceptions.
 
-Turning is free and is never an action on its own. A shooter already facing its target does not
-turn — the turn event means the facing changed, not that someone fired.
+Turning in an exchange is free. A shooter already facing its target does not turn — the turn event
+means the facing changed, not that someone fired.
+
+### Turning in place
+
+**A unit with AP left may turn in place toward any tile, free, on its own turn** (`TurnCommand`).
+At 0 AP it may not — and firing sets AP to 0 (§3.2), so a unit that has fired, or spent its AP
+moving, ends the turn facing wherever that left it.
+
+This is the owner's decision (2026-10-18): a tap anywhere on the board turns the active unit there,
+so it can be pointed somewhere else after its move. **A move carries no facing of its own: the unit
+always ends it facing along its last step.** An explicit facing on a move that spends the last AP
+would be a free turn at 0 AP, around the gate below — so turning in place is the only free
+reorientation, and without it the only way to aim the front was to plan the route around it. The AP
+gate is what keeps flanking a punishment: the turn is free but not unconditional, so a unit that
+spent its turn carelessly — ran into red, or fired from an exposed tile — cannot square up to the
+threat afterwards. A turn that changes nothing is refused (`ERR_ALREADY_FACING`), so the turn event
+still always means the facing changed.
 
 **Retaliation therefore always lands on the attacker's front.** Arithmetic, not tendency: facing
 snaps to one of eight directions, at most 22.5° off, and the front sector runs to 45°, so the return
@@ -184,22 +197,9 @@ cross-multiplied form is kept because it is exact, has no division, and cannot d
 Flanking is the main skill expression in the game. The UI must always show which sector a shot
 will land in **before** the player commits.
 
-## Experience
+## Victory
 
-Progression is **per unit class, per player**, and it is earned by fighting, not bought.
-
-- Each class has an XP pool. Damage dealt by a unit adds that amount to its class's pool.
-- Levels 0→5. On crossing a threshold the pool is reduced by the threshold and the level goes up.
-- Each level is worth `+A/8` damage (+12.5% of base attack).
-- Thresholds, per class (infantry, light, tank, artillery):
-
-```
-INFANTRY       150,   375,   938,  2344,  5859
-LIGHT_VEHICLE  700,  1750,  4375, 10938, 27344
-TANK          1000,  2500,  6250, 15625, 39063
-ARTILLERY     2000,  5000, 12500, 31250, 78125
-```
-
-- Engineers have no experience (they deal no damage).
-- In skirmish, experience is **per match** — it starts at 0 and does not persist between matches.
-  Persistent profiles belong with the campaign, not before it.
+A player with no units left is eliminated. The check runs the moment a unit falls — after a shot,
+a retaliation, a drone strike, a mine, a demolished bridge, or a concede — and again at end of
+turn. Last player standing wins. In 3-player games an eliminated player is skipped in the turn
+order, and the match continues between the remaining two.

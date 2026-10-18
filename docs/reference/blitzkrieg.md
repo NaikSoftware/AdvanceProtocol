@@ -15,7 +15,7 @@ Where to look (the code is obfuscated; these are the mappings that have already 
 | file | what is in it |
 | --- | --- |
 | `src/defpackage/class_3.java` | the unit — stat tables in `<clinit>`, damage in `method_160`, armour sector in `method_159`, engineer verbs in `method_16x–17x` |
-| `src/defpackage/class_1.java` | the player — objectives, experience thresholds and level-up in `method_97` |
+| `src/defpackage/class_1.java` | the player — the 15-slot mine table (not objectives: the original has none), experience thresholds and level-up in `method_97` |
 | `src/defpackage/class_2.java` | AI player, extends the player class |
 | `src/defpackage/GameCanvas.java` | board, terrain cost (`method_70`), rendering, save format |
 
@@ -38,6 +38,9 @@ Two rules about using it:
   finding in this file rather than silently matching or silently ignoring it.
 
 ### Findings from the reference
+
+- **The original has an experience system (thresholds and level-up in `class_1.method_97`); this
+  project dropped it.** A unit has only the parameters of its type.
 
 - **Tank → artillery damage is quartered in the original — confirmed, and deliberately not
   adopted.** `class_3.method_160` carries a distinct `>>= 2` branch for attacker `TANK` against
@@ -101,9 +104,11 @@ Two rules about using it:
   unit **under the cursor** — the hit test filters on alive and not-fogged, with no ownership
   check — falling back to the player's own selected unit when the cursor is over empty ground. The
   circle itself is gated on nothing else: a unit with 0 AP still shows it. The target crosshairs
-  inside it *are* AP-gated. [§3.13](../ui/overlays.md) adopts the on-demand split and the enemy inspection, remaps the
-  interaction to a tap because there is no cursor or key-hold on a touch screen, and departs on the
-  AP gate for enemies with the reason given there.
+  inside it *are* AP-gated. [§3.13](../ui/overlays.md) adopts the on-demand split, the enemy inspection, the fallback to the
+  selected unit and the drawing itself — a single red `drawArc` outline of radius `range × tile
+  width`, centred on the tile centre, with sprite `field_24[120]` as a crosshair on each markable
+  enemy (`GameCanvas.java:2574-2594`, range test `class_3.java:188-199`). It remaps the held key
+  to a long press, and departs on the AP gate for enemies with the reason given there.
 
 - **The original's own stat tables violate two of [§3.6](../rules/units.md)'s invariants.** Its max-AP table makes the
   **heavy tank the fastest** of all four tanks (56, against the medium's 44), and its armour table
@@ -118,9 +123,16 @@ Two rules about using it:
   marker, and returns `true`, which halts the path at that tile. So a minefield cannot be crossed
   by stopping past it, and the unit stops where it detonated — this project matches. The damage
   band is `90..180`, not the flat 120 the plan originally invented; adopted, because a flat number
-  would make mines the only damage source in the game that does not roll. Caveat worth knowing:
-  in the original the per-tile marker table appears to be shared between mines and objectives, so
-  the two may not be distinct concepts there. They are distinct here.
+  would make mines the only damage source in the game that does not roll.
+
+- **The original has no capturable objectives — the 15-slot `class_1` table is mines only.**
+  `field_149` holds positions, `field_150` marks a free slot and `field_151` a slot revealed to the
+  opponent; only an engineer sets `field_151` (`class_1:805-815`), and `method_105` detonates on the
+  table. Every slot is drawn with one sprite, `field_24[225]` (`GameCanvas:2632-2641`). Its victory
+  types (`GameCanvas.method_18`) are annihilation, killing designated units, reaching a rectangle,
+  and a test on this same table inside a rectangle — none involves ownership. The reveal is one-way
+  and what it shows is drawn live: a mine cleared out of sight disappears for the opponent too,
+  with no last-seen copy. This project has no objectives either; it wins by elimination only.
 
 - **Terrain penalties are widely spaced, and tracked vehicles ignore open ground.** Confirmed
   against `GameCanvas.method_68`: the original uses six buckets — `0` road, `5`, `10` ordinary
@@ -148,12 +160,17 @@ Two rules about using it:
   attacker's front — direction snaps to the nearest of eight, at most 22.5° off, inside the 45°
   front cone.
 
-  **Two details deliberately not adopted.** The original turns the survivor whenever it lives — the
-  swap happens before it is known whether an answer is even legal, so a unit with no AP or out of
-  range still turns. It also turns the selected unit toward any enemy the player taps, before
-  deciding the tap was an attack. Here the turn is tied to the action instead: you turn because you
-  fired. A turn granted for merely surviving, or for a tap, would be a free reorientation on someone
-  else's turn for doing nothing.
+  **The surviving-target turn is deliberately not adopted.** The original turns the survivor
+  whenever it lives — the swap happens before it is known whether an answer is even legal, so a
+  unit with no AP or out of range still turns. Here the retaliator turns because it fired back; a
+  turn granted for merely surviving would be a free reorientation on someone else's turn for doing
+  nothing.
+
+  **Turning on tap is adopted, with a gate the original does not have.** The original turns the
+  selected unit toward any enemy the player taps, before deciding the tap was an attack. The owner
+  adopted turning on tap for the acting unit (2026-10-18) — toward any tile, not only an enemy — but
+  only while the unit has AP left. At 0 AP, which includes every unit that has fired, it stays as it
+  is, so flanking still punishes a careless turn. See [combat.md](../rules/combat.md#turning-in-place).
 
 - **The HP bar on the board is a dark full-width track with a left-aligned fill drawn over it, and
   it carries no numbers — confirmed, and adopted with one departure.** `GameCanvas.method_26` draws

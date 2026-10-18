@@ -140,6 +140,8 @@ product against the target's facing. No trigonometry, no division.
   own shot resolves; a retaliator turns only **after** the damage lands, and only if it answered.
   The order is the rule — inverting it deletes flanking. Consequences, costs and the whole-unit
   (not turret-only) decision are in the linked document.
+- **A unit with AP left may turn in place toward any tile, free, on its own turn.** At 0 AP it stays
+  as it is — so a unit that fired or spent its AP is still flankable.
 - The UI must always show which sector a shot will land in **before** the player commits.
 
 ### 3.5 Vision and fog of war → [details](docs/rules/vision-and-fog.md)
@@ -176,17 +178,12 @@ is documentation. Two invariants hold there and are tested:
 Squad-level units are **one asset per tile** — one mesh, one draw call, one tile footprint. That
 mesh may sculpt three or four figures sharing a base, and it should.
 
-### 3.7 Experience → [thresholds](docs/rules/combat.md)
-
-Per unit class, per player, earned by damage dealt. Levels 0→5, each worth `+A/8` damage.
-Engineers have none. **In skirmish it is per match** and does not persist.
-
 ### 3.8 Engineers → [verb list](docs/rules/units.md)
 
 No gun; a verb list instead. All actions are on an **orthogonally adjacent** tile and cost
 `fire_cost` AP: lay/clear mine, repair/demolish bridge (an enemy on it dies; a friendly unit
-on it forbids the demolition), repair a friendly unit, capture/demolish an objective. Repair is
-the one place where unspent AP matters.
+on it forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP
+matters.
 
 ### 3.9 Drone strike — assault squad only → [details](docs/rules/units.md)
 
@@ -200,18 +197,10 @@ attack (§3.4), even though it computes no armour sector — the rule has no exc
 The triangle it produces is the spine of the game's matchups:
 **drones beat tanks → light vehicles beat infantry → tanks beat light vehicles.**
 
-### 3.10 Objectives and victory → [details](docs/rules/objectives.md)
+### 3.10 Victory → [details](docs/rules/combat.md)
 
-Up to 15 markers per map, owned or neutral, intact or taken; an adjacent engineer flips one.
-Objectives obey fog. Checked at end of turn: an opponent has no units left, **or** the map's
-objective condition is met.
-
-- **The objective condition is checked for one player only — the one whose turn just ended.**
-  Elimination stays global. This makes a simultaneous objective win unreachable rather than
-  tie-broken. It does **not** make a captured objective something you must survive a round to
-  keep — see the linked document.
-- A map with no objective condition sets `hold_target` to 0.
-- When both conditions resolve together, **elimination decides**.
+A player with no units left is eliminated, checked the moment their last unit falls. Last player
+standing wins.
 
 ### 3.11 Mines → [details](docs/rules/vision-and-fog.md)
 
@@ -234,8 +223,10 @@ at all times, offsetting off-road penalty. Roads are never affected — that is 
 
 - **Movement zones: always on**, selected unit only, drawn as two nested **contours** rather than
   filled tiles, so terrain and battle scars stay visible underneath.
-- **Fire radius: on demand** — tap a unit to see its reach. **Any visible unit, including an
-  enemy's**, because with retaliation "is it safe to shoot this" is the central question of a turn.
+- **Fire radius: on demand** — press and hold a unit to see its reach, release to hide it; a tap
+  never shows it. Drawn as a **circle** of the weapon's range, with a crosshair on each unit it can
+  hit. **Any visible unit, including an enemy's**, because with retaliation "is it safe to shoot
+  this" is the central question of a turn.
 - An enemy's marks ignore its AP and are computed from **that unit alone**, never from its owner's
   vision network — the network is hidden, and drawing from it would reveal unseen spotters. The
   forecast is therefore **a floor, not a ceiling**, and the UI must say so.

@@ -3,9 +3,9 @@ extends RefCounted
 ## Task 2.7: тап → намір → Command. Модель — «два тапи на будь-яку дію,
 ## жодного випадкового ходу від дотику» (task-2.7-brief.md): перший тап лише
 ## показує (вибір юніта і зон, прев'ю руху чи пострілу), другий — підтверджує
-## (R23). Єдина точка, де цей файл торкається core/ ДІЄЮ, а не читанням, —
-## confirm_pending(), і вона йде рівно крізь MatchService.submit(); жоден
-## інший метод не створює Command.
+## (R23). Дія, що витрачає хід, торкається core/ лише крізь confirm_pending() і
+## MatchService.submit(); єдиний інший Command — безкоштовний поворот на місці
+## (_maybe_turn(), власник 2026-10-18), той самий submit().
 ##
 ## R5, найважливіша обіцянка файлу: і select_unit(), і tap_cell() читають
 ## ЛИШЕ state.known_occupied_map(state.active_player) — ніколи
@@ -29,12 +29,21 @@ signal action_preview(preview: Dictionary)
 ## сам факт відсутності прев'ю змінився — окремий слухач (PathOverlay) знімає
 ## підсвітку шляху рівно на нього, не займаючи action_preview.
 signal pending_cleared
+signal targets_changed(tiles: Array[Vector2i])
+signal action_refused(reason: String)
+## Режим DRONE озброєно: коло досяжності (центр — тайл загону, радіус —
+## DroneCommand.RANGE) і позначки {id цілі: причина або ""} з Targeting (§3.13).
+signal drone_armed(center: Vector2i, radius: int, marks: Dictionary)
+## Огляд дальності довгим натиском (§3.13, docs/ui/overlays.md): рівно словник
+## Targeting.inspection() — центр, радіуси кіл гармати й дрона, їхні позначки ОКРЕМО
+## та is_floor. {} — огляд знято (палець відпущено).
+signal inspected(inspection: Dictionary)
 
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
 ## для показу (§9/§10 CLAUDE.md, «жодних хардкод-рядків») — текст і кнопку
 ## малює HUD (Task 2.8) із цих даних.
-enum ActionType { MOVE, SHOT }
+enum ActionType { MOVE, SHOT, ENGINEER, DRONE }
 
 ## MatchService (Task 2.1) — не типізований на його клас, бо
 ## game/autoload/match_service.gd навмисно не має class_name (він
@@ -58,6 +67,14 @@ var _zones: Pathing.Zones = null
 ## Порожній словник means «нема дії, що чекає підтвердження». Не null:
 ## confirm_pending()/cancel_pending() перевіряють is_empty(), а не тип змінної.
 var _pending: Dictionary = {}
+## Озброєна верба інженера (-1 — режиму ENGINEER немає) і її допустимі тайли —
+## рівно ті, що повернув EngineerCommand.action_status() (§3.13).
+var _armed_action: int = -1
+var _targets: Array[Vector2i] = []
+## Режим DRONE: тап по ворогу — прев'ю удару, а не пострілу.
+var _drone_armed: bool = false
+## Показано огляд довгого натиску — end_peek() має що знімати.
+var _peeking: bool = false
 
 
 func _init(match_service: Node, zone_overlay: ZoneOverlay, is_playing_check: Callable = Callable()) -> void:
@@ -77,6 +94,8 @@ func select_unit(unit: Unit) -> void:
 		return  # R24: «кожен тап» — і прямий виклик теж тап
 
 	_clear_pending()
+	disarm()
+	end_peek()
 	_selected_unit = unit
 	selection_changed.emit(unit)
 	_recompute_zones_for_selected()
@@ -109,6 +128,9 @@ func _recompute_zones_for_selected() -> void:
 ## 2. тап по тайлі своєї зони → прев'ю руху;
 ## 3. тап по ворогові в межах пострілу → прев'ю пострілу;
 ## 4. тап поза дошкою або по вже вибраному юніту → зняти вибір.
+## Будь-який інший тайл дошки при вибраному своєму юніті ще й повертає його туди
+## (власник 2026-10-18, TurnCommand, §3.4) — і тап далі має своє звичне значення.
+## Кільця тап не показує ніколи — це робота довгого натиску (peek_cell()).
 ## Усе, що не відповідає жодному з цих чотирьох пунктів, — легальний no-op:
 ## контролер не «вгадує», чого хотів гравець, коли модель мовчить.
 func tap_cell(cell: Vector2i) -> void:
@@ -116,8 +138,20 @@ func tap_cell(cell: Vector2i) -> void:
 		return  # R24: ввід заблокований, доки триває програвання
 
 	var state: BattleState = _match_service.state
+	if _armed_action >= 0:
+		_tap_in_engineer_mode(state, cell)
+		return
+	if _drone_armed:
+		_tap_in_drone_mode(state, cell)
+		return
 	if not state.board.in_bounds(cell):
 		_deselect()
+		return
+
+	# Власник: повторний тап по цілі прокладеного шляху — те саме, що Confirm.
+	# Лише рух: тап по ворогу лишається оглядом і прев'ю пострілу.
+	if not _pending.is_empty() and _pending["type"] == ActionType.MOVE and _pending["target"] == cell:
+		confirm_pending()
 		return
 
 	if _selected_unit != null and _selected_unit.is_alive() and cell == _selected_unit.pos:
@@ -136,8 +170,10 @@ func tap_cell(cell: Vector2i) -> void:
 		return
 
 	if _selected_unit == null:
-		return  # нічого не вибрано — тап по порожньому чи ворожому тайлі нічого не важить
+		return
 
+	_maybe_turn(state, cell)
+	# Прев'ю пострілу від повороту не залежить: його числа — від фейсингу ЦІЛІ.
 	if tapped != null:
 		_maybe_set_pending_shot(state, tapped)
 		return
@@ -147,8 +183,22 @@ func tap_cell(cell: Vector2i) -> void:
 	# інакше: тайл поза зоною вибраного юніта — no-op, а не здогад про намір
 
 
-## R23: другий тап (кнопка HUD, Task 2.8) — єдиний спосіб дії. Ніщо інше в
-## цьому файлі не викликає MatchService.submit().
+## Поворот на місці — побічний ефект тапу, а не окрема дія: подається тим самим
+## MatchService.submit(), лише коли core/ його приймає (TurnCommand.validate()), а
+## відмова (0 AP, уже дивиться туди) мовчазна. Невидимий ворог на тайлі сюди
+## не потрапляє інакше, ніж порожня земля: перевірка — лише позиція й AP свого.
+func _maybe_turn(state: BattleState, cell: Vector2i) -> void:
+	var turn: TurnCommand = TurnCommand.create(_selected_unit.id, cell)
+	if turn.validate(state) != "":
+		return
+	var err: String = _match_service.submit(turn)
+	# Зони не перераховуються: поворот не міняє ні позиції, ні AP. HUD перечитує
+	# стан сам — на events_ready.
+	assert(err == "", "TurnCommand пройшов validate(), але submit() відхилив: %s" % err)
+
+
+## R23: другий тап (кнопка HUD, Task 2.8) — єдиний спосіб дії, що витрачає хід.
+## Крім нього MatchService.submit() кличе лише безкоштовний поворот (_maybe_turn).
 func confirm_pending() -> void:
 	if _input_blocked():
 		return
@@ -156,6 +206,7 @@ func confirm_pending() -> void:
 		return
 	var command: Command = _build_command(_pending)
 	_clear_pending()
+	disarm()
 	if command == null:
 		return
 	var err: String = _match_service.submit(command)
@@ -190,8 +241,140 @@ func _sync_after_action() -> void:
 	_recompute_zones_for_selected()
 
 
+## Довгий натиск (§3.13, docs/ui/overlays.md): кільце юніта під пальцем, хоч би хто
+## був вибраний; над порожнім — свого вибраного; інакше нічого. Лише дивиться:
+## ні вибору, ні руху, ні повороту, ні прев'ю. Видимість — та сама known-мапа, що й
+## у тапі (R5): невидимий ворог — порожня земля. Які кільця існують і що позначено,
+## вирішує core/ (Targeting.inspection). Під час програвання — ні: active_player
+## тоді вже може бути наступним гравцем, і огляд читав би його знання.
+func peek_cell(cell: Vector2i) -> void:
+	if _input_blocked():
+		return
+	var state: BattleState = _match_service.state
+	var known: Dictionary = state.known_occupied_map(state.active_player)
+	var unit: Unit = state.get_unit(known[cell]) if known.has(cell) else _selected_unit
+	if unit == null:
+		return
+	_peeking = true
+	inspected.emit(Targeting.inspection(state, unit.id, state.active_player))
+
+
+## Палець відпущено (чи хід передано) — огляд знято. Без показаного огляду — тиша.
+func end_peek() -> void:
+	if not _peeking:
+		return
+	_peeking = false
+	inspected.emit({})
+
+
 func cancel_pending() -> void:
 	_clear_pending()
+	disarm()
+
+
+## Чи потрібне HUD-«Скасувати»: є прев'ю або озброєно дрон. На час верби інженера —
+## ні: у його панелі власне «Скасувати», і два поруч — зайве (власник).
+func has_cancelable() -> bool:
+	return _armed_action < 0 and (not _pending.is_empty() or _drone_armed)
+
+
+## Режим ENGINEER для вибраного свого інженера. Тайли й причина відмови — лише
+## з core/ (EngineerCommand.action_status), вигляд їх не виводить.
+func arm_engineer(action: int) -> void:
+	if _input_blocked() or _selected_unit == null:
+		return
+	var status: Dictionary = EngineerCommand.action_status(_match_service.state, _selected_unit.id, action)
+	var tiles: Array[Vector2i] = status["tiles"]
+	if tiles.is_empty():
+		action_refused.emit(status["reason"])
+		return
+	_clear_pending()
+	_armed_action = action
+	_targets = tiles
+	targets_changed.emit(tiles)
+
+
+## Режим DRONE для вибраного свого загону (§3.9). Окрема дія, а не перемикач
+## пострілу: без цього виклику тап по ворогу лишається пострілом.
+func arm_drone() -> void:
+	if _input_blocked() or _selected_unit == null:
+		return
+	var state: BattleState = _match_service.state
+	var reason: String = DroneCommand.check_launch(state, _selected_unit)
+	if reason != "":
+		action_refused.emit(reason)
+		return
+	_clear_pending()
+	disarm()
+	_drone_armed = true
+	drone_armed.emit(_selected_unit.pos, DroneCommand.RANGE, Targeting.drone_marks(state, _selected_unit.id))
+
+
+func disarm() -> void:
+	_armed_action = -1
+	_drone_armed = false
+	_targets = []
+	targets_changed.emit([] as Array[Vector2i])
+
+
+## У режимі ENGINEER: тайл з допустимих — прев'ю верби (міна — одразу дія); свій юніт — вибір
+## (знімає режим); решта — action_refused з причиною цього тайла.
+func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
+	if _targets.has(cell):
+		_pending = {
+			"type": ActionType.ENGINEER,
+			"unit_id": _selected_unit.id,
+			"action": _armed_action,
+			"target": cell,
+		}
+		# Межі ремонту — з core/, вигляд лише показує (§3.8, §3.13).
+		if _armed_action == EngineerCommand.Action.REPAIR_UNIT:
+			var bounds: Vector2i = EngineerCommand.repair_bounds(_selected_unit, state.unit_at(cell))
+			_pending["heal_min"] = bounds.x
+			_pending["heal_max"] = bounds.y
+		# Власник: міна ставиться самим тапом — підтвердження тут лише зайвий крок.
+		if _armed_action == EngineerCommand.Action.LAY_MINE:
+			confirm_pending()
+			return
+		action_preview.emit(_pending)
+		return
+	var known: Dictionary = state.known_occupied_map(state.active_player)
+	if known.has(cell):
+		var tapped: Unit = state.get_unit(known[cell])
+		if tapped != null and tapped.owner == state.active_player:
+			select_unit(tapped)
+			return
+	# Причина саме цього тайла — з validate(); несусідній тайл відмовляє раніше за
+	# будь-яку перевірку вмісту, тож нічого прихованого не видає.
+	action_refused.emit(EngineerCommand.create(_selected_unit.id, _armed_action, cell).validate(state))
+
+
+## У режимі DRONE: відомий ворог — прев'ю удару або причина відмови з
+## DroneCommand.validate() (та сама check_strike, що дала позначки); свій юніт —
+## вибір (знімає режим); порожній, невідомий чи поза дошкою тайл — знімає режим,
+## як «Скасувати», загін лишається вибраним (рішення контролера).
+func _tap_in_drone_mode(state: BattleState, cell: Vector2i) -> void:
+	var known: Dictionary = state.known_occupied_map(state.active_player)
+	var tapped: Unit = state.get_unit(known[cell]) if known.has(cell) else null
+	if tapped == null:
+		cancel_pending()
+		return
+	if tapped.owner == state.active_player:
+		select_unit(tapped)
+		return
+	var reason: String = DroneCommand.create(_selected_unit.id, tapped.id).validate(state)
+	if reason != "":
+		action_refused.emit(reason)
+		return
+	var bounds: Vector2i = Rules.drone_damage_bounds()
+	_pending = {
+		"type": ActionType.DRONE,
+		"unit_id": _selected_unit.id,
+		"target_id": tapped.id,
+		"min": bounds.x,
+		"max": bounds.y,
+	}
+	action_preview.emit(_pending)
 
 
 ## Єдина точка, де _pending скидається до «нема дії, що чекає підтвердження»
@@ -207,11 +390,15 @@ func _clear_pending() -> void:
 func _build_command(pending: Dictionary) -> Command:
 	match pending["type"]:
 		ActionType.MOVE:
-			# facing -1: гравець тут не обирає напрямок окремо — MoveCommand
-			# сам виводить його з останнього кроку шляху (core/commands/move_command.gd).
-			return MoveCommand.create(pending["unit_id"], pending["target"], -1)
+			# Напрямок у наказі не передається: MoveCommand сам виводить його з
+			# останнього кроку шляху (core/commands/move_command.gd).
+			return MoveCommand.create(pending["unit_id"], pending["target"])
 		ActionType.SHOT:
 			return FireCommand.create(pending["unit_id"], pending["target_id"])
+		ActionType.ENGINEER:
+			return EngineerCommand.create(pending["unit_id"], pending["action"], pending["target"])
+		ActionType.DRONE:
+			return DroneCommand.create(pending["unit_id"], pending["target_id"])
 	return null
 
 
@@ -248,11 +435,13 @@ func _maybe_set_pending_shot(state: BattleState, target: Unit) -> void:
 
 
 func _deselect() -> void:
+	disarm()
 	_selected_unit = null
 	_zones = null
 	_clear_pending()
 	_zone_overlay.clear()
 	selection_changed.emit(null)
+	end_peek()
 
 
 func _is_playing() -> bool:

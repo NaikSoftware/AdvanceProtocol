@@ -44,7 +44,7 @@ func before_each() -> void:
 	_saved_service = {
 		"state": MatchService.state, "launch_mode": MatchService.launch_mode,
 		"map_path": MatchService.map_path, "players": MatchService.players,
-		"ground_state": MatchService.ground_state, "seed_value": MatchService.seed_value,
+		"seed_value": MatchService.seed_value,
 	}
 	_e2e.ignore_runner_gui()
 
@@ -187,20 +187,19 @@ func test_menu_to_battle_to_menu_flow() -> void:
 	assert_false(FileAccess.file_exists(_save_path))
 	assert_false((menu.get_node("%ContinueButton") as Control).visible, "1: «Продовжити» сховано")
 
-	# 2. Новий матч → налаштування → 2 гравці + болото → Старт.
+	# 2. Новий матч → налаштування → 2 гравці → Старт.
 	await _click(menu.get_node("%NewMatchButton"))
 	assert_true(await _await_scene(MatchSetup), "2: екран налаштувань")
 	var setup: MatchSetup = _scene() as MatchSetup
 	setup.save_path = _save_path  # Старт стирає старе збереження — лише тестове
 	await _click(setup.get_node("%P2"))
-	await _click(setup.get_node("%Mud"))
 	await _click(setup.get_node("%StartButton"))
 	assert_true(await _await_scene(BattleScreen), "2: бій")
 	_redirect_save()
 	var st: BattleState = MatchService.state
 	assert_not_null(st)
 	assert_eq(st.player_count, 2, "2: два гравці")
-	assert_eq(st.board.ground_state, Terrain.GroundState.MUD, "2: болото")
+	assert_eq(st.board.ground_state, Terrain.GroundState.DRY, "2: ґрунт — з карти")
 	var map0: String = MatchService.map_path
 	assert_ne(map0, "")
 
@@ -265,7 +264,7 @@ func test_menu_to_battle_to_menu_flow() -> void:
 	assert_ne(st.seed_value, seed_before, "7: новий сід")
 	assert_eq(MatchService.map_path, map0, "7: та сама карта")
 	assert_eq(st.player_count, 2)
-	assert_eq(st.board.ground_state, Terrain.GroundState.MUD)
+	assert_eq(st.board.ground_state, Terrain.GroundState.DRY)
 
 	# 8. Усередині реваншу — зберегти й вийти та продовжити, і лише потім здатися:
 	# завершення матчу мусить прибрати саме це збереження, інакше «Продовжити» лишиться.

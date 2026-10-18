@@ -62,6 +62,15 @@ func _begin_and_drain() -> void:
 	service.take_events()
 
 
+## Тап при вибраному юніті тепер ще й повертає його (TurnCommand) — у черзі може
+## бути лише UnitTurned; будь-яка інша подія означала б, що прев'ю щось виконало.
+func _only_turns_queued() -> bool:
+	for e in service.take_events():
+		if not e is Events.UnitTurned:
+			return false
+	return true
+
+
 # --- Вибір ------------------------------------------------------------
 
 func test_tap_on_own_unit_selects_it_and_shows_two_zones() -> void:
@@ -94,7 +103,7 @@ func test_tap_on_zone_tile_sets_pending_move_and_submits_nothing() -> void:
 
 	assert_eq(u.pos, start_pos, "прев'ю не мусить рухати юніт")
 	assert_eq(u.ap, start_ap, "прев'ю не мусить витрачати AP")
-	assert_true(service.take_events().is_empty(), "прев'ю не мусить лишати подій у черзі")
+	assert_true(_only_turns_queued(), "прев'ю не мусить лишати подій у черзі")
 
 	assert_eq(_previews.size(), 1)
 	var p: Dictionary = _previews[0]
@@ -124,6 +133,63 @@ func test_confirm_pending_submits_exactly_one_move_command_and_clears_pending() 
 	assert_true(service.take_events().is_empty(), "повторний confirm_pending() не мусить нічого подавати")
 
 
+## Власник: повторний тап по тайлу, куди вже прокладено шлях, — те саме, що Confirm.
+func test_second_tap_on_pending_move_target_confirms_it() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	var target := Vector2i(6, 5)
+	controller.tap_cell(target)
+	var ap_left: int = int(_previews[0]["ap_left"])
+	controller.tap_cell(target)
+	assert_eq(u.pos, target)
+	assert_eq(u.ap, ap_left)
+	assert_eq(_selections.back(), u, "юніт лишається вибраним, як після Confirm")
+	assert_eq(_previews.size(), 1, "другий тап не будує нового прев'ю")
+	assert_eq(overlay.last_zones.origin, target, "зони перераховано від нової позиції")
+
+
+## Тап по іншому тайлу зони при відкладеному русі — лише нове прев'ю.
+func test_tap_on_another_tile_with_pending_move_only_repreviews() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	controller.tap_cell(Vector2i(6, 5))
+	controller.tap_cell(Vector2i(4, 5))
+	assert_eq(u.pos, Vector2i(5, 5))
+	assert_eq(_previews.size(), 2)
+
+
+## «Скасувати» HUD щось робить рівно тоді, коли є прев'ю або озброєно дрон; на час
+## верби інженера скасування одне — у його панелі.
+func test_has_cancelable_follows_pending_and_armed_modes() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	var eng: Unit = service.state.add_unit(ENGINEER_TYPE, 0, Vector2i(10, 10), 0)
+	var sq: Unit = service.state.add_unit(1, 0, Vector2i(15, 15), 0)
+	service.state.add_unit(5, 1, Vector2i(15, 18), 0)
+	_begin_and_drain()
+	assert_false(controller.has_cancelable(), "нічого не вибрано")
+	controller.tap_cell(u.pos)
+	assert_false(controller.has_cancelable(), "лише вибір — скасовувати нічого")
+	controller.tap_cell(Vector2i(6, 5))
+	assert_true(controller.has_cancelable(), "прев'ю руху")
+	controller.cancel_pending()
+	assert_false(controller.has_cancelable())
+	controller.tap_cell(eng.pos)
+	controller.arm_engineer(LAY)
+	assert_false(controller.has_cancelable(), "озброєна верба — у панелі інженера своє «Скасувати»")
+	controller.cancel_pending()
+	assert_false(controller.has_cancelable())
+	controller.tap_cell(sq.pos)
+	controller.arm_drone()
+	assert_true(controller.has_cancelable(), "озброєний дрон")
+	controller.cancel_pending()
+	assert_false(controller.has_cancelable())
+
+
 func test_cancel_pending_clears_pending_and_submits_nothing() -> void:
 	_start()
 	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
@@ -134,7 +200,7 @@ func test_cancel_pending_clears_pending_and_submits_nothing() -> void:
 	controller.cancel_pending()
 
 	assert_eq(u.pos, Vector2i(5, 5), "cancel_pending() не мусить рухати юніт")
-	assert_true(service.take_events().is_empty())
+	assert_true(_only_turns_queued())
 
 	# confirm_pending() після cancel_pending() — теж no-op.
 	controller.confirm_pending()
@@ -207,7 +273,7 @@ func test_tap_enemy_within_range_sets_pending_shot_with_sector_and_bounds() -> v
 	var expected: Dictionary = FireCommand.preview(service.state, u.id, enemy.id)
 	controller.tap_cell(enemy.pos)
 
-	assert_true(service.take_events().is_empty(), "прев'ю пострілу не мусить нічого подавати")
+	assert_true(_only_turns_queued(), "прев'ю пострілу не мусить нічого подавати")
 	assert_eq(_previews.size(), 1)
 	var p: Dictionary = _previews[0]
 	assert_eq(p["type"], InputController.ActionType.SHOT)
@@ -438,3 +504,508 @@ func test_zone_excludes_a_known_enemy_mine_but_not_an_unknown_one() -> void:
 	assert_not_null(overlay.last_zones)
 	assert_false(overlay.last_zones.can_reach(Vector2i(5, 6)), "відома ворожа міна — не в зоні")
 	assert_true(overlay.last_zones.can_reach(Vector2i(6, 5)), "невідома міна не видна формою зони")
+
+
+# --- Task 8: режим ENGINEER -------------------------------------------------
+# Допустимі тайли беруться лише з EngineerCommand.action_status() (§3.13) —
+# контролер їх не виводить сам.
+
+const ENGINEER_TYPE: int = 11
+const LAY := EngineerCommand.Action.LAY_MINE
+
+
+func _engineer_at(pos: Vector2i) -> Unit:
+	_start()
+	var e: Unit = service.state.add_unit(ENGINEER_TYPE, 0, pos, 0)
+	_begin_and_drain()
+	controller.tap_cell(e.pos)
+	return e
+
+
+func test_arm_engineer_emits_valid_tiles() -> void:
+	_engineer_at(Vector2i(5, 5))
+	var got: Array = []
+	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: got.append(t))
+	controller.arm_engineer(LAY)
+	assert_eq(got.size(), 1)
+	assert_eq(got[0], [Vector2i(5, 4), Vector2i(6, 5), Vector2i(5, 6), Vector2i(4, 5)] as Array[Vector2i])
+
+
+func test_arm_engineer_without_tiles_refuses_with_reason() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	e.ap = 29  # fire_cost 30
+	var reasons: Array[String] = []
+	var targets: Array = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
+	controller.arm_engineer(LAY)
+	assert_eq(reasons, ["ERR_NOT_ENOUGH_AP"] as Array[String])
+	assert_eq(targets.size(), 0, "нічого не озброєно — контур цілей не показується")
+	controller.tap_cell(Vector2i(5, 4))
+	assert_ne(int(_previews.back()["type"]) if not _previews.is_empty() else -1,
+		InputController.ActionType.ENGINEER, "без озброєння тап по сусідньому тайлі — не прев'ю верби")
+
+
+## Власник: міна ставиться одразу на тап по допустимому тайлі — без прев'ю й Confirm.
+func test_lay_mine_tap_on_valid_tile_lays_it_at_once() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(_previews.size(), 0, "жодного прев'ю — дія вже виконана")
+	assert_eq(service.state.mines.size(), 1)
+	assert_eq(service.state.mines[0].pos, Vector2i(6, 5))
+	assert_eq(e.ap, 0)
+	assert_false(controller.has_cancelable(), "нічого не озброєно й не чекає")
+
+
+## Решта верб — як раніше: тап лише показує прев'ю.
+func test_other_verbs_still_preview_first() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	service.state.board.set_kind(Vector2i(6, 5), Terrain.Kind.BRIDGE_DESTROYED)
+	controller.arm_engineer(EngineerCommand.Action.REPAIR_BRIDGE)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(_previews, [{"type": InputController.ActionType.ENGINEER, "unit_id": e.id,
+		"action": EngineerCommand.Action.REPAIR_BRIDGE, "target": Vector2i(6, 5)}] as Array[Dictionary])
+	assert_eq(service.state.board.kind_at(Vector2i(6, 5)), Terrain.Kind.BRIDGE_DESTROYED)
+
+
+func test_tap_outside_tiles_is_noop_in_engineer_mode() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	var sel_before: int = _selections.size()
+	controller.tap_cell(Vector2i(8, 5))  # поза тайлами; без режиму це було б прев'ю руху
+	controller.tap_cell(Vector2i(-1, -1))  # поза дошкою; без режиму — зняття вибору
+	assert_eq(_previews.size(), 0)
+	assert_eq(_selections.size(), sel_before)
+	controller.tap_cell(Vector2i(5, 4))
+	assert_eq(service.state.mines.size(), 1, "режим досі озброєний")
+	assert_eq(service.state.mines[0].pos, Vector2i(5, 4))
+	assert_eq(service.state.mines[0].owner, e.owner)
+
+
+func test_selecting_another_unit_disarms() -> void:
+	_engineer_at(Vector2i(5, 5))
+	var other: Unit = service.state.add_unit(5, 0, Vector2i(9, 9), 0)
+	controller.arm_engineer(LAY)
+	var targets: Array = []
+	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
+	controller.tap_cell(other.pos)
+	assert_eq(_selections.back(), other)
+	assert_eq(targets, [[] as Array[Vector2i]])
+	controller.tap_cell(Vector2i(9, 8))
+	assert_eq(int(_previews.back()["type"]), InputController.ActionType.MOVE, "режим знятий — звичайний тап")
+
+
+func test_targets_cleared_after_laying() -> void:
+	_engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	var targets: Array = []
+	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(targets.back(), [] as Array[Vector2i])
+
+
+func test_tap_on_invalid_tile_in_engineer_mode_reports_its_reason() -> void:
+	_engineer_at(Vector2i(5, 5))
+	controller.arm_engineer(LAY)
+	var reasons: Array[String] = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.tap_cell(Vector2i(8, 5))
+	assert_eq(reasons, ["ERR_NOT_ADJACENT"] as Array[String])
+	assert_eq(_previews.size(), 0)
+
+
+# --- Task 10: дрон ---------------------------------------------------------
+
+## Загін P0 на (5,5); танк P1 на (8,5) (у межах і звичайного пострілу, дальність 3);
+## стрілецький P1 на (5,8).
+func _squad_scene() -> Array[Unit]:
+	_start()
+	var sq: Unit = service.state.add_unit(1, 0, Vector2i(5, 5), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(8, 5), 0)
+	var inf: Unit = service.state.add_unit(0, 1, Vector2i(5, 8), 0)
+	_begin_and_drain()
+	controller.tap_cell(sq.pos)
+	return [sq, tank, inf]
+
+
+func test_arm_drone_emits_ring_and_marks() -> void:
+	var u: Array[Unit] = _squad_scene()
+	var got: Array = []
+	controller.drone_armed.connect(func(center: Vector2i, radius: int, marks: Dictionary) -> void:
+		got.append([center, radius, marks]))
+	controller.arm_drone()
+	assert_eq(got.size(), 1)
+	assert_eq(got[0][0], u[0].pos, "коло з центром у тайлі загону")
+	assert_eq(got[0][1], DroneCommand.RANGE)
+	assert_eq(got[0][2], {u[1].id: "", u[2].id: "ERR_DRONE_CANNOT_TARGET_INFANTRY"})
+
+
+func test_drone_tap_on_infantry_refused_with_reason() -> void:
+	var u: Array[Unit] = _squad_scene()
+	var reasons: Array[String] = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.arm_drone()
+	controller.tap_cell(u[2].pos)
+	assert_eq(reasons, ["ERR_DRONE_CANNOT_TARGET_INFANTRY"] as Array[String])
+	assert_eq(_previews.size(), 0)
+
+
+func test_drone_tap_on_vehicle_sets_preview_120_180() -> void:
+	var u: Array[Unit] = _squad_scene()
+	controller.arm_drone()
+	controller.tap_cell(u[1].pos)
+	assert_eq(_previews, [{"type": InputController.ActionType.DRONE, "unit_id": u[0].id,
+		"target_id": u[1].id, "min": 120, "max": 180}] as Array[Dictionary])
+	controller.confirm_pending()
+	assert_eq(u[0].drones_left, 1)
+	assert_eq(u[0].ap, 0)
+
+
+func test_plain_tap_on_enemy_still_previews_shot() -> void:
+	var u: Array[Unit] = _squad_scene()
+	controller.tap_cell(u[1].pos)
+	assert_eq(_previews.size(), 1)
+	assert_eq(int(_previews[0]["type"]), InputController.ActionType.SHOT)
+
+
+func test_arm_drone_without_drones_refused() -> void:
+	var u: Array[Unit] = _squad_scene()
+	u[0].drones_left = 0
+	var reasons: Array[String] = []
+	var armed: Array = []
+	controller.action_refused.connect(func(r: String) -> void: reasons.append(r))
+	controller.drone_armed.connect(func(_c: Vector2i, radius: int, _m: Dictionary) -> void: armed.append(radius))
+	controller.arm_drone()
+	assert_eq(reasons, ["ERR_NO_DRONES_LEFT"] as Array[String])
+	assert_eq(armed.size(), 0)
+	u[0].drones_left = 2
+	u[0].ap = 9  # fire_cost 10
+	controller.arm_drone()
+	assert_eq(reasons.back(), "ERR_NOT_ENOUGH_AP")
+	assert_eq(armed.size(), 0)
+
+
+## Рішення контролера: озброєння дрона знімає відкладений рух.
+func test_arming_drone_clears_pending_move() -> void:
+	var u: Array[Unit] = _squad_scene()
+	controller.tap_cell(Vector2i(5, 4))
+	assert_eq(int(_previews.back()["type"]), InputController.ActionType.MOVE)
+	var cleared_before: int = _pending_cleared_count
+	controller.arm_drone()
+	assert_eq(_pending_cleared_count, cleared_before + 1)
+	controller.confirm_pending()
+	assert_eq(u[0].pos, Vector2i(5, 5), "рух не відбувся")
+
+
+## Fix round 1 (рішення): у режимі DRONE тап по порожньому, невідомому чи поза
+## дошкою тайлу знімає режим, як «Скасувати», а загін лишається вибраним.
+func test_drone_tap_on_empty_or_off_board_disarms_and_keeps_selection() -> void:
+	for cell: Vector2i in [Vector2i(5, 3), Vector2i(-1, -1)]:
+		before_each()
+		var u: Array[Unit] = _squad_scene()
+		controller.arm_drone()
+		var targets: Array = []
+		controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
+		var sel_before: int = _selections.size()
+		controller.tap_cell(cell)
+		assert_eq(targets, [[] as Array[Vector2i]], "режим знято: %s" % cell)
+		assert_eq(_selections.size(), sel_before, "вибір не змінився: %s" % cell)
+		assert_eq(_previews.size(), 0)
+		controller.tap_cell(u[1].pos)
+		assert_eq(int(_previews.back()["type"]), InputController.ActionType.SHOT, "далі — звичайний постріл")
+
+
+# --- Огляд дальності довгим натиском (§3.13, docs/ui/overlays.md) -----------
+
+var _inspections: Array[Dictionary] = []
+
+
+func _watch_inspections() -> void:
+	_inspections = []
+	controller.inspected.connect(func(i: Dictionary) -> void: _inspections.append(i))
+
+
+## Усе розвідано обома гравцями — інспекцію гейтить лише seen (§3.5).
+func _begin_all_seen() -> void:
+	_begin_and_drain()
+	for p in service.state.player_count:
+		service.state.vision[p].seen.fill(1)
+
+
+## Тап більше ніколи не показує кільця: ні вибір, ні тап по ворогу, ні по порожньому.
+func test_a_tap_never_emits_an_inspection() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	_watch_inspections()
+
+	controller.tap_cell(tank.pos)
+	controller.tap_cell(car.pos)
+	controller.tap_cell(tank.pos)
+	controller.tap_cell(Vector2i(11, 7))
+	controller.tap_cell(Vector2i(0, 0))
+
+	assert_eq(_inspections, [] as Array[Dictionary])
+
+
+func test_peek_on_enemy_shows_its_inspection_and_end_clears() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)  # броньовик, 3 від танка
+	service.state.add_unit(0, 0, Vector2i(10, 2), 0)  # 8 від танка
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	tank.ap = 0  # §3.13: AP ворога не перевіряється
+	_watch_inspections()
+
+	controller.peek_cell(tank.pos)
+
+	assert_eq(_inspections.size(), 1)
+	var i: Dictionary = _inspections[0]
+	assert_eq(i, Targeting.inspection(service.state, tank.id, 0))
+	assert_eq(i["center"], Vector2i(10, 10))
+	assert_eq(i["radius"], 4)
+	assert_eq(i["drone_radius"], 0)
+	assert_eq(i["marked"], [car.id])
+	assert_true(i["is_floor"])
+	assert_eq(_selections.size(), 0, "огляд — не вибір")
+
+	controller.end_peek()
+
+	assert_eq(_inspections.size(), 2)
+	assert_eq(_inspections[1], {}, "відпускання знімає огляд")
+
+
+func test_peek_on_empty_ground_shows_selected_unit_ring() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	controller.tap_cell(car.pos)
+	_watch_inspections()
+
+	controller.peek_cell(Vector2i(3, 3))
+
+	assert_eq(_inspections, [Targeting.inspection(service.state, car.id, 0)] as Array[Dictionary])
+	assert_eq(_inspections[0]["radius"], 3)
+
+
+func test_peek_on_empty_ground_without_selection_shows_nothing() -> void:
+	_start()
+	service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	_begin_all_seen()
+	_watch_inspections()
+
+	controller.peek_cell(Vector2i(3, 3))
+	controller.end_peek()
+
+	assert_eq(_inspections, [] as Array[Dictionary], "нічого не показано — нічого й знімати")
+
+
+## Під пальцем ворог, вибрано свого — кільце ворога; вибір і прев'ю лишаються як були.
+func test_peek_changes_no_selection_and_no_pending() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	controller.tap_cell(car.pos)
+	controller.tap_cell(Vector2i(11, 7))
+	var facing: int = car.facing
+	var sel: int = _selections.size()
+	var prev: int = _previews.size()
+	var cleared: int = _pending_cleared_count
+	service.take_events()
+	_watch_inspections()
+
+	controller.peek_cell(tank.pos)
+	controller.end_peek()
+
+	assert_eq(_inspections[0]["marked"], [car.id], "кільце ворога під пальцем")
+	assert_eq(_selections.size(), sel)
+	assert_eq(_previews.size(), prev)
+	assert_eq(_pending_cleared_count, cleared)
+	assert_eq(car.facing, facing, "огляд не повертає")
+	assert_true(service.take_events().is_empty(), "огляд нічого не подає")
+	controller.tap_cell(Vector2i(11, 7))
+	assert_eq(car.pos, Vector2i(11, 7), "відкладений рух пережив огляд")
+
+
+func test_own_unit_peek_at_zero_ap_has_ring_and_no_marks() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	car.ap = 0
+	_watch_inspections()
+
+	controller.peek_cell(car.pos)
+
+	assert_eq(_inspections[0]["radius"], 3)
+	assert_eq(_inspections[0]["marked"], [], "AP 0 — стріляти нікуди")
+	assert_false(_inspections[0]["is_floor"])
+
+
+func test_peek_on_unseen_enemy_is_empty_ground() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(0, 0), 0)
+	var enemy: Unit = service.state.add_unit(5, 1, Vector2i(19, 19), 0)
+	_begin_and_drain()
+	assert_false(service.state.vision[0].is_seen(enemy.pos), "передумова: земля не розвідана")
+	controller.tap_cell(car.pos)
+	_watch_inspections()
+
+	controller.peek_cell(enemy.pos)
+
+	assert_eq(_inspections, [Targeting.inspection(service.state, car.id, 0)] as Array[Dictionary],
+		"невидимий ворог — як порожня земля: кільце вибраного")
+
+
+func test_own_squad_peek_splits_gun_and_drone() -> void:
+	_start()
+	var squad: Unit = service.state.add_unit(1, 0, Vector2i(10, 10), 0)
+	var inf: Unit = service.state.add_unit(0, 1, Vector2i(10, 13), 0)  # 3 — гармата; дрон піхоту не б'є
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 15), 0)  # 5 — лише дрон
+	_begin_all_seen()
+	_watch_inspections()
+
+	controller.peek_cell(squad.pos)
+
+	assert_eq(_inspections[0]["radius"], 3)
+	assert_eq(_inspections[0]["drone_radius"], DroneCommand.RANGE)
+	assert_eq(_inspections[0]["marked"], [inf.id])
+	assert_eq(_inspections[0]["drone_marked"], [tank.id])
+
+
+## battle_screen на TurnStarted кличе select_unit(null) до показу гейта.
+func test_peek_cleared_by_handover_deselect() -> void:
+	_start()
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	_begin_all_seen()
+	_watch_inspections()
+	controller.peek_cell(tank.pos)
+
+	controller.select_unit(null)
+
+	assert_eq(_inspections.size(), 2)
+	assert_eq(_inspections[-1], {})
+
+
+# --- Тап повертає вибраного юніта (TurnCommand, §3.4) ------------------------
+
+func _turned_events() -> Array[Events.BattleEvent]:
+	var out: Array[Events.BattleEvent] = []
+	for e in service.take_events():
+		if e is Events.UnitTurned:
+			out.append(e)
+	return out
+
+
+func test_tap_with_selection_turns_unit_toward_cell_without_spending_ap() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	var ap: int = u.ap
+	var target := Vector2i(5, 15)  # поза зоною — лише поворот
+	assert_ne(u.facing, Board.facing_towards(u.pos, target), "передумова")
+
+	controller.tap_cell(target)
+
+	assert_eq(u.facing, Board.facing_towards(u.pos, target))
+	assert_eq(u.ap, ap)
+	assert_eq(_turned_events().size(), 1)
+	assert_eq(_selections.size(), 1, "вибір лишився")
+
+
+func test_tap_at_zero_ap_does_not_turn_and_taps_keep_their_meaning() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(5, 5), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(5, 7), 0)
+	_begin_all_seen()
+	controller.tap_cell(car.pos)
+	car.ap = 0
+	var facing: int = car.facing
+
+	controller.tap_cell(Vector2i(9, 9))
+	controller.tap_cell(tank.pos)
+
+	assert_eq(car.facing, facing)
+	assert_eq(_turned_events().size(), 0)
+	assert_eq(_previews.size(), 0, "на 0 AP пострілу немає")
+	controller.tap_cell(car.pos)
+	assert_eq(_selections.back(), null, "тап по своєму тайлу й далі знімає вибір")
+
+
+func test_tap_on_enemy_turns_and_previews_shot_with_unchanged_numbers() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(5, 5), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(7, 5), 0)
+	_begin_all_seen()
+	controller.tap_cell(car.pos)
+	var want: Dictionary = FireCommand.preview(service.state, car.id, tank.id)
+	assert_ne(car.facing, Board.facing_towards(car.pos, tank.pos), "передумова")
+
+	controller.tap_cell(tank.pos)
+
+	assert_eq(car.facing, Board.facing_towards(car.pos, tank.pos))
+	assert_eq(_previews.size(), 1)
+	assert_eq(_previews[0]["sector"], want["sector"])
+	assert_eq(_previews[0]["min"], want["min"])
+	assert_eq(_previews[0]["max"], want["max"])
+
+
+func test_tap_on_own_tile_or_other_own_unit_does_not_turn() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	var other: Unit = service.state.add_unit(5, 0, Vector2i(5, 9), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	var facing: int = u.facing
+
+	controller.tap_cell(other.pos)
+	controller.tap_cell(u.pos)
+	controller.tap_cell(u.pos)
+
+	assert_eq(u.facing, facing)
+	assert_eq(_turned_events().size(), 0)
+
+
+func test_tap_in_engineer_or_drone_mode_does_not_turn() -> void:
+	_start()
+	var eng: Unit = service.state.add_unit(ENGINEER_TYPE, 0, Vector2i(5, 5), 0)
+	var sq: Unit = service.state.add_unit(1, 0, Vector2i(10, 10), 0)
+	service.state.add_unit(5, 1, Vector2i(10, 13), 0)
+	_begin_and_drain()
+	controller.tap_cell(eng.pos)
+	controller.arm_engineer(LAY)
+	var eng_facing: int = eng.facing
+	controller.tap_cell(Vector2i(5, 15))
+	assert_eq(eng.facing, eng_facing, "верба інженера")
+
+	controller.tap_cell(sq.pos)
+	controller.arm_drone()
+	var sq_facing: int = sq.facing
+	controller.tap_cell(Vector2i(17, 17))
+	assert_eq(sq.facing, sq_facing, "озброєний дрон")
+	assert_eq(_turned_events().size(), 0)
+
+
+func test_pending_move_survives_the_turn_and_second_tap_confirms() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	var target := Vector2i(5, 7)
+
+	controller.tap_cell(target)
+
+	assert_eq(u.facing, Board.facing_towards(Vector2i(5, 5), target), "перший тап повертає")
+	assert_eq(_previews.size(), 1)
+	assert_eq(_previews[0]["type"], InputController.ActionType.MOVE)
+	assert_true(controller.has_cancelable(), "відкладений рух лишився")
+
+	controller.tap_cell(target)
+
+	assert_eq(u.pos, target, "другий тап підтверджує")

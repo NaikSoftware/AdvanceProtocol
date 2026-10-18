@@ -237,6 +237,27 @@ func test_drone_count_is_public_and_shown_for_an_enemy_squad_too() -> void:
 	assert_eq(_label("DronesValue").text, "1")
 
 
+## overlays.md: AP ворога — залишок дій, яких гравець міг не бачити (відповідь на
+## чужому ході за ширмою передачі), тож ні рядок вибору, ні інспектор його не показують.
+func test_enemy_selection_never_shows_its_ap() -> void:
+	var state: BattleState = _state()
+	state.active_player = 0
+	var enemy: Unit = state.add_unit(5, 1, Vector2i(8, 8), 0)
+	enemy.ap = 7
+	hud.bind(state)
+
+	hud.show_selection(enemy)
+
+	assert_false(_label("ApValue").is_visible_in_tree(), "AP ворога в рядку вибору — витік")
+	assert_false(hud.get_node("%Inspector/Body/Stats/ApRow").is_visible_in_tree(), "і в інспекторі теж")
+	assert_true(_inspector().is_visible_in_tree(), "решта інспектора — публічні стати, вони лишаються")
+
+	var own: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
+	hud.show_selection(own)
+	assert_true(_label("ApValue").is_visible_in_tree(), "свій юніт показує AP, як і раніше")
+	assert_true(hud.get_node("%Inspector/Body/Stats/ApRow").is_visible_in_tree())
+
+
 func test_unit_without_drones_hides_the_drone_row_instead_of_showing_zero() -> void:
 	var state: BattleState = _state()
 	var tank: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)  # medium tank, 0 дронів
@@ -320,13 +341,27 @@ func test_no_user_facing_label_is_a_hard_coded_literal() -> void:
 	assert_gt(texts.size(), 15, "обхід дерева мусить справді щось знайти, інакше тест порожній")
 	var numeric_re := RegEx.create_from_string("^[0-9 /.%–-]+$")
 	var known := _csv_keys_and_locale("uk")
+	# Task 10: «Дрон (2)» — uk-значення «Дрон (%d)» із числом, теж переклад.
+	var formats: Array[RegEx] = []
+	for k: String in known:
+		if k.contains("%d"):
+			formats.append(RegEx.create_from_string("^" + _regex_escape(k).replace("%d", "[0-9]+") + "$"))
 	for text in texts:
 		if text.is_empty() or numeric_re.search(text) != null:
+			continue
+		if formats.any(func(r: RegEx) -> bool: return r.search(text) != null):
 			continue
 		assert_true(known.has(text),
 			"«%s» — не число, не ключ і не uk-переклад (§9, R29)" % text)
 
 	TranslationServer.set_locale(prev_locale)
+
+
+func _regex_escape(t: String) -> String:
+	var out := ""
+	for c in t:
+		out += "\\" + c if "\\^$.|?*+()[]{}".contains(c) else c
+	return out
 
 
 ## Ключі CSV плюс переклади ОДНІЄЇ мови — оракул для R29. Читається з файлу, а не з
@@ -410,7 +445,7 @@ func test_inspector_moves_with_the_camera() -> void:
 
 ## Юніт у дальньому кутку, камера відведена від нього до упору — екранна точка
 ## юніта опиняється ЗА верхнім краєм екрана. Панель мусить притиснутись рівно
-## до поля безпеки, а не поїхати за ним слідом у нікуди.
+## під верхню смугу (ґрунт видно завжди, §3.12), а не поїхати за ним слідом у нікуди.
 func test_inspector_is_clamped_to_the_safe_area_when_its_unit_is_off_screen() -> void:
 	var state: BattleState = _state()
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 0), 0)
@@ -422,8 +457,9 @@ func test_inspector_is_clamped_to_the_safe_area_when_its_unit_is_off_screen() ->
 	for i in 50:
 		rig.pan(Vector2(0.0, -2000.0))
 
-	assert_eq(_inspector().position.y, SAFE_TOP,
-		"панель мусить стати рівно на верхнє поле безпеки (56/24 з hud.tscn), а не піти за юнітом за екран")
+	var top_bar: Control = hud.get_node("SafeArea/Layout/TopBar")
+	assert_eq(_inspector().position.y, top_bar.get_global_rect().end.y - hud.get_global_rect().position.y,
+		"панель мусить стати рівно під верхню смугу, а не піти за юнітом за екран")
 	var panel := Rect2(_inspector().position, _inspector().size)
 	var safe := Rect2(SAFE_LEFT, SAFE_TOP,
 		hud.size.x - SAFE_LEFT - SAFE_RIGHT, hud.size.y - SAFE_TOP - SAFE_BOTTOM)
@@ -571,7 +607,7 @@ func test_events_ready_refreshes_turn_number_and_the_selected_units_ap() -> void
 	var ap_before: int = u.ap
 	assert_eq(_label("ApValue").text, str(ap_before), "передумова: AP показаний")
 
-	_service.submit(MoveCommand.create(u.id, Vector2i(4, 3), -1))
+	_service.submit(MoveCommand.create(u.id, Vector2i(4, 3)))
 
 	assert_lt(u.ap, ap_before, "передумова: рух справді витратив AP")
 	assert_eq(_label("ApValue").text, str(u.ap),
@@ -647,3 +683,74 @@ func test_inspector_never_covers_the_action_buttons() -> void:
 		"передумова: юніт мусить проєктуватись НИЖЧЕ верху рядка кнопок, інакше клемп не задіяний")
 	assert_lte(panel.end.y, bar_top,
 		"панель %s заїхала на рядок кнопок (його верх — %s): кнопку підтвердження мусить бути видно" % [panel, bar_top])
+
+
+func _repair_preview(heal_min: int, heal_max: int) -> Dictionary:
+	return {"type": InputController.ActionType.ENGINEER, "unit_id": 1, "action": EngineerCommand.Action.REPAIR_UNIT,
+		"target": Vector2i(4, 3), "heal_min": heal_min, "heal_max": heal_max}
+
+
+func test_repair_preview_shows_both_heal_bounds_verbatim() -> void:
+	hud.bind(_state())
+	hud.show_preview(_repair_preview(20, 43))
+	assert_true((hud.get_node("%PreviewRepairBox") as Control).visible)
+	assert_eq(_label("PreviewHealValue").text, "20–43")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled)
+	hud.show_preview(_move_preview(10))
+	assert_false((hud.get_node("%PreviewRepairBox") as Control).visible, "прев'ю руху гасить ремонт")
+
+
+func test_non_repair_engineer_preview_has_no_repair_box() -> void:
+	hud.bind(_state())
+	hud.show_preview({"type": InputController.ActionType.ENGINEER, "unit_id": 1,
+		"action": EngineerCommand.Action.LAY_MINE, "target": Vector2i(4, 3)})
+	assert_false((hud.get_node("%PreviewRepairBox") as Control).visible)
+
+
+## Озброєння верби скидає pending у контролері; прев'ю руху (і Confirm) не мусить
+## пережити це на екрані.
+func test_arming_a_verb_over_a_pending_move_clears_the_hud_preview() -> void:
+	var state: BattleState = _state()
+	var eng: Unit = state.add_unit(11, 0, Vector2i(3, 3), 0)
+	state.add_unit(5, 1, Vector2i(9, 9), 0)
+	_service.begin()
+	_service.take_events()
+	var controller := InputController.new(_service, SpyZoneOverlay.new())
+	hud.bind(state)
+	hud.attach_controller(controller)
+	controller.select_unit(eng)
+	controller.tap_cell(Vector2i(3, 5))
+	assert_true((hud.get_node("%PreviewMoveBox") as Control).visible, "передумова: прев'ю руху")
+	controller.arm_engineer(EngineerCommand.Action.LAY_MINE)
+	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
+	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)
+
+
+## Власник: «Скасувати» видно лише тоді, коли натиск щось робить — прев'ю дії або
+## озброєна верба чи дрон (InputController.has_cancelable()).
+func test_cancel_button_shown_only_when_it_does_something() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
+	var eng: Unit = state.add_unit(11, 0, Vector2i(6, 6), 0)
+	state.add_unit(5, 1, Vector2i(9, 9), 0)
+	_service.begin()
+	_service.take_events()
+	var controller := InputController.new(_service, SpyZoneOverlay.new())
+	hud.bind(state)
+	hud.attach_controller(controller)
+	var cancel: Button = hud.get_node("%CancelButton")
+	assert_false(cancel.visible, "нічого не вибрано")
+	controller.select_unit(u)
+	assert_false(cancel.visible, "лише вибір")
+	controller.tap_cell(Vector2i(4, 3))
+	assert_true(cancel.visible, "прев'ю руху")
+	cancel.pressed.emit()
+	assert_false(cancel.visible, "скасовано")
+	controller.tap_cell(Vector2i(4, 3))
+	(hud.get_node("%ConfirmButton") as Button).pressed.emit()
+	assert_false(cancel.visible, "підтверджено")
+	controller.select_unit(eng)
+	controller.arm_engineer(EngineerCommand.Action.LAY_MINE)
+	assert_false(cancel.visible, "озброєна верба — «Скасувати» лише в панелі інженера")
+	controller.select_unit(null)
+	assert_false(cancel.visible, "вибір знято")

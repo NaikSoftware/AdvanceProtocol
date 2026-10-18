@@ -48,6 +48,7 @@ const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
 @onready var _camera_rig: IsoCameraRig = %CameraRig
 @onready var _board_view: BoardView = %BoardView
 @onready var _units: Node3D = %Units
+@onready var _mine_layer: MineLayer = %MineLayer
 @onready var _hud: Hud = %Hud
 @onready var _gate: HandoverGate = %HandoverGate
 @onready var _pause: PauseMenu = %PauseMenu
@@ -63,6 +64,10 @@ var _settings: SettingsScreen = null
 var _controller: InputController = null
 var _zone_overlay: ZoneOverlay = null
 var _path_overlay: PathOverlay = null
+var _target_overlay: TargetOverlay = null
+## Id, позначені останнім оглядом (InputController.inspected).
+var _threatened: Array[int] = []
+var _drone_threatened: Array[int] = []
 var _event_player: EventPlayer = null
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
@@ -70,13 +75,13 @@ var _event_player: EventPlayer = null
 var _unit_views: Dictionary = {}
 
 ## R13/§3.13: поріг, за яким затиснутий палець/ЛКМ перестає бути тапом і стає
-## паном камери. ~10dp, переведений у логічні пікселі `Viewport` діленням на
-## content_scale_factor вікна (_drag_threshold_px() нижче — і коментар там
-## же пояснює, чому саме ділення, не множення). Судження без усталеного
-## прецеденту в проєкті (жоден інший файл ще не рахував dp) — винесено в
-## окрему функцію нижче, щоб рішення було одним місцем, а не розмазаним по
-## обробниках подій.
+## паном камери. ~10dp = 10 логічних px, бо UiScale тримає логічний px ≈ dp
+## (_drag_threshold_px() нижче) — одне місце, а не розмазане по обробниках.
 const _DRAG_THRESHOLD_DP: float = 10.0
+
+## Довгий натиск (docs/ui/overlays.md): палець тримається стільки, не перетнувши
+## поріг драга, — огляд дальності замість тапу; відпускання його знімає.
+const LONG_PRESS_SEC: float = 0.5
 
 ## Крок зуму коліщатка/пінчу за одну подію. zoom_by() сам клемпить
 ## (IsoCameraRig.MIN_ZOOM..MAX_ZOOM) — тут лише симетричний множник туди й
@@ -89,6 +94,10 @@ var _press_screen_pos: Vector2 = Vector2.ZERO
 ## моменту жест уже пан, і відпускання пальця НЕ мусить викликати tap_cell()
 ## (пункт 3 ТЗ).
 var _drag_exceeded_threshold: bool = false
+## Скільки тримається поточний натиск (_process()) і чи вже став довгим — тоді
+## відпускання знімає огляд і НЕ є тапом.
+var _press_held_sec: float = 0.0
+var _long_pressed: bool = false
 
 ## Мультитач: index -> остання відома позиція КОЖНОГО притиснутого пальця
 ## (не лише активного) — потрібен щипку, щоб знати обидві точки одразу.
@@ -110,7 +119,7 @@ var _gesture_had_pinch: bool = false
 
 
 ## R1: два кроки старту рівно в цьому порядку — start_match() лише будує
-## стан, populate() наповнює його юнітами й цілями, begin() праймить
+## стан, populate() наповнює його юнітами, begin() праймить
 ## видимість УСІХ гравців і запускає перший хід
 ## (core/battle_state.gd:44-72, MatchService.begin()).
 ##
@@ -134,6 +143,8 @@ var _gesture_had_pinch: bool = false
 ## екземпляра теста. Відкласти її через call_deferred теж не рятує — відкладений
 ## виклик приходить у вже звільнений вузол.
 func _ready() -> void:
+	# Кадр потрібен лише поки тримається натиск (§8: нерухомий екран нічого не коштує).
+	set_process(false)
 	_pause.settings_requested.connect(_open_settings)
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
@@ -177,7 +188,7 @@ func launch(match_service: Node) -> void:
 		map = (load(match_service.map_path) as MapData) if ResourceLoader.exists(match_service.map_path) else null
 		if map == null:
 			map = _FallbackMap
-	if not setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state):
+	if not setup(map, match_service.players, match_service.seed_value, match_service):
 		return
 	match_service.launch_mode = MatchService.Launch.NONE
 	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
@@ -186,15 +197,13 @@ func launch(match_service: Node) -> void:
 	_gate.show_for(_match_service.state.active_player)
 
 
-## ground_state < 0 — ґрунт карти; інакше вибраний у налаштуваннях матчу.
+## Ґрунт дошки завжди з карти (MapData.ground_state).
 ## false — карта зламана (populate() відмовив): матч не починається, екран
 ## повертає в меню; порожня дошка без кінця була б гірша за вихід.
-func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null, ground_state: int = -1) -> bool:
+func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null) -> bool:
 	_match_service = match_service if match_service != null else MatchService
 
 	var board: Board = map_data.to_board()
-	if ground_state >= 0:
-		board.ground_state = ground_state
 	_match_service.start_match(board, player_count, seed_value)
 	if not map_data.populate(_match_service.state):
 		push_error("BattleScreen: карта відхилена — напрям поза 0..7")
@@ -238,7 +247,9 @@ func _wire_view(board: Board) -> void:
 
 	_zone_overlay = ZoneOverlay.new(_board_view)
 	_path_overlay = PathOverlay.new(_board_view)
-	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"))
+	_target_overlay = TargetOverlay.new(_board_view)
+	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
+		func() -> void: _board_view.rebuild_tiles(_match_service.state.board))
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
 	# але власний шар і власний сигнал: action_preview малює його для прев'ю
@@ -252,6 +263,14 @@ func _wire_view(board: Board) -> void:
 	# шляху вище: action_preview ставить приціл, pending_cleared знімає.
 	_controller.action_preview.connect(_on_action_preview)
 	_controller.pending_cleared.connect(_clear_all_crosshairs)
+	# Допустимі тайли верби інженера (Task 8) — готові з core/ крізь контролер.
+	_controller.targets_changed.connect(_target_overlay.show_tiles)
+	# Дрон (Task 10): кільце на тому самому шарі цілей і позначки на юнітах — усе
+	# готове з Targeting. disarm() завжди шле targets_changed, тож там і знімаємо.
+	_controller.drone_armed.connect(_on_drone_armed)
+	_controller.targets_changed.connect(func(_tiles: Array[Vector2i]) -> void: _clear_forbidden_marks())
+	# Огляд (Task 14, §3.13): кільця й позначки готові з Targeting крізь контролер.
+	_controller.inspected.connect(_on_inspected)
 
 	_hud.bind(_match_service.state)
 	_hud.attach_controller(_controller)
@@ -345,13 +364,48 @@ func input_controller() -> InputController:
 ## між ними не приходить, бо _pending не скидається, а перезаписується.
 func _on_action_preview(preview: Dictionary) -> void:
 	_clear_all_crosshairs()
-	if preview.is_empty() or int(preview["type"]) != InputController.ActionType.SHOT:
+	if preview.is_empty() or not int(preview["type"]) in [InputController.ActionType.SHOT, InputController.ActionType.DRONE]:
 		return
 	# Ціль може й не мати вузла — фог вирішує це окремо (§3.5), і вигляд не
 	# сперечається з ним.
 	var target_view: UnitView = unit_view_for(int(preview["target_id"]))
 	if target_view != null:
 		target_view.set_targeted(true)
+
+
+## marks — {id: причина} з Targeting.drone_marks(): "" — приціл, інакше — хрест.
+## Ворог без вузла (фог) не позначається — вигляд не сперечається з туманом.
+func _on_drone_armed(center: Vector2i, radius: int, marks: Dictionary) -> void:
+	_target_overlay.show_drone_reach(center, radius)
+	for id: int in marks:
+		var view: UnitView = unit_view_for(id)
+		if view == null:
+			continue
+		if marks[id] == "":
+			view.set_targeted(true)
+		else:
+			view.set_forbidden(true)
+
+
+## Позначки тримаються списком id: вузли юнітів перебудовуються після кожного
+## пакета подій (_rebuild_units_for_active_player), а огляд — ні.
+func _on_inspected(inspection: Dictionary) -> void:
+	_threatened.assign(inspection.get("marked", []))
+	_drone_threatened.assign(inspection.get("drone_marked", []))
+	_target_overlay.show_rings(inspection)
+	_apply_threat_marks()
+
+
+func _apply_threat_marks() -> void:
+	for id: int in _unit_views:
+		var view: UnitView = _unit_views[id]
+		view.set_threatened(_threatened.has(id))
+		view.set_drone_threatened(_drone_threatened.has(id))
+
+
+func _clear_forbidden_marks() -> void:
+	for id in _unit_views:
+		(_unit_views[id] as UnitView).set_forbidden(false)
 
 
 ## Без окремого поля з id останньої цілі: _unit_views — це юніти одного екрана
@@ -486,6 +540,7 @@ func _on_screen_touch(st: InputEventScreenTouch) -> void:
 		# Скасований дотик (шторка, відкидання долоні) — не намір гравця: без тапу.
 		if st.canceled:
 			_pointer_down = false
+			_cancel_peek()
 			_camera_rig.end_hold()
 		else:
 			_end_pointer_press(st.position)
@@ -522,6 +577,7 @@ func _on_magnify_gesture(mg: InputEventMagnifyGesture) -> void:
 
 
 func _begin_pinch() -> void:
+	_cancel_peek()
 	_pinch_indices = _touch_positions.keys()
 	_pinch_indices.sort()
 	var a: Vector2 = _touch_positions[_pinch_indices[0]]
@@ -554,6 +610,9 @@ func _begin_pointer_press(screen_pos: Vector2) -> void:
 	_pointer_down = true
 	_press_screen_pos = screen_pos
 	_drag_exceeded_threshold = false
+	_press_held_sec = 0.0
+	_long_pressed = false
+	set_process(true)
 	# Новий дотик до дошки перебиває кидок, що ще котиться — гравець знову
 	# тримає камеру рукою.
 	_camera_rig.cancel_inertia()
@@ -614,6 +673,12 @@ func _end_pointer_press(screen_pos: Vector2) -> void:
 		if total_shift.length() > _drag_threshold_px():
 			_drag_exceeded_threshold = true
 			_camera_rig.pan(total_shift)
+	if _long_pressed:
+		# Відпускання довгого натиску — лише кінець огляду, ніколи не тап.
+		_cancel_peek()
+		if _drag_exceeded_threshold:
+			_camera_rig.end_pan()
+		return
 	if _drag_exceeded_threshold:
 		_camera_rig.end_pan()
 		return
@@ -625,17 +690,30 @@ func _end_pointer_press(screen_pos: Vector2) -> void:
 	_handle_tap_at_screen_position(_press_screen_pos)
 
 
-## dp -> пікселі логічного простору події: `content_scale_factor` — властивість
-## `Window`, не базового `Viewport` (звернення через get_viewport() впало б,
-## якби цю сцену колись поклали в SubViewport, де такого поля нема), і при
-## факторі > 1 події приходять у МЕНШОМУ логічному просторі, тож фіксований
-## dp-поріг ділиться на фактор, а не множиться — множення давало поріг у
-## кілька разів товщий за задумані ~10dp і саме на це відкат.
+## Лічильник довгого натиску. Драг (поріг перетнуто) чи щипок ним ніколи не стають:
+## обидва скидають _pointer_down/_drag_exceeded_threshold раніше, ніж натиск дотримається.
+func _process(delta: float) -> void:
+	if not _pointer_down or _drag_exceeded_threshold or _long_pressed or _controller == null:
+		set_process(false)
+		return
+	_press_held_sec += delta
+	if _press_held_sec >= LONG_PRESS_SEC:
+		_long_pressed = true
+		set_process(false)
+		_controller.peek_cell(_camera_rig.screen_point_to_cell(_press_screen_pos))
+
+
+func _cancel_peek() -> void:
+	_long_pressed = false
+	if _controller != null:
+		_controller.end_peek()
+
+
+## UiScale (Task 4.1) робить логічний px ≈ dp, тож поріг у dp — це вже логічні
+## пікселі події; ділення на content_scale_factor дало б на телефоні з
+## фактором 1.627 лише ~6 dp замість задуманих 10.
 func _drag_threshold_px() -> float:
-	var factor: float = get_window().content_scale_factor
-	if factor <= 0.0:
-		factor = 1.0
-	return _DRAG_THRESHOLD_DP / factor
+	return _DRAG_THRESHOLD_DP
 
 
 ## Екранна геометрія (промінь -> тайл) живе в IsoCameraRig (game/camera/,
@@ -701,8 +779,15 @@ func _on_events_ready() -> void:
 		# select_unit(null) очищає і InputController, і оверлей зон разом.
 		# R7: рекон і перебудова — лише як реакція на confirmed нижче, не тут.
 		_controller.select_unit(null)
+		# Огляд не переживає гейт (§3.13): натиск, що тримався, тут і закінчено.
+		_cancel_peek()
+		if _pointer_down:
+			_camera_rig.end_hold()  # інакше риг крутить _process за гейтом до наступного натиску (§8)
+		_pointer_down = false
 		_gate.show_for(_match_service.state.active_player)
-	else:
+	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
+		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
+		# перебудова поставила б вузли миттєво й з'їла б анімацію повороту.
 		_rebuild_units_for_active_player()
 
 
@@ -744,6 +829,9 @@ func _clear_unit_views() -> void:
 func _rebuild_units_for_active_player() -> void:
 	var state: BattleState = _match_service.state
 	_clear_unit_views()
+	# §3.11: міни — той самий знімок знання активного гравця, що й юніти, і в ті
+	# самі моменти (setup, після пакета подій, на confirmed гейта).
+	_mine_layer.rebuild(state, state.active_player)
 
 	var known: Dictionary = state.known_occupied_map(state.active_player)
 	for pos in known:
@@ -755,6 +843,7 @@ func _rebuild_units_for_active_player() -> void:
 		_units.add_child(view)
 		view.bind(unit)
 		_unit_views[uid] = view
+	_apply_threat_marks()
 
 
 func _first_unit_cell(player: int) -> Vector2i:
