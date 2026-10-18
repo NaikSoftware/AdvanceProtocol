@@ -7,10 +7,6 @@ extends Control
 const PLAYER_COLOURS: Array[Color] = [
 	Color(0.82, 0.66, 0.32), Color(0.32, 0.6, 0.62), Color(0.68, 0.4, 0.32),
 ]
-const CLASS_KEYS: Array[String] = [
-	"results_class_infantry", "results_class_light_vehicle",
-	"results_class_tank", "results_class_artillery",
-]
 
 ## Підміняється тестом до додавання у дерево; null — автолоад.
 var match_service: Node = null
@@ -18,9 +14,8 @@ var match_service: Node = null
 var router: Node = null
 
 
-## Рядок на гравця: втрати (мертві юніти), завдана шкода, утримані цілі, рівні
-## досвіду за класами. Шкода — з state.damage_dealt, а не з досвіду: міни
-## шкодять, але досвіду інженеру не дають.
+## Рядок на гравця: втрати (мертві юніти), завдана шкода, утримані цілі.
+## Шкода — з state.damage_dealt.
 static func summarize(state: BattleState) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	for p in state.player_count:
@@ -28,16 +23,11 @@ static func summarize(state: BattleState) -> Array[Dictionary]:
 		for u in state.units.values():
 			if u.owner == p and not u.is_alive():
 				losses += 1
-		var pool: Experience = state.experience[p]
-		var levels: Array[int] = []
-		for c in UnitTypes.UnitClass.values():
-			levels.append(pool.level[c])
 		rows.append({
 			"player": p,
 			"losses": losses,
 			"damage": state.damage_dealt[p],
 			"objectives": Objectives.held_by(state, p),
-			"levels": levels,
 		})
 	return rows
 
@@ -77,18 +67,6 @@ func _build_table(rows: Array[Dictionary]) -> void:
 		_cell(table, tr(spec[0]), Color.WHITE, HORIZONTAL_ALIGNMENT_LEFT)
 		for r in rows:
 			_cell(table, str(r[spec[1]]), Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
-	_cell(table, tr("results_levels"), Color.WHITE, HORIZONTAL_ALIGNMENT_LEFT)
-	for r in rows:
-		_cell(table, _levels_text(r["levels"]), Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
-
-
-## Лише класи з ненульовим рівнем; інженери досвіду не мають (§3.7).
-func _levels_text(levels: Array) -> String:
-	var lines: PackedStringArray = []
-	for i in CLASS_KEYS.size():
-		if levels[i] > 0:
-			lines.append("%s %d" % [tr(CLASS_KEYS[i]), levels[i]])
-	return "\n".join(lines) if not lines.is_empty() else "—"
 
 
 func _cell(table: GridContainer, text: String, colour: Color, align: HorizontalAlignment) -> void:

@@ -76,7 +76,7 @@ func test_incoming_shot_is_resolved_against_the_targets_old_facing() -> void:
 	state.begin_turn()
 	state.refresh_vision(t.owner)  # §3.3.1: відповідач мусить бачити атакувальника
 
-	var front: Vector2i = Rules.damage_bounds(a, t, 0, UnitTypes.ArmourSector.FRONT, 4)
+	var front: Vector2i = Rules.damage_bounds(a, t, UnitTypes.ArmourSector.FRONT, 4)
 	assert_true(REAR_DAMAGE_ON_SEED_11 > front.y,
 		"передумова літерала: кормове значення мусить лежати поза лобовими межами %s" % front)
 
@@ -285,9 +285,8 @@ func test_drone_strike_turns_the_squad_and_is_numerically_inert_today() -> void:
 	state.refresh_vision(t.owner)
 
 	var dist_sq: int = Rules.distance_sq(t.pos, a.pos)
-	var level: int = state.experience[t.owner].level_of(t.unit_class())
-	var rear: Vector2i = Rules.damage_bounds(t, a, level, UnitTypes.ArmourSector.REAR, dist_sq)
-	var front: Vector2i = Rules.damage_bounds(t, a, level, UnitTypes.ArmourSector.FRONT, dist_sq)
+	var rear: Vector2i = Rules.damage_bounds(t, a, UnitTypes.ArmourSector.REAR, dist_sq)
+	var front: Vector2i = Rules.damage_bounds(t, a, UnitTypes.ArmourSector.FRONT, dist_sq)
 	assert_eq(rear, front,
 		"броня штурмового загону 0/0/0 — розворот не рухає числа. Коли піхота отримає ненульову броню, цей тест мусить упасти і рішення §3.9 треба переглянути свідомо")
 

@@ -72,6 +72,46 @@ static func drone_targets(state: BattleState, unit_id: int) -> Array[Unit]:
 	return out
 
 
+static func reach_tiles(state: BattleState, unit_id: int, radius: int) -> Array[Vector2i]:
+	## §3.13: обвідна «коло дальності ∩ seen СПОСТЕРІГАЧА» — спільна для своїх і чужих
+	## юнітів. Береться seen АКТИВНОГО гравця, ніколи мережа власника ворога
+	## (прихована інформація). Юніт на нерозвіданому тайлі обвідної не має.
+	var out: Array[Vector2i] = []
+	var u: Unit = state.get_unit(unit_id)
+	if u == null or not u.is_alive():
+		return out
+	var seen: Vision = state.vision[state.active_player]
+	if not seen.is_seen(u.pos):
+		return out
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			var p: Vector2i = u.pos + Vector2i(dx, dy)
+			if state.board.in_bounds(p) and Rules.in_radius(u.pos, p, radius) and seen.is_seen(p):
+				out.append(p)
+	return out
+
+
+static func drone_marks(state: BattleState, unit_id: int) -> Dictionary:
+	## §3.13: позначки дрона, {id цілі: причина відмови або ""}. Лише для свого загону;
+	## причину дає та сама DroneCommand.check_strike(), що й валідація. Лише для
+	## носіїв дронів (тип з "drones" > 0); для решти типів — {}. Ключі — живі
+	## вороги на seen-тайлі активного гравця в межах RANGE (решта — не показується).
+	var out: Dictionary = {}
+	var a: Unit = state.get_unit(unit_id)
+	if a == null or not a.is_alive() or a.owner != state.active_player:
+		return out
+	if int(a.type()["drones"]) <= 0:
+		return out
+	var seen: Vision = state.vision[state.active_player]
+	for t in state.alive_units():
+		if t.owner == a.owner or not seen.is_seen(t.pos):
+			continue
+		if not Rules.in_radius(a.pos, t.pos, DroneCommand.RANGE):
+			continue
+		out[t.id] = DroneCommand.check_strike(state, a, t)
+	return out
+
+
 static func threatened_units(state: BattleState, unit_id: int, observer: int) -> Array[Unit]:
 	## §3.13, рядок «ворожий юніт»: які юніти гравця `observer` стоять під загрозою
 	## від оглянутого ворога. Це ПРОГНОЗ на його хід, а не законність пострілу

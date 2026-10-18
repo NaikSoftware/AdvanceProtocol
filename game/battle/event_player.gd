@@ -140,8 +140,6 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_objective_captured(event)
 	elif event is Events.ObjectiveDestroyed:
 		return _handle_objective_destroyed(event)
-	elif event is Events.ExperienceGained:
-		return _handle_experience_gained(event)
 	elif event is Events.ApChanged:
 		return _handle_ap_changed(event)
 	elif event is Events.TurnEnded:
@@ -278,11 +276,6 @@ func _handle_objective_captured(_event: Events.ObjectiveCaptured) -> Variant:
 
 
 func _handle_objective_destroyed(_event: Events.ObjectiveDestroyed) -> Variant:
-	return null
-
-
-## §3.7: рівень досвіду піде в HUD (інша задача), не в анімацію на дошці.
-func _handle_experience_gained(_event: Events.ExperienceGained) -> Variant:
 	return null
 
 

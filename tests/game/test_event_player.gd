@@ -92,7 +92,6 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.UnitRepaired.new(4, 20, 80),
 		Events.ObjectiveCaptured.new(0, 1),
 		Events.ObjectiveDestroyed.new(1),
-		Events.ExperienceGained.new(0, UnitTypes.UnitClass.TANK, 2),
 		Events.ApChanged.new(1, 30),
 		Events.TurnEnded.new(0),
 		Events.TurnStarted.new(1, 5),

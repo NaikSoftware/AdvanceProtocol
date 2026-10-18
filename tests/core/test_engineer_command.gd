@@ -36,7 +36,7 @@ func test_demolish_bridge_reshapes_the_map() -> void:
 	assert_false(state.board.penalty_at(Vector2i(4, 3)) < Terrain.IMPASSABLE)
 
 ## Рішення власника: міст підривається разом із ворогом, що на ньому стоїть, —
-## юніт гине, шкода зараховується власникові інженера (без досвіду, §3.7). Свій юніт
+## юніт гине, шкода зараховується власникові інженера. Свій юніт
 ## на мосту — заборона: інженер не скидає своїх у річку.
 func test_demolishing_a_bridge_under_an_enemy_destroys_it() -> void:
 	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
@@ -51,9 +51,6 @@ func test_demolishing_a_bridge_under_an_enemy_destroys_it() -> void:
 	assert_eq(state.board.kind_at(Vector2i(4, 3)), Terrain.Kind.BRIDGE_DESTROYED)
 	assert_false(enemy.is_alive(), "юніт на підірваному мосту гине")
 	assert_eq(state.damage_dealt[0], hp_before, "уся решта hp — на рахунок власника інженера")
-	# Не лише клас ENGINEER (у нього порогів нема, тож там завжди 0): жоден клас
-	# гравця 0 не мусить отримати за це вбивство досвіду.
-	assert_eq(state.experience[0].xp, [0, 0, 0, 0, 0] as Array[int], "підрив мосту не дає досвіду жодному класу")
 	var dealt: int = -1
 	var destroyed: int = -1
 	for i in events.size():
@@ -197,3 +194,94 @@ func test_demolishing_an_already_destroyed_objective_is_rejected() -> void:
 	o.intact = false
 	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).validate(state),
 		"ERR_NOTHING_TO_DEMOLISH")
+
+# --- Запити для панелі інженера (Task 4a) ---
+
+const A := EngineerCommand.Action
+
+func test_lay_mine_status_lists_free_adjacent_tiles_only() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.add_unit(5, 1, Vector2i(4, 3), 0)
+	var st: Dictionary = EngineerCommand.action_status(state, e.id, A.LAY_MINE)
+	assert_eq(st["tiles"].size(), 3)
+	assert_false(st["tiles"].has(Vector2i(4, 3)))
+	assert_eq(st["reason"], "")
+
+func test_status_reason_when_no_ap() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	e.ap = 20
+	var st: Dictionary = EngineerCommand.action_status(state, e.id, A.LAY_MINE)
+	assert_eq(st["tiles"], [])
+	assert_eq(st["reason"], "ERR_NOT_ENOUGH_AP")
+
+func test_clear_mine_reason_without_mine() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	assert_eq(EngineerCommand.action_status(state, e.id, A.CLEAR_MINE)["reason"], "ERR_NO_MINE_THERE")
+
+func test_demolish_bridge_forbidden_with_own_unit_on_it() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	state.add_unit(5, 0, Vector2i(4, 3), 0)
+	var st: Dictionary = EngineerCommand.action_status(state, e.id, A.DEMOLISH_BRIDGE)
+	assert_eq(st["tiles"], [])
+	assert_eq(st["reason"], "ERR_TILE_OCCUPIED")
+
+func test_capture_reason_for_own_objective() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	Objectives.add(state, Vector2i(4, 3), 0)
+	assert_eq(EngineerCommand.action_status(state, e.id, A.CAPTURE_OBJECTIVE)["reason"], "ERR_NOTHING_TO_CAPTURE")
+
+func test_status_never_changes_state_or_rng() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var before: String = JSON.stringify(BattleSerializer.to_dict(state))
+	var rng_before: int = state.rng.state
+	for a in 7:
+		EngineerCommand.action_status(state, e.id, a)
+	EngineerCommand.repair_bounds(e, e)
+	assert_eq(JSON.stringify(BattleSerializer.to_dict(state)), before)
+	assert_eq(state.rng.state, rng_before)
+
+func test_status_matches_validate_for_every_action_and_tile() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	state.board.set_kind(Vector2i(5, 4), Terrain.Kind.BRIDGE_DESTROYED)
+	Mines.place(state, Vector2i(3, 4), 1)
+	Objectives.add(state, Vector2i(4, 5), 1)
+	var hurt: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	hurt.hp -= 10
+	for a in 7:
+		var tiles: Array = EngineerCommand.action_status(state, e.id, a)["tiles"]
+		for d in Board.DIRS_4:
+			var p: Vector2i = e.pos + d
+			assert_eq(tiles.has(p), EngineerCommand.create(e.id, a, p).validate(state) == "", "action %d tile %s" % [a, p])
+
+func test_repair_bounds_full_ap() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var t: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	t.hp = t.max_hp() - 400
+	assert_eq(e.ap, 76)
+	assert_eq(EngineerCommand.repair_bounds(e, t), Vector2i(20, 43))
+
+func test_repair_bounds_after_one_field_step() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var t: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	t.hp = t.max_hp() - 400
+	e.ap = 51
+	assert_eq(EngineerCommand.repair_bounds(e, t), Vector2i(20, 30))
+
+func test_repair_bounds_capped_by_missing_hp() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var t: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	t.hp = t.max_hp() - 12
+	assert_eq(EngineerCommand.repair_bounds(e, t), Vector2i(12, 12))
+
+func test_repair_bounds_bracket_actual_roll() -> void:
+	var e: Unit = _engineer(Vector2i(4, 4))
+	var t: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
+	t.hp = t.max_hp() - 400
+	var b: Vector2i = EngineerCommand.repair_bounds(e, t)
+	var rng := RandomNumberGenerator.new()
+	for s in 200:
+		rng.seed = s
+		var r: int = EngineerCommand.repair_amount(rng, e)
+		assert_true(r >= b.x and r <= b.y, "seed %d: %d" % [s, r])

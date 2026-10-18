@@ -2,7 +2,25 @@ extends RefCounted
 ## Спільне для e2e-тестів. Ім'я без префікса `test_`, тож GUT не вважає файл тестом.
 ## Тримає посилання на GutTest, щоб кидати assert-и й чекати кадри від його імені.
 
+const BattleScreenScene := preload("res://game/battle/battle_screen.tscn")
+const MatchServiceScript := preload("res://game/autoload/match_service.gd")
+
+
+## Пише всі події, які сцена забрала з черги, — щоб перевіряти ПОРЯДОК подій
+## (хто повернувся до пострілу, хто після шкоди), а не лише кінцевий стан.
+class RecService extends MatchServiceScript:
+	var events: Array[Events.BattleEvent] = []
+	func take_events() -> Array[Events.BattleEvent]:
+		var e: Array[Events.BattleEvent] = super.take_events()
+		events.append_array(e)
+		return e
+
+
 var _t: GutTest
+var service: RecService
+var screen: BattleScreen
+## Свій файл на процес: паралельні прогони ділять user://.
+var save_path: String = "user://test_e2e_save_%d.json" % OS.get_process_id()
 ## Control -> початковий mouse_filter; повертаємо в restore_runner_gui(),
 ## щоб правка не текла в інші тести.
 var _saved_filters: Dictionary[Control, int] = {}
@@ -42,8 +60,10 @@ func restore_runner_gui() -> void:
 
 
 ## Справжній клік мишею у viewport: рух, натиск, відпускання.
-func click_at(p: Vector2) -> void:
-	var vp: Viewport = _t.get_viewport()
+## vp — для сцен усередині SubViewport; типово viewport тесту.
+func click_at(p: Vector2, vp: Viewport = null) -> void:
+	if vp == null:
+		vp = _t.get_viewport()
 	var mv := InputEventMouseMotion.new()
 	mv.position = p
 	mv.global_position = p
@@ -75,3 +95,105 @@ func wait_until(cond: Callable, what: String, max_frames: int = 120) -> bool:
 			return true
 	_t.assert_true(cond.call(), "не дочекались: " + what)
 	return cond.call()
+
+
+# --- Бій ---------------------------------------------------------------------
+
+## opts: tiles {Vector2i: Terrain.Kind} (решта — FIELD), ground (Terrain.GroundState),
+## seed (7), players (2), objectives Array[Vector2i], hold_target int,
+## prepare Callable(state: BattleState) — після setup(), до першого кадру тесту.
+func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void:
+	var m := MapData.new()
+	m.width = width
+	m.height = height
+	var t := PackedInt32Array()
+	t.resize(width * height)
+	t.fill(Terrain.Kind.FIELD)
+	var tiles: Dictionary = opts.get("tiles", {})
+	for p: Vector2i in tiles:
+		t[p.y * width + p.x] = tiles[p]
+	m.tiles = t
+	var typed: Array[Dictionary] = []
+	for s: Dictionary in spawns:
+		typed.append(s)
+	m.spawns = typed
+	var objs: Array[Vector2i] = []
+	objs.assign(opts.get("objectives", []))
+	m.objectives = objs
+	m.hold_target = opts.get("hold_target", 0)
+	# таблиця рухів піднімає матч у циклі — не тримаємо десяток екранів одразу
+	if is_instance_valid(screen):
+		screen.free()
+	if is_instance_valid(service):
+		service.free()
+	service = RecService.new()
+	_t.add_child_autofree(service)
+	screen = BattleScreenScene.instantiate()
+	_t.add_child_autofree(screen)
+	screen.save_path = save_path
+	screen.setup(m, opts.get("players", 2), opts.get("seed", 7), service,
+		opts.get("ground", Terrain.GroundState.DRY))
+	var prepare: Callable = opts.get("prepare", Callable())
+	if prepare.is_valid():
+		prepare.call(service.state)
+		screen._rebuild_units_for_active_player()
+	ignore_runner_gui([screen])
+	await settle()
+
+
+## Твіни камери й подій гасимо вручну, доки програвач не скаже, що закінчив.
+func settle() -> void:
+	await wait_until(func() -> bool: return not screen._event_player.is_playing(), "програвання подій")
+
+
+func hud() -> Hud:
+	return screen.get_node("%Hud")
+
+
+func gate() -> HandoverGate:
+	return screen.get_node("%HandoverGate")
+
+
+func press(button: BaseButton) -> void:
+	_t.assert_false(button.disabled, "кнопка мусить бути натискною: %s" % button.name)
+	button.pressed.emit()
+
+
+func px(cell: Vector2i) -> Vector2:
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	return rig.unproject(IsoCameraRig.cell_to_world(cell))
+
+
+## Справжній тап: миша вниз/вгору в центрі тайла через viewport.
+func tap(cell: Vector2i) -> void:
+	click_at(px(cell))
+
+
+func confirm() -> void:
+	press(hud().get_node("%ConfirmButton"))
+	await settle()
+
+
+func end_turn() -> void:
+	press(hud().get_node("%EndTurnButton"))
+	await settle()
+
+
+func confirm_gate() -> void:
+	press(gate().get_node("%ConfirmButton"))
+	await settle()
+
+
+## Вибрати юніт, тапнути ціль, підтвердити.
+func act(from: Vector2i, to: Vector2i) -> void:
+	tap(from)
+	tap(to)
+	await confirm()
+
+
+func events_of(cls: Variant) -> Array[Events.BattleEvent]:
+	var out: Array[Events.BattleEvent] = []
+	for e in service.events:
+		if is_instance_of(e, cls):
+			out.append(e)
+	return out

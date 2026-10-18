@@ -286,9 +286,6 @@ func _result_state() -> BattleState:
 	s.get_unit(2).hp = 0
 	s.get_unit(4).hp = 0
 	s.get_unit(5).hp = 0
-	# Рівні — з досвіду, шкода — з окремого лічильника (міни досвіду не дають).
-	s.experience[0].add_damage(UnitTypes.UnitClass.TANK, 1250)
-	s.experience[1].add_damage(UnitTypes.UnitClass.INFANTRY, 550)
 	s.damage_dealt = [1250, 550, 0] as Array[int]
 	Objectives.add(s, Vector2i(5, 5), 0)
 	Objectives.add(s, Vector2i(5, 4), 0)
@@ -311,13 +308,11 @@ func test_summary_numbers_from_constructed_state() -> void:
 	assert_eq(rows[0]["objectives"], 1)
 	assert_eq(rows[1]["objectives"], 1)
 	assert_eq(rows[2]["objectives"], 0)
-	assert_eq(rows[0]["levels"][UnitTypes.UnitClass.TANK], 1)
-	assert_eq(rows[1]["levels"][UnitTypes.UnitClass.INFANTRY], 2)
 
 
 func test_summary_credits_a_mine_kill_to_the_mine_owner() -> void:
 	var s: BattleState = BattleState.create(Board.create(6, 6, Terrain.GroundState.DRY), 2, 1)
-	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # інженер p0 — досвіду не має
+	s.add_unit(11, 0, Vector2i(0, 0), 0)                 # інженер p0
 	var victim: Unit = s.add_unit(2, 1, Vector2i(3, 3), 0)
 	victim.hp = 10
 	Mines.place(s, Vector2i(3, 3), 0)

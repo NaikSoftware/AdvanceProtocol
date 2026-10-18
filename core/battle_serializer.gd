@@ -33,9 +33,6 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
-	var experience: Array = []
-	for pool in state.experience:
-		experience.append({"xp": pool.xp.duplicate(), "level": pool.level.duplicate()})
 	return {
 		"version": VERSION,
 		"board": {
@@ -52,7 +49,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"next_unit_id": state._next_unit_id,
 		"objective_hold_target": state.objective_hold_target,
 		"units": units, "mines": mines, "objectives": objectives,
-		"vision": vision, "experience": experience,
+		"vision": vision,
 		"damage_dealt": state.damage_dealt.duplicate(),
 	}
 
@@ -132,17 +129,6 @@ static func from_dict(data: Dictionary) -> BattleState:
 		v.seen = PackedByteArray(v_data["seen"])
 		state.vision.append(v)
 
-	state.experience.clear()
-	for pool_data in (data["experience"] as Array):
-		var pool := Experience.new()
-		pool.xp.clear()
-		for x in (pool_data["xp"] as Array):
-			pool.xp.append(int(x))
-		pool.level.clear()
-		for l in (pool_data["level"] as Array):
-			pool.level.append(int(l))
-		state.experience.append(pool)
-
 	# Збереження до появи лічильника поля не мають — рахуємо з нуля, а не відмовляємо.
 	state.damage_dealt.clear()
 	var dealt: Array = data.get("damage_dealt", [])
@@ -187,14 +173,6 @@ static func _is_valid(data: Dictionary) -> bool:
 		return false
 	for v in (data["vision"] as Array):
 		if typeof(v) != TYPE_DICTIONARY or not _nums(v, "visible", w * h) or not _nums(v, "seen", w * h):
-			return false
-
-	var classes: int = UnitTypes.UnitClass.size()
-	if not _arr(data, "experience", pc):
-		return false
-	for pool in (data["experience"] as Array):
-		if typeof(pool) != TYPE_DICTIONARY or not _nums(pool, "xp", classes) \
-				or not _nums(pool, "level", classes, 0, Experience.MAX_LEVEL):
 			return false
 
 	if not _arr(data, "units"):
