@@ -136,6 +136,13 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 	var prepare: Callable = opts.get("prepare", Callable())
 	if prepare.is_valid():
 		prepare.call(service.state)
+		# prepare міняє стан повз команди (позиції, міни), тож знання активного
+		# гравця перераховується так само, як на початку ходу (begin_turn()):
+		# туман, цілі, пошук мін. Події відкидаються — як у setup().
+		var st: BattleState = service.state
+		st.refresh_vision(st.active_player)
+		Objectives.refresh_seen(st, st.active_player)
+		Mines.reveal_near(st, st.active_player)
 		screen._rebuild_units_for_active_player()
 	ignore_runner_gui([screen])
 	await settle()

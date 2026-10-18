@@ -48,6 +48,7 @@ const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
 @onready var _camera_rig: IsoCameraRig = %CameraRig
 @onready var _board_view: BoardView = %BoardView
 @onready var _units: Node3D = %Units
+@onready var _mine_layer: MineLayer = %MineLayer
 @onready var _hud: Hud = %Hud
 @onready var _gate: HandoverGate = %HandoverGate
 @onready var _pause: PauseMenu = %PauseMenu
@@ -744,6 +745,9 @@ func _clear_unit_views() -> void:
 func _rebuild_units_for_active_player() -> void:
 	var state: BattleState = _match_service.state
 	_clear_unit_views()
+	# §3.11: міни — той самий знімок знання активного гравця, що й юніти, і в ті
+	# самі моменти (setup, після пакета подій, на confirmed гейта).
+	_mine_layer.rebuild(state, state.active_player)
 
 	var known: Dictionary = state.known_occupied_map(state.active_player)
 	for pos in known:
