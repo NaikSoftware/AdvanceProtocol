@@ -13,72 +13,78 @@ mouse_filter = 2
 [node name="StatName" type="Label" parent="Body"]
 unique_name_in_owner = true
 
-[node name="ClassRow" type="HBoxContainer" parent="Body"]
+[node name="Stats" type="GridContainer" parent="Body"]
+theme_override_constants/h_separation = 16
+columns = 2
+mouse_filter = 2
+
+[node name="ClassRow" type="HBoxContainer" parent="Body/Stats"]
 theme_override_constants/separation = 8
 mouse_filter = 2
 
-[node name="ClassCaption" type="Label" parent="Body/ClassRow"]
+[node name="ClassCaption" type="Label" parent="Body/Stats/ClassRow"]
 text = "hud_class"
 
-[node name="StatClass" type="Label" parent="Body/ClassRow"]
+[node name="StatClass" type="Label" parent="Body/Stats/ClassRow"]
 unique_name_in_owner = true
 
-[node name="HpRow" type="HBoxContainer" parent="Body"]
+[node name="HpRow" type="HBoxContainer" parent="Body/Stats"]
 theme_override_constants/separation = 8
 mouse_filter = 2
 
-[node name="HpCaption" type="Label" parent="Body/HpRow"]
+[node name="HpCaption" type="Label" parent="Body/Stats/HpRow"]
 text = "hud_hp"
 
-[node name="StatHp" type="Label" parent="Body/HpRow"]
+[node name="StatHp" type="Label" parent="Body/Stats/HpRow"]
 unique_name_in_owner = true
 
-[node name="ApRow" type="HBoxContainer" parent="Body"]
+[node name="ApRow" type="HBoxContainer" parent="Body/Stats"]
 theme_override_constants/separation = 8
 mouse_filter = 2
 
-[node name="ApCaption" type="Label" parent="Body/ApRow"]
+[node name="ApCaption" type="Label" parent="Body/Stats/ApRow"]
 text = "hud_ap"
 
-[node name="StatAp" type="Label" parent="Body/ApRow"]
+[node name="StatAp" type="Label" parent="Body/Stats/ApRow"]
 unique_name_in_owner = true
 
-[node name="AttackRow" type="HBoxContainer" parent="Body"]
+[node name="AttackRow" type="HBoxContainer" parent="Body/Stats"]
 theme_override_constants/separation = 8
 mouse_filter = 2
 
-[node name="AttackCaption" type="Label" parent="Body/AttackRow"]
+[node name="AttackCaption" type="Label" parent="Body/Stats/AttackRow"]
 text = "hud_attack"
 
-[node name="StatAttack" type="Label" parent="Body/AttackRow"]
+[node name="StatAttack" type="Label" parent="Body/Stats/AttackRow"]
 unique_name_in_owner = true
 
-[node name="RangeRow" type="HBoxContainer" parent="Body"]
+[node name="RangeRow" type="HBoxContainer" parent="Body/Stats"]
 theme_override_constants/separation = 8
 mouse_filter = 2
 
-[node name="RangeCaption" type="Label" parent="Body/RangeRow"]
+[node name="RangeCaption" type="Label" parent="Body/Stats/RangeRow"]
 text = "hud_range"
 
-[node name="StatRange" type="Label" parent="Body/RangeRow"]
+[node name="StatRange" type="Label" parent="Body/Stats/RangeRow"]
 unique_name_in_owner = true
 
-[node name="VisionRow" type="HBoxContainer" parent="Body"]
+[node name="VisionRow" type="HBoxContainer" parent="Body/Stats"]
 theme_override_constants/separation = 8
 mouse_filter = 2
 
-[node name="VisionCaption" type="Label" parent="Body/VisionRow"]
+[node name="VisionCaption" type="Label" parent="Body/Stats/VisionRow"]
 text = "hud_vision"
 
-[node name="StatVision" type="Label" parent="Body/VisionRow"]
+[node name="StatVision" type="Label" parent="Body/Stats/VisionRow"]
 unique_name_in_owner = true
-
-[node name="ArmourCaption" type="Label" parent="Body"]
-text = "hud_armour"
 
 [node name="ArmourRow" type="HBoxContainer" parent="Body"]
 theme_override_constants/separation = 16
 mouse_filter = 2
+
+[node name="ArmourCaption" type="Label" parent="Body/ArmourRow"]
+size_flags_vertical = 4
+text = "hud_armour"
 
 [node name="FrontColumn" type="VBoxContainer" parent="Body/ArmourRow"]
 mouse_filter = 2

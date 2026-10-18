@@ -188,7 +188,7 @@ func test_hud_bottom_bar_wraps_only_when_it_must(p = use_parameters(
 	var root: Control = await _mount("res://game/ui/hud.tscn", size)
 	var bar: Control = root.get_node("%BottomBar")
 	var buttons: Control = root.get_node("%BottomBar/ButtonRow")
-	assert_eq(bar.size.y, 64.0 if one_row else 64.0 + 8.0 + _info_row_height(root), str(size))
+	assert_eq(bar.size.y, 48.0 if one_row else 48.0 + 8.0 + _info_row_height(root), str(size))
 	assert_eq(buttons.get_global_rect().end.x, bar.get_global_rect().end.x, "кнопки праворуч: %s" % size)
 
 
