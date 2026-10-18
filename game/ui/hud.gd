@@ -102,6 +102,7 @@ var _shown_player: int = -1
 ## тут не рятують: кнопки живуть УСЕРЕДИНІ них, а панель малюється поверх усього
 ## HUD, тож «влізла в безпечну зону» й «не накрила кнопки» — різні твердження.
 @onready var _bottom_bar: HFlowContainer = %BottomBar
+@onready var _top_bar: HBoxContainer = $SafeArea/Layout/TopBar
 
 
 var _last_preview: Dictionary = {}
@@ -117,6 +118,11 @@ func _ready() -> void:
 	resized.connect(_fit_engineer_panel)
 	_bottom_bar.resized.connect(_fit_engineer_panel)
 	_fit_engineer_panel()
+	# Межі панелі характеристик рухаються разом зі смугами й панеллю інженера
+	# (перенос рядка прев'ю, поява верб) — події, не щокадрове опитування (§8).
+	for c: Control in [_top_bar, _bottom_bar, _engineer_panel]:
+		c.item_rect_changed.connect(_reposition_inspector)
+	_engineer_panel.visibility_changed.connect(_reposition_inspector)
 	_clear_preview()
 	_render_selection()
 
@@ -330,8 +336,14 @@ func _reposition_inspector() -> void:
 		IsoCameraRig.cell_to_world(_selected_unit.pos) + Vector3(0.0, INSPECTOR_LIFT, 0.0))
 	var panel: Vector2 = _inspector.size
 	var left: float = float(_safe_area.get_theme_constant("margin_left"))
-	var top: float = float(_safe_area.get_theme_constant("margin_top"))
+	# Верхня межа — НИЗ верхньої смуги, а не поле безпеки: там ґрунт, який
+	# мусить бути видно завжди (§3.12), і кнопка паузи.
+	var top: float = _top_bar_bottom()
 	var right: float = size.x - float(_safe_area.get_theme_constant("margin_right")) - panel.x
+	# Відкрита панель інженера — така сама межа праворуч, як край поля: інакше
+	# характеристики накривають верби, які гравець саме збирається тапнути.
+	if _engineer_panel.is_visible_in_tree():
+		right = minf(right, _engineer_panel.get_global_rect().position.x - get_global_rect().position.x - panel.x)
 	# Нижня межа — ВЕРХ рядка кнопок, а не низ поля безпеки. Кнопки лежать
 	# усередині безпечної зони, а панель малюється поверх усього HUD, тож
 	# «панель у безпечній зоні» не означає «кнопки видно». Ціна помилки конкретна:
@@ -353,6 +365,14 @@ func _reposition_inspector() -> void:
 	_inspector.position = Vector2(
 		clampf(x, left, maxf(left, right)),
 		clampf(anchor.y - panel.y * 0.5, top, maxf(top, bottom)))
+
+
+## Низ верхньої смуги в координатах HUD; до розкладки — верхнє поле безпеки.
+func _top_bar_bottom() -> float:
+	var bar: Rect2 = _top_bar.get_global_rect()
+	if bar.size.y <= 0.0:
+		return float(_safe_area.get_theme_constant("margin_top"))
+	return bar.end.y - get_global_rect().position.y
 
 
 ## Верх рядка кнопок у координатах самого HUD. Через глобальний прямокутник, а

@@ -424,7 +424,7 @@ func test_inspector_moves_with_the_camera() -> void:
 
 ## Юніт у дальньому кутку, камера відведена від нього до упору — екранна точка
 ## юніта опиняється ЗА верхнім краєм екрана. Панель мусить притиснутись рівно
-## до поля безпеки, а не поїхати за ним слідом у нікуди.
+## під верхню смугу (ґрунт видно завжди, §3.12), а не поїхати за ним слідом у нікуди.
 func test_inspector_is_clamped_to_the_safe_area_when_its_unit_is_off_screen() -> void:
 	var state: BattleState = _state()
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 0), 0)
@@ -436,8 +436,9 @@ func test_inspector_is_clamped_to_the_safe_area_when_its_unit_is_off_screen() ->
 	for i in 50:
 		rig.pan(Vector2(0.0, -2000.0))
 
-	assert_eq(_inspector().position.y, SAFE_TOP,
-		"панель мусить стати рівно на верхнє поле безпеки (56/24 з hud.tscn), а не піти за юнітом за екран")
+	var top_bar: Control = hud.get_node("SafeArea/Layout/TopBar")
+	assert_eq(_inspector().position.y, top_bar.get_global_rect().end.y - hud.get_global_rect().position.y,
+		"панель мусить стати рівно під верхню смугу, а не піти за юнітом за екран")
 	var panel := Rect2(_inspector().position, _inspector().size)
 	var safe := Rect2(SAFE_LEFT, SAFE_TOP,
 		hud.size.x - SAFE_LEFT - SAFE_RIGHT, hud.size.y - SAFE_TOP - SAFE_BOTTOM)
