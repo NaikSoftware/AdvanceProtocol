@@ -99,6 +99,4 @@ spawns = Array[Dictionary]([{
 "pos": Vector2i(10, 10),
 "type_id": 2
 }])
-objectives = Array[Vector2i]([Vector2i(9, 5), Vector2i(5, 5), Vector2i(13, 5)])
-hold_target = 0
 name_key = "map_open"

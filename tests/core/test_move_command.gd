@@ -18,21 +18,6 @@ func test_move_costs_ap_and_moves_the_unit() -> void:
 	assert_true(u.ap < before)
 	assert_true(events[0] is Events.UnitMoved)
 
-func test_an_objective_passed_mid_turn_is_remembered_without_waiting_for_the_next_turn() -> void:
-	# §3.10: цілі підкоряються туману, отже позначатися розвіданими мусять там само,
-	# де оновлюється туман. Доти refresh_seen() викликався лише з begin_turn(), тож
-	# ціль, розвідана серед ходу, не пам'яталася — а якби юніт до наступного ходу
-	# відійшов, не запам'яталася б узагалі.
-	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
-	var idx: int = Objectives.add(state, Vector2i(6, 5), 1)
-	state.start()
-	assert_false(state.objectives[idx].seen_by[0], "передумова: ціль поза оглядом до ходу")
-
-	MoveCommand.create(u.id, Vector2i(3, 5), -1).apply(state)
-
-	assert_true(state.objectives[idx].seen_by[0],
-		"ціль, побачену серед ходу, памʼятаємо одразу, а не з наступного begin_turn()")
-
 func test_move_sets_explicit_facing() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
 	MoveCommand.create(u.id, Vector2i(3, 5), 6).apply(state)

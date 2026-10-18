@@ -14,7 +14,7 @@ var match_service: Node = null
 var router: Node = null
 
 
-## Рядок на гравця: втрати (мертві юніти), завдана шкода, утримані цілі.
+## Рядок на гравця: втрати (мертві юніти) і завдана шкода.
 ## Шкода — з state.damage_dealt.
 static func summarize(state: BattleState) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
@@ -27,7 +27,6 @@ static func summarize(state: BattleState) -> Array[Dictionary]:
 			"player": p,
 			"losses": losses,
 			"damage": state.damage_dealt[p],
-			"objectives": Objectives.held_by(state, p),
 		})
 	return rows
 
@@ -63,7 +62,7 @@ func _build_table(rows: Array[Dictionary]) -> void:
 	_cell(table, " ", Color(0.55, 0.6, 0.64), HORIZONTAL_ALIGNMENT_LEFT)
 	for r in rows:
 		_cell(table, str(int(r["player"]) + 1), PLAYER_COLOURS[r["player"]], HORIZONTAL_ALIGNMENT_CENTER)
-	for spec in [["results_losses", "losses"], ["results_damage", "damage"], ["results_objectives", "objectives"]]:
+	for spec in [["results_losses", "losses"], ["results_damage", "damage"]]:
 		_cell(table, tr(spec[0]), Color.WHITE, HORIZONTAL_ALIGNMENT_LEFT)
 		for r in rows:
 			_cell(table, str(r[spec[1]]), Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)

@@ -20,13 +20,6 @@ var damage_dealt: Array[int] = []
 var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
 var mines: Array[Mines.Mine] = []
-var objectives: Array[Objectives.Objective] = []
-## §3.10: скільки цілей потрібно утримувати, щоб перемогти цим способом.
-## 0 — навмисне значення «на цій мапі немає умови перемоги за цілі»:
-## Objectives.check_victory() уже трактує hold_target <= 0 як «умову вимкнено»
-## (core/objectives.gd), тож анігіляційна мапа просто лишає це поле типовим
-## замість того, щоб потребувати окремого прапорця «умова цілей є/немає».
-var objective_hold_target: int = 0
 var _next_unit_id: int = 1
 
 static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleState:
@@ -163,7 +156,6 @@ func begin_turn() -> Array[Events.BattleEvent]:
 	for u in units_of(active_player):
 		u.refill_ap()
 	out.append_array(refresh_vision(active_player))
-	out.append_array(Objectives.refresh_seen(self, active_player))
 	## §3.11: пошук мін — властивість присутності, а не руху. Доти єдиним
 	## викликачем Mines.reveal_near() був MoveCommand, тож інженер, який нікуди не
 	## пішов, не знаходив нічого: ворожа міна за крок від нього лишалася б

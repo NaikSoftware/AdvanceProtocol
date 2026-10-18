@@ -1,7 +1,7 @@
 extends GutTest
 ## Task 2.10: MapData — дані карти, які битва бере на старті. `to_board()`
 ## переносить тайли й стан ґрунту без жодного власного рішення; `populate()`
-## додає юнітів і цілі в уже створений BattleState (§3.10, §6 — карта не
+## додає юнітів в уже створений BattleState (§6 — карта не
 ## створює BattleState сама, лише наповнює той, що вже існує).
 
 func _map(width: int = 4, height: int = 3) -> MapData:
@@ -79,20 +79,6 @@ func test_populate_reports_success_for_a_valid_map() -> void:
 	var state: BattleState = BattleState.create(m.to_board(), 2, 1)
 	assert_true(m.populate(state))
 	assert_eq(state.units.size(), 1)
-
-
-func test_populate_adds_neutral_objectives_and_sets_hold_target() -> void:
-	var m: MapData = _map()
-	m.objectives = [Vector2i(0, 0), Vector2i(3, 2)] as Array[Vector2i]
-	m.hold_target = 2
-	var state: BattleState = BattleState.create(m.to_board(), 2, 1)
-
-	m.populate(state)
-
-	assert_eq(state.objectives.size(), 2)
-	for o in state.objectives:
-		assert_eq(o.owner, -1, "§3.10: цілі карти стартують нейтральними — володіння вирішує гра, не карта")
-	assert_eq(state.objective_hold_target, 2)
 
 
 func test_populate_is_additive_not_a_reset_of_existing_state() -> void:
