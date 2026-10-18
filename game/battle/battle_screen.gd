@@ -622,8 +622,8 @@ func _end_pointer_press(screen_pos: Vector2) -> void:
 
 
 ## UiScale (Task 4.1) робить логічний px ≈ dp, тож поріг у dp — це вже логічні
-## пікселі події; ділити на content_scale_factor не можна — це знову зменшило б
-## поріг на телефоні в стільки ж разів (~6 px при факторі 1.63).
+## пікселі події; ділення на content_scale_factor дало б на телефоні з
+## фактором 1.627 лише ~6 dp замість задуманих 10.
 func _drag_threshold_px() -> float:
 	return _DRAG_THRESHOLD_DP
 

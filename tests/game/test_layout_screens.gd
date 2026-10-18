@@ -93,7 +93,7 @@ func test_screens_fit_phone_pc_tablet(p = use_parameters(_cases())) -> void:
 	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
 
 
-func test_hud_bars_do_not_overlap_on_phone(p = use_parameters(LayoutProbe.SIZES)) -> void:
+func test_hud_bars_do_not_overlap_at_any_size(p = use_parameters(LayoutProbe.SIZES)) -> void:
 	var size: Vector2i = p
 	var root: Control = await _mount("res://game/ui/hud.tscn", size)
 	var bars: Array[Control] = [root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")]
@@ -150,3 +150,32 @@ func test_primary_actions_never_need_scrolling(p = use_parameters(_primary_cases
 	for path: String in PRIMARY_ACTIONS[key]:
 		buttons.append(root.get_node(path) as Control)
 	assert_eq(LayoutProbe.clipped(root, buttons, p[1]), [] as Array[String], "%s @ %s %s" % p)
+
+
+## Картка з закріпленим футером на ПК і планшеті читається ОДНИМ блоком по
+## центру: прокрутка вмикається лише тоді, коли вміст не влазить (телефони).
+const FOOTED_SCREENS: Array[String] = [
+	"res://game/ui/match_setup.tscn", "res://game/ui/settings_screen.tscn",
+	"res://game/ui/results_screen.tscn",
+]
+
+
+func _block_cases() -> Array:
+	var out: Array = []
+	for scene: String in FOOTED_SCREENS:
+		for size: Vector2i in [LayoutProbe.PC, LayoutProbe.TABLET]:
+			for locale: String in LOCALES:
+				out.append([scene, size, locale])
+	return out
+
+
+func test_card_and_footer_are_one_centred_block_on_pc(p = use_parameters(_block_cases())) -> void:
+	TranslationServer.set_locale(p[2])
+	var root: Control = await _mount(p[0], p[1])
+	var card: Rect2 = (root.get_node("SafeArea/Frame/Scroll/Center/Card") as Control).get_global_rect()
+	var footer: Rect2 = (root.get_node("SafeArea/Frame/FooterRow/Footer") as Control).get_global_rect()
+	var where: String = "%s @ %s %s" % p
+	var gap: float = footer.position.y - card.end.y
+	assert_between(gap, 0.0, 16.0, "розрив картка→футер: " + where)
+	var block_centre: float = (card.position.y + footer.end.y) * 0.5
+	assert_almost_eq(block_centre, p[1].y * 0.5, 16.0, "блок по центру: " + where)

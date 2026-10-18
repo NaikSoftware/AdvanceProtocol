@@ -1,7 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://game/ui/match_setup.gd" id="1_setup"]
 [ext_resource type="Theme" path="res://game/ui/theme/ap_theme.tres" id="2_theme"]
+
+[ext_resource type="Script" path="res://game/ui/fit_scroll.gd" id="fit_scroll"]
 
 [sub_resource type="ButtonGroup" id="players_group"]
 
@@ -38,11 +40,12 @@ theme_override_constants/margin_bottom = 32
 
 [node name="Frame" type="VBoxContainer" parent="SafeArea"]
 layout_mode = 2
+alignment = 1
 theme_override_constants/separation = 12
 
 [node name="Scroll" type="ScrollContainer" parent="SafeArea/Frame"]
 layout_mode = 2
-size_flags_vertical = 3
+script = ExtResource("fit_scroll")
 horizontal_scroll_mode = 0
 
 [node name="Center" type="CenterContainer" parent="SafeArea/Frame/Scroll"]

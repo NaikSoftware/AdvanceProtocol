@@ -1,7 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://game/ui/results_screen.gd" id="1_results"]
 [ext_resource type="Theme" path="res://game/ui/theme/ap_theme.tres" id="2_theme"]
+
+[ext_resource type="Script" path="res://game/ui/fit_scroll.gd" id="fit_scroll"]
 
 [node name="ResultsScreen" type="Control"]
 layout_mode = 3
@@ -34,11 +36,12 @@ theme_override_constants/margin_bottom = 32
 
 [node name="Frame" type="VBoxContainer" parent="SafeArea"]
 layout_mode = 2
+alignment = 1
 theme_override_constants/separation = 12
 
 [node name="Scroll" type="ScrollContainer" parent="SafeArea/Frame"]
 layout_mode = 2
-size_flags_vertical = 3
+script = ExtResource("fit_scroll")
 horizontal_scroll_mode = 0
 
 [node name="Center" type="CenterContainer" parent="SafeArea/Frame/Scroll"]
