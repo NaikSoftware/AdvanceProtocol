@@ -19,6 +19,28 @@ static func repair_amount(rng: RandomNumberGenerator, engineer: Unit) -> int:
 	## §3.8: (40 + rand(0, ap_left - fire_cost)) / 2 — інженер, що весь хід їхав, ремонтує погано.
 	return (40 + Rules.roll(rng, engineer.ap - engineer.fire_cost())) / 2
 
+static func repair_bounds(engineer: Unit, target: Unit) -> Vector2i:
+	## Межі ремонту без кидка (для панелі): x — мінімум, y — максимум, обидва з кепом на бракуючі HP.
+	var missing: int = target.max_hp() - target.hp
+	return Vector2i(mini(20, missing), mini((40 + maxi(0, engineer.ap - engineer.fire_cost())) / 2, missing))
+
+static func action_status(state: BattleState, unit_id: int, action: int) -> Dictionary:
+	## Допустимі сусідні тайли дії та причина відмови (першого сусіда в порядку DIRS_4).
+	## Лише читає стан — правила беруться з validate(), не дублюються.
+	var tiles: Array[Vector2i] = []
+	var reason: String = ""
+	var e: Unit = state.get_unit(unit_id)
+	for d in Board.DIRS_4:
+		var p: Vector2i = (e.pos if e != null else Vector2i.ZERO) + d
+		if e != null and not state.board.in_bounds(p):
+			continue
+		var r: String = create(unit_id, action, p).validate(state)
+		if r == "":
+			tiles.append(p)
+		elif reason == "":
+			reason = r
+	return {"tiles": tiles, "reason": "" if not tiles.is_empty() else reason}
+
 func validate(state: BattleState) -> String:
 	if state.is_over():
 		return "ERR_MATCH_OVER"
