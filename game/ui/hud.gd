@@ -78,6 +78,8 @@ var _shown_player: int = -1
 @onready var _preview_damage_value: Label = %PreviewDamageValue
 @onready var _preview_move_box: HBoxContainer = %PreviewMoveBox
 @onready var _preview_ap_value: Label = %PreviewApValue
+@onready var _preview_repair_box: HBoxContainer = %PreviewRepairBox
+@onready var _preview_heal_value: Label = %PreviewHealValue
 @onready var _confirm_button: Button = %ConfirmButton
 @onready var _cancel_button: Button = %CancelButton
 @onready var _end_turn_button: Button = %EndTurnButton
@@ -184,7 +186,11 @@ func show_preview(preview: Dictionary) -> void:
 			_preview_ap_value.text = str(int(preview["ap_left"]))
 			_preview_move_box.visible = true
 		InputController.ActionType.ENGINEER:
-			pass  # верба й тайл уже видно на панелі й контурі цілей
+			# Верба й тайл уже видні на панелі й контурі цілей; ремонт додатково
+			# несе межі лікування з core/ — AP тут важить, тож гравець бачить їх.
+			if int(preview["action"]) == EngineerCommand.Action.REPAIR_UNIT:
+				_preview_heal_value.text = "%d–%d" % [int(preview["heal_min"]), int(preview["heal_max"])]
+				_preview_repair_box.visible = true
 		InputController.ActionType.SHOT:
 			var sector: int = int(preview["sector"])
 			_preview_sector_value.text = tr(UnitInspector.SECTOR_KEYS[sector])
@@ -205,6 +211,9 @@ func attach_controller(controller: InputController) -> void:
 	_controller = controller
 	controller.selection_changed.connect(show_selection)
 	controller.action_preview.connect(show_preview)
+	# Контролер скинув pending (озброєння верби, новий вибір) — прев'ю й Confirm
+	# не мають пережити дію, якої вже немає.
+	controller.pending_cleared.connect(_clear_preview)
 	_engineer_panel.action_chosen.connect(controller.arm_engineer)
 	_engineer_panel.cancel_pressed.connect(_on_cancel_pressed)
 	# Озброєна верба згортає панель, щоб не закривати тайли-цілі; відмова по
@@ -343,6 +352,7 @@ func _clear_preview() -> void:
 	_last_preview = {}
 	_preview_shot_box.visible = false
 	_preview_move_box.visible = false
+	_preview_repair_box.visible = false
 	_confirm_button.disabled = true
 	_inspector.highlight_sector(UnitInspector.NO_SECTOR)
 

@@ -238,6 +238,11 @@ func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
 			"action": _armed_action,
 			"target": cell,
 		}
+		# Межі ремонту — з core/, вигляд лише показує (§3.8, §3.13).
+		if _armed_action == EngineerCommand.Action.REPAIR_UNIT:
+			var bounds: Vector2i = EngineerCommand.repair_bounds(_selected_unit, state.unit_at(cell))
+			_pending["heal_min"] = bounds.x
+			_pending["heal_max"] = bounds.y
 		action_preview.emit(_pending)
 		return
 	var known: Dictionary = state.known_occupied_map(state.active_player)

@@ -100,6 +100,33 @@ func test_hud_bars_do_not_overlap_at_any_size(p = use_parameters(LayoutProbe.SIZ
 	assert_eq(LayoutProbe.overlapping(bars), [] as Array[String], str(p))
 
 
+## Task 9: рядок меж ремонту при згорнутій панелі інженера влізає на кожен розмір
+## обома мовами, а HUD не виходить за екран.
+func test_hud_repair_preview_fits_with_collapsed_panel(p = use_parameters(_repair_cases())) -> void:
+	TranslationServer.set_locale(p[1])
+	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
+	var hud := root as Hud
+	hud.show_selection(_service.state.add_unit(11, 0, Vector2i(4, 4), 0))
+	(root.get_node("%EngineerPanel") as EngineerPanel).set_armed(true)
+	hud.show_preview({"type": InputController.ActionType.ENGINEER, "unit_id": 1,
+		"action": EngineerCommand.Action.REPAIR_UNIT, "target": Vector2i(4, 3), "heal_min": 20, "heal_max": 43})
+	await LayoutProbe.settle(self)
+	var where: String = "%s %s" % p
+	assert_true((root.get_node("%PreviewRepairBox") as Control).is_visible_in_tree(), where)
+	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
+	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
+	assert_eq(LayoutProbe.overlapping([root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")] as Array[Control]),
+		[] as Array[String], where)
+
+
+func _repair_cases() -> Array:
+	var out: Array = []
+	for size: Vector2i in LayoutProbe.SIZES:
+		for locale: String in LOCALES:
+			out.append([size, locale])
+	return out
+
+
 func test_menu_content_capped_on_wide(p = use_parameters(CAPPED_CONTENT.keys())) -> void:
 	var scene: String = p
 	var pc: Control = await _mount(scene, LayoutProbe.PC)

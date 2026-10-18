@@ -647,3 +647,44 @@ func test_inspector_never_covers_the_action_buttons() -> void:
 		"передумова: юніт мусить проєктуватись НИЖЧЕ верху рядка кнопок, інакше клемп не задіяний")
 	assert_lte(panel.end.y, bar_top,
 		"панель %s заїхала на рядок кнопок (його верх — %s): кнопку підтвердження мусить бути видно" % [panel, bar_top])
+
+
+func _repair_preview(heal_min: int, heal_max: int) -> Dictionary:
+	return {"type": InputController.ActionType.ENGINEER, "unit_id": 1, "action": EngineerCommand.Action.REPAIR_UNIT,
+		"target": Vector2i(4, 3), "heal_min": heal_min, "heal_max": heal_max}
+
+
+func test_repair_preview_shows_both_heal_bounds_verbatim() -> void:
+	hud.bind(_state())
+	hud.show_preview(_repair_preview(20, 43))
+	assert_true((hud.get_node("%PreviewRepairBox") as Control).visible)
+	assert_eq(_label("PreviewHealValue").text, "20–43")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled)
+	hud.show_preview(_move_preview(10))
+	assert_false((hud.get_node("%PreviewRepairBox") as Control).visible, "прев'ю руху гасить ремонт")
+
+
+func test_non_repair_engineer_preview_has_no_repair_box() -> void:
+	hud.bind(_state())
+	hud.show_preview({"type": InputController.ActionType.ENGINEER, "unit_id": 1,
+		"action": EngineerCommand.Action.LAY_MINE, "target": Vector2i(4, 3)})
+	assert_false((hud.get_node("%PreviewRepairBox") as Control).visible)
+
+
+## Озброєння верби скидає pending у контролері; прев'ю руху (і Confirm) не мусить
+## пережити це на екрані.
+func test_arming_a_verb_over_a_pending_move_clears_the_hud_preview() -> void:
+	var state: BattleState = _state()
+	var eng: Unit = state.add_unit(11, 0, Vector2i(3, 3), 0)
+	state.add_unit(5, 1, Vector2i(9, 9), 0)
+	_service.begin()
+	_service.take_events()
+	var controller := InputController.new(_service, SpyZoneOverlay.new())
+	hud.bind(state)
+	hud.attach_controller(controller)
+	controller.select_unit(eng)
+	controller.tap_cell(Vector2i(3, 5))
+	assert_true((hud.get_node("%PreviewMoveBox") as Control).visible, "передумова: прев'ю руху")
+	controller.arm_engineer(EngineerCommand.Action.LAY_MINE)
+	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
+	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)

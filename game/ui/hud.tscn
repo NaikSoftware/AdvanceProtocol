@@ -131,6 +131,19 @@ text = "hud_ap_left"
 [node name="PreviewApValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewMoveBox"]
 unique_name_in_owner = true
 
+[node name="PreviewRepairBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+theme_override_constants/separation = 8
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="PreviewHealCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewRepairBox"]
+text = "hud_heal"
+
+[node name="PreviewHealValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewRepairBox"]
+unique_name_in_owner = true
+
 [node name="ButtonRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
 size_flags_horizontal = 10
 theme_override_constants/separation = 16

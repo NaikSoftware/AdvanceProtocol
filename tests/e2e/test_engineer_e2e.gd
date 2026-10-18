@@ -194,3 +194,87 @@ func test_strip_cancel_and_completed_action_restore_the_panel() -> void:
 	await _e2e.confirm()
 	assert_eq(_state().mines.size(), 1)
 	assert_false((panel.get_node("%Strip") as Control).visible, "дію виконано — смужку знято")
+
+
+# --- Task 9: межі ремонту до підтвердження ---
+
+func _heal_text() -> String:
+	return (_e2e.hud().get_node("%PreviewHealValue") as Label).text
+
+
+func _repair_box() -> Control:
+	return _e2e.hud().get_node("%PreviewRepairBox")
+
+
+func _boot_hurt_tank(hp: int, eng_ap: int = -1) -> void:
+	await _boot([_spawn(MEDIUM_TANK, 0, TARGET)], {"prepare": func(st: BattleState) -> void:
+		st.unit_at(TARGET).hp = hp
+		if eng_ap >= 0:
+			st.unit_at(ENG).ap = eng_ap})
+	_e2e.tap(ENG)
+	await _e2e.settle()
+	_e2e.press(_e2e.engineer_panel().button_for(A.REPAIR_UNIT))
+	await _e2e.settle()
+	_e2e.tap(TARGET)
+	await _e2e.settle()
+
+
+func test_repair_preview_full_ap_shows_20_to_43() -> void:
+	await _boot_hurt_tank(300)
+	assert_true(_repair_box().is_visible_in_tree())
+	assert_eq(_heal_text(), "20–43")
+	var tank: Unit = _state().unit_at(TARGET)
+	await _e2e.confirm()
+	# Golden, seed 7: перший кидок матчу дає 20 (див. test_repair_unit_heals_within_bounds).
+	assert_eq(tank.hp, 320)
+	assert_false(_repair_box().visible, "дію виконано — прев'ю знято")
+
+
+func test_repair_preview_after_one_field_step_shows_20_to_30() -> void:
+	# 51 AP — стан інженера після кроку по полю, як у core-тесті repair_bounds.
+	await _boot_hurt_tank(300, 51)
+	assert_eq(_heal_text(), "20–30")
+	var tank: Unit = _state().unit_at(TARGET)
+	await _e2e.confirm()
+	# Seed 7: randi_range(0, 51 - 30) = 1 -> (40 + 1) / 2 = 20.
+	assert_eq(tank.hp, 321)
+
+
+func test_repair_preview_capped_by_missing_hp() -> void:
+	await _boot_hurt_tank(388)
+	assert_eq(_heal_text(), "12–12")
+	var tank: Unit = _state().unit_at(TARGET)
+	await _e2e.confirm()
+	assert_eq(tank.hp, 400)
+
+
+## Follow-up C: озброєння верби над відкладеним рухом знімає прев'ю руху в HUD.
+func test_arming_a_verb_clears_a_pending_move_preview() -> void:
+	await _boot()
+	_e2e.tap(ENG)
+	await _e2e.settle()
+	_e2e.tap(Vector2i(1, 1))
+	await _e2e.settle()
+	var hud: Hud = _e2e.hud()
+	assert_true((hud.get_node("%PreviewMoveBox") as Control).visible, "передумова: прев'ю руху")
+	_e2e.press(_e2e.engineer_panel().button_for(A.LAY_MINE))
+	await _e2e.settle()
+	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
+	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)
+
+
+## Follow-up B: озброєна верба не переживає гейт передачі.
+func test_armed_verb_does_not_survive_the_handover_gate() -> void:
+	await _boot()
+	var panel: EngineerPanel = _e2e.engineer_panel()
+	_e2e.tap(ENG)
+	_e2e.press(panel.button_for(A.LAY_MINE))
+	await _e2e.settle()
+	assert_true((panel.get_node("%Strip") as Control).visible, "передумова: озброєно")
+	await _e2e.end_turn()
+	assert_true(_e2e.gate().is_visible_in_tree(), "гейт показано")
+	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
+	assert_false((panel.get_node("%Strip") as Control).is_visible_in_tree())
+	await _e2e.confirm_gate()
+	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
+	assert_false((panel.get_node("%Strip") as Control).is_visible_in_tree())
