@@ -72,7 +72,7 @@ func test_match_continues_between_remaining_two() -> void:
 
 
 func test_three_player_map_runs_with_two_players() -> void:
-	var map: MapData = load("res://maps/urban.tres") as MapData
+	var map: MapData = load("res://tests/fixtures/three_player_map.tres") as MapData
 	assert_true(MatchSetup.map_supports(map, 3), "передумова: карта розрахована на трьох")
 	_e2e.service = E2E.RecService.new()
 	add_child_autofree(_e2e.service)

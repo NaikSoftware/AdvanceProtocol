@@ -110,11 +110,9 @@ results_draw,Нічия,Draw
 results_player,Гравець %d,Player %d
 results_not_finished,Матч не завершено,Match not finished
 pause_save_failed,Не вдалося зберегти,Could not save
-map_bridge,Переправа,River Crossing
-map_urban,Місто,Urban
-map_open,Відкрите поле,Open Field
-map_forest,Ліс,Forest
-map_mountain,Гори,Mountains
+map_river,Річка,River
+map_crossroads,Перехрестя,Crossroads
+map_ridge,Хребет,Ridge
 eng_lay_mine,Поставити міну,Lay mine
 eng_clear_mine,Зняти міну,Clear mine
 eng_repair_bridge,Відновити міст,Repair bridge

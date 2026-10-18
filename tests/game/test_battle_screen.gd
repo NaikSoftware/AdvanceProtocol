@@ -288,6 +288,23 @@ func test_fallback_entry_starts_a_default_match_from_the_shipped_map() -> void:
 	assert_not_null(screen.input_controller(), "резервний вхід мусить підняти InputController")
 
 
+## Збереження зі шляхом до видаленої карти (фаза 5a прибрала старі п'ять) не мусить
+## лишати порожню дошку — бій стартує на запасній «Річці».
+func test_a_save_pointing_at_a_deleted_map_falls_back_to_river() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	service.configure("res://maps/urban.tres", 2, 1)
+	var screen: Node3D = _screen()
+
+	screen.launch(service)
+
+	assert_not_null(service.state, "бій стартував")
+	if service.state == null:
+		return
+	assert_eq(service.state.board.width, 26)
+	assert_eq(service.state.board.height, 22)
+
+
 ## Гейт — половина, що захищає решту сьогоднішнього набору: без нього кожен
 ## тест цього файла отримував би другий, фоновий матч на автозавантаженому
 ## MatchService поверх власного ізольованого екземпляра.

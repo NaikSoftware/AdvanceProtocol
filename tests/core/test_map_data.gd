@@ -94,20 +94,20 @@ func test_populate_is_additive_not_a_reset_of_existing_state() -> void:
 	assert_eq(state.units.size(), 2, "юніт, доданий до populate(), не мусить зникнути")
 
 
-# --- Task 2.10, Крок 3: ручна карта skirmish_bridge ------------------------
+# --- Фаза 5a: поставна карта «Річка» ---------------------------------------
 
-func test_skirmish_bridge_map_loads_and_populates_a_sane_match() -> void:
-	var m: MapData = load("res://maps/skirmish_bridge.tres") as MapData
-	assert_not_null(m, "res://maps/skirmish_bridge.tres мусить завантажуватись як MapData")
-	assert_eq(m.width, 16)
-	assert_eq(m.height, 12)
-	assert_eq(m.spawns.size(), 18, "по 6 юнітів на кожного з 3 гравців (Task 4.12)")
+func test_river_map_loads_and_populates_a_sane_match() -> void:
+	var m: MapData = load("res://maps/river.tres") as MapData
+	assert_not_null(m, "res://maps/river.tres мусить завантажуватись як MapData")
+	assert_eq(m.width, 26)
+	assert_eq(m.height, 22)
+	assert_eq(m.spawns.size(), 12, "по 6 юнітів на кожного з 2 гравців")
 
 	var board: Board = m.to_board()
 	# Річка блокує брід поза мостом, а сам міст — прохідний.
-	assert_false(board.penalty_at(Vector2i(8, 0)) < Terrain.IMPASSABLE, "річка непрохідна поза мостом")
-	assert_true(board.penalty_at(Vector2i(8, 3)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
-	assert_true(board.penalty_at(Vector2i(8, 4)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
+	assert_false(board.penalty_at(Vector2i(8, 10)) < Terrain.IMPASSABLE, "річка непрохідна поза мостом")
+	assert_true(board.penalty_at(Vector2i(12, 10)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
+	assert_true(board.penalty_at(Vector2i(12, 11)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
 
 	var state: BattleState = BattleState.create(board, 2, 1)
 	m.populate(state)

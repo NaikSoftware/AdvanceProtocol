@@ -43,7 +43,7 @@ const _UnitViewScene := preload("res://game/battle/unit_view.tscn")
 ## Фіксований сід (не randi() — §6 CLAUDE.md, детермінізм): це запасний,
 ## а не бойовий шлях, тож повторюваність важливіша за різноманіття.
 const _FALLBACK_SEED: int = 1
-const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
+const _FallbackMap := preload("res://maps/river.tres")
 
 @onready var _camera_rig: IsoCameraRig = %CameraRig
 @onready var _board_view: BoardView = %BoardView

@@ -8,7 +8,9 @@ const MainMenuScene := preload("res://game/ui/main_menu.tscn")
 const ResultsScene := preload("res://game/ui/results_screen.tscn")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 var _test_save: String = "user://test_save_%d.json" % OS.get_process_id()
-const MAP_PATH: String = "res://maps/skirmish_bridge.tres"
+const MAP_PATH: String = "res://maps/river.tres"
+## Поставні карти — лише на двох; трьох гравців тримає тестова карта (фаза 5a).
+const THREE_PLAYER_MAP: String = "res://tests/fixtures/three_player_map.tres"
 ## Task 4.12: усі поставні карти тепер на трьох — карту лише на двох тест пише сам.
 var _two_owner_map: String = "user://test_two_owner_map_%d.tres" % OS.get_process_id()
 
@@ -61,14 +63,14 @@ func _finish_all_processed_tweens() -> void:
 
 func test_configured_seed_players_and_map_ground_land_in_state() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 3, 777)
+	service.configure(THREE_PLAYER_MAP, 3, 777)
 	var screen: BattleScreen = _screen()
 
 	screen.launch(service)
 
 	assert_eq(service.state.seed_value, 777)
 	assert_eq(service.state.player_count, 3)
-	assert_eq(service.state.board.ground_state, (load(MAP_PATH) as MapData).ground_state)
+	assert_eq(service.state.board.ground_state, (load(THREE_PLAYER_MAP) as MapData).ground_state)
 
 
 func test_new_match_starts_behind_the_gate() -> void:
@@ -125,12 +127,12 @@ func test_configure_without_seed_draws_a_random_one() -> void:
 
 func test_rematch_keeps_map_and_players_and_changes_seed() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 3, 5)
+	service.configure(THREE_PLAYER_MAP, 3, 5)
 	_screen().launch(service)
 
 	service.rematch()
 
-	assert_eq(service.map_path, MAP_PATH)
+	assert_eq(service.map_path, THREE_PLAYER_MAP)
 	assert_eq(service.players, 3)
 	assert_ne(service.seed_value, 5)
 	assert_eq(service.launch_mode, MatchServiceScript.Launch.NEW)
@@ -425,14 +427,14 @@ func test_map_selector_shows_translated_names_and_keeps_selection_on_locale_swit
 	var options: OptionButton = setup.get_node("%MapOptions")
 	var idx: int = setup._map_paths.find(MAP_PATH)
 	options.select(idx)
-	assert_eq(options.get_item_text(idx), "Переправа")
-	assert_eq(options.get_item_text(setup._map_paths.find("res://maps/urban.tres")), "Місто")
+	assert_eq(options.get_item_text(idx), "Річка")
+	assert_eq(options.get_item_text(setup._map_paths.find("res://maps/crossroads.tres")), "Перехрестя")
 
 	TranslationServer.set_locale("en")
 	setup.notification(Node.NOTIFICATION_TRANSLATION_CHANGED)
 
-	assert_eq(options.get_item_text(idx), "River Crossing")
-	assert_eq(options.get_item_text(setup._map_paths.find("res://maps/urban.tres")), "Urban")
+	assert_eq(options.get_item_text(idx), "River")
+	assert_eq(options.get_item_text(setup._map_paths.find("res://maps/crossroads.tres")), "Crossroads")
 	assert_eq(options.selected, idx, "вибір не злетів")
 	var service: Node = _service()
 	assert_true(setup.configure_from_choice(service))
@@ -445,7 +447,11 @@ func test_map_selector_shows_translated_names_and_keeps_selection_on_locale_swit
 func test_three_players_offered_only_when_map_has_three_owners() -> void:
 	var setup: MatchSetup = (load("res://game/ui/match_setup.tscn") as PackedScene).instantiate()
 	add_child_autofree(setup)
-	assert_false((setup.get_node("%P3") as Button).disabled, "поставні карти — на трьох")
+	assert_true((setup.get_node("%P3") as Button).disabled, "поставні карти — лише на двох (фаза 5a)")
+	setup._map_paths.assign([THREE_PLAYER_MAP])
+	(setup.get_node("%MapOptions") as OptionButton).select(0)
+	setup._sync_player_options()
+	assert_false((setup.get_node("%P3") as Button).disabled, "карта з трьома власниками спавнів")
 	setup._map_paths.assign([_save_two_owner_map()])
 	(setup.get_node("%MapOptions") as OptionButton).select(0)
 	setup._sync_player_options()

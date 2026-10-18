@@ -1,0 +1,34 @@
+# Річка: три переправи — центральний міст у містечку і два флангові.
+name_key=map_river
+ground=MUD
+tiles:
+TTTT......................
+TTTT..=..........TTTTTTTT.
+......=..........TTTTTTTT.
+....==========...TTTTTTTT.
+TTT.=........=...TTTTTTTT.
+TTT.=.^^^^...=...TTTTTTTT.
+TTT.=.^^^.BBB=.BB..TTT....
+....=.^^^.BB.=rBB..TTT....
+~~~.=.....BB.=.BB.........
+~~~.=..~~~...=.........~~~
+wwwwHwwwwwwwHHwwwwwwwHwwww
+wwwwHwwwwwwwHHwwwwwwwHwwww
+~~~.........=...~~~..=.~~~
+.........BB.=.BB.....=.~~~
+....TTT..BBr=.BB.^^^.=....
+....TTT..BB.=BBB.^^^.=.TTT
+.TTTTTTTT...=...^^^^.=.TTT
+.TTTTTTTT...=........=.TTT
+.TTTTTTTT...==========....
+.TTTTTTTT..........=......
+.TTTTTTTT..........=..TTTT
+......................TTTT
+spawns:
+# type_id x y facing — лише гравець 0 (низ); гравець 1 — дзеркало через центр
+0 17 19 7
+1 18 20 7
+2 19 19 0
+5 20 20 7
+9 21 20 7
+11 19 21 0
