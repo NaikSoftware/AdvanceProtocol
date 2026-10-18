@@ -93,6 +93,7 @@ var _shown_player: int = -1
 @onready var _preview_drone_damage_value: Label = %PreviewDroneDamageValue
 @onready var _drone_range_label: Label = %DroneRangeLabel
 @onready var _drone_reason_label: Label = %DroneReasonLabel
+@onready var _threat_floor_label: Label = %ThreatFloorLabel
 ## Поля безпеки читаються з того самого вузла, що їх і задає (§9: одне джерело
 ## правди) — панель поза цим контейнером, але поважає ті самі межі, бо виріз
 ## екрана однаково не питає, у контейнері вузол чи ні.
@@ -243,6 +244,9 @@ func attach_controller(controller: InputController) -> void:
 	controller.action_refused.connect(func(reason: String) -> void:
 		if _drone_button.visible:
 			_show_drone_reason(reason))
+	# §3.13: огляд ворога — позначки лише нижня межа, і UI мусить сказати це вголос.
+	controller.inspected.connect(func(_r: Array[Vector2i], _d: Array[Vector2i], _m: Array[int], is_floor: bool) -> void:
+		_show_threat_floor(is_floor))
 
 
 ## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.
@@ -407,6 +411,11 @@ func _on_end_turn_pressed() -> void:
 func _show_drone_range() -> void:
 	_drone_range_label.text = tr("hud_drone_range") % DroneCommand.RANGE
 	_drone_range_label.visible = true
+
+
+func _show_threat_floor(on: bool) -> void:
+	_threat_floor_label.text = tr("hud_threat_floor")
+	_threat_floor_label.visible = on
 
 
 func _show_drone_reason(key: String) -> void:

@@ -637,3 +637,135 @@ func test_drone_tap_on_empty_or_off_board_disarms_and_keeps_selection() -> void:
 		assert_eq(_previews.size(), 0)
 		controller.tap_cell(u[1].pos)
 		assert_eq(int(_previews.back()["type"]), InputController.ActionType.SHOT, "далі — звичайний постріл")
+
+
+# --- Task 14: інспекція (§3.13) -----------------------------------------
+
+var _inspections: Array[Dictionary] = []
+
+
+func _watch_inspections() -> void:
+	_inspections = []
+	controller.inspected.connect(func(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int], is_floor: bool) -> void:
+		_inspections.append({"ring": ring, "drone_ring": drone_ring, "marked": marked, "is_floor": is_floor}))
+
+
+## Усе розвідано обома гравцями — інспекцію гейтить лише seen (§3.5).
+func _begin_all_seen() -> void:
+	_begin_and_drain()
+	for p in service.state.player_count:
+		service.state.vision[p].seen.fill(1)
+
+
+const _EMPTY_INSPECTION: Dictionary = {"ring": [], "drone_ring": [], "marked": [], "is_floor": false}
+
+
+func test_tap_enemy_with_nothing_selected_inspects() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)  # броньовик, 3 від танка
+	var far: Unit = service.state.add_unit(0, 0, Vector2i(10, 2), 0)  # 8 від танка
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	tank.ap = 0  # §3.13: AP ворога не перевіряється
+	_watch_inspections()
+
+	controller.tap_cell(tank.pos)
+
+	assert_eq(_inspections.size(), 1)
+	var i: Dictionary = _inspections[-1]
+	# Коло r=4 на відкритій розвіданій дошці — 49 тайлів.
+	assert_eq(i["ring"].size(), 49)
+	assert_eq(i["ring"], Targeting.reach_tiles(service.state, tank.id, 4))
+	assert_eq(i["marked"], [car.id])
+	assert_false(i["marked"].has(far.id))
+	assert_eq(i["drone_ring"], [])
+	assert_true(i["is_floor"])
+	assert_eq(_selections.size(), 0, "інспекція ворога — не вибір")
+
+
+func test_tap_enemy_with_unit_selected_still_previews_shot() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	controller.tap_cell(car.pos)
+	_watch_inspections()
+
+	controller.tap_cell(tank.pos)
+
+	assert_eq(_previews.size(), 1)
+	assert_eq(_previews[0]["type"], InputController.ActionType.SHOT)
+	assert_eq(_inspections.size(), 0, "прев'ю пострілу не перемикає інспекцію на ворога")
+
+
+func test_own_unit_ring_shown_at_zero_ap() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	car.ap = 0
+	_watch_inspections()
+
+	controller.tap_cell(car.pos)
+
+	var i: Dictionary = _inspections[-1]
+	# Коло r=3 — 29 тайлів.
+	assert_eq(i["ring"].size(), 29)
+	assert_eq(i["ring"], Targeting.reach_tiles(service.state, car.id, 3))
+	assert_eq(i["marked"], [], "AP 0 — стріляти нікуди")
+	assert_false(i["is_floor"])
+
+
+func test_own_unit_marks_are_firing_targets() -> void:
+	_start()
+	var car: Unit = service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	_begin_all_seen()
+	_watch_inspections()
+
+	controller.tap_cell(car.pos)
+
+	assert_eq(_inspections[-1]["marked"], [tank.id])
+
+
+func test_own_squad_with_drones_has_drone_ring() -> void:
+	_start()
+	var squad: Unit = service.state.add_unit(1, 0, Vector2i(10, 10), 0)
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 15), 0)  # 5 — лише дрон
+	_begin_all_seen()
+	_watch_inspections()
+
+	controller.tap_cell(squad.pos)
+
+	var i: Dictionary = _inspections[-1]
+	assert_eq(i["drone_ring"].size(), 81, "коло r=5")
+	assert_eq(i["drone_ring"], Targeting.reach_tiles(service.state, squad.id, DroneCommand.RANGE))
+	assert_eq(i["marked"], [tank.id])
+
+
+func test_inspect_cleared_on_empty_tap() -> void:
+	_start()
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	_begin_all_seen()
+	_watch_inspections()
+	controller.tap_cell(tank.pos)
+
+	controller.tap_cell(Vector2i(0, 0))
+
+	assert_eq(_inspections.size(), 2)
+	assert_eq(_inspections[-1], _EMPTY_INSPECTION)
+
+
+## battle_screen на TurnStarted кличе select_unit(null) до показу гейта.
+func test_inspect_cleared_after_handover() -> void:
+	_start()
+	var tank: Unit = service.state.add_unit(5, 1, Vector2i(10, 10), 0)
+	service.state.add_unit(2, 0, Vector2i(10, 7), 0)
+	_begin_all_seen()
+	_watch_inspections()
+	controller.tap_cell(tank.pos)
+
+	controller.select_unit(null)
+
+	assert_eq(_inspections[-1], _EMPTY_INSPECTION)

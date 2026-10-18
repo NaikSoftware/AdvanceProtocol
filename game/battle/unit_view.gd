@@ -99,6 +99,8 @@ const _CROSSHAIR_COLOR: Color = Color("ff7a4a")
 ## Заборонена ціль дрона (§3.13): хрест, а не приціл, і інший колір — «сюди не можна»
 ## мусить читатись інакше, ніж «сюди прилетить».
 const _FORBIDDEN_COLOR: Color = Color("d23c3c")
+## Позначка огляду (§3.13) — колір кільця TargetOverlay, щоб читалась як «у цьому кільці».
+const _THREAT_COLOR: Color = TargetOverlay.COLOR
 
 ## Поточний факінг (0..7, порядок Board.DIRS_8). Читається ззовні для UI цілей.
 var facing: int = 0
@@ -106,6 +108,7 @@ var facing: int = 0
 @onready var _silhouette: Node3D = $Silhouette
 @onready var _crosshair: Sprite3D = $Crosshair
 @onready var _forbidden: Sprite3D = $Forbidden
+@onready var _threatened: Sprite3D = $Threatened
 @onready var _hp_bar: Sprite3D = $HpBar
 @onready var _hp_label: Label3D = $HpLabel
 @onready var _drone_icon: Sprite3D = $DroneIcon
@@ -133,6 +136,8 @@ func _ready() -> void:
 	_crosshair.modulate = _CROSSHAIR_COLOR
 	_forbidden.texture = _cross_texture()
 	_forbidden.modulate = _FORBIDDEN_COLOR
+	_threatened.texture = _crosshair_texture()
+	_threatened.modulate = _THREAT_COLOR
 
 
 func bind(unit: Unit) -> void:
@@ -330,6 +335,16 @@ func set_targeted(targeted: bool) -> void:
 ## Targeting.drone_marks() крізь battle_screen; вузол лише показує.
 func set_forbidden(on: bool) -> void:
 	_forbidden.visible = on
+
+
+## Позначений оглядом юніта (§3.13): рішення — з Targeting крізь
+## InputController.inspected і battle_screen; вузол лише показує.
+func set_threatened(on: bool) -> void:
+	_threatened.visible = on
+
+
+func is_threatened() -> bool:
+	return _threatened.visible
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed(), і два

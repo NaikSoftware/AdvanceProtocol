@@ -143,6 +143,23 @@ func test_hud_drone_controls_fit(p = use_parameters(_repair_cases())) -> void:
 		root.get_node("%EndTurnButton"), root.get_node("%EngineerPanel")] as Array[Control]), [] as Array[String], where)
 
 
+## Task 14: рядок «прогноз — нижня межа» поряд з озброєним дроном (найтісніший
+## нижній рядок) влазить на кожен розмір обома мовами.
+func test_hud_threat_floor_fits(p = use_parameters(_repair_cases())) -> void:
+	TranslationServer.set_locale(p[1])
+	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
+	var hud := root as Hud
+	hud.show_preview({"type": InputController.ActionType.DRONE, "unit_id": 1, "target_id": 2, "min": 120, "max": 180})
+	hud._show_drone_range()
+	hud._show_threat_floor(true)
+	await LayoutProbe.settle(self)
+	var where: String = "%s %s" % p
+	assert_true((root.get_node("%ThreatFloorLabel") as Control).is_visible_in_tree(), where)
+	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
+	assert_eq(LayoutProbe.overlapping([root.get_node("SafeArea/Layout/TopBar"), root.get_node("%BottomBar")] as Array[Control]),
+		[] as Array[String], where)
+
+
 func _repair_cases() -> Array:
 	var out: Array = []
 	for size: Vector2i in LayoutProbe.SIZES:

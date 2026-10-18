@@ -18,5 +18,12 @@ func show_tiles(tiles: Array[Vector2i]) -> void:
 	_board_view.draw_contour(ZoneOverlay._edges(tiles, COLOR), BoardView.LAYER_TARGETS)
 
 
+## Огляд юніта (§3.13): кільце дальності й кільце дрона на власному шарі — режими
+## верби й дрона перемальовують LAYER_TARGETS, а кільце вибраного юніта лишається.
+func show_rings(ring: Array[Vector2i], drone_ring: Array[Vector2i]) -> void:
+	_board_view.draw_contour(ZoneOverlay._edges(ring, COLOR) + ZoneOverlay._edges(drone_ring, COLOR),
+		BoardView.LAYER_INSPECT)
+
+
 func clear() -> void:
 	_board_view.clear_contour(BoardView.LAYER_TARGETS)

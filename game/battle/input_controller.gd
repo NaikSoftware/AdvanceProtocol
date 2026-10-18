@@ -34,6 +34,10 @@ signal action_refused(reason: String)
 ## Режим DRONE озброєно: кільце дальності й позначки {id цілі: причина або ""} —
 ## обидва з Targeting (§3.13), вигляд лише малює.
 signal drone_armed(ring: Array[Vector2i], marks: Dictionary)
+## Огляд юніта (§3.13): кільце дальності, кільце дрона й позначені id — усе з
+## Targeting. is_floor — оглянуто ворога: позначки лише нижня межа. Порожні
+## масиви — огляд знято.
+signal inspected(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int], is_floor: bool)
 
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
@@ -92,6 +96,10 @@ func select_unit(unit: Unit) -> void:
 	_selected_unit = unit
 	selection_changed.emit(unit)
 	_recompute_zones_for_selected()
+	if unit == null:
+		inspect_clear()
+	else:
+		inspect_unit(unit)
 
 
 ## Перераховує _zones для ПОТОЧНОГО _selected_unit і синхронізує оверлей —
@@ -154,7 +162,12 @@ func tap_cell(cell: Vector2i) -> void:
 		return
 
 	if _selected_unit == null:
-		return  # нічого не вибрано — тап по порожньому чи ворожому тайлі нічого не важить
+		# Нічого не вибрано: ворог — огляд його загрози, порожнє — зняти огляд (§3.13).
+		if tapped != null:
+			inspect_unit(tapped)
+		else:
+			inspect_clear()
+		return
 
 	if tapped != null:
 		_maybe_set_pending_shot(state, tapped)
@@ -207,6 +220,39 @@ func _sync_after_action() -> void:
 		_deselect()
 		return
 	_recompute_zones_for_selected()
+	inspect_unit(_selected_unit)
+
+
+## §3.13: кільце й позначки будь-якого видимого юніта. Свій — firing_targets()
+## (дальність, видимість, AP); ворог — threatened_units() (лише сам юніт, AP не
+## перевіряється) і is_floor. Дрон — окреме кільце, поки боєкомплект > 0 (він
+## публічний, §3.9). Жодної геометрії тут: усе з Targeting.
+## Без _input_blocked(): це читання, а _sync_after_action() кличе його саме тоді,
+## коли щойно подані події ще програються.
+func inspect_unit(unit: Unit) -> void:
+	var state: BattleState = _match_service.state
+	var ring: Array[Vector2i] = []
+	var drone_ring: Array[Vector2i] = []
+	var marked: Array[int] = []
+	var own: bool = unit != null and unit.owner == state.active_player
+	if unit != null and unit.is_alive():
+		ring = Targeting.reach_tiles(state, unit.id, unit.attack_range())
+		if unit.drones_left > 0:
+			drone_ring = Targeting.reach_tiles(state, unit.id, DroneCommand.RANGE)
+		var hits: Array = []
+		if own:
+			hits = Targeting.firing_targets(state, unit.id) + Targeting.drone_targets(state, unit.id)
+		else:
+			hits = Targeting.threatened_units(state, unit.id, state.active_player) \
+				+ Targeting.drone_threatened_units(state, unit.id, state.active_player)
+		for u: Unit in hits:
+			if not marked.has(u.id):
+				marked.append(u.id)
+	inspected.emit(ring, drone_ring, marked, unit != null and not own)
+
+
+func inspect_clear() -> void:
+	inspected.emit([] as Array[Vector2i], [] as Array[Vector2i], [] as Array[int], false)
 
 
 func cancel_pending() -> void:
@@ -374,6 +420,7 @@ func _deselect() -> void:
 	_clear_pending()
 	_zone_overlay.clear()
 	selection_changed.emit(null)
+	inspect_clear()
 
 
 func _is_playing() -> bool:

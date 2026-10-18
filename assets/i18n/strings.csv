@@ -53,6 +53,7 @@ hud_heal,Ремонт,Repair
 hud_drones,Дрони,Drones
 hud_drone_strike,Дрон (%d),Drone (%d)
 hud_drone_range,Радіус %d,Range %d
+hud_threat_floor,Щонайменше: мережа розвідки ворога прихована,At least: the enemy's spotter network is hidden
 hud_class,Клас,Class
 hud_confirm,Підтвердити,Confirm
 hud_cancel,Скасувати,Cancel

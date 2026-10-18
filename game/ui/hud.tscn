@@ -168,6 +168,11 @@ unique_name_in_owner = true
 visible = false
 size_flags_vertical = 4
 
+[node name="ThreatFloorLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
+unique_name_in_owner = true
+visible = false
+size_flags_vertical = 4
+
 [node name="ButtonRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
 size_flags_horizontal = 10
 theme_override_constants/separation = 16
