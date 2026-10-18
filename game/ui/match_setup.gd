@@ -1,14 +1,12 @@
 class_name MatchSetup
 extends Control
 ## Task 3.3: налаштування матчу. Обирається кількість гравців (2/3),
-## карта зі списку maps/, стан ґрунту й кольори гравців.
+## карта зі списку maps/. Стан ґрунту береться з самої карти (MapData.ground_state),
+## тож окремого вибору немає.
 ##
 ## Сід на екрані НЕ показується: він генерується випадково під капотом при
 ## старті матчу (детермінізм лишається — крок логіки Task 3.3). Гравцеві в
 ## хот-сит сирий сід не потрібен.
-##
-## Колір гравців на екрані поки лише показується: у бойовому вигляді його ніхто
-## не споживає, тож у конфіг він не йде.
 
 ## Старт матчу налаштовано; у справжньому запуску веде в бій (тести підміняють).
 signal started
@@ -106,17 +104,10 @@ func configure_from_choice(service: Node) -> bool:
 		return false
 	if _chosen_players() == 3 and not _selected_map_supports_3():
 		return false
-	service.configure(_map_paths[_map_options.selected], _chosen_players(), _chosen_ground())
+	service.configure(_map_paths[_map_options.selected], _chosen_players())
 	return true
 
 
 func _chosen_players() -> int:
 	return 3 if %P3.button_pressed else 2
 
-
-func _chosen_ground() -> int:
-	if %Mud.button_pressed:
-		return Terrain.GroundState.MUD
-	if %Frozen.button_pressed:
-		return Terrain.GroundState.FROZEN
-	return Terrain.GroundState.DRY

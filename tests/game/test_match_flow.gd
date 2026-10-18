@@ -59,21 +59,21 @@ func _finish_all_processed_tweens() -> void:
 
 # --- 3.3: конфіг -> бій -------------------------------------------------
 
-func test_configured_seed_players_and_ground_land_in_state() -> void:
+func test_configured_seed_players_and_map_ground_land_in_state() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 3, Terrain.GroundState.MUD, 777)
+	service.configure(MAP_PATH, 3, 777)
 	var screen: BattleScreen = _screen()
 
 	screen.launch(service)
 
 	assert_eq(service.state.seed_value, 777)
 	assert_eq(service.state.player_count, 3)
-	assert_eq(service.state.board.ground_state, Terrain.GroundState.MUD)
+	assert_eq(service.state.board.ground_state, (load(MAP_PATH) as MapData).ground_state)
 
 
 func test_new_match_starts_behind_the_gate() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY, 3)
+	service.configure(MAP_PATH, 2, 3)
 	var screen: BattleScreen = _screen()
 
 	screen.launch(service)
@@ -107,22 +107,21 @@ func test_broken_map_refuses_to_start_and_returns_to_menu() -> void:
 
 func test_configure_without_seed_draws_a_random_one() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY)
+	service.configure(MAP_PATH, 2)
 	var first: int = service.seed_value
-	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY)
+	service.configure(MAP_PATH, 2)
 	assert_ne(service.seed_value, first, "новий матч — новий випадковий сід")
 
 
-func test_rematch_keeps_map_players_ground_and_changes_seed() -> void:
+func test_rematch_keeps_map_and_players_and_changes_seed() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 3, Terrain.GroundState.FROZEN, 5)
+	service.configure(MAP_PATH, 3, 5)
 	_screen().launch(service)
 
 	service.rematch()
 
 	assert_eq(service.map_path, MAP_PATH)
 	assert_eq(service.players, 3)
-	assert_eq(service.ground_state, Terrain.GroundState.FROZEN)
 	assert_ne(service.seed_value, 5)
 	assert_eq(service.launch_mode, MatchServiceScript.Launch.NEW)
 
@@ -182,8 +181,9 @@ func test_continue_without_or_with_broken_save_fails_without_crashing() -> void:
 
 func test_rematch_after_continue_reuses_saved_map_path() -> void:
 	var a: Node = _service()
-	a.configure(MAP_PATH, 2, Terrain.GroundState.MUD, 3)
+	a.configure(MAP_PATH, 2, 3)
 	_screen().launch(a)
+	a.state.board.ground_state = Terrain.GroundState.MUD  # збереження несе свою дошку
 	a.save_current(_test_save)
 
 	var b: Node = _service()
@@ -191,7 +191,7 @@ func test_rematch_after_continue_reuses_saved_map_path() -> void:
 	b.rematch()
 
 	assert_eq(b.map_path, MAP_PATH)
-	assert_eq(b.ground_state, Terrain.GroundState.MUD)
+	assert_eq(b.state.board.ground_state, Terrain.GroundState.MUD)
 
 
 # --- 3.5: пауза ----------------------------------------------------------
@@ -343,14 +343,12 @@ func test_setup_screen_choice_reaches_the_service() -> void:
 	add_child_autofree(setup)
 	var options: OptionButton = setup.get_node("%MapOptions")
 	options.select(setup._map_paths.find(MAP_PATH))
-	(setup.get_node("%Mud") as Button).button_pressed = true
 	var service: Node = _service()
 
 	assert_true(setup.configure_from_choice(service))
 
 	assert_eq(service.map_path, MAP_PATH)
 	assert_eq(service.players, 2)
-	assert_eq(service.ground_state, Terrain.GroundState.MUD)
 	assert_eq(service.launch_mode, MatchServiceScript.Launch.NEW)
 
 
@@ -546,22 +544,22 @@ func _rematch_calls(service: Node) -> Array[String]:
 
 func test_rematch_goes_to_setup_when_map_is_missing_or_unknown() -> void:
 	var service: Node = _service()
-	service.configure("res://maps/renamed_away.tres", 2, Terrain.GroundState.DRY, 1)
+	service.configure("res://maps/renamed_away.tres", 2, 1)
 	assert_eq(_rematch_calls(service), ["setup"] as Array[String])
 	var unknown: Node = _service()
-	unknown.configure("", 2, Terrain.GroundState.DRY, 1)
+	unknown.configure("", 2, 1)
 	assert_eq(_rematch_calls(unknown), ["setup"] as Array[String])
 
 
 func test_rematch_goes_to_setup_when_map_cannot_host_the_players() -> void:
 	var service: Node = _service()
-	service.configure(_save_two_owner_map(), 3, Terrain.GroundState.DRY, 1)
+	service.configure(_save_two_owner_map(), 3, 1)
 	assert_eq(_rematch_calls(service), ["setup"] as Array[String])
 
 
 func test_rematch_on_a_valid_map_starts_the_battle() -> void:
 	var service: Node = _service()
-	service.configure(MAP_PATH, 2, Terrain.GroundState.DRY, 1)
+	service.configure(MAP_PATH, 2, 1)
 	assert_eq(_rematch_calls(service), ["battle"] as Array[String])
 
 

@@ -80,8 +80,6 @@ menu_quit,Вийти,Quit
 setup_title,Новий матч,New match
 setup_players,Гравці,Players
 setup_map,Карта,Map
-setup_ground,Ґрунт,Ground
-setup_colours,Кольори,Colours
 setup_start,Почати,Start
 settings_title,Налаштування,Settings
 settings_language,Мова,Language

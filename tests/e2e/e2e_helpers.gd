@@ -109,6 +109,7 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 	var m := MapData.new()
 	m.width = width
 	m.height = height
+	m.ground_state = opts.get("ground", Terrain.GroundState.DRY)
 	var t := PackedInt32Array()
 	t.resize(width * height)
 	t.fill(Terrain.Kind.FIELD)
@@ -138,8 +139,7 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 	else:
 		_t.add_child_autofree(screen)
 	screen.save_path = save_path
-	screen.setup(m, opts.get("players", 2), opts.get("seed", 7), service,
-		opts.get("ground", Terrain.GroundState.DRY))
+	screen.setup(m, opts.get("players", 2), opts.get("seed", 7), service)
 	var prepare: Callable = opts.get("prepare", Callable())
 	if prepare.is_valid():
 		prepare.call(service.state)

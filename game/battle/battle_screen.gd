@@ -178,7 +178,7 @@ func launch(match_service: Node) -> void:
 		map = (load(match_service.map_path) as MapData) if ResourceLoader.exists(match_service.map_path) else null
 		if map == null:
 			map = _FallbackMap
-	if not setup(map, match_service.players, match_service.seed_value, match_service, match_service.ground_state):
+	if not setup(map, match_service.players, match_service.seed_value, match_service):
 		return
 	match_service.launch_mode = MatchService.Launch.NONE
 	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
@@ -187,15 +187,13 @@ func launch(match_service: Node) -> void:
 	_gate.show_for(_match_service.state.active_player)
 
 
-## ground_state < 0 — ґрунт карти; інакше вибраний у налаштуваннях матчу.
+## Ґрунт дошки завжди з карти (MapData.ground_state).
 ## false — карта зламана (populate() відмовив): матч не починається, екран
 ## повертає в меню; порожня дошка без кінця була б гірша за вихід.
-func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null, ground_state: int = -1) -> bool:
+func setup(map_data: MapData, player_count: int, seed_value: int, match_service: Node = null) -> bool:
 	_match_service = match_service if match_service != null else MatchService
 
 	var board: Board = map_data.to_board()
-	if ground_state >= 0:
-		board.ground_state = ground_state
 	_match_service.start_match(board, player_count, seed_value)
 	if not map_data.populate(_match_service.state):
 		push_error("BattleScreen: карта відхилена — напрям поза 0..7")
