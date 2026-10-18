@@ -36,6 +36,11 @@ const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
 
 ## Земля переживає build(): масиви її текстур не перевантажуються на кожен міст.
 var _ground: GroundSurface
+var _water: WaterSurface
+## Зонд відбиттів знімає світ (шар 1) рівно один раз і теж переживає build():
+## новий знімок посеред партії міг би захопити тимчасові вузли на дошці.
+## §3.5: шар юнітів (UnitView.UNIT_LAYER) у cull_mask не входить ніколи.
+var _probe: ReflectionProbe
 ## тайл -> вид тайлу під ним.
 var _kind_by_cell: Dictionary = {}
 ## шар контуру -> Array[Dictionary] сегментів {cell, dir, color}, які зараз
@@ -57,7 +62,7 @@ func build(board: Board) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, а тести це фіксують як витік.
 	for child in get_children():
-		if child != _ground:
+		if child != _ground and child != _water and child != _probe:
 			child.free()
 	_kind_by_cell.clear()
 	# Вузли контуру щойно звільнені циклом free() вище (вони теж діти цього
@@ -78,6 +83,30 @@ func build(board: Board) -> void:
 		add_child(_ground)
 	# Відступ поза дошкою — Task 9 (оточення); поки земля рівно під дошкою.
 	_ground.build(board, 0)
+
+	if _water == null:
+		_water = WaterSurface.new()
+		_water.name = "Water"
+		add_child(_water)
+	var kinds: Image = _ground.kind_image()
+	_water.build(board, 0, null if kinds.is_empty() else ImageTexture.create_from_image(kinds))
+
+	if _probe == null:
+		_probe = ReflectionProbe.new()
+		_probe.name = "ReflectionProbe"
+		_probe.update_mode = ReflectionProbe.UPDATE_ONCE
+		_probe.cull_mask = 1
+		_probe.box_projection = true
+		_probe.blend_distance = 0.0
+		add_child(_probe)
+	# Коробка від y = -1 до 11 і на 2 клітинки ширша за дошку: на межі коробки
+	# зонд гасне, і вода крайніх клітинок чорніла б. Знімок — з висоти 1.5.
+	var size := Vector3(board.width + 4, 12.0, board.height + 4)
+	var centre := Vector3((board.width - 1) * 0.5, 5.0, (board.height - 1) * 0.5)
+	if _probe.size != size or _probe.position != centre:
+		_probe.size = size
+		_probe.position = centre
+		_probe.origin_offset = Vector3(0.0, -3.5, 0.0)
 
 
 ## Малює контур шару з тонких рисок, а не заливкою тайлів (§3.13: «контур,
@@ -216,3 +245,7 @@ func _contour_material() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	return mat
+
+
+func reflection_probe() -> ReflectionProbe:
+	return _probe

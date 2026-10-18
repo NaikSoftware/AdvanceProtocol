@@ -13,6 +13,10 @@ enum Style { OWN, ENEMY_REVEALED }
 ## маркер не z-fight'ив ні з тайлом, ні з ризками.
 const MARKER_Y: float = 0.06
 
+## Не шар світу (1): зонд відбиттів BoardView знімає шар 1, і маркер власника у
+## знімку показав би його міну суперникові у воді чи калюжі (§3.11).
+const MARKER_LAYER: int = 3
+
 ## Нейтральні плейсхолдери (§2): своя — тьмяний пісочний диск, ворожа — червоний
 ## ромб. Відрізняються і кольором, і формою, щоб не покладатися на один колір.
 const _COLORS: Dictionary = {
@@ -52,6 +56,7 @@ func _add(p: Vector2i, style: int) -> void:
 	mi.position = IsoCameraRig.cell_to_world(p) + Vector3(0.0, MARKER_Y, 0.0)
 	if style == Style.ENEMY_REVEALED:
 		mi.rotation.y = PI * 0.25
+	mi.layers = 1 << (MARKER_LAYER - 1)
 	mi.set_meta("style", style)
 	add_child(mi)
 	_markers[p] = mi

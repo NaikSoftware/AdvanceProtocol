@@ -164,7 +164,7 @@ func test_draw_contour_with_empty_segments_draws_nothing() -> void:
 func _circle_nodes() -> Array[MeshInstance3D]:
 	var out: Array[MeshInstance3D] = []
 	for child in view.get_children():
-		if child is MeshInstance3D and not child is MultiMeshInstance3D and not child is GroundSurface:
+		if child is MeshInstance3D and not child is MultiMeshInstance3D and not child is GroundSurface and not child is WaterSurface:
 			out.append(child)
 	return out
 

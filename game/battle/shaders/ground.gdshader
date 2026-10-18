@@ -32,30 +32,10 @@ vec3 layer_gain(int layer) {
 
 // Один повтор текстури на стільки клітинок.
 uniform float tiles_per_repeat = 3.0;
-// Амплітуда збурення межі видів, у клітинках.
-uniform float border_jitter = 0.45;
-// Напівширина переходу між видами, у частках клітинки.
-uniform float border_softness = 0.22;
 
 varying vec3 world_pos;
 
-float hash12(vec2 p) {
-	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-	p3 += dot(p3, p3.yzx + 33.33);
-	return fract((p3.x + p3.y) * p3.z);
-}
-
-float vnoise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	vec2 u = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
-			mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-
-float fbm(vec2 p) {
-	return 0.5 * vnoise(p) + 0.3 * vnoise(p * 2.03 + 17.1) + 0.2 * vnoise(p * 4.01 + 31.7);
-}
+#include "res://game/battle/shaders/terrain_noise.gdshaderinc"
 
 int layer_at(ivec2 px, ivec2 size) {
 	ivec2 c = clamp(px, ivec2(0), size - 1);
@@ -99,12 +79,10 @@ void vertex() {
 
 void fragment() {
 	vec2 p = world_pos.xz;
-	// Межа видів: великі хвилі плюс дрібна рваність.
-	vec2 q = p + (vec2(fbm(p * 0.8), fbm(p * 0.8 + vec2(5.2, 1.3))) - 0.5) * 2.0 * border_jitter
-			+ (vec2(vnoise(p * 4.1), vnoise(p * 4.1 + 9.7)) - 0.5) * 0.12;
+	vec2 q = border_warp(p);
 	vec2 g = q - map_origin;
 	vec2 base = floor(g);
-	vec2 fw = smoothstep(vec2(0.5 - border_softness), vec2(0.5 + border_softness), fract(g));
+	vec2 fw = border_weights(fract(g));
 	ivec2 size = textureSize(kind_map, 0);
 	ivec2 b = ivec2(base);
 
@@ -209,8 +187,11 @@ void fragment() {
 	float pthr = wet * 0.42;
 	float puddle = (1.0 - smoothstep(pthr - 0.03, pthr + 0.02, pn)) * puddle_ground;
 	alb *= mix(1.0, 0.55, puddle);
-	rough = mix(rough, 0.05, puddle);
-	nxy = mix(nxy, vec2(0.0), puddle);
+	// Гладка калюжа (0.05) відбиває зонд BoardView звичайним шляхом освітлення —
+	// без SSR. Дощ на ній — ті самі кола, що й на річці.
+	float rv = puddle > 0.0 ? ripple_visibility(p) : 0.0;
+	rough = mix(rough, 0.05 + 0.12 * wet * (1.0 - rv), puddle);
+	nxy = mix(nxy, puddle > 0.0 ? rain_ripples(p, TIME) * 2.0 * wet * rv : vec2(0.0), puddle);
 
 	if (cloud_shadow_strength > 0.0) {
 		float cloud = smoothstep(0.45, 0.7, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
