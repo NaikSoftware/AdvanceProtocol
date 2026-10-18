@@ -79,7 +79,6 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
   - **A friendly unit on the bridge forbids the demolition** (`ERR_TILE_OCCUPIED`).
 - **Repair a damaged friendly unit** — heals `(40 + rand(0, ap_left - fire_cost)) / 2`, so an
   engineer that drove all turn repairs badly. This is the one place where unspent AP matters.
-- **Capture / demolish an objective** ([§3.10](objectives.md))
 
 ## Drone strike — assault squad only
 

@@ -1,6 +1,6 @@
 ---
 name: core-engineer
-description: "Implements and fixes game rules in the engine-independent logic layer — plain typed GDScript, no scene-tree types, driven by tests. Use when the task changes a number a player can be killed by: a command, the validation or application of a rule, match state, the roster, damage, vision, fog, mines, objectives, or the tests covering them. Do NOT use for presentation work — scenes, node scripts, camera, overlays, input (that is view-engineer) — for running the suite on its own (gut-runner), or for deciding what a rule ought to be (rules-lawyer rules on that; this agent implements the ruling)."
+description: "Implements and fixes game rules in the engine-independent logic layer — plain typed GDScript, no scene-tree types, driven by tests. Use when the task changes a number a player can be killed by: a command, the validation or application of a rule, match state, the roster, damage, vision, fog, mines, or the tests covering them. Do NOT use for presentation work — scenes, node scripts, camera, overlays, input (that is view-engineer) — for running the suite on its own (gut-runner), or for deciding what a rule ought to be (rules-lawyer rules on that; this agent implements the ruling)."
 tools: [Read, Write, Edit, Grep, Glob, Bash, Skill]
 model: opus
 ---

@@ -2,20 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** дати інтерфейс усім правилам, які `core/` уже вміє (інженер, дрон, міни, цілі, три гравці) і прибрати систему досвіду (рішення власника 2026-10-18), на екрані, що коректно масштабується від малого телефона до ПК (без прив'язки до конкретного пристрою), і покрити кожну фічу e2e-сценарієм.
+**Goal:** дати інтерфейс усім правилам, які `core/` уже вміє (інженер, дрон, міни, три гравці), на екрані, що коректно масштабується від малого телефона до ПК (без прив'язки до конкретного пристрою), і покрити кожну фічу e2e-сценарієм.
 
-**Architecture:** кожен новий запит «що можна зробити / що показати» — статична функція в `core/` з юніт-тестом; вигляд (`game/`) лише малює її результат і подає `Command` крізь `InputController` → `MatchService.submit()`. Шари дошки (міни, цілі) перебудовуються **зі стану** для активного гравця, а не з потоку подій — потік не фільтрований по спостерігачу (§6, відомий борг). UI — контейнери + якорі, масштаб через `content_scale_factor`, порахований чистою функцією від розміру екрана й DPI.
+**Architecture:** кожен новий запит «що можна зробити / що показати» — статична функція в `core/` з юніт-тестом; вигляд (`game/`) лише малює її результат і подає `Command` крізь `InputController` → `MatchService.submit()`. Шар мін перебудовується **зі стану** для активного гравця, а не з потоку подій — потік не фільтрований по спостерігачу (§6, відомий борг). UI — контейнери + якорі, масштаб через `content_scale_factor`, порахований чистою функцією від розміру екрана й DPI.
 
 **Tech Stack:** Godot 4.7.2, статично типізований GDScript, GUT headless.
 
-**Spec:** розділ «Фаза 4 — повний ростер на екрані» і наскрізний розділ «Стиль, респонсивність і воркфлоу арту» в `docs/superpowers/plans/2026-08-09-advance-protocol-implementation.md`; `CLAUDE.md` §3 (особливо §3.8, §3.9, §3.10, §3.11, §3.13), §6, §9; `docs/ui/overlays.md`; `docs/rules/{units,objectives,vision-and-fog}.md`.
+**Spec:** розділ «Фаза 4 — повний ростер на екрані» і наскрізний розділ «Стиль, респонсивність і воркфлоу арту» в `docs/superpowers/plans/2026-08-09-advance-protocol-implementation.md`; `CLAUDE.md` §3 (особливо §3.8, §3.9, §3.11, §3.13), §6, §9; `docs/ui/overlays.md`; `docs/rules/{units,vision-and-fog}.md`.
 
 ## Global Constraints
 
 - Ростер — **12** типів (id 0–11), єдиний `ENGINEER` — інженерна машина (id 11, `fire_cost` 30, `max_ap` 76). Інженерного відділення немає (рішення власника 2026-10-17).
 - `core/` не імпортує вузли Godot; коментарі в `core/` — українською; типізований GDScript скрізь.
 - Вигляд нічого не рахує: дозволені цілі, тайли, межі ремонту, позначки дрона — лише з функцій `core/` (§3.13).
-- Прихована інформація: нерозкрита ворожа міна не має **жодного** вузла, контура чи відмінності в зонах; ціль малюється лише якщо `seen_by[active_player]`; нічого неактивного гравця не переживає гейт.
+- Прихована інформація: нерозкрита ворожа міна не має **жодного** вузла, контура чи відмінності в зонах; нічого неактивного гравця не переживає гейт.
 - Кожен новий рядок для показу — ключ у `assets/i18n/strings.csv` (`keys,uk,en`) і в списку `tests/game/test_localisation.gd`.
 - Жодної нової механіки. Неврегульоване — у розділ «Відкриті питання», не в код.
 - **Нічого не хардкодиться під конкретний пристрій.** Масштаб — загальна формула від розміру екрана й DPI; розкладка — контейнери, що тягнуться під будь-яке співвідношення сторін. Google Pixel 10 Pro XL (2992×1344 @ 486 ppi → ≈ 985×442 логічних, 1 логічний px ≈ 1 dp) — лише **орієнтир** і один із тестових прикладів, не ціль, під яку підганяються числа.
@@ -28,9 +28,9 @@
 
 ## Review Focus
 
-1. **Малий телефон 800×360 (і 985×442) з усім HUD одночасно** (вибраний інженер: панель верб + інспектор + нижній рядок + лічильник цілей) — нічого не виходить за `Viewport`, панелі не перекриваються, дошці лишається смуга ≥ 50 % висоти. Тест — Task 13 `test_full_hud_fits_every_size`.
+1. **Малий телефон 800×360 (і 985×442) з усім HUD одночасно** (вибраний інженер: панель верб + інспектор + нижній рядок) — нічого не виходить за `Viewport`, панелі не перекриваються, дошці лишається смуга ≥ 50 % висоти. Тест — Task 13 `test_full_hud_fits_every_size`.
 2. **Нерозкрита ворожа міна в маршруті** — зони й контур шляху побудовані так, ніби міни немає, і `MineLayer` не має для неї вузла. Тест — Task 5 `test_unrevealed_enemy_mine_leaves_no_trace_in_any_layer`.
-3. **Міна чи ціль, відкрита гравцем A, після гейта гравця B** — шари перебудовуються під B до зняття гейта. Тести — Task 5 `test_own_mine_hidden_after_handover`, Task 6 `test_objective_layer_rebuilt_for_incoming_player`.
+3. **Міна, відкрита гравцем A, після гейта гравця B** — шар перебудовується під B до зняття гейта. Тест — Task 5 `test_own_mine_hidden_after_handover`.
 4. **Зміна мови посеред ходу** з відкритою панеллю інженера / кнопкою дрона — підписи й текст причини перекладаються (той самий `NOTIFICATION_TRANSLATION_CHANGED`, що в `hud.gd:107`). Тест — Task 8 `test_engineer_panel_relabels_on_locale_change`.
 5. **Карта на 3 гравці, обрана для 2** — спавни гравця 2 не ламають матч. Тест — Task 12 `test_three_player_map_runs_with_two_players`.
 
@@ -41,15 +41,12 @@
 | # | що вже є | чого немає |
 | --- | --- | --- |
 | 4.1 | силует на **клас**: `_HULL_SIZES` + ствол/смуга, `game/battle/unit_view.gd:65,334-360` | розрізнення 12 **типів**: 4 танки, 3 легкі машини, 2 загони, 2 гармати виглядають однаково |
-| 4.2 | `EngineerCommand` з усіма 7 вербами й причинами відмови, `core/commands/engineer_command.gd:5,28-78` | запит «допустимі тайли / причина» в `core/`; режим інженера в `InputController` (`ActionType` лише `MOVE, SHOT`, `input_controller.gd:36`); панель; оновлення дошки на `BridgeChanged` (no-op, `event_player.gd:265`) |
+| 4.2 | `EngineerCommand` з усіма вербами й причинами відмови, `core/commands/engineer_command.gd:5,28-78` | запит «допустимі тайли / причина» в `core/`; режим інженера в `InputController` (`ActionType` лише `MOVE, SHOT`, `input_controller.gd:36`); панель; оновлення дошки на `BridgeChanged` (no-op, `event_player.gd:265`) |
 | 4.3 | формула `repair_amount()`, `engineer_command.gd:20-22` | аналітичні межі ремонту без кидка; показ у прев'ю |
 | 4.4 | `DroneCommand` + `check_strike()` (`drone_command.gd:19`), `Targeting.drone_targets()` (`targeting.gd:64`), значок на юніті `unit_view.gd:320`, рядок `DronesRow` у HUD `hud.gd:242` | кнопка дії, режим дрона в контролері, кільце радіуса 5, позначки «заборонено» з причиною; ворожі тайли кільця з `seen` (немає жодної функції, що повертає тайли обвідної) |
 | 4.5 | `Mines` з `known_to[]`, `core/mines.gd`; події `Mine*` | будь-який візуал: усі обробники — no-op, `event_player.gd:245-260` |
-| 4.6 | `Objectives` з `seen_by[]`, `owner`, `intact`, `core/objectives.gd` | будь-який візуал (`event_player.gd:276-282` — no-op) |
-| 4.7 | `Experience`, подія `ExperienceGained`, `fire_command.gd:164`; рівні в результатах `results_screen.gd:31` | **скасовано:** досвід видаляється повністю (Task 7) |
 | 4.8 | пропуск вибулого `battle_state.gd:211`, повернення AP відповідачам `:220`, гейт `handover_gate.gd:81`, вибір 3 гравців `match_setup.gd:62` | лише e2e на 3 гравців (`_boot` у `test_battle_e2e.gd:72` жорстко передає 2) |
-| 4.9 | `check_victory()` у кінці ходу, `end_turn_command.gd:27`; `MapData.hold_target` | лічильник у HUD |
-| 4.10 | одна карта `maps/skirmish_bridge.tres` (16×12, 2 гравці, без цілей) | 4 карти; `MapData.populate()` додає спавн власника ≥ `player_count` і ламає матч на 2 — латентний баг (`core/map_data.gd:45-53`) |
+| 4.10 | одна карта `maps/skirmish_bridge.tres` (16×12, 2 гравці) | 4 карти; `MapData.populate()` додає спавн власника ≥ `player_count` і ламає матч на 2 — латентний баг (`core/map_data.gd:45-53`) |
 | масштаб | `canvas_items` + `expand`, база 1280×720 (`project.godot:26-29`) | на Pixel 10 Pro XL масштаб 1344/720 = 1.867, логічний екран ≈ 1603×720, 48 логічних px ≈ 4.7 мм проти 48 dp = 7.6 мм — **у 1.63 раза замало**. Потрібна Task 1 |
 
 **Арифметика масштабу (фіксується тестом Task 1).** `stretch = min(w/1280, h/720)`, `dp = dpi/160`. Шуканий `content_scale_factor = max(1.0, dp / stretch)`.
@@ -66,19 +63,17 @@
 
 ```
 T1 масштаб+розкладка ─┐
-T2 e2e-каркас ────────┼─► T5 міни ─────┐
-T3 силуети (4.1)      │   T6 цілі ─────┼─► T11 лічильник цілей (4.9)
+T2 e2e-каркас ────────┼─► T5 міни
+T3 силуети (4.1)      │
 T4a core: інженер ────┼─► T8 панель інженера (4.2) ─► T9 ремонт (4.3)
 T4b core: дрон/обвідна┼─► T10 дрон (4.4) ─► T14 кільце й загрози (§3.13)
-                      ├─► T7 видалення досвіду
                       └─► T12 три гравці + карти (4.8, 4.10)
-                              T8,T9,T10,T11,T14 ─► T13 повний HUD на всіх розмірах
+                              T8,T9,T10,T14 ─► T13 повний HUD на всіх розмірах
 ```
 
-- **Паралельно з нуля, окремими worktree:** T1, T2, T3, T7 (core-завдання не чіпають `game/`, крім T7 — він прибирає показ досвіду з `event_player.gd` і `results_screen.gd`).
-- **T7 (видалення досвіду) — першим серед core-завдань:** він чіпає `rules.gd`, `engineer_command.gd`, `fire_command.gd`, які потім міняють T4a/T4b; T4a і T4b стартують від гілки з T7. T1, T2, T3 від нього не залежать.
-- Після T1+T2: T5, T6, T12 — паралельно. T8 чекає T4a, T5, T6 (верби міни й цілі перевіряються на шарах). T10 чекає T4b і T8. T11 чекає T6. T14 чекає T10. T13 — останнім.
-- `hud.tscn`/`hud.gd` змінюють T1, T8, T10, T11, T14 — у паралельних гілках очікувати конфлікту злиття саме там; зливати по одній.
+- **Паралельно з нуля, окремими worktree:** T1, T2, T3 (core-завдання не чіпають `game/`).
+- Після T1+T2: T5, T12 — паралельно. T8 чекає T4a і T5 (верби міни перевіряються на шарі). T10 чекає T4b і T8. T14 чекає T10. T15 іде після T8. T13 — останнім.
+- `hud.tscn`/`hud.gd` змінюють T1, T8, T10, T14 — у паралельних гілках очікувати конфлікту злиття саме там; зливати по одній.
 
 ---
 
@@ -164,13 +159,13 @@ func test_menu_content_capped_on_wide() -> void:
 - Consumes: наявні `_boot/_settle/_tap/_confirm/_end_turn/_confirm_gate/_act/_events_of` з `test_battle_e2e.gd:58-160`, `RecService` (`:35`)
 - Produces (у `e2e_helpers.gd`):
   - `class RecService` (перенесений)
-  - `func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> BattleScreen` — ключі `opts`: `tiles: Dictionary`, `ground: int`, `seed: int` (типово 7), `players: int` (типово 2), `objectives: Array[Vector2i]`, `hold_target: int`, `prepare: Callable(state: BattleState)` — викликається після `setup()` до першого показу (покласти міну, підняти XP, зменшити HP), після нього — `_screen._rebuild_units_for_active_player()` і перебудова шарів
+  - `func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> BattleScreen` — ключі `opts`: `tiles: Dictionary`, `ground: int`, `seed: int` (типово 7), `players: int` (типово 2), `prepare: Callable(state: BattleState)` — викликається після `setup()` до першого показу (покласти міну, зменшити HP), після нього — `_screen._rebuild_units_for_active_player()` і перебудова шарів
   - `func tap(cell: Vector2i)`, `func press(button: BaseButton)`, `func confirm()`, `func end_turn()`, `func confirm_gate()`, `func act(from, to)`, `func hud() -> Hud`, `func gate() -> HandoverGate`, `func events_of(cls) -> Array[Events.BattleEvent]`, властивості `service`, `screen`
   - `click_at(p: Vector2, vp: Viewport = null)` — необов'язковий viewport для сцен у `SubViewport` (Task 13)
 
 - [ ] **Step 1:** Перенести каркас; `test_battle_e2e.gd` викликає його. Виправити коментар у шапці (`:10`) — «дронів і мін немає, бо UI немає» стає неправдою після T5/T10, тепер він посилається на `test_engineer_e2e.gd`/`test_drone_e2e.gd`.
 - [ ] **Step 2:** `./run_tests.sh -gselect=test_battle_e2e.gd` — та сама кількість тестів, усі PASS (рефакторинг тесту без зміни очікувань).
-- [ ] **Step 3: Коміт** `test(e2e): спільний каркас бою з гравцями, цілями й підготовкою стану`
+- [ ] **Step 3: Коміт** `test(e2e): спільний каркас бою з гравцями й підготовкою стану`
 
 ---
 
@@ -224,9 +219,8 @@ func test_lay_mine_status_lists_free_adjacent_tiles_only() -> void   # 4 сус�
 func test_status_reason_when_no_ap() -> void                        # ap 20 < 30 → reason "ERR_NOT_ENOUGH_AP", tiles []
 func test_clear_mine_reason_without_mine() -> void                  # "ERR_NO_MINE_THERE"
 func test_demolish_bridge_forbidden_with_own_unit_on_it() -> void   # "ERR_TILE_OCCUPIED"
-func test_capture_reason_for_own_objective() -> void                # "ERR_NOTHING_TO_CAPTURE"
 func test_status_never_changes_state_or_rng() -> void               # серіалізований стан і rng.state до/після рівні
-func test_status_matches_validate_for_every_action_and_tile() -> void  # 7 дій × 4 сусіди: has(p) == (validate == "")
+func test_status_matches_validate_for_every_action_and_tile() -> void  # 5 дій × 4 сусіди: has(p) == (validate == "")
 func test_repair_bounds_full_ap() -> void:
 	# інженер ap 76, ціль 400/200 → (20, 43)
 	assert_eq(EngineerCommand.repair_bounds(e, t), Vector2i(20, 43))
@@ -314,48 +308,9 @@ func test_engineer_reveals_enemy_mine_in_its_diamond() -> void
 
 ---
 
-### Task 6: Цілі на дошці (4.6) — виконано й потім прибрано Task 15
+### Task 7: Систему досвіду видалено (замість 4.7)
 
-**Files:**
-- Create: `game/battle/objective_view.gd` (`class_name ObjectiveView extends Node3D` — шар усіх маркерів цілей)
-- Modify: `game/battle/battle_screen.tscn`, `game/battle/battle_screen.gd` (ті самі три точки перебудови, що й у T5)
-- Test: `tests/game/test_objective_view.gd`, `tests/e2e/test_objectives_e2e.gd`
-
-**Interfaces:**
-- Produces: `func rebuild(state: BattleState, observer: int) -> void` — маркер лише для `o.seen_by[observer]`; колір власника — та сама палітра, що `UnitView._PLAYER_COLORS` (винести в одну спільну константу, не копіювати); нейтральна (−1) — сірий; `not intact` — стан «зруйновано» (окремий меш/матеріал); `func marker_at(p: Vector2i) -> Node3D`; `func marker_state(p: Vector2i) -> Dictionary` (`{owner: int, intact: bool}` — для тестів)
-
-- [ ] **Step 1: Тести шару**
-
-```gdscript
-func test_unseen_objective_not_drawn() -> void
-func test_neutral_owned_destroyed_states_distinct() -> void
-func test_objective_layer_rebuilt_for_incoming_player() -> void  # P0 бачить, P1 — ні
-```
-
-- [ ] **Step 2: e2e** — карта 10×3 з цілями `[(5,1), (9,1)]`, P0 бачить (5,1) і не бачить (9,1): `marker_at((5,1)) != null`, `marker_at((9,1)) == null`. Після захоплення (T8: кнопка «Захопити»; до того — `prepare`) `marker_state((5,1)).owner == 0`.
-- [ ] **Step 3:** FAIL → реалізувати → PASS.
-- [ ] **Step 4: Коміт** `feat(battle): маркери цілей під туманом активного гравця`
-
----
-
-### Task 7: Видалити систему досвіду (замість 4.7)
-
-Рішення власника 2026-10-18: досвіду в грі немає — він переускладнює. Юніт має лише параметри свого типу. Це зміна правил, а не UI: шкода стає функцією типу, сектора броні й кидка, без бонусу рівня.
-
-**Files:**
-- Delete: `core/experience.gd`, `tests/core/test_experience.gd`
-- Modify: `core/rules.gd` (прибрати бонус `+A/8` за рівень з формули шкоди), `core/commands/fire_command.gd`, `core/commands/engineer_command.gd`, `core/mines.gd`, `core/battle_state.gd` (`experience`), `core/battle_serializer.gd`, `core/events.gd` (`ExperienceGained`), `game/battle/event_player.gd` (обробник), `game/ui/results_screen.gd` (рядок рівнів), `assets/i18n/strings.csv` (ключі досвіду)
-- Modify тести: `tests/core/test_rules_damage.gd`, `test_fire_command.gd`, `test_fire_facing.gd`, `test_retaliation.gd`, `test_drone_command.gd`, `test_engineer_command.gd`, `test_mines.gd`, `test_events.gd`, `test_battle_serializer.gd`, `tests/game/test_event_player.gd`, `tests/game/test_match_flow.gd`
-- Modify docs: `CLAUDE.md` §3.7 (видалити розділ і згадку в §9 про пороги, якщо є), `docs/rules/combat.md`, `docs/rules/units.md`; у `docs/reference/blitzkrieg.md` — один рядок «досвід оригіналу свідомо не переноситься»
-
-**Interfaces:**
-- Produces: сигнатури функцій шкоди без параметра рівня (точні імена — ті, що зараз у `core/rules.gd`; виконавець звіряє з кодом і оновлює всі виклики); `BattleState` без `experience`; `damage_dealt` лишається (його читає екран результату)
-
-- [ ] **Step 1:** `grep -rn -i "experience\|level_of\|досвід" core game tests` — повний список місць; жодне не лишається після кроку 3.
-- [ ] **Step 2: Тести спершу.** Golden-тести шкоди (`test_rules_damage.gd`) з рівнем 0 лишаються **без змін чисел** — це доказ, що базова формула не зрушила; тести з рівнем > 0 видалити. Новий тест серіалізатора `test_old_save_with_experience_still_loads` — збереження з ключем `experience` (формат до цього завдання) завантажується, ключ ігнорується; збереження без нього — теж.
-- [ ] **Step 3:** Видалити код, оновити виклики, `ExperienceGained` прибрати з `events.gd` і з вичерпного тесту конструкторів подій та таблиці `HANDLERS` в `event_player.gd`.
-- [ ] **Step 4:** `./run_tests.sh` зелений; `Scripts` = `find tests -name 'test_*.gd' | wc -l` (число зменшиться на 1 — `test_experience.gd`); `grep` з кроку 1 порожній, крім рядка в `blitzkrieg.md`.
-- [ ] **Step 5: Коміт** `refactor(core): систему досвіду видалено — юніт має лише параметри типу`
+Рішення власника 2026-10-18; виконано, деталі — в історії git.
 
 ---
 
@@ -365,11 +320,11 @@ func test_objective_layer_rebuilt_for_incoming_player() -> void  # P0 бачит
 - Create: `game/ui/engineer_panel.tscn`, `game/ui/engineer_panel.gd` (`class_name EngineerPanel extends PanelContainer`)
 - Create: `game/battle/target_overlay.gd` (`class_name TargetOverlay` — контур довільного набору тайлів; спільний з T10)
 - Modify: `game/battle/input_controller.gd`, `game/battle/board_view.gd` (шар `LAYER_TARGETS`), `game/battle/event_player.gd:265` (`BridgeChanged` → перебудова дошки), `game/battle/battle_screen.gd`, `game/ui/hud.tscn`, `game/ui/hud.gd`
-- Modify: `assets/i18n/strings.csv` — `eng_lay_mine`, `eng_clear_mine`, `eng_repair_bridge`, `eng_demolish_bridge`, `eng_repair_unit`, `eng_capture`, `eng_demolish_objective`, `eng_ap_cost` («%d AP»)
+- Modify: `assets/i18n/strings.csv` — `eng_lay_mine`, `eng_clear_mine`, `eng_repair_bridge`, `eng_demolish_bridge`, `eng_repair_unit`, `eng_ap_cost` («%d AP»)
 - Test: `tests/game/test_input_controller.gd`, `tests/game/test_engineer_panel.gd`, `tests/e2e/test_engineer_e2e.gd`
 
 **Interfaces:**
-- Consumes: `EngineerCommand.action_status()` (T4a), `MineLayer.rebuild`, `ObjectiveView.rebuild`, каркас T2, `LayoutProbe` (T1)
+- Consumes: `EngineerCommand.action_status()` (T4a), `MineLayer.rebuild`, каркас T2, `LayoutProbe` (T1)
 - Produces:
   - `InputController.ActionType` += `ENGINEER`, `DRONE` (останній — для T10)
   - `InputController.arm_engineer(action: int) -> void` — для вибраного свого інженера: якщо `action_status.tiles` порожні — сигнал `action_refused(reason: String)` і нічого не озброєно; інакше сигнал `targets_changed(tiles: Array[Vector2i])`
@@ -379,7 +334,7 @@ func test_objective_layer_rebuilt_for_incoming_player() -> void  # P0 бачит
   - `EngineerPanel.show_for(state: BattleState, unit: Unit) -> void`, сигнал `action_chosen(action: int)`; `func button_for(action: int) -> Button`
   - `TargetOverlay.show_tiles(tiles: Array[Vector2i]) -> void`, `clear() -> void` (ребра — та сама логіка, що `ZoneOverlay._edges`, викликати її, не копіювати)
 
-Поведінка панелі: сім кнопок завжди (порядок `EngineerCommand.Action`), на кожній назва і `fire_cost` («30 AP»). Недоступна — сірий стиль теми (`theme_type_variation`), але **не `disabled`**: тап по ній показує `tr(reason)` у рядку причини панелі (на телефоні немає наведення для підказки). Розкладка — `GridContainer` на 2 колонки праворуч у `Middle` HUD; на жодному з `SIZES` не перекриває `TopBar`/`BottomBar`; на PHONE_SMALL сітка може згортатися (`HFlowContainer`/прокрутка), але кнопки лишаються ≥ 48.
+Поведінка панелі: п'ять кнопок завжди (порядок `EngineerCommand.Action`), на кожній назва і `fire_cost` («30 AP»). Недоступна — сірий стиль теми (`theme_type_variation`), але **не `disabled`**: тап по ній показує `tr(reason)` у рядку причини панелі (на телефоні немає наведення для підказки). Розкладка — `GridContainer` на 2 колонки праворуч у `Middle` HUD; на жодному з `SIZES` не перекриває `TopBar`/`BottomBar`; на PHONE_SMALL сітка може згортатися (`HFlowContainer`/прокрутка), але кнопки лишаються ≥ 48.
 
 - [ ] **Step 1: Тести контролера**
 
@@ -392,8 +347,8 @@ func test_selecting_another_unit_disarms() -> void
 func test_targets_cleared_after_confirm() -> void
 ```
 
-- [ ] **Step 2: Тести панелі** — `test_seven_buttons_with_ap_cost`, `test_unavailable_button_shows_reason_on_press`, `test_engineer_panel_relabels_on_locale_change`, `test_panel_fits_phone_without_overlapping_bars` (`LayoutProbe.mount(hud.tscn, size)` для кожного з `SIZES`, вибраний інженер; `overflowing == []`, `small_targets == []`, `overlapping([TopBar, BottomBar, EngineerPanel]) == []`).
-- [ ] **Step 3: e2e (`test_engineer_e2e.gd`) — кожна з семи верб через кнопки**
+- [ ] **Step 2: Тести панелі** — `test_five_buttons_with_ap_cost`, `test_unavailable_button_shows_reason_on_press`, `test_engineer_panel_relabels_on_locale_change`, `test_panel_fits_phone_without_overlapping_bars` (`LayoutProbe.mount(hud.tscn, size)` для кожного з `SIZES`, вибраний інженер; `overflowing == []`, `small_targets == []`, `overlapping([TopBar, BottomBar, EngineerPanel]) == []`).
+- [ ] **Step 3: e2e (`test_engineer_e2e.gd`) — кожна з п'яти верб через кнопки**
 
 ```gdscript
 func test_lay_and_clear_mine() -> void          # state.mines.size() 1 → (наступний хід) 0; AP 0 після кожної
@@ -402,7 +357,6 @@ func test_demolish_bridge_with_enemy_on_it() -> void
 	# damage_dealt[0] == 100, BoardView показує зруйнований міст (вид інстансу тайла)
 func test_demolish_refused_with_own_unit_on_bridge() -> void   # рядок причини == tr("ERR_TILE_OCCUPIED"), state не змінився
 func test_repair_bridge() -> void               # BRIDGE_DESTROYED → BRIDGE
-func test_capture_and_demolish_objective() -> void   # owner 0; потім intact false (наступний хід)
 func test_repair_unit_heals_within_bounds() -> void  # див. T9 — тут лише факт UnitRepaired і hp зросло
 func test_engineer_buttons_hidden_for_non_engineer() -> void
 ```
@@ -477,38 +431,11 @@ func test_third_strike_refused() -> void   # prepare: drones_left 0 → нати
 
 ---
 
-### Task 11: ~~Лічильник цілей (4.9)~~ — СКАСОВАНО: механіку цілей видалено (власник, 2026-10-18), див. Task 15
-
-**Files:**
-- Modify: `game/ui/hud.gd` (`refresh()`), `game/ui/hud.tscn` (`ObjectiveCounter` у `TopBar`)
-- Modify: `assets/i18n/strings.csv` — `hud_objectives` («Цілі %d/%d» / «Objectives %d/%d»)
-- Test: `tests/game/test_hud.gd`, `tests/e2e/test_objectives_e2e.gd`
-
-**Interfaces:**
-- Consumes: `Objectives.held_by(state, state.active_player)`, `state.objective_hold_target`
-- Produces: `ObjectiveCounter` видимий лише при `hold_target > 0`; текст «утримано / треба» лише для **активного** гравця
-
-- [ ] **Step 1: Тести** — `test_counter_hidden_without_hold_target`, `test_counter_shows_active_players_holding` (P0 1/2; після гейта P1 0/2 — не P0-шне число).
-- [ ] **Step 2: e2e**
-
-```gdscript
-func test_capture_last_objective_wins_at_end_of_turn() -> void
-	# hold_target 1, ціль (3,1), інженер P0 на (2,1); «Захопити», Confirm → лічильник «1/1»,
-	# state.winner == -1 (ще не кінець ходу); end_turn → winner == 0, screen.match_finished видано
-func test_holding_is_checked_only_for_player_whose_turn_ended() -> void
-	# prepare: ціль належить P1 при hold_target 1; кінець ходу P0 → матч триває
-```
-
-- [ ] **Step 3:** FAIL → реалізувати → PASS; `LayoutProbe` по `SIZES`: `TopBar` з лічильником не виходить за межі.
-- [ ] **Step 4: Коміт** `feat(ui): лічильник цілей активного гравця`
-
----
-
 ### Task 12: Три гравці й комплект карт (4.8, 4.10)
 
 **Files:**
-- Modify: `core/map_data.gd` (`populate()` пропускає спавн з `owner >= state.player_count`; див. відкрите питання 2)
-- Create: `maps/urban.tres`, `maps/open.tres`, `maps/forest.tres`, `maps/mountain.tres`; Modify: `maps/skirmish_bridge.tres` (третій гравець, цілі)
+- Modify: `core/map_data.gd` (`populate()` пропускає спавн з `owner >= state.player_count`; див. відкрите питання 1)
+- Create: `maps/urban.tres`, `maps/open.tres`, `maps/forest.tres`, `maps/mountain.tres`; Modify: `maps/skirmish_bridge.tres` (третій гравець)
 - Modify: `assets/i18n/strings.csv` — `map_bridge`, `map_urban`, `map_open`, `map_forest`, `map_mountain`
 - Test: `tests/core/test_map_data.gd`, `tests/game/test_maps.gd`, `tests/e2e/test_three_players_e2e.gd`
 
@@ -522,8 +449,7 @@ func test_holding_is_checked_only_for_player_whose_turn_ended() -> void
 func test_map_is_well_formed(p = use_parameters(_map_paths())) -> void:
 	# tiles.size() == width*height; name_key перекладений
 	# кожен спавн у межах, на прохідному для свого юніта тайлі (Rules.entry_cost_at < IMPASSABLE), facing 0..7
-	# жодних двох спавнів на одному тайлі; objectives.size() <= 15, у межах, на прохідних тайлах
-	# 0 <= hold_target <= objectives.size()
+	# жодних двох спавнів на одному тайлі
 	# MatchSetup.map_supports(map, 2) і map_supports(map, 3)
 	# BFS по прохідних тайлах: від першого спавну кожного гравця досяжний тайл поряд зі спавном кожного іншого
 	# для 2 і 3: start_match + populate + begin без помилок, state.units_of(p) не порожні
@@ -532,7 +458,7 @@ func test_five_maps_with_required_kinds() -> void
 	# mountain — HILL >= 25 %, open — FIELD/ROAD >= 80 %
 ```
 
-Розміри й склад — контент-рішення: орієнтир 16×12…20×14, по 5–7 юнітів на гравця з різних класів, щонайменше один інженер і одна артилерія на гравця, 3–7 цілей. `hold_target` на кожній карті — відкрите питання 6, до відповіді ставити `0` на `open`, і `ceil(M/2)+1` на решті.
+Розміри й склад — контент-рішення: орієнтир 16×12…20×14, по 5–7 юнітів на гравця з різних класів, щонайменше один інженер і одна артилерія на гравця.
 - [ ] **Step 3: e2e (`test_three_players_e2e.gd`)**
 
 ```gdscript
@@ -580,13 +506,13 @@ func test_three_player_map_runs_with_two_players() -> void   # maps/urban.tres, 
 - Modify за результатом: `game/ui/hud.tscn`, `game/ui/engineer_panel.tscn`
 
 **Interfaces:**
-- Consumes: `LayoutProbe.mount` (T1), каркас T2 з `click_at(p, vp)`, усі панелі T8–T11 і T14
+- Consumes: `LayoutProbe.mount` (T1), каркас T2 з `click_at(p, vp)`, усі панелі T8–T10 і T14
 
 - [ ] **Step 1: e2e**
 
 ```gdscript
 func test_full_hud_fits_every_size(p = use_parameters(LayoutProbe.SIZES)) -> void:
-	# battle_screen.tscn у SubViewport розміру p; карта з цілями й hold_target 2
+	# battle_screen.tscn у SubViewport розміру p
 	# справжній тап (click_at у цей viewport) по інженеру → панель інженера + інспектор видимі;
 	# тап «Ремонт» по пошкодженому сусіду → PreviewRepairBox видимий
 	# overflowing(hud, p) == []; small_targets(hud) == []
@@ -606,20 +532,18 @@ func test_board_still_tappable_on_phone() -> void
 
 ### Task 15: Видалити механіку цілей (рішення власника 2026-10-18)
 
-Цілей у грі немає; перемога — лише знищенням. Прибрати `core/objectives.gd`, верби інженера CAPTURE/DEMOLISH_OBJECTIVE, умову «утримай N», поля карт, події, ObjectiveView, тексти й §3.10 у CLAUDE.md; старі збереження з полями цілей мусять завантажуватися. Повний бриф — у робочій теці SDD (task-15-brief.md). Іде після T8.
+Перемога — лише знищенням. Повний бриф — `task-15-brief.md` у робочій теці SDD; іде після T8.
 
 ## Відкриті питання до власника
 
-1. ~~Рівень досвіду ворога.~~ **Знято:** досвід видаляється повністю (власник, 2026-10-18), див. Task 7.
-2. ~~Карта на 3 гравці, зіграна вдвох.~~ **Рішення головного контексту:** `populate` пропускає спавни гравця 2; окремих варіантів карт немає.
-3. ~~Кільце дальності й позначки загроз (§3.13).~~ **Власник 2026-10-18: додати** — Task 14.
-4. ~~Поріг драга після масштабування.~~ **Рішення головного контексту (у T1):** поріг — 10 логічних px без ділення на `content_scale_factor`; після T1 логічний px ≈ dp, тож на Pixel це ≈ 10 dp, як і задумано.
-5. ~~Сім кнопок інженера завжди чи лише доступні?~~ **Відповідь у таблиці Фази 4:** усі сім, недоступні сірі з причиною на тап.
-6. **`hold_target` для кожної з п'яти карт** — контентне рішення; у плані тимчасові значення.
-7. ~~Силуети на 12 типів примітивами (4.1).~~ **Рішення головного контексту:** робимо мінімум за T3 — таблиця Фази 4 цього вимагає, а 12 однакових силуетів роблять e2e і ручні прогони нечитабельними до Фази 5.
+1. ~~Карта на 3 гравці, зіграна вдвох.~~ **Рішення головного контексту:** `populate` пропускає спавни гравця 2; окремих варіантів карт немає.
+2. ~~Кільце дальності й позначки загроз (§3.13).~~ **Власник 2026-10-18: додати** — Task 14.
+3. ~~Поріг драга після масштабування.~~ **Рішення головного контексту (у T1):** поріг — 10 логічних px без ділення на `content_scale_factor`; після T1 логічний px ≈ dp, тож на Pixel це ≈ 10 dp, як і задумано.
+4. ~~Усі кнопки інженера завжди чи лише доступні?~~ **Відповідь у таблиці Фази 4:** усі, недоступні сірі з причиною на тап.
+5. ~~Силуети на 12 типів примітивами (4.1).~~ **Рішення головного контексту:** робимо мінімум за T3 — таблиця Фази 4 цього вимагає, а 12 однакових силуетів роблять e2e і ручні прогони нечитабельними до Фази 5.
 
 ## Самоперевірка
 
-- **Покриття:** 4.1 → T3; 4.2 → T4a+T8; 4.3 → T4a+T9; 4.4 → T4b+T10; 4.5 → T5; 4.6 → T6; 4.7 → скасовано, T7 видаляє досвід; 4.8 → T12; 4.9 → T11; 4.10 → T12; респонсивність (без прив'язки до пристрою) → T1+T13 і крок `LayoutProbe` у кожному UI-завданні; e2e — у кожному завданні з фічею гравця.
+- **Покриття:** 4.1 → T3; 4.2 → T4a+T8; 4.3 → T4a+T9; 4.4 → T4b+T10; 4.5 → T5; 4.6, 4.7, 4.9 → скасовано (T7, T15); 4.8 → T12; 4.10 → T12; респонсивність (без прив'язки до пристрою) → T1+T13 і крок `LayoutProbe` у кожному UI-завданні; e2e — у кожному завданні з фічею гравця.
 - **Узгодженість імен:** `action_status`, `repair_bounds`, `reach_tiles`, `drone_marks`, `drone_damage_bounds`, `TargetOverlay.show_tiles`, `InputController.arm_engineer/arm_drone/disarm`, сигнали `targets_changed`, `drone_armed`, `action_refused`; `ActionType.ENGINEER/DRONE` вводить T8, споживає T10.
-- **Що застаріло в старій таблиці:** «13 типів» → 12; значок дронів (4.4) і ядро трьох гравців (4.8) й перевірка перемоги (4.9) уже є; файл 4.7 — `unit_inspector.gd`, не лише `hud.gd`; шари мін і цілей мусять читати стан, а не події; 720×360 із розділу «Стиль» замінено набором `LayoutProbe.SIZES` (800×360 … 1280×800); Pixel 10 Pro XL — лише орієнтир.
+- **Що застаріло в старій таблиці:** «13 типів» → 12; значок дронів (4.4) і ядро трьох гравців (4.8) уже є; шар мін мусить читати стан, а не події; 720×360 із розділу «Стиль» замінено набором `LayoutProbe.SIZES` (800×360 … 1280×800); Pixel 10 Pro XL — лише орієнтир.

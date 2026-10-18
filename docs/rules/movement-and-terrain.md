@@ -118,8 +118,8 @@ never more expensive than the distance covered.
 
 **Walking sees, and what it saw is kept.** Because vision is recomputed at every tile rather than
 once on arrival, a unit that drives past something and carries on has still seen it: the terrain
-enters that player's `seen` grid, an engineer's mine search runs from every tile it passed, and an
-objective glimpsed in the middle of the route is remembered. Recomputing only at the destination
+enters that player's `seen` grid, an engineer's mine search runs from every tile it passed, and the
+ground glimpsed in the middle of the route stays scouted. Recomputing only at the destination
 would silently discard all of it — the unit would arrive having learned nothing about the ground
 it had just crossed. This is a rules consequence rather than a presentation detail, and it is the
 reason the refresh is inside the walk loop and not after it.
