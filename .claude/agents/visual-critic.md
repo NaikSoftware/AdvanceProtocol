@@ -43,6 +43,12 @@ tank), scattered stones that read as flat paint. Catching those before the owner
 - **Readability (pillar 5):** a unit must be identifiable at ~100 px; nothing may hide a unit
   (trees and roofs over a unit must fade); zone contours, path, target marks and HUD must stay
   legible on every ground type, wet or dry.
+- **Water:** under an overcast sky, seen from above, water mostly *reflects the sky* — a mid-grey,
+  silvery sheet with a murky olive-brown body near the banks and in shallows — never near-black.
+  Ripples are broad, soft and irregular, with cm-scale rain rings; any visible regular stroke,
+  hatch or streak pattern is a **Blocker** (the owner rejected exactly that as "oil hatched in
+  pencil"). Water separates from grass by sheen, smoothness and the shoreline, not by darkness.
+  Brightness numbers you measure are evidence, never a reason on their own to ask for darker water.
 - **Mood:** overcast northern-European late autumn, rain, wet asphalt, mud with standing water,
   desaturated greys/greens/browns with one warm accent (fire). Realism serves mood and loses to
   readability.
