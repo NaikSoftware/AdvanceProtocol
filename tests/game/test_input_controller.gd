@@ -619,3 +619,21 @@ func test_arming_drone_clears_pending_move() -> void:
 	assert_eq(_pending_cleared_count, cleared_before + 1)
 	controller.confirm_pending()
 	assert_eq(u[0].pos, Vector2i(5, 5), "рух не відбувся")
+
+
+## Fix round 1 (рішення): у режимі DRONE тап по порожньому, невідомому чи поза
+## дошкою тайлу знімає режим, як «Скасувати», а загін лишається вибраним.
+func test_drone_tap_on_empty_or_off_board_disarms_and_keeps_selection() -> void:
+	for cell: Vector2i in [Vector2i(5, 3), Vector2i(-1, -1)]:
+		before_each()
+		var u: Array[Unit] = _squad_scene()
+		controller.arm_drone()
+		var targets: Array = []
+		controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
+		var sel_before: int = _selections.size()
+		controller.tap_cell(cell)
+		assert_eq(targets, [[] as Array[Vector2i]], "режим знято: %s" % cell)
+		assert_eq(_selections.size(), sel_before, "вибір не змінився: %s" % cell)
+		assert_eq(_previews.size(), 0)
+		controller.tap_cell(u[1].pos)
+		assert_eq(int(_previews.back()["type"]), InputController.ActionType.SHOT, "далі — звичайний постріл")

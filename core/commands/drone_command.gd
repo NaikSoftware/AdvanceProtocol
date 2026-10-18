@@ -22,22 +22,15 @@ static func check_strike(state: BattleState, a: Unit, t: Unit) -> String:
 	## обгортка, а Targeting.drone_targets() (§3.13) викликає саме цю функцію, а не
 	## власну копію умов. Оверлей «куди я можу вдарити дроном» мусить збігатися з
 	## валідацією до останньої перевірки, інакше він обіцяє удар, який гра відхилить.
-	if state.is_over():
-		return "ERR_MATCH_OVER"
-	if a == null or not a.is_alive():
-		return "ERR_NO_SUCH_UNIT"
+	# Спершу загін — та сама check_launch(), що й у кнопки дрона, тож розійтися
+	# вони не можуть; далі лише перевірки цілі.
+	var r: String = check_launch(state, a)
+	if r != "":
+		return r
 	if t == null or not t.is_alive():
 		return "ERR_NO_SUCH_TARGET"
-	if a.owner != state.active_player:
-		return "ERR_NOT_YOUR_UNIT"
 	if t.owner == a.owner:
 		return "ERR_FRIENDLY_FIRE"
-	if a.drones_left <= 0:
-		return "ERR_NO_DRONES_LEFT"
-	if a.has_fired:
-		return "ERR_ALREADY_FIRED"
-	if a.ap < a.fire_cost():
-		return "ERR_NOT_ENOUGH_AP"
 	if not UnitTypes.is_vehicle(t.unit_class()):
 		return "ERR_DRONE_CANNOT_TARGET_INFANTRY"
 	if not Rules.in_radius(a.pos, t.pos, RANGE):
@@ -51,9 +44,8 @@ static func check_strike(state: BattleState, a: Unit, t: Unit) -> String:
 	return ""
 
 static func check_launch(state: BattleState, a: Unit) -> String:
-	## Відмова, що не залежить від цілі (кнопка дрона в UI, §3.13): ті самі перевірки
-	## загону й у тому самому порядку, що й у check_strike(). Додаєш умову загону туди —
-	## додай і сюди, інакше кнопка озброїть удар, який кожен тап відхилить.
+	## Відмова, що не залежить від цілі (кнопка дрона в UI, §3.13). check_strike()
+	## починає саме з неї — єдине місце перевірок загону.
 	if state.is_over():
 		return "ERR_MATCH_OVER"
 	if a == null or not a.is_alive():

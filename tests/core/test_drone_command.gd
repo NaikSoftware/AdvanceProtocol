@@ -152,3 +152,23 @@ func test_check_launch_reports_unit_level_reasons() -> void:
 	state.active_player = 1
 	assert_eq(DroneCommand.check_launch(state, a), "ERR_NOT_YOUR_UNIT")
 	assert_eq(DroneCommand.check_launch(state, null), "ERR_NO_SUCH_UNIT")
+
+## Fix round 1: check_strike() починає з check_launch() — для кожної відмови загону
+## причина та сама, і з живою ворожою ціллю, і без цілі.
+func test_check_strike_agrees_with_check_launch_on_squad_failures() -> void:
+	var breakers: Dictionary = {
+		"ERR_NO_DRONES_LEFT": func(a: Unit) -> void: a.drones_left = 0,
+		"ERR_ALREADY_FIRED": func(a: Unit) -> void: a.has_fired = true,
+		"ERR_NOT_ENOUGH_AP": func(a: Unit) -> void: a.ap = a.fire_cost() - 1,
+		"ERR_NOT_YOUR_UNIT": func(_a: Unit) -> void: state.active_player = 1,
+		"ERR_MATCH_OVER": func(_a: Unit) -> void: state.winner = 0,
+	}
+	for reason: String in breakers:
+		before_each()
+		var a: Unit = _assault(Vector2i(2, 2))
+		var t: Unit = state.add_unit(5, 1, Vector2i(5, 2), 2)
+		state.begin_turn()
+		(breakers[reason] as Callable).call(a)
+		assert_eq(DroneCommand.check_launch(state, a), reason, reason)
+		assert_eq(DroneCommand.check_strike(state, a, t), reason, "%s з ціллю" % reason)
+		assert_eq(DroneCommand.check_strike(state, a, null), reason, "%s без цілі" % reason)

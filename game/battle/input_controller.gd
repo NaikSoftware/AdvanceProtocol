@@ -284,13 +284,13 @@ func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
 
 ## У режимі DRONE: відомий ворог — прев'ю удару або причина відмови з
 ## DroneCommand.validate() (та сама check_strike, що дала позначки); свій юніт —
-## вибір (знімає режим); порожній тайл — нічого.
+## вибір (знімає режим); порожній, невідомий чи поза дошкою тайл — знімає режим,
+## як «Скасувати», загін лишається вибраним (рішення контролера).
 func _tap_in_drone_mode(state: BattleState, cell: Vector2i) -> void:
 	var known: Dictionary = state.known_occupied_map(state.active_player)
-	if not known.has(cell):
-		return
-	var tapped: Unit = state.get_unit(known[cell])
+	var tapped: Unit = state.get_unit(known[cell]) if known.has(cell) else null
 	if tapped == null:
+		cancel_pending()
 		return
 	if tapped.owner == state.active_player:
 		select_unit(tapped)

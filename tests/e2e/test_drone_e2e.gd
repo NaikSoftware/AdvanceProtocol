@@ -120,7 +120,7 @@ func test_third_strike_refused() -> void:
 
 
 ## Рішення контролера: тап по ворогу без кнопки — звичайний постріл.
-func test_plain_tap_on_tank_is_a_shot_preview() -> void:
+func test_plain_tap_on_infantry_is_a_shot_preview() -> void:
 	await _boot()
 	_e2e.tap(SQUAD)
 	await _e2e.settle()
