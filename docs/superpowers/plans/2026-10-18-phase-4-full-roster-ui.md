@@ -314,7 +314,7 @@ func test_engineer_reveals_enemy_mine_in_its_diamond() -> void
 
 ---
 
-### Task 6: Цілі на дошці (4.6)
+### Task 6: Цілі на дошці (4.6) — виконано й потім прибрано Task 15
 
 **Files:**
 - Create: `game/battle/objective_view.gd` (`class_name ObjectiveView extends Node3D` — шар усіх маркерів цілей)
@@ -477,7 +477,7 @@ func test_third_strike_refused() -> void   # prepare: drones_left 0 → нати
 
 ---
 
-### Task 11: Лічильник цілей (4.9)
+### Task 11: ~~Лічильник цілей (4.9)~~ — СКАСОВАНО: механіку цілей видалено (власник, 2026-10-18), див. Task 15
 
 **Files:**
 - Modify: `game/ui/hud.gd` (`refresh()`), `game/ui/hud.tscn` (`ObjectiveCounter` у `TopBar`)
@@ -603,6 +603,10 @@ func test_board_still_tappable_on_phone() -> void
 - [ ] **Step 5: Коміт** `test(e2e): увесь HUD бою влазить у телефони, ПК і планшет`
 
 ---
+
+### Task 15: Видалити механіку цілей (рішення власника 2026-10-18)
+
+Цілей у грі немає; перемога — лише знищенням. Прибрати `core/objectives.gd`, верби інженера CAPTURE/DEMOLISH_OBJECTIVE, умову «утримай N», поля карт, події, ObjectiveView, тексти й §3.10 у CLAUDE.md; старі збереження з полями цілей мусять завантажуватися. Повний бриф — у робочій теці SDD (task-15-brief.md). Іде після T8.
 
 ## Відкриті питання до власника
 
