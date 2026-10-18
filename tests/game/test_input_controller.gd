@@ -124,6 +124,62 @@ func test_confirm_pending_submits_exactly_one_move_command_and_clears_pending() 
 	assert_true(service.take_events().is_empty(), "повторний confirm_pending() не мусить нічого подавати")
 
 
+## Власник: повторний тап по тайлу, куди вже прокладено шлях, — те саме, що Confirm.
+func test_second_tap_on_pending_move_target_confirms_it() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	var target := Vector2i(6, 5)
+	controller.tap_cell(target)
+	var ap_left: int = int(_previews[0]["ap_left"])
+	controller.tap_cell(target)
+	assert_eq(u.pos, target)
+	assert_eq(u.ap, ap_left)
+	assert_eq(_selections.back(), u, "юніт лишається вибраним, як після Confirm")
+	assert_eq(_previews.size(), 1, "другий тап не будує нового прев'ю")
+	assert_eq(overlay.last_zones.origin, target, "зони перераховано від нової позиції")
+
+
+## Тап по іншому тайлу зони при відкладеному русі — лише нове прев'ю.
+func test_tap_on_another_tile_with_pending_move_only_repreviews() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	controller.tap_cell(u.pos)
+	controller.tap_cell(Vector2i(6, 5))
+	controller.tap_cell(Vector2i(4, 5))
+	assert_eq(u.pos, Vector2i(5, 5))
+	assert_eq(_previews.size(), 2)
+
+
+## «Скасувати» щось робить рівно тоді, коли є прев'ю або озброєно вербу чи дрон.
+func test_has_cancelable_follows_pending_and_armed_modes() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	var eng: Unit = service.state.add_unit(ENGINEER_TYPE, 0, Vector2i(10, 10), 0)
+	var sq: Unit = service.state.add_unit(1, 0, Vector2i(15, 15), 0)
+	service.state.add_unit(5, 1, Vector2i(15, 18), 0)
+	_begin_and_drain()
+	assert_false(controller.has_cancelable(), "нічого не вибрано")
+	controller.tap_cell(u.pos)
+	assert_false(controller.has_cancelable(), "лише вибір — скасовувати нічого")
+	controller.tap_cell(Vector2i(6, 5))
+	assert_true(controller.has_cancelable(), "прев'ю руху")
+	controller.cancel_pending()
+	assert_false(controller.has_cancelable())
+	controller.tap_cell(eng.pos)
+	controller.arm_engineer(LAY)
+	assert_true(controller.has_cancelable(), "озброєна верба")
+	controller.cancel_pending()
+	assert_false(controller.has_cancelable())
+	controller.tap_cell(sq.pos)
+	controller.arm_drone()
+	assert_true(controller.has_cancelable(), "озброєний дрон")
+	controller.cancel_pending()
+	assert_false(controller.has_cancelable())
+
+
 func test_cancel_pending_clears_pending_and_submits_nothing() -> void:
 	_start()
 	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
@@ -480,13 +536,27 @@ func test_arm_engineer_without_tiles_refuses_with_reason() -> void:
 		InputController.ActionType.ENGINEER, "без озброєння тап по сусідньому тайлі — не прев'ю верби")
 
 
-func test_tap_on_valid_tile_sets_engineer_preview() -> void:
+## Власник: міна ставиться одразу на тап по допустимому тайлі — без прев'ю й Confirm.
+func test_lay_mine_tap_on_valid_tile_lays_it_at_once() -> void:
 	var e: Unit = _engineer_at(Vector2i(5, 5))
 	controller.arm_engineer(LAY)
 	controller.tap_cell(Vector2i(6, 5))
-	assert_eq(_previews.size(), 1)
-	assert_eq(_previews[0], {"type": InputController.ActionType.ENGINEER, "unit_id": e.id,
-		"action": LAY, "target": Vector2i(6, 5)})
+	assert_eq(_previews.size(), 0, "жодного прев'ю — дія вже виконана")
+	assert_eq(service.state.mines.size(), 1)
+	assert_eq(service.state.mines[0].pos, Vector2i(6, 5))
+	assert_eq(e.ap, 0)
+	assert_false(controller.has_cancelable(), "нічого не озброєно й не чекає")
+
+
+## Решта верб — як раніше: тап лише показує прев'ю.
+func test_other_verbs_still_preview_first() -> void:
+	var e: Unit = _engineer_at(Vector2i(5, 5))
+	service.state.board.set_kind(Vector2i(6, 5), Terrain.Kind.BRIDGE_DESTROYED)
+	controller.arm_engineer(EngineerCommand.Action.REPAIR_BRIDGE)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(_previews, [{"type": InputController.ActionType.ENGINEER, "unit_id": e.id,
+		"action": EngineerCommand.Action.REPAIR_BRIDGE, "target": Vector2i(6, 5)}] as Array[Dictionary])
+	assert_eq(service.state.board.kind_at(Vector2i(6, 5)), Terrain.Kind.BRIDGE_DESTROYED)
 
 
 func test_tap_outside_tiles_is_noop_in_engineer_mode() -> void:
@@ -498,8 +568,9 @@ func test_tap_outside_tiles_is_noop_in_engineer_mode() -> void:
 	assert_eq(_previews.size(), 0)
 	assert_eq(_selections.size(), sel_before)
 	controller.tap_cell(Vector2i(5, 4))
-	assert_eq(_previews.size(), 1, "режим досі озброєний")
-	assert_eq(_previews[0]["unit_id"], e.id)
+	assert_eq(service.state.mines.size(), 1, "режим досі озброєний")
+	assert_eq(service.state.mines[0].pos, Vector2i(5, 4))
+	assert_eq(service.state.mines[0].owner, e.owner)
 
 
 func test_selecting_another_unit_disarms() -> void:
@@ -515,16 +586,12 @@ func test_selecting_another_unit_disarms() -> void:
 	assert_eq(int(_previews.back()["type"]), InputController.ActionType.MOVE, "режим знятий — звичайний тап")
 
 
-func test_targets_cleared_after_confirm() -> void:
-	var e: Unit = _engineer_at(Vector2i(5, 5))
+func test_targets_cleared_after_laying() -> void:
+	_engineer_at(Vector2i(5, 5))
 	controller.arm_engineer(LAY)
-	controller.tap_cell(Vector2i(6, 5))
 	var targets: Array = []
 	controller.targets_changed.connect(func(t: Array[Vector2i]) -> void: targets.append(t))
-	controller.confirm_pending()
-	assert_eq(service.state.mines.size(), 1)
-	assert_eq(service.state.mines[0].pos, Vector2i(6, 5))
-	assert_eq(e.ap, 0)
+	controller.tap_cell(Vector2i(6, 5))
 	assert_eq(targets.back(), [] as Array[Vector2i])
 
 

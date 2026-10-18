@@ -148,6 +148,37 @@ func test_drone_and_threat_floor_fit_every_size(p = use_parameters(_sizes_by_loc
 	_assert_fits(size, "огляд ворога + постріл %s" % size)
 
 
+## Підказка озброєної верби (що тапнути) влазить на кожен розмір обома мовами — для
+## кожної з п'яти верб. Сусіди інженера дають ціль кожній: поранений танк, зруйнований
+## і цілий міст, своя міна.
+func test_engineer_hint_fits_every_size(p = use_parameters(_sizes_by_locale())) -> void:
+	var size: Vector2i = p[0]
+	TranslationServer.set_locale(p[1])
+	var broken := ENG + Vector2i.LEFT
+	var bridge := ENG + Vector2i.UP
+	var mine := ENG + Vector2i.DOWN
+	await _e2e.boot(10, 5, [_spawn(ENGINEER, 0, ENG), _spawn(MEDIUM_TANK, 0, HURT), _spawn(RIFLE, 1, FAR)],
+		{"viewport_size": size, "tiles": {broken: Terrain.Kind.BRIDGE_DESTROYED, bridge: Terrain.Kind.BRIDGE},
+		"prepare": func(st: BattleState) -> void:
+			for pl in st.player_count:
+				st.vision[pl].seen.fill(1)
+			st.unit_at(HURT).hp = 300
+			Mines.place(st, mine, 0)})
+	await _tap(ENG)
+	var panel: EngineerPanel = _e2e.engineer_panel()
+	var hint: Label = panel.get_node("%HintLabel")
+	for a: int in EngineerPanel.LABEL_KEYS:
+		var where: String = "верба %d %s %s" % [a, size, p[1]]
+		var b: Button = panel.button_for(a)
+		(panel.get_node("%Scroll") as ScrollContainer).ensure_control_visible(b)
+		await _e2e.settle()
+		await _tap_button(b)
+		assert_true(hint.is_visible_in_tree(), where)
+		assert_eq(LayoutProbe.clipped(_e2e.hud(), [hint] as Array[Control], size), [] as Array[String], where)
+		_assert_fits(size, where)
+		await _tap_button(panel.get_node("%StripCancel"))
+
+
 ## На PHONE_SMALL, з відкритою панеллю інженера, тап у центр смуги дошки вибирає
 ## юніт, що там стоїть. Дошка заповнена своїми загонами — під центром завжди хтось є.
 func test_board_still_tappable_on_phone(p = use_parameters(LOCALES)) -> void:

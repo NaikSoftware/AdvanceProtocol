@@ -121,5 +121,9 @@ eng_clear_mine,Зняти міну,Clear mine
 eng_repair_bridge,Відновити міст,Repair bridge
 eng_demolish_bridge,Підірвати міст,Demolish bridge
 eng_repair_unit,Ремонт юніта,Repair unit
-eng_ap_cost,%d ОД,%d AP
+eng_hint_lay_mine,"Тапни сусідню клітинку, щоб поставити міну",Tap an adjacent tile to lay a mine
+eng_hint_clear_mine,"Тапни сусідню міну, щоб зняти її",Tap an adjacent mine to clear it
+eng_hint_repair_bridge,"Тапни сусідній зруйнований міст, щоб відновити його",Tap an adjacent broken bridge to repair it
+eng_hint_demolish_bridge,"Тапни сусідній міст, щоб підірвати його",Tap an adjacent bridge to demolish it
+eng_hint_repair_unit,"Тапни сусідній свій юніт, щоб відремонтувати його",Tap an adjacent friendly unit to repair it
 ERR_NO_ADJACENT_TARGET,Поруч немає придатної цілі,No valid target adjacent

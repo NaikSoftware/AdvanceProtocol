@@ -251,6 +251,14 @@ func attach_controller(controller: InputController) -> void:
 	controller.action_refused.connect(func(reason: String) -> void:
 		if _drone_button.visible:
 			_show_drone_reason(reason))
+	# Власник: «Скасувати» видно лише тоді, коли натиск щось робить. Кожна зміна
+	# прев'ю чи режиму проходить крізь один із цих сигналів, тож видимість
+	# перечитується з контролера після кожної.
+	controller.action_preview.connect(_sync_cancel.unbind(1))
+	controller.pending_cleared.connect(_sync_cancel)
+	controller.targets_changed.connect(_sync_cancel.unbind(1))
+	controller.drone_armed.connect(_sync_cancel.unbind(2))
+	_sync_cancel()
 	# §3.13: огляд ворога — позначки лише нижня межа, і UI мусить сказати це вголос.
 	controller.inspected.connect(func(_r: Array[Vector2i], drone_ring: Array[Vector2i], _m: Array[int],
 			_dm: Array[int], is_floor: bool) -> void:
@@ -427,6 +435,10 @@ func _on_cancel_pressed() -> void:
 	if _controller != null:
 		_controller.cancel_pending()
 	_clear_preview()
+
+
+func _sync_cancel() -> void:
+	_cancel_button.visible = _controller != null and _controller.has_cancelable()
 
 
 func _on_end_turn_pressed() -> void:

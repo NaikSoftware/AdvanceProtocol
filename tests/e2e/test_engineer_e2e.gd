@@ -140,16 +140,22 @@ func test_engineer_buttons_hidden_for_non_engineer() -> void:
 ## Рішення контролера: на малому телефоні озброєна верба згортає панель у смужку,
 ## і кожен тайл-ціль лишається відкритим для тапу.
 func test_armed_targets_are_tappable_on_small_phone() -> void:
+	# Зруйновані мости навколо: ремонт — верба з прев'ю, тож тапнути можна кожен тайл
+	# (міна ставиться першим же тапом і з'їла б AP).
 	var eng_pos := Vector2i(4, 2)
+	var broken: Dictionary = {}
+	for d: Vector2i in Board.DIRS_4:
+		broken[eng_pos + d] = Terrain.Kind.BRIDGE_DESTROYED
 	await _e2e.boot(10, 5, [_spawn(ENGINEER, 0, eng_pos), _spawn(RIFLE, 1, Vector2i(9, 4))],
-		{"viewport_size": LayoutProbe.PHONE_SMALL})
+		{"viewport_size": LayoutProbe.PHONE_SMALL, "tiles": broken})
 	var eng: Unit = _state().unit_at(eng_pos)
 	_e2e.tap(eng_pos)
-	_e2e.press(_e2e.engineer_panel().button_for(A.LAY_MINE))
+	_e2e.press(_e2e.engineer_panel().button_for(A.REPAIR_BRIDGE))
 	await _e2e.settle()
+	assert_true((_e2e.engineer_panel().get_node("%HintLabel") as Control).is_visible_in_tree(), "підказка теж на екрані")
 	var previews: Array[Dictionary] = []
 	_e2e.screen.input_controller().action_preview.connect(func(pv: Dictionary) -> void: previews.append(pv))
-	var tiles: Array[Vector2i] = EngineerCommand.action_status(_state(), eng.id, A.LAY_MINE)["tiles"]
+	var tiles: Array[Vector2i] = EngineerCommand.action_status(_state(), eng.id, A.REPAIR_BRIDGE)["tiles"]
 	assert_eq(tiles.size(), 4)
 	var screen_rect := Rect2(Vector2.ZERO, Vector2(LayoutProbe.PHONE_SMALL))
 	for t: Vector2i in tiles:
@@ -159,7 +165,7 @@ func test_armed_targets_are_tappable_on_small_phone() -> void:
 		_e2e.tap(t)
 		await _e2e.settle()
 		assert_eq(previews.back(), {"type": InputController.ActionType.ENGINEER, "unit_id": eng.id,
-			"action": A.LAY_MINE, "target": t})
+			"action": A.REPAIR_BRIDGE, "target": t})
 
 
 ## Усі видимі Control HUD, що перехопили б тап у точці p.
@@ -191,7 +197,7 @@ func test_strip_cancel_and_completed_action_restore_the_panel() -> void:
 	# інженер досі вибраний — повторний тап по ньому зняв би вибір
 	_e2e.press(panel.button_for(A.LAY_MINE))
 	_e2e.tap(TARGET)
-	await _e2e.confirm()
+	await _e2e.settle()
 	assert_eq(_state().mines.size(), 1)
 	assert_false((panel.get_node("%Strip") as Control).visible, "дію виконано — смужку знято")
 
@@ -278,3 +284,61 @@ func test_armed_verb_does_not_survive_the_handover_gate() -> void:
 	await _e2e.confirm_gate()
 	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
 	assert_false((panel.get_node("%Strip") as Control).is_visible_in_tree())
+
+
+# --- Власник: UX міни й підказки ---
+
+## Тап по сусідньому тайлу після «Поставити міну» ставить її одразу: ні прев'ю,
+## ні Confirm, і панель після дії — та сама синхронізація, що після Confirm.
+func test_lay_mine_on_tap_without_confirm() -> void:
+	await _boot()
+	var panel: EngineerPanel = _e2e.engineer_panel()
+	var hud: Hud = _e2e.hud()
+	_e2e.tap(ENG)
+	_e2e.press(panel.button_for(A.LAY_MINE))
+	await _e2e.settle()
+	var hint: Label = panel.get_node("%HintLabel")
+	assert_true(hint.is_visible_in_tree())
+	assert_eq(hint.text, tr("eng_hint_lay_mine"))
+	_e2e.tap(Vector2i(7, 1))  # не сусід — відмова, як і раніше
+	await _e2e.settle()
+	assert_eq((panel.get_node("%ReasonLabel") as Label).text, tr("ERR_NOT_ADJACENT"))
+	assert_eq(_state().mines.size(), 0)
+	_e2e.tap(TARGET)
+	await _e2e.settle()
+	assert_eq(_state().mines.size(), 1)
+	assert_eq(_state().mines[0].pos, TARGET)
+	assert_eq(_eng().ap, 0)
+	assert_true((hud.get_node("%ConfirmButton") as Button).disabled, "підтверджувати нічого")
+	assert_false((hud.get_node("%CancelButton") as Control).visible, "скасовувати нічого")
+	assert_false(hint.is_visible_in_tree(), "режим знято — підказку теж")
+	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
+	assert_true((panel.get_node("%Scroll") as Control).visible, "панель розгорнулась")
+	assert_eq(panel.button_for(A.CLEAR_MINE).theme_type_variation, EngineerPanel.UNAVAILABLE_VARIATION,
+		"доступність верб перечитано: AP 0")
+	assert_eq((hud.get_node("%ApValue") as Label).text, "0")
+
+
+## Кожна верба має свою підказку, що тапнути.
+func test_every_armed_verb_has_its_hint() -> void:
+	await _boot([_spawn(MEDIUM_TANK, 0, Vector2i(1, 1))], {"tiles": {Vector2i(2, 0): Terrain.Kind.BRIDGE_DESTROYED,
+		Vector2i(2, 2): Terrain.Kind.BRIDGE},
+		"prepare": func(st: BattleState) -> void:
+			st.unit_at(Vector2i(1, 1)).hp = 300
+			Mines.place(st, TARGET, 0)})
+	var panel: EngineerPanel = _e2e.engineer_panel()
+	var hint: Label = panel.get_node("%HintLabel")
+	_e2e.tap(ENG)
+	await _e2e.settle()
+	var keys: Dictionary = {A.LAY_MINE: "eng_hint_lay_mine", A.CLEAR_MINE: "eng_hint_clear_mine",
+		A.REPAIR_BRIDGE: "eng_hint_repair_bridge", A.DEMOLISH_BRIDGE: "eng_hint_demolish_bridge",
+		A.REPAIR_UNIT: "eng_hint_repair_unit"}
+	for a: int in keys:
+		_e2e.press(panel.button_for(a))
+		await _e2e.settle()
+		assert_true(hint.is_visible_in_tree(), keys[a])
+		assert_eq(hint.text, tr(keys[a]))
+		assert_ne(hint.text, keys[a], "переклад є")
+		_e2e.press(panel.get_node("%StripCancel"))
+		await _e2e.settle()
+		assert_false(hint.is_visible_in_tree())

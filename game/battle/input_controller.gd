@@ -148,6 +148,12 @@ func tap_cell(cell: Vector2i) -> void:
 		_deselect()
 		return
 
+	# Власник: повторний тап по цілі прокладеного шляху — те саме, що Confirm.
+	# Лише рух: тап по ворогу лишається оглядом і прев'ю пострілу.
+	if not _pending.is_empty() and _pending["type"] == ActionType.MOVE and _pending["target"] == cell:
+		confirm_pending()
+		return
+
 	if _selected_unit != null and _selected_unit.is_alive() and cell == _selected_unit.pos:
 		_deselect()
 		return
@@ -251,6 +257,12 @@ func cancel_pending() -> void:
 	disarm()
 
 
+## Чи cancel_pending() щось змінить: є прев'ю або озброєно вербу чи дрон. HUD
+## показує «Скасувати» рівно тоді.
+func has_cancelable() -> bool:
+	return not _pending.is_empty() or _armed_action >= 0 or _drone_armed
+
+
 ## Режим ENGINEER для вибраного свого інженера. Тайли й причина відмови — лише
 ## з core/ (EngineerCommand.action_status), вигляд їх не виводить.
 func arm_engineer(action: int) -> void:
@@ -291,7 +303,7 @@ func disarm() -> void:
 	targets_changed.emit([] as Array[Vector2i])
 
 
-## У режимі ENGINEER: тайл з допустимих — прев'ю верби; свій юніт — вибір
+## У режимі ENGINEER: тайл з допустимих — прев'ю верби (міна — одразу дія); свій юніт — вибір
 ## (знімає режим); решта — action_refused з причиною цього тайла.
 func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
 	if _targets.has(cell):
@@ -306,6 +318,10 @@ func _tap_in_engineer_mode(state: BattleState, cell: Vector2i) -> void:
 			var bounds: Vector2i = EngineerCommand.repair_bounds(_selected_unit, state.unit_at(cell))
 			_pending["heal_min"] = bounds.x
 			_pending["heal_max"] = bounds.y
+		# Власник: міна ставиться самим тапом — підтвердження тут лише зайвий крок.
+		if _armed_action == EngineerCommand.Action.LAY_MINE:
+			confirm_pending()
+			return
 		action_preview.emit(_pending)
 		return
 	var known: Dictionary = state.known_occupied_map(state.active_player)

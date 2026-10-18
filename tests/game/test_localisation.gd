@@ -73,7 +73,8 @@ func test_every_error_key_is_translated() -> void:
 ## Task 8: підписи панелі інженера.
 const ENGINEER_PANEL_KEYS: Array[String] = [
 	"eng_lay_mine", "eng_clear_mine", "eng_repair_bridge", "eng_demolish_bridge",
-	"eng_repair_unit", "eng_ap_cost", "hud_heal", "hud_drone_strike", "hud_drone_range",
+	"eng_repair_unit", "eng_hint_lay_mine", "eng_hint_clear_mine", "eng_hint_repair_bridge",
+	"eng_hint_demolish_bridge", "eng_hint_repair_unit", "hud_heal", "hud_drone_strike", "hud_drone_range",
 	"hud_threat_floor", "hud_threat_floor_drone",
 ]
 

@@ -1,16 +1,16 @@
 class_name EngineerPanel
 extends PanelContainer
 ## Task 8: п'ять верб інженера (§3.8), завжди всі, у порядку EngineerCommand.Action,
-## крім цілей — механіку цілей прибирають окремою задачею (рішення власника),
-## кожна з ціною fire_cost. Доступність і причина відмови — лише з
+## крім цілей — механіку цілей прибирають окремою задачею (рішення власника).
+## Ціни на кнопках немає: кожна верба коштує той самий fire_cost (власник). Доступність і причина відмови — лише з
 ## EngineerCommand.action_status() (§3.13), панель нічого не виводить сама.
 ## Недоступна кнопка сіра, але НЕ disabled: на телефоні немає наведення, тож
 ## тап по ній — єдиний спосіб дізнатися причину (§1.5).
 ##
 ## Розкладка (рішення контролера): одна колонка, ширина ≤ ~40 % екрана, висота
 ## за вмістом (прокрутка лише коли не влазить). Коли верба озброєна, панель
-## згортається в смужку «верба + Скасувати», щоб тайли-цілі під нею лишались
-## тапабельними.
+## згортається в смужку «верба + Скасувати» з підказкою, що тапнути, щоб тайли-цілі
+## під нею лишались тапабельними.
 
 signal action_chosen(action: int)
 signal cancel_pressed
@@ -22,6 +22,13 @@ const LABEL_KEYS: Dictionary = {
 	EngineerCommand.Action.REPAIR_BRIDGE: "eng_repair_bridge",
 	EngineerCommand.Action.DEMOLISH_BRIDGE: "eng_demolish_bridge",
 	EngineerCommand.Action.REPAIR_UNIT: "eng_repair_unit",
+}
+const HINT_KEYS: Dictionary = {
+	EngineerCommand.Action.LAY_MINE: "eng_hint_lay_mine",
+	EngineerCommand.Action.CLEAR_MINE: "eng_hint_clear_mine",
+	EngineerCommand.Action.REPAIR_BRIDGE: "eng_hint_repair_bridge",
+	EngineerCommand.Action.DEMOLISH_BRIDGE: "eng_hint_demolish_bridge",
+	EngineerCommand.Action.REPAIR_UNIT: "eng_hint_repair_unit",
 }
 
 var _unit: Unit = null
@@ -46,6 +53,7 @@ var max_height: float = 0.0:
 @onready var _box: Control = %Box
 @onready var _strip: Control = %Strip
 @onready var _armed_label: Label = %ArmedLabel
+@onready var _hint_label: Label = %HintLabel
 
 
 func _ready() -> void:
@@ -86,6 +94,7 @@ func show_for(state: BattleState, unit: Unit) -> void:
 func set_armed(armed: bool) -> void:
 	_scroll.visible = not armed
 	_strip.visible = armed
+	_hint_label.visible = armed
 	_relabel()
 	_queue_fit()
 
@@ -97,10 +106,10 @@ func button_for(action: int) -> Button:
 func _relabel() -> void:
 	if _unit == null:
 		return
-	var cost: String = tr("eng_ap_cost") % _unit.fire_cost()
 	for action: int in _buttons:
-		(_buttons[action] as Button).text = "%s · %s" % [tr(LABEL_KEYS[action]), cost]
+		(_buttons[action] as Button).text = tr(LABEL_KEYS[action])
 	_armed_label.text = tr(LABEL_KEYS[_chosen]) if LABEL_KEYS.has(_chosen) else ""
+	_hint_label.text = tr(HINT_KEYS[_chosen]) if HINT_KEYS.has(_chosen) else ""
 
 
 func _on_pressed(action: int) -> void:
