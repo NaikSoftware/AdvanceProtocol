@@ -16,6 +16,11 @@ extends Node3D
 ## режими верби й дрона замінюють свої тайли, а кільце вибраного юніта живе поруч.
 enum { LAYER_ZONES, LAYER_PATH, LAYER_TARGETS, LAYER_INSPECT }
 
+## Шар рендеру для накладок (контури, кільця). Не шар світу (1): зонд відбиттів
+## знімає шар 1, і накладки активного гравця в знімку побачив би наступний гравець
+## у річці. Шар 2 — юніти, 3 — міни (MineLayer.MARKER_LAYER).
+const OVERLAY_LAYER: int = 4
+
 ## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
 ## задумом — вона мусить читатись як лінія на межі тайла, а не як ще один
 ## пофарбований тайл. _CONTOUR_INSET відсуває риску від самого краю тайла:
@@ -91,6 +96,8 @@ func build(board: Board) -> void:
 	var kinds: Image = _ground.kind_image()
 	_water.build(board, 0, null if kinds.is_empty() else ImageTexture.create_from_image(kinds))
 
+	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз: будь-яка
+	# зміна size/position/origin_offset перезняла б зонд посеред партії.
 	if _probe == null:
 		_probe = ReflectionProbe.new()
 		_probe.name = "ReflectionProbe"
@@ -98,16 +105,12 @@ func build(board: Board) -> void:
 		_probe.cull_mask = 1
 		_probe.box_projection = true
 		_probe.blend_distance = 0.0
-		add_child(_probe)
-	# Коробка від y = -1 до 11 і на 2 клітинки ширша за дошку: на межі коробки
-	# зонд гасне, і вода крайніх клітинок чорніла б. Знімок — з висоти 1.5.
-	var size := Vector3(board.width + 4, 12.0, board.height + 4)
-	var centre := Vector3((board.width - 1) * 0.5, 5.0, (board.height - 1) * 0.5)
-	if _probe.size != size or _probe.position != centre:
-		_probe.size = size
-		_probe.position = centre
+		# Коробка від y = -1 до 11 і на 2 клітинки ширша за дошку: на межі коробки
+		# зонд гасне, і вода крайніх клітинок чорніла б. Знімок — з висоти 1.5.
+		_probe.size = Vector3(board.width + 4, 12.0, board.height + 4)
+		_probe.position = Vector3((board.width - 1) * 0.5, 5.0, (board.height - 1) * 0.5)
 		_probe.origin_offset = Vector3(0.0, -3.5, 0.0)
-
+		add_child(_probe)
 
 ## Малює контур шару з тонких рисок, а не заливкою тайлів (§3.13: «контур,
 ## не заливка» — і зони руху, і шлях мусять лишати місцевість та бойові сліди під
@@ -153,6 +156,7 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	mmi.name = "Contour%d" % layer
 	mmi.multimesh = mm
 	mmi.material_override = _contour_material()
+	mmi.layers = 1 << (OVERLAY_LAYER - 1)
 	add_child(mmi)
 	_contour_nodes[layer] = mmi
 
@@ -199,6 +203,7 @@ func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 		mi.mesh = torus
 		mi.material_override = mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.layers = 1 << (OVERLAY_LAYER - 1)
 		mi.position = IsoCameraRig.cell_to_world(c["center"]) + Vector3(0.0, _CONTOUR_Y, 0.0)
 		# Тор товщиною _CONTOUR_WIDTH сплющено до висоти риски контуру.
 		mi.scale = Vector3(1.0, _CONTOUR_HEIGHT / _CONTOUR_WIDTH, 1.0)

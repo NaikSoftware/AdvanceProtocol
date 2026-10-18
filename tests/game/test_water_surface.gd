@@ -109,3 +109,42 @@ func test_water_material_gets_the_kind_map_and_water_kinds() -> void:
 	assert_eq(mat.get_shader_parameter("water_kind"), Terrain.Kind.WATER)
 	assert_eq(mat.get_shader_parameter("broken_bridge_kind"), Terrain.Kind.BRIDGE_DESTROYED)
 	assert_eq(mat.get_shader_parameter("map_origin"), Vector2(0, 0))
+
+
+## Накладки (контури всіх шарів, кільця) — стан активного гравця. Якщо зонд колись
+## перезніме посеред партії, наступний гравець не сміє побачити їх у річці.
+func test_overlays_are_on_the_overlay_layer_outside_the_probe_mask() -> void:
+	view.build(_river())
+	var seg: Array[Dictionary] = [{"cell": Vector2i(3, 3), "dir": Vector2i(1, 0), "color": Color.GOLD}]
+	for layer: int in [BoardView.LAYER_ZONES, BoardView.LAYER_PATH, BoardView.LAYER_TARGETS, BoardView.LAYER_INSPECT]:
+		view.draw_contour(seg, layer)
+	var circles: Array[Dictionary] = [{"center": Vector2i(4, 4), "radius": 3, "color": Color.WHITE}]
+	view.draw_circles(circles, BoardView.LAYER_INSPECT)
+	var bit: int = 1 << (BoardView.OVERLAY_LAYER - 1)
+	var overlays: Array[VisualInstance3D] = []
+	for child in view.get_children():
+		if child is VisualInstance3D and not child is GroundSurface and not child is WaterSurface and not child is ReflectionProbe:
+			overlays.append(child)
+	assert_eq(overlays.size(), 5, "4 контури і одне кільце")
+	for node in overlays:
+		assert_eq(node.layers, bit, node.name)
+	assert_eq(view.reflection_probe().cull_mask & bit, 0)
+	var camera := Camera3D.new()
+	assert_ne(camera.cull_mask & bit, 0, "камера за замовчуванням малює шар накладок")
+	camera.free()
+
+
+## Будь-яка зміна size/origin_offset/position зонда перезнімає його; перебудова
+## (підірваний міст) не сміє їх чіпати.
+func test_rebuild_tiles_leaves_the_probe_box_unchanged() -> void:
+	var board := _river()
+	view.build(board)
+	var probe: ReflectionProbe = view.reflection_probe()
+	assert_eq(probe.size, Vector3(30, 12, 26))
+	assert_eq(probe.position, Vector3(12.5, 5.0, 10.5))
+	assert_eq(probe.origin_offset, Vector3(0.0, -3.5, 0.0))
+	board.set_kind(Vector2i(12, 10), Terrain.Kind.BRIDGE_DESTROYED)
+	view.rebuild_tiles(board)
+	assert_eq(probe.size, Vector3(30, 12, 26))
+	assert_eq(probe.position, Vector3(12.5, 5.0, 10.5))
+	assert_eq(probe.origin_offset, Vector3(0.0, -3.5, 0.0))
