@@ -366,7 +366,7 @@ func test_retaliation_comes_from_ground_scouted_earlier_with_nobody_watching() -
 	# Хід гравця 1: розвідник їде геть від щойно розвіданого тайла.
 	state.active_player = 1
 	state.begin_turn()
-	MoveCommand.create(scout.id, Vector2i(6, 4), -1).apply(state)
+	MoveCommand.create(scout.id, Vector2i(6, 4)).apply(state)
 	assert_eq(scout.pos, Vector2i(6, 4), "передумова: 4 тайли поля по 15 — 60 з 68 AP")
 
 	# Хід гравця 0. Знання АТАКУВАЛЬНИКА — не предмет тесту (його огляд 3 теж не

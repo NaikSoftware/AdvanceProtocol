@@ -193,7 +193,7 @@ func test_retaliation_ap_cost_is_for_attackers_turn_only() -> void:
 	assert_eq(attacker.ap, 0)
 	assert_eq(target.ap, 0, "відповідь коштує AP до кінця ходу атакувальника")
 	# Стрілець більше нічого не може: рух відхиляється правилами.
-	assert_eq(_e2e.service.submit(MoveCommand.create(1, Vector2i(4, 0), -1)), "ERR_ALREADY_FIRED")
+	assert_eq(_e2e.service.submit(MoveCommand.create(1, Vector2i(4, 0))), "ERR_ALREADY_FIRED")
 	await _e2e.settle()
 
 	await _e2e.end_turn()

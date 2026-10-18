@@ -607,7 +607,7 @@ func test_events_ready_refreshes_turn_number_and_the_selected_units_ap() -> void
 	var ap_before: int = u.ap
 	assert_eq(_label("ApValue").text, str(ap_before), "передумова: AP показаний")
 
-	_service.submit(MoveCommand.create(u.id, Vector2i(4, 3), -1))
+	_service.submit(MoveCommand.create(u.id, Vector2i(4, 3)))
 
 	assert_lt(u.ap, ap_before, "передумова: рух справді витратив AP")
 	assert_eq(_label("ApValue").text, str(u.ap),

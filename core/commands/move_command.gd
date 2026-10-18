@@ -3,13 +3,14 @@ extends Command
 
 var unit_id: int = 0
 var target: Vector2i = Vector2i.ZERO
-var facing: int = -1
 
-static func create(p_unit_id: int, p_target: Vector2i, p_facing: int) -> MoveCommand:
+## Напрямку в наказі немає навмисно: після ходу юніт дивиться вздовж останнього
+## кроку. Обраний напрямок на ході, що витрачає останні AP, був би поворотом на 0 AP
+## в обхід TurnCommand (§3.4).
+static func create(p_unit_id: int, p_target: Vector2i) -> MoveCommand:
 	var c := MoveCommand.new()
 	c.unit_id = p_unit_id
 	c.target = p_target
-	c.facing = p_facing
 	return c
 
 func validate(state: BattleState) -> String:
@@ -22,12 +23,11 @@ func validate(state: BattleState) -> String:
 		return "ERR_NOT_YOUR_UNIT"
 	if u.has_fired:
 		return "ERR_ALREADY_FIRED"
-	# −1 — «обличчям за рухом». Решта поза 0..7 дійшла б до Rules.armour_sector()
-	# індексом за межами Board.DIRS.
-	if facing < -1 or facing > 7:
-		return "ERR_BAD_FACING"
 	if not state.board.in_bounds(target):
 		return "ERR_OFF_BOARD"
+	# Хід на місці нічого не робить: поворот на місці — це TurnCommand.
+	if target == u.pos:
+		return "ERR_OWN_TILE"
 	# §3.5: планування — з того, що гравець знає, а не з того, що є. Тайл, зайнятий
 	# невидимим ворогом, лишається законною ціллю: команда проходить перевірку, а
 	# рух зупиниться перед ним у apply(). Помилки на це немає навмисно — вона
@@ -83,7 +83,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 		if state.unit_at(step) != null or _is_known_enemy_mine(state, step, u.owner):
 			# Обрив — це подія, а не мовчанка. Без неї вигляд відрізняв би недоїзд від
 			# коротшого наказу лише порівнянням target із довжиною шляху, а обрив на
-			# першому кроці не відрізнив би від повороту на місці ніяк. Міна собі такої
+			# першому кроці не відрізнив би від повороту TurnCommand ніяк. Міна собі такої
 			# події не потребує: MineTriggered уже називає і юніт, і тайл, на якому все
 			# скінчилось, тобто говорить те саме й ще й причину.
 			trail.append(Events.MoveBlocked.new(unit_id, step))
@@ -128,21 +128,19 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	# коштував би окремий законний хід до тієї самої точки.
 	assert(spent <= u.ap, "хід не може коштувати більше за наявний AP: %d > %d" % [spent, u.ap])
 
-	var final_facing: int = facing
-	if final_facing < 0:
-		# Обличчя — від того, де юніт СПРАВДІ став, а не куди його вели: після обриву
-		# останній крок шляху може так і не відбутися, а саме він задає напрямок.
-		final_facing = Board.facing_towards(
-			walked[walked.size() - 2] if walked.size() >= 2 else start_pos,
-			u.pos) if not walked.is_empty() else u.facing
+	# Обличчя — від того, де юніт СПРАВДІ став, а не куди його вели: після обриву
+	# останній крок шляху може так і не відбутися, а саме він задає напрямок.
+	var final_facing: int = Board.facing_towards(
+		walked[walked.size() - 2] if walked.size() >= 2 else start_pos,
+		u.pos) if not walked.is_empty() else u.facing
 
 	u.facing = final_facing
 	u.spend_ap(spent)
 
-	# Поворот на місці — це UnitTurned, а не UnitMoved з порожнім шляхом:
-	# інакше вигляд мусив би сам розрізняти ці випадки за довжиною масиву. Сюди ж
-	# потрапляє обрив на першому ж кроці: юніт нікуди не зрушив, і потік подій має
-	# сказати саме це.
+	# Порожній шлях буває лише від обриву на першому ж кроці: юніт нікуди не зрушив,
+	# і заголовком іде UnitTurned (напрямок не змінився), а не UnitMoved з порожнім
+	# шляхом, — щоб вигляд не розрізняв ці випадки за довжиною масиву. Причину
+	# називає MoveBlocked у хвості.
 	if walked.is_empty():
 		out.append(Events.UnitTurned.new(unit_id, final_facing))
 	else:

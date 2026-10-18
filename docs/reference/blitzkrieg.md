@@ -160,12 +160,17 @@ Two rules about using it:
   attacker's front — direction snaps to the nearest of eight, at most 22.5° off, inside the 45°
   front cone.
 
-  **Two details deliberately not adopted.** The original turns the survivor whenever it lives — the
-  swap happens before it is known whether an answer is even legal, so a unit with no AP or out of
-  range still turns. It also turns the selected unit toward any enemy the player taps, before
-  deciding the tap was an attack. Here the turn is tied to the action instead: you turn because you
-  fired. A turn granted for merely surviving, or for a tap, would be a free reorientation on someone
-  else's turn for doing nothing.
+  **The surviving-target turn is deliberately not adopted.** The original turns the survivor
+  whenever it lives — the swap happens before it is known whether an answer is even legal, so a
+  unit with no AP or out of range still turns. Here the retaliator turns because it fired back; a
+  turn granted for merely surviving would be a free reorientation on someone else's turn for doing
+  nothing.
+
+  **Turning on tap is adopted, with a gate the original does not have.** The original turns the
+  selected unit toward any enemy the player taps, before deciding the tap was an attack. The owner
+  adopted turning on tap for the acting unit (2026-10-18) — toward any tile, not only an enemy — but
+  only while the unit has AP left. At 0 AP, which includes every unit that has fired, it stays as it
+  is, so flanking still punishes a careless turn. See [combat.md](../rules/combat.md#turning-in-place).
 
 - **The HP bar on the board is a dark full-width track with a left-aligned fill drawn over it, and
   it carries no numbers — confirmed, and adopted with one departure.** `GameCanvas.method_26` draws

@@ -127,8 +127,24 @@ Firing turns the shooter. Being shot does not turn the target. The order is the 
    back. No AP, out of range, an engineer, or an attacker it cannot see — no answer, no turn.
 4. The drone strike turns the squad too, though it computes no sector. One rule, no exceptions.
 
-Turning is free and is never an action on its own. A shooter already facing its target does not
-turn — the turn event means the facing changed, not that someone fired.
+Turning in an exchange is free. A shooter already facing its target does not turn — the turn event
+means the facing changed, not that someone fired.
+
+### Turning in place
+
+**A unit with AP left may turn in place toward any tile, free, on its own turn** (`TurnCommand`).
+At 0 AP it may not — and firing sets AP to 0 (§3.2), so a unit that has fired, or spent its AP
+moving, ends the turn facing wherever that left it.
+
+This is the owner's decision (2026-10-18): a tap anywhere on the board turns the active unit there,
+so it can be pointed somewhere else after its move. **A move carries no facing of its own: the unit
+always ends it facing along its last step.** An explicit facing on a move that spends the last AP
+would be a free turn at 0 AP, around the gate below — so turning in place is the only free
+reorientation, and without it the only way to aim the front was to plan the route around it. The AP
+gate is what keeps flanking a punishment: the turn is free but not unconditional, so a unit that
+spent its turn carelessly — ran into red, or fired from an exposed tile — cannot square up to the
+threat afterwards. A turn that changes nothing is refused (`ERR_ALREADY_FACING`), so the turn event
+still always means the facing changed.
 
 **Retaliation therefore always lands on the attacker's front.** Arithmetic, not tendency: facing
 snaps to one of eight directions, at most 22.5° off, and the front sector runs to 45°, so the return

@@ -101,7 +101,7 @@ func test_the_same_diagonal_stays_unlocked_after_the_spotter_leaves() -> void:
 	state.begin_turn()
 	assert_true(state.vision[0].is_seen(t.pos), "передумова: коригувальник розвідав тайл цілі")
 
-	MoveCommand.create(scout.id, Vector2i(2, 3), -1).apply(state)
+	MoveCommand.create(scout.id, Vector2i(2, 3)).apply(state)
 	assert_eq(scout.pos, Vector2i(2, 3), "передумова: 3 тайли поля по 10 — рівно 30 AP")
 	assert_false(state.vision[0].is_visible(t.pos), "передумова: зараз за ціллю не стежить ніхто")
 	assert_true(state.vision[0].is_seen(t.pos), "передумова: але землю під нею колись розвідали")

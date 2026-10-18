@@ -86,7 +86,7 @@ func test_a_tile_scouted_earlier_stays_shootable_with_nobody_watching() -> void:
 	state.begin_turn()
 	assert_true(state.vision[0].is_seen(t.pos), "передумова: розвідник накрив тайл танка")
 
-	MoveCommand.create(scout.id, Vector2i(2, 1), -1).apply(state)
+	MoveCommand.create(scout.id, Vector2i(2, 1)).apply(state)
 	assert_eq(scout.pos, Vector2i(2, 1), "передумова: 3 тайли поля по 10 — рівно 30 AP")
 	assert_false(state.vision[0].is_visible(t.pos),
 		"передумова: за танком більше не стежить ніхто — ані розвідник, ані гармата (5 > 3)")

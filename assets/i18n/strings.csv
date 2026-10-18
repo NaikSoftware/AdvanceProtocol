@@ -15,7 +15,6 @@ ERR_NO_SUCH_UNIT,Немає такого юніта,No such unit
 ERR_NOT_YOUR_UNIT,Це не ваш юніт,Not your unit
 ERR_ALREADY_FIRED,Юніт уже стріляв цього ходу,Unit has already fired this turn
 ERR_OFF_BOARD,За межами поля,Off the board
-ERR_BAD_FACING,Недійсний напрямок,Invalid facing
 ERR_OUT_OF_RANGE,Поза дальністю,Out of range
 ERR_NO_SUCH_TARGET,Немає такої цілі,No such target
 ERR_FRIENDLY_FIRE,Не можна стріляти по своїх,Cannot fire on a friendly unit
@@ -35,6 +34,8 @@ ERR_NO_FRIENDLY_UNIT_THERE,Тут немає вашого юніта,No friendly
 ERR_UNIT_UNDAMAGED,Юніт не пошкоджений,Unit is undamaged
 ERR_NOT_IMPLEMENTED,Ще не реалізовано,Not implemented
 ERR_MATCH_OVER,Матч завершено,The match is over
+ERR_OWN_TILE,Юніт уже стоїть на цій клітинці,The unit is already on this tile
+ERR_ALREADY_FACING,Юніт уже дивиться туди,The unit is already facing that way
 hud_turn,Хід,Turn
 hud_player,Гравець,Player
 hud_ap,ОД,AP
