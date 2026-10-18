@@ -10,6 +10,9 @@ extends Node3D
 
 ## Крок факінгу: вісім напрямків Board.DIRS_8 рівномірно по колу.
 const _DEGREES_PER_FACING: float = 45.0
+## Фаза 5a: усе видиме в юніті — лише на цьому шарі рендеру, щоб відбиття й
+## тіні могли відсікти юнітів маскою (відбиття не сміють показати прихований юніт).
+const UNIT_LAYER: int = 2
 
 ## Board.DIRS_8 іде ЗА годинниковою стрілкою (0 N, 2 E, 4 S, 6 W), а поворот
 ## навколо Y у Godot — ПРОТИ. Тому знак обов'язковий: `facing * 45` збігається
@@ -159,6 +162,15 @@ func bind(unit: Unit) -> void:
 	# означало б показувати намір, якого вже немає.
 	set_targeted(false)
 	set_forbidden(false)
+	_put_on_unit_layer(self)
+
+
+## Силует перебудовується на кожен bind(), тож шар ставиться після нього.
+static func _put_on_unit_layer(node: Node) -> void:
+	if node is VisualInstance3D:
+		(node as VisualInstance3D).layers = 1 << (UNIT_LAYER - 1)
+	for child: Node in node.get_children():
+		_put_on_unit_layer(child)
 
 
 ## Баг-звіт (виправлення 3): «вибираю танк, вказую їхати вперед — він їде

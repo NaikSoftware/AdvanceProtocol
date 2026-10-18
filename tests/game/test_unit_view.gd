@@ -576,3 +576,19 @@ func test_gun_and_drone_threat_marks_are_independent_and_distinct() -> void:
 	assert_ne(view._threatened.modulate, view._drone_threatened.modulate, "різний колір")
 	assert_ne(view._drone_threatened.texture, view._forbidden.texture, "не хрест заборони")
 	assert_ne(view._threatened.transform.origin, view._drone_threatened.transform.origin, "не накладаються")
+
+
+## Фаза 5a: юніти живуть на власному шарі рендеру — освітлення й відбиття
+## можуть виключити їх маскою, не знаючи про жоден конкретний вузол.
+func test_unit_meshes_are_on_the_unit_layer_only() -> void:
+	view.bind(_unit(5))
+	var expected: int = 1 << (UnitView.UNIT_LAYER - 1)
+	var found: int = 0
+	var stack: Array[Node] = [view]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		stack.append_array(n.get_children())
+		if n is VisualInstance3D:
+			found += 1
+			assert_eq((n as VisualInstance3D).layers, expected, "%s мусить бути лише на шарі юнітів" % n.name)
+	assert_gt(found, 4, "передумова: силует і позначки справді знайдено")

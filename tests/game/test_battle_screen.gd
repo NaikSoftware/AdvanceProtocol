@@ -477,8 +477,10 @@ func test_tap_resolves_from_the_press_position_not_the_release_position() -> voi
 	var camera: IsoCameraRig = screen.get_node("%CameraRig")
 	camera.center_on(unit.pos)
 	var cam3d: Camera3D = camera.get_node("Yaw/Camera3D")
-	camera.zoom_level = IsoCameraRig.MIN_ZOOM
-	cam3d.size = camera.zoom_level
+	camera.zoom_by(IsoCameraRig.MIN_ZOOM / camera.zoom_level)
+	simulate(camera, 240, 1.0 / 60.0)
+	assert_eq(camera.zoom_level, IsoCameraRig.MIN_ZOOM, "передумова: зум дійшов до MIN_ZOOM")
+	camera.center_on(unit.pos)
 
 	var boundary_point: Vector3 = IsoCameraRig.cell_to_world(unit.pos) + Vector3(0.49, 0.0, 0.0)
 	var press_pos: Vector2 = cam3d.unproject_position(boundary_point)

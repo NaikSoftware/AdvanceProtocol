@@ -65,8 +65,9 @@ func test_pan_is_clamped_to_board() -> void:
 	# точка йде ЗА пальцем) — додатний screen-y штовхає камеру до НИЖНЬОЇ
 	# межі (перевірено окремо нижче, у тестах інерції), тож сюди йде
 	# від'ємний, щоб перевірити саме ВЕРХНЮ межу.
+	# 300, не 2000 px: у перспективі точка на 2000 px вище центру — над горизонтом, пальцем туди не дотягнутись.
 	for i in 50:
-		rig.pan(Vector2(0, -2000))
+		rig.pan(Vector2(0, -300))
 	var focus: Vector3 = rig.global_position
 	assert_almost_eq(focus.x, 21.0, 0.01, "R12: межа — (board_size - 1) + BOARD_MARGIN, не board_size + BOARD_MARGIN")
 	assert_almost_eq(focus.z, 21.0, 0.01, "R12: межа — (board_size - 1) + BOARD_MARGIN, не board_size + BOARD_MARGIN")
@@ -394,3 +395,42 @@ func test_screen_point_to_cell_degrades_safely_when_the_ray_never_meets_the_boar
 	camera.rotation_degrees = Vector3.ZERO
 	var cell: Vector2i = rig.screen_point_to_cell(Vector2(640, 360))
 	assert_false(Board.create(20, 20, Terrain.GroundState.DRY).in_bounds(cell))
+
+# --- Перспектива (фаза 5a) ---------------------------------------------------
+
+func test_camera_is_perspective() -> void:
+	var camera: Camera3D = rig.get_node("Yaw/Camera3D")
+	assert_eq(camera.projection, Camera3D.PROJECTION_PERSPECTIVE)
+
+func test_pitch_eases_with_zoom() -> void:
+	assert_eq(IsoCameraRig.PITCH_NEAR_DEG, 40.0)
+	assert_eq(IsoCameraRig.PITCH_FAR_DEG, 55.0)
+	assert_eq(rig.pitch_for(IsoCameraRig.MIN_ZOOM), 40.0)
+	assert_eq(rig.pitch_for(IsoCameraRig.MAX_ZOOM), 55.0)
+
+func _settle_at(zoom: float) -> void:
+	rig.center_on(Vector2i(10, 10))
+	rig.zoom_by(zoom / rig.zoom_level)
+	simulate(rig, 240, 1.0 / 60.0)
+	assert_eq(rig.zoom_level, zoom, "передумова: зум дійшов до краю")
+	rig.center_on(Vector2i(10, 10))
+
+func test_screen_centre_looks_at_the_rig_origin() -> void:
+	for zoom: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		_settle_at(zoom)
+		var centre: Vector2 = rig.get_viewport().get_visible_rect().size * 0.5
+		var ground: Vector3 = rig._ray_ground_point(centre)
+		assert_almost_eq(ground.x, rig.global_position.x, 0.01, "зум %s" % zoom)
+		assert_almost_eq(ground.z, rig.global_position.z, 0.01, "зум %s" % zoom)
+
+func test_corner_taps_hit_the_drawn_cell_at_min_and_max_zoom() -> void:
+	for zoom: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		_settle_at(zoom)
+		var size: Vector2 = rig.get_viewport().get_visible_rect().size
+		for p: Vector2 in [Vector2(40, 40), Vector2(size.x - 40, 40),
+				Vector2(40, size.y - 40), Vector2(size.x - 40, size.y - 40)]:
+			var ground: Vector3 = rig._ray_ground_point(p)
+			var back: Vector2 = rig.unproject(ground)
+			assert_almost_eq(back.x, p.x, 0.5, "зум %s, точка %s" % [zoom, p])
+			assert_almost_eq(back.y, p.y, 0.5, "зум %s, точка %s" % [zoom, p])
+			assert_eq(rig.screen_point_to_cell(p), IsoCameraRig.world_to_cell(ground), "зум %s, точка %s" % [zoom, p])

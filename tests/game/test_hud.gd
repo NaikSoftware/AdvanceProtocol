@@ -454,8 +454,9 @@ func test_inspector_is_clamped_to_the_safe_area_when_its_unit_is_off_screen() ->
 	hud.attach_camera(rig)
 	hud.show_selection(u)
 
+	# 300, не 2000 px: у перспективі точка на 2000 px вище центру — над горизонтом, пальцем туди не дотягнутись.
 	for i in 50:
-		rig.pan(Vector2(0.0, -2000.0))
+		rig.pan(Vector2(0.0, -300.0))
 
 	var top_bar: Control = hud.get_node("SafeArea/Layout/TopBar")
 	assert_eq(_inspector().position.y, top_bar.get_global_rect().end.y - hud.get_global_rect().position.y,

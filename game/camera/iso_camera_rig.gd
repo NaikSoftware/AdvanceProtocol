@@ -1,7 +1,8 @@
 class_name IsoCameraRig
 extends Node3D
-## Фіксований ізометричний ріг: панорама і зум по площині дошки, кут камери
-## не змінюється (§1 non-goals — вільної камери нема). Вузол-власник фокусу —
+## Фіксований ріг: панорама і зум по площині дошки, гравець кута не крутить
+## (§1 non-goals — вільної камери нема); нахил залежить лише від зуму
+## (pitch_for()). Вузол-власник фокусу —
 ## сам корінь рига, дочірній Yaw несе поворот на 45°, лише щоб дати камері
 ## погляд; жодна з цих обертань не потрапляє у тайлові координати.
 
@@ -13,8 +14,18 @@ extends Node3D
 ## _notify_view_changed()), інакше він виродився б у той самий _process.
 signal view_changed
 
+## Фаза 5a: камера перспективна, zoom_level — відстань від камери до фокуса
+## (корінь рига на y = 0) уздовж осі погляду. FOV = 2·atan(0.5) свідомо: при
+## ньому висота кадру в площині фокуса дорівнює відстані, тож старі межі зуму
+## (колишній розмір ортофрустума) показують ту саму кількість тайлів, а пан у
+## центрі екрана має той самий масштаб пікселя, що й в ортопроекції.
 const MIN_ZOOM: float = 6.0
 const MAX_ZOOM: float = 20.0
+const FOV_DEG: float = 53.130102
+## Рішення власника: зблизька нахил пологіший (видно борти техніки), здалеку —
+## крутіший, щоб уся дошка читалась згори.
+const PITCH_NEAR_DEG: float = 40.0
+const PITCH_FAR_DEG: float = 55.0
 ## §3.13/§1: панорама обмежена межами дошки з полем в 2 тайли — гравець не
 ## може завести камеру за край карти навіть на максимальному зумі.
 const BOARD_MARGIN: float = 2.0
@@ -86,8 +97,9 @@ var _reported_zoom: float = 0.0
 
 func _ready() -> void:
 	_yaw.rotation_degrees.y = YAW_DEGREES
-	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	_camera.size = zoom_level
+	_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	_camera.fov = FOV_DEG
+	_place_camera()
 	_zoom_target = zoom_level
 	_prev_frame_position = global_position
 	_reported_position = global_position
@@ -318,10 +330,20 @@ func _update_zoom(delta: float) -> void:
 func _apply_zoom_keep_anchor(next_zoom: float) -> void:
 	var before: Variant = _ray_ground_point(_zoom_anchor_screen)
 	zoom_level = next_zoom
-	_camera.size = zoom_level
+	_place_camera()
 	var after: Variant = _ray_ground_point(_zoom_anchor_screen)
 	if before != null and after != null:
 		global_position = _clamp_to_bounds(global_position + ((before as Vector3) - (after as Vector3)))
+
+func pitch_for(zoom: float) -> float:
+	return lerpf(PITCH_NEAR_DEG, PITCH_FAR_DEG, inverse_lerp(MIN_ZOOM, MAX_ZOOM, zoom))
+
+## Камера на відстані zoom_level від кореня рига, дивиться рівно в нього —
+## центр екрана завжди лежить на фокусі, хоч би який був нахил.
+func _place_camera() -> void:
+	var p: float = pitch_for(zoom_level)
+	_camera.position = Vector3(0.0, zoom_level * sin(deg_to_rad(p)), zoom_level * cos(deg_to_rad(p)))
+	_camera.rotation_degrees = Vector3(-p, 0.0, 0.0)
 
 func _process(delta: float) -> void:
 	# Швидкість «останніх кадрів перед відривом» (рішення власника, не повна
