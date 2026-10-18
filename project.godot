@@ -42,3 +42,14 @@ locale/translations=PackedStringArray("res://assets/i18n/strings.uk.translation"
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
 textures/vram_compression/import_etc2_astc=true
+
+[shader_globals]
+
+weather_wetness={
+"type": "float",
+"value": 0.0
+}
+cloud_shadow_strength={
+"type": "float",
+"value": 0.0
+}

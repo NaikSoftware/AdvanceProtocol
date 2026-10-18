@@ -86,7 +86,7 @@ func test_long_press_on_enemy_tank_shows_a_circle_and_marks_my_unit_in_range() -
 
 func _ring_node() -> MeshInstance3D:
 	for c: Node in _e2e.screen.get_node("%BoardView").get_children():
-		if c is MeshInstance3D and not c is MultiMeshInstance3D:
+		if c is MeshInstance3D and not c is MultiMeshInstance3D and not c is GroundSurface:
 			return c
 	return null
 

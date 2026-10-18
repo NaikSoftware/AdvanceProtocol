@@ -1,7 +1,7 @@
 class_name BoardView
 extends Node3D
-## Рендерить сітку тайлів: один MultiMeshInstance3D на вид тайлу (§3.13,
-## Task 2.3), ніколи на тайл — так тримається бюджет ~100 draw calls (§8).
+## Рендерить дошку: одну суцільну землю (GroundSurface, Phase 5a) і поверх неї
+## контури та кола оверлеїв — так тримається бюджет ~100 draw calls (§8).
 ##
 ## §3.5: туман ховає ворожих юнітів і їхні міни, ніколи місцевість. Вона
 ## публічна з першого ходу й на повній яскравості, тож у BoardView свідомо
@@ -16,11 +16,6 @@ extends Node3D
 ## режими верби й дрона замінюють свої тайли, а кільце вибраного юніта живе поруч.
 enum { LAYER_ZONES, LAYER_PATH, LAYER_TARGETS, LAYER_INSPECT }
 
-## Тонкий проміжок між тайлами — щоб сітка читалась як сітка, а не суцільна
-## плита; висота — щоб дно не збігалося із землею з z-fighting.
-const _TILE_GAP: float = 0.05
-const _TILE_HEIGHT: float = 0.05
-
 ## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
 ## задумом — вона мусить читатись як лінія на межі тайла, а не як ще один
 ## пофарбований тайл. _CONTOUR_INSET відсуває риску від самого краю тайла:
@@ -31,30 +26,14 @@ const _TILE_HEIGHT: float = 0.05
 const _CONTOUR_WIDTH: float = 0.12
 const _CONTOUR_INSET: float = 0.06
 const _CONTOUR_HEIGHT: float = 0.04
-const _CONTOUR_LENGTH: float = 1.0 - _TILE_GAP - _CONTOUR_INSET * 2.0
-## Трохи вище верху тайла (_TILE_HEIGHT — рівень верхньої грані BoxMesh
-## тайла), щоб не z-fight'ити з нею, і вище шару підсвітки-заливки, що лежить
-## на самій поверхні тайла.
-const _CONTOUR_Y: float = _TILE_HEIGHT + 0.02
+## 0.95 — колишня ширина плитки (до суцільної землі): риски лишились тієї самої
+## довжини, тож кути сусідніх рисок, як і раніше, не сходяться.
+const _CONTOUR_LENGTH: float = 0.95 - _CONTOUR_INSET * 2.0
+## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y = 0.06), щоб не
+## z-fight'ити ні з тим, ні з іншим.
+const _CONTOUR_Y: float = 0.07
 const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
 
-## Нейтральні кольори-плейсхолдери, без прив'язки до жодної реальної армії чи
-## місцевості (§2): це геометрія і колір, не арт-проходка.
-const _BASE_COLORS: Dictionary = {
-	Terrain.Kind.ROAD: Color("6b6558"),
-	Terrain.Kind.FIELD: Color("7a9450"),
-	Terrain.Kind.FOREST: Color("3f5c34"),
-	Terrain.Kind.HILL: Color("8a7a55"),
-	Terrain.Kind.MARSH: Color("5c6b45"),
-	Terrain.Kind.WATER: Color("3a6b8a"),
-	Terrain.Kind.BUILDING: Color("8a8378"),
-	Terrain.Kind.RUBBLE: Color("6e6a63"),
-	Terrain.Kind.BRIDGE: Color("847a63"),
-	Terrain.Kind.BRIDGE_DESTROYED: Color("4a463f"),
-}
-
-## вид тайлу -> його MultiMeshInstance3D. Лише для видів, що реально є на дошці.
-var _instances: Dictionary = {}
 ## тайл -> вид тайлу під ним.
 var _kind_by_cell: Dictionary = {}
 ## шар контуру -> Array[Dictionary] сегментів {cell, dir, color}, які зараз
@@ -77,7 +56,6 @@ func build(board: Board) -> void:
 	# вузол «сиротою» до наступного кадру, а тести це фіксують як витік.
 	for child in get_children():
 		child.free()
-	_instances.clear()
 	_kind_by_cell.clear()
 	# Вузли контуру щойно звільнені циклом free() вище (вони теж діти цього
 	# Node3D) — без цього _contour_nodes лишав би посилання на вже мертві
@@ -87,21 +65,15 @@ func build(board: Board) -> void:
 	_circles.clear()
 	_circle_nodes.clear()
 
-	var cells_by_kind: Dictionary = {}
 	for y in board.height:
 		for x in board.width:
-			var cell := Vector2i(x, y)
-			var kind: int = board.kind_at(cell)
-			if not cells_by_kind.has(kind):
-				cells_by_kind[kind] = [] as Array[Vector2i]
-			cells_by_kind[kind].append(cell)
-			_kind_by_cell[cell] = kind
+			_kind_by_cell[Vector2i(x, y)] = board.kind_at(Vector2i(x, y))
 
-	for kind in cells_by_kind:
-		var cells: Array[Vector2i] = cells_by_kind[kind]
-		var mmi := _build_kind_instance(kind, cells)
-		add_child(mmi)
-		_instances[kind] = mmi
+	var ground := GroundSurface.new()
+	ground.name = "Ground"
+	# Відступ поза дошкою — Task 9 (оточення); поки земля рівно під дошкою.
+	ground.build(board, 0)
+	add_child(ground)
 
 
 ## Малює контур шару з тонких рисок, а не заливкою тайлів (§3.13: «контур,
@@ -112,7 +84,7 @@ func build(board: Board) -> void:
 ## §3.2 «перемальовується після кожної дії» означає заміну.
 ##
 ## Один MultiMeshInstance3D на шар (не на сегмент) — ті самі draw-call міркування,
-## що й у _build_kind_instance(): дошка складається з десятків сегментів
+## що й у суцільної землі: дошка складається з десятків сегментів
 ## контуру за раз, і кожен окремим вузлом уже помітно проти бюджету §8.
 func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	clear_contour(layer)
@@ -147,8 +119,7 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "Contour%d" % layer
 	mmi.multimesh = mm
-	# Той самий матеріал, що й тайли: читає use_colors, сам лишається білим.
-	mmi.material_override = _tile_material()
+	mmi.material_override = _contour_material()
 	add_child(mmi)
 	_contour_nodes[layer] = mmi
 
@@ -225,31 +196,6 @@ func contour_segments(layer: int) -> Array:
 	return _contour_segments.get(layer, [])
 
 
-func _build_kind_instance(kind: int, cells: Array[Vector2i]) -> MultiMeshInstance3D:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = _tile_mesh()
-	mm.instance_count = cells.size()
-	var base_color: Color = _BASE_COLORS.get(kind, Color.WHITE)
-	for i in cells.size():
-		var origin: Vector3 = IsoCameraRig.cell_to_world(cells[i]) + Vector3(0.0, _TILE_HEIGHT * 0.5, 0.0)
-		mm.set_instance_transform(i, Transform3D(Basis(), origin))
-		mm.set_instance_color(i, base_color)
-
-	var mmi := MultiMeshInstance3D.new()
-	mmi.name = "Tiles%d" % kind
-	mmi.multimesh = mm
-	mmi.material_override = _tile_material()
-	return mmi
-
-
-func _tile_mesh() -> Mesh:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(1.0 - _TILE_GAP, _TILE_HEIGHT, 1.0 - _TILE_GAP)
-	return mesh
-
-
 ## Одна риска: довга й тонка коробка. Типово довга вздовж X, тонка
 ## вздовж Z — правильно для ребра, що дивиться вздовж Z; для ребра вздовж X
 ## draw_contour() довертає екземпляр на 90° навколо Y (один спільний меш на
@@ -260,7 +206,7 @@ func _contour_mesh() -> Mesh:
 	return mesh
 
 
-func _tile_material() -> StandardMaterial3D:
+func _contour_material() -> StandardMaterial3D:
 	# Колір іде з екземпляра мультимешу (use_colors), матеріал лише вмикає його
 	# читання — сам він лишається білим, щоб не домішувати власний тон.
 	var mat := StandardMaterial3D.new()

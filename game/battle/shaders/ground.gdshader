@@ -1,0 +1,198 @@
+// Суцільна земля (Phase 5a, Task 5). Вид клітинки — з kind_map; текстура виду —
+// шар Texture2DArray (GroundSurface.TEX_LAYERS). Межі видів м'які й нерівні:
+// позицію збурено шумом, а вага сусідніх клітинок — білінійна з вузьким переходом.
+// Повтор текстури ламає «техніка 3» Іньїго Квілеса: два зсунуті й повернуті
+// семпли, змішані за низькочастотним шумом.
+shader_type spatial;
+render_mode blend_mix, cull_back;
+
+global uniform float weather_wetness;
+global uniform float cloud_shadow_strength;
+
+uniform sampler2D kind_map : filter_nearest, repeat_disable;
+// Клітинка, що відповідає пікселю (0, 0) kind_map (від'ємна при відступі).
+uniform vec2 map_origin = vec2(0.0);
+uniform int layer_for_kind[10];
+uniform sampler2DArray albedo_array : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2DArray normal_array : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float mud_amount = 0.0;
+
+// Шари з GroundSurface.TEX_LAYERS.
+const int ROAD = 0;
+const int FIELD = 1;
+const int HILL = 3;
+const int MUD = 5;
+
+// Один повтор текстури на стільки клітинок.
+uniform float tiles_per_repeat = 3.0;
+// Амплітуда збурення межі видів, у клітинках.
+uniform float border_jitter = 0.3;
+// Напівширина переходу між видами, у частках клітинки.
+uniform float border_softness = 0.22;
+
+varying vec3 world_pos;
+
+float hash12(vec2 p) {
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+float vnoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
+			mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fbm(vec2 p) {
+	return 0.5 * vnoise(p) + 0.3 * vnoise(p * 2.03 + 17.1) + 0.2 * vnoise(p * 4.01 + 31.7);
+}
+
+int layer_at(ivec2 px, ivec2 size) {
+	ivec2 c = clamp(px, ivec2(0), size - 1);
+	int kind = int(texelFetch(kind_map, c, 0).r * 255.0 + 0.5);
+	return layer_for_kind[clamp(kind, 0, 9)];
+}
+
+// Семпл шару без видимого повтору: регіони з різним зсувом і поворотом UV,
+// межа між ними — плавна, керована шумом і контрастом самої текстури.
+void sample_layer(int layer, vec2 uv, vec2 dx, vec2 dy, float k, out vec3 alb, out vec2 nxy) {
+	float l = k * 14.0;
+	float ia = floor(l);
+	float f = fract(l);
+	vec3 ab[2];
+	vec2 nb[2];
+	for (int j = 0; j < 2; j++) {
+		float idx = ia + float(j);
+		vec2 off = sin(vec2(3.0, 7.0) * idx);
+		float a = idx * 2.399;
+		mat2 r = mat2(vec2(cos(a), sin(a)), vec2(-sin(a), cos(a)));
+		vec3 c = vec3(r * uv + off, float(layer));
+		ab[j] = textureGrad(albedo_array, c, r * dx, r * dy).rgb;
+		vec2 n = textureGrad(normal_array, c, r * dx, r * dy).rg * 2.0 - 1.0;
+		// Повернули UV — повертаємо й нормаль назад у простір меша.
+		nb[j] = transpose(r) * n;
+	}
+	float t = smoothstep(0.2, 0.8, f - 0.1 * dot(ab[0] - ab[1], vec3(1.0)));
+	alb = mix(ab[0], ab[1], t);
+	nxy = mix(nb[0], nb[1], t);
+}
+
+void vertex() {
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
+void fragment() {
+	vec2 p = world_pos.xz;
+	// Межа видів: великі хвилі плюс дрібна рваність.
+	vec2 q = p + (vec2(fbm(p * 0.8), fbm(p * 0.8 + vec2(5.2, 1.3))) - 0.5) * 2.0 * border_jitter
+			+ (vec2(vnoise(p * 4.1), vnoise(p * 4.1 + 9.7)) - 0.5) * 0.12;
+	vec2 g = q - map_origin;
+	vec2 base = floor(g);
+	vec2 fw = smoothstep(vec2(0.5 - border_softness), vec2(0.5 + border_softness), fract(g));
+	ivec2 size = textureSize(kind_map, 0);
+	ivec2 b = ivec2(base);
+
+	int L[5];
+	float W[5];
+	L[0] = layer_at(b, size);
+	L[1] = layer_at(b + ivec2(1, 0), size);
+	L[2] = layer_at(b + ivec2(0, 1), size);
+	L[3] = layer_at(b + ivec2(1, 1), size);
+	W[0] = (1.0 - fw.x) * (1.0 - fw.y);
+	W[1] = fw.x * (1.0 - fw.y);
+	W[2] = (1.0 - fw.x) * fw.y;
+	W[3] = fw.x * fw.y;
+
+	// Багно: поле й пагорб під станом MUD (плямами, не суцільно) і узбіччя доріг.
+	float road_w = 0.0;
+	float soil_w = 0.0;
+	for (int i = 0; i < 4; i++) {
+		road_w += L[i] == ROAD ? W[i] : 0.0;
+		soil_w += (L[i] == FIELD || L[i] == HILL) ? W[i] : 0.0;
+	}
+	// Плями, а не напівпрозорий шар: півпрозоре багно поверх трави читається як
+	// «привид» текстури, а не як розкисла земля.
+	float mud_soil = 1.0 - smoothstep(mud_amount - 0.06, mud_amount + 0.06, fbm(p * 0.35 + 3.1) + 0.15);
+	float verge = 4.0 * road_w * (1.0 - road_w) * 0.7;
+	for (int i = 0; i < 4; i++) {
+		if (L[i] == FIELD || L[i] == HILL) {
+			W[i] *= 1.0 - mud_soil;
+		}
+		if (L[i] != ROAD) {
+			W[i] *= 1.0 - verge;
+		}
+	}
+	L[4] = MUD;
+	W[4] = soil_w * mud_soil + verge * (1.0 - road_w);
+
+	// Однакові шари сусідів семплюємо один раз.
+	for (int i = 1; i < 5; i++) {
+		for (int j = 0; j < i; j++) {
+			if (L[i] == L[j] && W[j] > 0.0) {
+				W[j] += W[i];
+				W[i] = 0.0;
+			}
+		}
+	}
+
+	vec2 uv = p / tiles_per_repeat;
+	vec2 dx = dFdx(uv);
+	vec2 dy = dFdy(uv);
+	float k = fbm(p * 0.13);
+	vec3 A[5];
+	vec2 N[5];
+	float H[5];
+	float hmax = -1.0;
+	for (int i = 0; i < 5; i++) {
+		H[i] = -1.0;
+		if (W[i] > 0.002) {
+			sample_layer(L[i], uv, dx, dy, k + float(L[i]) * 0.37, A[i], N[i]);
+			// Висотне змішування: на межі першим проступає світліше (камінь,
+			// пучок трави), тож перехід рваний за самою текстурою, а не розмитий.
+			H[i] = W[i] + dot(A[i], vec3(0.333)) * 0.6;
+			hmax = max(hmax, H[i]);
+		}
+	}
+	vec3 alb = vec3(0.0);
+	vec2 nxy = vec2(0.0);
+	float rough = 0.0;
+	float wsum = 0.0;
+	for (int i = 0; i < 5; i++) {
+		float w = max(H[i] - (hmax - 0.18), 0.0);
+		if (w > 0.0) {
+			alb += A[i] * w;
+			nxy += N[i] * w;
+			rough += (L[i] == ROAD ? 0.75 : 0.92) * w;
+			wsum += w;
+		}
+	}
+	alb /= wsum;
+	nxy /= wsum;
+	rough /= wsum;
+
+	// Мокрість: темніше й глянцевіше. Калюжі — у низинах дороги й багна,
+	// низина — темна ділянка текстури, тож край калюжі йде за рельєфом.
+	float wet = clamp(weather_wetness, 0.0, 1.0);
+	float lum = dot(alb, vec3(0.299, 0.587, 0.114));
+	alb *= mix(1.0, 0.75, wet);
+	rough = mix(rough, 0.4, wet);
+	float puddle_ground = clamp((road_w + W[4]) * 1.5, 0.0, 1.0);
+	float pn = fbm(p * 0.35 + 11.0) + (lum - 0.25) * 0.35;
+	float thr = wet * 0.42;
+	float puddle = (1.0 - smoothstep(thr - 0.03, thr + 0.02, pn)) * puddle_ground;
+	alb *= mix(1.0, 0.55, puddle);
+	rough = mix(rough, 0.05, puddle);
+	nxy = mix(nxy, vec2(0.0), puddle);
+
+	if (cloud_shadow_strength > 0.0) {
+		float cloud = smoothstep(0.45, 0.7, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
+		alb *= 1.0 - cloud_shadow_strength * cloud;
+	}
+
+	ALBEDO = alb;
+	ROUGHNESS = rough;
+	NORMAL_MAP = vec3(nxy * 0.5 + 0.5, 1.0);
+}
