@@ -15,7 +15,7 @@ Where to look (the code is obfuscated; these are the mappings that have already 
 | file | what is in it |
 | --- | --- |
 | `src/defpackage/class_3.java` | the unit — stat tables in `<clinit>`, damage in `method_160`, armour sector in `method_159`, engineer verbs in `method_16x–17x` |
-| `src/defpackage/class_1.java` | the player — objectives, experience thresholds and level-up in `method_97` |
+| `src/defpackage/class_1.java` | the player — the 15-slot mine table (not objectives: the original has none), experience thresholds and level-up in `method_97` |
 | `src/defpackage/class_2.java` | AI player, extends the player class |
 | `src/defpackage/GameCanvas.java` | board, terrain cost (`method_70`), rendering, save format |
 
@@ -120,9 +120,18 @@ Two rules about using it:
   marker, and returns `true`, which halts the path at that tile. So a minefield cannot be crossed
   by stopping past it, and the unit stops where it detonated — this project matches. The damage
   band is `90..180`, not the flat 120 the plan originally invented; adopted, because a flat number
-  would make mines the only damage source in the game that does not roll. Caveat worth knowing:
-  in the original the per-tile marker table appears to be shared between mines and objectives, so
-  the two may not be distinct concepts there. They are distinct here.
+  would make mines the only damage source in the game that does not roll.
+
+- **The original has no capturable objectives — the 15-slot `class_1` table is mines only.**
+  `field_149` holds positions, `field_150` marks a free slot and `field_151` a slot revealed to the
+  opponent; only an engineer sets `field_151` (`class_1:805-815`), and `method_105` detonates on the
+  table. Every slot is drawn with one sprite, `field_24[225]` (`GameCanvas:2632-2641`). Its victory
+  types (`GameCanvas.method_18`) are annihilation, killing designated units, reaching a rectangle,
+  and a test on this same table inside a rectangle — none involves ownership. Owned and neutral
+  markers, and the 15-per-map cap, are this project's own; the cap was inherited from the mine
+  table. The reveal is one-way and what it shows is drawn live: a mine cleared out of sight
+  disappears for the opponent too, with no last-seen copy. This project draws objectives the same
+  way — current owner on any `seen` tile ([objectives](../rules/objectives.md)).
 
 - **Terrain penalties are widely spaced, and tracked vehicles ignore open ground.** Confirmed
   against `GameCanvas.method_68`: the original uses six buckets — `0` road, `5`, `10` ordinary
