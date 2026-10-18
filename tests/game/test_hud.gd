@@ -237,6 +237,27 @@ func test_drone_count_is_public_and_shown_for_an_enemy_squad_too() -> void:
 	assert_eq(_label("DronesValue").text, "1")
 
 
+## overlays.md: AP ворога — залишок дій, яких гравець міг не бачити (відповідь на
+## чужому ході за ширмою передачі), тож ні рядок вибору, ні інспектор його не показують.
+func test_enemy_selection_never_shows_its_ap() -> void:
+	var state: BattleState = _state()
+	state.active_player = 0
+	var enemy: Unit = state.add_unit(5, 1, Vector2i(8, 8), 0)
+	enemy.ap = 7
+	hud.bind(state)
+
+	hud.show_selection(enemy)
+
+	assert_false(_label("ApValue").is_visible_in_tree(), "AP ворога в рядку вибору — витік")
+	assert_false(hud.get_node("%Inspector/Body/Stats/ApRow").is_visible_in_tree(), "і в інспекторі теж")
+	assert_true(_inspector().is_visible_in_tree(), "решта інспектора — публічні стати, вони лишаються")
+
+	var own: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
+	hud.show_selection(own)
+	assert_true(_label("ApValue").is_visible_in_tree(), "свій юніт показує AP, як і раніше")
+	assert_true(hud.get_node("%Inspector/Body/Stats/ApRow").is_visible_in_tree())
+
+
 func test_unit_without_drones_hides_the_drone_row_instead_of_showing_zero() -> void:
 	var state: BattleState = _state()
 	var tank: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)  # medium tank, 0 дронів
