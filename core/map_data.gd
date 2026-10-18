@@ -45,6 +45,10 @@ func populate(state: BattleState) -> bool:
 		if f < 0 or f > 7:
 			return false
 	for spawn in spawns:
+		# Рішення власника: карта на трьох, зіграна вдвох, просто не ставить юнітів
+		# зайвого гравця — окремих варіантів карти на кожну кількість немає.
+		if int(spawn["owner"]) >= state.player_count:
+			continue
 		state.add_unit(
 			int(spawn["type_id"]),
 			int(spawn["owner"]),

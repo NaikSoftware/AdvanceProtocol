@@ -1,0 +1,104 @@
+[gd_resource type="Resource" script_class="MapData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://core/map_data.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+width = 18
+height = 14
+ground_state = 0
+tiles = PackedInt32Array(2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1, 1, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 0, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 2, 2, 0, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2, 0, 2, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 1, 2, 2, 0, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 0, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 2, 2, 2, 2, 2, 1, 0, 1, 2, 2, 2, 2, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 0, 1, 2, 2, 2, 2, 2, 2, 2)
+spawns = Array[Dictionary]([{
+"facing": 2,
+"owner": 0,
+"pos": Vector2i(1, 2),
+"type_id": 9
+}, {
+"facing": 2,
+"owner": 0,
+"pos": Vector2i(1, 3),
+"type_id": 11
+}, {
+"facing": 2,
+"owner": 0,
+"pos": Vector2i(1, 4),
+"type_id": 0
+}, {
+"facing": 2,
+"owner": 0,
+"pos": Vector2i(2, 2),
+"type_id": 1
+}, {
+"facing": 2,
+"owner": 0,
+"pos": Vector2i(2, 3),
+"type_id": 7
+}, {
+"facing": 2,
+"owner": 0,
+"pos": Vector2i(2, 4),
+"type_id": 4
+}, {
+"facing": 6,
+"owner": 1,
+"pos": Vector2i(16, 2),
+"type_id": 9
+}, {
+"facing": 6,
+"owner": 1,
+"pos": Vector2i(16, 3),
+"type_id": 11
+}, {
+"facing": 6,
+"owner": 1,
+"pos": Vector2i(16, 4),
+"type_id": 0
+}, {
+"facing": 6,
+"owner": 1,
+"pos": Vector2i(15, 2),
+"type_id": 1
+}, {
+"facing": 6,
+"owner": 1,
+"pos": Vector2i(15, 3),
+"type_id": 7
+}, {
+"facing": 6,
+"owner": 1,
+"pos": Vector2i(15, 4),
+"type_id": 4
+}, {
+"facing": 0,
+"owner": 2,
+"pos": Vector2i(8, 13),
+"type_id": 9
+}, {
+"facing": 0,
+"owner": 2,
+"pos": Vector2i(9, 13),
+"type_id": 11
+}, {
+"facing": 0,
+"owner": 2,
+"pos": Vector2i(10, 13),
+"type_id": 0
+}, {
+"facing": 0,
+"owner": 2,
+"pos": Vector2i(8, 12),
+"type_id": 1
+}, {
+"facing": 0,
+"owner": 2,
+"pos": Vector2i(9, 12),
+"type_id": 7
+}, {
+"facing": 0,
+"owner": 2,
+"pos": Vector2i(10, 12),
+"type_id": 4
+}])
+objectives = Array[Vector2i]([Vector2i(9, 3), Vector2i(5, 8), Vector2i(13, 8), Vector2i(9, 0)])
+hold_target = 3
+name_key = "map_forest"
