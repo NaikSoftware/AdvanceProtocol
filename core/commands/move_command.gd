@@ -28,6 +28,10 @@ func validate(state: BattleState) -> String:
 		return "ERR_BAD_FACING"
 	if not state.board.in_bounds(target):
 		return "ERR_OFF_BOARD"
+	# Хід на місці з напрямком був би поворотом в обхід правила «лише поки є ОД» —
+	# поворот на місці робить тільки TurnCommand.
+	if target == u.pos:
+		return "ERR_OWN_TILE"
 	# §3.5: планування — з того, що гравець знає, а не з того, що є. Тайл, зайнятий
 	# невидимим ворогом, лишається законною ціллю: команда проходить перевірку, а
 	# рух зупиниться перед ним у apply(). Помилки на це немає навмисно — вона

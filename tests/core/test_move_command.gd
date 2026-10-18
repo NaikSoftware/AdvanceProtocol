@@ -105,29 +105,10 @@ func test_end_turn_validate_rejects_when_match_is_over() -> void:
 	assert_true(state.is_over(), "передумова: матч має бути завершений")
 	assert_eq(EndTurnCommand.create().validate(state), "ERR_MATCH_OVER")
 
-func test_turn_in_place_emits_unit_turned_not_unit_moved_and_costs_no_ap() -> void:
+## Поворот на місці — лише TurnCommand (AP-гейт); хід на свій тайл відхилено.
+func test_move_to_own_tile_is_refused() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)
-	var before: int = u.ap
-	var events: Array = MoveCommand.create(u.id, Vector2i(0, 5), 6).apply(state)
-	assert_eq(u.pos, Vector2i(0, 5), "поворот на місці не рухає юніт")
-	assert_eq(u.facing, 6)
-	assert_eq(u.ap, before, "порожній шлях не має коштувати AP")
-	var has_turned: bool = false
-	var has_moved: bool = false
-	var has_blocked: bool = false
-	for e in events:
-		if e is Events.UnitTurned:
-			has_turned = true
-		if e is Events.UnitMoved:
-			has_moved = true
-		if e is Events.MoveBlocked:
-			has_blocked = true
-	assert_true(has_turned, "поворот на місці — це UnitTurned")
-	assert_false(has_moved, "порожній шлях не повинен породжувати UnitMoved")
-	# Друга половина розрізнення (перша — у test_a_blocked_first_step_...): навмисний
-	# поворот і обрив на першому кроці дають однаковий UnitTurned, тож усе, чим вони
-	# відрізняються, — наявність MoveBlocked. Тут її бути не сміє.
-	assert_false(has_blocked, "нікого не блокували — обриву в потоці бути не може")
+	assert_eq(MoveCommand.create(u.id, Vector2i(0, 5), 6).validate(state), "ERR_OWN_TILE")
 
 func test_moving_onto_an_enemy_mine_detonates_it() -> void:
 	var u: Unit = state.add_unit(5, 0, Vector2i(0, 5), 2)

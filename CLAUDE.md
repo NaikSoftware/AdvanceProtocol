@@ -140,6 +140,8 @@ product against the target's facing. No trigonometry, no division.
   own shot resolves; a retaliator turns only **after** the damage lands, and only if it answered.
   The order is the rule — inverting it deletes flanking. Consequences, costs and the whole-unit
   (not turret-only) decision are in the linked document.
+- **A unit with AP left may turn in place toward any tile, free, on its own turn.** At 0 AP it stays
+  as it is — so a unit that fired or spent its AP is still flankable.
 - The UI must always show which sector a shot will land in **before** the player commits.
 
 ### 3.5 Vision and fog of war → [details](docs/rules/vision-and-fog.md)

@@ -98,9 +98,7 @@ func test_a_whole_match_runs_through_commands_only() -> void:
 		"§3.5: тайл, бачений гравцем 0, не мусить ставати видимим гравцю 1")
 	assert_false(s.vision[1].is_visible(Vector2i(3, 6)))
 
-	# --- Хід 1, гравець 1: жодного руху по суті (поворот на місці — це теж
-	# команда, а не порожній хід) -> EndTurn.
-	log.append_array(MoveCommand.create(enemy.id, enemy.pos, 6).apply(s))
+	# --- Хід 1, гравець 1: нічого не робить -> EndTurn.
 	log.append_array(EndTurnCommand.create().apply(s))
 	assert_eq(s.active_player, 0)
 	assert_eq(s.turn_number, 2, "хід повернувся до гравця 0 — номер ходу зріс")
