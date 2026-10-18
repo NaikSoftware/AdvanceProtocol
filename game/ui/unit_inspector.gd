@@ -60,14 +60,17 @@ func _ready() -> void:
 	clear()
 
 
-func show_unit(unit: Unit) -> void:
+## show_ap — false для ворожого юніта: його AP — залишок дій, яких гравець міг не
+## бачити (docs/ui/overlays.md), тож рядок AP ховається цілком.
+func show_unit(unit: Unit, show_ap: bool = true) -> void:
 	var t: Dictionary = unit.type()
 	_name_label.text = tr(t["name_key"])
 	_class_label.text = tr(CLASS_KEYS[unit.unit_class()])
 	# HP і AP — поточні проти максимуму: без другого числа «210» нічого не
 	# каже про те, наскільки юніт побитий.
 	_hp_label.text = "%d/%d" % [unit.hp, unit.max_hp()]
-	_ap_label.text = "%d/%d" % [unit.ap, unit.max_ap()]
+	_ap_label.get_parent().visible = show_ap
+	_ap_label.text = "%d/%d" % [unit.ap, unit.max_ap()] if show_ap else ""
 	_attack_label.text = str(int(t["attack"]))
 	_range_label.text = str(int(t["attack_range"]))
 	_vision_label.text = str(int(t["vision"]))

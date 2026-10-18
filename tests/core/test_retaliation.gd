@@ -489,3 +489,75 @@ func test_a_retaliator_killed_later_that_turn_keeps_no_stale_record() -> void:
 	assert_false(heavy.is_alive(), "передумова: другий постріл добиває")
 	EndTurnCommand.create().apply(s)
 	assert_eq(heavy.ap_before_retaliation, -1, "мертвий відповідач без застарілого запису")
+
+# ---------------------------------------------------------------------------
+# §3.10 + §3.3.1: вибуття від ВІДПОВІДІ. Атакувальник має 1 hp, а мінімальна
+# шкода — 10 (§3.3), тож відповідь танка, який вижив (400 hp), убиває його
+# напевно, хай що випаде на кубиках.
+
+func _has_event(events: Array, cls: Variant) -> bool:
+	for e in events:
+		if is_instance_of(e, cls):
+			return true
+	return false
+
+func _eliminated_players(events: Array) -> Array[int]:
+	var out: Array[int] = []
+	for e in events:
+		if e is Events.PlayerEliminated:
+			out.append(e.player)
+	return out
+
+func test_attacker_last_unit_killed_by_retaliation_ends_two_player_match() -> void:
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 6)
+	state.begin_turn()
+	state.refresh_vision(t.owner)
+	a.hp = 1
+
+	var events: Array = FireCommand.create(a.id, t.id).apply(state)
+
+	assert_not_null(_shot_retaliated(events), "передумова: ціль відповіла")
+	assert_false(a.is_alive(), "відповідь добила останній юніт атакувальника")
+	assert_eq(_eliminated_players(events), [0] as Array[int], "вибув той, хто стріляв")
+	var ended: Events.MatchEnded = null
+	for e in events:
+		if e is Events.MatchEnded:
+			ended = e
+	assert_not_null(ended, "§3.10: на двох — кінець матчу тим самим обміном")
+	assert_eq(ended.winner, 1, "переміг захисник")
+	assert_eq(state.winner, 1)
+	assert_eq(EndTurnCommand.create().validate(state), "ERR_MATCH_OVER", "після кінця матчу ходів більше немає")
+
+func test_active_player_eliminated_by_retaliation_in_three_player_match_passes_on() -> void:
+	state = BattleState.create(Board.create(16, 16, Terrain.GroundState.DRY), 3, 11)
+	state.active_player = 0
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 6)
+	var bystander: Unit = state.add_unit(5, 2, Vector2i(14, 14), 6)
+	state.begin_turn()
+	state.refresh_vision(t.owner)
+	a.hp = 1
+
+	var events: Array = FireCommand.create(a.id, t.id).apply(state)
+
+	assert_false(a.is_alive())
+	assert_eq(_eliminated_players(events), [0] as Array[int], "вибув активний гравець — на власному ході")
+	assert_false(_has_event(events, Events.MatchEnded), "на трьох матч триває: живі ще двоє")
+	assert_false(state.is_over())
+	# Пінуємо нинішню поведінку: хід сам не переходить — вибулий лишається активним,
+	# доки не натисне «Кінець ходу». Діяти він не може (юнітів немає), а сам кінець
+	# ходу йому дозволено.
+	assert_eq(state.active_player, 0, "хід не передається автоматично")
+	assert_eq(state.units_of(0).size(), 0, "діяти вибулому нічим")
+	assert_eq(EndTurnCommand.create().validate(state), "", "вибулий може (і мусить) закінчити хід")
+
+	EndTurnCommand.create().apply(state)
+	assert_eq(state.active_player, 1, "хід переходить до наступного живого")
+	EndTurnCommand.create().apply(state)
+	assert_eq(state.active_player, 2)
+	var turn_before: int = state.turn_number
+	EndTurnCommand.create().apply(state)
+	assert_eq(state.active_player, 1, "вибулого гравця 0 коло пропускає")
+	assert_eq(state.turn_number, turn_before + 1, "коло замкнулося — новий хід")
+	assert_true(bystander.is_alive() and t.is_alive())

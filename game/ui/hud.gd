@@ -176,9 +176,10 @@ func set_active_player(player: int) -> void:
 	_player_value.text = str(player + 1)
 
 
-## Вибраний юніт (null — вибору немає). Приймає будь-який юніт, не лише свій:
-## залишок дронів публічний за правилом (§3.9), тож ворожа штурмова група
-## показує його так само, як своя.
+## Вибраний юніт (null — вибору немає). Дії й AP — лише для СВОГО юніта
+## активного гравця. Ворожий юніт сюди теж може прийти, але показує тільки
+## публічне: стати й залишок дронів (§3.9). Його AP не показується ніколи — це
+## залишок дій, яких гравець міг не бачити (docs/ui/overlays.md).
 func show_selection(unit: Unit) -> void:
 	_selected_unit = unit
 	# Новий вибір скидає pending у контролері (input_controller.gd:72), тож
@@ -303,12 +304,15 @@ func _render_selection() -> void:
 		_inspector.clear()
 		return
 	_selection_row.visible = true
-	_ap_value.text = str(_selected_unit.ap)
+	# AP ворога — прихований залишок його дій на чужих ходах (overlays.md), не стат.
+	_ap_value.visible = own
+	_selection_row.get_node("ApCaption").visible = own
+	_ap_value.text = str(_selected_unit.ap) if own else ""
 	# Рядок дронів показується лише тому, у кого дрони бувають: «0» у танка —
 	# шум, а не інформація, бо дронів у нього немає за ростером (§3.9).
 	_drones_row.visible = int(_selected_unit.type()["drones"]) > 0
 	_drones_value.text = str(_selected_unit.drones_left)
-	_inspector.show_unit(_selected_unit)
+	_inspector.show_unit(_selected_unit, own)
 	# Рівно тут, а не в _reposition_inspector(): вміст панелі змінюється тільки
 	# на цьому шляху, а позиція перераховується ще й на кожен кадр руху камери
 	# (view_changed). Перерахунок мінімального розміру PanelContainer з усім його

@@ -20,15 +20,25 @@ const ENEMY_TANK := Vector2i(6, 2)  # 4 від загону — у дально�
 const ENEMY_INF := Vector2i(4, 4)
 const FAR := Vector2i(9, 4)
 
+const LOCALES: Array[String] = ["en", "uk"]
+
 var _e2e: E2E
 var _orig_locale: String
+
+
+## Кожен розмір LayoutProbe.SIZES × кожна мова: українські підписи довші, але
+## англійські рвуть рядки інакше — влазити мусять обидві.
+static func _sizes_by_locale() -> Array:
+	var out: Array = []
+	for size: Vector2i in LayoutProbe.SIZES:
+		for locale: String in LOCALES:
+			out.append([size, locale])
+	return out
 
 
 func before_each() -> void:
 	_e2e = E2E.new(self)
 	_orig_locale = TranslationServer.get_locale()
-	# Українські підписи довші — вони першими не влазять.
-	TranslationServer.set_locale("uk")
 
 
 func after_each() -> void:
@@ -79,8 +89,9 @@ func _assert_fits(size: Vector2i, where: String) -> void:
 	assert_true(strip >= 0.5 * size.y, "смуга дошки %s < %s: %s" % [strip, 0.5 * size.y, where])
 
 
-func test_full_hud_fits_every_size(p = use_parameters(LayoutProbe.SIZES)) -> void:
-	var size: Vector2i = p
+func test_full_hud_fits_every_size(p = use_parameters(_sizes_by_locale())) -> void:
+	var size: Vector2i = p[0]
+	TranslationServer.set_locale(p[1])
 	await _boot(size, [_spawn(ENGINEER, 0, ENG), _spawn(MEDIUM_TANK, 0, HURT), _spawn(RIFLE, 1, FAR)],
 		func(st: BattleState) -> void: st.unit_at(HURT).hp = 300)
 	await _tap(ENG)
@@ -103,8 +114,9 @@ func test_full_hud_fits_every_size(p = use_parameters(LayoutProbe.SIZES)) -> voi
 
 ## Найтісніші стани нижнього рядка: озброєний дрон із прев'ю, з причиною відмови,
 ## і огляд ворога з рядком «нижня межа».
-func test_drone_and_threat_floor_fit_every_size(p = use_parameters(LayoutProbe.SIZES)) -> void:
-	var size: Vector2i = p
+func test_drone_and_threat_floor_fit_every_size(p = use_parameters(_sizes_by_locale())) -> void:
+	var size: Vector2i = p[0]
+	TranslationServer.set_locale(p[1])
 	await _boot(size, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK), _spawn(RIFLE, 1, ENEMY_INF)])
 	await _tap(SQUAD)
 	var drone: Control = _node("%DroneButton")
@@ -130,7 +142,8 @@ func test_drone_and_threat_floor_fit_every_size(p = use_parameters(LayoutProbe.S
 
 ## На PHONE_SMALL, з відкритою панеллю інженера, тап у центр смуги дошки вибирає
 ## юніт, що там стоїть. Дошка заповнена своїми загонами — під центром завжди хтось є.
-func test_board_still_tappable_on_phone() -> void:
+func test_board_still_tappable_on_phone(p = use_parameters(LOCALES)) -> void:
+	TranslationServer.set_locale(p)
 	var size: Vector2i = LayoutProbe.PHONE_SMALL
 	# Інженер не перший: камера стає на перший юніт гравця, і центр смуги не має
 	# припасти на самого інженера (повторний тап зняв би вибір).
