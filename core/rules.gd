@@ -110,9 +110,16 @@ static func damage_bounds(attacker: Unit, target: Unit, sector: int,
 			attack_roll_max, 0, arty_roll_max)
 	return Vector2i(lo, hi)
 
+const DRONE_BASE: int = 120
+const DRONE_SPREAD: int = 60
+
 static func drone_damage(rng: RandomNumberGenerator) -> int:
 	## §3.9. Броня ігнорується повністю: дрон заходить згори, сектор не рахується.
-	return 120 + roll(rng, 60)
+	return DRONE_BASE + roll(rng, DRONE_SPREAD)
+
+static func drone_damage_bounds() -> Vector2i:
+	## Межі для оверлея (min, max) — ті самі константи, що й у drone_damage().
+	return Vector2i(DRONE_BASE, DRONE_BASE + DRONE_SPREAD)
 
 static func distance_sq(a: Vector2i, b: Vector2i) -> int:
 	var d: Vector2i = a - b

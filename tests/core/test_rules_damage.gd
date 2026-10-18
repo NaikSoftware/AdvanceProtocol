@@ -105,3 +105,14 @@ func test_damage_is_deterministic_per_seed() -> void:
 	var a: int = Rules.compute_damage(_rng(42), _u(MEDIUM_TANK), _u(HEAVY_TANK), UnitTypes.ArmourSector.SIDE, 9)
 	var b: int = Rules.compute_damage(_rng(42), _u(MEDIUM_TANK), _u(HEAVY_TANK), UnitTypes.ArmourSector.SIDE, 9)
 	assert_eq(a, b)
+
+func test_drone_bounds_match_roll_range() -> void:
+	var b: Vector2i = Rules.drone_damage_bounds()
+	assert_eq(b, Vector2i(120, 180))
+	var out: Array[int] = []
+	for s in 500:
+		out.append(Rules.drone_damage(_rng(s)))
+	assert_eq(_min(out), b.x, "нижня межа досягнута")
+	assert_eq(_max(out), b.y, "верхня межа досягнута")
+	for v in out:
+		assert_between(v, b.x, b.y)

@@ -546,3 +546,140 @@ func test_queries_do_not_touch_the_state() -> void:
 	assert_eq([tank.ap, tank.hp, tank.has_fired, enemy.ap, enemy.hp, enemy.has_fired,
 		squad.drones_left, enemy_squad.drones_left], before, "запит нічого не мутує")
 	assert_eq(state.rng.state, rng_state, "запит не чіпає RNG матчу")
+
+
+# --- Task 4b: тайли обвідної й позначки дрона для оверлея ------------------------
+
+func _all_seen(player: int) -> void:
+	state.vision[player].seen.fill(1)
+
+
+func test_reach_tiles_radius_5_on_open_board() -> void:
+	var u: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	assert_eq(Targeting.reach_tiles(state, u.id, 5).size(), 81, "dx²+dy² <= 25 → 81 тайл")
+
+
+func test_reach_tiles_clipped_by_seen() -> void:
+	var u: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	for x in 12:
+		state.vision[0].seen[9 * 12 + x] = 0  # смуга y == 9 нерозвідана
+	var tiles: Array[Vector2i] = Targeting.reach_tiles(state, u.id, 5)
+	assert_does_not_have(tiles, Vector2i(6, 9), "нерозвідана смуга не входить")
+	assert_has(tiles, Vector2i(6, 8))
+	assert_eq(tiles.size(), 81 - 9, "у колі 5 на y == 9 дев'ять тайлів (dy=3, dx² <= 16)")
+
+
+func test_reach_tiles_empty_for_unseen_enemy() -> void:
+	var e: Unit = state.add_unit(1, 1, Vector2i(10, 10), 2)
+	state.add_unit(0, 0, Vector2i(1, 1), 2)
+	state.start()
+	state.begin_turn()
+	assert_false(state.vision[0].is_seen(e.pos), "передумова")
+	assert_eq(Targeting.reach_tiles(state, e.id, 5).size(), 0)
+
+
+func test_reach_tiles_ignores_owner_network_of_enemy() -> void:
+	# seen ВОРОГА порожня — обвідна мусить братися з seen активного гравця.
+	var e: Unit = state.add_unit(1, 1, Vector2i(6, 6), 2)
+	state.add_unit(0, 0, Vector2i(6, 8), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	state.vision[1].seen.fill(0)
+	assert_eq(Targeting.reach_tiles(state, e.id, 5).size(), 81)
+
+
+func test_drone_marks_flag_infantry_with_reason() -> void:
+	var sq: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+	var inf: Unit = state.add_unit(0, 1, Vector2i(6, 8), 2)
+	var tank: Unit = state.add_unit(5, 1, Vector2i(8, 6), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	var m: Dictionary = Targeting.drone_marks(state, sq.id)
+	assert_eq(m[inf.id], "ERR_DRONE_CANNOT_TARGET_INFANTRY")
+	assert_eq(m[tank.id], "")
+
+
+func test_drone_marks_agree_with_drone_targets() -> void:
+	var sq: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+	state.add_unit(0, 1, Vector2i(6, 8), 2)
+	state.add_unit(5, 1, Vector2i(8, 6), 2)
+	var far: Unit = state.add_unit(5, 1, Vector2i(0, 0), 2)  # поза дальністю
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	var ok: Array[int] = []
+	var m: Dictionary = Targeting.drone_marks(state, sq.id)
+	for id in m:
+		if m[id] == "":
+			ok.append(id)
+	ok.sort()
+	var want: Array[int] = _ids(Targeting.drone_targets(state, sq.id))
+	want.sort()
+	assert_eq(ok, want)
+	assert_false(m.has(far.id), "поза RANGE ключа немає")
+
+
+func test_drone_marks_empty_without_drones() -> void:
+	var sq: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+	var tank: Unit = state.add_unit(5, 1, Vector2i(8, 6), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	sq.drones_left = 0
+	assert_eq(Targeting.drone_marks(state, sq.id)[tank.id], "ERR_NO_DRONES_LEFT")
+
+
+func test_drone_marks_only_for_own_squad() -> void:
+	var enemy: Unit = state.add_unit(1, 1, Vector2i(6, 6), 2)
+	state.add_unit(5, 0, Vector2i(8, 6), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	assert_eq(Targeting.drone_marks(state, enemy.id).size(), 0)
+
+
+func test_queries_do_not_touch_state() -> void:
+	var sq: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+	state.add_unit(5, 1, Vector2i(8, 6), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	var rng_before: int = state.rng.state
+	var ap: int = sq.ap
+	var seen_before: PackedByteArray = state.vision[0].seen.duplicate()
+	Targeting.reach_tiles(state, sq.id, 5)
+	Targeting.drone_marks(state, sq.id)
+	assert_eq(state.rng.state, rng_before)
+	assert_eq(sq.ap, ap)
+	assert_eq(state.vision[0].seen, seen_before)
+
+
+func test_drone_marks_exclude_enemy_on_unseen_tile() -> void:
+	# §1.2: ворог на нерозвіданому тайлі в межах RANGE не має потрапити в ключі.
+	var sq: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+	var hidden: Unit = state.add_unit(5, 1, Vector2i(8, 6), 2)
+	var shown: Unit = state.add_unit(5, 1, Vector2i(6, 8), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	state.vision[0].seen[6 * 12 + 8] = 0
+	var m: Dictionary = Targeting.drone_marks(state, sq.id)
+	assert_false(m.has(hidden.id), "ворог на unseen-тайлі відсутній")
+	assert_true(m.has(shown.id), "ворог на seen-тайлі присутній")
+
+
+func test_drone_marks_empty_for_unit_type_without_drones() -> void:
+	var tank: Unit = state.add_unit(5, 0, Vector2i(6, 6), 2)
+	state.add_unit(5, 1, Vector2i(8, 6), 2)
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+	assert_eq(Targeting.drone_marks(state, tank.id).size(), 0)
