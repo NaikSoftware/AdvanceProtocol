@@ -32,7 +32,7 @@ func rebuild(state: BattleState, observer: int) -> void:
 	for m in state.mines:
 		if m.owner == observer:
 			_add(m.pos, Style.OWN)
-		elif m.known_to[observer]:
+		elif Mines.is_known(state, m.pos, observer):
 			_add(m.pos, Style.ENEMY_REVEALED)
 
 
