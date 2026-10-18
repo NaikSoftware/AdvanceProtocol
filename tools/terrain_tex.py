@@ -4,7 +4,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-LIMIT = 6.0  # макс. середня різниця протилежних країв, з 255
+LIMIT = 2.5  # шов / типова різниця сусідів усередині
 
 
 def load(p):
@@ -39,13 +39,20 @@ def normal(a, strength):
     p = lambda dy, dx: np.roll(g, (dy, dx), (0, 1))  # wrap: нормаль теж тайлиться
     dx = (p(-1, -1) + 2 * p(0, -1) + p(1, -1)) - (p(-1, 1) + 2 * p(0, 1) + p(1, 1))
     dy = (p(-1, -1) + 2 * p(-1, 0) + p(-1, 1)) - (p(1, -1) + 2 * p(1, 0) + p(1, 1))
-    n = np.stack([dx * strength, dy * strength, np.ones_like(g)], -1)
+    n = np.stack([-dx * strength,  # OpenGL/Godot: X = -dh/dx
+                   dy * strength, np.ones_like(g)], -1)
     n /= np.linalg.norm(n, axis=-1, keepdims=True)
     return tie((n * 0.5 + 0.5) * 255)
 
 
 def edge_diffs(a):
-    return (np.abs(a[:, 0] - a[:, -1]).mean(), np.abs(a[0] - a[-1]).mean())
+    # Останній рядок/стовпець після tie() дорівнює першому, тому міряємо справжній шов:
+    # сусід по колу — це 1022 і 0, а не 1023 і 0. Абсолютний поріг 6/255 тут безглуздий:
+    # у детальній текстурі сусідні пікселі відрізняються на 20-40 самі по собі. Тому шов
+    # порівнюємо з типовою різницею сусідів усередині: це відношення, ~1 = шва не видно.
+    sx = np.abs(a[:, 0] - a[:, -2]).mean() / np.abs(np.diff(a[:, :-1], axis=1)).mean()
+    sy = np.abs(a[0] - a[-2]).mean() / np.abs(np.diff(a[:-1], axis=0)).mean()
+    return sx, sy
 
 
 def main(argv):
@@ -54,6 +61,14 @@ def main(argv):
     elif len(argv) >= 3 and argv[0] == "normal":
         s = float(argv[argv.index("--strength") + 1]) if "--strength" in argv else 2.0
         save(normal(load(argv[1]), s), argv[2])
+    elif argv and argv[0] == "selftest":
+        r = np.tile(np.linspace(0, 255, 64, dtype=np.float32), (64, 1))[:, :, None].repeat(3, 2)
+        up = r.transpose(1, 0, 2)[::-1]  # росте до верху зображення
+        R = normal(r, 2)[:, :, 0].mean()
+        G = normal(up, 2)[:, :, 1].mean()
+        print(f"ramp right: mean R={R:.1f} (want <127.5); ramp to top: mean G={G:.1f}")
+        assert R < 127.5
+        assert G < 127.5, "поверхня росте до верху: нормаль дивиться вниз, G<128"
     elif argv and argv[0] == "check":
         bad = 0
         for p in argv[1:]:
