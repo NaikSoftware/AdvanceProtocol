@@ -156,9 +156,10 @@ func test_a_drag_is_never_a_long_press() -> void:
 	await _boot(MEDIUM_TANK, TANK)
 	var from: Vector2 = _e2e.px(TANK)
 	_e2e._mouse_button(from, true)
-	# Тягнемо до центру екрана, не вправо: за FOV 42° танк біля правого краю, і
-	# +60 px потрапляли на смугу прокрутки вікна виводу GUT (x ≥ 1258), яка
-	# з'являється, лише коли виводу вже багато, і з'їдає рух миші.
+	# Справжній захист — ignore_runner_gui() у _boot, що тепер гасить і внутрішні
+	# вузли GUT: за FOV 42° +60 px вправо потрапляли на внутрішню смугу прокрутки
+	# вікна виводу GUT (x ≥ 1258), яку хелпер раніше пропускав. До центру екрана
+	# тягнемо додатково, щоб драг не залежав від того, що лежить біля краю.
 	var shift: Vector2 = (get_viewport().get_visible_rect().get_center() - from).normalized() * 60.0
 	var mv := InputEventMouseMotion.new()
 	mv.position = from + shift

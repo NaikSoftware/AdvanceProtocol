@@ -50,7 +50,10 @@ func _ignore_recursive(n: Node, skip: Array[Node]) -> void:
 		if not _saved_filters.has(ctl):
 			_saved_filters[ctl] = ctl.mouse_filter
 		ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for c: Node in n.get_children():
+	# get_children(true): смуга прокрутки RichTextLabel — внутрішній вузол, і без
+	# include_internal вона лишалась STOP та з'їдала драг біля правого краю.
+	# restore_runner_gui() повертає рівно те, що тут збережено.
+	for c: Node in n.get_children(true):
 		_ignore_recursive(c, skip)
 
 
