@@ -80,11 +80,6 @@ func test_map_is_well_formed(p = use_parameters(_map_paths())) -> void:
 				assert_gt(d.x * d.x + d.y * d.y, MAX_REACH * MAX_REACH,
 					"%s: %s і %s стартують на дистанції пострілу" % [path, a["pos"], b["pos"]])
 
-	assert_lte(m.objectives.size(), 15, path)
-	for o: Vector2i in m.objectives:
-		assert_true(_passable(board, o), "%s: ціль %s поза дошкою чи на непрохідному" % [path, o])
-	assert_between(m.hold_target, 0, m.objectives.size(), path)
-
 	assert_true(MatchSetup.map_supports(m, 2), path)
 	assert_true(MatchSetup.map_supports(m, 3), path)
 
@@ -136,4 +131,3 @@ func test_five_maps_with_required_kinds() -> void:
 	assert_gte(_count(mountain, [K.HILL]) * 4, mountain.tiles.size(), "mountain: пагорби >= 25 %")
 	var open: MapData = by_name["open"]
 	assert_gte(_count(open, [K.FIELD, K.ROAD]) * 5, open.tiles.size() * 4, "open: поле/дорога >= 80 %")
-	assert_eq(open.hold_target, 0, "open: без умови за цілі")

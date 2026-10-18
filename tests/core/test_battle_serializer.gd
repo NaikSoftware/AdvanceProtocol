@@ -9,7 +9,6 @@ func _populated_state() -> BattleState:
 	s.add_unit(1, 1, Vector2i(6, 6), 5)
 	s.add_unit(11, 2, Vector2i(2, 6), 0)
 	Mines.place(s, Vector2i(5, 5), 0)
-	Objectives.add(s, Vector2i(4, 0), 1)
 	s.damage_dealt = [1200, 0, 90] as Array[int]
 	s.turn_number = 4
 	s.active_player = 2
@@ -25,7 +24,6 @@ func test_round_trip_preserves_everything() -> void:
 	assert_eq(b.turn_number, 4)
 	assert_eq(b.active_player, 2)
 	assert_eq(b.mines.size(), 1)
-	assert_eq(b.objectives.size(), 1)
 	assert_eq(b.damage_dealt, [1200, 0, 90] as Array[int])
 
 func test_a_save_without_damage_dealt_loads_as_zeros() -> void:
@@ -33,12 +31,6 @@ func test_a_save_without_damage_dealt_loads_as_zeros() -> void:
 	d.erase("damage_dealt")
 	var b: BattleState = BattleSerializer.from_dict(d)
 	assert_eq(b.damage_dealt, [0, 0, 0] as Array[int], "старі збереження мусять відкриватися")
-
-func test_objective_hold_target_round_trips() -> void:
-	var a: BattleState = _populated_state()
-	a.objective_hold_target = 5
-	var b: BattleState = BattleSerializer.from_dict(BattleSerializer.to_dict(a))
-	assert_eq(b.objective_hold_target, 5)
 
 func test_unit_fields_survive() -> void:
 	var a: BattleState = _populated_state()
@@ -112,11 +104,6 @@ func test_hidden_information_is_not_leaked_or_collapsed_on_round_trip() -> void:
 	assert_true(mine.known_to[0])
 	assert_false(mine.known_to[1])
 	assert_false(mine.known_to[2])
-	# The objective is seen only by player 2.
-	var obj: Objectives.Objective = a.objectives[0]
-	obj.seen_by[0] = false
-	obj.seen_by[1] = false
-	obj.seen_by[2] = true
 
 	var b: BattleState = BattleSerializer.from_dict(BattleSerializer.to_dict(a))
 
@@ -129,11 +116,6 @@ func test_hidden_information_is_not_leaked_or_collapsed_on_round_trip() -> void:
 	assert_true(restored_mine.known_to[0], "власник знає про міну")
 	assert_false(restored_mine.known_to[1], "гравець 1 не знає про міну")
 	assert_false(restored_mine.known_to[2], "гравець 2 не знає про міну")
-
-	var restored_obj: Objectives.Objective = b.objectives[0]
-	assert_false(restored_obj.seen_by[0], "гравець 0 не бачив ціль")
-	assert_false(restored_obj.seen_by[1], "гравець 1 не бачив ціль")
-	assert_true(restored_obj.seen_by[2], "тільки гравець 2 бачив ціль")
 
 func test_rng_state_round_trip_matches_fresh_draws() -> void:
 	var a: BattleState = _populated_state()
@@ -161,13 +143,10 @@ func test_to_dict_snapshot_is_immune_to_later_mutation() -> void:
 
 	var mine: Mines.Mine = a.mines[0]
 	mine.known_to[1] = true
-	a.objectives[0].seen_by[0] = true
 	a.eliminated[1] = true
 
 	var snap_mine: Dictionary = snapshot["mines"][0]
 	assert_false((snap_mine["known_to"] as Array)[1], "знімок не бачить пізнішого розкриття міни")
-	var snap_obj: Dictionary = snapshot["objectives"][0]
-	assert_false((snap_obj["seen_by"] as Array)[0], "знімок не бачить пізнішого виявлення цілі")
 	assert_false((snapshot["eliminated"] as Array)[1], "знімок не бачить пізнішої елімінації")
 
 # --- Збереження, частини якого не погоджуються між собою, відкидається ------
@@ -205,6 +184,16 @@ func test_old_save_with_experience_still_loads() -> void:
 	assert_not_null(b, "старе збереження з ключем experience відкривається")
 	assert_eq(b.damage_dealt, [1200, 0, 90] as Array[int])
 
+func test_old_save_with_objectives_still_loads() -> void:
+	# Формат до видалення цілей: ключі є, але ігноруються — навіть сміття.
+	var d: Dictionary = _save()
+	d["objective_hold_target"] = 3
+	d["objectives"] = [{"x": 4, "y": 0, "owner": 1, "intact": true, "seen_by": [true]}]
+	var b: BattleState = BattleSerializer.from_dict(d)
+	assert_not_null(b, "старе збереження з ключами цілей відкривається")
+	assert_eq(b.units.size(), 3)
+	assert_false(BattleSerializer.to_dict(b).has("objectives"), "новий формат цілей не пише")
+
 func test_save_without_experience_loads() -> void:
 	var d: Dictionary = _save()
 	assert_false(d.has("experience"), "новий формат не пише experience")
@@ -219,11 +208,6 @@ func test_mine_known_to_of_the_wrong_size_is_rejected() -> void:
 	var d: Dictionary = _save()
 	d["mines"][0]["known_to"] = [true]
 	_assert_rejected(d, "known_to міни на 1 гравця")
-
-func test_objective_seen_by_of_the_wrong_size_is_rejected() -> void:
-	var d: Dictionary = _save()
-	d["objectives"][0]["seen_by"] = [true, false]
-	_assert_rejected(d, "seen_by цілі на 2 гравців")
 
 func test_tiles_not_matching_the_board_size_are_rejected() -> void:
 	var d: Dictionary = _save()

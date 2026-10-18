@@ -171,30 +171,6 @@ func test_action_without_enough_ap_is_rejected() -> void:
 	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.LAY_MINE, Vector2i(4, 3)).validate(state),
 		"ERR_NOT_ENOUGH_AP")
 
-func test_capture_objective_flips_ownership() -> void:
-	var e: Unit = _engineer(Vector2i(4, 4))
-	Objectives.add(state, Vector2i(4, 3), -1)
-	EngineerCommand.create(e.id, EngineerCommand.Action.CAPTURE_OBJECTIVE, Vector2i(4, 3)).apply(state)
-	assert_eq(Objectives.at(state, Vector2i(4, 3)).owner, 0)
-
-func test_demolish_objective_marks_it_destroyed() -> void:
-	var e: Unit = _engineer(Vector2i(4, 4))
-	Objectives.add(state, Vector2i(4, 3), 1)
-	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).validate(state), "")
-	EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).apply(state)
-	assert_false(Objectives.at(state, Vector2i(4, 3)).intact)
-
-func test_demolishing_an_already_destroyed_objective_is_rejected() -> void:
-	# Без цієї перевірки друге підривання того самого об'єкта валідувалось би,
-	# спалювало б увесь хід інженера і випускало б другий ObjectiveDestroyed —
-	# подію, яку вигляду нема чого анімувати вдруге.
-	var e: Unit = _engineer(Vector2i(4, 4))
-	Objectives.add(state, Vector2i(4, 3), 1)
-	var o: Objectives.Objective = Objectives.at(state, Vector2i(4, 3))
-	o.intact = false
-	assert_eq(EngineerCommand.create(e.id, EngineerCommand.Action.DEMOLISH_OBJECTIVE, Vector2i(4, 3)).validate(state),
-		"ERR_NOTHING_TO_DEMOLISH")
-
 # --- Запити для панелі інженера (Task 4a) ---
 
 const A := EngineerCommand.Action
@@ -245,18 +221,22 @@ func test_status_mixed_tile_reasons_give_no_adjacent_target() -> void:
 	state.add_unit(5, 0, Vector2i(4, 3), 0)  # неушкоджений свій танк
 	assert_eq(EngineerCommand.action_status(state, e.id, A.REPAIR_UNIT)["reason"], "ERR_NO_ADJACENT_TARGET")
 
-func test_capture_reason_for_own_objective() -> void:
+func test_status_specific_reason_on_one_neighbour_still_gives_no_adjacent_target() -> void:
+	# Один сусід відмовляє своєю причиною (міна), решта — іншою (зайнято): жодна
+	# не головна, тож панель показує загальну причину, а не першу в DIRS_4.
 	var e: Unit = _engineer(Vector2i(4, 4))
-	Objectives.add(state, Vector2i(4, 3), 0)
-	assert_eq(EngineerCommand.create(e.id, A.CAPTURE_OBJECTIVE, Vector2i(4, 3)).validate(state), "ERR_NOTHING_TO_CAPTURE")
-	# решта сусідів — «немає цілі», причини різні
-	assert_eq(EngineerCommand.action_status(state, e.id, A.CAPTURE_OBJECTIVE)["reason"], "ERR_NO_ADJACENT_TARGET")
+	Mines.place(state, Vector2i(4, 3), 0)
+	for p in [Vector2i(5, 4), Vector2i(4, 5), Vector2i(3, 4)]:
+		state.add_unit(5, 0, p, 0)
+	assert_eq(EngineerCommand.create(e.id, A.LAY_MINE, Vector2i(4, 3)).validate(state), "ERR_MINE_ALREADY_THERE")
+	assert_eq(EngineerCommand.action_status(state, e.id, A.LAY_MINE),
+		{"tiles": [] as Array[Vector2i], "reason": "ERR_NO_ADJACENT_TARGET"})
 
 func test_status_never_changes_state_or_rng() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
 	var before: String = JSON.stringify(BattleSerializer.to_dict(state))
 	var rng_before: int = state.rng.state
-	for a in 7:
+	for a: int in A.values():
 		EngineerCommand.action_status(state, e.id, a)
 	EngineerCommand.repair_bounds(e, e)
 	assert_eq(JSON.stringify(BattleSerializer.to_dict(state)), before)
@@ -267,10 +247,9 @@ func test_status_matches_validate_for_every_action_and_tile() -> void:
 	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
 	state.board.set_kind(Vector2i(5, 4), Terrain.Kind.BRIDGE_DESTROYED)
 	Mines.place(state, Vector2i(3, 4), 1)
-	Objectives.add(state, Vector2i(4, 5), 1)
 	var hurt: Unit = state.add_unit(5, 0, Vector2i(4, 3), 0)
 	hurt.hp -= 10
-	for a in 7:
+	for a: int in A.values():
 		var tiles: Array = EngineerCommand.action_status(state, e.id, a)["tiles"]
 		for d in Board.DIRS_4:
 			var p: Vector2i = e.pos + d

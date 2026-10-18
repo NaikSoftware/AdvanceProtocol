@@ -103,7 +103,7 @@ func wait_until(cond: Callable, what: String, max_frames: int = 120) -> bool:
 
 ## opts: tiles {Vector2i: Terrain.Kind} (решта — FIELD), ground (Terrain.GroundState),
 ## viewport_size Vector2i (екран у SubViewport цього розміру),
-## seed (7), players (2), objectives Array[Vector2i], hold_target int,
+## seed (7), players (2),
 ## prepare Callable(state: BattleState) — після setup(), до першого кадру тесту.
 func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void:
 	var m := MapData.new()
@@ -120,10 +120,6 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 	for s: Dictionary in spawns:
 		typed.append(s)
 	m.spawns = typed
-	var objs: Array[Vector2i] = []
-	objs.assign(opts.get("objectives", []))
-	m.objectives = objs
-	m.hold_target = opts.get("hold_target", 0)
 	# таблиця рухів піднімає матч у циклі — не тримаємо десяток екранів одразу
 	if is_instance_valid(screen):
 		screen.free()
@@ -149,10 +145,9 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 		prepare.call(service.state)
 		# prepare міняє стан повз команди (позиції, міни), тож знання активного
 		# гравця перераховується так само, як на початку ходу (begin_turn()):
-		# туман, цілі, пошук мін. Події відкидаються — як у setup().
+		# туман, пошук мін. Події відкидаються — як у setup().
 		var st: BattleState = service.state
 		st.refresh_vision(st.active_player)
-		Objectives.refresh_seen(st, st.active_player)
 		Mines.reveal_near(st, st.active_player)
 		screen._rebuild_units_for_active_player()
 	ignore_runner_gui([screen])

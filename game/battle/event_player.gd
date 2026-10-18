@@ -141,10 +141,6 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_bridge_changed(event)
 	elif event is Events.UnitRepaired:
 		return _handle_unit_repaired(event)
-	elif event is Events.ObjectiveCaptured:
-		return _handle_objective_captured(event)
-	elif event is Events.ObjectiveDestroyed:
-		return _handle_objective_destroyed(event)
 	elif event is Events.ApChanged:
 		return _handle_ap_changed(event)
 	elif event is Events.TurnEnded:
@@ -274,15 +270,6 @@ func _handle_bridge_changed(_event: Events.BridgeChanged) -> Variant:
 
 func _handle_unit_repaired(event: Events.UnitRepaired) -> Variant:
 	_apply_hp_update(event.unit_id, event.hp_left)
-	return null
-
-
-## Маркери цілей на дошці не входять до споживаних цією задачею інтерфейсів.
-func _handle_objective_captured(_event: Events.ObjectiveCaptured) -> Variant:
-	return null
-
-
-func _handle_objective_destroyed(_event: Events.ObjectiveDestroyed) -> Variant:
 	return null
 
 
