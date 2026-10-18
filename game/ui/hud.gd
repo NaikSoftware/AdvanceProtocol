@@ -83,6 +83,8 @@ var _shown_player: int = -1
 @onready var _end_turn_button: Button = %EndTurnButton
 @onready var _pause_button: Button = %PauseButton
 @onready var _inspector: UnitInspector = %Inspector
+## Верби інженера (Task 8) — лише для свого інженера активного гравця.
+@onready var _engineer_panel: EngineerPanel = %EngineerPanel
 ## Поля безпеки читаються з того самого вузла, що їх і задає (§9: одне джерело
 ## правди) — панель поза цим контейнером, але поважає ті самі межі, бо виріз
 ## екрана однаково не питає, у контейнері вузол чи ні.
@@ -178,6 +180,8 @@ func show_preview(preview: Dictionary) -> void:
 		InputController.ActionType.MOVE:
 			_preview_ap_value.text = str(int(preview["ap_left"]))
 			_preview_move_box.visible = true
+		InputController.ActionType.ENGINEER:
+			pass  # верба й тайл уже видно на панелі й контурі цілей
 		InputController.ActionType.SHOT:
 			var sector: int = int(preview["sector"])
 			_preview_sector_value.text = tr(UnitInspector.SECTOR_KEYS[sector])
@@ -198,6 +202,7 @@ func attach_controller(controller: InputController) -> void:
 	_controller = controller
 	controller.selection_changed.connect(show_selection)
 	controller.action_preview.connect(show_preview)
+	_engineer_panel.action_chosen.connect(controller.arm_engineer)
 
 
 ## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.
@@ -231,6 +236,14 @@ func _render_selection() -> void:
 	# показувати AP мерця гірше, ніж не показувати нічого.
 	if _selected_unit != null and not _selected_unit.is_alive():
 		_selected_unit = null
+	# Панель верб — лише своєму інженерові активного гравця: чужі верби не
+	# дія, а їхня доступність була б підказкою про чужий стан.
+	var own_engineer: bool = _selected_unit != null and _state != null \
+			and _selected_unit.unit_class() == UnitTypes.UnitClass.ENGINEER \
+			and _selected_unit.owner == _state.active_player
+	_engineer_panel.visible = own_engineer
+	if own_engineer:
+		_engineer_panel.show_for(_state, _selected_unit)
 	if _selected_unit == null:
 		_selection_row.visible = false
 		_inspector.clear()

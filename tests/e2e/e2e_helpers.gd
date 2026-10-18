@@ -198,6 +198,19 @@ func act(from: Vector2i, to: Vector2i) -> void:
 	await confirm()
 
 
+## Верба інженера кнопками панелі: вибрати інженера, натиснути вербу, тапнути
+## тайл, підтвердити.
+func engineer_act(from: Vector2i, action: int, to: Vector2i) -> void:
+	tap(from)
+	press(engineer_panel().button_for(action))
+	tap(to)
+	await confirm()
+
+
+func engineer_panel() -> EngineerPanel:
+	return hud().get_node("%EngineerPanel")
+
+
 func events_of(cls: Variant) -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []
 	for e in service.events:

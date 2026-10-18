@@ -31,7 +31,12 @@ var _unit_lookup: Callable
 var _is_playing: bool = false
 
 
-func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable()) -> void:
+## Перебудова BoardView з нинішньої Board (BridgeChanged).
+var _board_rebuild: Callable
+
+
+func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable(), board_rebuild: Callable = Callable()) -> void:
+	_board_rebuild = board_rebuild
 	_unit_view_lookup = unit_view_lookup
 	_unit_lookup = unit_lookup
 
@@ -258,10 +263,12 @@ func _handle_mine_revealed(_event: Events.MineRevealed) -> Variant:
 	return null
 
 
-## Зміна виду тайлу (міст цілий/зруйнований) — це BoardView.build(), а не
-## точкове перефарбовування; BoardView не дає API для зміни виду одного
-## тайлу без перебудови всієї дошки, тож поки що це no-op.
+## Зміна виду тайлу (міст цілий/зруйнований): новий вид уже записано в core/,
+## тож вигляд лише перебудовує дошку з нинішньої Board (інжектований Callable,
+## той самий прийом, що й пошуки юнітів — R18).
 func _handle_bridge_changed(_event: Events.BridgeChanged) -> Variant:
+	if _board_rebuild.is_valid():
+		_board_rebuild.call()
 	return null
 
 
