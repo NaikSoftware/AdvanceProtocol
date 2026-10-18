@@ -3849,7 +3849,7 @@ HUD показує постійно: номер ходу, активного г�
 
 **Files:**
 - Create: `game/battle/battle_screen.tscn`, `game/battle/battle_screen.gd`
-- Create: `maps/skirmish_bridge.tres` + `core/map_data.gd` (Resource з тайлами, стартовими юнітами, цілями, `ground_state`)
+- Create: `maps/skirmish_bridge.tres` + `core/map_data.gd` (Resource з тайлами, стартовими юнітами, `ground_state`)
 
 **Interfaces:**
 - Produces: `MapData` (Resource): `width`, `height`, `ground_state`, `tiles: PackedInt32Array`, `spawns: Array[Dictionary]`, `name_key: String`

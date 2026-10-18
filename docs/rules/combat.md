@@ -183,7 +183,7 @@ will land in **before** the player commits.
 
 ## Victory
 
-A player with no units left is eliminated, and the check runs the moment
-a unit falls — after a shot, a retaliation, a mine, or a demolished bridge — and again at end of
+A player with no units left is eliminated. The check runs the moment a unit falls — after a shot,
+a retaliation, a drone strike, a mine, a demolished bridge, or a concede — and again at end of
 turn. Last player standing wins. In 3-player games an eliminated player is skipped in the turn
 order, and the match continues between the remaining two.
