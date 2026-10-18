@@ -1,6 +1,7 @@
 extends GutTest
-## Task 14: тап по будь-якому видимому юніту — кільце дальності й позначки загроз
-## (§3.13) наскрізно, справжніми тапами по дошці.
+## §3.13, docs/ui/overlays.md: довгий натиск на будь-якому видимому юніті — коло
+## дальності й позначки загроз; відпускання знімає. Тап кілець не показує ніколи.
+## Наскрізно, справжніми подіями миші по дошці.
 
 const E2E := preload("res://tests/e2e/e2e_helpers.gd")
 
@@ -43,11 +44,7 @@ func _boot(enemy_type: int, enemy_pos: Vector2i, prepare: Callable = Callable())
 			st.unit_at(enemy_pos).ap = 0
 			if prepare.is_valid():
 				prepare.call(st)})
-	_e2e.screen.input_controller().inspected.connect(
-		func(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int], drone_marked: Array[int],
-				is_floor: bool) -> void:
-			_last = {"ring": ring, "drone_ring": drone_ring, "marked": marked, "drone_marked": drone_marked,
-				"is_floor": is_floor})
+	_e2e.screen.input_controller().inspected.connect(func(i: Dictionary) -> void: _last = i)
 
 
 func _state() -> BattleState:
@@ -59,78 +56,128 @@ func _view(cell: Vector2i) -> UnitView:
 
 
 func _rings() -> Array:
-	return (_e2e.screen.get_node("%BoardView") as BoardView).contour_segments(BoardView.LAYER_INSPECT)
+	return (_e2e.screen.get_node("%BoardView") as BoardView).circles(BoardView.LAYER_INSPECT)
 
 
 func _floor() -> Label:
 	return _e2e.hud().get_node("%ThreatFloorLabel")
 
 
-func test_tap_enemy_tank_with_nothing_selected_shows_its_threat() -> void:
+## Коло радіуса дальності (танк — 4) з центром у тайлі танка і приціл на моєму
+## броньовику в його дальності; відпускання знімає все.
+func test_long_press_on_enemy_tank_shows_a_circle_and_marks_my_unit_in_range() -> void:
 	await _boot(MEDIUM_TANK, TANK)
-	_e2e.tap(TANK)
-	await _e2e.settle()
-	assert_ne(_rings(), [], "кільце танка")
+	_e2e.long_press(TANK)
+	assert_eq(_rings(), [{"center": TANK, "radius": 4, "color": TargetOverlay.GUN_RING_COLOR}])
+	var ring: MeshInstance3D = _ring_node()
+	assert_eq(Vector2(ring.position.x, ring.position.z), Vector2(6.0, 1.0), "центр — середина тайла танка")
 	assert_true(_view(CAR_POS).is_threatened(), "броньовик на 3 — у дальності 4")
 	assert_false(_view(SQUAD).is_threatened(), "загін на 6 — поза дальністю")
 	assert_true(_floor().is_visible_in_tree())
 	assert_eq(_floor().text, tr("hud_threat_floor"))
-	assert_true(_last["is_floor"])
+
+	_e2e.release(TANK)
+	await _e2e.settle()
+
+	assert_eq(_rings(), [])
+	assert_false(_view(CAR_POS).is_threatened())
+	assert_false(_floor().is_visible_in_tree())
+
+
+func _ring_node() -> MeshInstance3D:
+	for c: Node in _e2e.screen.get_node("%BoardView").get_children():
+		if c is MeshInstance3D and not c is MultiMeshInstance3D:
+			return c
+	return null
+
+
+func test_a_tap_on_an_enemy_shows_no_ring() -> void:
+	await _boot(MEDIUM_TANK, TANK)
+	_e2e.tap(TANK)
+	await _e2e.settle()
+	assert_eq(_rings(), [])
+	assert_false(_view(CAR_POS).is_threatened())
+	assert_false(_floor().is_visible_in_tree())
+
+
+## Відпускання після довгого натиску — не тап: нічого не вибрано, нічого не повернуто.
+func test_release_after_long_press_is_not_a_tap() -> void:
+	await _boot(MEDIUM_TANK, TANK)
+	_e2e.tap(CAR_POS)
+	await _e2e.settle()
+	var car: Unit = _state().unit_at(CAR_POS)
+	var facing: int = car.facing
+	_e2e.long_press(Vector2i(5, 0))
+	_e2e.release(Vector2i(5, 0))
+	await _e2e.settle()
+	assert_eq(car.facing, facing, "довгий натиск не повертає")
+	assert_true(_e2e.hud().get_node("%SelectionRow").is_visible_in_tree(), "вибір лишився")
+	assert_false(_e2e.hud().get_node("%CancelButton").is_visible_in_tree(), "прев'ю руху не з'явилось")
+
+
+## Порожня земля під пальцем — кільце вибраного свого юніта.
+func test_long_press_on_empty_ground_shows_selected_unit_ring() -> void:
+	await _boot(MEDIUM_TANK, TANK)
+	_e2e.tap(CAR_POS)
+	await _e2e.settle()
+	assert_eq(_rings(), [], "вибір кільця не показує")
+	_e2e.long_press(Vector2i(4, 0))
+	assert_eq(_rings(), [{"center": CAR_POS, "radius": 3, "color": TargetOverlay.GUN_RING_COLOR}])
+	assert_true(_view(TANK).is_threatened(), "танк на 3 — ціль броньовика")
+	assert_false(_floor().is_visible_in_tree())
+	_e2e.release(Vector2i(4, 0))
 
 
 func test_enemy_squad_with_drones_threatens_at_5() -> void:
 	await _boot(ASSAULT, ENEMY_SQUAD)
-	_e2e.tap(ENEMY_SQUAD)
-	await _e2e.settle()
-	var id: int = _state().unit_at(ENEMY_SQUAD).id
-	assert_eq(_last["drone_ring"], Targeting.reach_tiles(_state(), id, DroneCommand.RANGE))
-	assert_ne(_last["drone_ring"], [])
+	_e2e.long_press(ENEMY_SQUAD)
+	assert_eq(_rings(), [{"center": ENEMY_SQUAD, "radius": 3, "color": TargetOverlay.GUN_RING_COLOR},
+		{"center": ENEMY_SQUAD, "radius": DroneCommand.RANGE, "color": TargetOverlay.DRONE_RING_COLOR}])
 	assert_true(_view(CAR_POS).is_drone_threatened(), "броньовик на 5 — дрон")
 	assert_false(_view(CAR_POS).is_threatened(), "гармата загону дістає лише на 3")
 	assert_eq(_last["drone_marked"], [_state().unit_at(CAR_POS).id])
 	assert_eq(_floor().text, tr("hud_threat_floor_drone"))
+	_e2e.release(ENEMY_SQUAD)
 
 
 func test_enemy_squad_without_drones_does_not_threaten_at_5() -> void:
 	await _boot(ASSAULT, ENEMY_SQUAD, func(st: BattleState) -> void: st.unit_at(ENEMY_SQUAD).drones_left = 0)
-	_e2e.tap(ENEMY_SQUAD)
-	await _e2e.settle()
-	assert_eq(_last["drone_ring"], [])
+	_e2e.long_press(ENEMY_SQUAD)
+	assert_eq(_last["drone_radius"], 0)
+	assert_eq(_rings().size(), 1, "лише коло гармати")
 	assert_false(_view(CAR_POS).is_threatened())
 	assert_false(_view(CAR_POS).is_drone_threatened())
 	assert_eq(_floor().text, tr("hud_threat_floor"))
+	_e2e.release(ENEMY_SQUAD)
 
 
-func test_empty_tap_clears_inspection() -> void:
+## Драг — ніколи не довгий натиск: палець поїхав за поріг, потім тримається.
+func test_a_drag_is_never_a_long_press() -> void:
 	await _boot(MEDIUM_TANK, TANK)
-	_e2e.tap(TANK)
-	await _e2e.settle()
-	_e2e.tap(Vector2i(4, 0))
+	var from: Vector2 = _e2e.px(TANK)
+	_e2e._mouse_button(from, true)
+	var mv := InputEventMouseMotion.new()
+	mv.position = from + Vector2(60, 0)
+	mv.global_position = mv.position
+	mv.relative = Vector2(60, 0)
+	mv.button_mask = MOUSE_BUTTON_MASK_LEFT
+	get_viewport().push_input(mv, true)
+	_e2e.screen._process(BattleScreen.LONG_PRESS_SEC * 2.0)
+	assert_eq(_rings(), [])
+	_e2e._mouse_button(mv.position, false)
 	await _e2e.settle()
 	assert_eq(_rings(), [])
-	assert_false(_view(CAR_POS).is_threatened())
-	assert_false(_view(CAR_POS).is_drone_threatened())
-	assert_false(_floor().is_visible_in_tree())
 
 
-func test_own_unit_selection_shows_ring_without_floor() -> void:
+func test_peek_does_not_survive_the_handover_gate() -> void:
 	await _boot(MEDIUM_TANK, TANK)
-	_e2e.tap(CAR_POS)
-	await _e2e.settle()
-	assert_ne(_rings(), [])
-	assert_true(_view(TANK).is_threatened(), "танк на 3 — ціль броньовика")
-	assert_false(_floor().is_visible_in_tree())
-
-
-func test_inspection_does_not_survive_the_handover_gate() -> void:
-	await _boot(MEDIUM_TANK, TANK)
-	_e2e.tap(TANK)
-	await _e2e.settle()
+	_e2e.long_press(TANK)
 	assert_ne(_rings(), [], "передумова")
 	await _e2e.end_turn()
 	assert_true(_e2e.gate().is_visible_in_tree(), "гейт показано")
 	assert_eq(_rings(), [])
 	assert_false(_floor().is_visible_in_tree())
+	_e2e.release(TANK)
 	await _e2e.confirm_gate()
 	assert_eq(_rings(), [])
 	for id: int in [_state().unit_at(CAR_POS).id, _state().unit_at(SQUAD).id]:
@@ -141,9 +188,31 @@ func test_inspection_does_not_survive_the_handover_gate() -> void:
 
 func test_enemy_engineer_shows_no_ring_and_no_floor() -> void:
 	await _boot(11, TANK)
-	_e2e.tap(TANK)
-	await _e2e.settle()
-	assert_eq(_last["ring"], [], "§3.6: у інженера немає гармати")
+	_e2e.long_press(TANK)
+	assert_eq(_last["radius"], 0, "§3.6: у інженера немає гармати")
 	assert_eq(_rings(), [])
 	assert_false(_view(CAR_POS).is_threatened())
 	assert_false(_floor().is_visible_in_tree())
+	_e2e.release(TANK)
+
+
+## Власник 2026-10-18: справжній тап по полю розвертає вибраного юніта туди.
+func test_a_real_tap_turns_the_selected_unit() -> void:
+	await _boot(MEDIUM_TANK, TANK)
+	_e2e.tap(CAR_POS)
+	await _e2e.settle()
+	var car: Unit = _state().unit_at(CAR_POS)
+	var ap: int = car.ap
+	var target := Vector2i(3, 2)
+	assert_ne(car.facing, Board.facing_towards(CAR_POS, target), "передумова")
+	var node: UnitView = _view(CAR_POS)
+
+	_e2e.tap(target)
+	await _e2e.settle()
+
+	assert_same(_view(CAR_POS), node, "поворот анімовано на тому самому вузлі, а не знято перебудовою")
+
+	assert_eq(car.facing, Board.facing_towards(CAR_POS, target))
+	assert_eq(car.ap, ap, "поворот безкоштовний")
+	assert_eq(_view(CAR_POS).facing, car.facing, "вузол повернуто")
+	assert_eq(_e2e.events_of(Events.UnitTurned).size(), 1)

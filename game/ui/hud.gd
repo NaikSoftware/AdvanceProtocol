@@ -245,7 +245,7 @@ func attach_controller(controller: InputController) -> void:
 		_engineer_panel.set_armed(not tiles.is_empty()))
 	controller.action_refused.connect(_engineer_panel.show_reason)
 	_drone_button.pressed.connect(controller.arm_drone)
-	controller.drone_armed.connect(func(_ring: Array[Vector2i], _marks: Dictionary) -> void: _show_drone_range())
+	controller.drone_armed.connect(func(_c: Vector2i, _r: int, _marks: Dictionary) -> void: _show_drone_range())
 	# disarm() завжди шле targets_changed — радіус дрона гасне разом із режимом.
 	controller.targets_changed.connect(func(_tiles: Array[Vector2i]) -> void: _drone_range_label.visible = false)
 	controller.action_refused.connect(func(reason: String) -> void:
@@ -257,12 +257,11 @@ func attach_controller(controller: InputController) -> void:
 	controller.action_preview.connect(_sync_cancel.unbind(1))
 	controller.pending_cleared.connect(_sync_cancel)
 	controller.targets_changed.connect(_sync_cancel.unbind(1))
-	controller.drone_armed.connect(_sync_cancel.unbind(2))
+	controller.drone_armed.connect(_sync_cancel.unbind(3))
 	_sync_cancel()
 	# §3.13: огляд ворога — позначки лише нижня межа, і UI мусить сказати це вголос.
-	controller.inspected.connect(func(_r: Array[Vector2i], drone_ring: Array[Vector2i], _m: Array[int],
-			_dm: Array[int], is_floor: bool) -> void:
-		_show_threat_floor(is_floor, not drone_ring.is_empty()))
+	controller.inspected.connect(func(i: Dictionary) -> void:
+		_show_threat_floor(i.get("is_floor", false), int(i.get("drone_radius", 0)) > 0))
 
 
 ## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.

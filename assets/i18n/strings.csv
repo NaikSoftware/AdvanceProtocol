@@ -19,7 +19,7 @@ ERR_OUT_OF_RANGE,Поза дальністю,Out of range
 ERR_NO_SUCH_TARGET,Немає такої цілі,No such target
 ERR_FRIENDLY_FIRE,Не можна стріляти по своїх,Cannot fire on a friendly unit
 ERR_NO_WEAPON,Юніт без зброї,Unit has no weapon
-ERR_NOT_ENOUGH_AP,Недостатньо очок дії,Not enough action points
+ERR_NOT_ENOUGH_AP,Недостатньо запасу ходу,Not enough action points
 ERR_TARGET_NOT_VISIBLE,Ціль не видно,Target is not visible
 ERR_NO_DRONES_LEFT,Дронів не лишилось,No drones left
 ERR_DRONE_CANNOT_TARGET_INFANTRY,Дрон не б'є піхоту,Drone cannot target infantry
@@ -38,8 +38,8 @@ ERR_OWN_TILE,Юніт уже стоїть на цій клітинці,The unit 
 ERR_ALREADY_FACING,Юніт уже дивиться туди,The unit is already facing that way
 hud_turn,Хід,Turn
 hud_player,Гравець,Player
-hud_ap,ОД,AP
-hud_ap_left,Залишок ОД,AP left
+hud_ap,Запас ходу,AP
+hud_ap_left,Залишок запасу ходу,AP left
 hud_hp,Міцність,HP
 hud_armour,Броня,Armour
 hud_armour_sector,Сектор броні,Armour sector

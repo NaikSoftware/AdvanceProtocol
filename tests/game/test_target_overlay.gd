@@ -33,16 +33,37 @@ func test_clear_and_empty_tiles_remove_contour() -> void:
 	assert_eq(board_view.contour_segments(BoardView.LAYER_TARGETS), [])
 
 
-## Task 14: кільця огляду — свій шар і два різні кольори, не з палітри зон руху
-## (золото/червоне) і не колір озброєних режимів.
-func test_show_rings_colours_gun_and_drone_apart_on_inspect_layer() -> void:
-	var ring: Array[Vector2i] = [Vector2i(2, 2)]
-	var drone_ring: Array[Vector2i] = [Vector2i(5, 5)]
-	overlay.show_rings(ring, drone_ring)
-	assert_eq(board_view.contour_segments(BoardView.LAYER_INSPECT),
-		ZoneOverlay._edges(ring, TargetOverlay.GUN_RING_COLOR) + ZoneOverlay._edges(drone_ring, TargetOverlay.DRONE_RING_COLOR))
-	assert_eq(board_view.contour_segments(BoardView.LAYER_TARGETS), [], "шар режимів не зачеплено")
+## Кільця огляду (§3.13): свій шар, два кола з radius/drone_radius з Targeting.inspection,
+## два різні кольори — не з палітри зон руху (золото/червоне) і не колір озброєних режимів.
+func test_show_rings_draws_gun_and_drone_circles_on_inspect_layer() -> void:
+	overlay.show_rings({"center": Vector2i(4, 4), "radius": 3, "drone_radius": 5})
+	assert_eq(board_view.circles(BoardView.LAYER_INSPECT), [
+		{"center": Vector2i(4, 4), "radius": 3, "color": TargetOverlay.GUN_RING_COLOR},
+		{"center": Vector2i(4, 4), "radius": 5, "color": TargetOverlay.DRONE_RING_COLOR}])
+	assert_eq(board_view.contour_segments(BoardView.LAYER_INSPECT), [])
+	assert_eq(board_view.circles(BoardView.LAYER_TARGETS), [], "шар режимів не зачеплено")
 	var taken: Array[Color] = [ZoneOverlay.COLOR_MOVE_AND_FIRE, ZoneOverlay.COLOR_MOVE_ONLY, TargetOverlay.COLOR]
 	assert_ne(TargetOverlay.GUN_RING_COLOR, TargetOverlay.DRONE_RING_COLOR)
 	for c in [TargetOverlay.GUN_RING_COLOR, TargetOverlay.DRONE_RING_COLOR]:
 		assert_false(taken.has(c), "%s" % c)
+
+
+func test_show_rings_skips_zero_radius_and_empty_clears() -> void:
+	overlay.show_rings({"center": Vector2i(4, 4), "radius": 0, "drone_radius": 5})
+	assert_eq(board_view.circles(BoardView.LAYER_INSPECT),
+		[{"center": Vector2i(4, 4), "radius": 5, "color": TargetOverlay.DRONE_RING_COLOR}], "інженер — без кола гармати")
+	overlay.show_rings({})
+	assert_eq(board_view.circles(BoardView.LAYER_INSPECT), [])
+
+
+## Режим дрона: його досяжність — те саме коло на шарі режимів; будь-яка зміна
+## режиму (show_tiles) чи clear() його знімає.
+func test_drone_reach_is_a_circle_cleared_with_the_mode() -> void:
+	overlay.show_drone_reach(Vector2i(2, 3), DroneCommand.RANGE)
+	assert_eq(board_view.circles(BoardView.LAYER_TARGETS),
+		[{"center": Vector2i(2, 3), "radius": DroneCommand.RANGE, "color": TargetOverlay.DRONE_RING_COLOR}])
+	overlay.show_tiles([] as Array[Vector2i])
+	assert_eq(board_view.circles(BoardView.LAYER_TARGETS), [])
+	overlay.show_drone_reach(Vector2i(2, 3), DroneCommand.RANGE)
+	overlay.clear()
+	assert_eq(board_view.circles(BoardView.LAYER_TARGETS), [])

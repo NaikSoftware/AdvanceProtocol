@@ -73,7 +73,8 @@ func test_drone_strike_through_button() -> void:
 	assert_eq(_button().text, tr("hud_drone_strike") % 2)
 	_e2e.press(_button())
 	await _e2e.settle()
-	assert_ne(_board_view().contour_segments(BoardView.LAYER_TARGETS), [], "кільце дрона")
+	assert_eq(_board_view().circles(BoardView.LAYER_TARGETS),
+		[{"center": SQUAD, "radius": DroneCommand.RANGE, "color": TargetOverlay.DRONE_RING_COLOR}], "коло дрона")
 	assert_true(_e2e.screen.unit_view_for(tank.id)._crosshair.visible, "танк — приціл")
 	assert_true(_e2e.screen.unit_view_for(_state().unit_at(INF).id)._forbidden.visible, "піхота — заборонена")
 	assert_false(_e2e.screen.unit_view_for(tank.id)._forbidden.visible)
@@ -150,13 +151,13 @@ func test_armed_drone_does_not_survive_the_handover_gate() -> void:
 	await _boot()
 	await _arm()
 	var inf_id: int = _state().unit_at(INF).id
-	assert_ne(_board_view().contour_segments(BoardView.LAYER_TARGETS), [], "передумова: озброєно")
+	assert_ne(_board_view().circles(BoardView.LAYER_TARGETS), [], "передумова: озброєно")
 	await _e2e.end_turn()
 	assert_true(_e2e.gate().is_visible_in_tree(), "гейт показано")
-	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
+	assert_eq(_board_view().circles(BoardView.LAYER_TARGETS), [])
 	assert_false((_e2e.hud().get_node("%DroneRangeLabel") as Control).is_visible_in_tree())
 	await _e2e.confirm_gate()
-	assert_eq(_board_view().contour_segments(BoardView.LAYER_TARGETS), [])
+	assert_eq(_board_view().circles(BoardView.LAYER_TARGETS), [])
 	var inf_view: UnitView = _e2e.screen.unit_view_for(inf_id)
 	if inf_view != null:
 		assert_false(inf_view._forbidden.visible)

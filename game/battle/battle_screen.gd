@@ -79,6 +79,10 @@ var _unit_views: Dictionary = {}
 ## (_drag_threshold_px() нижче) — одне місце, а не розмазане по обробниках.
 const _DRAG_THRESHOLD_DP: float = 10.0
 
+## Довгий натиск (docs/ui/overlays.md): палець тримається стільки, не перетнувши
+## поріг драга, — огляд дальності замість тапу; відпускання його знімає.
+const LONG_PRESS_SEC: float = 0.5
+
 ## Крок зуму коліщатка/пінчу за одну подію. zoom_by() сам клемпить
 ## (IsoCameraRig.MIN_ZOOM..MAX_ZOOM) — тут лише симетричний множник туди й
 ## назад.
@@ -90,6 +94,10 @@ var _press_screen_pos: Vector2 = Vector2.ZERO
 ## моменту жест уже пан, і відпускання пальця НЕ мусить викликати tap_cell()
 ## (пункт 3 ТЗ).
 var _drag_exceeded_threshold: bool = false
+## Скільки тримається поточний натиск (_process()) і чи вже став довгим — тоді
+## відпускання знімає огляд і НЕ є тапом.
+var _press_held_sec: float = 0.0
+var _long_pressed: bool = false
 
 ## Мультитач: index -> остання відома позиція КОЖНОГО притиснутого пальця
 ## (не лише активного) — потрібен щипку, щоб знати обидві точки одразу.
@@ -135,6 +143,8 @@ var _gesture_had_pinch: bool = false
 ## екземпляра теста. Відкласти її через call_deferred теж не рятує — відкладений
 ## виклик приходить у вже звільнений вузол.
 func _ready() -> void:
+	# Кадр потрібен лише поки тримається натиск (§8: нерухомий екран нічого не коштує).
+	set_process(false)
 	_pause.settings_requested.connect(_open_settings)
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
@@ -365,8 +375,8 @@ func _on_action_preview(preview: Dictionary) -> void:
 
 ## marks — {id: причина} з Targeting.drone_marks(): "" — приціл, інакше — хрест.
 ## Ворог без вузла (фог) не позначається — вигляд не сперечається з туманом.
-func _on_drone_armed(ring: Array[Vector2i], marks: Dictionary) -> void:
-	_target_overlay.show_tiles(ring)
+func _on_drone_armed(center: Vector2i, radius: int, marks: Dictionary) -> void:
+	_target_overlay.show_drone_reach(center, radius)
 	for id: int in marks:
 		var view: UnitView = unit_view_for(id)
 		if view == null:
@@ -379,11 +389,10 @@ func _on_drone_armed(ring: Array[Vector2i], marks: Dictionary) -> void:
 
 ## Позначки тримаються списком id: вузли юнітів перебудовуються після кожного
 ## пакета подій (_rebuild_units_for_active_player), а огляд — ні.
-func _on_inspected(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int],
-		drone_marked: Array[int], _is_floor: bool) -> void:
-	_threatened = marked
-	_drone_threatened = drone_marked
-	_target_overlay.show_rings(ring, drone_ring)
+func _on_inspected(inspection: Dictionary) -> void:
+	_threatened.assign(inspection.get("marked", []))
+	_drone_threatened.assign(inspection.get("drone_marked", []))
+	_target_overlay.show_rings(inspection)
 	_apply_threat_marks()
 
 
@@ -531,6 +540,7 @@ func _on_screen_touch(st: InputEventScreenTouch) -> void:
 		# Скасований дотик (шторка, відкидання долоні) — не намір гравця: без тапу.
 		if st.canceled:
 			_pointer_down = false
+			_cancel_peek()
 			_camera_rig.end_hold()
 		else:
 			_end_pointer_press(st.position)
@@ -567,6 +577,7 @@ func _on_magnify_gesture(mg: InputEventMagnifyGesture) -> void:
 
 
 func _begin_pinch() -> void:
+	_cancel_peek()
 	_pinch_indices = _touch_positions.keys()
 	_pinch_indices.sort()
 	var a: Vector2 = _touch_positions[_pinch_indices[0]]
@@ -599,6 +610,9 @@ func _begin_pointer_press(screen_pos: Vector2) -> void:
 	_pointer_down = true
 	_press_screen_pos = screen_pos
 	_drag_exceeded_threshold = false
+	_press_held_sec = 0.0
+	_long_pressed = false
+	set_process(true)
 	# Новий дотик до дошки перебиває кидок, що ще котиться — гравець знову
 	# тримає камеру рукою.
 	_camera_rig.cancel_inertia()
@@ -659,6 +673,12 @@ func _end_pointer_press(screen_pos: Vector2) -> void:
 		if total_shift.length() > _drag_threshold_px():
 			_drag_exceeded_threshold = true
 			_camera_rig.pan(total_shift)
+	if _long_pressed:
+		# Відпускання довгого натиску — лише кінець огляду, ніколи не тап.
+		_cancel_peek()
+		if _drag_exceeded_threshold:
+			_camera_rig.end_pan()
+		return
 	if _drag_exceeded_threshold:
 		_camera_rig.end_pan()
 		return
@@ -668,6 +688,25 @@ func _end_pointer_press(screen_pos: Vector2) -> void:
 		# драга (рев'ю, головна поломка 3) — див. коментар у _on_screen_touch().
 		return
 	_handle_tap_at_screen_position(_press_screen_pos)
+
+
+## Лічильник довгого натиску. Драг (поріг перетнуто) чи щипок ним ніколи не стають:
+## обидва скидають _pointer_down/_drag_exceeded_threshold раніше, ніж натиск дотримається.
+func _process(delta: float) -> void:
+	if not _pointer_down or _drag_exceeded_threshold or _long_pressed or _controller == null:
+		set_process(false)
+		return
+	_press_held_sec += delta
+	if _press_held_sec >= LONG_PRESS_SEC:
+		_long_pressed = true
+		set_process(false)
+		_controller.peek_cell(_camera_rig.screen_point_to_cell(_press_screen_pos))
+
+
+func _cancel_peek() -> void:
+	_long_pressed = false
+	if _controller != null:
+		_controller.end_peek()
 
 
 ## UiScale (Task 4.1) робить логічний px ≈ dp, тож поріг у dp — це вже логічні
@@ -740,8 +779,13 @@ func _on_events_ready() -> void:
 		# select_unit(null) очищає і InputController, і оверлей зон разом.
 		# R7: рекон і перебудова — лише як реакція на confirmed нижче, не тут.
 		_controller.select_unit(null)
+		# Огляд не переживає гейт (§3.13): натиск, що тримався, тут і закінчено.
+		_cancel_peek()
+		_pointer_down = false
 		_gate.show_for(_match_service.state.active_player)
-	else:
+	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
+		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
+		# перебудова поставила б вузли миттєво й з'їла б анімацію повороту.
 		_rebuild_units_for_active_player()
 
 

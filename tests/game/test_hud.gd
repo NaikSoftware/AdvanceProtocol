@@ -751,6 +751,6 @@ func test_cancel_button_shown_only_when_it_does_something() -> void:
 	assert_false(cancel.visible, "підтверджено")
 	controller.select_unit(eng)
 	controller.arm_engineer(EngineerCommand.Action.LAY_MINE)
-	assert_true(cancel.visible, "озброєна верба")
+	assert_false(cancel.visible, "озброєна верба — «Скасувати» лише в панелі інженера")
 	controller.select_unit(null)
 	assert_false(cancel.visible, "вибір знято")

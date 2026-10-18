@@ -182,6 +182,34 @@ func tap(cell: Vector2i) -> void:
 	click_at(px(cell), vp)
 
 
+## Справжній довгий натиск: миша вниз у центрі тайла, утримання рівно на поріг
+## довгого натиску (кадр сцени крокується вручну — реального часу не чекаємо).
+## Палець лишається притиснутим, доки тест не покличе release().
+func long_press(cell: Vector2i) -> void:
+	_mouse_button(px(cell), true)
+	screen._process(BattleScreen.LONG_PRESS_SEC)
+
+
+func release(cell: Vector2i) -> void:
+	_mouse_button(px(cell), false)
+
+
+func _mouse_button(p: Vector2, pressed: bool) -> void:
+	var v: Viewport = vp if vp != null else _t.get_viewport()
+	var mv := InputEventMouseMotion.new()
+	mv.position = p
+	mv.global_position = p
+	mv.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	v.push_input(mv, true)
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = pressed
+	ev.position = p
+	ev.global_position = p
+	ev.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	v.push_input(ev, true)
+
+
 func confirm() -> void:
 	press(hud().get_node("%ConfirmButton"))
 	await settle()

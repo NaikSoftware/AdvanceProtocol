@@ -3,9 +3,9 @@ extends RefCounted
 ## Task 2.7: тап → намір → Command. Модель — «два тапи на будь-яку дію,
 ## жодного випадкового ходу від дотику» (task-2.7-brief.md): перший тап лише
 ## показує (вибір юніта і зон, прев'ю руху чи пострілу), другий — підтверджує
-## (R23). Єдина точка, де цей файл торкається core/ ДІЄЮ, а не читанням, —
-## confirm_pending(), і вона йде рівно крізь MatchService.submit(); жоден
-## інший метод не створює Command.
+## (R23). Дія, що витрачає хід, торкається core/ лише крізь confirm_pending() і
+## MatchService.submit(); єдиний інший Command — безкоштовний поворот на місці
+## (_maybe_turn(), власник 2026-10-18), той самий submit().
 ##
 ## R5, найважливіша обіцянка файлу: і select_unit(), і tap_cell() читають
 ## ЛИШЕ state.known_occupied_map(state.active_player) — ніколи
@@ -31,15 +31,13 @@ signal action_preview(preview: Dictionary)
 signal pending_cleared
 signal targets_changed(tiles: Array[Vector2i])
 signal action_refused(reason: String)
-## Режим DRONE озброєно: кільце дальності й позначки {id цілі: причина або ""} —
-## обидва з Targeting (§3.13), вигляд лише малює.
-signal drone_armed(ring: Array[Vector2i], marks: Dictionary)
-## Огляд юніта (§3.13): кільце гармати й кільце дрона та їхні позначки ОКРЕМО
-## (дрон — окрема дія з власними кільцем і позначками), усе з Targeting.
-## is_floor — оглянуто ворога з хоч одним кільцем: позначки лише нижня межа.
-## Порожні масиви — огляд знято.
-signal inspected(ring: Array[Vector2i], drone_ring: Array[Vector2i], marked: Array[int],
-		drone_marked: Array[int], is_floor: bool)
+## Режим DRONE озброєно: коло досяжності (центр — тайл загону, радіус —
+## DroneCommand.RANGE) і позначки {id цілі: причина або ""} з Targeting (§3.13).
+signal drone_armed(center: Vector2i, radius: int, marks: Dictionary)
+## Огляд дальності довгим натиском (§3.13, docs/ui/overlays.md): рівно словник
+## Targeting.inspection() — центр, радіуси кіл гармати й дрона, їхні позначки ОКРЕМО
+## та is_floor. {} — огляд знято (палець відпущено).
+signal inspected(inspection: Dictionary)
 
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
@@ -75,6 +73,8 @@ var _armed_action: int = -1
 var _targets: Array[Vector2i] = []
 ## Режим DRONE: тап по ворогу — прев'ю удару, а не пострілу.
 var _drone_armed: bool = false
+## Показано огляд довгого натиску — end_peek() має що знімати.
+var _peeking: bool = false
 
 
 func _init(match_service: Node, zone_overlay: ZoneOverlay, is_playing_check: Callable = Callable()) -> void:
@@ -95,13 +95,10 @@ func select_unit(unit: Unit) -> void:
 
 	_clear_pending()
 	disarm()
+	end_peek()
 	_selected_unit = unit
 	selection_changed.emit(unit)
 	_recompute_zones_for_selected()
-	if unit == null:
-		inspect_clear()
-	else:
-		inspect_unit(unit)
 
 
 ## Перераховує _zones для ПОТОЧНОГО _selected_unit і синхронізує оверлей —
@@ -131,6 +128,9 @@ func _recompute_zones_for_selected() -> void:
 ## 2. тап по тайлі своєї зони → прев'ю руху;
 ## 3. тап по ворогові в межах пострілу → прев'ю пострілу;
 ## 4. тап поза дошкою або по вже вибраному юніту → зняти вибір.
+## Будь-який інший тайл дошки при вибраному своєму юніті ще й повертає його туди
+## (власник 2026-10-18, TurnCommand, §3.4) — і тап далі має своє звичне значення.
+## Кільця тап не показує ніколи — це робота довгого натиску (peek_cell()).
 ## Усе, що не відповідає жодному з цих чотирьох пунктів, — легальний no-op:
 ## контролер не «вгадує», чого хотів гравець, коли модель мовчить.
 func tap_cell(cell: Vector2i) -> void:
@@ -170,28 +170,35 @@ func tap_cell(cell: Vector2i) -> void:
 		return
 
 	if _selected_unit == null:
-		# Нічого не вибрано: ворог — огляд його загрози, порожнє — зняти огляд (§3.13).
-		if tapped != null:
-			inspect_unit(tapped)
-		else:
-			inspect_clear()
 		return
 
-	# Як у референсі: кільце — юніта під пальцем, хоч би хто був вибраний;
-	# над порожнім — назад до свого вибраного. Прев'ю пострілу від цього не залежить.
+	_maybe_turn(state, cell)
+	# Прев'ю пострілу від повороту не залежить: його числа — від фейсингу ЦІЛІ.
 	if tapped != null:
-		inspect_unit(tapped)
 		_maybe_set_pending_shot(state, tapped)
 		return
-	inspect_unit(_selected_unit)
 
 	if _zones != null and _zones.can_reach(cell):
 		_set_pending_move(cell)
 	# інакше: тайл поза зоною вибраного юніта — no-op, а не здогад про намір
 
 
-## R23: другий тап (кнопка HUD, Task 2.8) — єдиний спосіб дії. Ніщо інше в
-## цьому файлі не викликає MatchService.submit().
+## Поворот на місці — побічний ефект тапу, а не окрема дія: подається тим самим
+## MatchService.submit(), лише коли core/ його приймає (TurnCommand.validate()), а
+## відмова (0 AP, уже дивиться туди) мовчазна. Невидимий ворог на тайлі сюди
+## не потрапляє інакше, ніж порожня земля: перевірка — лише позиція й AP свого.
+func _maybe_turn(state: BattleState, cell: Vector2i) -> void:
+	var turn: TurnCommand = TurnCommand.create(_selected_unit.id, cell)
+	if turn.validate(state) != "":
+		return
+	var err: String = _match_service.submit(turn)
+	# Зони не перераховуються: поворот не міняє ні позиції, ні AP. HUD перечитує
+	# стан сам — на events_ready.
+	assert(err == "", "TurnCommand пройшов validate(), але submit() відхилив: %s" % err)
+
+
+## R23: другий тап (кнопка HUD, Task 2.8) — єдиний спосіб дії, що витрачає хід.
+## Крім нього MatchService.submit() кличе лише безкоштовний поворот (_maybe_turn).
 func confirm_pending() -> void:
 	if _input_blocked():
 		return
@@ -232,24 +239,32 @@ func _sync_after_action() -> void:
 		_deselect()
 		return
 	_recompute_zones_for_selected()
-	inspect_unit(_selected_unit)
 
 
-## §3.13: кільце й позначки будь-якого видимого юніта. Які кільця існують і що
-## позначено — вирішує core/ (Targeting.inspection), тут лише передача далі.
-## Без _input_blocked(): це читання, а _sync_after_action() кличе його саме тоді,
-## коли щойно подані події ще програються.
-func inspect_unit(unit: Unit) -> void:
-	if unit == null:
-		inspect_clear()
+## Довгий натиск (§3.13, docs/ui/overlays.md): кільце юніта під пальцем, хоч би хто
+## був вибраний; над порожнім — свого вибраного; інакше нічого. Лише дивиться:
+## ні вибору, ні руху, ні повороту, ні прев'ю. Видимість — та сама known-мапа, що й
+## у тапі (R5): невидимий ворог — порожня земля. Які кільця існують і що позначено,
+## вирішує core/ (Targeting.inspection). Під час програвання — ні: active_player
+## тоді вже може бути наступним гравцем, і огляд читав би його знання.
+func peek_cell(cell: Vector2i) -> void:
+	if _input_blocked():
 		return
 	var state: BattleState = _match_service.state
-	var i: Dictionary = Targeting.inspection(state, unit.id, state.active_player)
-	inspected.emit(i["ring"], i["drone_ring"], i["marked"], i["drone_marked"], i["is_floor"])
+	var known: Dictionary = state.known_occupied_map(state.active_player)
+	var unit: Unit = state.get_unit(known[cell]) if known.has(cell) else _selected_unit
+	if unit == null:
+		return
+	_peeking = true
+	inspected.emit(Targeting.inspection(state, unit.id, state.active_player))
 
 
-func inspect_clear() -> void:
-	inspected.emit([] as Array[Vector2i], [] as Array[Vector2i], [] as Array[int], [] as Array[int], false)
+## Палець відпущено (чи хід передано) — огляд знято. Без показаного огляду — тиша.
+func end_peek() -> void:
+	if not _peeking:
+		return
+	_peeking = false
+	inspected.emit({})
 
 
 func cancel_pending() -> void:
@@ -257,10 +272,10 @@ func cancel_pending() -> void:
 	disarm()
 
 
-## Чи cancel_pending() щось змінить: є прев'ю або озброєно вербу чи дрон. HUD
-## показує «Скасувати» рівно тоді.
+## Чи потрібне HUD-«Скасувати»: є прев'ю або озброєно дрон. На час верби інженера —
+## ні: у його панелі власне «Скасувати», і два поруч — зайве (власник).
 func has_cancelable() -> bool:
-	return not _pending.is_empty() or _armed_action >= 0 or _drone_armed
+	return _armed_action < 0 and (not _pending.is_empty() or _drone_armed)
 
 
 ## Режим ENGINEER для вибраного свого інженера. Тайли й причина відмови — лише
@@ -292,8 +307,7 @@ func arm_drone() -> void:
 	_clear_pending()
 	disarm()
 	_drone_armed = true
-	drone_armed.emit(Targeting.reach_tiles(state, _selected_unit.id, DroneCommand.RANGE),
-		Targeting.drone_marks(state, _selected_unit.id))
+	drone_armed.emit(_selected_unit.pos, DroneCommand.RANGE, Targeting.drone_marks(state, _selected_unit.id))
 
 
 func disarm() -> void:
@@ -427,7 +441,7 @@ func _deselect() -> void:
 	_clear_pending()
 	_zone_overlay.clear()
 	selection_changed.emit(null)
-	inspect_clear()
+	end_peek()
 
 
 func _is_playing() -> bool:

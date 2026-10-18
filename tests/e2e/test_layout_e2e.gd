@@ -135,17 +135,22 @@ func test_drone_and_threat_floor_fit_every_size(p = use_parameters(_sizes_by_loc
 	await _tap_button(_node("%CancelButton"))
 	await _tap(SQUAD)
 	assert_false(_node("%SelectionRow").is_visible_in_tree(), "вибір знято: %s" % size)
-	await _tap(ENEMY_TANK)
+	_e2e.long_press(ENEMY_TANK)
+	await _e2e.settle()
 	assert_true(_node("%ThreatFloorLabel").is_visible_in_tree(), "нижня межа: %s" % size)
 	_assert_fits(size, "огляд ворога %s" % size)
-	# Найтісніше: вибраний загін тапає ворожий загін із дронами — довший рядок
-	# «нижня межа» (дрон) і прев'ю пострілу в одному нижньому рядку.
+	_e2e.release(ENEMY_TANK)
+	# Найтісніше: вибраний загін тапає ворожий загін із дронами (прев'ю пострілу), а
+	# довгий натиск на нього дає довший рядок «нижня межа» (дрон) — в одному нижньому рядку.
 	await _tap(SQUAD)
 	await _tap(ENEMY_INF)
+	_e2e.long_press(ENEMY_INF)
+	await _e2e.settle()
 	assert_true(_node("%ThreatFloorLabel").is_visible_in_tree(), "нижня межа з вибором: %s" % size)
 	assert_eq((_node("%ThreatFloorLabel") as Label).text, tr("hud_threat_floor_drone"))
 	assert_true(_node("%PreviewShotBox").is_visible_in_tree(), "прев'ю пострілу: %s" % size)
 	_assert_fits(size, "огляд ворога + постріл %s" % size)
+	_e2e.release(ENEMY_INF)
 
 
 ## Підказка озброєної верби (що тапнути) влазить на кожен розмір обома мовами — для

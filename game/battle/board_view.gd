@@ -66,6 +66,10 @@ var _contour_segments: Dictionary = {}
 ## шар контуру -> MultiMeshInstance3D цього шару, щоб clear_contour() міг
 ## звільнити рівно свій вузол, не займаючи вузли інших шарів контуру.
 var _contour_nodes: Dictionary = {}
+## шар -> Array[Dictionary] кіл {center: Vector2i, radius: int, color: Color}
+## (draw_circles) і їхні вузли — той самий прийом, що й у контурів.
+var _circles: Dictionary = {}
+var _circle_nodes: Dictionary = {}
 
 
 func build(board: Board) -> void:
@@ -80,6 +84,8 @@ func build(board: Board) -> void:
 	# вузли, і наступний clear_contour() спробував би звільнити їх удруге.
 	_contour_segments.clear()
 	_contour_nodes.clear()
+	_circles.clear()
+	_circle_nodes.clear()
 
 	var cells_by_kind: Dictionary = {}
 	for y in board.height:
@@ -152,11 +158,53 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 ## малюємо їх наново тими самими сегментами.
 func rebuild_tiles(board: Board) -> void:
 	var kept: Dictionary = _contour_segments.duplicate()
+	var kept_circles: Dictionary = _circles.duplicate()
 	build(board)
 	for layer: int in kept:
 		var segs: Array[Dictionary] = []
 		segs.assign(kept[layer])
 		draw_contour(segs, layer)
+	for layer: int in kept_circles:
+		var circles: Array[Dictionary] = []
+		circles.assign(kept_circles[layer])
+		draw_circles(circles, layer)
+
+
+## Кільце дальності (§3.13, docs/ui/overlays.md): одне геометричне коло, не контур
+## тайлів — радіус у тайлах (тайл — 1.0 світу), центр у середині тайла. Радіус
+## приходить готовим із core/ (Targeting.inspection); тут лише геометрія малювання.
+## Сплющений тор — один вузол і один draw call на коло (§8). Замінює кола шару.
+func draw_circles(circles: Array[Dictionary], layer: int) -> void:
+	for node: Node in _circle_nodes.get(layer, []):
+		if is_instance_valid(node):
+			node.free()
+	_circles[layer] = circles
+	var nodes: Array[Node] = []
+	for c in circles:
+		var r: float = float(c["radius"])
+		var torus := TorusMesh.new()
+		torus.inner_radius = r - _CONTOUR_WIDTH * 0.5
+		torus.outer_radius = r + _CONTOUR_WIDTH * 0.5
+		torus.rings = 96
+		torus.ring_segments = 4
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = c["color"]
+		var mi := MeshInstance3D.new()
+		mi.name = "Circle%d_%d" % [layer, nodes.size()]
+		mi.mesh = torus
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.position = IsoCameraRig.cell_to_world(c["center"]) + Vector3(0.0, _CONTOUR_Y, 0.0)
+		# Тор товщиною _CONTOUR_WIDTH сплющено до висоти риски контуру.
+		mi.scale = Vector3(1.0, _CONTOUR_HEIGHT / _CONTOUR_WIDTH, 1.0)
+		add_child(mi)
+		nodes.append(mi)
+	_circle_nodes[layer] = nodes
+
+
+func circles(layer: int) -> Array:
+	return _circles.get(layer, [])
 
 
 ## Вид тайла, який зараз намальовано (-1 — тайла немає).

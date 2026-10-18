@@ -72,25 +72,6 @@ static func drone_targets(state: BattleState, unit_id: int) -> Array[Unit]:
 	return out
 
 
-static func reach_tiles(state: BattleState, unit_id: int, radius: int) -> Array[Vector2i]:
-	## §3.13: обвідна «коло дальності ∩ seen СПОСТЕРІГАЧА» — спільна для своїх і чужих
-	## юнітів. Береться seen АКТИВНОГО гравця, ніколи мережа власника ворога
-	## (прихована інформація). Юніт на нерозвіданому тайлі обвідної не має.
-	var out: Array[Vector2i] = []
-	var u: Unit = state.get_unit(unit_id)
-	if u == null or not u.is_alive():
-		return out
-	var seen: Vision = state.vision[state.active_player]
-	if not seen.is_seen(u.pos):
-		return out
-	for dy in range(-radius, radius + 1):
-		for dx in range(-radius, radius + 1):
-			var p: Vector2i = u.pos + Vector2i(dx, dy)
-			if state.board.in_bounds(p) and Rules.in_radius(u.pos, p, radius) and seen.is_seen(p):
-				out.append(p)
-	return out
-
-
 static func drone_marks(state: BattleState, unit_id: int) -> Dictionary:
 	## §3.13: позначки дрона, {id цілі: причина відмови або ""}. Лише для свого загону;
 	## причину дає та сама DroneCommand.check_strike(), що й валідація. Лише для
@@ -239,26 +220,31 @@ static func inspection(state: BattleState, unit_id: int, observer: int) -> Dicti
 	##     зброї), позначки — firing_targets(); кільце дрона — лише поки є дрони;
 	##   * ворог — позначки threatened_units()/drone_threatened_units(), а is_floor
 	##     лише тоді, коли є хоч одне кільце: без кільця прогнозувати нічого.
+	## Кільце — одне геометричне коло (§3.1, евклідове) з центром у тайлі юніта:
+	## радіус у тайлах, 0 — кільця немає. Юніт на нерозвіданому для активного
+	## гравця тайлі кілець не має (§3.5) — та сама перевірка, що й у позначках.
 	## Жодна умова тут не переписана — лише зібрана з уже наявних запитів.
-	var ring: Array[Vector2i] = []
-	var drone_ring: Array[Vector2i] = []
+	var radius: int = 0
+	var drone_radius: int = 0
 	var marked: Array[int] = []
 	var drone_marked: Array[int] = []
 	var u: Unit = state.get_unit(unit_id)
 	var own: bool = u != null and u.owner == observer
 	if u != null and u.is_alive():
-		# §3.6: у інженера немає гармати — ні кільця, ні загрози (див. threatened_units()).
-		if u.unit_class() != UnitTypes.UnitClass.ENGINEER:
-			ring = reach_tiles(state, unit_id, u.attack_range())
-		# §3.9: лишок дронів публічний, тож гейт на ньому нічого не видає — і свому, і чужому.
-		if u.drones_left > 0:
-			drone_ring = reach_tiles(state, unit_id, DroneCommand.RANGE)
+		if state.vision[state.active_player].is_seen(u.pos):
+			# §3.6: у інженера немає гармати — ні кільця, ні загрози (див. threatened_units()).
+			if u.unit_class() != UnitTypes.UnitClass.ENGINEER:
+				radius = u.attack_range()
+			# §3.9: лишок дронів публічний, тож гейт на ньому нічого не видає — і свому, і чужому.
+			if u.drones_left > 0:
+				drone_radius = DroneCommand.RANGE
 		marked = _ids(firing_targets(state, unit_id) if own else threatened_units(state, unit_id, observer))
 		drone_marked = _ids(drone_targets(state, unit_id) if own
 			else drone_threatened_units(state, unit_id, observer))
 	return {
-		"ring": ring, "drone_ring": drone_ring, "marked": marked, "drone_marked": drone_marked,
-		"is_floor": u != null and not own and not (ring.is_empty() and drone_ring.is_empty()),
+		"center": u.pos if u != null else Vector2i.ZERO,
+		"radius": radius, "drone_radius": drone_radius, "marked": marked, "drone_marked": drone_marked,
+		"is_floor": u != null and not own and (radius > 0 or drone_radius > 0),
 	}
 
 

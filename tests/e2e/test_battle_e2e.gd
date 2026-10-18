@@ -144,7 +144,10 @@ func _sector_case(attacker_cell: Vector2i, attacker_facing_after: int, sector: i
 		tr(UnitInspector.SECTOR_KEYS[sector]))
 	assert_eq((_e2e.hud().get_node("%PreviewDamageValue") as Label).text, "%d–%d" % [lo, hi])
 	assert_eq(target.hp, 400)
-	assert_eq(attacker.facing, E, "прев'ю не повертає")
+	# Власник 2026-10-18: тап по цілі вже повертає стрільця до неї; сектор у прев'ю
+	# від цього не змінився — він залежить від фейсингу ЦІЛІ (§3.4).
+	assert_eq(attacker.facing, attacker_facing_after, "тап повертає стрільця на ціль")
+	assert_eq(target.facing, N, "прев'ю ціль не повертає")
 	await _e2e.confirm()
 
 	assert_eq(target.hp, 400 - dmg, "golden-шкода")

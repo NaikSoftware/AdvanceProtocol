@@ -554,45 +554,56 @@ func _all_seen(player: int) -> void:
 	state.vision[player].seen.fill(1)
 
 
-func test_reach_tiles_radius_5_on_open_board() -> void:
-	var u: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+func test_inspection_radius_is_gun_range_and_drone_range_with_drones_left() -> void:
+	# §3.13: кільце — одне коло радіуса дальності в тайлах із центром у тайлі юніта;
+	# радіус дає core/, вигляд його не виводить. Загін: гармата 3, дрон 5.
+	var sq: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
 	state.start()
 	state.begin_turn()
 	_all_seen(0)
-	assert_eq(Targeting.reach_tiles(state, u.id, 5).size(), 81, "dx²+dy² <= 25 → 81 тайл")
+	var i: Dictionary = Targeting.inspection(state, sq.id, 0)
+	assert_eq(i["center"], Vector2i(6, 6))
+	assert_eq(i["radius"], 3)
+	assert_eq(i["drone_radius"], 5)
+	sq.drones_left = 0
+	assert_eq(Targeting.inspection(state, sq.id, 0)["drone_radius"], 0, "без дронів — без кільця дрона")
 
 
-func test_reach_tiles_clipped_by_seen() -> void:
-	var u: Unit = state.add_unit(1, 0, Vector2i(6, 6), 2)
+func test_inspection_radius_of_enemy_tank_and_engineer() -> void:
+	var tank: Unit = state.add_unit(5, 1, Vector2i(6, 6), 2)
+	var eng: Unit = state.add_unit(_ENGINEER, 0, Vector2i(3, 3), 2)
 	state.start()
 	state.begin_turn()
 	_all_seen(0)
-	for x in 12:
-		state.vision[0].seen[9 * 12 + x] = 0  # смуга y == 9 нерозвідана
-	var tiles: Array[Vector2i] = Targeting.reach_tiles(state, u.id, 5)
-	assert_does_not_have(tiles, Vector2i(6, 9), "нерозвідана смуга не входить")
-	assert_has(tiles, Vector2i(6, 8))
-	assert_eq(tiles.size(), 81 - 9, "у колі 5 на y == 9 дев'ять тайлів (dy=3, dx² <= 16)")
+	var t: Dictionary = Targeting.inspection(state, tank.id, 0)
+	assert_eq(t["radius"], 4)
+	assert_eq(t["drone_radius"], 0, "у танка дронів немає")
+	var e: Dictionary = Targeting.inspection(state, eng.id, 0)
+	assert_eq(e["radius"], 0, "§3.6: у інженера немає гармати")
+	assert_eq(e["drone_radius"], 0)
 
 
-func test_reach_tiles_empty_for_unseen_enemy() -> void:
+func test_inspection_of_enemy_on_unseen_ground_has_no_ring() -> void:
 	var e: Unit = state.add_unit(1, 1, Vector2i(10, 10), 2)
 	state.add_unit(0, 0, Vector2i(1, 1), 2)
 	state.start()
 	state.begin_turn()
 	assert_false(state.vision[0].is_seen(e.pos), "передумова")
-	assert_eq(Targeting.reach_tiles(state, e.id, 5).size(), 0)
+	var i: Dictionary = Targeting.inspection(state, e.id, 0)
+	assert_eq(i["radius"], 0)
+	assert_eq(i["drone_radius"], 0)
+	assert_false(i["is_floor"])
 
 
-func test_reach_tiles_ignores_owner_network_of_enemy() -> void:
-	# seen ВОРОГА порожня — обвідна мусить братися з seen активного гравця.
+func test_inspection_ring_ignores_owner_network_of_enemy() -> void:
+	# seen ВОРОГА порожня — кільце гейтиться seen активного гравця.
 	var e: Unit = state.add_unit(1, 1, Vector2i(6, 6), 2)
 	state.add_unit(0, 0, Vector2i(6, 8), 2)
 	state.start()
 	state.begin_turn()
 	_all_seen(0)
 	state.vision[1].seen.fill(0)
-	assert_eq(Targeting.reach_tiles(state, e.id, 5).size(), 81)
+	assert_eq(Targeting.inspection(state, e.id, 0)["radius"], 3)
 
 
 func test_drone_marks_flag_infantry_with_reason() -> void:
@@ -655,7 +666,7 @@ func test_queries_do_not_touch_state() -> void:
 	var rng_before: int = state.rng.state
 	var ap: int = sq.ap
 	var seen_before: PackedByteArray = state.vision[0].seen.duplicate()
-	Targeting.reach_tiles(state, sq.id, 5)
+	Targeting.inspection(state, sq.id, 0)
 	Targeting.drone_marks(state, sq.id)
 	assert_eq(state.rng.state, rng_before)
 	assert_eq(sq.ap, ap)
@@ -701,8 +712,8 @@ func test_engineer_has_no_gun_ring() -> void:
 
 	var mine: Dictionary = Targeting.inspection(state, own.id, 0)
 	var theirs: Dictionary = Targeting.inspection(state, enemy.id, 0)
-	assert_eq(mine["ring"], [], "свій інженер — без кільця гармати")
-	assert_eq(theirs["ring"], [], "ворожий інженер — без кільця гармати")
+	assert_eq(mine["radius"], 0, "свій інженер — без кільця гармати")
+	assert_eq(theirs["radius"], 0, "ворожий інженер — без кільця гармати")
 	assert_eq(mine["marked"], [], "свій інженер ні в кого не стріляє")
 	assert_eq(theirs["marked"], [], "ворожий інженер нікому не загрожує")
 
@@ -730,31 +741,31 @@ func test_inspection_matches_overlay_table() -> void:
 	_all_seen(0)
 
 	var own: Dictionary = Targeting.inspection(state, squad.id, 0)
-	assert_eq(own["ring"], Targeting.reach_tiles(state, squad.id, squad.attack_range()))
-	assert_eq(own["drone_ring"], Targeting.reach_tiles(state, squad.id, DroneCommand.RANGE))
+	assert_eq(own["radius"], 3)
+	assert_eq(own["drone_radius"], DroneCommand.RANGE)
 	assert_eq(own["marked"], _ids(Targeting.firing_targets(state, squad.id)))
 	assert_eq(own["drone_marked"], _ids(Targeting.drone_targets(state, squad.id)))
 	assert_false(own["is_floor"], "свій юніт — не прогноз, а факт")
 
 	squad.ap = 0
 	var spent: Dictionary = Targeting.inspection(state, squad.id, 0)
-	assert_ne(spent["ring"], [], "кільце свого — навіть при 0 AP")
+	assert_eq(spent["radius"], 3, "кільце свого — навіть при 0 AP")
 	assert_eq(spent["marked"], [], "при 0 AP стріляти нема по кому")
 
 	squad.drones_left = 0
 	var dry: Dictionary = Targeting.inspection(state, squad.id, 0)
-	assert_eq(dry["drone_ring"], [], "без дронів — без кільця дрона")
+	assert_eq(dry["drone_radius"], 0, "без дронів — без кільця дрона")
 	assert_eq(dry["drone_marked"], [])
 
 	var tank: Dictionary = Targeting.inspection(state, enemy_tank.id, 0)
-	assert_eq(tank["ring"], Targeting.reach_tiles(state, enemy_tank.id, enemy_tank.attack_range()))
-	assert_eq(tank["drone_ring"], [], "у танка дронів немає")
+	assert_eq(tank["radius"], 4)
+	assert_eq(tank["drone_radius"], 0, "у танка дронів немає")
 	assert_eq(tank["marked"], _ids(Targeting.threatened_units(state, enemy_tank.id, 0)))
 	assert_eq(tank["drone_marked"], [])
 	assert_true(tank["is_floor"])
 
 	var es: Dictionary = Targeting.inspection(state, enemy_squad.id, 0)
-	assert_eq(es["drone_ring"], Targeting.reach_tiles(state, enemy_squad.id, DroneCommand.RANGE))
+	assert_eq(es["drone_radius"], DroneCommand.RANGE)
 	assert_eq(es["drone_marked"], _ids(Targeting.drone_threatened_units(state, enemy_squad.id, 0)))
 	assert_has(es["drone_marked"], car.id, "передумова: броньовик під дроном")
 	assert_true(es["is_floor"])
