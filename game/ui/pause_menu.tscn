@@ -21,53 +21,59 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.04, 0.05, 0.06, 1)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="Scroll" type="ScrollContainer" parent="."]
 layout_mode = 1
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+horizontal_scroll_mode = 0
 
-[node name="Card" type="PanelContainer" parent="Center"]
+[node name="Center" type="CenterContainer" parent="Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Card" type="PanelContainer" parent="Scroll/Center"]
 custom_minimum_size = Vector2(380, 0)
 layout_mode = 2
 
-[node name="Body" type="VBoxContainer" parent="Center/Card"]
+[node name="Body" type="VBoxContainer" parent="Scroll/Center/Card"]
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="Title" type="Label" parent="Center/Card/Body"]
+[node name="Title" type="Label" parent="Scroll/Center/Card/Body"]
 layout_mode = 2
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.95, 0.9, 0.74, 1)
 theme_override_font_sizes/font_size = 30
 text = "pause_title"
 
-[node name="Sep" type="HSeparator" parent="Center/Card/Body"]
+[node name="Sep" type="HSeparator" parent="Scroll/Center/Card/Body"]
 layout_mode = 2
 
-[node name="ResumeButton" type="Button" parent="Center/Card/Body"]
+[node name="ResumeButton" type="Button" parent="Scroll/Center/Card/Body"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "pause_resume"
 
-[node name="SettingsButton" type="Button" parent="Center/Card/Body"]
+[node name="SettingsButton" type="Button" parent="Scroll/Center/Card/Body"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "pause_settings"
 
-[node name="SaveQuitButton" type="Button" parent="Center/Card/Body"]
+[node name="SaveQuitButton" type="Button" parent="Scroll/Center/Card/Body"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "pause_save_quit"
 
-[node name="SurrenderButton" type="Button" parent="Center/Card/Body"]
+[node name="SurrenderButton" type="Button" parent="Scroll/Center/Card/Body"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
@@ -75,7 +81,7 @@ size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.85, 0.5, 0.42, 1)
 text = "pause_surrender"
 
-[node name="ErrorLabel" type="Label" parent="Center/Card/Body"]
+[node name="ErrorLabel" type="Label" parent="Scroll/Center/Card/Body"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -83,20 +89,20 @@ horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.85, 0.5, 0.42, 1)
 text = "pause_save_failed"
 
-[node name="ConfirmBox" type="VBoxContainer" parent="Center/Card/Body"]
+[node name="ConfirmBox" type="VBoxContainer" parent="Scroll/Center/Card/Body"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="ConfirmLabel" type="Label" parent="Center/Card/Body/ConfirmBox"]
+[node name="ConfirmLabel" type="Label" parent="Scroll/Center/Card/Body/ConfirmBox"]
 custom_minimum_size = Vector2(340, 0)
 layout_mode = 2
 horizontal_alignment = 1
 autowrap_mode = 3
 text = "pause_surrender_confirm"
 
-[node name="ConfirmYesButton" type="Button" parent="Center/Card/Body/ConfirmBox"]
+[node name="ConfirmYesButton" type="Button" parent="Scroll/Center/Card/Body/ConfirmBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
@@ -104,7 +110,7 @@ size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.85, 0.5, 0.42, 1)
 text = "pause_surrender_yes"
 
-[node name="ConfirmCancelButton" type="Button" parent="Center/Card/Body/ConfirmBox"]
+[node name="ConfirmCancelButton" type="Button" parent="Scroll/Center/Card/Body/ConfirmBox"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2

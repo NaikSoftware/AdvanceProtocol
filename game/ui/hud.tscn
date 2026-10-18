@@ -65,9 +65,10 @@ text = "hud_pause"
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="BottomBar" type="HBoxContainer" parent="SafeArea/Layout"]
+[node name="BottomBar" type="HFlowContainer" parent="SafeArea/Layout"]
 unique_name_in_owner = true
-theme_override_constants/separation = 16
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 8
 mouse_filter = 2
 
 [node name="SelectionRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
@@ -125,24 +126,25 @@ text = "hud_ap_left"
 [node name="PreviewApValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewMoveBox"]
 unique_name_in_owner = true
 
-[node name="BottomSpacer" type="Control" parent="SafeArea/Layout/BottomBar"]
-size_flags_horizontal = 3
+[node name="ButtonRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
+size_flags_horizontal = 10
+theme_override_constants/separation = 16
 mouse_filter = 2
 
-[node name="CancelButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+[node name="CancelButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 64)
+custom_minimum_size = Vector2(48, 64)
 text = "hud_cancel"
 
-[node name="ConfirmButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+[node name="ConfirmButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 64)
+custom_minimum_size = Vector2(48, 64)
 disabled = true
 text = "hud_confirm"
 
-[node name="EndTurnButton" type="Button" parent="SafeArea/Layout/BottomBar"]
+[node name="EndTurnButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 64)
+custom_minimum_size = Vector2(48, 64)
 text = "hud_end_turn"
 
 [node name="Inspector" parent="." instance=ExtResource("2_inspector")]

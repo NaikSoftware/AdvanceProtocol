@@ -162,11 +162,18 @@ theme_override_constants/margin_top = 40
 theme_override_constants/margin_right = 64
 theme_override_constants/margin_bottom = 40
 
-[node name="Row" type="HBoxContainer" parent="SafeArea"]
+[node name="Scroll" type="ScrollContainer" parent="SafeArea"]
 layout_mode = 2
+mouse_filter = 1
+horizontal_scroll_mode = 0
+
+[node name="Row" type="HBoxContainer" parent="SafeArea/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="MenuColumn" type="VBoxContainer" parent="SafeArea/Row"]
+[node name="MenuColumn" type="VBoxContainer" parent="SafeArea/Scroll/Row"]
 custom_minimum_size = Vector2(360, 0)
 layout_mode = 2
 size_flags_horizontal = 0
@@ -174,47 +181,47 @@ size_flags_vertical = 4
 theme_override_constants/separation = 12
 mouse_filter = 2
 
-[node name="Title" type="Label" parent="SafeArea/Row/MenuColumn"]
+[node name="Title" type="Label" parent="SafeArea/Scroll/Row/MenuColumn"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.95, 0.9, 0.74, 1)
 theme_override_fonts/font = ExtResource("4_title")
 theme_override_font_sizes/font_size = 40
 text = "app_title"
 
-[node name="Gap" type="Control" parent="SafeArea/Row/MenuColumn"]
+[node name="Gap" type="Control" parent="SafeArea/Scroll/Row/MenuColumn"]
 custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="ContinueButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+[node name="ContinueButton" type="Button" parent="SafeArea/Scroll/Row/MenuColumn"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "menu_continue"
 
-[node name="NewMatchButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+[node name="NewMatchButton" type="Button" parent="SafeArea/Scroll/Row/MenuColumn"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "menu_new_match"
 
-[node name="SettingsButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+[node name="SettingsButton" type="Button" parent="SafeArea/Scroll/Row/MenuColumn"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "menu_settings"
 
-[node name="AboutButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+[node name="AboutButton" type="Button" parent="SafeArea/Scroll/Row/MenuColumn"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 size_flags_horizontal = 3
 text = "menu_about"
 
-[node name="QuitButton" type="Button" parent="SafeArea/Row/MenuColumn"]
+[node name="QuitButton" type="Button" parent="SafeArea/Scroll/Row/MenuColumn"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
