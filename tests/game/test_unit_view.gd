@@ -502,3 +502,46 @@ func test_views_of_same_owner_share_textures_and_materials() -> void:
 func test_no_debug_facing_arrow_in_shipped_build() -> void:
 	view.bind(_unit(5, 0))
 	assert_null(view.get_node_or_null("Silhouette/DebugFacingArrow"))
+
+
+## Task 4.3: силует-заступник на кожен із 12 типів (до асетів Фази 5.2).
+func test_every_type_has_a_distinct_silhouette() -> void:
+	var seen := {}
+	for id in UnitTypes.count():
+		var key := var_to_str(UnitSilhouettes.spec(id))
+		assert_false(seen.has(key), "тип %d повторює силует типу %s" % [id, seen.get(key)])
+		seen[key] = id
+
+
+func _footprint(id: int) -> float:
+	var h: Vector3 = UnitSilhouettes.spec(id).hull
+	return h.x * h.z
+
+
+## Мобільність light(7) → medium(5) → TD(6) → heavy(8) за AP спадає, тож і корпус росте.
+func test_heavier_tank_has_larger_hull_footprint() -> void:
+	assert_lt(_footprint(7), _footprint(5))
+	assert_lt(_footprint(5), _footprint(6))
+	assert_lt(_footprint(6), _footprint(8))
+
+
+func test_silhouette_stays_within_four_meshes() -> void:
+	for id in UnitTypes.count():
+		var root := UnitSilhouettes.build(id, Color.RED)
+		assert_between(root.get_child_count(), 1, 4, "тип %d" % id)
+		root.free()
+
+
+func test_silhouette_fits_one_tile() -> void:
+	for id in UnitTypes.count():
+		var root := UnitSilhouettes.build(id, Color.RED)
+		var lo := Vector3(INF, INF, INF)
+		var hi := Vector3(-INF, -INF, -INF)
+		for m: MeshInstance3D in root.get_children():
+			var box: AABB = m.mesh.get_aabb()
+			lo = lo.min(m.position + box.position)
+			hi = hi.max(m.position + box.end)
+		assert_lte(hi.x - lo.x, 1.0, "x типу %d" % id)
+		assert_lte(hi.z - lo.z, 1.0, "z типу %d" % id)
+		assert_gte(lo.y, 0.0, "низ типу %d" % id)
+		root.free()
