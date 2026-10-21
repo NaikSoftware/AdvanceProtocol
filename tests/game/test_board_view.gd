@@ -182,9 +182,14 @@ func test_draw_circles_makes_one_ring_per_circle_centred_on_the_tile() -> void:
 	var ring: MeshInstance3D = nodes[0]
 	assert_eq(ring.position.x, 4.0)
 	assert_eq(ring.position.z, 6.0)
-	var torus: TorusMesh = ring.mesh as TorusMesh
-	assert_not_null(torus)
-	assert_almost_eq((torus.inner_radius + torus.outer_radius) * 0.5, 3.0, 0.0001, "середня лінія — рівно 3 тайли")
+	var arrays: Array = (ring.mesh as ArrayMesh).surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var radius_sum := 0.0
+	for v in verts:
+		radius_sum += Vector2(v.x, v.z).length()
+	assert_almost_eq(radius_sum / verts.size(), 3.0, 0.0001, "середня лінія — рівно 3 тайли")
+	for v in verts:
+		assert_almost_eq(v.y, TerrainHeight.ground_y(4.0 + v.x, 6.0 + v.z) + 0.04, 0.0001, "кільце лягає на ґрунт")
 	assert_eq(view.contour_segments(BoardView.LAYER_INSPECT), [], "коло — не контур тайлів")
 
 

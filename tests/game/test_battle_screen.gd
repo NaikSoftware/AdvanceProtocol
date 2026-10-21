@@ -482,7 +482,8 @@ func test_tap_resolves_from_the_press_position_not_the_release_position() -> voi
 	assert_eq(camera.zoom_level, IsoCameraRig.MIN_ZOOM, "передумова: зум дійшов до MIN_ZOOM")
 	camera.center_on(unit.pos)
 
-	var boundary_point: Vector3 = IsoCameraRig.cell_to_world(unit.pos) + Vector3(0.49, 0.0, 0.0)
+	# Точка межі лежить на поверхні рельєфу, а не на площині y = 0 (тап б'є в землю).
+	var boundary_point := Vector3(unit.pos.x + 0.49, TerrainHeight.ground_y(unit.pos.x + 0.49, unit.pos.y), unit.pos.y)
 	var press_pos: Vector2 = cam3d.unproject_position(boundary_point)
 	var jitter_pos: Vector2 = press_pos + Vector2(8.0, 0.0)  # свідомо під порогом (~10dp), але штовхає за межу
 

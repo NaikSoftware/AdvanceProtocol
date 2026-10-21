@@ -7,8 +7,9 @@ extends MeshInstance3D
 ## §3.5: вода нічого не знає про туман; відбиття бере зонд BoardView, який не
 ## бачить шару юнітів.
 
-## Над землею (y = 0) і під маркерами мін (MineLayer.MARKER_Y = 0.06).
-const WATER_Y: float = 0.02
+## Рівень води — на 0.4 м нижче верху берега (TerrainHeight): вода стоїть там, де земля
+## нижча за цей рівень, берег видно над нею.
+const WATER_Y: float = TerrainHeight.WATER_LEVEL
 
 const _SHADER: Shader = preload("res://game/battle/shaders/water.gdshader")
 ## Дві карти нормалей брижі (tools/water_normals.py), стиснені з міпмапами.
@@ -17,7 +18,8 @@ const _WAVE_B: Texture2D = preload("res://assets/water/water_normal_b.png")
 
 
 
-func build(board: Board, margin: int, kind_map: ImageTexture) -> void:
+## height — карта висот, за якою шейдер лишає воду там, де земля нижча за рівень (null — за видом клітинки).
+func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHeight = null) -> void:
 	var has_water := false
 	# Пари сусідніх клітинок води вздовж X і вздовж Y: річка тече вздовж довшої осі.
 	var along_x := 0
@@ -50,6 +52,12 @@ func build(board: Board, margin: int, kind_map: ImageTexture) -> void:
 	mat.set_shader_parameter("wave_b", _WAVE_B)
 	# shortcut: одна вісь течії на карту, бо річки на картах прямі; для звивистої
 	# річки — напрямок із карти видів на фрагмент.
+	mat.set_shader_parameter("use_height", height != null)
+	if height != null:
+		mat.set_shader_parameter("height_map", ImageTexture.create_from_image(height.image()))
+		mat.set_shader_parameter("height_samples", float(height.samples))
+		mat.set_shader_parameter("height_origin", Vector2(-0.5 - margin, -0.5 - margin))
+		mat.set_shader_parameter("water_level", WATER_Y)
 	mat.set_shader_parameter("flow_dir", Vector2(1, 0) if along_x >= along_y else Vector2(0, 1))
 	material_override = mat
 

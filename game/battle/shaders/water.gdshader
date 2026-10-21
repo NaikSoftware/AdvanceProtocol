@@ -25,6 +25,13 @@ uniform int water_kind = 5;
 uniform int broken_bridge_kind = 9;
 // Річка тече й під цілим мостом; настил над нею — окремий меш.
 uniform int bridge_kind = 8;
+// Рельєф (TerrainHeight): вода є там, де земля нижча за її рівень. Без карти висот — як
+// раніше, за видом клітинки.
+uniform bool use_height = false;
+uniform sampler2D height_map : filter_linear, repeat_disable;
+uniform float height_samples = 4.0;
+uniform vec2 height_origin = vec2(-0.5);
+uniform float water_level = -0.05;
 // Вісь течії (одна на карту, WaterSurface.build).
 uniform vec2 flow_dir = vec2(1.0, 0.0);
 // Дві карти нормалей брижі (tools/water_normals.py); масштаб задає fragment():
@@ -64,22 +71,35 @@ void vertex() {
 
 void fragment() {
 	vec2 p = world_pos.xz;
-	// Та сама рвана межа, що й у землі: вода стоїть усередині берегової смуги.
-	vec2 g = border_warp(p) - map_origin;
-	vec2 fw = border_weights(fract(g));
-	ivec2 b = ivec2(floor(g));
-	ivec2 size = textureSize(kind_map, 0);
-	float w = mix(mix(water_at(b, size), water_at(b + ivec2(1, 0), size), fw.x),
-			mix(water_at(b + ivec2(0, 1), size), water_at(b + ivec2(1, 1), size), fw.x), fw.y);
-	if (w < 0.5) {
-		discard;
+	float shallow_fade = 1.0;
+	float depth_m = 4.0;
+	float bank_m = 4.0;
+	if (use_height) {
+		ivec2 hs = textureSize(height_map, 0);
+		vec2 huv = ((p - height_origin) * height_samples + 0.5) / vec2(hs);
+		// Глибина в метрах (1 м = 0.125); до нуля вода тоншає на перших ~20 см.
+		depth_m = (water_level - texture(height_map, huv).r) / 0.125;
+		if (depth_m <= 0.0) {
+			discard;
+		}
+		// Чіткий уріз: вода повна вже за ~7 см глибини (≈ 2 px на близькому зумі).
+		shallow_fade = smoothstep(0.0, 0.07, depth_m);
+		// Схил берега ~0.34 м на метр: глибина 1 м ~ 3 м від урізу.
+		bank_m = depth_m * 2.5;
+	} else {
+		// Та сама рвана межа, що й у землі: вода стоїть усередині берегової смуги.
+		vec2 g = border_warp(p) - map_origin;
+		vec2 fw = border_weights(fract(g));
+		ivec2 b = ivec2(floor(g));
+		ivec2 size = textureSize(kind_map, 0);
+		float w = mix(mix(water_at(b, size), water_at(b + ivec2(1, 0), size), fw.x),
+				mix(water_at(b + ivec2(0, 1), size), water_at(b + ivec2(1, 1), size), fw.x), fw.y);
+		if (w < 0.5) {
+			discard;
+		}
+		shallow_fade = smoothstep(0.5, 0.72, w);
+		bank_m = max(w - 0.5, 0.0) * 2.35;
 	}
-	// Біля урізу вага росте ~3.4 на клітинку: 0.5 -> 0.72 — це зовнішні ~0.5 м
-	// мілини, де вода тоншає до нуля; темна смуга відбитого берега — ~1.5 м.
-	float shallow_fade = smoothstep(0.5, 0.72, w);
-	// Відстань від урізу в метрах (вага ~3.4 на клітинку = 8 м) і каламуть біля
-	// берега за законом Бугера–Ламберта, exp(-2·d): ~0.13 за метр від берега.
-	float bank_m = max(w - 0.5, 0.0) * 2.35;
 	float murk = exp(-2.0 * bank_m);
 
 	// Кадр течії: x — уздовж, y — упоперек річки. Масштаб: клітинка = 8 м.
@@ -96,7 +116,10 @@ void fragment() {
 	mat2 rot = mat2(vec2(0.985, 0.174), vec2(-0.174, 0.985));
 	vec2 tb = texture(wave_b, rot * fp * vec2(2.0, 1.5) - wob + vec2(TIME * 0.15, 0.0)).rg * 2.0 - 1.0;
 	// Розтяг упоперек течії зменшує нахил уздовж неї в 1.5 раза — повертаємо.
-	vec2 sf = (ta * 0.75 + tb * 0.25) * vec2(0.4, 0.27);
+	// Третя октава під ~60°, що дрейфує в інший бік: брижа не біжить одним напрямком.
+	mat2 rot60 = mat2(vec2(0.5, 0.866), vec2(-0.866, 0.5));
+	vec2 tc = texture(wave_a, rot60 * fp * vec2(1.3, 1.0) + wob.yx + vec2(-TIME * 0.07, TIME * 0.06)).rg * 2.0 - 1.0;
+	vec2 sf = (ta * 0.55 + tb * 0.2 + transpose(rot60) * tc * 0.25) * vec2(0.4, 0.27);
 	// Здалеку (піксель > ~0.1 м) гребені стишуються: інакше на віддаленні вони
 	// складаються в правильну «пральну дошку».
 	sf *= mix(1.0, 0.35, smoothstep(0.022, 0.045, length(fwidth(p))));
@@ -129,6 +152,8 @@ void fragment() {
 	float lobe = pow(max(dot(r_soft, gdir), 0.0), 4.0);
 	sky += vec3(0.24, 0.25, 0.26) * glint_strength * lobe;
 	vec3 e = sky * reflection_tint * f * sky_reflection_gain * shallow_fade;
+	// Оливково-бура товща мілководдя (перші ~0.15 клітинки води за глибиною).
+	e += vec3(0.045, 0.04, 0.02) * exp(-depth_m * 5.0) * shallow_fade;
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
 	// Виміряно: gl_compatibility виводить EMISSION без лінійного -> sRGB (0.5 дає
 	// 128, а не 188), тож тут кодуємо самі, інакше вода там чорна.
@@ -142,5 +167,6 @@ void fragment() {
 	SPECULAR = 0.5;
 	NORMAL_MAP = slope_to_normal_map(slope);
 	EMISSION = e;
-	ALPHA = shallow_fade * 0.96;
+	// Мілководдя прозоріше: крізь воду видно мул берега.
+	ALPHA = shallow_fade * (0.96 - 0.3 * exp(-depth_m * 4.0));
 }

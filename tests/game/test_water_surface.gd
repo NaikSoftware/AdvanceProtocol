@@ -86,11 +86,11 @@ func test_rebuild_keeps_the_probe_and_the_water_node() -> void:
 	assert_true(water.visible, "підірваний міст — вода")
 
 
-func test_water_plane_lies_at_y_002_over_the_board() -> void:
+func test_water_plane_lies_at_the_water_level_over_the_board() -> void:
 	view.build(_river())
 	var water: WaterSurface = _waters()[0]
 	var aabb: AABB = water.transform * water.get_aabb()
-	assert_almost_eq(aabb.position.y, 0.02, 0.0001)
+	assert_almost_eq(aabb.position.y, TerrainHeight.WATER_LEVEL, 0.0001)
 	assert_almost_eq(aabb.position.x, -0.5, 0.0001)
 	assert_almost_eq(aabb.end.x, 25.5, 0.0001)
 	assert_almost_eq(aabb.end.z, 21.5, 0.0001)

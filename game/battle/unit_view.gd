@@ -219,6 +219,7 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		return tween.finished
 
 	var current_cell: Vector2i = IsoCameraRig.world_to_cell(position)
+	var from_pos: Vector3 = position
 	# Твін ще не виконався в момент побудови графа нижче — rotation_degrees.y
 	# лишиться незмінним аж до реального програвання, тож цю величину
 	# доводиться передбачати самим, а не перечитувати властивість між кроками
@@ -248,11 +249,22 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		predicted_degrees += delta
 
 		tween.set_parallel(false)
-		tween.tween_property(self, "position", IsoCameraRig.cell_to_world(cell), duration_per_step)
+		var to_pos: Vector3 = IsoCameraRig.cell_to_world(cell)
+		tween.tween_method(_walk.bind(from_pos, to_pos), 0.0, 1.0, duration_per_step)
+		from_pos = to_pos
 
 		current_cell = cell
 		facing = target_facing
 	return tween.finished
+
+
+## Крок руху між клітинками: XZ — лінійно, висота — з рельєфу під юнітом (а не пряма між
+## центрами клітинок, що протикала б горб). Без рельєфу — лінійно, як і було.
+func _walk(t: float, from: Vector3, to: Vector3) -> void:
+	var p: Vector3 = from.lerp(to, t)
+	if TerrainHeight.active != null:
+		p.y = TerrainHeight.active.at(p.x, p.z)
+	position = p
 
 
 ## R14: поворот твінується, а не клацає миттєво — «Твіни руху й повороту»

@@ -21,7 +21,7 @@ enum { LAYER_ZONES, LAYER_PATH, LAYER_TARGETS, LAYER_INSPECT }
 ## у річці. Шар 2 — юніти, 3 — міни (MineLayer.MARKER_LAYER).
 const OVERLAY_LAYER: int = 4
 
-## Тимчасовий настил мостів — верх на 0.25 клітинки (~2 м) над водою.
+## Руїни мостів: плита тримається на 0.25 над центром клітинки (центр — на 0.25 нижче рівня дороги).
 const PLACEHOLDER_DECK_TOP: float = 0.25
 
 ## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
@@ -33,15 +33,25 @@ const PLACEHOLDER_DECK_TOP: float = 0.25
 ## риски, а не одна змішана.
 const _CONTOUR_WIDTH: float = 0.12
 const _CONTOUR_INSET: float = 0.06
-const _CONTOUR_HEIGHT: float = 0.04
+const _CONTOUR_PIECES: int = 4
 ## 0.95 — колишня ширина плитки (до суцільної землі): риски лишились тієї самої
 ## довжини, тож кути сусідніх рисок, як і раніше, не сходяться.
-const _CONTOUR_LENGTH: float = 0.95 - _CONTOUR_INSET * 2.0
+const _CONTOUR_LENGTH: float = 0.95
 ## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y = 0.06), щоб не
 ## z-fight'ити ні з тим, ні з іншим.
-const _CONTOUR_Y: float = 0.07
+const _CONTOUR_Y: float = 0.04
 const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
 
+## Косметичний підтип клітинок (MapData.surface); лише вигляд землі, тримається між перебудовами.
+var surface: PackedByteArray = PackedByteArray()
+## Seed косметичного рельєфу — з імені карти (battle_screen), щоб та сама карта мала той самий рельєф.
+var relief_seed: int = 0
+## Карта висот поточної дошки; ця ж поверхня — TerrainHeight.active для всіх, хто лежить на землі.
+var _height: TerrainHeight
+var _height_signature: String = ""
+## Клас кожної клітинки (вода/пагорб/дорога/майданчик/інше), з яких складається рельєф: міст
+## ціле/підірваний — той самий клас, тож перебудова мосту карту не перебакує.
+var _height_kind_classes: PackedByteArray = PackedByteArray()
 ## Земля переживає build(): масиви її текстур не перевантажуються на кожен міст.
 var _ground: GroundSurface
 var _water: WaterSurface
@@ -76,6 +86,30 @@ var _circles: Dictionary = {}
 var _circle_nodes: Dictionary = {}
 
 
+func _exit_tree() -> void:
+	if TerrainHeight.active == _height:
+		TerrainHeight.active = null
+
+
+static func _classes(board: Board) -> PackedByteArray:
+	var out := PackedByteArray()
+	out.resize(board.width * board.height)
+	for y in board.height:
+		for x in board.width:
+			var kind: int = board.kind_at(Vector2i(x, y))
+			var c := 0
+			if kind == Terrain.Kind.WATER or kind == Terrain.Kind.BRIDGE or kind == Terrain.Kind.BRIDGE_DESTROYED:
+				c = 1
+			elif kind == Terrain.Kind.HILL:
+				c = 2
+			elif kind == Terrain.Kind.ROAD:
+				c = 3
+			elif kind == Terrain.Kind.BUILDING or kind == Terrain.Kind.RUBBLE:
+				c = 4
+			out[y * board.width + x] = c
+	return out
+
+
 func build(board: Board) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, а тести це фіксують як витік.
@@ -103,15 +137,24 @@ func build(board: Board) -> void:
 		_ground = GroundSurface.new()
 		_ground.name = "Ground"
 		add_child(_ground)
+	# Рельєф бакається раз на карту: підірваний міст міняє вид клітинки, але не форму землі.
+	var signature: String = "%d:%d:%d" % [board.width, board.height, relief_seed]
+	if board.width <= 0 or board.height <= 0:
+		_height = null
+	elif _height == null or signature != _height_signature or _height_kind_classes != _classes(board):
+		_height = TerrainHeight.bake(board, 0, relief_seed)
+		_height_signature = signature
+		_height_kind_classes = _classes(board)
+	TerrainHeight.active = _height
 	# Відступ поза дошкою — Task 9 (оточення); поки земля рівно під дошкою.
-	_ground.build(board, 0)
+	_ground.build(board, 0, surface, _height)
 
 	if _water == null:
 		_water = WaterSurface.new()
 		_water.name = "Water"
 		add_child(_water)
 	var kinds: Image = _ground.kind_image()
-	_water.build(board, 0, null if kinds.is_empty() else ImageTexture.create_from_image(kinds))
+	_water.build(board, 0, null if kinds.is_empty() else ImageTexture.create_from_image(kinds), _height)
 
 	_build_placeholder_bridge_deck(board)
 
@@ -152,25 +195,41 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	if kept.is_empty():
 		return
 
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = _contour_mesh()
-	mm.instance_count = kept.size()
-	for i in kept.size():
-		var seg: Dictionary = kept[i]
+	# Усі риски шару — один стрічковий меш, накладений на ґрунт (кожна вершина бере висоту з
+	# карти висот), у MultiMesh з одним екземпляром. Кінці стрічок заходять один за одного
+	# (довжина 0.95 > відстань до перпендикулярного ребра), тож кути зімкнуті на будь-якому схилі.
+	var verts := PackedVector3Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+	for seg in kept:
 		var cell: Vector2i = seg["cell"]
 		var dir: Vector2i = seg["dir"]
-		var center: Vector3 = IsoCameraRig.cell_to_world(cell) + Vector3(0.0, _CONTOUR_Y, 0.0)
-		var offset := Vector3(dir.x, 0.0, dir.y) * _CONTOUR_OFFSET
-		# Меш типово довгий уздовж X, тонкий уздовж Z — правильна
-		# орієнтація для ребра, що дивиться вздовж Z (dir.y != 0). Ребро, що
-		# дивиться вздовж X (dir.x != 0), повертається на 90° навколо Y.
-		var orientation := Basis()
-		if dir.x != 0:
-			orientation = orientation.rotated(Vector3.UP, PI * 0.5)
-		mm.set_instance_transform(i, Transform3D(orientation, center + offset))
-		mm.set_instance_color(i, seg["color"])
+		var along := Vector3(1.0, 0.0, 0.0) if dir.x == 0 else Vector3(0.0, 0.0, 1.0)
+		var side := Vector3(0.0, 0.0, 1.0) if dir.x == 0 else Vector3(1.0, 0.0, 0.0)
+		var mid := Vector3(cell.x + dir.x * _CONTOUR_OFFSET, 0.0, cell.y + dir.y * _CONTOUR_OFFSET)
+		var half: float = _CONTOUR_LENGTH * 0.5
+		var base: int = verts.size()
+		for k in _CONTOUR_PIECES + 1:
+			var c: Vector3 = mid + along * lerpf(-half, half, float(k) / _CONTOUR_PIECES)
+			for sgn: float in [-1.0, 1.0]:
+				var p: Vector3 = c + side * (sgn * _CONTOUR_WIDTH * 0.5)
+				verts.append(Vector3(p.x, TerrainHeight.ground_y(p.x, p.z) + _CONTOUR_Y, p.z))
+				colors.append(seg["color"])
+			if k > 0:
+				var i: int = base + k * 2
+				indices.append_array([i - 2, i - 1, i, i - 1, i + 1, i])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var ribbon := ArrayMesh.new()
+	ribbon.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = ribbon
+	mm.instance_count = 1
+	mm.set_instance_transform(0, Transform3D.IDENTITY)
 
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "Contour%d" % layer
@@ -211,26 +270,46 @@ func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 	var nodes: Array[Node] = []
 	for c in circles:
 		var r: float = float(c["radius"])
-		var torus := TorusMesh.new()
-		torus.inner_radius = r - _CONTOUR_WIDTH * 0.5
-		torus.outer_radius = r + _CONTOUR_WIDTH * 0.5
-		torus.rings = 96
-		torus.ring_segments = 4
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.albedo_color = c["color"]
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
-		mi.mesh = torus
+		mi.mesh = _ring_mesh(IsoCameraRig.cell_to_world(c["center"]), r)
 		mi.material_override = mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.layers = 1 << (OVERLAY_LAYER - 1)
-		mi.position = IsoCameraRig.cell_to_world(c["center"]) + Vector3(0.0, _CONTOUR_Y, 0.0)
-		# Тор товщиною _CONTOUR_WIDTH сплющено до висоти риски контуру.
-		mi.scale = Vector3(1.0, _CONTOUR_HEIGHT / _CONTOUR_WIDTH, 1.0)
+		# Вершини кільця — у світі (висота за ґрунтом), тож вузол стоїть у центрі колом на y = 0.
+		var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
+		mi.position = Vector3(centre.x, 0.0, centre.z)
 		add_child(mi)
 		nodes.append(mi)
 	_circle_nodes[layer] = nodes
+
+
+## Кільце-стрічка шириною _CONTOUR_WIDTH, що лягає на ґрунт: кожна вершина бере висоту з
+## карти висот (тор лишився б площиною й тонув у схилі). Вершини — відносно центру в XZ.
+func _ring_mesh(centre: Vector3, radius: float) -> ArrayMesh:
+	var segments: int = clampi(int(TAU * radius * 8.0), 64, 512)
+	var verts := PackedVector3Array()
+	var indices := PackedInt32Array()
+	for k in segments + 1:
+		var a: float = TAU * float(k) / float(segments)
+		var dir := Vector2(cos(a), sin(a))
+		for r: float in [radius - _CONTOUR_WIDTH * 0.5, radius + _CONTOUR_WIDTH * 0.5]:
+			var p := Vector2(centre.x, centre.z) + dir * r
+			verts.append(Vector3(dir.x * r, TerrainHeight.ground_y(p.x, p.y) + _CONTOUR_Y, dir.y * r))
+		if k > 0:
+			var i: int = k * 2
+			indices.append_array([i - 2, i - 1, i, i - 1, i + 1, i])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
 
 
 func circles(layer: int) -> Array:
@@ -255,21 +334,14 @@ func contour_segments(layer: int) -> Array:
 	return _contour_segments.get(layer, [])
 
 
-## Одна риска: довга й тонка коробка. Типово довга вздовж X, тонка
-## вздовж Z — правильно для ребра, що дивиться вздовж Z; для ребра вздовж X
-## draw_contour() довертає екземпляр на 90° навколо Y (один спільний меш на
-## всі напрямки дешевший за два різні меші в тому самому MultiMesh).
-func _contour_mesh() -> Mesh:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(_CONTOUR_LENGTH, _CONTOUR_HEIGHT, _CONTOUR_WIDTH)
-	return mesh
-
-
 func _contour_material() -> StandardMaterial3D:
 	# Колір іде з екземпляра мультимешу (use_colors), матеріал лише вмикає його
 	# читання — сам він лишається білим, щоб не домішувати власний тон.
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# Стрічка без нормалей: освітлення дало б чорні ділянки; контур — позначка, не матеріал.
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	return mat
 
 
@@ -296,9 +368,10 @@ func _build_placeholder_bridge_deck(board: Board) -> void:
 	var deck: Array[Transform3D] = []
 	for i in _placeholder_bridge_deck_cells.size():
 		var turn := Basis() if _placeholder_bridge_deck_axes[i].x != 0 else Basis(Vector3.UP, PI * 0.5)
-		var pos: Vector3 = IsoCameraRig.cell_to_world(_placeholder_bridge_deck_cells[i])
+		var cell: Vector2i = _placeholder_bridge_deck_cells[i]
+		# Настил стоїть на рівні дороги на берегах, а русло під ним — нижче (TerrainHeight.deck_y).
 		deck.append(Transform3D(turn * Basis.from_scale(Vector3(1.0, 0.06, 0.8)),
-				pos + Vector3(0.0, PLACEHOLDER_DECK_TOP - 0.03, 0.0)))
+				Vector3(cell.x, _height.deck_y(cell) - 0.03, cell.y)))
 	if not deck.is_empty():
 		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, Color(0.42, 0.42, 0.4))
 
@@ -311,7 +384,8 @@ func _add_ruin_transforms(cell: Vector2i, axis: Vector2i) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(cell)
 	var yaw := Basis() if axis.x != 0 else Basis(Vector3.UP, PI * 0.5)
-	var centre: Vector3 = IsoCameraRig.cell_to_world(cell)
+	# Центр — так, щоб верх настилу (PLACEHOLDER_DECK_TOP над ним) збігався з рівнем дороги.
+	var centre := Vector3(cell.x, _height.deck_y(cell) - PLACEHOLDER_DECK_TOP, cell.y)
 	var put := func(local: Vector3, tilt: Basis, size: Vector3) -> void:
 		_placeholder_bridge_ruin_transforms.append(
 				Transform3D(yaw * tilt * Basis.from_scale(size), centre + yaw * local))

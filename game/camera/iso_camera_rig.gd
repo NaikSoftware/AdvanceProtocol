@@ -113,7 +113,8 @@ func _ready() -> void:
 ## §3.1: логічні координати цілі, світові — (x, 0, y). 45° дає камера, а не
 ## ці дані, тому функція лишається чистим переносом без жодного повороту.
 static func cell_to_world(cell: Vector2i) -> Vector3:
-	return Vector3(cell.x, 0.0, cell.y)
+	# Висота — косметичний рельєф (TerrainHeight); без нього 0, і це та сама площина.
+	return Vector3(cell.x, TerrainHeight.ground_y(cell.x, cell.y), cell.y)
 
 static func world_to_cell(point: Vector3) -> Vector2i:
 	return Vector2i(roundi(point.x), roundi(point.z))
@@ -140,7 +141,8 @@ func _ray_ground_point(screen_pos: Vector2) -> Variant:
 	if is_zero_approx(dir.y):
 		return null
 	var origin: Vector3 = _camera.project_ray_origin(screen_pos)
-	var t: float = -origin.y / dir.y
+	# Площина фокуса — на висоті рига: на пагорбі пан тримає ту саму світову точку під пальцем.
+	var t: float = (global_position.y - origin.y) / dir.y
 	if t < 0.0:
 		return null
 	return origin + dir * t
@@ -245,6 +247,12 @@ func _update_inertia(delta: float) -> void:
 func screen_point_to_cell(screen_pos: Vector2) -> Vector2i:
 	var origin: Vector3 = _camera.project_ray_origin(screen_pos)
 	var dir: Vector3 = _camera.project_ray_normal(screen_pos)
+	# З рельєфом тап б'є в видиму поверхню, а не в площину y = 0 (піднятий тайл інакше
+	# вибирався б сусідом). Мимо землі — площина, як і без рельєфу.
+	if TerrainHeight.active != null:
+		var hit: Variant = TerrainHeight.active.pick(origin, dir)
+		if hit != null:
+			return world_to_cell(hit as Vector3)
 	if is_zero_approx(dir.y):
 		# Промінь паралельний площині дошки — перетину нема. Деградує на
 		# свідомо позадошковий тайл: Board.in_bounds() відкидає його самим
@@ -408,8 +416,7 @@ func _clamp_to_bounds(pos: Vector3) -> Vector3:
 	var min_edge: float = -BOARD_MARGIN
 	var max_x: float = float(_max_cell.x) + BOARD_MARGIN
 	var max_z: float = float(_max_cell.y) + BOARD_MARGIN
-	return Vector3(
-		clampf(pos.x, min_edge, max_x),
-		pos.y,
-		clampf(pos.z, min_edge, max_z)
-	)
+	var x: float = clampf(pos.x, min_edge, max_x)
+	var z: float = clampf(pos.z, min_edge, max_z)
+	# Фокус слідує за землею: центр екрана лежить на поверхні, а не на площині під пагорбом.
+	return Vector3(x, TerrainHeight.active.at(x, z) if TerrainHeight.active != null else pos.y, z)
