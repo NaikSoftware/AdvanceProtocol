@@ -15,3 +15,6 @@ prototyping-resources/*.import
 # Local session state — per-machine, not project content.
 .letta/settings.local.json
 __pycache__/
+
+# Art references and generation scratch — ~1 GB, local only; index in docs/art/ground-texture-research.md
+art-refs/
