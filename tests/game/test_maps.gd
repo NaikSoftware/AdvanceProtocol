@@ -200,6 +200,120 @@ func test_map_pace(p = use_parameters(_map_paths())) -> void:
 		assert_between(turns, bounds[type_id][0], bounds[type_id][1], "%s: тип %d — %.2f ходу" % [path, type_id, turns])
 
 
+## Косметичний підтип: правил не торкається, але крива сітка — це крива картинка.
+func test_map_surface_is_well_formed(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	assert_not_null(m, path)
+	if m == null:
+		return
+	assert_true(m.surface.is_empty() or m.surface.size() == m.width * m.height,
+		"%s: surface %d замість 0 або %d" % [path, m.surface.size(), m.width * m.height])
+	if m.surface.size() != m.width * m.height:
+		return
+	var bad: Array[Vector2i] = []
+	var odd: Array[Vector2i] = []
+	for y in m.height:
+		for x in m.width:
+			var i: int = y * m.width + x
+			if m.surface[i] >= MapData.surface_variants(m.tiles[i]):
+				bad.append(Vector2i(x, y))
+			if m.surface[i] != m.surface[(m.height - 1 - y) * m.width + (m.width - 1 - x)]:
+				odd.append(Vector2i(x, y))
+	assert_eq(bad.size(), 0, "%s: підтип поза варіантами виду %s" % [path, bad.slice(0, 8)])
+	assert_eq(odd.size(), 0, "%s: підтип без дзеркальної пари %s" % [path, odd.slice(0, 8)])
+
+
+# --- Зовнішнє кільце (рішення власника 2026-10-22): пейзаж за краєм, правила його не читають ---
+
+## Найбільше віддалення не має показати край світу — 12 клітинок з кожного боку.
+const OUTER_MARGIN: int = 12
+
+
+func test_map_outer_ring_is_well_formed_and_symmetric(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	assert_eq(m.outer_margin, OUTER_MARGIN, path)
+	var mg: int = m.outer_margin
+	var ow: int = m.width + 2 * mg
+	var oh: int = m.height + 2 * mg
+	assert_eq(m.outer_tiles.size(), ow * oh, path)
+	assert_true(m.outer_surface.is_empty() or m.outer_surface.size() == ow * oh, path)
+	if m.outer_tiles.size() != ow * oh:
+		return
+	var bad: Array[Vector2i] = []
+	var odd: Array[Vector2i] = []
+	for y in range(-mg, m.height + mg):
+		for x in range(-mg, m.width + mg):
+			var i: int = (y + mg) * ow + x + mg
+			var inside: bool = x >= 0 and x < m.width and y >= 0 and y < m.height
+			var k: int = m.outer_tiles[i]
+			var s: int = m.outer_surface[i] if not m.outer_surface.is_empty() else 0
+			if inside != (k == MapData.OUTER_HOLE) or (not inside and (k >= Terrain.Kind.size()
+					or s >= MapData.surface_variants(k))):
+				bad.append(Vector2i(x, y))
+			var j: int = oh * ow - 1 - i  # дзеркальна клітинка розширеної сітки
+			if m.outer_kind_at(Vector2i(x, y)) != m.outer_kind_at(Vector2i(m.width - 1 - x, m.height - 1 - y)) \
+					or (not m.outer_surface.is_empty() and m.outer_surface[i] != m.outer_surface[j]):
+				odd.append(Vector2i(x, y))
+	assert_eq(bad.size(), 0, "%s: криві клітинки кільця %s" % [path, bad.slice(0, 8)])
+	assert_eq(odd.size(), 0, "%s: кільце без дзеркальної пари %s" % [path, odd.slice(0, 8)])
+
+
+## Річка й дорога не обриваються на краю дошки: клітинка кільця за краєм продовжує їх.
+func test_map_edge_water_and_roads_continue_into_the_ring(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	# Без кільця outer_kind_at повертає сам край — перевірка пройшла б порожньо.
+	assert_eq(m.outer_margin, OUTER_MARGIN, path)
+	var wet: Array = [Terrain.Kind.WATER, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]
+	var paved: Array = [Terrain.Kind.ROAD, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]
+	var broken: Array[Vector2i] = []
+	for y in m.height:
+		for x in m.width:
+			var k: int = m.tiles[y * m.width + x]
+			var need: Array = paved if k == Terrain.Kind.ROAD else (wet if k == Terrain.Kind.WATER else [])
+			if need.is_empty():
+				continue
+			for d: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+				var q := Vector2i(x, y) + d
+				var off: bool = q.x < 0 or q.x >= m.width or q.y < 0 or q.y >= m.height
+				if off and not need.has(m.outer_kind_at(q)):
+					broken.append(Vector2i(x, y))
+	assert_eq(broken.size(), 0, "%s: обривається на краю дошки %s" % [path, broken.slice(0, 8)])
+
+
+func test_river_flows_through_the_ring_to_its_outer_edge_on_both_ends() -> void:
+	var m: MapData = load("res://maps/river.tres") as MapData
+	assert_eq(m.outer_margin, OUTER_MARGIN, "без кільця перевірка пройшла б порожньо")
+	var mg: int = m.outer_margin
+	var wet: Array = [Terrain.Kind.WATER, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]
+	# Старт — будь-яка клітинка річки на західному краю дошки: русло петляє, рядок не сталий.
+	var start := Vector2i(-1, -1)
+	for y in m.height:
+		if m.outer_kind_at(Vector2i(0, y)) == Terrain.Kind.WATER:
+			start = Vector2i(0, y)
+			break
+	assert_ne(start, Vector2i(-1, -1), "річка виходить на західний край дошки")
+	var seen: Dictionary = {start: true}
+	var queue: Array[Vector2i] = [start]
+	var west: bool = false
+	var east: bool = false
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		west = west or c.x == -mg
+		east = east or c.x == m.width - 1 + mg
+		for d: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+			var q: Vector2i = c + d
+			if q.x < -mg or q.x >= m.width + mg or q.y < -mg or q.y >= m.height + mg:
+				continue
+			if not seen.has(q) and wet.has(m.outer_kind_at(q)):
+				seen[q] = true
+				queue.append(q)
+	assert_true(west and east, "річка тече крізь кільце до зовнішнього краю з обох боків (захід %s, схід %s)"
+		% [west, east])
+
+
 func test_river_has_three_crossings_and_a_town() -> void:
 	var m: MapData = load("res://maps/river.tres") as MapData
 	assert_not_null(m)
