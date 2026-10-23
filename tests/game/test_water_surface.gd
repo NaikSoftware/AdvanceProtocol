@@ -311,3 +311,23 @@ func test_rebuild_tiles_requests_a_probe_recapture() -> void:
 	view.rebuild_tiles(board)
 	assert_eq(view.probe_captures_requested, before + 1)
 	assert_eq(view.reflection_probe().update_mode, ReflectionProbe.UPDATE_ONCE)
+
+
+## Вода йде за гладкою віссю річки, а не за клітинками: карта висот у матеріалі води — та сама,
+## що в землі, і вершини осі лежать нижче рівня води.
+func test_water_height_map_follows_the_smooth_course() -> void:
+	view.build(_river())
+	var mat: ShaderMaterial = _waters()[0].material_override
+	var img: Image = (mat.get_shader_parameter("height_map") as ImageTexture).get_image()
+	var h: TerrainHeight = view._height
+	assert_eq(img.get_data(), h.image().get_data(), "та сама карта висот")
+	var s: int = h.samples
+	var pts: PackedVector2Array = h.course.lines[0]
+	var checked := 0
+	for i in range(0, pts.size(), 4):
+		var p: Vector2 = pts[i]
+		if p.x < 0.0 or p.x > 25.0 or p.y < 0.0 or p.y > 21.0:
+			continue
+		checked += 1
+		assert_lt(img.get_pixel(roundi((p.x + 0.5) * s), roundi((p.y + 0.5) * s)).r, TerrainHeight.WATER_LEVEL, "вода під віссю %s" % p)
+	assert_gt(checked, 10)

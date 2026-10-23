@@ -31,16 +31,36 @@ const _BED_VAR: float = 0.5 * M
 const _BANK_RUN: float = 0.4
 const _BANK_RUN_VAR: float = 0.1
 const _BANK_POWER: float = 1.35
-## Меандр: бічний зсув русла ±0.3 клітинки (хвиля ~5), ширина ±0.15, дрібна рваність ±0.12.
-## Усе гаситься до нуля в центрах клітинок (правила: центр не-води сухий, води — мокрий) і
-## біля мостів (русло йде прямо під ними).
-const _MEANDER: float = 0.3
-const _WIDTH_VAR: float = 0.15
+## Асиметрія берегів за кривизною осі русла (RiverCourse): ширина схилу множиться на
+## 2^(-bend), тож на зовнішній стороні повороту (bend = 1) вона вдвічі менша — 1.2-2 м крутого
+## обриву, а на внутрішній (bend = -1) вдвічі більша — 4.8-8 м пологої піщаної коси.
+## Прямий плес (bend = 0) не міняється.
+## Ширина схилу гуляє вздовж берега на ±30 % (хвиля ~2.5 клітинки), щоб не було рівної смуги.
+const _RUN_WAVE: float = 0.3
+## Зовнішній берег різкіший за верх (степінь менший), внутрішній — рівномірний схил.
+const _CUT_POWER_DROP: float = 0.35
+const _BAR_POWER_DROP: float = 0.35
+## Нерівність урізу лише ЗВУЖУЄ воду (зсув ≥ 0), щоб не з'їсти запас до центрів суші:
+## 0..0.12 клітинки з хвилею 1-2.5 клітинки і 0..0.08 (0.64 м) з хвилею 0.3-0.6 (2-5 м).
 const _SHORE_JITTER: float = 0.12
-const _BRIDGE_STRAIGHT: float = 0.5
+const _SHORE_FINE: float = 0.08
+const _SHORE_MEAN: float = 0.1
+## Додаткова хвиля берега поблизу мосту (клітинок, лише звужує воду).
+const _APPROACH_WOBBLE: float = 0.15
+## Крок грубої сітки поля річки (у відліках); далі білінійно.
+const _RIVER_STEP: int = 2
+## Згладжування контуру води (клітинки): заповнює западини між виступами, ширину русла не чіпає.
+const _OUTLINE_SIGMA: float = 0.4
+## Згладжування поля ставка (клітинки) і поправка на усадку від нього.
+const _POND_SIGMA: float = 0.4
+const _POND_BIAS: float = 0.05
+const _POND_SHRINK: float = 0.12
+## Мілина (d >= цього), не з'єднана з сушею, — теж «острів»: затоплюється.
+const _HOLE_LEVEL: float = -0.2
 ## Крайовий обрив (лише без відступу): зовнішні 0.5 клітинки плити м'яко хилить униз.
 const _RIM_WIDTH: float = 0.5
 const _RIM_DROP: float = 0.1
+const _LN2: float = 0.6931472
 const _CURV_RANGE: float = 1.5 * M
 ## Дорога глаже за поле, але не геометрично плоска: слідує за ґрунтом.
 const _ROAD_DAMP: float = 0.9
@@ -61,15 +81,18 @@ var rows: int = 0
 var _h: PackedFloat32Array = PackedFloat32Array()
 var _water: PackedFloat32Array = PackedFloat32Array()
 var _curv: PackedFloat32Array = PackedFloat32Array()
+## Гладка вісь річки, з якої взято відстань до урізу; null — води нема.
+var course: RiverCourse = null
+## Переправи (RiverCourse.build): клітинки, центр, вісь, довжина й ширина настилу.
+var _groups: Array[Dictionary] = []
+## Вигин для шейдера: 0.5 + 0.5 * bend, bend -1 (коса) .. +1 (підмитий берег), 0 — плес.
+var _bar: PackedFloat32Array = PackedFloat32Array()
 var _min: float = 0.0
 var _max: float = 0.0
 ## клітинка мосту -> верх настилу.
 var _deck: Dictionary = {}
-# Клас клітинки (1 — так): вода (з мостами), міст; і «поряд з…».
+# Клітинка води (з мостами): 1 — так.
 var _wgrid: PackedByteArray = PackedByteArray()
-var _bgrid: PackedByteArray = PackedByteArray()
-var _wnear: PackedByteArray = PackedByteArray()
-var _bnear: PackedByteArray = PackedByteArray()
 
 
 ## seed — з імені карти (BoardView.relief_seed); та сама карта дає той самий рельєф.
@@ -123,15 +146,15 @@ func normal_at(x: float, z: float) -> Vector3:
 	return Vector3(at(x - e, z) - at(x + e, z), 2.0 * e, at(x, z - e) - at(x, z + e)).normalized()
 
 
-## RGB16F-текстура для шейдерів: R — висота, G — 1 під водою й спад до 0 на верху берега
-## (маска берега), B — кривизна -1..1 (запечене затінення, §8).
+## RGBA16F-текстура для шейдерів: R — висота, G — 1 під водою й спад до 0 на верху берега
+## (маска берега), B — кривизна -1..1 (запечене затінення, §8), A — 0.5 + 0.5 * bend (коса < 0.5 < підмитий берег).
 ## Піксель (i, j) — у світі (-0.5 - відступ + i / samples, ... j / samples).
 func image() -> Image:
-	var img := Image.create_empty(cols, rows, false, Image.FORMAT_RGBH)
+	var img := Image.create_empty(cols, rows, false, Image.FORMAT_RGBAH)
 	for j in rows:
 		for i in cols:
 			var k: int = j * cols + i
-			img.set_pixel(i, j, Color(_h[k], _water[k], _curv[k]))
+			img.set_pixel(i, j, Color(_h[k], _water[k], _curv[k], _bar[k]))
 	return img
 
 
@@ -173,7 +196,8 @@ func _bake(board: Board, seed_value: int) -> void:
 
 	# Класи клітинок одним проходом: далі рахуємо лише з масивів, без Board.
 	_wgrid.resize(bw * bh)
-	_bgrid.resize(bw * bh)
+	var bgrid := PackedByteArray()
+	bgrid.resize(bw * bh)
 	var hgrid := PackedByteArray()
 	var rgrid := PackedByteArray()
 	var pgrid := PackedByteArray()
@@ -181,7 +205,6 @@ func _bake(board: Board, seed_value: int) -> void:
 	rgrid.resize(bw * bh)
 	pgrid.resize(bw * bh)
 	var has_water := false
-	var has_bridge := false
 	var has_hill := false
 	var has_road := false
 	var has_pad := false
@@ -190,17 +213,14 @@ func _bake(board: Board, seed_value: int) -> void:
 			var kind: int = board.kind_at(Vector2i(cx, cy))
 			var i: int = cy * bw + cx
 			_wgrid[i] = 1 if _is_water(kind) else 0
-			_bgrid[i] = 1 if _is_bridge(kind) else 0
+			bgrid[i] = 1 if _is_bridge(kind) else 0
 			hgrid[i] = 1 if kind == Terrain.Kind.HILL else 0
 			rgrid[i] = 1 if kind == Terrain.Kind.ROAD else 0
 			pgrid[i] = 1 if (kind == Terrain.Kind.BUILDING or kind == Terrain.Kind.RUBBLE) else 0
 			has_water = has_water or _wgrid[i] == 1
-			has_bridge = has_bridge or _bgrid[i] == 1
 			has_hill = has_hill or hgrid[i] == 1
 			has_road = has_road or rgrid[i] == 1
 			has_pad = has_pad or pgrid[i] == 1
-	_wnear = _near_changes(_wgrid, bw, bh)
-	_bnear = _dilate(_bgrid, bw, bh, 2)
 
 	# Індикатори на відліках (клітинка точки; на межі зсув у пів відліку згладжує розмиття).
 	var hill := PackedFloat32Array()
@@ -244,51 +264,82 @@ func _bake(board: Board, seed_value: int) -> void:
 	var n1 := _noise(seed_value, 0.27)
 	var n2 := _noise(seed_value + 101, 0.65)
 	var n3 := _noise(seed_value + 202, 0.08)
-	var n4 := _noise(seed_value + 303, 0.1)
 	var nb1 := _noise(seed_value + 606, 0.18)
 	var nb2 := _noise(seed_value + 616, 0.27)
-	var n_mx := _noise(seed_value + 717, 0.2)
-	var n_mz := _noise(seed_value + 727, 0.2)
-	var n_w := _noise(seed_value + 737, 0.25)
+	var n_s3 := _noise(seed_value + 767, 2.2)
 	var n_s1 := _noise(seed_value + 747, 0.4)
 	var n_s2 := _noise(seed_value + 757, 0.9)
 	var n_crest := _noise(seed_value + 808, 0.5)
 
 	_h.resize(cols * rows)
+	_bar.resize(cols * rows)
 	_water.resize(cols * rows)
 	_min = INF
 	_max = -INF
 	var drop: float = -WATER_LEVEL
-	# Перший прохід: знакова відстань до води d і зсув берега shift (одне поле для урізу,
-	# верху берега й ширини схилу). Далі d злегка розмивається, щоб не лишати заломів.
+	# Перший прохід: знакова відстань до урізу d (з гладкої осі річки, RiverCourse) і зсув
+	# берега shift (нерівність урізу). Клітинки тут ні до чого: вода йде за віссю, а не за сіткою.
 	var dg := PackedFloat32Array()
 	var sg := PackedFloat32Array()
 	dg.resize(cols * rows)
+	dg.fill(2.0)
 	sg.resize(cols * rows)
-	for j in rows:
-		var z: float = -0.5 - margin + float(j) / fs
-		var cz: int = clampi(roundi(z), 0, bh - 1)
-		var fz: float = absf(z - roundf(z))
-		for i in cols:
-			var x: float = -0.5 - margin + float(i) / fs
-			var k: int = j * cols + i
-			var cell: int = cz * bw + clampi(roundi(x), 0, bw - 1)
-			var inside: bool = _wgrid[cell] == 1
-			dg[k] = -2.0 if inside else 2.0
-			if has_water and _wnear[cell] == 1:
-				# Усе, що зсуває берег, гаситься до 0 у центрах клітинок і біля мостів.
-				var fac: float = smoothstep(0.1, 0.4, maxf(absf(x - roundf(x)), fz))
-				if has_bridge and _bnear[cell] == 1:
-					fac *= smoothstep(_BRIDGE_STRAIGHT, _BRIDGE_STRAIGHT + 0.5, _bridge_dist(x, z))
-				var qx: float = x + fac * _MEANDER * clampf(1.5 * n_mx.get_noise_2d(x, z), -1.0, 1.0)
-				var qz: float = z + fac * _MEANDER * clampf(1.5 * n_mz.get_noise_2d(x, z), -1.0, 1.0)
-				var shift: float = fac * (_WIDTH_VAR * clampf(1.5 * n_w.get_noise_2d(x, z), -1.0, 1.0)
-						+ _SHORE_JITTER * clampf(1.8 * (0.7 * n_s1.get_noise_2d(x, z) + 0.3 * n_s2.get_noise_2d(x, z)), -1.0, 1.0))
-				dg[k] = _water_dist(qx, qz) + shift
-				sg[k] = shift
+	var wd := PackedFloat32Array()
+	var dc := PackedFloat32Array()
+	var bc := PackedFloat32Array()
 	if has_water:
-		dg = _blur(dg, 0.8, 0.8)
+		_groups = _bridge_groups(board, bgrid)
+		course = RiverCourse.build(_wgrid, bw, bh, margin + 3, _groups, seed_value)
+		var fld: Array[PackedFloat32Array] = course.field(cols, rows, s, margin, _RIVER_STEP)
+		dc = fld[0]
+		bc = fld[1]
+		# Спершу об'єднання капсул і дисків, потім згладжування його знакового поля, і лише тоді
+		# нерівність урізу: інакше накладені виступи читаються як окремі «бульби» (ставок-хрест).
+		# min(d, розмите d) — «замикання»: западини суші між виступами заповнюються, а вода
+		# ніде не звужується (розмиття саме з'їдає вузькі ставки й стрімки). Рахуємо на грубій сітці.
+		var cw: int = (cols - 1 + _RIVER_STEP - 1) / _RIVER_STEP + 1
+		var ch: int = (rows - 1 + _RIVER_STEP - 1) / _RIVER_STEP + 1
+		var pc: PackedFloat32Array = fld[2]
+		var dc0: PackedFloat32Array = dc.duplicate()
+		for k in dc0.size():
+			dc0[k] = minf(dc[k], pc[k])
+		# Ставок — об'єднання дисків: його поле згладжено сильніше (розмиття мінус поправка на усадку),
+		# щоб не читались клітинки; далі — спільне замикання з річкою.
+		var sig_p: float = _POND_SIGMA * fs / float(_RIVER_STEP)
+		var pond_soft: PackedFloat32Array = _blur(pc, sig_p, sig_p, cw, ch)
+		var cstep: float = float(_RIVER_STEP) / fs
+		for k in dc.size():
+			# Усадка обмежена, щоб ставок з однієї клітинки не висох у клітинці (мокрі 25 %).
+			if _edge_clear(k, cw, cstep):
+				dc[k] = minf(dc[k], minf(pond_soft[k] - _POND_BIAS, pc[k] + _POND_SHRINK))
+		var sig_c: float = _OUTLINE_SIGMA * fs / float(_RIVER_STEP)
+		var soft_c: PackedFloat32Array = _blur(dc, sig_c, sig_c, cw, ch)
+		for k in dc.size():
+			if soft_c[k] < dc[k] and dc[k] < 0.6 and _edge_clear(k, cw, cstep):
+				dc[k] = soft_c[k]
+		for k in dg.size():
+			dg[k] = RiverCourse.upsample(dc, cols, rows, _RIVER_STEP, k % cols, k / cols)
+		_restore_land_clearance(dg, dc, dc0)
+		for j in rows:
+			var z: float = -0.5 - margin + float(j) / fs
+			for i in cols:
+				var k: int = j * cols + i
+				var d: float = dg[k]
+				if absf(d) < 1.2:
+					var x: float = -0.5 - margin + float(i) / fs
+					var jit: float = 0.5 + 0.5 * clampf(1.8 * (0.7 * n_s1.get_noise_2d(x, z) + 0.3 * n_s2.get_noise_2d(x, z)), -1.0, 1.0)
+					var fine: float = 0.5 + 0.5 * clampf(1.5 * n_s3.get_noise_2d(x, z), -1.0, 1.0)
+					var shift: float = _SHORE_JITTER * jit + _SHORE_FINE * fine
+					# Прямий плес під мостом і за ним не лишається лінійкою: берег звужує воду ще на 0..0.15
+					# хвилею ~3 клітинок, але не під самим настилом (піни моста).
+					if not _groups.is_empty():
+						shift += _APPROACH_WOBBLE * (0.5 + 0.5 * clampf(1.6 * n_s1.get_noise_2d(x * 0.6 + 31.0, z * 0.6 - 17.0), -1.0, 1.0)) * _bar_fade(x, z)
+					dg[k] = d + shift
+					# Ширину схилу веде відхил від середнього зсуву, а не сам зсув.
+					sg[k] = shift - _SHORE_MEAN
 		sg = _blur(sg, 0.8, 0.8)
+		_fill_holes(dg)
+		wd = _inner_distance(dg)
 	for j in rows:
 		var z: float = -0.5 - margin + float(j) / fs
 		for i in cols:
@@ -296,8 +347,9 @@ func _bake(board: Board, seed_value: int) -> void:
 			var k: int = j * cols + i
 			var d: float = dg[k]
 			# Верх берега з того самого поля, що й уріз: ширина схилу 0.3-0.5 клітинки.
-			var run: float = clampf(_BANK_RUN + 0.35 * sg[k], _BANK_RUN - _BANK_RUN_VAR, _BANK_RUN + _BANK_RUN_VAR)
-			var bed: float = _BED_MIN + _BED_VAR * (0.5 + 0.5 * n4.get_noise_2d(x, z)) if has_water else 0.0
+			var b: float = RiverCourse.upsample(bc, cols, rows, _RIVER_STEP, i, j) if has_water and absf(d) < 1.3 else 0.0
+			var run: float = clampf(_BANK_RUN + 0.35 * sg[k], _BANK_RUN - _BANK_RUN_VAR, _BANK_RUN + _BANK_RUN_VAR) * exp(-b * _LN2) * (1.0 + _RUN_WAVE * clampf(1.5 * n_s1.get_noise_2d(x + 9.0, z - 4.0), -1.0, 1.0))
+			var bed: float = _BED_MIN + 0.5 * _BED_VAR if has_water else 0.0
 			var near_water: float = smoothstep(0.1, 1.2, d) if d > 0.0 else 0.0
 			var undul: float = _MICRO_AMP * (0.7 * n1.get_noise_2d(x, z) + 0.3 * n2.get_noise_2d(x, z)) \
 					+ undulation_scale * _BROAD_AMP * clampf(1.6 * (0.65 * nb1.get_noise_2d(x, z) + 0.35 * nb2.get_noise_2d(x, z)), -1.0, 1.0)
@@ -315,17 +367,26 @@ func _bake(board: Board, seed_value: int) -> void:
 				var hill_h: float = _HILL_MIN + _HILL_VAR * (0.5 + 0.5 * n3.get_noise_2d(x, z))
 				rise = hill_h * (0.7 * smoothstep(0.0, 0.55, hill_a[k]) + 0.3 * smoothstep(0.0, 0.7, hill_b[k]))
 				rise *= 1.0 + 0.12 * n_crest.get_noise_2d(x, z)
+				# Підйом не затікає у воду (розмиття пагорба), а то центр клітинки води виходить на суходіл.
+				if has_water:
+					rise *= smoothstep(0.0, 1.4, d)
 			var sink := 0.0
 			if d >= 0.0:
-				sink = drop * pow(1.0 - clampf(d / run, 0.0, 1.0), _BANK_POWER)
+				sink = drop * pow(1.0 - clampf(d / run, 0.0, 1.0), _BANK_POWER - _CUT_POWER_DROP * maxf(b, 0.0) - _BAR_POWER_DROP * maxf(-b, 0.0))
 			elif has_water:
-				sink = drop + (bed - drop) * smoothstep(0.0, 0.5, -d)
+				# Під косою мілина тягнеться далі, під підмитим берегом глибина одразу.
+				# Глибина лише зростає з відстанню від урізу й за 0.3-0.5 клітинки сягає дна; без
+				# шуму, щоб дно не підіймалось до поверхні посеред русла (темні плями крізь воду).
+				sink = drop + (bed - drop) * smoothstep(0.0, clampf(0.5 * exp(-b * _LN2), 0.3, 0.5), maxf(-d, wd[k] - 1.0 / fs))
 			var v: float = undul * damp + rise - sink
 			if margin == 0:
 				var e: float = minf(minf(x + 0.5, bw - 0.5 - x), minf(z + 0.5, bh - 0.5 - z))
 				if e < _RIM_WIDTH:
-					v -= _RIM_DROP * pow(1.0 - maxf(e, 0.0) / _RIM_WIDTH, 2.0)
+					var lowered: float = v - _RIM_DROP * pow(1.0 - maxf(e, 0.0) / _RIM_WIDTH, 2.0)
+					# Крайовий обрив не топить сушу біля води: інакше по краю дошки йде мокрий вінець.
+					v = lowered if v < WATER_LEVEL else maxf(lowered, WATER_LEVEL + 0.001)
 			_h[k] = v
+			_bar[k] = 0.5 + 0.5 * (clampf(b, -1.0, 1.0) * (_bar_fade(x, z) if b < 0.0 else 1.0) if has_water else 0.0)
 			# G: 1 під водою, 0 на верху берега (d = run), між ними — схил.
 			_water[k] = clampf(1.0 - d / run, 0.0, 1.0) if has_water else 0.0
 			_min = minf(_min, v)
@@ -338,37 +399,224 @@ func _bake(board: Board, seed_value: int) -> void:
 	_bake_decks(board)
 
 
-## Настил кожної переправи — на рівні найвищої суші, що торкається її клітинок (дорога на
-## кінцях), бо міст тримається на берегах, а не на руслі. Одна висота на всю групу.
-func _bake_decks(board: Board) -> void:
+## Переправи для осі річки: зв'язні групи клітинок мосту; вісь настилу — та, де обидва кінці
+## ланцюжка впираються в сушу (не воду), довжина й ширина — розміри групи.
+func _bridge_groups(board: Board, bgrid: PackedByteArray) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
 	var seen: Dictionary = {}
 	for y in board.height:
 		for x in board.width:
 			var start := Vector2i(x, y)
-			if seen.has(start) or not _is_bridge(board.kind_at(start)):
+			if seen.has(start) or bgrid[y * board.width + x] == 0:
 				continue
 			var group: Array[Vector2i] = [start]
 			seen[start] = true
-			var top := -INF
 			var i := 0
+			var lo := start
+			var hi := start
 			while i < group.size():
 				var c: Vector2i = group[i]
 				i += 1
+				lo = Vector2i(mini(lo.x, c.x), mini(lo.y, c.y))
+				hi = Vector2i(maxi(hi.x, c.x), maxi(hi.y, c.y))
 				for d in Board.DIRS_4:
 					var n: Vector2i = c + d
-					if not board.in_bounds(n):
+					if board.in_bounds(n) and bgrid[n.y * board.width + n.x] == 1 and not seen.has(n):
+						seen[n] = true
+						group.append(n)
+			# Кінці уздовж осі: клітинки поза обмежувальною рамкою, у межах її ширини упоперек.
+			var best_axis := Vector2i(1, 0)
+			var best_score := -1
+			for axis: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
+				var score := 0
+				for c in group:
+					for dir: Vector2i in [axis, -axis]:
+						var n: Vector2i = c + dir
+						if board.in_bounds(n) and bgrid[n.y * board.width + n.x] == 0 and _wgrid[n.y * board.width + n.x] == 0:
+							score += 1
+				if score > best_score:
+					best_score = score
+					best_axis = axis
+			var ext: Vector2i = hi - lo + Vector2i.ONE
+			out.append({
+				"cells": group,
+				"centre": Vector2(lo + hi) * 0.5,
+				"axis": Vector2(best_axis),
+				"length": float(ext.x if best_axis.x != 0 else ext.y),
+				"across": float(ext.y if best_axis.x != 0 else ext.x),
+			})
+	return out
+
+
+## Настил кожної переправи — на рівні найвищої суші, що торкається її клітинок (дорога на
+## кінцях), бо міст тримається на берегах, а не на руслі. Одна висота на всю групу.
+func _bake_decks(board: Board) -> void:
+	for g in _groups:
+		var top := -INF
+		for c: Vector2i in g["cells"]:
+			for d in Board.DIRS_4:
+				var n: Vector2i = c + d
+				if board.in_bounds(n) and not _is_water(board.kind_at(n)):
+					top = maxf(top, at(float(n.x), float(n.y)))
+		if top == -INF:
+			top = 0.0
+		for c: Vector2i in g["cells"]:
+			_deck[c] = top + DECK_LIFT
+
+
+## Вузол грубої сітки далі за 0.45 клітинки від краю дошки: розмиття продовжує крайові відліки, тож
+## біля краю воно витягувало б воду смугою до самого краю з прямими боками.
+func _edge_clear(k: int, cw: int, cstep: float) -> bool:
+	var x: float = -0.5 - margin + float(k % cw) * cstep
+	var z: float = -0.5 - margin + float(k / cw) * cstep
+	return minf(minf(x + 0.5, board_width - 0.5 - x), minf(z + 0.5, board_height - 0.5 - z)) >= 0.45
+
+
+## Замикання не підпускає воду до центру клітинки суші (юніти стоять там): біля кожного центру
+## в радіусі 0.5 клітинки поле плавно (від 0.3) повертається до незамкненого. Перевірка на повній
+## сітці, бо білінійний підйом між вузлами грубої сітки може піти нижче нуля.
+func _restore_land_clearance(dg: PackedFloat32Array, dc: PackedFloat32Array, dc0: PackedFloat32Array) -> void:
+	var fs: float = float(samples)
+	var cw: int = (cols - 1 + _RIVER_STEP - 1) / _RIVER_STEP + 1
+	var rad: int = ceili(0.5 * fs)
+	for cy in board_height:
+		for cx in board_width:
+			if _wgrid[cy * board_width + cx] == 1:
+				continue
+			var ci: int = (2 * cx + 1 + 2 * margin) * samples / 2
+			var cj: int = (2 * cy + 1 + 2 * margin) * samples / 2
+			var changed := false
+			for nj in range((cj - rad) / _RIVER_STEP, (cj + rad) / _RIVER_STEP + 2):
+				for ni in range((ci - rad) / _RIVER_STEP, (ci + rad) / _RIVER_STEP + 2):
+					var nk: int = nj * cw + ni
+					if ni >= 0 and nj >= 0 and ni < cw and nk < dc.size() and absf(dc[nk] - dc0[nk]) > 1e-5:
+						changed = true
+			if not changed:
+				continue
+			for j in range(maxi(cj - rad, 0), mini(cj + rad + 1, rows)):
+				for i in range(maxi(ci - rad, 0), mini(ci + rad + 1, cols)):
+					var dist: float = Vector2(i - ci, j - cj).length() / fs
+					if dist >= 0.5:
 						continue
-					var kind: int = board.kind_at(n)
-					if _is_bridge(kind):
-						if not seen.has(n):
-							seen[n] = true
-							group.append(n)
-					elif not _is_water(kind):
-						top = maxf(top, at(float(n.x), float(n.y)))
-			if top == -INF:
-				top = 0.0
-			for c in group:
-				_deck[c] = top + DECK_LIFT
+					var orig: float = RiverCourse.upsample(dc0, cols, rows, _RIVER_STEP, i, j)
+					var k: int = j * cols + i
+					dg[k] = lerpf(maxf(orig, dg[k]), dg[k], smoothstep(0.3, 0.5, dist))
+
+
+## Вода — суцільна площа без «островів»-артефактів: суша (d >= 0), не з'єднана з краєм карти й без
+## жодного центру клітинки суші, затоплюється (власник 2026-10-24: жодних острівців у річці чи
+## ставку, ні дрібних, ні «піднятих кіс»). Справжній острів (є клітинка суші, юніти стоять на ній)
+## лишається з берегами: правило власника про артефакти вигляду, а не про логічну сушу.
+func _fill_holes(dg: PackedFloat32Array) -> void:
+	var centres := PackedInt32Array()
+	for cy in board_height:
+		for cx in board_width:
+			if _wgrid[cy * board_width + cx] == 0:
+				centres.append(((2 * cy + 1 + 2 * margin) * samples / 2) * cols + (2 * cx + 1 + 2 * margin) * samples / 2)
+	# Прохід 1: суша (d >= 0), не з'єднана з краєм, — острів: топимо його й смугу мілини навколо.
+	var seen: PackedByteArray = _flood_from_border(dg, 0.0, centres)
+	var deep := PackedInt32Array()
+	for k in dg.size():
+		if dg[k] >= 0.0 and seen[k] == 0:
+			deep.append(k)
+	for k in deep:
+		var x: int = k % cols
+		var y: int = k / cols
+		for yy in range(maxi(y - 2, 0), mini(y + 3, rows)):
+			for xx in range(maxi(x - 2, 0), mini(x + 3, cols)):
+				if dg[yy * cols + xx] >= _HOLE_LEVEL:
+					dg[yy * cols + xx] = -0.5
+	# Прохід 2: мілина-горб (d >= -0.2) без з'єднання з краєм — теж острів.
+	seen = _flood_from_border(dg, _HOLE_LEVEL, centres)
+	for k in dg.size():
+		if dg[k] >= _HOLE_LEVEL and seen[k] == 0:
+			dg[k] = -0.5
+
+
+## Відстань (клітинки) від мокрого відліку (d < 0) до найближчого сухого; хамфер 1 / 1.414, дві
+## проходи. Вода за краєм карти — продовження води, суші там нема. Глибина дна — монотонна
+## функція цієї відстані, тож усередині тіла води дно не підіймається до поверхні.
+func _inner_distance(dg: PackedFloat32Array) -> PackedFloat32Array:
+	var inf: float = 1e6
+	var out := PackedFloat32Array()
+	out.resize(cols * rows)
+	for k in out.size():
+		out[k] = inf if dg[k] < 0.0 else 0.0
+	var diag: float = 1.4142
+	for j in rows:
+		for i in cols:
+			var k: int = j * cols + i
+			var v: float = out[k]
+			if v == 0.0:
+				continue
+			if i > 0:
+				v = minf(v, out[k - 1] + 1.0)
+			if j > 0:
+				v = minf(v, out[k - cols] + 1.0)
+				if i > 0:
+					v = minf(v, out[k - cols - 1] + diag)
+				if i < cols - 1:
+					v = minf(v, out[k - cols + 1] + diag)
+			out[k] = v
+	for j in range(rows - 1, -1, -1):
+		for i in range(cols - 1, -1, -1):
+			var k: int = j * cols + i
+			var v: float = out[k]
+			if v == 0.0:
+				continue
+			if i < cols - 1:
+				v = minf(v, out[k + 1] + 1.0)
+			if j < rows - 1:
+				v = minf(v, out[k + cols] + 1.0)
+				if i < cols - 1:
+					v = minf(v, out[k + cols + 1] + diag)
+				if i > 0:
+					v = minf(v, out[k + cols - 1] + diag)
+			out[k] = v
+	var inv: float = 1.0 / float(samples)
+	for k in out.size():
+		out[k] *= inv
+	return out
+
+
+## Відліки, з'єднані (по 4) з краєм карти через значення d >= level.
+func _flood_from_border(dg: PackedFloat32Array, level: float, extra: PackedInt32Array = PackedInt32Array()) -> PackedByteArray:
+	var seen := PackedByteArray()
+	seen.resize(cols * rows)
+	var stack: Array[int] = []
+	for k in extra:
+		stack.append(k)
+	for i in cols:
+		stack.append(i)
+		stack.append((rows - 1) * cols + i)
+	for j in rows:
+		stack.append(j * cols)
+		stack.append(j * cols + cols - 1)
+	while not stack.is_empty():
+		var k: int = stack.pop_back()
+		if seen[k] == 1 or dg[k] < level:
+			continue
+		seen[k] = 1
+		var x: int = k % cols
+		var y: int = k / cols
+		if x > 0:
+			stack.append(k - 1)
+		if x < cols - 1:
+			stack.append(k + 1)
+		if y > 0:
+			stack.append(k - cols)
+		if y < rows - 1:
+			stack.append(k + cols)
+	return seen
+
+
+## 0 біля настилу, 1 далі 3 клітинок від центру переправи: піщані коси не лежать у кінців мосту
+## (читались би як в'їзд).
+func _bar_fade(x: float, z: float) -> float:
+	var f := 1.0
+	for g in _groups:
+		f = minf(f, smoothstep(1.6, 3.0, Vector2(x, z).distance_to(g["centre"])))
+	return f
 
 
 static func _is_water(kind: int) -> bool:
@@ -387,80 +635,17 @@ static func _noise(seed_value: int, frequency: float) -> FastNoiseLite:
 	return n
 
 
-## 1 — у радіусі 2 клітинок є клітинка іншого класу (там відстань до межі ще рахується).
-func _near_changes(grid: PackedByteArray, w: int, h: int) -> PackedByteArray:
-	var out := PackedByteArray()
-	out.resize(w * h)
-	for cy in h:
-		for cx in w:
-			var v: int = grid[cy * w + cx]
-			var hit := 0
-			for yy in range(maxi(cy - 2, 0), mini(cy + 3, h)):
-				for xx in range(maxi(cx - 2, 0), mini(cx + 3, w)):
-					if grid[yy * w + xx] != v:
-						hit = 1
-			out[cy * w + cx] = hit
-	return out
-
-
-## 1 — у радіусі r клітинок є клітинка класу 1.
-func _dilate(grid: PackedByteArray, w: int, h: int, r: int) -> PackedByteArray:
-	var out := PackedByteArray()
-	out.resize(w * h)
-	for cy in h:
-		for cx in w:
-			var hit := 0
-			for yy in range(maxi(cy - r, 0), mini(cy + r + 1, h)):
-				for xx in range(maxi(cx - r, 0), mini(cx + r + 1, w)):
-					if grid[yy * w + xx] == 1:
-						hit = 1
-			out[cy * w + cx] = hit
-	return out
-
-
-## Знакова відстань (клітинки, ±2) від точки до межі води: мінус усередині. Межа — край
-## квадратів клітинок, тож центр клітинки не-води завжди має d >= 0.5 до зсуву.
-func _water_dist(x: float, z: float) -> float:
-	var cx0: int = clampi(roundi(x), 0, board_width - 1)
-	var cz0: int = clampi(roundi(z), 0, board_height - 1)
-	var inside: bool = _wgrid[cz0 * board_width + cx0] == 1
-	var best: float = 2.0
-	for cz in range(maxi(cz0 - 2, 0), mini(cz0 + 3, board_height)):
-		for cx in range(maxi(cx0 - 2, 0), mini(cx0 + 3, board_width)):
-			if (_wgrid[cz * board_width + cx] == 1) == inside:
-				continue
-			var dx: float = maxf(absf(x - cx) - 0.5, 0.0)
-			var dz: float = maxf(absf(z - cz) - 0.5, 0.0)
-			best = minf(best, sqrt(dx * dx + dz * dz))
-	return -best if inside else best
-
-
-## Відстань (клітинки, до 2) від точки до найближчої клітинки мосту.
-func _bridge_dist(x: float, z: float) -> float:
-	var cx0: int = clampi(roundi(x), 0, board_width - 1)
-	var cz0: int = clampi(roundi(z), 0, board_height - 1)
-	var best: float = 2.0
-	for cz in range(maxi(cz0 - 2, 0), mini(cz0 + 3, board_height)):
-		for cx in range(maxi(cx0 - 2, 0), mini(cx0 + 3, board_width)):
-			if _bgrid[cz * board_width + cx] == 0:
-				continue
-			var dx: float = maxf(absf(x - cx) - 0.5, 0.0)
-			var dz: float = maxf(absf(z - cz) - 0.5, 0.0)
-			best = minf(best, sqrt(dx * dx + dz * dz))
-	return best
-
-
 ## Гаусове розмиття (sigma по X і по Z у відліках), що наближене трьома прохідами рухомого
 ## середнього: вартість не залежить від sigma. Крайові відліки продовжуються.
-func _blur(src: PackedFloat32Array, sigma_x: float, sigma_z: float) -> PackedFloat32Array:
+func _blur(src: PackedFloat32Array, sigma_x: float, sigma_z: float, w: int = cols, h: int = rows) -> PackedFloat32Array:
 	var a: PackedFloat32Array = src.duplicate()
 	var b := PackedFloat32Array()
-	b.resize(cols * rows)
+	b.resize(w * h)
 	var rx: int = _box_radius(sigma_x)
 	var rz: int = _box_radius(sigma_z)
 	for _pass in 3:
-		_box_pass(a, b, cols, 1, rows, cols, rx)
-		_box_pass(b, a, rows, cols, cols, 1, rz)
+		_box_pass(a, b, w, 1, h, w, rx)
+		_box_pass(b, a, h, w, w, 1, rz)
 	return a
 
 

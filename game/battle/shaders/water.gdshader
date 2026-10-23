@@ -82,8 +82,9 @@ void fragment() {
 		if (depth_m <= 0.0) {
 			discard;
 		}
-		// Чіткий уріз: вода повна вже за ~7 см глибини (≈ 2 px на близькому зумі).
-		shallow_fade = smoothstep(0.0, 0.07, depth_m);
+		// Коса сповзає під воду: прозорість росте на перших ~0.3 м глибини (дно глибшого за 0.3 м
+		// не проглядає, TerrainHeight тримає його там), без різаного урізу.
+		shallow_fade = smoothstep(0.0, 0.3, depth_m);
 		// Схил берега ~0.34 м на метр: глибина 1 м ~ 3 м від урізу.
 		bank_m = depth_m * 2.5;
 	} else {
@@ -160,10 +161,15 @@ void fragment() {
 	e = pow(e, vec3(1.0 / 2.2));
 #endif
 
-	ALBEDO = mix(deep_color, shallow_color, murk) * (1.0 - f);
+	// Оливково-бурий край: 0.15-0.3 клітинки від берега (глибина 0.2-0.9 м) — тепліша каламуть.
+	float margin_t = 1.0 - smoothstep(0.1, 0.9, depth_m);
+	vec3 body = mix(deep_color, shallow_color, murk);
+	body = mix(body, vec3(0.06, 0.045, 0.022), 0.5 * margin_t);
+	ALBEDO = body * (1.0 - f);
 	// Підлога 0.1, а не 0.04: так радіанс зонда не дрібниться на іскри.
 	// Здалеку дощ — дрібне мерехтіння: шорсткість замість рябі.
-	ROUGHNESS = 0.1 + 0.1 * wet * (1.0 - rv);
+	// Низькочастотна мінливість шорсткості (~10-20 м), без зміни напрямку брижі.
+	ROUGHNESS = 0.1 + 0.1 * wet * (1.0 - rv) + 0.04 * vnoise(p * 0.08 + 9.0);
 	SPECULAR = 0.5;
 	NORMAL_MAP = slope_to_normal_map(slope);
 	EMISSION = e;
