@@ -309,6 +309,9 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 					var qz: int = cz + dz
 					if qx >= 0 and qz >= 0 and qx < bw and qz < bh and hgrid[qz * bw + qx] == 1:
 						agrid[cz * bw + cx] = 1
+	# Клітинки за 3 від пагорба: зсув (≤ 1.55) і білінійна опора (1) далі не сягають, тож решта
+	# відліків — точно 0 без шуму. У світі з кільцем це більшість відліків.
+	var near_hill: PackedByteArray = _dilate(hgrid, bw, bh, 3) if has_hill else PackedByteArray()
 	var hill := PackedFloat32Array()
 	var pad := PackedFloat32Array()
 	hill.resize(cols * rows)
@@ -325,7 +328,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 				var k: int = j * cols + i
 				if has_pad:
 					pad[k] = float(pgrid[clampi(roundi(z), 0, bh - 1) * bw + clampi(roundi(x), 0, bw - 1)])
-				if has_hill:
+				if has_hill and near_hill[clampi(roundi(z), 0, bh - 1) * bw + clampi(roundi(x), 0, bw - 1)] == 1:
 					var hx: float = x + 1.2 * warp_x.get_noise_2d(x, z) + 0.35 * warp_x2.get_noise_2d(x, z)
 					var hz: float = z + 1.2 * warp_z.get_noise_2d(x, z) + 0.35 * warp_z2.get_noise_2d(x, z)
 					hill[k] = _bilinear_cells(hgrid, bw, bh, hx, hz)
@@ -444,7 +447,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 			if has_pad:
 				damp *= 1.0 - smoothstep(0.0, 0.4, pad_m[k])
 			var rise := 0.0
-			if has_hill:
+			if has_hill and (hill_a[k] > 0.0 or hill_b[k] > 0.0 or near_hill[clampi(roundi(z), 0, bh - 1) * bw + clampi(roundi(x), 0, bw - 1)] == 1):
 				var hill_h: float = _HILL_MIN + _HILL_VAR * (0.5 + 0.5 * n3.get_noise_2d(x, z))
 				rise = hill_h * (0.7 * smoothstep(0.0, 0.55, hill_a[k]) + 0.3 * smoothstep(0.0, 0.7, hill_b[k]))
 				rise *= 1.0 + 0.12 * n_crest.get_noise_2d(x, z)
@@ -716,6 +719,27 @@ static func _bilinear_cells(grid: PackedByteArray, w: int, h: int, x: float, z: 
 	var az: int = clampi(z0, 0, h - 1)
 	var bz: int = clampi(z0 + 1, 0, h - 1)
 	return lerpf(lerpf(grid[az * w + ax], grid[az * w + bx], tx), lerpf(grid[bz * w + ax], grid[bz * w + bx], tx), tz)
+
+
+## Сітка 0/1, розширена на r клітинок (квадрат Чебишова), двома проходами.
+static func _dilate(grid: PackedByteArray, w: int, h: int, r: int) -> PackedByteArray:
+	var a := PackedByteArray()
+	a.resize(w * h)
+	var out := PackedByteArray()
+	out.resize(w * h)
+	for y in h:
+		for x in w:
+			for d in range(maxi(x - r, 0), mini(x + r + 1, w)):
+				if grid[y * w + d] == 1:
+					a[y * w + x] = 1
+					break
+	for y in h:
+		for x in w:
+			for d in range(maxi(y - r, 0), mini(y + r + 1, h)):
+				if a[d * w + x] == 1:
+					out[y * w + x] = 1
+					break
+	return out
 
 
 static func _is_water(kind: int) -> bool:
