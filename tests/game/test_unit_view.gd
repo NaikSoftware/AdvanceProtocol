@@ -658,27 +658,49 @@ func _off_plane(t: TerrainHeight, v: UnitView) -> float:
 	return maxf(twist, absf(t.at(v.position.x, v.position.z) - mean))
 
 
-## Помірний рівний схил (не крутіший за межу нахилу): основа лежить на землі всіма кутами —
-## не заходить у ґрунт глибше 2 см і не висить вище 10 см. Діагональний facing, щоб
-## кути справді крутились разом із юнітом.
-func test_unit_base_lies_on_a_moderate_slope() -> void:
+## Схил не крутіший за межу нахилу, від рівнини до помірного. Де земля під основою рівна,
+## основа лежить на ній усіма кутами: не глибше 2 см у ґрунті й не вище 10 см над ним. На
+## скруті чи горбі жорстка основа неминуче висить частиною країв — там межа ширша на
+## подвійний відступ землі від площини, але кути однаково не входять у ґрунт. Діагональний
+## facing, щоб кути справді крутились разом із юнітом.
+func test_vehicle_base_lies_on_the_ground_up_to_the_tilt_limit() -> void:
 	var t := _relief()
 	TerrainHeight.active = t
-	var tested := 0
+	var planar := 0
 	for c in _land_cells(t):
-		var s: float = _spread(t, c)
-		if s < 2.0 * _CM * 10.0 or s > tan(deg_to_rad(UnitView.MAX_TILT_DEG)) * 0.6:
+		if _spread(t, c) > tan(deg_to_rad(UnitView.MAX_TILT_DEG)) * 0.6:
 			continue
 		view.bind(_unit(5, 0, c, 1))
-		if _off_plane(t, view) > 4.0 * _CM:
-			continue
+		var off: float = _off_plane(t, view)
+		var bound: float = 10.0 * _CM if off <= 4.0 * _CM else 10.0 * _CM + 2.0 * off
+		if off <= 4.0 * _CM:
+			planar += 1
 		for p in _base_corners(view):
 			var g: float = t.at(p.x, p.z)
 			assert_gte(p.y - g, -2.0 * _CM, "кут у ґрунті на %s: %.1f см" % [c, (p.y - g) / _CM])
-			assert_lte(p.y - g, 10.0 * _CM, "кут висить на %s: %.1f см" % [c, (p.y - g) / _CM])
-		tested += 1
-	gut.p("помірних рівних схилів перевірено: %d" % tested)
-	assert_gt(tested, 3, "передумова: на Річці є помірні рівні схили")
+			assert_lte(p.y - g, bound, "кут висить на %s: %.1f см (межа %.1f)" % [c, (p.y - g) / _CM, bound / _CM])
+	gut.p("рівних клітинок під основою перевірено: %d" % planar)
+	assert_gte(planar, 15, "передумова: на Річці досить рівних клітинок")
+
+
+## Відділення стоїть на одній основі з кількома фігурами: нахил перекидав би їх разом із
+## підставкою. Тому воно лишається рівним (лише поворот) і трохи втоплене в ґрунт, щоб
+## край основи на схилі не висів.
+func test_infantry_squad_stays_level_and_sunk_on_a_slope() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	for id in UnitTypes.count():
+		if UnitTypes.is_vehicle(UnitTypes.get_type(id)["unit_class"]):
+			continue
+		view.bind(_unit(id, 0, steepest, 1))
+		var sil: Node3D = view.get_node("Silhouette")
+		assert_eq(sil.rotation, Vector3.ZERO, "тип %d рівний" % id)
+		assert_almost_eq(view.position.y, t.at(steepest.x, steepest.y) - UnitView.SQUAD_SINK, 0.0001, "тип %d втоплений" % id)
+		assert_almost_eq(view.rotation_degrees.y, -45.0, 0.0001, "поворот лишається")
 
 
 ## Найкрутіший берег: нахил обмежено, і жоден кут однаково не входить у ґрунт.
@@ -780,3 +802,21 @@ func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
 	view.bind(_unit(5, 0, bridge, 1))
 	assert_almost_eq(view.position.y, t.deck_y(bridge), 0.0001)
 	assert_eq(view.get_node("Silhouette").rotation, Vector3.ZERO)
+
+
+## Кадр юніта працює лише поки живий твін повороту чи ходу: у спокої десятки юнітів не
+## роблять нічого щокадру (§8).
+func test_unit_processes_only_while_turning() -> void:
+	view.bind(_unit(5, 0, Vector2i(2, 2), 0))
+	assert_false(view.is_processing(), "після bind кадр вимкнено")
+	view.face(2)
+	assert_true(view.is_processing(), "поворот вмикає кадр")
+	view._face_tween.custom_step(10.0)
+	view._process(0.0)
+	assert_false(view.is_processing(), "твін скінчився — кадр вимкнено")
+	var path: Array[Vector2i] = [Vector2i(3, 2)]
+	var tween: Tween = view.move_along(path, 0.1).get_object()
+	assert_true(view.is_processing(), "хід вмикає кадр")
+	tween.custom_step(10.0)
+	view._process(0.0)
+	assert_false(view.is_processing())

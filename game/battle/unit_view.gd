@@ -16,6 +16,8 @@ const UNIT_LAYER: int = 2
 ## Найбільший нахил корпусу за схилом, окремо вздовж і впоперек. Крутіший берег
 ## перекинув би модель на бік; там юніт лягає під цим кутом, а нижній край висить.
 const MAX_TILT_DEG: float = 20.0
+## Відділення стоїть рівно й на стільки нижче землі під центром: на схилі край основи не висить.
+const SQUAD_SINK: float = 0.05
 
 ## Board.DIRS_8 іде ЗА годинниковою стрілкою (0 N, 2 E, 4 S, 6 W), а поворот
 ## навколо Y у Godot — ПРОТИ. Тому знак обов'язковий: `facing * 45` збігається
@@ -134,9 +136,13 @@ var _face_tween: Tween
 var _half_base: Vector2 = Vector2.ZERO
 ## Кут повороту, для якого востаннє рахувався нахил; NAN — ще не ставився.
 var _posed_yaw: float = NAN
+## Техніка нахиляється за схилом; відділення на одній основі лишається рівним.
+var _tilts: bool = true
 
 
 func _ready() -> void:
+	# Кадр потрібен лише поки твін крутить юніт (див. _process).
+	set_process(false)
 	# Заступники текстур: суцільний колір замість реального арту, той самий
 	# підхід, що й нейтральні кольори-плейсхолдери мін (MineLayer). HP-смуга сюди не
 	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
@@ -157,6 +163,7 @@ func _ready() -> void:
 func bind(unit: Unit) -> void:
 	position = IsoCameraRig.cell_to_world(unit.pos)
 	_build_silhouette(unit.type_id, unit.owner)
+	_tilts = UnitTypes.is_vehicle(UnitTypes.get_type(unit.type_id)["unit_class"])
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
 	# не має попередньої орієнтації, з якої мало б сенс анімувати «доведення» —
 	# твінований face() тут дав би видиме crank-довертання щоразу, коли дошка
@@ -220,6 +227,7 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		_face_tween.kill()
 	var tween: Tween = create_tween()
 	_face_tween = tween
+	set_process(true)
 	if path.is_empty():
 		# Твін без жодного кроку міг би ніколи не подати finished — гарантований
 		# нульовий інтервал забезпечує, що сигнал таки настане.
@@ -272,16 +280,20 @@ func _walk(t: float, from: Vector3, to: Vector3) -> void:
 	_pose(from.lerp(to, t))
 
 
-## Твін повороту крутить лише кут вузла; нахил залежить від нього, тож іде слідом.
+## Твін повороту крутить лише кут вузла; нахил залежить від нього, тож іде слідом. Кадр
+## вмикають face() і move_along() і вимикає перший кадр після кінця твіна.
 func _process(_delta: float) -> void:
 	if rotation.y != _posed_yaw:
 		_pose(position)
+	if _face_tween == null or not _face_tween.is_running():
+		set_process(false)
 
 
 ## Ставить юніт у точці `at` на рельєф усією основою. Нахил — лише в силуеті, тангаж і
 ## крен у його власних осях: кут вузла навколо Y лишається напрямом (§3.4), а ніс у плані
 ## дивиться туди ж, куди й без нахилу. Висота — найменша, за якої жоден кут основи і
 ## центр не входять у ґрунт; на схилі, крутішому за MAX_TILT_DEG, нижній край висить.
+## Відділення не нахиляється: фігури на одній основі завалювались би разом із нею.
 func _pose(at: Vector3) -> void:
 	_posed_yaw = rotation.y
 	var th: TerrainHeight = TerrainHeight.active
@@ -294,6 +306,10 @@ func _pose(at: Vector3) -> void:
 	if deck > th.at(float(cell.x), float(cell.y)) + 0.001:
 		# Міст: настил рівний, а рельєф під ним — русло.
 		position = Vector3(at.x, deck, at.z)
+		_silhouette.rotation = Vector3.ZERO
+		return
+	if not _tilts:
+		position = Vector3(at.x, th.at(at.x, at.z) - SQUAD_SINK, at.z)
 		_silhouette.rotation = Vector3.ZERO
 		return
 	var yaw := Basis(Vector3.UP, rotation.y)
@@ -340,6 +356,7 @@ func face(direction: int) -> void:
 		_face_tween.kill()
 	_face_tween = create_tween()
 	_face_tween.tween_property(self, "rotation_degrees:y", current + delta, _FACE_TURN_DURATION)
+	set_process(true)
 
 
 ## Виправлення 1: bind() кличе це замість face() — щойно створений (чи
