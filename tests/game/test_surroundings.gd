@@ -265,7 +265,9 @@ func _joins_another_axis(c: RiverCourse, li: int, e: Vector2) -> bool:
 ## суцільної імли, а відірваних шматків води з віссю річки в кадрі нема. Вода тут — відліки
 ## запеченої висоти під рівнем води, що лишаються водою й після звуження на 2 відліки в кожен бік:
 ## перешийок, тонший за ~0.6 клітинки, на екрані — суша, і річка через нього не тече. Ставки й
-## озера осі річки не мають і тут не перевіряються.
+## озера осі річки не мають і тут не перевіряються. Вісь розкладено на відліки вздовж кожного
+## відрізка, кроком пів відліку. Межа тесту: кожна вода з віссю, що торкається дошки, мусить сягати
+## суцільної імли, тож річку, яку автор закінчив на дошці, цей тест не пропустить.
 func test_river_water_is_connected_from_the_board_into_closed_haze() -> void:
 	var checked := 0
 	for path: String in _MAPS:
@@ -292,11 +294,16 @@ func test_river_water_is_connected_from_the_board_into_closed_haze() -> void:
 		var axis := PackedByteArray()
 		axis.resize(cols * rows)
 		for li in t.course.axis_lines:
-			for q: Vector2 in t.course.lines[li]:
-				var i: int = roundi((q.x + 0.5) * s)
-				var j: int = roundi((q.y + 0.5) * s)
-				if i >= 0 and j >= 0 and i < cols and j < rows:
-					axis[j * cols + i] = 1
+			var pts: PackedVector2Array = t.course.lines[li]
+			for e in pts.size():
+				var a: Vector2 = pts[maxi(e - 1, 0)]
+				var steps: int = ceili(a.distance_to(pts[e]) * s * 2.0)
+				for n in steps + 1:
+					var q: Vector2 = a.lerp(pts[e], float(n) / maxi(steps, 1))
+					var i: int = roundi((q.x + 0.5) * s)
+					var j: int = roundi((q.y + 0.5) * s)
+					if i >= 0 and j >= 0 and i < cols and j < rows:
+						axis[j * cols + i] = 1
 		var seen := PackedByteArray()
 		seen.resize(cols * rows)
 		for start in cols * rows:
