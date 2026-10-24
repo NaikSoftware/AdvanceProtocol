@@ -35,6 +35,10 @@ const WIDTH_FINE: float = 0.03
 ## Бокове зміщення осі ±0.6 м з довжиною хвилі ~30 м (частота шуму 0.27 на клітинку):
 ## ±1.2 м дає вигини R ≈ 20–40 м кожні 10–15 м, тобто S-вигини на прямих.
 const WANDER_M: float = 0.6
+## Кільце: ще ±0.35 клітинки (2.8 м) з хвилею ~8 клітинок, з клітинки за краєм дошки. Колії
+## кільця прокладені автором по осях карти, і без цього лягають рівними гратками; дороги дошки не
+## рухаються.
+const RING_MEANDER: float = 0.35
 ## σ згладжування осі (клітинки): кут 90° — дуга R ≈ 0.89σ ≈ 7.8 м, сходинки 1–3 клітинки —
 ## одна крива.
 const SMOOTH: float = 1.1
@@ -515,10 +519,20 @@ func _smooth_chain(raw: PackedVector2Array, ci: int, n_l: FastNoiseLite, closed:
 		var kappa: float = tang[ib].distance_to(tang[ia]) / maxf(s[ib] - s[ia], 1e-4)
 		var fade: float = (1.0 if closed else smoothstep(0.6, 2.0, minf(s[i], s[n - 1] - s[i]))) * smoothstep(0.6, 2.0, near_node(out[i])) * smoothstep(0.6, 2.0, near_bridge(out[i])) * (1.0 - smoothstep(0.15, 0.5, kappa))
 		var off: float = WANDER_M * M * clampf(1.6 * n_l.get_noise_2d(s[i], 37.0 * ci), -1.0, 1.0) * fade
+		if _shift > 0:
+			off += RING_MEANDER * clampf(1.6 * n_l.get_noise_2d(s[i] * 0.45, 91.0 + 37.0 * ci), -1.0, 1.0) \
+					* fade * smoothstep(1.0, 2.5, _outside(out[i]))
 		moved[i] = out[i] + Vector2(-tang[i].y, tang[i].x) * off
 	if closed:
 		moved[n - 1] = moved[0]
 	return moved
+
+
+## Відстань Чебишова від прямокутника дошки (клітинки; < 0 усередині) у координатах світу.
+func _outside(p: Vector2) -> float:
+	var c := Vector2(_w - 1, _h - 1) * 0.5
+	var half := Vector2(_w - 2 * _shift, _h - 2 * _shift) * 0.5
+	return maxf(absf(p.x - c.x) - half.x, absf(p.y - c.y) - half.y)
 
 
 ## 1 — точку можна рухати, 0 — вона зафіксована на скелеті (розвилка чи міст поруч).
