@@ -49,7 +49,12 @@ wet ground state. Deciduous trees and grass come in three seasonal variants; pin
 **The two halves of a map differ in character and are fair only by numbers.** Rules-relevant
 layout is balanced by the pace and terrain-count tests in `tests/game/test_maps.gd`; the scenery
 (field and forest sub-types, props, bridge designs, the ring beyond the board) differs per half.
-A 180° copy reads like a chessboard. Format and examples: [`tools/maps/README.md`](../tools/maps/README.md).
+A 180° copy reads like a chessboard.
+
+**Land use follows how the country is really farmed**, never noise. Ploughed land is a man-made
+rectangle reached by a road or track; it keeps at least one cell of meadow from water, marsh and
+houses and never lies on a hill. Floodplains and riverbanks are meadow and reed, hamlets sit on
+roads with gardens and orchards around them, woods take hills, poor ground and field edges. Format and examples: [`tools/maps/README.md`](../tools/maps/README.md).
 
 ## Rendering and mobile budget
 
