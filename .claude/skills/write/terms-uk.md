@@ -180,10 +180,11 @@ listed at the end; do not copy them.
 змерджити → злити · емітить → надсилає · гейтить → закриває гейтом, обмежує ·
 пришпилює → фіксує · крешнутись → впасти.
 
-## Серпанок на краю світу
+## Імла на краю світу
 
 | English | Українська | note |
 | --- | --- | --- |
-| fog lobes, billows, puffs | клуби (серпанку) | never «лоби»: calque, and «лоб» is front armour |
+| world-edge haze, fog bank | імла (ж. р.: імли, імлою) | not «серпанок»; «туман» is only the fog of war |
+| fog lobes, billows, puffs | клуби (імли) | never «лоби»: calque, and «лоб» is front armour |
 | wisps, strands | пасма | |
-| world-edge haze | серпанок | «туман» is only the fog of war |
+| terrain saddle, dip (hill lowered toward an edge) | улоговина | not «сідловина» |

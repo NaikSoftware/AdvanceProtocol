@@ -422,3 +422,21 @@ func test_leaving_battle_restores_the_previous_cap() -> void
 - [ ] **Step 2:** Full verification: `./run_tests.sh` (note Scripts count), shader import check → 0 errors, `tools/frame_budget.gd` numbers match `docs/performance.md`.
 - [ ] **Step 3:** Publish a final page: River at MAX zoom, MIN zoom, a selected unit with zones, a unit in the forest, the bridge, all beside `river_target.jpg`; plus Crossroads and Ridge at MAX zoom.
 - [ ] **Step 4: Commit** — `git commit -m "docs: перспективна камера, вигляд поля бою, бюджет кадру"`
+
+---
+
+### Task 13: Units sit on the relief
+
+A unit model takes one height, `TerrainHeight.at()` at its centre (`UnitView._walk`), and stays level.
+On a slope (a hill edge, a river bank, a saddle at the board edge) the ground cuts through the
+model's base on the uphill side and leaves it floating on the downhill side.
+
+**Files:**
+- Modify: `game/battle/unit_view.gd` — pose from the height map under the footprint, while moving and at rest
+- Test: `tests/game/test_unit_view.gd`
+
+- [ ] **Step 1:** Decide the pose with the visual critic on a Ridge hill-edge frame: tilt to the ground normal averaged over the footprint (vehicles), or level at the highest corner (squads on one base). The turret and hull stay one piece (§3.4).
+- [ ] **Step 2: Write the failing tests** — on a sloped cell, no footprint corner lies below the ground by more than 2 cm, and none floats more than 10 cm above it; on flat ground the pose is unchanged.
+- [ ] **Step 3: Implement**; the facing tween and the walk keep the pose every frame of the move.
+- [ ] **Step 4:** Frames of units on Ridge hill edges and River banks, z12 and z20, through the visual critic. Run the suite → green.
+- [ ] **Step 5: Commit** — `git commit -m "fix(battle): юніт стоїть на рельєфі всією основою"`
