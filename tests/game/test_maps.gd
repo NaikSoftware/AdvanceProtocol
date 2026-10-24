@@ -9,7 +9,7 @@ const MAPS_DIR: String = "res://maps"
 const MAX_REACH: int = 5
 const LOCALES: Array[String] = ["uk", "en"]
 ## Карти, чиї тайли симетричні на 180°. Решту рівняє не форма, а test_map_sides_are_balanced;
-## підтипи й кільце — пейзаж, і на половинах він різний на кожній карті.
+## підтипи й кільце — пейзаж, і на половинах він може різнитися.
 const SYMMETRIC_MAPS: Array[String] = ["res://maps/crossroads.tres", "res://maps/ridge.tres"]
 const PACE_TOL: float = 0.05
 const COUNT_TOL: float = 0.15
