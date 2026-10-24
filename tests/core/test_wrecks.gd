@@ -31,6 +31,8 @@ func _assert_wreck_left(events: Array, pos: Vector2i, type_id: int) -> void:
 	var destroyed: int = _index_of(events, Events.UnitDestroyed)
 	var left: int = _index_of(events, Events.WreckLeft)
 	assert_true(destroyed >= 0, "передумова: юніт знищено")
+	assert_eq(_count(events, Events.UnitDestroyed), 1, "передумова: знищено рівно один юніт")
+	assert_eq(_count(events, Events.WreckLeft), 1, "одна смерть техніки — одні уламки")
 	assert_eq(left, destroyed + 1, "WreckLeft іде одразу за UnitDestroyed")
 	if left >= 0:
 		var e: Events.WreckLeft = events[left]
@@ -268,3 +270,59 @@ func test_a_wreck_left_on_the_second_players_turn_burns_out_on_that_players_turn
 	_end_turns(s, 1)
 	assert_eq([s.turn_number, s.active_player], [4, 1])
 	assert_null(Wrecks.wreck_at(s, Vector2i(3, 5)))
+
+# У грі на трьох уламки, що мали догоріти на ході вибулого гравця, догоряють на
+# наступному живому: годинник ходів перескакує вибулого, тож рівно «свого» моменту
+# не настає ніколи. Обидва тести падають, якщо в Wrecks.burn_out() замінити `>=` на `==`.
+
+func _turns_with_wreck(s: BattleState, pos: Vector2i, first_events: Array) -> Dictionary:
+	## Передає хід, доки уламки на pos не зникнуть, і рахує, скільки ходів кожен
+	## гравець ПОЧАВ з уламками на дошці. Ліміт ходів — щоб тест падав, а не висів.
+	var turns: Dictionary = {}
+	var events: Array = first_events
+	for i in 20:
+		if Wrecks.wreck_at(s, pos) == null:
+			var removed: int = _index_of(events, Events.WreckRemoved)
+			assert_true(removed >= 0, "зникнення — це подія")
+			if removed >= 0:
+				assert_eq((events[removed] as Events.WreckRemoved).reason, Wrecks.Reason.BURNED_OUT)
+			return {"turns": turns, "gone_at": [s.turn_number, s.active_player]}
+		turns[s.active_player] = turns.get(s.active_player, 0) + 1
+		events = EndTurnCommand.create().apply(s)
+	return {"turns": turns, "gone_at": null}
+
+func test_a_wreck_due_on_an_eliminated_players_turn_burns_out_on_the_next_live_one() -> void:
+	# Гравець 0 знищує машину гравця 1 у колі 1 і тим самим ходом здається. Уламки мали б
+	# догоріти на ході гравця 0 у колі 4, але той вибув — тож на ході гравця 1.
+	var s: BattleState = _two_lane_state(3)
+	var squad: Unit = s.add_unit(0, 0, Vector2i(0, 5), 2)
+	var car: Unit = s.add_unit(4, 1, Vector2i(2, 5), 6)
+	s.add_unit(0, 1, Vector2i(9, 9), 0)
+	s.add_unit(0, 2, Vector2i(9, 0), 0)
+	car.hp = 1
+	s.start()
+	s.begin_turn()
+	FireCommand.create(squad.id, car.id).apply(s)
+	assert_not_null(Wrecks.wreck_at(s, Vector2i(2, 5)), "передумова: уламки лишились")
+	var events: Array = ConcedeCommand.create().apply(s)
+	assert_true(s.eliminated[0], "передумова: гравець 0 вибув")
+	var r: Dictionary = _turns_with_wreck(s, Vector2i(2, 5), events)
+	assert_eq(r["gone_at"], [4, 1], "догоряє на наступному живому після пропущеного ходу")
+	assert_eq(r["turns"], {1: 3, 2: 3}, "кожен живий мав рівно WRECK_ROUNDS ходів з уламками")
+
+func test_wrecks_left_by_a_three_player_concede_burn_out() -> void:
+	# Здається гравець 1 у колі 1: його танк лишає уламки, які мали б догоріти на його
+	# ж ході в колі 4 — а той хід уже нікому не належить.
+	var s: BattleState = _two_lane_state(3)
+	s.add_unit(0, 0, Vector2i(9, 9), 0)
+	s.add_unit(5, 1, Vector2i(0, 5), 2)
+	s.add_unit(0, 2, Vector2i(9, 0), 0)
+	s.start()
+	s.begin_turn()
+	_end_turns(s, 1)
+	assert_eq(s.active_player, 1, "передумова")
+	var events: Array = ConcedeCommand.create().apply(s)
+	assert_not_null(Wrecks.wreck_at(s, Vector2i(0, 5)), "передумова: здача лишила уламки танка")
+	var r: Dictionary = _turns_with_wreck(s, Vector2i(0, 5), events)
+	assert_eq(r["gone_at"], [4, 2])
+	assert_eq(r["turns"], {0: 3, 2: 3}, "кожен живий мав рівно WRECK_ROUNDS ходів з уламками")
