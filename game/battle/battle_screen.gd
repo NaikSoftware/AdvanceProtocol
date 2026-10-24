@@ -220,6 +220,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 
 	_board_view.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
+	_board_view.ring_map = map_data
 	_wire_view(board)
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
@@ -243,6 +244,7 @@ func resume(match_service: Node = null) -> void:
 		var saved_map: MapData = load(mp) as MapData
 		_board_view.surface = saved_map.surface
 		_board_view.relief_seed = saved_map.name_key.hash()
+		_board_view.ring_map = saved_map
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
 	_match_service.events_ready.connect(_on_events_ready)

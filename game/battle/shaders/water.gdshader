@@ -58,6 +58,8 @@ uniform float glint_strength = 0.9;
 
 varying vec3 world_pos;
 
+#include "res://game/battle/shaders/surroundings.gdshaderinc"
+
 #include "res://game/battle/shaders/terrain_noise.gdshaderinc"
 
 float water_at(ivec2 px, ivec2 size) {
@@ -71,6 +73,9 @@ void vertex() {
 
 void fragment() {
 	vec2 p = world_pos.xz;
+	// До discard: похідні відстані для ширини лінії мусять рахуватись у всіх сусідніх пікселях.
+	vec2 sd = surround_distance(p);
+	vec4 sfog = surround ? surround_fog(sd, VIEWPORT_SIZE) : vec4(0.0);
 	float shallow_fade = 1.0;
 	float depth_m = 4.0;
 	float bank_m = 4.0;
@@ -166,6 +171,11 @@ void fragment() {
 	vec3 body = mix(deep_color, shallow_color, murk);
 	body = mix(body, vec3(0.06, 0.045, 0.022), 0.5 * margin_t);
 	ALBEDO = body * (1.0 - f);
+	if (surround) {
+		ALBEDO = surround_grade(ALBEDO, sd.x);
+		e = surround_grade(e, sd.x);
+	}
+	FOG = sfog;
 	// Нижня межа шорсткості 0.1, а не 0.04: так радіанс зонда не дає окремих яскравих пікселів.
 	// Здалеку дощ — дрібне мерехтіння: шорсткість замість рябі.
 	// Низькочастотна мінливість шорсткості (~12 клітинок, ~100 м), без зміни напрямку брижі.

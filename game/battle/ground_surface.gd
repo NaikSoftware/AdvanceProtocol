@@ -90,7 +90,9 @@ var _macro_layers: Array[String] = []
 
 ## surface — MapData.surface (y * width + x), порожній — усюди 0 (типовий вигляд).
 ## height — карта висот (TerrainHeight.bake з тим самим margin); null — плоска земля.
-func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray(), height: TerrainHeight = null) -> void:
+## ring > 0: board — світ (Surroundings.world_board), на ring клітинок ширший за дошку з кожного
+## боку; земля стоїть у координатах дошки, кільце — смугами грубшого меша (Surroundings.ground_mesh).
+func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray(), height: TerrainHeight = null, ring: int = 0) -> void:
 	var w: int = board.width + 2 * margin
 	var h: int = board.height + 2 * margin
 	if w <= 0 or h <= 0:
@@ -104,17 +106,22 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 			var cell := Vector2i(clampi(px - margin, 0, board.width - 1), clampi(py - margin, 0, board.height - 1))
 			_kind_image.set_pixel(px, py, Color8(board.kind_at(cell), 0, 0))
 
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(w, h)
+	var size := Vector2i(board.width - 2 * ring, board.height - 2 * ring)
+	if height != null and ring > 0:
+		mesh = Surroundings.ground_mesh(size, ring, height.samples)
+	else:
+		var plane := PlaneMesh.new()
+		plane.size = Vector2(w, h)
+		if height != null:
+			# Вершини рівно в відліках карти висот: одна клітинка = SAMPLES_PER_TILE квадів.
+			plane.subdivide_width = height.cols - 2
+			plane.subdivide_depth = height.rows - 2
+		mesh = plane
 	if height != null:
-		# Вершини рівно в відліках карти висот: одна клітинка = SAMPLES_PER_TILE квадів.
-		plane.subdivide_width = height.cols - 2
-		plane.subdivide_depth = height.rows - 2
 		custom_aabb = AABB(Vector3(-w * 0.5, height.min_height(), -h * 0.5), Vector3(w, height.max_height() - height.min_height(), h))
 	else:
 		custom_aabb = AABB()
-	mesh = plane
-	position = Vector3((board.width - 1) * 0.5, 0.0, (board.height - 1) * 0.5)
+	position = Vector3((size.x - 1) * 0.5, 0.0, (size.y - 1) * 0.5)
 	layers = 1
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
@@ -135,8 +142,11 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 	_set_layer_properties(mat, _macro_layers)
 	_set_classes(mat, board, margin, surface, surface_table, height != null)
 	_set_roads(mat, height)
-	mat.set_shader_parameter("map_origin", Vector2(-margin, -margin))
+	mat.set_shader_parameter("map_origin", Vector2(-margin - ring, -margin - ring))
 	mat.set_shader_parameter("repeat_m", REPEAT_M)
+	if ring > 0:
+		Surroundings.apply(mat, size)
+		mat.set_shader_parameter("snap_edges", height != null)
 	mat.set_shader_parameter("mud_amount", MUD_BLEND if board.ground_state == Terrain.GroundState.MUD else 0.0)
 	mat.set_shader_parameter("albedo_array", _albedo_array)
 	mat.set_shader_parameter("normal_array", _normal_array)
@@ -144,7 +154,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 	mat.set_shader_parameter("macro_variants", MACRO_VARIANTS)
 	mat.set_shader_parameter("use_height", height != null)
 	if height != null:
-		mat.set_shader_parameter("height_map", ImageTexture.create_from_image(height.image()))
+		mat.set_shader_parameter("height_map", height.texture())
 		mat.set_shader_parameter("height_samples", float(height.samples))
 		mat.set_shader_parameter("water_level", TerrainHeight.WATER_LEVEL)
 	material_override = mat

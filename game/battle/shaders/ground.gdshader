@@ -93,6 +93,8 @@ const float METRES_PER_TILE = 8.0;
 
 varying vec3 world_pos;
 
+#include "res://game/battle/shaders/surroundings.gdshaderinc"
+
 #include "res://game/battle/shaders/terrain_noise.gdshaderinc"
 
 // Зсув межі класів — три октави шуму, повернуті відносно осей сітки, у клітинках: велика
@@ -329,9 +331,14 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 }
 
 // Рельєф (TerrainHeight): R — висота землі у світі, G — маска води (для мокрого берега), B — кривизна.
-// Піксель (i, j) лежить у вершині сітки меша: PlaneMesh підрозділено рівно під відліки,
-// тож висота — texelFetch без фільтрації, а нормаль — скінченні різниці сусідніх відліків.
+// Висота — білінійно за позицією вершини, як TerrainHeight.at(): на дошці вершини лежать рівно у
+// відліках (те саме, що texelFetch), а грубіші вершини кільця — між ними. Нормаль — скінченні
+// різниці на кроці одного відліку.
 uniform bool use_height = false;
+// Меш кільця (Surroundings.ground_mesh): вершина дрібної клітинки на ребрі з грубшою лягає на
+// пряму грубого ребра — кінці в UV і UV2, частка в COLOR.r, позначка COLOR.a = 1. Без цього між
+// смугами різної густоти були б щілини.
+uniform bool snap_edges = false;
 uniform sampler2D height_map : filter_linear, repeat_disable;
 uniform float height_samples = 4.0;
 // Рівень води (TerrainHeight.WATER_LEVEL) для мокрого берега.
@@ -344,27 +351,27 @@ varying float slope_tan;
 // Напрямок НА сонце (DirectionalLight3D сцени бою): запечене світло-тінь рельєфу, §8.
 const vec3 SUN_DIR = vec3(0.5, 0.7, 0.5);
 
-float height_px(ivec2 px, ivec2 hs) {
-	return texelFetch(height_map, clamp(px, ivec2(0), hs - 1), 0).r;
+// Відлік карти висот у локальній точці вузла землі (центр вузла — центр карти).
+vec4 height_at(vec2 local) {
+	vec2 hs = vec2(textureSize(height_map, 0));
+	vec2 half_size = (hs - 1.0) / (2.0 * height_samples);
+	return textureLod(height_map, ((local + half_size) * height_samples + 0.5) / hs, 0.0);
 }
 
 void vertex() {
 	if (use_height) {
-		ivec2 hs = textureSize(height_map, 0);
-		vec2 half_size = vec2(hs - 1) / (2.0 * height_samples);
-		ivec2 px = ivec2(floor((VERTEX.xz + half_size) * height_samples + 0.5));
+		vec2 q = VERTEX.xz;
 		float e = 1.0 / height_samples;
-		VERTEX.y = height_px(px, hs);
-		vec3 n = normalize(vec3(
-				height_px(px - ivec2(1, 0), hs) - height_px(px + ivec2(1, 0), hs),
-				2.0 * e,
-				height_px(px - ivec2(0, 1), hs) - height_px(px + ivec2(0, 1), hs)));
+		vec4 hm = height_at(q);
+		VERTEX.y = snap_edges && COLOR.a > 0.5 ? mix(height_at(UV).r, height_at(UV2).r, COLOR.r) : hm.r;
+		float hl = height_at(q - vec2(e, 0.0)).r;
+		float hr = height_at(q + vec2(e, 0.0)).r;
+		vec3 n = normalize(vec3(hl - hr, 2.0 * e, height_at(q - vec2(0.0, e)).r - height_at(q + vec2(0.0, e)).r));
 		NORMAL = n;
 		// Та сама умовність, що в PlaneMesh: тангент уздовж +X, бінормаль = n x t (дивиться в -Z).
-		vec3 t = normalize(vec3(1.0, (height_px(px + ivec2(1, 0), hs) - height_px(px - ivec2(1, 0), hs)) / (2.0 * e), 0.0));
+		vec3 t = normalize(vec3(1.0, (hr - hl) / (2.0 * e), 0.0));
 		TANGENT = t;
 		BINORMAL = normalize(cross(n, t));
-		vec4 hm = texelFetch(height_map, clamp(px, ivec2(0), hs - 1), 0);
 		shore_mask = hm.g;
 		curvature = hm.b;
 		bar_mask = hm.a;
@@ -895,6 +902,13 @@ void fragment() {
 		alb *= 1.0 - cloud_shadow_strength * cloud;
 	}
 
+	FOG = vec4(0.0);
+	if (surround) {
+		vec2 sd = surround_distance(p);
+		alb = surround_grade(alb, sd.x);
+		refl = surround_grade(refl, sd.x);
+		FOG = surround_fog(sd, VIEWPORT_SIZE);
+	}
 	ALBEDO = alb;
 	EMISSION = refl * sky_reflection_gain;
 	if (debug_view > 0) {
