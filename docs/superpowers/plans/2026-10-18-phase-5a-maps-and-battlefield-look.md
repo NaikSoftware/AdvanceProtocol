@@ -286,7 +286,7 @@ func test_every_prop_exists_is_grounded_and_within_budget(p = use_parameters(PRO
 	# total triangle count ≤ PROP_FACE_LIMITS[group]
 ```
 - [ ] **Step 2: Run, expect FAIL** (files missing).
-- [ ] **Step 3: Generate** each asset with the `asset-manager` skill (`tripo-p1`, the face limits above, prompts derived from `docs/art/mood/river_target.jpg` and `docs/art-direction.md`: stone two-storey houses with dark slate roofs, a concrete road bridge segment, birch, pine, bare autumn tree, grey rocks, low stone wall with a wooden fence). Normalise each with `3d-modelling`. Render with `prop_preview`, publish each render; accept or re-roll (max 3).
+- [ ] **Step 3: Build** each asset by the route, sizes and accept checks in [`docs/art/props-research.md`](../../art/props-research.md) (Blender for geometric props, bridges and forest clumps; Tripo for houses, ruins and hero trees; CC0 for rocks and deadfall) and the rules in [`docs/art-direction.md`](../../art-direction.md) "Props": realistic, 2030s countryside, detail matched to screen scale, integer-tile footprints for structures, one bridge design per crossing, deciduous trees in three seasons. Normalise each with `3d-modelling`, uniform scale only. Render with `prop_preview` at both zooms; accept or re-roll (max 3).
 - [ ] **Step 4: Run, expect PASS.**
 - [ ] **Step 5: Commit** — `git commit -m "feat(art): 3D-об'єкти поля бою — дерева, будинки, міст, каміння"`
 
@@ -304,7 +304,7 @@ func test_every_prop_exists_is_grounded_and_within_budget(p = use_parameters(PRO
 - Consumes: GLBs from Task 7.
 - Produces: `PropLayer.build(board: Board, margin: int) -> void`; `PropLayer.set_reveal_cells(cells: Array[Vector2i]) -> void`; `PropLayer.instances_on(cell: Vector2i) -> Array[Dictionary]` (`{model: StringName, transform: Transform3D, faded: bool}`, for tests); `PropLayer.triangle_count() -> int`.
 - Produces: `static func cell_hash(cell: Vector2i, salt: int) -> int` — `hash(Vector3i(cell.x, cell.y, salt))`; all jitter derives from it.
-- Placement: FOREST → 2–3 trees mixed pine/birch/bare; BUILDING → one house variant; RUBBLE → `house_ruin`; BRIDGE → `bridge_span`, BRIDGE_DESTROYED → `bridge_broken`, both oriented along the bridge's road axis; HILL → `rocks`; FIELD cells orthogonally next to ROAD → `wall_fence` on ~1 in 4 cells (by hash). Out-of-board margin cells get the same rules from their clamped kind.
+- Placement follows [`docs/art-direction.md`](../../art-direction.md) "Props" and "Maps": the map's season picks the deciduous variant, each half of a map gets its own prop mix (never a 180° copy), structures only on whole `BUILDING` groups that fit their `footprint_tiles`, small props near cell edges and crushed by an entering vehicle (scar shown only on the viewer's `seen`), forest cells use canopy tiles inside and edge clumps facing open ground, power-line wires are screen-space lines between `wire_N` nodes. Original sketch, superseded where it conflicts: FOREST → 2–3 trees mixed pine/birch/bare; BUILDING → one house variant; RUBBLE → `house_ruin`; BRIDGE → `bridge_span`, BRIDGE_DESTROYED → `bridge_broken`, both oriented along the bridge's road axis; HILL → `rocks`; FIELD cells orthogonally next to ROAD → `wall_fence` on ~1 in 4 cells (by hash). Out-of-board margin cells get the same rules from their clamped kind.
 - Fade: a unit cell `c` reveals props on `c`, `c + (1,0)`, `c + (0,1)`, `c + (1,1)` (the camera sits at +x, +z of its focus at yaw 45°).
 
 - [ ] **Step 1: Write the failing tests**
@@ -357,6 +357,8 @@ func test_surroundings_fill_the_view_at_max_zoom_from_every_board_corner() -> vo
 ---
 
 ### Task 10: Weather and light presets
+
+Each map gets its own season and sky, which drive light and shadows — table in [`docs/art-direction.md`](../../art-direction.md) "Maps". The River rain preset below is one of three.
 
 **Files:**
 - Create: `game/battle/look/battle_look.gd` (`class_name BattleLook`, `extends Resource`), `game/battle/look/river_rain.tres`, `game/battle/look/overcast_dry.tres`, `game/battle/look/map_looks.gd` (`class_name MapLooks`), `game/battle/look/weather_rig.gd` + `weather_rig.tscn` (`class_name WeatherRig`, `extends Node3D`)
@@ -440,3 +442,20 @@ model's base on the uphill side and leaves it floating on the downhill side.
 - [ ] **Step 3: Implement**; the facing tween and the walk keep the pose every frame of the move.
 - [ ] **Step 4:** Frames of units on Ridge hill edges and River banks, z12 and z20, through the visual critic. Run the suite → green.
 - [ ] **Step 5: Commit** — `git commit -m "fix(battle): юніт стоїть на рельєфі всією основою"`
+
+---
+
+### Task 14: Wrecks block vehicles
+
+A destroyed vehicle leaves a wreck that vehicles cannot enter; infantry may. It burns out after a
+few rounds, is known only where the viewer's `seen` covers it, and goes down with a demolished
+bridge. Rule text: CLAUDE.md §3.14 and [`docs/rules/combat.md`](../../rules/combat.md). Lives in
+`core/` with tests; the view draws it from `WreckLeft` / `WreckRemoved` events.
+
+### Task 15: Hit, wreck and casualty effects
+
+Per [`docs/art-direction.md`](../../art-direction.md) "Effects": a surviving vehicle shows only
+the hit; a destroyed vehicle burns, smokes and leaves a wreck mesh until `WreckRemoved`, then a
+scorch decal; a destroyed squad leaves fallen figures and a scorch. Effects attach only to units
+the current player can see; scars respect the viewer's `seen`. Reference brief:
+`docs/art/damage-fx-research.md`.
