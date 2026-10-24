@@ -336,7 +336,7 @@ func test_map_surface_is_well_formed(p = use_parameters(_map_paths())) -> void:
 	assert_eq(odd.size(), 0, "%s: підтип без дзеркальної пари %s" % [path, odd.slice(0, 8)])
 
 
-# --- Зовнішнє кільце (рішення власника 2026-10-22): пейзаж за краєм, правила його не читають ---
+# --- Зовнішнє кільце: пейзаж за краєм, правила його не читають ---
 
 ## Найбільше віддалення не має показати край світу — 12 клітинок з кожного боку.
 const OUTER_MARGIN: int = 12
@@ -432,7 +432,7 @@ func test_river_has_three_crossings_and_a_town() -> void:
 	assert_not_null(m)
 	if m == null:
 		return
-	assert_gte(_count(m, [Terrain.Kind.BRIDGE]), 6, "три переправи по два ряди мосту")
+	assert_gte(_count(m, [Terrain.Kind.BRIDGE]), 6, "три переправи")
 	assert_gte(_count(m, [Terrain.Kind.BUILDING]), 8, "містечко")
 
 

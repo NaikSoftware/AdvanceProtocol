@@ -179,3 +179,18 @@ listed at the end; do not copy them.
 задеплоїти → розгорнути · дебажити → налагоджувати · залити (push) → надіслати, `push` ·
 змерджити → злити · емітить → надсилає · гейтить → закриває гейтом, обмежує ·
 пришпилює → фіксує · крешнутись → впасти.
+
+## Імла на краю світу
+
+| English | Українська | note |
+| --- | --- | --- |
+| world-edge haze, fog bank | імла (ж. р.: імли, імлою) | not «серпанок»; «туман» is only the fog of war |
+| fog lobes, billows, puffs | клуби (імли) | never «лоби»: calque, and «лоб» is front armour |
+| wisps, strands | пасма | |
+| terrain saddle, dip (hill lowered toward an edge) | улоговина | not «сідловина» |
+
+## Оформлення тексту
+
+| English | Українська | note |
+| --- | --- | --- |
+| backticks, code font | зворотні апострофи (`` ` ``), оформити як код | never «бектики» |

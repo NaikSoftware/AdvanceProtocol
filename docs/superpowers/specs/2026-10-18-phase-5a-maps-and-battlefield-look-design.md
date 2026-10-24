@@ -18,7 +18,7 @@ houses with dark slate roofs, some ruined, a concrete bridge over a dark river).
 kept beside it for reference only: `river_close.jpg` (low close view — what the camera should feel
 like zoomed in) and `river_dusk.jpg` (not chosen).
 
-## Owner decisions (fixed)
+## Fixed decisions
 
 1. **Maps.** The five old maps in `maps/` (forest, mountain, open, skirmish_bridge, urban) are
    deleted. Three new maps replace them:
@@ -31,7 +31,7 @@ like zoomed in) and `river_dusk.jpg` (not chosen).
 2. **Two players only.** No three-player map in this slice. Nothing is added to handle that in
    the setup screen — the existing `MatchSetup.map_supports` simply offers no map for three.
 3. **Six units per side**, as on the current maps.
-4. **Size about 26×22.** Balance by numbers, not by mirroring (owner, 2026-10-24): a map may be
+4. **Size about 26×22.** Balance by numbers, not by mirroring: a map may be
    almost symmetric, or its halves may differ with features of equal weight — a mirrored world
    everywhere is unrealistic. Pace target: scouts meet around turn 2–3, main
    forces around turn 3–4. No straight base-to-base road.
@@ -140,7 +140,7 @@ or paused frame rate never changes how they look, only how smooth.
 ### Ground
 - Replace the per-kind box tiles in `BoardView` with **one continuous ground surface** for the
   playable area.
-- **The look is decoupled from the grid** (owner, 2026-10-23). Cells exist only for rules and
+- **The look is decoupled from the grid**. Cells exist only for rules and
   pathfinding; the board shows no squares, straight cell edges or 90° steps anywhere. Each part
   has its own geometry:
   - **River and ponds** (`RiverCourse`): a smoothed centreline through the water cells with
@@ -225,7 +225,7 @@ for A. B and C only need to look correct, not tuned.
   desktop proxy (draw calls, triangles, frame time from the monitors) and every effect starts from
   the conservative option. On-device measurement is Phase 7.7.
 - The `SettingsService.quality` setting stays unwired in this slice.
-- New/changed player-facing behaviour gets an e2e scenario in `tests/e2e/` (owner rule): at least a
+- New/changed player-facing behaviour gets an e2e scenario in `tests/e2e/`: at least a
   match started on River, a move and a shot through real input with the perspective camera.
 - Screenshots of map A at zoomed-out and zoomed-in, with and without a selected unit, at the
   layout sizes (800×360 … 1280×800), shown to the owner in the browser next to the target frame.

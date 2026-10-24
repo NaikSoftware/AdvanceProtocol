@@ -57,3 +57,7 @@ sky_reflection_gain={
 "type": "float",
 "value": 1.0
 }
+fog_time={
+"type": "float",
+"value": 0.0
+}

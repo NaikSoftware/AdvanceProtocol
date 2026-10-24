@@ -136,7 +136,7 @@ means the facing changed, not that someone fired.
 At 0 AP it may not — and firing sets AP to 0 (§3.2), so a unit that has fired, or spent its AP
 moving, ends the turn facing wherever that left it.
 
-This is the owner's decision (2026-10-18): a tap anywhere on the board turns the active unit there,
+A tap anywhere on the board turns the active unit there,
 so it can be pointed somewhere else after its move. **A move carries no facing of its own: the unit
 always ends it facing along its last step.** An explicit facing on a move that spends the last AP
 would be a free turn at 0 AP, around the gate below — so turning in place is the only free

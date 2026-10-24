@@ -86,14 +86,25 @@ func test_rebuild_keeps_the_probe_and_the_water_node() -> void:
 	assert_true(water.visible, "підірваний міст — вода")
 
 
-func test_water_plane_lies_at_the_water_level_over_the_board() -> void:
-	view.build(_river())
+## Площина лежить на рівні води над усіма клітинками води з запасом у клітинку, але в межах
+## дошки: за ними вона лише рахувала б фрагменти, які однаково відкидає.
+func test_water_plane_lies_at_the_water_level_over_the_water_cells() -> void:
+	var board: Board = _river()
+	view.build(board)
 	var water: WaterSurface = _waters()[0]
 	var aabb: AABB = water.transform * water.get_aabb()
+	var z0: int = board.height
+	var z1: int = -1
+	for i in board.tiles.size():
+		if WaterSurface._is_water(board, Vector2i(i % board.width, i / board.width)):
+			z0 = mini(z0, i / board.width)
+			z1 = maxi(z1, i / board.width)
 	assert_almost_eq(aabb.position.y, TerrainHeight.WATER_LEVEL, 0.0001)
-	assert_almost_eq(aabb.position.x, -0.5, 0.0001)
+	assert_almost_eq(aabb.position.x, -0.5, 0.0001, "річка River тече від краю до краю")
 	assert_almost_eq(aabb.end.x, 25.5, 0.0001)
-	assert_almost_eq(aabb.end.z, 21.5, 0.0001)
+	assert_almost_eq(aabb.position.z, maxf(z0 - 1.5, -0.5), 0.0001)
+	assert_almost_eq(aabb.end.z, minf(z1 + 1.5, 21.5), 0.0001)
+	assert_lt(aabb.size.z, 22.0, "уся дошка площиною не вкрита")
 	assert_eq(water.layers, 1)
 	assert_eq(water.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 
@@ -127,7 +138,7 @@ func test_every_river_bridge_cell_is_water_in_the_mask() -> void:
 			if board.kind_at(Vector2i(x, y)) == Terrain.Kind.BRIDGE:
 				bridges += 1
 				assert_has(water_kinds, img.get_pixel(x, y).r8, "міст %d,%d" % [x, y])
-	assert_eq(bridges, 8, "на River вісім клітинок мостів")
+	assert_eq(bridges, 7, "на River сім клітинок мостів")
 
 
 ## Тимчасовий настил (до мостів Task 8): по екземпляру на кожну клітинку BRIDGE.
@@ -142,10 +153,10 @@ func test_placeholder_deck_on_every_bridge_cell_and_ruins_on_a_destroyed_one() -
 		for x in board.width:
 			if board.kind_at(Vector2i(x, y)) == Terrain.Kind.BRIDGE:
 				expected.append(Vector2i(x, y))
-	assert_eq(expected.size(), 7)
+	assert_eq(expected.size(), 6)
 	assert_eq_deep(view._placeholder_bridge_deck_cells, expected)
 	var deck: MultiMeshInstance3D = view.get_node("PlaceholderBridgeDeck")
-	assert_eq(deck.multimesh.instance_count, 7)
+	assert_eq(deck.multimesh.instance_count, 6)
 	assert_eq(deck.layers, 1, "настил — світ, зонд його бачить")
 	assert_eq(BoardView.PLACEHOLDER_DECK_TOP, 0.25)
 	assert_eq_deep(view._placeholder_bridge_ruin_cells, [Vector2i(4, 10)] as Array[Vector2i])
@@ -157,7 +168,7 @@ func test_placeholder_deck_on_every_bridge_cell_and_ruins_on_a_destroyed_one() -
 ## Підрив міняє настил клітинки на руїни, ремонт — назад.
 func test_demolish_and_repair_swap_deck_and_ruins() -> void:
 	var board := _river()
-	var cell := Vector2i(12, 10)
+	var cell := Vector2i(13, 10)
 	view.build(board)
 	assert_true(view._placeholder_bridge_deck_cells.has(cell))
 	assert_false(view._placeholder_bridge_ruin_cells.has(cell))
@@ -167,7 +178,7 @@ func test_demolish_and_repair_swap_deck_and_ruins() -> void:
 	view.rebuild_tiles(board)
 	assert_false(view._placeholder_bridge_deck_cells.has(cell), "підірваний — без настилу")
 	assert_true(view._placeholder_bridge_ruin_cells.has(cell), "підірваний — руїни")
-	assert_eq((view.get_node("PlaceholderBridgeDeck") as MultiMeshInstance3D).multimesh.instance_count, 7)
+	assert_eq((view.get_node("PlaceholderBridgeDeck") as MultiMeshInstance3D).multimesh.instance_count, 6)
 	var ruin_count: int = (view.get_node("PlaceholderBridgeRuin") as MultiMeshInstance3D).multimesh.instance_count
 	assert_between(ruin_count, 4, 5, "2–3 уламки настилу і 2 опори")
 
@@ -176,7 +187,7 @@ func test_demolish_and_repair_swap_deck_and_ruins() -> void:
 	assert_true(view._placeholder_bridge_deck_cells.has(cell), "відновлений — настил")
 	assert_false(view._placeholder_bridge_ruin_cells.has(cell))
 	assert_false(view.has_node("PlaceholderBridgeRuin"))
-	assert_eq((view.get_node("PlaceholderBridgeDeck") as MultiMeshInstance3D).multimesh.instance_count, 8)
+	assert_eq((view.get_node("PlaceholderBridgeDeck") as MultiMeshInstance3D).multimesh.instance_count, 7)
 
 
 ## Уламки — з хешу клітинки, не з випадковості: обидва гравці бачать те саме.
@@ -266,7 +277,7 @@ func test_rebuild_tiles_leaves_the_probe_box_unchanged() -> void:
 	assert_eq(probe.size, Vector3(30, 12, 26))
 	assert_eq(probe.position, Vector3(12.5, 5.0, 10.5))
 	assert_eq(probe.origin_offset, Vector3(0.0, -3.5, 0.0))
-	board.set_kind(Vector2i(12, 10), Terrain.Kind.BRIDGE_DESTROYED)
+	board.set_kind(Vector2i(13, 10), Terrain.Kind.BRIDGE_DESTROYED)
 	view.rebuild_tiles(board)
 	assert_eq(probe.size, Vector3(30, 12, 26))
 	assert_eq(probe.position, Vector3(12.5, 5.0, 10.5))
@@ -307,7 +318,7 @@ func test_rebuild_tiles_requests_a_probe_recapture() -> void:
 	var board := _river()
 	view.build(board)
 	var before: int = view.probe_captures_requested
-	board.set_kind(Vector2i(12, 10), Terrain.Kind.BRIDGE_DESTROYED)
+	board.set_kind(Vector2i(13, 10), Terrain.Kind.BRIDGE_DESTROYED)
 	view.rebuild_tiles(board)
 	assert_eq(view.probe_captures_requested, before + 1)
 	assert_eq(view.reflection_probe().update_mode, ReflectionProbe.UPDATE_ONCE)

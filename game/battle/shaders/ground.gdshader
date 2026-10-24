@@ -93,6 +93,8 @@ const float METRES_PER_TILE = 8.0;
 
 varying vec3 world_pos;
 
+#include "res://game/battle/shaders/surroundings.gdshaderinc"
+
 #include "res://game/battle/shaders/terrain_noise.gdshaderinc"
 
 // Зсув межі класів — три октави шуму, повернуті відносно осей сітки, у клітинках: велика
@@ -329,9 +331,14 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 }
 
 // Рельєф (TerrainHeight): R — висота землі у світі, G — маска води (для мокрого берега), B — кривизна.
-// Піксель (i, j) лежить у вершині сітки меша: PlaneMesh підрозділено рівно під відліки,
-// тож висота — texelFetch без фільтрації, а нормаль — скінченні різниці сусідніх відліків.
+// Висота — білінійно за позицією вершини, як TerrainHeight.at(): на дошці вершини лежать рівно у
+// відліках (те саме, що texelFetch), а грубіші вершини кільця — між ними. Нормаль — скінченні
+// різниці на кроці одного відліку.
 uniform bool use_height = false;
+// Меш кільця (Surroundings.ground_mesh): вершина дрібної клітинки на ребрі з грубшою лягає на
+// пряму грубого ребра — кінці в UV і UV2, позначка COLOR.a = 1. Без цього між смугами різної
+// густоти були б щілини.
+uniform bool snap_edges = false;
 uniform sampler2D height_map : filter_linear, repeat_disable;
 uniform float height_samples = 4.0;
 // Рівень води (TerrainHeight.WATER_LEVEL) для мокрого берега.
@@ -344,27 +351,33 @@ varying float slope_tan;
 // Напрямок НА сонце (DirectionalLight3D сцени бою): запечене світло-тінь рельєфу, §8.
 const vec3 SUN_DIR = vec3(0.5, 0.7, 0.5);
 
-float height_px(ivec2 px, ivec2 hs) {
-	return texelFetch(height_map, clamp(px, ivec2(0), hs - 1), 0).r;
+// Відлік карти висот у локальній точці вузла землі (центр вузла — центр карти).
+vec4 height_at(vec2 local) {
+	vec2 hs = vec2(textureSize(height_map, 0));
+	vec2 half_size = (hs - 1.0) / (2.0 * height_samples);
+	return textureLod(height_map, ((local + half_size) * height_samples + 0.5) / hs, 0.0);
 }
 
 void vertex() {
 	if (use_height) {
-		ivec2 hs = textureSize(height_map, 0);
-		vec2 half_size = vec2(hs - 1) / (2.0 * height_samples);
-		ivec2 px = ivec2(floor((VERTEX.xz + half_size) * height_samples + 0.5));
+		vec2 q = VERTEX.xz;
 		float e = 1.0 / height_samples;
-		VERTEX.y = height_px(px, hs);
-		vec3 n = normalize(vec3(
-				height_px(px - ivec2(1, 0), hs) - height_px(px + ivec2(1, 0), hs),
-				2.0 * e,
-				height_px(px - ivec2(0, 1), hs) - height_px(px + ivec2(0, 1), hs)));
+		vec4 hm = height_at(q);
+		VERTEX.y = hm.r;
+		if (snap_edges && COLOR.a > 0.5) {
+			// Частка — з позиції, а не з `COLOR`: колір вершини 8-бітний, і частка 1/255 зсунула б
+			// точку з ребра.
+			vec2 ab = UV2 - UV;
+			VERTEX.y = mix(height_at(UV).r, height_at(UV2).r, clamp(dot(q - UV, ab) / dot(ab, ab), 0.0, 1.0));
+		}
+		float hl = height_at(q - vec2(e, 0.0)).r;
+		float hr = height_at(q + vec2(e, 0.0)).r;
+		vec3 n = normalize(vec3(hl - hr, 2.0 * e, height_at(q - vec2(0.0, e)).r - height_at(q + vec2(0.0, e)).r));
 		NORMAL = n;
 		// Та сама умовність, що в PlaneMesh: тангент уздовж +X, бінормаль = n x t (дивиться в -Z).
-		vec3 t = normalize(vec3(1.0, (height_px(px + ivec2(1, 0), hs) - height_px(px - ivec2(1, 0), hs)) / (2.0 * e), 0.0));
+		vec3 t = normalize(vec3(1.0, (hr - hl) / (2.0 * e), 0.0));
 		TANGENT = t;
 		BINORMAL = normalize(cross(n, t));
-		vec4 hm = texelFetch(height_map, clamp(px, ivec2(0), hs - 1), 0);
 		shore_mask = hm.g;
 		curvature = hm.b;
 		bar_mask = hm.a;
@@ -382,531 +395,569 @@ void vertex() {
 
 void fragment() {
 	vec2 p = world_pos.xz;
+	// Похідні — до гілки суцільної імли: у сусідніх пікселях, що пішли іншою гілкою, вони не
+	// визначені. Текстури в гілці беруть їх звідси (textureGrad) або явний міп. У гілці лишається
+	// одна похідна — `dFdx(rs)` для тіні каменю на схилі: маска схилу залежить від покриття дороги
+	// всередині гілки, а на межі суцільної імли камінь однаково не видно.
 	vec2 dpx = dFdx(p);
 	vec2 dpy = dFdy(p);
-	// Паралакс: промінь від камери; глибина згасає з відстанню до нуля.
-	vec3 view = CAMERA_POSITION_WORLD - world_pos;
-	float cam_dist = length(view);
-	float pom_fade = 1.0 - smoothstep(pom_fade_start, pom_fade_end, cam_dist);
-	vec2 pom_dir = -view.xz / max(view.y, 0.2);
-	float detail_fade = 1.0 - smoothstep(detail_fade_start, detail_fade_end, cam_dist);
-	float above_m = (world_pos.y - water_level) / 0.125;
-
-	// Класи покриття: згладжена білінійна (вага Ерміта — опуклий кут клітинки стає овалом, а не
-	// ромбом) у точці, зсунутій повернутим шумом. Три найсильніші класи, смуга CLASS_BAND.
-	float core_r = length(p - round(p));
-	vec2 g = p + class_warp(p) * mix(CLASS_CORE, 1.0, smoothstep(0.0, 0.5, core_r)) - map_origin;
-	vec2 csz = vec2(textureSize(class_map0, 0));
-	vec2 ci0 = floor(g);
-	vec2 cf = g - ci0;
-	cf = cf * cf * (3.0 - 2.0 * cf);
-	vec2 cuv = (ci0 + cf + 0.5) / csz;
-	vec4 c0 = texture(class_map0, cuv);
-	vec4 c1 = texture(class_map1, cuv);
-	float S[8] = float[8](c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a);
-	int top[3] = int[3](0, 0, 0);
-	float tops[3] = float[3](-1.0, -1.0, -1.0);
-	for (int i = 0; i < 8; i++) {
-		float v = S[i];
-		if (v > tops[0]) {
-			tops[2] = tops[1]; top[2] = top[1];
-			tops[1] = tops[0]; top[1] = top[0];
-			tops[0] = v; top[0] = i;
-		} else if (v > tops[1]) {
-			tops[2] = tops[1]; top[2] = top[1];
-			tops[1] = v; top[1] = i;
-		} else if (v > tops[2]) {
-			tops[2] = v; top[2] = i;
-		}
+	vec3 rf = has_roads ? road_sample(p) : vec3(1e3, 0.0, 0.0);
+	float fwv = fwidth(rf.y);
+	float rv_all = ripple_visibility(p);
+	vec2 dxy_x = dFdx(world_pos.xy);
+	vec2 dxy_y = dFdy(world_pos.xy);
+	vec2 dzy_x = dFdx(world_pos.zy);
+	vec2 dzy_y = dFdy(world_pos.zy);
+	vec4 haze = vec4(0.0);
+	float line_a = 0.0;
+	if (surround) {
+		haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
+		line_a = surround_line(world_pos, CAMERA_POSITION_WORLD, 0.0, VIEWPORT_SIZE);
 	}
-	int L[4];
-	float W[4];
-	bool marsh_edge = false;
-	for (int i = 0; i < 3; i++) {
-		L[i] = class_layer[top[i]];
-		marsh_edge = marsh_edge || (layer_base[L[i]] == MARSH && tops[i] > tops[0] - MARSH_BAND);
-	}
-	// Ваги нормовано на CLASS_BAND: від їхньої величини залежать багно й калюжі нижче.
-	float band = marsh_edge ? MARSH_BAND : CLASS_BAND;
-	for (int i = 0; i < 3; i++) {
-		W[i] = max(tops[i] - (tops[0] - band), 0.0) * (CLASS_BAND / band);
-	}
-	// Слоти з однаковим шаром (запасні) — один семпл.
-	for (int i = 1; i < 3; i++) {
-		for (int j = 0; j < i; j++) {
-			if (L[i] == L[j] && W[j] > 0.0) {
-				W[j] += W[i];
-				W[i] = 0.0;
-			}
-		}
-	}
-
-	// Дорога: поле RoadCourse. de — відстань до нерівного краю (м, мінус на дорозі).
-	float road_cov = 0.0;
-	float verge = 0.0;
-	float de = 1e3;
-	vec3 rf = vec3(1e3, 0.0, 0.0);
-	vec4 rt = vec4(1.0, 0.0, 0.0, 0.0);
-	if (has_roads) {
-		rf = road_sample(p);
-		if (rf.x < 4.0) {
-			vec2 tsz = vec2(textureSize(road_type, 0));
-			rt = texture(road_type, ((p - map_origin + 0.5) * road_px) / tsz);
-			float side = rf.y >= 0.0 ? 1.0 : 0.0;
-			// Край у координатах дороги (u і бік): ґрунтівка ±0.3 м із виступами трави 0.3–0.8 м
-			// кожні 1–3 м, бруківка ±0.15 м, асфальт ±0.08 м. На розвилці (два u сходяться) — шум
-			// у світі.
-			float e_lo = (fbm(vec2(rf.z * 0.35, side * 31.0 + 2.0)) - 0.5) * 2.0;
-			float e_w = (fbm(p * 2.2 + 5.0) - 0.5) * 2.0;
-			float e_bite = smoothstep(0.55, 0.85, vnoise(vec2(rf.z * 0.55, side * 53.0 + 7.0)));
-			float amp = 0.08 * rt.r + 0.3 * rt.g + 0.15 * rt.b;
-			de = rf.x + mix(e_lo, e_w, rt.a) * amp + e_bite * (0.6 * rt.g + 0.12 * rt.b) * (1.0 - rt.a);
-			// Край 10–90 %: асфальт ~0.18 м, ґрунтівка ~0.45 м (smoothstep: 0.61 повної ширини) —
-			// ґрунтівка плавно переходить у траву, без різкої межі.
-			float soft = mix(0.15, 0.37, rt.g);
-			road_cov = 1.0 - smoothstep(-soft, soft, de);
-			// Узбіччя 0.6–1.4 м: витоптана рідка трава з розсипаним ґрунтом.
-			float vw = mix(0.6, 1.4, vnoise(vec2(rf.z * 0.2, side * 17.0)));
-			verge = (1.0 - smoothstep(0.0, vw, de)) * step(0.0, de);
-			if (use_height) {
-				// Під водою (міст, брід) дороги не видно.
-				float dry = smoothstep(-0.05, 0.25, above_m);
-				road_cov *= dry;
-				verge *= dry;
-			}
-		}
-	}
-
-	// Багно: плями поля й пагорба під станом MUD; біля дороги (до 4 м від краю) — на 0.2 більше.
-	// Поріг — квантиль fbm (0.45 ≈ 30 %, 0.537 ≈ 55 %), виміряний на карті.
-	float near = has_roads ? 1.0 - smoothstep(0.0, 4.0, rf.x) : 0.0;
-	float cover = mud_amount + 0.2 * near;
-	float thr = 0.45 + (cover - 0.3) * 0.35;
-	float mud_soil = mud_amount > 0.0
-			? 1.0 - smoothstep(thr - 0.02, thr + 0.02, fbm(p * 0.35 + 3.1))
-			: 0.0;
-	// Двір: ~45 % ґрунту плямами 2–6 м, межа нерівна (дрібна октава), трава між ними.
-	if (yard_slot >= 0) {
-		float yard = smoothstep(0.35, 0.65, S[yard_slot]);
-		float patch = 1.0 - smoothstep(0.47, 0.53, fbm(p * 1.4 + 57.0) + 0.08 * (vnoise(p * 9.0) - 0.5));
-		mud_soil = max(mud_soil, yard * patch);
-	}
-	float soil_w = 0.0;
-	for (int i = 0; i < 3; i++) {
-		if (layer_base[L[i]] == FIELD || layer_base[L[i]] == HILL) {
-			soil_w += W[i];
-			W[i] *= 1.0 - mud_soil;
-		}
-	}
-	L[3] = MUD;
-	W[3] = soil_w * mud_soil;
-
-	vec3 A[4];
-	vec2 N[4];
-	float H[4];
-	float Hgt[4];
-	float Cav[4];
-	float hmax = -1.0;
-	// Під суцільним асфальтом чи бруківкою покриття класів не видно: його не семплуємо зовсім
-	// (до 4 шарів × макро, паралакс і деталь). Ґрунтівку — семплуємо: вона просвічує траву.
-	bool skip_cls = road_cov > 0.995 && rt.g < 0.005;
-	for (int i = 0; i < 4; i++) {
-		H[i] = -10.0;
-		if (W[i] > 0.002 && !skip_cls) {
-			// Глибина в одиницях світу (1 м = 0.125), потім у UV шару.
-			vec2 pom = pom_fade > 0.01
-					? pom_dir * (relief_m[L[i]] * relief_scale * pom_fade / METRES_PER_TILE)
-					: vec2(0.0);
-			sample_layer(L[i], p, dpx, dpy, pom, detail_fade, A[i], N[i], Hgt[i], Cav[i]);
-			// Висотне змішування: на межі першим проступає те, що вище в самій
-			// карті висот (камінь, кому, пучок), тож перехід рваний, а не розмитий.
-			float wn = W[i] / max(W[0] + W[1] + W[2] + W[3], 1e-4);
-			H[i] = wn + Hgt[i] * 0.45;
-			hmax = max(hmax, H[i]);
-		}
-	}
-	vec3 alb = vec3(0.0);
-	vec2 nxy = vec2(0.0);
-	float rough = 0.0;
-	float cav = 0.0;
-	float wsum = 0.0;
-	float marsh_w = 0.0;
-	for (int i = 0; i < 4; i++) {
-		// H = -10 — шар не семплувався (вага 0 або skip_cls): його A/N не ініціалізовані.
-		float w = H[i] < -5.0 ? 0.0 : max(H[i] - (hmax - 0.18), 0.0);
-		if (w > 0.0) {
-			alb += A[i] * w;
-			nxy += N[i] * w;
-			rough += 0.92 * w;
-			// Каверна: низини карти висот темніші (щілини між каменями, дно колії).
-			cav += Cav[i] * w;
-			marsh_w += layer_base[L[i]] == MARSH ? w : 0.0;
-			wsum += w;
-		}
-	}
-	if (wsum > 0.0) {
-		marsh_w /= wsum;
-		alb /= wsum;
-		nxy /= wsum;
-		rough /= wsum;
-		cav /= wsum;
-	} else {
-		// Під дорогою (skip_cls): значення лише заглушка, дорога нижче перекриває її повністю.
-		alb = vec3(0.05);
-		rough = 0.9;
-		cav = 1.0;
-	}
-	alb *= cav;
-
-	// Дорога поверх покриття. Ґрунт — ізотропна текстура типу у світі; усе спрямоване (колії,
-	// центральна трава, калюжі) — у координатах дороги (u, v), тож іде крізь кути без розривів.
-	float rut = 0.0;
-	float rut_pud = 0.0;
-	float rut_rim = 0.0;
-	float paved_sheen = 0.0;
-	float wheel = 0.0;
-	float road_mul = 1.0;
-	if (road_cov > 0.001 || verge > 0.001) {
-		int t1 = rt.r >= rt.g && rt.r >= rt.b ? 0 : (rt.g >= rt.b ? 1 : 2);
-		vec3 ra; vec2 rn; float rh; float rc;
-		vec2 rpom = pom_fade > 0.01 ? pom_dir * (relief_m[road_layer[t1]] * relief_scale * pom_fade / METRES_PER_TILE) : vec2(0.0);
-		sample_layer(road_layer[t1], p, dpx, dpy, rpom, detail_fade, ra, rn, rh, rc);
-		ra *= rc;
-		// Перехід типів (асфальт -> бруківка) — нерівний і розтягнутий на 1–2 м. Вага рахується
-		// від типу з більшим номером, а не від переможця: на лінії зміни переможця шум мав би
-		// протилежний знак і давав поперечний шов.
-		float tw1 = rt[t1];
-		if (tw1 < 0.95) {
-			int t2 = t1 == 0 ? (rt.g >= rt.b ? 1 : 2) : (t1 == 1 ? (rt.r >= rt.b ? 0 : 2) : (rt.r >= rt.g ? 0 : 1));
-			vec3 sa; vec2 sn; float sh; float sc;
-			sample_layer(road_layer[t2], p, dpx, dpy, vec2(0.0), detail_fade, sa, sn, sh, sc);
-			int hi = max(t1, t2);
-			float h_hi = hi == t2 ? sh : rh;
-			float h_lo = hi == t2 ? rh : sh;
-			float khi = smoothstep(0.3, 0.7, rt[hi] + 0.35 * (fbm(p * 1.7 + 13.0) - 0.5) + 0.12 * (vnoise(p * 5.0 + 3.0) - 0.5) + 0.2 * (h_hi - h_lo));
-			float k = hi == t2 ? khi : 1.0 - khi;
-			ra = mix(ra, sa * sc, k);
-			rn = mix(rn, sn, k);
-		}
-		float av = abs(rf.y);
-		float side = rf.y >= 0.0 ? 1.0 : 0.0;
-		float u = rf.z;
-		// Колії йдуть крізь розвилку майже до її середини (гаснуть лише в глибині заокруглення).
-		float straight = 1.0 - smoothstep(0.6, 0.95, rt.a);
-		// Колії ґрунтівки: колія 1.5–1.8 м (|v| ≈ 0.83 м), хитання ±6 см; глибина змінюється
-		// вздовж дороги.
-		float wob = 0.12 * (vnoise(vec2(u * 0.25, 3.0 + side)) - 0.5);
-		float track = abs(av - 0.83 - wob);
-		float fwv = fwidth(rf.y);
-		// Смуга колії 0.25–0.47 м між рівнями 90 % і 10 % (край ~0.11 м); на далекому зумі край
-		// розширюється на піксель (fwidth), тож колія не вироджується в однопіксельну чорну лінію.
-		rut = (1.0 - smoothstep(0.09 - fwv, 0.27 + fwv, track)) * straight;
-		// Темнота колії змінюється на ±30 % з періодом 3–8 м.
-		float rut_k = mix(0.7, 1.3, smoothstep(0.25, 0.75, fbm(vec2(u * 0.18, 1.0 + side))));
-		// Асфальт і бруківка: сухими — без смуг коліс, бо їх не відрізнити від колій ґрунтівки.
-		// Мокрими лише смуги коліс трохи темніші й глянцевіші (×0.9, шорсткість 0.18).
-		float hw = max(av - rf.x, 0.5);
-		float lc = hw > 2.75 ? 0.5 * hw : 0.0;
-		float wv = av - lc + 0.2 * (vnoise(vec2(u * 0.05, 7.0 + side)) - 0.5);
-		float paved = (rt.r + 0.25 * rt.b) * straight;
-		wheel = (1.0 - smoothstep(0.12 - fwv, 0.48 + fwv, abs(abs(wv) - 0.85))) * paved;
-		float wet_now = clamp(weather_wetness, 0.0, 1.0);
-		float wear_k = 1.0 - 0.1 * wheel * wet_now;
-		// Колії й знос множаться після стиснення яскравості (нижче): до нього ΔL* вдвічі менший.
-		// Колія темніша за тіло дороги на ΔL* ~6–13 (×0.58–0.78), але не чорна.
-		road_mul = (1.0 - rut * rut_k * 0.32 * rt.g) * wear_k;
-		vec3 lw = vec3(0.299, 0.587, 0.114);
-		// Ґрунтівка: бурий ґрунт ~70 % поверх трави (тіло 0.45–0.9 плямами), смуги коліс — голий
-		// ґрунт, посередині — трав'яна смужка 0.4–0.6 м із розривами на ~25 % довжини.
-		vec3 soil = vec3(dot(ra, lw)) * SOIL_TINT;
-		float bare = 1.0 - smoothstep(0.25, 0.45, track);
-		float body = clamp(0.68 + 0.5 * (fbm(vec2(u * 0.3, rf.y * 0.9) + 5.0) - 0.5), 0.45, 0.9);
-		body = max(body, 0.95 * bare * straight);
-		vec3 dirt_alb = mix(alb, soil, body);
-		float cg = (1.0 - smoothstep(0.2, 0.3, av + 0.1 * (vnoise(vec2(u * 0.7, 5.0)) - 0.5)))
-				* smoothstep(0.2, 0.45, vnoise(vec2(u * 0.3, 9.0))) * straight;
-		dirt_alb = mix(dirt_alb, alb * vec3(1.05, 1.0, 0.85), cg * 0.85);
-		// Дно колії — мокрий темно-бурий ґрунт.
-		dirt_alb = mix(dirt_alb, dirt_alb * vec3(1.0, 0.9, 0.78), rut * 0.7);
-		// Асфальт: темний і рівний (тон текстури дає лише дрібну варіацію), латки ремонту 1–4 м
-		// (свіжі темніші, старі світліші), тріщини низького контрасту; край переходить у гравій
-		// до 0.4 м усередину.
-		float la = dot(ra, lw);
-		vec3 asph = vec3(la * 0.8) * vec3(0.97, 0.99, 1.02);
-		asph *= mix(1.0, 0.8, smoothstep(0.6, 0.64, fbm(vec2(u * 0.3, rf.y * 0.3) + 31.0)));
-		asph *= mix(1.0, 1.1, smoothstep(0.58, 0.62, fbm(vec2(u * 0.2, rf.y * 0.25) + 47.0)));
-		float crack = 1.0 - smoothstep(0.0, 0.025 + fwidth(p.x) * 3.0, abs(vnoise(p * 3.0 + 5.0) - 0.5));
-		asph *= 1.0 - 0.18 * crack;
-		vec3 gravel = vec3(la * 1.3) * vec3(1.02, 1.0, 0.95) * (0.75 + 0.5 * vnoise(p * 45.0));
-		float crumble = smoothstep(-0.45, -0.05, de + 0.35 * (vnoise(vec2(u * 1.4, side * 7.0 + 3.0)) - 0.5));
-		// Кінець асфальту (перехід у ґрунтівку): замість прямого зрізу — гравійна смуга завдовжки
-		// ~ширину дороги, у яку асфальт переходить плямами.
-		float apron = 1.0 - smoothstep(0.45, 0.9, rt.r + 0.35 * (vnoise(p * 2.5 + 17.0) - 0.5));
-		asph = mix(asph, gravel, max(crumble, apron * step(0.05, rt.g)));
-		// Бруківка: бордюр — темніша смуга 0.3 м по краю вулиці (2 px на типовому зумі; вужча
-		// зникає).
-		float kerb = smoothstep(-0.45, -0.3, de) * rt.b;
-		// Асфальт -> бруківка: той самий шум, що й у текстурі вище, тож тон і текстура міняються
-		// разом.
-		float kp = smoothstep(0.25, 0.75, rt.r / max(rt.r + rt.b, 1e-4) + 0.35 * (fbm(p * 1.7 + 13.0) - 0.5));
-		vec3 paved_alb = mix(ra, asph, kp);
-		// Межа типів нерівна, ~1 м за шумом: дрібна октава ламає пряму лінію зміни переможця
-		// в растрі.
-		float g_k = smoothstep(0.3, 0.7, rt.g + 0.3 * (vnoise(p * 2.0 + 29.0) - 0.5) + 0.15 * (vnoise(p * 7.0 + 41.0) - 0.5));
-		// Бордюр множиться після стиснення яскравості (як колії), інакше воно вдвічі зменшує ΔL*.
-		road_mul *= mix(1.0, 0.68, kerb * (1.0 - g_k));
-		vec3 road_alb = mix(paved_alb, dirt_alb, g_k);
-		// Калюжі в коліях — у дощ і при ґрунті MUD, на кожній колії свої (хеш комірки й боку), тож
-		// не стають у ряд пунктиром. Сухо без MUD — жодної. На всю ширину в низинах — лише в дощ.
-		float wetr = clamp(weather_wetness, 0.0, 1.0);
-		float rut_wet = max(wetr, mud_amount > 0.0 ? 0.7 : 0.0);
-		float kc = floor(u / RUT_CELL_M);
-		vec2 cid = vec2(kc, side * 7.0 + 3.0);
-		float hl = mix(0.15, 1.25, hash12(cid + 23.0));
-		float pc = (kc + 0.5) * RUT_CELL_M + (RUT_CELL_M * 0.5 - hl) * (hash12(cid + 11.0) * 2.0 - 1.0);
-		// Півширина 0.18–0.28 м: калюжа ширша за дно колії (0.3 м); кінці круглі, край нерівний.
-		float pw = mix(0.18, 0.28, hash12(cid + 37.0));
-		float pd = length(vec2(max(abs(u - pc) - max(hl - pw, 0.0), 0.0), track)) - pw
-				+ 0.08 * (vnoise(vec2(u * 6.0, side * 5.0 + 2.0)) - 0.5);
-		float present = step(hash12(cid), RUT_PUDDLE_P * rut_wet) * rt.g * straight;
-		rut_pud = present * (1.0 - smoothstep(-0.05 - fwv, fwv, pd));
-		// Каламутний обідок 0.1–0.15 м: мокрий темний ґрунт довкола води.
-		rut_rim = present * (1.0 - smoothstep(0.0, 0.14 + fwv, pd)) * (1.0 - rut_pud);
-		rut_pud = max(rut_pud, rt.g * wetr * smoothstep(0.7, 0.76, fbm(vec2(u * 0.12, rf.y * 0.15) + 21.0))
-				* (1.0 - smoothstep(0.0, 0.3, rf.x + 0.3)));
-		// Мокрий асфальт і бруківка: глянцеві смуги 4–10 м уздовж і 1–2 м упоперек — відблиск неба,
-		// а не темні плями.
-		paved_sheen = wetr * (rt.r + rt.b) * smoothstep(0.5, 0.62, fbm(vec2(u * 0.1, rf.y * 0.6) + 61.0));
-		// Узбіччя: трава світліша й сіріша, з дрібними плямами ґрунту дороги.
-		float vg = verge * (0.45 + 0.55 * vnoise(p * 9.0));
-		float speck = smoothstep(0.55, 0.75, vnoise(p * 23.0 + 4.0));
-		vec3 trampled = mix(alb, vec3(dot(alb, lw)) * 1.1, 0.35);
-		alb = mix(alb, mix(trampled, ra, speck * 0.6), vg * 0.6);
-		alb = mix(alb, road_alb, road_cov);
-		// Узбіччя асфальту: гравій 0.3–0.5 м за краєм, межа нерівна, далі трава.
-		float shoulder = rt.r * step(0.0, de) * (1.0 - smoothstep(0.3, 0.5, de + 0.2 * (vnoise(vec2(u * 0.9, side * 11.0)) - 0.5)));
-		alb = mix(alb, gravel, shoulder * (1.0 - road_cov) * (0.55 + 0.45 * vnoise(p * 17.0)));
-		nxy = mix(nxy, rn, road_cov);
-		rough = mix(rough, mix(0.9, 0.72, rt.r + rt.b), road_cov);
-	}
-	// Запечене затінення рельєфу (TerrainHeight, B): низини й русло темніші, горби світліші.
-	// Кривизна ізотропна, тож пологі хвилі рельєфу на полі видно саме через неї.
-	alb *= 1.0 + 0.35 * curvature;
-	// Запечене світло-тінь: 10° схил міняє яскравість на ~15 рівнів, на далекій відстані слабшає.
-	// Світло-тінь — похідна висоти вздовж сонця, тобто спрямована: з повним підсиленням на дрібних
-	// пологих хвилях вона дає паралельні діагональні смуги через усю дошку (узгодженість
-	// орієнтації по вікнах 0.87). Тож повна сила — лише на схилах круче ~10–22° (пагорб,
-	// берег), на пологому полі — ×1.
-	float shade_k = mix(1.0, 9.0, smoothstep(0.18, 0.4, slope_tan));
-	alb *= 1.0 + clamp(shade_k * hill_shade, -0.4, 0.55) * (1.0 - 0.4 * smoothstep(25.0, 45.0, cam_dist));
-	// Макро-варіація 20-50 м (fbm ~ 1/0.2 клітинки = 40 м): ламає повтор тону,
-	// не міняючи масштаб дрібниць.
-	float macro = fbm(p * 0.2 + 41.0) - 0.5;
-	alb *= vec3(1.0 + 0.16 * macro, 1.0 + 0.13 * macro, 1.0 + 0.06 * macro);
-	// З рельєфом пляма альбедо не перекриває хвилі землі: розкид яскравості стиснуто на ~45 %.
-	if (use_height) {
-		float l0 = max(dot(alb, vec3(0.299, 0.587, 0.114)), 0.004);
-		alb *= pow(l0 / 0.05, -0.45);
-	}
-	alb *= mix(1.0, road_mul, road_cov);
-
-	// Рельєф: стрімкий схил — голий ґрунт і камінь (шар HILL), а не трава; берег між урізом і
-	// верхом — мокрий мул і галька (шар BANK), темніший за траву над ним. Змішування за
-	// схилом і висотою, а не за клітинкою.
-	vec3 alb_field = alb;
-	float rock_dbg = 0.0;
-	float rock_k = 0.0;
-	float bar_w = 0.0;
-	float bank_amt = 0.0;
-	if (use_height) {
-		// Крутий схил (камінь пагорба й берег): трипланарна проєкція на нерухомі світові площини —
-		// XZ з вагою |n.y|^4, XY для граней уздовж Z (|n.z|^4), ZY — уздовж X (|n.x|^4). Без
-		// повороту: проєкція вздовж схилу дає на обривах концентричні смуги розтягнення.
-		vec3 wn = normalize(mat3(INV_VIEW_MATRIX) * NORMAL);
-		// bar_mask = 0.5 + 0.5 * bend: -1 коса (внутрішній), +1 підмитий берег (зовнішній).
-		float bend_s = bar_mask * 2.0 - 1.0;
-		float tx = pow(abs(wn.x), 4.0);
-		float tz = pow(abs(wn.z), 4.0);
-		float ty = pow(abs(wn.y), 4.0);
-		float tsum = max(tx + ty + tz, 1e-4);
-		vec2 pxy = world_pos.xy;
-		vec2 pzy = world_pos.zy;
-		vec2 dxy_x = dFdx(pxy);
-		vec2 dxy_y = dFdy(pxy);
-		vec2 dzy_x = dFdx(pzy);
-		vec2 dzy_y = dFdy(pzy);
-		// Камінь лише на схилах круче ~25° (tan 0.47): пологі верхи пагорба — трава, як у полі.
-		float slope_amt = smoothstep(0.47, 0.62, slope_tan + 0.08 * (fbm(p * 1.3) - 0.5)) * (1.0 - road_cov);
-		// Річковий берег не тягне щебінь пагорба: його тип дає вигин русла (нижче).
-		slope_amt *= 1.0 - smoothstep(0.02, 0.25, shore_mask);
-		bank_amt = smoothstep(0.08, 0.55, shore_mask + 0.2 * (fbm(p * 2.1 + 7.0) - 0.5));
-		if (slope_amt > 0.01) {
-			// Бокові проєкції семплуються лише там, де їхня частка ваги > 5 %: на помірному схилі
-			// вони розтягують текстуру в 1.7 раза вздовж лінії спаду й розмивають камінь.
-			vec3 ra; vec2 rn; float rh; float rc;
-			sample_layer(HILL, p, dpx, dpy, vec2(0.0), detail_fade, ra, rn, rh, rc);
-			if ((tx + tz) / tsum > 0.05) {
-				vec3 sa; vec2 sn; float sh; float sc;
-				vec3 sb; float sd; float sh2;
-				sample_layer(HILL, pxy, dxy_x, dxy_y, vec2(0.0), detail_fade, sa, sn, sh, sc);
-				sample_layer(HILL, pzy, dzy_x, dzy_y, vec2(0.0), detail_fade, sb, sn, sh2, sd);
-				ra = (ra * ty + sa * tz + sb * tx) / tsum;
-				rc = (rc * ty + sc * tz + sd * tx) / tsum;
-				rh = (rh * ty + sh * tz + sh2 * tx) / tsum;
-			}
-			// Тон каменю — у межах трави й ґрунту: скан на ~5 L* світліший за поле, а без множника
-			// дає найсвітлішу ділянку карти.
-			ra *= ROCK_GAIN;
-			// Висотне змішування: першими з трави проступають верхи каменів, край різкий за
-			// висотою; шум 3–6 м розбиває камінь на скупчення з травою між ними. Пучки трави
-			// 0.3–0.6 м (vnoise ×14 / клітинку) заходять на камінь, тож рівний відрізок контуру
-			// не довший за ~0.5 м.
-			float grass_bite = smoothstep(0.5, 0.8, vnoise(p * 14.0 + 5.3));
-			float rs = slope_amt * 0.45 + 1.5 * (fbm(p * 1.6 + 71.0) - 0.5);
-			float rx = rs + (rh - 0.5) * 1.2 - 0.3 * grass_bite;
-			rock_k = smoothstep(0.42, 0.58, rx);
-			// Камінь лежить у землі: м'яке затінення 0.4 м назовні від скупчення (відстань — з
-			// плавного поля rs через його градієнт у метрах, без висот і трави, тож лінії по
-			// контуру нема), пучки трави його перебивають. Сам камінь світліший на верхах і
-			// темніший у западинах карти висот: об'єм, а не рівномірний тон.
-			float px_m = max(length(dpx), length(dpy)) * METRES_PER_TILE;
-			float grad_m = length(vec2(dFdx(rs), dFdy(rs))) / max(px_m, 1e-4);
-			float out_m = (0.5 - rs) / max(grad_m, 0.05);
-			float ao = (1.0 - smoothstep(0.0, 0.4, out_m)) * (1.0 - 0.7 * grass_bite) * (1.0 - rock_k);
-			// Край скупчення — найнижчі місця карти висот (поріг rx іде за rh), тож тон і каверна
-			// там тягнуться до середніх: інакше темні западини обводять камінь лінією.
-			float rtone = mix(0.72, 1.18, clamp(rh + 0.35 * (1.0 - rock_k), 0.0, 1.0));
-			alb = mix(alb * (1.0 - 0.3 * ao), ra * mix(1.0, rc, rock_k) * rtone, rock_k);
-			// Нормаль каменю сильніша за траву (×1.8): горбки ловлять світло біля камери.
-			nxy = mix(nxy, rn * 1.8, rock_k);
-		}
-		if (bank_amt > 0.01) {
-			vec3 ba; vec2 bn; float bh; float bc;
-			sample_layer(BANK, p, dpx, dpy, vec2(0.0), detail_fade, ba, bn, bh, bc);
-			if ((tx + tz) / tsum > 0.05) {
-				vec3 sa; vec2 sn; float sh; float sc;
-				vec3 sb; float sd;
-				sample_layer(BANK, pxy, dxy_x, dxy_y, vec2(0.0), detail_fade, sa, sn, sh, sc);
-				sample_layer(BANK, pzy, dzy_x, dzy_y, vec2(0.0), detail_fade, sb, sn, sh, sd);
-				ba = (ba * ty + sa * tz + sb * tx) / tsum;
-				bc = (bc * ty + sc * tz + sd * tx) / tsum;
-			}
-			float above_b = (world_pos.y - water_level) / 0.125;
-			float contact = 1.0 - smoothstep(0.0, 0.7, above_b);
-			vec3 lw = vec3(0.299, 0.587, 0.114);
-			float fl = max(dot(alb, lw), 0.004);
-			// Тип берега — з вигину русла: ґрунт лише на зовнішній стороні повороту (підмив), смугою,
-			// що гуляє 0-2 м із хвилею ~20 м; на плесах і косах — низька трава й солома до води.
-			float outer = max(bend_s, 0.0);
-			float band = smoothstep(0.25, 0.75, fbm(p * 0.35 + 13.0));
-			float cut_amt = smoothstep(0.2, 0.7, outer) * band;
-			// Ґрунт грані: L* 22-32, тепло-бурий; текстура лише дає дрібну пістрявість.
-			float bl = max(dot(ba * bc, lw), 0.004);
-			// Темніше й зеленіше за пісок (у тон прибережної трави), з дрібною варіацією тону.
-			vec3 soil = fl * 0.7 * vec3(1.3, 1.0, 0.7) * clamp(bl / 0.05, 0.75, 1.2) * bc * (0.8 + 0.4 * vnoise(p * 14.0));
-			alb = mix(alb, soil * (1.0 - 0.3 * contact), bank_amt * cut_amt);
-			// Смуга сухої трави вздовж урізу: 0.05–0.4 клітинки за шумом; ширшає на внутрішніх
-			// вигинах і зникає на підмитих берегах.
-			float thr = mix(0.1, 0.85, smoothstep(0.2, 0.8, fbm(p * 0.45 + 3.0))) - 0.3 * max(-bend_s, 0.0) + 0.4 * outer;
-			// Маска 0.2–0.4 клітинки розриває смугу, щоб вона не мала сталої ширини.
-			float collar_break = smoothstep(0.25, 0.6, fbm(p * 3.0 + 21.0));
-			float straw = smoothstep(thr, thr + 0.35, shore_mask) * (1.0 - cut_amt) * collar_break;
-			alb = mix(alb, alb * vec3(1.12, 1.05, 0.8), straw * 0.6);
-			// Біле на березі читається як відблиск: стеля ~L* 55 (Y ~ 0.1).
-			float lc = dot(alb, lw);
-			alb *= mix(1.0, min(1.0, 0.1 / max(lc, 1e-4)), bank_amt);
-			// Земля, мул і мокрий ґрунт шорсткі: сухим не нижче 0.75, мокра смуга — не глянець.
-			rough = mix(rough, mix(0.9, 0.75, contact), bank_amt);
-		}
-		// Коса — півмісяць: верхній край гуляє шумом, до води — перехід від сухого до мокрого.
-		bar_w = clamp(max(-bend_s, 0.0) * 3.0, 0.0, 1.0) * smoothstep(0.05 + 0.35 * fbm(p * 1.1 + 31.0), 0.5 + 0.2 * fbm(p * 1.1 + 31.0), shore_mask);
-		// Дрібна нормаль не лягає на обриви: проєкція текстури плоска, а не вздовж схилу.
-		nxy *= 1.0 - 0.8 * max(slope_amt * (1.0 - rock_k), bank_amt);
-		rock_dbg = rock_k;
-	}
-
-	// Мокрість: темніше й глянцевіше. Калюжі — лише в коліях дороги й вікнах болота.
-	float wet = clamp(weather_wetness, 0.0, 1.0);
-	// Мокрий асфальт і бруківка темнішають сильніше за землю (×0.6 проти ×0.75).
-	alb *= mix(1.0, 0.75 - 0.15 * road_cov * (rt.r + rt.b), wet);
-	// Мокрий асфальт глянцевіший за мокру землю: чим більше дороги під пікселем, тим нижче шорсткість.
-	rough = mix(rough, mix(0.4, 0.22, road_cov * (rt.r + rt.b)), wet);
-	// Мокрі смуги коліс — трохи глянцевіші (0.18).
-	rough = mix(rough, 0.18, wet * wheel * road_cov);
-	// Калюжі ґрунтівки: у коліях і на всю ширину в низинах (координати дороги, див. вище).
-	float puddle = rut_pud * road_cov;
-	// Вікна стоячої води в болоті 0.5–2 м (~10 % площі): темні, з відблиском неба й у суху погоду.
-	float pool = marsh_w * (1.0 - smoothstep(0.29, 0.32, fbm(p * 1.6 + 43.0) + 0.08 * (vnoise(p * 9.0) - 0.5)));
-	puddle = max(puddle, pool);
-	alb *= mix(1.0, 0.55, puddle) * mix(1.0, 0.65, max(rut_rim * road_cov, pool));
-	// Мокра смуга берега: вага води росте ~3.4 на клітинку біля урізу (0.5), тож
-	// 0.1 -> 0.5 — це ~1 м суші перед водою; найтемніша й найглянцевіша при воді.
-	// З рельєфом смуга йде за ґрунтом, а не за клітинкою: мокре там, де земля в межах 0.4 м
-	// над рівнем води й поруч є вода (маска води з карти висот).
-	float shore = 0.0;
-	if (use_height) {
-		float above_m = (world_pos.y - water_level) / 0.125;
-		// Смуга — за горизонталлю (висота / тангенс схилу): 0.2-0.5 м упоперек і на косі, і на обриві.
-		float run_m = above_m / max(slope_tan, 0.05);
-		shore = (1.0 - smoothstep(0.2, 0.5, run_m)) * smoothstep(0.03, 0.12, shore_mask);
-	}
-	alb *= mix(1.0, 0.6, shore);
-	// Темна мокра лінія просто в урізі (2-4 px на близькому зумі), а не лише розмита смуга.
-	if (use_height) {
-		float edge_m = (world_pos.y - water_level) / 0.125 / max(slope_tan, 0.05);
-		alb *= mix(1.0, 0.65, (1.0 - smoothstep(0.04, 0.14, edge_m)) * smoothstep(0.03, 0.12, shore_mask));
-	}
-	// Мокрий берег не дзеркало: шорсткість лише до 0.5.
-	rough = mix(rough, 0.5, shore);
-	// Гладка калюжа відбиває зонд BoardView звичайним шляхом освітлення — без SSR.
-	// Дощ на ній — ті самі кола, що й на річці. Підлога шорсткості 0.12: на 0.05
-	// сонце на брижі давало однопіксельні іскри.
-	float rv = puddle > 0.0 ? ripple_visibility(p) : 0.0;
-	vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * 1.2 * wet * rv : vec2(0.0);
-	rough = mix(rough, 0.12 + 0.1 * wet * (1.0 - rv), puddle);
-	rough = mix(rough, 0.12, paved_sheen * road_cov);
-	nxy = mix(nxy, ripple, puddle);
-	// Мокрий асфальт відбиває ~8 % неба: сама шорсткість 0.22 під похмурим небом майже не дає
-	// відблиску, і мокра дорога не відрізняється від сухої.
-	float mirror = max(max(puddle * 2.5, shore * 0.12),
-			wet * road_cov * (rt.r + 0.5 * rt.b) * 0.08 + paved_sheen * road_cov * 0.8);
-	vec3 refl = vec3(0.0);
-	if (mirror > 0.0 && sky_reflection_gain > 0.0) {
-		// Як overcast_reflection (F0 0.1), але частку неба обмежено PUDDLE_SKY_MAX: на скісному
-		// куті вага 2.5 інакше дає майже біле дзеркало.
-		vec3 nw = slope_to_world(ripple);
-		vec3 vw = normalize(CAMERA_POSITION_WORLD - world_pos);
-		float fr = 0.1 + 0.9 * pow(1.0 - clamp(dot(nw, vw), 0.0, 1.0), 3.0);
-		refl = overcast_sky_at(reflect(-vw, nw), TIME) * min(fr * mirror, mix(PUDDLE_SKY_MAX, 0.1, pool));
-	}
-
-	// Коса (внутрішній берег повороту) — останнім, від яскравості поля поруч (з тією ж мокрістю):
-	// світліша й тепліша за поле, а не лише менш темна, ніж берег.
-	if (bar_w > 0.0) {
-		// Тон ближчий до прибережної трави, з дрібною варіацією яскравості: рівний тон
-		// читається як глина.
-		vec3 sand = dot(alb_field, vec3(0.299, 0.587, 0.114)) * mix(1.0, 0.75, wet) * mix(SAND_TINT, vec3(1.12, 1.05, 0.8), 0.5) * (1.0 - 0.2 * shore_mask);
-		sand *= 0.78 + 0.44 * vnoise(p * 13.0) + 0.1 * (vnoise(p * 41.0) - 0.5);
-		alb = mix(alb, sand, bar_w * 0.85);
-	}
-
-	if (cloud_shadow_strength > 0.0) {
-		float cloud = smoothstep(0.45, 0.7, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
-		alb *= 1.0 - cloud_shadow_strength * cloud;
-	}
-
-	ALBEDO = alb;
-	EMISSION = refl * sky_reflection_gain;
-	if (debug_view > 0) {
-		int c = top[0] + 1;
-		vec3 dc = vec3(float(c & 1), float((c >> 1) & 1), float((c >> 2) & 1));
+	// Під суцільною імлою видно лише її колір: решту матеріалу не рахуємо.
+	if (haze.a >= 0.999) {
 		ALBEDO = vec3(0.0);
-		EMISSION = debug_view == 1 ? dc : vec3(debug_view == 2 ? road_cov : rock_dbg);
-		rough = 1.0;
+		ROUGHNESS = 1.0;
+		SPECULAR = 0.0;
+		FOG = vec4(haze.rgb, 1.0);
+	} else {
+		// Паралакс: промінь від камери; глибина згасає з відстанню до нуля.
+		vec3 view = CAMERA_POSITION_WORLD - world_pos;
+		float cam_dist = length(view);
+		float pom_fade = 1.0 - smoothstep(pom_fade_start, pom_fade_end, cam_dist);
+		vec2 pom_dir = -view.xz / max(view.y, 0.2);
+		float detail_fade = 1.0 - smoothstep(detail_fade_start, detail_fade_end, cam_dist);
+		float above_m = (world_pos.y - water_level) / 0.125;
+
+		// Класи покриття: згладжена білінійна (вага Ерміта — опуклий кут клітинки стає овалом, а не
+		// ромбом) у точці, зсунутій повернутим шумом. Три найсильніші класи, смуга CLASS_BAND.
+		float core_r = length(p - round(p));
+		vec2 g = p + class_warp(p) * mix(CLASS_CORE, 1.0, smoothstep(0.0, 0.5, core_r))
+				- map_origin;
+		vec2 csz = vec2(textureSize(class_map0, 0));
+		vec2 ci0 = floor(g);
+		vec2 cf = g - ci0;
+		cf = cf * cf * (3.0 - 2.0 * cf);
+		vec2 cuv = (ci0 + cf + 0.5) / csz;
+		vec4 c0 = textureLod(class_map0, cuv, 0.0);
+		vec4 c1 = textureLod(class_map1, cuv, 0.0);
+		float S[8] = float[8](c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a);
+		int top[3] = int[3](0, 0, 0);
+		float tops[3] = float[3](-1.0, -1.0, -1.0);
+		for (int i = 0; i < 8; i++) {
+			float v = S[i];
+			if (v > tops[0]) {
+				tops[2] = tops[1]; top[2] = top[1];
+				tops[1] = tops[0]; top[1] = top[0];
+				tops[0] = v; top[0] = i;
+			} else if (v > tops[1]) {
+				tops[2] = tops[1]; top[2] = top[1];
+				tops[1] = v; top[1] = i;
+			} else if (v > tops[2]) {
+				tops[2] = v; top[2] = i;
+			}
+		}
+		int L[4];
+		float W[4];
+		bool marsh_edge = false;
+		for (int i = 0; i < 3; i++) {
+			L[i] = class_layer[top[i]];
+			marsh_edge = marsh_edge
+					|| (layer_base[L[i]] == MARSH && tops[i] > tops[0] - MARSH_BAND);
+		}
+		// Ваги нормовано на CLASS_BAND: від їхньої величини залежать багно й калюжі нижче.
+		float band = marsh_edge ? MARSH_BAND : CLASS_BAND;
+		for (int i = 0; i < 3; i++) {
+			W[i] = max(tops[i] - (tops[0] - band), 0.0) * (CLASS_BAND / band);
+		}
+		// Слоти з однаковим шаром (запасні) — один семпл.
+		for (int i = 1; i < 3; i++) {
+			for (int j = 0; j < i; j++) {
+				if (L[i] == L[j] && W[j] > 0.0) {
+					W[j] += W[i];
+					W[i] = 0.0;
+				}
+			}
+		}
+
+		// Дорога: поле RoadCourse. de — відстань до нерівного краю (м, мінус на дорозі).
+		float road_cov = 0.0;
+		float verge = 0.0;
+		float de = 1e3;
+		vec4 rt = vec4(1.0, 0.0, 0.0, 0.0);
+		if (has_roads) {
+			if (rf.x < 4.0) {
+				vec2 tsz = vec2(textureSize(road_type, 0));
+				rt = textureLod(road_type, ((p - map_origin + 0.5) * road_px) / tsz, 0.0);
+				float side = rf.y >= 0.0 ? 1.0 : 0.0;
+				// Край у координатах дороги (u і бік): ґрунтівка ±0.3 м із виступами трави 0.3–0.8
+				// м кожні 1–3 м, бруківка ±0.15 м, асфальт ±0.08 м. На розвилці (два u сходяться) —
+				// шум у світі.
+				float e_lo = (fbm(vec2(rf.z * 0.35, side * 31.0 + 2.0)) - 0.5) * 2.0;
+				float e_w = (fbm(p * 2.2 + 5.0) - 0.5) * 2.0;
+				float e_bite = smoothstep(0.55, 0.85, vnoise(vec2(rf.z * 0.55, side * 53.0 + 7.0)));
+				float amp = 0.08 * rt.r + 0.3 * rt.g + 0.15 * rt.b;
+				de = rf.x + mix(e_lo, e_w, rt.a) * amp + e_bite * (0.6 * rt.g + 0.12 * rt.b) * (1.0 - rt.a);
+				// Край 10–90 %: асфальт ~0.18 м, ґрунтівка ~0.45 м (smoothstep: 0.61 повної ширини)
+				// — ґрунтівка плавно переходить у траву, без різкої межі.
+				float soft = mix(0.15, 0.37, rt.g);
+				road_cov = 1.0 - smoothstep(-soft, soft, de);
+				// Узбіччя 0.6–1.4 м: витоптана рідка трава з розсипаним ґрунтом.
+				float vw = mix(0.6, 1.4, vnoise(vec2(rf.z * 0.2, side * 17.0)));
+				verge = (1.0 - smoothstep(0.0, vw, de)) * step(0.0, de);
+				if (use_height) {
+					// Під водою (міст, брід) дороги не видно.
+					float dry = smoothstep(-0.05, 0.25, above_m);
+					road_cov *= dry;
+					verge *= dry;
+				}
+			}
+		}
+
+		// Багно: плями поля й пагорба під станом MUD; біля дороги (до 4 м від краю) — на 0.2
+		// більше. Поріг — квантиль fbm (0.45 ≈ 30 %, 0.537 ≈ 55 %), виміряний на карті.
+		float near = has_roads ? 1.0 - smoothstep(0.0, 4.0, rf.x) : 0.0;
+		float cover = mud_amount + 0.2 * near;
+		float thr = 0.45 + (cover - 0.3) * 0.35;
+		float mud_soil = mud_amount > 0.0
+				? 1.0 - smoothstep(thr - 0.02, thr + 0.02, fbm(p * 0.35 + 3.1))
+				: 0.0;
+		// Двір: ~45 % ґрунту плямами 2–6 м, межа нерівна (дрібна октава), трава між ними.
+		if (yard_slot >= 0) {
+			float yard = smoothstep(0.35, 0.65, S[yard_slot]);
+			float patch = 1.0 - smoothstep(0.47, 0.53, fbm(p * 1.4 + 57.0) + 0.08 * (vnoise(p * 9.0) - 0.5));
+			mud_soil = max(mud_soil, yard * patch);
+		}
+		float soil_w = 0.0;
+		for (int i = 0; i < 3; i++) {
+			if (layer_base[L[i]] == FIELD || layer_base[L[i]] == HILL) {
+				soil_w += W[i];
+				W[i] *= 1.0 - mud_soil;
+			}
+		}
+		L[3] = MUD;
+		W[3] = soil_w * mud_soil;
+
+		vec3 A[4];
+		vec2 N[4];
+		float H[4];
+		float Hgt[4];
+		float Cav[4];
+		float hmax = -1.0;
+		// Під суцільним асфальтом чи бруківкою покриття класів не видно: його не семплуємо зовсім
+		// (до 4 шарів × макро, паралакс і деталь). Ґрунтівку — семплуємо: вона просвічує траву.
+		bool skip_cls = road_cov > 0.995 && rt.g < 0.005;
+		for (int i = 0; i < 4; i++) {
+			H[i] = -10.0;
+			if (W[i] > 0.002 && !skip_cls) {
+				// Глибина в одиницях світу (1 м = 0.125), потім у UV шару.
+				vec2 pom = pom_fade > 0.01
+						? pom_dir * (relief_m[L[i]] * relief_scale * pom_fade / METRES_PER_TILE)
+						: vec2(0.0);
+				sample_layer(L[i], p, dpx, dpy, pom, detail_fade, A[i], N[i], Hgt[i], Cav[i]);
+				// Висотне змішування: на межі першим проступає те, що вище в самій
+				// карті висот (камінь, кому, пучок), тож перехід рваний, а не розмитий.
+				float wn = W[i] / max(W[0] + W[1] + W[2] + W[3], 1e-4);
+				H[i] = wn + Hgt[i] * 0.45;
+				hmax = max(hmax, H[i]);
+			}
+		}
+		vec3 alb = vec3(0.0);
+		vec2 nxy = vec2(0.0);
+		float rough = 0.0;
+		float cav = 0.0;
+		float wsum = 0.0;
+		float marsh_w = 0.0;
+		for (int i = 0; i < 4; i++) {
+			// H = -10 — шар не семплувався (вага 0 або skip_cls): його A/N не ініціалізовані.
+			float w = H[i] < -5.0 ? 0.0 : max(H[i] - (hmax - 0.18), 0.0);
+			if (w > 0.0) {
+				alb += A[i] * w;
+				nxy += N[i] * w;
+				rough += 0.92 * w;
+				// Каверна: низини карти висот темніші (щілини між каменями, дно колії).
+				cav += Cav[i] * w;
+				marsh_w += layer_base[L[i]] == MARSH ? w : 0.0;
+				wsum += w;
+			}
+		}
+		if (wsum > 0.0) {
+			marsh_w /= wsum;
+			alb /= wsum;
+			nxy /= wsum;
+			rough /= wsum;
+			cav /= wsum;
+		} else {
+			// Під дорогою (skip_cls): значення лише заглушка, дорога нижче перекриває її повністю.
+			alb = vec3(0.05);
+			rough = 0.9;
+			cav = 1.0;
+		}
+		alb *= cav;
+
+		// Дорога поверх покриття. Ґрунт — ізотропна текстура типу у світі; усе спрямоване (колії,
+		// центральна трава, калюжі) — у координатах дороги (u, v), тож іде крізь кути без розривів.
+		float rut = 0.0;
+		float rut_pud = 0.0;
+		float rut_rim = 0.0;
+		float paved_sheen = 0.0;
+		float wheel = 0.0;
+		float road_mul = 1.0;
+		if (road_cov > 0.001 || verge > 0.001) {
+			int t1 = rt.r >= rt.g && rt.r >= rt.b ? 0 : (rt.g >= rt.b ? 1 : 2);
+			vec3 ra; vec2 rn; float rh; float rc;
+			vec2 rpom = pom_fade > 0.01 ? pom_dir * (relief_m[road_layer[t1]] * relief_scale * pom_fade / METRES_PER_TILE) : vec2(0.0);
+			sample_layer(road_layer[t1], p, dpx, dpy, rpom, detail_fade, ra, rn, rh, rc);
+			ra *= rc;
+			// Перехід типів (асфальт -> бруківка) — нерівний і розтягнутий на 1–2 м. Вага рахується
+			// від типу з більшим номером, а не від переможця: на лінії зміни переможця шум мав би
+			// протилежний знак і давав поперечний шов.
+			float tw1 = rt[t1];
+			if (tw1 < 0.95) {
+				int t2 = t1 == 0 ? (rt.g >= rt.b ? 1 : 2) : (t1 == 1 ? (rt.r >= rt.b ? 0 : 2) : (rt.r >= rt.g ? 0 : 1));
+				vec3 sa; vec2 sn; float sh; float sc;
+				sample_layer(road_layer[t2], p, dpx, dpy, vec2(0.0), detail_fade, sa, sn, sh, sc);
+				int hi = max(t1, t2);
+				float h_hi = hi == t2 ? sh : rh;
+				float h_lo = hi == t2 ? rh : sh;
+				float khi = smoothstep(0.3, 0.7, rt[hi] + 0.35 * (fbm(p * 1.7 + 13.0) - 0.5) + 0.12 * (vnoise(p * 5.0 + 3.0) - 0.5) + 0.2 * (h_hi - h_lo));
+				float k = hi == t2 ? khi : 1.0 - khi;
+				ra = mix(ra, sa * sc, k);
+				rn = mix(rn, sn, k);
+			}
+			float av = abs(rf.y);
+			float side = rf.y >= 0.0 ? 1.0 : 0.0;
+			float u = rf.z;
+			// Колії йдуть крізь розвилку майже до її середини (гаснуть лише в глибині
+			// заокруглення).
+			float straight = 1.0 - smoothstep(0.6, 0.95, rt.a);
+			// Колії ґрунтівки: колія 1.5–1.8 м (|v| ≈ 0.83 м), хитання ±6 см; глибина змінюється
+			// вздовж дороги.
+			float wob = 0.12 * (vnoise(vec2(u * 0.25, 3.0 + side)) - 0.5);
+			float track = abs(av - 0.83 - wob);
+			// Смуга колії 0.25–0.47 м між рівнями 90 % і 10 % (край ~0.11 м); на далекому зумі край
+			// розширюється на піксель (fwidth), тож колія не вироджується в однопіксельну чорну
+			// лінію.
+			rut = (1.0 - smoothstep(0.09 - fwv, 0.27 + fwv, track)) * straight;
+			// Темнота колії змінюється на ±30 % з періодом 3–8 м.
+			float rut_k = mix(0.7, 1.3, smoothstep(0.25, 0.75, fbm(vec2(u * 0.18, 1.0 + side))));
+			// Асфальт і бруківка: сухими — без смуг коліс, бо їх не відрізнити від колій ґрунтівки.
+			// Мокрими лише смуги коліс трохи темніші й глянцевіші (×0.9, шорсткість 0.18).
+			float hw = max(av - rf.x, 0.5);
+			float lc = hw > 2.75 ? 0.5 * hw : 0.0;
+			float wv = av - lc + 0.2 * (vnoise(vec2(u * 0.05, 7.0 + side)) - 0.5);
+			float paved = (rt.r + 0.25 * rt.b) * straight;
+			wheel = (1.0 - smoothstep(0.12 - fwv, 0.48 + fwv, abs(abs(wv) - 0.85))) * paved;
+			float wet_now = clamp(weather_wetness, 0.0, 1.0);
+			float wear_k = 1.0 - 0.1 * wheel * wet_now;
+			// Колії й знос множаться після стиснення яскравості (нижче): до нього ΔL* вдвічі
+			// менший. Колія темніша за тіло дороги на ΔL* ~6–13 (×0.58–0.78), але не чорна.
+			road_mul = (1.0 - rut * rut_k * 0.32 * rt.g) * wear_k;
+			vec3 lw = vec3(0.299, 0.587, 0.114);
+			// Ґрунтівка: бурий ґрунт ~70 % поверх трави (тіло 0.45–0.9 плямами), смуги коліс —
+			// голий ґрунт, посередині — трав'яна смужка 0.4–0.6 м із розривами на ~25 % довжини.
+			vec3 soil = vec3(dot(ra, lw)) * SOIL_TINT;
+			float bare = 1.0 - smoothstep(0.25, 0.45, track);
+			float body = clamp(0.68 + 0.5 * (fbm(vec2(u * 0.3, rf.y * 0.9) + 5.0) - 0.5),
+					0.45, 0.9);
+			body = max(body, 0.95 * bare * straight);
+			vec3 dirt_alb = mix(alb, soil, body);
+			float cg = (1.0 - smoothstep(0.2, 0.3, av + 0.1 * (vnoise(vec2(u * 0.7, 5.0)) - 0.5)))
+					* smoothstep(0.2, 0.45, vnoise(vec2(u * 0.3, 9.0))) * straight;
+			dirt_alb = mix(dirt_alb, alb * vec3(1.05, 1.0, 0.85), cg * 0.85);
+			// Дно колії — мокрий темно-бурий ґрунт.
+			dirt_alb = mix(dirt_alb, dirt_alb * vec3(1.0, 0.9, 0.78), rut * 0.7);
+			// Асфальт: темний і рівний (тон текстури дає лише дрібну варіацію), латки ремонту 1–4 м
+			// (свіжі темніші, старі світліші), тріщини низького контрасту; край переходить у гравій
+			// до 0.4 м усередину.
+			float la = dot(ra, lw);
+			vec3 asph = vec3(la * 0.8) * vec3(0.97, 0.99, 1.02);
+			asph *= mix(1.0, 0.8, smoothstep(0.6, 0.64, fbm(vec2(u * 0.3, rf.y * 0.3) + 31.0)));
+			asph *= mix(1.0, 1.1, smoothstep(0.58, 0.62, fbm(vec2(u * 0.2, rf.y * 0.25) + 47.0)));
+			float crack = 1.0 - smoothstep(0.0, 0.025 + (abs(dpx.x) + abs(dpy.x)) * 3.0, abs(vnoise(p * 3.0 + 5.0) - 0.5));
+			asph *= 1.0 - 0.18 * crack;
+			vec3 gravel = vec3(la * 1.3) * vec3(1.02, 1.0, 0.95) * (0.75 + 0.5 * vnoise(p * 45.0));
+			float crumble = smoothstep(-0.45, -0.05, de + 0.35 * (vnoise(vec2(u * 1.4, side * 7.0 + 3.0)) - 0.5));
+			// Кінець асфальту (перехід у ґрунтівку): замість прямого зрізу — гравійна смуга
+			// завдовжки ~ширину дороги, у яку асфальт переходить плямами.
+			float apron = 1.0 - smoothstep(0.45, 0.9, rt.r + 0.35 * (vnoise(p * 2.5 + 17.0) - 0.5));
+			asph = mix(asph, gravel, max(crumble, apron * step(0.05, rt.g)));
+			// Бруківка: бордюр — темніша смуга 0.3 м по краю вулиці (2 px на типовому зумі; вужча
+			// зникає).
+			float kerb = smoothstep(-0.45, -0.3, de) * rt.b;
+			// Асфальт -> бруківка: той самий шум, що й у текстурі вище, тож тон і текстура
+			// міняються разом.
+			float kp = smoothstep(0.25, 0.75, rt.r / max(rt.r + rt.b, 1e-4) + 0.35 * (fbm(p * 1.7 + 13.0) - 0.5));
+			vec3 paved_alb = mix(ra, asph, kp);
+			// Межа типів нерівна, ~1 м за шумом: дрібна октава ламає пряму лінію зміни переможця
+			// в растрі.
+			float g_k = smoothstep(0.3, 0.7, rt.g + 0.3 * (vnoise(p * 2.0 + 29.0) - 0.5) + 0.15 * (vnoise(p * 7.0 + 41.0) - 0.5));
+			// Бордюр множиться після стиснення яскравості (як колії), інакше воно вдвічі зменшує
+			// ΔL*.
+			road_mul *= mix(1.0, 0.68, kerb * (1.0 - g_k));
+			vec3 road_alb = mix(paved_alb, dirt_alb, g_k);
+			// Калюжі в коліях — у дощ і при ґрунті MUD, на кожній колії свої (хеш комірки й боку),
+			// тож не стають у ряд пунктиром. Сухо без MUD — жодної. На всю ширину в низинах — лише
+			// в дощ.
+			float wetr = clamp(weather_wetness, 0.0, 1.0);
+			float rut_wet = max(wetr, mud_amount > 0.0 ? 0.7 : 0.0);
+			float kc = floor(u / RUT_CELL_M);
+			vec2 cid = vec2(kc, side * 7.0 + 3.0);
+			float hl = mix(0.15, 1.25, hash12(cid + 23.0));
+			float pc = (kc + 0.5) * RUT_CELL_M + (RUT_CELL_M * 0.5 - hl) * (hash12(cid + 11.0) * 2.0 - 1.0);
+			// Півширина 0.18–0.28 м: калюжа ширша за дно колії (0.3 м); кінці круглі, край
+			// нерівний.
+			float pw = mix(0.18, 0.28, hash12(cid + 37.0));
+			float pd = length(vec2(max(abs(u - pc) - max(hl - pw, 0.0), 0.0), track)) - pw
+					+ 0.08 * (vnoise(vec2(u * 6.0, side * 5.0 + 2.0)) - 0.5);
+			float present = step(hash12(cid), RUT_PUDDLE_P * rut_wet) * rt.g * straight;
+			rut_pud = present * (1.0 - smoothstep(-0.05 - fwv, fwv, pd));
+			// Каламутний обідок 0.1–0.15 м: мокрий темний ґрунт довкола води.
+			rut_rim = present * (1.0 - smoothstep(0.0, 0.14 + fwv, pd)) * (1.0 - rut_pud);
+			rut_pud = max(rut_pud, rt.g * wetr * smoothstep(0.7, 0.76, fbm(vec2(u * 0.12, rf.y * 0.15) + 21.0))
+					* (1.0 - smoothstep(0.0, 0.3, rf.x + 0.3)));
+			// Мокрий асфальт і бруківка: глянцеві смуги 4–10 м уздовж і 1–2 м упоперек — відблиск
+			// неба, а не темні плями.
+			paved_sheen = wetr * (rt.r + rt.b) * smoothstep(0.5, 0.62, fbm(vec2(u * 0.1, rf.y * 0.6) + 61.0));
+			// Узбіччя: трава світліша й сіріша, з дрібними плямами ґрунту дороги.
+			float vg = verge * (0.45 + 0.55 * vnoise(p * 9.0));
+			float speck = smoothstep(0.55, 0.75, vnoise(p * 23.0 + 4.0));
+			vec3 trampled = mix(alb, vec3(dot(alb, lw)) * 1.1, 0.35);
+			alb = mix(alb, mix(trampled, ra, speck * 0.6), vg * 0.6);
+			alb = mix(alb, road_alb, road_cov);
+			// Узбіччя асфальту: гравій 0.3–0.5 м за краєм, межа нерівна, далі трава.
+			float shoulder = rt.r * step(0.0, de) * (1.0 - smoothstep(0.3, 0.5, de + 0.2 * (vnoise(vec2(u * 0.9, side * 11.0)) - 0.5)));
+			alb = mix(alb, gravel, shoulder * (1.0 - road_cov) * (0.55 + 0.45 * vnoise(p * 17.0)));
+			nxy = mix(nxy, rn, road_cov);
+			rough = mix(rough, mix(0.9, 0.72, rt.r + rt.b), road_cov);
+		}
+		// Запечене затінення рельєфу (TerrainHeight, B): низини й русло темніші, горби світліші.
+		// Кривизна ізотропна, тож пологі хвилі рельєфу на полі видно саме через неї.
+		alb *= 1.0 + 0.35 * curvature;
+		// Запечене світло-тінь: 10° схил міняє яскравість на ~15 рівнів, на далекій відстані
+		// слабшає. Світло-тінь — похідна висоти вздовж сонця, тобто спрямована: з повним
+		// підсиленням на дрібних пологих хвилях вона дає паралельні діагональні смуги через усю
+		// дошку (узгодженість орієнтації по вікнах 0.87). Тож повна сила — лише на схилах круче
+		// ~10–22° (пагорб, берег), на пологому полі — ×1.
+		float shade_k = mix(1.0, 9.0, smoothstep(0.18, 0.4, slope_tan));
+		alb *= 1.0 + clamp(shade_k * hill_shade, -0.4, 0.55) * (1.0 - 0.4 * smoothstep(25.0, 45.0, cam_dist));
+		// Макро-варіація 20-50 м (fbm ~ 1/0.2 клітинки = 40 м): ламає повтор тону,
+		// не міняючи масштаб дрібниць.
+		float macro = fbm(p * 0.2 + 41.0) - 0.5;
+		alb *= vec3(1.0 + 0.16 * macro, 1.0 + 0.13 * macro, 1.0 + 0.06 * macro);
+		// З рельєфом пляма альбедо не перекриває хвилі землі: розкид яскравості стиснуто на ~45 %.
+		if (use_height) {
+			float l0 = max(dot(alb, vec3(0.299, 0.587, 0.114)), 0.004);
+			alb *= pow(l0 / 0.05, -0.45);
+		}
+		alb *= mix(1.0, road_mul, road_cov);
+
+		// Рельєф: стрімкий схил — голий ґрунт і камінь (шар HILL), а не трава; берег між урізом і
+		// верхом — мокрий мул і галька (шар BANK), темніший за траву над ним. Змішування за
+		// схилом і висотою, а не за клітинкою.
+		vec3 alb_field = alb;
+		float rock_dbg = 0.0;
+		float rock_k = 0.0;
+		float bar_w = 0.0;
+		float bank_amt = 0.0;
+		if (use_height) {
+			// Крутий схил (камінь пагорба й берег): трипланарна проєкція на нерухомі світові
+			// площини — XZ з вагою |n.y|^4, XY для граней уздовж Z (|n.z|^4), ZY — уздовж X
+			// (|n.x|^4). Без повороту: проєкція вздовж схилу дає на обривах концентричні смуги
+			// розтягнення.
+			vec3 wn = normalize(mat3(INV_VIEW_MATRIX) * NORMAL);
+			// bar_mask = 0.5 + 0.5 * bend: -1 коса (внутрішній), +1 підмитий берег (зовнішній).
+			float bend_s = bar_mask * 2.0 - 1.0;
+			float tx = pow(abs(wn.x), 4.0);
+			float tz = pow(abs(wn.z), 4.0);
+			float ty = pow(abs(wn.y), 4.0);
+			float tsum = max(tx + ty + tz, 1e-4);
+			vec2 pxy = world_pos.xy;
+			vec2 pzy = world_pos.zy;
+			// Камінь лише на схилах круче ~25° (tan 0.47): пологі верхи пагорба — трава, як у полі.
+			float slope_amt = smoothstep(0.47, 0.62, slope_tan + 0.08 * (fbm(p * 1.3) - 0.5)) * (1.0 - road_cov);
+			// Річковий берег не тягне щебінь пагорба: його тип дає вигин русла (нижче).
+			slope_amt *= 1.0 - smoothstep(0.02, 0.25, shore_mask);
+			bank_amt = smoothstep(0.08, 0.55, shore_mask + 0.2 * (fbm(p * 2.1 + 7.0) - 0.5));
+			if (slope_amt > 0.01) {
+				// Бокові проєкції семплуються лише там, де їхня частка ваги > 5 %: на помірному
+				// схилі вони розтягують текстуру в 1.7 раза вздовж лінії спаду й розмивають камінь.
+				vec3 ra; vec2 rn; float rh; float rc;
+				sample_layer(HILL, p, dpx, dpy, vec2(0.0), detail_fade, ra, rn, rh, rc);
+				if ((tx + tz) / tsum > 0.05) {
+					vec3 sa; vec2 sn; float sh; float sc;
+					vec3 sb; float sd; float sh2;
+					sample_layer(HILL, pxy, dxy_x, dxy_y, vec2(0.0), detail_fade, sa, sn, sh, sc);
+					sample_layer(HILL, pzy, dzy_x, dzy_y, vec2(0.0), detail_fade, sb, sn, sh2, sd);
+					ra = (ra * ty + sa * tz + sb * tx) / tsum;
+					rc = (rc * ty + sc * tz + sd * tx) / tsum;
+					rh = (rh * ty + sh * tz + sh2 * tx) / tsum;
+				}
+				// Тон каменю — у межах трави й ґрунту: скан на ~5 L* світліший за поле, а без
+				// множника дає найсвітлішу ділянку карти.
+				ra *= ROCK_GAIN;
+				// Висотне змішування: першими з трави проступають верхи каменів, край різкий за
+				// висотою; шум 3–6 м розбиває камінь на скупчення з травою між ними. Пучки трави
+				// 0.3–0.6 м (vnoise ×14 / клітинку) заходять на камінь, тож рівний відрізок контуру
+				// не довший за ~0.5 м.
+				float grass_bite = smoothstep(0.5, 0.8, vnoise(p * 14.0 + 5.3));
+				float rs = slope_amt * 0.45 + 1.5 * (fbm(p * 1.6 + 71.0) - 0.5);
+				float rx = rs + (rh - 0.5) * 1.2 - 0.3 * grass_bite;
+				rock_k = smoothstep(0.42, 0.58, rx);
+				// Камінь лежить у землі: м'яке затінення 0.4 м назовні від скупчення (відстань — з
+				// плавного поля rs через його градієнт у метрах, без висот і трави, тож лінії по
+				// контуру нема), пучки трави його перебивають. Сам камінь світліший на верхах і
+				// темніший у западинах карти висот: об'єм, а не рівномірний тон.
+				float px_m = max(length(dpx), length(dpy)) * METRES_PER_TILE;
+				float grad_m = length(vec2(dFdx(rs), dFdy(rs))) / max(px_m, 1e-4);
+				float out_m = (0.5 - rs) / max(grad_m, 0.05);
+				float ao = (1.0 - smoothstep(0.0, 0.4, out_m)) * (1.0 - 0.7 * grass_bite) * (1.0 - rock_k);
+				// Край скупчення — найнижчі місця карти висот (поріг rx іде за rh), тож тон і
+				// каверна там тягнуться до середніх: інакше темні западини обводять камінь лінією.
+				float rtone = mix(0.72, 1.18, clamp(rh + 0.35 * (1.0 - rock_k), 0.0, 1.0));
+				alb = mix(alb * (1.0 - 0.3 * ao), ra * mix(1.0, rc, rock_k) * rtone, rock_k);
+				// Нормаль каменю сильніша за траву (×1.8): горбки ловлять світло біля камери.
+				nxy = mix(nxy, rn * 1.8, rock_k);
+			}
+			if (bank_amt > 0.01) {
+				vec3 ba; vec2 bn; float bh; float bc;
+				sample_layer(BANK, p, dpx, dpy, vec2(0.0), detail_fade, ba, bn, bh, bc);
+				if ((tx + tz) / tsum > 0.05) {
+					vec3 sa; vec2 sn; float sh; float sc;
+					vec3 sb; float sd;
+					sample_layer(BANK, pxy, dxy_x, dxy_y, vec2(0.0), detail_fade, sa, sn, sh, sc);
+					sample_layer(BANK, pzy, dzy_x, dzy_y, vec2(0.0), detail_fade, sb, sn, sh, sd);
+					ba = (ba * ty + sa * tz + sb * tx) / tsum;
+					bc = (bc * ty + sc * tz + sd * tx) / tsum;
+				}
+				float above_b = (world_pos.y - water_level) / 0.125;
+				float contact = 1.0 - smoothstep(0.0, 0.7, above_b);
+				vec3 lw = vec3(0.299, 0.587, 0.114);
+				float fl = max(dot(alb, lw), 0.004);
+				// Тип берега — з вигину русла: ґрунт лише на зовнішній стороні повороту (підмив),
+				// смугою, що гуляє 0-2 м із хвилею ~20 м; на плесах і косах — низька трава й солома
+				// до води.
+				float outer = max(bend_s, 0.0);
+				float band = smoothstep(0.25, 0.75, fbm(p * 0.35 + 13.0));
+				float cut_amt = smoothstep(0.2, 0.7, outer) * band;
+				// Ґрунт грані: L* 22-32, тепло-бурий; текстура лише дає дрібну пістрявість.
+				float bl = max(dot(ba * bc, lw), 0.004);
+				// Темніше й зеленіше за пісок (у тон прибережної трави), з дрібною варіацією тону.
+				vec3 soil = fl * 0.7 * vec3(1.3, 1.0, 0.7) * clamp(bl / 0.05, 0.75, 1.2) * bc * (0.8 + 0.4 * vnoise(p * 14.0));
+				alb = mix(alb, soil * (1.0 - 0.3 * contact), bank_amt * cut_amt);
+				// Смуга сухої трави вздовж урізу: 0.05–0.4 клітинки за шумом; ширшає на внутрішніх
+				// вигинах і зникає на підмитих берегах.
+				float thr = mix(0.1, 0.85, smoothstep(0.2, 0.8, fbm(p * 0.45 + 3.0))) - 0.3 * max(-bend_s, 0.0) + 0.4 * outer;
+				// Маска 0.2–0.4 клітинки розриває смугу, щоб вона не мала сталої ширини.
+				float collar_break = smoothstep(0.25, 0.6, fbm(p * 3.0 + 21.0));
+				float straw = smoothstep(thr, thr + 0.35, shore_mask) * (1.0 - cut_amt)
+						* collar_break;
+				alb = mix(alb, alb * vec3(1.12, 1.05, 0.8), straw * 0.6);
+				// Біле на березі читається як відблиск: стеля ~L* 55 (Y ~ 0.1).
+				float lc = dot(alb, lw);
+				alb *= mix(1.0, min(1.0, 0.1 / max(lc, 1e-4)), bank_amt);
+				// Земля, мул і мокрий ґрунт шорсткі: сухим не нижче 0.75, мокра смуга — не глянець.
+				rough = mix(rough, mix(0.9, 0.75, contact), bank_amt);
+			}
+			// Коса — півмісяць: верхній край гуляє шумом, до води — перехід від сухого до мокрого.
+			bar_w = clamp(max(-bend_s, 0.0) * 3.0, 0.0, 1.0) * smoothstep(0.05 + 0.35 * fbm(p * 1.1 + 31.0), 0.5 + 0.2 * fbm(p * 1.1 + 31.0), shore_mask);
+			// Дрібна нормаль не лягає на обриви: проєкція текстури плоска, а не вздовж схилу.
+			nxy *= 1.0 - 0.8 * max(slope_amt * (1.0 - rock_k), bank_amt);
+			rock_dbg = rock_k;
+		}
+
+		// Мокрість: темніше й глянцевіше. Калюжі — лише в коліях дороги й вікнах болота.
+		float wet = clamp(weather_wetness, 0.0, 1.0);
+		// Мокрий асфальт і бруківка темнішають сильніше за землю (×0.6 проти ×0.75).
+		alb *= mix(1.0, 0.75 - 0.15 * road_cov * (rt.r + rt.b), wet);
+		// Мокрий асфальт глянцевіший за мокру землю: чим більше дороги під пікселем, тим нижче
+		// шорсткість.
+		rough = mix(rough, mix(0.4, 0.22, road_cov * (rt.r + rt.b)), wet);
+		// Мокрі смуги коліс — трохи глянцевіші (0.18).
+		rough = mix(rough, 0.18, wet * wheel * road_cov);
+		// Калюжі ґрунтівки: у коліях і на всю ширину в низинах (координати дороги, див. вище).
+		float puddle = rut_pud * road_cov;
+		// Вікна стоячої води в болоті 0.5–2 м (~10 % площі): темні, з відблиском неба й у суху
+		// погоду.
+		float pool = marsh_w * (1.0 - smoothstep(0.29, 0.32, fbm(p * 1.6 + 43.0) + 0.08 * (vnoise(p * 9.0) - 0.5)));
+		puddle = max(puddle, pool);
+		alb *= mix(1.0, 0.55, puddle) * mix(1.0, 0.65, max(rut_rim * road_cov, pool));
+		// Мокра смуга берега: вага води росте ~3.4 на клітинку біля урізу (0.5), тож
+		// 0.1 -> 0.5 — це ~1 м суші перед водою; найтемніша й найглянцевіша при воді.
+		// З рельєфом смуга йде за ґрунтом, а не за клітинкою: мокре там, де земля в межах 0.4 м
+		// над рівнем води й поруч є вода (маска води з карти висот).
+		float shore = 0.0;
+		if (use_height) {
+			float above_m = (world_pos.y - water_level) / 0.125;
+			// Смуга — за горизонталлю (висота / тангенс схилу): 0.2-0.5 м упоперек і на косі, і на
+			// обриві.
+			float run_m = above_m / max(slope_tan, 0.05);
+			shore = (1.0 - smoothstep(0.2, 0.5, run_m)) * smoothstep(0.03, 0.12, shore_mask);
+		}
+		alb *= mix(1.0, 0.6, shore);
+		// Темна мокра лінія просто в урізі (2-4 px на близькому зумі), а не лише розмита смуга.
+		if (use_height) {
+			float edge_m = (world_pos.y - water_level) / 0.125 / max(slope_tan, 0.05);
+			alb *= mix(1.0, 0.65, (1.0 - smoothstep(0.04, 0.14, edge_m)) * smoothstep(0.03, 0.12, shore_mask));
+		}
+		// Мокрий берег не дзеркало: шорсткість лише до 0.5.
+		rough = mix(rough, 0.5, shore);
+		// Гладка калюжа відбиває зонд BoardView звичайним шляхом освітлення — без SSR.
+		// Дощ на ній — ті самі кола, що й на річці. Підлога шорсткості 0.12: на 0.05
+		// сонце на брижі давало однопіксельні іскри.
+		float rv = puddle > 0.0 ? rv_all : 0.0;
+		vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * 1.2 * wet * rv : vec2(0.0);
+		rough = mix(rough, 0.12 + 0.1 * wet * (1.0 - rv), puddle);
+		rough = mix(rough, 0.12, paved_sheen * road_cov);
+		nxy = mix(nxy, ripple, puddle);
+		// Мокрий асфальт відбиває ~8 % неба: сама шорсткість 0.22 під похмурим небом майже не дає
+		// відблиску, і мокра дорога не відрізняється від сухої.
+		float mirror = max(max(puddle * 2.5, shore * 0.12),
+				wet * road_cov * (rt.r + 0.5 * rt.b) * 0.08 + paved_sheen * road_cov * 0.8);
+		vec3 refl = vec3(0.0);
+		if (mirror > 0.0 && sky_reflection_gain > 0.0) {
+			// Як overcast_reflection (F0 0.1), але частку неба обмежено PUDDLE_SKY_MAX: на скісному
+			// куті вага 2.5 інакше дає майже біле дзеркало.
+			vec3 nw = slope_to_world(ripple);
+			vec3 vw = normalize(CAMERA_POSITION_WORLD - world_pos);
+			float fr = 0.1 + 0.9 * pow(1.0 - clamp(dot(nw, vw), 0.0, 1.0), 3.0);
+			refl = overcast_sky_at(reflect(-vw, nw), TIME) * min(fr * mirror, mix(PUDDLE_SKY_MAX, 0.1, pool));
+		}
+
+		// Коса (внутрішній берег повороту) — останнім, від яскравості поля поруч (з тією ж
+		// мокрістю): світліша й тепліша за поле, а не лише менш темна, ніж берег.
+		if (bar_w > 0.0) {
+			// Тон ближчий до прибережної трави, з дрібною варіацією яскравості: рівний тон
+			// читається як глина.
+			vec3 sand = dot(alb_field, vec3(0.299, 0.587, 0.114)) * mix(1.0, 0.75, wet) * mix(SAND_TINT, vec3(1.12, 1.05, 0.8), 0.5) * (1.0 - 0.2 * shore_mask);
+			sand *= 0.78 + 0.44 * vnoise(p * 13.0) + 0.1 * (vnoise(p * 41.0) - 0.5);
+			alb = mix(alb, sand, bar_w * 0.85);
+		}
+
+		if (cloud_shadow_strength > 0.0) {
+			float cloud = smoothstep(0.45, 0.7, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
+			alb *= 1.0 - cloud_shadow_strength * cloud;
+		}
+
+		FOG = vec4(0.0);
+		if (surround) {
+			alb = surround_grade(alb, haze.a);
+			refl = surround_grade(refl, haze.a);
+			FOG = surround_fog(haze, line_a);
+		}
+		ALBEDO = alb;
+		EMISSION = refl * sky_reflection_gain;
+		if (debug_view > 0) {
+			int c = top[0] + 1;
+			vec3 dc = vec3(float(c & 1), float((c >> 1) & 1), float((c >> 2) & 1));
+			ALBEDO = vec3(0.0);
+			EMISSION = debug_view == 1 ? dc : vec3(debug_view == 2 ? road_cov : rock_dbg);
+			rough = 1.0;
+		}
+		ROUGHNESS = rough;
+		// Колії й смуги коліс темніші й у відбитті: інакше постійний відблиск неба (F0 0.04 при
+		// альбедо ~0.06) вдвічі зменшує їхній ΔL* на екрані.
+		SPECULAR = mix(0.5, 0.2, bank_amt) * mix(1.0, road_mul, road_cov);
+		NORMAL_MAP = vec3(nxy * 0.5 + 0.5, 1.0);
 	}
-	ROUGHNESS = rough;
-	// Колії й смуги коліс темніші й у відбитті: інакше постійний відблиск неба (F0 0.04 при
-	// альбедо ~0.06) вдвічі зменшує їхній ΔL* на екрані.
-	SPECULAR = mix(0.5, 0.2, bank_amt) * mix(1.0, road_mul, road_cov);
-	NORMAL_MAP = vec3(nxy * 0.5 + 0.5, 1.0);
 }

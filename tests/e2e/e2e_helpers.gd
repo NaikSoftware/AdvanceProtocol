@@ -245,7 +245,7 @@ func act(from: Vector2i, to: Vector2i) -> void:
 
 
 ## Верба інженера кнопками панелі: вибрати інженера, натиснути вербу, тапнути
-## тайл, підтвердити. Міна ставиться самим тапом — без підтвердження (власник).
+## тайл, підтвердити. Міна ставиться самим тапом — без підтвердження.
 func engineer_act(from: Vector2i, action: int, to: Vector2i) -> void:
 	tap(from)
 	press(engineer_panel().button_for(action))

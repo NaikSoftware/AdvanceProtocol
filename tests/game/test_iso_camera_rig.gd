@@ -69,8 +69,25 @@ func test_pan_is_clamped_to_board() -> void:
 	for i in 50:
 		rig.pan(Vector2(0, -300))
 	var focus: Vector3 = rig.global_position
-	assert_almost_eq(focus.x, 21.0, 0.01, "R12: межа — (board_size - 1) + BOARD_MARGIN, не board_size + BOARD_MARGIN")
-	assert_almost_eq(focus.z, 21.0, 0.01, "R12: межа — (board_size - 1) + BOARD_MARGIN, не board_size + BOARD_MARGIN")
+	var edge: float = 19.0 + rig.pan_margin()
+	assert_almost_eq(focus.x, edge, 0.01, "R12: межа — (board_size - 1) + pan_margin(), не board_size + поле")
+	assert_almost_eq(focus.z, edge, 0.01, "R12: межа — (board_size - 1) + pan_margin(), не board_size + поле")
+
+
+## Зблизька фокус іде на 2 клітинки за край, на типовому зумі — ще за край, на найбільшому
+## віддаленні лишається за 3 клітинки всередині: інакше рівна імла за кільцем забирала б
+## понад третину кадру.
+func test_pan_margin_narrows_from_two_cells_out_near_to_three_cells_in_far() -> void:
+	rig.zoom_level = IsoCameraRig.MIN_ZOOM
+	assert_eq(rig.pan_margin(), IsoCameraRig.BOARD_MARGIN)
+	assert_eq(rig._clamp_to_bounds(Vector3(-9.0, 0.0, 30.0)), Vector3(-2.0, 0.0, 21.0))
+	rig.zoom_level = 12.0
+	# (12 − 6) / (20 − 6) = 3/7; 2 − 5 · (3/7)² = 1.0816: юніт на крайній клітинці стає в
+	# центр кадру.
+	assert_almost_eq(rig.pan_margin(), 2.0 - 5.0 * 9.0 / 49.0, 1e-5)
+	rig.zoom_level = IsoCameraRig.MAX_ZOOM
+	assert_eq(rig.pan_margin(), IsoCameraRig.BOARD_MARGIN_FAR)
+	assert_eq(rig._clamp_to_bounds(Vector3(-9.0, 0.0, 30.0)), Vector3(3.0, 0.0, 16.0))
 
 ## R13: дельта — це палець на екрані, не світові осі; ріг мусить сам довести
 ## її до площини дошки крізь свою власну проекцію. Рух лише по одній
@@ -278,10 +295,11 @@ func test_fling_stops_cleanly_at_the_hard_bound_without_jitter() -> void:
 
 	simulate(rig, 10, 1.0 / 60.0)
 	var at_bound: Vector3 = rig.global_position
-	assert_almost_eq(at_bound.z, 21.0, 0.01, "R12: клемп по z лишається на (board_size-1)+MARGIN")
+	var edge: float = 19.0 + rig.pan_margin()
+	assert_almost_eq(at_bound.z, edge, 0.01, "R12: клемп по z лишається на (board_size-1)+pan_margin()")
 
 	simulate(rig, 10, 1.0 / 60.0)
-	assert_almost_eq(rig.global_position.z, 21.0, 0.01,
+	assert_almost_eq(rig.global_position.z, edge, 0.01,
 		"після клемпа позиція не сіпається туди-сюди навколо межі — швидкість по z загашена одразу")
 
 # --- view_changed: єдиний спосіб для вигляду дізнатись, що екран поїхав ------

@@ -106,8 +106,8 @@ func test_river_map_loads_and_populates_a_sane_match() -> void:
 	var board: Board = m.to_board()
 	# Річка блокує брід поза мостом, а сам міст — прохідний.
 	assert_false(board.penalty_at(Vector2i(8, 10)) < Terrain.IMPASSABLE, "річка непрохідна поза мостом")
-	assert_true(board.penalty_at(Vector2i(12, 10)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
-	assert_true(board.penalty_at(Vector2i(12, 11)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
+	assert_true(board.penalty_at(Vector2i(13, 10)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
+	assert_true(board.penalty_at(Vector2i(13, 11)) < Terrain.IMPASSABLE, "міст мусить лишатися прохідним")
 
 	var state: BattleState = BattleState.create(board, 2, 1)
 	m.populate(state)
@@ -173,7 +173,7 @@ func test_surface_variants_per_kind() -> void:
 	assert_eq(MapData.surface_variants(Terrain.Kind.WATER), 1, "лише типовий вигляд")
 
 
-# --- Зовнішнє кільце (рішення власника 2026-10-22): лише пейзаж за краєм дошки ----
+# --- Зовнішнє кільце: лише пейзаж за краєм дошки ----
 
 ## Дошка 2×1 з кільцем 1: розширена сітка 4×3, внутрішній блок — заглушка 255.
 func _ringed() -> MapData:

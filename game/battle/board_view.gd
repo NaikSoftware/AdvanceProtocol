@@ -23,6 +23,16 @@ const OVERLAY_LAYER: int = 4
 
 ## Руїни мостів: плита тримається на 0.25 над центром клітинки (центр — на 0.25 нижче рівня дороги).
 const PLACEHOLDER_DECK_TOP: float = 0.25
+## Альбедо тимчасового настилу (sRGB, лінійне ~0.075) — мокрий асфальт, не світліший за дорогу
+## на березі: світло-сіра плита була б найяскравішою річчю в кадрі. Руїни — темніший бетон у воді.
+const PLACEHOLDER_DECK_ALBEDO: Color = Color(0.31, 0.30, 0.29)
+const PLACEHOLDER_RUIN_ALBEDO: Color = Color(0.25, 0.245, 0.235)
+const _DECK_SHADER: Shader = preload("res://game/battle/shaders/placeholder_deck.gdshader")
+
+## Крок часу імли (`fog_time` у surroundings.gdshaderinc), секунд. Кожне оновлення коштує
+## один намальований кадр: на 10 Гц дошка без руху малює 10 кадрів на секунду, а крок не міняє
+## жодного пікселя більш як на 2/255; на 5 Гц край клуба вже стрибає, на 2 Гц — видимо.
+const FOG_TICK: float = 0.1
 
 ## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
 ## задумом — вона мусить читатись як лінія на межі тайла, а не як ще один
@@ -45,6 +55,18 @@ const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
 var surface: PackedByteArray = PackedByteArray()
 ## Seed косметичного рельєфу — з імені карти (battle_screen), щоб та сама карта мала той самий рельєф.
 var relief_seed: int = 0
+## Карта, з якої береться кільце довкола дошки (MapData.outer_*); null чи карта без кільця — світ
+## закінчується краєм дошки. Лише вигляд: Board кільця не має.
+var ring_map: MapData = null
+## Час імли для всіх матеріалів світу; з боєм не скидається, бо візерунку однаково, з якого
+## часу пливти.
+static var fog_time: float = 0.0
+## Таймер `FOG_TICK`; лише з кільцем — без нього імли нема.
+var _fog_clock: Timer
+## Кільце й розмір дошки останньої побудови: для імли на руїнах мостів кільця й лінії межі на
+## настилах дошки.
+var _ring: int = 0
+var _board_size: Vector2i = Vector2i.ZERO
 ## Карта висот поточної дошки; ця ж поверхня — TerrainHeight.active для всіх, хто лежить на землі.
 var _height: TerrainHeight
 var _height_signature: String = ""
@@ -113,7 +135,7 @@ func build(board: Board) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, а тести це фіксують як витік.
 	for child in get_children():
-		if child != _ground and child != _water and child != _probe:
+		if child != _ground and child != _water and child != _probe and child != _fog_clock:
 			child.free()
 	_kind_by_cell.clear()
 	# Вузли контуру щойно звільнені циклом free() вище (вони теж діти цього
@@ -139,25 +161,44 @@ func build(board: Board) -> void:
 	# Рельєф бакається раз на карту: підірваний міст міняє вид клітинки, але не форму землі.
 	# Підтип покриття (surface) теж міняє рельєф: від нього залежать тип і ширина дороги, а з
 	# ними вирівнювання землі.
-	var signature: String = "%d:%d:%d:%d" % [board.width, board.height, relief_seed, hash(surface)]
+	# Світ — дошка разом із кільцем автора: рельєф, вода й дороги течуть крізь нього одним
+	# запіканням.
+	var ring: int = Surroundings.ring_of(ring_map) if board.width > 0 and board.height > 0 else 0
+	var world: Board = Surroundings.world_board(board, ring_map) if ring > 0 else board
+	_ring = ring
+	_board_size = Vector2i(board.width, board.height)
+	var world_surface: PackedByteArray = Surroundings.world_surface(ring_map) if ring > 0 else surface
+	var signature: String = "%d:%d:%d:%d:%d" % [board.width, board.height, relief_seed, hash(surface), ring]
 	if board.width <= 0 or board.height <= 0:
 		_height = null
 	elif _height == null or signature != _height_signature or _height_kind_classes != _classes(board):
-		_height = TerrainHeight.bake(board, 0, relief_seed, surface)
+		_height = TerrainHeight.bake(world, 0, relief_seed, world_surface, ring)
 		_height_signature = signature
 		_height_kind_classes = _classes(board)
 	TerrainHeight.active = _height
-	# Відступ поза дошкою — Task 9 (оточення); поки земля рівно під дошкою.
-	_ground.build(board, 0, surface, _height)
+	_ground.build(world, 0, world_surface, _height, ring)
 
 	if _water == null:
 		_water = WaterSurface.new()
 		_water.name = "Water"
 		add_child(_water)
 	var kinds: Image = _ground.kind_image()
-	_water.build(board, 0, null if kinds.is_empty() else ImageTexture.create_from_image(kinds), _height)
+	_water.build(world, 0, null if kinds.is_empty() else ImageTexture.create_from_image(kinds), _height, ring)
 
-	_build_placeholder_bridge_deck(board)
+	_build_placeholder_bridge_deck(world, ring)
+	if ring > 0:
+		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.
+		add_child(Surroundings.skirt(Vector2i(board.width, board.height), _height.min_height() - 0.5))
+		if _fog_clock == null:
+			_fog_clock = Timer.new()
+			_fog_clock.name = "FogClock"
+			_fog_clock.wait_time = FOG_TICK
+			_fog_clock.autostart = true
+			_fog_clock.timeout.connect(_tick_fog)
+			add_child(_fog_clock)
+	if _fog_clock != null:
+		# Без кільця імли нема: годинник стоїть і не будить кадр.
+		_fog_clock.paused = ring == 0
 
 	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз; перезйомку
 	# після перебудови просить rebuild_tiles явно (_request_probe_capture).
@@ -167,7 +208,10 @@ func build(board: Board) -> void:
 		_probe.update_mode = ReflectionProbe.UPDATE_ONCE
 		_probe.cull_mask = 1
 		_probe.box_projection = true
-		_probe.blend_distance = 0.0
+		# З кільцем зонд гасне плавно за 1.5 клітинки від краю коробки (дошка + 2): інакше вода
+		# кільця міняла б яскравість різкою прямою лінією. Клітинки дошки лишаються в неослабленій
+		# частині.
+		_probe.blend_distance = 1.5 if ring > 0 else 0.0
 		# Коробка від y = -1 до 11 і на 2 клітинки ширша за дошку: на межі коробки
 		# зонд гасне, і вода крайніх клітинок чорніла б. Знімок — з висоти 1.5.
 		_probe.size = Vector3(board.width + 4, 12.0, board.height + 4)
@@ -354,27 +398,48 @@ func reflection_probe() -> ReflectionProbe:
 ## PlaceholderBridgeRuin і ставить справжні мости (бетонний проліт на опорах або
 ## понтони) та їхні руїни. Поки річка тече під мостом, без настилу гравець не
 ## бачив би переправи. По одному MultiMesh — по одному draw call (§8).
-func _build_placeholder_bridge_deck(board: Board) -> void:
+## board — світ (дошка з кільцем, зсунута на ring). Списки клітинок — лише дошки. Цілий міст
+## кільця настилу не має: рівна світла плита впоперек русла під напівзакритою імлою читається
+## як кінець річки, а переправи кільця правила не бачать. Руїни кільця йдуть тим самим
+## мультимешем, без нового draw call.
+func _build_placeholder_bridge_deck(board: Board, ring: int = 0) -> void:
 	for y in board.height:
 		for x in board.width:
-			var cell := Vector2i(x, y)
-			if board.kind_at(cell) == Terrain.Kind.BRIDGE:
-				_placeholder_bridge_deck_cells.append(cell)
-				_placeholder_bridge_deck_axes.append(_bridge_axis(board, cell))
-			elif board.kind_at(cell) == Terrain.Kind.BRIDGE_DESTROYED:
-				_placeholder_bridge_ruin_cells.append(cell)
-				_add_ruin_transforms(cell, _bridge_axis(board, cell))
+			var cell := Vector2i(x - ring, y - ring)
+			var on_board: bool = _kind_by_cell.has(cell)
+			var kind: int = board.kind_at(Vector2i(x, y))
+			if kind != Terrain.Kind.BRIDGE and kind != Terrain.Kind.BRIDGE_DESTROYED:
+				continue
+			var axis: Vector2i = _bridge_axis(board, Vector2i(x, y))
+			if kind == Terrain.Kind.BRIDGE:
+				if on_board:
+					_placeholder_bridge_deck_cells.append(cell)
+					_placeholder_bridge_deck_axes.append(axis)
+			else:
+				if on_board:
+					_placeholder_bridge_ruin_cells.append(cell)
+				_add_ruin_transforms(cell, axis)
 	if not _placeholder_bridge_ruin_transforms.is_empty():
-		_add_placeholder_multimesh("PlaceholderBridgeRuin", _placeholder_bridge_ruin_transforms, Color(0.2, 0.19, 0.18))
+		_add_placeholder_multimesh("PlaceholderBridgeRuin", _placeholder_bridge_ruin_transforms, PLACEHOLDER_RUIN_ALBEDO)
 	var deck: Array[Transform3D] = []
 	for i in _placeholder_bridge_deck_cells.size():
-		var turn := Basis() if _placeholder_bridge_deck_axes[i].x != 0 else Basis(Vector3.UP, PI * 0.5)
-		var cell: Vector2i = _placeholder_bridge_deck_cells[i]
-		# Настил стоїть на рівні дороги на берегах, а русло під ним — нижче (TerrainHeight.deck_y).
-		deck.append(Transform3D(turn * Basis.from_scale(Vector3(1.0, 0.06, 0.8)),
-				Vector3(cell.x, _height.deck_y(cell) - 0.03, cell.y)))
+		deck.append(_deck_transform(_placeholder_bridge_deck_cells[i], _placeholder_bridge_deck_axes[i]))
 	if not deck.is_empty():
-		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, Color(0.42, 0.42, 0.4))
+		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, PLACEHOLDER_DECK_ALBEDO)
+
+
+## Імла пливе лише цим кроком, а не за `TIME`: матеріал з `TIME` змушує Mobile малювати
+## кожен кадр, і дошка без руху не відпочивала б зовсім.
+func _tick_fog() -> void:
+	fog_time += FOG_TICK
+	RenderingServer.global_shader_parameter_set(&"fog_time", fog_time)
+
+
+## Настил стоїть на рівні дороги на берегах, а русло під ним — нижче (TerrainHeight.deck_y).
+func _deck_transform(cell: Vector2i, axis: Vector2i) -> Transform3D:
+	var turn := Basis() if axis.x != 0 else Basis(Vector3.UP, PI * 0.5)
+	return Transform3D(turn * Basis.from_scale(Vector3(1.0, 0.06, 0.8)),
+			Vector3(cell.x, _height.deck_y(cell) - 0.03, cell.y))
 
 
 ## Уламки однієї клітинки: дві-три плити настилу, що звисають від опор під
@@ -410,9 +475,11 @@ func _add_ruin_transforms(cell: Vector2i, axis: Vector2i) -> void:
 
 func _add_placeholder_multimesh(node_name: String, transforms: Array[Transform3D], color: Color) -> void:
 	var box := BoxMesh.new()
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.95
+	var mat := ShaderMaterial.new()
+	mat.shader = _DECK_SHADER
+	mat.set_shader_parameter("albedo", color)
+	if _ring > 0:
+		Surroundings.apply(mat, _board_size)
 	box.material = mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D

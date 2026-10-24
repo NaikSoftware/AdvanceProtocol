@@ -32,7 +32,7 @@ func test_parse_rejects_ragged_rows_and_unknown_chars() -> void:
 
 
 
-# --- Косметичний підтип тайла (рішення власника 2026-10-21): лише вигляд, правила його не читають ---
+# --- Косметичний підтип тайла: лише вигляд, правила його не читають ---
 
 const _HEAD: String = "name_key=map_x\nground=DRY\ntiles:\n=.T\n=.T\n"
 
@@ -95,7 +95,7 @@ func test_move_cost_ignores_surface() -> void:
 					"тип %d, ґрунт %s, клітинки %s" % [type_id, ground, pair])
 
 
-# --- Зовнішнє кільце (рішення власника 2026-10-22): пейзаж за краєм, правила його не читають ---
+# --- Зовнішнє кільце: пейзаж за краєм, правила його не читають ---
 
 ## Дошка 2×1 (=.), кільце 1 → сітка 4×3; дошку пишуть один раз, у кільці на її місці '#'.
 const _RING_HEAD: String = "name_key=map_x\nground=DRY\nouter_margin=1\ntiles:\n=.\n"
@@ -174,7 +174,7 @@ func test_parse_rejects_malformed_outer_surface() -> void:
 
 
 func test_outer_ring_changes_neither_board_nor_move_cost() -> void:
-	# Сторож рішення власника: кільце — косметика. Та сама дошка з кільцем і без
+	# Кільце — косметика. Та сама дошка з кільцем і без
 	# дає ту саму Board, а ціна входу на крайову клітинку від кільця не залежить.
 	var bare: MapData = MapAscii.parse("name_key=map_x\nground=MUD\ntiles:\n=.\nspawns:\n")
 	var ringed: MapData = MapAscii.parse(_RING_HEAD.replace("DRY", "MUD") + _RING + "spawns:\n")
