@@ -116,6 +116,9 @@ const float CLASS_BAND = 0.05;
 const float CLASS_CORE = 0.5;
 // Межа болота ширша (~1.6 м проти ~0.3 м): болото переходить у траву, а не обривається плямою.
 const float MARSH_BAND = 0.3;
+// Межа між підтипами поля — ~0.5 клітинки (~4 м): вид той самий, число руху не міняється,
+// тож межу можна розмити сильно; рвана висотна суміш нижче лишає перехід нерівним.
+const float FIELD_SUB_BAND = 0.75;
 // Калюжі в коліях: комірка вздовж колії, у ній щонайбільше одна калюжа 0.3–2.5 м, що не виходить
 // за комірку. Імовірність 0.65 у дощ дає ~35 % довжини колії, проміжки з CV ~0.95; при MUD — ×0.7.
 const float RUT_CELL_M = 2.6;
@@ -304,7 +307,10 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 		float leaf = smoothstep(0.52, 0.66, fbm(p * 0.8 + 83.0)) * (1.0 - moss);
 		alb = mix(alb, alb * vec3(0.82, 0.98, 0.7), moss * 0.7);
 		alb = mix(alb, alb * vec3(1.18, 1.0, 0.78), leaf * 0.6);
-		vec3 grass = textureLod(macro_array, vec3(0.5, 0.5, float(FIELD * macro_variants)), 14.0).rgb;
+		// Трава між плямами підстилки — справжня текстура луки, а не її середній колір: рівна
+		// пляма одного кольору 1–2.5 м на оливковому тлі читалась як камуфляж.
+		float gmt = macro_m[FIELD] / METRES_PER_TILE;
+		vec3 grass = textureGrad(macro_array, vec3(p / gmt, float(FIELD * macro_variants)), dpx / gmt, dpy / gmt).rgb;
 		grass *= clamp(dot(alb, lw) / lm, 0.6, 1.4);
 		float floor_k = smoothstep(0.43, 0.5, fbm(p * 0.7 + 19.0));
 		float clump = smoothstep(0.62, 0.76, vnoise(p * 12.0 + 3.0));
@@ -465,8 +471,12 @@ void fragment() {
 			marsh_edge = marsh_edge
 					|| (layer_base[L[i]] == MARSH && tops[i] > tops[0] - MARSH_BAND);
 		}
+		// Два підтипи поля (лука й рілля) поруч: перехід ~4 м замість ~0.3 м, інакше на
+		// далекому зумі латки підтипів рябіють, як шум.
+		bool field_sub = layer_base[L[0]] == FIELD && layer_base[L[1]] == FIELD && L[0] != L[1]
+				&& tops[1] > tops[0] - FIELD_SUB_BAND;
 		// Ваги нормовано на CLASS_BAND: від їхньої величини залежать багно й калюжі нижче.
-		float band = marsh_edge ? MARSH_BAND : CLASS_BAND;
+		float band = marsh_edge ? MARSH_BAND : (field_sub ? FIELD_SUB_BAND : CLASS_BAND);
 		for (int i = 0; i < 3; i++) {
 			W[i] = max(tops[i] - (tops[0] - band), 0.0) * (CLASS_BAND / band);
 		}
@@ -558,7 +568,9 @@ void fragment() {
 				// Висотне змішування: на межі першим проступає те, що вище в самій
 				// карті висот (камінь, кому, пучок), тож перехід рваний, а не розмитий.
 				float wn = W[i] / max(W[0] + W[1] + W[2] + W[3], 1e-4);
-				H[i] = wn + Hgt[i] * 0.45;
+				// Між підтипами поля вага класу слабша: висота перемішує луку й ріллю на всю
+				// ширину смуги (~4 м), а не стягує перехід назад до ~1 м.
+				H[i] = wn * (field_sub ? 0.35 : 1.0) + Hgt[i] * 0.45;
 				hmax = max(hmax, H[i]);
 			}
 		}

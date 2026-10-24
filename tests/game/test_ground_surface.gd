@@ -321,3 +321,23 @@ func test_every_cell_shows_its_own_class_over_a_quarter_of_its_area() -> void:
 					bad.append("(%d, %d) %s %.0f %%" % [x, y, Terrain.Kind.keys()[board.kind_at(Vector2i(x, y))], share * 100.0])
 		gut.p("%s: найменша частка власного класу %.0f %%" % [file, worst * 100.0])
 		assert_eq(bad.size(), 0, "%s: клітинки без свого виду: %s" % [file, bad.slice(0, 10)])
+
+
+# Пора року: сезонний файл, де він є; інакше — звичайний. Шар без сезонних файлів (болото,
+# ліс) і невідома пора лишаються як є, тож пора не ламає жодної карти.
+func test_macro_path_takes_the_season_file_and_falls_back_to_the_plain_one() -> void:
+	var dir := "res://assets/terrain/macro/"
+	assert_eq(GroundSurface.macro_path("field", 0, &"summer"), dir + "field_albedo_0.summer.png")
+	assert_eq(GroundSurface.macro_path("field", 1, &"early"), dir + "field_albedo_1.early.png")
+	assert_eq(GroundSurface.macro_path("marsh", 0, &"summer"), dir + "marsh_albedo_0.png")
+	assert_eq(GroundSurface.macro_path("forest", 1, &"early"), dir + "forest_albedo_1.png")
+	assert_eq(GroundSurface.macro_path("field", 0, &"winter"), dir + "field_albedo_0.png")
+	assert_eq(GroundSurface.macro_path("field", 1), dir + "field_albedo_1.png")
+
+
+# Бракуючий варіант бере варіант 0 тієї ж пори, а не звичайний файл: інакше в літній ріллі
+# лягли б осінні латки.
+func test_missing_season_variant_takes_variant_zero_of_the_same_season() -> void:
+	var dir := "res://assets/terrain/macro/"
+	assert_eq(GroundSurface.macro_path("ploughed", 1, &"summer"), dir + "ploughed_albedo_0.summer.png")
+	assert_eq(GroundSurface.macro_path("marsh", 1), dir + "marsh_albedo_0.png")

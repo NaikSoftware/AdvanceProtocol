@@ -22,8 +22,9 @@ const RELIEF_M: Array[float] = [0.02, 0.04, 0.04, 0.07, 0.05, 0.10, 0.10, 0.05]
 
 ## Косметичні підтипи (MapData.surface): для виду — імена
 ## шарів за номером підтипу; перше ім'я — базовий шар. Шар підтипу вмикається, коли є
-## macro/<ім'я>_albedo_0.png; нема файлу — підтип тихо лишається базовим шаром, тож
-## додати PLOUGHED, PINE, DECIDUOUS пізніше — лише кинути файли (рядки нижче вже є).
+## macro/<ім'я>_albedo_0.png; нема файлу — підтип тихо лишається базовим шаром. Новому
+## підтипу файлу замало: шар ще потребує свого рядка в SURFACE_DETAIL, SURFACE_RELIEF_M
+## (і SURFACE_ALIGNED, якщо текстура спрямована), як у ploughed.
 const SURFACE_LAYERS: Dictionary = {
 	Terrain.Kind.ROAD: ["road", "dirt", "cobble"],
 	Terrain.Kind.FIELD: ["field", "ploughed"],
@@ -69,8 +70,10 @@ const TEX_LAYER_FOR_KIND: Dictionary = {
 
 ## Частка поля й пагорба, що при GroundState.MUD вкрита плямами багна далеко від
 ## доріг (біля доріг шейдер додає ще 0.2). §3.12: стан ґрунту — правило, і земля
-## мусить його показувати, не лише іконка HUD; але поле лишається полем.
-const MUD_BLEND: float = 0.3
+## мусить його показувати, не лише іконка HUD; але поле лишається полем. 0.15 дає ~15 %
+## поля далеко від доріг і ~35 % біля них: з 0.3 багно вкривало близько половини River
+## і на далекому зумі гасило луку й ріллю.
+const MUD_BLEND: float = 0.15
 
 const _SHADER: Shader = preload("res://game/battle/shaders/ground.gdshader")
 
@@ -88,6 +91,11 @@ var _kind_image: Image
 ## а форма меша від виду клітинок не залежить, тож він не складається вдруге.
 var _ring_mesh: ArrayMesh
 var _ring_mesh_height: TerrainHeight
+## Пора року: `summer`, `early` (рання осінь); порожня — пізня осінь, звичайні файли.
+## Для шару, що має файл macro/<шар>_albedo_<n>.<пора>.png, береться він; решта шарів — як є.
+## Ставити до першого build(): масиви текстур вантажаться один раз.
+var season: StringName = &""
+
 ## Імена шарів macro_array: перші 8 — TEX_LAYERS, далі — підтипи, чий файл існує.
 var _macro_layers: Array[String] = []
 
@@ -137,7 +145,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 		_albedo_array = _load_array("albedo")
 		_normal_array = _load_array("normal")
 		_macro_layers = _macro_layer_names()
-		_macro_array = _load_macro_array(_macro_layers)
+		_macro_array = _load_macro_array(_macro_layers, season)
 
 	var mat := ShaderMaterial.new()
 	mat.shader = _SHADER
@@ -329,15 +337,27 @@ static func _set_layer_properties(mat: ShaderMaterial, names: Array[String]) -> 
 	mat.set_shader_parameter("macro_m", macro)
 
 
-static func _load_macro_array(names: Array[String]) -> Texture2DArray:
+## Файл варіанта n шару для пори року. Порядок: варіант n цієї пори, варіант 0 цієї пори,
+## звичайний n, звичайний 0. Сезонні йдуть першими обидва: інакше бракуючий сезонний
+## варіант 1 узяв би осінній файл і на літній луці лягли б осінні латки.
+static func macro_path(layer_name: String, n: int, p_season: StringName = &"") -> String:
+	var base := "res://assets/terrain/macro/%s_albedo_%d%s.png"
+	var tries: Array[String] = []
+	if p_season != &"":
+		tries.append(base % [layer_name, n, "." + p_season])
+		tries.append(base % [layer_name, 0, "." + p_season])
+	tries.append(base % [layer_name, n, ""])
+	for path in tries:
+		if ResourceLoader.exists(path):
+			return path
+	return base % [layer_name, 0, ""]
+
+
+static func _load_macro_array(names: Array[String], p_season: StringName) -> Texture2DArray:
 	var images: Array[Image] = []
 	for layer_name in names:
-		var base := "res://assets/terrain/macro/%s_albedo_%d.png"
 		for n in MACRO_VARIANTS:
-			var path: String = base % [layer_name, n]
-			if not ResourceLoader.exists(path):
-				path = base % [layer_name, 0]
-			images.append((load(path) as Texture2D).get_image())
+			images.append((load(macro_path(layer_name, n, p_season)) as Texture2D).get_image())
 	var arr := Texture2DArray.new()
 	arr.create_from_images(images)
 	return arr
