@@ -30,6 +30,20 @@ func _map(width: int = 6, height: int = 6) -> MapData:
 	return m
 
 
+## Engine.max_fps — стан усього процесу: тест, що впав, не сміє лишити обмеження решті набору.
+var _fps_before: int = 0
+
+
+func before_each() -> void:
+	_fps_before = Engine.max_fps
+	# Інші екрани (меню) лишають своє обмеження; бій повертає саме його, тож старт — без обмеження.
+	Engine.max_fps = 0
+
+
+func after_each() -> void:
+	Engine.max_fps = _fps_before
+
+
 func _screen() -> Node3D:
 	var screen: Node3D = BattleScreenScene.instantiate()
 	add_child_autofree(screen)
@@ -982,3 +996,67 @@ func test_inspector_follows_the_camera_because_setup_wires_it() -> void:
 
 	assert_true(wired_to_hud,
 		"setup() мусить підписати HUD на рух камери — без цього рядка обидві половини лишаються зеленими, а на екрані панель стоїть як стояла")
+
+
+# --- §8: спокійний екран не крутить кадри даремно -------------------------
+
+## Спливла секунда спокою — таймер, а не реальний час: тест не чекає.
+func _idle_for_a_second(screen: Node3D) -> void:
+	var timer: Timer = screen._idle_timer
+	assert_almost_eq(timer.wait_time, BattleScreen.IDLE_AFTER_S, 0.0001)
+	timer.timeout.emit()
+
+
+func test_battle_caps_the_frame_rate_when_idle() -> void:
+	var screen: Node3D = _screen()
+	screen._input(InputEventScreenTouch.new())
+	assert_eq(Engine.max_fps, 0)
+	assert_false(screen._idle_timer.is_stopped(), "натиск заводить відлік спокою")
+	_idle_for_a_second(screen)
+	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS)
+
+
+func test_input_uncaps_the_frame_rate() -> void:
+	var screen: Node3D = _screen()
+	_idle_for_a_second(screen)
+	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS, "передумова: екран у спокої")
+	screen._input(InputEventScreenTouch.new())
+	assert_eq(Engine.max_fps, 0)
+
+
+## Натиск знімає лише обмеження спокою: обмеження, що було до бою, лишається.
+func test_input_returns_the_cap_from_before_the_battle() -> void:
+	Engine.max_fps = 45
+	# Не autofree: той звільняє екран уже після after_each, і _exit_tree повернув би 45 наступним тестам.
+	var screen: Node3D = BattleScreenScene.instantiate()
+	add_child(screen)
+	_idle_for_a_second(screen)
+	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS, "передумова: екран у спокої")
+	screen._input(InputEventScreenTouch.new())
+	assert_eq(Engine.max_fps, 45)
+	remove_child(screen)
+	screen.free()
+
+
+func test_camera_motion_keeps_the_frame_rate_uncapped() -> void:
+	var screen: Node3D = _screen()
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	screen._input(InputEventScreenTouch.new())
+	rig.set_process(true)
+	_idle_for_a_second(screen)
+	assert_eq(Engine.max_fps, 0, "камера ще їде — кадр без обмеження")
+	assert_false(screen._idle_timer.is_stopped(), "відлік спокою почався знову")
+	rig.set_process(false)
+	_idle_for_a_second(screen)
+	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS)
+
+
+func test_leaving_battle_restores_the_previous_cap() -> void:
+	Engine.max_fps = 45
+	var screen: Node3D = BattleScreenScene.instantiate()
+	add_child(screen)
+	_idle_for_a_second(screen)
+	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS, "передумова: бій обмежив кадри")
+	remove_child(screen)
+	screen.free()
+	assert_eq(Engine.max_fps, 45)
