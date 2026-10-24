@@ -8,7 +8,8 @@ const MAPS_DIR: String = "res://maps"
 ## Найдальший постріл ростеру — артилерія й дрон штурмового відділення, обидва 5.
 const MAX_REACH: int = 5
 const LOCALES: Array[String] = ["uk", "en"]
-## Карти з симетрією на 180°. Решту рівняє не форма, а test_map_sides_are_balanced.
+## Карти, чиї тайли симетричні на 180°. Решту рівняє не форма, а test_map_sides_are_balanced;
+## підтипи й кільце — пейзаж, і на половинах він може різнитися.
 const SYMMETRIC_MAPS: Array[String] = ["res://maps/crossroads.tres", "res://maps/ridge.tres"]
 const PACE_TOL: float = 0.05
 const COUNT_TOL: float = 0.15
@@ -118,7 +119,7 @@ func test_exactly_the_three_new_maps() -> void:
 	assert_eq(_map_paths(), ["res://maps/crossroads.tres", "res://maps/ridge.tres", "res://maps/river.tres"])
 
 
-## Симетрія на 180° — гарантія чесності: кожен гравець має дзеркально ту саму позицію.
+## Симетрія тайлів на 180° — гарантія чесності: кожен гравець має дзеркально ту саму позицію.
 func test_map_is_180_degree_symmetric(p = use_parameters(SYMMETRIC_MAPS)) -> void:
 	var path: String = p
 	var m: MapData = load(path) as MapData
@@ -324,16 +325,12 @@ func test_map_surface_is_well_formed(p = use_parameters(_map_paths())) -> void:
 	if m.surface.size() != m.width * m.height:
 		return
 	var bad: Array[Vector2i] = []
-	var odd: Array[Vector2i] = []
 	for y in m.height:
 		for x in m.width:
 			var i: int = y * m.width + x
 			if m.surface[i] >= MapData.surface_variants(m.tiles[i]):
 				bad.append(Vector2i(x, y))
-			if SYMMETRIC_MAPS.has(path) and m.surface[i] != m.surface[(m.height - 1 - y) * m.width + (m.width - 1 - x)]:
-				odd.append(Vector2i(x, y))
 	assert_eq(bad.size(), 0, "%s: підтип поза варіантами виду %s" % [path, bad.slice(0, 8)])
-	assert_eq(odd.size(), 0, "%s: підтип без дзеркальної пари %s" % [path, odd.slice(0, 8)])
 
 
 # --- Зовнішнє кільце: пейзаж за краєм, правила його не читають ---
@@ -342,7 +339,7 @@ func test_map_surface_is_well_formed(p = use_parameters(_map_paths())) -> void:
 const OUTER_MARGIN: int = 12
 
 
-func test_map_outer_ring_is_well_formed_and_symmetric(p = use_parameters(_map_paths())) -> void:
+func test_map_outer_ring_is_well_formed(p = use_parameters(_map_paths())) -> void:
 	var path: String = p
 	var m: MapData = load(path) as MapData
 	assert_eq(m.outer_margin, OUTER_MARGIN, path)
@@ -354,7 +351,6 @@ func test_map_outer_ring_is_well_formed_and_symmetric(p = use_parameters(_map_pa
 	if m.outer_tiles.size() != ow * oh:
 		return
 	var bad: Array[Vector2i] = []
-	var odd: Array[Vector2i] = []
 	for y in range(-mg, m.height + mg):
 		for x in range(-mg, m.width + mg):
 			var i: int = (y + mg) * ow + x + mg
@@ -364,13 +360,48 @@ func test_map_outer_ring_is_well_formed_and_symmetric(p = use_parameters(_map_pa
 			if inside != (k == MapData.OUTER_HOLE) or (not inside and (k >= Terrain.Kind.size()
 					or s >= MapData.surface_variants(k))):
 				bad.append(Vector2i(x, y))
-			var j: int = oh * ow - 1 - i  # дзеркальна клітинка розширеної сітки
-			# Симетрію дошки перевіряє test_map_is_180_degree_symmetric, і лише для SYMMETRIC_MAPS.
-			if not inside and (m.outer_kind_at(Vector2i(x, y)) != m.outer_kind_at(Vector2i(m.width - 1 - x, m.height - 1 - y))
-					or (not m.outer_surface.is_empty() and m.outer_surface[i] != m.outer_surface[j])):
-				odd.append(Vector2i(x, y))
 	assert_eq(bad.size(), 0, "%s: криві клітинки кільця %s" % [path, bad.slice(0, 8)])
-	assert_eq(odd.size(), 0, "%s: кільце без дзеркальної пари %s" % [path, odd.slice(0, 8)])
+
+
+## Рілля — рукотворне поле: кожна її ділянка на дошці й у кільці — суцільний прямокутник. Дорога
+## чи ліс посеред поля ділять його на окремі прямокутники; луки, ліси й болота лишаються вільної форми.
+func test_map_ploughed_patches_are_filled_rectangles(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var mg: int = m.outer_margin
+	var ow: int = m.width + 2 * mg
+	var ploughed := func(c: Vector2i) -> bool:
+		if c.x < -mg or c.y < -mg or c.x >= m.width + mg or c.y >= m.height + mg:
+			return false
+		if m.outer_kind_at(c) != Terrain.Kind.FIELD:
+			return false
+		var inside: bool = c.x >= 0 and c.y >= 0 and c.x < m.width and c.y < m.height
+		var s: int = m.surface_at(c) if inside else (
+				m.outer_surface[(c.y + mg) * ow + c.x + mg] if not m.outer_surface.is_empty() else 0)
+		return s == MapData.FieldSurface.PLOUGHED
+	var seen: Dictionary = {}
+	var bad: Array[Rect2i] = []
+	for y in range(-mg, m.height + mg):
+		for x in range(-mg, m.width + mg):
+			var start := Vector2i(x, y)
+			if seen.has(start) or not ploughed.call(start):
+				continue
+			seen[start] = true
+			var stack: Array[Vector2i] = [start]
+			var box := Rect2i(start, Vector2i.ONE)
+			var n := 0
+			while not stack.is_empty():
+				var c: Vector2i = stack.pop_back()
+				n += 1
+				box = box.merge(Rect2i(c, Vector2i.ONE))
+				for d: Vector2i in Board.DIRS_4:
+					var q: Vector2i = c + d
+					if not seen.has(q) and ploughed.call(q):
+						seen[q] = true
+						stack.append(q)
+			if n != box.get_area():
+				bad.append(box)
+	assert_eq(bad.size(), 0, "%s: рілля не прямокутником у межах %s" % [path, bad.slice(0, 4)])
 
 
 ## Річка й дорога не обриваються на краю дошки: клітинка кільця за краєм продовжує їх.

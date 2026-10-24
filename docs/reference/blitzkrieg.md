@@ -222,3 +222,13 @@ Two rules about using it:
   [§3.2](../rules/movement-and-terrain.md) — **stopping in gold keeps both this turn's shot and the
   right to answer; the red zone is disarmed until the unit's own turn.** The rule was already drawn
   on the board; nobody had said out loud that it was also the retaliation rule.
+
+- **The original has no camouflage or concealment, in forest or anywhere else, so do not "restore" it.**
+  An enemy unit is drawn and targetable on exactly two conditions, alive and on an unfogged tile
+  (`GameCanvas.java:2504`, the same test at `:2580`, `:3003`, `:3684`, `:3739`). There is no
+  per-unit visibility flag: `field_242` is "dead". The fog is per tile and never re-fogs during a
+  match (`class_1.java:201` is the only write of `true`). Vision ignores terrain
+  (`class_1.method_121`). Turn start keeps no idle counter (`class_3.method_188` only refills AP).
+  The AI ignores the fog entirely (`class_2.method_148`). A concealment rule here would be a new
+  mechanic, a per-unit exception to `seen` ([§3.5](../rules/vision-and-fog.md)) with consequences
+  for retaliation ([§3.3.1](../rules/combat.md)).
