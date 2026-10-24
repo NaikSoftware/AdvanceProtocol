@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ctmbh36eoydk4"
-path="res://.godot/imported/wall_field_ORM_e13f38a0-5d2b-489d-875b-c5012fb67338.jpg-699174445c6821a27d69ceb714944408.ctex"
+uid="uid://c7lj7bmy7tiv1"
+path="res://.godot/imported/tree_birch_early_ORM_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg-4f8febd9a4235b14cf9b5515a6cf8cb2.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "ebd336cef7a7696a2d1db41b31028a80"
+"md5": "5e5e9186fb5f7cc380669b876609c675"
 }
 
 [deps]
 
-source_file="res://assets/props/wall_field_ORM_e13f38a0-5d2b-489d-875b-c5012fb67338.jpg"
-dest_files=["res://.godot/imported/wall_field_ORM_e13f38a0-5d2b-489d-875b-c5012fb67338.jpg-699174445c6821a27d69ceb714944408.ctex"]
+source_file="res://assets/props/tree_birch_early_ORM_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg"
+dest_files=["res://.godot/imported/tree_birch_early_ORM_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg-4f8febd9a4235b14cf9b5515a6cf8cb2.ctex"]
 
 [params]
 

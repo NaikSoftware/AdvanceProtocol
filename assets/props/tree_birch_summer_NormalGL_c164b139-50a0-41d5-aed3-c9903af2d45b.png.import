@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://drxvra1v3kjdd"
-path="res://.godot/imported/house_h4_ORM_ddaf2835-96eb-49ba-8e0d-f2a7079a09b3.jpg-28e223e995ed78547eb94bc52fa95bca.ctex"
+uid="uid://dboceb1j31hly"
+path="res://.godot/imported/tree_birch_summer_NormalGL_c164b139-50a0-41d5-aed3-c9903af2d45b.png-e74cd7aadbb6823269e5076f7c9e1310.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "c88e1fd88c4efcbbe45c8933f91fd5c1"
+"md5": "6a11f3dfe1b736f22d99a990b01416b5"
 }
 
 [deps]
 
-source_file="res://assets/props/house_h4_ORM_ddaf2835-96eb-49ba-8e0d-f2a7079a09b3.jpg"
-dest_files=["res://.godot/imported/house_h4_ORM_ddaf2835-96eb-49ba-8e0d-f2a7079a09b3.jpg-28e223e995ed78547eb94bc52fa95bca.ctex"]
+source_file="res://assets/props/tree_birch_summer_NormalGL_c164b139-50a0-41d5-aed3-c9903af2d45b.png"
+dest_files=["res://.godot/imported/tree_birch_summer_NormalGL_c164b139-50a0-41d5-aed3-c9903af2d45b.png-e74cd7aadbb6823269e5076f7c9e1310.ctex"]
 
 [params]
 

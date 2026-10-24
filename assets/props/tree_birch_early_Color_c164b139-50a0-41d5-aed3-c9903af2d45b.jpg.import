@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cvhtdkvn183i7"
-path="res://.godot/imported/ruin_h5_ORM_2deff07a-0cc7-4e7c-bc9e-8873042ed84f.jpg-5ee3e2f5580a2874f8aca2994a108c3b.ctex"
+uid="uid://bkwe33xx8agyp"
+path="res://.godot/imported/tree_birch_early_Color_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg-1de44ff5f5b394c72745a6dba7fd4177.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "8098ebc2580c02f6ba3ba2439c4b3818"
+"md5": "9f113d2a8beaf55cf1eb95f2ae69bd90"
 }
 
 [deps]
 
-source_file="res://assets/props/ruin_h5_ORM_2deff07a-0cc7-4e7c-bc9e-8873042ed84f.jpg"
-dest_files=["res://.godot/imported/ruin_h5_ORM_2deff07a-0cc7-4e7c-bc9e-8873042ed84f.jpg-5ee3e2f5580a2874f8aca2994a108c3b.ctex"]
+source_file="res://assets/props/tree_birch_early_Color_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg"
+dest_files=["res://.godot/imported/tree_birch_early_Color_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg-1de44ff5f5b394c72745a6dba7fd4177.ctex"]
 
 [params]
 

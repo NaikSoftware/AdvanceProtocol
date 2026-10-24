@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bgfml5nbbx6ih"
-path="res://.godot/imported/tree_birch_early_Color_57d9c963-7c2b-42a9-a3fe-c1313898e6f3.jpg-22b654cbc3746a7b28e670ab2ebb9988.ctex"
+uid="uid://cibbdueuoguh7"
+path="res://.godot/imported/tree_birch_summer_ORM_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg-9c69accc4bae09c33e8d0e84bed53add.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "6a351afb4125ac3ca4a622c3cb7a7e35"
+"md5": "5e5e9186fb5f7cc380669b876609c675"
 }
 
 [deps]
 
-source_file="res://assets/props/tree_birch_early_Color_57d9c963-7c2b-42a9-a3fe-c1313898e6f3.jpg"
-dest_files=["res://.godot/imported/tree_birch_early_Color_57d9c963-7c2b-42a9-a3fe-c1313898e6f3.jpg-22b654cbc3746a7b28e670ab2ebb9988.ctex"]
+source_file="res://assets/props/tree_birch_summer_ORM_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg"
+dest_files=["res://.godot/imported/tree_birch_summer_ORM_c164b139-50a0-41d5-aed3-c9903af2d45b.jpg-9c69accc4bae09c33e8d0e84bed53add.ctex"]
 
 [params]
 
