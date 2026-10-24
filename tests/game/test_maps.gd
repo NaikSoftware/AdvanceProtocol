@@ -363,6 +363,47 @@ func test_map_outer_ring_is_well_formed(p = use_parameters(_map_paths())) -> voi
 	assert_eq(bad.size(), 0, "%s: криві клітинки кільця %s" % [path, bad.slice(0, 8)])
 
 
+## Рілля — рукотворне поле: кожна її ділянка на дошці й у кільці — суцільний прямокутник. Дорога
+## чи ліс посеред поля ділять його на окремі прямокутники; луки, ліси й болота лишаються вільної форми.
+func test_map_ploughed_patches_are_filled_rectangles(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var mg: int = m.outer_margin
+	var ow: int = m.width + 2 * mg
+	var ploughed := func(c: Vector2i) -> bool:
+		if c.x < -mg or c.y < -mg or c.x >= m.width + mg or c.y >= m.height + mg:
+			return false
+		if m.outer_kind_at(c) != Terrain.Kind.FIELD:
+			return false
+		var inside: bool = c.x >= 0 and c.y >= 0 and c.x < m.width and c.y < m.height
+		var s: int = m.surface_at(c) if inside else (
+				m.outer_surface[(c.y + mg) * ow + c.x + mg] if not m.outer_surface.is_empty() else 0)
+		return s == MapData.FieldSurface.PLOUGHED
+	var seen: Dictionary = {}
+	var bad: Array[Rect2i] = []
+	for y in range(-mg, m.height + mg):
+		for x in range(-mg, m.width + mg):
+			var start := Vector2i(x, y)
+			if seen.has(start) or not ploughed.call(start):
+				continue
+			seen[start] = true
+			var stack: Array[Vector2i] = [start]
+			var box := Rect2i(start, Vector2i.ONE)
+			var n := 0
+			while not stack.is_empty():
+				var c: Vector2i = stack.pop_back()
+				n += 1
+				box = box.merge(Rect2i(c, Vector2i.ONE))
+				for d: Vector2i in Board.DIRS_4:
+					var q: Vector2i = c + d
+					if not seen.has(q) and ploughed.call(q):
+						seen[q] = true
+						stack.append(q)
+			if n != box.get_area():
+				bad.append(box)
+	assert_eq(bad.size(), 0, "%s: рілля не прямокутником у межах %s" % [path, bad.slice(0, 4)])
+
+
 ## Річка й дорога не обриваються на краю дошки: клітинка кільця за краєм продовжує їх.
 func test_map_edge_water_and_roads_continue_into_the_ring(p = use_parameters(_map_paths())) -> void:
 	var path: String = p
