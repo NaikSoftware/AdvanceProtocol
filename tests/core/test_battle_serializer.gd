@@ -286,3 +286,59 @@ func test_next_unit_id_not_above_every_id_is_rejected() -> void:
 	var d: Dictionary = _save()
 	d["next_unit_id"] = 3
 	_assert_rejected(d, "next_unit_id 3 при наявному id 3 — наступний add_unit() видав би той самий id")
+
+# --- §3.14: уламки ----------------------------------------------------------
+
+func _saved_with_wreck() -> Dictionary:
+	# Дошка 10×10, бо тест мосту нижче рахує індекс тайла як y * 10 + x.
+	var s: BattleState = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 2, 11)
+	s.add_unit(5, 0, Vector2i(0, 5), 2)
+	s.add_unit(4, 1, Vector2i(9, 9), 2)
+	s.wrecks.append(Wrecks.Wreck.new(Vector2i(3, 5), 7, 17))
+	return JSON.parse_string(JSON.stringify(BattleSerializer.to_dict(s)))
+
+func test_wrecks_round_trip_with_their_expiry() -> void:
+	var b: BattleState = BattleSerializer.from_dict(_saved_with_wreck())
+	assert_not_null(b)
+	if b == null:
+		return
+	assert_eq(b.wrecks.size(), 1)
+	var w: Wrecks.Wreck = Wrecks.wreck_at(b, Vector2i(3, 5))
+	assert_not_null(w)
+	if w != null:
+		assert_eq(w.type_id, 7)
+		assert_eq(w.burns_out_at, 17)
+
+func test_a_save_without_wrecks_loads_with_none() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d.erase("wrecks")
+	var b: BattleState = BattleSerializer.from_dict(d)
+	assert_not_null(b, "старі збереження мусять відкриватися")
+	if b != null:
+		assert_true(b.wrecks.is_empty())
+
+func test_a_living_vehicle_on_a_wreck_is_rejected() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["wrecks"][0]["x"] = 0
+	assert_null(BattleSerializer.from_dict(d), "техніка ніколи не стоїть на уламках")
+
+func test_infantry_on_a_wreck_is_accepted() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["units"][0]["type_id"] = 0
+	d["wrecks"][0]["x"] = 0
+	assert_not_null(BattleSerializer.from_dict(d), "піхота стоїть на уламках законно")
+
+func test_two_wrecks_on_one_tile_are_rejected() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["wrecks"].append(d["wrecks"][0].duplicate())
+	assert_null(BattleSerializer.from_dict(d))
+
+func test_a_wreck_on_a_destroyed_bridge_is_rejected() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["board"]["tiles"][5 * 10 + 3] = Terrain.Kind.BRIDGE_DESTROYED
+	assert_null(BattleSerializer.from_dict(d), "уламки з мостом падають у річку")
+
+func test_a_wreck_of_infantry_type_is_rejected() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["wrecks"][0]["type_id"] = 0
+	assert_null(BattleSerializer.from_dict(d), "піхота уламків не лишає")
