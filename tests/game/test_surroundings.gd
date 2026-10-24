@@ -484,6 +484,43 @@ func test_destroyed_ring_bridge_draws_ruins_outside_the_board_list() -> void:
 	assert_eq(view._placeholder_bridge_ruin_cells.size(), 0, "на дошці руїн нема")
 
 
+## Настил — лише на мостах дошки: плита впоперек русла кільця під напівзакритою імлою
+## обриває річку прямою, і за нею вода читається окремим шматком.
+func test_ring_bridge_lays_no_deck_across_the_river() -> void:
+	var m: MapData = load("res://maps/river.tres")
+	var b: Board = m.to_board()
+	var on_board := 0
+	for k: int in b.tiles:
+		on_board += 1 if k == Terrain.Kind.BRIDGE else 0
+	assert_true(m.outer_tiles.has(Terrain.Kind.BRIDGE), "у кільці River є міст")
+	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
+	add_child_autofree(view)
+	view.ring_map = m
+	view.build(b)
+	var deck: MultiMeshInstance3D = view.get_node("PlaceholderBridgeDeck")
+	assert_eq(deck.multimesh.instance_count, on_board, "настил — лише на клітинках дошки")
+
+
+## Коліно русла завширшки в клітинку: розмиття тут не додає води зовсім, а замикання заповнює
+## внутрішній кут суші, не чіпаючи вузлів води й не підходячи до зовнішнього кута й далекої суші.
+func test_ring_closing_fills_the_inner_land_corner_of_a_narrow_bend() -> void:
+	var n := 20
+	var step := 0.25
+	var dc := PackedFloat32Array()
+	dc.resize(n * n)
+	for j in n:
+		for i in n:
+			var wet: bool = (j >= 8 and j <= 11 and i >= 8) or (i >= 8 and i <= 11 and j >= 8)
+			dc[j * n + i] = -0.3 if wet else 1.0
+	var c: PackedFloat32Array = TerrainHeight.new()._closing(dc, n, n, step, 0.8)
+	for k in dc.size():
+		if dc[k] < 0.0:
+			assert_eq(c[k], dc[k], "вузол води лишається своїм")
+	assert_lt(c[12 * n + 12], 0.0, "внутрішній кут суші заповнено")
+	assert_gt(c[7 * n + 7], 0.0, "зовнішній кут коліна сухий")
+	assert_gt(c[0], 0.0, "далека суша суха")
+
+
 ## Дотик по кільцю потрапляє в землю кільця, але дає клітинку поза дошкою, яку Board.in_bounds
 ## відкидає; що далі робить InputController.tap_cell — test_tap_outside_board_clears_selection.
 func test_tap_on_the_ring_picks_a_cell_outside_the_board() -> void:

@@ -81,6 +81,8 @@ const _EDGE_HILL_OUT: float = 1.5
 ## Розмиття берега біля краю дошки й у кільці (σ, клітинки) і розмах ширини русла кільця.
 const _RING_ROUND: float = 1.4
 const _RING_WIDTH_VAR: float = 0.3
+## Радіус замикання води кільця (клітинки): западини суші в березі, вужчі за нього, стають дугами.
+const _RING_CLOSE: float = 0.8
 ## Ширина гладкого мінімуму, яким об'єднано поля осей дошки й світу (клітинки).
 const _COURSE_ROUND: float = 0.4
 
@@ -585,7 +587,11 @@ func _keep_board_course(fld: Array[PackedFloat32Array], seed_value: int) -> void
 ## Берег біля краю дошки й у кільці: поле розмите ще раз (σ `_RING_ROUND` клітинки), тож кути, де
 ## стикуються осі, виступи берега й ставки, стають дугами, а не багатокутником; з клітинки за краєм
 ## ширина русла кільця ще й гуляє на ±`_RING_WIDTH_VAR` за шумом (хвиля ~3 клітинки), щоб
-## автором намальована смуга води не читалась рівним каналом. Вода лише додається, ніколи не
+## автором намальована смуга води не читалась рівним каналом. Над руслом завширшки в клітинку
+## розмите поле вище за саме поле, і ні розмиття, ні шум на ньому води не додають; тому шум лягає
+## на менше з розмитого й замкнутого поля (`_closing`, радіус `_RING_CLOSE`): замкнуте заповнює
+## западини суші, а біля прямого берега дорівнює відстані до урізу, тож шум розширює й вузьке
+## русло. Вода лише додається, ніколи не
 ## відступає: розмиття й шум формують берег, але не звужують і не перерізають русло завширшки в
 ## клітинку (навіть відступ на 0.15 клітинки там, де вода широка, рве русло кільця
 ## River). Смуга сягає клітинки всередину дошки, глибше поле не змінюється; що
@@ -594,6 +600,7 @@ func _keep_board_course(fld: Array[PackedFloat32Array], seed_value: int) -> void
 func _round_ring_shores(dc: PackedFloat32Array, cw: int, ch: int, cstep: float, seed_value: int) -> void:
 	var sig: float = _RING_ROUND / cstep
 	var soft: PackedFloat32Array = _blur(dc, sig, sig, cw, ch)
+	var closed: PackedFloat32Array = _closing(dc, cw, ch, cstep, _RING_CLOSE)
 	var n := _nz(seed_value + 1717, 0.33)
 	var cx: float = (board_width - 1) * 0.5
 	var cz: float = (board_height - 1) * 0.5
@@ -604,8 +611,35 @@ func _round_ring_shores(dc: PackedFloat32Array, cw: int, ch: int, cstep: float, 
 		var z: float = -0.5 - margin + float(k / cw) * cstep
 		var out: float = maxf(absf(x - cx) - hx, absf(z - cz) - hz)
 		var v: float = lerpf(dc[k], soft[k], smoothstep(-1.0, 0.5, out))
+		v = minf(v, lerpf(dc[k], closed[k], smoothstep(0.5, 1.5, out)))
 		v += _RING_WIDTH_VAR * n.get_noise_2d(x, z) * smoothstep(1.0, 2.5, out)
 		dc[k] = minf(v, dc[k])
+
+
+## Поле замкнутої води на грубій сітці: вода, розширена на r і звужена назад на r (відстані
+## хамфером). Розмиття русла завширшки в клітинку дає суходіл по всій ширині й не додає нічого,
+## тож западину суші між колінами такого русла заповнює лише замикання. Вузли води лишаються
+## своїми: глибина русла не змінюється. На суші — відстань до замкнутої води з одиничним нахилом:
+## уздовж прямого берега це звичайна відстань до урізу, тож поле суші неперервне.
+func _closing(dc: PackedFloat32Array, w: int, h: int, step: float, r: float) -> PackedFloat32Array:
+	var land := PackedFloat32Array()
+	land.resize(dc.size())
+	for k in dc.size():
+		land[k] = -dc[k]
+	var d_out: PackedFloat32Array = _inner_distance(land, w, h, step)
+	var grown := PackedFloat32Array()
+	grown.resize(dc.size())
+	for k in dc.size():
+		grown[k] = -1.0 if dc[k] <= 0.0 else d_out[k] - r
+	var d_in: PackedFloat32Array = _inner_distance(grown, w, h, step)
+	var out := PackedFloat32Array()
+	out.resize(dc.size())
+	for k in dc.size():
+		if dc[k] < 0.0:
+			out[k] = dc[k]
+		else:
+			out[k] = r - d_in[k] if grown[k] < 0.0 else d_out[k]
+	return out
 
 
 ## Гладкий мінімум (поліноміальний, ширина k): там, де дві водойми сходяться під кутом, берег
@@ -753,8 +787,14 @@ func _fill_holes(dg: PackedFloat32Array) -> void:
 
 ## Відстань (клітинки) від мокрого відліку (d < 0) до найближчого сухого; хамфер 1 / 1.414, дві
 ## проходи. Вода за краєм карти — продовження води, суші там нема. Глибина дна — монотонна
-## функція цієї відстані, тож усередині тіла води дно не підіймається до поверхні.
-func _inner_distance(dg: PackedFloat32Array) -> PackedFloat32Array:
+## функція цієї відстані, тож усередині тіла води дно не підіймається до поверхні. w, h, step —
+## інша сітка (груба сітка поля, крок у клітинках); без них — відліки карти висот.
+func _inner_distance(dg: PackedFloat32Array, w: int = 0, h: int = 0,
+		step: float = 0.0) -> PackedFloat32Array:
+	var cols: int = w if w > 0 else self.cols
+	var rows: int = h if h > 0 else self.rows
+	if step <= 0.0:
+		step = 1.0 / float(samples)
 	var inf: float = 1e6
 	var out := PackedFloat32Array()
 	out.resize(cols * rows)
@@ -791,9 +831,8 @@ func _inner_distance(dg: PackedFloat32Array) -> PackedFloat32Array:
 				if i > 0:
 					v = minf(v, out[k + cols - 1] + diag)
 			out[k] = v
-	var inv: float = 1.0 / float(samples)
 	for k in out.size():
-		out[k] *= inv
+		out[k] *= step
 	return out
 
 

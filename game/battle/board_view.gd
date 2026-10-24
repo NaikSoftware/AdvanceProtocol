@@ -397,10 +397,11 @@ func reflection_probe() -> ReflectionProbe:
 ## PlaceholderBridgeRuin і ставить справжні мости (бетонний проліт на опорах або
 ## понтони) та їхні руїни. Поки річка тече під мостом, без настилу гравець не
 ## бачив би переправи. По одному MultiMesh — по одному draw call (§8).
-## board — світ (дошка з кільцем, зсунута на ring): дорога кільця теж переходить річку мостом.
-## Списки клітинок — лише дошки; мости кільця йдуть тим самим мультимешем, без нового draw call.
+## board — світ (дошка з кільцем, зсунута на ring). Списки клітинок — лише дошки. Цілий міст
+## кільця настилу не має: рівна світла плита впоперек русла під напівзакритою імлою читається
+## як кінець річки, а переправи кільця правила не бачать. Руїни кільця йдуть тим самим
+## мультимешем, без нового draw call.
 func _build_placeholder_bridge_deck(board: Board, ring: int = 0) -> void:
-	var ring_decks: Array[Transform3D] = []
 	for y in board.height:
 		for x in board.width:
 			var cell := Vector2i(x - ring, y - ring)
@@ -413,8 +414,6 @@ func _build_placeholder_bridge_deck(board: Board, ring: int = 0) -> void:
 				if on_board:
 					_placeholder_bridge_deck_cells.append(cell)
 					_placeholder_bridge_deck_axes.append(axis)
-				else:
-					ring_decks.append(_deck_transform(cell, axis))
 			else:
 				if on_board:
 					_placeholder_bridge_ruin_cells.append(cell)
@@ -424,7 +423,6 @@ func _build_placeholder_bridge_deck(board: Board, ring: int = 0) -> void:
 	var deck: Array[Transform3D] = []
 	for i in _placeholder_bridge_deck_cells.size():
 		deck.append(_deck_transform(_placeholder_bridge_deck_cells[i], _placeholder_bridge_deck_axes[i]))
-	deck.append_array(ring_decks)
 	if not deck.is_empty():
 		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, PLACEHOLDER_DECK_ALBEDO)
 
