@@ -1,5 +1,5 @@
 // Тимчасовий настил і руїни мосту (BoardView._add_placeholder_multimesh): матовий колір, як
-// StandardMaterial3D, плюс серпанок і лінія межі — міст кільця не мусить світитись крізь серпанок.
+// StandardMaterial3D, плюс імла й лінія межі — міст кільця не мусить світитись крізь імлу.
 shader_type spatial;
 render_mode blend_mix, cull_back;
 

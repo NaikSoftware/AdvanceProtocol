@@ -29,7 +29,7 @@ const PLACEHOLDER_DECK_ALBEDO: Color = Color(0.31, 0.30, 0.29)
 const PLACEHOLDER_RUIN_ALBEDO: Color = Color(0.25, 0.245, 0.235)
 const _DECK_SHADER: Shader = preload("res://game/battle/shaders/placeholder_deck.gdshader")
 
-## Крок часу серпанку (`fog_time` у surroundings.gdshaderinc), секунд. Кожне оновлення коштує
+## Крок часу імли (`fog_time` у surroundings.gdshaderinc), секунд. Кожне оновлення коштує
 ## один намальований кадр: на 10 Гц дошка без руху малює 10 кадрів на секунду, а крок не міняє
 ## жодного пікселя більш як на 2/255; на 5 Гц край клуба вже стрибає, на 2 Гц — видимо.
 const FOG_TICK: float = 0.1
@@ -58,12 +58,12 @@ var relief_seed: int = 0
 ## Карта, з якої береться кільце довкола дошки (MapData.outer_*); null чи карта без кільця — світ
 ## закінчується краєм дошки. Лише вигляд: Board кільця не має.
 var ring_map: MapData = null
-## Час серпанку для всіх матеріалів світу; з боєм не скидається, бо візерунку однаково, з якого
+## Час імли для всіх матеріалів світу; з боєм не скидається, бо візерунку однаково, з якого
 ## часу пливти.
 static var fog_time: float = 0.0
-## Таймер `FOG_TICK`; лише з кільцем — без нього серпанку нема.
+## Таймер `FOG_TICK`; лише з кільцем — без нього імли нема.
 var _fog_clock: Timer
-## Кільце й розмір дошки останньої побудови: для серпанку на настилах мостів кільця.
+## Кільце й розмір дошки останньої побудови: для імли на настилах мостів кільця.
 var _ring: int = 0
 var _board_size: Vector2i = Vector2i.ZERO
 ## Карта висот поточної дошки; ця ж поверхня — TerrainHeight.active для всіх, хто лежить на землі.
@@ -196,7 +196,7 @@ func build(board: Board) -> void:
 			_fog_clock.timeout.connect(_tick_fog)
 			add_child(_fog_clock)
 	if _fog_clock != null:
-		# Без кільця серпанку нема: годинник стоїть і не будить кадр.
+		# Без кільця імли нема: годинник стоїть і не будить кадр.
 		_fog_clock.paused = ring == 0
 
 	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз; перезйомку
@@ -427,7 +427,7 @@ func _build_placeholder_bridge_deck(board: Board, ring: int = 0) -> void:
 		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, PLACEHOLDER_DECK_ALBEDO)
 
 
-## Серпанок пливе лише цим кроком, а не за `TIME`: матеріал з `TIME` змушує Mobile малювати
+## Імла пливе лише цим кроком, а не за `TIME`: матеріал з `TIME` змушує Mobile малювати
 ## кожен кадр, і дошка без руху не відпочивала б зовсім.
 func _tick_fog() -> void:
 	fog_time += FOG_TICK

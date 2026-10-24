@@ -40,7 +40,7 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 		return
 
 	# Площина — лише над клітинками води з запасом у клітинку (берег, виступи русла), у межах
-	# світу: кожен її фрагмент рахує висоту й серпанок, а суша під рештою кільця й дошки — ні.
+	# світу: кожен її фрагмент рахує висоту й імлу, а суша під рештою кільця й дошки — ні.
 	var pad := Vector2.ONE * (0.5 + margin)
 	var a: Vector2 = Vector2(maxi(lo.x - 1, 0), maxi(lo.y - 1, 0)) - pad
 	var b: Vector2 = Vector2(mini(hi.x + 1, board.width - 1), mini(hi.y + 1, board.height - 1)) + pad
