@@ -677,6 +677,7 @@ func test_unit_base_lies_on_a_moderate_slope() -> void:
 			assert_gte(p.y - g, -2.0 * _CM, "кут у ґрунті на %s: %.1f см" % [c, (p.y - g) / _CM])
 			assert_lte(p.y - g, 10.0 * _CM, "кут висить на %s: %.1f см" % [c, (p.y - g) / _CM])
 		tested += 1
+	gut.p("помірних рівних схилів перевірено: %d" % tested)
 	assert_gt(tested, 3, "передумова: на Річці є помірні рівні схили")
 
 
@@ -764,3 +765,18 @@ func test_turn_in_place_keeps_the_base_on_the_slope() -> void:
 		view._process(0.04)
 		for p in _base_corners(view):
 			assert_gte(p.y - t.at(p.x, p.z), -2.0 * _CM, "кут у ґрунті посеред повороту, крок %d" % i)
+
+
+## Міст: юніт стоїть рівно на настилі, а не на руслі під ним.
+func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var bridge := Vector2i(-1, -1)
+	for y in _river_board.height:
+		for x in _river_board.width:
+			if _river_board.kind_at(Vector2i(x, y)) == Terrain.Kind.BRIDGE:
+				bridge = Vector2i(x, y)
+	assert_ne(bridge, Vector2i(-1, -1), "передумова: на Річці є міст")
+	view.bind(_unit(5, 0, bridge, 1))
+	assert_almost_eq(view.position.y, t.deck_y(bridge), 0.0001)
+	assert_eq(view.get_node("Silhouette").rotation, Vector3.ZERO)
