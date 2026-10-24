@@ -73,6 +73,7 @@ var nodes: PackedVector2Array = PackedVector2Array()
 var _w: int = 0
 var _h: int = 0
 var _margin: int = 0
+var _shift: int = 0
 var _mask: PackedByteArray = PackedByteArray()
 var _type: PackedByteArray = PackedByteArray()
 var _bridge_cells: Array[Vector2i] = []
@@ -85,11 +86,15 @@ var _bend_nodes: PackedVector2Array = PackedVector2Array()
 
 ## surface — MapData.surface (підтип ROAD: 0 асфальт, 1 ґрунтівка, 2 бруківка).
 ## Повертає null, якщо дороги нема.
-static func build(board: Board, surface: PackedByteArray, margin: int, seed_value: int) -> RoadCourse:
+## shift — ширина кільця, коли board — світ разом із кільцем (TerrainHeight.bake з ring): шум
+## майданів береться в координатах дошки. Хвилястість і ширина доріг ідуть за довжиною й номером
+## ланцюжка, тож дорога, що продовжилась у кільце, на дошці хитається трохи інакше.
+static func build(board: Board, surface: PackedByteArray, margin: int, seed_value: int, shift: int = 0) -> RoadCourse:
 	var rc := RoadCourse.new()
 	rc._w = board.width
 	rc._h = board.height
 	rc._margin = margin
+	rc._shift = shift
 	rc._mask.resize(rc._w * rc._h)
 	rc._type.resize(rc._w * rc._h)
 	var any := false
@@ -923,7 +928,7 @@ func _plazas(d: PackedFloat32Array, tw: PackedVector3Array, jw: PackedFloat32Arr
 						plaza[(y + dy) * _w + x + dx] = 1
 	if not any:
 		return
-	var n_e := _noise(7919 + _w * 31 + _h, 1.0 / 12.0)
+	var n_e := _noise(7919 + (_w - 2 * _shift) * 31 + _h - 2 * _shift, 1.0 / 12.0)
 	var pad: int = ceili(PLAZA_R) + 4
 	# Вікно — увесь растр: площ мало, а растр ≤ кількох сотень пікселів на бік.
 	var inside := PackedFloat32Array()
@@ -953,7 +958,7 @@ func _plazas(d: PackedFloat32Array, tw: PackedVector3Array, jw: PackedFloat32Arr
 			if de > PLAZA_R + pad:
 				continue
 			var wp := Vector2(org + (i + 0.5) / PX, org + (j + 0.5) / PX)
-			var dp: float = (de - PLAZA_R if de > 0.0 else -di) + 0.6 * clampf(2.0 * n_e.get_noise_2dv(wp * 8.0), -1.0, 1.0)
+			var dp: float = (de - PLAZA_R if de > 0.0 else -di) + 0.6 * clampf(2.0 * n_e.get_noise_2dv((wp - Vector2(_shift, _shift)) * 8.0), -1.0, 1.0)
 			var wj: float = smoothstep(0.0, 2.0, d[k] - dp)
 			if wj <= 0.0:
 				continue

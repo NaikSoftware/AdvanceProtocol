@@ -60,7 +60,7 @@ const _POND_BIAS: float = 0.05
 const _POND_SHRINK: float = 0.12
 ## Мілина (d >= цього), не з'єднана з сушею, — теж «острів»: затоплюється.
 const _HOLE_LEVEL: float = -0.2
-## Крайовий обрив (лише без відступу): зовнішні 0.5 клітинки плити м'яко хилить униз.
+## Крайовий обрив (лише без відступу й кільця): зовнішні 0.5 клітинки плити м'яко хилить униз.
 const _RIM_WIDTH: float = 0.5
 const _RIM_DROP: float = 0.1
 const _LN2: float = 0.6931472
@@ -99,20 +99,56 @@ var _max: float = 0.0
 var _deck: Dictionary = {}
 # Клітинка води (з мостами): 1 — так.
 var _wgrid: PackedByteArray = PackedByteArray()
+## Ширина кільця, на яку зсунуті координати світу під час bake (0 — кільця нема).
+var _shift: int = 0
+var _texture: ImageTexture = null
 
 
 ## seed — з імені карти (BoardView.relief_seed); та сама карта дає той самий рельєф.
 ## surface — MapData.surface (тут з підтипів береться лише тип дороги для її ширини);
 ## порожній — усі 0.
-static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedByteArray = PackedByteArray()) -> TerrainHeight:
+## ring > 0: board — уже світ (дошка разом із кільцем, Surroundings.world_board), на ring клітинок
+## ширший з кожного боку. Запікається в координатах світу, потім зсувається на ring, тож at(),
+## deck_y(), bridge_groups() і image() далі говорять координатами дошки. course і roads лишаються
+## в координатах світу: їх читають лише растри, а ті й так покривають увесь світ.
+static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedByteArray = PackedByteArray(), ring: int = 0) -> TerrainHeight:
 	var t := TerrainHeight.new()
 	t.margin = p_margin
 	t.board_width = board.width
 	t.board_height = board.height
-	while t.samples > 2 and (board.width + 2 * p_margin) * (board.height + 2 * p_margin) * t.samples * t.samples * 2 > MAX_GROUND_TRIS:
+	t._shift = ring
+	# Бюджет трикутників рахує лише дошку: кільце має власний грубіший меш (Surroundings).
+	while t.samples > 2 and (board.width - 2 * ring) * (board.height - 2 * ring) * t.samples * t.samples * 2 > MAX_GROUND_TRIS:
 		t.samples -= 1
 	t._bake(board, seed_value, surface)
+	if ring > 0:
+		t._to_board_coords(ring)
 	return t
+
+
+func _to_board_coords(ring: int) -> void:
+	margin += ring
+	board_width -= 2 * ring
+	board_height -= 2 * ring
+	var off := Vector2i(ring, ring)
+	var deck: Dictionary = {}
+	for c: Vector2i in _deck:
+		deck[c - off] = _deck[c]
+	_deck = deck
+	for g in _groups:
+		var cells: Array[Vector2i] = []
+		for c: Vector2i in g["cells"]:
+			cells.append(c - off)
+		g["cells"] = cells
+		g["centre"] = (g["centre"] as Vector2) - Vector2(off)
+
+
+## Шум рельєфу прив'язаний до дошки: у світі з кільцем (координати зсунуті на _shift) дошка
+## лишається тим самим рельєфом, що й без кільця.
+func _nz(seed_value: int, frequency: float) -> FastNoiseLite:
+	var n := _noise(seed_value, frequency)
+	n.offset = Vector3(-_shift, -_shift, 0.0)
+	return n
 
 
 ## Переправи (зв'язні групи клітинок мосту): cells, centre, axis, length, across.
@@ -163,12 +199,24 @@ func normal_at(x: float, z: float) -> Vector3:
 ## (маска берега), B — кривизна -1..1 (запечене затінення, §8), A — 0.5 + 0.5 * bend (коса < 0.5 < підмитий берег).
 ## Піксель (i, j) — у світі (-0.5 - відступ + i / samples, ... j / samples).
 func image() -> Image:
-	var img := Image.create_empty(cols, rows, false, Image.FORMAT_RGBAH)
-	for j in rows:
-		for i in cols:
-			var k: int = j * cols + i
-			img.set_pixel(i, j, Color(_h[k], _water[k], _curv[k], _bar[k]))
+	# Через сирі байти RGBAF і перетворення рушієм: set_pixel на кожен відлік світу з кільцем — сотні мс.
+	var px := PackedFloat32Array()
+	px.resize(cols * rows * 4)
+	for k in cols * rows:
+		px[k * 4] = _h[k]
+		px[k * 4 + 1] = _water[k]
+		px[k * 4 + 2] = _curv[k]
+		px[k * 4 + 3] = _bar[k]
+	var img := Image.create_from_data(cols, rows, false, Image.FORMAT_RGBAF, px.to_byte_array())
+	img.convert(Image.FORMAT_RGBAH)
 	return img
+
+
+## image() як текстура, одна на карту: земля й вода беруть ту саму, а не будують її двічі.
+func texture() -> ImageTexture:
+	if _texture == null:
+		_texture = ImageTexture.create_from_image(image())
+	return _texture
 
 
 ## Світова точка, де промінь вперше входить у поверхню, або null (промінь не йде вниз чи
@@ -242,7 +290,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	var road_d := PackedFloat32Array()
 	var road_rw: int = (bw + 2 * margin) * RoadCourse.PX
 	if has_road:
-		roads = RoadCourse.build(board, surface, margin, seed_value)
+		roads = RoadCourse.build(board, surface, margin, seed_value, _shift)
 		road_d = roads.d_grid()
 
 	# Індикатори на відліках. Пагорб — гладкий (білінійний по клітинках) індикатор у точці,
@@ -265,10 +313,10 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	var pad := PackedFloat32Array()
 	hill.resize(cols * rows)
 	pad.resize(cols * rows)
-	var warp_x := _noise(seed_value + 404, 0.2)
-	var warp_z := _noise(seed_value + 505, 0.2)
-	var warp_x2 := _noise(seed_value + 414, 0.5)
-	var warp_z2 := _noise(seed_value + 515, 0.5)
+	var warp_x := _nz(seed_value + 404, 0.2)
+	var warp_z := _nz(seed_value + 505, 0.2)
+	var warp_x2 := _nz(seed_value + 414, 0.5)
+	var warp_z2 := _nz(seed_value + 515, 0.5)
 	if has_hill or has_pad:
 		for j in rows:
 			var z: float = -0.5 - margin + float(j) / fs
@@ -292,15 +340,15 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	if has_pad:
 		pad_m = _blur(pad, 0.35 * fs, 0.35 * fs)
 
-	var n1 := _noise(seed_value, 0.27)
-	var n2 := _noise(seed_value + 101, 0.65)
-	var n3 := _noise(seed_value + 202, 0.08)
-	var nb1 := _noise(seed_value + 606, 0.18)
-	var nb2 := _noise(seed_value + 616, 0.27)
-	var n_s3 := _noise(seed_value + 767, 2.2)
-	var n_s1 := _noise(seed_value + 747, 0.4)
-	var n_s2 := _noise(seed_value + 757, 0.9)
-	var n_crest := _noise(seed_value + 808, 0.5)
+	var n1 := _nz(seed_value, 0.27)
+	var n2 := _nz(seed_value + 101, 0.65)
+	var n3 := _nz(seed_value + 202, 0.08)
+	var nb1 := _nz(seed_value + 606, 0.18)
+	var nb2 := _nz(seed_value + 616, 0.27)
+	var n_s3 := _nz(seed_value + 767, 2.2)
+	var n_s1 := _nz(seed_value + 747, 0.4)
+	var n_s2 := _nz(seed_value + 757, 0.9)
+	var n_crest := _nz(seed_value + 808, 0.5)
 
 	_h.resize(cols * rows)
 	_bar.resize(cols * rows)
@@ -319,7 +367,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	var dc := PackedFloat32Array()
 	var bc := PackedFloat32Array()
 	if has_water:
-		course = RiverCourse.build(_wgrid, bw, bh, margin + 3, _groups, seed_value)
+		course = RiverCourse.build(_wgrid, bw, bh, margin + 3, _groups, seed_value, _shift)
 		var fld: Array[PackedFloat32Array] = course.field(cols, rows, s, margin, _RIVER_STEP)
 		dc = fld[0]
 		bc = fld[1]
@@ -413,7 +461,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 				# шуму, щоб дно не підіймалось до поверхні посеред русла (темні плями крізь воду).
 				sink = drop + (bed - drop) * smoothstep(0.0, clampf(0.5 * exp(-b * _LN2), 0.3, 0.5), maxf(-d, wd[k] - 1.0 / fs))
 			var v: float = undul * damp + rise - sink
-			if margin == 0:
+			if margin == 0 and _shift == 0:
 				var e: float = minf(minf(x + 0.5, bw - 0.5 - x), minf(z + 0.5, bh - 0.5 - z))
 				if e < _RIM_WIDTH:
 					var lowered: float = v - _RIM_DROP * pow(1.0 - maxf(e, 0.0) / _RIM_WIDTH, 2.0)

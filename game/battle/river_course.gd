@@ -76,12 +76,16 @@ var _wgrid: PackedByteArray = PackedByteArray()
 var _discs: PackedVector3Array = PackedVector3Array()
 ## Центри мостів: біля них берег не розсуваємо (настил, закріплена вісь).
 var _bridge_centres: PackedVector2Array = PackedVector2Array()
+## Зсув координат світу з кільцем відносно дошки (TerrainHeight.bake з ring): шум береться в
+## координатах дошки, тож меандри на дошці не залежать від того, чи є кільце.
+var _sh: Vector2 = Vector2.ZERO
 
 
 ## bridges — {centre: Vector2, axis: Vector2 (вісь настилу), length: float (клітинок уздовж осі),
 ## across: float (клітинок упоперек)}. pad — на скільки клітинок за межею дошки продовжити річку.
-static func build(wgrid: PackedByteArray, w: int, h: int, pad: int, bridges: Array[Dictionary], seed_value: int) -> RiverCourse:
+static func build(wgrid: PackedByteArray, w: int, h: int, pad: int, bridges: Array[Dictionary], seed_value: int, shift: int = 0) -> RiverCourse:
 	var rc := RiverCourse.new()
+	rc._sh = Vector2(shift, shift)
 	rc._w = w
 	rc._h = h
 	rc._wgrid = wgrid
@@ -288,8 +292,8 @@ static func _mk_noise(seed_value: int, freq: float) -> FastNoiseLite:
 ## Викривлення координат (domain warp) для контурів ставків і озер: 0.3 клітинки на хвилі
 ## ~1 клітинка + 0.1 на ~0.4; k — множник амплітуди.
 func _warp(x: float, z: float, k: float = 1.0) -> Vector2:
-	return k * Vector2(WARP * clampf(1.6 * _warp_x.get_noise_2d(x, z), -1.0, 1.0) + WARP_FINE * clampf(1.6 * _warp_x2.get_noise_2d(x, z), -1.0, 1.0),
-			WARP * clampf(1.6 * _warp_z.get_noise_2d(x, z), -1.0, 1.0) + WARP_FINE * clampf(1.6 * _warp_z2.get_noise_2d(x, z), -1.0, 1.0))
+	return k * Vector2(WARP * clampf(1.6 * _warp_x.get_noise_2d(x - _sh.x, z - _sh.y), -1.0, 1.0) + WARP_FINE * clampf(1.6 * _warp_x2.get_noise_2d(x - _sh.x, z - _sh.y), -1.0, 1.0),
+			WARP * clampf(1.6 * _warp_z.get_noise_2d(x - _sh.x, z - _sh.y), -1.0, 1.0) + WARP_FINE * clampf(1.6 * _warp_z2.get_noise_2d(x - _sh.x, z - _sh.y), -1.0, 1.0))
 
 
 ## Відстань від точки до краю дошки (клітинок).
@@ -306,7 +310,7 @@ func _lakes(seed_value: int) -> void:
 	for cz in _h:
 		for cx in _w:
 			if _wgrid[cz * _w + cx] == 1 and _dt(cx, cz) >= LAKE_DT:
-				_discs.append(Vector3(cx, cz, 1.2 - 0.35 * (0.5 + 0.5 * clampf(1.6 * n.get_noise_2d(cx, cz), -1.0, 1.0))))
+				_discs.append(Vector3(cx, cz, 1.2 - 0.35 * (0.5 + 0.5 * clampf(1.6 * n.get_noise_2d(cx - _sh.x, cz - _sh.y), -1.0, 1.0))))
 
 
 ## Знакова відстань до урізу (клітинки; мінус у воді), вигин у [-1, 1] (+1 — зовнішній берег,
@@ -427,8 +431,8 @@ func _add_line(raw: PackedVector2Array, bridges: Array[Dictionary], noises: Arra
 	var tang := _tangents(pts)
 	var wander: float = 1.0 if s[n - 1] >= ARC_POND else 0.0
 	for i in n:
-		var off: float = wander * (WANDER * clampf(1.6 * n_l.get_noise_2d(pts[i].x, pts[i].y), -1.0, 1.0) \
-				+ WANDER_FINE * clampf(1.6 * n_l2.get_noise_2d(pts[i].x, pts[i].y), -1.0, 1.0))
+		var off: float = wander * (WANDER * clampf(1.6 * n_l.get_noise_2d(pts[i].x - _sh.x, pts[i].y - _sh.y), -1.0, 1.0) \
+				+ WANDER_FINE * clampf(1.6 * n_l2.get_noise_2d(pts[i].x - _sh.x, pts[i].y - _sh.y), -1.0, 1.0))
 		pts[i] += Vector2(-tang[i].y, tang[i].x) * off
 	# Після зсуву лінію згладжено ще раз, щоб радіус кривизни не став меншим за ~1.5 ширини.
 	pts = _gauss_v(pts, 0.8)
@@ -473,8 +477,8 @@ func _add_line(raw: PackedVector2Array, bridges: Array[Dictionary], noises: Arra
 	var hw := PackedFloat32Array()
 	hw.resize(n)
 	for i in n:
-		var f: float = 0.85 + WIDTH_VAR * 0.5 * clampf(1.6 * n_w.get_noise_2d(pts[i].x, pts[i].y), -1.0, 1.0) \
-				+ WIDTH_FINE * clampf(1.6 * n_w2.get_noise_2d(pts[i].x, pts[i].y), -1.0, 1.0)
+		var f: float = 0.85 + WIDTH_VAR * 0.5 * clampf(1.6 * n_w.get_noise_2d(pts[i].x - _sh.x, pts[i].y - _sh.y), -1.0, 1.0) \
+				+ WIDTH_FINE * clampf(1.6 * n_w2.get_noise_2d(pts[i].x - _sh.x, pts[i].y - _sh.y), -1.0, 1.0)
 		# Мінімальна ширина — найслабше з обмежень: і обмеження під мостом, і запас до центрів суші
 		# (юніти стоять там) сильніші за неї.
 		var v: float = maxf(minf(smooth[i] * clampf(f, 0.6, 1.0), hmax), MIN_HALF)
@@ -577,9 +581,9 @@ func _add_pond_discs(cells: Array[Vector2i]) -> void:
 		var inset: float = POND_EDGE_GAP + 0.45
 		# Радіус і зсув кожного диска — свої (шум від координат), щоб ряд клітинок не давав
 		# однакових опуклостей.
-		var jx: float = _warp_x2.get_noise_2d(sp.x * 5.3 + 1.7, sp.y * 5.3)
-		var jz: float = _warp_z2.get_noise_2d(sp.x * 5.3, sp.y * 5.3 + 3.1)
-		var jr: float = _warp_x.get_noise_2d(sp.x * 4.1 + 9.0, sp.y * 4.1)
+		var jx: float = _warp_x2.get_noise_2d((sp.x - _sh.x) * 5.3 + 1.7, (sp.y - _sh.y) * 5.3)
+		var jz: float = _warp_z2.get_noise_2d((sp.x - _sh.x) * 5.3, (sp.y - _sh.y) * 5.3 + 3.1)
+		var jr: float = _warp_x.get_noise_2d((sp.x - _sh.x) * 4.1 + 9.0, (sp.y - _sh.y) * 4.1)
 		sp = Vector3(sp.x + POND_JITTER * clampf(1.6 * jx, -1.0, 1.0), sp.y + POND_JITTER * clampf(1.6 * jz, -1.0, 1.0), sp.z * (1.0 + 0.3 * clampf(1.6 * jr, -1.0, 1.0)))
 		# Відступ від краю дошки в кожного диска свій (+0–0.2 за шумом), тож край ставка біля
 		# межі дошки не пряма лінія.
@@ -603,8 +607,8 @@ func _add_pond_ellipse(centre: Vector2, ext: Vector2, amp: float) -> void:
 	var a: float = (ext.x if along_x else ext.y) * 0.5 * 0.97 + 0.12
 	var short: float = ext.y if along_x else ext.x
 	var b: float = short * 0.5 * (0.9 if short >= 2.0 else 1.0)
-	var n1: float = clampf(1.6 * _warp_x.get_noise_2d(centre.x * 3.7, centre.y * 3.7), -1.0, 1.0)
-	var n2: float = clampf(1.6 * _warp_z.get_noise_2d(centre.x * 3.7 + 5.0, centre.y * 3.7), -1.0, 1.0)
+	var n1: float = clampf(1.6 * _warp_x.get_noise_2d((centre.x - _sh.x) * 3.7, (centre.y - _sh.y) * 3.7), -1.0, 1.0)
+	var n2: float = clampf(1.6 * _warp_z.get_noise_2d((centre.x - _sh.x) * 3.7 + 5.0, (centre.y - _sh.y) * 3.7), -1.0, 1.0)
 	var c: Vector2 = centre + Vector2(POND_JITTER * 0.5 * n1, POND_JITTER * 0.5 * n2)
 	var ang: float = deg_to_rad(10.0) * n2
 	var dir := Vector2(1.0, 0.0).rotated(ang) if along_x else Vector2(0.0, 1.0).rotated(ang)
@@ -619,7 +623,7 @@ func _add_pond_ellipse(centre: Vector2, ext: Vector2, amp: float) -> void:
 	for i in steps + 1:
 		var t: float = 2.0 * float(i) / float(steps) - 1.0
 		var pt: Vector2 = c + dir * (t * a)
-		var prof: float = b * sqrt(maxf(1.0 - t * t, 0.0)) * (1.0 + 0.1 * clampf(1.6 * _warp_x2.get_noise_2d(pt.x * 4.3, pt.y * 4.3), -1.0, 1.0))
+		var prof: float = b * sqrt(maxf(1.0 - t * t, 0.0)) * (1.0 + 0.1 * clampf(1.6 * _warp_x2.get_noise_2d((pt.x - _sh.x) * 4.3, (pt.y - _sh.y) * 4.3), -1.0, 1.0))
 		var room: float = _land_centre_dist(pt.x, pt.y) - CLEAR
 		var edge_room: float = _edge_dist(pt.x, pt.y) - POND_EDGE_GAP
 		pts.append(pt)
@@ -661,7 +665,9 @@ func _land_centre_dist(x: float, z: float) -> float:
 
 
 ## Вода в клітинці; за межею дошки річка (смуга води на краю завширшки ≤ 2) продовжується
-## назовні, а ставок чи озеро на краю — ні: їх обрізає межа.
+## назовні, а ставок чи озеро на краю — ні: їх обрізає межа. Межа світу з кільцем (_sh ≠ 0) лежить
+## під повним серпанком, тож там продовжується будь-яка вода: інакше потонщення скелета вкорочує
+## вісь ширшої річки на 1.5–2 клітинки, і її кінець з заокругленим берегом лягає в кільце.
 func _is_water_at(cx: int, cz: int) -> bool:
 	var ix: int = clampi(cx, 0, _w - 1)
 	var iz: int = clampi(cz, 0, _h - 1)
@@ -683,7 +689,7 @@ func _is_water_at(cx: int, cz: int) -> bool:
 				break
 			run += 1
 			k += 1
-	return run <= 2
+	return run <= 2 or _sh != Vector2.ZERO
 
 
 static func _tangents(pts: PackedVector2Array) -> PackedVector2Array:
