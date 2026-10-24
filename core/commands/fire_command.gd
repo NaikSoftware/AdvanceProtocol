@@ -159,6 +159,7 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 
 	if not target.is_alive():
 		out.append(Events.UnitDestroyed.new(target.id, target.pos))
+		out.append_array(Wrecks.leave(state, target))
 		out.append_array(state.check_elimination())
 		# Смерть цілі може відкрити/закрити огляд будь-кому — усі гравці.
 		# Інакше, як MoveCommand.apply(), оновлюємо лише огляд атакуючого.

@@ -28,6 +28,8 @@ static func compute_zones(board: Board, unit: Unit, occupied: Dictionary) -> Zon
 	# Проста черга з пошуком мінімуму: карти маленькі (десятки на десятки),
 	# купа тут не окупається і лише додає коду.
 	var frontier: Array[Vector2i] = [unit.pos]
+	# Уламки (Wrecks.BLOCKED) перекривають тайл лише техніці, піхота йде крізь них.
+	var through_wrecks: bool = not UnitTypes.is_vehicle(unit.unit_class())
 	while not frontier.is_empty():
 		var best_i: int = 0
 		for i in frontier.size():
@@ -37,7 +39,7 @@ static func compute_zones(board: Board, unit: Unit, occupied: Dictionary) -> Zon
 		frontier.remove_at(best_i)
 
 		for n in board.neighbours4(current):
-			if occupied.has(n):
+			if occupied.has(n) and not (through_wrecks and occupied[n] == Wrecks.BLOCKED):
 				continue
 			var step: int = Rules.entry_cost_at(unit, board, n)
 			if step >= Terrain.IMPASSABLE:

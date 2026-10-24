@@ -20,6 +20,7 @@ var damage_dealt: Array[int] = []
 var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
 var mines: Array[Mines.Mine] = []
+var wrecks: Array[Wrecks.Wreck] = []
 var _next_unit_id: int = 1
 
 static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleState:
@@ -145,7 +146,17 @@ func known_blocked_map(player: int) -> Dictionary:
 	for m in mines:
 		if m.owner != player and m.known_to[player] and not out.has(m.pos):
 			out[m.pos] = -1
+	# Уламки знані так само, як ворог на тайлі (§3.5): лише над розвіданим. Перекривають
+	# вони тільки техніку — Pathing.compute_zones() пропускає піхоту крізь Wrecks.BLOCKED.
+	for w in wrecks:
+		if vision[player].is_seen(w.pos) and not out.has(w.pos):
+			out[w.pos] = Wrecks.BLOCKED
 	return out
+
+func turn_clock() -> int:
+	## Ходи матчу одним числом, що лише зростає: коло — turn_number, місце в колі —
+	## active_player. Догоряння уламків (Wrecks.burn_out()) порівнює саме його.
+	return turn_number * player_count + active_player
 
 func is_over() -> bool:
 	return winner != NO_WINNER
@@ -153,6 +164,7 @@ func is_over() -> bool:
 func begin_turn() -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []
 	out.append(Events.TurnStarted.new(active_player, turn_number))
+	out.append_array(Wrecks.burn_out(self))
 	for u in units_of(active_player):
 		u.refill_ap()
 	out.append_array(refresh_vision(active_player))
