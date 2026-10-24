@@ -55,9 +55,10 @@ VIEW: game angle, pitch 38–55°
 CONTENT: one solid line, constant 3 px at 1080p (= 0.28 % of viewport height; clamp 2–4 px),
   anti-aliased over 1 px. In metres that is 0.22 m at zoom 6 centre, 0.54 m at zoom 20 centre and
   about 1.0 m at the top edge at zoom 20, so the width must be screen-space (fwidth), not world-space.
-  The inner edge sits 1.5 px (screen space) outside the board boundary (cell −0.5 / W−0.5) and the
+  The inner edge sits 4 px (screen space) outside the board boundary (cell −0.5 / W−0.5) and the
   line grows outward, never over a board cell: the move-only contour ends 0.06 tile inside the
-  boundary, about 2.7 px at zoom 20, so the offset keeps 3 px of ground between them. Square
+  boundary, under 1.5 px near the top of a zoom-20 frame, so the offset keeps at least 3 px of
+  ground between them (measured on River: minimum 3 px, median 7 px). Square
   corners. Drawn on whatever surface is at the edge (ground, water, bridge deck, road) without a
   break; buildings and trees occlude it (depth-tested). The distance is taken where the view ray
   meets a plane at the edge's ground height, averaged along the edge over ±2 tiles (water counts at
