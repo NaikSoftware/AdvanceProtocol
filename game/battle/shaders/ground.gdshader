@@ -918,6 +918,20 @@ void fragment() {
 		rough = mix(rough, 0.12 + 0.1 * wet * (1.0 - rv), puddle);
 		rough = mix(rough, 0.4, paved_sheen * road_cov);
 		nxy = mix(nxy, ripple, puddle);
+		// Бризки від крапель на землі й дорозі: у клітинці 0.5 м раз на 2.5 с на ~0.12 с світлішає
+		// пляма ~10 см (у 40 % клітинок). Лише в дощ; здалеку, коли клітинка менша за ~4 px,
+		// гаснуть — інакше мерехтіли б окремими пікселями.
+		if (wet > 0.0) {
+			vec2 sq = p * 16.0;
+			vec2 sc = floor(sq);
+			float sh = hash12(sc + 3.0);
+			float st = fract(TIME * 0.4 + sh);
+			vec2 so = vec2(hash12(sc + 7.0), hash12(sc + 13.0)) * 0.6 + 0.2;
+			float splash = step(0.6, hash12(sc + 19.0)) * (1.0 - smoothstep(0.0, 0.05, st))
+					* (1.0 - smoothstep(0.1, 0.22, length(fract(sq) - so)))
+					* (1.0 - smoothstep(0.12, 0.25, length(fwidth(sq))));
+			alb = mix(alb, alb * 1.6 + 0.015, splash * wet);
+		}
 		// Мокрий асфальт відбиває ~3 % неба, глянцеві смуги — до 30 %: шорсткість 0.45 під похмурим
 		// небом сама відблиску майже не дає, а більше дзеркала робило дорогу яскравішою за воду.
 		float mirror = max(max(puddle * 2.5, shore * 0.12),
