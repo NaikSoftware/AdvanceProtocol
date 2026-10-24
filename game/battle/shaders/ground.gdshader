@@ -15,6 +15,14 @@ global uniform float sky_reflection_gain;
 uniform sampler2D class_map0 : filter_linear, repeat_disable;
 uniform sampler2D class_map1 : filter_linear, repeat_disable;
 uniform int class_layer[8];
+// Рілля — прямокутні поля (GroundSurface.plough_fields): у карті класів клітинки поля — лука,
+// а рілля лягає поверх прямокутника з прямим краєм. plough_map — номер поля + 1 у кожній
+// клітинці (0 — не рілля), plough_rect — центри крайніх клітинок (x0, y0, x1, y1),
+// plough_axis — 1, коли довгий бік поля вздовж z (борозни повертаються на 90°).
+uniform sampler2D plough_map : filter_nearest, repeat_disable;
+uniform vec4 plough_rect[64];
+uniform int plough_axis[64];
+uniform int plough_layer = -1;
 // Слот класу двору (`YARD`, клітинки будівель): поле з плямами втоптаного ґрунту 2–6 м;
 // -1 — двору нема.
 uniform int yard_slot = -1;
@@ -114,11 +122,14 @@ const float CLASS_BAND = 0.05;
 // в 1 клітинку на River) показує свій вид лише на 22 % площі, а з 0.5 — ≥ 31 % на всіх картах
 // (tests/game/test_ground_surface.gd). Вид міняє число руху, тож гравець мусить його бачити.
 const float CLASS_CORE = 0.5;
-// Межа болота ширша (~1.6 м проти ~0.3 м): болото переходить у траву, а не обривається плямою.
-const float MARSH_BAND = 0.3;
-// Межа між підтипами поля — ~0.5 клітинки (~4 м): вид той самий, число руху не міняється,
-// тож межу можна розмити сильно; рвана висотна суміш нижче лишає перехід нерівним.
-const float FIELD_SUB_BAND = 0.75;
+// Межа двох природних покриттів (лука, болото, ліс, пагорб, берег) — ~0.5 клітинки (~4 м), рвана
+// висотною сумішшю: природа не обривається лінією. Щебінь (руїни) лишає вузьку CLASS_BAND, а рілля
+// — рукотворна — малюється окремо прямокутником поля з прямим краєм (plough_rect).
+const float NATURAL_BAND = 0.75;
+const int RUBBLE = 6;
+// Рілля всередині прямокутника поля відступає від краю клітинки на ~1.2 м — смуга трави (узбіччя
+// поля), а прямий край лишається в межах 0.1–0.3 клітинки від межі клітинок.
+const float PLOUGH_HEADLAND = 0.15;
 // Калюжі в коліях: комірка вздовж колії, у ній щонайбільше одна калюжа 0.3–2.5 м, що не виходить
 // за комірку. Імовірність 0.65 у дощ дає ~35 % довжини колії, проміжки з CV ~0.95; при MUD — ×0.7.
 const float RUT_CELL_M = 2.6;
@@ -465,18 +476,15 @@ void fragment() {
 		}
 		int L[4];
 		float W[4];
-		bool marsh_edge = false;
 		for (int i = 0; i < 3; i++) {
 			L[i] = class_layer[top[i]];
-			marsh_edge = marsh_edge
-					|| (layer_base[L[i]] == MARSH && tops[i] > tops[0] - MARSH_BAND);
 		}
-		// Два підтипи поля (лука й рілля) поруч: перехід ~4 м замість ~0.3 м, інакше на
-		// далекому зумі латки підтипів рябіють, як шум.
-		bool field_sub = layer_base[L[0]] == FIELD && layer_base[L[1]] == FIELD && L[0] != L[1]
-				&& tops[1] > tops[0] - FIELD_SUB_BAND;
+		// Слот другого класу є завжди, навіть з нульовим індикатором: природна межа — лише коли
+		// він справді в смузі.
+		bool soft = L[0] != L[1] && layer_base[L[0]] != RUBBLE && layer_base[L[1]] != RUBBLE
+				&& tops[1] > tops[0] - NATURAL_BAND;
 		// Ваги нормовано на CLASS_BAND: від їхньої величини залежать багно й калюжі нижче.
-		float band = marsh_edge ? MARSH_BAND : (field_sub ? FIELD_SUB_BAND : CLASS_BAND);
+		float band = soft ? NATURAL_BAND : CLASS_BAND;
 		for (int i = 0; i < 3; i++) {
 			W[i] = max(tops[i] - (tops[0] - band), 0.0) * (CLASS_BAND / band);
 		}
@@ -556,7 +564,24 @@ void fragment() {
 		float hmax = -1.0;
 		// Під суцільним асфальтом чи бруківкою покриття класів не видно: його не семплуємо зовсім
 		// (до 4 шарів × макро, паралакс і деталь). Ґрунтівку — семплуємо: вона просвічує траву.
-		bool skip_cls = road_cov > 0.995 && rt.g < 0.005;
+		// Рілля: частка покриття з прямого краю прямокутника, згладжена на один піксель.
+		float plough_a = 0.0;
+		int pf = -1;
+		if (plough_layer >= 0) {
+			ivec2 pc = ivec2(round(p - map_origin));
+			ivec2 psz = textureSize(plough_map, 0);
+			if (pc.x >= 0 && pc.y >= 0 && pc.x < psz.x && pc.y < psz.y) {
+				pf = int(round(texelFetch(plough_map, pc, 0).r * 255.0)) - 1;
+			}
+			if (pf >= 0) {
+				vec4 r = plough_rect[pf];
+				vec2 inside = min(p - (r.xy - 0.5 + PLOUGH_HEADLAND), (r.zw + 0.5 - PLOUGH_HEADLAND) - p);
+				float d = min(inside.x, inside.y);
+				float aa = max(fwidth(d), 0.004);
+				plough_a = smoothstep(-aa, aa, d);
+			}
+		}
+		bool skip_cls = (road_cov > 0.995 && rt.g < 0.005) || plough_a > 0.999;
 		for (int i = 0; i < 4; i++) {
 			H[i] = -10.0;
 			if (W[i] > 0.002 && !skip_cls) {
@@ -568,9 +593,9 @@ void fragment() {
 				// Висотне змішування: на межі першим проступає те, що вище в самій
 				// карті висот (камінь, кому, пучок), тож перехід рваний, а не розмитий.
 				float wn = W[i] / max(W[0] + W[1] + W[2] + W[3], 1e-4);
-				// Між підтипами поля вага класу слабша: висота перемішує луку й ріллю на всю
-				// ширину смуги (~4 м), а не стягує перехід назад до ~1 м.
-				H[i] = wn * (field_sub ? 0.35 : 1.0) + Hgt[i] * 0.45;
+				// На природній межі вага класу слабша: висота перемішує покриття на всю ширину
+				// смуги (~4 м), а не стягує перехід назад до ~1 м.
+				H[i] = wn * (soft ? 0.35 : 1.0) + Hgt[i] * 0.45;
 				hmax = max(hmax, H[i]);
 			}
 		}
@@ -606,6 +631,30 @@ void fragment() {
 			cav = 1.0;
 		}
 		alb *= cav;
+		if (plough_a > 0.001) {
+			// Поле вздовж z: семплуємо в повернутих на -90° координатах, щоб борозни (вісь x
+			// текстури) йшли вздовж довгого боку; нахил нормалі повертаємо назад.
+			bool vert = plough_axis[pf] == 1;
+			vec2 q = vert ? vec2(p.y, -p.x) : p;
+			vec2 qdx = vert ? vec2(dpx.y, -dpx.x) : dpx;
+			vec2 qdy = vert ? vec2(dpy.y, -dpy.x) : dpy;
+			vec2 pd = vert ? vec2(pom_dir.y, -pom_dir.x) : pom_dir;
+			vec2 ppom = pom_fade > 0.01
+					? pd * (relief_m[plough_layer] * relief_scale * pom_fade / METRES_PER_TILE)
+					: vec2(0.0);
+			vec3 pa;
+			vec2 pn;
+			float ph;
+			float pcav;
+			sample_layer(plough_layer, q, qdx, qdy, ppom, detail_fade, pa, pn, ph, pcav);
+			if (vert) {
+				pn = vec2(-pn.y, pn.x);
+			}
+			alb = mix(alb, pa * pcav, plough_a);
+			nxy = mix(nxy, pn, plough_a);
+			rough = mix(rough, 0.92, plough_a);
+			marsh_w *= 1.0 - plough_a;
+		}
 
 		// Дорога поверх покриття. Ґрунт — ізотропна текстура типу у світі; усе спрямоване (колії,
 		// центральна трава, калюжі) — у координатах дороги (u, v), тож іде крізь кути без розривів.

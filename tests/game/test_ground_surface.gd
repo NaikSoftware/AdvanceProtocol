@@ -341,3 +341,40 @@ func test_missing_season_variant_takes_variant_zero_of_the_same_season() -> void
 	var dir := "res://assets/terrain/macro/"
 	assert_eq(GroundSurface.macro_path("ploughed", 1, &"summer"), dir + "ploughed_albedo_0.summer.png")
 	assert_eq(GroundSurface.macro_path("marsh", 1), dir + "marsh_albedo_0.png")
+
+
+# Рілля — прямокутні поля: зв'язні групи клітинок дають номер у кожній клітинці й прямокутник.
+func test_plough_fields_gives_one_rectangle_per_connected_group() -> void:
+	var P := 9
+	# 5×4: поле 3×2 угорі ліворуч, поле 1×3 праворуч, решта — 1.
+	var cells := PackedInt32Array([
+		P, P, P, 1, P,
+		P, P, P, 1, P,
+		1, 1, 1, 1, P,
+		1, 1, 1, 1, 1,
+	])
+	var res: Array = GroundSurface.plough_fields(cells, 5, P)
+	var ids: PackedByteArray = res[0]
+	var rects: Array[Rect2i] = res[1]
+	assert_eq(rects.size(), 2)
+	assert_eq(rects[0], Rect2i(0, 0, 3, 2))
+	assert_eq(rects[1], Rect2i(4, 0, 1, 3))
+	assert_eq(ids[0], 1)
+	assert_eq(ids[4], 2)
+	assert_eq(ids[3], 0)
+	assert_eq(GroundSurface.plough_fields(cells, 5, -1)[1].size(), 0, "без шару ріллі полів нема")
+
+
+# Понад MAX_PLOUGH_FIELDS поля мовчки лишились би лукою: жодна карта не має їх стільки.
+func test_every_map_fits_its_plough_fields_into_the_shader() -> void:
+	var names: Array[String] = GroundSurface._macro_layer_names()
+	var table: PackedInt32Array = GroundSurface._surface_table(names)
+	var plough: int = names.find("ploughed")
+	assert_gt(plough, -1)
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var cells: PackedInt32Array = GroundSurface.class_layers(board, 0, m.surface, table, true)
+		var n: int = (GroundSurface.plough_fields(cells, board.width, plough)[1] as Array).size()
+		gut.p("%s: полів ріллі %d" % [file, n])
+		assert_between(n, 1, GroundSurface.MAX_PLOUGH_FIELDS - 1, file)
