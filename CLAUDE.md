@@ -100,8 +100,9 @@ rifle squad and the engineer.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
   the zones use fog-filtered occupancy plus known enemy mines and, for a vehicle, known wrecks;
   the walk checks the truth and **stops on the tile before** anything it could not see or an
-  engineer has just found. AP is charged only for tiles actually entered. Planning against the true occupancy would leak — the
-  route would detour around an invisible enemy and give away where it stands.
+  engineer has just found. AP is charged only for tiles actually entered. Planning against the
+  true occupancy would leak — the route would detour around an invisible enemy and give away
+  where it stands.
 
 ### 3.3 Combat → [formula and worked reasoning](docs/rules/combat.md)
 

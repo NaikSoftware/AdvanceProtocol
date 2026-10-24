@@ -107,13 +107,12 @@ occupancies and conflating them is a bug in either direction:
   terrain, which is public (§3.5), the player's own units, enemy **units** standing on ground the
   player has scouted (`seen`, §3.5), the enemy mines the player already knows of, which are
   obstacles (§3.11), and, for a vehicle, the wrecks on scouted ground (§3.14). Ground that looks
-  empty is planned through. Terrain never surprises a move;
-  only an enemy can.
+  empty is planned through. Terrain never surprises a move; only an enemy or its wreck can.
 - **Walking** uses the truth. Before entering each tile the mover checks what is really there; if
   a unit it could not see is standing in the way, a vehicle meets a wreck on ground its side had
   not scouted, or an engineer has just found a mine there, the move **stops on the tile before
-  it** and ends. Vision is recomputed at every step, so whatever
-  emerged is visible from that moment on.
+  it** and ends. Vision is recomputed at every step, so whatever emerged is visible from that
+  moment on.
 
 This is the same shape as the mine rule (§3.11), and deliberately so: the unit stops where reality
 contradicted the plan. **AP is charged only for tiles actually entered** — a move cut short is
