@@ -108,6 +108,9 @@ var _curv: PackedFloat32Array = PackedFloat32Array()
 var course: RiverCourse = null
 ## Переправи (RiverCourse.build): клітинки, центр, вісь, довжина й ширина настилу.
 var _groups: Array[Dictionary] = []
+## Переправи дошки: лише вони рівняють русло й гасять нерівність берега біля себе. Міст кільця
+## настилу не має, і пряма вода під ним читалась би каналом.
+var _course_groups: Array[Dictionary] = []
 ## Дорога як власна геометрія (RoadCourse); null — доріг нема. Її растр рівняє рельєф під
 ## дорогою.
 var roads: RoadCourse = null
@@ -322,6 +325,13 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 
 	if has_water:
 		_groups = _bridge_groups(board, bgrid)
+		for g in _groups:
+			var inside := true
+			for c: Vector2i in g["cells"]:
+				inside = inside and c.x >= _shift and c.y >= _shift \
+						and c.x < bw - _shift and c.y < bh - _shift
+			if inside:
+				_course_groups.append(g)
 	# Дорога — власна геометрія (RoadCourse): рельєф рівняється під намальованою дорогою, а не
 	# під клітинками.
 	var road_d := PackedFloat32Array()
@@ -408,7 +418,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	var dc := PackedFloat32Array()
 	var bc := PackedFloat32Array()
 	if has_water:
-		course = RiverCourse.build(_wgrid, bw, bh, margin + 3, _groups, seed_value, _shift)
+		course = RiverCourse.build(_wgrid, bw, bh, margin + 3, _course_groups, seed_value, _shift)
 		var fld: Array[PackedFloat32Array] = course.field(cols, rows, s, margin, _RIVER_STEP)
 		if _shift > 0:
 			_keep_board_course(fld, seed_value)
@@ -455,7 +465,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 					var shift: float = _SHORE_JITTER * jit + _SHORE_FINE * fine
 					# Прямий плес під мостом і за ним не лишається лінійкою: берег звужує воду ще на 0..0.15
 					# хвилею ~3 клітинок, але не під самим настилом (піни моста).
-					if not _groups.is_empty():
+					if not _course_groups.is_empty():
 						shift += _APPROACH_WOBBLE * (0.5 + 0.5 * clampf(1.6 * n_s1.get_noise_2d(x * 0.6 + 31.0, z * 0.6 - 17.0), -1.0, 1.0)) * _bar_fade(x, z)
 					dg[k] = d + shift
 					# Ширину схилу веде відхил від середнього зсуву, а не сам зсув.
@@ -892,7 +902,7 @@ func _flood_from_border(dg: PackedFloat32Array, level: float, extra: PackedInt32
 ## (пісок біля настилу не відрізнити від в'їзду на міст).
 func _bar_fade(x: float, z: float) -> float:
 	var f := 1.0
-	for g in _groups:
+	for g in _course_groups:
 		f = minf(f, smoothstep(1.6, 3.0, Vector2(x, z).distance_to(g["centre"])))
 	return f
 
