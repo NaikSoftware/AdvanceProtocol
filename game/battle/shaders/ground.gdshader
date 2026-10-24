@@ -407,12 +407,16 @@ void vertex() {
 
 void fragment() {
 	vec2 p = world_pos.xz;
-	// Під повним серпанком видно лише його колір: решту матеріалу не рахуємо.
-	if (surround && haze_density(board_distance(p)) >= 0.999) {
+	vec4 haze = vec4(0.0);
+	if (surround) {
+		haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
+	}
+	// Під суцільним серпанком видно лише його колір: решту матеріалу не рахуємо.
+	if (haze.a >= 0.999) {
 		ALBEDO = vec3(0.0);
 		ROUGHNESS = 1.0;
 		SPECULAR = 0.0;
-		FOG = vec4(haze_rgb(p), 1.0);
+		FOG = vec4(haze.rgb, 1.0);
 	} else {
 		vec2 dpx = dFdx(p);
 		vec2 dpy = dFdy(p);
@@ -941,15 +945,14 @@ void fragment() {
 
 		FOG = vec4(0.0);
 		if (surround) {
-			float sd = board_distance(p);
-			alb = surround_grade(alb, sd);
-			refl = surround_grade(refl, sd);
+			alb = surround_grade(alb, haze.a);
+			refl = surround_grade(refl, haze.a);
 			float plane = 0.0;
 			if (use_height && abs(board_cheb(p)) < 1.0) {
 				plane = edge_plane_y(p, MODEL_MATRIX[3].xz);
 			}
 			float line_a = surround_line(world_pos, CAMERA_POSITION_WORLD, plane, VIEWPORT_SIZE);
-			FOG = surround_fog(p, sd, line_a);
+			FOG = surround_fog(haze, line_a);
 		}
 		ALBEDO = alb;
 		EMISSION = refl * sky_reflection_gain;

@@ -86,12 +86,13 @@ void vertex() {
 void fragment() {
 	vec2 p = world_pos.xz;
 	// До discard: похідні відстані для ширини лінії мусять рахуватись у всіх сусідніх пікселях.
-	float sd = board_distance(p);
+	vec4 haze = vec4(0.0);
 	vec4 sfog = vec4(0.0);
 	if (surround) {
+		haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
 		float plane = use_height && abs(board_cheb(p)) < 1.0 ? edge_plane_y(p) : 0.0;
 		float line_a = surround_line(world_pos, CAMERA_POSITION_WORLD, plane, VIEWPORT_SIZE);
-		sfog = surround_fog(p, sd, line_a);
+		sfog = surround_fog(haze, line_a);
 	}
 	float shallow_fade = 1.0;
 	float depth_m = 4.0;
@@ -123,7 +124,7 @@ void fragment() {
 		shallow_fade = smoothstep(0.5, 0.72, w);
 		bank_m = max(w - 0.5, 0.0) * 2.35;
 	}
-	// Під повним серпанком (після discard: вода не мусить лягти на сушу) — лише його колір.
+	// Під суцільним серпанком (після discard: вода не мусить лягти на сушу) — лише його колір.
 	if (sfog.a >= 0.999) {
 		ALBEDO = vec3(0.0);
 		FOG = sfog;
@@ -196,8 +197,8 @@ void fragment() {
 		body = mix(body, vec3(0.06, 0.045, 0.022), 0.5 * margin_t);
 		ALBEDO = body * (1.0 - f);
 		if (surround) {
-			ALBEDO = surround_grade(ALBEDO, sd);
-			e = surround_grade(e, sd);
+			ALBEDO = surround_grade(ALBEDO, haze.a);
+			e = surround_grade(e, haze.a);
 		}
 		FOG = sfog;
 		// Нижня межа шорсткості 0.1, а не 0.04: так радіанс зонда не дає окремих яскравих пікселів.

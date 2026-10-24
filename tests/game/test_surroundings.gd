@@ -28,13 +28,6 @@ func test_board_distance_is_zero_inside_and_euclidean_outside() -> void:
 	assert_almost_eq(Surroundings.board_distance(Vector2(28.5, 25.5), size), 5.0, 1e-5, "кут: 3-4-5")
 
 
-func test_haze_is_clear_to_3_tiles_half_at_7_and_full_at_11() -> void:
-	assert_eq(Surroundings.haze(3.0), 0.0)
-	assert_almost_eq(Surroundings.haze(7.0), 0.5, 1e-5)
-	assert_eq(Surroundings.haze(11.0), 1.0)
-	assert_eq(Surroundings.haze(0.0), 0.0, "дошка без серпанку")
-
-
 func test_world_board_takes_live_board_kinds_and_the_authored_ring() -> void:
 	var m: MapData = load("res://maps/river.tres")
 	var b: Board = m.to_board()
@@ -212,7 +205,7 @@ func test_river_runs_through_the_ring_to_its_outer_edge() -> void:
 		assert_true(wet, "вода на краю кільця x = %.1f" % edge_x)
 
 
-## Річка не має видимого кінця: кінець осі річки законний, лише коли він під повним серпанком,
+## Річка не має видимого кінця: кінець осі річки законний, лише коли він під суцільним серпанком,
 ## або впадає в іншу вісь (лежить у межах її півширини), або за ним на клітинку вздовж течії вже
 ## нема води карти — там водойму закінчив автор. Одна умова і для дошки, і для кільця.
 func test_no_river_course_ends_in_view() -> void:
@@ -238,7 +231,7 @@ func test_no_river_course_ends_in_view() -> void:
 				var authored: bool = not wb.in_bounds(beyond) \
 						or not TerrainHeight._is_water(wb.kind_at(beyond))
 				checked += 1
-				assert_true(d >= Surroundings.HAZE_FULL or _joins_another_axis(c, li, e) or authored,
+				assert_true(d >= Surroundings.HAZE_CLOSED or _joins_another_axis(c, li, e) or authored,
 						"%s: вісь %d кінчається в кадрі в %s (%.1f клітинки від дошки)"
 						% [path, li, e - Vector2(mg, mg), d])
 	assert_gt(checked, 0, "кінці осей є")
@@ -349,6 +342,24 @@ func test_board_relief_inside_stays_the_same_with_the_ring() -> void:
 			for x in range(4, m.width - 4):
 				worst = maxf(worst, absf(plain.at(x, z) - t.at(x, z)))
 		assert_lt(worst, 0.75 * M, "%s: найбільша різниця висоти в глибині дошки %.2f м" % [path, worst / M])
+
+
+## Серпанок пливе за глобальним `fog_time`, що росте кроком 0.1 с (10 кадрів на секунду на дошці
+## без руху), а не за `TIME`; годинник один на `BoardView` і переживає перебудову.
+func test_fog_clock_advances_fog_time_by_a_tenth_of_a_second() -> void:
+	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
+	add_child_autofree(view)
+	var m: MapData = load("res://maps/crossroads.tres")
+	view.ring_map = m
+	view.build(m.to_board())
+	var clock: Timer = view.get_node("FogClock")
+	assert_eq(clock.wait_time, BoardView.FOG_TICK)
+	assert_almost_eq(BoardView.FOG_TICK, 0.1, 1e-6)
+	var before: float = BoardView.fog_time
+	clock.timeout.emit()
+	assert_almost_eq(BoardView.fog_time, before + 0.1, 1e-5)
+	view.build(m.to_board())
+	assert_same(view.get_node("FogClock"), clock, "перебудова дошки годинник не скидає")
 
 
 ## Дотик по кільцю потрапляє в землю кільця, але дає клітинку поза дошкою, яку Board.in_bounds

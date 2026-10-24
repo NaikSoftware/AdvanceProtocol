@@ -219,6 +219,22 @@ grade:    surround_grade() takes alpha, not smoothstep(3, 11, d): the ground dar
           and is untouched in a gap
 ```
 
+As built (`fog_bank` in `surroundings.gdshaderinc`), three numbers differ from the model above,
+each for a measured reason, and the octaves are not stretched along the wind:
+
+- `puff` spans n ± 0.25 around 1 − c, not ± 0.12. With ± 0.12 the lobe edges were 2–5 px at zoom
+  20, against the 9–40 px (3–7 m) of F2.
+- `relief` divides by 0.25, not 0.04. With 0.04 it saturates to ±1 almost everywhere, so the closed
+  top turns into hard-edged camouflage patches and a single 0.1 s tick moves pixels by up to
+  6/255. Measured with 0.25: closed-top luminance cv 0.08–0.09, mean within 2/255 of
+  `haze_color`, one tick p99 1–2/255, 20 s apart p99 35/255.
+- The noise is sampled where the view ray meets the plane y = 0, not on the surface. The fog is
+  one sheet above the ground; sampled on the surface, the skirt (0.5 m lower than the ring) showed
+  a straight seam at the ring's outer edge.
+
+The warp fades out between 10 and 11.5 tiles, where the top is already closed, so the skirt needs
+only the density and relief fetches and still matches the ring.
+
 The envelope (coverage) is fixed to the board; only the pattern inside it moves. Lobes roll along
 the bank, grow and shrink, and the bank never advances onto the board. The yaw is fixed, so the
 relief offset is a constant vector. The skirt (d ≥ 12) runs only the value term (2 fetches): a

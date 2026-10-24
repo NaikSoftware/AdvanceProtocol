@@ -14,13 +14,14 @@ void vertex() {
 }
 
 void fragment() {
-	float sd = board_distance(world_pos.xz);
-	ALBEDO = surround ? surround_grade(albedo, sd) : albedo;
+	ALBEDO = albedo;
 	ROUGHNESS = 0.95;
 	FOG = vec4(0.0);
 	if (surround) {
+		vec4 haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
+		ALBEDO = surround_grade(albedo, haze.a);
 		// Настил рівний: площина лінії — він сам.
 		float line_a = surround_line(world_pos, CAMERA_POSITION_WORLD, world_pos.y, VIEWPORT_SIZE);
-		FOG = surround_fog(world_pos.xz, sd, line_a);
+		FOG = surround_fog(haze, line_a);
 	}
 }

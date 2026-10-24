@@ -29,6 +29,11 @@ const PLACEHOLDER_DECK_ALBEDO: Color = Color(0.31, 0.30, 0.29)
 const PLACEHOLDER_RUIN_ALBEDO: Color = Color(0.25, 0.245, 0.235)
 const _DECK_SHADER: Shader = preload("res://game/battle/shaders/placeholder_deck.gdshader")
 
+## Крок часу серпанку (`fog_time` у surroundings.gdshaderinc), секунд. Кожне оновлення коштує
+## один намальований кадр: на 10 Гц дошка без руху малює 10 кадрів на секунду, а крок не міняє
+## жодного пікселя більш як на 2/255; на 5 Гц край лоба вже стрибає, на 2 Гц — видимо.
+const FOG_TICK: float = 0.1
+
 ## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
 ## задумом — вона мусить читатись як лінія на межі тайла, а не як ще один
 ## пофарбований тайл. _CONTOUR_INSET відсуває риску від самого краю тайла:
@@ -53,6 +58,11 @@ var relief_seed: int = 0
 ## Карта, з якої береться кільце довкола дошки (MapData.outer_*); null чи карта без кільця — світ
 ## закінчується краєм дошки. Лише вигляд: Board кільця не має.
 var ring_map: MapData = null
+## Час серпанку для всіх матеріалів світу; з боєм не скидається, бо візерунку однаково, з якого
+## часу пливти.
+static var fog_time: float = 0.0
+## Таймер `FOG_TICK`; лише з кільцем — без нього серпанку нема.
+var _fog_clock: Timer
 ## Кільце й розмір дошки останньої побудови: для серпанку на настилах мостів кільця.
 var _ring: int = 0
 var _board_size: Vector2i = Vector2i.ZERO
@@ -124,7 +134,7 @@ func build(board: Board) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, а тести це фіксують як витік.
 	for child in get_children():
-		if child != _ground and child != _water and child != _probe:
+		if child != _ground and child != _water and child != _probe and child != _fog_clock:
 			child.free()
 	_kind_by_cell.clear()
 	# Вузли контуру щойно звільнені циклом free() вище (вони теж діти цього
@@ -178,6 +188,13 @@ func build(board: Board) -> void:
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.
 		add_child(Surroundings.skirt(Vector2i(board.width, board.height), _height.min_height() - 0.5))
+		if _fog_clock == null:
+			_fog_clock = Timer.new()
+			_fog_clock.name = "FogClock"
+			_fog_clock.wait_time = FOG_TICK
+			_fog_clock.autostart = true
+			_fog_clock.timeout.connect(_tick_fog)
+			add_child(_fog_clock)
 
 	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз; перезйомку
 	# після перебудови просить rebuild_tiles явно (_request_probe_capture).
@@ -407,6 +424,13 @@ func _build_placeholder_bridge_deck(board: Board, ring: int = 0) -> void:
 	deck.append_array(ring_decks)
 	if not deck.is_empty():
 		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, PLACEHOLDER_DECK_ALBEDO)
+
+
+## Серпанок пливе лише цим кроком, а не за `TIME`: матеріал з `TIME` змушує Mobile малювати
+## кожен кадр, і дошка без руху не відпочивала б зовсім.
+func _tick_fog() -> void:
+	fog_time += FOG_TICK
+	RenderingServer.global_shader_parameter_set(&"fog_time", fog_time)
 
 
 ## Настил стоїть на рівні дороги на берегах, а русло під ним — нижче (TerrainHeight.deck_y).

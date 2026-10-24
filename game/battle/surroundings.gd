@@ -5,11 +5,13 @@ extends RefCounted
 ## нею й серпанок далі. Суто вигляд: core/ кільця не бачить, юніт туди не ступає, дотик поза
 ## дошкою нічого не вибирає (Board.in_bounds).
 
-## Серпанок за евклідовою відстанню від прямокутника дошки (клітинки): чисто до 3, повний на 11 —
-## за клітинку до краю кільця, бо край кільця видно на будь-якому віддаленні. Шейдери
-## (surroundings.gdshaderinc) власних значень не мають: усі числа ставить `apply()`.
-const HAZE_START: float = 3.0
+## Обвідна серпанку за евклідовою відстанню від прямокутника дошки (клітинки): до 2 — нічого, лоби
+## з'являються з 2.5 і зливаються до 11, а з `HAZE_CLOSED` (за пів клітинки до краю кільця) верх
+## суцільний — край кільця видно на будь-якому віддаленні. Шейдери (surroundings.gdshaderinc)
+## власних значень не мають: усі числа ставить `apply()`.
+const HAZE_START: float = 2.5
 const HAZE_FULL: float = 11.0
+const HAZE_CLOSED: float = 11.5
 ## Колір серпанку, лінійний: холодний, світліший за мокру землю на 8–15 L*
 ## (docs/art/surroundings-research.md, P1 і M).
 const HAZE_COLOR: Color = Color(0.10, 0.135, 0.155)
@@ -40,7 +42,17 @@ const BAND_MID: int = 6
 const MID_QUADS: int = 2
 const FAR_QUADS: int = 1
 
+## Шум серпанку: безшовний fBm 4 октави з посиленням 0.7, 512² на 256 м (0.5 м на тексель) —
+## повтор у 32 клітинки довший за видиме кільце, найкрупніша октава 48 м. Сід сталий, тож межі
+## 5–95 % значень (`FOG_NOISE_RANGE`) виміряно раз для цієї текстури.
+const FOG_NOISE_SIZE: int = 512
+const FOG_NOISE_SEED: int = 7331
+const FOG_NOISE_RANGE: Vector2 = Vector2(0.275, 0.761)
+
 const _SKIRT_SHADER: Shader = preload("res://game/battle/shaders/haze_skirt.gdshader")
+
+## Одна текстура на процес: її беруть усі матеріали світу. `NoiseTexture2D` генерує її в потоці.
+static var _fog_noise: NoiseTexture2D
 
 
 ## Числа світу довкола дошки — у матеріал землі чи води (surroundings.gdshaderinc).
@@ -49,6 +61,9 @@ static func apply(mat: ShaderMaterial, size: Vector2i) -> void:
 	mat.set_shader_parameter("board_size", Vector2(size))
 	mat.set_shader_parameter("haze_color", Vector3(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b))
 	mat.set_shader_parameter("haze_range", Vector2(HAZE_START, HAZE_FULL))
+	mat.set_shader_parameter("haze_closed", HAZE_CLOSED)
+	mat.set_shader_parameter("fog_noise", fog_noise())
+	mat.set_shader_parameter("fog_noise_range", FOG_NOISE_RANGE)
 	mat.set_shader_parameter("grade_params", Vector2(GRADE_LUMA, GRADE_SAT))
 	mat.set_shader_parameter("line_color",
 			Vector4(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, LINE_ALPHA))
@@ -56,14 +71,32 @@ static func apply(mat: ShaderMaterial, size: Vector2i) -> void:
 	mat.set_shader_parameter("line_gap_px", LINE_GAP_PX)
 
 
-## Заслін: один квадрат кольору серпанку під землею, до SKIRT_REACH клітинок від дошки. Земля
-## на краю кільця вже повністю в серпанку, тож шва між ними не видно.
+static func fog_noise() -> NoiseTexture2D:
+	if _fog_noise == null:
+		var n := FastNoiseLite.new()
+		n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		n.seed = FOG_NOISE_SEED
+		# Хвиля найкрупнішої октави — 96 текселів, тобто 48 м.
+		n.frequency = 1.0 / 96.0
+		n.fractal_type = FastNoiseLite.FRACTAL_FBM
+		n.fractal_octaves = 4
+		n.fractal_gain = 0.7
+		_fog_noise = NoiseTexture2D.new()
+		_fog_noise.width = FOG_NOISE_SIZE
+		_fog_noise.height = FOG_NOISE_SIZE
+		_fog_noise.seamless = true
+		_fog_noise.noise = n
+	return _fog_noise
+
+
+## Заслін: один квадрат суцільного серпанку під землею, до `SKIRT_REACH` клітинок від дошки. Земля
+## на краю кільця вже під суцільним серпанком, тож шва між ними не видно.
 static func skirt(size: Vector2i, y: float) -> MeshInstance3D:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(size) + Vector2.ONE * (2.0 * SKIRT_REACH)
 	var mat := ShaderMaterial.new()
 	mat.shader = _SKIRT_SHADER
-	mat.set_shader_parameter("color", Vector3(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b))
+	apply(mat, size)
 	var mi := MeshInstance3D.new()
 	mi.name = "HazeSkirt"
 	mi.mesh = plane
@@ -169,10 +202,6 @@ static func board_distance(p: Vector2, size: Vector2i) -> float:
 	var half := Vector2(size) * 0.5
 	var q: Vector2 = (p - (half - Vector2(0.5, 0.5))).abs() - half
 	return Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length()
-
-
-static func haze(d: float) -> float:
-	return smoothstep(HAZE_START, HAZE_FULL, d)
 
 
 ## Дошка разом із кільцем одним `Board` (W+2m)×(H+2m): усередині — живі види дошки (підірваний
