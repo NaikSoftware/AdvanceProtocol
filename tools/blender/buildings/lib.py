@@ -205,7 +205,7 @@ def mats():
         "panel": make_material("panel", "Concrete034", 1.2, (0.58, 0.57, 0.53), seams=[("h", 3.0, 0.025, 0.4), ("z", 3.1, 0.025, 0.4)], streak=1.0, base_dirt=0.6, patch=((0.12, 0.13, 0.10), 0.14)),
         "panel_scorched": make_material("panel_scorched", "Concrete034", 1.2, (0.26, 0.25, 0.23), seams=[("h", 3.0, 0.025, 0.4), ("z", 3.1, 0.025, 0.4)], streak=1.0, base_dirt=0.5, patch=((0.01, 0.01, 0.01), 0.5)),
         "bitumen": make_material("bitumen", "Asphalt031", 1.0, g(0.38), seams=[("x", 1.1, 0.03, 0.5)], patch=((0.04, 0.045, 0.04), 0.2)),
-        "fc_roof": make_material("fc_roof", "Concrete019", 1.2, (1.45, 1.42, 1.32), seams=[("x", 1.1, 0.05, 0.3), ("y", 1.1, 0.05, 0.3)], streak=0.3, patch=((0.10, 0.14, 0.08), 0.1)),
+        "fc_roof": make_material("fc_roof", "Concrete046", 1.2, (0.52, 0.52, 0.50), seams=[("x", 1.1, 0.05, 0.3), ("y", 1.1, 0.05, 0.3)], streak=0.2, patch=((0.16, 0.2, 0.12), 0.06)),
         "wall_silicate": make_material("wall_silicate", "Plaster001", 1.0, (0.86, 0.86, 0.82), seams=[("z", 0.25, 0.05, 0.2)], streak=1.0, base_dirt=0.4),
         "clad_wall": make_material("clad_wall", "CorrugatedSteel005", 1.0, (0.62, 0.70, 0.62), seams=[("h", 1.0, 0.015, 0.55)], streak=1.0, base_dirt=0.5),
         "clad_roof": make_material("clad_roof", "CorrugatedSteel005", 1.0, (0.40, 0.42, 0.36), seams=[("y", 1.0, 0.05, 0.3), ("x", 1.0, 0.05, 0.3)], streak=0.25, patch=((0.2, 0.1, 0.05), 0.07)),
@@ -222,7 +222,7 @@ def mats():
         "apron": make_material("apron", "Concrete046", 1.5, (0.5, 0.5, 0.47), seams=[("x", 5.0, 0.03, 0.7), ("y", 5.0, 0.03, 0.7)], streak=0.6, patch=((0.05, 0.05, 0.05), 0.25)),
         "rubble": make_material("rubble", "Concrete034", 0.8, (0.30, 0.27, 0.25), patch=((0.2, 0.1, 0.07), 0.4)),
         "kiosk": make_material("kiosk", "Plaster001", 1.0, (0.66, 0.66, 0.64), streak=1.0, base_dirt=0.6),
-        "canopy": make_material("canopy", "CorrugatedSteel005", 1.0, (0.62, 0.64, 0.64), seams=[("x", 1.2, 0.02, 0.5)], streak=0.8),
+        "canopy": make_material("canopy", "CorrugatedSteel005", 1.0, (0.58, 0.58, 0.55), seams=[("x", 1.2, 0.05, 0.3)], streak=0.2),
     })
     return MATS
 
@@ -431,7 +431,7 @@ def unwrap(me, flat, atlas_px):
     return 100 / (sc * atlas_px)  # см на тексель, ураховуючи метри
 
 
-def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0):
+def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0, footprint=(1, 1), anchor=None):
     """Меш → обʼєкт, UV, запікання атласу, один матеріал, масштаб 1/8, експорт, перевірка."""
     mt = mats()
     me = bpy.data.meshes.new(name)
@@ -445,7 +445,10 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0):
     xs = [v.co.x for v in me.vertices]
     ys = [v.co.y for v in me.vertices]
     zs = [v.co.z for v in me.vertices]
-    cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    cx, cy = anchor if anchor else ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+    # слід у цілих тайлах: меш має лежати всередині, виступ (завал, апрон) — не більше 0.1 тайла
+    lim = (footprint[0] * TILE / 2 + 0.1 * TILE, footprint[1] * TILE / 2 + 0.1 * TILE)
+    assert max(abs(min(xs) - cx), abs(max(xs) - cx)) <= lim[0] and max(abs(min(ys) - cy), abs(max(ys) - cy)) <= lim[1], f"{name}: меш виходить за слід {footprint}"
     bpy.context.view_layer.objects.active = ob
     ob.select_set(True)
 
@@ -501,19 +504,20 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0):
     bs.inputs["Metallic"].default_value = 0.0
     me.materials.append(fm)
 
+    ob["footprint_tiles"] = list(footprint)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30))
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
     glb = os.path.join(out_dir, name + ".glb")
     bpy.ops.export_scene.gltf(filepath=glb, export_format="GLB", use_selection=True, export_apply=True, export_yup=True,
-                              export_materials="EXPORT", export_image_format="JPEG", export_image_quality=88)
-    return verify(glb, tri_limit, mean_l)
+                              export_materials="EXPORT", export_extras=True, export_image_format="JPEG", export_image_quality=88)
+    return verify(glb, tri_limit, mean_l, footprint)
 
 
 ATLAS = [0, 0]
 
 
-def verify(path, tri_limit, mean_l):
+def verify(path, tri_limit, mean_l, footprint):
     import json
     import struct
     d = open(path, "rb").read()
@@ -533,7 +537,10 @@ def verify(path, tri_limit, mean_l):
     hi = acc[p["attributes"]["POSITION"]]["max"]
     tris = acc[p["indices"]]["count"] // 3
     assert abs(lo[1]) < 1e-4, f"y_min={lo[1]}"
-    assert abs(lo[0] + hi[0]) < 1e-3 and abs(lo[2] + hi[2]) < 1e-3, "початок не по центру"
+    fx, fz = footprint[0] / 2 + 0.1, footprint[1] / 2 + 0.1
+    assert -fx <= lo[0] and hi[0] <= fx and -fz <= lo[2] and hi[2] <= fz, "меш поза слідом"
+    ex = [n.get("extras") for n in g["nodes"] if n.get("extras")] + [m.get("extras") for m in g["meshes"] if m.get("extras")]
+    assert any("footprint_tiles" in e for e in ex), "нема footprint_tiles у extras"
     assert not [n for n in g["nodes"] if {"translation", "rotation", "scale", "matrix"} & n.keys()], "трансформ на вузлі"
     if tri_limit:
         assert tris <= tri_limit, f"{tris} трикутників > {tri_limit}"

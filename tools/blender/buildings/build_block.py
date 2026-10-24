@@ -73,7 +73,7 @@ def intact():
     lib.reset()
     b = Builder()
     common(b, False)
-    lib.finish(b, "h5_panel_block", out, 1024, tri_limit=1500)
+    lib.finish(b, "h5_panel_block", out, tri_limit=1500, footprint=(4, 2), anchor=(0, 0))
 
 
 def damaged():
@@ -99,11 +99,11 @@ def damaged():
     # зависла арматура/край плити на розломі
     b.box(7.0, 4.5, z2 + 1.9, 2.0, 1.2, 0.2, "panel_scorched", top="bitumen", tilt=math.radians(18), rot=math.radians(-6))
     # відкинуте сміття зовні: завал на фронті і збоку, смуга за будівлею
-    lump(b, 11.0, 7.6, 6.5, 2.4, "rubble", 1, 26)
-    lump(b, 16.5, 1.0, 5.0, 2.0, "rubble", 2, 16)
-    lump(b, 9.0, -7.5, 3.5, 0.9, "rubble", 3, 8)
-    lump(b, 15.5, -5.5, 3.0, 0.8, "rubble", 4, 6)
-    lib.finish(b, "h5_panel_block_damaged", out, 1024, tri_limit=2500)
+    lump(b, 11.0, 7.0, 2.2, 1.6, "rubble", 1, 12)
+    lump(b, 15.4, 1.0, 1.6, 1.3, "rubble", 2, 8)
+    lump(b, 10.0, -7.0, 1.8, 1.0, "rubble", 3, 6)
+    lump(b, 14.0, -6.8, 1.8, 1.0, "rubble", 4, 5)
+    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=2500, footprint=(4, 2), anchor=(0, 0))
 
 
 intact()

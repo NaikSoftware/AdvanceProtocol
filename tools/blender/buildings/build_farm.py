@@ -37,8 +37,8 @@ def barn():
     for y in (-18.0, 8.0):
         b.box(W / 2 + 0.05, y, 0, 0.1, 1.6, 2.2, "door_steel")
     # кормова доріжка: бетонна смуга уздовж довгого боку
-    b.box(W / 2 + 2.0, 0, 0, 4.0, Ln - 2.0, 0.06, "apron")
-    lib.finish(b, "f2_livestock_barn", out, 1024, tri_limit=900)
+    b.box(W / 2 + 1.0, 0, 0, 2.0, Ln - 2.0, 0.06, "apron")
+    lib.finish(b, "f2_livestock_barn", out, tri_limit=900, footprint=(2, 8), anchor=(0, 0))
 
 
 # ------------------------------------------------------------------ F3 ангар 18 x 36
@@ -92,13 +92,13 @@ def hangar(damaged):
         for k in range(11):
             ang = rnd.uniform(0, math.pi)
             side = 1 if k % 3 else -1
-            b.box(side * rnd.uniform(11.0, 16.0), rnd.uniform(-16, 16), 0.1, 1.1, rnd.uniform(2.0, 3.2), 0.05, "clad_roof" if k % 2 else "fc_roof", rot=ang, tilt=rnd.uniform(-0.25, 0.25))
+            b.box(side * rnd.uniform(9.9, 10.8), rnd.uniform(-16, 16), 0.1, 1.1, rnd.uniform(1.6, 2.4), 0.05, "clad_roof" if k % 2 else "fc_roof", rot=ang, tilt=rnd.uniform(-0.25, 0.25))
         b.box(11.0, 3.0, 2.6, 1.1, 3.6, 0.05, "clad_roof", tilt=math.radians(35))
-        lump(b, 11.5, 5.5, 3.2, 1.0, "rubble", 11, 7)
+        lump(b, 10.5, 5.5, 2.0, 1.0, "rubble", 11, 6)
     # два ролетні ворота 5 x 5 на фронтоні +Y
     for gx in (-4.6, 4.6):
         b.box(gx, y1 + 0.06, 0, 5.0, 0.12, 5.0, "door_steel")
-    lib.finish(b, "f3_hangar_damaged" if damaged else "f3_hangar", out, 512 if not damaged else 1024, tri_limit=1400 if damaged else 300)
+    lib.finish(b, "f3_hangar_damaged" if damaged else "f3_hangar", out, tri_limit=1400 if damaged else 300, footprint=(3, 5), anchor=(0, 0))
 
 
 # ------------------------------------------------------------------ F4 зерносховища
@@ -125,7 +125,7 @@ def bins():
     b.beam((lx, ly + 0.8, 19.8), (0.0, 0.0, WALL + CONE + 0.4), 0.45, "metal_dark", 0.6)
     for x in xs:
         b.box(x, 0, WALL + CONE - 0.2, 0.3, 0.3, 0.5, "metal_dark")
-    lib.finish(b, "f4_grain_bins", out, 512, tri_limit=900)
+    lib.finish(b, "f4_grain_bins", out, tri_limit=900, footprint=(4, 2))
 
 
 # ------------------------------------------------------------------ F5 силоси
@@ -143,7 +143,7 @@ def silos():
     # нижній приймальний корпус із похилим транспортером
     b.box(-12.0, -6.5, 0, 12.0, 7.0, 7.0, "silo_concrete", top="bitumen")
     b.beam((-14.0, -4.0, 6.5), (-15.0, -1.5, H + 0.5), 0.6, "metal_dark", 1.0)
-    lib.finish(b, "f5_silo_battery", out, 1024, tri_limit=900)
+    lib.finish(b, "f5_silo_battery", out, tri_limit=900, footprint=(5, 2))
 
 
 # ------------------------------------------------------------------ F6 АЗС
@@ -167,7 +167,7 @@ def fuel():
     b.window(("y", 2.5, 1), 11.8, 1.0, 1.4, 1.2, 0.07)
     b.box(10.0, 2.5 + 0.02, 0.08, 1.0, 0.04, 2.1, "dark")
     b.box(10.0, 0, 3.08, 8.4, 5.4, 0.25, "kiosk", top="bitumen")
-    lib.finish(b, "f6_fuel_station", out, 512, tri_limit=500)
+    lib.finish(b, "f6_fuel_station", out, tri_limit=500, footprint=(4, 2))
 
 
 if want("barn"):

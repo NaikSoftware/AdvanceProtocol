@@ -1,21 +1,24 @@
 extends GutTest
-## Будівлі з Blender: кожна лежить на землі, має очікуваний слід у тайлах і вкладається в бюджет трикутників.
+## Будівлі з Blender: стоять на землі, лежать усередині цілого сліду в тайлах (виступ не більше 0.1 тайла)
+## і вкладаються в бюджет трикутників.
 
 const _DIR: String = "res://assets/props/"
-## імʼя -> [ширина X, глибина Z у тайлах, ліміт трикутників]
+## імʼя -> [слід X, слід Z у тайлах, ліміт трикутників]
 const _PROPS: Dictionary = {
-	"h5_panel_block": [3.75, 1.65, 600],
-	"h5_panel_block_damaged": [4.37, 2.70, 1300],
-	"f2_livestock_barn": [2.06, 7.63, 400],
-	"f3_hangar": [2.33, 4.58, 150],
-	"f3_hangar_damaged": [3.87, 4.56, 900],
-	"f4_grain_bins": [4.0, 1.48, 1000],
-	"f5_silo_battery": [4.5, 1.63, 700],
-	"f6_fuel_station": [3.63, 1.33, 300],
-	"f7_water_tower": [0.43, 0.38, 300],
-	"f7b_brick_tower": [0.8, 0.8, 400],
+	"h5_panel_block": [4, 2, 600],
+	"h5_panel_block_damaged": [4, 2, 1000],
+	"f2_livestock_barn": [2, 8, 400],
+	"f3_hangar": [3, 5, 150],
+	"f3_hangar_damaged": [3, 5, 900],
+	"f4_grain_bins": [4, 2, 1000],
+	"f5_silo_battery": [5, 2, 700],
+	"f6_fuel_station": [4, 2, 300],
+	"f7_water_tower": [1, 1, 300],
+	"f7b_brick_tower": [1, 1, 400],
 }
-const _EPS: float = 0.03
+## Стоять лише на клітинках кільця навколо поля, а не на ігровому полі.
+const RING_ONLY: Array[String] = ["f2_livestock_barn"]
+const _OVERHANG: float = 0.1
 
 
 func _bounds(root: Node) -> Array:
@@ -32,7 +35,16 @@ func _bounds(root: Node) -> Array:
 	return [lo, hi, tris]
 
 
-func test_every_building_rests_on_the_ground_with_its_footprint_and_budget() -> void:
+func _footprint_meta(root: Node) -> Array:
+	for n in [root] + root.find_children("*", "", true, false):
+		if n.has_meta("extras"):
+			var ex: Variant = n.get_meta("extras")
+			if ex is Dictionary and (ex as Dictionary).has("footprint_tiles"):
+				return (ex as Dictionary)["footprint_tiles"]
+	return []
+
+
+func test_every_building_rests_on_the_ground_inside_its_footprint() -> void:
 	for id in _PROPS:
 		var scene := load(_DIR + id + ".glb") as PackedScene
 		assert_not_null(scene, "%s: GLB не завантажився" % id)
@@ -44,9 +56,18 @@ func test_every_building_rests_on_the_ground_with_its_footprint_and_budget() -> 
 		var lo: Vector3 = b[0]
 		var hi: Vector3 = b[1]
 		var spec: Array = _PROPS[id]
+		var hx: float = float(spec[0]) / 2.0 + _OVERHANG
+		var hz: float = float(spec[1]) / 2.0 + _OVERHANG
 		assert_almost_eq(lo.y, 0.0, 0.02, "%s: низ на землі" % id)
-		assert_almost_eq(hi.x - lo.x, spec[0], _EPS, "%s: ширина" % id)
-		assert_almost_eq(hi.z - lo.z, spec[1], _EPS, "%s: глибина" % id)
-		assert_almost_eq(lo.x + hi.x, 0.0, 0.02, "%s: центр по X" % id)
-		assert_almost_eq(lo.z + hi.z, 0.0, 0.02, "%s: центр по Z" % id)
+		assert_true(lo.x >= -hx and hi.x <= hx, "%s: X поза слідом %s" % [id, spec])
+		assert_true(lo.z >= -hz and hi.z <= hz, "%s: Z поза слідом %s" % [id, spec])
 		assert_lte(b[2] as int, spec[2] as int, "%s: трикутники" % id)
+		var meta: Array = _footprint_meta(inst)
+		assert_eq(meta.size(), 2, "%s: нема footprint_tiles у метаданих" % id)
+		if meta.size() == 2:
+			assert_eq([int(meta[0]), int(meta[1])], [spec[0], spec[1]], "%s: footprint_tiles" % id)
+
+
+func test_ring_only_buildings_are_listed_in_the_props() -> void:
+	for id in RING_ONLY:
+		assert_true(_PROPS.has(id), id)

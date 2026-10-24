@@ -3,6 +3,8 @@
 set -e
 OUT="$(dirname "$0")/../../../art-refs/buildings_tex"
 mkdir -p "$OUT"
+# без цього Godot імпортує .blend із ambientCG і --import мовчки падає
+touch "$OUT/.gdignore"
 for m in Concrete034 Concrete046 Plaster001 CorrugatedSteel005 CorrugatedSteel007A Bricks105 MetalPlates013 Asphalt031 Concrete019 PaintedMetal012 Rust004; do
   [ -d "$OUT/$m" ] && continue
   mkdir -p "$OUT/$m"
