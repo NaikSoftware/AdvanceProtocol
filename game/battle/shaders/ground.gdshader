@@ -934,8 +934,10 @@ void fragment() {
 			alb = mix(alb, sand, bar_w * 0.85);
 		}
 
+		// Тінь хмари: плями ~10 клітинок, пливуть ~0.5 клітинки/с (4 м/с), тож пляма минає точку
+		// за 15–20 с. Край вузький (0.52–0.64), щоб тінь читалась плямою, а не загальною рябизною.
 		if (cloud_shadow_strength > 0.0) {
-			float cloud = smoothstep(0.45, 0.7, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
+			float cloud = smoothstep(0.52, 0.64, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
 			alb *= 1.0 - cloud_shadow_strength * cloud;
 		}
 
