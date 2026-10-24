@@ -363,45 +363,82 @@ func test_map_outer_ring_is_well_formed(p = use_parameters(_map_paths())) -> voi
 	assert_eq(bad.size(), 0, "%s: криві клітинки кільця %s" % [path, bad.slice(0, 8)])
 
 
-## Рілля — рукотворне поле: кожна її ділянка на дошці й у кільці — суцільний прямокутник. Дорога
-## чи ліс посеред поля ділять його на окремі прямокутники; луки, ліси й болота лишаються вільної форми.
-func test_map_ploughed_patches_are_filled_rectangles(p = use_parameters(_map_paths())) -> void:
-	var path: String = p
-	var m: MapData = load(path) as MapData
+func _is_ploughed(m: MapData, c: Vector2i) -> bool:
 	var mg: int = m.outer_margin
-	var ow: int = m.width + 2 * mg
-	var ploughed := func(c: Vector2i) -> bool:
-		if c.x < -mg or c.y < -mg or c.x >= m.width + mg or c.y >= m.height + mg:
-			return false
-		if m.outer_kind_at(c) != Terrain.Kind.FIELD:
-			return false
-		var inside: bool = c.x >= 0 and c.y >= 0 and c.x < m.width and c.y < m.height
-		var s: int = m.surface_at(c) if inside else (
-				m.outer_surface[(c.y + mg) * ow + c.x + mg] if not m.outer_surface.is_empty() else 0)
-		return s == MapData.FieldSurface.PLOUGHED
+	if c.x < -mg or c.y < -mg or c.x >= m.width + mg or c.y >= m.height + mg:
+		return false
+	if m.outer_kind_at(c) != Terrain.Kind.FIELD:
+		return false
+	var inside: bool = c.x >= 0 and c.y >= 0 and c.x < m.width and c.y < m.height
+	var i: int = (c.y + mg) * (m.width + 2 * mg) + c.x + mg
+	var s: int = m.surface_at(c) if inside else (m.outer_surface[i] if not m.outer_surface.is_empty() else 0)
+	return s == MapData.FieldSurface.PLOUGHED
+
+
+## Ділянки ріллі на дошці й у кільці разом — кожна як масив клітинок (4 напрямки).
+func _ploughed_patches(m: MapData) -> Array:
+	var mg: int = m.outer_margin
 	var seen: Dictionary = {}
-	var bad: Array[Rect2i] = []
+	var out: Array = []
 	for y in range(-mg, m.height + mg):
 		for x in range(-mg, m.width + mg):
 			var start := Vector2i(x, y)
-			if seen.has(start) or not ploughed.call(start):
+			if seen.has(start) or not _is_ploughed(m, start):
 				continue
 			seen[start] = true
+			var patch: Array[Vector2i] = []
 			var stack: Array[Vector2i] = [start]
-			var box := Rect2i(start, Vector2i.ONE)
-			var n := 0
 			while not stack.is_empty():
 				var c: Vector2i = stack.pop_back()
-				n += 1
-				box = box.merge(Rect2i(c, Vector2i.ONE))
+				patch.append(c)
 				for d: Vector2i in Board.DIRS_4:
 					var q: Vector2i = c + d
-					if not seen.has(q) and ploughed.call(q):
+					if not seen.has(q) and _is_ploughed(m, q):
 						seen[q] = true
 						stack.append(q)
-			if n != box.get_area():
-				bad.append(box)
-	assert_eq(bad.size(), 0, "%s: рілля не прямокутником у межах %s" % [path, bad.slice(0, 4)])
+			out.append(patch)
+	return out
+
+
+## Рілля — рукотворне поле: кожна її ділянка на дошці й у кільці — суцільний прямокутник щонайменше
+## 2×2. Дорога чи ліс посеред поля ділять його на окремі прямокутники; луки, ліси й болота лишаються
+## вільної форми.
+func test_map_ploughed_patches_are_filled_rectangles(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var bad: Array[Rect2i] = []
+	for patch: Array in _ploughed_patches(m):
+		var box := Rect2i(patch[0], Vector2i.ONE)
+		for c: Vector2i in patch:
+			box = box.merge(Rect2i(c, Vector2i.ONE))
+		if patch.size() != box.get_area() or box.size.x < 2 or box.size.y < 2:
+			bad.append(box)
+	assert_eq(bad.size(), 0, "%s: рілля не прямокутником 2×2+ у межах %s" % [path, bad.slice(0, 4)])
+
+
+## Рілля лежить так, як її орють насправді: між нею й водою, мостом, болотом чи будівлею — щонайменше
+## клітинка лук (заплава, двори й садки), і до кожного поля веде дорога — не далі, ніж через клітинку.
+## Ріллі на пагорбі не буває за самим форматом: підтип пагорба лише `0`.
+func test_map_ploughed_fields_follow_land_use(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var keep_off: Array = [Terrain.Kind.WATER, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED,
+			Terrain.Kind.MARSH, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
+	var crowded: Array[Vector2i] = []
+	var cut_off: Array[Vector2i] = []
+	for patch: Array in _ploughed_patches(m):
+		var access := false
+		for c: Vector2i in patch:
+			for dy in range(-2, 3):
+				for dx in range(-2, 3):
+					var k: int = m.outer_kind_at(c + Vector2i(dx, dy))
+					access = access or k == Terrain.Kind.ROAD
+					if absi(dx) <= 1 and absi(dy) <= 1 and keep_off.has(k):
+						crowded.append(c)
+		if not access:
+			cut_off.append(patch[0])
+	assert_eq(crowded.size(), 0, "%s: рілля впритул до води, болота чи будівлі %s" % [path, crowded.slice(0, 8)])
+	assert_eq(cut_off.size(), 0, "%s: поле без дороги поруч %s" % [path, cut_off.slice(0, 8)])
 
 
 ## Річка й дорога не обриваються на краю дошки: клітинка кільця за краєм продовжує їх.
