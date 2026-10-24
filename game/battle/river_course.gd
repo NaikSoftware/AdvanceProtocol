@@ -323,8 +323,8 @@ func _lakes(seed_value: int) -> void:
 
 
 ## Знакова відстань до урізу (клітинки; мінус у воді), вигин у [-1, 1] (+1 — зовнішній берег,
-## -1 — коса) і окреме поле ставків — на грубій сітці з кроком step відліків: вузол (ic, jc) —
-## відлік (ic * step, jc * step) повної сітки cols x rows, що лежить у світі на
+## -1 — коса) і окреме поле ставків — на грубому полі з кроком step відліків: вузол (ic, jc) —
+## відлік (ic * step, jc * step) повного поля відліків cols x rows, що лежить у світі на
 ## (-0.5 - margin + i / samples, ...).
 func field(cols: int, rows: int, samples: int, margin: int, step: int) -> Array[PackedFloat32Array]:
 	var cw: int = (cols - 1 + step - 1) / step + 1
@@ -402,7 +402,7 @@ func _splat(d: PackedFloat32Array, lat: PackedFloat32Array, kap: PackedFloat32Ar
 				kap[k] = lerpf(ka, kb, t)
 
 
-## Білінійне значення грубої сітки field() у відліку (i, j) повної сітки.
+## Білінійне значення грубого поля field() у відліку (i, j) повного поля відліків.
 static func upsample(coarse: PackedFloat32Array, cols: int, rows: int, step: int, i: int, j: int) -> float:
 	var cw: int = (cols - 1 + step - 1) / step + 1
 	var ch: int = (rows - 1 + step - 1) / step + 1
