@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cyjivqmlxdun3"
-path="res://.godot/imported/infra_tower_lattice_tower_steel_n.jpg-e7cb8714592aa5435973730e01dabb6a.ctex"
+uid="uid://b5u5fn87q6djp"
+path="res://.godot/imported/infra_culvert_ditch.png-ea2aea2df129b3692f47183128f48e46.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "f4f35d60b3cc18aaa6d8d92f0cd3708a"
 }
 
 [deps]
 
-source_file="res://assets/props/infra_tower_lattice_tower_steel_n.jpg"
-dest_files=["res://.godot/imported/infra_tower_lattice_tower_steel_n.jpg-e7cb8714592aa5435973730e01dabb6a.ctex"]
+source_file="res://assets/props/infra_culvert_ditch.png"
+dest_files=["res://.godot/imported/infra_culvert_ditch.png-ea2aea2df129b3692f47183128f48e46.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

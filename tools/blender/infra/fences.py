@@ -16,22 +16,28 @@ def runs(corner):
 def fence(kind, corner, name):
     b = B()
     if kind.startswith("sheet"):
-        col = {"sheet_green": (0.36, 0.52, 0.42), "sheet_brown": (0.62, 0.36, 0.28)}[kind]
-        sheet = pbr(f"{kind}_panel", "CorrugatedSteel005", tile=1.15, paint=col, contrast=0.6, rust=0.2, grime=0.15,
-                    rough=0.65, metal=0.1, seed=21 if kind.endswith("green") else 22)
+        col = {"sheet_green": (0.50, 0.57, 0.47), "sheet_brown": (0.44, 0.35, 0.30)}[kind]
+        sheet = sheet_mat(f"{kind}_panel", col, 21 if kind.endswith("green") else 22)
         post = sheet
         nom, ph, pw = 2.5, 2.0, 0.08
     elif kind == "euro":
-        sheet = pbr("euro_panel", "Concrete034", tile=1.5, tint=(0.66, 0.65, 0.62), sat=0.6, contrast=0.25, grime=0.25, rough=0.9, seed=25)
+        def relief(n):   # дві втоплені філенги в секції 2 × 2 м
+            return 1 - 0.85 * np.maximum(box_mask(n, 0.12, 0.88, 0.17, 0.42), box_mask(n, 0.12, 0.88, 0.5, 0.8))
+        sheet = concrete_mat("euro_panel", tile=2.0, relief=relief, seed=25)
         post = sheet
         nom, ph, pw = 2.0, 1.95, 0.15
     elif kind == "po2":
-        sheet = pbr("po2_panel", "Concrete046", tile=2.0, tint=(0.6, 0.6, 0.58), sat=0.6, contrast=0.25, grime=0.3, rough=0.95, seed=27)
+        def relief(n):   # три горизонтальні ребра й рамка по краю плити 4 × 2,5 м
+            h = np.zeros((n, n))
+            for z in (0.55, 1.2, 1.85):
+                h = np.maximum(h, box_mask(n, 0.0, 1.0, z / 2.5 - 0.035, z / 2.5 + 0.035, 0.01))
+            return 0.35 + 0.65 * h
+        sheet = concrete_mat("po2_panel", tile=4.0, tile_v=2.5, relief=relief, seed=27)
         post = sheet
         nom, ph, pw = 4.0, 2.5, 0.2
     elif kind == "picket":
         sheet = None
-        post = pbr("picket_post", "Planks021", tile=1.0, tint=(0.62, 0.58, 0.52), sat=0.4, grime=0.6, rough=0.95, seed=29)
+        post = pbr("picket_post", "Planks021", tile=1.0, tint=(0.62, 0.58, 0.52), sat=0.4, grime=0.2, rough=0.95, seed=29)
         nom, ph, pw = 2.0, 1.45, 0.1
         card = picket_mat()
     for (ox, oy), (dx, dy), L in runs(corner):
@@ -61,33 +67,30 @@ def fence(kind, corner, name):
                 f.material_index = b.mi(card)
                 b.skip_uv.add(f)
                 uv = b.bm.loops.layers.uv.verify()
-                for l, (u, vv) in zip(f.loops, ((0, 0), (w / 2, 0), (w / 2, 1), (0, 1))):
+                for l, (u, vv) in zip(f.loops, ((0, 0), (w / 0.96, 0), (w / 0.96, 1), (0, 1))):
                     l[uv].uv = (u, vv)
     finish(b, name, jpeg=(kind != "picket"))
 
 
 def picket_mat():
-    """Штахет 2 м × 1,3 м: дошка 0,1 м з проміжком, шпичаки, дві планки; різна висота й тон дощок."""
-    W, H = 128, 128
+    """Штахет: 8 дощок по 0,12 м у тайлі 0,96 м (1,5 см/тексель), чіткі просвіти, дві планки позаду."""
+    W, H = 64, 128
     rng = np.random.default_rng(31)
-    x = (np.arange(W) + 0.5) / W * 2.0                         # метри по довжині
-    y = (np.arange(H) + 0.5) / H * 1.3                         # метри по висоті
-    idx = np.floor(x / 0.1).astype(int); fx = (x / 0.1) - idx
-    top = 1.22 + rng.uniform(-0.08, 0.0, 20)[idx]              # неоднакова висота дощок
-    tone = rng.uniform(0.7, 1.05, 20)[idx]
-    X, Y = np.meshgrid(np.arange(W), np.arange(H))
-    ydat = y[:, None]
-    pointed = top[None, :] - 0.045 * (1 - np.abs(fx[None, :] - 0.5) * 2)
-    board = (np.abs(fx[None, :] - 0.5) < 0.43) & (ydat < pointed + 0.045)
-    rail = ((np.abs(ydat - 0.4) < 0.03) | (np.abs(ydat - 1.05) < 0.03))
-    alpha = (board | (rail & (idx[None, :] >= 0))).astype(float)
-    grain = fbm(W, 33, 8, 2)
-    base = np.array([0.62, 0.56, 0.48])
-    col = base * (tone[None, :, None] * (0.75 + 0.4 * grain[..., None]))
-    col = np.where(rail[..., None] & ~board[..., None], col * 0.6, col)
-    a = np.concatenate([col, alpha[..., None]], -1)[::-1]    # рядок 0 знизу, як у Blender
-    nrm = normal_from_height(grain, 6.0)
-    return pbr("picket_card", albedo=a, normal=np.concatenate([nrm, np.ones((H, W, 1))], -1), tile=2.0,
+    x = (np.arange(W) + 0.5) / W * 0.96
+    y = (np.arange(H) + 0.5) / H * 1.22 + 0.08
+    idx = np.minimum((x / 0.12).astype(int), 7); fx = x / 0.12 - idx
+    top = 1.26 + rng.uniform(-0.05, 0.0, 8)[idx]
+    tone = rng.uniform(0.8, 1.05, 8)[idx]
+    board = (np.abs(fx[None, :] - 0.5) < 0.33) & (y[:, None] < top[None, :])
+    rail = (np.abs(y[:, None] - 0.4) < 0.035) | (np.abs(y[:, None] - 1.05) < 0.035)
+    grain = np.tile(tile_noise(8, 3, W, 33), (2, 1))
+    base = np.array([0.62, 0.57, 0.50])
+    col = base * (tone[None, :, None] * (0.85 + 0.25 * grain[..., None]))
+    col = np.where(board[..., None], col, col * 0.55)
+    alpha = (board | rail).astype(float)
+    a = np.concatenate([col, alpha[..., None]], -1)
+    nrm = normal_from_height(grain, 2.0)
+    return pbr("picket_card", albedo=a, normal=np.concatenate([nrm, np.ones((H, W, 1))], -1), tile=0.96,
                rough=0.95, alpha=True, double_sided=True)
 
 

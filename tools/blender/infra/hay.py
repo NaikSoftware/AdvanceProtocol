@@ -15,7 +15,7 @@ def straw_mat():
     streak = tile_noise(3, 48, n, 41) * 0.6 + tile_noise(6, 96, n, 42) * 0.4      # смуги вздовж u
     blot = fbm(n, 43, 3)
     h = streak
-    base = np.array([0.42, 0.38, 0.27]); dark = np.array([0.22, 0.20, 0.14])
+    base = np.array([0.55, 0.50, 0.36]); dark = np.array([0.28, 0.25, 0.18])
     t = np.clip(0.35 + 0.6 * streak + 0.5 * (blot - 0.5), 0, 1)[..., None]
     a = dark + (base - dark) * t * 1.25
     return pbr("hay_straw", albedo=a, normal=np.concatenate([normal_from_height(h, 5.0), np.ones((n, n, 1))], -1),

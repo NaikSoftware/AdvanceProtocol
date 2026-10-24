@@ -8,7 +8,7 @@ from common import *
 
 
 def concrete(name="road_concrete", seed=61):
-    return pbr(name, "Concrete034", tile=1.5, tint=(0.52, 0.51, 0.49), sat=0.6, contrast=0.3, grime=0.4, rough=0.92, seed=seed)
+    return concrete_mat(name, tile=1.5, seed=seed)
 
 
 def jersey():
@@ -34,22 +34,39 @@ def jersey():
     finish(b, "infra_jersey_block")
 
 
-def tube(b, mat, c, ro, ri, L, n=20):
+def tube(b, mat, c, ro, ri, L, n=20, inner=None):
     bm = b.bm
     y0, y1 = c[1] - L / 2, c[1] + L / 2
     ang = [2 * math.pi * k / n for k in range(n)]
     V = {key: [bm.verts.new((c[0] + r * math.cos(a), y, c[2] + r * math.sin(a))) for a in ang]
          for key, (r, y) in {"o0": (ro, y0), "o1": (ro, y1), "i0": (ri, y0), "i1": (ri, y1)}.items()}
-    i = b.mi(mat)
+    i = b.mi(mat); j = b.mi(inner or mat)
     for k in range(n):
         k2 = (k + 1) % n
-        for q in ([V["o0"][k], V["o1"][k], V["o1"][k2], V["o0"][k2]], [V["i0"][k], V["i0"][k2], V["i1"][k2], V["i1"][k]],
-                  [V["o0"][k], V["o0"][k2], V["i0"][k2], V["i0"][k]], [V["o1"][k], V["i1"][k], V["i1"][k2], V["o1"][k2]]):
-            bm.faces.new(q).material_index = i
+        for q, m in (([V["o0"][k], V["o1"][k], V["o1"][k2], V["o0"][k2]], i), ([V["i0"][k], V["i0"][k2], V["i1"][k2], V["i1"][k]], j),
+                     ([V["o0"][k], V["o0"][k2], V["i0"][k2], V["i0"][k]], i), ([V["o1"][k], V["i1"][k], V["i1"][k2], V["o1"][k2]], i)):
+            bm.faces.new(q).material_index = m
+
+
+def ditch_decal():
+    """Декаль канави 16 × 1,8 м (3 см/тексель): мокра темна земля з водяним блиском; дошка кладе дві смуги
+    вздовж дороги по обидва боки труби, на 5,3 м від осі труби."""
+    W, H = 512, 64
+    v = (np.arange(H) + 0.5) / H
+    n = np.tile(tile_noise(16, 4, 128, 83), (1, 4))[:H]
+    width = 0.32 + 0.12 * n
+    alpha = np.clip((width - np.abs(v[:, None] - 0.5)) / 0.07, 0, 1)
+    wet = 0.5 + 0.5 * np.cos((v[:, None] - 0.5) * 8)
+    col = np.array([0.17, 0.15, 0.12])[None, None, :] * (0.8 + 0.4 * n[..., None]) + 0.05 * wet[..., None]
+    img = bpy.data.images.new("ditch", W, H, alpha=True)
+    arr = np.concatenate([col, (alpha * 0.9)[..., None]], -1)
+    img.pixels.foreach_set(arr.astype(np.float32).ravel())
+    img.filepath_raw = os.path.join(OUT, "infra_culvert_ditch.png"); img.file_format = "PNG"; img.save()
 
 
 def culvert():
     mat = concrete("culvert_concrete", 63)
+    ditch_decal()
     dark = pbr("culvert_dark", color=(0.02, 0.022, 0.02), rough=1.0)
     b = B()
     zc = 0.62
@@ -57,8 +74,8 @@ def culvert():
         b.box(mat, (0, s * 4.4, 0.75), (3.0, 0.4, 1.5))                        # оголовок
         b.box(mat, (0, s * 4.6, 1.52), (3.1, 0.5, 0.1))                        # верхня кромка
         b.box(mat, (0, s * 4.9, 0.04), (1.8, 0.6, 0.08))                       # лотковий фартух
-        tube(b, mat, (0, s * 4.8, zc), 0.62, 0.5, 0.4)                         # виступ труби
-        b.cyl(dark, (0, s * 4.58, zc), 0.5, 0.04, 20, axis="Y")                # темний зів
+        tube(b, mat, (0, s * 4.8, zc), 0.62, 0.5, 0.4, inner=dark)                         # виступ труби
+        b.cyl(dark, (0, s * 4.62, zc), 0.5, 0.04, 20, axis="Y")                # темний зів
         for sx in (-1, 1):                                                     # відхилені крила
             b.box(mat, (sx * 1.7, s * 4.6, 0.45), (0.3, 1.0, 0.9),
                   Matrix.Rotation(sx * s * 0.45, 3, "Z"))
@@ -66,9 +83,8 @@ def culvert():
 
 
 def trailer(name, paint, seed):
-    body = pbr(f"trailer_body_{seed}", "CorrugatedSteel005", tile=1.5, paint=paint, contrast=0.6, rust=0.4, grime=0.7,
-               rough=0.7, metal=0.1, seed=seed)
-    frame = pbr("trailer_frame", "MetalPlates013", tile=1.0, tint=(0.28, 0.27, 0.25), sat=0.4, rust=0.35, grime=0.7,
+    body = sheet_mat(f"trailer_body_{seed}", paint, seed)
+    frame = pbr("trailer_frame", "MetalPlates013", tile=1.0, tint=(0.42, 0.41, 0.39), sat=0.3, rust=0.0, grime=0.0,
                 rough=0.8, seed=seed + 1)
     tyre = rim = frame        # шасі, шини й диски — один матеріал
     b = B()
@@ -87,9 +103,10 @@ def trailer(name, paint, seed):
         for s in (-1, 1):
             b.cyl(tyre, (s * 1.05, ay, 0.5), 0.5, 0.4, 16, axis="X")
             b.cyl(rim, (s * 1.05 + s * 0.02, ay, 0.5), 0.28, 0.4, 10, axis="X")
-    for s in (-1, 1):                                                               # дишло
-        b.beam(frame, (s * 0.55, y1, 0.8), (0, 3.7, 0.72), 0.06)
-    b.box(frame, (0, 3.7, 0.72), (0.2, 0.16, 0.1))
+    for s in (-1, 1):                                                               # дишло: А-подібна рама
+        b.beam(frame, (s * 0.6, y1, 0.8), (0, 3.7, 0.75), 0.11)
+    b.box(frame, (0, 3.66, 0.75), (0.32, 0.3, 0.14))
+    b.box(frame, (0, y1 + 0.5, 0.78), (1.1, 0.14, 0.14))
     b.beam(frame, (0, 2.55, 1.0), (0, 2.38, 2.0), 0.07, 8)                          # гідроциліндр
     finish(b, name)
 
@@ -97,5 +114,5 @@ def trailer(name, paint, seed):
 reset()
 if want("infra_jersey_block"): jersey()
 if want("infra_culvert"): culvert()
-if want("infra_trailer_green"): trailer("infra_trailer_green", (0.22, 0.38, 0.36), 71)
-if want("infra_trailer_rust"): trailer("infra_trailer_rust", (0.45, 0.2, 0.13), 73)
+if want("infra_trailer_green"): trailer("infra_trailer_green", (0.47, 0.57, 0.53), 71)
+if want("infra_trailer_rust"): trailer("infra_trailer_rust", (0.50, 0.38, 0.33), 73)

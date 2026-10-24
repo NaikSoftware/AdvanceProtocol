@@ -48,11 +48,15 @@ def normal_from_height(h, k):
     return n * 0.5 + 0.5
 
 
-def _img_from_array(name, arr, jpeg=True):
+def _img_from_array(name, arr, jpeg=True, srgb=True):
     h, w = arr.shape[:2]
+    if srgb:                                   # масиви — у sRGB-значеннях; Blender кодує лінійні при збереженні
+        arr = np.concatenate([srgb_to_lin(np.clip(arr[..., :3], 0, 1)), arr[..., 3:]], -1)
     if arr.shape[2] == 3:
         arr = np.concatenate([arr, np.ones((h, w, 1))], -1)
-    img = bpy.data.images.new(name, w, h, alpha=True)
+    img = bpy.data.images.new(name, w, h, alpha=True, float_buffer=True)
+    if not srgb:
+        img.colorspace_settings.name = "Non-Color"
     img.pixels.foreach_set(np.clip(arr, 0, 1).astype(np.float32).ravel())
     img.file_format = "JPEG" if jpeg else "PNG"
     return img
@@ -61,11 +65,14 @@ def _img_from_array(name, arr, jpeg=True):
 def load_acg(mat, kind, size=SIZE):
     path = os.path.join(ACG, mat, f"{mat}_1K-JPG_{kind}.jpg")
     img = bpy.data.images.load(path)
+    if kind != "Color":
+        img.colorspace_settings.name = "Non-Color"
     img.scale(size, size)
     a = np.empty(size * size * 4, dtype=np.float32)
     img.pixels.foreach_get(a)
     bpy.data.images.remove(img)
-    return a.reshape(size, size, 4)[..., :3].astype(np.float64)
+    a = a.reshape(size, size, 4)[..., :3].astype(np.float64)
+    return lin_to_srgb(a) if kind == "Color" else a
 
 
 def srgb_to_lin(c): return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
@@ -97,7 +104,7 @@ def acg_albedo(src, tint, sat, rust, seed, grime=0.0, paint=None, contrast=1.0, 
 
 
 def pbr(name, src=None, tile=1.0, tint=(1, 1, 1), sat=1.0, rust=0.0, grime=0.0, rough=0.8, metal=0.0,
-        seed=1, res=None, paint=None, contrast=1.0, color=None, albedo=None, normal=None, alpha=False, double_sided=False):
+        seed=1, res=None, tile_v=None, paint=None, contrast=1.0, color=None, albedo=None, normal=None, alpha=False, double_sided=False):
     """Матеріал: tile — скільки метрів вкриває одна текстура; color — суцільний колір без текстур."""
     if name in _mat_cache:
         return _mat_cache[name]
@@ -121,10 +128,9 @@ def pbr(name, src=None, tile=1.0, tint=(1, 1, 1), sat=1.0, rust=0.0, grime=0.0, 
             nt.links.new(ti.outputs["Alpha"], bsdf.inputs["Alpha"])
         if normal is None and src:
             normal = np.concatenate([load_acg(src, "NormalGL", size), np.ones((size, size, 1))], -1)
-        if normal is not None:
+        if normal is not None and os.environ.get("INFRA_NONORMAL") != "1":
             tn = nt.nodes.new("ShaderNodeTexImage")
-            tn.image = _img_from_array(name + "_n", normal)
-            tn.image.colorspace_settings.name = "Non-Color"
+            tn.image = _img_from_array(name + "_n", normal, srgb=False)
             nm = nt.nodes.new("ShaderNodeNormalMap")
             nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
             nt.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
@@ -134,6 +140,7 @@ def pbr(name, src=None, tile=1.0, tint=(1, 1, 1), sat=1.0, rust=0.0, grime=0.0, 
     m.use_backface_culling = not double_sided
     m["alpha_mask"] = alpha
     m["tile"] = tile
+    m["tile_v"] = tile_v or tile
     m["cm_texel"] = round(tile / (albedo.shape[0] if albedo is not None else size) * 100, 2)
     _mat_cache[name] = m
     return m
@@ -198,12 +205,13 @@ class B:
         for f in bm.faces:
             if f in self.skip_uv:
                 continue
-            t = tile_of(self.mats[f.material_index])
+            m = self.mats[f.material_index]
+            t = tile_of(m); tv = m.get("tile_v", t)
             n = f.normal
             ax = max(range(3), key=lambda i: abs(n[i]))
             a, b = [(1, 2), (0, 2), (0, 1)][ax]
             for l in f.loops:
-                l[uv].uv = (l.vert.co[a] / t, l.vert.co[b] / t)
+                l[uv].uv = (l.vert.co[a] / t, l.vert.co[b] / (tv if b == 2 else t))
 
 
 def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True):
@@ -293,3 +301,41 @@ def reset():
 def want(name):
     a = args()
     return not a or name in a
+
+
+# ---------- спільні матеріали: фарбований лист і бетон ----------
+def sheet_mat(name, paint, seed, tile=1.15, size=64):
+    """Профнастил: вертикальні хвилі й стик листа лише в нормалі й albedo; без хмарних плям."""
+    u = (np.arange(size) + 0.5) / size
+    wave = np.sin(u * 2 * np.pi * 14)
+    h = np.tile(wave * 0.5 + 0.5, (size, 1))
+    h[:, :2] = 1.0                                   # край листа
+    streak = tile_noise(10, 2, size, seed)           # ледь помітні вертикальні розводи
+    shade = 0.9 + 0.1 * h + 0.06 * (streak - 0.5)
+    a = np.array(paint)[None, None, :] * shade[..., None]
+    a[:, :1] *= 0.6                                  # тінь стику
+    return pbr(name, albedo=a, normal=np.concatenate([normal_from_height(h, 3.0), np.ones((size, size, 1))], -1),
+               tile=tile, rough=0.6, metal=0.1)
+
+
+CONCRETE_GREY = (0.64, 0.64, 0.62)
+
+
+def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128):
+    """Блідий бетон одного значення для всіх виробів; relief(size) -> висоти 0..1, що йдуть у нормаль."""
+    a = acg_albedo("Concrete034", (1, 1, 1), 0.3, 0, seed, 0.0, paint=CONCRETE_GREY, contrast=0.3, size=size)
+    n = load_acg("Concrete034", "NormalGL", size)
+    n = np.concatenate([n[..., :2] * 0.5 + 0.25, n[..., 2:]], -1)   # ambientCG-нормаль, приглушена
+    if relief is not None:
+        h = relief(size)
+        r = normal_from_height(h, 5.0)
+        n = np.concatenate([(n[..., :2] - 0.5 + (r[..., :2] - 0.5)) + 0.5, r[..., 2:]], -1)
+        a = a * (0.82 + 0.18 * h[..., None])
+    return pbr(name, albedo=a, normal=np.concatenate([n, np.ones((size, size, 1))], -1), tile=tile, tile_v=tile_v,
+               rough=0.92)
+
+
+def box_mask(size, u0, u1, v0, v1, soft=0.012):
+    u = (np.arange(size) + 0.5) / size
+    f = lambda x, a, b: np.clip((x - a) / soft, 0, 1) * np.clip((b - x) / soft, 0, 1)
+    return f(u, u0, u1)[None, :] * f(u, v0, v1)[:, None]
