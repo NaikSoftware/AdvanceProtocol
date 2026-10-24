@@ -130,21 +130,50 @@ mode = o.get('mode', 'height')
 extras = None
 if mode == 'tiles':
     L, S = [float(v) for v in o['stated'].split(',')]
-    # природні габарити в одиницях моделі; реальний масштаб — із заявленої довгої сторони
-    real = L / max(d[0], d[1])
+    # реальний масштаб: за довгою стороною, а з scale_by=short — за короткою (модель майже квадратна)
+    real = (S / min(d[0], d[1])) if o.get('scale_by') == 'short' else (L / max(d[0], d[1]))
+    ob.data.transform(Matrix.Diagonal((real, real, real, 1)))
+    if o.get('extend'):
+        # подовжити вздовж гребеня повтором середнього зрізу: текстура не розтягується
+        lo, hi = bbox(); ax = 0 if (hi[0] - lo[0]) > (hi[1] - lo[1]) else 1
+        cur = hi[ax] - lo[ax]; need = float(o['extend']) - cur
+        if need > 0:
+            c = (lo[ax] + hi[ax]) / 2; w = cur * 0.2; y1, y2 = c - w / 2, c + w / 2
+            bm = bmesh.new(); bm.from_mesh(ob.data)
+            no = [0, 0, 0]; no[ax] = 1
+            for y in (y1, y2):
+                pc = [0, 0, 0]; pc[ax] = y
+                bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces), plane_co=pc, plane_no=no, dist=1e-6)
+            eps = 1e-4
+            slab = [f for f in bm.faces if all(y1 - eps <= v.co[ax] <= y2 + eps for v in f.verts)]
+            k = int(math.ceil(need / w)); shift = k * w
+            for v in bm.verts:
+                if v.co[ax] > y2 + eps:
+                    v.co[ax] += shift
+            for i in range(k):
+                r = bmesh.ops.duplicate(bm, geom=slab)
+                for v in [e for e in r['geom'] if isinstance(e, bmesh.types.BMVert)]:
+                    v.co[ax] += (i + 1) * w
+            bm.to_mesh(ob.data); bm.free()
+            bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+            bpy.ops.mesh.remove_doubles(threshold=0.0005); bpy.ops.mesh.normals_make_consistent(inside=False)
+            bpy.ops.object.mode_set(mode='OBJECT')
+            print('EXTEND slab copies', k, 'new length', round(cur + shift, 2))
+    lo, hi = bbox(); dm = [hi[i] - lo[i] for i in range(3)]
     best = None
     for nx in range(1, 5):
         for nz in range(1, 5):
-            s = min(nx * TILE_M / d[0], nz * TILE_M / d[1], real)
-            if s >= 0.75 * real and (best is None or nx * nz < best[0]):
-                best = (nx * nz, nx, nz, s)
-    _, nx, nz, s = best
+            shrink = min(1.0, nx * TILE_M / dm[0], nz * TILE_M / dm[1])
+            # заявлені габарити — задум, а не вимір: до 10 % менше за реальний допустимо, більше — ні
+            if shrink >= 0.9 and (best is None or nx * nz < best[0]):
+                best = (nx * nz, nx, nz, shrink)
+    _, nx, nz, shrink = best
     if o.get('fixed'):
         nx, nz = [int(v) for v in o['fixed'].split(',')]
-        s = min(nx * TILE_M / d[0], nz * TILE_M / d[1], real)
-    ob.data.transform(Matrix.Diagonal((s, s, s, 1)))
+        shrink = min(1.0, nx * TILE_M / dm[0], nz * TILE_M / dm[1])
+    ob.data.transform(Matrix.Diagonal((shrink, shrink, shrink, 1)))
     extras = [nx, nz]
-    print('FIT tiles', nx, nz, 'scale', round(s, 4), 'real-scale ratio', round(s / real, 2))
+    print('FIT tiles', nx, nz, 'real-scale ratio', round(shrink, 2))
 elif mode == 'crown':
     s = float(o['crown']) / max(d[0], d[1]); ob.data.transform(Matrix.Diagonal((s, s, s, 1)))
     print('FIT crown scale', round(s, 4), 'natural w/h', round(max(d[0], d[1]) / d[2], 2))
