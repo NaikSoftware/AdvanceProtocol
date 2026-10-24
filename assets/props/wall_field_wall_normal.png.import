@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://lx1f7p1eji2i"
-path="res://.godot/imported/ruin_h3_NormalGL_be66b039-89bd-4337-8f2e-b30f4fb58450.png-7b466dae154486223f6842c878c203b7.ctex"
+uid="uid://b6ref216ti6c0"
+path="res://.godot/imported/wall_field_wall_normal.png-c130f4887bb6241a3d32279c8651e3ba.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "3a8b7834c0e5c3e71303f17c9b245d53"
+"md5": "ef2e0d18474b2151ef5876b1e89c2f1d"
 }
 
 [deps]
 
-source_file="res://assets/props/ruin_h3_NormalGL_be66b039-89bd-4337-8f2e-b30f4fb58450.png"
-dest_files=["res://.godot/imported/ruin_h3_NormalGL_be66b039-89bd-4337-8f2e-b30f4fb58450.png-7b466dae154486223f6842c878c203b7.ctex"]
+source_file="res://assets/props/wall_field_wall_normal.png"
+dest_files=["res://.godot/imported/wall_field_wall_normal.png-c130f4887bb6241a3d32279c8651e3ba.ctex"]
 
 [params]
 

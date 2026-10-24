@@ -1,12 +1,13 @@
 """Руїна з геометрії готового будинку: стіни зрізані до 2.5 м, обвал усередині, завал навколо.
 
-blender -b --factory-startup -P build_ruin.py -- house.glb out.glb seed=1 apron=3 chimney=1 sheets=5
-Усе в метрах/8 (тайлах), як і вихідна модель. Колір завалу — плоскі зразки з текстури будинку
-з розкидом по вершинах; текстура знебарвлена до chroma <= ~8, як у решти Blender-набору.
+blender -b --factory-startup -P build_ruin.py -- house.glb out.glb brick=<dir> rubble=<dir> sheet=<dir> [seed=1 apron=3 chimney=4.5 sheets=5]
+<dir> — розпакований ambientCG 1K-JPG (CC0): <name>/<name>_1K-JPG_Color.jpg і _NormalGL.jpg.
+Три матеріали: цегла (стіни, димар), скан щебеню (купи й уламки), гофролист. Текстури знебарвлені й
+притемнені до chroma <= ~8, розгорнуті за світовими координатами (1 UV = 1.2 м), нормалі зі скану.
+Одна купа — 7-11 уламків по <= 20 трикутників, різний поворот і розмір.
 """
-import bpy, bmesh, sys, math, random, json, struct
-import numpy as np
-from mathutils import Vector, Matrix, noise
+import bpy, bmesh, sys, math, random, json, struct, os
+from mathutils import Vector, Matrix
 
 a = sys.argv[sys.argv.index('--') + 1:]
 src, dst = a[0], a[1]
@@ -16,104 +17,99 @@ rng = random.Random(int(o.get('seed', 1)))
 CUT = float(o.get('cut', 2.5)) / M
 APRON = float(o.get('apron', 3.0)) / M
 TILE = 7.6 / M
+UVM = 1.2  # метрів на одиницю UV
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=src)
 ob = [x for x in bpy.data.objects if x.type == 'MESH'][0]
 
-# --- текстура: знебарвити (руїна: пил, кіптява), зразки кольору
+def make_mat(name, d, value, sat):
+    base = os.path.basename(d.rstrip('/'))
+    col = bpy.data.images.load(f'{d}/{base}_1K-JPG_Color.jpg')
+    nor = bpy.data.images.load(f'{d}/{base}_1K-JPG_NormalGL.jpg')
+    nor.colorspace_settings.name = 'Non-Color'
+    import numpy as np
+    for im in (col, nor):
+        im.scale(512, 512)
+    px = np.array(col.pixels[:], dtype=np.float32).reshape(-1, 4)
+    lum = (0.3 * px[:, 0] + 0.59 * px[:, 1] + 0.11 * px[:, 2])[:, None]
+    px[:, :3] = (lum + (px[:, :3] - lum) * sat) * value
+    col.pixels.foreach_set(px.ravel())
+    col.pack(); nor.pack()
+    col.name = name + '_albedo'; nor.name = name + '_normal'
+    m = bpy.data.materials.new(name); m.use_nodes = True
+    nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    t1 = nt.nodes.new('ShaderNodeTexImage'); t1.image = col
+    t2 = nt.nodes.new('ShaderNodeTexImage'); t2.image = nor
+    nm = nt.nodes.new('ShaderNodeNormalMap')
+    nt.links.new(t1.outputs['Color'], b.inputs['Base Color'])
+    nt.links.new(t2.outputs['Color'], nm.inputs['Color'])
+    nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
+    b.inputs['Roughness'].default_value = 0.9
+    b.inputs['Metallic'].default_value = 0.0
+    return m
+
+mats = [make_mat('ruin_brick', o['brick'], 0.7, 0.45), make_mat('ruin_rubble', o['rubble'], 0.58, 0.3),
+        make_mat('ruin_sheet', o['sheet'], 0.4, 0.12)]
+MAT_WALL, MAT_RUB, MAT_SHEET = 0, 1, 2
+
+bm = bmesh.new(); bm.from_mesh(ob.data)
+for lay in list(bm.loops.layers.float_color) + list(bm.loops.layers.color):
+    (bm.loops.layers.float_color if lay in list(bm.loops.layers.float_color) else bm.loops.layers.color).remove(lay)
+uv = bm.loops.layers.uv.active
+
+# --- зразок місця димаря (найчервоніша грань вихідної текстури) — лише для положення
+import numpy as np
 img = None
-for mat in bpy.data.materials:
+for mat in ob.data.materials:
     for nd in mat.node_tree.nodes:
         if nd.type == 'BSDF_PRINCIPLED':
             for l in nd.inputs['Base Color'].links:
                 img = getattr(l.from_node, 'image', img)
-            for name, val in (('Roughness', 0.9), ('Metallic', 0.0)):
-                for l in list(nd.inputs[name].links):
-                    mat.node_tree.links.remove(l)
-                nd.inputs[name].default_value = val
 w, h = img.size
 px = np.array(img.pixels[:], dtype=np.float32).reshape(h, w, 4)
-lum = (0.3 * px[..., 0] + 0.59 * px[..., 1] + 0.11 * px[..., 2])[..., None]
-px[..., :3] = (lum + (px[..., :3] - lum) * 0.35) * 0.62   # знебарвлено й притемнено: пил і кіптява
-img.pixels.foreach_set(px.ravel())
-
-def sample(u, v):
-    return px[min(h - 1, int((v % 1) * h)), min(w - 1, int((u % 1) * w)), :3]
-
-bm = bmesh.new(); bm.from_mesh(ob.data)
-uv = bm.loops.layers.uv.active
-for lay in list(bm.loops.layers.float_color) + list(bm.loops.layers.color):
-    (bm.loops.layers.float_color if lay in list(bm.loops.layers.float_color) else bm.loops.layers.color).remove(lay)
-col = bm.loops.layers.float_color.new('Col')
-for f in bm.faces:
-    for l in f.loops:
-        l[col] = (1, 1, 1, 1)
-
-def face_uv(f):
-    n = len(f.loops)
-    return (sum(l[uv].uv.x for l in f.loops) / n, sum(l[uv].uv.y for l in f.loops) / n)
-
-# --- зразки UV: тиньк/стіна (нижня частина), дах, цегла (найчервоніший)
-walls = [f for f in bm.faces if max(abs(f.normal.z) for _ in [0]) < 0.4 and max(v.co.z for v in f.verts) < 0.4]
-roofs = [f for f in bm.faces if f.normal.z > 0.35 and min(v.co.z for v in f.verts) > 0.3]
 def redness(f):
-    c = sample(*face_uv(f)); return c[0] - 0.5 * (c[1] + c[2])
+    u = sum(l[uv].uv.x for l in f.loops) / len(f.loops); v = sum(l[uv].uv.y for l in f.loops) / len(f.loops)
+    c = px[min(h - 1, int((v % 1) * h)), min(w - 1, int((u % 1) * w)), :3]
+    return c[0] - 0.5 * (c[1] + c[2])
 brick_f = max(bm.faces, key=redness)
-uv_wall = face_uv(rng.choice(walls)) if walls else (0.5, 0.5)
-uv_roof = face_uv(rng.choice(roofs)) if roofs else (0.5, 0.5)
-uv_brick = face_uv(brick_f)
-brick_c = [v.co.copy() for v in brick_f.verts]
-def lumc(c):
-    return 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
-PAL = []
-cand = [face_uv(f) for f in bm.faces]
-rng.shuffle(cand)
-for u_ in cand:
-    c = sample(*u_)
-    if 0.09 < lumc(c) < 0.3:
-        PAL.append(u_)
-    if len(PAL) >= 10:
-        break
-if not PAL:
-    PAL = [uv_wall, uv_roof]
+bpos = sum((v.co for v in brick_f.verts), Vector()) / len(brick_f.verts)
 
 # --- зріз стін
 bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces), plane_co=(0, 0, CUT), plane_no=(0, 0, 1), dist=1e-6)
 bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.calc_center_median().z > CUT + 1e-5], context='FACES')
-bmesh.ops.delete(bm, geom=[f for f in bm.faces if abs(f.normal.z) > 0.6 and f.calc_center_median().z > 0.05], context='FACES')  # стеля/підлоги зсередини
+bmesh.ops.delete(bm, geom=[f for f in bm.faces if abs(f.normal.z) > 0.6 and f.calc_center_median().z > 0.05], context='FACES')
 bm.to_mesh(ob.data); bm.free()
 bpy.context.view_layer.objects.active = ob
 bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
 bpy.ops.mesh.quads_convert_to_tris(); bpy.ops.mesh.remove_doubles(threshold=0.0005)
 bpy.ops.object.mode_set(mode='OBJECT')
 n0 = len(ob.data.polygons)
-if n0 > 700:
-    m = ob.modifiers.new('d', 'DECIMATE'); m.ratio = 700 / n0
+if n0 > 500:
+    m = ob.modifiers.new('d', 'DECIMATE'); m.ratio = 500 / n0
     bpy.ops.object.modifier_apply(modifier=m.name)
 
 bm = bmesh.new(); bm.from_mesh(ob.data)
-uv = bm.loops.layers.uv.active
-col = bm.loops.layers.float_color.get('Col') or bm.loops.layers.float_color.new('Col')
-
-# --- габарит стін
+uv = bm.loops.layers.uv.active or bm.loops.layers.uv.new('UVMap')
 vs = [v.co for v in bm.verts]
 x0, x1 = min(v.x for v in vs), max(v.x for v in vs)
 y0, y1 = min(v.y for v in vs), max(v.y for v in vs)
 hx, hy = (x1 - x0) / 2, (y1 - y0) / 2
 cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
 nx = max(1, math.ceil((2 * hx + 2 * APRON) / TILE)); ny = max(1, math.ceil((2 * hy + 2 * APRON) / TILE))
-BX, BY = nx * TILE / 2, ny * TILE / 2   # межі footprint навколо початку координат
+BX, BY = nx * TILE / 2, ny * TILE / 2
 
-# --- кіптява: зовнішня стіна темнішає з висотою, нерівно
-for f in bm.faces:
-    k = rng.uniform(0.75, 1.0)
+def proj(f):
+    # UV за світовими координатами: 1 одиниця = UVM метрів; вісь — за домінантною нормаллю
+    n = f.normal
+    ax = max(range(3), key=lambda i: abs(n[i]))
     for l in f.loops:
-        z = l.vert.co.z / CUT
-        s = 0.4 * k * (1.0 - 0.55 * z * z)
-        l[col] = (s, s, s, 1)
+        p = l.vert.co * M / UVM
+        l[uv].uv = (p.y, p.z) if ax == 0 else (p.x, p.z) if ax == 1 else (p.x, p.y)
 
-# --- внутрішня оболонка: дзеркальні грані, зсунуті всередину на 0.25 м, темніші (сажа)
+# --- стіни: зовнішня оболонка + внутрішня (дзеркальна, зсунута на 0.25 м)
+for f in bm.faces:
+    f.material_index = MAT_WALL
 shell = [f for f in bm.faces if abs(f.normal.z) < 0.5]
 r = bmesh.ops.duplicate(bm, geom=shell)
 dup_f = [e for e in r['geom'] if isinstance(e, bmesh.types.BMFace)]
@@ -122,131 +118,92 @@ bmesh.ops.reverse_faces(bm, faces=dup_f)
 for v in dup_v:
     d = Vector((cx - v.co.x, cy - v.co.y, 0)); d.normalize()
     v.co += d * (0.25 / M)
-for f in dup_f:
-    for l in f.loops:
-        s = 0.3 * (1 - 0.3 * l.vert.co.z / CUT)
-        l[col] = (s, s, s, 1)
+bm.normal_update()
+for f in bm.faces:
+    proj(f)
 
-def put_uv(f, u):
-    # u == None: кожна грань бере випадковий зразок палітри — купа виходить рябою, а не плоскою плямою
-    if u is None:
-        c = f.calc_center_median()
-        k = (noise.noise(Vector((c.x, c.y, c.z)) * (M / 1.1)) + 1) / 2
-        u = PAL[min(len(PAL) - 1, int(k * len(PAL)))]
-    for l in f.loops:
-        l[uv].uv = u
+def finish(faces, mat):
+    for f in faces:
+        f.material_index = mat
+        proj(f)
 
-def tint(f, base, jit=0.18):
-    k = base * (1 + rng.uniform(-jit, jit))
-    for l in f.loops:
-        l[col] = (k, k, k, 1)
-
-def add_piece(geom_fn, u, base, jit=0.18, **kw):
-    r = geom_fn(**kw)
-    fs = [e for e in r['geom'] if isinstance(e, bmesh.types.BMFace)]
-    for f in fs:
-        put_uv(f, u); tint(f, base, jit)
-    return r
-
-def heap(px_, py_, rx, ry, hz, u, base):
-    r = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0)
-    vv = [e for e in r['verts']]
-    for v in vv:
-        v.co.x *= rx; v.co.y *= ry; v.co.z = max(v.co.z, 0.0) * hz
-        v.co.x += rng.uniform(-0.1, 0.1) * rx; v.co.y += rng.uniform(-0.1, 0.1) * ry; v.co.z *= rng.uniform(0.8, 1.15)
-        v.co.x += px_; v.co.y += py_
-    low = [f for f in bm.faces if f.verts[0] in vv and all(v.co.z <= 1e-6 for v in f.verts)]
-    bmesh.ops.delete(bm, geom=low, context='FACES')
-    for f in bm.faces:
-        if f.verts[0] in vv and f not in low and f.is_valid:
-            put_uv(f, u); tint(f, base, 0.25)
-
-def chunk(px_, py_, s, u, base):
-    r = bmesh.ops.create_cube(bm, size=s)
-    rot = Matrix.Rotation(rng.uniform(0, math.pi), 3, 'Z') @ Matrix.Rotation(rng.uniform(-0.5, 0.5), 3, 'X')
+def lump(pos, rad, sq):
+    r = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=rad)
+    rot = Matrix.Rotation(rng.uniform(0, 6.28), 3, 'Z') @ Matrix.Rotation(rng.uniform(-0.6, 0.6), 3, 'X')
     for v in r['verts']:
-        v.co = rot @ Vector((v.co.x * rng.uniform(0.7, 1.4), v.co.y, v.co.z * rng.uniform(0.5, 1.0)))
-        v.co += Vector((px_, py_, s * 0.3))
-    for f in bm.faces:
-        if f.verts[0] in r['verts']:
-            put_uv(f, u); tint(f, base, 0.3)
+        v.co = rot @ Vector((v.co.x * rng.uniform(0.9, 1.3), v.co.y, v.co.z * sq)) + pos
+    fs = [f for f in bm.faces if f.verts[0] in r['verts']]
+    for f in fs:
+        f.smooth = True
+    finish(fs, MAT_RUB)
 
-def sheet(px_, py_, ang_z, tilt, u, base):
-    # гофрований лист: 0.95 x 2.0 м, двобічний
+def heap(px_, py_, R, hz):
+    # купа з 7-11 уламків: більші внизу, менші нагорі
+    k = rng.randint(7, 9)
+    for i in range(k):
+        d = abs(rng.gauss(0, R * 0.45)); d = min(d, R)
+        a_ = rng.uniform(0, 6.28)
+        rad = rng.uniform(0.55, 1.05) / M * (1.0 - 0.35 * d / R)
+        z = hz * (1 - d / R) * rng.uniform(0.4, 1.0) + rad * 0.35
+        lump(Vector((px_ + d * math.cos(a_), py_ + d * math.sin(a_), z)), rad, rng.uniform(0.55, 0.9))
+
+def sheet(px_, py_, ang_z, tilt):
     wsh, lsh = 0.95 / M, 2.0 / M
     p = [bm.verts.new((-wsh / 2, -lsh / 2, 0)), bm.verts.new((wsh / 2, -lsh / 2, 0)), bm.verts.new((wsh / 2, lsh / 2, 0)), bm.verts.new((-wsh / 2, lsh / 2, 0))]
-    rot = Matrix.Rotation(ang_z, 3, 'Z') @ Matrix.Rotation(tilt, 3, 'X')
-    for v in p:
-        v.co = rot @ v.co + Vector((px_, py_, 0.18 / M * 1 + abs(math.sin(tilt)) * lsh / 2))
     p2 = [bm.verts.new(v.co) for v in p]
+    rot = Matrix.Rotation(ang_z, 3, 'Z') @ Matrix.Rotation(tilt, 3, 'X')
+    for v in p + p2:
+        v.co = rot @ v.co + Vector((px_, py_, 0.18 / M + abs(math.sin(tilt)) * lsh / 2))
     f1 = bm.faces.new(p); f2 = bm.faces.new(list(reversed(p2)))
-    for f in (f1, f2):
-        put_uv(f, u); tint(f, base, 0.2)
+    bm.normal_update()
+    finish([f1, f2], MAT_SHEET)
 
-# --- димар: стовп цегли (лише коли просять), стоїть на землі
 if o.get('chimney'):
-    bx = sum(c.x for c in brick_c) / len(brick_c); by = sum(c.y for c in brick_c) / len(brick_c)
-    bx, by = max(-hx * 0.5, min(hx * 0.5, bx)) + cx, max(-hy * 0.5, min(hy * 0.5, by)) + cy
-    s = 0.7 / M
+    bx = max(-hx * 0.5, min(hx * 0.5, bpos.x)) + cx; by = max(-hy * 0.5, min(hy * 0.5, bpos.y)) + cy
     r = bmesh.ops.create_cube(bm, size=1.0)
+    s = 0.7 / M
     for v in r['verts']:
         v.co = Vector((v.co.x * s, v.co.y * s, (v.co.z + 0.5) * float(o['chimney']) / M)) + Vector((bx, by, 0))
-    for f in bm.faces:
-        if f.verts[0] in r['verts']:
-            put_uv(f, uv_brick); tint(f, 0.55, 0.1)
+    bm.normal_update()
+    finish([f for f in bm.faces if f.verts[0] in r['verts']], MAT_WALL)
 
 def in_walls(x, y, m=0.3 / M):
     return (cx - hx - m) < x < (cx + hx + m) and (cy - hy - m) < y < (cy + hy + m)
 
-# --- обвал усередині: купа до ~0.8 м і два зсунуті листи даху
-heap(cx, cy, hx * 0.75, hy * 0.75, 0.9 / M, None, 0.55)
+# --- обвал усередині
+heap(cx - hx * 0.25, cy, min(hx, hy) * 0.7, 0.9 / M)
+heap(cx + hx * 0.3, cy + hy * 0.15, min(hx, hy) * 0.6, 0.7 / M)
 for sgn in (-1, 1):
-    sheet(cx + sgn * hx * 0.35, cy + rng.uniform(-hy * 0.3, hy * 0.3), rng.uniform(0, math.pi), sgn * rng.uniform(0.25, 0.5), uv_roof, 0.5)
-    sheet(cx + sgn * hx * 0.2, cy, rng.uniform(0, math.pi), -sgn * 0.3, uv_roof, 0.45)
+    sheet(cx + sgn * hx * 0.35, cy + rng.uniform(-hy * 0.3, hy * 0.3), rng.uniform(0, math.pi), sgn * rng.uniform(0.25, 0.5))
 
-# --- завал навколо: 2-5 м, усе в межах footprint з відступом 0.1 тайла
-pts = 0
-tries = 0
-while pts < 30 and tries < 1500:
+# --- завал навколо: упритул до стін, у межах footprint
+placed = 0; tries = 0
+while placed < int(o.get('heaps', 14)) and tries < 2000:
     tries += 1
-    x = rng.uniform(-BX + 0.1, BX - 0.1); y = rng.uniform(-BY + 0.1, BY - 0.1)
-    # завал лежить упритул до стін: далі 3.2 м від стіни купи не ставимо
-    if in_walls(x, y, 0.6 / M) or not in_walls(x, y, 3.2 / M):
+    x = rng.uniform(-BX + 0.12, BX - 0.12); y = rng.uniform(-BY + 0.12, BY - 0.12)
+    if in_walls(x, y, 0.5 / M) or not in_walls(x, y, 3.2 / M):
         continue
-    rx = rng.uniform(0.8, 1.8) / M; ry = rng.uniform(0.8, 1.8) / M
-    if abs(x) + rx > BX - 0.05 or abs(y) + ry > BY - 0.05:
+    R = rng.uniform(1.2, 2.0) / M
+    if abs(x) + R > BX - 0.04 or abs(y) + R > BY - 0.04:
         continue
-    heap(x, y, rx, ry, rng.uniform(0.4, 0.8) / M, None, rng.uniform(0.4, 0.7))
-    pts += 1
-placed = 0
-tries = 0
-while placed < 60 and tries < 800:
-    tries += 1
-    x = rng.uniform(-BX + 0.1, BX - 0.1); y = rng.uniform(-BY + 0.1, BY - 0.1)
-    if in_walls(x, y, 0.1 / M):
-        continue
-    chunk(x, y, rng.uniform(0.25, 0.55) / M, None, rng.uniform(0.4, 0.75))
+    heap(x, y, R, rng.uniform(0.4, 0.8) / M)
     placed += 1
-ns = int(o.get('sheets', 5))
-for i in range(ns):
-    for _ in range(50):
+for i in range(int(o.get('sheets', 5))):
+    for _ in range(60):
         x = rng.uniform(-BX + 0.15, BX - 0.15); y = rng.uniform(-BY + 0.15, BY - 0.15)
         if not in_walls(x, y, 0.4 / M):
             break
-    sheet(x, y, rng.uniform(0, math.pi), rng.uniform(0.12, 0.4), uv_roof, rng.uniform(0.5, 0.9))
+    sheet(x, y, rng.uniform(0, math.pi), rng.uniform(0.12, 0.4))
 
-# --- межі: усе, що вилізло за footprint, відсікається
-for f in list(bm.faces):
-    c = f.calc_center_median()
-    if abs(c.x) > BX or abs(c.y) > BY:
-        bmesh.ops.delete(bm, geom=[f], context='FACES')
-
+ob.data.materials.clear()
+for m in mats:
+    ob.data.materials.append(m)
 bm.to_mesh(ob.data); bm.free()
 bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
-bpy.ops.mesh.remove_doubles(threshold=0.0003)
+bpy.ops.mesh.remove_doubles(threshold=0.0002)
 bpy.ops.object.mode_set(mode='OBJECT')
-bpy.ops.object.shade_smooth_by_angle(angle=math.radians(40))
-# початок координат: основа в y = 0 (під землю нічого)
+bpy.ops.object.shade_smooth_by_angle(angle=math.radians(45))
+print('MATIDX2', sorted(set(p.material_index for p in ob.data.polygons)), len(ob.data.materials))
 vs = [v.co for v in ob.data.vertices]
 ob.data.transform(Matrix.Translation((0, 0, -min(v.z for v in vs))))
 ob['footprint_tiles'] = [nx, ny]
@@ -264,4 +221,5 @@ prims = [p for m in g['meshes'] for p in m['primitives']]
 lo = [min(g['accessors'][p['attributes']['POSITION']]['min'][i] for p in prims) for i in range(3)]
 hi = [max(g['accessors'][p['attributes']['POSITION']]['max'][i] for p in prims) for i in range(3)]
 tr = sum(g['accessors'][p['indices']]['count'] for p in prims) // 3
-print('RUIN tris', tr, 'size', [round(hi[i] - lo[i], 3) for i in range(3)], 'tiles', nx, ny, 'ymin', lo[1], 'attrs', list(prims[0]['attributes'].keys()))
+print('RUIN tris', tr, 'prims', len(prims), 'size', [round(hi[i] - lo[i], 3) for i in range(3)], 'tiles', nx, ny, 'ymin', lo[1],
+      'normals', all('normalTexture' in m for m in g['materials']))

@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bva5uw6ioddjy"
-path="res://.godot/imported/ruin_h1_NormalGL_b95bff45-12e6-47c4-9346-7989d93119e0.png-fc3049457d2cc2e3999679958d0fb198.ctex"
+uid="uid://dq3enmtevs1lf"
+path="res://.godot/imported/ruin_h3_Ground107_1K-JPG_Color.jpg-3e0ab6ee7d9e06387d8bd9d0a329ef91.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "c25668ff62fa5569aaff973dd57d2334"
+"md5": "d8293ca87f73ece6dbcaca722efe8c97"
 }
 
 [deps]
 
-source_file="res://assets/props/ruin_h1_NormalGL_b95bff45-12e6-47c4-9346-7989d93119e0.png"
-dest_files=["res://.godot/imported/ruin_h1_NormalGL_b95bff45-12e6-47c4-9346-7989d93119e0.png-fc3049457d2cc2e3999679958d0fb198.ctex"]
+source_file="res://assets/props/ruin_h3_Ground107_1K-JPG_Color.jpg"
+dest_files=["res://.godot/imported/ruin_h3_Ground107_1K-JPG_Color.jpg-3e0ab6ee7d9e06387d8bd9d0a329ef91.ctex"]
 
 [params]
 

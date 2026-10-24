@@ -37,10 +37,25 @@ img.pixels.foreach_set(px.ravel())
 img.pack()
 img.name = 'wall_albedo'
 
+# нормаль зі «висоти» (щілини кладки темні = заглиблення), метод скінченних різниць
+hgt = (base * (1 - 0.3 * moss)).astype(np.float32)
+gx = (np.roll(hgt, -1, 1) - np.roll(hgt, 1, 1)) * 6.0
+gy = (np.roll(hgt, -1, 0) - np.roll(hgt, 1, 0)) * 6.0
+nrm = np.stack([-gx, -gy, np.ones_like(gx)], -1)
+nrm /= np.linalg.norm(nrm, axis=-1, keepdims=True)
+npx = np.ones((N, N, 4), dtype=np.float32); npx[..., :3] = nrm * 0.5 + 0.5
+nimg = bpy.data.images.new('wall_normal', N, N)
+nimg.pixels.foreach_set(npx.reshape(-1, 4).ravel())
+nimg.colorspace_settings.name = 'Non-Color'; nimg.pack()
+
 mat = bpy.data.materials.new('wall'); mat.use_nodes = True
 bsdf = mat.node_tree.nodes['Principled BSDF']
 tex = mat.node_tree.nodes.new('ShaderNodeTexImage'); tex.image = img
 mat.node_tree.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
+nt_ = mat.node_tree.nodes.new('ShaderNodeTexImage'); nt_.image = nimg
+nmn = mat.node_tree.nodes.new('ShaderNodeNormalMap')
+mat.node_tree.links.new(nt_.outputs['Color'], nmn.inputs['Color'])
+mat.node_tree.links.new(nmn.outputs['Normal'], bsdf.inputs['Normal'])
 bsdf.inputs['Roughness'].default_value = 0.9
 
 mesh = bpy.data.meshes.new('wall'); ob = bpy.data.objects.new('wall', mesh)

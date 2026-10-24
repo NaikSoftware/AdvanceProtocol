@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ippnceodfvcg"
-path="res://.godot/imported/ruin_h3_Color_be66b039-89bd-4337-8f2e-b30f4fb58450.jpg-d7ccfc177cbe4111c2201a3fc04675d1.ctex"
+uid="uid://iuegv5aar4ap"
+path="res://.godot/imported/ruin_h1_Bricks097_1K-JPG_NormalGL.jpg-ef1ac9a82afddbb1a7284506624ae6ec.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "deea10e41ddcad7ad5b2df4d4165daea"
+"md5": "fde9ae16c57c50b3169aec64732a7d51"
 }
 
 [deps]
 
-source_file="res://assets/props/ruin_h3_Color_be66b039-89bd-4337-8f2e-b30f4fb58450.jpg"
-dest_files=["res://.godot/imported/ruin_h3_Color_be66b039-89bd-4337-8f2e-b30f4fb58450.jpg-d7ccfc177cbe4111c2201a3fc04675d1.ctex"]
+source_file="res://assets/props/ruin_h1_Bricks097_1K-JPG_NormalGL.jpg"
+dest_files=["res://.godot/imported/ruin_h1_Bricks097_1K-JPG_NormalGL.jpg-ef1ac9a82afddbb1a7284506624ae6ec.ctex"]
 
 [params]
 
