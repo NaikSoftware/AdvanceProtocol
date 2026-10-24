@@ -61,9 +61,12 @@ CONTENT: one solid line, constant 3 px at 1080p (= 0.28 % of viewport height; cl
   ground between them (measured on River: minimum 3 px, median 7 px). Square
   corners. Drawn on whatever surface is at the edge (ground, water, bridge deck, road) without a
   break; buildings and trees occlude it (depth-tested). The distance is taken where the view ray
-  meets a plane at the edge's ground height, averaged along the edge over ±2 tiles (water counts at
-  its level), not on the surface itself: on the surface the line would kink at every bank and its
-  copy on the river bed would show through the water below the copy on the surface.
+  meets the plane y = 0, not on the surface itself: on the surface the line would kink at every
+  bank and hill. The bake flattens the ground under the line to match: within 0.35 tile of the
+  edge (ring maps only) the plain's undulation fades to 0, and a hill crossing the edge dips to 0
+  in a saddle (0.8 tile inside the board, 1.5 tiles outside; edge hill cells keep 1.9–2.6 m on
+  Ridge). Water sits 0.16 tile lower, so over a river the line lands up to 0.1 tile off the true
+  edge; no move contour lies on water cells.
 COLOUR: linear (0.38, 0.015, 0.012) ≈ sRGB (166, 32, 28), L* ≈ 36, alpha 0.9, unshaded, and
   untouched by the out-of-play grade and the haze.
 MUST NOT: glow, bloom, pulse, dashes, fill, or a world-space width that thins to under 1 px far away.

@@ -261,6 +261,79 @@ func _joins_another_axis(c: RiverCourse, li: int, e: Vector2) -> bool:
 	return false
 
 
+## Річка тече суцільно: кожна область води, через яку йде вісь річки й яка торкається дошки, сягає
+## суцільного серпанку, а відірваних шматків води з віссю річки в кадрі нема. Вода тут — відліки
+## запеченої висоти під рівнем води, що лишаються водою й після звуження на 2 відліки в кожен бік:
+## перешийок, тонший за ~0.6 клітинки, на екрані — суша, і річка через нього не тече. Ставки й
+## озера осі річки не мають і тут не перевіряються.
+func test_river_water_is_connected_from_the_board_into_closed_haze() -> void:
+	var checked := 0
+	for path: String in _MAPS:
+		var w: Array = _world(path)
+		var m: MapData = w[0]
+		var t: TerrainHeight = w[3]
+		if t.course == null:
+			continue
+		var cols: int = t.cols
+		var rows: int = t.rows
+		var s: float = float(t.samples)
+		var size := Vector2i(m.width, m.height)
+		var wet := PackedByteArray()
+		wet.resize(cols * rows)
+		for k in cols * rows:
+			var x0: int = k % cols
+			var y0: int = k / cols
+			var all_wet := true
+			for dy in range(-2, 3):
+				for dx in range(-2, 3):
+					var q: int = clampi(y0 + dy, 0, rows - 1) * cols + clampi(x0 + dx, 0, cols - 1)
+					all_wet = all_wet and t._h[q] < TerrainHeight.WATER_LEVEL
+			wet[k] = 1 if all_wet else 0
+		var axis := PackedByteArray()
+		axis.resize(cols * rows)
+		for li in t.course.axis_lines:
+			for q: Vector2 in t.course.lines[li]:
+				var i: int = roundi((q.x + 0.5) * s)
+				var j: int = roundi((q.y + 0.5) * s)
+				if i >= 0 and j >= 0 and i < cols and j < rows:
+					axis[j * cols + i] = 1
+		var seen := PackedByteArray()
+		seen.resize(cols * rows)
+		for start in cols * rows:
+			if seen[start] == 1 or wet[start] == 0:
+				continue
+			var has_axis := false
+			var near := 1e9
+			var far := 0.0
+			var stack: Array[int] = [start]
+			seen[start] = 1
+			while not stack.is_empty():
+				var k: int = stack.pop_back()
+				var x: int = k % cols
+				var y: int = k / cols
+				has_axis = has_axis or axis[k] == 1
+				var d: float = Surroundings.board_distance(
+						Vector2(-0.5 - t.margin + x / s, -0.5 - t.margin + y / s), size)
+				near = minf(near, d)
+				far = maxf(far, d)
+				for o: Vector2i in Board.DIRS_4:
+					var nx: int = x + o.x
+					var ny: int = y + o.y
+					var nk: int = ny * cols + nx
+					if nx >= 0 and ny >= 0 and nx < cols and ny < rows and seen[nk] == 0 \
+							and wet[nk] == 1:
+						seen[nk] = 1
+						stack.append(nk)
+			if not has_axis or near >= Surroundings.HAZE_CLOSED:
+				continue
+			checked += 1
+			assert_true(near <= 0.0, "%s: шматок річки відірваний від дошки, %.1f–%.1f клітинки від неї"
+					% [path, near, far])
+			assert_gte(far, Surroundings.HAZE_CLOSED,
+					"%s: річка з дошки кінчається за %.1f клітинки, до суцільного серпанку" % [path, far])
+	assert_gt(checked, 0, "річки є")
+
+
 ## Озеро чи ставок — замкнена водойма з берегом довкола: за край світу (під заслін) виходить лише
 ## вода, крізь яку тече вісь річки.
 func test_only_rivers_reach_the_outer_edge_of_the_world() -> void:
@@ -406,7 +479,8 @@ func test_destroyed_ring_bridge_draws_ruins_outside_the_board_list() -> void:
 	var ruin: MultiMeshInstance3D = view.get_node_or_null("PlaceholderBridgeRuin")
 	assert_not_null(ruin, "руїни кільця намальовані")
 	if ruin != null:
-		assert_gte(ruin.multimesh.instance_count, 4, "дві плити й дві опори на клітинку")
+		# Дві плити, дві опори й третя плита, що впала: її кидає хеш цієї клітинки.
+		assert_eq(ruin.multimesh.instance_count, 5)
 	assert_eq(view._placeholder_bridge_ruin_cells.size(), 0, "на дошці руїн нема")
 
 
