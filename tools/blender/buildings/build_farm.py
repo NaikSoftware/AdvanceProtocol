@@ -41,6 +41,25 @@ def barn():
     lib.finish(b, "f2_livestock_barn", out, tri_limit=900, footprint=(2, 8), anchor=(0, 0))
 
 
+# ------------------------------------------------------------------ F1 мала господарська будівля 15 x 7
+def small_barn():
+    lib.reset()
+    b = Builder()
+    Lx, Wy, BASE, EAVE, RIDGE = 15.0, 7.0, 1.2, 3.5, 6.5
+    b.box(0, 0, 0, Lx, Wy, BASE, "brick_grey")
+    b.box(0, 0, BASE, Lx - 0.04, Wy - 0.04, EAVE - BASE, "boards")
+    b.gable(-Lx / 2, Lx / 2, -Wy / 2, Wy / 2, EAVE, RIDGE, "fc_roof", "boards", ridge_axis="x", overhang=0.4)
+    b.box(0, 0, RIDGE, Lx + 0.8, 0.3, 0.15, "metal_dark")                     # коник
+    # двостулкові ворота на торці +X, бічні двері й вікно, гвинтова димова труба не потрібна
+    b.box(Lx / 2 + 0.05, 0, 0, 0.1, 3.2, 3.0, "door_steel")
+    b.box(Lx / 2 + 0.07, 0, 0, 0.1, 0.1, 3.0, "metal_dark")
+    b.box(-Lx / 2 - 0.05, 0, 0, 0.1, 1.0, 2.0, "door_steel")
+    b.box(-3.0, Wy / 2 + 0.05, 0, 1.0, 0.1, 2.0, "door_steel")
+    b.window(("y", Wy / 2, 1), 3.0, 1.2, 0.9, 0.7)
+    b.window(("y", -Wy / 2, -1), -2.0, 1.2, 0.9, 0.7)
+    lib.finish(b, "f1_farm_barn", out, tri_limit=400, footprint=(2, 1), anchor=(0, 0))
+
+
 # ------------------------------------------------------------------ F3 ангар 18 x 36
 def hangar(damaged):
     lib.reset()
@@ -196,6 +215,8 @@ def fuel():
 
 if want("barn"):
     barn()
+if want("small"):
+    small_barn()
 if want("hangar"):
     hangar(False)
     hangar(True)

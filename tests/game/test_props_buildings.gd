@@ -7,6 +7,7 @@ const _DIR: String = "res://assets/props/"
 const _PROPS: Dictionary = {
 	"h5_panel_block": [4, 2, 1100],
 	"h5_panel_block_damaged": [4, 2, 1500],
+	"f1_farm_barn": [2, 1, 400],
 	"f2_livestock_barn": [2, 8, 400],
 	"f3_hangar": [3, 5, 500],
 	"f3_hangar_damaged": [3, 5, 1100],
