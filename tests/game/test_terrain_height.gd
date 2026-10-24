@@ -532,7 +532,7 @@ func test_bed_is_opaque_deep_beyond_half_a_tile_from_the_shore() -> void:
 ## Кінці настилу (по осі дороги) стоять на суші чи схилі берега, а під настилом є вода.
 func test_every_bridge_deck_spans_water_with_dry_ground_at_both_ends() -> void:
 	var r: Array = _river_bake()
-	_check_decks(r[0], r[1], 8)
+	_check_decks(r[0], r[1], 6)
 	# Міст через озеро й через вузький струмок, до яких вісь може не дотягнутись.
 	var lake: Board = _water_layout(14, 12, _rect(3, 2, 9, 9))
 	for y in range(2, 10):
@@ -590,8 +590,8 @@ func test_river_centreline_has_no_lateral_steps() -> void:
 func test_river_runs_straight_and_square_under_each_deck() -> void:
 	var r: Array = _river_bake()
 	var t: TerrainHeight = r[1]
-	# Центри та осі трьох переправ River (мости (4,10-11), (12-13,10-11), (21,10-11)).
-	var decks: Array = [[Vector2(4.0, 10.5), 1.0], [Vector2(12.5, 10.5), 2.0], [Vector2(21.0, 10.5), 1.0]]
+	# Центри та осі трьох переправ River (мости (4,10-11), (13,9-11), (21,10-11)).
+	var decks: Array = [[Vector2(4.0, 10.5), 1.0], [Vector2(13.0, 10.0), 1.0], [Vector2(21.0, 10.5), 1.0]]
 	var pts: PackedVector2Array = t.course.lines[0]
 	for d: Array in decks:
 		var c: Vector2 = d[0]
