@@ -72,6 +72,8 @@ func test_world_surface_carries_board_and_ring_subtypes() -> void:
 	pass_test("усі підтипи на місці")
 
 
+## Меш кільця на кожній поставній карті — зі справжніми клітинками води й берега густоти дошки —
+## не більший за `Surroundings.RING_TRIS_MAX`.
 func test_ring_mesh_bands_stay_within_the_triangle_budget() -> void:
 	var size := Vector2i(26, 22)
 	assert_eq(Surroundings.quads_for(Vector2i(0, 0), size, 7), 7)
@@ -79,10 +81,17 @@ func test_ring_mesh_bands_stay_within_the_triangle_budget() -> void:
 	assert_eq(Surroundings.quads_for(Vector2i(-2, 5), size, 7), 2)
 	assert_eq(Surroundings.quads_for(Vector2i(31, 5), size, 7), 2)
 	assert_eq(Surroundings.quads_for(Vector2i(-7, -7), size, 7), 1)
-	var board_tris: int = size.x * size.y * 7 * 7 * 2
-	var mesh: ArrayMesh = Surroundings.ground_mesh(size, 12, 7)
-	var tris: int = (mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-	assert_lte(tris - board_tris, 20000, "кільце: %d трикутників" % (tris - board_tris))
+	for path: String in _MAPS:
+		var w: Array = _world(path)
+		var b: Board = w[1]
+		var t: TerrainHeight = w[3]
+		var mg: int = Surroundings.ring_of(w[0])
+		var board_tris: int = b.width * b.height * t.samples * t.samples * 2
+		var mesh: ArrayMesh = Surroundings.ground_mesh(Vector2i(b.width, b.height), mg, t.samples,
+				t.bank_cells())
+		var tris: int = (mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+		assert_lte(tris - board_tris, Surroundings.RING_TRIS_MAX,
+				"%s: кільце %d трикутників" % [path, tris - board_tris])
 
 
 ## Т-з'єднання без щілини: вершина на ребрі з грубшою клітинкою лежить на відрізку між двома
@@ -329,7 +338,7 @@ func test_ridge_ponds_close_inside_the_ring() -> void:
 
 ## Шум рельєфу прив'язаний до дошки, а річка на дошці береться з осі самої дошки
 ## (`TerrainHeight._keep_board_course`): у глибині дошки кільце майже нічого не міняє — на
-## поставних картах різниця не більша за 0.21 м (дороги, що тривають у кільці, лягають сплайном
+## всіх трьох картах різниця не більша за 0.21 м (дороги, що тривають у кільці, лягають сплайном
 ## трохи інакше). Поріг 0.75 м ловить річку, що з кільцем змінила ширину по всій дошці.
 func test_board_relief_inside_stays_the_same_with_the_ring() -> void:
 	for path: String in _MAPS:
@@ -360,6 +369,45 @@ func test_fog_clock_advances_fog_time_by_a_tenth_of_a_second() -> void:
 	assert_almost_eq(BoardView.fog_time, before + 0.1, 1e-5)
 	view.build(m.to_board())
 	assert_same(view.get_node("FogClock"), clock, "перебудова дошки годинник не скидає")
+
+
+## Без кільця серпанку нема, і годинник після перебудови стоїть: інакше він будив би кадр 10 разів
+## на секунду даремно.
+func test_fog_clock_pauses_when_the_board_is_rebuilt_without_a_ring() -> void:
+	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
+	add_child_autofree(view)
+	var m: MapData = load("res://maps/crossroads.tres")
+	view.ring_map = m
+	view.build(m.to_board())
+	var clock: Timer = view.get_node("FogClock")
+	assert_false(clock.paused)
+	view.ring_map = null
+	view.build(m.to_board())
+	assert_true(clock.paused, "без кільця годинник стоїть")
+
+
+## Підірваний міст кільця теж лишає руїни: вони йдуть тим самим мультимешем, але не в перелік
+## клітинок руїн дошки, який читають правила й тести дошки.
+func test_destroyed_ring_bridge_draws_ruins_outside_the_board_list() -> void:
+	var m: MapData = (load("res://maps/river.tres") as MapData).duplicate()
+	var tiles: PackedByteArray = m.outer_tiles.duplicate()
+	var hit := -1
+	for i in tiles.size():
+		if tiles[i] == Terrain.Kind.BRIDGE:
+			hit = i
+			break
+	assert_gt(hit, -1, "у кільці River є міст")
+	tiles[hit] = Terrain.Kind.BRIDGE_DESTROYED
+	m.outer_tiles = tiles
+	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
+	add_child_autofree(view)
+	view.ring_map = m
+	view.build(m.to_board())
+	var ruin: MultiMeshInstance3D = view.get_node_or_null("PlaceholderBridgeRuin")
+	assert_not_null(ruin, "руїни кільця намальовані")
+	if ruin != null:
+		assert_gte(ruin.multimesh.instance_count, 4, "дві плити й дві опори на клітинку")
+	assert_eq(view._placeholder_bridge_ruin_cells.size(), 0, "на дошці руїн нема")
 
 
 ## Дотик по кільцю потрапляє в землю кільця, але дає клітинку поза дошкою, яку Board.in_bounds

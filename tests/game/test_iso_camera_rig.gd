@@ -82,7 +82,9 @@ func test_pan_margin_narrows_from_two_cells_out_near_to_three_cells_in_far() -> 
 	assert_eq(rig.pan_margin(), IsoCameraRig.BOARD_MARGIN)
 	assert_eq(rig._clamp_to_bounds(Vector3(-9.0, 0.0, 30.0)), Vector3(-2.0, 0.0, 21.0))
 	rig.zoom_level = 12.0
-	assert_gt(rig.pan_margin(), 0.0, "на типовому зумі юніт на крайній клітинці стає в центр кадру")
+	# (12 − 6) / (20 − 6) = 3/7; 2 − 5 · (3/7)² = 1.0816: юніт на крайній клітинці стає в
+	# центр кадру.
+	assert_almost_eq(rig.pan_margin(), 2.0 - 5.0 * 9.0 / 49.0, 1e-5)
 	rig.zoom_level = IsoCameraRig.MAX_ZOOM
 	assert_eq(rig.pan_margin(), IsoCameraRig.BOARD_MARGIN_FAR)
 	assert_eq(rig._clamp_to_bounds(Vector3(-9.0, 0.0, 30.0)), Vector3(3.0, 0.0, 16.0))

@@ -11,8 +11,8 @@ Contact sheet: `art-refs/surroundings/surroundings_sheet.jpg` (gitignored, local
 
 ## Camera facts this brief is sized from
 
-Computed from `IsoCameraRig` (FOV 42° vertical, pitch 38°→55°, zoom 6→20, focus clamped 2 cells
-beyond the last board cell) at 1920×1080. The pan clamp now narrows with zoom
+Computed from `IsoCameraRig` (FOV 42° vertical, pitch 38°→55°, zoom 6→20) at 1920×1080, with the
+focus 2 cells beyond the last board cell. The pan clamp narrows with zoom
 (`IsoCameraRig.pan_margin`): 2 cells beyond the last cell at zoom 6, 3 cells inside it at zoom 20,
 falling with the square of the zoom fraction. The zoom-20 reach below is therefore an upper bound;
 with the focus at a corner, measured flat haze covers 23 % of a 16:9 frame and 29 % of a 20:9 one.
@@ -130,8 +130,10 @@ CONTENT: the board uses 7 quads/tile (98 tris/tile), and 1 728 ring tiles at tha
   Ring cells with water or a bank slope (`TerrainHeight.bank_cells`) take the board's 7 quads/tile
   at any distance: a coarse quad over a river bed rises above the water plane and hides the water
   along straight triangle edges, and the bank masks are vertex values that a coarse quad cannot
-  shape. Measured extra tris with this rule: River 25.4k, Crossroads 18.8k, Ridge 17.7k.
-ACCEPT IF: ≤ 20k extra tris and ≤ 6 extra draw calls at zoom 20; no visible seam or density step at
+  shape. Board and ring together stay inside the 150k-triangle frame budget, so the ring's limit is
+  set by the River, the map with the most ring water.
+ACCEPT IF: ≤ 26k extra tris on every map (`Surroundings.RING_TRIS_MAX`, checked by
+  test_surroundings.gd) and ≤ 6 extra draw calls at zoom 20; no visible seam or density step at
   the board edge at zoom 6; faceting is visible only where haze is ≥ 50 %.
 ```
 

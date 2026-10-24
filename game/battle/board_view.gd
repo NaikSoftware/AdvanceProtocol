@@ -31,7 +31,7 @@ const _DECK_SHADER: Shader = preload("res://game/battle/shaders/placeholder_deck
 
 ## Крок часу серпанку (`fog_time` у surroundings.gdshaderinc), секунд. Кожне оновлення коштує
 ## один намальований кадр: на 10 Гц дошка без руху малює 10 кадрів на секунду, а крок не міняє
-## жодного пікселя більш як на 2/255; на 5 Гц край лоба вже стрибає, на 2 Гц — видимо.
+## жодного пікселя більш як на 2/255; на 5 Гц край клуба вже стрибає, на 2 Гц — видимо.
 const FOG_TICK: float = 0.1
 
 ## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
@@ -195,6 +195,9 @@ func build(board: Board) -> void:
 			_fog_clock.autostart = true
 			_fog_clock.timeout.connect(_tick_fog)
 			add_child(_fog_clock)
+	if _fog_clock != null:
+		# Без кільця серпанку нема: годинник стоїть і не будить кадр.
+		_fog_clock.paused = ring == 0
 
 	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз; перезйомку
 	# після перебудови просить rebuild_tiles явно (_request_probe_capture).
