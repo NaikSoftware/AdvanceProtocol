@@ -259,6 +259,7 @@ func resume(match_service: Node = null) -> void:
 func _wire_view(board: Board) -> void:
 	_board_view.build(board)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
+	_weather.attach_probe(_board_view.reflection_probe())
 	_follow_weather()
 
 	_zone_overlay = ZoneOverlay.new(_board_view)

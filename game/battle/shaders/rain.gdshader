@@ -1,7 +1,6 @@
-// Дощ (`WeatherRig`): один меш із N квадів; вершина несе випадкову точку в одиничній коробці (VERTEX)
-// і свій кут квада (UV). Крапля нерухома у світі (пан дає правильний паралакс), а коробка
-// загортається довкола фокуса камери — після пана чи зуму кадр не порожніє, поки
-// частинки старої коробки догорають.
+// Дощ (`WeatherRig`): один меш із N квадів; вершина несе випадкову точку в одиничній коробці
+// (VERTEX) і свій кут квада (UV). Крапля нерухома у світі (пан дає правильний паралакс), а коробка
+// загортається довкола фокуса камери, тож після пана чи зуму кадр одразу повний дощу.
 shader_type spatial;
 render_mode unshaded, blend_mix, cull_disabled, shadows_disabled, depth_draw_never;
 
@@ -12,9 +11,11 @@ uniform vec2 toward_camera = vec2(0.7071, 0.7071);
 // Падіння, клітинок/с: 1.0 — 8 м/с. Вітер — горизонтальний знос тією ж мірою.
 uniform float fall_speed = 1.0;
 uniform vec2 wind = vec2(-0.1, 0.06);
-// Смуга: довжина в клітинках (0.5 м розмиття руху), але не коротша за 7 px — інакше на
-// найбільшому віддаленні дощ лишається крапками по 2 px; ширина — не тонша за 1 px.
+// Смуга: довжина в клітинках (0.5 м розмиття руху), але на екрані не коротша за 7 px — камера
+// дивиться згори, і смуга 0.5 м на найбільшому віддаленні стискається в крапку 2–3 px.
+// Ширина — не тонша за 1 px.
 uniform float streak_length = 0.0625;
+uniform float min_streak_px = 7.0;
 uniform float streak_width = 0.005;
 uniform vec4 tint : source_color = vec4(0.75, 0.79, 0.84, 0.45);
 
@@ -32,11 +33,15 @@ void vertex() {
 	vec3 axis = normalize(vel);
 	vec3 view = CAMERA_POSITION_WORLD - c;
 	float dist = length(view);
-	vec3 side = normalize(cross(axis, view));
+	vec3 side = cross(axis, view / dist);
+	// Частка довжини смуги, видима з камери (синус кута між смугою й променем зору).
+	float seen = max(length(side), 0.2);
+	side /= seen;
 	// Розмір пікселя на цій відстані: смуга вужча за піксель мерехтіла б.
 	float px = 2.0 * dist / (PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y);
 	float w = max(streak_width, 1.1 * px);
-	vec3 p = c + side * (UV.x - 0.5) * w + axis * (UV.y - 0.5) * max(streak_length, 7.0 * px);
+	float len = max(streak_length, min_streak_px * px / seen);
+	vec3 p = c + side * (UV.x - 0.5) * w + axis * (UV.y - 0.5) * len;
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(p, 1.0);
 	v_along = UV.y;
 	// Ширина понад справжню гасне прозорістю, а краплі впритул до камери — зникають.

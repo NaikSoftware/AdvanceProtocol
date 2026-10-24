@@ -14,13 +14,22 @@ const _RAIN_SHADER: Shader = preload("res://game/battle/shaders/rain.gdshader")
 ## ~2 px.
 const RAIN_BOX: Vector3 = Vector3(2.6, 0.85, 2.6)
 
+## Пріоритет матеріалу дощу серед прозорих: понад воду (0), щоб дощ над річкою не зникав.
+const RAIN_PRIORITY: int = 1
 const _QUAD: Array[int] = [0, 1, 2, 0, 2, 3]
 
 var sun: DirectionalLight3D
 var rain: MeshInstance3D
+## Зонд відбиття дошки (`attach_probe`): у його коробці розсіяне світло бере він, а не
+## оточення, тож вигляд ставить світло і йому.
+var probe: ReflectionProbe
+var _look: BattleLook
 ## Останні значення глобальних uniform: без відеокарти RenderingServer їх не повертає.
 var applied_globals: Dictionary = {}
+## Скільки крапель у збудованому меші — не те саме, що дощ, який іде (`rain_drops()`).
 var _rain_drops: int = 0
+## Меш крапель на кількість: однаковий для всіх боїв процесу, будується раз.
+static var _drops_cache: Dictionary = {}
 
 
 func _init() -> void:
@@ -33,7 +42,9 @@ func _init() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	# Розсіяне світло — колір вигляду, а не небо: на дошці його однаково дає зонд кольором
+	# (`attach_probe`), і небо ззовні дало б інший тон на кільці.
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	environment = env
 
@@ -46,6 +57,9 @@ func _init() -> void:
 	rain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var rain_mat := ShaderMaterial.new()
 	rain_mat.shader = _RAIN_SHADER
+	# Вода теж прозора й без запису глибини: прозорі сортуються за центром AABB, а центр меша
+	# дощу — початок координат, тож без пріоритету вода залежно від пана малювалась би поверх.
+	rain_mat.render_priority = RAIN_PRIORITY
 	rain.material_override = rain_mat
 	add_child(rain)
 	follow(Vector3.ZERO, IsoCameraRig.MAX_ZOOM)
@@ -56,13 +70,41 @@ func apply(look: BattleLook) -> void:
 	sun.light_color = look.light_color
 	sun.light_energy = look.light_energy
 	sun.rotation_degrees = Vector3(-look.light_pitch_deg, look.light_yaw_deg, 0.0)
+	sun.shadow_opacity = look.shadow_opacity
+	sun.shadow_blur = look.shadow_blur
+	environment.ambient_light_color = look.ambient_color
 	environment.ambient_light_energy = look.ambient_energy
+	_look = look
+	_light_probe()
+	(environment.sky.sky_material as ShaderMaterial).set_shader_parameter("clear_amount", look.sky_clear)
 	rain.visible = look.rain and look.rain_amount > 0
 	if rain.visible and look.rain_amount != _rain_drops:
 		rain.mesh = _drops_mesh(look.rain_amount)
 		_rain_drops = look.rain_amount
 	_set_global(&"weather_wetness", look.wetness)
 	_set_global(&"cloud_shadow_strength", look.cloud_shadow_strength)
+	_set_global(&"sky_clear", look.sky_clear)
+	_set_global(&"water_murk", look.water_murk)
+	# Світло падає вздовж -Z сонця, тож напрям НА сонце — його +Z.
+	_set_global(&"sun_dir", sun.basis.z)
+	_set_global(&"haze_color", _rgb(look.haze_color))
+	_set_global(&"foliage_tint", _rgb(look.foliage_tint))
+
+
+## Зонд відбиття дошки з'являється, коли дошку збудовано. У його коробці Mobile бере розсіяне
+## світло з самого зонда й `ambient_light_energy` оточення не чує, тож вигляд ставить зонду той
+## самий колір, що й оточенню.
+func attach_probe(board_probe: ReflectionProbe) -> void:
+	probe = board_probe
+	_light_probe()
+
+
+func _light_probe() -> void:
+	if probe == null or _look == null:
+		return
+	probe.ambient_mode = ReflectionProbe.AMBIENT_COLOR
+	probe.ambient_color = _look.ambient_color
+	probe.ambient_color_energy = _look.ambient_energy
 
 
 ## Кількість крапель у дощі, що зараз іде (0 — дощу нема).
@@ -78,7 +120,11 @@ func follow(focus: Vector3, zoom_level: float) -> void:
 	mat.set_shader_parameter("box_size", RAIN_BOX * zoom_level)
 
 
-func _set_global(param: StringName, value: float) -> void:
+static func _rgb(c: Color) -> Vector3:
+	return Vector3(c.r, c.g, c.b)
+
+
+func _set_global(param: StringName, value: Variant) -> void:
 	applied_globals[param] = value
 	RenderingServer.global_shader_parameter_set(param, value)
 
@@ -86,6 +132,8 @@ func _set_global(param: StringName, value: float) -> void:
 ## Квад на краплю: усі чотири вершини несуть ту саму випадкову точку одиничної коробки, а UV —
 ## кут квада; смугу будує шейдер. Сід сталий, тож дощ однаковий від запуску до запуску.
 static func _drops_mesh(count: int) -> ArrayMesh:
+	if _drops_cache.has(count):
+		return _drops_cache[count]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 1
 	var verts := PackedVector3Array()
@@ -113,4 +161,5 @@ static func _drops_mesh(count: int) -> ArrayMesh:
 	# Вершини лежать в одиничній коробці, а краплі — будь-де довкола камери: без власної межі
 	# меш відсікався б, щойно фокус відійде від початку координат.
 	mesh.custom_aabb = AABB(Vector3(-1e4, -1e3, -1e4), Vector3(2e4, 2e3, 2e4))
+	_drops_cache[count] = mesh
 	return mesh

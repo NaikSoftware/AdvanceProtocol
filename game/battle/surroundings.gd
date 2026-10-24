@@ -12,9 +12,6 @@ extends RefCounted
 const HAZE_START: float = 2.5
 const HAZE_FULL: float = 11.0
 const HAZE_CLOSED: float = 11.5
-## Колір імли, лінійний: холодний, світліший за мокру землю на 8–15 L*
-## (docs/art/surroundings-research.md, P1 і M).
-const HAZE_COLOR: Color = Color(0.10, 0.135, 0.155)
 ## Яскравість ×0.8 і насиченість ×0.65 — лише разом з імлою, тією самою кривою
 ## (`surround_grade`): біля краю земля поза дошкою та сама, що й на дошці, і межу позначає тільки
 ## лінія.
@@ -68,7 +65,6 @@ static var _fog_noise: ImageTexture
 static func apply(mat: ShaderMaterial, size: Vector2i) -> void:
 	mat.set_shader_parameter("surround", true)
 	mat.set_shader_parameter("board_size", Vector2(size))
-	mat.set_shader_parameter("haze_color", Vector3(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b))
 	mat.set_shader_parameter("haze_range", Vector2(HAZE_START, HAZE_FULL))
 	mat.set_shader_parameter("haze_closed", HAZE_CLOSED)
 	mat.set_shader_parameter("fog_noise", fog_noise())

@@ -4,11 +4,19 @@
 
 [resource]
 script = ExtResource("1_look")
-light_color = Color(0.95, 0.97, 1, 1)
-light_energy = 1.25
-light_pitch_deg = 50.0
+season = &"early"
+light_color = Color(1, 0.97, 0.92, 1)
+light_energy = 1.5
+light_pitch_deg = 48.0
 light_yaw_deg = 315.0
+shadow_opacity = 0.95
+shadow_blur = 0.8
+ambient_color = Color(0.55, 0.65, 0.85, 1)
 ambient_energy = 0.6
+sky_clear = 0.85
+haze_color = Color(0.26, 0.32, 0.4, 1)
+foliage_tint = Color(1.08, 1.04, 0.76, 1)
+water_murk = 0.8
 rain = false
 rain_amount = 0
 wetness = 0.0
