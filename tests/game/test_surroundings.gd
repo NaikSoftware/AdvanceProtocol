@@ -484,9 +484,21 @@ func test_destroyed_ring_bridge_draws_ruins_outside_the_board_list() -> void:
 	assert_eq(view._placeholder_bridge_ruin_cells.size(), 0, "на дошці руїн нема")
 
 
+## Множник улоговини в центрі крайньої клітинки — smoothstep(0, 1.5, 0.5) = 7/27, кутової —
+## (7/27)²; на самому краю 0, за `_EDGE_HILL_IN` від краю — 1.
+func test_edge_hill_dip_has_exact_values_at_cell_centres() -> void:
+	var edge: float = 7.0 / 27.0
+	assert_almost_eq(TerrainHeight._edge_hill_dip(-0.5, -5.0), edge, 1e-6, "крайня клітинка")
+	assert_almost_eq(TerrainHeight._edge_hill_dip(-5.0, -0.5), edge, 1e-6, "крайня клітинка")
+	assert_almost_eq(TerrainHeight._edge_hill_dip(-0.5, -0.5), edge * edge, 1e-6, "кутова клітинка")
+	assert_eq(TerrainHeight._edge_hill_dip(0.0, -5.0), 0.0, "на краю")
+	assert_eq(TerrainHeight._edge_hill_dip(-1.5, -5.0), 1.0, "за 1.5 клітинки від краю")
+
+
 ## Пагорб, що перетинає край дошки, сходить на краю до 0 улоговиною, але клітинка HILL лишається
-## пагорбом: центр тримає ≥ `_HILL_KEEP` найменшої висоти пагорба, помножене на множник
-## улоговини в цьому центрі (1 далі за `_EDGE_HILL_IN` від краю, 0.259 на крайній клітинці).
+## пагорбом. Центр крайньої клітинки піднято щонайменше на 7/27 від `_HILL_KEEP` найменшої
+## висоти пагорба (0.56 м) і, на Ridge, на 0.65 м: найнижча крайня клітинка (23, 0) має 0.68 м.
+## Решта клітинок тримає `_HILL_KEEP` повністю. Кутових клітинок пагорба на Ridge нема.
 func test_ring_world_keeps_every_board_hill_cell_raised() -> void:
 	var w: Array = _world("res://maps/ridge.tres")
 	var m: MapData = w[0]
@@ -500,20 +512,23 @@ func test_ring_world_keeps_every_board_hill_cell_raised() -> void:
 	var f := TerrainHeight.bake(flat, 0, m.name_key.hash(), Surroundings.world_surface(m),
 			Surroundings.ring_of(m))
 	var floor_h: float = TerrainHeight._HILL_KEEP * TerrainHeight._HILL_MIN
+	# Допуск 8 мм: центр клітинки лежить між відліками, і білінійна інтерполяція зрізає вершину.
+	var tol: float = 0.008 * M
 	var edge_cells := 0
 	for z in b.height:
 		for x in b.width:
 			if b.kind_at(Vector2i(x, z)) != Terrain.Kind.HILL:
 				continue
-			var dip: float = TerrainHeight._edge_hill_dip(
-					absf(x - (b.width - 1) * 0.5) - b.width * 0.5,
-					absf(z - (b.height - 1) * 0.5) - b.height * 0.5)
-			edge_cells += 1 if dip < 1.0 else 0
 			var rise: float = t.at(float(x), float(z)) - f.at(float(x), float(z))
-			# Допуск 8 мм: центр клітинки лежить між відліками, і білінійна інтерполяція
-			# зрізає вершину.
-			assert_gt(rise, floor_h * dip - 0.008 * M,
-					"(%d, %d): піднято на %.3f, множник %.3f" % [x, z, rise, dip])
+			var on_edge: bool = x == 0 or z == 0 or x == b.width - 1 or z == b.height - 1
+			assert_false(on_edge and (x == 0 or x == b.width - 1) and (z == 0 or z == b.height - 1),
+					"(%d, %d): кутова клітинка пагорба" % [x, z])
+			if on_edge:
+				edge_cells += 1
+				assert_gt(rise, 7.0 / 27.0 * floor_h - tol, "(%d, %d): %.2f м" % [x, z, rise / M])
+				assert_gt(rise, 0.65 * M, "(%d, %d): %.2f м" % [x, z, rise / M])
+			else:
+				assert_gt(rise, floor_h - tol, "(%d, %d): %.2f м" % [x, z, rise / M])
 	assert_gt(edge_cells, 0, "на Ridge пагорб перетинає край")
 
 
