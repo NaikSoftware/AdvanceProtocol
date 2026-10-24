@@ -432,7 +432,7 @@ func test_river_has_three_crossings_and_a_town() -> void:
 	assert_not_null(m)
 	if m == null:
 		return
-	assert_gte(_count(m, [Terrain.Kind.BRIDGE]), 6, "три переправи по два ряди мосту")
+	assert_gte(_count(m, [Terrain.Kind.BRIDGE]), 6, "три переправи")
 	assert_gte(_count(m, [Terrain.Kind.BUILDING]), 8, "містечко")
 
 
