@@ -13,6 +13,9 @@ const _DEGREES_PER_FACING: float = 45.0
 ## Фаза 5a: усе видиме в юніті — лише на цьому шарі рендеру, щоб відбиття й
 ## тіні могли відсікти юнітів маскою (відбиття не сміють показати прихований юніт).
 const UNIT_LAYER: int = 2
+## Найбільший нахил корпусу за схилом, окремо вздовж і впоперек. Крутіший берег
+## перекинув би модель на бік; там юніт лягає під цим кутом, а нижній край висить.
+const MAX_TILT_DEG: float = 20.0
 
 ## Board.DIRS_8 іде ЗА годинниковою стрілкою (0 N, 2 E, 4 S, 6 W), а поворот
 ## навколо Y у Godot — ПРОТИ. Тому знак обов'язковий: `facing * 45` збігається
@@ -127,6 +130,10 @@ var _hp_ratio: float = 1.0
 ## Живий твін останнього face(); тримаємо посилання, щоб наступний виклик
 ## міг убити цей замість того, щоб два твіни змагались за rotation_degrees.y.
 var _face_tween: Tween
+## Половини основи корпусу (x — ширина, y — довжина): по її кутах юніт ставиться на схил.
+var _half_base: Vector2 = Vector2.ZERO
+## Кут повороту, для якого востаннє рахувався нахил; NAN — ще не ставився.
+var _posed_yaw: float = NAN
 
 
 func _ready() -> void:
@@ -155,6 +162,7 @@ func bind(unit: Unit) -> void:
 	# твінований face() тут дав би видиме crank-довертання щоразу, коли дошка
 	# перебудовується. Миттєве виставлення, не face().
 	_set_facing_instant(unit.facing)
+	_pose(position)
 	set_hp(unit.hp, unit.max_hp())
 	set_drones(unit.drones_left)
 	# Свіжий (чи перебудований) вузол не є ціллю жодного прев'ю: прев'ю живе в
@@ -258,13 +266,59 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 	return tween.finished
 
 
-## Крок руху між клітинками: XZ — лінійно, висота — з рельєфу під юнітом (а не пряма між
-## центрами клітинок, що протикала б горб). Без рельєфу — лінійно, як і було.
+## Крок руху між клітинками: XZ — лінійно, висота й нахил — з рельєфу під юнітом (а не пряма
+## між центрами клітинок, що протикала б горб).
 func _walk(t: float, from: Vector3, to: Vector3) -> void:
-	var p: Vector3 = from.lerp(to, t)
-	if TerrainHeight.active != null:
-		p.y = TerrainHeight.active.at(p.x, p.z)
-	position = p
+	_pose(from.lerp(to, t))
+
+
+## Твін повороту крутить лише кут вузла; нахил залежить від нього, тож іде слідом.
+func _process(_delta: float) -> void:
+	if rotation.y != _posed_yaw:
+		_pose(position)
+
+
+## Ставить юніт у точці `at` на рельєф усією основою. Нахил — лише в силуеті, тангаж і
+## крен у його власних осях: кут вузла навколо Y лишається напрямом (§3.4), а ніс у плані
+## дивиться туди ж, куди й без нахилу. Висота — найменша, за якої жоден кут основи і
+## центр не входять у ґрунт; на схилі, крутішому за MAX_TILT_DEG, нижній край висить.
+func _pose(at: Vector3) -> void:
+	_posed_yaw = rotation.y
+	var th: TerrainHeight = TerrainHeight.active
+	if th == null:
+		position = Vector3(at.x, 0.0, at.z)
+		_silhouette.rotation = Vector3.ZERO
+		return
+	var cell: Vector2i = IsoCameraRig.world_to_cell(at)
+	var deck: float = th.deck_y(cell)
+	if deck > th.at(float(cell.x), float(cell.y)) + 0.001:
+		# Міст: настил рівний, а рельєф під ним — русло.
+		position = Vector3(at.x, deck, at.z)
+		_silhouette.rotation = Vector3.ZERO
+		return
+	var yaw := Basis(Vector3.UP, rotation.y)
+	var corners: Array[Vector3] = []
+	var h: Array[float] = []
+	for sx: float in [-1.0, 1.0]:
+		for sz: float in [-1.0, 1.0]:
+			var c := Vector3(_half_base.x * sx, 0.0, _half_base.y * sz)
+			var w: Vector3 = at + yaw * c
+			corners.append(c)
+			h.append(th.at(w.x, w.z))
+	# Порядок кутів: (-x,-z), (-x,+z), (+x,-z), (+x,+z); ніс — це -Z.
+	var limit: float = deg_to_rad(MAX_TILT_DEG)
+	var pitch: float = 0.0
+	var roll: float = 0.0
+	if _half_base.y > 0.0:
+		pitch = atan(((h[0] + h[2]) - (h[1] + h[3])) / (4.0 * _half_base.y))
+	if _half_base.x > 0.0:
+		roll = atan(((h[2] + h[3]) - (h[0] + h[1])) / (4.0 * _half_base.x))
+	_silhouette.rotation = Vector3(clampf(pitch, -limit, limit), 0.0, clampf(roll, -limit, limit))
+	var tilt: Basis = _silhouette.basis
+	var y: float = th.at(at.x, at.z)
+	for i in corners.size():
+		y = maxf(y, h[i] - (tilt * corners[i]).y)
+	position = Vector3(at.x, y, at.z)
 
 
 ## R14: поворот твінується, а не клацає миттєво — «Твіни руху й повороту»
@@ -412,6 +466,7 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 	built.free()
 	var hull := _silhouette.get_node("Hull") as MeshInstance3D
 	var hull_size: Vector3 = (hull.mesh as BoxMesh).size
+	_half_base = Vector2(hull_size.x, hull_size.z) * 0.5
 	_hull_material = hull.material_override as StandardMaterial3D
 
 	# ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2) — єдиний виклик, єдине місце, де стрілку
