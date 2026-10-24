@@ -23,6 +23,10 @@ const OVERLAY_LAYER: int = 4
 
 ## Руїни мостів: плита тримається на 0.25 над центром клітинки (центр — на 0.25 нижче рівня дороги).
 const PLACEHOLDER_DECK_TOP: float = 0.25
+## Альбедо тимчасового настилу (sRGB, лінійне ~0.075) — мокрий асфальт, не світліший за дорогу
+## на березі: світло-сіра плита була б найяскравішою річчю в кадрі. Руїни — темніший бетон у воді.
+const PLACEHOLDER_DECK_ALBEDO: Color = Color(0.31, 0.30, 0.29)
+const PLACEHOLDER_RUIN_ALBEDO: Color = Color(0.25, 0.245, 0.235)
 const _DECK_SHADER: Shader = preload("res://game/battle/shaders/placeholder_deck.gdshader")
 
 ## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
@@ -389,17 +393,18 @@ func _build_placeholder_bridge_deck(board: Board, ring: int = 0) -> void:
 					_placeholder_bridge_deck_axes.append(axis)
 				else:
 					ring_decks.append(_deck_transform(cell, axis))
-			elif on_board:
-				_placeholder_bridge_ruin_cells.append(cell)
+			else:
+				if on_board:
+					_placeholder_bridge_ruin_cells.append(cell)
 				_add_ruin_transforms(cell, axis)
 	if not _placeholder_bridge_ruin_transforms.is_empty():
-		_add_placeholder_multimesh("PlaceholderBridgeRuin", _placeholder_bridge_ruin_transforms, Color(0.2, 0.19, 0.18))
+		_add_placeholder_multimesh("PlaceholderBridgeRuin", _placeholder_bridge_ruin_transforms, PLACEHOLDER_RUIN_ALBEDO)
 	var deck: Array[Transform3D] = []
 	for i in _placeholder_bridge_deck_cells.size():
 		deck.append(_deck_transform(_placeholder_bridge_deck_cells[i], _placeholder_bridge_deck_axes[i]))
 	deck.append_array(ring_decks)
 	if not deck.is_empty():
-		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, Color(0.42, 0.42, 0.4))
+		_add_placeholder_multimesh("PlaceholderBridgeDeck", deck, PLACEHOLDER_DECK_ALBEDO)
 
 
 ## Настил стоїть на рівні дороги на берегах, а русло під ним — нижче (TerrainHeight.deck_y).

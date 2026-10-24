@@ -6,26 +6,33 @@ extends RefCounted
 ## дошкою нічого не вибирає (Board.in_bounds).
 
 ## Серпанок за евклідовою відстанню від прямокутника дошки (клітинки): чисто до 3, повний на 11 —
-## за клітинку до краю кільця, бо край кільця видно на будь-якому віддаленні. Ті самі числа — у
-## ground.gdshader і water.gdshader (surround_*), міняти разом.
+## за клітинку до краю кільця, бо край кільця видно на будь-якому віддаленні. Шейдери
+## (surroundings.gdshaderinc) власних значень не мають: усі числа ставить `apply()`.
 const HAZE_START: float = 3.0
 const HAZE_FULL: float = 11.0
-## Колір серпанку, лінійний: холодний, світліший за мокру землю на 8–15 L* (бриф, P1 і M).
+## Колір серпанку, лінійний: холодний, світліший за мокру землю на 8–15 L*
+## (docs/art/surroundings-research.md, P1 і M).
 const HAZE_COLOR: Color = Color(0.10, 0.135, 0.155)
-## Яскравість ×0.8 і насиченість ×0.65 — лише разом із серпанком, тією самою кривою (grade()):
-## біля краю земля поза дошкою та сама, що й на дошці, і межу позначає тільки лінія.
+## Яскравість ×0.8 і насиченість ×0.65 — лише разом із серпанком, тією самою кривою
+## (`surround_grade`): біля краю земля поза дошкою та сама, що й на дошці, і межу позначає тільки
+## лінія.
 const GRADE_LUMA: float = 0.8
 const GRADE_SAT: float = 0.65
 ## Межа гри: суцільна лінія 0.28 % висоти кадру (3 px на 1080p, 2–4 px), назовні від краю.
 const LINE_COLOR: Color = Color(0.38, 0.015, 0.012)
 const LINE_ALPHA: float = 0.9
 const LINE_FRAC: float = 0.0028
+## Відступ внутрішнього краю лінії від межі дошки, пікселів кадру: контур «лише рух» на крайній
+## клітинці лежить за 0.06 клітинки від межі (`BoardView._CONTOUR_INSET`), а це лише ~2.7 px на
+## найбільшому віддаленні; разом із відступом між ними лишається ≥ 3 px землі.
+const LINE_GAP_PX: float = 1.5
 ## Заслін у кольорі серпанку — до 48 клітинок від дошки: кут кадру 20:9 на найбільшому
 ## віддаленні сягає 34.8 клітинки.
 const SKIRT_REACH: float = 48.0
 
 
-## Густота меша кільця, квадів на клітинку (бриф: 17k трикутників замість 169k за густоти дошки):
+## Густота меша кільця, квадів на клітинку (docs/art/surroundings-research.md: 17 тис. трикутників
+## замість 169 тис. за густоти дошки):
 ## перша клітинка за краєм — як дошка, щоб на межі не було сходинки; до 6 клітинок — 2 (4 м),
 ## далі — 1 (8 м), там серпанок уже ≥ 50 % і гранування не видно. Смуга — за Чебишовим.
 const BAND_FINE: int = 1
@@ -43,8 +50,10 @@ static func apply(mat: ShaderMaterial, size: Vector2i) -> void:
 	mat.set_shader_parameter("haze_color", Vector3(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b))
 	mat.set_shader_parameter("haze_range", Vector2(HAZE_START, HAZE_FULL))
 	mat.set_shader_parameter("grade_params", Vector2(GRADE_LUMA, GRADE_SAT))
-	mat.set_shader_parameter("line_color", Vector4(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, LINE_ALPHA))
+	mat.set_shader_parameter("line_color",
+			Vector4(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, LINE_ALPHA))
 	mat.set_shader_parameter("line_frac", LINE_FRAC)
+	mat.set_shader_parameter("line_gap_px", LINE_GAP_PX)
 
 
 ## Заслін: один квадрат кольору серпанку під землею, до SKIRT_REACH клітинок від дошки. Земля
@@ -64,19 +73,23 @@ static func skirt(size: Vector2i, y: float) -> MeshInstance3D:
 	return mi
 
 
-## Квадів на клітинку для клітинки світу (координати дошки).
-static func quads_for(cell: Vector2i, size: Vector2i, board_quads: int) -> int:
+## Квадів на клітинку для клітинки світу (координати дошки). Клітинка з `fine` (вода чи берег,
+## `TerrainHeight.bank_cells`) — як дошка: грубий квад над руслом закривав би воду прямими
+## ребрами, а вершинні маски берега на ньому не мали б форми.
+static func quads_for(cell: Vector2i, size: Vector2i, board_quads: int,
+		fine: Dictionary = {}) -> int:
 	var dt: int = maxi(maxi(-cell.x, cell.x - size.x + 1), maxi(-cell.y, cell.y - size.y + 1))
-	if dt <= BAND_FINE:
+	if dt <= BAND_FINE or fine.has(cell):
 		return board_quads
 	return MID_QUADS if dt <= BAND_MID else FAR_QUADS
 
 
-## Меш землі світу: клітинка за клітинкою, кожна — сітка n×n квадів своєї смуги, вершини відносно
+## Меш землі світу: клітинка за клітинкою, кожна — n×n квадів своєї смуги, вершини відносно
 ## центру дошки (там стоїть вузол землі). Вершина дрібної клітинки на ребрі з грубшою сусідкою несе
 ## кінці грубого ребра (UV, UV2) і позначку COLOR.a = 1: шейдер бере висоту з того самого ребра,
 ## тож Т-з'єднання не дає щілини.
-static func ground_mesh(size: Vector2i, ring: int, board_quads: int) -> ArrayMesh:
+static func ground_mesh(size: Vector2i, ring: int, board_quads: int,
+		fine: Dictionary = {}) -> ArrayMesh:
 	var centre := Vector2(size - Vector2i.ONE) * 0.5
 	var verts := PackedVector3Array()
 	var uv := PackedVector2Array()
@@ -86,13 +99,13 @@ static func ground_mesh(size: Vector2i, ring: int, board_quads: int) -> ArrayMes
 	var lo := -ring
 	for cy in range(lo, size.y + ring):
 		for cx in range(lo, size.x + ring):
-			var n: int = quads_for(Vector2i(cx, cy), size, board_quads)
+			var n: int = quads_for(Vector2i(cx, cy), size, board_quads, fine)
 			# Сусід поза світом — як сама клітинка: там ребро нічого не стикує.
 			var side := func(d: Vector2i) -> int:
 				var c := Vector2i(cx, cy) + d
 				if c.x < lo or c.y < lo or c.x >= size.x + ring or c.y >= size.y + ring:
 					return n
-				return quads_for(c, size, board_quads)
+				return quads_for(c, size, board_quads, fine)
 			var up: int = side.call(Vector2i(0, -1))
 			var down: int = side.call(Vector2i(0, 1))
 			var left: int = side.call(Vector2i(-1, 0))
@@ -162,11 +175,7 @@ static func haze(d: float) -> float:
 	return smoothstep(HAZE_START, HAZE_FULL, d)
 
 
-static func grade(d: float) -> float:
-	return haze(d)
-
-
-## Дошка разом із кільцем однією сіткою (W+2m)×(H+2m): усередині — живі види дошки (підірваний
+## Дошка разом із кільцем одним `Board` (W+2m)×(H+2m): усередині — живі види дошки (підірваний
 ## міст теж), довкола — кільце автора. Без кільця — сама дошка.
 static func world_board(board: Board, map: MapData) -> Board:
 	var m: int = ring_of(map)

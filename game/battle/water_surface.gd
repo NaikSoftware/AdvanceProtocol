@@ -25,20 +25,29 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 	# Пари сусідніх клітинок води вздовж X і вздовж Y: річка тече вздовж довшої осі.
 	var along_x := 0
 	var along_y := 0
+	var lo := Vector2i(board.width, board.height)
+	var hi := Vector2i(-1, -1)
 	for y in board.height:
 		for x in board.width:
 			if _is_water(board, Vector2i(x, y)):
 				has_water = true
+				lo = Vector2i(mini(lo.x, x), mini(lo.y, y))
+				hi = Vector2i(maxi(hi.x, x), maxi(hi.y, y))
 				along_x += 1 if _is_water(board, Vector2i(x + 1, y)) else 0
 				along_y += 1 if _is_water(board, Vector2i(x, y + 1)) else 0
 	visible = has_water
 	if not has_water:
 		return
 
+	# Площина — лише над клітинками води з запасом у клітинку (берег, виступи русла), у межах
+	# світу: кожен її фрагмент рахує висоту й серпанок, а суша під рештою кільця й дошки — ні.
+	var pad := Vector2.ONE * (0.5 + margin)
+	var a: Vector2 = Vector2(maxi(lo.x - 1, 0), maxi(lo.y - 1, 0)) - pad
+	var b: Vector2 = Vector2(mini(hi.x + 1, board.width - 1), mini(hi.y + 1, board.height - 1)) + pad
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(board.width + 2 * margin, board.height + 2 * margin)
+	plane.size = b - a
 	mesh = plane
-	position = Vector3((board.width - 1) * 0.5 - ring, WATER_Y, (board.height - 1) * 0.5 - ring)
+	position = Vector3((a.x + b.x) * 0.5 - ring, WATER_Y, (a.y + b.y) * 0.5 - ring)
 	layers = 1
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 

@@ -84,6 +84,10 @@ var _normal_array: Texture2DArray
 var _macro_array: Texture2DArray
 
 var _kind_image: Image
+## Меш землі з кільцем і карта висот, з якої його складено: підірваний міст перебудовує землю,
+## а форма меша від виду клітинок не залежить, тож він не складається вдруге.
+var _ring_mesh: ArrayMesh
+var _ring_mesh_height: TerrainHeight
 ## Імена шарів macro_array: перші 8 — TEX_LAYERS, далі — підтипи, чий файл існує.
 var _macro_layers: Array[String] = []
 
@@ -108,7 +112,10 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 
 	var size := Vector2i(board.width - 2 * ring, board.height - 2 * ring)
 	if height != null and ring > 0:
-		mesh = Surroundings.ground_mesh(size, ring, height.samples)
+		if _ring_mesh_height != height:
+			_ring_mesh = Surroundings.ground_mesh(size, ring, height.samples, height.bank_cells())
+			_ring_mesh_height = height
+		mesh = _ring_mesh
 	else:
 		var plane := PlaneMesh.new()
 		plane.size = Vector2(w, h)

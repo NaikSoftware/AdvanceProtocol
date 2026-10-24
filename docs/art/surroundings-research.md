@@ -12,7 +12,10 @@ Contact sheet: `art-refs/surroundings/surroundings_sheet.jpg` (gitignored, local
 ## Camera facts this brief is sized from
 
 Computed from `IsoCameraRig` (FOV 42° vertical, pitch 38°→55°, zoom 6→20, focus clamped 2 cells
-beyond the last board cell) at 1920×1080:
+beyond the last board cell) at 1920×1080. The pan clamp now narrows with zoom
+(`IsoCameraRig.pan_margin`): 2 cells beyond the last cell at zoom 6, 3 cells inside it at zoom 20,
+falling with the square of the zoom fraction. The zoom-20 reach below is therefore an upper bound;
+with the focus at a corner, measured flat haze covers 23 % of a 16:9 frame and 29 % of a 20:9 one.
 
 | zoom | pitch | distance to focus | cm/px at centre (depth) | cm/px at top edge | farthest reach of a screen corner past the board edge, 16:9 / 20:9 |
 | --- | --- | --- | --- | --- | --- |
@@ -52,13 +55,19 @@ VIEW: game angle, pitch 38–55°
 CONTENT: one solid line, constant 3 px at 1080p (= 0.28 % of viewport height; clamp 2–4 px),
   anti-aliased over 1 px. In metres that is 0.22 m at zoom 6 centre, 0.54 m at zoom 20 centre and
   about 1.0 m at the top edge at zoom 20, so the width must be screen-space (fwidth), not world-space.
-  The inner edge sits exactly on the board boundary (cell −0.5 / W−0.5) and the line grows outward,
-  never over a board cell. Square corners. Drawn on whatever surface is at the edge (ground, water,
-  bridge deck, road) without a break; buildings and trees occlude it (depth-tested).
+  The inner edge sits 1.5 px (screen space) outside the board boundary (cell −0.5 / W−0.5) and the
+  line grows outward, never over a board cell: the move-only contour ends 0.06 tile inside the
+  boundary, about 2.7 px at zoom 20, so the offset keeps 3 px of ground between them. Square
+  corners. Drawn on whatever surface is at the edge (ground, water, bridge deck, road) without a
+  break; buildings and trees occlude it (depth-tested). The distance is taken where the view ray
+  meets a plane at the edge's ground height, averaged along the edge over ±2 tiles (water counts at
+  its level), not on the surface itself: on the surface the line would kink at every bank and its
+  copy on the river bed would show through the water below the copy on the surface.
 COLOUR: linear (0.38, 0.015, 0.012) ≈ sRGB (166, 32, 28), L* ≈ 36, alpha 0.9, unshaded, and
   untouched by the out-of-play grade and the haze.
 MUST NOT: glow, bloom, pulse, dashes, fill, or a world-space width that thins to under 1 px far away.
   Must not look like the move-only contour (#c94f3f, L* ≈ 50, 0.96 m wide pieces inside the cell).
+  On screen that contour renders salmon, sRGB ≈ (230, 151, 136), measured at zoom 20 on River.
 ACCEPT IF: (1) width on a 1080p capture is 2–4 px at zoom 6, 12 and 20; (2) mean line pixel is within
   ΔE 6 of sRGB (166,32,28) on ground with L* 25–35; (3) unbroken across the river at both board
   edges of River; (4) at least 3 px of ground between it and a move-only contour on an edge cell
@@ -117,6 +126,10 @@ CONTENT: the board uses 7 quads/tile (98 tris/tile), and 1 728 ring tiles at tha
   50 % at 3–9 tiles; none beyond 9 tiles (haze ≥ 84 %), where forest is a dark canopy texture. Trees
   share the board's MultiMesh where possible. Ground texture detail finer than 0.3 m can drop
   beyond 4 tiles, since nothing under 28–34 cm/px resolves there.
+  Ring cells with water or a bank slope (`TerrainHeight.bank_cells`) take the board's 7 quads/tile
+  at any distance: a coarse quad over a river bed rises above the water plane and hides the water
+  along straight triangle edges, and the bank masks are vertex values that a coarse quad cannot
+  shape. Measured extra tris with this rule: River 25.4k, Crossroads 18.8k, Ridge 17.7k.
 ACCEPT IF: ≤ 20k extra tris and ≤ 6 extra draw calls at zoom 20; no visible seam or density step at
   the board edge at zoom 6; faceting is visible only where haze is ≥ 50 %.
 ```

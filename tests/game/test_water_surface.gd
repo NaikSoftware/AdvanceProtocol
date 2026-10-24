@@ -86,14 +86,25 @@ func test_rebuild_keeps_the_probe_and_the_water_node() -> void:
 	assert_true(water.visible, "підірваний міст — вода")
 
 
-func test_water_plane_lies_at_the_water_level_over_the_board() -> void:
-	view.build(_river())
+## Площина лежить на рівні води над усіма клітинками води з запасом у клітинку, але в межах
+## дошки: за ними вона лише рахувала б фрагменти, які однаково відкидає.
+func test_water_plane_lies_at_the_water_level_over_the_water_cells() -> void:
+	var board: Board = _river()
+	view.build(board)
 	var water: WaterSurface = _waters()[0]
 	var aabb: AABB = water.transform * water.get_aabb()
+	var z0: int = board.height
+	var z1: int = -1
+	for i in board.tiles.size():
+		if WaterSurface._is_water(board, Vector2i(i % board.width, i / board.width)):
+			z0 = mini(z0, i / board.width)
+			z1 = maxi(z1, i / board.width)
 	assert_almost_eq(aabb.position.y, TerrainHeight.WATER_LEVEL, 0.0001)
-	assert_almost_eq(aabb.position.x, -0.5, 0.0001)
+	assert_almost_eq(aabb.position.x, -0.5, 0.0001, "річка River тече від краю до краю")
 	assert_almost_eq(aabb.end.x, 25.5, 0.0001)
-	assert_almost_eq(aabb.end.z, 21.5, 0.0001)
+	assert_almost_eq(aabb.position.z, maxf(z0 - 1.5, -0.5), 0.0001)
+	assert_almost_eq(aabb.end.z, minf(z1 + 1.5, 21.5), 0.0001)
+	assert_lt(aabb.size.z, 22.0, "уся дошка площиною не вкрита")
 	assert_eq(water.layers, 1)
 	assert_eq(water.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 

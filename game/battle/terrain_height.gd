@@ -67,6 +67,8 @@ const _LN2: float = 0.6931472
 const _CURV_RANGE: float = 1.5 * M
 ## Дорога глаже за поле, але не геометрично плоска: слідує за ґрунтом.
 const _ROAD_DAMP: float = 0.9
+## Смуга за краєм дошки (клітинок), де вісь річки дошки переходить у вісь світу з кільцем.
+const _COURSE_BLEND: float = 1.5
 
 ## Поточна карта висот бою. Одна на процес: BoardView ставить її в build() і знімає, виходячи
 ## зі сцени; без неї (тести, меню) все лежить на y = 0.
@@ -187,6 +189,21 @@ func min_height() -> float:
 
 func max_height() -> float:
 	return _max
+
+
+## Клітинки (координати дошки) з водою чи схилом берега хоча б в одному відліку, разом із
+## відліками на межі клітинки: там меш кільця мусить мати густоту дошки (`Surroundings.ground_mesh`).
+func bank_cells() -> Dictionary:
+	var out: Dictionary = {}
+	for k in _water.size():
+		if _water[k] <= 0.0:
+			continue
+		var i: int = k % cols
+		var j: int = k / cols
+		for cx: int in [i / samples, (i - 1) / samples]:
+			for cz: int in [j / samples, (j - 1) / samples]:
+				out[Vector2i(cx - margin, cz - margin)] = true
+	return out
 
 
 ## Одиничний нормаль поверхні (скінченні різниці на кроці одного відліку).
@@ -372,6 +389,8 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	if has_water:
 		course = RiverCourse.build(_wgrid, bw, bh, margin + 3, _groups, seed_value, _shift)
 		var fld: Array[PackedFloat32Array] = course.field(cols, rows, s, margin, _RIVER_STEP)
+		if _shift > 0:
+			_keep_board_course(fld, seed_value)
 		dc = fld[0]
 		bc = fld[1]
 		# Спершу об'єднання капсул і дисків, потім згладжування його знакового поля, і лише тоді
@@ -482,6 +501,53 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	for k in _h.size():
 		_curv[k] = clampf((_h[k] - soft[k]) / _CURV_RANGE, -1.0, 1.0)
 	_bake_decks(board)
+
+
+## Річка на дошці — та сама, що й без кільця: вісь світу інша (скелет довшої маски, медіана
+## ширини по всій довжині, інший крок перевибірки), і без цього вода дошки звужувалась би в
+## клітинках, які правила вважають водою. Поле — об'єднання (мінімум) двох: поле осі дошки
+## згасає за `_COURSE_BLEND` клітинок поза дошкою, поле осі світу з'являється за стільки ж
+## усередині й на самому краю діє повністю. Не змішування: ставок, що його вісь дошки закриває
+## на краю, а вода кільця продовжує, у змішуванні розпався б на два. Вісь світу лише додає воду
+## біля краю: клітинки води дошки не сохнуть, а центри клітинок суші вона й сама обходить.
+func _keep_board_course(fld: Array[PackedFloat32Array], seed_value: int) -> void:
+	var sw: int = board_width - 2 * _shift
+	var sh: int = board_height - 2 * _shift
+	var sub := PackedByteArray()
+	sub.resize(sw * sh)
+	for cy in sh:
+		for cx in sw:
+			sub[cy * sw + cx] = _wgrid[(cy + _shift) * board_width + cx + _shift]
+	var off := Vector2i(_shift, _shift)
+	var groups: Array[Dictionary] = []
+	for g in _groups:
+		var cells: Array[Vector2i] = []
+		var inside := true
+		for c: Vector2i in g["cells"]:
+			inside = inside and c.x >= _shift and c.y >= _shift and c.x < _shift + sw and c.y < _shift + sh
+			cells.append(c - off)
+		if inside:
+			var bg: Dictionary = g.duplicate()
+			bg["cells"] = cells
+			bg["centre"] = (g["centre"] as Vector2) - Vector2(off)
+			groups.append(bg)
+	var own: RiverCourse = RiverCourse.build(sub, sw, sh, 3, groups, seed_value)
+	var ofld: Array[PackedFloat32Array] = own.field(cols, rows, samples, margin + _shift, _RIVER_STEP)
+	var cw: int = (cols - 1 + _RIVER_STEP - 1) / _RIVER_STEP + 1
+	var cstep: float = float(_RIVER_STEP) / float(samples)
+	var size := Vector2i(sw, sh)
+	var half := Vector2(size) * 0.5
+	for k in fld[0].size():
+		var p := Vector2(-0.5 - margin - _shift + (k % cw) * cstep, -0.5 - margin - _shift + (k / cw) * cstep)
+		var q: Vector2 = (p - (half - Vector2(0.5, 0.5))).abs() - half
+		var out: float = Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() + minf(maxf(q.x, q.y), 0.0)
+		var fade_board: float = RiverCourse.FAR * smoothstep(0.0, _COURSE_BLEND, out)
+		var fade_world: float = RiverCourse.FAR * (1.0 - smoothstep(-_COURSE_BLEND, 0.0, out))
+		var db: float = ofld[0][k] + fade_board
+		var dw: float = fld[0][k] + fade_world
+		fld[1][k] = lerpf(ofld[1][k], fld[1][k], smoothstep(-_COURSE_BLEND, _COURSE_BLEND, out))
+		fld[0][k] = minf(db, dw)
+		fld[2][k] = minf(ofld[2][k] + fade_board, fld[2][k] + fade_world)
 
 
 ## Переправи для осі річки: зв'язні групи клітинок мосту; вісь настилу — та, де обидва кінці

@@ -35,17 +35,6 @@ func test_haze_is_clear_to_3_tiles_half_at_7_and_full_at_11() -> void:
 	assert_eq(Surroundings.haze(0.0), 0.0, "дошка без серпанку")
 
 
-## Біля дошки тон землі не змінюється зовсім: затемнення йде лише разом із серпанком.
-func test_grade_starts_only_with_the_haze_and_follows_its_curve() -> void:
-	for d: float in [0.0, 0.5, 1.0, 2.0, 3.0]:
-		assert_eq(Surroundings.grade(d), 0.0, "%.1f клітинки від дошки" % d)
-	for d: float in [4.0, 7.0, 10.0, 11.0]:
-		assert_eq(Surroundings.grade(d), Surroundings.haze(d))
-	# Яскравість −20 %, насиченість −35 %: у межах брифу (−15…−25 % і −30…−45 %).
-	assert_between(Surroundings.GRADE_LUMA, 0.75, 0.85)
-	assert_between(Surroundings.GRADE_SAT, 0.55, 0.7)
-
-
 func test_world_board_takes_live_board_kinds_and_the_authored_ring() -> void:
 	var m: MapData = load("res://maps/river.tres")
 	var b: Board = m.to_board()
@@ -129,6 +118,34 @@ func test_ring_mesh_snaps_every_t_junction_onto_the_coarse_edge() -> void:
 	assert_gt(snapped, 0, "стики смуг є")
 
 
+## Грубий квад кільця над руслом закривав би воду прямими ребрами: клітинка з водою чи схилом
+## берега має густоту дошки, а суха клітинка далеко від води — своєї смуги.
+func test_ring_cells_with_water_or_bank_get_the_board_density() -> void:
+	var w: Array = _world("res://maps/river.tres")
+	var b: Board = w[1]
+	var t: TerrainHeight = w[3]
+	var size := Vector2i(b.width, b.height)
+	var fine: Dictionary = t.bank_cells()
+	var ring := 0
+	for c: Vector2i in fine:
+		if b.in_bounds(c):
+			continue
+		ring += 1
+		assert_eq(Surroundings.quads_for(c, size, t.samples, fine), t.samples, "клітинка %s" % c)
+	assert_gt(ring, 0, "річка тече крізь кільце")
+	var mg: int = Surroundings.ring_of(w[0])
+	for cy in range(-mg, b.height + mg):
+		for cx in range(-mg, b.width + mg):
+			var wet := false
+			for j in 8:
+				for i in 8:
+					wet = wet or t.at(cx - 0.5 + i / 7.0, cy - 0.5 + j / 7.0) < TerrainHeight.WATER_LEVEL
+			if wet and not fine.has(Vector2i(cx, cy)):
+				fail_test("клітинка з водою %s без густоти дошки" % Vector2i(cx, cy))
+				return
+	assert_eq(Surroundings.quads_for(Vector2i(-11, -11), size, t.samples, fine), Surroundings.FAR_QUADS)
+
+
 ## Ті самі інваріанти, що й у test_terrain_height.gd для дошки без кільця: правила бачать воду там,
 ## де її показує рельєф, а юніт у центрі клітинки суші стоїть на сухому.
 func test_world_bake_keeps_water_and_land_invariants_on_the_board() -> void:
@@ -144,9 +161,8 @@ func test_world_bake_keeps_water_and_land_invariants_on_the_board() -> void:
 					for j in 11:
 						for i in 11:
 							wet += 1 if t.at(x - 0.5 + i * 0.1, y - 0.5 + j * 0.1) < TerrainHeight.WATER_LEVEL else 0
-					# 30 зі 121 відліку, на один менше за чверть: River (14,9) біля мосту, де берег не
-					# розсувається, і (1,13), куди річка кільця вже не заходить. Один відлік сітки 11×11 — допуск.
-					assert_gte(wet, 30, "%s: клітинка води %s — %d зі 121 відліку" % [path, c, wet])
+					# Чверть зі 121 відліку, як і без кільця (test_terrain_height.gd).
+					assert_gte(wet, 31, "%s: клітинка води %s — %d зі 121 відліку" % [path, c, wet])
 				else:
 					for r10 in 4:
 						for k in 16:

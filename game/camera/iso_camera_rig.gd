@@ -30,6 +30,12 @@ const PITCH_FAR_DEG: float = 55.0
 ## §3.13/§1: панорама обмежена межами дошки з полем в 2 тайли — гравець не
 ## може завести камеру за край карти навіть на максимальному зумі.
 const BOARD_MARGIN: float = 2.0
+## Поле на найбільшому віддаленні від'ємне: фокус не ближче 3 клітинок до краю. Крайні клітинки
+## й так лишаються в кадрі, а фокус на краю чи за ним віддавав би 34–52 % кадру рівному серпанку
+## за кільцем (3 клітинки всередину — ≤ 30 % і на 20:9). Між зумами поле спадає за квадратом
+## частки зуму (`pan_margin`): на типовому зумі 12 воно ще +1.1, і юніт на крайній клітинці
+## стає в центр кадру.
+const BOARD_MARGIN_FAR: float = -3.0
 ## R13: єдине джерело правди для 45° — сцена бере його звідси в _ready(),
 ## а pan() (через проекцію променя, нижче) відображає той самий кут, не
 ## повторюючи його вдруге власною формулою.
@@ -412,10 +418,16 @@ func _notify_view_changed() -> void:
 	_reported_zoom = zoom_level
 	view_changed.emit()
 
+## Поле пана за крайніми клітинками на поточному зумі.
+func pan_margin() -> float:
+	var t: float = clampf(inverse_lerp(MIN_ZOOM, MAX_ZOOM, zoom_level), 0.0, 1.0)
+	return lerpf(BOARD_MARGIN, BOARD_MARGIN_FAR, t * t)
+
 func _clamp_to_bounds(pos: Vector3) -> Vector3:
-	var min_edge: float = -BOARD_MARGIN
-	var max_x: float = float(_max_cell.x) + BOARD_MARGIN
-	var max_z: float = float(_max_cell.y) + BOARD_MARGIN
+	var margin: float = pan_margin()
+	var min_edge: float = -margin
+	var max_x: float = float(_max_cell.x) + margin
+	var max_z: float = float(_max_cell.y) + margin
 	var x: float = clampf(pos.x, min_edge, max_x)
 	var z: float = clampf(pos.z, min_edge, max_z)
 	# Фокус слідує за землею: центр екрана лежить на поверхні, а не на площині під пагорбом.
