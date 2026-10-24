@@ -179,3 +179,11 @@ listed at the end; do not copy them.
 задеплоїти → розгорнути · дебажити → налагоджувати · залити (push) → надіслати, `push` ·
 змерджити → злити · емітить → надсилає · гейтить → закриває гейтом, обмежує ·
 пришпилює → фіксує · крешнутись → впасти.
+
+## Серпанок на краю світу
+
+| English | Українська | note |
+| --- | --- | --- |
+| fog lobes, billows, puffs | клуби (серпанку) | never «лоби»: calque, and «лоб» is front armour |
+| wisps, strands | пасма | |
+| world-edge haze | серпанок | «туман» is only the fog of war |
