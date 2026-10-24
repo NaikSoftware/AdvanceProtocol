@@ -75,8 +75,8 @@ static func quads_for(cell: Vector2i, size: Vector2i, board_quads: int) -> int:
 
 ## Меш землі світу: клітинка за клітинкою, кожна — сітка n×n квадів своєї смуги, вершини відносно
 ## центру дошки (там стоїть вузол землі). Вершина дрібної клітинки на ребрі з грубшою сусідкою несе
-## кінці грубого ребра (UV, UV2) і частку між ними (COLOR.r, COLOR.a = 1): шейдер кладе її на те
-## саме ребро, тож Т-з'єднання не дає щілини.
+## кінці грубого ребра (UV, UV2) і позначку COLOR.a = 1: шейдер бере висоту з того самого ребра,
+## тож Т-з'єднання не дає щілини.
 static func ground_mesh(size: Vector2i, ring: int, board_quads: int) -> ArrayMesh:
 	var centre := Vector2(size - Vector2i.ONE) * 0.5
 	var verts := PackedVector3Array()
@@ -105,7 +105,7 @@ static func ground_mesh(size: Vector2i, ring: int, board_quads: int) -> ArrayMes
 					var f := Vector2(float(i) / n, float(j) / n)
 					var p: Vector2 = o + f
 					verts.append(Vector3(p.x, 0.0, p.y))
-					var snap := Vector3.ZERO
+					var snap := 0.0
 					if j == 0 and up < n:
 						snap = _snap(f.x, up, o, Vector2(1, 0), Vector2.ZERO, uv, uv2)
 					elif j == n and down < n:
@@ -117,7 +117,7 @@ static func ground_mesh(size: Vector2i, ring: int, board_quads: int) -> ArrayMes
 					else:
 						uv.append(p)
 						uv2.append(p)
-					colors.append(Color(snap.x, 0.0, 0.0, snap.z))
+					colors.append(Color(0.0, 0.0, 0.0, snap))
 			for j in n:
 				for i in n:
 					var a: int = base + j * (n + 1) + i
@@ -142,13 +142,13 @@ static func ground_mesh(size: Vector2i, ring: int, board_quads: int) -> ArrayMes
 	return mesh
 
 
-## Кінці грубого ребра (m квадів) довкола частки s уздовж осі along; повертає (t, 0, 1).
-static func _snap(s: float, m: int, o: Vector2, along: Vector2, edge: Vector2, uv: PackedVector2Array, uv2: PackedVector2Array) -> Vector3:
+## Кінці грубого ребра (m квадів) довкола частки s уздовж осі along; повертає позначку 1.
+static func _snap(s: float, m: int, o: Vector2, along: Vector2, edge: Vector2, uv: PackedVector2Array, uv2: PackedVector2Array) -> float:
 	var k: int = mini(floori(s * m), m - 1)
 	var a: Vector2 = o + edge + along * (float(k) / m)
 	uv.append(a)
 	uv2.append(a + along / float(m))
-	return Vector3(s * m - k, 0.0, 1.0)
+	return 1.0
 
 
 ## Відстань (клітинки) від прямокутника дошки, евклідова: кути заокруглені, діагонального шва нема.

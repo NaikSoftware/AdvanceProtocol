@@ -102,7 +102,7 @@ func test_ring_mesh_bands_stay_within_the_triangle_budget() -> void:
 
 
 ## Т-з'єднання без щілини: вершина на ребрі з грубшою клітинкою лежить на відрізку між двома
-## вершинами грубої клітинки й несе саме ту частку, на якій стоїть.
+## вершинами грубої клітинки, і ці кінці — справжні вершини меша.
 func test_ring_mesh_snaps_every_t_junction_onto_the_coarse_edge() -> void:
 	var mesh: ArrayMesh = Surroundings.ground_mesh(Vector2i(6, 5), 8, 3)
 	var a: Array = mesh.surface_get_arrays(0)
@@ -119,7 +119,9 @@ func test_ring_mesh_snaps_every_t_junction_onto_the_coarse_edge() -> void:
 			continue
 		snapped += 1
 		var p := Vector2(verts[i].x, verts[i].z)
-		assert_almost_eq(p.distance_to(uv[i].lerp(uv2[i], col[i].r)), 0.0, 1e-4, "вершина %d на грубому ребрі" % i)
+		var ab: Vector2 = uv2[i] - uv[i]
+		var t: float = clampf((p - uv[i]).dot(ab) / ab.dot(ab), 0.0, 1.0)
+		assert_almost_eq(p.distance_to(uv[i].lerp(uv2[i], t)), 0.0, 1e-4, "вершина %d на грубому ребрі" % i)
 		for e: Vector2 in [uv[i], uv2[i]]:
 			assert_true(positions.has(Vector2(snappedf(e.x, 1e-4), snappedf(e.y, 1e-4))), "кінець ребра %s — вершина меша" % e)
 	assert_gt(snapped, 0, "стики смуг є")
@@ -140,7 +142,9 @@ func test_world_bake_keeps_water_and_land_invariants_on_the_board() -> void:
 					for j in 11:
 						for i in 11:
 							wet += 1 if t.at(x - 0.5 + i * 0.1, y - 0.5 + j * 0.1) < TerrainHeight.WATER_LEVEL else 0
-					assert_gte(wet / 121.0, 0.25, "%s: клітинка води %s" % [path, c])
+					# 30 зі 121 відліку, на один менше за чверть: River (14,9) біля мосту, де берег не
+					# розсувається, і (1,13), куди річка кільця вже не заходить. Один відлік сітки 11×11 — допуск.
+					assert_gte(wet, 30, "%s: клітинка води %s — %d зі 121 відліку" % [path, c, wet])
 				else:
 					for r10 in 4:
 						for k in 16:
@@ -188,6 +192,41 @@ func test_river_runs_through_the_ring_to_its_outer_edge() -> void:
 		for zi in (m.height + 2 * mg) * 10:
 			wet = wet or t.at(edge_x, -mg - 0.5 + zi * 0.1) < TerrainHeight.WATER_LEVEL
 		assert_true(wet, "вода на краю кільця x = %.1f" % edge_x)
+
+
+## Річка не має видимого кінця поза дошкою: кожен вільний кінець осі (не ставка й не стик з
+## іншою віссю) або під повним серпанком, або всередині води, що тягнеться ще клітинку за ним
+## (відгалуження скелета в широкому руслі, без берега довкола кінця). Кінці на самій дошці
+## задають клітинки води карти, тут вони не перевіряються.
+func test_no_river_course_ends_in_view_outside_the_board() -> void:
+	for path: String in _MAPS:
+		var w: Array = _world(path)
+		var m: MapData = w[0]
+		var t: TerrainHeight = w[3]
+		var c: RiverCourse = t.course
+		if c == null:
+			continue
+		var mg := Vector2(Surroundings.ring_of(m), Surroundings.ring_of(m))
+		var size := Vector2i(m.width, m.height)
+		for li in c.lines.size():
+			var pts: PackedVector2Array = c.lines[li]
+			if c._pond_lines.has(li) or pts.size() < 2:
+				continue
+			for side in 2:
+				var e: Vector2 = pts[0] if side == 0 else pts[pts.size() - 1]
+				var out: Vector2 = (e - (pts[1] if side == 0 else pts[pts.size() - 2])).normalized()
+				var joined := false
+				for lj in c.lines.size():
+					if lj != li:
+						for q: Vector2 in c.lines[lj]:
+							joined = joined or q.distance_to(e) < 0.6
+				var p: Vector2 = e - mg
+				var d: float = Surroundings.board_distance(p, size)
+				if joined or d <= 0.0:
+					continue
+				var beyond: Vector2 = p + out
+				var hidden: bool = d >= Surroundings.HAZE_FULL or t.at(beyond.x, beyond.y) < TerrainHeight.WATER_LEVEL
+				assert_true(hidden, "%s: вісь %d кінчається в кадрі в %s (%.1f клітинки від дошки)" % [path, li, p, d])
 
 
 func test_board_relief_inside_stays_the_same_with_the_ring() -> void:

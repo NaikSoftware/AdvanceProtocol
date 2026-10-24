@@ -336,8 +336,8 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 // різниці на кроці одного відліку.
 uniform bool use_height = false;
 // Меш кільця (Surroundings.ground_mesh): вершина дрібної клітинки на ребрі з грубшою лягає на
-// пряму грубого ребра — кінці в UV і UV2, частка в COLOR.r, позначка COLOR.a = 1. Без цього між
-// смугами різної густоти були б щілини.
+// пряму грубого ребра — кінці в UV і UV2, позначка COLOR.a = 1. Без цього між смугами різної
+// густоти були б щілини.
 uniform bool snap_edges = false;
 uniform sampler2D height_map : filter_linear, repeat_disable;
 uniform float height_samples = 4.0;
@@ -363,7 +363,12 @@ void vertex() {
 		vec2 q = VERTEX.xz;
 		float e = 1.0 / height_samples;
 		vec4 hm = height_at(q);
-		VERTEX.y = snap_edges && COLOR.a > 0.5 ? mix(height_at(UV).r, height_at(UV2).r, COLOR.r) : hm.r;
+		VERTEX.y = hm.r;
+		if (snap_edges && COLOR.a > 0.5) {
+			// Частка — з позиції, а не з COLOR: колір вершини 8-бітний, і частка 1/255 зсунула б точку з ребра.
+			vec2 ab = UV2 - UV;
+			VERTEX.y = mix(height_at(UV).r, height_at(UV2).r, clamp(dot(q - UV, ab) / dot(ab, ab), 0.0, 1.0));
+		}
 		float hl = height_at(q - vec2(e, 0.0)).r;
 		float hr = height_at(q + vec2(e, 0.0)).r;
 		vec3 n = normalize(vec3(hl - hr, 2.0 * e, height_at(q - vec2(0.0, e)).r - height_at(q + vec2(0.0, e)).r));
