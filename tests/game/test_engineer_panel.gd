@@ -10,7 +10,7 @@ const ENGINEER: int = 11
 const A := EngineerCommand.Action
 
 ## Golden: підписи кнопок англійською, у порядку EngineerCommand.Action. Без ціни:
-## кожна верба коштує той самий fire_cost — рядок ціни був шумом (власник).
+## кожна верба коштує той самий fire_cost — окремий рядок ціни нічого не додає.
 const EN_LABELS: Array[String] = [
 	"Lay mine", "Clear mine", "Repair bridge", "Demolish bridge", "Repair unit",
 ]
@@ -20,7 +20,6 @@ const EN_HINTS: Array[String] = [
 	"Tap an adjacent broken bridge to repair it", "Tap an adjacent bridge to demolish it",
 	"Tap an adjacent friendly unit to repair it",
 ]
-## Верби цілей на панелі немає: механіку цілей прибирає окрема задача (рішення власника).
 const VERBS: Array[int] = [A.LAY_MINE, A.CLEAR_MINE, A.REPAIR_BRIDGE, A.DEMOLISH_BRIDGE, A.REPAIR_UNIT]
 
 var _service: Node

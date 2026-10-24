@@ -116,7 +116,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE:
 				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE_DESTROYED)
 				out.append(Events.BridgeChanged.new(target_pos, true))
-				# Ворог на мосту падає разом із ним (рішення власника): та сама низка
+				# Ворог на мосту падає разом із ним: та сама низка
 				# подій, що й від смертельного влучання. Шкода — власникові інженера, як
 				# від міни.
 				var victim: Unit = state.unit_at(target_pos)

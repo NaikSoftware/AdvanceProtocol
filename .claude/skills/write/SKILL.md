@@ -49,6 +49,9 @@ When editing a file, keep the language it is already in — a mixed-language fil
   robust, seamless, powerful; «в принципі», «варто зазначити», «по суті».
 - **The code describes itself as it is now.** History ("раніше тут…", "fixed the bug where…")
   belongs in the commit message.
+- **No provenance in code or docs.** Never «рішення власника», "owner decision", a date, a phase
+  or task number (`Task 8`, `Phase 5a`), or "було 40, стало 96". A rule stands on its reason,
+  not on who decided it or when; write the reason, or nothing.
 - **Bold is rare** — the one thing a skimming reader must not miss.
 - **No real armies, nations, insignia or identifiable vehicles** in any text (CLAUDE.md §2).
 
@@ -197,7 +200,7 @@ Title: one Ukrainian phrase naming the user-visible result — no type prefix (r
 | turn | хід | |
 | hot-seat | гра на одному пристрої | |
 | handover gate | гейт передачі | dev word; the UI says «Передайте пристрій» |
-| action points | запас ходу, `AP` | owner's term (2026-10-18); never «ОД» / «очки дії» |
+| action points | запас ходу, `AP` | never «ОД» / «очки дії» |
 | shot / fire | постріл / вогонь | |
 | retaliation | вогонь у відповідь, постріл у відповідь | military usage |
 | facing | напрям, `facing` | turning = поворот |

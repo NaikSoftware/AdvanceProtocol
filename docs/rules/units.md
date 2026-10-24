@@ -33,7 +33,7 @@ Balance table. **`core/unit_types.gd` is the source of truth**; this table is do
 | 10 | howitzer | ARTY | 180 | 24 | 200 | 5 | 14 | 15/0/0 | 6 | 3 |
 | 11 | engineer vehicle | ENG | 0 | 76 | 200 | 1 | 30 | 10/5/5 | −5 | 3 |
 
-There is no engineer squad (owner decision): the only engineer is the vehicle, so mud slows it like
+There is no engineer squad: the only engineer is the vehicle, so mud slows it like
 any other vehicle (§3.12).
 
 Squad-level units (infantry) are **one asset per tile** — one mesh, one draw call, one
@@ -73,7 +73,7 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
 - **Lay mine** / **clear mine**
 - **Repair or demolish a bridge** — a demolished crossing reshapes the whole map, and this is the
   single highest-impact action in the game
-  - **An enemy unit on the bridge goes down with it** (owner decision): it is destroyed outright,
+  - **An enemy unit on the bridge goes down with it**: it is destroyed outright,
     with the same events as a lethal hit, and its remaining HP is credited to the engineer's owner
     as damage dealt. Elimination is checked at once.
   - **A friendly unit on the bridge forbids the demolition** (`ERR_TILE_OCCUPIED`).

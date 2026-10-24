@@ -2,7 +2,7 @@
 
 The owner says the dirt road and the hill/rubble patch beside the river on the River map look "strange and unnatural". Both show streaky texture smeared in one direction. visual-critic also saw a cell-aligned field rectangle, stripes on a hill top, and road and field textures that follow the cell grid.
 
-Owner decision: **the terrain look is decoupled from the tile grid.** Cells exist only for the rules and pathfinding. A tile may show several surfaces, and no grid may be visible anywhere.
+**The terrain look is decoupled from the tile grid.** Cells exist only for the rules and pathfinding. A tile may show several surfaces, and no grid may be visible anywhere.
 
 This document diagnoses the renderer (`game/battle/shaders/ground.gdshader`), gives measured real-world numbers, and sets a brief a screenshot can be checked against. It complements [ground-texture-research.md](ground-texture-research.md), whose CC0 decisions stand (see "CC0 decisions").
 

@@ -70,7 +70,7 @@ open and is then told they cannot see it will read the game as broken.
   the same diamond as tile fog (§3.1), so a revealed mine is always on a tile you can actually
   see. Visibility is **per player**, tracked on the mine, exactly like tile fog.
 - Driving onto an unrevealed mine detonates it.
-- **A known enemy mine is an obstacle** (owner decision): planning treats it like an occupied tile,
+- **A known enemy mine is an obstacle**: planning treats it like an occupied tile,
   so routes and both movement zones bend around it and its tile is not a legal destination. Your
   own mines never are.
 - **An engineer that finds a mine on its route mid-walk stops in front of it**, with the same halt
