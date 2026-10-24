@@ -37,22 +37,28 @@ func _ready() -> void:
 	plane.size = Vector2(FIELD_HALF * 2.0, FIELD_HALF * 2.0)
 	field.mesh = plane
 	var fm := StandardMaterial3D.new()
-	fm.albedo_color = Color(0.36, 0.42, 0.24)
-	fm.roughness = 1.0
+	# мокра приглушена сіра трава: ґрунт River L* 24–34, майже без насиченості
+	fm.albedo_color = Color(0.20, 0.23, 0.18)
+	fm.roughness = 0.55
 	field.material_override = fm
 	field.position = Vector3(cell.x, 0.0, cell.y)
 	add_child(field)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-50.0, -30.0, 0.0)
+	# похмуре м'яке світло: слабке пряме, сильне розсіяне, тінь прозора
+	sun.rotation_degrees = Vector3(-60.0, -30.0, 0.0)
+	sun.light_energy = 0.55
 	sun.shadow_enabled = true
+	sun.shadow_opacity = 0.55
+	sun.shadow_blur = 2.5
 	add_child(sun)
 	var env := WorldEnvironment.new()
 	env.environment = Environment.new()
 	env.environment.background_mode = Environment.BG_COLOR
-	env.environment.background_color = Color(0.55, 0.58, 0.6)
+	env.environment.background_color = Color(0.44, 0.47, 0.5)
 	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.environment.ambient_light_color = Color(0.7, 0.72, 0.75)
+	env.environment.ambient_light_color = Color(0.62, 0.65, 0.68)
+	env.environment.ambient_light_energy = 1.0
 	add_child(env)
 
 	for n in names:
@@ -64,10 +70,13 @@ func _ready() -> void:
 		inst.position = Vector3(cell.x, 0.0, cell.y)
 		add_child(inst)
 		print("PROP %s tris=%d" % [n, _triangles(inst)])
+		var tank := _tank_box(inst, cell)
+		add_child(tank)
 		rig.center_on(cell)
 		await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s.png" % [out, n])
 		await _shoot(rig, IsoCameraRig.MAX_ZOOM, "%s/%s_far.png" % [out, n])
 		inst.queue_free()
+		tank.queue_free()
 	get_tree().quit()
 
 func _shoot(rig: IsoCameraRig, zoom: float, path: String) -> void:
@@ -87,3 +96,20 @@ func _triangles(root: Node) -> int:
 			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
 			t += (idx.size() if not idx.is_empty() else (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
 	return t
+
+## Масштабна коробка танка 0.9 x 0.45 x 0.3 тайла поруч із об'єктом: за нею видно, чи об'єкт у масштабі.
+func _tank_box(inst: Node3D, cell: Vector2i) -> MeshInstance3D:
+	var right: float = 0.0
+	for m in inst.find_children("*", "MeshInstance3D", true, false):
+		var b: AABB = (m as MeshInstance3D).global_transform * (m as MeshInstance3D).get_aabb()
+		right = maxf(right, b.end.x - cell.x)
+	var box := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.45, 0.3, 0.9)
+	box.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.25, 0.27, 0.21)
+	mat.roughness = 0.8
+	box.material_override = mat
+	box.position = Vector3(cell.x + right + 0.35, 0.15, cell.y)
+	return box
