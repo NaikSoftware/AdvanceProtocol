@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://y24qvue1oj32"
-path.s3tc="res://.godot/imported/field_albedo_1.png-e9f706a5d52a8bb92742f424c974c309.s3tc.ctex"
-path.etc2="res://.godot/imported/field_albedo_1.png-e9f706a5d52a8bb92742f424c974c309.etc2.ctex"
+uid="uid://55v6mip4k30g"
+path.s3tc="res://.godot/imported/ploughed_albedo_0.png-2c3cd4937f5d2025a9a236b21f47f3cb.s3tc.ctex"
+path.etc2="res://.godot/imported/ploughed_albedo_0.png-2c3cd4937f5d2025a9a236b21f47f3cb.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://assets/terrain/macro/field_albedo_1.png"
-dest_files=["res://.godot/imported/field_albedo_1.png-e9f706a5d52a8bb92742f424c974c309.s3tc.ctex", "res://.godot/imported/field_albedo_1.png-e9f706a5d52a8bb92742f424c974c309.etc2.ctex"]
+source_file="res://assets/terrain/macro/ploughed_albedo_0.png"
+dest_files=["res://.godot/imported/ploughed_albedo_0.png-2c3cd4937f5d2025a9a236b21f47f3cb.s3tc.ctex", "res://.godot/imported/ploughed_albedo_0.png-2c3cd4937f5d2025a9a236b21f47f3cb.etc2.ctex"]
 
 [params]
 
