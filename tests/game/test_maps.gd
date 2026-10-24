@@ -8,6 +8,10 @@ const MAPS_DIR: String = "res://maps"
 ## Найдальший постріл ростеру — артилерія й дрон штурмового відділення, обидва 5.
 const MAX_REACH: int = 5
 const LOCALES: Array[String] = ["uk", "en"]
+## Карти з симетрією на 180°. Решту рівняє не форма, а test_map_sides_are_balanced.
+const SYMMETRIC_MAPS: Array[String] = ["res://maps/crossroads.tres", "res://maps/ridge.tres"]
+const PACE_TOL: float = 0.05
+const COUNT_TOL: float = 0.15
 
 
 static func _map_paths() -> Array:
@@ -115,7 +119,7 @@ func test_exactly_the_three_new_maps() -> void:
 
 
 ## Симетрія на 180° — гарантія чесності: кожен гравець має дзеркально ту саму позицію.
-func test_map_is_180_degree_symmetric(p = use_parameters(_map_paths())) -> void:
+func test_map_is_180_degree_symmetric(p = use_parameters(SYMMETRIC_MAPS)) -> void:
 	var path: String = p
 	var m: MapData = load(path) as MapData
 	var odd: Array[Vector2i] = []
@@ -155,7 +159,7 @@ func test_map_has_the_six_unit_set_per_side(p = use_parameters(_map_paths())) ->
 
 ## Ціна найдешевшого шляху (4 напрямки) за справжньою формулою входу. Тайл,
 ## дорожчий за повний запас AP, юніт не здатен увійти ніколи — він для нього стіна.
-func _path_cost(unit: Unit, board: Board, from: Vector2i, to: Vector2i) -> int:
+func _path_cost(unit: Unit, board: Board, from: Vector2i, to: Array[Vector2i]) -> int:
 	var dist: Dictionary = {from: 0}
 	var frontier: Array[Vector2i] = [from]
 	while not frontier.is_empty():
@@ -165,7 +169,7 @@ func _path_cost(unit: Unit, board: Board, from: Vector2i, to: Vector2i) -> int:
 				best = i
 		var cur: Vector2i = frontier[best]
 		frontier.remove_at(best)
-		if cur == to:
+		if to.has(cur):
 			return dist[cur]
 		for n in board.neighbours4(cur):
 			var c: int = Rules.entry_cost_at(unit, board, n)
@@ -179,7 +183,8 @@ func _path_cost(unit: Unit, board: Board, from: Vector2i, to: Vector2i) -> int:
 
 
 ## Темп — головна обіцянка нових карт: розвідка сходиться на 2–3 хід, основні сили на 3–4.
-## Міряємо від бази до бази під власним станом ґрунту карти, щоб правка тайлів не розбалансувала її тихо.
+## Міряємо під власним станом ґрунту карти: від бази до бази — межі темпу, від бази до середини —
+## рівність сторін, щоб правка тайлів не розбалансувала карту тихо.
 func test_map_pace(p = use_parameters(_map_paths())) -> void:
 	var path: String = p
 	var m: MapData = load(path) as MapData
@@ -193,11 +198,118 @@ func test_map_pace(p = use_parameters(_map_paths())) -> void:
 		assert_eq(ends.size(), 2, "%s: тип %d" % [path, type_id])
 		if ends.size() != 2:
 			continue
-		var u := Unit.create(0, type_id, 0, ends[0], 0)
-		var cost: int = _path_cost(u, board, ends[0], ends[1])
-		assert_lt(cost, Terrain.IMPASSABLE, "%s: тип %d не доїде до ворожої бази" % [path, type_id])
-		var turns: float = float(cost) / u.max_ap()
-		assert_between(turns, bounds[type_id][0], bounds[type_id][1], "%s: тип %d — %.2f ходу" % [path, type_id, turns])
+		var mid: Array[Vector2i] = _middle(board, ends[0], ends[1])
+		var to_mid: Array[float] = []
+		for o in 2:
+			var u := Unit.create(0, type_id, o, ends[o], 0)
+			var cost: int = _path_cost(u, board, ends[o], [ends[1 - o]] as Array[Vector2i])
+			assert_lt(cost, Terrain.IMPASSABLE, "%s: тип %d гравця %d не доїде до ворожої бази" % [path, type_id, o])
+			var turns: float = float(cost) / u.max_ap()
+			assert_between(turns, bounds[type_id][0], bounds[type_id][1],
+				"%s: тип %d гравця %d — %.2f ходу" % [path, type_id, o, turns])
+			to_mid.append(float(_path_cost(u, board, ends[o], mid)) / u.max_ap())
+		# Шлях від бази до бази однаковий для обох гравців з точністю до ціни входу на самі бази,
+		# тож рівність сторін міряє темп кожного від своєї бази до середини дошки.
+		assert_almost_eq(to_mid[0], to_mid[1], PACE_TOL * maxf(to_mid[0], to_mid[1]),
+			"%s: тип %d — до середини %.2f і %.2f ходу" % [path, type_id, to_mid[0], to_mid[1]])
+
+
+## Середні ряди (або стовпці) дошки між базами: нейтральна смуга, до якої біжать обидва.
+func _middle(board: Board, a: Vector2i, b: Vector2i) -> Array[Vector2i]:
+	var rows: bool = absi(a.y - b.y) >= absi(a.x - b.x)
+	var n: int = board.height if rows else board.width
+	var out: Array[Vector2i] = []
+	for k in range((n - 1) / 2, n / 2 + 1):
+		for i in (board.width if rows else board.height):
+			out.append(Vector2i(i, k) if rows else Vector2i(k, i))
+	return out
+
+
+## Одна 4-зв'язна група клітинок мосту — одна переправа.
+func _bridges(board: Board) -> Array[Array]:
+	var deck: Array = [Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]
+	var out: Array[Array] = []
+	var seen: Dictionary = {}
+	for y in board.height:
+		for x in board.width:
+			var c := Vector2i(x, y)
+			if seen.has(c) or not deck.has(board.kind_at(c)):
+				continue
+			var group: Array[Vector2i] = []
+			var queue: Array[Vector2i] = [c]
+			seen[c] = true
+			while not queue.is_empty():
+				var q: Vector2i = queue.pop_back()
+				group.append(q)
+				for n in board.neighbours4(q):
+					if not seen.has(n) and deck.has(board.kind_at(n)):
+						seen[n] = true
+						queue.append(n)
+			out.append(group)
+	return out
+
+
+## Міст без дороги з одного берега нікуди не веде. Вісь переправи не записана в карті,
+## тож годиться будь-яка вісь, де за обома торцями групи є ROAD.
+func test_every_bridge_has_road_on_both_banks(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var board: Board = (load(path) as MapData).to_board()
+	for group: Array[Vector2i] in _bridges(board):
+		var ok: bool = false
+		for axis: Vector2i in [Vector2i(0, 1), Vector2i(1, 0)]:
+			var road_ahead: bool = false
+			var road_behind: bool = false
+			for c in group:
+				var ahead: Vector2i = c + axis
+				var behind: Vector2i = c - axis
+				road_ahead = road_ahead or (board.in_bounds(ahead) and board.kind_at(ahead) == Terrain.Kind.ROAD)
+				road_behind = road_behind or (board.in_bounds(behind) and board.kind_at(behind) == Terrain.Kind.ROAD)
+			ok = ok or (road_ahead and road_behind)
+		assert_true(ok, "%s: міст %s має дорогу лише з одного берега" % [path, group])
+
+
+func _side_counts(m: MapData, kinds: Array, top: bool) -> int:
+	var n: int = 0
+	var rows: Array = range(0, m.height / 2) if top else range(m.height - m.height / 2, m.height)
+	for y: int in rows:
+		for x in m.width:
+			if kinds.has(m.tiles[y * m.width + x]):
+				n += 1
+	return n
+
+
+## Несиметрична карта чесна, лише якщо в гравців порівнянні переправи за темпом, а на половинах —
+## порівнянна кількість повільних і закритих для техніки клітинок.
+func test_map_sides_are_balanced(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var board: Board = m.to_board()
+	var bridges: Array[Array] = _bridges(board)
+	for type_id: int in [2, 5]:
+		var per_owner: Array = []
+		for s: Dictionary in m.spawns:
+			if int(s["type_id"]) != type_id:
+				continue
+			var u := Unit.create(0, type_id, int(s["owner"]), s["pos"], 0)
+			var turns: Array[float] = []
+			for group: Array[Vector2i] in bridges:
+				turns.append(float(_path_cost(u, board, s["pos"], group)) / u.max_ap())
+			turns.sort()
+			per_owner.append(turns)
+		assert_eq(per_owner.size(), 2, "%s: тип %d" % [path, type_id])
+		if per_owner.size() != 2:
+			continue
+		for i in bridges.size():
+			assert_almost_eq(per_owner[0][i], per_owner[1][i], PACE_TOL * per_owner[0][i],
+				"%s: тип %d, %d-а за близькістю переправа — %.2f і %.2f ходу" % [path, type_id, i + 1,
+					per_owner[0][i], per_owner[1][i]])
+	var slow: Array = [Terrain.Kind.FOREST, Terrain.Kind.HILL]
+	var closed: Array = [Terrain.Kind.WATER, Terrain.Kind.MARSH, Terrain.Kind.BUILDING]
+	for kinds: Array in [slow, closed]:
+		var top: int = _side_counts(m, kinds, true)
+		var bottom: int = _side_counts(m, kinds, false)
+		assert_almost_eq(float(top), float(bottom), COUNT_TOL * maxi(top, bottom),
+			"%s: клітинок %s згори %d, знизу %d" % [path, kinds, top, bottom])
 
 
 ## Косметичний підтип: правил не торкається, але крива сітка — це крива картинка.
@@ -218,7 +330,7 @@ func test_map_surface_is_well_formed(p = use_parameters(_map_paths())) -> void:
 			var i: int = y * m.width + x
 			if m.surface[i] >= MapData.surface_variants(m.tiles[i]):
 				bad.append(Vector2i(x, y))
-			if m.surface[i] != m.surface[(m.height - 1 - y) * m.width + (m.width - 1 - x)]:
+			if SYMMETRIC_MAPS.has(path) and m.surface[i] != m.surface[(m.height - 1 - y) * m.width + (m.width - 1 - x)]:
 				odd.append(Vector2i(x, y))
 	assert_eq(bad.size(), 0, "%s: підтип поза варіантами виду %s" % [path, bad.slice(0, 8)])
 	assert_eq(odd.size(), 0, "%s: підтип без дзеркальної пари %s" % [path, odd.slice(0, 8)])
@@ -253,8 +365,9 @@ func test_map_outer_ring_is_well_formed_and_symmetric(p = use_parameters(_map_pa
 					or s >= MapData.surface_variants(k))):
 				bad.append(Vector2i(x, y))
 			var j: int = oh * ow - 1 - i  # дзеркальна клітинка розширеної сітки
-			if m.outer_kind_at(Vector2i(x, y)) != m.outer_kind_at(Vector2i(m.width - 1 - x, m.height - 1 - y)) \
-					or (not m.outer_surface.is_empty() and m.outer_surface[i] != m.outer_surface[j]):
+			# Симетрію дошки перевіряє test_map_is_180_degree_symmetric, і лише для SYMMETRIC_MAPS.
+			if not inside and (m.outer_kind_at(Vector2i(x, y)) != m.outer_kind_at(Vector2i(m.width - 1 - x, m.height - 1 - y))
+					or (not m.outer_surface.is_empty() and m.outer_surface[i] != m.outer_surface[j])):
 				odd.append(Vector2i(x, y))
 	assert_eq(bad.size(), 0, "%s: криві клітинки кільця %s" % [path, bad.slice(0, 8)])
 	assert_eq(odd.size(), 0, "%s: кільце без дзеркальної пари %s" % [path, odd.slice(0, 8)])
