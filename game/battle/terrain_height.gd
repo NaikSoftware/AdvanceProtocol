@@ -216,7 +216,8 @@ func normal_at(x: float, z: float) -> Vector3:
 ## (маска берега), B — кривизна -1..1 (запечене затінення, §8), A — 0.5 + 0.5 * bend (коса < 0.5 < підмитий берег).
 ## Піксель (i, j) — у світі (-0.5 - відступ + i / samples, ... j / samples).
 func image() -> Image:
-	# Через сирі байти RGBAF і перетворення рушієм: set_pixel на кожен відлік світу з кільцем — сотні мс.
+	# Через сирі байти RGBAF і перетворення рушієм: `set_pixel` на кожен відлік світу з кільцем —
+	# сотні мс.
 	var px := PackedFloat32Array()
 	px.resize(cols * rows * 4)
 	for k in cols * rows:

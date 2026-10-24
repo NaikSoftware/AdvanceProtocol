@@ -377,7 +377,8 @@ void vertex() {
 		vec4 hm = height_at(q);
 		VERTEX.y = hm.r;
 		if (snap_edges && COLOR.a > 0.5) {
-			// Частка — з позиції, а не з COLOR: колір вершини 8-бітний, і частка 1/255 зсунула б точку з ребра.
+			// Частка — з позиції, а не з `COLOR`: колір вершини 8-бітний, і частка 1/255 зсунула б
+			// точку з ребра.
 			vec2 ab = UV2 - UV;
 			VERTEX.y = mix(height_at(UV).r, height_at(UV2).r, clamp(dot(q - UV, ab) / dot(ab, ab), 0.0, 1.0));
 		}

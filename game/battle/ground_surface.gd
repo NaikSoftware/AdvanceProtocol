@@ -94,8 +94,9 @@ var _macro_layers: Array[String] = []
 
 ## surface — MapData.surface (y * width + x), порожній — усюди 0 (типовий вигляд).
 ## height — карта висот (TerrainHeight.bake з тим самим margin); null — плоска земля.
-## ring > 0: board — світ (Surroundings.world_board), на ring клітинок ширший за дошку з кожного
-## боку; земля стоїть у координатах дошки, кільце — смугами грубшого меша (Surroundings.ground_mesh).
+## `ring` > 0: `board` — світ (`Surroundings.world_board`), на `ring` клітинок ширший за дошку з
+## кожного боку; земля стоїть у координатах дошки, кільце — смугами грубшого меша
+## (`Surroundings.ground_mesh`).
 func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray(), height: TerrainHeight = null, ring: int = 0) -> void:
 	var w: int = board.width + 2 * margin
 	var h: int = board.height + 2 * margin
