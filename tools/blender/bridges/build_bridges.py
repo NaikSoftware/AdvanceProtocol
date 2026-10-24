@@ -264,54 +264,98 @@ def _noise(rng, sigma_x, sigma_y=None, size=TEX):
 
 
 def make_texture(name):
+    """Колір (sRGB), висота в метрах і крок піксельної сітки в метрах (по u, по v).
+    Висота пекається в метрах ДО масштабу 1/8 тайла, тож нахил нормалі справжній."""
     import numpy as np
     rng = np.random.default_rng(sum(map(ord, name)))
     base = np.array(MATS[name][0])
     yy, xx = np.mgrid[0:TEX, 0:TEX] / TEX  # yy — рядки (v), xx — стовпці (u)
     img = np.ones((TEX, TEX, 3)) * base
     lum = np.zeros((TEX, TEX))
+    h = np.zeros((TEX, TEX))
+    step = (8.0 / TEX, 8.0 / TEX)  # 1.56 см на піксель
+    mod = lambda a, k: (a * k) % 1.0
     if name in ("concrete", "concrete_dust"):
         lum = 0.035 * _noise(rng, 12) + 0.025 * _noise(rng, 2.0) + 0.02 * _noise(rng, 0.7)
         lum -= 0.03 * np.clip(_noise(rng, 1.0, 14) - 0.8, 0, None)  # патьоки від води
-        lum -= 0.04 * (_noise(rng, 0.6) > 2.4)  # пори
+        pores = _noise(rng, 0.6) > 2.4
+        lum -= 0.04 * pores
+        h = 0.003 * _noise(rng, 2.0) + 0.0015 * _noise(rng, 0.7) - 0.004 * pores
+        if name == "concrete":
+            joint = mod(yy, 2) < 0.004  # шов плит кожні 4 м
+            h -= 0.012 * joint
+            lum -= 0.08 * joint
     elif name == "asphalt":
         lum = 0.02 * _noise(rng, 1.0) + 0.02 * _noise(rng, 0.5) + 0.01 * _noise(rng, 8)
         for cu in (0.28, 0.72):  # смуги, виїжджені колесами
             lum -= 0.025 * np.exp(-((xx - cu) / 0.07) ** 2)
-        lum += 0.04 * (_noise(rng, 0.45) > 2.2)  # зерно щебеню
+        grain = _noise(rng, 0.45) > 2.2
+        lum += 0.04 * grain
+        h = 0.002 * _noise(rng, 0.5) + 0.002 * grain + 0.0008 * _noise(rng, 2.0)
         for cu in (0.045, 0.955):  # крайові лінії
             w = (np.abs(xx - cu) < 0.011) * (_noise(rng, 2.0) > -1.2)
             img = np.where(w[..., None], np.array([0.62, 0.62, 0.58]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
         dash = (np.abs(xx - 0.5) < 0.008) & ((yy % 0.5) < 0.25) & (_noise(rng, 2.0) > -1.2)
         img = np.where(dash[..., None], np.array([0.60, 0.60, 0.56]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
+        step = (0.68 * 8.0 / TEX, 8.0 / TEX)  # u лягає впоперек настилу
     elif name == "steel_olive":
         lum = 0.04 * _noise(rng, 3) + 0.03 * _noise(rng, 0.6)
-        wear = _noise(rng, 1.2) > 1.7
-        img = np.where(wear[..., None], np.array([0.38, 0.22, 0.12]), img)  # облущена фарба
+        # Облущена фарба — масив від 3 м і патьоки, а не дрібні плями, що тайляться.
+        wear = 0.7 * _noise(rng, 6) + 0.5 * _noise(rng, 0.8, 10)
+        wm = np.clip((wear - 0.9) / 0.4, 0, 1)
+        img = img * (1 - wm[..., None]) + np.array([0.38, 0.22, 0.12]) * wm[..., None]
+        h = 0.0008 * _noise(rng, 0.6) - 0.0015 * wm - 0.004 * (mod(yy, 4) < 0.008)
     elif name == "timber":
         rows = 32
-        pid = np.floor(yy * rows)
-        tint = rng.uniform(-0.06, 0.06, rows)[pid.astype(int)]
+        pid = np.floor(yy * rows).astype(int)
+        tint = rng.uniform(-0.06, 0.06, rows)[pid]
         lum = tint + 0.05 * _noise(rng, 14, 0.5) + 0.02 * _noise(rng, 0.6)
-        seam = (yy * rows) % 1.0
-        lum -= 0.16 * ((seam < 0.07) | (seam > 0.95))
-        butt = (rng.uniform(0, 1, rows)[pid.astype(int)] - xx)
-        lum -= 0.14 * (np.abs(butt) < 0.006)
+        seam = mod(yy, rows)
+        gap = (seam < 0.07) | (seam > 0.95)
+        butt = np.abs(rng.uniform(0, 1, rows)[pid] - xx) < 0.006
+        lum -= 0.16 * gap + 0.14 * butt
+        h = 0.0015 * _noise(rng, 14, 0.5) - 0.002 * (2 * seam - 1) ** 2 - 0.012 * gap - 0.008 * butt
     elif name == "steel_grey":
         lum = 0.04 * _noise(rng, 3) + 0.04 * _noise(rng, 0.8, 10) + 0.02 * _noise(rng, 0.5)
+        seam = (mod(yy, 4) < 0.01) | (mod(xx, 4) < 0.01)  # стики листів 2 м
+        h = 0.0008 * _noise(rng, 0.6) - 0.005 * seam
+        lum -= 0.06 * seam
     elif name == "deckplate":
         lum = 0.025 * _noise(rng, 2.5) + 0.02 * _noise(rng, 0.5)
-        lum -= 0.12 * (((xx * 4) % 1.0 < 0.012) | ((yy * 4) % 1.0 < 0.012))  # стики листів 2 м
-        lum += 0.04 * (_noise(rng, 6) > 1.0)
-    elif name == "rust":
-        lum = 0.10 * _noise(rng, 1.5) + 0.05 * _noise(rng, 0.5)
+        seam = (mod(xx, 4) < 0.012) | (mod(yy, 4) < 0.012)
+        pad = _noise(rng, 6) > 1.0
+        lum += -0.12 * seam + 0.04 * pad
+        h = 0.0008 * _noise(rng, 0.7) - 0.006 * seam + 0.002 * pad
     img = np.clip(img + lum[..., None], 0, 1)
     px = np.concatenate([img, np.ones((TEX, TEX, 1))], axis=2)
-    # Blender: перший рядок — низ картинки; вертикаль не віддзеркалюється, бо v росте вгору.
-    return px.astype("float32")
+    return px.astype("float32"), h, step
+
+
+def bake_normal(h, step):
+    """Нормаль у дотичному просторі (OpenGL, +V вгору) з висоти в метрах; шви тайляться."""
+    import numpy as np
+    gx = (np.roll(h, -1, axis=1) - np.roll(h, 1, axis=1)) / (2 * step[0])
+    gy = (np.roll(h, -1, axis=0) - np.roll(h, 1, axis=0)) / (2 * step[1])
+    n = np.stack([-gx, -gy, np.ones_like(h)], axis=2)
+    n /= np.linalg.norm(n, axis=2, keepdims=True)
+    return np.concatenate([n * 0.5 + 0.5, np.ones((TEX, TEX, 1))], axis=2).astype("float32")
+
 
 
 FACES = [(0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7), (4, 5, 6, 7)]
+
+
+TEXCACHE = {}
+
+
+def _save_image(name, px, space):
+    img = bpy.data.images.new(f"bridge_{name}", TEX, TEX, alpha=False)
+    img.pixels.foreach_set(px.ravel())
+    img.filepath_raw = f"{TEX_DIR}/{name}.png"
+    img.file_format = "PNG"
+    img.save()
+    img.colorspace_settings.name = space
+    return img
 
 
 def build(name, fn, broken):
@@ -320,17 +364,22 @@ def build(name, fn, broken):
     mats = {}
     for k in MAT_ORDER:
         c, r, m = MATS[k]
-        img = bpy.data.images.new(f"bridge_{k}", TEX, TEX, alpha=False)
-        img.pixels.foreach_set(make_texture(k).ravel())
-        img.filepath_raw = f"{TEX_DIR}/{k}.png"
-        img.file_format = "PNG"
-        img.save()
+        if k not in TEXCACHE:
+            TEXCACHE[k] = make_texture(k)
+        col, h, step = TEXCACHE[k]
+        img = _save_image(f"{k}", col, "sRGB")
+        nrm = _save_image(f"{k}_n", bake_normal(h, step), "Non-Color")
         mat = bpy.data.materials.new(f"bridge_{k}")
         mat.use_nodes = True
         b = mat.node_tree.nodes["Principled BSDF"]
         t = mat.node_tree.nodes.new("ShaderNodeTexImage")
         t.image = img
         mat.node_tree.links.new(t.outputs["Color"], b.inputs["Base Color"])
+        tn = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        tn.image = nrm
+        nm = mat.node_tree.nodes.new("ShaderNodeNormalMap")
+        mat.node_tree.links.new(tn.outputs["Color"], nm.inputs["Color"])
+        mat.node_tree.links.new(nm.outputs["Normal"], b.inputs["Normal"])
         b.inputs["Roughness"].default_value = r
         b.inputs["Metallic"].default_value = m
         mats[k] = mat
