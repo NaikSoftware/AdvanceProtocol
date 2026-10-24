@@ -25,6 +25,9 @@ const _MICRO_AMP: float = 0.35 * M
 const _BROAD_AMP: float = 1.7 * M
 const _HILL_MIN: float = 3.5 * M
 const _HILL_VAR: float = 2.0 * M
+## Частка висоти пагорба, яку гарантовано тримає центр кожної клітинки HILL, хоч куди
+## зсунувся обрис.
+const _HILL_KEEP: float = 0.62
 const _BED_MIN: float = 2.2 * M
 const _BED_VAR: float = 0.5 * M
 ## Берег падає від верху до води на 0.3-0.5 клітинки (схил ≤ ~35°); степінь робить верх м'яким.
@@ -85,6 +88,9 @@ var _curv: PackedFloat32Array = PackedFloat32Array()
 var course: RiverCourse = null
 ## Переправи (RiverCourse.build): клітинки, центр, вісь, довжина й ширина настилу.
 var _groups: Array[Dictionary] = []
+## Дорога як власна геометрія (RoadCourse); null — доріг нема. Її растр рівняє рельєф під
+## дорогою.
+var roads: RoadCourse = null
 ## Вигин для шейдера: 0.5 + 0.5 * bend, bend -1 (коса) .. +1 (підмитий берег), 0 — плес.
 var _bar: PackedFloat32Array = PackedFloat32Array()
 var _min: float = 0.0
@@ -96,15 +102,22 @@ var _wgrid: PackedByteArray = PackedByteArray()
 
 
 ## seed — з імені карти (BoardView.relief_seed); та сама карта дає той самий рельєф.
-static func bake(board: Board, p_margin: int, seed_value: int) -> TerrainHeight:
+## surface — MapData.surface (тут з підтипів береться лише тип дороги для її ширини);
+## порожній — усі 0.
+static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedByteArray = PackedByteArray()) -> TerrainHeight:
 	var t := TerrainHeight.new()
 	t.margin = p_margin
 	t.board_width = board.width
 	t.board_height = board.height
 	while t.samples > 2 and (board.width + 2 * p_margin) * (board.height + 2 * p_margin) * t.samples * t.samples * 2 > MAX_GROUND_TRIS:
 		t.samples -= 1
-	t._bake(board, seed_value)
+	t._bake(board, seed_value, surface)
 	return t
+
+
+## Переправи (зв'язні групи клітинок мосту): cells, centre, axis, length, across.
+func bridge_groups() -> Array[Dictionary]:
+	return _groups
 
 
 ## Висота землі під світовою точкою (білінійно по відліках, за межею — крайова).
@@ -186,7 +199,7 @@ func pick(origin: Vector3, dir: Vector3) -> Variant:
 	return null
 
 
-func _bake(board: Board, seed_value: int) -> void:
+func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	var s: int = samples
 	var fs: float = float(s)
 	var bw: int = board_width
@@ -222,42 +235,60 @@ func _bake(board: Board, seed_value: int) -> void:
 			has_road = has_road or rgrid[i] == 1
 			has_pad = has_pad or pgrid[i] == 1
 
-	# Індикатори на відліках (клітинка точки; на межі зсув у пів відліку згладжує розмиття).
+	if has_water:
+		_groups = _bridge_groups(board, bgrid)
+	# Дорога — власна геометрія (RoadCourse): рельєф рівняється під намальованою дорогою, а не
+	# під клітинками.
+	var road_d := PackedFloat32Array()
+	var road_rw: int = (bw + 2 * margin) * RoadCourse.PX
+	if has_road:
+		roads = RoadCourse.build(board, surface, margin, seed_value)
+		road_d = roads.d_grid()
+
+	# Індикатори на відліках. Пагорб — гладкий (білінійний по клітинках) індикатор у точці,
+	# зсунутій шумом на ±1.2 клітинки (хвиля ~5 клітинок) і ±0.35 (~2): обрис — неправильний
+	# овал без осей сітки; зсув ±0.6 дає майже коло (круговість 0.95+).
+	# Межі зсуву (HILL — клітинка правил, штраф руху 20): поза клітинками пагорба й їхніми
+	# сусідами підйому нема (agrid), а центр кожної клітинки пагорба тримає ≥ 62 % висоти
+	# (hgrid, без зсуву, _HILL_KEEP).
+	var agrid := PackedByteArray()
+	agrid.resize(bw * bh)
+	for cz in bh:
+		for cx in bw:
+			for dz in range(-1, 2):
+				for dx in range(-1, 2):
+					var qx: int = cx + dx
+					var qz: int = cz + dz
+					if qx >= 0 and qz >= 0 and qx < bw and qz < bh and hgrid[qz * bw + qx] == 1:
+						agrid[cz * bw + cx] = 1
 	var hill := PackedFloat32Array()
-	var road := PackedFloat32Array()
 	var pad := PackedFloat32Array()
 	hill.resize(cols * rows)
-	road.resize(cols * rows)
 	pad.resize(cols * rows)
-	var warp_x := _noise(seed_value + 404, 0.45)
-	var warp_z := _noise(seed_value + 505, 0.45)
-	if has_hill or has_road or has_pad:
+	var warp_x := _noise(seed_value + 404, 0.2)
+	var warp_z := _noise(seed_value + 505, 0.2)
+	var warp_x2 := _noise(seed_value + 414, 0.5)
+	var warp_z2 := _noise(seed_value + 515, 0.5)
+	if has_hill or has_pad:
 		for j in rows:
 			var z: float = -0.5 - margin + float(j) / fs
 			for i in cols:
 				var x: float = -0.5 - margin + float(i) / fs
 				var k: int = j * cols + i
-				if has_road or has_pad:
-					var c: int = clampi(roundi(z), 0, bh - 1) * bw + clampi(roundi(x), 0, bw - 1)
-					road[k] = float(rgrid[c])
-					pad[k] = float(pgrid[c])
+				if has_pad:
+					pad[k] = float(pgrid[clampi(roundi(z), 0, bh - 1) * bw + clampi(roundi(x), 0, bw - 1)])
 				if has_hill:
-					# Обрис пагорба рваний: клітинку беруть із зсувом шумом.
-					var hx: int = clampi(roundi(x + 0.3 * warp_x.get_noise_2d(x, z)), 0, bw - 1)
-					var hz: int = clampi(roundi(z + 0.3 * warp_z.get_noise_2d(x, z)), 0, bh - 1)
-					hill[k] = float(hgrid[hz * bw + hx])
+					var hx: float = x + 1.2 * warp_x.get_noise_2d(x, z) + 0.35 * warp_x2.get_noise_2d(x, z)
+					var hz: float = z + 1.2 * warp_z.get_noise_2d(x, z) + 0.35 * warp_z2.get_noise_2d(x, z)
+					hill[k] = _bilinear_cells(hgrid, bw, bh, hx, hz)
 
-	# Пагорб витягнуто вздовж осі, обраної seed'ом карти (1.5 : 1); спад ≥ 1 клітинки.
-	var long_x: bool = (seed_value & 1) == 0
+	# Спад ≥ 1 клітинки, однаковий в усі боки (без витягування вздовж осі сітки).
 	var hill_a := PackedFloat32Array()
 	var hill_b := PackedFloat32Array()
 	if has_hill:
-		hill_a = _blur(hill, (0.9 if long_x else 0.6) * fs, (0.6 if long_x else 0.9) * fs)
-		hill_b = _blur(hill, (1.8 if long_x else 1.2) * fs, (1.2 if long_x else 1.8) * fs)
-	var road_m := PackedFloat32Array()
+		hill_a = _blur(hill, 0.75 * fs, 0.75 * fs)
+		hill_b = _blur(hill, 1.5 * fs, 1.5 * fs)
 	var pad_m := PackedFloat32Array()
-	if has_road:
-		road_m = _blur(road, 0.35 * fs, 0.35 * fs)
 	if has_pad:
 		pad_m = _blur(pad, 0.35 * fs, 0.35 * fs)
 
@@ -288,7 +319,6 @@ func _bake(board: Board, seed_value: int) -> void:
 	var dc := PackedFloat32Array()
 	var bc := PackedFloat32Array()
 	if has_water:
-		_groups = _bridge_groups(board, bgrid)
 		course = RiverCourse.build(_wgrid, bw, bh, margin + 3, _groups, seed_value)
 		var fld: Array[PackedFloat32Array] = course.field(cols, rows, s, margin, _RIVER_STEP)
 		dc = fld[0]
@@ -304,7 +334,7 @@ func _bake(board: Board, seed_value: int) -> void:
 		for k in dc0.size():
 			dc0[k] = minf(dc[k], pc[k])
 		# Ставок — об'єднання дисків: його поле згладжено сильніше (розмиття мінус поправка на усадку),
-		# щоб не читались клітинки; далі — спільне замикання з річкою.
+		# щоб у контурі не проступали сходинки клітинок; далі — спільне замикання з річкою.
 		var sig_p: float = _POND_SIGMA * fs / float(_RIVER_STEP)
 		var pond_soft: PackedFloat32Array = _blur(pc, sig_p, sig_p, cw, ch)
 		var cstep: float = float(_RIVER_STEP) / fs
@@ -359,7 +389,10 @@ func _bake(board: Board, seed_value: int) -> void:
 				undul = -0.6 * M + (undul + 0.6 * M) * 0.3
 			var damp: float = near_water
 			if has_road:
-				damp *= 1.0 - _ROAD_DAMP * smoothstep(0.0, 0.6, road_m[k])
+				var rd: float = road_d[clampi(int((z + 0.5 + margin) * RoadCourse.PX), 0, road_d.size() / road_rw - 1) * road_rw + clampi(int((x + 0.5 + margin) * RoadCourse.PX), 0, road_rw - 1)]
+				# Рівно під намальованою дорогою й 0.5 м за її краєм (поле відстані RoadCourse),
+				# далі спад за 1.5 м.
+				damp *= 1.0 - _ROAD_DAMP * (1.0 - smoothstep(0.5, 2.0, rd))
 			if has_pad:
 				damp *= 1.0 - smoothstep(0.0, 0.4, pad_m[k])
 			var rise := 0.0
@@ -367,6 +400,7 @@ func _bake(board: Board, seed_value: int) -> void:
 				var hill_h: float = _HILL_MIN + _HILL_VAR * (0.5 + 0.5 * n3.get_noise_2d(x, z))
 				rise = hill_h * (0.7 * smoothstep(0.0, 0.55, hill_a[k]) + 0.3 * smoothstep(0.0, 0.7, hill_b[k]))
 				rise *= 1.0 + 0.12 * n_crest.get_noise_2d(x, z)
+				rise = maxf(rise * _bilinear_cells(agrid, bw, bh, x, z, true), _HILL_KEEP * hill_h * _bilinear_cells(hgrid, bw, bh, x, z, true))
 				# Підйом не затікає у воду (розмиття пагорба), а то центр клітинки води виходить на суходіл.
 				if has_water:
 					rise *= smoothstep(0.0, 1.4, d)
@@ -611,12 +645,29 @@ func _flood_from_border(dg: PackedFloat32Array, level: float, extra: PackedInt32
 
 
 ## 0 біля настилу, 1 далі 3 клітинок від центру переправи: піщані коси не лежать у кінців мосту
-## (читались би як в'їзд).
+## (пісок біля настилу не відрізнити від в'їзду на міст).
 func _bar_fade(x: float, z: float) -> float:
 	var f := 1.0
 	for g in _groups:
 		f = minf(f, smoothstep(1.6, 3.0, Vector2(x, z).distance_to(g["centre"])))
 	return f
+
+
+## Білінійне значення сітки клітинок 0/1 у світовій точці (центр клітинки — цілі координати).
+## smooth — вага Ерміта замість лінійної: без зламу схилу на межі клітинки.
+static func _bilinear_cells(grid: PackedByteArray, w: int, h: int, x: float, z: float, smooth: bool = false) -> float:
+	var x0: int = floori(x)
+	var z0: int = floori(z)
+	var tx: float = x - x0
+	var tz: float = z - z0
+	if smooth:
+		tx = tx * tx * (3.0 - 2.0 * tx)
+		tz = tz * tz * (3.0 - 2.0 * tz)
+	var ax: int = clampi(x0, 0, w - 1)
+	var bx: int = clampi(x0 + 1, 0, w - 1)
+	var az: int = clampi(z0, 0, h - 1)
+	var bz: int = clampi(z0 + 1, 0, h - 1)
+	return lerpf(lerpf(grid[az * w + ax], grid[az * w + bx], tx), lerpf(grid[bz * w + ax], grid[bz * w + bx], tx), tz)
 
 
 static func _is_water(kind: int) -> bool:

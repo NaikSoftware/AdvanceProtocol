@@ -34,8 +34,7 @@ const PLACEHOLDER_DECK_TOP: float = 0.25
 const _CONTOUR_WIDTH: float = 0.12
 const _CONTOUR_INSET: float = 0.06
 const _CONTOUR_PIECES: int = 4
-## 0.95 — колишня ширина плитки (до суцільної землі): риски лишились тієї самої
-## довжини, тож кути сусідніх рисок, як і раніше, не сходяться.
+## 0.95 клітинки: риска коротша за клітинку, тож кути сусідніх рисок не сходяться.
 const _CONTOUR_LENGTH: float = 0.95
 ## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y = 0.06), щоб не
 ## z-fight'ити ні з тим, ні з іншим.
@@ -138,11 +137,13 @@ func build(board: Board) -> void:
 		_ground.name = "Ground"
 		add_child(_ground)
 	# Рельєф бакається раз на карту: підірваний міст міняє вид клітинки, але не форму землі.
-	var signature: String = "%d:%d:%d" % [board.width, board.height, relief_seed]
+	# Підтип покриття (surface) теж міняє рельєф: від нього залежать тип і ширина дороги, а з
+	# ними вирівнювання землі.
+	var signature: String = "%d:%d:%d:%d" % [board.width, board.height, relief_seed, hash(surface)]
 	if board.width <= 0 or board.height <= 0:
 		_height = null
 	elif _height == null or signature != _height_signature or _height_kind_classes != _classes(board):
-		_height = TerrainHeight.bake(board, 0, relief_seed)
+		_height = TerrainHeight.bake(board, 0, relief_seed, surface)
 		_height_signature = signature
 		_height_kind_classes = _classes(board)
 	TerrainHeight.active = _height

@@ -111,6 +111,71 @@ def match(a, ref, chroma=1.0, contrast=1.0, gain=1.0, hf=1.0, hfs=4.0):
     return tie(from_lab(out))
 
 
+def tone(a, L, ab, chroma=0.6, contrast=1.0):
+    # Середнє Lab → цільові (L, a, b); відхилення a/b множаться на chroma, L — на contrast,
+    # тож структура скану зберігається.
+    la = to_lab(a)
+    m = la.mean((0, 1))
+    out = la - m
+    out[..., 0] *= contrast
+    out[..., 1:] *= chroma
+    out += np.array([L, ab[0], ab[1]], np.float32)
+    return from_lab(out)
+
+
+def _median(L, size):
+    from PIL import ImageFilter
+    return np.asarray(Image.fromarray(np.clip(L * 2.55, 0, 255).astype(np.uint8)).filter(ImageFilter.MedianFilter(size)), np.float32) / 2.55
+
+
+def delines(a, size=21, thr=2.0, flatten=0.0, every=False):
+    # Тонкі лінії (сліди шин, зіркоподібні тріщини): відхилення від локальної медіани, усереднене
+    # вздовж 8 напрямків на 31 px. Уздовж лінії середнє лишається великим, а для шуму текстури
+    # прямує до 0. Там L — медіана плюс дрібне зерно (< 2 px) оригіналу, тож на місці лінії немає
+    # розмитої смуги. every — заміна всюди (асфальт: однорідне зерно, будь-яка деталь середнього
+    # масштабу — слід). flatten > 0 додатково знімає широкі смуги (sigma, px) у L, a, b.
+    la = to_lab(a)
+    L = la[..., 0]
+    med = _median(L, size)
+    fine = L - blur(L, 1.2)
+    if every:
+        w = np.ones_like(L)
+    else:
+        dev = L - med
+        best = np.zeros_like(dev)
+        for k in range(8):
+            ang = np.pi * k / 8
+            acc = np.zeros_like(dev)
+            for t in range(-15, 16):
+                acc += np.roll(dev, (int(round(t * np.sin(ang))), int(round(t * np.cos(ang)))), (0, 1))
+            acc /= 31
+            best = np.where(np.abs(acc) > np.abs(best), acc, best)
+        w = np.clip((np.abs(best) - thr) / thr, 0, 1)
+        w = np.clip(blur(w, 2.0) * 3.0, 0, 1)
+    la[..., 0] = L * (1 - w) + (med + fine) * w
+    if flatten > 0:
+        for c in range(3):
+            low = blur(la[..., c], flatten)
+            la[..., c] -= (low - low.mean()) * 0.85
+    return from_lab(la)
+
+
+# Метри повтору дублює GroundSurface.MACRO_M (game/battle/ground_surface.gd) — міняти обидва разом.
+# CC0-скани Poly Haven (ground-texture-research.md): шар → (папка, метри повтору, L*, (a*, b*),
+# лінії: 0 — не чіпати, 1 — прибрати знайдені лінії, 2 — смугозагороджувальний фільтр усюди
+# (асфальт)[, контраст L]. Бруківка: контраст 1.6 — шви темніші, інакше камінь 0.2 м (3 px за найбільшого
+# наближення) не відрізнити від гравію; скан 4 м, але повтор 3 м (камінь ~15 см, як справжня
+# кладка) — так у GroundSurface.MACRO_M.
+CC0 = {
+    "dirt": ("aerial_ground_rock", 20.0, 35.0, (0.8, 3.0), 0),
+    "mud": ("dirt_aerial_03", 25.0, 30.0, (1.5, 4.5), 1),
+    "hill": ("coast_land_rocks_01", 20.0, 33.0, (0.5, 6.0), 0),
+    "bank": ("coast_sand_05", 25.0, 28.0, (1.0, 3.8), 0),
+    "road": ("aerial_asphalt_01", 30.0, 28.0, (0.0, 1.0), 2),
+    "cobble": ("cobblestone_large_01", 3.0, 32.0, (0.8, 3.5), 0, 1.6),
+}
+
+
 def edge_diffs(a):
     # Останній рядок/стовпець після tie() дорівнює першому, тому міряємо справжній шов:
     # сусід по колу — це 1022 і 0, а не 1023 і 0. Абсолютний поріг 6/255 тут безглуздий:
@@ -180,6 +245,35 @@ def main(argv):
                 m = match(a, ref, **preset.get(name, {}))
                 save_rgba(m, height(m, sig.get(name, 3.0)), f"{argv[2]}/{name}_albedo_{n}.png")
             print("macro", name)
+    elif len(argv) >= 3 and argv[0] == "cc0":
+        # cc0 <ph_dir> <out_dir>: CC0-скан → 512 px макротекстури шару (тон, лінії, безшовна обробка
+        # лише якщо шов перевищує LIMIT, висота в альфу). Файли варіанта 1 видаляються: без них
+        # GroundSurface бере копію варіанта 0.
+        import os
+        for name, spec in CC0.items():
+            src, metres, L, ab, lines = spec[:5]
+            contrast = spec[5] if len(spec) > 5 else 1.0
+            a = np.asarray(Image.open(f"{argv[1]}/{src}/diff_2k.jpg").convert("RGB").resize((512, 512), Image.LANCZOS), np.float32)
+            if lines:
+                a = delines(a, every=lines == 2)
+            a = tone(a, L, ab, contrast=contrast)
+            lr, tb = edge_diffs(tie(a.copy()))
+            if lr > LIMIT or tb > LIMIT:
+                a = seamless(a)
+            else:
+                a = tie(a)
+            save_rgba(a, height(a, 3.0), f"{argv[2]}/{name}_albedo_0.png")
+            for ext in ("", ".import"):
+                p = f"{argv[2]}/{name}_albedo_1.png{ext}"
+                if os.path.exists(p):
+                    os.remove(p)
+            print(f"cc0 {name} <- {src} ({metres} m) seam lr={lr:.2f} tb={tb:.2f}{' seamless' if lr > LIMIT or tb > LIMIT else ''}")
+    elif len(argv) >= 3 and argv[0] == "delines":
+        # delines <in.png> <out.png> [--flatten sigma]: прибрати тонкі лінії (і широкі смуги)
+        # з макротекстури й наново порахувати висоту.
+        fl = float(argv[argv.index("--flatten") + 1]) if "--flatten" in argv else 0.0
+        a = tie(delines(load(argv[1]), flatten=fl))
+        save_rgba(a, height(a, 5.0), argv[2])
     elif argv and argv[0] == "selftest":
         r = np.tile(np.linspace(0, 255, 64, dtype=np.float32), (64, 1))[:, :, None].repeat(3, 2)
         up = r.transpose(1, 0, 2)[::-1]  # росте до верху зображення

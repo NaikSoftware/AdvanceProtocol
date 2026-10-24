@@ -301,8 +301,8 @@ func _river_bake() -> Array:
 	return [board, TerrainHeight.bake(board, 0, m.name_key.hash())]
 
 
-## Рішення власника 2026-10-23: сітка живе лише в логіці. Єдине, що тримає воду від клітинок:
-## юніти стоять у центрах суші, тож у радіусі 0.3 від центру клітинки суші води нема.
+## Контур води не прив'язаний до сітки, але юніти стоять у центрах клітинок суші: у радіусі
+## 0.3 від такого центру води нема.
 func test_water_keeps_0_3_tiles_from_every_land_cell_centre() -> void:
 	var boards: Dictionary = _probe_layouts()
 	for key: String in boards:
@@ -350,8 +350,8 @@ func _wet_fraction(t: TerrainHeight, c: Vector2i) -> float:
 	return wet / 121.0
 
 
-## Рішення власника «частково мокра»: берег може перетинати клітинку, але клітинка води
-## ніколи не малюється цілком сухою (інакше вигляд бреше про прохідність).
+## Берег може перетинати клітинку води, але цілком сухою вона не малюється: інакше вигляд
+## показував би прохідну землю там, де правила її не мають.
 func test_every_water_cell_shows_at_least_a_quarter_water() -> void:
 	var boards: Dictionary = _layouts()
 	for key: String in boards:
@@ -420,8 +420,8 @@ func _components(w: int, h: int, wet: Callable) -> int:
 	return n
 
 
-## Власник 2026-10-24: жодних калюж і ям уздовж берега — уся вода є частиною основної водойми.
-## Мокрих груп на карті висот рівно стільки, скільки логічних водойм.
+## Окремих калюж уздовж берега нема: мокрих груп на карті висот рівно стільки, скільки
+## логічних водойм.
 func test_water_has_one_component_per_logical_body_and_no_orphan_puddles() -> void:
 	var boards: Dictionary = _layouts()
 	for key: String in boards:
@@ -435,7 +435,8 @@ func test_water_has_one_component_per_logical_body_and_no_orphan_puddles() -> vo
 		assert_eq(visual, logical, "%s: груп води на карті висот" % key)
 
 
-## Рішення власника: жодних островів у воді. Суша, не з'єднана з краєм карти висот, не існує.
+## Острів без центру клітинки суші — артефакт контуру, його затоплено. Справжня суша (центр
+## клітинки суші всередині) лишається.
 func test_no_enclosed_land_inside_any_water_body() -> void:
 	var boards: Dictionary = _probe_layouts()
 	for key: String in boards:
@@ -490,8 +491,8 @@ func test_no_enclosed_land_inside_any_water_body() -> void:
 		assert_eq(islands, 0, "%s: відліків суші, оточеної водою, без центру клітинки" % key)
 
 
-## Власник 2026-10-24: темні плями посеред русла — то дно, що проглядає крізь воду. Глибина
-## ≥ 0.3 м (повна непрозорість шейдера) скрізь, крім смуги 0.5 клітинки від урізу.
+## Дно не просвічує посеред русла: глибина ≥ 0.3 м (повна непрозорість шейдера) скрізь,
+## крім смуги 0.5 клітинки від урізу.
 func test_bed_is_opaque_deep_beyond_half_a_tile_from_the_shore() -> void:
 	var boards: Dictionary = _probe_layouts()
 	var full: float = 0.3 * M
@@ -638,3 +639,23 @@ func test_banks_stay_under_50_degrees_even_beside_a_hill() -> void:
 				z += 0.04
 			x += 0.04
 		assert_lt(steepest, 1.2, "схил берега при пагорбі %s: %.1f°" % [hill_at, rad_to_deg(atan(steepest))])
+
+
+## HILL — клітинка правил: зсув обрису не виносить пагорб на поле. Пагорб в 1 клітинку тримає
+## у центрі ≥ 60 % найменшої висоти пагорба (_HILL_MIN), а центри клітинок поля, не сусідніх
+## із ним, лишаються як без пагорба.
+func test_one_cell_hill_stays_on_its_cell() -> void:
+	for seed_value in [3, 17, 41]:
+		var flat := Board.create(11, 11, Terrain.GroundState.DRY)
+		var with_hill := Board.create(11, 11, Terrain.GroundState.DRY)
+		with_hill.set_kind(Vector2i(5, 5), Terrain.Kind.HILL)
+		var a := TerrainHeight.bake(flat, 0, seed_value)
+		var b := TerrainHeight.bake(with_hill, 0, seed_value)
+		var rise: float = b.at(5.0, 5.0) - a.at(5.0, 5.0)
+		assert_gt(rise, 0.6 * TerrainHeight._HILL_MIN, "сід %d: центр пагорба піднято на %.3f" % [seed_value, rise])
+		for z in 11:
+			for x in 11:
+				if absi(x - 5) <= 1 and absi(z - 5) <= 1:
+					continue
+				# Допуск 8 мм (1e-3 клітинки): інтерполяція відліків дає зсув ~1 мм.
+				assert_almost_eq(b.at(float(x), float(z)), a.at(float(x), float(z)), 1e-3, "сід %d: поле (%d, %d) підняте" % [seed_value, x, z])

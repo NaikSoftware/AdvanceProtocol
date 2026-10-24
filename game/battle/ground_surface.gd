@@ -9,7 +9,7 @@ extends MeshInstance3D
 ## саму поверхню (IsoCameraRig.cell_to_world), правила висоти не читають.
 
 ## Порядок шарів Texture2DArray — тут, поруч із TEX_LAYER_FOR_KIND, а не в
-## окремому .tres, щоб відповідність вид -> шар читалась в одному місці.
+## окремому .tres, щоб відповідність вид -> шар була в одному місці.
 const TEX_LAYERS: Array[String] = ["road", "field", "forest", "hill", "marsh", "mud", "rubble", "bank"]
 
 ## Скільки метрів покриває один повтор текстури шару (в порядку TEX_LAYERS), і
@@ -30,12 +30,25 @@ const SURFACE_LAYERS: Dictionary = {
 	Terrain.Kind.FOREST: ["forest", "pine", "deciduous"],
 }
 ## Властивості шарів підтипів: шар деталі (фото-текстура близького плану, окремої нема),
-## глибина рельєфу, тип зносу доріг (1 асфальт, 2 ґрунтівка, 3 бруківка) і вирівнювання макро
-## (1 — baked колії вздовж осі дороги, 2 — без повороту, борозни).
-const SURFACE_DETAIL: Dictionary = {"dirt": "hill", "cobble": "bank", "ploughed": "field", "pine": "forest", "deciduous": "forest"}
+## глибина рельєфу й вирівнювання макро (2 — поворот лише 0/180°, щоб борозни лишались
+## паралельні). Базовий шар теж може взяти чужу деталь: власна деталь багна має колії шин,
+## а колій поза дорогою нема, тож багно бере ізотропний мокрий ґрунт берега
+## з галькою.
+const SURFACE_DETAIL: Dictionary = {"dirt": "hill", "cobble": "bank", "ploughed": "field", "pine": "forest", "deciduous": "forest", "mud": "bank"}
 const SURFACE_RELIEF_M: Dictionary = {"dirt": 0.06, "cobble": 0.06, "ploughed": 0.08, "pine": 0.04, "deciduous": 0.04}
-const SURFACE_WEAR: Dictionary = {"road": 1, "dirt": 2, "cobble": 3}
-const SURFACE_ALIGNED: Dictionary = {"dirt": 1, "ploughed": 2}
+const SURFACE_ALIGNED: Dictionary = {"ploughed": 2}
+## Метрів на повтор макро-текстури шару (вид зверху); невказаний шар — 12 м. CC0-скани Poly
+## Haven мають власний фізичний розмір, і ці метри дублюють таблицю CC0 у tools/terrain_tex.py —
+## міняти обидві разом. Решта згенерована на 12 м. Бруківка — 3 м: ~20 каменів по 15 см у
+## повторі, як справжня кладка. Ліс — 2 м: гілки в його макро мають справжню довжину 5–30 см
+## лише на цьому масштабі, на 12 м вони розтягуються до 1–3 м.
+const MACRO_M: Dictionary = {"dirt": 20.0, "mud": 25.0, "hill": 20.0, "bank": 25.0, "road": 30.0, "cobble": 3.0, "forest": 2.0}
+const DEFAULT_MACRO_M: float = 12.0
+## Класів покриття на карті (канали двох RGBA8 карт класів); зайві стають полем.
+const CLASS_SLOTS: int = 8
+## Клас двору в class_layers(): клітинка будівлі — поле з плямами втоптаного ґрунту (малює
+## шейдер), а не щебінь.
+const YARD: int = -2
 const MAX_LAYERS: int = 16
 ## Підтипів на вид у таблиці шейдера (indeks = вид * SURFACES_PER_KIND + підтип).
 const SURFACES_PER_KIND: int = 4
@@ -71,7 +84,6 @@ var _normal_array: Texture2DArray
 var _macro_array: Texture2DArray
 
 var _kind_image: Image
-var _surface_image: Image
 ## Імена шарів macro_array: перші 8 — TEX_LAYERS, далі — підтипи, чий файл існує.
 var _macro_layers: Array[String] = []
 
@@ -87,13 +99,10 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 		material_override = null
 		return
 	_kind_image = Image.create(w, h, false, Image.FORMAT_R8)
-	_surface_image = Image.create(w, h, false, Image.FORMAT_R8)
 	for py in h:
 		for px in w:
 			var cell := Vector2i(clampi(px - margin, 0, board.width - 1), clampi(py - margin, 0, board.height - 1))
 			_kind_image.set_pixel(px, py, Color8(board.kind_at(cell), 0, 0))
-			var si: int = cell.y * board.width + cell.x
-			_surface_image.set_pixel(px, py, Color8(surface[si] if si < surface.size() else 0, 0, 0))
 
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(w, h)
@@ -109,11 +118,6 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 	layers = 1
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
-	var table := PackedInt32Array()
-	table.resize(Terrain.Kind.size())
-	for kind: int in TEX_LAYER_FOR_KIND:
-		table[kind] = TEX_LAYER_FOR_KIND[kind]
-
 	if _albedo_array == null:
 		_albedo_array = _load_array("albedo")
 		_normal_array = _load_array("normal")
@@ -122,18 +126,16 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 
 	var mat := ShaderMaterial.new()
 	mat.shader = _SHADER
-	mat.set_shader_parameter("surface_map", ImageTexture.create_from_image(_surface_image))
 	var surface_table: PackedInt32Array = _surface_table(_macro_layers)
 	if height != null:
 		# З рельєфом голий ґрунт пагорба дає шейдер за схилом, а не за видом клітинки:
 		# інакше ділянка HILL лишалась би овалом чужої текстури, що не знає про схил.
 		for sub in SURFACES_PER_KIND:
 			surface_table[Terrain.Kind.HILL * SURFACES_PER_KIND + sub] = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
-	mat.set_shader_parameter("layer_for_surface", surface_table)
 	_set_layer_properties(mat, _macro_layers)
-	mat.set_shader_parameter("kind_map", ImageTexture.create_from_image(_kind_image))
+	_set_classes(mat, board, margin, surface, surface_table, height != null)
+	_set_roads(mat, height)
 	mat.set_shader_parameter("map_origin", Vector2(-margin, -margin))
-	mat.set_shader_parameter("layer_for_kind", table)
 	mat.set_shader_parameter("repeat_m", REPEAT_M)
 	mat.set_shader_parameter("mud_amount", MUD_BLEND if board.ground_state == Terrain.GroundState.MUD else 0.0)
 	mat.set_shader_parameter("albedo_array", _albedo_array)
@@ -150,6 +152,101 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 
 func kind_image() -> Image:
 	return _kind_image
+
+
+## Шар (індекс macro_array) кожної клітинки з відступом: класи покриття, з яких шейдер
+## малює межі, вільні від сітки (згладжена білінійна + повернутий шум зсуву, std ~2.5 м і ~0.5 м).
+## Дорога — окрема геометрія (RoadCourse), тож клітинка ROAD бере покриття сусідів; вода й міст
+## з рельєфом — поле (берег малює висота).
+static func class_layers(board: Board, margin: int, surface: PackedByteArray, table: PackedInt32Array, relief: bool) -> PackedInt32Array:
+	var w: int = board.width + 2 * margin
+	var h: int = board.height + 2 * margin
+	var out := PackedInt32Array()
+	out.resize(w * h)
+	var field: int = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
+	for py in h:
+		for px in w:
+			var cell := Vector2i(clampi(px - margin, 0, board.width - 1), clampi(py - margin, 0, board.height - 1))
+			var kind: int = board.kind_at(cell)
+			var si: int = cell.y * board.width + cell.x
+			var layer: int = table[kind * SURFACES_PER_KIND + clampi(surface[si] if si < surface.size() else 0, 0, SURFACES_PER_KIND - 1)]
+			if kind == Terrain.Kind.ROAD:
+				layer = -1
+			elif kind == Terrain.Kind.BUILDING:
+				layer = YARD
+			elif relief and TEX_LAYERS[TEX_LAYER_FOR_KIND[kind]] == "bank":
+				layer = field
+			out[py * w + px] = layer
+	# Дорога: більшість серед сусідів, що вже мають покриття; кілька проходів для широких смуг.
+	for _pass in 4:
+		var next: PackedInt32Array = out.duplicate()
+		for py in h:
+			for px in w:
+				if out[py * w + px] != -1:
+					continue
+				var votes: Dictionary = {}
+				for d in Board.DIRS_4:
+					var q := Vector2i(px, py) + d
+					if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and out[q.y * w + q.x] != -1:
+						votes[out[q.y * w + q.x]] = int(votes.get(out[q.y * w + q.x], 0)) + 1
+				var best := -1
+				for l: int in votes:
+					if best < 0 or int(votes[l]) > int(votes[best]) or (votes[l] == votes[best] and l == field):
+						best = l
+				next[py * w + px] = best
+		out = next
+	for i in out.size():
+		if out[i] == -1:
+			out[i] = field
+	return out
+
+
+## Карти класів: до CLASS_SLOTS шарів у каналах двох RGBA8 (255 — клітинка цього класу).
+func _set_classes(mat: ShaderMaterial, board: Board, margin: int, surface: PackedByteArray, table: PackedInt32Array, relief: bool) -> void:
+	var w: int = board.width + 2 * margin
+	var h: int = board.height + 2 * margin
+	var layers: PackedInt32Array = class_layers(board, margin, surface, table, relief)
+	var slots := PackedInt32Array()
+	var slot_of: Dictionary = {}
+	for l in layers:
+		if not slot_of.has(l) and slots.size() < CLASS_SLOTS:
+			slot_of[l] = slots.size()
+			slots.append(l)
+	var imgs: Array[Image] = [Image.create(w, h, false, Image.FORMAT_RGBA8), Image.create(w, h, false, Image.FORMAT_RGBA8)]
+	for py in h:
+		for px in w:
+			# shortcut: дев'ятий і далі клас малюється першим слотом; на картах їх ≤ 6.
+			var sl: int = slot_of.get(layers[py * w + px], 0)
+			var c := Color(0, 0, 0, 0)
+			c[sl % 4] = 1.0
+			imgs[sl / 4].set_pixel(px, py, c)
+	mat.set_shader_parameter("yard_slot", slot_of.get(YARD, -1))
+	var field: int = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
+	for i in slots.size():
+		if slots[i] == YARD:
+			slots[i] = field
+	while slots.size() < CLASS_SLOTS:
+		slots.append(slots[0] if not slots.is_empty() else 0)
+	mat.set_shader_parameter("class_map0", ImageTexture.create_from_image(imgs[0]))
+	mat.set_shader_parameter("class_map1", ImageTexture.create_from_image(imgs[1]))
+	mat.set_shader_parameter("class_layer", slots)
+
+
+## Шар дороги (RoadCourse.rasterise): поле відстані/осі й ваги типів; без рельєфу доріг нема.
+func _set_roads(mat: ShaderMaterial, height: TerrainHeight) -> void:
+	var rc: RoadCourse = height.roads if height != null else null
+	mat.set_shader_parameter("has_roads", rc != null)
+	if rc == null:
+		return
+	var imgs: Array[Image] = rc.rasterise()
+	mat.set_shader_parameter("road_field", ImageTexture.create_from_image(imgs[0]))
+	mat.set_shader_parameter("road_type", ImageTexture.create_from_image(imgs[1]))
+	mat.set_shader_parameter("road_px", float(RoadCourse.PX))
+	var road_layers := PackedInt32Array()
+	for n: String in SURFACE_LAYERS[Terrain.Kind.ROAD]:
+		var idx: int = _macro_layers.find(n)
+		road_layers.append(idx if idx >= 0 else TEX_LAYERS.find("road"))
+	mat.set_shader_parameter("road_layer", road_layers)
 
 
 ## Шари macro_array: базові, далі — підтипи в порядку SURFACE_LAYERS, чий файл існує.
@@ -180,23 +277,22 @@ static func _surface_table(names: Array[String]) -> PackedInt32Array:
 	return table
 
 
-## Властивості кожного шару macro_array: базовий шар, шар деталі, знос, вирівнювання, рельєф.
+## Властивості кожного шару macro_array: базовий шар, деталь, вирівнювання, рельєф, розмір макро.
 static func _set_layer_properties(mat: ShaderMaterial, names: Array[String]) -> void:
 	var base := PackedInt32Array()
 	var detail := PackedInt32Array()
-	var wear := PackedInt32Array()
 	var aligned := PackedInt32Array()
 	var relief := PackedFloat32Array()
 	for i in MAX_LAYERS:
 		base.append(i if i < TEX_LAYERS.size() else 0)
 		detail.append(i if i < TEX_LAYERS.size() else 0)
-		wear.append(0)
 		aligned.append(0)
 		relief.append(RELIEF_M[i] if i < RELIEF_M.size() else 0.04)
 	for i in names.size():
 		var n: String = names[i]
-		wear[i] = SURFACE_WEAR.get(n, 0)
 		if i < TEX_LAYERS.size():
+			if SURFACE_DETAIL.has(n):
+				detail[i] = TEX_LAYERS.find(SURFACE_DETAIL[n])
 			continue
 		detail[i] = TEX_LAYERS.find(SURFACE_DETAIL.get(n, "field"))
 		relief[i] = SURFACE_RELIEF_M.get(n, 0.04)
@@ -207,9 +303,12 @@ static func _set_layer_properties(mat: ShaderMaterial, names: Array[String]) -> 
 				base[i] = TEX_LAYERS.find((SURFACE_LAYERS[kind] as Array)[0])
 	mat.set_shader_parameter("layer_base", base)
 	mat.set_shader_parameter("layer_detail", detail)
-	mat.set_shader_parameter("layer_wear", wear)
 	mat.set_shader_parameter("layer_aligned", aligned)
 	mat.set_shader_parameter("relief_m", relief)
+	var macro := PackedFloat32Array()
+	for i in MAX_LAYERS:
+		macro.append(MACRO_M.get(names[i], DEFAULT_MACRO_M) if i < names.size() else DEFAULT_MACRO_M)
+	mat.set_shader_parameter("macro_m", macro)
 
 
 static func _load_macro_array(names: Array[String]) -> Texture2DArray:
