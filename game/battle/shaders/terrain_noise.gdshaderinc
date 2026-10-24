@@ -67,11 +67,14 @@ float ripple_visibility(vec2 p) {
 
 #include "res://game/battle/shaders/overcast_sky.gdshaderinc"
 
+// Наскільки ясне небо (`WeatherRig`): вода й калюжі відбивають те саме небо, що й купол.
+global uniform float sky_clear;
+
 // Відбиття похмурого неба з френелем Шліка; n і v — світові й нормалізовані,
 // t — секунди (дрейф хмар).
 vec3 overcast_reflection(vec3 n, vec3 v, float f0, float power, float t) {
 	float f = f0 + (1.0 - f0) * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), power);
-	return overcast_sky_at(reflect(-v, n), t) * f;
+	return overcast_sky_at(reflect(-v, n), t, sky_clear) * f;
 }
 
 // Нахил нормалі у світовому xz -> NORMAL_MAP площини (дотична +X, бінормаль −Z).

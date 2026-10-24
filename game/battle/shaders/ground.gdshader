@@ -9,6 +9,10 @@ global uniform float weather_wetness;
 global uniform float cloud_shadow_strength;
 // Сила власного відбиття неба в калюжах і на мокрому березі (див. water.gdshader).
 global uniform float sky_reflection_gain;
+// Тон трави й листя за порою року (`BattleLook.foliage_tint`); дорогу не зачіпає.
+global uniform vec3 foliage_tint;
+// Каламутність стоячої води під ясним небом (як у water.gdshader): вікна болота не блакитні.
+global uniform float water_murk;
 
 // Карти класів покриття (GroundSurface._set_classes): піксель — клітинка (з відступом), канал —
 // слот класу; class_layer — шар macro_array кожного слоту.
@@ -365,8 +369,8 @@ varying float curvature;
 varying float bar_mask;
 varying float hill_shade;
 varying float slope_tan;
-// Напрямок НА сонце (DirectionalLight3D сцени бою): запечене світло-тінь рельєфу, §8.
-const vec3 SUN_DIR = vec3(0.5, 0.7, 0.5);
+// Напрямок НА сонце (`WeatherRig.sun`): запечене світло-тінь рельєфу збігається з тінями юнітів.
+global uniform vec3 sun_dir;
 
 // Відлік карти висот у локальній точці вузла землі (центр вузла — центр карти).
 vec4 height_at(vec2 local) {
@@ -398,7 +402,7 @@ void vertex() {
 		shore_mask = hm.g;
 		curvature = hm.b;
 		bar_mask = hm.a;
-		hill_shade = dot(n, normalize(SUN_DIR)) - normalize(SUN_DIR).y;
+		hill_shade = dot(n, normalize(sun_dir)) - normalize(sun_dir).y;
 		slope_tan = length(n.xz) / max(n.y, 0.01);
 	} else {
 		shore_mask = 0.0;
@@ -630,7 +634,7 @@ void fragment() {
 			rough = 0.9;
 			cav = 1.0;
 		}
-		alb *= cav;
+		alb *= cav * foliage_tint;
 		if (plough_a > 0.001) {
 			// Поле вздовж z: семплуємо в повернутих на -90° координатах, щоб борозни (вісь x
 			// текстури) йшли вздовж довгого боку; нахил нормалі повертаємо назад.
@@ -650,7 +654,7 @@ void fragment() {
 			if (vert) {
 				pn = vec2(-pn.y, pn.x);
 			}
-			alb = mix(alb, pa * pcav, plough_a);
+			alb = mix(alb, pa * pcav * foliage_tint, plough_a);
 			nxy = mix(nxy, pn, plough_a);
 			rough = mix(rough, 0.92, plough_a);
 			marsh_w *= 1.0 - plough_a;
@@ -726,8 +730,10 @@ void fragment() {
 			float cg = (1.0 - smoothstep(0.2, 0.3, av + 0.1 * (vnoise(vec2(u * 0.7, 5.0)) - 0.5)))
 					* smoothstep(0.2, 0.45, vnoise(vec2(u * 0.3, 9.0))) * straight;
 			dirt_alb = mix(dirt_alb, alb * vec3(1.05, 1.0, 0.85), cg * 0.85);
-			// Дно колії — мокрий темно-бурий ґрунт.
-			dirt_alb = mix(dirt_alb, dirt_alb * vec3(1.0, 0.9, 0.78), rut * 0.7);
+			// Дно колії — мокрий темно-бурий ґрунт, але лише в дощ чи в багно: на сухій карті
+			// калюж і мокрого нема ніде.
+			dirt_alb = mix(dirt_alb, dirt_alb * vec3(1.0, 0.9, 0.78),
+					rut * 0.7 * (mud_amount > 0.0 ? 1.0 : clamp(weather_wetness, 0.0, 1.0)));
 			// Асфальт: темний і рівний (тон текстури дає лише дрібну варіацію), латки ремонту 1–4 м
 			// (свіжі темніші, старі світліші), тріщини низького контрасту; край переходить у гравій
 			// до 0.4 м усередину.
@@ -929,13 +935,15 @@ void fragment() {
 
 		// Мокрість: темніше й глянцевіше. Калюжі — лише в коліях дороги й вікнах болота.
 		float wet = clamp(weather_wetness, 0.0, 1.0);
-		// Мокрий асфальт і бруківка темнішають сильніше за землю (×0.6 проти ×0.75).
-		alb *= mix(1.0, 0.75 - 0.15 * road_cov * (rt.r + rt.b), wet);
-		// Мокрий асфальт глянцевіший за мокру землю: чим більше дороги під пікселем, тим нижче
-		// шорсткість.
-		rough = mix(rough, mix(0.4, 0.22, road_cov * (rt.r + rt.b)), wet);
-		// Мокрі смуги коліс — трохи глянцевіші (0.18).
-		rough = mix(rough, 0.18, wet * wheel * road_cov);
+		// Мокре темніше, але не безбарвне: земля ×0.85, асфальт і бруківка ×0.75. Сильніше
+		// затемнення з відблиском неба зверху сірить усе поле.
+		alb *= mix(1.0, 0.85 - 0.1 * road_cov * (rt.r + rt.b), wet);
+		// Мокра земля лише трохи глянцевіша: блиск сірого неба на траві забирає з неї колір.
+		// Асфальт — до 0.45, не нижче: на 0.22 сонце проти камери робило з дороги хром,
+		// яскравіший за воду.
+		rough = mix(rough, mix(0.8, 0.45, road_cov * (rt.r + rt.b)), wet);
+		// Мокрі смуги коліс — трохи глянцевіші.
+		rough = mix(rough, 0.4, wet * wheel * road_cov);
 		// Калюжі ґрунтівки: у коліях і на всю ширину в низинах (координати дороги, див. вище).
 		float puddle = rut_pud * road_cov;
 		// Вікна стоячої води в болоті 0.5–2 м (~10 % площі): темні, з відблиском неба й у суху
@@ -969,12 +977,12 @@ void fragment() {
 		float rv = puddle > 0.0 ? rv_all : 0.0;
 		vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * 1.2 * wet * rv : vec2(0.0);
 		rough = mix(rough, 0.12 + 0.1 * wet * (1.0 - rv), puddle);
-		rough = mix(rough, 0.12, paved_sheen * road_cov);
+		rough = mix(rough, 0.4, paved_sheen * road_cov);
 		nxy = mix(nxy, ripple, puddle);
-		// Мокрий асфальт відбиває ~8 % неба: сама шорсткість 0.22 під похмурим небом майже не дає
-		// відблиску, і мокра дорога не відрізняється від сухої.
+		// Мокрий асфальт відбиває ~3 % неба, глянцеві смуги — до 30 %: шорсткість 0.45 під похмурим
+		// небом сама відблиску майже не дає, а більше дзеркала робило дорогу яскравішою за воду.
 		float mirror = max(max(puddle * 2.5, shore * 0.12),
-				wet * road_cov * (rt.r + 0.5 * rt.b) * 0.08 + paved_sheen * road_cov * 0.8);
+				wet * road_cov * (rt.r + 0.5 * rt.b) * 0.03 + paved_sheen * road_cov * 0.3);
 		vec3 refl = vec3(0.0);
 		if (mirror > 0.0 && sky_reflection_gain > 0.0) {
 			// Як overcast_reflection (F0 0.1), але частку неба обмежено PUDDLE_SKY_MAX: на скісному
@@ -982,7 +990,10 @@ void fragment() {
 			vec3 nw = slope_to_world(ripple);
 			vec3 vw = normalize(CAMERA_POSITION_WORLD - world_pos);
 			float fr = 0.1 + 0.9 * pow(1.0 - clamp(dot(nw, vw), 0.0, 1.0), 3.0);
-			refl = overcast_sky_at(reflect(-vw, nw), TIME) * min(fr * mirror, mix(PUDDLE_SKY_MAX, 0.1, pool));
+			refl = overcast_sky_at(reflect(-vw, nw), TIME, sky_clear) * min(fr * mirror, mix(PUDDLE_SKY_MAX, 0.1, pool));
+			float murk_k = clamp(water_murk, 0.0, 1.0);
+			refl = mix(refl, vec3(dot(refl, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.92, 0.98, 1.02),
+					murk_k) * (1.0 - 0.8 * murk_k);
 		}
 
 		// Коса (внутрішній берег повороту) — останнім, від яскравості поля поруч (з тією ж
@@ -995,8 +1006,10 @@ void fragment() {
 			alb = mix(alb, sand, bar_w * 0.85);
 		}
 
+		// Тінь хмари: плями ~10 клітинок, пливуть ~0.5 клітинки/с (4 м/с), тож пляма минає точку
+		// за 15–20 с. Край вузький (0.52–0.64), щоб тінь читалась плямою, а не загальною рябизною.
 		if (cloud_shadow_strength > 0.0) {
-			float cloud = smoothstep(0.45, 0.7, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
+			float cloud = smoothstep(0.52, 0.64, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
 			alb *= 1.0 - cloud_shadow_strength * cloud;
 		}
 

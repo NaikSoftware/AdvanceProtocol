@@ -53,6 +53,7 @@ const _FallbackMap := preload("res://maps/river.tres")
 @onready var _gate: HandoverGate = %HandoverGate
 @onready var _pause: PauseMenu = %PauseMenu
 @onready var _ui: CanvasLayer = $UI
+@onready var _weather: WeatherRig = $WeatherRig
 
 ## Куди пише «Зберегти й вийти» і що стирає завершений матч; тести підміняють.
 var save_path: String = MatchService.SAVE_PATH
@@ -164,6 +165,7 @@ func _ready() -> void:
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
+	_camera_rig.view_changed.connect(_follow_weather)
 	# Android «назад» інакше виходить із гри разом із матчем; на цьому екрані
 	# воно відкриває паузу. Значення меню повертає _exit_tree().
 	_prev_quit_on_go_back = get_tree().quit_on_go_back
@@ -236,6 +238,10 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
 	_board_view.ring_map = map_data
+	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
+	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
+	_board_view.season = look.season
+	_weather.apply(look)
 	_wire_view(board)
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
@@ -260,6 +266,9 @@ func resume(match_service: Node = null) -> void:
 		_board_view.surface = saved_map.surface
 		_board_view.relief_seed = saved_map.name_key.hash()
 		_board_view.ring_map = saved_map
+	var look: BattleLook = BattleLook.for_map_path(mp)
+	_board_view.season = look.season
+	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
 	_match_service.events_ready.connect(_on_events_ready)
@@ -269,6 +278,8 @@ func resume(match_service: Node = null) -> void:
 func _wire_view(board: Board) -> void:
 	_board_view.build(board)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
+	_weather.attach_probe(_board_view.reflection_probe())
+	_follow_weather()
 
 	_zone_overlay = ZoneOverlay.new(_board_view)
 	_path_overlay = PathOverlay.new(_board_view)
@@ -309,6 +320,10 @@ func _wire_view(board: Board) -> void:
 	_hud.end_turn_pressed.connect(_on_end_turn_pressed)
 
 	_gate.confirmed.connect(_on_gate_confirmed)
+
+
+func _follow_weather() -> void:
+	_weather.follow(_camera_rig.global_position, _camera_rig.zoom_level)
 
 
 func _exit_tree() -> void:
