@@ -36,6 +36,8 @@ var _fps_before: int = 0
 
 func before_each() -> void:
 	_fps_before = Engine.max_fps
+	# Інші екрани (меню) лишають своє обмеження; бій повертає саме його, тож старт — без обмеження.
+	Engine.max_fps = 0
 
 
 func after_each() -> void:
@@ -1020,6 +1022,20 @@ func test_input_uncaps_the_frame_rate() -> void:
 	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS, "передумова: екран у спокої")
 	screen._input(InputEventScreenTouch.new())
 	assert_eq(Engine.max_fps, 0)
+
+
+## Натиск знімає лише обмеження спокою: обмеження, що було до бою, лишається.
+func test_input_returns_the_cap_from_before_the_battle() -> void:
+	Engine.max_fps = 45
+	# Не autofree: той звільняє екран уже після after_each, і _exit_tree повернув би 45 наступним тестам.
+	var screen: Node3D = BattleScreenScene.instantiate()
+	add_child(screen)
+	_idle_for_a_second(screen)
+	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS, "передумова: екран у спокої")
+	screen._input(InputEventScreenTouch.new())
+	assert_eq(Engine.max_fps, 45)
+	remove_child(screen)
+	screen.free()
 
 
 func test_camera_motion_keeps_the_frame_rate_uncapped() -> void:

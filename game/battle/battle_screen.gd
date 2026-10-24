@@ -731,11 +731,12 @@ func _process(delta: float) -> void:
 
 ## _input, а не _unhandled_input: натиск на кнопку HUD чи гейта теж будить кадри. Рух
 ## камери й анімація подій завжди починаються з натиску; поки вони тривають, відлік
-## спокою починається знову.
+## спокою починається знову. Натиск знімає лише обмеження спокою й повертає те, що
+## було до бою.
 func _input(_event: InputEvent) -> void:
 	_idle_timer.start()
-	if Engine.max_fps != 0:
-		Engine.max_fps = 0
+	if Engine.max_fps != _prev_max_fps:
+		Engine.max_fps = _prev_max_fps
 
 
 func _on_idle_timeout() -> void:
