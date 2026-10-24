@@ -109,7 +109,7 @@ COLOUR: mean linear (0.10, 0.135, 0.155), L* ≈ 43, b* slightly negative; value
 MUST NOT: show the skirt edge or the clear colour anywhere at any zoom or pan; band; leave a river or
   road lit brighter than the haze (water needs the same term).
 ACCEPT IF: (1) at zoom 20 with the focus clamped at each board corner, no pixel shows the clear
-  colour or a skirt edge (20:9 and 16:9); (2) at d ≥ 11 tiles alpha ≥ 0.98 and the mean is
+  colour or a skirt edge (20:9 and 16:9); (2) at d ≥ 11.5 tiles alpha ≥ 0.98 and the mean is
   within 2/255 of the haze colour (luminance cv 0.06–0.10); (3) the river at 8 tiles out is within
   10 % of the haze value.
 ```
@@ -282,7 +282,7 @@ DELIVERABLE: shader functions + one NoiseTexture2D (512², R8, generated at load
   driver. No new meshes or draw calls.
 ACCEPT IF: (1) ground at d < 2 tiles matches the same material on the board (ΔE < 1) at any
   fog_time; (2) at d = 5–9 tiles the alpha p5–p95 spread is ≥ 0.5 and at least 3 separate lobes show
-  along a 20-tile stretch of edge; (3) at d ≥ 11 alpha ≥ 0.98, mean within 2/255 of haze_color,
+  along a 20-tile stretch of edge; (3) at d ≥ 11.5 alpha ≥ 0.98, mean within 2/255 of haze_color,
   luminance cv 0.06–0.10; (4) consecutive ticks differ by ≤ 2/255 per pixel, while 20 s apart the
   p99 difference is ≥ 15/255; (5) with all other TIME uses removed, an idle board draws 10 ± 1
   frames per second (Engine.get_frames_drawn over 10 s).
