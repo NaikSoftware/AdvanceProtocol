@@ -77,6 +77,9 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
     with the same events as a lethal hit, and its remaining HP is credited to the engineer's owner
     as damage dealt. Elimination is checked at once.
   - **A friendly unit on the bridge forbids the demolition** (`ERR_TILE_OCCUPIED`).
+  - **A wreck on the span goes into the river** with the bridge, and does not forbid the
+    demolition; a unit lost with the bridge leaves no wreck
+    ([§3.14](movement-and-terrain.md#wrecks)).
 - **Repair a damaged friendly unit** — heals `(40 + rand(0, ap_left - fire_cost)) / 2`, so an
   engineer that drove all turn repairs badly. This is the one place where unspent AP matters.
 

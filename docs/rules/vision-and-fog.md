@@ -11,7 +11,10 @@ The detail behind §3.5 and §3.11 of CLAUDE.md — what each player can see, an
   least (3) — scouts are infantry, not vehicles.
 - **The fog hides enemy units, not the map.** Terrain is public from the first turn: the whole
   board is drawn, at full brightness, whether or not anyone has been near it. What the fog conceals
-  is the enemy — where their units are, and the mines they have laid.
+  is the enemy — where their units are, and the mines they have laid. Wrecks
+  ([§3.14](movement-and-terrain.md#wrecks)) follow the same `seen` rule as units: a player knows a
+  wreck only on ground they have scouted, and plans a vehicle's route as if unscouted ground held
+  none.
 - This is a deliberate design choice and not an oversight. Hiding the ground would make the opening
   of a match an exercise in map discovery, and it would make the two movement zones (§3.2) lie:
   a route planned across unscouted ground would be a guess, and the gold contour would have to

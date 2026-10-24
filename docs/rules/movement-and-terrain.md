@@ -1,6 +1,7 @@
 # Movement and terrain
 
-The detail behind §3.1, §3.2 and §3.12 of CLAUDE.md — the grid, action points and ground state.
+The detail behind §3.1, §3.2, §3.12 and §3.14 of CLAUDE.md — the grid, action points, ground state
+and wrecks.
 
 [back to CLAUDE.md](../../CLAUDE.md)
 
@@ -104,12 +105,14 @@ occupancies and conflating them is a bug in either direction:
 
 - **Planning** — the zones, the path, and whether a destination is reachable at all — uses the full
   terrain, which is public (§3.5), the player's own units, enemy **units** standing on ground the
-  player has scouted (`seen`, §3.5), and the enemy mines the player already knows of, which are
-  obstacles (§3.11). Ground that looks empty is planned through. Terrain never surprises a move;
+  player has scouted (`seen`, §3.5), the enemy mines the player already knows of, which are
+  obstacles (§3.11), and, for a vehicle, the wrecks on scouted ground (§3.14). Ground that looks
+  empty is planned through. Terrain never surprises a move;
   only an enemy can.
 - **Walking** uses the truth. Before entering each tile the mover checks what is really there; if
-  a unit it could not see is standing in the way, or an engineer has just found a mine there, the
-  move **stops on the tile before it** and ends. Vision is recomputed at every step, so whatever
+  a unit it could not see is standing in the way, a vehicle meets a wreck on ground its side had
+  not scouted, or an engineer has just found a mine there, the move **stops on the tile before
+  it** and ends. Vision is recomputed at every step, so whatever
   emerged is visible from that moment on.
 
 This is the same shape as the mine rule (§3.11), and deliberately so: the unit stops where reality
@@ -139,6 +142,34 @@ by a unit you cannot see is therefore a legal order**, not an error; you give it
 
 Both zones are computed by a flood fill over the grid (Dijkstra on entry cost) and must be
 recomputed after every action that changes AP or occupancy.
+
+## Wrecks
+
+A destroyed vehicle leaves a wreck on its tile — whatever killed it: a shot, a retaliation, a
+drone strike, a mine (the wreck lies on the mine tile), or a concede. Every class except
+infantry counts as a vehicle (`UnitTypes.is_vehicle()`), engineers and artillery included. A
+destroyed squad leaves none.
+
+- **A wreck blocks vehicles only.** A vehicle can never enter it, end on it, or pass through it.
+  Infantry walks onto it, stands on it, and walks on.
+- **It blocks nothing else** — not fire, vision, retaliation, or targeting. Victory (§3.10)
+  counts only live units, so a wreck keeps no player in the match.
+- **It burns out after `WRECK_ROUNDS` = 3 full rounds**, counted from the point in the round where
+  it appeared: it is removed at the start of the turn that falls at the same place in the round,
+  three rounds later. Every live player, including the one on whose turn it appeared, therefore
+  gets exactly three turns with it on the board. Counting from the start of a round instead would
+  give the players who move before the killer one turn fewer. The rules forget it once it burns
+  out; the scorch mark that remains is the view's.
+- **A bridge takes its wreck with it.** Demolishing a bridge removes any wreck on the span, and a
+  unit lost with the bridge leaves none — it fell into the river. A wreck does not forbid the
+  demolition: no vehicle can be standing on it.
+- **A player knows a wreck only on ground they have scouted** (`seen`, §3.5). Planning routes a
+  vehicle around known wrecks, and their tiles are not legal vehicle destinations; an unknown wreck
+  is planned through, and the walk stops on the tile before it, exactly as for an unseen unit.
+
+`core/` reports wrecks as events, so the view never decides whether one was left:
+`WreckLeft(pos, type_id)` comes straight after the `UnitDestroyed` it belongs to, and
+`WreckRemoved(pos, reason)` carries `Wrecks.Reason.BURNED_OUT` or `BRIDGE_DEMOLISHED`.
 
 ## Weather, time of day, and ground state
 

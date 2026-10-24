@@ -201,5 +201,7 @@ will land in **before** the player commits.
 
 A player with no units left is eliminated. The check runs the moment a unit falls — after a shot,
 a retaliation, a drone strike, a mine, a demolished bridge, or a concede — and again at end of
-turn. Last player standing wins. In 3-player games an eliminated player is skipped in the turn
+turn. Last player standing wins. A destroyed vehicle leaves a wreck on its tile unless it went
+down with a bridge ([§3.14](movement-and-terrain.md#wrecks)); a wreck is not a unit and does not
+count towards victory. In 3-player games an eliminated player is skipped in the turn
 order, and the match continues between the remaining two.
