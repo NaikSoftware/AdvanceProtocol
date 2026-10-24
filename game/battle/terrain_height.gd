@@ -69,6 +69,8 @@ const _CURV_RANGE: float = 1.5 * M
 const _ROAD_DAMP: float = 0.9
 ## Смуга за краєм дошки (клітинок), де вісь річки дошки переходить у вісь світу з кільцем.
 const _COURSE_BLEND: float = 1.5
+## Ширина гладкого мінімуму, яким об'єднано поля осей дошки й світу (клітинки).
+const _COURSE_ROUND: float = 0.4
 
 ## Поточна карта висот бою. Одна на процес: BoardView ставить її в build() і знімає, виходячи
 ## зі сцени; без неї (тести, меню) все лежить на y = 0.
@@ -547,8 +549,15 @@ func _keep_board_course(fld: Array[PackedFloat32Array], seed_value: int) -> void
 		var db: float = ofld[0][k] + fade_board
 		var dw: float = fld[0][k] + fade_world
 		fld[1][k] = lerpf(ofld[1][k], fld[1][k], smoothstep(-_COURSE_BLEND, _COURSE_BLEND, out))
-		fld[0][k] = minf(db, dw)
-		fld[2][k] = minf(ofld[2][k] + fade_board, fld[2][k] + fade_world)
+		fld[0][k] = _smooth_min(db, dw, _COURSE_ROUND)
+		fld[2][k] = _smooth_min(ofld[2][k] + fade_board, fld[2][k] + fade_world, _COURSE_ROUND)
+
+
+## Гладкий мінімум (поліноміальний, ширина k): там, де дві водойми сходяться під кутом, берег
+## огинає стик дугою, а не лишає вм'ятину.
+static func _smooth_min(a: float, b: float, k: float) -> float:
+	var h: float = maxf(k - absf(a - b), 0.0) / k
+	return minf(a, b) - h * h * k * 0.25
 
 
 ## Переправи для осі річки: зв'язні групи клітинок мосту; вісь настилу — та, де обидва кінці
