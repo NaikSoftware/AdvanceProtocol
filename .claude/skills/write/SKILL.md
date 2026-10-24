@@ -187,6 +187,13 @@ Title: one Ukrainian phrase naming the user-visible result — no type prefix (r
 - Otherwise the standard Ukrainian term (вузол, подія, екземпляр, типовий); a loanword only where
   developers don't use the official one (коміт, репозиторій, асет, меш).
 - No English stems with Ukrainian endings: емітить, пофіксити, лукап, креш, девтул.
+- **No calques or transliterations of English terms.** Don't write «хамфер» for chamfer distance or
+  «лоби» for fog lobes. These are words no Ukrainian reader recognises, and «лоб» already means
+  front armour here. Describe the thing in plain Ukrainian («наближена відстань», «клуби імли»).
+  If a precise name matters, put the English term in backticks after it once: «наближена відстань
+  (`chamfer`)». The same goes for words picked up from research briefs or critic reports: translate
+  them before they reach a comment, a commit or a reply. If you can't find the Ukrainian word, check
+  [`terms-uk.md`](terms-uk.md) and add the term there.
 - «вигляд» is the presentation layer (`game/`), `core/` is the rules layer — not «ядро», not
   «шар показу».
 

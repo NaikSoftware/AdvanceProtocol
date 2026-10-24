@@ -188,3 +188,9 @@ listed at the end; do not copy them.
 | fog lobes, billows, puffs | клуби (імли) | never «лоби»: calque, and «лоб» is front armour |
 | wisps, strands | пасма | |
 | terrain saddle, dip (hill lowered toward an edge) | улоговина | not «сідловина» |
+
+## Оформлення тексту
+
+| English | Українська | note |
+| --- | --- | --- |
+| backticks, code font | зворотні апострофи (`` ` ``), оформити як код | never «бектики» |
