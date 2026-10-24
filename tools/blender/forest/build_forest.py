@@ -185,6 +185,8 @@ def hull(mb, key, cell, top, relief, skirt_h, rng, half=False):
     for (i0, j0), (i1, j1) in zip(rim, nxt):
         if half and j0 == nz and j1 == nz:
             continue  # тильний край не видно
+        if half and i0 == i1 and i0 in (0, n):
+            continue  # бічні стіни клумпа стирчали пласкими плитами біля кутів
         a, b = pt(i0, j0), pt(i1, j1)
         horizontal = j0 == j1
 
@@ -289,7 +291,7 @@ TREES = {
     },
 }
 TOP = {"pine": 18.0, "mixed": 16.5, "deciduous": 15.5}
-SKIRT = {"pine": 12.5, "mixed": 11.0, "deciduous": 9.5}
+SKIRT = {"pine": 14.5, "mixed": 13.0, "deciduous": 11.5}
 
 
 def place_tree(mb, key, spec, x, z, rng, scale=1.0):
@@ -321,10 +323,10 @@ def edge_clump(mb, key, tname, v, rng):
         place_tree(mb, key, t["mid"][(i + v) % 2], (-2.0 if i == 0 else 2.2) + rng.uniform(-0.8, 0.8),
                    rng.uniform(-0.3, 0.8), rng, rng.uniform(0.95, 1.1))
     # Пояс кущів на відкритому боці: низький, густіший за інтер'єр.
-    for k in range(5 + v % 2):
-        w = rng.uniform(2.4, 3.6)
-        x = min(max(-3.4 + k * 1.45 + rng.uniform(-0.4, 0.4), -5 + w / 2), 5 - w / 2)
-        shrub(mb, x, rng.uniform(-5 + w * 0.5, -3.2), w, rng.uniform(2.0, 4.0), rng)
+    for k in range(7 + v % 2):
+        w = rng.uniform(1.8, 3.6)
+        x = min(max(-4.0 + k * 1.2 + rng.uniform(-0.6, 0.6), -5 + w / 2), 5 - w / 2)
+        shrub(mb, x, rng.uniform(-5 + w * 0.5, -2.6), w, rng.uniform(1.6, 4.2), rng)
 
 
 def canopy_tile(mb, key, tname, v, rng):

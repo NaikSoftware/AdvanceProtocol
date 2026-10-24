@@ -58,6 +58,15 @@ def desaturate(im, k):
     return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGBA")
 
 
+def warm(im, on):
+    """Мʼякий жовтувато-зелений відтінок: перехід від хвої до осіннього листя без різкої плями."""
+    if not on:
+        return im
+    a = np.asarray(im).astype(np.float32)
+    a[..., :3] *= np.array([1.08, 1.03, 0.85], np.float32)
+    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGBA")
+
+
 def harden(im, lo=0.35, hi=0.65):
     a = np.asarray(im).astype(np.float32) / 255.0
     t = np.clip((a[..., 3] - lo) / (hi - lo), 0, 1)
@@ -98,6 +107,18 @@ def key_background(path, mode):
     return Image.fromarray(np.dstack([rgb, fg * 255]).astype(np.uint8), "RGBA")
 
 
+def remove_outline(im):
+    """Генератор обводить листя тонким чорним контуром: на межі беремо колір із серцевини."""
+    a = np.asarray(im).astype(np.float32)
+    core = Image.fromarray(((a[..., 3] > 240) * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(5))
+    m = (np.asarray(core).astype(np.float32) / 255.0)[..., None]
+    pm = Image.fromarray((a[..., :3] * m).astype(np.uint8), "RGB").filter(ImageFilter.GaussianBlur(5))
+    wm = Image.fromarray((m[..., 0] * 255).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(5))
+    bg = np.asarray(pm).astype(np.float32) / np.maximum(np.asarray(wm).astype(np.float32)[..., None] / 255.0, 1e-3)
+    rgb = np.where(m > 0.5, a[..., :3], np.clip(bg, 0, 255))
+    return Image.fromarray(np.dstack([rgb, a[..., 3]]).astype(np.uint8), "RGBA")
+
+
 def split_cells(im, season):
     """Чотири крони з атласу 2x2; для голих гілок товщає alpha — тонкі лінії не виживають у мипах."""
     w = im.width // 2
@@ -107,6 +128,8 @@ def split_cells(im, season):
         scale = 320 / w
         if scale != 1:
             c = c.resize((320, 320), Image.LANCZOS)
+        if season != "late":
+            c = remove_outline(c)
         al = c.getchannel("A").point(lambda v: 255 if v > 60 else 0)
         bb = al.getbbox()
         out.append(c.crop(bb))
@@ -133,7 +156,12 @@ def place(canvas, crown, diameter_m, cx_m, cy_m, rng, bright):
     x = int(cx_m * PXM - im.width / 2)
     y = int(cy_m * PXM - im.height / 2)
     layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    layer.paste(im, (x, y))
+    # Обгортка через край вікна: покриття біля шва таке саме, як у центрі, тож між плитками
+    # не лишається прозорої щілини.
+    for dx in (-CELL, 0, CELL):
+        for dy in (-CELL, 0, CELL):
+            if x + dx < CELL and x + dx + im.width > 0 and y + dy < CELL and y + dy + im.height > 0:
+                layer.paste(im, (x + dx, y + dy), im)
     canvas.alpha_composite(layer)
     return {"cx": cx_m, "cy": cy_m, "r": diameter_m / 2}
 
@@ -156,11 +184,11 @@ def compose(kind, season, conif, broad, rng):
     cv = Image.new("RGBA", (CELL, CELL), (0, 0, 0, 0))
     crowns = []
     # Нижній шар: темніші крони під верхніми, щоб покриття сягало 80–90 %, а не лишалося ґратою.
-    under = {"pine": (5, 0.55), "mixed": (4, 0.55), "deciduous": (0, 1.0)}[kind]
+    under = {"pine": (5, 0.7), "mixed": (5, 0.7), "deciduous": (0, 1.0)}[kind]
     if kind == "deciduous" and season != "late":
         under = (7, 0.6) if season == "summer" else (4, 0.6)
     pool = [conif[n] for n in ("pine_a", "pine_b")] if kind != "deciduous" else broad
-    for (x, y) in spread(rng, under[0], 2.0, 8.0, 2.4):
+    for (x, y) in spread(rng, under[0], 0.0, 10.0, 2.4):
         place(cv, rng.choice(pool), rng.uniform(5.5, 7.0), x, y, rng, under[1])
     if kind == "pine":
         for (x, y) in spread(rng, 3, 2.9, 7.1, 3.0):
@@ -175,18 +203,18 @@ def compose(kind, season, conif, broad, rng):
     elif kind == "mixed":
         pts = spread(rng, 4, 3.0, 7.0, 3.0)
         for i, (x, y) in enumerate(pts):
-            if i < 2:
-                n = rng.choice(["pine_a", "pine_b"] if i == 0 else ["spruce_a", "spruce_b"])
-                c = place(cv, conif[n], 5.8 if i == 0 else 4.0, x, y, rng, rng.uniform(0.9, 1.1))
-                c["kind"] = "pine" if i == 0 else "spruce"
+            if i < 3:
+                n = rng.choice(["pine_a", "pine_b"] if i != 1 else ["spruce_a", "spruce_b"])
+                c = place(cv, conif[n], 5.8 if i != 1 else 4.0, x, y, rng, rng.uniform(0.9, 1.1))
+                c["kind"] = "pine" if i != 1 else "spruce"
             else:
-                c = place(cv, rng.choice(broad), rng.uniform(5.8, 7.2), x, y, rng, rng.uniform(0.9, 1.1))
+                c = place(cv, rng.choice(broad), rng.uniform(5.4, 6.6), x, y, rng, rng.uniform(0.8, 0.95))
                 c["kind"] = "broad"
             crowns.append(c)
     else:
         n = 4 if season == "summer" else 3
-        d = (6.4, 7.4) if season == "late" else ((7.2, 8.6) if season == "summer" else (6.2, 7.6))
-        for (x, y) in spread(rng, n, 3.2, 6.8, 3.0):
+        d = (5.0, 6.0) if season == "late" else ((7.2, 8.6) if season == "summer" else (6.2, 7.6))
+        for (x, y) in spread(rng, n, 3.2, 6.8, 3.2):
             c = place(cv, rng.choice(broad), rng.uniform(*d), x, y, rng, rng.uniform(0.9, 1.1))
             c["kind"] = "broad"
             crowns.append(c)
@@ -198,7 +226,7 @@ def scatter_patch(pieces, rng, size=320, cover=0.6):
     cv = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     for _ in range(80):
         p = rng.choice(pieces)
-        s = rng.randint(80, 140)
+        s = rng.randint(50, 100)
         x0 = rng.randint(0, max(0, p.width - s))
         y0 = rng.randint(0, max(0, p.height - s))
         q = p.crop((x0, y0, x0 + s, y0 + s)).rotate(rng.uniform(0, 360), resample=Image.BICUBIC)
@@ -212,6 +240,14 @@ def scatter_patch(pieces, rng, size=320, cover=0.6):
     m = Image.new("L", (size, size), 0)
     ImageDraw.Draw(m).ellipse((10, 10, size - 10, size - 10), fill=255)
     m = m.filter(ImageFilter.GaussianBlur(12))
+    # Шум розриває суцільну масу на пучки гілок і дає світліші кінчики.
+    noise = Image.fromarray(np.random.RandomState(rng.randint(0, 9999)).randint(0, 255, (24, 24)).astype(np.uint8))
+    noise = np.asarray(noise.resize((size, size), Image.BICUBIC)).astype(np.float32) / 255.0
+    cut = np.clip((noise - 0.38) / 0.12, 0, 1)
+    a = np.asarray(cv).astype(np.float32)
+    a[..., :3] = np.clip(a[..., :3] * (0.95 + 0.25 * cut[..., None]), 0, 255)
+    a[..., 3] *= cut
+    cv = Image.fromarray(a.astype(np.uint8), "RGBA")
     cv.putalpha(ImageChops.multiply(cv.getchannel("A"), m))
     return cv
 
@@ -252,7 +288,7 @@ def sheet(kind, season, pieces, bark_img, rng):
     if kind == "pine":
         shrub = sprite_shrub(rng)
     else:
-        shrub = scatter_patch(pieces, rng, cover=0.55)
+        shrub = scatter_patch(pieces, rng, cover=0.7)
     sh.paste(shrub, (320, 320))
     return sh
 
@@ -283,7 +319,7 @@ def main():
                 target = TARGET_Y[season]
             else:
                 target = (TARGET_Y["pine"] + TARGET_Y[season]) / 2
-            cv = desaturate(grade(cv, target), 0.7 if season == "early" else 1.0)
+            cv = warm(desaturate(grade(cv, target), (0.5 if kind == "mixed" else 0.7) if season == "early" else 1.0), kind == "mixed" and season == "early")
             atlas.paste(cv, ((v % 2) * 640, (v // 2) * 640))
             info.append(cr)
             cov = np.asarray(cv)[..., 3].astype(np.float32).mean() / 255
