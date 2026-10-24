@@ -27,7 +27,7 @@ def _img(name):
 
 
 def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=(), streak=0.0,
-                  base_dirt=0.0, patch=None, rough=0.85):
+                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3):
     """Матеріал, який запікається в атлас. Текстура тайлиться в метрах (box-проєкція в
     координатах обʼєкта), тож не залежить від UV. seams: (вісь, період м, ширина м, сила);
     вісь h = горизонталь стіни, x/y/z = координата обʼєкта. patch: (колір, частка) —
@@ -88,13 +88,18 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
         base = mix(flat, flat, 0.0)
     else:
         base = mix(base, tint, 1.0, "MULTIPLY")
+        if sat != 1.0:
+            hs = N("ShaderNodeHueSaturation")
+            hs.inputs["Saturation"].default_value = sat
+            L(base, hs.inputs["Color"])
+            base = hs.outputs["Color"]
 
     # смуги потьоків: шум, розтягнутий по висоті
     if streak > 0:
         x, y, z = sep.outputs
         v = N("ShaderNodeCombineXYZ")
-        L(math("MULTIPLY", x, 1.3), v.inputs[0])
-        L(math("MULTIPLY", y, 1.3), v.inputs[1])
+        L(math("MULTIPLY", x, streak_xy), v.inputs[0])
+        L(math("MULTIPLY", y, streak_xy), v.inputs[1])
         L(math("MULTIPLY", z, 0.08), v.inputs[2])
         nz = N("ShaderNodeTexNoise")
         nz.inputs["Scale"].default_value = 1.0
@@ -104,7 +109,7 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
         cr.color_ramp.elements[0].position = 0.42
         cr.color_ramp.elements[1].position = 0.7
         L(nz.outputs["Fac"], cr.inputs[0])
-        base = mix(base, (0.0, 0.0, 0.0), math("MULTIPLY", cr.outputs[0], streak * 0.55), "MIX")
+        base = mix(base, streak_col, math("MULTIPLY", cr.outputs[0], streak * 0.55), "MIX")
     # забруднення біля землі
     if base_dirt > 0:
         h = math("SUBTRACT", 1.0, math("DIVIDE", sep.outputs[2], 2.5, clamp=True))
@@ -133,6 +138,10 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
             ax = math("ABSOLUTE", ns.outputs[0])
             ay = math("ABSOLUTE", ns.outputs[1])
             c = math("ADD", math("MULTIPLY", sep.outputs[0], ay), math("MULTIPLY", sep.outputs[1], ax))
+        elif axis == "ang8":
+            # кут навколо найближчої осі бункера (центри кожні 8 м від -12), у метрах дуги
+            lx = math("SUBTRACT", math("MODULO", math("ADD", sep.outputs[0], 16.0), 8.0), 4.0)
+            c = math("MULTIPLY", math("ARCTAN2", sep.outputs[1], lx), 3.5)
         else:
             c = sep.outputs["XYZ".index(axis.upper())]
         f = math("FRACT", math("DIVIDE", math("ADD", c, 10000.0), period))
@@ -155,6 +164,8 @@ def make_window_material():
     L(bs.outputs["BSDF"], out.inputs["Surface"])
     uvn = N("ShaderNodeUVMap")
     uvn.uv_map = "local"
+    ca = N("ShaderNodeVertexColor")
+    ca.layer_name = "wtone"
     sep = N("ShaderNodeSeparateXYZ")
     L(uvn.outputs["UV"], sep.inputs[0])
 
@@ -179,12 +190,20 @@ def make_window_material():
     sky = math("MULTIPLY", math("ABSOLUTE", math("SUBTRACT", math("ADD", u, v), 1.0)), 0.25)  # діагональний відблиск
     gl = N("ShaderNodeMix")
     gl.data_type = "RGBA"
-    gl.inputs[6].default_value = (0.16, 0.19, 0.22, 1)
-    gl.inputs[7].default_value = (0.03, 0.035, 0.04, 1)
+    gl.inputs[6].default_value = (0.10, 0.12, 0.14, 1)
+    gl.inputs[7].default_value = (0.025, 0.03, 0.036, 1)
     L(sky, gl.inputs[0])
+    # тон вікна з атрибута: темне скло, теплі штори, світліше скло
+    tone = N("ShaderNodeSeparateColor")
+    L(ca.outputs["Color"], tone.inputs[0])
+    gl2 = N("ShaderNodeMix")
+    gl2.data_type = "RGBA"
+    L(tone.outputs[0], gl2.inputs[0])
+    L(gl.outputs[2], gl2.inputs[6])
+    gl2.inputs[7].default_value = (0.20, 0.17, 0.13, 1)
     fm = N("ShaderNodeMix")
     fm.data_type = "RGBA"
-    L(gl.outputs[2], fm.inputs[6])
+    L(gl2.outputs[2], fm.inputs[6])
     fm.inputs[7].default_value = (0.5, 0.5, 0.48, 1)
     L(mask, fm.inputs[0])
     L(fm.outputs[2], bs.inputs["Base Color"])
@@ -202,18 +221,21 @@ def mats():
     g = lambda v: (v, v, v)
     MATS.update({
         # сірувато-бежева панель 3 м x поверх, шви між панелями
-        "panel": make_material("panel", "Concrete034", 1.2, (0.58, 0.57, 0.53), seams=[("h", 3.0, 0.025, 0.4), ("z", 3.1, 0.025, 0.4)], streak=1.0, base_dirt=0.6, patch=((0.12, 0.13, 0.10), 0.14)),
-        "panel_scorched": make_material("panel_scorched", "Concrete034", 1.2, (0.26, 0.25, 0.23), seams=[("h", 3.0, 0.025, 0.4), ("z", 3.1, 0.025, 0.4)], streak=1.0, base_dirt=0.5, patch=((0.01, 0.01, 0.01), 0.5)),
-        "bitumen": make_material("bitumen", "Asphalt031", 1.0, g(0.38), seams=[("x", 1.1, 0.03, 0.5)], patch=((0.04, 0.045, 0.04), 0.2)),
-        "fc_roof": make_material("fc_roof", "Concrete046", 1.2, (0.52, 0.52, 0.50), seams=[("x", 1.1, 0.05, 0.3), ("y", 1.1, 0.05, 0.3)], streak=0.2, patch=((0.16, 0.2, 0.12), 0.06)),
+        "panel": make_material("panel", "Concrete034", 1.2, (0.50, 0.50, 0.47), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=1.0, base_dirt=0.6, patch=((0.12, 0.13, 0.10), 0.14)),
+        "panel_scorched": make_material("panel_scorched", "Concrete034", 1.2, (0.22, 0.21, 0.20), seams=[("h", 3.0, 0.04, 0.4), ("z", 3.1, 0.05, 0.4)], streak=1.0, base_dirt=0.5, patch=((0.01, 0.01, 0.01), 0.5)),
+        "bitumen": make_material("bitumen", "Asphalt031", 1.0, g(0.38), patch=((0.04, 0.045, 0.04), 0.2)),
+        "fc_roof": make_material("fc_roof", "Concrete034", 1.2, (0.33, 0.33, 0.32), seams=[("x", 1.1, 0.04, 0.3), ("y", 1.1, 0.04, 0.3)], streak=0.25, patch=((0.12, 0.16, 0.10), 0.06)),
         "wall_silicate": make_material("wall_silicate", "Plaster001", 1.0, (0.86, 0.86, 0.82), seams=[("z", 0.25, 0.05, 0.2)], streak=1.0, base_dirt=0.4),
         "clad_wall": make_material("clad_wall", "CorrugatedSteel005", 1.0, (0.62, 0.70, 0.62), seams=[("h", 1.0, 0.015, 0.55)], streak=1.0, base_dirt=0.5),
-        "clad_roof": make_material("clad_roof", "CorrugatedSteel005", 1.0, (0.40, 0.42, 0.36), seams=[("y", 1.0, 0.05, 0.3), ("x", 1.0, 0.05, 0.3)], streak=0.25, patch=((0.2, 0.1, 0.05), 0.07)),
-        "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.30, 0.38, 0.33), seams=[("z", 0.25, 0.01, 0.5)], base_dirt=0.5),
-        "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.78, 0.8, 0.8), seams=[("z", 1.5, 0.02, 0.5)], streak=1.0, base_dirt=0.4, patch=((0.2, 0.12, 0.07), 0.1)),
+        "clad_roof": make_material("clad_roof", "CorrugatedSteel005", 1.0, (0.34, 0.36, 0.32), seams=[("y", 1.0, 0.04, 0.3), ("x", 1.0, 0.04, 0.3)], streak=0.4, patch=((0.2, 0.1, 0.05), 0.07)),
+        "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.36, 0.42, 0.44), streak=0.5),
+        "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.2), patch=((0.03, 0.03, 0.03), 0.3)),
+        "clad_burnt": make_material("clad_burnt", "CorrugatedSteel005", 1.0, (0.12, 0.12, 0.11), streak=1.0),
+        "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.20, 0.36, 0.30), seams=[("z", 0.25, 0.03, 0.5)], base_dirt=0.5),
+        "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.62, 0.66, 0.70), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], streak=0.8, base_dirt=0.4),
         "silo_concrete": make_material("silo_concrete", "Concrete034", 1.5, (0.52, 0.52, 0.5), seams=[("z", 1.5, 0.02, 0.4)], streak=1.0, base_dirt=0.6, patch=((0.1, 0.12, 0.09), 0.2)),
-        "brick": make_material("brick", "Bricks105", 1.0, (0.55, 0.38, 0.32), streak=0.9, base_dirt=0.5),
-        "steel_paint": make_material("steel_paint", "PaintedMetal012", 1.0, (0.5, 0.5, 0.48), streak=1.0, base_dirt=0.5, patch=((0.2, 0.09, 0.04), 0.3)),
+        "brick": make_material("brick", "Bricks105", 1.0, (0.66, 0.46, 0.38), sat=0.5, streak=0.9, base_dirt=0.5),
+        "steel_paint": make_material("steel_paint", "PaintedMetal012", 1.0, (0.5, 0.5, 0.48), streak=1.6, streak_xy=6.0, base_dirt=0.5, streak_col=(0.28, 0.11, 0.05)),
         "metal_dark": make_material("metal_dark", "MetalPlates013", 1.0, g(0.8), streak=0.5),
         "rust": make_material("rust", "Rust004", 1.0, g(1.0)),
         "window": make_window_material(),
@@ -234,6 +256,9 @@ class Builder:
         self.bm = bmesh.new()
         self.slots = []
         self.local = self.bm.loops.layers.uv.new("local")
+        self.wtone = self.bm.loops.layers.color.new("wtone")
+        import random
+        self.rnd = random.Random(5)
 
     def _slot(self, name):
         if name not in self.slots:
@@ -279,6 +304,12 @@ class Builder:
         bmesh.ops.translate(self.bm, vec=(a + c) / 2, verts=verts)
         faces = list({f for v in verts for f in v.link_faces})
         self._finish(faces, mat)
+
+    def poly_up(self, pts, mat):
+        """Многокутник, нормаль якого дивиться вгору (для скатів і плит)."""
+        v = [Vector(p) for p in pts]
+        n = (v[1] - v[0]).cross(v[2] - v[1])
+        return self.poly(pts if n.z >= 0 else pts[::-1], mat)
 
     def poly(self, pts, mat):
         vs = [self.bm.verts.new(p) for p in pts]
@@ -344,8 +375,10 @@ class Builder:
             loc = [(0, 0), (1, 0), (1, 1), (0, 1)]
         f = self.poly(pts, "window")
         layer = self.local
+        tone = self.rnd.choice((0.0, 0.0, 0.0, 0.35, 0.8))
         for lp, uvv in zip(f.loops, loc):
             lp[layer].uv = uvv
+            lp[self.wtone] = (tone, tone, tone, 1.0)
 
     def tris(self):
         return sum(len(f.verts) - 2 for f in self.bm.faces)
@@ -460,11 +493,6 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0, footp
             break
     ATLAS[:] = [atlas_px, round(cm, 2)]
 
-    # метри → тайли після розгортки: у масштабі 1/8 розгортка Blender спотворюється
-    from mathutils import Matrix
-    me.transform(Matrix.Scale(1 / TILE, 4) @ Matrix.Translation((-cx, -cy, -min(zs))))
-    me.update()
-
     # запікання
     img = bpy.data.images.new("atlas", atlas_px, atlas_px)
     for m in me.materials:
@@ -491,8 +519,14 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0, footp
     mean_l = float(lstar.mean())
 
     # один матеріал на запеченому атласі
+    # запікали в метрах (матеріали тайляться в метрах); тепер метри → тайли
+    from mathutils import Matrix
+    me.transform(Matrix.Scale(1 / TILE, 4) @ Matrix.Translation((-cx, -cy, -min(zs))))
+    me.update()
     me.materials.clear()
     me.uv_layers.remove(me.uv_layers["local"])
+    if "wtone" in me.color_attributes:
+        me.color_attributes.remove(me.color_attributes["wtone"])
     fm = bpy.data.materials.new(name)
     fm.use_nodes = True
     nt = fm.node_tree

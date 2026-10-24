@@ -18,7 +18,7 @@ def bay_x(i):
     return X0 + 1.5 + 3.0 * i
 
 
-def windows(b, bays, floors, glass_dark=()):
+def windows(b, bays, floors, blown=()):
     for side, (y, sgn) in (("front", (Y1, 1)), ("back", (Y0, -1))):
         for i in bays:
             for f in floors:
@@ -31,7 +31,25 @@ def windows(b, bays, floors, glass_dark=()):
                     # сходова клітка: вузьке високе вікно на проміжку між поверхами
                     b.window(("y", y, sgn), bay_x(i), f * FLOOR - 0.6, 0.9, 1.3, 0.07)
                     continue
+                if (side, i, f) in blown:
+                    # вибите вікно: чорний проріз і кіптява над ним
+                    x = bay_x(i)
+                    b.poly([(x - 0.7, y + 0.03 * sgn, z), (x + 0.7, y + 0.03 * sgn, z), (x + 0.7, y + 0.03 * sgn, z + 1.4), (x - 0.7, y + 0.03 * sgn, z + 1.4)][::sgn], "dark")
+                    b.poly([(x - 0.9, y + 0.02 * sgn, z + 1.4), (x + 0.9, y + 0.02 * sgn, z + 1.4), (x + 0.5, y + 0.02 * sgn, z + 2.5), (x - 0.5, y + 0.02 * sgn, z + 2.3)][::sgn], "panel_scorched")
+                    continue
                 b.window(("y", y, sgn), bay_x(i), z, 1.4, 1.4)
+
+
+def balconies(b, bays):
+    for i in bays:
+        if i in STAIRS:
+            continue
+        for f in (1, 2):
+            x = bay_x(i)
+            b.box(x, Y1 + 0.6, f * FLOOR - 0.05, 2.2, 1.2, 0.15, "panel", top="panel")
+            b.box(x, Y1 + 1.15, f * FLOOR + 0.1, 2.2, 0.08, 0.9, "metal_dark")
+            b.box(x - 1.06, Y1 + 0.6, f * FLOOR + 0.1, 0.08, 1.1, 0.9, "metal_dark")
+            b.box(x + 1.06, Y1 + 0.6, f * FLOOR + 0.1, 0.08, 1.1, 0.9, "metal_dark")
 
 
 def common(b, east_damage):
@@ -42,6 +60,7 @@ def common(b, east_damage):
         for (cx, cy, sx, sy) in ((0, Y1 - 0.1, LEN, 0.2), (0, Y0 + 0.1, LEN, 0.2), (X0 + 0.1, 0, 0.2, DEP - 0.4), (X1 - 0.1, 0, 0.2, DEP - 0.4)):
             b.box(cx, cy, H, sx, sy, 0.5, mid)
         windows(b, range(10), range(NF))
+        balconies(b, (0, 2, 3, 4, 6, 7, 9))
         for gx in (X0, X1):  # торці глухі, у кожному одне вікно сходового майданчика
             pass
     else:
@@ -52,7 +71,8 @@ def common(b, east_damage):
             b.box(cx, cy, H, sx, sy, 0.5, mid)
         b.box((xc + X1) / 2, 0, 0, X1 - xc, DEP, 2 * FLOOR, mid, top="panel_scorched")
         windows(b, range(0, 7), range(NF))
-        windows(b, range(7, 10), range(2))
+        windows(b, range(7, 10), range(2), blown={("front", 7, 1), ("front", 9, 1), ("back", 8, 1), ("back", 7, 1), ("front", 8, 1)})
+        balconies(b, (0, 2, 3, 4))
     # входи й козирки сходових кліток на фронтоні
     for i in STAIRS:
         b.box(bay_x(i), Y1 + 0.02, 0, 1.3, 0.04, 2.1, "dark")
@@ -90,6 +110,17 @@ def damaged():
     b.box(X1 - 0.2, -3.0, z2, 0.4, 5.0, 1.4, "panel_scorched")
     b.box(X1 - 0.2, 4.3, z2, 0.4, 3.4, 2.7, "panel_scorched")
     b.box(7.2, Y1 - 0.2, z2, 2.6, 0.4, 1.7, "panel_scorched")
+    # зубчастий край: додаткові обломи на зламі стін і краю плити
+    for (x, y, sx, sy, h) in ((6.4, Y1 - 0.2, 0.9, 0.4, 2.6), (8.4, Y1 - 0.2, 0.6, 0.4, 0.8), (10.5, Y0 + 0.2, 0.8, 0.4, 2.9), (12.0, Y0 + 0.2, 0.5, 0.4, 1.0), (X1 - 0.2, 0.8, 0.4, 0.7, 2.2), (X1 - 0.2, 7.0, 0.4, 0.9, 1.0)):
+        b.box(x, y, z2, sx, sy, h, "panel_scorched")
+    # арматура, що стирчить із краю плити
+    for k in range(7):
+        yy = -5.0 + 1.6 * k
+        b.beam((X1 - 0.5, yy, z2 - 0.1), (X1 + 0.5, yy + 0.1, z2 + 0.45), 0.09, "rust")
+    for k in range(4):
+        b.beam((6.5 + 1.8 * k, Y1 - 0.2, z2 - 0.1), (6.9 + 1.8 * k, Y1 + 0.7, z2 + 0.4), 0.09, "rust")
+    # схил завалу від зламу до землі
+    b.box(11.0, 6.7, 0.8, 7.0, 3.3, 0.6, "rubble", top="rubble", tilt=math.radians(-32))
     # перегородки кімнат, що лишилися
     b.box(8.0, 0.5, z2, 0.15, 6.0, 1.9, "panel")
     b.box(11.2, -1.8, z2, 0.15, 4.0, 1.3, "panel")
@@ -99,7 +130,7 @@ def damaged():
     # зависла арматура/край плити на розломі
     b.box(7.0, 4.5, z2 + 1.9, 2.0, 1.2, 0.2, "panel_scorched", top="bitumen", tilt=math.radians(18), rot=math.radians(-6))
     # відкинуте сміття зовні: завал на фронті і збоку, смуга за будівлею
-    lump(b, 11.0, 7.0, 2.2, 1.6, "rubble", 1, 12)
+    lump(b, 11.0, 7.0, 2.2, 1.6, "rubble", 1, 14)
     lump(b, 15.4, 1.0, 1.6, 1.3, "rubble", 2, 8)
     lump(b, 10.0, -7.0, 1.8, 1.0, "rubble", 3, 6)
     lump(b, 14.0, -6.8, 1.8, 1.0, "rubble", 4, 5)

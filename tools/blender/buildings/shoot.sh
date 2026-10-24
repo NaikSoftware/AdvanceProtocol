@@ -3,6 +3,7 @@
 # Використання: shoot.sh <name> ...
 cd "$(dirname "$0")/../../.."
 for n in "$@"; do cp "art-refs/buildings_out/$n.glb" assets/props/; done
+rm -f assets/props/*.import assets/props/*.jpg
 /home/naik/.local/bin/godot --headless --import --path . >/dev/null 2>&1
 git checkout project.godot
-timeout 200 /home/naik/.local/bin/godot --path . res://tools/prop_preview.tscn -- "$PWD/art-refs/buildings" "$@" 2>&1 | grep -E "PROP|ERROR"
+timeout 280 /home/naik/.local/bin/godot --path . res://tools/prop_preview.tscn -- "$PWD/art-refs/buildings" "$@" 2>&1 | grep -E "PROP|ERROR"
