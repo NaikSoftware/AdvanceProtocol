@@ -100,8 +100,10 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
 **What a hit shows.** A vehicle that survives a hit shows only the hit itself — sparks and
 ricochets for small arms, a flash with a dust and debris burst for shells and drones — and no
 lasting damage. A destroyed vehicle burns, then smokes, and leaves a burnt-out wreck that blocks
-vehicles for a few turns ([§3.14](../CLAUDE.md)). A destroyed squad leaves fallen figures and a
-scorch, restrained, and no obstacle. Effects attach only to units the current player can see.
+vehicles for a few turns ([§3.14](../CLAUDE.md)). A squad loses figures as its HP drops — one of
+four per quarter lost — and the fallen lie beside it; a destroyed squad leaves them and a scorch,
+restrained, and no obstacle. Effects attach only to units the current player can see, the attacker's muzzle flash included.
+Sizes, durations, colours and sources: [`art/damage-fx-research.md`](art/damage-fx-research.md).
 
 
 Never one technique. A single explosion is four or five layers, each one the cheapest thing that
@@ -114,7 +116,7 @@ does its job:
 | depth | soft particles (depth fade), dissolve by a noise mask | the quad stops cutting the ground on a hard line, and dies by burning away rather than by alpha |
 | the flash | an `OmniLight3D` for 3–5 frames plus emissive on the particle | the only part that actually hits the eye |
 | heat haze | screen-texture refraction on one quad | cheap, and it is what reads as expensive |
-| the scar | `Decal` (crater, scorching) plus debris meshes | statics, not particles — see §8 |
+| the scar | a stamp into the ground's scar map (crater, scorching) plus debris meshes | statics, not particles — see §8 |
 
 The thing that is not obvious: **good fire is not simulated at runtime, it is simulated offline and
 baked into a flipbook.** EmberGen or Blender's Mantaflow run the real fluid sim, render 64 frames
@@ -132,7 +134,7 @@ What our own constraints add on top:
   is the battery budget above.
 - The explosion itself is `one_shot`, lives ~1.5 s, then `queue_free`. Setting `emitting = false`
   is not enough; the particles stay in frame.
-- Craters and scorching are `Decal` nodes, not quads laid over the ground — quads z-fight on slopes.
+- Craters, scorching and crushed-prop debris are stamped into a **scar map**, one texture over the board that the ground shader reads. Not `Decal` nodes: the Mobile renderer applies at most 8 decals per mesh and the Compatibility renderer none, and the ground is one mesh. Not quads over the ground: they z-fight on slopes and cost a draw call each.
 
 Off the table on mobile Vulkan: volumetric smoke, raymarching, GPU particle collision against the
 SDF, and more than one effect sampling `screen_texture` at a time.
