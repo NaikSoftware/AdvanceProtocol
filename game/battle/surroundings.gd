@@ -5,7 +5,7 @@ extends RefCounted
 ## нею й серпанок далі. Суто вигляд: core/ кільця не бачить, юніт туди не ступає, дотик поза
 ## дошкою нічого не вибирає (Board.in_bounds).
 
-## Обвідна серпанку за евклідовою відстанню від прямокутника дошки (клітинки): до 2 — нічого, лоби
+## Обвідна серпанку за евклідовою відстанню від прямокутника дошки (клітинки): до 2 — нічого, клуби
 ## з'являються з 2.5 і зливаються до 11, а з `HAZE_CLOSED` (за пів клітинки до краю кільця) верх
 ## суцільний — край кільця видно на будь-якому віддаленні. Шейдери (surroundings.gdshaderinc)
 ## власних значень не мають: усі числа ставить `apply()`.
@@ -34,10 +34,11 @@ const LINE_GAP_PX: float = 4.0
 const SKIRT_REACH: float = 48.0
 
 
-## Густота меша кільця, квадів на клітинку (docs/art/surroundings-research.md: 17 тис. трикутників
-## замість 169 тис. за густоти дошки):
-## перша клітинка за краєм — як дошка, щоб на межі не було сходинки; до 6 клітинок — 2 (4 м),
-## далі — 1 (8 м), там серпанок уже ≥ 50 % і гранування не видно. Смуга — за Чебишовим.
+## Густота меша кільця, квадів на клітинку (docs/art/surroundings-research.md): смугами, бо за
+## густоти дошки кільце мало б 169 тис. трикутників — увесь бюджет кадру. Перша клітинка за краєм
+## — як дошка, щоб на межі не було сходинки; до 6 клітинок — 2 (4 м), далі — 1 (8 м), там серпанок
+## уже ≥ 50 % і гранування не видно. Смуга — за Чебишовим. Клітинки з водою чи берегом — як дошка
+## на будь-якій відстані (`quads_for`).
 const BAND_FINE: int = 1
 const BAND_MID: int = 6
 const MID_QUADS: int = 2
@@ -50,10 +51,17 @@ const FOG_NOISE_SIZE: int = 512
 const FOG_NOISE_SEED: int = 7331
 const FOG_NOISE_RANGE: Vector2 = Vector2(0.275, 0.761)
 
+## Межа трикутників кільця на карті: смуги дають 16.8 тис., решту беруть клітинки води й берега
+## густоти дошки (River — 25.4 тис.); дошка 26×22 (56 тис.) разом із кільцем лишається в бюджеті
+## кадру 150 тис.
+const RING_TRIS_MAX: int = 26000
+
 const _SKIRT_SHADER: Shader = preload("res://game/battle/shaders/haze_skirt.gdshader")
 
-## Одна текстура на процес: її беруть усі матеріали світу. `NoiseTexture2D` генерує її в потоці.
-static var _fog_noise: NoiseTexture2D
+## Одна текстура на процес: її беруть усі матеріали світу. Генерується одразу, з міпами (~0.1 с
+## раз на процес), а не в потоці, як `NoiseTexture2D`: інакше перші кадри бою малюють серпанок без
+## візерунка, і той проступає на очах. Міпи потрібні: шейдер бере крупні октави з міпа 3.
+static var _fog_noise: ImageTexture
 
 
 ## Числа світу довкола дошки — у матеріал землі чи води (surroundings.gdshaderinc).
@@ -72,7 +80,7 @@ static func apply(mat: ShaderMaterial, size: Vector2i) -> void:
 	mat.set_shader_parameter("line_gap_px", LINE_GAP_PX)
 
 
-static func fog_noise() -> NoiseTexture2D:
+static func fog_noise() -> ImageTexture:
 	if _fog_noise == null:
 		var n := FastNoiseLite.new()
 		n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
@@ -82,11 +90,9 @@ static func fog_noise() -> NoiseTexture2D:
 		n.fractal_type = FastNoiseLite.FRACTAL_FBM
 		n.fractal_octaves = 4
 		n.fractal_gain = 0.7
-		_fog_noise = NoiseTexture2D.new()
-		_fog_noise.width = FOG_NOISE_SIZE
-		_fog_noise.height = FOG_NOISE_SIZE
-		_fog_noise.seamless = true
-		_fog_noise.noise = n
+		var img: Image = n.get_seamless_image(FOG_NOISE_SIZE, FOG_NOISE_SIZE, false, false, 0.1, true)
+		img.generate_mipmaps()
+		_fog_noise = ImageTexture.create_from_image(img)
 	return _fog_noise
 
 

@@ -358,18 +358,6 @@ vec4 height_at(vec2 local) {
 	return textureLod(height_map, ((local + half_size) * height_samples + 0.5) / hs, 0.0);
 }
 
-// Висота площини лінії межі (`surround_line`): земля в точках уздовж найближчого краю дошки, не
-// нижче води (вода там — поверхня), зважена середня. Лінія лягає на рельєф краю без зламів на
-// берегах, а контур зони на крайній клітинці, що лежить на самій землі, лишається поруч із нею.
-float edge_plane_y(vec2 p, vec2 node) {
-	float acc = 0.0;
-	for (int i = 0; i < SURROUND_TAPS; i++) {
-		float h = height_at(surround_edge_tap(p, i) - node).r;
-		acc += surround_tap_weight(i) * max(h, water_level);
-	}
-	return acc;
-}
-
 void vertex() {
 	if (use_height) {
 		vec2 q = VERTEX.xz;
@@ -407,9 +395,19 @@ void vertex() {
 
 void fragment() {
 	vec2 p = world_pos.xz;
+	// Похідні — до гілки суцільного серпанку: у сусідніх пікселях, що пішли іншою гілкою, вони не
+	// визначені. Текстури в гілці беруть їх звідси (textureGrad) або явний міп.
+	vec2 dpx = dFdx(p);
+	vec2 dpy = dFdy(p);
+	vec2 dxy_x = dFdx(world_pos.xy);
+	vec2 dxy_y = dFdy(world_pos.xy);
+	vec2 dzy_x = dFdx(world_pos.zy);
+	vec2 dzy_y = dFdy(world_pos.zy);
 	vec4 haze = vec4(0.0);
+	float line_a = 0.0;
 	if (surround) {
 		haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
+		line_a = surround_line(world_pos, CAMERA_POSITION_WORLD, 0.0, VIEWPORT_SIZE);
 	}
 	// Під суцільним серпанком видно лише його колір: решту матеріалу не рахуємо.
 	if (haze.a >= 0.999) {
@@ -418,8 +416,6 @@ void fragment() {
 		SPECULAR = 0.0;
 		FOG = vec4(haze.rgb, 1.0);
 	} else {
-		vec2 dpx = dFdx(p);
-		vec2 dpy = dFdy(p);
 		// Паралакс: промінь від камери; глибина згасає з відстанню до нуля.
 		vec3 view = CAMERA_POSITION_WORLD - world_pos;
 		float cam_dist = length(view);
@@ -438,8 +434,8 @@ void fragment() {
 		vec2 cf = g - ci0;
 		cf = cf * cf * (3.0 - 2.0 * cf);
 		vec2 cuv = (ci0 + cf + 0.5) / csz;
-		vec4 c0 = texture(class_map0, cuv);
-		vec4 c1 = texture(class_map1, cuv);
+		vec4 c0 = textureLod(class_map0, cuv, 0.0);
+		vec4 c1 = textureLod(class_map1, cuv, 0.0);
 		float S[8] = float[8](c0.r, c0.g, c0.b, c0.a, c1.r, c1.g, c1.b, c1.a);
 		int top[3] = int[3](0, 0, 0);
 		float tops[3] = float[3](-1.0, -1.0, -1.0);
@@ -489,7 +485,7 @@ void fragment() {
 			rf = road_sample(p);
 			if (rf.x < 4.0) {
 				vec2 tsz = vec2(textureSize(road_type, 0));
-				rt = texture(road_type, ((p - map_origin + 0.5) * road_px) / tsz);
+				rt = textureLod(road_type, ((p - map_origin + 0.5) * road_px) / tsz, 0.0);
 				float side = rf.y >= 0.0 ? 1.0 : 0.0;
 				// Край у координатах дороги (u і бік): ґрунтівка ±0.3 м із виступами трави 0.3–0.8
 				// м кожні 1–3 м, бруківка ±0.15 м, асфальт ±0.08 м. На розвилці (два u сходяться) —
@@ -676,7 +672,7 @@ void fragment() {
 			vec3 asph = vec3(la * 0.8) * vec3(0.97, 0.99, 1.02);
 			asph *= mix(1.0, 0.8, smoothstep(0.6, 0.64, fbm(vec2(u * 0.3, rf.y * 0.3) + 31.0)));
 			asph *= mix(1.0, 1.1, smoothstep(0.58, 0.62, fbm(vec2(u * 0.2, rf.y * 0.25) + 47.0)));
-			float crack = 1.0 - smoothstep(0.0, 0.025 + fwidth(p.x) * 3.0, abs(vnoise(p * 3.0 + 5.0) - 0.5));
+			float crack = 1.0 - smoothstep(0.0, 0.025 + (abs(dpx.x) + abs(dpy.x)) * 3.0, abs(vnoise(p * 3.0 + 5.0) - 0.5));
 			asph *= 1.0 - 0.18 * crack;
 			vec3 gravel = vec3(la * 1.3) * vec3(1.02, 1.0, 0.95) * (0.75 + 0.5 * vnoise(p * 45.0));
 			float crumble = smoothstep(-0.45, -0.05, de + 0.35 * (vnoise(vec2(u * 1.4, side * 7.0 + 3.0)) - 0.5));
@@ -776,10 +772,6 @@ void fragment() {
 			float tsum = max(tx + ty + tz, 1e-4);
 			vec2 pxy = world_pos.xy;
 			vec2 pzy = world_pos.zy;
-			vec2 dxy_x = dFdx(pxy);
-			vec2 dxy_y = dFdy(pxy);
-			vec2 dzy_x = dFdx(pzy);
-			vec2 dzy_y = dFdy(pzy);
 			// Камінь лише на схилах круче ~25° (tan 0.47): пологі верхи пагорба — трава, як у полі.
 			float slope_amt = smoothstep(0.47, 0.62, slope_tan + 0.08 * (fbm(p * 1.3) - 0.5)) * (1.0 - road_cov);
 			// Річковий берег не тягне щебінь пагорба: його тип дає вигин русла (нижче).
@@ -876,7 +868,8 @@ void fragment() {
 		float wet = clamp(weather_wetness, 0.0, 1.0);
 		// Мокрий асфальт і бруківка темнішають сильніше за землю (×0.6 проти ×0.75).
 		alb *= mix(1.0, 0.75 - 0.15 * road_cov * (rt.r + rt.b), wet);
-		// Мокрий асфальт глянцевіший за мокру землю: чим більше дороги під пікселем, тим нижче шорсткість.
+		// Мокрий асфальт глянцевіший за мокру землю: чим більше дороги під пікселем, тим нижче
+		// шорсткість.
 		rough = mix(rough, mix(0.4, 0.22, road_cov * (rt.r + rt.b)), wet);
 		// Мокрі смуги коліс — трохи глянцевіші (0.18).
 		rough = mix(rough, 0.18, wet * wheel * road_cov);
@@ -894,7 +887,8 @@ void fragment() {
 		float shore = 0.0;
 		if (use_height) {
 			float above_m = (world_pos.y - water_level) / 0.125;
-			// Смуга — за горизонталлю (висота / тангенс схилу): 0.2-0.5 м упоперек і на косі, і на обриві.
+			// Смуга — за горизонталлю (висота / тангенс схилу): 0.2-0.5 м упоперек і на косі, і на
+			// обриві.
 			float run_m = above_m / max(slope_tan, 0.05);
 			shore = (1.0 - smoothstep(0.2, 0.5, run_m)) * smoothstep(0.03, 0.12, shore_mask);
 		}
@@ -947,11 +941,6 @@ void fragment() {
 		if (surround) {
 			alb = surround_grade(alb, haze.a);
 			refl = surround_grade(refl, haze.a);
-			float plane = 0.0;
-			if (use_height && abs(board_cheb(p)) < 1.0) {
-				plane = edge_plane_y(p, MODEL_MATRIX[3].xz);
-			}
-			float line_a = surround_line(world_pos, CAMERA_POSITION_WORLD, plane, VIEWPORT_SIZE);
 			FOG = surround_fog(haze, line_a);
 		}
 		ALBEDO = alb;

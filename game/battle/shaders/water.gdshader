@@ -67,31 +67,23 @@ float water_at(ivec2 px, ivec2 size) {
 	return (kind == water_kind || kind == bridge_kind || kind == broken_bridge_kind) ? 1.0 : 0.0;
 }
 
-// Висота площини лінії межі — та сама, що в ground.gdshader (`edge_plane_y`): лінія на воді й на
-// березі — одна пряма.
-float edge_plane_y(vec2 p) {
-	vec2 hs = vec2(textureSize(height_map, 0));
-	float acc = 0.0;
-	for (int i = 0; i < SURROUND_TAPS; i++) {
-		vec2 uv = ((surround_edge_tap(p, i) - height_origin) * height_samples + 0.5) / hs;
-		acc += surround_tap_weight(i) * max(textureLod(height_map, uv, 0.0).r, water_level);
-	}
-	return acc;
-}
-
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
 	vec2 p = world_pos.xz;
-	// До discard: похідні відстані для ширини лінії мусять рахуватись у всіх сусідніх пікселях.
+	// Усе, що бере похідні (ширина лінії, міп брижі, видимість дощу), — до discard і до гілки
+	// суцільного серпанку: у сусідніх пікселях, що пішли іншою гілкою, похідні не визначені.
+	vec2 dpx = dFdx(p);
+	vec2 dpy = dFdy(p);
+	float px_m = length(abs(dpx) + abs(dpy));
+	float rv = ripple_visibility(p);
 	vec4 haze = vec4(0.0);
 	vec4 sfog = vec4(0.0);
 	if (surround) {
 		haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
-		float plane = use_height && abs(board_cheb(p)) < 1.0 ? edge_plane_y(p) : 0.0;
-		float line_a = surround_line(world_pos, CAMERA_POSITION_WORLD, plane, VIEWPORT_SIZE);
+		float line_a = surround_line(world_pos, CAMERA_POSITION_WORLD, 0.0, VIEWPORT_SIZE);
 		sfog = surround_fog(haze, line_a);
 	}
 	float shallow_fade = 1.0;
@@ -101,7 +93,7 @@ void fragment() {
 		ivec2 hs = textureSize(height_map, 0);
 		vec2 huv = ((p - height_origin) * height_samples + 0.5) / vec2(hs);
 		// Глибина в метрах (1 м = 0.125 одиниці світу).
-		depth_m = (water_level - texture(height_map, huv).r) / 0.125;
+		depth_m = (water_level - textureLod(height_map, huv, 0.0).r) / 0.125;
 		if (depth_m <= 0.0) {
 			discard;
 		}
@@ -142,21 +134,32 @@ void fragment() {
 		// (0.5 x 0.67 клітинки), трохи повернутий і повільніший, щоб шари не збігалися.
 		// Легке хитання UV (0.01) прибирає рівномірне ковзання текстури одним цілим.
 		vec2 wob = 0.01 * vec2(sin(fp.y * 3.0 + TIME * 0.7), cos(fp.x * 2.3 + TIME * 0.5));
-		vec2 ta = texture(wave_a, fp * vec2(1.0, 0.67) + wob + vec2(TIME * 0.1, 0.0)).rg * 2.0
-				- 1.0;
+		// Похідні UV брижі — з похідних p (кадр течії — поворот), ×1.5: міп на ~0.6 рівня
+		// грубший, і далекі гребені зливаються в тон, а не в смуги.
+		mat2 frame = mat2(vec2(fdir.x, fperp.x), vec2(fdir.y, fperp.y));
+		vec2 fdx = frame * dpx * 1.5;
+		vec2 fdy = frame * dpy * 1.5;
+		vec2 ka = vec2(1.0, 0.67);
+		vec2 ta = textureGrad(wave_a, fp * ka + wob + vec2(TIME * 0.1, 0.0), fdx * ka, fdy * ka).rg
+				* 2.0 - 1.0;
 		mat2 rot = mat2(vec2(0.985, 0.174), vec2(-0.174, 0.985));
-		vec2 tb = texture(wave_b, rot * fp * vec2(2.0, 1.5) - wob + vec2(TIME * 0.15, 0.0)).rg * 2.0 - 1.0;
+		vec2 kb = vec2(2.0, 1.5);
+		vec2 tb = textureGrad(wave_b, rot * fp * kb - wob + vec2(TIME * 0.15, 0.0), rot * (fdx * kb),
+				rot * (fdy * kb)).rg * 2.0 - 1.0;
 		// Розтяг упоперек течії зменшує нахил уздовж неї в 1.5 раза — повертаємо.
 		// Третя октава (0.25) під ~60°, що дрейфує в інший бік: брижа не рухається одним напрямком.
 		mat2 rot60 = mat2(vec2(0.5, 0.866), vec2(-0.866, 0.5));
-		vec2 tc = texture(wave_a, rot60 * fp * vec2(1.3, 1.0) + wob.yx + vec2(-TIME * 0.07, TIME * 0.06)).rg * 2.0 - 1.0;
+		vec2 kc = vec2(1.3, 1.0);
+		vec2 tc = textureGrad(wave_a, rot60 * fp * kc + wob.yx + vec2(-TIME * 0.07, TIME * 0.06),
+				rot60 * (fdx * kc), rot60 * (fdy * kc)).rg * 2.0 - 1.0;
 		vec2 sf = (ta * 0.55 + tb * 0.2 + transpose(rot60) * tc * 0.25) * vec2(0.4, 0.27);
-		// Здалеку (піксель ~0.18–0.36 м) нахил гребенів слабшає: інакше на віддаленні вони
-		// складаються в регулярний смугастий муар.
-		sf *= mix(1.0, 0.35, smoothstep(0.022, 0.045, length(fwidth(p))));
+		// Нахил гребенів слабшає зі слідом пікселя вздовж погляду (розмір пікселя / sin кута до
+		// води): коли слід ширший за ~0.15 м, гребені під пологим кутом складаються в
+		// горизонтальне штрихування, і рівна поверхня з відбитим небом читається краще.
+		vec3 vdir = normalize(CAMERA_POSITION_WORLD - world_pos);
+		sf *= mix(1.0, 0.08, smoothstep(0.018, 0.032, px_m / max(vdir.y, 0.2)));
 		vec2 slope = fdir * sf.x + fperp * sf.y;
 		float wet = clamp(weather_wetness, 0.0, 1.0);
-		float rv = ripple_visibility(p);
 		slope += rain_ripples(p, TIME) * 2.0 * wet * rv;
 
 		vec3 n = slope_to_world(slope);
@@ -169,7 +172,7 @@ void fragment() {
 		// Біля берега у воді відбивається сам берег, а не небо: темна смуга ~1–2 м.
 		f *= 1.0 - 0.7 * exp(-1.2 * bank_m);
 		// Піксель ~0.08 м (MIN zoom) -> 0, ~0.3 м (MAX zoom) -> 1.
-		float far = smoothstep(0.012, 0.04, length(fwidth(p)));
+		float far = smoothstep(0.012, 0.04, px_m);
 		vec3 sky = overcast_sky_at(reflect(-v, n), TIME) * (1.0 + far_sheen * far);
 		// Відблиск: світліша частина неба перед камерою. Напрямок — від осі камери
 		// (поворот камери сталий), тож пляма стоїть на екрані, а вода пливе під нею, як

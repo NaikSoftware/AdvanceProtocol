@@ -69,6 +69,17 @@ const _CURV_RANGE: float = 1.5 * M
 const _ROAD_DAMP: float = 0.9
 ## Смуга за краєм дошки (клітинок), де вісь річки дошки переходить у вісь світу з кільцем.
 const _COURSE_BLEND: float = 1.5
+## Смуга вздовж краю дошки (клітинки по обидва боки), де хвиля рельєфу рівнини згасає до 0, і
+## спад за нею: рівнина під червоною лінією лежить рівно на y = 0, тож кожна сторона лінії —
+## пряма в 3D і на екрані, а контур зони на крайній клітинці лежить на тій самій висоті. Пагорби
+## й русло лишаються як є: висота — лише вигляд, але пагорб, зрізаний уздовж межі, читався б ровом.
+const _EDGE_FLAT: float = 0.35
+const _EDGE_FLAT_RAMP: float = 0.6
+## Розмиття берега біля краю дошки й у кільці (σ, клітинки) і розмах ширини русла кільця.
+const _RING_ROUND: float = 0.8
+const _RING_WIDTH_VAR: float = 0.3
+## Заокруглення опуклих кутів води за 0.5–1.5 клітинки від краю всередині дошки (σ, клітинки).
+const _EDGE_CORNER_ROUND: float = 0.4
 ## Ширина гладкого мінімуму, яким об'єднано поля осей дошки й світу (клітинки).
 const _COURSE_ROUND: float = 0.4
 
@@ -194,7 +205,8 @@ func max_height() -> float:
 
 
 ## Клітинки (координати дошки) з водою чи схилом берега хоча б в одному відліку, разом із
-## відліками на межі клітинки: там меш кільця мусить мати густоту дошки (`Surroundings.ground_mesh`).
+## відліками на межі клітинки: там меш кільця мусить мати густоту дошки
+## (`Surroundings.ground_mesh`).
 func bank_cells() -> Dictionary:
 	var out: Dictionary = {}
 	for k in _water.size():
@@ -420,6 +432,8 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 		for k in dc.size():
 			if soft_c[k] < dc[k] and dc[k] < 0.6 and _edge_clear(k, cw, cstep):
 				dc[k] = soft_c[k]
+		if _shift > 0:
+			_round_ring_shores(dc, cw, ch, cstep, seed_value)
 		for k in dg.size():
 			dg[k] = RiverCourse.upsample(dc, cols, rows, _RIVER_STEP, k % cols, k / cols)
 		_restore_land_clearance(dg, dc, dc0)
@@ -461,6 +475,10 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 			if undul < -0.6 * M:
 				undul = -0.6 * M + (undul + 0.6 * M) * 0.3
 			var damp: float = near_water
+			if _shift > 0:
+				var ex: float = absf(x - (bw - 1) * 0.5) - (bw - 2 * _shift) * 0.5
+				var ez: float = absf(z - (bh - 1) * 0.5) - (bh - 2 * _shift) * 0.5
+				damp *= smoothstep(_EDGE_FLAT, _EDGE_FLAT + _EDGE_FLAT_RAMP, absf(maxf(ex, ez)))
 			if has_road:
 				var rd: float = road_d[clampi(int((z + 0.5 + margin) * RoadCourse.PX), 0, road_d.size() / road_rw - 1) * road_rw + clampi(int((x + 0.5 + margin) * RoadCourse.PX), 0, road_rw - 1)]
 				# Рівно під намальованою дорогою й 0.5 м за її краєм (поле відстані RoadCourse),
@@ -511,8 +529,9 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 ## клітинках, які правила вважають водою. Поле — об'єднання (мінімум) двох: поле осі дошки
 ## згасає за `_COURSE_BLEND` клітинок поза дошкою, поле осі світу з'являється за стільки ж
 ## усередині й на самому краю діє повністю. Не змішування: ставок, що його вісь дошки закриває
-## на краю, а вода кільця продовжує, у змішуванні розпався б на два. Вісь світу лише додає воду
-## біля краю: клітинки води дошки не сохнуть, а центри клітинок суші вона й сама обходить.
+## на краю, а вода кільця продовжує, у змішуванні розпався б на два. Гладкий мінімум зсуває
+## уріз щонайбільше на `_COURSE_ROUND` / 4 клітинки; що центри клітинок суші лишаються сухими в
+## радіусі 0.3, перевіряє test_surroundings.gd (`test_world_bake_keeps_water_and_land_invariants`).
 func _keep_board_course(fld: Array[PackedFloat32Array], seed_value: int) -> void:
 	var sw: int = board_width - 2 * _shift
 	var sh: int = board_height - 2 * _shift
@@ -551,6 +570,33 @@ func _keep_board_course(fld: Array[PackedFloat32Array], seed_value: int) -> void
 		fld[1][k] = lerpf(ofld[1][k], fld[1][k], smoothstep(-_COURSE_BLEND, _COURSE_BLEND, out))
 		fld[0][k] = _smooth_min(db, dw, _COURSE_ROUND)
 		fld[2][k] = _smooth_min(ofld[2][k] + fade_board, fld[2][k] + fade_world, _COURSE_ROUND)
+
+
+## Берег біля краю дошки й у кільці: поле розмите ще раз (σ `_RING_ROUND` клітинки), тож кути, де
+## стикуються осі, виступи берега й ставки, стають дугами, а не многокутником; з клітинки за краєм
+## ширина русла кільця ще й гуляє на ±`_RING_WIDTH_VAR` за шумом (хвиля ~3 клітинки), щоб
+## автором намальована смуга води не читалась рівним каналом. Глибше в дошці поле не змінюється:
+## там береги задають клітинки правил.
+func _round_ring_shores(dc: PackedFloat32Array, cw: int, ch: int, cstep: float, seed_value: int) -> void:
+	var sig: float = _RING_ROUND / cstep
+	var soft: PackedFloat32Array = _blur(dc, sig, sig, cw, ch)
+	var sig_in: float = _EDGE_CORNER_ROUND / cstep
+	var soft_in: PackedFloat32Array = _blur(dc, sig_in, sig_in, cw, ch)
+	var n := _nz(seed_value + 1717, 0.33)
+	var cx: float = (board_width - 1) * 0.5
+	var cz: float = (board_height - 1) * 0.5
+	var hx: float = (board_width - 2 * _shift) * 0.5
+	var hz: float = (board_height - 2 * _shift) * 0.5
+	for k in dc.size():
+		var x: float = -0.5 - margin + float(k % cw) * cstep
+		var z: float = -0.5 - margin + float(k / cw) * cstep
+		var out: float = maxf(absf(x - cx) - hx, absf(z - cz) - hz)
+		var v: float = lerpf(dc[k], soft[k], smoothstep(-1.0, 0.5, out))
+		# Ближче до краю на дошці — лише заокруглення опуклих кутів води (максимум із розмитим):
+		# вода там лише відступає, клітинки води правил лишаються мокрими.
+		v = maxf(v, lerpf(v, soft_in[k], 1.0 - smoothstep(-0.5, 0.5, absf(out + 1.0))))
+		v += _RING_WIDTH_VAR * n.get_noise_2d(x, z) * smoothstep(1.0, 2.5, out)
+		dc[k] = minf(v, RiverCourse.FAR)
 
 
 ## Гладкий мінімум (поліноміальний, ширина k): там, де дві водойми сходяться під кутом, берег
@@ -634,14 +680,16 @@ func _edge_clear(k: int, cw: int, cstep: float) -> bool:
 
 
 ## Замикання не підпускає воду до центру клітинки суші (юніти стоять там): біля кожного центру
-## в радіусі 0.5 клітинки поле плавно (від 0.3) повертається до незамкненого. Перевірка на повній
-## сітці, бо білінійний підйом між вузлами грубої сітки може піти нижче нуля.
+## в радіусі 0.5 клітинки поле плавно (від 0.3) повертається до незамкненого. Перевірка — на всіх
+## відліках, бо білінійний підйом між вузлами грубого поля може піти нижче нуля. У світі з
+## кільцем — лише клітинки дошки: у кільці юніт не стоїть, а повернення лишало б у березі круглі
+## вм'ятини.
 func _restore_land_clearance(dg: PackedFloat32Array, dc: PackedFloat32Array, dc0: PackedFloat32Array) -> void:
 	var fs: float = float(samples)
 	var cw: int = (cols - 1 + _RIVER_STEP - 1) / _RIVER_STEP + 1
 	var rad: int = ceili(0.5 * fs)
-	for cy in board_height:
-		for cx in board_width:
+	for cy in range(_shift, board_height - _shift):
+		for cx in range(_shift, board_width - _shift):
 			if _wgrid[cy * board_width + cx] == 1:
 				continue
 			var ci: int = (2 * cx + 1 + 2 * margin) * samples / 2
