@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://buh5f0hwusueu"
-path="res://.godot/imported/bridge_river_east_broken_bridge_deckplate.png-0bf507efc1f446fd27a3f1e4c5278e57.ctex"
+uid="uid://pm08lawbaugv"
+path="res://.godot/imported/steel_grey.png-45000921205ae3505e313ade70f17bfd.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "b7354097844228b43b2b92da8af45076"
 }
 
 [deps]
 
-source_file="res://assets/props/bridge_river_east_broken_bridge_deckplate.png"
-dest_files=["res://.godot/imported/bridge_river_east_broken_bridge_deckplate.png-0bf507efc1f446fd27a3f1e4c5278e57.ctex"]
+source_file="res://assets/props/bridge_tex/steel_grey.png"
+dest_files=["res://.godot/imported/steel_grey.png-45000921205ae3505e313ade70f17bfd.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

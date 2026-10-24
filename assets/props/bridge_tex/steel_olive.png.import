@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://8wneeybusvnh"
-path="res://.godot/imported/bridge_river_centre_broken_bridge_concrete.png-890d088cf84a1ae3a7e79c83e2676b94.ctex"
+uid="uid://dr2isgx3cmd6"
+path="res://.godot/imported/steel_olive.png-af9ecd29bac5d82a3ed00dda10789406.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "f70950fcf3bfdd12ef8f6cebbfc740c9"
 }
 
 [deps]
 
-source_file="res://assets/props/bridge_river_centre_broken_bridge_concrete.png"
-dest_files=["res://.godot/imported/bridge_river_centre_broken_bridge_concrete.png-890d088cf84a1ae3a7e79c83e2676b94.ctex"]
+source_file="res://assets/props/bridge_tex/steel_olive.png"
+dest_files=["res://.godot/imported/steel_olive.png-af9ecd29bac5d82a3ed00dda10789406.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

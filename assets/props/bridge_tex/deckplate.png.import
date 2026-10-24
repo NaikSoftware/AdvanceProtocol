@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://l8m6ywb1aa61"
-path="res://.godot/imported/bridge_river_centre_bridge_concrete.png-0fd4ee4a36c94c09b0b7006369f5a094.ctex"
+uid="uid://c2hvkpvbyxgqm"
+path="res://.godot/imported/deckplate.png-c8155d4ff380d290273d4ea3d7776d72.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "f70950fcf3bfdd12ef8f6cebbfc740c9"
 }
 
 [deps]
 
-source_file="res://assets/props/bridge_river_centre_bridge_concrete.png"
-dest_files=["res://.godot/imported/bridge_river_centre_bridge_concrete.png-0fd4ee4a36c94c09b0b7006369f5a094.ctex"]
+source_file="res://assets/props/bridge_tex/deckplate.png"
+dest_files=["res://.godot/imported/deckplate.png-c8155d4ff380d290273d4ea3d7776d72.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

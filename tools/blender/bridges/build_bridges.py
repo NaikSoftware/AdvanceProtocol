@@ -11,14 +11,17 @@ DECK_TOP над нею: сцена ставить модель на `deck_y(кл
 (прольоти, секції, плити), а `broken` лише повертає й зсуває ці групи та додає уламки.
 """
 import math
+import json
+import os
+import struct
 import sys
-import tempfile
 
 import bpy
 from mathutils import Matrix, Vector
 
 OUT = sys.argv[sys.argv.index("--") + 1]
-TMP = tempfile.mkdtemp()
+TEX_DIR = os.path.join(OUT, "bridge_tex")  # одна текстура на матеріал для всіх шести мостів
+os.makedirs(TEX_DIR, exist_ok=True)
 
 # --- матеріали: (колір sRGB, шорсткість, металічність). Колір береться з текстури 512 px, що лягає
 # на клітинку (8 м), тобто ~1.6 см на піксель; тут лише середній тон для довідки.
@@ -30,7 +33,6 @@ MATS = {
     "timber": ((0.36, 0.28, 0.19), 0.95, 0.0),
     "steel_grey": ((0.30, 0.32, 0.31), 0.6, 0.5),
     "deckplate": ((0.42, 0.43, 0.38), 0.85, 0.3),
-    "rust": ((0.45, 0.22, 0.12), 0.9, 0.3),
 }
 MAT_ORDER = list(MATS)
 
@@ -228,11 +230,10 @@ def pontoon(broken):
 
     # Відсіки розійшлись: один знесло за течією й він сів на дно боком, другий розвернуло.
     b1 = bays["b1"]
-    xf(b1, about((0, -0.55, 0), rz(-7)))
-    xf(b1, Matrix.Translation((0.06, 0, 0)))
+    xf(b1, about((0, -0.55, 0), rz(-17)))
     b2 = bays["b2"]
-    xf(b2, about((0, 0.275, 0), rz(16) @ rx(-11) @ ry(3)))
-    xf(b2, Matrix.Translation((0.20, 0.05, 0)))
+    xf(b2, about((0, 0.275, 0), rz(-14) @ rx(-13) @ ry(3)))
+    xf(b2, Matrix.Translation((0.24, 0.10, 0)))
     ground(b2)
     return {"r0": bays["r0"], "b1": b1, "b2": b2, "r1": bays["r1"], "plates": plates}
 
@@ -321,7 +322,7 @@ def build(name, fn, broken):
         c, r, m = MATS[k]
         img = bpy.data.images.new(f"bridge_{k}", TEX, TEX, alpha=False)
         img.pixels.foreach_set(make_texture(k).ravel())
-        img.filepath_raw = f"{TMP}/bridge_{k}.png"
+        img.filepath_raw = f"{TEX_DIR}/{k}.png"
         img.file_format = "PNG"
         img.save()
         mat = bpy.data.materials.new(f"bridge_{k}")
@@ -366,7 +367,22 @@ def build(name, fn, broken):
     print(f"BRIDGE {name} x[{min(xs):.3f},{max(xs):.3f}] y[{min(ys):.3f},{max(ys):.3f}] "
           f"z[{min(zs):.3f},{max(zs):.3f}] tris={sum(len(p.vertices) - 2 for p in mesh.polygons)}")
     bpy.ops.export_scene.gltf(filepath=f"{OUT}/{name}.glb", export_format="GLB", use_selection=True,
-                              export_apply=True, export_yup=True)
+                              export_apply=True, export_yup=True, export_keep_originals=True)
+    strip_image_views(f"{OUT}/{name}.glb")
+
+
+def strip_image_views(path):
+    """Експортер лишає в зовнішньої картинки і uri, і bufferView — це недійсне glTF."""
+    d = open(path, "rb").read()
+    n, _ = struct.unpack_from("<II", d, 12)
+    g = json.loads(d[20:20 + n])
+    for im in g.get("images", []):
+        im.pop("bufferView", None)
+    j = json.dumps(g, separators=(",", ":")).encode()
+    j += b" " * (-len(j) % 4)
+    rest = d[20 + n:]
+    out = struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(j) + len(rest)) + struct.pack("<II", len(j), 0x4E4F534A) + j + rest
+    open(path, "wb").write(out)
 
 
 for n, (f, b) in MODELS.items():

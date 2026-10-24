@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dao1pv8ipbu8i"
-path="res://.godot/imported/bridge_river_west_bridge_steel_olive.png-ddb87975f0f1071fe59ef1d4decbfce7.ctex"
+uid="uid://dggxc3vax0nar"
+path="res://.godot/imported/concrete_dust.png-824af2eca8472def57a27b59ff72fcc0.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "53b108cedadf22c30ea862a86ae41273"
 }
 
 [deps]
 
-source_file="res://assets/props/bridge_river_west_bridge_steel_olive.png"
-dest_files=["res://.godot/imported/bridge_river_west_bridge_steel_olive.png-ddb87975f0f1071fe59ef1d4decbfce7.ctex"]
+source_file="res://assets/props/bridge_tex/concrete_dust.png"
+dest_files=["res://.godot/imported/concrete_dust.png-824af2eca8472def57a27b59ff72fcc0.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
