@@ -288,6 +288,23 @@ func test_fallback_entry_starts_a_default_match_from_the_shipped_map() -> void:
 	assert_not_null(screen.input_controller(), "резервний вхід мусить підняти InputController")
 
 
+## Збереження зі шляхом до видаленої карти (фаза 5a прибрала старі п'ять) не мусить
+## лишати порожню дошку — бій стартує на запасній «Річці».
+func test_a_save_pointing_at_a_deleted_map_falls_back_to_river() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	service.configure("res://maps/urban.tres", 2, 1)
+	var screen: Node3D = _screen()
+
+	screen.launch(service)
+
+	assert_not_null(service.state, "бій стартував")
+	if service.state == null:
+		return
+	assert_eq(service.state.board.width, 26)
+	assert_eq(service.state.board.height, 22)
+
+
 ## Гейт — половина, що захищає решту сьогоднішнього набору: без нього кожен
 ## тест цього файла отримував би другий, фоновий матч на автозавантаженому
 ## MatchService поверх власного ізольованого екземпляра.
@@ -460,10 +477,13 @@ func test_tap_resolves_from_the_press_position_not_the_release_position() -> voi
 	var camera: IsoCameraRig = screen.get_node("%CameraRig")
 	camera.center_on(unit.pos)
 	var cam3d: Camera3D = camera.get_node("Yaw/Camera3D")
-	camera.zoom_level = IsoCameraRig.MIN_ZOOM
-	cam3d.size = camera.zoom_level
+	camera.zoom_by(IsoCameraRig.MIN_ZOOM / camera.zoom_level)
+	simulate(camera, 240, 1.0 / 60.0)
+	assert_eq(camera.zoom_level, IsoCameraRig.MIN_ZOOM, "передумова: зум дійшов до MIN_ZOOM")
+	camera.center_on(unit.pos)
 
-	var boundary_point: Vector3 = IsoCameraRig.cell_to_world(unit.pos) + Vector3(0.49, 0.0, 0.0)
+	# Точка межі лежить на поверхні рельєфу, а не на площині y = 0 (тап б'є в землю).
+	var boundary_point := Vector3(unit.pos.x + 0.49, TerrainHeight.ground_y(unit.pos.x + 0.49, unit.pos.y), unit.pos.y)
 	var press_pos: Vector2 = cam3d.unproject_position(boundary_point)
 	var jitter_pos: Vector2 = press_pos + Vector2(8.0, 0.0)  # свідомо під порогом (~10dp), але штовхає за межу
 

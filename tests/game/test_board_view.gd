@@ -30,67 +30,65 @@ func _two_kind_board() -> Board:
 	return board
 
 
-func _multimesh_children() -> Array:
-	var out: Array = []
+func _grounds() -> Array[GroundSurface]:
+	var out: Array[GroundSurface] = []
 	for child in view.get_children():
-		if child is MultiMeshInstance3D:
+		if child is GroundSurface:
 			out.append(child)
 	return out
 
 
-func test_build_makes_one_multimesh_per_kind_present_and_covers_every_tile() -> void:
-	var board := _two_kind_board()
-	view.build(board)
-	var mmis := _multimesh_children()
-	assert_eq(mmis.size(), 2, "дошка має рівно два види: ROAD і FIELD")
-	var total: int = 0
-	for mmi in mmis:
-		total += mmi.multimesh.instance_count
-	assert_eq(total, board.width * board.height, "кількість інстансів разом мусить дорівнювати кількості тайлів")
-
-
-func test_build_with_single_kind_makes_one_instance() -> void:
-	var board := Board.create(3, 3, Terrain.GroundState.DRY)
-	view.build(board)
-	var mmis := _multimesh_children()
-	assert_eq(mmis.size(), 1, "суцільне поле — один вид, один draw call")
-	assert_eq(mmis[0].multimesh.instance_count, 9)
-
-
-func test_build_handles_empty_board() -> void:
-	var board := Board.create(0, 0, Terrain.GroundState.DRY)
-	view.build(board)
-	assert_eq(_multimesh_children().size(), 0, "порожня дошка — жодного виду, жодного інстансу")
+## Phase 5a, Task 5: замість мультимешу на вид — одна суцільна земля (§8: один
+## draw call на всю дошку, а не по одному на вид тайлу).
+func test_build_makes_exactly_one_ground_surface() -> void:
+	view.build(_two_kind_board())
+	assert_eq(_grounds().size(), 1, "одна земля на дошку")
+	for child in view.get_children():
+		assert_false(child is MultiMeshInstance3D, "плиток на вид більше немає: %s" % child.name)
 
 
 func test_build_is_idempotent() -> void:
 	var board := _two_kind_board()
 	view.build(board)
 	view.build(board)
-	var mmis := _multimesh_children()
-	assert_eq(mmis.size(), 2, "повторний build не мусить плодити нові MultiMeshInstance3D")
-	var total: int = 0
-	for mmi in mmis:
-		total += mmi.multimesh.instance_count
-	assert_eq(total, board.width * board.height, "повторний build не мусить подвоювати інстанси")
+	assert_eq(_grounds().size(), 1, "повторний build не мусить плодити землю")
 
 
-## Колір екземпляра мультимешу не читається назад під headless (див. коментар
-## угорі файлу), але шлях, яким він туди потрапляє, — звичайні властивості
-## Resource, і вони читаються справно. Перевіряємо кожен екземпляр, який
-## справді створив build(), а не лише перший-ліпший: вид, якому забракло
-## матеріалу чи use_colors, — це саме та безмовна поломка, яку має ловити
-## цей тест.
-func test_build_wires_every_kind_instance_for_instance_color_paint() -> void:
+func test_build_handles_empty_board() -> void:
+	view.build(Board.create(0, 0, Terrain.GroundState.DRY))
+	assert_eq(_grounds().size(), 1)
+	assert_null(_grounds()[0].mesh, "порожня дошка — земля без меша")
+
+
+## Земля переживає перебудову (BridgeChanged): той самий вузол і ті самі масиви
+## текстур — інакше кожен підірваний міст перевантажував би 16 текстур.
+func test_rebuild_reuses_the_ground_node_and_its_textures() -> void:
 	var board := _two_kind_board()
 	view.build(board)
-	var mmis := _multimesh_children()
-	assert_true(mmis.size() > 0, "передумова: дошка має хоч один вид")
-	for mmi in mmis:
-		assert_true(mmi.multimesh.use_colors, "%s: без use_colors set_instance_color — no-op, підсвітка мовчки зникає" % mmi.name)
-		assert_true(mmi.material_override is StandardMaterial3D, "%s: колір інстансу нема куди читати без матеріалу" % mmi.name)
-		assert_true(mmi.material_override.vertex_color_use_as_albedo, "%s: без vertex_color_use_as_albedo колір інстансу не доходить до альбедо" % mmi.name)
-		assert_true(mmi.multimesh.mesh is BoxMesh, "%s: тайл мусить лишатись дешевим примітивом" % mmi.name)
+	var ground: GroundSurface = _grounds()[0]
+	var albedo: Texture2DArray = (ground.material_override as ShaderMaterial).get_shader_parameter("albedo_array")
+	view.rebuild_tiles(board)
+	assert_same(_grounds()[0], ground)
+	assert_same((ground.material_override as ShaderMaterial).get_shader_parameter("albedo_array"), albedo)
+
+
+## Підірваний міст (BridgeChanged) мусить дійти до карти видів шейдера, а
+## контури зон, що в цю мить досі правдиві, — лишитись.
+func test_rebuild_tiles_updates_the_kind_map_and_keeps_contours() -> void:
+	var board := Board.create(4, 4, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(1, 1), Terrain.Kind.BRIDGE)
+	view.build(board)
+	var segs: Array[Dictionary] = [{"cell": Vector2i(0, 0), "dir": Vector2i(1, 0), "color": Color.RED}]
+	view.draw_contour(segs, BoardView.LAYER_ZONES)
+	board.set_kind(Vector2i(1, 1), Terrain.Kind.BRIDGE_DESTROYED)
+
+	view.rebuild_tiles(board)
+
+	var img: Image = _grounds()[0].kind_image()
+	assert_eq(img.get_pixel(1, 1).r8, Terrain.Kind.BRIDGE_DESTROYED)
+	assert_eq(view.kind_at(Vector2i(1, 1)), Terrain.Kind.BRIDGE_DESTROYED)
+	assert_eq(view.contour_segments(BoardView.LAYER_ZONES), segs)
+	assert_eq(_grounds().size(), 1)
 
 
 ## §3.5: туман ховає юнітів і міни, ніколи не карту. BoardView не має і не
@@ -161,27 +159,12 @@ func test_draw_contour_with_empty_segments_draws_nothing() -> void:
 	assert_eq(view.contour_segments(view.LAYER_ZONES).size(), 0)
 
 
-## Task 8: BridgeChanged перебудовує дошку, а контури (зони, цілі) лишаються.
-func test_rebuild_tiles_shows_new_kind_and_keeps_contours() -> void:
-	var board := Board.create(4, 4, Terrain.GroundState.DRY)
-	board.set_kind(Vector2i(1, 1), Terrain.Kind.BRIDGE)
-	var bv: BoardView = BoardViewScene.instantiate()
-	add_child_autofree(bv)
-	bv.build(board)
-	var segs: Array[Dictionary] = [{"cell": Vector2i(0, 0), "dir": Vector2i(1, 0), "color": Color.RED}]
-	bv.draw_contour(segs, BoardView.LAYER_ZONES)
-	board.set_kind(Vector2i(1, 1), Terrain.Kind.BRIDGE_DESTROYED)
-	bv.rebuild_tiles(board)
-	assert_eq(bv.kind_at(Vector2i(1, 1)), Terrain.Kind.BRIDGE_DESTROYED)
-	assert_eq(bv.contour_segments(BoardView.LAYER_ZONES), segs)
-
-
 # --- Кільце огляду — одне геометричне коло (§3.13, docs/ui/overlays.md) ----------
 
 func _circle_nodes() -> Array[MeshInstance3D]:
 	var out: Array[MeshInstance3D] = []
 	for child in view.get_children():
-		if child is MeshInstance3D and not child is MultiMeshInstance3D:
+		if child is MeshInstance3D and not child is MultiMeshInstance3D and not child is GroundSurface and not child is WaterSurface:
 			out.append(child)
 	return out
 
@@ -199,9 +182,14 @@ func test_draw_circles_makes_one_ring_per_circle_centred_on_the_tile() -> void:
 	var ring: MeshInstance3D = nodes[0]
 	assert_eq(ring.position.x, 4.0)
 	assert_eq(ring.position.z, 6.0)
-	var torus: TorusMesh = ring.mesh as TorusMesh
-	assert_not_null(torus)
-	assert_almost_eq((torus.inner_radius + torus.outer_radius) * 0.5, 3.0, 0.0001, "середня лінія — рівно 3 тайли")
+	var arrays: Array = (ring.mesh as ArrayMesh).surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var radius_sum := 0.0
+	for v in verts:
+		radius_sum += Vector2(v.x, v.z).length()
+	assert_almost_eq(radius_sum / verts.size(), 3.0, 0.0001, "середня лінія — рівно 3 тайли")
+	for v in verts:
+		assert_almost_eq(v.y, TerrainHeight.ground_y(4.0 + v.x, 6.0 + v.z) + 0.04, 0.0001, "кільце лягає на ґрунт")
 	assert_eq(view.contour_segments(BoardView.LAYER_INSPECT), [], "коло — не контур тайлів")
 
 

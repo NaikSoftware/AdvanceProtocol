@@ -10,6 +10,9 @@ extends Node3D
 
 ## Крок факінгу: вісім напрямків Board.DIRS_8 рівномірно по колу.
 const _DEGREES_PER_FACING: float = 45.0
+## Фаза 5a: усе видиме в юніті — лише на цьому шарі рендеру, щоб відбиття й
+## тіні могли відсікти юнітів маскою (відбиття не сміють показати прихований юніт).
+const UNIT_LAYER: int = 2
 
 ## Board.DIRS_8 іде ЗА годинниковою стрілкою (0 N, 2 E, 4 S, 6 W), а поворот
 ## навколо Y у Godot — ПРОТИ. Тому знак обов'язковий: `facing * 45` збігається
@@ -128,7 +131,7 @@ var _face_tween: Tween
 
 func _ready() -> void:
 	# Заступники текстур: суцільний колір замість реального арту, той самий
-	# підхід, що й нейтральні кольори тайлів у BoardView. HP-смуга сюди не
+	# підхід, що й нейтральні кольори-плейсхолдери мін (MineLayer). HP-смуга сюди не
 	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
 	# з кожного bind().
 	_drone_icon.texture = _flat_texture(Color("d9b23a"))
@@ -159,6 +162,15 @@ func bind(unit: Unit) -> void:
 	# означало б показувати намір, якого вже немає.
 	set_targeted(false)
 	set_forbidden(false)
+	_put_on_unit_layer(self)
+
+
+## Силует перебудовується на кожен bind(), тож шар ставиться після нього.
+static func _put_on_unit_layer(node: Node) -> void:
+	if node is VisualInstance3D:
+		(node as VisualInstance3D).layers = 1 << (UNIT_LAYER - 1)
+	for child: Node in node.get_children():
+		_put_on_unit_layer(child)
 
 
 ## Баг-звіт (виправлення 3): «вибираю танк, вказую їхати вперед — він їде
@@ -207,6 +219,7 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		return tween.finished
 
 	var current_cell: Vector2i = IsoCameraRig.world_to_cell(position)
+	var from_pos: Vector3 = position
 	# Твін ще не виконався в момент побудови графа нижче — rotation_degrees.y
 	# лишиться незмінним аж до реального програвання, тож цю величину
 	# доводиться передбачати самим, а не перечитувати властивість між кроками
@@ -236,11 +249,22 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		predicted_degrees += delta
 
 		tween.set_parallel(false)
-		tween.tween_property(self, "position", IsoCameraRig.cell_to_world(cell), duration_per_step)
+		var to_pos: Vector3 = IsoCameraRig.cell_to_world(cell)
+		tween.tween_method(_walk.bind(from_pos, to_pos), 0.0, 1.0, duration_per_step)
+		from_pos = to_pos
 
 		current_cell = cell
 		facing = target_facing
 	return tween.finished
+
+
+## Крок руху між клітинками: XZ — лінійно, висота — з рельєфу під юнітом (а не пряма між
+## центрами клітинок, що протикала б горб). Без рельєфу — лінійно, як і було.
+func _walk(t: float, from: Vector3, to: Vector3) -> void:
+	var p: Vector3 = from.lerp(to, t)
+	if TerrainHeight.active != null:
+		p.y = TerrainHeight.active.at(p.x, p.z)
+	position = p
 
 
 ## R14: поворот твінується, а не клацає миттєво — «Твіни руху й повороту»

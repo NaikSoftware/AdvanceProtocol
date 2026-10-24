@@ -50,7 +50,10 @@ func _ignore_recursive(n: Node, skip: Array[Node]) -> void:
 		if not _saved_filters.has(ctl):
 			_saved_filters[ctl] = ctl.mouse_filter
 		ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for c: Node in n.get_children():
+	# get_children(true): смуга прокрутки RichTextLabel — внутрішній вузол, і без
+	# include_internal вона лишалась STOP та з'їдала драг біля правого краю.
+	# restore_runner_gui() повертає рівно те, що тут збережено.
+	for c: Node in n.get_children(true):
 		_ignore_recursive(c, skip)
 
 
@@ -103,6 +106,7 @@ func wait_until(cond: Callable, what: String, max_frames: int = 120) -> bool:
 
 ## opts: tiles {Vector2i: Terrain.Kind} (решта — FIELD), ground (Terrain.GroundState),
 ## viewport_size Vector2i (екран у SubViewport цього розміру),
+## map_path String (готова карта замість width/height/spawns/tiles/ground),
 ## seed (7), players (2),
 ## prepare Callable(state: BattleState) — після setup(), до першого кадру тесту.
 func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void:
@@ -121,6 +125,8 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 	for s: Dictionary in spawns:
 		typed.append(s)
 	m.spawns = typed
+	if opts.has("map_path"):
+		m = load(opts["map_path"])
 	# таблиця рухів піднімає матч у циклі — не тримаємо десяток екранів одразу
 	if is_instance_valid(screen):
 		screen.free()

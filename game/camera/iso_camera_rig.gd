@@ -1,7 +1,8 @@
 class_name IsoCameraRig
 extends Node3D
-## Фіксований ізометричний ріг: панорама і зум по площині дошки, кут камери
-## не змінюється (§1 non-goals — вільної камери нема). Вузол-власник фокусу —
+## Фіксований ріг: панорама і зум по площині дошки, гравець кута не крутить
+## (§1 non-goals — вільної камери нема); нахил залежить лише від зуму
+## (pitch_for()). Вузол-власник фокусу —
 ## сам корінь рига, дочірній Yaw несе поворот на 45°, лише щоб дати камері
 ## погляд; жодна з цих обертань не потрапляє у тайлові координати.
 
@@ -13,8 +14,19 @@ extends Node3D
 ## _notify_view_changed()), інакше він виродився б у той самий _process.
 signal view_changed
 
+## Фаза 5a: камера перспективна, але zoom_level зберіг сенс колишнього
+## ортографічного size — висоту кадру у світових одиницях у площині фокуса
+## (корінь рига на y = 0). Відстань до камери виводиться з нього (_distance()),
+## тож межі зуму показують ту саму кількість тайлів, а пан у центрі екрана має
+## той самий масштаб пікселя, що й в ортопроекції. FOV 42° — рішення власника:
+## 53° давав «риб'яче око», 30° читався майже як ортопроекція.
 const MIN_ZOOM: float = 6.0
 const MAX_ZOOM: float = 20.0
+const FOV_DEG: float = 42.0
+## Рішення власника: зблизька нахил пологіший (видно борти техніки), здалеку —
+## крутіший, щоб уся дошка читалась згори.
+const PITCH_NEAR_DEG: float = 38.0
+const PITCH_FAR_DEG: float = 55.0
 ## §3.13/§1: панорама обмежена межами дошки з полем в 2 тайли — гравець не
 ## може завести камеру за край карти навіть на максимальному зумі.
 const BOARD_MARGIN: float = 2.0
@@ -86,8 +98,9 @@ var _reported_zoom: float = 0.0
 
 func _ready() -> void:
 	_yaw.rotation_degrees.y = YAW_DEGREES
-	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	_camera.size = zoom_level
+	_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	_camera.fov = FOV_DEG
+	_place_camera()
 	_zoom_target = zoom_level
 	_prev_frame_position = global_position
 	_reported_position = global_position
@@ -100,7 +113,8 @@ func _ready() -> void:
 ## §3.1: логічні координати цілі, світові — (x, 0, y). 45° дає камера, а не
 ## ці дані, тому функція лишається чистим переносом без жодного повороту.
 static func cell_to_world(cell: Vector2i) -> Vector3:
-	return Vector3(cell.x, 0.0, cell.y)
+	# Висота — косметичний рельєф (TerrainHeight); без нього 0, і це та сама площина.
+	return Vector3(cell.x, TerrainHeight.ground_y(cell.x, cell.y), cell.y)
 
 static func world_to_cell(point: Vector3) -> Vector2i:
 	return Vector2i(roundi(point.x), roundi(point.z))
@@ -115,10 +129,10 @@ func set_bounds(board_size: Vector2i) -> void:
 ## камеру в клемп дошки і застрягав там до кінця жесту (відтворено і
 ## заміряно в реальному вікні, не здогад). Перетин променя з площиною y=0 —
 ## та сама геометрія, що вже давно й перевірено використовує
-## screen_point_to_cell() нижче — автоматично враховує і zoom_level (розмір
-## ортофрустума), і нахил камери (52°, чого груба формула теж не рахувала:
-## вертикальний рух пальця «стискається» перспективою площини сильніше за
-## горизонтальний), і будь-яку майбутню зміну проекції. Повертає null, якщо
+## screen_point_to_cell() нижче — сама враховує і відстань камери, і нахил,
+## що змінюється з зумом (pitch_for()), і перспективу: піксель біля верхнього
+## краю кадру важить більше світових одиниць, ніж біля нижнього, а жоден
+## сталий коефіцієнт цього не передасть. Повертає null, якщо
 ## промінь не перетинає площину дошки (камера дивиться паралельно чи вгору)
 ## — виклик тоді просто нічого не робить цього кадру, безпечніше за ділення
 ## на нуль.
@@ -127,7 +141,8 @@ func _ray_ground_point(screen_pos: Vector2) -> Variant:
 	if is_zero_approx(dir.y):
 		return null
 	var origin: Vector3 = _camera.project_ray_origin(screen_pos)
-	var t: float = -origin.y / dir.y
+	# Площина фокуса — на висоті рига: на пагорбі пан тримає ту саму світову точку під пальцем.
+	var t: float = (global_position.y - origin.y) / dir.y
 	if t < 0.0:
 		return null
 	return origin + dir * t
@@ -135,9 +150,9 @@ func _ray_ground_point(screen_pos: Vector2) -> Variant:
 ## delta — палець гравця на екрані (raw screen relative), не світові осі.
 ## Контракт САМ pan() — «пряме маніпулювання»: світова точка, що щойно була
 ## під поточним екранним якорем (центр `Viewport`), опиняється під
-## anchor+delta ПІСЛЯ виклику. Це не довільний стиль — при ортопроекції з
-## реальною геометрією (проекція променя на площину дошки, як і в
-## screen_point_to_cell()) є рівно один знак, що дає «дошка йде за пальцем»;
+## anchor+delta ПІСЛЯ виклику. Це не довільний стиль — коли рух рахується
+## променем на площину дошки (як і в screen_point_to_cell()), а не з
+## пікселів, є рівно один знак, що дає «дошка йде за пальцем»;
 ## інверсія рахується виведенням нижче (from - to), не обирається на смак.
 ## Раніше тут стояла проста формула Vector3(delta.x,0,delta.y).rotated(45°)
 ## — вона і плутала напрям (камера йшла за пальцем, а не дошка — власник
@@ -232,6 +247,12 @@ func _update_inertia(delta: float) -> void:
 func screen_point_to_cell(screen_pos: Vector2) -> Vector2i:
 	var origin: Vector3 = _camera.project_ray_origin(screen_pos)
 	var dir: Vector3 = _camera.project_ray_normal(screen_pos)
+	# З рельєфом тап б'є в видиму поверхню, а не в площину y = 0 (піднятий тайл інакше
+	# вибирався б сусідом). Мимо землі — площина, як і без рельєфу.
+	if TerrainHeight.active != null:
+		var hit: Variant = TerrainHeight.active.pick(origin, dir)
+		if hit != null:
+			return world_to_cell(hit as Vector3)
 	if is_zero_approx(dir.y):
 		# Промінь паралельний площині дошки — перетину нема. Деградує на
 		# свідомо позадошковий тайл: Board.in_bounds() відкидає його самим
@@ -248,7 +269,12 @@ func screen_point_to_cell(screen_pos: Vector2) -> Vector2i:
 ## прив'язка панелі до тайла юніта) отримує рівно точку, а не камеру, і
 ## разом із нею не отримує можливості завести другу геометрію рига.
 func unproject(world: Vector3) -> Vector2:
-	return _camera.unproject_position(world)
+	var screen: Vector2 = _camera.unproject_position(world)
+	# Перспектива дзеркалить точку позаду площини камери вгору екрана; камера
+	# дивиться вниз, тож усе позаду неї лежить на дошці НИЖЧЕ кадру.
+	if _camera.is_position_behind(world):
+		return Vector2(screen.x, get_viewport().get_visible_rect().size.y * 4.0)
+	return screen
 
 
 ## Миттєве рецентрування — єдиний виклик, дозволений на гейті передачі ходу
@@ -311,17 +337,33 @@ func _update_zoom(delta: float) -> void:
 	_apply_zoom_keep_anchor(next_zoom)
 
 ## Зум «у точку під пальцем»: беремо світову точку під якорем ДО зміни
-## розміру фрустума, міняємо розмір, дивимось, куди той самий екранний якір
+## відстані й нахилу камери, міняємо їх, дивимось, куди той самий екранний якір
 ## тепер указує, і зсуваємо камеру рівно на різницю. Той самий трюк, яким
 ## screen_point_to_cell()/pan() проектують промінь на площину дошки — тут
 ## застосований двічі навколо зміни zoom_level.
 func _apply_zoom_keep_anchor(next_zoom: float) -> void:
 	var before: Variant = _ray_ground_point(_zoom_anchor_screen)
 	zoom_level = next_zoom
-	_camera.size = zoom_level
+	_place_camera()
 	var after: Variant = _ray_ground_point(_zoom_anchor_screen)
 	if before != null and after != null:
 		global_position = _clamp_to_bounds(global_position + ((before as Vector3) - (after as Vector3)))
+
+func pitch_for(zoom: float) -> float:
+	return lerpf(PITCH_NEAR_DEG, PITCH_FAR_DEG, inverse_lerp(MIN_ZOOM, MAX_ZOOM, zoom))
+
+## Camera3D.keep_aspect лишається типовим KEEP_HEIGHT, тож FOV — вертикальний,
+## і zoom_level — висота (а не ширина) кадру в площині фокуса, як і ортографічний size.
+func _distance() -> float:
+	return zoom_level / (2.0 * tan(deg_to_rad(FOV_DEG) * 0.5))
+
+## Камера дивиться рівно в корінь рига — центр екрана завжди лежить на фокусі,
+## хоч би який був нахил.
+func _place_camera() -> void:
+	var p: float = pitch_for(zoom_level)
+	var d: float = _distance()
+	_camera.position = Vector3(0.0, d * sin(deg_to_rad(p)), d * cos(deg_to_rad(p)))
+	_camera.rotation_degrees = Vector3(-p, 0.0, 0.0)
 
 func _process(delta: float) -> void:
 	# Швидкість «останніх кадрів перед відривом» (рішення власника, не повна
@@ -374,8 +416,7 @@ func _clamp_to_bounds(pos: Vector3) -> Vector3:
 	var min_edge: float = -BOARD_MARGIN
 	var max_x: float = float(_max_cell.x) + BOARD_MARGIN
 	var max_z: float = float(_max_cell.y) + BOARD_MARGIN
-	return Vector3(
-		clampf(pos.x, min_edge, max_x),
-		pos.y,
-		clampf(pos.z, min_edge, max_z)
-	)
+	var x: float = clampf(pos.x, min_edge, max_x)
+	var z: float = clampf(pos.z, min_edge, max_z)
+	# Фокус слідує за землею: центр екрана лежить на поверхні, а не на площині під пагорбом.
+	return Vector3(x, TerrainHeight.active.at(x, z) if TerrainHeight.active != null else pos.y, z)

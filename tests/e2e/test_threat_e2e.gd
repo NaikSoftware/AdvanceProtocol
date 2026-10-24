@@ -86,7 +86,7 @@ func test_long_press_on_enemy_tank_shows_a_circle_and_marks_my_unit_in_range() -
 
 func _ring_node() -> MeshInstance3D:
 	for c: Node in _e2e.screen.get_node("%BoardView").get_children():
-		if c is MeshInstance3D and not c is MultiMeshInstance3D:
+		if c is MeshInstance3D and not c is MultiMeshInstance3D and not c is GroundSurface and not c is WaterSurface:
 			return c
 	return null
 
@@ -156,10 +156,15 @@ func test_a_drag_is_never_a_long_press() -> void:
 	await _boot(MEDIUM_TANK, TANK)
 	var from: Vector2 = _e2e.px(TANK)
 	_e2e._mouse_button(from, true)
+	# Справжній захист — ignore_runner_gui() у _boot, що тепер гасить і внутрішні
+	# вузли GUT: за FOV 42° +60 px вправо потрапляли на внутрішню смугу прокрутки
+	# вікна виводу GUT (x ≥ 1258), яку хелпер раніше пропускав. До центру екрана
+	# тягнемо додатково, щоб драг не залежав від того, що лежить біля краю.
+	var shift: Vector2 = (get_viewport().get_visible_rect().get_center() - from).normalized() * 60.0
 	var mv := InputEventMouseMotion.new()
-	mv.position = from + Vector2(60, 0)
+	mv.position = from + shift
 	mv.global_position = mv.position
-	mv.relative = Vector2(60, 0)
+	mv.relative = shift
 	mv.button_mask = MOUSE_BUTTON_MASK_LEFT
 	get_viewport().push_input(mv, true)
 	_e2e.screen._process(BattleScreen.LONG_PRESS_SEC * 2.0)

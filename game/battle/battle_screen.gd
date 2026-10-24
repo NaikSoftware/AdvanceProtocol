@@ -43,7 +43,7 @@ const _UnitViewScene := preload("res://game/battle/unit_view.tscn")
 ## Фіксований сід (не randi() — §6 CLAUDE.md, детермінізм): це запасний,
 ## а не бойовий шлях, тож повторюваність важливіша за різноманіття.
 const _FALLBACK_SEED: int = 1
-const _FallbackMap := preload("res://maps/skirmish_bridge.tres")
+const _FallbackMap := preload("res://maps/river.tres")
 
 @onready var _camera_rig: IsoCameraRig = %CameraRig
 @onready var _board_view: BoardView = %BoardView
@@ -218,6 +218,8 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# тож зливати чергу безпечно — початковий туман нижче йде не з неї.
 	_match_service.take_events()
 
+	_board_view.surface = map_data.surface
+	_board_view.relief_seed = map_data.name_key.hash()
 	_wire_view(board)
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
@@ -235,6 +237,12 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 ## юніти й камера з'являються на confirmed (_on_gate_confirmed), як при передачі ходу.
 func resume(match_service: Node = null) -> void:
 	_match_service = match_service if match_service != null else MatchService
+	# Підтипи поверхні живуть у MapData, не в збереженні: беремо їх з карти збереженої гри.
+	var mp: String = _match_service.map_path
+	if mp != "" and ResourceLoader.exists(mp):
+		var saved_map: MapData = load(mp) as MapData
+		_board_view.surface = saved_map.surface
+		_board_view.relief_seed = saved_map.name_key.hash()
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
 	_match_service.events_ready.connect(_on_events_ready)
