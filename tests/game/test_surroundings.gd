@@ -484,6 +484,39 @@ func test_destroyed_ring_bridge_draws_ruins_outside_the_board_list() -> void:
 	assert_eq(view._placeholder_bridge_ruin_cells.size(), 0, "на дошці руїн нема")
 
 
+## Пагорб, що перетинає край дошки, сходить на краю до 0 улоговиною, але клітинка HILL лишається
+## пагорбом: центр тримає ≥ `_HILL_KEEP` найменшої висоти пагорба, помножене на множник
+## улоговини в цьому центрі (1 далі за `_EDGE_HILL_IN` від краю, 0.259 на крайній клітинці).
+func test_ring_world_keeps_every_board_hill_cell_raised() -> void:
+	var w: Array = _world("res://maps/ridge.tres")
+	var m: MapData = w[0]
+	var b: Board = w[1]
+	var world: Board = w[2]
+	var t: TerrainHeight = w[3]
+	var flat := Board.create(world.width, world.height, world.ground_state)
+	for i in world.tiles.size():
+		var k: int = world.tiles[i]
+		flat.tiles[i] = Terrain.Kind.FIELD if k == Terrain.Kind.HILL else k
+	var f := TerrainHeight.bake(flat, 0, m.name_key.hash(), Surroundings.world_surface(m),
+			Surroundings.ring_of(m))
+	var floor_h: float = TerrainHeight._HILL_KEEP * TerrainHeight._HILL_MIN
+	var edge_cells := 0
+	for z in b.height:
+		for x in b.width:
+			if b.kind_at(Vector2i(x, z)) != Terrain.Kind.HILL:
+				continue
+			var dip: float = TerrainHeight._edge_hill_dip(
+					absf(x - (b.width - 1) * 0.5) - b.width * 0.5,
+					absf(z - (b.height - 1) * 0.5) - b.height * 0.5)
+			edge_cells += 1 if dip < 1.0 else 0
+			var rise: float = t.at(float(x), float(z)) - f.at(float(x), float(z))
+			# Допуск 8 мм: центр клітинки лежить між відліками, і білінійна інтерполяція
+			# зрізає вершину.
+			assert_gt(rise, floor_h * dip - 0.008 * M,
+					"(%d, %d): піднято на %.3f, множник %.3f" % [x, z, rise, dip])
+	assert_gt(edge_cells, 0, "на Ridge пагорб перетинає край")
+
+
 ## Настил — лише на мостах дошки: плита впоперек русла кільця під напівзакритою імлою
 ## обриває річку прямою, і за нею вода читається окремим шматком.
 func test_ring_bridge_lays_no_deck_across_the_river() -> void:
