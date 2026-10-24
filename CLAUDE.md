@@ -1,8 +1,8 @@
 # Advance Protocol
 
 Mobile-first, turn-based tactical warfare. Two or three players share **one device** and pass it
-between turns (hot-seat / pass-and-play). Godot 4, 3D geometry under a fixed orthographic camera
-with an isometric-style view, realistic art direction.
+between turns (hot-seat / pass-and-play). Godot 4, 3D geometry under a fixed-angle perspective
+camera with an isometric-style view, realistic art direction.
 
 There is no action layer. Nothing happens in real time, nothing is reflex-tested. The two things
 that carry the game are **tactical depth** and **atmosphere**, and every technical decision below
@@ -326,8 +326,14 @@ results, making decisions, integrating outputs and validating the final state.
 
 ## 8. Rendering and mobile budget → [details](docs/art-direction.md)
 
-Fixed orthographic rig, ~45° yaw and 50–55° pitch, pan and clamped zoom only. **Undersides are
-never seen and backs rarely are** — judge every asset from that angle.
+Fixed perspective rig, ~45° yaw, pitch easing with zoom, pan and clamped zoom only. **Undersides
+are never seen and backs rarely are** — judge every asset from that angle.
+
+**The tile grid exists only in the rules.** Ground, rivers, roads and surface boundaries are drawn
+as natural shapes that ignore cell edges; a tile may mix water, bank and grass. One limit keeps the
+picture honest: every cell must still visibly carry its own terrain kind, since each kind changes a
+movement number, and visual water stays ≥ 0.3 tile from any land-cell centre, where units stand. Height is cosmetic and touches no rule. World scale: 1 tile ≈ 8 m — size every
+texture and effect from real metres.
 
 Budget on a mid-range phone at 60 fps: **under ~100 draw calls and ~150k triangles on screen.**
 Bake static terrain lighting; one directional light with shadows for units only. No SSAO, no SSR,

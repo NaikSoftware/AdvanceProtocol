@@ -32,7 +32,8 @@ names in [§3.6](rules/units.md) remain role labels. The setting is an art-direc
 
 ## Rendering and mobile budget
 
-The camera is a fixed orthographic rig, roughly 45° yaw and 50–55° pitch. Pan and clamped zoom
+The camera is a fixed perspective rig, roughly 45° yaw, with pitch easing from 55° zoomed out to
+38° zoomed in (`IsoCameraRig.pitch_for`). Pan and clamped zoom
 only; no free rotation (90° snaps are acceptable if playtests ask for them). Because the angle is
 fixed, **undersides are never seen and backs rarely are** — judge every asset from that angle.
 
