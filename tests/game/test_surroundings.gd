@@ -569,6 +569,21 @@ func test_ring_closing_fills_the_inner_land_corner_of_a_narrow_bend() -> void:
 	assert_gt(c[0], 0.0, "далека суша суха")
 
 
+## За краєм поля замикання бачить сушу: берег між водою й краєм світу, вужчий за 2r, не
+## заливається до самого краю.
+func test_ring_closing_leaves_the_shore_at_the_field_edge_dry() -> void:
+	var n := 20
+	var dc := PackedFloat32Array()
+	dc.resize(n * n)
+	for j in n:
+		for i in n:
+			dc[j * n + i] = -0.3 if j >= 3 and j <= 6 else 1.0
+	var c: PackedFloat32Array = TerrainHeight.new()._closing(dc, n, n, 0.25, 0.8)
+	for i in n:
+		assert_gt(c[i], 0.0, "вузол (%d, 0) на краю поля сухий" % i)
+		assert_gt(c[n + i], 0.0, "вузол (%d, 1) біля краю поля сухий" % i)
+
+
 ## Дотик по кільцю потрапляє в землю кільця, але дає клітинку поза дошкою, яку Board.in_bounds
 ## відкидає; що далі робить InputController.tap_cell — test_tap_outside_board_clears_selection.
 func test_tap_on_the_ring_picks_a_cell_outside_the_board() -> void:

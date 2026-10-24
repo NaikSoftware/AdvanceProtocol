@@ -636,6 +636,12 @@ func _closing(dc: PackedFloat32Array, w: int, h: int, step: float, r: float) -> 
 	for k in dc.size():
 		grown[k] = -1.0 if dc[k] <= 0.0 else d_out[k] - r
 	var d_in: PackedFloat32Array = _inner_distance(grown, w, h, step)
+	# За краєм поля — суша: інакше розширена вода біля краю світу ніде не звужувалась би назад, і
+	# берег між водою й краєм заливало б аж до краю.
+	for k in dc.size():
+		var i: int = k % w
+		var j: int = k / w
+		d_in[k] = minf(d_in[k], float(mini(mini(i, j), mini(w - 1 - i, h - 1 - j)) + 1) * step)
 	var out := PackedFloat32Array()
 	out.resize(dc.size())
 	for k in dc.size():
