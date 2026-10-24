@@ -1,39 +1,42 @@
 class_name RiverCourse
 extends RefCounted
-## Гладка осьова лінія річки (рішення власника 2026-10-23: сітка живе лише в логіці й шляхах,
-## на екрані річка не знає про клітинки). Береться з клітинок WATER/BRIDGE: скелет маски
-## (Zhang-Suen на сітці по U пікселів на клітинку), гілки-«шпори» відрізаються, лінія
-## перевибирається з кроком STEP і згладжується Гаусом, тож сходинка клітинок в 1 клітинку
-## стає довгою діагоналлю. Ширина гуляє 0.6-1.4 логічної (хвиля ~4.5 клітинки), вісь — на ±0.2.
-## Береги — відстань до ламаної мінус півширина (об'єднання капсул).
+## Гладка осьова лінія річки. Сітка клітинок існує лише в правилах і пошуку шляху; на екрані
+## контур річки від неї не залежить. Лінія береться з клітинок WATER/BRIDGE: скелет маски
+## (Zhang-Suen на сітці по U пікселів на клітинку), короткі бічні гілки відрізаються, лінія
+## перевибирається з кроком STEP і згладжується гаусовим фільтром, тож сходинка клітинок
+## в 1 клітинку стає довгою діагоналлю. Півширина — 0.6–1.0 запасу до центрів суші (хвиля шуму
+## ~4.5 клітинки), вісь зсунуто шумом на ±0.45. Береги — відстань до ламаної мінус півширина
+## (об'єднання капсул).
 ##
 ## Лише вигляд: жодне правило цього не читає. Клітинки суші лишаються сухими в радіусі
-## 0.3 від центру (CLEAR), а під мостом лінія пряма й перпендикулярна настилу (піни).
+## 0.3 від центру (CLEAR), а під мостом лінію закріплено прямою й перпендикулярною настилу.
 
 const U: int = 3
 const STEP: float = 0.35
 const SIGMA: float = 1.2
-## Вода лишається ≥ 0.3 від центру будь-якої клітинки суші (там стоять юніти); 0.05 — запас
+## Вода лишається ≥ 0.3 від центру будь-якої клітинки суші (там стоять юніти); 0.03 — запас
 ## на кроці ламаної між вершинами.
 const CLEAR: float = 0.33
 const WIDTH_VAR: float = 0.3
 const WANDER: float = 0.35
-## Друга октава (хвиля ~2 клітинки): береги не лишаються прямими довше за клітинку-дві.
+## Друга октава (хвиля ~2 клітинки): пряма ділянка берега не довша за 1–2 клітинки.
 const WIDTH_FINE: float = 0.12
 const WANDER_FINE: float = 0.1
-## Не вужче за 9 м (1.12 клітинки), крім місць, де клітинки суші не лишають місця.
+## Ширина не менша за 9 м (1.12 клітинки), крім місць, де клітинки суші не лишають місця.
 const MIN_HALF: float = 0.56
 ## Півширина не більша за стільки медіан осі.
 const MAX_OVER_MEDIAN: float = 1.45
-## Ядро площі: клітинки води далі за LAKE_DT від суші (озеро) дають диски радіуса 0.85-1.2.
+## Озеро: клітинки води, далі за LAKE_DT від суші, дають диски радіуса 0.85–1.2.
 const LAKE_DT: float = 1.4
-## Амплітуда варпу контуру ставка (клітинок) і ставок завдовжки менше за ARC_POND.
+## Амплітуди викривлення координат (domain warp) для контуру ставка, у клітинках; лінія,
+## коротша за ARC_POND, — ставок.
 const WARP: float = 0.3
 const WARP_FINE: float = 0.1
 const ARC_POND: float = 3.0
-## Малий ставок збурюється слабше (множник), бо радіус ~0.6 не витримає 0.4 варпу.
+## Множник викривлення для ставка: повна амплітуда 0.4 порівнянна з радіусом ~0.6 і
+## спотворила б диск.
 const POND_WARP: float = 0.4
-## Ставок — група води не більша за стільки клітинок; радіуси дисків ставка (клітинок).
+## Ставок — група клітинок води, не більша за стільки; далі радіуси дисків ставка (клітинок).
 const POND_CELLS: int = 8
 const POND_EDGE_GAP: float = 0.12
 const POND_DISC: float = 0.6
@@ -42,19 +45,20 @@ const POND_DISC_MID: float = 0.5
 const POND_JITTER: float = 0.22
 ## Ставок не ближче за стільки до краю дошки.
 const EDGE_GAP: float = 0.3
-## Клітинка води, де після зсуву берега лишається менше за цю частку води, розсуває берег (_widen).
+## Клітинка води, де після зсуву берега лишається менше за цю частку води, розсуває берег
+## (_widen).
 const MIN_WET: float = 0.5
-## Дальність поля: далі нього відстань до води не змінює ні схил, ні пагорб.
+## Межа поля: далі за неї відстань до води не змінює ні схил, ні пагорб.
 const REACH: float = 1.6
 const FAR: float = 2.0
 const KAPPA_LO: float = 0.06
 const KAPPA_HI: float = 0.22
 
-## Ламані осі (світові клітинки), півширини й знакова кривизна на вершинах.
+## Ламані осі (світові координати в клітинках), півширини й знакова кривизна на вершинах.
 var lines: Array[PackedVector2Array] = []
 ## Скільки перших ліній — справжня вісь; далі лише допоміжні виступи берега (_widen).
 var main_count: int = 0
-## Номери ліній-ставків (коротких): контур збурено шумом (домен-варп 0.3 клітинки), без прямих сторін.
+## Номери ліній-ставків (коротких) → множник викривлення координат: контур без прямих сторін.
 var _pond_lines: Dictionary = {}
 ## Номери ліній-дисків ставка (підмножина _pond_lines).
 var _disc_ponds: Dictionary = {}
@@ -70,7 +74,7 @@ var _h: int = 0
 var _wgrid: PackedByteArray = PackedByteArray()
 ## Диски озера (x, z, радіус).
 var _discs: PackedVector3Array = PackedVector3Array()
-## Центри мостів: біля них берег не розсуваємо (настил, піни).
+## Центри мостів: біля них берег не розсуваємо (настил, закріплена вісь).
 var _bridge_centres: PackedVector2Array = PackedVector2Array()
 
 
@@ -96,7 +100,7 @@ static func build(wgrid: PackedByteArray, w: int, h: int, pad: int, bridges: Arr
 				y1 = maxi(y1, cy)
 	if x1 < 0:
 		return rc
-	# Зображення з рамкою в 1 піксель суші (скелет не липне до краю); піксель (i, j) → світ.
+	# Зображення з рамкою в 1 піксель суші (скелет не торкається краю); піксель (i, j) → світ.
 	var ox: float = float(x0) - 0.5 - pad
 	var oz: float = float(y0) - 0.5 - pad
 	var nx: int = (x1 - x0 + 1 + 2 * pad) * U + 2
@@ -137,7 +141,7 @@ static func build(wgrid: PackedByteArray, w: int, h: int, pad: int, bridges: Arr
 			raw.append(Vector2(ox + ((k % nx) - 0.5) / U, oz + (float(k / nx) - 0.5) / U))
 		rc._add_line(raw, bridges, [n_w, n_l, n_w2, n_l2], pinned)
 	# Міст, до якого не дотяглась жодна вісь, дістає власну коротку вісь: вода під настилом
-	# гарантована, а кінці настилу лишаються сухими (піввисота ≤ довжина / 2 - 0.15).
+	# гарантована, а кінці настилу лишаються сухими (півширина ≤ довжина / 2 - 0.15).
 	for bi in bridges.size():
 		if pinned[bi]:
 			continue
@@ -159,8 +163,9 @@ static func build(wgrid: PackedByteArray, w: int, h: int, pad: int, bridges: Arr
 	return rc
 
 
-## Розсуває береги там, де клітинка води лишилась би (майже) сухою: півширина осі плавно
-## росте на ~3.5 клітинки уздовж течії (виступ того ж профілю, що берег, без окремих плям).
+## Розсуває береги там, де клітинка води лишилась би (майже) сухою: поруч з віссю додається
+## зсунута до клітинки ламана на ±3.5 клітинки вздовж течії — виступ того ж профілю, що берег,
+## а не окрема кругла пляма.
 func _widen() -> void:
 	for cz in _h:
 		for cx in _w:
@@ -169,7 +174,8 @@ func _widen() -> void:
 			var wet := 0
 			for j in 5:
 				for i in 5:
-					# Береговий зсув звужує воду до 0.2: рахуємо те, що його переживе.
+					# Береговий зсув забирає 0.2 клітинки від урізу: рахуємо лише точки,
+					# глибші за нього.
 					wet += 1 if _water_d(cx - 0.4 + i * 0.2, cz - 0.4 + j * 0.2) < -0.2 else 0
 			if float(wet) >= MIN_WET * 25.0:
 				continue
@@ -198,7 +204,8 @@ func _widen() -> void:
 					var dd: float = Vector2(dc.x, dc.y).distance_to(c)
 					if dd > disc_d + 1.6:
 						continue
-					# Клітинка суші дальше за 0.3: радіус ≤ відстань до суші + 0.2 - запас.
+					# Радіус ≤ відстань до квадрата суші + 0.2: край диска заходить у клітинку суші
+					# на 0.2 й лишається далі за 0.3 від її центру.
 					var cap: float = _dt(dc.x, dc.y) + CLEAR - 0.2 + 0.2 - 0.13
 					var w: float = exp(-pow((dd - disc_d) / 0.8, 2.0))
 					var target: float = minf(dd + 0.15, cap)
@@ -210,7 +217,7 @@ func _widen() -> void:
 			var hw: PackedFloat32Array = halfs[best_li]
 			var dir: Vector2 = (c - pts[best_vi]).normalized()
 			# Односторонній виступ — окрема гладка ламана, зсунута до клітинки: береги об'єднуються,
-			# вісь і її кривизна не чіпаються; зсув згасає по Гаусу вздовж течії (~5 клітинок).
+			# вісь і її кривизна не змінюються; зсув згасає за Гаусом уздовж течії (σ ≈ 1 клітинка).
 			var q := PackedVector2Array()
 			var qh := PackedFloat32Array()
 			for vi in range(maxi(best_vi - 10, 0), mini(best_vi + 11, pts.size())):
@@ -230,7 +237,8 @@ func _widen() -> void:
 					ok = ok and (not _pond_lines.has(best_li) or _edge_dist(e.x, e.y) - rr >= EDGE_GAP)
 					if ok:
 						break
-					# Спершу зсув, далі й радіус: виступ не має заходити ближче CLEAR до центру суші.
+					# Спершу зсув, далі й радіус: виступ не має заходити ближче CLEAR
+					# до центру суші.
 					if _k < 4:
 						sh *= 0.5
 					else:
@@ -247,7 +255,7 @@ func _widen() -> void:
 				kappas[kappas.size() - 1].resize(q.size())
 
 
-## Найменше знакове d серед осей і дисків у точці (клітинки; мінус у воді).
+## Найменша знакова відстань серед осей і дисків у точці (клітинки; мінус у воді).
 func _water_d(x: float, z: float) -> float:
 	var best: float = FAR
 	var p0 := Vector2(x, z)
@@ -277,7 +285,8 @@ static func _mk_noise(seed_value: int, freq: float) -> FastNoiseLite:
 	return n
 
 
-## Зсув точки для контурів ставків і озер: 0.3 клітинки на хвилі ~1 клітинка + 0.1 на ~0.4.
+## Викривлення координат (domain warp) для контурів ставків і озер: 0.3 клітинки на хвилі
+## ~1 клітинка + 0.1 на ~0.4; k — множник амплітуди.
 func _warp(x: float, z: float, k: float = 1.0) -> Vector2:
 	return k * Vector2(WARP * clampf(1.6 * _warp_x.get_noise_2d(x, z), -1.0, 1.0) + WARP_FINE * clampf(1.6 * _warp_x2.get_noise_2d(x, z), -1.0, 1.0),
 			WARP * clampf(1.6 * _warp_z.get_noise_2d(x, z), -1.0, 1.0) + WARP_FINE * clampf(1.6 * _warp_z2.get_noise_2d(x, z), -1.0, 1.0))
@@ -288,7 +297,7 @@ func _edge_dist(x: float, z: float) -> float:
 	return minf(minf(x + 0.5, _w - 0.5 - x), minf(z + 0.5, _h - 0.5 - z))
 
 
-## Диски озера: центри клітинок води, що далі LAKE_DT від суші; радіус гуляє 0.85-1.2 за шумом.
+## Диски озера: центри клітинок води, що далі LAKE_DT від суші; радіус 0.85–1.2 залежно від шуму.
 func _lakes(seed_value: int) -> void:
 	var n := FastNoiseLite.new()
 	n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
@@ -300,9 +309,10 @@ func _lakes(seed_value: int) -> void:
 				_discs.append(Vector3(cx, cz, 1.2 - 0.35 * (0.5 + 0.5 * clampf(1.6 * n.get_noise_2d(cx, cz), -1.0, 1.0))))
 
 
-## Знакова відстань до урізу (клітинки; мінус у воді) і «вигин» -1..1 (+ зовнішній берег, - коса)
-## на ГРУБІЙ сітці з кроком step відліків: вузол (ic, jc) — відлік (ic * step, jc * step) повної
-## сітки cols x rows, що лежить у світі на (-0.5 - margin + i / samples, ...).
+## Знакова відстань до урізу (клітинки; мінус у воді), вигин у [-1, 1] (+1 — зовнішній берег,
+## -1 — коса) і окреме поле ставків — на грубій сітці з кроком step відліків: вузол (ic, jc) —
+## відлік (ic * step, jc * step) повної сітки cols x rows, що лежить у світі на
+## (-0.5 - margin + i / samples, ...).
 func field(cols: int, rows: int, samples: int, margin: int, step: int) -> Array[PackedFloat32Array]:
 	var cw: int = (cols - 1 + step - 1) / step + 1
 	var ch: int = (rows - 1 + step - 1) / step + 1
@@ -313,7 +323,8 @@ func field(cols: int, rows: int, samples: int, margin: int, step: int) -> Array[
 	d.fill(FAR)
 	lat.resize(cw * ch)
 	kap.resize(cw * ch)
-	# Ставки — окреме поле: TerrainHeight згладжує його сильніше за річку (контур без слідів клітинок).
+	# Ставки — окреме поле: TerrainHeight згладжує його сильніше за річку, щоб у контурі
+	# не лишалось сходинок клітинок.
 	var pond := PackedFloat32Array()
 	pond.resize(cw * ch)
 	pond.fill(FAR)
@@ -340,7 +351,8 @@ func field(cols: int, rows: int, samples: int, margin: int, step: int) -> Array[
 	bend.resize(cw * ch)
 	for k in bend.size():
 		if d[k] < REACH:
-			# Центр кривизни — з боку lat > 0 при kap > 0: зовнішній берег там, де lat і kap різних знаків.
+			# Центр кривизни — з боку lat > 0 при kap > 0: зовнішній берег там, де lat і kap
+			# різних знаків.
 			var kn: float = signf(kap[k]) * smoothstep(KAPPA_LO, KAPPA_HI, absf(kap[k]))
 			bend[k] = -clampf(lat[k] / 0.35, -1.0, 1.0) * kn
 	return [d, bend, pond]
@@ -418,9 +430,9 @@ func _add_line(raw: PackedVector2Array, bridges: Array[Dictionary], noises: Arra
 		var off: float = wander * (WANDER * clampf(1.6 * n_l.get_noise_2d(pts[i].x, pts[i].y), -1.0, 1.0) \
 				+ WANDER_FINE * clampf(1.6 * n_l2.get_noise_2d(pts[i].x, pts[i].y), -1.0, 1.0))
 		pts[i] += Vector2(-tang[i].y, tang[i].x) * off
-	# Після зсуву — ще раз згладити, щоб кривизна не стала різкішою за R ≈ 1.5 ширини.
+	# Після зсуву лінію згладжено ще раз, щоб радіус кривизни не став меншим за ~1.5 ширини.
 	pts = _gauss_v(pts, 0.8)
-	# Піни мостів: пряма через центр настилу, перпендикулярно його осі.
+	# Закріплення під мостами: вісь стає прямою через центр настилу, перпендикулярно до його осі.
 	var cap := PackedFloat32Array()
 	cap.resize(n)
 	cap.fill(1e3)
@@ -449,8 +461,8 @@ func _add_line(raw: PackedVector2Array, bridges: Array[Dictionary], noises: Arra
 				var target: Vector2 = c + perp * (pts[i] - c).dot(perp)
 				pts[i] = pts[i].lerp(target, w)
 				cap[i] = minf(cap[i], lerpf(1e3, cap_b, w))
-	# Півширина береться від запасу до центрів суші (вода майже на всю логічну смугу, тож клітинки
-	# води лишаються мокрими), згладженого вздовж осі, і гуляє 0.6-1.0 цього запасу.
+	# Півширина береться від запасу до центрів суші (вода займає майже всю смугу клітинок води,
+	# тож жодна з них не лишається сухою), згладженого вздовж осі, і становить 0.6–1.0 запасу.
 	var room := PackedFloat32Array()
 	for i in n:
 		room.append(_land_centre_dist(pts[i].x, pts[i].y) - CLEAR)
@@ -463,12 +475,12 @@ func _add_line(raw: PackedVector2Array, bridges: Array[Dictionary], noises: Arra
 	for i in n:
 		var f: float = 0.85 + WIDTH_VAR * 0.5 * clampf(1.6 * n_w.get_noise_2d(pts[i].x, pts[i].y), -1.0, 1.0) \
 				+ WIDTH_FINE * clampf(1.6 * n_w2.get_noise_2d(pts[i].x, pts[i].y), -1.0, 1.0)
-		# Мінімальна ширина — найслабше з обмежень: і кришка під мостом, і запас до центрів суші
+		# Мінімальна ширина — найслабше з обмежень: і обмеження під мостом, і запас до центрів суші
 		# (юніти стоять там) сильніші за неї.
 		var v: float = maxf(minf(smooth[i] * clampf(f, 0.6, 1.0), hmax), MIN_HALF)
 		hw[i] = maxf(minf(minf(v, cap[i]), room[i]), 0.02)
-	# Короткий контур — ставок: береги не пряміші за варп, тож півширина менша на амплітуду варпу,
-	# а до краю дошки лишається проміжок EDGE_GAP.
+	# Короткий контур — ставок: його викривлено шумом, тож півширина менша на амплітуду
+	# викривлення, а до краю дошки лишається проміжок EDGE_GAP.
 	if s[n - 1] < ARC_POND:
 		var pinned_here := false
 		for v in cap:
@@ -489,7 +501,8 @@ func _add_line(raw: PackedVector2Array, bridges: Array[Dictionary], noises: Arra
 			var lens: float = sqrt(clampf(1.0 - pow(2.0 * u - 1.0, 2.0), 0.0, 1.0))
 			if s[n - 1] > 0.1:
 				hw[i] = maxf(hw[i] * lerpf(1.0, lens, 0.85), minf(0.2, hw[i]))
-	# Кривизна: поворот дотичної на довжину дуги, згладжена (сирий другий різницевий шумить).
+	# Кривизна: поворот дотичної на довжину дуги, згладжений; друга скінченна різниця без
+	# згладження дає шум.
 	var kp := PackedFloat32Array()
 	kp.resize(n)
 	if n > 2:
@@ -527,8 +540,8 @@ func _pond_cells(p: Vector2) -> Array[Vector2i]:
 
 
 ## Ставок — об'єднання круглих дисків (по одному на клітинку води + трохи більший центральний),
-## кожен у своєму доменному варпі: без прямих сторін і «хреста» накладених виступів. Радіус
-## обмежено запасом до центрів суші й до краю дошки, як у лінзи.
+## кожен зі своїм викривленням координат: без прямих сторін і без кутів, які дає накладання
+## виступів. Радіус обмежено запасом до центрів суші й до краю дошки, як у лінзи.
 func _add_pond_discs(cells: Array[Vector2i]) -> void:
 	var amp: float = (WARP + WARP_FINE) * POND_WARP
 	var lo := Vector2i(1 << 20, 1 << 20)
@@ -550,8 +563,8 @@ func _add_pond_discs(cells: Array[Vector2i]) -> void:
 	for c in cells:
 		spots.append(Vector3(c.x, c.y, POND_DISC))
 	spots.append(Vector3(centre.x, centre.y, POND_DISC_CENTRE))
-	# Диски сусідніх клітинок торкаються лише «шийкою»: диск на середині кожної пари (і в центрі
-	# квадрата 2x2) заповнює її, тож контур не бубликовий, а один овал.
+	# Диски сусідніх клітинок перетинаються лише вузькою смугою: диск на середині кожної пари
+	# (і в центрі квадрата 2x2) заповнює перетин, тож контур — один овал без отвору.
 	for c in cells:
 		for d: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
 			if cells.has(c + d):
@@ -560,14 +573,16 @@ func _add_pond_discs(cells: Array[Vector2i]) -> void:
 			spots.append(Vector3(c.x + 0.5, c.y + 0.5, POND_DISC_CENTRE))
 	for sp in spots:
 		# Диск біля краю дошки зсунуто всередину й може підійти до краю ближче, ніж лінза: інакше
-		# береговий зсув з'їдає воду в клітинці краю, і вона лишається сухою.
+		# береговий зсув забирає воду в клітинці краю, і вона лишається сухою.
 		var inset: float = POND_EDGE_GAP + 0.45
-		# Радіус і зсув кожного диска — свої (шум від координат), щоб ряд клітинок не давав рівних випуклин.
+		# Радіус і зсув кожного диска — свої (шум від координат), щоб ряд клітинок не давав
+		# однакових опуклостей.
 		var jx: float = _warp_x2.get_noise_2d(sp.x * 5.3 + 1.7, sp.y * 5.3)
 		var jz: float = _warp_z2.get_noise_2d(sp.x * 5.3, sp.y * 5.3 + 3.1)
 		var jr: float = _warp_x.get_noise_2d(sp.x * 4.1 + 9.0, sp.y * 4.1)
 		sp = Vector3(sp.x + POND_JITTER * clampf(1.6 * jx, -1.0, 1.0), sp.y + POND_JITTER * clampf(1.6 * jz, -1.0, 1.0), sp.z * (1.0 + 0.3 * clampf(1.6 * jr, -1.0, 1.0)))
-		# Біля краю диск стоїть на своїй глибині й не впирається в EDGE_GAP, тож верх ставка не рівна лінія.
+		# Відступ від краю дошки в кожного диска свій (+0–0.2 за шумом), тож край ставка біля
+		# межі дошки не пряма лінія.
 		inset += 0.2 * (0.5 + 0.5 * clampf(1.6 * jr, -1.0, 1.0))
 		var pos := Vector2(clampf(sp.x, inset - 0.5, _w - 0.5 - inset), clampf(sp.y, inset - 0.5, _h - 0.5 - inset))
 		var room: float = _land_centre_dist(pos.x, pos.y) - CLEAR
@@ -580,9 +595,9 @@ func _add_pond_discs(cells: Array[Vector2i]) -> void:
 		kappas.append(PackedFloat32Array([0.0]))
 
 
-## Еліптичний ставок: лінза з ~9 дисків уздовж довшої осі (профіль півширини sqrt(1 - t^2)), вісь
-## повернута на ±10°, профіль і центр збурено шумом від координат. Півширина обмежена запасом
-## до центрів суші й краю дошки; біля краю центр зсунуто всередину, тож верх не рівна лінія.
+## Еліптичний ставок: ламана з 10 вершин уздовж довшої осі з профілем півширини
+## b * sqrt(1 - t^2); вісь повернута на ±10°, профіль і центр збурено шумом від координат.
+## Півширина обмежена запасом до центрів суші й краю дошки; біля краю центр зсунуто всередину.
 func _add_pond_ellipse(centre: Vector2, ext: Vector2, amp: float) -> void:
 	var along_x: bool = ext.x >= ext.y
 	var a: float = (ext.x if along_x else ext.y) * 0.5 * 0.97 + 0.12
@@ -594,7 +609,7 @@ func _add_pond_ellipse(centre: Vector2, ext: Vector2, amp: float) -> void:
 	var ang: float = deg_to_rad(10.0) * n2
 	var dir := Vector2(1.0, 0.0).rotated(ang) if along_x else Vector2(0.0, 1.0).rotated(ang)
 	var perp := Vector2(-dir.y, dir.x)
-	# Центр зсунуто так, щоб верх еліпса не заходив у проміжок до краю дошки.
+	# Центр зсунуто так, щоб бік еліпса не заходив у проміжок до краю дошки.
 	var inset: float = POND_EDGE_GAP + b * 0.9
 	c = Vector2(clampf(c.x, inset - 0.5, _w - 0.5 - inset) if not along_x else c.x, clampf(c.y, inset - 0.5, _h - 0.5 - inset) if along_x else c.y)
 	var pts := PackedVector2Array()
@@ -700,7 +715,7 @@ static func _resample(raw: PackedVector2Array) -> PackedVector2Array:
 	return out
 
 
-## Гаус по вершинах; кінці нерухомі, за кінцем лінія продовжується непарним відбиттям
+## Гаусове згладження вершин; кінці нерухомі, за кінцем лінія продовжується непарним відбиттям
 ## (дотична на кінці зберігається).
 static func _gauss_v(v: PackedVector2Array, sigma: float) -> PackedVector2Array:
 	var n: int = v.size()
@@ -740,12 +755,12 @@ static func _gauss_f(v: PackedFloat32Array, sigma: float) -> PackedFloat32Array:
 	return out
 
 
-# Сусіди за годинниковою від півночі: N, NE, E, SE, S, SW, W, NW.
+# Сусіди за годинниковою стрілкою від півночі: N, NE, E, SE, S, SW, W, NW.
 static func _ring(nx: int) -> Array[int]:
 	return [-nx, -nx + 1, 1, nx + 1, nx, nx - 1, -1, -nx - 1]
 
 
-## Число переходів 0 -> 1 навколо піксела: 1 — кінець, 2 — звичайний, >= 3 — розвилка.
+## Число переходів 0 -> 1 навколо пікселя: 1 — кінець, 2 — звичайний, ≥ 3 — розвилка.
 static func _crossings(img: PackedByteArray, k: int, ring: Array[int]) -> int:
 	var c: int = 0
 	for o in 8:
@@ -789,7 +804,7 @@ static func _thin(img: PackedByteArray, nx: int, ny: int) -> void:
 				changed = true
 
 
-## Іде від start уздовж скелета: до розвилки, глухого кута чи вже пройденого.
+## Іде від start уздовж скелета: до розвилки, кінця гілки чи вже пройденого пікселя.
 static func _walk(img: PackedByteArray, seen: PackedByteArray, nx: int, start: int, ring: Array[int]) -> PackedInt32Array:
 	var path := PackedInt32Array([start])
 	seen[start] = 1
