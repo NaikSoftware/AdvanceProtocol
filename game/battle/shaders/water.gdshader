@@ -75,7 +75,7 @@ void fragment() {
 	vec2 p = world_pos.xz;
 	// До discard: похідні відстані для ширини лінії мусять рахуватись у всіх сусідніх пікселях.
 	vec2 sd = surround_distance(p);
-	vec4 sfog = surround ? surround_fog(sd, VIEWPORT_SIZE) : vec4(0.0);
+	vec4 sfog = surround ? surround_fog(p, sd, VIEWPORT_SIZE) : vec4(0.0);
 	float shallow_fade = 1.0;
 	float depth_m = 4.0;
 	float bank_m = 4.0;

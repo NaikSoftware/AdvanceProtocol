@@ -12,9 +12,8 @@ const HAZE_START: float = 3.0
 const HAZE_FULL: float = 11.0
 ## Колір серпанку, лінійний: холодний, світліший за мокру землю на 8–15 L* (бриф, P1 і M).
 const HAZE_COLOR: Color = Color(0.10, 0.135, 0.155)
-## Поза дошкою: яскравість ×0.8 і насиченість ×0.65, набігає за пів клітинки й далі не глибшає —
-## вдвічі слабше за туман Panzer Corps 2 (G4), щоб не читалось як туман війни.
-const GRADE_RAMP: float = 0.5
+## Яскравість ×0.8 і насиченість ×0.65 — лише разом із серпанком, тією самою кривою (grade()):
+## біля краю земля поза дошкою та сама, що й на дошці, і межу позначає тільки лінія.
 const GRADE_LUMA: float = 0.8
 const GRADE_SAT: float = 0.65
 ## Межа гри: суцільна лінія 0.28 % висоти кадру (3 px на 1080p, 2–4 px), назовні від краю.
@@ -43,7 +42,7 @@ static func apply(mat: ShaderMaterial, size: Vector2i) -> void:
 	mat.set_shader_parameter("board_size", Vector2(size))
 	mat.set_shader_parameter("haze_color", Vector3(HAZE_COLOR.r, HAZE_COLOR.g, HAZE_COLOR.b))
 	mat.set_shader_parameter("haze_range", Vector2(HAZE_START, HAZE_FULL))
-	mat.set_shader_parameter("grade_params", Vector3(GRADE_RAMP, GRADE_LUMA, GRADE_SAT))
+	mat.set_shader_parameter("grade_params", Vector2(GRADE_LUMA, GRADE_SAT))
 	mat.set_shader_parameter("line_color", Vector4(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, LINE_ALPHA))
 	mat.set_shader_parameter("line_frac", LINE_FRAC)
 
@@ -164,7 +163,7 @@ static func haze(d: float) -> float:
 
 
 static func grade(d: float) -> float:
-	return smoothstep(0.0, GRADE_RAMP, d)
+	return haze(d)
 
 
 ## Дошка разом із кільцем однією сіткою (W+2m)×(H+2m): усередині — живі види дошки (підірваний

@@ -1,9 +1,10 @@
 # Surroundings beyond the board — reference and brief
 
 What the 12-tile `outer:` ring looks like on screen: the play-area outline, the out-of-play grade,
-the rain haze that hides the world's edge, and how cheap the ring may be. Owner decisions taken as
+the rain haze that hides the world's edge, and how cheap the ring may be. Taken as
 fixed: the hand-authored ring ([tools/maps/README.md](../../tools/maps/README.md)), a thin red
-outline on the board edge, a slight darkening and desaturation outside it, and rain haze further out.
+outline on the board edge, and rain haze further out, with a slight darkening and desaturation
+that comes in only with the haze.
 
 Contact sheet: `art-refs/surroundings/surroundings_sheet.jpg` (gitignored, local only).
 
@@ -66,13 +67,15 @@ ACCEPT IF: (1) width on a 1080p capture is 2–4 px at zoom 6, 12 and 20; (2) me
 ```
 ASSET: out-of-play grade   USE: post-lighting term in every ring material (ground, water, props)
 SOURCE REFS: G4 (grade the world, not the screen; strength halved), mock on the contact sheet
-CONTENT: outside the board, luminance ×0.80 (−20 %) and saturation ×0.65 (−35 %), both in linear
-  light. Ramps from 0 at the board edge to full at +0.5 tile (4 m), then stays constant. It never
-  deepens with distance: from 3 tiles on, the haze takes over. Acceptable range −15…−25 % and
-  −30…−45 %; below −15 % it does not read, above −25 % it starts to look like fog of war.
-MUST NOT: be screen-space (a vignette); get darker towards the screen edge; be applied to the board.
-ACCEPT IF: (1) same material just inside and 1–2 tiles outside: luminance ratio 0.75–0.85 and chroma
-  ratio 0.55–0.75; (2) panning shows the grade fixed to the ground, not to the frame.
+CONTENT: luminance ×0.80 (−20 %) and saturation ×0.65 (−35 %) at most, both in linear light, applied
+  only together with the haze and on the same curve: smoothstep(3, 11, d), d the Euclidean distance
+  from the board rectangle. Up to 3 tiles out the ground is exactly the ground of the board; the red
+  line alone marks the edge. Ramp ends are flat (smoothstep), so there is no visible start or end.
+MUST NOT: be screen-space (a vignette); get darker towards the screen edge; be applied to the board;
+  change any tone at or near the board edge, or run ahead of the haze.
+ACCEPT IF: (1) luminance sampled along a line crossing the edge is flat (same material) for the first
+  3 tiles out; (2) beyond that it changes gradually with no kink; (3) panning shows the grade fixed to
+  the ground, not to the frame.
 ```
 
 ```

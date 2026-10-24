@@ -35,10 +35,12 @@ func test_haze_is_clear_to_3_tiles_half_at_7_and_full_at_11() -> void:
 	assert_eq(Surroundings.haze(0.0), 0.0, "дошка без серпанку")
 
 
-func test_grade_is_full_half_a_tile_out_and_never_deepens() -> void:
-	assert_eq(Surroundings.grade(0.0), 0.0)
-	assert_eq(Surroundings.grade(0.5), 1.0)
-	assert_eq(Surroundings.grade(9.0), 1.0)
+## Біля дошки тон землі не змінюється зовсім: затемнення йде лише разом із серпанком.
+func test_grade_starts_only_with_the_haze_and_follows_its_curve() -> void:
+	for d: float in [0.0, 0.5, 1.0, 2.0, 3.0]:
+		assert_eq(Surroundings.grade(d), 0.0, "%.1f клітинки від дошки" % d)
+	for d: float in [4.0, 7.0, 10.0, 11.0]:
+		assert_eq(Surroundings.grade(d), Surroundings.haze(d))
 	# Яскравість −20 %, насиченість −35 %: у межах брифу (−15…−25 % і −30…−45 %).
 	assert_between(Surroundings.GRADE_LUMA, 0.75, 0.85)
 	assert_between(Surroundings.GRADE_SAT, 0.55, 0.7)
@@ -229,6 +231,51 @@ func test_no_river_course_ends_in_view_outside_the_board() -> void:
 				assert_true(hidden, "%s: вісь %d кінчається в кадрі в %s (%.1f клітинки від дошки)" % [path, li, p, d])
 
 
+## Озеро чи ставок — замкнена водойма з берегом довкола: за край світу (під заслін) виходить лише
+## вода, крізь яку тече вісь річки.
+func test_only_rivers_reach_the_outer_edge_of_the_world() -> void:
+	for path: String in _MAPS:
+		var t: TerrainHeight = _world(path)[3]
+		var w: int = t.cols
+		var h: int = t.rows
+		var s: float = float(t.samples)
+		var org: float = -0.5 - t.margin
+		var wet := func(k: int) -> bool:
+			return t._h[k] < TerrainHeight.WATER_LEVEL
+		var river := PackedByteArray()
+		river.resize(w * h)
+		if t.course != null:
+			# Вісь курсу — у координатах світу (TerrainHeight.bake з ring), відлік (i, j) — у -0.5 + i / s.
+			for li in t.course.lines.size():
+				if t.course._pond_lines.has(li):
+					continue
+				for q: Vector2 in t.course.lines[li]:
+					var i: int = roundi((q.x + 0.5) * s)
+					var j: int = roundi((q.y + 0.5) * s)
+					if i >= 0 and j >= 0 and i < w and j < h:
+						river[j * w + i] = 1
+		var seen := PackedByteArray()
+		seen.resize(w * h)
+		for start in w * h:
+			var x0: int = start % w
+			var y0: int = start / w
+			if seen[start] == 1 or not wet.call(start) or (x0 > 0 and y0 > 0 and x0 < w - 1 and y0 < h - 1):
+				continue
+			var has_river := false
+			var stack: Array[int] = [start]
+			seen[start] = 1
+			while not stack.is_empty():
+				var k: int = stack.pop_back()
+				has_river = has_river or river[k] == 1
+				for o: Vector2i in Board.DIRS_4:
+					var x: int = k % w + o.x
+					var y: int = k / w + o.y
+					if x >= 0 and y >= 0 and x < w and y < h and seen[y * w + x] == 0 and wet.call(y * w + x):
+						seen[y * w + x] = 1
+						stack.append(y * w + x)
+			assert_true(has_river, "%s: вода на краю світу біля (%.1f, %.1f) без осі річки" % [path, org + x0 / s, org + y0 / s])
+
+
 func test_board_relief_inside_stays_the_same_with_the_ring() -> void:
 	# Шум рельєфу прив'язаний до дошки; кільце міняє лише смугу біля краю (річка, дороги й
 	# пагорби, що тепер тривають за ним).
@@ -243,8 +290,8 @@ func test_board_relief_inside_stays_the_same_with_the_ring() -> void:
 	assert_lt(worst, 0.75 * M, "найбільша різниця висоти в глибині дошки %.2f м" % (worst / M))
 
 
-## Дотик по кільцю потрапляє в землю кільця, але дає клітинку поза дошкою: Board.in_bounds її
-## відкидає, і InputController.tap_cell знімає вибір замість вибору.
+## Дотик по кільцю потрапляє в землю кільця, але дає клітинку поза дошкою, яку Board.in_bounds
+## відкидає; що далі робить InputController.tap_cell — test_tap_outside_board_clears_selection.
 func test_tap_on_the_ring_picks_a_cell_outside_the_board() -> void:
 	var w: Array = _world("res://maps/crossroads.tres")
 	var b: Board = w[1]

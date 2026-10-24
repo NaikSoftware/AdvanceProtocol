@@ -17,5 +17,5 @@ void fragment() {
 	vec2 sd = surround_distance(world_pos.xz);
 	ALBEDO = surround ? surround_grade(albedo, sd.x) : albedo;
 	ROUGHNESS = 0.95;
-	FOG = surround ? surround_fog(sd, VIEWPORT_SIZE) : vec4(0.0);
+	FOG = surround ? surround_fog(world_pos.xz, sd, VIEWPORT_SIZE) : vec4(0.0);
 }

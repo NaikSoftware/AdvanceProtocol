@@ -912,7 +912,7 @@ void fragment() {
 		vec2 sd = surround_distance(p);
 		alb = surround_grade(alb, sd.x);
 		refl = surround_grade(refl, sd.x);
-		FOG = surround_fog(sd, VIEWPORT_SIZE);
+		FOG = surround_fog(p, sd, VIEWPORT_SIZE);
 	}
 	ALBEDO = alb;
 	EMISSION = refl * sky_reflection_gain;
