@@ -16,18 +16,17 @@ def runs(corner):
 def fence(kind, corner, name):
     b = B()
     if kind.startswith("sheet"):
-        col = {"sheet_green": (0.27, 0.42, 0.33), "sheet_brown": (0.5, 0.27, 0.2)}[kind]
-        sheet = pbr(f"{kind}_panel", "CorrugatedSteel005", tile=1.15, paint=col, contrast=0.6, rust=0.25, grime=0.5,
+        col = {"sheet_green": (0.36, 0.52, 0.42), "sheet_brown": (0.62, 0.36, 0.28)}[kind]
+        sheet = pbr(f"{kind}_panel", "CorrugatedSteel005", tile=1.15, paint=col, contrast=0.6, rust=0.2, grime=0.15,
                     rough=0.65, metal=0.1, seed=21 if kind.endswith("green") else 22)
-        post = pbr("fence_post_steel", "MetalPlates013", tile=1.0, tint=(0.5, 0.42, 0.36), sat=0.5, rust=0.6,
-                   rough=0.7, seed=23)
+        post = sheet
         nom, ph, pw = 2.5, 2.0, 0.08
     elif kind == "euro":
-        sheet = pbr("euro_panel", "Concrete034", tile=1.5, tint=(0.66, 0.65, 0.62), sat=0.6, contrast=0.4, grime=0.5, rough=0.9, seed=25)
+        sheet = pbr("euro_panel", "Concrete034", tile=1.5, tint=(0.66, 0.65, 0.62), sat=0.6, contrast=0.25, grime=0.25, rough=0.9, seed=25)
         post = sheet
         nom, ph, pw = 2.0, 1.95, 0.15
     elif kind == "po2":
-        sheet = pbr("po2_panel", "Concrete046", tile=2.0, tint=(0.6, 0.6, 0.58), sat=0.6, contrast=0.4, grime=0.7, rough=0.95, seed=27)
+        sheet = pbr("po2_panel", "Concrete046", tile=2.0, tint=(0.6, 0.6, 0.58), sat=0.6, contrast=0.25, grime=0.3, rough=0.95, seed=27)
         post = sheet
         nom, ph, pw = 4.0, 2.5, 0.2
     elif kind == "picket":
@@ -83,7 +82,7 @@ def picket_mat():
     rail = ((np.abs(ydat - 0.4) < 0.03) | (np.abs(ydat - 1.05) < 0.03))
     alpha = (board | (rail & (idx[None, :] >= 0))).astype(float)
     grain = fbm(W, 33, 8, 2)
-    base = np.array([0.45, 0.4, 0.34])
+    base = np.array([0.62, 0.56, 0.48])
     col = base * (tone[None, :, None] * (0.75 + 0.4 * grain[..., None]))
     col = np.where(rail[..., None] & ~board[..., None], col * 0.6, col)
     a = np.concatenate([col, alpha[..., None]], -1)[::-1]    # рядок 0 знизу, як у Blender

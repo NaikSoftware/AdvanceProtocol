@@ -8,7 +8,7 @@ from common import *
 
 
 def concrete(name="road_concrete", seed=61):
-    return pbr(name, "Concrete034", tile=1.5, tint=(0.62, 0.61, 0.59), sat=0.6, contrast=0.5, grime=0.8, rough=0.92, seed=seed)
+    return pbr(name, "Concrete034", tile=1.5, tint=(0.52, 0.51, 0.49), sat=0.6, contrast=0.3, grime=0.4, rough=0.92, seed=seed)
 
 
 def jersey():
@@ -68,10 +68,9 @@ def culvert():
 def trailer(name, paint, seed):
     body = pbr(f"trailer_body_{seed}", "CorrugatedSteel005", tile=1.5, paint=paint, contrast=0.6, rust=0.4, grime=0.7,
                rough=0.7, metal=0.1, seed=seed)
-    frame = pbr("trailer_frame", "MetalPlates013", tile=1.0, tint=(0.4, 0.38, 0.35), sat=0.5, rust=0.5, grime=0.7,
+    frame = pbr("trailer_frame", "MetalPlates013", tile=1.0, tint=(0.28, 0.27, 0.25), sat=0.4, rust=0.35, grime=0.7,
                 rough=0.8, seed=seed + 1)
-    tyre = pbr("trailer_tyre", color=(0.05, 0.05, 0.05), rough=0.95)
-    rim = pbr("trailer_rim", color=(0.3, 0.27, 0.24), rough=0.7, metal=0.2)
+    tyre = rim = frame        # шасі, шини й диски — один матеріал
     b = B()
     y0, y1, fl = -3.75, 2.25, 1.01
     b.box(body, (0, (y0 + y1) / 2, fl), (2.4, y1 - y0, 0.08))                       # підлога

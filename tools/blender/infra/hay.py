@@ -28,7 +28,7 @@ def wrap_mat():
     fine = tile_noise(8, 64, n, 52)
     h = band * 0.7 + fine * 0.3
     dirt = np.clip((fbm(n, 53, 4) - 0.45) * 2.2, 0, 1)[..., None]
-    a = np.array([0.74, 0.76, 0.72]) * (0.88 + 0.12 * h[..., None])
+    a = np.array([0.62, 0.64, 0.6]) * (0.88 + 0.12 * h[..., None])
     a = a * (1 - 0.35 * dirt)
     return pbr("hay_wrap", albedo=a, normal=np.concatenate([normal_from_height(h, 3.0), np.ones((n, n, 1))], -1),
                rough=0.3, tile=2.1)

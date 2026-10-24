@@ -13,8 +13,7 @@ def mats():
                    rough=0.9, seed=3)
     steel = pbr("pole_steel", "MetalPlates013", tile=1.0, tint=(0.7, 0.72, 0.7), sat=0.5, rust=0.35,
                 grime=0.5, rough=0.6, metal=0.1, seed=5)
-    glass = pbr("pole_insulator", color=(0.55, 0.62, 0.58), rough=0.25)
-    return concrete, steel, glass
+    return concrete, steel, concrete          # ізолятор з бетонного матеріалу: світла крапка, менше викликів
 
 
 def insulator(b, glass, steel, x, y, z0, pin=0.18):
@@ -53,7 +52,8 @@ def pole04():
 
 def pole_wood():
     concrete, steel, glass = mats()
-    bark = pbr("pole_wood", "Bark012", tile=1.2, tint=(0.9, 0.85, 0.78), sat=0.4, grime=0.4, rough=0.95, seed=9)
+    bark = pbr("pole_wood", "Bark012", tile=1.2, tint=(1.05, 0.97, 0.88), sat=0.4, grime=0.2, rough=0.95, seed=9)
+    steel = bark
     b = B(); H = 8.0
     b.cyl(bark, (0, 0, H / 2), 0.125, H, 10)
     b.box(concrete, (0, -0.235, 0.8), (0.2, 0.2, 1.6))                 # бетонна приставка, ~3 м під землею
@@ -69,9 +69,9 @@ def pole_wood():
 
 
 def tower():
-    steel = pbr("tower_steel", "MetalPlates013", tile=2.0, tint=(0.85, 0.88, 0.86), sat=0.4, rust=0.15,
-                grime=0.4, rough=0.55, metal=0.1, seed=11)
-    glass = pbr("pole_insulator", color=(0.55, 0.62, 0.58), rough=0.25)
+    steel = pbr("tower_steel", "MetalPlates013", tile=2.0, tint=(1.5, 1.55, 1.5), sat=0.4, rust=0.1,
+                grime=0.1, rough=0.55, metal=0.1, seed=11)
+    glass = steel
     b = B()
     levels = [0, 5, 10, 15, 20, 22.5, 26, 29.5, 32]
     def hw(z):
