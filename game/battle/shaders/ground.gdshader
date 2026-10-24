@@ -396,9 +396,14 @@ void vertex() {
 void fragment() {
 	vec2 p = world_pos.xz;
 	// Похідні — до гілки суцільного серпанку: у сусідніх пікселях, що пішли іншою гілкою, вони не
-	// визначені. Текстури в гілці беруть їх звідси (textureGrad) або явний міп.
+	// визначені. Текстури в гілці беруть їх звідси (textureGrad) або явний міп. У гілці лишається
+	// одна похідна — `dFdx(rs)` для тіні каменю на схилі: маска схилу залежить від покриття дороги
+	// всередині гілки, а на межі суцільного серпанку камінь однаково не видно.
 	vec2 dpx = dFdx(p);
 	vec2 dpy = dFdy(p);
+	vec3 rf = has_roads ? road_sample(p) : vec3(1e3, 0.0, 0.0);
+	float fwv = fwidth(rf.y);
+	float rv_all = ripple_visibility(p);
 	vec2 dxy_x = dFdx(world_pos.xy);
 	vec2 dxy_y = dFdy(world_pos.xy);
 	vec2 dzy_x = dFdx(world_pos.zy);
@@ -479,10 +484,8 @@ void fragment() {
 		float road_cov = 0.0;
 		float verge = 0.0;
 		float de = 1e3;
-		vec3 rf = vec3(1e3, 0.0, 0.0);
 		vec4 rt = vec4(1.0, 0.0, 0.0, 0.0);
 		if (has_roads) {
-			rf = road_sample(p);
 			if (rf.x < 4.0) {
 				vec2 tsz = vec2(textureSize(road_type, 0));
 				rt = textureLod(road_type, ((p - map_origin + 0.5) * road_px) / tsz, 0.0);
@@ -632,7 +635,6 @@ void fragment() {
 			// вздовж дороги.
 			float wob = 0.12 * (vnoise(vec2(u * 0.25, 3.0 + side)) - 0.5);
 			float track = abs(av - 0.83 - wob);
-			float fwv = fwidth(rf.y);
 			// Смуга колії 0.25–0.47 м між рівнями 90 % і 10 % (край ~0.11 м); на далекому зумі край
 			// розширюється на піксель (fwidth), тож колія не вироджується в однопіксельну чорну
 			// лінію.
@@ -903,7 +905,7 @@ void fragment() {
 		// Гладка калюжа відбиває зонд BoardView звичайним шляхом освітлення — без SSR.
 		// Дощ на ній — ті самі кола, що й на річці. Підлога шорсткості 0.12: на 0.05
 		// сонце на брижі давало однопіксельні іскри.
-		float rv = puddle > 0.0 ? ripple_visibility(p) : 0.0;
+		float rv = puddle > 0.0 ? rv_all : 0.0;
 		vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * 1.2 * wet * rv : vec2(0.0);
 		rough = mix(rough, 0.12 + 0.1 * wet * (1.0 - rv), puddle);
 		rough = mix(rough, 0.12, paved_sheen * road_cov);
