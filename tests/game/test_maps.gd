@@ -447,6 +447,28 @@ func test_map_ploughed_fields_follow_land_use(p = use_parameters(_map_paths())) 
 	assert_eq(cut_off.size(), 0, "%s: поле без дороги поруч %s" % [path, cut_off.slice(0, 8)])
 
 
+## Пагорб — схил, а не горбик на одну клітинку: кожна клітинка пагорба на дошці й у кільці має
+## сусіда-пагорб по стороні. Поодинокий пагорб читається як шум і дає штраф місцевості без форми.
+func test_map_has_no_lone_hill_cell(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var mg: int = m.outer_margin
+	var lone: Array[Vector2i] = []
+	for y in range(-mg, m.height + mg):
+		for x in range(-mg, m.width + mg):
+			var c := Vector2i(x, y)
+			if m.outer_kind_at(c) != Terrain.Kind.HILL:
+				continue
+			var paired := false
+			for d: Vector2i in Board.DIRS_4:
+				var q: Vector2i = c + d
+				var in_world: bool = q.x >= -mg and q.y >= -mg and q.x < m.width + mg and q.y < m.height + mg
+				paired = paired or (in_world and m.outer_kind_at(q) == Terrain.Kind.HILL)
+			if not paired:
+				lone.append(c)
+	assert_eq(lone.size(), 0, "%s: поодинокі клітинки пагорба %s" % [path, lone.slice(0, 8)])
+
+
 ## Річка й дорога не обриваються на краю дошки: клітинка кільця за краєм продовжує їх.
 func test_map_edge_water_and_roads_continue_into_the_ring(p = use_parameters(_map_paths())) -> void:
 	var path: String = p
