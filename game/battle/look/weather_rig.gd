@@ -81,6 +81,9 @@ func _init() -> void:
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
 	sun.shadow_enabled = true
+	# Дальні каскади тіні мають меншу роздільність і м'якший край; змішування між ними прибирає
+	# видимий шов: тінь чітка зблизька й трохи м'якша здалеку.
+	sun.directional_shadow_blend_splits = true
 	add_child(sun)
 	rain = MeshInstance3D.new()
 	rain.name = "Rain"

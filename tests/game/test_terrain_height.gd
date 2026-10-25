@@ -4,6 +4,8 @@ extends GutTest
 ## пікінг по піднятій клітинці. 1 м = 0.125 світу.
 
 const M: float = TerrainHeight.M
+## Сума висот _flat_checksum(3), записана з коду без розкиду опори пагорба.
+const FLAT_CHECKSUM_SEED3: float = -2.141504
 
 
 ## 14x14 поле: пагорб 3x3 у (3..5, 3..5), дорога вздовж X на y = 10, річка (2 клітинки) на y = 7..8
@@ -659,3 +661,37 @@ func test_one_cell_hill_stays_on_its_cell() -> void:
 					continue
 				# Допуск 8 мм (1e-3 клітинки): інтерполяція відліків дає зсув ~1 мм.
 				assert_almost_eq(b.at(float(x), float(z)), a.at(float(x), float(z)), 1e-3, "сід %d: поле (%d, %d) підняте" % [seed_value, x, z])
+
+
+## Сума висот рівної дошки (без пагорбів) у сітці 0.25 клітинки.
+static func _flat_checksum(seed_value: int) -> float:
+	var b := Board.create(12, 10, Terrain.GroundState.DRY)
+	b.set_kind(Vector2i(2, 7), Terrain.Kind.MARSH)
+	var t := TerrainHeight.bake(b, 0, seed_value)
+	var s := 0.0
+	for zi in 40:
+		for xi in 48:
+			s += t.at(xi * 0.25, zi * 0.25)
+	return s
+
+
+## Опора центру клітинки пагорба не чіпає рівну землю: поле висот дошки без пагорбів — те саме,
+## що й до того, як опора стала різної висоти (сума висот записана з того коду).
+func test_flat_board_relief_is_unchanged_by_hill_support() -> void:
+	var got: float = _flat_checksum(3)
+	gut.p("сума висот рівної дошки: %.6f" % got)
+	assert_almost_eq(got, FLAT_CHECKSUM_SEED3, 1e-4)
+
+
+## Центр пагорба в 1 клітинку тримає опору: не нижче _HILL_KEEP від найменшої висоти пагорба й не
+## вище 1.4 · _HILL_KEEP від найбільшої (+0..40 % — розкид висоти опори; згладжений стик додає
+## щонайбільше чверть ширини згладжування, 2.5 см).
+func test_hill_centre_support_stays_in_its_range() -> void:
+	for seed_value in [3, 17, 41, 77, 123]:
+		var flat := Board.create(11, 11, Terrain.GroundState.DRY)
+		var with_hill := Board.create(11, 11, Terrain.GroundState.DRY)
+		with_hill.set_kind(Vector2i(5, 5), Terrain.Kind.HILL)
+		var rise: float = TerrainHeight.bake(with_hill, 0, seed_value).at(5.0, 5.0) - TerrainHeight.bake(flat, 0, seed_value).at(5.0, 5.0)
+		var lo: float = TerrainHeight._HILL_KEEP * TerrainHeight._HILL_MIN
+		var hi: float = 1.4 * TerrainHeight._HILL_KEEP * (TerrainHeight._HILL_MIN + TerrainHeight._HILL_VAR) + 0.25 * 0.8 * TerrainHeight.M
+		assert_between(rise, lo, hi, "сід %d: центр пагорба %.3f" % [seed_value, rise])
