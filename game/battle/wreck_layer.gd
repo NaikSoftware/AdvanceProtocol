@@ -61,7 +61,7 @@ const COLUMN_TOP_W: float = 12.0 / 8.0
 ## Вогонь — один стовп полум'я з одного отвору (моторний відсік ззаду), як горить підбита
 ## машина: ширина ≈ 0,45 ширини корпусу, висота ≈ ширина корпусу. Два екземпляри атласу з
 ## різною фазою й темпом; основа трохи в металі, м'який край глибини ховає шов.
-const FLAME_WIDTH_PER_HULL: float = 0.45
+const FLAME_WIDTH_PER_HULL: float = 0.4
 const FLAME_HEIGHT_PER_HULL: float = 1.0
 ## Атлас вогню: сітка, кадрів, де в клітинці основа полум'я (v згори), яку частку ширини
 ## клітинки займає полум'я, і висота клітинки до ширини.
@@ -236,12 +236,19 @@ func flame_spots(pos: Vector2i) -> Array[Vector3]:
 	var e: _Entry = _entries[pos]
 	var spec: Dictionary = UnitSilhouettes.spec(e.type_id)
 	var hull: Vector3 = spec.hull
-	var top: float = hull.y - HULL_SAG
-	var ring: float = top + (0.14 if (spec.extras as Array).has(&"turret") else 0.0)
-	# Вогонь виходить з одного отвору — моторного відсіку ззаду; погон і люк — запасні точки.
-	for local: Vector3 in [Vector3(0.0, top, hull.z * 0.25), Vector3(hull.x * 0.12, ring, 0.0), Vector3(-hull.x * 0.2, top, -hull.z * 0.25)]:
+	# Корені — на даху башти: обидва в межах її сліду, тож нижче башта ховала б їх з усіх боків.
+	var top: float = hull.y - HULL_SAG + (0.14 if (spec.extras as Array).has(&"turret") else 0.0)
+	# Вогонь виходить з погона в центрі даху: башта стоїть у вогні, корінь видно з будь-якого
+	# боку. Два екземпляри обабіч центру — широка маса, а не один язик.
+	for local: Vector3 in [Vector3(-hull.x * 0.15, top, -hull.z * 0.1), Vector3(hull.x * 0.15, top, hull.z * 0.1)]:
 		out.append(e.node.transform * local)
 	return out
+
+
+## Центр вогню (погон на даху): звідси світло, іскри й дим.
+func fire_centre(pos: Vector2i) -> Vector3:
+	var spots: Array[Vector3] = flame_spots(pos)
+	return (spots[0] + spots[1]) * 0.5
 
 
 static func flames_for(life: float) -> int:
@@ -471,7 +478,7 @@ func _refresh_effects() -> void:
 		# вже нема) — не з порожнього повітря поруч.
 		var e: _Entry = _entries[c]
 		# Видима верхівка полум'я — близько половини висоти кваду: атлас угорі вже розсіюється.
-		var origin: Vector3 = flame_spots(c)[0] + Vector3(0.0, 0.5 * flame_height(e.type_id) * flame_scale_for(e.life), 0.0)
+		var origin: Vector3 = fire_centre(c) + Vector3(0.0, 0.5 * flame_height(e.type_id) * flame_scale_for(e.life), 0.0)
 		for k in PUFFS_PER_COLUMN:
 			var idx: int = i * PUFFS_PER_COLUMN + k
 			mm.set_instance_transform(idx, Transform3D(Basis(), origin))
@@ -491,7 +498,7 @@ func _refresh_effects() -> void:
 		for j in FLAMES_PER_SPOT:
 			# Свої фаза й темп атласу на кожен екземпляр: стовп не мерехтить у такт.
 			var sd: float = fposmod(float(hash(c) % 89) / 89.0 + 0.41 * float(j), 1.0)
-			fm.set_instance_transform(n, Transform3D(Basis(), flame_spots(c)[0]))
+			fm.set_instance_transform(n, Transform3D(Basis(), flame_spots(c)[j]))
 			fm.set_instance_custom_data(n, Color(flame_width(e.type_id) * sc, sd, e.birth, 0.0))
 			n += 1
 	fm.visible_instance_count = n
@@ -499,7 +506,7 @@ func _refresh_effects() -> void:
 	for i in _lights.size():
 		_lights[i].visible = i < _fire_cells.size()
 		if _lights[i].visible:
-			_lights[i].position = flame_spots(_fire_cells[i])[0] + Vector3(0.0, 0.12, 0.0)
+			_lights[i].position = fire_centre(_fire_cells[i]) + Vector3(0.0, 0.12, 0.0)
 	if _column_cells.is_empty():
 		_timer.stop()
 	elif _timer.is_stopped():
@@ -533,7 +540,7 @@ func _sync_emitters() -> void:
 			_embers.erase(c)
 	for c in _fire_cells:
 		if not _embers.has(c):
-			_embers[c] = _ember_emitter(flame_spots(c)[0], _ember_amount(_entries[c].life), hash(c))
+			_embers[c] = _ember_emitter(fire_centre(c), _ember_amount(_entries[c].life), hash(c))
 
 
 static func _ember_amount(life: float) -> int:
@@ -737,7 +744,9 @@ void vertex() {
 	vec3 up = INV_VIEW_MATRIX[1].xyz;
 	// Клуба швидка над вогнем і сповільнюється вгорі, розходячись ширше.
 	float h = pow(t, 0.7) * height;
-	float w = mix(base_w, top_w, sqrt(t));
+	// Біля самого полум'я клуби більші й густіші: стовп видимо починається з вогню.
+	float birth = 1.0 - smoothstep(0.0, 0.08, t);
+	float w = mix(base_w, top_w, sqrt(t)) * (1.0 + 0.6 * birth);
 	// Хаотичний бічний дрейф росте з висотою й повільно змінюється в часі.
 	vec3 wander = (right * sin(sd * 37.0 + fx_time * 0.35) + vec3(0.0, 0.0, 1.0) * cos(sd * 23.0 + fx_time * 0.27)) * w * 0.3 * t;
 	vec3 c = root + vec3(0.0, h + column_base, 0.0) + lean * h + wander;
@@ -749,14 +758,16 @@ void vertex() {
 	float reach = max(fx_time - INSTANCE_CUSTOM.w, 0.0) * grow;
 	// Кожна клуба прозора: густину дає перекриття сусідніх, а не одна непрозора куля.
 	// Біля вогню клуби малі й густі (народжуються в полум'ї, без проміжку), далі прозоріші.
-	float puff = mix(0.75, 0.4, smoothstep(0.0, 0.25, t)) * (0.85 + 0.3 * sd) * smoothstep(0.0, 0.015, t) * (1.0 - smoothstep(0.45, 1.0, t));
+	float puff = mix(0.75, 0.4, smoothstep(0.0, 0.25, t)) * (1.0 + 0.3 * birth) * (0.85 + 0.3 * sd) * smoothstep(0.0, 0.015, t) * (1.0 - smoothstep(0.45, 1.0, t));
 	v_alpha = abs(INSTANCE_CUSTOM.z) * puff * (1.0 - smoothstep(reach - 0.3, reach, h));
 	// На далекому зумі тонкий стовп блякнув: густіший і темніший здалеку.
 	float far = smoothstep(12.0, 30.0, length(CAMERA_POSITION_WORLD - c));
 	v_alpha = min(1.0, v_alpha * mix(1.0, 1.6, far));
 	v_dark = mix(1.0, 0.75, far);
 	// Кадр — від шляху клуби: атлас росте й розсіюється разом із нею.
-	v_frame = t * (grid * grid - 1.0);
+	// Перші кадри атласу майже порожні (клуба ще не з'явилася): біля вогню тримаємо кадр 2,
+	// інакше між полум'ям і стовпом видно проміжок.
+	v_frame = max(t * (grid * grid - 1.0), 2.0);
 	v_thin = INSTANCE_CUSTOM.z < 0.0 ? 1.0 : 0.0;
 	v_sd = sd;
 	v_sun = normalize(vec2(dot(sun_dir, right), -dot(sun_dir, up)) + 1e-4);

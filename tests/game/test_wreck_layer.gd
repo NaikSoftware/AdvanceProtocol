@@ -273,16 +273,19 @@ func test_every_column_casts_a_shadow_blob() -> void:
 func test_flames_sit_on_the_hull_top_at_named_spots() -> void:
 	layer.add(Vector2i(3, 3), 5, 1.0, 2)
 	var spots: Array[Vector3] = layer.flame_spots(Vector2i(3, 3))
-	assert_eq(spots.size(), 3)
 	var w: Node3D = layer.wreck_at(Vector2i(3, 3))
 	var hull: Vector3 = UnitSilhouettes.spec(5).hull
-	for p: Vector3 in spots:
-		var local: Vector3 = w.transform.affine_inverse() * p
-		assert_true(absf(local.x) <= hull.x * 0.5 and absf(local.z) <= hull.z * 0.5, "у межах корпусу: %s" % local)
-		assert_true(local.y >= hull.y - WreckLayer.HULL_SAG - 0.001, "на даху, не нижче: %s" % local)
-	# Вогонь виходить з одного отвору — моторного відсіку ззаду (+Z, перед — −Z).
-	var rear: Vector3 = w.transform.affine_inverse() * spots[0]
-	assert_true(rear.z > 0.0)
+	# Корені — на даху башти (0,14 над корпусом): обидва лежать у межах її сліду (0,6 × 0,5
+	# корпусу), тож на рівні даху корпусу башта ховала б їх з будь-якого боку.
+	var top: float = hull.y - WreckLayer.HULL_SAG + 0.14
+	# Вогонь виходить з погона в центрі даху: башта стоїть у вогні, і жоден бік не ховає корінь.
+	# Два екземпляри обабіч центру: ±0,15 ширини вбік і ±0,1 довжини вздовж корпусу.
+	assert_eq(spots.size(), 2)
+	var a: Vector3 = (w.transform.affine_inverse() * spots[0]).snappedf(0.0001)
+	var b: Vector3 = (w.transform.affine_inverse() * spots[1]).snappedf(0.0001)
+	assert_eq(a, Vector3(-hull.x * 0.15, top, -hull.z * 0.1).snappedf(0.0001))
+	assert_eq(b, Vector3(hull.x * 0.15, top, hull.z * 0.1).snappedf(0.0001))
+	assert_eq((w.transform.affine_inverse() * layer.fire_centre(Vector2i(3, 3))).snappedf(0.0001), Vector3(0.0, top, 0.0).snappedf(0.0001))
 
 
 ## Вогонь вщухає: велике полум'я → мале → без полум'я (дим).
@@ -309,12 +312,13 @@ func test_embers_fly_while_burning_and_stop_when_smouldering() -> void:
 
 
 
-## Вогонь — один стовп полум'я з отвору: ширина ≈ 0,45 ширини корпусу, висота ≈ ширина
+## Вогонь — стовп полум'я з погона: два екземпляри по ≈ 0,4 ширини корпусу, висота ≈ ширина
 ## корпусу; два екземпляри атласу з різною фазою й темпом; HDR-яскравий (понад 1).
 func test_fire_is_one_column_sized_from_the_hull() -> void:
 	assert_eq(WreckLayer.FLAMES_PER_SPOT, 2)
 	var hull: Vector3 = UnitSilhouettes.spec(5).hull
-	assert_eq(WreckLayer.flame_width(5), hull.x * 0.45)
+	# Кожен екземпляр ~0,4 ширини корпусу; разом із розносом ±0,15 — маса ~0,7 корпусу внизу.
+	assert_eq(WreckLayer.flame_width(5), hull.x * 0.4)
 	assert_eq(WreckLayer.flame_height(5), hull.x)
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
 	assert_true(float((fire.material_override as ShaderMaterial).get_shader_parameter("gain")) > 1.0)
