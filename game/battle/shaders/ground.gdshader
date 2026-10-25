@@ -357,14 +357,6 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 		vec3 grass = textureGrad(macro_array, vec3(p / gmt, float(FIELD * macro_variants)), dpx / gmt, dpy / gmt).rgb;
 		grass *= clamp(dot(alb, lw) / lm, 0.6, 1.4);
 		float floor_k = smoothstep(0.43, 0.5, fbm(p * 0.7 + 19.0));
-		// Середня частота опаду (гілки, шишки, купки 10–30 см): фото підстилки з шару деталі на
-		// 0.75 м повтору, лише яскравістю й без згасання з відстанню. Макро лісу на 2 м у
-		// дальніх міпах розмивається в повсть, а деталь біля камери на z6 вже згасла.
-		mat2 lr = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8));
-		float lmt = 0.75 / METRES_PER_TILE;
-		vec3 lt = textureGrad(albedo_array, vec3(lr * p / lmt, float(FOREST)), lr * dpx / lmt, lr * dpy / lmt).rgb;
-		float ltm = max(dot(textureLod(albedo_array, vec3(0.5, 0.5, float(FOREST)), 14.0).rgb, lw), 1e-3);
-		alb *= clamp(1.0 + 0.6 * (dot(lt, lw) - ltm) / ltm, 0.6, 1.45);
 		// Пучки трави крізь підстилку — лише в пізню осінь: у суху пору світло-зелені пучки на
 		// бурому опаді читались як штамп круглих цяток.
 		float clump = dry_season ? 0.0 : smoothstep(0.62, 0.76, vnoise(p * 12.0 + 3.0));
@@ -624,7 +616,7 @@ void fragment() {
 		// рівною плитою. Третій слот у дворі порожній — беремо його під щебінь.
 		if (yard_slot >= 0 && W[2] < 0.002) {
 			float yard_k = smoothstep(0.35, 0.65, S[yard_slot]);
-			float yr = yard_k * pile * 0.5;
+			float yr = yard_k * pile * 0.9;
 			if (yr > 0.01) {
 				L[2] = RUBBLE;
 				W[2] = CLASS_BAND * yr;
@@ -682,7 +674,10 @@ void fragment() {
 				vec2 pom = pom_fade > 0.01 && !lean
 						? pom_dir * (relief_m[L[i]] * relief_scale * pom_fade / METRES_PER_TILE)
 						: vec2(0.0);
-				sample_layer(L[i], p, dpx, dpy, pom, lean ? 0.0 : detail_fade, A[i], N[i], Hgt[i], Cav[i]);
+				// Ліс бере деталь (фото підстилки, гекс-тайлінг) і далеко від камери: без неї макро лісу
+				// на 2 м у дальніх міпах розмивається в повсть, а прямий повтор фото давав ґратку.
+				float dfl = lean ? 0.0 : (layer_base[L[i]] == FOREST ? 1.0 : detail_fade);
+				sample_layer(L[i], p, dpx, dpy, pom, dfl, A[i], N[i], Hgt[i], Cav[i]);
 				// Висотне змішування: на межі першим проступає те, що вище в самій
 				// карті висот (камінь, кому, пучок), тож перехід рваний, а не розмитий.
 				float wn = W[i] / max(W[0] + W[1] + W[2] + W[3], 1e-4);
