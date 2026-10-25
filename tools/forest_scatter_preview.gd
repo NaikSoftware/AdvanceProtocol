@@ -12,9 +12,16 @@ extends Node
 ## - Глибина точки `depth` — відстань у тайлах до найближчої клітинки без лісу (назовні —
 ##   мінус відстань до лісу), плюс шум ±`EDGE_NOISE` з довжиною хвилі ~1,5 тайла: край не
 ##   йде по межах клітинок.
-## - Пояс кущів: `depth` −0,15…`SHRUB_BAND`, густина `SHRUB_DENSITY` на тайл, висота 2–5 м;
-##   частина поясу — молоді ялини (`belt` у `WOODS`): пізньої осені голі кущі пропускають
-##   погляд, і стіною край тримає лише зелене до землі.
+## - Узлісся (`_hedges`): на кожну сторону лісової клітинки, що дивиться в поле, — шматок
+##   смуги `Hedge_Spruce`/`Hedge_Shrub` (1 тайл × 0,35 × 2–4 м), відступ `HEDGE_INSET`,
+##   уздовж сторони ±10°, довжина 0,9–1,15; частка ялинника — `hedge_evergreen`, пізньої
+##   осені не менше 0,7. Смуга лісу в одну клітинку так стає живоплотом.
+## - Поодинокі кущі біля краю: `depth` −0,15…`SHRUB_BAND`, `SHRUB_DENSITY` на тайл
+##   (`belt` у `WOODS`); підлісок усередині — `UNDERSTORY_DENSITY` кущів на тайл.
+## - Проламані клітинки (`_broken`, з карти проламів гравця, що дивиться): жодного стоячого
+##   дерева чи смуги, лише `Litter_A` і 2–3 `Log_*`; для глибини вони лишаються лісом, тож
+##   прохід не обростає новим узліссям. Дошка групує екземпляри за клітинками, щоб подія
+##   `ForestBroken(pos)` прибирала дерева клітинки й додавала гілля без повної перебудови.
 ## - Крайові дерева: `depth` `EDGE_FROM`–`EDGE_TO`, висота 8–15 м; у крайовому ряду —
 ##   ялина з кроною до землі (`Spruce_B`), щоб край стояв стіною.
 ## - Намет: `depth` > `CANOPY_FROM`, висота 18–25 м, густина з `WOODS`.
@@ -22,9 +29,10 @@ extends Node
 ## - Усі точки — сітка з кроком 1/√густини, зсунута на ±`JITTER` кроку; поворот довільний.
 ## - Масштаб: висоту задає шар, ширина крони — той самий множник, обмежений `CROWN_W`,
 ##   ще ±10 %.
-## - Розчинення: екземпляр, чия крона (вісь плюс півширина крони) ближча за `FADE_RADIUS`
+## - Розчинення — лише над піхотою (танк стоїть у клітинці, яку сам проламав): екземпляр,
+##   чия крона (вісь плюс півширина крони) ближча за `FADE_RADIUS`
 ##   до відрізка від юніта вздовж справжнього променя до камери завдовжки
-##   `висота крони · гориз. відстань до камери / висота камери`, зникає разом із тінню
+##   `висота крони · гориз. відстань до камери / висота камери + FADE_REACH_EXTRA`, зникає разом із тінню
 ##   (альфа 0 у кольорі екземпляра); у кільці ще `FADE_SOFT` альфа росте до 1 растром.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -36,7 +44,12 @@ const SEED: int = 7
 
 const EDGE_NOISE: float = 0.3
 const SHRUB_BAND: float = 0.6
-const SHRUB_DENSITY: float = 12.0
+const SHRUB_DENSITY: float = 4.0
+## Підлісок усередині лісу: кущі на тайл, висота.
+const UNDERSTORY_DENSITY: float = 3.0
+const UNDERSTORY_H: Vector2 = Vector2(1.5, 2.5)
+## Смуга узлісся (`Hedge_*`) стоїть на стороні крайової клітинки, відступивши в ліс.
+const HEDGE_INSET: float = 0.2
 const EDGE_FROM: float = 0.25
 const EDGE_TO: float = 0.85
 const EDGE_DENSITY: float = 2.4
@@ -44,6 +57,9 @@ const CANOPY_FROM: float = 0.7
 const JITTER: float = 0.4
 const FADE_RADIUS: float = 0.6
 const FADE_SOFT: float = 0.3
+## Маска розчинення подовжена до камери ще на стільки тайлів: на далекому зумі промінь
+## пологіший, і крона з-за меж відрізка ще накривала відділення.
+const FADE_REACH_EXTRA: float = 0.5
 ## Межі масштабу ширини крони відносно меша: ширина росте з висотою лише до цих меж.
 const CROWN_W: Vector2 = Vector2(0.95, 1.3)
 const LOG_DENSITY: float = 0.25
@@ -54,9 +70,9 @@ const SHRUB_H: Vector2 = Vector2(1.6, 4.0)
 
 ## Склад лісу: частки видів (префікс вузла або ім'я вузла) у наметі й у крайовому ряду.
 const WOODS: Dictionary = {
-	"pine": {"canopy": {"Pine": 0.85, "Spruce": 0.1, "Birch": 0.05}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 0.5, "Spruce_B": 0.5}, "density": 2.4},
-	"mixed": {"canopy": {"Pine": 0.45, "Spruce": 0.2, "Birch": 0.2, "Oak": 0.15}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 0.65, "Spruce_B": 0.35}, "density": 2.2},
-	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 0.8, "Spruce_B": 0.2}, "density": 1.5},
+	"pine": {"canopy": {"Pine": 0.85, "Spruce": 0.1, "Birch": 0.05}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 0.5, "Spruce_B": 0.5}, "hedge_evergreen": 0.85, "density": 2.4},
+	"mixed": {"canopy": {"Pine": 0.45, "Spruce": 0.2, "Birch": 0.2, "Oak": 0.15}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 0.65, "Spruce_B": 0.35}, "hedge_evergreen": 0.6, "density": 2.2},
+	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 0.8, "Spruce_B": 0.2}, "hedge_evergreen": 0.4, "density": 1.5},
 }
 
 ## Тон поля тестового лісу; світло, тінь, дощ і тон листя ставить WeatherRig за
@@ -80,6 +96,11 @@ var _material: Dictionary = {}  ## Mesh -> ShaderMaterial
 var _groups: Dictionary = {}  ## Mesh -> Array[Dictionary] {xf, top, pos}
 var _mmi: Dictionary = {}  ## Mesh -> MultiMeshInstance3D
 var _units: Array[Vector2] = [Vector2(2.0, 2.0), Vector2(4.0, 2.0)]
+## Проламані танком клітинки для гравця, що дивиться (на дошці — його карта проламів,
+## яку оновлює подія `ForestBroken`): там немає стоячих крон, лише стовбури й гілля на землі.
+var _broken: Dictionary = {}
+var _season: String = ""
+var _squad_box: MeshInstance3D
 
 
 func _ready() -> void:
@@ -89,6 +110,7 @@ func _ready() -> void:
 	var season: String = args[2] if args.size() > 2 else "late"
 	var look_name: String = args[3] if args.size() > 3 else "river"
 	var on_map: bool = args.size() > 4 and args[4] == "map"
+	_season = season
 	DirAccess.make_dir_recursive_absolute(out)
 	get_window().size = WINDOW
 	_rng.seed = SEED
@@ -115,6 +137,9 @@ func _test_frames(out: String, wood: String, season: String, look_name: String) 
 		for x in COLS:
 			_forest[Vector2i(x, y)] = true
 	_offset = Vector3(ORIGIN.x, 0, ORIGIN.y)
+	# Поки ядро не дає `ForestBroken`, — підставний список: клітинка танка й прохід до краю.
+	for c: Vector2i in [Vector2i(2, 2), Vector2i(2, 1), Vector2i(2, 0)]:
+		_broken[c] = true
 	_scatter(Rect2i(-2, -2, COLS + 4, ROWS + 4), func(_p: Vector2) -> String: return wood)
 	for h: Array in HEROES:
 		if _named.has(h[0]):
@@ -131,6 +156,20 @@ func _test_frames(out: String, wood: String, season: String, look_name: String) 
 		await _shoot(z[1], "%s/%s_%s_nofade.png" % [out, tag, z[0]])
 		_set_fade(true)  # камера вже на цьому зумі після попереднього кадру
 		await _shoot(z[1], "%s/%s_%s_fade.png" % [out, tag, z[0]])
+	# Відділення заходить у ліс: три клітинки поспіль, та сама камера.
+	_rig.zoom_by(IsoCameraRig.MIN_ZOOM / _rig.zoom_level)
+	var seq: Array[Image] = []
+	for k in 3:
+		_units[1] = Vector2(4.0, 4.6 - k)
+		_squad_box.position = _offset + Vector3(_units[1].x, 0.1, _units[1].y)
+		_set_fade(true)
+		for i in 30:
+			await get_tree().process_frame
+		seq.append(get_viewport().get_texture().get_image())
+	for k in seq.size():
+		seq[k].save_png("%s/%s_fade_seq_%d.png" % [out, tag, k])
+	_units[1] = Vector2(4.0, 2.0)
+	_squad_box.position = _offset + Vector3(_units[1].x, 0.1, _units[1].y)
 	_set_fade(false)
 	_rig.center_on(ORIGIN + Vector2i(10, 2))
 	await _shoot(IsoCameraRig.MIN_ZOOM, "%s/heroes_%s_%s_min.png" % [out, season, look_name])
@@ -253,6 +292,51 @@ func _scatter(area: Rect2i, wood_at: Callable) -> void:
 	_layer(area, SHRUB_DENSITY, shrub, func(p: Vector2) -> Dictionary: return WOODS[wood_at.call(p)]["belt"], SHRUB_H)
 	if _meshes.has("Log"):
 		_layer(area, LOG_DENSITY, logs, func(_p: Vector2) -> Dictionary: return {"Log": 1.0}, Vector2.ZERO)
+	_layer(area, UNDERSTORY_DENSITY, func(d: float) -> bool: return d > SHRUB_BAND,
+			func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0}, UNDERSTORY_H)
+	_hedges(wood_at)
+	_broken_cells()
+
+
+## Узлісся: на кожну сторону лісової клітинки, що дивиться в поле, — шматок смуги, відступивши
+## в ліс на `HEDGE_INSET`, уздовж сторони, ±10°, довжина 0,9–1,15 тайла — кути перекриваються.
+## Смуга лісу в одну клітинку дістає смугу з обох боків і стає живоплотом.
+func _hedges(wood_at: Callable) -> void:
+	for c: Vector2i in _forest:
+		if _broken.has(c):
+			continue
+		for dir: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if _forest.has(c + dir):
+				continue
+			var p: Vector2 = Vector2(c) + Vector2(dir) * (0.5 - HEDGE_INSET)
+			var share: float = WOODS[wood_at.call(p)]["hedge_evergreen"]
+			if _season == "late":
+				share = maxf(share, 0.7)  # голі кущі пізньої осені нічого не ховають
+			var name: String = "Hedge_Spruce" if _rng.randf() < share else "Hedge_Shrub"
+			if not _named.has(name):
+				continue
+			var yaw: float = (PI / 2.0 if dir.x != 0 else 0.0) + deg_to_rad(_rng.randf_range(-10.0, 10.0))
+			var basis := Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(_rng.randf_range(0.9, 1.15), _rng.randf_range(0.85, 1.15), 1.0))
+			_add_instance(_named[name], Transform3D(basis, _offset + Vector3(p.x, 0.0, p.y)), p, 0.45)
+
+
+## Проламана клітинка: гілля на землі й 2–3 повалені стовбури замість стоячих дерев.
+func _broken_cells() -> void:
+	for c: Vector2i in _broken:
+		if _named.has("Litter_A"):
+			var b := Basis(Vector3.UP, _rng.randf() * TAU)
+			_add_instance(_named["Litter_A"], Transform3D(b, _offset + Vector3(c.x, 0.0, c.y)), Vector2(c), 0.5)
+		for k in _rng.randi_range(2, 3):
+			var mesh: Mesh = (_meshes["Log"] as Array)[_rng.randi() % (_meshes["Log"] as Array).size()]
+			var p := Vector2(c) + Vector2(_rng.randf_range(-0.35, 0.35), _rng.randf_range(-0.35, 0.35))
+			var b := Basis(Vector3.UP, _rng.randf() * TAU)
+			_add_instance(mesh, Transform3D(b, _offset + Vector3(p.x, 0.0, p.y)), p, 0.4)
+
+
+func _add_instance(mesh: Mesh, xf: Transform3D, p: Vector2, r: float) -> void:
+	if not _groups.has(mesh):
+		_groups[mesh] = []
+	(_groups[mesh] as Array).append({"xf": xf, "top": mesh.get_aabb().end.y * xf.basis.get_scale().y + 0.15, "pos": p, "r": r})
 
 
 ## Сітка з кроком 1/√густини; density_at (якщо є) проріджує точки до місцевої густини.
@@ -265,7 +349,8 @@ func _layer(area: Rect2i, density: float, band: Callable, species_at: Callable, 
 			var p := Vector2(x, y) + Vector2(_rng.randf_range(-JITTER, JITTER), _rng.randf_range(-JITTER, JITTER)) * step
 			var d: float = _depth(p) + _noise.get_noise_2d(p.x, p.y) * EDGE_NOISE
 			var keep: bool = density_at.is_null() or _rng.randf() < float(density_at.call(p)) / density
-			if band.call(d) and keep:
+			var cell := Vector2i(floori(p.x + 0.5), floori(p.y + 0.5))
+			if band.call(d) and keep and not _broken.has(cell):
 				var k: String = _pick(species_at.call(p))
 				var mesh: Mesh = _named[k] if _named.has(k) else (_meshes[k] as Array)[_rng.randi() % (_meshes[k] as Array).size()]
 				_place_mesh(mesh, p, _rng.randf_range(heights.x, heights.y))
@@ -310,6 +395,7 @@ func _build_multimeshes() -> void:
 		_mmi[mesh] = node
 
 
+## Розчиняється лише крона над відділенням: танк стоїть у клітинці, яку сам проламав.
 func _set_fade(on: bool) -> void:
 	var cam: Camera3D = _rig.find_children("*", "Camera3D", true, false)[0] as Camera3D
 	for mesh: Mesh in _groups:
@@ -318,13 +404,13 @@ func _set_fade(on: bool) -> void:
 		for i in list.size():
 			var a: float = 1.0
 			if on:
-				for u: Vector2 in _units:
+				for u: Vector2 in [_units[1]]:
 					# Промінь від юніта до камери (перспектива: не середній кут камери, а
 					# справжній до цієї точки). Крона заввишки top ховає юніта, стоячи до
 					# top · (гориз. відстань / висота камери) ближче до камери вздовж цього променя.
 					var to_cam: Vector3 = cam.global_position - (_offset + Vector3(u.x, 0.0, u.y))
 					var flat := Vector2(to_cam.x, to_cam.z)
-					var reach: float = float(list[i]["top"]) * flat.length() / to_cam.y
+					var reach: float = float(list[i]["top"]) * flat.length() / to_cam.y + FADE_REACH_EXTRA
 					var dir: Vector2 = flat.normalized()
 					var p: Vector2 = list[i]["pos"]
 					var t: float = clampf((p - u).dot(dir), 0.0, reach)
@@ -351,6 +437,7 @@ func _add_boxes() -> void:
 	squad.material_override = _flat(Color(0.95, 0.85, 0.1))
 	squad.position = _offset + Vector3(_units[1].x, 0.1, _units[1].y)
 	add_child(squad)
+	_squad_box = squad
 
 
 func _flat(c: Color) -> StandardMaterial3D:

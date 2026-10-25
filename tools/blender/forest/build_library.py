@@ -71,6 +71,20 @@ def card(bm, uvl, uv2l, col, c, roll, size, rect, normal_of, shade):
     return {v: normal_of(c, None) for v in vs}
 
 
+def flat(bm, uvl, col, c, roll, size, rect, shade):
+    """Картка, що лежить на землі (гілля поваленого лісу): звичайна геометрія, UV2 = 0, тож
+    шейдер її не розгортає до камери."""
+    h = size / 2
+    cr, sr = math.cos(roll), math.sin(roll)
+    co = [Vector(c) + Vector((x * cr - y * sr, x * sr + y * cr, 0.0)) * h for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    vs = [bm.verts.new(p) for p in co]
+    f = bm.faces.new(vs)
+    for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        loop[uvl].uv = to_atlas(rect, u, v)
+        loop[col] = (shade, shade, shade, 1.0)
+    return {v: Vector((0, 0, 1)) for v in vs}
+
+
 def limb(bm, uvl, rect, pts, radii, sides=3):
     """Гілка-трубка з кількох відрізків; смуга кори вздовж, як у стовбура."""
     rings = []
@@ -119,8 +133,8 @@ def build_node(item, rects):
         cards = random.Random(item["node"] + "keep").sample(cards, max(1, round(len(cards) * keep)))
     cb, top = meta["crown_base"], meta["top"]
     R = max([math.hypot(cd["c"][0], cd["c"][1]) for cd in cards] + [0.5])
-    ctr = Vector((0, 0, (cb + top) / 2))
-    rad = Vector((R, R, max((top - cb) / 2, 0.5)))
+    ctr = Vector(meta.get("centre", (0, 0, (cb + top) / 2)))
+    rad = Vector(meta.get("radii", (R, R, max((top - cb) / 2, 0.5))))
 
     def normal_of(p, n):
         s = Vector(((p.x - ctr.x) / rad.x, (p.y - ctr.y) / rad.y, (p.z - ctr.z) / rad.z))
@@ -130,8 +144,14 @@ def build_node(item, rects):
     sprites = rects["sprites"].get(item.get("sprites"), [])
     scale = item.get("card_scale", 1.0)
     for cd in cards:
+        # Затінення в глибині крони — у межах 0,78–1: ширший розкид разом із різним тоном
+        # спрайтів малював на кроні плями камуфляжу.
+        shade = 0.78 + 0.22 * (min(max(cd["shade"], 0.55), 1.0) - 0.55) / 0.45
         vnorm.update(card(bm, uvl, uv2l, col, cd["c"], cd["roll"], cd["size"] * scale,
-                          rng.choice(sprites), normal_of, cd["shade"]))
+                          rng.choice(sprites), normal_of, shade))
+    flat_sprites = rects["sprites"].get(item.get("flat_sprites", "litter"), [])
+    for fl in meta.get("flats", []):
+        vnorm.update(flat(bm, uvl, col, fl["c"], fl["roll"], fl["size"], rng.choice(flat_sprites), fl["shade"]))
     n_cards = len(bm.faces)
     trect = rects["trunks"].get(item["node"])
     if item.get("trunk", True):

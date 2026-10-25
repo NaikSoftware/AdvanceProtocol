@@ -36,12 +36,7 @@ P = {
     "oak": dict(seg=0.6, depth=6, kids=(2, 3), spread=55, droop=0.0, leaf=0.085, per_node=7, twig_r=0.015),
     "shrub": dict(seg=0.55, depth=6, kids=(2, 3), spread=40, droop=0.1, leaf=0.07, per_node=6, twig_r=0.011),
 }[KIND]
-if SEASON == "late":
-    # Голий пагін 1–2 см тонший за тексель атласу (1,9 см) і зникає при alpha-cut; удвічі
-    # товща гілка лишає на екрані ту саму сіру сітку, яку око бачить у голій кроні здаля.
-    P["twig_r"] *= 2.2
-# Пізня осінь — голі гілки: листя ≤ 10 % пучка навіть у дуба, що тримає буре листя.
-KEEP = {"summer": 1.0, "early": 0.9, "turned": 0.92, "late": {"oak": 0.08, "birch": 0.03}.get(KIND, 0.02)}[SEASON]
+KEEP = {"summer": 1.0, "early": 0.9, "turned": 0.92, "late": {"oak": 0.08, "birch": 0.008}.get(KIND, 0.02)}[SEASON]
 BARK = (0.33, 0.30, 0.27) if KIND != "birch" else (0.30, 0.27, 0.25)
 GREENS = [(0.20, 0.30, 0.10), (0.24, 0.34, 0.12), (0.17, 0.26, 0.09), (0.28, 0.36, 0.14)]
 EARLY = [(0.40, 0.42, 0.16), (0.46, 0.45, 0.17), (0.34, 0.38, 0.15)]
@@ -112,7 +107,8 @@ def build(seed):
     a0 = rng.uniform(0, 2 * math.pi)
     for j in range(2):
         a = a0 + j * rng.uniform(1.6, 2.6)
-        start = Vector((math.cos(a), math.sin(a), 0)) * 1.0 + Vector((0, 0, -0.4))
+        # Товстий початок гілки — за краєм кадру: інакше він стирчить із крони сірим сучком.
+        start = Vector((math.cos(a), math.sin(a), 0)) * 1.45 + Vector((0, 0, -0.4))
         d = (-start + Vector((0, 0, 0.9))).normalized()
         grow(rng, bm, leaves, start, d, P["seg"] * rng.uniform(0.85, 1.1), P["twig_r"] * 2.5, 0)
     me = bpy.data.meshes.new("twig")

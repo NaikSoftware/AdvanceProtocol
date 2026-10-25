@@ -8,10 +8,12 @@ shader_type spatial;
 // Стовбури й гілки (UV2 = 0) лишаються звичайною геометрією.
 //
 // Альфа кольору екземпляра `MultiMesh` — розчинення над юнітом: 1 — ціла крона, 0 — немає
-// ні крони, ні її тіні; проміжне значення переходить у впорядкований растр 4×4. Фрагменти
+// ні крони, ні її тіні; проміжне значення переходить у шумовий растр. Фрагменти
 // відкидаються, а не змішуються: без сортування прозорих, крона лишається в буфері глибини.
 // Той самий растр згладжує alpha-cut край пучка на ширину пікселя (MSAA у проєкті немає,
-// тож alpha-to-coverage не діє).
+// тож alpha-to-coverage не діє). Растр — переплетений градієнтний шум, а не матриця Баєра:
+// упорядкована матриця на 1:1 читається сіткою напівтону.
+// Тінь не раструється: крона з альфою екземпляра < 0,5 тіні не кидає, решта кидає повну.
 // RGB кольору вершини — затінення пучка в глибині крони (1 на корі).
 render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform;
 
@@ -26,10 +28,8 @@ uniform float translucency = 0.35;
 
 varying float is_card;
 
-float bayer4(vec2 p) {
-	ivec2 i = ivec2(mod(p, 4.0));
-	int m[16] = int[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-	return (float(m[i.y * 4 + i.x]) + 0.5) / 16.0;
+float ign(vec2 p) {
+	return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
 }
 
 void vertex() {
@@ -45,7 +45,8 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 t = texture(albedo_tex, UV);
+	// Зміщення mip на −0,5: ближні крони на мінімальному зумі інакше розмиті.
+	vec4 t = texture(albedo_tex, UV, -0.5);
 	// Ширину згладження обмежено: на далекому зумі fwidth(alpha) великий, і без межі
 	// растром укрилась би вся картка — крона розсипалась би рябими крапками.
 	// На далеких mip-рівнях тонкі гілки усереднюються з прозорим тлом і тануть під порогом:
@@ -53,7 +54,13 @@ void fragment() {
 	float lod = textureQueryLod(albedo_tex, UV).x;
 	float cut = alpha_cutoff * mix(1.0, 0.45, clamp((lod - 1.0) / 3.0, 0.0, 1.0));
 	float edge = clamp((t.a - cut) / clamp(fwidth(t.a), 1e-4, 0.12) + 0.5, 0.0, 1.0);
-	if (COLOR.a <= 0.001 || edge * COLOR.a < bayer4(FRAGCOORD.xy)) {
+	// Тінь напрямленого світла рендериться ортографічно, а камера гри — у перспективі.
+	bool shadow_pass = PROJECTION_MATRIX[3][3] > 0.5;
+	if (shadow_pass) {
+		if (COLOR.a < 0.5 || edge < 0.5) {
+			discard;
+		}
+	} else if (COLOR.a <= 0.001 || edge * COLOR.a < ign(FRAGCOORD.xy)) {
 		discard;
 	}
 	vec3 tint = mix(vec3(1.0), foliage_tint, is_card);

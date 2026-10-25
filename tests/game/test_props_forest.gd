@@ -14,17 +14,21 @@ const GROUND_TOL: float = 0.02
 const LIMITS: Dictionary = {
 	"Pine": [13.0, 22.0, 0.7, 40, 150],
 	"Spruce": [12.0, 21.0, 0.6, 40, 150],
-	"Birch": [14.0, 20.0, 0.55, 40, 150],
-	"Oak": [15.0, 22.0, 0.8, 40, 150],
+	# Пізня осінь — голе гілля трьох порядків замість пучків, тому межа вища.
+	"Birch": [14.0, 20.0, 0.55, 40, 260],
+	"Oak": [15.0, 22.0, 0.8, 40, 260],
 	"Shrub": [1.5, 5.0, 0.4, 10, 100],
 	"Log": [0.2, 1.5, 0.5, 10, 60],
+	# Смуга узлісся завдовжки з тайл; гілля проламаної клітинки лежить на землі.
+	"Hedge": [2.0, 4.5, 0.62, 60, 200],
+	"Litter": [0.0, 0.5, 0.66, 10, 60],
 	# Поодинокі восени голі (лишається 8–18 % пучків), влітку — 1500–2000 трикутників.
-	"Hero": [15.0, 27.0, 1.25, 200, 3000],
+	"Hero": [15.0, 27.0, 1.3, 200, 3000],
 }
 
-const CONIFER: PackedStringArray = ["Pine_A", "Pine_B", "Pine_C", "Spruce_A", "Spruce_B"]
+const CONIFER: PackedStringArray = ["Pine_A", "Pine_B", "Pine_C", "Spruce_A", "Spruce_B", "Hedge_Spruce"]
 const BROADLEAF: PackedStringArray = [
-	"Birch_A", "Birch_B", "Oak_A", "Oak_B", "Shrub_Hazel", "Shrub_Thorn", "Log_A", "Log_B",
+	"Birch_A", "Birch_B", "Oak_A", "Oak_B", "Shrub_Hazel", "Shrub_Thorn", "Hedge_Shrub", "Log_A", "Log_B", "Litter_A",
 	"Hero_Oak", "Hero_Lime", "Hero_Birch", "Hero_Poplar",
 ]
 const SEASONS: PackedStringArray = ["late", "summer", "early"]
@@ -59,7 +63,10 @@ func _check(glb: String, root: Node3D, node: String) -> void:
 	assert_eq(mi.transform, Transform3D.IDENTITY, "%s: перетворення вузла запечене в меш" % label)
 	assert_eq(mi.mesh.get_surface_count(), 1, "%s: одна поверхня — один виклик малювання" % label)
 	var box: AABB = mi.mesh.get_aabb()
-	assert_almost_eq(box.position.y, 0.0, GROUND_TOL, "%s: земля на y = 0" % label)
+	# У смуги узлісся немає стовбура: нижня точка меша — центр нижнього пучка, а сам пучок
+	# сягає землі (картка розгортається на ±0,1 тайла).
+	var ground_tol: float = 0.1 if node.begins_with("Hedge") else GROUND_TOL
+	assert_almost_eq(box.position.y, 0.0, ground_tol, "%s: земля на y = 0" % label)
 	var h_m: float = box.end.y * TILE_M
 	assert_between(h_m, float(lim[0]), float(lim[1]), "%s: висота %.1f м" % [label, h_m])
 	var half: float = maxf(maxf(absf(box.position.x), absf(box.end.x)), maxf(absf(box.position.z), absf(box.end.z)))
@@ -69,7 +76,7 @@ func _check(glb: String, root: Node3D, node: String) -> void:
 	# Картки пучків несуть зсув кута в UV2, а всі чотири вершини стоять у центрі; генерація
 	# LOD чи сіток тіні при імпорті злила б такі вершини, і крона зникла б.
 	assert_null((mi.mesh as ArrayMesh).shadow_mesh, "%s: сітку тіні вимкнено в .import" % label)
-	if not label.contains("Log_"):
+	if not label.contains("Log_") and not label.contains("Litter_"):
 		var uv2: PackedVector2Array = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV2]
 		var cards: int = 0
 		for v in uv2:
@@ -108,6 +115,8 @@ func test_trunk_stands_on_origin() -> void:
 	if root == null:
 		return
 	for node in CONIFER:
+		if node.begins_with("Hedge"):
+			continue  # у смуги узлісся немає стовбура
 		var mi: MeshInstance3D = root.find_child(node, true, false) as MeshInstance3D
 		var verts: PackedVector3Array = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 		var lo := Vector2(INF, INF)
