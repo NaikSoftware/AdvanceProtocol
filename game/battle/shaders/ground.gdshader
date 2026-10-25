@@ -812,6 +812,7 @@ void fragment() {
 		float rut_pud = 0.0;
 		float rut_rim = 0.0;
 		float paved_sheen = 0.0;
+		float paved_rim = 0.0;
 		float wheel = 0.0;
 		float road_mul = 1.0;
 		if (road_cov > 0.001 || verge > 0.001) {
@@ -942,13 +943,19 @@ void fragment() {
 			rut_rim = present * (1.0 - smoothstep(0.0, 0.3 + fwv, pd)) * (1.0 - rut_pud);
 			rut_pud = max(rut_pud, rt.g * wetr * smoothstep(0.7, 0.76, fbm(vec2(u * 0.12, rf.y * 0.15) + 21.0))
 					* (1.0 - smoothstep(0.0, 0.3, rf.x + 0.3)));
-			// Калюжі на мокрому асфальті й бруківці — окремі плями 0.5–2 м у западинах, з чітким краєм
-			// (1 px), у світових координатах. Смуги в координатах дороги (u, v) розтягувались уздовж неї
-			// в довгі хвилясті світлі розводи, а м'які широкі плями блиску робили дорогу сухо-матовою.
-			float pf = fbm(p * 2.0 + 61.0) + 0.1 * (vnoise(p * 9.0) - 0.5);
+			// Калюжі на мокрому асфальті й бруківці — у западинах і смугах коліс, де вода тягнеться
+			// вздовж колії; групами з довгими сухими відрізками між ними (шум ~27 м), ~8–10 % дороги.
+			// Обрис рве друга октава, край — м'який перехід ~0.3 м, а не вирізана пляма: круглі плями з
+			// рівною заливкою й чітким краєм читались наліпками. Світові координати: смуги в (u, v)
+			// розтягувались уздовж дороги в довгі хвилясті світлі розводи.
+			float pcl = smoothstep(0.45, 0.62, fbm(p * 0.3 + 17.0));
+			float pf = fbm(p * 2.0 + 61.0) + 0.15 * (fbm(p * 6.0 + 3.0) - 0.5) + 0.05 * (vnoise(p * 14.0) - 0.5)
+					+ 0.18 * wheel - 0.15 * (1.0 - pcl);
 			// fwidth у розгалуженні не визначений: крок fbm ~3 на клітинку × розмір пікселя.
 			float pfw = 3.0 * max(length(dpx), length(dpy)) + 0.004;
-			paved_sheen = wetr * (rt.r + rt.b) * smoothstep(0.70, 0.70 + pfw, pf);
+			paved_sheen = wetr * (rt.r + rt.b) * smoothstep(0.70, 0.79 + pfw, pf);
+			// Мокрий обідок: асфальт довкола калюжі темніший, сходить нанівець за ~0.3 м.
+			paved_rim = wetr * (rt.r + rt.b) * smoothstep(0.63, 0.70, pf) * (1.0 - paved_sheen);
 			// Узбіччя: трава світліша й сіріша, з дрібними плямами ґрунту дороги.
 			float vg = verge * (0.45 + 0.55 * vnoise(p * 9.0));
 			float speck = smoothstep(0.55, 0.75, vnoise(p * 23.0 + 4.0));
@@ -1152,7 +1159,7 @@ void fragment() {
 		float pool_rim = pool_wet * (1.0 - smoothstep(0.31, 0.45, pool_f)) * (1.0 - pool);
 		alb *= mix(1.0, 0.35, pool_rim) * mix(vec3(1.0), vec3(0.95, 0.97, 0.85), pool_rim);
 		puddle = max(puddle, pool);
-		alb *= mix(1.0, 0.55, puddle) * mix(1.0, 0.6, max(rut_rim * road_cov, pool * 0.5));
+		alb *= mix(1.0, 0.55, puddle) * mix(1.0, 0.6, max(rut_rim * road_cov, pool * 0.5)) * (1.0 - 0.25 * paved_rim * road_cov);
 		// Вікно болота — непрозора оливково-бура торф'яна вода (~40 на екрані) під відблиском неба, а не
 		// затемнена трава: крізь множник під водою проступали купини, і вікно читалось сірою плівкою.
 		alb = mix(alb, vec3(0.075, 0.058, 0.028), pool);
@@ -1204,7 +1211,7 @@ void fragment() {
 		}
 		// Мокрий асфальт відбиває ~3 % неба: шорсткість 0.5 під похмурим небом сама відблиску майже
 		// не дає; небо видно в калюжах (puddle).
-		float mirror = max(max(max(puddle * mix(2.5, 8.0, paved_sheen * road_cov), pool * 6.0), shore * 0.12),
+		float mirror = max(max(max(puddle * mix(2.5, 5.0, paved_sheen * road_cov), pool * 6.0), shore * 0.12),
 				wet * road_cov * (rt.r + 0.5 * rt.b) * 0.03);
 		vec3 refl = vec3(0.0);
 		if (mirror > 0.0 && sky_reflection_gain > 0.0) {
@@ -1213,12 +1220,14 @@ void fragment() {
 			vec3 nw = slope_to_world(ripple);
 			vec3 vw = normalize(CAMERA_POSITION_WORLD - world_pos);
 			float fr = 0.1 + 0.9 * pow(1.0 - clamp(dot(nw, vw), 0.0, 1.0), 3.0);
-			// Калюжа на асфальті — до 0.7: рівна вода на темному дорожньому покритті — найсвітліше місце дороги.
-			float sky_cap = mix(mix(PUDDLE_SKY_MAX, 0.7, paved_sheen * road_cov), POOL_SKY_MAX, pool);
+			// Калюжа на асфальті — до 0.5 у центрі, край м'який: на ~15–25 рівнів світліша за мокрий асфальт.
+			float sky_cap = mix(mix(PUDDLE_SKY_MAX, 0.5, paved_sheen * road_cov), POOL_SKY_MAX, pool);
 			refl = overcast_sky_at(reflect(-vw, nw), TIME, sky_clear) * min(fr * mirror, sky_cap);
 			float murk_k = clamp(water_murk, 0.0, 1.0);
 			refl = mix(refl, vec3(dot(refl, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.92, 0.98, 1.02),
 					murk_k) * (1.0 - 0.8 * murk_k) * (1.0 - 0.35 * pool);
+			// Калюжа на дорозі відбиває нейтральне сіре небо, без синього відтінку.
+			refl = mix(refl, vec3(dot(refl, vec3(0.2126, 0.7152, 0.0722))), 0.85 * paved_sheen * road_cov);
 		}
 
 		// Коса (внутрішній берег повороту) — останнім, від яскравості поля поруч (з тією ж
