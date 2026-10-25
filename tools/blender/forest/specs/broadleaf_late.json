@@ -81,6 +81,7 @@
     "sat": 0.5
    },
    "sprites": "birch",
+   "crown_low": 0.6,
    "scale": 0.56,
    "card_scale": 1.4
   },
@@ -92,6 +93,7 @@
     "sat": 0.5
    },
    "sprites": "birch",
+   "crown_low": 0.6,
    "scale": 0.63,
    "card_scale": 1.4
   },
@@ -102,6 +104,7 @@
     "target_y": 0.06
    },
    "sprites": "oak",
+   "crown_low": 0.6,
    "scale": 0.58,
    "card_scale": 1.6
   },
@@ -112,6 +115,7 @@
     "target_y": 0.06
    },
    "sprites": "oak",
+   "crown_low": 0.6,
    "scale": 0.6,
    "card_scale": 1.6
   },

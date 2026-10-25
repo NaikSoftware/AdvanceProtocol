@@ -34,6 +34,7 @@ uniform float occlusion = 0.45;
 // Темний обідок пучка: м'який край замість різкої вирізаної лінії наліпки.
 uniform float rim = 0.45;
 uniform float card_round = 0.7;
+uniform float soft_edge = 0.7;
 
 varying float is_card;
 varying vec3 inst_tone;
@@ -76,7 +77,10 @@ void fragment() {
 	// але не в тіні: там низькі mip зливали голу крону в суцільну пляму тіні.
 	float lod = textureQueryLod(albedo_tex, UV).x;
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 1.0) / 3.0, 0.0, 1.0));
-	if (t.a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
+	// Силует пучка — з розмитішого mip: кругла м'яка грудка замість вирізаного
+	// паперового листя на ближньому зумі. Колір лишається з різкого рівня.
+	float a = mix(t.a, textureLod(albedo_tex, UV, lod + 1.5).a * 1.15, is_card * (shadow_pass ? 0.0 : soft_edge));
+	if (a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
 		discard;
 	}
 	vec3 tint = mix(vec3(1.0), foliage_tint, is_card);

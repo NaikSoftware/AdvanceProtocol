@@ -144,6 +144,15 @@ def build_node(item, rects):
         # Голе дерево: та сама будова, але менше пучків — крізь крону видно землю.
         cards = random.Random(item["node"] + "keep").sample(cards, max(1, round(len(cards) * keep)))
     cb, top = meta["crown_base"], meta["top"]
+    low = item.get("crown_low", 1.0)
+    if low < 1.0 and cards:
+        # Крона нижче: низ крони опускається до cb·low, верх лишається. З камери гри голий
+        # стовбур під кроною читався паличкою під кроною, що висить у повітрі.
+        k = (top - cb * low) / max(top - cb, 1e-3)
+        cards = [dict(cd, c=[cd["c"][0], cd["c"][1], top - (top - cd["c"][2]) * k]) for cd in cards]
+        meta = dict(meta, crown_base=cb * low, centre=None, radii=None)
+        meta = {k2: v for k2, v in meta.items() if v is not None}
+        cb = cb * low
     R = max([math.hypot(cd["c"][0], cd["c"][1]) for cd in cards] + [0.5])
     ctr = Vector(meta.get("centre", (0, 0, (cb + top) / 2)))
     rad = Vector(meta.get("radii", (R, R, max((top - cb) / 2, 0.5))))

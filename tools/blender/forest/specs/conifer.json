@@ -45,9 +45,10 @@
     ],
     "target_y": 0.07
    },
-   "scale": 0.66,
+   "scale": 0.713,
    "card_scale": 1.4,
-   "card_keep": 0.85
+   "card_keep": 0.85,
+   "crown_low": 0.45
   },
   {
    "node": "Pine_B",
@@ -62,9 +63,10 @@
     ],
     "target_y": 0.07
    },
-   "scale": 0.88,
+   "scale": 0.95,
    "card_scale": 1.4,
-   "card_keep": 0.85
+   "card_keep": 0.85,
+   "crown_low": 0.45
   },
   {
    "node": "Pine_C",
@@ -81,7 +83,8 @@
    },
    "scale": 0.77,
    "card_scale": 1.4,
-   "card_keep": 0.85
+   "card_keep": 0.85,
+   "crown_low": 0.45
   },
   {
    "node": "Spruce_A",
@@ -94,7 +97,8 @@
    },
    "scale": 0.71,
    "card_scale": 1.4,
-   "card_keep": 0.85
+   "card_keep": 0.85,
+   "crown_low": 0.8
   },
   {
    "node": "Spruce_B",
@@ -107,7 +111,8 @@
    },
    "scale": 0.86,
    "card_scale": 1.4,
-   "card_keep": 0.85
+   "card_keep": 0.85,
+   "crown_low": 0.8
   },
   {
    "node": "Hedge_Spruce",

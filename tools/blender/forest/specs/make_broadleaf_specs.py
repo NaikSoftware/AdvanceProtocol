@@ -33,10 +33,10 @@ BARK = {"birch": {"target_y": 0.16, "sat": 0.5}, "oak": {"target_y": 0.06}, "lim
 
 # вузол, джерело будови, набір спрайтів, кора, додатково
 ITEMS = [
-    ("Birch_A", "birch_a", "birch", "birch", {"late_src": "birch_a_bare", "leafy_keep": 0.7, "scale": 0.56, "card_scale": 1.4}),
-    ("Birch_B", "birch_b", "birch", "birch", {"late_src": "birch_b_bare", "leafy_keep": 0.7, "scale": 0.63, "card_scale": 1.4}),
-    ("Oak_A", "oak_a", "oak", "oak", {"late_src": "oak_a_bare", "leafy_keep": 0.85, "scale": 0.58, "card_scale": 1.6}),
-    ("Oak_B", "oak_b", "oak", "oak", {"late_src": "oak_b_bare", "leafy_keep": 0.85, "scale": 0.6, "card_scale": 1.6}),
+    ("Birch_A", "birch_a", "birch", "birch", {"late_src": "birch_a_bare", "leafy_keep": 0.7, "crown_low": 0.6, "scale": 0.56, "card_scale": 1.4}),
+    ("Birch_B", "birch_b", "birch", "birch", {"late_src": "birch_b_bare", "leafy_keep": 0.7, "crown_low": 0.6, "scale": 0.63, "card_scale": 1.4}),
+    ("Oak_A", "oak_a", "oak", "oak", {"late_src": "oak_a_bare", "leafy_keep": 0.85, "crown_low": 0.6, "scale": 0.58, "card_scale": 1.6}),
+    ("Oak_B", "oak_b", "oak", "oak", {"late_src": "oak_b_bare", "leafy_keep": 0.85, "crown_low": 0.6, "scale": 0.6, "card_scale": 1.6}),
     ("Shrub_Hazel", "shrub_hazel", "shrub", "lime", {"trunk": False, "strip": True}),
     ("Shrub_Thorn", "shrub_thorn", "shrub", "oak", {"trunk": False, "strip": True}),
     ("Hedge_Shrub", "hedge_shrub", "shrub", "lime", {"trunk": False, "strip": True}),

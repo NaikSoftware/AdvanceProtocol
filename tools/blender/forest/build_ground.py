@@ -1,17 +1,13 @@
-"""Плоскі шматки землі лісу: просіка, яку проламав танк, і темна долівка під лісом.
+"""Плоский шматок землі лісу: просіка, яку проламав танк.
 
 Запуск:
   blender -b --factory-startup -P build_ground.py -- <вихід.glb>
-Пише GLB із двома вузлами й одним напівпрозорим матеріалом (alphaMode BLEND):
-- Soil_Lane — 1,3 × 1,3 тайла на y = 0,01: розрита темна земля (L* ≈ 22) з двома коліями
+Пише GLB з одним вузлом і одним напівпрозорим матеріалом (alphaMode BLEND):
+- Soil_Lane — 1,3 × 1,3 тайла на y = 0,01: розрита темна земля (L* ≈ 18) смугою ~1 тайл з двома коліями
   вздовж x; край поперек смуги рваний і гуляє на ±0,25 тайла, кінці вздовж x тануть, тож
   сусідні шматки перекриваються без шва. Дошка кладе по шматку на проламану клітинку, x —
   уздовж проламу. Без такої смуги просіка серед гілля губилась і на мінімальному зумі.
-- Floor_Dark — 1,5 × 1,5 тайла: долівка лісу (прілий опад, мох), темна (≈0,55
-  яскравості трави). Профіль квадратний і на межі клітинки ще непрозорий, тож шматки
-  сусідніх клітинок зливаються без швів; край тане 0,05–0,25 тайла за межею й гуляє на
-  ±0,12 тайла. Без неї земля під краєм лісу така сама, як поле, і крона зливається з травою.
-Обидва — квади по 2 трикутники; рельєф карти дошка обгортає сама (сітка на шматок). Справжні колії від гусениць малює дошка (карта шрамів); тут
+Квад на 2 трикутники; рельєф карти дошка обгортає сама (сітка на шматок). Справжні колії від гусениць малює дошка (карта шрамів); тут
 лише земля самої просіки.
 """
 import json
@@ -43,7 +39,7 @@ def textures():
     yy, xx = (np.mgrid[0:N, 0:N] + 0.5) / N
     n1 = noise(rng, N, 8) * 0.6 + noise(rng, N, 32) * 0.4
     # Просіка: темна земля, дві вологі колії, край поперек смуги рваний і м'який.
-    soil = np.dstack([0.24 + 0.08 * n1, 0.19 + 0.06 * n1, 0.15 + 0.05 * n1])
+    soil = np.dstack([0.19 + 0.06 * n1, 0.15 + 0.05 * n1, 0.12 + 0.04 * n1])
     for c in (0.33, 0.67):
         rut = np.exp(-((yy - c - 0.02 * (n1 - 0.5)) / 0.045) ** 2)
         soil *= (1 - 0.45 * rut)[..., None]
@@ -51,23 +47,17 @@ def textures():
     # (±0,25 тайла при 1,3 тайла), а кінці вздовж смуги тануть — сусідні шматки
     # перекриваються, і ніде не лишається прямої лінії по межі клітинки.
     n2 = noise(rng, N, 4)
-    half = 0.32 + 0.2 * (n2 - 0.5) + 0.06 * (n1 - 0.5)
+    half = 0.4 + 0.2 * (n2 - 0.5) + 0.06 * (n1 - 0.5)
     edge = np.clip((half - np.abs(yy - 0.5)) / 0.1, 0, 1)
     ends = np.clip((0.5 - np.abs(xx - 0.5) - 0.06 * (n1 - 0.5)) / 0.18, 0, 1)
     soil_a = edge * ends * 0.95
-    # Долівка: квадратний профіль (Чебишев) із шумом на краю, середина рівна й непрозора.
-    n3 = noise(rng, N, 6) * 0.7 + noise(rng, N, 24) * 0.3
-    cheb = np.maximum(np.abs(xx - 0.5), np.abs(yy - 0.5)) * 1.5  # тайли від центру
-    floor_a = np.clip((0.75 + 0.24 * (n3 - 0.5) - cheb) / 0.2, 0, 1) * 0.85
-    floor = np.dstack([0.085 + 0.02 * n1, 0.09 + 0.02 * n1, 0.065 + 0.015 * n1])
-    img = np.zeros((N, 2 * N, 4))
-    img[:, :N, :3], img[:, :N, 3] = soil, soil_a
-    img[:, N:, :3], img[:, N:, 3] = floor, floor_a
+    img = np.zeros((N, N, 4))
+    img[..., :3], img[..., 3] = soil, soil_a
     return img
 
 
 def material(img):
-    im = bpy.data.images.new("forest_ground", 2 * N, N, alpha=True)
+    im = bpy.data.images.new("forest_ground", N, N, alpha=True)
     # Blender зберігає пікселі знизу вгору; 8-бітне зображення бере значення як є, у sRGB.
     px = img[::-1]
     im.pixels.foreach_set(px.astype(np.float32).ravel())
@@ -89,13 +79,13 @@ def material(img):
     return m
 
 
-def quad(name, size_m, z_m, u0, mat):
+def quad(name, size_m, z_m, mat):
     h = size_m / 2 / TILE_M
     me = bpy.data.meshes.new(name)
     me.from_pydata([(-h, -h, z_m / TILE_M), (h, -h, z_m / TILE_M), (h, h, z_m / TILE_M), (-h, h, z_m / TILE_M)], [], [(0, 1, 2, 3)])
     uv = me.uv_layers.new(name="UVMap")
     for li, (u, v) in enumerate(((0, 0), (1, 0), (1, 1), (0, 1))):
-        uv.data[li].uv = (u0 + u * 0.5, v)
+        uv.data[li].uv = (u, v)
     me.materials.append(mat)
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
@@ -122,7 +112,7 @@ def patch_glb(path):
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 mat = material(textures())
-obs = [quad("Soil_Lane", TILE_M * 1.3, 0.08, 0.0, mat), quad("Floor_Dark", TILE_M * 1.5, 0.04, 0.5, mat)]
+obs = [quad("Soil_Lane", TILE_M * 1.3, 0.08, mat)]
 for o in bpy.context.scene.objects:
     o.select_set(o in obs)
 bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", use_selection=True, export_yup=True,

@@ -79,7 +79,7 @@ const FADE_MODES: PackedStringArray = ["none", "silhouette", "soft", "cut"]
 const DEFAULT_MODE: String = "silhouette"
 ## Крони тоншають до просіки поступово: дерево, ближче до проламаної клітинки за
 ## `LANE_THIN` тайла (від краю нависання), стоїть з імовірністю, що росте від 0 до 1.
-const LANE_THIN: float = 0.6
+const LANE_THIN: float = 1.0
 const FADE_RADIUS: float = 0.6
 const FADE_SOFT: float = 0.15
 const FADE_REACH_EXTRA: float = 0.5
@@ -92,8 +92,8 @@ const UNIT_COLOR: Array[Color] = [Color(0.75, 0.2, 0.15), Color(0.95, 0.85, 0.1)
 
 ## Склад лісу: частки видів (префікс вузла або ім'я вузла) у наметі й у крайовому ряду.
 const WOODS: Dictionary = {
-	"pine": {"canopy": {"Pine": 0.85, "Spruce": 0.1, "Birch": 0.05}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.85, "density": 4.4},
-	"mixed": {"canopy": {"Pine": 0.45, "Spruce": 0.2, "Birch": 0.2, "Oak": 0.15}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.6, "density": 4.0},
+	"pine": {"canopy": {"Pine": 0.35, "Spruce": 0.55, "Birch": 0.1}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.85, "density": 4.4},
+	"mixed": {"canopy": {"Pine": 0.2, "Spruce": 0.4, "Birch": 0.2, "Oak": 0.2}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.6, "density": 4.0},
 	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.4, "density": 2.8},
 }
 
@@ -119,7 +119,7 @@ var _named: Dictionary = {}  ## ім'я вузла -> Mesh
 var _species: Dictionary = {}  ## Mesh -> префікс виду
 var _material: Dictionary = {}  ## Mesh -> ShaderMaterial
 var _soft_material: Dictionary = {}  ## Mesh -> ShaderMaterial (режим soft)
-var _ground_mesh: Dictionary = {}  ## Soil_Lane / Floor_Dark -> Mesh
+var _ground_mesh: Dictionary = {}  ## Soil_Lane -> Mesh
 var _groups: Dictionary = {}  ## Mesh -> Array[Dictionary] {xf, top, pos, r, rgb}
 var _ground_groups: Dictionary = {}  ## Mesh -> Array[Transform3D]
 var _mmi: Dictionary = {}  ## Mesh -> MultiMeshInstance3D
@@ -554,7 +554,7 @@ func _lane_damage(c: Vector2i, along: Vector2, across: Vector2) -> void:
 				lean = Basis(axis, -ang)
 			var b: Basis = lean * Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * s)
 			_add_instance(mesh, Transform3D(b, _offset + Vector3(p.x, 0.0, p.y)), p, 0.4)
-		_crushed_shrub(Vector2(c) + out * _rng.randf_range(0.45, 0.55) + along * _rng.randf_range(-0.4, 0.4))
+		_crushed_shrub(Vector2(c) + out * _rng.randf_range(0.6, 0.75) + along * _rng.randf_range(-0.4, 0.4))
 		var lp: Vector2 = Vector2(c) + out * _rng.randf_range(0.8, 1.0) + along * _rng.randf_range(-0.3, 0.3)
 		if _named.has("Litter_A"):
 			var lb := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(0.55, 1.0, 0.55))
@@ -636,7 +636,7 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 	var r: float = half * s + 0.25
 	# Крона може трохи нависати над просікою (40 % півширини), але не закривати її; далі
 	# від просіки дерева рідшають поступово, а не обриваються по межі клітинки.
-	var gap: float = _broken_distance(p) - (half * s * 0.4 + 0.1)
+	var gap: float = _broken_distance(p) - (half * s * 0.15 + 0.15)
 	if gap < 0.0 or _rng.randf() > smoothstep(0.0, LANE_THIN, gap):
 		return
 	var xf := Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * s), _offset + Vector3(p.x, 0.0, p.y))
@@ -700,9 +700,6 @@ func _build_ground() -> void:
 				var jit: float = deg_to_rad(_rng.randf_range(-8.0, 8.0))
 				var off := Vector3(_rng.randf_range(-0.08, 0.08), 0.0, _rng.randf_range(-0.08, 0.08))
 				_ground_add("Soil_Lane", Transform3D(Basis(Vector3.UP, _lane_yaw(c) + jit), _offset + Vector3(c.x, 0.0, c.y) + off))
-		elif _ground_mesh.has("Floor_Dark"):
-			# Поворот на чверті: квадратний профіль лишається на клітинці, шум краю різний.
-			_ground_add("Floor_Dark", Transform3D(Basis(Vector3.UP, PI / 2.0 * (_rng.randi() % 4)), _offset + Vector3(c.x, 0.0, c.y)))
 	for name: String in _ground_groups:
 		var node := MeshInstance3D.new()
 		node.mesh = _drape(_ground_mesh[name], _ground_groups[name])

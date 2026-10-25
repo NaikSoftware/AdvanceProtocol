@@ -136,7 +136,7 @@ func test_ground_pieces() -> void:
 	var root: Node3D = _load("forest_ground")
 	if root == null:
 		return
-	for node in ["Soil_Lane", "Floor_Dark"]:
+	for node in ["Soil_Lane"]:
 		var mi: MeshInstance3D = root.find_child(node, true, false) as MeshInstance3D
 		assert_not_null(mi, "forest_ground: нема вузла %s" % node)
 		if mi == null:
