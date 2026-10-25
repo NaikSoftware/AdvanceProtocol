@@ -8,11 +8,12 @@ shader_type spatial;
 // Стовбури й гілки (UV2 = 0) лишаються звичайною геометрією.
 //
 // Альфа кольору екземпляра `MultiMesh` — розчинення над юнітом: 1 — ціла крона, 0 — немає
-// ні крони, ні її тіні; проміжне значення переходить у впорядкований растр 4×4. Фрагменти
-// відкидаються, а не змішуються: без сортування прозорих, крона лишається в буфері глибини.
-// Той самий растр згладжує alpha-cut край пучка на ширину пікселя (MSAA у проєкті немає,
-// тож alpha-to-coverage не діє).
-// RGB кольору вершини — затінення пучка в глибині крони (1 на корі).
+// ні крони, ні її тіні. Проміжне значення гасить цілі пучки за порогом із хешу їхнього
+// центру: крона в перехідному кільці рідшає пучками. Піксельний растр (матриця Баєра чи
+// градієнтний шум) на 1:1 читався діагональною сіткою, а напівпрозора крона — привидом.
+// Фрагменти відкидаються, а не змішуються: без сортування прозорих.
+// Тінь не раструється: крона з альфою екземпляра < 0,5 тіні не кидає, решта кидає повну.
+// RGB кольору вершини — затінення й легкий розкид тону пучка (1 на корі).
 render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform;
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
@@ -21,18 +22,21 @@ uniform float alpha_cutoff : hint_range(0.0, 1.0) = 0.5;
 // синювате розсіяне світло робить буре фіолетовим, і цей множник його повертає.
 global uniform vec3 foliage_tint;
 // М'яке огортання світлом і просвічування: тіньовий бік пучка не чорніє, як у листя.
-uniform float wrap = 0.5;
+uniform float wrap = 0.8;
 uniform float translucency = 0.35;
 
 varying float is_card;
+varying flat float piece_hash;
 
-float bayer4(vec2 p) {
-	ivec2 i = ivec2(mod(p, 4.0));
-	int m[16] = int[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-	return (float(m[i.y * 4 + i.x]) + 0.5) / 16.0;
+float hash13(vec3 p) {
+	p = fract(p * 0.1031);
+	p += dot(p, p.zyx + 31.32);
+	return fract((p.x + p.y) * p.z);
 }
 
 void vertex() {
+	// Чотири вершини картки лежать в одній точці, тож хеш однаковий для всього пучка.
+	piece_hash = hash13(VERTEX * 97.0 + 0.5);
 	vec3 v = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	is_card = dot(UV2, UV2) > 0.0 ? 1.0 : 0.0;
 	if (is_card > 0.5) {
@@ -45,19 +49,24 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 t = texture(albedo_tex, UV);
-	// Ширину згладження обмежено: на далекому зумі fwidth(alpha) великий, і без межі
-	// растром укрилась би вся картка — крона розсипалась би рябими крапками.
+	// Зміщення mip на −0,5: ближні крони на мінімальному зумі інакше розмиті.
+	vec4 t = texture(albedo_tex, UV, -0.5);
+	// Тінь напрямленого світла рендериться ортографічно, а камера гри — у перспективі.
+	bool shadow_pass = PROJECTION_MATRIX[3][3] > 0.5;
 	// На далеких mip-рівнях тонкі гілки усереднюються з прозорим тлом і тануть під порогом:
-	// голе дерево здаля лишилось би самим стовбуром. Тож поріг знижується з рівнем mip.
+	// голе дерево здаля лишилось би самим стовбуром. Тож поріг знижується з рівнем mip —
+	// але не в тіні: там низькі mip зливали голу крону в суцільну пляму тіні.
 	float lod = textureQueryLod(albedo_tex, UV).x;
-	float cut = alpha_cutoff * mix(1.0, 0.45, clamp((lod - 1.0) / 3.0, 0.0, 1.0));
-	float edge = clamp((t.a - cut) / clamp(fwidth(t.a), 1e-4, 0.12) + 0.5, 0.0, 1.0);
-	if (COLOR.a <= 0.001 || edge * COLOR.a < bayer4(FRAGCOORD.xy)) {
+	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 1.0) / 3.0, 0.0, 1.0));
+	if (t.a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
 		discard;
 	}
 	vec3 tint = mix(vec3(1.0), foliage_tint, is_card);
-	ALBEDO = t.rgb * COLOR.rgb * tint;
+	// Здаля дрібний малюнок пучка (листки, світлі й темні гілочки) — це шум на кілька
+	// пікселів: колір плавно йде до середнього з ширшої ділянки, і крона читається масою.
+	vec3 coarse = textureLod(albedo_tex, UV, lod + 2.0).rgb;
+	vec3 rgb = mix(t.rgb, coarse, is_card * 0.7 * smoothstep(1.5, 3.5, lod));
+	ALBEDO = rgb * COLOR.rgb * tint;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
 }
@@ -66,8 +75,8 @@ void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float w = wrap * is_card;
 	float d = max((ndl + w) / (1.0 + w), 0.0) + is_card * translucency * max(-ndl, 0.0);
-	// Тінь сусідніх пучків на картці — лише наполовину: у справжній кроні світло проходить
-	// крізь листя, а повна тінь із різким краєм малює на кроні плями камуфляжу.
-	float att = mix(ATTENUATION, mix(0.5, 1.0, ATTENUATION), is_card);
+	// Тінь сусідніх пучків на картці — лише на чверть: у справжній кроні світло проходить
+	// крізь листя, а повна тінь із різким краєм малює на кроні двоколірний камуфляж.
+	float att = mix(ATTENUATION, mix(0.75, 1.0, ATTENUATION), is_card);
 	DIFFUSE_LIGHT += d * att * LIGHT_COLOR / PI;
 }

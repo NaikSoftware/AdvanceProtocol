@@ -61,14 +61,29 @@ def card(bm, uvl, uv2l, col, c, roll, size, rect, normal_of, shade):
     c = Vector(c)
     c.z = max(c.z, h * 0.8)  # нижній край пучка не йде під землю
     cr, sr = math.cos(roll), math.sin(roll)
+    tone = (shade, shade, shade, 1.0)
     vs = [bm.verts.new(c) for _ in range(4)]
     f = bm.faces.new(vs)
     for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
         x, y = (u * 2 - 1) * h, (v * 2 - 1) * h
         loop[uvl].uv = to_atlas(rect, u, v)
         loop[uv2l].uv = ((x * cr - y * sr) / TILE_M, (x * sr + y * cr) / TILE_M)
-        loop[col] = (shade, shade, shade, 1.0)
+        loop[col] = tone
     return {v: normal_of(c, None) for v in vs}
+
+
+def flat(bm, uvl, col, c, roll, size, rect, shade):
+    """Картка, що лежить на землі (гілля поваленого лісу): звичайна геометрія, UV2 = 0, тож
+    шейдер її не розгортає до камери."""
+    h = size / 2
+    cr, sr = math.cos(roll), math.sin(roll)
+    co = [Vector(c) + Vector((x * cr - y * sr, x * sr + y * cr, 0.0)) * h for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    vs = [bm.verts.new(p) for p in co]
+    f = bm.faces.new(vs)
+    for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        loop[uvl].uv = to_atlas(rect, u, v)
+        loop[col] = (shade, shade, shade, 1.0)
+    return {v: Vector((0, 0, 1)) for v in vs}
 
 
 def limb(bm, uvl, rect, pts, radii, sides=3):
@@ -107,6 +122,9 @@ def build_node(item, rects):
     d = os.path.join(SRC, item["src"])
     meta = json.load(open(os.path.join(d, "cards.json")))
     rng = random.Random(item["node"])
+    # Масштаб усього дерева: джерела мають 14–25 м, а для читання з камери гри дерева
+    # нижчі (сосна 12–14 м, листяні 10–12 м); пропорції крони й стовбура лишаються.
+    fs = item.get("scale", 1.0)
     bm = bmesh.new()
     uvl = bm.loops.layers.uv.new("UVMap")
     uv2l = bm.loops.layers.uv.new("UV2")
@@ -119,8 +137,8 @@ def build_node(item, rects):
         cards = random.Random(item["node"] + "keep").sample(cards, max(1, round(len(cards) * keep)))
     cb, top = meta["crown_base"], meta["top"]
     R = max([math.hypot(cd["c"][0], cd["c"][1]) for cd in cards] + [0.5])
-    ctr = Vector((0, 0, (cb + top) / 2))
-    rad = Vector((R, R, max((top - cb) / 2, 0.5)))
+    ctr = Vector(meta.get("centre", (0, 0, (cb + top) / 2)))
+    rad = Vector(meta.get("radii", (R, R, max((top - cb) / 2, 0.5))))
 
     def normal_of(p, n):
         s = Vector(((p.x - ctr.x) / rad.x, (p.y - ctr.y) / rad.y, (p.z - ctr.z) / rad.z))
@@ -130,13 +148,23 @@ def build_node(item, rects):
     sprites = rects["sprites"].get(item.get("sprites"), [])
     scale = item.get("card_scale", 1.0)
     for cd in cards:
+        # Тон пучка — від його місця в кроні: верх і зовнішній край світлі, низ і глибина
+        # темні, тож крона читається одним об'ємом зі світлим і тіньовим боком. Випадковий
+        # тон на кожну картку (два пучки поруч — світлий і темний) робив з крони рябий шум.
+        hfrac = min(max((cd["c"][2] - cb) / max(top - cb, 0.5), 0.0), 1.0)
+        rfrac = min(math.hypot(cd["c"][0] - ctr.x, cd["c"][1] - ctr.y) / max(rad.x, 0.5), 1.0)
+        shade = min(max(0.6 + 0.3 * hfrac + 0.1 * rfrac + 0.04 * math.sin(cd["roll"] * 7.31), 0.55), 1.0)
         vnorm.update(card(bm, uvl, uv2l, col, cd["c"], cd["roll"], cd["size"] * scale,
-                          rng.choice(sprites), normal_of, cd["shade"]))
+                          rng.choice(sprites), normal_of, shade))
+    flat_sprites = rects["sprites"].get(item.get("flat_sprites", "litter"), [])
+    for fl in meta.get("flats", []):
+        vnorm.update(flat(bm, uvl, col, fl["c"], fl["roll"], fl["size"], rng.choice(flat_sprites), fl["shade"]))
     n_cards = len(bm.faces)
     trect = rects["trunks"].get(item["node"])
     if item.get("trunk", True):
         tt = cb + item.get("trunk_into_crown", 0.3) * (top - cb)
-        r = item.get("trunk_radius", meta["trunk_width"] * 0.3)
+        # trunk_radius — у метрах готового дерева, після масштабу `scale`.
+        r = item.get("trunk_radius", meta["trunk_width"] * 0.3 * fs) / fs
         th = meta["trunk_render_height"]
         vnorm.update(trunk(bm, uvl, trect, r, r * 0.45, tt, min(1.0, tt / th),
                            item.get("trunk_sides", 5), tuple(item.get("lean", (0.0, 0.0)))))
@@ -150,6 +178,12 @@ def build_node(item, rects):
         for loop in f.loops:
             if loop.vert not in vnorm:
                 vnorm[loop.vert] = f.normal
+    if fs != 1.0:
+        for v in bm.verts:
+            v.co *= fs
+        for face in bm.faces:
+            for loop in face.loops:
+                loop[uv2l].uv = (loop[uv2l].uv[0] * fs, loop[uv2l].uv[1] * fs)
     me = bpy.data.meshes.new(item["node"])
     bm.verts.index_update()
     order = list(bm.verts)

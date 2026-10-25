@@ -26,10 +26,16 @@ VARIANTS = {
     "birch_b": dict(h=16.0, cb=6.0, w=5.5, limbs=5, rise=36, leader=0.8, cards=32, r=0.15, shape="egg", bark="birch", seed=12),
     "oak_a": dict(h=20.0, cb=6.5, w=9.5, limbs=5, rise=58, leader=0.3, cards=40, r=0.30, shape="dome", bark="oak", seed=21),
     "oak_b": dict(h=19.0, cb=5.5, w=8.5, limbs=5, rise=50, leader=0.45, cards=38, r=0.27, shape="dome", bark="oak", seed=22),
-    "hero_oak": dict(sec=2, lobes=6, lobe_r=3.6, h=19.0, cb=3.6, w=15.0, limbs=7, rise=62, leader=0.3, cards=820, r=0.45, shape="dome", bark="oak", seed=31),
-    "hero_lime": dict(sec=2, lobes=6, lobe_r=3.2, h=20.0, cb=3.2, w=12.0, limbs=7, rise=42, leader=0.6, cards=780, r=0.38, shape="egg", bark="lime", seed=32),
-    "hero_birch": dict(sec=2, lobes=5, lobe_r=1.9, spacing=0.42, h=17.0, cb=4.0, w=6.0, limbs=6, rise=30, leader=0.88, cards=640, r=0.2, shape="egg", bark="birch", seed=33),
-    "hero_poplar": dict(sec=1, lobes=7, lobe_r=1.8, spacing=0.42, h=25.0, cb=2.5, w=4.5, limbs=8, rise=14, leader=0.92, cards=660, r=0.32, shape="column", bark="lime", seed=34),
+    "hero_oak": dict(sec=2, ter=1, lobes=9, lobe_r=2.9, h=19.0, cb=3.6, w=15.0, limbs=7, rise=62, leader=0.3, cards=820, r=0.45, shape="dome", bark="oak", seed=31),
+    "hero_lime": dict(sec=2, ter=1, lobes=9, lobe_r=2.6, h=20.0, cb=3.2, w=12.0, limbs=7, rise=42, leader=0.6, cards=780, r=0.38, shape="egg", bark="lime", seed=32),
+    "hero_birch": dict(sec=2, ter=1, lobes=8, lobe_r=1.6, spacing=0.8, h=17.0, cb=4.0, w=6.0, limbs=6, rise=30, leader=0.88, cards=230, r=0.2, shape="egg", bark="birch", seed=33),
+    "hero_poplar": dict(sec=1, ter=1, lobes=9, lobe_r=1.5, spacing=0.45, h=25.0, cb=2.5, w=4.5, limbs=8, rise=14, leader=0.92, cards=660, r=0.32, shape="column", bark="lime", seed=34),
+    # Пізня осінь: та сама будова, але з другорядними й третинними гілками — голу крону
+    # тримає гілля, а не пучки (тих лишається третина).
+    "birch_a_bare": dict(sec=1, ter=1, h=18.0, cb=7.5, w=5.0, limbs=5, rise=32, leader=0.85, cards=34, r=0.16, shape="egg", bark="birch", seed=11),
+    "birch_b_bare": dict(sec=1, ter=1, h=16.0, cb=6.0, w=5.5, limbs=5, rise=36, leader=0.8, cards=32, r=0.15, shape="egg", bark="birch", seed=12),
+    "oak_a_bare": dict(sec=1, ter=1, h=20.0, cb=6.5, w=9.5, limbs=5, rise=58, leader=0.3, cards=40, r=0.30, shape="dome", bark="oak", seed=21),
+    "oak_b_bare": dict(sec=1, ter=1, h=19.0, cb=5.5, w=8.5, limbs=5, rise=50, leader=0.45, cards=38, r=0.27, shape="dome", bark="oak", seed=22),
     # Кущі: кілька стебел від землі, без стовбура.
     "shrub_hazel": dict(h=4.2, cb=0.6, w=4.0, limbs=5, rise=30, leader=0.0, cards=14, r=0.0, shape="egg", bark="lime", seed=41, stems=True),
     "shrub_thorn": dict(h=2.8, cb=0.3, w=3.2, limbs=4, rise=40, leader=0.0, cards=11, r=0.0, shape="dome", bark="oak", seed=42, stems=True),
@@ -72,28 +78,13 @@ def build(tag, v):
             d /= np.linalg.norm(d)
         base_r = max(v["r"] * 0.45, 0.05) if not v.get("stems") else 0.05
         radii = [base_r * (1 - 0.6 * j / max(len(pts) - 1, 1)) for j in range(len(pts))]
+        radii[-1] = min(radii[-1], 0.04)
         limbs.append({"pts": [p.round(3).tolist() for p in pts], "r": [round(r, 3) for r in radii], "sides": 3})
         tips.append(pts[-1])
-    # Другорядні гілки: на голому дереві саме вони роблять крону деревом, а не віником.
-    for lm in list(limbs[:v["limbs"]]):
-        pts = [np.array(p) for p in lm["pts"]]
-        if len(pts) < 2:
-            continue
-        for j in range(v.get("sec", 0)):
-            t = rng.uniform(0.45, 0.85)
-            k = min(int(t * (len(pts) - 1)), len(pts) - 2)
-            b = pts[k] + (pts[k + 1] - pts[k]) * (t * (len(pts) - 1) - k)
-            ld = (pts[-1] - pts[0]) / max(np.linalg.norm(pts[-1] - pts[0]), 1e-3)
-            side = np.cross(ld, [0, 0, 1])
-            side /= max(np.linalg.norm(side), 1e-3)
-            d = ld + side * rng.choice([-1, 1]) * rng.uniform(0.5, 0.9) + np.array([0, 0, 0.25])
-            d /= np.linalg.norm(d)
-            ln = np.linalg.norm(pts[-1] - pts[0]) * rng.uniform(0.35, 0.5)
-            m = b + d * ln * 0.55
-            e = m + (d + rng.normal(0, 0.2, 3) + np.array([0, 0, 0.15])) / 1.2 * ln * 0.45
-            r0 = lm["r"][k] * 0.55
-            limbs.append({"pts": [b.round(3).tolist(), m.round(3).tolist(), e.round(3).tolist()],
-                          "r": [round(r0, 3), round(r0 * 0.7, 3), round(r0 * 0.4, 3)], "sides": 3})
+    # Другорядні й третинні гілки: на голому дереві саме вони роблять крону деревом, а не
+    # віником із кількох палиць.
+    secondary = branch_out(limbs[:v["limbs"]], v.get("sec", 0), rng, 0.35, 0.5)
+    limbs += secondary + branch_out(secondary, v.get("ter", 0), rng, 0.45, 0.6)
     # Пучки сидять на зовнішній половині гілок: картка без гілки під нею висить у повітрі.
     anchors = []
     for lm in limbs:
@@ -111,6 +102,12 @@ def build(tag, v):
     tries = 0
     if v.get("lobes"):
         cards = lobe_cards(v, limbs, rng)
+        # Пучок на кінці кожної гілки: гілка, що виходить за лопать, інакше стирчить із
+        # крони голим сірим сучком.
+        for lm in limbs[v["limbs"]:]:
+            e = np.array(lm["pts"][-1])
+            cards.append({"c": e.round(3).tolist(), "n": [0, 0, 1], "roll": float(rng.uniform(0, 6.283)),
+                          "size": round(float(rng.uniform(1.4, 1.8)), 3), "shade": 0.8})
     while len(cards) < n and tries < n * 300:
         tries += 1
         if len(cards) % 5 < 3:
@@ -150,29 +147,61 @@ def build(tag, v):
     print("TREE", tag, "cards", len(cards), "limbs", len(limbs))
 
 
+def branch_out(parents, count, rng, len_lo, len_hi):
+    """По count дочірніх гілок на кожну з parents: від середини батьківської, убік і вгору,
+    два відрізки, кінець тоншає до 2 см — товстий обрубаний кінець стирчав би з крони сучком."""
+    out = []
+    for lm in parents:
+        pts = [np.array(p) for p in lm["pts"]]
+        if len(pts) < 2:
+            continue
+        for _ in range(count):
+            t = rng.uniform(0.45, 0.85)
+            k = min(int(t * (len(pts) - 1)), len(pts) - 2)
+            b = pts[k] + (pts[k + 1] - pts[k]) * (t * (len(pts) - 1) - k)
+            ld = (pts[-1] - pts[0]) / max(np.linalg.norm(pts[-1] - pts[0]), 1e-3)
+            side = np.cross(ld, [0, 0, 1])
+            side /= max(np.linalg.norm(side), 1e-3)
+            d = ld + side * rng.choice([-1, 1]) * rng.uniform(0.5, 0.9) + np.array([0, 0, 0.25])
+            d /= np.linalg.norm(d)
+            ln = np.linalg.norm(pts[-1] - pts[0]) * rng.uniform(len_lo, len_hi)
+            m = b + d * ln * 0.55
+            e = m + (d + rng.normal(0, 0.2, 3) + np.array([0, 0, 0.15])) / 1.2 * ln * 0.45
+            r0 = max(lm["r"][k] * 0.55, 0.03)
+            out.append({"pts": [b.round(3).tolist(), m.round(3).tolist(), e.round(3).tolist()],
+                        "r": [round(r0, 3), round(r0 * 0.6, 3), 0.02], "sides": 3})
+    return out
+
+
 def lobe_cards(v, limbs, rng):
     """Крона поодинокого дерева — 4–7 купол-лопатей на кінцях скелетних гілок, що
     перекриваються: обрис горбкуватий, як у справжнього дуба чи липи, а не рівна куля."""
-    tips = np.array([lm["pts"][-1] for lm in limbs[:v["limbs"]]])
+    tips = np.array([lm["pts"][-1] for lm in limbs])
     order = np.argsort(-(np.hypot(tips[:, 0], tips[:, 1]) + tips[:, 2] * 0.3))
-    centres = [tips[i] + np.array([0, 0, v["lobe_r"] * 0.35]) for i in order[:v["lobes"]]]
+    # Лопаті різного розміру з розкидом центрів: однакові кулі на палиці читались би
+    # штучно, як зліплені сніжки.
+    centres = [tips[i] + rng.normal(0, 0.4, 3) + np.array([0, 0, v["lobe_r"] * 0.3]) for i in order[:v["lobes"]]]
     centres.append(np.array([0.0, 0.0, v["h"] - v["lobe_r"] * 0.9]))  # верхівка над стовбуром
+    radii = [v["lobe_r"] * rng.uniform(0.7, 1.3) for _ in centres]
     top, cb = v["h"], v["cb"]
     zc = (cb + top) / 2
     cards = []
+    placed = []
     tries = 0
-    while len(cards) < v["cards"] and tries < v["cards"] * 400:
+    while len(cards) < v["cards"] and tries < v["cards"] * 60:
         tries += 1
-        c = centres[rng.integers(len(centres))]
-        r = v["lobe_r"] * rng.uniform(0.9, 1.15)
+        i = rng.integers(len(centres))
+        c = centres[i]
+        r = radii[i] * rng.uniform(0.9, 1.1)
         d = rng.normal(0, 1, 3)
         d[2] = abs(d[2]) * 0.8 + 0.1  # низ лопаті камера не бачить
         d /= np.linalg.norm(d)
         p = c + d * r * rng.uniform(0.55, 1.0)
         if p[2] > top or p[2] < cb + 0.5:
             continue
-        if any(np.linalg.norm(p - np.array(q["c"])) < v.get("spacing", 0.6) for q in cards):
+        if placed and np.min(np.linalg.norm(np.array(placed) - p, axis=1)) < v.get("spacing", 0.6):
             continue
+        placed.append(p)
         hfrac = float(np.clip((p[2] - cb) / (top - cb), 0, 1))
         out = np.array([p[0], p[1], (p[2] - zc) * 0.6])
         out /= max(np.linalg.norm(out), 1e-3)
@@ -192,16 +221,18 @@ def trunk_png(path, kind, height, rng):
         base = np.array([0.80, 0.79, 0.74])
         img = np.ones((H, W, 3)) * base * (0.9 + 0.1 * noise[..., None])
         # Горизонтальні чечевички й темні латки — ознака берези, видна з 45°.
-        for _ in range(int(220 * height / 15)):
+        for _ in range(int(360 * height / 15)):
             yy, xx = rng.integers(0, H), rng.integers(0, W)
-            ln, th = rng.integers(6, 30), rng.integers(1, 3)
-            img[yy:yy + th, max(xx - ln // 2, 0):xx + ln // 2] *= 0.25
-        for _ in range(int(25 * height / 15)):
+            ln, th = rng.integers(8, 40), rng.integers(1, 4)
+            img[yy:yy + th, max(xx - ln // 2, 0):xx + ln // 2] *= 0.2
+        # Чорні латки під гілками й поперечні смуги — з них березу видно з 45°, а не лише
+        # білу паличку.
+        for _ in range(int(60 * height / 15)):
             yy, xx = rng.integers(0, H), rng.integers(0, W)
-            r = rng.integers(4, 12)
-            img[max(yy - r, 0):yy + r, max(xx - r, 0):xx + r] *= 0.35
-        low = (1 - y) < (2.2 / height) * (0.8 + 0.4 * noise)  # нижні метри — темна тріщинувата кора
-        img[low] = img[low] * 0.3
+            r = rng.integers(6, 20)
+            img[max(yy - r // 2, 0):yy + r // 2, max(xx - r, 0):xx + r] *= 0.15
+        low = (1 - y) < (3.0 / height) * (0.8 + 0.4 * noise)  # нижні метри — темна тріщинувата кора
+        img[low] = img[low] * 0.25
     else:
         base = {"oak": np.array([0.33, 0.31, 0.28]), "lime": np.array([0.36, 0.34, 0.31])}[kind]
         furrow = np.asarray(Image.fromarray((rng.random((H // 64, W // 6)) * 255).astype(np.uint8)).resize((W, H), Image.BICUBIC)) / 255.0
@@ -218,7 +249,9 @@ def log(tag, length, r, seed):
     limbs = [{"pts": pts, "r": [r * 1.1, r, r * 0.85, r * 0.7], "sides": 5}]
     for k in (1, 2):
         b = np.array(pts[k])
-        d = np.array([rng.uniform(-0.3, 0.3), rng.choice([-1, 1]) * 0.7, 0.7])
+        # Сучки — убік і лише трохи вгору: стовбур на проламаній клітинці лежить під
+        # корпусом, і сучок угору простромив би його.
+        d = np.array([rng.uniform(-0.3, 0.3), rng.choice([-1, 1]) * 0.95, 0.25])
         limbs.append({"pts": [b.tolist(), (b + d * rng.uniform(0.8, 1.4)).tolist()], "r": [r * 0.35, r * 0.2], "sides": 3})
     d = os.path.join(OUT, tag)
     os.makedirs(d, exist_ok=True)
@@ -229,7 +262,64 @@ def log(tag, length, r, seed):
     print("LOG", tag)
 
 
+def hedge(tag, evergreen, seed):
+    """Смуга узлісся на одну сторону клітинки: 8 м уздовж x, 2,8 м углиб, 2–4 м заввишки.
+
+    Три ряди карток уступами, щільно, без просвітів між кущами: дошка ставить такий шматок
+    на кожну сторону крайової клітинки, що дивиться в поле, і край стоїть стіною, а смуга
+    дерев в одну клітинку стає живоплотом. Окремі кущі на узліссі читались би горошинами
+    з травою між ними. Ялинник (evergreen) звужується догори, як молоді ялини.
+    """
+    rng = np.random.default_rng(seed)
+    cards = []
+    layers = [(0.75, 1.0), (1.6, 0.85), (2.5, 0.6)] if evergreen else [(0.7, 1.0), (1.5, 0.9), (2.3, 0.55)]
+    for z, keep in layers:
+        for row, y in enumerate((-1.0, 0.0, 1.0)):
+            x = -4.0 + (0.45 if row % 2 else 0.0)
+            while x < 4.0:
+                if rng.random() < keep:
+                    c = [x + rng.normal(0, 0.15), y + rng.normal(0, 0.2), z + rng.normal(0, 0.15)]
+                    cards.append({"c": [round(q, 3) for q in c], "n": [0, 0, 1], "roll": float(rng.uniform(0, 6.283)),
+                                  "size": round(float(rng.uniform(1.2, 1.6)), 3),
+                                  "shade": round(0.7 + 0.1 * z / 2.5 + 0.1 * (y > 0), 3)})
+                x += 0.9
+    limbs = []
+    if not evergreen:
+        for _ in range(6):  # кілька стебел, видимих крізь голий кущ
+            b = np.array([rng.uniform(-3.5, 3.5), rng.uniform(-0.8, 0.8), 0.0])
+            e = b + np.array([rng.normal(0, 0.4), rng.normal(0, 0.3), rng.uniform(2.0, 3.0)])
+            limbs.append({"pts": [b.round(3).tolist(), e.round(3).tolist()], "r": [0.04, 0.015], "sides": 3})
+    d = os.path.join(OUT, tag)
+    os.makedirs(d, exist_ok=True)
+    trunk_png(os.path.join(d, "trunk.png"), "lime", 3.0, rng)
+    meta = {"tag": tag, "source": "procedural", "cards": cards, "limbs": limbs, "crown_base": 0.0, "top": 3.2,
+            "trunk_width": 0.1, "trunk_render_height": 3.0, "centre": [0, 0, 1.4], "radii": [4.5, 1.6, 1.8]}
+    json.dump(meta, open(os.path.join(d, "cards.json"), "w"), indent=1)
+    print("HEDGE", tag, "cards", len(cards))
+
+
+def litter(tag, seed):
+    """Повалений ліс на клітинці, яку проломив танк: плоскі картки гілля на землі, без
+    стоячих крон. Стовбури кладе дошка окремо (Log_*)."""
+    rng = np.random.default_rng(seed)
+    flats = []
+    for _ in range(14):
+        c = [rng.uniform(-3.4, 3.4), rng.uniform(-3.4, 3.4), round(float(rng.uniform(0.03, 0.12)), 3)]
+        flats.append({"c": [round(q, 3) for q in c], "roll": float(rng.uniform(0, 6.283)),
+                      "size": round(float(rng.uniform(1.6, 2.6)), 3), "shade": round(float(rng.uniform(0.7, 0.9)), 3)})
+    d = os.path.join(OUT, tag)
+    os.makedirs(d, exist_ok=True)
+    trunk_png(os.path.join(d, "trunk.png"), "oak", 3.0, rng)
+    meta = {"tag": tag, "source": "procedural", "cards": [], "flats": flats, "limbs": [], "crown_base": 0.0,
+            "top": 0.2, "trunk_width": 0.1, "trunk_render_height": 3.0}
+    json.dump(meta, open(os.path.join(d, "cards.json"), "w"), indent=1)
+    print("LITTER", tag, "flats", len(flats))
+
+
 for tag, v in VARIANTS.items():
     build(tag, v)
+hedge("hedge_spruce", True, 61)
+hedge("hedge_shrub", False, 62)
+litter("litter_a", 71)
 log("log_a", 6.5, 0.22, 51)
 log("log_b", 4.5, 0.17, 52)
