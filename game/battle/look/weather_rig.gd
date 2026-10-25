@@ -120,6 +120,7 @@ func apply(look: BattleLook) -> void:
 	_set_global(&"cloud_shadow_strength", look.cloud_shadow_strength)
 	_set_global(&"sky_clear", look.sky_clear)
 	_set_global(&"water_murk", look.water_murk)
+	_set_global(&"water_wind", look.water_wind)
 	# Світло падає вздовж -Z сонця, тож напрям НА сонце — його +Z.
 	_set_global(&"sun_dir", sun.basis.z)
 	_set_global(&"haze_color", _rgb(look.haze_color))

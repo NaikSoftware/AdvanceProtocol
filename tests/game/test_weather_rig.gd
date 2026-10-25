@@ -118,6 +118,22 @@ func test_only_clear_sky_water_is_murky() -> void:
 		assert_gt(BattleLook.for_map_path(path).water_murk, 0.0, path)
 
 
+## Брижа йде з погодою: Річка під вітром і дощем, Хребет — легкий вітерець, Перехрестя — майже
+## тихе повітря. Брижа Річки затверджена як є.
+func test_water_waves_follow_the_weather() -> void:
+	var river: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	var ridge: BattleLook = BattleLook.for_map_path("res://maps/ridge.tres")
+	var crossroads: BattleLook = BattleLook.for_map_path("res://maps/crossroads.tres")
+	assert_eq(river.water_wind, 1.0)
+	assert_gt(river.water_wind, ridge.water_wind)
+	assert_gt(ridge.water_wind, crossroads.water_wind)
+	assert_gt(crossroads.water_wind, 0.0, "вода не мертва")
+	var rig: WeatherRig = _rig()
+	rig.apply(ridge)
+	assert_almost_eq(rig.applied_globals[&"water_wind"], ridge.water_wind, 1e-5)
+	assert_true(ProjectSettings.has_setting("shader_globals/water_wind"))
+
+
 func test_each_map_names_its_season() -> void:
 	var want: Dictionary = {"res://maps/river.tres": &"late",
 			"res://maps/crossroads.tres": &"summer", "res://maps/ridge.tres": &"early"}
