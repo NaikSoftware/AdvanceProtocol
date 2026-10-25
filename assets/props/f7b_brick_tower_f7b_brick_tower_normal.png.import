@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://fk1knnbhlx4d"
-path="res://.godot/imported/f7b_brick_tower_f7b_brick_tower_normal.jpg-4568433f322cd26d19f433b9038d857b.ctex"
+uid="uid://df3hb478in3jc"
+path="res://.godot/imported/f7b_brick_tower_f7b_brick_tower_normal.png-72aea6304ea3cb8fea054126c7b1c673.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "1a410f3cebcd970c667795804520d566"
 }
 
 [deps]
 
-source_file="res://assets/props/f7b_brick_tower_f7b_brick_tower_normal.jpg"
-dest_files=["res://.godot/imported/f7b_brick_tower_f7b_brick_tower_normal.jpg-4568433f322cd26d19f433b9038d857b.ctex"]
+source_file="res://assets/props/f7b_brick_tower_f7b_brick_tower_normal.png"
+dest_files=["res://.godot/imported/f7b_brick_tower_f7b_brick_tower_normal.png-72aea6304ea3cb8fea054126c7b1c673.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

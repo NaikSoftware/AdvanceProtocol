@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dt2x3gdqupni4"
-path="res://.godot/imported/ruin_h1_ruin_h1_normal.jpg-0c61e3795079a313beb98210683b5aa0.ctex"
+uid="uid://ckeujin7jwnqu"
+path="res://.godot/imported/house_h1_hit_house_h1_hit_normal.png-81897e283c41925274976401f6cf29eb.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "422950e2208b1a78b959f3205125db0d"
 }
 
 [deps]
 
-source_file="res://assets/props/ruin_h1_ruin_h1_normal.jpg"
-dest_files=["res://.godot/imported/ruin_h1_ruin_h1_normal.jpg-0c61e3795079a313beb98210683b5aa0.ctex"]
+source_file="res://assets/props/house_h1_hit_house_h1_hit_normal.png"
+dest_files=["res://.godot/imported/house_h1_hit_house_h1_hit_normal.png-81897e283c41925274976401f6cf29eb.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
