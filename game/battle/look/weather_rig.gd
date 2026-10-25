@@ -10,12 +10,19 @@ const _RAIN_SHADER: Shader = preload("res://game/battle/shaders/rain.gdshader")
 
 ## Коробка дощу на одиницю `zoom_level` (висоти кадру в площині фокуса): уширшки й углиб —
 ## кадр 20:9 разом із дальньою землею вгорі кадру; заввишки — майже до камери, бо видимий дощ
-## — це передусім краплі ближче до неї: смуга 0.5 м біля землі на найбільшому віддаленні займає
-## ~2 px.
+## — це передусім краплі ближче до неї.
 const RAIN_BOX: Vector3 = Vector3(2.6, 0.85, 2.6)
-## Довжина смуги на екрані, пікселів, на найменшому й найбільшому віддаленні: розмитий рухом
-## слід, а не крапка. Коротша смуга, що повзе між пікселями, мерехтить блискітками.
-const RAIN_STREAK_PX: Vector2 = Vector2(40.0, 18.0)
+## Падіння, клітинок/с (28 м/с). Справжні 8 м/с з висоти камери дають штрихи в 1–5 px, що
+## читаються крапками; швидший дощ з тією самою витримкою виглядає так, як справжній зблизька.
+const RAIN_FALL: float = 3.5
+## Знос вітром на одиницю падіння — уздовж правої осі кадру, тож усі штрихи нахилені в один бік.
+const RAIN_SLANT: float = 0.25
+## Витримка, секунд: штрих — шлях краплі за цей час, у світі. Відношення довжини штриха до
+## його швидкості на екрані — саме витримка, на будь-якому зумі.
+const RAIN_EXPOSURE: float = 0.045
+## Крапля з'являється в новому місці раз на `RAIN_CYCLE` і видима лише `RAIN_LIFE`, секунд.
+const RAIN_CYCLE: float = 1.0
+const RAIN_LIFE: float = 0.2
 
 ## Пріоритет матеріалу дощу серед прозорих: понад воду (0), щоб дощ над річкою не зникав.
 const RAIN_PRIORITY: int = 1
@@ -64,6 +71,12 @@ func _init() -> void:
 	# дощу — початок координат, тож без пріоритету вода залежно від пана малювалась би поверх.
 	rain_mat.render_priority = RAIN_PRIORITY
 	rain.material_override = rain_mat
+	var v: Vector3 = rain_velocity()
+	rain_mat.set_shader_parameter("fall_speed", -v.y)
+	rain_mat.set_shader_parameter("wind", Vector2(v.x, v.z))
+	rain_mat.set_shader_parameter("exposure", RAIN_EXPOSURE)
+	rain_mat.set_shader_parameter("cycle", RAIN_CYCLE)
+	rain_mat.set_shader_parameter("life", RAIN_LIFE)
 	add_child(rain)
 	follow(Vector3.ZERO, IsoCameraRig.MAX_ZOOM)
 	apply(BattleLook.new())
@@ -122,9 +135,13 @@ func follow(focus: Vector3, zoom_level: float) -> void:
 	var mat := rain.material_override as ShaderMaterial
 	mat.set_shader_parameter("focus", Vector3(focus.x, 0.0, focus.z))
 	mat.set_shader_parameter("box_size", RAIN_BOX * zoom_level)
-	var t: float = inverse_lerp(IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM, zoom_level)
-	mat.set_shader_parameter("streak_px",
-			lerpf(RAIN_STREAK_PX.x, RAIN_STREAK_PX.y, clampf(t, 0.0, 1.0)))
+
+
+## Швидкість краплі у світі, клітинок/с. Права вісь кадру — (1, 0, -1): камера під
+## `IsoCameraRig.YAW_DEGREES` і не обертається.
+static func rain_velocity() -> Vector3:
+	var right := Vector3(1.0, 0.0, -1.0).normalized()
+	return Vector3.DOWN * RAIN_FALL + right * RAIN_FALL * RAIN_SLANT
 
 
 static func _rgb(c: Color) -> Vector3:
