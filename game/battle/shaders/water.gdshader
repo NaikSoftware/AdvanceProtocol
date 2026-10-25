@@ -15,7 +15,7 @@ render_mode blend_mix, cull_back, depth_draw_never, specular_disabled;
 global uniform float weather_wetness;
 // Сила власного відбиття неба. Вбудоване відбиття Godot для діелектрика не
 // перевищує ~16 % (SPECULAR = 1), і з ним річка темна; тому небо відбиваємо самі.
-// Погода (Task 10) може приглушити, типово 1.
+// Типово 1.
 global uniform float sky_reflection_gain;
 // Каламутність води під ясним небом (`BattleLook.water_murk`): 0 — вода як є; більше — відбите
 // небо сіріше й тьмяніше, товща оливково-темна. Сільський став згори на сонці темний, а не

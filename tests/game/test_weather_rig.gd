@@ -12,7 +12,7 @@ func _rig() -> WeatherRig:
 	return rig
 
 
-func test_weather_rig_gives_an_overcast_shader_sky_with_sky_ambient() -> void:
+func test_weather_rig_gives_a_shader_sky_colour_ambient_and_no_fog() -> void:
 	var env: Environment = _rig().environment
 	assert_not_null(env)
 	assert_eq(env.background_mode, Environment.BG_SKY)
@@ -150,6 +150,15 @@ func test_rain_follows_the_camera_focus_and_frame() -> void:
 	rig.follow(Vector3(5.0, 0.0, 7.0), 18.0)
 	var far: Vector3 = mat.get_shader_parameter("box_size")
 	assert_almost_eq(far, near * 3.0, Vector3.ONE * 1e-3)
+	# Довжина смуги на екрані — від найменшого віддалення до найбільшого, лінійно за зумом.
+	var mid: float = (IsoCameraRig.MIN_ZOOM + IsoCameraRig.MAX_ZOOM) * 0.5
+	var want: Dictionary = {IsoCameraRig.MIN_ZOOM: WeatherRig.RAIN_STREAK_PX.x,
+			mid: (WeatherRig.RAIN_STREAK_PX.x + WeatherRig.RAIN_STREAK_PX.y) * 0.5,
+			IsoCameraRig.MAX_ZOOM: WeatherRig.RAIN_STREAK_PX.y}
+	for zoom: float in want:
+		rig.follow(Vector3(5.0, 0.0, 7.0), zoom)
+		assert_almost_eq(float(mat.get_shader_parameter("streak_px")), float(want[zoom]), 1e-4,
+				"зум %s" % zoom)
 
 
 ## Вода й дощ — обидва прозорі без запису глибини; без пріоритету порядок залежав би від пана.
@@ -198,6 +207,24 @@ func test_a_look_has_no_rule_fields() -> void:
 			continue
 		for token: String in String(prop.name).split("_"):
 			assert_false(token in banned, "поле %s схоже на правило" % prop.name)
+
+
+## «Продовжити» бере вигляд з карти збереженої гри, а не типовий.
+func test_resume_applies_the_look_of_the_saved_map() -> void:
+	var service: Node = (load("res://game/autoload/match_service.gd") as GDScript).new()
+	add_child_autofree(service)
+	var first: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(first)
+	first.setup(load("res://maps/river.tres") as MapData, 2, 1, service)
+	service.map_path = "res://maps/river.tres"
+	var screen: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(screen)
+	screen.resume(service)
+	var rig: WeatherRig = screen.get_node("WeatherRig")
+	var look: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	assert_true(rig.rain.visible, "типовий вигляд дощу не має")
+	assert_almost_eq(rig.applied_globals[&"weather_wetness"], look.wetness, 1e-5)
+	assert_eq(rig.environment.ambient_light_color, look.ambient_color)
 
 
 func test_battle_screen_applies_the_look_of_its_map() -> void:

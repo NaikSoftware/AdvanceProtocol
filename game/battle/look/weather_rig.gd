@@ -13,6 +13,9 @@ const _RAIN_SHADER: Shader = preload("res://game/battle/shaders/rain.gdshader")
 ## — це передусім краплі ближче до неї: смуга 0.5 м біля землі на найбільшому віддаленні займає
 ## ~2 px.
 const RAIN_BOX: Vector3 = Vector3(2.6, 0.85, 2.6)
+## Довжина смуги на екрані, пікселів, на найменшому й найбільшому віддаленні: розмитий рухом
+## слід, а не крапка. Коротша смуга, що повзе між пікселями, мерехтить блискітками.
+const RAIN_STREAK_PX: Vector2 = Vector2(40.0, 18.0)
 
 ## Пріоритет матеріалу дощу серед прозорих: понад воду (0), щоб дощ над річкою не зникав.
 const RAIN_PRIORITY: int = 1
@@ -76,7 +79,8 @@ func apply(look: BattleLook) -> void:
 	environment.ambient_light_energy = look.ambient_energy
 	_look = look
 	_light_probe()
-	(environment.sky.sky_material as ShaderMaterial).set_shader_parameter("clear_amount", look.sky_clear)
+	var sky_mat := environment.sky.sky_material as ShaderMaterial
+	sky_mat.set_shader_parameter("clear_amount", look.sky_clear)
 	rain.visible = look.rain and look.rain_amount > 0
 	if rain.visible and look.rain_amount != _rain_drops:
 		rain.mesh = _drops_mesh(look.rain_amount)
@@ -118,6 +122,9 @@ func follow(focus: Vector3, zoom_level: float) -> void:
 	var mat := rain.material_override as ShaderMaterial
 	mat.set_shader_parameter("focus", Vector3(focus.x, 0.0, focus.z))
 	mat.set_shader_parameter("box_size", RAIN_BOX * zoom_level)
+	var t: float = inverse_lerp(IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM, zoom_level)
+	mat.set_shader_parameter("streak_px",
+			lerpf(RAIN_STREAK_PX.x, RAIN_STREAK_PX.y, clampf(t, 0.0, 1.0)))
 
 
 static func _rgb(c: Color) -> Vector3:
