@@ -56,9 +56,9 @@ def prof_h(y):
     """Висота насипу вздовж Y: полотно на 1,0 м з двома коліями (по 0,4 м завширшки, 14 см глибиною),
     схили до тераси 0,5 м і далі до землі. Північ і південь трохи різні."""
     if y >= 0:
-        xs, hs = [0, .7, .75, .8, 1.0, 1.05, 1.1, 2.6, 4.5, 7.2, 8.6], [1, 1, 1.03, .86, .86, 1.03, 1, 1, .5, .5, 0]
+        xs, hs = [0, .6, .65, .72, 1.08, 1.15, 1.25, 2.6, 4.5, 7.2, 8.6], [1, 1, 1.03, .86, .86, 1.03, 1, 1, .5, .5, 0]
     else:
-        xs, hs = [0, .7, .75, .8, 1.0, 1.05, 1.1, 2.6, 4.4, 7.0, 8.4], [1, 1, 1.03, .86, .86, 1.03, 1, 1, .55, .45, 0]
+        xs, hs = [0, .6, .65, .72, 1.08, 1.15, 1.25, 2.6, 4.4, 7.0, 8.4], [1, 1, 1.03, .86, .86, 1.03, 1, 1, .55, .45, 0]
     return float(np.interp(abs(y), xs, hs))
 
 
@@ -77,7 +77,7 @@ def terrain_vc(h, x, y, ruts=False):
     track, slope = (.34, .30, .24), (.26, .235, .185)
     wet, moss, mud, grass = (.15, .125, .10), (.20, .25, .12), (.22, .18, .12), (.30, .31, .26)
     if ruts:
-        return wet
+        return tuple(c * 0.65 for c in track)                 # дно колії: ґрунт ×0,65, не майже чорне
     if a > 4.3 and abs(x) < 2.2 and h < .5:
         if h < .1: return wet
         if h < .3: return moss if abs(x) < 1.7 else mud
@@ -89,10 +89,10 @@ def terrain_vc(h, x, y, ruts=False):
     return slope
 
 
-def terrain(b, mat, water):
+def terrain(b, mat, water, wetmat):
     xs = [-4, -3, -2, -1.5, -1.25, -1.0, -0.5, 0, 0.5, 1.0, 1.25, 1.5, 2, 3, 4]
-    ys = sorted({-8.4, -7.8, -7.0, -6.6, -6.0, -5.6, -5.2, -4.5, -4.4, 4.4, -2.6, -1.3, -1.1, -1.05, -1.0, -.8, -.75, -.7, 0, .7, .75,
-                 .8, 1.0, 1.05, 1.1, 1.3, 2.6, 4.5, 5.2, 5.6, 6.0, 6.6, 7.2, 7.8, 8.6})
+    ys = sorted({-8.4, -7.8, -7.0, -6.6, -6.0, -5.6, -5.2, -4.5, -4.4, 4.4, -2.6, -1.25, -1.15, -1.08, -.72, -.65, -.6, 0, .6, .65,
+                 .72, 1.08, 1.15, 1.25, 2.6, 4.5, 5.2, 5.6, 6.0, 6.6, 7.2, 7.8, 8.6})
     rng = np.random.default_rng(5)
     bm = b.bm
     tex_mean = 0.57                                       # середня лінійна яскравість текстури
@@ -108,13 +108,17 @@ def terrain(b, mat, water):
             if abs(y) > 4.5 and 0.95 < abs(x) < 1.6 and 0 < j < len(ys) - 1:       # нерівний берег
                 xx = x + rng.uniform(-0.12, 0.12)
                 h = max(0.04, h + rng.uniform(-0.05, 0.05))
-            rut = 0.76 < abs(y) < 1.04
+            rut = 0.7 < abs(y) < 1.1
             d = min(4.0 - abs(x), (8.4 if y < 0 else 8.6) - abs(y))
             alpha = float(np.clip(d / 1.8, 0, 1))          # край пагорба гасне в землю
             if abs(y) > 4.3 and abs(x) < 2.0:
                 alpha = max(alpha, float(np.clip(d / 1.0, 0, 1)))
+            col = terrain_vc(h, x, y, rut and base > .8)
+            wc = float(np.clip(d / 1.8, 0, 1))                        # на краю колір зливається з нейтральним тоном землі
+            neutral = (.28, .29, .24)
+            col = tuple(n_ + (c_ - n_) * wc for n_, c_ in zip(neutral, col))
             v = bm.verts.new((xx, y, h))
-            V[(i, j)] = (v, terrain_vc(h, x, y, rut and base > .8), alpha)
+            V[(i, j)] = (v, col, alpha)
     ii = b.mi(mat)
     for i in range(len(xs) - 1):
         for j in range(len(ys) - 1):
@@ -141,12 +145,13 @@ def terrain(b, mat, water):
                 l[b.col] = (1, 1, 1, rows[vi][2])
     strip(-1.3, 1.3, 4.7, 7.4, 0.06)
     strip(-1.3, 1.3, -7.2, -4.7, 0.06)
+    wet_i = b.mi(wetmat)
     for sy in (-0.9, 0.9):                                   # мокре дно колій
         strip_x = np.linspace(-3.2, 3.2, 7)
         for k in range(6):
-            vs = [bm.verts.new((strip_x[k], sy - 0.08, .865)), bm.verts.new((strip_x[k + 1], sy - 0.08, .865)),
-                  bm.verts.new((strip_x[k + 1], sy + 0.08, .865)), bm.verts.new((strip_x[k], sy + 0.08, .865))]
-            f = bm.faces.new(vs); f.material_index = wi; b.keep.add(f)
+            vs = [bm.verts.new((strip_x[k], sy - 0.1, .868)), bm.verts.new((strip_x[k + 1], sy - 0.1, .868)),
+                  bm.verts.new((strip_x[k + 1], sy + 0.1, .868)), bm.verts.new((strip_x[k], sy + 0.1, .868))]
+            f = bm.faces.new(vs); f.material_index = wet_i; b.keep.add(f)
             for l in f.loops: l[b.col] = (1, 1, 1, 1.0 if 0 < k < 5 else 0.0)
 
 
@@ -168,7 +173,8 @@ def culvert():
     dark = pbr("culvert_dark", color=(0.02, 0.022, 0.02), rough=1.0)
     b = B()
     b.mi(dark)                                                  # перший матеріал меша не отримує вершинних кольорів
-    terrain(b, terrain_mat(), water)
+    wetmat = pbr("culvert_wet", color=(0.30, 0.27, 0.22), rough=0.15, opacity=0.35)
+    terrain(b, terrain_mat(), water, wetmat)
     z0 = 0.0                                                   # підошва оголовка на дні канави, спинка підпирає насип
     zc = z0 + 0.62
     for s in (-1, 1):
@@ -213,8 +219,15 @@ def trailer(name, paint, seed):
     b.box(bed, (0, ym, fl + 0.055), (2.3, y1 - y0 - 0.1, 0.03))                     # дно: багно й солома
     for s in (-1, 1):
         b.box(body, (s * 1.2, ym, fl + 0.55), (0.05, y1 - y0, 1.0))                  # борт
-        b.tone = 0.82
-        b.box(body, (s * 1.22, ym, fl + 1.06), (0.14, y1 - y0 + 0.05, 0.1))          # верхня обв'язка кольору борту
+        yy0 = y0 - 0.025
+        for k, (a_, b_, tn, th) in enumerate(((0.0, 2.1, 0.74, 0.1), (2.2, 4.0, 0.9, 0.11), (4.1, 6.05, 0.8, 0.095))):
+            b.tone = tn                                                                # верхня обв'язка з розривами й різним тоном
+            b.box(body, (s * 1.22, yy0 + (a_ + b_) / 2, fl + 1.06), (0.14, b_ - a_, th), None)
+        b.tone = 0.72
+        b.box(body, (s * 1.228, ym, fl + 0.14), (0.01, y1 - y0 - 0.1, 0.2))             # темна смуга вздовж нижнього краю
+        for k in range(4):                                                              # патьоки під ребрами
+            for off in (-0.13, 0.15):
+                b.box(body, (s * 1.228, y0 + 0.5 + k * 1.65 + off, fl + 0.4), (0.01, 0.07, 0.7 - 0.2 * (off > 0)))
         b.tone = 1.0
         b.box(frame, (s * 1.0, ym, 0.84), (0.16, y1 - y0 - 0.2, 0.22))               # лонжерон під кузовом
         for k in range(4):                                                           # ребра борту, 12 см
