@@ -72,6 +72,11 @@ const TURN_FROM: float = 0.15
 const TURNED: Dictionary = {"Birch": Color(1.35, 1.15, 0.55), "Oak": Color(1.25, 0.95, 0.6)}
 
 const FADE_MODES: PackedStringArray = ["none", "silhouette", "soft", "cut"]
+## Показ юнітів у лісі за замовчуванням — обрис кольору гравця крізь крони.
+const DEFAULT_MODE: String = "silhouette"
+## Крони тоншають до просіки поступово: дерево, ближче до проламаної клітинки за
+## `LANE_THIN` тайла (від краю нависання), стоїть з імовірністю, що росте від 0 до 1.
+const LANE_THIN: float = 0.6
 const FADE_RADIUS: float = 0.6
 const FADE_SOFT: float = 0.15
 const FADE_REACH_EXTRA: float = 0.5
@@ -122,6 +127,8 @@ var _boxes: Array[MeshInstance3D] = []
 var _broken: Dictionary = {}
 var _season: String = ""
 var _wood_at: Callable
+## Зсув запеченої тіні від сонця (тайли): коротка тінь у бік від сонця, на похмурій карті 0.
+var _shade_offset := Vector2.ZERO
 var _area: Rect2i
 
 
@@ -144,6 +151,19 @@ func _ready() -> void:
 	get_tree().quit()
 
 
+## Зсув тіні з вигляду карти: напрям, у який іде світло, по землі, довжина
+## `sky_clear · 0,25 / tan(висота сонця)` — на Перехресті (34°) ~0,37 тайла, на Хребті
+## (48°) ~0,2, на похмурій Річці 0.
+func _shade_from_look(look: BattleLook) -> void:
+	var b := Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0))
+	var d: Vector3 = -b.z
+	var flat := Vector2(d.x, d.z)
+	if flat.length() < 1e-4:
+		return
+	_shade_offset = flat.normalized() * look.sky_clear * 0.25 / tan(deg_to_rad(look.light_pitch_deg))
+	print("SHADE offset=%s pitch=%.0f" % [_shade_offset, look.light_pitch_deg])
+
+
 func _seed() -> void:
 	_rng.seed = SEED
 	for n: FastNoiseLite in [_noise, _stand, _tone, _turn]:
@@ -161,7 +181,9 @@ func _test_frames(out: String, wood: String, season: String, look_name: String) 
 	_rig.set_bounds(Vector2i(18, 14))
 	var weather := WeatherRig.new()
 	add_child(weather)
-	weather.apply(load("res://game/battle/look/%s.tres" % look_name) as BattleLook)
+	var look: BattleLook = load("res://game/battle/look/%s.tres" % look_name) as BattleLook
+	weather.apply(look)
+	_shade_from_look(look)
 	_ground(GROUND[look_name])
 	for y in ROWS:
 		for x in COLS:
@@ -178,7 +200,7 @@ func _test_frames(out: String, wood: String, season: String, look_name: String) 
 	_report("wood=%s season=%s tiles=%d" % [wood, season, COLS * ROWS])
 	_rig.center_on(ORIGIN + Vector2i(3, 2))
 	await _variants(out, "%s_%s_%s" % [wood, season, look_name])
-	_set_mode("none")
+	_set_mode(DEFAULT_MODE)
 	_rig.center_on(ORIGIN + Vector2i(10, 2))
 	await _shoot(IsoCameraRig.MIN_ZOOM, "%s/heroes_%s_%s_min.png" % [out, season, look_name])
 
@@ -190,6 +212,7 @@ func _map_frames(out: String, wood: String, season: String, look_name: String) -
 	await get_tree().process_frame
 	var m: MapData = load("res://maps/%s.tres" % look_name) as MapData
 	bs.setup(m, 2, 1)
+	_shade_from_look(BattleLook.for_map_path(m.resource_path))
 	(bs.get_node("%Units") as Node3D).visible = false
 	(bs.get_node("UI") as CanvasLayer).visible = false
 	_rig = bs.get_node("%CameraRig")
@@ -216,17 +239,23 @@ func _map_frames(out: String, wood: String, season: String, look_name: String) -
 	_rebuild(true)
 	await get_tree().process_frame
 	_report("map=%s season=%s forest_cells=%d" % [look_name, season, _forest.size()])
+	# Бойовий екран після setup() ще веде камеру до першого юніта: чекаємо, доки доведе.
+	for i in 180:
+		await get_tree().process_frame
+	_rig.center_on(mid)
+	await _shoot(IsoCameraRig.MAX_ZOOM, "%s/_settle.png" % out)
 	_rig.center_on(mid)
 	for z: Array in [["min", IsoCameraRig.MIN_ZOOM], ["max", IsoCameraRig.MAX_ZOOM]]:
 		await _shoot(z[1], "%s/map_%s_%s_lane_before_%s.png" % [out, look_name, season, z[0]])
 	for c: Vector2i in lane:
 		_broken[c] = true
 	_rebuild(true)
+	_rig.center_on(mid)
 	for z: Array in [["min", IsoCameraRig.MIN_ZOOM], ["max", IsoCameraRig.MAX_ZOOM]]:
 		await _shoot(z[1], "%s/map_%s_%s_lane_after_%s.png" % [out, look_name, season, z[0]])
 	_add_boxes()
 	await _variants(out, "map_%s_%s" % [look_name, season])
-	_set_mode("none")
+	_set_mode(DEFAULT_MODE)
 	for b: MeshInstance3D in _boxes:
 		b.visible = false
 	var shots: Array = []
@@ -245,9 +274,22 @@ func _map_frames(out: String, wood: String, season: String, look_name: String) -
 		i += 1
 	_rig.center_on(Vector2i(roundi(sum.x / _forest.size()), roundi(sum.y / _forest.size())))
 	await _shoot(IsoCameraRig.MAX_ZOOM, "%s/map_%s_%s_max.png" % [out, look_name, season])
+	# До й після: тіні лісу в реальному часі без запеченої плями — проти запеченої плями.
+	for z: Array in [["min", IsoCameraRig.MIN_ZOOM], ["max", IsoCameraRig.MAX_ZOOM]]:
+		if z[0] == "min":
+			_rig.center_on(shots[0])
+		_set_shadows(true)
+		await _shoot(z[1], "%s/map_%s_%s_shadow_realtime_%s.png" % [out, look_name, season, z[0]])
+		var t_rt: float = await _gpu_avg(90)
+		var info_rt: String = _shadow_info()
+		_set_shadows(false)
+		await _shoot(z[1], "%s/map_%s_%s_shadow_baked_%s.png" % [out, look_name, season, z[0]])
+		var t_bk: float = await _gpu_avg(90)
+		print("SHADOW_GPU %s %s realtime=%.2f baked=%.2f shadow realtime %s baked %s" % [look_name, z[0], t_rt, t_bk, info_rt, _shadow_info()])
 
 
-## Найдовша пряма з 4 клітинок лісу, оточена лісом з обох боків (просіка в гущі).
+## Пряма з 4 клітинок лісу, що входить у ліс з поля (перед першою клітинкою — не ліс) і
+## йде гущею: так видно і вхід просіки, і її межі серед стоячих дерев.
 func _find_lane() -> Array[Vector2i]:
 	var best: Array[Vector2i] = []
 	var best_score: int = -1
@@ -257,7 +299,7 @@ func _find_lane() -> Array[Vector2i]:
 			for k in 4:
 				if _forest.has(c + d * k):
 					run.append(c + d * k)
-			if run.size() < 4:
+			if run.size() < 4 or _forest.has(c - d):
 				continue
 			var side := Vector2i(d.y, d.x)
 			var score: int = 0
@@ -415,6 +457,13 @@ func _hedges() -> void:
 			if not _named.has(name):
 				continue
 			var yaw: float = (PI / 2.0 if dir.x != 0 else 0.0) + deg_to_rad(_rng.randf_range(-10.0, 10.0))
+			# Біля входу просіки з поля смуга розвернута назовні й зсунута від просіки: вхід
+			# розірваний і розкиданий, а не охайний отвір.
+			for q: Vector2i in [Vector2i(dir.y, dir.x), Vector2i(-dir.y, -dir.x)]:
+				if _broken.has(c + q) and not _forest.has(c + q + dir):
+					p -= Vector2(q) * 0.15
+					p += Vector2(dir) * 0.1
+					yaw += deg_to_rad(_rng.randf_range(15.0, 25.0)) * (1.0 if _rng.randf() < 0.5 else -1.0)
 			var basis := Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(_rng.randf_range(0.9, 1.15), _rng.randf_range(0.85, 1.15), 1.0))
 			_add_instance(_named[name], Transform3D(basis, _offset + Vector3(p.x, 0.0, p.y)), p, 0.45)
 
@@ -436,10 +485,76 @@ func _broken_cells() -> void:
 			_add_instance(_named["Litter_A"], Transform3D(Basis(Vector3.UP, _rng.randf() * TAU), _offset + Vector3(c.x, 0.0, c.y)), Vector2(c), 0.5)
 		var along := Vector2(cos(yaw), -sin(yaw))
 		var across := Vector2(-along.y, along.x)
+		_lane_damage(c, along, across)
 		for k in _rng.randi_range(2, 3):
 			var p := Vector2(c) + across * (1.0 if k % 2 == 0 else -1.0) * _rng.randf_range(0.3, 0.4) + along * _rng.randf_range(-0.2, 0.2)
-			var b := Basis(Vector3.UP, yaw + deg_to_rad(_rng.randf_range(-20.0, 20.0)))
-			_add_instance(_named["Log_B"], Transform3D(b, _offset + Vector3(p.x, 0.0, p.y)), p, 0.3)
+			_pressed_log(p, yaw + deg_to_rad(_rng.randf_range(-20.0, 20.0)))
+
+
+## Відстань від точки до найближчої проламаної клітинки (тайли), 99 — немає поруч.
+func _broken_distance(p: Vector2) -> float:
+	var best: float = 99.0
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			var c := Vector2i(floori(p.x + 0.5) + dx, floori(p.y + 0.5) + dy)
+			if _broken.has(c):
+				var lo := Vector2(c) - Vector2(0.5, 0.5)
+				best = minf(best, p.distance_to(p.clamp(lo, lo + Vector2.ONE)))
+	return best
+
+
+## Межа просіки рвана, а не по лінії клітинки: по боках — дерева, нахилені від просіки
+## на 10–30°, і прим'яті кущі; гілля й поодинокий стовбур на 0,3–0,5 тайла за краєм під
+## стоячими деревами. Нічого стоячого всередині просіки й жодного світлого зламу: танк
+## тисне все до землі, а світла деревина — лише зайвий шум. Там, де просіка виходить
+## у поле, — прим'яті кущі й гілля врозкид назовні: вхід розірваний, а не двері.
+func _lane_damage(c: Vector2i, along: Vector2, across: Vector2) -> void:
+	for side: float in [1.0, -1.0]:
+		var n := Vector2i(roundi(c.x + across.x * side), roundi(c.y + across.y * side))
+		if _broken.has(n) or not _forest.has(n):
+			continue
+		var out: Vector2 = across * side
+		if _rng.randf() < 0.6:
+			var p: Vector2 = Vector2(c) + out * _rng.randf_range(0.6, 0.75) + along * _rng.randf_range(-0.3, 0.3)
+			var weights: Dictionary = WOODS[_wood_at.call(p)]["canopy"]
+			var k: String = _pick(weights, p)
+			var mesh: Mesh = _named[k] if _named.has(k) else (_meshes[k] as Array)[_rng.randi() % (_meshes[k] as Array).size()]
+			var s: float = _rng.randf_range(0.6, 0.85)
+			var axis := Vector3(along.x, 0.0, along.y).normalized()
+			var ang: float = deg_to_rad(_rng.randf_range(10.0, 30.0))
+			var lean := Basis(axis, ang)
+			# Верхівка відхиляється від просіки: знак кута — за напрямом out відносно осі.
+			if (lean * Vector3.UP).dot(Vector3(out.x, 0.0, out.y)) < 0.0:
+				lean = Basis(axis, -ang)
+			var b: Basis = lean * Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * s)
+			_add_instance(mesh, Transform3D(b, _offset + Vector3(p.x, 0.0, p.y)), p, 0.4)
+		_crushed_shrub(Vector2(c) + out * _rng.randf_range(0.45, 0.55) + along * _rng.randf_range(-0.4, 0.4))
+		var lp: Vector2 = Vector2(c) + out * _rng.randf_range(0.8, 1.0) + along * _rng.randf_range(-0.3, 0.3)
+		if _named.has("Litter_A"):
+			var lb := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(0.55, 1.0, 0.55))
+			_add_instance(_named["Litter_A"], Transform3D(lb, _offset + Vector3(lp.x, 0.0, lp.y)), lp, 0.3)
+		if _rng.randf() < 0.35:
+			_pressed_log(lp, atan2(-along.y, along.x) + _rng.randf_range(-0.6, 0.6))
+	for dir: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if _forest.has(c + dir):
+			continue
+		for k in 3:
+			var p: Vector2 = Vector2(c) + Vector2(dir) * _rng.randf_range(0.5, 0.75) + across * _rng.randf_range(-0.45, 0.45)
+			if k == 0 and _named.has("Litter_A"):
+				var lb := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(0.6, 1.0, 0.6))
+				_add_instance(_named["Litter_A"], Transform3D(lb, _offset + Vector3(p.x, 0.0, p.y)), p, 0.3)
+			else:
+				_crushed_shrub(p)
+
+
+## Прим'ятий кущ: сплющений по висоті й завалений набік.
+func _crushed_shrub(p: Vector2) -> void:
+	if not _meshes.has("Shrub"):
+		return
+	var mesh: Mesh = (_meshes["Shrub"] as Array)[_rng.randi() % (_meshes["Shrub"] as Array).size()]
+	var tilt := Basis(Vector3(_rng.randf_range(-1, 1), 0, _rng.randf_range(-1, 1)).normalized(), deg_to_rad(_rng.randf_range(15.0, 35.0)))
+	var b: Basis = tilt * Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(1.0, _rng.randf_range(0.4, 0.6), 1.0) * _rng.randf_range(0.7, 1.0))
+	_add_instance(mesh, Transform3D(b, _offset + Vector3(p.x, 0.0, p.y)), p, 0.3)
 
 
 ## Крона з центром p і радіусом r заходить на проламану клітинку.
@@ -455,10 +570,15 @@ func _overlaps_broken(p: Vector2, r: float) -> bool:
 	return false
 
 
-func _add_instance(mesh: Mesh, xf: Transform3D, p: Vector2, r: float) -> void:
+func _add_instance(mesh: Mesh, xf: Transform3D, p: Vector2, r: float, rgb: Color = Color.WHITE) -> void:
 	if not _groups.has(mesh):
 		_groups[mesh] = []
-	(_groups[mesh] as Array).append({"xf": xf, "top": mesh.get_aabb().end.y * xf.basis.get_scale().y + 0.15, "pos": p, "r": r, "rgb": Color.WHITE})
+	(_groups[mesh] as Array).append({"xf": xf, "top": mesh.get_aabb().end.y * xf.basis.get_scale().y + 0.15, "pos": p, "r": r, "rgb": rgb})
+
+
+## Стовбур на просіці: втиснутий у землю на ~10 см і темніший — лежить низько, не блищить.
+func _pressed_log(p: Vector2, yaw: float) -> void:
+	_add_instance(_named["Log_B"], Transform3D(Basis(Vector3.UP, yaw), _offset + Vector3(p.x, -0.012, p.y)), p, 0.3, Color(0.75, 0.75, 0.75))
 
 
 ## Сітка з кроком 1/√густини. `sizes` — масштаб меша (by_scale) або висота в метрах.
@@ -487,8 +607,10 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 	var half: float = maxf(maxf(-aabb.position.x, aabb.end.x), maxf(-aabb.position.z, aabb.end.z))
 	# AABB меша — центри карток; пучки виходять за нього ще на ~1,2 м угору й до 2 м убік.
 	var r: float = half * s + 0.25
-	# Крона може трохи нависати над просікою (40 % півширини), але не закривати її.
-	if _overlaps_broken(p, half * s * 0.4 + 0.1):
+	# Крона може трохи нависати над просікою (40 % півширини), але не закривати її; далі
+	# від просіки дерева рідшають поступово, а не обриваються по межі клітинки.
+	var gap: float = _broken_distance(p) - (half * s * 0.4 + 0.1)
+	if gap < 0.0 or _rng.randf() > smoothstep(0.0, LANE_THIN, gap):
 		return
 	var xf := Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3.ONE * s), _offset + Vector3(p.x, 0.0, p.y))
 	var tone: float = 1.0 + TONE_VAR * _tone.get_noise_2d(p.x, p.y)
@@ -520,6 +642,9 @@ func _build_multimeshes() -> void:
 			# Картки розгортаються в шейдері, тож AABB меша не містить країв пучків.
 			node.extra_cull_margin = 0.4
 			node.visible = pair[1] == _mmi
+			# Тінь у реальному часі — лише юнітам (§8): ліс лягає на землю запеченою плямою
+			# `Floor_Shade`, зсунутою від сонця, а не довгою тінню на пів карти.
+			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_root.add_child(node)
 			_nodes.append(node)
 			(pair[1] as Dictionary)[mesh] = node
@@ -529,9 +654,21 @@ func _build_ground() -> void:
 	for c: Vector2i in _forest:
 		if _broken.has(c):
 			if _ground_mesh.has("Soil_Lane"):
-				_ground_add("Soil_Lane", Transform3D(Basis(Vector3.UP, _lane_yaw(c)), _offset + Vector3(c.x, 0.0, c.y)))
+				var jit: float = deg_to_rad(_rng.randf_range(-8.0, 8.0))
+				var off := Vector3(_rng.randf_range(-0.08, 0.08), 0.0, _rng.randf_range(-0.08, 0.08))
+				_ground_add("Soil_Lane", Transform3D(Basis(Vector3.UP, _lane_yaw(c) + jit), _offset + Vector3(c.x, 0.0, c.y) + off))
 		elif _ground_mesh.has("Floor_Shade"):
-			_ground_add("Floor_Shade", Transform3D(Basis(Vector3.UP, _rng.randf() * TAU), _offset + Vector3(c.x, 0.0, c.y)))
+			var o: Vector2 = _shade_offset
+			_ground_add("Floor_Shade", Transform3D(Basis(Vector3.UP, _rng.randf() * TAU), _offset + Vector3(c.x + o.x, 0.0, c.y + o.y)))
+	# Поодинокі дерева поза лісом — своя пляма розміром із крону.
+	for mesh: Mesh in _groups:
+		if not String(_species.get(mesh, "")).begins_with("Hero"):
+			continue
+		for e: Dictionary in _groups[mesh]:
+			var p: Vector2 = e["pos"]
+			var k: float = float(e["r"]) / 0.85
+			var b := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(k, 1.0, k))
+			_ground_add("Floor_Shade", Transform3D(b, _offset + Vector3(p.x + _shade_offset.x, 0.0, p.y + _shade_offset.y)))
 	for name: String in _ground_groups:
 		var list: Array = _ground_groups[name]
 		var mm := MultiMesh.new()
@@ -545,6 +682,15 @@ func _build_ground() -> void:
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_root.add_child(node)
 		_nodes.append(node)
+
+
+## true — як було: ліс кидає тінь у реальному часі, запеченої плями немає.
+func _set_shadows(realtime: bool) -> void:
+	for mesh: Mesh in _mmi:
+		(_mmi[mesh] as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if realtime else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for n: Node in _nodes:
+		if n is MultiMeshInstance3D and (n as MultiMeshInstance3D).multimesh.mesh == _ground_mesh.get("Floor_Shade"):
+			(n as Node3D).visible = not realtime
 
 
 func _ground_add(name: String, xf: Transform3D) -> void:
@@ -636,9 +782,28 @@ func _report(what: String) -> void:
 	print("SCATTER %s instances=%d tris=%d multimeshes=%d" % [what, inst, tris, _groups.size() + _ground_groups.size()])
 
 
+## Середній час GPU за n кадрів: один кадр шумить у рази, порівнювати можна лише середнє.
+## Тіньовий прохід останнього кадру: трикутники й виклики малювання — без шуму таймера.
+func _shadow_info() -> String:
+	var vp: RID = get_viewport().get_viewport_rid()
+	var t: int = RenderingServer.viewport_get_render_info(vp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME)
+	var d: int = RenderingServer.viewport_get_render_info(vp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME)
+	return "tris=%d calls=%d" % [t, d]
+
+
+func _gpu_avg(n: int) -> float:
+	var vp: RID = get_viewport().get_viewport_rid()
+	var sum: float = 0.0
+	for i in n:
+		await get_tree().process_frame
+		sum += RenderingServer.viewport_get_measured_render_time_gpu(vp)
+	return sum / n
+
+
 func _shoot(zoom: float, path: String) -> void:
 	_rig.zoom_by(zoom / _rig.zoom_level)
-	for i in 60:
+	# Пан і зум камери плавні: до та після пролому мають бути в однаковому кадрі.
+	for i in 120:
 		await get_tree().process_frame
 	var vp: RID = get_viewport().get_viewport_rid()
 	var gpu: float = RenderingServer.viewport_get_measured_render_time_gpu(vp)
