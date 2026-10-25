@@ -127,18 +127,25 @@ def card_layout(pts, voxel, max_cards, keep_above=0.0, size_k=1.35, seed=1):
     return cards, float(cent[:, 2].min())
 
 
-def render_sprites(cam, pts, out, n_sprites, voxel=1.4, seed=3, prefix="sprite"):
-    """Пучки з різних місць крони: половина згори, половина під 45° назовні."""
+def render_sprites(cam, pts, out, n_sprites, size_m=SPRITE_M, res=SPRITE_RES, outer=0.0, seed=3, prefix="sprite"):
+    """Пучки з різних місць крони: половина згори, половина під 45° назовні.
+
+    outer — перцентиль відстані від осі, ближче за який пучки не беруться: кінці гілок,
+    де хвоя стирчить променями, читаються сосною, а середина крони — темною масою.
+    """
     rng = np.random.default_rng(seed)
     sc = bpy.context.scene
-    sc.render.resolution_x = sc.render.resolution_y = SPRITE_RES
-    cent, cnt = clusters(pts, voxel)
-    good = cent[cnt >= np.percentile(cnt, 60)]
+    sc.render.resolution_x = sc.render.resolution_y = res
+    cent, cnt = clusters(pts, size_m * 0.6)
+    ok = cnt >= np.percentile(cnt, 50)
+    if outer:
+        ok &= np.hypot(cent[:, 0], cent[:, 1]) >= np.percentile(np.hypot(cent[:, 0], cent[:, 1]), outer)
+    good = cent[ok]
     pick = good[rng.choice(len(good), size=min(n_sprites, len(good)), replace=False)]
-    cam.data.ortho_scale = SPRITE_M
+    cam.data.ortho_scale = size_m
     dist = 30.0
-    cam.data.clip_start = dist - 1.2
-    cam.data.clip_end = dist + 1.2
+    cam.data.clip_start = dist - size_m / 2
+    cam.data.clip_end = dist + size_m / 2
     files = []
     for i, c in enumerate(pick):
         if i % 2 == 0:
@@ -153,6 +160,27 @@ def render_sprites(cam, pts, out, n_sprites, voxel=1.4, seed=3, prefix="sprite")
         bpy.ops.render.render(write_still=True)
         files.append(os.path.basename(path))
     return files
+
+
+def skirt_cards(pts, crown_base, step=1.25, size=1.5, seed=5):
+    """Картки від низу крони до землі: ялина на краю лісу зелена до самого низу, і край
+    стоїть стіною, а не частоколом стовбурів."""
+    rng = np.random.default_rng(seed)
+    low = pts[pts[:, 2] < crown_base + 1.5]
+    r0 = float(np.percentile(np.hypot(low[:, 0], low[:, 1]), 85)) if len(low) else 1.5
+    cards = []
+    z = crown_base - step * 0.5
+    while z > size * 0.45:
+        r = r0 * (1.0 + 0.12 * (crown_base - z) / max(crown_base, 1.0))
+        n = max(4, int(2 * math.pi * r / 1.1))
+        for k in range(n):
+            a = 2 * math.pi * (k + rng.uniform(-0.3, 0.3)) / n
+            rr = r * rng.uniform(0.75, 1.0)
+            c = [rr * math.cos(a), rr * math.sin(a), z + rng.uniform(-0.2, 0.2)]
+            cards.append({"c": [round(x, 3) for x in c], "n": [math.cos(a), math.sin(a), 0.3],
+                          "roll": float(rng.uniform(0, 2 * math.pi)), "size": size, "shade": 0.6})
+        z -= step
+    return cards
 
 
 def render_trunk(cam, out, height, width, base=0.0):

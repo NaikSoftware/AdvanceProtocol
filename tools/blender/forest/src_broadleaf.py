@@ -26,10 +26,10 @@ VARIANTS = {
     "birch_b": dict(h=16.0, cb=6.0, w=5.5, limbs=5, rise=36, leader=0.8, cards=32, r=0.15, shape="egg", bark="birch", seed=12),
     "oak_a": dict(h=20.0, cb=6.5, w=9.5, limbs=5, rise=58, leader=0.3, cards=40, r=0.30, shape="dome", bark="oak", seed=21),
     "oak_b": dict(h=19.0, cb=5.5, w=8.5, limbs=5, rise=50, leader=0.45, cards=38, r=0.27, shape="dome", bark="oak", seed=22),
-    "hero_oak": dict(sec=1, h=19.0, cb=3.6, w=15.0, limbs=7, rise=62, leader=0.3, cards=85, r=0.45, shape="dome", bark="oak", seed=31),
-    "hero_lime": dict(sec=1, h=20.0, cb=3.2, w=12.0, limbs=7, rise=42, leader=0.6, cards=85, r=0.38, shape="egg", bark="lime", seed=32),
-    "hero_birch": dict(sec=2, h=17.0, cb=4.0, w=6.0, limbs=6, rise=30, leader=0.88, cards=60, r=0.2, shape="egg", bark="birch", seed=33),
-    "hero_poplar": dict(sec=1, h=25.0, cb=2.5, w=4.5, limbs=8, rise=14, leader=0.92, cards=70, r=0.32, shape="column", bark="lime", seed=34),
+    "hero_oak": dict(sec=2, lobes=6, lobe_r=3.6, h=19.0, cb=3.6, w=15.0, limbs=7, rise=62, leader=0.3, cards=820, r=0.45, shape="dome", bark="oak", seed=31),
+    "hero_lime": dict(sec=2, lobes=6, lobe_r=3.2, h=20.0, cb=3.2, w=12.0, limbs=7, rise=42, leader=0.6, cards=780, r=0.38, shape="egg", bark="lime", seed=32),
+    "hero_birch": dict(sec=2, lobes=5, lobe_r=1.9, spacing=0.42, h=17.0, cb=4.0, w=6.0, limbs=6, rise=30, leader=0.88, cards=640, r=0.2, shape="egg", bark="birch", seed=33),
+    "hero_poplar": dict(sec=1, lobes=7, lobe_r=1.8, spacing=0.42, h=25.0, cb=2.5, w=4.5, limbs=8, rise=14, leader=0.92, cards=660, r=0.32, shape="column", bark="lime", seed=34),
     # Кущі: кілька стебел від землі, без стовбура.
     "shrub_hazel": dict(h=4.2, cb=0.6, w=4.0, limbs=5, rise=30, leader=0.0, cards=14, r=0.0, shape="egg", bark="lime", seed=41, stems=True),
     "shrub_thorn": dict(h=2.8, cb=0.3, w=3.2, limbs=4, rise=40, leader=0.0, cards=11, r=0.0, shape="dome", bark="oak", seed=42, stems=True),
@@ -109,6 +109,8 @@ def build(tag, v):
     n = v["cards"]
     zc = (cb + top) / 2
     tries = 0
+    if v.get("lobes"):
+        cards = lobe_cards(v, limbs, rng)
     while len(cards) < n and tries < n * 300:
         tries += 1
         if len(cards) % 5 < 3:
@@ -146,6 +148,38 @@ def build(tag, v):
             "trunk_width": v["r"] * 2 / 0.6, "trunk_render_height": th, "leader_top": th}
     json.dump(meta, open(os.path.join(d, "cards.json"), "w"), indent=1)
     print("TREE", tag, "cards", len(cards), "limbs", len(limbs))
+
+
+def lobe_cards(v, limbs, rng):
+    """Крона поодинокого дерева — 4–7 купол-лопатей на кінцях скелетних гілок, що
+    перекриваються: обрис горбкуватий, як у справжнього дуба чи липи, а не рівна куля."""
+    tips = np.array([lm["pts"][-1] for lm in limbs[:v["limbs"]]])
+    order = np.argsort(-(np.hypot(tips[:, 0], tips[:, 1]) + tips[:, 2] * 0.3))
+    centres = [tips[i] + np.array([0, 0, v["lobe_r"] * 0.35]) for i in order[:v["lobes"]]]
+    centres.append(np.array([0.0, 0.0, v["h"] - v["lobe_r"] * 0.9]))  # верхівка над стовбуром
+    top, cb = v["h"], v["cb"]
+    zc = (cb + top) / 2
+    cards = []
+    tries = 0
+    while len(cards) < v["cards"] and tries < v["cards"] * 400:
+        tries += 1
+        c = centres[rng.integers(len(centres))]
+        r = v["lobe_r"] * rng.uniform(0.9, 1.15)
+        d = rng.normal(0, 1, 3)
+        d[2] = abs(d[2]) * 0.8 + 0.1  # низ лопаті камера не бачить
+        d /= np.linalg.norm(d)
+        p = c + d * r * rng.uniform(0.55, 1.0)
+        if p[2] > top or p[2] < cb + 0.5:
+            continue
+        if any(np.linalg.norm(p - np.array(q["c"])) < v.get("spacing", 0.6) for q in cards):
+            continue
+        hfrac = float(np.clip((p[2] - cb) / (top - cb), 0, 1))
+        out = np.array([p[0], p[1], (p[2] - zc) * 0.6])
+        out /= max(np.linalg.norm(out), 1e-3)
+        cards.append({"c": p.round(3).tolist(), "n": out.round(3).tolist(), "roll": float(rng.uniform(0, 6.283)),
+                      "size": round(float(rng.uniform(1.8, 2.4)), 3),
+                      "shade": round(min(0.55 + 0.25 * float(np.linalg.norm(p - c) / r) + 0.2 * hfrac, 1.0), 3)})
+    return cards
 
 
 def trunk_png(path, kind, height, rng):

@@ -15,10 +15,11 @@ const LIMITS: Dictionary = {
 	"Pine": [13.0, 22.0, 0.7, 40, 150],
 	"Spruce": [12.0, 21.0, 0.6, 40, 150],
 	"Birch": [14.0, 20.0, 0.55, 40, 150],
-	"Oak": [17.0, 22.0, 0.8, 40, 150],
-	"Shrub": [2.0, 5.0, 0.4, 10, 100],
+	"Oak": [15.0, 22.0, 0.8, 40, 150],
+	"Shrub": [1.5, 5.0, 0.4, 10, 100],
 	"Log": [0.2, 1.5, 0.5, 10, 60],
-	"Hero": [15.0, 27.0, 1.15, 100, 400],
+	# Поодинокі восени голі (лишається 8–18 % пучків), влітку — 1500–2000 трикутників.
+	"Hero": [15.0, 27.0, 1.25, 200, 3000],
 }
 
 const CONIFER: PackedStringArray = ["Pine_A", "Pine_B", "Pine_C", "Spruce_A", "Spruce_B"]
@@ -65,6 +66,16 @@ func _check(glb: String, root: Node3D, node: String) -> void:
 	assert_lte(half, float(lim[2]), "%s: півширина %.2f тайла" % [label, half])
 	var tris: int = _tris(mi.mesh)
 	assert_between(tris, int(lim[3]), int(lim[4]), "%s: %d трикутників" % [label, tris])
+	# Картки пучків несуть зсув кута в UV2, а всі чотири вершини стоять у центрі; генерація
+	# LOD чи сіток тіні при імпорті злила б такі вершини, і крона зникла б.
+	assert_null((mi.mesh as ArrayMesh).shadow_mesh, "%s: сітку тіні вимкнено в .import" % label)
+	if not label.contains("Log_"):
+		var uv2: PackedVector2Array = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV2]
+		var cards: int = 0
+		for v in uv2:
+			if v != Vector2.ZERO:
+				cards += 1
+		assert_gt(cards, 0, "%s: картки пучків мають UV2" % label)
 	var mat: StandardMaterial3D = mi.mesh.surface_get_material(0) as StandardMaterial3D
 	assert_not_null(mat, "%s: потрібен StandardMaterial3D" % label)
 	if mat != null:
