@@ -21,8 +21,8 @@ const RAIN_SLANT: float = 0.25
 ## його швидкості на екрані — саме витримка, на будь-якому зумі.
 const RAIN_EXPOSURE: float = 0.045
 ## Крапля з'являється в новому місці раз на `RAIN_CYCLE` і видима лише `RAIN_LIFE`, секунд:
-## третина крапель видима водночас.
-const RAIN_CYCLE: float = 0.6
+## вісім десятих крапель, що малюються, видимі водночас.
+const RAIN_CYCLE: float = 0.25
 const RAIN_LIFE: float = 0.2
 ## Шарів решітки крапель по висоті; по ширині й углиб квадів стільки, щоб разом вийшла
 ## кількість крапель вигляду.
@@ -44,6 +44,9 @@ var applied_globals: Dictionary = {}
 var _rain_drops: int = 0
 ## Квадів решітки по осях (x, висота, z); нуль — меша ще нема.
 var _rain_grid: Vector3 = Vector3.ZERO
+## Кількість крапель, яку просив вигляд: з нею порівнюємо, щоб не будувати меш наново, коли
+## вона не ділиться націло на решітку.
+var _rain_requested: int = 0
 var _focus: Vector3 = Vector3.ZERO
 var _zoom: float = IsoCameraRig.MAX_ZOOM
 ## Меш крапель на кількість: однаковий для всіх боїв процесу, будується раз.
@@ -103,11 +106,15 @@ func apply(look: BattleLook) -> void:
 	var sky_mat := environment.sky.sky_material as ShaderMaterial
 	sky_mat.set_shader_parameter("clear_amount", look.sky_clear)
 	rain.visible = look.rain and look.rain_amount > 0
-	if rain.visible and look.rain_amount != _rain_drops:
+	if rain.visible and look.rain_amount != _rain_requested:
 		var side: int = rain_side(look.rain_amount)
 		rain.mesh = _drops_mesh(side)
 		_rain_grid = Vector3(side, RAIN_LAYERS, side)
 		_rain_drops = side * side * RAIN_LAYERS
+		_rain_requested = look.rain_amount
+		var mat := rain.material_override as ShaderMaterial
+		mat.set_shader_parameter("grid", _rain_grid)
+		mat.set_shader_parameter("cell", rain_cell(_rain_grid))
 		_place_rain()
 	_set_global(&"weather_wetness", look.wetness)
 	_set_global(&"cloud_shadow_strength", look.cloud_shadow_strength)
@@ -135,13 +142,15 @@ func _light_probe() -> void:
 	probe.ambient_color_energy = _look.ambient_energy
 
 
-## Кількість крапель у дощі, що зараз іде (0 — дощу нема).
+## Кількість крапель у меші дощу, що зараз іде (0 — дощу нема); малюється з них ~восьма
+## частина (`rain_lattice`).
 func rain_drops() -> int:
 	return _rain_drops if rain.visible else 0
 
 
 ## Дощ іде там, куди дивиться камера: решітка квадів стає над світовими клітинками довкола
-## фокуса й рідшає з віддаленням, тож густота на екрані та сама на будь-якому зумі.
+## фокуса, а з віддаленням малюється менша частка клітинок, тож густота на екрані та сама на
+## будь-якому зумі.
 func follow(focus: Vector3, zoom_level: float) -> void:
 	_focus = focus
 	_zoom = zoom_level
@@ -159,24 +168,61 @@ static func rain_cell(grid: Vector3) -> Vector3:
 	return RAIN_BOX * IsoCameraRig.MIN_ZOOM / grid
 
 
-## Крок решітки (у клітинках) і світовий номер кутової клітинки для фокуса й зуму. Крок — степінь
-## двійки, найменший, з яким решітка вкриває коробку на цьому зумі: кожна крапля рідшої решітки —
-## та сама крапля густішої. Кут — ціле кратне кроку, тож пан зсуває решітку лише на цілі клітинки.
+## Коробка дощу на цьому зумі: нижній кут і розмір, клітинки дошки. Трохи зсунута до камери:
+## там у кадрі ближча земля й вища частина шару.
+static func rain_box(focus: Vector3, zoom_level: float) -> AABB:
+	var need: Vector3 = RAIN_BOX * zoom_level
+	var toward := Vector3(1.0, 0.0, 1.0).normalized()
+	var lo: Vector3 = Vector3(focus.x, 0.0, focus.z) - Vector3(need.x, 0.0, need.z) * 0.5 \
+			+ toward * need.x * 0.15
+	return AABB(lo, need)
+
+
+## Решітка для фокуса й зуму: крок (у клітинках), світовий номер кутової клітинки й `keep` —
+## поріг рангу клітинок, що малюються.
+##
+## Крок — степінь двійки, найменший, з яким решітка вкриває коробку із запасом в одну клітинку
+## (кут прилипає до цілої клітинки й може відстати від коробки на крок). Кут — ціле кратне кроку,
+## тож пан зсуває решітку лише на цілі клітинки. `keep` тримає сталою кількість клітинок, що
+## малюються в коробці: ~восьма частина решітки. Він ≤ 8^-log2(крок), тож усі такі клітинки
+## кратні кроку й решітка їх має — на порозі кроку видиме не міняється.
 static func rain_lattice(focus: Vector3, zoom_level: float, grid: Vector3) -> Dictionary:
 	var cell: Vector3 = rain_cell(grid)
-	var need: Vector3 = RAIN_BOX * zoom_level
+	var box: AABB = rain_box(focus, zoom_level)
 	var stride: int = 1
-	while stride < 64 and (grid.x * cell.x * stride < need.x - 1e-4
-			or grid.y * cell.y * stride < need.y - 1e-4):
+	while stride < 32 and ((grid.x - 1.0) * cell.x * stride < box.size.x
+			or (grid.z - 1.0) * cell.z * stride < box.size.z
+			or grid.y * cell.y * stride < box.size.y):
 		stride *= 2
-	var span: Vector3 = grid * cell * stride
-	# Коробка трохи зсунута до камери: там у кадрі ближча земля й вища частина шару.
-	var toward := Vector3(1.0, 0.0, 1.0).normalized()
-	var lo: Vector3 = Vector3(focus.x, 0.0, focus.z) - Vector3(span.x, 0.0, span.z) * 0.5 \
-			+ toward * span.x * 0.15
-	var origin := Vector3(floorf(lo.x / (cell.x * stride)) * stride, 0.0,
-			floorf(lo.z / (cell.z * stride)) * stride)
-	return {"cell": cell, "stride": stride, "origin": origin}
+	var origin := Vector3(floorf(box.position.x / (cell.x * stride)) * stride, 0.0,
+			floorf(box.position.z / (cell.z * stride)) * stride)
+	var margin: float = (grid.x - 1.0) / grid.x
+	var keep: float = margin * margin * margin / 8.0 * pow(IsoCameraRig.MIN_ZOOM / zoom_level, 3.0)
+	return {"cell": cell, "stride": stride, "origin": origin, "keep": keep}
+
+
+## Ранг світової клітинки — дзеркало `rain_rank` у rain.gdshader (тести рахують за ним, які
+## краплі малюються).
+static func rain_rank(wc: Vector3) -> float:
+	var lvl: int = 0
+	for i in range(1, 6):
+		var m: float = pow(2.0, i)
+		if fposmod(wc.x, m) != 0.0 or fposmod(wc.y, m) != 0.0 or fposmod(wc.z, m) != 0.0:
+			break
+		lvl = i
+	var u: float = rain_hash3(wc)
+	if lvl >= 5:
+		return u * pow(8.0, -5.0)
+	return pow(8.0, -(lvl + 1.0)) * (1.0 + 7.0 * u)
+
+
+## Дзеркало `rain_hash3` у rain.gdshader.
+static func rain_hash3(p: Vector3) -> float:
+	var p3: Vector3 = p * 0.1031
+	p3 -= p3.floor()
+	p3 += Vector3.ONE * p3.dot(Vector3(p3.z, p3.y, p3.x) + Vector3.ONE * 31.32)
+	var v: float = (p3.x + p3.y) * p3.z
+	return v - floorf(v)
 
 
 func _place_rain() -> void:
@@ -184,10 +230,9 @@ func _place_rain() -> void:
 		return
 	var lat: Dictionary = rain_lattice(_focus, _zoom, _rain_grid)
 	var mat := rain.material_override as ShaderMaterial
-	mat.set_shader_parameter("grid", _rain_grid)
-	mat.set_shader_parameter("cell", lat.cell)
 	mat.set_shader_parameter("stride", float(lat.stride))
 	mat.set_shader_parameter("cell_origin", lat.origin)
+	mat.set_shader_parameter("keep", lat.keep)
 
 
 ## Швидкість краплі у світі, клітинок/с. Права вісь кадру — (1, 0, -1): камера під
