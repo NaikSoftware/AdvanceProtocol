@@ -1,29 +1,32 @@
 extends GutTest
-## Ліс: плитки-маси крон, краєві клумпи й кущі. Кожен GLB — набір вузлів `Canopy_0..2`,
-## `Edge_0..3` або `Shrub_0..2` з одним матеріалом (атлас у GLB). Перевіряємо розміщення
-## (земля на y = 0, відбиток у вікні 10 м), бюджет трикутників і те, що матеріал
-## alpha-cut з текстурою — на ньому тримається покомірне затемнення крони.
+## Бібліотека крон лісу: окремі дерева, кущі й повалені стовбури, які дошка розкидає
+## `MultiMesh`-ами. GLB хвойних спільний для всіх сезонів, листяні — по одному на сезон.
+## Кожен вузол — один меш з одним матеріалом (атлас у GLB): один виклик малювання на
+## варіант. Перевіряємо розміщення (земля на y = 0, вісь стовбура в початку координат),
+## розмір, бюджет трикутників і alpha-cut матеріал — на ньому тримається розчинення крони
+## над юнітом (`forest_crown.gdshader`).
 
 const DIR: String = "res://assets/props/forest"
 const TILE_M: float = 8.0
-## Вікно крони 10 м у тайлах плюс запас на округлення вершин.
-const FOOTPRINT_MAX: float = 10.0 / TILE_M * 0.5 + 0.02
-## Краєві клумпи: крони крайніх дерев звисають за вікно ще на 2–3 м у сусідню клітинку.
-const EDGE_FOOTPRINT_MAX: float = 0.95
 const GROUND_TOL: float = 0.02
-const CANOPY_MAX_TRIS: int = 300
-const EDGE_MIN_TRIS: int = 800
-const EDGE_MAX_TRIS: int = 1200
-const SHRUB_MAX_TRIS: int = 16
 
-const WOODS: PackedStringArray = [
-	"forest_pine",
-	"forest_mixed_late", "forest_mixed_summer", "forest_mixed_early",
-	"forest_deciduous_late", "forest_deciduous_summer", "forest_deciduous_early",
+## Префікс вузла -> [мін. висота (м), макс. висота (м), макс. півширина (тайли), мін. трикутників, макс. трикутників].
+const LIMITS: Dictionary = {
+	"Pine": [13.0, 22.0, 0.7, 40, 150],
+	"Spruce": [12.0, 21.0, 0.6, 40, 150],
+	"Birch": [14.0, 20.0, 0.55, 40, 150],
+	"Oak": [17.0, 22.0, 0.8, 40, 150],
+	"Shrub": [2.0, 5.0, 0.4, 10, 100],
+	"Log": [0.2, 1.5, 0.5, 10, 60],
+	"Hero": [15.0, 27.0, 1.15, 100, 400],
+}
+
+const CONIFER: PackedStringArray = ["Pine_A", "Pine_B", "Pine_C", "Spruce_A", "Spruce_B"]
+const BROADLEAF: PackedStringArray = [
+	"Birch_A", "Birch_B", "Oak_A", "Oak_B", "Shrub_Hazel", "Shrub_Thorn", "Log_A", "Log_B",
+	"Hero_Oak", "Hero_Lime", "Hero_Birch", "Hero_Poplar",
 ]
-const SHRUBS: PackedStringArray = [
-	"forest_shrub_late", "forest_shrub_summer", "forest_shrub_early", "forest_shrub_conifer",
-]
+const SEASONS: PackedStringArray = ["late", "summer", "early"]
 
 
 func _load(name: String) -> Node3D:
@@ -45,17 +48,23 @@ func _tris(mesh: Mesh) -> int:
 	return t
 
 
-func _check_piece(name: String, mi: MeshInstance3D, max_tris: int, min_tris: int = 1, foot: float = FOOTPRINT_MAX) -> void:
-	var label: String = "%s/%s" % [name, mi.name]
+func _check(glb: String, root: Node3D, node: String) -> void:
+	var mi: MeshInstance3D = root.find_child(node, true, false) as MeshInstance3D
+	assert_not_null(mi, "%s: нема вузла %s" % [glb, node])
+	if mi == null:
+		return
+	var label: String = "%s/%s" % [glb, node]
+	var lim: Array = LIMITS[node.get_slice("_", 0)]
+	assert_eq(mi.transform, Transform3D.IDENTITY, "%s: перетворення вузла запечене в меш" % label)
+	assert_eq(mi.mesh.get_surface_count(), 1, "%s: одна поверхня — один виклик малювання" % label)
 	var box: AABB = mi.mesh.get_aabb()
 	assert_almost_eq(box.position.y, 0.0, GROUND_TOL, "%s: земля на y = 0" % label)
-	assert_lte(absf(box.position.x), foot, "%s: відбиток по x" % label)
-	assert_lte(absf(box.end.x), foot, "%s: відбиток по x" % label)
-	assert_lte(absf(box.position.z), foot, "%s: відбиток по z" % label)
-	assert_lte(absf(box.end.z), foot, "%s: відбиток по z" % label)
+	var h_m: float = box.end.y * TILE_M
+	assert_between(h_m, float(lim[0]), float(lim[1]), "%s: висота %.1f м" % [label, h_m])
+	var half: float = maxf(maxf(absf(box.position.x), absf(box.end.x)), maxf(absf(box.position.z), absf(box.end.z)))
+	assert_lte(half, float(lim[2]), "%s: півширина %.2f тайла" % [label, half])
 	var tris: int = _tris(mi.mesh)
-	assert_lte(tris, max_tris, "%s: %d трикутників понад бюджет %d" % [label, tris, max_tris])
-	assert_gte(tris, min_tris, "%s: %d трикутників менше за мінімум %d" % [label, tris, min_tris])
+	assert_between(tris, int(lim[3]), int(lim[4]), "%s: %d трикутників" % [label, tris])
 	var mat: StandardMaterial3D = mi.mesh.surface_get_material(0) as StandardMaterial3D
 	assert_not_null(mat, "%s: потрібен StandardMaterial3D" % label)
 	if mat != null:
@@ -63,41 +72,37 @@ func _check_piece(name: String, mi: MeshInstance3D, max_tris: int, min_tris: int
 		assert_not_null(mat.albedo_texture, "%s: атлас у матеріалі" % label)
 
 
-func test_woods_have_canopy_tiles_and_edge_clumps() -> void:
-	for name in WOODS:
-		var root: Node3D = _load(name)
-		if root == null:
-			continue
-		for i in 3:
-			var mi: MeshInstance3D = root.get_node_or_null("Canopy_%d" % i) as MeshInstance3D
-			assert_not_null(mi, "%s: нема Canopy_%d" % [name, i])
-			if mi != null:
-				_check_piece(name, mi, CANOPY_MAX_TRIS, 100)
-		for i in 4:
-			var mi: MeshInstance3D = root.get_node_or_null("Edge_%d" % i) as MeshInstance3D
-			assert_not_null(mi, "%s: нема Edge_%d" % [name, i])
-			if mi != null:
-				_check_piece(name, mi, EDGE_MAX_TRIS, EDGE_MIN_TRIS, EDGE_FOOTPRINT_MAX)
-
-
-func test_shrub_cards() -> void:
-	for name in SHRUBS:
-		var root: Node3D = _load(name)
-		if root == null:
-			continue
-		for i in 3:
-			var mi: MeshInstance3D = root.get_node_or_null("Shrub_%d" % i) as MeshInstance3D
-			assert_not_null(mi, "%s: нема Shrub_%d" % [name, i])
-			if mi != null:
-				_check_piece(name, mi, SHRUB_MAX_TRIS, 4)
-
-
-func test_edge_clump_is_open_on_negative_z() -> void:
-	# Відкритий бік клумпа — -Z: там пояс кущів, тож відбиток сильніше сягає в -Z, ніж
-	# дерева в +Z; board обертає клумп кроками по 90° до поля.
-	var root: Node3D = _load("forest_mixed_late")
+func test_conifers() -> void:
+	var root: Node3D = _load("forest_conifer")
 	if root == null:
 		return
-	var mi: MeshInstance3D = root.get_node("Edge_0") as MeshInstance3D
-	var box: AABB = mi.mesh.get_aabb()
-	assert_lt(box.position.z, -0.45, "кущі виходять до -Z")
+	for node in CONIFER:
+		_check("forest_conifer", root, node)
+
+
+func test_broadleaf_every_season() -> void:
+	for season in SEASONS:
+		var glb: String = "forest_broadleaf_%s" % season
+		var root: Node3D = _load(glb)
+		if root == null:
+			continue
+		for node in BROADLEAF:
+			_check(glb, root, node)
+
+
+func test_trunk_stands_on_origin() -> void:
+	# Дошка ставить екземпляр точкою на землі; вісь стовбура мусить бути в цій точці,
+	# інакше дерево на краю лісу стоїть у полі, а не там, де його поклала розкидка.
+	var root: Node3D = _load("forest_conifer")
+	if root == null:
+		return
+	for node in CONIFER:
+		var mi: MeshInstance3D = root.find_child(node, true, false) as MeshInstance3D
+		var verts: PackedVector3Array = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var lo := Vector2(INF, INF)
+		var hi := Vector2(-INF, -INF)
+		for v in verts:
+			if v.y < 0.05:
+				lo = lo.min(Vector2(v.x, v.z))
+				hi = hi.max(Vector2(v.x, v.z))
+		assert_lt(((lo + hi) * 0.5).length(), 0.02, "%s: комель у початку координат" % node)
