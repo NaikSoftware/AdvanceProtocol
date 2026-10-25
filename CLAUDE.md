@@ -150,8 +150,9 @@ product against the target's facing. No trigonometry, no division.
   is the rule — inverting it deletes flanking. A flank is therefore worth one shot: the next
   attacker from the same side finds the front. Consequences, costs and the whole-unit (not
   turret-only) decision are in the linked document.
-- **A unit with AP left may turn in place toward any tile, free, on its own turn.** At 0 AP it stays
-  as it is — so a unit that fired or spent its AP is still flankable.
+- **A unit with AP left may turn in place toward any tile, free, on its own turn.** At 0 AP it cannot
+  turn itself — so a unit that fired or spent its AP is flankable, but for one shot only: surviving
+  that shot turns it onto the attacker.
 - The UI must always show which sector a shot will land in **before** the player commits.
 
 ### 3.5 Vision and fog of war → [details](docs/rules/vision-and-fog.md)
@@ -244,10 +245,11 @@ at all times, offsetting off-road penalty. Roads are never affected — that is 
 - An enemy's marks ignore its AP and are computed from **that unit alone**, never from its owner's
   vision network — the network is hidden, and drawing from it would reveal unseen spotters.
 - **Its gun marks cover the whole weapon range circle, with no vision check**, because return fire
-  needs no vision (§3.3.1): every unit of yours inside the circle is answered, none outside it. Its
-  **drone marks** are measured with the squad's own vision diamond, since the drone strikes only on
-  its owner's turn and only on `seen` ground; they are **a floor, not a ceiling**, and the UI must
-  say so.
+  needs no vision (§3.3.1): outside the circle there is never an answer, inside it there is one
+  whenever the unit has the AP for it. A gun-only ring carries no floor caption. Its **drone
+  marks** are measured with the squad's own vision diamond, since the drone strikes only on its
+  owner's turn and only on `seen` ground; they are **a floor, not a ceiling**, and the UI must say
+  so whenever a drone ring is shown.
 - **The drone strike gets its own ring and its own marks**, and an enemy squad's remaining drones
   count towards the threat it is shown to pose. The count is public by rule (§3.9), so reading it
   reveals nothing; omitting it would under-report the most dangerous action in the game.

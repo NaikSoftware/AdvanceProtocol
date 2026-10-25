@@ -131,13 +131,14 @@ func test_drone_and_threat_floor_fit_every_size(p = use_parameters(_sizes_by_loc
 	assert_true(_node("%DroneReasonLabel").is_visible_in_tree(), "причина: %s" % size)
 	assert_eq((_node("%DroneReasonLabel") as Label).text, tr("ERR_DRONE_CANNOT_TARGET_INFANTRY"))
 	_assert_fits(size, "дрон, причина %s" % size)
-	# Зняти режим і вибір, тоді огляд ворога з рядком «нижня межа».
+	# Зняти режим і вибір, тоді огляд ворожого танка: лише кільце гармати, тож рядка
+	# «нижня межа» немає (§3.13) — він з'являється тільки з дроновим кільцем, нижче.
 	await _tap_button(_node("%CancelButton"))
 	await _tap(SQUAD)
 	assert_false(_node("%SelectionRow").is_visible_in_tree(), "вибір знято: %s" % size)
 	_e2e.long_press(ENEMY_TANK)
 	await _e2e.settle()
-	assert_true(_node("%ThreatFloorLabel").is_visible_in_tree(), "нижня межа: %s" % size)
+	assert_false(_node("%ThreatFloorLabel").is_visible_in_tree(), "кільце гармати — без нижньої межі: %s" % size)
 	_assert_fits(size, "огляд ворога %s" % size)
 	_e2e.release(ENEMY_TANK)
 	# Найтісніше: вибраний загін тапає ворожий загін із дронами (прев'ю пострілу), а
