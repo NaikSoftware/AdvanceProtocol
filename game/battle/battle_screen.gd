@@ -84,6 +84,11 @@ var _scars: ScarMap = null
 ## Шейдери ефектів уже розігріто: на старті нового бою, а в бою зі збереження — на першому
 ## гейті, коли камера вже стоїть на юнітах.
 var _fx_warmed: bool = false
+## Клітинки, у які в'їжджала техніка: ПРАВДА про розчавлені пропси, як BattleState.broken_forest
+## для просік. Лише вигляд, тож живе тут, а не в core/; глядачеві показується обрізаною його
+## seen (§3.5), інакше уламки огорожі видали б невидимий танк. Збереження її не пише:
+## «Продовжити» показує пропси цілими.
+var _crushed_truth: Dictionary[Vector2i, bool] = {}
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -834,6 +839,7 @@ func _on_events_ready() -> void:
 	var events: Array[Events.BattleEvent] = _match_service.take_events()
 	if events.is_empty():
 		return
+	_record_crushes(events)
 	await _event_player.play(events)
 
 	var turn_started: bool = false
@@ -927,6 +933,16 @@ func _rebuild_units_for_active_player() -> void:
 		_units.add_child(view)
 		view.bind(unit)
 		_unit_views[uid] = view
+	# Дах над показаним юнітом розчиняється — і лише над показаним: невидимий ворог під будинком
+	# прозорим дахом себе не видає.
+	var shown: Array[Vector2i] = []
+	shown.assign(known.keys())
+	_board_view.set_reveal_cells(shown)
+	var crushed: Array[Vector2i] = []
+	for pos: Vector2i in _crushed_truth:
+		if state.vision[state.active_player].is_seen(pos):
+			crushed.append(pos)
+	_board_view.set_crushed_cells(crushed)
 	forest_changed()
 	_apply_threat_marks()
 
@@ -971,6 +987,26 @@ func _warm_up_fx(cell: Vector2i) -> void:
 ## з перебудови після пакета подій і на гейті, тобто і на ForestBroken, і на передачі ходу.
 func forest_changed() -> void:
 	pass
+
+
+## Техніка, що ввійшла в клітинку, розчавлює її дрібні пропси; піхота проходить повз. Шлях
+## UnitMoved — лише тайли, у які юніт справді ввійшов. Юніт, що загинув на міні, зі стану вже
+## може зникнути: техніка лишає остов (WreckLeft) на останньому тайлі, піхота — ні.
+func _record_crushes(events: Array[Events.BattleEvent]) -> void:
+	var wrecks: Dictionary = {}
+	for e in events:
+		if e is Events.WreckLeft:
+			wrecks[(e as Events.WreckLeft).pos] = true
+	for e in events:
+		if not e is Events.UnitMoved:
+			continue
+		var moved := e as Events.UnitMoved
+		var unit: Unit = _match_service.state.get_unit(moved.unit_id)
+		var vehicle: bool = unit.unit_class() != UnitTypes.UnitClass.INFANTRY if unit != null \
+				else wrecks.has(moved.path.back())
+		if vehicle:
+			for pos in moved.path:
+				_crushed_truth[pos] = true
 
 
 func _first_unit_cell(player: int) -> Vector2i:
