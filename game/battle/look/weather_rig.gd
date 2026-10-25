@@ -60,6 +60,8 @@ var _focus: Vector3 = Vector3.ZERO
 var _zoom: float = IsoCameraRig.MAX_ZOOM
 ## Меш крапель на кількість: однаковий для всіх боїв процесу, будується раз.
 static var _drops_cache: Dictionary = {}
+## Сила тіні-контакту з останнього apply(): `UnitView` не будує плями, коли її нема.
+static var unit_contact: float = 0.0
 
 
 func _init() -> void:
@@ -108,6 +110,7 @@ func apply(look: BattleLook) -> void:
 	sun.rotation_degrees = Vector3(-look.light_pitch_deg, look.light_yaw_deg, 0.0)
 	sun.shadow_opacity = look.shadow_opacity
 	sun.shadow_blur = look.shadow_blur
+	sun.light_angular_distance = look.sun_angular_deg
 	environment.ambient_light_color = look.ambient_color
 	environment.ambient_light_energy = look.ambient_energy
 	_look = look
@@ -131,6 +134,8 @@ func apply(look: BattleLook) -> void:
 	_set_global(&"sky_clear", look.sky_clear)
 	_set_global(&"water_murk", look.water_murk)
 	_set_global(&"water_wind", look.water_wind)
+	_set_global(&"unit_contact_shadow", look.unit_contact_shadow)
+	unit_contact = look.unit_contact_shadow
 	# Світло падає вздовж -Z сонця, тож напрям НА сонце — його +Z.
 	_set_global(&"sun_dir", sun.basis.z)
 	_set_global(&"haze_color", _rgb(look.haze_color))
