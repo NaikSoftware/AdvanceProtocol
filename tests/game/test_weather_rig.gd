@@ -150,6 +150,12 @@ func test_rain_follows_the_camera_focus_and_frame() -> void:
 	rig.follow(Vector3(5.0, 0.0, 7.0), 18.0)
 	var far: Vector3 = mat.get_shader_parameter("box_size")
 	assert_almost_eq(far, near * 3.0, Vector3.ONE * 1e-3)
+	# Здалеку смуга на екрані коротша, але лишається лінією, а не крапкою.
+	var far_px: float = mat.get_shader_parameter("streak_px")
+	rig.follow(Vector3(5.0, 0.0, 7.0), 6.0)
+	var near_px: float = mat.get_shader_parameter("streak_px")
+	assert_gt(near_px, far_px)
+	assert_gt(far_px, 10.0)
 
 
 ## Вода й дощ — обидва прозорі без запису глибини; без пріоритету порядок залежав би від пана.

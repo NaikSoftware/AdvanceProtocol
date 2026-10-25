@@ -1,6 +1,10 @@
 // Дощ (`WeatherRig`): один меш із N квадів; вершина несе випадкову точку в одиничній коробці
 // (VERTEX) і свій кут квада (UV). Крапля нерухома у світі (пан дає правильний паралакс), а коробка
 // загортається довкола фокуса камери, тож після пана чи зуму кадр одразу повний дощу.
+//
+// Смуга будується на екрані, в пікселях: розмитий рухом слід завдовжки `streak_px` уздовж
+// проєкції падіння й рівна лінія зі згладженим краєм. Коротка смуга, що повзе між пікселями,
+// мерехтить блискітками, а не читається дощем.
 shader_type spatial;
 render_mode unshaded, blend_mix, cull_disabled, shadows_disabled, depth_draw_never;
 
@@ -8,22 +12,22 @@ render_mode unshaded, blend_mix, cull_disabled, shadows_disabled, depth_draw_nev
 uniform vec3 focus;
 uniform vec3 box_size = vec3(40.0, 14.0, 40.0);
 uniform vec2 toward_camera = vec2(0.7071, 0.7071);
-// Падіння, клітинок/с: 1.0 — 8 м/с. Вітер — горизонтальний знос тією ж мірою.
+// Падіння, клітинок/с: 1.0 — 8 м/с. Вітер — уздовж правої осі кадру (камера не обертається),
+// тож усі смуги нахилені в один бік, на екрані на ~18–24° від вертикалі.
 uniform float fall_speed = 1.0;
-uniform vec2 wind = vec2(-0.1, 0.06);
-// Смуга — розмитий рухом слід краплі: 8 м/с за витримку ~1/16 с — ~0.5 м. Камера дивиться
-// згори, і такий слід стискається до 2–5 px, а кінці гасне — тоді смуга не коротша за 10 px,
-// інакше дощ читається крапками-градом, а не тонкими лініями.
-uniform float streak_length = 0.0625;
-uniform float min_streak_px = 10.0;
-// Справжня ширина сліду ~1 см — тонша за піксель; смуга малюється в 1.5 px (вужча похила смуга
-// без згладжування рветься на окремі пікселі), а прозорість падає, тож лінія лишається ледь
-// помітною, а не жирною.
-uniform float streak_width = 0.0015;
-// Трохи світліше за мокру землю під похмурим небом, не біле.
-uniform vec4 tint : source_color = vec4(0.62, 0.65, 0.68, 0.25);
+uniform vec2 wind = vec2(0.177, -0.177);
+// Довжина смуги на екрані для краплі на відстані фокуса, пікселів; ставить `WeatherRig.follow`
+// за віддаленням камери. Ближчі краплі довші, дальші коротші.
+uniform float streak_px = 30.0;
+// Ширина квада, пікселів: лінія ~1 px і по 1.5 px м'якого краю з кожного боку.
+uniform float quad_px = 4.0;
+// Ледь світліше за мокру землю під похмурим небом; прозорість стала по всій смузі й однакова
+// для всіх крапель — інакше вони спалахують по одній.
+uniform vec4 tint : source_color = vec4(0.62, 0.65, 0.68, 0.09);
 
-varying float v_along;
+varying float v_x;
+varying float v_l;
+varying float v_len;
 varying float v_fade;
 
 void vertex() {
@@ -34,29 +38,29 @@ void vertex() {
 	vec3 lo = vec3(focus.x, 0.0, focus.z) - vec3(box_size.x, 0.0, box_size.z) * 0.5
 			+ vec3(toward_camera.x, 0.0, toward_camera.y) * box_size.x * 0.15;
 	vec3 c = lo + mod(seed * box_size + vel * TIME - lo, box_size);
-	vec3 axis = normalize(vel);
-	vec3 view = CAMERA_POSITION_WORLD - c;
-	float dist = length(view);
-	vec3 side = cross(axis, view / dist);
-	// Частка довжини смуги, видима з камери (синус кута між смугою й променем зору).
-	float seen = max(length(side), 0.2);
-	side /= seen;
-	// Розмір пікселя на цій відстані. abs: у Vulkan вісь Y проєкції перевернута, [1][1] < 0, і
-	// без нього кожен max(…, px) мовчки брав світовий розмір.
-	float px = 2.0 * dist / (abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y);
-	float w = max(streak_width, 1.5 * px);
-	float len = max(streak_length, min_streak_px * px / seen);
-	vec3 p = c + side * (UV.x - 0.5) * w + axis * (UV.y - 0.5) * len;
-	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(p, 1.0);
-	v_along = UV.y;
-	// Ширина понад справжню гасне прозорістю (не нижче 0.6: далі лінія зникла б зовсім), а
-	// краплі впритул до камери — зникають.
-	v_fade = max(sqrt(streak_width / w), 0.6) * smoothstep(1.5, 4.0, dist);
+	mat4 pv = PROJECTION_MATRIX * VIEW_MATRIX;
+	vec4 c0 = pv * vec4(c, 1.0);
+	vec4 c1 = pv * vec4(c + normalize(vel) * 0.05, 1.0);
+	vec2 half_vp = 0.5 * VIEWPORT_SIZE;
+	vec2 s0 = c0.xy / c0.w * half_vp;
+	vec2 s1 = c1.xy / c1.w * half_vp;
+	vec2 dir = normalize(s1 - s0 + vec2(1e-6));
+	vec2 perp = vec2(-dir.y, dir.x);
+	float dist = length(CAMERA_POSITION_WORLD - c);
+	float ref = length(CAMERA_POSITION_WORLD - focus);
+	float len = streak_px * clamp(ref / max(dist, 1e-3), 0.7, 1.6);
+	vec2 sp = s0 + dir * (UV.y - 0.5) * len + perp * (UV.x - 0.5) * quad_px;
+	POSITION = vec4(sp / half_vp * c0.w, c0.z, c0.w);
+	v_x = (UV.x - 0.5) * quad_px;
+	v_l = UV.y * len;
+	v_len = len;
+	// Краплі впритул до камери зникають, а не пролітають через увесь кадр.
+	v_fade = smoothstep(1.5, 4.0, dist);
 }
 
 void fragment() {
-	// Слід розмитий з обох кінців, без яскравої «голови»: голова й хвіст читалися як град.
-	float taper = sqrt(sin(3.14159 * v_along));
+	float across = 1.0 - smoothstep(0.25, 1.75, abs(v_x));
+	float ends = smoothstep(0.0, 5.0, v_l) * smoothstep(0.0, 5.0, v_len - v_l);
 	ALBEDO = tint.rgb;
-	ALPHA = tint.a * taper * v_fade;
+	ALPHA = tint.a * across * ends * v_fade;
 }
