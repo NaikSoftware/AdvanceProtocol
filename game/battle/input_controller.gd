@@ -113,7 +113,8 @@ func _recompute_zones_for_selected() -> void:
 		# джерело, що й у MoveCommand: разом із відомими ворожими мінами (§3.11).
 		var occupied: Dictionary = state.known_blocked_map(_selected_unit.owner)
 		occupied.erase(_selected_unit.pos)  # власний тайл юніта завжди прохідний для нього самого
-		_zones = Pathing.compute_zones(state.board, _selected_unit, occupied)
+		_zones = Pathing.compute_zones(state.board, _selected_unit, occupied,
+				state.known_broken_map(_selected_unit.owner))
 		_zone_overlay.show_for(_selected_unit, _zones)
 	else:
 		_zones = null

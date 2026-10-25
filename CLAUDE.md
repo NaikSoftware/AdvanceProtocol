@@ -92,6 +92,12 @@ rifle squad and the engineer.
 - **Terrain penalties are widely spaced on purpose** (`0 / 5 / 10 / 20 / 100 / impassable`).
   Compressing them makes every terrain free for every vehicle and silently deletes the off-road
   model.
+- **Tanks break forest; other vehicles need the path.** A `TANK` entering a forest tile pays the
+  forest cost and fells it for good — a *broken* forest tile, penalty 10. `LIGHT_VEHICLE`,
+  `ARTILLERY` and `ENGINEER` cannot enter standing forest at all (an infinite cost for those
+  classes), only broken tiles. Infantry walks through and never breaks it. No single tile penalty
+  can wall the wheels in and let the tanks through — the wheels have more AP — so the gate is one
+  class check in `Rules.entry_cost_at()`, not a unit×terrain matrix.
 - **Firing sets the unit's AP to 0.** A unit fires at most once per turn, and firing ends its
   activity. Every AP-consuming action other than movement is a decision to stop moving.
 - **Movement is spent, not committed.** A unit may move in as many separate steps as its AP
@@ -103,7 +109,9 @@ rifle squad and the engineer.
   the zones use fog-filtered occupancy plus known enemy mines; the walk checks the truth and
   **stops on the tile before** anything it could not see or an engineer has just found. AP is
   charged only for tiles actually entered. Planning against the true occupancy would leak — the
-  route would detour around an invisible enemy and give away where it stands.
+  route would detour around an invisible enemy and give away where it stands. **Broken forest is
+  planned the same way:** from the tiles the player knows are broken (§3.5), walked against the
+  truth.
 
 ### 3.3 Combat → [formula and worked reasoning](docs/rules/combat.md)
 
@@ -158,10 +166,13 @@ product against the target's facing. No trigonometry, no division.
 ### 3.5 Vision and fog of war → [details](docs/rules/vision-and-fog.md)
 
 - **The fog hides enemy units and their mines — never the map.** Terrain is public from the first
-  turn, at full brightness. Hiding the ground would make the two movement zones lie, since a
-  contour bending around unscouted obstacles is itself a tell. **It hides enemy units only until
-  the ground under them is scouted**, and since scouting is permanent, by mid-match it hides little
-  but mines — an opening mechanic, not a standing one. See the linked document.
+  turn, at full brightness. The one exception is forest a tank has broken (§3.2): a player knows a
+  tile is broken only once it is in their `seen` grid, so knowledge can lag the truth but never
+  contradict it, and planning never reads the truth. Hiding the ground would make the two movement
+  zones lie, since a contour bending around unscouted obstacles is itself a tell. **It hides enemy
+  units only until the ground under them is scouted**, and since scouting is permanent, by
+  mid-match it hides little but mines — an opening mechanic, not a standing one. See the linked
+  document.
 - Every player keeps **two grids**, and **`seen` is the one the rules read**: a tile ever scouted
   stays scouted, and an enemy standing on it is visible, shootable, inspectable and able to fire
   back. `visible` (inside a vision diamond right now) exists only to extend `seen`.

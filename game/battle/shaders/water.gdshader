@@ -194,7 +194,12 @@ void fragment() {
 		f *= 1.0 - 0.7 * exp(-1.2 * bank_m);
 		// Піксель ~0.08 м (MIN zoom) -> 0, ~0.3 м (MAX zoom) -> 1.
 		float far = smoothstep(0.012, 0.04, px_m);
-		vec3 sky = overcast_sky_at(reflect(-v, n), TIME, sky_clear) * (1.0 + far_sheen * far);
+		float murk_k = clamp(water_murk, 0.0, 1.0);
+		// Під ясним небом край дрібної хмари, відбитий крізь брижу, малює звивисті кола-контури.
+		// Каламутна вода відбиває небо ближче до рівної поверхні: дзеркало великих хмар, без кіл.
+		// На Річці (murk 0) нормаль та сама до біта.
+		vec3 n_sky = murk_k > 0.0 ? normalize(mix(n, vec3(0.0, 1.0, 0.0), 0.6 * murk_k)) : n;
+		vec3 sky = overcast_sky_at(reflect(-v, n_sky), TIME, sky_clear) * (1.0 + far_sheen * far);
 		// Відблиск: світліша частина неба перед камерою. Напрямок — від осі камери
 		// (поворот камери сталий), тож пляма стоїть на екрані, а вода пливе під нею, як
 		// справжній відблиск при панорамуванні. Широка пляма з пригладженої нормалі —
@@ -206,14 +211,6 @@ void fragment() {
 		vec3 r_soft = reflect(-v, slope_to_world(slope * 0.3));
 		float lobe = pow(max(dot(r_soft, gdir), 0.0), 4.0);
 		sky += vec3(0.24, 0.25, 0.26) * glint_strength * lobe;
-		float murk_k = clamp(water_murk, 0.0, 1.0);
-		// Під ясним небом край дрібної хмари, відбитий крізь брижу, малює звивисті кола-контури.
-		// Каламутна вода відбиває небо ближче до рівної поверхні: дзеркало великих хмар, без кіл.
-		if (murk_k > 0.0) {
-			vec3 sky_flat = overcast_sky_at(reflect(-v, vec3(0.0, 1.0, 0.0)), TIME, sky_clear)
-					* (1.0 + far_sheen * far);
-			sky = mix(sky, sky_flat, 0.6 * murk_k);
-		}
 		sky = mix(sky, vec3(dot(sky, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.92, 0.98, 1.02),
 				murk_k) * (1.0 - 0.8 * murk_k);
 		vec3 e = sky * reflection_tint * f * sky_reflection_gain * shallow_fade;

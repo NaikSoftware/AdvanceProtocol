@@ -11,10 +11,13 @@ Five classes drive all the matchup rules above:
 | class | role |
 | --- | --- |
 | `INFANTRY` | spots, holds ground, ignores armour; kills armour in close assault, or at range with drones (§3.9) |
-| `LIGHT_VEHICLE` | fast, thin, takes and screens ground |
-| `TANK` | the main line; slow, armoured, hits hard |
-| `ARTILLERY` | longest reach, biggest hit, helpless up close and very slow |
-| `ENGINEER` | no weapon; mines, demining, bridges, repair |
+| `LIGHT_VEHICLE` | fast, thin, takes and screens ground; enters forest only where a tank has broken it |
+| `TANK` | the main line; slow, armoured, hits hard; breaks the forest it drives into |
+| `ARTILLERY` | longest reach, biggest hit, helpless up close and very slow; enters forest only where a tank has broken it |
+| `ENGINEER` | no weapon; mines, demining, bridges, repair; enters forest only where a tank has broken it |
+
+Infantry walks through forest and never breaks it. The rule and its fog behaviour are in
+[movement-and-terrain.md](movement-and-terrain.md#action-points).
 
 Balance table. **`core/unit_types.gd` is the source of truth**; this table is documentation only.
 

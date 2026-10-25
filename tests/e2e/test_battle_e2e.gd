@@ -69,21 +69,22 @@ func _index_of(pred: Callable) -> int:
 # --- 1. Рух по місцевості ------------------------------------------------------
 
 ## Броньовик: cross_country 5, AP 68. cost = max(10, 10 + penalty - 5).
-## Штрафи: дорога 0, поле 10, ліс 20; MUD +10 до не-доріг, FROZEN -5 (мін. 0).
-## DRY:    дорога 10, поле 15, ліс 25
-## MUD:    дорога 10, поле 25, ліс 35   (поле 10+20-5, ліс 10+30-5)
-## FROZEN: дорога 10, поле 10, ліс 20   (поле max(10, 10+5-5), ліс 10+15-5)
+## Штрафи: дорога 0, поле 10, пагорб 20; MUD +10 до не-доріг, FROZEN -5 (мін. 0).
+## Пагорб, а не ліс: у цілий ліс броньовик не в'їжджає взагалі (§3.2), а штраф той самий.
+## DRY:    дорога 10, поле 15, пагорб 25
+## MUD:    дорога 10, поле 25, пагорб 35   (поле 10+20-5, пагорб 10+30-5)
+## FROZEN: дорога 10, поле 10, пагорб 20   (поле max(10, 10+5-5), пагорб 10+15-5)
 func test_movement_cost_per_terrain_and_ground_state() -> void:
 	var table: Array = [
 		[Terrain.GroundState.DRY, Terrain.Kind.ROAD, 10],
 		[Terrain.GroundState.DRY, Terrain.Kind.FIELD, 15],
-		[Terrain.GroundState.DRY, Terrain.Kind.FOREST, 25],
+		[Terrain.GroundState.DRY, Terrain.Kind.HILL, 25],
 		[Terrain.GroundState.MUD, Terrain.Kind.ROAD, 10],
 		[Terrain.GroundState.MUD, Terrain.Kind.FIELD, 25],
-		[Terrain.GroundState.MUD, Terrain.Kind.FOREST, 35],
+		[Terrain.GroundState.MUD, Terrain.Kind.HILL, 35],
 		[Terrain.GroundState.FROZEN, Terrain.Kind.ROAD, 10],
 		[Terrain.GroundState.FROZEN, Terrain.Kind.FIELD, 10],
-		[Terrain.GroundState.FROZEN, Terrain.Kind.FOREST, 20],
+		[Terrain.GroundState.FROZEN, Terrain.Kind.HILL, 20],
 	]
 	for row: Array in table:
 		await _boot(6, 3, [_spawn(ARMOURED_CAR, 0, Vector2i(1, 1)), _spawn(RIFLE, 1, Vector2i(5, 0))],
@@ -97,10 +98,11 @@ func test_movement_cost_per_terrain_and_ground_state() -> void:
 
 
 func test_movement_in_several_steps_spends_only_what_is_entered() -> void:
-	# Ряд y=1: дорога(2), поле(3), ліс(4), ліс(5). Вода над стартом — непрохідна.
+	# Ряд y=1: дорога(2), поле(3), пагорб(4), пагорб(5). Вода над стартом — непрохідна.
+	# Пагорб із тим самим штрафом, що й ліс: у цілий ліс броньовик не в'їжджає (§3.2).
 	await _boot(7, 3, [_spawn(ARMOURED_CAR, 0, Vector2i(1, 1)), _spawn(RIFLE, 1, Vector2i(6, 0))], {
-		Vector2i(2, 1): Terrain.Kind.ROAD, Vector2i(4, 1): Terrain.Kind.FOREST,
-		Vector2i(5, 1): Terrain.Kind.FOREST, Vector2i(1, 0): Terrain.Kind.WATER})
+		Vector2i(2, 1): Terrain.Kind.ROAD, Vector2i(4, 1): Terrain.Kind.HILL,
+		Vector2i(5, 1): Terrain.Kind.HILL, Vector2i(1, 0): Terrain.Kind.WATER})
 	var car: Unit = _unit(1)
 	await _e2e.act(Vector2i(1, 1), Vector2i(2, 1))
 	assert_eq(car.ap, 58, "дорога 10")
@@ -110,9 +112,9 @@ func test_movement_in_several_steps_spends_only_what_is_entered() -> void:
 	assert_eq(car.ap, 43, "поле 15 — окремий крок того ж ходу (рух витрачається, не фіксується)")
 	_e2e.tap(Vector2i(4, 1))
 	await _e2e.confirm()
-	assert_eq(car.ap, 18, "ліс 25")
+	assert_eq(car.ap, 18, "пагорб 25")
 	assert_eq(car.pos, Vector2i(4, 1))
-	# Ліс 25 > 18: тайл поза зоною — тап не створює прев'ю, кнопка лишається вимкненою.
+	# Пагорб 25 > 18: тайл поза зоною — тап не створює прев'ю, кнопка лишається вимкненою.
 	_e2e.tap(Vector2i(5, 1))
 	assert_true((_e2e.hud().get_node("%ConfirmButton") as Button).disabled, "поза зоною AP")
 	assert_eq(car.pos, Vector2i(4, 1))

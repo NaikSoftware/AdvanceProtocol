@@ -89,6 +89,7 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.MineTriggered.new(Vector2i(5, 5), 3),
 		Events.MineRevealed.new(Vector2i(5, 5), 1),
 		Events.BridgeChanged.new(Vector2i(6, 6), true),
+		Events.ForestBroken.new(Vector2i(7, 7)),
 		Events.UnitRepaired.new(4, 20, 80),
 		Events.ApChanged.new(1, 30),
 		Events.TurnEnded.new(0),
@@ -401,3 +402,12 @@ func test_bridge_changed_calls_board_rebuild() -> void:
 	player = EventPlayer.new(Callable(), Callable(), func() -> void: calls[0] += 1)
 	await player.play([Events.BridgeChanged.new(Vector2i(1, 1), true)] as Array[Events.BattleEvent])
 	assert_eq(calls[0], 1)
+
+
+## Просіка: подія не фільтрована за спостерігачем (§6), тож вигляд лише сповіщається
+## сигналом без даних події; що малювати, вирішує known_broken_map(глядача).
+func test_forest_broken_emits_forest_changed_without_payload() -> void:
+	var seen: Array[int] = [0]
+	player.forest_changed.connect(func() -> void: seen[0] += 1)
+	await player.play([Events.ForestBroken.new(Vector2i(1, 1))] as Array[Events.BattleEvent])
+	assert_eq(seen[0], 1)

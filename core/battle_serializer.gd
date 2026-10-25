@@ -27,6 +27,9 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var mines: Array = []
 	for m in state.mines:
 		mines.append({"x": m.pos.x, "y": m.pos.y, "owner": m.owner, "known_to": m.known_to.duplicate()})
+	var broken_forest: Array = []
+	for p: Vector2i in state.broken_forest:
+		broken_forest.append({"x": p.x, "y": p.y})
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
@@ -45,6 +48,9 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"eliminated": state.eliminated.duplicate(),
 		"next_unit_id": state._next_unit_id,
 		"units": units, "mines": mines,
+		# Лише правда: знання кожного гравця про просіки виводиться з неї та його seen
+		# (BattleState.known_broken_map()), а seen і так зберігається нижче.
+		"broken_forest": broken_forest,
 		"vision": vision,
 		"damage_dealt": state.damage_dealt.duplicate(),
 	}
@@ -106,6 +112,11 @@ static func from_dict(data: Dictionary) -> BattleState:
 		for k in (m_data["known_to"] as Array):
 			mine.known_to.append(bool(k))
 		state.mines.append(mine)
+
+	# Збереження до появи просік поля не мають — лісу там ніхто не валив.
+	state.broken_forest.clear()
+	for f_data in (data.get("broken_forest", []) as Array):
+		state.broken_forest[Vector2i(int(f_data["x"]), int(f_data["y"]))] = true
 
 	state.vision.clear()
 	for v_data in (data["vision"] as Array):
@@ -192,6 +203,18 @@ static func _is_valid(data: Dictionary) -> bool:
 		if typeof(m) != TYPE_DICTIONARY or not (_in(m, "x", 0, w - 1) and _in(m, "y", 0, h - 1)
 				and _in(m, "owner", 0, pc - 1) and _bools(m, "known_to", pc)):
 			return false
+
+	if data.has("broken_forest"):
+		if not _arr(data, "broken_forest"):
+			return false
+		var tiles: Array = board["tiles"]
+		for f in (data["broken_forest"] as Array):
+			# Просіка буває лише в лісі: інакше Terrain.penalty() мовчки ігнорувала б її,
+			# а вигляд валив би крони там, де їх ніколи не було.
+			if typeof(f) != TYPE_DICTIONARY or not (_in(f, "x", 0, w - 1) and _in(f, "y", 0, h - 1)):
+				return false
+			if int(tiles[int(f["y"]) * w + int(f["x"])]) != Terrain.Kind.FOREST:
+				return false
 
 	return true
 
