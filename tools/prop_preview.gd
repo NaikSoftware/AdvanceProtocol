@@ -111,5 +111,5 @@ func _tank_box(inst: Node3D, cell: Vector2i) -> MeshInstance3D:
 	mat.albedo_color = Color(0.25, 0.27, 0.21)
 	mat.roughness = 0.8
 	box.material_override = mat
-	box.position = Vector3(cell.x + right + 0.35, 0.15, cell.y)
+	box.position = Vector3(cell.x + right + 0.8, 0.15, cell.y - 0.8)
 	return box

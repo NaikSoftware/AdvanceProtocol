@@ -5,6 +5,8 @@ blender -b --factory-startup -P fix_house.py -- in.glb out.glb <fix> [key=value 
   fix = h2   замкнути задню стіну (у моделі її нема)
   fix = h3   сонячні панелі: синьо-чорні, низька насиченість, сітка не світліша за половину яскравості
   fix = h4   приглушити червоний димар
+  fix = ground  sink=<м>  опустити й зрізати нижче землі
+  fix = stump | boulder  світліший зріз пня / знебарвлення валуна
 """
 import bpy, bmesh, sys, math, json, struct
 import numpy as np
@@ -117,6 +119,16 @@ elif fix == 'h4':
     px[hot, 0] = (lum * 1.25)[hot]; px[hot, 1] = (lum * 0.95)[hot]; px[hot, 2] = (lum * 0.8)[hot]
     print('H4 hot px', int(hot.sum()))
     im.pixels.foreach_set(px.ravel())
+
+elif fix == 'ground':
+    # модель висить на кількох шпичаках: опустити на sink м, усе нижче землі зрізати (низу не видно)
+    sink = float(opt['sink']) / M
+    ob.data.transform(__import__('mathutils').Matrix.Translation((0, 0, -sink)))
+    bm = bmesh.new(); bm.from_mesh(ob.data)
+    bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces), plane_co=(0, 0, 0), plane_no=(0, 0, 1), dist=1e-7)
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.calc_center_median().z < -1e-6], context='FACES')
+    bm.to_mesh(ob.data); bm.free()
+    print('H4 ground cut, sink m', sink * M)
 
 elif fix in ('stump', 'boulder'):
     im = base_image()

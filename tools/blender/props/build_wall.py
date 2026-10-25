@@ -39,14 +39,16 @@ img.name = 'wall_albedo'
 
 # нормаль зі «висоти» (щілини кладки темні = заглиблення), метод скінченних різниць
 hgt = (base * (1 - 0.3 * moss)).astype(np.float32)
-gx = (np.roll(hgt, -1, 1) - np.roll(hgt, 1, 1)) * 6.0
-gy = (np.roll(hgt, -1, 0) - np.roll(hgt, 1, 0)) * 6.0
+gx = (np.roll(hgt, -1, 1) - np.roll(hgt, 1, 1)) * 14.0
+gy = (np.roll(hgt, -1, 0) - np.roll(hgt, 1, 0)) * 14.0
 nrm = np.stack([-gx, -gy, np.ones_like(gx)], -1)
 nrm /= np.linalg.norm(nrm, axis=-1, keepdims=True)
 npx = np.ones((N, N, 4), dtype=np.float32); npx[..., :3] = nrm * 0.5 + 0.5
-nimg = bpy.data.images.new('wall_normal', N, N)
+nimg = bpy.data.images.new('wall_normal', N, N, is_data=True)
+nimg.colorspace_settings.name = 'Non-Color'
 nimg.pixels.foreach_set(npx.reshape(-1, 4).ravel())
-nimg.colorspace_settings.name = 'Non-Color'; nimg.pack()
+print('WALLNORMAL mean', float(npx[..., :3].mean()))
+nimg.update(); nimg.pack()
 
 mat = bpy.data.materials.new('wall'); mat.use_nodes = True
 bsdf = mat.node_tree.nodes['Principled BSDF']

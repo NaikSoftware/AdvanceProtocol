@@ -5,6 +5,7 @@ from mathutils import Matrix
 a = sys.argv[sys.argv.index('--') + 1:]
 src, dst, limit, names = a[0], a[1], int(a[2]), a[3].split(',')
 k = float(a[4]) if len(a) > 4 else 0.125
+tex = int(a[5]) if len(a) > 5 else 512
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=src)
@@ -42,8 +43,8 @@ ob.data.transform(Matrix.Diagonal((k, k, k, 1)))
 lo, hi = bbox()
 ob.data.transform(Matrix.Translation((-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2])))
 for im in bpy.data.images:
-    if im.size[0] > 256:
-        im.scale(256, 256)
+    if im.size[0] > tex:
+        im.scale(tex, tex)
 bpy.ops.object.select_all(action='DESELECT')
 ob.select_set(True)
 bpy.ops.export_scene.gltf(filepath=dst, export_format='GLB', use_selection=True, export_apply=True)
