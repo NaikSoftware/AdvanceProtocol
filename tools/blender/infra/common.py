@@ -350,12 +350,12 @@ CONCRETE_GREY = (0.564, 0.53, 0.484)
 
 
 def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, top_z=None, shade=0.18,
-                 ground=True, k=5.0, seams=False, val=1.0, band=None, streak_k=0.5, streak_len=0.5):
+                 ground=True, k=5.0, seams=False, val=1.0, band=None, streak_k=0.5, streak_len=0.5, tint=(1, 1, 1)):
     """Блідий бетон одного значення для всіх виробів. relief(size) -> висоти 0..1 (йдуть у нормаль);
     бруд знизу (до 0,3 м від землі), патьоки під верхом (top_z, м) і плями з періодом у плитку."""
     tv = tile_v or tile
     a = acg_albedo("Concrete034", (1, 1, 1), 0.3, 0, seed, 0.0, paint=CONCRETE_GREY, contrast=0.3, size=size)
-    a = a * val * (0.9 + 0.2 * fbm(size, seed + 7, 2, 3))[..., None]       # велика пляма
+    a = a * val * np.array(tint) * (0.9 + 0.2 * fbm(size, seed + 7, 2, 3))[..., None]       # велика пляма
     z = ((np.arange(size) + 0.5) / size * tv)[:, None]                      # метри над землею (рядок = v)
     if ground:
         a = a * (1 - 0.4 * np.exp(-z / 0.3))[..., None]

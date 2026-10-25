@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bee8812mb5nj1"
-path="res://.godot/imported/f7_water_tower_f7_water_tower_normal.jpg-0256c39fe9d897e611212a93d599f3cc.ctex"
+uid="uid://hc4qjt3jma4d"
+path="res://.godot/imported/f1_farm_barn_f1_farm_barn_normal.png-a2a1330b4913f01a628575ad8d9f9502.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "c92b790de13cbf7f3c7f6fa17e8347d7"
 }
 
 [deps]
 
-source_file="res://assets/props/f7_water_tower_f7_water_tower_normal.jpg"
-dest_files=["res://.godot/imported/f7_water_tower_f7_water_tower_normal.jpg-0256c39fe9d897e611212a93d599f3cc.ctex"]
+source_file="res://assets/props/f1_farm_barn_f1_farm_barn_normal.png"
+dest_files=["res://.godot/imported/f1_farm_barn_f1_farm_barn_normal.png-a2a1330b4913f01a628575ad8d9f9502.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

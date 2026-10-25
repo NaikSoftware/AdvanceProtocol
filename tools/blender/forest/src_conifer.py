@@ -2,7 +2,7 @@
 
 Запуск:
   blender -b --factory-startup -P src_conifer.py -- <файл.blend> <об'єкт> <вихід> <тег>
-      [воксель=1.7] [карток=45] [частка_без_крони=0] [спрайтів=0]
+      [воксель=1.7] [карток=45] [частка_без_крони=0] [спрайтів=0] [skirt]
 Приклад: ... -- pine_tree_01_1k.blend pine_tree_01_a_LOD1 out pine_a 1.7 45 0.55 6
 LOD0 (4–6 млн граней) не потрібен: спрайт іде з ~1 см на піксель, а LOD1 дає 0,4–0,7 млн.
 Файл .blend лишається поза репозиторієм: Godot ламає імпорт, якщо бачить .blend у проєкті.
@@ -22,6 +22,7 @@ VOXEL = float(argv[4]) if len(argv) > 4 else 1.7
 CARDS = int(argv[5]) if len(argv) > 5 else 45
 KEEP_ABOVE = float(argv[6]) if len(argv) > 6 else 0.0
 SPRITES = int(argv[7]) if len(argv) > 7 else 0
+SKIRT = len(argv) > 8 and argv[8] == "skirt"
 out = os.path.join(OUT, TAG)
 os.makedirs(out, exist_ok=True)
 
@@ -57,7 +58,11 @@ cam = cl.setup_render()
 for i, t in enumerate(is_trunk):
     if t:
         ob.data.materials[i] = hidden
-sprites = cl.render_sprites(cam, twig, out, SPRITES) if SPRITES else []
+# Пучок 1,3 м у 256 px (0,5 см на піксель): пучки хвої з кінців гілок видно як промені.
+sprites = cl.render_sprites(cam, twig, out, SPRITES, size_m=1.3, res=256, outer=55) if SPRITES else []
+if SKIRT:
+    cards += cl.skirt_cards(twig, crown_base)
+    crown_base = 0.6
 
 for i, m in enumerate(mats):
     ob.data.materials[i] = m if is_trunk[i] else hidden

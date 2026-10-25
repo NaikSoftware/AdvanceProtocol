@@ -19,6 +19,10 @@ extends RefCounted
 
 signal playback_finished
 
+## Просіку повалено. Без даних: події не фільтровані за спостерігачем (§6), тож що саме
+## малювати, вигляд бере з BattleState.known_broken_map(глядача), а не з події.
+signal forest_changed
+
 ## Крок руху юніта тайл за тайлом (§1.4 — атмосфера читається, не
 ## пролітає повз). Той самий порядок величини, що й FACE_TURN_DURATION у
 ## UnitView.
@@ -29,6 +33,8 @@ var _unit_view_lookup: Callable
 ## Дає доступ до `Unit.max_hp()` — єдиного дозволеного джерела максимуму.
 var _unit_lookup: Callable
 var _is_playing: bool = false
+## Екран бою пішов посеред паузи (зберегти й вийти): після неї нічого не грається.
+var _stopped: bool = false
 
 
 ## Перебудова BoardView з нинішньої Board (BridgeChanged).
@@ -78,8 +84,17 @@ func play(events: Array[Events.BattleEvent]) -> void:
 		if events[i] is Events.UnitTurned and i > last_shot:
 			awaitable = null
 		await awaitable
+		if _stopped:
+			_is_playing = false
+			return
 	_is_playing = false
 	playback_finished.emit()
+
+
+## Паузи — твіни дерева, а не екрана, тож переживають екран; без зупинки програвач після
+## паузи грав би далі й кликав завершення у звільнений екран.
+func stop() -> void:
+	_stopped = true
 
 
 func is_playing() -> bool:
@@ -160,6 +175,9 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_mine_revealed(event)
 	elif event is Events.BridgeChanged:
 		return _handle_bridge_changed(event)
+	elif event is Events.ForestBroken:
+		forest_changed.emit()
+		return null
 	elif event is Events.UnitRepaired:
 		return _handle_unit_repaired(event)
 	elif event is Events.ApChanged:
@@ -240,7 +258,7 @@ func _play_shot(shooter_id: int, target_id: int, weapon: int = -1) -> Variant:
 	if target_view != null:
 		var target: Unit = _resolve_unit(target_id)
 		var armoured: bool = target != null and UnitTypes.is_vehicle(target.unit_class())
-		var hit: Node3D = BattleFx.spawn_hit(target_view.get_parent(), target_view.position, weapon, armoured)
+		BattleFx.spawn_hit(target_view.get_parent(), target_view.position, weapon, armoured)
 		awaitable = _pause(BattleFx.HIT_HOLD_SEC)
 	return awaitable
 
@@ -263,9 +281,9 @@ func _resolve_unit(unit_id: int) -> Unit:
 ## §3.9: залишок дронів публічний і має готовий візуал — UnitView.set_drones.
 func _handle_drone_launched(event: Events.DroneLaunched) -> Variant:
 	var view: UnitView = _resolve_unit_view(event.attacker_id)
-	if view == null:
-		return null
-	view.set_drones(event.drones_left)
+	if view != null:
+		view.set_drones(event.drones_left)
+	# Влучання — і від загону, якого глядач не бачить, як і від гармати невидимого стрільця.
 	return _play_shot(event.attacker_id, event.target_id, BattleFx.Weapon.DRONE)
 
 

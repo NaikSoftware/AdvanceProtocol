@@ -14,8 +14,27 @@ static func entry_cost(unit: Unit, penalty: int) -> int:
 		return Terrain.IMPASSABLE
 	return maxi(10, 10 + penalty - unit.cross_country())
 
-static func entry_cost_at(unit: Unit, board: Board, p: Vector2i) -> int:
-	return entry_cost(unit, board.penalty_at(p))
+static func entry_cost_at(unit: Unit, board: Board, p: Vector2i, broken: bool = false) -> int:
+	## broken — чи ліс на p повалено В ТОМУ ЗНАННІ, з якого рахує викликач: планування
+	## передає знання гравця (BattleState.known_broken_map()), хід — правду. За
+	## замовчуванням «не повалено», тож забутий аргумент дає обережну, а не всезнаючу ціну.
+	if not board.in_bounds(p):
+		return Terrain.IMPASSABLE
+	var kind: int = board.kind_at(p)
+	# §3.2: цілий ліс — стіна для техніки, що не валить дерев. Одним штрафом на тайл
+	# цього не виразити: колісна техніка має БІЛЬШЕ AP, ніж танки, тож будь-який
+	# штраф, який пропускає важкий танк (cc 9, 40 AP: p <= 39), пропускає й
+	# бронеавтомобіль (cc 5, 68 AP: стіна лише від p > 63). Тому — одна умова за
+	# класом, і вона повертає ту саму нескінченність, яку вже читає Pathing.
+	if kind == Terrain.Kind.FOREST and not broken and not passes_standing_forest(unit):
+		return Terrain.IMPASSABLE
+	return entry_cost(unit, Terrain.penalty(kind, board.ground_state, broken))
+
+static func passes_standing_forest(unit: Unit) -> bool:
+	## Піхота проходить ліс пішки, танк — валячи його (MoveCommand). Решта техніки —
+	## лише просіками.
+	var c: int = unit.unit_class()
+	return c == UnitTypes.UnitClass.INFANTRY or c == UnitTypes.UnitClass.TANK
 
 static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos: Vector2i) -> int:
 	## §3.4. Цілі числа, без тригонометрії.

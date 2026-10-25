@@ -21,6 +21,11 @@ The detail behind §3.5 and §3.11 of CLAUDE.md — what each player can see, an
   bend around obstacles the player is not supposed to know about — which is itself a tell. With
   the terrain public, the zones say exactly what they mean, and the only thing that can surprise a
   move is an enemy.
+- **Broken forest is the one piece of terrain behind the fog.** A tile a tank has felled
+  ([§3.2](movement-and-terrain.md#action-points)) is known as broken only once it is in the
+  player's `seen` grid. Because breaking and scouting are both permanent, that knowledge only ever
+  lags: a tile the player believes standing may be broken, never the reverse. The zones stay honest
+  — they under-report a path rather than invent one — and terrain still never surprises a move.
 - Every player keeps **two grids**, and `seen` is the load-bearing one:
   - **`seen`** — every tile this player has ever scouted. It is drawn as a fog tint over the ground
     nobody of theirs has reached, and **it is what gates the rules**: an enemy standing on a tile

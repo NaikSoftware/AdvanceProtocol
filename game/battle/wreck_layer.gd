@@ -163,6 +163,8 @@ func set_wind(wind: Vector3) -> void:
 ## Розігрів шейдерів стовпа, вогню й обгорілого матеріалу: кілька кадрів малюємо по
 ## одному нульовому екземпляру й крихітну коробку в `at`, далі все як було.
 func warm_up(at: Vector3) -> void:
+	if _warm != null:
+		return
 	_warm = MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = Vector3.ONE * 0.0001

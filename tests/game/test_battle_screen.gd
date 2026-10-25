@@ -1206,8 +1206,32 @@ func test_setup_warms_up_every_fx_material_once() -> void:
 	var screen: Node3D = _two_tanks_in_corners(service)
 	var units: Node3D = screen.get_node("%Units")
 	var layer: WreckLayer = screen.get_node("%WreckLayer")
-	assert_eq(units.find_children("Explosion*", "", false, false).size(), 1, "куля розігріву")
+	var warm: Array[Node] = units.find_children("Explosion*", "", false, false)
+	assert_eq(warm.size(), 1, "куля розігріву")
+	# Розігрів мусить бути невидимим: жодного спалаху чи світла біля юніта гравця.
+	assert_eq((warm[0].get_node("Light") as OmniLight3D).light_energy, 0.0)
+	assert_eq((warm[0].get_node("Flash") as Node3D).scale, Vector3.ONE * 0.0001)
+	var ball := (warm[0].get_node("Ball") as MeshInstance3D).material_override as ShaderMaterial
+	assert_eq(ball.get_shader_parameter("size"), 0.0001)
 	assert_true(layer.is_warming(), "стовп, вогонь і обгорілий матеріал теж малюються раз")
 	_finish_all_processed_tweens()
 	assert_false(layer.is_warming())
 	assert_eq(layer.column_count(), 0)
+
+
+
+## Бій зі збереження теж не застигає на першому вбивстві: розігрів — на першому гейті.
+func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	_two_tanks_in_corners(service)
+	var screen: Node3D = _screen()
+	screen.resume(service)
+	var units: Node3D = screen.get_node("%Units")
+	assert_eq(units.find_children("Explosion*", "", false, false).size(), 0, "за гейтом камера ще ніде")
+	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	assert_eq(units.find_children("Explosion*", "", false, false).size(), 1)
+	assert_true((screen.get_node("%WreckLayer") as WreckLayer).is_warming())
+	_finish_all_processed_tweens()
+	screen._on_gate_confirmed()
+	assert_false((screen.get_node("%WreckLayer") as WreckLayer).is_warming(), "розігрів — лише раз")

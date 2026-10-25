@@ -471,8 +471,6 @@ func is_drone_threatened() -> bool:
 	return _drone_threatened.visible
 
 
-## Твінує _silhouette, а не self: self.scale належить play_destroyed(), і два
-## твіни на одну властивість змагались би на пострілі, який убиває.
 func standing_figures() -> int:
 	return _standing
 
@@ -493,6 +491,8 @@ func _set_standing(count: int) -> void:
 	UnitSilhouettes.set_standing(figs, count, _owner_color)
 
 
+## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
+## твіни на одну властивість змагались би на пострілі, який убиває.
 func play_shot() -> Signal:
 	var tween: Tween = create_tween()
 	tween.tween_property(_silhouette, "scale", Vector3.ONE * _SHOT_PUNCH_SCALE, _SHOT_PUNCH_UP)

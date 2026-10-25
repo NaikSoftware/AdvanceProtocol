@@ -33,6 +33,8 @@ extends Resource
 @export var foliage_tint: Color = Color(1, 1, 1)
 ## 0..1: каламутна вода під ясним небом — відбите небо сіріше й тьмяніше, товща оливкова.
 @export_range(0.0, 1.0) var water_murk: float = 0.0
+## Вітер над водою: 1 — брижа Річки; менше — дрібніша й повільніша брижа тихого дня.
+@export_range(0.0, 1.0) var water_wind: float = 1.0
 @export var rain: bool = false
 ## Крапель у коробці дощу довкола кадру; на будь-якому віддаленні камери їх видно стільки ж.
 @export var rain_amount: int = 0

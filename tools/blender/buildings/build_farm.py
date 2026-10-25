@@ -144,6 +144,31 @@ def hangar(damaged):
         bent_sheet(b, pc, (pc[0] - 1.5, pc[1], pc[2] - 2.0), 1.4, "galv", 0.4, "y")
         pd = slope_pt(-1, edge(-1, -3.0, "hi"), -3.0)
         bent_sheet(b, pd, (pd[0] - 1.4, pd[1], pd[2] - 2.2), 1.4, "galv", 0.35, "y")
+        # відігнуті краї листів: 3 язики 1.5-2.5 м загинаються вниз на 0.3-0.6 м у проріз
+        def flap(side, which, y0f, y1f, drop):
+            pts = [r for r in HOLE[side] if y0f <= r[0] <= y1f]
+            for i in range(len(pts) - 1):
+                (ya_, tl_a, th_a), (yb_, tl_b, th_b) = pts[i], pts[i + 1]
+                ta_, tb_ = (tl_a, tl_b) if which == "lo" else (th_a, th_b)
+                dx = (-0.45 if which == "lo" else 0.45) * side
+                za, zb = EAVE + 3.0 * ta_, EAVE + 3.0 * tb_
+                xa_, xb_ = side * 9.0 * (1 - ta_), side * 9.0 * (1 - tb_)
+                q = [(xa_, ya_, za), (xb_, yb_, zb), (xb_ + dx, yb_, zb - drop), (xa_ + dx, ya_, za - drop)]
+                b.poly_up(q, "galv")
+        # завальцьований край 10-20 см уздовж країв пролому
+        for side in (1, -1):
+            pts = HOLE[side]
+            for i in range(0, len(pts) - 2, 2):
+                for which in ("lo", "hi"):
+                    ia, ib = pts[i], pts[i + 2]
+                    ta, tb = (ia[1], ib[1]) if which == "lo" else (ia[2], ib[2])
+                    p0 = (side * 9.0 * (1 - ta), ia[0], EAVE + 3.0 * ta + 0.08)
+                    p1 = (side * 9.0 * (1 - tb), ib[0], EAVE + 3.0 * tb + 0.08)
+                    if abs(p0[1] - p1[1]) > 0.1:
+                        b.beam(p0, p1, 0.12, "galv", 0.14)
+        flap(1, "lo", -3.2, -1.0, 0.5)
+        flap(1, "hi", 0.5, 2.8, 0.4)
+        flap(1, "lo", 2.0, 4.0, 0.55)
         # купа сталі й утеплювача на підлозі під проломом
         mound(b, 3.0, -0.5, 4.2, 5.0, 1.4, 33, mat="rubble_steel", z0=0.62, rings=5, segs=16)
         lib.chunks(b, 3.0, -0.5, 3.6, 1.5, 24, ("rubble_steel", "insul", "clad_burnt"), 31, z0=0.62, smin=0.35, smax=0.9)
@@ -167,7 +192,7 @@ def hangar(damaged):
             b.box(gx, gy + 0.14 * sg, 0.6, 5.0, 0.12, 5.0, "door_steel")
             b.box(gx, gy + 0.2 * sg, 5.2, 5.0, 0.12, 0.35, "metal_dark")
     b.box(x1 + 0.1, -8.0, 0.6, 0.2, 1.1, 2.1, "door_steel")
-    lib.finish(b, "f3_hangar_damaged" if damaged else "f3_hangar", out, tri_limit=2200 if damaged else 1000, footprint=(3, 5), anchor=(0, 0),
+    lib.finish(b, "f3_hangar_damaged" if damaged else "f3_hangar", out, tri_limit=3000 if damaged else 1000, footprint=(3, 5), anchor=(0, 0),
                density={"clad_wall": 0.5, "silo_concrete": 0.4, "metal_dark": 0.6, "door_steel": 0.6, "clad_burnt": 0.8, "clad_inner": 0.4})
 
 
@@ -244,6 +269,7 @@ def fuel():
         b.box(cx + ix, 0, 0.08, 0.8, 10.1, 0.26, "apron", top="apron")
         for py in (-4.4, -3.0, 3.0, 4.4):
             b.box(cx + ix, py, 0.3, 0.5, 0.9, 1.8, "pump", top="dark")
+            b.box(cx + ix, py - 0.47, 1.0, 0.5, 0.05, 0.55, "pump_light")
     # магазин-кіоск 8 x 5 x 3: суцільне скління по фасаду, двері, виступ даху
     b.box(10.0, 0, 0.08, 8.0, 5.0, 3.0, "kiosk", top="bitumen")
     b.window(("y", 2.5, 1), 8.3, 0.4, 4.0, 2.5)                          # суцільне скління ~4 м

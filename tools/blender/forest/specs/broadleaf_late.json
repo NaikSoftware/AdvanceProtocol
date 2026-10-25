@@ -2,20 +2,18 @@
  "atlas": "forest_broadleaf_late",
  "size": 1024,
  "alpha_cutoff": 0.45,
- "card_keep": 0.55,
+ "card_keep": 0.5,
  "sprite_sets": {
   "birch": [
    {
     "src": "birch_late",
     "grade": {
-     "tint": [
-      1.05,
-      1.0,
-      0.86
-     ],
-     "sat": 0.45,
-     "contrast": 0.8,
-     "target_y": 0.06
+     "lab": {
+      "L": 26,
+      "C": 6,
+      "h": 70,
+      "contrast_l": 0.9
+     }
     }
    }
   ],
@@ -23,14 +21,12 @@
    {
     "src": "broad_late",
     "grade": {
-     "tint": [
-      1.05,
-      1.0,
-      0.86
-     ],
-     "sat": 0.45,
-     "contrast": 0.8,
-     "target_y": 0.06
+     "lab": {
+      "L": 26,
+      "C": 6,
+      "h": 70,
+      "contrast_l": 0.9
+     }
     }
    }
   ],
@@ -38,14 +34,12 @@
    {
     "src": "oak_late",
     "grade": {
-     "tint": [
-      1.05,
-      1.0,
-      0.86
-     ],
-     "sat": 0.45,
-     "contrast": 0.8,
-     "target_y": 0.06
+     "lab": {
+      "L": 26,
+      "C": 6,
+      "h": 70,
+      "contrast_l": 0.9
+     }
     }
    }
   ],
@@ -53,14 +47,12 @@
    {
     "src": "shrub_late",
     "grade": {
-     "tint": [
-      1.05,
-      1.0,
-      0.86
-     ],
-     "sat": 0.45,
-     "contrast": 0.8,
-     "target_y": 0.06
+     "lab": {
+      "L": 26,
+      "C": 6,
+      "h": 70,
+      "contrast_l": 0.9
+     }
     }
    }
   ]
@@ -147,8 +139,8 @@
     "target_y": 0.06
    },
    "sprites": "oak",
-   "trunk_sides": 6,
-   "card_scale": 1.6
+   "card_keep": 0.18,
+   "trunk_sides": 6
   },
   {
    "node": "Hero_Lime",
@@ -157,8 +149,8 @@
     "target_y": 0.07
    },
    "sprites": "broad",
-   "trunk_sides": 6,
-   "card_scale": 1.5
+   "card_keep": 0.16,
+   "trunk_sides": 6
   },
   {
    "node": "Hero_Birch",
@@ -168,8 +160,8 @@
     "sat": 0.5
    },
    "sprites": "birch",
-   "trunk_sides": 6,
-   "card_scale": 1.25
+   "card_keep": 0.1,
+   "trunk_sides": 6
   },
   {
    "node": "Hero_Poplar",
@@ -178,8 +170,8 @@
     "target_y": 0.07
    },
    "sprites": "broad",
-   "trunk_sides": 6,
-   "card_scale": 1.3
+   "card_keep": 0.08,
+   "trunk_sides": 6
   }
  ]
 }

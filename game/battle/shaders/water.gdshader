@@ -21,6 +21,9 @@ global uniform float sky_reflection_gain;
 // небо сіріше й тьмяніше, товща оливково-темна. Сільський став згори на сонці темний, а не
 // блакитний: синє небо віддзеркалюється в ньому лише сірувато.
 global uniform float water_murk;
+// Вітер над водою (`BattleLook.water_wind`): 1 — брижа Річки, менше — тихіше повітря, і брижа
+// водночас дрібніша й повільніша.
+global uniform float water_wind;
 
 uniform sampler2D kind_map : filter_nearest, repeat_disable;
 // Клітинка, що відповідає пікселю (0, 0) kind_map (від'ємна при відступі).
@@ -137,26 +140,29 @@ void fragment() {
 		// (гребені в 1.5 раза довші впоперек течії, ~0.5–0.8 м між ними), 0.8 м/с; B — ~0.25–0.4 м
 		// (0.5 x 0.67 клітинки), трохи повернутий і повільніший, щоб шари не збігалися.
 		// Легке хитання UV (0.01) прибирає рівномірне ковзання текстури одним цілим.
-		vec2 wob = 0.01 * vec2(sin(fp.y * 3.0 + TIME * 0.7), cos(fp.x * 2.3 + TIME * 0.5));
+		// Час брижі йде з вітром: у тихе повітря вона й дрібніша, і повільніша.
+		float wt = TIME * water_wind;
+		vec2 wob = 0.01 * vec2(sin(fp.y * 3.0 + wt * 0.7), cos(fp.x * 2.3 + wt * 0.5));
 		// Похідні UV брижі — з похідних p (кадр течії — поворот), ×1.5: міп на ~0.6 рівня
 		// грубший, і далекі гребені зливаються в тон, а не в смуги.
 		mat2 frame = mat2(vec2(fdir.x, fperp.x), vec2(fdir.y, fperp.y));
 		vec2 fdx = frame * dpx * 1.5;
 		vec2 fdy = frame * dpy * 1.5;
 		vec2 ka = vec2(1.0, 0.67);
-		vec2 ta = textureGrad(wave_a, fp * ka + wob + vec2(TIME * 0.1, 0.0), fdx * ka, fdy * ka).rg
+		vec2 ta = textureGrad(wave_a, fp * ka + wob + vec2(wt * 0.1, 0.0), fdx * ka, fdy * ka).rg
 				* 2.0 - 1.0;
 		mat2 rot = mat2(vec2(0.985, 0.174), vec2(-0.174, 0.985));
 		vec2 kb = vec2(2.0, 1.5);
-		vec2 tb = textureGrad(wave_b, rot * fp * kb - wob + vec2(TIME * 0.15, 0.0), rot * (fdx * kb),
+		vec2 tb = textureGrad(wave_b, rot * fp * kb - wob + vec2(wt * 0.15, 0.0), rot * (fdx * kb),
 				rot * (fdy * kb)).rg * 2.0 - 1.0;
 		// Розтяг упоперек течії зменшує нахил уздовж неї в 1.5 раза — повертаємо.
 		// Третя октава (0.25) під ~60°, що дрейфує в інший бік: брижа не рухається одним напрямком.
 		mat2 rot60 = mat2(vec2(0.5, 0.866), vec2(-0.866, 0.5));
 		vec2 kc = vec2(1.3, 1.0);
-		vec2 tc = textureGrad(wave_a, rot60 * fp * kc + wob.yx + vec2(-TIME * 0.07, TIME * 0.06),
+		vec2 tc = textureGrad(wave_a, rot60 * fp * kc + wob.yx + vec2(-wt * 0.07, wt * 0.06),
 				rot60 * (fdx * kc), rot60 * (fdy * kc)).rg * 2.0 - 1.0;
-		vec2 sf = (ta * 0.55 + tb * 0.2 + transpose(rot60) * tc * 0.25) * vec2(0.4, 0.27);
+		vec2 sf = (ta * 0.55 + tb * 0.2 + transpose(rot60) * tc * 0.25) * vec2(0.4, 0.27)
+				* water_wind;
 		// Нахил гребенів слабшає зі слідом пікселя вздовж погляду (розмір пікселя / sin кута до
 		// води): коли слід ширший за ~0.15 м, гребені під пологим кутом складаються в
 		// горизонтальне штрихування, і рівна поверхня з відбитим небом читається краще.
@@ -177,7 +183,12 @@ void fragment() {
 		f *= 1.0 - 0.7 * exp(-1.2 * bank_m);
 		// Піксель ~0.08 м (MIN zoom) -> 0, ~0.3 м (MAX zoom) -> 1.
 		float far = smoothstep(0.012, 0.04, px_m);
-		vec3 sky = overcast_sky_at(reflect(-v, n), TIME, sky_clear) * (1.0 + far_sheen * far);
+		float murk_k = clamp(water_murk, 0.0, 1.0);
+		// Під ясним небом край дрібної хмари, відбитий крізь брижу, малює звивисті кола-контури.
+		// Каламутна вода відбиває небо ближче до рівної поверхні: дзеркало великих хмар, без кіл.
+		// На Річці (murk 0) нормаль та сама до біта.
+		vec3 n_sky = murk_k > 0.0 ? normalize(mix(n, vec3(0.0, 1.0, 0.0), 0.6 * murk_k)) : n;
+		vec3 sky = overcast_sky_at(reflect(-v, n_sky), TIME, sky_clear) * (1.0 + far_sheen * far);
 		// Відблиск: світліша частина неба перед камерою. Напрямок — від осі камери
 		// (поворот камери сталий), тож пляма стоїть на екрані, а вода пливе під нею, як
 		// справжній відблиск при панорамуванні. Широка пляма з пригладженої нормалі —
@@ -189,7 +200,6 @@ void fragment() {
 		vec3 r_soft = reflect(-v, slope_to_world(slope * 0.3));
 		float lobe = pow(max(dot(r_soft, gdir), 0.0), 4.0);
 		sky += vec3(0.24, 0.25, 0.26) * glint_strength * lobe;
-		float murk_k = clamp(water_murk, 0.0, 1.0);
 		sky = mix(sky, vec3(dot(sky, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.92, 0.98, 1.02),
 				murk_k) * (1.0 - 0.8 * murk_k);
 		vec3 e = sky * reflection_tint * f * sky_reflection_gain * shallow_fade;

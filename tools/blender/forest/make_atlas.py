@@ -30,6 +30,47 @@ def lin_to_srgb(a):
 LUM = np.array([0.2126, 0.7152, 0.0722])
 
 
+def srgb_to_lab(rgb):
+    lin = srgb_to_lin(rgb)
+    M = np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]])
+    xyz = lin @ M.T / np.array([0.95047, 1.0, 1.08883])
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], -1)
+
+
+def lab_to_srgb(lab):
+    fy = (lab[..., 0] + 16) / 116
+    fx, fz = fy + lab[..., 1] / 500, fy - lab[..., 2] / 200
+    f = np.stack([fx, fy, fz], -1)
+    xyz = np.where(f > 0.2069, f ** 3, (f - 16 / 116) / 7.787) * np.array([0.95047, 1.0, 1.08883])
+    Mi = np.array([[3.2406, -1.5372, -0.4986], [-0.9689, 1.8758, 0.0415], [0.0557, -0.2040, 1.0570]])
+    return lin_to_srgb(xyz @ Mi.T)
+
+
+def lab_grade(img, g):
+    """Середні L*, C* і тон h непрозорого — до цілі; розкид навколо середнього лишається
+    (L* множиться на contrast_l). Так задаються числа з брифу, а не «на око»."""
+    m = img[..., 3] > 0.5
+    lab = srgb_to_lab(img[..., :3])
+    L, a, b = lab[..., 0], lab[..., 1], lab[..., 2]
+    if "L" in g:
+        mu = L[m].mean()
+        L = g["L"] + (L - mu) * g.get("contrast_l", 1.0)
+    if "C" in g or "h" in g:
+        am, bm = a[m].mean(), b[m].mean()
+        C = np.hypot(a, b)
+        h = np.arctan2(b, a)
+        hm = np.arctan2(bm, am)
+        if "h" in g:
+            h = h + (np.radians(g["h"]) - hm)
+        if "C" in g:
+            C = C * (g["C"] / max(float(C[m].mean()), 1e-3))
+        a, b = C * np.cos(h), C * np.sin(h)
+    out = img.copy()
+    out[..., :3] = lab_to_srgb(np.stack([L, a, b], -1))
+    return out
+
+
 def grade(img, g):
     """Тон під настрій сцени: тонування, стискання контрасту яскравості, насиченість і
     середня лінійна яскравість непрозорого."""
@@ -38,6 +79,8 @@ def grade(img, g):
     m = a > 0.5
     if not m.any() or not g:
         return img
+    if "lab" in g:
+        return lab_grade(img, g["lab"])
     if "tint" in g:
         lin = lin * np.array(g["tint"])
     y = lin @ LUM
@@ -126,7 +169,9 @@ def trunk_strip(path):
 
 
 def main():
+    global CELL
     spec = json.load(open(SPEC))
+    CELL = spec.get("cell", CELL)
     size = spec.get("size", 1024)
     n = size // CELL
     atlas = np.zeros((size, size, 4))

@@ -531,7 +531,7 @@ func test_explosion_is_one_shot_and_frees_itself() -> void:
 		if t.is_valid():
 			t.custom_step(BattleFx.EXPLOSION_SEC + 0.01)
 	assert_true(boom.is_queued_for_deletion())
-	assert_true(BattleFx.EXPLOSION_SEC <= 1.5, "§ ефекти: кожна мить влучання ≤ 1,5 с")
+	assert_true(BattleFx.EXPLOSION_SEC <= 1.5, "кожна мить влучання ≤ 1,5 с")
 
 
 ## §3.5: невидимий ворог не має вузла взагалі — рішення контейнера

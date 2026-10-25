@@ -26,7 +26,11 @@ func _unit(id: int, type_id: int = 5, owner: int = 0, pos: Vector2i = Vector2i(0
 func _spawn_view(id: int, type_id: int = 5, owner: int = 0, pos: Vector2i = Vector2i(0, 0)) -> UnitView:
 	var scene := preload("res://game/battle/unit_view.tscn")
 	var view: UnitView = scene.instantiate()
-	add_child_autofree(view)
+	# Свій батько, що звільняється сам: миті влучання й спалахи лягають поруч із вузлом
+	# юніта, і без нього лишались би дітьми самого тесту.
+	var box := Node3D.new()
+	add_child_autofree(box)
+	box.add_child(view)
 	view.bind(_unit(id, type_id, owner, pos))
 	return view
 
@@ -91,6 +95,7 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.MineTriggered.new(Vector2i(5, 5), 3),
 		Events.MineRevealed.new(Vector2i(5, 5), 1),
 		Events.BridgeChanged.new(Vector2i(6, 6), true),
+		Events.ForestBroken.new(Vector2i(7, 7)),
 		Events.UnitRepaired.new(4, 20, 80),
 		Events.ApChanged.new(1, 30),
 		Events.TurnEnded.new(0),
@@ -493,3 +498,47 @@ func test_retaliation_waits_for_the_retaliators_turn() -> void:
 	_finish_all_processed_tweens()
 	assert_eq(_fx_named("Muzzle").size(), 1, "розвернувся — тоді стріляє")
 	_finish_all_processed_tweens()
+
+
+## Просіка: подія не фільтрована за спостерігачем (§6), тож вигляд лише сповіщається
+## сигналом без даних події; що малювати, вирішує known_broken_map(глядача).
+func test_forest_broken_emits_forest_changed_without_payload() -> void:
+	var seen: Array[int] = [0]
+	player.forest_changed.connect(func() -> void: seen[0] += 1)
+	await player.play([Events.ForestBroken.new(Vector2i(1, 1))] as Array[Events.BattleEvent])
+	assert_eq(seen[0], 1)
+
+
+## Удар дрона з загону, якого глядач не бачить, однаково показує влучання — як і гармата з
+## невидимого стрільця. Запуску біля загону нема: його вузла нема.
+func test_drone_from_an_unseen_squad_still_shows_the_hit() -> void:
+	var target: UnitView = _spawn_view(2, 5, 0, Vector2i(3, 3))
+	var target_unit := _unit(2, 5, 0, Vector2i(3, 3))
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return target if id == 2 else null,
+		func(id: int) -> Unit: return target_unit if id == 2 else null)
+	player.play([Events.DroneLaunched.new(1, 2, 1)] as Array[Events.BattleEvent])
+	assert_eq(_fx_named("Hit").size(), 1)
+	assert_eq(_fx_named("Muzzle").size(), 0)
+	_finish_all_processed_tweens()
+
+
+## «Зберегти й вийти» посеред паузи влучання: екран звільнено, і програвач після паузи не
+## сміє грати решту подій чи кликати завершення в мертвий екран.
+func test_stop_ends_playback_at_the_next_pause() -> void:
+	var target: UnitView = _spawn_view(2, 5, 0, Vector2i(3, 3))
+	var target_unit := _unit(2, 5, 0, Vector2i(3, 3))
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return target if id == 2 else null,
+		func(id: int) -> Unit: return target_unit if id == 2 else null)
+	var finished: Array[bool] = [false]
+	player.playback_finished.connect(func() -> void: finished[0] = true)
+	player.play([
+		Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT),
+		Events.DamageDealt.new(2, 300, 100),
+	] as Array[Events.BattleEvent])
+	player.stop()
+	_finish_all_processed_tweens()
+	assert_false(player.is_playing())
+	assert_false(finished[0], "зупинене програвання не повідомляє про завершення")
+	assert_eq(target.hp_ratio(), 1.0, "подія після паузи вже не грається")

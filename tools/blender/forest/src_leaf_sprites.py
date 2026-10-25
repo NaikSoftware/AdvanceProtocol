@@ -2,7 +2,8 @@
 
 Запуск:
   blender -b --factory-startup -P src_leaf_sprites.py -- <вихід> <набір> <сезон> [спрайтів=8] [зерно=1]
-набір: birch | broad | oak | shrub; сезон: late | summer | early.
+набір: birch | broad | oak | shrub; сезон: late | summer | early | turned (пожовкла крона
+ранньої осені).
 Пише <вихід>/<набір>_<сезон>/sprite_NN.png — шматок крони ~2,4 м, як у хвойних
 (crown_lib.SPRITE_M). Готових CC0-моделей берези, дуба чи липи немає, а атласи від
 генератора мають темний обвід і білий ореол по краю; тут листок і гілка — геометрія,
@@ -39,13 +40,15 @@ if SEASON == "late":
     # Голий пагін 1–2 см тонший за тексель атласу (1,9 см) і зникає при alpha-cut; удвічі
     # товща гілка лишає на екрані ту саму сіру сітку, яку око бачить у голій кроні здаля.
     P["twig_r"] *= 2.2
-KEEP = {"summer": 1.0, "early": 0.9, "late": {"oak": 0.4, "birch": 0.04}.get(KIND, 0.03)}[SEASON]
+# Пізня осінь — голі гілки: листя ≤ 10 % пучка навіть у дуба, що тримає буре листя.
+KEEP = {"summer": 1.0, "early": 0.9, "turned": 0.92, "late": {"oak": 0.08, "birch": 0.03}.get(KIND, 0.02)}[SEASON]
 BARK = (0.33, 0.30, 0.27) if KIND != "birch" else (0.30, 0.27, 0.25)
 GREENS = [(0.20, 0.30, 0.10), (0.24, 0.34, 0.12), (0.17, 0.26, 0.09), (0.28, 0.36, 0.14)]
 EARLY = [(0.40, 0.42, 0.16), (0.46, 0.45, 0.17), (0.34, 0.38, 0.15)]
 ORANGE = [(0.58, 0.40, 0.14), (0.62, 0.48, 0.16)]
 BROWN = [(0.36, 0.25, 0.15), (0.30, 0.21, 0.13), (0.40, 0.29, 0.17)]
 YELLOW = [(0.62, 0.52, 0.20), (0.55, 0.47, 0.20)]
+TAN = [(0.50, 0.38, 0.22), (0.46, 0.35, 0.20), (0.54, 0.42, 0.25)]
 
 
 def leaf_colour(rng):
@@ -53,6 +56,11 @@ def leaf_colour(rng):
         return rng.choice(GREENS)
     if SEASON == "early":
         return rng.choice(ORANGE) if rng.random() < 0.15 else rng.choice(EARLY)
+    if SEASON == "turned":
+        # Крона, що вже пожовкла: береза жовта, дуб світло-бурий, з рештками зеленого.
+        if rng.random() < 0.15:
+            return rng.choice(EARLY)
+        return rng.choice(TAN) if KIND == "oak" else rng.choice(YELLOW)
     return rng.choice(BROWN) if KIND in ("oak", "broad", "shrub") else rng.choice(YELLOW)
 
 

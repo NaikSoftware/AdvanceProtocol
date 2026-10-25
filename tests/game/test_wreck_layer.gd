@@ -219,3 +219,15 @@ func test_fallen_squads_lie_where_they_died_on_seen_ground_only() -> void:
 	assert_eq(Vector2(f.position.x, f.position.z), Vector2(2.0, 2.0))
 	layer.rebuild_fallen(state, 0)
 	assert_eq(layer.fallen_count(), 1, "перебудова не множить")
+
+
+
+## Другий розігрів поверх першого не губить його коробку й не вішає шар.
+func test_second_warm_up_while_warming_is_ignored() -> void:
+	layer.warm_up(Vector3.ZERO)
+	layer.warm_up(Vector3.ZERO)
+	assert_eq(layer.find_children("*", "MeshInstance3D", false, false).size(), 1)
+	for t in Engine.get_main_loop().get_processed_tweens():
+		if t.is_valid():
+			t.custom_step(1.0)
+	assert_false(layer.is_warming())

@@ -36,9 +36,11 @@ func validate(state: BattleState) -> String:
 	# входить, і маршрут законно його обходить.
 	# Відома ворожа міна — така сама перешкода, як видимий юніт (§3.11): на неї не
 	# прокладають маршрут і не роблять її ціллю.
+	# Просіки — так само з відомого (§3.2): маршрут крізь ліс, повалений невидимим
+	# танком, доніс би, куди той танк поїхав.
 	var occupied: Dictionary = state.known_blocked_map(u.owner)
 	occupied.erase(u.pos)
-	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
+	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied, state.known_broken_map(u.owner))
 	if not zones.can_reach(target):
 		return "ERR_OUT_OF_RANGE"
 	return ""
@@ -51,7 +53,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	# юніт крізь землю, яка ВИГЛЯДАЄ порожньою. Правда перевіряється потайлово нижче.
 	var occupied: Dictionary = state.known_blocked_map(u.owner)
 	occupied.erase(u.pos)
-	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
+	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied, state.known_broken_map(u.owner))
 	var path: Array[Vector2i] = Pathing.path_to(zones, target)
 
 	var walked: Array[Vector2i] = []
@@ -91,7 +93,9 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 			# скінчилось, тобто говорить те саме й ще й причину.
 			trail.append(Events.MoveBlocked.new(unit_id, step))
 			break
-		spent += Rules.entry_cost_at(u, state.board, step)
+		# Ціна — за правдою про ліс, як і зайнятість. Знання лише відстає від правди, тож
+		# ця ціна ніколи не вища за заплановану: просіка дешевша за цілий ліс.
+		spent += Rules.entry_cost_at(u, state.board, step, state.broken_forest.has(step))
 		# Напрям — покроково, а не раз після ходу: техніка, що гине на міні посеред
 		# шляху, лишає уламки (§3.14) за напрямком саме того кроку.
 		u.facing = Board.facing_towards(u.pos, step)
@@ -107,6 +111,13 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 		# кінцевої позиції вже не видно — при перерахунку раз на хід воно зникло б
 		# із пам'яті гравця, хоч юніт повз нього й проїхав.
 		trail.append_array(state.refresh_vision(u.owner))
+		# §3.2: танк валить ліс на вході, уже заплативши за цілий. Після туману — щоб
+		# ForestBroken не випередив TileRevealed свого тайла; до міни — бо дерева падають
+		# від самого в'їзду, навіть коли міна тут же спинить танк.
+		if u.unit_class() == UnitTypes.UnitClass.TANK and state.board.kind_at(step) == Terrain.Kind.FOREST \
+				and not state.broken_forest.has(step):
+			state.broken_forest[step] = true
+			trail.append(Events.ForestBroken.new(step))
 		# §3.11: детонація — на вході в тайл, а не в кінці шляху, тож мінне поле не
 		# переїдеш, просто не спиняючись на ньому. Умова обриву — рівно та, за якою
 		# детонує Mines.step_on(): порожній список означає, що не вибухнуло нічого.

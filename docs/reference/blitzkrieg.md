@@ -256,3 +256,13 @@ Two rules about using it:
   The AI ignores the fog entirely (`class_2.method_148`). A concealment rule here would be a new
   mechanic, a per-unit exception to `seen` ([§3.5](../rules/vision-and-fog.md)) with consequences
   for retaliation ([§3.3.1](../rules/combat.md)).
+
+- **Forest breaking is not in the original; it is adopted here as a new rule.** In the original
+  terrain never changes during play except bridges: the only writes to `GameCanvas.mapMask` outside
+  map loading are `method_50` and `method_52`, which swap the bridge range `16–18` with `19–21` (the
+  engineer's demolish and repair, checked against kind 5 in `class_3:215` and `:224`). Forest — kind
+  2, mask `76–86`, penalty 20 in `method_68` — is never written, and `method_70` reads only the
+  unit's cross-country, so every class enters forest at the same penalty and nothing is gated by
+  class. This project departs on purpose: a tank fells the forest it enters, and light vehicles,
+  artillery and the engineer may enter only the tiles a tank has broken
+  ([§3.2](../rules/movement-and-terrain.md#action-points)).

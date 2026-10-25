@@ -1,7 +1,7 @@
 ---
 name: visual-critic
 description: "Judges how the game looks, from screenshots and frame sequences, against the references — the visual gate every visual task must pass before it is accepted, separate from the code review. Use after any change to ground, water, props, lighting, weather, effects, unit models or camera; when a reference or generated asset needs a verdict; or when the owner says something looks wrong. Scores readability, real-world scale, texture quality and depth, animation, 3D model quality, lighting, mood and likeness to the reference frames, and returns concrete, fixable findings. Do NOT use it to review code (code-reviewer), to fix what it finds (send findings to the implementer), or to generate assets (asset-artist)."
-tools: [Read, Glob, Grep, Bash]
+tools: [Read, Glob, Grep, Bash, mcp__memroot__memory_retrieve, mcp__memroot__memory_create]
 model: opus
 ---
 

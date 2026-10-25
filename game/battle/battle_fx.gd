@@ -95,7 +95,7 @@ static func weapon_of(unit_class: int) -> Weapon:
 	return Weapon.RIFLE
 
 
-## Влучання по цілі, розміри — метри брифу (1 тайл = 8 м). `armoured` — техніка: по броні
+## Влучання по цілі, розміри в метрах (1 тайл = 8 м). `armoured` — техніка: по броні
 ## іскри й сіра хмара, по піхоті й землі — порох і ґрунт.
 static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool) -> Node3D:
 	var root := _root("Hit", parent, at)

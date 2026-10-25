@@ -77,6 +77,10 @@ water_murk={
 "type": "float",
 "value": 0.0
 }
+water_wind={
+"type": "float",
+"value": 1.0
+}
 haze_color={
 "type": "vec3",
 "value": Vector3(0.1, 0.135, 0.155)

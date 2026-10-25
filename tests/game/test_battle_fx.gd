@@ -43,7 +43,7 @@ func test_explosion_frees_itself_within_one_and_a_half_seconds() -> void:
 	assert_true(BattleFx.EXPLOSION_SEC <= 1.5)
 
 
-## Мить влучання — за класом зброї стрільця (§ ефекти): одноразова, ≤ 1,5 с, звільняє себе.
+## Мить влучання — за класом зброї стрільця: одноразова, ≤ 1,5 с, звільняє себе.
 func test_every_hit_moment_frees_itself_within_one_and_a_half_seconds() -> void:
 	for weapon: int in BattleFx.Weapon.values():
 		for armoured: bool in [true, false]:
@@ -72,7 +72,7 @@ func test_weapon_follows_the_shooters_class() -> void:
 	assert_eq(BattleFx.weapon_of(UnitTypes.UnitClass.ARTILLERY), BattleFx.Weapon.SHELL)
 
 
-## Дульний спалах малих калібрів на екрані субпіксельний (бриф): у стрілецької зброї його нема.
+## Дульний спалах малих калібрів на екрані субпіксельний: у стрілецької зброї його нема.
 func test_rifles_have_no_muzzle_flash() -> void:
 	assert_null(BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.RIFLE))
 	var m: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.TANK_GUN)

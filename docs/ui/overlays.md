@@ -120,11 +120,14 @@ the player could work out by hand.
 **The gun marks cover the whole range circle, with no vision check at all.** Return fire needs no
 vision — a hit reveals the shooter ([§3.3.1](../rules/combat.md)) — so the enemy answers every unit
 of yours inside its circle. Marks trimmed to its vision diamond would be looser than the rule, and
-would mark as safe exactly the units that get shot back. For return fire the marks are therefore
-exact: inside the circle you are answered, outside it you are not. They remain **a floor for the
-enemy's own turn**, since it can move before it fires.
+would mark as safe exactly the units that get shot back. Outside the circle there is never an
+answer; inside it there is one whenever the unit has the AP for it — the marks ignore AP and
+`has_fired` (above), so a spent unit stays marked. On the enemy's own turn it can also move before
+it fires. **A ring with gun marks only carries no floor caption**: the marks read no vision, so
+there is no hidden network for the caption to warn about.
 
-**The drone marks are a floor, not a ceiling, and the UI must say so.** The drone never answers; it
+**The drone marks are a floor, not a ceiling, and the UI must say so** — the floor caption is shown
+exactly when a drone ring is. The drone never answers; it
 strikes only on its owner's turn, against ground its owner has scouted
 ([§3.5](../rules/vision-and-fog.md)). Its marks are measured with that squad's own vision diamond,
 because that is all the forecast may read. The squad's *real* reach is the drone circle
@@ -142,7 +145,8 @@ implementation of either geometry in the renderer is exactly the drift this docu
 prevent.
 
 **The movement zones are drawn from the fog-filtered occupancy plus the enemy mines you already
-know of, which is also what the move is planned against** ([§3.2](../rules/movement-and-terrain.md),
+know of and the broken forest you already know of, which is also what the move is planned
+against** ([§3.2](../rules/movement-and-terrain.md),
 [§3.11](../rules/vision-and-fog.md)). The overlay and the order agree by construction: what you
 are shown as reachable is exactly what the game will attempt.
 
@@ -150,7 +154,8 @@ That matters more than it looks. Had the zones been drawn from the true occupanc
 unit, including invisible ones — an unseen enemy would punch a unit-shaped hole in the gold
 contour and give away its position. Had the *order* been planned against the true occupancy
 instead, the route would silently detour around it, which leaks the same fact in a subtler and
-harder-to-notice way.
+harder-to-notice way. Broken forest is the same case: drawn from the true state, a light
+vehicle's gold contour would reach into a path an unseen tank had just cut and show where it went.
 
 So the zones are, like the enemy forecast above, a **best case**: a path shown as open can turn
 out to be blocked by something you had not seen, and the move stops on the tile before it. That is

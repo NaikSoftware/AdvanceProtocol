@@ -81,6 +81,9 @@ var _event_player: EventPlayer = null
 var _viewer: int = 0
 ## Шрами бою на землі; маска — розвідане того, хто дивиться.
 var _scars: ScarMap = null
+## Шейдери ефектів уже розігріто: на старті нового бою, а в бою зі збереження — на першому
+## гейті, коли камера вже стоїть на юнітах.
+var _fx_warmed: bool = false
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -299,6 +302,7 @@ func _wire_view(board: Board) -> void:
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
 		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
 		_on_wreck_left, _on_wreck_removed)
+	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
 	# але власний шар і власний сигнал: action_preview малює його для прев'ю
@@ -340,6 +344,8 @@ func _follow_weather() -> void:
 
 
 func _exit_tree() -> void:
+	if _event_player != null:
+		_event_player.stop()
 	Engine.max_fps = _prev_max_fps
 	if get_tree() != null:
 		get_tree().quit_on_go_back = _prev_quit_on_go_back
@@ -884,6 +890,8 @@ func _on_events_ready() -> void:
 func _on_gate_confirmed() -> void:
 	_rebuild_units_for_active_player()
 	_rebuild_wrecks()
+	if not _fx_warmed:
+		_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
 	_camera_rig.center_on(_first_unit_cell(_match_service.state.active_player))
 	_gate.visible = false
 
@@ -919,6 +927,7 @@ func _rebuild_units_for_active_player() -> void:
 		_units.add_child(view)
 		view.bind(unit)
 		_unit_views[uid] = view
+	forest_changed()
 	_apply_threat_marks()
 
 
@@ -951,9 +960,17 @@ func _on_wreck_removed(pos: Vector2i, _reason: int) -> void:
 ## Перше вбивство не сміє застигати на компіляції шейдерів ефектів: малюємо кожен раз,
 ## невидимо, там, куди дивиться камера (поза кадром рушій їх не малює й не компілює).
 func _warm_up_fx(cell: Vector2i) -> void:
+	_fx_warmed = true
 	var at: Vector3 = IsoCameraRig.cell_to_world(cell)
 	BattleFx.warm_up(_units, at)
 	_wreck_layer.warm_up(at)
+
+
+## Гачок вигляду лісу: тут його перемальовують з known_broken_map(активного) — ніколи
+## з події. Вигляду повалених дерев на цій гілці ще немає, тож порожньо. Викликається
+## з перебудови після пакета подій і на гейті, тобто і на ForestBroken, і на передачі ходу.
+func forest_changed() -> void:
+	pass
 
 
 func _first_unit_cell(player: int) -> Vector2i:

@@ -145,3 +145,34 @@ func test_a_drone_strike_survivor_with_no_ap_turns_but_does_not_answer() -> void
 	assert_eq(_retaliations(events), 0)
 	assert_eq(t.facing, 6)
 	assert_eq(_turns_of(events, t.id).size(), 1)
+
+func test_the_reveal_reaches_only_the_targets_side() -> void:
+	# Три гравці: стріляє 0 по 1. Тайл стрільця дізнається лише бік цілі; третій
+	# гравець, якого постріл не стосується, не отримує ні тайла, ні події.
+	state = BattleState.create(Board.create(16, 16, Terrain.GroundState.DRY), 3, 11)
+	state.active_player = 0
+	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
+	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 6)
+	state.add_unit(5, 2, Vector2i(15, 15), 0)   # далеко — тайла стрільця не бачить
+	state.begin_turn()
+	_blind(1)
+	_blind(2)
+	var events: Array = FireCommand.create(a.id, t.id).apply(state)
+	assert_true(state.vision[1].is_seen(a.pos))
+	assert_false(state.vision[2].is_seen(a.pos), "третій гравець тайла стрільця не дізнається")
+	assert_eq(_first(events, func(e: Events.BattleEvent) -> bool:
+		return e is Events.TileRevealed and e.player == 2), -1, "і події для нього немає")
+
+func test_the_drone_strike_reveals_the_squad_before_the_damage() -> void:
+	var a: Unit = state.add_unit(1, 0, Vector2i(2, 2), 2)
+	var t: Unit = state.add_unit(8, 1, Vector2i(5, 2), 2)
+	state.begin_turn()
+	_blind(t.owner)
+	var events: Array = DroneCommand.create(a.id, t.id).apply(state)
+	var i_launch: int = _first(events, func(e: Events.BattleEvent) -> bool: return e is Events.DroneLaunched)
+	var i_reveal: int = _first(events, func(e: Events.BattleEvent) -> bool:
+		return e is Events.TileRevealed and e.player == t.owner and e.tiles.has(a.pos))
+	var i_dmg: int = _first(events, func(e: Events.BattleEvent) -> bool:
+		return e is Events.DamageDealt and e.unit_id == t.id)
+	assert_lt(i_launch, i_reveal)
+	assert_lt(i_reveal, i_dmg, "відкриття передує шкоді і на шляху дрона")
