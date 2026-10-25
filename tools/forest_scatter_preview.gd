@@ -56,7 +56,7 @@ const EDGE_DENSITY: float = 2.4
 const CANOPY_FROM: float = 0.7
 const JITTER: float = 0.4
 const FADE_RADIUS: float = 0.6
-const FADE_SOFT: float = 0.3
+const FADE_SOFT: float = 0.15
 ## Маска розчинення подовжена до камери ще на стільки тайлів: на далекому зумі промінь
 ## пологіший, і крона з-за меж відрізка ще накривала відділення.
 const FADE_REACH_EXTRA: float = 0.5
@@ -70,9 +70,9 @@ const SHRUB_H: Vector2 = Vector2(1.6, 4.0)
 
 ## Склад лісу: частки видів (префікс вузла або ім'я вузла) у наметі й у крайовому ряду.
 const WOODS: Dictionary = {
-	"pine": {"canopy": {"Pine": 0.85, "Spruce": 0.1, "Birch": 0.05}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 0.5, "Spruce_B": 0.5}, "hedge_evergreen": 0.85, "density": 2.4},
-	"mixed": {"canopy": {"Pine": 0.45, "Spruce": 0.2, "Birch": 0.2, "Oak": 0.15}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 0.65, "Spruce_B": 0.35}, "hedge_evergreen": 0.6, "density": 2.2},
-	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 0.8, "Spruce_B": 0.2}, "hedge_evergreen": 0.4, "density": 1.5},
+	"pine": {"canopy": {"Pine": 0.85, "Spruce": 0.1, "Birch": 0.05}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.85, "density": 2.4},
+	"mixed": {"canopy": {"Pine": 0.45, "Spruce": 0.2, "Birch": 0.2, "Oak": 0.15}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.6, "density": 2.2},
+	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.4, "density": 1.5},
 }
 
 ## Тон поля тестового лісу; світло, тінь, дощ і тон листя ставить WeatherRig за
@@ -284,7 +284,7 @@ func _pick(weights: Dictionary) -> String:
 func _scatter(area: Rect2i, wood_at: Callable) -> void:
 	var canopy := func(d: float) -> bool: return d > CANOPY_FROM
 	var edge := func(d: float) -> bool: return d > EDGE_FROM and d <= EDGE_TO
-	var shrub := func(d: float) -> bool: return d > -0.15 and d <= SHRUB_BAND
+	var shrub := func(d: float) -> bool: return d > 0.0 and d <= SHRUB_BAND
 	var logs := func(d: float) -> bool: return d > 0.3
 	_layer(area, 2.4, canopy, func(p: Vector2) -> Dictionary: return WOODS[wood_at.call(p)]["canopy"], CANOPY_H,
 			func(p: Vector2) -> float: return float(WOODS[wood_at.call(p)]["density"]))

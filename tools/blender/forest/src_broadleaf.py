@@ -102,6 +102,12 @@ def build(tag, v):
     tries = 0
     if v.get("lobes"):
         cards = lobe_cards(v, limbs, rng)
+        # Пучок на кінці кожної гілки: гілка, що виходить за лопать, інакше стирчить із
+        # крони голим сірим сучком.
+        for lm in limbs[v["limbs"]:]:
+            e = np.array(lm["pts"][-1])
+            cards.append({"c": e.round(3).tolist(), "n": [0, 0, 1], "roll": float(rng.uniform(0, 6.283)),
+                          "size": round(float(rng.uniform(1.4, 1.8)), 3), "shade": 0.8})
     while len(cards) < n and tries < n * 300:
         tries += 1
         if len(cards) % 5 < 3:
