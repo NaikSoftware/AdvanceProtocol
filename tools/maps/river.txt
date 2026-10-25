@@ -11,7 +11,7 @@ TTTT..=......T...TTTTTTTTT
 TTT.=........=............
 TTT.=.^^^....=========.~~.
 TTT.=^^^^.BBB=.BB....=.~~.
-....=.^^..BB.=rBB~~..=.~..
+....=.^...BB.=rBB~~..=.~..
 ....=..wwwBB.=.BB.~..=..w.
 ~...=.wwwwwwwHw......=.www
 ~~wwHwwww~wwwHw.....wHwwww
