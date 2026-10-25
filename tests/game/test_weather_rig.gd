@@ -252,7 +252,12 @@ func test_rain_density_on_screen_is_continuous_across_zoom() -> void:
 		for f: Vector3 in foci:
 			sum += _drawn_in_box(grid, f, zoom)
 		return sum / foci.size()
-	for pair: Array in [[5.9, 6.1], [11.9, 12.1]]:
+	# Пороги кроку із запасом у клітинку — 6·(G-1)/G·{1, 2}: пари стоять по обидва їхні боки.
+	var t1: float = IsoCameraRig.MIN_ZOOM * (grid.x - 1.0) / grid.x
+	for pair: Array in [[t1 - 0.02, t1 + 0.02], [2.0 * t1 - 0.02, 2.0 * t1 + 0.02]]:
+		var sa: int = WeatherRig.rain_lattice(foci[0], pair[0], grid).stride
+		var sb: int = WeatherRig.rain_lattice(foci[0], pair[1], grid).stride
+		assert_eq(sb, sa * 2, "пара %s мусить перетинати поріг кроку" % [pair])
 		var a: float = at.call(pair[0])
 		var b: float = at.call(pair[1])
 		assert_almost_eq(b / a, 1.0, 0.1, "зум %s / %s" % pair)
@@ -264,6 +269,38 @@ func test_rain_density_on_screen_is_continuous_across_zoom() -> void:
 		mean += f / all.size()
 	for i in all.size():
 		assert_almost_eq(all[i] / mean, 1.0, 0.1, "зум %d" % (i + 6))
+
+
+## `keep` має замкнену форму й ніколи не перевищує 8^-log2(крок): інакше клітинка з рангом під
+## порогом могла б лежати поза решіткою кроку, і густота на порозі просідала б.
+func test_rain_keep_never_exceeds_the_stride_bound() -> void:
+	for side: float in [32.0, 46.0, 60.0]:
+		var grid := Vector3(side, WeatherRig.RAIN_LAYERS, side)
+		var m: float = (side - 1.0) / side
+		for i in 1401:
+			var zoom: float = 6.0 + i * 0.01
+			var lat: Dictionary = WeatherRig.rain_lattice(Vector3(3.3, 0, -2.1), zoom, grid)
+			var want: float = m * m * m / 8.0 * pow(IsoCameraRig.MIN_ZOOM / zoom, 3.0)
+			assert_almost_eq(float(lat.keep), want, 1e-12)
+			var bound: float = pow(8.0, -log(float(lat.stride)) / log(2.0))
+			if float(lat.keep) > bound + 1e-9:
+				fail_test("решітка %d, зум %.2f: keep %.6f > %.6f" % [side, zoom, lat.keep, bound])
+				return
+
+
+## Дзеркало рангу в GDScript (`WeatherRig.rain_rank`, `rain_hash3`), за яким рахують густоту, мусить
+## збігатися з шейдером: сталі хешу, межа рівня й формула рангу записані в обох.
+func test_rain_rank_mirror_matches_the_shader_text() -> void:
+	var code: String = (load("res://game/battle/shaders/rain.gdshader") as Shader).code
+	for piece: String in ["p3 * 0.1031", "p3.zyx + 31.32", "fract((p3.x + p3.y) * p3.z)",
+			"i <= 5", "lvl >= 5.0", "pow(8.0, -(lvl + 1.0)) * (1.0 + 7.0 * u)",
+			"u * pow(8.0, -5.0)", "rain_rank(wc) < keep"]:
+		assert_true(code.contains(piece), "шейдер: " + piece)
+	var src: String = (load("res://game/battle/look/weather_rig.gd") as GDScript).source_code
+	for piece: String in ["* 0.1031", "Vector3(p3.z, p3.y, p3.x) + Vector3.ONE * 31.32",
+			"range(1, 6)", "lvl >= 5", "pow(8.0, -(lvl + 1.0)) * (1.0 + 7.0 * u)",
+			"u * pow(8.0, -5.0)"]:
+		assert_true(src.contains(piece), "дзеркало: " + piece)
 
 
 ## Решітка вкриває всю коробку кадру й з від'ємними координатами фокуса: кут прилипає до цілої
