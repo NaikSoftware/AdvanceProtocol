@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://crgdeke23wu8c"
-path="res://.godot/imported/infra_tower_lattice_lod_tower_steel_n.png-65dcc00c48d6abcd169be6643de7ef3f.ctex"
+uid="uid://bem2ha0d2e86q"
+path="res://.godot/imported/infra_trailer_green_trailer_bed_a.jpg-5fed987a1de56caf97be8e03c78312d7.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "b977e35fff48cca22494577df0571b2f"
+"md5": "72145be5db4f5cba8ee81c2330b6ef03"
 }
 
 [deps]
 
-source_file="res://assets/props/infra_tower_lattice_lod_tower_steel_n.png"
-dest_files=["res://.godot/imported/infra_tower_lattice_lod_tower_steel_n.png-65dcc00c48d6abcd169be6643de7ef3f.ctex"]
+source_file="res://assets/props/infra_trailer_green_trailer_bed_a.jpg"
+dest_files=["res://.godot/imported/infra_trailer_green_trailer_bed_a.jpg-5fed987a1de56caf97be8e03c78312d7.ctex"]
 
 [params]
 
