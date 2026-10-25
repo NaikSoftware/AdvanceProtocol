@@ -81,9 +81,8 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                     e = 0.03 * sgn
                     q = [(x - 0.7, yy + e, z), (x + 0.7, yy + e, z), (x + 0.7, yy + e, z + 1.4), (x - 0.7, yy + e, z + 1.4)]
                     b.poly(q[::sgn], "dark")
-                    for (dx0, dx1, hh) in ((-0.65, -0.2, 1.4), (-0.15, 0.3, 2.2), (0.35, 0.65, 1.1)):
-                        t = [(x + dx0, yy + e, z + 1.4), (x + dx1, yy + e, z + 1.4), (x + (dx0 + dx1) / 2, yy + e, z + 1.4 + hh)]
-                        b.poly(t[::sgn], "soot")
+                    sp = [(x - 0.85, yy + e * 0.6, z + 1.35), (x + 0.85, yy + e * 0.6, z + 1.35), (x + 0.45, yy + e * 0.6, z + 4.0), (x - 0.45, yy + e * 0.6, z + 4.0)]
+                    b.soot(sp, (0.02, 0.02, 0.38, 0.38), -sgn)
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
                 if not (i in cols and f >= 1):
@@ -128,50 +127,83 @@ def intact():
 
 
 def damaged():
+    """Обвал східного торця: стіни розрізані східцями на 1-3 поверхи, даху над провалом немає, плити й купа
+    лежать у прольоті та перед ним (вид з боку камери: фасад -Y і торець +X)."""
     lib.reset()
     b = Builder()
     rnd = random.Random(21)
     xc = 6.0
-    z2 = 2 * FLOOR
     F, B = (2, 4), (0, 3)
     body(b, X0, xc, NF, F, B, True)
-    body(b, xc, X1, 2, (), (), False)
-    blown = {("front", 7, 0), ("front", 7, 1), ("front", 8, 1), ("front", 9, 1), ("back", 7, 0), ("back", 7, 1), ("back", 8, 1), ("back", 9, 0), ("back", 9, 1)}
     windows(b, X0, xc, NF, F, B)
-    windows(b, xc, X1, 2, (), (), blown=blown)
     entrances(b, xc)
     roof_details(b, xc)
-    b.box((xc + X1) / 2, 0, z2 - 0.05, X1 - xc, DEP, 0.2, "panel_scorched", top="panel_scorched")
-    # східчастий зубчастий профіль зламу: стіни третього поверху від 0.3 до 3.1 м з косими верхами
-    def prof(n, lo=0.3, hi=3.1):
-        h = [rnd.uniform(lo, hi)]
-        for _ in range(n):
-            h.append(min(hi, max(lo, h[-1] + rnd.uniform(-1.4, 1.4))))
-        return h
-    wall_run(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, prof(9), "panel_scorched", "char", 5)
-    wall_run(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, [0.0, 0.0] + prof(8, 0.2, 2.6)[:-1], "panel_scorched", "char", 6)
-    wall_run(b, (xc, Y1 - 0.2), (xc + 4.0, Y1 - 0.2), 0.4, prof(4, 0.3, 2.2), "panel_scorched", "char", 7)
-    # плита даху розколота на 3-4 шматки, що спираються на купу під кутами 20-50°
-    for (x, y, z, sx, sy, ax, ay, az) in ((8.6, -2.2, 1.3, 3.2, 2.8, 0.55, 0.1, 0.2), (12.0, 1.8, 2.0, 3.4, 2.6, -0.7, 0.2, -0.4), (10.2, 2.6, 1.0, 2.8, 2.2, 0.35, -0.5, 0.6), (13.6, -2.6, 1.7, 2.6, 2.4, -0.45, -0.3, 1.1)):
-        b.box_e(x, y, z2 + z, sx, sy, 0.22, "bitumen", euler=(ax, ay, az), top="bitumen")
-    # темна іржава арматура з обламаних країв
+    # східці: висота кратна поверху (3.1 м), верх косий і зубчастий
+    def steps(n, cap=NF):
+        out_, h = [], rnd.randint(1, cap)
+        for _ in range(n + 1):
+            if rnd.random() < 0.45:
+                h = max(1, min(cap, h + rnd.choice((-2, -1, 1, 1, 2))))
+            out_.append(h * FLOOR + rnd.uniform(-0.25, 0.25))
+        return out_
+    back = steps(9)
+    east = steps(12)
+    front = steps(4, 2)
+    wall_run(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel", "char", 5)
+    wall_run(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel", "char", 6)
+    wall_run(b, (xc, Y1 - 0.2), (xc + 5.0, Y1 - 0.2), 0.4, front, "panel", "char", 7)
+    # вікна лишаються там, де стіна їх досягає; вибиті — з м'якою кіптявою
+    def wall_h(vals, t):
+        i = min(len(vals) - 2, max(0, int(t * (len(vals) - 1))))
+        return vals[i]
+    for i in (7, 8, 9):
+        x = bay_x(i)
+        t = (x - xc) / (X1 - xc)
+        hb = wall_h(back, t)
+        for f in range(3):
+            z = f * FLOOR + 0.95
+            if hb < z + 1.5:
+                continue
+            blow = rnd.random() < 0.55
+            if blow:
+                q = [(x - 0.7, Y0 - 0.03, z), (x + 0.7, Y0 - 0.03, z), (x + 0.7, Y0 - 0.03, z + 1.4), (x - 0.7, Y0 - 0.03, z + 1.4)]
+                b.poly(q, "dark")
+                b.soot([(x - 0.85, Y0 - 0.02, z + 1.35), (x + 0.85, Y0 - 0.02, z + 1.35), (x + 0.45, Y0 - 0.02, z + 4.0), (x - 0.45, Y0 - 0.02, z + 4.0)], (0.02, 0.02, 0.38, 0.38), 1)
+            else:
+                b.window(("y", Y0, -1), x, z, 1.4, 1.4)
+    for k in range(6):
+        yy = -4.2 + 1.6 * k
+        t = (yy - Y0) / DEP
+        he = wall_h(east, t)
+        for f in range(3):
+            z = f * FLOOR + 0.95
+            if he < z + 1.5 or rnd.random() < 0.4:
+                continue
+            b.window(("x", X1, 1), yy, z, 1.4, 1.4)
+    # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
+    for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 3.0, 3.6, 1.8, 0.0, 0.0, 0.0), (13.5, -3.6, 6.1, 2.6, 2.0, 0.12, 0.0, 0.1), (8.0, 4.0, 3.0, 2.4, 1.6, -0.1, 0.0, 0.0)):
+        b.box_e(x, y, z, sx, sy, 0.22, "panel", euler=(ax, ay, az), top="panel")
+    # розколота плита даху лежить у прольоті під кутами 20-50° на купі
+    for (x, y, z, sx, sy, ax, ay, az) in ((9.2, -0.5, 3.4, 3.2, 2.8, 0.7, 0.1, 0.2), (12.4, 1.6, 4.4, 3.4, 2.4, -0.8, 0.2, -0.4), (10.6, 2.8, 2.8, 2.8, 2.2, 0.5, -0.6, 0.6), (13.8, -1.8, 3.8, 2.6, 2.4, -0.6, -0.3, 1.1)):
+        b.box_e(x, y, z, sx, sy, 0.22, "bitumen", euler=(ax, ay, az), top="bitumen")
+    # арматура темна, іржава
     for k in range(18):
         x = rnd.uniform(6.5, 15.0)
-        edge = rnd.random()
-        if edge < 0.35:
-            p0 = (x, Y0 + 0.2, z2 + 0.3)
-        elif edge < 0.6:
-            p0 = (X1 - 0.2, rnd.uniform(-5, 5), z2 + 0.3)
-        else:
-            p0 = (x, rnd.uniform(-5, 5), z2 + 0.1)
+        p0 = (x, Y0 + 0.2, rnd.uniform(3.0, 6.0)) if rnd.random() < 0.5 else (X1 - 0.2, rnd.uniform(-5, 5), rnd.uniform(3.0, 6.0))
         b.beam(p0, (p0[0] + rnd.uniform(-0.9, 0.9), p0[1] + rnd.uniform(-0.8, 0.8), p0[2] + rnd.uniform(0.5, 1.4)), 0.09, "rebar")
-    # відсип 4-6 м завширшки й 1.5-2 м заввишки на вибитому розі (бік, що його бачить камера)
-    mound(b, 17.0, -1.0, 3.6, 7.4, 2.0, 61, rings=7, segs=24)
-    mound(b, 11.5, -6.5, 4.5, 1.9, 1.5, 62, rings=5, segs=18)
-    mound(b, 10.5, 0.0, 4.2, 5.0, 1.3, 63, z0=z2, rings=5, segs=18)
-    chunks(b, 16.8, -1.0, 2.6, 2.0, 22, ("rubble", "panel_scorched", "panel", "brick_grey"), 2, smin=0.5, smax=1.4)
-    chunks(b, 10.2, -6.4, 1.3, 1.5, 10, ("rubble", "panel_scorched"), 3, smin=0.5, smax=1.0)
-    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4200, footprint=(5, 2), anchor=(0, 0))
+    # купа заповнює проліт (висота до ~5 м, спирається на східці) і розходиться перед фасадом і торцем
+    mound(b, 10.8, 0.0, 4.6, 4.2, 5.0, 61, rings=8, segs=26)
+    mound(b, 17.0, -1.0, 3.4, 6.6, 1.6, 62, rings=7, segs=24)
+    mound(b, 11.5, -6.4, 4.2, 1.8, 1.3, 63, rings=5, segs=18)
+    chunks(b, 11.0, 0.0, 4.4, 4.2, 60, ("rubble", "heap", "panel"), 2, z0=0.4, smin=0.35, smax=1.0)
+    for k in range(140):                                                         # розсип зникає без жорсткого краю
+        a = rnd.uniform(0, 2 * math.pi)
+        t = rnd.uniform(0.7, 1.2)
+        px, py = 17.0 + 3.4 * t * math.cos(a), -1.0 + 6.6 * t * math.sin(a)
+        if px < 15.5 or abs(py) > 8.4 or px > 20.2:
+            continue
+        b.rock(px, py, 0.12, rnd.uniform(0.25, 0.55), rnd.choice(("rubble", "heap")), rnd)
+    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=7000, footprint=(5, 2), anchor=(0, 0))
 
 
 intact()
