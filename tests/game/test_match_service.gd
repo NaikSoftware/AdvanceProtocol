@@ -19,10 +19,8 @@ func test_accepted_command_queues_events() -> void:
 	assert_true(service.take_events().size() > 0)
 	assert_eq(service.take_events().size(), 0, "черга спорожняється після забору")
 
-## §3.5/core/battle_state.gd:44 — без другої фази старту vision[p] для гравця,
-## чий хід ще не наставав, лишається порожньою сіткою, і його юніти не можуть
-## відповісти на постріл узагалі (FireCommand._retaliate() залежить саме від
-## state.vision[target.owner].is_seen(...)). begin() мусить це виправляти.
+## §3.5/core/battle_state.gd start() — без другої фази старту vision[p] для гравця,
+## чий хід ще не наставав, лишається порожньою сіткою. begin() мусить це виправляти.
 func test_begin_primes_vision_for_every_player_and_starts_first_turn() -> void:
 	var p0_unit: Unit = service.state.add_unit(5, 0, Vector2i(1, 1), 0)
 	var p1_unit: Unit = service.state.add_unit(5, 1, Vector2i(6, 6), 0)
