@@ -153,6 +153,8 @@ class B:
         self.mats = []
         self.empties = []
         self.skip_uv = set()
+        self.tone = 1.0
+        self.col = self.bm.loops.layers.float_color.new("Color")
 
     def mi(self, mat):
         if mat not in self.mats:
@@ -164,6 +166,8 @@ class B:
         for v in verts:
             for f in v.link_faces:
                 f.material_index = i
+                for l in f.loops:
+                    l[self.col] = (self.tone, self.tone, self.tone, 1.0)
 
     def box(self, mat, c, size, rot=None):
         r = rot if rot is not None else Matrix.Identity(3)
@@ -218,6 +222,10 @@ def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True):
     bm = b.bm
     tile_of = lambda m: m.get("tile", 1.0)
     b.uv_box(tile_of)
+    for f in bm.faces:                     # грані без тону (ручні) — білі, інакше вершинний колір їх вимкне
+        for l in f.loops:
+            if l[b.col][3] == 0.0:
+                l[b.col] = (1.0, 1.0, 1.0, 1.0)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
     bmesh.ops.scale(bm, vec=(S, S, S), verts=bm.verts[:])
     xs = [v.co.x for v in bm.verts]; ys = [v.co.y for v in bm.verts]; zs = [v.co.z for v in bm.verts]
@@ -248,7 +256,7 @@ def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True):
     path = os.path.join(OUT, name + ".glb")
     os.makedirs(OUT, exist_ok=True)
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_apply=True,
-                              export_image_format="JPEG" if jpeg else "AUTO", export_jpeg_quality=80, export_cameras=False, export_lights=False,
+                              export_image_format="JPEG" if jpeg else "AUTO", export_jpeg_quality=80, export_vertex_color="ACTIVE", export_cameras=False, export_lights=False,
                               export_yup=True)
     if any(m.get("alpha_mask") for m in b.mats):
         patch_alpha_mask(path)
@@ -321,17 +329,30 @@ def sheet_mat(name, paint, seed, tile=1.15, size=64):
 CONCRETE_GREY = (0.64, 0.64, 0.62)
 
 
-def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128):
-    """Блідий бетон одного значення для всіх виробів; relief(size) -> висоти 0..1, що йдуть у нормаль."""
+def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, top_z=None, shade=0.18,
+                 ground=True, k=5.0, seams=False):
+    """Блідий бетон одного значення для всіх виробів. relief(size) -> висоти 0..1 (йдуть у нормаль);
+    бруд знизу (до 0,3 м від землі), патьоки під верхом (top_z, м) і плями з періодом у плитку."""
+    tv = tile_v or tile
     a = acg_albedo("Concrete034", (1, 1, 1), 0.3, 0, seed, 0.0, paint=CONCRETE_GREY, contrast=0.3, size=size)
+    a = a * (0.9 + 0.2 * fbm(size, seed + 7, 2, 3))[..., None]           # велика пляма
+    z = ((np.arange(size) + 0.5) / size * tv)[:, None]                      # метри над землею (рядок = v)
+    if ground:
+        a = a * (1 - 0.4 * np.exp(-z / 0.3))[..., None]
+    if top_z:
+        streak = np.clip(tile_noise(24, 1, size, seed + 3) * 1.6 - 0.45, 0, 1)
+        ramp = np.clip((z - (top_z - 0.5)) / 0.5, 0, 1) * (z <= top_z + 0.02)
+        a = a * (1 - 0.35 * streak * ramp)[..., None]
     n = load_acg("Concrete034", "NormalGL", size)
-    n = np.concatenate([n[..., :2] * 0.5 + 0.25, n[..., 2:]], -1)   # ambientCG-нормаль, приглушена
+    pit = 0.5 * tile_noise(48, 48, size, seed + 5) + 0.5 * tile_noise(16, 16, size, seed + 6)
+    h = (relief(size) if relief is not None else np.ones((size, size))) + 0.3 * pit
+    if seams:                                                               # стики опалубки через 0,25 м
+        h = h - 0.6 * (np.abs(np.sin(np.pi * z / 0.25)) ** 40)
+    r = normal_from_height(h, k)
+    n = np.concatenate([n[..., :2] - 0.5 + (r[..., :2] - 0.5) + 0.5, r[..., 2:]], -1)
     if relief is not None:
-        h = relief(size)
-        r = normal_from_height(h, 5.0)
-        n = np.concatenate([(n[..., :2] - 0.5 + (r[..., :2] - 0.5)) + 0.5, r[..., 2:]], -1)
-        a = a * (0.82 + 0.18 * h[..., None])
-    return pbr(name, albedo=a, normal=np.concatenate([n, np.ones((size, size, 1))], -1), tile=tile, tile_v=tile_v,
+        a = a * (1 - shade + shade * np.clip(relief(size), 0, 1))[..., None]
+    return pbr(name, albedo=a, normal=np.concatenate([n, np.ones((size, size, 1))], -1), tile=tile, tile_v=tv,
                rough=0.92)
 
 

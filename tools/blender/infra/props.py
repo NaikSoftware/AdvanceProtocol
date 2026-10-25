@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from common import *
 
 
-def concrete(name="road_concrete", seed=61):
-    return concrete_mat(name, tile=1.5, seed=seed)
+def concrete(name="road_concrete", seed=61, top_z=0.8):
+    return concrete_mat(name, tile=1.5, seed=seed, top_z=top_z, seams=True, k=7.0)
 
 
 def jersey():
@@ -65,12 +65,13 @@ def ditch_decal():
 
 
 def culvert():
-    mat = concrete("culvert_concrete", 63)
+    mat = concrete("culvert_concrete", 63, 1.5)
     ditch_decal()
     dark = pbr("culvert_dark", color=(0.02, 0.022, 0.02), rough=1.0)
     b = B()
     zc = 0.62
     for s in (-1, 1):
+        b.tone = 1 + 0.06 * s
         b.box(mat, (0, s * 4.4, 0.75), (3.0, 0.4, 1.5))                        # оголовок
         b.box(mat, (0, s * 4.6, 1.52), (3.1, 0.5, 0.1))                        # верхня кромка
         b.box(mat, (0, s * 4.9, 0.04), (1.8, 0.6, 0.08))                       # лотковий фартух
@@ -103,10 +104,10 @@ def trailer(name, paint, seed):
         for s in (-1, 1):
             b.cyl(tyre, (s * 1.05, ay, 0.5), 0.5, 0.4, 16, axis="X")
             b.cyl(rim, (s * 1.05 + s * 0.02, ay, 0.5), 0.28, 0.4, 10, axis="X")
-    for s in (-1, 1):                                                               # дишло: А-подібна рама
-        b.beam(frame, (s * 0.6, y1, 0.8), (0, 3.7, 0.75), 0.11)
-    b.box(frame, (0, 3.66, 0.75), (0.32, 0.3, 0.14))
-    b.box(frame, (0, y1 + 0.5, 0.78), (1.1, 0.14, 0.14))
+    for s in (-1, 1):                                                               # дишло: А-подібна рама, світліша
+        b.beam(body, (s * 0.65, y1, 0.85), (0, 3.7, 1.1), 0.17)
+    b.box(body, (0, 3.62, 1.1), (0.45, 0.4, 0.22))
+    b.box(body, (0, y1 + 0.55, 0.85), (1.3, 0.2, 0.2))
     b.beam(frame, (0, 2.55, 1.0), (0, 2.38, 2.0), 0.07, 8)                          # гідроциліндр
     finish(b, name)
 

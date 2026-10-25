@@ -31,7 +31,7 @@ def wrap_mat():
     a = np.array([0.62, 0.64, 0.6]) * (0.88 + 0.12 * h[..., None])
     a = a * (1 - 0.35 * dirt)
     return pbr("hay_wrap", albedo=a, normal=np.concatenate([normal_from_height(h, 3.0), np.ones((n, n, 1))], -1),
-               rough=0.3, tile=2.1)
+               rough=0.6, tile=2.1)
 
 
 def bale(b, mat, c=(0, 0, R), rot_jitter=0.0, seed=0, nseg=24):

@@ -15,24 +15,28 @@ def runs(corner):
 
 def fence(kind, corner, name):
     b = B()
+    rng = np.random.default_rng(sum(map(ord, name)))
     if kind.startswith("sheet"):
         col = {"sheet_green": (0.50, 0.57, 0.47), "sheet_brown": (0.44, 0.35, 0.30)}[kind]
         sheet = sheet_mat(f"{kind}_panel", col, 21 if kind.endswith("green") else 22)
         post = sheet
         nom, ph, pw = 2.5, 2.0, 0.08
     elif kind == "euro":
-        def relief(n):   # дві втоплені філенги в секції 2 × 2 м
-            return 1 - 0.85 * np.maximum(box_mask(n, 0.12, 0.88, 0.17, 0.42), box_mask(n, 0.12, 0.88, 0.5, 0.8))
-        sheet = concrete_mat("euro_panel", tile=2.0, relief=relief, seed=25)
+        def relief(n):   # три втоплені філенги один над одним у секції 2 × 2 м, зі скосом
+            h = np.zeros((n, n))
+            for v0, v1 in ((0.03, 0.31), (0.34, 0.62), (0.65, 0.93)):
+                h = np.maximum(h, box_mask(n, 0.06, 0.94, v0, v1, 0.03))
+            return 1 - 0.8 * h
+        sheet = concrete_mat("euro_panel", tile=2.0, relief=relief, seed=25, top_z=1.9, shade=0.1, k=9.0)
         post = sheet
-        nom, ph, pw = 2.0, 1.95, 0.15
+        nom, ph, pw = 2.0, 1.95, 0.2
     elif kind == "po2":
         def relief(n):   # три горизонтальні ребра й рамка по краю плити 4 × 2,5 м
             h = np.zeros((n, n))
             for z in (0.55, 1.2, 1.85):
                 h = np.maximum(h, box_mask(n, 0.0, 1.0, z / 2.5 - 0.035, z / 2.5 + 0.035, 0.01))
             return 0.35 + 0.65 * h
-        sheet = concrete_mat("po2_panel", tile=4.0, tile_v=2.5, relief=relief, seed=27)
+        sheet = concrete_mat("po2_panel", tile=4.0, tile_v=2.5, relief=relief, seed=27, top_z=2.45)
         post = sheet
         nom, ph, pw = 4.0, 2.5, 0.2
     elif kind == "picket":
@@ -56,9 +60,13 @@ def fence(kind, corner, name):
             if kind.startswith("sheet"):
                 b.box(sheet, at(c, 1.02, 0.045), (w, 0.035, 1.8), yaw)
             elif kind == "euro":
-                b.box(sheet, at(c, 0.95, 0), (w, 0.07, 1.6), yaw)
+                b.tone = 1 + rng.uniform(-0.07, 0.07)
+                b.box(sheet, at(c, 0.9, 0), (w, 0.1, 1.8), yaw)
+                b.tone = 1.0
             elif kind == "po2":
+                b.tone = 1 + rng.uniform(-0.07, 0.07)
                 b.box(sheet, at(c, 1.25, 0), (w, 0.09, 2.3), yaw)
+                b.tone = 1.0
             else:
                 # картка: площина вздовж плеча
                 v = [b.bm.verts.new(p) for p in (at(c - w / 2, 0.08), at(c + w / 2, 0.08),

@@ -9,16 +9,16 @@ const GROUND_TOL: float = 0.02
 
 ## ім'я: [габарит X, Y, Z в метрах (±допуск), допуск, максимум трикутників, кількість wire_N]
 const SPEC: Dictionary = {
-	"infra_pole_concrete_10kv": [Vector3(1.9, 7.9, 0.3), 0.25, 400, 3],
-	"infra_pole_concrete_04kv": [Vector3(0.9, 7.0, 0.3), 0.25, 400, 4],
-	"infra_pole_wood": [Vector3(1.8, 8.4, 0.5), 0.3, 500, 3],
+	"infra_pole_concrete_10kv": [Vector3(1.9, 10.9, 0.3), 0.15, 400, 3],
+	"infra_pole_concrete_04kv": [Vector3(0.9, 9.5, 0.3), 0.15, 400, 4],
+	"infra_pole_wood": [Vector3(1.8, 9.2, 0.5), 0.2, 500, 3],
 	"infra_tower_lattice": [Vector3(9.4, 33.5, 5.5), 1.5, 1500, 7],
 	"infra_tower_lattice_lod": [Vector3(9.4, 33.5, 5.5), 1.5, 400, 7],
 	"infra_fence_sheet_green": [Vector3(8.0, 2.0, 0.1), 0.2, 500, 0],
 	"infra_fence_sheet_green_corner": [Vector3(4.1, 2.0, 4.1), 0.2, 500, 0],
 	"infra_fence_sheet_brown": [Vector3(8.0, 2.0, 0.1), 0.2, 500, 0],
 	"infra_fence_sheet_brown_corner": [Vector3(4.1, 2.0, 4.1), 0.2, 500, 0],
-	"infra_fence_euro": [Vector3(8.0, 1.95, 0.2), 0.2, 500, 0],
+	"infra_fence_euro": [Vector3(8.0, 1.95, 0.25), 0.2, 500, 0],
 	"infra_fence_euro_corner": [Vector3(4.1, 1.95, 4.1), 0.2, 500, 0],
 	"infra_fence_po2": [Vector3(8.0, 2.5, 0.25), 0.2, 500, 0],
 	"infra_fence_po2_corner": [Vector3(4.2, 2.5, 4.2), 0.2, 500, 0],
