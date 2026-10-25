@@ -488,7 +488,14 @@ def mats():
         "soot": make_material("soot", flat=(0.045, 0.04, 0.036)),
         "clad_vc": make_material("clad_vc", "CorrugatedSteel005", 1.0, (0.46, 0.40, 0.34), seams=[("zv", 0.5, 0.04, 0.3)], corr=("h", 0.2, 0.008), streak=1.0, base_dirt=0.5, patch=((0.18, 0.09, 0.05), 0.25), vmul=True),
         "boards_ruin": make_material("boards_ruin", "Planks021", 1.0, (0.30, 0.27, 0.24), sat=0.35, seams=[("h", 0.2, 0.02, 0.8)], streak=1.0, base_dirt=0.5, bump=0.02),
-        "panel_in": make_material("panel_in", flat=(0.70, 0.68, 0.64)),
+        "panel_in": make_material("panel_in", flat=(0.30, 0.29, 0.27)),
+        "panel_frag": make_material("panel_frag", "Concrete034", 1.2, (0.43, 0.41, 0.38), streak=0.4, base_dirt=0.5, bump=0.02),
+        # напівруїни: ті самі світлі штукатурка, цегла й сірі дахи, що в цілих будинків; кіптява й руйнування зверху
+        "wall_half": make_material("wall_half", "Plaster001", 1.0, (0.66, 0.62, 0.55), streak=0.35, base_dirt=0.5, bump=0.012, patch=((0.40, 0.21, 0.14), 0.22), patch_scale=1.0, vmul=True),
+        "boards_vc": make_material("boards_vc", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02, vmul=True),
+        "sheet_char": make_material("sheet_char", "CorrugatedSteel005", 1.0, (0.34, 0.31, 0.28), streak=0.8, base_dirt=0.3, patch=((0.22, 0.11, 0.06), 0.3)),
+        "floor_char": make_material("floor_char", "Planks021", 1.0, (0.17, 0.145, 0.125), sat=0.4, seams=[("h", 0.2, 0.02, 0.8)], streak=0.6, base_dirt=0.3, bump=0.025),
+        "heap_base_buff": make_material("heap_base_buff", flat=(0.2, 0.165, 0.13)),
         "panel_light": make_material("panel_light", "Concrete034", 1.2, (0.26, 0.255, 0.25), streak=0.1, base_dirt=0.2),
         "rubble": make_rubble_material("rubble", [(0.30, (0.09, 0.05, 0.032)), (0.46, (0.115, 0.07, 0.044)), (0.66, (0.125, 0.104, 0.074)), (0.82, (0.08, 0.074, 0.06)), (0.95, (0.036, 0.03, 0.024)), (1.01, (0.21, 0.18, 0.10))]),
         "heap": make_rubble_material("heap", [(0.34, (0.09, 0.05, 0.032)), (0.50, (0.115, 0.07, 0.044)), (0.68, (0.125, 0.104, 0.074)), (0.86, (0.08, 0.074, 0.06)), (1.01, (0.036, 0.03, 0.024))]),
@@ -509,14 +516,16 @@ def mats():
         "panel_vc": make_material("panel_vc", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, vmul=True),
         # джерело запікання купи: темна основа, а уламки 20-50 см на ній світліші, тож щілини між ними читаються як шви
         "heap_base": make_material("heap_base", flat=(0.06, 0.044, 0.034)),
-        "heap_base_grey": make_material("heap_base_grey", flat=(0.12, 0.115, 0.105)),
+        "heap_buff": make_rubble_material("heap_buff", [(0.30, (0.46, 0.23, 0.13)), (0.50, (0.52, 0.31, 0.19)), (0.68, (0.64, 0.57, 0.46)), (0.84, (0.78, 0.76, 0.69)), (0.94, (0.20, 0.17, 0.14)), (1.01, (0.49, 0.41, 0.30))]),
+        "rubble_buff": make_rubble_material("rubble_buff", [(0.30, (0.46, 0.23, 0.13)), (0.50, (0.52, 0.31, 0.19)), (0.68, (0.64, 0.57, 0.46)), (0.84, (0.78, 0.76, 0.69)), (0.94, (0.20, 0.17, 0.14)), (1.01, (0.49, 0.41, 0.30))]),
+        "heap_base_grey": make_material("heap_base_grey", flat=(0.055, 0.048, 0.042)),
         "rubble_hi": make_rubble_material("rubble_hi", [(0.34, (0.15, 0.07, 0.04)), (0.52, (0.16, 0.09, 0.055)), (0.68, (0.15, 0.12, 0.09)), (0.84, (0.095, 0.088, 0.075)), (0.95, (0.045, 0.036, 0.03)), (1.01, (0.22, 0.19, 0.11))]),
-        "heap_grey": make_rubble_material("heap_grey", [(0.78, (0.30, 0.29, 0.265)), (0.88, (0.32, 0.29, 0.25)), (0.95, (0.38, 0.36, 0.30)), (1.01, (0.14, 0.13, 0.115))]),
+        "heap_grey": make_rubble_material("heap_grey", [(0.62, (0.17, 0.165, 0.15)), (0.80, (0.20, 0.18, 0.155)), (0.92, (0.12, 0.095, 0.075)), (1.01, (0.07, 0.065, 0.058))]),
         "pump_light": make_material("pump_light", flat=(0.12, 0.13, 0.14)),
         "cavity_black": make_material("cavity_black", flat=(0.003, 0.003, 0.003)),
         "pv_frame": make_material("pv_frame", flat=(0.10, 0.10, 0.105)),
         "brick_dark": make_material("brick_dark", "Bricks105", 1.0, recolor=(0.36, 0.28, 0.24), streak=0.5, base_dirt=0.6, bump=0.02),
-        "slab_dark": make_material("slab_dark", "Concrete034", 1.2, (0.34, 0.32, 0.30), streak=0.2, base_dirt=0.5),
+        "slab_dark": make_material("slab_dark", "Concrete034", 1.2, (0.30, 0.285, 0.265), streak=0.3, base_dirt=0.5, bump=0.035, patch=((0.07, 0.065, 0.06), 0.25), ash=((0.46, 0.44, 0.40), 2.5, 0.05)),
         "heap_house": make_rubble_material("heap_house", [(0.40, (0.24, 0.216, 0.176)), (0.70, (0.095, 0.05, 0.032)), (0.88, (0.08, 0.074, 0.06)), (1.01, (0.036, 0.03, 0.024))]),
         "window": make_window_material(),
         "frame": make_material("frame", flat=(0.55, 0.55, 0.53)),
@@ -879,14 +888,14 @@ class HeapSurface:
         return self.lip + max(-0.1, z) * self.s
 
 
-def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0):
+def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.0):
     """Меш купи за HeapSurface: кільця до губи (t=1, висота lip) і три кільця заокругленої губи, що опускаються під землю
     за 0.5 м; центр — одна грань-шапка, не віяло. jitter — адитивний шум лише для високого джерела запікання. Повертає найвищу вершину."""
     import random
     jr = random.Random(seed * 7 + 3)
     lip = hs.lip
     rm = 0.5 * (hs.rx + hs.ry)
-    rim = [(0.0, lip), (0.22 / rm, 0.78 * lip), (0.40 / rm, 0.38 * lip), (0.52 / rm, -0.12)]
+    rim = [(0.0, lip), (0.22 * skirt / rm, 0.78 * lip), (0.40 * skirt / rm, 0.38 * lip), (0.52 * skirt / rm, -0.12)]
     ring = []
     top = 0.0
     for k in range(1, rings + 1):
@@ -917,7 +926,7 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0):
     return top
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0):
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4):
     """Уламок стіни p0-p1: сегменти різної ширини, кожен ламається ще на 1-3 шматки з різними верхами (різниця 0.2-0.5 м,
     тож жодного рівного верху), випадкова ходьба висот довкола задуму heights (не вище hcap); верхні 0.4 м — відкрита
     цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий."""
@@ -974,7 +983,7 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
         a = Vector((p0[0], p0[1], 0)) + u * xa
         c = Vector((p0[0], p0[1], 0)) + u * xc
         pb = [a + nrm, c + nrm, c - nrm, a - nrm]
-        br_a, br_c = max(0.0, ha - 0.4), max(0.0, hc - 0.4)
+        br_a, br_c = max(0.0, ha - cap), max(0.0, hc - cap)
         lo_a, lo_c = max(0.0, br_a - soot_h), max(0.0, br_c - soot_h)
         for (q0, q1, tn) in ((pb[0], pb[1], 1.0), (pb[2], pb[3], inner_tone)):
             flip = q0 is pb[2]
@@ -1176,6 +1185,40 @@ def opening(b, axis, c, u, z, w, h, sgn, k=None):
     face([P(-hw - 0.15, z + h), P(hw + 0.15, z + h), P(hw + 0.05, z + h + 0.45), P(-hw - 0.05, z + h + 0.45)], (0.06, 0.06, 0.145, 0.145))
 
 
+def opening2(b, axis, c, u, z, w, h, sgn, floor=True):
+    """Проріз із глибиною: підлога (світліша смуга знизу), задня стіна (темна), освітлений відкіс збоку, підвіконня, уламок рамки
+    й кіптява над перемичкою. Грані лежать у площині стіни: глибину дають тони, а не діра в меші. axis 'y': нормаль по Y, 'x': по X."""
+    e = 0.025 * sgn
+    outn = Vector((0, sgn, 0)) if axis == "y" else Vector((sgn, 0, 0))
+
+    def P(du, zz, off=0.0):
+        return (u + du, c + e + off * sgn, zz) if axis == "y" else (c + e + off * sgn, u + du, zz)
+
+    def face(pts, tones):
+        n = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
+        if n.dot(outn) < 0:
+            pts, tones = pts[::-1], tones[::-1]
+        b.soot(pts, tones, 1)
+    hw = w / 2
+    fh = min(0.4, h * 0.25) if floor else 0.0
+    # задня стіна: темніша вгорі, трохи світліша біля підлоги
+    face([P(-hw, z + fh, 0.004), P(hw, z + fh, 0.004), P(hw, z + h, 0.004), P(-hw, z + h, 0.004)], (0.34, 0.34, 0.21, 0.21))
+    if fh:                                                                       # підлога: світла смуга з ледь помітним сміттям
+        face([P(-hw, z, 0.006), P(hw, z, 0.006), P(hw, z + fh, 0.006), P(-hw, z + fh, 0.006)], (0.50, 0.50, 0.36, 0.36))
+    face([P(-hw, z, 0.01), P(-hw + 0.16, z + 0.02, 0.01), P(-hw + 0.16, z + h - 0.02, 0.01), P(-hw, z + h, 0.01)], (0.52, 0.45, 0.45, 0.52))   # освітлений відкіс
+    face([P(hw - 0.12, z + 0.02, 0.01), P(hw, z, 0.01), P(hw, z + h, 0.01), P(hw - 0.12, z + h - 0.02, 0.01)], (0.16, 0.12, 0.12, 0.16))        # відкіс у тіні
+    if floor:
+        face([P(-hw - 0.08, z - 0.08), P(hw + 0.08, z - 0.08), P(hw + 0.08, z + 0.04, 0.012), P(-hw - 0.08, z + 0.04, 0.012)], (0.62, 0.62, 0.55, 0.55))   # підвіконня
+    face([P(-hw - 0.3, z + h), P(hw + 0.3, z + h), P(hw + 0.1, z + h + 0.9), P(-hw - 0.1, z + h + 0.9)], (0.22, 0.22, 0.58, 0.58))              # потік кіптяви вгору
+    # уламок рамки: стійка й шматок перемички, що лишились
+    if axis == "y":
+        b.box(u + hw - 0.05, c + 0.04 * sgn, z, 0.07, 0.07, min(h, 0.9), "pvc")
+        b.box(u - hw + 0.25, c + 0.04 * sgn, z + h - 0.07, 0.5, 0.07, 0.07, "pvc")
+    else:
+        b.box(c + 0.04 * sgn, u + hw - 0.05, z, 0.07, 0.07, min(h, 0.9), "pvc")
+        b.box(c + 0.04 * sgn, u - hw + 0.25, z + h - 0.07, 0.07, 0.5, 0.07, "pvc")
+
+
 def bent_sheet(b, p0, p1, width, mat, bend=0.35, axis="y"):
     """Зігнутий лист покрівлі: дві грані з перегином посередині; ширина вздовж осі axis."""
     p0, p1 = Vector(p0), Vector(p1)
@@ -1308,7 +1351,7 @@ def unwrap(me, flat, atlas_px, weights=None, planar=()):
     return 100 / (sc * atlas_px)  # см на тексель, ураховуючи метри
 
 
-HEAP_SLOTS = {"heap", "heap_grey", "heap_house"}
+HEAP_SLOTS = {"heap", "heap_grey", "heap_house", "heap_buff"}
 
 
 def heap_bake(me, b, hi, mt, img, nimg, atlas_px, ao=0.65):

@@ -149,9 +149,9 @@ def damaged():
     east = [2 * FLOOR, FLOOR, 2 * FLOOR, FLOOR]
     front = [FLOOR, 2 * FLOOR]
     roots = []
-    roots += panel_wall(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel", 5, piece=3.0, tilt=0.03, inner=(0.0, 1.0), lips=(FLOOR,), in_mat="panel_in")
-    roots += panel_wall(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel", 6, piece=3.0, tilt=0.04, inner=(-1.0, 0.0), lips=(FLOOR, 2 * FLOOR), in_mat="panel_in")
-    roots += panel_wall(b, (xc, Y1 - 0.2), (xc + 6.0, Y1 - 0.2), 0.4, front, "panel", 7, piece=3.0, tilt=0.03, inner=(0.0, -1.0), lips=(FLOOR,), in_mat="panel_in")
+    roots += panel_wall(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel_frag", 5, piece=3.0, tilt=0.03, inner=(0.0, 1.0), lips=(FLOOR,), in_mat="panel_in")
+    roots += panel_wall(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel_frag", 6, piece=3.0, tilt=0.04, inner=(-1.0, 0.0), lips=(FLOOR, 2 * FLOOR), in_mat="panel_in")
+    roots += panel_wall(b, (xc, Y1 - 0.2), (xc + 6.0, Y1 - 0.2), 0.4, front, "panel_frag", 7, piece=3.0, tilt=0.03, inner=(0.0, -1.0), lips=(FLOOR,), in_mat="panel_in")
     def wall_h(vals, t):
         return vals[min(len(vals) - 1, max(0, int(t * len(vals))))]
     # вікна лишаються там, де стіна їх досягає; вибиті — з м'якою кіптявою

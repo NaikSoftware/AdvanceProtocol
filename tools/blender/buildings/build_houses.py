@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, chunks, mound, mound_radius, wall_run, bent_sheet, burn_ring, HeapSurface, heap_mound
+from lib import opening2, Builder, chunks, mound, mound_radius, wall_run, bent_sheet, burn_ring, HeapSurface, heap_mound
 from mathutils import Vector
 
 out = lib.out_dir()
@@ -34,7 +34,10 @@ def blown(b, x, y, sgn, z, w, h, axis="y"):
         quad = [(x - w / 2, y + e, z), (x + w / 2, y + e, z), (x + w / 2, y + e, z + h), (x - w / 2, y + e, z + h)]
     else:
         quad = [(x + e, y - w / 2, z), (x + e, y + w / 2, z), (x + e, y + w / 2, z + h), (x + e, y - w / 2, z + h)]
-    b.poly(quad[::-1] if sgn < 0 else quad, "blown_dark")
+    if axis == "y":
+        opening2(b, "y", y, x, z, w, h, sgn)
+    else:
+        opening2(b, "x", x, y, z, w, h, sgn)
     burn_ring(b, axis, y if axis == "y" else x, x if axis == "y" else y, z, w, h, sgn, g_side=0.2, g_bot=0.1, g_top=0.45)
 
 
@@ -103,18 +106,18 @@ def house1(hit=False):
         # дві частини ската: розрив іде від коника крізь край карниза, тож контур даху ламається
         left = [(0, 0)] + [(uL[i], vs[i]) for i in range(nh + 1)] + [(0, 1)]
         right = [(uR[i], vs[i]) for i in range(nh + 1)] + [(1, 1), (1, 0)]
-        b.poly_up([P(u, v) for (u, v) in left], "fc_roof_burnt")
-        b.poly_up([P(u, v) for (u, v) in right], "fc_roof_burnt")
+        b.poly_up([P(u, v) for (u, v) in left], "fc_roof_xh")
+        b.poly_up([P(u, v) for (u, v) in right], "fc_roof_xh")
         # смуга кіптяви ~1.5 м навколо розриву: від майже чорного біля краю до тла даху
         for edge, sgn_ in ((uL, -1), (uR, 1)):
             for i in range(nh):
                 u0, u1 = edge[i], edge[i + 1]
                 v0, v1 = vs[i], vs[i + 1]
-                du = 0.17 * sgn_
+                du = 0.11 * sgn_
                 pts = [P(u0, v0), P(u1, v1), P(u1 + du, v1), P(u0 + du, v0)]
                 pts = [(x, y - 0.025, z + 0.03) for (x, y, z) in pts]
                 n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
-                tones = (0.02, 0.02, 0.2, 0.2)
+                tones = (0.06, 0.06, 0.34, 0.34)
                 if n_.z < 0:
                     pts, tones = pts[::-1], tones[::-1]
                 b.soot(pts, tones, 1)
@@ -299,24 +302,24 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
                 hs[-3:] = [1.6, 1.8, 1.8]
             else:
                 hs[:3] = [1.8, 1.7, 1.5]
-        wall_run(b, p0, p1, 0.4, hs, "wall_ruin", "brick_ruin", seed * 3 + si, hcap=1.9)
+        wall_run(b, p0, p1, 0.4, hs, "wall_half", "brick_face", seed * 3 + si, hcap=1.9, top_tone=0.82, brick_mat="brick_face")
     if os.environ.get("RUIN_WALLS_ONLY"):                                        # діагностика: лише стіни, щоб міряти їхній тон у кадрі
         lib.finish(b, name + "_walls", out, tri_limit=4200, footprint=footprint, anchor=(0, 0), ground_clip=True)
         return
     # --- купа: гребінь ≤1.5 м, контур 5-7 опуклостей із розмахом 0.3-0.6 м, губа 0.2-0.4 м; деталь запікається зі скан-джерела
     bh = Builder()
-    plan = [HeapSurface(0.0, 0.0, L / 2 + 0.2, D / 2 + 0.2, 0.95, seed + 1, bumps=rnd.choice((5, 6, 7)), lip=0.34, wob=0.15, hummocks=7, hum_amp=0.34)]
-    for k in range(3):
+    plan = [HeapSurface(0.0, 0.0, L / 2, D / 2, 0.85, seed + 1, bumps=rnd.choice((5, 6, 7)), lip=0.3, wob=0.12, hummocks=5, hum_amp=0.28)]
+    for k in range(2):                                                            # дрібні відсипи всередині клітинки (8 x 8 м)
         ang = rnd.uniform(0, 2 * math.pi)
-        rr_ = rnd.uniform(2.2, 3.4)
-        plan.append(HeapSurface(rr_ * math.cos(ang) * 1.15, rr_ * math.sin(ang) * 0.95, rnd.uniform(1.6, 2.2), rnd.uniform(1.4, 2.0),
-                                rnd.uniform(0.55, 0.8), seed + 10 + k, bumps=rnd.choice((5, 6, 7)), lip=0.24, wob=0.1, lump=0.06))
+        rr_ = rnd.uniform(1.3, 1.8)
+        plan.append(HeapSurface(rr_ * math.cos(ang), rr_ * math.sin(ang), rnd.uniform(0.8, 1.0), rnd.uniform(0.7, 0.9),
+                                rnd.uniform(0.5, 0.7), seed + 10 + k, bumps=rnd.choice((5, 6, 7)), lip=0.22, wob=0.08, lump=0.05))
     peak = 0.0
-    plan[0].fit_peak(1.32)
+    plan[0].fit_peak(1.15)
     for k, hsf in enumerate(plan):
         big = k == 0
-        peak = max(peak, heap_mound(b, hsf, "heap", rings=9 if big else 2, segs=48 if big else 16))
-        heap_mound(bh, hsf, "heap_base", rings=18 if big else 5, segs=110 if big else 36, jitter=0.05, seed=seed + k)
+        peak = max(peak, heap_mound(b, hsf, "heap_buff", rings=8 if big else 2, segs=40 if big else 16, skirt=0.5))
+        heap_mound(bh, hsf, "heap_base_buff", rings=16 if big else 5, segs=96 if big else 36, jitter=0.05, seed=seed + k, skirt=0.5)
     print("HEAPPEAK", name, round(peak, 3))
     assert peak <= 1.45, f"{name}: гребінь купи {peak:.2f} м"
 
@@ -325,7 +328,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
 
     # високий вихідний меш: уламки 20-50 см по всій купі й відсипу, плитові шматки з гострими краями
     hrnd = random.Random(seed + 77)
-    mats_ = ("rubble_hi",) * 5 + ("heap_grey", "heap_grey")
+    mats_ = ("rubble_buff",) * 7
     for hsf in plan:
         n = int(math.pi * hsf.rx * hsf.ry * 9.0)
         for _ in range(n):
@@ -342,34 +345,43 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
             t = math.sqrt(hrnd.uniform(0, 0.98))
             r = t * hsf.radius(a)
             px, py = hsf.cx + hsf.rx * r * math.cos(a), hsf.cy + hsf.ry * r * math.sin(a)
-            bh.box_e(px, py, hsf.z(px, py) + 0.03, hrnd.uniform(0.3, 0.6), hrnd.uniform(0.2, 0.4), hrnd.uniform(0.08, 0.16), "brick_ruin",
-                     euler=(hrnd.uniform(-0.35, 0.35), hrnd.uniform(-0.35, 0.35), hrnd.uniform(0, 3.14)), top="brick_ruin")
+            bh.box_e(px, py, hsf.z(px, py) + 0.03, hrnd.uniform(0.3, 0.6), hrnd.uniform(0.2, 0.4), hrnd.uniform(0.08, 0.16), "brick_face",
+                     euler=(hrnd.uniform(-0.35, 0.35), hrnd.uniform(-0.35, 0.35), hrnd.uniform(0, 3.14)), top="brick_face")
     # шматки 0.4-0.7 м на носку купи: наполовину вкопані, виступають за контур і кидають тінь
-    for k in range(4):
+    for k in range(3):
         hsf = plan[0]
-        a = (k + rnd.uniform(0.0, 0.8)) * 2 * math.pi / 4
+        a = (k + rnd.uniform(0.0, 0.8)) * 2 * math.pi / 3
         rr_ = hsf.radius(a)
-        px, py = hsf.cx + hsf.rx * rr_ * 1.04 * math.cos(a), hsf.cy + hsf.ry * rr_ * 1.04 * math.sin(a)
-        b.rock(px, py, 0.14, rnd.uniform(0.4, 0.7), rnd.choice(("rubble", "heap")), rnd, buried=0.45)
-    if chimney:                                                                   # димар: єдине високе над купою, з плитою-накриттям
+        px, py = hsf.cx + hsf.rx * rr_ * 0.97 * math.cos(a), hsf.cy + hsf.ry * rr_ * 0.97 * math.sin(a)
+        b.rock(px, py, 0.14, rnd.uniform(0.4, 0.6), "rubble_buff", rnd, buried=0.45)
+    if chimney:                                                                   # димар: пеньок із червоної цегли, що розколовся вгорі
         cx, cy = chimney
         zb = surf(cx, cy) - 0.3
-        top_ = 1.82
-        b.box_e(cx, cy, (zb + top_) / 2, 0.8, 0.8, top_ - zb, "brick_ruin", euler=(0, 0, 0.2), top="brick_ruin")
-        b.box_e(cx, cy, top_ + 0.08, 1.0, 1.0, 0.16, "brick_ruin", euler=(0, 0, 0.2), top="brick_ruin")
+        b.box_e(cx, cy, (zb + 1.2) / 2, 0.85, 0.85, 1.2 - zb, "brick_face", euler=(0, 0, 0.15), top="brick_face")
+        b.box_e(cx + 0.04, cy, 1.4, 0.72, 0.72, 0.5, "brick_face", euler=(0.1, -0.08, 0.5), top="brick_face")
+        b.box_e(cx - 0.05, cy + 0.05, 1.75, 0.55, 0.55, 0.32, "brick_face", euler=(0.28, 0.2, 0.9), top="brick_face")
+    for k in range(5 if chimney else 3):                                          # підняті шматки стін і плит: поле кидає тінь
+        a = rnd.uniform(0, 2 * math.pi)
+        t = rnd.uniform(0.25, 0.8)
+        hsf = plan[0]
+        r = t * hsf.radius(a)
+        px, py = hsf.cx + hsf.rx * r * math.cos(a), hsf.cy + hsf.ry * r * math.sin(a)
+        sz = rnd.uniform(0.7, 1.1)
+        b.box_e(px, py, surf(px, py) + sz * 0.22, sz * rnd.uniform(0.9, 1.3), sz * rnd.uniform(0.5, 0.8), sz * rnd.uniform(0.35, 0.5),
+                rnd.choice(("brick_face", "brick_dark", "brick_face")), euler=(rnd.uniform(-0.45, 0.45), rnd.uniform(-0.45, 0.45), rnd.uniform(0, 3.14)))
     # 3 крокви: низько лежать на купі, обидва кінці вгризаються, ≤30°, ≥0.2 м
     for k in range(3):
         a = rnd.uniform(0, 2 * math.pi)
-        r0 = rnd.uniform(1.0, 2.0)
-        x0_, y0_ = r0 * math.cos(a) * 1.3, r0 * math.sin(a)
+        r0 = rnd.uniform(0.4, 1.0)
+        x0_, y0_ = r0 * math.cos(a) * 1.1, r0 * math.sin(a)
         a2 = a + rnd.uniform(-0.5, 0.5)
-        r1 = r0 + rnd.uniform(2.6, 3.2)
-        x1_, y1_ = r1 * math.cos(a2) * 1.3, r1 * math.sin(a2)
+        r1 = r0 + rnd.uniform(1.3, 1.8)
+        x1_, y1_ = r1 * math.cos(a2) * 1.1, r1 * math.sin(a2)
         z0_ = surf(x0_, y0_) - 0.05
         z1_ = max(0.1, surf(x1_, y1_) - 0.05)
         th = rnd.uniform(0.2, 0.3)
         b.beam((x0_, y0_, z0_), (x1_, y1_, z1_), th, "timber_dark", th * 1.2)
-    lib.finish(b, name, out, tri_limit=4200, footprint=footprint, anchor=(0, 0), hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.65")))
+    lib.finish(b, name, out, tri_limit=4200, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.65")))
 
 
 if want("h1"):
@@ -383,5 +395,5 @@ if want("h3"):
 if want("h4"):
     house4()
 if want("ruins"):
-    ruin("ruin_h1", 10.0, 8.0, 0.8, 11, (2, 2), chimney=(2.2, -0.2), tile="fc_roof_x", cap=1.5)
-    ruin("ruin_h3", 10.0, 10.0, 0.6, 29, (2, 2), tile="tile_graphite", corner=True, cap=1.6)
+    ruin("ruin_h1", 6.2, 5.0, 0.8, 11, (1, 1), chimney=(1.3, -0.2), tile="fc_roof_x", cap=1.5)
+    ruin("ruin_h3", 5.6, 5.6, 0.6, 29, (1, 1), tile="tile_graphite", corner=True, cap=1.6)
