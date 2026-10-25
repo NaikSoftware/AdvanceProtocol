@@ -976,7 +976,7 @@ void fragment() {
 				rock_k = smoothstep(0.4, 0.62, rx);
 				// Камінь лежить у землі: кільце ~0.3 м темніше на ~30 % там, де висота трохи нижча за
 				// поріг (підніжжя каменю), а на сонці — тінь від каменя, зсунута від сонця.
-				float ring = smoothstep(0.08, 0.4, rx) * (1.0 - rock_k) * (1.0 - 0.6 * grass_bite);
+				float ring = smoothstep(0.26, 0.4, rx) * (1.0 - rock_k) * (1.0 - 0.6 * grass_bite);
 				float shadow = 0.0;
 				if (dry_season) {
 					vec2 so = sun_dir.xz / max(sun_dir.y, 0.3) * (0.25 / METRES_PER_TILE);
@@ -986,7 +986,7 @@ void fragment() {
 				}
 				// Сам камінь світліший на верхах і темніший у западинах карти висот: об'єм.
 				float rtone = mix(0.72, 1.18, clamp(rh + 0.35 * (1.0 - rock_k), 0.0, 1.0));
-				alb = mix(alb * (1.0 - 0.3 * max(ring, shadow)), ra * mix(1.0, rc, rock_k) * rtone, rock_k);
+				alb = mix(alb * (1.0 - 0.35 * max(ring, shadow)), ra * mix(1.0, rc, rock_k) * rtone, rock_k);
 				// Нормаль каменю сильніша за траву (×1.8): горбки ловлять світло біля камери.
 				nxy = mix(nxy, rn * 1.8, rock_k);
 			}
