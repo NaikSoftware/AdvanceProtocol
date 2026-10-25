@@ -9,7 +9,7 @@ out = lib.out_dir()
 # F7: бак Ø3 x 6 м на колоні Ø1.4 м, разом 18 м
 lib.reset()
 b = Builder()
-b.cyl(0, 0, 0, 0.95, 0.4, 12, "apron")                                   # фундамент
+b.cyl(0, 0, 0, 0.95, 0.4, 12, "steel_paint")                                   # фундамент
 b.cyl(0, 0, 0.4, 0.7, 11.6, 12, "steel_paint", cap=False)                # колона Ø1.4
 b.cyl(0, 0, 12.0, 0.9, 0.5, 16, "steel_paint", r_top=1.5, cap=False)     # перехід під бак
 b.cyl(0, 0, 12.5, 1.5, 4.8, 16, "steel_paint", cap=False)

@@ -144,6 +144,20 @@ def hangar(damaged):
         bent_sheet(b, pc, (pc[0] - 1.5, pc[1], pc[2] - 2.0), 1.4, "galv", 0.4, "y")
         pd = slope_pt(-1, edge(-1, -3.0, "hi"), -3.0)
         bent_sheet(b, pd, (pd[0] - 1.4, pd[1], pd[2] - 2.2), 1.4, "galv", 0.35, "y")
+        # відігнуті краї листів: 3 язики 1.5-2.5 м загинаються вниз на 0.3-0.6 м у проріз
+        def flap(side, which, y0f, y1f, drop):
+            pts = [r for r in HOLE[side] if y0f <= r[0] <= y1f]
+            for i in range(len(pts) - 1):
+                (ya_, tl_a, th_a), (yb_, tl_b, th_b) = pts[i], pts[i + 1]
+                ta_, tb_ = (tl_a, tl_b) if which == "lo" else (th_a, th_b)
+                dx = (-0.45 if which == "lo" else 0.45) * side
+                za, zb = EAVE + 3.0 * ta_, EAVE + 3.0 * tb_
+                xa_, xb_ = side * 9.0 * (1 - ta_), side * 9.0 * (1 - tb_)
+                q = [(xa_, ya_, za), (xb_, yb_, zb), (xb_ + dx, yb_, zb - drop), (xa_ + dx, ya_, za - drop)]
+                b.poly_up(q, "galv")
+        flap(1, "lo", -3.2, -1.0, 0.5)
+        flap(1, "hi", 0.5, 2.8, 0.4)
+        flap(1, "lo", 2.0, 4.0, 0.55)
         # купа сталі й утеплювача на підлозі під проломом
         mound(b, 3.0, -0.5, 4.2, 5.0, 1.4, 33, mat="rubble_steel", z0=0.62, rings=5, segs=16)
         lib.chunks(b, 3.0, -0.5, 3.6, 1.5, 24, ("rubble_steel", "insul", "clad_burnt"), 31, z0=0.62, smin=0.35, smax=0.9)
@@ -244,6 +258,7 @@ def fuel():
         b.box(cx + ix, 0, 0.08, 0.8, 10.1, 0.26, "apron", top="apron")
         for py in (-4.4, -3.0, 3.0, 4.4):
             b.box(cx + ix, py, 0.3, 0.5, 0.9, 1.8, "pump", top="dark")
+            b.box(cx + ix, py - 0.47, 1.0, 0.5, 0.05, 0.55, "pump_light")
     # магазин-кіоск 8 x 5 x 3: суцільне скління по фасаду, двері, виступ даху
     b.box(10.0, 0, 0.08, 8.0, 5.0, 3.0, "kiosk", top="bitumen")
     b.window(("y", 2.5, 1), 8.3, 0.4, 4.0, 2.5)                          # суцільне скління ~4 м
