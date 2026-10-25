@@ -322,6 +322,9 @@ results, making decisions, integrating outputs and validating the final state.
 - Give every child agent a discrete subtask with clear inputs, outputs and acceptance criteria.
 - **Every implementation gets a review pass by a separate agent**, rotated across reviewers. An
   implementer's own report of its work is not a review, however detailed.
+- **A visual implementer judges its own frames first.** After every render it opens the frames
+  at full size, checks each claim against them at both zooms, and fixes what is plainly wrong
+  before anything goes to `visual-critic`.
 - Use separate worktrees/branches when several child agents modify the repo in parallel, and
   **never commit in a tree where a child agent is working.**
 - Ask child agents to report concise findings, changed files, validation commands and blockers.
