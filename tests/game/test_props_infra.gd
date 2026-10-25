@@ -13,7 +13,6 @@ const SPEC: Dictionary = {
 	"infra_pole_concrete_04kv": [Vector3(0.9, 9.5, 0.3), 0.15, 400, 4],
 	"infra_pole_wood": [Vector3(1.8, 9.2, 0.5), 0.2, 500, 3],
 	"infra_tower_lattice": [Vector3(9.4, 33.5, 5.5), 1.5, 1500, 7],
-	"infra_tower_lattice_lod": [Vector3(9.4, 33.5, 5.5), 1.5, 400, 7],
 	"infra_fence_sheet_green": [Vector3(8.0, 2.0, 0.1), 0.2, 500, 0],
 	"infra_fence_sheet_green_corner": [Vector3(4.1, 2.0, 4.1), 0.2, 500, 0],
 	"infra_fence_sheet_brown": [Vector3(8.0, 2.0, 0.1), 0.2, 500, 0],
@@ -28,9 +27,9 @@ const SPEC: Dictionary = {
 	"infra_hay_wrapped": [Vector3(1.2, 1.31, 1.35), 0.1, 300, 0],
 	"infra_hay_stack": [Vector3(1.2, 2.46, 2.75), 0.15, 800, 0],
 	"infra_jersey_block": [Vector3(2.0, 0.8, 0.6), 0.1, 100, 0],
-	"infra_culvert": [Vector3(3.1, 1.57, 10.4), 0.4, 800, 0],
-	"infra_trailer_green": [Vector3(2.5, 2.37, 7.5), 0.25, 1200, 0],
-	"infra_trailer_rust": [Vector3(2.5, 2.37, 7.5), 0.25, 1200, 0],
+	"infra_culvert": [Vector3(8.0, 2.0, 17.0), 0.1, 1300, 0],
+	"infra_trailer_green": [Vector3(2.7, 2.37, 7.7), 0.25, 1200, 0],
+	"infra_trailer_rust": [Vector3(2.7, 2.37, 7.7), 0.25, 1200, 0],
 }
 
 

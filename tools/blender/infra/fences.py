@@ -17,7 +17,7 @@ def fence(kind, corner, name):
     b = B()
     rng = np.random.default_rng(sum(map(ord, name)))
     if kind.startswith("sheet"):
-        col = {"sheet_green": (0.50, 0.57, 0.47), "sheet_brown": (0.44, 0.35, 0.30)}[kind]
+        col = {"sheet_green": (0.33, 0.39, 0.31), "sheet_brown": (0.44, 0.35, 0.30)}[kind]
         sheet = sheet_mat(f"{kind}_panel", col, 21 if kind.endswith("green") else 22)
         post = sheet
         nom, ph, pw = 2.5, 2.0, 0.08
@@ -28,7 +28,8 @@ def fence(kind, corner, name):
                 h = np.maximum(h, box_mask(n, 0.06, 0.94, v0, v1, 0.03))
             return 1 - 0.8 * h
         sheet = concrete_mat("euro_panel", tile=2.0, relief=relief, seed=25, top_z=1.9, shade=0.1, k=9.0)
-        post = sheet
+        post = concrete_mat("euro_post", tile=2.0, seed=26, top_z=1.95)
+        b.mi(post)              # перший матеріал меша Godot не фарбує вершинним кольором — тон дістається панелям
         nom, ph, pw = 2.0, 1.95, 0.2
     elif kind == "po2":
         def relief(n):   # три горизонтальні ребра й рамка по краю плити 4 × 2,5 м
@@ -37,7 +38,8 @@ def fence(kind, corner, name):
                 h = np.maximum(h, box_mask(n, 0.0, 1.0, z / 2.5 - 0.035, z / 2.5 + 0.035, 0.01))
             return 0.35 + 0.65 * h
         sheet = concrete_mat("po2_panel", tile=4.0, tile_v=2.5, relief=relief, seed=27, top_z=2.45)
-        post = sheet
+        post = concrete_mat("po2_post", tile=2.0, seed=28, top_z=2.45)
+        b.mi(post)
         nom, ph, pw = 4.0, 2.5, 0.2
     elif kind == "picket":
         sheet = None
@@ -60,11 +62,11 @@ def fence(kind, corner, name):
             if kind.startswith("sheet"):
                 b.box(sheet, at(c, 1.02, 0.045), (w, 0.035, 1.8), yaw)
             elif kind == "euro":
-                b.tone = 1 + rng.uniform(-0.07, 0.07)
+                b.tone = 1 + rng.uniform(-0.18, 0.18)
                 b.box(sheet, at(c, 0.9, 0), (w, 0.1, 1.8), yaw)
                 b.tone = 1.0
             elif kind == "po2":
-                b.tone = 1 + rng.uniform(-0.07, 0.07)
+                b.tone = 1 + rng.uniform(-0.18, 0.18)
                 b.box(sheet, at(c, 1.25, 0), (w, 0.09, 2.3), yaw)
                 b.tone = 1.0
             else:
@@ -89,12 +91,13 @@ def picket_mat():
     idx = np.minimum((x / 0.12).astype(int), 7); fx = x / 0.12 - idx
     top = 1.26 + rng.uniform(-0.05, 0.0, 8)[idx]
     tone = rng.uniform(0.8, 1.05, 8)[idx]
-    board = (np.abs(fx[None, :] - 0.5) < 0.33) & (y[:, None] < top[None, :])
+    board = (np.abs(fx[None, :] - 0.5) < 0.29) & (y[:, None] < top[None, :])
     rail = (np.abs(y[:, None] - 0.4) < 0.035) | (np.abs(y[:, None] - 1.05) < 0.035)
     grain = np.tile(tile_noise(8, 3, W, 33), (2, 1))
     base = np.array([0.62, 0.57, 0.50])
     col = base * (tone[None, :, None] * (0.85 + 0.25 * grain[..., None]))
     col = np.where(board[..., None], col, col * 0.55)
+    col = np.where((board & (np.abs(fx[None, :] - 0.5) > 0.2))[..., None], col * 0.5, col)   # темні краї дощок
     alpha = (board | rail).astype(float)
     a = np.concatenate([col, alpha[..., None]], -1)
     nrm = normal_from_height(grain, 2.0)

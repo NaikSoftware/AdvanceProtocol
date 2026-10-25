@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b5u5fn87q6djp"
-path="res://.godot/imported/infra_culvert_ditch.png-ea2aea2df129b3692f47183128f48e46.ctex"
+uid="uid://dmksg0uexw43a"
+path="res://.godot/imported/infra_trailer_green_trailer_bed_n.jpg-7130045a57989136d353eb621fd53538.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "4230226322aae01345f689cd6e1d3e8c"
 }
 
 [deps]
 
-source_file="res://assets/props/infra_culvert_ditch.png"
-dest_files=["res://.godot/imported/infra_culvert_ditch.png-ea2aea2df129b3692f47183128f48e46.ctex"]
+source_file="res://assets/props/infra_trailer_green_trailer_bed_n.jpg"
+dest_files=["res://.godot/imported/infra_trailer_green_trailer_bed_n.jpg-7130045a57989136d353eb621fd53538.ctex"]
 
 [params]
 
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
