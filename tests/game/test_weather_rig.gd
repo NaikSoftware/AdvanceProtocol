@@ -150,15 +150,31 @@ func test_rain_follows_the_camera_focus_and_frame() -> void:
 	rig.follow(Vector3(5.0, 0.0, 7.0), 18.0)
 	var far: Vector3 = mat.get_shader_parameter("box_size")
 	assert_almost_eq(far, near * 3.0, Vector3.ONE * 1e-3)
-	# Довжина смуги на екрані — від найменшого віддалення до найбільшого, лінійно за зумом.
-	var mid: float = (IsoCameraRig.MIN_ZOOM + IsoCameraRig.MAX_ZOOM) * 0.5
-	var want: Dictionary = {IsoCameraRig.MIN_ZOOM: WeatherRig.RAIN_STREAK_PX.x,
-			mid: (WeatherRig.RAIN_STREAK_PX.x + WeatherRig.RAIN_STREAK_PX.y) * 0.5,
-			IsoCameraRig.MAX_ZOOM: WeatherRig.RAIN_STREAK_PX.y}
-	for zoom: float in want:
+	# Зум рухає й розтягує лише коробку: швидкість і витримка штриха — у світі й сталі.
+	for zoom: float in [6.0, 13.0, 20.0]:
 		rig.follow(Vector3(5.0, 0.0, 7.0), zoom)
-		assert_almost_eq(float(mat.get_shader_parameter("streak_px")), float(want[zoom]), 1e-4,
-				"зум %s" % zoom)
+		assert_almost_eq(float(mat.get_shader_parameter("fall_speed")), WeatherRig.RAIN_FALL, 1e-5)
+		assert_almost_eq(float(mat.get_shader_parameter("exposure")), WeatherRig.RAIN_EXPOSURE,
+				1e-5)
+
+
+## Штрих на екрані пролітає свою довжину за ту саму частку секунди на будь-якому зумі: довжина
+## й швидкість проєктуються однаково. Інакше з наближенням дощ «прискорюється» відносно штриха.
+func test_rain_streak_length_to_screen_speed_is_the_same_at_every_zoom() -> void:
+	var cam: IsoCameraRig = (load("res://game/camera/iso_camera_rig.tscn") as PackedScene).instantiate()
+	add_child_autofree(cam)
+	var v: Vector3 = WeatherRig.rain_velocity()
+	var dt: float = 0.005
+	for zoom: float in [6.0, 13.0, 20.0]:
+		cam.zoom_level = zoom
+		cam._place_camera()
+		var head := Vector3(0.5, 2.0, 0.5)
+		var length_px: float = cam.unproject(head).distance_to(
+				cam.unproject(head - v * WeatherRig.RAIN_EXPOSURE))
+		var speed_px: float = cam.unproject(head + v * dt).distance_to(cam.unproject(head)) / dt
+		assert_gt(speed_px, 0.0)
+		assert_almost_eq(length_px / speed_px, WeatherRig.RAIN_EXPOSURE,
+				WeatherRig.RAIN_EXPOSURE * 0.05, "зум %s" % zoom)
 
 
 ## Вода й дощ — обидва прозорі без запису глибини; без пріоритету порядок залежав би від пана.
