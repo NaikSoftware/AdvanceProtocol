@@ -20,9 +20,13 @@ const RAIN_SLANT: float = 0.25
 ## Витримка, секунд: штрих — шлях краплі за цей час, у світі. Відношення довжини штриха до
 ## його швидкості на екрані — саме витримка, на будь-якому зумі.
 const RAIN_EXPOSURE: float = 0.045
-## Крапля з'являється в новому місці раз на `RAIN_CYCLE` і видима лише `RAIN_LIFE`, секунд.
-const RAIN_CYCLE: float = 1.0
+## Крапля з'являється в новому місці раз на `RAIN_CYCLE` і видима лише `RAIN_LIFE`, секунд:
+## третина крапель видима водночас.
+const RAIN_CYCLE: float = 0.6
 const RAIN_LIFE: float = 0.2
+## Шарів решітки крапель по висоті; по ширині й углиб квадів стільки, щоб разом вийшла
+## кількість крапель вигляду.
+const RAIN_LAYERS: int = 8
 
 ## Пріоритет матеріалу дощу серед прозорих: понад воду (0), щоб дощ над річкою не зникав.
 const RAIN_PRIORITY: int = 1
@@ -38,6 +42,10 @@ var _look: BattleLook
 var applied_globals: Dictionary = {}
 ## Скільки крапель у збудованому меші — не те саме, що дощ, який іде (`rain_drops()`).
 var _rain_drops: int = 0
+## Квадів решітки по осях (x, висота, z); нуль — меша ще нема.
+var _rain_grid: Vector3 = Vector3.ZERO
+var _focus: Vector3 = Vector3.ZERO
+var _zoom: float = IsoCameraRig.MAX_ZOOM
 ## Меш крапель на кількість: однаковий для всіх боїв процесу, будується раз.
 static var _drops_cache: Dictionary = {}
 
@@ -96,8 +104,11 @@ func apply(look: BattleLook) -> void:
 	sky_mat.set_shader_parameter("clear_amount", look.sky_clear)
 	rain.visible = look.rain and look.rain_amount > 0
 	if rain.visible and look.rain_amount != _rain_drops:
-		rain.mesh = _drops_mesh(look.rain_amount)
-		_rain_drops = look.rain_amount
+		var side: int = rain_side(look.rain_amount)
+		rain.mesh = _drops_mesh(side)
+		_rain_grid = Vector3(side, RAIN_LAYERS, side)
+		_rain_drops = side * side * RAIN_LAYERS
+		_place_rain()
 	_set_global(&"weather_wetness", look.wetness)
 	_set_global(&"cloud_shadow_strength", look.cloud_shadow_strength)
 	_set_global(&"sky_clear", look.sky_clear)
@@ -129,12 +140,54 @@ func rain_drops() -> int:
 	return _rain_drops if rain.visible else 0
 
 
-## Коробка дощу стоїть на фокусі камери й росте з віддаленням: густота на екрані та сама на
-## будь-якому зумі.
+## Дощ іде там, куди дивиться камера: решітка квадів стає над світовими клітинками довкола
+## фокуса й рідшає з віддаленням, тож густота на екрані та сама на будь-якому зумі.
 func follow(focus: Vector3, zoom_level: float) -> void:
+	_focus = focus
+	_zoom = zoom_level
+	_place_rain()
+
+
+## Ребро решітки по ширині для кількості крапель: `side² × RAIN_LAYERS` найближче до неї.
+static func rain_side(count: int) -> int:
+	return maxi(1, roundi(sqrt(float(count) / RAIN_LAYERS)))
+
+
+## Розмір світової клітинки дощу, клітинок дошки: на найменшому віддаленні решітка з кроком 1
+## саме вкриває коробку. Від фокуса й зуму не залежить — інакше краплі зсувались би у світі.
+static func rain_cell(grid: Vector3) -> Vector3:
+	return RAIN_BOX * IsoCameraRig.MIN_ZOOM / grid
+
+
+## Крок решітки (у клітинках) і світовий номер кутової клітинки для фокуса й зуму. Крок — степінь
+## двійки, найменший, з яким решітка вкриває коробку на цьому зумі: кожна крапля рідшої решітки —
+## та сама крапля густішої. Кут — ціле кратне кроку, тож пан зсуває решітку лише на цілі клітинки.
+static func rain_lattice(focus: Vector3, zoom_level: float, grid: Vector3) -> Dictionary:
+	var cell: Vector3 = rain_cell(grid)
+	var need: Vector3 = RAIN_BOX * zoom_level
+	var stride: int = 1
+	while stride < 64 and (grid.x * cell.x * stride < need.x - 1e-4
+			or grid.y * cell.y * stride < need.y - 1e-4):
+		stride *= 2
+	var span: Vector3 = grid * cell * stride
+	# Коробка трохи зсунута до камери: там у кадрі ближча земля й вища частина шару.
+	var toward := Vector3(1.0, 0.0, 1.0).normalized()
+	var lo: Vector3 = Vector3(focus.x, 0.0, focus.z) - Vector3(span.x, 0.0, span.z) * 0.5 \
+			+ toward * span.x * 0.15
+	var origin := Vector3(floorf(lo.x / (cell.x * stride)) * stride, 0.0,
+			floorf(lo.z / (cell.z * stride)) * stride)
+	return {"cell": cell, "stride": stride, "origin": origin}
+
+
+func _place_rain() -> void:
+	if _rain_grid == Vector3.ZERO:
+		return
+	var lat: Dictionary = rain_lattice(_focus, _zoom, _rain_grid)
 	var mat := rain.material_override as ShaderMaterial
-	mat.set_shader_parameter("focus", Vector3(focus.x, 0.0, focus.z))
-	mat.set_shader_parameter("box_size", RAIN_BOX * zoom_level)
+	mat.set_shader_parameter("grid", _rain_grid)
+	mat.set_shader_parameter("cell", lat.cell)
+	mat.set_shader_parameter("stride", float(lat.stride))
+	mat.set_shader_parameter("cell_origin", lat.origin)
 
 
 ## Швидкість краплі у світі, клітинок/с. Права вісь кадру — (1, 0, -1): камера під
@@ -153,13 +206,13 @@ func _set_global(param: StringName, value: Variant) -> void:
 	RenderingServer.global_shader_parameter_set(param, value)
 
 
-## Квад на краплю: усі чотири вершини несуть ту саму випадкову точку одиничної коробки, а UV —
-## кут квада; смугу будує шейдер. Сід сталий, тож дощ однаковий від запуску до запуску.
-static func _drops_mesh(count: int) -> ArrayMesh:
-	if _drops_cache.has(count):
-		return _drops_cache[count]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 1
+## Квад на краплю, сіткою `side × RAIN_LAYERS × side`: усі чотири вершини несуть центр своєї
+## клітинки сітки в одиничній коробці, а UV — кут квада; штрих будує шейдер.
+static func _drops_mesh(side: int) -> ArrayMesh:
+	if _drops_cache.has(side):
+		return _drops_cache[side]
+	var count: int = side * side * RAIN_LAYERS
+	var grid := Vector3(side, RAIN_LAYERS, side)
 	var verts := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var idx := PackedInt32Array()
@@ -168,7 +221,8 @@ static func _drops_mesh(count: int) -> ArrayMesh:
 	idx.resize(count * 6)
 	var corners: Array[Vector2] = [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]
 	for i in count:
-		var seed := Vector3(rng.randf(), rng.randf(), rng.randf())
+		var g := Vector3(i % side, (i / side) % RAIN_LAYERS, i / (side * RAIN_LAYERS))
+		var seed: Vector3 = (g + Vector3(0.5, 0.5, 0.5)) / grid
 		for k in 4:
 			verts[i * 4 + k] = seed
 			uvs[i * 4 + k] = corners[k]
@@ -185,5 +239,5 @@ static func _drops_mesh(count: int) -> ArrayMesh:
 	# Вершини лежать в одиничній коробці, а краплі — будь-де довкола камери: без власної межі
 	# меш відсікався б, щойно фокус відійде від початку координат.
 	mesh.custom_aabb = AABB(Vector3(-1e4, -1e3, -1e4), Vector3(2e4, 2e3, 2e4))
-	_drops_cache[count] = mesh
+	_drops_cache[side] = mesh
 	return mesh
