@@ -156,6 +156,16 @@ class BridgeChanged extends BattleEvent:
 	func describe() -> String:
 		return "BridgeChanged(%s, destroyed=%s)" % [pos, destroyed]
 
+class ForestBroken extends BattleEvent:
+	## §3.2: танк повалив ліс на pos — дерева лежать, лишилася просіка. Потік подій
+	## не фільтрується за спостерігачем (§6), тож вигляд валить крони лише тоді, коли
+	## тайл є в seen гравця, що дивиться: те саме правило, що й known_broken_map().
+	var pos: Vector2i
+	func _init(p_pos: Vector2i) -> void:
+		pos = p_pos
+	func describe() -> String:
+		return "ForestBroken(%s)" % pos
+
 class UnitRepaired extends BattleEvent:
 	var unit_id: int
 	var amount: int

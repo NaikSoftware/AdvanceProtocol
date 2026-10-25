@@ -19,6 +19,10 @@ extends RefCounted
 
 signal playback_finished
 
+## Просіку повалено. Без даних: події не фільтровані за спостерігачем (§6), тож що саме
+## малювати, вигляд бере з BattleState.known_broken_map(глядача), а не з події.
+signal forest_changed
+
 ## Крок руху юніта тайл за тайлом (§1.4 — атмосфера читається, не
 ## пролітає повз). Той самий порядок величини, що й _FACE_TURN_DURATION у
 ## UnitView.
@@ -139,6 +143,9 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_mine_revealed(event)
 	elif event is Events.BridgeChanged:
 		return _handle_bridge_changed(event)
+	elif event is Events.ForestBroken:
+		forest_changed.emit()
+		return null
 	elif event is Events.UnitRepaired:
 		return _handle_unit_repaired(event)
 	elif event is Events.ApChanged:
