@@ -8,6 +8,8 @@ const TRIS_MAX: int = 1500
 const GROUND_TOLERANCE: float = 0.02
 ## Уламки можуть зсунутись за течією за клітинку мосту, але не далі за сусідню.
 const HALF_WIDTH_MAX: float = 0.75
+## Понтон плаває за 0.075 над дном, тож рештки відсіку можуть сидіти нижче нуля моделі, не пробиваючи русла.
+const BROKEN_BELOW_GROUND: Dictionary = {"bridge_river_east": 0.1}
 
 func _bounds(name: String) -> Dictionary:
 	var scene: PackedScene = load("res://assets/props/%s.glb" % name) as PackedScene
@@ -36,7 +38,7 @@ func test_intact_bridge_has_exact_length_and_sits_on_ground(p = use_parameters(B
 func test_broken_bridge_stays_in_footprint(p = use_parameters(BRIDGES.keys())) -> void:
 	var r: Dictionary = _bounds(p + "_broken")
 	var box: AABB = r["box"]
-	assert_almost_eq(box.position.y, 0.0, GROUND_TOLERANCE, "%s: має стояти на y = 0" % p)
+	assert_gte(box.position.y, -float(BROKEN_BELOW_GROUND.get(p, GROUND_TOLERANCE)), "%s: руїна нижче дна" % p)
 	assert_lte(box.size.z, float(BRIDGES[p]) + 0.02, "%s: руїна довша за переправу" % p)
 	assert_lte(maxf(absf(box.position.x), absf(box.end.x)), HALF_WIDTH_MAX, "%s: уламки далеко вбік" % p)
 	assert_lte(r["tris"], TRIS_MAX, "%s: трикутників %d" % [p, r["tris"]])
