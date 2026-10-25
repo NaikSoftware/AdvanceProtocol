@@ -231,3 +231,14 @@ func test_second_warm_up_while_warming_is_ignored() -> void:
 		if t.is_valid():
 			t.custom_step(1.0)
 	assert_false(layer.is_warming())
+
+
+
+## Дим і вогонь — запечені флипбуки з assets/vfx, а не заступник.
+func test_column_and_fire_sample_their_atlases() -> void:
+	var col := layer.get_node("Columns") as MultiMeshInstance3D
+	var fire := layer.get_node("Fires") as MultiMeshInstance3D
+	var cm := col.material_override as ShaderMaterial
+	assert_eq((cm.get_shader_parameter("puff_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column.png")
+	assert_eq((cm.get_shader_parameter("thin_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column_thin.png")
+	assert_eq(((fire.material_override as ShaderMaterial).get_shader_parameter("flame_tex") as Texture2D).resource_path, "res://assets/vfx/wreck_fire.png")
