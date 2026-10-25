@@ -42,6 +42,10 @@ const _HP_BAR_FRAME_COLOR: Color = Color("14120f")
 const _HP_BAR_BACK_COLOR: Color = Color("3b3833")
 
 const _DESTROY_DURATION: float = 0.6
+## Знищена техніка зникає під спалахом, і саме тим кроком анімація закінчується:
+## програвач одразу грає WreckLeft, тож уламки стають на тайл у тому самому кадрі, ще
+## під кулею, а не після того, як дим розійшовся.
+const KILL_HIDE_DELAY: float = 0.06
 
 ## Постріл і відповідь (§3.3.1): короткий поштовх силуету. Скарга власника —
 ## «атака у відповідь не відбувається»: вона відбувалась, але на дошці її було
@@ -119,6 +123,7 @@ var facing: int = 0
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
 var _hull_material: StandardMaterial3D
+var _type_id: int = 0
 var _drones_left: int = 0
 ## Останнє показане співвідношення HP. Джерело правди замість колишнього
 ## _hp_bar.scale.x — заливка тепер намальована ВСЕРЕДИНІ текстури, тож
@@ -149,6 +154,7 @@ func _ready() -> void:
 
 func bind(unit: Unit) -> void:
 	position = IsoCameraRig.cell_to_world(unit.pos)
+	_type_id = unit.type_id
 	_build_silhouette(unit.type_id, unit.owner)
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
 	# не має попередньої орієнтації, з якої мало б сенс анімувати «доведення» —
@@ -395,7 +401,17 @@ func play_shot() -> Signal:
 
 func play_destroyed() -> Signal:
 	var tween: Tween = create_tween()
-	tween.tween_property(self, "scale", Vector3.ZERO, _DESTROY_DURATION)
+	var cls: int = UnitTypes.get_type(_type_id)["unit_class"]
+	if not UnitTypes.is_vehicle(cls):
+		tween.tween_property(self, "scale", Vector3.ZERO, _DESTROY_DURATION)
+		return tween.finished
+	# Куля — у контейнері, не в цьому вузлі: вузол юніта звільнить перебудова дошки,
+	# а куля мусить догоріти над уламками.
+	BattleFx.spawn_explosion(get_parent(), position, BattleFx.fireball_size(cls))
+	for n: Node3D in [_hp_bar, _hp_label, _drone_icon]:
+		n.visible = false
+	tween.tween_interval(KILL_HIDE_DELAY)
+	tween.tween_callback(func() -> void: _silhouette.visible = false)
 	return tween.finished
 
 

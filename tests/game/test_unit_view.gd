@@ -454,11 +454,48 @@ func test_move_along_with_empty_path_still_finishes_without_moving() -> void:
 
 
 func test_play_destroyed_returns_a_finishing_tween() -> void:
-	view.bind(_unit(5))
+	view.bind(_unit(0))
 	var finished: Signal = view.play_destroyed()
 	var tween: Tween = finished.get_object()
 	tween.custom_step(10.0)
-	assert_eq(view.scale, Vector3.ZERO, "знищення — твін масштабу до нуля")
+	assert_eq(view.scale, Vector3.ZERO, "знищення піхоти — поки що твін масштабу до нуля")
+
+
+func _explosions() -> Array[Node]:
+	return view.get_parent().find_children("Explosion*", "", false, false)
+
+
+## Техніка не стискається в точку: спалах і вогняна куля над тайлом, а сам юніт
+## зникає під ними — уламки на тому самому тайлі ставить WreckLeft, а не цей вузол.
+func test_vehicle_destruction_flashes_and_hides_the_unit_under_the_fireball() -> void:
+	view.bind(_unit(5, 1, Vector2i(4, 2)))
+	var finished: Signal = view.play_destroyed()
+	assert_false(view._hp_bar.visible, "HP-бар зникає в мить загибелі, а не з кулею")
+	assert_false(view._hp_label.visible)
+	var boom: Array[Node] = _explosions()
+	assert_eq(boom.size(), 1, "рівно одна вогняна куля")
+	assert_eq((boom[0] as Node3D).position, view.position)
+	var ended: Array[bool] = [false]
+	finished.connect(func() -> void: ended[0] = true)
+	(finished.get_object() as Tween).custom_step(UnitView.KILL_HIDE_DELAY + 0.001)
+	assert_false(view._silhouette.visible, "під кулею юніта вже нема")
+	# Анімація закінчується тим самим кроком, яким ховає юніт: наступна подія, WreckLeft,
+	# ставить уламки в тому самому кадрі — порожнього тайла між ними не видно.
+	assert_true(ended[0])
+	assert_eq(view.scale, Vector3.ONE, "техніку не стискає")
+
+
+## Вибух — одноразовий: чекати його повністю не треба (уламки мусять з'явитися ще
+## під кулею), але й лишатися в кадрі він не сміє — звільняє себе сам.
+func test_explosion_is_one_shot_and_frees_itself() -> void:
+	view.bind(_unit(5))
+	view.play_destroyed()
+	var boom: Node = _explosions()[0]
+	for t in Engine.get_main_loop().get_processed_tweens():
+		if t.is_valid():
+			t.custom_step(BattleFx.EXPLOSION_SEC + 0.01)
+	assert_true(boom.is_queued_for_deletion())
+	assert_true(BattleFx.EXPLOSION_SEC <= 1.5, "§ ефекти: кожна мить влучання ≤ 1,5 с")
 
 
 ## §3.5: невидимий ворог не має вузла взагалі — рішення контейнера

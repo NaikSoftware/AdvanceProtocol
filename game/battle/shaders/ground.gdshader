@@ -46,6 +46,12 @@ uniform sampler2DArray macro_array : source_color, filter_linear_mipmap_anisotro
 // Варіантів макро на шар: індекс шару в macro_array = layer * macro_variants + variant.
 uniform int macro_variants = 1;
 uniform float mud_amount = 0.0;
+// Шрами бою (ScarMap): R — випалене, A — попіл; 32 текселі на тайл дошки. Маска — розвідане
+// (`seen`) глядача, тексель на тайл: шрам на нерозвіданому був би доносом про бій (§3.5).
+uniform bool has_scars = false;
+uniform sampler2D scar_map : filter_linear, repeat_disable;
+uniform sampler2D scar_seen : filter_linear, repeat_disable;
+uniform vec2 scar_size = vec2(1.0);
 
 // Шари з GroundSurface.TEX_LAYERS.
 const int ROAD = 0;
@@ -934,6 +940,20 @@ void fragment() {
 			alb = mix(alb, sand, bar_w * 0.85);
 		}
 
+		float scar_dark = 0.0;
+		if (has_scars) {
+			vec2 suv = (p + 0.5) / scar_size;
+			// За дошкою — нуль: інакше край текстури тягнеться смугою через усе кільце.
+			float inside = step(0.0, suv.x) * step(0.0, suv.y) * step(suv.x, 1.0) * step(suv.y, 1.0);
+			vec4 sc = texture(scar_map, suv) * texture(scar_seen, suv).r * inside;
+			// Ядро плями L* 10–15 на екрані: альбедо майже чорне, бо імла й відблиск неба
+			// поверх нього самі піднімають його на 6–8 L*. Попіл — сірі цятки L* 45–55.
+			scar_dark = sc.r;
+			alb = mix(alb, vec3(0.004, 0.0037, 0.0034), sc.r * 0.95);
+			alb = mix(alb, vec3(0.16, 0.155, 0.15), sc.a * 0.6);
+			rough = mix(rough, 1.0, sc.r);
+			refl *= 1.0 - sc.r;
+		}
 		if (cloud_shadow_strength > 0.0) {
 			float cloud = smoothstep(0.45, 0.7, fbm(p * 0.04 + TIME * vec2(0.02, 0.008)));
 			alb *= 1.0 - cloud_shadow_strength * cloud;
@@ -957,7 +977,7 @@ void fragment() {
 		ROUGHNESS = rough;
 		// Колії й смуги коліс темніші й у відбитті: інакше постійний відблиск неба (F0 0.04 при
 		// альбедо ~0.06) вдвічі зменшує їхній ΔL* на екрані.
-		SPECULAR = mix(0.5, 0.2, bank_amt) * mix(1.0, road_mul, road_cov);
+		SPECULAR = mix(0.5, 0.2, bank_amt) * mix(1.0, road_mul, road_cov) * (1.0 - 0.8 * scar_dark);
 		NORMAL_MAP = vec3(nxy * 0.5 + 0.5, 1.0);
 	}
 }

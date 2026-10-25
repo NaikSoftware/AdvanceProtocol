@@ -75,6 +75,9 @@ var _height_signature: String = ""
 var _height_kind_classes: PackedByteArray = PackedByteArray()
 ## Земля переживає build(): масиви її текстур не перевантажуються на кожен міст.
 var _ground: GroundSurface
+## Шрами бою (ScarMap) — їх тримає екран бою; земля отримує текстури на кожен build(),
+## бо build() створює їй новий матеріал.
+var scar_map: ScarMap
 var _water: WaterSurface
 ## Зонд відбиттів знімає світ (шар 1) рівно один раз і теж переживає build():
 ## новий знімок посеред партії міг би захопити тимчасові вузли на дошці.
@@ -177,6 +180,8 @@ func build(board: Board) -> void:
 		_height_kind_classes = _classes(board)
 	TerrainHeight.active = _height
 	_ground.build(world, 0, world_surface, _height, ring)
+	if scar_map != null and _ground.material_override is ShaderMaterial:
+		scar_map.apply(_ground.material_override)
 
 	if _water == null:
 		_water = WaterSurface.new()

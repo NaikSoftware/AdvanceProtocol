@@ -83,6 +83,8 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.DroneLaunched.new(1, 2, 1),
 		Events.DamageDealt.new(2, 40, 60),
 		Events.UnitDestroyed.new(2, Vector2i(3, 3)),
+		Events.WreckLeft.new(Vector2i(3, 3), 5, 2),
+		Events.WreckRemoved.new(Vector2i(3, 3), Wrecks.Reason.BURNED_OUT),
 		Events.TileRevealed.new(0, [Vector2i(1, 1), Vector2i(1, 2)]),
 		Events.MinePlaced.new(Vector2i(4, 4), 0),
 		Events.MineCleared.new(Vector2i(4, 4)),
@@ -401,3 +403,19 @@ func test_bridge_changed_calls_board_rebuild() -> void:
 	player = EventPlayer.new(Callable(), Callable(), func() -> void: calls[0] += 1)
 	await player.play([Events.BridgeChanged.new(Vector2i(1, 1), true)] as Array[Events.BattleEvent])
 	assert_eq(calls[0], 1)
+
+
+## Уламки показує контейнер (BattleScreen): лише він знає, чиє розвідане зараз на
+## екрані. Програвач лише передає подію далі, нічого не вирішуючи.
+func test_wreck_events_reach_the_injected_callables_unchanged() -> void:
+	var left: Array = []
+	var removed: Array = []
+	player = EventPlayer.new(Callable(), Callable(), Callable(),
+		func(pos: Vector2i, type_id: int, facing: int) -> void: left.append([pos, type_id, facing]),
+		func(pos: Vector2i, reason: int) -> void: removed.append([pos, reason]))
+	await player.play([
+		Events.WreckLeft.new(Vector2i(3, 4), 8, 6),
+		Events.WreckRemoved.new(Vector2i(5, 1), Wrecks.Reason.BRIDGE_DEMOLISHED),
+	] as Array[Events.BattleEvent])
+	assert_eq(left, [[Vector2i(3, 4), 8, 6]])
+	assert_eq(removed, [[Vector2i(5, 1), Wrecks.Reason.BRIDGE_DEMOLISHED]])

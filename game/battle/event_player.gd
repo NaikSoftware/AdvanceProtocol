@@ -35,8 +35,17 @@ var _is_playing: bool = false
 var _board_rebuild: Callable
 
 
-func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable(), board_rebuild: Callable = Callable()) -> void:
+## Показ уламків (pos, type_id, facing) і їхнє зникнення (pos, reason). Чи має їх бачити
+## той, хто зараз перед екраном, вирішує власник шару уламків, а не програвач.
+var _wreck_left: Callable
+var _wreck_removed: Callable
+
+
+func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable(), board_rebuild: Callable = Callable(),
+		wreck_left: Callable = Callable(), wreck_removed: Callable = Callable()) -> void:
 	_board_rebuild = board_rebuild
+	_wreck_left = wreck_left
+	_wreck_removed = wreck_removed
 	_unit_view_lookup = unit_view_lookup
 	_unit_lookup = unit_lookup
 
@@ -127,6 +136,10 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_damage_dealt(event)
 	elif event is Events.UnitDestroyed:
 		return _handle_unit_destroyed(event)
+	elif event is Events.WreckLeft:
+		return _handle_wreck_left(event)
+	elif event is Events.WreckRemoved:
+		return _handle_wreck_removed(event)
 	elif event is Events.TileRevealed:
 		return _handle_tile_revealed(event)
 	elif event is Events.MinePlaced:
@@ -229,6 +242,18 @@ func _handle_unit_destroyed(event: Events.UnitDestroyed) -> Variant:
 	# цього програвача: EventPlayer лише показує знищення, не керує складом
 	# юнітів.
 	return view.play_destroyed()
+
+
+func _handle_wreck_left(event: Events.WreckLeft) -> Variant:
+	if _wreck_left.is_valid():
+		_wreck_left.call(event.pos, event.type_id, event.facing)
+	return null
+
+
+func _handle_wreck_removed(event: Events.WreckRemoved) -> Variant:
+	if _wreck_removed.is_valid():
+		_wreck_removed.call(event.pos, event.reason)
+	return null
 
 
 ## §3.5: сама фог-логіка (які тайли тепер `seen`) уже застосована в
