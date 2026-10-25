@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, chunks, mound, wall_run
+from lib import Builder, chunks, mound, wall_run, burn_ring
 
 out = lib.out_dir()
 LEN, DEP, FLOOR, NF = 30.0, 12.0, 3.1, 3
@@ -81,8 +81,7 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                     e = 0.03 * sgn
                     q = [(x - 0.7, yy + e, z), (x + 0.7, yy + e, z), (x + 0.7, yy + e, z + 1.4), (x - 0.7, yy + e, z + 1.4)]
                     b.poly(q[::sgn], "dark")
-                    sp = [(x - 0.85, yy + e * 0.6, z + 1.35), (x + 0.85, yy + e * 0.6, z + 1.35), (x + 0.45, yy + e * 0.6, z + 4.0), (x - 0.45, yy + e * 0.6, z + 4.0)]
-                    b.soot(sp, (0.02, 0.02, 0.38, 0.38), -sgn)
+                    burn_ring(b, "y", yy, x, z, 1.4, 1.4, sgn)
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
                 if not (i in cols and f >= 1):
@@ -135,7 +134,7 @@ def damaged():
     xc = 6.0
     F, B = (2, 4), (0, 3)
     body(b, X0, xc, NF, F, B, True)
-    windows(b, X0, xc, NF, F, B, blown={(sd, 6, f) for sd in ('front', 'back') for f in range(3)} | {(sd, 5, f) for sd in ('back',) for f in range(1, 3)})
+    windows(b, X0, xc, NF, F, B, blown={(sd, 6, f) for sd in ('front', 'back') for f in range(3)})
     entrances(b, xc)
     roof_details(b, xc)
     # східці: висота кратна поверху (3.1 м), верх косий і зубчастий
@@ -147,16 +146,16 @@ def damaged():
             out_.append(h * FLOOR + rnd.uniform(-0.25, 0.25))
         return out_
     back = steps(9, 1)                               # стіна біля проламу не вища за поверх
-    east = steps(12)
+    east = steps(12, 2)                              # дальня стіна не вища за два поверхи
     front = steps(4, 2)
-    wall_run(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel_vc", "panel_vc", 5, pitch=0.7)
+    wall_run(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel_vc", "panel_vc", 5, pitch=0.7, inner_tone=0.45)
     wall_run(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel_vc", "panel_vc", 6, pitch=0.7)
     wall_run(b, (xc, Y1 - 0.2), (xc + 5.0, Y1 - 0.2), 0.4, front, "panel_vc", "panel_vc", 7, pitch=0.7)
     # вікна лишаються там, де стіна їх досягає; вибиті — з м'якою кіптявою
     def wall_h(vals, t):
         i = min(len(vals) - 2, max(0, int(t * (len(vals) - 1))))
         return vals[i]
-    for i in (7, 8, 9):
+    for i in (7, 8):
         x = bay_x(i)
         t = (x - xc) / (X1 - xc)
         hb = wall_h(back, t)
@@ -164,11 +163,11 @@ def damaged():
             z = f * FLOOR + 0.95
             if hb < z + 1.5:
                 continue
-            blow = rnd.random() < 0.85
+            blow = True
             if blow:
                 q = [(x - 0.7, Y0 - 0.03, z), (x + 0.7, Y0 - 0.03, z), (x + 0.7, Y0 - 0.03, z + 1.4), (x - 0.7, Y0 - 0.03, z + 1.4)]
                 b.poly(q, "dark")
-                b.soot([(x - 0.85, Y0 - 0.02, z + 1.35), (x + 0.85, Y0 - 0.02, z + 1.35), (x + 0.45, Y0 - 0.02, z + 4.0), (x - 0.45, Y0 - 0.02, z + 4.0)], (0.02, 0.02, 0.38, 0.38), 1)
+                burn_ring(b, "y", Y0, x, z, 1.4, 1.4, -1)
             else:
                 b.window(("y", Y0, -1), x, z, 1.4, 1.4)
     for k in range(6):
@@ -180,13 +179,13 @@ def damaged():
             if he < z + 1.5 or rnd.random() < 0.4:
                 continue
             b.poly([(X1 + 0.03, yy - 0.7, z), (X1 + 0.03, yy + 0.7, z), (X1 + 0.03, yy + 0.7, z + 1.4), (X1 + 0.03, yy - 0.7, z + 1.4)], "dark")
-            b.soot([(X1 + 0.02, yy - 0.85, z + 1.35), (X1 + 0.02, yy + 0.85, z + 1.35), (X1 + 0.02, yy + 0.45, z + 3.4), (X1 + 0.02, yy - 0.45, z + 3.4)], (0.02, 0.02, 0.38, 0.38), 1)
+            burn_ring(b, "x", X1, yy, z, 1.4, 1.4, 1)
     # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
     for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 3.0, 3.6, 1.8, 0.0, 0.0, 0.0), (13.5, -3.6, 6.1, 2.6, 2.0, 0.12, 0.0, 0.1), (8.0, 4.0, 3.0, 2.4, 1.6, -0.1, 0.0, 0.0)):
-        b.box_e(x, y, z, sx, sy, 0.22, "panel", euler=(ax, ay, az), top="panel")
+        b.box_e(x, y, z, sx, sy, 0.22, "slab_dark", euler=(ax, ay, az), top="slab_dark")
     # розколота плита даху лежить у прольоті під кутами 20-50° на купі
     for (x, y, z, sx, sy, ax, ay, az) in ((9.2, -0.5, 3.4, 3.2, 2.8, 0.7, 0.1, 0.2), (12.4, 1.6, 4.4, 3.4, 2.4, -0.8, 0.2, -0.4), (10.6, 2.8, 2.8, 2.8, 2.2, 0.5, -0.6, 0.6), (13.8, -1.8, 3.8, 2.6, 2.4, -0.6, -0.3, 1.1)):
-        b.box_e(x, y, z, sx, sy, 0.22, "bitumen", euler=(ax, ay, az), top="bitumen")
+        b.box_e(x, y, z, sx, sy, 0.22, "slab_dark", euler=(ax, ay, az), top="bitumen")
     # арматура темна, іржава
     for k in range(18):
         x = rnd.uniform(6.5, 15.0)
@@ -194,8 +193,8 @@ def damaged():
         b.beam(p0, (p0[0] + rnd.uniform(-0.9, 0.9), p0[1] + rnd.uniform(-0.8, 0.8), p0[2] + rnd.uniform(0.5, 1.4)), 0.09, "rebar")
     # одна безперервна купа: заповнює проліт, виливається через низьку задню стіну на відсип і далі на торець
     mound(b, 11.0, 0.5, 4.8, 4.6, 5.0, 61, mat="heap_grey", rings=6, segs=22, tongues=2)
-    mound(b, 12.8, -5.2, 4.8, 2.1, 3.4, 62, mat="heap_grey", rings=5, segs=18, tongues=4)
-    mound(b, 16.4, -1.5, 2.6, 5.0, 2.6, 63, mat="heap_grey", rings=5, segs=16, tongues=3)
+    mound(b, 12.8, -5.2, 4.8, 2.1, 3.4, 62, mat="heap_grey", rings=6, segs=26, tongues=5)
+    mound(b, 16.4, -1.5, 2.6, 5.0, 2.6, 63, mat="heap_grey", rings=6, segs=24, tongues=4)
     chunks(b, 11.0, 0.0, 4.2, 4.0, 9, ("heap_grey", "rubble"), 2, z0=0.4, smin=0.5, smax=1.1)
     for k in range(10):                                                          # розсип тоншає без жорсткого краю
         a = rnd.uniform(0, 2 * math.pi)
@@ -204,7 +203,7 @@ def damaged():
         if px < 15.0 or abs(py) > 8.4 or px > 20.2:
             continue
         b.rock(px, py, 0.12, rnd.uniform(0.28, 0.5), rnd.choice(("heap_grey", "rubble")), rnd)
-    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4000, footprint=(5, 2), anchor=(0, 0))
+    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4200, footprint=(5, 2), anchor=(0, 0))
 
 
 intact()
