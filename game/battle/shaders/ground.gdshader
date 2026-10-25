@@ -25,9 +25,12 @@ uniform int class_layer[8];
 // повертаються на 90°).
 uniform sampler2D plough_map : filter_nearest, repeat_disable;
 uniform int plough_axis[64];
+// Додатковий відступ кожного боку поля (клітинки: -x, -y, +x, +y) від дороги, що підходить до
+// нього (GroundSurface: між краєм поля й дорогою — 1–2 м трави). Бік лишається прямим.
+uniform vec4 plough_inset[64];
 uniform int plough_layer = -1;
-// Суха пора (GroundSurface.season — `summer` чи `early`): без моху в лісі, щебінь розсипом, а
-// схили тінить справжнє світло, а не запечене.
+// Суха пора (GroundSurface.season — `summer` чи `early`): без моху й пучків трави в лісі, тінь
+// купок щебеню від сонця.
 uniform bool dry_season = false;
 
 // Номер поля ріллі в клітинці карти класів; поза картою й не рілля — -1.
@@ -137,10 +140,10 @@ const float CLASS_BAND = 0.05;
 // в 1 клітинку на River) показує свій вид лише на 22 % площі, а з 0.5 — ≥ 31 % на всіх картах
 // (tests/game/test_ground_surface.gd). Вид міняє число руху, тож гравець мусить його бачити.
 const float CLASS_CORE = 0.5;
-// Межа двох природних покриттів (лука, болото, ліс, пагорб, берег) — ~0.3 клітинки (~2.5 м), рвана
-// висотною сумішшю: природа не обривається лінією. Ширша смуга дорожча (більше пікселів із двома
-// шарами) майже без видимої різниці. Щебінь (руїни) лишає вузьку CLASS_BAND, а рілля — рукотворна —
-// малюється окремо полем із прямим краєм (plough_map).
+// Межа двох покриттів класів (лука, болото, ліс, пагорб, берег, щебінь) — ~0.3 клітинки (~2.5 м),
+// рвана висотною сумішшю: не обривається лінією, щебінь розсипається в траву. Ширша смуга дорожча
+// (більше пікселів із двома шарами) майже без видимої різниці. Рілля — рукотворна — у класи не
+// входить: її поле малюється окремо з прямим краєм (plough_map).
 const float NATURAL_BAND = 0.45;
 const int RUBBLE = 6;
 // Рілля всередині поля відступає від краю клітинки на ~1.2 м — смуга трави (узбіччя
@@ -153,6 +156,8 @@ const float RUT_PUDDLE_P = 0.65;
 // Стеля відбиття неба в калюжі — трохи нижче за воду річки (reflect_top 0.26 у water.gdshader):
 // калюжа має ще й власне альбедо, тож не світліша за річку. Вікна води в болоті — 0.1: темні.
 const float PUDDLE_SKY_MAX = 0.2;
+// Частка неба у вікні болота: під похмурим небом вікно ~1.3–1.4 яскравості трави поруч, не біле.
+const float POOL_SKY_MAX = 0.75;
 // Болото: оливково-бурий тон замість сірого скану (множник до яскравості, сума з вагами L ≈ 1).
 const vec3 MARSH_TINT = vec3(1.26, 1.01, 0.6);
 // Тон ґрунту ґрунтівки (множник до сірого). Кольорова корекція сцени знижує насиченість на
@@ -329,19 +334,26 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 		vec3 lw = vec3(0.299, 0.587, 0.114);
 		float lm = max(dot(mm.rgb * layer_gain(FOREST), lw), 1e-3);
 		float l = max(dot(alb, lw), 1e-4);
-		alb *= l < lm ? (lm - 0.35 * (lm - l)) / l : 1.0;
+		// Суха пора: опад світлий, темні проміжки між листям — і є його фактура, тож стиснення
+		// слабше (75 % контрасту лишається); інакше підстилка розмазується в рівну пляму.
+		float keep_dark = dry_season ? 0.75 : 0.35;
+		alb *= l < lm ? (lm - keep_dark * (lm - l)) / l : 1.0;
 		// Суха пора — сухий опад без зелених плям моху.
 		float moss = dry_season ? 0.0 : smoothstep(0.5, 0.64, fbm(p * 1.1 + 61.0));
 		float leaf = smoothstep(0.52, 0.66, fbm(p * 0.8 + 83.0)) * (1.0 - moss);
 		alb = mix(alb, alb * vec3(0.82, 0.98, 0.7), moss * 0.7);
-		alb = mix(alb, alb * vec3(1.18, 1.0, 0.78), leaf * 0.6);
+		// Суха пора: опад уже бурий у самій текстурі, рудий відтінок плям лише слабкий — інакше
+		// підстилка розмазується іржею.
+		alb = mix(alb, alb * vec3(1.18, 1.0, 0.78), leaf * (dry_season ? 0.15 : 0.6));
 		// Трава між плямами підстилки — справжня текстура луки, а не її середній колір: рівна
 		// пляма одного кольору 1–2.5 м на оливковому тлі читалась як камуфляж.
 		float gmt = macro_m[FIELD] / METRES_PER_TILE;
 		vec3 grass = textureGrad(macro_array, vec3(p / gmt, float(FIELD * macro_variants)), dpx / gmt, dpy / gmt).rgb;
 		grass *= clamp(dot(alb, lw) / lm, 0.6, 1.4);
 		float floor_k = smoothstep(0.43, 0.5, fbm(p * 0.7 + 19.0));
-		float clump = smoothstep(0.62, 0.76, vnoise(p * 12.0 + 3.0));
+		// Пучки трави крізь підстилку — лише в пізню осінь: у суху пору світло-зелені пучки на
+		// бурому опаді читались як штамп круглих цяток.
+		float clump = dry_season ? 0.0 : smoothstep(0.62, 0.76, vnoise(p * 12.0 + 3.0));
 		alb = mix(alb, grass, max(1.0 - floor_k, clump * 0.8));
 	}
 	if (layer_base[layer] == MARSH) {
@@ -498,8 +510,7 @@ void fragment() {
 		}
 		// Слот другого класу є завжди, навіть з нульовим індикатором: природна межа — лише коли
 		// він справді в смузі.
-		bool soft = L[0] != L[1] && layer_base[L[0]] != RUBBLE && layer_base[L[1]] != RUBBLE
-				&& tops[1] > tops[0] - NATURAL_BAND;
+		bool soft = L[0] != L[1] && tops[1] > tops[0] - NATURAL_BAND;
 		// Ваги нормовано на CLASS_BAND: від їхньої величини залежать багно й калюжі нижче.
 		float band = soft ? NATURAL_BAND : CLASS_BAND;
 		for (int i = 0; i < 3; i++) {
@@ -578,18 +589,32 @@ void fragment() {
 		}
 		L[3] = MUD;
 		W[3] = soil_w * mud_soil;
-		// Суха пора: щебінь — розсип купок 0.3–0.5 клітинки (~40 % площі) по сухому ґрунту, а не
-		// суцільна плита; край купки темніший — камінь лежить у землі.
+		// Щебінь — розсип купок 0.3–0.5 клітинки (~40 % площі) по ґрунту (сухому чи мокрому за
+		// порою), а не суцільна плита. Край купки широкий: усередині смуги вага щебеню нижча за ґрунт,
+		// тож висотна суміш лишає з нього лише верхи каменів — без світлого «блюдця» під купкою.
+		// Край темніший (камінь лежить у землі), а на сонці — ще й тінь, зсунута від сонця.
 		float rubble_contact = 0.0;
-		if (dry_season) {
-			float pile_f = fbm(p * 2.4 + 17.0) + 0.3 * (vnoise(p * 7.0) - 0.5);
-			float pile = smoothstep(0.5, 0.56, pile_f);
-			for (int i = 0; i < 3; i++) {
-				if (layer_base[L[i]] == RUBBLE && W[i] > 0.0) {
-					rubble_contact = max(rubble_contact, W[i] / CLASS_BAND * smoothstep(0.38, 0.5, pile_f) * (1.0 - pile));
-					W[3] += W[i] * (1.0 - pile);
-					W[i] *= pile;
-				}
+		vec2 sun_off = sun_dir.xz / max(sun_dir.y, 0.25) * 0.04 * (dry_season ? 1.0 : 0.0);
+		float pile_f = fbm(p * 2.4 + 17.0) + 0.3 * (vnoise(p * 7.0) - 0.5);
+		float pile = smoothstep(0.46, 0.62, pile_f);
+		float pile_sh = smoothstep(0.46, 0.62, fbm((p + sun_off) * 2.4 + 17.0) + 0.3 * (vnoise((p + sun_off) * 7.0) - 0.5));
+		for (int i = 0; i < 3; i++) {
+			if (layer_base[L[i]] == RUBBLE && W[i] > 0.0) {
+				float wr = W[i] / CLASS_BAND;
+				rubble_contact = max(rubble_contact, wr * max(smoothstep(0.36, 0.5, pile_f) * (1.0 - pile), pile_sh * (1.0 - pile)));
+				W[3] += W[i] * (1.0 - 0.6 * pile);
+				W[i] *= 0.6 * pile;
+			}
+		}
+		// Двір: на ґрунті між будинками теж купки каменю (рідші), інакше пляма ґрунту читається
+		// рівною плитою. Третій слот у дворі порожній — беремо його під щебінь.
+		if (yard_slot >= 0 && W[2] < 0.002) {
+			float yard_k = smoothstep(0.35, 0.65, S[yard_slot]);
+			float yr = yard_k * pile * 0.5;
+			if (yr > 0.01) {
+				L[2] = RUBBLE;
+				W[2] = CLASS_BAND * yr;
+				rubble_contact = max(rubble_contact, yard_k * max(smoothstep(0.36, 0.5, pile_f) * (1.0 - pile), pile_sh * (1.0 - pile)));
 			}
 		}
 
@@ -615,13 +640,16 @@ void fragment() {
 				// і кути, де не з поля діагональний сусід. Тож і неправильна група має узбіччя на
 				// кожному зовнішньому краї, а не сходинки по межах клітинок.
 				vec2 f = p - map_origin - vec2(pc);
+				vec4 ins = plough_inset[pf];
 				float d = 1.0;
 				for (int dy = -1; dy <= 1; dy++) {
 					for (int dx = -1; dx <= 1; dx++) {
 						if ((dx == 0 && dy == 0) || plough_id(pc + ivec2(dx, dy)) == pf) {
 							continue;
 						}
-						vec2 e = vec2(dx == 0 ? 1.0 : 0.5 - f.x * float(dx), dy == 0 ? 1.0 : 0.5 - f.y * float(dy));
+						float ix = dx > 0 ? ins.z : ins.x;
+						float iy = dy > 0 ? ins.w : ins.y;
+						vec2 e = vec2(dx == 0 ? 1.0 : 0.5 - f.x * float(dx) - ix, dy == 0 ? 1.0 : 0.5 - f.y * float(dy) - iy);
 						d = min(d, dx != 0 && dy != 0 ? length(e) : min(e.x, e.y));
 					}
 				}
@@ -703,9 +731,10 @@ void fragment() {
 			if (vert) {
 				pn = vec2(-pn.y, pn.x);
 			}
-			// Смуга розвороту плуга ~0.3 м уздовж краю: ґрунт там утоптаний і темніший.
-			float turn = 1.0 - smoothstep(0.0, 0.0375, plough_d);
-			alb = mix(alb, pa * pcav * foliage_tint * (1.0 - 0.18 * turn), plough_a);
+			// Смуга розвороту плуга вздовж краю: ґрунт там утоптаний і темніший.
+			// Ширина ~0.4 м (0.05 клітинки), темніша на 35 %: вужча й слабша смуга губилась у борознах.
+			float turn = 1.0 - smoothstep(0.03, 0.05, plough_d);
+			alb = mix(alb, pa * pcav * foliage_tint * (1.0 - 0.35 * turn), plough_a);
 			nxy = mix(nxy, pn, plough_a);
 			rough = mix(rough, 0.92, plough_a);
 			marsh_w *= 1.0 - plough_a;
@@ -858,10 +887,7 @@ void fragment() {
 		// дошку (узгодженість орієнтації по вікнах 0.87). Тож повна сила — лише на схилах круче
 		// ~10–22° (пагорб, берег), на пологому полі — ×1.
 		float shade_k = mix(1.0, 9.0, smoothstep(0.18, 0.4, slope_tan));
-		// Під сонцем схил тінить світло сцени (BattleLook.sun_dir); запечене світло-тінь із чужим
-		// напрямом сонця там давало темну смугу через схил — лишаємо чверть.
-		alb *= 1.0 + clamp(shade_k * hill_shade, -0.4, 0.55) * (1.0 - 0.4 * smoothstep(25.0, 45.0, cam_dist))
-				* (dry_season ? 0.25 : 1.0);
+		alb *= 1.0 + clamp(shade_k * hill_shade, -0.4, 0.55) * (1.0 - 0.4 * smoothstep(25.0, 45.0, cam_dist));
 		// Макро-варіація 20-50 м (fbm ~ 1/0.2 клітинки = 40 м): ламає повтор тону,
 		// не міняючи масштаб дрібниць.
 		float macro = fbm(p * 0.2 + 41.0) - 0.5;
@@ -989,13 +1015,14 @@ void fragment() {
 
 		// Мокрість: темніше й глянцевіше. Калюжі — лише в коліях дороги й вікнах болота.
 		float wet = clamp(weather_wetness, 0.0, 1.0);
-		// Мокре темніше, але не безбарвне: земля ×0.85, асфальт і бруківка ×0.75. Сильніше
-		// затемнення з відблиском неба зверху сірить усе поле.
-		alb *= mix(1.0, 0.85 - 0.1 * road_cov * (rt.r + rt.b), wet);
+		// Мокре темніше, але не безбарвне: земля ×0.78 (світліша читається сухою й курною під
+		// дощем), ґрунтівка ×0.85, асфальт і бруківка ×0.75. Сильніше затемнення з відблиском неба
+		// зверху сірить усе поле.
+		alb *= mix(1.0, 0.78 + 0.07 * road_cov - 0.1 * road_cov * (rt.r + rt.b), wet);
 		// Мокра земля лише трохи глянцевіша: блиск сірого неба на траві забирає з неї колір.
 		// Асфальт — до 0.45, не нижче: на 0.22 сонце проти камери робило з дороги хром,
 		// яскравіший за воду.
-		rough = mix(rough, mix(0.8, 0.45, road_cov * (rt.r + rt.b)), wet);
+		rough = mix(rough, mix(0.72, 0.45, road_cov * (rt.r + rt.b)), wet);
 		// Мокрі смуги коліс — трохи глянцевіші.
 		rough = mix(rough, 0.4, wet * wheel * road_cov);
 		// Калюжі ґрунтівки: у коліях і на всю ширину в низинах (координати дороги, див. вище).
@@ -1003,8 +1030,12 @@ void fragment() {
 		// Вікна стоячої води в болоті 0.5–2 м (~10 % площі): темні, з відблиском неба. Лише в
 		// мокрому вигляді: на сухій карті на їхньому місці — висохлий торф (сезонне макро болота),
 		// а стояча вода під сонцем читалась би як калюжа без дощу.
-		float pool = marsh_w * (1.0 - smoothstep(0.29, 0.32, fbm(p * 1.6 + 43.0) + 0.08 * (vnoise(p * 9.0) - 0.5)))
-				* smoothstep(0.1, 0.35, weather_wetness);
+		float pool_f = fbm(p * 1.6 + 43.0) + 0.08 * (vnoise(p * 9.0) - 0.5);
+		float pool_wet = marsh_w * smoothstep(0.1, 0.35, weather_wetness);
+		float pool = pool_wet * (1.0 - smoothstep(0.29, 0.32, pool_f));
+		// Каламутна оливкова облямівка ~0.3–0.6 м навколо вікна: мокрий мох і мул, не світла лінія.
+		float pool_rim = pool_wet * (1.0 - smoothstep(0.32, 0.4, pool_f)) * (1.0 - pool);
+		alb = mix(alb, alb * vec3(0.78, 0.82, 0.55), pool_rim * 0.7);
 		puddle = max(puddle, pool);
 		alb *= mix(1.0, 0.55, puddle) * mix(1.0, 0.65, max(rut_rim * road_cov, pool));
 		// Мокра смуга берега: вага води росте ~3.4 на клітинку біля урізу (0.5), тож
@@ -1031,13 +1062,17 @@ void fragment() {
 		// Дощ на ній — ті самі кола, що й на річці. Підлога шорсткості 0.12: на 0.05
 		// сонце на брижі давало однопіксельні іскри.
 		float rv = puddle > 0.0 ? rv_all : 0.0;
-		vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * 1.2 * wet * rv : vec2(0.0);
+		vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * 1.2 * wet * rv * (1.0 - 0.6 * pool) : vec2(0.0);
 		rough = mix(rough, 0.12 + 0.1 * wet * (1.0 - rv), puddle);
+		// Вікно болота — матове для світла: небо в ньому дає лише EMISSION з обмеженою часткою
+		// нижче. Глянець через звичайне освітлення додавав зонд і сонце — біле дзеркало, світлу
+		// облямівку й білі цятки на колах дощу.
+		rough = mix(rough, 1.0, pool);
 		rough = mix(rough, 0.4, paved_sheen * road_cov);
 		nxy = mix(nxy, ripple, puddle);
 		// Мокрий асфальт відбиває ~3 % неба, глянцеві смуги — до 30 %: шорсткість 0.45 під похмурим
 		// небом сама відблиску майже не дає, а більше дзеркала робило дорогу яскравішою за воду.
-		float mirror = max(max(puddle * 2.5, shore * 0.12),
+		float mirror = max(max(max(puddle * 2.5, pool * 6.0), shore * 0.12),
 				wet * road_cov * (rt.r + 0.5 * rt.b) * 0.03 + paved_sheen * road_cov * 0.3);
 		vec3 refl = vec3(0.0);
 		if (mirror > 0.0 && sky_reflection_gain > 0.0) {
@@ -1046,7 +1081,7 @@ void fragment() {
 			vec3 nw = slope_to_world(ripple);
 			vec3 vw = normalize(CAMERA_POSITION_WORLD - world_pos);
 			float fr = 0.1 + 0.9 * pow(1.0 - clamp(dot(nw, vw), 0.0, 1.0), 3.0);
-			refl = overcast_sky_at(reflect(-vw, nw), TIME, sky_clear) * min(fr * mirror, mix(PUDDLE_SKY_MAX, 0.1, pool));
+			refl = overcast_sky_at(reflect(-vw, nw), TIME, sky_clear) * min(fr * mirror, mix(PUDDLE_SKY_MAX, POOL_SKY_MAX, pool));
 			float murk_k = clamp(water_murk, 0.0, 1.0);
 			refl = mix(refl, vec3(dot(refl, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.92, 0.98, 1.02),
 					murk_k) * (1.0 - 0.8 * murk_k);
@@ -1087,7 +1122,7 @@ void fragment() {
 		ROUGHNESS = rough;
 		// Колії й смуги коліс темніші й у відбитті: інакше постійний відблиск неба (F0 0.04 при
 		// альбедо ~0.06) вдвічі зменшує їхній ΔL* на екрані.
-		SPECULAR = mix(0.5, 0.2, bank_amt) * mix(1.0, road_mul, road_cov);
+		SPECULAR = mix(0.5, 0.2, bank_amt) * mix(1.0, road_mul, road_cov) * (1.0 - pool);
 		NORMAL_MAP = vec3(nxy * 0.5 + 0.5, 1.0);
 	}
 }
