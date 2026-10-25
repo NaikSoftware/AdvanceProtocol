@@ -14,7 +14,7 @@ Domain) so you are free to use them however you want!". Each archive also carrie
 | pack (as listed on the page) | size / frames | used for |
 | --- | --- | --- |
 | Ground Explosion (`GroundExplosionVDB.zip`) | 661 MB, 200 frames, channels density + flames | `explosion.png` (frames 6–132 step 2), `smoke_column.png` / `smoke_column_thin.png` (smoke only, frames 66–129), `dirt_burst.png` (smoke only, brown albedo, frames 4–130 step 2), `impact_flash.png` (frames 4–34 step 2, small scale) |
-| Small Camp Fire (`SmallCampfireVDB.zip`) | 59 MB, 200 frames, channels density + flames | `wreck_fire.png` (frames 40–167, 128 frames cross-faded into a 64-frame loop) |
+| Small Camp Fire (`SmallCampfireVDB.zip`) | 59 MB, 200 frames, channels density + flames | `wreck_fire.png` (frames 0–192 at step 1.5, cross-faded into a 64-frame loop) |
 
 Every other pack on the page (Aerial Explosion, Tornado Looping, Fire Plume, Cloud Pack, Grenade Dust Impact,
 Dust Shockwave, Industrial Chimney Smoke, Building Implosion, Gasoline Explosion, High-Res Smoke Plume, Simple
@@ -33,7 +33,7 @@ pitch). The VDB files themselves are not in the repository.
 | --- | --- | --- | --- |
 | `smoke_column.png` | rolling dark smoke, plays once and ends empty (loops without a seam) | 64, 8×8 × 192 px, 4 fps, cell ≈ 22 m (the cloud fills ≈ 19 m, scale the quad) | Ground Explosion VDB |
 | `smoke_column_thin.png` | the same, lighter and thinner (peak alpha 0.35) for the thinning stages | 64, 8×8 × 192 px, 4 fps | Ground Explosion VDB |
-| `wreck_fire.png` | low flames, seamless loop | 64, 8×8 × 192 px, 8 fps, cell ≈ 2.0 m | Small Camp Fire VDB |
+| `wreck_fire.png` | tall licking flames rising from a glowing burning bed (the bed is a flat emissive disc added in Blender, noise-animated), yellow-white root, orange body, dark smoky tips, seamless loop | 64, 16×4 × 128×256 px (2048×1024), 8 fps, cell width ≈ 1.7 m, base at the bottom centre, 6% above the cell bottom | Small Camp Fire VDB (vertical stretch 1.7) |
 | `explosion.png` | fireball then dark smoke, one-shot | 64, 8×8 × 192 px, 48 fps, cell ≈ 22 m | Ground Explosion VDB |
 | `dirt_burst.png` | brown earth and dust cloud, no fire, one-shot | 64, 8×8 × 192 px, 40 fps, cell ≈ 13.7 m | Ground Explosion VDB (density only, brown albedo) |
 | `impact_flash.png` | muzzle / impact flash into a small fireball, ends empty | 16, 4×4 × 192 px, 60 fps, cell ≈ 6.7 m | Ground Explosion VDB (early frames) |
