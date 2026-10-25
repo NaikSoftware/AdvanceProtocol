@@ -20,10 +20,10 @@
 shader_type spatial;
 render_mode unshaded, blend_mix, cull_disabled, shadows_disabled, depth_draw_never;
 
-// Решітка: розмір клітинки (клітинки дошки), кількість квадів по осях, номер кутової клітинки й
-// крок; ставить `WeatherRig.follow`.
-uniform vec3 cell = vec3(0.26, 0.6375, 0.26);
-uniform vec3 grid = vec3(60.0, 8.0, 60.0);
+// Решітка: розмір клітинки (клітинки дошки) й кількість квадів по осях ставить `WeatherRig.apply`
+// раз на меш; номер кутової клітинки, крок і поріг рангу — `WeatherRig.follow` за камерою.
+uniform vec3 cell = vec3(0.3, 0.6375, 0.3);
+uniform vec3 grid = vec3(40.0, 8.0, 40.0);
 uniform vec3 cell_origin;
 uniform float stride = 1.0;
 uniform float keep = 0.125;
@@ -78,44 +78,48 @@ void vertex() {
 	vec3 gi = floor(VERTEX * grid);
 	// Світовий номер клітинки цієї краплі: від нього залежить усе, що крапля робить.
 	vec3 wc = cell_origin + gi * stride;
-	bool drawn = rain_rank(wc) < keep;
-	float ph = TIME / cycle + rain_hash(wc.xz * 0.731 + wc.y * 17.13);
-	float k = floor(ph);
-	float age = fract(ph) * cycle;
-	vec3 r = vec3(rain_hash(wc.xz * 1.31 + wc.y * 7.7 + k),
-			rain_hash(wc.zx * 1.73 + wc.y * 3.1 + k * 1.7),
-			rain_hash(wc.xy * 1.51 + wc.z * 5.3 + k * 2.3));
-	vec3 vel = vec3(wind.x, -fall_speed, wind.y);
-	vec3 head = (wc + r) * cell + vel * age;
-	vec3 tail = head - vel * exposure;
-	mat4 pv = PROJECTION_MATRIX * VIEW_MATRIX;
-	vec4 h = pv * vec4(head, 1.0);
-	vec4 t = pv * vec4(tail, 1.0);
+	// Клітинка поза рангом нічого не малює: її квад стягується в точку поза кадром, і решта роботи
+	// вершини не потрібна.
 	v_x = 0.0;
 	v_l = 0.0;
 	v_vis = 0.0;
-	// Клітинка поза рангом, або крапля на площині камери чи позаду неї (коробка сягає камери на
-	// найбільшому віддаленні — ділення на w там вибухає): не малюємо.
-	if (!drawn || h.w < 0.05 || t.w < 0.05) {
-		POSITION = vec4(2.0, 2.0, 2.0, 1.0);
-	} else {
-		vec2 half_vp = 0.5 * VIEWPORT_SIZE;
-		vec2 sh = h.xy / h.w * half_vp;
-		vec2 st = t.xy / t.w * half_vp;
-		vec2 along = sh - st;
-		vec2 dir = along / max(length(along), 1e-4);
-		vec2 perp = vec2(-dir.y, dir.x);
-		// UV.y 0 — хвіст, 1 — голова; збоку квад на `quad_px`.
-		vec2 sp = mix(st, sh, UV.y) + perp * (UV.x - 0.5) * quad_px;
-		float w = mix(t.w, h.w, UV.y);
-		POSITION = vec4(sp / half_vp * w, mix(t.z, h.z, UV.y), w);
-		v_x = (UV.x - 0.5) * quad_px;
-		v_l = UV.y;
-		float dist = length(CAMERA_POSITION_WORLD - head);
-		v_vis = (age < life ? sin(3.14159 * age / life) : 0.0) * smoothstep(1.5, 4.0, dist);
-		if (v_vis <= 0.0) {
-			// Невидима зараз крапля: квад стягується в точку поза кадром і нічого не малює.
+	POSITION = vec4(2.0, 2.0, 2.0, 1.0);
+	if (rain_rank(wc) < keep) {
+		float ph = TIME / cycle + rain_hash(wc.xz * 0.731 + wc.y * 17.13);
+		float k = floor(ph);
+		float age = fract(ph) * cycle;
+		vec3 r = vec3(rain_hash(wc.xz * 1.31 + wc.y * 7.7 + k),
+				rain_hash(wc.zx * 1.73 + wc.y * 3.1 + k * 1.7),
+				rain_hash(wc.xy * 1.51 + wc.z * 5.3 + k * 2.3));
+		vec3 vel = vec3(wind.x, -fall_speed, wind.y);
+		vec3 head = (wc + r) * cell + vel * age;
+		vec3 tail = head - vel * exposure;
+		mat4 pv = PROJECTION_MATRIX * VIEW_MATRIX;
+		vec4 h = pv * vec4(head, 1.0);
+		vec4 t = pv * vec4(tail, 1.0);
+		// Крапля на площині камери чи позаду неї (коробка сягає камери на найбільшому віддаленні —
+		// ділення на w там вибухає): не малюємо.
+		if (h.w < 0.05 || t.w < 0.05) {
 			POSITION = vec4(2.0, 2.0, 2.0, 1.0);
+		} else {
+			vec2 half_vp = 0.5 * VIEWPORT_SIZE;
+			vec2 sh = h.xy / h.w * half_vp;
+			vec2 st = t.xy / t.w * half_vp;
+			vec2 along = sh - st;
+			vec2 dir = along / max(length(along), 1e-4);
+			vec2 perp = vec2(-dir.y, dir.x);
+			// UV.y 0 — хвіст, 1 — голова; збоку квад на `quad_px`.
+			vec2 sp = mix(st, sh, UV.y) + perp * (UV.x - 0.5) * quad_px;
+			float w = mix(t.w, h.w, UV.y);
+			POSITION = vec4(sp / half_vp * w, mix(t.z, h.z, UV.y), w);
+			v_x = (UV.x - 0.5) * quad_px;
+			v_l = UV.y;
+			float dist = length(CAMERA_POSITION_WORLD - head);
+			v_vis = (age < life ? sin(3.14159 * age / life) : 0.0) * smoothstep(1.5, 4.0, dist);
+			if (v_vis <= 0.0) {
+				// Невидима зараз крапля: квад стягується в точку поза кадром і нічого не малює.
+				POSITION = vec4(2.0, 2.0, 2.0, 1.0);
+			}
 		}
 	}
 }

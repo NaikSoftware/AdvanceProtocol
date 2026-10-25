@@ -11,7 +11,10 @@ const _RAIN_SHADER: Shader = preload("res://game/battle/shaders/rain.gdshader")
 ## Коробка дощу на одиницю `zoom_level` (висоти кадру в площині фокуса): уширшки й углиб —
 ## кадр 20:9 разом із дальньою землею вгорі кадру; заввишки — майже до камери, бо видимий дощ
 ## — це передусім краплі ближче до неї.
-const RAIN_BOX: Vector3 = Vector3(2.6, 0.85, 2.6)
+const RAIN_BOX: Vector3 = Vector3(2.0, 0.85, 2.0)
+## Дальній від камери кут коробки — на стільки `zoom_level` від фокуса по x і z: там верх кадру.
+## Ближчий до камери бік коробки в кадр не потрапляє, тож коробка закінчується до нього.
+const RAIN_FAR: float = 1.0242
 ## Падіння, клітинок/с (28 м/с). Справжні 8 м/с з висоти камери дають штрихи в 1–5 px, що
 ## читаються крапками; швидший дощ з тією самою витримкою виглядає так, як справжній зблизька.
 const RAIN_FALL: float = 3.5
@@ -143,8 +146,8 @@ func _light_probe() -> void:
 	probe.ambient_color_energy = _look.ambient_energy
 
 
-## Кількість крапель у меші дощу, що зараз іде (0 — дощу нема); малюється з них ~восьма
-## частина (`rain_lattice`).
+## Кількість крапель у меші дощу, що зараз іде (0 — дощу нема); скільки з них малюється,
+## вирішує `rain_lattice`.
 func rain_drops() -> int:
 	return _rain_drops if rain.visible else 0
 
@@ -169,14 +172,11 @@ static func rain_cell(grid: Vector3) -> Vector3:
 	return RAIN_BOX * IsoCameraRig.MIN_ZOOM / grid
 
 
-## Коробка дощу на цьому зумі: нижній кут і розмір, клітинки дошки. Трохи зсунута до камери:
-## там у кадрі ближча земля й вища частина шару.
+## Коробка дощу на цьому зумі: нижній кут і розмір, клітинки дошки. Дальній від камери кут —
+## `RAIN_FAR` зумів від фокуса; звідти коробка йде до камери на `RAIN_BOX` зумів.
 static func rain_box(focus: Vector3, zoom_level: float) -> AABB:
-	var need: Vector3 = RAIN_BOX * zoom_level
-	var toward := Vector3(1.0, 0.0, 1.0).normalized()
-	var lo: Vector3 = Vector3(focus.x, 0.0, focus.z) - Vector3(need.x, 0.0, need.z) * 0.5 \
-			+ toward * need.x * 0.15
-	return AABB(lo, need)
+	var lo := Vector3(focus.x - RAIN_FAR * zoom_level, 0.0, focus.z - RAIN_FAR * zoom_level)
+	return AABB(lo, RAIN_BOX * zoom_level)
 
 
 ## Решітка для фокуса й зуму: крок (у клітинках), світовий номер кутової клітинки й `keep` —
@@ -185,8 +185,9 @@ static func rain_box(focus: Vector3, zoom_level: float) -> AABB:
 ## Крок — степінь двійки, найменший, з яким решітка вкриває коробку із запасом в одну клітинку
 ## (кут прилипає до цілої клітинки й може відстати від коробки на крок). Кут — ціле кратне кроку,
 ## тож пан зсуває решітку лише на цілі клітинки. `keep` тримає сталою кількість клітинок, що
-## малюються в коробці: ~восьма частина решітки. Він ≤ 8^-log2(крок), тож усі такі клітинки
-## кратні кроку й решітка їх має — на порозі кроку видиме не міняється.
+## малюються в коробці: ((G-1)/G)³/8 усієї решітки за густотою найменшого віддалення. Він ≤
+## 8^-log2(крок), тож усі такі клітинки кратні кроку й решітка їх має — на порозі кроку видиме не
+## міняється.
 static func rain_lattice(focus: Vector3, zoom_level: float, grid: Vector3) -> Dictionary:
 	var cell: Vector3 = rain_cell(grid)
 	var box: AABB = rain_box(focus, zoom_level)
