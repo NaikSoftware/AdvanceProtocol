@@ -13,7 +13,7 @@ Domain) so you are free to use them however you want!". Each archive also carrie
 
 | pack (as listed on the page) | size / frames | used for |
 | --- | --- | --- |
-| Ground Explosion (`GroundExplosionVDB.zip`) | 661 MB, 200 frames, channels density + flames | `explosion.png` (frames 6–132 step 2), `smoke_column.png` / `smoke_column_thin.png` (smoke only, frames 66–129), `dirt_burst.png` (smoke only, brown albedo, frames 4–130 step 2), `impact_flash.png` (frames 4–34 step 2, small scale) |
+| Ground Explosion (`GroundExplosionVDB.zip`) | 661 MB, 200 frames, channels density + flames | `explosion.png` (frames 10–136 step 2, hottest in the first frames, fades to empty over the last 12), `smoke_column.png` / `smoke_column_thin.png` (smoke only, frames 66–129), `dirt_burst.png` (smoke only, brown albedo, frames 20–146 step 2, fades to empty over the last 12), `impact_flash.png` (frames 10–40 step 2, small scale) |
 | Small Camp Fire (`SmallCampfireVDB.zip`) | 59 MB, 200 frames, channels density + flames | `wreck_fire.png` (frames 0–192 at step 1.5, cross-faded into a 64-frame loop) |
 
 Every other pack on the page (Aerial Explosion, Tornado Looping, Fire Plume, Cloud Pack, Grenade Dust Impact,
@@ -34,9 +34,9 @@ pitch). The VDB files themselves are not in the repository.
 | `smoke_column.png` | rolling dark smoke, plays once and ends empty (loops without a seam) | 64, 8×8 × 192 px, 4 fps, cell ≈ 22 m (the cloud fills ≈ 19 m, scale the quad) | Ground Explosion VDB |
 | `smoke_column_thin.png` | the same, lighter and thinner (peak alpha 0.35) for the thinning stages | 64, 8×8 × 192 px, 4 fps | Ground Explosion VDB |
 | `wreck_fire.png` | tall flame rising from the cell bottom, the sim's own emission kept (licks and darker gaps inside): pale yellow-white hot base, yellow-orange middle, orange-red translucent edges and tips, thin dark-grey smoke wisps above; seamless loop | 64, 16×4 × 128×256 px (2048×1024), 8 fps, cell width ≈ 2.9 m (flame ≈ 1.5 m wide, 3.2 m tall), base at the bottom centre, 6% above the cell bottom | Small Camp Fire VDB (vertical stretch 3.6) |
-| `explosion.png` | fireball then dark smoke, one-shot | 64, 8×8 × 192 px, 48 fps, cell ≈ 22 m | Ground Explosion VDB |
-| `dirt_burst.png` | brown earth and dust cloud, no fire, one-shot | 64, 8×8 × 192 px, 40 fps, cell ≈ 13.7 m | Ground Explosion VDB (density only, brown albedo) |
-| `impact_flash.png` | muzzle / impact flash into a small fireball, ends empty | 16, 4×4 × 192 px, 60 fps, cell ≈ 6.7 m | Ground Explosion VDB (early frames) |
+| `explosion.png` | fireball then dark smoke, one-shot | 64, 8×8 × 192 px, 48 fps, cell ≈ 32 m | Ground Explosion VDB |
+| `dirt_burst.png` | brown earth and dust cloud, no fire, one-shot | 64, 8×8 × 192 px, 40 fps, cell ≈ 18.8 m | Ground Explosion VDB (density only, brown albedo) |
+| `impact_flash.png` | muzzle / impact flash into a small fireball, ends empty | 16, 4×4 × 192 px, 60 fps, cell ≈ 8.9 m | Ground Explosion VDB (early frames) |
 | `armour_sparks.png` | 4×2 sheet of 7 spark streaks (8th cell empty), tinted `#FFE6B0` with a white-hot core | 8 cells × 256 px | Kenney Particle Pack 1.1, `PNG (Transparent)/trace_01…trace_07.png`, resized 512→256 and tinted; <https://kenney.nl/assets/particle-pack>; CC0 1.0 (`License.txt` in the pack) |
 | `smoke_puff.png` | 256², white soft puff used by the main menu | **UNKNOWN SOURCE.** Added with the menu shell (first commit `766c8f5`). It matches no file in Kenney Particle Pack or Kenney Smoke Particles, and nobody recorded where it came from. SHA-256 `0cc39934418048c69ed815a3150f1feb03a344dd30a7b90cc361bb0554068522`. Replace it, or establish the source, before release | **unknown** |
 

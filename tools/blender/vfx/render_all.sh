@@ -9,9 +9,9 @@ B="${BLENDER:-blender}"
 G="$VDB/ground/ground_explosion/ground_explosion_VDB"
 F="$VDB/campfire/smallCampfire/smallCampfireVDB"
 R() { "$B" -b --factory-startup -P "$H/vdb_flipbook.py" -- "$@"; }
-R "$G" "$WORK" explosion rotx=90 height=24 kind=fire cell=192 samples=64 frames=6:132:2 pitch=45 ground=1 ramp=0.52 gain=4.5 fabs=10 dens=7 col=0.3,0.3,0.3 margin=0.06 fade=0.22
+R "$G" "$WORK" explosion rotx=90 height=24 kind=fire cell=192 samples=64 frames=10:136:2 pitch=45 ground=1 ramp=0.52 gain=4.5 fabs=10 dens=7 col=0.3,0.3,0.3 margin=0.3 fade=0.0001 heat=1 tau=7
 R "$G" "$WORK" smoke_puff rotx=90 height=24 kind=smoke cell=192 samples=64 frames=66:129:1 pitch=45 ground=1 dens=5 col=0.32,0.32,0.32 margin=0.06 fade=0.12
-R "$G" "$WORK" dirt_burst rotx=90 height=14 kind=smoke cell=192 samples=64 frames=4:130:2 pitch=45 ground=1 dens=6 col=0.36,0.28,0.2 margin=0.06 fade=0.12
-R "$G" "$WORK" flash rotx=90 height=8 kind=fire cell=192 samples=64 frames=4:34:2 pitch=45 ground=1 ramp=1.0 gain=9 fabs=10 dens=4 col=0.3,0.3,0.3 margin=0.12 fade=0.12
+R "$G" "$WORK" dirt_burst rotx=90 height=14 kind=smoke cell=192 samples=64 frames=20:146:2 pitch=45 ground=1 dens=6 col=0.36,0.28,0.2 margin=0.3 fade=0.0001
+R "$G" "$WORK" flash rotx=90 height=8 kind=fire cell=192 samples=64 frames=10:40:2 pitch=45 ground=1 ramp=1.0 gain=9 fabs=10 dens=4 col=0.3,0.3,0.3 margin=0.3 fade=0.0001 heat=1 tau=4
 R "$F" "$WORK" wreck_fire rotx=90 height=1.7 vstretch=3.6 kind=fire cell=256 cellw=128 samples=48 frames=0:192:1.5 pitch=45 ground=1 athr=0.3 ramp=3.1 gain=32 fabs=28 dens=40 col=0.08,0.08,0.08 margin=0.41 fit=typ
 python3 "$H/assemble.py" "$WORK" "$OUT" all

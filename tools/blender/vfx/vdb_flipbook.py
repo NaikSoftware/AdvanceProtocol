@@ -22,6 +22,7 @@ kind = K.get("kind", "smoke")
 dens_gain, gain, top = f("dens", 3.0), f("gain", 6.0), f("top", 1.0)
 col = tuple(float(x) for x in K.get("col", "0.35,0.35,0.35").split(","))
 _fa = K.get("frames", "0:0:1").split(":")
+heat, tau = f("heat", 0.0), f("tau", 7.0)
 a, b, st = int(_fa[0]), int(_fa[1]), float(_fa[2])
 
 files = sorted(glob.glob(vdir + "/*.vdb"), key=lambda p: int("".join(c for c in os.path.basename(p).rsplit(".", 1)[0].split("_")[-1] if c.isdigit()) or 0))
@@ -207,14 +208,14 @@ if float(K.get("bed", 0)) > 0:
     edgef.inputs["To Min"].default_value, edgef.inputs["To Max"].default_value = 1.0, 0.0
     edgef.clamp = True
     bt.links.new(rr.outputs[0], edgef.inputs["Value"])
-    heat = bt.nodes.new("ShaderNodeMath")  # noise x radial falloff = patchy hot spots
-    heat.operation = "MULTIPLY"
-    bt.links.new(bn.outputs["Fac"], heat.inputs[0])
-    bt.links.new(edgef.outputs["Result"], heat.inputs[1])
+    bheat = bt.nodes.new("ShaderNodeMath")  # noise x radial falloff = patchy hot spots
+    bheat.operation = "MULTIPLY"
+    bt.links.new(bn.outputs["Fac"], bheat.inputs[0])
+    bt.links.new(edgef.outputs["Result"], bheat.inputs[1])
     hs = bt.nodes.new("ShaderNodeMapRange")
     hs.inputs["From Min"].default_value, hs.inputs["From Max"].default_value = 0.05, 0.7
     hs.clamp = True
-    bt.links.new(heat.outputs[0], hs.inputs["Value"])
+    bt.links.new(bheat.outputs[0], hs.inputs["Value"])
     rmp = bt.nodes.new("ShaderNodeValToRGB")
     c2 = rmp.color_ramp
     c2.elements[0].position, c2.elements[0].color = 0.0, (*hexc("#4A1204"), 1)
@@ -332,6 +333,10 @@ for i, p in enumerate(sel):
     sc.frame_set(idx + 1)
     if bed_w is not None:
         bed_w.default_value = i * 0.3
+    if heat and kind == "fire" and fgrid:  # the first frames burn hottest: whiter core, then it cools
+        e = math.exp(-i / tau)
+        sc_.inputs[1].default_value = f("ramp", 1.0) * (1 + 1.6 * heat * e)
+        gm.inputs[1].default_value = gain * (1 + 2.0 * heat * e)
     sc.render.filepath = os.path.join(outdir, name, "f_%03d.png" % i)
     bpy.ops.render.render(write_still=True)
     print("rendered", i, idx)
