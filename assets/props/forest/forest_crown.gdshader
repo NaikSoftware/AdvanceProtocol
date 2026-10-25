@@ -48,7 +48,11 @@ void fragment() {
 	vec4 t = texture(albedo_tex, UV);
 	// Ширину згладження обмежено: на далекому зумі fwidth(alpha) великий, і без межі
 	// растром укрилась би вся картка — крона розсипалась би рябими крапками.
-	float edge = clamp((t.a - alpha_cutoff) / clamp(fwidth(t.a), 1e-4, 0.12) + 0.5, 0.0, 1.0);
+	// На далеких mip-рівнях тонкі гілки усереднюються з прозорим тлом і тануть під порогом:
+	// голе дерево здаля лишилось би самим стовбуром. Тож поріг знижується з рівнем mip.
+	float lod = textureQueryLod(albedo_tex, UV).x;
+	float cut = alpha_cutoff * mix(1.0, 0.45, clamp((lod - 1.0) / 3.0, 0.0, 1.0));
+	float edge = clamp((t.a - cut) / clamp(fwidth(t.a), 1e-4, 0.12) + 0.5, 0.0, 1.0);
 	if (COLOR.a <= 0.001 || edge * COLOR.a < bayer4(FRAGCOORD.xy)) {
 		discard;
 	}
