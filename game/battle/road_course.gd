@@ -769,6 +769,12 @@ func near_node(p: Vector2) -> float:
 	return best
 
 
+## Кінець лінії глухий (не на розвилці): далі за 1 клітинку від усіх вузлів. Кінці ліній на
+## розвилці лежать у самому вузлі (відстань ~0).
+func is_free_end(p: Vector2) -> bool:
+	return near_node(p) > 1.0
+
+
 ## Відстань до найближчої розвилки, що не є поворотом (клітинки).
 func _near_fixed_node(p: Vector2) -> float:
 	var best := 1e9
@@ -819,8 +825,8 @@ func rasterise() -> Array[Image]:
 		# Глухий кінець лінії (не на вузлі): довкола нього v йде по колу, і колії, що тягнуться по
 		# v, обвивали заокруглення концентричними смугами. Кінець позначаємо вагою jw, як
 		# розвилку: колій там нема, край — шумом у світі.
-		var free0: bool = near_node(pts[0]) > 1.0
-		var free1: bool = near_node(pts[pts.size() - 1]) > 1.0
+		var free0: bool = is_free_end(pts[0])
+		var free1: bool = is_free_end(pts[pts.size() - 1])
 		for si in pts.size() - 1:
 			var a: Vector2 = pts[si]
 			var b: Vector2 = pts[si + 1]
