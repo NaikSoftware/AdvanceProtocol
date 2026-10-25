@@ -10,10 +10,10 @@
     "src": "birch_early",
     "grade": {
      "lab": {
-      "L": 38,
-      "C": 16,
-      "h": 110,
-      "contrast_l": 0.5
+      "L": 25,
+      "C": 10,
+      "h": 135,
+      "contrast_l": 0.45
      }
     }
    }
@@ -23,10 +23,10 @@
     "src": "broad_early",
     "grade": {
      "lab": {
-      "L": 38,
-      "C": 16,
-      "h": 110,
-      "contrast_l": 0.5
+      "L": 25,
+      "C": 10,
+      "h": 135,
+      "contrast_l": 0.45
      }
     }
    }
@@ -36,10 +36,10 @@
     "src": "oak_early",
     "grade": {
      "lab": {
-      "L": 38,
-      "C": 16,
-      "h": 110,
-      "contrast_l": 0.5
+      "L": 25,
+      "C": 10,
+      "h": 135,
+      "contrast_l": 0.45
      }
     }
    }
@@ -49,10 +49,10 @@
     "src": "shrub_early",
     "grade": {
      "lab": {
-      "L": 38,
-      "C": 16,
-      "h": 110,
-      "contrast_l": 0.5
+      "L": 25,
+      "C": 10,
+      "h": 135,
+      "contrast_l": 0.45
      }
     }
    }
@@ -63,10 +63,10 @@
     "max": 4,
     "grade": {
      "lab": {
-      "L": 28,
-      "C": 6,
+      "L": 18,
+      "C": 5,
       "h": 70,
-      "contrast_l": 0.9
+      "contrast_l": 0.7
      }
     }
    }

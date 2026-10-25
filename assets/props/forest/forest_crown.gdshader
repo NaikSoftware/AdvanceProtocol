@@ -13,7 +13,10 @@ shader_type spatial;
 // градієнтний шум) на 1:1 читався діагональною сіткою, а напівпрозора крона — привидом.
 // Фрагменти відкидаються, а не змішуються: без сортування прозорих.
 // Тінь не раструється: крона з альфою екземпляра < 0,5 тіні не кидає, решта кидає повну.
-// RGB кольору вершини — затінення й легкий розкид тону пучка (1 на корі).
+// RGB кольору вершини — місце пучка в кроні: 0,55 низ і глибина … 1 верх (1 на корі).
+// Тон екземпляра (розкид, осіннє забарвлення цілої крони) — у custom data `MultiMesh`, а не
+// в кольорі: Godot множить колір екземпляра на колір вершини ще до коду шейдера, і тон
+// змішався б із місцем пучка.
 render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform;
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
@@ -22,10 +25,18 @@ uniform float alpha_cutoff : hint_range(0.0, 1.0) = 0.5;
 // синювате розсіяне світло робить буре фіолетовим, і цей множник його повертає.
 global uniform vec3 foliage_tint;
 // М'яке огортання світлом і просвічування: тіньовий бік пучка не чорніє, як у листя.
-uniform float wrap = 0.8;
-uniform float translucency = 0.35;
+uniform float wrap = 0.35;
+uniform float translucency = 0.15;
+// Об'єм крони: місце пучка розтягується до [occlusion, 1] і йде і в колір, і в розсіяне
+// світло неба (AO). Під рівним небом крона інакше — плоска аплікація одного кольору; так
+// у неї світлий верх, темний низ і темні щілини між кронами, де видно нижні пучки.
+uniform float occlusion = 0.45;
+// Темний обідок пучка: м'який край замість різкої вирізаної лінії наліпки.
+uniform float rim = 0.45;
+uniform float card_round = 0.7;
 
 varying float is_card;
+varying vec3 inst_tone;
 varying flat float piece_hash;
 
 float hash13(vec3 p) {
@@ -37,6 +48,8 @@ float hash13(vec3 p) {
 void vertex() {
 	// Чотири вершини картки лежать в одній точці, тож хеш однаковий для всього пучка.
 	piece_hash = hash13(VERTEX * 97.0 + 0.5);
+	// Без custom data (поодинокий MeshInstance3D) INSTANCE_CUSTOM — нулі: тон 1.
+	inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);
 	vec3 v = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	is_card = dot(UV2, UV2) > 0.0 ? 1.0 : 0.0;
 	if (is_card > 0.5) {
@@ -46,6 +59,11 @@ void vertex() {
 	}
 	VERTEX = v;
 	NORMAL = normalize((MODELVIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	if (is_card > 0.5) {
+		// Кути картки нахилені назовні: світло котиться по пучку, як по кулі, і крона
+		// світлішає до сонця плавно, а не ступенями світлий/темний пучок.
+		NORMAL = normalize(NORMAL + card_round * vec3(normalize(UV2), 0.0));
+	}
 }
 
 void fragment() {
@@ -65,8 +83,18 @@ void fragment() {
 	// Здаля дрібний малюнок пучка (листки, світлі й темні гілочки) — це шум на кілька
 	// пікселів: колір плавно йде до середнього з ширшої ділянки, і крона читається масою.
 	vec3 coarse = textureLod(albedo_tex, UV, lod + 2.0).rgb;
-	vec3 rgb = mix(t.rgb, coarse, is_card * 0.7 * smoothstep(1.5, 3.5, lod));
-	ALBEDO = rgb * COLOR.rgb * tint;
+	vec3 rgb = mix(t.rgb, coarse, is_card * 0.85 * smoothstep(0.8, 2.5, lod));
+	// Місце пучка в кроні (стале на картці) плюс положення точки на самій картці (UV2 —
+	// зсув від центру, тайли): затінення тече по кроні плавно, а не сходинками пучків.
+	float hf = clamp((COLOR.r - 0.55) / 0.45 + UV2.y * 1.3, 0.0, 1.0);
+	float occ = mix(1.0, mix(occlusion, 1.0, hf), is_card);
+	// Альфа сусіднього mip падає біля краю силуету пучка — там він і темніє. Здаля mip уже
+	// усереднений скрізь, і обідок затемнив би всю крону, тож там він гасне.
+	float edge = textureLod(albedo_tex, UV, lod + 1.0).a;
+	float r = mix(1.0, mix(1.0 - rim, 1.0, smoothstep(0.35, 0.85, edge)), is_card * (1.0 - smoothstep(2.0, 3.0, lod)));
+	ALBEDO = rgb * mix(COLOR.rgb, vec3(1.0), is_card) * inst_tone * tint * r;
+	AO = occ;
+	AO_LIGHT_AFFECT = 0.5;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
 }

@@ -10,9 +10,9 @@
     "src": "birch_summer",
     "grade": {
      "lab": {
-      "L": 36,
-      "C": 14,
-      "h": 125,
+      "L": 30,
+      "C": 10,
+      "h": 145,
       "contrast_l": 0.45
      }
     }
@@ -23,9 +23,9 @@
     "src": "broad_summer",
     "grade": {
      "lab": {
-      "L": 36,
-      "C": 14,
-      "h": 125,
+      "L": 30,
+      "C": 10,
+      "h": 145,
       "contrast_l": 0.45
      }
     }
@@ -36,9 +36,9 @@
     "src": "oak_summer",
     "grade": {
      "lab": {
-      "L": 36,
-      "C": 14,
-      "h": 125,
+      "L": 30,
+      "C": 10,
+      "h": 145,
       "contrast_l": 0.45
      }
     }
@@ -49,9 +49,9 @@
     "src": "shrub_summer",
     "grade": {
      "lab": {
-      "L": 36,
-      "C": 14,
-      "h": 125,
+      "L": 30,
+      "C": 10,
+      "h": 145,
       "contrast_l": 0.45
      }
     }
@@ -63,10 +63,10 @@
     "max": 4,
     "grade": {
      "lab": {
-      "L": 28,
-      "C": 6,
+      "L": 18,
+      "C": 5,
       "h": 70,
-      "contrast_l": 0.9
+      "contrast_l": 0.7
      }
     }
    }

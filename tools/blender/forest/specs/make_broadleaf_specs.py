@@ -17,14 +17,16 @@ import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Листя темніше за траву (~0,55 її яскравості) і зеленіше, без жовтизни (B/G ≥ 0,75): крона
+# того ж жовто-оливкового тону, що й поле, зливалась із ним.
 GREEN = {
-    "summer": {"L": 36, "C": 14, "h": 125, "contrast_l": 0.45},
-    "early": {"L": 38, "C": 16, "h": 110, "contrast_l": 0.5},
-    "late": {"L": 30, "C": 4, "h": 70, "contrast_l": 0.9},
+    "summer": {"L": 30, "C": 10, "h": 145, "contrast_l": 0.45},
+    "early": {"L": 25, "C": 10, "h": 135, "contrast_l": 0.45},
+    "late": {"L": 20, "C": 4, "h": 70, "contrast_l": 0.9},
 }
 TURNED = {"birch": {"L": 60, "C": 40, "h": 85, "contrast_l": 0.8},
           "oak": {"L": 43, "C": 30, "h": 68, "contrast_l": 0.8}}
-LITTER = {"L": 28, "C": 6, "h": 70, "contrast_l": 0.9}
+LITTER = {"L": 18, "C": 5, "h": 70, "contrast_l": 0.7}  # опад темний: світлі цятки на просіці — шум
 CUTOFF = {"summer": 0.45, "early": 0.45, "late": 0.45}
 KEEP = {"summer": 1.0, "early": 1.0, "late": 0.55}
 BARK = {"birch": {"target_y": 0.16, "sat": 0.5}, "oak": {"target_y": 0.06}, "lime": {"target_y": 0.07}}

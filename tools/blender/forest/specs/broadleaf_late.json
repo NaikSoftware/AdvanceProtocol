@@ -10,7 +10,7 @@
     "src": "birch_late",
     "grade": {
      "lab": {
-      "L": 30,
+      "L": 20,
       "C": 4,
       "h": 70,
       "contrast_l": 0.9
@@ -23,7 +23,7 @@
     "src": "broad_late",
     "grade": {
      "lab": {
-      "L": 30,
+      "L": 20,
       "C": 4,
       "h": 70,
       "contrast_l": 0.9
@@ -36,7 +36,7 @@
     "src": "oak_late",
     "grade": {
      "lab": {
-      "L": 30,
+      "L": 20,
       "C": 4,
       "h": 70,
       "contrast_l": 0.9
@@ -49,7 +49,7 @@
     "src": "shrub_late",
     "grade": {
      "lab": {
-      "L": 30,
+      "L": 20,
       "C": 4,
       "h": 70,
       "contrast_l": 0.9
@@ -63,10 +63,10 @@
     "max": 4,
     "grade": {
      "lab": {
-      "L": 28,
-      "C": 6,
+      "L": 18,
+      "C": 5,
       "h": 70,
-      "contrast_l": 0.9
+      "contrast_l": 0.7
      }
     }
    }

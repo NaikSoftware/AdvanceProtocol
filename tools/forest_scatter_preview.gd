@@ -69,8 +69,10 @@ const STAND_FREQ: float = 1.0 / 3.0
 const TONE_FREQ: float = 1.0 / 2.5
 const TONE_VAR: float = 0.06
 const TURN_FREQ: float = 1.0 / 2.0
-const TURN_FROM: float = 0.15
-const TURNED: Dictionary = {"Birch": Color(1.35, 1.15, 0.55), "Oak": Color(1.25, 0.95, 0.6)}
+const TURN_FROM: float = 0.45
+## Осінь — один приглушений іржавий акцент лише на дубах (≤15 % листяних крон), темніший
+## за траву: кілька різких тонів поруч читались камуфляжним принтом.
+const TURNED: Dictionary = {"Oak": Color(1.15, 0.9, 0.68)}
 
 const FADE_MODES: PackedStringArray = ["none", "silhouette", "soft", "cut"]
 ## Показ юнітів у лісі за замовчуванням — обрис кольору гравця крізь крони.
@@ -117,7 +119,7 @@ var _named: Dictionary = {}  ## ім'я вузла -> Mesh
 var _species: Dictionary = {}  ## Mesh -> префікс виду
 var _material: Dictionary = {}  ## Mesh -> ShaderMaterial
 var _soft_material: Dictionary = {}  ## Mesh -> ShaderMaterial (режим soft)
-var _ground_mesh: Dictionary = {}  ## Soil_Lane -> Mesh
+var _ground_mesh: Dictionary = {}  ## Soil_Lane / Floor_Dark -> Mesh
 var _groups: Dictionary = {}  ## Mesh -> Array[Dictionary] {xf, top, pos, r, rgb}
 var _ground_groups: Dictionary = {}  ## Mesh -> Array[Transform3D]
 var _mmi: Dictionary = {}  ## Mesh -> MultiMeshInstance3D
@@ -128,6 +130,8 @@ var _boxes: Array[MeshInstance3D] = []
 var _broken: Dictionary = {}
 var _season: String = ""
 var _wood_at: Callable
+var _measure: bool = false  ## лише кадри для вимірювання: z6 і z20, кожен із маскою
+var _mask_material: Dictionary = {}  ## Mesh -> матеріал маски (неосвітлений колір виду)
 var _proxy: Dictionary = {}  ## Mesh крони -> Mesh її проксі тіні
 var _proxy_mmi: Dictionary = {}  ## Mesh крони -> MultiMeshInstance3D проксі
 var _area: Rect2i
@@ -139,7 +143,8 @@ func _ready() -> void:
 	var wood: String = args[1] if args.size() > 1 else "mixed"
 	var season: String = args[2] if args.size() > 2 else "late"
 	var look_name: String = args[3] if args.size() > 3 else "river"
-	var on_map: bool = args.size() > 4 and args[4] == "map"
+	var on_map: bool = args.size() > 4 and args[4] in ["map", "measure"]
+	_measure = args.size() > 4 and args[4] == "measure"
 	_season = season
 	DirAccess.make_dir_recursive_absolute(out)
 	get_window().size = WINDOW
@@ -228,6 +233,20 @@ func _map_frames(out: String, wood: String, season: String, look_name: String) -
 	# Бойовий екран після setup() ще веде камеру до першого юніта: чекаємо, доки доведе.
 	for i in 180:
 		await get_tree().process_frame
+	if _measure:
+		for c: Vector2i in lane:
+			_broken[c] = true
+		_rebuild(true)
+		for z: Array in [["z6", IsoCameraRig.MIN_ZOOM], ["z20", IsoCameraRig.MAX_ZOOM]]:
+			_rig.center_on(mid)
+			await _shoot(z[1], "%s/m_%s_%s_%s.png" % [out, look_name, season, z[0]])
+			_mask_on(true)
+			await _shoot(z[1], "%s/m_%s_%s_%s_mask.png" % [out, look_name, season, z[0]])
+			_mask_on(false)
+			_set_mode("clear")
+			await _shoot(z[1], "%s/m_%s_%s_%s_ground.png" % [out, look_name, season, z[0]])
+			_set_mode(DEFAULT_MODE)
+		return
 	_rig.center_on(mid)
 	await _shoot(IsoCameraRig.MAX_ZOOM, "%s/_settle.png" % out)
 	_rig.center_on(mid)
@@ -328,8 +347,14 @@ func _load_library(season: String) -> void:
 	var soft := Shader.new()
 	soft.code = shader.code.replace("depth_draw_opaque, ", "").replace(
 			"|| (!shadow_pass && piece_hash > COLOR.a)", "").replace(
-			"ALBEDO = rgb * COLOR.rgb * tint;", "ALBEDO = rgb * COLOR.rgb * tint;\n\tALPHA = COLOR.a;")
+			"ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = COLOR.a;")
 	assert(soft.code.contains("ALPHA = COLOR.a;"), "шейдер soft не зібрався: змінився forest_crown.gdshader")
+	# Маска для вимірювання: ті самі пікселі крони, неосвітлений колір виду.
+	var mask := Shader.new()
+	mask.code = shader.code.replace("render_mode cull_disabled,", "render_mode unshaded, cull_disabled,").replace(
+			"ROUGHNESS = 1.0;", "ALBEDO = mask_col;\n\tROUGHNESS = 1.0;").replace(
+			"shader_type spatial;", "shader_type spatial;\nuniform vec3 mask_col;")
+	assert(mask.code.contains("ALBEDO = mask_col;") and mask.code.contains("unshaded"), "шейдер маски не зібрався")
 	for path: String in ["res://assets/props/forest/forest_conifer.glb", "res://assets/props/forest/forest_broadleaf_%s.glb" % season]:
 		var root: Node = (load(path) as PackedScene).instantiate()
 		var meshes: Array[Node] = root.find_children("*", "MeshInstance3D", true, false)
@@ -348,11 +373,15 @@ func _load_library(season: String) -> void:
 				_species.erase(mi.mesh)
 				(_meshes[prefix] as Array).erase(mi.mesh)
 			var src: StandardMaterial3D = mi.mesh.surface_get_material(0) as StandardMaterial3D
-			for pair: Array in [[shader, _material], [soft, _soft_material]]:
+			for pair: Array in [[shader, _material], [soft, _soft_material], [mask, _mask_material]]:
 				var m := ShaderMaterial.new()
 				m.shader = pair[0]
 				m.set_shader_parameter("albedo_tex", src.albedo_texture)
 				m.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
+				# Червоний — хвойні, зелений — листяні дерева, синій — решта (кущі, узлісся, гілля).
+				var conifer: bool = prefix in ["Pine", "Spruce"]
+				var broad: bool = prefix in ["Birch", "Oak", "Hero"]
+				m.set_shader_parameter("mask_col", Color(1, 0, 0) if conifer else (Color(0, 1, 0) if broad else Color(0, 0, 1)))
 				(pair[1] as Dictionary)[mi.mesh] = m
 		root.free()
 	var g: Node = (load("res://assets/props/forest/forest_ground.glb") as PackedScene).instantiate()
@@ -570,12 +599,13 @@ func _overlaps_broken(p: Vector2, r: float) -> bool:
 func _add_instance(mesh: Mesh, xf: Transform3D, p: Vector2, r: float, rgb: Color = Color.WHITE) -> void:
 	if not _groups.has(mesh):
 		_groups[mesh] = []
-	(_groups[mesh] as Array).append({"xf": xf, "top": mesh.get_aabb().end.y * xf.basis.get_scale().y + 0.15, "pos": p, "r": r, "rgb": rgb})
+	(_groups[mesh] as Array).append({"xf": _on_ground(xf), "top": mesh.get_aabb().end.y * xf.basis.get_scale().y + 0.15, "pos": p, "r": r, "rgb": rgb})
 
 
-## Стовбур на просіці: втиснутий у землю на ~10 см і темніший — лежить низько, не блищить.
+## Стовбур на просіці: втиснутий у землю на ~10 см і вдвічі темніший — під похмурим
+## небом верх циліндра інакше світиться сірим, а світла деревина на просіці — шум.
 func _pressed_log(p: Vector2, yaw: float) -> void:
-	_add_instance(_named["Log_B"], Transform3D(Basis(Vector3.UP, yaw), _offset + Vector3(p.x, -0.012, p.y)), p, 0.3, Color(0.75, 0.75, 0.75))
+	_add_instance(_named["Log_B"], Transform3D(Basis(Vector3.UP, yaw), _offset + Vector3(p.x, -0.012, p.y)), p, 0.3, Color(0.45, 0.45, 0.45))
 
 
 ## Сітка з кроком 1/√густини. `sizes` — масштаб меша (by_scale) або висота в метрах.
@@ -617,7 +647,7 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 		rgb = TURNED[species] * tone
 	if not _groups.has(mesh):
 		_groups[mesh] = []
-	(_groups[mesh] as Array).append({"xf": xf, "top": aabb.end.y * s + 0.15, "pos": p, "r": r, "rgb": rgb})
+	(_groups[mesh] as Array).append({"xf": _on_ground(xf), "top": aabb.end.y * s + 0.15, "pos": p, "r": r, "rgb": rgb})
 
 
 func _build_multimeshes() -> void:
@@ -627,12 +657,15 @@ func _build_multimeshes() -> void:
 			var mm := MultiMesh.new()
 			mm.transform_format = MultiMesh.TRANSFORM_3D
 			mm.use_colors = true
+			mm.use_custom_data = true
 			mm.mesh = mesh
 			mm.instance_count = list.size()
 			for i in list.size():
 				mm.set_instance_transform(i, list[i]["xf"])
 				var c: Color = list[i]["rgb"]
-				mm.set_instance_color(i, Color(c.r, c.g, c.b, 1.0 if pair[1] == _mmi else 0.0))
+				# Тон крони — у custom data; у кольорі лише розчинення (альфа).
+				mm.set_instance_custom_data(i, Color(c.r, c.g, c.b, 1.0))
+				mm.set_instance_color(i, Color(1, 1, 1, 1.0 if pair[1] == _mmi else 0.0))
 			var node := MultiMeshInstance3D.new()
 			node.multimesh = mm
 			node.material_override = (pair[0] as Dictionary)[mesh]
@@ -667,19 +700,68 @@ func _build_ground() -> void:
 				var jit: float = deg_to_rad(_rng.randf_range(-8.0, 8.0))
 				var off := Vector3(_rng.randf_range(-0.08, 0.08), 0.0, _rng.randf_range(-0.08, 0.08))
 				_ground_add("Soil_Lane", Transform3D(Basis(Vector3.UP, _lane_yaw(c) + jit), _offset + Vector3(c.x, 0.0, c.y) + off))
+		elif _ground_mesh.has("Floor_Dark"):
+			# Поворот на чверті: квадратний профіль лишається на клітинці, шум краю різний.
+			_ground_add("Floor_Dark", Transform3D(Basis(Vector3.UP, PI / 2.0 * (_rng.randi() % 4)), _offset + Vector3(c.x, 0.0, c.y)))
 	for name: String in _ground_groups:
-		var list: Array = _ground_groups[name]
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = _ground_mesh[name]
-		mm.instance_count = list.size()
-		for i in list.size():
-			mm.set_instance_transform(i, list[i])
-		var node := MultiMeshInstance3D.new()
-		node.multimesh = mm
+		var node := MeshInstance3D.new()
+		node.mesh = _drape(_ground_mesh[name], _ground_groups[name])
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_root.add_child(node)
 		_nodes.append(node)
+
+
+## Рельєф карти косметичний, але є (до ±2 м): усе, що стоїть на землі, — на її висоті.
+func _on_ground(xf: Transform3D) -> Transform3D:
+	xf.origin.y += TerrainHeight.ground_y(xf.origin.x, xf.origin.z)
+	return xf
+
+
+## Плоскі шматки землі не можуть лишатись пласкими квадами: рельєф прорізав би їх прямими
+## лініями. Кожен шматок — сітка DRAPE × DRAPE, вершини на висоті землі + DRAPE_LIFT; усі
+## шматки одного виду — один меш, один виклик малювання.
+const DRAPE: int = 10
+const DRAPE_LIFT: float = 0.01
+
+
+func _drape(src: Mesh, xfs: Array) -> ArrayMesh:
+	var a: Array = src.surface_get_arrays(0)
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
+	# Кути квада за UV: (min u, min v) … (max u, max v), білінійно між ними.
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for t in uv:
+		lo = lo.min(t)
+		hi = hi.max(t)
+	var corner: Dictionary = {}
+	for i in v.size():
+		corner[Vector2i(int(uv[i].x > (lo.x + hi.x) * 0.5), int(uv[i].y > (lo.y + hi.y) * 0.5))] = v[i]
+	assert(corner.size() == 4, "шматок землі має бути квадом")
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var base: int = 0
+	for xf: Transform3D in xfs:
+		for j in DRAPE + 1:
+			for i in DRAPE + 1:
+				var fx: float = float(i) / DRAPE
+				var fy: float = float(j) / DRAPE
+				var local: Vector3 = (corner[Vector2i(0, 0)] as Vector3).lerp(corner[Vector2i(1, 0)], fx).lerp(
+						(corner[Vector2i(0, 1)] as Vector3).lerp(corner[Vector2i(1, 1)], fx), fy)
+				var w: Vector3 = xf * local
+				w.y = TerrainHeight.ground_y(w.x, w.z) + DRAPE_LIFT
+				st.set_uv(Vector2(lerpf(lo.x, hi.x, fx), lerpf(lo.y, hi.y, fy)))
+				st.set_normal(Vector3.UP)
+				st.add_vertex(w)
+		for j in DRAPE:
+			for i in DRAPE:
+				var k: int = base + j * (DRAPE + 1) + i
+				for idx: int in [k, k + 1, k + DRAPE + 2, k, k + DRAPE + 2, k + DRAPE + 1]:
+					st.add_index(idx)
+		base += (DRAPE + 1) * (DRAPE + 1)
+	var m: ArrayMesh = st.commit()
+	m.surface_set_material(0, src.surface_get_material(0))
+	return m
 
 
 ## Хто кидає тінь: вид -> трикутники всіх екземплярів (до каскадів).
@@ -696,6 +778,11 @@ func _casters() -> String:
 			t += (m.surface_get_arrays(si)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 		by[k] = int(by.get(k, 0)) + t * mmi.multimesh.instance_count
 	return str(by)
+
+
+func _mask_on(on: bool) -> void:
+	for mesh: Mesh in _mmi:
+		(_mmi[mesh] as GeometryInstance3D).material_override = _mask_material[mesh] if on else _material[mesh]
 
 
 ## false — тінь кидають самі крони (для порівняння), true — проксі.
@@ -740,7 +827,6 @@ func _set_mode(mode: String) -> void:
 		main.visible = mode != "clear"
 		soft.visible = mode == "soft"
 		for i in list.size():
-			var c: Color = list[i]["rgb"]
 			var a: float = 1.0
 			var sa: float = 0.0
 			if mode == "cut":
@@ -750,10 +836,10 @@ func _set_mode(mode: String) -> void:
 				if k < 0.999:
 					a = 0.0
 					sa = lerpf(SOFT_ALPHA, 1.0, k)
-			main.multimesh.set_instance_color(i, Color(c.r, c.g, c.b, a))
+			main.multimesh.set_instance_color(i, Color(1, 1, 1, a))
 			if _proxy_mmi.has(mesh):
-				(_proxy_mmi[mesh] as MultiMeshInstance3D).multimesh.set_instance_color(i, Color(c.r, c.g, c.b, a))
-			soft.multimesh.set_instance_color(i, Color(c.r, c.g, c.b, sa))
+				(_proxy_mmi[mesh] as MultiMeshInstance3D).multimesh.set_instance_color(i, Color(1, 1, 1, a))
+			soft.multimesh.set_instance_color(i, Color(1, 1, 1, sa))
 	for b: MeshInstance3D in _boxes:
 		var m: StandardMaterial3D = b.material_override
 		m.next_pass = m.get_meta("silhouette") if mode == "silhouette" else null
