@@ -47,6 +47,9 @@ const _HP_BAR_FRAME_COLOR: Color = Color("14120f")
 const _HP_BAR_BACK_COLOR: Color = Color("3b3833")
 
 const _DESTROY_DURATION: float = 0.6
+## HP-бар і підпис — поверх усіх ефектів (вогонь уламків має пріоритет 1) і без перевірки
+## глибини: інакше полум'я перекривало б одні підписи, а інші лишались зверху.
+const OVERLAY_PRIORITY: int = 10
 ## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась.
 const SQUAD_FIGURES: int = 4
 const _FALL_SEC: float = 0.5
@@ -158,6 +161,10 @@ func _ready() -> void:
 	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
 	# з кожного bind().
 	_drone_icon.texture = _flat_texture(Color("d9b23a"))
+	for n: Node in [_hp_bar, _hp_label]:
+		n.set("no_depth_test", true)
+		n.set("render_priority", OVERLAY_PRIORITY)
+	_hp_label.outline_render_priority = OVERLAY_PRIORITY - 1
 	# Форма — біла, колір дає modulate (той самий прийом, що й у HP-барі вище):
 	# одне місце, де живе _CROSSHAIR_COLOR, і його видно в інспекторі.
 	_crosshair.texture = _crosshair_texture()

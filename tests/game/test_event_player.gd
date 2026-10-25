@@ -542,3 +542,19 @@ func test_stop_ends_playback_at_the_next_pause() -> void:
 	assert_false(player.is_playing())
 	assert_false(finished[0], "зупинене програвання не повідомляє про завершення")
 	assert_eq(target.hp_ratio(), 1.0, "подія після паузи вже не грається")
+
+
+
+## Снаряд і гармата по ґрунту лишають вирву-пляму; куди — каже програвач, ставить карта шрамів.
+func test_shell_and_ground_gun_hits_report_a_crater() -> void:
+	var target: UnitView = _spawn_view(2, 0, 0, Vector2i(3, 3))
+	var target_unit := _unit(2, 0, 0, Vector2i(3, 3))
+	var gun := _unit(1, 9, 1, Vector2i(7, 3))
+	var craters: Array = []
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return target if id == 2 else null,
+		func(id: int) -> Unit: return gun if id == 1 else (target_unit if id == 2 else null))
+	player.ground_hit.connect(func(cell: Vector2i, radius_m: float) -> void: craters.append([cell, radius_m]))
+	player.play([Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
+	assert_eq(craters, [[Vector2i(3, 3), 2.5]])
+	_finish_all_processed_tweens()

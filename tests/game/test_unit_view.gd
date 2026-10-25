@@ -531,7 +531,7 @@ func test_explosion_is_one_shot_and_frees_itself() -> void:
 		if t.is_valid():
 			t.custom_step(BattleFx.EXPLOSION_SEC + 0.01)
 	assert_true(boom.is_queued_for_deletion())
-	assert_true(BattleFx.EXPLOSION_SEC <= 1.5, "кожна мить влучання ≤ 1,5 с")
+	assert_true(BattleFx.EXPLOSION_SEC <= 2.0, "куля знищення разом із темним хвостом — до 2 с")
 
 
 ## §3.5: невидимий ворог не має вузла взагалі — рішення контейнера
@@ -896,3 +896,14 @@ func test_unit_processes_only_while_turning() -> void:
 	tween.custom_step(10.0)
 	view._process(0.0)
 	assert_false(view.is_processing())
+
+
+
+## HP-бар і підпис — поверх усіх ефектів, завжди однаково: полум'я уламків не сміє
+## перекривати один підпис і лишати інший зверху.
+func test_hp_bar_and_label_draw_over_every_effect() -> void:
+	view.bind(_unit(5))
+	for n: GeometryInstance3D in [view._hp_bar, view._hp_label]:
+		assert_true(n.get("no_depth_test"), n.name)
+		assert_eq(n.get("render_priority"), UnitView.OVERLAY_PRIORITY, n.name)
+	assert_true(UnitView.OVERLAY_PRIORITY > 1, "вище за вогонь (1)")
