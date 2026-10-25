@@ -23,6 +23,9 @@ const _PROPS: Dictionary = {
 	"house_h4": [2, 1, 1800],
 	"ruin_h1": [2, 2, 6000],
 	"ruin_h3": [2, 2, 6000],
+	"ruin_half_house1": [2, 2, 4600],
+	"ruin_half_house2": [2, 2, 4800],
+	"ruin_half_shed": [2, 2, 4600],
 }
 ## Стоять лише на клітинках кільця навколо поля, а не на ігровому полі.
 const RING_ONLY: Array[String] = ["f2_livestock_barn"]
