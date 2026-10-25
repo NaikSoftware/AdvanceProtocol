@@ -110,11 +110,14 @@ class WreckLeft extends BattleEvent:
 	## що впала з мостом, їх не лишають), і вигляд не має повторювати це правило.
 	var pos: Vector2i
 	var type_id: int
-	func _init(p_pos: Vector2i, p_type_id: int) -> void:
+	## Напрям юніта в мить загибелі — уламки лежать так, як він стояв.
+	var facing: int
+	func _init(p_pos: Vector2i, p_type_id: int, p_facing: int) -> void:
 		pos = p_pos
 		type_id = p_type_id
+		facing = p_facing
 	func describe() -> String:
-		return "WreckLeft(%s, type=%d)" % [pos, type_id]
+		return "WreckLeft(%s, type=%d, facing=%d)" % [pos, type_id, facing]
 
 class WreckRemoved extends BattleEvent:
 	## Уламки зникли з тайла; reason — значення Wrecks.Reason. Після догоряння

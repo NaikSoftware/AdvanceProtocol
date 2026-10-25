@@ -12,11 +12,14 @@ func _two_lane_state(players: int = 2) -> BattleState:
 		b.set_kind(Vector2i(x, 5), Terrain.Kind.ROAD)
 	var s: BattleState = BattleState.create(b, players, 11)
 	s.active_player = 0
+	_last_state = s
 	return s
+
+var _last_state: BattleState = null
 
 func _inject(s: BattleState, pos: Vector2i) -> void:
 	# Уламки, що догорять нескоро, — для тестів руху й планування, де причина смерті неважлива.
-	s.wrecks.append(Wrecks.Wreck.new(pos, 4, 1000))
+	s.wrecks.append(Wrecks.Wreck.new(pos, 4, 0, 1000))
 
 func _index_of(events: Array, kind: Variant) -> int:
 	for i in events.size():
@@ -27,7 +30,8 @@ func _index_of(events: Array, kind: Variant) -> int:
 func _count(events: Array, kind: Variant) -> int:
 	return events.filter(func(e: Events.BattleEvent) -> bool: return is_instance_of(e, kind)).size()
 
-func _assert_wreck_left(events: Array, pos: Vector2i, type_id: int) -> void:
+func _assert_wreck_left(events: Array, pos: Vector2i, type_id: int, facing: int) -> void:
+	## facing — той, з яким юніт загинув: вигляд малює уламки саме так, і стан теж.
 	var destroyed: int = _index_of(events, Events.UnitDestroyed)
 	var left: int = _index_of(events, Events.WreckLeft)
 	assert_true(destroyed >= 0, "передумова: юніт знищено")
@@ -38,6 +42,10 @@ func _assert_wreck_left(events: Array, pos: Vector2i, type_id: int) -> void:
 		var e: Events.WreckLeft = events[left]
 		assert_eq(e.pos, pos)
 		assert_eq(e.type_id, type_id)
+		assert_eq(e.facing, facing, "уламки дивляться туди, куди дивився юніт у мить загибелі")
+		var w: Wrecks.Wreck = Wrecks.wreck_at(_last_state, pos)
+		if w != null:
+			assert_eq(w.facing, facing, "стан і подія кажуть одне")
 
 # --- Хто лишає уламки ---------------------------------------------------------
 
@@ -49,7 +57,7 @@ func test_a_vehicle_killed_by_a_shot_leaves_a_wreck() -> void:
 	car.hp = 1
 	s.start()
 	var events: Array = FireCommand.create(tank.id, car.id).apply(s)
-	_assert_wreck_left(events, Vector2i(3, 5), 4)
+	_assert_wreck_left(events, Vector2i(3, 5), 4, 6)
 	assert_not_null(Wrecks.wreck_at(s, Vector2i(3, 5)))
 
 func test_infantry_leaves_no_wreck() -> void:
@@ -66,13 +74,14 @@ func test_infantry_leaves_no_wreck() -> void:
 
 func test_a_vehicle_killed_by_retaliation_leaves_a_wreck() -> void:
 	var s: BattleState = _two_lane_state()
-	var car: Unit = s.add_unit(4, 0, Vector2i(0, 5), 2)
+	# Машина стоїть на північ і розвертається на схід, щоб вистрілити: гине вже так.
+	var car: Unit = s.add_unit(4, 0, Vector2i(0, 5), 0)
 	var tank: Unit = s.add_unit(5, 1, Vector2i(2, 5), 6)
 	car.hp = 1
 	s.start()
 	var events: Array = FireCommand.create(car.id, tank.id).apply(s)
 	assert_true(tank.is_alive(), "передумова: танк пережив постріл і відповів")
-	_assert_wreck_left(events, Vector2i(0, 5), 4)
+	_assert_wreck_left(events, Vector2i(0, 5), 4, 2)
 
 func test_a_vehicle_killed_by_a_drone_leaves_a_wreck() -> void:
 	var s: BattleState = _two_lane_state()
@@ -82,11 +91,12 @@ func test_a_vehicle_killed_by_a_drone_leaves_a_wreck() -> void:
 	car.hp = 1
 	s.start()
 	var events: Array = DroneCommand.create(squad.id, car.id).apply(s)
-	_assert_wreck_left(events, Vector2i(4, 5), 4)
+	_assert_wreck_left(events, Vector2i(4, 5), 4, 6)
 
 func test_a_vehicle_killed_by_a_mine_leaves_a_wreck_on_the_mine_tile() -> void:
 	var s: BattleState = _two_lane_state()
-	var car: Unit = s.add_unit(4, 0, Vector2i(0, 5), 2)
+	# Стоїть на північ, їде на схід: уламки — за напрямком кроку, на якому вибухнуло.
+	var car: Unit = s.add_unit(4, 0, Vector2i(0, 5), 0)
 	s.add_unit(0, 0, Vector2i(9, 0), 0)
 	s.add_unit(0, 1, Vector2i(9, 9), 0)
 	Mines.place(s, Vector2i(2, 5), 1)
@@ -94,17 +104,20 @@ func test_a_vehicle_killed_by_a_mine_leaves_a_wreck_on_the_mine_tile() -> void:
 	s.start()
 	var events: Array = MoveCommand.create(car.id, Vector2i(3, 5)).apply(s)
 	assert_false(car.is_alive(), "передумова: міна вбила машину")
-	_assert_wreck_left(events, Vector2i(2, 5), 4)
+	_assert_wreck_left(events, Vector2i(2, 5), 4, 2)
 	assert_null(Mines.mine_at(s, Vector2i(2, 5)), "міна витрачена, уламки лежать на її місці")
 
 func test_conceding_leaves_wrecks_of_vehicles_only() -> void:
 	var s: BattleState = _two_lane_state()
-	s.add_unit(5, 0, Vector2i(0, 5), 2)
+	s.add_unit(5, 0, Vector2i(0, 5), 3)
 	s.add_unit(0, 0, Vector2i(0, 4), 2)
 	s.add_unit(0, 1, Vector2i(9, 9), 0)
 	var events: Array = ConcedeCommand.create().apply(s)
 	assert_eq(_count(events, Events.WreckLeft), 1, "уламки лишає танк, а не відділення")
 	assert_not_null(Wrecks.wreck_at(s, Vector2i(0, 5)))
+	var left: Events.WreckLeft = events[_index_of(events, Events.WreckLeft)]
+	assert_eq(left.facing, 3)
+	assert_eq(Wrecks.wreck_at(s, Vector2i(0, 5)).facing, 3)
 	assert_null(Wrecks.wreck_at(s, Vector2i(0, 4)))
 	assert_eq(s.winner, 1, "§3.10: уламки — не живий юніт, переможця це не змінює")
 

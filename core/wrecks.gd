@@ -16,11 +16,15 @@ enum Reason { BURNED_OUT, BRIDGE_DEMOLISHED }
 class Wreck extends RefCounted:
 	var pos: Vector2i
 	var type_id: int
+	## Напрям юніта в мить загибелі: вигляд малює уламки так само, і після
+	## завантаження теж, тож напрям зберігається, а не береться з мертвого юніта.
+	var facing: int
 	## Момент на годиннику ходів (BattleState.turn_clock()), з якого уламків уже немає.
 	var burns_out_at: int
-	func _init(p_pos: Vector2i, p_type_id: int, p_burns_out_at: int) -> void:
+	func _init(p_pos: Vector2i, p_type_id: int, p_facing: int, p_burns_out_at: int) -> void:
 		pos = p_pos
 		type_id = p_type_id
+		facing = p_facing
 		burns_out_at = p_burns_out_at
 
 static func wreck_at(state: BattleState, pos: Vector2i) -> Wreck:
@@ -42,8 +46,8 @@ static func leave(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]:
 	# ходів після появи уламків. Відлік від початку кола дав би гравцям, що ходять
 	# раніше за вбивцю, на хід менше.
 	var burns_out_at: int = state.turn_clock() + WRECK_ROUNDS * state.player_count
-	state.wrecks.append(Wreck.new(unit.pos, unit.type_id, burns_out_at))
-	return [Events.WreckLeft.new(unit.pos, unit.type_id)] as Array[Events.BattleEvent]
+	state.wrecks.append(Wreck.new(unit.pos, unit.type_id, unit.facing, burns_out_at))
+	return [Events.WreckLeft.new(unit.pos, unit.type_id, unit.facing)] as Array[Events.BattleEvent]
 
 static func remove(state: BattleState, pos: Vector2i, reason: int) -> Array[Events.BattleEvent]:
 	var w: Wreck = wreck_at(state, pos)

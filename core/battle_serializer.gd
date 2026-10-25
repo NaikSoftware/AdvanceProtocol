@@ -29,7 +29,8 @@ static func to_dict(state: BattleState) -> Dictionary:
 		mines.append({"x": m.pos.x, "y": m.pos.y, "owner": m.owner, "known_to": m.known_to.duplicate()})
 	var wrecks: Array = []
 	for w in state.wrecks:
-		wrecks.append({"x": w.pos.x, "y": w.pos.y, "type_id": w.type_id, "burns_out_at": w.burns_out_at})
+		wrecks.append({"x": w.pos.x, "y": w.pos.y, "type_id": w.type_id, "facing": w.facing,
+			"burns_out_at": w.burns_out_at})
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
@@ -114,7 +115,7 @@ static func from_dict(data: Dictionary) -> BattleState:
 	state.wrecks.clear()
 	for w_data in (data.get("wrecks", []) as Array):
 		state.wrecks.append(Wrecks.Wreck.new(Vector2i(int(w_data["x"]), int(w_data["y"])),
-			int(w_data["type_id"]), int(w_data["burns_out_at"])))
+			int(w_data["type_id"]), int(w_data.get("facing", 0)), int(w_data["burns_out_at"])))
 
 	state.vision.clear()
 	for v_data in (data["vision"] as Array):
@@ -210,6 +211,9 @@ static func _is_valid(data: Dictionary) -> bool:
 	for wr in (data.get("wrecks", []) as Array):
 		if typeof(wr) != TYPE_DICTIONARY or not (_in(wr, "x", 0, w - 1) and _in(wr, "y", 0, h - 1)
 				and _in(wr, "type_id", 0, UnitTypes.TYPES.size() - 1) and _num(wr, "burns_out_at")):
+			return false
+		# Без напряму уламки з ранніх збережень дивляться на північ (0); з ним — лише 0..7.
+		if wr.has("facing") and not _in(wr, "facing", 0, 7):
 			return false
 		var pos := Vector2i(int(wr["x"]), int(wr["y"]))
 		if wreck_at.has(pos) or not _is_vehicle_type(int(wr["type_id"])):

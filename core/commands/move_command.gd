@@ -54,7 +54,6 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	var zones: Pathing.Zones = Pathing.compute_zones(state.board, u, occupied)
 	var path: Array[Vector2i] = Pathing.path_to(zones, target)
 
-	var start_pos: Vector2i = u.pos
 	var walked: Array[Vector2i] = []
 	var spent: int = 0
 	# Усе, що сталося ДОРОГОЮ, збирається окремо: подія руху йде заголовком, а цей
@@ -93,6 +92,9 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 			trail.append(Events.MoveBlocked.new(unit_id, step))
 			break
 		spent += Rules.entry_cost_at(u, state.board, step)
+		# Напрям — покроково, а не раз після ходу: техніка, що гине на міні посеред
+		# шляху, лишає уламки (§3.14) за напрямком саме того кроку.
+		u.facing = Board.facing_towards(u.pos, step)
 		u.pos = step
 		walked.append(step)
 
@@ -132,13 +134,10 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	# коштував би окремий законний хід до тієї самої точки.
 	assert(spent <= u.ap, "хід не може коштувати більше за наявний AP: %d > %d" % [spent, u.ap])
 
-	# Обличчя — від того, де юніт СПРАВДІ став, а не куди його вели: після обриву
-	# останній крок шляху може так і не відбутися, а саме він задає напрямок.
-	var final_facing: int = Board.facing_towards(
-		walked[walked.size() - 2] if walked.size() >= 2 else start_pos,
-		u.pos) if not walked.is_empty() else u.facing
-
-	u.facing = final_facing
+	# Обличчя — від кроку, який юніт СПРАВДІ зробив, а не куди його вели: після обриву
+	# останній крок шляху може так і не відбутися. Обрив на першому ж кроці лишає
+	# напрям як був.
+	var final_facing: int = u.facing
 	u.spend_ap(spent)
 
 	# Порожній шлях буває лише від обриву на першому ж кроці: юніт нікуди не зрушив,

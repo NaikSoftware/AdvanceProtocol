@@ -28,7 +28,7 @@ func test_every_event_type_constructs_and_describes() -> void:
 		Events.DroneLaunched.new(1, 2, 1),
 		Events.DamageDealt.new(2, 40, 60),
 		Events.UnitDestroyed.new(2, Vector2i(3, 3)),
-		Events.WreckLeft.new(Vector2i(3, 3), 5),
+		Events.WreckLeft.new(Vector2i(3, 3), 5, 2),
 		Events.WreckRemoved.new(Vector2i(3, 3), Wrecks.Reason.BURNED_OUT),
 		Events.TileRevealed.new(0, [Vector2i(1, 1), Vector2i(1, 2)]),
 		Events.MinePlaced.new(Vector2i(4, 4), 0),

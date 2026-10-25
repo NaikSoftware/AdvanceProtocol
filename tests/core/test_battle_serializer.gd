@@ -294,7 +294,7 @@ func _saved_with_wreck() -> Dictionary:
 	var s: BattleState = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 2, 11)
 	s.add_unit(5, 0, Vector2i(0, 5), 2)
 	s.add_unit(4, 1, Vector2i(9, 9), 2)
-	s.wrecks.append(Wrecks.Wreck.new(Vector2i(3, 5), 7, 17))
+	s.wrecks.append(Wrecks.Wreck.new(Vector2i(3, 5), 7, 5, 17))
 	return JSON.parse_string(JSON.stringify(BattleSerializer.to_dict(s)))
 
 func test_wrecks_round_trip_with_their_expiry() -> void:
@@ -308,6 +308,20 @@ func test_wrecks_round_trip_with_their_expiry() -> void:
 	if w != null:
 		assert_eq(w.type_id, 7)
 		assert_eq(w.burns_out_at, 17)
+		assert_eq(w.facing, 5)
+
+func test_a_wreck_saved_without_facing_loads_facing_north() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["wrecks"][0].erase("facing")
+	var b: BattleState = BattleSerializer.from_dict(d)
+	assert_not_null(b, "старі збереження мусять відкриватися")
+	if b != null:
+		assert_eq(Wrecks.wreck_at(b, Vector2i(3, 5)).facing, 0)
+
+func test_a_wreck_facing_out_of_range_is_rejected() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["wrecks"][0]["facing"] = 8
+	_assert_rejected(d, "напрям поза 0..7")
 
 func test_a_save_without_wrecks_loads_with_none() -> void:
 	var d: Dictionary = _saved_with_wreck()
