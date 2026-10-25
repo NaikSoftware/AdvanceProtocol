@@ -27,6 +27,13 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var mines: Array = []
 	for m in state.mines:
 		mines.append({"x": m.pos.x, "y": m.pos.y, "owner": m.owner, "known_to": m.known_to.duplicate()})
+	var wrecks: Array = []
+	for w in state.wrecks:
+		wrecks.append({"x": w.pos.x, "y": w.pos.y, "type_id": w.type_id, "facing": w.facing,
+			"burns_out_at": w.burns_out_at})
+	var broken_forest: Array = []
+	for p: Vector2i in state.broken_forest:
+		broken_forest.append({"x": p.x, "y": p.y})
 	var vision: Array = []
 	for v in state.vision:
 		vision.append({"visible": Array(v.visible), "seen": Array(v.seen)})
@@ -44,7 +51,10 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"winner": state.winner,
 		"eliminated": state.eliminated.duplicate(),
 		"next_unit_id": state._next_unit_id,
-		"units": units, "mines": mines,
+		"units": units, "mines": mines, "wrecks": wrecks,
+		# Лише правда: знання кожного гравця про просіки виводиться з неї та його seen
+		# (BattleState.known_broken_map()), а seen і так зберігається нижче.
+		"broken_forest": broken_forest,
 		"vision": vision,
 		"damage_dealt": state.damage_dealt.duplicate(),
 	}
@@ -107,6 +117,16 @@ static func from_dict(data: Dictionary) -> BattleState:
 			mine.known_to.append(bool(k))
 		state.mines.append(mine)
 
+	# Збереження до появи уламків поля не мають — уламків там і не було.
+	state.wrecks.clear()
+	for w_data in (data.get("wrecks", []) as Array):
+		state.wrecks.append(Wrecks.Wreck.new(Vector2i(int(w_data["x"]), int(w_data["y"])),
+			int(w_data["type_id"]), int(w_data.get("facing", 0)), int(w_data["burns_out_at"])))
+	# Збереження до появи просік поля не мають — лісу там ніхто не валив.
+	state.broken_forest.clear()
+	for f_data in (data.get("broken_forest", []) as Array):
+		state.broken_forest[Vector2i(int(f_data["x"]), int(f_data["y"]))] = true
+
 	state.vision.clear()
 	for v_data in (data["vision"] as Array):
 		var v := Vision.create(state.board.width, state.board.height)
@@ -165,7 +185,7 @@ static func _is_valid(data: Dictionary) -> bool:
 	# (unit_at() бачив би лише першого), а next_unit_id має бути вище за всі id, інакше
 	# наступний add_unit() видав би вже зайнятий.
 	var ids: Dictionary = {}
-	var living_at: Dictionary = {}
+	var living_at: Dictionary = {}   # Vector2i -> type_id живого юніта
 	for u in (data["units"] as Array):
 		if typeof(u) != TYPE_DICTIONARY:
 			return false
@@ -184,7 +204,7 @@ static func _is_valid(data: Dictionary) -> bool:
 			var pos := Vector2i(int(u["x"]), int(u["y"]))
 			if living_at.has(pos):
 				return false
-			living_at[pos] = true
+			living_at[pos] = int(u["type_id"])
 
 	if not _arr(data, "mines"):
 		return false
@@ -193,7 +213,42 @@ static func _is_valid(data: Dictionary) -> bool:
 				and _in(m, "owner", 0, pc - 1) and _bools(m, "known_to", pc)):
 			return false
 
+	# §3.14: уламки лишає лише техніка, по одних на тайл, техніка на них не стоїть, а з
+	# підірваним мостом вони падають у річку. Відсутність поля допустима (старі збереження).
+	if data.has("wrecks") and not _arr(data, "wrecks"):
+		return false
+	var wreck_at: Dictionary = {}
+	for wr in (data.get("wrecks", []) as Array):
+		if typeof(wr) != TYPE_DICTIONARY or not (_in(wr, "x", 0, w - 1) and _in(wr, "y", 0, h - 1)
+				and _in(wr, "type_id", 0, UnitTypes.TYPES.size() - 1) and _num(wr, "burns_out_at")):
+			return false
+		# Без напряму уламки з ранніх збережень дивляться на північ (0); з ним — лише 0..7.
+		if wr.has("facing") and not _in(wr, "facing", 0, 7):
+			return false
+		var pos := Vector2i(int(wr["x"]), int(wr["y"]))
+		if wreck_at.has(pos) or not _is_vehicle_type(int(wr["type_id"])):
+			return false
+		if living_at.has(pos) and _is_vehicle_type(living_at[pos]):
+			return false
+		if int((board["tiles"] as Array)[pos.y * w + pos.x]) == Terrain.Kind.BRIDGE_DESTROYED:
+			return false
+		wreck_at[pos] = true
+	if data.has("broken_forest"):
+		if not _arr(data, "broken_forest"):
+			return false
+		var tiles: Array = board["tiles"]
+		for f in (data["broken_forest"] as Array):
+			# Просіка буває лише в лісі: інакше Terrain.penalty() мовчки ігнорувала б її,
+			# а вигляд валив би крони там, де їх ніколи не було.
+			if typeof(f) != TYPE_DICTIONARY or not (_in(f, "x", 0, w - 1) and _in(f, "y", 0, h - 1)):
+				return false
+			if int(tiles[int(f["y"]) * w + int(f["x"])]) != Terrain.Kind.FOREST:
+				return false
+
 	return true
+
+static func _is_vehicle_type(type_id: int) -> bool:
+	return UnitTypes.is_vehicle(UnitTypes.get_type(type_id)["unit_class"])
 
 static func _num(d: Dictionary, key: String) -> bool:
 	return d.has(key) and (typeof(d[key]) == TYPE_INT or typeof(d[key]) == TYPE_FLOAT)

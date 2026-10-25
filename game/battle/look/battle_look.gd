@@ -42,6 +42,9 @@ extends Resource
 @export_range(0.0, 1.0) var wetness: float = 0.0
 ## 0..1: наскільки темніє земля під хмарою, що пропливає.
 @export_range(0.0, 1.0) var cloud_shadow_strength: float = 0.0
+## Сила вітру: горизонтальний знос на одиницю падіння краплі. Ним зносить і дощ, і дим
+## (`WeatherRig.wind()`); у безвітряну погоду стовп диму стоїть майже прямо.
+@export_range(0.0, 1.0) var wind: float = 0.25
 
 const _DIR: String = "res://game/battle/look/%s.tres"
 

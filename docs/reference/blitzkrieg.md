@@ -241,6 +241,12 @@ Two rules about using it:
   right to answer; the red zone is disarmed until the unit's own turn.** The rule was already drawn
   on the board; nobody had said out loud that it was also the retaliation rule.
 
+- **The original keeps a corpse sprite for every dead unit, and never as an obstacle — this project
+  departs for vehicles on purpose.** `GameCanvas.java:2484-2488` draws a cosmetic corpse for any
+  dead unit on seen ground, infantry included. It blocks nothing: `method_56` skips dead units and
+  `method_53` treats their tile as free. Here a destroyed vehicle leaves a wreck that blocks other
+  vehicles for three rounds ([§3.14](../rules/movement-and-terrain.md#wrecks)), so a kill reshapes
+  the ground it happened on; infantry leaves none.
 - **The original has no camouflage or concealment, in forest or anywhere else, so do not "restore" it.**
   An enemy unit is drawn and targetable on exactly two conditions, alive and on an unfogged tile
   (`GameCanvas.java:2504`, the same test at `:2580`, `:3003`, `:3684`, `:3739`). There is no
@@ -250,3 +256,13 @@ Two rules about using it:
   The AI ignores the fog entirely (`class_2.method_148`). A concealment rule here would be a new
   mechanic, a per-unit exception to `seen` ([§3.5](../rules/vision-and-fog.md)) with consequences
   for retaliation ([§3.3.1](../rules/combat.md)).
+
+- **Forest breaking is not in the original; it is adopted here as a new rule.** In the original
+  terrain never changes during play except bridges: the only writes to `GameCanvas.mapMask` outside
+  map loading are `method_50` and `method_52`, which swap the bridge range `16–18` with `19–21` (the
+  engineer's demolish and repair, checked against kind 5 in `class_3:215` and `:224`). Forest — kind
+  2, mask `76–86`, penalty 20 in `method_68` — is never written, and `method_70` reads only the
+  unit's cross-country, so every class enters forest at the same penalty and nothing is gated by
+  class. This project departs on purpose: a tank fells the forest it enters, and light vehicles,
+  artillery and the engineer may enter only the tiles a tank has broken
+  ([§3.2](../rules/movement-and-terrain.md#action-points)).

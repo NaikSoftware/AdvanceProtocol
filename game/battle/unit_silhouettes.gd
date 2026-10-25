@@ -9,8 +9,8 @@ const _STRIPE_COLOR := Color("d9b23a")
 ## hull — розмір корпусу; barrel — довжина ствола (0 — без); extras — деталі.
 ## Кінчик ствола завжди на z = -0.5, тож увесь силует влазить в один тайл.
 const _SPECS: Array[Dictionary] = [
-	{"hull": Vector3(0.40, 0.35, 0.40), "barrel": 0.0, "extras": []},  # 0 стрілецький загін
-	{"hull": Vector3(0.40, 0.35, 0.40), "barrel": 0.0, "extras": [&"drone_rack"]},  # 1 штурмовий
+	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures"]},  # 0 стрілецький загін
+	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures", &"drone_rack"]},  # 1 штурмовий
 	{"hull": Vector3(0.55, 0.30, 0.85), "barrel": 0.30, "extras": [&"wheels"]},  # 2 бронеавто
 	{"hull": Vector3(0.62, 0.38, 0.90), "barrel": 0.0, "extras": [&"wheels"]},  # 3 транспортер
 	{"hull": Vector3(0.45, 0.25, 0.75), "barrel": 0.0, "extras": [&"wheels"]},  # 4 розвідувальне
@@ -24,6 +24,14 @@ const _SPECS: Array[Dictionary] = [
 ]
 
 static var _materials: Dictionary = {}
+static var _figure_mesh: BoxMesh
+static var _figure_material: StandardMaterial3D
+
+## Фігура відділення: 1,8 × 0,5 м (1 тайл = 8 м). Колір дає екземпляр MultiMesh — живі в
+## кольорі власника, загиблі темні (L* 20–28), тож уся четвірка — один виклик малювання.
+const FIGURE_SIZE: Vector3 = Vector3(0.0625, 0.225, 0.05)
+const FALLEN_COLOR: Color = Color("3a342c")
+const _FIGURE_SLOTS: Array[Vector2] = [Vector2(-0.1, -0.09), Vector2(0.1, -0.1), Vector2(-0.09, 0.1), Vector2(0.11, 0.09)]
 
 
 static func spec(type_id: int) -> Dictionary:
@@ -52,6 +60,8 @@ static func build(type_id: int, owner_color: Color) -> Node3D:
 		top += 0.14
 	if extras.has(&"stripe"):
 		_box(root, "Stripe", Vector3(hull_size.x + 0.02, 0.04, hull_size.z * 0.3), Vector3(0, hull_size.y + 0.02, 0), _STRIPE_COLOR)
+	if extras.has(&"figures"):
+		root.add_child(figures(4, owner_color))
 	if extras.has(&"drone_rack"):
 		_box(root, "DroneRack", Vector3(0.30, 0.10, 0.12), Vector3(0, hull_size.y + 0.05, hull_size.z * 0.5 - 0.06), _BARREL_COLOR)
 	if extras.has(&"wheels"):
@@ -71,6 +81,44 @@ static func build(type_id: int, owner_color: Color) -> Node3D:
 			y = hull_size.y + 0.15
 		_box(root, "Barrel", Vector3(thick, thick, barrel_len), Vector3(0, y, -0.5 + barrel_len * 0.5), _BARREL_COLOR)
 	return root
+
+
+## Четвірка фігур одним MultiMesh: стоять перші `standing`, решта лежить на тих самих місцях.
+static func figures(standing: int, owner_color: Color) -> MultiMeshInstance3D:
+	if _figure_mesh == null:
+		_figure_mesh = BoxMesh.new()
+		_figure_mesh.size = FIGURE_SIZE
+		_figure_material = StandardMaterial3D.new()
+		_figure_material.vertex_color_use_as_albedo = true
+		_figure_material.vertex_color_is_srgb = true
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = _figure_mesh
+	mm.instance_count = _FIGURE_SLOTS.size()
+	var mi := MultiMeshInstance3D.new()
+	mi.name = "Figures"
+	mi.multimesh = mm
+	mi.material_override = _figure_material
+	set_standing(mi, standing, owner_color)
+	return mi
+
+
+## Загибла фігура лежить уздовж землі на своєму місці, ледь зсунута вбік: не стоїть і не
+## здіймається над основою — загиблі не перешкода.
+static func set_standing(mi: MultiMeshInstance3D, standing: int, owner_color: Color) -> void:
+	var mm: MultiMesh = mi.multimesh
+	for i in mm.instance_count:
+		mm.set_instance_transform(i, figure_transform(i, i < standing))
+		mm.set_instance_color(i, owner_color if i < standing else FALLEN_COLOR)
+
+
+static func figure_transform(i: int, standing: bool) -> Transform3D:
+	var slot: Vector2 = _FIGURE_SLOTS[i]
+	if standing:
+		return Transform3D(Basis(), Vector3(slot.x, 0.05 + FIGURE_SIZE.y * 0.5, slot.y))
+	var b := Basis(Vector3.UP, float(i) * 1.3) * Basis(Vector3.RIGHT, PI * 0.5)
+	return Transform3D(b, Vector3(slot.x * 1.2, 0.05 + FIGURE_SIZE.z * 0.5, slot.y * 1.2))
 
 
 static func _box(parent: Node3D, node_name: String, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:

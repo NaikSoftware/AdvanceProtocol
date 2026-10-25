@@ -816,6 +816,11 @@ func rasterise() -> Array[Image]:
 		var hw: PackedFloat32Array = halfs[li]
 		var ty: PackedVector3Array = types[li]
 		var s0: float = 0.0
+		# Глухий кінець лінії (не на вузлі): довкола нього v йде по колу, і колії, що тягнуться по
+		# v, обвивали заокруглення концентричними смугами. Кінець позначаємо вагою jw, як
+		# розвилку: колій там нема, край — шумом у світі.
+		var free0: bool = near_node(pts[0]) > 1.0
+		var free1: bool = near_node(pts[pts.size() - 1]) > 1.0
 		for si in pts.size() - 1:
 			var a: Vector2 = pts[si]
 			var b: Vector2 = pts[si + 1]
@@ -833,7 +838,8 @@ func rasterise() -> Array[Image]:
 				var pz: float = org + (j + 0.5) * inv
 				for i in range(i0, i1 + 1):
 					var px: float = org + (i + 0.5) * inv
-					var t: float = clampf(((px - a.x) * ab.x + (pz - a.y) * ab.y) / len2, 0.0, 1.0)
+					var tr: float = ((px - a.x) * ab.x + (pz - a.y) * ab.y) / len2
+					var t: float = clampf(tr, 0.0, 1.0)
 					var qx: float = px - (a.x + ab.x * t)
 					var qz: float = pz - (a.y + ab.y * t)
 					var dd: float = sqrt(qx * qx + qz * qz) * 8.0 - lerpf(hw[si], hw[si + 1], t)
@@ -843,6 +849,15 @@ func rasterise() -> Array[Image]:
 						v[k] = (abn.x * qz - abn.y * qx) * 8.0
 						u[k] = (s0 + t * seg_len) * 8.0
 						tw[k] = ty[si].lerp(ty[si + 1], t)
+						# Відстань за глухим кінцем уздовж осі (м; мінус — ще до кінця): колії гаснуть
+						# за ~2 м до кінця й зникають на заокругленні.
+						var past: float = -INF
+						if si == 0 and free0:
+							past = -tr * seg_len * 8.0
+						if si == pts.size() - 2 and free1:
+							past = maxf(past, (tr - 1.0) * seg_len * 8.0)
+						if past > -2.0:
+							jw[k] = maxf(jw[k], smoothstep(-2.0, 0.5, past))
 			s0 += seg_len
 	_close_junctions(d, jw, rw, rh, org)
 	_plazas(d, tw, jw, rw, rh, org)
