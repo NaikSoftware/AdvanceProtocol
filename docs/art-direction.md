@@ -75,6 +75,8 @@ Techniques that buy atmosphere cheaply here:
 - Weather = particles + a screen overlay + a wind parameter on foliage shaders + an audio bed.
 - Skip volumetric fog. A depth-based fog gradient reads nearly as well and costs almost nothing.
 - Wetness is a material parameter (roughness + normal blend) driven by the weather controller.
+  Puddles sit in ruts and on tracks, never on a riverbank: next to the river they read as a
+  mistake, not as rain.
 - Post-processing: a colour-grade LUT, light vignette, minimal grain. **No SSAO, no SSR.**
 - **Persistent battle scars.** Wrecks block for a few turns, then their burnt scorch stays. Smoke columns linger for several turns. Craters and
   mud ruts accumulate. This is the cheapest atmosphere in the game and it doubles as information:
