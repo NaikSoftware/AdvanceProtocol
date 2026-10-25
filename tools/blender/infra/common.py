@@ -168,7 +168,7 @@ class B:
             for f in v.link_faces:
                 f.material_index = i
                 for l in f.loops:
-                    l[self.col] = (self.tone, self.tone, self.tone, 1.0)
+                    l[self.col] = (*self.tone, 1.0) if isinstance(self.tone, tuple) else (self.tone, self.tone, self.tone, 1.0)
 
     def box(self, mat, c, size, rot=None):
         r = rot if rot is not None else Matrix.Identity(3)
@@ -225,7 +225,7 @@ def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True):
     b.uv_box(tile_of)
     for f in bm.faces:                     # грані без тону (ручні) — білі, інакше вершинний колір їх вимкне
         for l in f.loops:
-            if l[b.col][3] == 0.0:
+            if tuple(l[b.col]) == (0.0, 0.0, 0.0, 0.0):
                 l[b.col] = (1.0, 1.0, 1.0, 1.0)
     bmesh.ops.recalc_face_normals(bm, faces=[f for f in bm.faces if f not in b.keep])
     bmesh.ops.scale(bm, vec=(S, S, S), verts=bm.verts[:])
@@ -331,30 +331,32 @@ def sheet_mat(name, paint, seed, tile=1.15, tile_v=2.0, size=64, base_dirt=True)
     a[:, :1] *= 0.6                                  # тінь стику
     if base_dirt:
         z = ((np.arange(h_px) + 0.5) / h_px * tile_v)[:, None]
-        w = np.exp(-z / 0.28)
-        rustc = np.array([0.30, 0.17, 0.10])[None, None, :]
-        a = a * (1 - 0.6 * w[..., None]) + rustc * (0.6 * w[..., None]) * (0.7 + 0.6 * streak[..., None])
+        w = np.clip((0.36 - z) / 0.08, 0, 1)                              # смуга 0,36 м з різким верхом
+        rustc = np.array([0.34, 0.19, 0.10])[None, None, :]
+        a = a * (1 - 0.55 * w[..., None]) + rustc * (0.55 * w[..., None]) * (0.7 + 0.6 * streak[..., None])
     return pbr(name, albedo=a, normal=np.concatenate([normal_from_height(h, 5.0), np.ones((h_px, size, 1))], -1),
                tile=tile, tile_v=tile_v, rough=0.6, metal=0.1)
 
 
-CONCRETE_GREY = (0.64, 0.64, 0.62)
+CONCRETE_GREY = (0.54, 0.53, 0.50)
 
 
 def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, top_z=None, shade=0.18,
-                 ground=True, k=5.0, seams=False):
+                 ground=True, k=5.0, seams=False, val=1.0, band=None, streak_k=0.5):
     """Блідий бетон одного значення для всіх виробів. relief(size) -> висоти 0..1 (йдуть у нормаль);
     бруд знизу (до 0,3 м від землі), патьоки під верхом (top_z, м) і плями з періодом у плитку."""
     tv = tile_v or tile
     a = acg_albedo("Concrete034", (1, 1, 1), 0.3, 0, seed, 0.0, paint=CONCRETE_GREY, contrast=0.3, size=size)
-    a = a * (0.9 + 0.2 * fbm(size, seed + 7, 2, 3))[..., None]           # велика пляма
+    a = a * val * (0.9 + 0.2 * fbm(size, seed + 7, 2, 3))[..., None]       # велика пляма
     z = ((np.arange(size) + 0.5) / size * tv)[:, None]                      # метри над землею (рядок = v)
     if ground:
         a = a * (1 - 0.4 * np.exp(-z / 0.3))[..., None]
     if top_z:
         streak = np.clip(tile_noise(24, 1, size, seed + 3) * 1.6 - 0.45, 0, 1)
         ramp = np.clip((z - (top_z - 0.5)) / 0.5, 0, 1) * (z <= top_z + 0.02)
-        a = a * (1 - 0.35 * streak * ramp)[..., None]
+        a = a * (1 - streak_k * streak * ramp)[..., None]
+    if band:                                                                # мокра смуга: (z0, z1, сила)
+        a = a * (1 - band[2] * np.clip(1 - np.abs(z - (band[0] + band[1]) / 2) / ((band[1] - band[0]) / 2), 0, 1) ** 0.5)[..., None]
     n = load_acg("Concrete034", "NormalGL", size)
     pit = 0.5 * tile_noise(48, 48, size, seed + 5) + 0.5 * tile_noise(16, 16, size, seed + 6)
     h = (relief(size) if relief is not None else np.ones((size, size))) + 0.3 * pit

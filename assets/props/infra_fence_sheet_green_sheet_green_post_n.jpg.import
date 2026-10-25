@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cb0v7ssrptxsj"
-path="res://.godot/imported/infra_culvert_culvert_ground_n.jpg-f6845722879392021f0c46c36daa2420.ctex"
+uid="uid://cjv4lo1xosx5w"
+path="res://.godot/imported/infra_fence_sheet_green_sheet_green_post_n.jpg-e42bd3b00fc2c1f4c6a07be1a573ecda.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "9b14f9032f46c9ab828c314435667f92"
+"md5": "adde8b5c0733a1fe4ca0ed2b7db914cd"
 }
 
 [deps]
 
-source_file="res://assets/props/infra_culvert_culvert_ground_n.jpg"
-dest_files=["res://.godot/imported/infra_culvert_culvert_ground_n.jpg-f6845722879392021f0c46c36daa2420.ctex"]
+source_file="res://assets/props/infra_fence_sheet_green_sheet_green_post_n.jpg"
+dest_files=["res://.godot/imported/infra_fence_sheet_green_sheet_green_post_n.jpg-e42bd3b00fc2c1f4c6a07be1a573ecda.ctex"]
 
 [params]
 

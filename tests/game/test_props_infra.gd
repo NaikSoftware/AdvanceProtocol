@@ -27,7 +27,7 @@ const SPEC: Dictionary = {
 	"infra_hay_wrapped": [Vector3(1.2, 1.31, 1.35), 0.1, 300, 0],
 	"infra_hay_stack": [Vector3(1.2, 2.46, 2.75), 0.15, 800, 0],
 	"infra_jersey_block": [Vector3(2.0, 0.8, 0.6), 0.1, 100, 0],
-	"infra_culvert": [Vector3(8.0, 2.0, 17.0), 0.1, 1300, 0],
+	"infra_culvert": [Vector3(8.0, 1.5, 17.0), 0.1, 1500, 0],
 	"infra_trailer_green": [Vector3(2.7, 2.37, 7.7), 0.25, 1200, 0],
 	"infra_trailer_rust": [Vector3(2.7, 2.37, 7.7), 0.25, 1200, 0],
 }
