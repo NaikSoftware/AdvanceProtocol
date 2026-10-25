@@ -386,3 +386,63 @@ static func _circumradius(a: Vector2, b: Vector2, c: Vector2) -> float:
 	var ca: float = c.distance_to(a)
 	var cr: float = absf((b - a).cross(c - a))
 	return 1e9 if cr < 1e-9 else ab * bc * ca / (2.0 * cr)
+
+
+## Вага розвилки (альфа растра типів) у світовій точці p — найближчий піксель.
+static func _jw_at(rc: RoadCourse, p: Vector2) -> float:
+	var img: Image = rc.rasterise()[1]
+	var i: int = clampi(roundi((p.x + 0.5 + rc._margin) * RoadCourse.PX - 0.5), 0, img.get_width() - 1)
+	var j: int = clampi(roundi((p.y + 0.5 + rc._margin) * RoadCourse.PX - 0.5), 0, img.get_height() - 1)
+	return img.get_pixel(i, j).a
+
+
+## Глухий кінець дороги має вагу розвилки (колії там гаснуть, бо u, v обвивають заокруглення),
+## середина дороги — ні.
+func test_dead_end_cap_gets_junction_weight_and_mid_road_none() -> void:
+	var b := _synthetic(15, 9, _rect(3, 4, 11, 4))
+	var rc := RoadCourse.build(b, PackedByteArray(), 2, 7)
+	assert_not_null(rc)
+	if rc == null:
+		return
+	assert_eq(rc.lines.size(), 1)
+	var pts: PackedVector2Array = rc.lines[0]
+	var end: Vector2 = pts[pts.size() - 1]
+	var dir: Vector2 = (end - pts[pts.size() - 2]).normalized()
+	assert_true(rc.is_free_end(end), "кінець окремої дороги — глухий")
+	assert_gt(_jw_at(rc, end + dir * (0.5 / _TILE_M)), 0.9, "за 0.5 м за кінцем")
+	assert_lt(_jw_at(rc, pts[pts.size() / 2]), 0.05, "посередині дороги")
+
+
+## Кінці ліній на розвилці не глухі: заокруглення там малює замикання розвилки, а не кінець.
+func test_line_ends_at_a_junction_are_not_free() -> void:
+	var cells: Array[Vector2i] = _rect(2, 4, 12, 4)
+	cells.append_array(_rect(7, 5, 7, 8))
+	var rc := RoadCourse.build(_synthetic(15, 11, cells), PackedByteArray(), 2, 7)
+	assert_not_null(rc)
+	if rc == null:
+		return
+	var at_node := 0
+	var free := 0
+	for pts in rc.lines:
+		for e in [pts[0], pts[pts.size() - 1]]:
+			if rc.near_node(e) < 0.5:
+				at_node += 1
+				assert_false(rc.is_free_end(e), "кінець у вузлі %s" % e)
+			elif rc.is_free_end(e):
+				free += 1
+	# Наскрізна дорога — одна лінія через вузол, у вузлі кінчається лише відгалуження.
+	assert_eq(at_node, 1, "відгалуження кінчається у вузлі")
+	assert_eq(free, 3, "три глухі кінці")
+
+
+## Кінець лінії або у вузлі (~0), або далеко від нього: кінець за 1.0–1.5 клітинки від вузла
+## поріг is_free_end рахував би глухим помилково.
+func test_no_map_road_end_sits_just_past_the_free_end_threshold() -> void:
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		for pts in rc.lines:
+			for e in [pts[0], pts[pts.size() - 1]]:
+				var d: float = rc.near_node(e)
+				assert_false(d > 1.0 and d < 1.5, "%s: кінець %s за %.2f клітинки від вузла" % [path, e, d])

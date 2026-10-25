@@ -15,29 +15,29 @@
 //
 // Кожна крапля видима лише `life` секунд циклу: око бачить швидкий штрих, а не предмет. Довжина
 // штриха — розмиття руху за витримку: швидкість × `exposure`, у світі, як і падіння, тож на
-// будь-якому зумі штрих пролітає свою довжину за ту саму частку секунди. Довжина в пікселях при
-// швидкості у світі дає «палиці», що прискорюються з наближенням.
+// будь-якому зумі штрих пролітає свою довжину за ту саму частку секунди. Падіння `WeatherRig`
+// росте з віддаленням так, що й швидкість, і довжина штриха на екрані сталі.
 shader_type spatial;
 render_mode unshaded, blend_mix, cull_disabled, shadows_disabled, depth_draw_never;
 
 // Решітка: розмір клітинки (клітинки дошки) й кількість квадів по осях ставить `WeatherRig.apply`
 // раз на меш; номер кутової клітинки, крок і поріг рангу — `WeatherRig.follow` за камерою.
-uniform vec3 cell = vec3(0.3, 0.6375, 0.3);
-uniform vec3 grid = vec3(40.0, 8.0, 40.0);
+uniform vec3 cell = vec3(0.4286, 0.6375, 0.4286);
+uniform vec3 grid = vec3(28.0, 8.0, 28.0);
 uniform vec3 cell_origin;
 uniform float stride = 1.0;
 uniform float keep = 0.125;
 // Падіння й вітер, клітинок/с; цикл і видиме життя краплі, витримка — секунд. Значення ставить
 // `WeatherRig` зі своїх сталих.
-uniform float fall_speed = 3.5;
+uniform float fall_speed = 5.6;
 uniform vec2 wind = vec2(0.62, -0.62);
-uniform float exposure = 0.045;
+uniform float exposure = 0.033;
 uniform float cycle = 0.25;
 uniform float life = 0.2;
 // Ширина квада впоперек штриха, пікселів: м'яка лінія завширшки ~1 px, що гасне до країв.
 uniform float quad_px = 3.0;
 // Ледь світліше за мокру землю під похмурим небом.
-uniform vec4 tint : source_color = vec4(0.66, 0.69, 0.72, 0.12);
+uniform vec4 tint : source_color = vec4(0.66, 0.69, 0.72, 0.08);
 
 varying float v_x;
 varying float v_l;

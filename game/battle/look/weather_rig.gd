@@ -15,15 +15,20 @@ const RAIN_BOX: Vector3 = Vector3(2.0, 0.85, 2.0)
 ## Дальній від камери кут коробки — на стільки `zoom_level` від фокуса по x і z: там верх кадру.
 ## Ближчий до камери бік коробки в кадр не потрапляє, тож коробка закінчується до нього.
 const RAIN_FAR: float = 1.0242
-## Падіння, клітинок/с (28 м/с). Справжні 8 м/с з висоти камери дають штрихи в 1–5 px, що
-## читаються крапками; швидший дощ з тією самою витримкою виглядає так, як справжній зблизька.
-const RAIN_FALL: float = 3.5
+## Падіння на найменшому віддаленні, клітинок/с. Дощ у кадрі — це передусім краплі біля
+## об'єктива, і їхній розмір та швидкість на екрані не залежать від того, як далеко земля. Тож
+## падіння росте з віддаленням як (зум / 6)^`RAIN_FALL_ZOOM_POW` — так само, як меншає клітинка
+## на екрані, — і штрих на будь-якому зумі пролітає кадр з тією самою швидкістю (~600 px/с) і
+## має ту саму довжину (~20 px). Справжні 8 м/с при сталій витримці давали на далекому зумі
+## крапки по 1–2 px, що читалися камінцями.
+const RAIN_FALL: float = 5.6
+const RAIN_FALL_ZOOM_POW: float = 1.28
 ## Вісь вітру — права вісь кадру (1, 0, -1): камера під `IsoCameraRig.YAW_DEGREES` і не
 ## обертається, тож усі штрихи дощу й стовпи диму нахилені в один бік. Сила — `BattleLook.wind`.
 const WIND_AXIS: Vector3 = Vector3(0.70710678, 0.0, -0.70710678)
 ## Витримка, секунд: штрих — шлях краплі за цей час, у світі. Відношення довжини штриха до
-## його швидкості на екрані — саме витримка, на будь-якому зумі.
-const RAIN_EXPOSURE: float = 0.045
+## його швидкості на екрані — саме витримка, на будь-якому зумі, тож штрих не стає «палицею».
+const RAIN_EXPOSURE: float = 0.033
 ## Крапля з'являється в новому місці раз на `RAIN_CYCLE` і видима лише `RAIN_LIFE`, секунд:
 ## вісім десятих крапель, що малюються, видимі водночас.
 const RAIN_CYCLE: float = 0.25
@@ -76,6 +81,9 @@ func _init() -> void:
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
 	sun.shadow_enabled = true
+	# Дальні каскади тіні мають меншу роздільність і м'якший край; змішування між ними прибирає
+	# видимий шов: тінь чітка зблизька й трохи м'якша здалеку.
+	sun.directional_shadow_blend_splits = true
 	add_child(sun)
 	rain = MeshInstance3D.new()
 	rain.name = "Rain"
@@ -103,10 +111,7 @@ func apply(look: BattleLook) -> void:
 	environment.ambient_light_color = look.ambient_color
 	environment.ambient_light_energy = look.ambient_energy
 	_look = look
-	var v: Vector3 = rain_velocity()
-	var rain_mat := rain.material_override as ShaderMaterial
-	rain_mat.set_shader_parameter("fall_speed", -v.y)
-	rain_mat.set_shader_parameter("wind", Vector2(v.x, v.z))
+	_set_rain_motion()
 	_light_probe()
 	var sky_mat := environment.sky.sky_material as ShaderMaterial
 	sky_mat.set_shader_parameter("clear_amount", look.sky_clear)
@@ -230,6 +235,8 @@ static func rain_hash3(p: Vector3) -> float:
 
 
 func _place_rain() -> void:
+	# Падіння залежить від зуму, тож оновлюється й без меша.
+	_set_rain_motion()
 	if _rain_grid == Vector3.ZERO:
 		return
 	var lat: Dictionary = rain_lattice(_focus, _zoom, _rain_grid)
@@ -244,9 +251,22 @@ func wind() -> Vector3:
 	return WIND_AXIS * (_look.wind if _look != null else 0.0)
 
 
-## Швидкість краплі у світі, клітинок/с.
+## Падіння краплі на цьому зумі, клітинок/с (див. `RAIN_FALL`).
+static func rain_fall(zoom_level: float) -> float:
+	return RAIN_FALL * pow(zoom_level / IsoCameraRig.MIN_ZOOM, RAIN_FALL_ZOOM_POW)
+
+
+## Швидкість краплі у світі на поточному зумі камери, клітинок/с.
 func rain_velocity() -> Vector3:
-	return Vector3.DOWN * RAIN_FALL + wind() * RAIN_FALL
+	var fall: float = rain_fall(_zoom)
+	return Vector3.DOWN * fall + wind() * fall
+
+
+func _set_rain_motion() -> void:
+	var v: Vector3 = rain_velocity()
+	var mat := rain.material_override as ShaderMaterial
+	mat.set_shader_parameter("fall_speed", -v.y)
+	mat.set_shader_parameter("wind", Vector2(v.x, v.z))
 
 
 static func _rgb(c: Color) -> Vector3:
