@@ -25,6 +25,12 @@ const _BASE_PENALTY: Dictionary = {
 	Kind.BRIDGE_DESTROYED: IMPASSABLE,
 }
 
+## Просіка (§3.2): ліс, повалений танком. Звичайний ґрунт зі шкали, той самий кошик,
+## що й поле: дерева лежать, і колісна техніка йде по них, як по ріллі. Непрохідність
+## цілого лісу для техніки, що не валить дерев, живе не тут, а в Rules.entry_cost_at():
+## одним штрафом на тайл її не виразити (див. там).
+const BROKEN_FOREST_PENALTY: int = 10
+
 const _MUD_OFFSET: int = 10
 const _FROZEN_OFFSET: int = -5
 const _FROZEN_MARSH_PENALTY: int = 20
@@ -32,10 +38,10 @@ const _FROZEN_MARSH_PENALTY: int = 20
 static func is_road(kind: int) -> bool:
 	return kind == Kind.ROAD or kind == Kind.BRIDGE
 
-static func penalty(kind: int, ground_state: int) -> int:
+static func penalty(kind: int, ground_state: int, broken: bool = false) -> int:
 	if kind == Kind.MARSH and ground_state == GroundState.FROZEN:
 		return _FROZEN_MARSH_PENALTY
-	var base: int = _BASE_PENALTY[kind]
+	var base: int = BROKEN_FOREST_PENALTY if broken and kind == Kind.FOREST else _BASE_PENALTY[kind]
 	if base >= IMPASSABLE or is_road(kind):
 		return base
 	match ground_state:
