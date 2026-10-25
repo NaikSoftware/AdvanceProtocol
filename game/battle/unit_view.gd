@@ -332,8 +332,12 @@ func _pose(at: Vector3) -> void:
 	_silhouette.rotation = Vector3(clampf(pitch, -limit, limit), 0.0, clampf(roll, -limit, limit))
 	var tilt: Basis = _silhouette.basis
 	var y: float = th.at(at.x, at.z)
-	for i in corners.size():
-		y = maxf(y, h[i] - (tilt * corners[i]).y)
+	for c: Vector3 in corners:
+		# Нахилений кут зсувається в плані (cos < 1), тож ґрунт беремо під ним, а не під
+		# рівним: на крутому березі різниця — кілька сантиметрів, і кут інакше тоне.
+		var tc: Vector3 = tilt * c
+		var w: Vector3 = at + yaw * tc
+		y = maxf(y, th.at(w.x, w.z) - tc.y)
 	position = Vector3(at.x, y, at.z)
 
 
