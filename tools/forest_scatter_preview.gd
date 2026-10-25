@@ -3,7 +3,7 @@ extends Node
 ## краю, нижчі крайові дерева, далі повний намет. Два режими:
 ## - тестовий ліс 6×5 тайлів із коробкою танка й коробкою відділення, мінімальний і
 ##   максимальний зум, без розчинення й із ним, плюс кадр поодиноких дерев;
-## - `map`: справжній бойовий екран із картою `look`, ліс на всіх клітинках FOREST.
+## - `map`: справжній бойовий екран із картою <вигляд>, ліс на всіх клітинках FOREST.
 ## Запуск (потрібне вікно, не --headless):
 ##   $GODOT --path . res://tools/forest_scatter_preview.tscn -- <тека> <ліс> <сезон> <вигляд> [map]
 ## ліс: pine | mixed | deciduous; сезон: late | summer | early; вигляд: river | crossroads | ridge.
@@ -12,7 +12,9 @@ extends Node
 ## - Глибина точки `depth` — відстань у тайлах до найближчої клітинки без лісу (назовні —
 ##   мінус відстань до лісу), плюс шум ±`EDGE_NOISE` з довжиною хвилі ~1,5 тайла: край не
 ##   йде по межах клітинок.
-## - Пояс кущів: `depth` −0,15…`SHRUB_BAND`, густина `SHRUB_DENSITY` на тайл, висота 2–5 м.
+## - Пояс кущів: `depth` −0,15…`SHRUB_BAND`, густина `SHRUB_DENSITY` на тайл, висота 2–5 м;
+##   частина поясу — молоді ялини (`belt` у `WOODS`): пізньої осені голі кущі пропускають
+##   погляд, і стіною край тримає лише зелене до землі.
 ## - Крайові дерева: `depth` `EDGE_FROM`–`EDGE_TO`, висота 8–15 м; у крайовому ряду —
 ##   ялина з кроною до землі (`Spruce_B`), щоб край стояв стіною.
 ## - Намет: `depth` > `CANOPY_FROM`, висота 18–25 м, густина з `WOODS`.
@@ -34,7 +36,7 @@ const SEED: int = 7
 
 const EDGE_NOISE: float = 0.3
 const SHRUB_BAND: float = 0.6
-const SHRUB_DENSITY: float = 11.0
+const SHRUB_DENSITY: float = 12.0
 const EDGE_FROM: float = 0.25
 const EDGE_TO: float = 0.85
 const EDGE_DENSITY: float = 2.4
@@ -47,27 +49,20 @@ const CROWN_W: Vector2 = Vector2(0.95, 1.3)
 const LOG_DENSITY: float = 0.25
 const CANOPY_H: Vector2 = Vector2(18.0, 25.0)
 const EDGE_H: Vector2 = Vector2(8.0, 15.0)
-const SHRUB_H: Vector2 = Vector2(2.0, 5.0)
+## Висота верхнього центра пучка; пучок додає ще ~1 м, тож видима висота 2,5–5 м.
+const SHRUB_H: Vector2 = Vector2(1.6, 4.0)
 
 ## Склад лісу: частки видів (префікс вузла або ім'я вузла) у наметі й у крайовому ряду.
 const WOODS: Dictionary = {
-	"pine": {"canopy": {"Pine": 0.85, "Spruce": 0.1, "Birch": 0.05}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "density": 2.4},
-	"mixed": {"canopy": {"Pine": 0.45, "Spruce": 0.2, "Birch": 0.2, "Oak": 0.15}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "density": 2.2},
-	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "density": 1.5},
+	"pine": {"canopy": {"Pine": 0.85, "Spruce": 0.1, "Birch": 0.05}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 0.5, "Spruce_B": 0.5}, "density": 2.4},
+	"mixed": {"canopy": {"Pine": 0.45, "Spruce": 0.2, "Birch": 0.2, "Oak": 0.15}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 0.65, "Spruce_B": 0.35}, "density": 2.2},
+	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 0.8, "Spruce_B": 0.2}, "density": 1.5},
 }
 
-## Світло карт — ті самі числа, що в BattleLook river / crossroads / ridge; ground — тон поля.
-const LOOKS: Dictionary = {
-	"river": {"light_color": Color(0.86, 0.89, 0.93), "light_energy": 0.75, "pitch": 50.0, "yaw": 225.0,
-		"shadow_opacity": 0.35, "shadow_blur": 3.0, "ambient_color": Color(0.62, 0.67, 0.75), "ambient_energy": 1.4,
-		"foliage_tint": Color(1.08, 1.0, 0.82), "ground": Color(0.29, 0.30, 0.22)},
-	"crossroads": {"light_color": Color(1.0, 0.88, 0.7), "light_energy": 1.6, "pitch": 28.0, "yaw": 135.0,
-		"shadow_opacity": 1.0, "shadow_blur": 0.6, "ambient_color": Color(0.5, 0.62, 0.85), "ambient_energy": 0.5,
-		"foliage_tint": Color(1.0, 1.08, 0.8), "ground": Color(0.36, 0.35, 0.24)},
-	"ridge": {"light_color": Color(1.0, 0.97, 0.92), "light_energy": 1.5, "pitch": 48.0, "yaw": 315.0,
-		"shadow_opacity": 0.95, "shadow_blur": 0.8, "ambient_color": Color(0.55, 0.65, 0.85), "ambient_energy": 0.6,
-		"foliage_tint": Color(1.08, 1.04, 0.76), "ground": Color(0.33, 0.32, 0.22)},
-}
+## Тон поля тестового лісу; світло, тінь, дощ і тон листя ставить WeatherRig за
+## game/battle/look/<вигляд>.tres — так само, як на бойовому екрані.
+const GROUND: Dictionary = {"river": Color(0.29, 0.30, 0.22), "crossroads": Color(0.36, 0.35, 0.24),
+	"ridge": Color(0.33, 0.32, 0.22)}
 
 ## Поодинокі дерева: ряд у полі праворуч від тестового лісу, окремий кадр.
 const HEROES: Array = [["Hero_Oak", Vector2(9.5, 1.0)], ["Hero_Lime", Vector2(12.4, 2.6)],
@@ -94,31 +89,28 @@ func _ready() -> void:
 	var season: String = args[2] if args.size() > 2 else "late"
 	var look_name: String = args[3] if args.size() > 3 else "river"
 	var on_map: bool = args.size() > 4 and args[4] == "map"
-	var look: Dictionary = LOOKS[look_name]
 	DirAccess.make_dir_recursive_absolute(out)
 	get_window().size = WINDOW
 	_rng.seed = SEED
 	_noise.seed = SEED
 	_noise.frequency = 1.0 / 1.5
-	_load_library(season, look)
+	_load_library(season)
 	if on_map:
-		await _map_frames(out, wood, season, look_name, look)
+		await _map_frames(out, wood, season, look_name)
 	else:
-		await _test_frames(out, wood, season, look_name, look)
+		await _test_frames(out, wood, season, look_name)
 	get_tree().quit()
 
 
-func _test_frames(out: String, wood: String, season: String, look_name: String, look: Dictionary) -> void:
+func _test_frames(out: String, wood: String, season: String, look_name: String) -> void:
 	_root = self
 	_rig = (load("res://game/camera/iso_camera_rig.tscn") as PackedScene).instantiate()
 	add_child(_rig)
 	_rig.set_bounds(Vector2i(18, 14))
-	var sun := DirectionalLight3D.new()
-	add_child(sun)
-	var env_node: WorldEnvironment = (load("res://game/battle/sky_rig.gd") as GDScript).new()
-	add_child(env_node)
-	_apply_look(sun, env_node.environment, look)
-	_ground(look["ground"])
+	var weather := WeatherRig.new()
+	add_child(weather)
+	weather.apply(load("res://game/battle/look/%s.tres" % look_name) as BattleLook)
+	_ground(GROUND[look_name])
 	for y in ROWS:
 		for x in COLS:
 			_forest[Vector2i(x, y)] = true
@@ -145,7 +137,7 @@ func _test_frames(out: String, wood: String, season: String, look_name: String, 
 
 
 ## Справжня карта: ліс на клітинках FOREST, ліва половина — сосновий бік, права — `wood`.
-func _map_frames(out: String, wood: String, season: String, look_name: String, look: Dictionary) -> void:
+func _map_frames(out: String, wood: String, season: String, look_name: String) -> void:
 	var bs: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
 	get_tree().root.add_child.call_deferred(bs)
 	await get_tree().process_frame
@@ -153,10 +145,7 @@ func _map_frames(out: String, wood: String, season: String, look_name: String, l
 	bs.setup(m, 2, 1)
 	(bs.get_node("%Units") as Node3D).visible = false
 	(bs.get_node("UI") as CanvasLayer).visible = false
-	var sun: DirectionalLight3D = bs.get_node("DirectionalLight3D")
-	var sky: WorldEnvironment = bs.get_node("SkyRig")
-	sky.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	_apply_look(sun, sky.environment, look)
+	# Світло, тінь, дощ і тон листя ставить сам WeatherRig бойового екрана за виглядом карти.
 	_rig = bs.get_node("%CameraRig")
 	_root = bs
 	var board: Board = bs._match_service.state.board
@@ -191,18 +180,6 @@ func _map_frames(out: String, wood: String, season: String, look_name: String, l
 	await _shoot(IsoCameraRig.MAX_ZOOM, "%s/map_%s_%s_max.png" % [out, look_name, season])
 
 
-func _apply_look(sun: DirectionalLight3D, env: Environment, look: Dictionary) -> void:
-	sun.shadow_enabled = true
-	sun.light_color = look["light_color"]
-	sun.light_energy = look["light_energy"]
-	sun.rotation_degrees = Vector3(-float(look["pitch"]), float(look["yaw"]), 0.0)
-	sun.shadow_opacity = look["shadow_opacity"]
-	sun.shadow_blur = look["shadow_blur"]
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = look["ambient_color"]
-	env.ambient_light_energy = look["ambient_energy"]
-
-
 func _ground(c: Color) -> void:
 	var field := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
@@ -216,7 +193,7 @@ func _ground(c: Color) -> void:
 	add_child(field)
 
 
-func _load_library(season: String, look: Dictionary) -> void:
+func _load_library(season: String) -> void:
 	var shader: Shader = load("res://assets/props/forest/forest_crown.gdshader")
 	for path: String in ["res://assets/props/forest/forest_conifer.glb", "res://assets/props/forest/forest_broadleaf_%s.glb" % season]:
 		var root: Node = (load(path) as PackedScene).instantiate()
@@ -231,8 +208,6 @@ func _load_library(season: String, look: Dictionary) -> void:
 			m.shader = shader
 			m.set_shader_parameter("albedo_tex", src.albedo_texture)
 			m.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
-			var t: Color = look["foliage_tint"]
-			m.set_shader_parameter("foliage_tint", Vector3(t.r, t.g, t.b))
 			_material[mi.mesh] = m
 		root.free()
 
@@ -275,7 +250,7 @@ func _scatter(area: Rect2i, wood_at: Callable) -> void:
 	_layer(area, 2.4, canopy, func(p: Vector2) -> Dictionary: return WOODS[wood_at.call(p)]["canopy"], CANOPY_H,
 			func(p: Vector2) -> float: return float(WOODS[wood_at.call(p)]["density"]))
 	_layer(area, EDGE_DENSITY, edge, func(p: Vector2) -> Dictionary: return WOODS[wood_at.call(p)]["edge"], EDGE_H)
-	_layer(area, SHRUB_DENSITY, shrub, func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0}, SHRUB_H)
+	_layer(area, SHRUB_DENSITY, shrub, func(p: Vector2) -> Dictionary: return WOODS[wood_at.call(p)]["belt"], SHRUB_H)
 	if _meshes.has("Log"):
 		_layer(area, LOG_DENSITY, logs, func(_p: Vector2) -> Dictionary: return {"Log": 1.0}, Vector2.ZERO)
 
@@ -304,13 +279,15 @@ func _place_mesh(mesh: Mesh, p: Vector2, height_m: float) -> void:
 	var s: float = height_m / TILE_M / aabb.end.y if height_m > 0.0 else 1.0
 	# Висоту задає розкидка, а ширину крони — ні: низьке джерело, витягнуте до 25 м, дало
 	# б крону на пів тайла ширшу за справжню, і намет злився б у суцільну плиту.
-	var w: float = clampf(s, CROWN_W.x, CROWN_W.y) * _rng.randf_range(0.9, 1.1)
+	# Молоде дерево (поясу кущів чи крайового ряду) не тримає ширини дорослої крони.
+	var w: float = clampf(s, minf(CROWN_W.x, s * 1.8), CROWN_W.y) * _rng.randf_range(0.9, 1.1)
 	var basis := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(w, s, w))
 	var xf := Transform3D(basis, _offset + Vector3(p.x, 0.0, p.y))
 	if not _groups.has(mesh):
 		_groups[mesh] = []
 	var half: float = maxf(maxf(-aabb.position.x, aabb.end.x), maxf(-aabb.position.z, aabb.end.z))
-	(_groups[mesh] as Array).append({"xf": xf, "top": aabb.end.y * s, "pos": p, "r": half * w + 0.1})  # +0,1: пучки виходять за AABB центрів карток
+	# AABB меша — центри карток; пучки виходять за нього ще на ~1,2 м угору й убік.
+	(_groups[mesh] as Array).append({"xf": xf, "top": aabb.end.y * s + 0.15, "pos": p, "r": half * w + 0.15})
 
 
 func _build_multimeshes() -> void:

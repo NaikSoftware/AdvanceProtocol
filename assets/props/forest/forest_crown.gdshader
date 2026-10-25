@@ -17,9 +17,9 @@ render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform;
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float alpha_cutoff : hint_range(0.0, 1.0) = 0.5;
-// Тон листя під світло карти (BattleLook.foliage_tint): похмуре синювате розсіяне світло
-// робить буре фіолетовим, і цей множник його повертає.
-uniform vec3 foliage_tint = vec3(1.0);
+// Тон листя під світло карти (BattleLook.foliage_tint, ставить WeatherRig): похмуре
+// синювате розсіяне світло робить буре фіолетовим, і цей множник його повертає.
+global uniform vec3 foliage_tint;
 // М'яке огортання світлом і просвічування: тіньовий бік пучка не чорніє, як у листя.
 uniform float wrap = 0.5;
 uniform float translucency = 0.35;
@@ -46,7 +46,9 @@ void vertex() {
 
 void fragment() {
 	vec4 t = texture(albedo_tex, UV);
-	float edge = clamp((t.a - alpha_cutoff) / max(fwidth(t.a), 1e-4) + 0.5, 0.0, 1.0);
+	// Ширину згладження обмежено: на далекому зумі fwidth(alpha) великий, і без межі
+	// растром укрилась би вся картка — крона розсипалась би рябими крапками.
+	float edge = clamp((t.a - alpha_cutoff) / clamp(fwidth(t.a), 1e-4, 0.12) + 0.5, 0.0, 1.0);
 	if (COLOR.a <= 0.001 || edge * COLOR.a < bayer4(FRAGCOORD.xy)) {
 		discard;
 	}
@@ -60,5 +62,8 @@ void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float w = wrap * is_card;
 	float d = max((ndl + w) / (1.0 + w), 0.0) + is_card * translucency * max(-ndl, 0.0);
-	DIFFUSE_LIGHT += d * ATTENUATION * LIGHT_COLOR / PI;
+	// Тінь сусідніх пучків на картці — лише наполовину: у справжній кроні світло проходить
+	// крізь листя, а повна тінь із різким краєм малює на кроні плями камуфляжу.
+	float att = mix(ATTENUATION, mix(0.5, 1.0, ATTENUATION), is_card);
+	DIFFUSE_LIGHT += d * att * LIGHT_COLOR / PI;
 }
