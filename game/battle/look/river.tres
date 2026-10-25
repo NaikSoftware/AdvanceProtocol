@@ -18,6 +18,6 @@ haze_color = Color(0.1, 0.135, 0.155, 1)
 foliage_tint = Color(1.08, 1, 0.82, 1)
 water_murk = 0.0
 rain = true
-rain_amount = 8192
+rain_amount = 28800
 wetness = 0.55
 cloud_shadow_strength = 0.35
