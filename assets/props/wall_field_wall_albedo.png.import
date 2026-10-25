@@ -7,9 +7,6 @@ path="res://.godot/imported/wall_field_wall_albedo.png-1a25ec153ec55793464bfb4eb
 metadata={
 "vram_texture": false
 }
-generator_parameters={
-"md5": "4d2e4d0a33a122933bb3ba7a1155036a"
-}
 
 [deps]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

@@ -7,9 +7,6 @@ path="res://.godot/imported/infra_fence_picket_picket_post_n.png-de6c4eb48e530ee
 metadata={
 "vram_texture": false
 }
-generator_parameters={
-"md5": "8d75a48f7077e9cd47f2d6b7a975700f"
-}
 
 [deps]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

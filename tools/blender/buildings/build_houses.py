@@ -119,10 +119,12 @@ def house1(hit=False):
             b.beam(P(u, 0.06 + 0.1 * rr.random()), P(u + 0.01, 0.9 - 0.25 * rr.random()), 0.14, "timber_dark", 0.2)
         b.beam(P(0.32, 0.55), P(0.68, 0.6), 0.14, "timber_dark", 0.2)
         # порожнина: один неосвітлений майже чорний чотирикутник над верхами стін (ними плашка штукатурки світилась)
-        b.poly([(-4.7, y0 + 0.1, EAVE + 0.12), (4.7, y0 + 0.1, EAVE + 0.12), (4.7, y1 - 0.1, EAVE + 0.12), (-4.7, y1 - 0.1, EAVE + 0.12)][::-1], "cavity_black")
+        b.poly([(-4.7, y0 + 0.1, EAVE + 0.12), (4.7, y0 + 0.1, EAVE + 0.12), (4.7, y1 - 0.1, EAVE + 0.12), (-4.7, y1 - 0.1, EAVE + 0.12)][::-1], "cavity")
+        for k in range(9):                                                        # балки перекриття горища: тьмяно видно крізь розрив
+            b.box(-4.0 + 1.0 * k, (y0 + y1) / 2, EAVE + 0.12, 0.14, y1 - y0 - 0.4, 0.16, "timber_dark")
         # стіна під розривом карниза: темна зверху, світлішає донизу (кіптява над місцем виходу диму)
         xl, xr = xa + (xb - xa) * 0.30, xa + (xb - xa) * 0.72
-        b.soot([(xl + 0.6, y0 - 0.03, EAVE - 1.5), (xr - 0.6, y0 - 0.03, EAVE - 1.5), (xr, y0 - 0.03, EAVE), (xl, y0 - 0.03, EAVE)][::-1], (0.40, 0.40, 0.14, 0.14), 1)
+        b.soot([(xl + 0.6, y0 - 0.03, EAVE - 1.5), (xr - 0.6, y0 - 0.03, EAVE - 1.5), (xr, y0 - 0.03, EAVE), (xl, y0 - 0.03, EAVE)][::-1], (0.30, 0.30, 0.10, 0.10), 1)
     if not hit:
         b.box(0, ym, RIDGE, xr1 - xr0 + 0.6, 0.3, 0.16, "gutter")
     else:
@@ -143,15 +145,15 @@ def house1(hit=False):
     b.poly_up([(-3.4, 2.4, 2.75), (3.4, 2.4, 2.75), (3.4, 4.3, 2.35), (-3.4, 4.3, 2.35)], "fc_roof_x")
     b.box(0, 4.15, 0.0, 1.2, 0.5, 0.25, "step")
     if hit:
-        gutter(b, -L / 2 - OV, xa + (xb - xa) * 0.30 - 0.0, y0 - OV, EAVE - 0.3)
+        gutter(b, -L / 2 - 0.1, xa + (xb - xa) * 0.30 - 0.0, y0 - OV, EAVE - 0.3)
         gutter(b, xa + (xb - xa) * 0.72, L / 2 + OV, y0 - OV, EAVE - 0.3)
     else:
         gutter(b, -L / 2 - OV, L / 2 + OV, y0 - OV, EAVE - 0.3)
     if hit:
         rr = random.Random(54)
-        mound(b, 0.0, -4.15, 2.8, 0.3, 0.7, 51, rings=4, segs=16, tongues=0)
+        mound(b, 0.0, -4.05, 2.8, 0.28, 1.0, 51, rings=4, segs=16, tongues=0)
         for k in range(14):                                      # справжні уламки під стіною -Y
-            b.rock(rr.uniform(-3.4, 3.4), -4.15 + rr.uniform(-0.3, 0.15), 0.18, rr.uniform(0.3, 0.6), rr.choice(("rubble", "heap")), rr)
+            b.rock(rr.uniform(-3.4, 3.4), -4.05 + rr.uniform(-0.2, 0.15), 0.25, rr.uniform(0.35, 0.6), rr.choice(("rubble", "heap")), rr)
         mound(b, 6.0, -0.4, 1.5, 2.0, 0.55, 52, rings=5, segs=18, tongues=1)  # розбитий завал на торці +X, не вище 0.6 м
         for k in range(12):
             b.rock(6.2 + rr.uniform(-1.6, 1.6), -0.4 + rr.uniform(-2.2, 2.2), 0.25 + rr.uniform(0, 0.3), rr.uniform(0.3, 0.6), "rubble", rr)
@@ -272,36 +274,54 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
                 hs[-3:] = [3.0, 3.1, 3.2]
             else:
                 hs[:3] = [3.2, 3.0, 2.6]
-        wall_run(b, p0, p1, 0.4, hs, "wall_ruin", "wall_ruin", seed * 3 + si, pitch=1.0)
-    if chimney:
-        cx, cy = chimney
-        b.box(cx, cy, 0, 0.8, 0.8, 3.2, "brick_dark")
-        b.box_e(cx + 0.05, cy, 4.0, 0.8, 0.8, 1.5, "brick_dark", euler=(0.12, -0.14, 0.3), top="char")
-    mound(b, 0.0, 0.0, L / 2 + 0.2, D / 2 + 0.2, 3.0, seed + 1, mat="heap", rings=6, segs=24, tongues=3)
+        wall_run(b, p0, p1, 0.4, hs, "wall_ruin", "brick_face", seed * 3 + si)
+    mound(b, 0.0, 0.0, L / 2 + 0.2, D / 2 + 0.2, 3.0, seed + 1, mat="heap", rings=7, segs=28, tongues=4)
     mound(b, rnd.uniform(-1.5, 1.5), rnd.uniform(-1.2, 1.2), L / 3, D / 3, 2.3, seed + 2, rings=4, segs=14, tongues=2)
-    for k in range(4):                                                            # лопаті: менші горби довкола основної купи
+    for k in range(5):                                                            # лопаті: менші горби довкола основної купи
         ang = rnd.uniform(0, 2 * math.pi)
         rr_ = rnd.uniform(2.0, 3.6)
         mound(b, rr_ * math.cos(ang) * 1.15, rr_ * math.sin(ang) * 0.95, rnd.uniform(1.6, 2.4), rnd.uniform(1.4, 2.2), rnd.uniform(0.9, 1.7), seed + 10 + k, rings=3, segs=11, tongues=1)
-    chunks(b, 0.0, 0.0, min(L, D) / 2 - 0.4, 2.4, 16, ("rubble", "heap", "rubble_steel"), seed + 3, z0=0.8, smin=0.4, smax=0.9)
-    for k in range(20):                                                           # розсип, що тоншає до країв
+
+    def heap_h(x, y):                                                             # висота основної купи в точці (наближено)
+        r = math.hypot(x / (L / 2 + 0.2), y / (D / 2 + 0.2))
+        return 3.0 * max(0.0, 1 - r ** 1.7) * 0.8
+
+    # уламки по гребенях і краях купи
+    for k in range(26):
         a = rnd.uniform(0, 2 * math.pi)
-        t = rnd.uniform(0.6, 1.0)
-        b.rock((L / 2 + 2.4) * t * math.cos(a) * 1.05, (D / 2 + 2.4) * t * math.sin(a) * 1.05, 0.12, rnd.uniform(0.28, 0.55), rnd.choice(("rubble", "heap")), rnd)
-    for k in range(13):                                                           # крокви: більшість лежить під 20-40° і перехрещується над купою
-        cx, cy = rnd.uniform(-2.8, 2.8), rnd.uniform(-2.2, 2.2)
-        a = rnd.uniform(0, math.pi * 2)
-        lnh = rnd.uniform(2.4, 3.8)
-        z0 = rnd.uniform(1.4, 2.2)
-        el = math.radians(rnd.choice((20, 25, 30, 35, 40, 40)))
-        b.beam((cx, cy, z0), (cx + lnh * math.cos(a), cy + lnh * math.sin(a), z0 + lnh * math.tan(el)), 0.16, rnd.choice(("timber_dark", "char")), 0.22)
-    for k in range(10):                                                           # яскраві зігнуті листи на купі
-        cx, cy = rnd.uniform(x0 + 2.4, x1 - 2.4), rnd.uniform(y0 + 2.4, y1 - 2.4)
-        a = rnd.uniform(0, 3.1)
-        ln = rnd.uniform(1.6, 2.4)
-        zz = rnd.uniform(1.5, 2.4)
-        bent_sheet(b, (cx, cy, zz), (cx + ln * math.cos(a), cy + ln * math.sin(a), zz - rnd.uniform(0.0, 0.35)), 1.1, rnd.choice((tile, "fc_roof_x", "tin_red", "tin_red", "clad_burnt")), 0.3,
-                   axis="y" if abs(math.cos(a)) > 0.5 else "x")
+        t = rnd.choice((0.25, 0.4, 0.55, 0.7, 0.9))
+        px, py = (L / 2) * t * math.cos(a), (D / 2) * t * math.sin(a)
+        b.rock(px, py, heap_h(px, py) + 0.15, rnd.uniform(0.4, 0.8), rnd.choice(("rubble", "heap", "brick_face")), rnd)
+    for k in range(16):
+        a = rnd.uniform(0, 2 * math.pi)
+        t = rnd.uniform(0.9, 1.15)
+        b.rock((L / 2 + 1.6) * t * math.cos(a), (D / 2 + 1.6) * t * math.sin(a), 0.12, rnd.uniform(0.28, 0.55), rnd.choice(("rubble", "heap")), rnd)
+    if chimney:                                                                   # димар: цегла, зламаний верх, стоїть на купі
+        cx, cy = chimney
+        zh = heap_h(cx, cy)
+        b.box_e(cx, cy, zh + 1.6, 0.8, 0.8, 3.2, "brick_face", euler=(0.05, -0.04, 0.2), top="brick_face")
+        b.box_e(cx + 0.05, cy, zh + 3.4, 0.8, 0.8, 0.5, "brick_face", euler=(0.25, -0.2, 0.5), top="char")
+    # 3-4 крокви різної товщини, обвуглені кінці, обидва кінці лежать на купі
+    for k in range(4):
+        a = rnd.uniform(0, 2 * math.pi)
+        r0 = rnd.uniform(0.6, 1.8)
+        x0_, y0_ = r0 * math.cos(a) * 1.4, r0 * math.sin(a) * 1.1
+        a2 = a + rnd.uniform(-0.6, 0.6)
+        r1 = r0 + rnd.uniform(2.0, 3.0)
+        x1_, y1_ = r1 * math.cos(a2) * 1.4, r1 * math.sin(a2) * 1.1
+        z0_ = heap_h(x0_, y0_) + rnd.uniform(0.6, 1.2)
+        z1_ = max(0.25, heap_h(x1_, y1_) + 0.15)
+        th = rnd.uniform(0.12, 0.3)
+        b.beam((x0_, y0_, z0_), (x1_, y1_, z1_), th, rnd.choice(("timber_dark", "timber_dark", "char")), th * 1.3)
+        b.box_e(x1_, y1_, z1_, 0.3, 0.3, 0.3, "char", euler=(rnd.uniform(0, 1), rnd.uniform(0, 1), 0))
+    for k in range(8):                                                            # листи покрівлі лежать на купі
+        a = rnd.uniform(0, 2 * math.pi)
+        t = rnd.uniform(0.3, 0.8)
+        px, py = (L / 2) * t * math.cos(a), (D / 2) * t * math.sin(a)
+        zz = heap_h(px, py) + 0.35
+        ln = rnd.uniform(1.4, 2.2)
+        bent_sheet(b, (px, py, zz), (px + ln * math.cos(a + 1), py + ln * math.sin(a + 1), max(0.3, zz - rnd.uniform(0.0, 0.4))), 1.1, rnd.choice((tile, "fc_roof_x", "tin_red", "tin_red", "clad_burnt")), 0.25,
+                   axis="y" if abs(math.cos(a + 1)) > 0.5 else "x")
     lib.finish(b, name, out, tri_limit=4000, footprint=footprint, anchor=(0, 0))
 
 
@@ -316,5 +336,5 @@ if want("h3"):
 if want("h4"):
     house4()
 if want("ruins"):
-    ruin("ruin_h1", 10.0, 8.0, 0.8, 11, (2, 2), chimney=(2.2, -0.2), tile="fc_roof_x")
+    ruin("ruin_h1", 10.0, 8.0, 0.6, 11, (2, 2), chimney=(2.2, -0.2), tile="fc_roof_x")
     ruin("ruin_h3", 10.0, 10.0, 0.4, 29, (2, 2), tile="tile_graphite", corner=True)

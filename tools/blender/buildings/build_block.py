@@ -56,6 +56,7 @@ def body(b, xa, xb, nf, front, back, roof):
                     continue
                 z = f * FLOOR
                 b.box(x, yp, z, 2 * LW, 0.12, 1.1, "panel")                       # парапет лоджії 1.1 м
+                b.box(x, yp, z + 1.1, 2 * LW + 0.1, 0.07, 0.07, "metal_dark")    # поручень
                 yb = ye - LOG * side + 0.01 * side
                 b.poly([(x - LW, yb, z), (x + LW, yb, z), (x + LW, yb, z + FLOOR), (x - LW, yb, z + FLOOR)][::-side], "panel_light")
                 for sx in (-1, 1):
@@ -149,9 +150,10 @@ def damaged():
     back = [FLOOR, FLOOR, 2 * FLOOR]
     east = [2 * FLOOR, FLOOR, 2 * FLOOR, FLOOR]
     front = [FLOOR, 2 * FLOOR]
-    panel_wall(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel", 5, piece=3.0, tilt=0.03)
-    panel_wall(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel", 6, piece=3.0, tilt=0.04)
-    panel_wall(b, (xc, Y1 - 0.2), (xc + 6.0, Y1 - 0.2), 0.4, front, "panel", 7, piece=3.0, tilt=0.03)
+    roots = []
+    roots += panel_wall(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel", 5, piece=3.0, tilt=0.03, inner=(0.0, 1.0), lips=(FLOOR,))
+    roots += panel_wall(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel", 6, piece=3.0, tilt=0.04, inner=(-1.0, 0.0), lips=(FLOOR, 2 * FLOOR))
+    roots += panel_wall(b, (xc, Y1 - 0.2), (xc + 6.0, Y1 - 0.2), 0.4, front, "panel", 7, piece=3.0, tilt=0.03, inner=(0.0, -1.0), lips=(FLOOR,))
     def wall_h(vals, t):
         return vals[min(len(vals) - 1, max(0, int(t * len(vals))))]
     # вікна лишаються там, де стіна їх досягає; вибиті — з м'якою кіптявою
@@ -185,18 +187,18 @@ def damaged():
         b.box_e(x, y, z, sx, sy, 0.22, "slab_dark", euler=(ax, ay, az), top="slab_dark")
     # розколота плита даху лежить у прольоті під кутами 20-50° на купі
     for (x, y, z, sx, sy, ax, ay, az) in ((9.2, -0.5, 3.4, 3.2, 2.8, 0.7, 0.1, 0.2), (12.4, 1.6, 4.4, 3.4, 2.4, -0.8, 0.2, -0.4), (10.6, 2.8, 2.8, 2.8, 2.2, 0.5, -0.6, 0.6), (13.8, -1.8, 3.8, 2.6, 2.4, -0.6, -0.3, 1.1)):
-        b.box_e(x, y, z, sx, sy, 0.22, "slab_dark", euler=(ax, ay, az), top="bitumen")
-    # арматура темна, іржава
-    for k in range(18):
-        x = rnd.uniform(6.5, 15.0)
-        p0 = (x, Y0 + 0.2, rnd.uniform(3.0, 6.0)) if rnd.random() < 0.5 else (X1 - 0.2, rnd.uniform(-5, 5), rnd.uniform(3.0, 6.0))
-        b.beam(p0, (p0[0] + rnd.uniform(-0.9, 0.9), p0[1] + rnd.uniform(-0.8, 0.8), p0[2] + rnd.uniform(0.5, 1.4)), 0.09, "rebar")
+        b.box_e(x, y, z, sx, sy, 0.34, "slab_dark", euler=(ax, ay, az), top="bitumen")
+    # арматура темна, іржава: кожен стрижень виходить із верху панелі
+    for k, (rx_, ry_, rz_) in enumerate(roots):
+        if k % 2:
+            continue
+        b.beam((rx_, ry_, rz_ - 0.1), (rx_ + rnd.uniform(-0.5, 0.5), ry_ + rnd.uniform(-0.5, 0.5), rz_ + rnd.uniform(0.6, 1.2)), 0.09, "rebar")
     # одна безперервна купа: заповнює проліт, виливається через низьку задню стіну на відсип і далі на торець
     mound(b, 11.0, 0.5, 4.8, 4.6, 5.0, 61, mat="heap_grey", rings=6, segs=22, tongues=2)
-    mound(b, 12.8, -5.2, 4.8, 2.1, 3.4, 62, mat="heap_grey", rings=6, segs=26, tongues=5)
-    mound(b, 16.4, -1.5, 2.6, 5.0, 2.6, 63, mat="heap_grey", rings=6, segs=24, tongues=4)
+    mound(b, 12.8, -5.2, 4.8, 2.1, 3.4, 62, mat="heap_grey", rings=7, segs=30, tongues=8)
+    mound(b, 16.4, -1.5, 2.6, 5.0, 2.6, 63, mat="heap_grey", rings=6, segs=28, tongues=6)
     chunks(b, 11.0, 0.0, 4.2, 4.0, 9, ("heap_grey", "rubble"), 2, z0=0.4, smin=0.5, smax=1.1)
-    for k in range(16):                                                          # розсип тоншає без жорсткого краю
+    for k in range(26):                                                          # розсип тоншає без жорсткого краю
         a = rnd.uniform(0, 2 * math.pi)
         t = rnd.uniform(0.75, 1.15)
         px, py = 14.0 + 5.8 * t * math.cos(a), -2.5 + 6.2 * t * math.sin(a)

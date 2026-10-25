@@ -7,9 +7,6 @@ path="res://.godot/imported/wall_field_wall_normal.png-c130f4887bb6241a3d32279c8
 metadata={
 "vram_texture": false
 }
-generator_parameters={
-"md5": "ba12da9f4df0fe156dabc704043db754"
-}
 
 [deps]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

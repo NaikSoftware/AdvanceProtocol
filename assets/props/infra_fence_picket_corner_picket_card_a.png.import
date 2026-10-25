@@ -7,9 +7,6 @@ path="res://.godot/imported/infra_fence_picket_corner_picket_card_a.png-89b8ba0c
 metadata={
 "vram_texture": false
 }
-generator_parameters={
-"md5": "ef6086bedff62256936e5cf299a0f369"
-}
 
 [deps]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
