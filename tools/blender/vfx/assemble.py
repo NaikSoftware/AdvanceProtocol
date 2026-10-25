@@ -13,16 +13,16 @@ from PIL import Image, ImageFilter
 # kind: loop | once. m = real width of one cell in metres (the camera frame of the bake).
 # lab: target (L lo, L hi) for the alpha-weighted mean colour; amax: cap on peak alpha.
 ATLAS = {
-    "smoke_column": dict(src="smoke_puff", kind="puff", n=64, cols=8, rows=8, fps=4, m=12.0,
+    "smoke_column": dict(src="smoke_puff", kind="puff", n=64, cols=8, rows=8, fps=4, m=22.1,
                               lab=(12, 27), tgt_L=26, ab=((-1, 2), (-3, 4))),
-    "smoke_column_thin": dict(src="smoke_puff", kind="puff", n=64, cols=8, rows=8, fps=4, m=12.0,
+    "smoke_column_thin": dict(src="smoke_puff", kind="puff", n=64, cols=8, rows=8, fps=4, m=22.1,
                               lab=(35, 45), tgt_L=40, amax=0.35, ab=((-1, 2), (-3, 4))),
-    "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=8, rows=8, fps=8, m=6.4,
+    "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=8, rows=8, fps=8, glow=0.8, glow_r=5, m=2.04,
                             lab=None),
-    "explosion": dict(src="explosion", kind="once", n=64, cols=8, rows=8, fps=48, m=20.0, lab=None),
-    "dirt_burst": dict(src="dirt_burst", kind="once", n=64, cols=8, rows=8, fps=40, m=16.0, desat=0.3,
+    "explosion": dict(src="explosion", kind="once", n=64, cols=8, rows=8, fps=48, m=22.4, lab=None),
+    "dirt_burst": dict(src="dirt_burst", kind="once", n=64, cols=8, rows=8, fps=40, m=13.7, desat=0.65,
                        lab=(28, 38), tgt_L=33, ab=((2, 4), (6, 10))),
-    "impact_flash": dict(src="flash", kind="once", n=16, cols=4, rows=4, fps=60, m=8.0, lab=None),
+    "impact_flash": dict(src="flash", kind="once", tail=6, n=16, cols=4, rows=4, fps=60, m=6.7, lab=None),
 }
 GRASS = np.array([92, 104, 70], np.float32) / 255  # muted late-autumn grass, L* ~ 41
 CM_PX = (7, 22)  # closest / farthest zoom, cm per screen pixel
@@ -57,7 +57,7 @@ def window(n, margin_zero=0.05, margin_full=0.18, bottom=(0.03, 0.09)):
 def load(src_dir):
     """Frames, lightly sharpened: Mantaflow smoke is diffusive and the folds need a firmer edge."""
     fs = sorted(glob.glob(src_dir + "/f_*.png"))
-    sh = ImageFilter.UnsharpMask(radius=1.4, percent=70, threshold=1)
+    sh = ImageFilter.UnsharpMask(radius=1.4, percent=25, threshold=1)
     return np.stack([np.asarray(Image.open(f).convert("RGBA").filter(sh), np.float32) / 255 for f in fs])
 
 
@@ -80,12 +80,25 @@ def process(cfg, frames):
         fr = loopify(fr[-2 * n:], n)
     else:
         fr = fr[:n].copy()
+    if cfg.get("tail"):  # a flash must end empty, the sim stops while it is still bright
+        k = cfg["tail"]
+        fr[-k:, ..., 3] *= np.linspace(1, 0, k + 1)[1:].reshape(-1, 1, 1).astype(np.float32)
     if cfg["kind"] == "puff":  # a puff is born and dies empty, so the loop closes without a seam
         t = np.arange(n, dtype=np.float32)
         up = np.clip(t / 3, 0, 1)
         dn = np.clip((n - 1 - t) / 8, 0, 1)
         fr[..., 3] *= (up * dn * up * dn * (3 - 2 * up * dn)).reshape(-1, 1, 1)
     H = fr.shape[1]
+    if cfg.get("glow"):  # soft halo under sharp flame sheets: blur the premultiplied frame and put it behind
+        from PIL import ImageFilter as IF
+        for i in range(fr.shape[0]):
+            pre = np.concatenate([fr[i, ..., :3] * fr[i, ..., 3:], fr[i, ..., 3:]], -1)
+            ch = [np.asarray(Image.fromarray((pre[..., k] * 255).astype(np.uint8)).filter(IF.GaussianBlur(cfg["glow_r"])), np.float32) / 255 for k in range(4)]
+            bl = np.stack(ch, -1) * cfg["glow"]
+            a0 = fr[i, ..., 3:]
+            o = pre + bl * (1 - a0)
+            al = np.clip(o[..., 3:], 1e-6, 1)
+            fr[i] = np.concatenate([np.clip(o[..., :3] / al, 0, 1), al], -1)
     wy, wx = window(H)
     fr = fr.copy()
     fr[..., 3] *= wy[None, :, None] * wx[None, None, :]
