@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, chunks, mound, wall_run, burn_ring, panel_wall
+from lib import Builder, chunks, mound, wall_run, burn_ring, panel_wall, opening
 
 out = lib.out_dir()
 LEN, DEP, FLOOR, NF = 30.0, 12.0, 3.1, 3
@@ -80,9 +80,7 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                 yy = y - (LOG * sgn if (i in cols and f >= 1) else 0.0)
                 if (side, i, f) in blown:
                     e = 0.03 * sgn
-                    q = [(x - 0.5, yy + e, z + 0.2), (x + 0.5, yy + e, z + 0.2), (x + 0.5, yy + e, z + 1.2), (x - 0.5, yy + e, z + 1.2)]
-                    b.poly(q[::sgn], "dark")
-                    burn_ring(b, "y", yy, x, z + 0.2, 1.0, 1.0, sgn)
+                    opening(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn)
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
                 if not (i in cols and f >= 1):
@@ -167,9 +165,7 @@ def damaged():
                 continue
             blow = True
             if blow:
-                q = [(x - 0.5, Y0 - 0.03, z + 0.2), (x + 0.5, Y0 - 0.03, z + 0.2), (x + 0.5, Y0 - 0.03, z + 1.2), (x - 0.5, Y0 - 0.03, z + 1.2)]
-                b.soot(q[::-1], (0.012, 0.012, 0.05, 0.05), 1)
-                burn_ring(b, "y", Y0, x, z + 0.2, 1.0, 1.0, -1)
+                opening(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1)
             else:
                 b.window(("y", Y0, -1), x, z, 1.4, 1.4)
     for k in range(6):
@@ -180,10 +176,9 @@ def damaged():
             z = f * FLOOR + 0.95
             if he < z + 1.5 or rnd.random() < 0.4:
                 continue
-            b.poly([(X1 + 0.03, yy - 0.5, z + 0.2), (X1 + 0.03, yy + 0.5, z + 0.2), (X1 + 0.03, yy + 0.5, z + 1.2), (X1 + 0.03, yy - 0.5, z + 1.2)], "dark")
-            burn_ring(b, "x", X1, yy, z + 0.2, 1.0, 1.0, 1)
+            opening(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1)
     # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
-    for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 3.0, 3.6, 1.8, 0.0, 0.0, 0.0), (13.5, -3.6, 6.1, 2.6, 2.0, 0.12, 0.0, 0.1), (8.0, 4.0, 3.0, 2.4, 1.6, -0.1, 0.0, 0.0)):
+    for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 2.9, 3.6, 1.8, 0.35, 0.0, 0.0), (13.5, -3.6, 5.9, 2.6, 2.0, 0.38, 0.0, 0.1), (8.0, 4.0, 2.9, 2.4, 1.6, -0.3, 0.0, 0.0)):
         b.box_e(x, y, z, sx, sy, 0.22, "slab_dark", euler=(ax, ay, az), top="slab_dark")
     # розколота плита даху лежить у прольоті під кутами 20-50° на купі
     for (x, y, z, sx, sy, ax, ay, az) in ((9.2, -0.5, 3.4, 3.2, 2.8, 0.38, 0.1, 0.2), (12.4, 1.6, 4.4, 3.4, 2.4, -0.4, 0.2, -0.4), (10.6, 2.8, 2.8, 2.8, 2.2, 0.3, -0.3, 0.6), (13.8, -1.8, 3.8, 2.6, 2.4, -0.35, -0.25, 1.1)):
@@ -193,22 +188,27 @@ def damaged():
         if k % 2:
             continue
         b.beam((rx_, ry_, rz_ - 0.1), (rx_ + rnd.uniform(-0.5, 0.5), ry_ + rnd.uniform(-0.5, 0.5), rz_ + rnd.uniform(0.6, 1.2)), 0.09, "rebar")
-    # одна безперервна купа: заповнює проліт, виливається через низьку задню стіну на відсип; без шипів — грудкувата маса
-    mound(b, 11.0, 0.5, 4.8, 4.6, 5.0, 61, mat="heap_grey", rings=7, segs=24, tongues=1)
-    mound(b, 12.8, -5.0, 4.6, 2.2, 2.6, 62, mat="heap_grey", rings=6, segs=22, tongues=2)
-    mound(b, 16.2, -1.5, 2.6, 5.0, 2.2, 63, mat="heap_grey", rings=6, segs=20, tongues=2)
-    chunks(b, 11.0, 0.0, 4.2, 4.0, 4, ("heap_grey", "rubble"), 2, z0=0.4, smin=0.5, smax=1.0)
-    for k in range(9):                                                          # скановані уламки на гребенях і краях відсипу
-        a_ = rnd.uniform(0, 2 * math.pi)
-        t = rnd.uniform(0.5, 1.1)
+    # одна безперервна купа: низька (кілька лобів), замкнена; скан-деталь запікається на неї з високого джерела
+    bh = Builder()
+    for (mx, my, mrx, mry, mh, ms, lo, hi_) in ((11.0, 0.5, 4.8, 4.6, 4.6, 61, (4, 16), (12, 52)), (12.8, -5.0, 4.6, 2.2, 2.2, 62, (3, 14), (10, 44)), (16.2, -1.5, 2.6, 5.0, 1.9, 63, (3, 12), (10, 40))):
+        mound(b, mx, my, mrx, mry, mh, ms, mat="heap_grey", rings=lo[0], segs=lo[1])
+        mound(bh, mx, my, mrx, mry, mh, ms, mat="heap_grey", rings=hi_[0], segs=hi_[1], jitter=0.12)
+    hrnd = random.Random(99)
+    for k in range(34):
+        a_ = hrnd.uniform(0, 2 * math.pi)
+        t = hrnd.uniform(0.1, 1.1)
         px, py = 14.0 + 5.4 * t * math.cos(a_), -2.5 + 5.6 * t * math.sin(a_)
-        if px < 14.5 or abs(py) > 8.4 or px > 20.0:
+        if px < 8.0 or abs(py) > 8.4 or px > 20.0:
             continue
-        b.rock(px, py, 0.4, rnd.uniform(0.3, 0.8), rnd.choice(("heap_grey", "rubble")), rnd)
-    for k in range(6):                                                           # півзанурені уламки панелей 0.15 м
-        px, py = rnd.uniform(14.0, 19.2), rnd.uniform(-7.8, 6.0)
-        b.box_e(px, py, 0.18, rnd.uniform(1.0, 1.9), rnd.uniform(0.8, 1.4), 0.15, "slab_dark", euler=(rnd.uniform(-0.25, 0.25), rnd.uniform(-0.25, 0.25), rnd.uniform(0, 3.1)), top="slab_dark")
-    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4200, footprint=(5, 2), anchor=(0, 0))
+        pz = 0.15 if px > 14.5 else 1.5
+        bh.rock(px, py, pz, hrnd.uniform(0.3, 1.0), hrnd.choice(("heap_grey", "rubble")), hrnd, buried=0.4)
+    for k in range(4):                                                           # справжні шматки, що ламають силует
+        px, py = rnd.uniform(14.5, 19.0), rnd.uniform(-7.5, 4.0)
+        b.rock(px, py, 0.5, rnd.uniform(0.6, 1.1), rnd.choice(("heap_grey", "rubble")), rnd, buried=0.4)
+    for k in range(4):                                                           # уламки панелей товщиною 0.3 м, наполовину в купі
+        px, py = rnd.uniform(14.8, 18.5), rnd.uniform(-6.5, 3.0)
+        b.box_e(px, py, 0.55, rnd.uniform(1.2, 1.9), rnd.uniform(0.9, 1.4), 0.3, "slab_dark", euler=(rnd.uniform(-0.3, 0.3), rnd.uniform(-0.3, 0.3), rnd.uniform(0, 3.1)), top="slab_dark")
+    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=3200, footprint=(5, 2), anchor=(0, 0), hi=bh)
 
 
 intact()

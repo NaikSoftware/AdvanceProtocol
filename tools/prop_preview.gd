@@ -3,15 +3,19 @@ extends Node
 ## зумі (найближче) і <name>_far.png на максимальному (де об'єкт ~100 px).
 ## Єдине освітлення для всіх наборів: м'яке холодне похмуре світло, приглушена волога сіра земля.
 ## Запуск (потрібне вікно, не --headless):
-##   $GODOT --path . res://tools/prop_preview.tscn -- [out_dir] [--graze] [--back] [--tank] [--dir=res://...] [name ...]
+##   $GODOT --path . res://tools/prop_preview.tscn -- [out_dir] [--graze] [--back] [--river] [--side] [--tank] [--dir=res://...] [name ...]
 ## Без out_dir знімки лягають у user://prop_preview. Без імен знімається все з теки (за замовчуванням assets/props).
 ##   --graze  додає <name>_graze.png: низьке бічне сонце, щоб побачити рельєф карти нормалей;
 ##   --back   додає <name>_back.png: об'єкт, повернутий на 180°, щоб побачити протилежний фасад;
+##   --river  ґрунт із текстури River (мокрий мул) замість сірої площини; файли отримують суфікс _river;
+##   --side   додає <name>_side.png: ортографічний вид збоку для перевірки кутів балок і висот;
 ##   --tank   ставить поруч коробку розміром із танк для масштабу (збоку, щоб не закривати малий об'єкт).
 
 var props_dir: String = "res://assets/props"
 var graze: bool = false
 var back: bool = false
+var river: bool = false
+var side: bool = false
 const WINDOW: Vector2i = Vector2i(1280, 720)
 ## Ширина смуги поля під об'єктом: мосту потрібна довжина з запасом, дому — тайл навколо.
 const FIELD_HALF: float = 6.0
@@ -26,6 +30,10 @@ func _ready() -> void:
 			graze = true
 		elif args[i] == "--back":
 			back = true
+		elif args[i] == "--river":
+			river = true
+		elif args[i] == "--side":
+			side = true
 		elif args[i] == "--tank":
 			tank = true
 		elif args[i].begins_with("--dir="):
@@ -54,6 +62,14 @@ func _ready() -> void:
 	var fm := StandardMaterial3D.new()
 	fm.albedo_color = Color(0.30, 0.32, 0.30)
 	fm.roughness = 1.0
+	if river:
+		# ґрунт River: волога розмита ріллі-мул з текстури гри, нижча яскравість, блиск мокрого
+		fm.albedo_texture = load("res://assets/terrain/field_albedo.png") as Texture2D
+		fm.normal_enabled = true
+		fm.normal_texture = load("res://assets/terrain/field_normal.png") as Texture2D
+		fm.uv1_scale = Vector3(5.0, 5.0, 1.0)
+		fm.albedo_color = Color(0.62, 0.64, 0.62)
+		fm.roughness = 0.45
 	field.material_override = fm
 	field.position = Vector3(cell.x, 0.0, cell.y)
 	add_child(field)
@@ -95,17 +111,32 @@ func _ready() -> void:
 			inst.add_child(box)
 		print("PROP %s tris=%d" % [n, _triangles(inst)])
 		rig.center_on(cell)
-		await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s.png" % [out, n])
-		await _shoot(rig, IsoCameraRig.MAX_ZOOM, "%s/%s_far.png" % [out, n])
+		await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s%s.png" % [out, n, "_river" if river else ""])
+		await _shoot(rig, IsoCameraRig.MAX_ZOOM, "%s/%s_far%s.png" % [out, n, "_river" if river else ""])
 		if graze:
 			sun.rotation_degrees = Vector3(-14.0, -70.0, 0.0)
 			sun.light_energy = 1.6
-			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_graze.png" % [out, n])
+			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_graze%s.png" % [out, n, "_river" if river else ""])
 			sun.rotation_degrees = Vector3(-50.0, -30.0, 0.0)
 			sun.light_energy = 0.9
 		if back:
 			inst.rotation.y = PI
-			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_back.png" % [out, n])
+			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_back%s.png" % [out, n, "_river" if river else ""])
+		if side:
+			var prev: Camera3D = get_viewport().get_camera_3d()
+			var cam := Camera3D.new()
+			cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+			cam.size = 7.0
+			add_child(cam)
+			cam.position = Vector3(cell.x, 1.1, cell.y + 12.0)
+			cam.look_at(Vector3(cell.x, 1.1, cell.y))
+			cam.make_current()
+			for i in 60:
+				await get_tree().process_frame
+			get_viewport().get_texture().get_image().save_png("%s/%s_side.png" % [out, n])
+			if prev != null:
+				prev.make_current()
+			cam.queue_free()
 		inst.queue_free()
 	get_tree().quit()
 

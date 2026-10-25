@@ -483,6 +483,7 @@ def mats():
         "pv_frame": make_material("pv_frame", flat=(0.10, 0.10, 0.105)),
         "brick_dark": make_material("brick_dark", "Bricks105", 1.0, recolor=(0.45, 0.22, 0.13), streak=0.5, base_dirt=0.6, bump=0.02),
         "slab_dark": make_material("slab_dark", "Concrete034", 1.2, (0.34, 0.32, 0.30), streak=0.2, base_dirt=0.5),
+        "heap_house": make_rubble_material("heap_house", [(0.40, (0.30, 0.27, 0.22)), (0.70, (0.115, 0.055, 0.034)), (0.88, (0.10, 0.092, 0.075)), (1.01, (0.045, 0.038, 0.03))]),
         "window": make_window_material(),
         "frame": make_material("frame", flat=(0.55, 0.55, 0.53)),
         "dark": make_material("dark", flat=(0.02, 0.02, 0.02)),
@@ -742,37 +743,43 @@ class Builder:
         return sum(len(f.verts) - 2 for f in self.bm.faces)
 
 
-def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, tongues=3, lump=0.4):
-    """Купа уламків одним мешем: контур із частками й язиками, низькочастотні западини й піки."""
+def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, tongues=0, lump=0.25, jitter=0.0):
+    """Низька широка купа одним замкненим мешем: профіль-косинус (схили ≲35°), нерівний контур із лопатями,
+    детермінований низькочастотний рельєф (низька й висока деталізація мають однаковий силует);
+    jitter додає дрібну випадковість лише для високого вихідного меша запікання."""
     import random
     rnd = random.Random(seed)
     ph = [rnd.uniform(0, 6.28) for _ in range(4)]
-    tong = [(rnd.uniform(0, 6.28), rnd.uniform(0.2, 0.4)) for _ in range(tongues)]
-    rad = []
-    for i in range(segs):
-        a = 2 * math.pi * i / segs
-        r = 1.0 + 0.22 * math.sin(3 * a + ph[0]) + 0.16 * math.sin(5 * a + ph[1]) + rnd.uniform(-0.2, 0.2)
+    tong = [(rnd.uniform(0, 6.28), rnd.uniform(0.15, 0.3)) for _ in range(tongues)]
+    jr = random.Random(seed * 7 + 1)
+
+    def radius(a):
+        r = 1.0 + 0.2 * math.sin(3 * a + ph[0]) + 0.13 * math.sin(5 * a + ph[1]) + 0.06 * math.sin(8 * a + ph[2])
         for (ta, tw) in tong:
             d = abs((a - ta + math.pi) % (2 * math.pi) - math.pi)
-            r += tw * max(0.0, 1 - d / 0.6)
-        rad.append(min(1.55, max(0.45, r)))
+            r += tw * max(0.0, 1 - d / 0.7)
+        return min(1.5, max(0.55, r))
+
     ring = []
     for k in range(rings + 1):
         t = k / rings
         row = []
         for i in range(segs):
             a = 2 * math.pi * i / segs
-            r = t * rad[i]
-            noise = 1.0 + 0.4 * math.sin(2 * a + ph[2] + 3 * t) + 0.3 * math.sin(5 * a + ph[3] - 4 * t) + 0.25 * math.sin(9 * a + ph[0] + 7 * t) + rnd.uniform(-0.3, 0.3)
-            z = z0 + hmax * (1 - t ** 2.3) * noise * rnd.uniform(0.75, 1.05) if k < rings else z0 - 0.12
+            r = t * radius(a)
             px, py = cx + rx * r * math.cos(a), cy + ry * r * math.sin(a)
-            if k < rings and lump:
-                kk = 2 * math.pi / 1.75
-                z += lump * math.sin(kk * px + ph[0]) * math.sin(kk * py + ph[1]) * (1 - t)
+            if k < rings:
+                noise = 1.0 + 0.22 * math.sin(2 * a + ph[2] + 3 * t) + 0.16 * math.sin(5 * a + ph[3] - 4 * t) + (jr.uniform(-jitter, jitter) if jitter else 0.0)
+                z = z0 + hmax * 0.5 * (1 + math.cos(math.pi * min(1.0, t))) * noise
+                if lump:
+                    kk = 2 * math.pi / 1.75
+                    z += lump * math.sin(kk * px + ph[0]) * math.sin(kk * py + ph[1]) * (1 - t)
+            else:
+                z = z0 - 0.12
             row.append(b.bm.verts.new((px, py, max(z0 - 0.12, z))))
         ring.append(row)
     fs = []
-    top = b.bm.verts.new((cx, cy, z0 + hmax * 0.95))
+    top = b.bm.verts.new((cx, cy, z0 + hmax * 0.99))
     for i in range(segs):
         j = (i + 1) % segs
         fs.append(b.bm.faces.new((ring[0][i], ring[0][j], top)))
@@ -906,6 +913,33 @@ def burn_ring(b, axis, c, u, z, w, h, sgn, g_side=0.65, g_bot=0.3, g_top=1.1, t_
         b.soot(pts, tones, 1)
 
 
+def opening(b, axis, c, u, z, w, h, sgn):
+    """Вибитий проріз вікна: опалена рамка (відкіс) ~0.1 м, всередині градієнт ~(35..45) sRGB, над перемичкою
+    кіптява, що згасає на 0.3-0.5 м. axis 'y': стіна з нормаллю по Y на y=c; axis 'x': нормаль по X."""
+    e = 0.025 * sgn
+    outn = Vector((0, sgn, 0)) if axis == "y" else Vector((sgn, 0, 0))
+
+    def P(du, zz, off=0.0):
+        return (u + du, c + e + off * sgn, zz) if axis == "y" else (c + e + off * sgn, u + du, zz)
+
+    def face(pts, tones):
+        n = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
+        if n.dot(outn) < 0:
+            pts, tones = pts[::-1], tones[::-1]
+        b.soot(pts, tones, 1)
+    hw = w / 2
+    r = 0.1
+    inner = [(-hw + r, z + r), (hw - r, z + r), (hw - r, z + h - r), (-hw + r, z + h - r)]
+    outer = [(-hw, z), (hw, z), (hw, z + h), (-hw, z + h)]
+    k_ = 2.3 if axis == "x" else 1.0                                    # торець у тіні: піднімаємо тон, щоб проріз читався
+    face([P(*inner[0], 0.01), P(*inner[1], 0.01), P(*inner[2], 0.01), P(*inner[3], 0.01)], (0.03 * k_, 0.03 * k_, 0.045 * k_, 0.045 * k_))
+    for i in range(4):
+        j = (i + 1) % 4
+        face([P(*outer[i]), P(*outer[j]), P(*inner[j], 0.005), P(*inner[i], 0.005)], (0.07, 0.07, 0.05, 0.05))
+    # кіптява над перемичкою 0.4 м, ширша за проріз
+    face([P(-hw - 0.15, z + h), P(hw + 0.15, z + h), P(hw + 0.05, z + h + 0.45), P(-hw - 0.05, z + h + 0.45)], (0.06, 0.06, 0.145, 0.145))
+
+
 def bent_sheet(b, p0, p1, width, mat, bend=0.35, axis="y"):
     """Зігнутий лист покрівлі: дві грані з перегином посередині; ширина вздовж осі axis."""
     p0, p1 = Vector(p0), Vector(p1)
@@ -1009,7 +1043,69 @@ def unwrap(me, flat, atlas_px, weights=None):
     return 100 / (sc * atlas_px)  # см на тексель, ураховуючи метри
 
 
-def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footprint=(1, 1), anchor=None, density=None):
+HEAP_SLOTS = {"heap", "heap_grey", "heap_house"}
+
+
+def heap_bake(me, b, hi, mt, img, nimg, atlas_px):
+    """Запікає деталь високополігональної купи (скани + щільна основа) на низькополігональні грані з матеріалом
+    купи: альбедо і тангентну нормаль, прямо в основний атлас (лише текселі цих граней)."""
+    idx = [i for i, s_ in enumerate(b.slots) if s_ in HEAP_SLOTS]
+    if not idx:
+        return
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.material_index not in idx], context="FACES")
+    lowme = bpy.data.meshes.new("low_heap")
+    bm.to_mesh(lowme)
+    bm.free()
+    for p in lowme.polygons:
+        p.material_index = 0
+    lowmat = bpy.data.materials.new("low_bake")
+    lowmat.use_nodes = True
+    node = lowmat.node_tree.nodes.new("ShaderNodeTexImage")
+    lowme.materials.append(lowmat)
+    low = bpy.data.objects.new("low_heap", lowme)
+    bpy.context.scene.collection.objects.link(low)
+    bmesh.ops.recalc_face_normals(hi.bm, faces=hi.bm.faces)
+    himesh = bpy.data.meshes.new("high_heap")
+    hi.bm.to_mesh(himesh)
+    for s_ in hi.slots:
+        himesh.materials.append(mt[s_])
+    high = bpy.data.objects.new("high_heap", himesh)
+    bpy.context.scene.collection.objects.link(high)
+    himg = bpy.data.images.new("hbake", atlas_px, atlas_px)
+    himg.generated_color = (1.0, 0.0, 1.0, 1.0)
+    node.image = himg
+    lowmat.node_tree.nodes.active = node
+    bpy.ops.object.select_all(action="DESELECT")
+    high.select_set(True)
+    low.select_set(True)
+    bpy.context.view_layer.objects.active = low
+    kw = dict(use_selected_to_active=True, cage_extrusion=1.2, max_ray_distance=3.0, margin=6, margin_type="EXTEND", use_clear=False)
+    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, **kw)
+    nim2 = bpy.data.images.new("hnorm", atlas_px, atlas_px, alpha=False)
+    nim2.generated_color = (0.5, 0.5, 1.0, 1.0)
+    nim2.colorspace_settings.name = "Non-Color"
+    node.image = nim2
+    bpy.ops.object.bake(type="NORMAL", normal_space="TANGENT", **kw)
+    H = np.array(himg.pixels[:]).reshape(-1, 4)
+    N2 = np.array(nim2.pixels[:]).reshape(-1, 4)
+    mask = (np.abs(H[:, 0] - 1.0) + np.abs(H[:, 1]) + np.abs(H[:, 2] - 1.0)) > 0.03
+    A = np.array(img.pixels[:]).reshape(-1, 4)
+    A[mask] = H[mask]
+    img.pixels[:] = A.ravel().tolist()
+    NN = np.array(nimg.pixels[:]).reshape(-1, 4)
+    NN[mask] = N2[mask]
+    nimg.pixels[:] = NN.ravel().tolist()
+    img.save()
+    nimg.save()
+    print("HEAPBAKE texels", int(mask.sum()))
+    for o in (low, high):
+        bpy.data.objects.remove(o)
+    bpy.ops.object.select_all(action="DESELECT")
+
+
+def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footprint=(1, 1), anchor=None, density=None, hi=None):
     """Меш → обʼєкт, UV, запікання атласу, один матеріал, масштаб 1/8, експорт, перевірка."""
     mt = mats()
     me = bpy.data.meshes.new(name)
@@ -1072,6 +1168,10 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footp
         nimg.filepath_raw = os.path.join(out_dir, name + "_normal.jpg")
         nimg.file_format = "JPEG"
     nimg.save()
+    if hi is not None:
+        heap_bake(me, b, hi, mt, img, nimg, atlas_px)
+        bpy.context.view_layer.objects.active = ob
+        ob.select_set(True)
 
     px = np.array(img.pixels[:]).reshape(-1, 4)[:, :3]
     px = px[px.sum(axis=1) > 0.002]
