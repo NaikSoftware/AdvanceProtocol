@@ -249,7 +249,9 @@ def log(tag, length, r, seed):
     limbs = [{"pts": pts, "r": [r * 1.1, r, r * 0.85, r * 0.7], "sides": 5}]
     for k in (1, 2):
         b = np.array(pts[k])
-        d = np.array([rng.uniform(-0.3, 0.3), rng.choice([-1, 1]) * 0.7, 0.7])
+        # Сучки — убік і лише трохи вгору: стовбур на проламаній клітинці лежить під
+        # корпусом, і сучок угору простромив би його.
+        d = np.array([rng.uniform(-0.3, 0.3), rng.choice([-1, 1]) * 0.95, 0.25])
         limbs.append({"pts": [b.tolist(), (b + d * rng.uniform(0.8, 1.4)).tolist()], "r": [r * 0.35, r * 0.2], "sides": 3})
     d = os.path.join(OUT, tag)
     os.makedirs(d, exist_ok=True)

@@ -259,6 +259,11 @@ glossy material in a field. Laid in loose rows 10–30 m apart, or stacked 2–3
 | bare deciduous (oak3, bare0) | 10–20 m | Ø 8–12 m | A web of branches over a visible ground shadow | Fully bare |
 | shrubs: hazel, willow, blackthorn | 2–5 m | Ø 2–5 m | Dark brown-grey mounds | Mostly bare, dense twigs |
 
+The heights above are the real trees. **In the game every tree is drawn about 40 % lower**, for
+readability from the game camera: pine and spruce 12–14 m, oak, lime and other broadleaf 10–12 m,
+birch 9–11 m, solitary trees in the same range. The whole tree scales together, so crown and trunk
+keep their proportions (pine trunk about 0.3 m). Shrubs and the edge belt keep their real size.
+
 Route: single hero trees (solitary oak, birch, roadside lime or pear) are **Tripo**, 1500–3000 faces,
 then foliage converted to alpha-cut cards in Blender if Tripo merges the crown into a solid blob.
 Prompt (oak):
@@ -311,7 +316,8 @@ be **identifiable at ~100 px** and inspectable. The numbers that frame the choic
 
 - A **shrub belt 3–6 m deep** (hazel, blackthorn, young birch, young pine 2–5 m tall) along every
   wood–field edge. It is denser than the interior and sits lower, so the edge steps up in 2–3 bands:
-  shrubs 2–5 m, then young or edge trees 8–15 m, then the full canopy 18–25 m.
+  shrubs 2–5 m, then young or edge trees 8–15 m, then the full canopy 18–25 m (in the game:
+  shrubs 2–5 m, edge trees 7–10 m, canopy 10–14 m — see the note under the table above).
 - Edge trees carry crowns lower and wider on the open side. Trunks are visible only in the first row.
 - The edge line is irregular, with bays and spurs of 5–20 m, never along tile edges (§8).
 - On the edge tile itself: deadfall logs 4–10 m (Poly Haven dead_tree_trunk_02, tree_stump_01, CC0),

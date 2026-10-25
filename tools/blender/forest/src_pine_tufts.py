@@ -1,10 +1,11 @@
-"""Спрайти пучків сосни з гілочок Poly Haven pine_tree_01 (CC0): pine_tree_01_twig_a..g_LOD1.
+"""Спрайти пучків хвої з гілочок Poly Haven pine_tree_01 (CC0), twig_a..g_LOD1.
 
 Запуск:
-  blender -b --factory-startup -P src_pine_tufts.py -- <pine_tree_01_1k.blend> <вихід> [спрайтів=10]
-Пише <вихід>/pine_tufts/sprite_NN.png. Кожен спрайт — 6–9 гілочок по 0,3–0,7 м, розкладених
-віялом від спільного центру, як пагони на кінці соснової гілки: згори хвоя читається
-променями. Пучок, вирізаний шаром зі всієї крони, давав пласку лапату масу, схожу на листя.
+  blender -b --factory-startup -P src_pine_tufts.py -- <pine_tree_01_1k.blend> <вихід> [спрайтів=10] [pine|spruce]
+Пише <вихід>/<вид>_tufts/sprite_NN.png. Кожен спрайт — 10–14 гілочок по 0,3–0,7 м,
+розкладених зіркою від спільного центру, як пагони на кінці гілки: згори хвоя читається
+променями з рваним прозорим краєм. Пучок, вирізаний шаром зі всієї крони, давав пласку
+лапату масу, схожу на листя. Ялинові гілочки звисають (нахил униз), соснові — вгору.
 """
 import math
 import os
@@ -20,7 +21,12 @@ import crown_lib as cl  # noqa: E402
 argv = sys.argv[sys.argv.index("--") + 1:]
 LIB, OUT = argv[:2]
 N = int(argv[2]) if len(argv) > 2 else 10
+KIND = argv[3] if len(argv) > 3 else "pine"
+# Гілочки ялини в fir_tree_01 — голий кістяк (хвою там розставляють вузли геометрії), тож
+# і ялиновий пучок збирається з соснових гілочок: густіше, звислим віялом; темніший тон
+# дає атлас.
 NAMES = ["pine_tree_01_twig_%s_LOD1" % c for c in "abcdefg"]
+TILT = (15, 40) if KIND == "pine" else (-25, 5)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 with bpy.data.libraries.load(LIB, link=False) as (src, dst):
@@ -40,21 +46,21 @@ sc.render.resolution_x = sc.render.resolution_y = 256
 cam.data.ortho_scale = 1.3
 cam.data.clip_start = 1.0
 cam.data.clip_end = 100.0
-out = os.path.join(OUT, "pine_tufts")
+out = os.path.join(OUT, KIND + "_tufts")
 os.makedirs(out, exist_ok=True)
 rng = random.Random(7)
 for i in range(N):
     for o in list(sc.objects):
         if o.type == "MESH":
             bpy.data.objects.remove(o)
-    k = rng.randint(6, 9)
+    k = rng.randint(10, 14) if KIND == "pine" else rng.randint(14, 18)
     for j in range(k):
         me = rng.choice(protos)
         o = bpy.data.objects.new("tw", me)
         sc.collection.objects.link(o)
         yaw = 2 * math.pi * j / k + rng.uniform(-0.3, 0.3)
-        # Гілочка лежить уздовж +Y; нахил угору 15–40°, поворот навколо осі пучка.
-        o.rotation_euler = Euler((math.radians(rng.uniform(15, 40)), 0, yaw - math.pi / 2), "XYZ")
+        # Гілочка лежить уздовж +Y; нахил TILT, поворот навколо осі пучка.
+        o.rotation_euler = Euler((math.radians(rng.uniform(*TILT)), 0, yaw - math.pi / 2), "XYZ")
         f = rng.uniform(0.75, 1.05)
         o.scale = (f, f, f)
         o.location = (rng.gauss(0, 0.04), rng.gauss(0, 0.04), rng.gauss(0, 0.03))
@@ -62,4 +68,4 @@ for i in range(N):
     cl.aim(cam, (0, 0, 0.08), d, 30)
     sc.render.filepath = os.path.join(out, "sprite_%02d.png" % i)
     bpy.ops.render.render(write_still=True)
-    print("TUFT", i, k)
+    print("TUFT", KIND, i, k)
