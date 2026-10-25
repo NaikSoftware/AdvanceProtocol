@@ -86,6 +86,9 @@ const WIRE_GONE_DIST: float = 34.0
 const FIELD_FENCE_RUN: int = 3
 const FIELD_FENCE_CHANCE: int = 6
 const HAY_CHANCE: int = 2
+## Найменший проміжок між будівлями сусідніх слідів, клітинки: стіни можуть торкатись, але не
+## врізатись; запас більший за нуль лишає порожніми забагато дворів у тісних групах.
+const STRUCTURE_GAP: float = 0.0
 const _FADE_SHADER: Shader = preload("res://game/battle/shaders/prop_fade.gdshader")
 
 ## Модель -> {mesh, local, footprint, aabb, wires, tris}; спільний на процес, бо GLB кешуються.
@@ -108,8 +111,8 @@ var _crushed: Dictionary = {}
 var _board_size: Vector2i = Vector2i.ZERO
 ## Клітинки дошки з лісом: тут стоятимуть дерева, коли їхній вигляд буде готовий.
 var forest_cells: Array[Vector2i] = []
-## Будівлі й руїни кидають тінь сонця. Без неї на сонячній карті дім висить над землею; ставити
-## до build().
+## Пропси (крім мостів) кидають тінь сонця. Без неї на сонячній карті дім, тюк чи опора висять
+## над землею; ставити до build().
 var structure_shadows: bool = false
 
 
@@ -298,9 +301,10 @@ func _build_nodes(haze: bool) -> void:
 		var mmi := MultiMeshInstance3D.new()
 		mmi.name = String(m)
 		mmi.multimesh = mm
-		# §8: тіні — юнітам; будівлям — лише там, де без тіні сонячний дім висить у повітрі.
-		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if fades and structure_shadows \
-				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# §8: тіні — юнітам; пропсам — лише там, де без тіні на сонці річ висить над землею. Каміння
+		# без тіні: низьке, а прохід тіней по ~50 брилах Ridge коштує понад 50 тис. трикутників.
+		var casts: bool = structure_shadows and kind != Kind.BRIDGE and kind != Kind.BOULDER
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if fades:
 			mmi.material_override = _fade_material(m, info, haze)
 		add_child(mmi)
@@ -432,6 +436,9 @@ class _Placer:
 	var salt: int
 	var used: Dictionary = {}
 	var spans: Array = []
+	## Межі вже поставлених будівель у XZ: виступ моделі за слід (дозволений ассетом до 0.1 тайла)
+	## не сміє врізатись у сусідню будівлю.
+	var placed: Array[Rect2] = []
 	## Клітинки дошки, на яких уже стоїть дрібний пропс (одна річ на ребро).
 	var edges: Dictionary = {}
 
@@ -573,7 +580,7 @@ class _Placer:
 						continue
 					for rot in 4:
 						var size_r: Vector2i = fp if rot % 2 == 0 else Vector2i(fp.y, fp.x)
-						if _fits(free, c, size_r):
+						if _fits(free, c, size_r) and _clear_of_placed(m, c, rot, size_r):
 							var weight: int = int(s.get("weight", 1)) * size_r.x * size_r.y
 							if _faces_road(c, size_r, rot):
 								weight *= 3
@@ -588,6 +595,19 @@ class _Placer:
 				if roll < 0:
 					_put_structure(o[0], o[1], o[2], o[3], free)
 					break
+
+	func _rect_of(m: StringName, origin: Vector2i, rot: int, s: Vector2i) -> Rect2:
+		var centre := Vector2(origin) + Vector2(s - Vector2i.ONE) * 0.5
+		var box: AABB = Transform3D(Basis(Vector3.UP, rot * PI * 0.5), Vector3(centre.x, 0.0, centre.y)) \
+				* ((PropLayer.model(m) as Dictionary)["aabb"] as AABB)
+		return Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+
+	func _clear_of_placed(m: StringName, origin: Vector2i, rot: int, s: Vector2i) -> bool:
+		var r: Rect2 = _rect_of(m, origin, rot, s).grow(STRUCTURE_GAP)
+		for p in placed:
+			if r.intersects(p):
+				return false
+		return true
 
 	func _fits(free: Dictionary, origin: Vector2i, s: Vector2i) -> bool:
 		for dy in s.y:
@@ -618,6 +638,7 @@ class _Placer:
 				for o: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
 					lo = minf(lo, ground(c.x + o.x, c.y + o.y))
 		used[m] = int(used.get(m, 0)) + 1
+		placed.append(_rect_of(m, origin, rot, s))
 		var centre := Vector2(origin) + Vector2(s - Vector2i.ONE) * 0.5
 		layer._add(m, Transform3D(Basis(Vector3.UP, rot * PI * 0.5), Vector3(centre.x, lo, centre.y)),
 				_board_only(cells))

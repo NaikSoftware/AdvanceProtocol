@@ -81,6 +81,21 @@ func test_structures_lie_wholly_inside_building_cells(p = use_parameters(MAPS)) 
 	assert_gt(checked, 0, "%s: будівлі є" % p)
 
 
+## Сусідні будівлі не врізаються одна в одну, хоч модель і може виступати за свій слід.
+func test_structures_never_intersect(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _view(_map(p))
+	var rects: Array[Rect2] = []
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+			continue
+		var box: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var r := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+		for o in rects:
+			assert_false(r.intersects(o), "%s: %s врізається в сусіда" % [p, inst["model"]])
+		rects.append(r)
+
+
 ## Дрібний пропс — лише на прохідній клітинці дошки і поза квадратом юніта в її центрі.
 func test_nothing_small_on_a_unit_centre(p = use_parameters(MAPS)) -> void:
 	var m: MapData = _map(p)
@@ -367,7 +382,7 @@ func test_vehicle_crushes_infantry_does_not_and_the_enemy_never_sees_it_unscoute
 	assert_false(_faded(view, Vector2i(4, 4)), "§3.5: прозорий дах не видає невидимих стрільців")
 
 
-## Тінь сонця кидають лише будівлі й руїни і лише з увімкненим перемикачем.
+## Тінь сонця кидають пропси (крім мостів і каміння) і лише з увімкненим перемикачем.
 func test_structure_shadows_only_when_switched_on() -> void:
 	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
 	add_child_autofree(view)
@@ -375,7 +390,7 @@ func test_structure_shadows_only_when_switched_on() -> void:
 	view.build(_house_board())
 	for n: MultiMeshInstance3D in view.props().find_children("*", "MultiMeshInstance3D", false, false):
 		var k: int = _kind(StringName(n.name))
-		var want: int = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if k == PropLayer.Kind.STRUCTURE \
+		var want: int = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if k != PropLayer.Kind.BRIDGE and k != PropLayer.Kind.BOULDER \
 				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		assert_eq(n.cast_shadow, want, n.name)
 
