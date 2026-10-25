@@ -96,16 +96,17 @@ func test_apply_sends_the_haze_foliage_and_sky_to_every_material() -> void:
 		assert_true(ProjectSettings.has_setting("shader_globals/" + g), g)
 
 
-## Хмарне чи ясне небо задає світло: під хмарами тіні бліді й м'які, а світло неба сильне
-## відносно сонця; на ясному небі — навпаки.
+## Хмарне чи ясне небо задає світло: під хмарами світло розсіяне — небо сильне відносно сонця,
+## тінь розмита фільтром; на ясному небі сонце спрямоване, і тінь має напівтінь від його
+## кутового розміру. Тіні дерев на сонячних картах світлі й м'які, щоб не тягнути погляд.
 func test_the_sky_type_decides_shadows_and_ambient() -> void:
 	var overcast: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
 	assert_lt(overcast.sky_clear, 0.5, "Річка похмура")
 	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres"]:
 		var clear: BattleLook = BattleLook.for_map_path(path)
 		assert_gt(clear.sky_clear, 0.5, path)
-		assert_lt(overcast.shadow_opacity, clear.shadow_opacity, path)
 		assert_gt(overcast.shadow_blur, clear.shadow_blur, path)
+		assert_gt(clear.sun_angular_deg, overcast.sun_angular_deg, path)
 		assert_gt(overcast.ambient_energy / overcast.light_energy,
 				clear.ambient_energy / clear.light_energy, path)
 
@@ -132,6 +133,22 @@ func test_water_waves_follow_the_weather() -> void:
 	rig.apply(ridge)
 	assert_almost_eq(rig.applied_globals[&"water_wind"], ridge.water_wind, 1e-5)
 	assert_true(ProjectSettings.has_setting("shader_globals/water_wind"))
+
+
+## На сонячних картах тінь сонця світла й м'яка, тож юніта на землі тримає тінь-контакт;
+## на похмурій Річці її нема — там вигляд затверджений як є.
+func test_sunny_maps_give_units_a_contact_shadow() -> void:
+	assert_eq(BattleLook.for_map_path("res://maps/river.tres").unit_contact_shadow, 0.0)
+	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres"]:
+		var look: BattleLook = BattleLook.for_map_path(path)
+		assert_gt(look.unit_contact_shadow, 0.0, path)
+		assert_gt(look.sun_angular_deg, 0.0, path + ": м'яка тінь сонця")
+	var rig: WeatherRig = _rig()
+	var look: BattleLook = BattleLook.for_map_path("res://maps/crossroads.tres")
+	rig.apply(look)
+	assert_almost_eq(rig.applied_globals[&"unit_contact_shadow"], look.unit_contact_shadow, 1e-5)
+	assert_almost_eq(rig.sun.light_angular_distance, look.sun_angular_deg, 1e-5)
+	assert_true(ProjectSettings.has_setting("shader_globals/unit_contact_shadow"))
 
 
 func test_each_map_names_its_season() -> void:

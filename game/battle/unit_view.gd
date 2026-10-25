@@ -536,12 +536,37 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 	var hull_size: Vector3 = (hull.mesh as BoxMesh).size
 	_half_base = Vector2(hull_size.x, hull_size.z) * 0.5
 	_hull_material = hull.material_override as StandardMaterial3D
+	_silhouette.add_child(_build_contact_shadow(hull_size))
 
 	# ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2) — єдиний виклик, єдине місце, де стрілку
 	# додають на дошку. Прибрати стрілку — це прибрати рівно ці два рядки
 	# (або поставити _DEBUG_SHOW_FACING_ARROW у false), а не шукати по файлу.
 	if _DEBUG_SHOW_FACING_ARROW:
 		_silhouette.add_child(_build_facing_arrow(hull_size))
+
+
+const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/unit_contact_shadow.gdshader")
+## Пляма тіні-контакту ширша за слід корпусу: край гасне вже за корпусом.
+const CONTACT_SPREAD: float = 2.0
+static var _contact_material: ShaderMaterial
+
+
+## Тінь-контакт: плаский квад під корпусом у силуеті, тож нахиляється разом із ним на схилі й
+## ховається разом із юнітом. Сонця не чекає — силу ставить вигляд карти глобальним uniform.
+func _build_contact_shadow(hull_size: Vector3) -> MeshInstance3D:
+	if _contact_material == null:
+		_contact_material = ShaderMaterial.new()
+		_contact_material.shader = _CONTACT_SHADER
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(hull_size.x, hull_size.z) * CONTACT_SPREAD
+	var mi := MeshInstance3D.new()
+	mi.name = "ContactShadow"
+	mi.mesh = plane
+	mi.material_override = _contact_material
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.layers = 1 << (UNIT_LAYER - 1)
+	mi.position = Vector3(0.0, 0.01, 0.0)
+	return mi
 
 
 ## Перебудова юнітів після кожної дії створює десяток вузлів: матеріал і

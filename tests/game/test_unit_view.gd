@@ -44,6 +44,20 @@ func test_bind_picks_a_distinct_silhouette_per_class() -> void:
 	assert_eq(seen_sizes.size(), type_ids.size(), "кожен клас мусить мати власний, ні на який інший не схожий силует")
 
 
+## Тінь-контакт: плаский квад під корпусом, ширший за його слід, сам тіні від сонця не кидає;
+## лежить у силуеті, тож нахиляється й ховається разом із юнітом.
+func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
+	for type_id: int in [0, 5, 11]:
+		view.bind(_unit(type_id))
+		var blob: MeshInstance3D = view.get_node("Silhouette/ContactShadow")
+		var hull: Vector3 = (view.get_node("Silhouette/Hull").mesh as BoxMesh).size
+		var size: Vector2 = (blob.mesh as PlaneMesh).size
+		assert_gt(size.x, hull.x)
+		assert_gt(size.y, hull.z)
+		assert_between(blob.position.y, 0.0, 0.05, "на ґрунті, під корпусом")
+		assert_eq(blob.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
 ## R14: face() твінується (не клацає миттєво), тож перевіряємо ціль твіна
 ## через custom_step — той самий прийом, що й для move_along/play_destroyed,
 ## а не читаємо rotation_degrees.y одразу після виклику.

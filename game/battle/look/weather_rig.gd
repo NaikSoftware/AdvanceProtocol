@@ -108,6 +108,7 @@ func apply(look: BattleLook) -> void:
 	sun.rotation_degrees = Vector3(-look.light_pitch_deg, look.light_yaw_deg, 0.0)
 	sun.shadow_opacity = look.shadow_opacity
 	sun.shadow_blur = look.shadow_blur
+	sun.light_angular_distance = look.sun_angular_deg
 	environment.ambient_light_color = look.ambient_color
 	environment.ambient_light_energy = look.ambient_energy
 	_look = look
@@ -131,6 +132,7 @@ func apply(look: BattleLook) -> void:
 	_set_global(&"sky_clear", look.sky_clear)
 	_set_global(&"water_murk", look.water_murk)
 	_set_global(&"water_wind", look.water_wind)
+	_set_global(&"unit_contact_shadow", look.unit_contact_shadow)
 	# Світло падає вздовж -Z сонця, тож напрям НА сонце — його +Z.
 	_set_global(&"sun_dir", sun.basis.z)
 	_set_global(&"haze_color", _rgb(look.haze_color))
