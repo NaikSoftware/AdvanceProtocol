@@ -139,42 +139,82 @@ func test_apply_turns_rain_and_wetness_on_and_off() -> void:
 	assert_eq(rig.applied_globals[&"weather_wetness"], 0.0)
 
 
-## Дощ — коробка довкола фокуса камери, завбільшки з кадр: густота на екрані та сама на
-## будь-якому віддаленні, а краплі не витрачаються на невидиму частину дошки.
-func test_rain_follows_the_camera_focus_and_frame() -> void:
+func _rain_uniforms() -> Array[String]:
+	var names: Array[String] = []
+	var shader := load("res://game/battle/shaders/rain.gdshader") as Shader
+	for u: Dictionary in shader.get_shader_uniform_list():
+		names.append(String(u.name))
+	# Порожній список зробив би перевірки «нема такого uniform» порожніми.
+	assert_true("cell_origin" in names and "exposure" in names, "uniform шейдера дощу прочитано")
+	return names
+
+
+## Краплі прив'язані до світу: де крапля, вирішує світовий номер її клітинки, а не фокус камери.
+## Шейдер не бачить фокуса; кутова клітинка решітки — ціле кратне кроку, тож пан менший за
+## клітинку нічого не міняє, а більший зсуває решітку на цілі кроки — кожна крапля лишається на
+## своєму місці світу. Розмір клітинки не залежить ні від фокуса, ні від зуму.
+func test_rain_drops_stay_in_the_world_when_the_camera_pans() -> void:
+	var names: Array[String] = _rain_uniforms()
+	assert_false("focus" in names, "шейдер дощу не мусить рахувати краплі від фокуса")
+	assert_false("box_size" in names)
 	var rig: WeatherRig = _rig()
+	rig.apply(BattleLook.for_map_path("res://maps/river.tres"))
 	var mat := rig.rain.material_override as ShaderMaterial
-	rig.follow(Vector3(5.0, 0.0, 7.0), 6.0)
-	assert_eq(mat.get_shader_parameter("focus"), Vector3(5.0, 0.0, 7.0))
-	var near: Vector3 = mat.get_shader_parameter("box_size")
-	rig.follow(Vector3(5.0, 0.0, 7.0), 18.0)
-	var far: Vector3 = mat.get_shader_parameter("box_size")
-	assert_almost_eq(far, near * 3.0, Vector3.ONE * 1e-3)
-	# Зум рухає й розтягує лише коробку: швидкість і витримка штриха — у світі й сталі.
+	rig.follow(Vector3(5.0, 0.0, 7.0), 12.0)
+	var o1: Vector3 = mat.get_shader_parameter("cell_origin")
+	var s: float = mat.get_shader_parameter("stride")
+	var cell: Vector3 = mat.get_shader_parameter("cell")
+	assert_eq(fposmod(o1.x, s), 0.0)
+	assert_eq(fposmod(o1.z, s), 0.0)
+	# Пан на чверть клітинки: решітка та сама.
+	rig.follow(Vector3(5.0 + cell.x * s * 0.25, 0.0, 7.0), 12.0)
+	assert_eq(mat.get_shader_parameter("cell_origin"), o1)
+	# Пан на кілька клітинок: решітка зсувається на цілі кроки, клітинка та сама.
+	for pan: float in [1.37, 4.9, -3.3]:
+		rig.follow(Vector3(5.0 + pan, 0.0, 7.0 - pan * 0.5), 12.0)
+		var o2: Vector3 = mat.get_shader_parameter("cell_origin")
+		assert_eq(fposmod(o2.x - o1.x, s), 0.0, "пан %s" % pan)
+		assert_eq(fposmod(o2.z - o1.z, s), 0.0, "пан %s" % pan)
+		assert_eq(mat.get_shader_parameter("cell"), cell)
+
+
+## Зум бере рідшу решітку тих самих світових клітинок (крок — степінь двійки), тож краплі,
+## що лишились видимими, не зсуваються, а густота на екрані лишається тією самою.
+func test_rain_zoom_thins_the_same_world_lattice() -> void:
+	var rig: WeatherRig = _rig()
+	rig.apply(BattleLook.for_map_path("res://maps/river.tres"))
+	var mat := rig.rain.material_override as ShaderMaterial
+	var cell: Vector3 = Vector3.ZERO
+	var last: float = 0.0
 	for zoom: float in [6.0, 13.0, 20.0]:
 		rig.follow(Vector3(5.0, 0.0, 7.0), zoom)
-		assert_almost_eq(float(mat.get_shader_parameter("fall_speed")), WeatherRig.RAIN_FALL, 1e-5)
+		var s: float = mat.get_shader_parameter("stride")
+		assert_eq(s, pow(2.0, roundf(log(s) / log(2.0))), "крок — степінь двійки")
+		assert_true(s >= last)
+		last = s
+		if cell != Vector3.ZERO:
+			assert_eq(mat.get_shader_parameter("cell"), cell, "зум %s" % zoom)
+		cell = mat.get_shader_parameter("cell")
+	assert_eq(mat.get_shader_parameter("stride"), 4.0, "найбільше віддалення бере кожну четверту")
+
+
+## Довжина штриха — розмиття руху у світі: швидкість × витримка. Жодної довжини в пікселях —
+## вона з наближенням лишалась би сталою, а швидкість на екрані росла б («палиці»). Зум не міняє
+## ні швидкості, ні витримки.
+func test_rain_streak_length_is_world_speed_times_exposure() -> void:
+	var names: Array[String] = _rain_uniforms()
+	for bad: String in ["streak_px", "min_streak_px", "streak_length"]:
+		assert_false(bad in names, bad)
+	var code: String = (load("res://game/battle/shaders/rain.gdshader") as Shader).code
+	assert_true(code.contains("tail = head - vel * exposure"), "штрих — шлях краплі за витримку")
+	var rig: WeatherRig = _rig()
+	var mat := rig.rain.material_override as ShaderMaterial
+	for zoom: float in [6.0, 13.0, 20.0]:
+		rig.follow(Vector3(5.0, 0.0, 7.0), zoom)
+		assert_almost_eq(float(mat.get_shader_parameter("fall_speed")),
+				-WeatherRig.rain_velocity().y, 1e-5)
 		assert_almost_eq(float(mat.get_shader_parameter("exposure")), WeatherRig.RAIN_EXPOSURE,
 				1e-5)
-
-
-## Штрих на екрані пролітає свою довжину за ту саму частку секунди на будь-якому зумі: довжина
-## й швидкість проєктуються однаково. Інакше з наближенням дощ «прискорюється» відносно штриха.
-func test_rain_streak_length_to_screen_speed_is_the_same_at_every_zoom() -> void:
-	var cam: IsoCameraRig = (load("res://game/camera/iso_camera_rig.tscn") as PackedScene).instantiate()
-	add_child_autofree(cam)
-	var v: Vector3 = WeatherRig.rain_velocity()
-	var dt: float = 0.005
-	for zoom: float in [6.0, 13.0, 20.0]:
-		cam.zoom_level = zoom
-		cam._place_camera()
-		var head := Vector3(0.5, 2.0, 0.5)
-		var length_px: float = cam.unproject(head).distance_to(
-				cam.unproject(head - v * WeatherRig.RAIN_EXPOSURE))
-		var speed_px: float = cam.unproject(head + v * dt).distance_to(cam.unproject(head)) / dt
-		assert_gt(speed_px, 0.0)
-		assert_almost_eq(length_px / speed_px, WeatherRig.RAIN_EXPOSURE,
-				WeatherRig.RAIN_EXPOSURE * 0.05, "зум %s" % zoom)
 
 
 ## Вода й дощ — обидва прозорі без запису глибини; без пріоритету порядок залежав би від пана.
