@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, chunks, mound, wall_run, burn_ring
+from lib import Builder, chunks, mound, wall_run, burn_ring, panel_wall
 
 out = lib.out_dir()
 LEN, DEP, FLOOR, NF = 30.0, 12.0, 3.1, 3
@@ -79,9 +79,9 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                 yy = y - (LOG * sgn if (i in cols and f >= 1) else 0.0)
                 if (side, i, f) in blown:
                     e = 0.03 * sgn
-                    q = [(x - 0.7, yy + e, z), (x + 0.7, yy + e, z), (x + 0.7, yy + e, z + 1.4), (x - 0.7, yy + e, z + 1.4)]
+                    q = [(x - 0.5, yy + e, z + 0.2), (x + 0.5, yy + e, z + 0.2), (x + 0.5, yy + e, z + 1.2), (x - 0.5, yy + e, z + 1.2)]
                     b.poly(q[::sgn], "dark")
-                    burn_ring(b, "y", yy, x, z, 1.4, 1.4, sgn)
+                    burn_ring(b, "y", yy, x, z + 0.2, 1.0, 1.0, sgn)
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
                 if not (i in cols and f >= 1):
@@ -145,16 +145,16 @@ def damaged():
                 h = max(1, min(cap, h + rnd.choice((-2, -1, 1, 1, 2))))
             out_.append(h * FLOOR + rnd.uniform(-0.25, 0.25))
         return out_
-    back = steps(9, 1)                               # стіна біля проламу не вища за поверх
-    east = steps(12, 2)                              # дальня стіна не вища за два поверхи
-    front = steps(4, 2)
-    wall_run(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel_vc", "panel_vc", 5, pitch=0.7, inner_tone=0.45)
-    wall_run(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel_vc", "panel_vc", 6, pitch=0.7)
-    wall_run(b, (xc, Y1 - 0.2), (xc + 5.0, Y1 - 0.2), 0.4, front, "panel_vc", "panel_vc", 7, pitch=0.7)
-    # вікна лишаються там, де стіна їх досягає; вибиті — з м'якою кіптявою
+    # прямі збірні панелі по 3 м із двома рівнями зламаного верху і легким відхиленням від виска
+    back = [FLOOR, FLOOR, 2 * FLOOR]
+    east = [2 * FLOOR, FLOOR, 2 * FLOOR, FLOOR]
+    front = [FLOOR, 2 * FLOOR]
+    panel_wall(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel", 5, piece=3.0, tilt=0.03)
+    panel_wall(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel", 6, piece=3.0, tilt=0.04)
+    panel_wall(b, (xc, Y1 - 0.2), (xc + 6.0, Y1 - 0.2), 0.4, front, "panel", 7, piece=3.0, tilt=0.03)
     def wall_h(vals, t):
-        i = min(len(vals) - 2, max(0, int(t * (len(vals) - 1))))
-        return vals[i]
+        return vals[min(len(vals) - 1, max(0, int(t * len(vals))))]
+    # вікна лишаються там, де стіна їх досягає; вибиті — з м'якою кіптявою
     for i in (7, 8):
         x = bay_x(i)
         t = (x - xc) / (X1 - xc)
@@ -165,9 +165,9 @@ def damaged():
                 continue
             blow = True
             if blow:
-                q = [(x - 0.7, Y0 - 0.03, z), (x + 0.7, Y0 - 0.03, z), (x + 0.7, Y0 - 0.03, z + 1.4), (x - 0.7, Y0 - 0.03, z + 1.4)]
+                q = [(x - 0.5, Y0 - 0.03, z + 0.2), (x + 0.5, Y0 - 0.03, z + 0.2), (x + 0.5, Y0 - 0.03, z + 1.2), (x - 0.5, Y0 - 0.03, z + 1.2)]
                 b.poly(q, "dark")
-                burn_ring(b, "y", Y0, x, z, 1.4, 1.4, -1)
+                burn_ring(b, "y", Y0, x, z + 0.2, 1.0, 1.0, -1)
             else:
                 b.window(("y", Y0, -1), x, z, 1.4, 1.4)
     for k in range(6):
@@ -178,8 +178,8 @@ def damaged():
             z = f * FLOOR + 0.95
             if he < z + 1.5 or rnd.random() < 0.4:
                 continue
-            b.poly([(X1 + 0.03, yy - 0.7, z), (X1 + 0.03, yy + 0.7, z), (X1 + 0.03, yy + 0.7, z + 1.4), (X1 + 0.03, yy - 0.7, z + 1.4)], "dark")
-            burn_ring(b, "x", X1, yy, z, 1.4, 1.4, 1)
+            b.poly([(X1 + 0.03, yy - 0.5, z + 0.2), (X1 + 0.03, yy + 0.5, z + 0.2), (X1 + 0.03, yy + 0.5, z + 1.2), (X1 + 0.03, yy - 0.5, z + 1.2)], "dark")
+            burn_ring(b, "x", X1, yy, z + 0.2, 1.0, 1.0, 1)
     # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
     for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 3.0, 3.6, 1.8, 0.0, 0.0, 0.0), (13.5, -3.6, 6.1, 2.6, 2.0, 0.12, 0.0, 0.1), (8.0, 4.0, 3.0, 2.4, 1.6, -0.1, 0.0, 0.0)):
         b.box_e(x, y, z, sx, sy, 0.22, "slab_dark", euler=(ax, ay, az), top="slab_dark")
@@ -196,7 +196,7 @@ def damaged():
     mound(b, 12.8, -5.2, 4.8, 2.1, 3.4, 62, mat="heap_grey", rings=6, segs=26, tongues=5)
     mound(b, 16.4, -1.5, 2.6, 5.0, 2.6, 63, mat="heap_grey", rings=6, segs=24, tongues=4)
     chunks(b, 11.0, 0.0, 4.2, 4.0, 9, ("heap_grey", "rubble"), 2, z0=0.4, smin=0.5, smax=1.1)
-    for k in range(10):                                                          # розсип тоншає без жорсткого краю
+    for k in range(16):                                                          # розсип тоншає без жорсткого краю
         a = rnd.uniform(0, 2 * math.pi)
         t = rnd.uniform(0.75, 1.15)
         px, py = 14.0 + 5.8 * t * math.cos(a), -2.5 + 6.2 * t * math.sin(a)

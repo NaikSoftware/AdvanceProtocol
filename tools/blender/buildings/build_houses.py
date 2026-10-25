@@ -35,7 +35,7 @@ def blown(b, x, y, sgn, z, w, h, axis="y"):
     else:
         quad = [(x + e, y - w / 2, z), (x + e, y + w / 2, z), (x + e, y + w / 2, z + h), (x + e, y - w / 2, z + h)]
     b.poly(quad[::-1] if sgn < 0 else quad, "dark")
-    burn_ring(b, axis, y if axis == "y" else x, x if axis == "y" else y, z, w, h, sgn, grow=0.3)
+    burn_ring(b, axis, y if axis == "y" else x, x if axis == "y" else y, z, w, h, sgn, g_side=0.2, g_bot=0.1, g_top=0.45)
 
 
 def win_front(b, y, sgn, xs, z, w=1.2, h=1.4, bl=()):
@@ -122,7 +122,7 @@ def house1(hit=False):
         b.poly([(-4.7, y0 + 0.1, EAVE + 0.12), (4.7, y0 + 0.1, EAVE + 0.12), (4.7, y1 - 0.1, EAVE + 0.12), (-4.7, y1 - 0.1, EAVE + 0.12)][::-1], "cavity_black")
         # стіна під розривом карниза: темна зверху, світлішає донизу (кіптява над місцем виходу диму)
         xl, xr = xa + (xb - xa) * 0.30, xa + (xb - xa) * 0.72
-        b.soot([(xl, y0 - 0.03, EAVE - 1.5), (xr, y0 - 0.03, EAVE - 1.5), (xr, y0 - 0.03, EAVE), (xl, y0 - 0.03, EAVE)][::-1], (0.40, 0.40, 0.10, 0.10), 1)
+        b.soot([(xl + 0.6, y0 - 0.03, EAVE - 1.5), (xr - 0.6, y0 - 0.03, EAVE - 1.5), (xr, y0 - 0.03, EAVE), (xl, y0 - 0.03, EAVE)][::-1], (0.40, 0.40, 0.14, 0.14), 1)
     if not hit:
         b.box(0, ym, RIDGE, xr1 - xr0 + 0.6, 0.3, 0.16, "gutter")
     else:
@@ -148,7 +148,6 @@ def house1(hit=False):
     else:
         gutter(b, -L / 2 - OV, L / 2 + OV, y0 - OV, EAVE - 0.3)
     if hit:
-        b.box_e(5.1, 0.0, 0.5, 1.0, 3.0, 1.0, "char")
         rr = random.Random(54)
         mound(b, 0.0, -4.15, 2.8, 0.3, 0.7, 51, rings=4, segs=16, tongues=0)
         for k in range(14):                                      # справжні уламки під стіною -Y
@@ -273,7 +272,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
                 hs[-3:] = [3.0, 3.1, 3.2]
             else:
                 hs[:3] = [3.2, 3.0, 2.6]
-        wall_run(b, p0, p1, 0.4, hs, "wall_ruin", "wall_ruin", seed * 3 + si, pitch=0.7)
+        wall_run(b, p0, p1, 0.4, hs, "wall_ruin", "wall_ruin", seed * 3 + si, pitch=1.0)
     if chimney:
         cx, cy = chimney
         b.box(cx, cy, 0, 0.8, 0.8, 3.2, "brick_dark")
@@ -300,7 +299,8 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
         cx, cy = rnd.uniform(x0 + 2.4, x1 - 2.4), rnd.uniform(y0 + 2.4, y1 - 2.4)
         a = rnd.uniform(0, 3.1)
         ln = rnd.uniform(1.6, 2.4)
-        bent_sheet(b, (cx, cy, rnd.uniform(2.0, 2.8)), (cx + ln * math.cos(a), cy + ln * math.sin(a), rnd.uniform(1.0, 1.7)), 1.1, rnd.choice((tile, "fc_roof_x", "tin_red", "tin_red", "clad_burnt")), 0.3,
+        zz = rnd.uniform(1.5, 2.4)
+        bent_sheet(b, (cx, cy, zz), (cx + ln * math.cos(a), cy + ln * math.sin(a), zz - rnd.uniform(0.0, 0.35)), 1.1, rnd.choice((tile, "fc_roof_x", "tin_red", "tin_red", "clad_burnt")), 0.3,
                    axis="y" if abs(math.cos(a)) > 0.5 else "x")
     lib.finish(b, name, out, tri_limit=4000, footprint=footprint, anchor=(0, 0))
 

@@ -437,7 +437,7 @@ def mats():
         "gutter": make_material("gutter", flat=(0.30, 0.31, 0.31)),
         "rebar": make_material("rebar", flat=(0.11, 0.06, 0.04)),
         "soot": make_material("soot", flat=(0.045, 0.04, 0.036)),
-        "panel_light": make_material("panel_light", "Concrete034", 1.2, (0.42, 0.41, 0.39), streak=0.1, base_dirt=0.2),
+        "panel_light": make_material("panel_light", "Concrete034", 1.2, (0.26, 0.255, 0.25), streak=0.1, base_dirt=0.2),
         "rubble": make_rubble_material("rubble", [(0.30, (0.095, 0.047, 0.034)), (0.46, (0.12, 0.065, 0.047)), (0.66, (0.135, 0.125, 0.11)), (0.82, (0.08, 0.08, 0.08)), (0.95, (0.04, 0.036, 0.032)), (1.01, (0.28, 0.24, 0.10))]),
         "heap": make_rubble_material("heap", [(0.34, (0.095, 0.047, 0.034)), (0.50, (0.12, 0.065, 0.047)), (0.68, (0.135, 0.125, 0.11)), (0.86, (0.08, 0.08, 0.08)), (1.01, (0.04, 0.036, 0.032))]),
         "rubble_steel": make_rubble_material("rubble_steel", [(0.35, (0.05, 0.05, 0.05)), (0.6, (0.12, 0.13, 0.13)), (0.75, (0.15, 0.115, 0.095)), (0.9, (0.14, 0.14, 0.14)), (1.01, (0.24, 0.22, 0.15))], 3.0),
@@ -448,7 +448,7 @@ def mats():
         "cavity": make_material("cavity", flat=(0.03, 0.028, 0.026)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
-        "wall_ruin": make_material("wall_ruin", "Plaster001", 1.0, (0.50, 0.48, 0.44), seams=[("z", 0.25, 0.03, 0.45), ("h", 0.5, 0.025, 0.3)], streak=0.25, base_dirt=0.6, bump=0.03, patch=((0.12, 0.11, 0.10), 0.3), patch_scale=0.8, vmul=True),
+        "wall_ruin": make_material("wall_ruin", "Plaster001", 1.0, (0.62, 0.59, 0.54), seams=[("z", 0.25, 0.03, 0.5), ("h", 0.5, 0.025, 0.35)], streak=0.2, base_dirt=0.5, bump=0.035, patch=((0.2, 0.17, 0.15), 0.3), patch_scale=0.8, vmul=True),
         "panel_vc": make_material("panel_vc", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, vmul=True),
         "heap_grey": make_rubble_material("heap_grey", [(0.70, (0.105, 0.105, 0.10)), (0.80, (0.095, 0.047, 0.034)), (0.90, (0.135, 0.125, 0.11)), (1.01, (0.04, 0.036, 0.032))]),
         "pump_light": make_material("pump_light", flat=(0.12, 0.13, 0.14)),
@@ -719,7 +719,7 @@ def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, t
     rad = []
     for i in range(segs):
         a = 2 * math.pi * i / segs
-        r = 1.0 + 0.22 * math.sin(3 * a + ph[0]) + 0.16 * math.sin(5 * a + ph[1]) + rnd.uniform(-0.08, 0.08)
+        r = 1.0 + 0.22 * math.sin(3 * a + ph[0]) + 0.16 * math.sin(5 * a + ph[1]) + rnd.uniform(-0.2, 0.2)
         for (ta, tw) in tong:
             d = abs((a - ta + math.pi) % (2 * math.pi) - math.pi)
             r += tw * max(0.0, 1 - d / 0.6)
@@ -731,7 +731,7 @@ def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, t
         for i in range(segs):
             a = 2 * math.pi * i / segs
             r = t * rad[i]
-            noise = 1.0 + 0.3 * math.sin(2 * a + ph[2] + 3 * t) + rnd.uniform(-0.15, 0.15)
+            noise = 1.0 + 0.3 * math.sin(2 * a + ph[2] + 3 * t) + 0.2 * math.sin(5 * a + ph[3] - 4 * t) + rnd.uniform(-0.28, 0.28)
             z = z0 + hmax * (1 - t ** 1.7) * noise * rnd.uniform(0.75, 1.05) if k < rings else z0 - 0.12
             row.append(b.bm.verts.new((cx + rx * r * math.cos(a), cy + ry * r * math.sin(a), max(z0 - 0.12, z))))
         ring.append(row)
@@ -745,9 +745,9 @@ def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, t
     b._finish(fs, mat)
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=0.7, soot_h=1.8, top_tone=0.16, inner_tone=0.55):
-    """Уламок стіни p0-p1: верх косий і зигзагоподібний кроком ~pitch, верхні soot_h метрів темнішають
-    вершинним тоном (матеріал має vmul). Висоти heights інтерполюються між відрізками."""
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.72, inner_tone=0.85):
+    """Уламок стіни p0-p1: верх із 2-4 жорсткими східцями (плато 2-4 відрізки, перепад 0.2-1.2 м, іноді легкий
+    нахил). Колір стіни зберігається (верхні soot_h м лише трохи темнішають вершинним тоном)."""
     import random
     rnd = random.Random(seed)
     n0 = len(heights) - 1
@@ -755,28 +755,28 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=0.7, soot_h=
     ln = d.length
     u = d.normalized()
     nrm = Vector((-u.y, u.x, 0)) * thick / 2
-    n = max(n0, int(ln / pitch))
+    n = max(2, int(ln / pitch))
 
     def hat(t):
         x = t * n0
         i = min(n0 - 1, int(x))
         return heights[i] * (1 - (x - i)) + heights[i + 1] * (x - i)
-    # корона: випадкові плато довжиною 2-5 вершин із різкими сходинками 0.2-1.2 м і похилими ділянками
-    hs = []
+    seg = []                                            # (ha, hc) для кожного відрізка
     i = 0
-    while i <= n:
-        run = rnd.randint(2, 5)
+    while i < n:
+        run = rnd.randint(2, 4)
         step = rnd.choice((-1, 1)) * rnd.uniform(0.2, 1.2)
-        slope = rnd.random() < 0.35
+        tilt = rnd.uniform(-0.25, 0.25) if rnd.random() < 0.4 else 0.0
         for j in range(run):
-            if i > n:
+            if i >= n:
                 break
-            h = hat(i / n)
+            h = hat((i + 0.5) / n)
             if h > 0.05:
-                h = max(0.15, h + step * (0.25 if not slope else (j / max(1, run - 1)) - 0.3) + rnd.uniform(-0.1, 0.1))
-            hs.append(h)
+                h = max(0.25, h + step)
+                seg.append((h - tilt * 0.5, h + tilt * 0.5))
+            else:
+                seg.append((0.0, 0.0))
             i += 1
-    hs = hs[:n + 1]
 
     def quad(pts, tones, m):
         f = b.poly([tuple(q) for q in pts], m)
@@ -789,12 +789,11 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=0.7, soot_h=
     for i in range(n):
         a = Vector((p0[0], p0[1], 0)) + u * (ln * i / n)
         c = Vector((p0[0], p0[1], 0)) + u * (ln * (i + 1) / n)
-        ha, hc = hs[i], hs[i + 1]
+        ha, hc = seg[i]
         if ha <= 0.05 and hc <= 0.05:
             continue
         pb = [a + nrm, c + nrm, c - nrm, a - nrm]
         lo_a, lo_c = max(0.0, ha - soot_h), max(0.0, hc - soot_h)
-        # зовнішня грань (pb0 -> pb1) і внутрішня (pb2 -> pb3): нижня частина чиста, верхня темнішає
         quad([V(pb[0], 0), V(pb[1], 0), V(pb[1], lo_c), V(pb[0], lo_a)], (1, 1, 1, 1), mat)
         quad([V(pb[0], lo_a), V(pb[1], lo_c), V(pb[1], hc), V(pb[0], ha)], (1, 1, top_tone, top_tone), mat)
         quad([V(pb[2], 0), V(pb[3], 0), V(pb[3], lo_a), V(pb[2], lo_c)], (inner_tone,) * 4, mat)
@@ -804,15 +803,41 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=0.7, soot_h=
         quad([V(pb[3], 0), V(pb[0], 0), V(pb[0], ha), V(pb[3], ha)], (1, 1, top_tone, top_tone), mat)
 
 
-def burn_ring(b, axis, c, u, z, w, h, sgn, grow=0.55, t_in=0.03, t_out=0.5):
-    """Квадратна кіптява навколо прорізу: чотири смуги, тон від майже чорного біля краю до тла стіни.
-    axis 'y': стіна з нормаллю по Y на y=c, u — координата по X; axis 'x': стіна з нормаллю по X."""
+def panel_wall(b, p0, p1, thick, heights, mat, seed=0, piece=3.0, tilt=0.05):
+    """Збірна стіна з прямих панелей по piece м: кожна панель — жорстка плита з двома рівнями зламаного верху
+    і легким відхиленням від виска (не гнеться як лист)."""
+    import random
+    rnd = random.Random(seed)
+    d = Vector((p1[0] - p0[0], p1[1] - p0[1], 0))
+    ln = d.length
+    u = d.normalized()
+    n = max(1, int(round(ln / piece)))
+    w = ln / n
+    for i in range(n):
+        h = heights[min(i, len(heights) - 1)]
+        if h <= 0.05:
+            continue
+        cx = p0[0] + u.x * w * (i + 0.5)
+        cy = p0[1] + u.y * w * (i + 0.5)
+        yaw = math.atan2(u.y, u.x)
+        tl = rnd.uniform(-tilt, tilt)
+        for (k, frac, drop) in ((0, 0.55, 0.0), (1, 0.45, rnd.uniform(0.5, 1.3))):
+            ww = w * frac
+            off = (-w / 2 + ww / 2) if k == 0 else (-w / 2 + w * 0.55 + ww / 2)
+            hh = max(0.4, h - drop)
+            px, py = cx + u.x * off, cy + u.y * off
+            b.box_e(px, py, hh / 2, ww, thick, hh, mat, euler=(tl * -u.y if False else tl, 0.0, yaw), top=mat)
+
+
+def burn_ring(b, axis, c, u, z, w, h, sgn, g_side=0.22, g_bot=0.12, g_top=0.85, t_in=0.15, t_out=0.34):
+    """Кіптява навколо прорізу: темніша за стіну (≈0.45 її тону), м'яко згасає назовні, найсильніша над прорізом.
+    axis 'y': стіна з нормаллю по Y на y=c, u — координата по X; axis 'x': нормаль по X."""
     e = 0.02 * sgn
     def P(du, zz):
         return (u + du, c + e, zz) if axis == "y" else (c + e, u + du, zz)
     hw = w / 2
     inner = [(-hw, z), (hw, z), (hw, z + h), (-hw, z + h)]
-    outer = [(-hw - grow, z - grow * 0.6), (hw + grow, z - grow * 0.6), (hw + grow, z + h + grow * 1.2), (-hw - grow, z + h + grow * 1.2)]
+    outer = [(-hw - g_side, z - g_bot), (hw + g_side, z - g_bot), (hw + g_side * 0.7, z + h + g_top), (-hw - g_side * 0.7, z + h + g_top)]
     outn = Vector((0, sgn, 0)) if axis == "y" else Vector((sgn, 0, 0))
     for i in range(4):
         j = (i + 1) % 4
