@@ -2,7 +2,8 @@ extends Node
 ## Бюджет кадру бою: справжній екран бою на карті, камера на заданих клітинках і зумах; друкує
 ## draw calls і трикутники кадру (Performance) і знімає кадр. Не входить у гру.
 ## Запуск (потрібне вікно, не --headless; вікно — за межами екрана):
-##   $GODOT --path . --position 6000,0 res://tools/battle_budget.tscn -- <out_dir> <map>[@x,y@zoom] ...
+##   $GODOT --path . --position 6000,0 res://tools/battle_budget.tscn -- <out_dir> [--shadows] <map>[@x,y@zoom] ...
+## --shadows: будівлі й руїни кидають справжню тінь сонця — щоб зміряти, скільки це коштує.
 ## Без @… знімається центр дошки на MAX і MIN зумі. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=….
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
 
@@ -20,13 +21,22 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	get_window().size = WINDOW
 	var shots: Array = []
+	var shadows: bool = args.has("--shadows")
 	for i in range(1, args.size()):
+		if args[i] == "--shadows":
+			continue
 		var parts: PackedStringArray = args[i].split("@")
 		var map: String = parts[0]
 		var screen: BattleScreen = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
 		add_child(screen)
 		screen.setup(load("res://maps/%s.tres" % map) as MapData, 2, 1)
 		var board: Board = MatchService.state.board
+		if shadows:
+			var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+			for mmi: MultiMeshInstance3D in props.find_children("*", "MultiMeshInstance3D", false, false):
+				var k: int = int(PropLayer.spec_of(StringName(mmi.name))["kind"])
+				if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+					mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		var rig: IsoCameraRig = screen.get_node("%CameraRig")
 		var views: Array = []
 		if parts.size() >= 3:

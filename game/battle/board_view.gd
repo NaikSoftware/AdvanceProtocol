@@ -53,6 +53,9 @@ var ring_map: MapData = null
 ## Пора року землі (BattleLook.season): `late` — звичайні файли, `summer` / `early` — сезонні.
 ## Ставити до першого build(): текстури землі вантажаться один раз.
 var season: StringName = &"late"
+## Будівлі кидають тінь сонця (PropLayer.structure_shadows): на сонячній карті без неї дім висить.
+## Ставить екран бою з вигляду карти до першого build().
+var structure_shadows: bool = false
 ## Час імли для всіх матеріалів світу; з боєм не скидається, бо візерунку однаково, з якого
 ## часу пливти.
 static var fog_time: float = 0.0
@@ -181,6 +184,7 @@ func build(board: Board) -> void:
 		_props = PropLayer.new()
 		_props.name = "Props"
 		add_child(_props)
+	_props.structure_shadows = structure_shadows
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board))
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.

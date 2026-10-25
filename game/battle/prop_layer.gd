@@ -75,7 +75,12 @@ const SPAN: Dictionary = {&"10kv": 7.5, &"04kv": 4.5}
 ## Провис дроту посередині прольоту, клітинки (~1.1 м).
 const WIRE_SAG: float = 0.14
 const WIRE_SEGMENTS: int = 6
-const WIRE_COLOR: Color = Color(0.09, 0.09, 0.085)
+const WIRE_COLOR: Color = Color(0.12, 0.12, 0.115, 0.85)
+## Відстань камери (клітинки), до якої дріт суцільний, і та, де він зник би зовсім: на дальньому
+## зумі (~26) лишається третина — справжній дріт там тонший за піксель, а чорна лінія в пікселі
+## обводила б містечко рамкою.
+const WIRE_OPAQUE_DIST: float = 9.0
+const WIRE_GONE_DIST: float = 34.0
 ## Імовірності з хешу на клітинку, у шістнадцятих: огорожа вздовж дороги йде відрізками по три
 ## клітинки, тюки — на кожній ~восьмій луці.
 const FIELD_FENCE_RUN: int = 3
@@ -103,6 +108,9 @@ var _crushed: Dictionary = {}
 var _board_size: Vector2i = Vector2i.ZERO
 ## Клітинки дошки з лісом: тут стоятимуть дерева, коли їхній вигляд буде готовий.
 var forest_cells: Array[Vector2i] = []
+## Будівлі й руїни кидають тінь сонця. Без неї на сонячній карті дім висить над землею; ставити
+## до build().
+var structure_shadows: bool = false
 
 
 ## Детермінований хеш клітинки; уся мінливість розстановки береться з нього.
@@ -290,8 +298,9 @@ func _build_nodes(haze: bool) -> void:
 		var mmi := MultiMeshInstance3D.new()
 		mmi.name = String(m)
 		mmi.multimesh = mm
-		# §8: тіні — лише юнітам.
-		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# §8: тіні — юнітам; будівлям — лише там, де без тіні сонячний дім висить у повітрі.
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if fades and structure_shadows \
+				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if fades:
 			mmi.material_override = _fade_material(m, info, haze)
 		add_child(mmi)
@@ -304,6 +313,11 @@ func _build_nodes(haze: bool) -> void:
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.albedo_color = WIRE_COLOR
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+		# min > max: дріт гасне з відстанню, а не з'являється.
+		mat.distance_fade_min_distance = WIRE_GONE_DIST
+		mat.distance_fade_max_distance = WIRE_OPAQUE_DIST
 		_wires.material_override = mat
 		add_child(_wires)
 
@@ -484,12 +498,23 @@ class _Placer:
 		return lo.x >= PropLayer.KEEP_OUT or hi.x <= -PropLayer.KEEP_OUT \
 				or lo.y >= PropLayer.KEEP_OUT or hi.y <= -PropLayer.KEEP_OUT
 
-	func put_small(m: StringName, c: Vector2i, local: Vector2, yaw: float, scale: float = 1.0) -> bool:
+	## tilt — довгий пропс (огорожа) лягає за схилом уздовж своєї довжини (локальна X), а не стоїть
+	## рівно, одним кінцем у повітрі.
+	func put_small(m: StringName, c: Vector2i, local: Vector2, yaw: float, scale: float = 1.0, tilt: bool = false) -> bool:
 		if m == &"":
 			return false
 		var x: float = c.x + local.x
 		var z: float = c.y + local.y
-		var xform := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * scale), Vector3(x, ground(x, z), z))
+		var basis := Basis(Vector3.UP, yaw)
+		var y: float = ground(x, z)
+		if tilt:
+			var half_len: float = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size.x * 0.5
+			var along: Vector3 = basis.x * half_len
+			var y0: float = ground(x - along.x, z - along.z)
+			var y1: float = ground(x + along.x, z + along.z)
+			basis = Basis(basis.z, atan2(y1 - y0, 2.0 * half_len)) * basis
+			y = minf((y0 + y1) * 0.5, y)
+		var xform := Transform3D(basis.scaled(Vector3.ONE * scale), Vector3(x, y, z))
 		if not clear_of_centre(m, xform, c):
 			return false
 		var cells: Array[Vector2i] = [c]
@@ -675,7 +700,7 @@ class _Placer:
 		if edges.has(key):
 			return false
 		var yaw: float = 0.0 if d.y != 0 else PI * 0.5
-		if put_small(m, c, Vector2(d) * inset, yaw):
+		if put_small(m, c, Vector2(d) * inset, yaw, 1.0, true):
 			edges[key] = true
 			return true
 		return false

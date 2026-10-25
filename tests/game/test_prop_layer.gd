@@ -356,9 +356,35 @@ func test_vehicle_crushes_infantry_does_not_and_the_enemy_never_sees_it_unscoute
 	await _move(service, screen, RIFLE, Vector2i(4, 3))
 	assert_true(_crushed_on(screen, Vector2i(3, 1)), "техніка розчавила огорожу")
 	assert_false(_crushed_on(screen, Vector2i(3, 3)), "піхота пройшла повз")
+	assert_true(_faded(view, Vector2i(4, 4)), "дім між стрільцями й камерою розчинився")
+	assert_false(_faded(view, Vector2i(4, 0)), "дім за машиною — ні")
 
 	assert_false(service.state.vision[1].is_seen(Vector2i(3, 1)), "передумова: гравець 1 там не бував")
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
 	await wait_physics_frames(3)
 	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
 	assert_false(_crushed_on(screen, Vector2i(3, 1)), "§3.5: уламки на нерозвіданому не видають танк")
+	assert_false(_faded(view, Vector2i(4, 4)), "§3.5: прозорий дах не видає невидимих стрільців")
+
+
+## Тінь сонця кидають лише будівлі й руїни і лише з увімкненим перемикачем.
+func test_structure_shadows_only_when_switched_on() -> void:
+	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
+	add_child_autofree(view)
+	view.structure_shadows = true
+	view.build(_house_board())
+	for n: MultiMeshInstance3D in view.props().find_children("*", "MultiMeshInstance3D", false, false):
+		var k: int = _kind(StringName(n.name))
+		var want: int = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if k == PropLayer.Kind.STRUCTURE \
+				else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		assert_eq(n.cast_shadow, want, n.name)
+
+
+## Сонячна карта вмикає тіні будівель, похмура River — ні.
+func test_sunny_map_switches_structure_shadows_on(p = use_parameters([["crossroads", true], ["river", false]])) -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: BattleScreen = BattleScreenScene.instantiate()
+	add_child_autofree(screen)
+	screen.setup(_map(p[0]), 2, 1, service)
+	assert_eq((screen.get_node("%BoardView") as BoardView).structure_shadows, p[1], p[0])
