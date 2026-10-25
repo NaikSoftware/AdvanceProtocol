@@ -395,3 +395,70 @@ func test_road_between_ploughed_cells_splits_the_fields() -> void:
 	var cells: PackedInt32Array = GroundSurface.plough_cells(board, 0, surface, table, true)
 	assert_eq(cells[2], -1, "дорога не бере шар ріллі від сусідів")
 	assert_eq((GroundSurface.plough_fields(cells, 5, plough)[1] as Array).size(), 2)
+
+
+# Біля річки стоячої води нема: кожна клітинка води й кожна сусідня з нею має в bank_mask 255
+# (шейдер гасить там вікна болота), а клітинка далі за одну від води — 0.
+func test_bank_mask_covers_every_cell_next_to_water() -> void:
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var mask: PackedByteArray = GroundSurface.bank_mask(board, 0)
+		var bad: Array[Vector2i] = []
+		for y in board.height:
+			for x in board.width:
+				var near := false
+				var far := true
+				for dy in range(-2, 3):
+					for dx in range(-2, 3):
+						var q := Vector2i(x + dx, y + dy)
+						if q.x < 0 or q.y < 0 or q.x >= board.width or q.y >= board.height:
+							continue
+						var k: int = board.kind_at(q)
+						if k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED:
+							far = false
+							if absi(dx) <= 1 and absi(dy) <= 1:
+								near = true
+				var v: int = mask[y * board.width + x]
+				if (near and v != 255) or (far and v != 0):
+					bad.append(Vector2i(x, y))
+		assert_eq(bad.size(), 0, "%s: %s" % [file, bad.slice(0, 8)])
+
+
+func test_build_passes_the_bank_map_to_the_shader() -> void:
+	var board := Board.create(3, 1, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(0, 0), Terrain.Kind.WATER)
+	ground.build(board, 0)
+	var tex: Texture2D = (ground.material_override as ShaderMaterial).get_shader_parameter("bank_map")
+	assert_not_null(tex)
+	var img: Image = tex.get_image()
+	assert_eq(img.get_pixel(1, 0).r8, 255, "сусід води — без стоячої води")
+	assert_eq(img.get_pixel(2, 0).r8, 0)
+
+
+# Калюжі лише на рівному й у низинах: пагорб, схил понад ~7.5° і гребінь — без стоячої води.
+func test_puddle_gate_keeps_hills_slopes_and_crests_dry() -> void:
+	assert_almost_eq(GroundSurface.puddle_gate(0.0, 0.0, 0.0), 1.0, 1e-4, "рівне — калюжа можлива")
+	assert_almost_eq(GroundSurface.puddle_gate(0.0, -0.2, 0.0), 1.0, 1e-4, "низина — калюжа можлива")
+	assert_eq(GroundSurface.puddle_gate(0.0, 0.0, 1.0), 0.0, "клітинка пагорба")
+	assert_eq(GroundSurface.puddle_gate(tan(deg_to_rad(7.5)), 0.0, 0.0), 0.0, "схил 7.5°")
+	assert_eq(GroundSurface.puddle_gate(tan(deg_to_rad(20.0)), -0.2, 0.0), 0.0, "крутий схил і в низині")
+	assert_eq(GroundSurface.puddle_gate(0.0, 0.1, 0.0), 0.0, "гребінь")
+	assert_lt(GroundSurface.puddle_gate(tan(deg_to_rad(6.0)), 0.0, 0.0), 1.0, "між 5° і 7.5° калюжа вже слабне")
+
+
+# Кожна клітинка пагорба на картах позначена в hill_mask: шейдер не кладе туди калюж.
+func test_hill_mask_marks_every_hill_cell() -> void:
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var mask: PackedByteArray = GroundSurface.hill_mask(board, 0)
+		var bad := 0
+		for y in board.height:
+			for x in board.width:
+				var hill: bool = board.kind_at(Vector2i(x, y)) == Terrain.Kind.HILL
+				if (mask[y * board.width + x] == 255) != hill:
+					bad += 1
+				if hill:
+					assert_eq(GroundSurface.puddle_gate(0.0, 0.0, mask[y * board.width + x] / 255.0), 0.0)
+		assert_eq(bad, 0, file)
