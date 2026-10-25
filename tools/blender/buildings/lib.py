@@ -431,7 +431,7 @@ def mats():
         "bitumen": make_material("bitumen", "Asphalt031", 1.0, g(0.38), patch=((0.04, 0.045, 0.04), 0.2)),
         # шифер: смуги листів ~1.1 м вздовж коника і хвиля кроком 15 см униз по скату
         "fc_roof": make_material("fc_roof", "Concrete034", 1.2, (0.40, 0.40, 0.38), seams=[("y", 1.1, 0.05, 0.35)], corr=("y", 0.2, 0.016), streak=0.1, patch=((0.12, 0.16, 0.10), 0.05)),
-        "fc_roof_x": make_material("fc_roof_x", "Concrete034", 1.2, (0.18, 0.18, 0.17), seams=[("x", 1.1, 0.05, 0.4)], corr=("x", 0.3, 0.012), streak=0.1, patch=((0.12, 0.16, 0.10), 0.05)),
+        "fc_roof_x": make_material("fc_roof_x", "Concrete034", 1.2, (0.18, 0.18, 0.17), seams=[("x", 1.1, 0.05, 0.4)], corr=("x", 0.3, 0.007), streak=0.1, patch=((0.12, 0.16, 0.10), 0.05)),
         "wall_silicate": make_material("wall_silicate", "Plaster001", 1.0, (0.58, 0.57, 0.53), seams=[("z", 0.25, 0.05, 0.2)], streak=0.6, base_dirt=0.4),
         "clad_wall": make_material("clad_wall", "CorrugatedSteel005", 1.0, (0.60, 0.66, 0.60), seams=[("h", 1.0, 0.04, 0.4)], corr=("h", 0.2, 0.01), streak=1.0, base_dirt=0.5),
         # профнастил даху: ребра тільки від карниза до коника
@@ -455,7 +455,8 @@ def mats():
         "pvc": make_material("pvc", flat=(0.40, 0.40, 0.38)),
         "pv": make_material("pv", flat=(0.04, 0.046, 0.062), seams=[("x", 1.0, 0.03, 0.7), ("y", 1.7, 0.03, 0.7)], patch=((0.08, 0.09, 0.115), 0.22), patch_scale=0.5),
         "wall_plaster": make_material("wall_plaster", "Plaster001", 1.0, (0.68, 0.64, 0.56), streak=0.2, base_dirt=0.5, bump=0.008, patch=((0.34, 0.31, 0.27), 0.25), patch_scale=0.9),
-        "brick_face": make_material("brick_face", "Bricks105", 1.0, recolor=(0.61, 0.26, 0.145), streak=0.2, base_dirt=0.5, bump=0.02, patch=((0.09, 0.06, 0.04), 0.2), patch_scale=1.6),
+        "brick_face": make_material("brick_face", "Bricks105", 1.0, recolor=(0.58, 0.30, 0.20), streak=0.2, base_dirt=0.5, bump=0.02, patch=((0.09, 0.06, 0.04), 0.2), patch_scale=1.6),
+        "brick_ruin": make_material("brick_ruin", "Bricks105", 1.0, recolor=(0.45, 0.345, 0.295), streak=0.2, base_dirt=0.5, bump=0.02, patch=((0.07, 0.06, 0.05), 0.2), patch_scale=1.6),
         "tile_graphite": make_material("tile_graphite", "CorrugatedSteel005", 1.0, (0.20, 0.21, 0.22), seams=[("y", 0.35, 0.05, 0.7), ("x", 1.1, 0.05, 0.4)], corr=("y", 0.35, 0.035), streak=0.1),
         "tile_brown": make_material("tile_brown", "CorrugatedSteel005", 1.0, (0.28, 0.20, 0.16), seams=[("y", 0.35, 0.05, 0.7), ("x", 1.1, 0.05, 0.4)], corr=("y", 0.35, 0.035), streak=0.1),
         "tin_green": make_material("tin_green", "CorrugatedSteel005", 1.0, (0.33, 0.37, 0.34), seams=[("x", 1.0, 0.05, 0.5)], corr=("x", 0.2, 0.035), streak=0.08),
@@ -465,25 +466,25 @@ def mats():
         "rebar": make_material("rebar", flat=(0.11, 0.06, 0.04)),
         "soot": make_material("soot", flat=(0.045, 0.04, 0.036)),
         "panel_light": make_material("panel_light", "Concrete034", 1.2, (0.26, 0.255, 0.25), streak=0.1, base_dirt=0.2),
-        "rubble": make_rubble_material("rubble", [(0.30, (0.115, 0.055, 0.034)), (0.46, (0.145, 0.085, 0.05)), (0.66, (0.16, 0.13, 0.09)), (0.82, (0.10, 0.092, 0.075)), (0.95, (0.045, 0.038, 0.03)), (1.01, (0.26, 0.22, 0.12))]),
-        "heap": make_rubble_material("heap", [(0.34, (0.115, 0.055, 0.034)), (0.50, (0.145, 0.085, 0.05)), (0.68, (0.16, 0.13, 0.09)), (0.86, (0.10, 0.092, 0.075)), (1.01, (0.045, 0.038, 0.03))]),
+        "rubble": make_rubble_material("rubble", [(0.30, (0.09, 0.05, 0.032)), (0.46, (0.115, 0.07, 0.044)), (0.66, (0.125, 0.104, 0.074)), (0.82, (0.08, 0.074, 0.06)), (0.95, (0.036, 0.03, 0.024)), (1.01, (0.21, 0.18, 0.10))]),
+        "heap": make_rubble_material("heap", [(0.34, (0.09, 0.05, 0.032)), (0.50, (0.115, 0.07, 0.044)), (0.68, (0.125, 0.104, 0.074)), (0.86, (0.08, 0.074, 0.06)), (1.01, (0.036, 0.03, 0.024))]),
         "rubble_steel": make_rubble_material("rubble_steel", [(0.35, (0.05, 0.05, 0.05)), (0.6, (0.12, 0.13, 0.13)), (0.75, (0.15, 0.115, 0.095)), (0.9, (0.14, 0.14, 0.14)), (1.01, (0.24, 0.22, 0.15))], 3.0),
         "soot_v": make_soot_material(),
         "fc_roof_burnt": make_material("fc_roof_burnt", "Concrete034", 1.2, (0.07, 0.07, 0.07), seams=[("x", 1.1, 0.05, 0.3)], corr=("x", 0.2, 0.02), streak=1.0),
         "tin_red": make_material("tin_red", "CorrugatedSteel005", 1.0, (0.34, 0.25, 0.21), seams=[("x", 1.0, 0.05, 0.4)], corr=("x", 0.2, 0.03), streak=0.3, patch=((0.2, 0.12, 0.08), 0.3)),
-        "timber_dark": make_material("timber_dark", flat=(0.03, 0.02, 0.014)),
-        "cavity": make_material("cavity", flat=(0.014, 0.0135, 0.013)),
+        "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.13, 0.105, 0.09), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02),
+        "cavity": make_material("cavity", flat=(0.035, 0.034, 0.033)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
-        "wall_ruin": make_material("wall_ruin", "Plaster001", 1.0, (0.44, 0.37, 0.30), streak=0.35, base_dirt=0.5, bump=0.035, patch=((0.19, 0.08, 0.045), 0.42), patch_scale=1.1, vmul=True),
+        "wall_ruin": make_material("wall_ruin", "Plaster001", 1.0, (0.36, 0.30, 0.25), streak=0.35, base_dirt=0.5, bump=0.035, patch=((0.13, 0.10, 0.075), 0.42), patch_scale=1.1, vmul=True),
         "panel_vc": make_material("panel_vc", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, vmul=True),
-        "heap_grey": make_rubble_material("heap_grey", [(0.70, (0.115, 0.107, 0.088)), (0.80, (0.115, 0.055, 0.034)), (0.90, (0.16, 0.13, 0.09)), (1.01, (0.045, 0.038, 0.03))]),
+        "heap_grey": make_rubble_material("heap_grey", [(0.78, (0.095, 0.092, 0.082)), (0.88, (0.10, 0.09, 0.078)), (0.95, (0.125, 0.115, 0.095)), (1.01, (0.036, 0.032, 0.028))]),
         "pump_light": make_material("pump_light", flat=(0.12, 0.13, 0.14)),
         "cavity_black": make_material("cavity_black", flat=(0.003, 0.003, 0.003)),
         "pv_frame": make_material("pv_frame", flat=(0.10, 0.10, 0.105)),
-        "brick_dark": make_material("brick_dark", "Bricks105", 1.0, recolor=(0.45, 0.22, 0.13), streak=0.5, base_dirt=0.6, bump=0.02),
+        "brick_dark": make_material("brick_dark", "Bricks105", 1.0, recolor=(0.36, 0.28, 0.24), streak=0.5, base_dirt=0.6, bump=0.02),
         "slab_dark": make_material("slab_dark", "Concrete034", 1.2, (0.34, 0.32, 0.30), streak=0.2, base_dirt=0.5),
-        "heap_house": make_rubble_material("heap_house", [(0.40, (0.30, 0.27, 0.22)), (0.70, (0.115, 0.055, 0.034)), (0.88, (0.10, 0.092, 0.075)), (1.01, (0.045, 0.038, 0.03))]),
+        "heap_house": make_rubble_material("heap_house", [(0.40, (0.24, 0.216, 0.176)), (0.70, (0.095, 0.05, 0.032)), (0.88, (0.08, 0.074, 0.06)), (1.01, (0.036, 0.03, 0.024))]),
         "window": make_window_material(),
         "frame": make_material("frame", flat=(0.55, 0.55, 0.53)),
         "dark": make_material("dark", flat=(0.02, 0.02, 0.02)),
@@ -743,23 +744,28 @@ class Builder:
         return sum(len(f.verts) - 2 for f in self.bm.faces)
 
 
-def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, tongues=0, lump=0.25, jitter=0.0):
-    """Низька широка купа одним замкненим мешем: профіль-косинус (схили ≲35°), нерівний контур із лопатями,
-    детермінований низькочастотний рельєф (низька й висока деталізація мають однаковий силует);
-    jitter додає дрібну випадковість лише для високого вихідного меша запікання."""
+def mound_radius(seed, tongues=0):
+    """Нормований радіус контуру купи за кутом (той самий, що в mound): 6-8 опуклостей без довгих прямих."""
     import random
     rnd = random.Random(seed)
     ph = [rnd.uniform(0, 6.28) for _ in range(4)]
     tong = [(rnd.uniform(0, 6.28), rnd.uniform(0.15, 0.3)) for _ in range(tongues)]
-    jr = random.Random(seed * 7 + 1)
 
     def radius(a):
-        r = 1.0 + 0.2 * math.sin(3 * a + ph[0]) + 0.13 * math.sin(5 * a + ph[1]) + 0.06 * math.sin(8 * a + ph[2])
+        r = 1.0 + 0.2 * math.sin(3 * a + ph[0]) + 0.13 * math.sin(5 * a + ph[1]) + 0.14 * math.sin(7 * a + ph[2]) + 0.05 * math.sin(11 * a + ph[3])
         for (ta, tw) in tong:
             d = abs((a - ta + math.pi) % (2 * math.pi) - math.pi)
             r += tw * max(0.0, 1 - d / 0.7)
-        return min(1.5, max(0.55, r))
+        return min(1.45, max(0.6, r))
+    return radius, ph
 
+
+def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, tongues=0, lump=0.45, jitter=0.0):
+    """Низька широка купа одним замкненим мешем: косинусний профіль із заокругленим гребенем, лобастий контур,
+    детермінований рельєф (низька й висока деталізація мають однаковий силует); jitter — лише для високого джерела запікання."""
+    import random
+    radius, ph = mound_radius(seed, tongues)
+    jr = random.Random(seed * 7 + 1)
     ring = []
     for k in range(rings + 1):
         t = k / rings
@@ -769,7 +775,7 @@ def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, t
             r = t * radius(a)
             px, py = cx + rx * r * math.cos(a), cy + ry * r * math.sin(a)
             if k < rings:
-                noise = 1.0 + 0.22 * math.sin(2 * a + ph[2] + 3 * t) + 0.16 * math.sin(5 * a + ph[3] - 4 * t) + (jr.uniform(-jitter, jitter) if jitter else 0.0)
+                noise = 1.0 + 0.1 * math.sin(2 * a + ph[2] + 3 * t) + 0.08 * math.sin(5 * a + ph[3] - 4 * t) + 0.06 * math.sin(9 * a + ph[0] + 6 * t) + (jr.uniform(-jitter, jitter) if jitter else 0.0)
                 z = z0 + hmax * 0.5 * (1 + math.cos(math.pi * min(1.0, t))) * noise
                 if lump:
                     kk = 2 * math.pi / 1.75
@@ -779,7 +785,7 @@ def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, t
             row.append(b.bm.verts.new((px, py, max(z0 - 0.12, z))))
         ring.append(row)
     fs = []
-    top = b.bm.verts.new((cx, cy, z0 + hmax * 0.99))
+    top = b.bm.verts.new((cx, cy, z0 + hmax * 0.9))
     for i in range(segs):
         j = (i + 1) % segs
         fs.append(b.bm.faces.new((ring[0][i], ring[0][j], top)))
@@ -788,7 +794,7 @@ def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, t
     b._finish(fs, mat)
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_face"):
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin"):
     """Уламок стіни p0-p1: сегменти різної ширини (0.5-2.4 м), випадкова ходьба висот із ≥3 глибинами й похилими
     зламами; верхні 0.4 м — відкрита цегла (як у купі), решта — штукатурка. Висоти heights задають огляд."""
     import random
@@ -870,12 +876,17 @@ def panel_wall(b, p0, p1, thick, heights, mat, seed=0, piece=3.0, tilt=0.05, inn
         cx = p0[0] + u.x * w * (i + 0.5)
         cy = p0[1] + u.y * w * (i + 0.5)
         tl = rnd.uniform(-tilt, tilt)
-        for (k, frac, drop) in ((0, 0.55, 0.0), (1, 0.45, rnd.uniform(0.5, 1.3))):
+        f1 = rnd.uniform(0.28, 0.45)
+        f2 = rnd.uniform(0.25, 0.4)
+        fr = [f1, f2, max(0.15, 1.0 - f1 - f2)]
+        offs = 0.0
+        for (k, frac, drop) in ((0, fr[0], 0.0), (1, fr[1], rnd.uniform(0.3, 1.6)), (2, fr[2], rnd.uniform(0.6, 2.0))):
             ww = w * frac
-            off = (-w / 2 + ww / 2) if k == 0 else (-w / 2 + w * 0.55 + ww / 2)
+            off = -w / 2 + offs + ww / 2
+            offs += ww
             hh = max(0.4, h - drop)
             px, py = cx + u.x * off, cy + u.y * off
-            b.box_e(px, py, hh / 2, ww, thick, hh, mat, euler=(tl, 0.0, yaw), top=mat)
+            b.box_e(px, py, hh / 2, ww, thick, hh, mat, euler=(tl + rnd.uniform(-0.05, 0.05), rnd.uniform(-0.04, 0.04), yaw + rnd.uniform(-0.06, 0.06)), top=mat)
             roots.append((px + u.x * ww * rnd.uniform(-0.3, 0.3), py + u.y * ww * rnd.uniform(-0.3, 0.3), hh))
             # кіптява зовні: темніше вгорі, м'яко згасає донизу (тон відносно тла стіни wall_tone)
             sx, sy = px + outer.x * (thick / 2 + 0.02), py + outer.y * (thick / 2 + 0.02)
@@ -931,8 +942,8 @@ def opening(b, axis, c, u, z, w, h, sgn):
     r = 0.1
     inner = [(-hw + r, z + r), (hw - r, z + r), (hw - r, z + h - r), (-hw + r, z + h - r)]
     outer = [(-hw, z), (hw, z), (hw, z + h), (-hw, z + h)]
-    k_ = 2.3 if axis == "x" else 1.0                                    # торець у тіні: піднімаємо тон, щоб проріз читався
-    face([P(*inner[0], 0.01), P(*inner[1], 0.01), P(*inner[2], 0.01), P(*inner[3], 0.01)], (0.03 * k_, 0.03 * k_, 0.045 * k_, 0.045 * k_))
+    k_ = 5.0 if axis == "x" else 1.0                                    # торець у тіні: піднімаємо тон, щоб проріз читався
+    face([P(*inner[0], 0.01), P(*inner[1], 0.01), P(*inner[2], 0.01), P(*inner[3], 0.01)], (0.06 * k_, 0.06 * k_, 0.03 * k_, 0.03 * k_))
     for i in range(4):
         j = (i + 1) % 4
         face([P(*outer[i]), P(*outer[j]), P(*inner[j], 0.005), P(*inner[i], 0.005)], (0.07, 0.07, 0.05, 0.05))
@@ -1088,10 +1099,20 @@ def heap_bake(me, b, hi, mt, img, nimg, atlas_px):
     nim2.colorspace_settings.name = "Non-Color"
     node.image = nim2
     bpy.ops.object.bake(type="NORMAL", normal_space="TANGENT", **kw)
+    aoimg = bpy.data.images.new("hao", atlas_px, atlas_px)
+    aoimg.generated_color = (1.0, 1.0, 1.0, 1.0)
+    node.image = aoimg
+    sc_ = bpy.context.scene
+    old_samples = sc_.cycles.samples
+    sc_.cycles.samples = 24
+    bpy.ops.object.bake(type="AO", **kw)
+    sc_.cycles.samples = old_samples
     H = np.array(himg.pixels[:]).reshape(-1, 4)
+    AO = np.array(aoimg.pixels[:]).reshape(-1, 4)[:, :3].mean(axis=1)
     N2 = np.array(nim2.pixels[:]).reshape(-1, 4)
     mask = (np.abs(H[:, 0] - 1.0) + np.abs(H[:, 1]) + np.abs(H[:, 2] - 1.0)) > 0.03
     A = np.array(img.pixels[:]).reshape(-1, 4)
+    H[:, :3] *= (1.0 - 0.55 * (1.0 - np.clip(AO, 0, 1)))[:, None]      # порожнини між уламками темніші на ~55%
     A[mask] = H[mask]
     img.pixels[:] = A.ravel().tolist()
     NN = np.array(nimg.pixels[:]).reshape(-1, 4)

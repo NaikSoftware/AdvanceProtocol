@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, chunks, mound, wall_run, bent_sheet, burn_ring
+from lib import Builder, chunks, mound, mound_radius, wall_run, bent_sheet, burn_ring
 from mathutils import Vector
 
 out = lib.out_dir()
@@ -152,8 +152,8 @@ def house1(hit=False):
         rr = random.Random(54)
         bh = Builder()
         # низька основа ≤0.6 м (кидає тінь) під стіною -Y і на торці +X; деталь запікається зі скан-джерела
-        for (mx, my, mrx, mry, mh, ms) in ((0.0, -4.05, 3.0, 0.5, 0.55, 51), (6.0, -0.4, 1.5, 2.0, 0.55, 52)):
-            mound(b, mx, my, mrx, mry, mh, ms, mat="heap_house", rings=3, segs=12)
+        for (mx, my, mrx, mry, mh, ms) in ((0.0, -4.05, 3.0, 0.5, 0.45, 51), (6.0, -0.4, 1.5, 2.0, 0.5, 52)):
+            mound(b, mx, my, mrx, mry, mh, ms, mat="heap_house", rings=4, segs=16)
             mound(bh, mx, my, mrx, mry, mh, ms, mat="heap_house", rings=8, segs=36, jitter=0.12)
         for k in range(10):
             bh.rock(rr.uniform(-3.2, 3.2), -4.0 + rr.uniform(-0.15, 0.1), 0.3, rr.uniform(0.3, 0.55), rr.choice(("heap_house", "rubble")), rr, buried=0.4)
@@ -162,6 +162,8 @@ def house1(hit=False):
         for k in range(3):                                                        # справжні шматки 0.4-0.6 м
             b.rock(rr.uniform(-2.5, 2.5), -4.2 + rr.uniform(-0.1, 0.1), 0.35, rr.uniform(0.4, 0.6), "heap_house", rr, buried=0.4)
         b.rock(6.4, -0.4, 0.35, 0.55, "heap_house", rr, buried=0.4)
+        b.rock(7.2, 1.2, 0.3, 0.45, "heap_house", rr, buried=0.4)
+        b.rock(-2.2, -4.1, 0.3, 0.5, "heap_house", rr, buried=0.4)
     lib.finish(b, "house_h1_hit" if hit else "house_h1", out, tri_limit=2600, footprint=(2, 1), anchor=(0, 0), hi=bh)
 
 
@@ -278,24 +280,24 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
                     hs[j] = 0.0
         if corner and si in (1, 2):                                  # один кут на поверх висоти: видно колишній дім здалеку
             if si == 1:
-                hs[-3:] = [2.8, 3.1, 3.2]
+                hs[-3:] = [1.8, 2.0, 2.0]
             else:
-                hs[:3] = [3.2, 3.0, 2.6]
-        wall_run(b, p0, p1, 0.4, hs, "wall_ruin", "brick_face", seed * 3 + si)
+                hs[:3] = [2.0, 1.9, 1.6]
+        wall_run(b, p0, p1, 0.4, hs, "wall_ruin", "brick_ruin", seed * 3 + si)
     # --- купа: низька широка (h ≤ 2 м, схили ≲35°), замкнена; деталь запікається зі скан-джерела
     bh = Builder()
-    plan = [(0.0, 0.0, L / 2 + 0.2, D / 2 + 0.2, 2.0, seed + 1)]
+    plan = [(0.0, 0.0, L / 2 + 0.2, D / 2 + 0.2, 1.7, seed + 1)]
     for k in range(3):
         ang = rnd.uniform(0, 2 * math.pi)
         rr_ = rnd.uniform(2.2, 3.4)
-        plan.append((rr_ * math.cos(ang) * 1.15, rr_ * math.sin(ang) * 0.95, rnd.uniform(1.6, 2.2), rnd.uniform(1.4, 2.0), rnd.uniform(0.7, 1.1), seed + 10 + k))
+        plan.append((rr_ * math.cos(ang) * 1.15, rr_ * math.sin(ang) * 0.95, rnd.uniform(1.6, 2.2), rnd.uniform(1.4, 2.0), rnd.uniform(0.6, 1.0), seed + 10 + k))
     for (mx, my, mrx, mry, mh, ms) in plan:
-        mound(b, mx, my, mrx, mry, mh, ms, mat="heap", rings=5 if mh > 1.5 else 3, segs=22 if mh > 1.5 else 10)
+        mound(b, mx, my, mrx, mry, mh, ms, mat="heap", rings=7 if mh > 1.5 else 3, segs=30 if mh > 1.5 else 12)
         mound(bh, mx, my, mrx, mry, mh, ms, mat="heap", rings=14 if mh > 1.5 else 6, segs=60 if mh > 1.5 else 20, jitter=0.12)
 
     def heap_h(x, y):                                                             # поверхня основної купи (косинусний профіль)
         t = min(1.0, math.hypot(x / (L / 2 + 0.2), y / (D / 2 + 0.2)))
-        return 2.0 * 0.5 * (1 + math.cos(math.pi * t))
+        return 1.7 * 0.5 * (1 + math.cos(math.pi * t))
 
     # високий вихідний меш: скани 0.3-1 м по всій купі й відсипу
     hrnd = random.Random(seed + 77)
@@ -308,17 +310,18 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
         a = hrnd.uniform(0, 2 * math.pi)
         t = hrnd.uniform(0.95, 1.25)
         bh.rock((L / 2 + 1.0) * t * math.cos(a), (D / 2 + 1.0) * t * math.sin(a), 0.05, hrnd.uniform(0.25, 0.5), hrnd.choice(("rubble", "heap")), hrnd, buried=0.4)
-    # справжні шматки, що ламають силует (4)
-    for k in range(4):
-        a = rnd.uniform(0, 2 * math.pi)
-        t = rnd.uniform(0.55, 0.95)
-        px, py = (L / 2 + 0.2) * t * math.cos(a), (D / 2 + 0.2) * t * math.sin(a)
-        b.rock(px, py, heap_h(px, py) + 0.1, rnd.uniform(0.6, 1.1), rnd.choice(("rubble", "heap")), rnd, buried=0.35)
+    # 5 шматків 0.4-0.9 м на носку купи: наполовину вкопані, виступають за контур і кидають тінь
+    rad_fn, _ph = mound_radius(seed + 1, 0)
+    for k in range(5):
+        a = (k + rnd.uniform(0.0, 0.8)) * 2 * math.pi / 5
+        rr_ = rad_fn(a)
+        px, py = (L / 2 + 0.2) * rr_ * 1.02 * math.cos(a), (D / 2 + 0.2) * rr_ * 1.02 * math.sin(a)
+        b.rock(px, py, 0.18, rnd.uniform(0.5, 0.9), rnd.choice(("rubble", "heap")), rnd, buried=0.45)
     if chimney:                                                                   # димар: єдине високе над купою
         cx, cy = chimney
         zh = heap_h(cx, cy)
-        b.box_e(cx, cy, zh + 1.0, 0.8, 0.8, 2.0, "brick_face", euler=(0.05, -0.04, 0.2), top="brick_face")
-        b.box_e(cx + 0.05, cy, zh + 2.1, 0.8, 0.8, 0.45, "brick_face", euler=(0.25, -0.2, 0.5), top="char")
+        b.box_e(cx, cy, zh + 1.0, 0.8, 0.8, 2.0, "brick_ruin", euler=(0.05, -0.04, 0.2), top="brick_ruin")
+        b.box_e(cx + 0.05, cy, zh + 2.1, 0.8, 0.8, 0.45, "brick_ruin", euler=(0.25, -0.2, 0.5), top="char")
     # 3 крокви: низько лежать на купі, обидва кінці вгризаються, ≤30°, ≥0.2 м
     for k in range(3):
         a = rnd.uniform(0, 2 * math.pi)
@@ -330,7 +333,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
         z0_ = heap_h(x0_, y0_) - 0.05
         z1_ = max(0.1, heap_h(x1_, y1_) - 0.05)
         th = rnd.uniform(0.2, 0.3)
-        b.beam((x0_, y0_, z0_), (x1_, y1_, z1_), th, rnd.choice(("timber_dark", "char")), th * 1.2)
+        b.beam((x0_, y0_, z0_), (x1_, y1_, z1_), th, "timber_dark", th * 1.2)
     lib.finish(b, name, out, tri_limit=3200, footprint=footprint, anchor=(0, 0), hi=bh)
 
 

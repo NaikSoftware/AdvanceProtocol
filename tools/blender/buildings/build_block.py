@@ -93,7 +93,7 @@ def roof_details(b, xmax):
             continue
         b.box(bay_x(i), Y0 + 2.6, H, 2.6, 2.6, 2.4, "panel", top="bitumen")
     for k, x in enumerate((-12, -7, -2, 3, 11.5, 13.5)):
-        if x > xmax:
+        if x > xmax or (xmax < X1 and x > -4):
             continue
         b.cyl(x, 1.2 * (-1) ** k, H, 0.22, 1.6, 8, "metal_dark")
     # парапет по периметру даху
@@ -161,7 +161,7 @@ def damaged():
         hb = wall_h(back, t)
         for f in range(3):
             z = f * FLOOR + 0.95
-            if hb < z + 1.5:
+            if hb - 1.4 < z + 1.8:
                 continue
             blow = True
             if blow:
@@ -174,7 +174,7 @@ def damaged():
         he = wall_h(east, t)
         for f in range(3):
             z = f * FLOOR + 0.95
-            if he < z + 1.5 or rnd.random() < 0.4:
+            if he - 1.4 < z + 1.8 or rnd.random() < 0.4:
                 continue
             opening(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1)
     # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
