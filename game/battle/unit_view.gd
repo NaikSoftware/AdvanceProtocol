@@ -508,6 +508,8 @@ func play_destroyed() -> Signal:
 		for n: Node3D in [_hp_bar, _hp_label, _drone_icon]:
 			n.visible = false
 		_set_standing(0)
+		if _contact != null:
+			_contact.visible = false
 		tween.tween_interval(_FALL_SEC)
 		return tween.finished
 	# Куля — у контейнері, не в цьому вузлі: вузол юніта звільнить перебудова дошки,
@@ -536,7 +538,10 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 	var hull_size: Vector3 = (hull.mesh as BoxMesh).size
 	_half_base = Vector2(hull_size.x, hull_size.z) * 0.5
 	_hull_material = hull.material_override as StandardMaterial3D
-	_silhouette.add_child(_build_contact_shadow(hull_size))
+	_contact = null
+	if WeatherRig.unit_contact > 0.0:
+		_contact = _build_contact_shadow(hull_size)
+		_silhouette.add_child(_contact)
 
 	# ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2) — єдиний виклик, єдине місце, де стрілку
 	# додають на дошку. Прибрати стрілку — це прибрати рівно ці два рядки
@@ -548,17 +553,29 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/unit_contact_shadow.gdshader")
 ## Пляма тіні-контакту ширша за слід корпусу: край гасне вже за корпусом.
 const CONTACT_SPREAD: float = 2.0
+## Вершини кваду: на пагорбі шейдер кладе їх на рельєф, і ґрунт плями не ріже.
+const CONTACT_SUBDIVIDE: int = 5
 static var _contact_material: ShaderMaterial
+## Нема, коли вигляд карти тіні-контакту не має: інакше кожен юніт платить прозорий виклик малювання.
+var _contact: MeshInstance3D = null
 
 
-## Тінь-контакт: плаский квад під корпусом у силуеті, тож нахиляється разом із ним на схилі й
-## ховається разом із юнітом. Сонця не чекає — силу ставить вигляд карти глобальним uniform.
+## Тінь-контакт: квад під корпусом у силуеті, тож нахиляється разом із ним на схилі й
+## ховається разом із юнітом; де ґрунт вищий за квад, шейдер кладе вершини на рельєф. Сонця не чекає — силу ставить вигляд карти глобальним uniform.
 func _build_contact_shadow(hull_size: Vector3) -> MeshInstance3D:
 	if _contact_material == null:
 		_contact_material = ShaderMaterial.new()
 		_contact_material.shader = _CONTACT_SHADER
+	var th: TerrainHeight = TerrainHeight.active
+	_contact_material.set_shader_parameter("use_height", th != null)
+	if th != null:
+		_contact_material.set_shader_parameter("height_map", th.texture())
+		_contact_material.set_shader_parameter("height_samples", float(th.samples))
+		_contact_material.set_shader_parameter("height_origin", -0.5 - th.margin)
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(hull_size.x, hull_size.z) * CONTACT_SPREAD
+	plane.subdivide_width = CONTACT_SUBDIVIDE
+	plane.subdivide_depth = CONTACT_SUBDIVIDE
 	var mi := MeshInstance3D.new()
 	mi.name = "ContactShadow"
 	mi.mesh = plane

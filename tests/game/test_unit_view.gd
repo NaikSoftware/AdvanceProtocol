@@ -18,6 +18,7 @@ func before_each() -> void:
 func after_each() -> void:
 	# Статичне поле на весь процес: тест, що впав посередині, не сміє лишити рельєф решті набору.
 	TerrainHeight.active = null
+	WeatherRig.unit_contact = 0.0
 
 
 func _unit(type_id: int, owner: int = 0, pos: Vector2i = Vector2i(2, 3), facing: int = 0) -> Unit:
@@ -47,6 +48,7 @@ func test_bind_picks_a_distinct_silhouette_per_class() -> void:
 ## Тінь-контакт: плаский квад під корпусом, ширший за його слід, сам тіні від сонця не кидає;
 ## лежить у силуеті, тож нахиляється й ховається разом із юнітом.
 func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
+	WeatherRig.unit_contact = 0.6
 	for type_id: int in [0, 5, 11]:
 		view.bind(_unit(type_id))
 		var blob: MeshInstance3D = view.get_node("Silhouette/ContactShadow")
@@ -56,6 +58,23 @@ func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 		assert_gt(size.y, hull.z)
 		assert_between(blob.position.y, 0.0, 0.05, "на ґрунті, під корпусом")
 		assert_eq(blob.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+## Без тіні-контакту у вигляді карти пляму не будують зовсім: прозорий квад під кожним юнітом —
+## зайвий виклик малювання.
+func test_no_contact_shadow_when_the_look_has_none() -> void:
+	WeatherRig.unit_contact = 0.0
+	for type_id: int in [0, 5]:
+		view.bind(_unit(type_id))
+		assert_null(view.get_node_or_null("Silhouette/ContactShadow"))
+
+
+## Загиблі фігури лежать на ґрунті, тож пляма під відділенням зникає разом зі стоячими.
+func test_squad_contact_shadow_goes_with_the_squad() -> void:
+	WeatherRig.unit_contact = 0.6
+	view.bind(_unit(0))
+	view.play_destroyed()
+	assert_false((view.get_node("Silhouette/ContactShadow") as Node3D).visible)
 
 
 ## R14: face() твінується (не клацає миттєво), тож перевіряємо ціль твіна

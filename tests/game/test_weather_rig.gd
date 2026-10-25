@@ -138,17 +138,23 @@ func test_water_waves_follow_the_weather() -> void:
 ## На сонячних картах тінь сонця світла й м'яка, тож юніта на землі тримає тінь-контакт;
 ## на похмурій Річці її нема — там вигляд затверджений як є.
 func test_sunny_maps_give_units_a_contact_shadow() -> void:
-	assert_eq(BattleLook.for_map_path("res://maps/river.tres").unit_contact_shadow, 0.0)
+	var river: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	assert_eq(river.unit_contact_shadow, 0.0)
 	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres"]:
 		var look: BattleLook = BattleLook.for_map_path(path)
-		assert_gt(look.unit_contact_shadow, 0.0, path)
+		assert_almost_eq(look.unit_contact_shadow, 0.6, 1e-5, path)
+		assert_almost_eq(look.shadow_opacity, 0.3, 1e-5, path)
+		assert_lt(look.shadow_opacity, river.shadow_opacity, path + ": під сонцем тінь світліша, ніж під хмарами")
 		assert_gt(look.sun_angular_deg, 0.0, path + ": м'яка тінь сонця")
 	var rig: WeatherRig = _rig()
 	var look: BattleLook = BattleLook.for_map_path("res://maps/crossroads.tres")
 	rig.apply(look)
 	assert_almost_eq(rig.applied_globals[&"unit_contact_shadow"], look.unit_contact_shadow, 1e-5)
+	assert_almost_eq(WeatherRig.unit_contact, look.unit_contact_shadow, 1e-5)
 	assert_almost_eq(rig.sun.light_angular_distance, look.sun_angular_deg, 1e-5)
 	assert_true(ProjectSettings.has_setting("shader_globals/unit_contact_shadow"))
+	rig.apply(river)
+	assert_eq(WeatherRig.unit_contact, 0.0, "наступна карта без плями не успадковує її")
 
 
 func test_each_map_names_its_season() -> void:
