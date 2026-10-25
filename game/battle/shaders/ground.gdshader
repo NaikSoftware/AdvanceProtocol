@@ -929,7 +929,7 @@ void fragment() {
 			vec2 so = vec2(hash12(sc + 7.0), hash12(sc + 13.0)) * 0.6 + 0.2;
 			float splash = step(0.6, hash12(sc + 19.0)) * (1.0 - smoothstep(0.0, 0.05, st))
 					* (1.0 - smoothstep(0.1, 0.22, length(fract(sq) - so)))
-					* (1.0 - smoothstep(0.12, 0.25, length(fwidth(sq))));
+					* (1.0 - smoothstep(0.12, 0.25, length(16.0 * (abs(dpx) + abs(dpy)))));
 			alb = mix(alb, alb * 1.6 + 0.015, splash * wet);
 		}
 		// Мокрий асфальт відбиває ~3 % неба, глянцеві смуги — до 30 %: шорсткість 0.45 під похмурим
