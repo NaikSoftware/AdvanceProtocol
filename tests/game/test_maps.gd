@@ -469,6 +469,42 @@ func test_map_has_no_lone_hill_cell(p = use_parameters(_map_paths())) -> void:
 	assert_eq(lone.size(), 0, "%s: поодинокі клітинки пагорба %s" % [path, lone.slice(0, 8)])
 
 
+## Пагорб має тіло: кожен пагорб дошки з 4 і більше клітинок містить суцільний квадрат 2×2.
+## Драбинка з клітинок по діагоналі має сусідів по стороні, але виглядає ниткою, а не схилом.
+func test_board_hills_have_a_solid_body(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var hill := func(c: Vector2i) -> bool:
+		return c.x >= 0 and c.y >= 0 and c.x < m.width and c.y < m.height \
+				and m.tiles[c.y * m.width + c.x] == Terrain.Kind.HILL
+	var seen: Dictionary = {}
+	var thin: Array[Vector2i] = []
+	for y in m.height:
+		for x in m.width:
+			var start := Vector2i(x, y)
+			if seen.has(start) or not hill.call(start):
+				continue
+			seen[start] = true
+			var shape: Array[Vector2i] = []
+			var stack: Array[Vector2i] = [start]
+			while not stack.is_empty():
+				var c: Vector2i = stack.pop_back()
+				shape.append(c)
+				for d: Vector2i in Board.DIRS_4:
+					if not seen.has(c + d) and hill.call(c + d):
+						seen[c + d] = true
+						stack.append(c + d)
+			if shape.size() < 4:
+				continue
+			var body := false
+			for c: Vector2i in shape:
+				body = body or (hill.call(c + Vector2i(1, 0)) and hill.call(c + Vector2i(0, 1))
+						and hill.call(c + Vector2i(1, 1)))
+			if not body:
+				thin.append(start)
+	assert_eq(thin.size(), 0, "%s: пагорби без суцільного тіла 2×2 біля %s" % [path, thin.slice(0, 8)])
+
+
 ## Річка й дорога не обриваються на краю дошки: клітинка кільця за краєм продовжує їх.
 func test_map_edge_water_and_roads_continue_into_the_ring(p = use_parameters(_map_paths())) -> void:
 	var path: String = p
