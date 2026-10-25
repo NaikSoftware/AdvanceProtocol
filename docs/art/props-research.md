@@ -186,6 +186,9 @@ texture and bake; geometry changes only where it changes the outline (holes, bro
 collapsed section). **Must not:** medieval stone, arches, ivy-covered romance ruin, bodies,
 vehicles, flags. Passes if the building outline and most of the roof read from above at both zooms.
 
+A **fully destroyed** variant (walls down to stubs, roof gone, rubble spread around) is kept for
+the odd tile. Most `RUBBLE` tiles get a half-destroyed building, a few get the full ruin.
+
 ### Farm and industrial
 
 | id | prop | size | tiles | route | notes |
