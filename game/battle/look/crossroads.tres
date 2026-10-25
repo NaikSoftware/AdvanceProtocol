@@ -17,6 +17,7 @@ sky_clear = 1.0
 haze_color = Color(0.32, 0.35, 0.38, 1)
 foliage_tint = Color(1, 1.08, 0.8, 1)
 water_murk = 1.0
+water_wind = 0.4
 rain = false
 rain_amount = 0
 wetness = 0.0

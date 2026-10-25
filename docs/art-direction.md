@@ -28,10 +28,12 @@ What this fixes, concretely:
   **Nothing medieval or old-world:** no stone-arch bridges, no slate-and-fieldstone cottages.
 - **Infantry:** plate carriers, ballistic helmets, optics on rifles.
 
-What stays forbidden, exactly as before: **no real army, nation, flag, insignia or identifiable
-vehicle**, anywhere in code, data, UI or assets. The sides are fictional and stay fictional.
+**Vehicles follow real contemporary designs under altered names**: a player recognises the
+family, but no model carries its real designation. **No real army, flag or insignia** anywhere in
+code, data, UI or assets. Each player's set comes from one country's family — never a mix — and
+wheels and tracks turn when a vehicle moves.
 Era-neutrality in the *rules* also stands — nothing in `core/` encodes a period, and the unit
-names in [§3.6](rules/units.md) remain role labels. The setting is an art-direction decision, not a rules one.
+class names in [§3.6](rules/units.md) remain role labels. The setting is an art-direction decision, not a rules one.
 
 ## Maps: season, sky and two characters
 
@@ -73,6 +75,11 @@ Techniques that buy atmosphere cheaply here:
 - Weather = particles + a screen overlay + a wind parameter on foliage shaders + an audio bed.
 - Skip volumetric fog. A depth-based fog gradient reads nearly as well and costs almost nothing.
 - Wetness is a material parameter (roughness + normal blend) driven by the weather controller.
+  Puddles collect only where water would stand: on dirt tracks, in hollows and on flat ground,
+  never on a hill slope and never on a riverbank, where they read as a mistake, not as rain.
+  Smoke drifts with the same wind that slants the rain, so a column never leans against it.
+  Wave size on open water follows the map's weather: River's rain and wind give the full ripple,
+  the calm sunny maps a fraction of it.
 - Post-processing: a colour-grade LUT, light vignette, minimal grain. **No SSAO, no SSR.**
 - **Persistent battle scars.** Wrecks block for a few turns, then their burnt scorch stays. Smoke columns linger for several turns. Craters and
   mud ruts accumulate. This is the cheapest atmosphere in the game and it doubles as information:

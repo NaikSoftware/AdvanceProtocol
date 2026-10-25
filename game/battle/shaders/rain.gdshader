@@ -1,55 +1,130 @@
-// Дощ (`WeatherRig`): один меш із N квадів; вершина несе випадкову точку в одиничній коробці
-// (VERTEX) і свій кут квада (UV). Крапля нерухома у світі (пан дає правильний паралакс), а коробка
-// загортається довкола фокуса камери, тож після пана чи зуму кадр одразу повний дощу.
+// Дощ (`WeatherRig`): один меш із квадів, що стоять сіткою `grid`; вершина несе центр своєї
+// клітинки сітки в одиничній коробці (VERTEX) і кут квада (UV).
+//
+// Краплі прив'язані до світу. Світ поділено на клітинки `cell`; у кожної своя крапля, і де вона
+// з'являється в кожному циклі, вирішує лише світовий номер клітинки й номер циклу. Сітка квадів
+// стоїть над клітинками довкола камери: `cell_origin` — світовий номер кутової клітинки, `stride`
+// — крок (степінь двійки) на віддаленні камери. Пан зсуває сітку на цілі клітинки, тож та сама
+// крапля лишається на тому самому місці світу й дає правильний паралакс.
+//
+// Густота на екрані стала на будь-якому зумі: клітинка малює краплю, лише коли її ранг менший за
+// `keep` (його ставить `WeatherRig` за зумом). Ранг іде від рівня решітки: клітинки, кратні
+// більшому степеню двійки, мають менший ранг, а всередині рівня порядок дає хеш клітинки. Тож
+// з віддаленням краплі зникають по одній, а ті, що лишились, — завжди клітинки рідшої решітки;
+// зміна кроку на порозі нічого не міняє у видимому.
+//
+// Кожна крапля видима лише `life` секунд циклу: око бачить швидкий штрих, а не предмет. Довжина
+// штриха — розмиття руху за витримку: швидкість × `exposure`, у світі, як і падіння, тож на
+// будь-якому зумі штрих пролітає свою довжину за ту саму частку секунди. Довжина в пікселях при
+// швидкості у світі дає «палиці», що прискорюються з наближенням.
 shader_type spatial;
 render_mode unshaded, blend_mix, cull_disabled, shadows_disabled, depth_draw_never;
 
-// Світ: фокус камери на землі, розмір коробки (клітинки), її зсув до камери.
-uniform vec3 focus;
-uniform vec3 box_size = vec3(40.0, 14.0, 40.0);
-uniform vec2 toward_camera = vec2(0.7071, 0.7071);
-// Падіння, клітинок/с: 1.0 — 8 м/с. Вітер — горизонтальний знос тією ж мірою.
-uniform float fall_speed = 1.0;
-uniform vec2 wind = vec2(-0.1, 0.06);
-// Смуга: довжина в клітинках (0.5 м розмиття руху), але на екрані не коротша за 7 px — камера
-// дивиться згори, і смуга 0.5 м на найбільшому віддаленні стискається в крапку 2–3 px.
-// Ширина — не тонша за 1 px.
-uniform float streak_length = 0.0625;
-uniform float min_streak_px = 7.0;
-uniform float streak_width = 0.005;
-uniform vec4 tint : source_color = vec4(0.75, 0.79, 0.84, 0.45);
+// Решітка: розмір клітинки (клітинки дошки), кількість квадів по осях, номер кутової клітинки й
+// крок; ставить `WeatherRig.follow`.
+uniform vec3 cell = vec3(0.26, 0.6375, 0.26);
+uniform vec3 grid = vec3(60.0, 8.0, 60.0);
+uniform vec3 cell_origin;
+uniform float stride = 1.0;
+uniform float keep = 0.125;
+// Падіння й вітер, клітинок/с; цикл і видиме життя краплі, витримка — секунд. Значення ставить
+// `WeatherRig` зі своїх сталих.
+uniform float fall_speed = 3.5;
+uniform vec2 wind = vec2(0.62, -0.62);
+uniform float exposure = 0.045;
+uniform float cycle = 0.25;
+uniform float life = 0.2;
+// Ширина квада впоперек штриха, пікселів: м'яка лінія завширшки ~1 px, що гасне до країв.
+uniform float quad_px = 3.0;
+// Ледь світліше за мокру землю під похмурим небом.
+uniform vec4 tint : source_color = vec4(0.66, 0.69, 0.72, 0.12);
 
-varying float v_along;
-varying float v_fade;
+varying float v_x;
+varying float v_l;
+varying float v_vis;
+
+float rain_hash(vec2 p) {
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+// Хеш точки в [0, 1) (Dave Hoskins, hash13); дзеркало — `WeatherRig.rain_hash3`.
+float rain_hash3(vec3 p3) {
+	p3 = fract(p3 * 0.1031);
+	p3 += dot(p3, p3.zyx + 31.32);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+// Ранг клітинки (див. `WeatherRig.rain_rank`): рівень L — скільки разів усі три номери діляться
+// на 2 (до 5); ранг лежить у [8^-(L+1), 8^-L), найглибший рівень — у [0, 8^-5).
+float rain_rank(vec3 wc) {
+	float lvl = 0.0;
+	for (int i = 1; i <= 5; i++) {
+		float m = exp2(float(i));
+		if (mod(wc.x, m) != 0.0 || mod(wc.y, m) != 0.0 || mod(wc.z, m) != 0.0) {
+			break;
+		}
+		lvl = float(i);
+	}
+	float u = rain_hash3(wc);
+	if (lvl >= 5.0) {
+		return u * pow(8.0, -5.0);
+	}
+	return pow(8.0, -(lvl + 1.0)) * (1.0 + 7.0 * u);
+}
 
 void vertex() {
-	vec3 seed = VERTEX;
+	vec3 gi = floor(VERTEX * grid);
+	// Світовий номер клітинки цієї краплі: від нього залежить усе, що крапля робить.
+	vec3 wc = cell_origin + gi * stride;
+	bool drawn = rain_rank(wc) < keep;
+	float ph = TIME / cycle + rain_hash(wc.xz * 0.731 + wc.y * 17.13);
+	float k = floor(ph);
+	float age = fract(ph) * cycle;
+	vec3 r = vec3(rain_hash(wc.xz * 1.31 + wc.y * 7.7 + k),
+			rain_hash(wc.zx * 1.73 + wc.y * 3.1 + k * 1.7),
+			rain_hash(wc.xy * 1.51 + wc.z * 5.3 + k * 2.3));
 	vec3 vel = vec3(wind.x, -fall_speed, wind.y);
-	// Мінімальний кут коробки: на землі, трохи зсунутий до камери — там у кадрі ближча земля
-	// й вища частина шару.
-	vec3 lo = vec3(focus.x, 0.0, focus.z) - vec3(box_size.x, 0.0, box_size.z) * 0.5
-			+ vec3(toward_camera.x, 0.0, toward_camera.y) * box_size.x * 0.15;
-	vec3 c = lo + mod(seed * box_size + vel * TIME - lo, box_size);
-	vec3 axis = normalize(vel);
-	vec3 view = CAMERA_POSITION_WORLD - c;
-	float dist = length(view);
-	vec3 side = cross(axis, view / dist);
-	// Частка довжини смуги, видима з камери (синус кута між смугою й променем зору).
-	float seen = max(length(side), 0.2);
-	side /= seen;
-	// Розмір пікселя на цій відстані: смуга вужча за піксель мерехтіла б.
-	float px = 2.0 * dist / (PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y);
-	float w = max(streak_width, 1.1 * px);
-	float len = max(streak_length, min_streak_px * px / seen);
-	vec3 p = c + side * (UV.x - 0.5) * w + axis * (UV.y - 0.5) * len;
-	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(p, 1.0);
-	v_along = UV.y;
-	// Ширина понад справжню гасне прозорістю, а краплі впритул до камери — зникають.
-	v_fade = max(sqrt(streak_width / w), 0.75) * smoothstep(1.5, 4.0, dist);
+	vec3 head = (wc + r) * cell + vel * age;
+	vec3 tail = head - vel * exposure;
+	mat4 pv = PROJECTION_MATRIX * VIEW_MATRIX;
+	vec4 h = pv * vec4(head, 1.0);
+	vec4 t = pv * vec4(tail, 1.0);
+	v_x = 0.0;
+	v_l = 0.0;
+	v_vis = 0.0;
+	// Клітинка поза рангом, або крапля на площині камери чи позаду неї (коробка сягає камери на
+	// найбільшому віддаленні — ділення на w там вибухає): не малюємо.
+	if (!drawn || h.w < 0.05 || t.w < 0.05) {
+		POSITION = vec4(2.0, 2.0, 2.0, 1.0);
+	} else {
+		vec2 half_vp = 0.5 * VIEWPORT_SIZE;
+		vec2 sh = h.xy / h.w * half_vp;
+		vec2 st = t.xy / t.w * half_vp;
+		vec2 along = sh - st;
+		vec2 dir = along / max(length(along), 1e-4);
+		vec2 perp = vec2(-dir.y, dir.x);
+		// UV.y 0 — хвіст, 1 — голова; збоку квад на `quad_px`.
+		vec2 sp = mix(st, sh, UV.y) + perp * (UV.x - 0.5) * quad_px;
+		float w = mix(t.w, h.w, UV.y);
+		POSITION = vec4(sp / half_vp * w, mix(t.z, h.z, UV.y), w);
+		v_x = (UV.x - 0.5) * quad_px;
+		v_l = UV.y;
+		float dist = length(CAMERA_POSITION_WORLD - head);
+		v_vis = (age < life ? sin(3.14159 * age / life) : 0.0) * smoothstep(1.5, 4.0, dist);
+		if (v_vis <= 0.0) {
+			// Невидима зараз крапля: квад стягується в точку поза кадром і нічого не малює.
+			POSITION = vec4(2.0, 2.0, 2.0, 1.0);
+		}
+	}
 }
 
 void fragment() {
-	// Голова краплі (низ смуги) яскравіша за слід.
+	// М'яка лінія: найщільніша по осі й гасне за ~1.25 px від неї.
+	float across = 1.0 - smoothstep(0.0, 1.25, abs(v_x));
+	// Обидва кінці гаснуть, суцільного тіла й голови нема.
+	float along = sin(3.14159 * v_l);
 	ALBEDO = tint.rgb;
-	ALPHA = tint.a * v_along * v_fade;
+	ALPHA = tint.a * across * along * v_vis;
 }
