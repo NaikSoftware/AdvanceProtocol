@@ -29,16 +29,16 @@ MATS = {
     "concrete": ((0.50, 0.49, 0.47), 0.95, 0.0),
     "concrete_dust": ((0.68, 0.66, 0.62), 1.0, 0.0),
     "asphalt": ((0.16, 0.16, 0.165), 0.95, 0.0),
-    "steel_olive": ((0.20, 0.24, 0.17), 0.7, 0.4),
-    "timber": ((0.36, 0.28, 0.19), 0.95, 0.0),
-    "steel_grey": ((0.30, 0.32, 0.31), 0.6, 0.5),
+    "steel_gal": ((0.46, 0.48, 0.48), 0.55, 0.6),
+    "rust": ((0.20, 0.09, 0.05), 0.9, 0.3),
+    "steel_grey": ((0.38, 0.40, 0.39), 0.6, 0.5),
     "deckplate": ((0.42, 0.43, 0.38), 0.85, 0.3),
 }
 MAT_ORDER = list(MATS)
 
 # Верх настилу над нулем Z (низом моделі). Бетон і панельний міст стоять на дні, понтон плаває:
 # дно русла на 2.2-2.7 м під верхом берега, вода на 1.25 м.
-DECK_TOP = {"centre": 0.30, "west": 0.30, "east": 0.22}
+DECK_TOP = {"centre": 0.30, "west": 0.30, "east": 0.21}
 
 
 TILE_M = 1.0  # одна текстура = клітинка (одиниця світу)
@@ -110,6 +110,32 @@ def ground(group):
     xf(group, Matrix.Translation((0, 0, -zmin(group))))
 
 
+import random
+
+
+def jag(face_y, sign, w, z0, z1, mat="concrete", seed=1, n=9, x0=0.0):
+    """Зуби відколу на торці: грубі уламки, що виступають за площину зламу, щоб торець не був гладкою плитою."""
+    r = random.Random(seed)
+    out = []
+    for i in range(n):
+        x = x0 - w / 2 + (i + 0.5) * w / n
+        d = r.uniform(0.02, 0.07)
+        hh = (z1 - z0) * r.uniform(0.35, 0.9)
+        zc = r.uniform(z0 + hh / 2, z1 - hh / 2)
+        out.append(Box(mat, (x + r.uniform(-0.01, 0.01), face_y + sign * d / 2, zc),
+                       (w / n * r.uniform(0.7, 1.2), d, hh), rx(r.uniform(-10, 10)) @ rz(r.uniform(-12, 12))))
+    return out
+
+
+def rebar_stubs(face_y, sign, w, zc, seed=2, n=6, x0=0.0):
+    """Кінці арматури: тонкі зігнуті прути з обламаного торця."""
+    r = random.Random(seed)
+    return [Box("rust", (x0 - w / 2 + (i + 0.5) * w / n + r.uniform(-0.015, 0.015),
+                         face_y + sign * 0.075, zc + r.uniform(-0.02, 0.02)),
+                (0.016, 0.15, 0.016), rx(sign * r.uniform(-22, 22)) @ rz(r.uniform(-8, 8)))
+            for i in range(n)]
+
+
 # ---------------------------------------------------------------- центр: бетонна балка, 3 клітинки
 def concrete(broken):
     L, W = 3.0, 0.88
@@ -117,46 +143,61 @@ def concrete(broken):
     th = 0.14  # плита 1.1 м
     bot = DT - th
 
-    def span(y0, y1):
-        """Проліт: плита, асфальт, дві розмітки, два парапети."""
+    def span(y0, y1, lo=False, hi=False, seed=0):
+        """Проліт: плита, асфальт, парапети зі сталевою огорожею; lo/hi — оббитий торець."""
         n = y1 - y0
         yc = (y0 + y1) / 2
         g = [Box("concrete", (0, yc, bot + th / 2), (W, n, th)),
              Box("asphalt", (0, yc, DT + 0.004), (W - 0.2, n, 0.008))]
+        posts = max(2, int(n / 0.25) + 1)
         for sx in (-1, 1):
             g.append(Box("concrete", (sx * (W / 2 - 0.03), yc, DT + 0.055), (0.06, n, 0.11)))
+            g.append(Box("steel_grey", (sx * (W / 2 - 0.03), yc, DT + 0.15), (0.02, n, 0.02)))  # поручень
+            for k in range(posts):
+                g.append(Box("steel_grey", (sx * (W / 2 - 0.03), y0 + 0.02 + k * (n - 0.04) / (posts - 1),
+                                            DT + 0.13), (0.02, 0.02, 0.05)))
+        for face, sign, on in ((y0, -1, lo), (y1, 1, hi)):
+            if on:
+                g += jag(face, sign, W, bot, DT + 0.11, seed=seed + sign + 3)
+                g += rebar_stubs(face, sign, W - 0.1, bot + th * 0.55, seed=seed + sign + 9)
         return g
 
-    # Бетон: два прольоти по 12 м й опора посередині. Береги тримають упори на кінцях.
-    pier = [Box("concrete", (0, 0, bot / 2), (W - 0.12, 0.125, bot)),
+    # Бетон: два прольоти по 12 м на стінчастій опорі в усю ширину настилу; береги тримають упори.
+    pier = [Box("concrete", (0, 0, bot / 2), (W - 0.02, 0.125, bot)),
             Box("concrete", (0, 0, bot - 0.015), (W + 0.02, 0.16, 0.03))]
     abut = [Box("concrete", (0, sy * (L / 2 - 0.09), bot / 2), (W + 0.02, 0.18, bot)) for sy in (-1, 1)]
     if not broken:
         return {"pier": pier, "abut": abut, "span1": span(-L / 2, 0), "span2": span(0, L / 2)}
 
-    s1 = span(-L / 2, 0)
-    # Другий проліт: плита біля берега провисла, середня плита обвалилась, третя лежить у воді.
-    near = span(1.0, L / 2)
-    xf(near, about((0, L / 2, DT - 0.02), rx(3)))
-    xf(near, Matrix.Translation((0, -0.008, 0)))
-    drop = span(0.42, 1.0 - 0.01)
-    xf(drop, about((0, 1.0, DT - 0.03), rx(17)))
-    xf(drop, Matrix.Translation((0.04, 0, 0)) @ about((0, 0.7, 0.2), rz(5)))
-    fall = [Box("concrete", (0.12, 0.22, 0.08), (0.36, 0.34, 0.07), rx(9) @ rz(-14)),
-            Box("concrete_dust", (-0.18, 0.4, 0.05), (0.24, 0.2, 0.05), ry(11) @ rz(30)),
-            Box("concrete", (0.2, 0.78, 0.05), (0.2, 0.16, 0.05), rx(-18) @ rz(40))]
-    # Парапет, що звис з обламаного краю, пил на уламках. Арматура дрібніша за 15 см: лише в текстурі.
-    hang = [Box("concrete", (-W / 2 + 0.03, 0.34, 0.1), (0.05, 0.22, 0.09), rx(35) @ rz(8))]
-    dust = [Box("concrete_dust", (0.0, 0.1, bot - 0.02), (0.5, 0.1, 0.04), rz(3))]
-    return {"pier": pier, "abut": abut, "span1": s1, "near": near, "drop": drop,
-            "fall": fall, "hang": hang, "dust": dust}
+    s1 = span(-L / 2, 0, hi=True, seed=1)
+    # Другий проліт відламався від опори: край біля берега просів на 5°, середня плита впала
+    # торцем у воду й лежить на дні, між нею й опорою — щілина понад 4 м з уламками.
+    near = span(1.0, L / 2 - 0.1, lo=True, seed=2)
+    xf(near, about((0, L / 2 - 0.1, DT - 0.02), rx(5)))
+    drop = span(0.5, 0.99, lo=True, hi=True, seed=3)
+    xf(drop, about((0, 0.99, DT - 0.04), rx(24)))
+    xf(drop, about((0, 0.75, 0.2), rz(6)))
+    ground(drop)
+    r = random.Random(7)
+    fall = []
+    for k in range(5):
+        sz = r.uniform(0.07, 0.17)
+        fall.append(Box("concrete" if k % 2 else "concrete_dust",
+                        (r.uniform(-0.3, 0.3), 0.08 + k * 0.08, sz * 0.4),
+                        (sz * 1.4, sz, sz * 0.7), rx(r.uniform(-25, 25)) @ rz(r.uniform(0, 80))))
+    fall += rebar_stubs(0.3, 1, 0.3, 0.05, seed=5, n=3, x0=-0.1)
+    hang = [Box("concrete", (-W / 2 + 0.03, 0.25, 0.08), (0.05, 0.22, 0.09), rx(35) @ rz(8)),
+            Box("steel_grey", (-W / 2 + 0.03, 0.31, 0.12), (0.02, 0.2, 0.02), rx(35) @ rz(8))]
+    ground(fall)
+    ground(hang)
+    return {"pier": pier, "abut": abut, "span1": s1, "near": near, "drop": drop, "fall": fall, "hang": hang}
 
 
 # ---------------------------------------------------------------- захід: панельна ферма
 def bailey(broken):
     L = 2.0
     DT = DECK_TOP["west"]
-    PL, PH = 3.0 / 8, 1.5 / 8  # панель 3.0 × 1.5 м
+    PL, PH = 3.0 / 8, 2.7 / 8  # панель 3.0 × 2.7 м: висота справжньої двоярусної ферми
     N = 5
     y0 = -N * PL / 2
     rw = 3.7 / 8  # проїзна частина
@@ -166,20 +207,21 @@ def bailey(broken):
     def panel(i):
         ya, yb = y0 + i * PL, y0 + (i + 1) * PL
         yc = (ya + yb) / 2
-        g = [Box("timber", (0, yc, DT - 0.02), (rw, PL, 0.04)),
-             Box("steel_olive", (0, yc, DT - 0.05), (rw + 2 * tw, 0.03, 0.025)),
-             Box("steel_olive", (0, ya + 0.015, DT - 0.045), (rw + 2 * tw, 0.02, 0.03))]
-        diag_len = math.hypot(PL, PH)
-        ang = math.degrees(math.atan2(PH, PL)) * (1 if i % 2 == 0 else -1)
+        g = [Box("deckplate", (0, yc, DT - 0.02), (rw, PL, 0.04)),
+             Box("asphalt", (0, yc, DT + 0.004), (rw - 0.04, PL, 0.008)),
+             Box("steel_gal", (0, yc, DT - 0.05), (rw + 2 * tw, 0.03, 0.025)),
+             Box("steel_gal", (0, ya + 0.015, DT - 0.045), (rw + 2 * tw, 0.02, 0.03))]
+        diag_len = math.hypot(PL, PH - 0.03)
+        ang = math.degrees(math.atan2(PH - 0.03, PL)) * (1 if i % 2 == 0 else -1)
         for sx in (-1, 1):
-            g.append(Box("steel_olive", (sx * xt, yc, DT + 0.01), (tw, PL, 0.022)))  # нижній пояс
-            g.append(Box("steel_olive", (sx * xt, yc, DT + PH - 0.005), (tw, PL, 0.022)))  # верхній
-            g.append(Box("steel_olive", (sx * xt, ya + 0.01, DT + PH / 2), (tw, 0.02, PH)))  # стійка
-            g.append(Box("steel_olive", (sx * xt, yc, DT + PH / 2), (tw - 0.01, diag_len, 0.014), rx(ang)))
+            g.append(Box("steel_gal", (sx * xt, yc, DT + 0.015), (tw, PL, 0.03)))  # нижній пояс
+            g.append(Box("steel_gal", (sx * xt, yc, DT + PH - 0.015), (tw, PL, 0.03)))  # верхній
+            g.append(Box("steel_gal", (sx * xt, ya + 0.01, DT + PH / 2), (tw, 0.02, PH)))  # стійка
+            g.append(Box("steel_gal", (sx * xt, yc, DT + PH / 2), (tw - 0.01, diag_len, 0.018), rx(ang)))
         return g
 
     panels = [panel(i) for i in range(N)]
-    end = [Box("steel_olive", (sx * xt, sy * (N * PL / 2), DT + PH / 2), (tw, 0.02, PH))
+    end = [Box("steel_gal", (sx * xt, sy * (N * PL / 2), DT + PH / 2), (tw, 0.02, PH))
            for sx in (-1, 1) for sy in (-1, 1)]
     # Опори: бетонні лежні на кінцях переправи; їхня довжина не виходить за 2 клітинки.
     abut = [Box("concrete", (0, sy * (L / 2 - 0.08), (DT - 0.045) / 2), (0.7, 0.16, DT - 0.045))
@@ -189,51 +231,53 @@ def bailey(broken):
         return {"abut": abut, "end": end, **{f"p{i}": p for i, p in enumerate(panels)}}
 
     # Західний кінець зірвався з опори: дві панелі провисли, середня випала й лежить на боці,
-    # східна половина сіла на 4°. Між ними щілина ширша за 4 м.
-    west = panels[0] + panels[1]
+    # східна половина сіла на 3°. Між ними щілина ширша за 4 м.
+    west = panels[0] + panels[1] + jag(y0 + 2 * PL, 1, rw, DT - 0.05, DT + 0.3, "steel_gal", 11, 6)
     xf(west, about((0, y0 + 2 * PL, DT), rx(11)))
     xf(west, Matrix.Translation((0.03, 0.0, 0)) @ about((0, y0, DT), rz(-4)))
     mid = panels[2]
     xf(mid, about((0, 0, DT + PH / 2), ry(38) @ rx(8)))
     xf(mid, Matrix.Translation((0.22, -0.02, -0.12)))
     ground(mid)
-    east = panels[3] + panels[4] + end[2:]
+    east = panels[3] + panels[4] + end[2:] + jag(y0 + 3 * PL, -1, rw, DT - 0.05, DT + 0.3, "steel_gal", 12, 6)
     xf(east, about((0, L / 2 - 0.06, DT), rx(-3)))
-    planks = [Box("timber", (0.1 * k - 0.05, 0.16 + 0.03 * k, 0.03 + 0.012 * k), (0.34, 0.07, 0.015), rz(10 * k - 15))
+    planks = [Box("deckplate", (0.1 * k - 0.05, 0.16 + 0.03 * k, 0.03 + 0.012 * k), (0.34, 0.07, 0.015), rz(10 * k - 15))
               for k in range(4)]
     return {"abut": abut, "west": west, "mid": mid, "east": east, "planks": planks, "endw": end[:2]}
 
 
 # ---------------------------------------------------------------- схід: понтонний міст
 def pontoon(broken):
-    DT = DECK_TOP["east"]
-    hw, hh = 0.85, 0.20  # корпус 6.8 м × 1.6 м
-    rwid = 0.60
+    hh = 0.17  # поплавок 1.4 м; решта до настилу — рама
+    rwid = 0.70
 
     def bay(y0, y1, ramp=False):
         n = y1 - y0
         yc = (y0 + y1) / 2
-        g = [Box("steel_grey", (0, yc, hh / 2), (hw, n - 0.012, hh)),
-             Box("deckplate", (0, yc, hh + 0.01), (rwid, n - 0.012, 0.02))]
+        g = [Box("deckplate", (0, yc, hh + 0.02), (rwid, n - 0.012, 0.04))]
         for sx in (-1, 1):
-            g.append(Box("steel_grey", (sx * (rwid / 2 + 0.012), yc, hh + 0.016), (0.024, n - 0.012, 0.032)))
-            g.append(Box("steel_grey", (sx * (hw / 2 - 0.03), yc, hh + 0.012), (0.06, n - 0.012, 0.024)))
+            # Поплавок видно збоку при ватерлінії: вузький корпус зі стрейком.
+            g.append(Box("steel_grey", (sx * 0.32, yc, hh / 2), (0.26, n - 0.012, hh)))
+            g.append(Box("steel_grey", (sx * 0.455, yc, hh * 0.55), (0.03, n - 0.012, 0.045)))  # стрейк
+            g.append(Box("steel_grey", (sx * (rwid / 2 + 0.012), yc, hh + 0.052), (0.024, n - 0.012, 0.032)))  # бортик
             if not ramp:
-                g.append(Box("steel_grey", (sx * (hw / 2 - 0.03), yc, hh + 0.04), (0.03, 0.03, 0.04)))
+                g.append(Box("steel_grey", (sx * 0.455, yc, hh + 0.075), (0.03, 0.03, 0.04)))
+        g.append(Box("steel_grey", (0, yc, hh * 0.45), (0.38, n - 0.012, 0.03)))  # поперечна рама між поплавками
         return g
 
     # 2 клітинки замало для відсіків по 6.7 м з аппарелями: чотири відсіки довжини 0.45-0.55.
     bays = {"r0": bay(-1.0, -0.55, True), "b1": bay(-0.55, 0.0), "b2": bay(0.0, 0.55), "r1": bay(0.55, 1.0, True)}
-    plates = [Box("steel_grey", (0, sy * 0.98, hh + 0.012), (rwid, 0.04, 0.012)) for sy in (-1, 1)]
+    plates = [Box("steel_grey", (0, sy * 0.98, hh + 0.052), (rwid, 0.04, 0.012)) for sy in (-1, 1)]
     if not broken:
         return {**bays, "plates": plates}
 
     # Відсіки розійшлись: один знесло за течією й він сів на дно боком, другий розвернуло.
-    b1 = bays["b1"]
+    # Торці відсіків у розриві рвані: зуби обшивки й кінці арматури рами.
+    b1 = bays["b1"] + jag(0.0, 1, 0.8, 0.0, hh + 0.05, "steel_grey", 21, 8) + rebar_stubs(0.0, 1, 0.5, hh * 0.5, 4, 4)
     xf(b1, about((0, -0.55, 0), rz(-17)))
-    b2 = bays["b2"]
+    b2 = bays["b2"] + jag(0.0, -1, 0.8, 0.0, hh + 0.05, "steel_grey", 22, 8) + rebar_stubs(0.0, -1, 0.5, hh * 0.5, 5, 4)
     xf(b2, about((0, 0.275, 0), rz(-14) @ rx(-13) @ ry(3)))
-    xf(b2, Matrix.Translation((0.24, 0.10, 0)))
+    xf(b2, Matrix.Translation((0.19, 0.10, 0)))
     ground(b2)
     return {"r0": bays["r0"], "b1": b1, "b2": b2, "r1": bays["r1"], "plates": plates}
 
@@ -276,11 +320,13 @@ def make_texture(name):
     step = (8.0 / TEX, 8.0 / TEX)  # 1.56 см на піксель
     mod = lambda a, k: (a * k) % 1.0
     if name in ("concrete", "concrete_dust"):
-        lum = 0.035 * _noise(rng, 12) + 0.025 * _noise(rng, 2.0) + 0.02 * _noise(rng, 0.7)
-        lum -= 0.03 * np.clip(_noise(rng, 1.0, 14) - 0.8, 0, None)  # патьоки від води
+        lum = 0.012 * _noise(rng, 12) + 0.02 * _noise(rng, 2.0) + 0.02 * _noise(rng, 0.7)
+        lum -= 0.05 * np.clip(_noise(rng, 0.8, 14) - 0.6, 0, None)  # патьоки від води
         pores = _noise(rng, 0.6) > 2.4
         lum -= 0.04 * pores
-        h = 0.003 * _noise(rng, 2.0) + 0.0015 * _noise(rng, 0.7) - 0.004 * pores
+        board = mod(yy, 16) < 0.012  # шви опалубки щитами по 0,5 м
+        h = 0.006 * _noise(rng, 2.0) + 0.003 * _noise(rng, 0.7) - 0.004 * pores - 0.008 * board
+        lum -= 0.05 * board
         if name == "concrete":
             joint = mod(yy, 2) < 0.004  # шов плит кожні 4 м
             h -= 0.012 * joint
@@ -298,28 +344,21 @@ def make_texture(name):
         dash = (np.abs(xx - 0.5) < 0.008) & ((yy % 0.5) < 0.25) & (_noise(rng, 2.0) > -1.2)
         img = np.where(dash[..., None], np.array([0.60, 0.60, 0.56]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
         step = (0.68 * 8.0 / TEX, 8.0 / TEX)  # u лягає впоперек настилу
-    elif name == "steel_olive":
-        lum = 0.04 * _noise(rng, 3) + 0.03 * _noise(rng, 0.6)
-        # Облущена фарба — масив від 3 м і патьоки, а не дрібні плями, що тайляться.
-        wear = 0.7 * _noise(rng, 6) + 0.5 * _noise(rng, 0.8, 10)
-        wm = np.clip((wear - 0.9) / 0.4, 0, 1)
-        img = img * (1 - wm[..., None]) + np.array([0.38, 0.22, 0.12]) * wm[..., None]
-        h = 0.0008 * _noise(rng, 0.6) - 0.0015 * wm - 0.004 * (mod(yy, 4) < 0.008)
-    elif name == "timber":
-        rows = 32
-        pid = np.floor(yy * rows).astype(int)
-        tint = rng.uniform(-0.06, 0.06, rows)[pid]
-        lum = tint + 0.05 * _noise(rng, 14, 0.5) + 0.02 * _noise(rng, 0.6)
-        seam = mod(yy, rows)
-        gap = (seam < 0.07) | (seam > 0.95)
-        butt = np.abs(rng.uniform(0, 1, rows)[pid] - xx) < 0.006
-        lum -= 0.16 * gap + 0.14 * butt
-        h = 0.0015 * _noise(rng, 14, 0.5) - 0.002 * (2 * seam - 1) ** 2 - 0.012 * gap - 0.008 * butt
+    elif name == "steel_gal":
+        lum = 0.03 * _noise(rng, 3) + 0.02 * _noise(rng, 0.6) + 0.02 * _noise(rng, 0.8, 10)
+        # Світла оцинкована сталь з темними патьоками від води, без дрібних плям.
+        streak = np.clip(_noise(rng, 0.8, 10) - 0.6, 0, None)
+        lum -= 0.06 * streak
+        h = 0.0008 * _noise(rng, 0.6) - 0.004 * (mod(yy, 4) < 0.008) - 0.001 * streak
+    elif name == "rust":
+        lum = 0.04 * _noise(rng, 6) + 0.03 * _noise(rng, 0.6)
+        h = 0.004 * _noise(rng, 0.8)
     elif name == "steel_grey":
         lum = 0.04 * _noise(rng, 3) + 0.04 * _noise(rng, 0.8, 10) + 0.02 * _noise(rng, 0.5)
         seam = (mod(yy, 4) < 0.01) | (mod(xx, 4) < 0.01)  # стики листів 2 м
-        h = 0.0008 * _noise(rng, 0.6) - 0.005 * seam
-        lum -= 0.06 * seam
+        rib = (mod(xx, 16) < 0.016) | (mod(yy, 16) < 0.016)  # ребра жорсткості через 0,5 м
+        h = 0.0012 * _noise(rng, 0.6) - 0.005 * seam + 0.012 * rib
+        lum += -0.06 * seam + 0.05 * rib
     elif name == "deckplate":
         lum = 0.025 * _noise(rng, 2.5) + 0.02 * _noise(rng, 0.5)
         seam = (mod(xx, 4) < 0.012) | (mod(yy, 4) < 0.012)

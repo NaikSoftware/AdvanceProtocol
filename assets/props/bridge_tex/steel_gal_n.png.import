@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cqvok8p3m4gtj"
-path="res://.godot/imported/timber.png-1b2b45d56b2fe7597568a92268d59ce0.ctex"
+uid="uid://c3oct3ix6s5t7"
+path="res://.godot/imported/steel_gal_n.png-e11abf1c0bc095c9611f383c68fa245f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/props/bridge_tex/timber.png"
-dest_files=["res://.godot/imported/timber.png-1b2b45d56b2fe7597568a92268d59ce0.ctex"]
+source_file="res://assets/props/bridge_tex/steel_gal_n.png"
+dest_files=["res://.godot/imported/steel_gal_n.png-e11abf1c0bc095c9611f383c68fa245f.ctex"]
 
 [params]
 

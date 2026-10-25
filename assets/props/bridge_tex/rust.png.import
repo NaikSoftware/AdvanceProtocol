@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://di3u4qgl5l26"
-path="res://.godot/imported/steel_olive_n.png-ae5bb676fc9ab6174ad2aa6416e84a82.ctex"
+uid="uid://d07qscdq6f18b"
+path="res://.godot/imported/rust.png-ba2e183aa05b9db8287764e29e2bd9e2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/props/bridge_tex/steel_olive_n.png"
-dest_files=["res://.godot/imported/steel_olive_n.png-ae5bb676fc9ab6174ad2aa6416e84a82.ctex"]
+source_file="res://assets/props/bridge_tex/rust.png"
+dest_files=["res://.godot/imported/rust.png-ba2e183aa05b9db8287764e29e2bd9e2.ctex"]
 
 [params]
 
