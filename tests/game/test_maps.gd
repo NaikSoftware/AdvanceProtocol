@@ -8,8 +8,8 @@ const MAPS_DIR: String = "res://maps"
 ## Найдальший постріл ростеру — артилерія й дрон штурмового відділення, обидва 5.
 const MAX_REACH: int = 5
 const LOCALES: Array[String] = ["uk", "en"]
-## Карти, чиї тайли симетричні на 180°. Решту рівняє не форма, а test_map_sides_are_balanced;
-## підтипи й кільце — пейзаж, і на половинах він може різнитися.
+## Карти, де дороги, вода, мости, болота й будівлі симетричні на 180°. Решту рівняє не форма, а
+## test_map_sides_are_balanced; ліси, пагорби, поля й кільце на половинах можуть різнитися.
 const SYMMETRIC_MAPS: Array[String] = ["res://maps/crossroads.tres", "res://maps/ridge.tres"]
 const PACE_TOL: float = 0.05
 const COUNT_TOL: float = 0.15
@@ -119,14 +119,20 @@ func test_exactly_the_three_new_maps() -> void:
 	assert_eq(_map_paths(), ["res://maps/crossroads.tres", "res://maps/ridge.tres", "res://maps/river.tres"])
 
 
-## Симетрія тайлів на 180° — гарантія чесності: кожен гравець має дзеркально ту саму позицію.
+## Симетрія на 180° — гарантія чесності: дороги, вода, мости, болота, будівлі й бази в кожного гравця
+## дзеркально ті самі. Ліси, пагорби й поля на половинах різні: їх рівняють лічба клітинок і темп
+## (test_map_sides_are_balanced, test_map_pace), а не форма.
 func test_map_is_180_degree_symmetric(p = use_parameters(SYMMETRIC_MAPS)) -> void:
 	var path: String = p
 	var m: MapData = load(path) as MapData
+	var fixed: Array = [Terrain.Kind.ROAD, Terrain.Kind.WATER, Terrain.Kind.BRIDGE,
+			Terrain.Kind.BRIDGE_DESTROYED, Terrain.Kind.MARSH, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
 	var odd: Array[Vector2i] = []
 	for y in m.height:
 		for x in m.width:
-			if m.tiles[y * m.width + x] != m.tiles[(m.height - 1 - y) * m.width + (m.width - 1 - x)]:
+			var k: int = m.tiles[y * m.width + x]
+			var twin: int = m.tiles[(m.height - 1 - y) * m.width + (m.width - 1 - x)]
+			if (fixed.has(k) or fixed.has(twin)) and k != twin:
 				odd.append(Vector2i(x, y))
 	assert_eq(odd.size(), 0, "%s: тайли без дзеркальної пари %s" % [path, odd.slice(0, 8)])
 	var by_owner: Dictionary = {0: 0, 1: 0}
