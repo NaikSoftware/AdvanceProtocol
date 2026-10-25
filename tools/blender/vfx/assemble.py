@@ -17,7 +17,7 @@ ATLAS = {
                               lab=(12, 27), tgt_L=26, ab=((-1, 2), (-3, 4))),
     "smoke_column_thin": dict(src="smoke_puff", kind="puff", n=64, cols=8, rows=8, fps=4, m=22.1,
                               lab=(35, 45), tgt_L=40, amax=0.35, ab=((-1, 2), (-3, 4))),
-    "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=16, rows=4, fps=8, bonfire=1, m=3.38, fill=2.3, soft=1.0,
+    "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=16, rows=4, fps=8, bonfire=1, raw=1, m=2.93, sway=0.05,
                             lab=None),
     "explosion": dict(src="explosion", kind="once", n=64, cols=8, rows=8, fps=48, m=22.4, lab=None),
     "dirt_burst": dict(src="dirt_burst", kind="once", n=64, cols=8, rows=8, fps=40, m=13.7, desat=0.65,
@@ -96,6 +96,8 @@ def bonfire(fr, cfg):
     col = np.stack([np.interp(base_to_tip[:, 0], stops_u, stops_c[:, k]) for k in range(3)], -1)[:, None, :]  # H,1,3
     rng = np.random.default_rng(5)
     out = np.zeros_like(fr)
+    if cfg.get("raw"):
+        return _raw_flame(fr, base_to_tip[:, 0], cfg, rng)
     for i in range(n):
         a = a0[i]
         body = np.clip(_blur(a, 2.2) * float(cfg.get("fill", 2.6)), 0, 1)
@@ -147,6 +149,46 @@ def _sway(out, h, cfg):
             dx = amp * (lean * h[r] ** 1.4 + 0.6 * whip * h[r] ** 3)
             res[i, r] = ndshift(out[i, r], (dx, 0), order=1, mode="constant")
     return res
+
+
+def _raw_flame(fr, h, cfg, rng):
+    """The sim's own emission and soft alpha, kept: only a cooler tint towards the tips, a short fade at the
+    very top, <= 1 px blur and thin smoke wisps. No fill, so the licks and gaps inside the body stay."""
+    n, H, W, _ = fr.shape
+    out = np.zeros_like(fr)
+    hh = h[:, None]
+    t = (np.clip((hh - 0.45) / 0.55, 0, 1) ** 1.3) * float(cfg.get("tip", 0.6))
+    orange = np.array([232, 92, 26], np.float32) / 255
+    for i in range(n):
+        a = fr[i, ..., 3]
+        rgb = fr[i, ..., :3]
+        edge = np.clip(1 - a * 1.2, 0, 1)[..., None] * 0.45  # thin, see-through parts run orange-red
+        tt = np.clip(t[..., None] + edge, 0, 0.85)
+        lum = (rgb @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None]
+        rgb = rgb * (1 - tt) + orange * np.clip(lum * 1.15, 0.45, 1.0) * tt
+        # hot base: a gamma lift that keeps the licks and gaps (a blend towards white would flatten them)
+        rgb = np.clip(rgb, 0, 1) ** (1 - float(cfg.get("heat", 0.8)) * np.clip((0.7 - hh) / 0.7, 0, 1))[..., None]
+        a = a * (1 - 0.7 * np.clip((hh - 0.82) / 0.18, 0, 1))
+        pre = np.concatenate([rgb * a[..., None], a[..., None]], -1)
+        pre = np.stack([_blur(pre[..., k], 0.8) for k in range(4)], -1)
+        al = pre[..., 3]
+        # smoke wisps from the blurred silhouette, dragged up
+        w = np.zeros((H, W), np.float32)
+        base = _blur(al, 2.0)
+        for k, (dy, r, g) in enumerate(((int(H * 0.14), 5.0, 0.30), (int(H * 0.28), 8.0, 0.22))):
+            sh = np.roll(base, -dy, 0)
+            sh[H - dy:] = 0
+            sh = np.roll(sh, int(round(6 * np.sin(i * 0.37 + k * 2))), 1)
+            nz = _blur(rng.random((H, W)).astype(np.float32), 5.0)
+            nz = (nz - nz.min()) / max(nz.max() - nz.min(), 1e-6)
+            w = np.maximum(w, _blur(sh, r) * g * (0.5 + nz))
+        w = np.clip(w, 0, 0.4) * (1 - al)
+        soot = np.array([0.20, 0.18, 0.17], np.float32)
+        a_out = al + w
+        rgb_out = (pre[..., :3] + soot * w[..., None]) / np.maximum(a_out[..., None], 1e-6)
+        out[i, ..., :3] = np.clip(rgb_out, 0, 1)
+        out[i, ..., 3] = np.clip(a_out, 0, 1)
+    return _sway(out, h, cfg)
 
 
 def luma_report(fr):
