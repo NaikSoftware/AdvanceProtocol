@@ -1,0 +1,185 @@
+{
+ "atlas": "forest_broadleaf_late",
+ "size": 1024,
+ "alpha_cutoff": 0.45,
+ "card_keep": 0.55,
+ "sprite_sets": {
+  "birch": [
+   {
+    "src": "birch_late",
+    "grade": {
+     "tint": [
+      1.05,
+      1.0,
+      0.86
+     ],
+     "sat": 0.45,
+     "contrast": 0.8,
+     "target_y": 0.06
+    }
+   }
+  ],
+  "broad": [
+   {
+    "src": "broad_late",
+    "grade": {
+     "tint": [
+      1.05,
+      1.0,
+      0.86
+     ],
+     "sat": 0.45,
+     "contrast": 0.8,
+     "target_y": 0.06
+    }
+   }
+  ],
+  "oak": [
+   {
+    "src": "oak_late",
+    "grade": {
+     "tint": [
+      1.05,
+      1.0,
+      0.86
+     ],
+     "sat": 0.45,
+     "contrast": 0.8,
+     "target_y": 0.06
+    }
+   }
+  ],
+  "shrub": [
+   {
+    "src": "shrub_late",
+    "grade": {
+     "tint": [
+      1.05,
+      1.0,
+      0.86
+     ],
+     "sat": 0.45,
+     "contrast": 0.8,
+     "target_y": 0.06
+    }
+   }
+  ]
+ },
+ "items": [
+  {
+   "node": "Birch_A",
+   "src": "birch_a",
+   "trunk_grade": {
+    "target_y": 0.3,
+    "sat": 0.5
+   },
+   "sprites": "birch"
+  },
+  {
+   "node": "Birch_B",
+   "src": "birch_b",
+   "trunk_grade": {
+    "target_y": 0.3,
+    "sat": 0.5
+   },
+   "sprites": "birch"
+  },
+  {
+   "node": "Oak_A",
+   "src": "oak_a",
+   "trunk_grade": {
+    "target_y": 0.06
+   },
+   "sprites": "oak",
+   "card_scale": 1.2
+  },
+  {
+   "node": "Oak_B",
+   "src": "oak_b",
+   "trunk_grade": {
+    "target_y": 0.06
+   },
+   "sprites": "oak",
+   "card_scale": 1.2
+  },
+  {
+   "node": "Shrub_Hazel",
+   "src": "shrub_hazel",
+   "trunk_grade": {
+    "target_y": 0.07
+   },
+   "sprites": "shrub",
+   "trunk": false,
+   "strip": true
+  },
+  {
+   "node": "Shrub_Thorn",
+   "src": "shrub_thorn",
+   "trunk_grade": {
+    "target_y": 0.06
+   },
+   "sprites": "shrub",
+   "trunk": false,
+   "strip": true
+  },
+  {
+   "node": "Log_A",
+   "src": "log_a",
+   "trunk_grade": {
+    "target_y": 0.06
+   },
+   "trunk": false,
+   "strip": true
+  },
+  {
+   "node": "Log_B",
+   "src": "log_b",
+   "trunk_grade": {
+    "target_y": 0.06
+   },
+   "trunk": false,
+   "strip": true
+  },
+  {
+   "node": "Hero_Oak",
+   "src": "hero_oak",
+   "trunk_grade": {
+    "target_y": 0.06
+   },
+   "sprites": "oak",
+   "trunk_sides": 6,
+   "card_scale": 1.6
+  },
+  {
+   "node": "Hero_Lime",
+   "src": "hero_lime",
+   "trunk_grade": {
+    "target_y": 0.07
+   },
+   "sprites": "broad",
+   "trunk_sides": 6,
+   "card_scale": 1.5
+  },
+  {
+   "node": "Hero_Birch",
+   "src": "hero_birch",
+   "trunk_grade": {
+    "target_y": 0.3,
+    "sat": 0.5
+   },
+   "sprites": "birch",
+   "trunk_sides": 6,
+   "card_scale": 1.25
+  },
+  {
+   "node": "Hero_Poplar",
+   "src": "hero_poplar",
+   "trunk_grade": {
+    "target_y": 0.07
+   },
+   "sprites": "broad",
+   "trunk_sides": 6,
+   "card_scale": 1.3
+  }
+ ]
+}
