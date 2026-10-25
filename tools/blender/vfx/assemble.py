@@ -17,7 +17,7 @@ ATLAS = {
                               lab=(12, 27), tgt_L=26, ab=((-1, 2), (-3, 4))),
     "smoke_column_thin": dict(src="smoke_puff", kind="puff", n=64, cols=8, rows=8, fps=4, m=22.1,
                               lab=(35, 45), tgt_L=40, amax=0.35, ab=((-1, 2), (-3, 4))),
-    "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=16, rows=4, fps=8, vgrade=0.5, glow=1.1, glow_r=9, m=1.8,
+    "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=16, rows=4, fps=8, bonfire=1, m=3.38, fill=2.3, soft=1.0,
                             lab=None),
     "explosion": dict(src="explosion", kind="once", n=64, cols=8, rows=8, fps=48, m=22.4, lab=None),
     "dirt_burst": dict(src="dirt_burst", kind="once", n=64, cols=8, rows=8, fps=40, m=13.7, desat=0.65,
@@ -73,6 +73,96 @@ def loopify(fr, n):
     return np.concatenate([pm / np.maximum(al, 1e-6), al], -1)
 
 
+def _blur(a, r):
+    from scipy.ndimage import gaussian_filter
+    return gaussian_filter(a, r, mode="constant")
+
+
+def bonfire(fr, cfg):
+    """Turn the thin, stringy flame sheets of the sim into a full, soft, bright flame body.
+
+    Shape comes from the sim (its alpha, blurred and filled), colour from the height in the flame:
+    near-white to pale yellow in the lower 40%, yellow-orange in the middle, orange-red and fading in the
+    top 20%. Thin dark-grey wisps above the tips hand over to the smoke column (alpha <= 0.4).
+    """
+    n, H, W, _ = fr.shape
+    a0 = fr[..., 3]
+    union = a0.max(0)
+    rows = np.nonzero(_blur(union, 1.5).max(1) > 0.35)[0]
+    top, bot = int(rows.min()), int(rows.max())
+    base_to_tip = ((bot - np.arange(H)) / max(bot - top, 1)).clip(0, 1)[:, None]
+    stops_u = [0.0, 0.40, 0.60, 0.80, 1.0]
+    stops_c = np.array([(255, 246, 205), (255, 236, 175), (255, 200, 92), (244, 140, 46), (210, 74, 24)], np.float32) / 255
+    col = np.stack([np.interp(base_to_tip[:, 0], stops_u, stops_c[:, k]) for k in range(3)], -1)[:, None, :]  # H,1,3
+    rng = np.random.default_rng(5)
+    out = np.zeros_like(fr)
+    for i in range(n):
+        a = a0[i]
+        body = np.clip(_blur(a, 2.2) * float(cfg.get("fill", 2.6)), 0, 1)
+        body = _blur(body, float(cfg.get("soft", 1.3)))
+        # keep a little of the sim's own brightness variation as texture
+        lum = fr[i, ..., :3] @ np.array([0.2126, 0.7152, 0.0722], np.float32)
+        tex = _blur(lum, 1.0)
+        tex = np.clip(tex / max(float(np.percentile(tex[a > 0.3], 90)) if (a > 0.3).any() else 1.0, 1e-3), 0, 1.2)
+        tx = 0.9 + 0.12 * (tex - 0.6)
+        edge = np.clip(1 - body * 1.4, 0, 1)[..., None]  # rim: one step cooler than the core
+        up = np.clip(base_to_tip + 0.18, 0, 1)
+        col2 = np.stack([np.interp(up[:, 0], stops_u, stops_c[:, k]) for k in range(3)], -1)[:, None, :]
+        rgb = (col * (1 - 0.55 * edge) + col2 * 0.55 * edge) * tx[..., None]
+        al = body * (1 - np.clip((base_to_tip - 0.80) / 0.20, 0, 1) ** 1.5 * 0.92)
+        # smoke wisps: the flame silhouette dragged upwards and smeared, dark grey, thin
+        w = np.zeros((H, W), np.float32)
+        for k, (dy, r, g) in enumerate(((int(H * 0.16), 5.0, 0.30), (int(H * 0.30), 8.0, 0.22))):
+            sh = np.roll(body, -dy, 0)
+            sh[H - dy:] = 0
+            sh = np.roll(sh, int(round(6 * np.sin(i * 0.37 + k * 2))), 1)
+            nz = _blur(rng.random((H, W)).astype(np.float32), 5.0)
+            nz = (nz - nz.min()) / max(nz.max() - nz.min(), 1e-6)
+            w = np.maximum(w, _blur(sh, r) * g * (0.5 + nz))
+        w = np.clip(w, 0, 0.4)
+        w = w * (1 - al)
+        soot = np.array([0.20, 0.18, 0.17], np.float32)
+        a_out = al + w * (1 - al)
+        rgb_out = (rgb * al[..., None] + soot * (w * (1 - al))[..., None]) / np.maximum(a_out[..., None], 1e-6)
+        out[i, ..., :3] = np.clip(rgb_out, 0, 1)
+        out[i, ..., 3] = np.clip(a_out, 0, 1)
+    return _sway(out, base_to_tip[:, 0], cfg)
+
+
+def _sway(out, h, cfg):
+    """Licking: the upper flame leans and whips sideways. Sum of harmonics of the loop period, so frame
+    63 -> 0 stays continuous; harmonics 1..4 with fixed phases make it non-rhythmic to the eye."""
+    from scipy.ndimage import shift as ndshift
+    n, H, W, _ = out.shape
+    amp = float(cfg.get("sway", 0.07)) * W
+    ph = (0.4, 2.1, 4.0, 5.3)
+    wt = (1.0, 0.7, 0.45, 0.3)
+    res = np.empty_like(out)
+    for i in range(n):
+        t = 2 * np.pi * i / n
+        lean = sum(w * np.sin((k + 1) * t + p_) for k, (w, p_) in enumerate(zip(wt, ph)))
+        # a second, faster whip that only the tip feels
+        whip = sum(w * np.sin((k + 2) * 2 * t + p_ * 1.7) for k, (w, p_) in enumerate(zip(wt, ph)))
+        for r in range(H):
+            dx = amp * (lean * h[r] ** 1.4 + 0.6 * whip * h[r] ** 3)
+            res[i, r] = ndshift(out[i, r], (dx, 0), order=1, mode="constant")
+    return res
+
+
+def luma_report(fr):
+    """Alpha-weighted mean luma (0..255) of the flame body: lower half and upper half of its rows."""
+    a = fr[..., 3]
+    body = a > 0.6
+    rows = np.nonzero(body.any((0, 2)))[0]
+    mid = (rows.min() + rows.max()) // 2
+    L = (fr[..., :3] @ np.array([0.2126, 0.7152, 0.0722], np.float32)) * 255
+    low = body.copy()
+    low[:, :mid + 1] = False
+    up = body.copy()
+    up[:, mid:] = False
+    return float(L[low].mean()), float(L[up].mean())
+
+
 def process(cfg, frames):
     n = cfg["n"]
     fr = frames
@@ -80,6 +170,9 @@ def process(cfg, frames):
         fr = loopify(fr[-2 * n:], n)
     else:
         fr = fr[:n].copy()
+    if cfg.get("bonfire"):
+        fr = bonfire(fr, cfg)
+        print("flame luma lower half %.0f, upper half %.0f (alpha > 0.6)" % luma_report(fr))
     if cfg.get("tail"):  # a flash must end empty, the sim stops while it is still bright
         k = cfg["tail"]
         fr[-k:, ..., 3] *= np.linspace(1, 0, k + 1)[1:].reshape(-1, 1, 1).astype(np.float32)

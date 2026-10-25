@@ -13,5 +13,5 @@ R "$G" "$WORK" explosion rotx=90 height=24 kind=fire cell=192 samples=64 frames=
 R "$G" "$WORK" smoke_puff rotx=90 height=24 kind=smoke cell=192 samples=64 frames=66:129:1 pitch=45 ground=1 dens=5 col=0.32,0.32,0.32 margin=0.06 fade=0.12
 R "$G" "$WORK" dirt_burst rotx=90 height=14 kind=smoke cell=192 samples=64 frames=4:130:2 pitch=45 ground=1 dens=6 col=0.36,0.28,0.2 margin=0.06 fade=0.12
 R "$G" "$WORK" flash rotx=90 height=8 kind=fire cell=192 samples=64 frames=4:34:2 pitch=45 ground=1 ramp=1.0 gain=9 fabs=10 dens=4 col=0.3,0.3,0.3 margin=0.12 fade=0.12
-R "$F" "$WORK" wreck_fire rotx=90 height=1.7 vstretch=1.7 kind=fire cell=256 cellw=128 samples=64 frames=0:192:1.5 pitch=45 ground=1 athr=0.3 ramp=1.7 gain=8 fabs=12 dens=40 col=0.08,0.08,0.08 margin=0.05 fit=typ bed=0.75 bedz=1.2 bedgain=2.0
-python3 -I "$H/assemble.py" "$WORK" "$OUT" all
+R "$F" "$WORK" wreck_fire rotx=90 height=1.7 vstretch=3.6 kind=fire cell=256 cellw=128 samples=48 frames=0:192:1.5 pitch=45 ground=1 athr=0.3 ramp=1.7 gain=8 fabs=40 dens=40 col=0.08,0.08,0.08 margin=0.6 fit=typ
+python3 "$H/assemble.py" "$WORK" "$OUT" all

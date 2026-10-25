@@ -33,7 +33,7 @@ pitch). The VDB files themselves are not in the repository.
 | --- | --- | --- | --- |
 | `smoke_column.png` | rolling dark smoke, plays once and ends empty (loops without a seam) | 64, 8×8 × 192 px, 4 fps, cell ≈ 22 m (the cloud fills ≈ 19 m, scale the quad) | Ground Explosion VDB |
 | `smoke_column_thin.png` | the same, lighter and thinner (peak alpha 0.35) for the thinning stages | 64, 8×8 × 192 px, 4 fps | Ground Explosion VDB |
-| `wreck_fire.png` | tall licking flames rising from a glowing burning bed (the bed is a flat emissive disc added in Blender, noise-animated), yellow-white root, orange body, dark smoky tips, seamless loop | 64, 16×4 × 128×256 px (2048×1024), 8 fps, cell width ≈ 1.7 m, base at the bottom centre, 6% above the cell bottom | Small Camp Fire VDB (vertical stretch 1.7) |
+| `wreck_fire.png` | tall soft flame body rising from the cell bottom: near-white base, yellow-orange middle, orange-red fading tips, thin dark-grey smoke wisps above; shape from the sim, colour graded by height, sideways licking added as loop-period harmonics; seamless loop | 64, 16×4 × 128×256 px (2048×1024), 8 fps, cell width ≈ 3.4 m (flame ≈ 1.5 m wide, 3 m tall), base at the bottom centre, 6% above the cell bottom | Small Camp Fire VDB (vertical stretch 3.6) |
 | `explosion.png` | fireball then dark smoke, one-shot | 64, 8×8 × 192 px, 48 fps, cell ≈ 22 m | Ground Explosion VDB |
 | `dirt_burst.png` | brown earth and dust cloud, no fire, one-shot | 64, 8×8 × 192 px, 40 fps, cell ≈ 13.7 m | Ground Explosion VDB (density only, brown albedo) |
 | `impact_flash.png` | muzzle / impact flash into a small fireball, ends empty | 16, 4×4 × 192 px, 60 fps, cell ≈ 6.7 m | Ground Explosion VDB (early frames) |
