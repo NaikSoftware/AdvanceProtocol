@@ -260,7 +260,7 @@ func attach_controller(controller: InputController) -> void:
 	_sync_cancel()
 	# §3.13: огляд ворога — позначки лише нижня межа, і UI мусить сказати це вголос.
 	controller.inspected.connect(func(i: Dictionary) -> void:
-		_show_threat_floor(i.get("is_floor", false), int(i.get("drone_radius", 0)) > 0))
+		_show_threat_floor(i.get("is_floor", false)))
 
 
 ## Явна прив'язка камери (§9), у тому ж стилі, що attach_controller() вище.
@@ -448,9 +448,9 @@ func _show_drone_range() -> void:
 	_drone_range_label.visible = true
 
 
-## drone — у ворога є кільце дрона: там підлога найнижча (overlays.md), і копія каже це.
-func _show_threat_floor(on: bool, drone: bool = false) -> void:
-	_threat_floor_label.text = tr("hud_threat_floor_drone" if drone else "hud_threat_floor")
+## Підпис видно лише разом із кільцем дрона ворога (is_floor), тож текст один.
+func _show_threat_floor(on: bool) -> void:
+	_threat_floor_label.text = tr("hud_threat_floor_drone")
 	_threat_floor_label.visible = on
 
 

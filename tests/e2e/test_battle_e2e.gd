@@ -221,33 +221,24 @@ func test_engineer_never_retaliates() -> void:
 	assert_eq(_e2e.events_of(Events.ShotRetaliated).size(), 0)
 
 
-# --- 4. Невидимий нападник -----------------------------------------------------------
+# --- 4. Нападник із нерозвіданої землі -----------------------------------------------
 
 ## Танк (огляд 4, дальність 4) стріляє з (1,3) по гарматі (огляд 3, дальність 5) на (5,3):
-## манхеттен 4 -> гармата його не бачить (тайл не розвіданий), хоч дістала б.
+## манхеттен 4 -> гармата тайла нападника не розвідувала, але влучання його відкриває
+## (§3.3.1), тож вона б'є у відповідь, як в оригіналі.
 ## Постріл: int(71.25 + 11) = 82 (броня гармати збоку 0, кидок броні 0 -> без кидка) -> 118.
-func test_unseen_attacker_is_not_retaliated_against() -> void:
+## Відповідь у лоб танка: кидки 16 (0..50), 8 (0..9), 73 (0..100):
+## int(150 + 16 - (27.75 + 8) + 73) = 203 -> 400 - 203 = 197.
+func test_attacker_on_unscouted_ground_is_revealed_and_answered() -> void:
 	await _boot(9, 7, [_spawn(MEDIUM_TANK, 0, Vector2i(1, 3), E), _spawn(FIELD_GUN, 1, Vector2i(5, 3), N)])
 	await _e2e.act(Vector2i(1, 3), Vector2i(5, 3))
 	var gun: Unit = _unit(2)
 	assert_eq(gun.hp, 200 - 82)
-	assert_eq(gun.ap, 24, "не відповіла — AP цілий")
-	assert_eq(gun.facing, N, "невидимий нападник не повертає ціль (це був би витік)")
-	assert_eq(_unit(1).hp, 400, "безкарний постріл")
-	assert_eq(_e2e.events_of(Events.ShotRetaliated).size(), 0)
-
-
-## Те саме, але стрілецький загін гравця 1 на (3,5) розвідує (1,3) (манхеттен 4 <= 5):
-## тепер гармата бачить нападника і б'є у відповідь у лоб танка:
-## кидки 16 (0..50), 8 (0..9), 73 (0..100): int(150 + 16 - (27.75 + 8) + 73) = 203 -> 400-203=197.
-func test_scouted_attacker_is_retaliated_against() -> void:
-	await _boot(9, 7, [_spawn(MEDIUM_TANK, 0, Vector2i(1, 3), E), _spawn(FIELD_GUN, 1, Vector2i(5, 3), N),
-		_spawn(RIFLE, 1, Vector2i(3, 5))])
-	await _e2e.act(Vector2i(1, 3), Vector2i(5, 3))
-	assert_eq(_unit(2).hp, 200 - 82)
+	assert_true(_e2e.service.state.vision[1].is_seen(Vector2i(1, 3)), "влучання відкрило тайл нападника")
+	assert_eq(gun.ap, 0, "відповіла")
+	assert_eq(gun.facing, W, "відповідач розвернувся на нападника")
 	assert_eq(_unit(1).hp, 400 - 203)
-	assert_eq(_unit(2).ap, 0)
-	assert_eq(_unit(2).facing, W, "відповідач розвернувся на нападника")
+	assert_eq(_e2e.events_of(Events.ShotRetaliated).size(), 1)
 
 
 # --- 5. Хід крізь туман -----------------------------------------------------------------

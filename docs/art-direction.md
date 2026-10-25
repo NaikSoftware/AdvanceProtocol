@@ -21,14 +21,42 @@ What this fixes, concretely:
   optics, antenna clusters. Not riveted plate.
 - **Palette:** contemporary digital-pattern camouflage, low-saturation greys, greens and tans.
   Dust, rain and mud are the only things that dirty a vehicle.
-- **Light and audio:** overcast northern-European daylight as the default preset, turbine and
-  diesel notes, radio chatter as texture rather than language.
+- **Light and audio:** per-map daylight (see below), turbine and diesel notes, radio chatter as
+  texture rather than language.
+- **Countryside:** contemporary Eastern-European — brick and plaster houses under metal or
+  fibre-cement roofs, panel blocks, farm hangars, silos, concrete fences and poles, modern bridges.
+  **Nothing medieval or old-world:** no stone-arch bridges, no slate-and-fieldstone cottages.
 - **Infantry:** plate carriers, ballistic helmets, optics on rifles.
 
-What stays forbidden, exactly as before: **no real army, nation, flag, insignia or identifiable
-vehicle**, anywhere in code, data, UI or assets. The sides are fictional and stay fictional.
+**Vehicles follow real contemporary designs under altered names**: a player recognises the
+family, but no model carries its real designation. **No real army, flag or insignia** anywhere in
+code, data, UI or assets. Each player's set comes from one country's family — never a mix — and
+wheels and tracks turn when a vehicle moves.
 Era-neutrality in the *rules* also stands — nothing in `core/` encodes a period, and the unit
-names in [§3.6](rules/units.md) remain role labels. The setting is an art-direction decision, not a rules one.
+class names in [§3.6](rules/units.md) remain role labels. The setting is an art-direction decision, not a rules one.
+
+## Maps: season, sky and two characters
+
+Each map has its own season and sky, and the sky decides the light:
+
+| map | season and sky | light and shadows |
+| --- | --- | --- |
+| River | late autumn, overcast, rain | soft diffuse light, weak soft shadows, high cool ambient, bare broadleaf |
+| Crossroads | late summer, sunny, dry | strong warm low sun, crisp shadows, sky-blue ambient, full leaf |
+| Ridge | early autumn, clear | bright sun higher up, crisp shadows, yellow-orange birch and oak |
+
+The season never contradicts the map's ground state (§3.12): snow needs `FROZEN`, rain needs a
+wet ground state. Deciduous trees and grass come in three seasonal variants; pine serves every map.
+
+**The two halves of a map differ in character and are fair only by numbers.** Rules-relevant
+layout is balanced by the pace and terrain-count tests in `tests/game/test_maps.gd`; the scenery
+(field and forest sub-types, props, bridge designs, the ring beyond the board) differs per half.
+A 180° copy reads like a chessboard.
+
+**Land use follows how the country is really farmed**, never noise. Ploughed land is a man-made
+rectangle reached by a road or track; it keeps at least one cell of meadow from water, marsh and
+houses and never lies on a hill. Floodplains and riverbanks are meadow and reed, hamlets sit on
+roads with gardens and orchards around them, woods take hills, poor ground and field edges. Format and examples: [`tools/maps/README.md`](../tools/maps/README.md).
 
 ## Rendering and mobile budget
 
@@ -41,20 +69,54 @@ Budget on a mid-range phone at 60 fps: under ~100 draw calls and ~150k triangles
 
 Techniques that buy atmosphere cheaply here:
 
-- **Bake** static terrain lighting. One directional light with shadows for units only.
+- **Bake** static terrain lighting. One directional light with shadows for units only. On sunny
+  maps props carry baked or contact shadows cast along that map's sun, or they float.
 - Time of day is a **per-map baked preset**, not a dynamic cycle.
 - Weather = particles + a screen overlay + a wind parameter on foliage shaders + an audio bed.
 - Skip volumetric fog. A depth-based fog gradient reads nearly as well and costs almost nothing.
 - Wetness is a material parameter (roughness + normal blend) driven by the weather controller.
+  Puddles collect only where water would stand: on dirt tracks, in hollows and on flat ground,
+  never on a hill slope and never on a riverbank, where they read as a mistake, not as rain.
+  Smoke drifts with the same wind that slants the rain, so a column never leans against it.
+  Wave size on open water follows the map's weather: River's rain and wind give the full ripple,
+  the calm sunny maps a fraction of it.
 - Post-processing: a colour-grade LUT, light vignette, minimal grain. **No SSAO, no SSR.**
-- **Persistent battle scars.** Wrecks stay. Smoke columns linger for several turns. Craters and
+- **Persistent battle scars.** Wrecks block for a few turns, then their burnt scorch stays. Smoke columns linger for several turns. Craters and
   mud ruts accumulate. This is the cheapest atmosphere in the game and it doubles as information:
   the map should tell you where the fighting has been.
 
 Turn-based means the screen is usually static — enable low-processor mode and drop the frame rate
 hard when nothing is animating. Battery life is a feature for a game passed between people.
 
+## Props
+
+- **Realistic, never cartoon or toy-like:** real proportions and materials, weathering. Flat
+  faces, blob trees and boxes with painted windows fail.
+- **Detail matches the screen**, 7 cm/px at the closest zoom and 22 cm/px at the farthest: a
+  feature under ~15 cm is texture or nothing; a feature of ~0.5 m or more that changes the
+  silhouette from above is geometry. Textures sit at 1.5–3 cm per texel. Check every asset at both
+  zooms: no blur close, no shimmer far.
+- **Props add no rule.** A structure stands only on `BUILDING` cells and fits a whole number of
+  tiles, so no unit ever stands inside a neighbour's wall. Small props (fences, bales, poles,
+  trailers, blocks) sit near cell edges on passable cells; a vehicle that enters the cell crushes
+  them and the debris stays as a scar, infantry passes them by.
+- **Forests are dense woods** a tank could hide in — canopy masses, a shrub belt at the edge, not
+  a few trees with units visible between them. The canopy dithers over cells holding a unit the
+  current player can see, including the cells between the unit and the camera.
+- **Scars respect the fog:** crushed props, wrecks and craters show only where the viewer's
+  `seen` covers the tile, or they report enemy movement.
+- Briefs, sizes and routes per prop (Blender, Tripo or CC0): [`art/props-research.md`](art/props-research.md).
+
 ## Effects — fire, explosions, smoke
+
+**What a hit shows.** A vehicle that survives a hit shows only the hit itself — sparks and
+ricochets for small arms, a flash with a dust and debris burst for shells and drones — and no
+lasting damage. A destroyed vehicle burns, then smokes, and leaves a burnt-out wreck that blocks
+vehicles for a few turns ([§3.14](../CLAUDE.md)). A squad loses figures as its HP drops — one of
+four per quarter lost — and the fallen lie beside it; a destroyed squad leaves them and a scorch,
+restrained, and no obstacle. Effects attach only to units the current player can see, the attacker's muzzle flash included.
+Sizes, durations, colours and sources: [`art/damage-fx-research.md`](art/damage-fx-research.md).
+
 
 Never one technique. A single explosion is four or five layers, each one the cheapest thing that
 does its job:
@@ -66,7 +128,7 @@ does its job:
 | depth | soft particles (depth fade), dissolve by a noise mask | the quad stops cutting the ground on a hard line, and dies by burning away rather than by alpha |
 | the flash | an `OmniLight3D` for 3–5 frames plus emissive on the particle | the only part that actually hits the eye |
 | heat haze | screen-texture refraction on one quad | cheap, and it is what reads as expensive |
-| the scar | `Decal` (crater, scorching) plus debris meshes | statics, not particles — see §8 |
+| the scar | a stamp into the ground's scar map (crater, scorching) plus debris meshes | statics, not particles — see §8 |
 
 The thing that is not obvious: **good fire is not simulated at runtime, it is simulated offline and
 baked into a flipbook.** EmberGen or Blender's Mantaflow run the real fluid sim, render 64 frames
@@ -84,7 +146,7 @@ What our own constraints add on top:
   is the battery budget above.
 - The explosion itself is `one_shot`, lives ~1.5 s, then `queue_free`. Setting `emitting = false`
   is not enough; the particles stay in frame.
-- Craters and scorching are `Decal` nodes, not quads laid over the ground — quads z-fight on slopes.
+- Craters, scorching and crushed-prop debris are stamped into a **scar map**, one texture over the board that the ground shader reads. Not `Decal` nodes: the Mobile renderer applies at most 8 decals per mesh and the Compatibility renderer none, and the ground is one mesh. Not quads over the ground: they z-fight on slopes and cost a draw call each.
 
 Off the table on mobile Vulkan: volumetric smoke, raymarching, GPU particle collision against the
 SDF, and more than one effect sampling `screen_texture` at a time.

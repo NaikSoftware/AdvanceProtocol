@@ -1,7 +1,7 @@
 ---
 name: rules-lawyer
 description: "Settles what the game rules actually say before anyone writes code against them. Use when a brief and the written rules disagree, when a rule is ambiguous or silent on a case (an edge in retaliation, fog, mines, armour sectors, drone strikes), when someone proposes changing a rule, or when a reviewer flags that code does not match the spec. Do NOT use it to write or fix code (core-engineer / view-engineer), to run tests (gut-runner), or to tune numbers for balance (balance-analyst)."
-tools: [Read, Grep, Glob, Bash, Skill]
+tools: [Read, Grep, Glob, Bash, Skill, mcp__memroot__memory_retrieve, mcp__memroot__memory_create]
 model: opus
 ---
 

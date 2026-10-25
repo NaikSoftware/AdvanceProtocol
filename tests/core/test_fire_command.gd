@@ -23,7 +23,10 @@ func test_fire_emits_shot_then_damage() -> void:
 	state.begin_turn()
 	var events: Array = FireCommand.create(a.id, t.id).apply(state)
 	assert_true(events[0] is Events.ShotFired)
-	assert_true(events[1] is Events.DamageDealt)
+	# Між пострілом і шкодою може стояти TileRevealed: влучання відкриває стрільця (§3.3.1).
+	var i_dmg: int = events.find_custom(func(e: Events.BattleEvent) -> bool: return e is Events.DamageDealt)
+	assert_gt(i_dmg, 0)
+	assert_true(events.slice(1, i_dmg).all(func(e: Events.BattleEvent) -> bool: return e is Events.TileRevealed))
 
 func test_out_of_range_is_rejected() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(0, 0), 2)   # range 4
@@ -101,7 +104,7 @@ func test_a_tile_scouted_earlier_stays_shootable_with_nobody_watching() -> void:
 
 func test_the_same_shot_is_illegal_over_ground_nobody_ever_scouted() -> void:
 	# Та сама пара, без розвідника. Єдина причина відмови — (5,5) не бачив ніхто й
-	# ніколи: саме на такій землі §3.3.1 і лишає безкарність.
+	# ніколи.
 	var gun: Unit = state.add_unit(9, 0, Vector2i(5, 10), 0)
 	var t: Unit = state.add_unit(5, 1, Vector2i(5, 5), 0)
 	state.start()
@@ -191,6 +194,7 @@ func test_fire_adds_applied_damage_to_the_shooters_tally() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
 	var t: Unit = state.add_unit(2, 1, Vector2i(6, 4), 2)
 	state.begin_turn()
+	t.ap = 0  # без відповіді: інакше вона ляже в підсумок гравця 1
 	var before: int = t.hp
 	FireCommand.create(a.id, t.id).apply(state)
 	assert_eq(state.damage_dealt[0], before - t.hp, "підсумок рахує фактично завдану шкоду")
