@@ -51,22 +51,24 @@ def trunk(bm, uvl, rect, base_r, top_r, height, uv_top, sides, lean=(0.0, 0.0)):
     return normals
 
 
-def card(bm, uvl, col, c, n, roll, size, rect, normal_of, shade):
-    """Квадрат пучка з центром c і лицем n, повернутий на roll навколо n."""
-    n = Vector(n).normalized()
-    ref = Vector((0, 0, 1)) if abs(n.z) < 0.9 else Vector((1, 0, 0))
-    t = ref.cross(n).normalized()
-    b = n.cross(t)
-    t, b = t * math.cos(roll) + b * math.sin(roll), b * math.cos(roll) - t * math.sin(roll)
+def card(bm, uvl, uv2l, col, c, roll, size, rect, normal_of, shade):
+    """Пучок: чотири вершини в центрі c, зсув кута — в UV2 (одиниці гри, після 1/8).
+
+    Шейдер forest_crown розгортає картку до камери; roll крутить пучок у площині екрана,
+    щоб однакові спрайти не стояли однаково.
+    """
     h = size / 2
-    co = [Vector(c) + (t * x + b * y) * h for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-    lift = max(0.0, 0.02 - min(p.z for p in co))  # нижній кут куща не йде під землю
-    vs = [bm.verts.new(p + Vector((0, 0, lift))) for p in co]
+    c = Vector(c)
+    c.z = max(c.z, h * 0.8)  # нижній край пучка не йде під землю
+    cr, sr = math.cos(roll), math.sin(roll)
+    vs = [bm.verts.new(c) for _ in range(4)]
     f = bm.faces.new(vs)
     for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        x, y = (u * 2 - 1) * h, (v * 2 - 1) * h
         loop[uvl].uv = to_atlas(rect, u, v)
+        loop[uv2l].uv = ((x * cr - y * sr) / TILE_M, (x * sr + y * cr) / TILE_M)
         loop[col] = (shade, shade, shade, 1.0)
-    return {v: normal_of(v.co, n) for v in vs}
+    return {v: normal_of(c, None) for v in vs}
 
 
 def limb(bm, uvl, rect, pts, radii, sides=3):
@@ -106,7 +108,8 @@ def build_node(item, rects):
     meta = json.load(open(os.path.join(d, "cards.json")))
     rng = random.Random(item["node"])
     bm = bmesh.new()
-    uvl = bm.loops.layers.uv.new()
+    uvl = bm.loops.layers.uv.new("UVMap")
+    uv2l = bm.loops.layers.uv.new("UV2")
     col = bm.loops.layers.float_color.new("Col")
     vnorm = {}
     cards = meta["cards"]
@@ -118,17 +121,16 @@ def build_node(item, rects):
     R = max([math.hypot(cd["c"][0], cd["c"][1]) for cd in cards] + [0.5])
     ctr = Vector((0, 0, (cb + top) / 2))
     rad = Vector((R, R, max((top - cb) / 2, 0.5)))
-    bend = item.get("normal_bend", 0.75)
 
     def normal_of(p, n):
         s = Vector(((p.x - ctr.x) / rad.x, (p.y - ctr.y) / rad.y, (p.z - ctr.z) / rad.z))
         s = s.normalized() if s.length > 1e-6 else Vector((0, 0, 1))
-        return (s * bend + n * (1 - bend)).normalized()
+        return s
 
     sprites = rects["sprites"].get(item.get("sprites"), [])
     scale = item.get("card_scale", 1.0)
     for cd in cards:
-        vnorm.update(card(bm, uvl, col, cd["c"], cd["n"], cd["roll"], cd["size"] * scale,
+        vnorm.update(card(bm, uvl, uv2l, col, cd["c"], cd["roll"], cd["size"] * scale,
                           rng.choice(sprites), normal_of, cd["shade"]))
     n_cards = len(bm.faces)
     trect = rects["trunks"].get(item["node"])
