@@ -33,6 +33,7 @@ MATS = {
     "asphalt_wet": ((0.22, 0.22, 0.225), 0.4, 0.0),
     "asphalt": ((0.16, 0.16, 0.165), 0.95, 0.0),
     "steel_gal": ((0.50, 0.52, 0.52), 0.5, 0.2),
+    "steel_dark": ((0.27, 0.28, 0.27), 0.6, 0.25),
     "wet": ((0.10, 0.11, 0.11), 0.15, 0.0),
     "rust": ((0.20, 0.09, 0.05), 0.9, 0.3),
     "steel_grey": ((0.38, 0.40, 0.39), 0.6, 0.25),
@@ -289,11 +290,11 @@ def bailey(broken):
     east = panels[3] + panels[4] + [end[1], end[3]] + chord_stubs(y0 + 3 * PL, -1, xt, tw, DT + 0.015, DT + PH - 0.015)
     xf(east, about((0, L / 2 - 0.06, DT), rx(10)))
     # Уламки у воді, кожен від 0.3 тайла: настил, балка й дві діагоналі лежать у розриві.
-    junk = [Box("asphalt_wet", (0.44, 0.1, 0.135), (0.3, 0.26, 0.04), rx(10) @ rz(40)),
-            Box("steel_gal", (-0.4, 0.0, 0.15), (0.04, 0.5, 0.04), rz(25) @ rx(10)),
-            Box("steel_gal", (0.5, -0.12, 0.145), (0.03, 0.4, 0.03), rz(-35) @ rx(-8)),
-            Box("steel_gal", (-0.5, 0.15, 0.145), (0.03, 0.38, 0.03), rz(30) @ rx(7))]
-    junk.append(wet((0.44, 0.1, 0.12), (0.31, 0.27, 0.06)))
+    junk = [Box("asphalt_wet", (0.44, 0.1, 0.116), (0.3, 0.26, 0.04), rx(10) @ rz(40)),
+            Box("steel_gal", (-0.4, 0.0, 0.13), (0.04, 0.5, 0.04), rz(25) @ rx(10)),
+            Box("steel_gal", (0.5, -0.12, 0.122), (0.03, 0.4, 0.03), rz(-35) @ rx(-4)),
+            Box("steel_gal", (-0.5, 0.15, 0.122), (0.03, 0.38, 0.03), rz(30) @ rx(4))]
+    junk.append(wet((0.44, 0.1, 0.1), (0.31, 0.27, 0.06)))
     return {"abut": abut, "west": west, "east": east, "junk": junk}
 
 
@@ -339,7 +340,7 @@ def pontoon(broken):
     r1 = bays["r1"] + jag(0.55, -1, 0.8, 0.0, hh * 0.7, "steel_grey", 23, 8) + torn_plate(0.55, -1, 0.8, 0.05, hh, 6)
     frag = [Box("steel_grey", (0.0, 0.0, hh / 2), (0.2, 0.3, hh)), wet((0, 0, wl), (0.204, 0.304, 0.05)),
             Box("deckplate", (-0.04, 0.0, hh + 0.02), (0.3, 0.3, 0.04))]
-    frag += jag(0.15, 1, 0.26, 0.0, hh * 0.9, "steel_grey", 31, 5) + jag(-0.15, -1, 0.26, 0.0, hh * 0.9, "steel_grey", 32, 5)
+    frag += jag(0.15, 1, 0.26, 0.0, hh * 0.45, "steel_dark", 31, 5) + jag(-0.15, -1, 0.26, 0.0, hh * 0.45, "steel_dark", 32, 5)
     frag += torn_plate(0.15, 1, 0.3, 0.05, hh, 7, 4) + torn_plate(-0.15, -1, 0.3, 0.05, hh, 8, 4)
     xf(frag, about((0, 0, 0), rx(-30) @ rz(35)))
     xf(frag, Matrix.Translation((0.5, 0.1, 0)))
@@ -420,7 +421,7 @@ def make_texture(name):
     elif name == "rust":
         lum = 0.04 * _noise(rng, 6) + 0.03 * _noise(rng, 0.6)
         h = 0.004 * _noise(rng, 0.8)
-    elif name == "steel_grey":
+    elif name in ("steel_grey", "steel_dark"):
         lum = 0.04 * _noise(rng, 3) + 0.04 * _noise(rng, 0.8, 10) + 0.02 * _noise(rng, 0.5)
         seam = (mod(yy, 4) < 0.01) | (mod(xx, 4) < 0.01)  # стики листів 2 м
         rib = (mod(xx, 16) < 0.016) | (mod(yy, 16) < 0.016)  # ребра жорсткості через 0,5 м
