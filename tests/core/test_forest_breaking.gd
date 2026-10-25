@@ -76,9 +76,11 @@ func test_light_vehicle_artillery_and_engineer_enter_a_broken_cell() -> void:
 		var u: Unit = state.add_unit(type_id, 0, Vector2i(2, 5), 2)
 		state.refresh_vision(0)
 		assert_eq(MoveCommand.create(u.id, Vector2i(3, 5)).validate(state), "", "тип %d у просіку" % type_id)
-		MoveCommand.create(u.id, Vector2i(3, 5)).apply(state)
+		var before: int = state.broken_forest.size()
+		var events: Array = MoveCommand.create(u.id, Vector2i(3, 5)).apply(state)
 		assert_eq(u.pos, Vector2i(3, 5), "тип %d у просіці" % type_id)
-		assert_false(state.broken_forest.has(Vector2i(3, 4)), "тип %d лісу не валить" % type_id)
+		assert_false(events.any(func(e: Events.BattleEvent) -> bool: return e is Events.ForestBroken), "тип %d лісу не валить" % type_id)
+		assert_eq(state.broken_forest.size(), before, "тип %d не змінив просік" % type_id)
 
 func test_infantry_walks_through_forest_and_never_breaks_it() -> void:
 	var inf: Unit = state.add_unit(RIFLE, 0, Vector2i(2, 5), 2)
@@ -133,6 +135,38 @@ func test_the_enemy_learns_the_break_once_it_scouts_the_tile() -> void:
 	assert_true(state.vision[1].is_seen(Vector2i(3, 5)), "передумова: тайл розвідано")
 	assert_true(state.known_broken_map(1).has(Vector2i(3, 5)))
 	assert_eq(MoveCommand.create(car.id, Vector2i(3, 5)).validate(state), "")
+
+func test_the_walk_charges_the_true_forest_cost_not_the_believed_one() -> void:
+	var b: Board = Board.create(10, 10, Terrain.GroundState.DRY)
+	b.set_kind(Vector2i(3, 5), Terrain.Kind.FOREST)
+	state = BattleState.create(b, 2, 7)
+	var breaker: Unit = state.add_unit(MEDIUM_TANK, 0, Vector2i(3, 7), 0)
+	state.start()
+	MoveCommand.create(breaker.id, Vector2i(3, 3)).apply(state)
+	# Танк гравця 1 з'являється після start(): його seen порожня, тож просіку він не знає,
+	# і планує крізь ліс, який має за цілий, — а ціна кроку мусить бути за правдою.
+	var tank: Unit = state.add_unit(MEDIUM_TANK, 1, Vector2i(2, 5), 6)
+	state.active_player = 1
+	tank.refill_ap()
+	assert_false(state.known_broken_map(1).has(Vector2i(3, 5)), "передумова: гравець 1 просіки не знає")
+	var ap_before: int = tank.ap
+	MoveCommand.create(tank.id, Vector2i(4, 5)).apply(state)
+	assert_eq(tank.pos, Vector2i(4, 5))
+	assert_eq(ap_before - tank.ap, 10 + 10, "обидва кроки — за ціною просіки, а не цілого лісу")
+
+func test_a_move_stopped_before_an_unseen_unit_in_forest_does_not_break_it() -> void:
+	var b: Board = Board.create(10, 10, Terrain.GroundState.DRY)
+	b.set_kind(Vector2i(3, 5), Terrain.Kind.FOREST)
+	state = BattleState.create(b, 2, 7)
+	state.start()
+	# Обидва юніти додано після start(): гравець 0 піхоту в лісі не бачить.
+	var tank: Unit = state.add_unit(MEDIUM_TANK, 0, Vector2i(2, 5), 2)
+	state.add_unit(RIFLE, 1, Vector2i(3, 5), 6)
+	var events: Array = MoveCommand.create(tank.id, Vector2i(4, 5)).apply(state)
+	assert_true(events.any(func(e: Events.BattleEvent) -> bool: return e is Events.MoveBlocked), "передумова: хід обірвано")
+	assert_eq(tank.pos, Vector2i(2, 5))
+	assert_true(state.broken_forest.is_empty(), "танк у ліс не в'їхав — нічого не повалено")
+	assert_false(events.any(func(e: Events.BattleEvent) -> bool: return e is Events.ForestBroken))
 
 func test_a_tank_breaks_the_forest_even_when_a_mine_goes_off_there() -> void:
 	var tank: Unit = state.add_unit(MEDIUM_TANK, 0, Vector2i(2, 5), 2)

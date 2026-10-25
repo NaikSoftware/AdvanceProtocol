@@ -286,6 +286,7 @@ func _wire_view(board: Board) -> void:
 	_target_overlay = TargetOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
 		func() -> void: _board_view.rebuild_tiles(_match_service.state.board))
+	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
 	# але власний шар і власний сигнал: action_preview малює його для прев'ю
@@ -901,7 +902,15 @@ func _rebuild_units_for_active_player() -> void:
 		_units.add_child(view)
 		view.bind(unit)
 		_unit_views[uid] = view
+	forest_changed()
 	_apply_threat_marks()
+
+
+## Гачок вигляду лісу: тут його перемальовують з known_broken_map(активного) — ніколи
+## з події. Вигляду повалених дерев на цій гілці ще немає, тож порожньо. Викликається
+## з перебудови після пакета подій і на гейті, тобто і на ForestBroken, і на передачі ходу.
+func forest_changed() -> void:
+	pass
 
 
 func _first_unit_cell(player: int) -> Vector2i:

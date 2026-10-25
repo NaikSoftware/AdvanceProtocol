@@ -168,10 +168,11 @@ product against the target's facing. No trigonometry, no division.
 - **The fog hides enemy units and their mines — never the map.** Terrain is public from the first
   turn, at full brightness. The one exception is forest a tank has broken (§3.2): a player knows a
   tile is broken only once it is in their `seen` grid, so knowledge can lag the truth but never
-  contradict it, and planning never reads the truth. Hiding the ground would make the two movement zones lie, since a
-  contour bending around unscouted obstacles is itself a tell. **It hides enemy units only until
-  the ground under them is scouted**, and since scouting is permanent, by mid-match it hides little
-  but mines — an opening mechanic, not a standing one. See the linked document.
+  contradict it, and planning never reads the truth. Hiding the ground would make the two movement
+  zones lie, since a contour bending around unscouted obstacles is itself a tell. **It hides enemy
+  units only until the ground under them is scouted**, and since scouting is permanent, by
+  mid-match it hides little but mines — an opening mechanic, not a standing one. See the linked
+  document.
 - Every player keeps **two grids**, and **`seen` is the one the rules read**: a tile ever scouted
   stays scouted, and an enemy standing on it is visible, shootable, inspectable and able to fire
   back. `visible` (inside a vision diamond right now) exists only to extend `seen`.

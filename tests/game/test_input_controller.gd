@@ -506,6 +506,26 @@ func test_zone_excludes_a_known_enemy_mine_but_not_an_unknown_one() -> void:
 	assert_true(overlay.last_zones.can_reach(Vector2i(6, 5)), "невідома міна не видна формою зони")
 
 
+## Просіка: зона бронеавтомобіля мусить збігатися з MoveCommand.validate() — знає лише
+## розвідані власником просіки, нерозвіданої не видно (§3.5).
+func test_zone_reaches_known_broken_forest_but_not_unscouted_one() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(2, 0, Vector2i(5, 5), 0)  # armoured car, owner 0
+	var near := Vector2i(5, 6)  # в ромбі огляду
+	var far := Vector2i(5, 9)  # Манхеттен 4, нерозвіданий
+	for p: Vector2i in [near, far]:
+		service.state.board.set_kind(p, Terrain.Kind.FOREST)
+		service.state.broken_forest[p] = true
+	_begin_and_drain()
+	assert_true(service.state.vision[0].is_seen(near), "передумова: near розвіданий")
+	assert_false(service.state.vision[0].is_seen(far), "передумова: far нерозвіданий")
+
+	controller.tap_cell(u.pos)
+
+	assert_true(overlay.last_zones.can_reach(near), "відома просіка — в зоні")
+	assert_false(overlay.last_zones.can_reach(far), "нерозвідана просіка не просочується в зону")
+
+
 # --- Task 8: режим ENGINEER -------------------------------------------------
 # Допустимі тайли беруться лише з EngineerCommand.action_status() (§3.13) —
 # контролер їх не виводить сам.
