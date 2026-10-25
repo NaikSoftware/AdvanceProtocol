@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, lump
+from lib import Builder, lump, mound, bent_sheet
 
 out = lib.out_dir()
 only = sys.argv[sys.argv.index("--") + 2:] if "--" in sys.argv else []
@@ -60,7 +60,7 @@ def small_barn():
     b.window(("y", -Wy / 2, -1), -2.0, 1.2, 0.9, 0.7)
     b.window(("y", -Wy / 2, -1), 2.5, 1.2, 0.9, 0.7)
     for sg in (1, -1):                                                         # фасція по карнизах
-        b.box(0, sg * (Wy / 2 + 0.34), EAVE - 0.3, Lx + 0.7, 0.05, 0.16, "pvc")
+        b.box(0, sg * (Wy / 2 + 0.34), EAVE - 0.3, Lx + 0.7, 0.05, 0.16, "gutter")
     lib.finish(b, "f1_farm_barn", out, tri_limit=400, footprint=(2, 1), anchor=(0, 0))
 
 
@@ -100,19 +100,39 @@ def hangar(damaged):
         b.box(0, y0 + 0.22, 0.6, W - 0.5, 0.02, EAVE - 0.6, "clad_inner")
         b.box(0, y1 - 0.22, 0.6, W - 0.5, 0.02, EAVE - 0.6, "clad_inner")
         b.box(0, 0, 0.62, W - 0.4, Ln - 0.4, 0.04, "floor_dark")
-        for k in range(6):
-            ya, yb = y0 + k * seg, y0 + (k + 1) * seg
-            if k not in (2, 3):
-                sl(1, [(0, ya), (0, yb), (1, yb), (1, ya)], "clad_roof")
-            if k != 2:
-                sl(-1, [(0, ya), (0, yb), (1, yb), (1, ya)], "clad_roof")
-        # залишки східного скату: рвані краї з багатьма зубцями, обгорілі
-        sl(1, [(0.72, -6.0), (1, -6.0), (1, -1.0), (0.93, -1.6), (0.88, -2.3), (0.95, -3.0), (0.84, -3.8), (0.78, -4.6), (0.86, -5.2)], "clad_burnt")
-        sl(1, [(1, 1.2), (1, 6.0), (0.55, 6.0), (0.62, 5.0), (0.7, 4.3), (0.64, 3.4), (0.78, 2.6), (0.9, 1.9)], "clad_burnt")
-        sl(1, [(0, -6.0), (0.27, -6.0), (0.22, -5.0), (0.3, -4.2), (0.14, -3.6), (0.2, -2.6), (0.05, -2.0), (0, -1.8)], "clad_burnt")
-        sl(1, [(0, 2.2), (0.12, 2.8), (0.33, 3.6), (0.26, 4.4), (0.34, 5.1), (0.2, 6.0), (0, 6.0)], "clad_burnt")
-        sl(-1, [(0.0, -6.0), (0.3, -6.0), (0.22, -4.9), (0.34, -4.0), (0.12, -2.2), (0.0, -3.0)], "clad_burnt")
-        sl(-1, [(1, -6.0), (0.62, -6.0), (0.7, -5.2), (0.58, -4.6), (0.8, -4.0), (0.74, -3.5), (1, -3.2)], "clad_burnt")
+        # покрівля: цілі секції + дві секції з нерівним проломом, що не слідує швам листів
+        hole_rnd = random.Random(5)
+        def hole(y, side):
+            """Інтервал t (0 карниз .. 1 коник), вирізаний на висоті y; зубці 0.3-1 м розкидані випадково."""
+            env = max(0.0, 1.0 - (abs(y - (0.5 if side > 0 else -3.5)) / (6.3 if side > 0 else 3.4)) ** 3)
+            if env <= 0.05:
+                return None
+            c = 0.55 + hole_rnd.uniform(-0.07, 0.07)
+            wlo = env * hole_rnd.uniform(0.28, 0.42)
+            whi = env * hole_rnd.uniform(0.26, 0.40)
+            return (max(0.0, c - wlo), min(1.0, c + whi))
+        for side in (1, -1):
+            ylo, yhi = (-6.0, 6.0) if side > 0 else (-6.0, 0.0)
+            for k in range(6):
+                ya, yb = y0 + k * seg, y0 + (k + 1) * seg
+                if yb <= ylo or ya >= yhi:
+                    sl(side, [(0, ya), (0, yb), (1, yb), (1, ya)], "clad_roof")
+            n = int((yhi - ylo) / 0.6)
+            for i in range(n):
+                ya, yb = ylo + 0.6 * i, ylo + 0.6 * (i + 1)
+                h = hole(0.5 * (ya + yb), side)
+                if h is None:
+                    sl(side, [(0, ya), (0, yb), (1, yb), (1, ya)], "clad_roof")
+                    continue
+                t0, t1 = h
+                if t0 > 0.02:
+                    sl(side, [(0, ya), (0, yb), (t0, yb), (t0, ya)], "clad_roof" if t0 > 0.18 else "clad_burnt")
+                    if t0 > 0.18:
+                        sl(side, [(t0 - 0.12, ya), (t0 - 0.12, yb), (t0, yb), (t0, ya)], "clad_burnt")
+                if t1 < 0.98:
+                    sl(side, [(t1, ya), (t1, yb), (1, yb), (1, ya)], "clad_roof" if 1 - t1 > 0.18 else "clad_burnt")
+                    if 1 - t1 > 0.18:
+                        sl(side, [(t1, ya), (t1, yb), (t1 + 0.12, yb), (t1 + 0.12, ya)], "clad_burnt")
         for gy in (y0, y1):
             b.poly([(x0, gy, EAVE), (x1, gy, EAVE), (0, gy, RIDGE)] if gy > 0 else [(x1, gy, EAVE), (x0, gy, EAVE), (0, gy, RIDGE)], "clad_wall")
         for k in range(7):                                                           # портальні рами
@@ -121,14 +141,21 @@ def hangar(damaged):
                 b.box(xs, y, 0.6, 0.3, 0.45, EAVE - 0.6, "metal_dark")
             b.beam((x0 + 0.3, y, EAVE), (0, y, RIDGE), 0.4, "metal_dark", 0.25)
             b.beam((x1 - 0.3, y, EAVE), (0, y, RIDGE), 0.4, "metal_dark", 0.25)
-        # 2-3 зігнуті листи звисають у пролом із краю покрівлі й лежать на кроквах
-        b.beam((3.0, -3.9, 7.95), (0.4, -4.4, 5.9), 1.1, "clad_roof", 0.05)
-        b.beam((5.2, 3.8, 7.3), (2.4, 4.1, 5.2), 1.1, "clad_burnt", 0.05)
-        b.beam((-3.0, -3.6, 7.5), (-0.6, -3.9, 5.6), 1.1, "clad_roof", 0.05)
-        # купа листів, уламків і кроквяних обрізків на підлозі всередині
-        lib.chunks(b, 2.0, 0.0, 4.5, 1.4, 22, ("clad_burnt", "rubble"), 31, z0=0.62, smin=0.5, smax=1.1)
-        for k in range(9):
-            b.box_e(rnd.uniform(-5, 6), rnd.uniform(-5.5, 5.5), 0.9 + rnd.uniform(0, 0.8), 1.1, rnd.uniform(1.6, 2.6), 0.05, rnd.choice(("clad_roof", "clad_burnt", "fc_roof")),
+        # 3 зігнуті листи висять на прогонах пролому (стик на краю покрівлі), один лежить на кроквах
+        def slope_pt(side, t, y):
+            return (side * 9.0 * (1 - t), y, EAVE + 3.0 * t)
+        pa = slope_pt(1, 0.78, 0.1)
+        bent_sheet(b, pa, (pa[0] + 1.4, pa[1], pa[2] - 2.2), 1.1, "clad_burnt", 0.35, "y")
+        pb = slope_pt(1, 0.3, -2.6)
+        bent_sheet(b, pb, (pb[0] - 1.6, pb[1], pb[2] - 2.0), 1.1, "clad_roof", 0.3, "y")
+        pc = slope_pt(-1, 0.62, -3.6)
+        bent_sheet(b, pc, (pc[0] - 1.4, pc[1], pc[2] - 1.9), 1.1, "clad_roof", 0.3, "y")
+        bent_sheet(b, (1.0, 3.5, 6.0), (4.0, 4.1, 4.6), 1.1, "fc_roof", 0.3, "y")
+        # купа на підлозі під проломом: суцільний горб + кутасті уламки; контактна тінь від неї
+        mound(b, 3.0, -0.5, 4.2, 5.0, 1.6, 33, z0=0.62, rings=5, segs=16)
+        lib.chunks(b, 3.0, -0.5, 3.6, 1.7, 20, ("clad_burnt", "rubble", "clad_roof"), 31, z0=0.62, smin=0.5, smax=1.1)
+        for k in range(7):
+            b.box_e(rnd.uniform(-5, 6), rnd.uniform(-5.5, 5.5), 0.75 + rnd.uniform(0, 0.5), 1.1, rnd.uniform(1.6, 2.4), 0.05, rnd.choice(("clad_roof", "clad_burnt")),
                     euler=(rnd.uniform(-0.5, 0.5), rnd.uniform(-0.5, 0.5), rnd.uniform(0, 3.1)))
         # сміття зовні: листи й крихта вздовж стіни
         for k in range(12):
@@ -208,14 +235,15 @@ def fuel():
     b.box(1.0, 0, 0, 29.0, 10.6, 0.08, "apron", top="apron")
     cx = -4.0
     for sx in (-5.5, 5.5):                                               # колони навісу
-        for sy in (-2.6, 2.6):
+        for sy in (-2.4, 2.4):
             b.box(cx + sx, sy, 0, 0.5, 0.5, 4.2, "kiosk")
-    b.box(cx, 0, 4.1, 15.0, 9.0, 0.9, "kiosk", top="canopy")            # фасція ~0.9 м
-    b.box(cx, 0, 4.4, 15.06, 9.06, 0.4, "metal_dark")                 # темна смуга по фасції (без бренду)
-    for ix in (-3.5, 3.5):                                               # острівці 4 x 1 з двома колонками
-        b.box(cx + ix, 0, 0.08, 1.0, 10.4, 0.2, "apron", top="apron")
-        for py in (-1.2, 1.2):
-            b.box(cx + ix, py, 0.28, 0.5, 0.9, 1.8, "frame", top="dark")
+    b.box(cx, 0, 4.1, 15.0, 6.5, 0.9, "kiosk", top="canopy")            # фасція ~0.9 м
+    b.box(cx, 0, 4.4, 15.06, 6.56, 0.4, "metal_dark")                 # темна смуга по фасції (без бренду)
+    for ix in (-3.5, 3.5):                                               # острівці з бордюром, колонки видно за краєм навісу
+        b.box(cx + ix, 0, 0.08, 1.1, 10.4, 0.22, "step", top="step")
+        b.box(cx + ix, 0, 0.08, 0.8, 10.1, 0.26, "apron", top="apron")
+        for py in (-4.4, -3.0, 3.0, 4.4):
+            b.box(cx + ix, py, 0.3, 0.5, 0.9, 1.8, "frame", top="dark")
     # магазин-кіоск 8 x 5 x 3: суцільне скління по фасаду, двері, виступ даху
     b.box(10.0, 0, 0.08, 8.0, 5.0, 3.0, "kiosk", top="bitumen")
     b.window(("y", 2.5, 1), 8.3, 0.4, 4.0, 2.5)                          # суцільне скління ~4 м

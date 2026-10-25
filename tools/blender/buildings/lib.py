@@ -177,7 +177,7 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
         cr.color_ramp.elements[1].position = 0.6
         L(nz.outputs["Fac"], cr.inputs[0])
         f = math("FRACT", math("DIVIDE", math("ADD", sep.outputs[2], 10000.0), period))
-        fall = math("POWER", f, 4.0)            # найсильніше одразу під швом
+        fall = math("POWER", f, 2.0)            # найсильніше одразу під швом
         # грубий неперіодичний маскувальник і посилення донизу: не решітка, а локальні потьоки
         v2 = N("ShaderNodeMapping")
         v2.inputs["Scale"].default_value = (0.33, 0.33, 0.33)
@@ -273,12 +273,12 @@ def make_window_material():
     sill = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", v, 0.62)), 0.025)
     mask = math("MAXIMUM", math("MAXIMUM", frame, mull), sill)
     sky = math("MULTIPLY", math("ABSOLUTE", math("SUBTRACT", math("ADD", u, v), 1.0)), 0.5)
-    glass_sky = mixc((0.17, 0.20, 0.23), (0.10, 0.12, 0.14), sky)
+    glass_sky = mixc((0.085, 0.10, 0.115), (0.04, 0.05, 0.06), sky)
     tone = N("ShaderNodeSeparateColor")
     L(ca.outputs["Color"], tone.inputs[0])
     t = tone.outputs[0]
     g1 = mixc(glass_sky, (0.02, 0.025, 0.03), math("MULTIPLY", t, 2.0, True))
-    g2 = mixc(g1, (0.20, 0.16, 0.11), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))
+    g2 = mixc(g1, (0.11, 0.105, 0.10), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))
     fr = mixc(g2, (0.72, 0.72, 0.70), mask)
     rv = mixc(fr, (0.05, 0.045, 0.04), reveal)
     L(rv, bs.inputs["Base Color"])
@@ -302,14 +302,14 @@ def mats():
     g = lambda v: (v, v, v)
     MATS.update({
         # нейтрально-теплий бетон панелей, шви між панелями 3 м і по поверхах
-        "panel": make_material("panel", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=1.0, base_dirt=0.6, patch=((0.12, 0.13, 0.10), 0.14)),
+        "panel": make_material("panel", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, patch=((0.12, 0.13, 0.10), 0.14)),
         # кіптява плавними потьоками, без плям-«корів»
         "panel_scorched": make_material("panel_scorched", "Concrete034", 1.2, (0.20, 0.19, 0.18), seams=[("h", 3.0, 0.04, 0.4), ("z", 3.1, 0.05, 0.4)], streak=1.6, streak_xy=2.5, base_dirt=0.5),
         "char": make_material("char", flat=(0.03, 0.028, 0.026)),
         "bitumen": make_material("bitumen", "Asphalt031", 1.0, g(0.38), patch=((0.04, 0.045, 0.04), 0.2)),
         # шифер: смуги листів ~1.1 м вздовж коника і хвиля кроком 15 см униз по скату
-        "fc_roof": make_material("fc_roof", "Concrete034", 1.2, (0.40, 0.40, 0.38), seams=[("y", 1.1, 0.04, 0.3)], corr=("y", 0.15, 0.012), streak=0.25, patch=((0.12, 0.16, 0.10), 0.06)),
-        "fc_roof_x": make_material("fc_roof_x", "Concrete034", 1.2, (0.30, 0.30, 0.29), seams=[("x", 1.1, 0.04, 0.3)], corr=("x", 0.15, 0.012), streak=0.25, patch=((0.12, 0.16, 0.10), 0.06)),
+        "fc_roof": make_material("fc_roof", "Concrete034", 1.2, (0.40, 0.40, 0.38), seams=[("y", 1.1, 0.05, 0.35)], corr=("y", 0.2, 0.016), streak=0.1, patch=((0.12, 0.16, 0.10), 0.05)),
+        "fc_roof_x": make_material("fc_roof_x", "Concrete034", 1.2, (0.18, 0.18, 0.17), seams=[("x", 1.1, 0.05, 0.4)], corr=("x", 0.2, 0.016), streak=0.1, patch=((0.12, 0.16, 0.10), 0.05)),
         "wall_silicate": make_material("wall_silicate", "Plaster001", 1.0, (0.80, 0.78, 0.72), seams=[("z", 0.25, 0.05, 0.2)], streak=1.0, base_dirt=0.4),
         "clad_wall": make_material("clad_wall", "CorrugatedSteel005", 1.0, (0.60, 0.66, 0.60), seams=[("h", 1.0, 0.04, 0.4)], corr=("h", 0.2, 0.01), streak=1.0, base_dirt=0.5),
         # профнастил даху: ребра тільки від карниза до коника
@@ -317,7 +317,7 @@ def mats():
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
         "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
-        "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.2), patch=((0.03, 0.03, 0.03), 0.3)),
+        "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.10), patch=((0.02, 0.02, 0.02), 0.3)),
         "clad_burnt": make_material("clad_burnt", "CorrugatedSteel005", 1.0, (0.12, 0.12, 0.11), streak=1.0),
         "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.22, 0.34, 0.29), seams=[("z", 0.25, 0.03, 0.5)], corr=("z", 0.25, 0.008), base_dirt=0.5),
         "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.62, 0.66, 0.70), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], corr=("z", 0.25, 0.01), streak=0.8, base_dirt=0.4),
@@ -325,24 +325,29 @@ def mats():
         # цегла: червоно-коричнева ~RGB 110/70/58, лише яскравість із текстури
         "brick": make_material("brick", "Bricks105", 1.0, recolor=(0.50, 0.20, 0.135), streak=0.7, base_dirt=0.4, bump=0.012),
         # сталь: плями іржі лише великі (>3 м), плюс потьоки під швами
-        "steel_paint": make_material("steel_paint", "PaintedMetal012", 3.0, (0.36, 0.37, 0.35), seams=[("z", 1.5, 0.04, 0.3)], base_dirt=0.4, patch=((0.30, 0.12, 0.05), 0.22), patch_scale=0.3, runs=(1.5, (0.32, 0.13, 0.05), 1.5, 18.0)),
+        "steel_paint": make_material("steel_paint", "PaintedMetal012", 3.0, (0.25, 0.28, 0.25), seams=[("z", 1.5, 0.05, 0.3)], base_dirt=0.4, runs=(1.5, (0.28, 0.12, 0.05), 2.2, 18.0)),
         "metal_dark": make_material("metal_dark", "MetalPlates013", 1.0, g(0.8), streak=0.5),
         "rust": make_material("rust", "Rust004", 1.0, g(1.0)),
         "galv_cone": make_material("galv_cone", "CorrugatedSteel005", 1.0, (0.50, 0.54, 0.58), seams=[("ang8", 0.9, 0.05, 0.5)], base_dirt=0.1),
         "clad_inner": make_material("clad_inner", "CorrugatedSteel005", 1.0, (0.16, 0.17, 0.16), base_dirt=0.5),
         "pvc": make_material("pvc", flat=(0.72, 0.72, 0.70)),
         "pv": make_material("pv", flat=(0.02, 0.03, 0.06), seams=[("x", 1.0, 0.03, 0.8), ("y", 1.7, 0.03, 0.8)]),
-        "wall_plaster": make_material("wall_plaster", "Plaster001", 1.0, (0.84, 0.80, 0.70), streak=1.0, base_dirt=0.5, bump=0.008),
-        "brick_face": make_material("brick_face", "Bricks105", 1.0, recolor=(0.95, 0.40, 0.28), streak=0.8, base_dirt=0.5, bump=0.012),
-        "tile_graphite": make_material("tile_graphite", "CorrugatedSteel005", 1.0, (0.20, 0.21, 0.22), seams=[("y", 0.35, 0.03, 0.45), ("x", 1.1, 0.03, 0.3)], streak=0.3),
-        "tile_brown": make_material("tile_brown", "CorrugatedSteel005", 1.0, (0.28, 0.20, 0.16), seams=[("y", 0.35, 0.03, 0.45), ("x", 1.1, 0.03, 0.3)], streak=0.3),
-        "tin_green": make_material("tin_green", "CorrugatedSteel005", 1.0, (0.30, 0.38, 0.30), seams=[("x", 1.0, 0.04, 0.3)], corr=("x", 0.15, 0.012), streak=0.3),
-        "tin_ochre": make_material("tin_ochre", "CorrugatedSteel005", 1.0, (0.55, 0.46, 0.32), seams=[("x", 1.0, 0.04, 0.3)], corr=("x", 0.15, 0.012), streak=0.3),
+        "wall_plaster": make_material("wall_plaster", "Plaster001", 1.0, (0.84, 0.80, 0.70), streak=0.2, base_dirt=0.5, bump=0.008, patch=((0.40, 0.37, 0.32), 0.25), patch_scale=0.9),
+        "brick_face": make_material("brick_face", "Bricks105", 1.0, recolor=(0.80, 0.37, 0.28), streak=0.2, base_dirt=0.5, bump=0.012, patch=((0.12, 0.07, 0.05), 0.2), patch_scale=1.6),
+        "tile_graphite": make_material("tile_graphite", "CorrugatedSteel005", 1.0, (0.20, 0.21, 0.22), seams=[("y", 0.35, 0.05, 0.55), ("x", 1.1, 0.05, 0.35)], corr=("y", 0.35, 0.02), streak=0.1),
+        "tile_brown": make_material("tile_brown", "CorrugatedSteel005", 1.0, (0.28, 0.20, 0.16), seams=[("y", 0.35, 0.05, 0.55), ("x", 1.1, 0.05, 0.35)], corr=("y", 0.35, 0.02), streak=0.1),
+        "tin_green": make_material("tin_green", "CorrugatedSteel005", 1.0, (0.34, 0.40, 0.34), seams=[("x", 1.0, 0.05, 0.45)], corr=("x", 0.2, 0.018), streak=0.08),
+        "tin_ochre": make_material("tin_ochre", "CorrugatedSteel005", 1.0, (0.55, 0.46, 0.32), seams=[("x", 1.0, 0.05, 0.45)], corr=("x", 0.2, 0.018), streak=0.08),
         "step": make_material("step", "Concrete034", 1.0, (0.50, 0.49, 0.46), streak=0.4, base_dirt=0.5),
+        "gutter": make_material("gutter", flat=(0.30, 0.31, 0.31)),
+        "rebar": make_material("rebar", flat=(0.11, 0.06, 0.04)),
+        "soot": make_material("soot", flat=(0.045, 0.04, 0.036)),
+        "panel_light": make_material("panel_light", "Concrete034", 1.2, (0.78, 0.76, 0.72), streak=0.1, base_dirt=0.2),
+        "heap": make_material("heap", "Concrete034", 0.8, (0.28, 0.26, 0.24), patch=((0.34, 0.16, 0.11), 0.5), patch_scale=2.0, streak=0.0, base_dirt=0.3),
         "window": make_window_material(),
         "frame": make_material("frame", flat=(0.55, 0.55, 0.53)),
         "dark": make_material("dark", flat=(0.02, 0.02, 0.02)),
-        "apron": make_material("apron", "Concrete046", 1.5, (0.5, 0.5, 0.47), seams=[("x", 5.0, 0.03, 0.7), ("y", 5.0, 0.03, 0.7)], streak=0.6, patch=((0.05, 0.05, 0.05), 0.25)),
+        "apron": make_material("apron", "Concrete034", 1.5, (0.42, 0.42, 0.40), seams=[("x", 5.0, 0.04, 0.6), ("y", 5.0, 0.04, 0.6)], streak=0.5, patch=((0.05, 0.05, 0.05), 0.25)),
         "rubble": make_material("rubble", "Concrete034", 0.8, (0.30, 0.27, 0.25), patch=((0.2, 0.1, 0.07), 0.4)),
         "kiosk": make_material("kiosk", "Plaster001", 1.0, (0.78, 0.75, 0.68), streak=1.0, base_dirt=0.6),
         "canopy": make_material("canopy", "CorrugatedSteel005", 1.0, (0.58, 0.58, 0.55), seams=[("x", 1.2, 0.05, 0.3)], streak=0.2),
@@ -569,6 +574,67 @@ class Builder:
         return sum(len(f.verts) - 2 for f in self.bm.faces)
 
 
+def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0):
+    """Купа уламків одним мешем: неправильний контур, кутасті грані, піки й западини."""
+    import random
+    rnd = random.Random(seed)
+    rad = [rnd.uniform(0.72, 1.18) for _ in range(segs)]
+    rad = [(rad[i - 1] + 2 * rad[i] + rad[(i + 1) % segs]) / 4 for i in range(segs)]
+    ring = []
+    for k in range(rings + 1):
+        t = k / rings
+        row = []
+        for i in range(segs):
+            a = 2 * math.pi * i / segs
+            r = t * rad[i]
+            z = z0 + hmax * (1 - t ** 1.6) * rnd.uniform(0.55, 1.15) if k < rings else z0
+            row.append(b.bm.verts.new((cx + rx * r * math.cos(a), cy + ry * r * math.sin(a), z)))
+        ring.append(row)
+    fs = []
+    top = b.bm.verts.new((cx, cy, z0 + hmax * 1.08))
+    for i in range(segs):
+        j = (i + 1) % segs
+        fs.append(b.bm.faces.new((ring[0][i], ring[0][j], top)))
+        for k in range(rings):
+            fs.append(b.bm.faces.new((ring[k][i], ring[k + 1][i], ring[k + 1][j], ring[k][j])))
+    b._finish(fs, mat)
+
+
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0):
+    """Уламок стіни завдовжки p0-p1: висота змінюється від відрізка до відрізка, верх косий і зубчастий."""
+    import random
+    rnd = random.Random(seed)
+    n = len(heights) - 1
+    d = Vector((p1[0] - p0[0], p1[1] - p0[1], 0))
+    ln = d.length
+    u = d.normalized()
+    nrm = Vector((-u.y, u.x, 0)) * thick / 2
+    for i in range(n):
+        a = Vector((p0[0], p0[1], 0)) + u * (ln * i / n)
+        c = Vector((p0[0], p0[1], 0)) + u * (ln * (i + 1) / n)
+        ha, hc = heights[i], heights[i + 1]
+        if ha <= 0.05 and hc <= 0.05:
+            continue
+        pts_b = [a + nrm, c + nrm, c - nrm, a - nrm]
+        va = [Vector((q.x, q.y, 0)) for q in pts_b]
+        top = [Vector((pts_b[0].x, pts_b[0].y, ha)), Vector((pts_b[1].x, pts_b[1].y, hc)), Vector((pts_b[2].x, pts_b[2].y, hc + rnd.uniform(-0.2, 0.2))), Vector((pts_b[3].x, pts_b[3].y, ha + rnd.uniform(-0.2, 0.2)))]
+        b.poly([tuple(q) for q in (va[0], va[1], top[1], top[0])], mat)
+        b.poly([tuple(q) for q in (va[2], va[3], top[3], top[2])], mat)
+        b.poly([tuple(q) for q in top], top_mat)
+        b.poly([tuple(q) for q in (va[1], va[2], top[2], top[1])], mat)
+        b.poly([tuple(q) for q in (va[3], va[0], top[0], top[3])], mat)
+
+
+def bent_sheet(b, p0, p1, width, mat, bend=0.35, axis="y"):
+    """Зігнутий лист покрівлі: дві грані з перегином посередині; ширина вздовж осі axis."""
+    p0, p1 = Vector(p0), Vector(p1)
+    mid = (p0 + p1) / 2
+    pm = mid + Vector((0, 0, bend))
+    thin, wide = (0.05, width) if axis == "y" else (width, 0.05)
+    b.beam(p0, pm, thin, mat, wide)
+    b.beam(pm, p1, thin, mat, wide)
+
+
 def chunks(b, cx, cy, r, hmax, n, mats, seed, z0=0.0, smin=0.5, smax=1.5):
     """Купа кутастих уламків: гранувата брила, повернута випадково; вища до центру."""
     import random
@@ -680,7 +746,7 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footp
     cx, cy = anchor if anchor else ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
     # слід у цілих тайлах: меш має лежати всередині, виступ (завал, апрон) — не більше 0.1 тайла
     lim = (footprint[0] * TILE / 2 + 0.1 * TILE, footprint[1] * TILE / 2 + 0.1 * TILE)
-    assert max(abs(min(xs) - cx), abs(max(xs) - cx)) <= lim[0] and max(abs(min(ys) - cy), abs(max(ys) - cy)) <= lim[1], f"{name}: меш виходить за слід {footprint}"
+    assert max(abs(min(xs) - cx), abs(max(xs) - cx)) <= lim[0] and max(abs(min(ys) - cy), abs(max(ys) - cy)) <= lim[1], f"{name}: меш виходить за слід {footprint}: x {min(xs)-cx:.1f}..{max(xs)-cx:.1f}, y {min(ys)-cy:.1f}..{max(ys)-cy:.1f}"
     bpy.context.view_layer.objects.active = ob
     ob.select_set(True)
 

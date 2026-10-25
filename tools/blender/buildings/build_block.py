@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, chunks
+from lib import Builder, chunks, mound, wall_run
 
 out = lib.out_dir()
 LEN, DEP, FLOOR, NF = 30.0, 12.0, 3.1, 3
@@ -55,7 +55,11 @@ def body(b, xa, xb, nf, front, back, roof):
                 if f >= nf:
                     continue
                 z = f * FLOOR
-                b.box(x, yp, z, 2 * LW, 0.12, 1.0, "panel")                       # парапет лоджії
+                b.box(x, yp, z, 2 * LW, 0.12, 1.1, "panel")                       # парапет лоджії 1.1 м
+                yb = ye - LOG * side + 0.01 * side
+                b.poly([(x - LW, yb, z), (x + LW, yb, z), (x + LW, yb, z + FLOOR), (x - LW, yb, z + FLOOR)][::-side], "panel_light")
+                for sx in (-1, 1):
+                    b.box(x + sx * (LW - 0.02), (ya + yb) / 2, z, 0.03, LOG, FLOOR - 0.15, "panel_light")
             if nf > 2:
                 b.box(x, (ya + yb) / 2, 2 * FLOOR - 0.15, 2 * LW, LOG, 0.15, "panel", top="panel")  # плита між лоджіями
                 b.box(x, (ya + yb) / 2, top_z - 0.2, 2 * LW, LOG, 0.2, "panel", top="bitumen" if roof else "panel")
@@ -74,8 +78,12 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                 z = f * FLOOR + 0.95
                 yy = y - (LOG * sgn if (i in cols and f >= 1) else 0.0)
                 if (side, i, f) in blown:
-                    b.poly([(x - 0.7, yy + 0.03 * sgn, z), (x + 0.7, yy + 0.03 * sgn, z), (x + 0.7, yy + 0.03 * sgn, z + 1.4), (x - 0.7, yy + 0.03 * sgn, z + 1.4)][::sgn], "dark")
-                    b.poly([(x - 0.9, yy + 0.02 * sgn, z + 1.4), (x + 0.9, yy + 0.02 * sgn, z + 1.4), (x + 0.5, yy + 0.02 * sgn, z + 2.5), (x - 0.5, yy + 0.02 * sgn, z + 2.3)][::sgn], "panel_scorched")
+                    e = 0.03 * sgn
+                    q = [(x - 0.7, yy + e, z), (x + 0.7, yy + e, z), (x + 0.7, yy + e, z + 1.4), (x - 0.7, yy + e, z + 1.4)]
+                    b.poly(q[::sgn], "dark")
+                    for (dx0, dx1, hh) in ((-0.65, -0.2, 1.4), (-0.15, 0.3, 2.2), (0.35, 0.65, 1.1)):
+                        t = [(x + dx0, yy + e, z + 1.4), (x + dx1, yy + e, z + 1.4), (x + (dx0 + dx1) / 2, yy + e, z + 1.4 + hh)]
+                        b.poly(t[::sgn], "soot")
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
                 if not (i in cols and f >= 1):
@@ -133,26 +141,37 @@ def damaged():
     windows(b, xc, X1, 2, (), (), blown=blown)
     entrances(b, xc)
     roof_details(b, xc)
-    # плита перекриття 2-го поверху, частково зірвана; обрубки стін третього поверху — зубчасті
     b.box((xc + X1) / 2, 0, z2 - 0.05, X1 - xc, DEP, 0.2, "panel_scorched", top="panel_scorched")
-    stubs = ((7.0, Y1 - 0.2, 1.4, 0.4, 2.6), (8.6, Y1 - 0.2, 0.7, 0.4, 0.8), (6.5, Y0 + 0.2, 1.0, 0.4, 2.9), (9.0, Y0 + 0.2, 3.0, 0.4, 1.1), (11.0, Y0 + 0.2, 1.2, 0.4, 2.5),
-             (13.3, Y0 + 0.2, 2.2, 0.4, 3.0), (X1 - 0.2, -3.0, 0.4, 3.5, 1.3), (X1 - 0.2, 1.0, 0.4, 1.0, 2.9), (X1 - 0.2, 4.0, 0.4, 2.0, 1.0), (10.6, Y1 - 0.2, 1.6, 0.4, 0.6))
-    for (x, y, sx, sy, h) in stubs:
-        b.box_e(x, y, z2 + h / 2, sx, sy, h, "panel_scorched", euler=(0, 0, rnd.uniform(-0.05, 0.05)), top="char")
-    # нерівна арматура, що стирчить з краю плити й обламків
-    for k in range(16):
+    # східчастий зубчастий профіль зламу: стіни третього поверху від 0.3 до 3.1 м з косими верхами
+    def prof(n, lo=0.3, hi=3.1):
+        h = [rnd.uniform(lo, hi)]
+        for _ in range(n):
+            h.append(min(hi, max(lo, h[-1] + rnd.uniform(-1.4, 1.4))))
+        return h
+    wall_run(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, prof(9), "panel_scorched", "char", 5)
+    wall_run(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, [0.0, 0.0] + prof(8, 0.2, 2.6)[:-1], "panel_scorched", "char", 6)
+    wall_run(b, (xc, Y1 - 0.2), (xc + 4.0, Y1 - 0.2), 0.4, prof(4, 0.3, 2.2), "panel_scorched", "char", 7)
+    # плита даху розколота на 3-4 шматки, що спираються на купу під кутами 20-50°
+    for (x, y, z, sx, sy, ax, ay, az) in ((8.6, -2.2, 1.3, 3.2, 2.8, 0.55, 0.1, 0.2), (12.0, 1.8, 2.0, 3.4, 2.6, -0.7, 0.2, -0.4), (10.2, 2.6, 1.0, 2.8, 2.2, 0.35, -0.5, 0.6), (13.6, -2.6, 1.7, 2.6, 2.4, -0.45, -0.3, 1.1)):
+        b.box_e(x, y, z2 + z, sx, sy, 0.22, "bitumen", euler=(ax, ay, az), top="bitumen")
+    # темна іржава арматура з обламаних країв
+    for k in range(18):
         x = rnd.uniform(6.5, 15.0)
-        y = rnd.choice((Y1 - 0.2, Y0 + 0.2)) if rnd.random() < 0.6 else rnd.uniform(-5, 5)
-        ex = X1 + 0.1 if y not in (Y1 - 0.2, Y0 + 0.2) else x
-        b.beam((ex, y, z2 - 0.05), (ex + rnd.uniform(-0.8, 0.9), y + rnd.uniform(-0.7, 0.8), z2 + rnd.uniform(0.4, 1.4)), 0.09, "rust")
-    # купи кутастого завалу: на плиті, перед фасадом, збоку й ззаду
-    chunks(b, 10.8, 0.0, 4.6, 2.4, 55, ("rubble", "panel_scorched", "panel"), 1, z0=z2, smin=0.4, smax=1.4)
-    chunks(b, 11.0, 5.9, 1.9, 3.4, 30, ("rubble", "panel_scorched", "brick_grey"), 2, smin=0.5, smax=1.5)
-    chunks(b, 14.4, 0.5, 1.5, 2.0, 14, ("rubble", "panel"), 3, smin=0.5, smax=1.2)
-    chunks(b, 10.5, -6.4, 1.6, 1.6, 12, ("rubble", "panel_scorched"), 4, smin=0.5, smax=1.2)
-    # упала плита даху на купі
-    b.box_e(9.8, 0.2, z2 + 1.9, 6.0, 5.0, 0.22, "bitumen", euler=(0.18, -0.12, 0.1), top="bitumen")
-    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=3200, footprint=(4, 2), anchor=(0, 0))
+        edge = rnd.random()
+        if edge < 0.35:
+            p0 = (x, Y0 + 0.2, z2 + 0.3)
+        elif edge < 0.6:
+            p0 = (X1 - 0.2, rnd.uniform(-5, 5), z2 + 0.3)
+        else:
+            p0 = (x, rnd.uniform(-5, 5), z2 + 0.1)
+        b.beam(p0, (p0[0] + rnd.uniform(-0.9, 0.9), p0[1] + rnd.uniform(-0.8, 0.8), p0[2] + rnd.uniform(0.5, 1.4)), 0.09, "rebar")
+    # відсип 4-6 м завширшки й 1.5-2 м заввишки на вибитому розі (бік, що його бачить камера)
+    mound(b, 17.0, -1.0, 3.6, 7.4, 2.0, 61, rings=7, segs=24)
+    mound(b, 11.5, -6.5, 4.5, 1.9, 1.5, 62, rings=5, segs=18)
+    mound(b, 10.5, 0.0, 4.2, 5.0, 1.3, 63, z0=z2, rings=5, segs=18)
+    chunks(b, 16.8, -1.0, 2.6, 2.0, 22, ("rubble", "panel_scorched", "panel", "brick_grey"), 2, smin=0.5, smax=1.4)
+    chunks(b, 10.2, -6.4, 1.3, 1.5, 10, ("rubble", "panel_scorched"), 3, smin=0.5, smax=1.0)
+    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4200, footprint=(5, 2), anchor=(0, 0))
 
 
 intact()
