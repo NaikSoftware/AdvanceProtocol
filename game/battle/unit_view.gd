@@ -47,6 +47,13 @@ const _HP_BAR_FRAME_COLOR: Color = Color("14120f")
 const _HP_BAR_BACK_COLOR: Color = Color("3b3833")
 
 const _DESTROY_DURATION: float = 0.6
+## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась.
+const SQUAD_FIGURES: int = 4
+const _FALL_SEC: float = 0.5
+## Знищена техніка зникає під спалахом, і саме тим кроком анімація закінчується:
+## програвач одразу грає WreckLeft, тож уламки стають на тайл у тому самому кадрі, ще
+## під кулею, а не після того, як дим розійшовся.
+const KILL_HIDE_DELAY: float = 0.06
 
 ## Постріл і відповідь (§3.3.1): короткий поштовх силуету. Скарга власника —
 ## «атака у відповідь не відбувається»: вона відбувалась, але на дошці її було
@@ -59,7 +66,7 @@ const _SHOT_PUNCH_DOWN: float = 0.13
 
 ## R14: хід чекає на гравця, не навпаки — поворот твінується, але лишається
 ## коротким, щоб не виглядав як затримка вводу.
-const _FACE_TURN_DURATION: float = 0.15
+const FACE_TURN_DURATION: float = 0.15
 
 ## Абстрактні кольори гравців-плейсхолдерів (§2 — жодного реального прапора
 ## чи армії). Індекс — Unit.owner. Колір іде лише на корпус (Hull), не на
@@ -124,6 +131,9 @@ var facing: int = 0
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
 var _hull_material: StandardMaterial3D
+var _type_id: int = 0
+var _owner_color: Color = Color.WHITE
+var _standing: int = 0
 var _drones_left: int = 0
 ## Останнє показане співвідношення HP. Джерело правди замість колишнього
 ## _hp_bar.scale.x — заливка тепер намальована ВСЕРЕДИНІ текстури, тож
@@ -162,6 +172,7 @@ func _ready() -> void:
 
 func bind(unit: Unit) -> void:
 	position = IsoCameraRig.cell_to_world(unit.pos)
+	_type_id = unit.type_id
 	_build_silhouette(unit.type_id, unit.owner)
 	_tilts = UnitTypes.is_vehicle(UnitTypes.get_type(unit.type_id)["unit_class"])
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
@@ -257,11 +268,11 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 			# Доворот НА МІСЦІ, перш ніж юніт зрушить у новий тайл — це і є
 			# виправлення бага: раніше цей tween_property йшов паралельно з
 			# рухом нижче (set_parallel(true)) і юніт в'їжджав носом у стару
-			# сторону. _FACE_TURN_DURATION, не duration_per_step: той самий
+			# сторону. FACE_TURN_DURATION, не duration_per_step: той самий
 			# короткий поворот, що й у face(), — крок лишається читабельним, а
 			# хід не починає відчуватись повільним.
 			tween.set_parallel(false)
-			tween.tween_property(self, "rotation_degrees:y", predicted_degrees + delta, _FACE_TURN_DURATION)
+			tween.tween_property(self, "rotation_degrees:y", predicted_degrees + delta, FACE_TURN_DURATION)
 		predicted_degrees += delta
 
 		tween.set_parallel(false)
@@ -359,7 +370,7 @@ func face(direction: int) -> void:
 	if _face_tween != null and _face_tween.is_valid():
 		_face_tween.kill()
 	_face_tween = create_tween()
-	_face_tween.tween_property(self, "rotation_degrees:y", current + delta, _FACE_TURN_DURATION)
+	_face_tween.tween_property(self, "rotation_degrees:y", current + delta, FACE_TURN_DURATION)
 	set_process(true)
 
 
@@ -388,6 +399,7 @@ func set_hp(hp: int, max_hp: int) -> void:
 	# кожен свій), і modulate поверх нього перефарбував би й рамку теж.
 	_hp_bar.modulate = Color.WHITE
 	_hp_label.text = "%d/%d" % [hp, max_hp]
+	_set_standing(_figures_for(hp, max_hp))
 
 
 ## Єдине джерело правди про показане HP — для UI й тестів. Колишнє
@@ -459,7 +471,27 @@ func is_drone_threatened() -> bool:
 	return _drone_threatened.visible
 
 
-## Твінує _silhouette, а не self: self.scale належить play_destroyed(), і два
+func standing_figures() -> int:
+	return _standing
+
+
+## `ceil(SQUAD_FIGURES · hp / max_hp)` цілими: фігура падає, щойно втрачено її чверть.
+static func _figures_for(hp: int, max_hp: int) -> int:
+	if max_hp <= 0 or hp <= 0:
+		return 0
+	return mini(SQUAD_FIGURES, (SQUAD_FIGURES * hp + max_hp - 1) / max_hp)
+
+
+func _set_standing(count: int) -> void:
+	var figs := _silhouette.get_node_or_null("Figures") as MultiMeshInstance3D
+	if figs == null:
+		_standing = 0
+		return
+	_standing = count
+	UnitSilhouettes.set_standing(figs, count, _owner_color)
+
+
+## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
 ## твіни на одну властивість змагались би на пострілі, який убиває.
 func play_shot() -> Signal:
 	var tween: Tween = create_tween()
@@ -470,7 +502,21 @@ func play_shot() -> Signal:
 
 func play_destroyed() -> Signal:
 	var tween: Tween = create_tween()
-	tween.tween_property(self, "scale", Vector3.ZERO, _DESTROY_DURATION)
+	var cls: int = UnitTypes.get_type(_type_id)["unit_class"]
+	if not UnitTypes.is_vehicle(cls):
+		# Відділення падає, а не стискається: лежачі фігури далі малює шар загиблих зі стану.
+		for n: Node3D in [_hp_bar, _hp_label, _drone_icon]:
+			n.visible = false
+		_set_standing(0)
+		tween.tween_interval(_FALL_SEC)
+		return tween.finished
+	# Куля — у контейнері, не в цьому вузлі: вузол юніта звільнить перебудова дошки,
+	# а куля мусить догоріти над уламками.
+	BattleFx.spawn_explosion(get_parent(), position, BattleFx.fireball_size(cls))
+	for n: Node3D in [_hp_bar, _hp_label, _drone_icon]:
+		n.visible = false
+	tween.tween_interval(KILL_HIDE_DELAY)
+	tween.tween_callback(func() -> void: _silhouette.visible = false)
 	return tween.finished
 
 
@@ -480,7 +526,8 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 	for child in _silhouette.get_children():
 		child.free()
 
-	var built := UnitSilhouettes.build(type_id, PLAYER_COLORS[owner % PLAYER_COLORS.size()])
+	_owner_color = PLAYER_COLORS[owner % PLAYER_COLORS.size()]
+	var built := UnitSilhouettes.build(type_id, _owner_color)
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)

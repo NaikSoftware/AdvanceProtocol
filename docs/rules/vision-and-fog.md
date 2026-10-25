@@ -11,13 +11,21 @@ The detail behind §3.5 and §3.11 of CLAUDE.md — what each player can see, an
   least (3) — scouts are infantry, not vehicles.
 - **The fog hides enemy units, not the map.** Terrain is public from the first turn: the whole
   board is drawn, at full brightness, whether or not anyone has been near it. What the fog conceals
-  is the enemy — where their units are, and the mines they have laid.
+  is the enemy — where their units are, and the mines they have laid. Wrecks
+  ([§3.14](movement-and-terrain.md#wrecks)) follow the same `seen` rule as units: a player knows a
+  wreck only on ground they have scouted, and plans a vehicle's route as if unscouted ground held
+  none.
 - This is a deliberate design choice and not an oversight. Hiding the ground would make the opening
   of a match an exercise in map discovery, and it would make the two movement zones (§3.2) lie:
   a route planned across unscouted ground would be a guess, and the gold contour would have to
   bend around obstacles the player is not supposed to know about — which is itself a tell. With
   the terrain public, the zones say exactly what they mean, and the only thing that can surprise a
   move is an enemy.
+- **Broken forest is the one piece of terrain behind the fog.** A tile a tank has felled
+  ([§3.2](movement-and-terrain.md#action-points)) is known as broken only once it is in the
+  player's `seen` grid. Because breaking and scouting are both permanent, that knowledge only ever
+  lags: a tile the player believes standing may be broken, never the reverse. The zones stay honest
+  — they under-report a path rather than invent one — and terrain still never surprises a move.
 - Every player keeps **two grids**, and `seen` is the load-bearing one:
   - **`seen`** — every tile this player has ever scouted. It is drawn as a fog tint over the ground
     nobody of theirs has reached, and **it is what gates the rules**: an enemy standing on a tile

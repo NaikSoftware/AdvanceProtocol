@@ -998,6 +998,130 @@ func test_inspector_follows_the_camera_because_setup_wires_it() -> void:
 		"setup() мусить підписати HUD на рух камери — без цього рядка обидві половини лишаються зеленими, а на екрані панель стоїть як стояла")
 
 
+# --- Уламки: лише над розвіданим тим, хто зараз перед екраном (§3.5, §3.14) ---
+
+func _first_tile(state: BattleState, seen_by: int, unseen_by: int) -> Vector2i:
+	for y in state.board.height:
+		for x in state.board.width:
+			var p := Vector2i(x, y)
+			if state.vision[seen_by].is_seen(p) and not state.vision[unseen_by].is_seen(p) and state.unit_at(p) == null:
+				return p
+	return Vector2i(-1, -1)
+
+
+func _two_tanks_in_corners(service: Node) -> Node3D:
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(0, 0), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(5, 5), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	return screen
+
+
+func test_a_kill_leaves_a_wreck_under_the_fireball() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 0},
+		{"type_id": 2, "owner": 1, "pos": Vector2i(3, 2), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(5, 5), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	var victim: Unit = service.state.unit_at(Vector2i(3, 2))
+	victim.hp = 1
+	victim.facing = 6
+	screen.input_controller().tap_cell(Vector2i(2, 2))
+	screen.input_controller().tap_cell(victim.pos)
+	screen.input_controller().confirm_pending()
+	# Кожна анімація починається лише після попередньої: постріл, потім знищення.
+	for _i in 4:
+		_finish_all_processed_tweens()
+	assert_false(victim.is_alive(), "передумова: бронеавто знищене")
+	assert_false(screen._event_player.is_playing(), "передумова: пакет подій доіграно")
+	assert_not_null(layer.wreck_at(Vector2i(3, 2)), "уламки — на тайлі знищеної техніки")
+	assert_eq(layer.wreck_count(), 1)
+	assert_eq(layer.fire_count(), 1, "щойно знищена техніка горить")
+	assert_null(screen.unit_view_for(victim.id))
+	var f: Vector3 = -layer.wreck_at(Vector2i(3, 2)).basis.z
+	assert_eq(Vector2i(roundi(f.x), roundi(f.z)), Board.DIRS_8[6], "уламки лежать так, як стояв юніт")
+	var scars: ScarMap = screen._scars
+	assert_eq(scars.image().get_pixel(3 * 32 + 16, 2 * 32 + 16).r8, 255, "під уламками — випалена пляма")
+	assert_eq(scars.mask().get_pixel(3, 2).r8, 255)
+
+
+func test_handover_redraws_wrecks_from_the_incoming_players_seen() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _two_tanks_in_corners(service)
+	var state: BattleState = service.state
+	var p0_only: Vector2i = _first_tile(state, 0, 1)
+	var p1_only: Vector2i = _first_tile(state, 1, 0)
+	assert_ne(p0_only, Vector2i(-1, -1), "передумова: є тайл, розвіданий лише гравцем 0")
+	assert_ne(p1_only, Vector2i(-1, -1), "передумова: є тайл, розвіданий лише гравцем 1")
+	state.wrecks.append(Wrecks.Wreck.new(p0_only, 5, 0, state.turn_clock() + 100))
+	state.wrecks.append(Wrecks.Wreck.new(p1_only, 5, 0, state.turn_clock() + 100))
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	screen._rebuild_wrecks()
+	assert_not_null(layer.wreck_at(p0_only), "передумова: гравець 0 бачить свої уламки")
+
+	screen.get_node("%Hud").get_node("%EndTurnButton").pressed.emit()
+	_finish_all_processed_tweens()
+	var gate: Control = screen.get_node("%HandoverGate")
+	assert_true(gate.visible)
+	assert_null(layer.wreck_at(p1_only), "за гейтом ще світ гравця 0 — розвідане гравця 1 не малюється")
+	assert_not_null(layer.wreck_at(p0_only))
+
+	gate.get_node("%ConfirmButton").pressed.emit()
+	assert_eq(layer.wreck_count(), 1)
+	assert_not_null(layer.wreck_at(p1_only))
+	assert_null(layer.wreck_at(p0_only), "уламки над нерозвіданим гравцем 1 — донос про чужий бій")
+	var scars: ScarMap = screen._scars
+	assert_eq(scars.mask().get_pixel(p0_only.x, p0_only.y).r8, 0, "і пляма під ними схована маскою")
+	assert_eq(scars.mask().get_pixel(p1_only.x, p1_only.y).r8, 255)
+	assert_eq(scars.image().get_pixel(p1_only.x * 32 + 16, p1_only.y * 32 + 16).r8, 255)
+
+
+func test_burnt_out_wreck_disappears_when_its_turn_comes() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _two_tanks_in_corners(service)
+	var state: BattleState = service.state
+	var p := Vector2i(1, 0)
+	assert_true(state.vision[0].is_seen(p), "передумова: тайл розвіданий гравцем 0")
+	# Догоряє на наступному ході (годинник +1).
+	state.wrecks.append(Wrecks.Wreck.new(p, 5, 0, state.turn_clock() + 1))
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	layer.rebuild(state, 0)
+	assert_not_null(layer.wreck_at(p))
+
+	screen.get_node("%Hud").get_node("%EndTurnButton").pressed.emit()
+	_finish_all_processed_tweens()
+	assert_null(layer.wreck_at(p), "WreckRemoved прибирає уламки, щойно їх показано")
+	assert_eq(layer.column_count(), 0)
+
+
+## Бій зі збереження: уламки вже в стані, і «Продовжити» малює їх із нього.
+func test_resume_draws_wrecks_already_in_state_only_on_seen_ground() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	_two_tanks_in_corners(service)
+	var state: BattleState = service.state
+	state.wrecks.append(Wrecks.Wreck.new(_first_tile(state, 0, 1), 5, 0, state.turn_clock() + 100))
+	state.wrecks.append(Wrecks.Wreck.new(_first_tile(state, 1, 0), 5, 0, state.turn_clock() + 100))
+	var screen: Node3D = _screen()
+	screen.resume(service)
+	var gate: Control = screen.get_node("%HandoverGate")
+	gate.get_node("%ConfirmButton").pressed.emit()
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	assert_eq(layer.wreck_count(), 1)
+	assert_not_null(layer.wreck_at(_first_tile(state, 0, 1)))
+
+
 # --- §8: спокійний екран не крутить кадри даремно -------------------------
 
 ## Спливла секунда спокою — таймер, а не реальний час: тест не чекає.
@@ -1060,3 +1184,54 @@ func test_leaving_battle_restores_the_previous_cap() -> void:
 	remove_child(screen)
 	screen.free()
 	assert_eq(Engine.max_fps, 45)
+
+
+## Дим і дощ — один вітер: нахил стовпа на екрані бою має той самий горизонтальний
+## напрям, що й знос крапель.
+func test_smoke_leans_the_same_way_as_the_rain() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _two_tanks_in_corners(service)
+	var rain: Vector3 = (screen.get_node("WeatherRig") as WeatherRig).rain_velocity()
+	var lean: Vector3 = (screen.get_node("%WreckLayer") as WreckLayer).column_lean()
+	assert_ne(lean, Vector3.ZERO, "передумова: у типовому вигляді вітер є")
+	assert_eq(lean.normalized(), Vector3(rain.x, 0.0, rain.z).normalized())
+
+
+## Перше вбивство матчу не сміє зависнути на компіляції шейдерів: екран бою на старті один
+## раз малює кожен матеріал ефектів, невидимо малим, і прибирає його.
+func test_setup_warms_up_every_fx_material_once() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _two_tanks_in_corners(service)
+	var units: Node3D = screen.get_node("%Units")
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	var warm: Array[Node] = units.find_children("Explosion*", "", false, false)
+	assert_eq(warm.size(), 1, "куля розігріву")
+	# Розігрів мусить бути невидимим: жодного спалаху чи світла біля юніта гравця.
+	assert_eq((warm[0].get_node("Light") as OmniLight3D).light_energy, 0.0)
+	assert_eq((warm[0].get_node("Flash") as Node3D).scale, Vector3.ONE * 0.0001)
+	var ball := (warm[0].get_node("Ball") as MeshInstance3D).material_override as ShaderMaterial
+	assert_eq(ball.get_shader_parameter("size"), 0.0001)
+	assert_true(layer.is_warming(), "стовп, вогонь і обгорілий матеріал теж малюються раз")
+	_finish_all_processed_tweens()
+	assert_false(layer.is_warming())
+	assert_eq(layer.column_count(), 0)
+
+
+
+## Бій зі збереження теж не застигає на першому вбивстві: розігрів — на першому гейті.
+func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	_two_tanks_in_corners(service)
+	var screen: Node3D = _screen()
+	screen.resume(service)
+	var units: Node3D = screen.get_node("%Units")
+	assert_eq(units.find_children("Explosion*", "", false, false).size(), 0, "за гейтом камера ще ніде")
+	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	assert_eq(units.find_children("Explosion*", "", false, false).size(), 1)
+	assert_true((screen.get_node("%WreckLayer") as WreckLayer).is_warming())
+	_finish_all_processed_tweens()
+	screen._on_gate_confirmed()
+	assert_false((screen.get_node("%WreckLayer") as WreckLayer).is_warming(), "розігрів — лише раз")
