@@ -148,7 +148,7 @@ a vegetable garden at the back (k_wd4, k_wd7).
 | H3 | two-storey 2010s–2030s cottage, plaster plus brick plinth, graphite metal tile, PV array on the south roof | 10 × 10 m, eaves 6.0 m, ridge 9.5 m | 1.25 × 1.25 | Large dark roof with a blue-black PV block 5 × 3.4 m; tallest roof in the hamlet |
 | H4 | small wooden-clad house, green or ochre corrugated metal roof (house3, house5) | 9 × 6 m, ridge 5.5 m | 1.1 × 0.75 | Small coloured roof: the one accent of saturated colour, kept low-chroma |
 | H5 | 2–3-storey brick or panel apartment block, flat bitumen roof, 2–3 stairwells (k_pole8) | 30 × 12 m, 7–10 m high | 3.75 × 1.5 | Flat dark roof with vent stacks and stair-head boxes; a long silhouette, a landmark |
-| R1–R3 | ruins of H1, H2/H3 and H5 | footprint +3–5 m rubble apron | +0.5 tile | See Ruins |
+| R1–R3 | half-destroyed buildings, own designs (not cut from H1–H5) | footprint + rubble spill at the broken side | +0.5 tile | See Ruins |
 
 **Route.** H1–H4 are **Tripo**: irregular, many small parts, and they read better generated than
 built from boxes. 3000–5000 faces each, texture at most 1024 px. H5 is **Blender**: boxes with a
@@ -166,28 +166,28 @@ H3 adds: `two storeys, graphite metal-tile gable roof, rooftop solar panel array
 render over brick, brick plinth, clean modern lines`. **Must not:** shop signs, house numbers, flags, ornate Baroque or Tudor detail, slate, timber framing.
 H1 also passes if the roof is ≥ 55 % of the top-down silhouette and is grey, not red.
 
-### Ruins (shelled houses)
+### Ruins (half-destroyed buildings)
 
-Measured from k_wd6 (nadir view; tyres Ø 0.6 m ≈ 10 px give about 6 cm/px):
+A `RUBBLE` tile shows a **half-destroyed building**: the map has intact buildings and damaged ones.
+A ruin is its own design in the same 2030s countryside language; it does not have to match, or be
+cut from, any intact house. It must still read as a building from the game camera, never as a heap.
 
-- Walls stand to **0.5–2.5 m** over most of the footprint, 0.25–0.4 m thick. One or two fragments
-  reach eave height, often a **brick chimney stack** (k_wd3). The roof is **gone or collapsed inside the footprint**.
-- **Rubble apron 2–5 m** outside the walls: brick in buff, orange and white, plaster chunks, and
-  **corrugated roof sheets (red, brown, grey) bent and scattered**. They are the brightest pieces, at
-  0.9 × 2 m (13 × 28 px at close zoom).
-- Burnt variant (k_db11): soot black above window heads, sheets sagging inside, door and window holes
-  open and black.
-- Partial hit (k_db14, k_wd5): roof torn open over a third of the length, rafters showing, the rest
-  intact. This is the cheapest "damaged" state: an intact house with a hole.
+- **Most walls stand at or near full height.** One corner or one wall section has collapsed.
+- **The roof is partly gone**: burnt or fallen in over part of the plan, rafters and sagging sheets
+  exposed (k_db14, k_wd5); the rest is still on.
+- Shell holes in walls, blown-out windows and door, soot black above the openings (k_db11).
+- **Rubble only where the collapse is**: a spill at the foot of the broken wall, brick in buff,
+  orange and white, plaster chunks, bent corrugated sheets (0.9 × 2 m). It never replaces the house.
+- Variants: a single-storey brick house with half the roof caved in; a two-storey house with a
+  collapsed gable end; a farm shed with a broken roof and one fallen wall.
 
-Route: **Tripo** for the rubble mass and wall stubs, 3000–4000 faces; scattered roof sheets added in
-**Blender** as ~10 thin bent quads (cheap, and the right size). Prompt:
-> `ruin of a shelled single-storey brick house, 10 m by 8 m footprint, walls broken down to 0.5 to
-> 2.5 m high, one brick chimney stack standing 5 m, roof completely collapsed into the interior,
-> heaps of broken brick and plaster spilling 3 m beyond the walls, bent corrugated roof sheets
-> scattered on the rubble, charred timber beams, soot-blackened window openings, wet dust,` + common
-> suffix. **Must not:** medieval stone, arches, ivy-covered romance ruin, bodies, vehicles, flags.
-Also passes if no wall stands higher than 3 m except the chimney, and rubble covers ≥ 1.3× the footprint area from above.
+Route: **Blender**, in the same pipeline and materials as the intact houses. Detail goes into the
+texture and bake; geometry changes only where it changes the outline (holes, broken roof line,
+collapsed section). **Must not:** medieval stone, arches, ivy-covered romance ruin, bodies,
+vehicles, flags. Passes if the building outline and most of the roof read from above at both zooms.
+
+A **fully destroyed** variant (walls down to stubs, roof gone, rubble spread around) is kept for
+the odd tile. Most `RUBBLE` tiles get a half-destroyed building, a few get the full ruin.
 
 ### Farm and industrial
 
@@ -259,6 +259,11 @@ glossy material in a field. Laid in loose rows 10–30 m apart, or stacked 2–3
 | bare deciduous (oak3, bare0) | 10–20 m | Ø 8–12 m | A web of branches over a visible ground shadow | Fully bare |
 | shrubs: hazel, willow, blackthorn | 2–5 m | Ø 2–5 m | Dark brown-grey mounds | Mostly bare, dense twigs |
 
+The heights above are the real trees. **In the game every tree is drawn about 40 % lower**, for
+readability from the game camera: pine and spruce 12–14 m, oak, lime and other broadleaf 10–12 m,
+birch 9–11 m, solitary trees in the same range. The whole tree scales together, so crown and trunk
+keep their proportions (pine trunk about 0.3 m). Shrubs and the edge belt keep their real size.
+
 Route: single hero trees (solitary oak, birch, roadside lime or pear) are **Tripo**, 1500–3000 faces,
 then foliage converted to alpha-cut cards in Blender if Tripo merges the crown into a solid blob.
 Prompt (oak):
@@ -311,7 +316,8 @@ be **identifiable at ~100 px** and inspectable. The numbers that frame the choic
 
 - A **shrub belt 3–6 m deep** (hazel, blackthorn, young birch, young pine 2–5 m tall) along every
   wood–field edge. It is denser than the interior and sits lower, so the edge steps up in 2–3 bands:
-  shrubs 2–5 m, then young or edge trees 8–15 m, then the full canopy 18–25 m.
+  shrubs 2–5 m, then young or edge trees 8–15 m, then the full canopy 18–25 m (in the game:
+  shrubs 2–5 m, edge trees 7–10 m, canopy 10–14 m — see the note under the table above).
 - Edge trees carry crowns lower and wider on the open side. Trunks are visible only in the first row.
 - The edge line is irregular, with bays and spurs of 5–20 m, never along tile edges (§8).
 - On the edge tile itself: deadfall logs 4–10 m (Poly Haven dead_tree_trunk_02, tree_stump_01, CC0),
