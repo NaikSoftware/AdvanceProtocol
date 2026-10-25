@@ -56,9 +56,9 @@ def prof_h(y):
     """Висота насипу вздовж Y: полотно на 1,0 м з двома коліями (по 0,4 м завширшки, 14 см глибиною),
     схили до тераси 0,5 м і далі до землі. Північ і південь трохи різні."""
     if y >= 0:
-        xs, hs = [0, .7, .8, 1.0, 1.1, 2.6, 4.5, 7.2, 8.6], [1, 1, .86, .86, 1, 1, .5, .5, 0]
+        xs, hs = [0, .7, .75, .8, 1.0, 1.05, 1.1, 2.6, 4.5, 7.2, 8.6], [1, 1, 1.03, .86, .86, 1.03, 1, 1, .5, .5, 0]
     else:
-        xs, hs = [0, .7, .8, 1.0, 1.1, 2.6, 4.4, 7.0, 8.4], [1, 1, .86, .86, 1, 1, .55, .45, 0]
+        xs, hs = [0, .7, .75, .8, 1.0, 1.05, 1.1, 2.6, 4.4, 7.0, 8.4], [1, 1, 1.03, .86, .86, 1.03, 1, 1, .55, .45, 0]
     return float(np.interp(abs(y), xs, hs))
 
 
@@ -68,7 +68,7 @@ def carve(x, y, h):
     if a < 4.3:
         return h
     v = float(np.clip((1.5 - abs(x)) / 0.5, 0, 1))             # 1 на дні, 0 за бровкою
-    return h * (1 - v) + 0.0 * v
+    return h * (1 - v) + 0.04 * v                              # дно трохи над землею дошки: без z-fighting
 
 
 def terrain_vc(h, x, y, ruts=False):
@@ -90,8 +90,9 @@ def terrain_vc(h, x, y, ruts=False):
 
 
 def terrain(b, mat, water):
-    xs = [-4, -3, -2, -1.5, -0.5, 0, 0.5, 1.5, 2, 3, 4]
-    ys = sorted({-8.4, -7.0, -4.5, -4.4, 4.4, -2.6, -1.1, -1.0, -.8, -.7, 0, .7, .8, 1.0, 1.1, 2.6, 4.5, 6.0, 7.2, 8.6, -6.0, 5.2, -5.2})
+    xs = [-4, -3, -2, -1.5, -1.25, -1.0, -0.5, 0, 0.5, 1.0, 1.25, 1.5, 2, 3, 4]
+    ys = sorted({-8.4, -7.8, -7.0, -6.6, -6.0, -5.6, -5.2, -4.5, -4.4, 4.4, -2.6, -1.3, -1.1, -1.05, -1.0, -.8, -.75, -.7, 0, .7, .75,
+                 .8, 1.0, 1.05, 1.1, 1.3, 2.6, 4.5, 5.2, 5.6, 6.0, 6.6, 7.2, 7.8, 8.6})
     rng = np.random.default_rng(5)
     bm = b.bm
     tex_mean = 0.57                                       # середня лінійна яскравість текстури
@@ -101,14 +102,18 @@ def terrain(b, mat, water):
             f = min(1.0, max(0.0, (4.0 - abs(x)) / 2.4))
             base = prof_h(y)
             h = carve(x, y, base * f) if abs(y) >= 4.3 else base * f
+            xx = x
             if 0 < i < len(xs) - 1 and 0 < j < len(ys) - 1 and h > 0.1 and abs(y) > 1.3:
                 h += rng.uniform(-0.02, 0.02)
+            if abs(y) > 4.5 and 0.95 < abs(x) < 1.6 and 0 < j < len(ys) - 1:       # нерівний берег
+                xx = x + rng.uniform(-0.12, 0.12)
+                h = max(0.04, h + rng.uniform(-0.05, 0.05))
             rut = 0.76 < abs(y) < 1.04
             d = min(4.0 - abs(x), (8.4 if y < 0 else 8.6) - abs(y))
             alpha = float(np.clip(d / 1.8, 0, 1))          # край пагорба гасне в землю
             if abs(y) > 4.3 and abs(x) < 2.0:
                 alpha = max(alpha, float(np.clip(d / 1.0, 0, 1)))
-            v = bm.verts.new((x, y, h))
+            v = bm.verts.new((xx, y, h))
             V[(i, j)] = (v, terrain_vc(h, x, y, rut and base > .8), alpha)
     ii = b.mi(mat)
     for i in range(len(xs) - 1):
@@ -120,31 +125,46 @@ def terrain(b, mat, water):
             for l, p in zip(f.loops, q):
                 lin = srgb_to_lin(np.array(p[1])) / tex_mean
                 l[b.col] = (*np.clip(lin, 0, 1), p[2])
-    # вода в кожній канаві вздовж осі труби
+    # вода: смуга 2,6 м у кожній канаві (берег різаний схилами), на кінцях гасне; плюс мокрі смуги в колії
     wi = b.mi(water)
-    for y0, y1, lv in ((4.7, 7.0, .07), (-6.8, -4.7, .06)):
-        vs = [bm.verts.new((x, y, lv)) for x, y in ((-0.55, y0), (0.55, y0), (0.55, y1), (-0.55, y1))]
-        f = bm.faces.new(vs); f.material_index = wi; b.keep.add(f)
-        for l in f.loops: l[b.col] = (1, 1, 1, 1)
+
+    def strip(x0, x1, y0, y1, lv, nseg=6):
+        ys_ = np.linspace(y0, y1, nseg + 1)
+        rows = []
+        for k, y in enumerate(ys_):
+            a_ = 0.0 if k in (0, nseg) else 1.0
+            rows.append((bm.verts.new((x0, y, lv)), bm.verts.new((x1, y, lv)), a_))
+        for k in range(nseg):
+            q = [rows[k][0], rows[k][1], rows[k + 1][1], rows[k + 1][0]]
+            f = bm.faces.new(q); f.material_index = wi; b.keep.add(f)
+            for l, vi in zip(f.loops, (k, k, k + 1, k + 1)):
+                l[b.col] = (1, 1, 1, rows[vi][2])
+    strip(-1.3, 1.3, 4.7, 7.4, 0.06)
+    strip(-1.3, 1.3, -7.2, -4.7, 0.06)
+    for sy in (-0.9, 0.9):                                   # мокре дно колій
+        strip_x = np.linspace(-3.2, 3.2, 7)
+        for k in range(6):
+            vs = [bm.verts.new((strip_x[k], sy - 0.08, .865)), bm.verts.new((strip_x[k + 1], sy - 0.08, .865)),
+                  bm.verts.new((strip_x[k + 1], sy + 0.08, .865)), bm.verts.new((strip_x[k], sy + 0.08, .865))]
+            f = bm.faces.new(vs); f.material_index = wi; b.keep.add(f)
+            for l in f.loops: l[b.col] = (1, 1, 1, 1.0 if 0 < k < 5 else 0.0)
 
 
 def terrain_mat():
-    """Колія й земля: дрібний гравій і піщані прожилки вздовж полотна (~1,5 см на тексель), без плям 0,5 м."""
+    """Колія й земля: дрібний гравій (~3 см), без низькочастотних плям; край гасне альфа-змішуванням."""
     n = 128
     fine = tile_noise(48, 48, n, 76)
-    streak = tile_noise(3, 40, n, 75)
-    a = 0.78 * (0.9 + 0.1 * fine + 0.06 * (streak - 0.5))
+    a = 0.78 * (0.92 + 0.08 * fine)
     a = np.repeat(a[..., None], 3, -1)
-    alpha = 0.62 + 0.38 * fbm(n, 79, 6, 3)                  # шумова альфа краю
-    h = fine * 0.6 + streak * 0.4
+    alpha = 0.8 + 0.2 * fbm(n, 79, 6, 3)
     return pbr("culvert_ground", albedo=np.concatenate([a, alpha[..., None]], -1),
-               normal=np.concatenate([normal_from_height(h, 1.5), np.ones((n, n, 1))], -1),
-               tile=1.5, rough=0.95, alpha=True, double_sided=False)
+               normal=np.concatenate([normal_from_height(fine, 1.5), np.ones((n, n, 1))], -1),
+               tile=1.5, rough=0.95, alpha=True, blend=True)
 
 
 def culvert():
     mat = concrete("culvert_concrete", 63, 1.9, val=0.8, band=(0.4, 0.8, 0.3), streak_k=0.5, ground=False)
-    water = pbr("culvert_water", color=(0.14, 0.16, 0.155), rough=0.06)
+    water = pbr("culvert_water", color=(0.16, 0.18, 0.175), rough=0.12, opacity=0.9)
     dark = pbr("culvert_dark", color=(0.02, 0.022, 0.02), rough=1.0)
     b = B()
     b.mi(dark)                                                  # перший матеріал меша не отримує вершинних кольорів
@@ -181,7 +201,7 @@ def bed_mat():
 
 
 def trailer(name, paint, seed):
-    body = sheet_mat(f"trailer_body_{seed}", paint, seed, tile_v=1.2)
+    body = sheet_mat(f"trailer_body_{seed}", paint, seed, tile_v=2.1, band=(0.9, 1.5), patch=0.6)
     frame = pbr("trailer_frame", "MetalPlates013", tile=1.0, tint=(0.42, 0.41, 0.39), sat=0.3, rust=0.0, grime=0.0,
                 rough=0.8, seed=seed + 1)
     bed = bed_mat()
@@ -228,4 +248,4 @@ reset()
 if want("infra_jersey_block"): jersey()
 if want("infra_culvert"): culvert()
 if want("infra_trailer_green"): trailer("infra_trailer_green", (0.30, 0.34, 0.24), 71)
-if want("infra_trailer_rust"): trailer("infra_trailer_rust", (0.45, 0.36, 0.28), 73)
+if want("infra_trailer_rust"): trailer("infra_trailer_rust", (0.52, 0.34, 0.22), 73)

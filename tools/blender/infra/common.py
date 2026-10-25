@@ -82,6 +82,7 @@ def lin_to_srgb(c): return np.where(c <= 0.0031308, c * 12.92, 1.055 * np.clip(c
 
 
 _mat_cache = {}
+_alpha_modes = {}                      # ім'я матеріалу -> BLEND | MASK (експортер усе ставить у BLEND)
 
 
 def acg_albedo(src, tint, sat, rust, seed, grime=0.0, paint=None, contrast=1.0, size=SIZE):
@@ -104,7 +105,7 @@ def acg_albedo(src, tint, sat, rust, seed, grime=0.0, paint=None, contrast=1.0, 
 
 
 def pbr(name, src=None, tile=1.0, tint=(1, 1, 1), sat=1.0, rust=0.0, grime=0.0, rough=0.8, metal=0.0,
-        seed=1, res=None, tile_v=None, paint=None, contrast=1.0, color=None, albedo=None, normal=None, alpha=False, double_sided=False):
+        seed=1, res=None, tile_v=None, paint=None, contrast=1.0, color=None, albedo=None, normal=None, alpha=False, double_sided=False, blend=False, opacity=1.0):
     """Матеріал: tile — скільки метрів вкриває одна текстура; color — суцільний колір без текстур."""
     if name in _mat_cache:
         return _mat_cache[name]
@@ -134,9 +135,10 @@ def pbr(name, src=None, tile=1.0, tint=(1, 1, 1), sat=1.0, rust=0.0, grime=0.0, 
             nm = nt.nodes.new("ShaderNodeNormalMap")
             nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
             nt.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
-    if alpha:
-        if hasattr(m, "blend_method"):
-            m.blend_method = "CLIP"
+    if alpha or opacity < 1.0:
+        _alpha_modes[name] = "BLEND" if (blend or opacity < 1.0) else "MASK"
+        if opacity < 1.0:
+            bsdf.inputs["Alpha"].default_value = opacity
     m.use_backface_culling = not double_sided
     m["alpha_mask"] = alpha
     m["tile"] = tile
@@ -279,8 +281,11 @@ def patch_gltf(path):
             if "COLOR_1" in p["attributes"]:
                 p["attributes"]["COLOR_0"] = p["attributes"].pop("COLOR_1")
     for m in g.get("materials", []):
-        if m.get("alphaMode") == "BLEND":
+        mode = _alpha_modes.get(m.get("name"))
+        if mode == "MASK":
             m["alphaMode"] = "MASK"; m["alphaCutoff"] = 0.5
+        elif mode == "BLEND":
+            m["alphaMode"] = "BLEND"; m.pop("alphaCutoff", None)
     js = json.dumps(g, separators=(",", ":")).encode()
     js += b" " * (-len(js) % 4)
     rest = d[20 + clen:]
@@ -308,7 +313,7 @@ def report(path, tris):
 
 def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    _mat_cache.clear()
+    _mat_cache.clear(); _alpha_modes.clear()
 
 
 def want(name):
@@ -317,7 +322,7 @@ def want(name):
 
 
 # ---------- спільні матеріали: фарбований лист і бетон ----------
-def sheet_mat(name, paint, seed, tile=1.15, tile_v=2.0, size=64, base_dirt=True):
+def sheet_mat(name, paint, seed, tile=1.15, tile_v=2.0, size=64, base_dirt=True, band=(0.0, 0.36), patch=0.0):
     """Профнастил: вертикальні хвилі й стик листа в нормалі й albedo; бруд і іржа лише біля землі (tile_v = висота плоті, м)."""
     h_px = int(size * tile_v / tile)
     u = (np.arange(size) + 0.5) / size
@@ -331,18 +336,21 @@ def sheet_mat(name, paint, seed, tile=1.15, tile_v=2.0, size=64, base_dirt=True)
     a[:, :1] *= 0.6                                  # тінь стику
     if base_dirt:
         z = ((np.arange(h_px) + 0.5) / h_px * tile_v)[:, None]
-        w = np.clip((0.36 - z) / 0.08, 0, 1)                              # смуга 0,36 м з різким верхом
+        w = np.clip((band[1] - z) / 0.08, 0, 1) * np.clip((z - band[0] + 0.02) / 0.02, 0, 1)
+        if patch:                                                         # іржа плямами навколо гнізд і нижнього краю
+            pn = np.vstack([tile_noise(5, 5, size, seed + 11)] * (h_px // size + 1))[:h_px]
+            w = w * np.clip((pn - (1 - patch)) * 5 + 0.3, 0, 1)
         rustc = np.array([0.34, 0.19, 0.10])[None, None, :]
         a = a * (1 - 0.55 * w[..., None]) + rustc * (0.55 * w[..., None]) * (0.7 + 0.6 * streak[..., None])
     return pbr(name, albedo=a, normal=np.concatenate([normal_from_height(h, 5.0), np.ones((h_px, size, 1))], -1),
                tile=tile, tile_v=tile_v, rough=0.6, metal=0.1)
 
 
-CONCRETE_GREY = (0.54, 0.53, 0.50)
+CONCRETE_GREY = (0.564, 0.53, 0.484)
 
 
 def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, top_z=None, shade=0.18,
-                 ground=True, k=5.0, seams=False, val=1.0, band=None, streak_k=0.5):
+                 ground=True, k=5.0, seams=False, val=1.0, band=None, streak_k=0.5, streak_len=0.5):
     """Блідий бетон одного значення для всіх виробів. relief(size) -> висоти 0..1 (йдуть у нормаль);
     бруд знизу (до 0,3 м від землі), патьоки під верхом (top_z, м) і плями з періодом у плитку."""
     tv = tile_v or tile
@@ -353,7 +361,7 @@ def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, to
         a = a * (1 - 0.4 * np.exp(-z / 0.3))[..., None]
     if top_z:
         streak = np.clip(tile_noise(24, 1, size, seed + 3) * 1.6 - 0.45, 0, 1)
-        ramp = np.clip((z - (top_z - 0.5)) / 0.5, 0, 1) * (z <= top_z + 0.02)
+        ramp = np.clip((z - (top_z - streak_len)) / streak_len, 0, 1) * (z <= top_z + 0.02)
         a = a * (1 - streak_k * streak * ramp)[..., None]
     if band:                                                                # мокра смуга: (z0, z1, сила)
         a = a * (1 - band[2] * np.clip(1 - np.abs(z - (band[0] + band[1]) / 2) / ((band[1] - band[0]) / 2), 0, 1) ** 0.5)[..., None]
