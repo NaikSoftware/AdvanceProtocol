@@ -9,10 +9,10 @@ extends Node3D
 ## `add()`/`remove()` — лише для показу щойно зіграних подій; хто викликає `add()`,
 ## той і перевіряє `seen`.
 ##
-## Ціна кадру (§8): уламок — один меш на деталь силуету; усі стовпи — одна
-## MultiMesh, усі язики полум'я — друга, світла вогню — не більше чотирьох. Анімація —
-## крок таймера 8 разів на секунду, а не вбудований час шейдера: той тримав би кадр
-## щокадрово, і обмеження частоти кадрів у спокої ніколи б не вмикалось.
+## Ціна кадру (§8): уламок — одна сітка; усі стовпи — одна MultiMesh, усі язики полум'я —
+## друга, світла вогню — не більше чотирьох. Анімація — крок таймера 30 разів на секунду,
+## а не вбудований час шейдера: той тримав би кадр щокадрово, і обмеження частоти кадрів у
+## спокої ніколи б не вмикалось.
 
 ## Більше стовпів на екрані з'їдає кадр перекриттям прозорих квадів, а не кількістю.
 const MAX_COLUMNS: int = 8
@@ -20,8 +20,7 @@ const MAX_COLUMNS: int = 8
 ## Суцільний шлейф, а не окремі кулі: багато менших прозорих клуб, кожна живе ~9 с і
 ## перекривається з десятком сусідніх.
 const PUFFS_PER_COLUMN: int = 30
-## Екземплярів атласу на одне джерело вогню: накладені з різною фазою, кутом і масштабом,
-## вони дають хаотичне полум'я, що весь час міняє форму.
+## Екземплярів атласу на уламок — по одному на корінь, зі своїми фазою й темпом.
 const FLAMES_PER_SPOT: int = 2
 const MAX_FIRE_LIGHTS: int = 4
 ## Крок часу ефектів, разів на секунду: не частіше за обмеження кадру в спокої (30), тож
@@ -58,25 +57,20 @@ const FIRE_FADE_IN_AT: float = 0.6
 const FIRE_FADE_IN_SEC: float = 0.5
 const COLUMN_BASE_W: float = 2.5 / 8.0
 const COLUMN_TOP_W: float = 12.0 / 8.0
-## Вогонь — один стовп полум'я з одного отвору (моторний відсік ззаду), як горить підбита
-## машина: ширина ≈ 0,45 ширини корпусу, висота ≈ ширина корпусу. Два екземпляри атласу з
-## різною фазою й темпом; основа трохи в металі, м'який край глибини ховає шов.
+## Вогонь виходить з погона: два корені обабіч центру даху башти, кожен — екземпляр атласу
+## ≈ 0,4 ширини корпусу (разом маса ≈ 0,7 корпусу внизу), висота ≈ ширина корпусу. Основа
+## трохи в металі, м'який край глибини ховає шов.
 const FLAME_WIDTH_PER_HULL: float = 0.4
 const FLAME_HEIGHT_PER_HULL: float = 1.0
-## Атлас вогню: сітка, кадрів, де в клітинці основа полум'я (v згори), яку частку ширини
+## Розмітка атласу вогню: кадрів, де в клітинці основа полум'я (v згори), яку частку ширини
 ## клітинки займає полум'я, і висота клітинки до ширини.
-static var fire_tex: Texture2D = FIRE_TEX
-static var fire_grid: Vector2 = Vector2(8, 8)
-static var fire_frames: float = 64.0
-static var fire_base_v: float = 0.8
-static var fire_fill: float = 0.6
-static var fire_cell_aspect: float = 1.0
+const FIRE_FRAMES: float = 64.0
+const FIRE_BASE_V: float = 0.8
+const FIRE_FILL: float = 0.6
+const FIRE_CELL_ASPECT: float = 1.0
 ## Нахил стовпа на одиницю вітру `WeatherRig.wind()`: дим іде туди ж, куди й дощ. За вітру
 ## River (0,25) це ~20°; у безвітря стовп стоїть прямо.
 const SMOKE_LEAN_PER_WIND: float = 1.46
-## Полум'я з точок на корпусі — частинки, як вогонь у головному меню: дрібні адитивні цятки
-## з гарячим біло-жовтим ядром, що здіймаються, тоншають і червоніють. На джерело — не більше
-## FLAME_PARTICLES; коли лишається жар, частинок нема, і довгі уламки нічого не коштують.
 ## Іскри з вогню: кілька за раз (бюджет телефону), більше — поки горить сильно.
 const EMBERS_HARD: int = 10
 const EMBERS_SOFT: int = 4
@@ -137,12 +131,12 @@ func _init() -> void:
 	_fire_mat.shader = fire_shader()
 	# Вогонь — поверх диму власного стовпа, а не за ним.
 	_fire_mat.render_priority = 1
-	_fire_mat.set_shader_parameter("flame_tex", fire_tex)
-	_fire_mat.set_shader_parameter("grid", fire_grid)
-	_fire_mat.set_shader_parameter("frames", fire_frames)
-	_fire_mat.set_shader_parameter("base_v", fire_base_v)
-	_fire_mat.set_shader_parameter("fill", fire_fill)
-	_fire_mat.set_shader_parameter("cell_aspect", fire_cell_aspect)
+	_fire_mat.set_shader_parameter("flame_tex", FIRE_TEX)
+	_fire_mat.set_shader_parameter("grid", Vector2.ONE * FLIPBOOK_GRID)
+	_fire_mat.set_shader_parameter("frames", FIRE_FRAMES)
+	_fire_mat.set_shader_parameter("base_v", FIRE_BASE_V)
+	_fire_mat.set_shader_parameter("fill", FIRE_FILL)
+	_fire_mat.set_shader_parameter("cell_aspect", FIRE_CELL_ASPECT)
 	_fire_mat.set_shader_parameter("gain", 2.8)
 	_fire_mat.set_shader_parameter("play_fps", FIRE_PLAY_FPS)
 	_fire_mat.set_shader_parameter("fade_in_at", FIRE_FADE_IN_AT)
@@ -185,7 +179,7 @@ static func life_of(state: BattleState, w: Wrecks.Wreck) -> float:
 	return clampf(float(w.burns_out_at - state.turn_clock()) / float(total), 0.0, 1.0)
 
 
-## Стадії: перше коло — три язики й густий дим; друге — один язик і дим ×0,6; третє —
+## Стадії: перше коло — повне полум'я й густий дим; друге — менше полум'я й дим ×0,6; третє —
 ## дим ×0,3; останній хід — голі уламки. Ціле число ходів у частці горіння (6 для двох
 ## гравців), тож пороги стоять між кроками, а не на них.
 static func column_opacity_for(life: float) -> float:
@@ -215,16 +209,6 @@ static func flame_height(type_id: int) -> float:
 	return (UnitSilhouettes.spec(type_id).hull as Vector3).x * FLAME_HEIGHT_PER_HULL
 
 
-## Атлас вогню на заміну (настроювання на тимчасовому флипбуці); діє на нові шари.
-static func use_fire_atlas(tex: Texture2D, grid: Vector2, frames: float, base_v: float, fill: float, cell_aspect: float) -> void:
-	fire_tex = tex
-	fire_grid = grid
-	fire_frames = frames
-	fire_base_v = base_v
-	fire_fill = fill
-	fire_cell_aspect = cell_aspect
-
-
 func ember_emitter(pos: Vector2i) -> GPUParticles3D:
 	return _embers.get(pos, null)
 
@@ -252,11 +236,7 @@ func fire_centre(pos: Vector2i) -> Vector3:
 
 
 static func flames_for(life: float) -> int:
-	if life > 2.0 / 3.0:
-		return 1
-	if life > 1.0 / 3.0 + 0.01:
-		return 1
-	return 0
+	return 1 if flame_scale_for(life) > 0.0 else 0
 
 
 func add(pos: Vector2i, type_id: int, life: float, facing: int = 0) -> void:
@@ -482,8 +462,8 @@ func _refresh_effects() -> void:
 		var c: Vector2i = _column_cells[i]
 		var seed: float = float(hash(c) % 997) / 997.0
 		var opacity: float = column_opacity_for(_entries[c].life)
-		# Дим народжується на верхівці стовпа полум'я (чи на даху моторного відсіку, коли вогню
-		# вже нема) — не з порожнього повітря поруч.
+		# Дим народжується на верхівці полум'я над погоном (чи на самому погоні, коли вогню вже
+		# нема) — не з порожнього повітря поруч.
 		var e: _Entry = _entries[c]
 		# Видима верхівка полум'я — близько половини висоти кваду: атлас угорі вже розсіюється.
 		var origin: Vector3 = fire_centre(c) + Vector3(0.0, 0.5 * flame_height(e.type_id) * flame_scale_for(e.life), 0.0)
@@ -704,7 +684,6 @@ void fragment() {
 	col = mix(col, ash_color, smoothstep(1.0 - ash_share, 1.0 - ash_share + 0.12, fleck) * (0.35 + 0.65 * up));
 	ALBEDO = col;
 	ROUGHNESS = 0.9;
-	// Жар — рідкі дрібні плями на верхніх гранях, не суцільна помаранчева плямистість.
 }
 """
 
@@ -716,18 +695,16 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabl
 uniform sampler2D puff_tex : source_color, filter_linear_mipmap;
 uniform sampler2D thin_tex : source_color, filter_linear_mipmap;
 uniform float grid = 8.0;
-// Час крокує таймером WreckLayer, 8 разів на секунду: вбудований час рушія тримав би кадр щокадрово.
+// Час крокує таймером WreckLayer, 30 разів на секунду: вбудований час рушія тримав би кадр щокадрово.
 uniform float fx_time = 0.0;
 uniform float height = 3.0;
 uniform float base_w = 0.8;
 uniform float top_w = 1.3;
 uniform vec3 lean = vec3(0.0);
-// Частка шляху клуби за секунду = кадрів/с атласу / 64: кадр і висота йдуть разом.
+// Частка шляху клуби за секунду = 1 / PLUME_LIFE_SEC: кадр атласу й висота йдуть разом.
 uniform float rise = 0.0625;
 // Ріст свіжого стовпа, одиниць світу за секунду від народження (INSTANCE_CUSTOM.w).
 uniform float grow = 0.75;
-// Стовп починається з верхівок полум'я (дах корпусу + ~2 м), а не з порожнього повітря.
-uniform float column_base = 0.0;
 // Сонце (WeatherRig): освітлений бік клуби світліший на ясних мапах; у похмурі — нічого.
 global uniform vec3 sun_dir;
 global uniform float sky_clear;
@@ -757,7 +734,7 @@ void vertex() {
 	float w = mix(base_w, top_w, sqrt(t)) * (1.0 + 0.6 * birth);
 	// Хаотичний бічний дрейф росте з висотою й повільно змінюється в часі.
 	vec3 wander = (right * sin(sd * 37.0 + fx_time * 0.35) + vec3(0.0, 0.0, 1.0) * cos(sd * 23.0 + fx_time * 0.27)) * w * 0.3 * t;
-	vec3 c = root + vec3(0.0, h + column_base, 0.0) + lean * h + wander;
+	vec3 c = root + vec3(0.0, h, 0.0) + lean * h + wander;
 	float roll = sd * 6.2832 + (sd - 0.5) * fx_time * 0.4;
 	vec2 v = vec2(cos(roll) * VERTEX.x - sin(roll) * VERTEX.y, sin(roll) * VERTEX.x + cos(roll) * VERTEX.y);
 	vec3 world = c + (right * v.x + up * v.y) * w * (0.85 + 0.3 * sd);
@@ -899,7 +876,10 @@ void vertex() {
 	vec3 root = MODEL_MATRIX[3].xyz;
 	vec2 away = -sun_dir.xz / max(sun_dir.y, 0.25);
 	float reach = min(max(fx_time - INSTANCE_CUSTOM.w, 0.0) * grow, height);
-	vec3 c = root + vec3(away.x, 0.0, away.y) * reach * 0.5 + vec3(0.0, 0.03, 0.0);
+	// Низьке сонце відкинуло б пляму за кілька тайлів від стовпа: не далі за тайл.
+	vec2 off = away * reach * 0.5;
+	off *= min(1.0, 1.0 / max(length(off), 1e-4));
+	vec3 c = root + vec3(off.x, 0.0, off.y) + vec3(0.0, 0.03, 0.0);
 	vec3 world = c + vec3(VERTEX.x, 0.0, VERTEX.y) * 2.0;
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
 	v_a = 0.3 * sky_clear * INSTANCE_CUSTOM.x * (reach / height);

@@ -5,7 +5,7 @@ extends RefCounted
 ## меш; Compatibility не має їх зовсім. Не квади над землею: ті мерехтять на схилах і
 ## коштують виклик малювання кожен.
 ##
-## Канали: R — випалене (темне ядро), G — вирва, B — уламки, A — попіл. Ставиться на CPU,
+## Канали: R — випалене (пляма під уламками й вирва), A — попіл; G і B вільні. Ставиться на CPU,
 ## коли подія вже зіграна; додавання — максимумом, тож пляма, поставлена двічі, не
 ## темнішає.
 ##
@@ -103,7 +103,7 @@ func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:
 			if dist >= r_px:
 				continue
 			var ang: float = atan2(float(dy), float(dx))
-			# Множник лише збільшує відстань: край ніколи не виходить за 7 м.
+			# Множник лише збільшує відстань: край ніколи не виходить за `radius_m`.
 			var lobes: float = 0.5 + 0.5 * noise.get_noise_2d(cos(ang) * 1.3, sin(ang) * 1.3)
 			var rays: float = 0.5 + 0.5 * noise.get_noise_2d(cos(ang) * 6.0 + 9.0, sin(ang) * 6.0)
 			var d_eff: float = dist * (1.0 + 0.18 * lobes + 0.3 * smoothstep(0.55, 0.9, 1.0 - rays) * dist / r_px)

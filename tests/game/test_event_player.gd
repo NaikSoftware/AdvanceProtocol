@@ -558,3 +558,40 @@ func test_shell_and_ground_gun_hits_report_a_crater() -> void:
 	player.play([Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
 	assert_eq(craters, [[Vector2i(3, 3), 2.5]])
 	_finish_all_processed_tweens()
+
+
+func _craters_for(shooter: Unit, target_unit: Unit, events: Array[Events.BattleEvent], with_view: bool = true) -> Array:
+	var target: UnitView = _spawn_view(target_unit.id, target_unit.type_id, target_unit.owner, target_unit.pos) if with_view else null
+	var craters: Array = []
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return target if id == target_unit.id else null,
+		func(id: int) -> Unit: return shooter if id == shooter.id else (target_unit if id == target_unit.id else null))
+	player.ground_hit.connect(func(cell: Vector2i, radius_m: float) -> void: craters.append([cell, radius_m]))
+	player.play(events)
+	_finish_all_processed_tweens()
+	return craters
+
+
+## Танкова гармата по піхоті б'є в ґрунт — мала вирва 1,5 м.
+func test_tank_gun_on_infantry_leaves_a_small_crater() -> void:
+	var craters: Array = _craters_for(_unit(1, 5, 1, Vector2i(6, 3)), _unit(2, 0, 0, Vector2i(3, 3)),
+		[Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
+	assert_eq(craters, [[Vector2i(3, 3), 1.5]])
+
+
+## По броні гармата й дрон влучають у машину, не в землю: вирви нема.
+func test_tank_gun_and_drone_on_a_vehicle_leave_no_crater() -> void:
+	var by_gun: Array = _craters_for(_unit(1, 5, 1, Vector2i(6, 3)), _unit(2, 5, 0, Vector2i(3, 3)),
+		[Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
+	assert_eq(by_gun, [])
+	var by_drone: Array = _craters_for(_unit(1, 1, 1, Vector2i(6, 3)), _unit(2, 5, 0, Vector2i(3, 3)),
+		[Events.DroneLaunched.new(1, 2, 1)] as Array[Events.BattleEvent])
+	assert_eq(by_drone, [])
+
+
+## Вирва — від стану, не від вузла: ціль, якої глядач не бачить, однаково лишає шрам
+## (карта шрамів сама множиться на `seen`).
+func test_crater_is_reported_without_a_target_view() -> void:
+	var craters: Array = _craters_for(_unit(1, 9, 1, Vector2i(7, 3)), _unit(2, 0, 0, Vector2i(3, 3)),
+		[Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent], false)
+	assert_eq(craters, [[Vector2i(3, 3), 2.5]])

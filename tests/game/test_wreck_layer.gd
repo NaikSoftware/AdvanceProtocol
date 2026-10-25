@@ -150,8 +150,10 @@ func test_stages_thin_the_smoke_then_leave_a_bare_wreck() -> void:
 		layer.add(Vector2i(i, 0), 5, lives[i])
 	assert_eq(layer.column_opacity(Vector2i(0, 0)), 1.0)
 	assert_eq(layer.flame_count(Vector2i(0, 0)), 1)
+	assert_eq(WreckLayer.flame_scale_for(lives[0]), 1.0, "перше коло — повне полум'я")
 	assert_eq(layer.column_opacity(Vector2i(1, 0)), 0.6)
 	assert_eq(layer.flame_count(Vector2i(1, 0)), 1)
+	assert_eq(WreckLayer.flame_scale_for(lives[1]), 0.55, "друге коло — те саме джерело, менше")
 	assert_eq(layer.column_opacity(Vector2i(2, 0)), 0.3)
 	assert_eq(layer.flame_count(Vector2i(2, 0)), 0)
 	assert_false(layer.has_column(Vector2i(3, 0)), "останній хід — голі уламки")
@@ -178,8 +180,8 @@ func test_wreck_stands_on_its_tile() -> void:
 
 
 ## §8: батарея — частина продукту. Дим не живе на TIME (той тримав би кадр
-## щокадрово), а крокує таймером 8 разів на секунду, і таймер стоїть, коли диму нема.
-func test_smoke_is_stepped_at_eight_fps_and_stops_when_nothing_burns() -> void:
+## щокадрово), а крокує таймером 30 разів на секунду, і таймер стоїть, коли диму нема.
+func test_smoke_is_stepped_by_a_timer_and_stops_when_nothing_burns() -> void:
 	# Крок не частіше за обмеження кадру в спокої (30): вогонь плавний, а кадр однаково
 	# скидається, щойно все догоріло.
 	assert_eq(WreckLayer.FLIPBOOK_FPS, 30.0)
@@ -273,8 +275,7 @@ func test_every_column_casts_a_shadow_blob() -> void:
 	assert_eq(shadows.multimesh.visible_instance_count, layer.column_count())
 
 
-## Вогонь — на корпусі, як багаття на машині: джерела на моторному відсіку ззаду, на
-## погоні башти й у люку, основа язика — на даху корпусу, а не хмара над ним.
+## Вогонь виходить з погона: два корені обабіч центру даху, а не хмара над корпусом.
 func test_flames_sit_on_the_hull_top_at_named_spots() -> void:
 	layer.add(Vector2i(3, 3), 5, 1.0, 2)
 	var spots: Array[Vector3] = layer.flame_spots(Vector2i(3, 3))
@@ -326,6 +327,14 @@ func test_fire_is_one_column_sized_from_the_hull() -> void:
 	assert_eq(WreckLayer.flame_width(5), hull.x * 0.4)
 	assert_eq(WreckLayer.flame_height(5), hull.x)
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
-	assert_true(float((fire.material_override as ShaderMaterial).get_shader_parameter("gain")) > 1.0)
-	assert_eq(layer.find_children("Flame*", "GPUParticles3D", true, false).size(), 0, "без тіла з частинок")
-	assert_eq(layer.find_children("Halo*", "", true, false).size(), 0)
+	var mat := fire.material_override as ShaderMaterial
+	assert_true(float(mat.get_shader_parameter("gain")) > 1.0)
+	# Гра читає власний атлас вогню з його сталими сітки й розмітки.
+	assert_eq(mat.get_shader_parameter("flame_tex"), WreckLayer.FIRE_TEX)
+	assert_eq(mat.get_shader_parameter("base_v"), WreckLayer.FIRE_BASE_V)
+	# Тіло вогню — лише два екземпляри атласу на уламок; частинки — тільки іскри.
+	layer.add(Vector2i(3, 3), 5, 1.0, 0)
+	assert_eq(fire.multimesh.visible_instance_count, 2)
+	var particles: Array[Node] = layer.find_children("*", "GPUParticles3D", true, false)
+	assert_eq(particles.size(), 1)
+	assert_eq(particles[0], layer.ember_emitter(Vector2i(3, 3)))
