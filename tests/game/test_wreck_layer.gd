@@ -94,14 +94,19 @@ func test_no_more_than_eight_columns_and_the_youngest_are_kept() -> void:
 func test_wreck_is_neutral_burnt_and_carries_no_hp_bar() -> void:
 	layer.add(Vector2i(3, 3), 5, 1.0)
 	var w: Node3D = layer.wreck_at(Vector2i(3, 3))
-	var meshes: int = 0
+	var meshes: Array[MeshInstance3D] = []
 	for n: Node in w.find_children("*", "", true, false):
 		assert_false(n is Sprite3D or n is Label3D, "уламки не мають HP-бара й підписів")
 		if n is MeshInstance3D:
-			meshes += 1
-			assert_eq((n as MeshInstance3D).material_override, WreckLayer.burnt_material(), "один спільний обгорілий матеріал")
+			meshes.append(n)
+	# Одна сітка на уламки: один виклик малювання і одна тінь замість трьох-чотирьох (бюджет §8).
+	assert_eq(meshes.size(), 1)
+	assert_eq(meshes[0].material_override, WreckLayer.burnt_material(), "один спільний обгорілий матеріал")
 	var live: Node3D = UnitSilhouettes.build(5, Color.WHITE)
-	assert_eq(meshes, live.get_child_count(), "той самий силует, що в живого юніта")
+	var verts: int = 0
+	for part: Node in live.get_children():
+		verts += ((part as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	assert_eq((meshes[0].mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), verts, "той самий силует, що в живого юніта")
 	live.free()
 
 

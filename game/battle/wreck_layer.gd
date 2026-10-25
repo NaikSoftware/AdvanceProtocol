@@ -421,13 +421,21 @@ static func burnt_material() -> ShaderMaterial:
 static func build_wreck(pos: Vector2i, type_id: int, facing: int) -> Node3D:
 	var root := UnitSilhouettes.build(type_id, Color.BLACK)
 	root.name = "Wreck_%d_%d" % [pos.x, pos.y]
+	# Усі частини — в одну сітку: один виклик малювання й одна тінь на уламки (бюджет §8).
+	var st := SurfaceTool.new()
 	for part: Node in root.get_children():
 		var m := part as MeshInstance3D
-		m.material_override = burnt_material()
-		m.layers = 1 << (UnitView.UNIT_LAYER - 1)
 		m.position.y -= HULL_SAG
 		if m.name == "Barrel":
 			m.rotation.x = -deg_to_rad(BARREL_DROP_DEG)
+		st.append_from(m.mesh, 0, m.transform)
+		m.free()
+	var merged := MeshInstance3D.new()
+	merged.name = "Body"
+	merged.mesh = st.commit()
+	merged.material_override = burnt_material()
+	merged.layers = 1 << (UnitView.UNIT_LAYER - 1)
+	root.add_child(merged)
 	var h: int = hash(pos)
 	# Перекіс — довкола осей самого корпусу, після повороту: інакше нахил «їде» з напрямом.
 	root.basis = Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing))) \
