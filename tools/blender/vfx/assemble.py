@@ -19,10 +19,10 @@ ATLAS = {
                               lab=(35, 45), tgt_L=40, amax=0.35, ab=((-1, 2), (-3, 4))),
     "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=16, rows=4, fps=8, bonfire=1, raw=1, m=2.93, sway=0.05,
                             lab=None),
-    "explosion": dict(src="explosion", kind="once", n=64, cols=8, rows=8, fps=48, m=22.4, lab=None),
+    "explosion": dict(src="explosion", kind="once", topramp=(0.06, 0.30), n=64, cols=8, rows=8, fps=48, m=22.4, lab=None),
     "dirt_burst": dict(src="dirt_burst", kind="once", n=64, cols=8, rows=8, fps=40, m=13.7, desat=0.65,
                        lab=(28, 38), tgt_L=33, ab=((2, 4), (6, 10))),
-    "impact_flash": dict(src="flash", kind="once", tail=6, n=16, cols=4, rows=4, fps=60, m=6.7, lab=None),
+    "impact_flash": dict(src="flash", kind="once", tail=6, topramp=(0.06, 0.26), n=16, cols=4, rows=4, fps=60, m=6.7, lab=None),
 }
 GRASS = np.array([92, 104, 70], np.float32) / 255  # muted late-autumn grass, L* ~ 41
 CM_PX = (7, 22)  # closest / farthest zoom, cm per screen pixel
@@ -254,6 +254,10 @@ def process(cfg, frames):
             al = np.clip(o[..., 3:], 1e-6, 1)
             fr[i] = np.concatenate([np.clip(o[..., :3] / al, 0, 1), al], -1)
     wy, _ = window(H)
+    if cfg.get("topramp"):  # the sim box ends in a straight cut near the top; fade it out more gently there
+        z, f_ = cfg["topramp"]
+        t = np.clip((np.arange(H) / (H - 1) - z) / (f_ - z), 0, 1)
+        wy = np.minimum(wy, t * t * (3 - 2 * t))
     _, wx = window(fr.shape[2])
     fr = fr.copy()
     fr[..., 3] *= wy[None, :, None] * wx[None, None, :]
