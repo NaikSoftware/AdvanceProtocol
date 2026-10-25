@@ -21,7 +21,7 @@ report. Generation spends real money, so you never start a batch on your own ini
 - **The project's art-direction document** for palette, materials and mood, and the normative
   instructions at the repository root for what the frame budget allows on screen at once.
 - **The setting constraint in those instructions.** It binds the prompt and the filename as much
-  as the asset: nothing real, no insignia, no identifiable vehicle.
+  as the asset: vehicles follow real designs but carry altered names, no insignia, no flags.
 </read_first>
 
 <judging_the_result>

@@ -15,6 +15,11 @@ func before_each() -> void:
 	add_child_autofree(view)
 
 
+func after_each() -> void:
+	# Статичне поле на весь процес: тест, що впав посередині, не сміє лишити рельєф решті набору.
+	TerrainHeight.active = null
+
+
 func _unit(type_id: int, owner: int = 0, pos: Vector2i = Vector2i(2, 3), facing: int = 0) -> Unit:
 	return Unit.create(1, type_id, owner, pos, facing)
 
@@ -629,3 +634,226 @@ func test_unit_meshes_are_on_the_unit_layer_only() -> void:
 			found += 1
 			assert_eq((n as VisualInstance3D).layers, expected, "%s мусить бути лише на шарі юнітів" % n.name)
 	assert_gt(found, 4, "передумова: силует і позначки справді знайдено")
+
+
+# --- Юніт на рельєфі ----------------------------------------------------
+
+const _CM: float = TerrainHeight.M * 0.01
+static var _river: TerrainHeight = null
+static var _river_board: Board = null
+
+
+func _relief() -> TerrainHeight:
+	if _river == null:
+		var m: MapData = load("res://maps/river.tres")
+		_river_board = m.to_board()
+		_river = TerrainHeight.bake(_river_board, 0, m.name_key.hash())
+	return _river
+
+
+## Кути основи корпусу у світі: низ Hull, ±половина його розміру.
+func _base_corners(v: UnitView) -> Array[Vector3]:
+	var sil: Node3D = v.get_node("Silhouette")
+	var size: Vector3 = ((sil.get_node("Hull") as MeshInstance3D).mesh as BoxMesh).size
+	var out: Array[Vector3] = []
+	for sx: float in [-0.5, 0.5]:
+		for sz: float in [-0.5, 0.5]:
+			out.append(sil.global_transform * Vector3(size.x * sx, 0.0, size.z * sz))
+	return out
+
+
+## Перепад висот під кутами тайла: скільки схилу під юнітом.
+func _spread(t: TerrainHeight, c: Vector2i) -> float:
+	var lo := INF
+	var hi := -INF
+	for d: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
+		var h: float = t.at(c.x + d.x, c.y + d.y)
+		lo = minf(lo, h)
+		hi = maxf(hi, h)
+	return hi - lo
+
+
+func _land_cells(t: TerrainHeight) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for y in _river_board.height:
+		for x in _river_board.width:
+			var k: int = _river_board.kind_at(Vector2i(x, y))
+			if k != Terrain.Kind.WATER and k != Terrain.Kind.BRIDGE and k != Terrain.Kind.BRIDGE_DESTROYED:
+				out.append(Vector2i(x, y))
+	return out
+
+
+## Наскільки земля під основою юніта відходить від площини: скрут (діагоналі на різній
+## висоті) і горб чи западина під центром. Жорстка основа на такій землі неминуче висить
+## частиною країв — 10 см там недосяжні за будь-якого нахилу.
+func _off_plane(t: TerrainHeight, v: UnitView) -> float:
+	var g: Array[float] = []
+	for p in _base_corners(v):
+		g.append(t.at(p.x, p.z))
+	var mean: float = (g[0] + g[1] + g[2] + g[3]) / 4.0
+	var twist: float = absf(g[0] + g[3] - g[1] - g[2]) / 4.0
+	return maxf(twist, absf(t.at(v.position.x, v.position.z) - mean))
+
+
+## Схил не крутіший за межу нахилу, від рівнини до помірного. Де земля під основою рівна,
+## основа лежить на ній усіма кутами: не глибше 2 см у ґрунті й не вище 10 см над ним. На
+## скруті чи горбі жорстка основа неминуче висить частиною країв — там межа ширша на
+## подвійний відступ землі від площини, але кути однаково не входять у ґрунт. Діагональний
+## facing, щоб кути справді крутились разом із юнітом.
+func test_vehicle_base_lies_on_the_ground_up_to_the_tilt_limit() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var planar := 0
+	for c in _land_cells(t):
+		if _spread(t, c) > tan(deg_to_rad(UnitView.MAX_TILT_DEG)) * 0.6:
+			continue
+		view.bind(_unit(5, 0, c, 1))
+		var off: float = _off_plane(t, view)
+		var bound: float = 10.0 * _CM if off <= 4.0 * _CM else 10.0 * _CM + 2.0 * off
+		if off <= 4.0 * _CM:
+			planar += 1
+		for p in _base_corners(view):
+			var g: float = t.at(p.x, p.z)
+			assert_gte(p.y - g, -2.0 * _CM, "кут у ґрунті на %s: %.1f см" % [c, (p.y - g) / _CM])
+			assert_lte(p.y - g, bound, "кут висить на %s: %.1f см (межа %.1f)" % [c, (p.y - g) / _CM, bound / _CM])
+	gut.p("рівних клітинок під основою перевірено: %d" % planar)
+	assert_gte(planar, 15, "передумова: на Річці досить рівних клітинок")
+
+
+## Відділення стоїть на одній основі з кількома фігурами: нахил перекидав би їх разом із
+## підставкою. Тому воно лишається рівним (лише поворот) і трохи втоплене в ґрунт, щоб
+## край основи на схилі не висів.
+func test_infantry_squad_stays_level_and_sunk_on_a_slope() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	for id in UnitTypes.count():
+		if UnitTypes.is_vehicle(UnitTypes.get_type(id)["unit_class"]):
+			continue
+		view.bind(_unit(id, 0, steepest, 1))
+		var sil: Node3D = view.get_node("Silhouette")
+		assert_eq(sil.rotation, Vector3.ZERO, "тип %d рівний" % id)
+		assert_almost_eq(view.position.y, t.at(steepest.x, steepest.y) - UnitView.SQUAD_SINK, 0.0001, "тип %d втоплений" % id)
+		assert_almost_eq(view.rotation_degrees.y, -45.0, 0.0001, "поворот лишається")
+
+
+## Найкрутіший берег: нахил обмежено, і жоден кут однаково не входить у ґрунт.
+func test_tilt_is_clamped_and_nothing_sinks_on_the_steepest_bank() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	assert_gt(_spread(t, steepest), tan(deg_to_rad(UnitView.MAX_TILT_DEG)) * 0.8, "передумова: схил крутіший за межу")
+	view.bind(_unit(8, 0, steepest, 3))
+	var sil: Node3D = view.get_node("Silhouette")
+	var up: Vector3 = sil.global_basis.y.normalized()
+	assert_gt(up.angle_to(Vector3.UP), deg_to_rad(1.0), "на схилі юніт нахилений")
+	assert_lte(absf(sil.rotation.x), deg_to_rad(UnitView.MAX_TILT_DEG) + 0.0001, "тангаж у межі")
+	assert_lte(absf(sil.rotation.z), deg_to_rad(UnitView.MAX_TILT_DEG) + 0.0001, "крен у межі")
+	for p in _base_corners(view):
+		assert_gte(p.y - t.at(p.x, p.z), -2.0 * _CM, "кут у ґрунті: %.1f см" % ((p.y - t.at(p.x, p.z)) / _CM))
+
+
+## §3.4: нахил не повертає юніт. Напрям, кут корпусу навколо осі й те, куди дивиться
+## ніс у плані, — ті самі, що й на рівній землі.
+func test_tilt_does_not_change_facing() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	for f in 8:
+		view.bind(_unit(5, 0, steepest, f))
+		var sil: Node3D = view.get_node("Silhouette")
+		var nose: Vector3 = -sil.global_basis.z
+		var flat_nose: Vector3 = -view.global_basis.z
+		assert_eq(view.facing, f)
+		assert_almost_eq(view.rotation_degrees.y, -45.0 * f, 0.0001, "кут вузла — лише напрям")
+		assert_almost_eq(Vector2(nose.x, nose.z).normalized().dot(Vector2(flat_nose.x, flat_nose.z)), 1.0, 0.0001,
+				"ніс у плані дивиться туди ж, facing %d" % f)
+
+
+func test_flat_ground_keeps_the_unit_level() -> void:
+	view.bind(_unit(8, 0, Vector2i(4, 4), 1))
+	var sil: Node3D = view.get_node("Silhouette")
+	assert_eq(sil.rotation, Vector3.ZERO)
+	assert_eq(view.position, Vector3(4, 0, 4))
+
+
+## Кожен кадр ходу юніт лежить на схилі, а не лише на кінцевій клітинці.
+func test_unit_keeps_the_pose_while_moving() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	var start := steepest + Vector2i(-1, 0)
+	view.bind(_unit(5, 0, start, 2))
+	var path: Array[Vector2i] = [steepest]
+	var tween: Tween = view.move_along(path, 1.0).get_object()
+	var sil: Node3D = view.get_node("Silhouette")
+	var tilted := 0
+	for i in 10:
+		tween.custom_step(0.1)
+		for p in _base_corners(view):
+			assert_gte(p.y - t.at(p.x, p.z), -2.0 * _CM, "кут у ґрунті на кроці %d" % i)
+		if sil.rotation.length() > deg_to_rad(1.0):
+			tilted += 1
+	assert_gt(tilted, 0, "дорогою юніт нахиляється за схилом")
+
+
+## Поворот на місці: твін крутить вузол, нахил іде слідом кожен кадр.
+func test_turn_in_place_keeps_the_base_on_the_slope() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	view.bind(_unit(8, 0, steepest, 0))
+	view.face(2)
+	for i in 5:
+		view._face_tween.custom_step(0.04)
+		view._process(0.04)
+		for p in _base_corners(view):
+			assert_gte(p.y - t.at(p.x, p.z), -2.0 * _CM, "кут у ґрунті посеред повороту, крок %d" % i)
+
+
+## Міст: юніт стоїть рівно на настилі, а не на руслі під ним.
+func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var bridge := Vector2i(-1, -1)
+	for y in _river_board.height:
+		for x in _river_board.width:
+			if _river_board.kind_at(Vector2i(x, y)) == Terrain.Kind.BRIDGE:
+				bridge = Vector2i(x, y)
+	assert_ne(bridge, Vector2i(-1, -1), "передумова: на Річці є міст")
+	view.bind(_unit(5, 0, bridge, 1))
+	assert_almost_eq(view.position.y, t.deck_y(bridge), 0.0001)
+	assert_eq(view.get_node("Silhouette").rotation, Vector3.ZERO)
+
+
+## Кадр юніта працює лише поки живий твін повороту чи ходу: у спокої десятки юнітів не
+## роблять нічого щокадру (§8).
+func test_unit_processes_only_while_turning() -> void:
+	view.bind(_unit(5, 0, Vector2i(2, 2), 0))
+	assert_false(view.is_processing(), "після bind кадр вимкнено")
+	view.face(2)
+	assert_true(view.is_processing(), "поворот вмикає кадр")
+	view._face_tween.custom_step(10.0)
+	view._process(0.0)
+	assert_false(view.is_processing(), "твін скінчився — кадр вимкнено")
+	var path: Array[Vector2i] = [Vector2i(3, 2)]
+	var tween: Tween = view.move_along(path, 0.1).get_object()
+	assert_true(view.is_processing(), "хід вмикає кадр")
+	tween.custom_step(10.0)
+	view._process(0.0)
+	assert_false(view.is_processing())

@@ -50,10 +50,10 @@ its target first, so retaliation always lands frontally. Quoting a side or rear 
 wrong in the one place the number decides whether to open fire at all.
 
 The sector shown for **your own** shot stays honest — the target has not turned yet. What is new is
-that it is the last time that sector is free: a target that answers ends up facing you, so the same
-shot from the same tile next turn finds its front. The UI must not leave a player thinking a flank
-keeps paying. The retaliator's turn is animated, not snapped, on the watching player's screen — it
-is the only thing that explains, in the moment, why the flank stopped working.
+that it is the last time that sector is free: a target that survives ends up facing you, answer or
+not, so the next shot from the same side finds its front. The UI must not leave a player thinking a
+flank keeps paying. The survivor's turn is animated, not snapped, on the watching player's screen —
+it is the only thing that explains, in the moment, why the flank stopped working.
 
 **Own unit and enemy unit are gated differently, and this is a deliberate departure from the
 reference.**
@@ -61,7 +61,7 @@ reference.**
 | inspecting | ring | marked units |
 | --- | --- | --- |
 | your own | always, even at 0 AP | enemies it can fire on **right now** — range, visibility and AP all checked |
-| an enemy | always | your units inside its range and seen by **that unit alone** — **AP deliberately not checked** |
+| an enemy | always | your units inside its range circle — **no vision check, AP deliberately not checked**; drone marks: your vehicles inside drone range and seen by **that squad alone** |
 
 **The drone strike counts as reach, for both rows.** It is a separate action with its own range,
 its own list of legal targets and its own ammunition ([§3.9](../rules/units.md)), so it gets its
@@ -92,16 +92,16 @@ squad with infantry is a response to a threat that has to be known to be live.
 The drone's marks obey the action's own rules, not the ordinary shot's: vehicle classes only, so
 the observer's infantry is never marked as a drone target. **Two different gates are in play here
 and they must not be confused.** Whether a unit can be *inspected at all* is decided by `seen`; the
-marks drawn inside an inspected **enemy's** ring are computed from that unit's own vision diamond,
-because the forecast may not read its owner's network (below). For **your own** squad the ring
-answers the same question as the gun's — what can I hit right now — so ammunition gates it too: a
+drone marks drawn inside an inspected **enemy** squad's ring are computed from that squad's own
+vision diamond, because the forecast may not read its owner's network (below). For **your own**
+squad the ring answers the same question as the gun's — what can I hit right now — so ammunition gates it too: a
 squad out of drones has no drone ring.
 
-**The drone is where the floor understates the most, and the UI copy should say so.** A strike
+**The drone is where the forecast understates the most, and the UI copy should say so.** A strike
 needs the *owner's* vision like any other shot, so a squad whose network sees a tank outside its
 own diamond genuinely can hit it — and the forecast, computed from that one squad alone, will not
 mark it. The gap between forecast and reality is therefore widest on exactly the action that
-ignores armour, out-reaches everything, and draws no reply. Under-reporting is still the right
+ignores armour and out-reaches everything. Under-reporting is still the right
 trade against leaking where the spotters are, but the player must be told that the drone ring is
 the squad's *unaided* reach, not its real one.
 
@@ -112,32 +112,32 @@ also the less useful reading. What you want from an enemy is the **threat foreca
 this thing hit when its turn comes — and it will have full AP by then regardless. So an enemy's
 marks answer "who is in danger", and your own unit's marks answer "what can I shoot now".
 
-**An enemy's marks are computed from that unit alone, never from its owner's vision.** A shot
-needs the *owner's* vision, not the shooter's — a spotter elsewhere on the map extends what the
-whole force can fire on (§3.3.1). But that network is hidden, and drawing marks from it would
-reveal that an unseen spotter exists. So the forecast uses only the inspected unit's own range and
-own vision, which is information the player could work out by hand from a public roster and a
-position they can already see.
+**An enemy's marks are computed from that unit alone, never from its owner's vision.** The
+owner's network is hidden, and drawing marks from it would reveal that an unseen spotter exists.
+So the forecast uses only the inspected unit's position and its public stats, which is information
+the player could work out by hand.
 
-The consequence must be stated in the UI rather than hidden: **the marks are a floor, not a
-ceiling.** A unit not marked can still be shot. That is the honest version — the alternative is an
-overlay that quietly leaks the position of scouts.
+**The gun marks cover the whole range circle, with no vision check at all.** Return fire needs no
+vision — a hit reveals the shooter ([§3.3.1](../rules/combat.md)) — so the enemy answers every unit
+of yours inside its circle. Marks trimmed to its vision diamond would be looser than the rule, and
+would mark as safe exactly the units that get shot back. For return fire the marks are therefore
+exact: inside the circle you are answered, outside it you are not. They remain **a floor for the
+enemy's own turn**, since it can move before it fires.
 
-**The gap is much wider than "the enemy might have a spotter you have not found", and it widens as
-the match runs.** The forecast measures the inspected unit's reach with its own vision diamond,
-because that is all it may read. The enemy's *real* reach is their range circle intersected with
-their `seen` grid ([§3.5](../rules/vision-and-fog.md)) — a grid that only grows, and that by
-mid-match may cover most of the board. So by then a tank forecast as threatening a handful of tiles
-is in practice threatening everything inside its circle. The UI copy must not promise more than
-"these are certainly in danger"; a player who reads the unmarked tiles as safe will be wrong, and
-increasingly wrong the longer the match goes on.
+**The drone marks are a floor, not a ceiling, and the UI must say so.** The drone never answers; it
+strikes only on its owner's turn, against ground its owner has scouted
+([§3.5](../rules/vision-and-fog.md)). Its marks are measured with that squad's own vision diamond,
+because that is all the forecast may read. The squad's *real* reach is the drone circle
+intersected with its owner's `seen` grid — a grid that only grows — so a vehicle not marked can
+still be struck, and increasingly so as the match runs. The UI copy must not promise more than
+"these are certainly in danger".
 
 Both computations belong in `core/` and neither may be re-derived in the view — the ring's radius
 included, which `core/` hands over alongside the marks. **What may be fired on is the range circle
 intersected with the observer's `seen` grid** ([§3.5](../rules/vision-and-fog.md)) —
 *not* a circle intersected with a vision diamond, which is what this paragraph used to say and what
-a renderer would most plausibly guess. The diamond appears in exactly one place here: the marks
-inside an enemy's ring, which are deliberately computed from that unit alone. A second
+a renderer would most plausibly guess. The diamond appears in exactly one place here: the drone marks
+inside an enemy squad's ring, which are deliberately computed from that squad alone. A second
 implementation of either geometry in the renderer is exactly the drift this document exists to
 prevent.
 

@@ -76,9 +76,10 @@ Two rules about using it:
 
   What settled it is that permanence is what makes reconnaissance an investment. Under live vision,
   a scout that dies has bought you nothing; under `seen`, it has bought you everything it saw, and
-  the scout car earns its place in the roster. The price is real and is written out in
-  [§3.5](../rules/vision-and-fog.md): impunity from being unseen decays as the match runs, because
-  the ground nobody has scouted only ever shrinks.
+  the scout car earns its place in the roster. The price is written out in
+  [§3.5](../rules/vision-and-fog.md): the protection of unscouted ground decays as the match runs,
+  because that ground only ever shrinks — and it never covered return fire, since a hit reveals the
+  shooter (see the retaliation entries below).
 
   **Two grids are still not pointless.** `visible` remains the live-vision highlight the view will
   draw, and it is what mine detection reads ([§3.11](../rules/vision-and-fog.md)) — a sapper
@@ -160,11 +161,15 @@ Two rules about using it:
   attacker's front — direction snaps to the nearest of eight, at most 22.5° off, inside the 45°
   front cone.
 
-  **The surviving-target turn is deliberately not adopted.** The original turns the survivor
-  whenever it lives — the swap happens before it is known whether an answer is even legal, so a
-  unit with no AP or out of range still turns. Here the retaliator turns because it fired back; a
-  turn granted for merely surviving would be a free reorientation on someone else's turn for doing
-  nothing.
+  **The surviving-target turn is adopted.** The original turns the survivor whenever it lives —
+  the swap (`class_1:444-448`) and the turn happen before it is known whether an answer is even
+  legal, so a unit with no AP, out of range, or an engineer still turns. This project now does the
+  same: the turn comes after the first shot's damage, so that shot keeps the old sector, and if the
+  survivor answers it fires from the new facing. The cost is that a flank is worth one shot — the
+  next attacker from the same side finds the front ([combat.md](../rules/combat.md#facing-in-an-exchange)).
+  An earlier version turned only a retaliator that actually fired back, on the argument that a turn
+  for merely surviving is a free reorientation; that argument also rested on hiding the shooter's
+  bearing, which the reveal below makes moot.
 
   **Turning on tap is adopted, with a gate the original does not have.** The original turns the
   selected unit toward any enemy the player taps, before deciding the tap was an attack. The owner
@@ -216,6 +221,19 @@ Two rules about using it:
   The fire-cost table is identical too (`class_3:507`, `{10,10,18,18,18,20,20,25,20,14,14,20,30}`),
   so the thresholds are not merely analogous, they are the same numbers.
 
+  **There is no vision condition on the answer in the original, and none here — adopted.** The gate
+  above is the whole of it: `method_162` → `method_163` → `method_164` test range (squared
+  Euclidean against `field_254`), class (`field_250 == 4` is the engineer) and live AP, and nothing
+  reads facing or fog. It needs no vision condition because **every shot reveals the shooter**:
+  `class_1:354`, at the start of the state that resolves the shot, clears the fog of the *target
+  owner's* grid (`arr_class_1[field_170.field_263].field_172`) at the *attacker's* tile
+  (`field_169.field_236/237`), before damage is computed. This project adopts both halves: a
+  resolved shot or drone strike marks the attacker's tile `seen` for the target's side before the
+  damage lands, and retaliation checks range, class and AP only
+  ([§3.3.1](../rules/combat.md#retaliation)). An earlier version required the retaliator to have
+  scouted its attacker and cited a departure recorded here; no such entry ever existed, and the
+  departure is withdrawn.
+
   **What this costs at the table, since it is not obvious:** a tank has 48 AP, pays 20 to fire and
   10 per clear tile, so four tiles of advance leave 8 and no answer, while two tiles leave 28 and a
   full-strength one. The threshold is exactly the gold movement zone of
@@ -229,3 +247,12 @@ Two rules about using it:
   `method_53` treats their tile as free. Here a destroyed vehicle leaves a wreck that blocks other
   vehicles for three rounds ([§3.14](../rules/movement-and-terrain.md#wrecks)), so a kill reshapes
   the ground it happened on; infantry leaves none.
+- **The original has no camouflage or concealment, in forest or anywhere else, so do not "restore" it.**
+  An enemy unit is drawn and targetable on exactly two conditions, alive and on an unfogged tile
+  (`GameCanvas.java:2504`, the same test at `:2580`, `:3003`, `:3684`, `:3739`). There is no
+  per-unit visibility flag: `field_242` is "dead". The fog is per tile and never re-fogs during a
+  match (`class_1.java:201` is the only write of `true`). Vision ignores terrain
+  (`class_1.method_121`). Turn start keeps no idle counter (`class_3.method_188` only refills AP).
+  The AI ignores the fog entirely (`class_2.method_148`). A concealment rule here would be a new
+  mechanic, a per-unit exception to `seen` ([§3.5](../rules/vision-and-fog.md)) with consequences
+  for retaliation ([§3.3.1](../rules/combat.md)).

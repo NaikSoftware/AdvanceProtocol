@@ -1,0 +1,17 @@
+{"atlas": "forest_conifer", "size": 1024, "alpha_cutoff": 0.45,
+ "sprite_sets": {
+  "pine": [
+   {"src": "pine_a", "alpha_gain": 1.4, "grade": {"tint": [0.9, 1.0, 0.97], "sat": 0.65, "contrast": 0.8, "target_y": 0.04}},
+   {"src": "pine_b", "alpha_gain": 1.4, "grade": {"tint": [0.9, 1.0, 0.97], "sat": 0.65, "contrast": 0.8, "target_y": 0.04}},
+   {"src": "pine_c", "alpha_gain": 1.4, "grade": {"tint": [0.9, 1.0, 0.97], "sat": 0.65, "contrast": 0.8, "target_y": 0.04}}],
+  "spruce": [
+   {"src": "spruce_a", "alpha_gain": 1.3, "grade": {"tint": [0.85, 1.0, 1.0], "sat": 0.6, "contrast": 0.8, "target_y": 0.03}},
+   {"src": "spruce_b", "alpha_gain": 1.3, "grade": {"tint": [0.85, 1.0, 1.0], "sat": 0.6, "contrast": 0.8, "target_y": 0.03}}]
+ },
+ "items": [
+  {"node": "Pine_A", "src": "pine_a", "sprites": "pine", "trunk_grade": {"tint": [1.25, 0.95, 0.75], "target_y": 0.07}},
+  {"node": "Pine_B", "src": "pine_b", "sprites": "pine", "trunk_grade": {"tint": [1.25, 0.95, 0.75], "target_y": 0.07}},
+  {"node": "Pine_C", "src": "pine_c", "sprites": "pine", "trunk_grade": {"tint": [1.25, 0.95, 0.75], "target_y": 0.07}},
+  {"node": "Spruce_A", "src": "spruce_a", "sprites": "spruce", "trunk_into_crown": 0.5, "trunk_grade": {"target_y": 0.05}},
+  {"node": "Spruce_B", "src": "spruce_b", "sprites": "spruce", "trunk_into_crown": 0.5, "trunk_grade": {"target_y": 0.05}}
+ ]}

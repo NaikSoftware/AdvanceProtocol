@@ -22,8 +22,9 @@ const RELIEF_M: Array[float] = [0.02, 0.04, 0.04, 0.07, 0.05, 0.10, 0.10, 0.05]
 
 ## Косметичні підтипи (MapData.surface): для виду — імена
 ## шарів за номером підтипу; перше ім'я — базовий шар. Шар підтипу вмикається, коли є
-## macro/<ім'я>_albedo_0.png; нема файлу — підтип тихо лишається базовим шаром, тож
-## додати PLOUGHED, PINE, DECIDUOUS пізніше — лише кинути файли (рядки нижче вже є).
+## macro/<ім'я>_albedo_0.png; нема файлу — підтип тихо лишається базовим шаром. Новому
+## підтипу файлу замало: шар ще потребує свого рядка в SURFACE_DETAIL, SURFACE_RELIEF_M
+## (і SURFACE_ALIGNED, якщо текстура спрямована), як у ploughed.
 const SURFACE_LAYERS: Dictionary = {
 	Terrain.Kind.ROAD: ["road", "dirt", "cobble"],
 	Terrain.Kind.FIELD: ["field", "ploughed"],
@@ -41,8 +42,9 @@ const SURFACE_ALIGNED: Dictionary = {"ploughed": 2}
 ## Haven мають власний фізичний розмір, і ці метри дублюють таблицю CC0 у tools/terrain_tex.py —
 ## міняти обидві разом. Решта згенерована на 12 м. Бруківка — 3 м: ~20 каменів по 15 см у
 ## повторі, як справжня кладка. Ліс — 2 м: гілки в його макро мають справжню довжину 5–30 см
-## лише на цьому масштабі, на 12 м вони розтягуються до 1–3 м.
-const MACRO_M: Dictionary = {"dirt": 20.0, "mud": 25.0, "hill": 20.0, "bank": 25.0, "road": 30.0, "cobble": 3.0, "forest": 2.0}
+## лише на цьому масштабі, на 12 м вони розтягуються до 1–3 м. Болото — 8 м: купини в макро
+## тоді 0.4–0.6 м, як справжні; на 12 м вони були б ~0.7–0.8 м.
+const MACRO_M: Dictionary = {"dirt": 20.0, "mud": 25.0, "hill": 20.0, "bank": 25.0, "road": 30.0, "cobble": 3.0, "forest": 2.0, "marsh": 8.0}
 const DEFAULT_MACRO_M: float = 12.0
 ## Класів покриття на карті (канали двох RGBA8 карт класів); зайві стають полем.
 const CLASS_SLOTS: int = 8
@@ -50,6 +52,13 @@ const CLASS_SLOTS: int = 8
 ## шейдер), а не щебінь.
 const YARD: int = -2
 const MAX_LAYERS: int = 16
+## Полів ріллі в шейдері (uniform-масив plough_axis).
+const MAX_PLOUGH_FIELDS: int = 64
+## Смуга трави всередині крайньої клітинки поля, клітинки (PLOUGH_HEADLAND у ground.gdshader).
+const PLOUGH_HEADLAND: float = 0.15
+## Трави між прямим краєм ріллі й краєм дороги, м.
+const PLOUGH_ROAD_GAP_M: float = 1.5
+const METRES_PER_TILE: float = 8.0
 ## Підтипів на вид у таблиці шейдера (indeks = вид * SURFACES_PER_KIND + підтип).
 const SURFACES_PER_KIND: int = 4
 
@@ -69,8 +78,9 @@ const TEX_LAYER_FOR_KIND: Dictionary = {
 
 ## Частка поля й пагорба, що при GroundState.MUD вкрита плямами багна далеко від
 ## доріг (біля доріг шейдер додає ще 0.2). §3.12: стан ґрунту — правило, і земля
-## мусить його показувати, не лише іконка HUD; але поле лишається полем.
-const MUD_BLEND: float = 0.3
+## мусить його показувати, не лише іконка HUD; але поле лишається полем. 0.15 дає ~15 %
+## поля далеко від доріг і ~35 % біля них; більша частка на далекому зумі гасить луку й ріллю.
+const MUD_BLEND: float = 0.15
 
 const _SHADER: Shader = preload("res://game/battle/shaders/ground.gdshader")
 
@@ -88,6 +98,11 @@ var _kind_image: Image
 ## а форма меша від виду клітинок не залежить, тож він не складається вдруге.
 var _ring_mesh: ArrayMesh
 var _ring_mesh_height: TerrainHeight
+## Пора року: `summer`, `early` (рання осінь); порожня — пізня осінь, звичайні файли.
+## Для шару, що має файл macro/<шар>_albedo_<n>.<пора>.png, береться він; решта шарів — як є.
+## Ставити до першого build(): масиви текстур вантажаться один раз.
+var season: StringName = &""
+
 ## Імена шарів macro_array: перші 8 — TEX_LAYERS, далі — підтипи, чий файл існує.
 var _macro_layers: Array[String] = []
 
@@ -137,7 +152,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 		_albedo_array = _load_array("albedo")
 		_normal_array = _load_array("normal")
 		_macro_layers = _macro_layer_names()
-		_macro_array = _load_macro_array(_macro_layers)
+		_macro_array = _load_macro_array(_macro_layers, season)
 
 	var mat := ShaderMaterial.new()
 	mat.shader = _SHADER
@@ -148,7 +163,16 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 		for sub in SURFACES_PER_KIND:
 			surface_table[Terrain.Kind.HILL * SURFACES_PER_KIND + sub] = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
 	_set_layer_properties(mat, _macro_layers)
-	_set_classes(mat, board, margin, surface, surface_table, height != null)
+	var plough: int = _macro_layers.find("ploughed")
+	var cells: PackedInt32Array = plough_cells(board, margin, surface, surface_table, height != null)
+	# Рілля — рукотворна: у картах класів її клітинки — лука (природна м'яка межа), а саме поле
+	# шейдер кладе зверху прямокутником із прямим краєм.
+	var class_table: PackedInt32Array = surface_table.duplicate()
+	for s in SURFACES_PER_KIND:
+		if plough >= 0 and class_table[Terrain.Kind.FIELD * SURFACES_PER_KIND + s] == plough:
+			class_table[Terrain.Kind.FIELD * SURFACES_PER_KIND + s] = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
+	_set_classes(mat, board, margin, surface, class_table, height != null)
+	_set_plough(mat, cells, board.width + 2 * margin, plough, height)
 	_set_roads(mat, height)
 	mat.set_shader_parameter("map_origin", Vector2(-margin - ring, -margin - ring))
 	mat.set_shader_parameter("repeat_m", REPEAT_M)
@@ -156,6 +180,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 		Surroundings.apply(mat, size)
 		mat.set_shader_parameter("snap_edges", height != null)
 	mat.set_shader_parameter("mud_amount", MUD_BLEND if board.ground_state == Terrain.GroundState.MUD else 0.0)
+	mat.set_shader_parameter("dry_season", season != &"")
 	mat.set_shader_parameter("albedo_array", _albedo_array)
 	mat.set_shader_parameter("normal_array", _normal_array)
 	mat.set_shader_parameter("macro_array", _macro_array)
@@ -250,6 +275,104 @@ func _set_classes(mat: ShaderMaterial, board: Board, margin: int, surface: Packe
 	mat.set_shader_parameter("class_layer", slots)
 
 
+## class_layers для пошуку полів: дорога, міст і вода лишають власний вид (-1), а не беруть
+## покриття сусідів голосуванням — інакше поле перескакувало б через дорогу й зливалось із
+## сусіднім в одне.
+static func plough_cells(board: Board, margin: int, surface: PackedByteArray, table: PackedInt32Array, relief: bool) -> PackedInt32Array:
+	var out: PackedInt32Array = class_layers(board, margin, surface, table, relief)
+	var w: int = board.width + 2 * margin
+	for i in out.size():
+		var cell := Vector2i(clampi(i % w - margin, 0, board.width - 1), clampi(i / w - margin, 0, board.height - 1))
+		var kind: int = board.kind_at(cell)
+		if kind == Terrain.Kind.ROAD or kind == Terrain.Kind.WATER or kind == Terrain.Kind.BRIDGE or kind == Terrain.Kind.BRIDGE_DESTROYED:
+			out[i] = -1
+	return out
+
+
+## Поля ріллі: зв'язні (4 сусіди) групи клітинок шару `layer` у `cells` (plough_cells, рядок
+## ширини `w`). Повертає [номер поля + 1 у кожній клітинці (0 — не рілля), прямокутники
+## Rect2i за клітинками]. Не більше MAX_PLOUGH_FIELDS: решта лишається лукою.
+static func plough_fields(cells: PackedInt32Array, w: int, layer: int) -> Array:
+	var ids := PackedByteArray()
+	ids.resize(cells.size())
+	var rects: Array[Rect2i] = []
+	if layer < 0 or w <= 0:
+		return [ids, rects]
+	var h: int = cells.size() / w
+	for start in cells.size():
+		if cells[start] != layer or ids[start] != 0 or rects.size() >= MAX_PLOUGH_FIELDS:
+			continue
+		var id: int = rects.size() + 1
+		var rect := Rect2i(start % w, start / w, 1, 1)
+		var stack: Array[int] = [start]
+		ids[start] = id
+		while not stack.is_empty():
+			var i: int = stack.pop_back()
+			var c := Vector2i(i % w, i / w)
+			rect = rect.expand(c).expand(c + Vector2i.ONE)
+			for d in Board.DIRS_4:
+				var q: Vector2i = c + d
+				var j: int = q.y * w + q.x
+				if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and cells[j] == layer and ids[j] == 0:
+					ids[j] = id
+					stack.append(j)
+		rects.append(rect)
+	return [ids, rects]
+
+
+func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: int, height: TerrainHeight) -> void:
+	var res: Array = plough_fields(cells, w, layer)
+	var rects: Array[Rect2i] = res[1]
+	mat.set_shader_parameter("plough_layer", layer if not rects.is_empty() else -1)
+	if rects.is_empty():
+		return
+	var img := Image.create_from_data(w, cells.size() / w, false, Image.FORMAT_R8, res[0])
+	mat.set_shader_parameter("plough_map", ImageTexture.create_from_image(img))
+	var axis := PackedInt32Array()
+	var insets := PackedVector4Array()
+	var rc: RoadCourse = height.roads if height != null else null
+	for r in rects:
+		# Борозни вздовж довгого боку; квадратне поле — вздовж x.
+		axis.append(1 if r.size.y > r.size.x else 0)
+		insets.append(plough_road_insets(r, rc))
+	mat.set_shader_parameter("plough_axis", axis)
+	mat.set_shader_parameter("plough_inset", insets)
+
+
+## Відступ кожного боку поля (клітинки: -x, -y, +x, +y), щоб між прямим краєм ріллі й дорогою
+## лишалось PLOUGH_ROAD_GAP_M трави. Бік зсувається цілим, тож край лишається прямим, а не йде
+## за вигином дороги. Не більше 0.45 клітинки: глибше край вийшов би з крайньої клітинки поля.
+static func plough_road_insets(r: Rect2i, rc: RoadCourse) -> Vector4:
+	if rc == null:
+		return Vector4.ZERO
+	var img: Image = rc.rasterise()[0]
+	# Растр доріг починається там, де карта класів: координата дороги = клітинка - відступ курсу.
+	var off := Vector2(rc._margin, rc._margin)
+	var lo := Vector2(r.position) - Vector2(0.5, 0.5)
+	var hi := Vector2(r.end) - Vector2(0.5, 0.5)
+	var out := Vector4.ZERO
+	# Бік: [вісь (0 — x, 1 — y), знак напрямку всередину поля].
+	var sides: Array = [[0, 1.0], [1, 1.0], [0, -1.0], [1, -1.0]]
+	for k in 4:
+		var ax: int = sides[k][0]
+		var inward: float = sides[k][1]
+		var edge: float = (lo if inward > 0.0 else hi)[ax]
+		var t: float = 0.0
+		for _iter in 6:
+			var line: float = edge + inward * (PLOUGH_HEADLAND + t)
+			var dmin: float = INF
+			var a: float = lo[1 - ax]
+			while a <= hi[1 - ax]:
+				var q := Vector2(line, a) if ax == 0 else Vector2(a, line)
+				dmin = minf(dmin, rc.d_from(img, q - off))
+				a += 0.125
+			if dmin >= PLOUGH_ROAD_GAP_M:
+				break
+			t = minf(t + (PLOUGH_ROAD_GAP_M - dmin) / METRES_PER_TILE, 0.45)
+		out[k] = t
+	return out
+
+
 ## Шар дороги (RoadCourse.rasterise): поле відстані/осі й ваги типів; без рельєфу доріг нема.
 func _set_roads(mat: ShaderMaterial, height: TerrainHeight) -> void:
 	var rc: RoadCourse = height.roads if height != null else null
@@ -329,15 +452,27 @@ static func _set_layer_properties(mat: ShaderMaterial, names: Array[String]) -> 
 	mat.set_shader_parameter("macro_m", macro)
 
 
-static func _load_macro_array(names: Array[String]) -> Texture2DArray:
+## Файл варіанта n шару для пори року. Порядок: варіант n цієї пори, варіант 0 цієї пори,
+## звичайний n, звичайний 0. Сезонні йдуть першими обидва: інакше бракуючий сезонний
+## варіант 1 узяв би осінній файл і на літній луці лягли б осінні латки.
+static func macro_path(layer_name: String, n: int, p_season: StringName = &"") -> String:
+	var base := "res://assets/terrain/macro/%s_albedo_%d%s.png"
+	var tries: Array[String] = []
+	if p_season != &"":
+		tries.append(base % [layer_name, n, "." + p_season])
+		tries.append(base % [layer_name, 0, "." + p_season])
+	tries.append(base % [layer_name, n, ""])
+	for path in tries:
+		if ResourceLoader.exists(path):
+			return path
+	return base % [layer_name, 0, ""]
+
+
+static func _load_macro_array(names: Array[String], p_season: StringName) -> Texture2DArray:
 	var images: Array[Image] = []
 	for layer_name in names:
-		var base := "res://assets/terrain/macro/%s_albedo_%d.png"
 		for n in MACRO_VARIANTS:
-			var path: String = base % [layer_name, n]
-			if not ResourceLoader.exists(path):
-				path = base % [layer_name, 0]
-			images.append((load(path) as Texture2D).get_image())
+			images.append((load(macro_path(layer_name, n, p_season)) as Texture2D).get_image())
 	var arr := Texture2DArray.new()
 	arr.create_from_images(images)
 	return arr

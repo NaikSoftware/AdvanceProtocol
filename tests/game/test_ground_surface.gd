@@ -321,3 +321,77 @@ func test_every_cell_shows_its_own_class_over_a_quarter_of_its_area() -> void:
 					bad.append("(%d, %d) %s %.0f %%" % [x, y, Terrain.Kind.keys()[board.kind_at(Vector2i(x, y))], share * 100.0])
 		gut.p("%s: найменша частка власного класу %.0f %%" % [file, worst * 100.0])
 		assert_eq(bad.size(), 0, "%s: клітинки без свого виду: %s" % [file, bad.slice(0, 10)])
+
+
+# Пора року: сезонний файл, де він є; інакше — звичайний. Шар без сезонних файлів (берег,
+# асфальт) і невідома пора лишаються як є, тож пора не ламає жодної карти.
+func test_macro_path_takes_the_season_file_and_falls_back_to_the_plain_one() -> void:
+	var dir := "res://assets/terrain/macro/"
+	assert_eq(GroundSurface.macro_path("field", 0, &"summer"), dir + "field_albedo_0.summer.png")
+	assert_eq(GroundSurface.macro_path("field", 1, &"early"), dir + "field_albedo_1.early.png")
+	assert_eq(GroundSurface.macro_path("bank", 0, &"summer"), dir + "bank_albedo_0.png")
+	assert_eq(GroundSurface.macro_path("road", 1, &"early"), dir + "road_albedo_0.png")
+	assert_eq(GroundSurface.macro_path("field", 0, &"winter"), dir + "field_albedo_0.png")
+	assert_eq(GroundSurface.macro_path("field", 1), dir + "field_albedo_1.png")
+
+
+# Бракуючий варіант бере варіант 0 тієї ж пори, а не звичайний файл: інакше в літній ріллі
+# лягли б осінні латки.
+func test_missing_season_variant_takes_variant_zero_of_the_same_season() -> void:
+	var dir := "res://assets/terrain/macro/"
+	assert_eq(GroundSurface.macro_path("ploughed", 1, &"summer"), dir + "ploughed_albedo_0.summer.png")
+	assert_eq(GroundSurface.macro_path("marsh", 1), dir + "marsh_albedo_0.png")
+
+
+# Рілля — прямокутні поля: зв'язні групи клітинок дають номер у кожній клітинці й прямокутник.
+func test_plough_fields_gives_one_rectangle_per_connected_group() -> void:
+	var P := 9
+	# 5×4: поле 3×2 угорі ліворуч, поле 1×3 праворуч, решта — 1.
+	var cells := PackedInt32Array([
+		P, P, P, 1, P,
+		P, P, P, 1, P,
+		1, 1, 1, 1, P,
+		1, 1, 1, 1, 1,
+	])
+	var res: Array = GroundSurface.plough_fields(cells, 5, P)
+	var ids: PackedByteArray = res[0]
+	var rects: Array[Rect2i] = res[1]
+	assert_eq(rects.size(), 2)
+	assert_eq(rects[0], Rect2i(0, 0, 3, 2))
+	assert_eq(rects[1], Rect2i(4, 0, 1, 3))
+	assert_eq(ids[0], 1)
+	assert_eq(ids[4], 2)
+	assert_eq(ids[3], 0)
+	assert_eq(GroundSurface.plough_fields(cells, 5, -1)[1].size(), 0, "без шару ріллі полів нема")
+
+
+# Понад MAX_PLOUGH_FIELDS поля мовчки лишились би лукою: жодна карта не має їх стільки.
+# Рахується світ разом із кільцем — те, що build() справді отримує від BoardView.
+func test_every_map_fits_its_plough_fields_into_the_shader() -> void:
+	var names: Array[String] = GroundSurface._macro_layer_names()
+	var table: PackedInt32Array = GroundSurface._surface_table(names)
+	var plough: int = names.find("ploughed")
+	assert_gt(plough, -1)
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var world: Board = Surroundings.world_board(board, m) if Surroundings.ring_of(m) > 0 else board
+		var surface: PackedByteArray = Surroundings.world_surface(m) if Surroundings.ring_of(m) > 0 else m.surface
+		var cells: PackedInt32Array = GroundSurface.plough_cells(world, 0, surface, table, true)
+		var n: int = (GroundSurface.plough_fields(cells, world.width, plough)[1] as Array).size()
+		gut.p("%s: полів ріллі у світі %d" % [file, n])
+		assert_between(n, 1, GroundSurface.MAX_PLOUGH_FIELDS - 1, file)
+
+
+# Дорога між двома полями лишається дорогою: голосування сусідів не робить її ріллею й не
+# зливає поля в одне через неї.
+func test_road_between_ploughed_cells_splits_the_fields() -> void:
+	var names: Array[String] = GroundSurface._macro_layer_names()
+	var table: PackedInt32Array = GroundSurface._surface_table(names)
+	var plough: int = names.find("ploughed")
+	var board := Board.create(5, 1, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(2, 0), Terrain.Kind.ROAD)
+	var surface := PackedByteArray([1, 1, 0, 1, 1])
+	var cells: PackedInt32Array = GroundSurface.plough_cells(board, 0, surface, table, true)
+	assert_eq(cells[2], -1, "дорога не бере шар ріллі від сусідів")
+	assert_eq((GroundSurface.plough_fields(cells, 5, plough)[1] as Array).size(), 2)

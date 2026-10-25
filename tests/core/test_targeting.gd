@@ -38,18 +38,20 @@ func test_target_in_the_range_circle_but_outside_the_vision_diamond_is_not_a_tar
 	assert_does_not_have(ids, diagonal.id, "§3.1: у дальності, але поза оглядом — не ціль")
 
 
-func test_threat_forecast_stops_at_the_vision_diamond_too() -> void:
-	# Дзеркало попереднього тесту для другої функції: та сама діагональ, той самий
-	# перетин двох форм, тільки очима оглянутого ворога.
+func test_threat_forecast_covers_the_whole_range_circle() -> void:
+	# §3.13 + §3.3.1: відповідь не потребує зору — влучання відкриває стрільця, — тож
+	# ворог відповість кожному в колі своєї дальності. Позначки, обрізані ромбом огляду,
+	# були б м'якшими за саме правило. Та сама діагональ: у колі 4, поза ромбом 4.
 	var enemy: Unit = state.add_unit(5, 1, Vector2i(4, 4), 2)
 	var spotter: Unit = state.add_unit(0, 0, Vector2i(4, 7), 2)    # огляд 5 — бачить ворога
 	var diagonal: Unit = state.add_unit(5, 0, Vector2i(7, 6), 2)   # зсув (3, 2) від ворога
 	state.start()
 	state.begin_turn()
 
+	assert_false(Rules.in_vision_diamond(enemy.pos, diagonal.pos, enemy.vision()), "передумова: поза ромбом огляду")
 	var ids: Array[int] = _ids(Targeting.threatened_units(state, enemy.id, 0))
-	assert_has(ids, spotter.id, "зсув (0, 3): у колі 4 і в ромбі 4 — під загрозою")
-	assert_does_not_have(ids, diagonal.id, "§3.1: у колі дальності, поза ромбом огляду — не позначається")
+	assert_has(ids, spotter.id, "зсув (0, 3): у колі 4 — під загрозою")
+	assert_has(ids, diagonal.id, "§3.13: у колі дальності, хоч і поза ромбом огляду — позначається")
 
 
 # --- §3.13: AP перевіряється у своєму юніті й НЕ перевіряється у ворожому -------
@@ -98,14 +100,14 @@ func test_enemy_threat_ignores_the_enemys_ap_and_fired_flag() -> void:
 
 # --- §3.13: прогноз рахується ОДНИМ юнітом, а не мережею його власника ----------
 
-func test_threat_does_not_widen_when_the_enemy_has_a_spotter() -> void:
-	# Антивитік, найважливіший тест файлу. Гармата (дальність 5, огляд 3) дістає
-	# мій танк за 5 тайлів, але сама його не бачить. Її власник бачить — його
-	# піхота стоїть поруч із моїм танком. Якби прогноз брав state.vision[owner],
-	# позначка на танку видала б існування розвідника, якого я не знайшов.
+func test_threat_does_not_depend_on_the_enemys_spotters() -> void:
+	# Антивитік, найважливіший тест файлу. Гармата (дальність 5, огляд 3) дістає мій
+	# танк за 5 тайлів, але сама його не бачить; бачить її коригувальник. Позначки
+	# мусять бути однакові з ним і без нього — інакше вони видали б розвідника, якого
+	# я не знайшов. Танк позначено, бо він у колі дальності, а не тому, що його бачать.
 	var gun: Unit = state.add_unit(9, 1, Vector2i(2, 2), 2)
-	state.add_unit(0, 1, Vector2i(7, 4), 2)                     # ворожий коригувальник, огляд 5
-	var my_eyes: Unit = state.add_unit(0, 0, Vector2i(2, 5), 2) # моя піхота бачить гармату
+	var spotter: Unit = state.add_unit(0, 1, Vector2i(7, 4), 2)  # ворожий коригувальник, огляд 5
+	var my_eyes: Unit = state.add_unit(0, 0, Vector2i(2, 5), 2)  # моя піхота бачить гармату
 	var far_tank: Unit = state.add_unit(5, 0, Vector2i(7, 2), 2)
 	state.start()
 	state.begin_turn()
@@ -114,10 +116,14 @@ func test_threat_does_not_widen_when_the_enemy_has_a_spotter() -> void:
 	assert_false(Rules.in_vision_diamond(gun.pos, far_tank.pos, gun.vision()), "передумова: гармата його не бачить")
 	assert_true(state.vision[1].is_visible(far_tank.pos), "передумова: МЕРЕЖА супротивника танк бачить")
 
-	var ids: Array[int] = _ids(Targeting.threatened_units(state, gun.id, 0))
-	assert_has(ids, my_eyes.id, "у дальності та у власному ромбі гармати — під загрозою")
-	assert_does_not_have(ids, far_tank.id,
-		"§3.13: прогноз рахується власним оглядом гармати; мережа власника — прихована інформація")
+	var with_spotter: Array[int] = _ids(Targeting.threatened_units(state, gun.id, 0))
+	assert_has(with_spotter, my_eyes.id)
+	assert_has(with_spotter, far_tank.id, "§3.13: у колі дальності — під загрозою відповіді")
+
+	spotter.hp = 0
+	state.refresh_vision_all()
+	assert_eq(_ids(Targeting.threatened_units(state, gun.id, 0)), with_spotter,
+		"§3.13: прогноз рахується одним юнітом; мережа власника — прихована інформація")
 
 
 func test_invisible_enemy_cannot_be_inspected() -> void:

@@ -24,8 +24,11 @@ The detail behind §3.5 and §3.11 of CLAUDE.md — what each player can see, an
 - Every player keeps **two grids**, and `seen` is the load-bearing one:
   - **`seen`** — every tile this player has ever scouted. It is drawn as a fog tint over the ground
     nobody of theirs has reached, and **it is what gates the rules**: an enemy standing on a tile
-    you have scouted is visible to you, can be fired on (§3.3), can be inspected (§3.13), and can
-    fire back (§3.3.1). Scouting is permanent. Once a tile is in `seen` it never leaves.
+    you have scouted is visible to you, can be fired on (§3.3) and can be inspected (§3.13).
+    Scouting is permanent. Once a tile is in `seen` it never leaves.
+  - **A hit is a second way into `seen`.** Every shot that resolves against a target, the drone
+    strike included, adds the attacker's tile to the `seen` of the target's side before the damage
+    lands (§3.3.1). Only that side learns it; a third player does not.
   - **`visible`** — the tiles inside some unit's vision diamond *right now*. Its job is to extend
     `seen`; the rules do not read it directly.
 - **Scouting is one-way, and that is the point.** A tile you looked at once stays open for the rest
@@ -35,12 +38,11 @@ The detail behind §3.5 and §3.11 of CLAUDE.md — what each player can see, an
 - `visible` is recomputed for the active player from scratch at the start of their turn and after
   every move step, and unioned into `seen`. Never carry another player's grids into the renderer.
 
-**What this costs, stated plainly, because it is the price of the rule above.** Three things in
-this document lean on *not* being seen, and all three weaken as a match goes on:
+**What this costs, stated plainly, because it is the price of the rule above.** Two things in
+this document lean on *not* being seen, and both weaken as a match goes on. Return fire is not one
+of them: retaliation reads no vision at all, because the hit has already revealed the shooter
+(§3.3.1), so being unscouted protects a unit only until it fires.
 
-- **§3.3.1's impunity** — "an attacker the defender cannot see fires with impunity" — now means
-  ground the defender has **never scouted**, and that only ever shrinks. How quickly depends on map
-  size against roster size, which is a map-design question and is not settled here.
 - **The firing envelope** is the range circle intersected with `seen`, not with the vision diamond.
   The diamond still decides how fast the map opens, which is why infantry's 5 matters — but it no
   longer decides what you may shoot.

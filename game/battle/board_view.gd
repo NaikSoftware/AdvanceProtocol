@@ -58,6 +58,9 @@ var relief_seed: int = 0
 ## Карта, з якої береться кільце довкола дошки (MapData.outer_*); null чи карта без кільця — світ
 ## закінчується краєм дошки. Лише вигляд: Board кільця не має.
 var ring_map: MapData = null
+## Пора року землі (BattleLook.season): `late` — звичайні файли, `summer` / `early` — сезонні.
+## Ставити до першого build(): текстури землі вантажаться один раз.
+var season: StringName = &"late"
 ## Час імли для всіх матеріалів світу; з боєм не скидається, бо візерунку однаково, з якого
 ## часу пливти.
 static var fog_time: float = 0.0
@@ -160,6 +163,7 @@ func build(board: Board) -> void:
 	if _ground == null:
 		_ground = GroundSurface.new()
 		_ground.name = "Ground"
+		_ground.season = &"" if season == &"late" else season
 		add_child(_ground)
 	# Рельєф бакається раз на карту: підірваний міст міняє вид клітинки, але не форму землі.
 	# Підтип покриття (surface) теж міняє рельєф: від нього залежать тип і ширина дороги, а з
