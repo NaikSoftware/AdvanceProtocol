@@ -8,7 +8,7 @@ const MAPS_DIR: String = "res://maps"
 ## Найдальший постріл ростеру — артилерія й дрон штурмового відділення, обидва 5.
 const MAX_REACH: int = 5
 const LOCALES: Array[String] = ["uk", "en"]
-## Карти, де дороги, вода, мости, болота й будівлі симетричні на 180°. Решту рівняє не форма, а
+## Карти, де дороги, вода, мости й будівлі симетричні на 180°. Решту рівняє не форма, а
 ## test_map_sides_are_balanced; ліси, пагорби, поля й кільце на половинах можуть різнитися.
 const SYMMETRIC_MAPS: Array[String] = ["res://maps/crossroads.tres", "res://maps/ridge.tres"]
 const PACE_TOL: float = 0.05
@@ -119,14 +119,14 @@ func test_exactly_the_three_new_maps() -> void:
 	assert_eq(_map_paths(), ["res://maps/crossroads.tres", "res://maps/ridge.tres", "res://maps/river.tres"])
 
 
-## Симетрія на 180° — гарантія чесності: дороги, вода, мости, болота, будівлі й бази в кожного гравця
-## дзеркально ті самі. Ліси, пагорби й поля на половинах різні: їх рівняють лічба клітинок і темп
+## Симетрія на 180° — гарантія чесності: дороги, вода, мости, будівлі й бази в кожного гравця
+## дзеркально ті самі. Ліси, пагорби, болота й поля на половинах різні: їх рівняють лічба клітинок і темп
 ## (test_map_sides_are_balanced, test_map_pace), а не форма.
 func test_map_is_180_degree_symmetric(p = use_parameters(SYMMETRIC_MAPS)) -> void:
 	var path: String = p
 	var m: MapData = load(path) as MapData
 	var fixed: Array = [Terrain.Kind.ROAD, Terrain.Kind.WATER, Terrain.Kind.BRIDGE,
-			Terrain.Kind.BRIDGE_DESTROYED, Terrain.Kind.MARSH, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
+			Terrain.Kind.BRIDGE_DESTROYED, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
 	var odd: Array[Vector2i] = []
 	for y in m.height:
 		for x in m.width:
@@ -317,6 +317,33 @@ func test_map_sides_are_balanced(p = use_parameters(_map_paths())) -> void:
 		var bottom: int = _side_counts(m, kinds, false)
 		assert_almost_eq(float(top), float(bottom), COUNT_TOL * maxi(top, bottom),
 			"%s: клітинок %s згори %d, знизу %d" % [path, kinds, top, bottom])
+
+
+## Лічба лісу на половинах не бачить, де саме він стоїть: біля однієї бази може бути гай, біля
+## іншої — голе поле. Тож ліс у межах 6 кроків (манхеттенська відстань) від середини стартових
+## позицій кожного гравця має бути порівнянним — різниця не більша за половину більшого.
+func test_start_zones_have_comparable_cover(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var sum: Dictionary = {}
+	var n: Dictionary = {}
+	for s: Dictionary in m.spawns:
+		var o: int = int(s["owner"])
+		sum[o] = sum.get(o, Vector2.ZERO) + Vector2(s["pos"])
+		n[o] = n.get(o, 0) + 1
+	var cover: Array[int] = []
+	for o: int in sum:
+		var c: Vector2 = sum[o] / n[o]
+		var k := 0
+		for y in m.height:
+			for x in m.width:
+				if m.tiles[y * m.width + x] == Terrain.Kind.FOREST and absf(x - c.x) + absf(y - c.y) <= 6.0:
+					k += 1
+		cover.append(k)
+	assert_eq(cover.size(), 2, path)
+	if cover.size() == 2:
+		assert_lte(absi(cover[0] - cover[1]), maxi(cover[0], cover[1]) / 2,
+			"%s: ліс біля стартових позицій %s" % [path, cover])
 
 
 ## Косметичний підтип: правил не торкається, але крива сітка — це крива картинка.
