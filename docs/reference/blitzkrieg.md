@@ -241,6 +241,12 @@ Two rules about using it:
   right to answer; the red zone is disarmed until the unit's own turn.** The rule was already drawn
   on the board; nobody had said out loud that it was also the retaliation rule.
 
+- **The original keeps a corpse sprite for every dead unit, and never as an obstacle — this project
+  departs for vehicles on purpose.** `GameCanvas.java:2484-2488` draws a cosmetic corpse for any
+  dead unit on seen ground, infantry included. It blocks nothing: `method_56` skips dead units and
+  `method_53` treats their tile as free. Here a destroyed vehicle leaves a wreck that blocks other
+  vehicles for three rounds ([§3.14](../rules/movement-and-terrain.md#wrecks)), so a kill reshapes
+  the ground it happened on; infantry leaves none.
 - **The original has no camouflage or concealment, in forest or anywhere else, so do not "restore" it.**
   An enemy unit is drawn and targetable on exactly two conditions, alive and on an unfogged tile
   (`GameCanvas.java:2504`, the same test at `:2580`, `:3003`, `:3684`, `:3739`). There is no

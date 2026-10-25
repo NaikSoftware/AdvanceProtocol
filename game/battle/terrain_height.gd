@@ -400,6 +400,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	var n_s1 := _nz(seed_value + 747, 0.4)
 	var n_s2 := _nz(seed_value + 757, 0.9)
 	var n_crest := _nz(seed_value + 808, 0.5)
+	var n_knob := _nz(seed_value + 818, 0.7)
 
 	_h.resize(cols * rows)
 	_bar.resize(cols * rows)
@@ -510,7 +511,16 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 				var hill_h: float = _HILL_MIN + _HILL_VAR * (0.5 + 0.5 * n3.get_noise_2d(x, z))
 				rise = hill_h * (0.7 * smoothstep(0.0, 0.55, hill_a[k]) + 0.3 * smoothstep(0.0, 0.7, hill_b[k]))
 				rise *= 1.0 + 0.12 * n_crest.get_noise_2d(x, z)
-				rise = maxf(rise * _bilinear_cells(agrid, bw, bh, x, z, true), _HILL_KEEP * hill_h * _bilinear_cells(hgrid, bw, bh, x, z, true))
+				# Опора центру клітинки — горбок у кожній клітинці пагорба; рівні й однакові вони
+				# стояли рядом, як лоток для яєць. Тож висота опори гуляє +0..40 % (шум ~1.4 клітинки,
+				# не менше _HILL_KEEP), а стик з обрисом — гладкий максимум, без перегину між горбками.
+				var keep: float = _HILL_KEEP * hill_h * (1.0 + 0.4 * (0.5 + 0.5 * n_knob.get_noise_2d(x, z))) \
+						* _bilinear_cells(hgrid, bw, bh, x, z, true)
+				var shaped: float = rise * _bilinear_cells(agrid, bw, bh, x, z, true)
+				# Ширина згладжування росте з висотою: де обидва майже 0 (поле біля пагорба), гладкий
+				# максимум інакше підняв би землю на чверть ширини.
+				var kw: float = 0.8 * M * clampf(maxf(shaped, keep) / (2.0 * M), 0.0, 1.0)
+				rise = maxf(shaped, keep) if kw < 1e-4 else -_smooth_min(-shaped, -keep, kw)
 				# Підйом не затікає у воду (розмиття пагорба), а то центр клітинки води виходить на суходіл.
 				if has_water:
 					rise *= smoothstep(0.0, 1.4, d)

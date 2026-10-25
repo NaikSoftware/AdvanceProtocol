@@ -104,6 +104,32 @@ class UnitDestroyed extends BattleEvent:
 	func describe() -> String:
 		return "UnitDestroyed(unit=%d at %s)" % [unit_id, pos]
 
+class WreckLeft extends BattleEvent:
+	## Знищена техніка лишила уламки на своєму тайлі. Окрема подія, а не висновок
+	## вигляду з UnitDestroyed: чи лишились уламки, вирішує `core/` (піхота й техніка,
+	## що впала з мостом, їх не лишають), і вигляд не має повторювати це правило.
+	var pos: Vector2i
+	var type_id: int
+	## Напрям юніта в мить загибелі — уламки лежать так, як він стояв.
+	var facing: int
+	func _init(p_pos: Vector2i, p_type_id: int, p_facing: int) -> void:
+		pos = p_pos
+		type_id = p_type_id
+		facing = p_facing
+	func describe() -> String:
+		return "WreckLeft(%s, type=%d, facing=%d)" % [pos, type_id, facing]
+
+class WreckRemoved extends BattleEvent:
+	## Уламки зникли з тайла; reason — значення Wrecks.Reason. Після догоряння
+	## вигляд лишає випалену пляму, після підриву мосту — нічого.
+	var pos: Vector2i
+	var reason: int
+	func _init(p_pos: Vector2i, p_reason: int) -> void:
+		pos = p_pos
+		reason = p_reason
+	func describe() -> String:
+		return "WreckRemoved(%s, reason=%d)" % [pos, reason]
+
 class TileRevealed extends BattleEvent:
 	var player: int
 	var tiles: Array[Vector2i]
