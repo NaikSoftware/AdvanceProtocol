@@ -395,3 +395,42 @@ func test_road_between_ploughed_cells_splits_the_fields() -> void:
 	var cells: PackedInt32Array = GroundSurface.plough_cells(board, 0, surface, table, true)
 	assert_eq(cells[2], -1, "дорога не бере шар ріллі від сусідів")
 	assert_eq((GroundSurface.plough_fields(cells, 5, plough)[1] as Array).size(), 2)
+
+
+# Біля річки стоячої води нема: кожна клітинка води й кожна сусідня з нею має в bank_mask 255
+# (шейдер гасить там вікна болота), а клітинка далі за одну від води — 0.
+func test_bank_mask_covers_every_cell_next_to_water() -> void:
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var mask: PackedByteArray = GroundSurface.bank_mask(board, 0)
+		var bad: Array[Vector2i] = []
+		for y in board.height:
+			for x in board.width:
+				var near := false
+				var far := true
+				for dy in range(-2, 3):
+					for dx in range(-2, 3):
+						var q := Vector2i(x + dx, y + dy)
+						if q.x < 0 or q.y < 0 or q.x >= board.width or q.y >= board.height:
+							continue
+						var k: int = board.kind_at(q)
+						if k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED:
+							far = false
+							if absi(dx) <= 1 and absi(dy) <= 1:
+								near = true
+				var v: int = mask[y * board.width + x]
+				if (near and v != 255) or (far and v != 0):
+					bad.append(Vector2i(x, y))
+		assert_eq(bad.size(), 0, "%s: %s" % [file, bad.slice(0, 8)])
+
+
+func test_build_passes_the_bank_map_to_the_shader() -> void:
+	var board := Board.create(3, 1, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(0, 0), Terrain.Kind.WATER)
+	ground.build(board, 0)
+	var tex: Texture2D = (ground.material_override as ShaderMaterial).get_shader_parameter("bank_map")
+	assert_not_null(tex)
+	var img: Image = tex.get_image()
+	assert_eq(img.get_pixel(1, 0).r8, 255, "сусід води — без стоячої води")
+	assert_eq(img.get_pixel(2, 0).r8, 0)

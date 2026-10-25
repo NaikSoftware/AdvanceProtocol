@@ -173,6 +173,8 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 			class_table[Terrain.Kind.FIELD * SURFACES_PER_KIND + s] = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
 	_set_classes(mat, board, margin, surface, class_table, height != null)
 	_set_plough(mat, cells, board.width + 2 * margin, plough, height)
+	var bank := Image.create_from_data(board.width + 2 * margin, board.height + 2 * margin, false, Image.FORMAT_R8, bank_mask(board, margin))
+	mat.set_shader_parameter("bank_map", ImageTexture.create_from_image(bank))
 	_set_roads(mat, height)
 	mat.set_shader_parameter("map_origin", Vector2(-margin - ring, -margin - ring))
 	mat.set_shader_parameter("repeat_m", REPEAT_M)
@@ -273,6 +275,25 @@ func _set_classes(mat: ShaderMaterial, board: Board, margin: int, surface: Packe
 	mat.set_shader_parameter("class_map0", ImageTexture.create_from_image(imgs[0]))
 	mat.set_shader_parameter("class_map1", ImageTexture.create_from_image(imgs[1]))
 	mat.set_shader_parameter("class_layer", slots)
+
+
+## Смуга біля річки (рядок ширини board.width + 2 * margin): 255 — клітинка води чи мосту
+## або її сусід (8 напрямків), 0 — решта. Шейдер не кладе тут стоячої води: калюжі й вікна
+## болота на березі читались дивно.
+static func bank_mask(board: Board, margin: int) -> PackedByteArray:
+	var w: int = board.width + 2 * margin
+	var h: int = board.height + 2 * margin
+	var out := PackedByteArray()
+	out.resize(w * h)
+	for py in h:
+		for px in w:
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					var c := Vector2i(clampi(px + dx - margin, 0, board.width - 1), clampi(py + dy - margin, 0, board.height - 1))
+					var k: int = board.kind_at(c)
+					if k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED:
+						out[py * w + px] = 255
+	return out
 
 
 ## class_layers для пошуку полів: дорога, міст і вода лишають власний вид (-1), а не беруть
