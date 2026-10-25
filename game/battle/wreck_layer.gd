@@ -26,8 +26,6 @@ const MAX_FIRE_LIGHTS: int = 4
 ## Крок часу ефектів, разів на секунду: не частіше за обмеження кадру в спокої (30), тож
 ## вогонь і дим рухаються плавно, а кадр однаково скидається, щойно все догоріло.
 const FLIPBOOK_FPS: float = 30.0
-## Атлас вогню — швидше за його 8 кадрів/с: справжнє полум'я мерехтить хаотично й швидко.
-const FIRE_PLAY_FPS: float = 30.0
 ## Шлейф: клуба живе стільки секунд від верхівки полум'я до верху.
 const PLUME_LIFE_SEC: float = 9.0
 ## Розігріву досить кількох кадрів.
@@ -35,10 +33,9 @@ const WARM_UP_SEC: float = 0.1
 
 ## Запечені флипбуки 8×8 (assets/vfx/SOURCES.md). Дим грає раз і закінчується порожнім:
 ## стовп — це клуби, що стартують уступами, кожна від кадру 0 біля корпусу до порожнього
-## нагорі. Тонкий атлас — для стадії, де дим рідшає. Вогонь — безшовна петля.
+## нагорі. Тонкий атлас — для стадії, де дим рідшає. Вогонь — процедурний (шейдер вогню).
 const SMOKE_TEX: Texture2D = preload("res://assets/vfx/smoke_column.png")
 const SMOKE_THIN_TEX: Texture2D = preload("res://assets/vfx/smoke_column_thin.png")
-const FIRE_TEX: Texture2D = preload("res://assets/vfx/wreck_fire.png")
 const FLIPBOOK_GRID: int = 8
 ## Клітинка диму ≈ 22 м, сама хмара в ній ≈ 19 м.
 const SMOKE_CELL_PER_CLOUD: float = 22.0 / 19.0
@@ -62,12 +59,6 @@ const COLUMN_TOP_W: float = 12.0 / 8.0
 ## трохи в металі, м'який край глибини ховає шов.
 const FLAME_WIDTH_PER_HULL: float = 0.4
 const FLAME_HEIGHT_PER_HULL: float = 1.0
-## Розмітка атласу вогню: кадрів, де в клітинці основа полум'я (v згори), яку частку ширини
-## клітинки займає полум'я, і висота клітинки до ширини.
-const FIRE_FRAMES: float = 64.0
-const FIRE_BASE_V: float = 0.8
-const FIRE_FILL: float = 0.6
-const FIRE_CELL_ASPECT: float = 1.0
 ## Нахил стовпа на одиницю вітру `WeatherRig.wind()`: дим іде туди ж, куди й дощ. За вітру
 ## River (0,25) це ~20°; у безвітря стовп стоїть прямо.
 const SMOKE_LEAN_PER_WIND: float = 1.46
@@ -131,14 +122,7 @@ func _init() -> void:
 	_fire_mat.shader = fire_shader()
 	# Вогонь — поверх диму власного стовпа, а не за ним.
 	_fire_mat.render_priority = 1
-	_fire_mat.set_shader_parameter("flame_tex", FIRE_TEX)
-	_fire_mat.set_shader_parameter("grid", Vector2.ONE * FLIPBOOK_GRID)
-	_fire_mat.set_shader_parameter("frames", FIRE_FRAMES)
-	_fire_mat.set_shader_parameter("base_v", FIRE_BASE_V)
-	_fire_mat.set_shader_parameter("fill", FIRE_FILL)
-	_fire_mat.set_shader_parameter("cell_aspect", FIRE_CELL_ASPECT)
 	_fire_mat.set_shader_parameter("gain", 2.8)
-	_fire_mat.set_shader_parameter("play_fps", FIRE_PLAY_FPS)
 	_fire_mat.set_shader_parameter("fade_in_at", FIRE_FADE_IN_AT)
 	_fire_mat.set_shader_parameter("fade_in_sec", FIRE_FADE_IN_SEC)
 	_columns = _multimesh("Columns", _column_mat, MAX_COLUMNS * PUFFS_PER_COLUMN)
@@ -230,6 +214,14 @@ func flame_spots(pos: Vector2i) -> Array[Vector3]:
 
 
 ## Центр вогню (погон на даху): звідси світло, іскри й дим.
+## Ширина й висота кожного з двох язиків, одиниці світу: з корпусу, менші на другому колі.
+func flame_size(pos: Vector2i) -> Vector2:
+	if not _entries.has(pos):
+		return Vector2.ZERO
+	var e: _Entry = _entries[pos]
+	return Vector2(flame_width(e.type_id), flame_height(e.type_id)) * flame_scale_for(e.life)
+
+
 func fire_centre(pos: Vector2i) -> Vector3:
 	var spots: Array[Vector3] = flame_spots(pos)
 	return (spots[0] + spots[1]) * 0.5
@@ -465,8 +457,8 @@ func _refresh_effects() -> void:
 		# Дим народжується на верхівці полум'я над погоном (чи на самому погоні, коли вогню вже
 		# нема) — не з порожнього повітря поруч.
 		var e: _Entry = _entries[c]
-		# Видима верхівка полум'я — близько половини висоти кваду: атлас угорі вже розсіюється.
-		var origin: Vector3 = fire_centre(c) + Vector3(0.0, 0.5 * flame_height(e.type_id) * flame_scale_for(e.life), 0.0)
+		# Суцільне тіло вогню — нижні ~60 % висоти, вище язики вже рвуться: дим — звідти.
+		var origin: Vector3 = fire_centre(c) + Vector3(0.0, 0.6 * flame_size(c).y, 0.0)
 		for k in PUFFS_PER_COLUMN:
 			var idx: int = i * PUFFS_PER_COLUMN + k
 			mm.set_instance_transform(idx, Transform3D(Basis(), origin))
@@ -482,12 +474,12 @@ func _refresh_effects() -> void:
 	var n: int = 0
 	for c in _fire_cells:
 		var e: _Entry = _entries[c]
-		var sc: float = flame_scale_for(e.life)
+		var size: Vector2 = flame_size(c)
 		for j in FLAMES_PER_SPOT:
-			# Свої фаза й темп атласу на кожен екземпляр: стовп не мерехтить у такт.
+			# Свій зсув шуму на кожен язик: два стовпи ніколи не рухаються в такт.
 			var sd: float = fposmod(float(hash(c) % 89) / 89.0 + 0.41 * float(j), 1.0)
 			fm.set_instance_transform(n, Transform3D(Basis(), flame_spots(c)[j]))
-			fm.set_instance_custom_data(n, Color(flame_width(e.type_id) * sc, sd, e.birth, 0.0))
+			fm.set_instance_custom_data(n, Color(size.x, sd, e.birth, size.y))
 			n += 1
 	fm.visible_instance_count = n
 	_sync_emitters()
@@ -789,19 +781,17 @@ const _FIRE_CODE: String = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
-uniform sampler2D flame_tex : source_color, filter_linear_mipmap;
-uniform vec2 grid = vec2(8.0);
-uniform float frames = 64.0;
-// Той самий крок таймера, що й у диму. Петля ≥ 2 с, кожен екземпляр — свій темп ±30 % і старт.
+// Процедурне полум'я: краплеподібна маска (широка гаряча основа, звужується догори),
+// fbm-шум зі зсувом області, що пливе вгору, і температура = маска × шум, з якої колір.
+// Жодної текстури й жодного періодичного руху: два шари шуму з несумірними швидкостями.
+// Той самий крок таймера, що й у диму.
 uniform float fx_time = 0.0;
-uniform float play_fps = 30.0;
-// Понад 1: ядро світиться майже білим, краї й верх — помаранчеві з атласу.
+// Понад 1: найгарячіше — майже біле й світиться, краї й верх — помаранчеві й червоні.
 uniform float gain = 2.8;
-// Де в клітинці основа полум'я (v згори), яку частку ширини воно займає, висота клітинки до ширини.
-uniform float base_v = 0.8;
-uniform float fill = 0.6;
-uniform float cell_aspect = 1.0;
-// На далекому зумі стовп не вужчий за 6 px: інакше вогонь зникає, а дим без нього бреше.
+// Квад ширший за полум'я, щоб м'який край не різався рамкою; основа — трохи в металі.
+uniform float pad = 1.6;
+uniform float sink = 0.08;
+// На далекому зумі язик не вужчий за 6 px: інакше вогонь зникає, а дим без нього бреше.
 uniform float min_px = 6.0;
 // Висота кадру в пікселях: VIEWPORT_SIZE у вершинному шейдері тут нульовий, тож її дає WreckLayer.
 uniform float viewport_h = 1080.0;
@@ -812,16 +802,24 @@ uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 // Основа тоне в металі м'яко, а не обрізається рівною лінією по даху.
 uniform float soft_fade = 0.08;
 
-varying float v_frame;
 varying float v_in;
+varying float v_sd;
 
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0)), f.x), f.y);
+}
+float fbm(vec2 p) { return 0.65 * vn(p) + 0.35 * vn(p * 2.03 + 17.0); }
 float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
-// Шум значень: гладкий, але неперіодичний (синус дав би розмірене «танцювання»).
 float vnoise(float x) { float i = floor(x); float f = fract(x); return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f)); }
 
 void vertex() {
-	// INSTANCE_CUSTOM: x — ширина полум'я (одиниці світу), y — випадковість, z — народження.
+	// INSTANCE_CUSTOM: x — ширина полум'я, w — висота (одиниці світу), y — випадковість, z — народження.
 	float w = INSTANCE_CUSTOM.x;
+	float h = INSTANCE_CUSTOM.w;
 	float sd = INSTANCE_CUSTOM.y;
 	vec3 root = MODEL_MATRIX[3].xyz;
 	// Стовп стоїть вертикально у світі й повернутий до камери лише довкола вертикалі.
@@ -829,29 +827,48 @@ void vertex() {
 	vec4 p0 = PROJECTION_MATRIX * VIEW_MATRIX * vec4(root, 1.0);
 	vec4 p1 = PROJECTION_MATRIX * VIEW_MATRIX * vec4(root + right * w, 1.0);
 	float px = length(p1.xy / p1.w - p0.xy / p0.w) * viewport_h * 0.5;
-	w *= clamp(min_px / max(px, 0.001), 1.0, 8.0);
-	w *= 0.9 + 0.2 * vnoise(fx_time * (4.1 + 2.7 * sd) + sd * 61.0);
-	float qw = w / fill;
-	float qh = qw * cell_aspect;
-	// Основа полум'я (v = base_v) — у точці отвору, на 1 см у металі.
-	float base_y = 0.5 - base_v;
-	vec3 world = root + right * VERTEX.x * qw + vec3(0.0, (VERTEX.y - base_y) * qh - 0.01, 0.0);
+	float grow = clamp(min_px / max(px, 0.001), 1.0, 8.0);
+	w *= grow;
+	h *= grow;
+	// UV.y = 0 згори; низ кваду — на `sink` висоти під коренем.
+	vec3 world = root + right * VERTEX.x * w * pad + vec3(0.0, (VERTEX.y + 0.5) * h * (1.0 + sink) - h * sink, 0.0);
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
-	v_frame = fx_time * play_fps * (0.7 + 0.6 * fract(sd * 7.31)) + sd * frames;
 	v_in = clamp((fx_time - INSTANCE_CUSTOM.z - fade_in_at) / fade_in_sec, 0.0, 1.0);
-}
-
-vec4 frame_at(float f, vec2 uv) {
-	float n = mod(floor(f), frames);
-	return texture(flame_tex, (clamp(uv, vec2(0.002), vec2(0.998)) + vec2(mod(n, grid.x), floor(n / grid.x))) / grid);
+	v_sd = sd;
 }
 
 void fragment() {
-	vec4 tex = mix(frame_at(v_frame, UV), frame_at(v_frame + 1.0, UV), fract(v_frame));
-	// Біля отвору — майже біле розжарене серце, вище — колір атласу.
-	vec3 col = mix(tex.rgb, vec3(1.0, 0.94, 0.80), smoothstep(base_v - 0.35, base_v, UV.y) * 0.6);
-	ALBEDO = col * gain;
-	ALPHA = tex.a * v_in;
+	// x — від осі в пів-ширинах полум'я; y — частка висоти над коренем (0 — корінь, 1 — верх).
+	float x = (UV.x - 0.5) * 2.0 * pad;
+	float y = (1.0 - UV.y) * (1.0 + sink) - sink;
+	vec2 seed = vec2(v_sd * 71.0, v_sd * 37.0);
+	float t = fx_time;
+	// Область шуму пливе вгору; зсув області — з другого шуму з іншою, несумірною швидкістю.
+	vec2 p = vec2(x * 1.3, y * 2.2) + seed;
+	vec2 q = vec2(fbm(p * 1.1 + vec2(0.0, -t * 1.13)), fbm(p * 1.1 + vec2(5.2, -t * 0.71)));
+	float n = fbm(p * 1.7 + (q - 0.5) * 1.6 + vec2(0.0, -t * 2.37));
+	float n2 = fbm(p * 3.3 + vec2(3.1, -t * 3.91));
+	float noise = 0.7 * n + 0.3 * n2;
+	// Колихання всього язика — повільний шум, не синус.
+	x += (vnoise(t * 1.7 + v_sd * 13.0) - 0.5) * 0.35 * y;
+	// Краплина: повна ширина біля кореня, звужується догори; шум роз'їдає край, і що вище — то
+	// сильніше, тож язики відриваються нерівно.
+	float yc = clamp(y, 0.0, 1.0);
+	float half_w = mix(1.35, 0.2, smoothstep(0.1, 1.0, yc)) * (1.0 + 0.2 * smoothstep(0.0, 0.2, yc) * (1.0 - smoothstep(0.2, 0.55, yc)));
+	float edge = abs(x) + (noise - 0.5) * (0.5 + 0.9 * y);
+	float body = 1.0 - smoothstep(half_w * 0.2, half_w * 1.15, edge);
+	float top = 1.0 - smoothstep(0.45, 1.05, y + (noise - 0.5) * 0.7);
+	float root_fade = smoothstep(-sink, 0.04, y);
+	float mask = body * top * root_fade;
+	float temp = mask * (0.4 + 0.8 * noise) * (1.3 - 0.6 * yc);
+	vec3 col = mix(vec3(0.55, 0.12, 0.03), vec3(0.95, 0.35, 0.08), smoothstep(0.2, 0.5, temp));
+	col = mix(col, vec3(1.0, 0.68, 0.24), smoothstep(0.5, 0.8, temp));
+	col = mix(col, vec3(1.0, 0.95, 0.82), smoothstep(0.8, 1.0, temp));
+	float a = smoothstep(0.04, 0.4, temp);
+	// Тонка темна димна кромка нагорі: холодні краї язиків уже кіптява.
+	float soot = smoothstep(0.03, 0.12, temp) * (1.0 - a) * smoothstep(0.45, 0.8, y);
+	ALBEDO = mix(vec3(0.07, 0.06, 0.055), col * gain, a / max(a + soot * 0.5, 1e-4));
+	ALPHA = clamp(a + soot * 0.5, 0.0, 1.0) * v_in;
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);

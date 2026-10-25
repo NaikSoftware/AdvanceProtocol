@@ -244,13 +244,14 @@ func test_second_warm_up_while_warming_is_ignored() -> void:
 
 
 ## Дим і вогонь — запечені флипбуки з assets/vfx, а не заступник.
-func test_column_and_fire_sample_their_atlases() -> void:
+func test_column_samples_its_atlases_and_fire_is_procedural() -> void:
 	var col := layer.get_node("Columns") as MultiMeshInstance3D
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
 	var cm := col.material_override as ShaderMaterial
 	assert_eq((cm.get_shader_parameter("puff_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column.png")
 	assert_eq((cm.get_shader_parameter("thin_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column_thin.png")
-	assert_eq(((fire.material_override as ShaderMaterial).get_shader_parameter("flame_tex") as Texture2D).resource_path, "res://assets/vfx/wreck_fire.png")
+	# Полум'я — процедурне (шум, без текстури): жоден атлас не дав суцільного тіла вогню.
+	assert_eq((fire.material_override as ShaderMaterial).shader.code.count("sampler2D"), 1, "лише глибина для м'якого краю")
 
 
 
@@ -329,12 +330,14 @@ func test_fire_is_one_column_sized_from_the_hull() -> void:
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
 	var mat := fire.material_override as ShaderMaterial
 	assert_true(float(mat.get_shader_parameter("gain")) > 1.0)
-	# Гра читає власний атлас вогню з його сталими сітки й розмітки.
-	assert_eq(mat.get_shader_parameter("flame_tex"), WreckLayer.FIRE_TEX)
-	assert_eq(mat.get_shader_parameter("base_v"), WreckLayer.FIRE_BASE_V)
-	# Тіло вогню — лише два екземпляри атласу на уламок; частинки — тільки іскри.
+	# Тіло вогню — два квади на уламок; ширина й висота кожного — з корпусу й стадії.
 	layer.add(Vector2i(3, 3), 5, 1.0, 0)
-	assert_eq(fire.multimesh.visible_instance_count, 2)
+	layer.add(Vector2i(5, 3), 5, 4.0 / 6.0, 0)
+	assert_eq(fire.multimesh.visible_instance_count, 4)
+	# (Дані екземплярів MultiMesh у безголовому рушії не зберігаються — читаємо через шар.)
+	assert_eq(layer.flame_size(Vector2i(3, 3)), Vector2(WreckLayer.flame_width(5), WreckLayer.flame_height(5)))
+	assert_eq(layer.flame_size(Vector2i(5, 3)), Vector2(WreckLayer.flame_width(5), WreckLayer.flame_height(5)) * 0.55)
+	layer.remove(Vector2i(5, 3))
 	var particles: Array[Node] = layer.find_children("*", "GPUParticles3D", true, false)
 	assert_eq(particles.size(), 1)
 	assert_eq(particles[0], layer.ember_emitter(Vector2i(3, 3)))
