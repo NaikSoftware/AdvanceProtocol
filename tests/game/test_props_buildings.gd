@@ -5,17 +5,24 @@ extends GutTest
 const _DIR: String = "res://assets/props/"
 ## імʼя -> [слід X, слід Z у тайлах, ліміт трикутників]
 const _PROPS: Dictionary = {
-	"h5_panel_block": [4, 2, 1300],
-	"h5_panel_block_damaged": [4, 2, 1700],
+	"h5_panel_block": [4, 2, 2500],
+	"h5_panel_block_damaged": [4, 2, 3200],
 	"f1_farm_barn": [2, 1, 400],
 	"f2_livestock_barn": [2, 8, 400],
-	"f3_hangar": [3, 5, 500],
-	"f3_hangar_damaged": [3, 5, 1100],
+	"f3_hangar": [3, 5, 1000],
+	"f3_hangar_damaged": [3, 5, 2200],
 	"f4_grain_bins": [4, 2, 2000],
 	"f5_silo_battery": [5, 2, 1200],
 	"f6_fuel_station": [4, 2, 800],
 	"f7_water_tower": [1, 1, 700],
 	"f7b_brick_tower": [1, 1, 900],
+	"house_h1": [2, 1, 2200],
+	"house_h1_hit": [2, 1, 2200],
+	"house_h2": [2, 2, 2200],
+	"house_h3": [2, 2, 2400],
+	"house_h4": [2, 1, 1800],
+	"ruin_h1": [2, 1, 3500],
+	"ruin_h3": [2, 2, 3500],
 }
 ## Стоять лише на клітинках кільця навколо поля, а не на ігровому полі.
 const RING_ONLY: Array[String] = ["f2_livestock_barn"]
