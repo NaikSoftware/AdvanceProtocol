@@ -118,6 +118,22 @@ func test_only_clear_sky_water_is_murky() -> void:
 		assert_gt(BattleLook.for_map_path(path).water_murk, 0.0, path)
 
 
+## Брижа йде з погодою: Річка під вітром і дощем, Хребет — легкий вітерець, Перехрестя — майже
+## тихе повітря. Брижа Річки затверджена як є.
+func test_water_waves_follow_the_weather() -> void:
+	var river: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	var ridge: BattleLook = BattleLook.for_map_path("res://maps/ridge.tres")
+	var crossroads: BattleLook = BattleLook.for_map_path("res://maps/crossroads.tres")
+	assert_eq(river.water_wind, 1.0)
+	assert_gt(river.water_wind, ridge.water_wind)
+	assert_gt(ridge.water_wind, crossroads.water_wind)
+	assert_gt(crossroads.water_wind, 0.0, "вода не мертва")
+	var rig: WeatherRig = _rig()
+	rig.apply(ridge)
+	assert_almost_eq(rig.applied_globals[&"water_wind"], ridge.water_wind, 1e-5)
+	assert_true(ProjectSettings.has_setting("shader_globals/water_wind"))
+
+
 func test_each_map_names_its_season() -> void:
 	var want: Dictionary = {"res://maps/river.tres": &"late",
 			"res://maps/crossroads.tres": &"summer", "res://maps/ridge.tres": &"early"}
@@ -166,9 +182,14 @@ func test_rain_drops_stay_in_the_world_when_the_camera_pans() -> void:
 	var cell: Vector3 = mat.get_shader_parameter("cell")
 	assert_eq(fposmod(o1.x, s), 0.0)
 	assert_eq(fposmod(o1.z, s), 0.0)
-	# Пан на чверть клітинки: решітка та сама.
-	rig.follow(Vector3(5.0 + cell.x * s * 0.25, 0.0, 7.0), 12.0)
-	assert_eq(mat.get_shader_parameter("cell_origin"), o1)
+	# Пан на чверть кроку від кута коробки посередині клітинки: решітка та сама.
+	var box: AABB = WeatherRig.rain_box(Vector3(5.0, 0.0, 7.0), 12.0)
+	var step: float = cell.x * s
+	var mid: float = (floorf(box.position.x / step) + 0.5) * step - box.position.x
+	rig.follow(Vector3(5.0 + mid, 0.0, 7.0), 12.0)
+	var o_mid: Vector3 = mat.get_shader_parameter("cell_origin")
+	rig.follow(Vector3(5.0 + mid + step * 0.25, 0.0, 7.0), 12.0)
+	assert_eq(mat.get_shader_parameter("cell_origin"), o_mid)
 	# Пан на кілька клітинок: решітка зсувається на цілі кроки, клітинка та сама.
 	for pan: float in [1.37, 4.9, -3.3]:
 		rig.follow(Vector3(5.0 + pan, 0.0, 7.0 - pan * 0.5), 12.0)
@@ -179,7 +200,7 @@ func test_rain_drops_stay_in_the_world_when_the_camera_pans() -> void:
 
 
 ## Зум бере рідшу решітку тих самих світових клітинок (крок — степінь двійки), тож краплі,
-## що лишились видимими, не зсуваються, а густота на екрані лишається тією самою.
+## що лишились видимими, не зсуваються.
 func test_rain_zoom_thins_the_same_world_lattice() -> void:
 	var rig: WeatherRig = _rig()
 	rig.apply(BattleLook.for_map_path("res://maps/river.tres"))
@@ -196,6 +217,70 @@ func test_rain_zoom_thins_the_same_world_lattice() -> void:
 			assert_eq(mat.get_shader_parameter("cell"), cell, "зум %s" % zoom)
 		cell = mat.get_shader_parameter("cell")
 	assert_eq(mat.get_shader_parameter("stride"), 4.0, "найбільше віддалення бере кожну четверту")
+
+
+## Частка решітки, що малюється в коробці дощу на цьому зумі: клітинки з рангом нижче `keep`,
+## чий центр у коробці (за дзеркалом рангу шейдера).
+func _drawn_in_box(grid: Vector3, focus: Vector3, zoom: float) -> float:
+	var lat: Dictionary = WeatherRig.rain_lattice(focus, zoom, grid)
+	var box: AABB = WeatherRig.rain_box(focus, zoom)
+	var cell: Vector3 = lat.cell
+	var n: int = 0
+	for gz in int(grid.z):
+		for gy in int(grid.y):
+			for gx in int(grid.x):
+				var wc: Vector3 = lat.origin + Vector3(gx, gy, gz) * float(lat.stride)
+				if WeatherRig.rain_rank(wc) >= lat.keep:
+					continue
+				var c: Vector3 = (wc + Vector3(0.5, 0.5, 0.5)) * cell
+				if box.has_point(c):
+					n += 1
+	return float(n) / (grid.x * grid.y * grid.z)
+
+
+## Густота дощу на екрані неперервна по зуму: частка крапель, що малюються в коробці кадру, та
+## сама по обидва боки порогів кроку (6 і 12 — 12 ще й типовий зум) і на всьому діапазоні.
+## Без рангу з фіксованою кількістю квадів крок, що подвоюється, лишав би в кадрі восьму частину.
+func test_rain_density_on_screen_is_continuous_across_zoom() -> void:
+	var grid := Vector3(32, WeatherRig.RAIN_LAYERS, 32)
+	# Кілька фокусів: на крупному кроці в коробці ~17 вузлів решітки по осі, і чи потрапляє
+	# крайній, залежить від того, де стоїть камера.
+	var foci: Array[Vector3] = [Vector3(7.3, 0.0, 5.1), Vector3(-4.6, 0.0, 12.2),
+			Vector3(18.9, 0.0, -2.7), Vector3(1.1, 0.0, 1.9)]
+	var at := func(zoom: float) -> float:
+		var sum: float = 0.0
+		for f: Vector3 in foci:
+			sum += _drawn_in_box(grid, f, zoom)
+		return sum / foci.size()
+	for pair: Array in [[5.9, 6.1], [11.9, 12.1]]:
+		var a: float = at.call(pair[0])
+		var b: float = at.call(pair[1])
+		assert_almost_eq(b / a, 1.0, 0.1, "зум %s / %s" % pair)
+	var all: Array[float] = []
+	for z in range(6, 21):
+		all.append(at.call(float(z)))
+	var mean: float = 0.0
+	for f: float in all:
+		mean += f / all.size()
+	for i in all.size():
+		assert_almost_eq(all[i] / mean, 1.0, 0.1, "зум %d" % (i + 6))
+
+
+## Решітка вкриває всю коробку кадру й з від'ємними координатами фокуса: кут прилипає до цілої
+## клітинки вниз (`floorf`), а не до нуля (`int()`), інакше дальній край коробки лишався б
+## без крапель.
+func test_rain_lattice_covers_the_box_at_negative_coordinates() -> void:
+	var grid := Vector3(60, WeatherRig.RAIN_LAYERS, 60)
+	for focus: Vector3 in [Vector3(-3.3, 0, -7.9), Vector3(-0.2, 0, 4.4), Vector3(13.7, 0, -1.1)]:
+		for zoom: float in [6.0, 11.9, 12.1, 20.0]:
+			var lat: Dictionary = WeatherRig.rain_lattice(focus, zoom, grid)
+			var box: AABB = WeatherRig.rain_box(focus, zoom)
+			var lo: Vector3 = lat.origin * lat.cell
+			var hi: Vector3 = (lat.origin + grid * float(lat.stride)) * lat.cell
+			var tag: String = "фокус %s зум %s" % [focus, zoom]
+			assert_true(lo.x <= box.position.x + 1e-4 and lo.z <= box.position.z + 1e-4, tag)
+			assert_true(hi.x >= box.end.x - 1e-4 and hi.z >= box.end.z - 1e-4, tag)
+			assert_true(hi.y >= box.end.y - 1e-4, tag)
 
 
 ## Довжина штриха — розмиття руху у світі: швидкість × витримка. Жодної довжини в пікселях —
@@ -252,6 +337,15 @@ func test_the_drops_mesh_is_built_once() -> void:
 	a.apply(look)
 	b.apply(look)
 	assert_same(a.rain.mesh, b.rain.mesh)
+	# Кількість, що не ділиться на решітку: меш будується раз, а не на кожному apply().
+	var odd: BattleLook = look.duplicate()
+	odd.rain_amount = 5000
+	a.apply(odd)
+	var mesh: Mesh = a.rain.mesh
+	a.apply(odd)
+	assert_same(a.rain.mesh, mesh)
+	var side: int = WeatherRig.rain_side(5000)
+	assert_eq(a.rain_drops(), side * side * WeatherRig.RAIN_LAYERS)
 
 
 ## §3.12: вигляд не тримає жодного числа правил.

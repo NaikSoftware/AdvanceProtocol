@@ -155,6 +155,17 @@ def hangar(damaged):
                 xa_, xb_ = side * 9.0 * (1 - ta_), side * 9.0 * (1 - tb_)
                 q = [(xa_, ya_, za), (xb_, yb_, zb), (xb_ + dx, yb_, zb - drop), (xa_ + dx, ya_, za - drop)]
                 b.poly_up(q, "galv")
+        # завальцьований край 10-20 см уздовж країв пролому
+        for side in (1, -1):
+            pts = HOLE[side]
+            for i in range(0, len(pts) - 2, 2):
+                for which in ("lo", "hi"):
+                    ia, ib = pts[i], pts[i + 2]
+                    ta, tb = (ia[1], ib[1]) if which == "lo" else (ia[2], ib[2])
+                    p0 = (side * 9.0 * (1 - ta), ia[0], EAVE + 3.0 * ta + 0.08)
+                    p1 = (side * 9.0 * (1 - tb), ib[0], EAVE + 3.0 * tb + 0.08)
+                    if abs(p0[1] - p1[1]) > 0.1:
+                        b.beam(p0, p1, 0.12, "galv", 0.14)
         flap(1, "lo", -3.2, -1.0, 0.5)
         flap(1, "hi", 0.5, 2.8, 0.4)
         flap(1, "lo", 2.0, 4.0, 0.55)
@@ -181,7 +192,7 @@ def hangar(damaged):
             b.box(gx, gy + 0.14 * sg, 0.6, 5.0, 0.12, 5.0, "door_steel")
             b.box(gx, gy + 0.2 * sg, 5.2, 5.0, 0.12, 0.35, "metal_dark")
     b.box(x1 + 0.1, -8.0, 0.6, 0.2, 1.1, 2.1, "door_steel")
-    lib.finish(b, "f3_hangar_damaged" if damaged else "f3_hangar", out, tri_limit=2200 if damaged else 1000, footprint=(3, 5), anchor=(0, 0),
+    lib.finish(b, "f3_hangar_damaged" if damaged else "f3_hangar", out, tri_limit=3000 if damaged else 1000, footprint=(3, 5), anchor=(0, 0),
                density={"clad_wall": 0.5, "silo_concrete": 0.4, "metal_dark": 0.6, "door_steel": 0.6, "clad_burnt": 0.8, "clad_inner": 0.4})
 
 
