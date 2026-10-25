@@ -30,8 +30,10 @@ MATS = {
     "concrete_dust": ((0.68, 0.66, 0.62), 1.0, 0.0),
     "rubble": ((0.34, 0.33, 0.31), 1.0, 0.0),
     "asphalt1": ((0.16, 0.16, 0.165), 0.95, 0.0),
+    "asphalt_wet": ((0.22, 0.22, 0.225), 0.4, 0.0),
     "asphalt": ((0.16, 0.16, 0.165), 0.95, 0.0),
     "steel_gal": ((0.50, 0.52, 0.52), 0.5, 0.2),
+    "steel_dark": ((0.27, 0.28, 0.27), 0.6, 0.25),
     "wet": ((0.10, 0.11, 0.11), 0.15, 0.0),
     "rust": ((0.20, 0.09, 0.05), 0.9, 0.3),
     "steel_grey": ((0.38, 0.40, 0.39), 0.6, 0.25),
@@ -71,7 +73,7 @@ class Box:
             q = [self.v[i] for i in f]
             n = (q[1] - q[0]).cross(q[3] - q[0])
             ax = max(range(3), key=lambda k: abs(n[k]))
-            if f == FACES[4] and self.mat in ("asphalt", "asphalt1"):
+            if f == FACES[4] and self.mat in ("asphalt", "asphalt1", "asphalt_wet"):
                 out.append([((p.x - c[0]) / s[0] + 0.5, p.y / TILE_M) for p in q])
             elif ax == 2:
                 out.append([(p.x / TILE_M, p.y / TILE_M) for p in q])
@@ -161,7 +163,6 @@ def chord_stubs(face_y, sign, xt, tw, z_low, z_top):
     out = []
     for sx in (-1, 1):
         out.append(Box("steel_gal", (sx * xt, face_y + sign * 0.04, z_low), (tw, 0.1, 0.03), rx(-sign * 30)))
-        out.append(Box("steel_gal", (sx * xt, face_y + sign * 0.05, z_top), (tw, 0.12, 0.03), rx(-sign * 55)))
     return out
 
 
@@ -184,13 +185,9 @@ def concrete(broken):
         yc = (y0 + y1) / 2
         g = [Box("concrete", (0, yc, bot + th / 2), (W, n, th)),
              Box("asphalt", (0, yc, DT + 0.004), (W - 0.2, n, 0.008))]
-        posts = max(2, int(n / 0.25) + 1)
         for sx in (-1, 1):
             g.append(Box("concrete", (sx * (W / 2 - 0.03), yc, DT + 0.055), (0.06, n, 0.11)))
             g.append(Box("steel_grey", (sx * (W / 2 - 0.03), yc, DT + 0.15), (0.035, n, 0.035)))  # поручень
-            for k in range(posts):
-                g.append(Box("steel_grey", (sx * (W / 2 - 0.03), y0 + 0.02 + k * (n - 0.04) / (posts - 1),
-                                            DT + 0.13), (0.02, 0.02, 0.05)))
         for face, sign, on in ((y0, -1, lo), (y1, 1, hi)):
             if on:
                 g += jag(face, sign, W, bot, DT + 0.11, seed=seed + sign + 3)
@@ -293,11 +290,11 @@ def bailey(broken):
     east = panels[3] + panels[4] + [end[1], end[3]] + chord_stubs(y0 + 3 * PL, -1, xt, tw, DT + 0.015, DT + PH - 0.015)
     xf(east, about((0, L / 2 - 0.06, DT), rx(10)))
     # Уламки у воді, кожен від 0.3 тайла: настил, балка й дві діагоналі лежать у розриві.
-    junk = [Box("asphalt1", (0.06, 0.0, 0.135), (0.42, 0.34, 0.04), rx(14) @ rz(-12)),
-            Box("steel_gal", (-0.14, 0.04, 0.15), (0.04, 0.55, 0.04), rz(25) @ rx(10)),
-            Box("steel_gal", (0.2, -0.1, 0.145), (0.03, 0.42, 0.03), rz(-35) @ rx(-8)),
-            Box("steel_gal", (-0.22, -0.1, 0.145), (0.03, 0.4, 0.03), rz(30) @ rx(7))]
-    junk.append(wet((0.06, 0.0, 0.12), (0.43, 0.35, 0.06)))
+    junk = [Box("asphalt_wet", (0.44, 0.1, 0.116), (0.3, 0.26, 0.04), rx(10) @ rz(40)),
+            Box("steel_gal", (-0.4, 0.0, 0.13), (0.04, 0.5, 0.04), rz(25) @ rx(10)),
+            Box("steel_gal", (0.5, -0.12, 0.122), (0.03, 0.4, 0.03), rz(-35) @ rx(-4)),
+            Box("steel_gal", (-0.5, 0.15, 0.122), (0.03, 0.38, 0.03), rz(30) @ rx(4))]
+    junk.append(wet((0.44, 0.1, 0.1), (0.31, 0.27, 0.06)))
     return {"abut": abut, "west": west, "east": east, "junk": junk}
 
 
@@ -311,7 +308,8 @@ def pontoon(broken):
     def bay(y0, y1, ramp=False, bows=()):
         n = y1 - y0
         yc = (y0 + y1) / 2
-        g = [Box("deckplate", (0, yc, hh + 0.02), (rwid, n - 0.012, 0.04))]
+        dz = -0.03 if ramp else 0.0  # аппарель сидить нижче й піднімається до берега
+        g = [Box("deckplate", (0, yc, hh + 0.02 + dz), (rwid, n - 0.012, 0.04))]
         lo = y0 + (0.06 if any(sg < 0 for _, sg in bows) else 0.0)
         hi = y1 - (0.06 if any(sg > 0 for _, sg in bows) else 0.0)
         for fx in floats:
@@ -321,13 +319,15 @@ def pontoon(broken):
                 g.append(Box("steel_grey", (fx, yb - sg * 0.03, hh / 2), (0.2, 0.012, 0.18), rx(sg * 19)))
         for sx in (-1, 1):
             g.append(Box("steel_grey", (sx * 0.455, yc, hh * 0.55), (0.03, n - 0.012, 0.045)))  # стрейк
-            g.append(Box("steel_grey", (sx * (rwid / 2 + 0.012), yc, hh + 0.052), (0.024, n - 0.012, 0.032)))
+            g.append(Box("steel_grey", (sx * (rwid / 2 + 0.012), yc, hh + 0.052 + dz), (0.024, n - 0.012, 0.032)))
+        for yb, sg in bows:  # похилий з'їзд ~0.3 тайла до берега
+            g.append(Box("deckplate", (0, yb - sg * 0.15, hh + 0.04), (rwid, 0.3, 0.03), rx(sg * 6)))
         return g
 
     # 2 клітинки замало для відсіків по 6.7 м з аппарелями: чотири відсіки довжини 0.45-0.55.
     bays = {"r0": bay(-1.0, -0.55, True, ((-1.0, -1),)), "b1": bay(-0.55, 0.0), "b2": bay(0.0, 0.55),
             "r1": bay(0.55, 1.0, True, ((1.0, 1),))}
-    plates = [Box("steel_grey", (0, sy * 0.98, hh + 0.052), (rwid, 0.04, 0.012)) for sy in (-1, 1)]
+    plates = []
     if not broken:
         return {**bays, "plates": plates}
 
@@ -340,9 +340,9 @@ def pontoon(broken):
     r1 = bays["r1"] + jag(0.55, -1, 0.8, 0.0, hh * 0.7, "steel_grey", 23, 8) + torn_plate(0.55, -1, 0.8, 0.05, hh, 6)
     frag = [Box("steel_grey", (0.0, 0.0, hh / 2), (0.2, 0.3, hh)), wet((0, 0, wl), (0.204, 0.304, 0.05)),
             Box("deckplate", (-0.04, 0.0, hh + 0.02), (0.3, 0.3, 0.04))]
-    frag += jag(0.15, 1, 0.26, 0.0, hh * 0.9, "steel_grey", 31, 5) + jag(-0.15, -1, 0.26, 0.0, hh * 0.9, "steel_grey", 32, 5)
+    frag += jag(0.15, 1, 0.26, 0.0, hh * 0.45, "steel_dark", 31, 5) + jag(-0.15, -1, 0.26, 0.0, hh * 0.45, "steel_dark", 32, 5)
     frag += torn_plate(0.15, 1, 0.3, 0.05, hh, 7, 4) + torn_plate(-0.15, -1, 0.3, 0.05, hh, 8, 4)
-    xf(frag, about((0, 0, 0), rx(-20) @ rz(35)))
+    xf(frag, about((0, 0, 0), rx(-30) @ rz(35)))
     xf(frag, Matrix.Translation((0.5, 0.1, 0)))
     xf(frag, Matrix.Translation((0, 0, -0.07 - zmin(frag))))  # сидить глибше за ватерлінію, дно ще вище
     return {"r0": bays["r0"], "b1": b1, "frag": frag, "r1": r1, "plates": plates}
@@ -397,7 +397,7 @@ def make_texture(name):
             joint = mod(yy, 2) < 0.01  # шов плит кожні 4 м
             h -= 0.012 * joint
             lum -= 0.02 * joint
-    elif name in ("asphalt", "asphalt1"):
+    elif name in ("asphalt", "asphalt1", "asphalt_wet"):
         lum = 0.008 * _noise(rng, 1.0) + 0.008 * _noise(rng, 0.5) + 0.004 * _noise(rng, 8)
         for cu in (0.28, 0.72):  # смуги, виїжджені колесами
             lum -= 0.012 * np.exp(-((xx - cu) / 0.07) ** 2)
@@ -405,10 +405,10 @@ def make_texture(name):
         lum += 0.016 * grain
         h = 0.002 * _noise(rng, 0.5) + 0.002 * grain + 0.0008 * _noise(rng, 2.0)
         for cu in (0.045, 0.955):  # крайові лінії
-            w = (np.abs(xx - cu) < 0.011) * (_noise(rng, 2.0) > -1.2)
-            img = np.where(w[..., None], np.array([0.62, 0.62, 0.58]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
-        dash = (np.abs(xx - 0.5) < 0.016) & ((yy % 0.5) < 0.25) & (_noise(rng, 2.0) > -1.2) & (name == "asphalt")
-        img = np.where(dash[..., None], np.array([0.46, 0.46, 0.43]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
+            w = (np.abs(xx - cu) < 0.02) * (_noise(rng, 2.0) > -1.2)
+            img = np.where(w[..., None], np.array([0.36, 0.36, 0.34]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
+        dash = (np.abs(xx - 0.5) < 0.03) & ((yy % 0.5) < 0.25) & (_noise(rng, 2.0) > -1.2) & (name == "asphalt")
+        img = np.where(dash[..., None], np.array([0.33, 0.33, 0.31]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
         step = (0.68 * 8.0 / TEX, 8.0 / TEX)  # u лягає впоперек настилу
     elif name == "steel_gal":
         lum = 0.03 * _noise(rng, 3) + 0.02 * _noise(rng, 0.6) + 0.02 * _noise(rng, 0.8, 10)
@@ -421,7 +421,7 @@ def make_texture(name):
     elif name == "rust":
         lum = 0.04 * _noise(rng, 6) + 0.03 * _noise(rng, 0.6)
         h = 0.004 * _noise(rng, 0.8)
-    elif name == "steel_grey":
+    elif name in ("steel_grey", "steel_dark"):
         lum = 0.04 * _noise(rng, 3) + 0.04 * _noise(rng, 0.8, 10) + 0.02 * _noise(rng, 0.5)
         seam = (mod(yy, 4) < 0.01) | (mod(xx, 4) < 0.01)  # стики листів 2 м
         rib = (mod(xx, 16) < 0.016) | (mod(yy, 16) < 0.016)  # ребра жорсткості через 0,5 м

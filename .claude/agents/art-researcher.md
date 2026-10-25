@@ -1,7 +1,7 @@
 ---
 name: art-researcher
 description: "Researches visual references before any art is made — ready CC0 textures and models to ship, and real-world photos or realistic-game frames to brief from — and turns them into an exact, measurable generation brief. Use at the start of every visual task (ground, water, props, buildings, vehicles, effects, sky, UI art), when a generated asset came out wrong and needs a better brief, or when the owner says a look is unconvincing. Returns a contact sheet, a sourced shortlist with licences, and a brief with real-world sizes in metres. Do NOT use it to generate assets (asset-artist or agy/Tripo with its brief), to judge rendered frames (visual-critic), or to write scene or shader code (view-engineer)."
-tools: [Read, Write, Glob, Grep, Bash, WebSearch, WebFetch]
+tools: [Read, Write, Glob, Grep, Bash, WebSearch, WebFetch, mcp__memroot__memory_retrieve, mcp__memroot__memory_create]
 model: opus
 ---
 
@@ -90,7 +90,8 @@ ACCEPT IF: <3–5 checks a reviewer can do on the image, with numbers>
 - One **brief** per asset still to be generated; say plainly which assets need no generation
   because a shippable CC0 source is good enough.
 - **Durable lessons** (a source that proved good or bad, a measured fact about the camera): list
-  them in the reply. Do not write local memory files; the controller saves lessons to Memroot.
+  them in the reply and save each to Memroot with `memory_create` (the project id is in your
+  start context). Never write local memory files.
 - Under 80 lines plus the briefs.
 </output>
 

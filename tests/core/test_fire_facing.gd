@@ -10,8 +10,8 @@ extends GutTest
 ##   2. ЦІЛЬ отримує шкоду, і сектор ВХІДНОГО пострілу рахується від СТАРОЇ
 ##      орієнтації цілі. Ціль не розвертається передом до удару — інакше
 ##      флангування, найвиразніший хід у грі (§3.4), знецінилось би до нуля.
-##   3. ТІЛЬКИ ПІСЛЯ застосування шкоди, і тільки якщо відповідь СПРАВДІ
-##      відбувається, відповідач розвертається на початкового атакувальника.
+##   3. ТІЛЬКИ ПІСЛЯ застосування шкоди ціль, що вижила, розвертається на
+##      початкового атакувальника — завжди, навіть коли відповісти не може.
 ##
 ## Розворот — НАСЛІДОК пострілу, ніколи не передумова: дуги вогню немає, він не
 ## коштує AP, не може «не вдатися» і не впливає на те, чи дозволено стріляти.
@@ -74,7 +74,7 @@ func test_incoming_shot_is_resolved_against_the_targets_old_facing() -> void:
 	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 6)   # захід — спиною до цілі
 	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 2)   # схід — кормою до атакувальника
 	state.begin_turn()
-	state.refresh_vision(t.owner)  # §3.3.1: відповідач мусить бачити атакувальника
+	state.refresh_vision(t.owner)
 
 	var front: Vector2i = Rules.damage_bounds(a, t, UnitTypes.ArmourSector.FRONT, 4)
 	assert_true(REAR_DAMAGE_ON_SEED_11 > front.y,
@@ -114,90 +114,8 @@ func test_retaliation_lands_in_the_new_sector_of_the_attacker() -> void:
 		"відповідь лягає в НОВИЙ сектор — розворот стався до пострілу, а не після")
 
 # ---------------------------------------------------------------------------
-# 2. НЕ ВІДПОВІВ — НЕ РОЗВЕРНУВСЯ. Чотири окремі гілки виходу з _retaliate().
-#
-# Найважливіша — остання: якби ціль крутилась від самого факту отриманої шкоди,
-# її орієнтація вказувала б на невидимого стрільця. Безкарність невидимої атаки
-# (§3.3.1) витекла б через канал, якого туман не фільтрує взагалі.
-
-func test_engineer_that_cannot_retaliate_does_not_turn() -> void:
-	# Стрілецьке відділення (#0) впритул до інженерного (#11, hp 200):
-	# (0.75*15 + [0,3]) * 4 = [45, 57] << 200 hp — інженер живий, з AP і в
-	# дальності, і все одно мовчить (§3.6), отже й не обертається.
-	var a: Unit = state.add_unit(0, 0, Vector2i(4, 4), 6)
-	var t: Unit = state.add_unit(11, 1, Vector2i(5, 4), 2)   # схід — кормою до атакувальника
-	state.begin_turn()
-	state.refresh_vision(t.owner)
-	var ap_before: int = t.ap
-	var events: Array = FireCommand.create(a.id, t.id).apply(state)
-
-	assert_true(t.is_alive())
-	assert_null(_shot_retaliated(events), "передумова: інженер не відповідає")
-	assert_eq(t.facing, 2, "не відповів — не розвернувся")
-	assert_eq(_turns_of(events, t.id).size(), 0, "і жодного UnitTurned на нього в потоці")
-	assert_eq(t.ap, ap_before, "AP того, хто не відповідав, лишається як було")
-	assert_false(t.has_fired)
-
-func test_target_without_enough_ap_does_not_turn() -> void:
-	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 6)
-	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 2)
-	state.begin_turn()
-	state.refresh_vision(t.owner)
-	t.ap = 19  # fire_cost = 20
-	var events: Array = FireCommand.create(a.id, t.id).apply(state)
-
-	assert_null(_shot_retaliated(events), "передумова: менше fire_cost AP — відповіді немає")
-	assert_eq(t.facing, 2, "не відповів — не розвернувся")
-	assert_eq(_turns_of(events, t.id).size(), 0)
-	assert_eq(t.ap, 19, "розворот, якого не було, нічого не коштував")
-	assert_false(t.has_fired)
-
-func test_target_out_of_its_own_range_does_not_turn() -> void:
-	# Гармата (#9: дальність 5) по винищувачу танків (#6: дальність 4, hp 400)
-	# з відстані рівно 5: постріл законний, відповідь не дістає.
-	var a: Unit = state.add_unit(9, 0, Vector2i(0, 0), 6)
-	var t: Unit = state.add_unit(6, 1, Vector2i(5, 0), 2)   # схід — кормою до атакувальника
-	state.begin_turn()
-	# Предмет тесту — дальність вогню у відповідь, тож обмеження знанням атакувальника
-	# прибирається з дороги явно (§3.5 обмежує постріл за `seen`).
-	state.vision[0].seen.fill(1)
-	state.refresh_vision(t.owner)
-	var ap_before: int = t.ap
-	var events: Array = FireCommand.create(a.id, t.id).apply(state)
-
-	assert_true(t.is_alive(), "передумова: 266 макс. шкоди << 400 hp")
-	assert_null(_shot_retaliated(events), "передумова: 25 > 4^2 — не дістає")
-	assert_eq(t.facing, 2, "не відповів — не розвернувся")
-	assert_eq(_turns_of(events, t.id).size(), 0)
-	assert_eq(t.ap, ap_before)
-	assert_false(t.has_fired)
-
-func test_target_that_cannot_see_the_attacker_does_not_turn() -> void:
-	# КРИТИЧНА гілка. Ціль отримує шкоду від стрільця, якого її власник ніколи не
-	# розвідував. Якби розворот чіплявся до шкоди, а не до відповіді, орієнтація
-	# цілі показала б УСІМ, звідки прилетіло, — а туман подій не фільтрує (§6,
-	# «known debt»). Безкарність невидимої атаки (§3.3.1) витекла б повз туман.
-	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 6)
-	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 2)
-	state.begin_turn()
-	# Навмисно НЕ рахуємо зір гравця 1: його seen порожній, тайла атакувальника
-	# він не розвідував ЖОДНОГО разу. Гасимо обидві сітки явно, а не покладаємось
-	# на типове значення BattleState.create() — щоб тест не зламався мовчки, якщо типове значення
-	# колись зміниться. Той самий прийом, що й у test_retaliation.gd, case 10.
-	state.vision[t.owner].visible.fill(0)
-	state.vision[t.owner].seen.fill(0)
-	assert_true(t.ap >= t.fire_cost() and Rules.in_radius(t.pos, a.pos, t.attack_range()),
-		"передумова: AP і дальність цілком дозволяли б відповідь — не пускає саме зір")
-	var ap_before: int = t.ap
-	var events: Array = FireCommand.create(a.id, t.id).apply(state)
-
-	assert_true(t.is_alive())
-	assert_null(_shot_retaliated(events), "передумова: без зору на атакувальника відповіді немає")
-	assert_eq(t.facing, 2,
-		"§3.3.1: розворот чіпляється до ВІДПОВІДІ, а не до шкоди — інакше орієнтація цілі видала б невидимого стрільця")
-	assert_eq(_turns_of(events, t.id).size(), 0)
-	assert_eq(t.ap, ap_before)
-	assert_false(t.has_fired)
+# 2. Ціль, що вижила, розвертається ЗАВЖДИ — і тоді, коли відповісти не може
+# (немає AP, не дістає, інженер). Ці гілки живуть у test_retaliation_original.gd.
 
 # ---------------------------------------------------------------------------
 # 3. Обидва розвороти живуть у ПОТОЦІ ПОДІЙ. Вигляд не сміє домальовувати

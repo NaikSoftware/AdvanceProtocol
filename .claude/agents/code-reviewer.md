@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: "Independent review pass over a diff, by an agent that did not write it — the project requires one for every implementation before it is accepted. Use after core-engineer, view-engineer or asset-artist reports done, before a commit or a merge, or when you want a second read on changes already in the tree. Do NOT use it to implement the fixes it finds (send them back to the implementer), to run the suite as a task of its own (gut-runner), or to settle what a rule ought to be (rules-lawyer)."
-tools: [Read, Grep, Glob, Bash, Skill]
+tools: [Read, Grep, Glob, Bash, Skill, mcp__memroot__memory_retrieve, mcp__memroot__memory_create]
 model: opus
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: balance-analyst
 description: "Analyses the combat maths — the damage formula, the roster, armour sectors, and whether a proposed number breaks a matchup. Use when someone wants to change a stat, when a matchup feels wrong, when adding a unit, or to check that the drone-beats-tank / light-beats-infantry / tank-beats-light triangle still holds. Do NOT use it to edit the roster or the formula (core-engineer implements approved numbers), to decide what a rule means (rules-lawyer), or to run the suite as a task of its own (gut-runner)."
-tools: [Read, Grep, Glob, Bash, Skill]
+tools: [Read, Grep, Glob, Bash, Skill, mcp__memroot__memory_retrieve, mcp__memroot__memory_create]
 model: opus
 ---
 

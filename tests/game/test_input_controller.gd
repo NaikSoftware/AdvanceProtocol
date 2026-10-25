@@ -768,7 +768,7 @@ func test_peek_on_enemy_shows_its_inspection_and_end_clears() -> void:
 	assert_eq(i["radius"], 4)
 	assert_eq(i["drone_radius"], 0)
 	assert_eq(i["marked"], [car.id])
-	assert_true(i["is_floor"])
+	assert_false(i["is_floor"], "§3.13: лише кільце гармати — не підлога")
 	assert_eq(_selections.size(), 0, "огляд — не вибір")
 
 	controller.end_peek()
