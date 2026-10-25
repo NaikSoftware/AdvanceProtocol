@@ -274,7 +274,7 @@ func test_rain_density_on_screen_is_continuous_across_zoom() -> void:
 ## `keep` має замкнену форму й ніколи не перевищує 8^-log2(крок): інакше клітинка з рангом під
 ## порогом могла б лежати поза решіткою кроку, і густота на порозі просідала б.
 func test_rain_keep_never_exceeds_the_stride_bound() -> void:
-	for side: float in [32.0, 46.0, 60.0]:
+	for side: float in [32.0, 40.0, 46.0, 60.0]:
 		var grid := Vector3(side, WeatherRig.RAIN_LAYERS, side)
 		var m: float = (side - 1.0) / side
 		for i in 1401:
