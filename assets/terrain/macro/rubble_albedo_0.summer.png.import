@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ckntt833pc0nt"
-path.s3tc="res://.godot/imported/marsh_albedo_1.png-d62401b8ab4c5dcba4d1f94586e5f938.s3tc.ctex"
-path.etc2="res://.godot/imported/marsh_albedo_1.png-d62401b8ab4c5dcba4d1f94586e5f938.etc2.ctex"
+uid="uid://cdqldrc1gl8ch"
+path.s3tc="res://.godot/imported/rubble_albedo_0.summer.png-742dd1ce9ed196d220b66a00534a1a29.s3tc.ctex"
+path.etc2="res://.godot/imported/rubble_albedo_0.summer.png-742dd1ce9ed196d220b66a00534a1a29.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://assets/terrain/macro/marsh_albedo_1.png"
-dest_files=["res://.godot/imported/marsh_albedo_1.png-d62401b8ab4c5dcba4d1f94586e5f938.s3tc.ctex", "res://.godot/imported/marsh_albedo_1.png-d62401b8ab4c5dcba4d1f94586e5f938.etc2.ctex"]
+source_file="res://assets/terrain/macro/rubble_albedo_0.summer.png"
+dest_files=["res://.godot/imported/rubble_albedo_0.summer.png-742dd1ce9ed196d220b66a00534a1a29.s3tc.ctex", "res://.godot/imported/rubble_albedo_0.summer.png-742dd1ce9ed196d220b66a00534a1a29.etc2.ctex"]
 
 [params]
 

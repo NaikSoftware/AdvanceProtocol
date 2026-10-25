@@ -1,0 +1,212 @@
+extends GutTest
+## Небо, світло й погода бою. Шейдери GUT не компілює, тож перевіряються оточення, світло й
+## частинки, які отримує сцена. Погода й час доби — суто вигляд (§3.12).
+
+const MAPS: Array[String] = ["res://maps/river.tres", "res://maps/crossroads.tres",
+		"res://maps/ridge.tres"]
+
+
+func _rig() -> WeatherRig:
+	var rig := WeatherRig.new()
+	add_child_autofree(rig)
+	return rig
+
+
+func test_weather_rig_gives_an_overcast_shader_sky_with_sky_ambient() -> void:
+	var env: Environment = _rig().environment
+	assert_not_null(env)
+	assert_eq(env.background_mode, Environment.BG_SKY)
+	assert_not_null(env.sky)
+	var mat := env.sky.sky_material as ShaderMaterial
+	assert_not_null(mat, "небо — шейдер, не процедурне блакитне")
+	assert_eq(mat.shader.resource_path, "res://game/battle/shaders/overcast_sky.gdshader")
+	assert_eq(env.ambient_light_source, Environment.AMBIENT_SOURCE_COLOR)
+	assert_eq(env.reflected_light_source, Environment.REFLECTION_SOURCE_SKY)
+	# Земля пише власний FOG, тож туман оточення сірив би лише юніти над чіткою землею.
+	assert_false(env.fog_enabled)
+
+
+func test_battle_screen_has_one_weather_rig_and_one_sun_with_shadows() -> void:
+	var screen: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(screen)
+	assert_eq(screen.find_children("*", "WorldEnvironment", true, false).size(), 1)
+	assert_true(screen.get_node("WeatherRig") is WeatherRig)
+	var suns: Array[Node] = screen.find_children("*", "DirectionalLight3D", true, false)
+	assert_eq(suns.size(), 1, "§8: одне напрямлене світло")
+	assert_true((suns[0] as DirectionalLight3D).shadow_enabled)
+
+
+func test_river_rains_and_the_other_maps_stay_dry() -> void:
+	assert_true(BattleLook.for_map_path("res://maps/river.tres").rain)
+	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres", ""]:
+		var look: BattleLook = BattleLook.for_map_path(path)
+		assert_false(look.rain, path)
+		assert_eq(look.wetness, 0.0, path)
+
+
+## Дощ чи мокра земля на карті з ґрунтом «сухо» суперечили б значку ґрунту в HUD (§3.12).
+func test_only_a_map_whose_ground_is_not_dry_looks_wet() -> void:
+	for path: String in MAPS:
+		var look: BattleLook = BattleLook.for_map_path(path)
+		if (load(path) as MapData).ground_state == Terrain.GroundState.DRY:
+			assert_false(look.rain, path)
+			assert_eq(look.wetness, 0.0, path)
+
+
+func test_each_map_has_its_own_light() -> void:
+	var seen: Dictionary = {}
+	for path: String in MAPS:
+		var look: BattleLook = BattleLook.for_map_path(path)
+		seen[[look.light_color, look.light_pitch_deg, look.light_yaw_deg]] = path
+	assert_eq(seen.size(), MAPS.size())
+
+
+func test_apply_sets_the_sun_from_the_look() -> void:
+	var rig: WeatherRig = _rig()
+	var look: BattleLook = BattleLook.for_map_path("res://maps/ridge.tres")
+	rig.apply(look)
+	assert_eq(rig.sun.light_color, look.light_color)
+	assert_almost_eq(rig.sun.light_energy, look.light_energy, 1e-5)
+	assert_almost_eq(rig.sun.rotation_degrees.x, -look.light_pitch_deg, 1e-3)
+	assert_almost_eq(rig.sun.rotation_degrees.y, look.light_yaw_deg, 1e-3)
+	assert_true(rig.sun.shadow_enabled)
+	assert_almost_eq(rig.sun.shadow_opacity, look.shadow_opacity, 1e-5)
+	assert_almost_eq(rig.sun.shadow_blur, look.shadow_blur, 1e-5)
+	assert_almost_eq(rig.environment.ambient_light_energy, look.ambient_energy, 1e-5)
+	assert_eq(rig.environment.ambient_light_color, look.ambient_color)
+	var sky := rig.environment.sky.sky_material as ShaderMaterial
+	assert_almost_eq(float(sky.get_shader_parameter("clear_amount")), look.sky_clear, 1e-5)
+	# Запечене світло-тінь рельєфу мусить дивитись на те саме сонце, що кидає тіні юнітів.
+	var to_sun: Vector3 = rig.applied_globals[&"sun_dir"]
+	assert_almost_eq(to_sun, -(rig.sun.basis * Vector3.FORWARD), Vector3.ONE * 1e-4)
+	assert_gt(to_sun.y, 0.0, "сонце над обрієм")
+
+
+func test_apply_sends_the_haze_foliage_and_sky_to_every_material() -> void:
+	var rig: WeatherRig = _rig()
+	var look: BattleLook = BattleLook.for_map_path("res://maps/crossroads.tres")
+	rig.apply(look)
+	var c: Color = look.haze_color
+	assert_eq(rig.applied_globals[&"haze_color"], Vector3(c.r, c.g, c.b))
+	c = look.foliage_tint
+	assert_eq(rig.applied_globals[&"foliage_tint"], Vector3(c.r, c.g, c.b))
+	assert_almost_eq(rig.applied_globals[&"sky_clear"], look.sky_clear, 1e-5)
+	assert_almost_eq(rig.applied_globals[&"water_murk"], look.water_murk, 1e-5)
+	for g: String in ["sun_dir", "sky_clear", "foliage_tint", "haze_color", "water_murk"]:
+		assert_true(ProjectSettings.has_setting("shader_globals/" + g), g)
+
+
+## Хмарне чи ясне небо задає світло: під хмарами тіні бліді й м'які, а світло неба сильне
+## відносно сонця; на ясному небі — навпаки.
+func test_the_sky_type_decides_shadows_and_ambient() -> void:
+	var overcast: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	assert_lt(overcast.sky_clear, 0.5, "Річка похмура")
+	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres"]:
+		var clear: BattleLook = BattleLook.for_map_path(path)
+		assert_gt(clear.sky_clear, 0.5, path)
+		assert_lt(overcast.shadow_opacity, clear.shadow_opacity, path)
+		assert_gt(overcast.shadow_blur, clear.shadow_blur, path)
+		assert_gt(overcast.ambient_energy / overcast.light_energy,
+				clear.ambient_energy / clear.light_energy, path)
+
+
+## Похмура вода Річки затверджена як є: каламутність її не торкається. Під ясним небом став
+## мусить бути темним, а не блакитним.
+func test_only_clear_sky_water_is_murky() -> void:
+	assert_eq(BattleLook.for_map_path("res://maps/river.tres").water_murk, 0.0)
+	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres"]:
+		assert_gt(BattleLook.for_map_path(path).water_murk, 0.0, path)
+
+
+func test_each_map_names_its_season() -> void:
+	var want: Dictionary = {"res://maps/river.tres": &"late",
+			"res://maps/crossroads.tres": &"summer", "res://maps/ridge.tres": &"early"}
+	for path: String in want:
+		assert_eq(BattleLook.for_map_path(path).season, want[path], path)
+
+
+func test_apply_turns_rain_and_wetness_on_and_off() -> void:
+	var rig: WeatherRig = _rig()
+	var wet: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	rig.apply(wet)
+	assert_true(rig.rain.visible)
+	assert_eq(rig.rain_drops(), wet.rain_amount)
+	assert_almost_eq(rig.applied_globals[&"weather_wetness"], wet.wetness, 1e-5)
+	assert_almost_eq(rig.applied_globals[&"cloud_shadow_strength"], wet.cloud_shadow_strength, 1e-5)
+	rig.apply(BattleLook.for_map_path("res://maps/crossroads.tres"))
+	assert_false(rig.rain.visible)
+	assert_eq(rig.rain_drops(), 0)
+	assert_eq(rig.applied_globals[&"weather_wetness"], 0.0)
+
+
+## Дощ — коробка довкола фокуса камери, завбільшки з кадр: густота на екрані та сама на
+## будь-якому віддаленні, а краплі не витрачаються на невидиму частину дошки.
+func test_rain_follows_the_camera_focus_and_frame() -> void:
+	var rig: WeatherRig = _rig()
+	var mat := rig.rain.material_override as ShaderMaterial
+	rig.follow(Vector3(5.0, 0.0, 7.0), 6.0)
+	assert_eq(mat.get_shader_parameter("focus"), Vector3(5.0, 0.0, 7.0))
+	var near: Vector3 = mat.get_shader_parameter("box_size")
+	rig.follow(Vector3(5.0, 0.0, 7.0), 18.0)
+	var far: Vector3 = mat.get_shader_parameter("box_size")
+	assert_almost_eq(far, near * 3.0, Vector3.ONE * 1e-3)
+
+
+## Вода й дощ — обидва прозорі без запису глибини; без пріоритету порядок залежав би від пана.
+func test_rain_draws_over_the_water() -> void:
+	var service: Node = (load("res://game/autoload/match_service.gd") as GDScript).new()
+	add_child_autofree(service)
+	var screen: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(screen)
+	screen.setup(load("res://maps/river.tres") as MapData, 2, 1, service)
+	var water: GeometryInstance3D = screen.get_node("%BoardView").get_node("Water")
+	var rig: WeatherRig = screen.get_node("WeatherRig")
+	assert_gt((rig.rain.material_override as Material).render_priority,
+			(water.material_override as Material).render_priority)
+
+
+## У коробці зонда Mobile бере розсіяне світло з нього, а не з оточення: без цього сила й колір
+## розсіяного світла вигляду на дошку не діяли б зовсім.
+func test_the_board_probe_gets_the_ambient_light_of_the_look() -> void:
+	var service: Node = (load("res://game/autoload/match_service.gd") as GDScript).new()
+	add_child_autofree(service)
+	var screen: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(screen)
+	screen.setup(load("res://maps/river.tres") as MapData, 2, 1, service)
+	var probe: ReflectionProbe = (screen.get_node("%BoardView") as BoardView).reflection_probe()
+	var look: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	assert_eq(probe.ambient_mode, ReflectionProbe.AMBIENT_COLOR)
+	assert_eq(probe.ambient_color, look.ambient_color)
+	assert_almost_eq(probe.ambient_color_energy, look.ambient_energy, 1e-5)
+
+
+func test_the_drops_mesh_is_built_once() -> void:
+	var a: WeatherRig = _rig()
+	var b: WeatherRig = _rig()
+	var look: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	a.apply(look)
+	b.apply(look)
+	assert_same(a.rain.mesh, b.rain.mesh)
+
+
+## §3.12: вигляд не тримає жодного числа правил.
+func test_a_look_has_no_rule_fields() -> void:
+	var banned: Array[String] = ["vision", "range", "ap", "cost", "damage", "penalty", "hp",
+			"armour", "armor", "ground", "mud"]
+	for prop: Dictionary in BattleLook.new().get_property_list():
+		if not (prop.usage & PROPERTY_USAGE_SCRIPT_VARIABLE):
+			continue
+		for token: String in String(prop.name).split("_"):
+			assert_false(token in banned, "поле %s схоже на правило" % prop.name)
+
+
+func test_battle_screen_applies_the_look_of_its_map() -> void:
+	var service: Node = (load("res://game/autoload/match_service.gd") as GDScript).new()
+	add_child_autofree(service)
+	var screen: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(screen)
+	screen.setup(load("res://maps/river.tres") as MapData, 2, 1, service)
+	var rig: WeatherRig = screen.get_node("WeatherRig")
+	assert_true(rig.rain.visible)
+	assert_almost_eq(rig.applied_globals[&"weather_wetness"],
+			BattleLook.for_map_path("res://maps/river.tres").wetness, 1e-5)
