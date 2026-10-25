@@ -29,7 +29,8 @@ extends Node
 ##   не менше 0,7. Смуга лісу в одну клітинку так стає живоплотом.
 ## - Кущі біля краю: `depth` 0…`SHRUB_BAND`, `SHRUB_DENSITY` на тайл; підлісок усередині —
 ##   `UNDERSTORY_DENSITY` на тайл.
-## - Під кожною стоячою клітинкою — `Floor_Shade` (м'яка тінь, на 0,15 тайла за край).
+## - Тінь дерева кидає не крона, а її проксі `<вузол>_Shadow` (~34 трикутники, лише тінь):
+##   форма та сама, тіньовий прохід у кілька разів дешевший.
 ## - Проламані клітинки (`_broken`, з карти проламів того, хто дивиться): жодного стоячого
 ##   дерева, що стоїть ближче за 40 % півширини крони від клітинки; `Soil_Lane` уздовж
 ##   проламу, `Litter_A`, 2–3 `Log_B` уздовж проламу по краях клітинки. Для глибини вони
@@ -116,7 +117,7 @@ var _named: Dictionary = {}  ## ім'я вузла -> Mesh
 var _species: Dictionary = {}  ## Mesh -> префікс виду
 var _material: Dictionary = {}  ## Mesh -> ShaderMaterial
 var _soft_material: Dictionary = {}  ## Mesh -> ShaderMaterial (режим soft)
-var _ground_mesh: Dictionary = {}  ## Soil_Lane / Floor_Shade -> Mesh
+var _ground_mesh: Dictionary = {}  ## Soil_Lane -> Mesh
 var _groups: Dictionary = {}  ## Mesh -> Array[Dictionary] {xf, top, pos, r, rgb}
 var _ground_groups: Dictionary = {}  ## Mesh -> Array[Transform3D]
 var _mmi: Dictionary = {}  ## Mesh -> MultiMeshInstance3D
@@ -127,8 +128,8 @@ var _boxes: Array[MeshInstance3D] = []
 var _broken: Dictionary = {}
 var _season: String = ""
 var _wood_at: Callable
-## Зсув запеченої тіні від сонця (тайли): коротка тінь у бік від сонця, на похмурій карті 0.
-var _shade_offset := Vector2.ZERO
+var _proxy: Dictionary = {}  ## Mesh крони -> Mesh її проксі тіні
+var _proxy_mmi: Dictionary = {}  ## Mesh крони -> MultiMeshInstance3D проксі
 var _area: Rect2i
 
 
@@ -151,19 +152,6 @@ func _ready() -> void:
 	get_tree().quit()
 
 
-## Зсув тіні з вигляду карти: напрям, у який іде світло, по землі, довжина
-## `sky_clear · 0,25 / tan(висота сонця)` — на Перехресті (34°) ~0,37 тайла, на Хребті
-## (48°) ~0,2, на похмурій Річці 0.
-func _shade_from_look(look: BattleLook) -> void:
-	var b := Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0))
-	var d: Vector3 = -b.z
-	var flat := Vector2(d.x, d.z)
-	if flat.length() < 1e-4:
-		return
-	_shade_offset = flat.normalized() * look.sky_clear * 0.25 / tan(deg_to_rad(look.light_pitch_deg))
-	print("SHADE offset=%s pitch=%.0f" % [_shade_offset, look.light_pitch_deg])
-
-
 func _seed() -> void:
 	_rng.seed = SEED
 	for n: FastNoiseLite in [_noise, _stand, _tone, _turn]:
@@ -183,7 +171,6 @@ func _test_frames(out: String, wood: String, season: String, look_name: String) 
 	add_child(weather)
 	var look: BattleLook = load("res://game/battle/look/%s.tres" % look_name) as BattleLook
 	weather.apply(look)
-	_shade_from_look(look)
 	_ground(GROUND[look_name])
 	for y in ROWS:
 		for x in COLS:
@@ -212,7 +199,6 @@ func _map_frames(out: String, wood: String, season: String, look_name: String) -
 	await get_tree().process_frame
 	var m: MapData = load("res://maps/%s.tres" % look_name) as MapData
 	bs.setup(m, 2, 1)
-	_shade_from_look(BattleLook.for_map_path(m.resource_path))
 	(bs.get_node("%Units") as Node3D).visible = false
 	(bs.get_node("UI") as CanvasLayer).visible = false
 	_rig = bs.get_node("%CameraRig")
@@ -274,18 +260,20 @@ func _map_frames(out: String, wood: String, season: String, look_name: String) -
 		i += 1
 	_rig.center_on(Vector2i(roundi(sum.x / _forest.size()), roundi(sum.y / _forest.size())))
 	await _shoot(IsoCameraRig.MAX_ZOOM, "%s/map_%s_%s_max.png" % [out, look_name, season])
-	# До й після: тіні лісу в реальному часі без запеченої плями — проти запеченої плями.
+	# Тінь від справжніх крон проти тіні від проксі: форма має збігтися, прохід — подешевшати.
 	for z: Array in [["min", IsoCameraRig.MIN_ZOOM], ["max", IsoCameraRig.MAX_ZOOM]]:
 		if z[0] == "min":
 			_rig.center_on(shots[0])
-		_set_shadows(true)
-		await _shoot(z[1], "%s/map_%s_%s_shadow_realtime_%s.png" % [out, look_name, season, z[0]])
+		_use_proxies(false)
+		await _shoot(z[1], "%s/map_%s_%s_shadow_crowns_%s.png" % [out, look_name, season, z[0]])
 		var t_rt: float = await _gpu_avg(90)
 		var info_rt: String = _shadow_info()
-		_set_shadows(false)
-		await _shoot(z[1], "%s/map_%s_%s_shadow_baked_%s.png" % [out, look_name, season, z[0]])
+		_use_proxies(true)
+		await _shoot(z[1], "%s/map_%s_%s_shadow_proxy_%s.png" % [out, look_name, season, z[0]])
 		var t_bk: float = await _gpu_avg(90)
-		print("SHADOW_GPU %s %s realtime=%.2f baked=%.2f shadow realtime %s baked %s" % [look_name, z[0], t_rt, t_bk, info_rt, _shadow_info()])
+		if z[0] == "min":
+			print("CASTERS proxy ", _casters())
+		print("SHADOW_GPU %s %s crowns=%.2f proxy=%.2f shadow crowns %s proxy %s" % [look_name, z[0], t_rt, t_bk, info_rt, _shadow_info()])
 
 
 ## Пряма з 4 клітинок лісу, що входить у ліс з поля (перед першою клітинкою — не ліс) і
@@ -344,13 +332,21 @@ func _load_library(season: String) -> void:
 	assert(soft.code.contains("ALPHA = COLOR.a;"), "шейдер soft не зібрався: змінився forest_crown.gdshader")
 	for path: String in ["res://assets/props/forest/forest_conifer.glb", "res://assets/props/forest/forest_broadleaf_%s.glb" % season]:
 		var root: Node = (load(path) as PackedScene).instantiate()
-		for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+		var meshes: Array[Node] = root.find_children("*", "MeshInstance3D", true, false)
+		for mi: MeshInstance3D in meshes:
+			if String(mi.name).ends_with("_Shadow"):
+				_proxy[(root.find_child(String(mi.name).trim_suffix("_Shadow"), true, false) as MeshInstance3D).mesh] = mi.mesh
+		for mi: MeshInstance3D in meshes:
 			var prefix: String = String(mi.name).get_slice("_", 0)
 			_named[String(mi.name)] = mi.mesh
 			_species[mi.mesh] = prefix
 			if not _meshes.has(prefix):
 				_meshes[prefix] = []
 			(_meshes[prefix] as Array).append(mi.mesh)
+			if String(mi.name).ends_with("_Shadow"):
+				_named.erase(String(mi.name))
+				_species.erase(mi.mesh)
+				(_meshes[prefix] as Array).erase(mi.mesh)
 			var src: StandardMaterial3D = mi.mesh.surface_get_material(0) as StandardMaterial3D
 			for pair: Array in [[shader, _material], [soft, _soft_material]]:
 				var m := ShaderMaterial.new()
@@ -406,6 +402,7 @@ func _rebuild(with_ground: bool) -> void:
 	_ground_groups.clear()
 	_mmi.clear()
 	_soft_mmi.clear()
+	_proxy_mmi.clear()
 	_seed()
 	_scatter()
 	if _offset == Vector3(ORIGIN.x, 0, ORIGIN.y):
@@ -642,12 +639,25 @@ func _build_multimeshes() -> void:
 			# Картки розгортаються в шейдері, тож AABB меша не містить країв пучків.
 			node.extra_cull_margin = 0.4
 			node.visible = pair[1] == _mmi
-			# Тінь у реальному часі — лише юнітам (§8): ліс лягає на землю запеченою плямою
-			# `Floor_Shade`, зсунутою від сонця, а не довгою тінню на пів карти.
-			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			# Тінь дерева кидає проксі (нижче); видима крона — лише якщо проксі немає.
+			# Підстилка лежить пласко на землі — її тінь не видно, а прохід вона коштує.
+			if pair[1] != _mmi or _proxy.has(mesh) or _species.get(mesh, "") == "Litter":
+				node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_root.add_child(node)
 			_nodes.append(node)
 			(pair[1] as Dictionary)[mesh] = node
+		if _proxy.has(mesh):
+			var main: MultiMeshInstance3D = _mmi[mesh]
+			var mm: MultiMesh = main.multimesh.duplicate() as MultiMesh
+			mm.mesh = _proxy[mesh]
+			var node := MultiMeshInstance3D.new()
+			node.multimesh = mm
+			node.material_override = main.material_override
+			node.extra_cull_margin = main.extra_cull_margin
+			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+			_root.add_child(node)
+			_nodes.append(node)
+			_proxy_mmi[mesh] = node
 
 
 func _build_ground() -> void:
@@ -657,18 +667,6 @@ func _build_ground() -> void:
 				var jit: float = deg_to_rad(_rng.randf_range(-8.0, 8.0))
 				var off := Vector3(_rng.randf_range(-0.08, 0.08), 0.0, _rng.randf_range(-0.08, 0.08))
 				_ground_add("Soil_Lane", Transform3D(Basis(Vector3.UP, _lane_yaw(c) + jit), _offset + Vector3(c.x, 0.0, c.y) + off))
-		elif _ground_mesh.has("Floor_Shade"):
-			var o: Vector2 = _shade_offset
-			_ground_add("Floor_Shade", Transform3D(Basis(Vector3.UP, _rng.randf() * TAU), _offset + Vector3(c.x + o.x, 0.0, c.y + o.y)))
-	# Поодинокі дерева поза лісом — своя пляма розміром із крону.
-	for mesh: Mesh in _groups:
-		if not String(_species.get(mesh, "")).begins_with("Hero"):
-			continue
-		for e: Dictionary in _groups[mesh]:
-			var p: Vector2 = e["pos"]
-			var k: float = float(e["r"]) / 0.85
-			var b := Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(k, 1.0, k))
-			_ground_add("Floor_Shade", Transform3D(b, _offset + Vector3(p.x + _shade_offset.x, 0.0, p.y + _shade_offset.y)))
 	for name: String in _ground_groups:
 		var list: Array = _ground_groups[name]
 		var mm := MultiMesh.new()
@@ -684,13 +682,27 @@ func _build_ground() -> void:
 		_nodes.append(node)
 
 
-## true — як було: ліс кидає тінь у реальному часі, запеченої плями немає.
-func _set_shadows(realtime: bool) -> void:
-	for mesh: Mesh in _mmi:
-		(_mmi[mesh] as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if realtime else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+## Хто кидає тінь: вид -> трикутники всіх екземплярів (до каскадів).
+func _casters() -> String:
+	var by: Dictionary = {}
 	for n: Node in _nodes:
-		if n is MultiMeshInstance3D and (n as MultiMeshInstance3D).multimesh.mesh == _ground_mesh.get("Floor_Shade"):
-			(n as Node3D).visible = not realtime
+		var mmi := n as MultiMeshInstance3D
+		if mmi == null or not mmi.visible or mmi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			continue
+		var m: Mesh = mmi.multimesh.mesh
+		var k: String = m.resource_name if m.resource_name != "" else str(m)
+		var t: int = 0
+		for si in m.get_surface_count():
+			t += (m.surface_get_arrays(si)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+		by[k] = int(by.get(k, 0)) + t * mmi.multimesh.instance_count
+	return str(by)
+
+
+## false — тінь кидають самі крони (для порівняння), true — проксі.
+func _use_proxies(on: bool) -> void:
+	for mesh: Mesh in _proxy_mmi:
+		(_mmi[mesh] as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if on else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		(_proxy_mmi[mesh] as Node3D).visible = on
 
 
 func _ground_add(name: String, xf: Transform3D) -> void:
@@ -739,6 +751,8 @@ func _set_mode(mode: String) -> void:
 					a = 0.0
 					sa = lerpf(SOFT_ALPHA, 1.0, k)
 			main.multimesh.set_instance_color(i, Color(c.r, c.g, c.b, a))
+			if _proxy_mmi.has(mesh):
+				(_proxy_mmi[mesh] as MultiMeshInstance3D).multimesh.set_instance_color(i, Color(c.r, c.g, c.b, a))
 			soft.multimesh.set_instance_color(i, Color(c.r, c.g, c.b, sa))
 	for b: MeshInstance3D in _boxes:
 		var m: StandardMaterial3D = b.material_override

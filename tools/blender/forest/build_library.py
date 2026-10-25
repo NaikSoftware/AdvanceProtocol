@@ -132,6 +132,14 @@ def build_node(item, rects):
     vnorm = {}
     cards = meta["cards"]
     keep = item.get("card_keep", 1.0)
+    fs_card = 1.0
+    if item.get("max_cards") and len(cards) > item["max_cards"]:
+        # Проксі тіні: менше пучків, але більших — сумарна площа та сама (×0,85 на
+        # перекриття), тож пляма тіні тієї ж величини й так само дірява.
+        n = item["max_cards"]
+        fs_card = 0.85 * math.sqrt(len(cards) / n)
+        cards = random.Random(item["node"] + "proxy").sample(cards, n)
+        keep = 1.0
     if keep < 1.0 and cards:
         # Голе дерево: та сама будова, але менше пучків — крізь крону видно землю.
         cards = random.Random(item["node"] + "keep").sample(cards, max(1, round(len(cards) * keep)))
@@ -146,7 +154,7 @@ def build_node(item, rects):
         return s
 
     sprites = rects["sprites"].get(item.get("sprites"), [])
-    scale = item.get("card_scale", 1.0)
+    scale = item.get("card_scale", 1.0) * fs_card
     for cd in cards:
         # Тон пучка — від його місця в кроні: верх і зовнішній край світлі, низ і глибина
         # темні, тож крона читається одним об'ємом зі світлим і тіньовим боком. Випадковий
@@ -160,7 +168,7 @@ def build_node(item, rects):
     for fl in meta.get("flats", []):
         vnorm.update(flat(bm, uvl, col, fl["c"], fl["roll"], fl["size"], rng.choice(flat_sprites), fl["shade"]))
     n_cards = len(bm.faces)
-    trect = rects["trunks"].get(item["node"])
+    trect = rects["trunks"].get(item.get("trunk_of", item["node"]))
     if item.get("trunk", True):
         tt = cb + item.get("trunk_into_crown", 0.3) * (top - cb)
         # trunk_radius — у метрах готового дерева, після масштабу `scale`.
@@ -168,7 +176,7 @@ def build_node(item, rects):
         th = meta["trunk_render_height"]
         vnorm.update(trunk(bm, uvl, trect, r, r * 0.45, tt, min(1.0, tt / th),
                            item.get("trunk_sides", 5), tuple(item.get("lean", (0.0, 0.0)))))
-    for lm in meta.get("limbs", []):
+    for lm in ([] if item.get("max_cards") else meta.get("limbs", [])):
         vnorm.update(limb(bm, uvl, trect, lm["pts"], lm["r"], lm.get("sides", 3)))
     bm.faces.ensure_lookup_table()
     for f in bm.faces[n_cards:]:  # кора без затінення пучків
@@ -236,6 +244,11 @@ def patch_glb(path, cutoff):
     open(path, "wb").write(out)
 
 
+PROXY_FOR = ("Pine", "Spruce", "Birch", "Oak", "Hero", "Shrub")
+PROXY_CARDS = 14
+PROXY_CARDS_SHRUB = 6  # підлісок здебільшого стоїть у тіні крон
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     spec = json.load(open(SPEC))
@@ -248,6 +261,13 @@ def main():
         ob = build_node(item, rects)
         ob.data.materials.append(mat)
         obs.append(ob)
+        if item["node"].startswith(PROXY_FOR):
+            # Сітка лише для тіні (cast_shadow = SHADOWS_ONLY): той самий атлас, ~14 пучків
+            # і тригранний стовбур замість сотень трикутників крони в тіньовому проході.
+            px = dict(item, node=item["node"] + "_Shadow", trunk_of=item["node"], max_cards=PROXY_CARDS_SHRUB if item["node"].startswith("Shrub") else PROXY_CARDS, trunk_sides=3)
+            ob = build_node(px, rects)
+            ob.data.materials.append(mat)
+            obs.append(ob)
     for o in bpy.context.scene.objects:
         o.select_set(o in obs)
     bpy.context.view_layer.objects.active = obs[0]

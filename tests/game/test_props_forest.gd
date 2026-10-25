@@ -136,7 +136,7 @@ func test_ground_pieces() -> void:
 	var root: Node3D = _load("forest_ground")
 	if root == null:
 		return
-	for node in ["Soil_Lane", "Floor_Shade"]:
+	for node in ["Soil_Lane"]:
 		var mi: MeshInstance3D = root.find_child(node, true, false) as MeshInstance3D
 		assert_not_null(mi, "forest_ground: нема вузла %s" % node)
 		if mi == null:
@@ -148,3 +148,22 @@ func test_ground_pieces() -> void:
 		# glTF BLEND Godot імпортує як ALPHA_DEPTH_PRE_PASS; головне — справжня прозорість.
 		assert_true(mat.transparency in [BaseMaterial3D.TRANSPARENCY_ALPHA, BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS],
 				"%s: напівпрозорий" % node)
+
+
+func test_tree_shadow_proxies() -> void:
+	# Кожне дерево й кущ мають сітку лише для тіні: дешевий тіньовий прохід без зміни форми тіні.
+	var sets: Dictionary = {"forest_conifer": CONIFER}
+	for season in SEASONS:
+		sets["forest_broadleaf_%s" % season] = BROADLEAF
+	for glb: String in sets:
+		var root: Node3D = _load(glb)
+		if root == null:
+			continue
+		for node: String in sets[glb]:
+			if not node.begins_with("Pine") and not node.begins_with("Spruce") and not node.begins_with("Birch") \
+					and not node.begins_with("Oak") and not node.begins_with("Hero") and not node.begins_with("Shrub"):
+				continue
+			var mi: MeshInstance3D = root.find_child(node + "_Shadow", true, false) as MeshInstance3D
+			assert_not_null(mi, "%s: нема %s_Shadow" % [glb, node])
+			if mi != null:
+				assert_lte(_tris(mi.mesh), 40, "%s/%s_Shadow: трикутників" % [glb, node])

@@ -1,15 +1,13 @@
-"""Плоскі шматки землі лісу: просіка, яку проламав танк, і тінь під лісом.
+"""Плоский шматок землі лісу: просіка, яку проламав танк.
 
 Запуск:
   blender -b --factory-startup -P build_ground.py -- <вихід.glb>
-Пише GLB із двома вузлами й одним напівпрозорим матеріалом (alphaMode BLEND):
+Пише GLB з одним вузлом і одним напівпрозорим матеріалом (alphaMode BLEND):
 - Soil_Lane — 1,3 × 1,3 тайла на y = 0,01: розрита темна земля (L* ≈ 22) з двома коліями
   вздовж x; край поперек смуги рваний і гуляє на ±0,25 тайла, кінці вздовж x тануть, тож
   сусідні шматки перекриваються без шва. Дошка кладе по шматку на проламану клітинку, x —
   уздовж проламу. Без такої смуги просіка серед гілля губилась і на мінімальному зумі.
-- Floor_Shade — 1,7 × 1,7 тайла на y = 0,005: запечена тінь під кроною, зсунута від сонця;
-  плоске ядро й м'який край. Без неї ліс висить над травою вирізаною аплікацією.
-Обидва — по 2 трикутники. Справжні колії від гусениць малює дошка (карта шрамів); тут
+2 трикутники. Справжні колії від гусениць малює дошка (карта шрамів); тут
 лише земля самої просіки.
 """
 import json
@@ -53,22 +51,13 @@ def textures():
     edge = np.clip((half - np.abs(yy - 0.5)) / 0.1, 0, 1)
     ends = np.clip((0.5 - np.abs(xx - 0.5) - 0.06 * (n1 - 0.5)) / 0.18, 0, 1)
     soil_a = edge * ends * 0.95
-    # Тінь під лісом: темна пляма з м'яким краєм, найтемніша в середині.
-    # Плями сусідніх клітинок мають злитися в одну тінь, тож край дуже м'який, а середина
-    # пласка й неглибока; на межі квадрата альфа рівно 0, інакше проступає сітка.
-    r = np.hypot(xx - 0.5, yy - 0.5) * 2
-    # Плоске ядро до 0,65 радіуса й м'який край: з-під крони виходить саме ядро, а не
-    # блідий хвіст, і дерево стоїть на темній плямі. 0,42 на траві дає L* ≈ 27 проти 36.
-    shade_a = np.clip((0.97 - r - 0.1 * (n1 - 0.5)) / 0.32, 0, 1) * 0.42
-    shade = np.dstack([np.full_like(r, 0.10), np.full_like(r, 0.12), np.full_like(r, 0.05)])  # оливкова тінь на траві
-    img = np.zeros((N, 2 * N, 4))
-    img[:, :N, :3], img[:, :N, 3] = soil, soil_a
-    img[:, N:, :3], img[:, N:, 3] = shade, shade_a
+    img = np.zeros((N, N, 4))
+    img[..., :3], img[..., 3] = soil, soil_a
     return img
 
 
 def material(img):
-    im = bpy.data.images.new("forest_ground", 2 * N, N, alpha=True)
+    im = bpy.data.images.new("forest_ground", N, N, alpha=True)
     # Blender зберігає пікселі знизу вгору; 8-бітне зображення бере значення як є, у sRGB.
     px = img[::-1]
     im.pixels.foreach_set(px.astype(np.float32).ravel())
@@ -90,13 +79,13 @@ def material(img):
     return m
 
 
-def quad(name, size_m, z_m, u0, mat):
+def quad(name, size_m, z_m, mat):
     h = size_m / 2 / TILE_M
     me = bpy.data.meshes.new(name)
     me.from_pydata([(-h, -h, z_m / TILE_M), (h, -h, z_m / TILE_M), (h, h, z_m / TILE_M), (-h, h, z_m / TILE_M)], [], [(0, 1, 2, 3)])
     uv = me.uv_layers.new(name="UVMap")
     for li, (u, v) in enumerate(((0, 0), (1, 0), (1, 1), (0, 1))):
-        uv.data[li].uv = (u0 + u * 0.5, v)
+        uv.data[li].uv = (u, v)
     me.materials.append(mat)
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
@@ -123,7 +112,7 @@ def patch_glb(path):
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 mat = material(textures())
-obs = [quad("Soil_Lane", TILE_M * 1.3, 0.08, 0.0, mat), quad("Floor_Shade", TILE_M * 1.7, 0.04, 0.5, mat)]
+obs = [quad("Soil_Lane", TILE_M * 1.3, 0.08, mat)]
 for o in bpy.context.scene.objects:
     o.select_set(o in obs)
 bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", use_selection=True, export_yup=True,
