@@ -76,8 +76,9 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	a.drones_left -= 1
 	a.exhaust()
 	out.append(Events.DroneLaunched.new(unit_id, target_id, a.drones_left))
+	# Дрон відкриває загін і розвертає ціль так само, як постріл (§3.9: без винятку).
+	out.append_array(FireCommand._reveal_shooter(state, a, t))
 	out.append_array(FireCommand._resolve_damage(state, a, t, Rules.drone_damage(state.rng)))
 	out.append(Events.ApChanged.new(unit_id, 0))
-	if t.is_alive():
-		out.append_array(FireCommand._retaliate(state, a, t))
+	out.append_array(FireCommand._answer(state, a, t))
 	return out

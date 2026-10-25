@@ -50,7 +50,10 @@ HP is still above zero the roles swap and the same damage path runs in reverse).
 Retaliation
   triggers  : an attack resolved and the target is still alive
   requires  : retaliator has >= fire_cost AP, and the original attacker is within
-              the retaliator's range; ENGINEER never retaliates (it has no weapon)
+              the retaliator's range; ENGINEER never retaliates (it has no weapon).
+              Nothing else — no vision, facing or sector condition
+  reveals   : before the damage lands, the attacker's tile becomes `seen` for the
+              target's side, permanently (drone strike included)
   damage    : the ordinary damage formula, no reduction — armour sector computed
               from the original attacker's facing, as for any shot
   cost      : sets the retaliator's AP to 0, exactly as firing does
@@ -72,8 +75,9 @@ advance leave 8 and no answer at all; two leave 28 and a full-strength one. **Th
 exactly the gold movement zone of [§3.2](movement-and-terrain.md)** — a unit that stops in gold
 keeps this turn's shot *and* the right to answer, a unit that runs into red is disarmed until its
 own turn. Confirmed against the reference, which gates its retaliation on live AP the same way
-and refills only the active player's units ([§4](../reference/blitzkrieg.md)); kept on the owner's
-call after a play test where nothing fired back.
+and refills only the active player's units (see the
+[reference findings](../reference/blitzkrieg.md#findings-from-the-reference)); kept after a play
+test where nothing fired back.
 
 The defender's other exposure is that it cannot answer twice in the same attacker's turn.
 
@@ -81,35 +85,31 @@ An earlier version of this section claimed the retaliator forfeits its next turn
 what the code or the reference did; it was a rationale written into the spec rather than read out
 of it, and it is corrected here rather than implemented, on the owner's call.
 
-**The retaliator must be able to see its attacker.** A return shot obeys the same visibility rule
-as any other shot, and that rule reads `seen` ([§3.5](vision-and-fog.md)): the original attacker's
-tile has to be **ground the retaliating player has scouted at some point** — not ground anyone is
-watching right now. The reference gates its retaliation on AP, range and class alone, and
-requiring visibility at all is a deliberate departure from it, recorded in
-[§4](../reference/blitzkrieg.md).
+**A hit reveals the shooter, so retaliation has no vision condition.** Every shot that resolves
+against a target — the drone strike included — marks the attacker's tile as `seen`
+([§3.5](vision-and-fog.md)) for the target's side, before the damage lands. The retaliator
+therefore always knows where the shot came from, and the gate above is the whole gate, exactly as
+in the reference ([findings](../reference/blitzkrieg.md#findings-from-the-reference)).
 
-The consequence is the point: **an attacker the defender has never scouted fires with impunity.**
-That makes reconnaissance a weapon rather than a convenience — but it is an **opening-game**
-weapon, and the wording matters, because an earlier version of this section said "cannot see at
-that moment" and meant something much stronger and much more permanent.
+The consequence is the point: **there is no shooting from the fog without an answer.** Vision
+still decides what *you* may fire on, but it no longer protects you once you have fired. Do not add a
+vision condition back: it would let an unscouted attacker fire with impunity, which the reference
+never allowed.
 
-Scouting is one-way, so the ground a player has never looked at only ever shrinks. Impunity is
-widest on turn one and close to gone by the time both sides have driven across the map:
-
-- Artillery has range 5 and vision 3, and firing from maximum range at a gun whose owner has never
-  scouted your firing position is genuinely free. Two guns at range 5 do not trade **while the
-  ground between them is unscouted** — once either side has swept it, they trade normally, and
-  counter-battery fire becomes a question of who shoots first rather than who has eyes.
-- Infantry sees furthest (5) of anything in the game, which makes it the fastest opener of ground
-  rather than the permanent enabler of everyone else's shots.
-- Killing the enemy's spotters no longer takes their vision away — what they have scouted, they
-  keep. It slows the *growth* of what they can shoot at, which is worth most early and least late.
+- Artillery has range 5 and vision 3. Two guns at range 5 trade on the first shot; firing from
+  maximum range buys nothing against a target with the same reach. Against a tank's 4 it still
+  shoots without reply, because that is range, not vision.
+- Infantry sees furthest (5) of anything in the game, which makes it the fastest opener of ground —
+  that is, of what your side may shoot at — rather than a shield against return fire.
+- Killing the enemy's spotters does not take their vision away — what they have scouted, they
+  keep. It slows the *growth* of what they can shoot at.
 
 This reshapes the economics of shooting, and that is the point:
 
 - Firing on a healthy target inside its range invites a full-strength answer.
-- Artillery finally has a concrete reason to hold maximum range: at 5 against a tank's 4, it
-  shoots without reply. The same is true of the drone strike at range 5.
+- Artillery has a concrete reason to hold maximum range: at 5 against a tank's 4, it shoots
+  without reply. The same is true of the drone strike at range 5 against a target that reaches
+  less.
 - Finishing a wounded unit becomes a rule rather than a habit — the dead do not shoot back.
 - Flanking costs more than it did: closing to a side or rear arc usually puts you inside the
   target's own range.
@@ -118,14 +118,16 @@ Retaliation damage is credited to the retaliator's owner tally like any other da
 
 ## Facing in an exchange
 
-Firing turns the shooter. Being shot does not turn the target. The order is the rule:
+Firing turns the shooter. Surviving a shot turns the target. The order is the rule:
 
 1. The attacker turns onto its target, **before** its shot resolves.
 2. The target is hit in the sector it faced **when the shot was fired** — it has not turned yet, so
    flanking pays in full.
-3. A retaliator turns onto its attacker **after** the damage lands, and only if it actually fired
-   back. No AP, out of range, an engineer, or an attacker it cannot see — no answer, no turn.
-4. The drone strike turns the squad too, though it computes no sector. One rule, no exceptions.
+3. The surviving target turns onto its attacker **after** the damage lands — always, also when it
+   cannot answer (no AP, out of range, an engineer). If it answers, it fires from the new facing,
+   and the return shot reads the attacker's sector from the attacker's own facing.
+4. The drone strike turns the squad, and its surviving target turns onto the squad, though the
+   strike computes no sector. One rule, no exceptions.
 
 Turning in an exchange is free. A shooter already facing its target does not turn — the turn event
 means the facing changed, not that someone fired.
@@ -154,8 +156,8 @@ The whole unit turns, hull included. Turning only a turret was considered and de
 rides on the hull, so a fixed hull would keep flanking paying in full. That is a different rule, not
 a different animation.
 
-**What it costs:** a static flank is now a one-shot asset. The defender ends the exchange pointed at
-whoever shot it, for zero AP, on someone else's turn — so the second through fourth shots from the
+**What it costs:** a static flank is a one-shot asset. Any survivor ends the exchange pointed at
+whoever shot it — answer or not — for zero AP, on someone else's turn — so the second through fourth shots from the
 same tile are worth 24–52% less than the first.
 
 **What it buys:** orientation becomes steerable. A cheap shot from one axis pulls the target's front
