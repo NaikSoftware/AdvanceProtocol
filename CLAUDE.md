@@ -51,9 +51,11 @@ than leading them: the drone strike (§3.9) is already load-bearing, and a conte
 simply has drones. Materials, palette and the audio brief are in
 [docs/art-direction.md](docs/art-direction.md).
 
-**No real army, nation, flag, insignia or identifiable vehicle** — anywhere in code, data, UI or
-assets, now or later. The sides are fictional and stay fictional. The *rules* remain era-neutral:
-nothing in `core/` encodes a period, and the unit names in §3.6 are role labels.
+**Vehicles are modelled on real contemporary ones, under altered names** — recognisable kit, never
+its real designation. **No real army, flag or insignia** anywhere in code, data, UI or assets.
+Each player fields one national set: every vehicle and squad in it comes from one country's
+family, and the sets differ in numbers as well as looks (§3.6). The *rules* remain era-neutral:
+nothing in `core/` encodes a period, and the class names in §3.6 are role labels.
 
 ---
 
@@ -174,6 +176,10 @@ is documentation. Two invariants hold there and are tested:
 - `front >= side >= rear`, every unit (§3.4).
 - **Tank mobility is strictly ordered** light → medium → tank destroyer → heavy, in both AP and
   cross-country. Armour must be paid for with mobility.
+
+**One roster per national set, each with its own numbers, is a planned rules change and is not
+designed yet.** Until it is, every side uses the one roster, and the two invariants above will
+hold inside every set.
 
 Squad-level units are **one asset per tile** — one mesh, one draw call, one tile footprint. That
 mesh may sculpt three or four figures sharing a base, and it should.
@@ -316,6 +322,9 @@ results, making decisions, integrating outputs and validating the final state.
 - Give every child agent a discrete subtask with clear inputs, outputs and acceptance criteria.
 - **Every implementation gets a review pass by a separate agent**, rotated across reviewers. An
   implementer's own report of its work is not a review, however detailed.
+- **A visual implementer judges its own frames first.** After every render it opens the frames
+  at full size, checks each claim against them at both zooms, and fixes what is plainly wrong
+  before anything goes to `visual-critic`.
 - Use separate worktrees/branches when several child agents modify the repo in parallel, and
   **never commit in a tree where a child agent is working.**
 - Ask child agents to report concise findings, changed files, validation commands and blockers.
