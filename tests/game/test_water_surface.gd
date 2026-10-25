@@ -233,9 +233,9 @@ func test_flow_axis_follows_the_river() -> void:
 	assert_eq(mat.get_shader_parameter("flow_dir"), Vector2(0, 1), "вертикальна річка — вздовж Z")
 
 
-## Вода й калюжі відбивають небо SkyRig напряму, з власною силою відбиття:
+## Вода й калюжі відбивають небо WeatherRig напряму, з власною силою відбиття:
 ## вбудоване відбиття Godot для діелектрика не перевищує ~16 %. Сила — глобальний
-## uniform, який погода (Task 10) може приглушити; типово 1.
+## uniform, типово 1.
 func test_sky_reflection_gain_is_a_global_uniform_on_by_default() -> void:
 	assert_false(ProjectSettings.has_setting("shader_globals/sky_fallback"), "стару назву прибрано")
 	assert_true(ProjectSettings.has_setting("shader_globals/sky_reflection_gain"))

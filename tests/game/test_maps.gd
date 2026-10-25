@@ -8,7 +8,8 @@ const MAPS_DIR: String = "res://maps"
 ## Найдальший постріл ростеру — артилерія й дрон штурмового відділення, обидва 5.
 const MAX_REACH: int = 5
 const LOCALES: Array[String] = ["uk", "en"]
-## Карти з симетрією на 180°. Решту рівняє не форма, а test_map_sides_are_balanced.
+## Карти, де дороги, вода, мости й будівлі симетричні на 180°. Решту рівняє не форма, а
+## test_map_sides_are_balanced; ліси, пагорби, поля й кільце на половинах можуть різнитися.
 const SYMMETRIC_MAPS: Array[String] = ["res://maps/crossroads.tres", "res://maps/ridge.tres"]
 const PACE_TOL: float = 0.05
 const COUNT_TOL: float = 0.15
@@ -118,14 +119,20 @@ func test_exactly_the_three_new_maps() -> void:
 	assert_eq(_map_paths(), ["res://maps/crossroads.tres", "res://maps/ridge.tres", "res://maps/river.tres"])
 
 
-## Симетрія на 180° — гарантія чесності: кожен гравець має дзеркально ту саму позицію.
+## Симетрія на 180° — гарантія чесності: дороги, вода, мости, будівлі й бази в кожного гравця
+## дзеркально ті самі. Ліси, пагорби, болота й поля на половинах різні: їх рівняють лічба клітинок і темп
+## (test_map_sides_are_balanced, test_map_pace), а не форма.
 func test_map_is_180_degree_symmetric(p = use_parameters(SYMMETRIC_MAPS)) -> void:
 	var path: String = p
 	var m: MapData = load(path) as MapData
+	var fixed: Array = [Terrain.Kind.ROAD, Terrain.Kind.WATER, Terrain.Kind.BRIDGE,
+			Terrain.Kind.BRIDGE_DESTROYED, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
 	var odd: Array[Vector2i] = []
 	for y in m.height:
 		for x in m.width:
-			if m.tiles[y * m.width + x] != m.tiles[(m.height - 1 - y) * m.width + (m.width - 1 - x)]:
+			var k: int = m.tiles[y * m.width + x]
+			var twin: int = m.tiles[(m.height - 1 - y) * m.width + (m.width - 1 - x)]
+			if (fixed.has(k) or fixed.has(twin)) and k != twin:
 				odd.append(Vector2i(x, y))
 	assert_eq(odd.size(), 0, "%s: тайли без дзеркальної пари %s" % [path, odd.slice(0, 8)])
 	var by_owner: Dictionary = {0: 0, 1: 0}
@@ -312,6 +319,33 @@ func test_map_sides_are_balanced(p = use_parameters(_map_paths())) -> void:
 			"%s: клітинок %s згори %d, знизу %d" % [path, kinds, top, bottom])
 
 
+## Лічба лісу на половинах не бачить, де саме він стоїть: біля однієї бази може бути гай, біля
+## іншої — голе поле. Тож ліс у межах 6 кроків (манхеттенська відстань) від середини стартових
+## позицій кожного гравця має бути порівнянним — різниця не більша за половину більшого.
+func test_start_zones_have_comparable_cover(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var sum: Dictionary = {}
+	var n: Dictionary = {}
+	for s: Dictionary in m.spawns:
+		var o: int = int(s["owner"])
+		sum[o] = sum.get(o, Vector2.ZERO) + Vector2(s["pos"])
+		n[o] = n.get(o, 0) + 1
+	var cover: Array[int] = []
+	for o: int in sum:
+		var c: Vector2 = sum[o] / n[o]
+		var k := 0
+		for y in m.height:
+			for x in m.width:
+				if m.tiles[y * m.width + x] == Terrain.Kind.FOREST and absf(x - c.x) + absf(y - c.y) <= 6.0:
+					k += 1
+		cover.append(k)
+	assert_eq(cover.size(), 2, path)
+	if cover.size() == 2:
+		assert_lte(absi(cover[0] - cover[1]), maxi(cover[0], cover[1]) / 2,
+			"%s: ліс біля стартових позицій %s" % [path, cover])
+
+
 ## Косметичний підтип: правил не торкається, але крива сітка — це крива картинка.
 func test_map_surface_is_well_formed(p = use_parameters(_map_paths())) -> void:
 	var path: String = p
@@ -324,16 +358,12 @@ func test_map_surface_is_well_formed(p = use_parameters(_map_paths())) -> void:
 	if m.surface.size() != m.width * m.height:
 		return
 	var bad: Array[Vector2i] = []
-	var odd: Array[Vector2i] = []
 	for y in m.height:
 		for x in m.width:
 			var i: int = y * m.width + x
 			if m.surface[i] >= MapData.surface_variants(m.tiles[i]):
 				bad.append(Vector2i(x, y))
-			if SYMMETRIC_MAPS.has(path) and m.surface[i] != m.surface[(m.height - 1 - y) * m.width + (m.width - 1 - x)]:
-				odd.append(Vector2i(x, y))
 	assert_eq(bad.size(), 0, "%s: підтип поза варіантами виду %s" % [path, bad.slice(0, 8)])
-	assert_eq(odd.size(), 0, "%s: підтип без дзеркальної пари %s" % [path, odd.slice(0, 8)])
 
 
 # --- Зовнішнє кільце: пейзаж за краєм, правила його не читають ---
@@ -342,7 +372,7 @@ func test_map_surface_is_well_formed(p = use_parameters(_map_paths())) -> void:
 const OUTER_MARGIN: int = 12
 
 
-func test_map_outer_ring_is_well_formed_and_symmetric(p = use_parameters(_map_paths())) -> void:
+func test_map_outer_ring_is_well_formed(p = use_parameters(_map_paths())) -> void:
 	var path: String = p
 	var m: MapData = load(path) as MapData
 	assert_eq(m.outer_margin, OUTER_MARGIN, path)
@@ -354,7 +384,6 @@ func test_map_outer_ring_is_well_formed_and_symmetric(p = use_parameters(_map_pa
 	if m.outer_tiles.size() != ow * oh:
 		return
 	var bad: Array[Vector2i] = []
-	var odd: Array[Vector2i] = []
 	for y in range(-mg, m.height + mg):
 		for x in range(-mg, m.width + mg):
 			var i: int = (y + mg) * ow + x + mg
@@ -364,13 +393,143 @@ func test_map_outer_ring_is_well_formed_and_symmetric(p = use_parameters(_map_pa
 			if inside != (k == MapData.OUTER_HOLE) or (not inside and (k >= Terrain.Kind.size()
 					or s >= MapData.surface_variants(k))):
 				bad.append(Vector2i(x, y))
-			var j: int = oh * ow - 1 - i  # дзеркальна клітинка розширеної сітки
-			# Симетрію дошки перевіряє test_map_is_180_degree_symmetric, і лише для SYMMETRIC_MAPS.
-			if not inside and (m.outer_kind_at(Vector2i(x, y)) != m.outer_kind_at(Vector2i(m.width - 1 - x, m.height - 1 - y))
-					or (not m.outer_surface.is_empty() and m.outer_surface[i] != m.outer_surface[j])):
-				odd.append(Vector2i(x, y))
 	assert_eq(bad.size(), 0, "%s: криві клітинки кільця %s" % [path, bad.slice(0, 8)])
-	assert_eq(odd.size(), 0, "%s: кільце без дзеркальної пари %s" % [path, odd.slice(0, 8)])
+
+
+func _is_ploughed(m: MapData, c: Vector2i) -> bool:
+	var mg: int = m.outer_margin
+	if c.x < -mg or c.y < -mg or c.x >= m.width + mg or c.y >= m.height + mg:
+		return false
+	if m.outer_kind_at(c) != Terrain.Kind.FIELD:
+		return false
+	var inside: bool = c.x >= 0 and c.y >= 0 and c.x < m.width and c.y < m.height
+	var i: int = (c.y + mg) * (m.width + 2 * mg) + c.x + mg
+	var s: int = m.surface_at(c) if inside else (m.outer_surface[i] if not m.outer_surface.is_empty() else 0)
+	return s == MapData.FieldSurface.PLOUGHED
+
+
+## Ділянки ріллі на дошці й у кільці разом — кожна як масив клітинок (4 напрямки).
+func _ploughed_patches(m: MapData) -> Array:
+	var mg: int = m.outer_margin
+	var seen: Dictionary = {}
+	var out: Array = []
+	for y in range(-mg, m.height + mg):
+		for x in range(-mg, m.width + mg):
+			var start := Vector2i(x, y)
+			if seen.has(start) or not _is_ploughed(m, start):
+				continue
+			seen[start] = true
+			var patch: Array[Vector2i] = []
+			var stack: Array[Vector2i] = [start]
+			while not stack.is_empty():
+				var c: Vector2i = stack.pop_back()
+				patch.append(c)
+				for d: Vector2i in Board.DIRS_4:
+					var q: Vector2i = c + d
+					if not seen.has(q) and _is_ploughed(m, q):
+						seen[q] = true
+						stack.append(q)
+			out.append(patch)
+	return out
+
+
+## Рілля — рукотворне поле: кожна її ділянка на дошці й у кільці — суцільний прямокутник щонайменше
+## 2×2. Дорога чи ліс посеред поля ділять його на окремі прямокутники; луки, ліси й болота лишаються
+## вільної форми.
+func test_map_ploughed_patches_are_filled_rectangles(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var bad: Array[Rect2i] = []
+	for patch: Array in _ploughed_patches(m):
+		var box := Rect2i(patch[0], Vector2i.ONE)
+		for c: Vector2i in patch:
+			box = box.merge(Rect2i(c, Vector2i.ONE))
+		if patch.size() != box.get_area() or box.size.x < 2 or box.size.y < 2:
+			bad.append(box)
+	assert_eq(bad.size(), 0, "%s: рілля не прямокутником 2×2+ у межах %s" % [path, bad.slice(0, 4)])
+
+
+## Рілля лежить так, як її орють насправді: між нею й водою, мостом, болотом чи будівлею — щонайменше
+## клітинка лук (заплава, двори й садки), і до кожного поля веде дорога — не далі, ніж через клітинку.
+## Ріллі на пагорбі не буває за самим форматом: підтип пагорба лише `0`.
+func test_map_ploughed_fields_follow_land_use(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var keep_off: Array = [Terrain.Kind.WATER, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED,
+			Terrain.Kind.MARSH, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
+	var crowded: Array[Vector2i] = []
+	var cut_off: Array[Vector2i] = []
+	for patch: Array in _ploughed_patches(m):
+		var access := false
+		for c: Vector2i in patch:
+			for dy in range(-2, 3):
+				for dx in range(-2, 3):
+					var k: int = m.outer_kind_at(c + Vector2i(dx, dy))
+					access = access or k == Terrain.Kind.ROAD
+					if absi(dx) <= 1 and absi(dy) <= 1 and keep_off.has(k):
+						crowded.append(c)
+		if not access:
+			cut_off.append(patch[0])
+	assert_eq(crowded.size(), 0, "%s: рілля впритул до води, болота чи будівлі %s" % [path, crowded.slice(0, 8)])
+	assert_eq(cut_off.size(), 0, "%s: поле без дороги поруч %s" % [path, cut_off.slice(0, 8)])
+
+
+## Пагорб — схил, а не горбик на одну клітинку: кожна клітинка пагорба на дошці й у кільці має
+## сусіда-пагорб по стороні. Поодинокий пагорб читається як шум і дає штраф місцевості без форми.
+func test_map_has_no_lone_hill_cell(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var mg: int = m.outer_margin
+	var lone: Array[Vector2i] = []
+	for y in range(-mg, m.height + mg):
+		for x in range(-mg, m.width + mg):
+			var c := Vector2i(x, y)
+			if m.outer_kind_at(c) != Terrain.Kind.HILL:
+				continue
+			var paired := false
+			for d: Vector2i in Board.DIRS_4:
+				var q: Vector2i = c + d
+				var in_world: bool = q.x >= -mg and q.y >= -mg and q.x < m.width + mg and q.y < m.height + mg
+				paired = paired or (in_world and m.outer_kind_at(q) == Terrain.Kind.HILL)
+			if not paired:
+				lone.append(c)
+	assert_eq(lone.size(), 0, "%s: поодинокі клітинки пагорба %s" % [path, lone.slice(0, 8)])
+
+
+## Пагорб має тіло: кожен пагорб дошки з 4 і більше клітинок містить суцільний квадрат 2×2.
+## Драбинка з клітинок по діагоналі має сусідів по стороні, але виглядає ниткою, а не схилом.
+func test_board_hills_have_a_solid_body(p = use_parameters(_map_paths())) -> void:
+	var path: String = p
+	var m: MapData = load(path) as MapData
+	var hill := func(c: Vector2i) -> bool:
+		return c.x >= 0 and c.y >= 0 and c.x < m.width and c.y < m.height \
+				and m.tiles[c.y * m.width + c.x] == Terrain.Kind.HILL
+	var seen: Dictionary = {}
+	var thin: Array[Vector2i] = []
+	for y in m.height:
+		for x in m.width:
+			var start := Vector2i(x, y)
+			if seen.has(start) or not hill.call(start):
+				continue
+			seen[start] = true
+			var shape: Array[Vector2i] = []
+			var stack: Array[Vector2i] = [start]
+			while not stack.is_empty():
+				var c: Vector2i = stack.pop_back()
+				shape.append(c)
+				for d: Vector2i in Board.DIRS_4:
+					if not seen.has(c + d) and hill.call(c + d):
+						seen[c + d] = true
+						stack.append(c + d)
+			if shape.size() < 4:
+				continue
+			var body := false
+			for c: Vector2i in shape:
+				body = body or (hill.call(c + Vector2i(1, 0)) and hill.call(c + Vector2i(0, 1))
+						and hill.call(c + Vector2i(1, 1)))
+			if not body:
+				thin.append(start)
+	assert_eq(thin.size(), 0, "%s: пагорби без суцільного тіла 2×2 біля %s" % [path, thin.slice(0, 8)])
 
 
 ## Річка й дорога не обриваються на краю дошки: клітинка кільця за краєм продовжує їх.

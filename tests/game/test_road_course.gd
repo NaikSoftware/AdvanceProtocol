@@ -285,8 +285,52 @@ func test_widths_single_lane_town_street_and_variation() -> void:
 	assert_eq(near_lines, 1, "у смузі 2 клітинки — одна лінія, а не дві")
 
 
+## Місця, де до дороги примикає польова дорога чи заїзд: ґрунтовий глухий відросток до 8 клітинок.
+## Заокруглення такого примикання стягує сусідні дуги, а справжня дорога біля двору чи поля й
+## повертає круто, тож вимога дуг 6–14 м тут не діє — вона для доріг, якими їздять наскрізь.
+static func _track_joins(m: MapData) -> Array[Vector2]:
+	var b: Board = m.to_board()
+	var out: Array[Vector2] = []
+	for y in b.height:
+		for x in b.width:
+			var c := Vector2i(x, y)
+			if not _is_road(b, c):
+				continue
+			var nbrs: Array[Vector2i] = []
+			for d: Vector2i in Board.DIRS_4:
+				if _is_road(b, c + d):
+					nbrs.append(c + d)
+			if nbrs.size() < 3:
+				continue
+			for n: Vector2i in nbrs:
+				var prev: Vector2i = c
+				var cur: Vector2i = n
+				for step in 8:
+					if b.kind_at(cur) != Terrain.Kind.ROAD or m.surface_at(cur) != MapData.RoadSurface.DIRT:
+						break
+					var next: Array[Vector2i] = []
+					for d: Vector2i in Board.DIRS_4:
+						if cur + d != prev and _is_road(b, cur + d):
+							next.append(cur + d)
+					if next.is_empty():
+						out.append(Vector2(c))
+						break
+					if next.size() > 1:
+						break
+					prev = cur
+					cur = next[0]
+	return out
+
+
+static func _near_any(p: Vector2, pts: Array[Vector2], r: float) -> bool:
+	for q in pts:
+		if p.distance_to(q) <= r:
+			return true
+	return false
+
+
 ## Кожен поворот на 90° у ланцюжку клітинок — дуга радіусом 6–14 м; деінде зламів нема
-## (R > 4 м, на вулиці міста R > 3 м).
+## (R > 4 м, на вулиці міста R > 3 м). Біля примикання польової дороги чи заїзду — див. `_track_joins`.
 func test_corners_are_arcs_of_6_to_14_metres() -> void:
 	for path in _MAPS:
 		var b := _board(path)
@@ -294,6 +338,7 @@ func test_corners_are_arcs_of_6_to_14_metres() -> void:
 		if rc == null:
 			fail_test(path)
 			continue
+		var joins: Array[Vector2] = _track_joins(load(path) as MapData)
 		var corners: Array[Vector2] = []
 		for y in b.height:
 			for x in b.width:
@@ -311,14 +356,14 @@ func test_corners_are_arcs_of_6_to_14_metres() -> void:
 		for li in rc.lines.size():
 			var pts: PackedVector2Array = rc.lines[li]
 			for i in range(2, pts.size() - 2):
-				if rc.near_node(pts[i]) < 1.0:
+				if rc.near_node(pts[i]) < 1.0 or _near_any(pts[i], joins, 4.5):
 					continue
 				var r: float = _circumradius(pts[i - 2], pts[i], pts[i + 2]) * _TILE_M
 				# Вулиця міста повертає в межах смуги 2 клітинки: радіус бордюру 3–6 м, як у справжньому місті.
 				var lim: float = 3.0 if rc.base_halfs[li][i] >= RoadCourse.STREET_HALF_M - 1.0 else 4.0
 				assert_gt(r, lim, "%s: злам осі в %s, R = %.1f м" % [path, pts[i], r])
 		for c in corners:
-			if rc.near_node(c) < 1.6:
+			if rc.near_node(c) < 1.6 or _near_any(c, joins, 4.5):
 				continue
 			var best := 1e9
 			for pts in rc.lines:

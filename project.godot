@@ -61,3 +61,27 @@ fog_time={
 "type": "float",
 "value": 0.0
 }
+sun_dir={
+"type": "vec3",
+"value": Vector3(0.5, 0.7071, 0.5)
+}
+sky_clear={
+"type": "float",
+"value": 0.0
+}
+foliage_tint={
+"type": "vec3",
+"value": Vector3(1, 1, 1)
+}
+water_murk={
+"type": "float",
+"value": 0.0
+}
+water_wind={
+"type": "float",
+"value": 1.0
+}
+haze_color={
+"type": "vec3",
+"value": Vector3(0.1, 0.135, 0.155)
+}

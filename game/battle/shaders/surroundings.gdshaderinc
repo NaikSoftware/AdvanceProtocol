@@ -5,7 +5,8 @@
 uniform bool surround = false;
 // Розмір дошки в клітинках; її межа — краї клітинок -0.5 і `size - 0.5`.
 uniform vec2 board_size;
-uniform vec3 haze_color;
+// Колір імли — з вигляду карти (`BattleLook.haze_color`), спільний для всіх матеріалів світу.
+global uniform vec3 haze_color;
 // Обвідна імли (клітинки від дошки): x — з якої відстані з'являються клуби, y — де вони
 // зливаються; з `haze_closed` верх суцільний.
 uniform vec2 haze_range;

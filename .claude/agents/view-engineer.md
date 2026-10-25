@@ -1,7 +1,7 @@
 ---
 name: view-engineer
 description: "Builds the presentation layer in Godot — scenes, node scripts, camera, overlays, input handling, playback of resolved events. Use when the task adds or changes a scene, a 3D or UI node script, a tween or animation, the camera rig, a board overlay, the between-turns handover screen, or the HUD. Do NOT use for rules, damage, vision or anything in the engine-independent logic layer (that is core-engineer), for running the suite on its own (gut-runner), or for generating 3D assets (asset-artist)."
-tools: [Read, Write, Edit, Grep, Glob, Bash, Skill, mcp__godot__create_scene, mcp__godot__add_node, mcp__godot__save_scene, mcp__godot__get_uid, mcp__godot__run_project, mcp__godot__stop_project, mcp__godot__get_debug_output, mcp__godot__get_project_info]
+tools: [Read, Write, Edit, Grep, Glob, Bash, Skill, mcp__godot__create_scene, mcp__godot__add_node, mcp__godot__save_scene, mcp__godot__get_uid, mcp__godot__run_project, mcp__godot__stop_project, mcp__godot__get_debug_output, mcp__godot__get_project_info, mcp__memroot__memory_retrieve, mcp__memroot__memory_create]
 model: sonnet
 ---
 

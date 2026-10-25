@@ -265,25 +265,22 @@ func test_state_survives_a_save_load_mid_match() -> void:
 	assert_eq(EndTurnCommand.create().validate(restored), "")
 
 # ---------------------------------------------------------------------------
-# BattleState.start(): a defender can retaliate during player 0's very first
-# turn — before player 1 has ever had a begin_turn() of their own to compute
-# an honest vision grid. Without start(), vision[1] is still the all-zero
-# grid BattleState.create() built, FireCommand._retaliate() gates the
-# counter-shot on state.vision[target.owner].is_seen(...), and this shot
-# would go answered by nobody. This is the exact defect fixed by priming
-# every player's vision once, up front, via start().
+# A defender answers during player 0's very first turn — before player 1 has
+# ever had a begin_turn() of their own. Retaliation reads no vision grid (§3.3.1:
+# the hit itself reveals the shooter), so the answer does not depend on how far
+# player 1's knowledge has been primed; start() is called here only because a
+# real match always calls it.
 #
 # Two medium tanks (#5: atk 95, ap 48, hp 400, range 4, fire_cost 20, armour
 # 37/27/18) face each other head-on at distance 2 (dist_sq = 4), same
 # geometry as tests/core/test_retaliation.gd case 1 — well inside both
-# units' range (16) and vision (16), so both survive the opening exchange
-# (bounds [34, 66] per shot, both floors well under 400 hp) and the only
-# thing gating the retaliation is whether player 1's vision was ever primed.
+# units' range, so both survive the opening exchange (bounds [34, 66] per
+# shot, both floors well under 400 hp).
 func test_defender_can_retaliate_during_player_zeros_opening_turn() -> void:
 	var s: BattleState = BattleState.create(Board.create(16, 16, Terrain.GroundState.DRY), 2, 11)
 	var a: Unit = s.add_unit(5, 0, Vector2i(4, 4), 2)   # схід
 	var t: Unit = s.add_unit(5, 1, Vector2i(6, 4), 6)   # захід — дивиться просто на атакувальника
-	s.start()   # без цього виклику vision[1] лишається нульовою — тест провалиться
+	s.start()
 	s.active_player = 0
 	s.begin_turn()   # player 1's begin_turn() has NEVER run at this point
 
@@ -295,5 +292,5 @@ func test_defender_can_retaliate_during_player_zeros_opening_turn() -> void:
 		if e is Events.ShotRetaliated:
 			retaliated = true
 	assert_true(retaliated,
-		"BattleState.start() мусив праймити зір гравця 1 ще до його першого ходу — інакше він не бачить атакувальника")
+		"§3.3.1: ціль відповідає і на першому ході супротивника")
 	assert_true(a.hp < attacker_hp_before, "відповідь мусила завдати шкоди атакувальнику")

@@ -53,12 +53,17 @@ const _FallbackMap := preload("res://maps/river.tres")
 @onready var _gate: HandoverGate = %HandoverGate
 @onready var _pause: PauseMenu = %PauseMenu
 @onready var _ui: CanvasLayer = $UI
+@onready var _weather: WeatherRig = $WeatherRig
 
 ## Куди пише «Зберегти й вийти» і що стирає завершений матч; тести підміняють.
 var save_path: String = MatchService.SAVE_PATH
 
 var _match_service: Node = null
 var _prev_quit_on_go_back: bool = true
+## Обмеження кадрів до бою; _exit_tree() повертає його.
+var _prev_max_fps: int = 0
+## Відлік спокою: таймер, а не _process, — у спокої екран не робить нічого щокадру (§8).
+var _idle_timer: Timer
 ## Відкритий оверлей налаштувань (null, поки не відкривали).
 var _settings: SettingsScreen = null
 var _controller: InputController = null
@@ -82,6 +87,10 @@ const _DRAG_THRESHOLD_DP: float = 10.0
 ## Довгий натиск (docs/ui/overlays.md): палець тримається стільки, не перетнувши
 ## поріг драга, — огляд дальності замість тапу; відпускання його знімає.
 const LONG_PRESS_SEC: float = 0.5
+## §8: хід здебільшого стоїть на місці, а батарея — спільна для всіх гравців. Після
+## IDLE_AFTER_S без натисків, руху камери й анімації подій кадр обмежено до IDLE_FPS.
+const IDLE_FPS: int = 30
+const IDLE_AFTER_S: float = 1.0
 
 ## Крок зуму коліщатка/пінчу за одну подію. zoom_by() сам клемпить
 ## (IsoCameraRig.MIN_ZOOM..MAX_ZOOM) — тут лише симетричний множник туди й
@@ -145,10 +154,18 @@ var _gesture_had_pinch: bool = false
 func _ready() -> void:
 	# Кадр потрібен лише поки тримається натиск (§8: нерухомий екран нічого не коштує).
 	set_process(false)
+	_prev_max_fps = Engine.max_fps
+	_idle_timer = Timer.new()
+	_idle_timer.one_shot = true
+	_idle_timer.autostart = true
+	_idle_timer.wait_time = IDLE_AFTER_S
+	_idle_timer.timeout.connect(_on_idle_timeout)
+	add_child(_idle_timer)
 	_pause.settings_requested.connect(_open_settings)
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
+	_camera_rig.view_changed.connect(_follow_weather)
 	# Android «назад» інакше виходить із гри разом із матчем; на цьому екрані
 	# воно відкриває паузу. Значення меню повертає _exit_tree().
 	_prev_quit_on_go_back = get_tree().quit_on_go_back
@@ -221,6 +238,10 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
 	_board_view.ring_map = map_data
+	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
+	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
+	_board_view.season = look.season
+	_weather.apply(look)
 	_wire_view(board)
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
@@ -245,6 +266,9 @@ func resume(match_service: Node = null) -> void:
 		_board_view.surface = saved_map.surface
 		_board_view.relief_seed = saved_map.name_key.hash()
 		_board_view.ring_map = saved_map
+	var look: BattleLook = BattleLook.for_map_path(mp)
+	_board_view.season = look.season
+	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
 	_match_service.events_ready.connect(_on_events_ready)
@@ -254,6 +278,8 @@ func resume(match_service: Node = null) -> void:
 func _wire_view(board: Board) -> void:
 	_board_view.build(board)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
+	_weather.attach_probe(_board_view.reflection_probe())
+	_follow_weather()
 
 	_zone_overlay = ZoneOverlay.new(_board_view)
 	_path_overlay = PathOverlay.new(_board_view)
@@ -296,7 +322,12 @@ func _wire_view(board: Board) -> void:
 	_gate.confirmed.connect(_on_gate_confirmed)
 
 
+func _follow_weather() -> void:
+	_weather.follow(_camera_rig.global_position, _camera_rig.zoom_level)
+
+
 func _exit_tree() -> void:
+	Engine.max_fps = _prev_max_fps
 	if get_tree() != null:
 		get_tree().quit_on_go_back = _prev_quit_on_go_back
 
@@ -711,6 +742,23 @@ func _process(delta: float) -> void:
 		_long_pressed = true
 		set_process(false)
 		_controller.peek_cell(_camera_rig.screen_point_to_cell(_press_screen_pos))
+
+
+## _input, а не _unhandled_input: натиск на кнопку HUD чи гейта теж будить кадри. Рух
+## камери й анімація подій завжди починаються з натиску; поки вони тривають, відлік
+## спокою починається знову. Натиск знімає лише обмеження спокою й повертає те, що
+## було до бою.
+func _input(_event: InputEvent) -> void:
+	_idle_timer.start()
+	if Engine.max_fps != _prev_max_fps:
+		Engine.max_fps = _prev_max_fps
+
+
+func _on_idle_timeout() -> void:
+	if _camera_rig.is_processing() or (_event_player != null and _event_player.is_playing()):
+		_idle_timer.start()
+	else:
+		Engine.max_fps = IDLE_FPS
 
 
 func _cancel_peek() -> void:
