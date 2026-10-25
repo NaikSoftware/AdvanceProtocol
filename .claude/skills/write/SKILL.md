@@ -53,7 +53,8 @@ When editing a file, keep the language it is already in — a mixed-language fil
   or task number (`Task 8`, `Phase 5a`), or "було 40, стало 96". A rule stands on its reason,
   not on who decided it or when; write the reason, or nothing.
 - **Bold is rare** — the one thing a skimming reader must not miss.
-- **No real armies, nations, insignia or identifiable vehicles** in any text (CLAUDE.md §2).
+- **No real armies, flags, insignia or real vehicle designations** in any text — vehicles carry
+  altered names (CLAUDE.md §2).
 
 ## 3. Code comments (GDScript)
 

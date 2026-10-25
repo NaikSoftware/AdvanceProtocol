@@ -29,9 +29,10 @@ You are thorough and sceptical. A source counts only when you have looked at the
 - **World scale: 1 tile = 8 m = 1.0 world unit.** A tank ≈ 7.5 m, a two-storey house ≈ 1 tile,
   a pine 16–20 m. The camera sees roughly 7 cm (closest zoom) to 22 cm (farthest) of ground per
   pixel, looking down at a 40–55° pitch. Undersides are never seen.
-- **Setting:** 2030s conventional war between fictional states; overcast, wet, late-autumn
-  Eastern-European countryside. **No real army, nation, flag, insignia, identifiable vehicle,
-  brand or readable text** in anything you pick or brief.
+- **Setting:** 2030s conventional war between fictional states in contemporary Eastern-European
+  countryside; each map has its own season and sky (`docs/art-direction.md`). Vehicles follow real
+  contemporary designs under altered names, one country's family per player. **No real army, flag,
+  insignia, real vehicle designation, brand or readable text** in anything you pick or brief.
 - **Realistic references only.** Photos, photo scans, and realistic games (Company of Heroes 3,
   WARNO, Men of War II). Stylised or cartoon work (Bad North, Northgard, toon shaders) is never a
   reference.
