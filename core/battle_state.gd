@@ -20,6 +20,11 @@ var damage_dealt: Array[int] = []
 var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
 var mines: Array[Mines.Mine] = []
+## Просіки (§3.2): Vector2i -> true, ПРАВДА про те, де танк повалив ліс. Живе тут, а не
+## на Board, навмисно: дошку читають і вигляд, і зони в InputController, і кожен з них
+## без жодного зусилля отримав би всезнання. Звідси правду бере лише сам хід
+## (MoveCommand.apply()); планування — з known_broken_map().
+var broken_forest: Dictionary = {}
 var _next_unit_id: int = 1
 
 static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleState:
@@ -147,6 +152,21 @@ func known_blocked_map(player: int) -> Dictionary:
 	for m in mines:
 		if m.owner != player and m.known_to[player] and not out.has(m.pos):
 			out[m.pos] = -1
+	return out
+
+func known_broken_map(player: int) -> Dictionary:
+	## Просіки такими, якими їх ЗНАЄ гравець: правда, обрізана його seen (§3.5). Окремої
+	## сітки знання немає і не треба: і повалений ліс, і розвідка незворотні, тож
+	## «знає» = «повалено» і «розвідано», і знання лише відстає від правди, але ніколи
+	## їй не суперечить. Техніка, що планує крізь відому просіку, завжди має рацію.
+	##
+	## Читає seen, а не visible, з тієї ж причини, що й known_occupied_map(): ворог на
+	## давно розвіданому тайлі гравцеві видимий, тож і ліс, який той ворог валить на
+	## цьому тайлі, видно падаючим. Нового про невидимий танк це не каже нічого.
+	var out: Dictionary = {}
+	for p: Vector2i in broken_forest:
+		if vision[player].is_seen(p):
+			out[p] = true
 	return out
 
 func is_over() -> bool:

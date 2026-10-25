@@ -34,6 +34,7 @@ func test_every_event_type_constructs_and_describes() -> void:
 		Events.MineTriggered.new(Vector2i(5, 5), 3),
 		Events.MineRevealed.new(Vector2i(5, 5), 1),
 		Events.BridgeChanged.new(Vector2i(6, 6), true),
+		Events.ForestBroken.new(Vector2i(7, 7)),
 		Events.UnitRepaired.new(4, 20, 80),
 		Events.ApChanged.new(1, 30),
 		Events.TurnEnded.new(0),

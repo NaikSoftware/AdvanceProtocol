@@ -145,7 +145,8 @@ implementation of either geometry in the renderer is exactly the drift this docu
 prevent.
 
 **The movement zones are drawn from the fog-filtered occupancy plus the enemy mines you already
-know of, which is also what the move is planned against** ([§3.2](../rules/movement-and-terrain.md),
+know of and the broken forest you already know of, which is also what the move is planned
+against** ([§3.2](../rules/movement-and-terrain.md),
 [§3.11](../rules/vision-and-fog.md)). The overlay and the order agree by construction: what you
 are shown as reachable is exactly what the game will attempt.
 
@@ -153,7 +154,8 @@ That matters more than it looks. Had the zones been drawn from the true occupanc
 unit, including invisible ones — an unseen enemy would punch a unit-shaped hole in the gold
 contour and give away its position. Had the *order* been planned against the true occupancy
 instead, the route would silently detour around it, which leaks the same fact in a subtler and
-harder-to-notice way.
+harder-to-notice way. Broken forest is the same case: drawn from the true state, a light
+vehicle's gold contour would reach into a path an unseen tank had just cut and show where it went.
 
 So the zones are, like the enemy forecast above, a **best case**: a path shown as open can turn
 out to be blocked by something you had not seen, and the move stops on the tile before it. That is
