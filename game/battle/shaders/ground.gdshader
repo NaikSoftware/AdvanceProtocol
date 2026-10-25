@@ -28,8 +28,8 @@ uniform int plough_axis[64];
 // Додатковий відступ кожного боку поля (клітинки: -x, -y, +x, +y) від дороги, що підходить до
 // нього (GroundSurface: між краєм поля й дорогою — 1–2 м трави). Бік лишається прямим.
 uniform vec4 plough_inset[64];
-// Смуга біля річки (GroundSurface.bank_mask): 1 — клітинка води й сусідні, де стоячої води
-// бути не може.
+// Де стоячої води бути не може: r — смуга біля річки (GroundSurface.bank_mask: клітинка води
+// й сусідні), g — клітинка пагорба (GroundSurface.hill_mask).
 uniform sampler2D bank_map : filter_linear, repeat_disable;
 uniform int plough_layer = -1;
 // Суха пора (GroundSurface.season — `summer` чи `early`): без моху й пучків трави в лісі, тінь
@@ -159,6 +159,9 @@ const float RUT_PUDDLE_P = 0.65;
 // Стеля відбиття неба в калюжі — трохи нижче за воду річки (reflect_top 0.26 у water.gdshader):
 // калюжа має ще й власне альбедо, тож не світліша за річку. Вікна води в болоті — 0.1: темні.
 const float PUDDLE_SKY_MAX = 0.2;
+// Схил (tan), на якому калюжа вже не стоїть: 5° -> 7.5°. Схили пагорбів і берегів — сухі.
+const float PUDDLE_SLOPE_LO = 0.087;
+const float PUDDLE_SLOPE_HI = 0.13;
 // Частка неба у вікні болота: під похмурим небом вікно ~1.1–1.3 яскравості трави поруч, не біле.
 const float POOL_SKY_MAX = 0.42;
 // Болото: оливково-бурий тон замість сірого скану (множник до яскравості, сума з вагами L ≈ 1).
@@ -1044,16 +1047,22 @@ void fragment() {
 		rough = mix(rough, mix(0.85, 0.45, road_cov * (rt.r + rt.b)), wet);
 		// Мокрі смуги коліс — трохи глянцевіші.
 		rough = mix(rough, 0.4, wet * wheel * road_cov);
+		// Вода стоїть лише на рівному й у низинах: схил крутіший за ~5–7.5°, гребінь (кривизна > 0)
+		// і клітинка пагорба (bank_map.g) — без калюж і вікон. Мокре затемнення там лишається.
+		// Та сама формула — GroundSurface.puddle_gate (тест).
+		vec2 water_mask = texture(bank_map, (p - map_origin + 0.5) / vec2(textureSize(bank_map, 0))).rg;
+		float pud_gate = (1.0 - smoothstep(PUDDLE_SLOPE_LO, PUDDLE_SLOPE_HI, slope_tan))
+				* (1.0 - smoothstep(0.0, 0.08, curvature)) * (1.0 - smoothstep(0.2, 0.6, water_mask.g));
 		// Калюжі ґрунтівки: у коліях і на всю ширину в низинах (координати дороги, див. вище).
-		float puddle = rut_pud * road_cov;
+		float puddle = rut_pud * road_cov * pud_gate;
 		// Вікна стоячої води в болоті 0.5–2 м (~10 % площі): темні, з відблиском неба. Лише в
 		// мокрому вигляді: на сухій карті на їхньому місці — висохлий торф (сезонне макро болота),
 		// а стояча вода під сонцем читалась би як калюжа без дощу.
 		float pool_f = fbm(p * 1.6 + 43.0) + 0.08 * (vnoise(p * 9.0) - 0.5);
-		// Біля річки (bank_map: клітинка води й ~1 клітинка довкола) — жодної стоячої води:
+		// Біля річки (bank_map.r: клітинка води й ~1 клітинка довкола) — жодної стоячої води:
 		// вікна там читались калюжами на березі.
-		float bank_k = texture(bank_map, (p - map_origin + 0.5) / vec2(textureSize(bank_map, 0))).r;
-		float pool_wet = marsh_w * smoothstep(0.1, 0.35, weather_wetness) * (1.0 - smoothstep(0.2, 0.6, bank_k));
+		float bank_k = water_mask.r;
+		float pool_wet = marsh_w * smoothstep(0.1, 0.35, weather_wetness) * (1.0 - smoothstep(0.2, 0.6, bank_k)) * pud_gate;
 		float pool = pool_wet * (1.0 - smoothstep(0.27, 0.33, pool_f));
 		// Обідок ~0.3–0.5 м: темний мокрий мул (~0.6 від трави поруч), у який вода м'яко переходить.
 		float pool_rim = pool_wet * (1.0 - smoothstep(0.31, 0.42, pool_f)) * (1.0 - pool);

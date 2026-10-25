@@ -434,3 +434,31 @@ func test_build_passes_the_bank_map_to_the_shader() -> void:
 	var img: Image = tex.get_image()
 	assert_eq(img.get_pixel(1, 0).r8, 255, "сусід води — без стоячої води")
 	assert_eq(img.get_pixel(2, 0).r8, 0)
+
+
+# Калюжі лише на рівному й у низинах: пагорб, схил понад ~7.5° і гребінь — без стоячої води.
+func test_puddle_gate_keeps_hills_slopes_and_crests_dry() -> void:
+	assert_almost_eq(GroundSurface.puddle_gate(0.0, 0.0, 0.0), 1.0, 1e-4, "рівне — калюжа можлива")
+	assert_almost_eq(GroundSurface.puddle_gate(0.0, -0.2, 0.0), 1.0, 1e-4, "низина — калюжа можлива")
+	assert_eq(GroundSurface.puddle_gate(0.0, 0.0, 1.0), 0.0, "клітинка пагорба")
+	assert_eq(GroundSurface.puddle_gate(tan(deg_to_rad(7.5)), 0.0, 0.0), 0.0, "схил 7.5°")
+	assert_eq(GroundSurface.puddle_gate(tan(deg_to_rad(20.0)), -0.2, 0.0), 0.0, "крутий схил і в низині")
+	assert_eq(GroundSurface.puddle_gate(0.0, 0.1, 0.0), 0.0, "гребінь")
+	assert_lt(GroundSurface.puddle_gate(tan(deg_to_rad(6.0)), 0.0, 0.0), 1.0, "між 5° і 7.5° калюжа вже слабне")
+
+
+# Кожна клітинка пагорба на картах позначена в hill_mask: шейдер не кладе туди калюж.
+func test_hill_mask_marks_every_hill_cell() -> void:
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var mask: PackedByteArray = GroundSurface.hill_mask(board, 0)
+		var bad := 0
+		for y in board.height:
+			for x in board.width:
+				var hill: bool = board.kind_at(Vector2i(x, y)) == Terrain.Kind.HILL
+				if (mask[y * board.width + x] == 255) != hill:
+					bad += 1
+				if hill:
+					assert_eq(GroundSurface.puddle_gate(0.0, 0.0, mask[y * board.width + x] / 255.0), 0.0)
+		assert_eq(bad, 0, file)

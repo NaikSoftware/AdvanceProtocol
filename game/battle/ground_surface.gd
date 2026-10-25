@@ -59,6 +59,9 @@ const PLOUGH_HEADLAND: float = 0.15
 ## Трави між прямим краєм ріллі й краєм дороги, м.
 const PLOUGH_ROAD_GAP_M: float = 1.5
 const METRES_PER_TILE: float = 8.0
+## Схил (тангенс), на якому калюжа вже не стоїть: 5° -> 7.5° (PUDDLE_SLOPE_* у ground.gdshader).
+const PUDDLE_SLOPE_LO: float = 0.087
+const PUDDLE_SLOPE_HI: float = 0.13
 ## Підтипів на вид у таблиці шейдера (indeks = вид * SURFACES_PER_KIND + підтип).
 const SURFACES_PER_KIND: int = 4
 
@@ -173,7 +176,14 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 			class_table[Terrain.Kind.FIELD * SURFACES_PER_KIND + s] = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
 	_set_classes(mat, board, margin, surface, class_table, height != null)
 	_set_plough(mat, cells, board.width + 2 * margin, plough, height)
-	var bank := Image.create_from_data(board.width + 2 * margin, board.height + 2 * margin, false, Image.FORMAT_R8, bank_mask(board, margin))
+	var bm: PackedByteArray = bank_mask(board, margin)
+	var hm: PackedByteArray = hill_mask(board, margin)
+	var rg := PackedByteArray()
+	rg.resize(bm.size() * 2)
+	for i in bm.size():
+		rg[i * 2] = bm[i]
+		rg[i * 2 + 1] = hm[i]
+	var bank := Image.create_from_data(board.width + 2 * margin, board.height + 2 * margin, false, Image.FORMAT_RG8, rg)
 	mat.set_shader_parameter("bank_map", ImageTexture.create_from_image(bank))
 	_set_roads(mat, height)
 	mat.set_shader_parameter("map_origin", Vector2(-margin - ring, -margin - ring))
@@ -294,6 +304,29 @@ static func bank_mask(board: Board, margin: int) -> PackedByteArray:
 					if k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED:
 						out[py * w + px] = 255
 	return out
+
+
+## Клітинки пагорба (рядок ширини board.width + 2 * margin): 255 — HILL, 0 — решта. На пагорбі
+## калюж не буває ніде, навіть на пологому місці.
+static func hill_mask(board: Board, margin: int) -> PackedByteArray:
+	var w: int = board.width + 2 * margin
+	var h: int = board.height + 2 * margin
+	var out := PackedByteArray()
+	out.resize(w * h)
+	for py in h:
+		for px in w:
+			var c := Vector2i(clampi(px - margin, 0, board.width - 1), clampi(py - margin, 0, board.height - 1))
+			if board.kind_at(c) == Terrain.Kind.HILL:
+				out[py * w + px] = 255
+	return out
+
+
+## Частка калюжі, яку дозволяє рельєф (копія pud_gate у ground.gdshader — міняти разом):
+## схил `slope_tan` (тангенс) понад ~5–7.5° і гребінь (`curvature` > 0) — сухі, клітинка пагорба
+## (`hill` 0..1) — суха завжди. Низини й рівне — 1.
+static func puddle_gate(slope_tan: float, curvature: float, hill: float) -> float:
+	return (1.0 - smoothstep(PUDDLE_SLOPE_LO, PUDDLE_SLOPE_HI, slope_tan)) \
+			* (1.0 - smoothstep(0.0, 0.08, curvature)) * (1.0 - smoothstep(0.2, 0.6, hill))
 
 
 ## class_layers для пошуку полів: дорога, міст і вода лишають власний вид (-1), а не беруть
