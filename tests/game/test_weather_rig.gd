@@ -321,8 +321,8 @@ func test_rain_lattice_covers_the_box_at_negative_coordinates() -> void:
 
 
 ## Довжина штриха — розмиття руху у світі: швидкість × витримка. Жодної довжини в пікселях —
-## вона з наближенням лишалась би сталою, а швидкість на екрані росла б («палиці»). Зум не міняє
-## ні швидкості, ні витримки.
+## вона з наближенням лишалась би сталою, а швидкість на екрані росла б («палиці»). Витримка
+## стала; падіння росте з віддаленням за `WeatherRig.rain_fall`.
 func test_rain_streak_length_is_world_speed_times_exposure() -> void:
 	var names: Array[String] = _rain_uniforms()
 	for bad: String in ["streak_px", "min_streak_px", "streak_length"]:
@@ -331,12 +331,40 @@ func test_rain_streak_length_is_world_speed_times_exposure() -> void:
 	assert_true(code.contains("tail = head - vel * exposure"), "штрих — шлях краплі за витримку")
 	var rig: WeatherRig = _rig()
 	var mat := rig.rain.material_override as ShaderMaterial
+	var last: float = 0.0
 	for zoom: float in [6.0, 13.0, 20.0]:
 		rig.follow(Vector3(5.0, 0.0, 7.0), zoom)
-		assert_almost_eq(float(mat.get_shader_parameter("fall_speed")),
-				-WeatherRig.rain_velocity().y, 1e-5)
+		var fall: float = mat.get_shader_parameter("fall_speed")
+		assert_almost_eq(fall, WeatherRig.rain_fall(zoom), 1e-4, "зум %s" % zoom)
+		assert_gt(fall, last, "падіння росте з віддаленням")
+		last = fall
 		assert_almost_eq(float(mat.get_shader_parameter("exposure")), WeatherRig.RAIN_EXPOSURE,
 				1e-5)
+
+
+## Штрих на екрані той самий на будь-якому зумі: швидкість у кадрі сталa (±20 %), довжина —
+## 12–30 px на кадрі заввишки 1080 px. Інакше здалеку дощ стає крапками («камінці»), а з
+## наближенням — палицями, що прискорюються.
+func test_rain_streak_on_screen_is_the_same_at_every_zoom() -> void:
+	var cam: IsoCameraRig = (load("res://game/camera/iso_camera_rig.tscn") as PackedScene).instantiate()
+	add_child_autofree(cam)
+	var scale_1080: float = 1080.0 / get_viewport().get_visible_rect().size.y
+	var speeds: Array[float] = []
+	for zoom: float in [6.0, 13.0, 20.0]:
+		cam.zoom_by(zoom / cam.zoom_level)
+		simulate(cam, 80, 0.1)
+		assert_almost_eq(cam.zoom_level, zoom, 0.01)
+		var head: Vector3 = cam.global_position + Vector3(0.0, 0.5, 0.0)
+		var v: Vector3 = Vector3.DOWN * WeatherRig.rain_fall(zoom)
+		var dt: float = 0.002
+		var speed: float = cam.unproject(head + v * dt).distance_to(cam.unproject(head)) / dt
+		speed *= scale_1080
+		speeds.append(speed)
+		var length: float = speed * WeatherRig.RAIN_EXPOSURE
+		assert_between(length, 12.0, 30.0, "зум %s: штрих %.1f px" % [zoom, length])
+	var mean: float = (speeds[0] + speeds[1] + speeds[2]) / 3.0
+	for i in 3:
+		assert_almost_eq(speeds[i] / mean, 1.0, 0.2, "швидкість у кадрі %s" % [speeds])
 
 
 ## Вода й дощ — обидва прозорі без запису глибини; без пріоритету порядок залежав би від пана.
@@ -424,3 +452,14 @@ func test_battle_screen_applies_the_look_of_its_map() -> void:
 	assert_true(rig.rain.visible)
 	assert_almost_eq(rig.applied_globals[&"weather_wetness"],
 			BattleLook.for_map_path("res://maps/river.tres").wetness, 1e-5)
+
+
+## Один вітер на вигляд: дощ зносить рівно ним, а сила — з вигляду карти.
+func test_rain_drifts_with_the_looks_wind() -> void:
+	var rig: WeatherRig = _rig()
+	var look := BattleLook.new()
+	look.wind = 0.1
+	rig.apply(look)
+	assert_eq(rig.wind(), WeatherRig.WIND_AXIS * 0.1)
+	var v: Vector3 = rig.rain_velocity()
+	assert_almost_eq(Vector3(v.x, 0.0, v.z), rig.wind() * -v.y, Vector3.ONE * 1e-5)

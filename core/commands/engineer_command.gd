@@ -116,9 +116,13 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE:
 				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE_DESTROYED)
 				out.append(Events.BridgeChanged.new(target_pos, true))
+				# Уламки на прогоні падають у річку разом із ним (§3.14). Підрив вони не
+				# забороняють: техніки на них немає, а піхоту на мосту й так можна скинути.
+				out.append_array(Wrecks.remove(state, target_pos, Wrecks.Reason.BRIDGE_DEMOLISHED))
 				# Ворог на мосту падає разом із ним: та сама низка
-				# подій, що й від смертельного влучання. Шкода — власникові інженера, як
-				# від міни.
+				# подій, що й від смертельного влучання, крім уламків — техніка в річці
+				# їх не лишає, тож Wrecks.leave() тут немає. Шкода — власникові
+				# інженера, як від міни.
 				var victim: Unit = state.unit_at(target_pos)
 				if victim != null:
 					state.damage_dealt[e.owner] += victim.hp

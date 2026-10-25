@@ -49,6 +49,7 @@ const _FallbackMap := preload("res://maps/river.tres")
 @onready var _board_view: BoardView = %BoardView
 @onready var _units: Node3D = %Units
 @onready var _mine_layer: MineLayer = %MineLayer
+@onready var _wreck_layer: WreckLayer = %WreckLayer
 @onready var _hud: Hud = %Hud
 @onready var _gate: HandoverGate = %HandoverGate
 @onready var _pause: PauseMenu = %PauseMenu
@@ -74,6 +75,15 @@ var _target_overlay: TargetOverlay = null
 var _threatened: Array[int] = []
 var _drone_threatened: Array[int] = []
 var _event_player: EventPlayer = null
+## Гравець, чий світ зараз на екрані. До гейта це ще попередній гравець, хоча
+## `state.active_player` уже наступний: уламки з пакета передачі ходу звіряються з
+## розвіданим того, хто дивиться, а не того, хто от-от сяде.
+var _viewer: int = 0
+## Шрами бою на землі; маска — розвідане того, хто дивиться.
+var _scars: ScarMap = null
+## Шейдери ефектів уже розігріто: на старті нового бою, а в бою зі збереження — на першому
+## гейті, коли камера вже стоїть на юнітах.
+var _fx_warmed: bool = false
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -246,6 +256,8 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
 	_rebuild_units_for_active_player()
+	_rebuild_wrecks()
+	_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
 	# fly_to(), не center_on(): у самостійному запуску гейта немає, і програмний
 	# рух камери мусить доводитись плавно. Через launch() дошку одразу закриває
 	# гейт, а center_on() на confirmed зупиняє цей твін — витікати нічому.
@@ -276,6 +288,9 @@ func resume(match_service: Node = null) -> void:
 
 
 func _wire_view(board: Board) -> void:
+	_wreck_layer.set_wind(_weather.wind())
+	_scars = ScarMap.new(Vector2i(board.width, board.height))
+	_board_view.scar_map = _scars
 	_board_view.build(board)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
 	_weather.attach_probe(_board_view.reflection_probe())
@@ -285,7 +300,8 @@ func _wire_view(board: Board) -> void:
 	_path_overlay = PathOverlay.new(_board_view)
 	_target_overlay = TargetOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
-		func() -> void: _board_view.rebuild_tiles(_match_service.state.board))
+		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
+		_on_wreck_left, _on_wreck_removed)
 	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
@@ -328,6 +344,8 @@ func _follow_weather() -> void:
 
 
 func _exit_tree() -> void:
+	if _event_player != null:
+		_event_player.stop()
 	Engine.max_fps = _prev_max_fps
 	if get_tree() != null:
 		get_tree().quit_on_go_back = _prev_quit_on_go_back
@@ -871,6 +889,9 @@ func _on_events_ready() -> void:
 ## ловив би позицію ще НЕ на цілі й падав.
 func _on_gate_confirmed() -> void:
 	_rebuild_units_for_active_player()
+	_rebuild_wrecks()
+	if not _fx_warmed:
+		_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
 	_camera_rig.center_on(_first_unit_cell(_match_service.state.active_player))
 	_gate.visible = false
 
@@ -891,6 +912,10 @@ func _rebuild_units_for_active_player() -> void:
 	# §3.11: міни — той самий знімок знання активного гравця, що й юніти, і в ті
 	# самі моменти (setup, після пакета подій, на confirmed гейта).
 	_mine_layer.rebuild(state, state.active_player)
+	_wreck_layer.rebuild_fallen(state, state.active_player)
+	# Розвідане росте з кожним кроком — шрами на щойно розвіданому з'являються одразу.
+	if _scars != null:
+		_scars.show_for(state.vision[state.active_player])
 
 	var known: Dictionary = state.known_occupied_map(state.active_player)
 	for pos in known:
@@ -904,6 +929,41 @@ func _rebuild_units_for_active_player() -> void:
 		_unit_views[uid] = view
 	forest_changed()
 	_apply_threat_marks()
+
+
+## §3.5: уламки, вогонь і дим — лише над розвіданим (`seen`) гравцем, що сідає.
+## Не в _rebuild_units_for_active_player(): та йде після кожного пакета подій і
+## щоразу народжувала б щойно поставлені уламки наново, з новою фазою диму.
+func _rebuild_wrecks() -> void:
+	_viewer = _match_service.state.active_player
+	_wreck_layer.rebuild(_match_service.state, _viewer)
+	for w in _match_service.state.wrecks:
+		_scars.stamp_scorch(w.pos)
+	_scars.show_for(_match_service.state.vision[_viewer])
+
+
+## Щойно знищена техніка: її вузол існував, отже тайл розвіданий тим, хто дивиться.
+## Перевірка все одно потрібна — події не фільтруються за гравцем (§6), і на здачі
+## WreckLeft приходить для всієї техніки того, хто здався.
+func _on_wreck_left(pos: Vector2i, type_id: int, facing: int) -> void:
+	# Пляма ставиться завжди: на нерозвіданому її ховає маска, а розвідка згодом покаже.
+	_scars.stamp_scorch(pos)
+	if _match_service.state.vision[_viewer].is_seen(pos):
+		_wreck_layer.add(pos, type_id, 1.0, facing)
+
+
+## Прибрати показане — нічого не розкриває. Решту на гейті перемалює _rebuild_wrecks().
+func _on_wreck_removed(pos: Vector2i, _reason: int) -> void:
+	_wreck_layer.remove(pos)
+
+
+## Перше вбивство не сміє застигати на компіляції шейдерів ефектів: малюємо кожен раз,
+## невидимо, там, куди дивиться камера (поза кадром рушій їх не малює й не компілює).
+func _warm_up_fx(cell: Vector2i) -> void:
+	_fx_warmed = true
+	var at: Vector3 = IsoCameraRig.cell_to_world(cell)
+	BattleFx.warm_up(_units, at)
+	_wreck_layer.warm_up(at)
 
 
 ## Гачок вигляду лісу: тут його перемальовують з known_broken_map(активного) — ніколи
