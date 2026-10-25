@@ -366,6 +366,7 @@ func test_plough_fields_gives_one_rectangle_per_connected_group() -> void:
 
 
 # Понад MAX_PLOUGH_FIELDS поля мовчки лишились би лукою: жодна карта не має їх стільки.
+# Рахується світ разом із кільцем — те, що build() справді отримує від BoardView.
 func test_every_map_fits_its_plough_fields_into_the_shader() -> void:
 	var names: Array[String] = GroundSurface._macro_layer_names()
 	var table: PackedInt32Array = GroundSurface._surface_table(names)
@@ -374,7 +375,23 @@ func test_every_map_fits_its_plough_fields_into_the_shader() -> void:
 	for file in ["crossroads", "ridge", "river"]:
 		var m: MapData = load("res://maps/%s.tres" % file) as MapData
 		var board: Board = m.to_board()
-		var cells: PackedInt32Array = GroundSurface.class_layers(board, 0, m.surface, table, true)
-		var n: int = (GroundSurface.plough_fields(cells, board.width, plough)[1] as Array).size()
-		gut.p("%s: полів ріллі %d" % [file, n])
+		var world: Board = Surroundings.world_board(board, m) if Surroundings.ring_of(m) > 0 else board
+		var surface: PackedByteArray = Surroundings.world_surface(m) if Surroundings.ring_of(m) > 0 else m.surface
+		var cells: PackedInt32Array = GroundSurface.plough_cells(world, 0, surface, table, true)
+		var n: int = (GroundSurface.plough_fields(cells, world.width, plough)[1] as Array).size()
+		gut.p("%s: полів ріллі у світі %d" % [file, n])
 		assert_between(n, 1, GroundSurface.MAX_PLOUGH_FIELDS - 1, file)
+
+
+# Дорога між двома полями лишається дорогою: голосування сусідів не робить її ріллею й не
+# зливає поля в одне через неї.
+func test_road_between_ploughed_cells_splits_the_fields() -> void:
+	var names: Array[String] = GroundSurface._macro_layer_names()
+	var table: PackedInt32Array = GroundSurface._surface_table(names)
+	var plough: int = names.find("ploughed")
+	var board := Board.create(5, 1, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(2, 0), Terrain.Kind.ROAD)
+	var surface := PackedByteArray([1, 1, 0, 1, 1])
+	var cells: PackedInt32Array = GroundSurface.plough_cells(board, 0, surface, table, true)
+	assert_eq(cells[2], -1, "дорога не бере шар ріллі від сусідів")
+	assert_eq((GroundSurface.plough_fields(cells, 5, plough)[1] as Array).size(), 2)

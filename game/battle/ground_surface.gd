@@ -51,7 +51,7 @@ const CLASS_SLOTS: int = 8
 ## шейдер), а не щебінь.
 const YARD: int = -2
 const MAX_LAYERS: int = 16
-## Полів ріллі в шейдері (uniform-масив plough_rect).
+## Полів ріллі в шейдері (uniform-масив plough_axis).
 const MAX_PLOUGH_FIELDS: int = 64
 ## Підтипів на вид у таблиці шейдера (indeks = вид * SURFACES_PER_KIND + підтип).
 const SURFACES_PER_KIND: int = 4
@@ -73,8 +73,7 @@ const TEX_LAYER_FOR_KIND: Dictionary = {
 ## Частка поля й пагорба, що при GroundState.MUD вкрита плямами багна далеко від
 ## доріг (біля доріг шейдер додає ще 0.2). §3.12: стан ґрунту — правило, і земля
 ## мусить його показувати, не лише іконка HUD; але поле лишається полем. 0.15 дає ~15 %
-## поля далеко від доріг і ~35 % біля них: з 0.3 багно вкривало близько половини River
-## і на далекому зумі гасило луку й ріллю.
+## поля далеко від доріг і ~35 % біля них; більша частка на далекому зумі гасить луку й ріллю.
 const MUD_BLEND: float = 0.15
 
 const _SHADER: Shader = preload("res://game/battle/shaders/ground.gdshader")
@@ -159,7 +158,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 			surface_table[Terrain.Kind.HILL * SURFACES_PER_KIND + sub] = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
 	_set_layer_properties(mat, _macro_layers)
 	var plough: int = _macro_layers.find("ploughed")
-	var cells: PackedInt32Array = class_layers(board, margin, surface, surface_table, height != null)
+	var cells: PackedInt32Array = plough_cells(board, margin, surface, surface_table, height != null)
 	# Рілля — рукотворна: у картах класів її клітинки — лука (природна м'яка межа), а саме поле
 	# шейдер кладе зверху прямокутником із прямим краєм.
 	var class_table: PackedInt32Array = surface_table.duplicate()
@@ -167,7 +166,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 		if plough >= 0 and class_table[Terrain.Kind.FIELD * SURFACES_PER_KIND + s] == plough:
 			class_table[Terrain.Kind.FIELD * SURFACES_PER_KIND + s] = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
 	_set_classes(mat, board, margin, surface, class_table, height != null)
-	_set_plough(mat, cells, board.width + 2 * margin, plough, Vector2(-margin - ring, -margin - ring))
+	_set_plough(mat, cells, board.width + 2 * margin, plough)
 	_set_roads(mat, height)
 	mat.set_shader_parameter("map_origin", Vector2(-margin - ring, -margin - ring))
 	mat.set_shader_parameter("repeat_m", REPEAT_M)
@@ -269,7 +268,21 @@ func _set_classes(mat: ShaderMaterial, board: Board, margin: int, surface: Packe
 	mat.set_shader_parameter("class_layer", slots)
 
 
-## Поля ріллі: зв'язні (4 сусіди) групи клітинок шару `layer` у `cells` (class_layers, рядок
+## class_layers для пошуку полів: дорога, міст і вода лишають власний вид (-1), а не беруть
+## покриття сусідів голосуванням — інакше поле перескакувало б через дорогу й зливалось із
+## сусіднім в одне.
+static func plough_cells(board: Board, margin: int, surface: PackedByteArray, table: PackedInt32Array, relief: bool) -> PackedInt32Array:
+	var out: PackedInt32Array = class_layers(board, margin, surface, table, relief)
+	var w: int = board.width + 2 * margin
+	for i in out.size():
+		var cell := Vector2i(clampi(i % w - margin, 0, board.width - 1), clampi(i / w - margin, 0, board.height - 1))
+		var kind: int = board.kind_at(cell)
+		if kind == Terrain.Kind.ROAD or kind == Terrain.Kind.WATER or kind == Terrain.Kind.BRIDGE or kind == Terrain.Kind.BRIDGE_DESTROYED:
+			out[i] = -1
+	return out
+
+
+## Поля ріллі: зв'язні (4 сусіди) групи клітинок шару `layer` у `cells` (plough_cells, рядок
 ## ширини `w`). Повертає [номер поля + 1 у кожній клітинці (0 — не рілля), прямокутники
 ## Rect2i за клітинками]. Не більше MAX_PLOUGH_FIELDS: решта лишається лукою.
 static func plough_fields(cells: PackedInt32Array, w: int, layer: int) -> Array:
@@ -300,7 +313,7 @@ static func plough_fields(cells: PackedInt32Array, w: int, layer: int) -> Array:
 	return [ids, rects]
 
 
-func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: int, origin: Vector2) -> void:
+func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: int) -> void:
 	var res: Array = plough_fields(cells, w, layer)
 	var rects: Array[Rect2i] = res[1]
 	mat.set_shader_parameter("plough_layer", layer if not rects.is_empty() else -1)
@@ -308,14 +321,10 @@ func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: in
 		return
 	var img := Image.create_from_data(w, cells.size() / w, false, Image.FORMAT_R8, res[0])
 	mat.set_shader_parameter("plough_map", ImageTexture.create_from_image(img))
-	var rv := PackedVector4Array()
 	var axis := PackedInt32Array()
 	for r in rects:
-		# Центри крайніх клітинок у координатах шейдера (p): край поля — на ±0.5 від них.
-		rv.append(Vector4(r.position.x + origin.x, r.position.y + origin.y, r.end.x - 1 + origin.x, r.end.y - 1 + origin.y))
 		# Борозни вздовж довгого боку; квадратне поле — вздовж x.
 		axis.append(1 if r.size.y > r.size.x else 0)
-	mat.set_shader_parameter("plough_rect", rv)
 	mat.set_shader_parameter("plough_axis", axis)
 
 

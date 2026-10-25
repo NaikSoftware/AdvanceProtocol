@@ -20,13 +20,21 @@ uniform sampler2D class_map0 : filter_linear, repeat_disable;
 uniform sampler2D class_map1 : filter_linear, repeat_disable;
 uniform int class_layer[8];
 // Рілля — прямокутні поля (GroundSurface.plough_fields): у карті класів клітинки поля — лука,
-// а рілля лягає поверх прямокутника з прямим краєм. plough_map — номер поля + 1 у кожній
-// клітинці (0 — не рілля), plough_rect — центри крайніх клітинок (x0, y0, x1, y1),
-// plough_axis — 1, коли довгий бік поля вздовж z (борозни повертаються на 90°).
+// а рілля лягає поверх клітинок поля з прямим краєм. plough_map — номер поля + 1 у кожній
+// клітинці (0 — не рілля), plough_axis — 1, коли довгий бік поля вздовж z (борозни
+// повертаються на 90°).
 uniform sampler2D plough_map : filter_nearest, repeat_disable;
-uniform vec4 plough_rect[64];
 uniform int plough_axis[64];
 uniform int plough_layer = -1;
+
+// Номер поля ріллі в клітинці карти класів; поза картою й не рілля — -1.
+int plough_id(ivec2 c) {
+	ivec2 sz = textureSize(plough_map, 0);
+	if (c.x < 0 || c.y < 0 || c.x >= sz.x || c.y >= sz.y) {
+		return -1;
+	}
+	return int(round(texelFetch(plough_map, c, 0).r * 255.0)) - 1;
+}
 // Слот класу двору (`YARD`, клітинки будівель): поле з плямами втоптаного ґрунту 2–6 м;
 // -1 — двору нема.
 uniform int yard_slot = -1;
@@ -128,10 +136,10 @@ const float CLASS_BAND = 0.05;
 const float CLASS_CORE = 0.5;
 // Межа двох природних покриттів (лука, болото, ліс, пагорб, берег) — ~0.5 клітинки (~4 м), рвана
 // висотною сумішшю: природа не обривається лінією. Щебінь (руїни) лишає вузьку CLASS_BAND, а рілля
-// — рукотворна — малюється окремо прямокутником поля з прямим краєм (plough_rect).
+// — рукотворна — малюється окремо полем із прямим краєм (plough_map).
 const float NATURAL_BAND = 0.75;
 const int RUBBLE = 6;
-// Рілля всередині прямокутника поля відступає від краю клітинки на ~1.2 м — смуга трави (узбіччя
+// Рілля всередині поля відступає від краю клітинки на ~1.2 м — смуга трави (узбіччя
 // поля), а прямий край лишається в межах 0.1–0.3 клітинки від межі клітинок.
 const float PLOUGH_HEADLAND = 0.15;
 // Калюжі в коліях: комірка вздовж колії, у ній щонайбільше одна калюжа 0.3–2.5 м, що не виходить
@@ -568,21 +576,31 @@ void fragment() {
 		float hmax = -1.0;
 		// Під суцільним асфальтом чи бруківкою покриття класів не видно: його не семплуємо зовсім
 		// (до 4 шарів × макро, паралакс і деталь). Ґрунтівку — семплуємо: вона просвічує траву.
-		// Рілля: частка покриття з прямого краю прямокутника, згладжена на один піксель.
+		// Рілля: частка покриття з відстані до краю поля, згладжена на один піксель. Ширина
+		// згладжування — з dpx/dpy поза розгалуженням (fwidth у неоднорідній гілці невизначений).
 		float plough_a = 0.0;
 		int pf = -1;
+		float plough_aa = max(max(length(dpx), length(dpy)), 0.004);
 		if (plough_layer >= 0) {
 			ivec2 pc = ivec2(round(p - map_origin));
-			ivec2 psz = textureSize(plough_map, 0);
-			if (pc.x >= 0 && pc.y >= 0 && pc.x < psz.x && pc.y < psz.y) {
-				pf = int(round(texelFetch(plough_map, pc, 0).r * 255.0)) - 1;
-			}
+			pf = plough_id(pc);
 			if (pf >= 0) {
-				vec4 r = plough_rect[pf];
-				vec2 inside = min(p - (r.xy - 0.5 + PLOUGH_HEADLAND), (r.zw + 0.5 - PLOUGH_HEADLAND) - p);
-				float d = min(inside.x, inside.y);
-				float aa = max(fwidth(d), 0.004);
-				plough_a = smoothstep(-aa, aa, d);
+				// Відстань до краю — від справжніх клітинок поля: сторони, де сусід не з цього поля,
+				// і кути, де не з поля діагональний сусід. Тож і неправильна група має узбіччя на
+				// кожному зовнішньому краї, а не сходинки по межах клітинок.
+				vec2 f = p - map_origin - vec2(pc);
+				float d = 1.0;
+				for (int dy = -1; dy <= 1; dy++) {
+					for (int dx = -1; dx <= 1; dx++) {
+						if ((dx == 0 && dy == 0) || plough_id(pc + ivec2(dx, dy)) == pf) {
+							continue;
+						}
+						vec2 e = vec2(dx == 0 ? 1.0 : 0.5 - f.x * float(dx), dy == 0 ? 1.0 : 0.5 - f.y * float(dy));
+						d = min(d, dx != 0 && dy != 0 ? length(e) : min(e.x, e.y));
+					}
+				}
+				d -= PLOUGH_HEADLAND;
+				plough_a = smoothstep(-plough_aa, plough_aa, d);
 			}
 		}
 		bool skip_cls = (road_cov > 0.995 && rt.g < 0.005) || plough_a > 0.999;
