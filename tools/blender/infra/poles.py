@@ -25,7 +25,7 @@ def insulator(b, glass, steel, x, y, z0, pin=0.18):
 def pole10():
     concrete, steel, glass = mats()
     b = B(); H = 10.5
-    b.frustum(concrete, 0.30, 0.17, H)
+    b.frustum(concrete, 0.24, 0.17, H)
     zc = H - 0.6
     b.box(steel, (0, 0, zc), (1.9, 0.07, 0.09))            # траверса
     b.box(steel, (0, 0.0, zc - 0.05), (0.24, 0.22, 0.05))   # хомут
@@ -38,7 +38,7 @@ def pole10():
 def pole04():
     concrete, steel, glass = mats()
     b = B(); H = 9.5
-    b.frustum(concrete, 0.30, 0.17, H)
+    b.frustum(concrete, 0.24, 0.17, H)
     w = []
     for i, (z, s) in enumerate(((H - 0.4, -1), (H - 0.4, 1), (H - 0.8, -1), (H - 0.8, 1))):
         b.box(steel, (s * 0.2, 0, z), (0.4, 0.05, 0.05))
