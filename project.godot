@@ -41,6 +41,7 @@ locale/translations=PackedStringArray("res://assets/i18n/strings.uk.translation"
 
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile=2
 textures/vram_compression/import_etc2_astc=true
 
 [shader_globals]
@@ -80,6 +81,10 @@ water_murk={
 water_wind={
 "type": "float",
 "value": 1.0
+}
+unit_contact_shadow={
+"type": "float",
+"value": 0.0
 }
 haze_color={
 "type": "vec3",

@@ -185,7 +185,8 @@ void fragment() {
 		sf *= mix(1.0, 0.08, smoothstep(0.018, 0.032, px_m / max(vdir.y, 0.2)));
 		vec2 slope = fdir * sf.x + fperp * sf.y;
 		float wet = clamp(weather_wetness, 0.0, 1.0);
-		// Кола дощу вдвічі контрастніші: менші й рідші кола інакше губились на брижі.
+		// Нахил кіл дощу ×4 (з ×1.5 у самій rain_ripples — ×6): менші й рідші кола інакше губились
+		// на брижі.
 		slope += rain_ripples(p, TIME) * 4.0 * wet * rv;
 
 		vec3 n = slope_to_world(slope);
