@@ -334,7 +334,7 @@ func test_rain_streak_length_is_world_speed_times_exposure() -> void:
 	for zoom: float in [6.0, 13.0, 20.0]:
 		rig.follow(Vector3(5.0, 0.0, 7.0), zoom)
 		assert_almost_eq(float(mat.get_shader_parameter("fall_speed")),
-				-WeatherRig.rain_velocity().y, 1e-5)
+				-rig.rain_velocity().y, 1e-5)
 		assert_almost_eq(float(mat.get_shader_parameter("exposure")), WeatherRig.RAIN_EXPOSURE,
 				1e-5)
 
@@ -424,3 +424,14 @@ func test_battle_screen_applies_the_look_of_its_map() -> void:
 	assert_true(rig.rain.visible)
 	assert_almost_eq(rig.applied_globals[&"weather_wetness"],
 			BattleLook.for_map_path("res://maps/river.tres").wetness, 1e-5)
+
+
+## Один вітер на вигляд: дощ зносить рівно ним, а сила — з вигляду карти.
+func test_rain_drifts_with_the_looks_wind() -> void:
+	var rig: WeatherRig = _rig()
+	var look := BattleLook.new()
+	look.wind = 0.1
+	rig.apply(look)
+	assert_eq(rig.wind(), WeatherRig.WIND_AXIS * 0.1)
+	var v: Vector3 = rig.rain_velocity()
+	assert_eq(Vector3(v.x, 0.0, v.z), rig.wind() * WeatherRig.RAIN_FALL)

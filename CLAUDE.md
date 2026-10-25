@@ -106,12 +106,12 @@ rifle squad and the engineer.
   AP left, red = reachable but cannot act. Recomputed after every action that changes AP or
   occupancy.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
-  the zones use fog-filtered occupancy plus known enemy mines; the walk checks the truth and
-  **stops on the tile before** anything it could not see or an engineer has just found. AP is
-  charged only for tiles actually entered. Planning against the true occupancy would leak — the
-  route would detour around an invisible enemy and give away where it stands. **Broken forest is
-  planned the same way:** from the tiles the player knows are broken (§3.5), walked against the
-  truth.
+  the zones use fog-filtered occupancy plus known enemy mines and, for a vehicle, known wrecks;
+  the walk checks the truth and **stops on the tile before** anything it could not see or an
+  engineer has just found. AP is charged only for tiles actually entered. Planning against the
+  true occupancy would leak — the route would detour around an invisible enemy and give away
+  where it stands. **Broken forest is planned the same way:** from the tiles the player knows
+  are broken (§3.5), walked against the truth.
 
 ### 3.3 Combat → [formula and worked reasoning](docs/rules/combat.md)
 
@@ -265,6 +265,13 @@ at all times, offsetting off-road penalty. Roads are never affected — that is 
   count towards the threat it is shown to pose. The count is public by rule (§3.9), so reading it
   reveals nothing; omitting it would under-report the most dangerous action in the game.
 - Both computations live in `core/`. **Neither may be re-derived in the view.**
+
+### 3.14 Wrecks → [details](docs/rules/movement-and-terrain.md#wrecks)
+
+A destroyed vehicle leaves a wreck on its tile; infantry and a unit lost with a bridge leave none.
+**A wreck blocks vehicles only** — infantry stands on it, and fire, vision and victory ignore it.
+It burns out after 3 full rounds, a demolished bridge takes it along, and a player knows it only
+on `seen` ground (§3.5): planning routes a vehicle around the wrecks its side knows of.
 
 ---
 
