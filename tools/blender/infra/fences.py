@@ -28,8 +28,8 @@ def fence(kind, corner, name):
             for v0, v1 in ((0.03, 0.31), (0.34, 0.62), (0.65, 0.93)):
                 h = np.maximum(h, box_mask(n, 0.06, 0.94, v0, v1, 0.03))
             return 1 - 0.8 * h
-        sheet = concrete_mat("euro_panel", tile=2.0, relief=relief, seed=25, top_z=1.9, shade=0.1, k=9.0, streak_k=0.9, streak_len=0.8)
-        post = concrete_mat("euro_post", tile=2.0, seed=26, top_z=1.95, streak_k=0.9, streak_len=0.8)
+        sheet = concrete_mat("euro_panel", tile=2.0, relief=relief, seed=25, top_z=1.9, shade=0.1, k=9.0, streak_k=0.9, streak_len=0.8, val=0.92, tint=(1.02, 1.0, 0.97))
+        post = concrete_mat("euro_post", tile=2.0, seed=26, top_z=1.95, streak_k=0.9, streak_len=0.8, val=0.92, tint=(1.02, 1.0, 0.97))
         b.mi(post)              # перший матеріал меша Godot не фарбує вершинним кольором — тон дістається панелям
         nom, ph, pw = 2.0, 1.95, 0.2
     elif kind == "po2":
