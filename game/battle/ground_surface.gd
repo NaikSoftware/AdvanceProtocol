@@ -42,8 +42,9 @@ const SURFACE_ALIGNED: Dictionary = {"ploughed": 2}
 ## Haven мають власний фізичний розмір, і ці метри дублюють таблицю CC0 у tools/terrain_tex.py —
 ## міняти обидві разом. Решта згенерована на 12 м. Бруківка — 3 м: ~20 каменів по 15 см у
 ## повторі, як справжня кладка. Ліс — 2 м: гілки в його макро мають справжню довжину 5–30 см
-## лише на цьому масштабі, на 12 м вони розтягуються до 1–3 м.
-const MACRO_M: Dictionary = {"dirt": 20.0, "mud": 25.0, "hill": 20.0, "bank": 25.0, "road": 30.0, "cobble": 3.0, "forest": 2.0}
+## лише на цьому масштабі, на 12 м вони розтягуються до 1–3 м. Болото — 8 м: купини в макро
+## тоді 0.4–0.6 м, як справжні; на 12 м вони були б ~0.7–0.8 м.
+const MACRO_M: Dictionary = {"dirt": 20.0, "mud": 25.0, "hill": 20.0, "bank": 25.0, "road": 30.0, "cobble": 3.0, "forest": 2.0, "marsh": 8.0}
 const DEFAULT_MACRO_M: float = 12.0
 ## Класів покриття на карті (канали двох RGBA8 карт класів); зайві стають полем.
 const CLASS_SLOTS: int = 8
@@ -174,6 +175,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 		Surroundings.apply(mat, size)
 		mat.set_shader_parameter("snap_edges", height != null)
 	mat.set_shader_parameter("mud_amount", MUD_BLEND if board.ground_state == Terrain.GroundState.MUD else 0.0)
+	mat.set_shader_parameter("dry_season", season != &"")
 	mat.set_shader_parameter("albedo_array", _albedo_array)
 	mat.set_shader_parameter("normal_array", _normal_array)
 	mat.set_shader_parameter("macro_array", _macro_array)
