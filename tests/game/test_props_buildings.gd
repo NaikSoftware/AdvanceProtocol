@@ -5,17 +5,17 @@ extends GutTest
 const _DIR: String = "res://assets/props/"
 ## імʼя -> [слід X, слід Z у тайлах, ліміт трикутників]
 const _PROPS: Dictionary = {
-	"h5_panel_block": [4, 2, 1100],
-	"h5_panel_block_damaged": [4, 2, 1500],
+	"h5_panel_block": [4, 2, 1300],
+	"h5_panel_block_damaged": [4, 2, 1700],
 	"f1_farm_barn": [2, 1, 400],
 	"f2_livestock_barn": [2, 8, 400],
 	"f3_hangar": [3, 5, 500],
 	"f3_hangar_damaged": [3, 5, 1100],
-	"f4_grain_bins": [4, 2, 1000],
-	"f5_silo_battery": [5, 2, 700],
-	"f6_fuel_station": [4, 2, 300],
-	"f7_water_tower": [1, 1, 300],
-	"f7b_brick_tower": [1, 1, 400],
+	"f4_grain_bins": [4, 2, 2000],
+	"f5_silo_battery": [5, 2, 1200],
+	"f6_fuel_station": [4, 2, 800],
+	"f7_water_tower": [1, 1, 700],
+	"f7b_brick_tower": [1, 1, 900],
 }
 ## Стоять лише на клітинках кільця навколо поля, а не на ігровому полі.
 const RING_ONLY: Array[String] = ["f2_livestock_barn"]
@@ -34,6 +34,16 @@ func _bounds(root: Node) -> Array:
 		for s in mi.mesh.get_surface_count():
 			tris += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 	return [lo, hi, tris]
+
+
+func _has_normal_map(root: Node) -> bool:
+	for n in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		for s in mi.mesh.get_surface_count():
+			var m := mi.mesh.surface_get_material(s) as BaseMaterial3D
+			if m == null or m.normal_texture == null:
+				return false
+	return true
 
 
 func _footprint_meta(root: Node) -> Array:
@@ -63,6 +73,7 @@ func test_every_building_rests_on_the_ground_inside_its_footprint() -> void:
 		assert_true(lo.x >= -hx and hi.x <= hx, "%s: X поза слідом %s" % [id, spec])
 		assert_true(lo.z >= -hz and hi.z <= hz, "%s: Z поза слідом %s" % [id, spec])
 		assert_lte(b[2] as int, spec[2] as int, "%s: трикутники" % id)
+		assert_true(_has_normal_map(inst), "%s: нема карти нормалей" % id)
 		var meta: Array = _footprint_meta(inst)
 		assert_eq(meta.size(), 2, "%s: нема footprint_tiles у метаданих" % id)
 		if meta.size() == 2:

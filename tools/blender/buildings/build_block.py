@@ -19,20 +19,15 @@ def bay_x(i):
 
 
 def windows(b, bays, floors, blown=()):
+    """Сувора сітка: одне вікно на панель, однакового розміру; на фасаді вхід замість вікна."""
     for side, (y, sgn) in (("front", (Y1, 1)), ("back", (Y0, -1))):
         for i in bays:
             for f in floors:
                 z = f * FLOOR + 0.95
                 if i in STAIRS and f == 0 and side == "front":
                     continue
-                if i in STAIRS:
-                    if f == 0:
-                        continue
-                    # сходова клітка: вузьке високе вікно на проміжку між поверхами
-                    b.window(("y", y, sgn), bay_x(i), f * FLOOR - 0.6, 0.9, 1.3, 0.07)
-                    continue
                 if (side, i, f) in blown:
-                    # вибите вікно: чорний проріз і кіптява над ним
+                    # вибите вікно: чорний проріз і плавна кіптява над ним
                     x = bay_x(i)
                     b.poly([(x - 0.7, y + 0.03 * sgn, z), (x + 0.7, y + 0.03 * sgn, z), (x + 0.7, y + 0.03 * sgn, z + 1.4), (x - 0.7, y + 0.03 * sgn, z + 1.4)][::sgn], "dark")
                     b.poly([(x - 0.9, y + 0.02 * sgn, z + 1.4), (x + 0.9, y + 0.02 * sgn, z + 1.4), (x + 0.5, y + 0.02 * sgn, z + 2.5), (x - 0.5, y + 0.02 * sgn, z + 2.3)][::sgn], "panel_scorched")
@@ -40,16 +35,20 @@ def windows(b, bays, floors, blown=()):
                 b.window(("y", y, sgn), bay_x(i), z, 1.4, 1.4)
 
 
-def balconies(b, bays):
-    for i in bays:
-        if i in STAIRS:
-            continue
-        for f in (1, 2):
+def balconies(b, front, back):
+    """Лоджії-балкони глибиною 1.2 м, у 2-3 колонах на кожному довгому фасаді, з другого поверху."""
+    for (y, sgn, cols) in ((Y1, 1, front), (Y0, -1, back)):
+        for i in cols:
             x = bay_x(i)
-            b.box(x, Y1 + 0.6, f * FLOOR - 0.05, 2.2, 1.2, 0.15, "panel", top="panel")
-            b.box(x, Y1 + 1.15, f * FLOOR + 0.1, 2.2, 0.08, 0.9, "metal_dark")
-            b.box(x - 1.06, Y1 + 0.6, f * FLOOR + 0.1, 0.08, 1.1, 0.9, "metal_dark")
-            b.box(x + 1.06, Y1 + 0.6, f * FLOOR + 0.1, 0.08, 1.1, 0.9, "metal_dark")
+            for f in (1, 2):
+                z = f * FLOOR
+                yc = y + 0.6 * sgn
+                b.box(x, yc, z - 0.05, 2.6, 1.2, 0.15, "panel", top="panel")          # плита
+                b.box(x, y + 1.15 * sgn, z + 0.1, 2.6, 0.12, 1.0, "panel")            # суцільний парапет
+                for sx in (-1.25, 1.25):
+                    b.box(x + sx, yc, z + 0.1, 0.12, 1.2, 2.6, "panel")                # бічні стінки лоджії
+                if f == 2:
+                    b.box(x, yc, z + 2.7, 2.6, 1.2, 0.15, "panel", top="bitumen")      # стеля верхньої лоджії
 
 
 def common(b, east_damage):
@@ -60,7 +59,7 @@ def common(b, east_damage):
         for (cx, cy, sx, sy) in ((0, Y1 - 0.1, LEN, 0.2), (0, Y0 + 0.1, LEN, 0.2), (X0 + 0.1, 0, 0.2, DEP - 0.4), (X1 - 0.1, 0, 0.2, DEP - 0.4)):
             b.box(cx, cy, H, sx, sy, 0.5, mid)
         windows(b, range(10), range(NF))
-        balconies(b, (0, 2, 3, 4, 6, 7, 9))
+        balconies(b, (2, 4, 7), (0, 3, 6))
         for gx in (X0, X1):  # торці глухі, у кожному одне вікно сходового майданчика
             pass
     else:
@@ -72,7 +71,7 @@ def common(b, east_damage):
         b.box((xc + X1) / 2, 0, 0, X1 - xc, DEP, 2 * FLOOR, mid, top="panel_scorched")
         windows(b, range(0, 7), range(NF))
         windows(b, range(7, 10), range(2), blown={("front", 7, 1), ("front", 9, 1), ("back", 8, 1), ("back", 7, 1), ("front", 8, 1)})
-        balconies(b, (0, 2, 3, 4))
+        balconies(b, (2, 4), (0, 3))
     # входи й козирки сходових кліток на фронтоні
     for i in STAIRS:
         b.box(bay_x(i), Y1 + 0.02, 0, 1.3, 0.04, 2.1, "dark")
@@ -93,7 +92,7 @@ def intact():
     lib.reset()
     b = Builder()
     common(b, False)
-    lib.finish(b, "h5_panel_block", out, tri_limit=1500, footprint=(4, 2), anchor=(0, 0))
+    lib.finish(b, "h5_panel_block", out, tri_limit=2500, footprint=(4, 2), anchor=(0, 0))
 
 
 def damaged():

@@ -45,11 +45,11 @@ def barn():
 def small_barn():
     lib.reset()
     b = Builder()
-    Lx, Wy, BASE, EAVE, RIDGE = 15.0, 7.0, 1.2, 3.5, 6.5
+    Lx, Wy, BASE, EAVE, RIDGE = 15.0, 7.0, 1.1, 3.5, 6.5
     b.box(0, 0, 0, Lx, Wy, BASE, "brick_grey")
     b.box(0, 0, BASE, Lx - 0.04, Wy - 0.04, EAVE - BASE, "boards")
-    b.gable(-Lx / 2, Lx / 2, -Wy / 2, Wy / 2, EAVE, RIDGE, "fc_roof", "boards", ridge_axis="x", overhang=0.4)
-    b.box(0, 0, RIDGE, Lx + 0.8, 0.3, 0.15, "metal_dark")                     # коник
+    b.gable(-Lx / 2, Lx / 2, -Wy / 2, Wy / 2, EAVE, RIDGE, "fc_roof_x", "boards", ridge_axis="x", overhang=0.3)
+    b.box(0, 0, RIDGE, Lx + 0.6, 0.3, 0.15, "metal_dark")                     # коник
     # двостулкові ворота на торці +X, бічні двері й вікно, гвинтова димова труба не потрібна
     b.box(Lx / 2 + 0.05, 0, 0, 0.1, 3.2, 3.0, "door_steel")
     b.box(Lx / 2 + 0.07, 0, 0, 0.1, 0.1, 3.0, "metal_dark")
@@ -77,7 +77,7 @@ def hangar(damaged):
         for k in range(1, 6):                                                    # світлові смуги на скатах
             y = y0 + k * seg - 3.0
             for sx in (-1, 1):
-                b.poly_up([(sx * 3.0, y - 1.6, 8.08), (sx * 6.5, y - 1.6, 6.91), (sx * 6.5, y + 1.6, 6.91), (sx * 3.0, y + 1.6, 8.08)], "glass_roof")
+                b.poly_up([(sx * 3.0, y - 0.5, 8.08), (sx * 6.5, y - 0.5, 6.91), (sx * 6.5, y + 0.5, 6.91), (sx * 3.0, y + 0.5, 8.08)], "glass_roof")
     else:
         b.box(x0 + 0.1, 0, 0.6, 0.2, Ln, EAVE - 0.6, "clad_wall")
         # східна стіна з проломом: клаптик нерівний, обгорілий по краях
@@ -145,13 +145,14 @@ def hangar(damaged):
 def bins():
     lib.reset()
     b = Builder()
-    R, WALL, CONE = 3.5, 10.0, 2.0
+    R, WALL, CONE = 3.5, 10.0, 2.8
     xs = (-12.0, -4.0, 4.0, 12.0)
     for x in xs:
         b.cyl(x, 0, 0, R + 0.3, 0.3, 20, "silo_concrete", cap=True)
         b.cyl(x, 0, 0.3, R, WALL - 0.3, 20, "galv", cap=False)
         b.cyl(x, 0, WALL, R + 0.25, CONE, 20, "galv", r_top=0.35, cap_mat="metal_dark")
-        b.box(x, R + 0.1, 0.3, 0.5, 0.15, WALL - 0.3, "metal_dark")      # драбина
+        b.ladder(x, R + 0.12, 0.3, WALL - 0.3, "x")                    # драбина
+        b.box(x, -1.8, WALL + 1.45, 0.8, 0.8, 0.35, "metal_dark")        # дахові люки
         b.box(x, R + 0.02, 0, 1.0, 0.1, 1.9, "door_steel")               # люк
     # елеваторна нория 20 м з головою і спуском до перекриття над бункерами
     lx, ly = 0.0, -6.5
@@ -166,7 +167,7 @@ def bins():
     b.beam((lx, ly + 0.8, 19.8), (0.0, 0.0, WALL + CONE + 0.4), 0.45, "metal_dark", 0.6)
     for x in xs:
         b.box(x, 0, WALL + CONE - 0.2, 0.3, 0.3, 0.5, "metal_dark")
-    lib.finish(b, "f4_grain_bins", out, tri_limit=900, footprint=(4, 2))
+    lib.finish(b, "f4_grain_bins", out, tri_limit=2000, footprint=(4, 2))
 
 
 # ------------------------------------------------------------------ F5 силоси
@@ -182,8 +183,12 @@ def silos():
     b.box(0, 0, H, 35.0, 2.6, 2.4, "silo_concrete", top="bitumen")
     b.box(-15.0, 0, H, 5.0, 5.0, 4.5, "silo_concrete", top="bitumen")
     # нижній приймальний корпус із похилим транспортером
-    b.box(-12.0, -6.5, 0, 12.0, 7.0, 7.0, "silo_concrete", top="bitumen")
-    lib.finish(b, "f5_silo_battery", out, tri_limit=900, footprint=(5, 2))
+    b.box(-12.0, -5.2, 0, 12.0, 6.0, 7.0, "silo_concrete", top="bitumen")
+    b.box(-12.0, -2.2 + 0.05, 0, 3.0, 0.1, 3.5, "door_steel")                    # ворота прийому
+    b.box(0, 5.5, 0, 30.0, 4.5, 4.2, "silo_concrete", top="bitumen")             # навантажувальна галерея
+    for gx in range(-12, 13, 6):
+        b.box(gx, 7.75 + 0.05, 0, 2.4, 0.1, 3.0, "door_steel")
+    lib.finish(b, "f5_silo_battery", out, tri_limit=1200, footprint=(5, 2), anchor=(0, 0))
 
 
 # ------------------------------------------------------------------ F6 АЗС
@@ -196,21 +201,20 @@ def fuel():
         for sy in (-2.6, 2.6):
             b.box(cx + sx, sy, 0, 0.5, 0.5, 4.2, "kiosk")
     b.box(cx, 0, 4.1, 15.0, 9.0, 0.9, "kiosk", top="canopy")            # фасція ~0.9 м
-    b.box(cx, 0, 4.45, 15.06, 9.06, 0.22, "metal_dark")                 # темна смуга по фасції (без бренду)
-    for ix in (-3.5, 3.5):
-        b.box(cx + ix, 0, 0.08, 1.1, 5.0, 0.2, "apron", top="apron")
-        for py in (-1.3, 1.3):
-            b.box(cx + ix, py, 0.28, 0.6, 0.5, 1.5, "frame", top="dark")
+    b.box(cx, 0, 4.4, 15.06, 9.06, 0.4, "metal_dark")                 # темна смуга по фасції (без бренду)
+    for ix in (-3.5, 3.5):                                               # острівці 4 x 1 з двома колонками
+        b.box(cx + ix, 0, 0.08, 1.0, 4.0, 0.2, "apron", top="apron")
+        for py in (-1.2, 1.2):
+            b.box(cx + ix, py, 0.28, 0.5, 0.9, 1.8, "frame", top="dark")
     # магазин-кіоск 8 x 5 x 3: суцільне скління по фасаду, двері, виступ даху
     b.box(10.0, 0, 0.08, 8.0, 5.0, 3.0, "kiosk", top="bitumen")
-    b.window(("y", 2.5, 1), 8.2, 0.9, 4.2, 1.5)
-    b.window(("y", 2.5, 1), 12.3, 0.9, 1.3, 1.5)
+    b.window(("y", 2.5, 1), 8.3, 0.4, 4.0, 2.5)                          # суцільне скління ~4 м
+    b.window(("y", 2.5, 1), 11.6, 0.4, 1.3, 2.5)                         # скляні двері
     b.window(("y", -2.5, -1), 9.0, 1.1, 1.4, 1.3)
     b.window(("y", -2.5, -1), 11.5, 1.1, 1.4, 1.3)
-    b.box(10.3, 2.5 + 0.03, 0.08, 1.0, 0.05, 2.1, "dark")
     b.box(10.0, 0, 3.08, 8.5, 5.5, 0.3, "kiosk", top="bitumen")
     b.box(10.0, 2.9, 2.55, 8.0, 0.8, 0.12, "metal_dark")                # козирок над вітриною
-    lib.finish(b, "f6_fuel_station", out, tri_limit=500, footprint=(4, 2))
+    lib.finish(b, "f6_fuel_station", out, tri_limit=800, footprint=(4, 2))
 
 
 if want("barn"):

@@ -27,7 +27,7 @@ def _img(name):
 
 
 def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=(), streak=0.0,
-                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3):
+                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3, corr=None, bump=0.006, patch_scale=0.55, runs=None, recolor=None):
     """Матеріал, який запікається в атлас. Текстура тайлиться в метрах (box-проєкція в
     координатах обʼєкта), тож не залежить від UV. seams: (вісь, період м, ширина м, сила);
     вісь h = горизонталь стіни, x/y/z = координата обʼєкта. patch: (колір, частка) —
@@ -71,6 +71,7 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
                 L(v, n.inputs[i])
         return n.outputs[2]
 
+    hparts = []
     if flat is not None:
         col = (*flat, 1.0)
         base = None
@@ -84,9 +85,19 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
         it.projection_blend = 0.0
         L(mp.outputs["Vector"], it.inputs["Vector"])
         base = it.outputs["Color"]
+        texcol = base
+        bw = N("ShaderNodeRGBToBW")
+        L(texcol, bw.inputs[0])
+        hparts.append(math("MULTIPLY", bw.outputs[0], bump))
+        if recolor is not None:
+            gs = N("ShaderNodeHueSaturation")
+            gs.inputs["Saturation"].default_value = 0.0
+            L(texcol, gs.inputs["Color"])
+            base = mix(gs.outputs["Color"], recolor, 1.0, "MULTIPLY")
+            texcol = None
     if base is None:
         base = mix(flat, flat, 0.0)
-    else:
+    elif recolor is None:
         base = mix(base, tint, 1.0, "MULTIPLY")
         if sat != 1.0:
             hs = N("ShaderNodeHueSaturation")
@@ -118,7 +129,7 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
     if patch is not None:
         pcol, frac = patch
         v = N("ShaderNodeMapping")
-        v.inputs["Scale"].default_value = (0.55, 0.55, 0.55)
+        v.inputs["Scale"].default_value = (patch_scale,) * 3
         L(tc.outputs["Object"], v.inputs["Vector"])
         nz = N("ShaderNodeTexNoise")
         nz.inputs["Scale"].default_value = 1.0
@@ -148,12 +159,54 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
         d = math("ABSOLUTE", math("SUBTRACT", f, 0.5))
         line = math("GREATER_THAN", d, 0.5 - width / period)
         base = mix(base, (0.0, 0.0, 0.0), math("MULTIPLY", line, strength), "MIX")
+        hparts.append(math("MULTIPLY", line, -0.012))
+    # потьоки вниз від швів і заклепок: тонкі вертикальні смуги, що згасають нижче шва
+    if runs is not None:
+        period, rcol, rstr = runs
+        v = N("ShaderNodeCombineXYZ")
+        L(math("MULTIPLY", sep.outputs[0], 3.0), v.inputs[0])
+        L(math("MULTIPLY", sep.outputs[1], 3.0), v.inputs[1])
+        L(math("MULTIPLY", sep.outputs[2], 0.05), v.inputs[2])
+        nz = N("ShaderNodeTexNoise")
+        nz.inputs["Scale"].default_value = 1.0
+        nz.inputs["Detail"].default_value = 2.0
+        L(v.outputs[0], nz.inputs["Vector"])
+        cr = N("ShaderNodeValToRGB")
+        cr.color_ramp.elements[0].position = 0.45
+        cr.color_ramp.elements[1].position = 0.6
+        L(nz.outputs["Fac"], cr.inputs[0])
+        f = math("FRACT", math("DIVIDE", math("ADD", sep.outputs[2], 10000.0), period))
+        fall = math("POWER", f, 4.0)            # найсильніше одразу під швом
+        base = mix(base, rcol, math("MULTIPLY", math("MULTIPLY", cr.outputs[0], fall), rstr), "MIX")
+    # рельєф: хвилястість, текстурний рельєф і канавки швів — у карту нормалей
+    if corr is not None:
+        axis, pitch, amp = corr
+        if axis == "h":
+            nrm = N("ShaderNodeNewGeometry")
+            ns = N("ShaderNodeSeparateXYZ")
+            L(nrm.outputs["Normal"], ns.inputs[0])
+            cc = math("ADD", math("MULTIPLY", sep.outputs[0], math("ABSOLUTE", ns.outputs[1])), math("MULTIPLY", sep.outputs[1], math("ABSOLUTE", ns.outputs[0])))
+        else:
+            cc = sep.outputs["XYZ".index(axis.upper())]
+        wv = math("SINE", math("MULTIPLY", cc, 6.2832 / pitch))
+        hparts.append(math("MULTIPLY", wv, amp))
+    if hparts:
+        tot = hparts[0]
+        for q in hparts[1:]:
+            tot = math("ADD", tot, q)
+        bn = N("ShaderNodeBump")
+        bn.inputs["Strength"].default_value = 1.0
+        bn.inputs["Distance"].default_value = 1.0
+        L(tot, bn.inputs["Height"])
+        L(bn.outputs["Normal"], bsdf.inputs["Normal"])
     L(base, bsdf.inputs["Base Color"])
     return m
 
 
 def make_window_material():
-    """Вікно одним квадом: рама, середник і скло малюються шейдером за локальними UV (шар "local")."""
+    """Вікно одним квадом за локальними UV (шар "local"): зовнішній темний відкіс імітує
+    заглиблення 10-15 см, далі рама, середник і скло. Тон з атрибута wtone: 0 небесно-сіре
+    скло, 0.5 темне, 1 тепла штора."""
     m = bpy.data.materials.new("window")
     m.use_nodes = True
     nt = m.node_tree
@@ -161,6 +214,7 @@ def make_window_material():
     N, L = nt.nodes.new, nt.links.new
     out = N("ShaderNodeOutputMaterial")
     bs = N("ShaderNodeBsdfPrincipled")
+    bs.inputs["Roughness"].default_value = 0.35
     L(bs.outputs["BSDF"], out.inputs["Surface"])
     uvn = N("ShaderNodeUVMap")
     uvn.uv_map = "local"
@@ -169,9 +223,10 @@ def make_window_material():
     sep = N("ShaderNodeSeparateXYZ")
     L(uvn.outputs["UV"], sep.inputs[0])
 
-    def math(op, a, b=None):
+    def math(op, a, b=None, clamp=False):
         n = N("ShaderNodeMath")
         n.operation = op
+        n.use_clamp = clamp
         for i, v in enumerate((a, b)):
             if v is None:
                 continue
@@ -181,32 +236,43 @@ def make_window_material():
                 L(v, n.inputs[i])
         return n.outputs[0]
 
+    def mixc(a, b, fac):
+        n = N("ShaderNodeMix")
+        n.data_type = "RGBA"
+        if isinstance(fac, (int, float)):
+            n.inputs[0].default_value = fac
+        else:
+            L(fac, n.inputs[0])
+        for i, v in ((6, a), (7, b)):
+            if isinstance(v, tuple):
+                n.inputs[i].default_value = (*v, 1.0)
+            else:
+                L(v, n.inputs[i])
+        return n.outputs[2]
+
     u, v = sep.outputs[0], sep.outputs[1]
     edge = math("MINIMUM", math("MINIMUM", u, math("SUBTRACT", 1.0, u)), math("MINIMUM", v, math("SUBTRACT", 1.0, v)))
-    frame = math("LESS_THAN", edge, 0.08)
-    mull = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", u, 0.5)), 0.025)
-    sill = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", v, 0.62)), 0.02)
+    reveal = math("LESS_THAN", edge, 0.07)
+    frame = math("LESS_THAN", edge, 0.15)
+    mull = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", u, 0.5)), 0.03)
+    sill = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", v, 0.62)), 0.025)
     mask = math("MAXIMUM", math("MAXIMUM", frame, mull), sill)
-    sky = math("MULTIPLY", math("ABSOLUTE", math("SUBTRACT", math("ADD", u, v), 1.0)), 0.25)  # діагональний відблиск
-    gl = N("ShaderNodeMix")
-    gl.data_type = "RGBA"
-    gl.inputs[6].default_value = (0.10, 0.12, 0.14, 1)
-    gl.inputs[7].default_value = (0.025, 0.03, 0.036, 1)
-    L(sky, gl.inputs[0])
-    # тон вікна з атрибута: темне скло, теплі штори, світліше скло
+    sky = math("MULTIPLY", math("ABSOLUTE", math("SUBTRACT", math("ADD", u, v), 1.0)), 0.5)
+    glass_sky = mixc((0.17, 0.20, 0.23), (0.10, 0.12, 0.14), sky)
     tone = N("ShaderNodeSeparateColor")
     L(ca.outputs["Color"], tone.inputs[0])
-    gl2 = N("ShaderNodeMix")
-    gl2.data_type = "RGBA"
-    L(tone.outputs[0], gl2.inputs[0])
-    L(gl.outputs[2], gl2.inputs[6])
-    gl2.inputs[7].default_value = (0.20, 0.17, 0.13, 1)
-    fm = N("ShaderNodeMix")
-    fm.data_type = "RGBA"
-    L(gl2.outputs[2], fm.inputs[6])
-    fm.inputs[7].default_value = (0.5, 0.5, 0.48, 1)
-    L(mask, fm.inputs[0])
-    L(fm.outputs[2], bs.inputs["Base Color"])
+    t = tone.outputs[0]
+    g1 = mixc(glass_sky, (0.02, 0.025, 0.03), math("MULTIPLY", t, 2.0, True))
+    g2 = mixc(g1, (0.20, 0.16, 0.11), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))
+    fr = mixc(g2, (0.55, 0.54, 0.50), mask)
+    rv = mixc(fr, (0.015, 0.015, 0.015), reveal)
+    L(rv, bs.inputs["Base Color"])
+    # рельєф: відкіс глибоко, скло злегка заглиблене відносно рами
+    h = math("ADD", math("MULTIPLY", reveal, -0.12), math("MULTIPLY", math("SUBTRACT", 1.0, mask), -0.03))
+    bn = N("ShaderNodeBump")
+    bn.inputs["Distance"].default_value = 1.0
+    L(h, bn.inputs["Height"])
+    L(bn.outputs["Normal"], bs.inputs["Normal"])
     return m
 
 
@@ -218,6 +284,44 @@ def mats():
     """Каталог матеріалів; створюється один раз на сцену."""
     if MATS:
         return MATS
+    g = lambda v: (v, v, v)
+    MATS.update({
+        # нейтрально-теплий бетон панелей, шви між панелями 3 м і по поверхах
+        "panel": make_material("panel", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=1.0, base_dirt=0.6, patch=((0.12, 0.13, 0.10), 0.14)),
+        # кіптява плавними потьоками, без плям-«корів»
+        "panel_scorched": make_material("panel_scorched", "Concrete034", 1.2, (0.20, 0.19, 0.18), seams=[("h", 3.0, 0.04, 0.4), ("z", 3.1, 0.05, 0.4)], streak=1.6, streak_xy=2.5, base_dirt=0.5),
+        "char": make_material("char", flat=(0.03, 0.028, 0.026)),
+        "bitumen": make_material("bitumen", "Asphalt031", 1.0, g(0.38), patch=((0.04, 0.045, 0.04), 0.2)),
+        # шифер: смуги листів ~1.1 м вздовж коника і хвиля кроком 15 см униз по скату
+        "fc_roof": make_material("fc_roof", "Concrete034", 1.2, (0.40, 0.40, 0.38), seams=[("y", 1.1, 0.04, 0.3)], corr=("y", 0.15, 0.012), streak=0.25, patch=((0.12, 0.16, 0.10), 0.06)),
+        "fc_roof_x": make_material("fc_roof_x", "Concrete034", 1.2, (0.40, 0.40, 0.38), seams=[("x", 1.1, 0.04, 0.3)], corr=("x", 0.15, 0.012), streak=0.25, patch=((0.12, 0.16, 0.10), 0.06)),
+        "wall_silicate": make_material("wall_silicate", "Plaster001", 1.0, (0.80, 0.78, 0.72), seams=[("z", 0.25, 0.05, 0.2)], streak=1.0, base_dirt=0.4),
+        "clad_wall": make_material("clad_wall", "CorrugatedSteel005", 1.0, (0.60, 0.66, 0.60), seams=[("h", 1.0, 0.04, 0.4)], corr=("h", 0.2, 0.01), streak=1.0, base_dirt=0.5),
+        # профнастил даху: ребра тільки від карниза до коника
+        "clad_roof": make_material("clad_roof", "CorrugatedSteel005", 1.0, (0.34, 0.36, 0.32), seams=[("y", 1.0, 0.04, 0.3)], corr=("y", 0.2, 0.012), streak=0.4, patch=((0.2, 0.1, 0.05), 0.07)),
+        "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
+        "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
+        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
+        "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.2), patch=((0.03, 0.03, 0.03), 0.3)),
+        "clad_burnt": make_material("clad_burnt", "CorrugatedSteel005", 1.0, (0.12, 0.12, 0.11), streak=1.0),
+        "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.22, 0.34, 0.29), seams=[("z", 0.25, 0.03, 0.5)], corr=("z", 0.25, 0.008), base_dirt=0.5),
+        "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.62, 0.66, 0.70), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], corr=("z", 0.25, 0.01), streak=0.8, base_dirt=0.4),
+        "silo_concrete": make_material("silo_concrete", "Concrete034", 1.5, (0.55, 0.54, 0.51), seams=[("z", 1.5, 0.04, 0.4)], streak=0.4, base_dirt=0.6, patch=((0.1, 0.12, 0.09), 0.2)),
+        # цегла: червоно-коричнева ~RGB 110/70/58, лише яскравість із текстури
+        "brick": make_material("brick", "Bricks105", 1.0, recolor=(0.50, 0.20, 0.135), streak=0.7, base_dirt=0.4, bump=0.012),
+        # сталь: плями іржі лише великі (>3 м), плюс потьоки під швами
+        "steel_paint": make_material("steel_paint", "PaintedMetal012", 1.0, (0.50, 0.50, 0.47), seams=[("z", 1.5, 0.04, 0.3)], base_dirt=0.4, patch=((0.30, 0.12, 0.05), 0.3), patch_scale=0.3, runs=(1.5, (0.30, 0.12, 0.05), 1.3)),
+        "metal_dark": make_material("metal_dark", "MetalPlates013", 1.0, g(0.8), streak=0.5),
+        "rust": make_material("rust", "Rust004", 1.0, g(1.0)),
+        "window": make_window_material(),
+        "frame": make_material("frame", flat=(0.55, 0.55, 0.53)),
+        "dark": make_material("dark", flat=(0.02, 0.02, 0.02)),
+        "apron": make_material("apron", "Concrete046", 1.5, (0.5, 0.5, 0.47), seams=[("x", 5.0, 0.03, 0.7), ("y", 5.0, 0.03, 0.7)], streak=0.6, patch=((0.05, 0.05, 0.05), 0.25)),
+        "rubble": make_material("rubble", "Concrete034", 0.8, (0.30, 0.27, 0.25), patch=((0.2, 0.1, 0.07), 0.4)),
+        "kiosk": make_material("kiosk", "Plaster001", 1.0, (0.78, 0.75, 0.68), streak=1.0, base_dirt=0.6),
+        "canopy": make_material("canopy", "CorrugatedSteel005", 1.0, (0.58, 0.58, 0.55), seams=[("x", 1.2, 0.05, 0.3)], streak=0.2),
+    })
+    return MATS
     g = lambda v: (v, v, v)
     MATS.update({
         # сірувато-бежева панель 3 м x поверх, шви між панелями
@@ -307,6 +411,34 @@ class Builder:
         faces = list({f for v in verts for f in v.link_faces})
         self._finish(faces, mat)
 
+    def poly_out(self, pts, mat, centre):
+        """Многокутник, нормаль якого дивиться від точки centre (для стінок циліндрів)."""
+        v = [Vector(p) for p in pts]
+        n = (v[1] - v[0]).cross(v[2] - v[1])
+        mid = sum(v, Vector()) / len(v)
+        return self.poly(pts if n.dot(mid - Vector(centre)) >= 0 else pts[::-1], mat)
+
+    def cyl_arch(self, cx, cy, r_at, ang, z0, w, h, mat):
+        """Арковий проріз (темний) на похилій циліндричній стіні: r_at(z) — радіус на висоті z."""
+        arc = [(-w / 2 + w * i / 6, h - w / 2 + math.sqrt(max((w / 2) ** 2 - (-w / 2 + w * i / 6) ** 2, 0.0))) for i in range(7)]
+        loc = [(-w / 2, 0.0), (w / 2, 0.0)] + arc[::-1]
+        pts = []
+        for xl, zl in loc:
+            z = z0 + zl
+            r = r_at(z) + 0.02
+            th = ang + xl / r
+            pts.append((cx + r * math.cos(th), cy + r * math.sin(th), z))
+        self.poly_out(pts, mat, (cx, cy, z0 + h / 2))
+
+    def ladder(self, x, y, z0, h, along="x", mat="metal_dark"):
+        """Драбина з поручнями і щаблями, видна зверху як силует і тінь."""
+        sx, sy = (0.5, 0.06) if along == "x" else (0.06, 0.5)
+        for d in (-0.24, 0.24):
+            self.box(x + (d if along == "x" else 0), y + (d if along == "y" else 0), z0, 0.06 if along == "x" else 0.1, 0.06 if along == "y" else 0.1, h, mat)
+        n = int(h / 0.4)
+        for k in range(n):
+            self.box(x, y, z0 + 0.3 + k * 0.4, sx, sy, 0.04, mat)
+
     def poly_up(self, pts, mat):
         """Многокутник, нормаль якого дивиться вгору (для скатів і плит)."""
         v = [Vector(p) for p in pts]
@@ -377,7 +509,7 @@ class Builder:
             loc = [(0, 0), (1, 0), (1, 1), (0, 1)]
         f = self.poly(pts, "window")
         layer = self.local
-        tone = self.rnd.choice((0.0, 0.0, 0.0, 0.35, 0.8))
+        tone = self.rnd.choices((0.0, 0.5, 1.0), weights=(85, 9, 6))[0]
         for lp, uvv in zip(f.loops, loc):
             lp[layer].uv = uvv
             lp[self.wtone] = (tone, tone, tone, 1.0)
@@ -466,7 +598,7 @@ def unwrap(me, flat, atlas_px):
     return 100 / (sc * atlas_px)  # см на тексель, ураховуючи метри
 
 
-def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0, footprint=(1, 1), anchor=None):
+def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footprint=(1, 1), anchor=None):
     """Меш → обʼєкт, UV, запікання атласу, один матеріал, масштаб 1/8, експорт, перевірка."""
     mt = mats()
     me = bpy.data.meshes.new(name)
@@ -497,21 +629,34 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0, footp
 
     # запікання
     img = bpy.data.images.new("atlas", atlas_px, atlas_px)
+    bake_nodes = []
     for m in me.materials:
         nt = m.node_tree
         n = nt.nodes.new("ShaderNodeTexImage")
         n.image = img
         nt.nodes.active = n
+        bake_nodes.append(n)
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
     sc.cycles.device = "CPU"
     sc.cycles.samples = 1
     bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, margin=6, margin_type="EXTEND", use_clear=True)
     os.makedirs(out_dir, exist_ok=True)
-    png = os.path.join(out_dir, name + "_atlas.png")
-    img.filepath_raw = png
-    img.file_format = "PNG"
+    jpg = os.path.join(out_dir, name + "_atlas.jpg")
+    img.filepath_raw = jpg
+    img.file_format = "JPEG"
+    sc.render.image_settings.quality = 90
     img.save()
+    # карта нормалей (тангентна, OpenGL) із тієї самої процедурної висоти
+    nimg = bpy.data.images.new("normal", atlas_px, atlas_px, alpha=False)
+    nimg.generated_color = (0.5, 0.5, 1.0, 1.0)
+    nimg.colorspace_settings.name = "Non-Color"
+    for n in bake_nodes:
+        n.image = nimg
+    bpy.ops.object.bake(type="NORMAL", normal_space="TANGENT", margin=6, margin_type="EXTEND", use_clear=True)
+    nimg.filepath_raw = os.path.join(out_dir, name + "_normal.jpg")
+    nimg.file_format = "JPEG"
+    nimg.save()
 
     px = np.array(img.pixels[:]).reshape(-1, 4)[:, :3]
     px = px[px.sum(axis=1) > 0.002]
@@ -536,6 +681,12 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0, footp
     t = nt.nodes.new("ShaderNodeTexImage")
     t.image = img
     nt.links.new(t.outputs["Color"], bs.inputs["Base Color"])
+    tn = nt.nodes.new("ShaderNodeTexImage")
+    tn.image = nimg
+    nm = nt.nodes.new("ShaderNodeNormalMap")
+    nm.uv_map = "UVMap"
+    nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
+    nt.links.new(nm.outputs["Normal"], bs.inputs["Normal"])
     bs.inputs["Roughness"].default_value = 0.85
     bs.inputs["Metallic"].default_value = 0.0
     me.materials.append(fm)
@@ -546,7 +697,7 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.0, footp
     ob.select_set(True)
     glb = os.path.join(out_dir, name + ".glb")
     bpy.ops.export_scene.gltf(filepath=glb, export_format="GLB", use_selection=True, export_apply=True, export_yup=True,
-                              export_materials="EXPORT", export_extras=True, export_image_format="JPEG", export_image_quality=88)
+                              export_materials="EXPORT", export_extras=True, export_image_format="AUTO")
     return verify(glb, tri_limit, mean_l, footprint)
 
 
@@ -567,6 +718,7 @@ def verify(path, tri_limit, mean_l, footprint):
         off += 8 + clen
     prims = [p for m in g["meshes"] for p in m["primitives"]]
     assert len(prims) == 1, f"{len(prims)} примітивів"
+    assert "normalTexture" in g["materials"][prims[0]["material"]], "нема normalTexture"
     acc = g["accessors"]
     p = prims[0]
     lo = acc[p["attributes"]["POSITION"]]["min"]
