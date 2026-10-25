@@ -21,6 +21,8 @@ const PUFFS_PER_COLUMN: int = 14
 const MAX_FLAMES: int = 3
 const MAX_FIRE_LIGHTS: int = 4
 const FLIPBOOK_FPS: float = 8.0
+## Розігріву досить кількох кадрів.
+const WARM_UP_SEC: float = 0.1
 
 ## Слоти текстур: справжній флипбук замінює заступника заміною файла. Нема файла —
 ## процедурний заступник тієї самої сітки кадрів.
@@ -34,10 +36,9 @@ const COLUMN_BASE_W: float = 3.0 / 8.0
 const COLUMN_TOP_W: float = 8.0 / 8.0
 ## Язики полум'я 3 / 2,2 / 1,6 м: на ходу загибелі всі три, далі один.
 const FLAME_M: Array[float] = [3.0, 2.2, 1.6]
-## Вітер — до камери (камера стоїть за +X+Z від фокуса, IsoCameraRig.YAW_DEGREES):
-## нахил тоді вкорочує стовп на екрані, а не подовжує його вгору по мапі.
-const WIND_DIR: Vector3 = Vector3(0.7071, 0.0, 0.7071)
-const COLUMN_LEAN_DEG: float = 20.0
+## Нахил стовпа на одиницю вітру `WeatherRig.wind()`: дим іде туди ж, куди й дощ. За вітру
+## River (0,25) це ~20°; у безвітря стовп стоїть прямо.
+const SMOKE_LEAN_PER_WIND: float = 1.46
 ## Тепле світло вогню: радіус ~4 м, слабке — підсвічує уламки й землю довкола.
 const FIRE_LIGHT_RANGE: float = 4.0 / 8.0
 const FIRE_LIGHT_ENERGY: float = 0.8
@@ -63,6 +64,9 @@ var _column_mat: ShaderMaterial
 var _fire_mat: ShaderMaterial
 var _timer: Timer
 var _frame: int = 0
+var _warm: MeshInstance3D = null
+## Загиблі відділення: чотири лежачі фігури на тайлі, де відділення полягло.
+var _fallen: Dictionary[Vector2i, MultiMeshInstance3D] = {}
 var _column_cells: Array[Vector2i] = []
 var _fire_cells: Array[Vector2i] = []
 
@@ -75,7 +79,6 @@ func _init() -> void:
 	_column_mat.set_shader_parameter("height", COLUMN_HEIGHT)
 	_column_mat.set_shader_parameter("base_w", COLUMN_BASE_W)
 	_column_mat.set_shader_parameter("top_w", COLUMN_TOP_W)
-	_column_mat.set_shader_parameter("lean", WIND_DIR * tan(deg_to_rad(COLUMN_LEAN_DEG)))
 	_fire_mat = ShaderMaterial.new()
 	_fire_mat.shader = fire_shader()
 	# Вогонь — поверх диму власного стовпа, а не за ним.
@@ -150,6 +153,79 @@ func remove(pos: Vector2i) -> void:
 	_entries[pos].node.free()
 	_entries.erase(pos)
 	_refresh_effects()
+
+
+## Вітер вигляду (`WeatherRig.wind()`), горизонтальний вектор.
+func set_wind(wind: Vector3) -> void:
+	_column_mat.set_shader_parameter("lean", wind * SMOKE_LEAN_PER_WIND)
+
+
+## Розігрів шейдерів стовпа, вогню й обгорілого матеріалу: кілька кадрів малюємо по
+## одному нульовому екземпляру й крихітну коробку в `at`, далі все як було.
+func warm_up(at: Vector3) -> void:
+	_warm = MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3.ONE * 0.0001
+	_warm.mesh = box
+	_warm.material_override = burnt_material()
+	_warm.position = at
+	add_child(_warm)
+	for mi: MultiMeshInstance3D in [_columns, _fires]:
+		if mi.multimesh.visible_instance_count == 0:
+			mi.multimesh.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3.ONE * 0.0001), at))
+			mi.multimesh.set_instance_custom_data(0, Color(0, 0, 0, 0))
+			mi.multimesh.visible_instance_count = 1
+	# Твін, а не `await`: він гине разом із шаром, тож звільнений шар не прокинеться.
+	var tw: Tween = create_tween()
+	tw.tween_interval(WARM_UP_SEC)
+	tw.tween_callback(_end_warm_up)
+
+
+func _end_warm_up() -> void:
+	if _warm == null:
+		return
+	_warm.free()
+	_warm = null
+	_refresh_effects()
+
+
+## Загиблі відділення — зі стану (мертві юніти лишаються в `state.units`), тож вони
+## переживають і перебудову, і збереження. Лише над розвіданим глядача (§3.5): тіла на
+## нерозвіданому — донос про бій. Техніка тут не малюється: її лишки — уламки.
+func rebuild_fallen(state: BattleState, observer: int) -> void:
+	for f: MultiMeshInstance3D in _fallen.values():
+		f.free()
+	_fallen.clear()
+	for id: int in state.units:
+		var u: Unit = state.units[id]
+		if u.is_alive() or u.unit_class() != UnitTypes.UnitClass.INFANTRY or _fallen.has(u.pos):
+			continue
+		if not state.vision[observer].is_seen(u.pos):
+			continue
+		var f: MultiMeshInstance3D = UnitSilhouettes.figures(0, UnitSilhouettes.FALLEN_COLOR)
+		f.name = "Fallen_%d_%d" % [u.pos.x, u.pos.y]
+		f.position = IsoCameraRig.cell_to_world(u.pos)
+		f.rotation.y = deg_to_rad(UnitView._degrees_for_facing(u.facing))
+		f.layers = 1 << (UnitView.UNIT_LAYER - 1)
+		add_child(f)
+		_fallen[u.pos] = f
+
+
+func fallen_count() -> int:
+	return _fallen.size()
+
+
+func fallen_at(pos: Vector2i) -> MultiMeshInstance3D:
+	return _fallen.get(pos, null)
+
+
+func is_warming() -> bool:
+	return _warm != null
+
+
+func column_lean() -> Vector3:
+	var v: Variant = _column_mat.get_shader_parameter("lean")
+	return v if v is Vector3 else Vector3.ZERO
 
 
 func wreck_count() -> int:

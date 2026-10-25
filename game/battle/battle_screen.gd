@@ -254,6 +254,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# не з потоку подій, який щойно злитий вище.
 	_rebuild_units_for_active_player()
 	_rebuild_wrecks()
+	_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
 	# fly_to(), не center_on(): у самостійному запуску гейта немає, і програмний
 	# рух камери мусить доводитись плавно. Через launch() дошку одразу закриває
 	# гейт, а center_on() на confirmed зупиняє цей твін — витікати нічому.
@@ -284,6 +285,7 @@ func resume(match_service: Node = null) -> void:
 
 
 func _wire_view(board: Board) -> void:
+	_wreck_layer.set_wind(_weather.wind())
 	_scars = ScarMap.new(Vector2i(board.width, board.height))
 	_board_view.scar_map = _scars
 	_board_view.build(board)
@@ -902,6 +904,7 @@ func _rebuild_units_for_active_player() -> void:
 	# §3.11: міни — той самий знімок знання активного гравця, що й юніти, і в ті
 	# самі моменти (setup, після пакета подій, на confirmed гейта).
 	_mine_layer.rebuild(state, state.active_player)
+	_wreck_layer.rebuild_fallen(state, state.active_player)
 	# Розвідане росте з кожним кроком — шрами на щойно розвіданому з'являються одразу.
 	if _scars != null:
 		_scars.show_for(state.vision[state.active_player])
@@ -943,6 +946,14 @@ func _on_wreck_left(pos: Vector2i, type_id: int, facing: int) -> void:
 ## Прибрати показане — нічого не розкриває. Решту на гейті перемалює _rebuild_wrecks().
 func _on_wreck_removed(pos: Vector2i, _reason: int) -> void:
 	_wreck_layer.remove(pos)
+
+
+## Перше вбивство не сміє застигати на компіляції шейдерів ефектів: малюємо кожен раз,
+## невидимо, там, куди дивиться камера (поза кадром рушій їх не малює й не компілює).
+func _warm_up_fx(cell: Vector2i) -> void:
+	var at: Vector3 = IsoCameraRig.cell_to_world(cell)
+	BattleFx.warm_up(_units, at)
+	_wreck_layer.warm_up(at)
 
 
 func _first_unit_cell(player: int) -> Vector2i:

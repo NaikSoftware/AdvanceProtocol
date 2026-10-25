@@ -362,7 +362,7 @@ func test_move_along_tweens_position_to_final_cell() -> void:
 ## Виправлення 3: юніт довертається НА МІСЦІ ПЕРЕД кожним кроком шляху, що
 ## справді міняє напрямок (Board.facing_towards, чиста функція core/), а не
 ## паралельно з рухом. Крок 1 — на схід (facing=2), крок 2 — на південь
-## (facing=4); обидва — доворот (_FACE_TURN_DURATION=0.15) стартовий з
+## (facing=4); обидва — доворот (FACE_TURN_DURATION=0.15) стартовий з
 ## facing=0, тож кожен крок шляху займає 0.15+0.1=0.25с сумарно.
 func test_move_along_turns_the_unit_at_each_step() -> void:
 	view.bind(_unit(5, 0, Vector2i(0, 0), 0))  # дивиться на північ (facing=0)
@@ -458,12 +458,43 @@ func test_move_along_with_empty_path_still_finishes_without_moving() -> void:
 	assert_eq(view.position, start_pos, "порожній шлях не мусить зрушити юніт")
 
 
-func test_play_destroyed_returns_a_finishing_tween() -> void:
+func test_destroyed_squad_lays_all_figures_down_instead_of_shrinking() -> void:
 	view.bind(_unit(0))
 	var finished: Signal = view.play_destroyed()
-	var tween: Tween = finished.get_object()
-	tween.custom_step(10.0)
-	assert_eq(view.scale, Vector3.ZERO, "знищення піхоти — поки що твін масштабу до нуля")
+	(finished.get_object() as Tween).custom_step(10.0)
+	assert_eq(view.standing_figures(), 0)
+	assert_eq(view.scale, Vector3.ONE, "відділення не стискається в точку — фігури падають")
+	assert_false(view._hp_bar.visible)
+
+
+func _figures() -> MultiMeshInstance3D:
+	return view.get_node("Silhouette/Figures") as MultiMeshInstance3D
+
+
+## Відділення — чотири фігури одним викликом малювання; стоїть одна на кожну чверть HP, що
+## лишилась (`ceil(4 · hp / max_hp)`), решта лежить на тій самій основі.
+func test_squad_shows_one_standing_figure_per_quarter_of_hp() -> void:
+	view.bind(_unit(0))
+	assert_eq(_figures().multimesh.instance_count, UnitView.SQUAD_FIGURES)
+	assert_eq(UnitView.SQUAD_FIGURES, 4)
+	var cases: Dictionary = {100: 4, 76: 4, 75: 3, 74: 3, 50: 2, 26: 2, 25: 1, 1: 1, 0: 0}
+	for hp: int in cases:
+		view.set_hp(hp, 100)
+		assert_eq(view.standing_figures(), cases[hp], "hp %d" % hp)
+
+
+func test_fallen_figure_lies_flat_and_low() -> void:
+	var standing: Transform3D = UnitSilhouettes.figure_transform(0, true)
+	var fallen: Transform3D = UnitSilhouettes.figure_transform(3, false)
+	assert_eq(roundi(standing.basis.y.normalized().y), 1, "жива фігура стоїть")
+	assert_eq(roundi(fallen.basis.y.normalized().y), 0, "загибла лежить")
+	assert_true(fallen.origin.y < standing.origin.y)
+
+
+func test_vehicles_have_no_figures() -> void:
+	view.bind(_unit(5))
+	assert_null(view.get_node_or_null("Silhouette/Figures"))
+	assert_eq(view.standing_figures(), 0)
 
 
 func _explosions() -> Array[Node]:
@@ -579,8 +610,16 @@ func test_silhouette_fits_one_tile() -> void:
 		var root := UnitSilhouettes.build(id, Color.RED)
 		var lo := Vector3(INF, INF, INF)
 		var hi := Vector3(-INF, -INF, -INF)
-		for m: MeshInstance3D in root.get_children():
-			var box: AABB = m.mesh.get_aabb()
+		for m: Node3D in root.get_children():
+			if m is MultiMeshInstance3D:
+				# Фігури відділення: і стоячі, і лежачі мусять лишатись у тайлі.
+				for i in UnitView.SQUAD_FIGURES:
+					for up: bool in [true, false]:
+						var fb: AABB = UnitSilhouettes.figure_transform(i, up) * AABB(-UnitSilhouettes.FIGURE_SIZE * 0.5, UnitSilhouettes.FIGURE_SIZE)
+						lo = lo.min(fb.position)
+						hi = hi.max(fb.end)
+				continue
+			var box: AABB = (m as MeshInstance3D).mesh.get_aabb()
 			lo = lo.min(m.position + box.position)
 			hi = hi.max(m.position + box.end)
 		assert_lte(hi.x - lo.x, 1.0, "x типу %d" % id)

@@ -15,8 +15,9 @@ const RAIN_BOX: Vector3 = Vector3(2.6, 0.85, 2.6)
 ## Падіння, клітинок/с (28 м/с). Справжні 8 м/с з висоти камери дають штрихи в 1–5 px, що
 ## читаються крапками; швидший дощ з тією самою витримкою виглядає так, як справжній зблизька.
 const RAIN_FALL: float = 3.5
-## Знос вітром на одиницю падіння — уздовж правої осі кадру, тож усі штрихи нахилені в один бік.
-const RAIN_SLANT: float = 0.25
+## Вісь вітру — права вісь кадру (1, 0, -1): камера під `IsoCameraRig.YAW_DEGREES` і не
+## обертається, тож усі штрихи дощу й стовпи диму нахилені в один бік. Сила — `BattleLook.wind`.
+const WIND_AXIS: Vector3 = Vector3(0.70710678, 0.0, -0.70710678)
 ## Витримка, секунд: штрих — шлях краплі за цей час, у світі. Відношення довжини штриха до
 ## його швидкості на екрані — саме витримка, на будь-якому зумі.
 const RAIN_EXPOSURE: float = 0.045
@@ -79,9 +80,6 @@ func _init() -> void:
 	# дощу — початок координат, тож без пріоритету вода залежно від пана малювалась би поверх.
 	rain_mat.render_priority = RAIN_PRIORITY
 	rain.material_override = rain_mat
-	var v: Vector3 = rain_velocity()
-	rain_mat.set_shader_parameter("fall_speed", -v.y)
-	rain_mat.set_shader_parameter("wind", Vector2(v.x, v.z))
 	rain_mat.set_shader_parameter("exposure", RAIN_EXPOSURE)
 	rain_mat.set_shader_parameter("cycle", RAIN_CYCLE)
 	rain_mat.set_shader_parameter("life", RAIN_LIFE)
@@ -99,6 +97,10 @@ func apply(look: BattleLook) -> void:
 	environment.ambient_light_color = look.ambient_color
 	environment.ambient_light_energy = look.ambient_energy
 	_look = look
+	var v: Vector3 = rain_velocity()
+	var rain_mat := rain.material_override as ShaderMaterial
+	rain_mat.set_shader_parameter("fall_speed", -v.y)
+	rain_mat.set_shader_parameter("wind", Vector2(v.x, v.z))
 	_light_probe()
 	var sky_mat := environment.sky.sky_material as ShaderMaterial
 	sky_mat.set_shader_parameter("clear_amount", look.sky_clear)
@@ -190,11 +192,14 @@ func _place_rain() -> void:
 	mat.set_shader_parameter("cell_origin", lat.origin)
 
 
-## Швидкість краплі у світі, клітинок/с. Права вісь кадру — (1, 0, -1): камера під
-## `IsoCameraRig.YAW_DEGREES` і не обертається.
-static func rain_velocity() -> Vector3:
-	var right := Vector3(1.0, 0.0, -1.0).normalized()
-	return Vector3.DOWN * RAIN_FALL + right * RAIN_FALL * RAIN_SLANT
+## Горизонтальний вітер вигляду: знос на одиницю падіння. Його читають і дощ, і дим.
+func wind() -> Vector3:
+	return WIND_AXIS * (_look.wind if _look != null else 0.0)
+
+
+## Швидкість краплі у світі, клітинок/с.
+func rain_velocity() -> Vector3:
+	return Vector3.DOWN * RAIN_FALL + wind() * RAIN_FALL
 
 
 static func _rgb(c: Color) -> Vector3:

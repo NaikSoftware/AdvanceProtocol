@@ -1196,3 +1196,18 @@ func test_smoke_leans_the_same_way_as_the_rain() -> void:
 	var lean: Vector3 = (screen.get_node("%WreckLayer") as WreckLayer).column_lean()
 	assert_ne(lean, Vector3.ZERO, "передумова: у типовому вигляді вітер є")
 	assert_eq(lean.normalized(), Vector3(rain.x, 0.0, rain.z).normalized())
+
+
+## Перше вбивство матчу не сміє зависнути на компіляції шейдерів: екран бою на старті один
+## раз малює кожен матеріал ефектів, невидимо малим, і прибирає його.
+func test_setup_warms_up_every_fx_material_once() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _two_tanks_in_corners(service)
+	var units: Node3D = screen.get_node("%Units")
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	assert_eq(units.find_children("Explosion*", "", false, false).size(), 1, "куля розігріву")
+	assert_true(layer.is_warming(), "стовп, вогонь і обгорілий матеріал теж малюються раз")
+	_finish_all_processed_tweens()
+	assert_false(layer.is_warming())
+	assert_eq(layer.column_count(), 0)

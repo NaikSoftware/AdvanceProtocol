@@ -183,3 +183,39 @@ func test_smoke_is_stepped_at_eight_fps_and_stops_when_nothing_burns() -> void:
 	assert_false(layer.is_animating())
 	for code: String in [WreckLayer.column_shader().code, WreckLayer.fire_shader().code]:
 		assert_false(code.contains("TIME"), "шейдер диму не сміє читати TIME")
+
+
+## Дим іде туди ж, куди й дощ: нахил стовпа — та сама горизонтальна вісь вітру, що й у
+## WeatherRig, у SMOKE_LEAN_PER_WIND разів сильніший.
+func test_column_leans_along_the_wind_it_is_given() -> void:
+	var w := Vector3(0.3, 0.0, -0.3)
+	layer.set_wind(w)
+	assert_eq(layer.column_lean(), w * WreckLayer.SMOKE_LEAN_PER_WIND)
+	layer.set_wind(Vector3.ZERO)
+	assert_eq(layer.column_lean(), Vector3.ZERO, "у безвітря стовп стоїть прямо")
+
+
+func _dead_squad(p: Vector2i, type_id: int = 0) -> Unit:
+	var u: Unit = state.add_unit(type_id, 1, p, 2)
+	u.hp = 0
+	return u
+
+
+## Загиблі відділення лежать до кінця матчу — зі стану, тож переживають і перебудову, і
+## збереження; видно їх лише над розвіданим (§3.5).
+func test_fallen_squads_lie_where_they_died_on_seen_ground_only() -> void:
+	_dead_squad(Vector2i(2, 2))
+	_dead_squad(Vector2i(6, 6))
+	var tank: Unit = state.add_unit(5, 1, Vector2i(3, 3), 0)
+	tank.hp = 0
+	state.add_unit(0, 1, Vector2i(4, 4), 0)
+	for p: Vector2i in [Vector2i(2, 2), Vector2i(3, 3), Vector2i(4, 4)]:
+		_seen(0, p)
+	layer.rebuild_fallen(state, 0)
+	assert_eq(layer.fallen_count(), 1, "лише загиблі відділення над розвіданим; техніка — уламки")
+	var f: MultiMeshInstance3D = layer.fallen_at(Vector2i(2, 2))
+	assert_not_null(f)
+	assert_eq(f.multimesh.instance_count, UnitView.SQUAD_FIGURES)
+	assert_eq(Vector2(f.position.x, f.position.z), Vector2(2.0, 2.0))
+	layer.rebuild_fallen(state, 0)
+	assert_eq(layer.fallen_count(), 1, "перебудова не множить")

@@ -419,3 +419,77 @@ func test_wreck_events_reach_the_injected_callables_unchanged() -> void:
 	] as Array[Events.BattleEvent])
 	assert_eq(left, [[Vector2i(3, 4), 8, 6]])
 	assert_eq(removed, [[Vector2i(5, 1), Wrecks.Reason.BRIDGE_DEMOLISHED]])
+
+
+func _fx_named(prefix: String) -> Array[Node]:
+	return get_tree().root.find_children(prefix + "*", "", true, false).filter(func(n: Node) -> bool: return not n.is_queued_for_deletion())
+
+
+## Влучання видно на цілі, а дульний спалах — лише на стрільці, якого глядач бачить: спалах
+## на нерозвіданому тайлі показав би, звідки стріляли (§3.3.1).
+func test_unseen_shooter_gets_no_muzzle_flash_but_the_hit_still_shows() -> void:
+	var target: UnitView = _spawn_view(2, 5, 0, Vector2i(3, 3))
+	var shooter_unit := _unit(1, 5, 1, Vector2i(5, 3))
+	var target_unit := _unit(2, 5, 0, Vector2i(3, 3))
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return target if id == 2 else null,
+		func(id: int) -> Unit: return shooter_unit if id == 1 else (target_unit if id == 2 else null))
+	player.play([Events.ShotRetaliated.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
+	assert_eq(_fx_named("Muzzle").size(), 0, "стрілець поза розвіданим — жодного спалаху біля нього")
+	var hits: Array[Node] = _fx_named("Hit")
+	assert_eq(hits.size(), 1)
+	assert_eq((hits[0] as Node3D).position, target.position)
+	_finish_all_processed_tweens()
+
+
+func test_seen_tank_shooter_flashes_at_its_muzzle() -> void:
+	var shooter: UnitView = _spawn_view(1, 5, 0, Vector2i(2, 2))
+	var shooter_unit := _unit(1, 5, 0, Vector2i(2, 2))
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return shooter if id == 1 else null,
+		func(id: int) -> Unit: return shooter_unit if id == 1 else null)
+	player.play([Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
+	assert_eq(_fx_named("Muzzle").size(), 1)
+	assert_eq(_fx_named("Hit").size(), 0, "ціль поза розвіданим — влучання не малюємо")
+	_finish_all_processed_tweens()
+
+
+## Спалах влучання — раніше, ніж ціль обертається на стрільця: поворот іде наступною подією
+## й чекає, доки мить влучання не дограє.
+func test_the_target_turns_only_after_the_hit_moment() -> void:
+	var target: UnitView = _spawn_view(2, 5, 0, Vector2i(3, 3))
+	var shooter_unit := _unit(1, 5, 1, Vector2i(5, 3))
+	var target_unit := _unit(2, 5, 0, Vector2i(3, 3))
+	var resolved: Array[String] = []
+	player = EventPlayer.new(
+		func(id: int) -> UnitView:
+			resolved.append("view%d" % id)
+			return target if id == 2 else null,
+		func(id: int) -> Unit: return shooter_unit if id == 1 else (target_unit if id == 2 else null))
+	player.play([
+		Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT),
+		Events.UnitTurned.new(2, 2),
+	] as Array[Events.BattleEvent])
+	assert_eq(_fx_named("Hit").size(), 1, "влучання вже видно")
+	assert_eq(target.facing, 0, "а ціль ще не повернулась")
+	_finish_all_processed_tweens()
+	_finish_all_processed_tweens()
+	assert_eq(target.facing, 2)
+
+
+## §3.4: ціль спершу розвертається до стрільця, і лише тоді відповідає — постріл у
+## відповідь не може вилетіти з корпусу, що ще крутиться.
+func test_retaliation_waits_for_the_retaliators_turn() -> void:
+	var red: UnitView = _spawn_view(2, 5, 1, Vector2i(3, 3))
+	var red_unit := _unit(2, 5, 1, Vector2i(3, 3))
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return red if id == 2 else null,
+		func(id: int) -> Unit: return red_unit if id == 2 else null)
+	player.play([
+		Events.UnitTurned.new(2, 4),
+		Events.ShotRetaliated.new(2, 1, UnitTypes.ArmourSector.FRONT),
+	] as Array[Events.BattleEvent])
+	assert_eq(_fx_named("Muzzle").size(), 0, "поки корпус крутиться, пострілу нема")
+	_finish_all_processed_tweens()
+	assert_eq(_fx_named("Muzzle").size(), 1, "розвернувся — тоді стріляє")
+	_finish_all_processed_tweens()

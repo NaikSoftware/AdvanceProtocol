@@ -21,3 +21,4 @@ rain = false
 rain_amount = 0
 wetness = 0.0
 cloud_shadow_strength = 0.3
+wind = 0.12

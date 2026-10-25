@@ -20,7 +20,7 @@ extends RefCounted
 signal playback_finished
 
 ## Крок руху юніта тайл за тайлом (§1.4 — атмосфера читається, не
-## пролітає повз). Той самий порядок величини, що й _FACE_TURN_DURATION у
+## пролітає повз). Той самий порядок величини, що й FACE_TURN_DURATION у
 ## UnitView.
 const _MOVE_STEP_DURATION: float = 0.12
 
@@ -67,8 +67,16 @@ func play(events: Array[Events.BattleEvent]) -> void:
 		return
 
 	_is_playing = true
-	for event in events:
-		var awaitable: Variant = _dispatch(event)
+	# Поворот чекається лише перед пострілом (§3.4: розвернувся — тоді стріляє). Поворот на
+	# місці без бою не блокує ввід: швидкий другий тап гравця інакше губився б.
+	var last_shot: int = -1
+	for i in events.size():
+		if events[i] is Events.ShotFired or events[i] is Events.ShotRetaliated or events[i] is Events.DroneLaunched:
+			last_shot = i
+	for i in events.size():
+		var awaitable: Variant = _dispatch(events[i])
+		if events[i] is Events.UnitTurned and i > last_shot:
+			awaitable = null
 		await awaitable
 	_is_playing = false
 	playback_finished.emit()
@@ -185,10 +193,13 @@ func _handle_unit_turned(event: Events.UnitTurned) -> Variant:
 	var view: UnitView = _resolve_unit_view(event.unit_id)
 	if view == null:
 		return null
-	# face() навмисно fire-and-forget (Task 2.4, R14) — гравець не чекає на
-	# поворот, тож тут немає сигналу для await.
+	# Програвач чекає поворот (0,15 с): стрілець розвертається до пострілу, а ціль, що
+	# вижила, — до відповіді (§3.4); постріл із корпусу, що ще крутиться, читається як
+	# розворот уже після бою. Гравець на поворот не чекає — face() для вводу як був.
 	view.face(event.facing)
-	return null
+	# Окремий твін-пауза, а не сам твін повороту: той face() убиває наступним викликом, і
+	# вбитий твін finished не подає — програвач завис би назавжди.
+	return _pause(UnitView.FACE_TURN_DURATION)
 
 
 ## §3.2/§3.5: позиція вже показана попереднім UnitMoved, чий шлях
@@ -204,20 +215,49 @@ func _handle_move_blocked(_event: Events.MoveBlocked) -> Variant:
 ## відповідь (§3.3.1) власник прочитав як «не працює». Поштовх силуету — це
 ## не нова механіка (§10), а показ уже вирішеної події.
 func _handle_shot_fired(event: Events.ShotFired) -> Variant:
-	return _play_shot(event.attacker_id)
+	return _play_shot(event.attacker_id, event.target_id)
 
 
 ## Awaited окремо від пострілу вище — саме ця пауза й робить відповідь
 ## видимою як ДРУГИЙ постріл, а не як частину першого.
 func _handle_shot_retaliated(event: Events.ShotRetaliated) -> Variant:
-	return _play_shot(event.attacker_id)
+	return _play_shot(event.attacker_id, event.target_id)
 
 
-func _play_shot(shooter_id: int) -> Variant:
-	var view: UnitView = _resolve_unit_view(shooter_id)
-	if view == null:
+## Поштовх і дульний спалах — лише на стрільці, чий вузол є (глядач його бачить): спалах на
+## нерозвіданому тайлі показав би, звідки стріляли (§3.3.1). Влучання — на цілі, якщо її вузол
+## є; програвач чекає на нього, тож поворот цілі (наступна подія) іде вже після спалаху.
+func _play_shot(shooter_id: int, target_id: int, weapon: int = -1) -> Variant:
+	var shooter_view: UnitView = _resolve_unit_view(shooter_id)
+	var target_view: UnitView = _resolve_unit_view(target_id)
+	if weapon < 0:
+		var shooter: Unit = _resolve_unit(shooter_id)
+		weapon = BattleFx.weapon_of(shooter.unit_class()) if shooter != null else BattleFx.Weapon.RIFLE
+	var awaitable: Variant = null
+	if shooter_view != null:
+		awaitable = shooter_view.play_shot()
+		BattleFx.spawn_muzzle(shooter_view.get_parent(), shooter_view.transform, weapon)
+	if target_view != null:
+		var target: Unit = _resolve_unit(target_id)
+		var armoured: bool = target != null and UnitTypes.is_vehicle(target.unit_class())
+		var hit: Node3D = BattleFx.spawn_hit(target_view.get_parent(), target_view.position, weapon, armoured)
+		awaitable = _pause(BattleFx.HIT_HOLD_SEC)
+	return awaitable
+
+
+## Пауза програвача — твін дерева, а не вузла: вузол може звільнитись посеред паузи, і
+## тоді його твін не подав би finished, а програвач завис би назавжди.
+static func _pause(sec: float) -> Signal:
+	var t: Tween = Engine.get_main_loop().create_tween()
+	t.tween_interval(sec)
+	return t.finished
+
+
+func _resolve_unit(unit_id: int) -> Unit:
+	if not _unit_lookup.is_valid():
 		return null
-	return view.play_shot()
+	var result: Variant = _unit_lookup.call(unit_id)
+	return result if result is Unit else null
 
 
 ## §3.9: залишок дронів публічний і має готовий візуал — UnitView.set_drones.
@@ -226,7 +266,7 @@ func _handle_drone_launched(event: Events.DroneLaunched) -> Variant:
 	if view == null:
 		return null
 	view.set_drones(event.drones_left)
-	return null
+	return _play_shot(event.attacker_id, event.target_id, BattleFx.Weapon.DRONE)
 
 
 func _handle_damage_dealt(event: Events.DamageDealt) -> Variant:
