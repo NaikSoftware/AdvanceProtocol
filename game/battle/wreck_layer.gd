@@ -24,18 +24,26 @@ const FLIPBOOK_FPS: float = 8.0
 ## Розігріву досить кількох кадрів.
 const WARM_UP_SEC: float = 0.1
 
-## Слоти текстур: справжній флипбук замінює заступника заміною файла. Нема файла —
-## процедурний заступник тієї самої сітки кадрів.
-const SMOKE_TEX_PATH: String = "res://assets/vfx/smoke_column.png"
-const FIRE_TEX_PATH: String = "res://assets/vfx/wreck_fire.png"
+## Запечені флипбуки 8×8 (assets/vfx/SOURCES.md). Дим грає раз і закінчується порожнім:
+## стовп — це клуби, що стартують уступами, кожна від кадру 0 біля корпусу до порожнього
+## нагорі. Тонкий атлас — для стадії, де дим рідшає. Вогонь — безшовна петля.
+const SMOKE_TEX: Texture2D = preload("res://assets/vfx/smoke_column.png")
+const SMOKE_THIN_TEX: Texture2D = preload("res://assets/vfx/smoke_column_thin.png")
+const FIRE_TEX: Texture2D = preload("res://assets/vfx/wreck_fire.png")
 const FLIPBOOK_GRID: int = 8
+## Клітинка диму ≈ 22 м, сама хмара в ній ≈ 19 м; клітинка вогню ≈ 2 м, полум'я ≈ 1,7 м.
+const SMOKE_CELL_PER_CLOUD: float = 22.0 / 19.0
+const FIRE_CELL_PER_FLAME: float = 2.0 / 1.7
+## 64 кадри диму по 4 кадри/с: клуба живе 16 с від корпусу до верху стовпа.
+const SMOKE_FPS: float = 4.0
+const FIRE_FPS: float = 8.0
 
-## 1 тайл = 8 м: стовп 25 м заввишки, 3 м біля основи, 8 м угорі.
+## 1 тайл = 8 м: стовп 25 м заввишки; клуба 5,5 м біля корпусу, 9 м угорі.
 const COLUMN_HEIGHT: float = 25.0 / 8.0
-const COLUMN_BASE_W: float = 3.0 / 8.0
-const COLUMN_TOP_W: float = 8.0 / 8.0
-## Язики полум'я 3 / 2,2 / 1,6 м: на ходу загибелі всі три, далі один.
-const FLAME_M: Array[float] = [3.0, 2.2, 1.6]
+const COLUMN_BASE_W: float = 5.5 / 8.0
+const COLUMN_TOP_W: float = 9.0 / 8.0
+## Полум'я 3,5 / 2,5 / 1,8 м: на корпусі техніки, а не багаття; на ходу загибелі всі три.
+const FLAME_M: Array[float] = [3.5, 2.5, 1.8]
 ## Нахил стовпа на одиницю вітру `WeatherRig.wind()`: дим іде туди ж, куди й дощ. За вітру
 ## River (0,25) це ~20°; у безвітря стовп стоїть прямо.
 const SMOKE_LEAN_PER_WIND: float = 1.46
@@ -50,7 +58,6 @@ const HULL_SAG: float = 0.15 / 8.0
 static var _burnt: ShaderMaterial
 static var _column_shader: Shader
 static var _fire_shader: Shader
-static var _textures: Dictionary = {}
 
 class _Entry:
 	var node: Node3D
@@ -74,17 +81,20 @@ var _fire_cells: Array[Vector2i] = []
 func _init() -> void:
 	_column_mat = ShaderMaterial.new()
 	_column_mat.shader = column_shader()
-	_column_mat.set_shader_parameter("puff_tex", _flipbook(SMOKE_TEX_PATH, false))
+	_column_mat.set_shader_parameter("puff_tex", SMOKE_TEX)
+	_column_mat.set_shader_parameter("thin_tex", SMOKE_THIN_TEX)
 	_column_mat.set_shader_parameter("grid", float(FLIPBOOK_GRID))
 	_column_mat.set_shader_parameter("height", COLUMN_HEIGHT)
-	_column_mat.set_shader_parameter("base_w", COLUMN_BASE_W)
-	_column_mat.set_shader_parameter("top_w", COLUMN_TOP_W)
+	_column_mat.set_shader_parameter("base_w", COLUMN_BASE_W * SMOKE_CELL_PER_CLOUD)
+	_column_mat.set_shader_parameter("top_w", COLUMN_TOP_W * SMOKE_CELL_PER_CLOUD)
+	_column_mat.set_shader_parameter("rise", SMOKE_FPS / 64.0)
 	_fire_mat = ShaderMaterial.new()
 	_fire_mat.shader = fire_shader()
 	# Вогонь — поверх диму власного стовпа, а не за ним.
 	_fire_mat.render_priority = 1
-	_fire_mat.set_shader_parameter("flame_tex", _flipbook(FIRE_TEX_PATH, true))
+	_fire_mat.set_shader_parameter("flame_tex", FIRE_TEX)
 	_fire_mat.set_shader_parameter("grid", float(FLIPBOOK_GRID))
+	_fire_mat.set_shader_parameter("play_fps", FIRE_FPS)
 	_columns = _multimesh("Columns", _column_mat, MAX_COLUMNS * PUFFS_PER_COLUMN)
 	_fires = _multimesh("Fires", _fire_mat, MAX_COLUMNS * MAX_FLAMES)
 	for i in MAX_FIRE_LIGHTS:
@@ -341,7 +351,8 @@ func _refresh_effects() -> void:
 		for k in PUFFS_PER_COLUMN:
 			var idx: int = i * PUFFS_PER_COLUMN + k
 			mm.set_instance_transform(idx, Transform3D(Basis(), IsoCameraRig.cell_to_world(c)))
-			mm.set_instance_custom_data(idx, Color(float(k) / float(PUFFS_PER_COLUMN), fposmod(seed + 0.618 * k, 1.0), opacity, 0.0))
+			# w — тонкий атлас для стадії, де дим уже рідшає.
+			mm.set_instance_custom_data(idx, Color(float(k) / float(PUFFS_PER_COLUMN), fposmod(seed + 0.618 * k, 1.0), opacity, 1.0 if opacity <= 0.3 else 0.0))
 	mm.visible_instance_count = _column_cells.size() * PUFFS_PER_COLUMN
 	var fm: MultiMesh = _fires.multimesh
 	var n: int = 0
@@ -350,7 +361,7 @@ func _refresh_effects() -> void:
 		for k in flames_for(_entries[c].life):
 			var off := Vector3(0.09 * float(k % 2 * 2 - 1) * float(mini(k, 1)), 0.0, 0.07 * float(k - 1))
 			fm.set_instance_transform(n, Transform3D(Basis(), base + off))
-			fm.set_instance_custom_data(n, Color(FLAME_M[k] / 8.0, fposmod(float(hash(c) % 89) / 89.0 + 0.37 * k, 1.0), 1.0, 0.0))
+			fm.set_instance_custom_data(n, Color(FLAME_M[k] * FIRE_CELL_PER_FLAME / 8.0, fposmod(float(hash(c) % 89) / 89.0 + 0.37 * k, 1.0), 1.0, 0.0))
 			n += 1
 	fm.visible_instance_count = n
 	for i in _lights.size():
@@ -417,15 +428,6 @@ static func fire_shader() -> Shader:
 	return _fire_shader
 
 
-## Флипбук із файла, інакше заступник тієї самої сітки 8×8 (FxPlaceholder).
-static func _flipbook(path: String, fire: bool) -> Texture2D:
-	if ResourceLoader.exists(path):
-		return load(path)
-	if not _textures.has(fire):
-		_textures[fire] = ImageTexture.create_from_image(FxPlaceholder.fire_atlas() if fire else FxPlaceholder.smoke_atlas())
-	return _textures[fire]
-
-
 const _BURNT_CODE: String = """
 shader_type spatial;
 render_mode cull_back;
@@ -472,66 +474,62 @@ const _COLUMN_CODE: String = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
-// Без міпмап і без розмиття: клуба на 7 см/px мусить читатись чіткою структурою.
+// Колір і пряма альфа — з атласу; між кадрами — плавний перехід.
 uniform sampler2D puff_tex : source_color, filter_linear;
+uniform sampler2D thin_tex : source_color, filter_linear;
 uniform float grid = 8.0;
 // Час крокує таймером WreckLayer, 8 разів на секунду: вбудований час рушія тримав би кадр щокадрово.
 uniform float fx_time = 0.0;
-// Кадрів флипбука на секунду; між кадрами — змішування, тож 4 кадри/с при кроці 8/с не смикаються.
-uniform float play_fps = 4.0;
 uniform float height = 3.0;
-uniform float base_w = 0.4;
-uniform float top_w = 1.0;
+uniform float base_w = 0.8;
+uniform float top_w = 1.3;
 uniform vec3 lean = vec3(0.0);
-uniform float rise = 0.06;
-// Лінійні: густе ядро L* 12–18, теплий світлий край L* 45–55 (b* +12), верх L* 35–45.
-uniform vec3 core = vec3(0.020, 0.019, 0.018);
-uniform vec3 rim = vec3(0.215, 0.180, 0.140);
-uniform vec3 top = vec3(0.110, 0.110, 0.115);
-// Твердий край клуби: вузька смуга альфи замість м'якого спаду.
-uniform vec2 alpha_edge = vec2(0.42, 0.58);
+// Частка шляху клуби за секунду = кадрів/с атласу / 64: кадр і висота йдуть разом.
+uniform float rise = 0.0625;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
-// М'які краї (1,2 м) лише там, де квад врізається в землю чи уламки.
+// М'які краї (1,2 м) лише там, де клуба врізається в землю чи уламки.
 uniform float soft_fade = 0.15;
 
 varying float v_alpha;
 varying float v_frame;
-varying float v_t;
+varying float v_thin;
 
 void vertex() {
-	// INSTANCE_CUSTOM: x — місце клуби в стовпі, y — власний початковий кадр, z — густота стадії.
+	// INSTANCE_CUSTOM: x — уступ клуби в стовпі, y — зсув убік, z — густота стадії, w — тонкий атлас.
 	float t = fract(INSTANCE_CUSTOM.x + fx_time * rise);
 	vec3 root = MODEL_MATRIX[3].xyz;
 	float w = mix(base_w, top_w, t);
-	float jig = (INSTANCE_CUSTOM.y - 0.5) * 0.15 * w;
-	// Від даху корпусу, а не від землі: інакше густа основа ховає вогонь.
-	vec3 c = root + vec3(0.0, t * height + 0.38, 0.0) + lean * t * height;
 	vec3 right = INV_VIEW_MATRIX[0].xyz;
 	vec3 up = INV_VIEW_MATRIX[1].xyz;
-	c += right * jig;
+	// Від даху корпусу, а не від землі: інакше клуба ховає вогонь.
+	vec3 c = root + vec3(0.0, t * height + 0.38, 0.0) + lean * t * height;
+	c += right * (INSTANCE_CUSTOM.y - 0.5) * 0.15 * w;
 	vec3 world = c + (right * VERTEX.x + up * VERTEX.y) * w;
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
-	// Густий нижче 60 % висоти, далі тоншає до ≤ 0,35 і зникає до верху.
-	float dens = mix(0.95, 0.3, smoothstep(0.6, 0.85, t)) * (1.0 - smoothstep(0.9, 1.0, t));
-	v_alpha = INSTANCE_CUSTOM.z * dens * smoothstep(0.0, 0.06, t);
-	v_frame = fx_time * play_fps + INSTANCE_CUSTOM.y * grid * grid;
-	v_t = t;
+	v_alpha = INSTANCE_CUSTOM.z;
+	// Кадр — від шляху клуби: кадр 0 на корпусі, порожній кадр нагорі, тож стовп без шва.
+	v_frame = t * (grid * grid - 1.0);
+	v_thin = INSTANCE_CUSTOM.w;
 }
 
-vec4 frame_at(float f, vec2 uv) {
-	float n = mod(f, grid * grid);
-	return texture(puff_tex, (clamp(uv, vec2(0.002), vec2(0.998)) + vec2(mod(n, grid), floor(n / grid))) / grid);
+vec4 frame_at(sampler2D atlas, float f, vec2 uv) {
+	float n = clamp(f, 0.0, grid * grid - 1.0);
+	return texture(atlas, (clamp(uv, vec2(0.002), vec2(0.998)) + vec2(mod(n, grid), floor(n / grid))) / grid);
 }
 
 void fragment() {
-	vec4 tex = mix(frame_at(floor(v_frame), UV), frame_at(floor(v_frame) + 1.0, UV), fract(v_frame));
-	float a = smoothstep(alpha_edge.x, alpha_edge.y, tex.a);
-	// Освітлення — із самого кадру (яскравість): ядро темне, освітлений бік клуби теплий.
-	float lum = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
-	vec3 col = mix(core, top, smoothstep(0.45, 0.9, v_t)) * (0.55 + 0.9 * lum);
-	col = mix(col, rim, smoothstep(0.85, 1.0, lum) * 0.45 * (1.0 - smoothstep(0.6, 0.9, v_t)));
-	ALBEDO = col;
-	ALPHA = a * v_alpha;
+	vec4 a0;
+	vec4 a1;
+	if (v_thin > 0.5) {
+		a0 = frame_at(thin_tex, floor(v_frame), UV);
+		a1 = frame_at(thin_tex, floor(v_frame) + 1.0, UV);
+	} else {
+		a0 = frame_at(puff_tex, floor(v_frame), UV);
+		a1 = frame_at(puff_tex, floor(v_frame) + 1.0, UV);
+	}
+	vec4 tex = mix(a0, a1, fract(v_frame));
+	ALBEDO = tex.rgb;
+	ALPHA = tex.a * v_alpha;
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);
@@ -544,12 +542,11 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabl
 
 uniform sampler2D flame_tex : source_color, filter_linear;
 uniform float grid = 8.0;
-// Той самий крок таймера, що й у диму; полум'я грає швидше.
+// Той самий крок таймера, що й у диму; петля безшовна.
 uniform float fx_time = 0.0;
 uniform float play_fps = 8.0;
-// Колір несе сам кадр (серце #FFD9A0 → край #E0702A); понад 1 — найяскравіше на екрані.
+// Колір несе сам кадр; понад 1 — вогонь світиться й лишається найяскравішим на екрані.
 uniform float gain = 2.2;
-uniform vec2 alpha_edge = vec2(0.42, 0.58);
 // На далекому зумі язик не дрібніший за 6 px: інакше вогонь зникає, а дим без нього бреше.
 uniform float min_px = 6.0;
 // Висота кадру в пікселях: VIEWPORT_SIZE у вершинному шейдері тут нульовий, тож її дає WreckLayer.
@@ -560,7 +557,7 @@ varying float v_frame;
 void vertex() {
 	float w = INSTANCE_CUSTOM.x;
 	vec3 root = MODEL_MATRIX[3].xyz;
-	vec3 c = root + vec3(0.0, w * 0.45 + 0.5, 0.0);
+	vec3 c = root + vec3(0.0, w * 0.4 + 0.45, 0.0);
 	vec4 p0 = PROJECTION_MATRIX * VIEW_MATRIX * vec4(c, 1.0);
 	vec4 p1 = PROJECTION_MATRIX * VIEW_MATRIX * vec4(c + INV_VIEW_MATRIX[1].xyz * w, 1.0);
 	float px = length(p1.xy / p1.w - p0.xy / p0.w) * viewport_h * 0.5;
@@ -578,6 +575,6 @@ vec4 frame_at(float f, vec2 uv) {
 void fragment() {
 	vec4 tex = mix(frame_at(floor(v_frame), UV), frame_at(floor(v_frame) + 1.0, UV), fract(v_frame));
 	ALBEDO = tex.rgb * gain;
-	ALPHA = smoothstep(alpha_edge.x, alpha_edge.y, tex.a);
+	ALPHA = tex.a;
 }
 """
