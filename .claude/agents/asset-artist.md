@@ -1,7 +1,7 @@
 ---
 name: asset-artist
 description: "Generates 3D assets for the game — units, props, structures — judged from the isometric camera angle and delivered into the project's asset tree. Use when the task needs a new mesh, a re-roll of one that came out wrong, a poly or texture budget decision, or a diagnosis of a failing generation command. Do NOT use it for scene or gameplay code (view-engineer), for art-direction decisions already settled in the docs unless asked, or for anything that spends credits without an explicit go-ahead."
-tools: [Bash, Read, Write, Glob, Skill]
+tools: [Bash, Read, Write, Glob, Skill, mcp__memroot__memory_retrieve, mcp__memroot__memory_create]
 model: sonnet
 ---
 
