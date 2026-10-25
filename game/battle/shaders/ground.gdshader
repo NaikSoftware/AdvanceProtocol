@@ -412,6 +412,11 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 		float clump = dry_season ? 0.0 : smoothstep(0.62, 0.76, vnoise(p * 12.0 + 3.0));
 		alb = mix(alb, grass, max(1.0 - floor_k, clump * 0.8));
 	}
+	if (layer_base[layer] == MUD && dry_season) {
+		// Сухий ґрунт двору світліший за щебінь і траву довкола, тож там, де його вага велика, лягав
+		// блідими овалами: темніший і тепліший, у тон двору.
+		alb *= 0.85 * vec3(1.02, 1.0, 0.94);
+	}
 	if (layer_base[layer] == MARSH) {
 		// Купини 0.4–0.8 м: світліші солом'яні верхи й темні проміжки; плями очерету 2–4 м.
 		vec3 lw = vec3(0.299, 0.587, 0.114);
@@ -634,7 +639,8 @@ void fragment() {
 		if (yard_slot >= 0) {
 			float yard = smoothstep(0.35, 0.65, S[yard_slot]);
 			float patch = 1.0 - smoothstep(0.4, 0.6, fbm(p * 1.4 + 57.0) + 0.25 * (fbm(p * 2.0 + 11.0) - 0.5));
-			mud_soil = max(mud_soil, yard * mix(0.25, 0.75, patch));
+			// Стеля 0.5, не 0.75: суцільний ґрунт двору лягав рівними блідими плямами.
+			mud_soil = max(mud_soil, yard * mix(0.2, 0.5, patch));
 		}
 		float soil_w = 0.0;
 		for (int i = 0; i < 3; i++) {
@@ -869,6 +875,9 @@ void fragment() {
 			// Асфальт і бруківка темніші за траву: сухі ~0.8, мокрі ~0.7 її яскравості. Множиться тут, після
 			// стиснення яскравості рельєфу (нижче), — темніше альбедо воно з'їдало майже повністю.
 			road_mul *= mix(1.0, mix(PAVED_DRY_K, PAVED_WET_K, wet_now), rt.r + rt.b);
+			// Мокра ґрунтівка темніша: поза коліями, особливо на розвилці, суха світла пляма ґрунту в дощ
+			// читалась серпанком біля кінця асфальту.
+			road_mul *= mix(1.0, 0.78, wet_now * rt.g);
 			vec3 lw = vec3(0.299, 0.587, 0.114);
 			// Ґрунтівка: бурий ґрунт ~70 % поверх трави (тіло 0.45–0.9 плямами), смуги коліс —
 			// голий ґрунт, посередині — трав'яна смужка 0.4–0.6 м із розривами на ~25 % довжини.
@@ -906,9 +915,9 @@ void fragment() {
 			// завдовжки ~ширину дороги, у яку асфальт переходить плямами.
 			float apron = 1.0 - smoothstep(0.45, 0.9, rt.r + 0.35 * (vnoise(p * 2.5 + 17.0) - 0.5));
 			asph = mix(asph, gravel, max(crumble, apron * step(0.05, rt.g)));
-			// Бруківка: бордюр — темніша смуга 0.3 м по краю вулиці (2 px на типовому зумі; вужча
-			// зникає).
-			float kerb = smoothstep(-0.45, -0.3, de) * rt.b;
+			// Бруківка: бордюр — трохи темніша смуга ~0.15 м по краю вулиці з розривами: суцільна темна
+			// лінія 0.3 м (×0.68) читалась намальованою обвідкою кожної дороги.
+			float kerb = smoothstep(-0.4, -0.33, de) * rt.b * smoothstep(0.3, 0.6, vnoise(vec2(u * 0.6, side * 13.0 + 1.0)));
 			// Асфальт -> бруківка: той самий шум, що й у текстурі вище, тож тон і текстура
 			// міняються разом.
 			float kp = smoothstep(0.25, 0.75, rt.r / max(rt.r + rt.b, 1e-4) + 0.35 * (fbm(p * 1.7 + 13.0) - 0.5));
@@ -918,7 +927,7 @@ void fragment() {
 			float g_k = smoothstep(0.3, 0.7, rt.g + 0.3 * (vnoise(p * 2.0 + 29.0) - 0.5) + 0.15 * (vnoise(p * 7.0 + 41.0) - 0.5));
 			// Бордюр множиться після стиснення яскравості (як колії), інакше воно вдвічі зменшує
 			// ΔL*.
-			road_mul *= mix(1.0, 0.68, kerb * (1.0 - g_k));
+			road_mul *= mix(1.0, 0.84, kerb * (1.0 - g_k));
 			vec3 road_alb = mix(paved_alb, dirt_alb, g_k);
 			// Калюжі в коліях — у дощ і при ґрунті MUD, на кожній колії свої (хеш комірки й боку),
 			// тож не стають у ряд пунктиром. Сухо без MUD — жодної. На всю ширину в низинах — лише
@@ -962,10 +971,10 @@ void fragment() {
 			vec3 trampled = mix(alb, vec3(dot(alb, lw)) * 1.1, 0.35);
 			alb = mix(alb, mix(trampled, ra, speck * 0.6), vg * 0.6);
 			alb = mix(alb, road_alb, road_cov);
-			// Узбіччя — вузький (~0.3 м) суцільний гравій із зерном ~6 см і чітким зовнішнім краєм: напівпрозора
+			// Узбіччя — вузький (~0.3 м) суцільний гравій із зерном ~0.4 м і чітким зовнішнім краєм: напівпрозора
 			// смуга читалась асфальтом, крізь який видно траву, а широка гладка — бежевою стрічкою.
 			float shoulder = rt.r * step(0.0, de) * (1.0 - smoothstep(0.09, 0.12, de + 0.04 * (vnoise(vec2(u * 0.9, side * 11.0)) - 0.5)));
-			alb = mix(alb, gravel * vec3(1.05, 1.0, 0.9) * (0.6 + 0.8 * vnoise(p * 140.0)), shoulder * (1.0 - road_cov) * (0.85 + 0.15 * vnoise(p * 17.0)));
+			alb = mix(alb, gravel * vec3(1.05, 1.0, 0.9) * (0.7 + 0.6 * vnoise(p * 20.0)) * (0.85 + 0.3 * vnoise(p * 90.0)), shoulder * (1.0 - road_cov) * (0.85 + 0.15 * vnoise(p * 17.0)));
 			nxy = mix(nxy, rn, road_cov);
 			rough = mix(rough, mix(0.9, 0.72, rt.r + rt.b), road_cov);
 		}
@@ -1036,12 +1045,13 @@ void fragment() {
 				// Мокрий камінь: темна вузька кромка 1–2 px, де камінь входить у ґрунт.
 				float rim_w = dry_season ? 0.0 : smoothstep(0.4, 0.45, rx) * (1.0 - rock_k);
 				float shadow = 0.0;
-				float h2 = rh;
+				float h2;
+				// Висота каменя ~0.1 м (2–3 px на z6) у бік сонця: дає світлий і тіньовий бік, а на сонці —
+				// ще й тінь (точка в тіні, якщо камінь між нею й сонцем).
+				vec2 so = normalize(sun_dir.xz + vec2(1e-4)) * (0.1 / METRES_PER_TILE);
+				vec3 a2; vec2 n2;
+				stone_sample(p + so, dpx, dpy, a2, n2, h2);
 				if (dry_season) {
-					// Тінь ~0.1 м (2–3 px на z6) за каменем — точка в тіні, якщо камінь між нею й сонцем.
-					vec2 so = normalize(sun_dir.xz + vec2(1e-4)) * (0.1 / METRES_PER_TILE);
-					vec3 a2; vec2 n2;
-					stone_sample(p + so, dpx, dpy, a2, n2, h2);
 					shadow = 1.5 * smoothstep(0.45, 0.58, rs + (h2 - 0.5) * STONE_H) * (1.0 - rock_k);
 				}
 				// Тон каменю — відтінок ґрунту під ним (не синювато-сірий фото): камінь із того ж
@@ -1054,21 +1064,18 @@ void fragment() {
 				float shade_in = clamp(dot(ra, lw3) / pm, 0.8, 1.2);
 				vec3 sn = slope_to_world(rn * 2.0);
 				float ndl = clamp((dot(sn, sun_dir) - sun_dir.y) * 3.0, -1.0, 1.0);
-				// На сонці бік каменя — з висоти: нижче до сонця — бік до сонця. Нормаль фото на 2–3 px
-				// каменя вже розмита мипами й світлотіні не дає.
-				if (dry_season) {
-					ndl = clamp(ndl + (rh - h2) * STONE_H * 4.0, -1.0, 1.0);
-				}
+				// Бік каменя — з висоти: нижче до сонця — бік до сонця. Нормаль фото на 2–3 px каменя вже
+				// розмита мипами й світлотіні не дає.
+				ndl = clamp(ndl + (rh - h2) * STONE_H * 4.0, -1.0, 1.0);
 				// Відтінок ґрунту приглушений (на траві камінь інакше став би зеленим); під хмарами — менше:
-				// холодне небо робить нейтральний сірий синюватим поряд із теплим ґрунтом.
-				// Мокрий камінь під хмарами — темніший за ґрунт (~0.6), блиск дає шорсткість нижче.
-				vec3 sc = mix(vec3(gl), alb, dry_season ? 0.45 : 0.65) * (dry_season ? 1.12 : 0.6) * shade_in * (1.0 + 0.3 * ndl);
-				if (dry_season) {
-					sc *= mix(vec3(0.93, 0.96, 1.05), vec3(1.06, 1.0, 0.9), 0.5 + 0.5 * ndl);
-				}
+				// холодне небо робить нейтральний сірий синюватим поряд із теплим ґрунтом. Мокрий камінь:
+				// освітлений бік ~1.3 ґрунту, тіньовий ~0.65, буруватий — темні рівні цятки читались синіми.
+				vec3 sc = mix(vec3(gl), alb, dry_season ? 0.45 : 0.6) * (dry_season ? 1.12 : 1.0) * shade_in
+						* (1.0 + 0.35 * ndl);
+				sc *= dry_season ? mix(vec3(0.93, 0.96, 1.05), vec3(1.06, 1.0, 0.9), 0.5 + 0.5 * ndl) : vec3(1.03, 1.0, 0.93);
 				alb = mix(alb * (1.0 - 0.3 * max(ring, shadow)) * (1.0 - 0.5 * rim_w), sc, rock_k);
 				// Нормаль каменю з фото (×2): освітлений і тіньовий бік кожного каменя.
-				nxy = mix(nxy, rn * (dry_season ? 2.0 : 1.0), rock_k);
+				nxy = mix(nxy, rn * (dry_season ? 2.0 : 1.6), rock_k);
 			}
 			if (bank_amt > 0.01) {
 				vec3 ba; vec2 bn; float bh; float bc;
@@ -1155,6 +1162,9 @@ void fragment() {
 		// плівку поверх крон.
 		float pool_wet = smoothstep(0.6, 0.9, marsh_w) * smoothstep(0.1, 0.35, weather_wetness) * (1.0 - smoothstep(0.2, 0.6, bank_k)) * pud_gate;
 		float pool = pool_wet * (1.0 - smoothstep(0.27, 0.33, pool_f));
+		// Середина вікна відбиває більше неба (до ~40 % сірого), край — оливковий: рівна пляма читалась
+		// плямою на ґрунті, а небо на всю ширину давало сірий обідок на переході.
+		float pool_ctr = 1.0 - smoothstep(0.12, 0.27, pool_f);
 		// Обідок ~0.3–0.5 м: темний мокрий мул (~0.35 від трави поруч), у який вода м'яко переходить.
 		float pool_rim = pool_wet * (1.0 - smoothstep(0.31, 0.45, pool_f)) * (1.0 - pool);
 		alb *= mix(1.0, 0.35, pool_rim) * mix(vec3(1.0), vec3(0.95, 0.97, 0.85), pool_rim);
@@ -1171,9 +1181,9 @@ void fragment() {
 		if (use_height) {
 			float above_m = (world_pos.y - water_level) / 0.125;
 			// Смуга — за горизонталлю (висота / тангенс схилу): 0.2-0.5 м упоперек і на косі, і на
-			// обриві.
+			// обриві; у каламутного ставка — 0.08–0.2 м, бо ширша лягала темним розмитим ореолом.
 			float run_m = above_m / max(slope_tan, 0.05);
-			shore = (1.0 - smoothstep(0.2, 0.5, run_m)) * smoothstep(0.03, 0.12, shore_mask);
+			shore = (1.0 - smoothstep(mix(0.2, 0.08, clamp(water_murk, 0.0, 1.0)), mix(0.5, 0.2, clamp(water_murk, 0.0, 1.0)), run_m)) * smoothstep(0.03, 0.12, shore_mask);
 		}
 		alb *= mix(1.0, 0.6, shore);
 		// Темна мокра лінія просто в урізі (2-4 px на близькому зумі), а не лише розмита смуга.
@@ -1188,7 +1198,7 @@ void fragment() {
 		// тоді не рівна пляма, а йде градієнтом і ворушиться.
 		float rv = puddle > 0.0 ? rv_all : 0.0;
 		vec2 wind = vec2(vnoise(p * 6.0 + vec2(TIME * 0.35, 0.0)), vnoise(p * 6.0 + vec2(17.0, TIME * 0.3))) - 0.5;
-		vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * 1.2 * wet * rv + wind * 0.7 * pool : vec2(0.0);
+		vec2 ripple = puddle > 0.0 ? rain_ripples(p, TIME) * (1.2 + 1.5 * pool) * wet * rv + wind * 0.7 * pool : vec2(0.0);
 		// Калюжа й вікно болота матові для світла: небо в них — лише EMISSION з обмеженою часткою
 		// нижче. Глянець через звичайне освітлення додавав зонд і сонце — біле дзеркало, світлий
 		// обвід по краю й білі цятки на колах дощу.
@@ -1221,7 +1231,7 @@ void fragment() {
 			vec3 vw = normalize(CAMERA_POSITION_WORLD - world_pos);
 			float fr = 0.1 + 0.9 * pow(1.0 - clamp(dot(nw, vw), 0.0, 1.0), 3.0);
 			// Калюжа на асфальті — до 0.5 у центрі, край м'який: на ~15–25 рівнів світліша за мокрий асфальт.
-			float sky_cap = mix(mix(PUDDLE_SKY_MAX, 0.5, paved_sheen * road_cov), POOL_SKY_MAX, pool);
+			float sky_cap = mix(mix(PUDDLE_SKY_MAX, 0.5, paved_sheen * road_cov), mix(POOL_SKY_MAX, 0.28, pool_ctr), pool);
 			refl = overcast_sky_at(reflect(-vw, nw), TIME, sky_clear) * min(fr * mirror, sky_cap);
 			float murk_k = clamp(water_murk, 0.0, 1.0);
 			refl = mix(refl, vec3(dot(refl, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.92, 0.98, 1.02),
@@ -1276,16 +1286,16 @@ void fragment() {
 			EMISSION = debug_view == 1 ? dc : vec3(debug_view == 2 ? road_cov : rock_dbg);
 			rough = 1.0;
 		}
-		// Сухий камінь матовий; мокрий блищить (0.55: на 0.35 крутий бік давав білі іскри в 1 px).
-		// Темний альбедо (~0.6 ґрунту) і вдвічі пласкіша нормаль не дають йому синіти від сірого неба.
-		ROUGHNESS = mix(rough, dry_season ? 1.0 : 0.55, rock_dbg);
+		// Камінь матовий: мокрий відблиск сірого неба на крутих нормалях фарбував його в синій, а на
+		// низькій шорсткості давав білі іскри в 1 px.
+		ROUGHNESS = mix(rough, 1.0, rock_dbg);
 		// Колії й смуги коліс темніші й у відбитті: інакше постійний відблиск неба (F0 0.04 при
 		// альбедо ~0.06) вдвічі зменшує їхній ΔL* на екрані.
 		// Вікна болота під ясним небом віддзеркалювали б синє небо зонда; каламутна стояча вода —
 		// темна, тож її дзеркало слабшає з `water_murk` (на Річці 0, множник рівно 1).
 		// Мокрий асфальт поза калюжами — 0.4 дзеркала: зонд на шорсткості 0.5 освітлював його до сухого тону.
 		SPECULAR = mix(0.5, 0.2, bank_amt) * mix(1.0, road_mul, road_cov) * (1.0 - puddle) * mix(1.0, 0.4, wet * road_cov * (rt.r + rt.b))
-				* (1.0 - 0.8 * pool * clamp(water_murk, 0.0, 1.0)) * (1.0 - (dry_season ? 0.8 : 0.5) * rock_dbg) * (1.0 - 0.8 * scar_dark);
+				* (1.0 - 0.8 * pool * clamp(water_murk, 0.0, 1.0)) * (1.0 - 0.8 * rock_dbg) * (1.0 - 0.8 * scar_dark);
 		NORMAL_MAP = vec3(nxy * 0.5 + 0.5, 1.0);
 	}
 }
