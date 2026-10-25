@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dctm1dmrd0f5t"
-path="res://.godot/imported/infra_tower_lattice_lod_tower_steel_a.png-935f2c0fa250028cfb300c795e735290.ctex"
+uid="uid://o5lvn38xwoy1"
+path="res://.godot/imported/infra_fence_po2_po2_post_a.jpg-1ba69ddebbec2d3558b4fffd780befa2.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "43316bdce4c4b855a717321dbbee2d50"
+"md5": "ed5323b3b88127240f07caff6278fe5a"
 }
 
 [deps]
 
-source_file="res://assets/props/infra_tower_lattice_lod_tower_steel_a.png"
-dest_files=["res://.godot/imported/infra_tower_lattice_lod_tower_steel_a.png-935f2c0fa250028cfb300c795e735290.ctex"]
+source_file="res://assets/props/infra_fence_po2_po2_post_a.jpg"
+dest_files=["res://.godot/imported/infra_fence_po2_po2_post_a.jpg-1ba69ddebbec2d3558b4fffd780befa2.ctex"]
 
 [params]
 

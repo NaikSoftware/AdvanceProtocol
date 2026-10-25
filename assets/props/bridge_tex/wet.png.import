@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cem763fwglon"
-path="res://.godot/imported/infra_culvert_culvert_concrete_n.jpg-569b0182131e2c1fd4ad28d21adbf38d.ctex"
+uid="uid://bgel2ribl3i8b"
+path="res://.godot/imported/wet.png-d0576971849b4727292381cce5d7e413.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "db5234dcffaee90f8801b41cb2c9f22f"
 }
 
 [deps]
 
-source_file="res://assets/props/infra_culvert_culvert_concrete_n.jpg"
-dest_files=["res://.godot/imported/infra_culvert_culvert_concrete_n.jpg-569b0182131e2c1fd4ad28d21adbf38d.ctex"]
+source_file="res://assets/props/bridge_tex/wet.png"
+dest_files=["res://.godot/imported/wet.png-d0576971849b4727292381cce5d7e413.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

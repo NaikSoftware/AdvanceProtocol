@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bgbmhrgw27ic7"
-path="res://.godot/imported/infra_culvert_culvert_concrete_a.jpg-6ba4a0c9d539239bc8bc56cf7c0d18e1.ctex"
+uid="uid://dalsqw5t6r36"
+path="res://.godot/imported/infra_fence_euro_euro_post_a.jpg-a3f69d928a2d45fb465e56747247214d.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "8b1525f70b8d380f1795e22c71c5d1eb"
+"md5": "5558ab60a3bd80ddf79c070779edbcd7"
 }
 
 [deps]
 
-source_file="res://assets/props/infra_culvert_culvert_concrete_a.jpg"
-dest_files=["res://.godot/imported/infra_culvert_culvert_concrete_a.jpg-6ba4a0c9d539239bc8bc56cf7c0d18e1.ctex"]
+source_file="res://assets/props/infra_fence_euro_euro_post_a.jpg"
+dest_files=["res://.godot/imported/infra_fence_euro_euro_post_a.jpg-a3f69d928a2d45fb465e56747247214d.ctex"]
 
 [params]
 

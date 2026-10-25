@@ -12,11 +12,11 @@ R, Wd, BEV = 0.675, 1.2, 0.07
 
 def straw_mat():
     n = 128
-    streak = tile_noise(3, 48, n, 41) * 0.6 + tile_noise(6, 96, n, 42) * 0.4      # смуги вздовж u
+    streak = tile_noise(2, 64, n, 41) * 0.65 + tile_noise(4, 128, n, 42) * 0.35      # смуги вздовж u
     blot = fbm(n, 43, 3)
     h = streak
-    base = np.array([0.55, 0.50, 0.36]); dark = np.array([0.28, 0.25, 0.18])
-    t = np.clip(0.35 + 0.6 * streak + 0.5 * (blot - 0.5), 0, 1)[..., None]
+    base = np.array([0.46, 0.41, 0.29]); dark = np.array([0.24, 0.21, 0.15])
+    t = np.clip(0.3 + 0.9 * streak + 0.2 * (blot - 0.5), 0, 1)[..., None]
     a = dark + (base - dark) * t * 1.25
     return pbr("hay_straw", albedo=a, normal=np.concatenate([normal_from_height(h, 5.0), np.ones((n, n, 1))], -1),
                rough=0.95, tile=2.1)
@@ -24,14 +24,15 @@ def straw_mat():
 
 def wrap_mat():
     n = 128
-    band = tile_noise(2, 24, n, 51)                                              # складки плівки
+    band = tile_noise(2, 6, n, 51)                                              # складки плівки
     fine = tile_noise(8, 64, n, 52)
-    h = band * 0.7 + fine * 0.3
+    h = band * 0.9 + fine * 0.1
     dirt = np.clip((fbm(n, 53, 4) - 0.45) * 2.2, 0, 1)[..., None]
-    a = np.array([0.62, 0.64, 0.6]) * (0.88 + 0.12 * h[..., None])
+    a = np.array([0.16, 0.26, 0.18]) * (0.8 + 0.4 * h[..., None])
+    a[:, :3] = [0.25, 0.33, 0.25]                  # поздовжній стик плівки: світла смуга
     a = a * (1 - 0.35 * dirt)
-    return pbr("hay_wrap", albedo=a, normal=np.concatenate([normal_from_height(h, 3.0), np.ones((n, n, 1))], -1),
-               rough=0.6, tile=2.1)
+    return pbr("hay_wrap", albedo=a, normal=np.concatenate([normal_from_height(h, 0.35), np.ones((n, n, 1))], -1),
+               rough=0.35, tile=2.1)
 
 
 def bale(b, mat, c=(0, 0, R), rot_jitter=0.0, seed=0, nseg=24):

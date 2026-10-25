@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://r0gogty7jcgj"
-path="res://.godot/imported/infra_tower_lattice_lod_tower_lattice_card_a.png-b309f52804d55b01264ec38d0644d2b0.ctex"
+uid="uid://dr1iyklpvagyf"
+path="res://.godot/imported/infra_culvert_culvert_concrete_a.png-613eedfcfdd594e603d9f75b93ae5757.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "002e6e4c1f2c4d3ac09943f2412fa04e"
+"md5": "7d889b6c4bf38690940cd38ca644cf48"
 }
 
 [deps]
 
-source_file="res://assets/props/infra_tower_lattice_lod_tower_lattice_card_a.png"
-dest_files=["res://.godot/imported/infra_tower_lattice_lod_tower_lattice_card_a.png-b309f52804d55b01264ec38d0644d2b0.ctex"]
+source_file="res://assets/props/infra_culvert_culvert_concrete_a.png"
+dest_files=["res://.godot/imported/infra_culvert_culvert_concrete_a.png-613eedfcfdd594e603d9f75b93ae5757.ctex"]
 
 [params]
 

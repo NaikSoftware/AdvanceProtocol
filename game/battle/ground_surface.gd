@@ -54,6 +54,11 @@ const YARD: int = -2
 const MAX_LAYERS: int = 16
 ## Полів ріллі в шейдері (uniform-масив plough_axis).
 const MAX_PLOUGH_FIELDS: int = 64
+## Смуга трави всередині крайньої клітинки поля, клітинки (PLOUGH_HEADLAND у ground.gdshader).
+const PLOUGH_HEADLAND: float = 0.15
+## Трави між прямим краєм ріллі й краєм дороги, м.
+const PLOUGH_ROAD_GAP_M: float = 1.5
+const METRES_PER_TILE: float = 8.0
 ## Підтипів на вид у таблиці шейдера (indeks = вид * SURFACES_PER_KIND + підтип).
 const SURFACES_PER_KIND: int = 4
 
@@ -167,7 +172,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 		if plough >= 0 and class_table[Terrain.Kind.FIELD * SURFACES_PER_KIND + s] == plough:
 			class_table[Terrain.Kind.FIELD * SURFACES_PER_KIND + s] = TEX_LAYER_FOR_KIND[Terrain.Kind.FIELD]
 	_set_classes(mat, board, margin, surface, class_table, height != null)
-	_set_plough(mat, cells, board.width + 2 * margin, plough)
+	_set_plough(mat, cells, board.width + 2 * margin, plough, height)
 	_set_roads(mat, height)
 	mat.set_shader_parameter("map_origin", Vector2(-margin - ring, -margin - ring))
 	mat.set_shader_parameter("repeat_m", REPEAT_M)
@@ -315,7 +320,7 @@ static func plough_fields(cells: PackedInt32Array, w: int, layer: int) -> Array:
 	return [ids, rects]
 
 
-func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: int) -> void:
+func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: int, height: TerrainHeight) -> void:
 	var res: Array = plough_fields(cells, w, layer)
 	var rects: Array[Rect2i] = res[1]
 	mat.set_shader_parameter("plough_layer", layer if not rects.is_empty() else -1)
@@ -324,10 +329,48 @@ func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: in
 	var img := Image.create_from_data(w, cells.size() / w, false, Image.FORMAT_R8, res[0])
 	mat.set_shader_parameter("plough_map", ImageTexture.create_from_image(img))
 	var axis := PackedInt32Array()
+	var insets := PackedVector4Array()
+	var rc: RoadCourse = height.roads if height != null else null
 	for r in rects:
 		# Борозни вздовж довгого боку; квадратне поле — вздовж x.
 		axis.append(1 if r.size.y > r.size.x else 0)
+		insets.append(plough_road_insets(r, rc))
 	mat.set_shader_parameter("plough_axis", axis)
+	mat.set_shader_parameter("plough_inset", insets)
+
+
+## Відступ кожного боку поля (клітинки: -x, -y, +x, +y), щоб між прямим краєм ріллі й дорогою
+## лишалось PLOUGH_ROAD_GAP_M трави. Бік зсувається цілим, тож край лишається прямим, а не йде
+## за вигином дороги. Не більше 0.45 клітинки: глибше край вийшов би з крайньої клітинки поля.
+static func plough_road_insets(r: Rect2i, rc: RoadCourse) -> Vector4:
+	if rc == null:
+		return Vector4.ZERO
+	var img: Image = rc.rasterise()[0]
+	# Растр доріг починається там, де карта класів: координата дороги = клітинка - відступ курсу.
+	var off := Vector2(rc._margin, rc._margin)
+	var lo := Vector2(r.position) - Vector2(0.5, 0.5)
+	var hi := Vector2(r.end) - Vector2(0.5, 0.5)
+	var out := Vector4.ZERO
+	# Бік: [вісь (0 — x, 1 — y), знак напрямку всередину поля].
+	var sides: Array = [[0, 1.0], [1, 1.0], [0, -1.0], [1, -1.0]]
+	for k in 4:
+		var ax: int = sides[k][0]
+		var inward: float = sides[k][1]
+		var edge: float = (lo if inward > 0.0 else hi)[ax]
+		var t: float = 0.0
+		for _iter in 6:
+			var line: float = edge + inward * (PLOUGH_HEADLAND + t)
+			var dmin: float = INF
+			var a: float = lo[1 - ax]
+			while a <= hi[1 - ax]:
+				var q := Vector2(line, a) if ax == 0 else Vector2(a, line)
+				dmin = minf(dmin, rc.d_from(img, q - off))
+				a += 0.125
+			if dmin >= PLOUGH_ROAD_GAP_M:
+				break
+			t = minf(t + (PLOUGH_ROAD_GAP_M - dmin) / METRES_PER_TILE, 0.45)
+		out[k] = t
+	return out
 
 
 ## Шар дороги (RoadCourse.rasterise): поле відстані/осі й ваги типів; без рельєфу доріг нема.
