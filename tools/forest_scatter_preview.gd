@@ -29,7 +29,7 @@ extends Node
 ## - Усі точки — сітка з кроком 1/√густини, зсунута на ±`JITTER` кроку; поворот довільний.
 ## - Масштаб: висоту задає шар, ширина крони — той самий множник, обмежений `CROWN_W`,
 ##   ще ±10 %.
-## - Розчинення — лише над піхотою (танк стоїть у клітинці, яку сам проламав): екземпляр,
+## - Розчинення — над кожним видимим юнітом, танком теж: екземпляр,
 ##   чия крона (вісь плюс півширина крони) ближча за `FADE_RADIUS`
 ##   до відрізка від юніта вздовж справжнього променя до камери завдовжки
 ##   `висота крони · гориз. відстань до камери / висота камери + FADE_REACH_EXTRA`, зникає разом із тінню
@@ -60,6 +60,8 @@ const FADE_SOFT: float = 0.15
 ## Маска розчинення подовжена до камери ще на стільки тайлів: на далекому зумі промінь
 ## пологіший, і крона з-за меж відрізка ще накривала відділення.
 const FADE_REACH_EXTRA: float = 0.5
+## Півдовжина корпусу юніта (тайли): танк, відділення — маска росте на неї.
+const UNIT_HALF: Array[float] = [0.45, 0.2]
 ## Межі масштабу ширини крони відносно меша: ширина росте з висотою лише до цих меж.
 const CROWN_W: Vector2 = Vector2(0.95, 1.3)
 const LOG_DENSITY: float = 0.25
@@ -371,8 +373,8 @@ func _place_mesh(mesh: Mesh, p: Vector2, height_m: float) -> void:
 	if not _groups.has(mesh):
 		_groups[mesh] = []
 	var half: float = maxf(maxf(-aabb.position.x, aabb.end.x), maxf(-aabb.position.z, aabb.end.z))
-	# AABB меша — центри карток; пучки виходять за нього ще на ~1,2 м угору й убік.
-	(_groups[mesh] as Array).append({"xf": xf, "top": aabb.end.y * s + 0.15, "pos": p, "r": half * w + 0.15})
+	# AABB меша — центри карток; пучки виходять за нього ще на ~1,2 м угору й до 2 м убік.
+	(_groups[mesh] as Array).append({"xf": xf, "top": aabb.end.y * s + 0.15, "pos": p, "r": half * w + 0.25})
 
 
 func _build_multimeshes() -> void:
@@ -395,7 +397,8 @@ func _build_multimeshes() -> void:
 		_mmi[mesh] = node
 
 
-## Розчиняється лише крона над відділенням: танк стоїть у клітинці, яку сам проламав.
+## Розчиняються крони між камерою й кожним видимим юнітом, танк теж: власна проламана
+## клітинка танка дерев не має, а сусідні між ним і камерою ховали б його корпус.
 func _set_fade(on: bool) -> void:
 	var cam: Camera3D = _rig.find_children("*", "Camera3D", true, false)[0] as Camera3D
 	for mesh: Mesh in _groups:
@@ -404,7 +407,8 @@ func _set_fade(on: bool) -> void:
 		for i in list.size():
 			var a: float = 1.0
 			if on:
-				for u: Vector2 in [_units[1]]:
+				for ui in _units.size():
+					var u: Vector2 = _units[ui]
 					# Промінь від юніта до камери (перспектива: не середній кут камери, а
 					# справжній до цієї точки). Крона заввишки top ховає юніта, стоячи до
 					# top · (гориз. відстань / висота камери) ближче до камери вздовж цього променя.
@@ -417,7 +421,7 @@ func _set_fade(on: bool) -> void:
 					var dist: float = p.distance_to(u + dir * t)
 					# Відстань рахується від осі стовбура, тож радіус крони додається: інакше край
 					# крони сусіднього дерева лишається над юнітом.
-					var r0: float = FADE_RADIUS + float(list[i]["r"])
+					var r0: float = FADE_RADIUS + float(list[i]["r"]) + UNIT_HALF[ui]
 					a = minf(a, smoothstep(r0, r0 + FADE_SOFT, dist))
 			mm.set_instance_color(i, Color(1, 1, 1, a))
 
