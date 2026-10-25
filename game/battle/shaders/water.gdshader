@@ -106,9 +106,8 @@ void fragment() {
 		}
 		// Коса плавно йде під воду: непрозорість росте на перших ~0.3 м глибини (дно глибше
 		// за 0.3 м не просвічує, TerrainHeight тримає його там), без різкої межі урізу.
-		// Каламутний ставок — чіткий уріз (0.08 м глибини, ~0.2 м від берега): непрозора вода не
-		// просвічує дно, і на 0.3 м край розмивався на 20–30 px. Річка (murk 0) — як і була.
-		shallow_fade = smoothstep(0.0, mix(0.3, 0.08, clamp(water_murk, 0.0, 1.0)), depth_m);
+		// Каламутний ставок — 0.15 м: на 0.3 м край ставав темним розмитим ореолом, на 0.08 — сходинками.
+		shallow_fade = smoothstep(0.0, mix(0.3, 0.15, clamp(water_murk, 0.0, 1.0)), depth_m);
 		// Схил берега ~0.4 м на метр: глибина 1 м — ~2.5 м від урізу.
 		bank_m = depth_m * 2.5;
 	} else {
@@ -169,10 +168,15 @@ void fragment() {
 		// в ~3 рази більша, що повільно дрейфує, ламає її. Похмурий вигляд (sky_clear = 0, River)
 		// не змінюється.
 		if (sky_clear > 0.0) {
+			// Під сонцем дрібні ямки брижі читались кованим металом: брижа втричі більша, плюс широка
+			// повільна хвиля ~10× більша, і вся вдвічі слабша.
 			vec2 kd = kb / 3.0;
 			vec2 td = textureGrad(wave_b, rot60 * fp * kd + vec2(wt * 0.03, -wt * 0.02), rot60 * (fdx * kd),
 					rot60 * (fdy * kd)).rg * 2.0 - 1.0;
-			sf += transpose(rot60) * td * vec2(0.4, 0.27) * 0.35 * sky_clear * water_wind;
+			vec2 kl = ka / 10.0;
+			vec2 tl = textureGrad(wave_a, fp * kl + vec2(wt * 0.01, wt * 0.008), fdx * kl, fdy * kl).rg * 2.0 - 1.0;
+			vec2 big = (transpose(rot60) * td * 0.6 + tl * 0.4) * vec2(0.4, 0.27) * water_wind;
+			sf = mix(sf, big, sky_clear) * mix(1.0, 0.5, sky_clear);
 		}
 		// Нахил гребенів слабшає зі слідом пікселя вздовж погляду (розмір пікселя / sin кута до
 		// води): коли слід ширший за ~0.15 м, гребені під пологим кутом складаються в
@@ -181,7 +185,8 @@ void fragment() {
 		sf *= mix(1.0, 0.08, smoothstep(0.018, 0.032, px_m / max(vdir.y, 0.2)));
 		vec2 slope = fdir * sf.x + fperp * sf.y;
 		float wet = clamp(weather_wetness, 0.0, 1.0);
-		slope += rain_ripples(p, TIME) * 2.0 * wet * rv;
+		// Кола дощу вдвічі контрастніші: менші й рідші кола інакше губились на брижі.
+		slope += rain_ripples(p, TIME) * 4.0 * wet * rv;
 
 		vec3 n = slope_to_world(slope);
 		vec3 v = normalize(CAMERA_POSITION_WORLD - world_pos);
