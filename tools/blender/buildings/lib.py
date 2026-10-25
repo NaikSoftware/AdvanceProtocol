@@ -5,6 +5,7 @@ ambientCG для запікання, запікання в один атлас, 
 Одиниці: метри, фронт будівлі вздовж +Y (Blender), що в Godot стає -Z. Перед експортом усе
 масштабується на 1/8 (тайл = 8 м = 1.0), початок координат у центрі підошви на землі.
 """
+import json
 import math
 import os
 import sys
@@ -411,6 +412,7 @@ def make_soot_material():
     return m
 
 
+_SCANS = None
 MATS = {}
 FLAT = {"frame", "dark"}
 
@@ -453,7 +455,7 @@ def mats():
         "pvc": make_material("pvc", flat=(0.40, 0.40, 0.38)),
         "pv": make_material("pv", flat=(0.04, 0.046, 0.062), seams=[("x", 1.0, 0.03, 0.7), ("y", 1.7, 0.03, 0.7)], patch=((0.08, 0.09, 0.115), 0.22), patch_scale=0.5),
         "wall_plaster": make_material("wall_plaster", "Plaster001", 1.0, (0.68, 0.64, 0.56), streak=0.2, base_dirt=0.5, bump=0.008, patch=((0.34, 0.31, 0.27), 0.25), patch_scale=0.9),
-        "brick_face": make_material("brick_face", "Bricks105", 1.0, recolor=(0.50, 0.31, 0.26), streak=0.2, base_dirt=0.5, bump=0.02, patch=((0.12, 0.09, 0.075), 0.2), patch_scale=1.6),
+        "brick_face": make_material("brick_face", "Bricks105", 1.0, recolor=(0.61, 0.26, 0.145), streak=0.2, base_dirt=0.5, bump=0.02, patch=((0.09, 0.06, 0.04), 0.2), patch_scale=1.6),
         "tile_graphite": make_material("tile_graphite", "CorrugatedSteel005", 1.0, (0.20, 0.21, 0.22), seams=[("y", 0.35, 0.05, 0.7), ("x", 1.1, 0.05, 0.4)], corr=("y", 0.35, 0.035), streak=0.1),
         "tile_brown": make_material("tile_brown", "CorrugatedSteel005", 1.0, (0.28, 0.20, 0.16), seams=[("y", 0.35, 0.05, 0.7), ("x", 1.1, 0.05, 0.4)], corr=("y", 0.35, 0.035), streak=0.1),
         "tin_green": make_material("tin_green", "CorrugatedSteel005", 1.0, (0.33, 0.37, 0.34), seams=[("x", 1.0, 0.05, 0.5)], corr=("x", 0.2, 0.035), streak=0.08),
@@ -463,8 +465,8 @@ def mats():
         "rebar": make_material("rebar", flat=(0.11, 0.06, 0.04)),
         "soot": make_material("soot", flat=(0.045, 0.04, 0.036)),
         "panel_light": make_material("panel_light", "Concrete034", 1.2, (0.26, 0.255, 0.25), streak=0.1, base_dirt=0.2),
-        "rubble": make_rubble_material("rubble", [(0.30, (0.095, 0.058, 0.047)), (0.46, (0.12, 0.08, 0.062)), (0.66, (0.135, 0.125, 0.11)), (0.82, (0.08, 0.08, 0.08)), (0.95, (0.04, 0.036, 0.032)), (1.01, (0.24, 0.22, 0.15))]),
-        "heap": make_rubble_material("heap", [(0.34, (0.095, 0.058, 0.047)), (0.50, (0.12, 0.08, 0.062)), (0.68, (0.135, 0.125, 0.11)), (0.86, (0.08, 0.08, 0.08)), (1.01, (0.04, 0.036, 0.032))]),
+        "rubble": make_rubble_material("rubble", [(0.30, (0.115, 0.055, 0.034)), (0.46, (0.145, 0.085, 0.05)), (0.66, (0.16, 0.13, 0.09)), (0.82, (0.10, 0.092, 0.075)), (0.95, (0.045, 0.038, 0.03)), (1.01, (0.26, 0.22, 0.12))]),
+        "heap": make_rubble_material("heap", [(0.34, (0.115, 0.055, 0.034)), (0.50, (0.145, 0.085, 0.05)), (0.68, (0.16, 0.13, 0.09)), (0.86, (0.10, 0.092, 0.075)), (1.01, (0.045, 0.038, 0.03))]),
         "rubble_steel": make_rubble_material("rubble_steel", [(0.35, (0.05, 0.05, 0.05)), (0.6, (0.12, 0.13, 0.13)), (0.75, (0.15, 0.115, 0.095)), (0.9, (0.14, 0.14, 0.14)), (1.01, (0.24, 0.22, 0.15))], 3.0),
         "soot_v": make_soot_material(),
         "fc_roof_burnt": make_material("fc_roof_burnt", "Concrete034", 1.2, (0.07, 0.07, 0.07), seams=[("x", 1.1, 0.05, 0.3)], corr=("x", 0.2, 0.02), streak=1.0),
@@ -473,13 +475,13 @@ def mats():
         "cavity": make_material("cavity", flat=(0.014, 0.0135, 0.013)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
-        "wall_ruin": make_material("wall_ruin", "Plaster001", 1.0, (0.40, 0.37, 0.34), seams=[("z", 0.25, 0.03, 0.5), ("h", 0.5, 0.025, 0.35)], streak=0.2, base_dirt=0.5, bump=0.035, patch=((0.14, 0.12, 0.10), 0.3), patch_scale=0.8, vmul=True),
+        "wall_ruin": make_material("wall_ruin", "Plaster001", 1.0, (0.44, 0.37, 0.30), streak=0.35, base_dirt=0.5, bump=0.035, patch=((0.19, 0.08, 0.045), 0.42), patch_scale=1.1, vmul=True),
         "panel_vc": make_material("panel_vc", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, vmul=True),
-        "heap_grey": make_rubble_material("heap_grey", [(0.70, (0.105, 0.105, 0.10)), (0.80, (0.095, 0.058, 0.047)), (0.90, (0.135, 0.125, 0.11)), (1.01, (0.04, 0.036, 0.032))]),
+        "heap_grey": make_rubble_material("heap_grey", [(0.70, (0.115, 0.107, 0.088)), (0.80, (0.115, 0.055, 0.034)), (0.90, (0.16, 0.13, 0.09)), (1.01, (0.045, 0.038, 0.03))]),
         "pump_light": make_material("pump_light", flat=(0.12, 0.13, 0.14)),
         "cavity_black": make_material("cavity_black", flat=(0.003, 0.003, 0.003)),
         "pv_frame": make_material("pv_frame", flat=(0.10, 0.10, 0.105)),
-        "brick_dark": make_material("brick_dark", "Bricks105", 1.0, recolor=(0.40, 0.26, 0.22), streak=0.5, base_dirt=0.6, bump=0.02),
+        "brick_dark": make_material("brick_dark", "Bricks105", 1.0, recolor=(0.45, 0.22, 0.13), streak=0.5, base_dirt=0.6, bump=0.02),
         "slab_dark": make_material("slab_dark", "Concrete034", 1.2, (0.34, 0.32, 0.30), streak=0.2, base_dirt=0.5),
         "window": make_window_material(),
         "frame": make_material("frame", flat=(0.55, 0.55, 0.53)),
@@ -611,21 +613,26 @@ class Builder:
         n = (v[1] - v[0]).cross(v[2] - v[1])
         return self.poly(pts if n.z >= 0 else pts[::-1], mat)
 
-    def rock(self, cx, cy, cz, size, mat, rnd):
-        """Уламок: ікосфера з випадковим зсувом вершин, сплюснута й повернута."""
+    def rock(self, cx, cy, cz, size, mat, rnd, buried=0.3):
+        """Уламок зі скану Poly Haven (CC0, ~110 трикутників): випадкова деталь, масштаб, поворот; наполовину вкопаний."""
         from mathutils import Euler
-        if size < 0.62:
-            r = bmesh.ops.create_cube(self.bm, size=1.0)       # 12 трикутників, але з нерівними гранями
-        else:
-            r = bmesh.ops.create_icosphere(self.bm, subdivisions=1, radius=0.5)
-        verts = r["verts"]
-        for v in verts:
-            v.co *= rnd.uniform(0.7, 1.25)
-        sx, sy, sz = size * rnd.uniform(0.8, 1.3), size * rnd.uniform(0.7, 1.2), size * rnd.uniform(0.45, 0.9)
-        bmesh.ops.scale(self.bm, vec=(sx, sy, sz), verts=verts)
-        bmesh.ops.rotate(self.bm, cent=(0, 0, 0), matrix=Euler((rnd.uniform(-0.5, 0.5), rnd.uniform(-0.5, 0.5), rnd.uniform(0, 3.14))).to_matrix(), verts=verts)
-        bmesh.ops.translate(self.bm, vec=(cx, cy, cz), verts=verts)
-        faces = list({f for v in verts for f in v.link_faces})
+        global _SCANS
+        if _SCANS is None:
+            with open(os.path.join(HERE, "debris_scans.json")) as fh:
+                _SCANS = json.load(fh)
+        piece = _SCANS[rnd.choice(sorted(_SCANS))]
+        sx, sy, sz = size * rnd.uniform(0.8, 1.3), size * rnd.uniform(0.7, 1.2), size * rnd.uniform(0.5, 0.95)
+        rot = Euler((rnd.uniform(-0.5, 0.5), rnd.uniform(-0.5, 0.5), rnd.uniform(0, 3.14))).to_matrix()
+        vs = []
+        for v in piece["v"]:
+            p = rot @ Vector((v[0] * sx, v[1] * sy, v[2] * sz))
+            vs.append(self.bm.verts.new((cx + p.x, cy + p.y, cz - sz * buried + p.z)))
+        faces = []
+        for f in piece["f"]:
+            try:
+                faces.append(self.bm.faces.new([vs[i] for i in f]))
+            except ValueError:
+                pass
         self._finish(faces, mat)
 
     def soot(self, pts, tones, side=1):
@@ -735,7 +742,7 @@ class Builder:
         return sum(len(f.verts) - 2 for f in self.bm.faces)
 
 
-def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, tongues=3):
+def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, tongues=3, lump=0.4):
     """Купа уламків одним мешем: контур із частками й язиками, низькочастотні западини й піки."""
     import random
     rnd = random.Random(seed)
@@ -757,11 +764,15 @@ def mound(b, cx, cy, rx, ry, hmax, seed, mat="heap", rings=6, segs=20, z0=0.0, t
             a = 2 * math.pi * i / segs
             r = t * rad[i]
             noise = 1.0 + 0.4 * math.sin(2 * a + ph[2] + 3 * t) + 0.3 * math.sin(5 * a + ph[3] - 4 * t) + 0.25 * math.sin(9 * a + ph[0] + 7 * t) + rnd.uniform(-0.3, 0.3)
-            z = z0 + hmax * (1 - t ** 1.7) * noise * rnd.uniform(0.75, 1.05) if k < rings else z0 - 0.12
-            row.append(b.bm.verts.new((cx + rx * r * math.cos(a), cy + ry * r * math.sin(a), max(z0 - 0.12, z))))
+            z = z0 + hmax * (1 - t ** 2.3) * noise * rnd.uniform(0.75, 1.05) if k < rings else z0 - 0.12
+            px, py = cx + rx * r * math.cos(a), cy + ry * r * math.sin(a)
+            if k < rings and lump:
+                kk = 2 * math.pi / 1.75
+                z += lump * math.sin(kk * px + ph[0]) * math.sin(kk * py + ph[1]) * (1 - t)
+            row.append(b.bm.verts.new((px, py, max(z0 - 0.12, z))))
         ring.append(row)
     fs = []
-    top = b.bm.verts.new((cx, cy, z0 + hmax * 1.08))
+    top = b.bm.verts.new((cx, cy, z0 + hmax * 0.95))
     for i in range(segs):
         j = (i + 1) % segs
         fs.append(b.bm.faces.new((ring[0][i], ring[0][j], top)))
@@ -787,7 +798,7 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
         return heights[i] * (1 - (x - i)) + heights[i + 1] * (x - i)
     cuts = [0.0]
     while cuts[-1] < ln - 0.3:
-        cuts.append(min(ln, cuts[-1] + rnd.uniform(0.5, 2.4)))
+        cuts.append(min(ln, cuts[-1] + rnd.uniform(0.35, 1.5)))
     cuts[-1] = ln
     segs = []
     h = None
@@ -798,7 +809,7 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             segs.append((0.0, 0.0))
             h = None
             continue
-        h = hb if h is None else max(0.3, min(3.2, h + rnd.choice((-1.2, -0.7, -0.3, 0.3, 0.7, 1.1))))
+        h = hb if h is None else max(0.3, min(3.2, h + rnd.choice((-0.6, -0.4, -0.2, 0.2, 0.35, 0.6, -1.0, 0.9))))
         diag = rnd.uniform(0.5, 1.1) * rnd.choice((-1, 1)) if rnd.random() < 0.35 else rnd.uniform(-0.1, 0.1)
         segs.append((max(0.2, h - diag / 2), max(0.2, h + diag / 2)))
 
@@ -900,7 +911,7 @@ def bent_sheet(b, p0, p1, width, mat, bend=0.35, axis="y"):
     p0, p1 = Vector(p0), Vector(p1)
     mid = (p0 + p1) / 2
     pm = mid + Vector((0, 0, bend))
-    thin, wide = (0.05, width) if axis == "y" else (width, 0.05)
+    thin, wide = (0.1, width) if axis == "y" else (width, 0.1)
     b.beam(p0, pm, thin, mat, wide)
     b.beam(pm, p1, thin, mat, wide)
 

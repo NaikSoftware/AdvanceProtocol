@@ -168,7 +168,7 @@ def damaged():
             blow = True
             if blow:
                 q = [(x - 0.5, Y0 - 0.03, z + 0.2), (x + 0.5, Y0 - 0.03, z + 0.2), (x + 0.5, Y0 - 0.03, z + 1.2), (x - 0.5, Y0 - 0.03, z + 1.2)]
-                b.poly(q, "dark")
+                b.soot(q[::-1], (0.012, 0.012, 0.05, 0.05), 1)
                 burn_ring(b, "y", Y0, x, z + 0.2, 1.0, 1.0, -1)
             else:
                 b.window(("y", Y0, -1), x, z, 1.4, 1.4)
@@ -186,25 +186,28 @@ def damaged():
     for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 3.0, 3.6, 1.8, 0.0, 0.0, 0.0), (13.5, -3.6, 6.1, 2.6, 2.0, 0.12, 0.0, 0.1), (8.0, 4.0, 3.0, 2.4, 1.6, -0.1, 0.0, 0.0)):
         b.box_e(x, y, z, sx, sy, 0.22, "slab_dark", euler=(ax, ay, az), top="slab_dark")
     # розколота плита даху лежить у прольоті під кутами 20-50° на купі
-    for (x, y, z, sx, sy, ax, ay, az) in ((9.2, -0.5, 3.4, 3.2, 2.8, 0.7, 0.1, 0.2), (12.4, 1.6, 4.4, 3.4, 2.4, -0.8, 0.2, -0.4), (10.6, 2.8, 2.8, 2.8, 2.2, 0.5, -0.6, 0.6), (13.8, -1.8, 3.8, 2.6, 2.4, -0.6, -0.3, 1.1)):
+    for (x, y, z, sx, sy, ax, ay, az) in ((9.2, -0.5, 3.4, 3.2, 2.8, 0.38, 0.1, 0.2), (12.4, 1.6, 4.4, 3.4, 2.4, -0.4, 0.2, -0.4), (10.6, 2.8, 2.8, 2.8, 2.2, 0.3, -0.3, 0.6), (13.8, -1.8, 3.8, 2.6, 2.4, -0.35, -0.25, 1.1)):
         b.box_e(x, y, z, sx, sy, 0.34, "slab_dark", euler=(ax, ay, az), top="bitumen")
     # арматура темна, іржава: кожен стрижень виходить із верху панелі
     for k, (rx_, ry_, rz_) in enumerate(roots):
         if k % 2:
             continue
         b.beam((rx_, ry_, rz_ - 0.1), (rx_ + rnd.uniform(-0.5, 0.5), ry_ + rnd.uniform(-0.5, 0.5), rz_ + rnd.uniform(0.6, 1.2)), 0.09, "rebar")
-    # одна безперервна купа: заповнює проліт, виливається через низьку задню стіну на відсип і далі на торець
-    mound(b, 11.0, 0.5, 4.8, 4.6, 5.0, 61, mat="heap_grey", rings=6, segs=22, tongues=2)
-    mound(b, 12.8, -5.2, 4.8, 2.1, 3.4, 62, mat="heap_grey", rings=7, segs=30, tongues=8)
-    mound(b, 16.4, -1.5, 2.6, 5.0, 2.6, 63, mat="heap_grey", rings=6, segs=28, tongues=6)
-    chunks(b, 11.0, 0.0, 4.2, 4.0, 9, ("heap_grey", "rubble"), 2, z0=0.4, smin=0.5, smax=1.1)
-    for k in range(26):                                                          # розсип тоншає без жорсткого краю
-        a = rnd.uniform(0, 2 * math.pi)
-        t = rnd.uniform(0.75, 1.15)
-        px, py = 14.0 + 5.8 * t * math.cos(a), -2.5 + 6.2 * t * math.sin(a)
-        if px < 15.0 or abs(py) > 8.4 or px > 20.2:
+    # одна безперервна купа: заповнює проліт, виливається через низьку задню стіну на відсип; без шипів — грудкувата маса
+    mound(b, 11.0, 0.5, 4.8, 4.6, 5.0, 61, mat="heap_grey", rings=7, segs=24, tongues=1)
+    mound(b, 12.8, -5.0, 4.6, 2.2, 2.6, 62, mat="heap_grey", rings=6, segs=22, tongues=2)
+    mound(b, 16.2, -1.5, 2.6, 5.0, 2.2, 63, mat="heap_grey", rings=6, segs=20, tongues=2)
+    chunks(b, 11.0, 0.0, 4.2, 4.0, 4, ("heap_grey", "rubble"), 2, z0=0.4, smin=0.5, smax=1.0)
+    for k in range(9):                                                          # скановані уламки на гребенях і краях відсипу
+        a_ = rnd.uniform(0, 2 * math.pi)
+        t = rnd.uniform(0.5, 1.1)
+        px, py = 14.0 + 5.4 * t * math.cos(a_), -2.5 + 5.6 * t * math.sin(a_)
+        if px < 14.5 or abs(py) > 8.4 or px > 20.0:
             continue
-        b.rock(px, py, 0.12, rnd.uniform(0.28, 0.5), rnd.choice(("heap_grey", "rubble")), rnd)
+        b.rock(px, py, 0.4, rnd.uniform(0.3, 0.8), rnd.choice(("heap_grey", "rubble")), rnd)
+    for k in range(6):                                                           # півзанурені уламки панелей 0.15 м
+        px, py = rnd.uniform(14.0, 19.2), rnd.uniform(-7.8, 6.0)
+        b.box_e(px, py, 0.18, rnd.uniform(1.0, 1.9), rnd.uniform(0.8, 1.4), 0.15, "slab_dark", euler=(rnd.uniform(-0.25, 0.25), rnd.uniform(-0.25, 0.25), rnd.uniform(0, 3.1)), top="slab_dark")
     lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4200, footprint=(5, 2), anchor=(0, 0))
 
 
