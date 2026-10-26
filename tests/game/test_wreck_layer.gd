@@ -382,6 +382,9 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
 	assert_eq(layer.hearth_material().get_shader_parameter("rise"), WreckLayer.HEARTH_RISE, "шум густоти пливе вгору зі швидкістю диму")
 	assert_false(layer.hearth_material().shader.code.contains("sin("), "хеш без sin: час росте весь матч")
+	var code: String = layer.hearth_material().shader.code
+	assert_true(code.contains("sun_dir") and code.contains("sky_clear"), "об'єм: світло від сонця мапи, а в похмуру — розсіяне")
+	assert_true(code.contains("vec3 billow(") and code.contains("dot(n, L)"), "об'єм: клуби мають нормаль і освітлюються")
 	layer.set_wind(Vector3(0.25, 0, 0))
 	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")
 	layer.rebuild(state, 0)

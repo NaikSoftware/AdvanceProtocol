@@ -207,7 +207,11 @@ What our own constraints add on top:
   denser (density 0.65 against the chimney's 0.36), because wind lays it flat and thins it. Density
   and the ragged edge come from noise that scrolls up at the smoke's own 0.8 m/s, so nothing along
   the plume repeats; a slow edge noise bites up to ~30 % of the width so the outline is torn, not a
-  cone. The plume leans with the wind like the wreck columns. No `sin` in the shader — game time
+  cone. The strip reads as a volume without volumetrics: a smooth height field of billows gives each
+  fragment a normal (finite differences, no seams), lit by the map's sun on clear maps (warm lit
+  side, cool shadow side) and by a soft sky light with low contrast on overcast ones; hollows
+  between billows are darker, and the plume breaks into tatters towards the top. Still one strip
+  per source, one draw call for all of them. The plume leans with the wind like the wreck columns. No `sin` in the shader — game time
   grows all match. Target: the lower third reads 12–18 levels lighter than the ground behind it at
   zoom 8. Houses and ruins are public map props, so it is always on.
 - **No crater after a burst:** the cloud, dust and clods play out and leave nothing on the ground.

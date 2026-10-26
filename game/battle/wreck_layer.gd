@@ -34,7 +34,8 @@ const WARM_UP_SEC: float = 0.1
 ## Мирний дим мапи: 1–3 димарі й 1–2 руїни. Не клуби (ті виходили залпами, наче кільця диму),
 ## а один суцільний шлейф на джерело: вузька смуга до камери, що хилиться з вітром і повільно
 ## звивається; густоту й рваний край дає шум, що пливе вгору зі швидкістю підйому диму, тож уздовж
-## шлейфу вона міняється плавно й без жодного періоду. Хати й руїни — частина мапи, видимі всім,
+## шлейфу вона міняється плавно й без жодного періоду. Об'єм — з того ж шуму: його висота дає
+## нормаль, яку освітлює сонце мапи (ясно) чи розсіяне світло (похмуро). Хати й руїни — частина мапи, видимі всім,
 ## тож цей дим нічого не видає і горить завжди.
 const HEARTH_MAX: int = 5
 ## Густота шлейфу (0–1): ледь помітний, але на телефоні читається — нижня третина світліша за тло
@@ -854,7 +855,7 @@ varying float v_s;
 varying float v_w;
 varying float v_sd;
 varying float v_dens;
-varying vec2 v_sun;
+varying vec3 v_sun;
 
 float hash(vec2 p) {
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -867,13 +868,17 @@ float vn(vec2 p) {
 	f = f * f * (3.0 - 2.0 * f);
 	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-float fbm(vec2 p) {
-	float a = vn(p);
-	p = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * 2.03 + 11.0;
-	a += 0.5 * vn(p);
-	p = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * 2.01 + 23.0;
-	a += 0.25 * vn(p);
+// Висота клуба: гладкий шум із трьох октав, піднесений, щоб випуклини були округлі, а не кашаті.
+float puff_h(vec2 p) {
+	float a = vn(p) + 0.5 * vn(p * 2.1 + 3.7) + 0.25 * vn(p * 4.3 + 9.1);
 	return a / 1.75;
+}
+// xy — нахил поверхні клуба (звідси нормаль і світло), z — сама висота. Скінченні різниці:
+// без швів між клітинками, тож клуби м'які, а не потріскані.
+vec3 billow(vec2 p) {
+	float e = 0.12;
+	float h0 = puff_h(p);
+	return vec3((puff_h(p + vec2(e, 0.0)) - h0) / e, (puff_h(p + vec2(0.0, e)) - h0) / e, h0);
 }
 
 void vertex() {
@@ -889,7 +894,7 @@ void vertex() {
 	// Звивання росте з висотою й пливе вгору з димом: повільний шум у координаті частинки.
 	vec3 wander = (right * (vn(vec2(s * 1.2 + sd, 3.1)) - 0.5) + side * (vn(vec2(s * 0.9 + sd, 7.7)) - 0.5)) * 0.9 * H * h01 * h01;
 	float w = mix(base_w * INSTANCE_CUSTOM.w, top_w, pow(h01, 0.85));
-	// Смуга на 35 % ширша за шлейф: рваний край вилазить за обрис і не впирається в межу кваду.
+	// Смуга на 35 % ширша за шлейф: пухнастий край вилазить за обрис і не впирається в межу кваду.
 	vec3 world = root + vec3(0.0, h, 0.0) + lean * h + wander + right * VERTEX.x * w * 1.35;
 	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	v_h01 = h01;
@@ -897,28 +902,40 @@ void vertex() {
 	v_w = w;
 	v_sd = sd;
 	v_dens = INSTANCE_CUSTOM.x;
-	v_sun = normalize(vec2(dot(sun_dir, INV_VIEW_MATRIX[0].xyz), -dot(sun_dir, INV_VIEW_MATRIX[1].xyz)) + 1e-4);
+	// Напрямок на сонце в базисі екрана: x праворуч, y вниз (як UV), z до глядача.
+	v_sun = normalize(vec3(dot(sun_dir, INV_VIEW_MATRIX[0].xyz), -dot(sun_dir, INV_VIEW_MATRIX[1].xyz), dot(sun_dir, INV_VIEW_MATRIX[2].xyz)) + 1e-4);
 }
 
 void fragment() {
 	float x = (UV.x * 2.0 - 1.0) * 1.35;
-	// Шум у метрах поперек і вздовж частинки диму: біля труби дрібний, угорі крупніший.
-	vec2 q = vec2(x * v_w, v_s) * 8.0 / mix(1.5, 4.0, v_h01) + v_sd;
-	float n = fbm(q);
-	float n2 = fbm(q * 2.3 + 5.0);
+	// Клуби в метрах поперек і вздовж частинки диму: біля труби дрібні, угорі крупніші.
+	float sc = mix(0.8, 2.4, v_h01);
+	vec2 q = vec2(x * v_w, v_s) * 8.0 / sc + v_sd;
+	vec3 a = billow(q);
+	// Висота 0..1 з контрастом: клуби проступають із розмитої маси.
+	float lump = smoothstep(0.25, 0.75, a.z);
 	// Повільний шум краю, окремий для лівого й правого боку, пливе вгору з димом: край
-	// виїдається вглиб до 30 % ширини, і від нього відходять клапті, — обрис не конус.
+	// виїдається вглиб, і обрис — не конус.
 	float side_sd = v_sd + (x < 0.0 ? 0.0 : 31.0);
-	float lo = vn(vec2(v_s * 8.0 / 3.5 + side_sd, side_sd * 0.37));
-	float bite = (lo - 0.35) * 0.9 * smoothstep(0.05, 0.25, v_h01);
-	float profile = 1.0 - smoothstep(0.25, 1.0, abs(x) + (n - 0.5) * 0.7 + bite);
-	float tear = vn(vec2(x * v_w * 8.0 / 2.5, v_s * 8.0 / 2.5) + side_sd + 13.0);
-	profile *= mix(1.0, smoothstep(0.3, 0.55, tear), smoothstep(0.35, 0.9, abs(x)));
-	float dens = profile * (0.45 + 0.55 * n2);
+	float bite = (vn(vec2(v_s * 8.0 / 3.5 + side_sd, side_sd * 0.37)) - 0.35) * 0.7 * smoothstep(0.05, 0.25, v_h01);
+	// Запас до краю: клуби відкушують його, угорі дим розривається на клапті. М'яка рампа — пух, а не контур.
+	float e = 1.0 - abs(x) + (lump - 0.5) * 0.45 - bite - 0.25 * smoothstep(0.4, 1.0, v_h01);
+	float dens = smoothstep(0.0, 0.6, e) * (0.6 + 0.4 * lump);
 	float fade = smoothstep(0.0, 0.03, v_h01) * (1.0 - smoothstep(0.35, 1.0, v_h01));
-	float lit = clamp(dot(vec2(x, 0.0), v_sun), 0.0, 1.0);
-	ALBEDO = vec3(0.29, 0.31, 0.35) * (0.8 + 0.4 * n2) * (1.0 + 0.3 * sky_clear * lit);
-	ALPHA = clamp(dens * fade * v_dens, 0.0, 1.0);
+	// Нормаль: клуби поверх округлого шлейфу в цілому.
+	vec3 n = normalize(vec3(-a.xy * 1.1, 1.0) + vec3(x * 0.8, 0.0, 0.4 * sqrt(max(1.0 - x * x, 0.0))));
+	// Ясно — сонце; похмуро — розсіяне світло зверху (y вниз, тож «вгору» — мінус) і малий контраст.
+	vec3 L = normalize(mix(vec3(0.0, -0.75, 0.66), v_sun, sky_clear));
+	float lam = clamp(dot(n, L) * 0.5 + 0.5, 0.0, 1.0);
+	float contrast = mix(0.85, 1.0, sky_clear);
+	lam = mix(0.5, lam, contrast);
+	vec3 lit_col = mix(vec3(0.58, 0.60, 0.64), vec3(0.95, 0.92, 0.88), sky_clear);
+	vec3 shade_col = mix(vec3(0.14, 0.15, 0.19), vec3(0.28, 0.34, 0.42), sky_clear);
+	vec3 col = mix(shade_col, lit_col, smoothstep(0.15, 0.9, lam));
+	// Западини між клубами й гущавина всередині темніші.
+	col *= mix(0.55, 1.0, smoothstep(0.1, 0.8, lump));
+	ALBEDO = col;
+	ALPHA = clamp(dens * fade * v_dens * 0.8, 0.0, 1.0);
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, край біля даху там буде жорсткішим.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / (0.5 / 8.0), 0.0, 1.0);
