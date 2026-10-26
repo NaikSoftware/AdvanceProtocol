@@ -289,6 +289,7 @@ func resume(match_service: Node = null) -> void:
 
 func _wire_view(board: Board) -> void:
 	_wreck_layer.set_wind(_weather.wind())
+	BattleFx.wind = _weather.wind()
 	_scars = ScarMap.new(Vector2i(board.width, board.height))
 	_board_view.scar_map = _scars
 	_board_view.build(board)
@@ -862,6 +863,9 @@ func _on_events_ready() -> void:
 		if _pointer_down:
 			_camera_rig.end_hold()  # інакше риг крутить _process за гейтом до наступного натиску (§8)
 		_pointer_down = false
+		# Дим влучань висить кілька секунд: над тайлом, якого наступний гравець не розвідав, він
+		# показав би, де стояла ціль (§3.5).
+		BattleFx.clear_all(get_tree())
 		_gate.show_for(_match_service.state.active_player)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
 		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а

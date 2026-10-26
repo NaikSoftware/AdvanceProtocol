@@ -1210,7 +1210,7 @@ func test_setup_warms_up_every_fx_material_once() -> void:
 	assert_eq(warm.size(), 1, "куля розігріву")
 	# Розігрів мусить бути невидимим: жодного спалаху чи світла біля юніта гравця.
 	assert_eq((warm[0].get_node("Light") as OmniLight3D).light_energy, 0.0)
-	assert_eq((warm[0].get_node("Flash") as Node3D).scale, Vector3.ONE * 0.0001)
+	assert_eq((warm[0] as Node3D).scale, Vector3.ONE * 0.0001)
 	var ball := (warm[0].get_node("Ball") as MeshInstance3D).material_override as ShaderMaterial
 	assert_lt(float(ball.get_shader_parameter("size")), 0.001)
 	assert_true(layer.is_warming(), "стовп, вогонь і обгорілий матеріал теж малюються раз")
