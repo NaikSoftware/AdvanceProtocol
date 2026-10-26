@@ -870,8 +870,12 @@ float vn(vec2 p) {
 }
 // Висота клуба: гладкий шум із трьох октав, піднесений, щоб випуклини були округлі, а не кашаті.
 float puff_h(vec2 p) {
-	float a = vn(p) + 0.5 * vn(p * 2.1 + 3.7) + 0.25 * vn(p * 4.3 + 9.1);
-	return a / 1.75;
+	// Мокра погода: крупніші клуби (дрібні октави слабші), щоб не розсипалися на смуги.
+	float heavy = 1.0 - sky_clear;
+	float w2 = mix(0.45, 0.22, heavy);
+	float w3 = mix(0.18, 0.06, heavy);
+	float a = vn(p) + w2 * vn(p * 2.1 + 3.7) + w3 * vn(p * 4.3 + 9.1);
+	return a / (1.0 + w2 + w3);
 }
 // xy — нахил поверхні клуба (звідси нормаль і світло), z — сама висота. Скінченні різниці:
 // без швів між клітинками, тож клуби м'які, а не потріскані.
@@ -893,15 +897,18 @@ void vertex() {
 	vec3 side = vec3(-right.z, 0.0, right.x);
 	// Звивання росте з висотою й пливе вгору з димом: повільний шум у координаті частинки.
 	vec3 wander = (right * (vn(vec2(s * 1.2 + sd, 3.1)) - 0.5) + side * (vn(vec2(s * 0.9 + sd, 7.7)) - 0.5)) * 0.9 * H * h01 * h01;
-	float w = mix(base_w * INSTANCE_CUSTOM.w, top_w, pow(h01, 0.85));
+	// Мокра погода: дим важчий — ширший біля труби й не лягає на землю (нахил обмежено).
+	float heavy = 1.0 - sky_clear;
+	float w = mix(base_w * INSTANCE_CUSTOM.w * (1.0 + 1.2 * heavy), top_w, pow(h01, 0.85));
+	vec3 lean_c = lean * mix(1.0, min(1.0, 0.16 / max(length(lean), 1e-4)), heavy);
 	// Смуга на 35 % ширша за шлейф: пухнастий край вилазить за обрис і не впирається в межу кваду.
-	vec3 world = root + vec3(0.0, h, 0.0) + lean * h + wander + right * VERTEX.x * w * 1.35;
+	vec3 world = root + vec3(0.0, h, 0.0) + lean_c * h + wander + right * VERTEX.x * w * 1.35;
 	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	v_h01 = h01;
 	v_s = s;
 	v_w = w;
 	v_sd = sd;
-	v_dens = INSTANCE_CUSTOM.x;
+	v_dens = INSTANCE_CUSTOM.x * (1.0 + 0.5 * heavy * (1.0 - smoothstep(0.0, 0.5, h01)));
 	// Напрямок на сонце в базисі екрана: x праворуч, y вниз (як UV), z до глядача.
 	v_sun = normalize(vec3(dot(sun_dir, INV_VIEW_MATRIX[0].xyz), -dot(sun_dir, INV_VIEW_MATRIX[1].xyz), dot(sun_dir, INV_VIEW_MATRIX[2].xyz)) + 1e-4);
 }
@@ -909,7 +916,7 @@ void vertex() {
 void fragment() {
 	float x = (UV.x * 2.0 - 1.0) * 1.35;
 	// Клуби в метрах поперек і вздовж частинки диму: біля труби дрібні, угорі крупніші.
-	float sc = mix(0.8, 2.4, v_h01);
+	float sc = mix(mix(0.8, 0.9, 1.0 - sky_clear), 2.4, v_h01);
 	vec2 q = vec2(x * v_w, v_s) * 8.0 / sc + v_sd;
 	vec3 a = billow(q);
 	// Висота 0..1 з контрастом: клуби проступають із розмитої маси.
@@ -919,18 +926,17 @@ void fragment() {
 	float side_sd = v_sd + (x < 0.0 ? 0.0 : 31.0);
 	float bite = (vn(vec2(v_s * 8.0 / 3.5 + side_sd, side_sd * 0.37)) - 0.35) * 0.7 * smoothstep(0.05, 0.25, v_h01);
 	// Запас до краю: клуби відкушують його, угорі дим розривається на клапті. М'яка рампа — пух, а не контур.
-	float e = 1.0 - abs(x) + (lump - 0.5) * 0.45 - bite - 0.25 * smoothstep(0.4, 1.0, v_h01);
-	float dens = smoothstep(0.0, 0.6, e) * (0.6 + 0.4 * lump);
+	float e = 1.0 - abs(x) + (lump - 0.5) * mix(0.45, 0.3, 1.0 - sky_clear) - bite - 0.25 * smoothstep(0.4, 1.0, v_h01);
+	float dens = smoothstep(0.0, 0.6, e) * mix(0.6 + 0.4 * lump, 0.7 + 0.3 * lump, 1.0 - sky_clear);
 	float fade = smoothstep(0.0, 0.03, v_h01) * (1.0 - smoothstep(0.35, 1.0, v_h01));
 	// Нормаль: клуби поверх округлого шлейфу в цілому.
-	vec3 n = normalize(vec3(-a.xy * 1.1, 1.0) + vec3(x * 0.8, 0.0, 0.4 * sqrt(max(1.0 - x * x, 0.0))));
+	vec3 n = normalize(vec3(-a.xy * mix(2.6, 1.1, sky_clear), 1.0) + vec3(x * 0.8, 0.0, 0.4 * sqrt(max(1.0 - x * x, 0.0))));
 	// Ясно — сонце; похмуро — розсіяне світло зверху (y вниз, тож «вгору» — мінус) і малий контраст.
 	vec3 L = normalize(mix(vec3(0.0, -0.75, 0.66), v_sun, sky_clear));
 	float lam = clamp(dot(n, L) * 0.5 + 0.5, 0.0, 1.0);
-	float contrast = mix(0.85, 1.0, sky_clear);
-	lam = mix(0.5, lam, contrast);
-	vec3 lit_col = mix(vec3(0.58, 0.60, 0.64), vec3(0.95, 0.92, 0.88), sky_clear);
-	vec3 shade_col = mix(vec3(0.14, 0.15, 0.19), vec3(0.28, 0.34, 0.42), sky_clear);
+	lam = clamp((lam - 0.5) * mix(1.35, 1.0, sky_clear) + 0.5, 0.0, 1.0);
+	vec3 lit_col = mix(vec3(0.55, 0.57, 0.61), vec3(0.95, 0.92, 0.88), sky_clear);
+	vec3 shade_col = mix(vec3(0.10, 0.11, 0.14), vec3(0.28, 0.34, 0.42), sky_clear);
 	vec3 col = mix(shade_col, lit_col, smoothstep(0.15, 0.9, lam));
 	// Западини між клубами й гущавина всередині темніші.
 	col *= mix(0.55, 1.0, smoothstep(0.1, 0.8, lump));
