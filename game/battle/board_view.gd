@@ -197,6 +197,11 @@ func build(board: Board) -> void:
 		for sp: Dictionary in ring_map.spawns:
 			spawns.append(sp["pos"])
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields, spawns)
+	# Стежки публічні (§3.5): маска зносу не залежить від туману й ставиться разом із землею.
+	if _ground.material_override is ShaderMaterial and not _props.footpaths.is_empty():
+		var h: TerrainHeight = _height
+		var dry: Callable = (func(q: Vector2) -> bool: return h.at(q.x, q.y) >= TerrainHeight.WATER_LEVEL) if h != null else Callable()
+		Footpaths.apply(_ground.material_override, Footpaths.bake(_props.footpaths, _props.trodden, _board_size, dry), _board_size)
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.
 		add_child(Surroundings.skirt(Vector2i(board.width, board.height), _height.min_height() - 0.5))
