@@ -111,8 +111,10 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   dry steel never shine. Ruins show floor debris inside, never grass. A few chimneys and ruins
   give off a faint smoke.
 - **Forests are dense woods** a tank could hide in — canopy masses, a shrub belt at the edge, not
-  a few trees with units visible between them. The canopy dithers over cells holding a unit the
-  current player can see, including the cells between the unit and the camera.
+  a few trees with units visible between them.
+- **Whatever hides a visible unit turns semi-transparent** — crowns, roofs and walls between the
+  camera and a unit the current player can see fade smoothly to about 30–40 % opacity with alpha
+  blending. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
 - **Scars respect the fog:** crushed props, wrecks and craters show only where the viewer's
   `seen` covers the tile, or they report enemy movement.
 - Briefs, sizes and routes per prop (Blender, Tripo or CC0): [`art/props-research.md`](art/props-research.md).
