@@ -5,7 +5,9 @@ extends Node
 ##   $GODOT --path . --position 6000,0 res://tools/battle_budget.tscn -- <out_dir> [--shadows] <map>[@x,y@zoom] ...
 ## --shadows: будівлі й руїни кидають справжню тінь сонця — щоб зміряти, скільки це коштує.
 ## Без @… знімається центр дошки на MAX і MIN зумі. <map>@sel@zoom — вибраний перший юніт гравця 0
-## із контурами зон руху поверх пропсів. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=….
+## із контурами зон руху поверх пропсів. <map>@top@x,y,size — ортографічний погляд згори на
+## клітинку x,y (size клітинок у кадрі) з межами будівель (червоні) й огорож (блакитні) і найменшим
+## проміжком між будівлями та між будівлею й огорожею в метрах. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=….
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -40,6 +42,13 @@ func _ready() -> void:
 					mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		var rig: IsoCameraRig = screen.get_node("%CameraRig")
 		var views: Array = []
+		if parts.size() >= 3 and parts[1] == "top":
+			var a: PackedStringArray = parts[2].split(",")
+			var name: String = "%s_top_%s_%s" % [map, a[0], a[1]]
+			shots.append([name, await _top_down(screen, Vector2(float(a[0]), float(a[1])), float(a[2]), name)])
+			screen.free()
+			await get_tree().process_frame
+			continue
 		if parts.size() >= 3 and parts[1] == "sel":
 			var unit: Unit = MatchService.state.units_of(0)[0]
 			(screen.get("_controller") as InputController).select_unit(unit)
@@ -68,3 +77,78 @@ func _ready() -> void:
 	for s: Array in shots:
 		(s[1] as Image).save_jpg("%s/%s.jpg" % [out, s[0]], 0.9)
 	get_tree().quit()
+
+
+## Погляд згори: межі будівель і огорож, найменші проміжки — числом у кадрі й у виводі.
+func _top_down(screen: BattleScreen, at: Vector2, span: float, name: String) -> Image:
+	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	var houses: Array[Rect2] = []
+	var fences: Array[Rect2] = []
+	var window := Rect2(at - Vector2.ONE * span * 0.5, Vector2.ONE * span)
+	for inst in props.all_instances():
+		var spec: Dictionary = PropLayer.spec_of(inst["model"])
+		var box: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var r := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+		if not window.intersects(r):
+			continue
+		var k: int = int(spec["kind"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			houses.append(r)
+		elif k == PropLayer.Kind.GARDEN_FENCE:
+			fences.append(r)
+	var hh: float = INF
+	for i in houses.size():
+		for j in range(i + 1, houses.size()):
+			hh = minf(hh, _gap(houses[i], houses[j]))
+	var hf: float = INF
+	for h in houses:
+		for f in fences:
+			hf = minf(hf, _gap(h, f))
+	var lines := ImmediateMesh.new()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.no_depth_test = true
+	mat.vertex_color_use_as_albedo = true
+	if not houses.is_empty() or not fences.is_empty():
+		lines.surface_begin(Mesh.PRIMITIVE_LINES, mat)
+	for pair: Array in [[houses, Color.RED], [fences, Color.CYAN]]:
+		for r: Rect2 in pair[0]:
+			var c: Array = [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
+			for k in 4:
+				for v: Vector2 in [c[k], c[(k + 1) % 4]]:
+					lines.surface_set_color(pair[1])
+					lines.surface_add_vertex(Vector3(v.x, 5.0, v.y))
+	if not houses.is_empty() or not fences.is_empty():
+		lines.surface_end()
+	if not houses.is_empty() or not fences.is_empty():
+		var outline := MeshInstance3D.new()
+		outline.mesh = lines
+		screen.add_child(outline)
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = span
+	cam.position = Vector3(at.x, 60.0, at.y)
+	cam.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	cam.far = 200.0
+	screen.add_child(cam)
+	cam.make_current()
+	var label := Label.new()
+	label.text = "%s: будівля–будівля %.1f м, будівля–огорожа %.1f м" % [name, hh * 8.0, hf * 8.0]
+	label.add_theme_font_size_override("font_size", 28)
+	label.add_theme_color_override("font_color", Color.YELLOW)
+	label.position = Vector2(20, 860)
+	add_child(label)
+	print("TOPDOWN %s house_gap_m=%.2f fence_gap_m=%.2f houses=%d fences=%d" % [name, hh * 8.0, hf * 8.0, houses.size(), fences.size()])
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var img: Image = get_viewport().get_texture().get_image()
+	label.free()
+	return img
+
+
+## Найменша відстань між двома прямокутниками в XZ, клітинки (0 — перетинаються).
+func _gap(a: Rect2, b: Rect2) -> float:
+	var dx: float = maxf(0.0, maxf(b.position.x - a.end.x, a.position.x - b.end.x))
+	var dz: float = maxf(0.0, maxf(b.position.y - a.end.y, a.position.y - b.end.y))
+	return sqrt(dx * dx + dz * dz)

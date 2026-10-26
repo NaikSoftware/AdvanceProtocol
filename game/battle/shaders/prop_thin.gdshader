@@ -13,6 +13,22 @@ uniform float metallic = 0.0;
 // Частка неба в нормалі: 0 — нормаль ассета, 1 — освітлення як у горизонтальної площини.
 uniform float sky_bend = 0.65;
 
+// Мокрість карти (WeatherRig): на мокрій River панель темніша, сіро-бежева (насиченість ≤ 0.1) і
+// з брудом унизу — кольорова огорожа світилась би, як пофарбована щойно.
+global uniform float weather_wetness;
+const float WET_FULL = 0.5;
+const float WET_DARK = 0.75;
+const vec3 WET_TONE = vec3(1.0, 0.96, 0.9);
+// Бруд біля землі: ~0.5 м (клітинка — 8 м).
+const float DIRT_H = 0.06;
+const float DIRT = 0.6;
+
+varying float base_h;
+
+void vertex() {
+	base_h = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y - MODEL_MATRIX[3].y;
+}
+
 void fragment() {
 	vec4 tex = texture(albedo_tex, UV) * albedo_color;
 	if (use_vertex_color) {
@@ -21,7 +37,14 @@ void fragment() {
 	if (alpha_cut > 0.0 && tex.a < alpha_cut) {
 		discard;
 	}
-	ALBEDO = tex.rgb;
+	vec3 albedo = tex.rgb;
+	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
+	if (wet > 0.0) {
+		float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+		albedo = mix(albedo, luma * WET_TONE, wet) * mix(1.0, WET_DARK, wet);
+		albedo *= mix(1.0, DIRT, wet * (1.0 - smoothstep(0.0, DIRT_H, base_h)));
+	}
+	ALBEDO = albedo;
 	ROUGHNESS = roughness;
 	METALLIC = metallic;
 	vec3 up = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);

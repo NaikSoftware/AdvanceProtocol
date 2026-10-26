@@ -16,7 +16,7 @@ const MODEL_DIR: String = "res://assets/props/"
 ## Модель -> {kind, weight, …}. Слід будівлі в тайлах — з метаданих GLB (`footprint_tiles`), тож
 ## нова модель того самого виду стає в слот за самим ім'ям. Модель без файлу пропускається.
 ## max — скільки разів на карту (орієнтир, що має лишатись одним), ring — лише в кільці, gap —
-## власний проміжок до сусідньої будівлі й до огорожі двору, якщо більший за STRUCTURE_GAP, tower —
+## власний проміжок до сусідньої будівлі, якщо більший за STRUCTURE_GAP, tower —
 ## вежа, одна на двір, scale — множник розміру брили (ассет завеликий для польового каменя),
 ## map/order/deck_top — міст своєї переправи (DECK_TOP з tools/blender/bridges/build_bridges.py).
 const MODELS: Dictionary = {
@@ -37,8 +37,8 @@ const MODELS: Dictionary = {
 	&"f4_grain_bins": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f5_silo_battery": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f6_fuel_station": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"f7_water_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.3, "tower": true},
-	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.3, "tower": true},
+	&"f7_water_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.5, "tower": true},
+	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.5, "tower": true},
 	&"ruin_h1": {"kind": Kind.RUIN, "weight": 1},
 	&"ruin_h3": {"kind": Kind.RUIN, "weight": 1},
 	&"bridge_river_west": {"kind": Kind.BRIDGE, "map": &"river", "order": 0, "deck_top": 0.30},
@@ -91,16 +91,16 @@ const WIRE_GONE_DIST: float = 34.0
 const FIELD_FENCE_RUN: int = 3
 const FIELD_FENCE_CHANCE: int = 6
 const HAY_CHANCE: int = 2
-## Найменший проміжок між межами будівель (разом зі звісом даху), клітинки: 1.5 м. Будівля, що не
-## влазить із ним, поступається іншій моделі чи повороту або лишає двір порожнім, але не заходить
-## у сусіда.
-const STRUCTURE_GAP: float = 0.1875
+## Найменший проміжок між межами будівель (разом зі звісом даху), клітинки: 2 м. З камери під 38°
+## вужчий прохід ховається за дахом, і два будинки читаються одним. Будівля, що не влазить із ним,
+## поступається іншій моделі чи повороту або лишає клітинки порожнім двором.
+const STRUCTURE_GAP: float = 0.25
+## Будівля з дахом тримається на стільки всередині своєї групи BUILDING (клітинки, ~2 м): між
+## звісом і огорожею двору (YARD_OUT за межею) лишається ≥ 0.3 клітинки.
+const YARD_CLEAR: float = 0.25
 ## Огорожа двору стоїть за межею групи BUILDING на ~1 м: у двір не заходить, а звіс даху
 ## (будівля не виходить за свій слід) її не торкається.
 const YARD_OUT: float = 0.12
-## Найбільший звіс даху за межу двору, клітинки (~0.5 м): ассет може бути глибшим за слід до 0.1
-## тайла, а огорожа стоїть на YARD_OUT, тож звіс до неї не дістає.
-const YARD_EAVE: float = 0.065
 ## Кам'яні брили й бетонні блоки темніші за ассет: світлі, вони читались плямами фарби.
 const STONE_TINT: float = 0.85
 ## Пляма дотику під брилою чи блоком: у скільки разів ширша за сам пропс і наскільки темна.
@@ -688,8 +688,8 @@ class _Placer:
 	var edges: Dictionary = {}
 	## Клітинки дошки з огорожею двору: польова огорожа й причепи їх оминають.
 	var yard_cells: Dictionary = {}
-	## Клітинки дошки під будівлями: двір без будівлі не обгороджується (порожня огорожа серед поля
-	## читається уламком).
+	## Клітинки дошки під будівлями -> напрям фасаду (−Z моделі) на дошці: двір без будівлі не
+	## обгороджується (порожня огорожа серед поля читається уламком), а хвіртка стає перед дверима.
 	var built: Dictionary = {}
 
 	func _init(p_layer: PropLayer, p_world: Board, p_ring: int, p_size: Vector2i,
@@ -872,13 +872,12 @@ class _Placer:
 				return false
 		return true
 
-	## Модель не виходить за межу групи BUILDING далі за звіс YARD_EAVE (за ним — огорожа двору); у бік
-	## інших клітинок тієї ж групи звіс будь-який, сусіда стереже проміжок між будівлями.
+	## Межа моделі зі звісом даху, розширена на YARD_CLEAR, лежить у клітинках своєї групи: до огорожі
+	## двору лишається ≥ 0.3 клітинки. У бік інших клітинок групи — будь-як, сусіда стереже проміжок.
 	func _inside_yard(m: StringName, origin: Vector2i, rot: int, s: Vector2i, in_group: Dictionary) -> bool:
 		var r: Rect2 = _rect_of(m, origin, rot, s)
 		var f := Rect2(Vector2(origin) - Vector2(0.5, 0.5), Vector2(s))
-		# Модель із власним проміжком (вежа) тримає його й до огорожі двору, що стоїть на YARD_OUT.
-		var reach: float = minf(YARD_EAVE, YARD_OUT - float(PropLayer.spec_of(m).get("gap", 0.0)))
+		var reach: float = -YARD_CLEAR
 		var sides: Array = []
 		if r.position.x < f.position.x - reach:
 			sides.append(Vector2i(-1, 0))
@@ -923,7 +922,7 @@ class _Placer:
 				var c: Vector2i = origin + Vector2i(dx, dy)
 				free.erase(c)
 				cells.append(c)
-				built[c] = true
+				built[c] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(1, 0)][rot]
 				# Найнижча точка під слідом: стіна трохи заходить у землю, але ніде не висить.
 				for o: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
 					lo = minf(lo, ground(c.x + o.x, c.y + o.y))
@@ -1066,8 +1065,14 @@ class _Placer:
 					sides.append([g, d])
 		if sides.is_empty() or m == &"":
 			return
+		# Хвіртка — перед дверима (фасад будинку) і, де можна, на дорогу.
+		var door: Array = sides.filter(func(e: Array) -> bool: return built.get(e[0], Vector2i.ZERO) == e[1])
 		var to_road: Array = sides.filter(func(e: Array) -> bool: return kind(e[0] + e[1]) == Terrain.Kind.ROAD)
-		var pool: Array = to_road if not to_road.is_empty() else sides
+		var door_road: Array = door.filter(func(e: Array) -> bool: return to_road.has(e))
+		var pool: Array = door_road
+		for alt: Array in [door, to_road, sides]:
+			if pool.is_empty():
+				pool = alt
 		var gate: Array = pool[h(first, 120) % pool.size()]
 		for e: Array in sides:
 			if e != gate:
@@ -1100,7 +1105,7 @@ class _Placer:
 		for y in size.y:
 			for x in size.x:
 				var c := Vector2i(x, y)
-				if not open_ground(c) or yard_cells.has(c) or _near_building(c):
+				if not open_ground(c) or _near_yard(c):
 					continue
 				for d in Board.DIRS_4:
 					var r: Vector2i = c + d
@@ -1125,10 +1130,13 @@ class _Placer:
 			var c := Vector2i(k.x, k.y)
 			put_on_edge(pick_for_half(Kind.FIELD_FENCE, half(c)), c, Vector2i(k.z, k.w))
 
-	func _near_building(c: Vector2i) -> bool:
+	## Клітинка в межах однієї від двору чи будинку: польова огорожа поруч з огорожею двору читається
+	## подвійним рядом.
+	func _near_yard(c: Vector2i) -> bool:
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
-				if kind(c + Vector2i(dx, dy)) == Terrain.Kind.BUILDING:
+				var n: Vector2i = c + Vector2i(dx, dy)
+				if yard_cells.has(n) or kind(n) == Terrain.Kind.BUILDING:
 					return true
 		return false
 

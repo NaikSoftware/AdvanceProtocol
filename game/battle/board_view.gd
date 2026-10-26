@@ -387,6 +387,10 @@ func _contour_material() -> StandardMaterial3D:
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	# Стрічка без нормалей: освітлення дало б чорні ділянки; контур — позначка, не матеріал.
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# Зони руху — головний інтерфейс гри (§3.2): підніжжя огорожі чи стіна, що стоїть на межі
+	# клітинки, не сміє сховати риску.
+	mat.no_depth_test = true
+	mat.render_priority = 1
 	return mat
 
 
