@@ -1,15 +1,16 @@
 extends Node
 ## Рослинність на справжньому ґрунті карти: екран бою (рельєф, ґрунт, вода, світло й погода карти),
 ## на одну клітинку ставляться вузли бібліотеки рослинності з матеріалами, як на дошці
-## (PropPreview.veg_mesh), камера гри — на найближчому й найдальшому зумі. Не входить у гру.
+## (VegetationLayer.veg_mesh), камера гри — на найближчому й найдальшому зумі. Не входить у гру.
 ## Запуск (потрібне вікно, не --headless):
-##   $GODOT --path . res://tools/veg_board_shot.tscn -- <out_dir> <map> <library.glb> <node,node,...> [x,y] [--water]
+##   $GODOT --path . res://tools/veg_board_shot.tscn -- <out_dir> <map> <library.glb> <node,node,...> [x,y] [--water] [--norain] [--neutral]
+## --norain: без штрихів дощу (порожній кадр для маски tools/veg_measure.py має збігатися піксель у піксель);
+## --neutral: біле сонце й без тону листя (для tools/veg_measure.py leaf).
 ## Без x,y — перша клітинка поля, що межує з водою (--water: сама клітинка води біля берега, для очерету).
 ## Вузли стають рядком через клітинку вздовж X на висоті рельєфу. Кадри: <tag>_z6.png і <tag>_z20.png,
 ## де tag — ім'я бібліотеки без .glb; пишуться наприкінці (save_png блокує ~1 с).
 
 const SETTLE_FRAMES: int = 120
-const PreviewScript := preload("res://tools/prop_preview.gd")
 
 
 func _ready() -> void:
@@ -23,6 +24,8 @@ func _ready() -> void:
 	var lib: String = args[2]
 	var nodes: PackedStringArray = args[3].split(",")
 	var want_water: bool = args.has("--water")
+	var norain: bool = args.has("--norain")
+	var neutral: bool = args.has("--neutral")
 	DirAccess.make_dir_recursive_absolute(out)
 	get_window().size = Vector2i(1280, 720)
 
@@ -30,6 +33,12 @@ func _ready() -> void:
 	add_child(screen)
 	screen.setup(load("res://maps/%s.tres" % map) as MapData, 2, 1)
 	var board: Board = MatchService.state.board
+	var weather: WeatherRig = screen.get("_weather")
+	if norain and weather.rain != null:
+		weather.rain.visible = false
+	if neutral:
+		weather.sun.light_color = Color(1, 1, 1)
+		RenderingServer.global_shader_parameter_set(&"foliage_tint", Vector3.ONE)
 	var cell := Vector2i(-1, -1)
 	for a in args.slice(4):
 		if a.contains(","):
@@ -51,7 +60,7 @@ func _ready() -> void:
 		if i < 0:
 			continue
 		var inst := MeshInstance3D.new()
-		inst.mesh = PreviewScript.veg_mesh(mi.mesh, -1.0, 0.0)
+		inst.mesh = VegetationLayer.veg_mesh(mi.mesh, -1.0, 0.0, (screen.get_node("%BoardView") as BoardView).structure_shadows)
 		var x: float = float(cell.x) + (float(i) - float(nodes.size() - 1) * 0.5) * 1.0
 		var z: float = float(cell.y)
 		inst.position = Vector3(x, TerrainHeight.ground_y(x, z), z)

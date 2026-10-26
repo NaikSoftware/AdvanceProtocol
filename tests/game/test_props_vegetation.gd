@@ -4,7 +4,7 @@ extends GutTest
 ## спирається veg_body.gdshaderinc:
 ## - G — ідентифікатор пучка: дерева в нижній половині [0; 0,5) (їх тримає fade_floor), решта —
 ##   у верхній [0,5; 1);
-## - поверхня 1 (пляма затінення) — у кущів і в усього поваленого, крім снопів очерету й рогозу;
+## - поверхня 1 (пляма затінення) — у всіх, крім снопів очерету й рогозу;
 ## - бюджет трикутників: дерево 800, кущ біля хати 400, інший кущ 600, сніп 300.
 
 const LIBS: Array[String] = [
@@ -38,6 +38,8 @@ func test_vertex_contract(p = use_parameters(LIBS)) -> void:
 		var fallen: bool = name.ends_with("_fallen")
 		var tree: bool = _starts(name, TREES)
 		var sheaf: bool = _starts(name, SHEAVES)
+		# G перевіряється на поверхні 0: її шейдери (veg, veg_fade*) читають G; пляма затінення
+		# (поверхня 1, veg_shade.gdshader) G не читає — лише R (сила) й B (висота крони).
 		var a: Array = mi.mesh.surface_get_arrays(0)
 		var col: PackedColorArray = a[Mesh.ARRAY_COLOR]
 		var bad_g: int = 0
@@ -45,7 +47,7 @@ func test_vertex_contract(p = use_parameters(LIBS)) -> void:
 			if (col[i].g < 0.5) != tree:
 				bad_g += 1
 		assert_eq(bad_g, 0, "%s/%s: G (дерево/решта) не за контрактом у %d вершин" % [p, name, bad_g])
-		var want_surfaces: int = 1 if sheaf or (tree and not fallen) else 2
+		var want_surfaces: int = 1 if sheaf else 2
 		assert_eq(mi.mesh.get_surface_count(), want_surfaces, "%s/%s: поверхонь" % [p, name])
 		var tris: int = 0
 		for s in mi.mesh.get_surface_count():

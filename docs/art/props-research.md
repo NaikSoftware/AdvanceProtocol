@@ -423,13 +423,12 @@ One library GLB per group and season in `assets/props/vegetation/`:
 `{bank,yard,meadow}_veg_{late,summer,early}.glb` (late = River, summer = Crossroads,
 early = Ridge). Each plant is a node, the same geometry in every season. Only the atlas changes,
 plus how many clumps a bare late crown keeps. Every node has a `<name>_fallen` twin, what is left after a vehicle drives through. Reeds and
-bushes become a bundle of broken stems 0.4–0.8 m high, leaning 30–60° the way the vehicle went,
-with a few leaves. A tree becomes a heap of brushwood up to 0.9 m high: 36 branches 3–8 cm thick
-and 0.6–1.8 m long, mostly pressed the way of travel, every sixth sticking up at 20–45°, plus
-2–3 short trunk pieces of at most 1 m. The bark is dry and pale, and a third of the pieces in every
-heap show a fresh break, so the heap reads on dark ground. On the real River ground at zoom 6 the
-heap measures p50 ≈ 80–90 and p90 ≈ 110–125 out of 255, against ground ≈ 70
-(`tools/veg_measure.py lum`). The season's leaves lie on top in small clusters.
+bushes become 5–9 broken stems 1–1.4 m long, leaning 35–60° from the vertical the way the vehicle
+went, tips at most 0.8 m high, with gaps between them and a few leaves (bush bark at tone 0.6). A tree becomes a dense heap of brushwood up to 0.9 m high: 36 branches 5–12 cm
+thick and 0.6–1.8 m long, mostly pressed the way of travel, every sixth sticking up at 20–45°, plus
+2–3 short trunk pieces of at most 1 m. Everything has the tree's own bark at the trunk's tone
+(0.45), with no pale wood or fresh breaks: on the game zoom, light wood read as white litter. The
+heap reads by its silhouette and its shade, not by brightness. The season's leaves lie on top in small clusters.
 
 Trees are grown, not filled into a sphere: a trunk leaning up to 8°, at least three scaffold
 limbs, second- and third-order branches, and leaf clumps at the branch ends, so gaps show between
@@ -476,8 +475,6 @@ texel), VRAM-compressed with mipmaps. Season colours follow the forest. Late aut
   same bare-twig sprites and the same tone as the late forest (`forest/src_leaf_sprites.py`
   `broad_late` and `oak_late`, graded to L* 26, C* 3, h 55 as in `forest/specs/broadleaf_late.json`),
   so bare twigs match across the forest and the meadow. The sprites are read from `$FOREST_SPRITES`;
-  sharing one runtime texture would need an atlas common to both libraries, which waits for the
-  forest merge;
 - oak keeps up to 30 % brown, alder and lilac up to 40 % dull green;
 - walnut keeps yellow remnants and thuja turns bronze.
 
@@ -497,8 +494,7 @@ surfaces, and placement overrides both with the GLB's own atlas as `albedo_tex`:
 
 Vertex colour carries per-clump data:
 - **R** is the tone. On a clump it is the place in the crown (the lower third is darker). On bark it
-  is the brightness: 0.45 for trunks and limbs in the crown's shade, 1 for the dry wood of heaps and
-  the hawthorn frame.
+  is the brightness: 0.45 everywhere, for trunks, limbs, heap brushwood and bush stems.
 - **G** is the clump id, the same for every vertex of a card or branch, so a dissolve drops whole
   clumps and never single triangles. Trees take [0.02, 0.48]; `fade_floor` applies to them.
   Everything else (bushes, reeds, thuja) takes [0.52, 0.98] and fades fully. The gap keeps the 16-bit
@@ -538,6 +534,27 @@ UV2 pre-flipped (`uv2()` in `veg_build.py`); otherwise every vertex is lifted ~1
 space and bark counts as a card. `forest_*.glb` from `tools/blender/forest/build_library.py` did
 not pre-flip either.
 
+**Placement in battle.** `game/battle/vegetation_layer.gd` (`VegetationLayer`, built by `BoardView`
+after the props) places the libraries. It adds no rule, and every point has its own seed derived
+from the map seed.
+- **Banks.** Reed and cattail beds stand in the shallows (0–1 m under the waterline) of water cells
+  that border field or marsh: 8–14 clumps per cell, following the shore, at least 0.3 from any land
+  cell centre. Willow and alder stand on the dry bank in groups of 1–3, at the edge of a land cell
+  and within 0.4 of the water. Everything comes in patches rather than a ring: more on quiet bends
+  and near marsh, nothing within 2 cells of a bridge or next to a road.
+- **Meadows.** Rare groups of 1–3 hawthorn and dog-rose bushes, or a lone pear or oak (a willow
+  near water), only on unploughed field and away from the villages.
+- **Yards.** About 70 % of the homesteads in the village layout get 1–2 of apple, cherry, lilac,
+  elder, thuja or a berry row, inside the yard or just outside its fence.
+
+Nothing stands on a road with a 0.3 shoulder, on a bridge, in water, in ploughland, on a fence or
+garden bed, and no crown reaches a roof. When a unit stands under a crown or between it and the
+camera, the plant fades (`set_reveal_cells`, with the `fade_floor` 0.6 for bare late crowns). A
+vehicle's cell shows the `_fallen` twin (`set_crushed`). On a sunny map the shade patch stretches
+away from the sun by the crown's height. The battle ground shows no real sun shadow, so this
+follows the houses' contact patch (`prop_contact.gdshader`). `tests/game/test_vegetation_layer.gd`
+checks all of this on the three maps.
+
 Reeds belong in the shallows, 0.5–2 m out from the waterline, not on dry bank.
 
 **Measuring.** `tools/veg_measure.py` measures rendered frames only, never sprites or the atlas:
@@ -548,7 +565,7 @@ Reeds belong in the shallows, 0.5–2 m out from the waterline, not on dry bank.
 light and weather) and shoots zoom 6 and 20.
 
 Rebuild: `tools/blender/vegetation/build_all.sh`. Frames: `tools/prop_preview.gd` with `--veg`,
-`--nodes=`, `--water[=E]`, `--with=`, `--fade=`, `--fade-floor=`, `--dissolve=`, `--tank=X:Z`,
+`--nodes=`, `--water[=E]`, `--beside=`, `--fade=`, `--fade-floor=`, `--dissolve=`, `--tank=X:Z`,
 `--neutral`, `--rg`.
 
 ## Bridges

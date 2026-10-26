@@ -140,12 +140,13 @@ def to_atlas(rect, u, v):
 
 class Mesh:
     """Колір вершини:
-    R — тон: у пучка — місце в кроні (нижня третина темніша); у кори — її яскравість (0,45 у
-        стовбура й гілок під кроною, 1 у сухої деревини куп і каркаса глоду);
+    R — тон: у пучка — місце в кроні (нижня третина темніша); у кори — її яскравість (0,45 скрізь:
+        стовбур, гілки, хмиз куп, стебла кущів — світла деревина на ігровому зумі читалась сміттям);
     G — ідентифікатор пучка, однаковий для всіх вершин картки чи гілки: шейдер гасить пучок
-        цілим і бере з нього фазу вітру. Нижня половина [0; 0,5) — дерева: над юнітом їх тримає
+        цілим. Нижня половина [0; 0,5) — дерева: над юнітом їх тримає
         нижня межа прозорості fade_floor (гола крона пізньої пори юніта не ховає); верхня половина —
         усе інше (кущі, очерет, туя) прозоріє до звичайного рівня;
+    B — 0, крім плями затінення: там висота крони (у двох тайлах), від неї довжина запеченої тіні.
     Плями затінення (shade) — окрема поверхня з іншим матеріалом (veg_shade.gdshader)."""
 
     def __init__(self, seed, floor=False):
@@ -189,9 +190,15 @@ class Mesh:
     def fixed(self, corners, rect, shades, normal, pid=None):
         self.quad(corners, rect, [FIXED] * 4, shades, normal, pid)
 
-    def shade(self, corners, rect, strength):
-        """Пляма затінення: м'яка, неправильна, множить колір ґрунту (strength — частка затемнення в центрі)."""
+    def shade(self, corners, rect, strength, lift=0.0):
+        """Пляма затінення: м'яка, неправильна, затемнює ґрунт (strength — частка в центрі); lift —
+        висота крони, м: на сонячній карті шейдер витягує пляму від сонця на довжину тіні."""
         self.quad(corners, rect, [FIXED] * 4, [strength] * 4, Vector((0, 0, 1)), shade_surface=True)
+        b = min(lift / TILE_M / 2.0, 1.0)
+        self.bm.faces.ensure_lookup_table()
+        for loop in self.bm.faces[-1].loops:
+            col = loop[self.col]
+            loop[self.col] = (col[0], col[1], b, col[3])
 
     def tube(self, pts, radii, rect, sides=4, tone=BARK_TONE):
         """Стовбур чи гілка: трубка з кількох відрізків, смуга кори вздовж."""
@@ -311,13 +318,14 @@ def sheaf(it, rects, fallen):
     return m
 
 
-def litter(m, rects, rx, ry, rng, z=0.02, centre=Vector(), strength=0.25):
-    """Пляма темної підстилки й тіні під кущем: на похмурій Річці тінь від сонця майже не видно,
-    і без неї кущ стоїть на землі, як на столі."""
+def litter(m, rects, rx, ry, rng, z=0.3, centre=Vector(), strength=0.25, lift=0.0):
+    """Пляма затінення під рослиною (поверхня 1, veg_shade.gdshader): земля бою тіні сонця не
+    показує, і без плями рослина стоїть, як на столі. Пляма піднята на z = 0,3 м над основою:
+    нерівний рельєф у її межах інакше ховав більшу частину плями під землею."""
     a = rng.uniform(0, 2 * math.pi)
     ca, sa = math.cos(a), math.sin(a)
     corners = [centre + Vector((x * rx * ca - y * ry * sa, x * rx * sa + y * ry * ca, z)) for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-    m.shade(corners, rects["sprites"]["litter"][0], strength)
+    m.shade(corners, rects["sprites"]["litter"][0], strength, lift)
 
 
 def crown(it, rects, fallen):
@@ -388,38 +396,37 @@ def crown(it, rects, fallen):
             rad = 0.05
         lm = dict(pts=[b0, b0.lerp(tip, 0.5) + Vector((0, 0, 0.1)), tip], r=[rad, rad * 0.7, rad * 0.35])
         stems.append(lm)
-        m.tube(lm["pts"], lm["r"], bark, sides=3, tone=1.0 if it.get("frame") else BARK_TONE)
+        m.tube(lm["pts"], lm["r"], bark, sides=3)
     if it.get("frame"):
         # Колючий каркас: від кожного стебла ще гілки — пізньої пори їх видно між пучками.
         for lm in branch_out(stems, it["frame"], skel, 0.6, 0.9):
-            m.tube(lm["pts"], [max(min(x, 0.04), 0.03) for x in lm["r"]], rects["bark"]["deadwood"], sides=3, tone=1.0)
-    litter(m, rects, rx * 0.85, ry * 0.85, skel)
+            m.tube(lm["pts"], [max(min(x, 0.04), 0.03) for x in lm["r"]], bark, sides=3)
+    litter(m, rects, rx * 0.85, ry * 0.85, skel, lift=(top + base) / 2)
     check_budget(m, it, "yard" if GROUP == "yard" else "crown")
     return m
 
 
 def crushed(it, m, rects, bark, cards, travel, base, top, rng):
-    """Кущ, який переїхала техніка: пучок зламаних стебел 0,4–0,8 м заввишки, похилених під
-    35–60° в один бік (куди їхала техніка), частина стебел — світлий злам; трохи листя дрібними
+    """Кущ, який переїхала техніка: 5–9 зламаних стебел 0,4–0,8 м заввишки, похилених під 35–60° від
+    вертикалі в один бік (куди їхала техніка), з просвітами між ними, колір кори куща (без світлих зламів); трохи листя дрібними
     пучками біля стебел, не килимом; м'яка пляма затінення."""
     along = Vector((math.cos(travel), math.sin(travel), 0.0))
-    dead = rects["bark"]["deadwood"]
-    wood = rects["bark"]["wood"]
-    n = max(it.get("stems", 4) * 3, 14)
-    # Стебла товщі за справжні (~13 см): тонші на найближчому зумі вужчі за 2 пікселі.
-    rad = 0.065
+    # 5–9 стебел з просвітами між ними: густий пучок читався чорною брилою.
+    n = rng.randint(5, 9)
+    rad = 0.05
     stems = []
     for k in range(n):
         b0 = Vector((rng.gauss(0, 0.45), rng.gauss(0, 0.45), -0.05))
         ang = travel + rng.gauss(0, 0.3)
-        # Стебла 1–1,4 м під 35–55°: кінці на 0,57–0,8 м, пучок завдовжки з кущ, а не жмут на місці.
+        # Стебла 1–1,4 м під 35–60° від вертикалі (30–55° від землі), кінці не вище 0,8 м.
         ln = rng.uniform(1.0, 1.4)
-        pitch = math.radians(rng.uniform(35, 55))
+        pitch = math.radians(rng.uniform(30, 55))
         d = Vector((math.cos(ang) * math.cos(pitch), math.sin(ang) * math.cos(pitch), math.sin(pitch)))
         tip = b0 + d * min(ln, 0.8 / math.sin(pitch))
-        m.tube([b0, b0.lerp(tip, 0.5), tip], [rad, rad * 0.75, rad * 0.5], wood if k % 3 == 0 else dead, sides=3, tone=1.0)
+        # Тон 0,6: стебла куща світліші за кору стовбура, бо пучок без них темнів до ґрунту − 35.
+        m.tube([b0, b0.lerp(tip, 0.5), tip], [rad, rad * 0.75, rad * 0.5], bark, sides=3, tone=0.6)
         stems.append((b0, tip))
-    for i, (_, size, rect, roll) in enumerate(cards[:max(4, len(cards) // 4)]):
+    for i, (_, size, rect, roll) in enumerate(cards[:max(3, len(cards) // 8)]):
         b0, tip = stems[i % n]
         q = b0.lerp(tip, rng.uniform(0.3, 0.9)) + Vector((rng.gauss(0, 0.1), rng.gauss(0, 0.1), 0.0))
         m.card(q, roll, rng.uniform(0.3, 0.45), rect, lambda _c: Vector((0, 0.3, 1)).normalized(), rng.uniform(0.55, 0.8))
@@ -460,22 +467,21 @@ def branch_out(parents, count, rng, len_lo, len_hi):
     return out
 
 
-def heap(it, m, rects, branches, cards, travel):
-    """Дерево, яке переїхав танк: купа хмизу до 0,9 м заввишки. Гілки 3–8 см завтовшки й
-    0,6–1,8 м завдовжки, здебільшого притиснуті в бік руху, частина стирчить угору; 2–3 короткі
-    уламки стовбура ≤ 1 м. Кора суха й світла (тон 1), третина гілок у кожній купі — свіжий злам.
-    Листя пори року — дрібні пучки; пізньої пори його мало й воно під гіллям. Під купою — м'яка
-    пляма затінення."""
+def heap(it, m, rects, bark, branches, cards, travel):
+    """Дерево, яке переїхав танк: щільна купа хмизу до 0,9 м заввишки, ~0,3 клітинки. Гілки 5–12 см
+    завтовшки й 0,4–1,2 м завдовжки, здебільшого притиснуті в бік руху, частина стирчить угору; 2–3 короткі
+    уламки стовбура ≤ 1 м. Колір — кора дерева з тим самим тоном, що й стовбур (0,45): світла
+    деревина й злами на ігровому зумі читались білим сміттям. Купа читається силуетом і тінню.
+    Листя пори року — дрібні пучки; пізньої пори його мало й воно під гіллям."""
     rng = random.Random(it["node"] + "heap")
     along = Vector((math.cos(travel), math.sin(travel), 0.0))
     side = Vector((-along.y, along.x, 0.0))
     # Розмір купи: уздовж руху ~0,5 висоти дерева, поперек ~0,4 ширини крони, не більше 6 × 4 м.
-    la, ls = min(it["h"] * 0.25, 3.0), min(it["w"] * 0.2, 2.0)
+    # Щільна купа ~0,3 клітинки: півосі 1,2 × 1,0 м незалежно від розміру дерева.
+    la, ls = 1.2, 1.0
     late = SEASON == "late" and it["kind"] in LATE_BARE
-    wood = rects["bark"]["wood"]
-    dead = rects["bark"]["deadwood"]
 
-    def spot(k=0.45):
+    def spot(k=0.35):
         u, v = rng.gauss(0, k), rng.gauss(0, k)
         return along * la * max(-1.0, min(u, 1.0)) + side * ls * max(-1.0, min(v, 1.0))
 
@@ -487,12 +493,12 @@ def heap(it, m, rects, branches, cards, travel):
         yaw = travel + rng.gauss(0, 0.6)
         d = Vector((math.cos(yaw), math.sin(yaw), rng.uniform(-0.05, 0.15))).normalized()
         ln = rng.uniform(0.5, 1.0)
-        m.tube([c - d * ln / 2, c + d * ln / 2], [r, r * 0.9], wood if k == 0 else dead, sides=5, tone=1.0)
-    # Хмиз: гілки 3–8 см завтовшки; висота купи росте до середини, третина — свіжий злам.
+        m.tube([c - d * ln / 2, c + d * ln / 2], [r, r * 0.9], bark, sides=5)
+    # Хмиз: гілки 5–12 см завтовшки; висота купи росте до середини.
     n = 36
     for k in range(n):
-        rad = rng.uniform(0.015, 0.04)
-        ln = rng.uniform(0.6, 1.8)
+        rad = rng.uniform(0.025, 0.06)
+        ln = rng.uniform(0.4, 1.2)
         yaw = travel + rng.gauss(0, 0.7)
         up = k % 6 == 0  # кожна шоста стирчить угору під 20–45°
         pitch = math.radians(rng.uniform(20, 45) if up else rng.uniform(-8, 18))
@@ -502,7 +508,7 @@ def heap(it, m, rects, branches, cards, travel):
         p0.z = rng.uniform(0.05, 0.25 + 0.45 * centre)
         p1 = p0 + d * ln
         p1.z = min(max(p1.z, 0.05), 0.9)
-        m.tube([p0, p1], [rad, rad * 0.6], wood if k % 3 == 0 else dead, sides=3, tone=1.0)
+        m.tube([p0, p1], [rad, rad * 0.6], bark, sides=3)
     # Листя: дрібні пучки 0,3–0,5 м.
     room = (BUDGET["tree"] - m.tris()) // 2
     nc = min(len(cards), room, 40 if late else 160)
@@ -589,7 +595,7 @@ def tree(it, rects, fallen):
         cards.append((p, crng.uniform(*it["card"]), crng.choice(sprites), crng.uniform(0, 2 * math.pi)))
 
     if fallen:
-        return heap(it, m, rects, limbs + sec, cards, ldir)
+        return heap(it, m, rects, bark, limbs + sec, cards, ldir)
     for lm in trunks:
         m.tube(lm["pts"], lm["r"], bark, sides=6)
     for lm in limbs:
@@ -614,6 +620,10 @@ def tree(it, rects, fallen):
             nrm = ((c - mid).normalized() + Vector((0, 0, 0.3))).normalized()
             m.card(c, trng.uniform(0, 2 * math.pi), trng.uniform(*it["card"]) * trng.uniform(0.6, 0.9),
                    trng.choice(twig), lambda _c, n_=nrm: n_, trng.uniform(0.6, 1.0))
+    # Пляма затінення під кроною; на сонячній карті шейдер витягує її в тінь від сонця.
+    # Сила 0,55 — близько до плями дотику будівель (PropLayer.CONTACT_ALPHA 0,6): поруч із хатою тінь
+    # дерева не має бути слабшою.
+    litter(m, rects, R * 0.8, R * 0.75, random.Random(it["node"] + "shade"), strength=0.55, lift=(cb + h) / 2)
     n = min(n, (BUDGET["tree"] - m.tris()) // 2)
     for p, size, rect, roll in cards[:n]:
         hfrac = min(max((p.z - cb) / max(h - cb, 0.5), 0.0), 1.0)

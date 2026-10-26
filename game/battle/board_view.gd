@@ -88,6 +88,8 @@ var probe_captures_requested: int = 0
 ## Будівлі, мости й дрібні пропси (PropLayer). Переживає build(): набір клітинок під юнітами й
 ## розчавлених лишається між перебудовами мосту.
 var _props: PropLayer
+## Очерет, рогіз і кущі на берегах (VegetationLayer); перебудовується з кожним build().
+var _vegetation: VegetationLayer
 ## тайл -> вид тайлу під ним.
 var _kind_by_cell: Dictionary = {}
 ## шар контуру -> Array[Dictionary] сегментів {cell, dir, color}, які зараз
@@ -197,6 +199,11 @@ func build(board: Board) -> void:
 		for sp: Dictionary in ring_map.spawns:
 			spawns.append(sp["pos"])
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields, spawns)
+	_vegetation = VegetationLayer.new()
+	_vegetation.name = "Vegetation"
+	_vegetation.cast_shadows = structure_shadows
+	add_child(_vegetation)
+	_vegetation.build(board, _height, fields, relief_seed, season, _props, VillageLayout.for_map(_map_key()).get("homes", []))
 	# Стежки публічні (§3.5): маска зносу не залежить від туману й ставиться разом із землею.
 	if _ground.material_override is ShaderMaterial and not _props.footpaths.is_empty():
 		Footpaths.apply(_ground.material_override, Footpaths.bake(_props.footpaths, _props.trodden, _board_size, _dry_grid()), _board_size)
@@ -416,15 +423,23 @@ func props() -> PropLayer:
 	return _props
 
 
+func vegetation() -> VegetationLayer:
+	return _vegetation
+
+
 ## Клітинки юнітів, що зараз на дошці: будівлі над ними й між ними та камерою розчиняються.
 ## instant — без переходу (гейт передачі, §3.5): див. PropLayer.set_reveal_cells.
 func set_reveal_cells(cells: Array[Vector2i], instant: bool = false) -> void:
 	_props.set_reveal_cells(cells, instant)
+	if _vegetation != null:
+		_vegetation.set_reveal_cells(cells)
 
 
 ## Клітинки з розчавленими пропсами, уже обрізані розвіданим глядача (§3.5).
 func set_crushed_cells(cells: Array[Vector2i]) -> void:
 	_props.set_crushed(cells)
+	if _vegetation != null:
+		_vegetation.set_crushed(cells)
 
 
 ## Ім'я файлу карти без розширення: мости своєї карти й сіль хешу розстановки.

@@ -387,34 +387,10 @@ func _veg_material(inst: Node3D) -> void:
 		mi.visible = false
 
 
-## Копія меша вузла рослинності з матеріалами, як їх ставить розстановка: поверхня 0 — рослина
-## (veg.gdshader; над юнітом — veg_fade_depth з next_pass veg_fade, пріоритети
-## PropLayer.FADE_DEPTH_PRIORITY і +1), поверхня 1 — пляма затінення (veg_shade.gdshader). fade < 0 —
-## звичайний вигляд. Спільна з tools/veg_board_shot.gd.
+## Копія меша вузла рослинності з матеріалами гри (VegetationLayer.veg_mesh). Спільна з
+## tools/veg_board_shot.gd.
 static func veg_mesh(src: Mesh, p_fade: float, p_floor: float) -> Mesh:
-	var tex: Texture2D = (src.surface_get_material(0) as BaseMaterial3D).albedo_texture
-	var sm := ShaderMaterial.new()
-	sm.set_shader_parameter("albedo_tex", tex)
-	if p_fade >= 0.0:
-		sm.shader = load("res://assets/props/vegetation/veg_fade_depth.gdshader")
-		sm.render_priority = PropLayer.FADE_DEPTH_PRIORITY
-		var col := ShaderMaterial.new()
-		col.shader = load("res://assets/props/vegetation/veg_fade.gdshader")
-		col.set_shader_parameter("albedo_tex", tex)
-		col.render_priority = PropLayer.FADE_DEPTH_PRIORITY + 1
-		for m: ShaderMaterial in [sm, col]:
-			m.set_shader_parameter("fade_floor", p_floor)
-		sm.next_pass = col
-	else:
-		sm.shader = load("res://assets/props/vegetation/veg.gdshader")
-	var shade := ShaderMaterial.new()
-	shade.shader = load("res://assets/props/vegetation/veg_shade.gdshader")
-	shade.set_shader_parameter("albedo_tex", tex)
-	var mesh: Mesh = src.duplicate()
-	mesh.surface_set_material(0, sm)
-	if mesh.get_surface_count() > 1:
-		mesh.surface_set_material(1, shade)
-	return mesh
+	return VegetationLayer.veg_mesh(src, p_fade, p_floor)
 
 
 ## Будівлі в бою малює prop_fade (мокрість за weather_wetness, теплі стіни), а не матеріал GLB;
