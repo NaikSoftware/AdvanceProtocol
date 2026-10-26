@@ -496,6 +496,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] No pole, transformer cabinet or guy anchor on the drawn road surface
 - [ ] 0.4 kV network is a tree along streets: no crossing spans, no closed loops, no pole that feeds nothing
 - [ ] One transformer per settlement, including the north Ridge ring hamlet
+- [ ] Wires stay visible against the river from every camera angle
 - [ ] Generator takes every rule constant from the game
 - [ ] In `feat/battlefield-dressing`
 
@@ -505,6 +506,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] A visible worn corridor porch → gate → verge at every yard, zoom 6–8
 - [ ] Reads as wear, not a rug or a pencil line
 - [ ] One or two winding paths to water per map, never across ploughed land or gardens
+- [ ] Paths to water go somewhere real (from a yard or road to a landing on the bank), not random stripes
 
 ### Task 21: Bank, yard and meadow vegetation
 
@@ -525,7 +527,9 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 - [x] Explosions without craters; scorch under wrecks only on `seen`
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
+- [ ] Chimney smoke reads as volume, not flat strokes
 - [ ] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
+- [ ] First scroll across the map is smooth, no hitch
 
 ### Task 24: New props in villages
 
