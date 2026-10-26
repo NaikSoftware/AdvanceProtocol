@@ -184,11 +184,25 @@ func test_atlas_cells_match_sources() -> void:
 	assert_almost_eq(BattleFx.FLASH_CORE_M, 9.2 * 112.0 / 192.0, 1e-9)
 
 
-## Хмара ґрунту гасне з 40-го кадру: хвіст атласу інакше лишав темну грудку на траві.
-func test_dirt_fades_out_before_its_tail() -> void:
+## Атлас ґрунту сам плавно гасне на останніх кадрах: другого згасання поверх нього нема,
+## інакше хмара зникала б різко раніше за свій кінець.
+func test_dirt_plays_the_atlas_own_fade() -> void:
+	assert_false(BattleFx._shader(false).code.contains("fade_from"))
+
+
+## Спалах не вигорає в чисто біле: перші ~4 кадри тьмяніші, а там, де альфа спадає, колір
+## холоне до #B8400F. Іскри цього не мають.
+func test_flash_starts_soft_and_cools_at_its_edge() -> void:
 	var hit: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.SHELL, false)
-	for n: Node in hit.find_children("Dirt*", "MeshInstance3D", true, false):
-		assert_eq(((n as MeshInstance3D).material_override as ShaderMaterial).get_shader_parameter("fade_from"), 40.0)
+	for n: Node in hit.find_children("Flash*", "MeshInstance3D", true, false):
+		var mat := (n as MeshInstance3D).material_override as ShaderMaterial
+		assert_eq(mat.get_shader_parameter("early_gain"), BattleFx.FLASH_EARLY_GAIN)
+		assert_eq(mat.get_shader_parameter("cool_edge"), 1.0)
+	assert_eq(BattleFx.FLASH_EARLY_GAIN, 0.55)
+	var armour: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.TANK_GUN, true)
+	for n: Node in armour.find_children("Spark*", "MeshInstance3D", true, false):
+		var mat := (n as MeshInstance3D).material_override as ShaderMaterial
+		assert_eq(mat.get_shader_parameter("cool_edge"), 0.0)
 
 
 ## Розміри влучань, діаметр клуби в метрах: по броні — менші, ніж по ґрунту.

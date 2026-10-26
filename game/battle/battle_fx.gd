@@ -48,8 +48,8 @@ const EXPLOSION_TAIL_SEC: float = 1.0
 const EXPLOSION_SEC: float = 40.0 / EXPLOSION_FPS + EXPLOSION_TAIL_SEC
 ## Межу клуби з землею й корпусом м'яко гасить глибина на 1,5 м.
 const HIT_SOFT_FADE: float = 1.5 / 8.0
-## Ґрунт гасне з цього кадру: хвіст атласу лишав би темну грудку на траві.
-const DIRT_FADE_FROM: float = 40.0
+## Спалах не вигорає в чисто біле: перші ~4 кадри — з цією часткою підсилення.
+const FLASH_EARLY_GAIN: float = 0.55
 ## Світло спалаху — 3–5 кадрів.
 const FLASH_SEC: float = 0.08
 ## Куля народжується в корпусі, ~1 м над землею: точка вибуху атласу внизу клітинки, і
@@ -79,6 +79,7 @@ static func spawn_explosion(parent: Node, at: Vector3, size: float) -> Node3D:
 	bt.tween_method(func(f: float) -> void: bmat.set_shader_parameter("frame", f), 40.0, 63.0, EXPLOSION_TAIL_SEC)
 	bt.tween_callback(func() -> void: ball.visible = false)
 	var flash := _sprite(root, "Flash", FLASH_TEX, Vector2(4, 4), 16, size * 0.5 * FLASH_CELL_M / FLASH_CORE_M, LIFT_M / 8.0, 2.5, true)
+	_soft_flash(flash)
 	_play(root, flash, 16, FLASH_FPS, 0.0)
 	_light(root, 10.0, 6.0)
 	var tw: Tween = root.create_tween()
@@ -308,6 +309,7 @@ static func _expire(root: Node3D) -> void:
 ## Спалах: ядро `core_m` метрів.
 static func _flash(root: Node3D, core_m: float, offset: Vector3, delay: float) -> void:
 	var q := _sprite(root, "Flash", FLASH_TEX, Vector2(4, 4), 16, core_m * FLASH_CELL_M / FLASH_CORE_M / 8.0, 0.0, 2.5, true)
+	_soft_flash(q)
 	q.position = offset
 	_play(root, q, 16, FLASH_FPS, delay)
 
@@ -322,7 +324,6 @@ static func _burst(root: Node3D, ball_m: float, offset: Vector3, delay: float, s
 ## Хмара ґрунту `cloud_m` метрів.
 static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, sec: float) -> void:
 	var q := _sprite(root, "Dirt", DIRT_TEX, Vector2(8, 8), 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0, false)
-	(q.material_override as ShaderMaterial).set_shader_parameter("fade_from", DIRT_FADE_FROM)
 	q.position = offset
 	_play(root, q, 64, 64.0 / sec, delay)
 
@@ -343,6 +344,12 @@ static func _spray(root: Node3D, rng: RandomNumberGenerator, count: int, at: Vec
 			tw.tween_callback(func() -> void: q.visible = true)
 		tw.tween_interval(0.12)
 		tw.tween_callback(func() -> void: q.visible = false)
+
+
+static func _soft_flash(q: MeshInstance3D) -> void:
+	var mat := q.material_override as ShaderMaterial
+	mat.set_shader_parameter("early_gain", FLASH_EARLY_GAIN)
+	mat.set_shader_parameter("cool_edge", 1.0)
 
 
 ## Зсув центру кваду від точки влучання, у частках кваду (x — праворуч на екрані, y — угору):
@@ -368,6 +375,8 @@ static func _sprite(root: Node3D, node_name: String, tex: Texture2D, grid: Vecto
 	mat.set_shader_parameter("size", size)
 	mat.set_shader_parameter("lift", lift)
 	mat.set_shader_parameter("gain", gain)
+	mat.set_shader_parameter("early_gain", 1.0)
+	mat.set_shader_parameter("cool_edge", 0.0)
 	var mi := MeshInstance3D.new()
 	mi.name = node_name
 	var mesh := QuadMesh.new()
@@ -439,8 +448,10 @@ uniform float gain = 1.0;
 uniform vec2 anchor = vec2(0.0);
 // Поворот смуги в площині кадру (іскри віялом).
 uniform float roll = 0.0;
-// З цього кадру клуба гасне до нуля (хвіст атласу інакше лишається темною грудкою).
-uniform float fade_from = 1000.0;
+// Спалах: перші ~4 кадри — з такою часткою підсилення (без чисто білої плями), а край, де
+// альфа спадає, холоне до #B8400F. Іскри й клуби — без цього.
+uniform float early_gain = 1.0;
+uniform float cool_edge = 0.0;
 // Сонце (WeatherRig): освітлений бік клуби світліший на ясних мапах; у похмурі — нічого.
 global uniform vec3 sun_dir;
 global uniform float sky_clear;
@@ -467,8 +478,9 @@ void fragment() {
 	vec4 t = mix(frame_at(floor(frame), UV), frame_at(floor(frame) + 1.0, UV), fract(frame));
 	// Бік клуби до сонця — світліший на 0,3–0,5 сонячного світла (лише на ясних мапах).
 	float lit = clamp(dot(normalize(UV - 0.5 + 1e-4), v_sun), 0.0, 1.0) * smoothstep(0.05, 0.35, length(UV - 0.5));
-	ALBEDO = t.rgb * gain * (1.0 + 0.45 * sky_clear * lit);
-	ALPHA = t.a * (1.0 - smoothstep(fade_from, fade_from + 16.0, frame));
+	vec3 rgb = mix(t.rgb, vec3(0.479, 0.051, 0.005) * 2.0, cool_edge * (1.0 - smoothstep(0.15, 0.7, t.a)));
+	ALBEDO = rgb * gain * mix(early_gain, 1.0, smoothstep(0.0, 4.0, frame)) * (1.0 + 0.45 * sky_clear * lit);
+	ALPHA = t.a;
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);
