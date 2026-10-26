@@ -15,11 +15,11 @@ def straw_mat():
     streak = tile_noise(2, 64, n, 41) * 0.65 + tile_noise(4, 128, n, 42) * 0.35      # смуги вздовж u
     blot = fbm(n, 43, 3)
     h = streak
-    base = np.array([0.46, 0.41, 0.29]); dark = np.array([0.24, 0.21, 0.15])
+    base = np.array([0.54, 0.46, 0.28]); dark = np.array([0.28, 0.23, 0.13])   # солома: тепла охра, не сірий
     t = np.clip(0.3 + 0.9 * streak + 0.2 * (blot - 0.5), 0, 1)[..., None]
     a = dark + (base - dark) * t * 1.25
     return pbr("hay_straw", albedo=a, normal=np.concatenate([normal_from_height(h, 5.0), np.ones((n, n, 1))], -1),
-               rough=0.95, tile=2.1)
+               rough=1.0, tile=2.1)
 
 
 def wrap_mat():
@@ -32,7 +32,15 @@ def wrap_mat():
     a[:, :3] = [0.25, 0.33, 0.25]                  # поздовжній стик плівки: світла смуга
     a = a * (1 - 0.35 * dirt)
     return pbr("hay_wrap", albedo=a, normal=np.concatenate([normal_from_height(h, 0.35), np.ones((n, n, 1))], -1),
-               rough=0.35, tile=2.1)
+               rough=0.75, tile=2.1)
+
+
+def matte(m, spec):
+    """Солома не блищить: мінімальний дзеркальний відсвіт (KHR_materials_specular), метал 0."""
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Specular IOR Level"].default_value = spec
+    b.inputs["Metallic"].default_value = 0.0
+    return m
 
 
 def bale(b, mat, c=(0, 0, R), rot_jitter=0.0, seed=0, nseg=24):
@@ -90,6 +98,6 @@ def build(name, mat, stack=False):
 
 
 reset()
-if want("infra_hay_round"): build("infra_hay_round", straw_mat())
-if want("infra_hay_wrapped"): build("infra_hay_wrapped", wrap_mat())
-if want("infra_hay_stack"): build("infra_hay_stack", straw_mat(), stack=True)
+if want("infra_hay_round"): build("infra_hay_round", matte(straw_mat(), 0.2))
+if want("infra_hay_wrapped"): build("infra_hay_wrapped", matte(wrap_mat(), 0.3))
+if want("infra_hay_stack"): build("infra_hay_stack", matte(straw_mat(), 0.2), stack=True)

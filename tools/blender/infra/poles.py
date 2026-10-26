@@ -37,7 +37,7 @@ def pole10():
 
 def pole04():
     concrete, steel, glass = mats()
-    b = B(); H = 9.5
+    b = B(); H = 8.8
     b.frustum(concrete, 0.24, 0.17, H)
     w = []
     for i, (z, s) in enumerate(((H - 0.4, -1), (H - 0.4, 1), (H - 0.8, -1), (H - 0.8, 1))):
@@ -53,7 +53,7 @@ def pole_wood():
     concrete, steel, glass = mats()
     bark = pbr("pole_wood", "Bark012", tile=1.2, tint=(0.72, 0.66, 0.58), sat=0.4, grime=0.0, rough=0.95, seed=9)
     steel = bark
-    b = B(); H = 9.0
+    b = B(); H = 8.5
     b.cyl(bark, (0, 0, H / 2), 0.125, H, 10)
     b.box(concrete, (0, -0.235, 0.8), (0.2, 0.2, 1.6))                 # бетонна приставка, ~3 м під землею
     for z in (0.5, 1.2):

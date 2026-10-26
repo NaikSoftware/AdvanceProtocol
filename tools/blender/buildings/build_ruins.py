@@ -150,7 +150,7 @@ def house1(ruined):
     b = Builder()
     rnd = random.Random(14)
     hx, hy = 3.3, 2.4
-    E, R = 2.5, 4.2
+    E, R = 3.0, 6.5
     ya, yb, ym, xb, xw = -(hy + 0.4), hy + 0.4, 0.0, hx + 0.45, -(hx + 0.45)
     S, N = -hy, hy
 
@@ -167,8 +167,8 @@ def house1(ruined):
         gable_roof(b, PF, PB, xw, xb, "fc_roof_xh")
         trim(b, xw, xb, ya, yb, E, hx, S, N)
         for x in (-2.3, -0.8, 1.5, 2.65):
-            b.window(("y", S - 0.19, -1), x, 0.9, 1.0, 1.2)
-            pane_dress(b, "y", S - 0.19, -1, x, 0.9, 1.0, 1.2)
+            b.window(("y", S - 0.19, -1), x, 1.0, 1.0, 1.4)
+            pane_dress(b, "y", S - 0.19, -1, x, 1.0, 1.0, 1.4)
         b.box(0.1, S - 0.19 + 0.03, 0.0, 1.0, 0.06, 2.0, "door_panel")
         b.box(0.1, S - 0.19 + 0.05, 2.0, 1.2, 0.07, 0.1, "step")
         for sx in (-0.55, 0.55):
@@ -176,24 +176,24 @@ def house1(ruined):
         b.box(0.1, S - 0.5, 0.0, 1.8, 0.7, 0.2, "plinth_flat")
         for y in (-1.0, 1.0):
             for sx, sgn in ((hx + 0.19, 1), (-hx - 0.19, -1)):
-                b.window(("x", sx, sgn), y, 0.9, 1.1, 1.2)
-                pane_dress(b, "x", sx, sgn, y, 0.9, 1.1, 1.2)
+                b.window(("x", sx, sgn), y, 1.0, 1.1, 1.4)
+                pane_dress(b, "x", sx, sgn, y, 1.0, 1.1, 1.4)
         for x in (-2.3, -0.6, 1.2, 2.6):
-            b.window(("y", N + 0.19, 1), x, 0.9, 1.0, 1.2)
-            pane_dress(b, "y", N + 0.19, 1, x, 0.9, 1.0, 1.2)
+            b.window(("y", N + 0.19, 1), x, 1.0, 1.0, 1.4)
+            pane_dress(b, "y", N + 0.19, 1, x, 1.0, 1.0, 1.4)
         grime(b, "y", S - 0.19, -1, -hx, hx, 0.5)
         grime(b, "y", N + 0.19, 1, -hx, hx, 0.5)
         grime(b, "x", hx + 0.19, 1, S, N, 0.5)
-        b.box(1.6, -0.2, 3.5, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
+        b.chimney(1.6, -0.2, 4.6, 0.6, 3.1, "brick_face", cap="plinth_flat")
         lib.finish(b, "house_h5", out, tri_limit=2200, footprint=(1, 1))
         return
     kw = dict(top_tone=0.82)
     standing = dict(brick_mat="wall_plaster", cap=0.06, jag=0.12, **kw)
     broken = dict(brick_mat="brick_face", step=0.35, diag_p=0.85, jit=0.5, **kw)
-    wall_run(b, (-0.9, S), (hx + 0.2, S), 0.4, [E] * 6, "wall_half", "wall_plaster", 21, hcap=2.6, **standing)
+    wall_run(b, (-0.9, S), (hx + 0.2, S), 0.4, [E] * 6, "wall_half", "wall_plaster", 21, hcap=3.1, **standing)
     wall_run(b, (-hx, S), (-0.9, S), 0.4, [0.6, 1.3, 0.9, 1.8], "wall_half", "brick_face", 22, hcap=2.2, **broken)
-    wall_run(b, (hx, S), (hx, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 23, hcap=2.6, **standing)
-    wall_run(b, (hx + 0.2, N), (-1.6, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 24, hcap=2.6, **standing)
+    wall_run(b, (hx, S), (hx, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 23, hcap=3.1, **standing)
+    wall_run(b, (hx + 0.2, N), (-1.6, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 24, hcap=3.1, **standing)
     wall_run(b, (-1.6, N), (-hx, N), 0.4, [1.7, 1.1, 2.0, 0.8], "wall_half", "brick_face", 25, hcap=2.2, **broken)
     wall_run(b, (-hx, N), (-hx, S), 0.4, [2.2, 1.3, 0.7, 1.0, 0.6], "wall_half", "brick_face", 26, hcap=2.2, **broken)
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
@@ -242,7 +242,7 @@ def house1(ruined):
     bent_sheet(b, (-2.7, -0.9, sf(-2.7, -0.9) + 0.2), (-2.3, 0.8, sf(-2.3, 0.8) + 0.2), 0.9, "sheet_char", 0.18, axis="x")
     bent_sheet(b, (-1.6, -1.2, sf(-1.6, -1.2) + 0.2), (-1.4, 0.5, sf(-1.4, 0.5) + 0.2), 0.9, "sheet_char", 0.18, axis="x")
     bent_sheet(b, (-1.5, -3.0, sf(-1.5, -3.0) + 0.1), (-2.9, -2.9, sf(-2.9, -2.9) + 0.1), 0.9, "sheet_char", 0.12, axis="y")
-    b.box(1.6, -0.2, 3.5, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
+    b.chimney(1.6, -0.2, 4.6, 0.6, 3.1, "brick_face", cap="plinth_flat")
     lumps(b, plan, rnd, 14)
     bh = heaps(b, plan, 7)
     lib.finish(b, "ruin_half_house1", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
@@ -254,7 +254,7 @@ def house2(ruined):
     b = Builder()
     rnd = random.Random(33)
     hx, hy = 3.0, 2.8
-    E, R, FL = 5.4, 7.3, 2.7
+    E, R, FL = 6.0, 9.5, 3.0
     ya, yb, ym, xb, xw = -(hy + 0.4), hy + 0.4, 0.0, hx + 0.45, -(hx + 0.45)
     S, N = -hy, hy
 
@@ -287,14 +287,14 @@ def house2(ruined):
         b.box(2.2, S - 0.5, 0.0, 1.8, 0.7, 0.2, "plinth_flat")
         grime(b, "y", S - 0.19, -1, -hx, hx, 0.6)
         grime(b, "x", hx + 0.19, 1, S, N, 0.6)
-        b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
+        b.chimney(-1.8, 0.0, 8.0, 0.6, 2.4, "brick_face", cap="plinth_flat")
         lib.finish(b, "house_h6", out, tri_limit=2600, footprint=(1, 1))
         return
     kw = dict(top_tone=0.82)
     standing = dict(brick_mat="wall_plaster_w", cap=0.06, jag=0.1, **kw)
-    wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 31, hcap=5.6, **standing)
-    wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 32, hcap=5.6, **standing)
-    wall_run(b, (-hx, N), (-hx, S), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 33, hcap=5.6, **standing)
+    wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 31, hcap=6.2, **standing)
+    wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 32, hcap=6.2, **standing)
+    wall_run(b, (-hx, N), (-hx, S), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 33, hcap=6.2, **standing)
     prism(b, [(-hy, E), (hy, E), (hy, E + 0.5), (1.9, E + 0.5), (1.9, E + 1.1), (1.1, E + 1.1), (1.1, E + 1.7), (0.4, E + 1.7), (0.4, E + 1.2), (-0.5, E + 1.2), (-0.5, E + 0.7), (-1.4, E + 0.7), (-1.4, E + 0.2), (-hy, E + 0.2)], 0.4, (-hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster_w", top_mat="brick_dark")   # зламаний верх: п'ять уступів 0.4-0.6 м, на зламі темна цегла   # зламаний верх фронтону
     wall_run(b, (hx, S), (hx, N), 0.4, [1.2, 2.2, 4.2, 5.0, 3.6, 1.8, 1.1, 0.9, 1.5, 2.5, 1.3], "wall_half_w", "chunk_brick", 34, hcap=5.2, jag=0.8, brick_mat="chunk_brick", step=0.7, diag_p=0.6, jit=1.0, cap=0.3, tvar=0.3, **kw)
     zt = E - 0.03
@@ -315,7 +315,7 @@ def house2(ruined):
     grime(b, "y", S - 0.2, -1, -hx, hx, 0.0)
     # внутрішня грань західного фронтону не чиста штукатурка: кіптява згори, облуплені плями
     xi = -hx + 0.21
-    plane_soot(b, [(xi, -2.5, 2.8), (xi, 2.5, 2.8), (xi, 2.0, 6.7), (xi, -2.0, 6.7)], (0.5, 0.5, 0.12, 0.12), (1, 0, 0))
+    plane_soot(b, [(xi, -2.5, 2.8), (xi, 2.5, 2.8), (xi, 2.0, 7.2), (xi, -2.0, 7.2)], (0.5, 0.5, 0.12, 0.12), (1, 0, 0))
     for (yy, zz, ww, hh) in ((-1.0, 4.4, 1.2, 0.9), (1.2, 3.6, 0.9, 1.2), (0.0, 5.6, 1.4, 0.7)):
         plane_soot(b, [(xi + 0.004, yy - ww / 2, zz), (xi + 0.004, yy + ww / 2, zz + 0.1), (xi + 0.004, yy + ww * 0.4, zz + hh), (xi + 0.004, yy - ww * 0.5, zz + hh * 0.8)], (0.2, 0.2, 0.09, 0.09), (1, 0, 0))
     for (yy, zz, ww, hh_) in ((-1.2, 3.4, 1.1, 0.8), (0.9, 4.2, 0.9, 0.9), (1.7, 3.0, 0.7, 0.6)):      # плями втрати штукатурки: проступає цегла
@@ -361,7 +361,7 @@ def house2(ruined):
     chip_slab(b, 2.5, 0.1, 3.8, 2.1, 1.9, 0.12, (-0.35, 0.12, 0.1), "tile_small", "tile_small", 44, rebar=0, per_edge=2)
     chip_slab(b, 2.9, 1.7, 3.0, 1.9, 1.7, 0.12, (-0.25, 0.18, -0.2), "tile_small", "tile_small", 45, rebar=0, per_edge=2)
     bent_sheet(b, (3.2, 1.6, sf(3.2, 1.6) + 0.2), (3.9, 2.4, sf(3.9, 2.4) + 0.12), 0.9, "sheet_char", 0.12, axis="y")
-    b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
+    b.chimney(-1.8, 0.0, 8.0, 0.6, 2.4, "brick_face", cap="plinth_flat")
     lumps(b, plan, rnd, 14)
     bh = heaps(b, plan, 9)
     lib.finish(b, "ruin_half_house2", out, tri_limit=4800, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
