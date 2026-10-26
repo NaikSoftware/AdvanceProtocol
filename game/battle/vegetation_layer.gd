@@ -5,7 +5,8 @@ extends Node3D
 ##   березі — плямами, не суцільним кільцем; більше на тихих вигинах і біля боліт;
 ## - луки: рідкі поодинокі кущі (глід, шипшина) й дерева (груша, дуб, біля води — верба), по
 ##   одному або групками з 2–3, лише на неораному полі;
-## - двори: у частині садиб — яблуня, вишня, бузок, бузина, туя або ягідний ряд.
+## - двори: у частині садиб, лише всередині паркану — яблуня чи вишня, другою — бузок, бузина, туя
+##   або ягідний ряд.
 ## Нічого біля мостів, на дорогах з узбіччям, у ріллі, на парканах і грядках; крона не заходить на
 ## будівлю. Кожна точка має власне зерно (point_seed) від зерна карти, тож розстановка однакова в
 ## усіх гравців. Юніта рослини не ховають: дерево чи кущ, чия крона над клітинкою юніта або між
@@ -24,9 +25,6 @@ const MEADOW_BUSHES: Array[StringName] = [&"meadow_hawthorn_01", &"meadow_hawtho
 const MEADOW_TREES: Array[StringName] = [&"meadow_pear_01", &"meadow_pear_02", &"meadow_pear_03",
 	&"meadow_oak_01", &"meadow_oak_02", &"meadow_oak_03"]
 const WET_TREES: Array[StringName] = [&"meadow_willow_01", &"meadow_willow_02", &"meadow_willow_03"]
-const YARD_PLANTS: Array[StringName] = [&"yard_apple_01", &"yard_apple_02", &"yard_apple_03",
-	&"yard_cherry_01", &"yard_cherry_02", &"yard_cherry_03", &"yard_lilac_01", &"yard_elder_01",
-	&"yard_berry_row_01", &"yard_thuja_01"]
 const YARD_TREES: Array[StringName] = [&"yard_apple_01", &"yard_apple_02", &"yard_apple_03",
 	&"yard_cherry_01", &"yard_cherry_02", &"yard_cherry_03"]
 const YARD_SMALL: Array[StringName] = [&"yard_lilac_01", &"yard_elder_01", &"yard_berry_row_01", &"yard_thuja_01"]
@@ -38,9 +36,9 @@ const CROWN: Dictionary = {
 	&"yard_lilac": 0.18, &"yard_elder": 0.22, &"yard_berry_row": 0.26, &"yard_thuja": 0.12,
 }
 
-## Масштаб екземпляра за префіксом вузла: дуб і верба на луках — 10–15 м, яблуня у дворі — 5–6 м.
+## Масштаб екземпляра за префіксом вузла: дуб і верба на луках — 10–15 м, яблуня й вишня у дворі — 5–6 м.
 ## Модель будується меншою, бо голу крону обмежує розмах гілок; шейдер збільшує картки разом з екземпляром.
-const GROW: Dictionary = {&"meadow_oak": 1.4, &"meadow_willow": 1.35, &"yard_apple": 1.15}
+const GROW: Dictionary = {&"meadow_oak": 1.4, &"meadow_willow": 1.35, &"yard_apple": 1.15, &"yard_cherry": 0.8}
 
 ## Береги. Пляма: клітинки групуються в квадрати PATCH × PATCH; пляма «жива» з імовірністю PATCH_ON %.
 const PATCH: int = 2
@@ -68,10 +66,14 @@ const SHORE_REACH: float = 0.4
 ## Вода (а з нею й очерет) — щонайменше LAND_CLEAR від центру будь-якої клітинки суходолу (§8).
 const LAND_CLEAR: float = 0.3
 ## Ставок — водойма не більша за POND_MAX клітинок. Очерет на ньому — POND_PATCHES плям, що разом
-## займають POND_SHARE обводу (за кутом від центру), і не далі POND_REACH від урізу (1 м).
+## з розмахом куртин займають POND_SHARE довжини урізу, і не далі POND_REACH від урізу (1 м).
 const POND_MAX: int = 16
 const POND_PATCHES: Vector2i = Vector2i(3, 5)
-const POND_SHARE: Vector2 = Vector2(0.25, 0.4)
+const POND_SHARE: Vector2 = Vector2(0.28, 0.36)
+## Розмах куртини вбік від її центру вздовж урізу (тайли): пляма видно ширша за відрізок центрів.
+const POND_SPREAD: float = 0.2
+## Уріз ставка — POND_RAYS променів від центру.
+const POND_RAYS: int = 96
 const POND_REACH: float = 0.125
 ## Луки: квадрат MEADOW_PATCH × MEADOW_PATCH клітинок має групу з імовірністю MEADOW_ON %.
 const MEADOW_PATCH: int = 4
@@ -359,24 +361,45 @@ static func ponds(board: Board) -> Array:
 	return out
 
 
-## Очерет ставка: точки мілини біля урізу, з них лишаються ті, що в одній з плям — секторів кута від
-## центру ставка. Сектори рівні, по одній плямі в кожному: плями не зливаються в кільце.
-static func _plan_pond(board: Board, height: TerrainHeight, map_seed: int, pond: Array[Vector2i],
-		out: Array[Dictionary]) -> void:
+## Уріз ставка: на кожному з POND_RAYS променів від центру — перша точка, де ґрунт вищий за воду.
+static func shore_ring(height: TerrainHeight, centre: Vector2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for k in POND_RAYS:
+		var d := Vector2.from_angle(TAU * k / POND_RAYS)
+		var r: float = 0.0
+		while r < 8.0 and height.at(centre.x + d.x * r, centre.y + d.y * r) <= TerrainHeight.WATER_LEVEL:
+			r += 0.02
+		out.append(centre + d * r)
+	return out
+
+
+## Відстань уздовж урізу від променя 0 до кожного променя (останній елемент — уся довжина).
+static func shore_length(ring: PackedVector2Array) -> PackedFloat32Array:
+	var s := PackedFloat32Array([0.0])
+	for k in ring.size():
+		s.append(s[k] + ring[k].distance_to(ring[(k + 1) % ring.size()]))
+	return s
+
+
+static func pond_centre(pond: Array[Vector2i]) -> Vector2:
 	var centre := Vector2.ZERO
 	for c in pond:
 		centre += Vector2(c)
-	centre /= pond.size()
+	return centre / pond.size()
+
+
+## Очерет ставка: точки мілини біля урізу, з них лишаються ті, що в одній з плям. Пляма — відрізок
+## урізу (за довжиною, не за кутом: на видовженому ставку кут перебільшує бічні береги); уріз
+## поділено на рівні частини, по плямі в кожній, тож плями не зливаються в кільце.
+static func _plan_pond(board: Board, height: TerrainHeight, map_seed: int, pond: Array[Vector2i],
+		out: Array[Dictionary]) -> void:
+	var centre: Vector2 = pond_centre(pond)
+	var along: PackedFloat32Array = shore_length(shore_ring(height, centre))
+	var total: float = along[along.size() - 1]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = point_seed(map_seed, pond[0], 6)
-	var n: int = rng.randi_range(POND_PATCHES.x, POND_PATCHES.y)
-	var span: float = rng.randf_range(POND_SHARE.x, POND_SHARE.y) * TAU / n
-	var sector: float = TAU / n
-	var start: float = rng.randf_range(0.0, TAU)
-	var arcs: Array[float] = []
-	for i in n:
-		arcs.append(start + sector * i + rng.randf_range(0.0, sector - span))
-	var cand: Array = []
+	# Усі придатні точки мілини біля урізу з місцем уздовж урізу.
+	var shore: Array = []
 	for c in pond:
 		if board.kind_at(c) != Terrain.Kind.WATER \
 				or _near_kind(board, c, NO_BRIDGE, [Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]) \
@@ -390,11 +413,32 @@ static func _plan_pond(board: Board, height: TerrainHeight, map_seed: int, pond:
 					continue
 				if _land_dist(board, p) < LAND_CLEAR or not near_dry(height, p, POND_REACH):
 					continue
-				var a: float = (p - centre).angle()
-				for a0: float in arcs:
-					if fposmod(a - a0, TAU) < span:
-						cand.append([Vector3(p.x, g, p.y), c])
-						break
+				# Місце точки вздовж урізу — за її кутом, між сусідніми променями.
+				var t: float = fposmod((p - centre).angle(), TAU) / TAU * POND_RAYS
+				var k: int = mini(floori(t), POND_RAYS - 1)
+				shore.append([Vector3(p.x, g, p.y), c, lerpf(along[k], along[k + 1], t - k)])
+	if shore.is_empty():
+		return
+	# Пляма — відрізок урізу навколо придатної точки; уріз поділено на рівні частини, по плямі в
+	# кожній, де є мілина, тож плями не зливаються в кільце. Довжина плями — частка урізу мінус
+	# розмах куртин з обох боків.
+	var n: int = rng.randi_range(POND_PATCHES.x, POND_PATCHES.y)
+	var span: float = maxf(rng.randf_range(POND_SHARE.x, POND_SHARE.y) * total / n - 2.0 * POND_SPREAD, 0.1)
+	var sector: float = total / n
+	var start: float = rng.randf_range(0.0, total)
+	var arcs: Array[float] = []
+	for i in n:
+		var lo: float = start + sector * i
+		var inside: Array = shore.filter(func(e: Array) -> bool:
+			return fposmod(float(e[2]) - lo, total) < sector - span)
+		if not inside.is_empty():
+			arcs.append(float(inside[rng.randi_range(0, inside.size() - 1)][2]))
+	var cand: Array = []
+	for e: Array in shore:
+		for a0: float in arcs:
+			if fposmod(float(e[2]) - a0, total) < span:
+				cand.append(e)
+				break
 	_shuffle(cand, rng)
 	var taken: Array[Vector3] = []
 	for e: Array in cand:
@@ -478,25 +522,17 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 		rng.seed = point_seed(map_seed, house, 5)
 		if rng.randi_range(0, 99) >= YARD_ON:
 			continue
-		# Клітинки садиби з макета здебільшого зайняті хатою, сараєм і городом: рослини стають і
-		# попід парканом — у сусідніх клітинках луки (там діють звичайні правила _free).
-		var own: Array = h.get("cells", [house])
-		var cells: Array = own.duplicate()
-		for oc: Vector2i in own:
-			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var n: Vector2i = oc + d
-				if not cells.has(n) and board.in_bounds(n) and board.kind_at(n) in [Terrain.Kind.FIELD, Terrain.Kind.HILL]:
-					cells.append(n)
+		# Лише всередині паркану: дерево за парканом глядач бачить лучним, і хата поруч здається вищою.
+		var cells: Array = h.get("cells", [house])
 		var want: int = rng.randi_range(1, 2)
 		var placed: Array[Vector2] = []
 		for t in 80:
 			if placed.size() >= want:
 				break
-			# Перша рослина садиби — дерево 5–6 м (яблуня, вишня): кущі лише другою або там, де
-			# дерево не влазить біля даху чи дороги.
-			var pool: Array[StringName] = YARD_TREES if placed.is_empty() else YARD_PLANTS
+			# Перша рослина — дерево 5–6 м (яблуня, вишня); не влазить біля даху чи дороги — у
+			# дворі нічого. Друга — кущ.
+			var pool: Array[StringName] = YARD_TREES if placed.is_empty() else YARD_SMALL
 			var node: StringName = pool[rng.randi_range(0, pool.size() - 1)]
-			var small: StringName = YARD_SMALL[rng.randi_range(0, YARD_SMALL.size() - 1)]
 			var cell: Vector2i = cells[rng.randi_range(0, cells.size() - 1)]
 			var p: Vector2 = Vector2(cell) + Vector2(rng.randf_range(-0.45, 0.45), rng.randf_range(-0.45, 0.45))
 			var far: bool = true
@@ -504,19 +540,14 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 				far = far and (p - o).length() >= 0.35
 			if not far:
 				continue
-			if not own.has(cell) and not _free(board, height, props, obst, fields, p, crown_of(small), stats):
-				continue
 			# Двір стоїть на клітинці BUILDING — перевірка клітинки тут не діє, решта правил та сама.
-			if near_road(props, p, crown_of(small)):
+			if near_road(props, p, crown_of(node)):
 				_bump(stats, "on_road")
 				continue
 			var why: String = ""
 			var room: float = INF
 			for r: Rect2 in obst["roofs"]:
 				room = minf(room, _rect_dist(r, p))
-			# Велике дерево не влазить біля даху чи дороги — у тій самій точці може стати малий кущ.
-			if room < crown_of(node) or near_road(props, p, crown_of(node)):
-				node = small
 			if room < crown_of(node):
 				why = "yard_roof"
 			for r: Rect2 in obst["small"]:
@@ -530,7 +561,7 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 			placed.append(p)
 			out.append({"node": node, "pos": Vector3(p.x, height.at(p.x, p.y), p.y), "yaw": rng.randf_range(0.0, TAU),
 					"scale": rng.randf_range(0.9, 1.1) * grow_of(node), "cell": cell,
-					"kind": "tree" if crown_of(node) >= 0.28 else "bush", "group": "yard"})
+					"kind": "tree" if YARD_TREES.has(node) else "bush", "group": "yard"})
 
 
 static func _shuffle(a: Array, rng: RandomNumberGenerator) -> void:
