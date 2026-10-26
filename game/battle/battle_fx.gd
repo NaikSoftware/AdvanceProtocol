@@ -131,6 +131,13 @@ static func warm_up(parent: Node, at: Vector3) -> Node3D:
 		for l: Node in hit.find_children("*", "OmniLight3D", true, false):
 			(l as OmniLight3D).light_energy = 0.0
 			(l as OmniLight3D).visible = false
+		# Розмір частинки масштаб кореня не зменшує: на першому юніті лишалась біла риска.
+		for e: Node in hit.find_children("*", "GPUParticles3D", true, false):
+			var pm := (e as GPUParticles3D).process_material as ParticleProcessMaterial
+			pm.scale_min = 0.0001
+			pm.scale_max = 0.0001
+			pm.initial_velocity_min = 0.0
+			pm.initial_velocity_max = 0.0
 	return boom
 
 

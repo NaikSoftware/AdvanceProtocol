@@ -180,6 +180,26 @@ func test_handover_rebuilds_units_and_recenters_camera_before_gate_lifts() -> vo
 		"камера мусить рецентруватися на перший юніт гравця, що заходить")
 
 
+## §3.5: дим влучання висить кілька секунд; на передачі ходу його прибирають, щоб над
+## тайлом, якого гравець, що заходить, не розвідав, не лишилось сліду цілі.
+func test_handover_clears_lingering_battle_fx() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(4, 4), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var units: Node3D = screen.get_node("%Units")
+	var hit: Node3D = BattleFx.spawn_hit(units, IsoCameraRig.cell_to_world(Vector2i(4, 4)), BattleFx.Weapon.SHELL, false)
+	assert_false(hit.is_queued_for_deletion(), "передумова: дим ще висить")
+	screen.get_node("%Hud").get_node("%EndTurnButton").pressed.emit()
+	assert_true(screen.get_node("%HandoverGate").visible)
+	assert_true(hit.is_queued_for_deletion(), "гейт прибрав дим попереднього ходу")
+
+
 # --- Кінець ходу: рівно одна EndTurnCommand --------------------------------
 
 func test_end_turn_button_submits_exactly_one_end_turn_command() -> void:

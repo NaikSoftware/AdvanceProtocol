@@ -150,6 +150,10 @@ func test_warm_up_is_invisible() -> void:
 		assert_eq((r as Node3D).scale, Vector3.ONE * 0.0001)
 		for l: Node in r.find_children("*", "OmniLight3D", true, false):
 			assert_eq((l as OmniLight3D).light_energy, 0.0)
+		for e: Node in r.find_children("*", "GPUParticles3D", true, false):
+			var pm := (e as GPUParticles3D).process_material as ParticleProcessMaterial
+			assert_true(pm.scale_max < 0.001, "частинка розігріву невидима")
+			assert_eq(pm.initial_velocity_max, 0.0)
 
 
 ## Світло — лише там, де спалах справді яскравий: гармата й снаряд, не кулі.
