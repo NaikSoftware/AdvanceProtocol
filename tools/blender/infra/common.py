@@ -182,6 +182,7 @@ class B:
         M = Matrix.Translation(c) @ r.to_4x4() @ Matrix.Diagonal((*size, 1))
         res = bmesh.ops.create_cube(self.bm, size=1.0, matrix=M)
         self._tag(mat, res["verts"])
+        return res["verts"], M
 
     def beam(self, mat, p0, p1, r, n=4, caps=True):
         p0, p1 = Vector(p0), Vector(p1)
@@ -226,7 +227,8 @@ class B:
                 l[uv].uv = (l.vert.co[a] / t, l.vert.co[b] / (tv if b == 2 else t))
 
 
-def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True):
+def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True, floor=None):
+    """floor — висота землі в метрах до масштабу; без неї найнижча вершина стає нулем."""
     bm = b.bm
     tile_of = lambda m: m.get("tile", 1.0)
     b.uv_box(tile_of)
@@ -239,7 +241,7 @@ def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True):
     xs = [v.co.x for v in bm.verts]; ys = [v.co.y for v in bm.verts]; zs = [v.co.z for v in bm.verts]
     dx = -(min(xs) + max(xs)) / 2 if center else 0.0
     dy = -(min(ys) + max(ys)) / 2 if center else 0.0
-    dz = -min(zs)
+    dz = -min(zs) if floor is None else -floor * S
     bmesh.ops.translate(bm, vec=(dx, dy, dz), verts=bm.verts[:])
     tris = sum(len(f.verts) - 2 for f in bm.faces)
     me = bpy.data.meshes.new(name)
@@ -356,7 +358,7 @@ CONCRETE_GREY = (0.564, 0.53, 0.484)
 
 def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, top_z=None, shade=0.18,
                  ground=True, k=5.0, seams=False, val=1.0, band=None, streak_k=0.5, streak_len=0.5, tint=(1, 1, 1),
-                 moss=0.0, rust_runs=0, chips=False, paint=None, peel=0.0):
+                 moss=0.0, rust_runs=0, chips=False, paint=None, peel=0.0, arrays=False):
     """Блідий бетон одного значення для всіх виробів. relief(size) -> висоти 0..1 (йдуть у нормаль);
     бруд знизу (до 0,3 м від землі), патьоки під верхом (top_z, м) і плями з періодом у плитку."""
     tv = tile_v or tile
@@ -404,6 +406,8 @@ def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, to
     n = np.concatenate([n[..., :2] - 0.5 + (r[..., :2] - 0.5) + 0.5, r[..., 2:]], -1)
     if relief is not None:
         a = a * (1 - shade + shade * np.clip(relief(size), 0, 1))[..., None]
+    if arrays:                                                              # для атласу: сирі масиви альбедо й нормалей
+        return a, n
     return pbr(name, albedo=a, normal=np.concatenate([n, np.ones((size, size, 1))], -1), tile=tile, tile_v=tv,
                rough=0.92)
 

@@ -262,12 +262,12 @@ def house2():
     b = Builder()
     b.win_kind = 2                                                                # широкі двостулкові з фрамугою
     lib.palette(roof="brown_dark", eave=3.2, chim="ch_orange", row=0.25, frame=1)
-    RING[:] = ["brick_face", 0.1, False]
+    RING[:] = ["brick_muted", 0.1, False]
     L, D, EAVE, RIDGE = 11.0, 9.0, 3.2, 7.0
     y0, y1 = -D / 2, D / 2
     b.box(0, 0, 0, L + 0.08, D + 0.08, 0.5, "brick_grey")
-    b.box(0, 0, 0.5, L - 0.02, D - 0.02, EAVE - 0.5, "brick_face")
-    b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tile_brown", "brick_face", ridge_axis="x", overhang=0.4)
+    b.box(0, 0, 0.5, L - 0.02, D - 0.02, EAVE - 0.5, "brick_muted")
+    b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tile_brown", "brick_muted", ridge_axis="x", overhang=0.4)
     b.box(0, 0, RIDGE, L + 0.8, 0.3, 0.18, "gutter")
     b.chimney2("brick", -2.5, 0.0, 6.4, 1.9, "brick_face")      # високий цегляний на гребені
     win_front(b, y1, 1, (-4.0, 4.0), 1.1, 1.6, 1.3)
@@ -275,8 +275,8 @@ def house2():
     win_side(b, -L / 2, -1, (-1.5, 1.5), 1.1, 1.6, 1.3)
     win_side(b, L / 2, 1, (-1.5, 1.5), 1.1, 1.6, 1.3)
     b.window(("x", L / 2, 1), 0.0, EAVE + 1.4, 0.6, 0.8, kind=3)                 # віконце горища у фронтоні
-    lib.window_ring(b, "x", L / 2, 1, 0.0, EAVE + 1.4, 0.6, 0.8, t=0.08, mat="brick_face")
-    b.box(0, y1 + 1.0, 0, 3.2, 2.0, 2.7, "brick_face", top="tile_brown")
+    lib.window_ring(b, "x", L / 2, 1, 0.0, EAVE + 1.4, 0.6, 0.8, t=0.08, mat="brick_muted")
+    b.box(0, y1 + 1.0, 0, 3.2, 2.0, 2.7, "brick_muted", top="tile_brown")
     b.box(0, y1 + 2.02, 0, 1.2, 0.04, 2.1, "door_wood")
     b.box(0, y1 + 2.0, 0, 1.8, 0.9, 0.2, "step")
     b.window(("x", 1.6, 1), y1 + 1.0, 1.0, 0.9, 1.0)
@@ -285,7 +285,7 @@ def house2():
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y1 + 0.4, EAVE - 0.3)
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y0 - 0.4, EAVE - 0.3)
     pipe(b, L / 2 - 0.35, y0, -1, 0.4, EAVE)
-    lib.weather(b, "brick_face", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE), ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=5, patches=False)
+    lib.weather(b, "brick_muted", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE), ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=5, patches=False)
     lib.finish(b, "house_h2", out, tri_limit=2200, footprint=(2, 2), target_cm=3.6)
 
 

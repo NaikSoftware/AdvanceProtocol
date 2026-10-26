@@ -157,7 +157,6 @@ func _ready() -> void:
 			var path: String = "%s/%s.glb" % [props_dir, with_model]
 			if ResourceLoader.exists(path):
 				other = (load(path) as PackedScene).instantiate()
-				other.position = Vector3(1.6, 0.0, -0.6)
 				add_child(other)
 				other.global_position = inst.global_position + Vector3(1.6, 0.0, -0.6)
 			else:
