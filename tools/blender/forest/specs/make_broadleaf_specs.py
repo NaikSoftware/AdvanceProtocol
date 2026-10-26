@@ -21,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # того ж жовто-оливкового тону, що й поле, зливалась із ним.
 GREEN = {
     "summer": {"L": 30, "C": 10, "h": 145, "contrast_l": 0.45},
-    "early": {"L": 25, "C": 10, "h": 135, "contrast_l": 0.45},
+    "early": {"L": 28, "C": 10, "h": 135, "contrast_l": 0.45},
     "late": {"L": 20, "C": 4, "h": 70, "contrast_l": 0.9},
 }
 TURNED = {"birch": {"L": 60, "C": 40, "h": 85, "contrast_l": 0.8},
@@ -73,6 +73,10 @@ for season in ("late", "summer", "early"):
         if node.startswith(("Hedge", "Shrub", "Log", "Litter")):
             it["card_keep"] = 1.0
         it.update(extra)
+        if season != "late" and "card_scale" in it:
+            # Листяна крона — більші пучки, що перекриваються: одна суцільна кругла маса,
+            # а не окремі пласкі грудки. Голі дерева пізньої осені — без змін.
+            it["card_scale"] = round(it["card_scale"] * 1.25, 3)
         items.append(it)
     # Клітинка 256 px (≈0,9 см на тексель для пучка 2,4 м): на 128 px ближні крони на
     # мінімальному зумі були розмиті.

@@ -207,6 +207,10 @@ def build_node(item, rects):
     bm.to_mesh(me)
     bm.free()
     me.normals_split_custom_set_from_vertices([tuple(vnorm[v]) for v in order])
+    # Тон пучка мусить піти в COLOR_0: Godot читає лише його. Без активного атрибута
+    # експортер писав білий COLOR_0, а тон — у COLOR_1, і шейдер крони його не бачив.
+    me.color_attributes.active_color = me.color_attributes["Col"]
+    me.color_attributes.render_color_index = me.color_attributes.active_color_index
     ob = bpy.data.objects.new(item["node"], me)
     bpy.context.scene.collection.objects.link(ob)
     s = 1.0 / TILE_M
@@ -283,7 +287,7 @@ def main():
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", use_selection=True, export_yup=True,
                               export_apply=True, export_image_format="AUTO", export_texcoords=True,
-                              export_normals=True, export_vertex_color="ACTIVE", export_cameras=False, export_lights=False)
+                              export_normals=True, export_vertex_color="ACTIVE", export_all_vertex_colors=False, export_cameras=False, export_lights=False)
     patch_glb(OUT, spec.get("alpha_cutoff", 0.5))
     for o in obs:
         print("NODE", o.name, "tris", sum(len(p.vertices) - 2 for p in o.data.polygons))
