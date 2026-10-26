@@ -67,12 +67,14 @@ const LOG_DENSITY: float = 0.25
 const SHRUB_H: Vector2 = Vector2(2.0, 4.0)
 const STAND_FREQ: float = 1.0 / 3.0
 const TONE_FREQ: float = 1.0 / 2.5
-const TONE_VAR: float = 0.06
+const TONE_VAR: float = 0.03
 const TURN_FREQ: float = 1.0 / 2.0
 const TURN_FROM: float = 0.25
 ## Рання осінь: близько чверті листяних крон забарвлені цілими кронами — береза жовта, дуб
 ## іржавий, обидва приглушені й темніші за траву.
-const TURNED: Dictionary = {"Birch": Color(1.22, 1.08, 0.62), "Oak": Color(1.15, 0.9, 0.68)}
+## Яскравість осінніх тонів — та сама, що в зеленої крони (луминанс ≈ 1): різниться відтінок,
+## а не світлість, інакше крони лягають світлими й темними плямами.
+const TURNED: Dictionary = {"Birch": Color(1.12, 1.0, 0.57), "Oak": Color(1.12, 0.95, 0.72)}
 
 const FADE_MODES: PackedStringArray = ["none", "silhouette", "soft", "cut"]
 ## Показ юнітів у лісі за замовчуванням — обрис кольору гравця крізь крони.
@@ -85,8 +87,6 @@ const LANE_MARGIN: float = 0.3
 ## У скільки разів крона ширша за масштаб висоти: зімкнений ліс, ≥85 % закрито згори.
 ## Картки ростуть разом (зсув кута — за масштабом екземпляра по горизонталі).
 const WIDE: float = 1.45
-## Кущів на тайл обабіч просіки (0,35–1,3 тайла від проламаної клітинки).
-const LANE_SHRUBS: float = 4.0
 const FADE_RADIUS: float = 0.6
 const FADE_SOFT: float = 0.15
 const FADE_REACH_EXTRA: float = 0.5
@@ -105,7 +105,7 @@ const WOODS: Dictionary = {
 }
 
 ## Пізня осінь: основа — темні вузькі ялини, листяні (переважно голі) — домішкою.
-const LATE_CANOPY: Dictionary = {"Spruce": 0.65, "Pine": 0.05, "Birch": 0.18, "Oak": 0.12}
+const LATE_CANOPY: Dictionary = {"Spruce": 0.78, "Pine": 0.04, "Birch": 0.13, "Oak": 0.05}
 const LATE_EDGE: Dictionary = {"Spruce_B": 0.6, "Birch": 0.3, "Oak": 0.1}
 
 ## Тон поля тестового лісу; світло, тінь, дощ і тон листя ставить WeatherRig за
@@ -257,10 +257,11 @@ func _map_frames(out: String, wood: String, season: String, look_name: String) -
 			_set_mode("clear")
 			await _shoot(z[1], "%s/m_%s_%s_%s_ground.png" % [out, look_name, season, z[0]])
 			_set_mode(DEFAULT_MODE)
-			var cells := _cell_mask()
-			_set_mode("clear")
-			await _shoot(z[1], "%s/m_%s_%s_%s_cells.png" % [out, look_name, season, z[0]])
-			cells.queue_free()
+			for hm: Array in [["cells", 1.05], ["cells_top", 1.3]]:
+				var cells := _cell_mask(hm[1])
+				_set_mode("clear")
+				await _shoot(z[1], "%s/m_%s_%s_%s_%s.png" % [out, look_name, season, z[0], hm[0]])
+				cells.queue_free()
 			_set_mode(DEFAULT_MODE)
 		return
 	_rig.center_on(mid)
@@ -472,10 +473,6 @@ func _scatter() -> void:
 		_layer(LOG_DENSITY, logs, func(_p: Vector2) -> Dictionary: return {"Log": 1.0}, Vector2.ONE, true)
 	_layer(UNDERSTORY_DENSITY, func(d: float) -> bool: return d > SHRUB_BAND,
 			func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0}, UNDERSTORY_H, false)
-	# Підлісок обабіч просіки: крони тут вужчі й рідші (поле до просіки), і кущі 2–4 м
-	# закривають землю між ними дешевше за ще одне дерево.
-	_layer(LANE_SHRUBS, func(d: float) -> bool: return d > 0.0, func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0},
-			SHRUB_H, false, func(p: Vector2) -> float: return LANE_SHRUBS if _broken_distance(p) > 0.35 and _broken_distance(p) < 1.3 else 0.0)
 	_hedges()
 	_broken_cells()
 
@@ -647,7 +644,7 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 		# сусідню клітинку, і вона лишалась порожньою.
 		s *= 0.85
 	elif species == "Spruce" and _season == "late":
-		w = 0.75  # пізня осінь: темні вузькі шпилі ялин, між ними — голі листяні
+		w = 0.6  # пізня осінь: темні вузькі шпилі ялин, між ними — голі листяні
 	elif species in ["Pine", "Spruce", "Birch", "Oak", "Hero"]:
 		w = WIDE
 	elif species == "Shrub":
@@ -796,9 +793,10 @@ func _casters() -> String:
 	return str(by)
 
 
-## Біла маска стоячих лісових клітинок (без просіки) поверх усього, на висоті середини
-## крони (~8,5 м): з камери гри крона лежить над клітинкою там, а не на землі.
-func _cell_mask() -> MeshInstance3D:
+## Біла маска стоячих лісових клітинок (без просіки) поверх усього, на висоті height
+## (тайли): середина крони ~8,5 м або верх зімкненого лісу ~10,5 м — з камери гри крона
+## лежить над клітинкою там, а не на землі.
+func _cell_mask(height: float) -> MeshInstance3D:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for c: Vector2i in _forest:
@@ -807,7 +805,7 @@ func _cell_mask() -> MeshInstance3D:
 		var q: Array[Vector3] = []
 		for o: Vector2 in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5)]:
 			var w := _offset + Vector3(c.x + o.x, 0.0, c.y + o.y)
-			w.y = TerrainHeight.ground_y(w.x, w.z) + 1.05
+			w.y = TerrainHeight.ground_y(w.x, w.z) + height
 			q.append(w)
 		for i: int in [0, 1, 2, 0, 2, 3]:
 			st.add_vertex(q[i])

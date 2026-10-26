@@ -170,7 +170,10 @@ def build_node(item, rects):
         # тон на кожну картку (два пучки поруч — світлий і темний) робив з крони рябий шум.
         hfrac = min(max((cd["c"][2] - cb) / max(top - cb, 0.5), 0.0), 1.0)
         rfrac = min(math.hypot(cd["c"][0] - ctr.x, cd["c"][1] - ctr.y) / max(rad.x, 0.5), 1.0)
-        shade = min(max(0.6 + 0.3 * hfrac + 0.1 * rfrac + 0.04 * math.sin(cd["roll"] * 7.31), 0.55), 1.0)
+        # Край крони темніший за середину (там крони сусідів перекриваються й затіняють одна
+        # одну): без цього крона — пласка лопать одного тону.
+        shade = min(max(0.55 + 0.45 * (0.8 * hfrac + 0.35 * (1.0 - rfrac * rfrac) - 0.1)
+                        + 0.03 * math.sin(cd["roll"] * 7.31), 0.55), 1.0)
         vnorm.update(card(bm, uvl, uv2l, col, cd["c"], cd["roll"], cd["size"] * scale,
                           rng.choice(sprites), normal_of, shade))
     flat_sprites = rects["sprites"].get(item.get("flat_sprites", "litter"), [])
@@ -181,7 +184,7 @@ def build_node(item, rects):
     if item.get("trunk", True):
         tt = cb + item.get("trunk_into_crown", 0.3) * (top - cb)
         # trunk_radius — у метрах готового дерева, після масштабу `scale`.
-        r = item.get("trunk_radius", meta["trunk_width"] * 0.3 * fs) / fs
+        r = item.get("trunk_radius", meta["trunk_width"] * 0.3 * fs) / fs * item.get("trunk_r_mul", 1.0)
         th = meta["trunk_render_height"]
         vnorm.update(trunk(bm, uvl, trect, r, r * 0.45, tt, min(1.0, tt / th),
                            item.get("trunk_sides", 5), tuple(item.get("lean", (0.0, 0.0)))))

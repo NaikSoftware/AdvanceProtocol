@@ -9,7 +9,7 @@
     "src": "pine_tufts",
     "grade": {
      "lab": {
-      "L": 25,
+      "L": 28,
       "C": 8,
       "h": 140,
       "contrast_l": 0.6
@@ -22,7 +22,7 @@
     "src": "spruce_tufts",
     "grade": {
      "lab": {
-      "L": 21,
+      "L": 24,
       "C": 8,
       "h": 142,
       "contrast_l": 0.6

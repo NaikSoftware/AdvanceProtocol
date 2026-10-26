@@ -10,10 +10,10 @@
     "src": "birch_summer",
     "grade": {
      "lab": {
-      "L": 36,
+      "L": 28,
       "C": 12,
       "h": 130,
-      "contrast_l": 0.7
+      "contrast_l": 0.6
      }
     }
    }
@@ -23,10 +23,10 @@
     "src": "broad_summer",
     "grade": {
      "lab": {
-      "L": 36,
+      "L": 28,
       "C": 12,
       "h": 130,
-      "contrast_l": 0.7
+      "contrast_l": 0.6
      }
     }
    }
@@ -36,10 +36,10 @@
     "src": "oak_summer",
     "grade": {
      "lab": {
-      "L": 36,
+      "L": 28,
       "C": 12,
       "h": 130,
-      "contrast_l": 0.7
+      "contrast_l": 0.6
      }
     }
    }
@@ -49,10 +49,10 @@
     "src": "shrub_summer",
     "grade": {
      "lab": {
-      "L": 36,
+      "L": 28,
       "C": 12,
       "h": 130,
-      "contrast_l": 0.7
+      "contrast_l": 0.6
      }
     }
    }
@@ -77,11 +77,12 @@
    "node": "Birch_A",
    "src": "birch_a",
    "trunk_grade": {
-    "target_y": 0.16,
-    "sat": 0.5
+    "target_y": 0.32,
+    "sat": 0.4
    },
    "sprites": "birch",
    "card_keep": 0.7,
+   "trunk_r_mul": 2.0,
    "crown_low": 0.6,
    "scale": 0.56,
    "card_scale": 2.24
@@ -90,11 +91,12 @@
    "node": "Birch_B",
    "src": "birch_b",
    "trunk_grade": {
-    "target_y": 0.16,
-    "sat": 0.5
+    "target_y": 0.32,
+    "sat": 0.4
    },
    "sprites": "birch",
    "card_keep": 0.7,
+   "trunk_r_mul": 2.0,
    "crown_low": 0.6,
    "scale": 0.63,
    "card_scale": 2.24
@@ -214,8 +216,8 @@
    "node": "Hero_Birch",
    "src": "hero_birch",
    "trunk_grade": {
-    "target_y": 0.16,
-    "sat": 0.5
+    "target_y": 0.32,
+    "sat": 0.4
    },
    "sprites": "birch",
    "trunk_sides": 6,

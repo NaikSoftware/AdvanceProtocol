@@ -21,8 +21,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # й поле, зливалась із ним. Літо тепліше й світліше; пізня осінь — голі гілки світло-сіро-бурі
 # (темні голі крони читались чорними вирізками сухого листя).
 GREEN = {
-    "summer": {"L": 36, "C": 12, "h": 130, "contrast_l": 0.7},
-    "early": {"L": 28, "C": 10, "h": 135, "contrast_l": 0.7},
+    "summer": {"L": 28, "C": 12, "h": 130, "contrast_l": 0.6},
+    "early": {"L": 24, "C": 10, "h": 135, "contrast_l": 0.6},
     "late": {"L": 34, "C": 5, "h": 65, "contrast_l": 0.6},
 }
 TURNED = {"birch": {"L": 60, "C": 40, "h": 85, "contrast_l": 0.8},
@@ -30,12 +30,12 @@ TURNED = {"birch": {"L": 60, "C": 40, "h": 85, "contrast_l": 0.8},
 LITTER = {"L": 18, "C": 5, "h": 70, "contrast_l": 0.7}  # опад темний: світлі цятки на просіці — шум
 CUTOFF = {"summer": 0.45, "early": 0.45, "late": 0.45}
 KEEP = {"summer": 1.0, "early": 1.0, "late": 0.55}
-BARK = {"birch": {"target_y": 0.16, "sat": 0.5}, "oak": {"target_y": 0.06}, "lime": {"target_y": 0.07}}
+BARK = {"birch": {"target_y": 0.32, "sat": 0.4}, "oak": {"target_y": 0.06}, "lime": {"target_y": 0.07}}
 
 # вузол, джерело будови, набір спрайтів, кора, додатково
 ITEMS = [
-    ("Birch_A", "birch_a", "birch", "birch", {"late_src": "birch_a_bare", "leafy_keep": 0.7, "crown_low": 0.6, "scale": 0.56, "card_scale": 1.4}),
-    ("Birch_B", "birch_b", "birch", "birch", {"late_src": "birch_b_bare", "leafy_keep": 0.7, "crown_low": 0.6, "scale": 0.63, "card_scale": 1.4}),
+    ("Birch_A", "birch_a", "birch", "birch", {"late_src": "birch_a_bare", "trunk_r_mul": 2.0, "leafy_keep": 0.7, "crown_low": 0.6, "scale": 0.56, "card_scale": 1.4}),
+    ("Birch_B", "birch_b", "birch", "birch", {"late_src": "birch_b_bare", "trunk_r_mul": 2.0, "leafy_keep": 0.7, "crown_low": 0.6, "scale": 0.63, "card_scale": 1.4}),
     ("Oak_A", "oak_a", "oak", "oak", {"late_src": "oak_a_bare", "leafy_keep": 0.85, "crown_low": 0.6, "scale": 0.58, "card_scale": 1.6}),
     ("Oak_B", "oak_b", "oak", "oak", {"late_src": "oak_b_bare", "leafy_keep": 0.85, "crown_low": 0.6, "scale": 0.6, "card_scale": 1.6}),
     ("Shrub_Hazel", "shrub_hazel", "shrub", "lime", {"trunk": False, "strip": True}),
