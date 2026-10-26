@@ -15,19 +15,31 @@ FPS = 24
 
 
 def _outline(rnd, L, W):
-    """Опуклий контур плити L x W зі зрізаними (відколотими) кутами: плита не прямокутник, а зі сколами."""
+    """Контур плити L x W: зрізані кути й рвані краї — по кожному ребру 1.0-1.4 м вузли, зсунуті всередину на 0.04-0.22 м (сколи бетону)."""
     c = [(-L / 2, -W / 2), (L / 2, -W / 2), (L / 2, W / 2), (-L / 2, W / 2)]
     c = [(x * rnd.uniform(0.92, 1.0), y * rnd.uniform(0.92, 1.0)) for x, y in c]
-    pts = []
+    base = []
     cut = rnd.sample(range(4), rnd.choice((2, 3)))
     for i, p in enumerate(c):
         if i in cut:
             a, d = c[i - 1], c[(i + 1) % 4]
             k1, k2 = rnd.uniform(0.12, 0.3), rnd.uniform(0.12, 0.3)
-            pts.append((p[0] + (a[0] - p[0]) * k1, p[1] + (a[1] - p[1]) * k1))
-            pts.append((p[0] + (d[0] - p[0]) * k2, p[1] + (d[1] - p[1]) * k2))
+            base.append((p[0] + (a[0] - p[0]) * k1, p[1] + (a[1] - p[1]) * k1))
+            base.append((p[0] + (d[0] - p[0]) * k2, p[1] + (d[1] - p[1]) * k2))
         else:
-            pts.append(p)
+            base.append(p)
+    pts = []
+    for i in range(len(base)):
+        p, q = base[i], base[(i + 1) % len(base)]
+        pts.append(p)
+        ln = math.hypot(q[0] - p[0], q[1] - p[1])
+        m = int(ln / rnd.uniform(1.0, 1.4))
+        for j in range(1, m + 1):
+            t = (j + rnd.uniform(-0.25, 0.25)) / (m + 1)
+            x, y = p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t
+            r = math.hypot(x, y) or 1.0
+            d_ = rnd.uniform(0.04, 0.22)
+            pts.append((x - x / r * d_, y - y / r * d_))
     return pts
 
 
@@ -99,14 +111,14 @@ def _rigid(ob, kind, shape, mass=1.0):
     bpy.ops.rigidbody.object_add(type=kind)
     rb = ob.rigid_body
     rb.collision_shape = shape
-    rb.friction = 0.7
+    rb.friction = 1.0
     rb.restitution = 0.03
     rb.use_margin = True
     rb.collision_margin = 0.004
     if kind == "ACTIVE":
         rb.mass = mass
-        rb.linear_damping = 0.12
-        rb.angular_damping = 0.3
+        rb.linear_damping = 0.18
+        rb.angular_damping = 0.5
     return rb
 
 
@@ -305,7 +317,7 @@ def wave_main(k, workdir):
     scene.frame_start, scene.frame_end = 1, frames + 5
     scene.frame_set(1)
     rnd = random.Random(world["seed"] * 100 + k)
-    x0, x1, yi0, yi1, yo0, yo1 = world["region"]
+    x0, x1, yi0, yi1, yo0, yo1, outf = world["regions"][str(k)]
     base = _pile_top() + 1.0
     layers = []                                                        # шар: кола в плані, що не перекриваються, і його товщина (найбільший розмір тіла)
     thick = []
@@ -347,7 +359,7 @@ def wave_main(k, workdir):
             verts, faces = _rock(rnd, sz)
             meta = dict(outline=None, th=sz * 0.5, size=(sz, sz), hole=False)
             vol, rad, ext, tilt = sz ** 3 * 0.35, sz * 0.6, sz * 1.05, 1.0
-        out = rnd.random() < 0.36
+        out = rnd.random() < outf
         px, py, li = spot(rad, ext, out)
         prep.append((i, kind, verts, faces, meta, vol, px, py, li, tilt))
     zs = []

@@ -39,7 +39,7 @@ def intervals(xa, xb, cols):
     return res
 
 
-def body(b, xa, xb, nf, front, back, roof, core_end=None, ends=None, core_start=None, starts=None):
+def body(b, xa, xb, nf, front, back, roof, core_end=None, ends=None, core_start=None, starts=None, broken=()):
     """Секція будинку: серцевина, фасадні шари з прорізами-лоджіями, вікна на сітці."""
     top_z = nf * FLOOR
     ends = ends or (xb,) * nf                      # де обривається фасадний шар на кожному поверсі
@@ -62,8 +62,9 @@ def body(b, xa, xb, nf, front, back, roof, core_end=None, ends=None, core_start=
             yp = ye - 0.06 * side
             for f in range(1, nf):
                 z = f * FLOOR
+                if i in broken and f >= 3:                                         # біля пролому верхні лоджії зруйновані: лишається лише ніша
+                    continue
                 b.box(x, yp, z, 2 * LW, 0.12, 1.1, "panel")                       # парапет лоджії 1.1 м
-                b.box(x, yp, z + 1.1, 2 * LW + 0.1, 0.07, 0.07, "metal_dark")    # поручень
                 yb = ye - LOG * side + 0.01 * side
                 b.poly([(x - LW, yb, z), (x + LW, yb, z), (x + LW, yb, z + FLOOR), (x - LW, yb, z + FLOOR)][::-side], "panel_light")
                 for sx in (-1, 1):
@@ -71,8 +72,10 @@ def body(b, xa, xb, nf, front, back, roof, core_end=None, ends=None, core_start=
                 if (i * 7 + f * 3 + (1 if side > 0 else 0)) % 2 == 0:                       # засклена лоджія: рама над парапетом
                     b.window(("y", ye - 0.08 * side, side), x, z + 1.15, 2 * LW - 0.06, FLOOR - 1.4)
             for f in range(2, nf):
+                if i in broken and f >= 3:
+                    continue
                 b.box(x, (ya + yb) / 2, f * FLOOR - 0.15, 2 * LW, LOG, 0.15, "panel", top="panel")  # плита між лоджіями
-            if nf > 2:
+            if nf > 2 and i not in broken:
                 b.box(x, (ya + yb) / 2, top_z - 0.2, 2 * LW, LOG, 0.2, "panel", top="bitumen" if roof else "panel")
 
 
@@ -306,6 +309,19 @@ def boulder(b, rnd, c, dims, mat, yaw, spacer=False):
     CHECKS["boulders"].append((verts, rot, dims))
 
 
+def stripes(b, a, c, z0, z1, nrm, mat, fr=(0.2, 0.5, 0.8)):
+    """Шпалери: 2-3 вертикальні смуги темнішого тону на стіні (зсунуті в кімнату на 1 см, щоб не було z-fighting)."""
+    ln = math.hypot(c[0] - a[0], c[1] - a[1])
+    ux, uy = (c[0] - a[0]) / ln, (c[1] - a[1]) / ln
+    o = 0.012
+    for f in fr:
+        p0, p1 = ln * f - 0.14, ln * f + 0.14
+        pts = [(a[0] + ux * p0 + nrm[0] * o, a[1] + uy * p0 + nrm[1] * o, z0), (a[0] + ux * p1 + nrm[0] * o, a[1] + uy * p1 + nrm[1] * o, z0),
+               (a[0] + ux * p1 + nrm[0] * o, a[1] + uy * p1 + nrm[1] * o, z1), (a[0] + ux * p0 + nrm[0] * o, a[1] + uy * p0 + nrm[1] * o, z1)]
+        b.decal(pts, [0.62, 0.62, 0.5, 0.5], mat, nrm)
+    CHECKS["stripes"] = CHECKS.get("stripes", 0) + len(fr)
+
+
 def wall_bands(b, a, c, z0, z1, nrm, mat="interior_wall_dm"):
     """Стіна кімнати трьома смугами з тоном у вершинах: низ темніший, середина світла, верхня третина закопчена."""
     rows = [(z0, 0.55), (z0 + (z1 - z0) * 0.55, 1.0), (z1, 0.3)]
@@ -375,24 +391,31 @@ def wing(b, rnd, sgn, tgw):
                 CHECKS["floor_rubble"] += 1
         if k == NF:
             CHECKS["roof_verts"][sgn] = [v for v in b.bm.verts if v not in before_k and any(f.material_index != rs_ for f in v.link_faces)]   # без прутів арматури
-    # перекриття, що звисають рампою: два шматки панелей по ~3 м, посередині панелі немає
+    # перекриття, що звисають рампою зі зламом посередині: перший відрізок 26-28°, далі крутіше 37-38°, край рваний
     for k in RAMPS[sgn]:
-        for (yc, wd, ang) in ((-3.0, 3.1, 31.0), (2.9, 3.3, 36.0)):
-            d_, s_, t_, n_ = slab_frame(0.0 if sgn > 0 else math.pi, ang)
+        for (yc, wd, a1, a2) in ((-3.0, 3.1, 26.0, 37.0), (2.9, 3.3, 28.0, 38.0)):
+            d1, s1, t1, n1 = slab_frame(0.0 if sgn > 0 else math.pi, a1)
+            d2, s2, t2, n2 = slab_frame(0.0 if sgn > 0 else math.pi, a2)
             hinge = _v3(X(SLAB_REL[k] - 0.1), yc, k * FLOOR)
+            L1 = 2.3
             Lr = 6.0
-            for Lq in [3.0 + 0.1 * q for q in range(0, 31)]:       # довжина до купи, а коли до неї не дістає — до 6 м, і шматок висить на арматурі
-                e = hinge + s_ * Lq
+            for Lq in [L1 + 0.7 + 0.1 * q for q in range(0, 35)]:     # довжина до купи; не дістає — до ~6 м, і шматок висить на арматурі
+                e = hinge + s1 * L1 + s2 * (Lq - L1)
                 if e.z <= tgw(e.x, yc) + 0.1:
                     Lr = Lq
                     break
             th = 0.22
-            pts = [(-Lr / 2, -wd / 2), (Lr / 2 - rnd.uniform(0.2, 0.6), -wd / 2), (Lr / 2, -wd / 2 + rnd.uniform(0.5, 1.2)), (Lr / 2 - rnd.uniform(0.1, 0.5), wd / 2), (-Lr / 2, wd / 2)]
-            C = hinge - n_ * th + s_ * (Lr / 2)
-            ft, rot = place_slab(b, pts, th, C, s_, t_, n_, "broken_end", "interior_floor", heap=False, kind="ramp")
+            L2 = Lr - L1
+            pts1 = [(-L1 / 2, -wd / 2), (L1 / 2, -wd / 2 + rnd.uniform(0.0, 0.25)), (L1 / 2 - rnd.uniform(0.1, 0.3), wd / 2), (-L1 / 2, wd / 2)]
+            C1 = hinge - n1 * th + s1 * (L1 / 2)
+            place_slab(b, pts1, th, C1, s1, t1, n1, "broken_end", "interior_floor", heap=False, kind="ramp")
+            hinge2 = hinge + s1 * L1 - n1 * 0.06                      # злам: другий відрізок трохи нижче й крутіше
+            pts2 = [(-L2 / 2, -wd / 2), (L2 / 2 - rnd.uniform(0.2, 0.6), -wd / 2), (L2 / 2, -wd / 2 + rnd.uniform(0.5, 1.2)), (L2 / 2 - rnd.uniform(0.1, 0.5), wd / 2), (-L2 / 2, wd / 2)]
+            C2 = hinge2 - n2 * th + s2 * (L2 / 2)
+            ft, rot = place_slab(b, pts2, th, C2, s2, t2, n2, "broken_end", "interior_floor", heap=False, kind="ramp")
             CHECKS["ramps"][-1]["len"] = Lr
             if k == RAMPS[sgn][0] and yc < 0:
-                edge_bundle(b, rnd, pts, th, C, rot)
+                edge_bundle(b, rnd, pts2, th, C2, rot)
     # покрівля звисає з краю даху
     d_, s_, t_, n_ = slab_frame(0.0 if sgn > 0 else math.pi, 22.0)
     Ld = 1.9
@@ -413,6 +436,9 @@ def wing(b, rnd, sgn, tgw):
         for sy in (-1, 1):
             wall_bands(b, (X(0.05), sy * (YI - OFF)), (X(re - 0.02), sy * (YI - OFF)), zf, zc, (0, -sy, 0), "wp%d_dm" % pm)
         wall_bands(b, (X(0.05), -YI + OFF), (X(0.05), YI - OFF), zf, zc, (sgn, 0, 0), "wp%d_dm" % pm)
+        stripes(b, (X(0.05), -YI + OFF), (X(0.05), YI - OFF), zf + 0.4, zc - 0.5, (sgn, 0, 0), "wp%d_dm" % pm, (0.2, 0.5, 0.8))
+        for sy in (-1, 1):
+            stripes(b, (X(0.05), sy * (YI - OFF)), (X(re - 0.02), sy * (YI - OFF)), zf + 0.4, zc - 0.5, (0, -sy, 0), "wp%d_dm" % pm, (0.3, 0.7) if re > 2.5 else (0.5,))
         zp0 = zf - 0.03
         nparts = 0
         if re > 2.6:                                               # поперечна стіна з дверима
@@ -436,6 +462,7 @@ def wing(b, rnd, sgn, tgw):
 
 def remnants(b, rnd):
     """Рештки задньої стіни й сходової клітки в проломі заввишки 1-3 поверхи, рваним верхом: крила лишаються одним корпусом."""
+    rnd = random.Random(77)                                          # власний потік: симуляція (art-refs/heap_sim) залежить від цих коробок
     x = XA
     hs = []
     boxes = []                                                       # коробки для симуляції: уламки падають на ці рештки й упираються в них
@@ -591,8 +618,9 @@ def load_sim(boxes, mh):
     os.makedirs(d, exist_ok=True)
     gx0, gx1, gy0, gy1, st = -9.0, 9.0, -6.0, 20.0, 0.5
     nx, ny = int(round((gx1 - gx0) / st)) + 1, int(round((gy1 - gy0) / st)) + 1
-    world = dict(seed=SIM_SEED, boxes=[list(bx) for bx in boxes], grid=[gx0, gx1, gy0, gy1, st], region=[-5.0, 5.0, -3.2, 4.4, 6.4, 9.5],
-                 heights=[round(mh(gx0 + i * st, gy0 + j * st), 3) for j in range(ny) for i in range(nx)], version=3)
+    world = dict(seed=SIM_SEED, boxes=[list(bx) for bx in boxes], grid=[gx0, gx1, gy0, gy1, st], regions={"1": [-4.6, 4.6, 0.6, 4.6, 6.4, 8.0, 0.2], "2": [-4.8, 4.8, -1.0, 5.0, 6.4, 8.6, 0.25], "3": [-4.2, 4.2, -0.5, 4.8, 6.4, 8.6, 0.25],
+                 "4": [-5.4, 5.4, -3.0, 5.0, 6.4, 9.5, 0.3], "5": [-5.4, 5.4, -3.0, 5.0, 6.4, 9.5, 0.3], "6": [-5.4, 5.4, -3.0, 5.0, 6.4, 9.5, 0.3]},
+                 heights=[round(mh(gx0 + i * st, gy0 + j * st), 3) for j in range(ny) for i in range(nx)], version=4)
     wp = os.path.join(d, "world.json")
     same = os.path.exists(wp) and json.load(open(wp)) == json.loads(json.dumps(world))
     done = all(os.path.exists(os.path.join(d, "pieces_%d.pkl" % k)) for k in (1, 2, 3, 4, 5, 6))
@@ -637,6 +665,20 @@ def heap_from_sim(b, tg, tgw, boxes, rnd):
         d["wv"] = [M @ Vector(v) for v in d["verts"]]
         d["c"] = M.translation.copy()
         d["tilt"] = math.degrees(math.acos(min(1.0, abs(M.col[2].z))))
+    # відсів: тіла, що провалились чи відлетіли, плити сторч і все далі ~1.5 м від щільної купи (на краю лишається рідкий розсип)
+    n_all = len(pcs)
+    for d in pcs:
+        d["top"] = max(v.z for v in d["wv"])
+    pcs[:] = [d for d in pcs if d["c"].z > -0.3 and abs(d["c"].x) < 8.8 and -5.0 < d["c"].y < 19.0 and d["top"] < (5.2 if d["kind"] == "slab" else 5.4)
+              and not (d["kind"] == "slab" and d["tilt"] > 55.0)]
+    cellz = {}
+    for d in pcs:
+        k_ = (int(math.floor(d["c"].x)), int(math.floor(d["c"].y)))
+        cellz.setdefault(k_, []).append(d["top"])
+    dense = [k_ for k_, v in cellz.items() if len(v) >= 6 and max(v) > 1.0]
+    pcs[:] = [d for d in pcs if any(math.hypot(d["c"].x - (kx + 0.5), d["c"].y - (ky + 0.5)) <= 2.0 for kx, ky in dense)]
+    vol = sum(d["vol"] for d in pcs)
+    CHECKS["culled"] = n_all - len(pcs)
     rk = [max(d["size"]) for d in pcs if d["kind"] == "rock"]
     CHECKS["sim"] = dict(slabs=sum(1 for d in pcs if d["kind"] == "slab"), panels=sum(1 for d in pcs if d["kind"] == "panel"), total=len(pcs),
                          holes=sum(1 for d in pcs if d.get("hole")), boulders=sum(1 for r in rk if r >= 0.8), chunks=sum(1 for r in rk if 0.3 <= r < 0.8),
@@ -869,11 +911,11 @@ def damaged():
     ends_l = tuple(CL + r for r in REL_L)
     starts_r = tuple(CR - r for r in REL_R)
     # крила: серцевина + фасадні шари, що обриваються уступами по поверхах
-    F, B = (), ()
+    F, B = (1, 3, 5, 14, 16), ()                                     # п'ять лоджій на одному фасаді; 5-та й 14-та, найближчі до пролому, частково зруйновані
     blown = {("back", 2, 1), ("front", 4, 0), ("front", 14, 1), ("back", 15, 2), ("front", 6, 3)}
-    body(b, X0, max(ends_l), NF, F, B, True, core_end=CL, ends=ends_l)
+    body(b, X0, max(ends_l), NF, F, B, True, core_end=CL, ends=ends_l, broken=(5, 14))
     windows(b, X0, max(ends_l), NF, F, B, blown=blown, ends=ends_l)
-    body(b, min(starts_r), X1, NF, F, B, True, core_start=CR, starts=starts_r)
+    body(b, min(starts_r), X1, NF, F, B, True, core_start=CR, starts=starts_r, broken=(5, 14))
     windows(b, min(starts_r), X1, NF, F, B, blown=blown, starts=starts_r)
     for xe, sg in ((X1, 1), (X0, -1)):                              # обидва торці: тепліший бетон і патьоки (з камери видно той, що стоїть до неї після повороту)
         lib._quad(b, [(xe + 0.006 * sg, Y0, 0.0), (xe + 0.006 * sg, Y1, 0.0), (xe + 0.006 * sg, Y1, H), (xe + 0.006 * sg, Y0, H)], "panel_warm", (sg, 0, 0))
@@ -935,7 +977,7 @@ def validate(tg):
     est = 255 * (1.055 * (CAV_LIN * 0.47) ** (1 / 2.4) - 0.055)      # 0.47 — зміряно під світлом Річки: альбедо 0.03 дало sRGB 32
     assert 80 <= est <= 100, f"нутро кімнат на екрані під Річкою ~{est:.0f}: ціль L* 55-65 (sRGB 80-100)"
     assert all(1.0 <= f <= 2.0 for f in CHECKS["flats"]) and len(CHECKS["flats"]) == 2 * NF, f"пласка частина перекриття від стіни {CHECKS['flats']}"
-    assert len(CHECKS["ramps"]) == 2 * 3
+    assert len(CHECKS["ramps"]) == 2 * 3 * 2 and CHECKS["stripes"] >= 2 * NF * 4, "рампи з переломом, смуги шпалер"
     for r in CHECKS["ramps"]:
         r["ft"].normal_update()
         ang = math.degrees(math.acos(abs(r["ft"].normal.z)))
