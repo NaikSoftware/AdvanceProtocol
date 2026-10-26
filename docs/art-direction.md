@@ -100,6 +100,16 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   tiles, so no unit ever stands inside a neighbour's wall. Small props (fences, bales, poles,
   trailers, blocks) sit near cell edges on passable cells; a vehicle that enters the cell crushes
   them and the debris stays as a scar, infantry passes them by.
+- **Placed as a real village would be.** The layout of each map is authored, not scattered cell
+  by cell: power lines run along roads from one map edge to the other and branch to houses, never
+  a lone pole or a line from nowhere; a yard is a house facing the road, a garden of tilled rows
+  behind it, a shed, and one fence around them with a gate to the road; bales and trailers stand
+  at field edges or by a shed, never on a garden or the road; nothing hangs over a bank or stands
+  within ~0.4 tile of water; buildings sit on levelled ground and bridge ends meet the banks.
+  Heights are real: a 0.4 kV pole 8–9 m, a single-storey house 6–7 m to the ridge.
+- **Materials read in battle as in the asset preview:** textured and matte; straw, concrete and
+  dry steel never shine. Ruins show floor debris inside, never grass. A few chimneys and ruins
+  give off a faint smoke.
 - **Forests are dense woods** a tank could hide in — canopy masses, a shrub belt at the edge, not
   a few trees with units visible between them. The canopy dithers over cells holding a unit the
   current player can see, including the cells between the unit and the camera.
