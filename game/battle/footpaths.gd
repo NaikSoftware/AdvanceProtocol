@@ -18,7 +18,7 @@ const STEP: float = 0.1
 const REACH: float = 1.4
 ## Півширина втоптаної середини: 0.64 м завширшки = 0.08 клітинки, ±0.2 м шумом. Довкола неї зону прим'ятої
 ## трави шейдер бере з розмитого (mip) зносу.
-const HALF: float = 0.04
+const HALF: float = 0.055
 
 
 static func _hash(x: int, y: int, seed_value: int) -> float:

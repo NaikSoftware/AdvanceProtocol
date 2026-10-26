@@ -2173,7 +2173,7 @@ class _Placer:
 				var f: float = 1.0
 				for pin: Vector2 in [door, gate]:
 					f += 1.5 * exp(-pts[k].distance_to(pin) * pts[k].distance_to(pin) / 0.02)
-				hw[k] = lerpf(0.09, Footpaths.HALF, tail) * f
+				hw[k] = lerpf(0.11, Footpaths.HALF, tail) * f
 			walks.append({"kind": &"yard", "home": i, "door": door, "pts": pts, "seed": sd, "solid": 0.7,
 					"fade_end": minf(0.2, 0.3 * Footpaths.length(pts)), "half": hw})
 			var gp: Vector2 = gate + out * 0.22
