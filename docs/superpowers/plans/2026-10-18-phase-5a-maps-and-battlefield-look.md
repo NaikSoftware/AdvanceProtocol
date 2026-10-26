@@ -484,7 +484,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 ### Task 18: Damaged panel block
 
-- [ ] Reference photos of real collapsed panel blocks from 40–55° above; heap height, plan shape and piece sizes measured
+- [x] Reference photos of real collapsed panel blocks from 40–55° above; heap height, plan shape and piece sizes measured
 - [ ] Heap shaped like the reference: a tongue below the breach, never a ring around the building
 - [ ] Breach with sagging slabs, ragged facade, plastered rooms, soot on the walls
 - [ ] Accepted side by side with the reference photo in a battle frame
