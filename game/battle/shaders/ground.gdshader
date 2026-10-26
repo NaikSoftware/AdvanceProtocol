@@ -1308,8 +1308,20 @@ void fragment() {
 			scar_dark = sc.r;
 			alb = mix(alb, vec3(0.004, 0.0037, 0.0034), sc.r * 0.95);
 			alb = mix(alb, vec3(0.16, 0.155, 0.15), sc.a * 0.6);
-			rough = mix(rough, 1.0, sc.r);
-			refl *= 1.0 - sc.r;
+			// Вирва: чаша обпаленого буро-сірого ґрунту (на екрані ~35–45 із 255 проти трави ~80),
+			// довкола — світліший вал свіжого викиду; нормаль нахилена по схилах чаші й валу.
+			alb = mix(alb, vec3(0.030, 0.025, 0.019), sc.g * 0.85);
+			alb = mix(alb, alb * 1.2 + vec3(0.012, 0.009, 0.006), sc.b * 0.7);
+			vec2 st = 1.0 / (scar_size * 32.0);
+			vec2 g = vec2(texture(scar_map, suv + vec2(st.x, 0.0)).g - texture(scar_map, suv - vec2(st.x, 0.0)).g,
+					texture(scar_map, suv + vec2(0.0, st.y)).g - texture(scar_map, suv - vec2(0.0, st.y)).g);
+			vec2 gr = vec2(texture(scar_map, suv + vec2(st.x, 0.0)).b - texture(scar_map, suv - vec2(st.x, 0.0)).b,
+					texture(scar_map, suv + vec2(0.0, st.y)).b - texture(scar_map, suv - vec2(0.0, st.y)).b);
+			// Висота: чаша — западина, вал — горб; нахил нормалі — мінус градієнт висоти.
+			nxy += (g - 0.5 * gr) * 1.6 * texture(scar_seen, suv).r * inside;
+			scar_dark = max(sc.r, sc.g * 0.6);
+			rough = mix(rough, 1.0, max(sc.r, sc.g));
+			refl *= 1.0 - max(sc.r, sc.g * 0.7);
 		}
 		// Тінь хмари: плями ~10 клітинок, пливуть ~0.5 клітинки/с (4 м/с), тож пляма минає точку
 		// за 15–20 с. Край вузький (0.52–0.64), щоб тінь читалась плямою, а не загальною рябизною.

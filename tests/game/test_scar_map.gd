@@ -55,8 +55,18 @@ func test_apply_hands_both_textures_to_the_ground_material() -> void:
 
 
 
-func test_crater_scorch_is_small_and_ends_at_its_radius() -> void:
+## Вирва — чаша (G) радіусом `radius_m` з нерівним краєм і вал викиду (B) довкола до 1,7
+## радіуса; чорної плями (R) вона не лишає — та для уламків.
+func test_crater_is_a_bowl_with_an_ejecta_rim() -> void:
 	scars.stamp_crater(Vector2i(4, 4), 2.5)
 	var c := Vector2i(4 * 32 + 16, 4 * 32 + 16)
-	assert_eq(scars.image().get_pixelv(c).r8, 255)
-	assert_eq(scars.image().get_pixelv(c + Vector2i(10, 0)).r8, 0)
+	var img: Image = scars.image()
+	assert_eq(img.get_pixelv(c).g8, 255, "дно чаші")
+	assert_eq(img.get_pixelv(c).r8, 0, "не чорнильна пляма")
+	assert_gt(img.get_pixelv(c + Vector2i(5, 0)).g8, img.get_pixelv(c + Vector2i(8, 0)).g8, "чаша мілішає до краю")
+	var rim: int = 0
+	for d: Vector2i in [Vector2i(11, 0), Vector2i(-11, 0), Vector2i(0, 11), Vector2i(0, -11)]:
+		rim = maxi(rim, img.get_pixelv(c + d).b8)
+	assert_gt(rim, 60, "вал довкола краю")
+	assert_eq(img.get_pixelv(c + Vector2i(18, 0)).b8, 0, "за 1,7 радіуса чисто")
+	assert_eq(img.get_pixelv(c + Vector2i(18, 0)).g8, 0)

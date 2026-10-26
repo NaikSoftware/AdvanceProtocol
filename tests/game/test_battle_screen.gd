@@ -1258,12 +1258,12 @@ func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
 
 
 
-## Вирва від снаряда — у карті шрамів під ціллю, як пляма від уламків.
+## Вирва від снаряда — у карті шрамів під ціллю.
 func test_ground_hit_stamps_a_crater_scorch() -> void:
 	var service: Node = MatchServiceScript.new()
 	add_child_autofree(service)
 	var screen: Node3D = _two_tanks_in_corners(service)
 	screen._event_player.ground_hit.emit(Vector2i(2, 3), 2.5)
 	var scars: ScarMap = screen._scars
-	assert_eq(scars.image().get_pixel(2 * 32 + 16, 3 * 32 + 16).r8, 255)
-	assert_eq(scars.image().get_pixel(2 * 32 + 16 + 12, 3 * 32 + 16).r8, 0, "вирва 2,5 м — за 3 м від центру чисто")
+	assert_eq(scars.image().get_pixel(2 * 32 + 16, 3 * 32 + 16).g8, 255, "дно чаші")
+	assert_eq(scars.image().get_pixel(2 * 32 + 16 + 18, 3 * 32 + 16).g8, 0, "чаша 2,5 м — за 4,5 м від центру чисто")

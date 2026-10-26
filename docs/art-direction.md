@@ -159,8 +159,19 @@ What our own constraints add on top:
 - **An explosion is sharp, its smoke is slow.** The cloud reaches full volume in 0.1–0.2 s; then
   the flipbook crawls, the cloud rises with deceleration (1.5–2 m/s at the start), widens and
   drifts downwind, and thins evenly to zero in 3–6 s (a tank-gun hit puff 3.5 s, a 155 mm burst or
-  a kill 6 s). The end is set by the cloud's own opacity curve, never by the last flipbook frame:
-  smoke does not vanish on the spot. The player waits only for the flash (0.3 s), not the smoke.
+  a kill 6 s). The cloud keeps its shape for the first third of its life, then dissolves by a
+  noise threshold — thin edges first, the dense core last — never by fading the whole cloud and
+  never with the last flipbook frame; the rise slows but does not stop. The player waits only for
+  the flash (0.3 s), not the smoke.
+- **Smoke never buries a neighbour.** Over the screen footprint of a visible unit other than the
+  target, each smoke layer is capped at 0.22 opacity, so two stacked layers stay under 0.4.
+- **Hot cores, not white stickers.** A flash core is white-yellow in the middle with an orange edge,
+  alpha-blended, for two frames; sparks cool along the blackbody ramp (white → yellow → orange →
+  dull red) and arc under gravity; a gun firing leaves grey-beige powder smoke along the barrel and a
+  low dust ring 1–1.5 tiles wide on the ground.
+- **A crater is burnt soil, not ink:** a brown-grey bowl (about half the brightness of the grass)
+  with a ragged edge, a lighter ejecta rim and a normal that follows the bowl. Debris chunks are
+  irregular, 0.2–0.7 m, fly their whole arc, land and settle.
 - Every moment is `one_shot` and frees itself with `queue_free` once its smoke is gone (≤ 6.5 s).
   Setting `emitting = false` is not enough; the particles stay in frame. A handover clears all of
   them: smoke over ground the next player never scouted would show where the target stood.
