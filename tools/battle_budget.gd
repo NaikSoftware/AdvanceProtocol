@@ -187,7 +187,7 @@ func _ready() -> void:
 				for dx in size_r.x:
 					cells.append(pc + Vector2i(dx, dy))
 			pl._add(StringName(parts[2]), Transform3D(Basis(Vector3.UP, rot * PI * 0.5), Vector3(centre.x, 0.0, centre.y)), cells)
-			pl._build_nodes(false)
+			pl._build_nodes(not board.in_bounds(pc))                       # за краєм дошки — будівля кільця (з серпанком, без тіні)
 			pl._apply()
 			views.append([pc + size_r / 2, float(parts[4])])
 		elif parts.size() >= 3 and parts[1] == "sel":

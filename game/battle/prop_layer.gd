@@ -70,7 +70,7 @@ const MODELS: Dictionary = {
 	&"tree_stump_01": {"kind": Kind.YARD, "crush": Crush.SINK, "scale": 0.5},
 }
 ## Руїни з глухим фронтоном збоку: ставляться пошкодженим фасадом (−Z) до камери (+x чи +z).
-const CAMERA_FRONT: Array[StringName] = [&"ruin_half_house2"]
+const CAMERA_FRONT: Array[StringName] = [&"ruin_half_house2", &"h5_panel_block_damaged"]
 ## Руїни, яких у таблиці ще нема, стають у слот за префіксом імені: напівзруйнована будівля —
 ## звичайна, повна руїна — рідкісна. Перший збіг виграє.
 ## Моделі, що лежать на диску, але ще не прийняті: їх не бере ні таблиця, ні префікс.
