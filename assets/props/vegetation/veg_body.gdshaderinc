@@ -28,6 +28,14 @@ uniform float bark_dark = 0.45;
 uniform float rim = 0.15;
 uniform float card_round = 0.7;
 uniform float card_up = 1.2;
+// Вітер: час задає той, хто ставить рослини, з низькою частотою (кілька разів на секунду).
+// Не TIME: матеріал із TIME змушує перемальовувати кадр щокадру, і режим низького
+// навантаження не вмикається. wind_strength = 0 — повний штиль.
+uniform float wind_time = 0.0;
+uniform float wind_strength = 1.0;
+// Розмах: пучок крони — 6 см, верх стебла очерету — 18 см.
+const float WIND_CLUMP = 0.06 / 8.0;
+const float WIND_REED = 0.18 / 8.0;
 
 varying float is_card;
 // 1 — нерухома вертикальна картка (очерет, рогіз) або картка, що лежить (повалений кущ):
@@ -56,6 +64,15 @@ void vertex() {
 		float s = length(MODEL_MATRIX[0].xyz);
 		v.xy += UV2 * s;
 	}
+	// Гойдання: фаза — з положення пучка у світі й його ідентифікатора, тож сусіди не в такт.
+	vec3 wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float ph = dot(wpos, vec3(3.1, 0.0, 2.3)) + piece_hash * 6.283;
+	float sway = 0.6 * sin(wind_time * 1.7 + ph) + 0.4 * sin(wind_time * 2.9 + ph * 1.7);
+	// Хитаються пучки крони й верх вертикальних карток очерету; підстилка, листя на купі й кора — ні.
+	float amp = is_fixed > 0.5
+			? WIND_REED * clamp((COLOR.r - 0.55) / 0.45, 0.0, 1.0) * step(abs(NORMAL.y), 0.5)
+			: WIND_CLUMP * COLOR.r * is_card;
+	v += (MODELVIEW_MATRIX * vec4(normalize(vec3(1.0, 0.0, 0.35)) * amp * sway * wind_strength, 0.0)).xyz;
 	VERTEX = v;
 	NORMAL = normalize((MODELVIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	if (is_card > 0.5) {
@@ -86,7 +103,7 @@ void fragment() {
 	cut = mix(cut, min(cut + 0.45, 0.97), is_fixed * (1.0 - smoothstep(0.12, 0.4, facing)) * float(!shadow_pass));
 	// Силует — з різкого рівня: обрис пучка — дрібне листя. Розмитіший mip для порогу
 	// робив із пучка кілька великих лопатей — «листки» по метру на ближньому зумі.
-#ifdef VEG_FADE
+#if defined(VEG_FADE) || defined(VEG_FADE_DEPTH)
 	// Напівпрозора крона над юнітом: альфа екземпляра — справжня прозорість, без растру.
 	if (t.a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001)) {
 		discard;
@@ -117,7 +134,10 @@ void fragment() {
 	SPECULAR = 0.15;
 	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без
 	// окремого прозорого проходу. Без MSAA це звичайний alpha-cut за тим самим порогом.
-#ifdef VEG_FADE
+#if defined(VEG_FADE_DEPTH)
+	// Перший прохід: лише глибина найближчого шару (колір прозорий).
+	ALPHA = 0.0;
+#elif defined(VEG_FADE)
 	// Кора гасне швидше за листя: гілля над юнітом інакше стирчить темними рисками.
 	ALPHA = COLOR.a * mix(0.6, 1.0, is_card);
 #else

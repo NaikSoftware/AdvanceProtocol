@@ -19,6 +19,7 @@ extends Node
 ##   --tank   ставить поруч коробку розміром із танк для масштабу (збоку, щоб не закривати малий об'єкт).
 ##   --veg    рослинність: матеріал GLB замінюється шейдером assets/props/vegetation/veg.gdshader з його ж
 ##            атласом, MSAA 2× (alpha-to-coverage); --fade=A — veg_fade.gdshader з альфою екземпляра A;
+##   --seq=N  ще N кадрів вітру на найближчому зумі (wind_time крок 0,15 с) у <name>_seq/NN.png;
 ##   --dissolve=A  veg.gdshader з альфою екземпляра A: крона рідшає цілими пучками;
 ##   --tank=X:Z  коробка-танк у цій точці (тайли від об'єкта), напр. під кроною;
 ##   --nodes=a,b,c  лише ці вузли бібліотеки GLB, рядком уздовж X через --gap=G тайлів (типово 0,6);
@@ -45,6 +46,9 @@ var side: bool = false
 var veg: bool = false
 var fade: float = -1.0
 var dissolve: float = -1.0
+## Матеріали рослинності: їм кадр за кадром іде wind_time (послідовність --seq).
+var veg_mats: Array[ShaderMaterial] = []
+var seq: int = 0
 var tank_at: Vector2 = Vector2(2.6, 1.6)
 var only_nodes: PackedStringArray = PackedStringArray()
 var gap: float = 0.6
@@ -91,6 +95,8 @@ func _ready() -> void:
 			veg = true
 		elif args[i].begins_with("--fade="):
 			fade = float(args[i].substr(7))
+		elif args[i].begins_with("--seq="):
+			seq = int(args[i].substr(6))
 		elif args[i].begins_with("--dissolve="):
 			dissolve = float(args[i].substr(11))
 		elif args[i].begins_with("--tank="):
@@ -246,6 +252,8 @@ func _ready() -> void:
 		var shot: String = tag if tag != "" else n
 		await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s%s.png" % [out, shot, sfx])
 		await _shoot(rig, zoom2, "%s/%s_far%s.png" % [out, shot, sfx])
+		if seq > 0:
+			await _wind_seq(rig, "%s/%s_seq%s" % [out, shot, sfx])
 		if graze:
 			var rot0: Vector3 = sun.rotation_degrees
 			var e0: float = sun.light_energy
@@ -338,7 +346,7 @@ func _pick_nodes(inst: Node3D) -> void:
 
 ## Шейдер рослинності з атласом самого GLB (як його поставить розстановка).
 func _veg_material(inst: Node3D) -> void:
-	var sh: Shader = load("res://assets/props/vegetation/veg_fade.gdshader" if fade >= 0.0 else "res://assets/props/vegetation/veg.gdshader")
+	var sh: Shader = load("res://assets/props/vegetation/veg_fade_depth.gdshader" if fade >= 0.0 else "res://assets/props/vegetation/veg.gdshader")
 	for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
 		if mi.is_queued_for_deletion():
 			continue
@@ -346,6 +354,16 @@ func _veg_material(inst: Node3D) -> void:
 		var sm := ShaderMaterial.new()
 		sm.shader = sh
 		sm.set_shader_parameter("albedo_tex", base.albedo_texture)
+		if fade >= 0.0:
+			# Два проходи: глибина найближчих карток, потім колір із прозорістю.
+			var col := ShaderMaterial.new()
+			col.shader = load("res://assets/props/vegetation/veg_fade.gdshader")
+			col.set_shader_parameter("albedo_tex", base.albedo_texture)
+			col.render_priority = 1
+			sm.next_pass = col
+		veg_mats.append(sm)
+		if sm.next_pass != null:
+			veg_mats.append(sm.next_pass)
 		if fade < 0.0 and dissolve < 0.0:
 			mi.material_override = sm
 			continue
@@ -364,3 +382,21 @@ func _veg_material(inst: Node3D) -> void:
 		mmi.position = mi.position
 		mi.get_parent().add_child(mmi)
 		mi.visible = false
+
+
+## Послідовність вітру: wind_time іде кроком 0,15 с; кадри зберігаються наприкінці, бо save_png
+## блокує ~1 с.
+func _wind_seq(rig: IsoCameraRig, dir: String) -> void:
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	for i in 60:
+		await get_tree().process_frame
+	var frames: Array[Image] = []
+	for k in seq:
+		for mat in veg_mats:
+			mat.set_shader_parameter("wind_time", float(k) * 0.15)
+		for i in 3:
+			await get_tree().process_frame
+		frames.append(get_viewport().get_texture().get_image())
+	DirAccess.make_dir_recursive_absolute(dir)
+	for k in frames.size():
+		frames[k].save_png("%s/%02d.png" % [dir, k])

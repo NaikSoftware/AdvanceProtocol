@@ -26,7 +26,9 @@ BARK = {"willow": (0.40, 0.36, 0.26), "alder": (0.26, 0.24, 0.22), "apple": (0.3
         "cherry": (0.32, 0.22, 0.19), "walnut": (0.45, 0.43, 0.40), "lilac": (0.36, 0.34, 0.31),
         "elder": (0.42, 0.39, 0.33), "berry": (0.38, 0.28, 0.21), "thuja": (0.36, 0.26, 0.20),
         "hawthorn": (0.32, 0.29, 0.26), "dogrose": (0.34, 0.25, 0.18), "pear": (0.24, 0.22, 0.20),
-        "oak": (0.30, 0.28, 0.25), "wwillow": (0.36, 0.33, 0.27)}
+        "oak": (0.30, 0.28, 0.25), "wwillow": (0.36, 0.33, 0.27),
+        # Свіжий злам: світла деревина уламків у купі поваленого дерева.
+        "wood": (0.52, 0.44, 0.32)}
 
 
 def load(path):
@@ -100,7 +102,7 @@ def litter_sprite(seed):
     img = np.zeros((n, n, 4))
     noise = rng.normal(0, 1, (n // 8, n // 8))
     noise = np.asarray(Image.fromarray(((noise - noise.min()) / np.ptp(noise) * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC)) / 255.0
-    img[..., :3] = np.array([0.17, 0.145, 0.11])[None, None, :] * (0.8 + 0.4 * noise[..., None])
+    img[..., :3] = np.array([0.24, 0.21, 0.18])[None, None, :] * (0.8 + 0.4 * noise[..., None])
     img[..., 3] = 1.0
     img = soft_edge(img, seed)
     yy, xx = (np.mgrid[0:n, 0:n] + 0.5) / n * 2 - 1
@@ -148,7 +150,7 @@ def main():
     y, x = take(1, 1)
     atlas[y:y + CELL, x:x + CELL] = premul_dilate(litter_sprite(99))
     rects["sprites"]["litter"] = [uv(x, y, CELL, CELL)]
-    woody = [k for k in GROUPS[GROUP] if k not in SHEAF]
+    woody = [k for k in GROUPS[GROUP] if k not in SHEAF] + ["wood"]
     for i, kind in enumerate(woody):
         if i % (CELL // STRIP_W) == 0:
             block = take(1, 2)

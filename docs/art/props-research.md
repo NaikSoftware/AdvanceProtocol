@@ -474,8 +474,15 @@ and dissolve by whole clumps via instance alpha. Alpha-to-coverage needs `alpha_
 this was measured on a test quad. Each card and branch carries its own id in vertex colour G, so a
 dissolve drops whole clumps, never single triangles. Vertex colour R holds the clump tone: the
 lower third of a crown is darker. Over a visible unit, swap the instance's material for
-`veg_fade.gdshader`, which shows instance alpha as true transparency (separate transparent pass,
-no dither); bark fades faster than leaves. Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen
+`veg_fade_depth.gdshader` with `veg_fade.gdshader` as its `next_pass` (render priority 1). The
+first pass writes the depth of the nearest cards and draws nothing. The second then blends only
+that nearest layer, so the crown is evenly translucent instead of smoky where cards overlap.
+Instance alpha is true transparency, with no dither, and bark fades faster than leaves.
+
+**Wind.** The material uniforms `wind_time` (seconds) and `wind_strength` (0 means calm) sway
+crown clumps by about 6 cm and reed tops by about 18 cm; bark, litter and fallen leaves stay
+still. Placement advances `wind_time` from a low-rate timer and never through `TIME`, because a
+material that reads `TIME` forces a redraw every frame and low-processor mode never idles. Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen
 edge-on. Shared body: `veg_body.gdshaderinc`.
 
 **Import.** As for the forest: `meshes/force_disable_compression=true`, no generated LODs and no
