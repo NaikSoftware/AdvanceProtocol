@@ -128,6 +128,14 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   blending. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
 - **Scars respect the fog:** crushed props, wrecks and craters show only where the viewer's
   `seen` covers the tile, or they report enemy movement.
+- **Footpaths are wear, not a laid strip.** From each house door through the gate to the road, plus
+  trodden patches at gates and sheds and one or two meandering tracks from a road to the water.
+  `Footpaths` bakes one R8 mask per board (128 px per tile); `ground.gdshader` darkens and browns the
+  ground with it, so there are no nodes, decals or draw calls. 0.4–0.8 m wide, wider at doors and
+  gates, one smooth curve with a ragged, noisy edge, bare earth in patches with grass sprouting even
+  in the middle, low contrast. The noise lives in path coordinates (along, across), never in a world
+  texture. A path fades out on the verge and never reaches the carriageway or the water. Public: the
+  fog never touches it, and it changes no rule.
 - Briefs, sizes and routes per prop (Blender, Tripo or CC0): [`art/props-research.md`](art/props-research.md).
 
 ## Effects — fire, explosions, smoke
