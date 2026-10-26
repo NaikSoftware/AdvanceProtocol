@@ -232,3 +232,157 @@ def simulate(seed, mound_h, boxes, region, counts, frames=240, floor_stubs=(), m
     bpy.ops.rigidbody.world_remove()
     scene.frame_set(1)
     return res
+
+
+# --------------------------------------------------------------------------- хвилі: кожна окремим запуском Blender (до ~180 с), .blend між хвилями
+#   blender -b --factory-startup --python heap_sim.py -- <хвиля 0..4> <каталог>
+# Хвиля 0 ставить нерухомий світ із world.json (стіни крил, рештки, ґрунт, пагорб-носій), далі кожна хвиля скидає свій склад на те, що лягло раніше
+# (лягле заморожується) і зберігає w<k>.blend та pieces_<k>.pkl. Порядок: ядро з великих брил, середні шматки, плити й панелі, дрібняк у щілини.
+
+WAVES = {
+    1: dict(name="boulders", comp=(("rock", 180, 0.8, 1.5),)),
+    2: dict(name="chunks", comp=(("rock", 650, 0.3, 0.8),)),
+    3: dict(name="slabs", comp=(("slab", 10, 0, 0), ("panel", 60, 0, 0))),
+    4: dict(name="fines_a", comp=(("rock", 625, 0.1, 0.3),)),
+    5: dict(name="fines_b", comp=(("rock", 375, 0.1, 0.3),)),
+    6: dict(name="fines_c", comp=(("rock", 250, 0.1, 0.3),)),
+}
+
+
+def _build_world(world):
+    import json
+    scene = bpy.context.scene
+    scene.render.fps = FPS
+    bpy.ops.rigidbody.world_add()
+    rw = scene.rigidbody_world
+    rw.substeps_per_frame = 20
+    rw.solver_iterations = 30
+    ob = _passive_box("ground", (-60, 60, -60, 60, -2.0, 0.0))
+    for i, bx in enumerate(world["boxes"]):
+        _passive_box("wall%d" % i, tuple(bx))
+    gx0, gx1, gy0, gy1, step = world["grid"]
+    nx, ny = int(round((gx1 - gx0) / step)) + 1, int(round((gy1 - gy0) / step)) + 1
+    heights = world["heights"]
+    verts = [(gx0 + i * step, gy0 + j * step, heights[j * nx + i] - 0.02) for j in range(ny) for i in range(nx)]
+    faces = [[j * nx + i, j * nx + i + 1, (j + 1) * nx + i + 1, (j + 1) * nx + i] for j in range(ny - 1) for i in range(nx - 1)]
+    mo = _obj("mound", verts, faces, (0, 0, 0), (0, 0, 0))
+    _rigid(mo, "PASSIVE", "MESH")
+
+
+def _passive_box(name, bx):
+    v, f, c = _box_mesh(*bx)
+    ob = _obj(name, v, f, c, (0, 0, 0))
+    _rigid(ob, "PASSIVE", "BOX")
+    return ob
+
+
+def _pile_top():
+    top = 0.0
+    for ob in bpy.data.objects:
+        if ob.name.startswith("p") or ob.name == "mound":
+            for corner in ob.bound_box:
+                top = max(top, (ob.matrix_world @ Vector(corner)).z)
+    return top
+
+
+def wave_main(k, workdir):
+    import json
+    import os
+    import pickle
+    path = lambda n: os.path.join(workdir, n)
+    if k == 0:
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        world = json.load(open(path("world.json")))
+        _build_world(world)
+        bpy.ops.wm.save_as_mainfile(filepath=path("w0.blend"))
+        return
+    bpy.ops.wm.open_mainfile(filepath=path("w%d.blend" % (k - 1)))
+    world = json.load(open(path("world.json")))
+    scene = bpy.context.scene
+    rw = scene.rigidbody_world
+    frames = 100 if k >= 4 else 130
+    rw.point_cache.frame_start, rw.point_cache.frame_end = 1, frames + 5
+    scene.frame_start, scene.frame_end = 1, frames + 5
+    scene.frame_set(1)
+    rnd = random.Random(world["seed"] * 100 + k)
+    x0, x1, yi0, yi1, yo0, yo1 = world["region"]
+    base = _pile_top() + 1.0
+    layers = []                                                        # шар: кола в плані, що не перекриваються, і його товщина (найбільший розмір тіла)
+    thick = []
+
+    def spot(rad, th, out):
+        for li, lay in enumerate(layers):
+            for _ in range(30):
+                lo, hi = x0 + rad, x1 - rad
+                px = rnd.uniform(lo, hi) if lo < hi else (x0 + x1) / 2
+                py = rnd.uniform(yo0 + rad, yo1 + rad) if out else rnd.uniform(yi0 + min(rad, 1.0), yi1)
+                if all(math.hypot(px - qx, py - qy) > rad + qr + 0.03 for qx, qy, qr in lay):
+                    lay.append((px, py, rad))
+                    thick[li] = max(thick[li], th)
+                    return px, py, li
+        layers.append([])
+        thick.append(0.0)
+        return spot(rad, th, out)
+
+    items = []
+    for kind, n, smin, smax in WAVES[k]["comp"]:
+        items += [(kind, smin, smax)] * n
+    rnd.shuffle(items)
+    prep = []
+    for i, (kind, smin, smax) in enumerate(items):
+        if kind == "slab":
+            L, W, th = rnd.uniform(3.0, 6.0), rnd.uniform(1.2, 3.0), rnd.uniform(0.16, 0.22)
+            outline = _outline(rnd, L, W)
+            verts, faces = _prism(outline, th)
+            meta = dict(outline=outline, th=th, size=(L, W), hole=False)
+            vol, rad, ext, tilt = L * W * th, math.hypot(L, W) / 2, 0.4 * L + 0.4, 0.35
+        elif kind == "panel":
+            w, h, t = rnd.uniform(0.4, 1.5), rnd.uniform(0.4, 1.4), rnd.uniform(0.14, 0.3)
+            hole = w > 0.95 and h > 0.9 and rnd.random() < 0.55
+            verts, faces = _panel(rnd, w, h, t, hole)
+            meta = dict(outline=None, th=t, size=(w, h), hole=hole)
+            vol, rad, ext, tilt = w * h * t, math.hypot(w, h) / 2, max(w, h) * 1.05, 1.0
+        else:
+            sz = rnd.uniform(smin, smax)
+            verts, faces = _rock(rnd, sz)
+            meta = dict(outline=None, th=sz * 0.5, size=(sz, sz), hole=False)
+            vol, rad, ext, tilt = sz ** 3 * 0.35, sz * 0.6, sz * 1.05, 1.0
+        out = rnd.random() < 0.36
+        px, py, li = spot(rad, ext, out)
+        prep.append((i, kind, verts, faces, meta, vol, px, py, li, tilt))
+    zs = []
+    zc = base
+    for t_ in thick:
+        zs.append(zc)
+        zc += t_ + 0.15
+    new = []
+    for (i, kind, verts, faces, meta, vol, px, py, li, tilt) in prep:
+        ob = _obj("p%d_%d" % (k, i), verts, faces, (px, py, zs[li] + thick[li] / 2), (rnd.uniform(-tilt, tilt), rnd.uniform(-tilt, tilt), rnd.uniform(0, 6.28)))
+        _rigid(ob, "ACTIVE", "CONVEX_HULL", mass=max(0.02, vol * 2.4))
+        ob["kind"] = kind
+        ob["meta"] = json.dumps(meta)
+        new.append(ob)
+    for f in range(2, frames + 1):
+        scene.frame_set(f)
+    bpy.context.view_layer.update()
+    mats = [ob.matrix_world.copy() for ob in new]
+    out_list = []
+    for ob, mw in zip(new, mats):
+        meta = json.loads(ob["meta"])
+        out_list.append(dict(kind=ob["kind"], verts=[tuple(v.co) for v in ob.data.vertices], faces=[list(p.vertices) for p in ob.data.polygons],
+                             matrix=[list(r) for r in mw], **meta))
+    scene.frame_set(1)
+    for ob, mw in zip(new, mats):                                      # лягле заморожується: наступна хвиля бачить його нерухомим
+        ob.rigid_body.type = "PASSIVE"
+        ob.rigid_body.collision_shape = "CONVEX_HULL"
+        ob.matrix_world = mw
+    bpy.ops.wm.save_as_mainfile(filepath=path("w%d.blend" % k))
+    pickle.dump(out_list, open(path("pieces_%d.pkl" % k), "wb"))
+    z = [m.translation.z for m in mats]
+    print("WAVE", k, WAVES[k]["name"], len(new), "z", round(min(z), 2), round(max(z), 2))
+
+
+if __name__ == "__main__":
+    import sys
+    a = sys.argv[sys.argv.index("--") + 1:]
+    wave_main(int(a[0]), a[1])

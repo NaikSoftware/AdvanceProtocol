@@ -9,6 +9,7 @@ import lib
 import heap_sim
 from mathutils import Vector, Matrix
 import bmesh
+import bpy
 from lib import Builder, chunks, mound, wall_run, burn_ring, panel_wall, opening2, chip_slab, HeapSurface, heap_mound
 
 out = lib.out_dir()
@@ -568,7 +569,7 @@ def apron(b, tg, width=1.3, n=44):
 
 
 SIM_SEED = 11
-MOUND_K = 0.42                         # пагорб дрібної фракції під уламками — частка від повної висоти язика; решту набирають уламки
+MOUND_K = 0.28                         # пагорб дрібної фракції під уламками — частка від повної висоти язика; решту набирають уламки
 
 
 def sim_boxes(rem):
@@ -580,6 +581,36 @@ def _hash_pick(i, j):
     return ((i * 73856093) ^ (j * 19349663)) & 1
 
 
+def load_sim(boxes, mh):
+    """Результат хвиль симуляції (heap_sim.py, кожна хвиля окремим запуском Blender) із art-refs/heap_sim; світ задає world.json.
+    Немає результату чи світ змінився — світ записується заново, а хвилі треба прогнати (`HEAP_WORLD_ONLY=1`, далі heap_sim.sh)."""
+    import json
+    import pickle
+    import subprocess
+    d = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "art-refs", "heap_sim"))
+    os.makedirs(d, exist_ok=True)
+    gx0, gx1, gy0, gy1, st = -9.0, 9.0, -6.0, 20.0, 0.5
+    nx, ny = int(round((gx1 - gx0) / st)) + 1, int(round((gy1 - gy0) / st)) + 1
+    world = dict(seed=SIM_SEED, boxes=[list(bx) for bx in boxes], grid=[gx0, gx1, gy0, gy1, st], region=[-5.0, 5.0, -3.2, 4.4, 6.4, 9.5],
+                 heights=[round(mh(gx0 + i * st, gy0 + j * st), 3) for j in range(ny) for i in range(nx)], version=3)
+    wp = os.path.join(d, "world.json")
+    same = os.path.exists(wp) and json.load(open(wp)) == json.loads(json.dumps(world))
+    done = all(os.path.exists(os.path.join(d, "pieces_%d.pkl" % k)) for k in (1, 2, 3, 4, 5, 6))
+    if not (same and done):
+        for f in os.listdir(d):
+            os.remove(os.path.join(d, f))
+        json.dump(world, open(wp, "w"))
+        if os.environ.get("HEAP_WORLD_ONLY"):
+            print("WORLD", wp)
+            raise SystemExit(0)
+        for k in range(0, 7):                                        # кожна хвиля — окремий запуск Blender
+            subprocess.run([bpy.app.binary_path, "-b", "--factory-startup", "--python", heap_sim.__file__, "--", str(k), d], check=True, timeout=175)
+    pcs = []
+    for k in (1, 2, 3, 4, 5, 6):
+        pcs += pickle.load(open(os.path.join(d, "pieces_%d.pkl" % k), "rb"))
+    return {"pieces": pcs}
+
+
 def heap_from_sim(b, tg, tgw, boxes, rnd):
     """Завал із симуляції. 300-600 тіл падають із висоти пролому на пагорб: частина лягає всередині контуру секції, частина виштовхнута назовні
     з боку фасаду. Що лягло — стає високополігональною купою hi (для запікання нормалі, AO й кольору); у модель іде низькополігональна оболонка
@@ -587,15 +618,29 @@ def heap_from_sim(b, tg, tgw, boxes, rnd):
     import heap_sim
     from mathutils.bvhtree import BVHTree
     mh = lambda x, y: MOUND_K * tgw(x, y)
-    res = heap_sim.simulate(SIM_SEED, mh, boxes, (-5.0, 5.0, -3.0, 4.2, 6.4, 9.5, 6.5, 0.0), (10, 60, 480), frames=260, mound_grid=(-9.0, 9.0, -6.0, 20.0, 0.6))
+    res = load_sim(boxes, mh)
     pcs = res["pieces"]
+    vol = 0.0
     for d in pcs:
-        M = d["matrix"]
+        M = Matrix(d["matrix"])
+        d["matrix"] = M
+        bmv = bmesh.new()
+        vv = [bmv.verts.new(v) for v in d["verts"]]
+        for f in d["faces"]:
+            try:
+                bmv.faces.new([vv[i] for i in f])
+            except ValueError:
+                pass
+        d["vol"] = abs(bmv.calc_volume())
+        bmv.free()
+        vol += d["vol"]
         d["wv"] = [M @ Vector(v) for v in d["verts"]]
         d["c"] = M.translation.copy()
         d["tilt"] = math.degrees(math.acos(min(1.0, abs(M.col[2].z))))
+    rk = [max(d["size"]) for d in pcs if d["kind"] == "rock"]
     CHECKS["sim"] = dict(slabs=sum(1 for d in pcs if d["kind"] == "slab"), panels=sum(1 for d in pcs if d["kind"] == "panel"), total=len(pcs),
-                         holes=sum(1 for d in pcs if d.get("hole")))
+                         holes=sum(1 for d in pcs if d.get("hole")), boulders=sum(1 for r in rk if r >= 0.8), chunks=sum(1 for r in rk if 0.3 <= r < 0.8),
+                         fines=sum(1 for r in rk if r < 0.3), volume=round(vol, 1))
     # який шматок плит лишається окремою геометрією: найбільші, що лягли під 15-45°, горизонт найвище
     cand = sorted((d for d in pcs if d["kind"] == "slab" and 15.0 <= d["tilt"] <= 45.0 and d["c"].y > -4.5 and d["c"].z > 0.5), key=lambda d: -d["size"][0] * d["size"][1])
     kept = cand[:5]
@@ -862,8 +907,9 @@ def damaged():
 def validate(tg):
     """Кожна вимога до завалу й пролому — перевірка на побудованій геометрії; порушення валить збирання."""
     sim = CHECKS["sim"]
-    assert 300 <= sim["total"] <= 600, f"уламків у симуляції {sim['total']}"
+    assert 150 <= sim["boulders"] <= 200 and 500 <= sim["chunks"] <= 800 and 1000 <= sim["fines"] <= 1500, f"склад симуляції {sim}"
     assert 8 <= sim["slabs"] <= 12 and 30 <= sim["panels"] <= 60 and sim["holes"] >= 5, f"склад симуляції {sim}"
+    assert sim["volume"] >= 100.0, f"об'єм уламків {sim['volume']} м³ < 100"
     kept = CHECKS["kept"]
     assert 4 <= len(kept) <= 6, f"окремих плит {len(kept)}"
     for d in kept:
