@@ -47,6 +47,11 @@ int plough_id(ivec2 c) {
 // Слот класу двору (`YARD`, клітинки будівель): поле з плямами втоптаного ґрунту 2–6 м;
 // -1 — двору нема.
 uniform int yard_slot = -1;
+// Протоптані стежки (Footpaths.bake): R — знос стежки, G — витоптана пляма; 64 px на клітинку, мипмапи.
+// Маска публічна, туман її не множить; координати дошки, як у scar_size.
+uniform bool has_paths = false;
+uniform sampler2D path_map : filter_linear_mipmap_anisotropic, repeat_disable;
+uniform vec2 path_size = vec2(1.0);
 // Клітинка, що відповідає пікселю (0, 0) карт класів (від'ємна при відступі).
 uniform vec2 map_origin = vec2(0.0);
 // Властивості шарів macro_array (до 16; перші 8 — шари деталі, далі — підтипи):
@@ -75,8 +80,7 @@ uniform sampler2DArray macro_array : source_color, filter_linear_mipmap_anisotro
 // Варіантів макро на шар: індекс шару в macro_array = layer * macro_variants + variant.
 uniform int macro_variants = 1;
 uniform float mud_amount = 0.0;
-// Шрами бою (ScarMap): R — випалене під уламками, G — чаша вирви, B — вал викиду довкола неї,
-// A — попіл; 32 текселі на тайл дошки. Маска — розвідане
+// Шрами бою (ScarMap): R — випалене під уламками, A — попіл; 32 текселі на тайл дошки. Маска — розвідане
 // (`seen`) глядача, тексель на тайл: шрам на нерозвіданому був би доносом про бій (§3.5).
 uniform bool has_scars = false;
 uniform sampler2D scar_map : filter_linear, repeat_disable;
@@ -1298,6 +1302,27 @@ void fragment() {
 			alb = mix(alb, sand, bar_w * 0.85);
 		}
 
+		// Протоптана стежка (Footpaths): суха витоптана земля — світло-бура, мокра — темна глина (мокра
+		// темніша за довкілля); обидві зберігають дрібну текстуру ґрунту. Пляма біля воріт і сараю —
+		// колір грядок, 30–40 %. Дорога й вода стежку не беруть. Публічна: туман її не множить.
+		if (has_paths) {
+			vec2 puv = (p + 0.5) / path_size;
+			float pin = step(0.0, puv.x) * step(0.0, puv.y) * step(puv.x, 1.0) * step(puv.y, 1.0);
+			vec2 pm = texture(path_map, puv).rg * pin * (1.0 - road_cov);
+			// Стан ґрунту MUD мокрий і без дощу, як колії.
+			float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);
+			float lum = dot(alb, vec3(0.299, 0.587, 0.114));
+			// Зона прим'ятої, рідшої й світлішої трави довкола втоптаної середини: розмитий (mip) знос
+			// з рваним краєм; мокра — темніша, як і сама стежка.
+			float zone_src = textureLod(path_map, puv, 3.0).r * pin * (1.0 - road_cov);
+			float zone = smoothstep(0.04, 0.2, zone_src * (0.55 + 0.9 * vnoise(p * 9.0 + 3.0)));
+			alb = mix(alb, lum * mix(vec3(1.35, 1.22, 0.9), vec3(0.85, 0.78, 0.62), wet_p), zone * 0.55);
+			vec3 bare = mix(vec3(0.17, 0.115, 0.062), vec3(0.105, 0.068, 0.04), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
+			alb = mix(alb, bare, clamp(pm.r * 1.8, 0.0, 1.0));
+			alb = mix(alb, vec3(0.045, 0.026, 0.014) * mix(1.0, 0.6, wet_p) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.55);
+			rough = mix(rough, rough * 0.9, wet_p * clamp(pm.r * 1.8 + pm.g * 0.4, 0.0, 1.0));
+		}
+
 		float scar_dark = 0.0;
 		if (has_scars) {
 			vec2 suv = (p + 0.5) / scar_size;
@@ -1309,29 +1334,8 @@ void fragment() {
 			scar_dark = sc.r;
 			alb = mix(alb, vec3(0.004, 0.0037, 0.0034), sc.r * 0.95);
 			alb = mix(alb, vec3(0.16, 0.155, 0.15), sc.a * 0.6);
-			// Вирва: чаша обпаленого темного буро-сірого ґрунту (на екрані ~35–45 із 255 проти трави
-			// ~80) із власною зернистістю — борозни ріллі й трава всередині не тягнуться крізь неї;
-			// довкола — світліший піднятий вал свіжого викиду з розкиданими грудками.
-			float bowl = smoothstep(0.0, 0.75, sc.g);
-			vec3 soil = mix(vec3(0.032, 0.027, 0.020), vec3(0.020, 0.017, 0.013), sc.g) * (0.8 + 0.4 * vnoise(p * 13.0 + 5.0));
-			alb = mix(alb, soil, bowl);
-			float clods = smoothstep(0.84, 0.9, vnoise(p * 28.0 + 3.0)) * (1.0 - bowl);
-			alb = mix(alb, alb * 1.45 + vec3(0.022, 0.018, 0.012), sc.b * 0.85);
-			alb = mix(alb, vec3(0.018, 0.015, 0.011), clods * sc.b);
-			// Схил по двох текселях (0,5 м): по одному край чаші ставав різкою темною рискою.
-			vec2 st = 2.0 / (scar_size * 32.0);
-			vec2 g = vec2(texture(scar_map, suv + vec2(st.x, 0.0)).g - texture(scar_map, suv - vec2(st.x, 0.0)).g,
-					texture(scar_map, suv + vec2(0.0, st.y)).g - texture(scar_map, suv - vec2(0.0, st.y)).g);
-			vec2 gr = vec2(texture(scar_map, suv + vec2(st.x, 0.0)).b - texture(scar_map, suv - vec2(st.x, 0.0)).b,
-					texture(scar_map, suv + vec2(0.0, st.y)).b - texture(scar_map, suv - vec2(0.0, st.y)).b);
-			// Висота: чаша — западина, вал — горб; нормаль — мінус градієнт висоти. Усередині чаші
-			// вона замінює нормаль ріллі, а не додається до неї.
-			vec2 crater_n = (g * 0.8 - gr * 0.3) * texture(scar_seen, suv).r * inside;
-			nxy = mix(nxy, crater_n, bowl) + crater_n * (1.0 - bowl);
-			scar_dark = max(sc.r, sc.g * 0.6);
-			// Дно матове: гладше дно ловило відблиск неба й світлішало за поле.
-			rough = mix(rough, 1.0, max(max(sc.r, sc.b), bowl));
-			refl *= 1.0 - max(sc.r, bowl);
+			rough = mix(rough, 1.0, sc.r);
+			refl *= 1.0 - sc.r;
 		}
 		// Тінь хмари: плями ~10 клітинок, пливуть ~0.5 клітинки/с (4 м/с), тож пляма минає точку
 		// за 15–20 с. Край вузький (0.52–0.64), щоб тінь читалась плямою, а не загальною рябизною.

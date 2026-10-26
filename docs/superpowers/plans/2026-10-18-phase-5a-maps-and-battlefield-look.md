@@ -459,3 +459,80 @@ the hit; a destroyed vehicle burns, smokes and leaves a wreck mesh until `WreckR
 scorch decal; a destroyed squad leaves fallen figures and a scorch. Effects attach only to units
 the current player can see; scars respect the viewer's `seen`. Reference brief:
 `docs/art/damage-fx-research.md`.
+
+---
+
+### Task 16: Terrain under villages
+
+- [x] Fields nearly level on the board and in the ring (≤0.25 m within a cell)
+- [x] Every building on a levelled pad cut into the slope, none sunk to the windows or on a plinth
+- [x] Fences and garden beds follow the ground (section midpoint within 5 cm)
+
+### Task 17: House models and roofs
+
+Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom 8.
+
+- [x] One chimney per house, five chimney types; several window forms; trims in the wall tone
+- [x] Concrete fences weathered, three or more types; sheds 3; trailers 4
+- [x] Wet factor in `prop_fade` no longer lightens roofs; no colour roof tints
+- [x] Roof colours only graphite slate, dark cherry or red-brown, true dark green, galvanised grey, dark brown; no olive, ochre or mustard
+- [x] Every roof clearly darker than its wall: sRGB luma ratio ≤ 0.6
+- [ ] Not plastic, not grey; streaks under sills and a damp plinth band visible in battle
+- [ ] Glass reads as glass on intact houses; broken windows only on ruins, as a real opening
+- [ ] Hay and bridges matte; gardens tilled rows; chimney tops open and dark; ruin floors show debris, not grass
+- [ ] No village looks bought in one shop: three or more forms, ages and wear per category
+
+### Task 18: Damaged panel block
+
+- [x] Reference photos of real collapsed panel blocks from 40–55° above; heap height, plan shape and piece sizes measured
+- [ ] Heap shaped like the reference: a tongue below the breach, never a ring around the building
+- [ ] Breach with sagging slabs, ragged facade, plastered rooms, soot on the walls
+- [ ] Accepted side by side with the reference photo in a battle frame
+
+### Task 19: Power lines
+
+- [x] Trunks along roads to the outer edge of the ring; a pole on every bend; no lone poles
+- [x] A drop to every house on the board, under the eaves; no wire through a roof; 10 kV pole 10.7 m
+- [ ] No pole, transformer cabinet or guy anchor on the drawn road surface
+- [ ] 0.4 kV network is a tree along streets: no crossing spans, no closed loops, no pole that feeds nothing
+- [ ] One transformer per settlement, including the north Ridge ring hamlet
+- [ ] Wires stay visible against the river from every camera angle
+- [ ] Generator takes every rule constant from the game
+- [ ] In `feat/battlefield-dressing`
+
+### Task 20: Footpaths
+
+- [x] No path on the road; no segments or seams
+- [ ] A visible worn corridor porch → gate → verge at every yard, zoom 6–8
+- [ ] Reads as wear, not a rug or a pencil line
+- [ ] One or two winding paths to water per map, never across ploughed land or gardens
+- [ ] Paths to water go somewhere real (from a yard or road to a landing on the bank), not random stripes
+
+### Task 21: Bank, yard and meadow vegetation
+
+- [ ] No wind sway
+- [ ] Trees with branches, own silhouette per species, three or more forms; bare late crowns as dense twig networks
+- [ ] Fallen form is a low pile of broken branches; crushed bushes as leaning stems
+- [ ] Reed with plumes and cattail with heads, standing in the shallows
+- [ ] Reed and bushes in patches along some banks; trees or bushes in many yards, not all; a few lone bushes and trees on meadow, never on ploughed land
+- [ ] Accepted in battle frames on all three maps
+
+### Task 22: Forest into battle
+
+- [ ] Crowns on their trunks; per-point seeded scatter (`ForestScatter`)
+- [ ] Autumn on Ridge, River mixed with bare birches, dense enough to hide a tank
+- [ ] Placed on FOREST cells in battle; crowns over a visible unit fade with alpha, no dither
+
+### Task 23: Effects and light
+
+- [x] Explosions without craters; scorch under wrecks only on `seen`
+- [x] Chimney and ruin smoke as one continuous plume, no pulsing
+- [ ] Chimney smoke reads as volume, not flat strokes
+- [ ] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
+- [ ] First scroll across the map is smooth, no hitch
+
+### Task 24: New props in villages
+
+- [ ] Gates of several types facing the road
+- [ ] New fence, shed and trailer variants alternate between neighbours
+- [ ] Bales only at field edges; nothing within 0.4 tile of water

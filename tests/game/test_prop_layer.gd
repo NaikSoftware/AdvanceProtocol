@@ -377,7 +377,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	for inst in view.props().all_instances():
 		models[inst["model"]] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
-			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts"] and not String(n.name).ends_with("_fade"))
+			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts"] and not String(n.name).ends_with("_fade"))
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
@@ -851,16 +851,23 @@ func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) 
 
 
 ## Дахи будинків мають різні відтінки, руїни й двірське вбрання — без відтінку.
-func test_roofs_get_varied_tints() -> void:
-	var view: BoardView = _cached("crossroads")
-	var p: PropLayer = view.props()
-	var tints: Dictionary = {}
-	for inst in p.all_instances():
-		if _kind(inst["model"]) == PropLayer.Kind.STRUCTURE and not inst.get("yard", false):
-			tints[p._roof_tint(inst)] = true
-		elif _kind(inst["model"]) == PropLayer.Kind.RUIN:
-			assert_eq(p._roof_tint(inst), Color(1, 1, 1))
-	assert_gte(tints.size(), 3, "щонайменше три відтінки дахів")
+func test_roofs_are_untinted(p = use_parameters(MAPS)) -> void:
+	# Колір даху дає лише текстура моделі: множник відтінку зсував дахи в оливу й вохру.
+	var props: PropLayer = _cached(p).props()
+	for inst in props.all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			assert_eq(props._roof_tint(inst), Color(1, 1, 1), "%s: %s" % [p, inst["model"]])
+
+
+func test_roof_variety_comes_from_house_textures() -> void:
+	var atlases: Dictionary = {}
+	for m: StringName in PropLayer.MODELS:
+		if String(m).begins_with("house_h") and int(PropLayer.spec_of(m)["kind"]) == PropLayer.Kind.STRUCTURE:
+			var mat := (PropLayer.model(m)["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
+			if mat != null and mat.albedo_texture != null:
+				atlases[mat.albedo_texture.resource_path] = true
+	assert_gte(atlases.size(), 3, "щонайменше три хати зі своїм атласом (і своїм дахом)")
 
 
 ## Паркан і дрібний пропс не лягають на дорожнє покриття (осі й ширина дороги, не вид клітинки).
@@ -977,7 +984,7 @@ func test_buildings_sit_on_the_relief(p = use_parameters(MAPS)) -> void:
 	assert_gt(checked, 5, "%s: є будівлі" % p)
 
 
-## Секція паркану лежить на рельєфі обома кінцями (нахил за схилом, не висить).
+## Секція паркану лежить на рельєфі обома кінцями й серединою (нахил за схилом, не висить).
 func test_fences_follow_the_relief(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var th: TerrainHeight = view._height
@@ -989,6 +996,10 @@ func test_fences_follow_the_relief(p = use_parameters(MAPS)) -> void:
 		for sgn: float in [-1.0, 1.0]:
 			var end: Vector3 = t * Vector3(sgn * half, 0.0, 0.0)
 			assert_almost_eq(end.y, th.at(end.x, end.z), 0.03, "%s: паркан на %s висить" % [p, inst["cells"]])
+		# Середина секції — не вище й не нижче ґрунту більш ніж на 5 см (край майданчика будівлі).
+		var mid: Vector3 = t.origin
+		assert_almost_eq(mid.y, th.at(mid.x, mid.z), PropLayer.FENCE_SAG + 0.001,
+				"%s: середина паркану (%.2f; %.2f) відходить від ґрунту на %.2f м" % [p, mid.x, mid.z, (mid.y - th.at(mid.x, mid.z)) / TerrainHeight.M])
 
 
 ## Будівлі, паркани й стовпи не ближче WATER_CLEAR до води й болота: на березі вони висіли б над руслом.
@@ -1067,7 +1078,7 @@ func test_chimney_tops_and_ruin_centres() -> void:
 		return i["model"] in [&"house_h5", &"house_h6"] and not i.get("yard", false) \
 				and Rect2i(0, 0, 26, 22).has_point((i["cells"] as Array)[0]))
 	var tops: Array[Vector3] = props.chimney_tops()
-	assert_gte(tops.size(), houses.size(), "у кожної хати дошки — щонайменше один димар")
+	assert_eq(tops.size(), houses.size(), "на кожній хаті дошки рівно один димар")
 	for t in tops:
 		var near := false
 		for hs: Dictionary in houses:
@@ -1078,6 +1089,29 @@ func test_chimney_tops_and_ruin_centres() -> void:
 	assert_eq(ruins.size(), 6, "шість руїн на дошці Перехрестя")
 	for r in ruins:
 		assert_almost_eq(r.y, view._height.at(r.x, r.z), 0.1)
+
+
+## Руїна тліє з пролому на рівні даху — над землею, усередині обрису руїни, — а не біля
+## уцілілого димаря.
+func test_ruin_smoke_rises_from_the_breach_at_roof_level() -> void:
+	for name in MAPS:
+		var props: PropLayer = _cached(name).props()
+		var m: MapData = _map(name)
+		var pts: Array[Vector3] = props.ruin_smoke_points()
+		var centres: Array[Vector3] = props.ruin_centres()
+		var boxes: Array[AABB] = []
+		for inst in props.all_instances():
+			if int(PropLayer.spec_of(inst["model"])["kind"]) == PropLayer.Kind.RUIN \
+					and Rect2i(0, 0, m.width, m.height).has_point((inst["cells"] as Array)[0]):
+				boxes.append((inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB))
+		assert_eq(pts.size(), centres.size(), name)
+		assert_eq(pts.size(), boxes.size(), name)
+		for i in pts.size():
+			var p: Vector3 = pts[i]
+			assert_gt(p.y, centres[i].y + 0.1, "%s: над землею, на рівні даху" % name)
+			assert_true(p.x > -0.5 and p.z > -0.5 and p.x < m.width - 0.5 and p.z < m.height - 0.5, "%s: на дошці" % name)
+			assert_true(p.x >= boxes[i].position.x and p.x <= boxes[i].end.x and p.z >= boxes[i].position.z and p.z <= boxes[i].end.z,
+					"%s: усередині обрису руїни" % name)
 
 
 ## Пояс бруду довкола кожної хати дошки — одним вузлом.
@@ -1425,3 +1459,19 @@ func test_yards_are_at_most_l_shaped(p = use_parameters(MAPS)) -> void:
 			if cnt == 1 or cnt == 3 or (cnt == 2 and a == d):
 				corners += 1
 		assert_lte(corners, 6, "%s: двір хати %s — сходинки" % [p, home["house"]])
+
+
+## Плитка грядок лежить на ґрунті: кожен кут і внутрішні точки (сітка 5×5) — на висоті землі плюс
+## підйом плитки (0.004) з допуском 3 см, тож рельєф не ріже город на клапті.
+func test_garden_beds_lie_on_the_ground(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var th: TerrainHeight = view._height
+	var beds: Array[Transform3D] = view.props().garden_beds()
+	assert_gt(beds.size(), 0, "%s: є городи" % p)
+	for i in beds.size():
+		var t: Transform3D = beds[i]
+		for j in 5:
+			for k in 5:
+				var v: Vector3 = t * Vector3(-0.5 + j * 0.25, 0.0, -0.5 + k * 0.25)
+				assert_almost_eq(v.y - th.at(v.x, v.z), 0.004, 0.03 * TerrainHeight.M,
+						"%s: город %d у (%.2f; %.2f) відходить від ґрунту на %.2f м" % [p, i, v.x, v.z, (v.y - 0.004 - th.at(v.x, v.z)) / TerrainHeight.M])

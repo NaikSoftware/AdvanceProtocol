@@ -24,11 +24,14 @@ const DECK_LIFT: float = 0.01
 const _MICRO_AMP: float = 0.35 * M
 const _BROAD_AMP: float = 1.7 * M
 ## Поле майже рівне: хвиля рівнини на клітинках FIELD — ця частка (лука ≤ ~0.2 м у клітинці,
-## рілля вдвічі рівніша). Дорога й майданчик будівлі — теж рівна земля. Повна хвиля
-## повертається за `_FLAT_RAMP` клітинок уже в сусідніх клітинках (ліс, пагорб, болото), тож
-## клітинка поля рівна до самого краю, а обриву на межі нема.
+## рілля вдвічі рівніша). Дорога й майданчик будівлі — теж рівна земля. Хвиля повертається за
+## `_FLAT_RAMP` клітинок уже в сусідніх клітинках (у лісі — лише до `_FLAT_FOREST`, на пагорбі й
+## болоті — повна), тож клітинка поля рівна до самого краю, а обриву на межі нема.
 const _FLAT_MEADOW: float = 0.12
 const _FLAT_PLOUGHED: float = 0.06
+## Ліс — нерівний, але без горбів: повна хвиля під кронами без дерев поруч (край лісу, прогалина)
+## читалась темною плямою схилу від сонця серед рівного поля.
+const _FLAT_FOREST: float = 0.35
 const _FLAT_RAMP: float = 1.5
 const _HILL_MIN: float = 3.5 * M
 const _HILL_VAR: float = 2.0 * M
@@ -98,6 +101,13 @@ const _COURSE_ROUND: float = 0.4
 ## білінійна висота на краю сліду брала б відлік поза майданчиком) і спад до рельєфу довкола.
 const _PAD_MARGIN: float = 0.125
 const _PAD_BLEND: float = 0.5
+const _PAD_BLEND_MAX: float = 1.5
+## Ширина спаду на одиницю глибини зрізу: найкрутіше місце smoothstep — 1.5 · глибина / ширина,
+## тож 3.2 дає ≤ ~25°.
+const _PAD_SLOPE: float = 3.2
+## Темна волога смуга біля підніжжя зрізу: ширина (клітинки) і найбільша поправка кривизни.
+const _PAD_FOOT_WIDTH: float = 0.5
+const _PAD_FOOT: float = 0.6
 
 ## Поточна карта висот бою. Одна на процес: BoardView ставить її в build() і знімає, виходячи
 ## зі сцени; без неї (тести, меню) все лежить на y = 0.
@@ -144,6 +154,12 @@ var _pad_levels: PackedFloat32Array = PackedFloat32Array()
 ## Майданчики додано, а рельєф ще не перераховано: перерахунок — при першому читанні висоти, тож
 ## будівлі, поставлені поспіль, коштують один перерахунок, а не по одному на кожну.
 var _pads_dirty: bool = false
+## Ширина спаду кожного майданчика (клітинки).
+var _pad_blend: PackedFloat32Array = PackedFloat32Array()
+## Майданчики, з якими востаннє рахувалися кривизна й текстура.
+var _finished_pads: Array[Rect2] = []
+## Скільки разів майданчики перезалили текстуру висот (перевірка в тестах).
+var texture_updates: int = 0
 
 
 ## seed — з імені карти (BoardView.relief_seed); та сама карта дає той самий рельєф.
@@ -643,30 +659,44 @@ func _apply_pads() -> void:
 					acc += Vector2(_h_base[j * cols + i], 1.0)
 		sums[group[a]] = acc
 	_pad_levels.resize(n)
+	_pad_blend.resize(n)
 	for a in n:
 		var acc: Vector2 = sums[group[a]]
 		var c: Vector2 = _pads[a].get_center()
 		_pad_levels[a] = maxf(acc.x / acc.y if acc.y > 0.0 else _h_base_at(c.x, c.y), WATER_LEVEL + 0.3 * M)
+		# Спад тим ширший, чим глибше майданчик урізаний у схил: найкрутіше місце переходу ≤ ~25°.
+		var dev := 0.0
+		var r: Rect2 = _pads[a].grow(grow)
+		for j in range(_sample_lo(r.position.y, fs, rows), _sample_hi(r.end.y, fs, rows) + 1):
+			for i in range(_sample_lo(r.position.x, fs, cols), _sample_hi(r.end.x, fs, cols) + 1):
+				if r.has_point(Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs)) and _h_base[j * cols + i] >= WATER_LEVEL:
+					dev = maxf(dev, absf(_h_base[j * cols + i] - _pad_levels[a]))
+		_pad_blend[a] = clampf(_PAD_SLOPE * dev, _PAD_BLEND, _PAD_BLEND_MAX)
 	_h = _h_base.duplicate()
 	# Ядра спершу: відлік ядра — точно висота тераси, і спад сусіднього майданчика його не зрушить.
 	var core := PackedByteArray()
 	core.resize(_h.size())
-	for pass_core in [true, false]:
+	for pass_core: bool in [true, false]:
 		for a in n:
 			var r: Rect2 = _pads[a].grow(grow)
-			var outer: Rect2 = r.grow(_PAD_BLEND)
+			var outer: Rect2 = r.grow(_pad_blend[a])
 			for j in range(_sample_lo(outer.position.y, fs, rows), _sample_hi(outer.end.y, fs, rows) + 1):
 				for i in range(_sample_lo(outer.position.x, fs, cols), _sample_hi(outer.end.x, fs, cols) + 1):
 					var k: int = j * cols + i
 					if core[k] == 1 or _h_base[k] < WATER_LEVEL:
 						continue
-					var q: Vector2 = (Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs) - r.get_center()).abs() - r.size * 0.5
-					var dist: float = Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length()
+					var dist: float = _rect_dist(r, Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs))
 					if pass_core and dist == 0.0:
 						_h[k] = _pad_levels[a]
 						core[k] = 1
-					elif not pass_core and dist < _PAD_BLEND:
-						_h[k] = lerpf(_h[k], _pad_levels[a], 1.0 - smoothstep(0.0, _PAD_BLEND, dist))
+					elif not pass_core and dist < _pad_blend[a]:
+						_h[k] = lerpf(_h[k], _pad_levels[a], 1.0 - smoothstep(0.0, _pad_blend[a], dist))
+
+
+## Відстань від точки до прямокутника (0 усередині).
+static func _rect_dist(r: Rect2, p: Vector2) -> float:
+	var q: Vector2 = (p - r.get_center()).abs() - r.size * 0.5
+	return Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length()
 
 
 ## Перший (lo) і останній (hi) відлік уздовж осі з n відліків, що покривають координату v.
@@ -687,10 +717,16 @@ func _h_base_at(x: float, z: float) -> float:
 
 
 ## Після майданчиків: кривизна, межі висот і текстура (та сама, що вже в шейдерах землі й води).
+## Ті самі майданчики, що й минулого разу (перебудова клітинок посеред партії), — рельєф той самий,
+## і кривизна з текстурою не перераховуються.
 func finish_pads() -> void:
 	if _pads_dirty:
 		_apply_pads()
+	if _pads == _finished_pads:
+		return
+	_finished_pads = _pads.duplicate()
 	_bake_curvature()
+	_mark_cut_feet()
 	_min = INF
 	_max = -INF
 	for v in _h:
@@ -698,6 +734,27 @@ func finish_pads() -> void:
 		_max = maxf(_max, v)
 	if _texture != null:
 		_texture.update(image())
+		texture_updates += 1
+
+
+## Підніжжя зрізу з горішнього боку майданчика — смуга ~0.5 клітинки вологого темнішого ґрунту
+## (кривизна < 0 — запечене затінення западини в шейдері землі): інакше вирівняний майданчик на
+## схилі не читається зовсім. Сила росте з глибиною зрізу до 1 м.
+func _mark_cut_feet() -> void:
+	var fs: float = float(samples)
+	var grow: float = maxf(_PAD_MARGIN, 1.0 / fs + 0.01)
+	for a in _pads.size():
+		var r: Rect2 = _pads[a].grow(grow)
+		var outer: Rect2 = r.grow(_PAD_FOOT_WIDTH)
+		for j in range(_sample_lo(outer.position.y, fs, rows), _sample_hi(outer.end.y, fs, rows) + 1):
+			for i in range(_sample_lo(outer.position.x, fs, cols), _sample_hi(outer.end.x, fs, cols) + 1):
+				var k: int = j * cols + i
+				var cut: float = _h_base[k] - _h[k]
+				var dist: float = _rect_dist(r, Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs))
+				if cut <= 0.0 or dist == 0.0 or dist >= _PAD_FOOT_WIDTH:
+					continue
+				var w: float = (1.0 - smoothstep(0.0, _PAD_FOOT_WIDTH, dist)) * clampf(cut / M, 0.0, 1.0)
+				_curv[k] = maxf(_curv[k] - _PAD_FOOT * w, -1.0)
 
 
 ## Річка на дошці — та сама, що й без кільця: вісь світу інша (скелет довшої маски, медіана
@@ -823,31 +880,54 @@ static func _edge_hill_dip(ex: float, ez: float) -> float:
 
 
 ## Множник хвилі рівнини на кожному відліку: на полі `_FLAT_MEADOW` чи `_FLAT_PLOUGHED` (межа
-## луки й ріллі розмита на 0.3 клітинки), на дорозі й майданчику — як на луці, поза ними росте
-## до 1 за `_FLAT_RAMP` клітинок від найближчої рівної клітинки. Кільце — так само: поле є полем і
-## за краєм дошки.
+## луки й ріллі розмита на 0.3 клітинки), на дорозі й майданчику — як на луці; поза ними росте за
+## `_FLAT_RAMP` клітинок від найближчої такої клітинки — у лісі до `_FLAT_FOREST`, на пагорбі й
+## болоті до 1. Кільце — так само: поле є полем і за краєм дошки.
 func _flatness(board: Board, surface: PackedByteArray, fs: float) -> PackedFloat32Array:
 	var bw: int = board_width
 	var bh: int = board_height
+	# Вид і множник — раз на клітинку, відлік лише бере їх за індексом своєї клітинки.
+	var cell_k := PackedFloat32Array()
+	var cell_level := PackedFloat32Array()
+	var cell_far := PackedFloat32Array()
+	cell_k.resize(bw * bh)
+	cell_level.resize(bw * bh)
+	cell_far.resize(bw * bh)
+	for cz in bh:
+		for cx in bw:
+			var c: int = cz * bw + cx
+			var kind: int = board.kind_at(Vector2i(cx, cz))
+			var plough: bool = kind == Terrain.Kind.FIELD and surface.size() == bw * bh \
+					and surface[c] == MapData.FieldSurface.PLOUGHED
+			cell_k[c] = _FLAT_PLOUGHED if plough else _FLAT_MEADOW
+			# Куди росте множник далеко від рівної землі: ліс — до `_FLAT_FOREST`, решта — до 1.
+			cell_far[c] = _FLAT_FOREST if kind == Terrain.Kind.FOREST else 1.0
+			var flat_kind: bool = kind == Terrain.Kind.FIELD or kind == Terrain.Kind.ROAD \
+					or kind == Terrain.Kind.BUILDING or kind == Terrain.Kind.RUBBLE
+			cell_level[c] = 0.0 if flat_kind else -1.0
+	var col_cell := PackedInt32Array()
+	col_cell.resize(cols)
+	for i in cols:
+		col_cell[i] = clampi(roundi(-0.5 - margin + float(i) / fs), 0, bw - 1)
 	var level := PackedFloat32Array()
 	var k_map := PackedFloat32Array()
+	var far := PackedFloat32Array()
 	level.resize(cols * rows)
 	k_map.resize(cols * rows)
+	far.resize(cols * rows)
 	for j in rows:
-		var cz: int = clampi(roundi(-0.5 - margin + float(j) / fs), 0, bh - 1)
+		var row: int = clampi(roundi(-0.5 - margin + float(j) / fs), 0, bh - 1) * bw
 		for i in cols:
-			var cx: int = clampi(roundi(-0.5 - margin + float(i) / fs), 0, bw - 1)
-			var kind: int = board.kind_at(Vector2i(cx, cz))
-			var k: int = j * cols + i
-			var plough: bool = kind == Terrain.Kind.FIELD and surface.size() == bw * bh \
-					and surface[cz * bw + cx] == MapData.FieldSurface.PLOUGHED
-			k_map[k] = _FLAT_PLOUGHED if plough else _FLAT_MEADOW
-			var flat_kind: bool = kind in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
-			level[k] = 0.0 if flat_kind else -1.0
+			var c: int = row + col_cell[i]
+			k_map[j * cols + i] = cell_k[c]
+			level[j * cols + i] = cell_level[c]
+			far[j * cols + i] = cell_far[c]
 	var dist: PackedFloat32Array = _inner_distance(level)
 	k_map = _blur(k_map, 0.3 * fs, 0.3 * fs)
+	# Межа лісу й пагорба чи болота — без сходинки множника; на полі (dist = 0) far не діє.
+	far = _blur(far, 0.3 * fs, 0.3 * fs)
 	for k in k_map.size():
-		k_map[k] = lerpf(k_map[k], 1.0, smoothstep(0.0, _FLAT_RAMP, dist[k]))
+		k_map[k] = lerpf(k_map[k], far[k], smoothstep(0.0, _FLAT_RAMP, dist[k]))
 	return k_map
 
 
