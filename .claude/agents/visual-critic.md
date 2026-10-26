@@ -69,13 +69,23 @@ Give the evidence for every score below 5 — a location in the frame and what y
    (stones poke through mud and grass rather than being painted on), ambient occlusion in crevices,
    parallax where used. Flat-looking relief is a finding.
 5. **Animation** (sequences only) — motion present where it should be (rain, water, smoke, foliage),
-   believable speed at real scale, no popping, no looping seam; still things stay still.
+   believable speed at real scale, no popping, no looping seam; still things stay still. Fire,
+   smoke and explosions are judged on a real-speed sequence at the default game zoom (8), next to
+   a reference frame from a similar camera; slow-motion or magnified crops are supporting evidence
+   only — the owner rejected a fire that had passed on crops alone.
 6. **3D models** — silhouette from the game angle, proportions and scale, texel density matching
    the ground's, no floating or sinking, no visible LOD pops, materials consistent with the setting.
 7. **Lighting** — one coherent overcast key, believable shadows, wet speculars where it is wet,
    no unexplained bright/dark patches, reflections plausible and never leaking hidden information.
 8. **Mood and likeness** — compared side by side with the target frame: palette, value range,
    wetness, atmosphere (haze, rain), how much of the target's feeling the frame has.
+9. **Plausibility of placement** — for every placed object ask "would someone have put it there?"
+   A fence encloses a yard on soil or grass and never stands on asphalt or across a road or
+   driveway; a trailer, a bale stack or a machine stands in a yard, by a shed or at a field edge,
+   alone or in a loose pair, never in a parade row of identical copies; poles follow a road or a
+   line between houses; a shed belongs to a house; a bridge carries a road. Identical objects in a
+   regular row, an object on a road surface, a yard with no house, or a cluster with no reason is a
+   finding, at least **Major**. Trace each suspicious object in the frame and name it.
 
 </criteria>
 
