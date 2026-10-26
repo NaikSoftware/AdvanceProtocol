@@ -21,10 +21,11 @@ def want(n):
 
 
 def sills(b, x, y, sgn, w, z, axis):
+    """Відлив на 5 см далі за наличник (0.12 м), тож під ним лягає тінь."""
     if axis == "y":
-        b.box(x, y + 0.07 * sgn, z - 0.1, w + 0.3, 0.14, 0.1, "step")
+        b.box(x, y + 0.085 * sgn, z - 0.08, w + 0.34, 0.17, 0.08, "step")
     else:
-        b.box(x + 0.07 * sgn, y, z - 0.1, 0.14, w + 0.3, 0.1, "step")
+        b.box(x + 0.085 * sgn, y, z - 0.08, 0.17, w + 0.34, 0.08, "step")
 
 
 def blown(b, x, y, sgn, z, w, h, axis="y"):
@@ -35,10 +36,14 @@ def blown(b, x, y, sgn, z, w, h, axis="y"):
     else:
         quad = [(x + e, y - w / 2, z), (x + e, y + w / 2, z), (x + e, y + w / 2, z + h), (x + e, y - w / 2, z + h)]
     if axis == "y":
-        opening2(b, "y", y, x, z, w, h, sgn)
+        opening2(b, "y", y, x, z, w, h, sgn, streak=0.0, sooty=True)
     else:
-        opening2(b, "x", x, y, z, w, h, sgn)
-    burn_ring(b, axis, y if axis == "y" else x, x if axis == "y" else y, z, w, h, sgn, g_side=0.2, g_bot=0.1, g_top=0.45)
+        opening2(b, "x", x, y, z, w, h, sgn, streak=0.0, sooty=True)
+    burn_ring(b, axis, y if axis == "y" else x, x if axis == "y" else y, z, w, h, sgn, g_side=0.3, g_bot=0.1, g_top=1.9, ztop=2.95, mat="wall_plaster_dm")
+    lib.pocks(b, axis, y if axis == "y" else x, sgn, x if axis == "y" else y, z + h / 2, 1.6, 10, int(abs(x * 7 + y * 13)) + 3, zmin=0.55, zmax=2.9)
+
+
+RING = ["trim"]                          # матеріал наличника поточного будинку
 
 
 def win_front(b, y, sgn, xs, z, w=1.2, h=1.4, bl=()):
@@ -47,6 +52,7 @@ def win_front(b, y, sgn, xs, z, w=1.2, h=1.4, bl=()):
             blown(b, x, y, sgn, z, w, h)
         else:
             b.window(("y", y, sgn), x, z, w, h)
+            lib.window_ring(b, "y", y, sgn, x, z, w, h, mat=RING[0])
         sills(b, x, y, sgn, w, z, "y")
 
 
@@ -56,11 +62,18 @@ def win_side(b, x, sgn, ys, z, w=1.2, h=1.4, bl=()):
             blown(b, x, y, sgn, z, w, h, "x")
         else:
             b.window(("x", x, sgn), y, z, w, h)
+            lib.window_ring(b, "x", x, sgn, y, z, w, h, mat=RING[0])
         sills(b, x, y, sgn, w, z, "x")
 
 
 def gutter(b, x0, x1, y, z):
     b.box((x0 + x1) / 2, y, z, x1 - x0, 0.14, 0.14, "gutter")
+
+
+def pipe(b, x, y, sgn, ov, eave):
+    """Водостічна труба на 8 см від стіни y і коліно до ринви, що висить на ov за стіною."""
+    lib.downpipe(b, x, y + 0.08 * sgn, eave - 0.45)
+    b.box(x, y + sgn * (0.08 + ov) / 2, eave - 0.45, 0.1, ov - 0.04, 0.1, "gutter")
 
 
 def post(b, x, y, z0, h):
@@ -70,11 +83,14 @@ def post(b, x, y, z0, h):
 # ----------------------------------------------------------------------- H1
 def house1(hit=False):
     lib.reset()
+    lib.palette(wall=(0.80, 0.68, 0.47), roof="asb", eave=3.0, chim="ch_grey")
+    RING[0] = "trim"
     b = Builder()
     L, Db, EAVE, RIDGE = 10.0, 6.4, 3.0, 6.5      # корпус 10 x 6.4, веранда ще 1.6 м (разом 8 м)
     y0, y1 = -4.0, 2.4
-    b.box(0, (y0 + y1) / 2, 0, L, Db, 0.5, "brick_grey")
+    b.box(0, (y0 + y1) / 2, 0, L + 0.08, Db + 0.08, 0.5, "brick_grey")          # цоколь на 4 см за стіною
     b.box(0, (y0 + y1) / 2, 0.5, L - 0.02, Db - 0.02, EAVE - 0.5, "wall_plaster")
+    lib.quoins(b, ([] if hit else [(-L / 2, y0, 1, 1)]) + [(L / 2, y0, -1, 1), (L / 2, y1, -1, -1)], 0.5, EAVE - 0.05)   # біля пролому кут обсипався
     ym = (y0 + y1) / 2
     d = Db / 2
     OV = 0.5
@@ -120,16 +136,16 @@ def house1(hit=False):
                 fr_ = xx - ii
                 u_in = edge[ii] * (1 - fr_) + edge[ii + 1] * fr_
                 p_in = P(u_in, v)
-                p_out = P(u_in + sgn_ * rr.uniform(0.012, 0.045), min(1.0, v + rr.uniform(0.0, 0.03)))
-                cur = (p_in, p_out, rr.uniform(0.08, 0.16), 0.42 + rr.uniform(-0.03, 0.02))
+                p_out = P(u_in + sgn_ * rr.uniform(0.045, 0.1), min(1.0, v + rr.uniform(0.0, 0.05)))
+                cur = (p_in, p_out, rr.uniform(0.08, 0.14), 1.0)
                 if prev is not None:
                     pts = [prev[0], cur[0], cur[1], prev[1]]
                     pts = [(x, y - 0.025, z + 0.03) for (x, y, z) in pts]
                     tn_ = [prev[2], cur[2], cur[3], prev[3]]
                     n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
                     if n_.z < 0:
-                        pts, tn_ = pts[::-1], tn_[::-1]
-                    b.soot(pts, tn_, 1)
+                        n_ = -n_
+                    b.decal(pts, tn_, "fc_roof_xh_dm", tuple(n_.normalized()))      # кіптява множником на шифері: згасає в колір даху
                 prev = cur
         for k in range(16):                                                       # язики сажі вгору від верхніх країв розриву, різної довжини
             side_ = rr.choice((-1, 1))
@@ -142,11 +158,11 @@ def house1(hit=False):
             w_ = rr.uniform(0.01, 0.03)
             pts = [P(u0_ - w_, v0), P(u0_ + w_, v0), P(u0_ + w_ * 0.4 - side_ * 0.01, min(1.0, v0 + ln_)), P(u0_ - w_ * 0.4 - side_ * 0.01, min(1.0, v0 + ln_))]
             pts = [(x, y - 0.025, z + 0.03) for (x, y, z) in pts]
-            tn_ = [rr.uniform(0.1, 0.16), rr.uniform(0.1, 0.16), 0.42, 0.42]
+            tn_ = [rr.uniform(0.1, 0.16), rr.uniform(0.1, 0.16), 0.7, 0.7]
             n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
             if n_.z < 0:
-                pts, tn_ = pts[::-1], tn_[::-1]
-            b.soot(pts, tn_, 1)
+                n_ = -n_
+            b.decal(pts, tn_, "fc_roof_xh_dm", tuple(n_.normalized()))
         for edge, sgn_ in ((uL, -1), (uR, 1)):                                    # переламані рейки стирчать у розрив
             for i in range(1, nh):
                 if rr.random() < 0.45:
@@ -170,6 +186,14 @@ def house1(hit=False):
                 break
             b.beam(P(u, 0.06 + 0.1 * rr.random()), P(u + 0.01, 0.9 - 0.25 * rr.random()), 0.14, "timber_hit", 0.2)
         b.beam(P(0.32, 0.55), P(0.68, 0.6), 0.14, "timber_hit", 0.2)
+        for k in range(4):                                                        # уламки на скаті: шифер, цегла димаря, штукатурка — вибух розкидав їх навколо розриву
+            side_ = rr.choice((-1, 1))
+            v_ = rr.uniform(0.05, 0.8)
+            ii = min(nh - 1, int(v_ * nh))
+            u_ = (uL[ii] - rr.uniform(0.02, 0.12)) if side_ < 0 else (uR[ii] + rr.uniform(0.02, 0.12))
+            q = P(u_, v_)
+            sz = rr.uniform(0.15, 0.3)
+            b.chunk(q[0], q[1] - 0.02, q[2] + sz * 0.25, sz, rr.choice(("chunk_brick", "chunk_plaster", "chunk_concrete")), rr, tone=(0.55, 0.9))
         # порожнина: один неосвітлений майже чорний чотирикутник над верхами стін (ними плашка штукатурки світилась)
         b.poly([(-4.7, y0 + 0.1, EAVE + 0.12), (4.7, y0 + 0.1, EAVE + 0.12), (4.7, y1 - 0.1, EAVE + 0.12), (-4.7, y1 - 0.1, EAVE + 0.12)][::-1], "cavity")
         for k in range(9):                                                        # балки перекриття горища: тьмяно видно крізь розрив
@@ -183,7 +207,7 @@ def house1(hit=False):
         for i in range(nst):                                                      # смужки однакової глибини: тон плавно переходить у тон стіни, без чорного краю
             dep = 1.25 + rr.uniform(-0.05, 0.05)
             x0_, x1_ = xl + i * w_, xl + (i + 1) * w_
-            b.soot([(x0_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE), (x0_, y0 - 0.03, EAVE)][::-1], (0.2, 0.2, 0.6, 0.6), 1)
+            b.decal([(x0_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE), (x0_, y0 - 0.03, EAVE)], (1.0, 1.0, 0.12, 0.12), "wall_plaster_dm", (0, -1, 0))
     if not hit:
         b.box(0, ym, RIDGE, xr1 - xr0 + 0.6, 0.3, 0.16, "gutter")
     b.chimney(2.2, -0.2, 4.4, 0.75, 3.3, "brick_face")        # цегляний димар
@@ -204,12 +228,14 @@ def house1(hit=False):
         gutter(b, xa + (xb - xa) * 0.72, L / 2 + OV, y0 - OV, EAVE - 0.3)
     else:
         gutter(b, -L / 2 - OV, L / 2 + OV, y0 - OV, EAVE - 0.3)
+    pipe(b, L / 2 - 0.35, y0, -1, OV, EAVE)
     bh = None
     if hit:
         rr = random.Random(54)
         plan_ = [lib.HeapSurface(-0.6, -3.95, 2.6, 0.55, 1.0, 51, bumps=6, lip=0.2, wob=0.15, lump=0.08, hummocks=3, hum_amp=0.5, sq=2.0, noise=1.5, feather=0.5)]
         bh = lib.rubble_heaps(b, plan_, 54, dens=9.0, skirt=0.25)
         lib.rubble_lumps(b, plan_, rr, 30, tmin=0.1, tmax=0.95, size=(0.2, 0.5))
+    lib.weather(b, "wall_plaster", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE), ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=3)
     lib.finish(b, "house_h1_hit" if hit else "house_h1", out, tri_limit=2600, footprint=(2, 1), anchor=(0, 0), hi=bh)
 
 
@@ -217,9 +243,11 @@ def house1(hit=False):
 def house2():
     lib.reset()
     b = Builder()
+    lib.palette(roof="brown", eave=3.2, chim="ch_orange", row=0.25, frame=1)
+    RING[0] = "brick_face"
     L, D, EAVE, RIDGE = 11.0, 9.0, 3.2, 7.0
     y0, y1 = -D / 2, D / 2
-    b.box(0, 0, 0, L, D, 0.5, "brick_grey")
+    b.box(0, 0, 0, L + 0.08, D + 0.08, 0.5, "brick_grey")
     b.box(0, 0, 0.5, L - 0.02, D - 0.02, EAVE - 0.5, "brick_face")
     b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tile_brown", "brick_face", ridge_axis="x", overhang=0.4)
     b.box(0, 0, RIDGE, L + 0.8, 0.3, 0.18, "gutter")
@@ -236,17 +264,21 @@ def house2():
     b.box(L / 2 + 0.3, 0.0, 5.0, 0.15, 0.7, 0.7, "pvc")
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y1 + 0.4, EAVE - 0.3)
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y0 - 0.4, EAVE - 0.3)
-    lib.finish(b, "house_h2", out, tri_limit=2200, footprint=(2, 2))
+    pipe(b, L / 2 - 0.35, y0, -1, 0.4, EAVE)
+    lib.weather(b, "brick_face", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE), ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=5, patches=False)
+    lib.finish(b, "house_h2", out, tri_limit=2200, footprint=(2, 2), target_cm=3.6)
 
 
 # ----------------------------------------------------------------------- H3
 def house3():
     lib.reset()
     b = Builder()
+    lib.palette(wall=(0.68, 0.71, 0.58), roof="terracotta", eave=6.0, row=0.3, frame=2, trim=(0.80, 0.80, 0.78))
+    RING[0] = "trim"
     L, D, EAVE, RIDGE = 10.0, 10.0, 6.0, 9.5
     y0, y1 = -D / 2, D / 2
     OV = 0.5
-    b.box(0, 0, 0, L, D, 1.0, "brick_grey")
+    b.box(0, 0, 0, L + 0.08, D + 0.08, 1.0, "brick_grey")
     b.box(0, 0, 1.0, L - 0.02, D - 0.02, EAVE - 1.0, "wall_plaster")
     b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tile_graphite", "wall_plaster", ridge_axis="x", overhang=OV)
     b.box(0, 0, RIDGE, L + 1.0, 0.3, 0.18, "gutter")
@@ -261,7 +293,7 @@ def house3():
     for (xa_, sa, xb_, sb) in ((-2.6, 1.15, 2.6, 1.25), (-2.6, 4.55, 2.6, 4.65), (-2.6, 1.15, -2.5, 4.65), (2.5, 1.15, 2.6, 4.65)):
         q0, q1 = pv(xa_, sa), pv(xb_, sb)
         b.beam((q0[0], q0[1], q0[2] + 0.03), (q1[0], q1[1], q1[2] + 0.03), 0.09, "pv_frame", 0.09)
-    for fl, z in ((0, 1.5), (1, 4.2)):
+    for fl, z in ((0, 1.5), (1, 3.9)):                      # верхній ряд на 0.3 м нижче: карниз не ховає вікна
         win_front(b, y1, 1, (-3.5, 0.0, 3.5) if fl else (-3.5, 3.5), z, 1.3, 1.5)
         win_front(b, y0, -1, (-3.5, 0.0, 3.5), z, 1.3, 1.5)
         win_side(b, -L / 2, -1, (-2.0, 2.0), z, 1.3, 1.5)
@@ -273,16 +305,23 @@ def house3():
     b.box(0, y1 + 1.4, 0.0, 3.2, 1.6, 1.0, "step", top="step")
     gutter(b, -L / 2 - OV, L / 2 + OV, y1 + OV, EAVE - 0.3)
     gutter(b, -L / 2 - OV, L / 2 + OV, y0 - OV, EAVE - 0.3)
-    lib.finish(b, "house_h3", out, tri_limit=2400, footprint=(2, 2))
+    pipe(b, L / 2 - 0.35, y0, -1, OV, EAVE)
+    b.window(("x", L / 2, 1), 0.0, 6.7, 0.9, 1.1)                                # вікно горища у фронтоні: середник і імпост — у шейдері
+    lib.window_ring(b, "x", L / 2, 1, 0.0, 6.7, 0.9, 1.1)
+    sills(b, L / 2, 0.0, 1, 0.9, 6.7, "x")
+    lib.weather(b, "wall_plaster", [("y", y0, -1, -L / 2, L / 2, 1.0, EAVE), ("y", y1, 1, -L / 2, L / 2, 1.0, EAVE), ("x", -L / 2, -1, y0, y1, 1.0, EAVE), ("x", L / 2, 1, y0, y1, 1.0, EAVE)], seed=7, patches=False)
+    lib.finish(b, "house_h3", out, tri_limit=2400, footprint=(2, 2), target_cm=3.6)
 
 
 # ----------------------------------------------------------------------- H4
 def house4():
     lib.reset()
     b = Builder()
+    lib.palette(roof="green", eave=3.0, chim="ch_plaster", boards=(0.52, 0.60, 0.64))
+    RING[0] = "trim"
     L, D, EAVE, RIDGE = 9.0, 6.0, 3.0, 6.5
     y0, y1 = -D / 2, D / 2
-    b.box(0, 0, 0, L, D, 0.4, "brick_grey")
+    b.box(0, 0, 0, L + 0.08, D + 0.08, 0.4, "brick_grey")
     b.box(0, 0, 0.4, L - 0.02, D - 0.02, EAVE - 0.4, "boards")
     b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tin_green", "boards", ridge_axis="x", overhang=0.4)
     b.box(0, 0, RIDGE, L + 0.8, 0.28, 0.16, "gutter")
@@ -296,6 +335,10 @@ def house4():
     b.poly_up([(-1.5, y1, 2.7), (1.5, y1, 2.7), (1.5, y1 + 1.6, 2.3), (-1.5, y1 + 1.6, 2.3)], "tin_green")
     b.box(0, y1 + 1.0, 0, 3.0, 1.4, 0.4, "step", top="step")
     b.chimney(2.8, -0.8, 4.8, 0.7, 2.7, "brick_face")           # цегляний димар
+    gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y0 - 0.4, EAVE - 0.3)
+    gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y1 + 0.4, EAVE - 0.3)
+    pipe(b, L / 2 - 0.35, y0, -1, 0.4, EAVE)
+    lib.weather(b, "boards", [("y", y0, -1, -L / 2, L / 2, 0.4, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.4, EAVE), ("x", -L / 2, -1, y0, y1, 0.4, EAVE), ("x", L / 2, 1, y0, y1, 0.4, EAVE)], seed=9, patches=False)
     lib.finish(b, "house_h4", out, tri_limit=1800, footprint=(2, 1))
 
 
