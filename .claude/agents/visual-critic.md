@@ -69,7 +69,10 @@ Give the evidence for every score below 5 — a location in the frame and what y
    (stones poke through mud and grass rather than being painted on), ambient occlusion in crevices,
    parallax where used. Flat-looking relief is a finding.
 5. **Animation** (sequences only) — motion present where it should be (rain, water, smoke, foliage),
-   believable speed at real scale, no popping, no looping seam; still things stay still.
+   believable speed at real scale, no popping, no looping seam; still things stay still. Fire,
+   smoke and explosions are judged on a real-speed sequence at the default game zoom (8), next to
+   a reference frame from a similar camera; slow-motion or magnified crops are supporting evidence
+   only — the owner rejected a fire that had passed on crops alone.
 6. **3D models** — silhouette from the game angle, proportions and scale, texel density matching
    the ground's, no floating or sinking, no visible LOD pops, materials consistent with the setting.
 7. **Lighting** — one coherent overcast key, believable shadows, wet speculars where it is wet,
