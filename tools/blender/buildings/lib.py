@@ -666,7 +666,7 @@ def mats():
         # обвуглена деревина: майже чорна, а попіл світлим сірим лише на кромках
         "timber_hit": make_material("timber_hit", "Planks021", 1.0, (0.085, 0.072, 0.062), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02),
         "wall_plaster_w": make_material("wall_plaster_w", "Plaster001", 1.0, (0.56, 0.52, 0.45), streak=0.6, base_dirt=0.8, bump=0.008, patch=((0.26, 0.24, 0.21), 0.4), patch_scale=0.9),
-        "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.026, 0.021, 0.018), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02, ash=((0.22, 0.215, 0.205), 3.5, 0.03)),
+        "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.06, 0.047, 0.036), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02, ash=((0.22, 0.215, 0.205), 3.5, 0.03)),
         "cavity": make_material("cavity", flat=(0.16, 0.16, 0.16)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
@@ -792,7 +792,7 @@ def apply_palette():
                                       undul=(1.5, 0.03), cracks=(1.0, 0.005, tuple(c * 0.4 for c in lin)), patch=[(tuple(c * 0.9 for c in lin), 0.35)], patch_scale=0.12, vmul=True)
             _dm(nm_)
     # обгоріла штукатурка всередині: темно-сіро-бура, світліший попіл патьоками донизу, зерно тиньку лишається
-    MATS["plaster_burnt"] = make_material("plaster_burnt", "Plaster001", 1.0, recolor=(0.15, 0.14, 0.13), contrast=2.5, streak=1.2, streak_col=(0.05, 0.045, 0.04),
+    MATS["plaster_burnt"] = make_material("plaster_burnt", "Plaster001", 1.0, recolor=(0.22, 0.20, 0.18), contrast=2.5, streak=1.2, streak_col=(0.05, 0.045, 0.04),
                                           bump=0.006, rough=0.95, rvar=0.1, cracks=(1.4, 0.006, (0.01, 0.01, 0.01)))
     if wall is not None:                                                  # кутові камені в тон стіни, трохи світліші: білі давали пилку
         MATS["quoin"] = make_material("quoin", "Plaster001", 1.0, recolor=tuple(min(c * 1.12, 0.9) / 0.66 for c in srgb_lin(wall)), contrast=2.5, streak=0.4, bump=0.006, rough=0.88)
@@ -812,6 +812,7 @@ def apply_palette():
         def roofmat(name, rows_axis, other):
             return roof_mat(name, kind, srgb, rows_axis, other, eave, PAL.get("row", 0.34))
         MATS["fc_roof_xh"] = roofmat("fc_roof_xh", "y", "x")
+        MATS["roof_fallen"] = roof_mat("roof_fallen", kind, tuple(c * 0.7 for c in srgb), "y", "x", eave, PAL.get("row", 0.34))   # лист на землі: брудніший і в тіні
         MATS["fc_roof_h"] = roofmat("fc_roof_h", "x", "y")
         MATS["tile_brown"] = MATS["tile_graphite"] = MATS["tin_green"] = MATS["tile_small"] = MATS["fc_roof_xh"]
         _dm("fc_roof_xh")                                                    # кіптява й бруд на даху — множником на ньому ж
