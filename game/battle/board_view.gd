@@ -188,6 +188,7 @@ func build(board: Board) -> void:
 		add_child(_props)
 	_props.structure_shadows = structure_shadows
 	_props.wet = wet
+	_props.garden_green = {&"summer": 1.0, &"early": 0.5}.get(season, 0.15)
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board))
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.

@@ -18,7 +18,8 @@ const MODEL_DIR: String = "res://assets/props/"
 ## max — скільки разів на карту (орієнтир, що має лишатись одним), ring — лише в кільці, gap —
 ## власний проміжок до сусідньої будівлі, якщо більший за STRUCTURE_GAP, tower —
 ## вежа (одна на карту, у власному дворі), storeys — двоповерховий (у селі їх не більше половини),
-## scale — множник розміру брили (ассет завеликий для польового каменя),
+## scale — рівномірний множник розміру (брила завелика для польового каменя, хата на клітинку
+## заширока, щоб між сусідніми з камери гри було видно землю),
 ## map/order/deck_top — міст своєї переправи (DECK_TOP з tools/blender/bridges/build_bridges.py).
 const MODELS: Dictionary = {
 	&"house_h1": {"kind": Kind.STRUCTURE, "weight": 4},
@@ -26,8 +27,8 @@ const MODELS: Dictionary = {
 	&"house_h2": {"kind": Kind.STRUCTURE, "weight": 3},
 	&"house_h3": {"kind": Kind.STRUCTURE, "weight": 2, "storeys": 2},
 	&"house_h4": {"kind": Kind.STRUCTURE, "weight": 4},
-	&"house_h5": {"kind": Kind.STRUCTURE, "weight": 6},
-	&"house_h6": {"kind": Kind.STRUCTURE, "weight": 2, "storeys": 2},
+	&"house_h5": {"kind": Kind.STRUCTURE, "weight": 6, "scale": HOUSE_SCALE},
+	&"house_h6": {"kind": Kind.STRUCTURE, "weight": 2, "storeys": 2, "scale": HOUSE_SCALE},
 	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
@@ -104,6 +105,9 @@ const STRUCTURE_GAP: float = 0.125
 ## Повітка-двірська будівля на клітинці BUILDING без будинку: f8_shed, зменшена так, щоб вільно
 ## стала в клітинку (ассет на 0.96 клітинки не влазить із відступом до огорожі).
 const YARD_SHED: StringName = &"f8_shed"
+## Хата на клітинку (ассет на 0.94 клітинки, ~7.5 м) — рівномірно до ~6.4 м: така сільська хата
+## звична, а між двома сусідніми з камери гри лишається смуга землі.
+const HOUSE_SCALE: float = 0.85
 const YARD_SHED_SCALE: float = 0.7
 ## Велика будівля (слід понад клітинку) зі звісом тримається на стільки всередині своєї групи
 ## BUILDING (клітинки, ~2 м). Будинок на одну клітинку стоїть у ній по центру й тримає лише
@@ -122,8 +126,8 @@ const MIN_FENCE: float = 0.5
 # суворіше — рахувати на кожному зумі, якщо на дальньому знову злипнуться будинки.
 const SCREEN_PITCH_DEG: float = 40.0
 const SCREEN_DEPTH_SEP: float = 1.2
-## Земля між силуетами на екрані, клітинки: силуети, що лише торкаються кутами, теж читаються одним.
-const SCREEN_GROUND: float = 0.3
+## Земля між силуетами на екрані, клітинки (~1.2 м): силуети, що торкаються кутами, читаються одним.
+const SCREEN_GROUND: float = 0.15
 ## Огорожа двору стоїть за межею групи BUILDING на ~2.2 м: будинок на одну клітинку займає її
 ## майже всю, і до огорожі однаково лишається ≥ 0.3 клітинки; секція ще далеко від центру сусідньої
 ## клітинки, де стоїть юніт.
@@ -139,6 +143,11 @@ const _THIN_SHADER: Shader = preload("res://game/battle/shaders/prop_thin.gdshad
 ## Огорожа без прозорих щілин — той самий шейдер без discard: рання перевірка глибини лишається.
 static var _thin_solid_shader: Shader
 const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.gdshader")
+const _GARDEN_SHADER: Shader = preload("res://game/battle/shaders/prop_garden.gdshader")
+## Запас від краю дорожнього покриття для парканів і дрібних пропсів, клітинки (~0.4 м).
+const ROAD_PAD: float = 0.05
+## Сарай, причіп чи техніка — лише при хаті: хата в межах стількох клітинок (Чебишов).
+const HOUSE_NEAR: int = 2
 ## Той самий шейдер будівлі без розчинення: discard у шейдері вимикає ранню перевірку глибини на
 ## мобільних GPU, тож будівлі моделі, над якою зараз ніхто не стоїть, малюються без нього.
 static var _solid_shader: Shader
@@ -163,6 +172,13 @@ var _instances: Array[Dictionary] = []
 ## Модель -> MultiMeshInstance3D і індекси екземплярів у ній.
 var _nodes: Dictionary = {}
 var _slots: Dictionary = {}
+## Розстановка останньої побудови: для перевірки дорожнього покриття (тести, інструменти).
+var _placer: RefCounted
+## Городні грядки: клітинка BUILDING без будинку й без повітки — город (лише вигляд).
+var _gardens: Array[Vector2i] = []
+var _garden_node: MultiMeshInstance3D
+## Наскільки грядки зелені (BattleLook.season): літо — зелень, рання осінь — жовта, пізня — гола рілля.
+var garden_green: float = 0.2
 ## Опори з дротами: [індекс екземпляра опори A, індекс B] — проліт.
 var _spans: Array = []
 var _wires: MeshInstance3D
@@ -415,6 +431,9 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_spans.clear()
 	_wires = null
 	_contacts = null
+	_garden_node = null
+	_gardens.clear()
+	_placer = null
 	_node_materials.clear()
 	forest_cells.clear()
 	_board_size = board_size
@@ -423,6 +442,8 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	var p := _Placer.new(self, world, ring, board_size, height, map_key, half_dir)
 	p.place_all()
 	_spans = p.spans
+	_gardens = p.gardens
+	_placer = p
 	for y in board_size.y:
 		for x in board_size.x:
 			if world.kind_at(Vector2i(x + ring, y + ring)) == Terrain.Kind.FOREST:
@@ -450,9 +471,17 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 	_queue_apply()
 
 
+## Точка на покритті дороги (осі й ширина RoadCourse) з запасом pad, клітинки.
+func on_road(p: Vector2, pad: float = 0.0) -> bool:
+	return _placer != null and _placer.on_road(p, pad)
+
+
 ## Для тестів: екземпляри, що стоять на клітинці дошки.
 func instances_on(cell: Vector2i) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	if _gardens.has(cell):
+		out.append({"model": &"garden", "transform": Transform3D(Basis(), Vector3(cell.x, 0.0, cell.y)),
+				"faded": false, "crushed": false, "yard": true})
 	for inst in _instances:
 		if (inst["cells"] as Array).has(cell):
 			out.append({"model": inst["model"], "transform": _final_transform(inst),
@@ -524,7 +553,7 @@ func _build_nodes(haze: bool) -> void:
 		mmi.multimesh = mm
 		# §8: тіні — юнітам; пропсам — лише там, де без тіні на сонці річ висить над землею. Каміння
 		# без тіні: низьке, а прохід тіней по ~50 брилах Ridge коштує понад 50 тис. трикутників.
-		var casts: bool = structure_shadows and kind != Kind.BRIDGE and kind != Kind.BOULDER
+		var casts: bool = structure_shadows and kind in [Kind.STRUCTURE, Kind.RUIN, Kind.FIELD_FENCE, Kind.GARDEN_FENCE, Kind.POLE]
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if fades:
 			_node_materials[m] = {"fade": _fade_material(m, info, haze, false), "solid": _fade_material(m, info, haze, true)}
@@ -547,6 +576,38 @@ func _build_nodes(haze: bool) -> void:
 		_wires.material_override = mat
 		add_child(_wires)
 	_build_contacts()
+	_build_gardens()
+
+
+## Городні грядки: один квадрат на клітинку, ряди малює шейдер. Два трикутники замість дров і
+## причепів на кожній порожній клітинці двору: город читається двором хати, а не складом.
+func _build_gardens() -> void:
+	if _gardens.is_empty():
+		return
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE * 0.78
+	var mat := ShaderMaterial.new()
+	mat.shader = _GARDEN_SHADER
+	mat.set_shader_parameter("green", garden_green)
+	quad.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = quad
+	mm.instance_count = _gardens.size()
+	for i in _gardens.size():
+		var c: Vector2i = _gardens[i]
+		var yaw: float = PI * 0.5 if absi(cell_hash(c, 144)) % 2 else 0.0
+		var hx: float = TerrainHeight.ground_y(c.x + 0.3, c.y) - TerrainHeight.ground_y(c.x - 0.3, c.y)
+		var hz: float = TerrainHeight.ground_y(c.x, c.y + 0.3) - TerrainHeight.ground_y(c.x, c.y - 0.3)
+		var up := Vector3(-hx / 0.6, 1.0, -hz / 0.6).normalized()
+		var right: Vector3 = Vector3(cos(yaw), 0.0, -sin(yaw)).slide(up).normalized()
+		mm.set_instance_transform(i, Transform3D(Basis(right, up, right.cross(up)),
+				Vector3(c.x, TerrainHeight.ground_y(c.x, c.y) + 0.006, c.y)))
+	_garden_node = MultiMeshInstance3D.new()
+	_garden_node.name = "GardenBeds"
+	_garden_node.multimesh = mm
+	_garden_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_garden_node)
 
 
 ## Пляма дотику під брилами й блоками: один квадрат на кожен, лягає за схилом, одна MultiMesh. Без
@@ -773,6 +834,11 @@ class _Placer:
 	var tower_placed := false
 	## Клітинки дошки, на яких уже стоїть дрібний пропс (одна річ на ребро).
 	var edges: Dictionary = {}
+	var gardens: Array[Vector2i] = []
+	## Клітинка дошки -> відрізки осі дороги поруч [a, b, півширина в клітинках]: покриття дороги
+	## — власна геометрія (RoadCourse), не вид клітинки, тож паркан на «полі» міг лягти на асфальт.
+	var road_index: Dictionary = {}
+	var road_indexed := false
 	## Клітинки дошки з огорожею двору: польова огорожа й причепи їх оминають.
 	var yard_cells: Dictionary = {}
 	## Клітинки дошки під будівлями -> напрям фасаду (−Z моделі) на дошці: двір без будівлі не
@@ -835,6 +901,62 @@ class _Placer:
 	func ground(x: float, z: float) -> float:
 		return height.at(x, z) if height != null else 0.0
 
+	## Точка на покритті дороги (з запасом pad), за осями RoadCourse і їхньою шириною.
+	func on_road(p: Vector2, pad: float) -> bool:
+		if not road_indexed:
+			_index_roads()
+		var c := Vector2i(roundi(p.x), roundi(p.y))
+		for seg: Array in road_index.get(c, []):
+			var a: Vector2 = seg[0]
+			var b: Vector2 = seg[1]
+			var ab: Vector2 = b - a
+			var t: float = clampf((p - a).dot(ab) / maxf(ab.length_squared(), 1e-6), 0.0, 1.0)
+			if p.distance_to(a + ab * t) < float(seg[2]) + pad:
+				return true
+		return false
+
+	func _index_roads() -> void:
+		road_indexed = true
+		if height == null or height.roads == null:
+			return
+		var roads: RoadCourse = height.roads
+		for li in roads.lines.size():
+			var pts: PackedVector2Array = roads.lines[li]
+			for k in range(1, pts.size()):
+				var a: Vector2 = pts[k - 1] - Vector2(ring, ring)
+				var b: Vector2 = pts[k] - Vector2(ring, ring)
+				var half: float = float(roads.halfs[li][k]) / 8.0
+				var lo := Vector2i(floori(minf(a.x, b.x) - half - 0.5), floori(minf(a.y, b.y) - half - 0.5))
+				var hi := Vector2i(ceili(maxf(a.x, b.x) + half + 0.5), ceili(maxf(a.y, b.y) + half + 0.5))
+				for y in range(lo.y, hi.y + 1):
+					for x in range(lo.x, hi.x + 1):
+						var key := Vector2i(x, y)
+						if not road_index.has(key):
+							road_index[key] = []
+						(road_index[key] as Array).append([a, b, half])
+
+	## Межа пропса в XZ (кути й середина) лежить на покритті дороги.
+	func _box_on_road(m: StringName, xform: Transform3D) -> bool:
+		var box: AABB = xform * ((PropLayer.model(m) as Dictionary)["aabb"] as AABB)
+		for v: Vector2 in [Vector2(box.position.x, box.position.z), Vector2(box.end.x, box.position.z),
+				Vector2(box.end.x, box.end.z), Vector2(box.position.x, box.end.z),
+				Vector2(box.get_center().x, box.get_center().z)]:
+			if on_road(v, ROAD_PAD):
+				return true
+		return false
+
+	## Хата (будинок, не вежа й не двірське вбрання) в межах HOUSE_NEAR клітинок.
+	func house_near(c: Vector2i) -> bool:
+		for dy in range(-HOUSE_NEAR, HOUSE_NEAR + 1):
+			for dx in range(-HOUSE_NEAR, HOUSE_NEAR + 1):
+				var n: StringName = model_at.get(c + Vector2i(dx, dy), &"")
+				if n == &"":
+					continue
+				var s: Dictionary = PropLayer.spec_of(n)
+				if int(s["kind"]) == Kind.STRUCTURE and not bool(s.get("tower", false)):
+					return true
+		return false
+
 	## Межі екземпляра в XZ відносно центру клітинки не заходять у квадрат юніта.
 	func clear_of_centre(m: StringName, xform: Transform3D, c: Vector2i) -> bool:
 		var box: AABB = xform * ((PropLayer.model(m) as Dictionary)["aabb"] as AABB)
@@ -862,7 +984,7 @@ class _Placer:
 			basis = Basis(basis.z, atan2(y1 - y0, 2.0 * half_len)) * basis
 			y = minf((y0 + y1) * 0.5, y)
 		var xform := Transform3D(basis * Basis.from_scale(Vector3(length, 1.0, 1.0) * scale), Vector3(x, y, z))
-		if not clear_of_centre(m, xform, c):
+		if not clear_of_centre(m, xform, c) or _box_on_road(m, xform):
 			return false
 		var cells: Array[Vector2i] = [c]
 		layer._add(m, xform, cells)
@@ -959,7 +1081,7 @@ class _Placer:
 
 	func _rect_of(m: StringName, origin: Vector2i, rot: int, s: Vector2i) -> Rect2:
 		var centre := Vector2(origin) + Vector2(s - Vector2i.ONE) * 0.5
-		var box: AABB = Transform3D(Basis(Vector3.UP, rot * PI * 0.5), Vector3(centre.x, 0.0, centre.y)) \
+		var box: AABB = Transform3D(_basis_of(m, rot), Vector3(centre.x, 0.0, centre.y)) \
 				* ((PropLayer.model(m) as Dictionary)["aabb"] as AABB)
 		return Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
 
@@ -977,7 +1099,13 @@ class _Placer:
 		return true
 
 	func _height_of(m: StringName) -> float:
-		return ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size.y
+		return ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size.y * _scale_of(m)
+
+	func _scale_of(m: StringName) -> float:
+		return float(PropLayer.spec_of(m).get("scale", 1.0))
+
+	func _basis_of(m: StringName, rot: int) -> Basis:
+		return Basis(Vector3.UP, rot * PI * 0.5).scaled(Vector3.ONE * _scale_of(m))
 
 	## Проєкція межі будівлі (разом із висотою даху) на екран камери гри: [Rect2 екрана, Vector2
 	## глибини вздовж погляду]. Камера стоїть на +x, +z від фокуса й дивиться на −x, −z.
@@ -1067,8 +1195,7 @@ class _Placer:
 		for c in cells:
 			model_at[c] = m
 		var centre := Vector2(origin) + Vector2(s - Vector2i.ONE) * 0.5
-		layer._add(m, Transform3D(Basis(Vector3.UP, rot * PI * 0.5), Vector3(centre.x, lo, centre.y)),
-				_board_only(cells))
+		layer._add(m, Transform3D(_basis_of(m, rot), Vector3(centre.x, lo, centre.y)), _board_only(cells))
 
 	func _board_only(cells: Array[Vector2i]) -> Array[Vector2i]:
 		var out: Array[Vector2i] = []
@@ -1080,36 +1207,56 @@ class _Placer:
 
 	# --- двори ------------------------------------------------------------------------------
 
-	## Кожна клітинка BUILDING дошки читається забудованою (§8: вид клітинки видно): де будинок не
-	## став, там двір — зменшена повітка, дрова чи причіп, і тюк. Такі клітинки входять у ділянку
-	## й обгороджуються разом із сусідами одним контуром з однією хвірткою.
+	## Кожна клітинка BUILDING дошки читається забудованою (§8: вид клітинки видно). Хата — головне;
+	## де вона не стала, там двір хати: одна повітка й один причіп на двір як доповнення, решта —
+	## город із грядками й тюком. Клітинки двору обгороджуються разом із хатою одним контуром.
 	func _dress_yards() -> void:
+		var shed_in: Dictionary = {}
+		var trailer_in: Dictionary = {}
 		for y in size.y:
 			for x in size.x:
 				var c := Vector2i(x, y)
 				if kind(c) != Terrain.Kind.BUILDING or built.has(c):
 					continue
 				built[c] = Vector2i.ZERO
-				var cells: Array[Vector2i] = [c]
+				var yard: Vector2i = _yard_key(c)
 				var yaw: float = float(h(c, 140) % 4) * PI * 0.5
 				var lo: float = minf(ground(c.x - 0.3, c.y - 0.3), ground(c.x + 0.3, c.y + 0.3))
-				# Поруч із вежею повітки нема: вежа стоїть у власному дворі, тож тут лише дрова.
+				# Поруч із вежею повітки нема: вежа стоїть у власному дворі.
 				var by_tower := false
 				for dy in range(-1, 2):
 					for dx in range(-1, 2):
 						var n: StringName = model_at.get(c + Vector2i(dx, dy), &"")
 						by_tower = by_tower or bool(PropLayer.spec_of(n).get("tower", false))
-				match 3 if by_tower else h(c, 141) % 4:
-					0, 1:
-						var shed := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(c.x, lo, c.y))
-						if PropLayer.model(YARD_SHED) != null:
-							layer._add(YARD_SHED, shed, cells, true)
-					2:
-						_yard_item(pick_for_half(Kind.TRAILER, half(c)), c, Vector2(0.0, 0.1), yaw)
-					3:
-						for k in 2:
-							_yard_item(&"dead_tree_trunk_02", c, Vector2(-0.15, -0.1 + 0.1 * k), yaw + 0.1 * k)
-				_yard_item(pick_for_half(Kind.HAY, half(c)), c, Vector2(0.28, 0.28).rotated(yaw), float(h(c, 142) % 628) / 100.0)
+				var roll: int = h(c, 141) % 3 if house_near(c) else 2
+				if roll == 0 and not by_tower and not shed_in.has(yard) and PropLayer.model(YARD_SHED) != null:
+					shed_in[yard] = true
+					var cells: Array[Vector2i] = [c]
+					layer._add(YARD_SHED, Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * YARD_SHED_SCALE),
+							Vector3(c.x, lo, c.y)), cells, true)
+				elif roll == 1 and not trailer_in.has(yard):
+					trailer_in[yard] = true
+					_yard_item(pick_for_half(Kind.TRAILER, half(c)), c, Vector2(0.0, 0.1), yaw)
+				else:
+					gardens.append(c)
+					if h(c, 143) % 2 == 0:
+						_yard_item(pick_for_half(Kind.HAY, half(c)), c, Vector2(0.3, 0.3).rotated(yaw), float(h(c, 142) % 628) / 100.0)
+
+	## Двір — зв'язна група BUILDING дошки; ключ — її найменша клітинка.
+	func _yard_key(c: Vector2i) -> Vector2i:
+		var best: Vector2i = c
+		var seen: Dictionary = {c: true}
+		var queue: Array[Vector2i] = [c]
+		while not queue.is_empty():
+			var q: Vector2i = queue.pop_back()
+			if q.y < best.y or (q.y == best.y and q.x < best.x):
+				best = q
+			for d in Board.DIRS_4:
+				var n: Vector2i = q + d
+				if not seen.has(n) and on_board(n) and kind(n) == Terrain.Kind.BUILDING:
+					seen[n] = true
+					queue.append(n)
+		return best
 
 	func _yard_item(m: StringName, c: Vector2i, local: Vector2, yaw: float) -> void:
 		if m == &"" or PropLayer.model(m) == null:
@@ -1298,6 +1445,10 @@ class _Placer:
 	func _span_clear(c: Vector2i, d: Vector2i, t: Vector2i, lo: float, hi: float) -> bool:
 		var mid: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
 		var half_t: Vector2 = (Vector2(t) * (hi - lo) * 0.5).abs()
+		# Паркан не лягає на дорогу: секція коротшає, доки не зійде з покриття.
+		for k in 9:
+			if on_road(mid + (Vector2(t) * (hi - lo) * 0.5) * (float(k) / 4.0 - 1.0), ROAD_PAD):
+				return false
 		var span := Rect2(mid - half_t, half_t * 2.0).grow(0.3 - 1e-3)
 		for pl: Array in placed:
 			if span.intersects(pl[0]):
@@ -1362,7 +1513,8 @@ class _Placer:
 					continue
 				var corner := Vector2(1.0 if h(c, 6) & 1 else -1.0, 1.0 if h(c, 6) & 2 else -1.0) * 0.33
 				var m: StringName = pick_for_half(Kind.HAY, half(c))
-				var n: int = 2 + h(c, 7) % 2
+				# Тюк один чи вільна пара, кожен своїм поворотом: три однакові поруч читаються рядом копій.
+				var n: int = 1 + h(c, 7) % 2
 				for k in n:
 					var off := Vector2(float(h(c, 8 + k) % 100) / 100.0 - 0.5, float(h(c, 12 + k) % 100) / 100.0 - 0.5) * 0.12
 					put_small(m, c, corner + off - corner.normalized() * 0.09 * k, float(h(c, 16 + k) % 628) / 100.0)
@@ -1379,7 +1531,7 @@ class _Placer:
 				for d in Board.DIRS_4:
 					var f: Vector2i = c + d
 					var b: Vector2i = f + d
-					if not yard_cells.has(f) or kind(b) != Terrain.Kind.BUILDING or done.has(b / 4):
+					if not yard_cells.has(f) or kind(b) != Terrain.Kind.BUILDING or done.has(b / 4) or not house_near(c):
 						continue
 					if put_on_edge(pick_for_half(Kind.TRAILER, half(c)), c, d, 0.39):
 						done[b / 4] = true
@@ -1399,8 +1551,9 @@ class _Placer:
 						continue
 					var side := Vector2(d.y, d.x).abs()
 					var yaw: float = PI * 0.5 if d.y == 0 else 0.0
-					put_small(m, c, side * 0.36 - Vector2(d) * 0.2, yaw + 0.15)
-					put_small(m, c, -side * 0.38 - Vector2(d) * 0.25, yaw - 0.1)
+					# На узбіччі, не на асфальті: put_small відкидає блок на покритті дороги.
+					put_small(m, c, side * 0.43 - Vector2(d) * 0.2, yaw + 0.15)
+					put_small(m, c, -side * 0.43 - Vector2(d) * 0.3, yaw - 0.1)
 
 	## Каміння на пагорбах: одна-дві брили біля краю клітинки, кожна половина — свої дві породи.
 	func _boulders() -> void:
