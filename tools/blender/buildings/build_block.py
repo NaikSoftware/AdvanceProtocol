@@ -137,13 +137,14 @@ def broken_end(b, xc, rnd):
     """Зламаний торець уцілілого корпусу: темне нутро замість цілої стіни, плити перекриттів стирчать на 0.3-0.6 м
     східцями (три шматки по глибині різної довжини), огризки фасадних панелей біля краю."""
     yi0, yi1 = Y0 + 0.05, Y1 - 0.05
-    lib._quad(b, [(xc + 0.01, yi0, 0.0), (xc + 0.01, yi1, 0.0), (xc + 0.01, yi1, H), (xc + 0.01, yi0, H)], "blown_dark", (1.0, 0.0, 0.0))
-    for f in range(1, NF + 1):
-        z = f * FLOOR - 0.22
-        ys = [yi0, yi0 + (yi1 - yi0) * rnd.uniform(0.25, 0.4), yi0 + (yi1 - yi0) * rnd.uniform(0.6, 0.75), yi1]
-        for k in range(3):
-            ov = rnd.uniform(0.3, 0.6)
-            b.box(xc + ov / 2, (ys[k] + ys[k + 1]) / 2, z, ov, ys[k + 1] - ys[k], 0.22, "slab_dark", top="slab_dark")
+    lib._quad(b, [(xc + 0.01, yi0, 0.0), (xc + 0.01, yi1, 0.0), (xc + 0.01, yi1, H), (xc + 0.01, yi0, H)], "interior_burnt", (1.0, 0.0, 0.0))
+    for f in range(1, NF + 1):                                                   # рваний край плит: 5 шматків різної довжини й товщини
+        cuts = sorted(rnd.uniform(0.1, 0.9) for _ in range(4))
+        ys = [yi0] + [yi0 + (yi1 - yi0) * c_ for c_ in cuts] + [yi1]
+        for k in range(5):
+            ov = rnd.uniform(0.15, 0.6)
+            th = rnd.uniform(0.14, 0.22)
+            b.box(xc + ov / 2, (ys[k] + ys[k + 1]) / 2, f * FLOOR - th, ov, ys[k + 1] - ys[k], th, "slab_dark", top="slab_dark")
     for (y, sgn) in ((Y1 - 0.2, 1), (Y0 + 0.2, -1)):                              # огризки фасадного шару: зубці 0.4-1.2 м різної висоти
         for f in range(NF):
             if rnd.random() < 0.35:
@@ -197,6 +198,7 @@ def damaged():
             blow = True
             if blow:
                 lib.burn_ring(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, g_side=0.35, g_bot=0.1, g_top=5.0, ztop=H - 0.05, mat="panel_dm", strong=True)
+                lib.plume(b, "y", Y0, -1, x, z + 1.25, 1.1, H - 0.05, "panel_dm")
                 opening2(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, streak=0.0, sooty=True)
             else:
                 b.window(("y", Y0, -1), x, z, 1.4, 1.4)
@@ -209,6 +211,7 @@ def damaged():
             if he - 1.4 < z + 1.8 or rnd.random() < 0.4 or (f == 0 and k % 2):          # у нижньому ряду не частіше кожного другого прорізу
                 continue
             lib.burn_ring(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, g_side=0.35, g_bot=0.1, g_top=5.0, ztop=H - 0.05, mat="panel_dm", strong=True)
+            lib.plume(b, "x", X1, 1, yy, z + 1.25, 1.1, H - 0.05, "panel_dm")
             opening2(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, streak=0.0, sooty=True)
     # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
     for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 2.9, 3.6, 1.8, 0.35, 0.0, 0.0), (13.5, -3.6, 5.9, 2.6, 2.0, 0.38, 0.0, 0.1), (8.0, 4.0, 2.9, 2.4, 1.6, -0.3, 0.0, 0.0)):
@@ -227,18 +230,19 @@ def damaged():
     # одна безперервна купа: плавна поверхня без радіальних зломів (парабола, горби, западина), контур із 5-7 опуклостей і заокругленою
     # губою; деталь — бетонні уламки 0.3-0.9 м на темній основі — запікається зі скан-джерела разом з AO
     bh = Builder()
-    plan = [HeapSurface(11.0, 0.5, 4.8, 4.6, 4.3, 61, bumps=6, lip=0.32, wob=0.45, lump=0.25, hummocks=6, hum_amp=0.9, pw=1.35),
-            HeapSurface(12.8, -5.0, 4.6, 2.2, 2.0, 62, bumps=5, lip=0.3, wob=0.2, lump=0.12, hummocks=3, hum_amp=0.4, pw=1.5),
-            HeapSurface(16.2, -1.5, 2.6, 5.0, 1.7, 63, bumps=7, lip=0.3, wob=0.2, lump=0.12, hummocks=3, hum_amp=0.4, pw=1.5)]
+    # край купи сходить у землю (feather), без бортика; перехід у колір ґрунту — спідницею 1.5 м
+    plan = [HeapSurface(11.0, 0.5, 4.8, 4.6, 4.3, 61, bumps=6, lip=0.0, wob=0.45, lump=0.25, hummocks=6, hum_amp=0.9, pw=1.35, noise=1.0, feather=1.5),
+            HeapSurface(12.8, -5.0, 4.6, 2.2, 2.0, 62, bumps=5, lip=0.0, wob=0.2, lump=0.12, hummocks=3, hum_amp=0.4, pw=1.5, noise=1.0, feather=1.2),
+            HeapSurface(16.2, -1.5, 2.6, 5.0, 1.7, 63, bumps=7, lip=0.0, wob=0.2, lump=0.12, hummocks=3, hum_amp=0.4, pw=1.5, noise=1.0, feather=1.2)]
     plan[0].fit_peak(4.6)
     print("HEAPPEAK h5", [round(max(h_.z(h_.cx + h_.rx * u / 20.0, h_.cy + h_.ry * v / 20.0) for u in range(-20, 21) for v in range(-20, 21)), 2) for h_ in plan], "s", round(plan[0].s, 3))
     for k, hsf in enumerate(plan):
         big = k == 0
-        heap_mound(b, hsf, "heap_grey", rings=7 if big else 3, segs=32 if big else 16, skirt_mat="edge_ground")      # без світлого обідка: край у колір ґрунту
+        heap_mound(b, hsf, "heap_grey", rings=5 if big else 3, segs=24 if big else 14, skirt=1.5, skirt_mat="edge_ground")      # без світлого обідка: край у колір ґрунту
         heap_mound(bh, hsf, "heap_base_grey", rings=18 if big else 8, segs=110 if big else 56, jitter=0.1 * hsf.hmax / 4.0, seed=61 + k)
     hrnd = random.Random(99)
     for hsf in plan:
-        n = int(math.pi * hsf.rx * hsf.ry * 5.0)
+        n = int(math.pi * hsf.rx * hsf.ry * 22.0)                                    # дрібний щебінь 10-40 см (лише в запіканні)
         for _ in range(n):
             a_ = hrnd.uniform(0, 2 * math.pi)
             t = math.sqrt(hrnd.uniform(0, 1.0)) * 1.1
@@ -246,13 +250,13 @@ def damaged():
             px, py = hsf.cx + hsf.rx * r * math.cos(a_), hsf.cy + hsf.ry * r * math.sin(a_)
             z = hsf.z(px, py) if t < 1.0 else hsf.lip * max(0.0, 1.0 - (t - 1.0) / 0.12) * 0.8
             q = hrnd.random()
-            size = hrnd.uniform(0.3, 0.55) if q < 0.65 else (hrnd.uniform(0.55, 0.9) if q < 0.93 else hrnd.uniform(0.9, 1.3))
-            bh.rock(px, py, z + 0.04, size, hrnd.choice(("heap_grey",) * 4 + ("rubble_hi",)), hrnd, buried=0.3)
+            size = hrnd.uniform(0.1, 0.25) if q < 0.7 else (hrnd.uniform(0.25, 0.4) if q < 0.97 else hrnd.uniform(0.4, 0.7))
+            bh.rock(px, py, z + 0.02, size, "heap_grey", hrnd, buried=0.3)
     def surf(x, y):
         return max(h_.z(x, y) for h_ in plan)
     for k in range(5):                                                           # справжні шматки, що ламають силует
         px, py = rnd.uniform(14.5, 19.0), rnd.uniform(-7.5, 4.0)
-        b.rock(px, py, 0.4, rnd.uniform(0.6, 1.1), rnd.choice(("heap_grey", "rubble")), rnd, buried=0.45)
+        b.rock(px, py, 0.4, rnd.uniform(0.6, 1.1), "heap_grey", rnd, buried=0.45)
     for k in range(7):                                                           # арматура стирчить із купи пучками
         px, py = rnd.uniform(8.0, 15.0), rnd.uniform(-3.0, 4.0)
         z0_ = surf(px, py)
