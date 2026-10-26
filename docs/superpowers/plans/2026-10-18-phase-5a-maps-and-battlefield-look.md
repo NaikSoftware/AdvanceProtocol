@@ -511,6 +511,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] No wind sway
 - [ ] Trees with branches, own silhouette per species, three or more forms; bare late crowns as dense twig networks
 - [ ] Fallen form is a low pile of broken branches; crushed bushes as leaning stems
+- [ ] No pale or light wood anywhere (fresh breaks, splintered ends): fallen wood keeps bark colour, no lighter than the ground under it
 - [ ] Reed with plumes and cattail with heads, standing in the shallows
 - [ ] Reed and bushes in patches along some banks; trees or bushes in many yards, not all; a few lone bushes and trees on meadow, never on ploughed land
 - [ ] Accepted in battle frames on all three maps
