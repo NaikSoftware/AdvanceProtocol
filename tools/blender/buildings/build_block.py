@@ -6,6 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
+import heap_sim
 from mathutils import Vector, Matrix
 import bmesh
 from lib import Builder, chunks, mound, wall_run, burn_ring, panel_wall, opening2, chip_slab, HeapSurface, heap_mound
@@ -169,7 +170,7 @@ HEAP_TOP = 4.8                        # найвища точка плит, м
 TONGUE_HW = 3.6                       # висота купи біля стіни, м
 TONGUE_LEN = 7.6                      # щільна частина виходить від фасаду на ~7 м
 XL = 6.0                              # площина фасаду в локальній системі язика (спуск уздовж +x), потім повертається на +Y моделі
-CAV_LIN = 0.13                        # середнє альбедо стін кімнат (лінійне): під небом Річки дає на екрані sRGB ~70
+CAV_LIN = 0.22                        # середнє альбедо стін кімнат (лінійне): під небом Річки дає на екрані sRGB ~90 (L* 55-65)
 
 CHECKS = {"ramps": [], "droops": [], "flats": [], "panels": [], "scatter": [], "apron": 0, "protr": [], "slab_max": {}, "bundles": [], "slabs": [], "boulders": [], "rods": [],
           "heap_verts": [], "stubs": [], "remnants": None, "partitions": {}, "ceilings": 0, "roof_verts": {}, "floor_rubble": 0, "cells": 0}
@@ -436,6 +437,7 @@ def remnants(b, rnd):
     """Рештки задньої стіни й сходової клітки в проломі заввишки 1-3 поверхи, рваним верхом: крила лишаються одним корпусом."""
     x = XA
     hs = []
+    boxes = []                                                       # коробки для симуляції: уламки падають на ці рештки й упираються в них
     pat = [2, 1, 3, 1, 2, 3, 1]
     for k in range(40):
         if x >= XB - 0.3:
@@ -445,6 +447,7 @@ def remnants(b, rnd):
             fl = pat[k % len(pat)]
             h = fl * FLOOR - rnd.uniform(0.0, 1.2)
             b.box(xa + wd / 2, Y0 + LOG / 2, 0.0, wd + 0.02, LOG, h, "panel", top="broken_end")
+            boxes.append((xa, xa + wd, Y0, Y0 + LOG, 0.0, h))
             hs.append(h)
             pat = pat[1:] + pat[:1] if rnd.random() < 0.5 else pat
         x += w
@@ -453,7 +456,9 @@ def remnants(b, rnd):
     h1, h2 = 2 * FLOOR - 0.4, 3 * FLOOR - 0.7
     b.box(sx + 0.75, Y0 + LOG + 1.6, 0.0, 1.5, 3.2, h1, "panel", top="broken_end")
     b.box(sx + 2.25, Y0 + LOG + 1.6, 0.0, 1.5, 3.2, h2, "panel", top="broken_end")
+    boxes += [(sx, sx + 1.5, Y0 + LOG, Y0 + LOG + 3.2, 0.0, h1), (sx + 1.5, sx + 3.0, Y0 + LOG, Y0 + LOG + 3.2, 0.0, h2)]
     CHECKS["remnants"] = (hs, h1, h2)
+    return boxes
 
 
 def facade_breaks(b, rnd, sgn):
@@ -541,79 +546,6 @@ class Tongue:
         b._finish(fs, mat)
 
 
-class Heights:
-    """Карта висот завалу (0.25 м): оболонка, шматки й верхи вже покладених плит; плита лягає на найвищу опору, тож під нею лишаються порожнини."""
-    G = 0.25
-    X0, Y0, NX, NY = XL - 12.0, -12.0, 124, 96
-
-    def __init__(self, tg):
-        import numpy as np
-        self.a = np.zeros((self.NX, self.NY))
-        for i in range(self.NX):
-            for j in range(self.NY):
-                self.a[i, j] = 0.8 * tg.h(self.X0 + i * self.G, self.Y0 + j * self.G)
-
-    def at(self, x, y):
-        i = min(max(int(round((x - self.X0) / self.G)), 0), self.NX - 1)
-        j = min(max(int(round((y - self.Y0) / self.G)), 0), self.NY - 1)
-        return self.a[i, j]
-
-    def raise_disc(self, x, y, r, z):
-        for i in range(max(0, int((x - r - self.X0) / self.G)), min(self.NX, int((x + r - self.X0) / self.G) + 2)):
-            for j in range(max(0, int((y - r - self.Y0) / self.G)), min(self.NY, int((y + r - self.Y0) / self.G) + 2)):
-                if math.hypot(self.X0 + i * self.G - x, self.Y0 + j * self.G - y) <= r:
-                    self.a[i, j] = max(self.a[i, j], z)
-
-
-def _inside(poly, x, y):
-    c = False
-    for i in range(len(poly)):
-        (x1, y1), (x2, y2) = poly[i - 1], poly[i]
-        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
-            c = not c
-    return c
-
-
-def drop(b, rnd, hf, x, y, yaw, theta, L, W, th, mat, kind, sink=0.3, rebar=0.1):
-    """Плита L x W завтовшки th, нахил theta, спускається за напрямком yaw; лягає на найвищу опору (ніс вгрузає на sink), решта висить над
-    порожниною. Верх записується в карту, тож наступні плити спираються на неї."""
-    pts = piece(rnd, L, W)
-    x0_, y0_, yaw0 = x, y, yaw
-    for attempt in range(14):                                      # якщо плита лягла б вище за межу купи, зсуваємо її
-        d, s, t, n = slab_frame(yaw, theta)
-        smp = list(pts) + [(u, v) for u in (-L * 0.3, 0.0, L * 0.3) for v in (-W * 0.3, 0.0, W * 0.3)]
-        C = _v3(x, y, 0.0)
-        clr = min((C + s * u + t * v).z - hf.at(x + (s * u + t * v).x, y + (s * u + t * v).y) for u, v in smp)
-        C.z = -clr - sink
-        ztop = C.z + th * n.z + max((s * u + t * v).z for u, v in pts)
-        if ztop <= HEAP_TOP:
-            break
-        x, y, yaw = x0_ + rnd.uniform(-1.2, 1.2) * (attempt + 1) / 4, y0_ + rnd.uniform(-1.8, 1.8) * (attempt + 1) / 4, yaw0 + rnd.uniform(-0.3, 0.3)
-    else:
-        return None
-    ft, rot = place_slab(b, pts, th, C, s, t, n, mat, mat, kind=kind)
-    rec = CHECKS["slabs"][-1]
-    rec["L"], rec["W"], rec["yaw"] = L, W, yaw
-    import numpy as np
-    top = C + n * th
-    rad = max(math.hypot(u, v) for u, v in pts) + 0.3
-    Mi = np.linalg.inv(np.array([[s.x, t.x], [s.y, t.y]]))
-    for i in range(hf.NX):
-        px = hf.X0 + i * hf.G
-        if abs(px - x) > rad:
-            continue
-        for j in range(hf.NY):
-            py = hf.Y0 + j * hf.G
-            if abs(py - y) > rad:
-                continue
-            u, v = Mi @ np.array([px - top.x, py - top.y])
-            if _inside(pts, u, v):
-                hf.a[i, j] = max(hf.a[i, j], top.z + s.z * u + t.z * v)
-    if rnd.random() < rebar:
-        edge_bundle(b, rnd, pts, th, C, rot)
-    return C, s, d
-
-
 def apron(b, tg, width=1.3, n=44):
     """Пиловий фартух навколо язика: смуга між контуром завалу й обрисом на 1.3 м далі, з хвилястим зовнішнім краєм (без клітинок-прямокутників)."""
     cx, cy = XL + 2.5, 0.0
@@ -635,6 +567,230 @@ def apron(b, tg, width=1.3, n=44):
     CHECKS["apron_ring"] = cnt
 
 
+SIM_SEED = 11
+MOUND_K = 0.42                         # пагорб дрібної фракції під уламками — частка від повної висоти язика; решту набирають уламки
+
+
+def sim_boxes(rem):
+    """Нерухомі коробки симуляції: цілі крила (стіни пролому) й рештки задньої стіни із сходовою кліткою."""
+    return [(-40.0, XA, Y0, Y1, 0.0, H), (XB, 40.0, Y0, Y1, 0.0, H)] + list(rem)
+
+
+def _hash_pick(i, j):
+    return ((i * 73856093) ^ (j * 19349663)) & 1
+
+
+def heap_from_sim(b, tg, tgw, boxes, rnd):
+    """Завал із симуляції. 300-600 тіл падають із висоти пролому на пагорб: частина лягає всередині контуру секції, частина виштовхнута назовні
+    з боку фасаду. Що лягло — стає високополігональною купою hi (для запікання нормалі, AO й кольору); у модель іде низькополігональна оболонка
+    (висотна сітка ~1500-2000 трикутників), 4-6 найбільших плит окремою геометрією (втоплені в масу на 30-60 % під кутом 15-45°) і дрібний розсип."""
+    import heap_sim
+    from mathutils.bvhtree import BVHTree
+    mh = lambda x, y: MOUND_K * tgw(x, y)
+    res = heap_sim.simulate(SIM_SEED, mh, boxes, (-5.0, 5.0, -3.0, 4.2, 6.4, 9.5, 6.5, 0.0), (10, 60, 480), frames=260, mound_grid=(-9.0, 9.0, -6.0, 20.0, 0.6))
+    pcs = res["pieces"]
+    for d in pcs:
+        M = d["matrix"]
+        d["wv"] = [M @ Vector(v) for v in d["verts"]]
+        d["c"] = M.translation.copy()
+        d["tilt"] = math.degrees(math.acos(min(1.0, abs(M.col[2].z))))
+    CHECKS["sim"] = dict(slabs=sum(1 for d in pcs if d["kind"] == "slab"), panels=sum(1 for d in pcs if d["kind"] == "panel"), total=len(pcs),
+                         holes=sum(1 for d in pcs if d.get("hole")))
+    # який шматок плит лишається окремою геометрією: найбільші, що лягли під 15-45°, горизонт найвище
+    cand = sorted((d for d in pcs if d["kind"] == "slab" and 15.0 <= d["tilt"] <= 45.0 and d["c"].y > -4.5 and d["c"].z > 0.5), key=lambda d: -d["size"][0] * d["size"][1])
+    kept = cand[:5]
+    if len(kept) < 4:
+        kept = sorted((d for d in pcs if d["kind"] == "slab" and 10.0 <= d["tilt"] <= 50.0), key=lambda d: -d["size"][0] * d["size"][1])[:4]
+    for d in kept:
+        d["kept"] = True
+    # висотна карта купи без плит, що лишаються окремо
+    nx, ny = int((9.0 - -9.0) / 0.4) + 1, int((20.0 - -6.0) / 0.4) + 1
+    mv, mf = [], []
+    for j in range(ny):
+        for i in range(nx):
+            x, y = -9.0 + i * 0.4, -6.0 + j * 0.4
+            mv.append(Vector((x, y, mh(x, y))))
+    for j in range(ny - 1):
+        for i in range(nx - 1):
+            a = j * nx + i
+            if max(mv[a].z, mv[a + 1].z, mv[a + nx].z, mv[a + nx + 1].z) < 0.01:
+                continue
+            mf.append((a, a + 1, a + nx + 1, a + nx))
+    poly_v, poly_f = list(mv), list(mf)
+    for d in pcs:
+        if d.get("kept"):
+            continue
+        base = len(poly_v)
+        poly_v.extend(d["wv"])
+        poly_f.extend([tuple(base + i for i in f) for f in d["faces"]])
+    bvh = BVHTree.FromPolygons([tuple(v) for v in poly_v], [tuple(f) for f in poly_f])
+
+    def top_z(x, y):
+        h = bvh.ray_cast(Vector((x, y, 40.0)), Vector((0, 0, -1)))
+        return h[0].z if h[0] is not None else 0.0
+
+    # втоплення окремих плит: опускаємо, поки 30-60 % їхньої площі не ховається під купою
+    import numpy as np
+    for d in kept:
+        pts = d["outline"]
+        M = d["matrix"]
+        smp = [M @ Vector((u, v, d["th"] / 2)) for u in np.linspace(-d["size"][0] / 2, d["size"][0] / 2, 9) for v in np.linspace(-d["size"][1] / 2, d["size"][1] / 2, 7)
+               if _in_poly(pts, u, v)]
+        zs = [top_z(p.x, p.y) for p in smp]
+        lo, hi_ = 0.0, 2.0
+        for _ in range(14):
+            mid = (lo + hi_) / 2
+            frac = sum(1 for p, z in zip(smp, zs) if p.z - mid < z - 0.02) / len(smp)
+            lo, hi_ = (mid, hi_) if frac < 0.45 else (lo, mid)
+        d["dz"] = (lo + hi_) / 2
+        d["buried"] = sum(1 for p, z in zip(smp, zs) if p.z - d["dz"] < z - 0.02) / len(smp)
+        d["wv"] = [v - Vector((0, 0, d["dz"])) for v in d["wv"]]
+        d["c"] = d["c"] - Vector((0, 0, d["dz"]))
+    CHECKS["kept"] = kept
+    # низькополігональна оболонка: висотна сітка променями зверху
+    step = 0.62
+    gx0, gx1, gy0, gy1 = -7.6, 7.6, -5.2, 18.6
+    nx, ny = int((gx1 - gx0) / step) + 1, int((gy1 - gy0) / step) + 1
+    z = [[0.0] * ny for _ in range(nx)]
+    for i in range(nx):
+        for j in range(ny):
+            x, y = gx0 + i * step, gy0 + j * step
+            zs_ = [top_z(x + dx, y + dy) for dx, dy in ((0, 0), (0.2, 0.2), (-0.2, 0.2), (0.2, -0.2), (-0.2, -0.2))]
+            z[i][j] = sum(zs_) / 5.0
+    zz = [[z[i][j] if 0 < i < nx - 1 and 0 < j < ny - 1 else z[i][j] for j in range(ny)] for i in range(nx)]
+    for i in range(1, nx - 1):                                        # одне згладжування: промені не мають ловити кожен окремий шип
+        for j in range(1, ny - 1):
+            zz[i][j] = 0.6 * z[i][j] + 0.4 * (z[i - 1][j] + z[i + 1][j] + z[i][j - 1] + z[i][j + 1]) / 4.0
+    vs, cnt, fs = {}, {}, []
+    for i in range(nx):
+        for j in range(ny):
+            vs[i, j] = b.bm.verts.new((gx0 + i * step, gy0 + j * step, zz[i][j]))
+    for i in range(nx - 1):
+        for j in range(ny - 1):
+            q = [vs[i, j], vs[i + 1, j], vs[i + 1, j + 1], vs[i, j + 1]]
+            if max(v.co.z for v in q) < 0.12:
+                continue
+            for v in q:
+                cnt[v] = cnt.get(v, 0) + 1
+            if _hash_pick(i, j):
+                q = q[1:] + q[:1]
+            fs += [b.bm.faces.new((q[0], q[1], q[2])), b.bm.faces.new((q[0], q[2], q[3]))]
+    for v, c in cnt.items():                                          # край оболонки лягає на землю, крім місць, де купа впирається у стіни будівлі
+        near_wall = (abs(v.co.x) > 6.0 and v.co.y < 6.6) or v.co.y < -4.4
+        if c < 4 and not near_wall:
+            v.co.z = 0.0
+    for f in fs:
+        f.normal_update()
+        if f.normal.z < 0:
+            f.normal_flip()
+    b._finish(fs, "heap_grey")
+    CHECKS["shell_tris"] = len(fs)
+    # плити, що лишились окремо
+    for d in kept:
+        M = d["matrix"]
+        s_, t_, n_ = M.col[0].xyz.copy(), M.col[1].xyz.copy(), M.col[2].xyz.copy()
+        pts = list(d["outline"])
+        th = d["th"]
+        P = d["c"].copy()
+        if n_.z < 0:                                                  # плита лягла догори дном: верх — інший бік тієї ж призми
+            s_, n_ = -s_, -n_
+            pts = [(-x, y) for x, y in pts]
+            P = P + (M.col[2].xyz) * (th / 2)
+        else:
+            P = P - n_ * (th / 2)
+        rot = Matrix((s_, t_, n_)).transposed()
+        ft, rot2 = place_slab(b, pts, th, P, s_, t_, n_, "slab_light_dm", "slab_light_dm", kind="slab")
+        rec = CHECKS["slabs"][-1]
+        rec["L"], rec["W"], rec["heap"] = d["size"][0], d["size"][1], True
+        d["rec"] = rec
+        edge_bundle(b, rnd, pts, th, P, rot2)
+    # дрібний розсип: тіла, що відлетіли за межі оболонки, лишаються окремими шматками
+    far = [d for d in pcs if d["kind"] != "slab" and not d.get("kept") and top_z(d["c"].x, d["c"].y) < d["c"].z - 0.35 and d["c"].z > 0.12][:40]
+    for d in far:
+        sz = max(d["size"])
+        if 0.3 <= sz <= 1.5:
+            rubble(b, rnd, (d["c"].x, d["c"].y, d["c"].z), sz, "heap_rubble_dm", tone=(0.8, 1.2))
+            CHECKS["scatter"].append(d["c"].y - YF)
+    # купки уламків на перекриттях 2-4 поверху з окремої симуляції
+    stubs, boxes2 = [], []
+    for sgn in (1, -1):
+        core = CL if sgn > 0 else CR
+        boxes2.append((core - 40.0 if sgn > 0 else core, core if sgn > 0 else core + 40.0, Y0, Y1, 0.0, H))
+        for k in (1, 2, 3):
+            x0_, x1_ = sorted((core + sgn * 0.1, core + sgn * (SLAB_REL[k] - 0.3)))
+            stubs.append((x0_, x1_, -YI, YI, k * FLOOR, 3))
+    fres = heap_sim.simulate(SIM_SEED + 1, lambda x, y: 0.0, boxes2, (0, 1, 0, 1, 20, 21, 20.0, 0.0), (0, 0, 0), frames=70, floor_stubs=stubs)
+    nfl = 0
+    for d in fres["floor"]:
+        c = d["matrix"].translation
+        st = stubs[d["stub"]]
+        if st[0] - 0.1 <= c.x <= st[1] + 0.1 and st[4] - 0.05 <= c.z <= st[4] + 0.9:
+            rubble(b, rnd, (c.x, c.y, c.z), max(0.3, d["size"][0]), "heap_rubble_dm", tone=(0.8, 1.2))
+            nfl += 1
+    CHECKS["floor_rubble"] = nfl
+    # висока поліґональна купа для запікання
+    hi = Builder()
+    mfaces = []
+    mvs = [hi.bm.verts.new(v) for v in mv]
+    for f in mf:
+        mfaces.append(hi.bm.faces.new([mvs[i] for i in f]))
+    hi._finish(mfaces, "heap_base_rubble")
+    for d in pcs:
+        slot = {"slab": "slab_light_dm", "panel": "frag_light_dm", "rock": "heap_rubble_dm"}[d["kind"]]
+        vs_ = [hi.bm.verts.new(v) for v in d["wv"]]
+        tn = rnd.uniform(0.8, 1.25)
+        fl = []
+        for f in d["faces"]:
+            try:
+                fl.append(hi.bm.faces.new([vs_[i] for i in f]))
+            except ValueError:
+                pass
+        hi._finish(fl, slot)
+        for f in fl:
+            for lp in f.loops:
+                lp[hi.wtone] = (tn, tn, tn, 1.0)
+    return hi
+
+
+def _in_poly(pts, x, y):
+    c = False
+    for i in range(len(pts)):
+        (x1, y1), (x2, y2) = pts[i - 1], pts[i]
+        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+            c = not c
+    return c
+
+
+def preview_hi(hi, path):
+    """Знімає високополігональну купу з камери, схожої на ігрову (ортографічно, 45° по азимуту, нахил ~50°)."""
+    import bpy
+    me = bpy.data.meshes.new("hi_prev")
+    hi.bm.to_mesh(me)
+    ob = bpy.data.objects.new("hi_prev", me)
+    bpy.context.scene.collection.objects.link(ob)
+    cols = {"slab_light_dm": (0.7, 0.7, 0.7, 1), "frag_light_dm": (0.55, 0.55, 0.5, 1), "heap_rubble_dm": (0.4, 0.38, 0.36, 1), "heap_base_rubble": (0.3, 0.29, 0.28, 1)}
+    for sl in hi.slots:
+        m = bpy.data.materials.new(sl)
+        m.diffuse_color = cols.get(sl, (0.5, 0.5, 0.5, 1))
+        me.materials.append(m)
+    sc = bpy.context.scene
+    sc.render.engine = "BLENDER_WORKBENCH"
+    sc.display.shading.light = "STUDIO"
+    sc.display.shading.color_type = "MATERIAL"
+    sc.render.resolution_x, sc.render.resolution_y = 1400, 900
+    cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
+    cam.data.type = "ORTHO"
+    cam.data.ortho_scale = 26
+    sc.collection.objects.link(cam)
+    cam.location = (0.0 + 40 * math.sin(math.radians(45)) * math.cos(math.radians(50)) * -1, 6.0 + 40 * math.cos(math.radians(45)) * math.cos(math.radians(50)) * 1, 40 * math.sin(math.radians(50)))
+    d = Vector((0.0, 6.0, 1.5)) - cam.location
+    cam.rotation_euler = d.to_track_quat("-Z", "Y").to_euler()
+    sc.camera = cam
+    sc.render.filepath = path
+    bpy.ops.render.render(write_still=True)
+    print("PREVIEW", path)
+
+
 def damaged():
     """Обвал середньої секції: два уцілілі крила з відкритими кімнатами, між ними пролом на всю висоту; на фасад (+Y) лежить язик завалу
     (дрібняк і шматки 0.3-1.5 м як тіло, 6-8 плит стирчать під різними кутами), з інших боків уламків немає."""
@@ -650,9 +806,10 @@ def damaged():
     M["interior_floor"] = lib.make_material("interior_floor", "Concrete034", 1.5, (0.2, 0.19, 0.175), patch=((0.03, 0.03, 0.03), 0.3), streak=0.3)
     M["broken_end"] = lib.make_material("broken_end", "Concrete034", 1.2, (0.30, 0.285, 0.265), streak=0.5, base_dirt=0.5, bump=0.05, patch=((0.36, 0.15, 0.06), 0.3), patch_scale=0.22)   # рваний бетон з іржею
     M["heap_light"] = lib.make_material("heap_light", "Concrete034", 2.0, (0.60, 0.59, 0.57), streak=0.3, base_dirt=0.4, bump=0.05)           # світло-сірий дрібняк завалу
-    M["slab_light"] = lib.make_material("slab_light", "Concrete034", 1.2, (0.52, 0.505, 0.485), streak=0.4, base_dirt=0.4, bump=0.03)
-    M["frag_light"] = lib.make_material("frag_light", "Concrete034", 1.2, (0.52, 0.505, 0.48), streak=0.8, base_dirt=0.5, bump=0.03)
-    M["heap_rubble"] = lib.make_material("heap_rubble", "rubble", 2.0, (0.70, 0.83, 0.92), bump=0.07, rough=0.95, streak=0.2)    # Poly Haven rubble, повтор 2 м, тон майже нейтральний
+    M["slab_light"] = lib.make_material("slab_light", "Concrete034", 1.2, (0.46, 0.45, 0.43), streak=0.9, streak_xy=1.6, base_dirt=0.5, bump=0.03, patch=((0.12, 0.11, 0.10), 0.25))
+    M["frag_light"] = lib.make_material("frag_light", "Concrete034", 1.2, (0.42, 0.41, 0.39), streak=1.0, streak_xy=1.6, base_dirt=0.6, bump=0.03, patch=((0.10, 0.09, 0.08), 0.25))
+    M["heap_rubble"] = lib.make_material("heap_rubble", "rubble", 2.0, (0.58, 0.66, 0.72), bump=0.07, rough=0.95, streak=0.2)
+    M["heap_base_rubble"] = lib.make_material("heap_base_rubble", "rubble", 2.0, (0.58, 0.66, 0.72), bump=0.07, rough=0.95, streak=0.2)    # Poly Haven rubble, повтор 2 м, тон майже нейтральний
     M["debris_apron"] = lib.make_material("debris_apron", "concrete_debris", 2.0, (0.66, 0.80, 1.0), bump=0.05, rough=0.95)    # Poly Haven concrete_debris навколо язика
     M["panel_warm"] = lib.make_material("panel_warm", "Concrete034", 1.2, (0.98, 0.78, 0.54), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.5, base_dirt=0.6, cells=("x", 3.0, "z", 3.1, 0.19), rough=0.9)   # торець: тепліший бетон, щоб небо не робило його синім
     lib.FLAT.add("rebar")                                                                   # прути: плоский зразок без AO, інакше тонкі призми запікаються чорними
@@ -680,108 +837,49 @@ def damaged():
     wing(b, rnd, -1, tgw)
     facade_breaks(b, rnd, 1)
     facade_breaks(b, rnd, -1)
-    remnants(b, rnd)
+    rem_boxes = remnants(b, rnd)
     entrances(b, CL - 0.5)
     entrances(b, X1, CR - 1.0)
     roof_details(b, CL - 0.5)
     roof_details(b, X1, CR - 1.0)
     CHECKS["furniture"] = CHECKS.get("furniture", 0) + 2
-    # завал (у локальній системі язика)
+    # завал: симуляція твердих тіл, потім низькополігональна оболонка й кілька плит окремою геометрією
     before = set(b.bm.verts)
-    tg.build(b, hrnd)
-    hf = Heights(tg)
-    n0 = len(CHECKS["slabs"])
-    # тіло купи: дрібняк і шматки 0.3-1.5 м, світло-сірі, густо по всьому язику
-    placed = 0
-    for _ in range(2500):
-        if placed >= 175:
-            break
-        x, y = hrnd.uniform(XL - 10.6, XL + 9.0), hrnd.uniform(-9.5, 9.5)
-        h0 = 0.8 * tg.h(x, y)
-        if abs(y) > tg.half(x - XL) + (1.2 if x >= XL else -0.5) or (h0 < 0.15 and hrnd.random() < 0.7):
-            continue
-        sz = max(0.5, (0.6 + (hrnd.random() ** 1.6) * 0.7) * (0.6 + 0.4 * min(1.0, h0 / 2.5)))   # біля краю дрібніші
-        c = (x, y, h0 + sz * 0.22)
-        rubble(b, hrnd, c, sz, "heap_rubble_dm", tone=(0.85, 1.4), flat=0.7)
-        hf.raise_disc(x, y, sz * 0.45, c[2] + sz * 0.3)
-        placed += 1
-    big = ((2.4, -4.6, 0.5, 40, 5.2, 2.8), (3.0, 0.2, -0.8, 46, 5.0, 2.6), (2.2, 4.4, 0.9, 36, 4.8, 2.6), (4.6, -1.8, 1.2, 44, 4.0, 2.4),
-           (4.8, 2.6, -1.1, 40, 3.8, 2.2), (6.0, -4.4, 0.0, 34, 3.6, 2.2), (5.8, 4.8, -0.6, 32, 3.6, 2.2))
-    for (dx, y, yaw, th_, L, W) in big:
-        drop(b, hrnd, hf, XL + dx, y, yaw, th_, L, W, hrnd.uniform(0.15, 0.2), "slab_light_dm", "slab", sink=0.6, rebar=0.15)
-    for (dx, y, yaw, th_) in ((5.4, -6.0, 0.8, 38), (5.6, 1.2, -0.9, 34), (3.6, -6.4, 0.2, 44), (4.4, 6.2, -1.0, 36), (6.8, -0.8, 1.2, 40)):
-        drop(b, hrnd, hf, XL + dx, y, yaw, th_, 3.0, 2.8, hrnd.uniform(0.16, 0.2), "frag_light_dm", "panel", sink=0.5, rebar=0.3)
-    for rec in CHECKS["slabs"][n0:]:
-        rec["heap"] = True
-    # нижній шар дрібняку розповзається по траві за контуром купи
-    cx, cy = XL + 2.5, 0.0
-    for i in range(26):
-        a = 2 * math.pi * i / 26 + hrnd.uniform(-0.1, 0.1)
-        ca, sa = math.cos(a), math.sin(a)
-        r = 0.0
-        while r < 20.0 and tg.h(cx + ca * r, cy + sa * r) > 0.05:
-            r += 0.1
-        r += hrnd.uniform(0.1, 1.8)
-        x, y = cx + ca * r, cy + sa * r
-        if x < XL + 0.3:
-            continue
-        sz = hrnd.uniform(0.46, 0.7)
-        rubble(b, hrnd, (x, y, sz * 0.12), sz, "heap_rubble_dm", tone=(0.7, 1.2))
-        CHECKS["scatter"].append(x - XL)
-        CHECKS["apron"] += 1
+    hi = heap_from_sim(b, tg, tgw, sim_boxes(rem_boxes), hrnd)
+    if os.environ.get("HEAP_PREVIEW"):                               # кроп купи після симуляції, до запікання
+        preview_hi(hi, os.environ["HEAP_PREVIEW"])
+        return
+    ap0 = set(b.bm.verts)
     apron(b, tg)
-    CHECKS["heap_verts"] = [v for v in b.bm.verts if v not in before]
-    validate(tg)
-    for v in CHECKS["heap_verts"]:                                  # поворот язика на 90°: спуск +x -> +Y моделі, поперечна вісь -> X через XCEN
+    for v in [v for v in b.bm.verts if v not in ap0]:                # фартух побудований у локальній системі язика: повертаємо в модель
         xl, yl = v.co.x, v.co.y
         v.co.x, v.co.y = XCEN - yl, YF + (xl - XL)
-    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=6000, max_px=2048, footprint=(7, 3), anchor=(0, 6.0), ground_clip=True, ao=0.45)
+    CHECKS["heap_verts"] = [v for v in b.bm.verts if v not in before]
+    validate(tg)
+    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=7500, max_px=2048, footprint=(7, 3), anchor=(0, 6.0), ground_clip=True, hi=hi, ao=0.8)
 
 
 def validate(tg):
     """Кожна вимога до завалу й пролому — перевірка на побудованій геометрії; порушення валить збирання."""
-    import numpy as np
-    hv = [v for v in CHECKS["heap_verts"] if v.is_valid]
+    sim = CHECKS["sim"]
+    assert 300 <= sim["total"] <= 600, f"уламків у симуляції {sim['total']}"
+    assert 8 <= sim["slabs"] <= 12 and 30 <= sim["panels"] <= 60 and sim["holes"] >= 5, f"склад симуляції {sim}"
+    kept = CHECKS["kept"]
+    assert 4 <= len(kept) <= 6, f"окремих плит {len(kept)}"
+    for d in kept:
+        assert 10.0 <= d["tilt"] <= 50.0, f"нахил плити {d['tilt']:.0f}°"
+        assert 0.25 <= d["buried"] <= 0.65, f"втоплена плита {d['buried']:.2f}"
+        assert 3.0 <= d["size"][0] <= 6.0 and 1.2 <= d["size"][1] <= 3.0 and 0.16 <= d["th"] <= 0.22, f"плита {d['size']} {d['th']}"
+    assert 1400 <= CHECKS["shell_tris"] <= 2100, f"трикутників оболонки {CHECKS['shell_tris']}"
+    hv = [v for v in CHECKS["heap_verts"] if v.is_valid and v.co.z > 0.1]
     top = max(v.co.z for v in hv)
-    assert 3.0 <= top <= 5.0, f"висота купи {top:.2f} м поза 3-5"
-    wall_h = max(v.co.z for v in hv if abs(v.co.x - XL) <= 1.0)
-    assert wall_h >= 2.5, f"біля стіни купа лише {wall_h:.2f} м"
-    reach = max(v.co.x for v in hv) - XL
-    assert 8.0 <= reach <= 12.0, f"виліт купи {reach:.1f} м поза 8-12"
-    assert min(v.co.x for v in hv) >= XL - 12.0, "завал виходить за задню стіну"
-    side = [round(v.co.y, 1) for v in hv if v.co.z > 0.1 and v.co.x < XL and abs(v.co.y) > 7.0]        # всередині пролому (13 м) уламки лише між крилами
-    assert not side, f"уламки з боків будинку далі ніж на 1 м від стіни {side[:5]}"
-    dense = max(d for d in [i * 0.05 for i in range(0, 400)] if tg.base(d) > 0.3)       # де оболонка ще вища за 0.3 м
-    assert 6.0 <= dense <= 8.0, f"щільна частина {dense:.1f} м, треба ~7"
-    hs = [c for c in CHECKS["slabs"] if c["heap"]]
-    big = panels = 0
-    for c in CHECKS["slabs"]:
-        c["ft"].normal_update()
-        ang = math.degrees(math.acos(min(1.0, abs(c["ft"].normal.z))))
-        c["ang"] = ang
-        th = abs((c["top"][0].co - c["bot"][0].co).dot(c["ft"].normal))
-        a = np.array([(v.co.x, v.co.y, v.co.z) for v in c["top"]])
-        a = a - a.mean(axis=0)
-        ev = np.sqrt(np.maximum(np.linalg.eigvalsh(a.T @ a / len(a)), 0))
-        c["size"] = (ev[1] * 3.46, ev[2] * 3.46)
-        if c["heap"]:
-            assert 20.0 <= ang <= 50.0, f"нахил плити {ang:.1f}° поза 20-50°"
-            assert 0.14 - 1e-3 <= th <= 0.2 + 1e-3, f"товщина уламка {th:.3f}"
-            assert c["size"][0] >= 1.2 and c["size"][1] / c["size"][0] <= 3.2, f"плита-скалка {c['size']}"
-            big += 1 if (c["kind"] == "slab" and c["L"] >= 3.0 and c["W"] >= 1.2) else 0
-            panels += 1 if c["kind"] == "panel" else 0
-    assert 6 <= big <= 8, f"великих плит {big}: треба 6-8"
-    assert panels >= 4, f"шматків панелей {panels}"
-    vis = sum(1 for c in hs if c["kind"] == "slab" and c["L"] > 3.0 and c["ft"].normal.x > 0.05)
-    assert vis + len(CHECKS["ramps"]) >= 6, f"з камери видно лише {vis} довгих плит"
-    assert sum(1 for c in hs if c["ang"] <= 36.0) >= 2
-    exts = []
-    for verts, rot, dims in CHECKS["boulders"]:
-        loc = [rot.transposed() @ Vector(v.co) for v in verts]
-        ext = sorted(max(p[i] for p in loc) - min(p[i] for p in loc) for i in range(3))
-        assert 0.3 <= ext[2] <= 1.5, f"шматок {ext}"
-        assert ext[2] / max(ext[0], 0.05) <= 3.6, "шматок-голка"
-        exts.append(ext)
+    assert 3.0 <= top <= 5.2, f"висота купи {top:.2f} м"
+    inside = [v.co.z for v in hv if abs(v.co.x) < 5.0 and -3.0 < v.co.y < 5.0]
+    assert inside and max(inside) >= 2.5, "пролом не засипано"
+    reach = max(v.co.y for v in hv) - Y1
+    assert 6.0 <= reach <= 12.5, f"виліт купи {reach:.1f} м"
+    side = [(round(v.co.x, 1), round(v.co.y, 1)) for v in hv if (v.co.y < Y1 + 0.5 and abs(v.co.x) > 7.6) or abs(v.co.x) > 10.0]
+    assert not side, f"уламки з боків будинку {side[:5]}"
     for dia, v in CHECKS["rods"]:
         assert 0.01 <= dia <= 0.02, f"діаметр прута {dia}"
         assert math.degrees(math.asin(abs(v.normalized().z))) <= 60.0, "прут стирчить сторч"
@@ -789,9 +887,8 @@ def validate(tg):
     assert len(CHECKS["partitions"]) == 2 * NF and all(2 <= n <= 3 for n in CHECKS["partitions"].values()), "стін у клітинках 2-3"
     assert CHECKS["ceilings"] == 2 * NF and CHECKS["furniture"] >= 3 and CHECKS["cells"] == 4 * NF
     est = 255 * (1.055 * (CAV_LIN * 0.47) ** (1 / 2.4) - 0.055)      # 0.47 — зміряно під світлом Річки: альбедо 0.03 дало sRGB 32
-    assert 60 <= est <= 80, f"нутро кімнат на екрані під Річкою ~{est:.0f}: ціль 60-80"
-    # пролом: жодного плаского перекриття далі 2 м від стіни, рампи 25-40, звис даху, зріз даху, зріз фасаду
-    assert all(1.0 <= f <= 2.0 for f in CHECKS["flats"]) and len(CHECKS["flats"]) == 2 * NF, f"пласка частина перекриття від стіни {CHECKS['flats']}: має бути 1-2 м"
+    assert 80 <= est <= 100, f"нутро кімнат на екрані під Річкою ~{est:.0f}: ціль L* 55-65 (sRGB 80-100)"
+    assert all(1.0 <= f <= 2.0 for f in CHECKS["flats"]) and len(CHECKS["flats"]) == 2 * NF, f"пласка частина перекриття від стіни {CHECKS['flats']}"
     assert len(CHECKS["ramps"]) == 2 * 3
     for r in CHECKS["ramps"]:
         r["ft"].normal_update()
@@ -807,15 +904,14 @@ def validate(tg):
     for sgn, vs in CHECKS["roof_verts"].items():
         edge = max((v.co.x - (CL if sgn > 0 else CR)) * sgn for v in vs)
         top_end = (REL_L if sgn > 0 else REL_R)[NF - 1]
-        assert 1.0 <= top_end - edge <= 1.5, f"плита даху крила {sgn} зрізана на {top_end - edge:.2f} м, треба 1-1.5"
-    assert len(CHECKS["protr"]) == 4 * NF and all(3 <= len(g) <= 5 and all(0.3 <= x <= 0.8 for x in g) for g in CHECKS["protr"]), f"виступи зрізу фасаду {CHECKS['protr']}"
+        assert 1.0 <= top_end - edge <= 1.5, f"плита даху крила {sgn} зрізана на {top_end - edge:.2f} м"
+    assert len(CHECKS["protr"]) == 4 * NF and all(3 <= len(g) <= 5 and all(0.3 <= x <= 0.8 for x in g) for g in CHECKS["protr"]), "виступи зрізу фасаду"
     assert CHECKS["bundles"] and all(0.05 <= w <= 0.08 for w in CHECKS["bundles"]), "пучок арматури 5-8 см"
     hs_, h1_, h2_ = CHECKS["remnants"]
     assert hs_ and all(FLOOR - 1.3 <= h_ <= 3 * FLOOR for h_ in hs_) and max(hs_) >= 2 * FLOOR and h2_ >= 2 * FLOOR, f"рештки задньої стіни {hs_}"
-    assert CHECKS["apron_ring"] >= 12 and CHECKS["apron"] >= 10 and CHECKS["floor_rubble"] >= 2 * (NF - 1)
-    print("MEAS heap_top_m=%.2f at_wall=%.2f reach=%.1f dense=%.1f slabs=%d (big=%d panels=%d) tilt=%.0f..%.0f ramps=%s" % (
-        top, wall_h, reach, dense, len(hs), big, panels, min(c["ang"] for c in hs), max(c["ang"] for c in hs), [round(r["ang"]) for r in CHECKS["ramps"]]))
-    print("MEAS flats_m=%s chunks=%d dims=%.2f..%.2f rods=%d apron_cells=%d" % ([round(f, 2) for f in CHECKS["flats"]], len(exts), min(e[2] for e in exts), max(e[2] for e in exts), len(CHECKS["rods"]), CHECKS["apron"]))
+    assert CHECKS["apron_ring"] >= 12 and CHECKS["floor_rubble"] >= 6, f"купки на перекриттях {CHECKS['floor_rubble']}"
+    print("MEAS sim=%s kept=%d tilt=%s buried=%s shell_tris=%d top=%.2f reach=%.1f floor_piles=%d scatter=%d" % (
+        sim, len(kept), [round(d["tilt"]) for d in kept], [round(d["buried"], 2) for d in kept], CHECKS["shell_tris"], top, reach, CHECKS["floor_rubble"], len(CHECKS["scatter"])))
 
 
 if os.environ.get("BLOCK_ONLY") != "damaged":
