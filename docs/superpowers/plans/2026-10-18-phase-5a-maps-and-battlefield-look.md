@@ -475,8 +475,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] One chimney per house, five chimney types; several window forms; trims in the wall tone
 - [x] Concrete fences weathered, three or more types; sheds 3; trailers 4
 - [x] Wet factor in `prop_fade` no longer lightens roofs; no colour roof tints
-- [ ] Roof colours only graphite slate, dark cherry or red-brown, true dark green, galvanised grey, dark brown; no olive, ochre or mustard
-- [ ] Every roof clearly darker than its wall: sRGB luma ratio ≤ 0.6
+- [x] Roof colours only graphite slate, dark cherry or red-brown, true dark green, galvanised grey, dark brown; no olive, ochre or mustard
+- [x] Every roof clearly darker than its wall: sRGB luma ratio ≤ 0.6
 - [ ] Not plastic, not grey; streaks under sills and a damp plinth band visible in battle
 - [ ] Glass reads as glass on intact houses; broken windows only on ruins, as a real opening
 - [ ] Hay and bridges matte; gardens tilled rows; chimney tops open and dark; ruin floors show debris, not grass
