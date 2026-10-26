@@ -53,15 +53,21 @@ def roof_break(b, P, cut, sgn, rnd, mat, nv=18, battens=True):
     """Рваний край даху: ступінчастий контур (кожен ряд листів чи черепиці обламаний на свою довжину), вузька кіптява вздовж краю
     й оголені рейки, що стирчать у провал. sgn — у який бік від краю лишився дах."""
     xs = [cut(i / nv) + rnd.uniform(-0.14, 0.14) for i in range(nv)]
-    pts = [P(xs[0] + 0.0, 0.0)]
-    for i in range(nv):
-        pts.append(P(xs[i], i / nv))
-        pts.append(P(xs[i], (i + 1) / nv))
+    # рваний край ламаною через середини рядів: сходинки по ряду давали на зумі 6 піксельні зубці
+    pts = [P(xs[0], 0.0)] + [P(xs[i], (i + 0.5) / nv) for i in range(nv)] + [P(xs[-1], 1.0)]
+    edge_thick(b, pts, sgn)
     return pts, xs
 
 
+def edge_thick(b, pts, sgn, d=0.15):
+    """Видима товщина зламу: смуга 15 см униз від краю (лист плюс лати), обернена до провалу (від боку sgn, де дах лишився)."""
+    for p0, p1 in zip(pts[:-1], pts[1:]):
+        q = [p0, p1, (p1[0], p1[1], p1[2] - d), (p0[0], p0[1], p0[2] - d)]
+        lib._quad(b, q, "boards_ruin", (-sgn, 0.0, 0.0))
+
+
 def roof_part(b, P, x_end, cut, mat, rnd, nv=18, battens=True):
-    pts, xs = roof_break(b, P, cut, 1, rnd, mat, nv)
+    pts, xs = roof_break(b, P, cut, 1 if x_end > 0 else -1, rnd, mat, nv)
     b.poly_up([P(x_end, 0.0)] + pts + [P(x_end, 1.0)], mat)
     return xs
 
@@ -70,7 +76,7 @@ def break_dress(b, P, xs, sgn, rnd, nv=18, battens=True):
     """Кіптява вздовж краю (вузька) і рейки 5x4 см, що стирчать за край на 0.2-0.5 м."""
     for i in range(nv):                                                          # кіптява на самому даху: чорна біля краю, згасає за ~0.9 м
         v0, v1 = i / nv, (i + 1) / nv
-        for (d0, d1, t0, t1) in ((0.0, 0.35, 0.1, 0.45), (0.35, 0.9, 0.45, 1.0)):
+        for (d0, d1, t0, t1) in ((0.0, 0.35, 0.4, 0.7), (0.35, 0.9, 0.7, 1.0)):      # чорна облямівка уздовж зламу читалась як обведення
             pts = [P(xs[i] + d0 * sgn, v0), P(xs[i] + d0 * sgn, v1), P(xs[i] + d1 * sgn, v1), P(xs[i] + d1 * sgn, v0)]
             pts = [(x, y, z + 0.01) for (x, y, z) in pts]
             n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
@@ -143,7 +149,7 @@ def house1(ruined):
     """Одноповерховий дім 6.6 x 4.8 м. Напівзруйнований: східна половина даху ціла, західна провалилась, обвалена частина
     фронтальної й західної стін, завал усередині й невеликий зсув перед обваленою стіною."""
     lib.reset()
-    lib.palette(wall=(0.84, 0.68, 0.56), roof="cherry", eave=3.0, chim="ch_orange", row=0.3, trim=(0.90, 0.88, 0.84))
+    lib.palette(wall=(0.84, 0.68, 0.56), roof="cherry", eave=3.0, chim="ch_orange", row=0.3, trim=(0.90, 0.88, 0.84), frame=4)
     DM[0] = "wall_plaster_dm" if not ruined else "wall_half"
     b = Builder()
     rnd = random.Random(14)
@@ -324,9 +330,7 @@ def house2(ruined):
     lib.pocks(b, "y", S - 0.2, -1, 0.5, 3.0, 2.6, 60, 43, zmin=0.2, zmax=5.9)
     # внутрішня грань західного фронтону не чиста штукатурка: кіптява згори, облуплені плями
     xi = -hx + 0.21
-    plane_soot(b, [(xi, -2.5, 2.8), (xi, 2.5, 2.8), (xi, 2.0, 7.2), (xi, -2.0, 7.2)], (0.5, 0.5, 0.12, 0.12), (1, 0, 0))
-    for (yy, zz, ww, hh) in ((-1.0, 4.4, 1.2, 0.9), (1.2, 3.6, 0.9, 1.2), (0.0, 5.6, 1.4, 0.7)):
-        plane_soot(b, [(xi + 0.004, yy - ww / 2, zz), (xi + 0.004, yy + ww / 2, zz + 0.1), (xi + 0.004, yy + ww * 0.4, zz + hh), (xi + 0.004, yy - ww * 0.5, zz + hh * 0.8)], (0.2, 0.2, 0.09, 0.09), (1, 0, 0))
+    # внутрішня стіна вже з обгорілої штукатурки (in_mat); суцільні площини кіптяви робили її чорною порожнечею
     for (yy, zz, ww, hh_) in ((-1.2, 3.4, 1.1, 0.8), (0.9, 4.2, 0.9, 0.9), (1.7, 3.0, 0.7, 0.6)):      # плями втрати штукатурки: проступає цегла
         b.box(xi + 0.015, yy, zz, 0.03, ww, hh_, "brick_face")
     ph = [rnd.uniform(0, 6.3) for _ in range(3)]
@@ -340,12 +344,9 @@ def house2(ruined):
     def roof_west(P, cut):
         nv = 18
         xs = [cut(i / nv) + rnd.uniform(-0.14, 0.14) for i in range(nv)]
-        pts = [P(xw, 0.0)]
-        for i in range(nv):
-            pts.append(P(xs[i], i / nv))
-            pts.append(P(xs[i], (i + 1) / nv))
-        pts.append(P(xw, 1.0))
-        b.poly_up(pts, "tile_small")
+        edge = [P(xs[0], 0.0)] + [P(xs[i], (i + 0.5) / nv) for i in range(nv)] + [P(xs[-1], 1.0)]
+        b.poly_up([P(xw, 0.0)] + edge + [P(xw, 1.0)], "tile_small")
+        edge_thick(b, edge, -1)
         return xs
     xsF = roof_west(PF, cutF)
     xsB = roof_west(PB, cutB)
@@ -363,12 +364,12 @@ def house2(ruined):
             HeapSurface(1.7, 0.2, 1.5, 2.0, 1.7, 82, bumps=5, lip=0.26, wob=0.15, lump=0.06, hummocks=3, hum_amp=0.5)]
     plan[0].fit_peak(1.0)
     sf = surface(plan)
-    chip_slab(b, 1.4, -1.4, FL - 0.1, 2.8, 2.4, 0.22, (0.0, 0.35, 0.05), "floor_char", "floor_char", 41, rebar=3, per_edge=2)
-    chip_slab(b, 1.8, 1.4, FL - 0.25, 2.6, 2.2, 0.22, (0.0, 0.42, -0.06), "floor_char", "floor_char", 42, rebar=2, per_edge=2)
+    chip_slab(b, 1.4, -1.4, FL - 0.1, 2.8, 2.4, 0.22, (0.0, 0.35, 0.05), "slab_dark", "slab_dark", 41, rebar=3, per_edge=2)    # бетон перекриття в кіптяві
+    chip_slab(b, 1.8, 1.4, FL - 0.25, 2.6, 2.2, 0.22, (0.0, 0.42, -0.06), "slab_dark", "slab_dark", 42, rebar=2, per_edge=2)
     # дах упав трьома шматками з тієї самої черепиці, що стоїть: лежать на крокві й підлозі, провисли всередину
-    chip_slab(b, 1.9, -1.7, 4.7, 2.0, 2.0, 0.12, (-0.5, 0.08, 0.0), "tile_small", "tile_small", 43, rebar=0, per_edge=2)
-    chip_slab(b, 2.5, 0.1, 3.8, 2.1, 1.9, 0.12, (-0.35, 0.12, 0.1), "tile_small", "tile_small", 44, rebar=0, per_edge=2)
-    chip_slab(b, 2.9, 1.7, 3.0, 1.9, 1.7, 0.12, (-0.25, 0.18, -0.2), "tile_small", "tile_small", 45, rebar=0, per_edge=2)
+    chip_slab(b, 1.9, -1.7, 4.7, 2.0, 2.0, 0.12, (-0.5, 0.08, 0.0), "sheet_char", "sheet_char", 43, rebar=0, per_edge=2)
+    chip_slab(b, 2.5, 0.1, 3.8, 2.1, 1.9, 0.12, (-0.35, 0.12, 0.1), "sheet_char", "sheet_char", 44, rebar=0, per_edge=2)
+    chip_slab(b, 2.9, 1.7, 3.0, 1.9, 1.7, 0.12, (-0.25, 0.18, -0.2), "sheet_char", "sheet_char", 45, rebar=0, per_edge=2)
     bent_sheet(b, (3.2, 1.6, sf(3.2, 1.6) + 0.2), (3.9, 2.4, sf(3.9, 2.4) + 0.12), 0.9, "sheet_char", 0.12, axis="y")
     b.chimney(-1.8, 0.0, 8.0, 0.6, 2.4, "brick_face", cap="plinth_flat")
     lumps(b, plan, rnd, 14)

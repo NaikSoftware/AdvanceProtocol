@@ -99,7 +99,7 @@ def hangar(damaged):
         b.box(0, y1 - 0.1, 0.6, W, 0.2, EAVE - 0.6, "clad_wall")
         b.box(0, y0 + 0.22, 0.6, W - 0.5, 0.02, EAVE - 0.6, "clad_inner")
         b.box(0, y1 - 0.22, 0.6, W - 0.5, 0.02, EAVE - 0.6, "clad_inner")
-        b.box(0, 0, 0.62, W - 0.4, Ln - 0.4, 0.04, "floor_dark")
+        b.box(0, 0, 0.62, W - 0.4, Ln - 0.4, 0.04, "apron")                               # бетонна підлога: темна читалась як порожнеча
         # покрівля: прорізи вирізані прямо в геометрії рваним краєм (зубці 0.3-1 м), а не маскою
         hole_rnd = random.Random(5)
         HOLE = {}
@@ -109,8 +109,8 @@ def hangar(damaged):
             for i in range(n + 1):
                 y = ylo + 0.5 * i
                 e = math.sin(math.pi * (y - ylo) / (yhi - ylo)) ** 0.7
-                wl = 0.36 * e * hole_rnd.uniform(0.7, 1.3) * (1.4 if hole_rnd.random() < 0.18 else 1.0)
-                wh = 0.32 * e * hole_rnd.uniform(0.7, 1.3) * (1.4 if hole_rnd.random() < 0.18 else 1.0)
+                wl = 0.36 * e * hole_rnd.uniform(0.72, 1.28)                       # рваний край без зірчастих шпичаків
+                wh = 0.32 * e * hole_rnd.uniform(0.72, 1.28)
                 pts.append((y, max(0.0, cen - wl), min(1.0, cen + wh)))
             HOLE[side] = pts
             for k in range(6):
@@ -165,7 +165,21 @@ def hangar(damaged):
                     p0 = (side * 9.0 * (1 - ta), ia[0], EAVE + 3.0 * ta + 0.08)
                     p1 = (side * 9.0 * (1 - tb), ib[0], EAVE + 3.0 * tb + 0.08)
                     if abs(p0[1] - p1[1]) > 0.1:
-                        b.beam(p0, p1, 0.12, "galv_rim", 0.14)
+                        b.beam(p0, p1, 0.18, "galv_rim", 0.2)
+        # каркас крізь пролом: дві крокви поперек кожного й прогін уздовж; світла пляма на підлозі під діркою
+        for side in (1, -1):
+            pts = HOLE[side]
+            ylo_, yhi_ = pts[0][0], pts[-1][0]
+            for yy in (ylo_ + (yhi_ - ylo_) * 0.3, ylo_ + (yhi_ - ylo_) * 0.7):
+                q = min(pts, key=lambda r: abs(r[0] - yy))
+                pa_ = slope_pt(side, max(0.0, q[1] - 0.08), yy)
+                pb_ = slope_pt(side, min(1.0, q[2] + 0.08), yy)
+                b.beam((pa_[0], yy, pa_[2] - 0.2), (pb_[0], yy, pb_[2] - 0.2), 0.2, "galv", 0.3)
+            tm = (max(r[1] for r in pts) + min(r[2] for r in pts)) / 2
+            pa_, pb_ = slope_pt(side, tm, ylo_ - 0.6), slope_pt(side, tm, yhi_ + 0.6)
+            b.beam((pa_[0], pa_[1], pa_[2] - 0.35), (pb_[0], pb_[1], pb_[2] - 0.35), 0.16, "galv", 0.22)
+            lit = [(side * 9.0 * (1 - r[1]), r[0], 0.665) for r in pts] + [(side * 9.0 * (1 - r[2]), r[0], 0.665) for r in pts[::-1]]
+            b.poly_up(lit, "step")
         flap(1, "lo", -3.2, -1.0, 0.5)
         flap(1, "hi", 0.5, 2.8, 0.4)
         flap(1, "lo", 2.0, 4.0, 0.55)
