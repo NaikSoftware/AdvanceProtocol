@@ -106,6 +106,8 @@ const WOODS: Dictionary = {
 
 ## Пізня осінь: основа — темні вузькі ялини, листяні (переважно голі) — домішкою.
 const LATE_CANOPY: Dictionary = {"Spruce": 0.78, "Pine": 0.04, "Birch": 0.13, "Oak": 0.05}
+## Ялинник пізньої осені рідший: між зірками крон — темні просвіти землі.
+const LATE_DENSITY: float = 3.2
 const LATE_EDGE: Dictionary = {"Spruce_B": 0.6, "Birch": 0.3, "Oak": 0.1}
 
 ## Тон поля тестового лісу; світло, тінь, дощ і тон листя ставить WeatherRig за
@@ -478,7 +480,7 @@ func _scatter() -> void:
 	var shrub := func(d: float) -> bool: return d > 0.0 and d <= SHRUB_BAND
 	var logs := func(d: float) -> bool: return d > 0.3
 	_layer(4.8, canopy, func(p: Vector2) -> Dictionary: return LATE_CANOPY if _season == "late" else WOODS[_wood_at.call(p)]["canopy"], CANOPY_SCALE, true,
-			func(p: Vector2) -> float: return float(WOODS[_wood_at.call(p)]["density"]))
+			func(p: Vector2) -> float: return LATE_DENSITY if _season == "late" else float(WOODS[_wood_at.call(p)]["density"]))
 	_layer(EDGE_DENSITY, edge, func(p: Vector2) -> Dictionary: return LATE_EDGE if _season == "late" else WOODS[_wood_at.call(p)]["edge"], EDGE_SCALE, true)
 	_layer(SHRUB_DENSITY, shrub, func(p: Vector2) -> Dictionary: return WOODS[_wood_at.call(p)]["belt"], SHRUB_H, false)
 	if _meshes.has("Log"):

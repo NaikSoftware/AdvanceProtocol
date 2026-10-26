@@ -86,6 +86,21 @@ def flat(bm, uvl, col, c, roll, size, rect, shade):
     return {v: Vector((0, 0, 1)) for v in vs}
 
 
+def tier_card(bm, uvl, uv2l, col, c, roll, size, rect, shade):
+    """Горизонтальна картка ярусу ялини: лежить у площині, як гілка, і не розгортається
+    до камери; крихітний UV2 лише позначає її як хвою для шейдера (тон, світло)."""
+    h = size / 2
+    cr, sr = math.cos(roll), math.sin(roll)
+    co = [Vector(c) + Vector((x * cr - y * sr, x * sr + y * cr, 0.0)) * h for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    vs = [bm.verts.new(p) for p in co]
+    f = bm.faces.new(vs)
+    for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        loop[uvl].uv = to_atlas(rect, u, v)
+        loop[uv2l].uv = (1e-4, 0.0)
+        loop[col] = (shade, shade, shade, 1.0)
+    return {v: Vector((0, 0, 1)) for v in vs}
+
+
 def limb(bm, uvl, rect, pts, radii, sides=3):
     """Гілка-трубка з кількох відрізків; смуга кори вздовж, як у стовбура."""
     rings = []
@@ -176,6 +191,20 @@ def build_node(item, rects):
                         + 0.03 * math.sin(cd["roll"] * 7.31), 0.55), 1.0)
         vnorm.update(card(bm, uvl, uv2l, col, cd["c"], cd["roll"], cd["size"] * scale,
                           rng.choice(sprites), normal_of, shade))
+    tiers = item.get("tiers", 0)
+    if tiers and cards:
+        # Яруси ялини: згори крона — зірка з гострих гілок, що звужується до верхівки, з
+        # темними просвітами між променями. Самі білборди згори давали круглу пляму.
+        rr = random.Random(item["node"] + "tiers")
+        for k in range(tiers):
+            f = (k + 0.5) / tiers
+            z = cb + (top - cb) * f * 0.9
+            rad = R * (1.0 - f) * 1.15 + 0.2
+            for j in range(5):
+                a = 2 * math.pi * j / 5 + k * 0.63 + rr.uniform(-0.2, 0.2)
+                c = (math.cos(a) * rad * 0.5, math.sin(a) * rad * 0.5, z)
+                shade = 0.55 + 0.25 * f  # горизонтальні яруси ловлять усе небо: темніші, верхівка світліша
+                vnorm.update(tier_card(bm, uvl, uv2l, col, c, a, rad * 1.05, rr.choice(sprites), shade))
     flat_sprites = rects["sprites"].get(item.get("flat_sprites", "litter"), [])
     for fl in meta.get("flats", []):
         vnorm.update(flat(bm, uvl, col, fl["c"], fl["roll"], fl["size"], rng.choice(flat_sprites), fl["shade"]))
@@ -280,7 +309,7 @@ def main():
         if item["node"].startswith(PROXY_FOR):
             # Сітка лише для тіні (cast_shadow = SHADOWS_ONLY): той самий атлас, ~14 пучків
             # і тригранний стовбур замість сотень трикутників крони в тіньовому проході.
-            px = dict(item, node=item["node"] + "_Shadow", trunk_of=item["node"], max_cards=PROXY_CARDS_SHRUB if item["node"].startswith("Shrub") else PROXY_CARDS, trunk_sides=3)
+            px = dict(item, node=item["node"] + "_Shadow", trunk_of=item["node"], tiers=0, max_cards=PROXY_CARDS_SHRUB if item["node"].startswith("Shrub") else PROXY_CARDS, trunk_sides=3)
             ob = build_node(px, rects)
             ob.data.materials.append(mat)
             obs.append(ob)
