@@ -28,8 +28,10 @@ func _ready() -> void:
 	var shadows: bool = args.has("--shadows")
 	# --noshadows: пропси без тіні сонця — щоб зміряти, скільки коштує прохід тіней.
 	var no_shadows: bool = args.has("--noshadows")
+	# --stdmat: будинки з імпортованим матеріалом GLB, без prop_fade — щоб порівняти фактуру.
+	var std_mat: bool = args.has("--stdmat")
 	for i in range(1, args.size()):
-		if args[i] == "--shadows" or args[i] == "--noshadows":
+		if args[i] == "--shadows" or args[i] == "--noshadows" or args[i] == "--stdmat":
 			continue
 		var parts: PackedStringArray = args[i].split("@")
 		var map: String = parts[0]
@@ -47,6 +49,10 @@ func _ready() -> void:
 				var k: int = int(PropLayer.spec_of(StringName(mmi.name))["kind"])
 				if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
 					mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		if std_mat:
+			for mmi: MultiMeshInstance3D in (screen.get_node("%BoardView") as BoardView).props().find_children("*", "MultiMeshInstance3D", false, false):
+				if String(mmi.name).begins_with("house"):
+					mmi.material_override = null
 		var rig: IsoCameraRig = screen.get_node("%CameraRig")
 		var views: Array = []
 		if parts.size() >= 3 and parts[1] == "top":

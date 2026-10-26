@@ -173,7 +173,10 @@ static var _by_kind: Dictionary = {}
 ## Модель -> мокра копія сітки (мости під дощем).
 static var _wet_meshes: Dictionary = {}
 const WET_DARK: float = 0.75
-const WET_ROUGHNESS: float = 0.4
+const WET_ROUGHNESS: float = 0.55
+const BRIDGE_ROUGH: float = 0.85
+## Тюки: загорнутий у плівку мав шорсткість 0.35 і блищав, як метал.
+const HAY_ROUGH: float = 0.8
 ## Модель -> {solid, fade} ShaderMaterial будівлі для поточного вузла.
 var _node_materials: Dictionary = {}
 var _contacts: MultiMeshInstance3D
@@ -295,12 +298,18 @@ static func model(name: StringName) -> Variant:
 ## не чіпаємо: load() ділить його сітку з усіма, хто його вантажить.
 static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
 	var kind: int = int(spec_of(name).get("kind", -1))
-	if kind not in [Kind.FIELD_FENCE, Kind.GARDEN_FENCE, Kind.BOULDER, Kind.BLOCK, Kind.POLE]:
+	if kind not in [Kind.FIELD_FENCE, Kind.GARDEN_FENCE, Kind.BOULDER, Kind.BLOCK, Kind.POLE, Kind.HAY]:
 		return mesh
 	var copy: Mesh = mesh.duplicate()
 	for i in copy.get_surface_count():
 		var src := copy.surface_get_material(i) as BaseMaterial3D
 		if src == null:
+			continue
+		if kind == Kind.HAY:
+			var matte: BaseMaterial3D = src.duplicate()
+			matte.roughness = maxf(src.roughness, HAY_ROUGH)
+			matte.metallic = 0.0
+			copy.surface_set_material(i, matte)
 			continue
 		if kind == Kind.BOULDER or kind == Kind.BLOCK or kind == Kind.POLE:
 			var tint: float = POLE_TINT if kind == Kind.POLE else STONE_TINT
@@ -575,7 +584,7 @@ func _build_nodes(haze: bool) -> void:
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_custom_data = fades
-		mm.mesh = _wet_mesh(m, info["mesh"]) if wet and kind == Kind.BRIDGE else info["mesh"]
+		mm.mesh = _bridge_mesh(m, info["mesh"], wet) if kind == Kind.BRIDGE else info["mesh"]
 		mm.instance_count = (by_node[key] as Array).size()
 		var mmi := MultiMeshInstance3D.new()
 		# Godot міняє «@» в імені вузла на «_», тож вузол кільця — «модель_ring».
@@ -611,41 +620,75 @@ func _build_nodes(haze: bool) -> void:
 	_build_gardens()
 
 
-## Городні грядки: один квадрат на клітинку, ряди малює шейдер. Два трикутники замість дров і
-## причепів на кожній порожній клітинці двору: город читається двором хати, а не складом.
+## Городи: сусідні клітинки городу зливаються в одну ділянку (жадібні прямокутники, тож Г-подібна
+## група не ляже на хату), трохи повернуту й з відступом від меж — один город на двір, а не плитка
+## на кожну клітинку. Ряди — шейдер, крок у метрах однаковий для будь-якого розміру ділянки.
 func _build_gardens() -> void:
 	if _gardens.is_empty():
 		return
+	var plots: Array[Rect2i] = _garden_rects()
 	var quad := PlaneMesh.new()
-	quad.size = Vector2.ONE * 0.62
+	quad.size = Vector2.ONE
 	var mat := ShaderMaterial.new()
 	mat.shader = _GARDEN_SHADER
 	mat.set_shader_parameter("green", garden_green)
 	quad.material = mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
 	mm.mesh = quad
-	mm.instance_count = _gardens.size()
-	for i in _gardens.size():
-		var c: Vector2i = _gardens[i]
-		# Город не по сітці клітинок: трохи повернутий і зсунутий, ряди — то вздовж, то впоперек.
-		var hv: int = absi(cell_hash(c, 144))
-		var yaw: float = (PI * 0.5 if hv % 2 else 0.0) + (float(hv / 2 % 61) / 60.0 - 0.5) * 0.5
-		var shift := Vector2(float(hv / 128 % 21) / 20.0 - 0.5, float(hv / 4096 % 21) / 20.0 - 0.5) * 0.16
-		var hx: float = TerrainHeight.ground_y(c.x + 0.3, c.y) - TerrainHeight.ground_y(c.x - 0.3, c.y)
-		var hz: float = TerrainHeight.ground_y(c.x, c.y + 0.3) - TerrainHeight.ground_y(c.x, c.y - 0.3)
+	mm.instance_count = plots.size()
+	for i in plots.size():
+		var r: Rect2i = plots[i]
+		var hv: int = absi(cell_hash(r.position, 144))
+		# Ряди вздовж довшого боку; ділянка трохи повернута й менша за свої клітинки.
+		var long_x: bool = r.size.x >= r.size.y
+		var yaw: float = (0.0 if long_x else PI * 0.5) + (float(hv % 41) / 40.0 - 0.5) * 0.2
+		var len_a: float = float(maxi(r.size.x, r.size.y)) - 0.28 - float(hv / 64 % 10) / 100.0
+		var len_b: float = float(mini(r.size.x, r.size.y)) - 0.3 - float(hv / 1024 % 10) / 100.0
+		var centre := Vector2(r.position) + Vector2(r.size - Vector2i.ONE) * 0.5
+		var hx: float = TerrainHeight.ground_y(centre.x + 0.3, centre.y) - TerrainHeight.ground_y(centre.x - 0.3, centre.y)
+		var hz: float = TerrainHeight.ground_y(centre.x, centre.y + 0.3) - TerrainHeight.ground_y(centre.x, centre.y - 0.3)
 		var up := Vector3(-hx / 0.6, 1.0, -hz / 0.6).normalized()
 		var right: Vector3 = Vector3(cos(yaw), 0.0, -sin(yaw)).slide(up).normalized()
-		var at := Vector2(c) + shift
-		# Різний розмір городу: від ~3.6 до ~5.5 м.
-		var size: float = 0.75 + float(hv / 65536 % 31) / 100.0
-		mm.set_instance_transform(i, Transform3D(Basis(right * size, up, right.cross(up) * size),
-				Vector3(at.x, TerrainHeight.ground_y(at.x, at.y) + 0.006, at.y)))
+		mm.set_instance_transform(i, Transform3D(Basis(right * len_a, up, right.cross(up) * len_b),
+				Vector3(centre.x, TerrainHeight.ground_y(centre.x, centre.y) + 0.006, centre.y)))
+		# r — скільки рядів на ділянці (ряд ~0.9 м), g — зсув візерунка краю.
+		mm.set_instance_custom_data(i, Color(len_a * 8.0 / 0.9, float(hv % 97) / 97.0, 0.0, 0.0))
 	_garden_node = MultiMeshInstance3D.new()
 	_garden_node.name = "GardenBeds"
 	_garden_node.multimesh = mm
 	_garden_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_garden_node)
+
+
+## Жадібне покриття клітинок городу прямокутниками: рядок за рядком, вшир, потім углиб.
+func _garden_rects() -> Array[Rect2i]:
+	var left: Dictionary = {}
+	for c in _gardens:
+		left[c] = true
+	var cells: Array = left.keys()
+	cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
+	var out: Array[Rect2i] = []
+	for c: Vector2i in cells:
+		if not left.has(c):
+			continue
+		var w: int = 1
+		while left.has(c + Vector2i(w, 0)):
+			w += 1
+		var hgt: int = 1
+		while true:
+			var full := true
+			for x in w:
+				full = full and left.has(c + Vector2i(x, hgt))
+			if not full:
+				break
+			hgt += 1
+		for y in hgt:
+			for x in w:
+				left.erase(c + Vector2i(x, y))
+		out.append(Rect2i(c, Vector2i(w, hgt)))
+	return out
 
 
 ## Пляма дотику під брилами й блоками: один квадрат на кожен, лягає за схилом, одна MultiMesh. Без
@@ -717,19 +760,25 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 	return mat
 
 
-static func _wet_mesh(m: StringName, mesh: Mesh) -> Mesh:
-	if _wet_meshes.has(m):
-		return _wet_meshes[m]
+## Копія сітки мосту під погоду карти. Ассет має «мокрі» поверхні з шорсткістю 0.15 і сталь 0.5 —
+## у кадрі міст блищав, як скло. Шорсткість тепер не нижча за BRIDGE_ROUGH (суха карта) чи
+## WET_ROUGHNESS (мокра; там ще й темніше).
+static func _bridge_mesh(m: StringName, mesh: Mesh, wet_look: bool) -> Mesh:
+	var key: String = "%s:%s" % [m, wet_look]
+	if _wet_meshes.has(key):
+		return _wet_meshes[key]
 	var copy: Mesh = mesh.duplicate()
 	for i in copy.get_surface_count():
 		var src := copy.surface_get_material(i) as BaseMaterial3D
 		if src == null:
 			continue
 		var w: BaseMaterial3D = src.duplicate()
-		w.albedo_color = src.albedo_color * Color(WET_DARK, WET_DARK, WET_DARK, 1.0)
-		w.roughness = minf(src.roughness, WET_ROUGHNESS)
+		var dark: float = WET_DARK if wet_look else 1.0
+		w.albedo_color = src.albedo_color * Color(dark, dark, dark, 1.0)
+		w.roughness = maxf(src.roughness, WET_ROUGHNESS if wet_look else BRIDGE_ROUGH)
+		w.metallic = minf(src.metallic, 0.1)
 		copy.surface_set_material(i, w)
-	_wet_meshes[m] = copy
+	_wet_meshes[key] = copy
 	return copy
 
 
