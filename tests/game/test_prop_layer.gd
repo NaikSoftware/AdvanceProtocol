@@ -732,7 +732,7 @@ func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
 ## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
 ## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
 ## разом зі свідомою зміною таблиці моделей чи правил розстановки.
-const RIVER_BUILDINGS_FINGERPRINT: int = 2853600657
+const RIVER_BUILDINGS_FINGERPRINT: int = 1817935571
 
 
 func test_river_buildings_match_the_golden_fingerprint() -> void:
@@ -851,16 +851,23 @@ func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) 
 
 
 ## Дахи будинків мають різні відтінки, руїни й двірське вбрання — без відтінку.
-func test_roofs_get_varied_tints() -> void:
-	var view: BoardView = _cached("crossroads")
-	var p: PropLayer = view.props()
-	var tints: Dictionary = {}
-	for inst in p.all_instances():
-		if _kind(inst["model"]) == PropLayer.Kind.STRUCTURE and not inst.get("yard", false):
-			tints[p._roof_tint(inst)] = true
-		elif _kind(inst["model"]) == PropLayer.Kind.RUIN:
-			assert_eq(p._roof_tint(inst), Color(1, 1, 1))
-	assert_gte(tints.size(), 3, "щонайменше три відтінки дахів")
+func test_roofs_are_untinted(p = use_parameters(MAPS)) -> void:
+	# Колір даху дає лише текстура моделі: множник відтінку зсував дахи в оливу й вохру.
+	var props: PropLayer = _cached(p).props()
+	for inst in props.all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			assert_eq(props._roof_tint(inst), Color(1, 1, 1), "%s: %s" % [p, inst["model"]])
+
+
+func test_roof_variety_comes_from_house_textures() -> void:
+	var atlases: Dictionary = {}
+	for m: StringName in PropLayer.MODELS:
+		if String(m).begins_with("house_h") and int(PropLayer.spec_of(m)["kind"]) == PropLayer.Kind.STRUCTURE:
+			var mat := (PropLayer.model(m)["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
+			if mat != null and mat.albedo_texture != null:
+				atlases[mat.albedo_texture.resource_path] = true
+	assert_gte(atlases.size(), 3, "щонайменше три хати зі своїм атласом (і своїм дахом)")
 
 
 ## Паркан і дрібний пропс не лягають на дорожнє покриття (осі й ширина дороги, не вид клітинки).
@@ -1043,7 +1050,7 @@ func test_poles_and_houses_have_real_heights(p = use_parameters(MAPS)) -> void:
 		if int(s.get("kind", -1)) == PropLayer.Kind.POLE:
 			var r: Vector2 = Vector2(8.0, 9.5) if s.get("line") == &"04kv" else Vector2(8.5, 10.0)
 			assert_between(metres, r.x, r.y, "%s: %s %.1f м" % [p, inst["model"], metres])
-		elif inst["model"] in [&"house_h5", &"house_h6"] and not inst.get("yard", false):
+		elif inst["model"] in PropLayer.HOUSE_FORMS and not inst.get("yard", false):
 			var r: Vector2 = Vector2(8.5, 11.0) if int(s.get("storeys", 1)) >= 2 else Vector2(5.0, 8.0)
 			assert_between(metres, r.x, r.y, "%s: %s %.1f м" % [p, inst["model"], metres])
 
@@ -1068,7 +1075,7 @@ func test_chimney_tops_and_ruin_centres() -> void:
 	var view: BoardView = _cached("crossroads")
 	var props: PropLayer = view.props()
 	var houses: Array = props.all_instances().filter(func(i: Dictionary) -> bool:
-		return i["model"] in [&"house_h5", &"house_h6"] and not i.get("yard", false) \
+		return i["model"] in PropLayer.HOUSE_FORMS and not i.get("yard", false) \
 				and Rect2i(0, 0, 26, 22).has_point((i["cells"] as Array)[0]))
 	var tops: Array[Vector3] = props.chimney_tops()
 	assert_eq(tops.size(), houses.size(), "на кожній хаті дошки рівно один димар")
@@ -1134,9 +1141,15 @@ func test_ruins_stand_on_rubble_floors() -> void:
 ## весь дім давало вигляд пластику.
 func test_house_shader_takes_every_map_of_the_glb_material() -> void:
 	var view: BoardView = _cached("crossroads")
-	var node: MultiMeshInstance3D = view.props().get_node("house_h5")
+	var m: StringName = &""
+	for f: StringName in PropLayer.HOUSE_FORMS:                               # будь-яка хата, що стоїть на дошці
+		if view.props().has_node(String(f)):
+			m = f
+			break
+	assert_ne(m, &"", "на дошці немає жодної хати")
+	var node: MultiMeshInstance3D = view.props().get_node(String(m))
 	var mat: ShaderMaterial = node.material_override
-	var src := (PropLayer.model(&"house_h5")["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
+	var src := (PropLayer.model(m)["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
 	assert_eq(mat.get_shader_parameter("albedo_tex"), src.albedo_texture)
 	assert_eq(mat.get_shader_parameter("normal_tex"), src.normal_texture)
 	assert_almost_eq(float(mat.get_shader_parameter("normal_scale")), src.normal_scale if src.normal_enabled else 1.0, 1e-4)
@@ -1468,3 +1481,37 @@ func test_garden_beds_lie_on_the_ground(p = use_parameters(MAPS)) -> void:
 				var v: Vector3 = t * Vector3(-0.5 + j * 0.25, 0.0, -0.5 + k * 0.25)
 				assert_almost_eq(v.y - th.at(v.x, v.z), 0.004, 0.03 * TerrainHeight.M,
 						"%s: город %d у (%.2f; %.2f) відходить від ґрунту на %.2f м" % [p, i, v.x, v.z, (v.y - 0.004 - th.at(v.x, v.z)) / TerrainHeight.M])
+
+
+## Село не «з одного магазину»: хати садиб ближче HOUSE_APART клітинок — різних форм, а в кожному селі
+## (хати, зв'язані відстанню до HOUSE_APART клітинок) з трьох і більше хат — щонайменше три форми.
+func test_village_houses_vary(p = use_parameters(MAPS)) -> void:
+	var houses: Array = []
+	for inst in _cached(p).props().all_instances():
+		if String(inst["model"]).begins_with("house_") and not inst.get("yard", false):
+			houses.append([(inst["cells"] as Array)[0], inst["model"]])
+	assert_gt(houses.size(), 0, "%s: хат немає" % p)
+	var seen: Dictionary = {}
+	for a in houses.size():
+		for b in range(a + 1, houses.size()):
+			var d: Vector2i = (houses[a][0] as Vector2i) - (houses[b][0] as Vector2i)
+			if maxi(absi(d.x), absi(d.y)) <= PropLayer.HOUSE_APART:
+				assert_ne(houses[a][1], houses[b][1], "%s: однакові сусіди %s і %s" % [p, houses[a][0], houses[b][0]])
+	for a in houses.size():
+		if seen.has(a):
+			continue
+		var village: Array = [a]
+		seen[a] = true
+		var k: int = 0
+		while k < village.size():
+			for b in houses.size():
+				var d: Vector2i = (houses[village[k]][0] as Vector2i) - (houses[b][0] as Vector2i)
+				if not seen.has(b) and maxi(absi(d.x), absi(d.y)) <= PropLayer.HOUSE_APART:
+					seen[b] = true
+					village.append(b)
+			k += 1
+		var forms: Dictionary = {}
+		for v in village:
+			forms[houses[v][1]] = true
+		if village.size() >= 3:
+			assert_gte(forms.size(), 3, "%s: село біля %s — лише %d форми на %d хат" % [p, houses[a][0], forms.size(), village.size()])

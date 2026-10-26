@@ -447,6 +447,73 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
     lib.finish(b, name, out, tri_limit=5200, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.1")))
 
 
+def house7():
+    """H7: хата на одну клітинку з чотирисхилим дахом (рідня H1): корпус 6.4 x 5.6 м, шифер, стара тинькована,
+    вікна на три стулки, димар із зонтом біля короткого гребеня."""
+    lib.reset()
+    lib.palette(wall=(0.63, 0.67, 0.68), roof="asb_dark", eave=2.9, chim="ch_grey", frame=3, trim=0.9)
+    RING[:] = ["trim", 0.1, False]
+    b = Builder()
+    b.win_kind = 0
+    L, D, EAVE, RIDGE, OV = 6.4, 5.6, 2.9, 5.3, 0.45                           # зі звісом 7.3 м: влазить у клітинку з відступом
+    y0, y1 = -D / 2, D / 2
+    b.box(0, 0, 0, L + 0.08, D + 0.08, 0.5, "brick_grey")
+    b.box(0, 0, 0.5, L - 0.02, D - 0.02, EAVE - 0.5, "wall_plaster")
+    xa, xb, ya, yb = -L / 2 - OV, L / 2 + OV, y0 - OV, y1 + OV
+    xr0, xr1 = -0.5, 0.5                                                       # короткий гребінь: скати майже однакові
+    b.poly([(xa, yb, EAVE), (xa, ya, EAVE), (xr0, 0.0, RIDGE)], "fc_roof_h")
+    b.poly([(xb, ya, EAVE), (xb, yb, EAVE), (xr1, 0.0, RIDGE)], "fc_roof_h")
+    b.poly([(xa, ya, EAVE), (xb, ya, EAVE), (xr1, 0.0, RIDGE), (xr0, 0.0, RIDGE)], "fc_roof_xh")
+    b.poly([(xb, yb, EAVE), (xa, yb, EAVE), (xr0, 0.0, RIDGE), (xr1, 0.0, RIDGE)], "fc_roof_xh")
+    win_front(b, y0, -1, (-2.0, 1.5), 1.0, 1.0, 1.4)
+    win_front(b, y1, 1, (-1.6, 1.6), 1.0, 1.0, 1.4)
+    win_side(b, -L / 2, -1, (0.0,), 1.0, 1.0, 1.4)
+    win_side(b, L / 2, 1, (0.0,), 1.0, 1.0, 1.4)
+    b.box(-0.2, y0 - 0.02, 0.5, 1.0, 0.06, 2.0, "door_red")                    # на 4 см перед стіною
+    b.box(-0.2, y0 - 0.5, 0.0, 1.6, 0.8, 0.45, "step", top="step")
+    b.chimney2("hood", 0.4, 0.5, 4.3, 1.7, "brick_face")
+    gutter(b, xa, xb, ya, EAVE - 0.3)
+    pipe(b, L / 2 - 0.35, y0, -1, OV, EAVE)
+    lib.weather(b, "wall_plaster", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE),
+                                    ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=17)
+    lib.finish(b, "house_h7", out, tri_limit=1800, footprint=(1, 1))
+
+
+def house8():
+    """H8: дерев'яна хата на одну клітинку (рідня H4): корпус 5.8 x 4.8 м з дощок, фарбованих у сіро-блакитний,
+    профлист червоно-брунатний, віконниці, ґанок із дашком до камери, цегляний димар біля фронтону."""
+    lib.reset()
+    b = Builder()
+    lib.palette(roof="oxide_deep", eave=2.9, chim="ch_orange", boards=(0.66, 0.70, 0.72), trim=(0.40, 0.33, 0.26))
+    RING[:] = ["trim", 0.08, True]
+    b.win_kind = 0
+    L, D, EAVE, RIDGE = 5.8, 4.8, 2.9, 5.4                                     # з ґанком і димарем 7.2 x 6.5 м: влазить у клітинку
+    y0, y1 = -D / 2, D / 2
+    b.box(0, 0, 0, L + 0.08, D + 0.08, 0.4, "brick_grey")
+    b.box(0, 0, 0.4, L - 0.02, D - 0.02, EAVE - 0.4, "boards")
+    b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tin_green", "boards", ridge_axis="x", overhang=0.35)
+    b.box(0, 0, RIDGE, L + 0.7, 0.28, 0.16, "gutter")
+    win_front(b, y0, -1, (-2.0, 2.0), 1.0, 1.0, 1.4)
+    win_front(b, y1, 1, (-1.4, 1.4), 1.0, 1.0, 1.4)
+    win_side(b, -L / 2, -1, (0.0,), 1.0, 1.0, 1.4)
+    win_side(b, L / 2, 1, (-1.0,), 1.0, 1.0, 1.4)
+    b.box(0, y0 - 0.02, 0.4, 1.0, 0.06, 2.0, "door_wood")
+    for px in (-1.1, 1.1):
+        post(b, px, y0 - 1.1, 0.4, 2.0)
+    b.poly_up([(-1.5, y0, 2.6), (1.5, y0, 2.6), (1.5, y0 - 1.3, 2.3), (-1.5, y0 - 1.3, 2.3)], "tin_green")
+    b.box(0, y0 - 0.7, 0, 3.0, 1.2, 0.4, "step", top="step")
+    b.chimney(L / 2 + 0.52, 1.0, 0.0, 1.0, 5.7, "brick_face")                 # приставний цегляний 1 x 1 м до фронтону
+    gutter(b, -L / 2 - 0.35, L / 2 + 0.35, y0 - 0.35, EAVE - 0.3)
+    pipe(b, -L / 2 + 0.35, y0, -1, 0.35, EAVE)
+    lib.weather(b, "boards", [("y", y0, -1, -L / 2, L / 2, 0.4, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.4, EAVE),
+                              ("x", -L / 2, -1, y0, y1, 0.4, EAVE), ("x", L / 2, 1, y0, y1, 0.4, EAVE)], seed=19, patches=False)
+    lib.finish(b, "house_h8", out, tri_limit=1800, footprint=(1, 1))
+
+
+if want("h7"):
+    house7()
+if want("h8"):
+    house8()
 if want("h1"):
     house1(False)
 if want("h1hit"):
