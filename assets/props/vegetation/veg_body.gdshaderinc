@@ -28,14 +28,18 @@ uniform float bark_dark = 0.45;
 uniform float rim = 0.15;
 uniform float card_round = 0.7;
 uniform float card_up = 1.2;
-// Вітер: час задає той, хто ставить рослини, з низькою частотою (кілька разів на секунду).
-// Не TIME: матеріал із TIME змушує перемальовувати кадр щокадру, і режим низького
-// навантаження не вмикається. wind_strength = 0 — повний штиль.
-uniform float wind_time = 0.0;
-uniform float wind_strength = 1.0;
-// Розмах: пучок крони — 6 см, верх стебла очерету — 18 см.
+// Вітер. Глобальні, щоб обидва проходи прозорості й усі рослини мали той самий час (інакше
+// глибина першого проходу розійдеться з другим). Не TIME: матеріал із TIME змушує
+// перемальовувати кадр щокадру. Частоту оновлення wind_time задає гра: від ~10 Гц рух плавний,
+// 4–5 Гц дають помітні ступені; wind_strength = 0 зупиняє рух зовсім (і перемальовування).
+global uniform float wind_time;
+global uniform float wind_strength;
+// Розмах: пучок крони — 6 см; верх стебла очерету — до ~18 см (картка частково під землею).
 const float WIND_CLUMP = 0.06 / 8.0;
-const float WIND_REED = 0.18 / 8.0;
+const float WIND_REED = 0.25 / 8.0;
+// Нижня межа альфи над юнітом для голої крони листопадних (ставить розстановка для пізньої
+// пори, напр. 0,6): гола крона юніта не ховає, а без межі дерево зникало б зовсім.
+uniform float fade_floor = 0.0;
 
 varying float is_card;
 // 1 — нерухома вертикальна картка (очерет, рогіз) або картка, що лежить (повалений кущ):
@@ -46,11 +50,16 @@ varying float facing;
 varying flat float card_half;
 varying vec3 inst_tone;
 varying flat float piece_hash;
+varying flat float evergreen;
 
 void vertex() {
 	// Ідентифікатор пучка (картки чи гілки) записано в G кольору вершини під час збирання:
-	// хеш позиції різнився б у кожного трикутника нерухомої картки й гілки.
-	piece_hash = COLOR.g;
+	// хеш позиції різнився б у кожного трикутника нерухомої картки й гілки. Нижня половина G —
+	// листопадні, верхня — вічнозелені. Правильно, поки RGB кольору екземпляра MultiMesh = 1
+	// (тон екземпляра йде в custom data, альфа — розчинення): Godot множить колір екземпляра на
+	// колір вершини ще до коду шейдера.
+	piece_hash = fract(COLOR.g * 2.0);
+	evergreen = step(0.5, COLOR.g);
 	// Без custom data (поодинокий MeshInstance3D) INSTANCE_CUSTOM — нулі: тон 1.
 	inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);
 	vec3 v = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -64,14 +73,15 @@ void vertex() {
 		float s = length(MODEL_MATRIX[0].xyz);
 		v.xy += UV2 * s;
 	}
-	// Гойдання: фаза — з положення пучка у світі й його ідентифікатора, тож сусіди не в такт.
-	vec3 wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	float ph = dot(wpos, vec3(3.1, 0.0, 2.3)) + piece_hash * 6.283;
-	float sway = 0.6 * sin(wind_time * 1.7 + ph) + 0.4 * sin(wind_time * 2.9 + ph * 1.7);
-	// Хитаються пучки крони й верх вертикальних карток очерету; підстилка, листя на купі й кора — ні.
-	float amp = is_fixed > 0.5
-			? WIND_REED * clamp((COLOR.r - 0.55) / 0.45, 0.0, 1.0) * step(abs(NORMAL.y), 0.5)
-			: WIND_CLUMP * COLOR.r * is_card;
+	// Гойдання: фаза — одна на пучок (ідентифікатор) і екземпляр (положення й поворот), а не з
+	// кожної вершини: інакше нерухома картка очерету «дихала» шириною. Частоти непорівнянні
+	// (1,7 і 2,93), тож рух не повторюється з коротким періодом.
+	float ph = piece_hash * 6.283 + dot(MODEL_MATRIX[3].xyz, vec3(3.1, 0.0, 2.3)) + MODEL_MATRIX[0].z * 7.0;
+	float sway = 0.6 * sin(wind_time * 1.7 + ph) + 0.4 * sin(wind_time * 2.93 + ph * 1.618);
+	// Хитаються лише пучки з B = 1 (крона, стоячий очерет); у нерухомої картки — її верх.
+	float amp = COLOR.b * (is_fixed > 0.5
+			? WIND_REED * clamp((COLOR.r - 0.55) / 0.45, 0.0, 1.0)
+			: WIND_CLUMP * COLOR.r * is_card);
 	v += (MODELVIEW_MATRIX * vec4(normalize(vec3(1.0, 0.0, 0.35)) * amp * sway * wind_strength, 0.0)).xyz;
 	VERTEX = v;
 	NORMAL = normalize((MODELVIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
@@ -96,8 +106,12 @@ void fragment() {
 	// здаля (від mip 2,5): на ближньому зумі знижений поріг на розмитому mip роздував обрис
 	// пучка в кілька гладких лопатей. І не в тіні: там гола крона зливалась у пляму.
 	// Рівень mip із похідних UV: textureQueryLod немає в gl_compatibility (GLES3).
+	// Анізотропний фільтр бере mip за меншою віссю сліду пікселя (до 16:1), а не за більшою,
+	// тож рівень тут — так само; за більшою віссю пороги нижче спрацьовували б раніше.
 	vec2 texel = UV * vec2(textureSize(albedo_tex, 0));
-	float lod = max(0.5 * log2(max(dot(dFdx(texel), dFdx(texel)), dot(dFdy(texel), dFdy(texel)))), 0.0);
+	float ax = dot(dFdx(texel), dFdx(texel));
+	float ay = dot(dFdy(texel), dFdy(texel));
+	float lod = max(0.5 * log2(max(min(ax, ay), max(ax, ay) / 256.0)), 0.0);
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 2.5) / 2.0, 0.0, 1.0));
 	// Нерухома картка ребром до камери — смуга з розмитого стебла: вона тоншає й гасне.
 	cut = mix(cut, min(cut + 0.45, 0.97), is_fixed * (1.0 - smoothstep(0.12, 0.4, facing)) * float(!shadow_pass));
@@ -105,7 +119,8 @@ void fragment() {
 	// робив із пучка кілька великих лопатей — «листки» по метру на ближньому зумі.
 #if defined(VEG_FADE) || defined(VEG_FADE_DEPTH)
 	// Напівпрозора крона над юнітом: альфа екземпляра — справжня прозорість, без растру.
-	if (t.a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001)) {
+	float inst_a = max(COLOR.a, fade_floor * (1.0 - evergreen));
+	if (t.a < cut || inst_a < (shadow_pass ? 0.5 : 0.001)) {
 		discard;
 	}
 #else
@@ -135,11 +150,11 @@ void fragment() {
 	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без
 	// окремого прозорого проходу. Без MSAA це звичайний alpha-cut за тим самим порогом.
 #if defined(VEG_FADE_DEPTH)
-	// Перший прохід: лише глибина найближчого шару (колір прозорий).
-	ALPHA = 0.0;
+	// Перший прохід: лише глибина найближчого шару (колір прозорий); у тіньовому — повна тінь.
+	ALPHA = shadow_pass ? 1.0 : 0.0;
 #elif defined(VEG_FADE)
 	// Кора гасне швидше за листя: гілля над юнітом інакше стирчить темними рисками.
-	ALPHA = COLOR.a * mix(0.6, 1.0, is_card);
+	ALPHA = max(COLOR.a, fade_floor * (1.0 - evergreen)) * mix(0.6, 1.0, is_card);
 #else
 	ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));
 #endif

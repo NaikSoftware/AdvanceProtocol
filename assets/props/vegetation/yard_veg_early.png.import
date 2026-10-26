@@ -2,21 +2,18 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cqbakxo5kjl6o"
-path.s3tc="res://.godot/imported/meadow_veg_summer_meadow_veg_summer.png-649297ca1549a19322e12f752c7f24c1.s3tc.ctex"
-path.etc2="res://.godot/imported/meadow_veg_summer_meadow_veg_summer.png-649297ca1549a19322e12f752c7f24c1.etc2.ctex"
+uid="uid://ibd33rc5fnin"
+path.s3tc="res://.godot/imported/yard_veg_early.png-2c275c8497792b7f4c900ba038fb6552.s3tc.ctex"
+path.etc2="res://.godot/imported/yard_veg_early.png-2c275c8497792b7f4c900ba038fb6552.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "52c48972bac2ecc34aa70409e33e4b89"
-}
 
 [deps]
 
-source_file="res://assets/props/vegetation/meadow_veg_summer_meadow_veg_summer.png"
-dest_files=["res://.godot/imported/meadow_veg_summer_meadow_veg_summer.png-649297ca1549a19322e12f752c7f24c1.s3tc.ctex", "res://.godot/imported/meadow_veg_summer_meadow_veg_summer.png-649297ca1549a19322e12f752c7f24c1.etc2.ctex"]
+source_file="res://assets/props/vegetation/yard_veg_early.png"
+dest_files=["res://.godot/imported/yard_veg_early.png-2c275c8497792b7f4c900ba038fb6552.s3tc.ctex", "res://.godot/imported/yard_veg_early.png-2c275c8497792b7f4c900ba038fb6552.etc2.ctex"]
 
 [params]
 

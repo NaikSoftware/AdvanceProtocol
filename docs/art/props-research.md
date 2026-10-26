@@ -422,8 +422,9 @@ One library GLB per group and season in `assets/props/vegetation/`:
 `{bank,yard,meadow}_veg_{late,summer,early}.glb` (late = River, summer = Crossroads,
 early = Ridge). Each plant is a node, the same geometry in every season. Only the atlas changes,
 plus how many clumps a bare late crown keeps. Every node has a `<name>_fallen` twin, what is left after a vehicle drives through. Reeds and
-bushes become a crumpled bundle 0.3–0.6 m high, with stems bent the way the vehicle went. A tree
-becomes a heap of broken and crushed branches 0.3–0.8 m high: stubs of trunk, broken limbs at all
+bushes become a bundle of broken stems 0.4–0.8 m high, leaning 30–60° the way the vehicle went,
+with a few leaves. A tree becomes a heap of broken and crushed branches 0.3–0.9 m high, with dry
+pale bark and about 30 % fresh breaks so it reads on dark ground: stubs of trunk, broken limbs at all
 angles but mostly pressed the way of travel, and the season's leaves on top.
 
 Trees are grown, not filled into a sphere: a trunk leaning up to 8°, at least three scaffold
@@ -441,54 +442,89 @@ late autumn only shows the third-order twigs and keeps fewer clumps.
 
 | plant (forms) | size w × d × h, m (summer) | tris late / summer | fallen tris |
 | --- | --- | --- | --- |
-| bank_reed _01, _02, _03 | 2 × 2 × 2.1; 2 × 3 × 2.5; 3 × 2 × 2.3 | 28–56 / 28–56 | 56–112 |
-| bank_cattail _01, _02 | 1 × 1 × 1.9; 2 × 2 × 2.0 | 20–32 / 20–32 | 40–64 |
-| bank_bush_willow _01, _02, _03 | 3 × 3 × 3.0; 3 × 3 × 2.0; 3 × 2 × 3.5 | 158–200 / 214–260 | 158–260 |
-| bank_bush_alder _01, _02, _03 | 3 × 3 × 3.7; 4 × 4 × 3.1; 3 × 3 × 3.9 | 128–158 / 188–222 | 128–222 |
-| yard_apple _01, _02, _03 | 5 × 6 × 4.5; 6 × 5 × 5.0; 4 × 4 × 4.3 | 486 / 540 | 360 |
-| yard_cherry _01, _02, _03 | 4 × 4 × 5.8; 4 × 4 × 5.4; 4 × 4 × 5.5 | 476 / 520 | 348 |
-| yard_walnut _01, _02, _03 | 10 × 8 × 9.4; 10 × 9 × 9.6; 10 × 10 × 8.0 | 492 / 616 | 348–360 |
-| yard_lilac _01 | 2 × 3 × 2.7 | 196 / 238 | 196–238 |
-| yard_elder _01 | 4 × 4 × 2.9 | 158 / 214 | 158–214 |
-| yard_berry_row _01 | 4 × 2 × 1.1 | 156 / 170 | 156–170 |
-| yard_thuja _01 | 2 × 2 × 4.1 | 154 / 154 | 154 |
-| meadow_hawthorn _01, _02 | 3 × 3 × 2.9; 3 × 3 × 2.0 | 170–222 / 170–222 | 170–222 |
-| meadow_dogrose _01 | 3 × 2 × 1.7 | 186 / 186 | 186 |
-| meadow_pear _01, _02, _03 | 6 × 6 × 11.7; 6 × 4 × 9.7; 7 × 7 × 11.2 | 660 / 736 | 372–384 |
-| meadow_oak _01, _02, _03 | 10 × 10 × 13.0; 9 × 14 × 9.0; 12 × 11 × 9.7 | 700 / 736 | 372–384 |
-| meadow_willow _01, _02, _03 | 4 × 3 × 6.7; 11 × 9 × 9.2; 9 × 9 × 8.6 | 656–800 / 736–800 | 384 |
+| bank_reed _01, _02, _03 | 2 × 3 × 3.0; 3 × 2 × 3.2; 4 × 2 × 3.1 | 36–72 / 36–72 | 72–144 |
+| bank_cattail _01, _02 | 1 × 1 × 2.0; 3 × 2 × 2.2 | 20–32 / 20–32 | 40–64 |
+| bank_bush_willow _01, _02, _03 | 3 × 3 × 3.0; 3 × 3 × 2.0; 3 × 2 × 3.5 | 94–132 / 214–260 | 226–362 |
+| bank_bush_alder _01, _02, _03 | 3 × 3 × 3.7; 4 × 4 × 3.1; 3 × 3 × 3.9 | 98–126 / 188–222 | 184–222 |
+| yard_apple _01, _02, _03 | 5 × 6 × 4.5; 6 × 5 × 5.0; 4 × 4 × 4.3 | 380 / 540 | 314–494 |
+| yard_cherry _01, _02, _03 | 4 × 4 × 5.8; 4 × 4 × 5.4; 4 × 4 × 5.5 | 378 / 520 | 314–474 |
+| yard_walnut _01, _02, _03 | 10 × 8 × 9.4; 10 × 9 × 9.6; 10 × 10 × 8.0 | 372 / 616 | 326–606 |
+| yard_lilac _01 | 2 × 3 × 2.7 | 154 / 238 | 304–324 |
+| yard_elder _01 | 4 × 4 × 2.9 | 94 / 214 | 226–252 |
+| yard_berry_row _01 | 4 × 2 × 1.1 | 120 / 170 | 298–308 |
+| yard_thuja _01 | 2 × 2 × 4.1 | 154 / 154 | 204 |
+| meadow_hawthorn _01, _02 | 3 × 3 × 2.9; 3 × 2 × 2.1 | 164–206 / 266–342 | 178–222 |
+| meadow_dogrose _01 | 3 × 3 × 1.7 | 270 / 354 | 262–278 |
+| meadow_pear _01, _02, _03 | 6 × 6 × 11.7; 6 × 4 × 9.7; 7 × 7 × 11.2 | 540 / 736 | 314–606 |
+| meadow_oak _01, _02, _03 | 10 × 10 × 13.0; 9 × 14 × 9.0; 12 × 11 × 9.7 | 600 / 736 | 314–606 |
+| meadow_willow _01, _02, _03 | 3 × 3 × 6.7; 11 × 9 × 9.2; 9 × 9 × 8.6 | 540–684 / 736–800 | 314–606 |
 
 Sizes include the litter patch under shrubs; the visible crown edge is up to ~1 m beyond the clump centres. Fallen forms stand 0.3–0.9 m high.
 
-Atlas: 1024² RGBA per library, 128 px cells (a 2 m clump at 1.6 cm per texel), VRAM-compressed
-with mipmaps. Season colours follow the forest: late reeds are straw with grey-buff plumes, fruit
-trees and hawthorn almost bare, walnut keeps yellow remnants, oak keeps brown leaves, alder and
-lilac stay dull green. In summer the plants are green, with a hint of apples, black elderberries
-and red haws.
+Atlas: one 1024² RGBA PNG per library, `<group>_veg_<season>.png`, next to the GLB. The GLB
+references it by `uri` and carries no copy of its own. Cells are 128 px (a 2 m clump at 1.6 cm per
+texel), VRAM-compressed with mipmaps. Season colours follow the forest. Late autumn:
+- reeds are straw-brown, darker than early autumn;
+- fruit trees, willows, hawthorn and dog rose keep ≤ 15 % of their clumps, and the sprites inside
+  them hold ≤ 15 % leaves on grey-brown twigs;
+- oak keeps up to 30 % brown, alder and lilac up to 40 % dull green;
+- walnut keeps yellow remnants and thuja turns bronze.
 
-**Material.** The GLB carries a plain alpha-cut material only so it imports. Placement overrides it
-with `assets/props/vegetation/veg.gdshader` (`albedo_tex` = the GLB's own atlas), which has the same
-body as the forest crown: camera-facing clump cards, `foliage_tint`, alpha-to-coverage under MSAA,
-and dissolve by whole clumps via instance alpha. Alpha-to-coverage needs `alpha_to_coverage` in
-`render_mode`. `ALPHA_ANTIALIASING_EDGE` alone leaves the edge identical with and without MSAA;
-this was measured on a test quad. Each card and branch carries its own id in vertex colour G, so a
-dissolve drops whole clumps, never single triangles. Vertex colour R holds the clump tone: the
-lower third of a crown is darker. Over a visible unit, swap the instance's material for
-`veg_fade_depth.gdshader` with `veg_fade.gdshader` as its `next_pass` (render priority 1). The
-first pass writes the depth of the nearest cards and draws nothing. The second then blends only
-that nearest layer, so the crown is evenly translucent instead of smoky where cards overlap.
-Instance alpha is true transparency, with no dither, and bark fades faster than leaves.
+In summer the plants are green, with a hint of apples, black elderberries and red haws.
 
-**Wind.** The material uniforms `wind_time` (seconds) and `wind_strength` (0 means calm) sway
-crown clumps by about 6 cm and reed tops by about 18 cm; bark, litter and fallen leaves stay
-still. Placement advances `wind_time` from a low-rate timer and never through `TIME`, because a
-material that reads `TIME` forces a redraw every frame and low-processor mode never idles. Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen
-edge-on. Shared body: `veg_body.gdshaderinc`.
+**Materials.** The GLB's materials are plain placeholders so it imports. Each node has two
+surfaces, and placement overrides both with the GLB's own atlas as `albedo_tex`:
+- **Surface 0, the plant:** `assets/props/vegetation/veg.gdshader`. It has the same body as the
+  forest crown: camera-facing clump cards, `foliage_tint`, alpha-to-coverage under MSAA, and
+  dissolve by whole clumps through instance alpha. Alpha-to-coverage needs `alpha_to_coverage` in
+  `render_mode`; `ALPHA_ANTIALIASING_EDGE` alone leaves the edge identical with and without MSAA
+  (measured on a test quad).
+- **Surface 1, the shade patch** under a bush or heap: `veg_shade.gdshader`. It is black with
+  alpha = vertex colour R (0.35–0.45) × a soft, irregular mask from the atlas, casts no shadow and
+  writes no depth.
 
-**Import.** As for the forest: `meshes/force_disable_compression=true`, no generated LODs and no
-shadow meshes; LOD generation collapses cards whose four vertices share one point. No tangents are
-generated, because there is no normal map. The shader also compiles under `gl_compatibility`: the mip
-level is derived from UV derivatives, because `textureQueryLod` is not available there.
+Vertex colour carries per-clump data:
+- **R** is the clump tone; the lower third of a crown is darker.
+- **G** is the clump id, the same for every vertex of a card or branch, so a dissolve drops whole
+  clumps and never single triangles. The lower half of G marks deciduous plants, the upper half
+  evergreens.
+- **B** is 1 where the clump sways in the wind. Bark, heaps, crushed bushes and fallen reeds are 0.
+
+The ids are only correct while the MultiMesh instance colour RGB is 1: put the instance tone in
+custom data and the dissolve in alpha.
+
+**Over a visible unit**, swap that instance's surface 0 for `veg_fade_depth.gdshader` with
+`veg_fade.gdshader` as its `next_pass`. Use render priority 5 for the depth pass and 6 for the
+colour pass, the same convention as `FADE_DEPTH_PRIORITY` in `PropLayer`: fire, smoke and rain draw
+at priority 1.
+- The depth pass writes the depth of the nearest cards and draws nothing, so the colour pass blends
+  only that nearest layer and the crown is evenly translucent instead of smoky.
+- The depth pass also casts the full shadow (`depth_prepass_alpha`), so the shadow does not jump
+  when the fade starts.
+- Instance alpha is true transparency, with no dither, and bark fades faster than leaves.
+- For late deciduous libraries, set the material uniform `fade_floor` to 0.6. A bare crown hides no
+  unit, and without a floor the tree would vanish. Evergreens (thuja) ignore the floor.
+
+**Wind.** The global shader uniforms `wind_time` (seconds) and `wind_strength` (0 means calm) are
+declared in `project.godot`. They are global so that both fade passes and every plant share one
+value. Crown clumps sway about 6 cm and reed tops 18–25 cm. Each clump has one phase, taken from
+its id and from the instance position and rotation. The two frequencies, 1.7 and 2.93, are
+incommensurate, so the motion has no short repeat.
+
+Placement advances `wind_time` from its own timer, never through `TIME`: a material that reads
+`TIME` forces a redraw every frame and low-processor mode never idles. Updating at about 10 Hz
+looks smooth, while 4–5 Hz steps visibly. Setting `wind_strength = 0` stops the motion, and with
+it the redraws.
+
+Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen edge-on. The
+shared shader body is in `veg_body.gdshaderinc`.
+
+**Import.** As for the forest: `meshes/force_disable_compression=true`, with no generated LODs and
+no shadow meshes, because LOD generation collapses cards whose four vertices share one point. No
+tangents are generated, since there is no normal map. The shader also compiles under
+`gl_compatibility`, where `textureQueryLod` is not available. Instead, the mip level is derived from
+UV derivatives along the shorter axis of the pixel footprint, which is what anisotropic filtering
+uses.
 
 **UV2 trap.** Blender's glTF exporter writes every UV map as `1 − v`. The builder therefore writes
 UV2 pre-flipped (`uv2()` in `veg_build.py`); otherwise every vertex is lifted ~1 tile in view
@@ -498,7 +534,8 @@ not pre-flip either.
 Reeds belong in the shallows, 0.5–2 m out from the waterline, not on dry bank.
 
 Rebuild: `tools/blender/vegetation/build_all.sh`. Frames: `tools/prop_preview.gd` with `--veg`,
-`--nodes=`, `--water[=E]`, `--with=`, `--fade=`, `--dissolve=`, `--tank=X:Z`, `--rg`.
+`--nodes=`, `--water[=E]`, `--with=`, `--fade=`, `--fade-floor=`, `--dissolve=`, `--tank=X:Z`,
+`--seq=N`, `--rg`.
 
 ## Bridges
 

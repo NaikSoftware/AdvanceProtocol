@@ -28,7 +28,9 @@ BARK = {"willow": (0.40, 0.36, 0.26), "alder": (0.26, 0.24, 0.22), "apple": (0.3
         "hawthorn": (0.32, 0.29, 0.26), "dogrose": (0.34, 0.25, 0.18), "pear": (0.24, 0.22, 0.20),
         "oak": (0.30, 0.28, 0.25), "wwillow": (0.36, 0.33, 0.27),
         # Свіжий злам: світла деревина уламків у купі поваленого дерева.
-        "wood": (0.52, 0.44, 0.32)}
+        "wood": (0.52, 0.44, 0.32),
+        # Висохла кора уламків у купі (L ≈ 95/255): жива кора на темному ґрунті Річки зникала.
+        "deadwood": (0.40, 0.37, 0.33)}
 
 
 def load(path):
@@ -96,18 +98,19 @@ def bark_strip(rgb, seed):
 
 
 def litter_sprite(seed):
-    """Пляма підстилки й тіні під кущем: темна бура, рваний край (alpha-cut, без напівпрозорості)."""
+    """Маска плями затінення під кущем чи купою: м'який край, неправильна форма, усередині
+    плямиста. Колір не потрібен — veg_shade.gdshader бере лише альфу й множить на неї ґрунт."""
     rng = np.random.default_rng(seed)
     n = CELL
-    img = np.zeros((n, n, 4))
-    noise = rng.normal(0, 1, (n // 8, n // 8))
-    noise = np.asarray(Image.fromarray(((noise - noise.min()) / np.ptp(noise) * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC)) / 255.0
-    img[..., :3] = np.array([0.24, 0.21, 0.18])[None, None, :] * (0.8 + 0.4 * noise[..., None])
-    img[..., 3] = 1.0
-    img = soft_edge(img, seed)
     yy, xx = (np.mgrid[0:n, 0:n] + 0.5) / n * 2 - 1
-    # Край рідшає плямами: у середині суцільно, до краю — клапті.
-    img[..., 3] = (img[..., 3] * (1.15 - np.hypot(xx, yy) * 0.75) > 0.3 + 0.55 * noise).astype(float)
+    ang = np.arctan2(yy, xx)
+    wob = sum(rng.uniform(0.05, 0.12) * np.sin(k * ang + rng.uniform(0, 6.3)) for k in (2, 3, 5))
+    r = np.hypot(xx, yy) / (0.8 + wob)
+    noise = rng.normal(0, 1, (n // 16, n // 16))
+    noise = np.asarray(Image.fromarray(((noise - noise.min()) / np.ptp(noise) * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC)) / 255.0
+    img = np.zeros((n, n, 4))
+    img[..., :3] = 0.5
+    img[..., 3] = np.clip(1.0 - r, 0, 1) ** 1.5 * (0.7 + 0.3 * noise)
     return img
 
 
@@ -150,7 +153,7 @@ def main():
     y, x = take(1, 1)
     atlas[y:y + CELL, x:x + CELL] = premul_dilate(litter_sprite(99))
     rects["sprites"]["litter"] = [uv(x, y, CELL, CELL)]
-    woody = [k for k in GROUPS[GROUP] if k not in SHEAF] + ["wood"]
+    woody = [k for k in GROUPS[GROUP] if k not in SHEAF] + ["wood", "deadwood"]
     for i, kind in enumerate(woody):
         if i % (CELL // STRIP_W) == 0:
             block = take(1, 2)

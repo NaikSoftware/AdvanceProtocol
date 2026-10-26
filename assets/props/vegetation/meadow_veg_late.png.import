@@ -2,21 +2,18 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqtjsnn6pq0uc"
-path.s3tc="res://.godot/imported/bank_veg_late_bank_veg_late.png-cc2fe904d96e41adc4c2cc2456bfa49f.s3tc.ctex"
-path.etc2="res://.godot/imported/bank_veg_late_bank_veg_late.png-cc2fe904d96e41adc4c2cc2456bfa49f.etc2.ctex"
+uid="uid://cfir3rbq18fe8"
+path.s3tc="res://.godot/imported/meadow_veg_late.png-c350a23bc5e0fd0e3d633744c66ef76d.s3tc.ctex"
+path.etc2="res://.godot/imported/meadow_veg_late.png-c350a23bc5e0fd0e3d633744c66ef76d.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "0fc13be4cc5a885632447c390b538951"
-}
 
 [deps]
 
-source_file="res://assets/props/vegetation/bank_veg_late_bank_veg_late.png"
-dest_files=["res://.godot/imported/bank_veg_late_bank_veg_late.png-cc2fe904d96e41adc4c2cc2456bfa49f.s3tc.ctex", "res://.godot/imported/bank_veg_late_bank_veg_late.png-cc2fe904d96e41adc4c2cc2456bfa49f.etc2.ctex"]
+source_file="res://assets/props/vegetation/meadow_veg_late.png"
+dest_files=["res://.godot/imported/meadow_veg_late.png-c350a23bc5e0fd0e3d633744c66ef76d.s3tc.ctex", "res://.godot/imported/meadow_veg_late.png-c350a23bc5e0fd0e3d633744c66ef76d.etc2.ctex"]
 
 [params]
 

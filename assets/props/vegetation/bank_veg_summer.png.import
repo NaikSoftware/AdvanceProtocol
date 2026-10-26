@@ -2,21 +2,18 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ecwdr35xhdwo"
-path.s3tc="res://.godot/imported/bank_veg_early_bank_veg_early.png-54a1d5296f56bd3bd1e8c477d21afb58.s3tc.ctex"
-path.etc2="res://.godot/imported/bank_veg_early_bank_veg_early.png-54a1d5296f56bd3bd1e8c477d21afb58.etc2.ctex"
+uid="uid://j02ncj7sfrpr"
+path.s3tc="res://.godot/imported/bank_veg_summer.png-d49221f6df71fe29f0cfd195fbf92a09.s3tc.ctex"
+path.etc2="res://.godot/imported/bank_veg_summer.png-d49221f6df71fe29f0cfd195fbf92a09.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "a7a564ce6712f9036d570c8c58e18dbb"
-}
 
 [deps]
 
-source_file="res://assets/props/vegetation/bank_veg_early_bank_veg_early.png"
-dest_files=["res://.godot/imported/bank_veg_early_bank_veg_early.png-54a1d5296f56bd3bd1e8c477d21afb58.s3tc.ctex", "res://.godot/imported/bank_veg_early_bank_veg_early.png-54a1d5296f56bd3bd1e8c477d21afb58.etc2.ctex"]
+source_file="res://assets/props/vegetation/bank_veg_summer.png"
+dest_files=["res://.godot/imported/bank_veg_summer.png-d49221f6df71fe29f0cfd195fbf92a09.s3tc.ctex", "res://.godot/imported/bank_veg_summer.png-d49221f6df71fe29f0cfd195fbf92a09.etc2.ctex"]
 
 [params]
 

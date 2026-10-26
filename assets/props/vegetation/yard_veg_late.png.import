@@ -2,21 +2,18 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b3ysudrp4uus"
-path.s3tc="res://.godot/imported/yard_veg_early_yard_veg_early.png-160431f775d6ae94be607ed97f72e80e.s3tc.ctex"
-path.etc2="res://.godot/imported/yard_veg_early_yard_veg_early.png-160431f775d6ae94be607ed97f72e80e.etc2.ctex"
+uid="uid://6vwksyiggajt"
+path.s3tc="res://.godot/imported/yard_veg_late.png-46ad6e553a092e5c706d855a65317824.s3tc.ctex"
+path.etc2="res://.godot/imported/yard_veg_late.png-46ad6e553a092e5c706d855a65317824.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "0d2f824314b79dfa93bbd805a6c537e4"
-}
 
 [deps]
 
-source_file="res://assets/props/vegetation/yard_veg_early_yard_veg_early.png"
-dest_files=["res://.godot/imported/yard_veg_early_yard_veg_early.png-160431f775d6ae94be607ed97f72e80e.s3tc.ctex", "res://.godot/imported/yard_veg_early_yard_veg_early.png-160431f775d6ae94be607ed97f72e80e.etc2.ctex"]
+source_file="res://assets/props/vegetation/yard_veg_late.png"
+dest_files=["res://.godot/imported/yard_veg_late.png-46ad6e553a092e5c706d855a65317824.s3tc.ctex", "res://.godot/imported/yard_veg_late.png-46ad6e553a092e5c706d855a65317824.etc2.ctex"]
 
 [params]
 
