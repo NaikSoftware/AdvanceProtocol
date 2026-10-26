@@ -157,10 +157,12 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 				_burst(root, cloud, Vector3(0, 0.15, 0), 0.0, 64.0 / EXPLOSION_FPS)
 			else:
 				_dirt(root, cloud, Vector3.ZERO, 0.0, 64.0 / DIRT_FPS)
+				_debris(root, cloud)
 		Weapon.SHELL:
 			_flash(root, 4.0, Vector3(0, 0.2, 0), 0.0)
 			_light(root, 15.0, 4.0)
 			_dirt(root, cloud, Vector3.ZERO, 0.0, 64.0 / DIRT_FPS)
+			_debris(root, cloud)
 		Weapon.DRONE:
 			# Удар згори: спалах на даху, клуба вибуху на корпусі, жодного викиду ґрунту.
 			_flash(root, 1.75, Vector3(0, 0.4, 0), 0.0)
@@ -194,6 +196,96 @@ static func atlases_of(root: Node) -> Array[Texture2D]:
 		if mat != null and not out.has(mat.get_shader_parameter("tex")):
 			out.append(mat.get_shader_parameter("tex"))
 	return out
+
+
+## Викид ґрунту: 10–20 темних грудок 0,1–0,4 м, що крутяться в балістичних дугах, і 2–4
+## смуги землі вздовж польоту. Більший вибух — більше грудок і вищий кидок. Дві системи
+## частинок на вибух (по виклику малювання), матеріали й сітки спільні для всіх вибухів.
+static func _debris(root: Node3D, cloud_m: float) -> void:
+	var k: float = clampf((cloud_m - 3.5) / 8.5, 0.0, 1.0)
+	# Злітає вище за хмару ґрунту (снаряд — ~10 м, гармата по ґрунту — ~3 м) і падає за її
+	# краєм: усередині клуби грудок не видно.
+	var v: float = sqrt(2.0 * 9.8 * cloud_m * 0.85) / 8.0
+	if _clod_mesh == null:
+		_clod_mesh = BoxMesh.new()
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color(0.09, 0.07, 0.05)
+		m.roughness = 1.0
+		_clod_mesh.material = m
+		_streak_mesh = _cross_quad()
+		var sm := StandardMaterial3D.new()
+		sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		sm.albedo_color = Color(0.05, 0.04, 0.03, 0.85)
+		sm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_streak_mesh.surface_set_material(0, sm)
+	var clods := _debris_emitter(root, "Debris", 10 + roundi(8.0 * k), v, _clod_mesh, 0.1 / 8.0, 0.4 / 8.0, false)
+	clods.position = Vector3(0, 0.02, 0)
+	_debris_emitter(root, "DebrisStreaks", 2 + roundi(2.0 * k), v * 1.15, _streak_mesh, 1.0 / 8.0, 2.0 / 8.0, true)
+
+
+static var _clod_mesh: BoxMesh
+static var _streak_mesh: ArrayMesh
+
+
+static func _debris_emitter(root: Node3D, node_name: String, amount: int, v: float, mesh: Mesh, s_min: float, s_max: float, align: bool) -> GPUParticles3D:
+	var em := GPUParticles3D.new()
+	em.name = node_name
+	em.amount = amount
+	em.lifetime = 1.2
+	em.one_shot = true
+	em.explosiveness = 1.0
+	em.randomness = 0.5
+	em.local_coords = false
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3.UP
+	pm.spread = 60.0
+	pm.initial_velocity_min = v * 0.5
+	pm.initial_velocity_max = v
+	# Справжня вага: грудки падають так, як падали б на 8-метровому тайлі.
+	pm.gravity = Vector3(0.0, -9.8 / 8.0, 0.0)
+	pm.scale_min = s_min
+	pm.scale_max = s_max
+	pm.lifetime_randomness = 0.3
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.03
+	if align:
+		# Смуга тягнеться вздовж польоту.
+		pm.particle_flag_align_y = true
+		pm.color = Color(1, 1, 1, 1)
+		var fade := Gradient.new()
+		fade.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+		var ft := GradientTexture1D.new()
+		ft.gradient = fade
+		pm.color_ramp = ft
+	else:
+		pm.angle_min = -180.0
+		pm.angle_max = 180.0
+		pm.angular_velocity_min = -360.0
+		pm.angular_velocity_max = 360.0
+		pm.particle_flag_rotate_y = true
+	em.process_material = pm
+	em.draw_pass_1 = mesh
+	em.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	em.layers = 1 << (UnitView.UNIT_LAYER - 1)
+	em.visibility_aabb = AABB(Vector3(-1.5, -0.2, -1.5), Vector3(3, 2, 3))
+	root.add_child(em, true)
+	em.emitting = true
+	return em
+
+
+## Два схрещені вузькі квади: смугу видно з будь-якого боку, а не ребром.
+static func _cross_quad() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for basis: Basis in [Basis(), Basis(Vector3.UP, PI * 0.5)]:
+		var a: Vector3 = basis * Vector3(-0.06, -0.5, 0)
+		var b: Vector3 = basis * Vector3(0.06, -0.5, 0)
+		var c: Vector3 = basis * Vector3(0.06, 0.5, 0)
+		var d: Vector3 = basis * Vector3(-0.06, 0.5, 0)
+		for q: Vector3 in [a, b, c, a, c, d]:
+			st.add_vertex(q)
+	return st.commit()
 
 
 static func _root(node_name: String, parent: Node, at: Vector3) -> Node3D:

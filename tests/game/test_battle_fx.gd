@@ -168,3 +168,27 @@ func test_hit_sizes_follow_the_weapon_and_the_target() -> void:
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.TANK_GUN, true), 2.5)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.TANK_GUN, false), 3.5)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.SHELL, false), 12.0)
+
+
+## Вибух у ґрунті викидає грудки землі й кілька смуг балістичними дугами: одна система
+## частинок на грудки й одна на смуги, коротке життя, кількість і розмір — від радіуса вибуху.
+## По броні ґрунту нема — й грудок теж.
+func test_ground_bursts_throw_clods_and_armour_hits_do_not() -> void:
+	var shell: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.SHELL, false)
+	var clods := shell.get_node("Debris") as GPUParticles3D
+	var streaks := shell.get_node("DebrisStreaks") as GPUParticles3D
+	assert_eq(clods.amount, 18)
+	assert_eq(streaks.amount, 4)
+	assert_true(clods.one_shot and streaks.one_shot)
+	assert_eq(clods.lifetime, 1.2)
+	var pm := clods.process_material as ParticleProcessMaterial
+	assert_eq(pm.gravity, Vector3(0.0, -9.8 / 8.0, 0.0), "справжня вага, 1 тайл = 8 м")
+	# Властивість зберігається у float32: допуск — лише на округлення.
+	assert_almost_eq(pm.scale_min, 0.1 / 8.0, 1e-7)
+	assert_almost_eq(pm.scale_max, 0.4 / 8.0, 1e-7)
+	var gun: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.TANK_GUN, false)
+	assert_eq((gun.get_node("Debris") as GPUParticles3D).amount, 10)
+	assert_eq((gun.get_node("DebrisStreaks") as GPUParticles3D).amount, 2)
+	for weapon: BattleFx.Weapon in [BattleFx.Weapon.TANK_GUN, BattleFx.Weapon.DRONE, BattleFx.Weapon.AUTOCANNON]:
+		var hit: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, weapon, true)
+		assert_eq(hit.find_children("Debris*", "GPUParticles3D", true, false).size(), 0)
