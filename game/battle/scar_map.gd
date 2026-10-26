@@ -5,7 +5,7 @@ extends RefCounted
 ## меш; Compatibility не має їх зовсім. Не квади над землею: ті мерехтять на схилах і
 ## коштують виклик малювання кожен.
 ##
-## Канали: R — випалене (темне ядро), G — вирва, B — уламки, A — попіл. Ставиться на CPU,
+## Канали: R — випалене (пляма під уламками й вирва), A — попіл; G і B вільні. Ставиться на CPU,
 ## коли подія вже зіграна; додавання — максимумом, тож пляма, поставлена двічі, не
 ## темнішає.
 ##
@@ -74,14 +74,24 @@ func stamp_scorch(cell: Vector2i) -> void:
 	if _stamped.has(cell):
 		return
 	_stamped[cell] = true
+	_stamp(cell, SCORCH_RADIUS_M, SCORCH_CORE_M)
+
+
+## Вирва-пляма від снаряда чи гармати по ґрунту: та сама нерівна форма, `radius_m` метрів.
+## Кілька влучань у той самий тайл додаються максимумом — не темніють без кінця.
+func stamp_crater(cell: Vector2i, radius_m: float) -> void:
+	_stamp(cell, radius_m, radius_m * 0.6)
+
+
+func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = hash(cell)
 	noise.frequency = 1.0
 	var fine := FastNoiseLite.new()
 	fine.seed = hash(cell) + 1
 	fine.frequency = 0.35
-	var r_px: float = SCORCH_RADIUS_M * 4.0
-	var core_px: float = SCORCH_CORE_M * 4.0
+	var r_px: float = radius_m * 4.0
+	var core_px: float = core_m * 4.0
 	var c := Vector2(cell.x * PX_PER_TILE + PX_PER_TILE / 2, cell.y * PX_PER_TILE + PX_PER_TILE / 2)
 	var ri: int = int(r_px)
 	for dy in range(-ri, ri + 1):
@@ -93,7 +103,7 @@ func stamp_scorch(cell: Vector2i) -> void:
 			if dist >= r_px:
 				continue
 			var ang: float = atan2(float(dy), float(dx))
-			# Множник лише збільшує відстань: край ніколи не виходить за 7 м.
+			# Множник лише збільшує відстань: край ніколи не виходить за `radius_m`.
 			var lobes: float = 0.5 + 0.5 * noise.get_noise_2d(cos(ang) * 1.3, sin(ang) * 1.3)
 			var rays: float = 0.5 + 0.5 * noise.get_noise_2d(cos(ang) * 6.0 + 9.0, sin(ang) * 6.0)
 			var d_eff: float = dist * (1.0 + 0.18 * lobes + 0.3 * smoothstep(0.55, 0.9, 1.0 - rays) * dist / r_px)
