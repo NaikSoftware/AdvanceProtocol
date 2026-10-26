@@ -23,10 +23,17 @@ dens_gain, gain, top = f("dens", 3.0), f("gain", 6.0), f("top", 1.0)
 col = tuple(float(x) for x in K.get("col", "0.35,0.35,0.35").split(","))
 _fa = K.get("frames", "0:0:1").split(":")
 heat, tau = f("heat", 0.0), f("tau", 7.0)
+lift, l0, l1 = f("lift", 0.0), f("l0", 0), f("l1", 40)  # the cloud rises by `lift` m between rendered frames l0 and l1
 a, b, st = int(_fa[0]), int(_fa[1]), float(_fa[2])
 
 files = sorted(glob.glob(vdir + "/*.vdb"), key=lambda p: int("".join(c for c in os.path.basename(p).rsplit(".", 1)[0].split("_")[-1] if c.isdigit()) or 0))
 sel = [files[min(len(files) - 1, round(a + k * st))] for k in range(int((b - a) / st) + 1)] if b else files[::int(st)]
+
+def set_lift(idx):
+    """Rise of the whole volume: a ground burst's fireball lifts off instead of only spreading sideways."""
+    t = min(max((idx - l0) / max(l1 - l0, 1), 0.0), 1.0)
+    vo.location.z = lift * t * t * (3 - 2 * t)
+
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene
@@ -283,9 +290,10 @@ sc.render.resolution_x = sc.render.resolution_y = pre_cell
 sc.cycles.samples = 16
 sc.cycles.use_denoising = False
 boxes = []
-tmp = os.path.join(outdir, "_pre.png")
-for p_ in sel[:: max(1, len(sel) // 8)]:
+tmp = os.path.join(outdir, "_pre_%s.png" % name)
+for p_ in sel[:: max(1, len(sel) // 8)] + [sel[-1]]:
     sc.frame_set(files.index(p_) + 1)
+    set_lift(sel.index(p_))
     sc.render.filepath = tmp
     bpy.ops.render.render(write_still=True)
     im = bpy.data.images.load(tmp)
@@ -327,10 +335,20 @@ al.data.energy = 6000 * top * (frame_m / 8) ** 2
 sc.render.resolution_x, sc.render.resolution_y = cellw, cell
 sc.cycles.samples = samples
 sc.cycles.use_denoising = True
+# blast point: the ground contact of the volume at the first rendered frame, projected into the cell
+from bpy_extras.object_utils import world_to_camera_view
+sc.frame_set(files.index(sel[0]) + 1)
+set_lift(0)
+bpy.context.view_layer.update()
+bb0 = [vo.matrix_world @ Vector(c) for c in vo.bound_box]
+P0 = Vector((sum(v.x for v in bb0) / 8, sum(v.y for v in bb0) / 8, min(v.z for v in bb0)))
+ax, ay, _ = world_to_camera_view(sc, cam, P0)
+print("ANCHOR x_from_left=%.3f y_from_top=%.3f frame_m=%.2f cell_w_m=%.2f" % (ax, 1 - ay, frame_m, frame_m * cellw / cell))
 os.makedirs(os.path.join(outdir, name), exist_ok=True)
 for i, p in enumerate(sel):
     idx = files.index(p)
     sc.frame_set(idx + 1)
+    set_lift(i)
     if bed_w is not None:
         bed_w.default_value = i * 0.3
     if heat and kind == "fire" and fgrid:  # the first frames burn hottest: whiter core, then it cools

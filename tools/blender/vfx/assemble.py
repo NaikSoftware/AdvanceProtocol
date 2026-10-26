@@ -19,10 +19,10 @@ ATLAS = {
                               lab=(35, 45), tgt_L=40, amax=0.35, ab=((-1, 2), (-3, 4))),
     "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=16, rows=4, fps=8, bonfire=1, raw=1, m=2.93, sway=0.05,
                             lab=None),
-    "explosion": dict(src="explosion", kind="once", tail=12, n=64, cols=8, rows=8, fps=48, m=32.2, lab=None),
-    "dirt_burst": dict(src="dirt_burst", kind="once", tail=12, n=64, cols=8, rows=8, fps=40, m=18.8, desat=0.65,
+    "explosion": dict(src="explosion", kind="once", tail=12, n=64, cols=8, rows=8, fps=48, m=21.7, lab=None),
+    "dirt_burst": dict(src="dirt_burst", kind="once", tail=12, n=64, cols=8, rows=8, fps=40, m=13.4, desat=0.65,
                        lab=(28, 38), tgt_L=33, ab=((2, 4), (6, 10))),
-    "impact_flash": dict(src="flash", kind="once", tail=6, n=16, cols=4, rows=4, fps=60, m=8.9, lab=None),
+    "impact_flash": dict(src="flash", kind="once", tail=8, n=16, cols=4, rows=4, fps=60, m=9.2, lab=None),
 }
 GRASS = np.array([92, 104, 70], np.float32) / 255  # muted late-autumn grass, L* ~ 41
 CM_PX = (7, 22)  # closest / farthest zoom, cm per screen pixel
@@ -217,7 +217,8 @@ def process(cfg, frames):
         print("flame luma lower half %.0f, upper half %.0f (alpha > 0.6)" % luma_report(fr))
     if cfg.get("tail"):  # a flash must end empty, the sim stops while it is still bright
         k = cfg["tail"]
-        fr[-k:, ..., 3] *= np.linspace(1, 0, k + 1)[1:].reshape(-1, 1, 1).astype(np.float32)
+        e = np.linspace(0, 1, k + 1)[1:]
+        fr[-k:, ..., 3] *= (1 - e * e * (3 - 2 * e)).reshape(-1, 1, 1).astype(np.float32)  # eased: no kink where the fade starts
     if cfg["kind"] == "puff":  # a puff is born and dies empty, so the loop closes without a seam
         t = np.arange(n, dtype=np.float32)
         up = np.clip(t / 3, 0, 1)
