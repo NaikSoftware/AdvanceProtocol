@@ -85,7 +85,7 @@ func test_structures_lie_wholly_inside_building_cells(p = use_parameters(MAPS)) 
 ## ховається за дахом, і два будинки читаються одним.
 func test_structures_keep_two_metres_apart(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _view(_map(p))
-	var rects: Array[Rect2] = []
+	var rects: Array = []
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
 		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
@@ -93,9 +93,13 @@ func test_structures_keep_two_metres_apart(p = use_parameters(MAPS)) -> void:
 		var box: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 		# Кожна межа розширена на 1 м: перетин означає прохід, вужчий за 2 м.
 		var r := Rect2(box.position.x, box.position.z, box.size.x, box.size.z).grow(PropLayer.STRUCTURE_GAP * 0.5 - 1e-4)
-		for o in rects:
-			assert_false(r.intersects(o), "%s: %s ближче 2 м до сусіда" % [p, inst["model"]])
-		rects.append(r)
+		var ruin: bool = k == PropLayer.Kind.RUIN
+		for o: Array in rects:
+			# Руїни прив'язані кожна до своєї клітинки RUBBLE; правило стереже будинки.
+			if ruin and o[1]:
+				continue
+			assert_false(r.intersects(o[0]), "%s: %s ближче 2 м до сусіда" % [p, inst["model"]])
+		rects.append([r, ruin])
 
 
 ## Дрібний пропс — лише на прохідній клітинці дошки і поза квадратом юніта в її центрі.
@@ -110,8 +114,11 @@ func test_nothing_small_on_a_unit_centre(p = use_parameters(MAPS)) -> void:
 		var c: Vector2i = (inst["cells"] as Array)[0]
 		assert_true(board.in_bounds(c), "%s: дрібний пропс поза дошкою" % p)
 		var kind: int = board.kind_at(c)
-		assert_true(kind in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.HILL],
-				"%s: %s на непрохідному виді %d" % [p, inst["model"], kind])
+		# Огорожа двору може стояти й на порожній клітинці BUILDING за межею ділянки.
+		var allowed: Array = [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.HILL]
+		if _kind(inst["model"]) == PropLayer.Kind.GARDEN_FENCE:
+			allowed.append(Terrain.Kind.BUILDING)
+		assert_true(kind in allowed, "%s: %s на виді %d" % [p, inst["model"], kind])
 		var box: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 		var r: float = PropLayer.KEEP_OUT
 		var hits: bool = box.position.x - c.x < r and box.end.x - c.x > -r and box.position.z - c.y < r and box.end.z - c.y > -r
@@ -184,6 +191,16 @@ func test_bridge_follows_the_road_axis() -> void:
 	assert_eq_deep(view.props().instances_on(Vector2i(3, 2))[0]["model"], on[0]["model"])
 
 
+## Одна клітинка BUILDING: ділянка двору однозначна — рівно ця клітинка.
+func _yard_board() -> Board:
+	var board := Board.create(8, 8, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(3, 3), Terrain.Kind.BUILDING)
+	return board
+
+
+const _YARD_SIDES: Array[Vector2i] = [Vector2i(3, 2), Vector2i(3, 4), Vector2i(2, 3), Vector2i(4, 3)]
+
+
 func _house_board() -> Board:
 	var board := Board.create(8, 8, Terrain.GroundState.DRY)
 	for c: Vector2i in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(2, 3), Vector2i(3, 3)]:
@@ -242,9 +259,9 @@ func test_reveal_survives_a_rebuild() -> void:
 
 ## Розчавлене — лише дрібні пропси, і лише на поданих клітинках; будинок не чавиться.
 func test_crush_flattens_small_props_on_the_given_cells_only() -> void:
-	var view: BoardView = _view(null, _house_board())
+	var view: BoardView = _view(null, _yard_board())
 	var fenced: Array[Vector2i] = []
-	for c: Vector2i in [Vector2i(2, 1), Vector2i(3, 1), Vector2i(2, 4), Vector2i(3, 4)]:
+	for c: Vector2i in _YARD_SIDES:
 		if not _fences_on(view, c).is_empty():
 			fenced.append(c)
 	assert_gte(fenced.size(), 3, "двір обгороджено, хвіртка — одна")
@@ -256,11 +273,11 @@ func test_crush_flattens_small_props_on_the_given_cells_only() -> void:
 		return
 	assert_false(on[0]["crushed"])
 	var before: Transform3D = on[0]["transform"]
-	view.set_crushed_cells([fence_cell, Vector2i(2, 2)] as Array[Vector2i])
+	view.set_crushed_cells([fence_cell, Vector2i(3, 3)] as Array[Vector2i])
 	var after: Dictionary = _fences_on(view, fence_cell)[0]
 	assert_true(after["crushed"])
 	assert_ne(after["transform"], before, "повалена огорожа лежить інакше")
-	for inst in view.props().instances_on(Vector2i(2, 2)):
+	for inst in view.props().instances_on(Vector2i(3, 3)):
 		assert_false(inst["crushed"], "будинок не чавиться")
 	assert_false(_fences_on(view, other)[0]["crushed"], "огорожа поруч ціла")
 
@@ -351,16 +368,27 @@ func test_ring_structures_take_the_haze() -> void:
 	assert_true(mat.get_shader_parameter("surround"))
 
 
-## Огорожа двору — замкнений контур довкола групи з однією хвірткою: на кожному ребрі групи, де за
-## межею поле, стоїть секція, крім одного.
+func _length(inst: Dictionary) -> float:
+	var b: Basis = (inst["transform"] as Transform3D).basis
+	return b.x.length()
+
+
+## Огорожа двору — замкнений контур довкола ділянки з однією хвірткою ~3.6 м: секція стоїть на кожному
+## ребрі, і рівно одна з них коротша на хвіртку.
 func test_yard_fence_closes_the_yard_with_one_gate() -> void:
-	var view: BoardView = _view(null, _house_board())
-	var sides: int = 0
+	var view: BoardView = _view(null, _yard_board())
+	assert_false(view.props().instances_on(Vector2i(3, 3)).is_empty(), "передумова: будинок на клітинці")
 	var fenced: int = 0
-	for c: Vector2i in [Vector2i(2, 1), Vector2i(3, 1), Vector2i(2, 4), Vector2i(3, 4), Vector2i(1, 2), Vector2i(1, 3), Vector2i(4, 2), Vector2i(4, 3)]:
-		sides += 1
-		fenced += 1 if not _fences_on(view, c).is_empty() else 0
-	assert_eq(fenced, sides - 1, "вісім ребер, одна хвіртка")
+	var total: float = 0.0
+	for c: Vector2i in _YARD_SIDES:
+		var on: Array[Dictionary] = _fences_on(view, c)
+		fenced += 1 if not on.is_empty() else 0
+		for i in on:
+			total += _length(i)
+	assert_eq(fenced, 4, "кожне ребро обгороджене")
+	# Повний контур ділянки 1×1 з опуклими кутами — 4 × (1 + 2·YARD_OUT); хвіртка забирає GATE.
+	var full: float = 4.0 * (1.0 + 2.0 * PropLayer.YARD_OUT)
+	assert_almost_eq(total, full - PropLayer.GATE, 0.02, "одна хвіртка на весь контур")
 	var models: Dictionary = {}
 	for inst in view.props().all_instances():
 		if _kind(inst["model"]) == PropLayer.Kind.GARDEN_FENCE:
@@ -370,12 +398,15 @@ func test_yard_fence_closes_the_yard_with_one_gate() -> void:
 
 ## Хвіртка — у бік дороги, коли дорога поруч.
 func test_yard_gate_faces_the_road() -> void:
-	var board := _house_board()
-	board.set_kind(Vector2i(2, 4), Terrain.Kind.ROAD)
+	var board := _yard_board()
 	board.set_kind(Vector2i(3, 4), Terrain.Kind.ROAD)
 	var view: BoardView = _view(null, board)
-	var road_fences: int = _fences_on(view, Vector2i(2, 4)).size() + _fences_on(view, Vector2i(3, 4)).size()
-	assert_eq(road_fences, 1, "одна з двох секцій до дороги — хвіртка")
+	var road: Array[Dictionary] = _fences_on(view, Vector2i(3, 4))
+	assert_eq(road.size(), 1, "бік до дороги обгороджено")
+	var total: float = 0.0
+	for i in road:
+		total += _length(i)
+	assert_almost_eq(total, 1.0 + 2.0 * PropLayer.YARD_OUT - PropLayer.GATE, 0.02, "хвіртка — на дорогу")
 
 
 ## Під брилами й блоками — пляма дотику, одним вузлом.
@@ -428,10 +459,10 @@ func _yard_map() -> MapData:
 	var tiles := PackedInt32Array()
 	tiles.resize(m.width * m.height)
 	tiles.fill(Terrain.Kind.FIELD)
-	# Двори 4×2: будинок 2×2 влазить із проміжком 2 м до огорожі.
-	for x in range(2, 6):
-		for y in [0, 1, 5, 6]:
-			tiles[y * m.width + x] = Terrain.Kind.BUILDING
+	# Двори на одну клітинку: будинок стоїть рівно там, а секція огорожі — на клітинці перед ним
+	# (хвіртка лише вкорочує її), на шляху машини (3,2) і стрільців (4,4).
+	tiles[1 * m.width + 3] = Terrain.Kind.BUILDING
+	tiles[5 * m.width + 4] = Terrain.Kind.BUILDING
 	m.tiles = tiles
 	m.spawns = [
 		{"type_id": ARMOURED_CAR, "owner": 0, "pos": Vector2i(1, 2), "facing": 2},
@@ -481,20 +512,19 @@ func test_vehicle_crushes_infantry_does_not_and_the_enemy_never_sees_it_unscoute
 	add_child_autofree(screen)
 	screen.setup(_yard_map(), 2, 1, service)
 	var view: BoardView = screen.get_node("%BoardView")
-	# Хвіртка може припасти на будь-яке ребро, тож беремо клітинку шляху, де огорожа таки є.
-	var car_cell: Vector2i = _fenced_of(view, [Vector2i(2, 2), Vector2i(3, 2), Vector2i(4, 2)])
-	var rifle_cell: Vector2i = _fenced_of(view, [Vector2i(2, 4), Vector2i(3, 4), Vector2i(4, 4)])
-	assert_ne(car_cell, Vector2i(-1, -1), "передумова: огорожа під двором")
-	assert_ne(rifle_cell, Vector2i(-1, -1), "передумова: огорожа під другим двором")
+	var car_cell := Vector2i(3, 2)
+	var rifle_cell := Vector2i(4, 4)
+	assert_false(_fences_on(view, car_cell).is_empty(), "передумова: огорожа під двором")
+	assert_false(_fences_on(view, rifle_cell).is_empty(), "передумова: огорожа під другим двором")
 
 	await _move(service, screen, ARMOURED_CAR, Vector2i(4, 2))
 	await _move(service, screen, RIFLE, Vector2i(4, 4))
 	assert_true(_crushed_on(screen, car_cell), "техніка розчавила огорожу")
 	assert_false(_crushed_on(screen, rifle_cell), "піхота пройшла повз")
-	# Стрільці на (4,4): між ними й камерою — (4..5, 5); будинок південного двору там і стоїть.
-	var south: Vector2i = _structure_cell(view, [Vector2i(4, 5), Vector2i(5, 5)])
-	var north: Vector2i = _structure_cell(view, [Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0), Vector2i(5, 0)])
-	assert_ne(south, Vector2i(-1, -1), "передумова: будинок між стрільцями й камерою")
+	# Стрільці на (4,4): будинок (4,5) стоїть між ними й камерою; будинок (3,1) — за машиною.
+	var south := Vector2i(4, 5)
+	var north := Vector2i(3, 1)
+	assert_ne(_structure_cell(view, [south]), Vector2i(-1, -1), "передумова: будинок між стрільцями й камерою")
 	assert_true(_faded(view, south), "дім між стрільцями й камерою розчинився")
 	assert_false(_faded(view, north), "дім за машиною — ні")
 
@@ -546,9 +576,8 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 		var c: Vector2i = (inst["cells"] as Array)[0]
 		var has_built := false
 		for d in Board.DIRS_4:
-			if board.in_bounds(c + d) and board.kind_at(c + d) == Terrain.Kind.BUILDING:
-				has_built = has_built or _group_has(board, c + d, built)
-		assert_true(has_built, "%s: огорожа на %s довкола порожнього двору" % [p, c])
+			has_built = has_built or built.has(c + d)
+		assert_true(has_built, "%s: огорожа на %s не при будинку" % [p, c])
 
 
 func _group_has(board: Board, start: Vector2i, built: Dictionary) -> bool:
@@ -584,7 +613,110 @@ func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 			fences.append(r)
 	for f in fences:
 		for b in houses + towers:
-			assert_false(b.grow(0.3 - 1e-4).intersects(f), "%s: огорожа ближче 0.3 клітинки до будівлі" % p)
+			assert_false(b.grow(0.3 - 1e-4).intersects(f), "%s: огорожа %s ближче 0.3 клітинки до будівлі %s" % [p, f, b])
 	for t in towers:
 		for b in houses:
 			assert_false(t.grow(0.5 - 1e-4).intersects(b), "%s: вежа ближче 0.5 клітинки до будівлі" % p)
+
+
+
+## З камери гри будівлі не накладаються на екрані, хіба що одна далеко за іншою вглиб: ближча
+## будівля інакше ховає звіс дальшої, і дві читаються однією, хоч згори між ними й 2 м.
+func test_buildings_never_overlap_on_screen(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _view(_map(p))
+	var proj: Array = []
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+			continue
+		var box: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var scr: Array = PropLayer._Placer._screen_of(Rect2(box.position.x, box.position.z, box.size.x, box.size.z), box.size.y)
+		scr.append(k == PropLayer.Kind.RUIN)
+		for o: Array in proj:
+			# Руїни прив'язані кожна до своєї клітинки RUBBLE; правило стереже будинки.
+			if scr[2] and o[2]:
+				continue
+			var overlap: bool = (scr[0] as Rect2).intersects(o[0])
+			assert_false(overlap and PropLayer._Placer._depth_gap(scr[1], o[1]) < PropLayer.SCREEN_DEPTH_SEP,
+					"%s: %s накладається на сусіда на екрані" % [p, inst["model"]])
+		proj.append(scr)
+
+
+## Одна вежа на карту, і жодна будівля не стоїть поруч із нею.
+func test_one_tower_per_map_in_its_own_lot(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _view(_map(p))
+	var towers: Array[Vector2i] = []
+	var others: Dictionary = {}
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+			continue
+		for c: Vector2i in inst["cells"]:
+			if bool(PropLayer.spec_of(inst["model"]).get("tower", false)):
+				towers.append(c)
+			else:
+				others[c] = true
+	assert_lte(towers.size(), 1, p)
+	for t in towers:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				assert_false(others.has(t + Vector2i(dx, dy)), "%s: будівля поруч із вежею" % p)
+
+
+## Однакові моделі не стоять у сусідніх клітинках, і двоповерхових — не більше половини.
+func test_villages_are_varied(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _view(_map(p))
+	var at: Dictionary = {}
+	var houses: int = 0
+	var tall: int = 0
+	for inst in view.props().all_instances():
+		if _kind(inst["model"]) != PropLayer.Kind.STRUCTURE:
+			continue
+		var s: Dictionary = PropLayer.spec_of(inst["model"])
+		if not bool(s.get("tower", false)):
+			houses += 1
+			tall += 1 if int(s.get("storeys", 1)) >= 2 else 0
+		for c: Vector2i in inst["cells"]:
+			at[c] = [inst["model"], inst]
+	for c: Vector2i in at:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var n: Vector2i = c + Vector2i(dx, dy)
+				if at.has(n) and at[n][1] != at[c][1]:
+					assert_ne(at[n][0], at[c][0], "%s: дві %s поруч" % [p, at[c][0]])
+	assert_lte(tall * 2, houses, "%s: двоповерхових більше половини" % p)
+
+
+## Кожна клітинка RUBBLE дошки показує руїну; неприйнята модель не стає нікуди.
+func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var board: Board = m.to_board()
+	var view: BoardView = _view(m)
+	for y in board.height:
+		for x in board.width:
+			var c := Vector2i(x, y)
+			if board.kind_at(c) != Terrain.Kind.RUBBLE:
+				continue
+			var ruins: Array = view.props().instances_on(c).filter(
+					func(i: Dictionary) -> bool: return _kind(i["model"]) == PropLayer.Kind.RUIN)
+			assert_eq(ruins.size(), 1, "%s: руїна на %s" % [p, c])
+	for inst in view.props().all_instances():
+		assert_false(PropLayer.RETIRED.has(inst["model"]), "%s: неприйнята %s" % [p, inst["model"]])
+
+
+## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
+## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
+## разом зі свідомою зміною таблиці моделей чи правил розстановки.
+const RIVER_BUILDINGS_FINGERPRINT: int = 3587636975
+
+
+func test_river_buildings_match_the_golden_fingerprint() -> void:
+	var view: BoardView = _view(_map("river"))
+	var parts: PackedStringArray = []
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			var c: Vector2i = (inst["cells"] as Array)[0]
+			parts.append("%s@%d,%d" % [inst["model"], c.x, c.y])
+	parts.sort()
+	assert_eq(";".join(parts).hash(), RIVER_BUILDINGS_FINGERPRINT, ";".join(parts))

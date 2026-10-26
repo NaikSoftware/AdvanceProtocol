@@ -22,6 +22,7 @@ const vec3 WET_TONE = vec3(1.0, 0.96, 0.9);
 // Бруд біля землі: ~0.5 м (клітинка — 8 м).
 const float DIRT_H = 0.06;
 const float DIRT = 0.6;
+const float WET_ROUGHNESS = 0.4;
 
 varying float base_h;
 
@@ -45,7 +46,8 @@ void fragment() {
 		albedo *= mix(1.0, DIRT, wet * (1.0 - smoothstep(0.0, DIRT_H, base_h)));
 	}
 	ALBEDO = albedo;
-	ROUGHNESS = roughness;
+	// Мокра фарбована бляха — м'який полиск, не матова картка.
+	ROUGHNESS = mix(roughness, WET_ROUGHNESS, wet);
 	METALLIC = metallic;
 	vec3 up = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
 	// Тильний бік рушій сам перевертає (cull_disabled); нахил до неба вирівнює обидва.

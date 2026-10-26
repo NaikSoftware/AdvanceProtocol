@@ -5,7 +5,8 @@ extends Node
 ##   $GODOT --path . --position 6000,0 res://tools/battle_budget.tscn -- <out_dir> [--shadows] <map>[@x,y@zoom] ...
 ## --shadows: будівлі й руїни кидають справжню тінь сонця — щоб зміряти, скільки це коштує.
 ## Без @… знімається центр дошки на MAX і MIN зумі. <map>@sel@zoom — вибраний перший юніт гравця 0
-## із контурами зон руху поверх пропсів. <map>@top@x,y,size — ортографічний погляд згори на
+## із контурами зон руху поверх пропсів. <map>@behind@<модель>@zoom — той самий юніт за першою
+## такою будівлею (з боку від камери), вибраний: розчинення даху й контур зони поверх сліду. <map>@top@x,y,size — ортографічний погляд згори на
 ## клітинку x,y (size клітинок у кадрі) з межами будівель (червоні) й огорож (блакитні) і найменшим
 ## проміжком між будівлями та між будівлею й огорожею в метрах. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=….
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
@@ -49,7 +50,24 @@ func _ready() -> void:
 			screen.free()
 			await get_tree().process_frame
 			continue
-		if parts.size() >= 3 and parts[1] == "sel":
+		if parts.size() >= 4 and parts[1] == "behind":
+			# Юніт за будівлею з боку, протилежного камері: дах чи вежа мусять розчинитися, а
+			# контур зони — лягти поверх сліду будівлі.
+			var target := Vector2i(-1, -1)
+			for inst in (screen.get_node("%BoardView") as BoardView).props().all_instances():
+				var c: Vector2i = (inst["cells"] as Array)[0]
+				if String(inst["model"]) == parts[2] and board.in_bounds(c - Vector2i.ONE):
+					target = c
+					break
+			if target == Vector2i(-1, -1):
+				push_error("battle_budget: нема %s на дошці" % parts[2])
+			else:
+				var unit: Unit = MatchService.state.units_of(0)[0]
+				unit.pos = target - Vector2i.ONE
+				screen.call("_rebuild_units_for_active_player")
+				(screen.get("_controller") as InputController).select_unit(unit)
+				views.append([unit.pos, float(parts[3])])
+		elif parts.size() >= 3 and parts[1] == "sel":
 			var unit: Unit = MatchService.state.units_of(0)[0]
 			(screen.get("_controller") as InputController).select_unit(unit)
 			views.append([unit.pos, float(parts[2])])
