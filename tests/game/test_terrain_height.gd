@@ -698,10 +698,11 @@ func test_hill_centre_support_stays_in_its_range() -> void:
 		assert_between(rise, lo, hi, "сід %d: центр пагорба %.3f" % [seed_value, rise])
 
 
-## Поле майже рівне: на кожній карті всередині кожної клітинки FIELD (відліки ±0.4 клітинки з
-## кроком 0.1) висота гуляє менше ніж на 0.25 м. Поле біля пагорба (до 3 клітинок у світі з
-## кільцем: розмиття пагорба) чи біля води має схил і не рахується. Пагорби лишаються пагорбами:
-## середня висота центрів клітинок HILL — понад 3 м.
+## Поле майже рівне: на кожній карті всередині кожної клітинки FIELD — на дошці й у кільці — (відліки
+## ±0.4 клітинки з кроком 0.1) висота гуляє менше ніж на 0.25 м. Поле біля пагорба (до 3 клітинок:
+## розмиття пагорба) чи біля води має схил і не рахується. Пагорби лишаються пагорбами: середня
+## висота центрів клітинок HILL дошки — понад 3 м, кільця — понад 2 м (біля краю дошки їх опускає
+## улоговина краю).
 func test_field_cells_are_nearly_level_and_hills_keep_their_height() -> void:
 	for path in _MAPS:
 		var m: MapData = load(path)
@@ -710,35 +711,42 @@ func test_field_cells_are_nearly_level_and_hills_keep_their_height() -> void:
 		var world: Board = Surroundings.world_board(board, m) if ring > 0 else board
 		var ws: PackedByteArray = Surroundings.world_surface(m) if ring > 0 else m.surface
 		var t := TerrainHeight.bake(world, 0, m.name_key.hash(), ws, ring)
-		var worst := 0.0
-		var worst_at := Vector2i(-1, -1)
-		var fields := 0
-		var hill_sum := 0.0
-		var hills := 0
-		for y in board.height:
-			for x in board.width:
-				var c := Vector2i(x, y)
-				var kind: int = board.kind_at(c)
+		# [0] дошка, [1] кільце: найбільший розмах, де, скільки клітинок поля, сума й кількість пагорбів.
+		var worst: Array[float] = [0.0, 0.0]
+		var worst_at: Array[Vector2i] = [Vector2i(-1, -1), Vector2i(-1, -1)]
+		var fields: Array[int] = [0, 0]
+		var hill_sum: Array[float] = [0.0, 0.0]
+		var hills: Array[int] = [0, 0]
+		for wy in world.height:
+			for wx in world.width:
+				var c := Vector2i(wx - ring, wy - ring)
+				var r: int = 0 if board.in_bounds(c) else 1
+				var kind: int = world.kind_at(Vector2i(wx, wy))
 				if kind == Terrain.Kind.HILL:
-					hill_sum += t.at(x, y)
-					hills += 1
-				if kind != Terrain.Kind.FIELD or _near_slope(world, c + Vector2i(ring, ring)):
+					hill_sum[r] += t.at(c.x, c.y)
+					hills[r] += 1
+				if kind != Terrain.Kind.FIELD or _near_slope(world, Vector2i(wx, wy)):
 					continue
-				fields += 1
+				fields[r] += 1
 				var lo := 1e9
 				var hi := -1e9
 				for j in 9:
 					for i in 9:
-						var v: float = t.at(x - 0.4 + i * 0.1, y - 0.4 + j * 0.1)
+						var v: float = t.at(c.x - 0.4 + i * 0.1, c.y - 0.4 + j * 0.1)
 						lo = minf(lo, v)
 						hi = maxf(hi, v)
-				if hi - lo > worst:
-					worst = hi - lo
-					worst_at = c
-		gut.p("%s: %d клітинок поля, найбільший розмах %.3f м у %s; пагорб у середньому %.2f м" % [path, fields, worst / M, worst_at, hill_sum / hills / M])
-		assert_true(fields > 50, "%s: є що міряти (%d)" % [path, fields])
-		assert_lt(worst / M, 0.25, "%s: поле рівне, розмах %.3f м у %s" % [path, worst / M, worst_at])
-		assert_gt(hill_sum / hills / M, 3.0, "%s: пагорби стоять" % path)
+				if hi - lo > worst[r]:
+					worst[r] = hi - lo
+					worst_at[r] = c
+		for r in 2:
+			var where: String = ["дошка", "кільце"][r]
+			if r == 1 and ring == 0:
+				continue
+			gut.p("%s, %s: %d клітинок поля, найбільший розмах %.3f м у %s; пагорб у середньому %.2f м (%d)" % [path, where, fields[r], worst[r] / M, worst_at[r], hill_sum[r] / maxi(hills[r], 1) / M, hills[r]])
+			assert_true(fields[r] > 20, "%s, %s: є що міряти (%d)" % [path, where, fields[r]])
+			assert_lt(worst[r] / M, 0.25, "%s, %s: поле рівне, розмах %.3f м у %s" % [path, where, worst[r] / M, worst_at[r]])
+			if hills[r] > 0:
+				assert_gt(hill_sum[r] / hills[r] / M, 3.0 if r == 0 else 2.0, "%s, %s: пагорби стоять" % [path, where])
 
 
 static func _near_slope(world: Board, c: Vector2i) -> bool:
