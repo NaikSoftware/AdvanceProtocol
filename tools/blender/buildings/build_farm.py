@@ -165,7 +165,7 @@ def hangar(damaged):
                     p0 = (side * 9.0 * (1 - ta), ia[0], EAVE + 3.0 * ta + 0.08)
                     p1 = (side * 9.0 * (1 - tb), ib[0], EAVE + 3.0 * tb + 0.08)
                     if abs(p0[1] - p1[1]) > 0.1:
-                        b.beam(p0, p1, 0.12, "galv", 0.14)
+                        b.beam(p0, p1, 0.12, "galv_rim", 0.14)
         flap(1, "lo", -3.2, -1.0, 0.5)
         flap(1, "hi", 0.5, 2.8, 0.4)
         flap(1, "lo", 2.0, 4.0, 0.55)

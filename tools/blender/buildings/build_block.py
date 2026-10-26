@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, chunks, mound, wall_run, burn_ring, panel_wall, opening, chip_slab, HeapSurface, heap_mound
+from lib import Builder, chunks, mound, wall_run, burn_ring, panel_wall, opening2, chip_slab, HeapSurface, heap_mound
 
 out = lib.out_dir()
 LEN, DEP, FLOOR, NF = 30.0, 12.0, 3.1, 3
@@ -80,7 +80,7 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                 yy = y - (LOG * sgn if (i in cols and f >= 1) else 0.0)
                 if (side, i, f) in blown:
                     e = 0.03 * sgn
-                    opening(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn)
+                    opening2(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, streak=0.4)
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
                 if not (i in cols and f >= 1):
@@ -165,7 +165,7 @@ def damaged():
                 continue
             blow = True
             if blow:
-                opening(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1)
+                opening2(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, streak=0.4)
             else:
                 b.window(("y", Y0, -1), x, z, 1.4, 1.4)
     for k in range(6):
@@ -176,7 +176,7 @@ def damaged():
             z = f * FLOOR + 0.95
             if he - 1.4 < z + 1.8 or rnd.random() < 0.4 or (f == 0 and k % 2):          # у нижньому ряду не частіше кожного другого прорізу
                 continue
-            opening(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1)
+            opening2(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, streak=0.4)
     # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
     for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 2.9, 3.6, 1.8, 0.35, 0.0, 0.0), (13.5, -3.6, 5.9, 2.6, 2.0, 0.38, 0.0, 0.1), (8.0, 4.0, 2.9, 2.4, 1.6, -0.3, 0.0, 0.0)):
         chip_slab(b, x, y, z, sx, sy, 0.22, (ax, ay, az), "slab_dark", "slab_dark", int(x * 10 + y))
@@ -201,7 +201,7 @@ def damaged():
     print("HEAPPEAK h5", [round(max(h_.z(h_.cx + h_.rx * u / 20.0, h_.cy + h_.ry * v / 20.0) for u in range(-20, 21) for v in range(-20, 21)), 2) for h_ in plan], "s", round(plan[0].s, 3))
     for k, hsf in enumerate(plan):
         big = k == 0
-        heap_mound(b, hsf, "heap_grey", rings=7 if big else 3, segs=32 if big else 16)
+        heap_mound(b, hsf, "heap_grey", rings=7 if big else 3, segs=32 if big else 16, skirt_mat="rubble_steel")
         heap_mound(bh, hsf, "heap_base_grey", rings=18 if big else 8, segs=110 if big else 56, jitter=0.1 * hsf.hmax / 4.0, seed=61 + k)
     hrnd = random.Random(99)
     for hsf in plan:
@@ -223,7 +223,7 @@ def damaged():
     for k in range(4):                                                           # уламки панелей товщиною 0.3 м, наполовину в купі
         px, py = rnd.uniform(14.8, 18.5), rnd.uniform(-6.5, 3.0)
         chip_slab(b, px, py, max(0.45, surf(px, py) * 0.7), rnd.uniform(1.4, 2.0), rnd.uniform(1.0, 1.5), 0.3, (rnd.uniform(-0.3, 0.3), rnd.uniform(-0.3, 0.3), rnd.uniform(0, 3.1)), "slab_dark", "slab_dark", 400 + k, rebar=1, per_edge=2)
-    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4200, footprint=(5, 2), anchor=(0, 0), hi=bh, ground_clip=True, ao=0.45)
+    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4600, footprint=(5, 2), anchor=(0, 0), hi=bh, ground_clip=True, ao=0.45)
 
 
 intact()

@@ -113,11 +113,11 @@ def house1(hit=False):
             for i in range(nh):
                 u0, u1 = edge[i], edge[i + 1]
                 v0, v1 = vs[i], vs[i + 1]
-                du = 0.11 * sgn_
+                du = 0.09 * sgn_
                 pts = [P(u0, v0), P(u1, v1), P(u1 + du, v1), P(u0 + du, v0)]
                 pts = [(x, y - 0.025, z + 0.03) for (x, y, z) in pts]
                 n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
-                tones = (0.06, 0.06, 0.34, 0.34)
+                tones = (0.14, 0.14, 0.42, 0.42)
                 if n_.z < 0:
                     pts, tones = pts[::-1], tones[::-1]
                 b.soot(pts, tones, 1)
@@ -139,12 +139,10 @@ def house1(hit=False):
         xl, xr = xa + (xb - xa) * 0.30, xa + (xb - xa) * 0.72
         nst = 16
         w_ = (xr - xl) / nst
-        for i in range(nst):                                                      # смужки різної глибини: рваний низ і зубчасті боки
-            edge_ = min(i, nst - 1 - i)
-            dep = 1.5 * (0.35 + 0.65 * min(1.0, edge_ / 3.0)) * rr.uniform(0.5, 1.2)
+        for i in range(nst):                                                      # смужки однакової глибини: тон плавно переходить у тон стіни, без чорного краю
+            dep = 1.25 + rr.uniform(-0.05, 0.05)
             x0_, x1_ = xl + i * w_, xl + (i + 1) * w_
-            dep2 = dep * rr.uniform(0.7, 1.3)
-            b.soot([(x0_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE - dep2), (x1_, y0 - 0.03, EAVE), (x0_, y0 - 0.03, EAVE)][::-1], (0.30, 0.30, 0.10, 0.10), 1)
+            b.soot([(x0_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE), (x0_, y0 - 0.03, EAVE)][::-1], (0.24, 0.24, 0.74, 0.74), 1)
     if not hit:
         b.box(0, ym, RIDGE, xr1 - xr0 + 0.6, 0.3, 0.16, "gutter")
     b.box(2.2, -0.2, 4.0, 0.75, 0.75, 3.3, "brick_face", top="brick_grey")        # цегляний димар
@@ -170,17 +168,13 @@ def house1(hit=False):
         rr = random.Random(54)
         bh = Builder()
         # низька основа ≤0.6 м (кидає тінь) під стіною -Y і на торці +X; деталь запікається зі скан-джерела
-        for (mx, my, mrx, mry, mh, ms) in ((0.0, -4.05, 3.0, 0.5, 0.45, 51), (6.0, -0.4, 1.5, 2.0, 0.5, 52)):
+        for (mx, my, mrx, mry, mh, ms) in ((0.0, -4.05, 3.0, 0.45, 0.45, 51),):
             mound(b, mx, my, mrx, mry, mh, ms, mat="heap_house", rings=4, segs=16)
             mound(bh, mx, my, mrx, mry, mh, ms, mat="heap_house", rings=8, segs=36, jitter=0.12)
         for k in range(10):
             bh.rock(rr.uniform(-3.2, 3.2), -4.0 + rr.uniform(-0.15, 0.1), 0.3, rr.uniform(0.3, 0.55), rr.choice(("heap_house", "rubble")), rr, buried=0.4)
-        for k in range(8):
-            bh.rock(6.0 + rr.uniform(-1.3, 1.3), -0.4 + rr.uniform(-1.8, 1.8), 0.3, rr.uniform(0.3, 0.55), rr.choice(("heap_house", "rubble")), rr, buried=0.4)
         for k in range(3):                                                        # справжні шматки 0.4-0.6 м
             b.rock(rr.uniform(-2.5, 2.5), -4.2 + rr.uniform(-0.1, 0.1), 0.35, rr.uniform(0.4, 0.6), "heap_house", rr, buried=0.4)
-        b.rock(6.4, -0.4, 0.35, 0.55, "heap_house", rr, buried=0.4)
-        b.rock(7.2, 1.2, 0.3, 0.45, "heap_house", rr, buried=0.4)
         b.rock(-2.2, -4.1, 0.3, 0.5, "heap_house", rr, buried=0.4)
     lib.finish(b, "house_h1_hit" if hit else "house_h1", out, tri_limit=2600, footprint=(2, 1), anchor=(0, 0), hi=bh)
 
@@ -287,22 +281,22 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
         hs = [rnd.uniform(0.4, cap)]
         for i in range(n):
             hs.append(min(cap, max(0.3, hs[-1] + rnd.uniform(-0.7, 0.7))))
-        # 2-3 шматки: два проломи довжиною не менше 2 відрізків (≥1.2 м після масштабування)
-        pieces = rnd.choice((2, 3))
-        cutpts = sorted(rnd.sample(range(2, n - 1), pieces - 1)) if n > 5 else [n // 2]
-        for cp in cutpts:
-            for j in range(cp, min(n + 1, cp + 2)):
+        # кожен бік розірваний: два проломи, разом не менше третини довжини, тож кільце не читається як суцільний червоний квадрат
+        cnt = n + 1
+        glen = max(2, -(-cnt // 6))
+        starts = sorted(rnd.sample(range(1, max(2, cnt - glen - 1)), 2)) if cnt > 2 * glen + 3 else [1]
+        for st in starts:
+            for j in range(st, min(cnt, st + glen)):
                 hs[j] = 0.0
-        if rnd.random() > keep:                                     # іноді з боку лишається лише уламок
-            for j in range(0, n + 1):
-                if rnd.random() < 0.6:
-                    hs[j] = 0.0
-        if corner and si in (1, 2):                                  # один кут на поверх висоти: видно колишній дім здалеку
+        if sum(1 for v in hs if v <= 0.05) < cnt / 3:
+            for j in range(cnt // 2, min(cnt, cnt // 2 + glen)):
+                hs[j] = 0.0
+        if corner and si in (1, 2):                                  # один кут вищий: видно колишній дім здалеку
             if si == 1:
-                hs[-3:] = [1.6, 1.8, 1.8]
+                hs[-3:] = [1.3, 1.5, 1.5]
             else:
-                hs[:3] = [1.8, 1.7, 1.5]
-        wall_run(b, p0, p1, 0.4, hs, "wall_half", "brick_face", seed * 3 + si, hcap=1.9, top_tone=0.82, brick_mat="brick_face")
+                hs[:3] = [1.5, 1.4, 1.2]
+        wall_run(b, p0, p1, 0.4, hs, "wall_half_d", "wall_plaster", seed * 3 + si, hcap=1.5, top_tone=0.55, brick_mat="wall_plaster", cap=0.12)
     if os.environ.get("RUIN_WALLS_ONLY"):                                        # діагностика: лише стіни, щоб міряти їхній тон у кадрі
         lib.finish(b, name + "_walls", out, tri_limit=4200, footprint=footprint, anchor=(0, 0), ground_clip=True)
         return
@@ -318,7 +312,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
     plan[0].fit_peak(1.15)
     for k, hsf in enumerate(plan):
         big = k == 0
-        peak = max(peak, heap_mound(b, hsf, "heap_buff", rings=8 if big else 2, segs=40 if big else 16, skirt=0.5))
+        peak = max(peak, heap_mound(b, hsf, "heap_buff", rings=8 if big else 2, segs=40 if big else 16, skirt=0.5, skirt_mat="rubble_buff"))
         heap_mound(bh, hsf, "heap_base_buff", rings=16 if big else 5, segs=96 if big else 36, jitter=0.05, seed=seed + k, skirt=0.5)
     print("HEAPPEAK", name, round(peak, 3))
     assert peak <= 1.45, f"{name}: гребінь купи {peak:.2f} м"
@@ -381,7 +375,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
         z1_ = max(0.1, surf(x1_, y1_) - 0.05)
         th = rnd.uniform(0.2, 0.3)
         b.beam((x0_, y0_, z0_), (x1_, y1_, z1_), th, "timber_dark", th * 1.2)
-    lib.finish(b, name, out, tri_limit=4200, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.65")))
+    lib.finish(b, name, out, tri_limit=4200, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.85")))
 
 
 if want("h1"):

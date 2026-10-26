@@ -3,10 +3,11 @@ extends Node
 ## зумі (найближче) і <name>_far.png на максимальному (де об'єкт ~100 px).
 ## Єдине освітлення для всіх наборів: м'яке холодне похмуре світло, приглушена волога сіра земля.
 ## Запуск (потрібне вікно, не --headless):
-##   $GODOT --path . res://tools/prop_preview.tscn -- [out_dir] [--graze] [--back] [--river] [--black] [--side] [--tank] [--dir=res://...] [name ...]
+##   $GODOT --path . res://tools/prop_preview.tscn -- [out_dir] [--graze] [--back] [--river] [--rl] [--black] [--side] [--tank] [--dir=res://...] [name ...]
 ## Без out_dir знімки лягають у user://prop_preview. Без імен знімається все з теки (за замовчуванням assets/props).
 ##   --graze  додає <name>_graze.png: низьке бічне сонце, щоб побачити рельєф карти нормалей;
 ##   --back   додає <name>_back.png: об'єкт, повернутий на 180°, щоб побачити протилежний фасад;
+##   --rl     вигляд карти Річка з гри (BattleLook): розсіяне похмуре світло з дальнього боку, сильне небо, мокрий ґрунт; суфікс _rl;
 ##   --black  чорний ґрунт без відблисків: у кадрі лишається лише сам об'єкт, тож його середній тон міряється без тла; файли отримують суфікс _black;
 ##   --river  ґрунт із текстури River (мокрий мул) замість сірої площини; файли отримують суфікс _river;
 ##   --side   додає <name>_side.png: ортографічний вид збоку для перевірки кутів балок і висот;
@@ -17,6 +18,7 @@ var graze: bool = false
 var back: bool = false
 var river: bool = false
 var black: bool = false
+var rl: bool = false
 var sfx: String = ""
 var side: bool = false
 const WINDOW: Vector2i = Vector2i(1280, 720)
@@ -37,6 +39,9 @@ func _ready() -> void:
 			river = true
 		elif args[i] == "--black":
 			black = true
+		elif args[i] == "--rl":
+			rl = true
+			river = true
 		elif args[i] == "--side":
 			side = true
 		elif args[i] == "--tank":
@@ -47,7 +52,7 @@ func _ready() -> void:
 			out = args[i]
 		else:
 			names.append(args[i])
-	sfx = ("_river" if river else "") + ("_black" if black else "")
+	sfx = ("_rl" if rl else ("_river" if river else "")) + ("_black" if black else "")
 	if names.is_empty():
 		for f in DirAccess.get_files_at(props_dir):
 			if f.ends_with(".glb"):
@@ -79,6 +84,9 @@ func _ready() -> void:
 	if black:
 		fm.albedo_color = Color(0.0, 0.0, 0.0)
 		fm.metallic_specular = 0.0
+	if rl:
+		fm.albedo_color = Color(0.26, 0.27, 0.26)
+		fm.roughness = 0.42
 	field.material_override = fm
 	field.position = Vector3(cell.x, 0.0, cell.y)
 	add_child(field)
@@ -99,6 +107,16 @@ func _ready() -> void:
 	env.environment.ambient_light_color = Color(0.62, 0.66, 0.72)
 	env.environment.ambient_light_energy = 0.8
 	add_child(env)
+	if rl:
+		var look: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+		sun.light_color = look.light_color
+		sun.light_energy = look.light_energy
+		sun.rotation_degrees = Vector3(-look.light_pitch_deg, look.light_yaw_deg, 0.0)
+		sun.shadow_opacity = look.shadow_opacity
+		sun.shadow_blur = look.shadow_blur
+		env.environment.ambient_light_color = look.ambient_color
+		env.environment.ambient_light_energy = look.ambient_energy
+		env.environment.background_color = Color(0.40, 0.44, 0.48)
 
 	for n in names:
 		var scene: PackedScene = load("%s/%s.glb" % [props_dir, n]) as PackedScene

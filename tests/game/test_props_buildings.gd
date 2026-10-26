@@ -6,7 +6,7 @@ const _DIR: String = "res://assets/props/"
 ## імʼя -> [слід X, слід Z у тайлах, ліміт трикутників]
 const _PROPS: Dictionary = {
 	"h5_panel_block": [4, 2, 2500],
-	"h5_panel_block_damaged": [5, 2, 4200],
+	"h5_panel_block_damaged": [5, 2, 4600],
 	"f1_farm_barn": [2, 1, 400],
 	"f2_livestock_barn": [2, 8, 400],
 	"f3_hangar": [3, 5, 1000],
@@ -23,9 +23,9 @@ const _PROPS: Dictionary = {
 	"house_h4": [2, 1, 1800],
 	"ruin_h1": [1, 1, 3000],
 	"ruin_h3": [1, 1, 3000],
-	"house_h5": [1, 1, 1200],
-	"house_h6": [1, 1, 1600],
-	"f8_shed": [1, 1, 1000],
+	"house_h5": [1, 1, 2200],
+	"house_h6": [1, 1, 2600],
+	"f8_shed": [1, 1, 1600],
 	"ruin_half_house1": [1, 1, 4600],
 	"ruin_half_house2": [1, 1, 4800],
 	"ruin_half_shed": [1, 1, 4600],
