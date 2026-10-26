@@ -186,7 +186,7 @@ def house1(hit=False):
             b.soot([(x0_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE), (x0_, y0 - 0.03, EAVE)][::-1], (0.2, 0.2, 0.6, 0.6), 1)
     if not hit:
         b.box(0, ym, RIDGE, xr1 - xr0 + 0.6, 0.3, 0.16, "gutter")
-    b.box(2.2, -0.2, 4.0, 0.75, 0.75, 3.3, "brick_face", top="brick_grey")        # цегляний димар
+    b.chimney(2.2, -0.2, 4.0, 0.75, 3.3, "brick_face")        # цегляний димар
     bl = (-3.2, 0.0) if hit else ()
     win_front(b, y0, -1, (-3.2, 0.0, 3.2), 1.0, bl=bl)
     win_front(b, y1, 1, (-4.0, 4.0), 1.0)
@@ -223,7 +223,7 @@ def house2():
     b.box(0, 0, 0.5, L - 0.02, D - 0.02, EAVE - 0.5, "brick_face")
     b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tile_brown", "brick_face", ridge_axis="x", overhang=0.4)
     b.box(0, 0, RIDGE, L + 0.8, 0.3, 0.18, "gutter")
-    b.box(-2.5, 0.4, 4.4, 0.6, 0.6, 3.4, "brick_face", top="brick_grey")
+    b.chimney(-2.5, 0.4, 4.4, 0.6, 3.4, "brick_face")
     win_front(b, y1, 1, (-4.0, 4.0), 1.1)
     win_front(b, y0, -1, (-3.5, 0.0, 3.5), 1.1)
     win_side(b, -L / 2, -1, (-1.5, 1.5), 1.1)
@@ -295,7 +295,7 @@ def house4():
         post(b, px, y1 + 1.4, 0.4, 2.2)
     b.poly_up([(-1.5, y1, 2.7), (1.5, y1, 2.7), (1.5, y1 + 1.6, 2.3), (-1.5, y1 + 1.6, 2.3)], "tin_green")
     b.box(0, y1 + 1.0, 0, 3.0, 1.4, 0.4, "step", top="step")
-    b.box(2.8, -0.8, 4.2, 0.7, 0.7, 2.2, "brick_face", top="brick_grey")           # цегляний димар
+    b.chimney(2.8, -0.8, 4.2, 0.7, 2.2, "brick_face")           # цегляний димар
     lib.finish(b, "house_h4", out, tri_limit=1800, footprint=(2, 1))
 
 
