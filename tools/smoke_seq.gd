@@ -2,7 +2,7 @@ extends Node
 ## Знімає потік мирного диму справжнім екраном бою в реальному часі: обрізка навколо шлейфу, кадри
 ## тримаються в пам'яті й пишуться в кінці (save_png блокує ~1 с). Не входить у гру.
 ## Запуск (вікно, не --headless):
-##   $GODOT --path . --position 6000,0 res://tools/smoke_seq.tscn -- <out_dir> <map> <zoom> <hearth> <секунд> <кадрів/с>
+##   $GODOT --path . --position 6000,0 res://tools/smoke_seq.tscn -- <out_dir> <map> <zoom> <hearth> <секунд> <кадрів/с> [off]
 ## Друкує SMOKE-рядок із числом кадрів і справжнім fps рендера.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -23,7 +23,14 @@ func _ready() -> void:
 	screen.setup(load("res://maps/%s.tres" % a[1]) as MapData, 2, 1)
 	var layer: WreckLayer = screen.get("_wreck_layer")
 	var pts: Array[Vector3] = layer.hearth_points()
+	if pts.is_empty():
+		push_error("smoke_seq: на карті %s нема джерел диму" % a[1])
+		get_tree().quit(1)
+		return
 	var p: Vector3 = layer.to_global(pts[int(a[3]) % pts.size()])
+	# off — той самий кадр без мирного диму: різниця з ним дає яскравість диму над ґрунтом.
+	if a.size() > 6 and a[6] == "off":
+		(layer.get("_hearths") as Node3D).visible = false
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	# Екран спершу сам наводить камеру на перший юніт; наводимо вдруге, коли він затих.
 	for f in SETTLE_FRAMES:
