@@ -1311,7 +1311,7 @@ void fragment() {
 			float wear = texture(path_map, puv).r * pin * (1.0 - road_cov);
 			float lum = dot(alb, vec3(0.299, 0.587, 0.114));
 			vec3 bare = vec3(0.14, 0.108, 0.07) * (0.6 + 0.4 * clamp(lum / 0.1, 0.0, 2.0));
-			alb = mix(alb, bare, wear * 0.85);
+			alb = mix(alb, bare, clamp(wear * 1.15, 0.0, 1.0));
 		}
 
 		float scar_dark = 0.0;
