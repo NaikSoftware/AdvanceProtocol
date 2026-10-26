@@ -949,39 +949,32 @@ func _box_of(inst: Dictionary) -> AABB:
 	return (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 
 
-## Будівля сидить на рельєфі: підошва не вище найнижчої точки під нею (не висить), а перепад під
-## слідом не більший за 1 м (інакше її треба перенести, підрізка не сховає).
+## Будівля стоїть на рівному майданчику: ґрунт під її справжнім слідом (сітка 9×9) гуляє не більше
+## ніж на 0.15 м, жоден кут не закопаний глибше 0.1 м і не висить. Усі будівлі, руїни й сараї — на
+## дошці й у кільці.
 func test_buildings_sit_on_the_relief(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	# Рельєф саме цієї карти: TerrainHeight.active — рельєф останньої побудованої дошки.
 	var th: TerrainHeight = view._height
+	var checked := 0
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
-		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN and inst["model"] != PropLayer.YARD_SHED:
 			continue
-		# Кільце — пейзаж в імлі за дошкою; рельєф перевіряється на дошці.
-		if not Rect2i(0, 0, 26, 22).has_point((inst["cells"] as Array)[0]):
-			continue
+		checked += 1
 		var box: AABB = _box_of(inst)
 		var lo: float = INF
 		var hi: float = -INF
-		for v: Vector2 in [Vector2(box.position.x, box.position.z), Vector2(box.end.x, box.end.z),
-				Vector2(box.position.x, box.end.z), Vector2(box.end.x, box.position.z), Vector2(box.get_center().x, box.get_center().z)]:
-			var g: float = th.at(v.x, v.y)
-			lo = minf(lo, g)
-			hi = maxf(hi, g)
-		if hi - lo <= PropLayer.PLINTH_FROM + 1e-3:
-			assert_lte(box.position.y, lo + 0.005, "%s: %s на %s висить" % [p, inst["model"], inst["cells"]])
-			continue
-		# Крутий схил: хата на середній висоті й стоїть на цоколі, що сягає землі внизу.
-		var plinth := false
-		for t: Transform3D in view.props().plinths():
-			var foot := Rect2(t.origin.x - t.basis.x.length() * 0.5, t.origin.z - t.basis.z.length() * 0.5,
-					t.basis.x.length(), t.basis.z.length())
-			var bottom: float = t.origin.y - t.basis.y.length() * 0.5
-			if foot.has_point(Vector2(box.get_center().x, box.get_center().z)) and bottom <= lo + 0.03:
-				plinth = true
-		assert_true(plinth, "%s: %s на %s — схил без цоколя" % [p, inst["model"], inst["cells"]])
+		for j in 9:
+			for i in 9:
+				var g: float = th.at(box.position.x + box.size.x * i / 8.0, box.position.z + box.size.z * j / 8.0)
+				lo = minf(lo, g)
+				hi = maxf(hi, g)
+		var what: String = "%s: %s на %s" % [p, inst["model"], inst["cells"]]
+		assert_lte((hi - lo) / TerrainHeight.M, 0.15, "%s — ґрунт під слідом гуляє на %.2f м" % [what, (hi - lo) / TerrainHeight.M])
+		assert_lte((hi - box.position.y) / TerrainHeight.M, 0.1, "%s — закопана на %.2f м" % [what, (hi - box.position.y) / TerrainHeight.M])
+		assert_lte(box.position.y, lo + 0.005, "%s висить" % what)
+	assert_gt(checked, 5, "%s: є будівлі" % p)
 
 
 ## Секція паркану лежить на рельєфі обома кінцями (нахил за схилом, не висить).

@@ -2,23 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://crug1t5erm3kb"
-path="res://.godot/imported/h5_panel_block_damaged_h5_panel_block_damaged_normal.jpg-19c648b105b4e496b05775383236386f.ctex"
+uid="uid://b8sfe7dskroph"
+path.s3tc="res://.godot/imported/h5_panel_block_damaged_atlas.jpg-abf91cc7544be0a639a0ddf9f2149f3f.s3tc.ctex"
+path.etc2="res://.godot/imported/h5_panel_block_damaged_atlas.jpg-abf91cc7544be0a639a0ddf9f2149f3f.etc2.ctex"
 metadata={
-"vram_texture": false
-}
-generator_parameters={
-"md5": "83fa163bc86ef94c7343e9d454e3ed17"
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/props/h5_panel_block_damaged_h5_panel_block_damaged_normal.jpg"
-dest_files=["res://.godot/imported/h5_panel_block_damaged_h5_panel_block_damaged_normal.jpg-19c648b105b4e496b05775383236386f.ctex"]
+source_file="res://assets/props/h5_panel_block_damaged_atlas.jpg"
+dest_files=["res://.godot/imported/h5_panel_block_damaged_atlas.jpg-abf91cc7544be0a639a0ddf9f2149f3f.s3tc.ctex", "res://.godot/imported/h5_panel_block_damaged_atlas.jpg-abf91cc7544be0a639a0ddf9f2149f3f.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
