@@ -416,7 +416,7 @@ def crushed(it, m, rects, bark, cards, travel, base, top, rng):
     along = Vector((math.cos(travel), math.sin(travel), 0.0))
     # 5–9 стебел з просвітами між ними: густий пучок читався чорною брилою.
     n = rng.randint(5, 9)
-    rad = 0.05
+    rad = 0.065
     stems = []
     for k in range(n):
         b0 = Vector((rng.gauss(0, 0.45), rng.gauss(0, 0.45), -0.05))
@@ -428,10 +428,12 @@ def crushed(it, m, rects, bark, cards, travel, base, top, rng):
         tip = b0 + d * min(ln, 0.8 / math.sin(pitch))
         m.tube([b0, b0.lerp(tip, 0.5), tip], [rad, rad * 0.75, rad * 0.5], bark, sides=3, tone=HEAP_TONE)
         stems.append((b0, tip))
-    for i, (_, size, rect, roll) in enumerate(cards[:max(3, len(cards) // 8)]):
+    # Пучки листя біля стебел — третина пучків куща, світлі (0,75–0,95): з меншою кількістю й тоном
+    # зім'ятий кущ на траві читався кількома темними паличками.
+    for i, (_, size, rect, roll) in enumerate(cards[:max(6, len(cards) // 3)]):
         b0, tip = stems[i % n]
-        q = b0.lerp(tip, rng.uniform(0.3, 0.9)) + Vector((rng.gauss(0, 0.1), rng.gauss(0, 0.1), 0.0))
-        m.card(q, roll, rng.uniform(0.3, 0.45), rect, lambda _c: Vector((0, 0.3, 1)).normalized(), rng.uniform(0.55, 0.8))
+        q = b0.lerp(tip, rng.uniform(0.3, 0.9)) + Vector((rng.gauss(0, 0.15), rng.gauss(0, 0.15), 0.0))
+        m.card(q, roll, rng.uniform(0.35, 0.55), rect, lambda _c: Vector((0, 0.3, 1)).normalized(), rng.uniform(0.75, 0.95))
     litter(m, rects, 1.0, 0.8, rng, centre=along * 0.3)
     check_budget(m, it, "yard" if GROUP == "yard" else "crown")
     return m
