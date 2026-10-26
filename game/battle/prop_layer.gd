@@ -103,10 +103,29 @@ const SPAN: Dictionary = {&"10kv": 4.5, &"04kv": 4.5}
 ## не відрізняється від параболи.
 const WIRE_SAG_RATIO: float = 0.025
 const WIRE_SEGMENTS: int = 8
-## Відвід до хати від стовпа не довший за це (клітинки).
-const DROP_DIRECT: float = 3.0
-## Нижче цієї висоти над ґрунтом (клітинки, ~2.8 м) відвід на стіні не кріпиться.
-const DROP_MIN_H: float = 0.35
+## Відвід до хати від стовпа до стіни: не довший за це (12 м) і не коротший за DROP_MIN (клітинки).
+const DROP_DIRECT: float = 1.5
+const DROP_MIN: float = 0.3
+## Відвід тримається від чужих будівель щонайменше на стільки (2 м) і не перетинає дорогу.
+const DROP_GAP: float = 0.25
+## Стовп і проліт — від обрису будь-якої будівлі, стовп ще й від паркану чи дрібної речі й від краю
+## асфальту (клітинки; 0.5 клітинки — 4 м).
+const POLE_BUILDING_CLEAR: float = 0.5
+const POLE_HOME_CLEAR: float = 0.3
+const POLE_PROP_CLEAR: float = 0.1
+const POLE_ROAD_CLEAR: float = 0.2
+## Нижче цієї висоти над ґрунтом (клітинки, ~2.4 м) відвід на стіні не кріпиться.
+const DROP_MIN_H: float = 0.3
+## Дахом вважається те, що вище за стільки над ґрунтом (клітинки, ~2.8 м): нижче — ґанок, фундамент.
+const DROP_ROOF_MIN: float = 0.35
+## Кромка даху ближче за стільки до осі хати — не звіс (зруйнований дах).
+const DROP_LIP_MIN: float = 0.25
+## Кріплення відводу нижче за кромку даху на стільки (клітинки, ~0.6 м): під звісом, а не на гребені.
+const DROP_EAVE_DROP: float = 0.08
+## Стовп лінії макету стоїть у її точці з цією точністю (клітинки).
+const POLE_SNAP: float = 0.05
+## Відтяжка кутової чи кінцевої опори лягає на землю на стільки клітинок від неї.
+const GUY_REACH: float = 0.3
 ## Яка частка відводу від стовпа перевіряється на дах: останній відрізок лежить під звісом, де дріт
 ## і має закінчуватись.
 const DROP_ROOF_T: float = 0.9
@@ -179,9 +198,11 @@ const GARDEN_SHARE: float = 0.4
 const HAY_OUT: float = 0.15
 ## Найдальше від точки макету, куди тюк перескакує на край поля.
 const HAY_SNAP: float = 2.0
-## Шафа трансформаторної підстанції на опорі (~1.0 × 1.2 × 0.7 м) і її колір (оцинкована сталь,
-## сіро-зелена, value ≤ 0.3).
-const TRANSFORMER_SIZE: Vector3 = Vector3(0.125, 0.15, 0.085)
+## КТП-шафа на землі біля опори (~1.6 × 2.4 × 1.1 м) і її колір (оцинкована сталь, сіро-зелена,
+## value ≤ 0.3).
+const TRANSFORMER_SIZE: Vector3 = Vector3(0.2, 0.3, 0.14)
+## Шафа стоїть на землі за стільки клітинок від стовпа вздовж лінії (поперек вона зайшла б у слід юніта).
+const TRANSFORMER_OFFSET: float = 0.25
 const TRANSFORMER_COLOR: Color = Color(0.25, 0.28, 0.26)
 ## Поселення — опори в межах стількох клітинок: одна підстанція на поселення.
 const SETTLEMENT_R: float = 6.0
@@ -713,7 +734,8 @@ func _build_nodes(haze: bool) -> void:
 		var m: StringName = _instances[i]["model"]
 		var key: StringName = m
 		var k: int = int(spec_of(m)["kind"])
-		if (k == Kind.STRUCTURE or k == Kind.RUIN) and not _on_board((_instances[i]["cells"] as Array)[0]):
+		# Опори кільця — свій вузол: AABB опор дошки не розтягується на весь світ.
+		if (k == Kind.STRUCTURE or k == Kind.RUIN or k == Kind.POLE) and not _on_board((_instances[i]["cells"] as Array)[0]):
 			key = StringName(String(m) + "@ring")
 		if not by_node.has(key):
 			by_node[key] = []
@@ -1357,6 +1379,8 @@ func _rebuild_wires() -> void:
 			continue
 		for pr: Array in drop_wire_pairs(pole, dr[1]):
 			_append_wire(verts, pr[0], pr[1])
+	for g: Array in _guy_lines():
+		_append_wire(verts, g[0], g[1])
 	if verts.is_empty():
 		_wires.mesh = null
 		return
@@ -1366,6 +1390,32 @@ func _rebuild_wires() -> void:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
 	_wires.mesh = mesh
+
+
+## Відтяжки: кутова й кінцева опора тягнеться від ~85 % висоти до землі в бік, протилежний прольотам
+## (дріт, що тягне опору, вона мусить утримати). Пряма опора відтяжки не має.
+func _guy_lines() -> Array:
+	var pull: Dictionary = {}
+	var degree: Dictionary = {}
+	for s: Array in _spans:
+		for e in 2:
+			var a: Dictionary = _instances[s[e]]
+			var b: Dictionary = _instances[s[1 - e]]
+			if _is_crushed(a) or _is_crushed(b):
+				continue
+			var d: Vector3 = (b["transform"] as Transform3D).origin - (a["transform"] as Transform3D).origin
+			pull[s[e]] = pull.get(s[e], Vector3.ZERO) + Vector3(d.x, 0.0, d.z).normalized()
+			degree[s[e]] = int(degree.get(s[e], 0)) + 1
+	var out: Array = []
+	for i: int in pull:
+		# Пряма (сума ≈ 0) чи розгалуження під прямими кутами (сума мала) відтяжки не мають.
+		if int(degree[i]) >= 2 and (pull[i] as Vector3).length() < 0.6:
+			continue
+		var t: Transform3D = _instances[i]["transform"]
+		var h: float = ((model(_instances[i]["model"]) as Dictionary)["aabb"] as AABB).size.y
+		var away: Vector3 = -(pull[i] as Vector3).normalized()
+		out.append([t.origin + Vector3(0.0, h * 0.85, 0.0), t.origin + away * GUY_REACH])
+	return out
 
 
 static func _append_wire(verts: PackedVector3Array, pa: Vector3, pb: Vector3) -> void:
@@ -1446,6 +1496,18 @@ static func drop_wire_pairs(pole: Dictionary, target: Vector3) -> Array:
 	return out
 
 
+## Житлова будівля: ціла хата (house_*) де завгодно; пошкоджена (ruin_half_house*) — лише на дошці: поле
+## руїн за її краєм ніхто не живить. Сараї й решта руїн не житлові.
+static func is_home(inst: Dictionary, on_board: bool) -> bool:
+	if inst.get("yard", false):
+		return false
+	var k: int = int(spec_of(inst["model"])["kind"])
+	var m: String = String(inst["model"])
+	if k == Kind.STRUCTURE:
+		return m.begins_with("house")
+	return k == Kind.RUIN and on_board and m.contains("ruin_half_house")
+
+
 static var _tri_cache: Dictionary = {}
 
 
@@ -1477,19 +1539,29 @@ static func drop_clear_of_roof(pole_xf: Transform3D, wp: Array[Vector3], target:
 	return true
 
 
+## Центр шафи підстанції біля опори: на землі, збоку від стовпа вздовж лінії; на асфальт не лягає.
+func _cabinet_at(pole: Dictionary) -> Vector3:
+	var t: Transform3D = pole["transform"]
+	var along: Vector3 = t.basis.z.normalized()
+	for s: float in [1.0, -1.0]:
+		var c: Vector3 = t.origin + along * s * TRANSFORMER_OFFSET
+		if not on_road(Vector2(c.x, c.z), 0.1):
+			return c + Vector3(0.0, TRANSFORMER_SIZE.y * 0.5, 0.0)
+	return t.origin + along * TRANSFORMER_OFFSET + Vector3(0.0, TRANSFORMER_SIZE.y * 0.5, 0.0)
+
+
 ## Центри шаф підстанцій, що зараз показано (на поваленій опорі шафи нема).
 func transformers_shown() -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	for i: int in _transformers:
 		var pole: Dictionary = _instances[i]
 		if not _is_crushed(pole):
-			var h: float = ((model(pole["model"]) as Dictionary)["aabb"] as AABB).size.y
-			out.append((pole["transform"] as Transform3D) * Vector3(0.0, h * 0.55, TRANSFORMER_SIZE.z * 0.5 + 0.015))
+			out.append(_cabinet_at(pole))
 	return out
 
 
-## Щоглова трансформаторна підстанція — сталева шафа на опорі 10 кВ, на ~55 % висоти, збоку від
-## траверси. Повалена опора — без шафи.
+## Комплектна трансформаторна підстанція (КТП) — сталева шафа ~1.6 × 2.4 × 1.1 м на землі біля опори
+## 10 кВ. Повалена опора — без шафи.
 func _rebuild_transformers() -> void:
 	if _transformers.is_empty():
 		return
@@ -1514,11 +1586,10 @@ func _rebuild_transformers() -> void:
 	var k: int = 0
 	for i: int in _transformers:
 		var pole: Dictionary = _instances[i]
-		var t: Transform3D = pole["transform"]
-		var h: float = ((model(pole["model"]) as Dictionary)["aabb"] as AABB).size.y
-		var at: Vector3 = t * Vector3(0.0, h * 0.55, TRANSFORMER_SIZE.z * 0.5 + 0.015)
+		var at: Vector3 = _cabinet_at(pole)
+		var basis: Basis = (pole["transform"] as Transform3D).basis.orthonormalized()
 		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ZERO), at) if _is_crushed(pole)
-				else Transform3D(t.basis.orthonormalized(), at))
+				else Transform3D(basis, at))
 		k += 1
 
 
@@ -1559,6 +1630,11 @@ class _Placer:
 	var gates: Dictionary = {}
 	## Обриси дрібних речей дворів: наступна не стає на попередню.
 	var placed_small: Array[Rect2] = []
+	## Обриси для стовпів і дротів ЛЕП: будівлі й руїни, мости, решта пропсів (_index_obstacles).
+	var _bld_rects: Array[Rect2] = []
+	var _bld_is_home: Array[bool] = []
+	var _bridge_rects: Array[Rect2] = []
+	var _prop_rects: Array[Rect2] = []
 	## Клітинка дошки -> відрізки осі дороги поруч [a, b, півширина в клітинках]: покриття дороги
 	## — власна геометрія (RoadCourse), не вид клітинки, тож паркан на «полі» міг лягти на асфальт.
 	var road_index: Dictionary = {}
@@ -2746,11 +2822,13 @@ class _Placer:
 					layer._add(m, xform, cells)
 					break
 
-	## Траси ЛЕП з макету: точки лінії — це самі опори, стовп стоїть рівно в кожній (злам теж опора) і
-	## повернутий по бісектрисі, щоб траверса не лягала вздовж прольоту. Точка, де стовпу не місце,
-	## лишає розрив, який помітить тест, а не мовчки зсувається. Відгалуження 0.4 кВ починається зі
-	## стовпа, що вже стоїть у його першій точці, і саме той стовп стає підстанцією.
+	## Траси ЛЕП з макету: точки ліній — самі опори (їх обчислює tools/power_grid.py за намірами routes),
+	## стовп стоїть рівно в кожній, повернутий по бісектрисі, щоб траверса не лягала вздовж прольоту.
+	## Точка, де стовпу не місце (рельєф чи будівлі змінились), лишає розрив, який ловить тест, а не
+	## мовчки зсувається. Відгалуження починається зі стовпа, що вже стоїть у його першій точці;
+	## підстанції — на стовпах 10 кВ у точках transformers.
 	func _layout_poles() -> void:
+		_index_obstacles()
 		for line: Dictionary in layout.get("lines", []):
 			var kind_name: StringName = line["kind"]
 			var m: StringName = &"infra_pole_concrete_10kv" if kind_name == &"10kv" else &"infra_pole_concrete_04kv"
@@ -2758,12 +2836,9 @@ class _Placer:
 				continue
 			var pts: Array = line["points"]
 			var prev: int = -1
-			var prev_at := Vector2.INF
 			for k in pts.size():
 				var p: Vector2 = pts[k]
-				var idx: int = _pole_near(p, 0.05)
-				if idx >= 0 and kind_name == &"04kv" and _is_10kv(idx):
-					layer._transformers[idx] = true
+				var idx: int = _pole_near(p, PropLayer.POLE_SNAP)
 				if idx < 0:
 					var t := Vector2.ZERO
 					if k > 0:
@@ -2776,10 +2851,13 @@ class _Placer:
 				if idx < 0:
 					prev = -1
 					continue
-				if prev >= 0 and prev != idx and _wire_clear(prev_at, p):
+				if prev >= 0 and prev != idx:
 					spans.append([prev, idx])
 				prev = idx
-				prev_at = p
+		for p: Vector2 in layout.get("transformers", []):
+			var i: int = _pole_near(p, PropLayer.POLE_SNAP)
+			if i >= 0 and _is_10kv(i):
+				layer._transformers[i] = true
 		_service_drops()
 
 	func _is_10kv(i: int) -> bool:
@@ -2795,100 +2873,148 @@ class _Placer:
 				return i
 		return -1
 
-	## Стовп на точці траси, якщо там тверда земля поза будівлями, дорогою й водою; індекс екземпляра
-	## чи −1. Кільце теж: лінія йде за межу дошки, тож клітинка може лежати й поза нею. Двір BUILDING
-	## — теж земля: у селі опора стоїть між хатами, але не в їхньому обрисі.
-	func _pole_on(m: StringName, p: Vector2, t: Vector2) -> int:
+	## Обриси того, від чого тримаються стовпи й дроти: будівлі й руїни (разом із кільцем), мости, решта
+	## пропсів (паркани, тюки, причепи). Збираються раз, до першого стовпа.
+	func _index_obstacles() -> void:
+		_bld_rects.clear()
+		_bld_is_home.clear()
+		_prop_rects.clear()
+		_bridge_rects.clear()
+		for inst: Dictionary in layer._instances:
+			var k: int = int(PropLayer.spec_of(inst["model"])["kind"])
+			if k == Kind.POLE:
+				continue
+			var b: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+			var r := Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+			if k == Kind.STRUCTURE or k == Kind.RUIN:
+				_bld_rects.append(r)
+				_bld_is_home.append(PropLayer.is_home(inst, on_board((inst["cells"] as Array)[0])))
+			elif k == Kind.BRIDGE:
+				_bridge_rects.append(r)
+			else:
+				_prop_rects.append(r)
+
+	## Чи може тут стояти стовп: тверда земля (поле, пагорб, двір), не асфальт, не вода, не слід юніта,
+	## не ближче POLE_BUILDING_CLEAR до обрису будівлі, не в парканах і дрібних речах, не на мосту.
+	func pole_spot_ok(p: Vector2) -> bool:
 		var c := Vector2i(roundi(p.x), roundi(p.y))
-		if kind(c) not in [Terrain.Kind.FIELD, Terrain.Kind.HILL, Terrain.Kind.BUILDING] or on_road(p, 0.1):
-			return -1
+		if kind(c) not in [Terrain.Kind.FIELD, Terrain.Kind.HILL, Terrain.Kind.BUILDING] or on_road(p, PropLayer.POLE_ROAD_CLEAR):
+			return false
 		# Стовп на березі, не в руслі й не над болотом.
 		if near_wet(p, WATER_CLEAR + 0.15):
-			return -1
-		for pl: Array in placed:
-			if (pl[0] as Rect2).grow(0.1).has_point(p):
-				return -1
-		for r: Rect2 in placed_small:
-			if r.grow(0.03).has_point(p):
-				return -1
+			return false
+		# До хати стовп, що її живить, може стати ближче (POLE_HOME_CLEAR): тест вимагає, щоб кожен такий
+		# стовп справді мав відвід до неї.
+		for i in _bld_rects.size():
+			if _bld_rects[i].grow(PropLayer.POLE_HOME_CLEAR if _bld_is_home[i] else PropLayer.POLE_BUILDING_CLEAR).has_point(p):
+				return false
+		for r: Rect2 in _prop_rects:
+			if r.grow(PropLayer.POLE_PROP_CLEAR).has_point(p):
+				return false
+		for r: Rect2 in _bridge_rects:
+			if r.grow(0.3).has_point(p):
+				return false
 		# Не ближче UNIT_POLE_CLEAR до сліду юніта будь-якої клітинки: стовп впритул до корпусу.
-		if not clear_of_units(Rect2(p - Vector2(0.03, 0.03), Vector2(0.06, 0.06)), PropLayer.UNIT_POLE_CLEAR):
+		return clear_of_units(Rect2(p - Vector2(0.03, 0.03), Vector2(0.06, 0.06)), PropLayer.UNIT_POLE_CLEAR)
+
+	## Стовп на точці траси, якщо там можна; індекс екземпляра чи −1. Кільце теж: лінія йде за межу дошки.
+	func _pole_on(m: StringName, p: Vector2, t: Vector2) -> int:
+		if not pole_spot_ok(p):
 			return -1
+		var c := Vector2i(roundi(p.x), roundi(p.y))
 		var before: int = layer._instances.size()
 		if put_small(m, c, p - Vector2(c), atan2(t.x, t.y), float(PropLayer.spec_of(m).get("scale", 1.0))):
 			return before
 		return -1
 
-	## Відвід до кожної хати макету від найближчої опори 0.4 кВ (чи 10 кВ із підстанцією) не далі за
-	## DROP_DIRECT: два дроти до стіни під звісом даху, з боку стовпа. Не вийшло — відводу нема, і
-	## це видно в тесті, а не підмінюється проміжним стовпом.
+	## Відвід до кожної житлової будівлі від найближчої опори 0.4 кВ (чи 10 кВ із підстанцією), від якої
+	## він можливий (_drop_target). Не вийшло — відводу нема, і це видно в тесті, а не підмінюється
+	## проміжним стовпом.
 	func _service_drops() -> void:
 		var poles: Array[int] = []
 		for i in layer._instances.size():
 			if int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.POLE \
 					and (not _is_10kv(i) or layer._transformers.has(i)):
 				poles.append(i)
-		for home: Dictionary in layout.get("homes", []):
-			var hc: Vector2i = home["house"]
-			var house_i: int = -1
-			for i in layer._instances.size():
-				if (layer._instances[i]["cells"] as Array).has(hc) and int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.STRUCTURE \
-						and not layer._instances[i].get("yard", false):
-					house_i = i
-			if house_i < 0:
+		for house_i in layer._instances.size():
+			var inst: Dictionary = layer._instances[house_i]
+			if not PropLayer.is_home(inst, _on_board_cell((inst["cells"] as Array)[0])):
 				continue
-			var box: AABB = (layer._instances[house_i]["transform"] as Transform3D) * ((PropLayer.model(layer._instances[house_i]["model"]) as Dictionary)["aabb"] as AABB)
-			var roof := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
-			var centre: Vector2 = roof.get_center()
-			var order: Array[int] = poles.filter(func(i: int) -> bool: return _pole_xz(i).distance_to(centre) <= PropLayer.DROP_DIRECT)
+			var box: AABB = _box_of(inst)
+			var centre := Vector2(box.get_center().x, box.get_center().z)
+			var order: Array[int] = poles.duplicate()
 			order.sort_custom(func(x: int, y: int) -> bool: return _pole_xz(x).distance_to(centre) < _pole_xz(y).distance_to(centre))
 			for pi in order:
-				var fp: Vector2 = _pole_xz(pi)
-				var wall: Vector2 = _wall_point(roof, fp)
-				if not _wire_clear(fp, wall, roof):
-					continue
-				var at: Vector3 = _eave_attach(house_i, pi, wall, centre)
+				var at: Vector3 = _drop_target(house_i, pi)
 				if at.is_finite():
 					layer._drops.append([pi, at])
 					break
 
-	## Кріплення відводу на стіні: під звісом, на висоті, де дріт від траверси не заходить під поверхню
-	## даху (за мешем хати, а не за часткою від її висоти) — двоповерхова хата не вгризається в дах.
-	## Vector3.INF — під звісом дріт не лягає.
-	func _eave_attach(house_i: int, pole_i: int, wall: Vector2, centre: Vector2) -> Vector3:
+	func _on_board_cell(c: Vector2i) -> bool:
+		return on_board(c)
+
+	func _box_of(inst: Dictionary) -> AABB:
+		return (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+
+	## Точка кріплення відводу від опори pole_i до хати house_i під звісом, або Vector3.INF: від стовпа до
+	## кромки даху не далі за DROP_DIRECT і не ближче за DROP_MIN, не ближче DROP_GAP до чужих будівель,
+	## не через дорогу, не крізь власний дах.
+	func _drop_target(house_i: int, pole_i: int) -> Vector3:
+		var box: AABB = _box_of(layer._instances[house_i])
+		var roof := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+		var fp: Vector2 = _pole_xz(pole_i)
+		var at: Vector3 = _eave_attach(house_i, pole_i, roof.get_center())
+		if not at.is_finite():
+			return Vector3.INF
+		var lip := Vector2(at.x, at.z)
+		var d: float = fp.distance_to(lip)
+		if d > PropLayer.DROP_DIRECT or d < PropLayer.DROP_MIN:
+			return Vector3.INF
+		for r: Rect2 in _bld_rects:
+			if not r.is_equal_approx(roof) and _seg_hits_rect(fp, lip, r.grow(PropLayer.DROP_GAP)):
+				return Vector3.INF
+		for j in 11:
+			if on_road(fp.lerp(lip, float(j) / 10.0), 0.0):
+				return Vector3.INF
+		return at
+
+	## Кріплення відводу під звісом даху: на краю даху з боку стовпа (де меш хати закінчується), на
+	## DROP_EAVE_DROP нижче за кромку даху за мешем хати, а не за часткою від висоти. Дріт приходить
+	## ззовні кромки й не входить у дах; нижче DROP_MIN_H над ґрунтом кріплення не стає. Vector3.INF —
+	## не лягає.
+	func _eave_attach(house_i: int, pole_i: int, centre: Vector2) -> Vector3:
 		var inst: Dictionary = layer._instances[house_i]
 		var info: Dictionary = PropLayer.model(inst["model"])
 		var xf: Transform3D = (inst["transform"] as Transform3D) * (info["local"] as Transform3D)
 		var tm: TriangleMesh = PropLayer.triangles_of(inst["model"])
 		var pole: Dictionary = layer._instances[pole_i]
 		var wp: Array[Vector3] = (PropLayer.model(pole["model"]) as Dictionary)["wires"]
-		# Точка на межі обрису може лежати поза мешем (кут, зрізаний скатом): тоді кріплення — на стіні
-		# ближче до осі, де меш уже є.
+		var dir: Vector2 = (_pole_xz(pole_i) - centre).normalized()
+		var lip := Vector2.INF
 		var top: float = -INF
-		for f: float in [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]:
-			var q: Vector2 = centre.lerp(wall, f)
+		var s: float = 0.7
+		while s >= 0.0:
+			var q: Vector2 = centre + dir * s
 			top = PropLayer.roof_y(tm, xf, q.x, q.y)
-			if top != -INF:
-				wall = q
+			# Дах, а не ґанок чи фундамент: кромка від DROP_ROOF_MIN над ґрунтом.
+			if top != -INF and top - ground(q.x, q.y) >= PropLayer.DROP_ROOF_MIN:
+				lip = q
 				break
-		if top == -INF:
+			top = -INF
+			s -= 0.02
+		# Кромка біля самої осі — це дірка в зруйнованому даху, а не звіс.
+		if top == -INF or lip.distance_to(centre) < PropLayer.DROP_LIP_MIN:
 			return Vector3.INF
-		var y: float = top - 0.03
-		var floor_y: float = ground(wall.x, wall.y) + PropLayer.DROP_MIN_H
-		while y >= floor_y:
-			if PropLayer.drop_clear_of_roof(pole["transform"], wp, Vector3(wall.x, y, wall.y), tm, xf):
-				return Vector3(wall.x, y, wall.y)
-			y -= 0.02
-		return Vector3.INF
+		var floor_y: float = ground(lip.x, lip.y) + PropLayer.DROP_MIN_H
+		var y: float = maxf(top - PropLayer.DROP_EAVE_DROP, floor_y)
+		if y > top - 0.02:
+			return Vector3.INF
+		var target := Vector3(lip.x, y, lip.y)
+		return target if PropLayer.drop_clear_of_roof(pole["transform"], wp, target, tm, xf) else Vector3.INF
 
 	func _pole_xz(i: int) -> Vector2:
 		var o: Vector3 = (layer._instances[i]["transform"] as Transform3D).origin
 		return Vector2(o.x, o.z)
-
-	## Точка на стіні хати (під дахом) з боку від from.
-	func _wall_point(roof: Rect2, from: Vector2) -> Vector2:
-		var c: Vector2 = roof.get_center()
-		return c + (from - c).normalized() * minf(roof.size.x, roof.size.y) * 0.48
 
 	# --- мости -----------------------------------------------------------------------------
 
