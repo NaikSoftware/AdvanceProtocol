@@ -30,3 +30,15 @@ if [ ! -f "$OUT/broken_brick_wall/rough.jpg" ]; then
   U=$(curl -s https://api.polyhaven.com/files/broken_brick_wall | python3 -I -c "import json,sys;print(json.load(sys.stdin)['Rough']['2k']['jpg']['url'])")
   curl -sL -o "$OUT/broken_brick_wall/rough.jpg" "$U"
 fi
+
+# завал панелі: Poly Haven rubble (шкаралупа купи) і concrete_debris (фартух довкола), CC0, 1K
+for t in rubble concrete_debris; do
+  mkdir -p "$OUT/$t"
+  for m in "Diffuse:diff" "Rough:rough"; do
+    k="${m%%:*}"; f="${m##*:}"
+    if [ ! -f "$OUT/$t/$f.jpg" ]; then
+      U=$(curl -s "https://api.polyhaven.com/files/$t" | python3 -I -c "import json,sys;print(json.load(sys.stdin)['$k']['1k']['jpg']['url'])")
+      curl -sL -o "$OUT/$t/$f.jpg" "$U"
+    fi
+  done
+done
