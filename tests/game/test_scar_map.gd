@@ -54,27 +54,14 @@ func test_apply_hands_both_textures_to_the_ground_material() -> void:
 	assert_eq(mat.get_shader_parameter("scar_size"), Vector2(8, 6))
 
 
-
-## Вирва — чаша (G) радіусом `radius_m` з нерівним краєм і вал викиду (B) довкола до 1,7
-## радіуса; чорної плями (R) вона не лишає — та для уламків.
-func test_crater_is_a_bowl_with_an_ejecta_rim() -> void:
-	scars.stamp_crater(Vector2i(4, 4), 2.5)
-	var c := Vector2i(4 * 32 + 16, 4 * 32 + 16)
+## Вирв нема: єдиний шрам бою на ґрунті — пляма під уламками в R (з попелом в A); G і B
+## лишаються нулями.
+func test_wreck_scorch_writes_only_scorch_and_ash() -> void:
+	scars.stamp_scorch(Vector2i(3, 2))
 	var img: Image = scars.image()
-	assert_eq(img.get_pixelv(c).g8, 255, "дно чаші")
-	assert_eq(img.get_pixelv(c).r8, 0, "не чорнильна пляма")
-	assert_gt(img.get_pixelv(c + Vector2i(5, 0)).g8, img.get_pixelv(c + Vector2i(8, 0)).g8, "чаша мілішає до краю")
-	var rim: int = 0
-	for d: Vector2i in [Vector2i(11, 0), Vector2i(-11, 0), Vector2i(0, 11), Vector2i(0, -11)]:
-		rim = maxi(rim, img.get_pixelv(c + d).b8)
-	assert_gt(rim, 60, "вал довкола краю")
-	assert_eq(img.get_pixelv(c + Vector2i(18, 0)).b8, 0, "за 1,7 радіуса чисто")
-	assert_eq(img.get_pixelv(c + Vector2i(18, 0)).g8, 0)
-
-
-## Вал не заходить на сусідню клітинку: штамп обрізано межами власної.
-func test_crater_stays_inside_its_cell() -> void:
-	scars.stamp_crater(Vector2i(4, 4), 2.5)
-	for y in range(4 * 32, 5 * 32):
-		assert_eq(scars.image().get_pixel(5 * 32, y).b8, 0)
-		assert_eq(scars.image().get_pixel(4 * 32 - 1, y).b8, 0)
+	for y in img.get_height():
+		for x in img.get_width():
+			var c: Color = img.get_pixel(x, y)
+			assert_true(c.g8 == 0 and c.b8 == 0, "G і B вільні (%d, %d)" % [x, y])
+			if c.g8 != 0 or c.b8 != 0:
+				return

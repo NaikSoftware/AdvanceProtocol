@@ -170,7 +170,6 @@ def house1(ruined):
         b.box(0, 0, 0, 2 * hx + 0.46, 2 * hy + 0.46, 0.5, "plinth_flat")       # цоколь на 4 см за стіною
         b.box(0, 0, 0.5, 2 * hx + 0.38, 2 * hy + 0.38, E - 0.5, "wall_plaster")
         c_ = 0.19
-        lib.quoins(b, [(-hx - c_, S - c_, 1, 1), (hx + c_, S - c_, -1, 1), (hx + c_, N + c_, -1, -1)], 0.5, E - 0.05)
         for sx in (hx, -hx):
             prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (sx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
         gable_roof(b, PF, PB, xw, xb, "fc_roof_xh")
@@ -178,7 +177,7 @@ def house1(ruined):
         for x in (-2.3, -0.8, 1.5, 2.65):
             b.window(("y", S - 0.19, -1), x, 1.0, 0.8, 1.5, kind=4 if x < 0 else None)   # вузькі; два з гратами
             pane_dress(b, "y", S - 0.19, -1, x, 1.0, 0.8, 1.5, rain=False)
-        b.box(0.1, S - 0.21, 0.0, 1.0, 0.06, 2.0, "door_red")                   # на 4 см перед стіною: врівень зі стіною мерехтіло й читалось як пролом
+        b.box(0.1, S - 0.21, 0.0, 1.0, 0.06, 2.0, "door_red")                   # на 4 см перед стіною: врівень зі стіною двері мерехтять і читаються як пролом
         b.box(0.1, S - 0.22, 2.0, 1.2, 0.07, 0.1, "trim")
         for sx in (-0.55, 0.55):
             b.box(0.1 + sx, S - 0.22, 0.0, 0.1, 0.07, 2.1, "trim")
@@ -268,7 +267,7 @@ def house1(ruined):
 def house2(ruined):
     """Двоповерховий дім 6 x 5.6 м. Напівзруйнований: західна половина даху ціла, східний фронтон обвалений, перекриття нахилене в завал."""
     lib.reset()
-    lib.palette(wall=(0.76, 0.72, 0.60), roof="green_dark", eave=6.0, chim="ch_sand", frame=1, trim=0.92)
+    lib.palette(wall=(0.76, 0.72, 0.60), roof="green_mid", eave=6.0, chim="ch_sand", frame=1, trim=0.92)
     DM[0] = "wall_plaster_dm" if not ruined else "wall_half_w"
     b = Builder()
     b.win_kind = 0                                                               # старі дерев'яні на три стулки
@@ -287,7 +286,6 @@ def house2(ruined):
         b.box(0, 0, 0, 2 * hx + 0.46, 2 * hy + 0.46, 0.6, "plinth_flat")
         b.box(0, 0, 0.6, 2 * hx + 0.38, 2 * hy + 0.38, E - 0.6, "wall_plaster")
         c_ = 0.19
-        lib.quoins(b, [(-hx - c_, S - c_, 1, 1), (hx + c_, S - c_, -1, 1), (hx + c_, N + c_, -1, -1)], 0.6, E - 0.05)
         for sx in (hx, -hx):
             prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (sx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
         gable_roof(b, PF, PB, xw, xb, "tile_small")

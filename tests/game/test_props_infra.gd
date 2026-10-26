@@ -17,10 +17,10 @@ const SPEC: Dictionary = {
 	"infra_fence_sheet_green_corner": [Vector3(4.1, 2.0, 4.1), 0.2, 500, 0],
 	"infra_fence_sheet_brown": [Vector3(8.0, 2.0, 0.1), 0.2, 500, 0],
 	"infra_fence_sheet_brown_corner": [Vector3(4.1, 2.0, 4.1), 0.2, 500, 0],
-	"infra_fence_euro": [Vector3(8.0, 2.04, 0.6), 0.2, 500, 0],
-	"infra_fence_euro_corner": [Vector3(4.4, 2.04, 4.4), 0.2, 500, 0],
-	"infra_fence_po2": [Vector3(8.0, 2.59, 0.6), 0.2, 500, 0],
-	"infra_fence_po2_corner": [Vector3(4.4, 2.59, 4.4), 0.2, 500, 0],
+	"infra_fence_euro": [Vector3(8.0, 1.95, 0.64), 0.2, 500, 0],
+	"infra_fence_euro_corner": [Vector3(4.42, 1.95, 4.42), 0.2, 500, 0],
+	"infra_fence_po2": [Vector3(8.0, 2.5, 0.64), 0.2, 500, 0],
+	"infra_fence_po2_corner": [Vector3(4.42, 2.5, 4.42), 0.2, 500, 0],
 	"infra_fence_picket": [Vector3(8.0, 1.45, 0.1), 0.2, 500, 0],
 	"infra_fence_picket_corner": [Vector3(4.1, 1.45, 4.1), 0.2, 500, 0],
 	"infra_hay_round": [Vector3(1.2, 1.31, 1.35), 0.1, 300, 0],
@@ -30,22 +30,22 @@ const SPEC: Dictionary = {
 	"infra_culvert": [Vector3(8.0, 1.5, 17.0), 0.1, 2000, 0],
 	"infra_trailer_green": [Vector3(2.7, 2.37, 7.7), 0.25, 1200, 0],
 	"infra_trailer_rust": [Vector3(2.7, 2.37, 7.7), 0.25, 1200, 0],
-	"infra_fence_slab": [Vector3(8.0, 2.1, 0.6), 0.2, 500, 0],
-	"infra_fence_slab_corner": [Vector3(4.4, 2.1, 4.4), 0.2, 500, 0],
-	"infra_fence_euro_stone": [Vector3(8.0, 1.89, 0.6), 0.2, 500, 0],
-	"infra_fence_euro_stone_corner": [Vector3(4.4, 1.89, 4.4), 0.2, 500, 0],
-	"infra_fence_euro_brick": [Vector3(8.0, 2.09, 0.6), 0.2, 500, 0],
-	"infra_fence_euro_brick_corner": [Vector3(4.4, 2.09, 4.4), 0.2, 500, 0],
-	"infra_fence_euro_wave": [Vector3(8.0, 2.29, 0.6), 0.2, 500, 0],
-	"infra_fence_euro_wave_corner": [Vector3(4.4, 2.29, 4.4), 0.2, 500, 0],
-	"infra_fence_brickpost": [Vector3(8.1, 2.07, 0.6), 0.2, 500, 0],
-	"infra_fence_brickpost_corner": [Vector3(4.55, 2.07, 4.55), 0.2, 500, 0],
-	"infra_fence_painted_green": [Vector3(8.0, 2.29, 0.6), 0.2, 500, 0],
-	"infra_fence_painted_green_corner": [Vector3(4.4, 2.29, 4.4), 0.2, 500, 0],
-	"infra_fence_painted_beige": [Vector3(8.0, 1.89, 0.6), 0.2, 500, 0],
-	"infra_fence_painted_beige_corner": [Vector3(4.4, 1.89, 4.4), 0.2, 500, 0],
-	"infra_fence_slab_damaged": [Vector3(8.0, 2.09, 1.2), 0.2, 500, 0],
-	"infra_fence_euro_stone_damaged": [Vector3(8.0, 1.89, 0.99), 0.2, 500, 0],
+	"infra_fence_slab": [Vector3(8.0, 2.0, 0.64), 0.2, 500, 0],
+	"infra_fence_slab_corner": [Vector3(4.42, 2.0, 4.42), 0.2, 500, 0],
+	"infra_fence_euro_stone": [Vector3(8.0, 1.8, 0.64), 0.2, 500, 0],
+	"infra_fence_euro_stone_corner": [Vector3(4.42, 1.8, 4.42), 0.2, 500, 0],
+	"infra_fence_euro_brick": [Vector3(8.0, 2.0, 0.64), 0.2, 500, 0],
+	"infra_fence_euro_brick_corner": [Vector3(4.42, 2.0, 4.42), 0.2, 500, 0],
+	"infra_fence_euro_wave": [Vector3(8.0, 2.2, 0.64), 0.2, 500, 0],
+	"infra_fence_euro_wave_corner": [Vector3(4.42, 2.2, 4.42), 0.2, 500, 0],
+	"infra_fence_brickpost": [Vector3(8.1, 1.98, 0.64), 0.2, 500, 0],
+	"infra_fence_brickpost_corner": [Vector3(4.57, 1.98, 4.57), 0.2, 500, 0],
+	"infra_fence_painted_green": [Vector3(8.0, 2.2, 0.64), 0.2, 500, 0],
+	"infra_fence_painted_green_corner": [Vector3(4.42, 2.2, 4.42), 0.2, 500, 0],
+	"infra_fence_painted_beige": [Vector3(8.0, 1.8, 0.64), 0.2, 500, 0],
+	"infra_fence_painted_beige_corner": [Vector3(4.42, 1.8, 4.42), 0.2, 500, 0],
+	"infra_fence_slab_damaged": [Vector3(8.0, 2.01, 0.67), 0.2, 500, 0],
+	"infra_fence_euro_stone_damaged": [Vector3(8.0, 1.81, 0.66), 0.2, 500, 0],
 	"infra_trailer_flatbed": [Vector3(2.14, 1.31, 5.66), 0.25, 600, 0],
 	"infra_trailer_tank": [Vector3(2.14, 2.34, 5.64), 0.25, 600, 0],
 }
@@ -100,3 +100,18 @@ func test_infra_props_fit_the_spec() -> void:
 				wires += 1
 				assert_lte((c as Node3D).position.y, box.end.y + 0.01, "%s: wire поза габаритом" % name)
 		assert_eq(wires, int(spec[3]), "%s: кількість точок кріплення дротів" % name)
+
+
+## Кожна поверхня — окремий виклик малювання (бюджет кадру): паркан — стовпи й один атлас панелей із валиком.
+func test_fences_have_at_most_two_surfaces() -> void:
+	for name: String in SPEC:
+		if not name.begins_with("infra_fence_"):
+			continue
+		var root: Node3D = (load(DIR + name + ".glb") as PackedScene).instantiate()
+		add_child_autofree(root)
+		var meshes: Array = []
+		_meshes(root, meshes)
+		var surfaces: int = 0
+		for mi: MeshInstance3D in meshes:
+			surfaces += mi.mesh.get_surface_count()
+		assert_lte(surfaces, 2, "%s: поверхонь" % name)
