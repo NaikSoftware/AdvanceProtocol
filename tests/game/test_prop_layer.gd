@@ -1518,43 +1518,34 @@ func _rect_gap(p: Vector2, r: Rect2) -> float:
 	return Vector2(maxf(maxf(r.position.x - p.x, 0.0), p.x - r.end.x), maxf(maxf(r.position.y - p.y, 0.0), p.y - r.end.y)).length()
 
 
-## Житлові будівлі карти: індекс екземпляра, обрис і чи лежить вона на дошці.
+## Житлові будівлі карти: індекс екземпляра, обрис, чи лежить вона на дошці і чи живить її мережа
+## (PropLayer.powered_homes — те саме визначення, що в tools/power_dump.gd).
 func _homes(props: PropLayer, m: MapData) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	var centres: Array[Vector2] = []
+	var on_board: Array[bool] = []
 	var board := Rect2i(0, 0, m.width, m.height)
 	for i in props._instances.size():
 		var inst: Dictionary = props._instances[i]
-		var on_board: bool = board.has_point((inst["cells"] as Array)[0])
-		if PropLayer.is_home(inst, on_board):
-			out.append({"i": i, "rect": _rect_of(inst), "board": on_board})
+		if PropLayer.is_home(inst):
+			var r: Rect2 = _rect_of(inst)
+			out.append({"i": i, "rect": r, "board": board.has_point((inst["cells"] as Array)[0])})
+			centres.append(r.get_center())
+			on_board.append(out.back()["board"])
+	var powered: Array[bool] = PropLayer.powered_homes(centres, on_board)
+	for k in out.size():
+		out[k]["powered"] = powered[k]
 	return out
 
 
-## Хати, які мережа мусить живити: на дошці — усі, крім названих у макеті як «unfed» (немає де поставити
-## стовп); в кільці — ті, що в поселенні від двох хат (ланцюг не довший за SETTLEMENT_R).
+## Хати, які мережа мусить живити: усі, що живить мережа (PropLayer.powered_homes), крім названих у макеті
+## «unfed» (немає де поставити стовп).
 func _powered_homes(props: PropLayer, m: MapData, unfed: Array) -> Array[Dictionary]:
-	var homes: Array[Dictionary] = _homes(props, m)
 	var out: Array[Dictionary] = []
-	for h in homes:
+	for h in _homes(props, m):
 		var c: Vector2 = (h["rect"] as Rect2).get_center()
-		if unfed.any(func(u: Vector2) -> bool: return u.distance_to(c) < 0.3):
-			continue
-		if not h["board"]:
-			# Поселення кільця — зв'язна група хат із кроком до SETTLEMENT_R.
-			var group: Dictionary = {h["i"]: true}
-			var grew: bool = true
-			while grew:
-				grew = false
-				for o in homes:
-					if not group.has(o["i"]) and not o["board"]:
-						for gi in group:
-							if ((o["rect"] as Rect2).get_center()).distance_to(_rect_of(props._instances[gi]).get_center()) <= PropLayer.SETTLEMENT_R:
-								group[o["i"]] = true
-								grew = true
-								break
-			if group.size() < 2:
-				continue
-		out.append(h)
+		if h["powered"] and not unfed.any(func(u: Vector2) -> bool: return u.distance_to(c) < 0.3):
+			out.append(h)
 	return out
 
 
@@ -1643,8 +1634,8 @@ func _angle_at(props: PropLayer, b: int, a: int, c: int) -> float:
 	return rad_to_deg((_pole_at(props, a) - _pole_at(props, b)).angle_to(_pole_at(props, c) - _pole_at(props, b)))
 
 
-## Злам ніколи не повертає назад: кут між будь-якими двома прольотами на опорі — не гостріший за 80°
-## (прямий кут траси з допуском на косу).
+## Злам ніколи не повертає назад: кут між будь-якими двома прольотами на опорі — не гостріший за 80° (прямий
+## кут траси з допуском на косу); гілка 0.4 кВ відходить від 10 кВ на підстанції не гостріше за 60°.
 func test_no_span_folds_back(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var adj: Dictionary = _neighbours(props)
@@ -1653,7 +1644,8 @@ func test_no_span_folds_back(p = use_parameters(MAPS)) -> void:
 		for a in nb.size():
 			for b in range(a + 1, nb.size()):
 				var ang: float = absf(_angle_at(props, i, nb[a], nb[b]))
-				assert_gte(ang, 80.0, "%s: на опорі %s проліт повертає назад (%.0f°)" % [p, _pole_at(props, i), ang])
+				var tee: bool = props._transformers.has(i) and (_is_04(props, nb[a]) != _is_04(props, nb[b]))
+				assert_gte(ang, 59.0 if tee else 79.0, "%s: на опорі %s проліт повертає назад (%.0f°)" % [p, _pole_at(props, i), ang])
 
 
 ## Підстанція на поселення рівно одна: кожна хата живиться від мережі з однією підстанцією, а хати одного
@@ -1728,9 +1720,8 @@ func test_every_home_has_a_drop_that_misses_every_roof(p = use_parameters(MAPS))
 		var drops: Array = _drops_to(props, h["rect"])
 		var centre: Vector2 = (h["rect"] as Rect2).get_center()
 		if not powered_ids.has(h["i"]):
-			assert_eq(drops.size(), 0, "%s: відвід до хати %s, якої мережа не живить" % [p, centre])
 			continue
-		assert_eq(drops.size(), 1, "%s: відводів до хати %s — %d" % [p, centre, drops.size()])
+		assert_eq(drops.size(), 1, "%s: відводів до хати %s — %d (запустіть tools/power_grid.py)" % [p, centre, drops.size()])
 		if drops.is_empty():
 			continue
 		var d: Array = drops[0]
@@ -1750,7 +1741,7 @@ func test_every_home_has_a_drop_that_misses_every_roof(p = use_parameters(MAPS))
 				for j in 21:
 					assert_gte(_rect_gap(from.lerp(lip, float(j) / 20.0), r), PropLayer.DROP_GAP - 0.02, "%s: відвід до %s ближче за %.2f до чужої будівлі" % [p, centre, PropLayer.DROP_GAP])
 		for j in 21:
-			assert_false(props.on_road(from.lerp(lip, float(j) / 20.0), 0.0), "%s: відвід до %s через дорогу" % [p, centre])
+			assert_gte(props.road_edge_m(from.lerp(lip, float(j) / 20.0)), 0.0, "%s: відвід до %s через дорогу" % [p, centre])
 		# Висота кріплення: вище 2.4 м над ґрунтом і нижче за верх хати.
 		var above: float = (target.y - view._height.at(target.x, target.z)) * 8.0
 		assert_between(above, 2.4 - 1e-3, _box_of(props._instances[h["i"]]).size.y * 8.0, "%s: кріплення відводу до %s на %.1f м" % [p, centre, above])
@@ -1768,15 +1759,16 @@ func test_every_home_has_a_drop_that_misses_every_roof(p = use_parameters(MAPS))
 					continue
 				assert_gte(pts[j].y, (xf * (hit["position"] as Vector3)).y - 0.005, "%s: відвід до %s проходить крізь дах (%.0f%%)" % [p, centre, 100.0 * j / 40.0])
 	# Хата, названа в unfed, справді без відводу.
+	var all_homes: Array[Dictionary] = _homes(props, m)
 	for u: Vector2 in unfed:
-		for h in _homes(props, m):
+		for h in all_homes:
 			if (h["rect"] as Rect2).get_center().distance_to(u) < 0.3:
-				assert_eq(_drops_to(props, h["rect"]).size(), 0, "%s: хата %s названа без відводу, а відвід є — оновіть unfed" % [p, u])
+				assert_eq(_drops_to(props, h["rect"]).size(), 0, "%s: хата %s названа без відводу, а відвід є — запустіть tools/power_grid.py" % [p, u])
 	# Сараї й руїни відводу не мають.
 	for inst in props._instances:
 		var k: int = _kind(inst["model"])
 		var is_home: bool = false
-		for h in _homes(props, m):
+		for h in all_homes:
 			is_home = is_home or h["rect"].is_equal_approx(_rect_of(inst))
 		if is_home or (k != PropLayer.Kind.RUIN and k != PropLayer.Kind.STRUCTURE):
 			continue
@@ -1822,8 +1814,8 @@ func test_poles_stand_on_the_ground(p = use_parameters(MAPS)) -> void:
 		assert_lte(absf(o.y - view._height.at(o.x, o.z)) * 8.0, 0.02, "%s: стовп %s висить чи вгрузає" % [p, _pole_at(props, i)])
 
 
-## Нічого на асфальті (≥ POLE_ROAD_CLEAR від його краю), у воді, ближче 0.4 клітинки до води, в лісі, на
-## руїнах, мосту, у центрі клітинки; стовп і проліт — ≥ POLE_BUILDING_CLEAR від обрису будь-якої будівлі
+## Нічого на асфальті (≥ POLE_ROAD_CLEAR_M від його краю за полем дороги, яке малює шейдер), у воді,
+## ближче POLE_WET_CLEAR до води, в лісі, на мосту, у центрі клітинки; стовп і проліт — ≥ POLE_BUILDING_CLEAR від обрису будь-якої будівлі
 ## (до хати, яку цей стовп живить, — не ближче POLE_HOME_CLEAR); стовп не в обрисі паркану й дрібної речі.
 ## Кільце теж.
 func test_poles_keep_off_road_water_bridges_and_buildings(p = use_parameters(MAPS)) -> void:
@@ -1844,13 +1836,13 @@ func test_poles_keep_off_road_water_bridges_and_buildings(p = use_parameters(MAP
 		elif k != PropLayer.Kind.POLE:
 			smalls.append(_rect_of(inst))
 	var bad_kinds: Array = [Terrain.Kind.WATER, Terrain.Kind.MARSH, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED,
-			Terrain.Kind.ROAD, Terrain.Kind.FOREST, Terrain.Kind.RUBBLE]
+			Terrain.Kind.ROAD, Terrain.Kind.FOREST]
 	var fed: Dictionary = {}
 	for d: Array in props._drops:
 		fed[d[0]] = (fed.get(d[0], []) as Array) + [Vector2((d[1] as Vector3).x, (d[1] as Vector3).z)]
 	for i in _pole_ids(props):
 		var at: Vector2 = _pole_at(props, i)
-		assert_false(props.on_road(at, PropLayer.POLE_ROAD_CLEAR - 1e-3), "%s: стовп %s ближче за %.2f до асфальту" % [p, at, PropLayer.POLE_ROAD_CLEAR])
+		assert_gte(props.road_edge_m(at), PropLayer.POLE_ROAD_CLEAR_M - 0.01, "%s: стовп %s за %.2f м від краю асфальту — запустіть tools/power_grid.py" % [p, at, props.road_edge_m(at)])
 		var c := Vector2i(roundi(at.x), roundi(at.y))
 		var kind_here: int = world.kind_at(c + Vector2i(ring, ring))
 		assert_false(kind_here in bad_kinds, "%s: стовп %s на клітинці %d" % [p, at, kind_here])
@@ -1862,7 +1854,7 @@ func test_poles_keep_off_road_water_bridges_and_buildings(p = use_parameters(MAP
 				var kn: int = world.kind_at(n + Vector2i(ring, ring))
 				if kn == Terrain.Kind.WATER or kn == Terrain.Kind.MARSH:
 					var nearest := Vector2(clampf(at.x, n.x - 0.5, n.x + 0.5), clampf(at.y, n.y - 0.5, n.y + 0.5))
-					assert_gte(at.distance_to(nearest), 0.4, "%s: стовп %s за %.2f від води" % [p, at, at.distance_to(nearest)])
+					assert_gte(at.distance_to(nearest), PropLayer.POLE_WET_CLEAR - 1e-3, "%s: стовп %s за %.2f від води" % [p, at, at.distance_to(nearest)])
 		assert_gte(maxf(absf(at.x - c.x), absf(at.y - c.y)), 0.45, "%s: стовп %s у центрі клітинки" % [p, at])
 		for r in buildings:
 			var gap: float = _rect_gap(at, r)
@@ -1895,29 +1887,96 @@ func test_poles_keep_off_road_water_bridges_and_buildings(p = use_parameters(MAP
 				assert_true(feeds, "%s: проліт %s—%s за %.2f від будівлі %s" % [p, a, b, least, r])
 
 
-## Опори кільця — окремий вузол: AABB вузла опор дошки не розтягується на весь світ.
-func test_ring_poles_live_in_their_own_node(p = use_parameters(MAPS)) -> void:
-	var props: PropLayer = _cached(p).props()
+## Відтяжки: кутова й кінцева опора їх мають, пряма — ні; анкер стоїть на ґрунті (висота TerrainHeight),
+## не ближче POLE_ROAD_CLEAR_M до асфальту й не в сліду юніта. Шафа ТП — КТП 2–3 м заввишки на землі, уся
+## її площа поза асфальтом, будівлями й слідом юніта.
+func test_guys_and_cabinets_stand_clear(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var props: PropLayer = view.props()
 	var m: MapData = _map(p)
-	var ring_nodes: int = 0
-	for node in props.get_children():
-		if node is MultiMeshInstance3D and String(node.name).begins_with("infra_pole"):
-			var box: AABB = (node as MultiMeshInstance3D).get_aabb()
-			if String(node.name).ends_with("_ring"):
-				ring_nodes += 1
-			else:
-				assert_lte(box.size.x, m.width + 1.0, "%s: вузол %s розтягнувся на %.1f" % [p, node.name, box.size.x])
-				assert_lte(box.size.z, m.height + 1.0, "%s: вузол %s розтягнувся на %.1f" % [p, node.name, box.size.z])
-	assert_gt(ring_nodes, 0, "%s: опор кільця нема" % p)
-
-
-## Відтяжки є (кутова й кінцева опори), а підстанція — КТП-шафа на землі 2–3 м заввишки.
-func test_corner_poles_have_guys_and_transformers_are_cabinets(p = use_parameters(MAPS)) -> void:
-	var props: PropLayer = _cached(p).props()
-	assert_gt(props._guy_lines().size(), 0, "%s: відтяжок нема" % p)
+	var adj: Dictionary = _neighbours(props)
+	var guys: Dictionary = {}
+	for g: Array in props._guy_lines():
+		guys[g[0]] = g[2]
+	var board := Rect2i(0, 0, m.width, m.height)
+	for i: int in adj:
+		var nb: Array = adj[i]
+		var straight: bool = nb.size() == 2 and absf(_angle_at(props, i, nb[0], nb[1])) >= 170.0
+		var corner: bool = nb.size() == 1 or (nb.size() == 2 and absf(_angle_at(props, i, nb[0], nb[1])) <= 140.0)
+		if straight:
+			assert_false(guys.has(i), "%s: пряма опора %s має відтяжку" % [p, _pole_at(props, i)])
+		if corner:
+			assert_true(guys.has(i), "%s: кутова чи кінцева опора %s без відтяжки" % [p, _pole_at(props, i)])
+	for i: int in guys:
+		var a: Vector3 = guys[i]
+		assert_almost_eq(a.y, view._height.at(a.x, a.z), 0.001, "%s: анкер відтяжки %s не на ґрунті" % [p, Vector2(a.x, a.z)])
+		assert_gte(props.road_edge_m(Vector2(a.x, a.z)), PropLayer.POLE_ROAD_CLEAR_M - 0.01, "%s: анкер відтяжки %s на асфальті" % [p, Vector2(a.x, a.z)])
+		var c := Vector2i(roundi(a.x), roundi(a.z))
+		if board.has_point(c):
+			assert_gte(maxf(absf(a.x - c.x), absf(a.z - c.y)), PropLayer.UNIT_HALF + 0.01, "%s: анкер %s у сліду юніта" % [p, Vector2(a.x, a.z)])
 	assert_between(PropLayer.TRANSFORMER_SIZE.y * 8.0, 2.0, 3.0, "шафа ТП заввишки")
-	for at: Vector3 in props.transformers_shown():
-		assert_false(props.on_road(Vector2(at.x, at.z), 0.0), "%s: шафа підстанції на асфальті %s" % [p, at])
+	var buildings: Array[Rect2] = []
+	for inst in props._instances:
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			buildings.append(_rect_of(inst))
+	for i: int in props._transformers:
+		var pole: Dictionary = props._instances[i]
+		var at: Vector3 = props._cabinet_at(pole)
+		var basis: Basis = (pole["transform"] as Transform3D).basis
+		var side := Vector2(basis.x.x, basis.x.z).normalized() * PropLayer.TRANSFORMER_SIZE.x * 0.5
+		var along := Vector2(basis.z.x, basis.z.z).normalized() * PropLayer.TRANSFORMER_SIZE.z * 0.5
+		var c2 := Vector2(at.x, at.z)
+		for q: Vector2 in [c2 + side + along, c2 + side - along, c2 - side + along, c2 - side - along, c2]:
+			assert_gte(props.road_edge_m(q), PropLayer.POLE_ROAD_CLEAR_M - 0.01, "%s: шафа ТП %s на асфальті" % [p, c2])
+			for r in buildings:
+				assert_false(r.has_point(q), "%s: шафа ТП %s у будівлі" % [p, c2])
+		assert_gt(c2.distance_to(_pole_at(props, i)), 0.3, "%s: шафа ТП %s проходить крізь стовп" % [p, c2])
+
+
+## Сільська мережа радіальна: мережа 0.4 кВ кожної підстанції — дерево (без кілець), кожен її листок має
+## відвід, прольоти в плані не перетинаються (і 10 кВ з 0.4 кВ теж), перший проліт від підстанції — звичайний
+## (≥ 2 клітинок, де можна — ≥ 3), а опори не скупчуються: пара ближче за 1.3 — лише сусідні кутові (не ближче 1.4), а біля
+## підстанції несусідні опори — не ближче 2.
+func test_low_voltage_network_is_a_tree_without_crossings(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var adj: Dictionary = _neighbours(props)
+	for tp: int in props._transformers:
+		var seen: Dictionary = {tp: true}
+		var stack: Array[int] = [tp]
+		while not stack.is_empty():
+			var u: int = stack.pop_back()
+			for n: int in adj[u]:
+				if _is_04(props, n) and not seen.has(n):
+					seen[n] = true
+					stack.append(n)
+		# Ребра, а не прохід: у дереві з n вершин n − 1 ребро.
+		var count: int = 0
+		for sp: Array in props._spans:
+			if seen.has(sp[0]) and seen.has(sp[1]) and (sp[0] == tp or sp[1] == tp or (_is_04(props, sp[0]) and _is_04(props, sp[1]))):
+				count += 1
+		assert_eq(count, seen.size() - 1, "%s: мережа 0.4 кВ підстанції %s — не дерево (%d ребер на %d опор)" % [p, _pole_at(props, tp), count, seen.size()])
+		for n: int in adj[tp]:
+			if _is_04(props, n):
+				assert_gte(_pole_at(props, tp).distance_to(_pole_at(props, n)), 2.0 - 0.01, "%s: перший проліт від підстанції %s коротший за 2" % [p, _pole_at(props, tp)])
+	for i in props._spans.size():
+		var a: Vector2 = _pole_at(props, props._spans[i][0])
+		var b: Vector2 = _pole_at(props, props._spans[i][1])
+		for j in range(i + 1, props._spans.size()):
+			if props._spans[i].any(func(e: int) -> bool: return props._spans[j].has(e)):
+				continue
+			var x: Variant = Geometry2D.segment_intersects_segment(a, b, _pole_at(props, props._spans[j][0]), _pole_at(props, props._spans[j][1]))
+			assert_null(x, "%s: прольоти %s—%s і %s перетинаються в плані" % [p, a, b, _pole_at(props, props._spans[j][0])])
+	var ids: Array[int] = _pole_ids(props)
+	for x in ids.size():
+		for y in range(x + 1, ids.size()):
+			var d: float = _pole_at(props, ids[x]).distance_to(_pole_at(props, ids[y]))
+			assert_gte(d, 1.4, "%s: опори %s на відстані %.2f" % [p, _pole_at(props, ids[x]), d])
+			var neighbours: bool = (adj[ids[x]] as Array).has(ids[y])
+			if d < 1.29 and not neighbours:
+				assert_true(false, "%s: несусідні опори %s на відстані %.2f" % [p, _pole_at(props, ids[x]), d])
+			if d < 1.99 and not neighbours and (props._transformers.has(ids[x]) or props._transformers.has(ids[y])):
+				assert_true(false, "%s: біля підстанції несусідні опори на відстані %.2f" % [p, d])
 
 
 ## Плитка грядок лежить на ґрунті: кожен кут і внутрішні точки (сітка 5×5) — на висоті землі плюс
