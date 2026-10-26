@@ -143,8 +143,9 @@ func _ready() -> void:
 					await RenderingServer.frame_post_draw
 					shots.append(["%s_veg_%s_%d_%d_%d" % [map, what, at.x, at.y, k], get_viewport().get_texture().get_image()])
 				if what == "crush":
-					(screen.get("_crushed_truth") as Dictionary)[at] = true
-					screen.call("_rebuild_units_for_active_player")
+					# Напряму в шар дошки: екран бою показує зім'ятість лише на розвіданому гравцем.
+					var crushed: Array[Vector2i] = [at]
+					(screen.get_node("%BoardView") as BoardView).set_crushed_cells(crushed)
 					for f in SETTLE_FRAMES:
 						await get_tree().process_frame
 					await RenderingServer.frame_post_draw
