@@ -316,6 +316,9 @@ func _wire_view(board: Board) -> void:
 	_scars = ScarMap.new(Vector2i(board.width, board.height))
 	_board_view.scar_map = _scars
 	_board_view.build(board)
+	# Мирний дим 1–3 димарів і 1–2 руїн: мапа та сама — і вибір той самий.
+	if _board_view.props() != null:
+		_wreck_layer.set_hearths(_board_view.props().chimney_tops(), _board_view.props().ruin_centres(), board.width * 73 + board.height * 31)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
 	_weather.attach_probe(_board_view.reflection_probe())
 	_follow_weather()

@@ -345,3 +345,33 @@ func test_fire_is_one_column_sized_from_the_hull() -> void:
 	var particles: Array[Node] = layer.find_children("*", "GPUParticles3D", true, false)
 	assert_eq(particles.size(), 1)
 	assert_eq(particles[0], layer.ember_emitter(Vector2i(3, 3)))
+
+
+## Мирний дим мапи: 1–3 димарі й 1–2 руїни, вибрані за мапою (той самий вибір щоразу), тонкий
+## атлас і мала густота — ледь помітний шлейф, а не пожежа. Горить завжди: хати й руїни видимі
+## всім, і дим нічого не видає. Анімація не спиняється, поки він є.
+func test_hearth_smoke_picks_a_few_faint_columns() -> void:
+	var chimneys: Array[Vector3] = [Vector3(1, 1, 1), Vector3(2, 1, 1), Vector3(3, 1, 1), Vector3(4, 1, 1), Vector3(5, 1, 1)]
+	var ruins: Array[Vector3] = [Vector3(1, 0, 5), Vector3(2, 0, 5), Vector3(3, 0, 5)]
+	for seed in 12:
+		layer.set_hearths(chimneys, ruins, seed)
+		var pts: Array[Vector3] = layer.hearth_points()
+		var c: int = pts.filter(func(p: Vector3) -> bool: return p.y > 0.5).size()
+		var r: int = pts.size() - c
+		assert_true(c >= 1 and c <= 3, "димарів 1–3")
+		assert_true(r >= 1 and r <= 2, "руїн 1–2")
+	layer.set_hearths(chimneys, ruins, 7)
+	var first: Array[Vector3] = layer.hearth_points().duplicate()
+	layer.set_hearths(chimneys, ruins, 7)
+	assert_eq(layer.hearth_points(), first, "та сама мапа — той самий вибір")
+	var mm: MultiMesh = (layer.get_node("Hearths") as MultiMeshInstance3D).multimesh
+	assert_eq(mm.visible_instance_count, first.size() * WreckLayer.HEARTH_PUFFS)
+	# Дані екземплярів headless-рендер не зберігає: густоту перевіряємо за сталими (від'ємна в
+	# шейдері — тонкий атлас, пікова альфа якого 0,35).
+	assert_true(WreckLayer.CHIMNEY_DENSITY <= 0.5 and WreckLayer.RUIN_DENSITY <= 0.5, "мала густота")
+	assert_true(layer.is_animating(), "дим рухається й без уламків")
+	assert_almost_eq(float(layer.hearth_material().get_shader_parameter("lighten")), WreckLayer.HEARTH_LIGHTEN, 1e-6)
+	layer.set_wind(Vector3(0.25, 0, 0))
+	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")
+	layer.rebuild(state, 0)
+	assert_eq(layer.hearth_points(), first, "перебудова уламків мирного диму не гасить")

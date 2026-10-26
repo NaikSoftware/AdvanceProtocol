@@ -178,6 +178,9 @@ What our own constraints add on top:
   core is yellow-orange for three frames (~50 ms). Ground dust is one soft radial layer 0.3 m above
   the ground with a noise-eaten edge, fading softly where the relief meets it — never per-cell
   alpha or a regular grid.
+- **Peaceful smoke:** 1–3 chimneys and 1–2 ruins per map breathe a barely visible, continuous plume —
+  the wreck column's technique with the thin atlas at a third of its density, lighter grey, 14 m
+  tall, leaning with the same wind. Houses and ruins are public map props, so it is always on.
 - **A crater is burnt soil, not ink:** a brown-grey bowl (about half the brightness of the grass)
   with a ragged edge, a lighter ejecta rim and a normal that follows the bowl. Debris chunks are
   irregular, 0.2–0.7 m, fly their whole arc, land and settle.

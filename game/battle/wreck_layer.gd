@@ -31,6 +31,22 @@ const PLUME_LIFE_SEC: float = 9.0
 ## Розігріву досить кількох кадрів.
 const WARM_UP_SEC: float = 0.1
 
+## Мирний дим мапи: 1–3 димарі й 1–2 руїни, що тліють. Той самий стовп, що над уламками, але
+## тонкий атлас, рідкий і світліший: ледь помітний шлейф, а не пожежа. Хати й руїни — частина
+## мапи, видимі всім, тож цей дим нічого не видає і горить завжди.
+const HEARTH_PUFFS: int = 14
+const HEARTH_MAX: int = 5
+## Густота шлейфу (від'ємна — тонкий атлас, пікова альфа якого 0,35): разом ~0,1–0,15.
+const CHIMNEY_DENSITY: float = 0.35
+const RUIN_DENSITY: float = 0.45
+## Стовп 14 м, від 0,6 м біля димаря до 6 м угорі; клуба живе 14 с — повільний шлейф.
+const HEARTH_HEIGHT: float = 14.0 / 8.0
+const HEARTH_BASE_W: float = 0.6 / 8.0
+const HEARTH_TOP_W: float = 6.0 / 8.0
+const HEARTH_LIFE_SEC: float = 14.0
+## Деревний дим світліший за мазутний дим уламків.
+const HEARTH_LIGHTEN: float = 0.45
+
 ## Запечені флипбуки 8×8 (assets/vfx/SOURCES.md). Дим грає раз і закінчується порожнім:
 ## стовп — це клуби, що стартують уступами, кожна від кадру 0 біля корпусу до порожнього
 ## нагорі. Тонкий атлас — для стадії, де дим рідшає. Вогонь — процедурний (шейдер вогню).
@@ -119,6 +135,9 @@ var _warm: MeshInstance3D = null
 ## Загиблі відділення: чотири лежачі фігури на тайлі, де відділення полягло.
 var _fallen: Dictionary[Vector2i, MultiMeshInstance3D] = {}
 var _column_cells: Array[Vector2i] = []
+var _hearths: MultiMeshInstance3D
+var _hearth_mat: ShaderMaterial
+var _hearth_points: Array[Vector3] = []
 var _fire_cells: Array[Vector2i] = []
 
 
@@ -154,6 +173,18 @@ func _init() -> void:
 	_shadow_mat.set_shader_parameter("height", COLUMN_HEIGHT)
 	_shadows = _multimesh("ColumnShadows", _shadow_mat, MAX_COLUMNS)
 	_fires = _multimesh("Fires", _fire_mat, MAX_COLUMNS * FLAMES_PER_SPOT)
+	_hearth_mat = ShaderMaterial.new()
+	_hearth_mat.shader = column_shader()
+	_hearth_mat.set_shader_parameter("puff_tex", SMOKE_TEX)
+	_hearth_mat.set_shader_parameter("thin_tex", SMOKE_THIN_TEX)
+	_hearth_mat.set_shader_parameter("grid", float(FLIPBOOK_GRID))
+	_hearth_mat.set_shader_parameter("height", HEARTH_HEIGHT)
+	_hearth_mat.set_shader_parameter("base_w", HEARTH_BASE_W * SMOKE_CELL_PER_CLOUD)
+	_hearth_mat.set_shader_parameter("top_w", HEARTH_TOP_W * SMOKE_CELL_PER_CLOUD)
+	_hearth_mat.set_shader_parameter("rise", 1.0 / HEARTH_LIFE_SEC)
+	_hearth_mat.set_shader_parameter("grow", COLUMN_GROW)
+	_hearth_mat.set_shader_parameter("lighten", HEARTH_LIGHTEN)
+	_hearths = _multimesh("Hearths", _hearth_mat, HEARTH_MAX * HEARTH_PUFFS)
 	for i in MAX_FIRE_LIGHTS:
 		var l := OmniLight3D.new()
 		l.name = "FireLight%d" % i
@@ -272,6 +303,39 @@ func remove(pos: Vector2i) -> void:
 ## Вітер вигляду (`WeatherRig.wind()`), горизонтальний вектор.
 func set_wind(wind: Vector3) -> void:
 	_column_mat.set_shader_parameter("lean", wind * SMOKE_LEAN_PER_WIND)
+	_hearth_mat.set_shader_parameter("lean", wind * SMOKE_LEAN_PER_WIND)
+
+
+## Мирний дим: з `chimneys` (верхи димарів) — 1–3, з `ruins` (середини руїн на землі) — 1–2,
+## вибрані за `seed` мапи, тож у кожного гравця й у кожному бою на цій мапі ті самі.
+func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int) -> void:
+	_hearth_points.clear()
+	var picks: Array = []
+	for group: Array in [[chimneys, 1 + absi(seed) % 3, CHIMNEY_DENSITY], [ruins, 1 + (absi(seed) / 3) % 2, RUIN_DENSITY]]:
+		var pts: Array[Vector3] = (group[0] as Array[Vector3]).duplicate()
+		pts.sort_custom(func(a: Vector3, b: Vector3) -> bool: return hash(a + Vector3(seed, 0, 0)) < hash(b + Vector3(seed, 0, 0)))
+		for i in mini(int(group[1]), pts.size()):
+			picks.append([pts[i], float(group[2])])
+	var mm: MultiMesh = _hearths.multimesh
+	var n: int = 0
+	for pick: Array in picks.slice(0, HEARTH_MAX):
+		var at: Vector3 = pick[0]
+		_hearth_points.append(at)
+		var sd: float = float(hash(at) % 997) / 997.0
+		for k in HEARTH_PUFFS:
+			mm.set_instance_transform(n, Transform3D(Basis(), at))
+			mm.set_instance_custom_data(n, Color(float(k) / float(HEARTH_PUFFS), fposmod(sd + 0.618 * k, 1.0), -float(pick[1]), LONG_AGO))
+			n += 1
+	mm.visible_instance_count = n
+	_refresh_effects()
+
+
+func hearth_points() -> Array[Vector3]:
+	return _hearth_points
+
+
+func hearth_material() -> ShaderMaterial:
+	return _hearth_mat
 
 
 ## Розігрів шейдерів стовпа, вогню й обгорілого матеріалу: кілька кадрів малюємо по
@@ -288,7 +352,7 @@ func warm_up(at: Vector3) -> void:
 	add_child(_warm)
 	# Іскри теж компілюють шейдери на першому вбивстві — одна крихітна.
 	_ember_emitter(at, 1, 1).reparent(_warm)
-	for mi: MultiMeshInstance3D in [_columns, _fires, _shadows]:
+	for mi: MultiMeshInstance3D in [_columns, _fires, _shadows, _hearths]:
 		if mi.multimesh.visible_instance_count == 0:
 			mi.multimesh.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3.ONE * 0.0001), at))
 			mi.multimesh.set_instance_custom_data(0, Color(0, 0, 0, 0))
@@ -514,7 +578,7 @@ func _refresh_effects() -> void:
 		_lights[i].visible = i < _fire_cells.size()
 		if _lights[i].visible:
 			_lights[i].position = fire_centre(_fire_cells[i]) + Vector3(0.0, 0.12, 0.0)
-	if _column_cells.is_empty():
+	if _column_cells.is_empty() and _hearth_points.is_empty():
 		_timer.stop()
 	elif _timer.is_stopped():
 		# Таймер поза деревом не стартує; шар без дерева — лише в тестах стану.
@@ -524,7 +588,7 @@ func _refresh_effects() -> void:
 
 
 func _ready() -> void:
-	if not _column_cells.is_empty():
+	if not _column_cells.is_empty() or not _hearth_points.is_empty():
 		_timer.start()
 
 
@@ -532,6 +596,7 @@ func _step() -> void:
 	_frame += 1
 	var t: float = float(_frame) / FLIPBOOK_FPS
 	_column_mat.set_shader_parameter("fx_time", t)
+	_hearth_mat.set_shader_parameter("fx_time", t)
 	_shadow_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("viewport_h", float(get_viewport().get_visible_rect().size.y))
@@ -726,6 +791,8 @@ uniform vec3 lean = vec3(0.0);
 uniform float rise = 0.0625;
 // Ріст свіжого стовпа, одиниць світу за секунду від народження (INSTANCE_CUSTOM.w).
 uniform float grow = 0.75;
+// Мирний дим (димарі, руїни): світліший за мазутний дим уламків.
+uniform float lighten = 0.0;
 // Сонце (WeatherRig): освітлений бік клуби світліший на ясних мапах; у похмурі — нічого.
 global uniform vec3 sun_dir;
 global uniform float sky_clear;
@@ -798,7 +865,7 @@ void fragment() {
 	}
 	vec4 tex = mix(a0, a1, fract(v_frame));
 	float lit = clamp(dot(normalize(uv - 0.5 + 1e-4), v_sun), 0.0, 1.0) * smoothstep(0.05, 0.35, length(uv - 0.5));
-	ALBEDO = tex.rgb * v_dark * (1.0 + 0.45 * sky_clear * lit);
+	ALBEDO = mix(tex.rgb, vec3(0.3, 0.3, 0.31) * (0.7 + 0.6 * dot(tex.rgb, vec3(0.333)) / 0.25), lighten) * v_dark * (1.0 + 0.45 * sky_clear * lit);
 	ALPHA = tex.a * v_alpha;
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
