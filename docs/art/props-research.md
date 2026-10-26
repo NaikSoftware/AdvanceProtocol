@@ -166,6 +166,26 @@ H3 adds: `two storeys, graphite metal-tile gable roof, rooftop solar panel array
 render over brick, brick plinth, clean modern lines`. **Must not:** shop signs, house numbers, flags, ornate Baroque or Tudor detail, slate, timber framing.
 H1 also passes if the roof is ≥ 55 % of the top-down silhouette and is grey, not red.
 
+#### House surfaces (Blender bake, `tools/blender/buildings/lib.py`)
+
+Targets measured on the references with the same crop metric used on game frames
+(sRGB mean, saturation of the mean, luma p5–p95):
+
+| surface | reference | measured |
+| --- | --- | --- |
+| asbestos-cement roof | house0, k_aerialpl1 | sat 0.01–0.06, spread 77–160 |
+| red / brown metal tile | k_aerialpl1 | sat 0.28–0.44 |
+| plaster or brick wall, with windows and shade | house0, k_aerialpl1 | sat 0.07–0.23, spread > 120 |
+
+Recipe, per house: a palette (wall colour, roof kind, chimney brick, window frame), so no two
+neighbours share a roof or a wall. Every surface carries albedo, normal and roughness from the
+ambientCG scan (Displacement and Roughness maps, not only Color), and baked AO. Relief the camera
+resolves is procedural: asbestos waves 0.177 m, metal-tile course steps, profiled-sheet ribs,
+plaster cracks and 0.5–2 m undulation. Weathering is a multiplier on the wall itself
+(splash-back grime to ~0.55 m, sill and gutter streaks, soot plumes that flare above openings,
+shrapnel spalls around hits), never a separately coloured patch. Specular 0.3 comes from
+`tools/prop_import.gd` on import, since glTF cannot carry it into Godot.
+
 ### Ruins (half-destroyed buildings)
 
 A `RUBBLE` tile shows a **half-destroyed building**: the map has intact buildings and damaged ones.
