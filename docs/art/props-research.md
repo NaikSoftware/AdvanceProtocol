@@ -408,6 +408,12 @@ photos below are reference only and are not shipped.
 | v_willow | [Dülmen pollard willows](https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Umland_--_2014_--_7067.jpg), D. Rabich | CC BY-SA 4.0 | Wet-meadow willows, often pollarded |
 | v_elder, v_lilac | [Sambucus nigra 004](https://commons.wikimedia.org/wiki/File:Sambucus_nigra_004.jpg), Willow; [Syringa vulgaris kz01](https://commons.wikimedia.org/wiki/File:Syringa_vulgaris_kz01.jpg), K. Ziarnek | CC BY 2.5 / CC BY-SA 4.0 | Yard shrub masses 2–3 m |
 
+| v_oblique | [Krasnoselye aerial view](https://commons.wikimedia.org/wiki/File:Krasnoselye_PSRER_Aerial_view_of_abandoned_village_2026-04-22.jpg), Budgawl | CC BY-SA 4.0 | Village gardens from ~45°: fruit trees and shrubs by houses at the game angle |
+| v_top | [Schönwald, Escheckstraße](https://commons.wikimedia.org/wiki/File:Sch%C3%B6nwald_im_Schwarzwald,_Escheckstra%C3%9Fe_--_2025_--_0147.jpg), D. Rabich | CC BY-SA 4.0 | Solitary crowns from above: lobed outline and shadow |
+| v_reed_aerial | [Fotoflug Leer–Papenburg](https://commons.wikimedia.org/wiki/File:2013-05-03_Fotoflug_Leer_Papenburg_DSCF7214.jpg), M. Nolte; [Virginia shoreline](https://commons.wikimedia.org/wiki/File:DSC_0070_(15283482670).jpg), Virginia State Parks | CC BY-SA 3.0 DE / CC BY 2.0 | Reed beds and bank scrub from the air: dense straw mat, scrub on the bank line |
+| v_flattened | [Reeds flattened by Dorian](https://commons.wikimedia.org/wiki/File:Reeds_flattened_by_Tropical_Storm_Dorian,_Mount_Stewart_Salt_Marshes,_PEI_(48740483167).jpg), Larry from Charlottetown; [Wind-flattened reeds, Myton Fields](https://commons.wikimedia.org/wiki/File:Wind-flattened_reeds,_Myton_Fields,_Warwick_-_geograph.org.uk_-_7411186.jpg), R. Stott | CC BY 2.0 / CC BY-SA 2.0 | Crushed reed: stems laid one way, low bundle |
+| v_heap | [Overgrown bushes](https://commons.wikimedia.org/wiki/File:Overgrown_Bushes.jpg), Paul The Writer; [Pile burning](https://commons.wikimedia.org/wiki/File:(Sierra_Elko)_Pile_Burning_1_(52637186468).jpg), USFS; [Sihlwald windthrow](https://commons.wikimedia.org/wiki/File:Sihlwald_windthrow_Spinnerweg_20200204_1.jpg), D. Kraft | CC0 / PD / CC BY-SA 3.0 | Crushed shrubs and broken-branch piles: volume, limbs at all angles |
+
 Local copies (gitignored scratch): `~/.cache/ap-scratch/bank-veg/refs/`, with every URL in `urls.tsv`.
 
 ### Assets
@@ -415,27 +421,44 @@ Local copies (gitignored scratch): `~/.cache/ap-scratch/bank-veg/refs/`, with ev
 One library GLB per group and season in `assets/props/vegetation/`:
 `{bank,yard,meadow}_veg_{late,summer,early}.glb` (late = River, summer = Crossroads,
 early = Ridge). Each plant is a node, the same geometry in every season. Only the atlas changes,
-plus how many clumps a bare late crown keeps. Every node has a `<name>_fallen` twin: reeds and
-bushes lie flat as if driven over, and trees fall on their side with the crown along the ground.
-Sizes are in metres; the visible crown is ~1–2 m wider than the clump centres given here.
+plus how many clumps a bare late crown keeps. Every node has a `<name>_fallen` twin, what is left after a vehicle drives through. Reeds and
+bushes become a crumpled bundle 0.3–0.6 m high, with stems bent the way the vehicle went. A tree
+becomes a heap of broken and crushed branches 0.3–0.8 m high: stubs of trunk, broken limbs at all
+angles but mostly pressed the way of travel, and the season's leaves on top.
 
-| node | size (w × d × h) | tris late / summer, early |
-| --- | --- | --- |
-| bank_reed_01, _02, _03 | 1.6 × 1.6 × 2.1; 3.0 × 2.2 × 2.6; strip 3.7 × 1.6 × 2.3 | 28; 48; 56 |
-| bank_cattail_01, _02 | 1.4 × 1.0 × 1.9; 1.7 × 1.9 × 1.9 | 20; 32 |
-| bank_bush_willow_01, _02 | 2.1 × 2.0 × 2.9; 2.6 × 2.2 × 2.2 | 160 / 224; 148 / 212 |
-| bank_bush_alder_01 | 2.8 × 2.7 × 3.8 | 140 / 220 |
-| yard_apple_01, _02 | 3.7 × 3.6 × 4.3; 3.1 × 3.1 × 4.8 | 192 / 324; 176 / 302 |
-| yard_cherry_01 | 3.0 × 2.8 × 4.7 | 172 / 304 |
-| yard_walnut_01 | 6.9 × 5.8 × 9.6 | 304 / 556 |
-| yard_lilac_01, yard_elder_01 | 2.1 × 1.7 × 2.7; 1.8 × 1.9 × 2.9 | 194 / 236; 142 / 212 |
-| yard_berry_row_01 | row 3.9 × 0.6 × 1.2 | 146 / 168 |
-| yard_thuja_01 | 1.0 × 0.9 × 3.8 (evergreen, bronze in late autumn) | 152 |
-| meadow_hawthorn_01, _02 | 2.7 × 2.5 × 2.8; 2.3 × 2.1 × 2.0 | 148 / 220; 114 / 168 |
-| meadow_dogrose_01 | 1.7 × 1.5 × 1.8 | 144 / 184 |
-| meadow_pear_01 | 6.3 × 6.2 × 10.2 | 304 / 556 |
-| meadow_oak_01 | 9.6 × 8.7 × 11.7 | 456 / 688 |
-| meadow_willow_01 | 8.3 × 7.4 × 8.6 | 394 / 628 |
+Trees are grown, not filled into a sphere: a trunk leaning up to 8°, at least three scaffold
+limbs, second- and third-order branches, and leaf clumps at the branch ends, so gaps show between
+them. Each species keeps its own habit:
+- oak: crooked thick limbs and an open crown;
+- wild pear: narrow and tall, with a leader;
+- walnut: forks at 1.5–2 m into 3–4 limbs, with a wide low crown;
+- willow: pollarded head, several trunks, or a broad single trunk;
+- fruit trees: scaffold limbs from about 1 m.
+
+There are three forms of every tree and of the willow and alder bushes, varied by branch seed,
+lean and crown asymmetry. The skeleton has its own seed, so a plant is the same in every season;
+late autumn only shows the third-order twigs and keeps fewer clumps.
+
+| plant (forms) | size w × d × h, m (summer) | tris late / summer | fallen tris |
+| --- | --- | --- | --- |
+| bank_reed _01, _02, _03 | 2 × 2 × 2.1; 2 × 3 × 2.5; 3 × 2 × 2.3 | 28–56 / 28–56 | 56–112 |
+| bank_cattail _01, _02 | 1 × 1 × 1.9; 2 × 2 × 2.0 | 20–32 / 20–32 | 40–64 |
+| bank_bush_willow _01, _02, _03 | 3 × 3 × 3.0; 3 × 3 × 2.0; 3 × 2 × 3.5 | 158–200 / 214–260 | 158–260 |
+| bank_bush_alder _01, _02, _03 | 3 × 3 × 3.7; 4 × 4 × 3.1; 3 × 3 × 3.9 | 128–158 / 188–222 | 128–222 |
+| yard_apple _01, _02, _03 | 5 × 6 × 4.5; 6 × 5 × 5.0; 4 × 4 × 4.3 | 486 / 540 | 360 |
+| yard_cherry _01, _02, _03 | 4 × 4 × 5.8; 4 × 4 × 5.4; 4 × 4 × 5.5 | 476 / 520 | 348 |
+| yard_walnut _01, _02, _03 | 10 × 8 × 9.4; 10 × 9 × 9.6; 10 × 10 × 8.0 | 492 / 616 | 348–360 |
+| yard_lilac _01 | 2 × 3 × 2.7 | 196 / 238 | 196–238 |
+| yard_elder _01 | 4 × 4 × 2.9 | 158 / 214 | 158–214 |
+| yard_berry_row _01 | 4 × 2 × 1.1 | 156 / 170 | 156–170 |
+| yard_thuja _01 | 2 × 2 × 4.1 | 154 / 154 | 154 |
+| meadow_hawthorn _01, _02 | 3 × 3 × 2.9; 3 × 3 × 2.0 | 170–222 / 170–222 | 170–222 |
+| meadow_dogrose _01 | 3 × 2 × 1.7 | 186 / 186 | 186 |
+| meadow_pear _01, _02, _03 | 6 × 6 × 11.7; 6 × 4 × 9.7; 7 × 7 × 11.2 | 660 / 736 | 372–384 |
+| meadow_oak _01, _02, _03 | 10 × 10 × 13.0; 9 × 14 × 9.0; 12 × 11 × 9.7 | 700 / 736 | 372–384 |
+| meadow_willow _01, _02, _03 | 4 × 3 × 6.7; 11 × 9 × 9.2; 9 × 9 × 8.6 | 656–800 / 736–800 | 384 |
+
+Sizes include the litter patch under shrubs; the visible crown edge is up to ~1 m beyond the clump centres. Fallen forms stand 0.3–0.9 m high.
 
 Atlas: 1024² RGBA per library, 128 px cells (a 2 m clump at 1.6 cm per texel), VRAM-compressed
 with mipmaps. Season colours follow the forest: late reeds are straw with grey-buff plumes, fruit
@@ -446,21 +469,29 @@ and red haws.
 **Material.** The GLB carries a plain alpha-cut material only so it imports. Placement overrides it
 with `assets/props/vegetation/veg.gdshader` (`albedo_tex` = the GLB's own atlas), which has the same
 body as the forest crown: camera-facing clump cards, `foliage_tint`, alpha-to-coverage under MSAA,
-and dissolve by whole clumps via instance alpha. Over a visible unit, swap the instance's material for
+and dissolve by whole clumps via instance alpha. Alpha-to-coverage needs `alpha_to_coverage` in
+`render_mode`. `ALPHA_ANTIALIASING_EDGE` alone leaves the edge identical with and without MSAA;
+this was measured on a test quad. Each card and branch carries its own id in vertex colour G, so a
+dissolve drops whole clumps, never single triangles. Vertex colour R holds the clump tone: the
+lower third of a crown is darker. Over a visible unit, swap the instance's material for
 `veg_fade.gdshader`, which shows instance alpha as true transparency (separate transparent pass,
-no dither). Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen
+no dither); bark fades faster than leaves. Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen
 edge-on. Shared body: `veg_body.gdshaderinc`.
 
 **Import.** As for the forest: `meshes/force_disable_compression=true`, no generated LODs and no
-shadow meshes; LOD generation collapses cards whose four vertices share one point.
+shadow meshes; LOD generation collapses cards whose four vertices share one point. No tangents are
+generated, because there is no normal map. The shader also compiles under `gl_compatibility`: the mip
+level is derived from UV derivatives, because `textureQueryLod` is not available there.
 
 **UV2 trap.** Blender's glTF exporter writes every UV map as `1 − v`. The builder therefore writes
 UV2 pre-flipped (`uv2()` in `veg_build.py`); otherwise every vertex is lifted ~1 tile in view
-space and bark counts as a card. `forest_*.glb` from `tools/blender/forest/build_library.py` does
-not pre-flip yet.
+space and bark counts as a card. `forest_*.glb` from `tools/blender/forest/build_library.py` did
+not pre-flip either.
+
+Reeds belong in the shallows, 0.5–2 m out from the waterline, not on dry bank.
 
 Rebuild: `tools/blender/vegetation/build_all.sh`. Frames: `tools/prop_preview.gd` with `--veg`,
-`--nodes=`, `--water`, `--with=`, `--fade=`, `--rg`.
+`--nodes=`, `--water[=E]`, `--with=`, `--fade=`, `--dissolve=`, `--tank=X:Z`, `--rg`.
 
 ## Bridges
 

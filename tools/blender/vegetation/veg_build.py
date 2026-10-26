@@ -8,8 +8,8 @@ assets/props/vegetation/veg.gdshader (або veg_fade.gdshader над юніто
 Будова однакова в усіх сезонах (те саме зерно), змінюється лише атлас і частка пучків
 голої крони, тож рослина на Річці й на Перехресті — та сама рослина.
 
-<вузол>_fallen — повалений техникою: сніп очерету й кущ лягають на землю пласкими картками,
-дерево падає на бік стовбуром і кроною вздовж землі.
+<вузол>_fallen — повалений технікою: сніп і кущ — зім'ятий пучок 0,3–0,6 м, нахилений у бік
+руху; дерево — купа зламаного гілля 0,3–0,8 м з обрубками стовбура й листям пори року.
 """
 import json
 import math
@@ -27,11 +27,46 @@ ATLAS_DIR, GROUP, SEASON, OUT = argv[:4]
 TILE_M = 8.0
 FIXED = (1e-4, 0.0)  # UV2 (до перевертання, див. uv2()) нерухомої картки: листя для шейдера, але не розгортається до камери
 
-# Розміри в метрах. sheaf: сніп очерету / рогозу; crown: кущ чи дерево.
-#   rx, ry — півосі плями; h — висота снопа (від, до); cards — кількість карток.
-#   crown: top — верх, base — низ крони, rx/ry — півосі крони, trunk — висота голого стовбура й
-#   радіус біля землі, stems — кількість стовбурців куща від землі, card — розмір пучка (від, до),
-#   bare — частка пучків голої крони (сезон late), lean — нахил (м на верх).
+# Розміри в метрах. sheaf: сніп очерету / рогозу; crown: кущ; tree: дерево зі скелетом гілок.
+#   sheaf: rx, ry — півосі плями; h — висота снопа (від, до); cards — кількість карток.
+#   crown: top — верх, base — низ крони, rx/ry — півосі, stems — стебел від землі, card — розмір
+#   пучка (від, до), bare — частка пучків пізньої пори, vase/cone/row — форма.
+#   tree: h — висота, cb — низ крони, w — ширина крони, r — радіус стовбура, fork — висота
+#   розвилки (звідки скелетні гілки), limbs, rise — кут гілки від вертикалі (°), crook —
+#   кривизна, leader — частка крони, куди доходить провідник, sec/ter — дочірніх гілок на
+#   гілку, lobe_r — радіус клубу листя на кінці гілки, multi — стовбурів від землі,
+#   pollard — верба «головою»: пучок прямих пагонів з голови.
+TREE = {
+    "apple": dict(h=4.5, cb=1.2, w=4.4, r=0.13, fork=1.0, limbs=4, rise=52, crook=0.22, leader=0.25, sec=2, ter=1,
+                  lobe_r=0.85, cards=150, card=(1.0, 1.5), bare=0.5),
+    "cherry": dict(h=5.0, cb=1.4, w=3.6, r=0.11, fork=1.1, limbs=4, rise=36, crook=0.15, leader=0.6, sec=2, ter=1,
+                   lobe_r=0.75, cards=140, card=(0.9, 1.4), bare=0.5),
+    "walnut": dict(h=11.0, cb=2.2, w=8.5, r=0.28, fork=1.7, limbs=4, rise=40, crook=0.2, leader=0.0, sec=2, ter=1,
+                   lobe_r=1.8, cards=200, card=(1.5, 2.3), bare=0.45),
+    "pear": dict(h=10.5, cb=2.0, w=5.0, r=0.24, fork=2.0, limbs=6, rise=22, crook=0.22, leader=0.85, sec=2, ter=1,
+                 lobe_r=1.05, cards=200, card=(1.3, 1.9), bare=0.45),
+    "oak": dict(h=12.5, cb=2.6, w=11.0, r=0.45, fork=2.6, limbs=6, rise=62, crook=0.42, leader=0.3, sec=2, ter=1,
+                lobe_r=1.8, cards=200, card=(1.8, 2.7), bare=0.55, droop=0.06),
+    "wwillow": dict(h=9.0, cb=2.0, w=8.0, r=0.40, fork=1.8, limbs=6, rise=42, crook=0.2, leader=0.2, sec=2, ter=1,
+                    lobe_r=1.4, cards=200, card=(1.6, 2.3), bare=0.5),
+}
+
+
+def tree_variants(prefix, kind, n=3, extra=None):
+    """n форм одного виду: зерно гілля, нахил стовбура до 8° і асиметрія крони різні, розміри ±12 %."""
+    out = []
+    for i in range(n):
+        it = dict(TREE[kind], node="%s_%02d" % (prefix, i + 1), kind=kind, type="tree")
+        rng = random.Random(it["node"] + "form")
+        k = rng.uniform(0.88, 1.12)
+        it.update(h=it["h"] * k, w=it["w"] * rng.uniform(0.88, 1.12), lean_deg=rng.uniform(1.5, 8.0),
+                  asym=rng.uniform(0.1, 0.35))
+        if extra and i < len(extra):
+            it.update(extra[i])
+        out.append(it)
+    return out
+
+
 ASSETS = {
     "bank": [
         dict(node="bank_reed_01", kind="reed", type="sheaf", rx=0.7, ry=0.6, h=(1.6, 2.3), cards=14),
@@ -40,48 +75,50 @@ ASSETS = {
         dict(node="bank_cattail_01", kind="cattail", type="sheaf", rx=0.5, ry=0.45, h=(1.2, 1.8), cards=10),
         dict(node="bank_cattail_02", kind="cattail", type="sheaf", rx=0.9, ry=0.6, h=(1.3, 2.0), cards=16),
         dict(node="bank_bush_willow_01", kind="willow", type="crown", top=3.0, base=0.5, rx=1.5, ry=1.4, stems=7,
-             card=(1.0, 1.5), cards=70, vase=0.5, bare=0.55),
+             card=(1.0, 1.5), cards=70, vase=0.5, bare=0.6),
         dict(node="bank_bush_willow_02", kind="willow", type="crown", top=2.2, base=0.3, rx=1.8, ry=1.4, stems=6,
-             card=(0.9, 1.4), cards=70, vase=0.3, bare=0.55),
+             card=(0.9, 1.4), cards=70, vase=0.3, bare=0.6),
+        dict(node="bank_bush_willow_03", kind="willow", type="crown", top=3.6, base=0.6, rx=1.3, ry=1.1, stems=9,
+             card=(0.9, 1.4), cards=75, vase=0.65, bare=0.6, lean=(0.4, 0.1)),
         dict(node="bank_bush_alder_01", kind="alder", type="crown", top=3.8, base=0.7, rx=1.6, ry=1.5, stems=5,
-             card=(1.0, 1.6), cards=80, bare=0.5),
+             card=(1.0, 1.6), cards=80, bare=0.6),
+        dict(node="bank_bush_alder_02", kind="alder", type="crown", top=3.2, base=0.5, rx=1.9, ry=1.4, stems=4,
+             card=(1.0, 1.6), cards=80, bare=0.6, lean=(-0.3, 0.2)),
+        dict(node="bank_bush_alder_03", kind="alder", type="crown", top=4.0, base=1.0, rx=1.3, ry=1.3, stems=3,
+             card=(1.0, 1.5), cards=75, vase=0.3, bare=0.6),
     ],
-    "yard": [
-        dict(node="yard_apple_01", kind="apple", type="crown", top=4.5, base=1.4, rx=2.3, ry=2.1, trunk=(1.4, 0.13),
-             limbs=5, card=(1.1, 1.7), cards=120, bare=0.45, flat_top=0.25),
-        dict(node="yard_apple_02", kind="apple", type="crown", top=5.2, base=1.6, rx=2.0, ry=1.9, trunk=(1.6, 0.12),
-             limbs=4, card=(1.1, 1.7), cards=115, bare=0.45, lean=(0.5, 0.2)),
-        dict(node="yard_cherry_01", kind="cherry", type="crown", top=5.0, base=1.5, rx=1.7, ry=1.6, trunk=(1.5, 0.11),
-             limbs=5, card=(1.0, 1.5), cards=110, bare=0.4),
-        dict(node="yard_walnut_01", kind="walnut", type="crown", top=10.0, base=2.8, rx=3.8, ry=3.5, trunk=(2.8, 0.28),
-             limbs=6, card=(1.6, 2.5), cards=230, bare=0.45),
+    "yard": tree_variants("yard_apple", "apple") + tree_variants("yard_cherry", "cherry")
+    + tree_variants("yard_walnut", "walnut") + [
         dict(node="yard_lilac_01", kind="lilac", type="crown", top=2.8, base=0.6, rx=1.3, ry=1.2, stems=8,
              card=(0.9, 1.3), cards=70, vase=0.25, bare=0.7),
         dict(node="yard_elder_01", kind="elder", type="crown", top=3.0, base=0.8, rx=1.6, ry=1.5, stems=6,
-             card=(1.0, 1.4), cards=70, vase=0.5, bare=0.5),
+             card=(1.0, 1.4), cards=70, vase=0.5, bare=0.6),
         dict(node="yard_berry_row_01", kind="berry", type="crown", top=1.1, base=0.15, rx=2.0, ry=0.4, stems=8,
-             card=(0.55, 0.8), cards=36, row=True, bare=0.7),
+             card=(0.55, 0.8), cards=36, row=True, bare=0.8),
         dict(node="yard_thuja_01", kind="thuja", type="crown", top=4.0, base=0.2, rx=0.7, ry=0.7, stems=1,
              card=(0.8, 1.1), cards=70, cone=True, bare=1.0),
     ],
     "meadow": [
+        # Глід і шипшина пізньої пори — колючий каркас: усі пучки лишаються (у спрайтах голі гілочки з ягодами).
         dict(node="meadow_hawthorn_01", kind="hawthorn", type="crown", top=2.9, base=0.4, rx=1.5, ry=1.4, stems=5,
-             card=(1.0, 1.4), cards=80, bare=0.55),
+             card=(1.0, 1.4), cards=80, bare=1.0),
         dict(node="meadow_hawthorn_02", kind="hawthorn", type="crown", top=2.0, base=0.3, rx=1.3, ry=1.1, stems=4,
-             card=(0.9, 1.3), cards=60, bare=0.55),
+             card=(0.9, 1.3), cards=60, bare=1.0),
         dict(node="meadow_dogrose_01", kind="dogrose", type="crown", top=1.7, base=0.15, rx=1.3, ry=1.1, stems=7,
-             card=(0.8, 1.2), cards=50, vase=0.6, bare=0.6),
-        dict(node="meadow_pear_01", kind="pear", type="crown", top=11.0, base=2.5, rx=3.4, ry=3.2, trunk=(2.5, 0.25),
-             limbs=6, card=(1.6, 2.4), cards=230, bare=0.45, lean=(0.4, 0.0)),
-        dict(node="meadow_oak_01", kind="oak", type="crown", top=12.5, base=2.6, rx=5.5, ry=5.0, trunk=(2.6, 0.45),
-             limbs=7, card=(2.0, 3.0), cards=290, bare=0.6, flat_top=0.2),
-        dict(node="meadow_willow_01", kind="wwillow", type="crown", top=9.0, base=2.0, rx=4.5, ry=4.2, trunk=(2.0, 0.40),
-             limbs=7, card=(1.8, 2.6), cards=260, bare=0.55),
-    ],
+             card=(0.8, 1.2), cards=50, vase=0.6, bare=1.0),
+    ] + tree_variants("meadow_pear", "pear") + tree_variants("meadow_oak", "oak")
+    + tree_variants("meadow_willow", "wwillow", extra=[
+        # Верба «головою»: товстий стовбур до 2,4 м і пучок прямих пагонів.
+        dict(pollard=True, h=6.5, cb=2.4, w=6.0, fork=2.4, r=0.42, limbs=12, rise=20, crook=0.05, leader=0.0,
+             sec=1, ter=0, lobe_r=0.9),
+        # Кілька стовбурів від землі.
+        dict(multi=3, fork=0.3, rise=24, limbs=3, leader=0.0, r=0.28),
+    ]),
 }
-# Частка листків, що лишилась у пізньому сезоні (з veg_sprites.py): крона, де листків майже
-# немає, рідшає пучками — крізь неї видно землю, як крізь голе дерево.
+# Пізня пора: у спрайтах цих видів листя ≤ 15 %, лишається темний каркас гілочок.
 LATE_BARE = {"willow", "alder", "apple", "cherry", "walnut", "lilac", "elder", "berry", "hawthorn", "dogrose", "pear", "oak", "wwillow"}
+# Межі трикутників (мобільний бюджет): дерево, кущ біля хати, кущ на березі й на луці, сніп.
+BUDGET = {"tree": 800, "yard": 400, "crown": 600, "sheaf": 300}
 
 
 def uv2(u, v):
@@ -96,20 +133,26 @@ def to_atlas(rect, u, v):
 
 
 class Mesh:
-    def __init__(self):
+    """Колір вершини: R — тон (місце в кроні; 1 на корі), G — ідентифікатор пучка 0…1, однаковий
+    для всіх вершин картки чи гілки: шейдер гасить пучок цілим за ним (з позиції вершини хеш
+    різнився б у кожного трикутника нерухомої картки)."""
+
+    def __init__(self, seed):
+        self.ids = random.Random(seed + "ids")
         self.bm = bmesh.new()
         self.uv = self.bm.loops.layers.uv.new("UVMap")
         self.uv2 = self.bm.loops.layers.uv.new("UV2")
         self.col = self.bm.loops.layers.float_color.new("Col")
         self.n = {}
 
-    def quad(self, co, rect, uv2s, shades, normal):
+    def quad(self, co, rect, uv2s, shades, normal, pid=None):
+        pid = self.ids.random() if pid is None else pid
         vs = [self.bm.verts.new(p) for p in co]
         f = self.bm.faces.new(vs)
         for loop, (u, v), u2, s in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1)), uv2s, shades):
             loop[self.uv].uv = to_atlas(rect, u, v)
             loop[self.uv2].uv = uv2(*u2)
-            loop[self.col] = (s, s, s, 1.0)
+            loop[self.col] = (s, pid, 0.0, 1.0)
         for v in vs:
             self.n[v] = normal(v.co) if callable(normal) else normal
 
@@ -126,11 +169,12 @@ class Mesh:
         n = normal(c)
         self.quad([c] * 4, rect, uv2s, [shade] * 4, n)
 
-    def fixed(self, corners, rect, shades, normal):
-        self.quad(corners, rect, [FIXED] * 4, shades, normal)
+    def fixed(self, corners, rect, shades, normal, pid=None):
+        self.quad(corners, rect, [FIXED] * 4, shades, normal, pid)
 
     def tube(self, pts, radii, rect, sides=4):
         """Стовбур чи гілка: трубка з кількох відрізків, смуга кори вздовж."""
+        pid = self.ids.random()
         rings = []
         total = sum((Vector(pts[i + 1]) - Vector(pts[i])).length for i in range(len(pts) - 1))
         acc = 0.0
@@ -157,7 +201,10 @@ class Mesh:
                 for loop, (u, v) in zip(f.loops, ((0, r0[k][1]), (1, r0[j][1]), (1, r1[j][1]), (0, r1[k][1]))):
                     loop[self.uv].uv = to_atlas(rect, u, v)
                     loop[self.uv2].uv = uv2(0.0, 0.0)
-                    loop[self.col] = (1.0, 1.0, 1.0, 1.0)
+                    loop[self.col] = (1.0, pid, 1.0, 1.0)
+
+    def tris(self):
+        return sum(len(f.verts) - 2 for f in self.bm.faces)
 
     def finish(self, name, mat):
         bm = self.bm
@@ -181,11 +228,29 @@ class Mesh:
         return ob
 
 
+def sub_rect(rect, v0, v1):
+    """Частина спрайта між v0 і v1 по висоті (0 — низ кадру)."""
+    x, y, w, h = rect
+    return [x, y + (1.0 - v1) * h, w, (v1 - v0) * h]
+
+
+def shade_of(hfrac, rfrac):
+    """Тон пучка: нижня третина й глибина крони темніші — туди світла доходить менше."""
+    return min(max(0.5 + 0.5 * (0.9 * hfrac + 0.3 * (1.0 - rfrac * rfrac) - 0.1), 0.5), 1.0)
+
+
+def check_budget(m, it, kind):
+    t = m.tris()
+    lim = BUDGET[kind]
+    assert t <= lim, "%s: %d трикутників > %d" % (it["node"], t, lim)
+
+
 def sheaf(it, rects, fallen):
     """Сніп очерету чи рогозу: вертикальні картки з довільним поворотом у плямі rx×ry.
-    Повалений — ті самі картки лягають майже пласко, стеблами в один бік (куди їхала техніка)."""
+    Повалений — зім'ятий сніп 0,3–0,6 м: низ стебел стоїть, верх зламаний і лягає в один бік,
+    куди їхала техніка."""
     rng = random.Random(it["node"])
-    m = Mesh()
+    m = Mesh(it["node"])
     sprites = rects["sprites"][it["kind"]]
     fall_dir = rng.uniform(0, 2 * math.pi)
     for i in range(it["cards"]):
@@ -196,30 +261,47 @@ def sheaf(it, rects, fallen):
         h = rng.uniform(*it["h"]) * (1.0 - 0.25 * r * r)
         w = h * 0.5 * rng.uniform(0.9, 1.15)
         yaw = rng.uniform(0, math.pi)
-        d = Vector((math.cos(yaw), math.sin(yaw), 0.0))
-        nrm = Vector((-d.y, d.x, 0.0))
+        fd = fall_dir + rng.gauss(0, 0.3)
+        hb = rng.uniform(0.25, 0.45)
+        sag = rng.uniform(-0.1, 0.12)
         rect = rng.choice(sprites)
         base = Vector((x, y, -0.1))  # нижче землі: на схилі берега картка не висить
         if not fallen:
+            d = Vector((math.cos(yaw), math.sin(yaw), 0.0))
             # Невеликий нахил назовні від середини: куртина розходиться віялом.
-            out = Vector((x, y, 0.0)) * 0.12
-            up = (Vector((0, 0, 1)) + out).normalized() * (h + 0.1)
+            up = (Vector((0, 0, 1)) + Vector((x, y, 0.0)) * 0.12).normalized() * (h + 0.1)
             m.fixed([base - d * w / 2, base + d * w / 2, base + d * w / 2 + up, base - d * w / 2 + up], rect,
-                    (0.55, 0.55, 1.0, 1.0), nrm)
+                    (0.55, 0.55, 1.0, 1.0), Vector((-d.y, d.x, 0.0)))
         else:
-            fd = fall_dir + rng.gauss(0, 0.35)
             along = Vector((math.cos(fd), math.sin(fd), 0.0))
             side = Vector((-along.y, along.x, 0.0))
-            tip = along * h * 0.95 + Vector((0, 0, rng.uniform(0.15, 0.35)))
-            b = Vector((x, y, 0.05))
-            m.fixed([b - side * w / 2, b + side * w / 2, b + side * w / 2 + tip, b - side * w / 2 + tip], rect,
-                    (0.6, 0.6, 0.85, 0.85), Vector((0, 0, 1)))
+            pid = m.ids.random()
+            k = (hb + 0.1) / (h + 0.1)
+            low = base + Vector((0, 0, hb + 0.1))
+            m.fixed([base - side * w / 2, base + side * w / 2, low + side * w / 2, low - side * w / 2],
+                    sub_rect(rect, 0.0, k), (0.5, 0.5, 0.65, 0.65), along, pid)
+            tip = low + along * (h - hb) * 0.9 + Vector((0, 0, sag))
+            m.fixed([low - side * w / 2, low + side * w / 2, tip + side * w / 2, tip - side * w / 2],
+                    sub_rect(rect, k, 1.0), (0.65, 0.65, 0.85, 0.85), Vector((0, 0, 1)), pid)
+    check_budget(m, it, "sheaf")
     return m
 
 
+def litter(m, rects, rx, ry, rng, z=0.02):
+    """Пляма темної підстилки й тіні під кущем: на похмурій Річці тінь від сонця майже не видно,
+    і без неї кущ стоїть на землі, як на столі."""
+    a = rng.uniform(0, 2 * math.pi)
+    ca, sa = math.cos(a), math.sin(a)
+    corners = [Vector((x * rx * ca - y * ry * sa, x * rx * sa + y * ry * ca, z)) for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    m.fixed(corners, rects["sprites"]["litter"][0], [1.0] * 4, Vector((0, 0, 1)))
+
+
 def crown(it, rects, fallen):
+    """Кущ: пучки в еліпсоїді (ваза, конус, ряд) на кількох стеблах від землі.
+    Повалений — зім'ятий пучок 0,3–0,6 м, витягнутий і нахилений у бік руху техніки."""
     rng = random.Random(it["node"])
-    m = Mesh()
+    skel = random.Random(it["node"] + "skel")
+    m = Mesh(it["node"])
     sprites = rects["sprites"][it["kind"]]
     bark = rects["bark"][it["kind"]]
     top, base = it["top"], it["base"]
@@ -228,108 +310,244 @@ def crown(it, rects, fallen):
     cz = (top + base) / 2
     rz = (top - base) / 2
     ctr = Vector((0, 0, cz)) + lean * (cz / top)
-    is_tree = "trunk" in it
-    shrub_flat = fallen and not is_tree
-    fall = None
-    if fallen and is_tree:
-        # Дерево падає на бік: поворот навколо осі по землі, крона лягає вздовж. Поворот — до
-        # розстановки пучків, щоб пучки не пішли під землю (card() тримає їх над нею).
-        a = rng.uniform(0, 2 * math.pi)
-        axis = Vector((math.cos(a), math.sin(a), 0.0))
-        fall = Matrix.Translation((0, 0, it["trunk"][1] * 0.8)) @ Matrix.Rotation(math.radians(84), 4, axis)
-
-    def T(p):
-        if not fall:
-            return Vector(p)
-        # Крона, що впала, осідає: гілки ламаються під власною вагою, верхній бік не стирчить на всю ширину.
-        q = fall @ Vector(p)
-        return Vector((q.x, q.y, q.z * 0.45))
-
-    def tube(pts, radii, sides):
-        q = [T(p) for p in pts]
-        q = [Vector((v.x, v.y, max(v.z, r * 0.6))) if fall else v for v, r in zip(q, radii)]
-        m.tube([tuple(v) for v in q], radii, bark, sides=sides)
+    td = skel.uniform(0, 2 * math.pi)
+    along = Vector((math.cos(td), math.sin(td), 0.0))
+    side = Vector((-along.y, along.x, 0.0))
 
     def normal_of(p):
         s = Vector(((p.x - ctr.x) / rx, (p.y - ctr.y) / ry, (p.z - ctr.z) / rz))
         return s.normalized() if s.length > 1e-6 else Vector((0, 0, 1))
 
-    # Пучки: точки в еліпсоїді крони, зсунуті до поверхні (r^0.4): усередині крони пучки не
-    # видно, а крона читається об'ємом лише з повним краєм.
-    keep = it.get("bare", 1.0) if (SEASON == "late" and it["kind"] in LATE_BARE) else 1.0
-    # Крона дерева на відкритому місці — кілька лопатей навколо скелетних гілок, а не куля:
-    # рваний обрис і просвіти між лопатями (на фото поодиноких дубів і груш так і є).
-    lobes = [(Vector((0, 0, 0)), 1.0)]
-    if is_tree:
-        lobes = []
-        for k in range(5):
-            a = 2 * math.pi * k / 5 + rng.uniform(-0.4, 0.4)
-            off = Vector((math.cos(a) * rx * 0.45, math.sin(a) * ry * 0.45, rng.uniform(-0.2, 0.35) * rz))
-            lobes.append((off, rng.uniform(0.5, 0.65)))
-        lobes.append((Vector((0, 0, rz * 0.3)), 0.6))
-    pts = []
-    while len(pts) < it["cards"]:
+    # Пучки: точки в еліпсоїді, зсунуті до поверхні (r^0.4). Усі властивості пучка тягнуться
+    # до вибірки пізньої пори, тож кущ однаковий у всі пори, лише голий рідший.
+    cards = []
+    while len(cards) < it["cards"]:
         v = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1))).normalized()
         r = rng.random() ** 0.4
-        lo, lk = rng.choice(lobes)
-        p = Vector((v.x * rx * r * lk, v.y * ry * r * lk, v.z * rz * r * lk)) + lo
+        p = Vector((v.x * rx * r, v.y * ry * r, v.z * rz * r))
+        f = (p.z + rz) / (2 * rz)
         if it.get("cone"):
             # Туя: конус, вузький угорі.
-            f = (p.z + rz) / (2 * rz)
             p.x *= 1.15 - f
             p.y *= 1.15 - f
         if it.get("vase"):
             # Кущ, що розходиться від землі вазою: низ крони вужчий.
-            f = (p.z + rz) / (2 * rz)
             k = 1.0 - it["vase"] * (1.0 - f)
             p.x *= k
             p.y *= k
-        if it.get("flat_top") and p.z > rz * (1 - it["flat_top"]):
-            p.z = rz * (1 - it["flat_top"]) + (p.z - rz * (1 - it["flat_top"])) * 0.4
         if it.get("row"):
             p.x = rng.uniform(-rx, rx)
-        pts.append(p + ctr)
-    pts = rng.sample(pts, max(1, round(len(pts) * keep)))
-    for p in pts:
+        cards.append((p + ctr, rng.uniform(*it["card"]), rng.choice(sprites), rng.uniform(0, 2 * math.pi)))
+    keep = it.get("bare", 1.0) if (SEASON == "late" and it["kind"] in LATE_BARE) else 1.0
+    cards = cards[:max(1, round(len(cards) * keep))]
+    for p, size, rect, roll in cards:
         hfrac = min(max((p.z - base) / max(top - base, 0.5), 0.0), 1.0)
         rfrac = min(math.hypot((p.x - ctr.x) / rx, (p.y - ctr.y) / ry), 1.0)
-        shade = min(max(0.55 + 0.45 * (0.8 * hfrac + 0.35 * (1.0 - rfrac * rfrac) - 0.1), 0.55), 1.0)
-        size = rng.uniform(*it["card"])
-        rect = rng.choice(sprites)
-        if shrub_flat:
-            # Розчавлений кущ: пучки лежать на землі, пляма ширша, гілки зламані й розкидані.
-            q = Vector((p.x * 1.3, p.y * 1.3, 0.04 + 0.25 * hfrac))
-            a = rng.uniform(0, 2 * math.pi)
-            ca, sa = math.cos(a), math.sin(a)
-            corners = [q + Vector((x * ca - y * sa, x * sa + y * ca, 0.0)) * size / 2 for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
-            m.fixed(corners, rect, [shade * 0.9] * 4, Vector((0, 0, 1)))
+        shade = shade_of(hfrac, rfrac)
+        if fallen:
+            q = Vector((p.x - ctr.x, p.y - ctr.y, 0.0))
+            a_, s_ = q.dot(along), q.dot(side)
+            q = along * (a_ * 1.3 + 0.5 * hfrac * (top - base)) + side * s_ * 1.1
+            q.z = 0.1 + 0.2 * hfrac
+            m.card(q, roll, size * 0.6, rect, lambda _c: Vector((0, 0, 1)), shade * 0.9)
         else:
             nrm = normal_of(p)
-            m.card(T(p), rng.uniform(0, 2 * math.pi), size, rect, lambda _c, n=nrm: n, shade)
-    # Стовбур і гілки.
-    if is_tree:
-        th, tr = it["trunk"]
-        top_t = Vector((0, 0, th + 0.35 * (top - th) * 0.5)) + lean * 0.5
-        tube([(0, 0, -0.15), (0, 0, th * 0.5), tuple(top_t)], [tr * 1.15, tr, tr * 0.8], 6)
-        for k in range(it["limbs"]):
-            a = 2 * math.pi * k / it["limbs"] + rng.uniform(-0.3, 0.3)
-            tip = ctr + Vector((math.cos(a) * rx * 0.7, math.sin(a) * ry * 0.7, rng.uniform(-0.2, 0.5) * rz))
-            mid = top_t.lerp(tip, 0.5) + Vector((0, 0, 0.3 * rz))
-            tube([tuple(top_t), tuple(mid), tuple(tip)], [tr * 0.55, tr * 0.35, tr * 0.12], 3)
+            m.card(p, roll, size, rect, lambda _c, n=nrm: n, shade)
+    for k in range(it.get("stems", 0)):
+        a = 2 * math.pi * k / max(it["stems"], 1) + skel.uniform(-0.4, 0.4)
+        r0 = skel.uniform(0.05, 0.25) if not it.get("row") else 0.05
+        x0 = skel.uniform(-rx * 0.9, rx * 0.9) if it.get("row") else math.cos(a) * r0
+        y0 = 0.0 if it.get("row") else math.sin(a) * r0
+        tip = Vector((x0 + math.cos(a) * rx * 0.5, y0 + math.sin(a) * ry * 0.5, base + (top - base) * 0.55)) + lean * 0.5
+        if it.get("row"):
+            tip = Vector((x0, math.sin(a) * ry * 0.4, top * 0.7))
+        b0 = Vector((x0, y0, -0.1))
+        if fallen:
+            # Стебла зламані й нахилені в бік руху, кінці на 0,3–0,5 м над землею.
+            ang = td + skel.uniform(-0.35, 0.35)
+            tip = b0 + Vector((math.cos(ang), math.sin(ang), 0.0)) * (top - base) * 0.7 + Vector((0, 0, skel.uniform(0.3, 0.5)))
+        rad = 0.035 if top > 2 else 0.015
+        m.tube([tuple(b0), tuple(b0.lerp(tip, 0.5) + Vector((0, 0, 0.1))), tuple(tip)], [rad, rad * 0.7, rad * 0.35], bark, sides=3)
+    if fallen:
+        litter(m, rects, rx * 1.4, ry * 1.2, skel)
     else:
-        for k in range(it.get("stems", 0)):
-            a = 2 * math.pi * k / max(it["stems"], 1) + rng.uniform(-0.4, 0.4)
-            r0 = rng.uniform(0.05, 0.25) if not it.get("row") else 0.05
-            x0 = rng.uniform(-rx * 0.9, rx * 0.9) if it.get("row") else math.cos(a) * r0
-            y0 = 0.0 if it.get("row") else math.sin(a) * r0
-            tip = Vector((x0 + math.cos(a) * rx * 0.5, y0 + math.sin(a) * ry * 0.5, base + (top - base) * 0.55))
-            if it.get("row"):
-                tip = Vector((x0, math.sin(a) * ry * 0.4, top * 0.7))
-            if shrub_flat:
-                tip = Vector((tip.x * 1.8, tip.y * 1.8, 0.12))
-            rad = 0.035 if top > 2 else 0.015
-            tube([(x0, y0, -0.1), tuple(Vector((x0, y0, 0)).lerp(tip, 0.5) + Vector((0, 0, 0.1))), tuple(tip)],
-                 [rad, rad * 0.7, rad * 0.35], 3)
+        litter(m, rects, rx * 0.85, ry * 0.85, skel)
+    check_budget(m, it, "yard" if GROUP == "yard" else "crown")
+    return m
+
+
+def grow_pts(start, d, length, nseg, crook, rng, droop=0.0):
+    """Ламана гілки: nseg відрізків, напрям щоразу трохи відхиляється (кривизна виду)."""
+    pts = [Vector(start)]
+    d = Vector(d).normalized()
+    for _ in range(nseg):
+        pts.append(pts[-1] + d * length / nseg)
+        d = (d + Vector((rng.gauss(0, crook), rng.gauss(0, crook), rng.gauss(0, crook) * 0.5 - droop))).normalized()
+    return pts
+
+
+def branch_out(parents, count, rng, len_lo, len_hi):
+    """По count дочірніх гілок на кожну батьківську (як у лісі, src_broadleaf.branch_out): від
+    середини батьківської вбік і вгору, два відрізки, кінець тоншає до 2 см."""
+    out = []
+    for lm in parents:
+        pts = lm["pts"]
+        ld = (pts[-1] - pts[0]).normalized()
+        sd = ld.cross(Vector((0, 0, 1)))
+        sd = sd.normalized() if sd.length > 1e-3 else Vector((1, 0, 0))
+        for _ in range(count):
+            t = rng.uniform(0.45, 0.85)
+            k = min(int(t * (len(pts) - 1)), len(pts) - 2)
+            b = pts[k].lerp(pts[k + 1], t * (len(pts) - 1) - k)
+            d = (ld + sd * rng.choice((-1, 1)) * rng.uniform(0.5, 0.9) + Vector((0, 0, 0.25))).normalized()
+            ln = (pts[-1] - pts[0]).length * rng.uniform(len_lo, len_hi)
+            mid = b + d * ln * 0.55
+            e = mid + (d + Vector((rng.gauss(0, 0.2), rng.gauss(0, 0.2), rng.gauss(0, 0.2) + 0.15))) / 1.2 * ln * 0.45
+            r0 = max(lm["r"][k] * 0.55, 0.03)
+            out.append(dict(pts=[b, mid, e], r=[r0, r0 * 0.6, 0.02]))
+    return out
+
+
+def heap(it, m, sprites, bark, branches, trunks, cards, travel):
+    """Дерево, яке переїхав танк: купа зламаного й розчавленого гілля 0,3–0,8 м заввишки.
+    Уламки гілок стирчать під різними кутами, але здебільшого притиснуті в бік руху; у купі
+    лежать обрубки стовбура; зверху — листя пори року (пучки, що розгортаються до камери)."""
+    rng = random.Random(it["node"] + "heap")
+    along = Vector((math.cos(travel), math.sin(travel), 0.0))
+    side = Vector((-along.y, along.x, 0.0))
+    # Розмір купи: уздовж руху ~0,6 висоти дерева, поперек ~0,45 ширини крони.
+    la, ls = it["h"] * 0.3, it["w"] * 0.22
+
+    def spot():
+        u, v = rng.gauss(0, 0.45), rng.gauss(0, 0.45)
+        return along * la * max(-1.0, min(u, 1.0)) + side * ls * max(-1.0, min(v, 1.0))
+
+    r = it["r"]
+    # Обрубки стовбура: 2–3 товсті короткі колоди, що лежать.
+    for k in range(rng.randint(2, 3)):
+        c = spot() * 0.6 + Vector((0, 0, r * 0.9))
+        yaw = travel + rng.gauss(0, 0.5)
+        d = Vector((math.cos(yaw), math.sin(yaw), rng.uniform(-0.1, 0.25))).normalized()
+        ln = rng.uniform(0.8, 1.8)
+        m.tube([c - d * ln / 2, c + d * ln / 2], [r * rng.uniform(0.7, 1.0)] * 2, bark, sides=6)
+    # Уламки гілок: шматки 0,8–2,5 м, нахил до 40°, курс — у бік руху ±45°.
+    for k in range(min(len(branches) * 2, 28)):
+        lm = branches[k % len(branches)]
+        rad = max(lm["r"][0] * rng.uniform(0.4, 0.9), 0.04)
+        ln = rng.uniform(0.8, 2.5)
+        yaw = travel + rng.gauss(0, 0.8)
+        pitch = math.radians(rng.uniform(-5, 40))
+        d = Vector((math.cos(yaw) * math.cos(pitch), math.sin(yaw) * math.cos(pitch), math.sin(pitch)))
+        p0 = spot() + Vector((0, 0, rng.uniform(0.05, 0.3)))
+        p1 = p0 + d * ln
+        p1.z = min(max(p1.z, 0.05), 0.8)
+        m.tube([p0, p1], [rad, rad * 0.5], bark, sides=3)
+    # Листя: пучки на купі, верх не вище ~0,8 м.
+    room = (BUDGET["tree"] - m.tris()) // 2
+    # Пізньої пори пучки — голі гілочки (у спрайтах ≤ 15 % листя), тож купа не рідшає.
+    n = min(len(cards), room, 90)
+    for _, size, rect, roll in cards[:n]:
+        sz = min(size * 0.55, 1.0)
+        p = spot() + Vector((0, 0, rng.uniform(0.1, 0.4)))
+        m.card(p, roll, sz, rect, lambda _c: Vector((0, 0.3, 1)).normalized(), rng.uniform(0.55, 0.85))
+    check_budget(m, it, "tree")
+    return m
+
+
+def tree(it, rects, fallen):
+    """Дерево зі скелетом: стовбур (або кілька, або верба «головою»), ≥ 3 скелетні гілки,
+    другий і третій порядок гілок, клуби листя на кінцях гілок. Будова — з окремого зерна,
+    тож однакова в усі пори; пізньої пори видно третій порядок гілок і менше пучків.
+    Повалений (переїхав танк) — heap()."""
+    skel = random.Random(it["node"] + "skel")
+    crng = random.Random(it["node"] + "cards")
+    m = Mesh(it["node"])
+    sprites = rects["sprites"][it["kind"]]
+    bark = rects["bark"][it["kind"]]
+    h, cb, R, r = it["h"], it["cb"], it["w"] / 2, it["r"]
+    la = math.radians(it["lean_deg"])
+    ldir = skel.uniform(0, 2 * math.pi)
+    up = Vector((math.sin(la) * math.cos(ldir), math.sin(la) * math.sin(ldir), math.cos(la)))
+    adir = skel.uniform(0, 2 * math.pi)
+    pollard = it.get("pollard", False)
+    trunks, limbs = [], []
+    leader_top = None
+    if it.get("multi"):
+        n = it["multi"]
+        for k in range(n):
+            az = 2 * math.pi * k / n + skel.uniform(-0.4, 0.4)
+            d = (up + Vector((math.cos(az), math.sin(az), 0.0)) * math.sin(math.radians(it["rise"]))).normalized()
+            p0 = Vector((math.cos(az) * 0.12, math.sin(az) * 0.12, -0.15))
+            pts = grow_pts(p0, d, (h - cb * 0.5) * skel.uniform(0.8, 0.95), 3, it["crook"], skel)
+            trunks.append(dict(pts=pts, r=[r, r * 0.75, r * 0.45, 0.08]))
+        limbs = list(trunks)
+        trunks = []
+        # Від кожного стовбура — ще дві гілки першого порядку.
+        limbs += branch_out(limbs, 2, skel, 0.4, 0.55)
+    else:
+        F = up * it["fork"]
+        trunks.append(dict(pts=[Vector((0, 0, -0.15)), up * it["fork"] * 0.5, F], r=[r * 1.2, r, r * 0.88]))
+        if it["leader"] > 0:
+            pts = grow_pts(F, up, max(cb + it["leader"] * (h - cb) - F.z, 0.5), 2, it["crook"] * 0.5, skel)
+            trunks.append(dict(pts=pts, r=[r * 0.85, r * 0.55, r * 0.25]))
+            leader_top = pts[-1]
+        n = it["limbs"]
+        for i in range(n):
+            az = 2 * math.pi * i / n + skel.uniform(-0.45, 0.45)
+            start = F.lerp(leader_top, 0.1 + 0.7 * i / n) if (leader_top is not None and not pollard) else F
+            rise = math.radians(it["rise"] * skel.uniform(0.8, 1.2))
+            d = Vector((math.sin(rise) * math.cos(az), math.sin(rise) * math.sin(az), math.cos(rise)))
+            reach = R * (1.0 + it["asym"] * math.cos(az - adir))
+            L = reach / max(math.sin(rise), 0.3) * 0.82
+            L = min(L, (h - it["lobe_r"] * 0.7 - start.z) / max(math.cos(rise), 0.2))
+            if pollard:
+                L = skel.uniform(2.6, 3.6)
+            r0 = 0.05 if pollard else r * 0.55
+            pts = grow_pts(start, d, L, 3, it["crook"], skel, it.get("droop", 0.0))
+            limbs.append(dict(pts=pts, r=[r0, r0 * 0.7, r0 * 0.45, min(0.05, r0 * 0.3)]))
+    sec = branch_out(limbs, it["sec"], skel, 0.35, 0.55)
+    ter = branch_out(sec, it["ter"], skel, 0.45, 0.6)
+    # Клуби листя — на кінцях гілок першого й другого порядку (у верби «головою» — уздовж
+    # пагонів), а не в еліпсоїді: між клубами просвіти, обрис рваний.
+    centres = [lm["pts"][-1] for lm in limbs + sec]
+    if pollard:
+        centres += [lm["pts"][1].lerp(lm["pts"][2], 0.5) for lm in limbs]
+    if leader_top is not None:
+        centres.append(leader_top + Vector((0, 0, it["lobe_r"] * 0.3)))
+    radii = [it["lobe_r"] * skel.uniform(0.7, 1.25) for _ in centres]
+    mid = sum(centres, Vector()) / len(centres)
+    cards = []
+    for _ in range(it["cards"]):
+        i = crng.randrange(len(centres))
+        d = Vector((crng.gauss(0, 1), crng.gauss(0, 1), crng.gauss(0, 1)))
+        d.z = abs(d.z) * 0.8 - 0.2  # низ клубу камера не бачить
+        d = d.normalized()
+        p = centres[i] + d * radii[i] * crng.uniform(0.45, 1.0)
+        p.z = min(max(p.z, cb * 0.85), h)
+        cards.append((p, crng.uniform(*it["card"]), crng.choice(sprites), crng.uniform(0, 2 * math.pi)))
+
+    if fallen:
+        return heap(it, m, sprites, bark, limbs + sec, trunks, cards, ldir)
+    for lm in trunks:
+        m.tube(lm["pts"], lm["r"], bark, sides=6)
+    for lm in limbs:
+        m.tube(lm["pts"], lm["r"], bark, sides=4)
+    for lm in sec:
+        m.tube(lm["pts"], lm["r"], bark, sides=3)
+    if SEASON == "late":
+        for lm in ter:
+            m.tube(lm["pts"], lm["r"], bark, sides=3)
+    room = (BUDGET["tree"] - m.tris()) // 2
+    n = min(len(cards), room)
+    if SEASON == "late" and it["kind"] in LATE_BARE:
+        n = min(n, round(len(cards) * it["bare"]))
+    for p, size, rect, roll in cards[:n]:
+        hfrac = min(max((p.z - cb) / max(h - cb, 0.5), 0.0), 1.0)
+        rfrac = min(math.hypot(p.x, p.y) / max(R, 0.5), 1.0)
+        nrm = (p - mid).normalized()
+        nrm = (nrm + Vector((0, 0, 0.3))).normalized()
+        m.card(p, roll, size, rect, lambda _c, n_=nrm: n_, shade_of(hfrac, rfrac))
+    check_budget(m, it, "tree")
     return m
 
 
@@ -380,10 +598,7 @@ def main():
     for it in ASSETS[GROUP]:
         for fallen in (False, True):
             node = it["node"] + ("_fallen" if fallen else "")
-            if it["type"] == "sheaf":
-                m = sheaf(it, rects, fallen)
-            else:
-                m = crown(it, rects, fallen)
+            m = {"sheaf": sheaf, "crown": crown, "tree": tree}[it["type"]](it, rects, fallen)
             obs.append(m.finish(node, mat))
     for o in bpy.context.scene.objects:
         o.select_set(o in obs)

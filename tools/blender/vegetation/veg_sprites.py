@@ -45,10 +45,10 @@ RED = [(0.55, 0.20, 0.10), (0.62, 0.28, 0.12), (0.50, 0.24, 0.12)]
 K = {
     "willow": dict(seg=0.6, depth=6, kids=(2, 3), spread=24, droop=0.0, leaf=0.10, shape="lance", per_node=7,
                    twig_r=0.010, bark=(0.42, 0.36, 0.18), sm=2.4,
-                   leaves={"summer": (1.0, G_GREY, None), "early": (0.9, G_GREY, (0.3, EARLY)), "late": (0.3, OLIVE, (0.4, YELLOW))}),
+                   leaves={"summer": (1.0, G_GREY, None), "early": (0.9, G_GREY, (0.3, EARLY)), "late": (0.15, OLIVE, (0.4, YELLOW))}),
     "alder": dict(seg=0.6, depth=6, kids=(2, 3), spread=40, droop=0.05, leaf=0.08, shape="ovate", per_node=6,
                   twig_r=0.012, bark=(0.24, 0.22, 0.21), sm=2.4,
-                  leaves={"summer": (1.0, G_DARK, None), "early": (0.95, G_DARK, (0.15, G)), "late": (0.25, G_DARK, (0.5, OLIVE))},
+                  leaves={"summer": (1.0, G_DARK, None), "early": (0.95, G_DARK, (0.15, G)), "late": (0.15, G_DARK, (0.5, OLIVE))},
                   fruit={"late": (0.10, 0.02, [(0.12, 0.09, 0.07)]), "early": (0.08, 0.02, [(0.20, 0.22, 0.10)])}),
     "apple": dict(seg=0.55, depth=6, kids=(2, 3), spread=50, droop=0.12, leaf=0.075, shape="ovate", per_node=6,
                   twig_r=0.013, bark=(0.33, 0.30, 0.27), sm=2.4,
@@ -64,7 +64,7 @@ K = {
                    leaves={"summer": (1.0, G, (0.3, EARLY)), "early": (0.9, EARLY, (0.3, YELLOW)), "late": (0.12, YELLOW, (0.4, BROWN))}),
     "lilac": dict(seg=0.45, depth=6, kids=(2, 3), spread=30, droop=0.0, leaf=0.08, shape="ovate", per_node=6,
                   twig_r=0.010, bark=(0.34, 0.32, 0.30), sm=2.0,
-                  leaves={"summer": (1.0, G_DARK, (0.2, G)), "early": (0.95, G_DARK, (0.3, G)), "late": (0.35, OLIVE, (0.4, G_DARK))},
+                  leaves={"summer": (1.0, G_DARK, (0.2, G)), "early": (0.95, G_DARK, (0.3, G)), "late": (0.2, OLIVE, (0.4, G_DARK))},
                   fruit={"late": (0.08, 0.03, [(0.33, 0.25, 0.16)]), "early": (0.08, 0.03, [(0.33, 0.25, 0.16)])}),
     "elder": dict(seg=0.5, depth=6, kids=(2, 3), spread=45, droop=0.2, leaf=0.09, shape="lance", per_node=7,
                   twig_r=0.011, bark=(0.40, 0.38, 0.33), sm=2.2,
@@ -76,48 +76,48 @@ K = {
                   fruit={"summer": (0.08, 0.025, [(0.55, 0.10, 0.10), (0.12, 0.06, 0.08)])}),
     "thuja": dict(seg=0.45, depth=6, kids=(3, 3), spread=30, droop=0.0, leaf=0.07, shape="scale", per_node=8,
                   twig_r=0.008, bark=(0.30, 0.22, 0.17), sm=1.8,
-                  leaves={"summer": (1.0, G_DARK, None), "early": (1.0, G_DARK, None), "late": (1.0, [(0.20, 0.22, 0.10), (0.24, 0.24, 0.11)], (0.5, G_DARK))}),
+                  leaves={"summer": (1.0, G_DARK, None), "early": (1.0, G_DARK, None), "late": (1.0, [(0.32, 0.25, 0.12), (0.36, 0.28, 0.13), (0.28, 0.22, 0.11)], (0.25, G_DARK))}),
     "hawthorn": dict(seg=0.45, depth=6, kids=(2, 3), spread=55, droop=0.0, leaf=0.05, shape="ovate", per_node=7,
                      twig_r=0.010, bark=(0.30, 0.27, 0.24), sm=2.0,
                      leaves={"summer": (1.0, G_DARK, (0.3, G)), "early": (0.85, EARLY, (0.3, G_DARK)), "late": (0.05, BROWN, None)},
-                     fruit={"summer": (0.10, 0.03, [(0.50, 0.14, 0.09)]), "early": (0.16, 0.03, [(0.60, 0.15, 0.09)]),
-                            "late": (0.12, 0.03, [(0.42, 0.12, 0.09)])}),
+                     fruit={"summer": (0.04, 0.03, [(0.40, 0.13, 0.08)]), "early": (0.07, 0.03, [(0.42, 0.12, 0.08)]),
+                            "late": (0.10, 0.035, [(0.36, 0.09, 0.07), (0.30, 0.08, 0.07)])}),
     "dogrose": dict(seg=0.35, depth=5, kids=(2, 3), spread=40, droop=0.35, leaf=0.05, shape="ovate", per_node=6,
                     twig_r=0.008, bark=(0.30, 0.22, 0.16), sm=1.6,
                     leaves={"summer": (1.0, G, None), "early": (0.8, EARLY, (0.35, RED)), "late": (0.04, BROWN, None)},
-                    fruit={"summer": (0.06, 0.04, [(0.60, 0.20, 0.08)]), "early": (0.14, 0.04, [(0.66, 0.18, 0.08)]),
-                           "late": (0.12, 0.04, [(0.52, 0.12, 0.08)])}),
+                    fruit={"summer": (0.03, 0.04, [(0.48, 0.17, 0.08)]), "early": (0.06, 0.04, [(0.50, 0.15, 0.08)]),
+                           "late": (0.08, 0.045, [(0.42, 0.11, 0.07), (0.36, 0.09, 0.07)])}),
     "pear": dict(seg=0.6, depth=6, kids=(2, 3), spread=32, droop=0.0, leaf=0.07, shape="ovate", per_node=6,
                  twig_r=0.013, bark=(0.28, 0.26, 0.24), sm=2.6,
                  leaves={"summer": (1.0, G_DARK, (0.3, G)), "early": (0.9, EARLY, (0.25, RED)), "late": (0.04, BROWN, None)}),
     "oak": dict(seg=0.65, depth=6, kids=(2, 3), spread=58, droop=0.0, leaf=0.085, shape="ovate", per_node=7,
                 twig_r=0.016, bark=(0.32, 0.30, 0.27), sm=2.8,
-                leaves={"summer": (1.0, G, None), "early": (0.95, G, (0.3, EARLY)), "late": (0.35, BROWN, (0.3, [(0.50, 0.38, 0.22)]))}),
+                leaves={"summer": (1.0, G, None), "early": (0.95, G, (0.3, EARLY)), "late": (0.15, BROWN, (0.3, [(0.50, 0.38, 0.22)]))}),
     "wwillow": dict(seg=0.65, depth=6, kids=(2, 3), spread=30, droop=0.45, leaf=0.10, shape="lance", per_node=7,
                     twig_r=0.011, bark=(0.40, 0.34, 0.18), sm=2.8,
-                    leaves={"summer": (1.0, G_GREY, None), "early": (0.9, G_GREY, (0.3, EARLY)), "late": (0.3, OLIVE, (0.5, YELLOW))}),
+                    leaves={"summer": (1.0, G_GREY, None), "early": (0.9, G_GREY, (0.3, EARLY)), "late": (0.12, OLIVE, (0.5, YELLOW))}),
 }
 
 # Снопи: висота (м), стебел, ширина кадру (м), колір стебел і листків, волоть / качан.
 REED = {
-    "reed": dict(h=(1.6, 2.5), n=55, w=1.25, leaf_w=0.032, leaf_l=(0.25, 0.45), leaves_per=6,
+    "reed": dict(h=(1.6, 2.5), n=34, w=1.25, leaf_w=0.032, leaf_l=(0.25, 0.45), leaves_per=5,
                  stem={"summer": [(0.24, 0.31, 0.12), (0.21, 0.28, 0.11)], "early": [(0.36, 0.36, 0.17), (0.31, 0.33, 0.15)],
-                       "late": [(0.55, 0.46, 0.30), (0.49, 0.41, 0.27), (0.58, 0.50, 0.35)]},
+                       "late": [(0.43, 0.36, 0.23), (0.38, 0.32, 0.21), (0.45, 0.39, 0.27)]},
                  leaf={"summer": [(0.19, 0.28, 0.10), (0.22, 0.31, 0.11), (0.26, 0.33, 0.13)],
                        "early": [(0.36, 0.36, 0.15), (0.30, 0.33, 0.14), (0.44, 0.40, 0.19)],
-                       "late": [(0.52, 0.44, 0.31), (0.44, 0.38, 0.28), (0.57, 0.49, 0.37), (0.38, 0.34, 0.29)]},
+                       "late": [(0.41, 0.34, 0.24), (0.34, 0.30, 0.22), (0.44, 0.38, 0.29), (0.30, 0.27, 0.23)]},
                  # Волоть очерету: 20–40 см, пізнього літа бурo-фіолетова, восени пухнаста сіро-біла.
-                 head="plume", head_l=(0.22, 0.38),
+                 head="plume", head_l=(0.35, 0.5),
                  head_c={"summer": [(0.34, 0.24, 0.24), (0.30, 0.22, 0.22)], "early": [(0.40, 0.30, 0.26), (0.46, 0.36, 0.30)],
-                         "late": [(0.70, 0.65, 0.58), (0.62, 0.57, 0.50)]}),
+                         "late": [(0.62, 0.58, 0.52), (0.56, 0.51, 0.45)]}),
     "cattail": dict(h=(1.2, 2.0), n=32, w=1.1, leaf_w=0.024, leaf_l=(0.9, 1.6), leaves_per=0,
                     stem={"summer": [(0.22, 0.30, 0.11)], "early": [(0.32, 0.34, 0.15)], "late": [(0.45, 0.38, 0.25)]},
                     leaf={"summer": [(0.18, 0.27, 0.10), (0.21, 0.30, 0.11), (0.24, 0.32, 0.12)],
                           "early": [(0.32, 0.34, 0.14), (0.40, 0.39, 0.18), (0.27, 0.31, 0.13)],
-                          "late": [(0.52, 0.43, 0.28), (0.46, 0.38, 0.26), (0.58, 0.49, 0.33), (0.40, 0.35, 0.26)]},
+                          "late": [(0.42, 0.34, 0.22), (0.37, 0.30, 0.21), (0.46, 0.39, 0.26), (0.32, 0.28, 0.21)]},
                     # Качан рогозу: 15–20 см × 2,5 см, темно-бурий; пізньої осені світліший, розпушений.
-                    head="spike", head_l=(0.15, 0.20),
-                    head_c={"summer": [(0.26, 0.16, 0.09)], "early": [(0.24, 0.15, 0.09)], "late": [(0.36, 0.27, 0.20)]}),
+                    head="spike", head_l=(0.17, 0.21),
+                    head_c={"summer": [(0.20, 0.11, 0.06)], "early": [(0.19, 0.11, 0.06)], "late": [(0.27, 0.19, 0.13)]}),
 }
 
 _mats = {}
@@ -173,6 +173,10 @@ def build_twig(seed):
     per_node = round(P["per_node"] * (2.2 if leafy else 1.0))
     leaf_m = P["leaf"] * (0.75 if leafy else 1.0)
     scatter = (0.07 if leafy else 0.04) * sm
+    # Голий пучок — темний каркас гілочок: тонкі світло-сірі гілочки на далеких mip
+    # розпливались рожевою імлою, тож без листя вони товщі й темніші.
+    twig_r = P["twig_r"] * (1.0 if leafy else 1.7)
+    bark = P["bark"] if leafy else tuple(c * 0.55 for c in P["bark"])
     bm = bmesh.new()
     leaves, fruits = [], []
 
@@ -193,7 +197,10 @@ def build_twig(seed):
                 q = p + (e - p) * rng.random() + Vector([rng.gauss(0, scatter) for _ in range(3)])
                 leaves.append((q, colour()))
             if fruit and rng.random() < fruit[0] * 3:
-                fruits.append((e + Vector([rng.gauss(0, 0.02) for _ in range(3)]), rng.choice(fruit[2])))
+                # Ягоди гронами по 3–5: поодинока ягода менша за піксель, гроно читається точкою.
+                fc0 = rng.choice(fruit[2])
+                for _ in range(rng.randint(3, 5) if fruit[1] < 0.06 else 1):
+                    fruits.append((e + Vector([rng.gauss(0, 0.025) for _ in range(3)]), fc0))
         if level == P["depth"]:
             return
         k = rng.randint(*P["kids"])
@@ -202,15 +209,15 @@ def build_twig(seed):
             rot = Matrix.Rotation(2 * math.pi * i / k + rng.uniform(-0.5, 0.5), 3, d)
             tilt = Matrix.Rotation(math.radians(P["spread"] * rng.uniform(0.6, 1.2)), 3, rot @ ax)
             nd = ((tilt @ d).normalized() + Vector((0, 0, 0.25))).normalized()
-            grow(e, nd, length * rng.uniform(0.62, 0.78), max(radius * 0.68, P["twig_r"] * 0.5), level + 1)
+            grow(e, nd, length * rng.uniform(0.62, 0.78), max(radius * 0.68, twig_r * 0.5), level + 1)
 
     a0 = rng.uniform(0, 2 * math.pi)
     for j in range(2):
         a = a0 + j * rng.uniform(1.6, 2.6)
         start = Vector((math.cos(a), math.sin(a), 0)) * 1.45 * sm + Vector((0, 0, -0.4 * sm))
         d = (-start + Vector((0, 0, 0.9 * sm))).normalized()
-        grow(start, d, P["seg"] * rng.uniform(0.85, 1.1), P["twig_r"] * 2.5, 0)
-    add_obj("twig", bm, [P["bark"]] * len(bm.faces))
+        grow(start, d, P["seg"] * rng.uniform(0.85, 1.1), twig_r * 2.5, 0)
+    add_obj("twig", bm, [bark] * len(bm.faces))
 
     lb = bmesh.new()
     fc = []
@@ -265,8 +272,10 @@ def build_sheaf(seed):
     clear()
     bm = bmesh.new()
     fc = []
+    # Стебла купками з просвітами між ними: рівномірна стіна стебел на mip ставала смугою.
+    groups = [rng.uniform(-R["w"] * 0.38, R["w"] * 0.38) for _ in range(5)]
     for _ in range(R["n"]):
-        x = rng.gauss(0, R["w"] * 0.2)
+        x = rng.choice(groups) + rng.gauss(0, R["w"] * 0.035)
         y = rng.uniform(-0.25, 0.25)
         h = rng.uniform(*R["h"])
         lean = Vector((rng.gauss(0, 0.06) + x * 0.08, rng.gauss(0, 0.05), 1.0)).normalized()
@@ -274,7 +283,7 @@ def build_sheaf(seed):
         top = base + lean * h
         sc = rng.choice(R["stem"][SEASON])
         # Стебло: тонка чотиригранна трубка, 7–9 мм.
-        bmesh.ops.create_cone(bm, cap_ends=False, segments=4, radius1=0.0045, radius2=0.003, depth=h,
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=4, radius1=0.006, radius2=0.004, depth=h,
                               matrix=Matrix.Translation((base + top) / 2) @ lean.to_track_quat("Z", "Y").to_matrix().to_4x4())
         fc.extend([sc] * (len(bm.faces) - len(fc)))
         if R["leaves_per"]:
@@ -303,9 +312,9 @@ def build_sheaf(seed):
                     blade(bm, top - lean * hl * rng.uniform(0.0, 0.7), d, hl * rng.uniform(0.5, 0.9),
                           0.03 if SEASON == "late" else 0.018, rng.uniform(0.05, 0.15), fc, hc)
         else:
-            if rng.random() < 0.6:
+            if rng.random() < 0.85:
                 c0 = top - lean * (0.12 + hl / 2)
-                bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.014, radius2=0.012, depth=hl,
+                bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.021, radius2=0.019, depth=hl,
                                       matrix=Matrix.Translation(c0) @ lean.to_track_quat("Z", "Y").to_matrix().to_4x4())
                 fc.extend([hc] * (len(bm.faces) - len(fc)))
     add_obj("sheaf", bm, fc)

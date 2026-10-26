@@ -18,7 +18,7 @@ uniform float translucency = 0.1;
 // - крона: низ і край крони темніші на crown_depth, де крони перекриваються.
 // Різниця між пучками навмисне мала: світлі грудки поверх темних читались камуфляжем.
 uniform float lobe_depth = 0.35;
-uniform float crown_depth = 0.1;
+uniform float crown_depth = 0.25;
 // Ширина краю alpha-to-coverage (у частках альфи).
 uniform float a2c_edge = 0.3;
 // Кора й стовбури темніші: стовбур стоїть у тіні крони, а розсіяне світло неба на нього
@@ -39,15 +39,10 @@ varying flat float card_half;
 varying vec3 inst_tone;
 varying flat float piece_hash;
 
-float hash13(vec3 p) {
-	p = fract(p * 0.1031);
-	p += dot(p, p.zyx + 31.32);
-	return fract((p.x + p.y) * p.z);
-}
-
 void vertex() {
-	// Чотири вершини картки лежать в одній точці, тож хеш однаковий для всього пучка.
-	piece_hash = hash13(VERTEX * 97.0 + 0.5);
+	// Ідентифікатор пучка (картки чи гілки) записано в G кольору вершини під час збирання:
+	// хеш позиції різнився б у кожного трикутника нерухомої картки й гілки.
+	piece_hash = COLOR.g;
 	// Без custom data (поодинокий MeshInstance3D) INSTANCE_CUSTOM — нулі: тон 1.
 	inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);
 	vec3 v = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -83,7 +78,9 @@ void fragment() {
 	// голе дерево здаля лишилось би самим стовбуром. Тож поріг знижується з рівнем mip, але лише
 	// здаля (від mip 2,5): на ближньому зумі знижений поріг на розмитому mip роздував обрис
 	// пучка в кілька гладких лопатей. І не в тіні: там гола крона зливалась у пляму.
-	float lod = textureQueryLod(albedo_tex, UV).x;
+	// Рівень mip із похідних UV: textureQueryLod немає в gl_compatibility (GLES3).
+	vec2 texel = UV * vec2(textureSize(albedo_tex, 0));
+	float lod = max(0.5 * log2(max(dot(dFdx(texel), dFdx(texel)), dot(dFdy(texel), dFdy(texel)))), 0.0);
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 2.5) / 2.0, 0.0, 1.0));
 	// Нерухома картка ребром до камери — смуга з розмитого стебла: вона тоншає й гасне.
 	cut = mix(cut, min(cut + 0.45, 0.97), is_fixed * (1.0 - smoothstep(0.12, 0.4, facing)) * float(!shadow_pass));
@@ -115,13 +112,14 @@ void fragment() {
 	float r = mix(1.0, mix(1.0 - rim, 1.0, smoothstep(0.35, 0.85, edge)), is_card * (1.0 - smoothstep(2.0, 3.0, lod)));
 	// Затінення крони — у колір: AO рендерер тут не застосовує (розсіяне світло неба
 	// від нього не змінюється), і без цього крона лишалась пласкою.
-	ALBEDO = rgb * mix(COLOR.rgb, vec3(1.0), is_card) * inst_tone * tint * r * occ * mix(bark_dark, 1.0, is_card);
+	ALBEDO = rgb * mix(vec3(COLOR.r), vec3(1.0), is_card) * inst_tone * tint * r * occ * mix(bark_dark, 1.0, is_card);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
 	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без
 	// окремого прозорого проходу. Без MSAA це звичайний alpha-cut за тим самим порогом.
 #ifdef VEG_FADE
-	ALPHA = COLOR.a;
+	// Кора гасне швидше за листя: гілля над юнітом інакше стирчить темними рисками.
+	ALPHA = COLOR.a * mix(0.6, 1.0, is_card);
 #else
 	ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));
 #endif

@@ -19,8 +19,11 @@ extends Node
 ##   --tank   ставить поруч коробку розміром із танк для масштабу (збоку, щоб не закривати малий об'єкт).
 ##   --veg    рослинність: матеріал GLB замінюється шейдером assets/props/vegetation/veg.gdshader з його ж
 ##            атласом, MSAA 2× (alpha-to-coverage); --fade=A — veg_fade.gdshader з альфою екземпляра A;
+##   --dissolve=A  veg.gdshader з альфою екземпляра A: крона рідшає цілими пучками;
+##   --tank=X:Z  коробка-танк у цій точці (тайли від об'єкта), напр. під кроною;
 ##   --nodes=a,b,c  лише ці вузли бібліотеки GLB, рядком уздовж X через --gap=G тайлів (типово 0,6);
-##   --water  вода в дальній половині поля (край — за 0,1 тайла за об'єктом), щоб бачити берег;
+##   --water[=E]  вода в дальній половині поля, край на E тайлів від об'єктів (типово −0,1 — за ними;
+##            додатне — перед ними, об'єкти стоять у мілині);
 ##   --with=res://….glb:X:Z  ще один GLB поруч (зсув у тайлах), напр. хата біля дерева;
 ##   --tag=T  ім'я знімка замість імені GLB.
 
@@ -41,9 +44,13 @@ const ROAD_K: Dictionary = {"road": 0.75, "dirt": 1.0}
 var side: bool = false
 var veg: bool = false
 var fade: float = -1.0
+var dissolve: float = -1.0
+var tank_at: Vector2 = Vector2(2.6, 1.6)
 var only_nodes: PackedStringArray = PackedStringArray()
 var gap: float = 0.6
 var water: bool = false
+## Край води відносно об'єктів (тайли вздовж Z): від'ємний — вода за об'єктами, додатний — перед ними, об'єкти в мілині.
+var water_edge: float = -0.1
 var with_path: String = ""
 var with_off: Vector2 = Vector2.ZERO
 var tag: String = ""
@@ -84,12 +91,21 @@ func _ready() -> void:
 			veg = true
 		elif args[i].begins_with("--fade="):
 			fade = float(args[i].substr(7))
+		elif args[i].begins_with("--dissolve="):
+			dissolve = float(args[i].substr(11))
+		elif args[i].begins_with("--tank="):
+			var tp: PackedStringArray = args[i].substr(7).split(":")
+			tank_at = Vector2(float(tp[0]), float(tp[1]))
+			tank = true
 		elif args[i].begins_with("--nodes="):
 			only_nodes = args[i].substr(8).split(",")
 		elif args[i].begins_with("--gap="):
 			gap = float(args[i].substr(6))
 		elif args[i] == "--water":
 			water = true
+		elif args[i].begins_with("--water="):
+			water = true
+			water_edge = float(args[i].substr(8))
 		elif args[i].begins_with("--with="):
 			var wp: PackedStringArray = args[i].substr(7).split(":")
 			with_path = wp[0] + ":" + wp[1]
@@ -155,7 +171,7 @@ func _ready() -> void:
 		wmat.roughness = 0.08
 		wmat.metallic_specular = 0.6
 		wmi.material_override = wmat
-		wmi.position = Vector3(cell.x, 0.004, cell.y - 0.1 - FIELD_HALF * 0.5)
+		wmi.position = Vector3(cell.x, 0.004, cell.y + water_edge - FIELD_HALF * 0.5)
 		add_child(wmi)
 	if with_path != "":
 		var ws: Node3D = (load(with_path) as PackedScene).instantiate()
@@ -223,7 +239,7 @@ func _ready() -> void:
 			var tm := StandardMaterial3D.new()
 			tm.albedo_color = Color(0.32, 0.36, 0.30)
 			box.material_override = tm
-			box.position = Vector3(2.6, 0.25, 1.6)
+			box.position = Vector3(tank_at.x, 0.25, tank_at.y)
 			inst.add_child(box)
 		print("PROP %s tris=%d" % [n, _triangles(inst)])
 		rig.center_on(cell)
@@ -330,17 +346,18 @@ func _veg_material(inst: Node3D) -> void:
 		var sm := ShaderMaterial.new()
 		sm.shader = sh
 		sm.set_shader_parameter("albedo_tex", base.albedo_texture)
-		if fade < 0.0:
+		if fade < 0.0 and dissolve < 0.0:
 			mi.material_override = sm
 			continue
-		# Альфа розчинення приходить кольором екземпляра MultiMesh, як на дошці.
+		# Альфа розчинення приходить кольором екземпляра MultiMesh, як на дошці: у veg_fade —
+		# прозорість (--fade), у veg — гасіння цілими пучками (--dissolve).
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_colors = true
 		mm.mesh = mi.mesh
 		mm.instance_count = 1
 		mm.set_instance_transform(0, Transform3D.IDENTITY)
-		mm.set_instance_color(0, Color(1, 1, 1, fade))
+		mm.set_instance_color(0, Color(1, 1, 1, fade if fade >= 0.0 else dissolve))
 		var mmi := MultiMeshInstance3D.new()
 		mmi.multimesh = mm
 		mmi.material_override = sm

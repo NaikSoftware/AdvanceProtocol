@@ -93,6 +93,22 @@ def bark_strip(rgb, seed):
     return out
 
 
+def litter_sprite(seed):
+    """Пляма підстилки й тіні під кущем: темна бура, рваний край (alpha-cut, без напівпрозорості)."""
+    rng = np.random.default_rng(seed)
+    n = CELL
+    img = np.zeros((n, n, 4))
+    noise = rng.normal(0, 1, (n // 8, n // 8))
+    noise = np.asarray(Image.fromarray(((noise - noise.min()) / np.ptp(noise) * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC)) / 255.0
+    img[..., :3] = np.array([0.17, 0.145, 0.11])[None, None, :] * (0.8 + 0.4 * noise[..., None])
+    img[..., 3] = 1.0
+    img = soft_edge(img, seed)
+    yy, xx = (np.mgrid[0:n, 0:n] + 0.5) / n * 2 - 1
+    # Край рідшає плямами: у середині суцільно, до краю — клапті.
+    img[..., 3] = (img[..., 3] * (1.15 - np.hypot(xx, yy) * 0.75) > 0.3 + 0.55 * noise).astype(float)
+    return img
+
+
 def main():
     n = SIZE // CELL
     atlas = np.zeros((SIZE, SIZE, 4))
@@ -129,6 +145,9 @@ def main():
                 h = CELL
             atlas[y:y + h, x:x + CELL] = premul_dilate(img)
             rects["sprites"][kind].append(uv(x, y, CELL, h))
+    y, x = take(1, 1)
+    atlas[y:y + CELL, x:x + CELL] = premul_dilate(litter_sprite(99))
+    rects["sprites"]["litter"] = [uv(x, y, CELL, CELL)]
     woody = [k for k in GROUPS[GROUP] if k not in SHEAF]
     for i, kind in enumerate(woody):
         if i % (CELL // STRIP_W) == 0:
