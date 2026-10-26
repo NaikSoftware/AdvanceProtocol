@@ -154,6 +154,7 @@ static var _thin_solid_shader: Shader
 const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.gdshader")
 const _GARDEN_SHADER: Shader = preload("res://game/battle/shaders/prop_garden.gdshader")
 const _GRIME_SHADER: Shader = preload("res://game/battle/shaders/prop_grime.gdshader")
+const _RUBBLE_SHADER: Shader = preload("res://game/battle/shaders/prop_rubble.gdshader")
 ## Найбільший перепад рельєфу під хатою без цоколя, клітинки (1 м). Більший — хата стає на середню
 ## висоту: вгору по схилу врізана в землю, донизу — на кам'яному цоколі.
 const PLINTH_FROM: float = 0.125
@@ -181,6 +182,8 @@ const WET_ROUGHNESS: float = 0.55
 const BRIDGE_ROUGH: float = 0.85
 ## Тюки: загорнутий у плівку мав шорсткість 0.35 і блищав, як метал.
 const HAY_ROUGH: float = 0.8
+## Спекуляр будівель: мінеральні поверхні (тиньк, цегла, шифер) ≤ 0.3, якщо GLB не каже менше.
+const MINERAL_SPECULAR: float = 0.3
 ## Модель -> {solid, fade} ShaderMaterial будівлі для поточного вузла.
 var _node_materials: Dictionary = {}
 var _contacts: MultiMeshInstance3D
@@ -656,6 +659,7 @@ func _build_nodes(haze: bool) -> void:
 	_build_gardens()
 	_build_grime()
 	_build_plinths()
+	_build_rubble_floors()
 
 
 ## Городи: сусідні клітинки городу зливаються в одну ділянку (жадібні прямокутники, тож Г-подібна
@@ -727,6 +731,37 @@ func _garden_rects() -> Array[Rect2i]:
 				left.erase(c + Vector2i(x, y))
 		out.append(Rect2i(c, Vector2i(w, hgt)))
 	return out
+
+
+## Підлога руїн дошки: плита уламків на обрисі руїни (трохи ширша за нього), щоб крізь пролом не
+## було видно трави. Одна MultiMesh, два трикутники на руїну.
+func _build_rubble_floors() -> void:
+	var xforms: Array[Transform3D] = []
+	for inst in _instances:
+		if int(spec_of(inst["model"])["kind"]) != Kind.RUIN or not _on_board((inst["cells"] as Array)[0]):
+			continue
+		var box: AABB = (inst["transform"] as Transform3D) * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var c := Vector2(box.get_center().x, box.get_center().z)
+		xforms.append(Transform3D(Basis.from_scale(Vector3(box.size.x * 1.08, 1.0, box.size.z * 1.08)),
+				Vector3(c.x, TerrainHeight.ground_y(c.x, c.y) + 0.004, c.y)))
+	if xforms.is_empty():
+		return
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE
+	var mat := ShaderMaterial.new()
+	mat.shader = _RUBBLE_SHADER
+	quad.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = quad
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+	var node := MultiMeshInstance3D.new()
+	node.name = "RubbleFloors"
+	node.multimesh = mm
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
 
 
 ## Кам'яні цоколі хат на схилі: одна MultiMesh коробок.
@@ -848,11 +883,29 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 	var mat := ShaderMaterial.new()
 	mat.shader = _solid() if solid else _FADE_SHADER
 	if src != null:
+		# Усе, що є в матеріалі GLB: карта шорсткості з її каналом, метал, AO, сила нормалей і
+		# спекуляр; інакше атлас із фактурою в бою читається рівним пластиком.
 		mat.set_shader_parameter("albedo_tex", src.albedo_texture)
 		mat.set_shader_parameter("normal_tex", src.normal_texture)
+		mat.set_shader_parameter("normal_scale", src.normal_scale if src.normal_enabled else 1.0)
 		mat.set_shader_parameter("albedo_color", src.albedo_color)
 		mat.set_shader_parameter("roughness", src.roughness)
 		mat.set_shader_parameter("metallic", src.metallic)
+		mat.set_shader_parameter("specular", minf(src.metallic_specular, MINERAL_SPECULAR))
+		mat.set_shader_parameter("use_roughness_tex", src.roughness_texture != null)
+		if src.roughness_texture != null:
+			mat.set_shader_parameter("roughness_tex", src.roughness_texture)
+			mat.set_shader_parameter("roughness_channel", _channel(src.roughness_texture_channel))
+		mat.set_shader_parameter("use_metallic_tex", src.metallic_texture != null)
+		if src.metallic_texture != null:
+			mat.set_shader_parameter("metallic_tex", src.metallic_texture)
+			mat.set_shader_parameter("metallic_channel", _channel(src.metallic_texture_channel))
+		var ao: bool = src.ao_enabled and src.ao_texture != null
+		mat.set_shader_parameter("use_ao_tex", ao)
+		if ao:
+			mat.set_shader_parameter("ao_tex", src.ao_texture)
+			mat.set_shader_parameter("ao_channel", _channel(src.ao_texture_channel))
+			mat.set_shader_parameter("ao_light_affect", src.ao_light_affect)
 	if haze:
 		Surroundings.apply(mat, _board_size)
 	_fade_materials[key] = mat
@@ -889,6 +942,11 @@ static func _thin_solid() -> Shader:
 		assert(code.contains(cut), "PropLayer: відсікання в prop_thin.gdshader змінилось")
 		_thin_solid_shader.code = code.replace(cut, "")
 	return _thin_solid_shader
+
+
+## Канал текстури StandardMaterial3D (TEXTURE_CHANNEL_*) як вектор для dot у шейдері.
+static func _channel(ch: int) -> Vector4:
+	return [Vector4(1, 0, 0, 0), Vector4(0, 1, 0, 0), Vector4(0, 0, 1, 0), Vector4(0, 0, 0, 1), Vector4(0.299, 0.587, 0.114, 0)][ch]
 
 
 static func _solid() -> Shader:

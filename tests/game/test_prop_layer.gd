@@ -377,7 +377,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	for inst in view.props().all_instances():
 		models[inst["model"]] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
-			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths"])
+			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths", &"RubbleFloors"])
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
@@ -1059,3 +1059,31 @@ func test_houses_get_a_grime_band() -> void:
 				and Rect2i(0, 0, 26, 22).has_point((inst["cells"] as Array)[0]):
 			houses += 1
 	assert_eq(node.multimesh.instance_count, houses)
+
+
+
+## Під кожною руїною дошки — підлога з уламків, не трава.
+func test_ruins_stand_on_rubble_floors() -> void:
+	var view: BoardView = _cached("crossroads")
+	var node: MultiMeshInstance3D = view.props().get_node("RubbleFloors")
+	assert_eq(node.multimesh.instance_count, view.props().ruin_centres().size())
+
+
+
+## Шейдер будівлі бере з матеріалу GLB усе, що там є: альбедо, нормалі з їхньою силою, карту
+## шорсткості з каналом, метал, AO, а спекуляр — не більший за мінеральний. Одне число шорсткості на
+## весь дім давало вигляд пластику.
+func test_house_shader_takes_every_map_of_the_glb_material() -> void:
+	var view: BoardView = _cached("crossroads")
+	var node: MultiMeshInstance3D = view.props().get_node("house_h5")
+	var mat: ShaderMaterial = node.material_override
+	var src := (PropLayer.model(&"house_h5")["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
+	assert_eq(mat.get_shader_parameter("albedo_tex"), src.albedo_texture)
+	assert_eq(mat.get_shader_parameter("normal_tex"), src.normal_texture)
+	assert_almost_eq(float(mat.get_shader_parameter("normal_scale")), src.normal_scale if src.normal_enabled else 1.0, 1e-4)
+	assert_eq(bool(mat.get_shader_parameter("use_roughness_tex")), src.roughness_texture != null)
+	if src.roughness_texture != null:
+		assert_eq(mat.get_shader_parameter("roughness_tex"), src.roughness_texture)
+		assert_eq(mat.get_shader_parameter("roughness_channel"), PropLayer._channel(src.roughness_texture_channel))
+	assert_eq(bool(mat.get_shader_parameter("use_ao_tex")), src.ao_enabled and src.ao_texture != null)
+	assert_lte(float(mat.get_shader_parameter("specular")), PropLayer.MINERAL_SPECULAR + 1e-4)

@@ -7,8 +7,24 @@ render_mode blend_mix, cull_disabled;
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec4 albedo_color : source_color = vec4(1.0);
+// Шорсткість і металічність: число множиться на карту (glTF ORM: G — шорсткість, B — метал), як у
+// StandardMaterial3D. Одне число на весь дім давало рівний блік — «пластик».
 uniform float roughness = 0.9;
 uniform float metallic = 0.0;
+uniform sampler2D roughness_tex : hint_roughness_g, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform vec4 roughness_channel = vec4(0.0, 1.0, 0.0, 0.0);
+uniform bool use_roughness_tex = false;
+uniform sampler2D metallic_tex : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform vec4 metallic_channel = vec4(0.0, 0.0, 1.0, 0.0);
+uniform bool use_metallic_tex = false;
+// Затінення (AO) з атласу: шви, кути, піддашшя.
+uniform sampler2D ao_tex : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform vec4 ao_channel = vec4(1.0, 0.0, 0.0, 0.0);
+uniform bool use_ao_tex = false;
+uniform float ao_light_affect = 0.0;
+uniform float normal_scale = 1.0;
+// Спекуляр мінеральних поверхонь (тиньк, цегла, шифер) ≤ 0.3; типові 0.5 блищать, як пластик.
+uniform float specular = 0.3;
 
 // Мокрість карти (WeatherRig, BattleLook.wetness): ті самі ассети стоять і на сухих сонячних
 // картах, тож вологу не запечено в альбедо — вона тут, за погодою.
@@ -66,6 +82,13 @@ void fragment() {
 	// Стіни тепліші: під блакитним небом сонячних карт сіра штукатурка ставала синюватою.
 	albedo *= mix(WALL_WARM, vec3(1.0), roof_k);
 	float rough = roughness;
+	if (use_roughness_tex) {
+		rough *= dot(texture(roughness_tex, UV), roughness_channel);
+	}
+	float metal = metallic;
+	if (use_metallic_tex) {
+		metal *= dot(texture(metallic_tex, UV), metallic_channel);
+	}
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {
 		float roof = smoothstep(0.4, 0.7, world_normal.y);
@@ -77,8 +100,14 @@ void fragment() {
 	}
 	ALBEDO = albedo;
 	NORMAL_MAP = texture(normal_tex, UV).rgb;
+	NORMAL_MAP_DEPTH = normal_scale;
 	ROUGHNESS = rough;
-	METALLIC = metallic;
+	METALLIC = metal;
+	SPECULAR = specular;
+	if (use_ao_tex) {
+		AO = dot(texture(ao_tex, UV), ao_channel);
+		AO_LIGHT_AFFECT = ao_light_affect;
+	}
 	FOG = vec4(0.0);
 	if (surround) {
 		vec4 haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
