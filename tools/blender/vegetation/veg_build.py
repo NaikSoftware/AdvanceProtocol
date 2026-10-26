@@ -379,7 +379,12 @@ def crown(it, rects, fallen):
         hfrac = min(max((p.z - base) / max(top - base, 0.5), 0.0), 1.0)
         rfrac = min(math.hypot((p.x - ctr.x) / rx, (p.y - ctr.y) / ry), 1.0)
         nrm = normal_of(p)
-        m.card(p, roll, size, rect, lambda _c, n=nrm: n, shade_of(hfrac, rfrac))
+        sh = shade_of(hfrac, rfrac)
+        # Береговий кущ стоїть на відкритому березі: без нижньої межі тону гола крона пізньої пори
+        # темніла до ~(40, 37, 27) — чорна пляма на березі.
+        if GROUP == "bank":
+            sh = max(sh, 0.75)
+        m.card(p, roll, size, rect, lambda _c, n=nrm: n, sh)
     stems = []
     for k in range(it.get("stems", 0)):
         a = 2 * math.pi * k / max(it["stems"], 1) + skel.uniform(-0.4, 0.4)

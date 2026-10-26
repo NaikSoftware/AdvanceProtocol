@@ -47,7 +47,7 @@ K = {
                    twig_r=0.010, bark=(0.42, 0.36, 0.18), sm=2.4,
                    leaves={"summer": (1.0, G_GREY, None), "early": (0.9, G_GREY, (0.3, EARLY)), "late": (0.06, OLIVE, (0.4, YELLOW))}),
     "alder": dict(seg=0.6, depth=6, kids=(2, 3), spread=40, droop=0.05, leaf=0.08, shape="ovate", per_node=6,
-                  twig_r=0.012, bark=(0.24, 0.22, 0.21), sm=2.4,
+                  twig_r=0.012, bark=(0.34, 0.31, 0.27), sm=2.4,
                   leaves={"summer": (1.0, G_DARK, None), "early": (0.95, G_DARK, (0.15, G)), "late": (0.04, BROWN, (0.3, OLIVE))},
                   fruit={"late": (0.10, 0.02, [(0.12, 0.09, 0.07)]), "early": (0.08, 0.02, [(0.20, 0.22, 0.10)])}),
     "apple": dict(seg=0.55, depth=6, kids=(2, 3), spread=50, droop=0.12, leaf=0.075, shape="ovate", per_node=6,
