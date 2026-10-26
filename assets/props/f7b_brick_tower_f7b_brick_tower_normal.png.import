@@ -2,10 +2,13 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://df3hb478in3jc"
+uid="uid://dgvax1wli3xfx"
 path="res://.godot/imported/f7b_brick_tower_f7b_brick_tower_normal.png-72aea6304ea3cb8fea054126c7b1c673.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "d5585cf9d933bcf63e2298c02b27797c"
 }
 
 [deps]
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

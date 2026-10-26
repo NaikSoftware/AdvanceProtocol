@@ -314,6 +314,7 @@ func _wire_view(board: Board) -> void:
 		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
 		_on_wreck_left, _on_wreck_removed)
 	_event_player.forest_changed.connect(forest_changed)
+	_event_player.ground_hit.connect(func(cell: Vector2i, radius_m: float) -> void: _scars.stamp_crater(cell, radius_m))
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
 	# але власний шар і власний сигнал: action_preview малює його для прев'ю

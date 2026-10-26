@@ -3,15 +3,24 @@ extends Node
 ## зумі (найближче) і <name>_far.png на максимальному (де об'єкт ~100 px).
 ## Єдине освітлення для всіх наборів: м'яке холодне похмуре світло, приглушена волога сіра земля.
 ## Запуск (потрібне вікно, не --headless):
-##   $GODOT --path . res://tools/prop_preview.tscn -- [out_dir] [--graze] [--back] [--tank] [--dir=res://...] [name ...]
+##   $GODOT --path . res://tools/prop_preview.tscn -- [out_dir] [--graze] [--back] [--river] [--rl] [--black] [--side] [--tank] [--dir=res://...] [name ...]
 ## Без out_dir знімки лягають у user://prop_preview. Без імен знімається все з теки (за замовчуванням assets/props).
 ##   --graze  додає <name>_graze.png: низьке бічне сонце, щоб побачити рельєф карти нормалей;
 ##   --back   додає <name>_back.png: об'єкт, повернутий на 180°, щоб побачити протилежний фасад;
+##   --rl     вигляд карти Річка з гри (BattleLook): розсіяне похмуре світло з дальнього боку, сильне небо, мокрий ґрунт; суфікс _rl;
+##   --black  чорний ґрунт без відблисків: у кадрі лишається лише сам об'єкт, тож його середній тон міряється без тла; файли отримують суфікс _black;
+##   --river  ґрунт із текстури River (мокрий мул) замість сірої площини; файли отримують суфікс _river;
+##   --side   додає <name>_side.png: ортографічний вид збоку для перевірки кутів балок і висот;
 ##   --tank   ставить поруч коробку розміром із танк для масштабу (збоку, щоб не закривати малий об'єкт).
 
 var props_dir: String = "res://assets/props"
 var graze: bool = false
 var back: bool = false
+var river: bool = false
+var black: bool = false
+var rl: bool = false
+var sfx: String = ""
+var side: bool = false
 const WINDOW: Vector2i = Vector2i(1280, 720)
 ## Ширина смуги поля під об'єктом: мосту потрібна довжина з запасом, дому — тайл навколо.
 const FIELD_HALF: float = 6.0
@@ -26,6 +35,15 @@ func _ready() -> void:
 			graze = true
 		elif args[i] == "--back":
 			back = true
+		elif args[i] == "--river":
+			river = true
+		elif args[i] == "--black":
+			black = true
+		elif args[i] == "--rl":
+			rl = true
+			river = true
+		elif args[i] == "--side":
+			side = true
 		elif args[i] == "--tank":
 			tank = true
 		elif args[i].begins_with("--dir="):
@@ -34,6 +52,7 @@ func _ready() -> void:
 			out = args[i]
 		else:
 			names.append(args[i])
+	sfx = ("_rl" if rl else ("_river" if river else "")) + ("_black" if black else "")
 	if names.is_empty():
 		for f in DirAccess.get_files_at(props_dir):
 			if f.ends_with(".glb"):
@@ -54,6 +73,20 @@ func _ready() -> void:
 	var fm := StandardMaterial3D.new()
 	fm.albedo_color = Color(0.30, 0.32, 0.30)
 	fm.roughness = 1.0
+	if river:
+		# ґрунт River: волога розмита ріллі-мул з текстури гри, нижча яскравість, блиск мокрого
+		fm.albedo_texture = load("res://assets/terrain/field_albedo.png") as Texture2D
+		fm.normal_enabled = true
+		fm.normal_texture = load("res://assets/terrain/field_normal.png") as Texture2D
+		fm.uv1_scale = Vector3(5.0, 5.0, 1.0)
+		fm.albedo_color = Color(0.62, 0.64, 0.62)
+		fm.roughness = 0.45
+	if black:
+		fm.albedo_color = Color(0.0, 0.0, 0.0)
+		fm.metallic_specular = 0.0
+	if rl:
+		fm.albedo_color = Color(0.26, 0.27, 0.26)
+		fm.roughness = 0.42
 	field.material_override = fm
 	field.position = Vector3(cell.x, 0.0, cell.y)
 	add_child(field)
@@ -74,6 +107,16 @@ func _ready() -> void:
 	env.environment.ambient_light_color = Color(0.62, 0.66, 0.72)
 	env.environment.ambient_light_energy = 0.8
 	add_child(env)
+	if rl:
+		var look: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+		sun.light_color = look.light_color
+		sun.light_energy = look.light_energy
+		sun.rotation_degrees = Vector3(-look.light_pitch_deg, look.light_yaw_deg, 0.0)
+		sun.shadow_opacity = look.shadow_opacity
+		sun.shadow_blur = look.shadow_blur
+		env.environment.ambient_light_color = look.ambient_color
+		env.environment.ambient_light_energy = look.ambient_energy
+		env.environment.background_color = Color(0.40, 0.44, 0.48)
 
 	for n in names:
 		var scene: PackedScene = load("%s/%s.glb" % [props_dir, n]) as PackedScene
@@ -83,6 +126,16 @@ func _ready() -> void:
 		var inst: Node3D = scene.instantiate()
 		inst.position = Vector3(cell.x, 0.0, cell.y)
 		add_child(inst)
+		if rl:
+			# мокрий реквізит із гри: матеріал-накладка зменшує шорсткість, тож дахи й стіни дають мокрий блиск
+			for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
+				for si: int in mi.mesh.get_surface_count():
+					var wm: StandardMaterial3D = mi.get_active_material(si) as StandardMaterial3D
+					if wm != null:
+						var wet: StandardMaterial3D = wm.duplicate() as StandardMaterial3D
+						wet.roughness = 0.4
+						wet.metallic_specular = 0.12
+						mi.set_surface_override_material(si, wet)
 		if tank:
 			var box := MeshInstance3D.new()
 			var bm := BoxMesh.new()
@@ -95,17 +148,32 @@ func _ready() -> void:
 			inst.add_child(box)
 		print("PROP %s tris=%d" % [n, _triangles(inst)])
 		rig.center_on(cell)
-		await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s.png" % [out, n])
-		await _shoot(rig, IsoCameraRig.MAX_ZOOM, "%s/%s_far.png" % [out, n])
+		await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s%s.png" % [out, n, sfx])
+		await _shoot(rig, IsoCameraRig.MAX_ZOOM, "%s/%s_far%s.png" % [out, n, sfx])
 		if graze:
 			sun.rotation_degrees = Vector3(-14.0, -70.0, 0.0)
 			sun.light_energy = 1.6
-			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_graze.png" % [out, n])
+			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_graze%s.png" % [out, n, sfx])
 			sun.rotation_degrees = Vector3(-50.0, -30.0, 0.0)
 			sun.light_energy = 0.9
 		if back:
 			inst.rotation.y = PI
-			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_back.png" % [out, n])
+			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_back%s.png" % [out, n, sfx])
+		if side:
+			var prev: Camera3D = get_viewport().get_camera_3d()
+			var cam := Camera3D.new()
+			cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+			cam.size = 7.0
+			add_child(cam)
+			cam.position = Vector3(cell.x, 1.1, cell.y + 12.0)
+			cam.look_at(Vector3(cell.x, 1.1, cell.y))
+			cam.make_current()
+			for i in 60:
+				await get_tree().process_frame
+			get_viewport().get_texture().get_image().save_png("%s/%s_side.png" % [out, n])
+			if prev != null:
+				prev.make_current()
+			cam.queue_free()
 		inst.queue_free()
 	get_tree().quit()
 

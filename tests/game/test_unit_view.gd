@@ -18,6 +18,7 @@ func before_each() -> void:
 func after_each() -> void:
 	# Статичне поле на весь процес: тест, що впав посередині, не сміє лишити рельєф решті набору.
 	TerrainHeight.active = null
+	WeatherRig.unit_contact = 0.0
 
 
 func _unit(type_id: int, owner: int = 0, pos: Vector2i = Vector2i(2, 3), facing: int = 0) -> Unit:
@@ -42,6 +43,38 @@ func test_bind_picks_a_distinct_silhouette_per_class() -> void:
 		var size: Vector3 = (hull.mesh as BoxMesh).size
 		seen_sizes[size] = true
 	assert_eq(seen_sizes.size(), type_ids.size(), "кожен клас мусить мати власний, ні на який інший не схожий силует")
+
+
+## Тінь-контакт: плаский квад під корпусом, ширший за його слід, сам тіні від сонця не кидає;
+## лежить у силуеті, тож нахиляється й ховається разом із юнітом.
+func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
+	WeatherRig.unit_contact = 0.6
+	for type_id: int in [0, 5, 11]:
+		view.bind(_unit(type_id))
+		var blob: MeshInstance3D = view.get_node("Silhouette/ContactShadow")
+		var hull: Vector3 = (view.get_node("Silhouette/Hull").mesh as BoxMesh).size
+		var size: Vector2 = (blob.mesh as PlaneMesh).size
+		assert_gt(size.x, hull.x)
+		assert_gt(size.y, hull.z)
+		assert_between(blob.position.y, 0.0, 0.05, "на ґрунті, під корпусом")
+		assert_eq(blob.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+## Без тіні-контакту у вигляді карти пляму не будують зовсім: прозорий квад під кожним юнітом —
+## зайвий виклик малювання.
+func test_no_contact_shadow_when_the_look_has_none() -> void:
+	WeatherRig.unit_contact = 0.0
+	for type_id: int in [0, 5]:
+		view.bind(_unit(type_id))
+		assert_null(view.get_node_or_null("Silhouette/ContactShadow"))
+
+
+## Загиблі фігури лежать на ґрунті, тож пляма під відділенням зникає разом зі стоячими.
+func test_squad_contact_shadow_goes_with_the_squad() -> void:
+	WeatherRig.unit_contact = 0.6
+	view.bind(_unit(0))
+	view.play_destroyed()
+	assert_false((view.get_node("Silhouette/ContactShadow") as Node3D).visible)
 
 
 ## R14: face() твінується (не клацає миттєво), тож перевіряємо ціль твіна
@@ -531,7 +564,7 @@ func test_explosion_is_one_shot_and_frees_itself() -> void:
 		if t.is_valid():
 			t.custom_step(BattleFx.EXPLOSION_SEC + 0.01)
 	assert_true(boom.is_queued_for_deletion())
-	assert_true(BattleFx.EXPLOSION_SEC <= 1.5, "кожна мить влучання ≤ 1,5 с")
+	assert_true(BattleFx.EXPLOSION_SEC <= 2.0, "куля знищення разом із темним хвостом — до 2 с")
 
 
 ## §3.5: невидимий ворог не має вузла взагалі — рішення контейнера
@@ -896,3 +929,14 @@ func test_unit_processes_only_while_turning() -> void:
 	tween.custom_step(10.0)
 	view._process(0.0)
 	assert_false(view.is_processing())
+
+
+
+## HP-бар і підпис — поверх усіх ефектів, завжди однаково: полум'я уламків не сміє
+## перекривати один підпис і лишати інший зверху.
+func test_hp_bar_and_label_draw_over_every_effect() -> void:
+	view.bind(_unit(5))
+	for n: GeometryInstance3D in [view._hp_bar, view._hp_label]:
+		assert_true(n.get("no_depth_test"), n.name)
+		assert_eq(n.get("render_priority"), UnitView.OVERLAY_PRIORITY, n.name)
+	assert_true(UnitView.OVERLAY_PRIORITY > 1, "вище за вогонь (1)")

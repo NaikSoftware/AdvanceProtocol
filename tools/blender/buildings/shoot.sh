@@ -1,9 +1,14 @@
 #!/bin/bash
 # Копіює GLB у assets/props, імпортує й знімає превʼю камерою гри (потрібне вікно).
-# Використання: shoot.sh <name> ...
+# Використання: [FLAGS="--rl --back"] shoot.sh <name> ...
+# Видаляємо лише витягнуті з GLB текстури знімуваних активів: Godot не перезаписує вже витягнуту карту нормалей, тож стара лишалась би
+# в кадрі. .import чужих активів не чіпаємо: вони тримають стабільні uid (видалення зсувало uid у чужих сценах).
 cd "$(dirname "$0")/../../.."
-for n in "$@"; do cp "art-refs/buildings_out/$n.glb" assets/props/; done
-rm -f assets/props/*.import assets/props/*.jpg
-/home/naik/.local/bin/godot --headless --import --path . >/dev/null 2>&1
+for n in "$@"; do
+  cmp -s "art-refs/buildings_out/$n.glb" "assets/props/$n.glb" || cp "art-refs/buildings_out/$n.glb" assets/props/
+  rm -f "assets/props/${n}.glb.import" "assets/props/${n}_${n}_atlas.jpg" "assets/props/${n}_${n}_atlas.jpg.import" "assets/props/${n}_${n}_normal.png" "assets/props/${n}_${n}_normal.png.import" \
+        "assets/props/${n}_${n}_normal.jpg" "assets/props/${n}_${n}_normal.jpg.import"
+done
+timeout 120 /home/naik/.local/bin/godot --headless --import --path . >/dev/null 2>&1
 git checkout project.godot
-timeout 280 /home/naik/.local/bin/godot --path . res://tools/prop_preview.tscn -- "$PWD/art-refs/buildings" --graze --back --tank "$@" 2>&1 | grep -E "PROP|ERROR"
+timeout 170 /home/naik/.local/bin/godot --path . res://tools/prop_preview.tscn -- "$PWD/art-refs/buildings" ${FLAGS:---graze --back --tank --side} "$@" 2>&1 | grep -E "PROP|ERROR"

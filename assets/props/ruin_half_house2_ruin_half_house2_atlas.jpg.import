@@ -2,16 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c1k6l8el8mjp7"
-path="res://.godot/imported/wreck_fire.png-066e8210b2c4355bac431f835aa44ffc.ctex"
+uid="uid://c2md1gfek5ch8"
+path="res://.godot/imported/ruin_half_house2_ruin_half_house2_atlas.jpg-171468dddc3f0beef0cc4d7614fa0efc.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "34740220fc3ee5fc1a27d4f63d86dc93"
 }
 
 [deps]
 
-source_file="res://assets/vfx/wreck_fire.png"
-dest_files=["res://.godot/imported/wreck_fire.png-066e8210b2c4355bac431f835aa44ffc.ctex"]
+source_file="res://assets/props/ruin_half_house2_ruin_half_house2_atlas.jpg"
+dest_files=["res://.godot/imported/ruin_half_house2_ruin_half_house2_atlas.jpg-171468dddc3f0beef0cc4d7614fa0efc.ctex"]
 
 [params]
 
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
