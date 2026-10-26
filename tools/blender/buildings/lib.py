@@ -590,6 +590,7 @@ def mats():
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
         "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
+        "floor_lit": make_material("floor_lit", "Concrete034", 1.5, (0.30, 0.29, 0.27)),       # підлога в сонячній плямі під діркою: на екрані ~1.5-2x темної (світло там лише від неба)
         "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.10), patch=((0.02, 0.02, 0.02), 0.3)),
         "clad_burnt": make_material("clad_burnt", "CorrugatedSteel005", 1.0, (0.12, 0.12, 0.11), streak=1.0),
         "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.22, 0.34, 0.29), seams=[("z", 0.25, 0.03, 0.5)], corr=("z", 0.25, 0.008), base_dirt=0.5),
@@ -666,7 +667,7 @@ def mats():
         # обвуглена деревина: майже чорна, а попіл світлим сірим лише на кромках
         "timber_hit": make_material("timber_hit", "Planks021", 1.0, (0.085, 0.072, 0.062), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02),
         "wall_plaster_w": make_material("wall_plaster_w", "Plaster001", 1.0, (0.56, 0.52, 0.45), streak=0.6, base_dirt=0.8, bump=0.008, patch=((0.26, 0.24, 0.21), 0.4), patch_scale=0.9),
-        "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.06, 0.047, 0.036), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02, ash=((0.22, 0.215, 0.205), 3.5, 0.03)),
+        "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.10, 0.08, 0.062), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02, ash=((0.22, 0.215, 0.205), 3.5, 0.03)),
         "cavity": make_material("cavity", flat=(0.16, 0.16, 0.16)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
@@ -1760,6 +1761,18 @@ def bent_sheet(b, p0, p1, width, mat, bend=0.35, axis="y"):
     thin, wide = (0.1, width) if axis == "y" else (width, 0.1)
     b.beam(p0, pm, thin, mat, wide)
     b.beam(pm, p1, thin, mat, wide)
+
+
+def ground_sheet(b, x, y, z0, rot, ln, width, mat, rnd):
+    """Лист профнастилу чи шиферу на землі: край 1.5 см, злам посередині (горб 6-15 см) і піднятий один кінець —
+    не пласка картка. Гофра — у карті нормалей матеріалу."""
+    d = Vector((math.cos(rot), math.sin(rot), 0.0))
+    c = Vector((x, y, z0))
+    p0 = c - d * (ln / 2) + Vector((0, 0, 0.01))
+    p1 = c + d * (ln / 2) + Vector((0, 0, rnd.uniform(0.08, 0.25)))
+    pm = (p0 + p1) / 2 + Vector((0, 0, rnd.uniform(0.06, 0.15)))
+    b.beam(tuple(p0), tuple(pm), width, mat, 0.015)
+    b.beam(tuple(pm), tuple(p1), width, mat, 0.015)
 
 
 def chunks(b, cx, cy, r, hmax, n, mats, seed, z0=0.0, smin=0.5, smax=1.5):

@@ -25,3 +25,8 @@ if [ ! -f "$OUT/broken_brick_wall/diff.jpg" ]; then
   U=$(curl -s https://api.polyhaven.com/files/broken_brick_wall | python3 -I -c "import json,sys;print(json.load(sys.stdin)['Diffuse']['2k']['jpg']['url'])")
   curl -sL -o "$OUT/broken_brick_wall/diff.jpg" "$U"
 fi
+# шорсткість цегли з того самого скану: make_material бере її в ORM (без неї цегла рівно матова)
+if [ ! -f "$OUT/broken_brick_wall/rough.jpg" ]; then
+  U=$(curl -s https://api.polyhaven.com/files/broken_brick_wall | python3 -I -c "import json,sys;print(json.load(sys.stdin)['Rough']['2k']['jpg']['url'])")
+  curl -sL -o "$OUT/broken_brick_wall/rough.jpg" "$U"
+fi

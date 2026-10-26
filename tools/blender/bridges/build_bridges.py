@@ -475,11 +475,11 @@ def make_texture(name):
         # густіший у коліях (колія 1.66 м, x = ±0.83 м від осі = u 0.104 / 0.896), сталь проглядає плямами
         # між коліями й біля бортів; стики листів 2 м — ледь помітні темні лінії.
         dirt = road_texture("dirt", 8.0, 8.0, 7)
-        dirt = dirt.mean(axis=(0, 1)) + (dirt - dirt.mean(axis=(0, 1))) * 0.6  # м'які великі плями на 40 % слабші: читались полірованим мармуром
+        dirt = dirt.mean(axis=(0, 1)) + (dirt - dirt.mean(axis=(0, 1))) * 0.45  # м'які великі плями на 40 % слабші: читались полірованим мармуром
         fx = np.minimum(mod(xx, 4), 1 - mod(xx, 4))
         seam = fx < 0.0075
         track = sum(np.exp(-((np.minimum(np.abs(xx - cu), 1 - np.abs(xx - cu))) / 0.03) ** 2) for cu in (0.104, 0.896))
-        cover = np.clip(0.62 + 0.18 * _noise(rng, 1.5) + 0.4 * track, 0, 1)
+        cover = np.clip(0.62 + 0.11 * _noise(rng, 1.5) + 0.4 * track, 0, 1)  # і на пандусах: хмаркові плями ще на 40 % слабші
         img = img * (1 - cover[..., None]) + dirt * cover[..., None]
         grit = _noise(rng, 0.12)                                               # дрібний пісок і камінці ~1-2 см
         tread = track * (np.sin(yy * TEX * 2 * np.pi / 6.0) > 0.4) * (0.6 + 0.4 * _noise(rng, 0.5))   # слід протектора ~10 см упоперек колії
