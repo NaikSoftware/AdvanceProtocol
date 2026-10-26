@@ -58,6 +58,10 @@ rectangle reached by a road or track; it keeps at least one cell of meadow from 
 houses and never lies on a hill. Floodplains and riverbanks are meadow and reed, hamlets sit on
 roads with gardens and orchards around them, woods take hills, poor ground and field edges. Format and examples: [`tools/maps/README.md`](../tools/maps/README.md).
 
+**Fields are nearly level** — meadow and ploughed land rise and fall by a few decimetres within a
+cell, on the board and in the ring alike. Relief belongs to hills, banks and woods; a rolling
+field reads as dark swells that look like shadows with no source.
+
 ## Rendering and mobile budget
 
 The camera is a fixed perspective rig, roughly 45° yaw, with pitch easing from 55° zoomed out to
@@ -101,17 +105,24 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   trailers, blocks) sit near cell edges on passable cells; a vehicle that enters the cell crushes
   them and the debris stays as a scar, infantry passes them by.
 - **Placed as a real village would be.** The layout of each map is authored, not scattered cell
-  by cell: power lines run along roads from one map edge to the other and branch to houses, never
-  a lone pole or a line from nowhere; a yard is a house facing the road, a garden of tilled rows
+  by cell: power lines run along roads across the board and on through the ring to its outer
+  edge, so no line visibly starts or ends; a pole stands on every bend, one transformer feeds each
+  settlement, and every house gets a drop under its eaves — never a lone pole, a wire over a roof
+  or a line from nowhere; a yard is a house facing the road, a garden of tilled rows
   behind it, a shed, and one fence around them with a gate to the road; bales and trailers stand
   at field edges or by a shed, never on a garden or the road; nothing hangs over a bank or stands
-  within ~0.4 tile of water; buildings sit on levelled ground and bridge ends meet the banks.
+  within ~0.4 tile of water; bridge ends meet the banks. Every building stands on a levelled pad
+  cut into the slope uphill and built up downhill, never sunk to the windows or raised on a plinth.
   Heights are real: a 0.4 kV pole 8–9 m, a single-storey house 6–7 m to the ridge.
 - **Materials read in battle as in the asset preview:** textured and matte; straw, concrete and
   dry steel never shine. Ruins show floor debris inside, never grass. A few chimneys and ruins
   give off a faint smoke.
 - **Forests are dense woods** a tank could hide in — canopy masses, a shrub belt at the edge, not
   a few trees with units visible between them.
+- **Loose vegetation where it really grows:** reed, cattail and willow in patches along some
+  banks; fruit trees and shrubs in many yards, not all; a few lone bushes and trees on meadow,
+  never on ploughed land. Every species comes in at least three shapes. A vehicle that enters the
+  cell leaves a low pile of crushed branches or a flattened clump, never a flat stain.
 - **Whatever hides a visible unit turns semi-transparent** — crowns, roofs and walls between the
   camera and a unit the current player can see fade smoothly to about 30–40 % opacity with alpha
   blending. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
