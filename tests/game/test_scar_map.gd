@@ -52,3 +52,11 @@ func test_apply_hands_both_textures_to_the_ground_material() -> void:
 	assert_eq(mat.get_shader_parameter("scar_map"), scars.texture())
 	assert_eq(mat.get_shader_parameter("scar_seen"), scars.mask_texture())
 	assert_eq(mat.get_shader_parameter("scar_size"), Vector2(8, 6))
+
+
+
+func test_crater_scorch_is_small_and_ends_at_its_radius() -> void:
+	scars.stamp_crater(Vector2i(4, 4), 2.5)
+	var c := Vector2i(4 * 32 + 16, 4 * 32 + 16)
+	assert_eq(scars.image().get_pixelv(c).r8, 255)
+	assert_eq(scars.image().get_pixelv(c + Vector2i(10, 0)).r8, 0)

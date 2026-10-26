@@ -94,14 +94,19 @@ func test_no_more_than_eight_columns_and_the_youngest_are_kept() -> void:
 func test_wreck_is_neutral_burnt_and_carries_no_hp_bar() -> void:
 	layer.add(Vector2i(3, 3), 5, 1.0)
 	var w: Node3D = layer.wreck_at(Vector2i(3, 3))
-	var meshes: int = 0
+	var meshes: Array[MeshInstance3D] = []
 	for n: Node in w.find_children("*", "", true, false):
 		assert_false(n is Sprite3D or n is Label3D, "уламки не мають HP-бара й підписів")
 		if n is MeshInstance3D:
-			meshes += 1
-			assert_eq((n as MeshInstance3D).material_override, WreckLayer.burnt_material(), "один спільний обгорілий матеріал")
+			meshes.append(n)
+	# Одна сітка на уламки: один виклик малювання і одна тінь замість трьох-чотирьох (бюджет §8).
+	assert_eq(meshes.size(), 1)
+	assert_eq(meshes[0].material_override, WreckLayer.burnt_material(), "один спільний обгорілий матеріал")
 	var live: Node3D = UnitSilhouettes.build(5, Color.WHITE)
-	assert_eq(meshes, live.get_child_count(), "той самий силует, що в живого юніта")
+	var verts: int = 0
+	for part: Node in live.get_children():
+		verts += ((part as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	assert_eq((meshes[0].mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), verts, "той самий силует, що в живого юніта")
 	live.free()
 
 
@@ -144,9 +149,11 @@ func test_stages_thin_the_smoke_then_leave_a_bare_wreck() -> void:
 	for i in lives.size():
 		layer.add(Vector2i(i, 0), 5, lives[i])
 	assert_eq(layer.column_opacity(Vector2i(0, 0)), 1.0)
-	assert_eq(layer.flame_count(Vector2i(0, 0)), 3)
+	assert_eq(layer.flame_count(Vector2i(0, 0)), 1)
+	assert_eq(WreckLayer.flame_scale_for(lives[0]), 1.0, "перше коло — повне полум'я")
 	assert_eq(layer.column_opacity(Vector2i(1, 0)), 0.6)
 	assert_eq(layer.flame_count(Vector2i(1, 0)), 1)
+	assert_eq(WreckLayer.flame_scale_for(lives[1]), 0.55, "друге коло — те саме джерело, менше")
 	assert_eq(layer.column_opacity(Vector2i(2, 0)), 0.3)
 	assert_eq(layer.flame_count(Vector2i(2, 0)), 0)
 	assert_false(layer.has_column(Vector2i(3, 0)), "останній хід — голі уламки")
@@ -173,9 +180,11 @@ func test_wreck_stands_on_its_tile() -> void:
 
 
 ## §8: батарея — частина продукту. Дим не живе на TIME (той тримав би кадр
-## щокадрово), а крокує таймером 8 разів на секунду, і таймер стоїть, коли диму нема.
-func test_smoke_is_stepped_at_eight_fps_and_stops_when_nothing_burns() -> void:
-	assert_eq(WreckLayer.FLIPBOOK_FPS, 8.0)
+## щокадрово), а крокує таймером 30 разів на секунду, і таймер стоїть, коли диму нема.
+func test_smoke_is_stepped_by_a_timer_and_stops_when_nothing_burns() -> void:
+	# Крок не частіше за обмеження кадру в спокої (30): вогонь плавний, а кадр однаково
+	# скидається, щойно все догоріло.
+	assert_eq(WreckLayer.FLIPBOOK_FPS, 30.0)
 	assert_true(layer.is_animating() == false, "порожня дошка не анімується")
 	layer.add(Vector2i(3, 3), 5, 1.0)
 	assert_true(layer.is_animating())
@@ -235,10 +244,100 @@ func test_second_warm_up_while_warming_is_ignored() -> void:
 
 
 ## Дим і вогонь — запечені флипбуки з assets/vfx, а не заступник.
-func test_column_and_fire_sample_their_atlases() -> void:
+func test_column_samples_its_atlases_and_fire_is_procedural() -> void:
 	var col := layer.get_node("Columns") as MultiMeshInstance3D
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
 	var cm := col.material_override as ShaderMaterial
 	assert_eq((cm.get_shader_parameter("puff_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column.png")
 	assert_eq((cm.get_shader_parameter("thin_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column_thin.png")
-	assert_eq(((fire.material_override as ShaderMaterial).get_shader_parameter("flame_tex") as Texture2D).resource_path, "res://assets/vfx/wreck_fire.png")
+	# Полум'я — процедурне (шум, без текстури): жоден атлас не дав суцільного тіла вогню.
+	assert_eq((fire.material_override as ShaderMaterial).shader.code.count("sampler2D"), 1, "лише глибина для м'якого краю")
+
+
+
+## Свіжий стовп росте від корпусу (~6 м/с), а не стоїть на повну висоту одразу; уламки зі
+## стану (бій зі збереження, гейт) — давно горять, тож стовп уже повний.
+func test_fresh_column_grows_and_rebuilt_column_is_full() -> void:
+	assert_eq(WreckLayer.COLUMN_HEIGHT, 40.0 / 8.0)
+	assert_eq(WreckLayer.COLUMN_GROW, 6.0 / 8.0)
+	layer.add(Vector2i(1, 1), 5, 1.0, 0)
+	assert_eq(layer.birth_of(Vector2i(1, 1)), layer.fx_time())
+	_wreck(Vector2i(2, 2))
+	_seen(0, Vector2i(2, 2))
+	layer.rebuild(state, 0)
+	assert_eq(layer.birth_of(Vector2i(2, 2)), WreckLayer.LONG_AGO)
+
+
+## Під кожним стовпом — м'яка тінь; її густота йде від ясності неба в шейдері.
+func test_every_column_casts_a_shadow_blob() -> void:
+	for i in 3:
+		layer.add(Vector2i(i, 0), 5, 1.0, 0)
+	var shadows := layer.get_node("ColumnShadows") as MultiMeshInstance3D
+	assert_eq(shadows.multimesh.visible_instance_count, layer.column_count())
+
+
+## Вогонь виходить з погона: два корені обабіч центру даху, а не хмара над корпусом.
+func test_flames_sit_on_the_hull_top_at_named_spots() -> void:
+	layer.add(Vector2i(3, 3), 5, 1.0, 2)
+	var spots: Array[Vector3] = layer.flame_spots(Vector2i(3, 3))
+	var w: Node3D = layer.wreck_at(Vector2i(3, 3))
+	var hull: Vector3 = UnitSilhouettes.spec(5).hull
+	# Корені — на даху башти (0,14 над корпусом): обидва лежать у межах її сліду (0,6 × 0,5
+	# корпусу), тож на рівні даху корпусу башта ховала б їх з будь-якого боку.
+	var top: float = hull.y - WreckLayer.HULL_SAG + 0.14
+	# Вогонь виходить з погона в центрі даху: башта стоїть у вогні, і жоден бік не ховає корінь.
+	# Два екземпляри обабіч центру: ±0,15 ширини вбік і ±0,1 довжини вздовж корпусу.
+	assert_eq(spots.size(), 2)
+	var a: Vector3 = (w.transform.affine_inverse() * spots[0]).snappedf(0.0001)
+	var b: Vector3 = (w.transform.affine_inverse() * spots[1]).snappedf(0.0001)
+	assert_eq(a, Vector3(-hull.x * 0.15, top, -hull.z * 0.1).snappedf(0.0001))
+	assert_eq(b, Vector3(hull.x * 0.15, top, hull.z * 0.1).snappedf(0.0001))
+	assert_eq((w.transform.affine_inverse() * layer.fire_centre(Vector2i(3, 3))).snappedf(0.0001), Vector3(0.0, top, 0.0).snappedf(0.0001))
+
+
+## Вогонь вщухає: велике полум'я → мале → без полум'я (дим).
+func test_fire_dies_down_over_the_wrecks_life() -> void:
+	assert_eq(WreckLayer.flame_scale_for(1.0), 1.0)
+	assert_eq(WreckLayer.flame_scale_for(4.0 / 6.0), 0.55)
+	assert_eq(WreckLayer.flame_scale_for(2.0 / 6.0), 0.0)
+
+
+## Іскри вилітають із вогню хаотичними сплесками: кілька штук, поки горить сильно, менше —
+## коли слабше, і зовсім нема, коли лишився жар.
+func test_embers_fly_while_burning_and_stop_when_smouldering() -> void:
+	layer.add(Vector2i(1, 1), 5, 1.0, 0)
+	layer.add(Vector2i(2, 2), 5, 4.0 / 6.0, 0)
+	layer.add(Vector2i(3, 3), 5, 2.0 / 6.0, 0)
+	var big: GPUParticles3D = layer.ember_emitter(Vector2i(1, 1))
+	var small: GPUParticles3D = layer.ember_emitter(Vector2i(2, 2))
+	assert_eq(big.amount, WreckLayer.EMBERS_HARD)
+	assert_eq(small.amount, WreckLayer.EMBERS_SOFT)
+	assert_true(big.explosiveness > 0.0, "сплесками, а не рівним струменем")
+	assert_null(layer.ember_emitter(Vector2i(3, 3)))
+	layer.remove(Vector2i(1, 1))
+	assert_null(layer.ember_emitter(Vector2i(1, 1)))
+
+
+
+## Вогонь — стовп полум'я з погона: два екземпляри по ≈ 0,4 ширини корпусу, висота ≈ ширина
+## корпусу; два екземпляри атласу з різною фазою й темпом; HDR-яскравий (понад 1).
+func test_fire_is_one_column_sized_from_the_hull() -> void:
+	assert_eq(WreckLayer.FLAMES_PER_SPOT, 2)
+	var hull: Vector3 = UnitSilhouettes.spec(5).hull
+	# Кожен білборд ~0,6 ширини корпусу; з розносом ±0,15 вони перекриваються в одну масу ~0,6 тайла.
+	assert_eq(WreckLayer.flame_width(5), hull.x * 0.6)
+	assert_eq(WreckLayer.flame_height(5), hull.x)
+	var fire := layer.get_node("Fires") as MultiMeshInstance3D
+	var mat := fire.material_override as ShaderMaterial
+	assert_true(float(mat.get_shader_parameter("gain")) > 1.0)
+	# Тіло вогню — два квади на уламок; ширина й висота кожного — з корпусу й стадії.
+	layer.add(Vector2i(3, 3), 5, 1.0, 0)
+	layer.add(Vector2i(5, 3), 5, 4.0 / 6.0, 0)
+	assert_eq(fire.multimesh.visible_instance_count, 4)
+	# (Дані екземплярів MultiMesh у безголовому рушії не зберігаються — читаємо через шар.)
+	assert_eq(layer.flame_size(Vector2i(3, 3)), Vector2(WreckLayer.flame_width(5), WreckLayer.flame_height(5)))
+	assert_eq(layer.flame_size(Vector2i(5, 3)), Vector2(WreckLayer.flame_width(5), WreckLayer.flame_height(5)) * 0.55)
+	layer.remove(Vector2i(5, 3))
+	var particles: Array[Node] = layer.find_children("*", "GPUParticles3D", true, false)
+	assert_eq(particles.size(), 1)
+	assert_eq(particles[0], layer.ember_emitter(Vector2i(3, 3)))
