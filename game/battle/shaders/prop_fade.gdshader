@@ -1,6 +1,6 @@
 // Будівлі й руїни (PropLayer): матеріал GLB (альбедо, нормалі, шорсткість) плюс розчинення
-// растром над юнітом і імла кільця. Лише для будівель: дах — єдине, що може сховати юніта, а
-// дрібні пропси й мости лишаються зі своїм імпортованим матеріалом.
+// растром над юнітом, мокрість за погодою і імла кільця. Лише для будівель: дах — єдине, що може
+// сховати юніта, а дрібні пропси й мости лишаються зі своїм матеріалом.
 shader_type spatial;
 render_mode blend_mix, cull_disabled;
 
@@ -10,7 +10,25 @@ uniform vec4 albedo_color : source_color = vec4(1.0);
 uniform float roughness = 0.9;
 uniform float metallic = 0.0;
 
+// Мокрість карти (WeatherRig, BattleLook.wetness): ті самі ассети стоять і на сухих сонячних
+// картах, тож вологу не запечено в альбедо — вона тут, за погодою.
+global uniform float weather_wetness;
+// Повна відповідь уже на мокрості River (0.55); 0 — суха карта без змін.
+const float WET_FULL = 0.5;
+// Мокра стіна темніє до 0.55 альбедо: інакше біла штукатурка — найяскравіше в похмурому кадрі.
+const float WET_WALL = 0.55;
+const float WET_ROOF = 0.75;
+const float WET_ROOF_ROUGHNESS = 0.3;
+// Смуга бруду внизу стіни (~0.5 м, клітинка — 8 м) і темніший стик із землею (~0.15 м).
+const float GRIME_H = 0.0625;
+const float GRIME = 0.7;
+const float CONTACT_H = 0.02;
+const float CONTACT = 0.6;
+
 varying vec3 world_pos;
+varying vec3 world_normal;
+// Висота над підошвою будівлі (початок екземпляра стоїть на найнижчій точці під слідом).
+varying float base_h;
 // Частка викинутих пікселів (INSTANCE_CUSTOM.a): 0 — суцільна, 0.7 — крізь дах видно юніта.
 varying flat float v_fade;
 
@@ -27,6 +45,8 @@ float bayer4(vec2 frag) {
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	base_h = world_pos.y - MODEL_MATRIX[3].y;
 	v_fade = INSTANCE_CUSTOM.a;
 }
 
@@ -35,9 +55,19 @@ void fragment() {
 		discard;
 	}
 	vec3 albedo = texture(albedo_tex, UV).rgb * albedo_color.rgb;
+	float rough = roughness;
+	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
+	if (wet > 0.0) {
+		float roof = smoothstep(0.4, 0.7, world_normal.y);
+		albedo *= mix(1.0, mix(WET_WALL, WET_ROOF, roof), wet);
+		rough = mix(rough, WET_ROOF_ROUGHNESS, wet * roof);
+		float grime = 1.0 - smoothstep(0.0, GRIME_H, base_h);
+		float contact = 1.0 - smoothstep(0.0, CONTACT_H, base_h);
+		albedo *= mix(1.0, GRIME, wet * grime) * mix(1.0, CONTACT, wet * contact);
+	}
 	ALBEDO = albedo;
 	NORMAL_MAP = texture(normal_tex, UV).rgb;
-	ROUGHNESS = roughness;
+	ROUGHNESS = rough;
 	METALLIC = metallic;
 	FOG = vec4(0.0);
 	if (surround) {

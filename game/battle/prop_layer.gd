@@ -15,7 +15,8 @@ enum Crush { NONE, LAY, SQUASH, SINK }
 const MODEL_DIR: String = "res://assets/props/"
 ## Модель -> {kind, weight, …}. Слід будівлі в тайлах — з метаданих GLB (`footprint_tiles`), тож
 ## нова модель того самого виду стає в слот за самим ім'ям. Модель без файлу пропускається.
-## max — скільки разів на карту (орієнтир, що має лишатись одним), ring — лише в кільці,
+## max — скільки разів на карту (орієнтир, що має лишатись одним), ring — лише в кільці, gap —
+## власний проміжок до сусідньої будівлі, якщо більший за STRUCTURE_GAP,
 ## map/order/deck_top — міст своєї переправи (DECK_TOP з tools/blender/bridges/build_bridges.py).
 const MODELS: Dictionary = {
 	&"house_h1": {"kind": Kind.STRUCTURE, "weight": 4},
@@ -23,17 +24,20 @@ const MODELS: Dictionary = {
 	&"house_h2": {"kind": Kind.STRUCTURE, "weight": 4},
 	&"house_h3": {"kind": Kind.STRUCTURE, "weight": 3},
 	&"house_h4": {"kind": Kind.STRUCTURE, "weight": 4},
+	&"house_h5": {"kind": Kind.STRUCTURE, "weight": 3},
+	&"house_h6": {"kind": Kind.STRUCTURE, "weight": 3},
+	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"f1_farm_barn": {"kind": Kind.STRUCTURE, "weight": 2},
+	&"f1_farm_barn": {"kind": Kind.STRUCTURE, "weight": 1},
 	&"f2_livestock_barn": {"kind": Kind.STRUCTURE, "weight": 2, "ring": true},
 	&"f3_hangar": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f3_hangar_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f4_grain_bins": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f5_silo_battery": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f6_fuel_station": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"f7_water_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1},
-	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1},
+	&"f7_water_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.3},
+	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.3},
 	&"ruin_h1": {"kind": Kind.RUIN, "weight": 1},
 	&"ruin_h3": {"kind": Kind.RUIN, "weight": 1},
 	&"bridge_river_west": {"kind": Kind.BRIDGE, "map": &"river", "order": 0, "deck_top": 0.30},
@@ -86,10 +90,27 @@ const WIRE_GONE_DIST: float = 34.0
 const FIELD_FENCE_RUN: int = 3
 const FIELD_FENCE_CHANCE: int = 6
 const HAY_CHANCE: int = 2
-## Найменший проміжок між будівлями сусідніх слідів, клітинки: стіни можуть торкатись, але не
-## врізатись; запас більший за нуль лишає порожніми забагато дворів у тісних групах.
-const STRUCTURE_GAP: float = 0.0
+## Найменший проміжок між межами будівель (разом зі звісом даху), клітинки: 1.5 м. Будівля, що не
+## влазить із ним, поступається іншій моделі чи повороту або лишає двір порожнім, але не заходить
+## у сусіда.
+const STRUCTURE_GAP: float = 0.1875
+## Огорожа двору стоїть за межею групи BUILDING на ~0.6 м: у двір не заходить, а звіс даху
+## (будівля не виходить за свій слід) її не торкається.
+const YARD_OUT: float = 0.08
+## Найбільший звіс даху за межу двору, клітинки (~0.5 м): ассет може бути глибшим за слід до 0.1
+## тайла, а огорожа стоїть на YARD_OUT, тож звіс до неї не дістає.
+const YARD_EAVE: float = 0.065
+## Кам'яні брили й бетонні блоки темніші за ассет: світлі, вони читались плямами фарби.
+const STONE_TINT: float = 0.85
+## Пляма дотику під брилою чи блоком: у скільки разів ширша за сам пропс і наскільки темна.
+const CONTACT_SPREAD: float = 1.5
+const CONTACT_ALPHA: float = 0.45
 const _FADE_SHADER: Shader = preload("res://game/battle/shaders/prop_fade.gdshader")
+const _THIN_SHADER: Shader = preload("res://game/battle/shaders/prop_thin.gdshader")
+const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.gdshader")
+## Той самий шейдер будівлі без розчинення: discard у шейдері вимикає ранню перевірку глибини на
+## мобільних GPU, тож будівлі моделі, над якою зараз ніхто не стоїть, малюються без нього.
+static var _solid_shader: Shader
 
 ## Модель -> {mesh, local, footprint, aabb, wires, tris}; спільний на процес, бо GLB кешуються.
 static var _models: Dictionary = {}
@@ -97,6 +118,10 @@ static var _models: Dictionary = {}
 static var _fade_materials: Dictionary = {}
 ## Вид -> моделі на диску: перелік теки й сортування не повторюються на кожну групу будівель.
 static var _by_kind: Dictionary = {}
+## Модель -> {solid, fade} ShaderMaterial будівлі для поточного вузла.
+var _node_materials: Dictionary = {}
+var _contacts: MultiMeshInstance3D
+var _apply_queued: bool = false
 
 ## Кожен екземпляр: {model, transform, cells (клітинки дошки під ним), crush, broken_of}.
 var _instances: Array[Dictionary] = []
@@ -125,8 +150,8 @@ static func cell_hash(cell: Vector2i, salt: int) -> int:
 static func spec_of(model: StringName) -> Dictionary:
 	if MODELS.has(model):
 		return MODELS[model]
-	# Зруйнований двійник мосту — той самий слот, що й цілий.
-	var base := StringName(String(model).trim_suffix("_broken"))
+	# Шматок мосту на одну клітинку («модель#k») і зруйнований двійник — той самий слот, що й цілий.
+	var base := StringName(String(model).get_slice("#", 0).trim_suffix("_broken"))
 	if base != model and MODELS.has(base):
 		return MODELS[base]
 	for rule in PREFIX_RULES:
@@ -143,7 +168,8 @@ static func models_of(kind: int) -> Array[StringName]:
 	var names: Array[StringName] = []
 	for m: StringName in MODELS:
 		names.append(m)
-	for f in DirAccess.get_files_at(MODEL_DIR):
+	# Перелік через ResourceLoader: в експортованій збірці в теці лежать лише .import і .remap.
+	for f in ResourceLoader.list_directory(MODEL_DIR):
 		if f.ends_with(".glb") and not f.ends_with("_broken.glb") and not MODELS.has(StringName(f.get_basename())):
 			names.append(StringName(f.get_basename()))
 	names.sort()
@@ -158,6 +184,9 @@ static func models_of(kind: int) -> Array[StringName]:
 ## Сітка, локальне перетворення сітки, слід і межі моделі; null — файлу нема.
 static func model(name: StringName) -> Variant:
 	if _models.has(name):
+		return _models[name]
+	if String(name).contains("#"):
+		_models[name] = _segment(name)
 		return _models[name]
 	var path: String = MODEL_DIR + String(name) + ".glb"
 	if not ResourceLoader.exists(path):
@@ -183,11 +212,145 @@ static func model(name: StringName) -> Variant:
 	var tris: int = 0
 	for s in mi.mesh.get_surface_count():
 		tris += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-	var info: Dictionary = {"mesh": mi.mesh, "local": local, "footprint": footprint,
+	var info: Dictionary = {"mesh": _tuned_mesh(name, mi.mesh), "local": local, "footprint": footprint,
 			"aabb": local * mi.mesh.get_aabb(), "wires": wires, "tris": tris}
 	root.free()
 	_models[name] = info
 	return info
+
+
+## Копія сітки з власними матеріалами для огорож (двобічне світло) і каміння (темніше). Сам GLB
+## не чіпаємо: load() ділить його сітку з усіма, хто його вантажить.
+static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
+	var kind: int = int(spec_of(name).get("kind", -1))
+	if kind != Kind.FIELD_FENCE and kind != Kind.GARDEN_FENCE and kind != Kind.BOULDER and kind != Kind.BLOCK:
+		return mesh
+	var copy: Mesh = mesh.duplicate()
+	for i in copy.get_surface_count():
+		var src := copy.surface_get_material(i) as BaseMaterial3D
+		if src == null:
+			continue
+		if kind == Kind.BOULDER or kind == Kind.BLOCK:
+			var dark: BaseMaterial3D = src.duplicate()
+			dark.albedo_color = src.albedo_color * Color(STONE_TINT, STONE_TINT, STONE_TINT, 1.0)
+			copy.surface_set_material(i, dark)
+			continue
+		var thin := ShaderMaterial.new()
+		thin.shader = _THIN_SHADER
+		thin.set_shader_parameter("albedo_tex", src.albedo_texture)
+		thin.set_shader_parameter("albedo_color", src.albedo_color)
+		thin.set_shader_parameter("use_vertex_color", src.vertex_color_use_as_albedo)
+		var cut: bool = src.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		thin.set_shader_parameter("alpha_cut", src.alpha_scissor_threshold if cut else 0.0)
+		thin.set_shader_parameter("roughness", src.roughness)
+		thin.set_shader_parameter("metallic", src.metallic)
+		copy.surface_set_material(i, thin)
+	return copy
+
+
+## Шматок моделі мосту на одну клітинку переправи: «модель#k» — k-та клітинка вздовж локальної Z
+## (від −L/2). Підрив буває на одній клітинці (EngineerCommand), тож кожна клітинка показує власний
+## стан: цілий настил чи руїну. Трикутники обрізано точно по межі клітинки, з інтерполяцією всіх
+## атрибутів, тож довгий настил не зникає й не вилазить у сусідню клітинку.
+static func _segment(name: StringName) -> Variant:
+	var base := StringName(String(name).get_slice("#", 0))
+	var k: int = int(String(name).get_slice("#", 1))
+	var whole: Variant = model(base)
+	if whole == null:
+		return null
+	var info: Dictionary = whole
+	# Довжина переправи — за цілою моделлю: уламки зруйнованої можуть бути коротші.
+	var intact := StringName(String(base).trim_suffix("_broken"))
+	var length: int = roundi(((model(intact) if model(intact) != null else info)["aabb"] as AABB).size.z)
+	var z0: float = -length * 0.5 + k
+	var mesh: ArrayMesh = _clip_z(info["mesh"], info["local"], z0, z0 + 1.0)
+	var tris: int = 0
+	for s in mesh.get_surface_count():
+		tris += (mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	var wires: Array[Vector3] = []
+	return {"mesh": mesh, "local": Transform3D.IDENTITY, "footprint": Vector2i.ZERO,
+			"aabb": mesh.get_aabb() if mesh.get_surface_count() > 0 else AABB(), "wires": wires, "tris": tris}
+
+
+## Поверхні сітки (у просторі кореня моделі), обрізані площинами z = z0 і z = z1.
+static func _clip_z(src: Mesh, local: Transform3D, z0: float, z1: float) -> ArrayMesh:
+	var out := ArrayMesh.new()
+	for s in src.get_surface_count():
+		var a: Array = src.surface_get_arrays(s)
+		var pos: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var nrm: PackedVector3Array = a[Mesh.ARRAY_NORMAL] if a[Mesh.ARRAY_NORMAL] != null else PackedVector3Array()
+		var tan: PackedFloat32Array = a[Mesh.ARRAY_TANGENT] if a[Mesh.ARRAY_TANGENT] != null else PackedFloat32Array()
+		var col: PackedColorArray = a[Mesh.ARRAY_COLOR] if a[Mesh.ARRAY_COLOR] != null else PackedColorArray()
+		var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV] if a[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+		var uv2: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2] if a[Mesh.ARRAY_TEX_UV2] != null else PackedVector2Array()
+		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		if idx.is_empty():
+			idx.resize(pos.size())
+			for i in pos.size():
+				idx[i] = i
+		var verts: Array = []
+		for i in pos.size():
+			# Вершина як масив атрибутів: позиція, нормаль, дотична, колір, uv, uv2.
+			verts.append([local * pos[i],
+					(local.basis * nrm[i]).normalized() if not nrm.is_empty() else Vector3.UP,
+					Vector4(tan[i * 4], tan[i * 4 + 1], tan[i * 4 + 2], tan[i * 4 + 3]) if not tan.is_empty() else Vector4(1, 0, 0, 1),
+					col[i] if not col.is_empty() else Color.WHITE,
+					uv[i] if not uv.is_empty() else Vector2.ZERO,
+					uv2[i] if not uv2.is_empty() else Vector2.ZERO])
+		var o_pos := PackedVector3Array()
+		var o_nrm := PackedVector3Array()
+		var o_tan := PackedFloat32Array()
+		var o_col := PackedColorArray()
+		var o_uv := PackedVector2Array()
+		var o_uv2 := PackedVector2Array()
+		for t in range(0, idx.size(), 3):
+			var poly: Array = [verts[idx[t]], verts[idx[t + 1]], verts[idx[t + 2]]]
+			poly = _clip_poly(poly, z0, 1.0)
+			poly = _clip_poly(poly, z1, -1.0)
+			for j in range(1, poly.size() - 1):
+				for v: Array in [poly[0], poly[j], poly[j + 1]]:
+					o_pos.append(v[0])
+					o_nrm.append(v[1])
+					var tv: Vector4 = v[2]
+					o_tan.append_array([tv.x, tv.y, tv.z, tv.w])
+					o_col.append(v[3])
+					o_uv.append(v[4])
+					o_uv2.append(v[5])
+		if o_pos.is_empty():
+			continue
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = o_pos
+		arrays[Mesh.ARRAY_NORMAL] = o_nrm
+		if not tan.is_empty():
+			arrays[Mesh.ARRAY_TANGENT] = o_tan
+		if not col.is_empty():
+			arrays[Mesh.ARRAY_COLOR] = o_col
+		if not uv.is_empty():
+			arrays[Mesh.ARRAY_TEX_UV] = o_uv
+		if not uv2.is_empty():
+			arrays[Mesh.ARRAY_TEX_UV2] = o_uv2
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		out.surface_set_material(out.get_surface_count() - 1, src.surface_get_material(s))
+	return out
+
+
+## Сазерленд — Ходжмен однією площиною: лишає частину многокутника, де side·(z − plane) ≥ 0.
+static func _clip_poly(poly: Array, plane: float, side: float) -> Array:
+	var out: Array = []
+	for i in poly.size():
+		var a: Array = poly[i]
+		var b: Array = poly[(i + 1) % poly.size()]
+		var da: float = side * ((a[0] as Vector3).z - plane)
+		var db: float = side * ((b[0] as Vector3).z - plane)
+		if da >= 0.0:
+			out.append(a)
+		if (da >= 0.0) != (db >= 0.0):
+			var t: float = da / (da - db)
+			out.append([(a[0] as Vector3).lerp(b[0], t), (a[1] as Vector3).lerp(b[1], t).normalized(),
+					(a[2] as Vector4).lerp(b[2], t), (a[3] as Color).lerp(b[3], t),
+					(a[4] as Vector2).lerp(b[4], t), (a[5] as Vector2).lerp(b[5], t)])
+	return out
 
 
 static func _to_root(n: Node3D, root: Node3D) -> Transform3D:
@@ -211,6 +374,8 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_slots.clear()
 	_spans.clear()
 	_wires = null
+	_contacts = null
+	_node_materials.clear()
 	forest_cells.clear()
 	_board_size = board_size
 	if world.width <= 0 or world.height <= 0:
@@ -233,7 +398,7 @@ func set_reveal_cells(cells: Array[Vector2i]) -> void:
 	for c in cells:
 		for o in REVEAL_OFFSETS:
 			_reveal[c + o] = true
-	_apply()
+	_queue_apply()
 
 
 ## Клітинки, де розчавлено дрібні пропси, — уже обрізані розвіданим глядача (§3.5): шар не
@@ -242,7 +407,7 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 	_crushed.clear()
 	for c in cells:
 		_crushed[c] = true
-	_apply()
+	_queue_apply()
 
 
 ## Для тестів: екземпляри, що стоять на клітинці дошки.
@@ -272,6 +437,20 @@ func wire_spans() -> int:
 		if not _is_crushed(_instances[s[0]]) and not _is_crushed(_instances[s[1]]):
 			n += 1
 	return n
+
+
+## Набір під юнітами й розчавлене приходять разом після кожного пакета подій: вузли оновлюються
+## один раз наприкінці кадру, а не на кожен виклик. Стан (instances_on) правдивий одразу.
+func _queue_apply() -> void:
+	if _apply_queued:
+		return
+	_apply_queued = true
+	_flush.call_deferred()
+
+
+func _flush() -> void:
+	if _apply_queued:
+		_apply()
 
 
 func _add(model_name: StringName, xform: Transform3D, cells: Array[Vector2i]) -> int:
@@ -306,7 +485,8 @@ func _build_nodes(haze: bool) -> void:
 		var casts: bool = structure_shadows and kind != Kind.BRIDGE and kind != Kind.BOULDER
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if fades:
-			mmi.material_override = _fade_material(m, info, haze)
+			_node_materials[m] = {"fade": _fade_material(m, info, haze, false), "solid": _fade_material(m, info, haze, true)}
+			mmi.material_override = _node_materials[m]["solid"]
 		add_child(mmi)
 		_nodes[m] = mmi
 		_slots[m] = by_model[m]
@@ -324,17 +504,59 @@ func _build_nodes(haze: bool) -> void:
 		mat.distance_fade_max_distance = WIRE_OPAQUE_DIST
 		_wires.material_override = mat
 		add_child(_wires)
+	_build_contacts()
+
+
+## Пляма дотику під брилами й блоками: один квадрат на кожен, лягає за схилом, одна MultiMesh. Без
+## неї світлий камінь на траві читається наклеєним, а справжня тінь по всіх брилах — задорога.
+func _build_contacts() -> void:
+	var xforms: Array[Transform3D] = []
+	for inst in _instances:
+		var k: int = int(spec_of(inst["model"])["kind"])
+		if k != Kind.BOULDER and k != Kind.BLOCK:
+			continue
+		var t: Transform3D = inst["transform"]
+		var box: AABB = t * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var size := Vector2(box.size.x, box.size.z) * CONTACT_SPREAD
+		var c := Vector2(box.get_center().x, box.get_center().z)
+		var hx: float = TerrainHeight.ground_y(c.x + 0.05, c.y) - TerrainHeight.ground_y(c.x - 0.05, c.y)
+		var hz: float = TerrainHeight.ground_y(c.x, c.y + 0.05) - TerrainHeight.ground_y(c.x, c.y - 0.05)
+		var up := Vector3(-hx / 0.1, 1.0, -hz / 0.1).normalized()
+		var right: Vector3 = Vector3.RIGHT.slide(up).normalized()
+		var back: Vector3 = right.cross(up)
+		xforms.append(Transform3D(Basis(right * size.x, up, -back * size.y),
+				Vector3(c.x, TerrainHeight.ground_y(c.x, c.y) + 0.004, c.y)))
+	if xforms.is_empty():
+		return
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE
+	var mat := ShaderMaterial.new()
+	mat.shader = _CONTACT_SHADER
+	mat.set_shader_parameter("strength", CONTACT_ALPHA)
+	quad.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = quad
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+	_contacts = MultiMeshInstance3D.new()
+	_contacts.name = "ContactShadows"
+	_contacts.multimesh = mm
+	_contacts.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_contacts)
 
 
 ## Імпортований матеріал не чіпаємо: GLB кешується й ділиться між усіма, хто його вантажить.
 ## Розчинення й імла — у власному ShaderMaterial поверх сітки (material_override).
-func _fade_material(m: StringName, info: Dictionary, haze: bool) -> ShaderMaterial:
-	var key: String = "%s:%s" % [m, haze]
+func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) -> ShaderMaterial:
+	# Розмір дошки — у ключі: імла кільця залежить від нього, а кеш живе весь процес.
+	var key: String = "%s:%s:%s:%s" % [m, haze, _board_size, solid]
 	if _fade_materials.has(key):
 		return _fade_materials[key]
 	var src := (info["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
 	var mat := ShaderMaterial.new()
-	mat.shader = _FADE_SHADER
+	mat.shader = _solid() if solid else _FADE_SHADER
 	if src != null:
 		mat.set_shader_parameter("albedo_tex", src.albedo_texture)
 		mat.set_shader_parameter("normal_tex", src.normal_texture)
@@ -345,6 +567,16 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool) -> ShaderMateri
 		Surroundings.apply(mat, _board_size)
 	_fade_materials[key] = mat
 	return mat
+
+
+static func _solid() -> Shader:
+	if _solid_shader == null:
+		_solid_shader = Shader.new()
+		var code: String = _FADE_SHADER.code
+		var cut: String = "\tif (v_fade > bayer4(FRAGCOORD.xy)) {\n\t\tdiscard;\n\t}\n"
+		assert(code.contains(cut), "PropLayer: розчинення в prop_fade.gdshader змінилось")
+		_solid_shader.code = code.replace(cut, "")
+	return _solid_shader
 
 
 func _is_faded(inst: Dictionary) -> bool:
@@ -381,15 +613,22 @@ func _final_transform(inst: Dictionary) -> Transform3D:
 
 
 func _apply() -> void:
+	_apply_queued = false
 	for m: StringName in _nodes:
-		var mm: MultiMesh = (_nodes[m] as MultiMeshInstance3D).multimesh
+		var mmi: MultiMeshInstance3D = _nodes[m]
+		var mm: MultiMesh = mmi.multimesh
 		var slots: Array = _slots[m]
 		var local: Transform3D = (model(m) as Dictionary)["local"]
+		var any_faded := false
 		for k in slots.size():
 			var inst: Dictionary = _instances[slots[k]]
 			mm.set_instance_transform(k, _final_transform(inst) * local)
 			if mm.use_custom_data:
-				mm.set_instance_custom_data(k, Color(0, 0, 0, FADE if _is_faded(inst) else 0.0))
+				var faded: bool = _is_faded(inst)
+				any_faded = any_faded or faded
+				mm.set_instance_custom_data(k, Color(0, 0, 0, FADE if faded else 0.0))
+		if _node_materials.has(m):
+			mmi.material_override = _node_materials[m]["fade" if any_faded else "solid"]
 	_rebuild_wires()
 
 
@@ -436,11 +675,13 @@ class _Placer:
 	var salt: int
 	var used: Dictionary = {}
 	var spans: Array = []
-	## Межі вже поставлених будівель у XZ: виступ моделі за слід (дозволений ассетом до 0.1 тайла)
-	## не сміє врізатись у сусідню будівлю.
-	var placed: Array[Rect2] = []
+	## Межі вже поставлених будівель у XZ разом зі звісом даху і власний проміжок кожної:
+	## [Rect2, gap]. Нова будівля тримається від них на більший із двох проміжків.
+	var placed: Array = []
 	## Клітинки дошки, на яких уже стоїть дрібний пропс (одна річ на ребро).
 	var edges: Dictionary = {}
+	## Клітинки дошки з огорожею двору: польова огорожа й причепи їх оминають.
+	var yard_cells: Dictionary = {}
 
 	func _init(p_layer: PropLayer, p_world: Board, p_ring: int, p_size: Vector2i,
 			p_height: TerrainHeight, p_map: StringName, p_half: Vector2) -> void:
@@ -456,7 +697,7 @@ class _Placer:
 	func place_all() -> void:
 		_structures()
 		_bridges()
-		_garden_fences()
+		_yard_fences()
 		_field_fences()
 		_hay()
 		_trailers()
@@ -507,7 +748,9 @@ class _Placer:
 
 	## tilt — довгий пропс (огорожа) лягає за схилом уздовж своєї довжини (локальна X), а не стоїть
 	## рівно, одним кінцем у повітрі.
-	func put_small(m: StringName, c: Vector2i, local: Vector2, yaw: float, scale: float = 1.0, tilt: bool = false) -> bool:
+	## length — масштаб уздовж локальної X: огорожа двору подовжується на кутах до сусідньої.
+	func put_small(m: StringName, c: Vector2i, local: Vector2, yaw: float, scale: float = 1.0, tilt: bool = false,
+			length: float = 1.0) -> bool:
 		if m == &"":
 			return false
 		var x: float = c.x + local.x
@@ -515,13 +758,13 @@ class _Placer:
 		var basis := Basis(Vector3.UP, yaw)
 		var y: float = ground(x, z)
 		if tilt:
-			var half_len: float = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size.x * 0.5
+			var half_len: float = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size.x * 0.5 * length
 			var along: Vector3 = basis.x * half_len
 			var y0: float = ground(x - along.x, z - along.z)
 			var y1: float = ground(x + along.x, z + along.z)
 			basis = Basis(basis.z, atan2(y1 - y0, 2.0 * half_len)) * basis
 			y = minf((y0 + y1) * 0.5, y)
-		var xform := Transform3D(basis.scaled(Vector3.ONE * scale), Vector3(x, y, z))
+		var xform := Transform3D(basis * Basis.from_scale(Vector3(length, 1.0, 1.0) * scale), Vector3(x, y, z))
 		if not clear_of_centre(m, xform, c):
 			return false
 		var cells: Array[Vector2i] = [c]
@@ -560,6 +803,7 @@ class _Placer:
 		var free: Dictionary = {}
 		for c in group:
 			free[c] = true
+		var in_group: Dictionary = free.duplicate()
 		var in_ring: bool = not group.any(func(c: Vector2i) -> bool: return on_board(c))
 		var models: Array[StringName] = PropLayer.models_of(kind_id)
 		var step: int = 0
@@ -580,14 +824,17 @@ class _Placer:
 						continue
 					for rot in 4:
 						var size_r: Vector2i = fp if rot % 2 == 0 else Vector2i(fp.y, fp.x)
-						if _fits(free, c, size_r) and _clear_of_placed(m, c, rot, size_r):
+						if _fits(free, c, size_r) and _clear_of_placed(m, c, rot, size_r) \
+								and _inside_yard(m, c, rot, size_r, in_group):
 							var weight: int = int(s.get("weight", 1)) * size_r.x * size_r.y
-							if _faces_road(c, size_r, rot):
-								weight *= 3
-							options.append([m, c, rot, size_r, weight])
-							total += weight
+							options.append([m, c, rot, size_r, weight, _faces_road(c, size_r, rot)])
 			if options.is_empty():
 				return
+			# Фасадом до дороги, щойно таке місце є: хата не стоїть до вулиці глухим боком.
+			if options.any(func(o: Array) -> bool: return o[5]):
+				options = options.filter(func(o: Array) -> bool: return o[5])
+			for o: Array in options:
+				total += int(o[4])
 			var roll: int = h(group[0], 100 + step) % total
 			step += 1
 			for o: Array in options:
@@ -602,11 +849,38 @@ class _Placer:
 				* ((PropLayer.model(m) as Dictionary)["aabb"] as AABB)
 		return Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
 
+	func _gap_of(m: StringName) -> float:
+		return maxf(STRUCTURE_GAP, float(PropLayer.spec_of(m).get("gap", 0.0)))
+
 	func _clear_of_placed(m: StringName, origin: Vector2i, rot: int, s: Vector2i) -> bool:
-		var r: Rect2 = _rect_of(m, origin, rot, s).grow(STRUCTURE_GAP)
-		for p in placed:
-			if r.intersects(p):
+		var r: Rect2 = _rect_of(m, origin, rot, s)
+		for p: Array in placed:
+			if r.grow(maxf(_gap_of(m), float(p[1]))).intersects(p[0]):
 				return false
+		return true
+
+	## Модель не виходить за межу групи BUILDING далі за звіс YARD_EAVE (за ним — огорожа двору); у бік
+	## інших клітинок тієї ж групи звіс будь-який, сусіда стереже проміжок між будівлями.
+	func _inside_yard(m: StringName, origin: Vector2i, rot: int, s: Vector2i, in_group: Dictionary) -> bool:
+		var r: Rect2 = _rect_of(m, origin, rot, s)
+		var f := Rect2(Vector2(origin) - Vector2(0.5, 0.5), Vector2(s))
+		var sides: Array = []
+		if r.position.x < f.position.x - YARD_EAVE:
+			sides.append(Vector2i(-1, 0))
+		if r.end.x > f.end.x + YARD_EAVE:
+			sides.append(Vector2i(1, 0))
+		if r.position.y < f.position.y - YARD_EAVE:
+			sides.append(Vector2i(0, -1))
+		if r.end.y > f.end.y + YARD_EAVE:
+			sides.append(Vector2i(0, 1))
+		for d: Vector2i in sides:
+			for dy in s.y:
+				for dx in s.x:
+					var c: Vector2i = origin + Vector2i(dx, dy)
+					var n: Vector2i = c + d
+					if (n.x < origin.x or n.x >= origin.x + s.x or n.y < origin.y or n.y >= origin.y + s.y) \
+							and not in_group.has(n):
+						return false
 		return true
 
 	func _fits(free: Dictionary, origin: Vector2i, s: Vector2i) -> bool:
@@ -638,7 +912,7 @@ class _Placer:
 				for o: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
 					lo = minf(lo, ground(c.x + o.x, c.y + o.y))
 		used[m] = int(used.get(m, 0)) + 1
-		placed.append(_rect_of(m, origin, rot, s))
+		placed.append([_rect_of(m, origin, rot, s), _gap_of(m)])
 		var centre := Vector2(origin) + Vector2(s - Vector2i.ONE) * 0.5
 		layer._add(m, Transform3D(Basis(Vector3.UP, rot * PI * 0.5), Vector3(centre.x, lo, centre.y)),
 				_board_only(cells))
@@ -653,11 +927,11 @@ class _Placer:
 
 	# --- мости -----------------------------------------------------------------------------
 
-	## Переправа — одна модель на всю довжину, уздовж дороги; настил — на deck_y. Мости своєї
-	## карти розкладаються на переправи за порядком уздовж X; інакше — будь-який міст тієї ж
-	## довжини. Міст кільця моделі не має: він не має й настилу, а правила його не бачать.
-	## shortcut: переправа з хоч одною підірваною клітинкою вся показує зруйнований стан, хоча
-	## решта клітинок прохідна; різати модель по клітинках — коли підрив посередині стане частим.
+	## Переправа — модель на всю довжину вздовж дороги; настил — на deck_y. Мости своєї карти
+	## розкладаються на переправи за порядком уздовж X; інакше — будь-який міст тієї ж довжини. Міст
+	## кільця моделі не має: у нього нема й настилу, а правила його не бачать. Підрив буває на одній
+	## клітинці, тож змішана переправа — по шматку на клітинку, кожен у власному стані: гравець бачить,
+	## яку саме клітинку може відновити інженер. Ціла чи вся зруйнована — одна модель.
 	func _bridges() -> void:
 		if height == null:
 			return
@@ -684,18 +958,28 @@ class _Placer:
 			if m == &"":
 				push_warning("PropLayer: переправі довжиною %d нема моделі" % length)
 				continue
+			var axis: Vector2 = g["axis"]
 			var cells: Array[Vector2i] = []
 			cells.assign(g["cells"])
-			var broken: bool = cells.any(func(c: Vector2i) -> bool: return kind(c) == Terrain.Kind.BRIDGE_DESTROYED)
-			var shown: StringName = StringName(String(m) + "_broken") if broken else m
-			if PropLayer.model(shown) == null:
-				shown = m
-			var axis: Vector2 = g["axis"]
+			# Клітинки за зростанням уздовж осі — у тому ж порядку, що й шматки моделі вздовж локальної Z.
+			cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.x < b.x if axis.x != 0.0 else a.y < b.y)
+			var broken_m := StringName(String(m) + "_broken")
+			if PropLayer.model(broken_m) == null:
+				broken_m = m
+			var broken: Array = cells.map(func(c: Vector2i) -> bool: return kind(c) == Terrain.Kind.BRIDGE_DESTROYED)
 			# Вісь моделі — Z; переправа вздовж X повертається на 90° (локальна +Z → світова +X).
 			var turn := Basis() if axis.x == 0.0 else Basis(Vector3.UP, PI * 0.5)
 			var centre: Vector2 = g["centre"]
 			var y: float = height.deck_y(cells[0]) - float(PropLayer.spec_of(m)["deck_top"])
-			layer._add(shown, Transform3D(turn, Vector3(centre.x, y, centre.y)), cells)
+			var xform := Transform3D(turn, Vector3(centre.x, y, centre.y))
+			if not broken.has(true):
+				layer._add(m, xform, cells)
+			elif not broken.has(false):
+				layer._add(broken_m, xform, cells)
+			else:
+				for k in cells.size():
+					var one: Array[Vector2i] = [cells[k]]
+					layer._add(StringName("%s#%d" % [broken_m if broken[k] else m, k]), xform, one)
 
 	func _length(g: Dictionary) -> int:
 		var axis: Vector2 = g["axis"]
@@ -726,31 +1010,109 @@ class _Placer:
 			return true
 		return false
 
-	## Огорожа городу: на прохідній клітинці під кожним ребром, за яким стоїть будинок.
-	func _garden_fences() -> void:
+	## Огорожа двору — замкнений контур одного типу довкола кожної групи BUILDING дошки, на YARD_OUT
+	## за її межею, з хвірткою в бік дороги. На опуклих кутах сусідні прольоти подовжуються назустріч,
+	## на вгнутих коротшають, тож кути зімкнуті й нічого не стирчить. Де за межею вода чи край дошки,
+	## контур уривається: огорожі на воді не буває.
+	func _yard_fences() -> void:
+		var seen: Dictionary = {}
 		for y in size.y:
 			for x in size.x:
-				var c := Vector2i(x, y)
-				if not open_ground(c):
+				var start := Vector2i(x, y)
+				if seen.has(start) or kind(start) != Terrain.Kind.BUILDING:
 					continue
-				for d in Board.DIRS_4:
-					if kind(c + d) == Terrain.Kind.BUILDING:
-						put_on_edge(pick_for_half(Kind.GARDEN_FENCE, half(c)), c, d)
+				var group: Dictionary = {start: true}
+				var queue: Array[Vector2i] = [start]
+				seen[start] = true
+				while not queue.is_empty():
+					var q: Vector2i = queue.pop_back()
+					for d in Board.DIRS_4:
+						var n: Vector2i = q + d
+						if on_board(n) and not seen.has(n) and kind(n) == Terrain.Kind.BUILDING:
+							seen[n] = true
+							group[n] = true
+							queue.append(n)
+				_fence_yard(group, start)
 
-	## Поле вздовж дороги: огорожа відрізками по FIELD_FENCE_RUN клітинок на частині узбіч.
+	func _fence_yard(group: Dictionary, first: Vector2i) -> void:
+		var m: StringName = pick_for_half(Kind.GARDEN_FENCE, half(first))
+		var cells: Array = group.keys()
+		cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
+		var sides: Array = []
+		for g: Vector2i in cells:
+			for d in Board.DIRS_4:
+				var c: Vector2i = g + d
+				if group.has(c) or not on_board(c):
+					continue
+				if kind(c) in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.HILL]:
+					sides.append([g, d])
+		if sides.is_empty() or m == &"":
+			return
+		var to_road: Array = sides.filter(func(e: Array) -> bool: return kind(e[0] + e[1]) == Terrain.Kind.ROAD)
+		var pool: Array = to_road if not to_road.is_empty() else sides
+		var gate: Array = pool[h(first, 120) % pool.size()]
+		for e: Array in sides:
+			if e != gate:
+				_yard_segment(m, group, e[0], e[1])
+
+	func _yard_segment(m: StringName, group: Dictionary, g: Vector2i, d: Vector2i) -> void:
+		var c: Vector2i = g + d
+		var t := Vector2i(absi(d.y), absi(d.x))
+		var ext: Dictionary = {}
+		for e: Vector2i in [t, -t]:
+			if group.has(g + e):
+				ext[e] = -YARD_OUT if group.has(c + e) else 0.0
+			else:
+				ext[e] = YARD_OUT
+		var length: float = 1.0 + float(ext[t]) + float(ext[-t])
+		var shift: float = (float(ext[t]) - float(ext[-t])) * 0.5
+		var key := Vector4i(c.x, c.y, -d.x, -d.y)
+		if edges.has(key):
+			return
+		var local: Vector2 = -Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * shift
+		if put_small(m, c, local, 0.0 if d.y != 0 else PI * 0.5, 1.0, true, length):
+			edges[key] = true
+			yard_cells[c] = true
+
+	## Огорожа поля вздовж дороги: відрізками щонайменше у дві клітинки, з одного боку дороги на
+	## відрізок і не біля дворів — подвійні паралельні ряди й самотня секція серед поля читаються
+	## помилкою.
 	func _field_fences() -> void:
+		var picks: Dictionary = {}
 		for y in size.y:
 			for x in size.x:
 				var c := Vector2i(x, y)
-				if not open_ground(c):
+				if not open_ground(c) or yard_cells.has(c) or _near_building(c):
 					continue
 				for d in Board.DIRS_4:
-					if kind(c + d) != Terrain.Kind.ROAD:
+					var r: Vector2i = c + d
+					if kind(r) != Terrain.Kind.ROAD:
 						continue
-					var along: int = (c.x if d.y != 0 else c.y) / FIELD_FENCE_RUN
-					var run := Vector2i(along, (c.y if d.y != 0 else c.x) * 4 + d.x + 2 * d.y)
-					if h(run, 3) % 16 < FIELD_FENCE_CHANCE:
-						put_on_edge(pick_for_half(Kind.FIELD_FENCE, half(c)), c, d)
+					var t := Vector2i(absi(d.y), absi(d.x))
+					var along: int = r.x if t.x != 0 else r.y
+					var across: int = r.y if t.x != 0 else r.x
+					var hr: int = h(Vector2i(along / FIELD_FENCE_RUN * 2 + t.x, across), 3)
+					if hr % 16 >= FIELD_FENCE_CHANCE:
+						continue
+					var side: int = 1 if (hr / 16) % 2 == 0 else -1
+					if -(d.y if t.x != 0 else d.x) != side:
+						continue
+					picks[Vector4i(c.x, c.y, d.x, d.y)] = true
+		var keys: Array = picks.keys()
+		keys.sort()
+		for k: Vector4i in keys:
+			var t := Vector2i(absi(k.w), absi(k.z))
+			if not picks.has(Vector4i(k.x + t.x, k.y + t.y, k.z, k.w)) and not picks.has(Vector4i(k.x - t.x, k.y - t.y, k.z, k.w)):
+				continue
+			var c := Vector2i(k.x, k.y)
+			put_on_edge(pick_for_half(Kind.FIELD_FENCE, half(c)), c, Vector2i(k.z, k.w))
+
+	func _near_building(c: Vector2i) -> bool:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				if kind(c + Vector2i(dx, dy)) == Terrain.Kind.BUILDING:
+					return true
+		return false
 
 	## Тюки на луці, купкою в куті клітинки; не біля води, болота й дороги.
 	func _hay() -> void:
@@ -772,17 +1134,19 @@ class _Placer:
 					var off := Vector2(float(h(c, 8 + k) % 100) / 100.0 - 0.5, float(h(c, 12 + k) % 100) / 100.0 - 0.5) * 0.12
 					put_small(m, c, corner + off - corner.normalized() * 0.09 * k, float(h(c, 16 + k) % 628) / 100.0)
 
-	## Причіп біля подвір'я: один на групу будівель, на прохідній клітинці поруч, уздовж ребра.
+	## Причіп біля подвір'я: один на групу, на полі за огорожею двору (ближче — сама огорожа), уздовж
+	## ребра в бік двору.
 	func _trailers() -> void:
 		var done: Dictionary = {}
 		for y in size.y:
 			for x in size.x:
 				var c := Vector2i(x, y)
-				if not open_ground(c) or h(c, 20) % 16 >= 4:
+				if not open_ground(c) or yard_cells.has(c) or h(c, 20) % 16 >= 4:
 					continue
 				for d in Board.DIRS_4:
-					var b: Vector2i = c + d
-					if kind(b) != Terrain.Kind.BUILDING or done.has(b / 4):
+					var f: Vector2i = c + d
+					var b: Vector2i = f + d
+					if not yard_cells.has(f) or kind(b) != Terrain.Kind.BUILDING or done.has(b / 4):
 						continue
 					if put_on_edge(pick_for_half(Kind.TRAILER, half(c)), c, d, 0.39):
 						done[b / 4] = true
@@ -860,10 +1224,10 @@ class _Placer:
 					var tan: Vector2 = (b - a) / seg
 					var nrm := Vector2(-tan.y, tan.x) * side
 					var half_w: float = float(roads.halfs[li][k]) / 8.0
-					var placed: int = _pole_at(m, p + nrm * (half_w + 0.3), tan)
-					if placed >= 0 and prev >= 0:
-						spans.append([prev, placed])
-					prev = placed
+					var pole: int = _pole_at(m, p + nrm * (half_w + 0.3), tan)
+					if pole >= 0 and prev >= 0:
+						spans.append([prev, pole])
+					prev = pole
 					next += step
 				dist += seg
 

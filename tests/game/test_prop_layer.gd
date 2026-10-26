@@ -128,14 +128,31 @@ func test_bridge_swaps_when_demolished_and_back_when_repaired() -> void:
 	assert_eq(view.props().instances_on(Vector2i(21, 10))[0]["model"], &"bridge_river_east")
 	board.set_kind(cell, Terrain.Kind.BRIDGE_DESTROYED)
 	view.rebuild_tiles(board)
-	assert_eq(view.props().instances_on(cell)[0]["model"], &"bridge_river_centre_broken")
+	assert_eq(view.props().instances_on(cell)[0]["model"], &"bridge_river_centre_broken#1", "підірвана клітинка — руїна")
+	assert_eq(view.props().instances_on(Vector2i(13, 9))[0]["model"], &"bridge_river_centre#0",
+			"сусідня клітинка тієї ж переправи лишається цілою: її не треба відновлювати")
+	assert_eq(view.props().instances_on(Vector2i(13, 11))[0]["model"], &"bridge_river_centre#2")
 	assert_eq(view.props().instances_on(Vector2i(4, 10))[0]["model"], &"bridge_river_west", "інша переправа ціла")
+	for c: Vector2i in [Vector2i(13, 9), Vector2i(13, 10), Vector2i(13, 11)]:
+		assert_eq(view.props().instances_on(c).size(), 1, "%s: рівно один шматок" % c)
 	board.set_kind(cell, Terrain.Kind.BRIDGE)
 	view.rebuild_tiles(board)
 	assert_eq(view.props().instances_on(cell)[0]["model"], &"bridge_river_centre")
 
 
 ## Настил збігається з дорогою: модель стоїть на deck_y мінус висота її настилу.
+## Шматок мосту обрізано рівно по межі своєї клітинки.
+func test_bridge_segments_stay_inside_their_cell() -> void:
+	for name: String in ["bridge_river_centre#0", "bridge_river_centre#1", "bridge_river_centre_broken#2", "bridge_river_west#1"]:
+		var info: Dictionary = PropLayer.model(StringName(name))
+		var box: AABB = info["aabb"]
+		var k: int = int(name.get_slice("#", 1))
+		var length: float = 3.0 if name.begins_with("bridge_river_centre") else 2.0
+		assert_gt(int(info["tris"]), 0, name)
+		assert_gte(box.position.z, -length * 0.5 + k - 1e-4, name)
+		assert_lte(box.end.z, -length * 0.5 + k + 1.0 + 1e-4, name)
+
+
 func test_bridge_deck_meets_the_road() -> void:
 	var view: BoardView = _view(_map("river"))
 	var inst: Dictionary = view.props().instances_on(Vector2i(13, 10))[0]
@@ -181,38 +198,56 @@ func _faded(view: BoardView, cell: Vector2i) -> bool:
 
 ## Юніт на c розчиняє будівлі на c і на клітинках між ним і камерою (+x, +z); будинок за юнітом
 ## (з боку −x, −z) лишається суцільним.
+## Клітинка групи з будинком, з найменшими координатами (будинок може не вкрити всю групу).
+func _house_cell(view: BoardView) -> Vector2i:
+	for c: Vector2i in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(2, 3), Vector2i(3, 3)]:
+		if not view.props().instances_on(c).filter(
+				func(i: Dictionary) -> bool: return _kind(i["model"]) == PropLayer.Kind.STRUCTURE).is_empty():
+			return c
+	return Vector2i(-1, -1)
+
+
 func test_reveal_fades_the_cell_and_its_camera_side_neighbours_only() -> void:
 	var view: BoardView = _view(null, _house_board())
-	assert_false(view.props().instances_on(Vector2i(2, 2)).is_empty(), "передумова: будинок на групі 2×2")
-	view.set_reveal_cells([Vector2i(1, 1)] as Array[Vector2i])
-	assert_true(_faded(view, Vector2i(2, 2)), "будинок між юнітом і камерою")
-	view.set_reveal_cells([Vector2i(4, 4)] as Array[Vector2i])
-	assert_false(_faded(view, Vector2i(2, 2)), "будинок за юнітом не розчиняється")
-	view.set_reveal_cells([Vector2i(3, 3)] as Array[Vector2i])
-	assert_true(_faded(view, Vector2i(2, 2)), "юніт на клітинці будинку")
+	var h: Vector2i = _house_cell(view)
+	assert_ne(h, Vector2i(-1, -1), "передумова: будинок на групі 2×2")
+	view.set_reveal_cells([h - Vector2i(1, 1)] as Array[Vector2i])
+	assert_true(_faded(view, h), "будинок між юнітом і камерою")
+	view.set_reveal_cells([Vector2i(5, 5)] as Array[Vector2i])
+	assert_false(_faded(view, h), "будинок за юнітом не розчиняється")
+	view.set_reveal_cells([h] as Array[Vector2i])
+	assert_true(_faded(view, h), "юніт на клітинці будинку")
 
 
 func test_reveal_replaces_the_previous_set() -> void:
 	var view: BoardView = _view(null, _house_board())
-	view.set_reveal_cells([Vector2i(2, 2)] as Array[Vector2i])
-	assert_true(_faded(view, Vector2i(2, 2)))
+	var h: Vector2i = _house_cell(view)
+	view.set_reveal_cells([h] as Array[Vector2i])
+	assert_true(_faded(view, h))
 	view.set_reveal_cells([] as Array[Vector2i])
-	assert_false(_faded(view, Vector2i(2, 2)), "набір замінено, не доповнено")
+	assert_false(_faded(view, h), "набір замінено, не доповнено")
 
 
 ## Розчинення й набір переживають перебудову мосту.
 func test_reveal_survives_a_rebuild() -> void:
 	var board := _house_board()
 	var view: BoardView = _view(null, board)
-	view.set_reveal_cells([Vector2i(2, 2)] as Array[Vector2i])
+	var h: Vector2i = _house_cell(view)
+	view.set_reveal_cells([h] as Array[Vector2i])
 	view.rebuild_tiles(board)
-	assert_true(_faded(view, Vector2i(2, 2)))
+	assert_true(_faded(view, h))
 
 
 ## Розчавлене — лише дрібні пропси, і лише на поданих клітинках; будинок не чавиться.
 func test_crush_flattens_small_props_on_the_given_cells_only() -> void:
 	var view: BoardView = _view(null, _house_board())
-	var fence_cell := Vector2i(2, 1)
+	var fenced: Array[Vector2i] = []
+	for c: Vector2i in [Vector2i(2, 1), Vector2i(3, 1), Vector2i(2, 4), Vector2i(3, 4)]:
+		if not _fences_on(view, c).is_empty():
+			fenced.append(c)
+	assert_gte(fenced.size(), 3, "двір обгороджено, хвіртка — одна")
+	var fence_cell: Vector2i = fenced[0]
+	var other: Vector2i = fenced[1]
 	var on: Array[Dictionary] = _fences_on(view, fence_cell)
 	assert_eq(on.size(), 1, "огорожа під будинком")
 	if on.is_empty():
@@ -225,7 +260,7 @@ func test_crush_flattens_small_props_on_the_given_cells_only() -> void:
 	assert_ne(after["transform"], before, "повалена огорожа лежить інакше")
 	for inst in view.props().instances_on(Vector2i(2, 2)):
 		assert_false(inst["crushed"], "будинок не чавиться")
-	assert_false(_fences_on(view, Vector2i(2, 4))[0]["crushed"], "огорожа поруч ціла")
+	assert_false(_fences_on(view, other)[0]["crushed"], "огорожа поруч ціла")
 
 
 func _fences_on(view: BoardView, cell: Vector2i) -> Array[Dictionary]:
@@ -294,7 +329,8 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	var models: Dictionary = {}
 	for inst in view.props().all_instances():
 		models[inst["model"]] = true
-	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false)
+	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
+			func(n: Node) -> bool: return n.name != &"ContactShadows")
 	assert_eq(mmis.size(), models.size(), p)
 	for n in mmis:
 		assert_true(models.has(StringName(n.name)), "%s: вузол %s" % [p, n.name])
@@ -305,9 +341,72 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 ## Будівлі кільця тонуть в імлі разом із землею: матеріал розчинення несе параметри кільця.
 func test_ring_structures_take_the_haze() -> void:
 	var view: BoardView = _view(_map("crossroads"))
-	var mmi: MultiMeshInstance3D = view.props().get_node("house_h1")
+	var mmi: MultiMeshInstance3D = null
+	for n: MultiMeshInstance3D in view.props().find_children("*", "MultiMeshInstance3D", false, false):
+		if n.name != &"ContactShadows" and _kind(StringName(n.name)) == PropLayer.Kind.STRUCTURE:
+			mmi = n
 	var mat: ShaderMaterial = mmi.material_override
 	assert_true(mat.get_shader_parameter("surround"))
+
+
+## Огорожа двору — замкнений контур довкола групи з однією хвірткою: на кожному ребрі групи, де за
+## межею поле, стоїть секція, крім одного.
+func test_yard_fence_closes_the_yard_with_one_gate() -> void:
+	var view: BoardView = _view(null, _house_board())
+	var sides: int = 0
+	var fenced: int = 0
+	for c: Vector2i in [Vector2i(2, 1), Vector2i(3, 1), Vector2i(2, 4), Vector2i(3, 4), Vector2i(1, 2), Vector2i(1, 3), Vector2i(4, 2), Vector2i(4, 3)]:
+		sides += 1
+		fenced += 1 if not _fences_on(view, c).is_empty() else 0
+	assert_eq(fenced, sides - 1, "вісім ребер, одна хвіртка")
+	var models: Dictionary = {}
+	for inst in view.props().all_instances():
+		if _kind(inst["model"]) == PropLayer.Kind.GARDEN_FENCE:
+			models[inst["model"]] = true
+	assert_eq(models.size(), 1, "один тип огорожі на двір")
+
+
+## Хвіртка — у бік дороги, коли дорога поруч.
+func test_yard_gate_faces_the_road() -> void:
+	var board := _house_board()
+	board.set_kind(Vector2i(2, 4), Terrain.Kind.ROAD)
+	board.set_kind(Vector2i(3, 4), Terrain.Kind.ROAD)
+	var view: BoardView = _view(null, board)
+	var road_fences: int = _fences_on(view, Vector2i(2, 4)).size() + _fences_on(view, Vector2i(3, 4)).size()
+	assert_eq(road_fences, 1, "одна з двох секцій до дороги — хвіртка")
+
+
+## Під брилами й блоками — пляма дотику, одним вузлом.
+func test_boulders_get_contact_blobs() -> void:
+	var view: BoardView = _view(_map("ridge"))
+	var stones: int = 0
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		stones += 1 if k == PropLayer.Kind.BOULDER or k == PropLayer.Kind.BLOCK else 0
+	var blobs: MultiMeshInstance3D = view.props().get_node("ContactShadows")
+	assert_eq(blobs.multimesh.instance_count, stones)
+
+
+## Будівлі моделі, над якою ніхто не стоїть, малюються шейдером без discard.
+func test_unfaded_structures_use_the_solid_material() -> void:
+	var view: BoardView = _view(null, _house_board())
+	var p: PropLayer = view.props()
+	var node: MultiMeshInstance3D = null
+	for n: MultiMeshInstance3D in p.find_children("*", "MultiMeshInstance3D", false, false):
+		if n.name != &"ContactShadows" and _kind(StringName(n.name)) == PropLayer.Kind.STRUCTURE:
+			node = n
+	assert_not_null(node)
+	assert_false(((node.material_override as ShaderMaterial).shader.code).contains("discard"))
+	view.set_reveal_cells([Vector2i(2, 2)] as Array[Vector2i])
+	p._flush()
+	assert_true(((node.material_override as ShaderMaterial).shader.code).contains("discard"))
+
+
+## Перелік моделей — через ResourceLoader, тож працює й в експортованій збірці.
+func test_model_discovery_is_export_safe() -> void:
+	var src: String = (load("res://game/battle/prop_layer.gd") as Script).source_code
+	assert_false(src.contains("DirAccess"), "DirAccess не бачить .glb в експорті")
+	assert_true(PropLayer.models_of(PropLayer.Kind.RUIN).size() >= 2)
 
 
 ## Нова модель руїни стає в слот за префіксом імені.
@@ -349,6 +448,13 @@ func _move(service: Node, screen: BattleScreen, type_id: int, to: Vector2i) -> v
 	await wait_physics_frames(3)
 
 
+func _fenced_of(view: BoardView, cells: Array[Vector2i]) -> Vector2i:
+	for c in cells:
+		if not _fences_on(view, c).is_empty():
+			return c
+	return Vector2i(-1, -1)
+
+
 func _crushed_on(screen: BattleScreen, cell: Vector2i) -> bool:
 	var view: BoardView = screen.get_node("%BoardView")
 	for inst in view.props().instances_on(cell):
@@ -364,21 +470,24 @@ func test_vehicle_crushes_infantry_does_not_and_the_enemy_never_sees_it_unscoute
 	add_child_autofree(screen)
 	screen.setup(_yard_map(), 2, 1, service)
 	var view: BoardView = screen.get_node("%BoardView")
-	assert_false(view.props().instances_on(Vector2i(3, 1)).is_empty(), "передумова: огорожа під двором")
-	assert_false(view.props().instances_on(Vector2i(3, 3)).is_empty(), "передумова: огорожа під другим двором")
+	# Хвіртка може припасти на будь-яке ребро, тож беремо клітинку шляху, де огорожа таки є.
+	var car_cell: Vector2i = _fenced_of(view, [Vector2i(2, 1), Vector2i(3, 1), Vector2i(4, 1)])
+	var rifle_cell: Vector2i = _fenced_of(view, [Vector2i(2, 3), Vector2i(3, 3), Vector2i(4, 3)])
+	assert_ne(car_cell, Vector2i(-1, -1), "передумова: огорожа під двором")
+	assert_ne(rifle_cell, Vector2i(-1, -1), "передумова: огорожа під другим двором")
 
 	await _move(service, screen, ARMOURED_CAR, Vector2i(4, 1))
 	await _move(service, screen, RIFLE, Vector2i(4, 3))
-	assert_true(_crushed_on(screen, Vector2i(3, 1)), "техніка розчавила огорожу")
-	assert_false(_crushed_on(screen, Vector2i(3, 3)), "піхота пройшла повз")
+	assert_true(_crushed_on(screen, car_cell), "техніка розчавила огорожу")
+	assert_false(_crushed_on(screen, rifle_cell), "піхота пройшла повз")
 	assert_true(_faded(view, Vector2i(4, 4)), "дім між стрільцями й камерою розчинився")
 	assert_false(_faded(view, Vector2i(4, 0)), "дім за машиною — ні")
 
-	assert_false(service.state.vision[1].is_seen(Vector2i(3, 1)), "передумова: гравець 1 там не бував")
+	assert_false(service.state.vision[1].is_seen(car_cell), "передумова: гравець 1 там не бував")
 	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
 	await wait_physics_frames(3)
 	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
-	assert_false(_crushed_on(screen, Vector2i(3, 1)), "§3.5: уламки на нерозвіданому не видають танк")
+	assert_false(_crushed_on(screen, car_cell), "§3.5: уламки на нерозвіданому не видають танк")
 	assert_false(_faded(view, Vector2i(4, 4)), "§3.5: прозорий дах не видає невидимих стрільців")
 
 

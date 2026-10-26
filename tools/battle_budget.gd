@@ -4,7 +4,8 @@ extends Node
 ## Запуск (потрібне вікно, не --headless; вікно — за межами екрана):
 ##   $GODOT --path . --position 6000,0 res://tools/battle_budget.tscn -- <out_dir> [--shadows] <map>[@x,y@zoom] ...
 ## --shadows: будівлі й руїни кидають справжню тінь сонця — щоб зміряти, скільки це коштує.
-## Без @… знімається центр дошки на MAX і MIN зумі. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=….
+## Без @… знімається центр дошки на MAX і MIN зумі. <map>@sel@zoom — вибраний перший юніт гравця 0
+## із контурами зон руху поверх пропсів. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=….
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -39,7 +40,11 @@ func _ready() -> void:
 					mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		var rig: IsoCameraRig = screen.get_node("%CameraRig")
 		var views: Array = []
-		if parts.size() >= 3:
+		if parts.size() >= 3 and parts[1] == "sel":
+			var unit: Unit = MatchService.state.units_of(0)[0]
+			(screen.get("_controller") as InputController).select_unit(unit)
+			views.append([unit.pos, float(parts[2])])
+		elif parts.size() >= 3:
 			var xy: PackedStringArray = parts[1].split(",")
 			views.append([Vector2i(int(xy[0]), int(xy[1])), float(parts[2])])
 		else:
