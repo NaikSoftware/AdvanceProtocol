@@ -1087,6 +1087,19 @@ func test_chimney_tops_and_ruin_centres() -> void:
 		assert_almost_eq(r.y, view._height.at(r.x, r.z), 0.1)
 
 
+## Руїна тліє з пролому на рівні даху — над землею, усередині обрису руїни, — а не біля
+## уцілілого димаря.
+func test_ruin_smoke_rises_from_the_breach_at_roof_level() -> void:
+	var view: BoardView = _cached("crossroads")
+	var props: PropLayer = view.props()
+	var pts: Array[Vector3] = props.ruin_smoke_points()
+	var centres: Array[Vector3] = props.ruin_centres()
+	assert_eq(pts.size(), centres.size())
+	for i in pts.size():
+		assert_gt(pts[i].y, centres[i].y + 0.1, "над землею, на рівні даху")
+		assert_lt(Vector2(pts[i].x - centres[i].x, pts[i].z - centres[i].z).length(), 0.6, "у межах руїни")
+
+
 ## Пояс бруду довкола кожної хати дошки — одним вузлом.
 func test_houses_get_a_grime_band() -> void:
 	var view: BoardView = _cached("river")

@@ -466,7 +466,9 @@ func test_smoke_spares_visible_neighbours() -> void:
 	assert_eq(smoke.get_shader_parameter("occ1"), Vector4.ZERO)
 	assert_true(smoke.shader.code.contains("occ[i].w + %s" % str(BattleFx.OCCLUDE_FEATHER)), "спад розмитий")
 	assert_true(BattleFx.OCCLUDE_FEATHER >= 1.0, "спад на тайл — без виїмки в стовпі")
-	assert_true(smoke.shader.code.contains("min(a, occ_cap)"), "над сусідом — без м'якого краю за глибиною, що вирізав дірку")
+	assert_true(smoke.shader.code.contains("min(a, lim)"), "над сусідом — без м'якого краю за глибиною, що вирізав дірку")
+	assert_eq(_mat(boom.get_node("Ball")).get_shader_parameter("occ_floor"), 0.6, "куля над сусідом ≤ 0,6 від першого кадру")
+	assert_eq(smoke.get_shader_parameter("occ_floor"), 1.0)
 	_step_all(0.3)
 	assert_eq(smoke.get_shader_parameter("occ_k"), 1.0, "обмеження повне з 0,3 с")
 	_assert_total_cap(boom)
@@ -492,6 +494,25 @@ func test_overlapping_puffs_share_the_cap() -> void:
 	_assert_total_cap(BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.AUTOCANNON, true))
 	_assert_total_cap(BattleFx.spawn_muzzle(parent, Transform3D(Basis(), Vector3(0.2, 0, 0)), BattleFx.Weapon.TANK_GUN, 5))
 	assert_almost_eq(BattleFx.occlude_cap(4), 1.0 - pow(0.55, 0.25), 1e-6)
+
+
+## Хвиля пилу фугаса розбігається низькими клубами по колу й над сусідом лише рідшає — малий окремий
+## бюджет, що не з'їдає межу самої хмари.
+func test_he_dust_wave_runs_out_and_only_thins_over_a_neighbour() -> void:
+	var u: UnitView = UnitViewScene.instantiate()
+	parent.add_child(u)
+	u.position = Vector3(1, 0, 0)
+	var hit: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.SHELL, false)
+	var wave: Array[Node] = hit.find_children("Wave*", "MeshInstance3D", true, false)
+	assert_gt(wave.size(), 8)
+	var start: float = (wave[0] as Node3D).position.length()
+	for q: Node in wave:
+		assert_almost_eq(float(_mat(q).get_shader_parameter("occ_cap")), BattleFx.WAVE_CAP, 1e-6)
+	assert_almost_eq(float(_mat(hit.get_node("Dirt")).get_shader_parameter("occ_cap")), BattleFx.occlude_cap(2), 1e-6, "хмара й ядро — свій бюджет")
+	_step_all(BattleFx.DUST_SPREAD_SEC + 0.05)
+	var reached: float = Vector2((wave[0] as Node3D).position.x, (wave[0] as Node3D).position.z).length()
+	assert_gt(reached, 1.0, "за 0,5 с хвиля дійшла понад клітинку від розриву")
+	assert_lt(start, 0.3, "і почалась біля нього")
 
 
 ## Дрібні клуби різняться поворотом і початковим кадром: однакові «капустини» читались штампом.

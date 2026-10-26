@@ -372,10 +372,19 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	assert_eq(dens.size(), first.size())
 	for i in dens.size():
 		assert_eq(dens[i], WreckLayer.hearth_density(first[i].y < 0.5))
-		assert_true(dens[i] < 0.0 and dens[i] >= -0.5, "тонкий атлас, мала густота")
+		assert_true(dens[i] < 0.0 and dens[i] >= -1.0, "тонкий атлас (пікова альфа 0,35), не пожежа")
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
 	assert_almost_eq(float(layer.hearth_material().get_shader_parameter("lighten")), WreckLayer.HEARTH_LIGHTEN, 1e-6)
 	layer.set_wind(Vector3(0.25, 0, 0))
 	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")
 	layer.rebuild(state, 0)
 	assert_eq(layer.hearth_points(), first, "перебудова уламків мирного диму не гасить")
+
+
+## Полум'я остова не вище за 0,6 клітинки над основою: вище язики м'яко гаснуть і не накривають
+## юніт на сусідній клітинці; стовп диму починається не вище за цю верхівку.
+func test_wreck_flame_is_capped_below_the_neighbouring_cell() -> void:
+	var fires := layer.get_node("Fires") as MultiMeshInstance3D
+	assert_eq((fires.material_override as ShaderMaterial).get_shader_parameter("max_h"), WreckLayer.FLAME_MAX_H)
+	assert_true(WreckLayer.FLAME_MAX_H <= 0.6)
+	assert_true(WreckLayer.FIRE_SHADER.code.contains("smoothstep(max_h * 0.7, max_h, v_h)"))

@@ -641,6 +641,25 @@ func ruin_centres() -> Array[Vector3]:
 	return out
 
 
+## Звідки тліє руїна: у проломі на рівні даху (0,55 висоти обрису), відсунуто від уцілілого
+## димаря — дим біля цілого димаря читався б як дим із димаря.
+func ruin_smoke_points() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for inst in _instances:
+		if int(spec_of(inst["model"])["kind"]) != Kind.RUIN or not _on_board((inst["cells"] as Array)[0]):
+			continue
+		var box: AABB = (inst["transform"] as Transform3D) * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var c := Vector3(box.get_center().x, box.position.y + box.size.y * 0.55, box.get_center().z)
+		var t: Transform3D = _final_transform(inst) * (model(inst["model"]) as Dictionary)["local"]
+		for ch: Vector3 in (model(inst["model"]) as Dictionary).get("chimneys", []):
+			var away := Vector2(c.x, c.z) - Vector2((t * ch).x, (t * ch).z)
+			if away.length() > 1e-4:
+				var push: Vector2 = away.normalized() * minf(box.size.x, box.size.z) * 0.3
+				c += Vector3(push.x, 0.0, push.y)
+		out.append(c)
+	return out
+
+
 ## Точка на покритті дороги (осі й ширина RoadCourse) з запасом pad, клітинки.
 func on_road(p: Vector2, pad: float = 0.0) -> bool:
 	return _placer != null and _placer.on_road(p, pad)
