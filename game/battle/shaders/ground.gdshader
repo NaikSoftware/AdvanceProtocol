@@ -1312,13 +1312,14 @@ void fragment() {
 			// довкола — світліший вал свіжого викиду; нормаль нахилена по схилах чаші й валу.
 			alb = mix(alb, vec3(0.030, 0.025, 0.019), sc.g * 0.85);
 			alb = mix(alb, alb * 1.2 + vec3(0.012, 0.009, 0.006), sc.b * 0.7);
-			vec2 st = 1.0 / (scar_size * 32.0);
+			// Схил по двох текселях (0,5 м): по одному край чаші ставав різкою темною рискою.
+			vec2 st = 2.0 / (scar_size * 32.0);
 			vec2 g = vec2(texture(scar_map, suv + vec2(st.x, 0.0)).g - texture(scar_map, suv - vec2(st.x, 0.0)).g,
 					texture(scar_map, suv + vec2(0.0, st.y)).g - texture(scar_map, suv - vec2(0.0, st.y)).g);
 			vec2 gr = vec2(texture(scar_map, suv + vec2(st.x, 0.0)).b - texture(scar_map, suv - vec2(st.x, 0.0)).b,
 					texture(scar_map, suv + vec2(0.0, st.y)).b - texture(scar_map, suv - vec2(0.0, st.y)).b);
 			// Висота: чаша — западина, вал — горб; нахил нормалі — мінус градієнт висоти.
-			nxy += (g - 0.5 * gr) * 1.6 * texture(scar_seen, suv).r * inside;
+			nxy += (g - 0.5 * gr) * 0.8 * texture(scar_seen, suv).r * inside;
 			scar_dark = max(sc.r, sc.g * 0.6);
 			rough = mix(rough, 1.0, max(sc.r, sc.g));
 			refl *= 1.0 - max(sc.r, sc.g * 0.7);
