@@ -242,6 +242,8 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
             c = math("ADD", math("MULTIPLY", sep.outputs[0], ay), math("MULTIPLY", sep.outputs[1], ax))
         elif axis == "zv":
             c = sep.outputs[2]
+        elif axis == "ang0":                                       # кут навколо вертикалі через початок координат (конус даху вежі)
+            c = math("MULTIPLY", math("ARCTAN2", sep.outputs[1], sep.outputs[0]), 3.0)
         elif axis == "ang8":
             # кут навколо найближчої осі бункера (центри кожні 8 м від -12), у метрах дуги
             lx = math("SUBTRACT", math("MODULO", math("ADD", sep.outputs[0], 16.0), 8.0), 4.0)
@@ -281,15 +283,18 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
     # потьоки вниз від швів і заклепок: тонкі вертикальні смуги, що згасають нижче шва
     if runs is not None:
         period, rcol, rstr = runs[:3]
-        # стовпці-смуги: кожен кут навколо осі й кожен поверх між швами мають свій випадковий хеш
+        # патьоки іржі лише з частини стовпців (~12 %, 3-6 на видимий бік), кожен своєї сили й довжини 0.5-1.5 м під швом:
+        # рівномірні смуги через одну читались штрихкодом
         ang = math("MULTIPLY", math("ARCTAN2", sep.outputs[1], sep.outputs[0]), 24.0)
         cid = math("FLOOR", ang)
         zid = math("FLOOR", math("DIVIDE", math("ADD", sep.outputs[2], 0.001), period))
         hsh = math("FRACT", math("MULTIPLY", math("SINE", math("ADD", math("MULTIPLY", cid, 12.9898), math("MULTIPLY", zid, 78.233))), 43758.5453))
-        on = math("LESS_THAN", hsh, 0.33)
+        hs2 = math("FRACT", math("MULTIPLY", hsh, 7.13))
+        on = math("LESS_THAN", hsh, 0.12)
         f = math("FRACT", math("DIVIDE", math("ADD", sep.outputs[2], 10000.0), period))
-        fall = math("POWER", f, 1.6)               # найтемніше під швом, згасає на 1.5-3 м
-        base = mix(base, rcol, math("MULTIPLY", math("MULTIPLY", on, fall), rstr), "MIX")
+        dist = math("MULTIPLY", math("SUBTRACT", 1.0, f), period)                    # метри під швом
+        fall = math("SUBTRACT", 1.0, math("DIVIDE", dist, math("ADD", 0.5, hs2)), clamp=True)
+        base = mix(base, rcol, math("MULTIPLY", math("MULTIPLY", on, fall), math("MULTIPLY", rstr, math("ADD", 0.5, math("MULTIPLY", hs2, 0.5)))), "MIX")
     # рельєф: хвилястість, текстурний рельєф і канавки швів — у карту нормалей
     if corr is not None:
         axis, pitch, amp = corr
@@ -368,7 +373,7 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
 FRAMES = [(0.42, 0.42, 0.40), (0.17, 0.095, 0.055), (0.07, 0.075, 0.08), (0.45, 0.40, 0.30), (0.24, 0.25, 0.26)]   # біла (~75 %), коричнева, графітова, кремова, сіра
 
 
-def make_window_material(frame_i=0):
+def make_window_material(frame_i=0, dark=False):
     """Вікно одним квадом за локальними UV (шар "local"): зовнішній темний відкіс імітує
     заглиблення 10-15 см, далі рама, середник і скло. Тон з атрибута wtone: 0 небесно-сіре
     скло, 0.5 темне, 1 тепла штора."""
@@ -417,18 +422,18 @@ def make_window_material(frame_i=0):
 
     u, v = sep.outputs[0], sep.outputs[1]
     edge = math("MINIMUM", math("MINIMUM", u, math("SUBTRACT", 1.0, u)), math("MINIMUM", v, math("SUBTRACT", 1.0, v)))
-    reveal = math("LESS_THAN", edge, 0.05)
+    reveal = math("LESS_THAN", edge, 0.09 if dark else 0.05)                    # у панельках укіс ширший: проріз читається втопленим
     frame = math("LESS_THAN", edge, 0.10)
     mull = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", u, 0.5)), 0.03)
     sill = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", v, 0.62)), 0.025)
     mask = math("MAXIMUM", math("MAXIMUM", frame, mull), sill)
     sky = math("SUBTRACT", 1.0, v)                                             # відбите небо світліше вгорі шибки
-    glass_sky = mixc((0.16, 0.19, 0.23), (0.05, 0.06, 0.075), sky)                                # небо у склі: світле вгорі, темніше донизу
+    glass_sky = mixc((0.16, 0.19, 0.23), (0.05, 0.06, 0.075), sky) if not dark else mixc((0.05, 0.058, 0.07), (0.012, 0.014, 0.017), sky)   # небо у склі: світле вгорі, темніше донизу
     tone = N("ShaderNodeSeparateColor")
     L(ca.outputs["Color"], tone.inputs[0])
     t = tone.outputs[0]
     g1 = mixc(glass_sky, (0.02, 0.025, 0.03), math("MULTIPLY", t, 2.0, True))
-    g2 = mixc(g1, (0.42, 0.36, 0.27), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))       # штора: тепла, світліша за скло
+    g2 = mixc(g1, (0.42, 0.36, 0.27) if not dark else (0.10, 0.085, 0.065), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))       # штора: тепла, світліша за скло
     fcol = FRAMES[frame_i]                                                     # рама — одна на будинок, з палітри
     fr = mixc(g2, fcol, mask)
     rv = mixc(fr, (0.05, 0.045, 0.04), reveal)
@@ -576,7 +581,8 @@ def mats():
     MATS.update({
         # нейтрально-теплий бетон панелей, шви між панелями 3 м і по поверхах
         # панелі: кожна плита 3 x 3.1 м свого тону (±6 %), темні шви між ними, без хмаркових плям
-        "panel": make_material("panel", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, cells=("x", 3.0, "z", 3.1, 0.06), rough=0.9),
+        # панелі: кожна плита 3 x 3.1 м свого тону (±13 %), темні шви між ними, без хмаркових плям
+        "panel": make_material("panel", "Concrete034", 1.2, (0.66, 0.64, 0.60), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, cells=("x", 3.0, "z", 3.1, 0.13), rough=0.9),
         # кіптява плавними потьоками, без плям-«корів»
         "panel_scorched": make_material("panel_scorched", "Concrete034", 1.2, (0.20, 0.19, 0.18), seams=[("h", 3.0, 0.04, 0.4), ("z", 3.1, 0.05, 0.4)], streak=1.6, streak_xy=2.5, base_dirt=0.5),
         "char": make_material("char", flat=(0.03, 0.028, 0.026)),
@@ -599,7 +605,10 @@ def mats():
         "silo_concrete": make_material("silo_concrete", "Concrete034", 1.5, (0.68, 0.60, 0.47), seams=[("z", 1.5, 0.03, 0.2)], streak=1.2, base_dirt=0.6),
         # цегла: червоно-коричнева ~RGB 110/70/58, лише яскравість із текстури
         # цегла: червоно-коричнева ~RGB 110/70/58, вивітрена патьоками й брудом знизу, без плям-хмар
-        "brick": make_material("brick", "Bricks105", 1.3, recolor=(0.50, 0.20, 0.135), contrast=1.3, streak=1.0, base_dirt=0.6, bump=0.012),
+        # цегла вежі: на ~15 % менш насичена, патьоки, бруд знизу сильніший (смуга ~1 м)
+        "brick": make_material("brick", "Bricks105", 1.3, recolor=(0.47, 0.24, 0.17), contrast=1.3, streak=1.0, base_dirt=0.9, bump=0.012),
+        # фальцевий метал конічного даху: радіальні шви кожні ~0.5 м, темний сіро-зелений, рідкі патьоки іржі
+        "roof_cone": make_material("roof_cone", flat=srgb_lin((0.30, 0.34, 0.31)), seams=[("ang0", 0.47, 0.03, 0.55)], seam_col=srgb_lin((0.16, 0.18, 0.17)), seam_bump=1.0, streak=0.3, patch=((0.17, 0.075, 0.035), 0.04), patch_scale=0.8, rough=0.55),
         # сталь: плями іржі лише великі (>3 м), плюс потьоки під швами
         # сталь: вигоріла сіро-зелена фарба, іржа патьоками під швами й дрібними плямами; без великих хмар
         "steel_paint": make_material("steel_paint", flat=srgb_lin((0.42, 0.48, 0.43)), seams=[("z", 1.5, 0.05, 0.3)], base_dirt=0.3, patch=((0.20, 0.09, 0.04), 0.05), patch_scale=0.7, runs=(3.0, (0.30, 0.10, 0.04), 1.0, 18.0), rough=0.6),
@@ -624,7 +633,8 @@ def mats():
         "clad_vc": make_material("clad_vc", "CorrugatedSteel005", 1.0, (0.46, 0.40, 0.34), seams=[("zv", 0.5, 0.04, 0.3)], corr=("h", 0.2, 0.008), streak=1.0, base_dirt=0.5, patch=((0.18, 0.09, 0.05), 0.25), vmul=True),
         "boards_ruin": make_material("boards_ruin", "Planks021", 1.0, (0.30, 0.27, 0.24), sat=0.35, seams=[("h", 0.2, 0.02, 0.8)], streak=1.0, base_dirt=0.5, bump=0.02),
         "panel_in": make_material("panel_in", flat=(0.30, 0.29, 0.27)),
-        "panel_frag": make_material("panel_frag", "Concrete034", 1.2, (0.43, 0.41, 0.38), streak=0.4, base_dirt=0.5, bump=0.02),
+        # уламки панелей у пилу й кіптяві: на ~30 % темніші за цілі
+        "panel_frag": make_material("panel_frag", "Concrete034", 1.2, (0.30, 0.29, 0.27), streak=0.6, base_dirt=0.5, bump=0.02),
         # напівруїни: ті самі світлі штукатурка, цегла й сірі дахи, що в цілих будинків; кіптява й руйнування зверху
         "wall_half_w": make_material("wall_half_w", "Plaster001", 2.5, (0.56, 0.52, 0.45), streak=0.65, base_dirt=0.85, bump=0.004, patch=((0.22, 0.17, 0.13), 0.35), patch_scale=1.0, vmul=True),
         "wall_half": make_material("wall_half", "Plaster001", 2.5, (0.66, 0.62, 0.55), streak=0.35, base_dirt=0.5, bump=0.004, patch=((0.40, 0.21, 0.14), 0.22), patch_scale=1.0, vmul=True),
@@ -682,7 +692,8 @@ def mats():
         "rubble_buff": make_rubble_material("rubble_buff", [(0.30, (0.46, 0.23, 0.13)), (0.50, (0.52, 0.31, 0.19)), (0.68, (0.64, 0.57, 0.46)), (0.84, (0.78, 0.76, 0.69)), (0.94, (0.20, 0.17, 0.14)), (1.01, (0.49, 0.41, 0.30))]),
         "heap_base_grey": make_material("heap_base_grey", flat=(0.055, 0.048, 0.042)),
         "rubble_hi": make_rubble_material("rubble_hi", [(0.34, (0.15, 0.07, 0.04)), (0.52, (0.16, 0.09, 0.055)), (0.68, (0.15, 0.12, 0.09)), (0.84, (0.095, 0.088, 0.075)), (0.95, (0.045, 0.036, 0.03)), (1.01, (0.22, 0.19, 0.11))]),
-        "heap_grey": make_rubble_material("heap_grey", [(0.62, (0.17, 0.165, 0.15)), (0.80, (0.20, 0.18, 0.155)), (0.92, (0.12, 0.095, 0.075)), (1.01, (0.07, 0.065, 0.058))]),
+        # купа бетону й пилу: близькі тони уламків (без камуфляжних плям), темні щілини
+        "heap_grey": make_rubble_material("heap_grey", [(0.55, (0.15, 0.145, 0.135)), (0.85, (0.17, 0.16, 0.145)), (0.95, (0.12, 0.11, 0.10)), (1.01, (0.09, 0.085, 0.078))]),
         "pump_light": make_material("pump_light", flat=(0.12, 0.13, 0.14)),
         "cavity_black": make_material("cavity_black", flat=(0.003, 0.003, 0.003)),
         "pv_frame": make_material("pv_frame", flat=(0.42, 0.43, 0.44), rough=0.45),
@@ -739,11 +750,11 @@ def srgb_lin(c):
     return tuple(((v + 0.055) / 1.055) ** 2.4 if v > 0.04045 else v / 12.92 for v in c)
 
 
-def palette(wall=None, roof=None, eave=3.0, chim=None, row=0.34, frame=0, boards=None, trim=(0.86, 0.85, 0.80)):
+def palette(wall=None, roof=None, eave=3.0, chim=None, row=0.34, frame=0, boards=None, trim=(0.86, 0.85, 0.80), glass=None):
     """Колір стін (sRGB 0..1), дах (ключ ROOFS), низ даху eave (м, для моху), матеріал димаря, крок рядів черепиці (м)
     і рама вікон будинку (0 біла, 1 коричнева, 2 графітова). Викликається до finish()."""
     PAL.clear()
-    PAL.update(wall=wall, roof=roof, eave=eave, chim=chim, row=row, frame=frame, boards=boards, trim=trim)
+    PAL.update(wall=wall, roof=roof, eave=eave, chim=chim, row=row, frame=frame, boards=boards, trim=trim, glass=glass)
 
 
 # дах: (вид, sRGB). asb — азбестоцементний шифер: сірий, лише стики листів і лишайник, без рядів;
@@ -801,7 +812,7 @@ def apply_palette():
     if wall is not None:                                                  # кутові камені в тон стіни, трохи світліші: білі давали пилку
         MATS["quoin"] = make_material("quoin", "Plaster001", 1.0, recolor=tuple(min(c * 1.12, 0.9) / 0.66 for c in srgb_lin(wall)), contrast=2.5, streak=0.4, bump=0.006, rough=0.88)
     tl = srgb_lin(PAL.get("trim") or (0.86, 0.85, 0.80))                 # наличники, кути й відливи: фарбована штукатурка, світліша за стіну
-    MATS["window"] = make_window_material(PAL.get("frame", 0))
+    MATS["window"] = make_window_material(PAL.get("frame", 0), PAL.get("glass") == "dark")
     MATS["trim"] = make_material("trim", "Plaster001", 1.0, recolor=tuple(c / 0.66 for c in tl), contrast=2.0, streak=0.4, bump=0.004, rough=0.82, rvar=0.1)
     if PAL.get("boards") is not None:                                     # фарбована обшивка: вигоріла фарба, волокно дошки лишається
         bl = srgb_lin(PAL["boards"])
@@ -828,7 +839,7 @@ def apply_palette():
         MATS[nm] = make_material(nm, "Bricks105", 1.0, recolor=rc, streak=0.2, base_dirt=0.3, bump=0.02, patch=((0.09, 0.06, 0.04), 0.2), patch_scale=1.6)
     MATS["ch_plaster"] = make_material("ch_plaster", "Plaster001", 1.0, recolor=(0.80, 0.78, 0.72), streak=0.5, base_dirt=0.3, bump=0.008, patch=((0.2, 0.19, 0.17), 0.2))
     ch = PAL.get("chim") or "brick_face"
-    for n in {"wall_plaster", "wall_plaster_w", "brick_face", "boards", "brick_grey", "plinth_flat", "panel"} | {ch}:
+    for n in {"wall_plaster", "wall_plaster_w", "brick_face", "boards", "brick_grey", "plinth_flat", "panel", "brick"} | {ch}:
         if n in _KW:
             _dm(n)
 
@@ -837,7 +848,7 @@ def _off(axis, c, sgn, u, z, off):
     return (u, c + sgn * off, z) if axis == "y" else (c + sgn * off, u, z)
 
 
-def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4):
+def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.42, kband=(0.52, 0.6), ksill=(0.68, 0.78), lsill=(0.7, 1.5)):
     """Вивітрювання стін декалями-множниками: брудний низ із рваним краєм (-30%), темні патьоки під підвіконнями й від ринви (-25%),
     пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
     import random
@@ -850,8 +861,8 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4):
         us = [u0 + (u1 - u0) * i / n for i in range(n + 1)]
         ph = [rnd.uniform(0, 6.28) for _ in range(3)]
         # низ: бризки з землі до плавної межі 0.4-0.7 м (сума синусоїд 2-5 м, а не випадковий зубець на кожні 0.4 м)
-        hs = [0.42 + 0.07 * math.sin(u / 2.3 + ph[0]) + 0.04 * math.sin(u / 0.9 + ph[1]) for u in us]
-        kb = rnd.uniform(0.52, 0.6)                                      # бризки з землі: темна смуга ~0.4 м
+        hs = [band + 0.07 * math.sin(u / 2.3 + ph[0]) + 0.04 * math.sin(u / 0.9 + ph[1]) for u in us]
+        kb = rnd.uniform(*kband)                                      # бризки з землі: темна смуга ~0.4 м
         for i in range(n):
             b.decal([P(us[i], zb), P(us[i + 1], zb), P(us[i + 1], zb + hs[i + 1]), P(us[i], zb + hs[i])], (kb, kb, 1.0, 1.0), dm, nrm)
         eh = 0.75 + rnd.uniform(-0.1, 0.1)
@@ -865,10 +876,10 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4):
                 uu = u + end * (w / 2 + 0.06) + rnd.uniform(-0.04, 0.04)
                 hw = rnd.uniform(0.05, 0.09)
                 zt = z - 0.12
-                zbm = max(zb + 0.3, zt - rnd.uniform(0.7, 1.5))
+                zbm = max(zb + 0.3, zt - rnd.uniform(*lsill))
                 if zt - zbm < 0.25:
                     continue
-                k = rnd.uniform(0.68, 0.78)
+                k = rnd.uniform(*ksill)
                 b.decal([P(uu - hw, zbm), P(uu, zbm), P(uu, zt), P(uu - hw, zt)], (1.0, 1.0, k, 0.97), dm, nrm)
                 b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, zt), P(uu, zt)], (1.0, 1.0, 0.97, k), dm, nrm)
         for _ in range(max(2, int((u1 - u0) / 1.5))):                   # з карниза: короткі патьоки там, де переливається ринва
@@ -1595,7 +1606,7 @@ def chip_slab(b, cx, cy, cz, sx, sy, th, euler, mat, top, seed, rebar=3, per_edg
     return ends
 
 
-def burn_ring(b, axis, c, u, z, w, h, sgn, g_side=0.65, g_bot=0.3, g_top=1.1, t_in=0.045, t_out=0.145, ztop=None, mat=None):
+def burn_ring(b, axis, c, u, z, w, h, sgn, g_side=0.65, g_bot=0.3, g_top=1.1, t_in=0.045, t_out=0.145, ztop=None, mat=None, strong=False):
     """Кіптява навколо прорізу: темніша за стіну (≈0.45 її тону), м'яко згасає назовні, найсильніша над прорізом.
     axis 'y': стіна з нормаллю по Y на y=c, u — координата по X; axis 'x': нормаль по X."""
     e = 0.02 * sgn
@@ -1616,7 +1627,10 @@ def burn_ring(b, axis, c, u, z, w, h, sgn, g_side=0.65, g_bot=0.3, g_top=1.1, t_
             k_in = 0.2 if i == 2 else 0.45                                       # над перемичкою найчорніше
             mid = [tuple((Vector(pts[1 - q]) * 0.55 + Vector(pts[2 + q]) * 0.45)) for q in (1, 0)]
             m0, m1 = mid[0], mid[1]
-            km = 0.45 if i == 2 else 0.7                                         # чорна облямівка біля прорізу читалась як велике вікно
+            km = 0.45 if i == 2 else 0.7
+            if strong:                                                               # факел на 1.5-2 поверхи, що читається й на далекому зумі
+                k_in, km = k_in * 0.6, km * 0.55
+                                        # чорна облямівка біля прорізу читалась як велике вікно
             b.decal([pts[0], pts[1], m1, m0], (k_in, k_in, km, km), mat, tuple(outn))
             b.decal([m0, m1, pts[2], pts[3]], (km, km, 1.0, 1.0), mat, tuple(outn))
             continue

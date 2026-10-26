@@ -38,5 +38,12 @@ b.ladder(r_at(8.0) + 0.05, 0, 0.5, 15.0, "y")                    # пожежн�
 for k, (rr, zz) in enumerate(((2.45, 15.3), (2.6, 15.55), (2.75, 15.8), (2.9, 16.05))):
     b.cyl(0, 0, zz, rr, 0.25, 20, "brick", cap=True)              # ступінчастий карниз під баком
 b.cyl(0, 0, 16.3, 3.1, 3.9, 20, "steel_paint", cap=False)        # бак
-b.cyl(0, 0, 20.2, 3.2, 1.8, 20, "metal_dark", r_top=0.4, cap=True)  # шатро
+b.cyl(0, 0, 20.2, 3.2, 1.8, 20, "roof_cone", r_top=0.4, cap=True)  # шатро з фальцевого металу
+# патьоки іржі й кіптяви з-під бака по цеглі: 3 на видимих камері боках, 3-5 м, найтемніші вгорі
+for a_, ln_ in ((-math.pi / 2 + 0.3, 4.5), (-0.5, 3.2), (0.15, 5.0)):
+    r_ = r_at(15.0) + 0.015
+    ca, sa = math.cos(a_), math.sin(a_)
+    for (w0, w1, t0, t1) in ((-0.28, 0.0, 1.0, 0.55), (0.0, 0.28, 0.55, 1.0)):
+        pts = [(r_ * ca - w * sa, r_ * sa + w * ca, z) for (w, z) in ((w0, 15.2 - ln_), (w1, 15.2 - ln_), (w1, 15.2), (w0, 15.2))]
+        b.decal(pts, (1.0, 1.0, t1, t0), "brick_dm", (ca, sa, 0.0))
 lib.finish(b, "f7b_brick_tower", out, tri_limit=900, footprint=(1, 1))

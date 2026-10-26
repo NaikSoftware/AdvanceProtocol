@@ -82,7 +82,7 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                 yy = y - (LOG * sgn if (i in cols and f >= 1) else 0.0)
                 if (side, i, f) in blown:
                     e = 0.03 * sgn
-                    lib.burn_ring(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, g_side=0.35, g_bot=0.1, g_top=2.0, mat="panel_dm")
+                    lib.burn_ring(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, g_side=0.35, g_bot=0.1, g_top=5.0, ztop=H - 0.05, mat="panel_dm", strong=True)
                     opening2(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, streak=0.0, sooty=True)
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
@@ -118,6 +118,7 @@ def entrances(b, xmax):
 
 def intact():
     lib.reset()
+    lib.palette(glass="dark")                                                    # темне скло з сірим небом: світлі штори в панельці читались папером
     b = Builder()
     F, B = (2, 4, 7), (0, 3, 6)
     body(b, X0, X1, NF, F, B, True)
@@ -126,22 +127,44 @@ def intact():
     roof_details(b, X1)
     # бризки біля цоколя, патьоки під кожним підвіконням і від парапету даху; над відкритими лоджіями стіни немає
     sk = lambda cols: [(bay_x(i) - LW, bay_x(i) + LW) for i in cols]
-    lib.weather(b, "panel", [("y", Y1, 1, X0, X1, 0.0, H)], seed=21, patches=False, skip_u=sk(F), seg=1.5)
-    lib.weather(b, "panel", [("y", Y0, -1, X0, X1, 0.0, H)], seed=22, patches=False, skip_u=sk(B), seg=1.5)
-    lib.weather(b, "panel", [("x", X1, 1, Y0, Y1, 0.0, H), ("x", X0, -1, Y0, Y1, 0.0, H)], seed=23, patches=False, seg=1.5)
+    lib.weather(b, "panel", [("y", Y1, 1, X0, X1, 0.0, H)], seed=21, patches=False, skip_u=sk(F), seg=1.5, band=0.75, kband=(0.66, 0.72), ksill=(0.55, 0.65), lsill=(1.0, 1.5))
+    lib.weather(b, "panel", [("y", Y0, -1, X0, X1, 0.0, H)], seed=22, patches=False, skip_u=sk(B), seg=1.5, band=0.75, kband=(0.66, 0.72), ksill=(0.55, 0.65), lsill=(1.0, 1.5))
+    lib.weather(b, "panel", [("x", X1, 1, Y0, Y1, 0.0, H), ("x", X0, -1, Y0, Y1, 0.0, H)], seed=23, patches=False, seg=1.5, band=0.75, kband=(0.66, 0.72))
     lib.finish(b, "h5_panel_block", out, tri_limit=2500, footprint=(4, 2), anchor=(0, 0))
+
+
+def broken_end(b, xc, rnd):
+    """Зламаний торець уцілілого корпусу: темне нутро замість цілої стіни, плити перекриттів стирчать на 0.3-0.6 м
+    східцями (три шматки по глибині різної довжини), огризки фасадних панелей біля краю."""
+    yi0, yi1 = Y0 + 0.05, Y1 - 0.05
+    lib._quad(b, [(xc + 0.01, yi0, 0.0), (xc + 0.01, yi1, 0.0), (xc + 0.01, yi1, H), (xc + 0.01, yi0, H)], "blown_dark", (1.0, 0.0, 0.0))
+    for f in range(1, NF + 1):
+        z = f * FLOOR - 0.22
+        ys = [yi0, yi0 + (yi1 - yi0) * rnd.uniform(0.25, 0.4), yi0 + (yi1 - yi0) * rnd.uniform(0.6, 0.75), yi1]
+        for k in range(3):
+            ov = rnd.uniform(0.3, 0.6)
+            b.box(xc + ov / 2, (ys[k] + ys[k + 1]) / 2, z, ov, ys[k + 1] - ys[k], 0.22, "slab_dark", top="slab_dark")
+    for (y, sgn) in ((Y1 - 0.2, 1), (Y0 + 0.2, -1)):                              # огризки фасадного шару: зубці 0.4-1.2 м різної висоти
+        for f in range(NF):
+            if rnd.random() < 0.35:
+                continue
+            ln = rnd.uniform(0.4, 1.2)
+            hh = rnd.uniform(1.2, FLOOR - 0.2)
+            b.box(xc + ln / 2, y, f * FLOOR, ln, 0.4, hh, "panel_frag", top="panel_frag")
 
 
 def damaged():
     """Обвал східного торця: стіни розрізані східцями на 1-3 поверхи, даху над провалом немає, плити й купа
     лежать у прольоті та перед ним (вид з боку камери: фасад -Y і торець +X)."""
     lib.reset()
+    lib.palette(glass="dark")
     b = Builder()
     rnd = random.Random(21)
     xc = 6.0
     F, B = (2, 4), (0, 3)
     body(b, X0, xc, NF, F, B, True)
-    windows(b, X0, xc, NF, F, B, blown={(sd, 6, f) for sd in ('front', 'back') for f in range(3)})
+    windows(b, X0, xc, NF, F, B, blown={(sd, 6, f) for sd in ('front', 'back') for f in range(3)} | {("front", 5, 2), ("back", 5, 1), ("back", 5, 2)})
+    broken_end(b, xc, rnd)
     entrances(b, xc)
     roof_details(b, xc)
     # східці: висота кратна поверху (3.1 м), верх косий і зубчастий
@@ -173,7 +196,7 @@ def damaged():
                 continue
             blow = True
             if blow:
-                lib.burn_ring(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, g_side=0.35, g_bot=0.1, g_top=2.0, mat="panel_dm")
+                lib.burn_ring(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, g_side=0.35, g_bot=0.1, g_top=5.0, ztop=H - 0.05, mat="panel_dm", strong=True)
                 opening2(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, streak=0.0, sooty=True)
             else:
                 b.window(("y", Y0, -1), x, z, 1.4, 1.4)
@@ -185,7 +208,7 @@ def damaged():
             z = f * FLOOR + 0.95
             if he - 1.4 < z + 1.8 or rnd.random() < 0.4 or (f == 0 and k % 2):          # у нижньому ряду не частіше кожного другого прорізу
                 continue
-            lib.burn_ring(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, g_side=0.35, g_bot=0.1, g_top=2.0, mat="panel_dm")
+            lib.burn_ring(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, g_side=0.35, g_bot=0.1, g_top=5.0, ztop=H - 0.05, mat="panel_dm", strong=True)
             opening2(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, streak=0.0, sooty=True)
     # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
     for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 2.9, 3.6, 1.8, 0.35, 0.0, 0.0), (13.5, -3.6, 5.9, 2.6, 2.0, 0.38, 0.0, 0.1), (8.0, 4.0, 2.9, 2.4, 1.6, -0.3, 0.0, 0.0)):
@@ -211,7 +234,7 @@ def damaged():
     print("HEAPPEAK h5", [round(max(h_.z(h_.cx + h_.rx * u / 20.0, h_.cy + h_.ry * v / 20.0) for u in range(-20, 21) for v in range(-20, 21)), 2) for h_ in plan], "s", round(plan[0].s, 3))
     for k, hsf in enumerate(plan):
         big = k == 0
-        heap_mound(b, hsf, "heap_grey", rings=7 if big else 3, segs=32 if big else 16, skirt_mat="rubble_steel")
+        heap_mound(b, hsf, "heap_grey", rings=7 if big else 3, segs=32 if big else 16, skirt_mat="edge_ground")      # без світлого обідка: край у колір ґрунту
         heap_mound(bh, hsf, "heap_base_grey", rings=18 if big else 8, segs=110 if big else 56, jitter=0.1 * hsf.hmax / 4.0, seed=61 + k)
     hrnd = random.Random(99)
     for hsf in plan:
@@ -230,6 +253,10 @@ def damaged():
     for k in range(5):                                                           # справжні шматки, що ламають силует
         px, py = rnd.uniform(14.5, 19.0), rnd.uniform(-7.5, 4.0)
         b.rock(px, py, 0.4, rnd.uniform(0.6, 1.1), rnd.choice(("heap_grey", "rubble")), rnd, buried=0.45)
+    for k in range(7):                                                           # арматура стирчить із купи пучками
+        px, py = rnd.uniform(8.0, 15.0), rnd.uniform(-3.0, 4.0)
+        z0_ = surf(px, py)
+        b.beam((px, py, z0_ - 0.1), (px + rnd.uniform(-0.6, 0.6), py + rnd.uniform(-0.6, 0.6), z0_ + rnd.uniform(0.5, 1.1)), 0.06, "rebar")
     for k in range(4):                                                           # уламки панелей товщиною 0.3 м, наполовину в купі
         px, py = rnd.uniform(14.8, 18.5), rnd.uniform(-6.5, 3.0)
         chip_slab(b, px, py, max(0.45, surf(px, py) * 0.7), rnd.uniform(1.4, 2.0), rnd.uniform(1.0, 1.5), 0.3, (rnd.uniform(-0.3, 0.3), rnd.uniform(-0.3, 0.3), rnd.uniform(0, 3.1)), "slab_dark", "slab_dark", 400 + k, rebar=1, per_edge=2)
