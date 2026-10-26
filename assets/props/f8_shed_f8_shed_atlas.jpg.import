@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://l0olxxqfgan0"
-path="res://.godot/imported/ruin_h3_ruin_h3_normal.jpg-7198eda7704fbc6c19c7636230bab518.ctex"
+uid="uid://dm0arqnf0npph"
+path="res://.godot/imported/f8_shed_f8_shed_atlas.jpg-5366586772833e63faf405700186ea48.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "792aad4764576e446ac45e2cea57c1e6"
+"md5": "43a62359eafff09d87ec81a9cdc1c598"
 }
 
 [deps]
 
-source_file="res://assets/props/ruin_h3_ruin_h3_normal.jpg"
-dest_files=["res://.godot/imported/ruin_h3_ruin_h3_normal.jpg-7198eda7704fbc6c19c7636230bab518.ctex"]
+source_file="res://assets/props/f8_shed_f8_shed_atlas.jpg"
+dest_files=["res://.godot/imported/f8_shed_f8_shed_atlas.jpg-5366586772833e63faf405700186ea48.ctex"]
 
 [params]
 
