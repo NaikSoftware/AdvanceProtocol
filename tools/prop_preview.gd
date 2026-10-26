@@ -5,6 +5,7 @@ extends Node
 ## Запуск (потрібне вікно, не --headless):
 ##   $GODOT --path . res://tools/prop_preview.tscn -- [out_dir] [--graze] [--back] [--river] [--rl] [--black] [--side] [--tank] [--dir=res://...] [name ...]
 ## Без out_dir знімки лягають у user://prop_preview. Без імен знімається все з теки (за замовчуванням assets/props).
+##   --gy=N   азимут бічного сонця для --graze (за замовчуванням -70; 90 — з боку +X);
 ##   --graze  додає <name>_graze.png: низьке бічне сонце, щоб побачити рельєф карти нормалей;
 ##   --back   додає <name>_back.png: об'єкт, повернутий на 180°, щоб побачити протилежний фасад;
 ##   --rl     вигляд карти Річка з гри (BattleLook): розсіяне похмуре світло з дальнього боку, сильне небо, мокрий ґрунт; суфікс _rl;
@@ -20,6 +21,7 @@ extends Node
 
 var props_dir: String = "res://assets/props"
 var graze: bool = false
+var graze_yaw: float = -70.0
 var back: bool = false
 var river: bool = false
 var black: bool = false
@@ -46,6 +48,8 @@ func _ready() -> void:
 	for i in args.size():
 		if args[i] == "--graze":
 			graze = true
+		elif args[i].begins_with("--gy="):
+			graze_yaw = float(args[i].substr(5))
 		elif args[i] == "--back":
 			back = true
 		elif args[i] == "--river":
@@ -193,7 +197,7 @@ func _ready() -> void:
 		if graze:
 			var rot0: Vector3 = sun.rotation_degrees
 			var e0: float = sun.light_energy
-			sun.rotation_degrees = Vector3(-14.0, -70.0, 0.0)
+			sun.rotation_degrees = Vector3(-14.0, graze_yaw, 0.0)
 			sun.light_energy = 1.6
 			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_graze%s.png" % [out, n, sfx])
 			# світло мапи (--rl, --cr) повертається, а не типове: інакше наступні об'єкти знімались би під чужим сонцем
