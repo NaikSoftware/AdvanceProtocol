@@ -300,7 +300,7 @@ def house4():
 
 
 # ----------------------------------------------------------------------- руїни
-def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", corner=False, cap=1.5, open_c=1):
+def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", corner=False, cap=1.5, open_c=1, low_runs=(), tall_open=False):
     """Руїна: низька купа (гребінь ≤1.5 м, 5-7 опуклостей контуру, заокруглена губа) із деталлю зі сканованих і плитових
     уламків 20-50 см, уламки стін з проломами ≥1.2 м і зазубреними верхами, стирчать не вище 1.9 м (один кут до поверху
     за потреби), нахилені крокви, плити на купі. Деталь купи запікається зі скан-джерела разом із AO."""
@@ -315,21 +315,23 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
     kw = dict(top_tone=1.0, brick_mat="wall_brick", cap=0.22, step=0.45, diag_p=0.6, jit=0.8, tvar=0.3, foot=0.55, soot_h=0.0)
     for ci, c in enumerate(cs):
         for di, d in enumerate(dirs[ci]):
-            ln = A if ci != open_c else 0.45
-            hc = rnd.uniform(1.8, 3.0) if ci != open_c else 0.5
+            low_ = ci == open_c and not tall_open
+            ln = A if not low_ else 0.45
+            hc = (rnd.uniform(1.2, 1.8) if tall_open and ci == open_c else rnd.uniform(1.8, 3.0)) if not low_ else 0.5
             p1 = (c[0] + d[0] * ln, c[1] + d[1] * ln)
-            hs = [hc, hc * 0.8, hc * 0.55] if ci != open_c else [0.5, 0.4]
+            hs = [hc, hc * 0.8, hc * 0.55] if not low_ else [0.5, 0.4]
             wall_run(b, c, p1, 0.4, hs, "wall_brick", "wall_plaster", seed * 7 + ci * 2 + di, hcap=3.2, **kw)
-    breach = ((open_c) % 4, (open_c - 1) % 4)                                      # сторони, що сходяться на низькому куті
+    breach = tuple(si_ for si_ in ((open_c) % 4, (open_c - 1) % 4) if si_ not in low_runs)   # сторони, що сходяться на відкритому куті, крім тих, де лежить низька стінка
     normals = [(0, -1), (1, 0), (0, 1), (-1, 0)]
     for si in range(4):
         if si in breach:
             continue
+        low_side = si in low_runs
         c0, c1 = cs[si], cs[(si + 1) % 4]
         d = ((c1[0] - c0[0]) / math.hypot(c1[0] - c0[0], c1[1] - c0[1]), (c1[1] - c0[1]) / math.hypot(c1[0] - c0[0], c1[1] - c0[1]))
         q0 = (c0[0] + d[0] * (A + 0.3), c0[1] + d[1] * (A + 0.3))
         q1 = (c1[0] - d[0] * (A + 0.3), c1[1] - d[1] * (A + 0.3))
-        hh = rnd.uniform(1.0, 1.5)
+        hh = rnd.uniform(0.4, 0.8) if low_side else rnd.uniform(1.0, 1.5)
         wall_run(b, q0, q1, 0.4, [hh, hh * 0.9, hh * 1.1, hh], "wall_brick", "wall_plaster", seed * 11 + si, hcap=1.6, **kw)
     if os.environ.get("RUIN_WALLS_ONLY"):                                        # діагностика: лише стіни, щоб міряти їхній тон у кадрі
         lib.finish(b, name + "_walls", out, tri_limit=4200, footprint=footprint, anchor=(0, 0), ground_clip=True)
@@ -352,12 +354,12 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
 
     lib.rubble_lumps(b, plan[:1], rnd, 70, tmin=0.03, tmax=0.97, size=(0.18, 0.45), outer=4)   # грудки 20-45 см дають силует і тінь
     lib.rubble_lumps(b, plan[1:], rnd, 12, tmin=0.1, tmax=0.95, size=(0.2, 0.4), outer=5)
-    if chimney:                                                                   # димар: пеньок із червоної цегли, що розколовся вгорі
+    if chimney:                                                                   # димар: нижня частина стоїть, верхня звалилась і лежить на купі
         cx, cy = chimney
         zb = surf(cx, cy) - 0.3
-        b.box_e(cx, cy, (zb + 1.2) / 2, 0.85, 0.85, 1.2 - zb, "brick_face", euler=(0, 0, 0.15), top="brick_face")
-        b.box_e(cx + 0.04, cy, 1.4, 0.72, 0.72, 0.5, "brick_face", euler=(0.1, -0.08, 0.5), top="brick_face")
-        b.box_e(cx - 0.05, cy + 0.05, 1.75, 0.55, 0.55, 0.32, "brick_face", euler=(0.28, 0.2, 0.9), top="brick_face")
+        b.box_e(cx, cy, (zb + 0.9) / 2, 0.85, 0.85, 0.9 - zb, "brick_face", euler=(0, 0, 0.15), top="brick_face")
+        b.box_e(cx - 0.05, cy, 0.9, 0.7, 0.7, 0.18, "brick_face", euler=(0.25, 0.2, 0.9), top="brick_face")
+        b.box_e(cx + 1.0, cy - 0.35, surf(cx + 1.0, cy - 0.35) + 0.32, 0.72, 0.72, 1.7, "brick_face", euler=(0.1, 1.42, 0.55), top="brick_face")
     for k in range(4):                                                            # підняті шматки: поле кидає тінь
         a = rnd.uniform(0, 2 * math.pi)
         t = rnd.uniform(0.2, 0.7)
@@ -377,7 +379,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
         z1_ = max(0.1, surf(x1_, y1_) + 0.02)
         th = rnd.uniform(0.18, 0.26)
         b.beam((x0_, y0_, z0_), (x1_, y1_, z1_), th, "timber_dark", th * 1.2)
-    lib.finish(b, name, out, tri_limit=5200, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.2")))
+    lib.finish(b, name, out, tri_limit=5200, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.1")))
 
 
 if want("h1"):
@@ -392,4 +394,4 @@ if want("h4"):
     house4()
 if want("ruins"):
     ruin("ruin_h1", 5.8, 4.8, 0.8, 11, (1, 1), chimney=(0.9, -0.2), open_c=1, tile="fc_roof_x", cap=1.5)
-    ruin("ruin_h3", 5.4, 5.4, 0.6, 29, (1, 1), open_c=2, tile="tile_graphite", corner=True, cap=1.6)
+    ruin("ruin_h3", 5.4, 5.4, 0.6, 29, (1, 1), open_c=2, tall_open=True, low_runs=(1,), tile="tile_graphite", corner=True, cap=1.6)
