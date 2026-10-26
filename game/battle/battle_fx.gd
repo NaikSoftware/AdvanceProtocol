@@ -264,7 +264,7 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 				_hot(root, 4.0, Vector3(0, 0.1, 0))
 				_dirt(root, cloud, Vector3.ZERO, 0.0, 0.15, life, 0.7, 0.4)
 				_core(root, cloud, 0.6 * life, 0.7, 0.4)
-				_dust(root, 2.0 * 1.75 * cloud / 2.0, Vector3.ZERO, 0.8 * life, 0.8)
+				_dust(root, 1.75 * cloud, Vector3.ZERO, 0.8 * life, 0.8)
 				_debris(root, cloud)
 		Weapon.SHELL:
 			_hot(root, 6.0, Vector3(0, 0.12, 0), 0.0, PRIORITY_HOT, HOT_SEC, true)
@@ -273,7 +273,7 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 			_dirt(root, cloud, Vector3.ZERO, 0.0, 0.2, life, 0.6, 0.3)
 			_core(root, cloud, 0.5 * life, 0.6, 0.3)
 			# Приземна хвиля пилу: радіус ~1,75 радіуса хмари, розходиться за 0,5 с, рідшає разом із хмарою.
-			_dust(root, 2.0 * 1.75 * cloud / 2.0, Vector3.ZERO, 0.8 * life, 0.9)
+			_dust(root, 1.75 * cloud, Vector3.ZERO, 0.8 * life, 0.9)
 			_debris(root, cloud)
 		Weapon.DRONE:
 			# Удар згори: гаряче ядро на даху, чорна клуба на корпусі, іскри вниз і вбік, без ґрунту.
@@ -526,12 +526,12 @@ static func _expire(root: Node3D, sec: float) -> void:
 	tw.tween_callback(root.queue_free)
 
 
-## Видимі юніти поруч (крім `except` — цілі чи стрільця) стають «щитом» для диму цієї миті.
 ## Межа одного шару, коли в миті `layers` шарів диму: разом вони не густіші за OCCLUDE_TOTAL.
 static func occlude_cap(layers: int) -> float:
 	return 1.0 - pow(1.0 - OCCLUDE_TOTAL, 1.0 / float(maxi(layers, 1)))
 
 
+## Видимі живі юніти поруч (крім `except` — цілі чи стрільця) стають «щитом» для диму цієї миті.
 static func _shield(root: Node3D, parent: Node, except: Vector3) -> void:
 	var occ: Array[Vector4] = []
 	for c: Node in parent.get_children():
@@ -984,7 +984,7 @@ uniform vec4 occ4;
 uniform vec4 occ5;
 uniform int occ_n = 0;
 uniform float occ_k = 0.0;
-// Межа шару над сусідом: основний 0,35, другий поверх нього 0,15 — разом ≤ 0,45.
+// Межа шару над сусідом (BattleFx.occlude_cap): усі шари миті разом ≤ 0,45; 1 — без межі.
 uniform float occ_cap = 1.0;
 // Поворот кваду в площині кадру довкола його середини (дрібні клуби — кожна по-своєму).
 uniform float roll = 0.0;

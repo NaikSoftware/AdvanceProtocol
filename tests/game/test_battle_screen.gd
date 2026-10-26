@@ -1263,6 +1263,26 @@ func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
 
 
 
+## Вирв нема: снаряд гаубиці по піхоті грає розрив, але карта шрамів лишається порожньою —
+## єдиний слід на ґрунті лишає підбита техніка.
+func test_a_shell_on_infantry_leaves_no_ground_mark() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 10, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(2, 2), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var gun: Unit = service.state.units_of(0)[0]
+	var squad: Unit = service.state.units_of(1)[0]
+	screen._event_player.play([Events.ShotFired.new(gun.id, squad.id, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
+	_finish_all_processed_tweens()
+	var data: PackedByteArray = (screen._scars as ScarMap).image().get_data()
+	assert_eq(data.count(0), data.size(), "жодного шраму від розриву")
+
+
 ## §3.5: після підтвердження гейта дах над юнітом гравця, що заходить, уже розчинений (рівень 1.0,
 ## вузол «_fade» видно) — без жодного тіку переходу; після наступної передачі, де юніта під дахом
 ## нема, — уже суцільний.

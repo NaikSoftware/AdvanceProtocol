@@ -545,8 +545,8 @@ func test_stop_ends_playback_at_the_next_pause() -> void:
 
 
 
-## Стріляють лише по юнітах, і слід на ґрунті лишає тільки підбита техніка (пляма під уламками):
-## програвач не повідомляє ні про які вирви, і гаубиця по піхоті лишає тільки саму мить розриву.
+## Гаубиця по піхоті грає саму мить розриву (що слід на ґрунті не лишається, стереже
+## test_a_shell_on_infantry_leaves_no_ground_mark у test_battle_screen).
 func test_shots_leave_no_crater() -> void:
 	var target: UnitView = _spawn_view(2, 0, 0, Vector2i(3, 3))
 	var target_unit := _unit(2, 0, 0, Vector2i(3, 3))
@@ -554,7 +554,6 @@ func test_shots_leave_no_crater() -> void:
 	player = EventPlayer.new(
 		func(id: int) -> UnitView: return target if id == 2 else null,
 		func(id: int) -> Unit: return gun if id == 1 else (target_unit if id == 2 else null))
-	assert_false(player.has_signal("ground_hit"))
 	player.play([Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
 	assert_eq(target.get_parent().find_children("Hit*", "", false, false).size(), 1, "розрив видно")
 	_finish_all_processed_tweens()

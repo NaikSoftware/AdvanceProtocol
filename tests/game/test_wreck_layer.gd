@@ -366,9 +366,13 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	assert_eq(layer.hearth_points(), first, "та сама мапа — той самий вибір")
 	var mm: MultiMesh = (layer.get_node("Hearths") as MultiMeshInstance3D).multimesh
 	assert_eq(mm.visible_instance_count, first.size() * WreckLayer.HEARTH_PUFFS)
-	# Дані екземплярів headless-рендер не зберігає: густоту перевіряємо за сталими (від'ємна в
-	# шейдері — тонкий атлас, пікова альфа якого 0,35).
-	assert_true(WreckLayer.CHIMNEY_DENSITY <= 0.5 and WreckLayer.RUIN_DENSITY <= 0.5, "мала густота")
+	# Дані екземплярів headless-рендер не зберігає: перевіряємо густоти, які шар у них записав
+	# (від'ємна — тонкий атлас, пікова альфа якого 0,35).
+	var dens: Array[float] = layer.hearth_densities()
+	assert_eq(dens.size(), first.size())
+	for i in dens.size():
+		assert_eq(dens[i], WreckLayer.hearth_density(first[i].y < 0.5))
+		assert_true(dens[i] < 0.0 and dens[i] >= -0.5, "тонкий атлас, мала густота")
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
 	assert_almost_eq(float(layer.hearth_material().get_shader_parameter("lighten")), WreckLayer.HEARTH_LIGHTEN, 1e-6)
 	layer.set_wind(Vector3(0.25, 0, 0))

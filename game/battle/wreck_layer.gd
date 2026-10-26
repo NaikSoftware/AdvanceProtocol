@@ -138,6 +138,7 @@ var _column_cells: Array[Vector2i] = []
 var _hearths: MultiMeshInstance3D
 var _hearth_mat: ShaderMaterial
 var _hearth_points: Array[Vector3] = []
+var _hearth_densities: Array[float] = []
 var _fire_cells: Array[Vector2i] = []
 
 
@@ -310,24 +311,44 @@ func set_wind(wind: Vector3) -> void:
 ## вибрані за `seed` мапи, тож у кожного гравця й у кожному бою на цій мапі ті самі.
 func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int) -> void:
 	_hearth_points.clear()
-	var picks: Array = []
-	for group: Array in [[chimneys, 1 + absi(seed) % 3, CHIMNEY_DENSITY], [ruins, 1 + (absi(seed) / 3) % 2, RUIN_DENSITY]]:
-		var pts: Array[Vector3] = (group[0] as Array[Vector3]).duplicate()
-		pts.sort_custom(func(a: Vector3, b: Vector3) -> bool: return hash(a + Vector3(seed, 0, 0)) < hash(b + Vector3(seed, 0, 0)))
-		for i in mini(int(group[1]), pts.size()):
-			picks.append([pts[i], float(group[2])])
+	_hearth_densities.clear()
+	for p: Vector3 in _pick(chimneys, 1 + absi(seed) % 3, seed):
+		_hearth_points.append(p)
+		_hearth_densities.append(hearth_density(false))
+	for p: Vector3 in _pick(ruins, 1 + (absi(seed) / 3) % 2, seed):
+		_hearth_points.append(p)
+		_hearth_densities.append(hearth_density(true))
+	_hearth_points.resize(mini(_hearth_points.size(), HEARTH_MAX))
+	_hearth_densities.resize(_hearth_points.size())
 	var mm: MultiMesh = _hearths.multimesh
-	var n: int = 0
-	for pick: Array in picks.slice(0, HEARTH_MAX):
-		var at: Vector3 = pick[0]
-		_hearth_points.append(at)
+	for h in _hearth_points.size():
+		var at: Vector3 = _hearth_points[h]
 		var sd: float = float(hash(at) % 997) / 997.0
 		for k in HEARTH_PUFFS:
+			var n: int = h * HEARTH_PUFFS + k
 			mm.set_instance_transform(n, Transform3D(Basis(), at))
-			mm.set_instance_custom_data(n, Color(float(k) / float(HEARTH_PUFFS), fposmod(sd + 0.618 * k, 1.0), -float(pick[1]), LONG_AGO))
-			n += 1
-	mm.visible_instance_count = n
+			mm.set_instance_custom_data(n, Color(float(k) / float(HEARTH_PUFFS), fposmod(sd + 0.618 * k, 1.0), _hearth_densities[h], LONG_AGO))
+	mm.visible_instance_count = _hearth_points.size() * HEARTH_PUFFS
 	_refresh_effects()
+
+
+## Густота шлейфу для шейдера стовпа: від'ємна — тонкий атлас (пікова альфа 0,35), за модулем —
+## густота стадії; руїна тліє трохи густіше за димар.
+static func hearth_density(ruin: bool) -> float:
+	return -(RUIN_DENSITY if ruin else CHIMNEY_DENSITY)
+
+
+## `count` точок із `pts`, перемішаних за `seed`.
+static func _pick(pts: Array[Vector3], count: int, seed: int) -> Array[Vector3]:
+	var out: Array[Vector3] = pts.duplicate()
+	out.sort_custom(func(a: Vector3, b: Vector3) -> bool: return hash(a + Vector3(seed, 0, 0)) < hash(b + Vector3(seed, 0, 0)))
+	out.resize(mini(count, out.size()))
+	return out
+
+
+## Густота, яку отримав кожен шлейф (у тому ж порядку, що й `hearth_points`).
+func hearth_densities() -> Array[float]:
+	return _hearth_densities
 
 
 func hearth_points() -> Array[Vector3]:
@@ -368,6 +389,8 @@ func _end_warm_up() -> void:
 		return
 	_warm.free()
 	_warm = null
+	# Розігрів позичав екземпляр 0 і в мирного диму: на мапі без димарів він лишився б.
+	_hearths.multimesh.visible_instance_count = _hearth_points.size() * HEARTH_PUFFS
 	_refresh_effects()
 
 
@@ -578,6 +601,9 @@ func _refresh_effects() -> void:
 		_lights[i].visible = i < _fire_cells.size()
 		if _lights[i].visible:
 			_lights[i].position = fire_centre(_fire_cells[i]) + Vector3(0.0, 0.12, 0.0)
+	# shortcut: поки на мапі є мирний дим, таймер не спиняється ніколи — цей шар анімується завжди,
+	# і простій кадру в спокої (§8) мусить це врахувати; коли простій з'явиться, крокувати мирний
+	# дим рідше (кілька разів на секунду) або гасити його, поки нічого іншого не рухається.
 	if _column_cells.is_empty() and _hearth_points.is_empty():
 		_timer.stop()
 	elif _timer.is_stopped():

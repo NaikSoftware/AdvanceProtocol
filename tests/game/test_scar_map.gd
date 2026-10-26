@@ -54,6 +54,14 @@ func test_apply_hands_both_textures_to_the_ground_material() -> void:
 	assert_eq(mat.get_shader_parameter("scar_size"), Vector2(8, 6))
 
 
-## Вирв нема: єдиний шрам бою на ґрунті — пляма під уламками (R).
-func test_scar_map_has_no_craters() -> void:
-	assert_false(scars.has_method("stamp_crater"))
+## Вирв нема: єдиний шрам бою на ґрунті — пляма під уламками в R (з попелом в A); G і B
+## лишаються нулями.
+func test_wreck_scorch_writes_only_scorch_and_ash() -> void:
+	scars.stamp_scorch(Vector2i(3, 2))
+	var img: Image = scars.image()
+	for y in img.get_height():
+		for x in img.get_width():
+			var c: Color = img.get_pixel(x, y)
+			assert_true(c.g8 == 0 and c.b8 == 0, "G і B вільні (%d, %d)" % [x, y])
+			if c.g8 != 0 or c.b8 != 0:
+				return
