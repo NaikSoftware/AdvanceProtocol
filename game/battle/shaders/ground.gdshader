@@ -1315,7 +1315,7 @@ void fragment() {
 			vec3 bare = mix(vec3(0.17, 0.115, 0.062), vec3(0.022, 0.015, 0.009), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
 			alb = mix(alb, bare, clamp(pm.r * 1.8, 0.0, 1.0));
 			alb = mix(alb, vec3(0.045, 0.026, 0.014) * mix(1.0, 0.6, wet_p) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.4);
-			rough = mix(rough, 0.45, wet_p * clamp(pm.r * 1.8 + pm.g * 0.4, 0.0, 1.0));
+			rough = mix(rough, rough * 0.9, wet_p * clamp(pm.r * 1.8 + pm.g * 0.4, 0.0, 1.0));
 		}
 
 		float scar_dark = 0.0;
