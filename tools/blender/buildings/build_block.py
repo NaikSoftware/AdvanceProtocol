@@ -239,7 +239,7 @@ def damaged():
     plan = [HeapSurface(11.0, 0.5, 4.8, 4.6, 4.3, 61, bumps=6, lip=0.0, wob=0.45, lump=0.25, hummocks=6, hum_amp=0.9, pw=1.35, noise=1.0, feather=1.5),
             HeapSurface(12.8, -5.0, 4.6, 2.2, 2.0, 62, bumps=5, lip=0.0, wob=0.2, lump=0.12, hummocks=3, hum_amp=0.4, pw=1.5, noise=1.0, feather=1.2),
             HeapSurface(16.2, -1.5, 2.6, 5.0, 1.7, 63, bumps=7, lip=0.0, wob=0.35, lump=0.3, hummocks=6, hum_amp=0.9, pw=1.5, noise=1.5, feather=1.2)]   # правий горб не гладкий купол
-    plan[0].fit_peak(4.6)
+    plan[0].fit_peak(2.6)                                                       # нижча купа: на крутих боках проєкція зверху тягнулась смугами
     print("HEAPPEAK h5", [round(max(h_.z(h_.cx + h_.rx * u / 20.0, h_.cy + h_.ry * v / 20.0) for u in range(-20, 21) for v in range(-20, 21)), 2) for h_ in plan], "s", round(plan[0].s, 3))
     for k, hsf in enumerate(plan):
         big = k == 0
