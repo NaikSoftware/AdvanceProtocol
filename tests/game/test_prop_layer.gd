@@ -669,7 +669,9 @@ func test_buildings_never_overlap_on_screen(p = use_parameters(MAPS)) -> void:
 			if scr[2] and o[2]:
 				continue
 			# Між силуетами — щонайменше SCREEN_GROUND землі (кути, що торкаються, теж злипаються).
-			var overlap: bool = (scr[0] as Rect2).grow(PropLayer.SCREEN_GROUND - 1e-4).intersects(o[0])
+			# Між хатою й руїною — менший запас: руїна низька, силует не злипається.
+			var margin: float = PropLayer.SCREEN_GROUND_RUIN if (scr[2] or o[2]) else PropLayer.SCREEN_GROUND
+			var overlap: bool = (scr[0] as Rect2).grow(margin - 1e-4).intersects(o[0])
 			assert_false(overlap and PropLayer._Placer._depth_gap(scr[1], o[1]) < PropLayer.SCREEN_DEPTH_SEP,
 					"%s: %s накладається на сусіда на екрані" % [p, inst["model"]])
 		proj.append(scr)
@@ -740,7 +742,7 @@ func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
 ## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
 ## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
 ## разом зі свідомою зміною таблиці моделей чи правил розстановки.
-const RIVER_BUILDINGS_FINGERPRINT: int = 2734619228
+const RIVER_BUILDINGS_FINGERPRINT: int = 2262903032
 
 
 func test_river_buildings_match_the_golden_fingerprint() -> void:

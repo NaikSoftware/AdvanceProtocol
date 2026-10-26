@@ -107,7 +107,14 @@ const STRUCTURE_GAP: float = 0.125
 const YARD_SHED: StringName = &"f8_shed"
 ## Хата на клітинку (ассет на 0.94 клітинки, ~7.5 м) — рівномірно до ~6.4 м: така сільська хата
 ## звична, а між двома сусідніми з камери гри лишається смуга землі.
-const HOUSE_SCALE: float = 0.85
+const HOUSE_SCALE: float = 1.0
+## Стовпи ЛЕП у метрах: ассет 0.4 кВ — 9.5 м, 10 кВ — 10.7 м; справжні — 8–9 і ~9–10 м над землею.
+## Без поправки стовп виходив удвічі вищим за одноповерхову хату (гребінь 5.4 м).
+const POLE_SCALE: float = 0.85
+## Відвід до хати — від стовпа не далі за стільки клітинок.
+const SERVICE_REACH: float = 5.5
+## Стовп, будівля й паркан тримаються від води й болота щонайменше на стільки клітинок.
+const WATER_CLEAR: float = 0.4
 const YARD_SHED_SCALE: float = 0.7
 ## Велика будівля (слід понад клітинку) зі звісом тримається на стільки всередині своєї групи
 ## BUILDING (клітинки, ~2 м). Будинок на одну клітинку стоїть у ній по центру й тримає лише
@@ -128,6 +135,8 @@ const SCREEN_PITCH_DEG: float = 40.0
 const SCREEN_DEPTH_SEP: float = 1.2
 ## Земля між силуетами на екрані, клітинки (~1.2 м): силуети, що торкаються кутами, читаються одним.
 const SCREEN_GROUND: float = 0.15
+## Те саме між хатою й руїною (~0.4 м): руїна низька й напівзавалена, силует не злипається.
+const SCREEN_GROUND_RUIN: float = 0.05
 ## Огорожа двору стоїть за межею групи BUILDING на ~2.2 м: будинок на одну клітинку займає її
 ## майже всю, і до огорожі однаково лишається ≥ 0.3 клітинки; секція ще далеко від центру сусідньої
 ## клітинки, де стоїть юніт.
@@ -184,6 +193,8 @@ var _gardens: Array[Vector2i] = []
 var _garden_node: MultiMeshInstance3D
 ## Наскільки грядки зелені (BattleLook.season): літо — зелень, рання осінь — жовта, пізня — гола рілля.
 var garden_green: float = 0.2
+## Відводи до хат: [індекс опори, точка на стіні хати].
+var _drops: Array = []
 ## Опори з дротами: [індекс екземпляра опори A, індекс B] — проліт.
 var _spans: Array = []
 var _wires: MeshInstance3D
@@ -437,6 +448,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_slots.clear()
 	_node_model.clear()
 	_spans.clear()
+	_drops.clear()
 	_wires = null
 	_contacts = null
 	_garden_node = null
@@ -581,7 +593,7 @@ func _build_nodes(haze: bool) -> void:
 		add_child(mmi)
 		_nodes[key] = mmi
 		_slots[key] = by_node[key]
-	if not _spans.is_empty():
+	if not _spans.is_empty() or not _drops.is_empty():
 		_wires = MeshInstance3D.new()
 		_wires.name = "Wires"
 		_wires.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -832,6 +844,21 @@ func _rebuild_wires() -> void:
 			for j in WIRE_SEGMENTS:
 				for t: float in [float(j) / WIRE_SEGMENTS, float(j + 1) / WIRE_SEGMENTS]:
 					verts.append(pa.lerp(pb, t) - Vector3(0.0, WIRE_SAG * 4.0 * t * (1.0 - t), 0.0))
+	# Відвід до хати: два дроти від траверси стовпа до стіни під дахом, з невеликим провисом.
+	for dr: Array in _drops:
+		var pole: Dictionary = _instances[dr[0]]
+		if _is_crushed(pole):
+			continue
+		var wp: Array[Vector3] = (model(pole["model"]) as Dictionary)["wires"]
+		if wp.is_empty():
+			continue
+		var target: Vector3 = dr[1]
+		for k in [0, wp.size() - 1]:
+			var pa: Vector3 = (pole["transform"] as Transform3D) * wp[k]
+			var pb: Vector3 = target + Vector3(0.0, 0.0, 0.02 * (k - 0.5))
+			for j in WIRE_SEGMENTS:
+				for t: float in [float(j) / WIRE_SEGMENTS, float(j + 1) / WIRE_SEGMENTS]:
+					verts.append(pa.lerp(pb, t) - Vector3(0.0, WIRE_SAG * 0.4 * 4.0 * t * (1.0 - t), 0.0))
 	if verts.is_empty():
 		_wires.mesh = null
 		return
@@ -863,6 +890,10 @@ class _Placer:
 	## Клітинка -> модель будівлі на ній: однакові моделі поруч не стають.
 	var model_at: Dictionary = {}
 	var tower_placed := false
+	## Скільки поставлено будинків: [одноповерхових, двоповерхових].
+	var storeys: Array[int] = [0, 0]
+	## Макет сіл карти (VillageLayout); порожній — розстановка процедурою, як для тестових дощок.
+	var layout: Dictionary = {}
 	## Клітинки дошки, на яких уже стоїть дрібний пропс (одна річ на ребро).
 	var edges: Dictionary = {}
 	var gardens: Array[Vector2i] = []
@@ -886,8 +917,18 @@ class _Placer:
 		map_key = p_map
 		half_dir = p_half
 		salt = String(p_map).hash()
+		layout = VillageLayout.for_map(p_map)
 
 	func place_all() -> void:
+		if not layout.is_empty():
+			_structures()
+			_homesteads()
+			_bridges()
+			_layout_hay()
+			_blocks()
+			_boulders()
+			_layout_poles()
+			return
 		_structures()
 		_dress_yards()
 		_bridges()
@@ -988,6 +1029,11 @@ class _Placer:
 					return true
 		return false
 
+	const N_FACE := Vector2i(0, -1)
+	const W_FACE := Vector2i(-1, 0)
+	const S_FACE := Vector2i(0, 1)
+	const E_FACE := Vector2i(1, 0)
+
 	## Межі екземпляра в XZ відносно центру клітинки не заходять у квадрат юніта.
 	func clear_of_centre(m: StringName, xform: Transform3D, c: Vector2i) -> bool:
 		var box: AABB = xform * ((PropLayer.model(m) as Dictionary)["aabb"] as AABB)
@@ -1052,6 +1098,10 @@ class _Placer:
 					groups.append(group)
 			# Спершу групи дошки: єдина на карту вежа — орієнтир села, а не пейзажу за краєм.
 			var board_first: Array = groups.filter(func(g: Array) -> bool: return g.any(func(c: Vector2i) -> bool: return on_board(c)))
+			# Села дошки — з макету карти; процедура лишається для кільця.
+			if not layout.is_empty() and target == Terrain.Kind.BUILDING:
+				groups = groups.filter(func(g: Array) -> bool: return not board_first.has(g))
+				board_first = []
 			for g: Array[Vector2i] in board_first + groups.filter(func(g: Array) -> bool: return not board_first.has(g)):
 				_fill_group(g, kind_id)
 
@@ -1073,6 +1123,9 @@ class _Placer:
 				if s.has("max") and int(used.get(m, 0)) >= int(s["max"]):
 					continue
 				if bool(s.get("tower", false)) and (has_tower or tower_placed):
+					continue
+				# Двоповерхових не більше, ніж одноповерхових: село — це передусім хати.
+				if int(s.get("storeys", 1)) >= 2 and storeys[1] >= storeys[0]:
 					continue
 				var fp: Vector2i = (PropLayer.model(m) as Dictionary)["footprint"]
 				if fp == Vector2i.ZERO:
@@ -1125,7 +1178,8 @@ class _Placer:
 		for p: Array in placed:
 			if r.grow(maxf(_gap_of(m), float(p[1]))).intersects(p[0]):
 				return false
-			if (scr[0] as Rect2).grow(SCREEN_GROUND).intersects(p[2]) and _depth_gap(scr[1], p[3]) < SCREEN_DEPTH_SEP:
+			var margin: float = SCREEN_GROUND_RUIN if p[4] else SCREEN_GROUND
+			if (scr[0] as Rect2).grow(margin).intersects(p[2]) and _depth_gap(scr[1], p[3]) < SCREEN_DEPTH_SEP:
 				return false
 		return true
 
@@ -1220,9 +1274,12 @@ class _Placer:
 				for o: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
 					lo = minf(lo, ground(c.x + o.x, c.y + o.y))
 		used[m] = int(used.get(m, 0)) + 1
+		var sp: Dictionary = PropLayer.spec_of(m)
+		if int(sp["kind"]) == Kind.STRUCTURE and not bool(sp.get("tower", false)):
+			storeys[1 if int(sp.get("storeys", 1)) >= 2 else 0] += 1
 		var r: Rect2 = _rect_of(m, origin, rot, s)
 		var scr: Array = _screen_of(r, _height_of(m))
-		placed.append([r, _gap_of(m), scr[0], scr[1]])
+		placed.append([r, _gap_of(m), scr[0], scr[1], int(PropLayer.spec_of(m)["kind"]) == Kind.RUIN])
 		for c in cells:
 			model_at[c] = m
 		var centre := Vector2(origin) + Vector2(s - Vector2i.ONE) * 0.5
@@ -1309,6 +1366,227 @@ class _Placer:
 		var z: float = c.y + local.y
 		var cells: Array[Vector2i] = [c]
 		layer._add(m, Transform3D(Basis(Vector3.UP, yaw), Vector3(x, ground(x, z), z)), cells, true)
+
+	# --- села за макетом карти -----------------------------------------------------------------
+
+	## Садиби з VillageLayout: хата на своїй клітинці фасадом до дороги, город за нею, сарай, двір
+	## і сади між садибами; кожна клітинка BUILDING дошки — частина садиби чи саду.
+	func _homesteads() -> void:
+		var homes: Array = layout.get("homes", [])
+		var owner_of: Dictionary = {}
+		var solid: Dictionary = {}
+		for i in homes.size():
+			for c: Vector2i in homes[i]["cells"]:
+				owner_of[c] = i
+			solid[homes[i]["house"]] = true
+			if homes[i].has("shed"):
+				solid[homes[i]["shed"]] = true
+		for i in homes.size():
+			var home: Dictionary = homes[i]
+			var hc: Vector2i = home["house"]
+			var rot: int = [N_FACE, W_FACE, S_FACE, E_FACE].find(home["face"])
+			_put_structure(_house_model(hc, i), hc, rot, Vector2i.ONE, {})
+			for g: Vector2i in home.get("garden", []):
+				gardens.append(g)
+			# Клітинка двору без хати, сараю й городу — теж город: клітинка BUILDING не лишається голою.
+			for c: Vector2i in home["cells"]:
+				if not built.has(c):
+					built[c] = Vector2i.ZERO
+					if c != home.get("shed", Vector2i(-99, -99)) and not gardens.has(c):
+						gardens.append(c)
+			if home.has("shed") and PropLayer.model(YARD_SHED) != null:
+				var sc: Vector2i = home["shed"]
+				var lo: float = minf(ground(sc.x - 0.3, sc.y - 0.3), ground(sc.x + 0.3, sc.y + 0.3))
+				var cells: Array[Vector2i] = [sc]
+				layer._add(YARD_SHED, Transform3D(Basis(Vector3.UP, rot * PI * 0.5).scaled(Vector3.ONE * YARD_SHED_SCALE),
+						Vector3(sc.x, lo, sc.y)), cells, true)
+		for c: Vector2i in layout.get("orchards", []):
+			built[c] = Vector2i.ZERO
+			gardens.append(c)
+		for i in homes.size():
+			_fence_home(i, homes[i], owner_of, solid)
+
+	## Хата садиби: здебільшого одноповерхова, двоповерхова — кожна четверта за хешем; сусідні садиби
+	## не повторюють модель.
+	func _house_model(hc: Vector2i, i: int) -> StringName:
+		var single: StringName = &"house_h5"
+		var tall: StringName = &"house_h6"
+		var m: StringName = tall if h(hc, 150) % 4 == 0 else single
+		if not _no_twin(m, hc, Vector2i.ONE):
+			m = single if m == tall else tall
+		return m if PropLayer.model(m) != null else single
+
+	## Один замкнений паркан довкола двору садиби з воротами на боці фасаду. Межа з сусідньою садибою —
+	## одна спільна секція, що стоїть у городі чи дворі сусіда, не впритул до хати чи сараю.
+	func _fence_home(i: int, home: Dictionary, owner_of: Dictionary, solid: Dictionary) -> void:
+		var lot: Dictionary = {}
+		for c: Vector2i in home["cells"]:
+			lot[c] = true
+		var palette: Array[StringName] = PropLayer.models_of(Kind.GARDEN_FENCE)
+		if palette.is_empty():
+			return
+		var hc: Vector2i = home["house"]
+		var base: int = absi(hash(Vector2i(salt, Kind.GARDEN_FENCE))) + half(hc)
+		var m: StringName = palette[(base + h(hc, 121) % 2) % palette.size()]
+		var gate := [hc, home["face"]]
+		var cells: Array = lot.keys()
+		cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
+		var plans: Array[Dictionary] = []
+		for g: Vector2i in cells:
+			for d in Board.DIRS_4:
+				var c: Vector2i = g + d
+				if lot.has(c) or not on_board(c):
+					continue
+				if owner_of.has(c):
+					# Спільна межа: секцію ставить той, із чийого боку хата чи сарай; інакше — менший номер.
+					if solid.has(c) or (not solid.has(g) and int(owner_of[c]) < i):
+						continue
+				elif kind(c) not in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.HILL, Terrain.Kind.BUILDING]:
+					continue
+				var plan: Dictionary = _yard_segment(lot, g, d, [g, d] == gate)
+				if not plan.is_empty():
+					plans.append(plan)
+		for plan in plans:
+			var c: Vector2i = plan["c"]
+			if put_small(m, c, plan["local"], plan["yaw"], 1.0, true, plan["length"]):
+				edges[plan["key"]] = true
+				yard_cells[c] = true
+
+	## Тюки з макету: на краю поля, поодинці чи вільною парою, кожен своїм поворотом.
+	func _layout_hay() -> void:
+		for p0: Vector2 in layout.get("hay", []):
+			var c := Vector2i(roundi(p0.x), roundi(p0.y))
+			# Тюк — біля краю клітинки, не в центрі, де стоїть юніт.
+			var local: Vector2 = p0 - Vector2(c)
+			if absf(local.x) < 0.32 and absf(local.y) < 0.32:
+				local = (local if local.length() > 0.01 else Vector2(1, 0)).normalized() * 0.4
+			var p: Vector2 = Vector2(c) + local
+			# Тюк — лише на полі (край поля), не в лісі й не на пагорбі.
+			if not on_board(c) or kind(c) != Terrain.Kind.FIELD:
+				continue
+			var m: StringName = pick_for_half(Kind.HAY, half(c))
+			var n: int = 1 + h(c, 7) % 2
+			for k in n:
+				var q: Vector2 = p + Vector2(0.18 * k, 0.05 * k)
+				var cells: Array[Vector2i] = [c]
+				var xform := Transform3D(Basis(Vector3.UP, float(h(c, 16 + k) % 628) / 100.0), Vector3(q.x, ground(q.x, q.y), q.y))
+				if m != &"" and not _box_on_road(m, xform):
+					layer._add(m, xform, cells)
+
+	## Траси ЛЕП з макету: стовпи з рівним кроком уздовж ламаної, на твердій землі (не у воді, не
+	## на дорозі, не в садибі) — інакше найближче місце вздовж траси; над водою проліт не довший за
+	## півтора кроки. Сусідні стовпи однієї траси з'єднує дріт; хату — відвід від найближчого стовпа.
+	func _layout_poles() -> void:
+		for line: Dictionary in layout.get("lines", []):
+			var kind_name: StringName = line["kind"]
+			var m: StringName = &"infra_pole_concrete_10kv" if kind_name == &"10kv" else &"infra_pole_concrete_04kv"
+			if PropLayer.model(m) == null:
+				continue
+			var pts: Array = line["points"]
+			var step: float = SPAN[kind_name]
+			var length: float = 0.0
+			for k in range(1, pts.size()):
+				length += (pts[k] as Vector2).distance_to(pts[k - 1])
+			var prev: int = -1
+			var prev_at := Vector2.INF
+			var s: float = 0.5
+			while s <= length - 0.3:
+				var placed_at: Vector2 = Vector2.INF
+				var idx: int = -1
+				for off: float in _pole_offsets(step):
+					var q: float = clampf(s + off, 0.0, length)
+					var p: Vector2 = _point_at(pts, q)
+					var t: Vector2 = _tangent_at(pts, q)
+					idx = _pole_on(m, p, t)
+					if idx >= 0:
+						placed_at = p
+						s = q
+						break
+				if idx >= 0:
+					if prev >= 0 and prev_at.distance_to(placed_at) <= step * 1.5 + 0.5:
+						spans.append([prev, idx])
+					prev = idx
+					prev_at = placed_at
+				s += step
+		_service_drops()
+
+	func _pole_offsets(step: float) -> Array[float]:
+		var out: Array[float] = [0.0]
+		var k: float = 0.25
+		while k <= step * 0.5:
+			out.append_array([-k, k])
+			k += 0.25
+		return out
+
+	func _point_at(pts: Array, s: float) -> Vector2:
+		var acc: float = 0.0
+		for k in range(1, pts.size()):
+			var a: Vector2 = pts[k - 1]
+			var b: Vector2 = pts[k]
+			var l: float = a.distance_to(b)
+			if acc + l >= s:
+				return a.lerp(b, (s - acc) / maxf(l, 1e-6))
+			acc += l
+		return pts.back()
+
+	func _tangent_at(pts: Array, s: float) -> Vector2:
+		var acc: float = 0.0
+		for k in range(1, pts.size()):
+			var a: Vector2 = pts[k - 1]
+			var b: Vector2 = pts[k]
+			var l: float = a.distance_to(b)
+			if acc + l >= s:
+				return (b - a).normalized()
+			acc += l
+		return Vector2(0, 1)
+
+	## Стовп на точці траси, якщо там тверда земля поза садибами й дорогою; індекс екземпляра чи −1.
+	func _pole_on(m: StringName, p: Vector2, t: Vector2) -> int:
+		var c := Vector2i(roundi(p.x), roundi(p.y))
+		if not on_board(c) or kind(c) not in [Terrain.Kind.FIELD, Terrain.Kind.HILL] or on_road(p, 0.1):
+			return -1
+		for w: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + w
+			if kind(n) == Terrain.Kind.WATER or kind(n) == Terrain.Kind.MARSH:
+				if p.distance_to(Vector2(n)) < 0.5 + WATER_CLEAR:
+					return -1
+		var before: int = layer._instances.size()
+		if put_small(m, c, p - Vector2(c), atan2(t.x, t.y), POLE_SCALE):
+			return before
+		return -1
+
+	## Відвід до кожної хати від найближчого стовпа (до SERVICE_REACH клітинок): два дроти до стіни
+	## під дахом, з боку стовпа, — не в землю.
+	func _service_drops() -> void:
+		var poles: Array[int] = []
+		for i in layer._instances.size():
+			if int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.POLE:
+				poles.append(i)
+		for home: Dictionary in layout.get("homes", []):
+			var hc: Vector2i = home["house"]
+			var best: int = -1
+			var best_d: float = SERVICE_REACH
+			for i in poles:
+				var o: Vector3 = (layer._instances[i]["transform"] as Transform3D).origin
+				var dist: float = Vector2(o.x, o.z).distance_to(Vector2(hc))
+				if dist < best_d:
+					best_d = dist
+					best = i
+			if best < 0:
+				continue
+			var house_i: int = -1
+			for i in layer._instances.size():
+				if (layer._instances[i]["cells"] as Array).has(hc) and int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.STRUCTURE \
+						and not layer._instances[i].get("yard", false):
+					house_i = i
+			if house_i < 0:
+				continue
+			var ht: Transform3D = layer._instances[house_i]["transform"]
+			var box: AABB = ht * ((PropLayer.model(layer._instances[house_i]["model"]) as Dictionary)["aabb"] as AABB)
+			var po: Vector3 = (layer._instances[best]["transform"] as Transform3D).origin
+			var to_pole := Vector2(po.x - box.get_center().x, po.z - box.get_center().z).normalized()
+			var wall := Vector2(box.get_center().x, box.get_center().z) + to_pole * minf(box.size.x, box.size.z) * 0.48
+			layer._drops.append([best, Vector3(wall.x, box.position.y + box.size.y * 0.55, wall.y)])
 
 	# --- мости -----------------------------------------------------------------------------
 
