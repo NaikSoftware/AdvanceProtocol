@@ -63,6 +63,8 @@ var _match_service: Node = null
 var _prev_quit_on_go_back: bool = true
 ## Обмеження кадрів до бою; _exit_tree() повертає його.
 var _prev_max_fps: int = 0
+## Об'їзд дошки за гейтом (_warm_board) робиться один раз за життя екрана.
+var _board_warmed: bool = false
 ## Відлік спокою: таймер, а не _process, — у спокої екран не робить нічого щокадру (§8).
 var _idle_timer: Timer
 ## Відкритий оверлей налаштувань (null, поки не відкривали).
@@ -234,6 +236,7 @@ func launch(match_service: Node) -> void:
 	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
 	_clear_unit_views()
 	_gate.show_for(_match_service.state.active_player)
+	_warm_board()
 
 
 ## Ґрунт дошки завжди з карти (MapData.ground_state).
@@ -306,6 +309,7 @@ func resume(match_service: Node = null) -> void:
 	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
+	_warm_board()
 	_match_service.events_ready.connect(_on_events_ready)
 	_match_service.launch_mode = MatchService.Launch.NONE
 
@@ -1007,6 +1011,35 @@ func _warm_up_fx(cell: Vector2i) -> void:
 	var at: Vector3 = IsoCameraRig.cell_to_world(cell)
 	BattleFx.warm_up(_units, at)
 	_wreck_layer.warm_up(at)
+
+
+## Поки гейт закриває екран, камера по кадру стоїть над кожним блоком дошки (BoardWarmUp), а потім над
+## першим юнітом з його юнітами: матеріали, що інакше вперше потрапили б у кадр після гейта чи на
+## першому скролі, компілюються тут, невидимо. Гейт не
+## чіпається; якщо гравець устиг підтвердити, об'їзд кидається — камера вже стоїть на його позиції.
+## Без вікна (headless) нічого не малюється, тож і об'їжджати нічого.
+func _warm_board() -> void:
+	if _board_warmed or DisplayServer.get_name() == "headless":
+		return
+	_board_warmed = true
+	var board: Board = _match_service.state.board
+	await get_tree().process_frame
+	for cell in BoardWarmUp.stops(Vector2i(board.width, board.height)):
+		if not _gate.visible:
+			return
+		_camera_rig.center_on(cell)
+		await get_tree().process_frame
+	if not _gate.visible:
+		return
+	# Юніти з'являються лише на confirmed, тож їхні матеріали й підписи теж уперше малювалися б у першому
+	# кадрі після гейта. Малюємо їх тут, під непрозорим гейтом, і знову прибираємо: на confirmed вони
+	# ставляться як і раніше.
+	_rebuild_units_for_active_player(true)
+	_camera_rig.center_on(_first_unit_cell(_match_service.state.active_player))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if _gate.visible:
+		_clear_unit_views()
 
 
 ## Гачок вигляду лісу: тут його перемальовують з known_broken_map(активного) — ніколи
