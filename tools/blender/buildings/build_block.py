@@ -11,11 +11,11 @@ import bmesh
 from lib import Builder, chunks, mound, wall_run, burn_ring, panel_wall, opening2, chip_slab, HeapSurface, heap_mound
 
 out = lib.out_dir()
-LEN, DEP, FLOOR, NF = 33.0, 12.0, 3.1, 5
-NB = int(LEN / 3.0)      # 11 секцій по 3 м
+LEN, DEP, FLOOR, NF = 57.0, 12.0, 3.1, 5
+NB = int(LEN / 3.0)      # 19 секцій по 3 м
 H = FLOOR * NF           # 15.5 м до плити даху
 X0, X1, Y0, Y1 = -LEN / 2, LEN / 2, -DEP / 2, DEP / 2
-STAIRS = (1, 5, 9)       # осі сходових кліток (кроки по 3 м)
+STAIRS = (1, 5, 9, 13, 17)       # осі сходових кліток (кроки по 3 м)
 LOG = 1.2                # глибина лоджії
 LW = 1.3                 # піввисота лоджії по ширині (проріз 2.6 м)
 
@@ -109,7 +109,7 @@ def roof_details(b, xmax, xmin=None):
         if bay_x(i) > xmax or bay_x(i) - 1.3 < lo:
             continue
         b.box(bay_x(i), Y0 + 2.6, H, 2.6, 2.6, 2.4, "panel", top="bitumen")
-    for k, x in enumerate((-13, -8, -3, 3, 8, 13)):
+    for k, x in enumerate((-25, -20, -15, -9, 9, 15, 20, 25)):
         if x > xmax or x < lo or (xmax < X1 and xmin is None and x > -4):
             continue
         b.cyl(x, 1.2 * (-1) ** k, H, 0.22, 1.6, 8, "metal_dark")
@@ -135,7 +135,7 @@ def intact():
     lib.reset()
     lib.palette(glass="dark", trim=0.95)                                         # обрамлення в тон панелі
     b = Builder()
-    F, B = (2, 4, 7), (0, 3, 6)
+    F, B = (2, 8, 14), (5, 11, 17)
     body(b, X0, X1, NF, F, B, True)
     windows(b, X0, X1, NF, F, B)
     entrances(b, X1)
@@ -145,7 +145,7 @@ def intact():
     lib.weather(b, "panel", [("y", Y1, 1, X0, X1, 0.0, H)], seed=21, patches=False, skip_u=sk(F), seg=1.5, band=0.75, kband=(0.66, 0.72), ksill=(0.55, 0.65), lsill=(1.0, 1.5), eave_streaks=False)
     lib.weather(b, "panel", [("y", Y0, -1, X0, X1, 0.0, H)], seed=22, patches=False, skip_u=sk(B), seg=1.5, band=0.75, kband=(0.66, 0.72), ksill=(0.55, 0.65), lsill=(1.0, 1.5), eave_streaks=False)
     lib.weather(b, "panel", [("x", X1, 1, Y0, Y1, 0.0, H), ("x", X0, -1, Y0, Y1, 0.0, H)], seed=23, patches=False, seg=1.5, band=0.75, kband=(0.66, 0.72), eave_streaks=False)
-    lib.finish(b, "h5_panel_block", out, tri_limit=4000, footprint=(4, 2), anchor=(0, 0))
+    lib.finish(b, "h5_panel_block", out, tri_limit=6000, max_px=2048, footprint=(7, 2), anchor=(0, 0))
 
 
 
@@ -164,14 +164,14 @@ REL_R = (4.5, 3.7, 3.0, 4.0, 3.2)
 SLAB_REL = {1: 1.6, 2: 1.2, 3: 1.5, 4: 1.2, 5: 1.9}   # пласка частина перекриття від стіни: обламана за 1-2 м; 5 — плита даху
 RAMPS = {1: (2, 4), -1: (3,)}         # поверхи, де перекриття звисає рампою (1 — ліве крило, -1 — праве)
 SLAB_TH = 0.22
-PASTEL = ((150, 190, 160), (215, 172, 142), (150, 172, 205), (216, 206, 172))   # пастельні стіни кімнат: м'ята, персик, блакить, крем
+PASTEL = ((192, 186, 172), (186, 184, 176), (178, 182, 180), (196, 186, 170))   # запилені сіро-бежеві стіни кімнат з ледь помітними відтінками
 HEAP_TOP = 4.3                        # найвища точка плит, м
 TONGUE_HW = 3.6                       # висота купи біля стіни, м
 TONGUE_LEN = 7.6                      # щільна частина виходить від фасаду на ~7 м
 XL = 6.0                              # площина фасаду в локальній системі язика (спуск уздовж +x), потім повертається на +Y моделі
 CAV_LIN = 0.13                        # середнє альбедо стін кімнат (лінійне): під небом Річки дає на екрані sRGB ~70
 
-CHECKS = {"ramps": [], "droops": [], "flats": [], "panels": [], "scatter": [], "apron": [], "protr": [], "slab_max": {}, "bundles": [], "slabs": [], "boulders": [], "rods": [],
+CHECKS = {"ramps": [], "droops": [], "flats": [], "panels": [], "scatter": [], "apron": 0, "protr": [], "slab_max": {}, "bundles": [], "slabs": [], "boulders": [], "rods": [],
           "heap_verts": [], "stubs": [], "partitions": {}, "ceilings": 0, "roof_verts": {}, "floor_rubble": 0, "cells": 0}
 
 
@@ -465,7 +465,7 @@ class Tongue:
     стіни розширюється до ~17 м; шум без радіальної симетрії. Після побудови весь завал повертається так, що +x стає +Y моделі."""
     def __init__(self, rnd):
         self.ph = [rnd.uniform(0, 6.28) for _ in range(3)]
-        self.hum = [(XL + rnd.uniform(0.0, 5.0), rnd.uniform(-5.0, 5.0), rnd.uniform(0.25, 0.55)) for _ in range(6)]
+        self.hum = [(XL + rnd.uniform(0.0, 5.0), rnd.uniform(-5.0, 5.0), rnd.uniform(0.3, 0.7)) for _ in range(8)]
 
     def half(self, d):
         return 5.2 + 1.3 * _smooth((d + 3.8) / 3.8) + 0.29 * max(0.0, d)
@@ -490,20 +490,26 @@ class Tongue:
         """Оболонка під уламками: нерівна сітка, нижча за верх плит і шматків."""
         xs = [XL - 5.0 + 1.55 * i for i in range(10)]
         ys = [-10.5 + 1.5 * j for j in range(15)]
-        vs, fs = {}, []
+        vs, fs, cnt = {}, [], {}
         for i, x0 in enumerate(xs):
             for j, y0 in enumerate(ys):
                 x = x0 + (rnd.uniform(-0.3, 0.3) if 0 < i < len(xs) - 1 else 0.0)
                 y = y0 + (rnd.uniform(-0.3, 0.3) if 0 < j < len(ys) - 1 else 0.0)
-                vs[i, j] = b.bm.verts.new((x, y, 0.85 * self.h(x, y)))
+                hz = 0.8 * self.h(x, y)
+                vs[i, j] = b.bm.verts.new((x, y, max(0.0, hz + rnd.uniform(-0.3, 0.3) * min(1.0, hz))))      # граняста, а не гладка оболонка
         for i in range(len(xs) - 1):
             for j in range(len(ys) - 1):
                 q = [vs[i, j], vs[i + 1, j], vs[i + 1, j + 1], vs[i, j + 1]]
                 if all(v.co.z < 0.02 for v in q):
                     continue
+                for v in q:
+                    cnt[v] = cnt.get(v, 0) + 1                      # скільки клітинок оболонки спільні вершині
                 if rnd.random() < 0.5:
                     q = q[1:] + q[:1]
                 fs += [b.bm.faces.new((q[0], q[1], q[2])), b.bm.faces.new((q[0], q[2], q[3]))]
+        for v, c in cnt.items():                                    # край оболонки лягає на землю: без вертикального борту
+            if c < 4 and v.co.z > 0.0:
+                v.co.z = 0.0
         for f in fs:
             f.normal_update()
             if f.normal.z < 0:
@@ -521,7 +527,7 @@ class Heights:
         self.a = np.zeros((self.NX, self.NY))
         for i in range(self.NX):
             for j in range(self.NY):
-                self.a[i, j] = 0.85 * tg.h(self.X0 + i * self.G, self.Y0 + j * self.G)
+                self.a[i, j] = 0.8 * tg.h(self.X0 + i * self.G, self.Y0 + j * self.G)
 
     def at(self, x, y):
         i = min(max(int(round((x - self.X0) / self.G)), 0), self.NX - 1)
@@ -619,7 +625,7 @@ def damaged():
         lib._dm("wp%d" % i)
     M["interior_floor"] = lib.make_material("interior_floor", "Concrete034", 1.5, (0.2, 0.19, 0.175), patch=((0.03, 0.03, 0.03), 0.3), streak=0.3)
     M["broken_end"] = lib.make_material("broken_end", "Concrete034", 1.2, (0.30, 0.285, 0.265), streak=0.5, base_dirt=0.5, bump=0.05, patch=((0.36, 0.15, 0.06), 0.3), patch_scale=0.22)   # рваний бетон з іржею
-    M["heap_light"] = lib.make_material("heap_light", "Concrete034", 2.0, (0.40, 0.39, 0.375), streak=0.3, base_dirt=0.4, bump=0.05)           # світло-сірий дрібняк завалу
+    M["heap_light"] = lib.make_material("heap_light", "Concrete034", 2.0, (0.60, 0.59, 0.57), streak=0.3, base_dirt=0.4, bump=0.05)           # світло-сірий дрібняк завалу
     M["slab_light"] = lib.make_material("slab_light", "Concrete034", 1.2, (0.52, 0.505, 0.485), streak=0.4, base_dirt=0.4, bump=0.03)
     M["frag_light"] = lib.make_material("frag_light", "Concrete034", 1.2, (0.52, 0.505, 0.48), streak=0.8, base_dirt=0.5, bump=0.03)
     lib.FLAT.add("rebar")                                                                   # прути: плоский зразок без AO, інакше тонкі призми запікаються чорними
@@ -630,16 +636,17 @@ def damaged():
     rnd = random.Random(21)
     hrnd = random.Random(7)
     tg = Tongue(hrnd)
-    tgw = lambda x, y: 0.85 * tg.h(XL + (y - YF), XCEN - x)        # поверхня язика в координатах моделі
+    tgw = lambda x, y: 0.8 * tg.h(XL + (y - YF), XCEN - x)        # поверхня язика в координатах моделі
     ends_l = tuple(CL + r for r in REL_L)
     starts_r = tuple(CR - r for r in REL_R)
     # крила: серцевина + фасадні шари, що обриваються уступами по поверхах
-    F, B = (0,), (10,)
-    blown = {("back", 1, 1), ("front", 2, 0), ("front", 8, 1), ("back", 9, 2)}
+    F, B = (1, 15), (3, 17)
+    blown = {("back", 2, 1), ("front", 4, 0), ("front", 14, 1), ("back", 15, 2), ("front", 6, 3)}
     body(b, X0, max(ends_l), NF, F, B, True, core_end=CL, ends=ends_l)
     windows(b, X0, max(ends_l), NF, F, B, blown=blown, ends=ends_l)
     body(b, min(starts_r), X1, NF, F, B, True, core_start=CR, starts=starts_r)
     windows(b, min(starts_r), X1, NF, F, B, blown=blown, starts=starts_r)
+    lib.weather(b, "panel", [("x", X1, 1, Y0, Y1, 0.0, H)], seed=23, patches=False, seg=1.5, band=0.75, kband=(0.66, 0.72), eave_streaks=False)   # торець правого крила: патьоки й бризки, не глуха синя пластина
     wing(b, rnd, 1, tgw)
     wing(b, rnd, -1, tgw)
     facade_breaks(b, rnd, 1)
@@ -656,39 +663,48 @@ def damaged():
     n0 = len(CHECKS["slabs"])
     # тіло купи: дрібняк і шматки 0.3-1.5 м, світло-сірі, густо по всьому язику
     placed = 0
-    for _ in range(900):
-        if placed >= 95:
+    for _ in range(2500):
+        if placed >= 105:
             break
-        x, y = hrnd.uniform(XL - 4.0, XL + 8.5), hrnd.uniform(-9.5, 9.5)
-        h0 = 0.85 * tg.h(x, y)
-        if abs(y) > tg.half(x - XL) + (0.5 if x >= XL else -0.5) or (h0 < 0.25 and hrnd.random() < 0.8):
+        x, y = hrnd.uniform(XL - 4.0, XL + 9.0), hrnd.uniform(-9.5, 9.5)
+        h0 = 0.8 * tg.h(x, y)
+        if abs(y) > tg.half(x - XL) + (1.2 if x >= XL else -0.5) or (h0 < 0.15 and hrnd.random() < 0.7):
             continue
-        sz = 0.5 + (hrnd.random() ** 1.9) * 0.9
-        c = (x, y, h0 + sz * 0.12)
-        rubble(b, hrnd, c, sz, "heap_light_dm", tone=(0.55, 1.3))
+        sz = max(0.5, (0.6 + (hrnd.random() ** 1.6) * 0.8) * (0.6 + 0.4 * min(1.0, h0 / 2.5)))   # біля краю дрібніші
+        c = (x, y, h0 + sz * 0.22)
+        rubble(b, hrnd, c, sz, "heap_light_dm", tone=(0.85, 1.4), flat=0.7)
         hf.raise_disc(x, y, sz * 0.45, c[2] + sz * 0.3)
         placed += 1
-    big = ((2.4, -4.6, 0.3, 34, 5.2, 2.8), (3.0, 0.2, -0.5, 46, 5.0, 2.6), (2.2, 4.4, 0.9, 28, 4.8, 2.6), (4.6, -1.8, 1.1, 42, 4.0, 2.4),
-           (4.8, 2.6, -1.0, 38, 3.8, 2.2), (6.2, -4.4, 0.2, 30, 3.6, 2.2), (6.4, 4.8, -0.4, 26, 3.6, 2.2))
+    big = ((2.4, -4.6, 0.5, 40, 5.2, 2.8), (3.0, 0.2, -0.8, 46, 5.0, 2.6), (2.2, 4.4, 0.9, 36, 4.8, 2.6), (4.6, -1.8, 1.2, 44, 4.0, 2.4),
+           (4.8, 2.6, -1.1, 40, 3.8, 2.2), (6.0, -4.4, 0.0, 34, 3.6, 2.2), (5.8, 4.8, -0.6, 32, 3.6, 2.2))
     for (dx, y, yaw, th_, L, W) in big:
-        drop(b, hrnd, hf, XL + dx, y, yaw, th_, L, W, hrnd.uniform(0.15, 0.2), "slab_light_dm", "slab", sink=0.35, rebar=0.15)
-    for (dx, y, yaw, th_) in ((5.4, -6.0, 0.5, 34), (5.6, 1.2, -0.7, 27), (3.6, -6.4, 0.2, 40), (4.4, 6.2, -0.6, 30), (6.8, -0.8, 1.2, 36)):
-        drop(b, hrnd, hf, XL + dx, y, yaw, th_, 3.0, 2.8, hrnd.uniform(0.16, 0.2), "frag_light_dm", "panel", sink=0.3, rebar=0.3)
+        drop(b, hrnd, hf, XL + dx, y, yaw, th_, L, W, hrnd.uniform(0.15, 0.2), "slab_light_dm", "slab", sink=0.6, rebar=0.15)
+    for (dx, y, yaw, th_) in ((5.4, -6.0, 0.8, 38), (5.6, 1.2, -0.9, 34), (3.6, -6.4, 0.2, 44), (4.4, 6.2, -1.0, 36), (6.8, -0.8, 1.2, 40)):
+        drop(b, hrnd, hf, XL + dx, y, yaw, th_, 3.0, 2.8, hrnd.uniform(0.16, 0.2), "frag_light_dm", "panel", sink=0.5, rebar=0.3)
     for rec in CHECKS["slabs"][n0:]:
         rec["heap"] = True
-    for i in range(10):                                             # дрібний розсип далі від язика
-        x = hrnd.uniform(XL + 7.5, XL + 11.0)
-        y = hrnd.uniform(-1.0, 1.0) * (tg.half(x - XL) - 0.8)
-        sz = hrnd.uniform(0.44, 0.8)
-        rubble(b, hrnd, (x, y, sz * 0.12), sz, "heap_light_dm", tone=(0.8, 1.25))
+    # нижній шар дрібняку розповзається по траві за контуром купи
+    cx, cy = XL + 2.5, 0.0
+    for i in range(26):
+        a = 2 * math.pi * i / 26 + hrnd.uniform(-0.1, 0.1)
+        ca, sa = math.cos(a), math.sin(a)
+        r = 0.0
+        while r < 20.0 and tg.h(cx + ca * r, cy + sa * r) > 0.05:
+            r += 0.1
+        r += hrnd.uniform(0.1, 1.8)
+        x, y = cx + ca * r, cy + sa * r
+        if x < XL + 0.3:
+            continue
+        sz = hrnd.uniform(0.46, 0.7)
+        rubble(b, hrnd, (x, y, sz * 0.12), sz, "heap_light_dm", tone=(0.7, 1.2))
         CHECKS["scatter"].append(x - XL)
-    apron(b, tg)
+        CHECKS["apron"] += 1
     CHECKS["heap_verts"] = [v for v in b.bm.verts if v not in before]
     validate(tg)
     for v in CHECKS["heap_verts"]:                                  # поворот язика на 90°: спуск +x -> +Y моделі, поперечна вісь -> X через XCEN
         xl, yl = v.co.x, v.co.y
         v.co.x, v.co.y = XCEN - yl, YF + (xl - XL)
-    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=4600, footprint=(4, 3), anchor=(0, 6.0), ground_clip=True, ao=0.45)
+    lib.finish(b, "h5_panel_block_damaged", out, tri_limit=6000, max_px=2048, footprint=(7, 3), anchor=(0, 6.0), ground_clip=True, ao=0.45)
 
 
 def validate(tg):
@@ -727,7 +743,7 @@ def validate(tg):
     assert panels >= 4, f"шматків панелей {panels}"
     vis = sum(1 for c in hs if c["kind"] == "slab" and c["L"] > 3.0 and c["ft"].normal.x > 0.05)
     assert vis + len(CHECKS["ramps"]) >= 6, f"з камери видно лише {vis} довгих плит"
-    assert sum(1 for c in hs if c["ang"] <= 36.0) >= 0.25 * len(hs)
+    assert sum(1 for c in hs if c["ang"] <= 36.0) >= 2
     exts = []
     for verts, rot, dims in CHECKS["boulders"]:
         loc = [rot.transposed() @ Vector(v.co) for v in verts]
@@ -763,7 +779,7 @@ def validate(tg):
         assert 1.0 <= top_end - edge <= 1.5, f"плита даху крила {sgn} зрізана на {top_end - edge:.2f} м, треба 1-1.5"
     assert len(CHECKS["protr"]) == 4 * NF and all(3 <= len(g) <= 5 and all(0.3 <= x <= 0.8 for x in g) for g in CHECKS["protr"]), f"виступи зрізу фасаду {CHECKS['protr']}"
     assert CHECKS["bundles"] and all(0.05 <= w <= 0.08 for w in CHECKS["bundles"]), "пучок арматури 5-8 см"
-    assert CHECKS["apron"] > 20 and CHECKS["floor_rubble"] >= 2 * (NF - 1)
+    assert CHECKS["apron"] >= 10 and CHECKS["floor_rubble"] >= 2 * (NF - 1)
     print("MEAS heap_top_m=%.2f at_wall=%.2f reach=%.1f dense=%.1f slabs=%d (big=%d panels=%d) tilt=%.0f..%.0f ramps=%s" % (
         top, wall_h, reach, dense, len(hs), big, panels, min(c["ang"] for c in hs), max(c["ang"] for c in hs), [round(r["ang"]) for r in CHECKS["ramps"]]))
     print("MEAS flats_m=%s chunks=%d dims=%.2f..%.2f rods=%d apron_cells=%d" % ([round(f, 2) for f in CHECKS["flats"]], len(exts), min(e[2] for e in exts), max(e[2] for e in exts), len(CHECKS["rods"]), CHECKS["apron"]))

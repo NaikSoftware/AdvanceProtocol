@@ -208,6 +208,9 @@ func _ready() -> void:
 			for f in SETTLE_FRAMES:
 				await get_tree().process_frame
 			await RenderingServer.frame_post_draw
+			for inst in (screen.get_node("%BoardView") as BoardView).props().all_instances():
+				if String(inst["model"]).begins_with("h5_panel"):
+					print("FOUND ", map, " ", inst["model"], " ", inst["cells"][0], " ", (inst["transform"] as Transform3D).origin)
 			var dc: int = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 			var tris: int = int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
 			var name: String = "%s_%d_%d_z%d" % [map, v[0].x, v[0].y, int(v[1])]

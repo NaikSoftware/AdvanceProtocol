@@ -87,6 +87,8 @@ func test_structures_lie_wholly_inside_building_cells(p = use_parameters(MAPS)) 
 		var k: int = _kind(inst["model"])
 		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
 			continue
+		if (PropLayer.RING_LANDMARKS.get(StringName(p), {}) as Dictionary).get("model", &"") == inst["model"]:
+			continue                                                   # орієнтир кільця стоїть на вільному полі за краєм: це декорація без правил
 		var want: int = Terrain.Kind.BUILDING if k == PropLayer.Kind.STRUCTURE else Terrain.Kind.RUBBLE
 		var info: Dictionary = PropLayer.model(inst["model"])
 		var t: Transform3D = inst["transform"]
@@ -1468,3 +1470,20 @@ func test_garden_beds_lie_on_the_ground(p = use_parameters(MAPS)) -> void:
 				var v: Vector3 = t * Vector3(-0.5 + j * 0.25, 0.0, -0.5 + k * 0.25)
 				assert_almost_eq(v.y - th.at(v.x, v.z), 0.004, 0.03 * TerrainHeight.M,
 						"%s: город %d у (%.2f; %.2f) відходить від ґрунту на %.2f м" % [p, i, v.x, v.z, (v.y - 0.004 - th.at(v.x, v.z)) / TerrainHeight.M])
+
+
+## Орієнтир кільця Хребта (зруйнована панельна п'ятиповерхівка) стоїть цілком за краєм дошки, на вільному полі, фасадом із язиком до камери.
+func test_ridge_ring_landmark_stands_in_the_ring_facing_the_camera() -> void:
+	var m: MapData = _map("ridge")
+	var found: Array[Dictionary] = []
+	for inst in _view(m).props().all_instances():
+		if inst["model"] == &"h5_panel_block_damaged":
+			found.append(inst)
+	assert_eq(found.size(), 1, "рівно один орієнтир")
+	if found.is_empty():
+		return
+	var t: Transform3D = found[0]["transform"]
+	var front: Vector3 = t.basis * Vector3(0, 0, -1)                    # −Z моделі — фасад, з якого лежить язик
+	assert_gt(front.x + front.z, 0.5, "фасад дивиться до камери (+x чи +z)")
+	for c: Vector2i in found[0]["cells"]:
+		assert_true(c.x < 0 or c.y < 0 or c.x >= m.width or c.y >= m.height, "клітинка %s за краєм дошки" % c)

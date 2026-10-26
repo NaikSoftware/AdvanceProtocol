@@ -5,8 +5,8 @@ extends GutTest
 const _DIR: String = "res://assets/props/"
 ## імʼя -> [слід X, слід Z у тайлах, ліміт трикутників]
 const _PROPS: Dictionary = {
-	"h5_panel_block": [4, 2, 4000],
-	"h5_panel_block_damaged": [4, 3, 4600],
+	"h5_panel_block": [7, 2, 6000],
+	"h5_panel_block_damaged": [7, 3, 6000],
 	"f1_farm_barn": [2, 1, 400],
 	"f2_livestock_barn": [2, 8, 400],
 	"f3_hangar": [3, 5, 1000],

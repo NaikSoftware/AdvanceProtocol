@@ -71,6 +71,11 @@ const MODELS: Dictionary = {
 }
 ## Руїни з глухим фронтоном збоку: ставляться пошкодженим фасадом (−Z) до камери (+x чи +z).
 const CAMERA_FRONT: Array[StringName] = [&"ruin_half_house2", &"h5_panel_block_damaged"]
+## Орієнтир кільця: кільце — декорація без правил, тож карта може мати в ньому свою велику руїну. Модель ставиться в кільці
+## найближче до near (клітинка дошки), поворотом rot (2 — фасад із язиком завалу до камери), лише на вільному полі.
+const RING_LANDMARKS: Dictionary = {
+	&"ridge": {"model": &"h5_panel_block_damaged", "near": Vector2i(-8, 11), "rot": 2},
+}
 ## Руїни, яких у таблиці ще нема, стають у слот за префіксом імені: напівзруйнована будівля —
 ## звичайна, повна руїна — рідкісна. Перший збіг виграє.
 ## Моделі, що лежать на диску, але ще не прийняті: їх не бере ні таблиця, ні префікс.
@@ -1490,6 +1495,7 @@ class _Placer:
 	func place_all() -> void:
 		if not layout.is_empty():
 			_structures()
+			_ring_landmark()
 			_homesteads()
 			settle()
 			_footpaths()
@@ -1500,6 +1506,7 @@ class _Placer:
 			_layout_poles()
 			return
 		_structures()
+		_ring_landmark()
 		_dress_yards()
 		settle()
 		_bridges()
@@ -1510,6 +1517,43 @@ class _Placer:
 		_blocks()
 		_boulders()
 		_poles()
+
+	## Орієнтир кільця карти (RING_LANDMARKS): найближче до near вільне поле, що цілком лежить за краєм дошки.
+	func _ring_landmark() -> void:
+		var spec: Dictionary = PropLayer.RING_LANDMARKS.get(map_key, {})
+		if spec.is_empty() or ring <= 0:
+			return
+		var m: StringName = spec["model"]
+		var fp: Vector2i = (PropLayer.model(m) as Dictionary)["footprint"]
+		if fp == Vector2i.ZERO:
+			return
+		var rot: int = int(spec["rot"])
+		var s: Vector2i = fp if rot % 2 == 0 else Vector2i(fp.y, fp.x)
+		var near: Vector2 = Vector2(spec["near"]) + Vector2(s) * 0.5
+		var best := Vector2i.ZERO
+		var best_d: float = INF
+		var free: Dictionary = {}
+		for oy in range(-ring, size.y + ring - s.y + 1):
+			for ox in range(-ring, size.x + ring - s.x + 1):
+				var o := Vector2i(ox, oy)
+				var d: float = (Vector2(o) + Vector2(s) * 0.5 - near).length_squared()
+				if d >= best_d:
+					continue
+				var ok := true
+				for dy in s.y:
+					for dx in s.x:
+						var c: Vector2i = o + Vector2i(dx, dy)
+						if on_board(c) or model_at.has(c) or not [Terrain.Kind.FIELD, Terrain.Kind.HILL].has(kind(c)):
+							ok = false
+				if ok and _clear_of_placed(m, o, rot, s):
+					best = o
+					best_d = d
+		if best_d == INF:
+			return
+		for dy in s.y:
+			for dx in s.x:
+				free[best + Vector2i(dx, dy)] = true
+		_put_structure(m, best, rot, s, free)
 
 	## Клітинка світу -> клітинка дошки.
 	func board_cell(w: Vector2i) -> Vector2i:
