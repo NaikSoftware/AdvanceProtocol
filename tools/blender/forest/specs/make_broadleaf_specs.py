@@ -85,6 +85,9 @@ for season in ("late", "summer", "early"):
                 it["trunk_into_crown"] = 0.75
                 it["trunk_top"] = 0.08
                 it["card_keep"] = 1.0
+                # Обрис голої крони — текстура гілочок на пучках, а не геометрія гілок: ~90
+                # трикутників замість ~230 (бюджет кадру бою).
+                it["limbs"] = False
         if season != "late" and leafy_keep:
             it["card_keep"] = leafy_keep
         if node.startswith(("Hedge", "Shrub", "Log", "Litter")):
@@ -95,6 +98,14 @@ for season in ("late", "summer", "early"):
             it["card_keep"] = 0.6
             it["card_scale"] = 1.3
         it.update(extra)
+        if season != "late" and node.startswith(("Birch", "Oak")):
+            it["limbs"] = False  # гілки під листям не видно: пів трикутників дерева
+        if node.startswith("Shrub"):
+            # Кущ: стебла під пучками; голий кущ пізньої осені читається текстурою гілочок.
+            it["limbs"] = False
+        if node == "Hedge_Shrub":
+            it["limbs"] = False
+            it["card_budget"] = 35
         if node.startswith("Hero"):
             # Стовбур поодинокого дерева ~1 м у діаметрі: тонкий читався паличкою під кроною.
             it["trunk_r_mul"] = 1.8

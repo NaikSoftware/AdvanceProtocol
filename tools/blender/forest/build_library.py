@@ -163,12 +163,18 @@ def build_node(item, rects):
     if keep < 1.0 and cards:
         # Голе дерево: та сама будова, але менше пучків — крізь крону видно землю.
         cards = random.Random(seed + "keep").sample(cards, max(1, round(len(cards) * keep)))
+    if item.get("card_budget") and len(cards) > item["card_budget"]:
+        # Бюджет бою: менше пучків, більших (площа крони та сама, ×0,9 на перекриття). Обрис
+        # і будова лишаються, бо пучки беруться з тих самих місць крони.
+        n = item["card_budget"]
+        fs_card = 0.9 * math.sqrt(len(cards) / n)
+        cards = random.Random(seed + "budget").sample(cards, n)
     if item.get("max_cards") and len(cards) > item["max_cards"]:
         # Проксі тіні: менше пучків, але більших — сумарна площа та сама (×0,85 на
         # перекриття), тож пляма тіні тієї ж величини й так само дірява. Пучки — з уже
         # відібраних: голе дерево не кидає тіні повної листяної крони.
         n = item["max_cards"]
-        fs_card = 0.85 * math.sqrt(len(cards) / n)
+        fs_card *= 0.85 * math.sqrt(len(cards) / n)
         cards = random.Random(seed + "proxy").sample(cards, n)
     cb, top = meta["crown_base"], meta["top"]
     low = item.get("crown_low", 1.0)
@@ -180,6 +186,12 @@ def build_node(item, rects):
         meta = dict(meta, crown_base=cb * low, centre=None, radii=None)
         meta = {k2: v for k2, v in meta.items() if v is not None}
         cb = cb * low
+    if not item.get("trunk", True) and not item.get("limbs", True) and not item.get("max_cards") and cards:
+        # Меш лише з пучків (кущ без стебел): найнижча картка мусить сягати землі, інакше кущ
+        # висить над нею, бо раніше до землі діставали стебла.
+        lift = min(cd["c"][2] - cd["size"] * item.get("card_scale", 1.0) * fs_card * 0.45 for cd in cards)
+        if lift > 0:
+            cards = [dict(cd, c=[cd["c"][0], cd["c"][1], cd["c"][2] - lift]) for cd in cards]
     R = max([math.hypot(cd["c"][0], cd["c"][1]) for cd in cards] + [0.5])
     ctr = Vector(meta.get("centre", (0, 0, (cb + top) / 2)))
     rad = Vector(meta.get("radii", (R, R, max((top - cb) / 2, 0.5))))
@@ -229,7 +241,9 @@ def build_node(item, rects):
         th = meta["trunk_render_height"]
         vnorm.update(trunk(bm, uvl, trect, r, r * item.get("trunk_top", 0.45), tt, min(1.0, tt / th),
                            item.get("trunk_sides", 5), tuple(item.get("lean", (0.0, 0.0)))))
-    for lm in ([] if item.get("max_cards") else meta.get("limbs", [])):
+    # Гілки під листям не видно: у листяному сезоні їх не будують (`limbs`: False) — пів трикутників
+    # дерева. Гілки голого дерева пізньої осені і є його обрис.
+    for lm in ([] if item.get("max_cards") or not item.get("limbs", True) else meta.get("limbs", [])):
         vnorm.update(limb(bm, uvl, trect, lm["pts"], lm["r"], lm.get("sides", 3)))
     bm.faces.ensure_lookup_table()
     for f in bm.faces[n_cards:]:  # кора без затінення пучків
@@ -332,7 +346,7 @@ def patch_glb(path, cutoff):
 
 
 PROXY_FOR = ("Pine", "Spruce", "Birch", "Oak", "Hero", "Shrub")
-PROXY_CARDS = 14
+PROXY_CARDS = 8
 PROXY_CARDS_SHRUB = 6  # підлісок здебільшого стоїть у тіні крон
 
 
@@ -352,9 +366,9 @@ def main():
         ob.data.materials.append(mat)
         obs.append(ob)
         if item["node"].startswith(PROXY_FOR):
-            # Сітка лише для тіні (cast_shadow = SHADOWS_ONLY): той самий атлас, ~14 пучків
-            # і тригранний стовбур замість сотень трикутників крони в тіньовому проході.
-            px = dict(item, node=item["node"] + "_Shadow", trunk_of=item["node"], tiers=0, max_cards=PROXY_CARDS_SHRUB if item["node"].startswith("Shrub") else PROXY_CARDS, trunk_sides=3)
+            # Проксі: той самий атлас, ~8 більших пучків без стовбура (~16 трикутників). Тінь
+            # стенду і дальній ліс бою (кільце, підріст), де пучків і стовбура не розрізнити.
+            px = dict(item, node=item["node"] + "_Shadow", trunk_of=item["node"], tiers=0, max_cards=PROXY_CARDS_SHRUB if item["node"].startswith("Shrub") else PROXY_CARDS, trunk=False)
             ob = build_node(px, rects)
             ob.data.materials.append(mat)
             obs.append(ob)

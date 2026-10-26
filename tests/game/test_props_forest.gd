@@ -22,7 +22,7 @@ const LIMITS: Dictionary = {
 	"Shrub": [1.5, 5.0, 0.4, 10, 100],
 	"Log": [0.2, 1.5, 0.5, 10, 60],
 	# Смуга узлісся завдовжки з тайл; гілля проламаної клітинки лежить на землі.
-	"Hedge": [2.0, 4.5, 0.62, 60, 200],
+	"Hedge": [2.0, 4.5, 0.62, 40, 200],
 	"Litter": [0.0, 0.5, 0.66, 10, 60],
 	# Поодинокі восени голі (лишається 8–18 % пучків), влітку — 1500–2000 трикутників.
 	"Hero": [9.0, 15.0, 1.3, 200, 3000],
@@ -77,10 +77,20 @@ func _check(glb: String, root: Node3D, node: String) -> void:
 	assert_eq(mi.transform, Transform3D.IDENTITY, "%s: перетворення вузла запечене в меш" % label)
 	assert_eq(mi.mesh.get_surface_count(), 1, "%s: одна поверхня — один виклик малювання" % label)
 	var box: AABB = mi.mesh.get_aabb()
-	# У смуги узлісся немає стовбура: нижня точка меша — центр нижнього пучка, а сам пучок
-	# сягає землі (картка розгортається на ±0,1 тайла).
-	var ground_tol: float = 0.1 if node.begins_with("Hedge") else GROUND_TOL
-	assert_almost_eq(box.position.y, 0.0, ground_tol, "%s: земля на y = 0" % label)
+	# Меш лише з пучків (смуга узлісся, кущ без стебел): нижня точка меша — центр нижнього
+	# пучка, а сама картка розгортається на |UV2| / √2 нижче. Видимий низ — на землі.
+	var arrays: Array = mi.mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uv2s: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var cards_only: bool = true
+	var bottom: float = INF
+	for i in verts.size():
+		cards_only = cards_only and uv2s[i].length() >= 1e-3
+		bottom = minf(bottom, verts[i].y - uv2s[i].length() * 0.7071)
+	if cards_only:
+		assert_between(bottom, -0.1, GROUND_TOL, "%s: видимий низ пучків на землі (%.3f)" % [label, bottom])
+	else:
+		assert_almost_eq(box.position.y, 0.0, GROUND_TOL, "%s: земля на y = 0" % label)
 	var h_m: float = box.end.y * TILE_M
 	assert_between(h_m, float(lim[0]), float(lim[1]), "%s: висота %.1f м" % [label, h_m])
 	var half: float = maxf(maxf(absf(box.position.x), absf(box.end.x)), maxf(absf(box.position.z), absf(box.end.z)))

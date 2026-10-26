@@ -56,6 +56,10 @@ var season: StringName = &"late"
 ## Будівлі кидають тінь сонця (PropLayer.structure_shadows): на сонячній карті без неї дім висить.
 ## Ставить екран бою з вигляду карти до першого build().
 var structure_shadows: bool = false
+## Сонце карти для запеченої тіні лісу (ForestLayer): напрям НА сонце й частка світла, яку
+## забирає крона. Ставить екран бою з вигляду карти до першого build().
+var sun_dir := Vector3(0.5, 0.7071, 0.5)
+var forest_shadow: float = 0.15
 ## Мокра карта (PropLayer.wet): ставить екран бою з вигляду карти до першого build().
 var wet: bool = false
 ## Час імли для всіх матеріалів світу; з боєм не скидається, бо візерунку однаково, з якого
@@ -88,6 +92,9 @@ var probe_captures_requested: int = 0
 ## Будівлі, мости й дрібні пропси (PropLayer). Переживає build(): набір клітинок під юнітами й
 ## розчавлених лишається між перебудовами мосту.
 var _props: PropLayer
+## Ліс на клітинках FOREST дошки й кільця (ForestLayer); переживає build(): розкид дорогий, а
+## перебудова мосту лісу не міняє.
+var _forest: ForestLayer
 ## тайл -> вид тайлу під ним.
 var _kind_by_cell: Dictionary = {}
 ## шар контуру -> Array[Dictionary] сегментів {cell, dir, color}, які зараз
@@ -133,7 +140,7 @@ func build(board: Board) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, а тести це фіксують як витік.
 	for child in get_children():
-		if child != _ground and child != _water and child != _probe and child != _fog_clock and child != _props:
+		if child != _ground and child != _water and child != _probe and child != _fog_clock and child != _props and child != _forest:
 			child.free()
 	_kind_by_cell.clear()
 	# Вузли контуру щойно звільнені циклом free() вище (вони теж діти цього
@@ -197,6 +204,14 @@ func build(board: Board) -> void:
 		for sp: Dictionary in ring_map.spawns:
 			spawns.append(sp["pos"])
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields, spawns)
+	if _forest == null:
+		_forest = ForestLayer.new()
+		_forest.name = "Forest"
+		add_child(_forest)
+	_forest.sun_dir = sun_dir
+	_forest.shadow_strength = forest_shadow
+	if board.width > 0 and board.height > 0:
+		_forest.build(world, world_surface, ring, _board_size, season, relief_seed)
 	# Стежки публічні (§3.5): маска зносу не залежить від туману й ставиться разом із землею.
 	if _ground.material_override is ShaderMaterial and not _props.footpaths.is_empty():
 		Footpaths.apply(_ground.material_override, Footpaths.bake(_props.footpaths, _props.trodden, _board_size, _dry_grid()), _board_size)
@@ -420,6 +435,24 @@ func props() -> PropLayer:
 ## instant — без переходу (гейт передачі, §3.5): див. PropLayer.set_reveal_cells.
 func set_reveal_cells(cells: Array[Vector2i], instant: bool = false) -> void:
 	_props.set_reveal_cells(cells, instant)
+	if _forest != null:
+		_forest.set_reveal_cells(cells)
+
+
+func forest() -> ForestLayer:
+	return _forest
+
+
+## Проламаний ліс, який знає глядач (BattleState.known_broken_map), — ніколи не правда.
+func set_forest_broken(known: Dictionary) -> void:
+	if _forest != null:
+		_forest.set_broken(known)
+
+
+## Зум камери: підлісок лише до ForestLayer.DETAIL_ZOOM.
+func set_forest_zoom(zoom: float) -> void:
+	if _forest != null:
+		_forest.set_zoom(zoom)
 
 
 ## Клітинки з розчавленими пропсами, уже обрізані розвіданим глядача (§3.5).

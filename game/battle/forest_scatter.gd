@@ -103,6 +103,7 @@ var _turn_hi: float = 0.0
 var _turn_lo: float = 0.0
 var _stand_sorted: PackedFloat32Array = []  ## шум насаджень по лісу карти, для квантилів
 var _out: Array[Dictionary] = []
+var _limit := Rect2i()
 var _fixed_u: Dictionary = {}  ## Vector2 -> частка в розподілі осені для поставлених вручну
 
 
@@ -112,12 +113,15 @@ var _fixed_u: Dictionary = {}  ## Vector2 -> частка в розподілі 
 ## - `broken`: Vector2i -> true — проламані клітинки того, хто дивиться;
 ## - `season`: late | summer | early; `seed` — зерно карти;
 ## - `library`: ім'я вузла -> {"h": висота AABB, "half": півширина AABB} (тайли, масштаб 1);
-## - `fixed`: [[ім'я вузла, Vector2]] — поодинокі дерева, поставлені вручну.
+## - `fixed`: [[ім'я вузла, Vector2]] — поодинокі дерева, поставлені вручну;
+## - `area`: лише ця частина карти (тайли); порожня — увесь ліс. Зерна точок ті самі, тож
+##   план частини збігається з тією самою частиною плану цілого.
 ## Повертає записи {"node", "xf" (Transform3D у тайлах, y = 0 — земля), "pos", "r" (радіус
 ## крони), "rgb" (тон), "turn" ("orange" | "green" | ""), "ground" (шматок землі просіки)}.
 static func plan(cells: Dictionary, wood_at: Callable, broken: Dictionary, season: String, seed: int,
-		library: Dictionary, fixed: Array = []) -> Array[Dictionary]:
+		library: Dictionary, fixed: Array = [], area: Rect2i = Rect2i()) -> Array[Dictionary]:
 	var f := ForestScatter.new()
+	f._limit = area
 	f._cells = cells
 	f._wood_at = wood_at
 	f._broken = broken
@@ -147,7 +151,7 @@ static func plan(cells: Dictionary, wood_at: Callable, broken: Dictionary, seaso
 	for i in fixed.size():
 		var rng := f._rng(Layer.FIXED, i, 0)
 		if library.has(fixed[i][0]):
-			f._place(fixed[i][0], fixed[i][1], 1.0, rng)
+			f._place(fixed[i][0], fixed[i][1], 1.0, rng, true)
 	return f._out
 
 
@@ -209,6 +213,8 @@ func _init_noise() -> void:
 
 
 func _area() -> Rect2i:
+	if _limit.has_area():
+		return _limit
 	var lo := Vector2i(1 << 20, 1 << 20)
 	var hi := -lo
 	for c: Vector2i in _cells:
@@ -290,7 +296,11 @@ func _pick(weights: Dictionary, p: Vector2, rng: RandomNumberGenerator) -> Strin
 
 ## Масштаб s (по висоті); дерева ширші за свою висоту в WIDE разів, щоб ліс зімкнувся.
 ## Крона з полем LANE_MARGIN не заходить на пролам.
-func _place(name: String, p: Vector2, s: float, rng: RandomNumberGenerator) -> void:
+func _place(name: String, p: Vector2, s: float, rng: RandomNumberGenerator, fixed: bool = false) -> void:
+	# Ліс стоїть лише на клітинках лісу: край рваний (шум глибини), але не заходить у поле, де
+	# дерево стояло б на чужій клітинці й плутало б, де ліс за правилами.
+	if not fixed and not _cells.has(Vector2i(roundi(p.x), roundi(p.y))):
+		return
 	var species: String = name.get_slice("_", 0)
 	var w: float = 1.0
 	var bd: float = broken_distance(_broken, p)
@@ -334,14 +344,15 @@ func _turn_of(species: String, p: Vector2) -> String:
 
 
 func _add(name: String, xf: Transform3D, p: Vector2, r: float, rgb: Color = Color.WHITE) -> void:
-	if _lib.has(name):
+	if _lib.has(name) and _cells.has(Vector2i(roundi(p.x), roundi(p.y))):
 		_out.append({"node": name, "xf": xf, "pos": p, "r": r, "rgb": rgb, "turn": "", "ground": false})
 
 
 ## Узлісся: на кожну сторону лісової клітинки, що дивиться в поле, — шматок смуги.
 func _hedges() -> void:
+	var area: Rect2i = _area()
 	for c: Vector2i in _cells:
-		if _broken.has(c):
+		if _broken.has(c) or not area.has_point(c):
 			continue
 		var open: Array[Vector2i] = []
 		for dir: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -353,7 +364,8 @@ func _hedges() -> void:
 			if corner and rng.randf() < 0.15:
 				continue  # опуклий кут заокруглюється
 			var base: Vector2 = Vector2(c) + Vector2(dir) * 0.5
-			var inset: float = HEDGE_INSET + _noise.get_noise_2d(base.x * 3.1, base.y * 3.1) * HEDGE_WANDER
+			# Не менше 0,15: смуга (і її зсув біля виходу просіки) лишається у своїй клітинці лісу.
+			var inset: float = maxf(0.15, HEDGE_INSET + _noise.get_noise_2d(base.x * 3.1, base.y * 3.1) * HEDGE_WANDER)
 			var p: Vector2 = Vector2(c) + Vector2(dir) * (0.5 - inset)
 			var share: float = WOODS[_wood_at.call(p)]["hedge_evergreen"]
 			if _season == "late":
@@ -382,8 +394,9 @@ func _lane_yaw(c: Vector2i, rng: RandomNumberGenerator) -> float:
 
 ## Проламана клітинка: розрита земля (`Soil_Lane`), гілля, 2–3 стовбури уздовж проламу по краях.
 func _broken_cells() -> void:
+	var area: Rect2i = _area()
 	for c: Vector2i in _broken:
-		if not _cells.has(c):
+		if not _cells.has(c) or not area.has_point(c):
 			continue
 		var rng := _rng(Layer.BROKEN, c.x, c.y)
 		var yaw: float = _lane_yaw(c, rng)
@@ -402,7 +415,8 @@ func _broken_cells() -> void:
 
 ## Межа просіки рвана, а не по лінії клітинки: по боках — прим'яті кущі, гілля й поодинокий
 ## стовбур на 0,3–0,5 тайла за краєм. Нічого стоячого всередині просіки. Там, де просіка
-## виходить у поле, — прим'яті кущі й гілля врозкид назовні: вхід розірваний, а не двері.
+## виходить у поле, — прим'яті кущі й гілля врозкид біля виходу (ще в лісовій клітинці): вхід
+## розірваний, а не двері.
 func _lane_damage(c: Vector2i, along: Vector2, across: Vector2, rng: RandomNumberGenerator) -> void:
 	for side: float in [1.0, -1.0]:
 		var n := Vector2i(roundi(c.x + across.x * side), roundi(c.y + across.y * side))
@@ -418,7 +432,7 @@ func _lane_damage(c: Vector2i, along: Vector2, across: Vector2, rng: RandomNumbe
 		if _cells.has(c + dir):
 			continue
 		for k in 3:
-			var p: Vector2 = Vector2(c) + Vector2(dir) * rng.randf_range(0.5, 0.75) + across * rng.randf_range(-0.45, 0.45)
+			var p: Vector2 = Vector2(c) + Vector2(dir) * rng.randf_range(0.3, 0.45) + across * rng.randf_range(-0.45, 0.45)
 			if k == 0:
 				_add("Litter_A", Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.6, 1.0, 0.6)), Vector3(p.x, 0.0, p.y)), p, 0.3)
 			else:

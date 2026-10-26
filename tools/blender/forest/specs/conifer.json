@@ -48,7 +48,8 @@
    "scale": 0.713,
    "card_scale": 2.3,
    "card_keep": 0.85,
-   "crown_low": 0.45
+   "crown_low": 0.45,
+   "card_budget": 36
   },
   {
    "node": "Pine_B",
@@ -66,7 +67,8 @@
    "scale": 0.95,
    "card_scale": 2.3,
    "card_keep": 0.85,
-   "crown_low": 0.45
+   "crown_low": 0.45,
+   "card_budget": 36
   },
   {
    "node": "Pine_C",
@@ -84,7 +86,8 @@
    "scale": 0.77,
    "card_scale": 2.3,
    "card_keep": 0.85,
-   "crown_low": 0.45
+   "crown_low": 0.45,
+   "card_budget": 36
   },
   {
    "node": "Spruce_A",
@@ -104,7 +107,8 @@
    "card_scale": 2.3,
    "card_keep": 0.65,
    "crown_low": 0.8,
-   "tiers": 4
+   "tiers": 3,
+   "card_budget": 24
   },
   {
    "node": "Spruce_B",
@@ -124,7 +128,8 @@
    "card_scale": 2.3,
    "card_keep": 0.65,
    "crown_low": 0.8,
-   "tiers": 4
+   "tiers": 3,
+   "card_budget": 24
   },
   {
    "node": "Hedge_Spruce",
@@ -132,7 +137,8 @@
    "sprites": "spruce",
    "trunk": false,
    "card_keep": 0.75,
-   "card_scale": 1.12
+   "card_scale": 1.12,
+   "card_budget": 24
   }
  ]
 }

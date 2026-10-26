@@ -103,6 +103,8 @@ const _DRAG_THRESHOLD_DP: float = 10.0
 ## хмарами River світло розсіяне, і будинки без тіні від землі не відриваються. Не за прозорістю
 ## тіні: на сонячних картах вона навмисно м'яка й світліша, ніж під хмарами.
 const STRUCTURE_SHADOW_MIN_SKY_CLEAR: float = 0.5
+## Частка світла, яку забирає запечена тінь лісу на сонячній карті (ForestLayer).
+const FOREST_SHADOW: float = 0.18
 ## Мокра карта для пропсів (мости темніші й блищать): River під дощем — 0.55, сухі — 0.
 const WET_MIN: float = 0.3
 
@@ -188,6 +190,8 @@ func _ready() -> void:
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
 	_camera_rig.view_changed.connect(_follow_weather)
+	_camera_rig.view_changed.connect(_follow_forest)
+	_follow_forest()
 	# Android «назад» інакше виходить із гри разом із матчем; на цьому екрані
 	# воно відкриває паузу. Значення меню повертає _exit_tree().
 	_prev_quit_on_go_back = get_tree().quit_on_go_back
@@ -265,6 +269,9 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
 	_board_view.wet = look.wetness >= WET_MIN
+	_board_view.sun_dir = Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0)).z
+	# Запечена тінь лісу слабша під похмурим небом (менше прямого світла).
+	_board_view.forest_shadow = FOREST_SHADOW * clampf(look.light_energy / 1.5, 0.4, 1.0)
 	_weather.apply(look)
 	_wire_view(board)
 	# Техніка, що стоїть на клітинці від старту матчу, теж розчавила дрібні пропси під собою; глядач
@@ -303,6 +310,9 @@ func resume(match_service: Node = null) -> void:
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
 	_board_view.wet = look.wetness >= WET_MIN
+	_board_view.sun_dir = Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0)).z
+	# Запечена тінь лісу слабша під похмурим небом (менше прямого світла).
+	_board_view.forest_shadow = FOREST_SHADOW * clampf(look.light_energy / 1.5, 0.4, 1.0)
 	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
@@ -1009,11 +1019,17 @@ func _warm_up_fx(cell: Vector2i) -> void:
 	_wreck_layer.warm_up(at)
 
 
-## Гачок вигляду лісу: тут його перемальовують з known_broken_map(активного) — ніколи
-## з події. Вигляду повалених дерев на цій гілці ще немає, тож порожньо. Викликається
-## з перебудови після пакета подій і на гейті, тобто і на ForestBroken, і на передачі ходу.
+## Зум камери для лісу: підлісок лише до ForestLayer.DETAIL_ZOOM.
+func _follow_forest() -> void:
+	_board_view.set_forest_zoom(_camera_rig.zoom_level)
+
+
+## Гачок вигляду лісу: його перемальовують з known_broken_map(активного) — ніколи з
+## події. Викликається з перебудови після пакета подій і на гейті, тобто і на ForestBroken,
+## і на передачі ходу.
 func forest_changed() -> void:
-	pass
+	var state: BattleState = _match_service.state
+	_board_view.set_forest_broken(state.known_broken_map(state.active_player))
 
 
 ## Техніка, що ввійшла в клітинку, розчавлює її дрібні пропси; піхота проходить повз. Шлях

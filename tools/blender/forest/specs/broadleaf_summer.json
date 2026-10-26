@@ -90,7 +90,8 @@
    "trunk_r_mul": 2.0,
    "crown_low": 0.6,
    "scale": 0.56,
-   "card_scale": 2.24
+   "card_scale": 2.24,
+   "limbs": false
   },
   {
    "node": "Birch_B",
@@ -109,7 +110,8 @@
    "trunk_r_mul": 2.0,
    "crown_low": 0.6,
    "scale": 0.63,
-   "card_scale": 2.24
+   "card_scale": 2.24,
+   "limbs": false
   },
   {
    "node": "Oak_A",
@@ -126,7 +128,8 @@
    "card_keep": 0.85,
    "crown_low": 0.6,
    "scale": 0.58,
-   "card_scale": 2.56
+   "card_scale": 2.56,
+   "limbs": false
   },
   {
    "node": "Oak_B",
@@ -143,7 +146,8 @@
    "card_keep": 0.85,
    "crown_low": 0.6,
    "scale": 0.6,
-   "card_scale": 2.56
+   "card_scale": 2.56,
+   "limbs": false
   },
   {
    "node": "Shrub_Hazel",
@@ -160,7 +164,8 @@
    "card_keep": 0.6,
    "card_scale": 2.08,
    "trunk": false,
-   "strip": true
+   "strip": true,
+   "limbs": false
   },
   {
    "node": "Shrub_Thorn",
@@ -177,7 +182,8 @@
    "card_keep": 0.6,
    "card_scale": 2.08,
    "trunk": false,
-   "strip": true
+   "strip": true,
+   "limbs": false
   },
   {
    "node": "Hedge_Shrub",
@@ -193,7 +199,9 @@
    "sprites": "shrub",
    "card_keep": 1.0,
    "trunk": false,
-   "strip": true
+   "strip": true,
+   "limbs": false,
+   "card_budget": 35
   },
   {
    "node": "Log_A",
