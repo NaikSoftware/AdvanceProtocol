@@ -834,6 +834,8 @@ void vertex() {
 	vec4 p1 = PROJECTION_MATRIX * VIEW_MATRIX * vec4(root + right * w, 1.0);
 	float px = length(p1.xy / p1.w - p0.xy / p0.w) * viewport_h * 0.5;
 	float grow = clamp(min_px / max(px, 0.001), 1.0, 8.0);
+	// Здалеку вогонь більший (як і дим густіший): на далекому зумі він інакше губився.
+	grow *= mix(1.0, 1.4, smoothstep(12.0, 30.0, length(CAMERA_POSITION_WORLD - root)));
 	w *= grow;
 	h *= grow;
 	// UV.y = 0 згори; низ кваду — на `sink` висоти під коренем, верх — на `tall` висоти.
@@ -849,17 +851,20 @@ void fragment() {
 	float y = (1.0 - UV.y) * (tall + sink) - sink;
 	float t = fx_time + v_sd * 37.0;
 	vec2 seed = vec2(v_sd * 7.1, v_sd * 2.3);
-	// Висота «дихає» 0,6–1,1 за повільним шумом.
-	float pump = 0.6 + 0.5 * vnoise(t * 1.7);
+	// Висота «дихає» 0,5–1,15 за шумом.
+	float pump = 0.5 + 0.65 * vnoise(t * 3.5);
 	float hh = y / pump;
+	// Увесь язик хитається вбік (шум, не синус): біля кореня ледь, угорі — на чверть ширини.
+	x += (vnoise(t * 6.1 + v_sd * 13.0) - 0.5) * (0.12 + 0.35 * clamp(hh, 0.0, 1.0));
 	// Великі хвилі: ~1,75 циклу на ширину, амплітуда ~0,25 ширини, пливуть угору ~2 висоти/с.
 	vec2 big = vec2(x * 1.75, y * 1.2 - t * 2.5) + seed;
-	vec2 warp = (vec2(fbm(big), fbm(big + vec2(4.7, 1.3))) - 0.5) * vec2(0.5, 0.45);
+	vec2 warp = (vec2(fbm(big), fbm(big + vec2(4.7, 1.3))) - 0.5) * vec2(0.7, 0.5);
 	vec2 q = vec2(x, y) + warp;
 	// Дрібниця пливе повільніше за хвилі.
 	float d = fbm(vec2(q.x * 3.2, q.y * 2.4 - t * 2.1) + seed * 1.7);
 	// Ширина: найширше біля кореня, вужче вгорі; м'який край.
-	float half_w = mix(0.62, 0.26, clamp(hh, 0.0, 1.0));
+	// Ширина теж «дихає», своїм шумом: основа не стоїть сталою плямою.
+	float half_w = mix(0.62, 0.26, clamp(hh, 0.0, 1.0)) * (0.7 + 0.5 * vnoise(t * 3.3 + 11.0));
 	float shape = 1.0 - smoothstep(half_w * 0.45, half_w, abs(q.x));
 	// Внизу густота рівна й суцільна; угорі контрастна — поріг перетинає її на різній висоті,
 	// тож верх рваний, а не зрізаний рівно.
@@ -868,19 +873,32 @@ void fragment() {
 	// Поріг росте з висотою: угорі вціліють лише клапті густоти.
 	float thr = 0.15 + 0.5 * hh;
 	// Біля верху кваду все гасне: клапті не зрізаються його краєм.
-	float body = smoothstep(thr - 0.05, thr + 0.2, n) * (1.0 - smoothstep(tall - 0.4, tall - 0.05, y));
-	float heat = clamp(1.9 * n * pow(clamp(1.0 - 0.7 * hh, 0.0, 1.0), 1.5), 0.0, 1.0);
+	// Широкий м'який перехід порогу, а край ще й роз'їдає дрібний швидкий шум: пасма, що
+	// тоншають у дим, а не вирізаний папір.
+	float body = smoothstep(thr - 0.15, thr + 0.4, n) * (1.0 - smoothstep(tall - 0.4, tall - 0.05, y));
+	float fine = fbm(vec2(q.x * 19.0, q.y * 14.0 - t * 6.5) + seed * 3.1);
+	body *= mix(1.0, fine, 1.0 - body);
+	// Угорі язики гаснуть, а не висять яскраво-червоними клаптями.
+	body *= 1.0 - smoothstep(0.6, 1.0, hh);
+	// Той самий дрібний шум — смуги й просвіти всередині тіла.
+	float heat = clamp(1.4 * n * pow(clamp(1.0 - 0.7 * hh, 0.0, 1.0), 1.5) + (fine - 0.5) * 0.4, 0.0, 1.0);
 	// Кольори лінійні (екран переводить у sRGB): темно-червоне — #A52A0A, помаранчеве, жовте, біле.
 	vec3 col = mix(vec3(0.033, 0.005, 0.002), vec3(0.376, 0.023, 0.003), smoothstep(0.05, 0.25, heat));
 	col = mix(col, vec3(0.89, 0.133, 0.007), smoothstep(0.25, 0.45, heat));
 	col = mix(col, vec3(1.0, 0.477, 0.051), smoothstep(0.5, 0.7, heat));
-	col = mix(col, vec3(1.0, 0.89, 0.69), smoothstep(0.62, 0.8, heat));
+	// Біле — лише тонке серце біля кореня.
+	col = mix(col, vec3(1.0, 0.89, 0.69), smoothstep(0.85, 0.97, heat));
 	// HDR — лише гарячому серцю: помаранчеве й червоне, помножене на gain, вигоріло б у жовте.
 	// Верхня половина — вдвічі тьмяніша: світиться серце, а не язики.
-	col *= mix(1.0, gain, smoothstep(0.5, 0.82, heat)) * mix(1.0, 0.5, smoothstep(0.5, 0.9, hh));
+	col *= mix(1.0, gain, smoothstep(0.5, 0.9, heat)) * mix(1.0, 0.5, smoothstep(0.5, 0.9, hh));
+	// Вище ~0,7 висоти колір іде в сірий дим, а не в яскраво-червоне.
+	col = mix(col, vec3(0.06, 0.055, 0.05), smoothstep(0.7, 1.0, hh));
 	// Непрозорість згасає крізь червону смугу в кіптяву; довкола — ледь помітне світіння.
 	float a = body * smoothstep(0.0, 0.12, heat);
-	float glow = 0.12 * shape * (1.0 - smoothstep(0.0, 0.8, hh)) * smoothstep(-sink, 0.05, y);
+	// Розсіяне світіння довкола полум'я — ширше за саме полум'я в 1,5 раза.
+	float halo = 1.0 - smoothstep(half_w * 0.6, half_w * 1.5, abs(q.x));
+	// Світіння мерехтить разом із вогнем (шум, не синус), а не стоїть сталою плямою.
+	float glow = 0.3 * (0.5 + 0.9 * vnoise(t * 4.1 + 3.0)) * halo * (1.0 - smoothstep(0.0, 0.8, hh)) * smoothstep(-sink, 0.05, y);
 	float alpha = a * v_in;
 	vec3 rgb = col * alpha + vec3(0.79, 0.1, 0.007) * glow * v_in;
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
@@ -889,7 +907,7 @@ void fragment() {
 	// Попередньо помножена альфа: гаряче тіло перекриває фон, а холодна кромка лише додає
 	// світло — інакше край ближнього язика лягав би темною смугою на сусідній.
 	ALBEDO = rgb * soft;
-	ALPHA = alpha * smoothstep(0.1, 0.4, heat) * soft;
+	ALPHA = alpha * smoothstep(0.35, 0.6, heat) * soft;
 }
 """
 
