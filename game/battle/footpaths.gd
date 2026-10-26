@@ -15,9 +15,10 @@ const PX_PER_TILE: int = 64
 ## Крок ламаної, клітинки.
 const STEP: float = 0.1
 ## Скільки півширин від осі ще може лежати знос (край зсунуто шумом до 0.35 півширини).
-const REACH: float = 1.4
-## Півширина стежки: 0.6 м у центрі = 0.075 клітинки, ±0.2 м шумом.
-const HALF: float = 0.0375
+const REACH: float = 2.4
+## Півширина втоптаної середини: ~0.7 м завширшки, ±0.2 м плавним шумом. З боків по 0.3–0.5 м прим'ята
+## рідша трава (слабший знос, до REACH півширин).
+const HALF: float = 0.045
 
 
 static func _hash(x: int, y: int, seed_value: int) -> float:
@@ -109,6 +110,23 @@ static func turns(pts: PackedVector2Array) -> int:
 	return count
 
 
+## Спрямляє ламану плавними дугами: кожен злам замінено квадратичною кривою Безьє, яка зрізає кут на
+## radius (не більше 0.48 сусіднього відрізка); кінці нерухомі.
+static func fillet(ctrl: PackedVector2Array, radius: float) -> PackedVector2Array:
+	var out := PackedVector2Array([ctrl[0]])
+	for i in range(1, ctrl.size() - 1):
+		var v: Vector2 = ctrl[i]
+		var c: float = minf(radius, 0.48 * minf(v.distance_to(ctrl[i - 1]), v.distance_to(ctrl[i + 1])))
+		var a: Vector2 = v + (ctrl[i - 1] - v).normalized() * c
+		var b: Vector2 = v + (ctrl[i + 1] - v).normalized() * c
+		var n: int = maxi(2, ceili(2.0 * c / 0.05))
+		for k in range(n + 1):
+			var t: float = float(k) / n
+			out.append(a.lerp(v, t).lerp(v.lerp(b, t), t))
+	out.append(ctrl[ctrl.size() - 1])
+	return out
+
+
 static func length(pts: PackedVector2Array) -> float:
 	var l: float = 0.0
 	for k in range(1, pts.size()):
@@ -164,6 +182,7 @@ static func _stamp_walk(buf: PackedByteArray, w: int, h: int, walk: Dictionary, 
 	var fade_in: float = float(walk.get("fade_start", 0.0))
 	var fade_out: float = float(walk.get("fade_end", 0.0))
 	var solid: float = float(walk.get("solid", 0.3))
+	var flat: float = float(walk.get("flat", 1.3))
 	var cum := PackedFloat32Array([0.0])
 	for k in range(1, pts.size()):
 		cum.append(cum[k - 1] + pts[k].distance_to(pts[k - 1]))
@@ -197,7 +216,7 @@ static func _stamp_walk(buf: PackedByteArray, w: int, h: int, walk: Dictionary, 
 				var d: float = dir.cross(q - a)
 				# Ширина гуляє на ±0.2 м плавним шумом уздовж стежки.
 				var half: float = lerpf(hw[k], hw[k + 1], t) * (0.67 + 0.66 * _noise(s * 1.7, 5.5, sd + 3))
-				_put(buf, (py * w + px) * 2, _wear(s, d, dist / half, total, fade_in, fade_out, sd, solid), q, dry)
+				_put(buf, (py * w + px) * 2, _wear(s, d, dist / half, total, fade_in, fade_out, sd, solid, flat), q, dry)
 
 
 static func _seg_dist(q: Vector2, a: Vector2, ab: Vector2) -> float:
@@ -207,13 +226,17 @@ static func _seg_dist(q: Vector2, a: Vector2, ab: Vector2) -> float:
 ## Знос у точці стежки: s вздовж, d поперек (клітинки), r — відстань від осі в півширинах. Профіль —
 ## гострий пік, а не плато: від осі знос спадає лінійно, край рваний шумом 0.3–0.5 м, на шумі ж
 ## проміжки й острівці трави (клітини шуму ≥ 2.5 px, дрібніше за піксель не буває).
-static func _wear(s: float, d: float, r: float, total: float, fade_in: float, fade_out: float, sd: int, solid: float) -> float:
+static func _wear(s: float, d: float, r: float, total: float, fade_in: float, fade_out: float, sd: int, solid: float, flat: float = 1.3) -> float:
+	# Край рваний шумом ±0.15 м (0.4 півширини); на тому ж шумі проміжки й острівці трави.
 	var edge: float = 0.6 * _noise(s * 7.0, d * 11.0, sd) + 0.4 * _noise(s * 15.0, d * 23.0, sd + 5)
-	var rr: float = r + 0.7 * (edge - 0.5)
-	var prof: float = pow(clampf(1.0 - rr, 0.0, 1.0), 1.15)
+	var rr: float = r + 0.8 * (edge - 0.5)
+	var prof: float = clampf(flat * (1.0 - rr), 0.0, 1.0)
 	var bare: float = smoothstep(0.3, 0.55, _noise(s * 7.0, d * 10.0, sd + 11))
 	var along: float = 0.65 + 0.35 * _noise(s * 1.4, 3.5, sd + 17)
-	var v: float = prof * (solid + (1.0 - solid) * bare) * along
+	var core: float = prof * (solid + (1.0 - solid) * bare) * along
+	# Прим'ята трава з боків: на 30–50 % слабша за середину, теж з рваним краєм.
+	var band: float = 0.4 * (1.0 - smoothstep(0.9, 2.1, r + 0.8 * (edge - 0.5)))
+	var v: float = maxf(core, band)
 	if fade_in > 0.0:
 		v *= smoothstep(0.0, fade_in, s)
 	if fade_out > 0.0:

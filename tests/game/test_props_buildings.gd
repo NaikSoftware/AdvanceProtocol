@@ -25,6 +25,8 @@ const _PROPS: Dictionary = {
 	"ruin_h3": [1, 1, 5200],
 	"house_h5": [1, 1, 2200],
 	"house_h6": [1, 1, 2600],
+	"house_h7": [1, 1, 1800],
+	"house_h8": [1, 1, 1800],
 	"f8_shed": [1, 1, 1600],
 	"f8_shed_brick": [1, 1, 1200],
 	"f8_shed_lean": [1, 1, 1200],
@@ -33,7 +35,7 @@ const _PROPS: Dictionary = {
 	"ruin_half_shed": [1, 1, 4600],
 }
 ## На кожній хаті рівно один димар, отже рівно один маркер chimney_top: гра чіпляє до нього дим.
-const _CHIMNEYS: Array[String] = ["house_h1", "house_h1_hit", "house_h2", "house_h3", "house_h4", "house_h5", "house_h6"]
+const _CHIMNEYS: Array[String] = ["house_h1", "house_h1_hit", "house_h2", "house_h3", "house_h4", "house_h5", "house_h6", "house_h7", "house_h8"]
 ## Стоять лише на клітинках кільця навколо поля, а не на ігровому полі.
 const RING_ONLY: Array[String] = ["f2_livestock_barn"]
 const _OVERHANG: float = 0.1

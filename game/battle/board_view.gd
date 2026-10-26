@@ -483,20 +483,24 @@ func _request_probe_capture() -> void:
 	probe_captures_requested += 1
 
 
-## Де суха земля, для маски стежок: сітка 8 відліків на клітинку, пораховано раз (а не `height.at` на
-## кожен піксель). null — рельєфу нема, маска не обрізається.
+## Де суха земля й не дорога, для маски стежок: сітка 8 відліків на клітинку, пораховано раз (а не
+## `height.at` на кожен піксель). Без рельєфу вода не відсікається, але дорога відсікається завжди:
+## широкі плями біля воріт дотягуються до полотна.
 func _dry_grid() -> Callable:
-	if _height == null:
-		return Callable()
 	const PER: int = 8
 	var w: int = _board_size.x * PER
 	var h: int = _board_size.y * PER
 	var grid := PackedByteArray()
-	grid.resize(w * h)
-	for y in h:
-		for x in w:
-			grid[y * w + x] = 1 if _height.at((x + 0.5) / PER - 0.5, (y + 0.5) / PER - 0.5) >= TerrainHeight.WATER_LEVEL else 0
+	if _height != null:
+		grid.resize(w * h)
+		for y in h:
+			for x in w:
+				grid[y * w + x] = 1 if _height.at((x + 0.5) / PER - 0.5, (y + 0.5) / PER - 0.5) >= TerrainHeight.WATER_LEVEL else 0
+	var props: PropLayer = _props
 	return func(q: Vector2) -> bool:
-		var x: int = clampi(floori((q.x + 0.5) * PER), 0, w - 1)
-		var y: int = clampi(floori((q.y + 0.5) * PER), 0, h - 1)
-		return grid[y * w + x] == 1
+		if not grid.is_empty():
+			var x: int = clampi(floori((q.x + 0.5) * PER), 0, w - 1)
+			var y: int = clampi(floori((q.y + 0.5) * PER), 0, h - 1)
+			if grid[y * w + x] != 1:
+				return false
+		return props == null or not props.on_road(q, 0.0)

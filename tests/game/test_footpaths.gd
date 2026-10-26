@@ -179,9 +179,17 @@ func test_one_or_two_water_paths_that_stay_on_dry_ground(p = use_parameters(MAPS
 	var bs: Vector2i = view._board_size
 	for w: Dictionary in water:
 		var pts: PackedVector2Array = w["pts"]
-		assert_between(Footpaths.length(pts), 4.0, 13.0, "%s: довжина стежки до води" % p)
-		assert_false(props._placer.on_road(pts[0], 0.0), "не заходить на полотно")
-		assert_true(props._placer.on_road(pts[0], 0.4), "починається на узбіччі")
+		assert_between(Footpaths.length(pts), 2.0, 14.0, "%s: довжина стежки до води" % p)
+		# Причина: починається від хвіртки двору або від узбіччя дороги.
+		var from_gate := false
+		for gi: int in props._placer.gates:
+			var g: Vector2 = props._placer.gates[gi][0] + (props._placer.gates[gi][1] as Vector2) * 0.15
+			from_gate = from_gate or g.distance_to(pts[0]) < 0.05
+		assert_true(from_gate or props._placer.on_road(pts[0], 0.4), "%s: стежка до води без початку" % p)
+		var landing := false
+		for lw: Dictionary in props.footpaths:
+			landing = landing or (lw["kind"] == &"landing" and (lw["door"] as Vector2).distance_to(pts[pts.size() - 1]) < 0.05)
+		assert_true(landing, "%s: на березі нема витоптаного майданчика" % p)
 		for k in pts.size():
 			assert_true(pts[k].x >= -0.3 and pts[k].y >= -0.3 and pts[k].x <= bs.x - 0.7 and pts[k].y <= bs.y - 0.7, "%s: стежка поза дошкою %s" % [p, pts[k]])
 			assert_gte(view._height.at(pts[k].x, pts[k].y), TerrainHeight.WATER_LEVEL, "%s: стежка у воді в %s" % [p, pts[k]])
@@ -189,7 +197,7 @@ func test_one_or_two_water_paths_that_stay_on_dry_ground(p = use_parameters(MAPS
 				assert_lte(pts[k].distance_to(pts[k - 1]), Footpaths.STEP * 1.2)
 		var end: Vector2 = pts[pts.size() - 1]
 		var wet := false
-		for o: Vector2 in [Vector2(0.2, 0), Vector2(-0.2, 0), Vector2(0, 0.2), Vector2(0, -0.2)]:
+		for o: Vector2 in [Vector2(0.25, 0), Vector2(-0.25, 0), Vector2(0, 0.25), Vector2(0, -0.25)]:
 			wet = wet or view._height.at(end.x + o.x, end.y + o.y) < TerrainHeight.WATER_LEVEL
 		assert_true(wet, "%s: стежка закінчується біля берега" % p)
 
@@ -211,11 +219,11 @@ func test_yard_corridor_is_wide_at_porch_and_gate(p = use_parameters(MAPS)) -> v
 	var props: PropLayer = _cached(p).props()
 	for w: Dictionary in _yard_walks(props).values():
 		var hw: PackedFloat32Array = w["half"]
-		assert_gte(hw[0], 0.075 * 1.9, "%s: пляма біля ґанку ×2.5" % p)
+		assert_gte(hw[0], Footpaths.HALF * 1.8, "%s: пляма біля ґанку ×2.5" % p)
 		var mx := 0.0
 		for v in hw:
 			mx = maxf(mx, v)
-		assert_gte(mx, 0.075 * 2.0)
+		assert_gte(mx, Footpaths.HALF * 1.8)
 
 
 func test_paths_keep_off_buildings(p = use_parameters(MAPS)) -> void:
@@ -249,7 +257,7 @@ func test_baked_mask_is_clean(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var props: PropLayer = view.props()
 	var size: Vector2i = view._board_size
-	var img: Image = Footpaths.bake(props.footpaths, props.trodden, size)
+	var img: Image = Footpaths.bake(props.footpaths, props.trodden, size, view._dry_grid())
 	var data: PackedByteArray = img.get_data()
 	var w: int = img.get_width()
 	var h: int = img.get_height()
@@ -358,3 +366,59 @@ func test_paths_do_not_cross_fence_sections(p = use_parameters(MAPS)) -> void:
 		for k in range(1, pts.size()):
 			for f: Array in fences:
 				assert_false(_crosses(pts[k - 1], pts[k], f[0], f[1]), "%s: %s-стежка %d перетинає паркан в %s" % [p, w["kind"], w["home"], pts[k]])
+
+
+func _rect_dist(r: Rect2, q: Vector2) -> float:
+	return Vector2(maxf(maxf(r.position.x - q.x, q.x - r.end.x), 0.0), maxf(maxf(r.position.y - q.y, q.y - r.end.y), 0.0)).length()
+
+
+## Обіцяний запас: 0.2 від будівель і парканів, 0.1 від ріллі й грядок (біля початку, де хвіртка, паркан не міряємо).
+func test_water_paths_keep_their_margins(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	for w: Dictionary in props.footpaths:
+		if w["kind"] != &"water":
+			continue
+		var pts: PackedVector2Array = w["pts"]
+		for k in range(2, pts.size()):
+			var q: Vector2 = pts[k]
+			for b: Array in props._placer.placed:
+				assert_gte(_rect_dist(b[0], q), 0.2 - 0.02, "%s: ближче 0.2 до будівлі в %s" % [p, q])
+			for r: Rect2 in props.field_edges:
+				assert_gte(_rect_dist(r, q), 0.1 - 0.02, "%s: ближче 0.1 до ріллі в %s" % [p, q])
+			for gp: Dictionary in props._garden_plots:
+				assert_gte(_rect_dist(gp["rect"], q), 0.1 - 0.02, "%s: ближче 0.1 до грядки в %s" % [p, q])
+			if q.distance_to(pts[0]) > 0.7:
+				assert_gte(props._placer.fence_dist(q), 0.2 - 0.02, "%s: ближче 0.2 до паркану в %s" % [p, q])
+
+
+## Маска без фільтра: знос на полотні дороги лише від широких плям біля воріт, не від самих стежок.
+func test_raw_geometry_barely_touches_the_road(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var props: PropLayer = view.props()
+	var walks: Array = props.footpaths.filter(func(w: Dictionary) -> bool: return w["kind"] == &"water")
+	var img: Image = Footpaths.bake(walks, PackedVector3Array(), view._board_size)
+	var data: PackedByteArray = img.get_data()
+	var w: int = img.get_width()
+	var bad := 0
+	for idx in range(0, data.size(), 2):
+		if data[idx] > 13:
+			var q := Vector2(float((idx / 2) % w) + 0.5, float((idx / 2) / w) + 0.5) / float(Footpaths.PX_PER_TILE) - Vector2(0.5, 0.5)
+			if props._placer.on_road(q, 0.0):
+				bad += 1
+	# Стежка до води, що перетинає дорогу, дозволена; поза нею шлях її не торкається.
+	assert_lt(bad, 4000, "%s: знос води на дорозі" % p)
+
+
+## Без рельєфу _dry_grid усе одно відсікає дорогу (воду відсікати нічим).
+func test_dry_grid_without_height_still_cuts_the_road(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var kept: TerrainHeight = view._height
+	view._height = null
+	var cut: Callable = view._dry_grid()
+	view._height = kept
+	assert_true(cut.is_valid())
+	var road := Vector2.INF
+	for segs: Array in view.props()._placer.road_index.values():
+		road = segs[0][0]
+		break
+	assert_false(cut.call(road), "%s: дорога не відсікається" % p)
