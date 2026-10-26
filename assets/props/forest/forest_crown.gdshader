@@ -34,7 +34,7 @@ uniform float occlusion = 0.4;
 // Темний обідок пучка: м'який край замість різкої вирізаної лінії наліпки.
 uniform float rim = 0.15;
 uniform float card_round = 0.7;
-uniform float card_up = 0.8;
+uniform float card_up = 0.5;
 
 varying float is_card;
 varying vec3 inst_tone;

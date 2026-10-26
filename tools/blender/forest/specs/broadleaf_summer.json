@@ -10,9 +10,9 @@
     "src": "birch_summer",
     "grade": {
      "lab": {
-      "L": 30,
-      "C": 10,
-      "h": 145,
+      "L": 36,
+      "C": 12,
+      "h": 130,
       "contrast_l": 0.7
      }
     }
@@ -23,9 +23,9 @@
     "src": "broad_summer",
     "grade": {
      "lab": {
-      "L": 30,
-      "C": 10,
-      "h": 145,
+      "L": 36,
+      "C": 12,
+      "h": 130,
       "contrast_l": 0.7
      }
     }
@@ -36,9 +36,9 @@
     "src": "oak_summer",
     "grade": {
      "lab": {
-      "L": 30,
-      "C": 10,
-      "h": 145,
+      "L": 36,
+      "C": 12,
+      "h": 130,
       "contrast_l": 0.7
      }
     }
@@ -49,9 +49,9 @@
     "src": "shrub_summer",
     "grade": {
      "lab": {
-      "L": 30,
-      "C": 10,
-      "h": 145,
+      "L": 36,
+      "C": 12,
+      "h": 130,
       "contrast_l": 0.7
      }
     }
@@ -84,7 +84,7 @@
    "card_keep": 0.7,
    "crown_low": 0.6,
    "scale": 0.56,
-   "card_scale": 1.75
+   "card_scale": 2.24
   },
   {
    "node": "Birch_B",
@@ -97,7 +97,7 @@
    "card_keep": 0.7,
    "crown_low": 0.6,
    "scale": 0.63,
-   "card_scale": 1.75
+   "card_scale": 2.24
   },
   {
    "node": "Oak_A",
@@ -109,7 +109,7 @@
    "card_keep": 0.85,
    "crown_low": 0.6,
    "scale": 0.58,
-   "card_scale": 2.0
+   "card_scale": 2.56
   },
   {
    "node": "Oak_B",
@@ -121,7 +121,7 @@
    "card_keep": 0.85,
    "crown_low": 0.6,
    "scale": 0.6,
-   "card_scale": 2.0
+   "card_scale": 2.56
   },
   {
    "node": "Shrub_Hazel",
@@ -195,7 +195,7 @@
    "sprites": "oak",
    "trunk_sides": 6,
    "scale": 0.63,
-   "card_scale": 1.625
+   "card_scale": 2.08
   },
   {
    "node": "Hero_Lime",
@@ -206,7 +206,7 @@
    "sprites": "broad",
    "trunk_sides": 6,
    "scale": 0.6,
-   "card_scale": 1.625
+   "card_scale": 2.08
   },
   {
    "node": "Hero_Birch",
@@ -218,7 +218,7 @@
    "sprites": "birch",
    "trunk_sides": 6,
    "scale": 0.62,
-   "card_scale": 1.625
+   "card_scale": 2.08
   },
   {
    "node": "Hero_Poplar",
@@ -229,7 +229,7 @@
    "sprites": "broad",
    "trunk_sides": 6,
    "scale": 0.56,
-   "card_scale": 1.625
+   "card_scale": 2.08
   }
  ]
 }

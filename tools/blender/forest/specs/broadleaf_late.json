@@ -10,10 +10,10 @@
     "src": "birch_late",
     "grade": {
      "lab": {
-      "L": 20,
-      "C": 4,
-      "h": 70,
-      "contrast_l": 0.9
+      "L": 34,
+      "C": 5,
+      "h": 65,
+      "contrast_l": 0.6
      }
     }
    }
@@ -23,10 +23,10 @@
     "src": "broad_late",
     "grade": {
      "lab": {
-      "L": 20,
-      "C": 4,
-      "h": 70,
-      "contrast_l": 0.9
+      "L": 34,
+      "C": 5,
+      "h": 65,
+      "contrast_l": 0.6
      }
     }
    }
@@ -36,10 +36,10 @@
     "src": "oak_late",
     "grade": {
      "lab": {
-      "L": 20,
-      "C": 4,
-      "h": 70,
-      "contrast_l": 0.9
+      "L": 34,
+      "C": 5,
+      "h": 65,
+      "contrast_l": 0.6
      }
     }
    }
@@ -49,10 +49,10 @@
     "src": "shrub_late",
     "grade": {
      "lab": {
-      "L": 20,
-      "C": 4,
-      "h": 70,
-      "contrast_l": 0.9
+      "L": 34,
+      "C": 5,
+      "h": 65,
+      "contrast_l": 0.6
      }
     }
    }
