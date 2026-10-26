@@ -35,7 +35,7 @@ func test_every_map_has_bank_meadow_and_yard_plants(p = use_parameters(MAPS)) ->
 	var by: Dictionary = {}
 	for pl: Dictionary in veg.placements:
 		by[pl["group"]] = int(by.get(pl["group"], 0)) + 1
-	assert_gt(int(by.get("bank", 0)), 10, "%s: берегової рослинності %s" % [p, by])
+	assert_gt(int(by.get("bank", 0)) + int(by.get("pond", 0)), 10, "%s: берегової рослинності %s" % [p, by])
 	assert_gt(int(by.get("meadow", 0)), 0, "%s: на луках нічого (%s)" % [p, by])
 	if not VillageLayout.for_map(StringName(p)).get("homes", []).is_empty():
 		assert_gt(int(by.get("yard", 0)), 0, "%s: у дворах нічого (%s)" % [p, by])
@@ -75,7 +75,7 @@ func test_land_plants_keep_off_roads_water_fields_fences_and_roofs(p = use_param
 		var k: int = board.kind_at(c)
 		if k in [Terrain.Kind.ROAD, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED, Terrain.Kind.WATER]:
 			bad.append([pl["node"], q, "cell %d" % k])
-		if view.props().on_road(q, VegetationLayer.ROAD_PAD):
+		if VegetationLayer.near_road(view.props(), q, VegetationLayer.crown_of(pl["node"])):
 			bad.append([pl["node"], q, "road shoulder"])
 		if h.at(q.x, q.y) < TerrainHeight.WATER_LEVEL + VegetationLayer.DRY:
 			bad.append([pl["node"], q, "water"])
@@ -129,3 +129,52 @@ func test_plants_over_a_unit_fade_and_crushed_ones_fall() -> void:
 		fallen = fallen or String(ch.name).ends_with("_fallen")
 	assert_true(fallen, "розчавлене дерево мусить показати повалений двійник")
 	veg.set_crushed([])
+
+
+## Ставок: очерет плямами по 25–40 % обводу (за кутом від центру), 3–5 плям, не далі 1 м від урізу.
+func test_pond_reeds_patchy_and_hug_the_shore(p = use_parameters(["crossroads", "ridge"])) -> void:
+	var view: BoardView = _view(p)
+	var board: Board = _board(p)
+	var h: TerrainHeight = view.get("_height")
+	var ponds: Array = VegetationLayer.ponds(board)
+	assert_gt(ponds.size(), 0, "%s: ставків немає" % p)
+	for pond: Array[Vector2i] in ponds:
+		var centre := Vector2.ZERO
+		for c in pond:
+			centre += Vector2(c)
+		centre /= pond.size()
+		const BINS: int = 36
+		var hit: Array[bool] = []
+		hit.resize(BINS)
+		var far: Array = []
+		for pl: Dictionary in view.vegetation().placements:
+			var q := Vector2(pl["pos"].x, pl["pos"].z)
+			if pl["group"] != "pond" or not pond.has(pl["cell"]):
+				continue
+			hit[int(fposmod((q - centre).angle(), TAU) / TAU * BINS) % BINS] = true
+			if not VegetationLayer.near_dry(h, q, VegetationLayer.POND_REACH + 0.01):
+				far.append(q)
+		var share: float = float(hit.count(true)) / BINS
+		var runs: int = 0
+		for i in BINS:
+			runs += 1 if hit[i] and not hit[(i + BINS - 1) % BINS] else 0
+		assert_eq(far, [], "%s: очерет далі 1 м від берега" % p)
+		assert_between(share, 0.15, 0.45, "%s %s: частка обводу під очеретом" % [p, pond[0]])
+		assert_between(runs, 2, 5, "%s %s: плям очерету" % [p, pond[0]])
+
+
+## Дерево (яблуня, вишня, горіх) — щонайменше в половині садиб Річки. На Перехресті садиби
+## затиснуті між дорогами й дахами, дерево там не влазить.
+func test_half_of_yards_have_a_tree(p = use_parameters(["river"])) -> void:
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	var with_tree: Dictionary = {}
+	for pl: Dictionary in _view(p).vegetation().placements:
+		if pl["group"] != "yard" or pl["kind"] != "tree":
+			continue
+		for h: Dictionary in homes:
+			var cells: Array = h.get("cells", [h["house"]])
+			var q := Vector2(pl["pos"].x, pl["pos"].z)
+			for c: Vector2i in cells:
+				if (q - Vector2(c)).length() < 1.6:
+					with_tree[h["house"]] = true
+	assert_gte(with_tree.size() * 2, homes.size(), "%s: дерево у %d садибах з %d" % [p, with_tree.size(), homes.size()])

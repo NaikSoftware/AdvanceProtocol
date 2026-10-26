@@ -95,6 +95,63 @@ func _ready() -> void:
 			screen.free()
 			await get_tree().process_frame
 			continue
+		if parts.size() >= 4 and parts[1] == "veg":
+			# Рослинність: crush — кущ до й після наїзду; tree — юніт під кроною дерева на луці;
+			# reed — юніт на березі під очеретом; wind — 4 кадри дерева з кроком 0,5 с (вітру немає).
+			var veg: VegetationLayer = (screen.get_node("%BoardView") as BoardView).vegetation()
+			var what: String = parts[2]
+			var unit: Unit = MatchService.state.units_of(0)[0]
+			var spot := Vector2i(-1, -1)
+			var at := Vector2i(-1, -1)
+			for pl: Dictionary in veg.placements:
+				var c: Vector2i = pl["cell"]
+				if what == "crush" and pl["kind"] == "bush" and board.kind_at(c) == Terrain.Kind.FIELD \
+						and MatchService.state.unit_at(c) == null:
+					at = c
+				elif what in ["tree", "wind"] and pl["kind"] == "tree" and pl["group"] == "meadow" \
+						and board.kind_at(c) == Terrain.Kind.FIELD:
+					at = c
+					spot = c
+				elif what == "reed" and pl["kind"] == "reed":
+					var q := Vector2(pl["pos"].x, pl["pos"].z)
+					for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+						var n: Vector2i = c + d
+						var r := Rect2(Vector2(n) - Vector2(0.5, 0.5), Vector2.ONE)
+						if board.in_bounds(n) and board.kind_at(n) == Terrain.Kind.FIELD \
+								and VegetationLayer._rect_dist(r, q) < VegetationLayer.crown_of(pl["node"]):
+							at = n
+							spot = n
+				if at.x >= 0:
+					break
+			if at.x < 0:
+				push_error("battle_budget: нема рослини для %s" % what)
+			else:
+				if spot.x >= 0:
+					var other: Unit = MatchService.state.unit_at(spot)
+					if other != null and other != unit:
+						other.pos = unit.pos
+					unit.pos = spot
+					screen.call("_rebuild_units_for_active_player")
+				rig.center_on(at)
+				rig.zoom_by(float(parts[3]) / rig.zoom_level)
+				for f in SETTLE_FRAMES:
+					await get_tree().process_frame
+				var frames: int = 4 if what == "wind" else 1
+				for k in frames:
+					if k > 0:
+						await get_tree().create_timer(0.5).timeout
+					await RenderingServer.frame_post_draw
+					shots.append(["%s_veg_%s_%d_%d_%d" % [map, what, at.x, at.y, k], get_viewport().get_texture().get_image()])
+				if what == "crush":
+					(screen.get("_crushed_truth") as Dictionary)[at] = true
+					screen.call("_rebuild_units_for_active_player")
+					for f in SETTLE_FRAMES:
+						await get_tree().process_frame
+					await RenderingServer.frame_post_draw
+					shots.append(["%s_veg_crush_%d_%d_after" % [map, at.x, at.y], get_viewport().get_texture().get_image()])
+			screen.free()
+			await get_tree().process_frame
+			continue
 		if parts.size() >= 4 and parts[1] == "behind":
 			# Юніт за будівлею з боку, протилежного камері: дах чи вежа мусять розчинитися, а
 			# контур зони — лягти поверх сліду будівлі.

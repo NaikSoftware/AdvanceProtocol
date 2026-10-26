@@ -48,7 +48,7 @@ K = {
                    leaves={"summer": (1.0, G_GREY, None), "early": (0.9, G_GREY, (0.3, EARLY)), "late": (0.06, OLIVE, (0.4, YELLOW))}),
     "alder": dict(seg=0.6, depth=6, kids=(2, 3), spread=40, droop=0.05, leaf=0.08, shape="ovate", per_node=6,
                   twig_r=0.012, bark=(0.24, 0.22, 0.21), sm=2.4,
-                  leaves={"summer": (1.0, G_DARK, None), "early": (0.95, G_DARK, (0.15, G)), "late": (0.15, G_DARK, (0.5, OLIVE))},
+                  leaves={"summer": (1.0, G_DARK, None), "early": (0.95, G_DARK, (0.15, G)), "late": (0.04, BROWN, (0.3, OLIVE))},
                   fruit={"late": (0.10, 0.02, [(0.12, 0.09, 0.07)]), "early": (0.08, 0.02, [(0.20, 0.22, 0.10)])}),
     "apple": dict(seg=0.55, depth=6, kids=(2, 3), spread=50, droop=0.12, leaf=0.075, shape="ovate", per_node=6,
                   twig_r=0.013, bark=(0.33, 0.30, 0.27), sm=2.4,
@@ -64,7 +64,7 @@ K = {
                    leaves={"summer": (1.0, G, (0.3, EARLY)), "early": (0.9, EARLY, (0.3, YELLOW)), "late": (0.035, YELLOW, (0.4, BROWN))}),
     "lilac": dict(seg=0.45, depth=6, kids=(2, 3), spread=30, droop=0.0, leaf=0.08, shape="ovate", per_node=6,
                   twig_r=0.010, bark=(0.34, 0.32, 0.30), sm=2.0,
-                  leaves={"summer": (1.0, G_DARK, (0.2, G)), "early": (0.95, G_DARK, (0.3, G)), "late": (0.2, OLIVE, (0.4, G_DARK))},
+                  leaves={"summer": (1.0, G_DARK, (0.2, G)), "early": (0.95, G_DARK, (0.3, G)), "late": (0.06, OLIVE, (0.3, BROWN))},
                   fruit={"late": (0.08, 0.03, [(0.33, 0.25, 0.16)]), "early": (0.08, 0.03, [(0.33, 0.25, 0.16)])}),
     "elder": dict(seg=0.5, depth=6, kids=(2, 3), spread=45, droop=0.2, leaf=0.09, shape="lance", per_node=7,
                   twig_r=0.011, bark=(0.40, 0.38, 0.33), sm=2.2,
@@ -100,25 +100,26 @@ K = {
 
 # Снопи: висота (м), стебел, ширина кадру (м), колір стебел і листків, волоть / качан.
 REED = {
-    "reed": dict(h=(1.5, 3.0), n=34, w=1.25, leaf_w=0.032, leaf_l=(0.25, 0.45), leaves_per=5,
-                 stem={"summer": [(0.24, 0.31, 0.12), (0.21, 0.28, 0.11)], "early": [(0.36, 0.36, 0.17), (0.31, 0.33, 0.15)],
+    # Літо й рання осінь — сіро-оливкові стебла з рудуватою волоттю, яскравістю як трава поруч.
+    "reed": dict(h=(1.5, 3.0), n=34, w=1.25, leaf_w=0.03, leaf_l=(0.15, 0.3), leaves_per=2,
+                 stem={"summer": [(0.40, 0.40, 0.28), (0.36, 0.37, 0.25)], "early": [(0.44, 0.42, 0.27), (0.40, 0.39, 0.25)],
                        "late": [(0.31, 0.26, 0.17), (0.28, 0.23, 0.15), (0.32, 0.28, 0.19)]},
-                 leaf={"summer": [(0.19, 0.28, 0.10), (0.22, 0.31, 0.11), (0.26, 0.33, 0.13)],
-                       "early": [(0.36, 0.36, 0.15), (0.30, 0.33, 0.14), (0.44, 0.40, 0.19)],
+                 leaf={"summer": [(0.38, 0.39, 0.26), (0.42, 0.42, 0.28), (0.34, 0.36, 0.24)],
+                       "early": [(0.42, 0.41, 0.25), (0.46, 0.44, 0.27), (0.38, 0.38, 0.23)],
                        "late": [(0.30, 0.25, 0.18), (0.25, 0.21, 0.16), (0.31, 0.27, 0.21), (0.21, 0.19, 0.17)]},
                  # Волоть очерету: 20–40 см, пізнього літа бурo-фіолетова, восени пухнаста сіро-біла.
                  head="plume", head_l=(0.25, 0.35),
-                 head_c={"summer": [(0.34, 0.24, 0.24), (0.30, 0.22, 0.22)], "early": [(0.40, 0.30, 0.26), (0.46, 0.36, 0.30)],
+                 head_c={"summer": [(0.50, 0.32, 0.20), (0.45, 0.30, 0.20)], "early": [(0.52, 0.36, 0.24), (0.48, 0.33, 0.22)],
                          "late": [(0.40, 0.37, 0.33), (0.36, 0.33, 0.29)]}),
     "cattail": dict(h=(1.2, 2.0), n=32, w=1.1, leaf_w=0.024, leaf_l=(0.9, 1.6), leaves_per=0,
-                    stem={"summer": [(0.22, 0.30, 0.11)], "early": [(0.32, 0.34, 0.15)], "late": [(0.45, 0.38, 0.25)]},
-                    leaf={"summer": [(0.18, 0.27, 0.10), (0.21, 0.30, 0.11), (0.24, 0.32, 0.12)],
-                          "early": [(0.32, 0.34, 0.14), (0.40, 0.39, 0.18), (0.27, 0.31, 0.13)],
+                    stem={"summer": [(0.38, 0.39, 0.26)], "early": [(0.42, 0.41, 0.25)], "late": [(0.45, 0.38, 0.25)]},
+                    leaf={"summer": [(0.38, 0.39, 0.26), (0.42, 0.42, 0.28), (0.34, 0.36, 0.24)],
+                          "early": [(0.42, 0.41, 0.25), (0.46, 0.44, 0.27), (0.38, 0.38, 0.23)],
                           "late": [(0.33, 0.27, 0.17), (0.29, 0.23, 0.16), (0.36, 0.30, 0.20), (0.25, 0.22, 0.16)]},
                     # Качан рогозу: 18–22 см завдовжки, темно-бурий; намальований 12 см завтовшки замість
                     # справжніх 2,5: тонший на найближчому зумі менший за піксель.
                     head="spike", head_l=(0.18, 0.22),
-                    head_c={"summer": [(0.15, 0.08, 0.045)], "early": [(0.15, 0.08, 0.045)], "late": [(0.20, 0.13, 0.09)]}),
+                    head_c={"summer": [(0.30, 0.17, 0.09)], "early": [(0.30, 0.17, 0.09)], "late": [(0.20, 0.13, 0.09)]}),
 }
 
 _mats = {}
@@ -287,8 +288,9 @@ def build_sheaf(seed):
         base = Vector((x, y, -0.05))
         top = base + lean * h
         sc = rng.choice(R["stem"][SEASON])
-        # Стебло: тонка чотиригранна трубка, 7–9 мм.
-        bmesh.ops.create_cone(bm, cap_ends=False, segments=4, radius1=0.006, radius2=0.004, depth=h,
+        # Стебло: чотиригранна трубка, намальована 2–3 см замість справжніх 7–9 мм — тонше на
+        # найближчому зумі менше за піксель, і сніп читається листяною грудкою без вертикалей.
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=4, radius1=0.014, radius2=0.009, depth=h,
                               matrix=Matrix.Translation((base + top) / 2) @ lean.to_track_quat("Z", "Y").to_matrix().to_4x4())
         fc.extend([sc] * (len(bm.faces) - len(fc)))
         if R["leaves_per"]:
@@ -301,7 +303,7 @@ def build_sheaf(seed):
                       rng.choice(R["leaf"][SEASON]))
         else:
             # Рогіз: листки від землі, прямі й довгі, вигинаються до кінця.
-            for k in range(3):
+            for k in range(1):
                 a = rng.uniform(0, 2 * math.pi)
                 d = Vector((math.cos(a) * 0.3, math.sin(a) * 0.15, 1.0)).normalized()
                 blade(bm, base + Vector((rng.gauss(0, 0.04), 0, 0)), d, rng.uniform(0.5, 0.75) * h, R["leaf_w"],
@@ -319,7 +321,7 @@ def build_sheaf(seed):
                     blade(bm, top - lean * hl * rng.uniform(0.0, 0.7), d, hl * rng.uniform(0.5, 0.9),
                           0.06 if SEASON == "late" else 0.05, rng.uniform(0.05, 0.15), fc, hc)
         else:
-            if rng.random() < 0.85:
+            if rng.random() < 0.95:
                 c0 = top - lean * (0.12 + hl / 2)
                 bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.06, radius2=0.055, depth=hl,
                                       matrix=Matrix.Translation(c0) @ lean.to_track_quat("Z", "Y").to_matrix().to_4x4())
