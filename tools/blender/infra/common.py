@@ -11,6 +11,9 @@ from mathutils import Matrix, Vector
 
 S = 0.125
 ACG = os.environ.get("INFRA_ACG", "")
+if not ACG or not os.path.isdir(ACG):                                   # без явного каталогу текстури шукались би відносно cwd Blender
+    raise SystemExit(f"INFRA_ACG має вказувати на каталог текстур ambientCG (art-refs/buildings_tex), зараз: {ACG!r}")
+ACG = os.path.abspath(ACG)
 OUT = os.environ.get("INFRA_OUT", os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "props"))
 OUT = os.path.abspath(OUT)
 SIZE = 512
@@ -64,6 +67,8 @@ def _img_from_array(name, arr, jpeg=True, srgb=True):
 
 def load_acg(mat, kind, size=SIZE):
     path = os.path.join(ACG, mat, f"{mat}_1K-JPG_{kind}.jpg")
+    if not os.path.exists(path):                                            # частину джерел (Ground111) завантажено лише у 2K
+        path = os.path.join(ACG, mat, f"{mat}_2K-JPG_{kind}.jpg")
     img = bpy.data.images.load(path)
     if kind != "Color":
         img.colorspace_settings.name = "Non-Color"
@@ -361,8 +366,10 @@ def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, to
     if ground:
         a = a * (1 - 0.4 * np.exp(-z / 0.3))[..., None]
     if top_z:
-        streak = np.clip(tile_noise(24, 1, size, seed + 3) * 1.6 - 0.45, 0, 1)
-        ramp = np.clip((z - (top_z - streak_len)) / streak_len, 0, 1) * (z <= top_z + 0.02)
+        cols = 9 + seed % 13                                                # своє число стовпців і своя довжина кожного патьоку
+        streak = np.clip(tile_noise(cols, 1, size, seed + 3) * 1.8 - 0.7, 0, 1)
+        ln_ = streak_len * (0.35 + 1.4 * tile_noise(cols, 1, size, seed + 4))
+        ramp = np.clip((z - (top_z - ln_)) / ln_, 0, 1) * (z <= top_z + 0.02)
         a = a * (1 - streak_k * streak * ramp)[..., None]
     if band:                                                                # мокра смуга: (z0, z1, сила)
         a = a * (1 - band[2] * np.clip(1 - np.abs(z - (band[0] + band[1]) / 2) / ((band[1] - band[0]) / 2), 0, 1) ** 0.5)[..., None]

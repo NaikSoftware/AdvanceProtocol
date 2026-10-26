@@ -80,7 +80,7 @@ def fence(kind, corner, name, damaged=False):
             for v0, v1 in ((0.03, 0.31), (0.34, 0.62), (0.65, 0.93)):
                 h = np.maximum(h, box_mask(n, 0.06, 0.94, v0, v1, 0.03))
             return 1 - 0.8 * h
-        sheet = concrete_mat("euro_panel", tile=2.0, relief=relief, seed=25, top_z=1.9, shade=0.1, k=9.0, streak_k=0.9, streak_len=0.8, val=0.92, tint=WARM, moss=0.7, rust_runs=2, chips=True)
+        sheets = [concrete_mat(f"euro_panel{v}", tile=2.0, relief=relief, seed=25 + 17 * v, top_z=1.9, shade=0.4, k=14.0, streak_k=0.9, streak_len=0.8, val=0.92, tint=WARM, moss=0.7, rust_runs=2, chips=True) for v in range(3)]
         post = concrete_mat("euro_post", tile=2.0, seed=26, top_z=1.95, streak_k=0.9, streak_len=0.8, val=0.92, tint=WARM, moss=0.6, chips=True)
         b.mi(post)              # перший матеріал меша Godot не фарбує вершинним кольором — тон дістається панелям
         nom, ph, pw = 2.0, 1.95, 0.2
@@ -90,16 +90,16 @@ def fence(kind, corner, name, damaged=False):
             for z in (0.55, 1.2, 1.85):
                 h = np.maximum(h, box_mask(n, 0.0, 1.0, z / 2.5 - 0.035, z / 2.5 + 0.035, 0.01))
             return 0.35 + 0.65 * h
-        sheet = concrete_mat("po2_panel", tile=4.0, tile_v=2.5, relief=relief, seed=27, top_z=2.45, tint=WARM, moss=0.7, rust_runs=3, chips=True)
+        sheets = [concrete_mat(f"po2_panel{v}", tile=4.0, tile_v=2.5, relief=relief, seed=27 + 17 * v, top_z=2.45, shade=0.4, k=12.0, tint=WARM, moss=0.7, rust_runs=3, chips=True) for v in range(3)]
         post = concrete_mat("po2_post", tile=2.0, seed=28, top_z=2.45, tint=WARM, moss=0.6, chips=True)
         b.mi(post)
         nom, ph, pw = 4.0, 2.5, 0.2
     elif kind in CONCRETE:
         spec = CONCRETE[kind]
         nom, ph, pw = spec["nom"], spec["ph"], spec["pw"]
-        sheet = concrete_mat(f"{kind}_panel", tile=nom, tile_v=ph, relief=spec.get("relief"), seed=spec["seed"], top_z=ph - 0.05, k=spec.get("k", 9.0),
-                             streak_k=0.7, streak_len=0.9, tint=WARM, moss=0.7, rust_runs=spec.get("rust", 2), chips=True,
-                             paint=spec.get("paint"), peel=spec.get("peel", 0.0), seams=spec.get("seams", False))
+        sheets = [concrete_mat(f"{kind}_panel{v}", tile=nom, tile_v=ph, relief=spec.get("relief"), seed=spec["seed"] + 17 * v, top_z=ph - 0.05, k=spec.get("k", 9.0) * 1.6,
+                               shade=0.45 if spec.get("relief") else 0.18, streak_k=0.7, streak_len=0.9, tint=WARM, moss=0.7, rust_runs=spec.get("rust", 2), chips=True,
+                               paint=spec.get("paint"), peel=spec.get("peel", 0.0), seams=spec.get("seams", False)) for v in range(3)]
         if spec.get("brick_post"):
             post = pbr(f"{kind}_post", "Bricks105", tile=1.0, tint=(0.82, 0.50, 0.40), sat=0.6, grime=0.3, rough=0.9, seed=spec["seed"] + 1)
             cap = concrete_mat(f"{kind}_cap", tile=1.0, seed=spec["seed"] + 2, tint=WARM, moss=0.0)
@@ -111,6 +111,8 @@ def fence(kind, corner, name, damaged=False):
         post = pbr("picket_post", "Planks021", tile=1.0, tint=(0.42, 0.36, 0.29), sat=0.4, grime=0.0, rough=0.95, seed=29)
         nom, ph, pw = 2.0, 1.45, 0.1
         card = picket_mat()
+    if kind not in ("picket",) and not kind.startswith("sheet"):
+        dirt = pbr("fence_dirt", "Ground111", tile=1.5, tint=(0.62, 0.62, 0.48), sat=0.8, grime=0.2, rough=0.95, seed=81)
     for (ox, oy), (dx, dy), L in runs(corner):
         n = max(1, round(L / nom)); pitch = L / n
         yaw = Matrix.Rotation(math.atan2(dy, dx), 3, "Z")
@@ -124,6 +126,9 @@ def fence(kind, corner, name, damaged=False):
             b.box(post, at(s, ph / 2), (pw, pw, ph), yaw)
             if kind in CONCRETE and CONCRETE[kind].get("brick_post"):
                 b.box(cap, at(s, ph + 0.04), (pw + 0.1, pw + 0.1, 0.08), yaw)          # бетонна шапка стовпа
+        if kind not in ("picket",) and not kind.startswith("sheet"):           # бруд і трава, нагорнуті до основи з обох боків
+            for side in (-1, 1):
+                b.box(dirt, at(L / 2, 0.0, side * 0.16), (L, 0.26, 0.09), yaw @ Matrix.Rotation(side * 0.35, 3, "X"))
         for i in range(n):
             c = (i + 0.5) * pitch; w = pitch - pw
             if kind.startswith("sheet"):
@@ -131,22 +136,28 @@ def fence(kind, corner, name, damaged=False):
                 b.tone = (t * (1 + dh), t, t * (1 - dh))                                   # тон і відтінок листа
                 b.box(sheet, at(c, 0.99, 0.045), (w, 0.035, 1.92), yaw)
                 b.tone = 1.0
-            elif kind == "euro":
+            elif kind in CONCRETE or kind in ("euro", "po2"):
+                hh = {"euro": 1.8, "po2": 2.3}.get(kind, ph - 0.08)
+                rows = 4 if kind.startswith("euro") else 1                        # єврозабір — плити, вставлені одна на одну в пази стовпів
+                sh = sheets[int(rng.integers(3))]                                  # своя маска патьоків на кожну плиту
                 b.tone = 1 + rng.uniform(-0.12, 0.12)
-                b.box(sheet, at(c, 0.9, 0), (w, 0.1, 1.8), yaw)
-                b.tone = 1.0
-            elif kind in CONCRETE:
-                if damaged and i == 1:
-                    continue                                                       # плити немає зовсім
-                b.tone = 1 + rng.uniform(-0.12, 0.12)                              # кожна плита свого тону
+                lean = Matrix.Rotation(rng.uniform(0.04, 0.09) * rng.choice((-1, 1)), 3, "X") if rng.random() < 0.18 else Matrix.Identity(3)
+                sunk = rng.uniform(0.04, 0.1) if rng.random() < 0.12 else 0.0      # просіла чи брак: нижча на кілька сантиметрів
+                if damaged and i == 1:                                             # злам: зубчастий пеньок, уламки й арматура біля основи
+                    for k_, (du, hz) in enumerate(((-w / 3, rng.uniform(0.3, 0.6)), (0.0, rng.uniform(0.15, 0.35)), (w / 3, rng.uniform(0.5, 0.9)))):
+                        b.box(sh, at(c + du, hz / 2, 0), (w / 3 - 0.01, 0.09, hz), yaw)
+                    for k_ in range(6):
+                        sz = rng.uniform(0.18, 0.5)
+                        rot = yaw @ Matrix.Rotation(rng.uniform(0, 3.1), 3, "Z") @ Matrix.Rotation(rng.uniform(-0.5, 0.5), 3, "X")
+                        b.box(sh, at(c + rng.uniform(-w / 2, w / 2), sz * 0.15, rng.uniform(0.15, 0.7)), (sz, sz * 0.7, 0.09), rot)
+                    b.tone = 1.0
+                    continue
                 if damaged and i == n - 1:                                         # розбита плита: нижній уламок, нахилений
-                    b.box(sheet, at(c, 0.4, 0.05), (w * 0.8, 0.09, 0.8), yaw @ Matrix.Rotation(0.25, 3, "X"))
+                    b.box(sh, at(c, 0.4, 0.05), (w * 0.8, 0.09, 0.8), yaw @ Matrix.Rotation(0.25, 3, "X"))
                 else:
-                    b.box(sheet, at(c, ph / 2 - 0.02, 0), (w, 0.09, ph - 0.08), yaw)
-                b.tone = 1.0
-            elif kind == "po2":
-                b.tone = 1 + rng.uniform(-0.12, 0.12)
-                b.box(sheet, at(c, 1.25, 0), (w, 0.09, 2.3), yaw)
+                    rh = hh / rows
+                    for r_ in range(rows):
+                        b.box(sh, at(c, rh * (r_ + 0.5) - sunk, 0), (w, 0.09, rh - (0.02 if rows > 1 else 0)), yaw @ lean)
                 b.tone = 1.0
             else:
                 # картка: площина вздовж плеча

@@ -2,7 +2,9 @@
 те саме габаритне тіло. Напівзруйновані: стоять майже всі стіни, один кут або секція обвалені, дах частково згорів, у стінах
 вибиті вікна й діри від снарядів, дверей немає; завал лише біля обвалу й не виходить за клітинку. Матеріали ті самі, що в цілих
 будинків (світла штукатурка, червона цегла в димарі й на зламах, сірі дахи), кіптява й руйнування зверху.
-Камера гри бачить боки -Y і +X, тому руйнування скрізь на них. Запуск: build_ruins.py -- <out> [house1 house2 shed]"""
+Камера гри бачить боки -Y і +X, тому руйнування скрізь на них.
+Ще два цілі сараї для дворів без зруйнованих двійників: f8_shed_brick (цегляний під шифером) і f8_shed_lean (дерев'яна
+прибудова з односхилим дахом). Запуск: build_ruins.py -- <out> [house1 house2 shed shed_brick shed_lean]"""
 import math
 import os
 import random
@@ -76,7 +78,7 @@ def break_dress(b, P, xs, sgn, rnd, nv=18, battens=True):
     """Кіптява вздовж краю (вузька) і рейки 5x4 см, що стирчать за край на 0.2-0.5 м."""
     for i in range(nv):                                                          # кіптява на самому даху: чорна біля краю, згасає за ~0.9 м
         v0, v1 = i / nv, (i + 1) / nv
-        for (d0, d1, t0, t1) in ((0.0, 0.35, 0.4, 0.7), (0.35, 0.9, 0.7, 1.0)):      # чорна облямівка уздовж зламу читалась як обведення
+        for (d0, d1, t0, t1) in ((0.0, 0.35, 0.4, 0.7), (0.35, 0.9, 0.7, 1.0)):      # чорна облямівка уздовж зламу читається як обведення
             pts = [P(xs[i] + d0 * sgn, v0), P(xs[i] + d0 * sgn, v1), P(xs[i] + d1 * sgn, v1), P(xs[i] + d1 * sgn, v0)]
             pts = [(x, y, z + 0.01) for (x, y, z) in pts]
             n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
@@ -149,7 +151,7 @@ def house1(ruined):
     """Одноповерховий дім 6.6 x 4.8 м. Напівзруйнований: східна половина даху ціла, західна провалилась, обвалена частина
     фронтальної й західної стін, завал усередині й невеликий зсув перед обваленою стіною."""
     lib.reset()
-    lib.palette(wall=(0.84, 0.68, 0.56), roof="cherry_dark", eave=3.0, chim="ch_orange", row=0.3, trim=(0.67, 0.66, 0.62), frame=4)   # єдина хата з брудно-білим обрамленням (~170 sRGB)
+    lib.palette(wall=(0.73, 0.64, 0.57), roof="cherry_dark", eave=3.0, chim="ch_orange", row=0.3, trim=0.95, frame=4)
     DM[0] = "wall_plaster_dm" if not ruined else "wall_half"
     b = Builder()
     b.win_kind = 3                                                               # вузькі вертикальні з фрамугою
@@ -176,10 +178,10 @@ def house1(ruined):
         for x in (-2.3, -0.8, 1.5, 2.65):
             b.window(("y", S - 0.19, -1), x, 1.0, 0.8, 1.5, kind=4 if x < 0 else None)   # вузькі; два з гратами
             pane_dress(b, "y", S - 0.19, -1, x, 1.0, 0.8, 1.5, rain=False)
-        b.box(0.1, S - 0.19 + 0.03, 0.0, 1.0, 0.06, 2.0, "door_red")
-        b.box(0.1, S - 0.19 + 0.05, 2.0, 1.2, 0.07, 0.1, "trim")
+        b.box(0.1, S - 0.21, 0.0, 1.0, 0.06, 2.0, "door_red")                   # на 4 см перед стіною: врівень зі стіною мерехтіло й читалось як пролом
+        b.box(0.1, S - 0.22, 2.0, 1.2, 0.07, 0.1, "trim")
         for sx in (-0.55, 0.55):
-            b.box(0.1 + sx, S - 0.19 + 0.05, 0.0, 0.1, 0.07, 2.1, "trim")
+            b.box(0.1 + sx, S - 0.22, 0.0, 0.1, 0.07, 2.1, "trim")
         b.box(0.1, S - 0.5, 0.0, 1.8, 0.7, 0.2, "plinth_flat")
         for y in (-1.0, 1.0):
             for sx, sgn in ((hx + 0.19, 1), (-hx - 0.19, -1)):
@@ -188,7 +190,7 @@ def house1(ruined):
         for x in (-2.3, -0.6, 1.2, 2.6):
             b.window(("y", N + 0.19, 1), x, 1.0, 0.8, 1.5)
             pane_dress(b, "y", N + 0.19, 1, x, 1.0, 0.8, 1.5, rain=False)
-        b.chimney2("wide", 1.6, -0.2, 4.6, 3.0)                     # тинькований широкий на два канали
+        b.chimney2("wide", 1.6, -0.2, 4.6, 3.0)                     # тинькований широкий
         c_ = 0.19
         lib.weather(b, "wall_plaster", [("y", S - c_, -1, -hx - c_, hx + c_, 0.5, E), ("y", N + c_, 1, -hx - c_, hx + c_, 0.5, E), ("x", hx + c_, 1, S - c_, N + c_, 0.5, E), ("x", -hx - c_, -1, S - c_, N + c_, 0.5, E)], seed=11)
         lib.finish(b, "house_h5", out, tri_limit=2200, footprint=(1, 1))
@@ -266,7 +268,7 @@ def house1(ruined):
 def house2(ruined):
     """Двоповерховий дім 6 x 5.6 м. Напівзруйнований: західна половина даху ціла, східний фронтон обвалений, перекриття нахилене в завал."""
     lib.reset()
-    lib.palette(wall=(0.86, 0.78, 0.55), roof="green_dark", eave=6.0, chim="ch_sand", frame=1, trim=0.92)
+    lib.palette(wall=(0.76, 0.72, 0.60), roof="green_dark", eave=6.0, chim="ch_sand", frame=1, trim=0.92)
     DM[0] = "wall_plaster_dm" if not ruined else "wall_half_w"
     b = Builder()
     b.win_kind = 0                                                               # старі дерев'яні на три стулки
@@ -307,8 +309,7 @@ def house2(ruined):
         b.box(2.2, S - 0.5, 0.0, 1.8, 0.7, 0.2, "plinth_flat")
         b.window(("x", hx + 0.19, 1), 0.0, E + 1.0, 0.8, 0.9, kind=3)      # віконце горища у фронтоні
         lib.window_ring(b, "x", hx + 0.19, 1, 0.0, E + 1.0, 0.8, 0.9)
-        b.chimney2("hood", -1.8, 0.0, 8.6, 1.6, "brick_face")       # два димарі: цегляний із зонтом на гребені
-        b.chimney2("steel", 1.8, -2.0, 7.0, 1.3)                     # і сталева труба на схилі
+        b.chimney2("hood", -1.8, 0.0, 8.6, 1.6, "brick_face")       # цегляний із зонтом на гребені
         c_ = 0.19
         lib.weather(b, "wall_plaster", [("y", S - c_, -1, -hx - c_, hx + c_, 0.6, E), ("y", N + c_, 1, -hx - c_, hx + c_, 0.6, E), ("x", hx + c_, 1, S - c_, N + c_, 0.6, E), ("x", -hx - c_, -1, S - c_, N + c_, 0.6, E)], seed=13)
         lib.finish(b, "house_h6", out, tri_limit=2600, footprint=(1, 1))
@@ -473,7 +474,7 @@ def shed_variant(name, kind):
     """Інші сараї для дворів: brick — цегляний 5 x 3.6 м під шиферним двосхилим дахом із дерев'яними дверима;
     lean — дерев'яна прибудова з односхилим дахом із зеленого профлисту."""
     lib.reset()
-    lib.palette(roof="asb_old" if kind == "brick" else "green_dark", eave=2.4)
+    lib.palette(roof="asb_dark" if kind == "brick" else "green_dark", eave=2.4)
     b = Builder()
     hx, hy, E = (2.5, 1.8, 2.4) if kind == "brick" else (2.2, 1.6, 2.2)
     if kind == "brick":
@@ -492,10 +493,10 @@ def shed_variant(name, kind):
         lib._quad(b, [(-hx, hy, E), (hx, hy, E), (hx, hy, Eb), (-hx, hy, Eb)], "boards_soft", (0, 1, 0))
         for sx in (-1, 1):
             tri = [(sx * hx, -hy, E), (sx * hx, hy, E), (sx * hx, hy, Eb)]
-            v = [__import__("mathutils").Vector(q) for q in tri]
+            v = [Vector(q) for q in tri]
             n_ = (v[1] - v[0]).cross(v[2] - v[1])
             f = b.poly(tri if n_.x * sx > 0 else tri[::-1], "boards_soft")
-            b.facing.append((f, __import__("mathutils").Vector((sx, 0, 0))))
+            b.facing.append((f, Vector((sx, 0, 0))))
         b.poly_up([(-hx - 0.3, -hy - 0.4, E - 0.12), (hx + 0.3, -hy - 0.4, E - 0.12), (hx + 0.3, hy + 0.25, Eb + 0.06), (-hx - 0.3, hy + 0.25, Eb + 0.06)], "fc_roof_xh")
         b.box(-0.8, -hy - 0.03, 0.25, 1.0, 0.06, 1.8, "door_steel")
         lib.weather(b, "boards_soft", [("y", -hy, -1, -hx, hx, 0.25, E)], seed=63, patches=False)

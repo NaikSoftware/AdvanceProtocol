@@ -26,10 +26,14 @@ const _PROPS: Dictionary = {
 	"house_h5": [1, 1, 2200],
 	"house_h6": [1, 1, 2600],
 	"f8_shed": [1, 1, 1600],
+	"f8_shed_brick": [1, 1, 1200],
+	"f8_shed_lean": [1, 1, 1200],
 	"ruin_half_house1": [1, 1, 4600],
 	"ruin_half_house2": [1, 1, 4800],
 	"ruin_half_shed": [1, 1, 4600],
 }
+## На кожній хаті рівно один димар, отже рівно один маркер chimney_top: гра чіпляє до нього дим.
+const _CHIMNEYS: Array[String] = ["house_h1", "house_h1_hit", "house_h2", "house_h3", "house_h4", "house_h5", "house_h6"]
 ## Стоять лише на клітинках кільця навколо поля, а не на ігровому полі.
 const RING_ONLY: Array[String] = ["f2_livestock_barn"]
 const _OVERHANG: float = 0.1
@@ -96,3 +100,14 @@ func test_every_building_rests_on_the_ground_inside_its_footprint() -> void:
 func test_ring_only_buildings_are_listed_in_the_props() -> void:
 	for id in RING_ONLY:
 		assert_true(_PROPS.has(id), id)
+
+
+func test_every_house_has_exactly_one_chimney_marker() -> void:
+	for id: String in _CHIMNEYS:
+		var inst: Node3D = (load(_DIR + id + ".glb") as PackedScene).instantiate()
+		add_child_autofree(inst)
+		var n: int = 0
+		for c in inst.find_children("*", "", true, false):
+			if str(c.name).begins_with("chimney_top"):
+				n += 1
+		assert_eq(n, 1, "%s: маркери chimney_top" % id)

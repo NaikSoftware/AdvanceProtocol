@@ -261,8 +261,25 @@ def trailer(name, paint, seed, kind="tipper"):
     finish(b, name)
 
 
+def tank_mat(name, paint, seed, n=128):
+    """Гладка фарбована бочка: іржа неправильними плямами двох масштабів і кілька патьоків, а не рівні кружки."""
+    big, small = fbm(n, seed, 3, 4), fbm(n, seed + 5, 9, 3)
+    rust = np.clip((0.6 * big + 0.4 * small - 0.58) * 6, 0, 1)
+    u = (np.arange(n) + 0.5) / n
+    rng = np.random.default_rng(seed)
+    for _ in range(5):
+        u0, ln = rng.uniform(0, 1), rng.uniform(0.2, 0.6)
+        v = (np.arange(n) + 0.5) / n
+        rust = np.maximum(rust, 0.7 * np.exp(-((u[None, :] - u0) / 0.01) ** 2) * np.clip(1 - np.abs(v[:, None] - 0.5) / ln, 0, 1))
+    col = np.array(paint) * (0.85 + 0.25 * fbm(n, seed + 9, 4, 3))[..., None]
+    a = col * (1 - rust[..., None]) + np.array([0.33, 0.17, 0.08]) * (0.7 + 0.5 * small[..., None]) * rust[..., None]
+    nrm = normal_from_height(0.5 * small + 0.5 * rust, 1.5)
+    return pbr(name, albedo=a, normal=np.concatenate([nrm, np.ones((n, n, 1))], -1), tile=2.0, rough=0.7, metal=0.1)
+
+
 def trailer_small(name, paint, seed, kind):
-    body = sheet_mat(f"trailer_body_{seed}", paint, seed, tile_v=1.2, band=(0.4, 0.9), patch=0.7)
+    body = (sheet_mat(f"trailer_body_{seed}", paint, seed, tile_v=1.2, band=(0.4, 0.9), patch=0.7) if kind == "flatbed"
+            else tank_mat(f"trailer_tank_{seed}", paint, seed))
     frame = pbr("trailer_frame", "MetalPlates013", tile=1.0, tint=(0.42, 0.41, 0.39), sat=0.3, rust=0.0, grime=0.0, rough=0.8, seed=seed + 1)
     b = B()
     y0, y1, fl = -2.4, 1.6, 0.75

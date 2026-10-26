@@ -1067,7 +1067,7 @@ func test_chimney_tops_and_ruin_centres() -> void:
 		return i["model"] in [&"house_h5", &"house_h6"] and not i.get("yard", false) \
 				and Rect2i(0, 0, 26, 22).has_point((i["cells"] as Array)[0]))
 	var tops: Array[Vector3] = props.chimney_tops()
-	assert_gte(tops.size(), houses.size(), "у кожної хати дошки — щонайменше один димар")
+	assert_eq(tops.size(), houses.size(), "на кожній хаті дошки рівно один димар")
 	for t in tops:
 		var near := false
 		for hs: Dictionary in houses:

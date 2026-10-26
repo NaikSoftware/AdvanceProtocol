@@ -153,10 +153,16 @@ func _ready() -> void:
 		add_child(inst)
 		if road_layer != "":
 			_road_ends(inst)
+		var other: Node3D = null
 		if with_model != "":
-			var other: Node3D = (load("%s/%s.glb" % [props_dir, with_model]) as PackedScene).instantiate()
-			other.position = Vector3(1.6, 0.0, -0.6)
-			inst.add_child(other)
+			var path: String = "%s/%s.glb" % [props_dir, with_model]
+			if ResourceLoader.exists(path):
+				other = (load(path) as PackedScene).instantiate()
+				other.position = Vector3(1.6, 0.0, -0.6)
+				add_child(other)
+				other.global_position = inst.global_position + Vector3(1.6, 0.0, -0.6)
+			else:
+				push_error("prop_preview: --with=%s не знайдено" % with_model)
 		if rl:
 			# мокрий реквізит із гри: матеріал-накладка зменшує шорсткість, тож дахи й стіни дають мокрий блиск
 			for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
@@ -209,6 +215,8 @@ func _ready() -> void:
 				prev.make_current()
 			cam.queue_free()
 		inst.queue_free()
+		if other != null:
+			other.queue_free()
 	get_tree().quit()
 
 func _shoot(rig: IsoCameraRig, zoom: float, path: String) -> void:

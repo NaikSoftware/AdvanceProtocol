@@ -98,7 +98,7 @@ def post(b, x, y, z0, h):
 # ----------------------------------------------------------------------- H1
 def house1(hit=False):
     lib.reset()
-    lib.palette(wall=(0.80, 0.68, 0.47), roof="asb_dark", eave=3.0, chim="ch_grey", frame=3, trim=0.88)
+    lib.palette(wall=(0.70, 0.63, 0.53), roof="asb_dark", eave=3.0, chim="ch_grey", frame=3, trim=0.88)
     RING[:] = ["trim", 0.1, False]
     b = Builder()
     b.win_kind, b.win_mix = 0, (1, 0.4)                                     # старі дерев'яні на три стулки, частину замінено пластиковими
@@ -227,9 +227,7 @@ def house1(hit=False):
             b.decal([(x0_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE), (x0_, y0 - 0.03, EAVE)], (1.0, 1.0, 0.12, 0.12), "wall_plaster_dm", (0, -1, 0))
     if not hit:
         b.box(0, ym, RIDGE, xr1 - xr0 + 0.6, 0.3, 0.16, "gutter")
-    b.chimney2("brick" if hit else "hood", 2.2, -0.2, 5.4, 2.3, "brick_face")   # димарі різні: цегляний із зонтом біля гребеня
-    if not hit:
-        b.chimney2("brick", -3.4, -3.0, 3.9, 1.4, "brick_face")  # і низький цегляний на схилі ближче до звису
+    b.chimney2("brick" if hit else "hood", 2.2, -0.2, 5.4, 2.3, "brick_face")   # один димар: у цілої хати з зонтом, у пошкодженої цегляний
     bl = (-3.2, 0.0) if hit else ()
     win_front(b, y0, -1, (-3.2, 0.0, 3.2), 1.0, bl=bl)
     win_front(b, y1, 1, (-4.0, 4.0), 1.0)
@@ -238,7 +236,7 @@ def house1(hit=False):
     b.box(-3.9, y1 + 0.03, 0.5, 1.0, 0.06, 2.0, "door_red")
     b.box(0, 3.2, 0, 6.0, 1.6, 0.35, "step", top="step")                         # засклена веранда
     for px in (-3.0, -1.0, 1.0, 3.0):
-        post(b, px, 3.9, 0.35, 2.2)
+        post(b, px, 3.9, 0.35, 1.95)                                              # верх під дахом веранди, не крізь нього
     for px in (-2.0, 0.0, 2.0):
         b.window(("y", 3.92, 1), px, 0.6, 1.8, 1.55)
     b.poly_up([(-3.4, 2.4, 2.75), (3.4, 2.4, 2.75), (3.4, 4.3, 2.35), (-3.4, 4.3, 2.35)], "fc_roof_xh")
@@ -295,7 +293,7 @@ def house2():
 def house3():
     lib.reset()
     b = Builder()
-    lib.palette(wall=(0.68, 0.71, 0.58), roof="graphite_dark", eave=6.0, row=0.3, frame=2, trim=0.95)
+    lib.palette(wall=(0.63, 0.65, 0.58), roof="graphite_dark", eave=6.0, row=0.3, frame=2, trim=0.95)
     RING[:] = ["trim", 0.025, False]                                          # сучасна хата: без виступної лиштви, лише укіс
     L, D, EAVE, RIDGE = 10.0, 10.0, 6.0, 9.5
     y0, y1 = -D / 2, D / 2
@@ -340,7 +338,7 @@ def house3():
 def house4():
     lib.reset()
     b = Builder()
-    lib.palette(roof="oxide_dark", eave=3.0, chim="ch_plaster", boards=(0.52, 0.60, 0.64), trim=(0.44, 0.37, 0.29))
+    lib.palette(roof="oxide_dark", eave=3.0, chim="ch_orange", boards=(0.50, 0.55, 0.57), trim=(0.44, 0.37, 0.29))
     RING[:] = ["trim", 0.08, True]                                            # стара дерев'яна хата: віконниці
     b.win_kind = 0
     L, D, EAVE, RIDGE = 9.0, 6.0, 3.0, 6.5
@@ -358,7 +356,7 @@ def house4():
         post(b, px, y1 + 1.4, 0.4, 2.2)
     b.poly_up([(-1.5, y1, 2.7), (1.5, y1, 2.7), (1.5, y1 + 1.6, 2.3), (-1.5, y1 + 1.6, 2.3)], "tin_green")
     b.box(0, y1 + 1.0, 0, 3.0, 1.4, 0.4, "step", top="step")
-    b.chimney2("brick", L / 2 + 0.75, 1.0, 0.0, 6.0, "brick_face")   # приставний цегляний біля фронтону, від землі
+    b.chimney(L / 2 + 0.52, 1.0, 0.0, 1.0, 6.0, "brick_face")        # приставний цегляний 1 x 1 м до фронтону, від землі
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y0 - 0.4, EAVE - 0.3)
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y1 + 0.4, EAVE - 0.3)
     pipe(b, L / 2 - 0.35, y0, -1, 0.4, EAVE)
@@ -383,7 +381,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
     for ci, c in enumerate(cs):
         for di, d in enumerate(dirs[ci]):
             low_ = ci == open_c and not tall_open
-            if low_:                                                              # чистий низький пенечок поза купою читався сторонньою цеглою: кут лишається відкритим
+            if low_:                                                              # чистий низький пенечок поза купою читається сторонньою цеглою: кут лишається відкритим
                 continue
             ln = A
             hc = (rnd.uniform(1.2, 1.8) if tall_open and ci == open_c else rnd.uniform(1.8, 3.0)) if not low_ else 0.5
