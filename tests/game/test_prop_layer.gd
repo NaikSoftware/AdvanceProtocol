@@ -1880,3 +1880,19 @@ func test_corner_poles_have_guys_and_transformers_are_cabinets(p = use_parameter
 	assert_between(PropLayer.TRANSFORMER_SIZE.y * 8.0, 2.0, 3.0, "шафа ТП заввишки")
 	for at: Vector3 in props.transformers_shown():
 		assert_false(props.on_road(Vector2(at.x, at.z), 0.0), "%s: шафа підстанції на асфальті %s" % [p, at])
+
+
+## Плитка грядок лежить на ґрунті: кожен кут і внутрішні точки (сітка 5×5) — на висоті землі плюс
+## підйом плитки (0.004) з допуском 3 см, тож рельєф не ріже город на клапті.
+func test_garden_beds_lie_on_the_ground(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var th: TerrainHeight = view._height
+	var beds: Array[Transform3D] = view.props().garden_beds()
+	assert_gt(beds.size(), 0, "%s: є городи" % p)
+	for i in beds.size():
+		var t: Transform3D = beds[i]
+		for j in 5:
+			for k in 5:
+				var v: Vector3 = t * Vector3(-0.5 + j * 0.25, 0.0, -0.5 + k * 0.25)
+				assert_almost_eq(v.y - th.at(v.x, v.z), 0.004, 0.03 * TerrainHeight.M,
+						"%s: город %d у (%.2f; %.2f) відходить від ґрунту на %.2f м" % [p, i, v.x, v.z, (v.y - 0.004 - th.at(v.x, v.z)) / TerrainHeight.M])
