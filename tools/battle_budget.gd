@@ -85,16 +85,17 @@ func _ready() -> void:
 			# клітинці двору без хати й сараю, піхота — на іншій, поруч із хатою; камера — на хаті.
 			var home: Dictionary = VillageLayout.for_map(StringName(map))["homes"][int(parts[2])]
 			var hc: Vector2i = home["house"]
-			# Спершу клітинки двору, потім прохідні сусідні з двором (у дворі буває лише одна вільна).
+			# Спершу клітинки двору, потім прохідні за ≤ 2 клітинки від нього (у дворі буває лише одна вільна).
 			var spots: Array = (home["cells"] as Array).filter(func(c: Vector2i) -> bool:
 				return c != hc and c != home.get("shed", Vector2i(-99, -99)))
 			var near: Array = []
 			for c: Vector2i in home["cells"]:
-				for d in Board.DIRS_4:
-					var n: Vector2i = c + d
-					if not (home["cells"] as Array).has(n) and not near.has(n) and board.in_bounds(n) \
-							and board.kind_at(n) in [Terrain.Kind.FIELD, Terrain.Kind.HILL, Terrain.Kind.ROAD]:
-						near.append(n)
+				for dy in range(-2, 3):
+					for dx in range(-2, 3):
+						var n: Vector2i = c + Vector2i(dx, dy)
+						if not (home["cells"] as Array).has(n) and not near.has(n) and board.in_bounds(n) \
+								and board.kind_at(n) in [Terrain.Kind.FIELD, Terrain.Kind.HILL, Terrain.Kind.ROAD]:
+							near.append(n)
 			# Юніт, для якого хата — серед клітинок, що розчиняються (REVEAL_OFFSETS), сховав би її: такі
 			# місця — останніми; далі — ближчі до хати.
 			var key := func(c: Vector2i) -> int:
@@ -103,14 +104,31 @@ func _ready() -> void:
 			spots.sort_custom(by_key)
 			near.sort_custom(by_key)
 			spots.append_array(near)
-			var want: Array = [UnitTypes.UnitClass.INFANTRY, UnitTypes.UnitClass.TANK]
-			for k in mini(want.size(), spots.size()):
+			# Юніт не стоїть на паркані: центр клітинки — щонайменше на півкорпусу від кожної секції.
+			var fences: Array[Rect2] = []
+			for inst in (screen.get_node("%BoardView") as BoardView).props().all_instances():
+				if int(PropLayer.spec_of(inst["model"])["kind"]) == PropLayer.Kind.GARDEN_FENCE:
+					var fb: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+					fences.append(Rect2(fb.position.x, fb.position.z, fb.size.x, fb.size.z))
+			var want: Array = [[UnitTypes.UnitClass.INFANTRY, 0.2], [UnitTypes.UnitClass.TANK, 0.4]]
+			var taken: Array[Vector2i] = []
+			for w: Array in want:
+				var spot := Vector2i(-1, -1)
+				for c: Vector2i in spots:
+					var p := Vector2(c)
+					if not taken.has(c) and not fences.any(func(r: Rect2) -> bool:
+							return p.distance_to(p.clamp(r.position, r.end)) < float(w[1])):
+						spot = c
+						break
+				if spot.x < 0:
+					continue
+				taken.append(spot)
 				for u: Unit in MatchService.state.units_of(0):
-					if u.unit_class() == want[k]:
-						var other: Unit = MatchService.state.unit_at(spots[k])
+					if u.unit_class() == w[0]:
+						var other: Unit = MatchService.state.unit_at(spot)
 						if other != null and other != u:
 							other.pos = u.pos
-						u.pos = spots[k]
+						u.pos = spot
 						break
 			screen.call("_rebuild_units_for_active_player")
 			views.append([home["house"], float(parts[3])])

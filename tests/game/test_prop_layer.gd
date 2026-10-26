@@ -377,7 +377,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	for inst in view.props().all_instances():
 		models[inst["model"]] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
-			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths", &"RubbleFloors", &"RubbleDebris", &"YardPaths"])
+			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths", &"RubbleFloors", &"RubbleDebris", &"YardPaths"] and not String(n.name).ends_with("_fade"))
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
@@ -456,21 +456,6 @@ func test_boulders_get_contact_blobs() -> void:
 	# Дзеркальний базис перевертає обхід трикутників, і cull_back викидає пляму зовсім.
 	for i in blobs.multimesh.instance_count:
 		assert_gt(blobs.multimesh.get_instance_transform(i).basis.determinant(), 0.0, "пляма %d дзеркальна" % i)
-
-
-## Будівлі моделі, над якою ніхто не стоїть, малюються шейдером без discard.
-func test_unfaded_structures_use_the_solid_material() -> void:
-	var view: BoardView = _view(null, _house_board())
-	var p: PropLayer = view.props()
-	var node: MultiMeshInstance3D = null
-	for n: MultiMeshInstance3D in p.find_children("*", "MultiMeshInstance3D", false, false):
-		if n.name != &"ContactShadows" and _kind(StringName(n.name)) == PropLayer.Kind.STRUCTURE:
-			node = n
-	assert_not_null(node)
-	assert_false(((node.material_override as ShaderMaterial).shader.code).contains("discard"))
-	view.set_reveal_cells([Vector2i(2, 2)] as Array[Vector2i])
-	p._flush()
-	assert_true(((node.material_override as ShaderMaterial).shader.code).contains("discard"))
 
 
 ## Перелік моделей — через ResourceLoader, тож працює й в експортованій збірці.
@@ -581,9 +566,11 @@ func test_structure_shadows_only_when_switched_on() -> void:
 	view.structure_shadows = true
 	view.build(_house_board())
 	for n: MultiMeshInstance3D in view.props().find_children("*", "MultiMeshInstance3D", false, false):
-		var k: int = _kind(StringName(n.name))
+		# Вузол «_fade» (напівпрозорі екземпляри) кидає тінь, як і суцільний вузол своєї моделі.
+		var base: String = String(n.name).trim_suffix("_fade")
+		var k: int = _kind(StringName(base))
 		# Тінь кидають лише будинки дошки; руїни — плямою дотику, кільце й дрібнота — без тіні.
-		var casts: bool = k == PropLayer.Kind.STRUCTURE and not String(n.name).ends_with("_ring")
+		var casts: bool = k == PropLayer.Kind.STRUCTURE and not base.ends_with("_ring")
 		var want: int = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		assert_eq(n.cast_shadow, want, n.name)
 
@@ -1239,3 +1226,62 @@ func test_poles_stand_upright(p = use_parameters(MAPS)) -> void:
 		assert_lte(rad_to_deg(up.angle_to(Vector3.UP)), 3.0, "%s: стовп %s нахилений" % [p, inst["cells"]])
 		n += 1
 	assert_gt(n, 0, "%s: передумова — стовпи є" % p)
+
+
+## Розчиняється лише будівля, вища за FADE_MIN_H, що на екрані перекриває юніта: купа уламків по
+## коліно лишається суцільною, хата перед юнітом — розчиняється.
+func test_only_tall_buildings_over_the_unit_dissolve() -> void:
+	var view: BoardView = _view(_map("crossroads"))
+	var props: PropLayer = view.props()
+	var tall: Dictionary = {}
+	var low: Dictionary = {}
+	for inst in props.all_instances():
+		var k: int = _kind(inst["model"])
+		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+			continue
+		var h: float = _box_of(inst).size.y
+		if h >= PropLayer.FADE_MIN_H and tall.is_empty() and not inst.get("yard", false):
+			tall = inst
+		elif h < PropLayer.FADE_MIN_H and low.is_empty():
+			low = inst
+	assert_false(tall.is_empty(), "передумова — висока будівля")
+	# Юніт за будівлею з боку від камери (камера на +x, +z): будівля — його REVEAL_OFFSETS (1, 1).
+	var behind: Vector2i = (tall["cells"] as Array)[0] - Vector2i.ONE
+	var cells: Array[Vector2i] = [behind]
+	props.set_reveal_cells(cells)
+	assert_true(props._is_faded(tall), "висока будівля перед юнітом розчиняється")
+	if not low.is_empty():
+		var at: Array[Vector2i] = [(low["cells"] as Array)[0] - Vector2i.ONE]
+		props.set_reveal_cells(at)
+		assert_false(props._is_faded(low), "низька руїна не розчиняється")
+
+
+## Будівля над юнітом — звичайна альфа з проходом глибини, не растр: матеріал вузла «_fade» —
+## альфа-варіант без discard; за FADE_TIME дім переходить туди з альфою FADE_ALPHA, а в суцільному
+## вузлі схований; знято юніта — повертається.
+func test_dissolve_is_alpha_blend_not_dither() -> void:
+	var src: String = (load("res://game/battle/shaders/prop_fade.gdshader") as Shader).code
+	assert_false(src.contains("discard"), "у шейдері будівель нема растрового розчинення")
+	var view: BoardView = _view(null, _house_board())
+	var props: PropLayer = view.props()
+	var h: Vector2i = _house_cell(view)
+	view.set_reveal_cells([h] as Array[Vector2i])
+	var idx: int = -1
+	for i in props._instances.size():
+		if props._is_faded(props._instances[i]):
+			idx = i
+	assert_gte(idx, 0, "передумова: будинок над юнітом")
+	var key: StringName = props._instances[idx]["model"]
+	var fmi: MultiMeshInstance3D = props._fade_nodes[key]
+	var code: String = ((fmi.material_override as ShaderMaterial).shader as Shader).code
+	assert_true(code.contains("#define FADE_ALPHA") and src.contains("depth_prepass_alpha"), "альфа з проходом глибини")
+	assert_false(fmi.visible, "до переходу вузол розчинення схований")
+	props._flush()
+	props._process(PropLayer.FADE_TIME * 2.0)
+	# Дані екземплярів MultiMesh безголовий рендер не зберігає: перевіряємо рівень і вузол.
+	assert_almost_eq(float(props._fade_level[idx]), 1.0, 1e-4, "перехід завершився за FADE_TIME")
+	assert_true(fmi.visible, "дім у вузлі розчинення")
+	view.set_reveal_cells([] as Array[Vector2i])
+	props._flush()
+	props._process(PropLayer.FADE_TIME * 2.0)
+	assert_false(fmi.visible, "юніта нема — дім знову суцільний")

@@ -47,10 +47,10 @@ const MODELS: Dictionary = {
 	&"bridge_river_centre": {"kind": Kind.BRIDGE, "map": &"river", "order": 1, "deck_top": 0.30},
 	&"bridge_river_east": {"kind": Kind.BRIDGE, "map": &"river", "order": 2, "deck_top": 0.21},
 	&"infra_fence_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
-	# Сільська садиба: дерев'яний штакетник або низький коричневий профлист (ассет 2 м — до ~1.4 м).
-	# Зелений профлист з камери гри сірів до бетонних плит — він, як і єврозабір, для ферм.
+	# Сільська садиба — дерев'яний штакетник. Профлист (ассет 2 м — до ~1.4 м) з камери гри читався
+	# пласкою бузковою коробкою без стовпчиків і швів — він, як і єврозабір, для ферм.
 	&"infra_fence_sheet_green": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
-	&"infra_fence_sheet_brown": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "height": 0.7},
+	&"infra_fence_sheet_brown": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
 	&"infra_fence_euro": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY},
 	&"infra_hay_round": {"kind": Kind.HAY, "crush": Crush.SQUASH},
 	&"infra_hay_wrapped": {"kind": Kind.HAY, "crush": Crush.SQUASH},
@@ -82,7 +82,11 @@ const PREFIX_RULES: Array[Dictionary] = [
 ## Половина квадрата в центрі клітинки, куди не заходить жоден дрібний пропс: там стоїть юніт.
 const KEEP_OUT: float = 0.2
 ## Частка викинутих пікселів даху над юнітом (≈ 30 % непрозорості, docs/art/props-research.md).
-const FADE: float = 0.7
+## Будівля над юнітом — напівпрозора (альфа FADE_ALPHA), перехід за FADE_TIME секунд.
+const FADE_ALPHA: float = 0.35
+const FADE_TIME: float = 0.2
+## Розчиняється лише будівля, вища за це (клітинки, ~4 м): нижча юніта не закриває.
+const FADE_MIN_H: float = 0.5
 ## Сусіди, що розчиняються разом із клітинкою юніта: камера стоїть на +x, +z від фокуса (yaw 45°),
 ## тож саме ці клітинки лежать між юнітом і камерою.
 const REVEAL_OFFSETS: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]
@@ -162,8 +166,11 @@ const GARDEN_SHARE: float = 0.4
 const HAY_OUT: float = 0.15
 ## Найдальше від точки макету, куди тюк перескакує на край поля.
 const HAY_SNAP: float = 2.0
-## Ширина стежки двору: ~1 м.
-const PATH_WIDTH: float = 0.13
+## Ширина стежки двору (~0.6 м) і під'їзної колії від воріт до дороги (~2 м); колія — не довша
+## за DRIVE_MAX клітинок.
+const PATH_WIDTH: float = 0.08
+const DRIVE_WIDTH: float = 0.26
+const DRIVE_MAX: float = 3.0
 ## Відступи сторони кільця паркану від межі двору, від бажаного (назовні) до найглибшого всередину;
 ## глибше −0.25 паркан зайшов би в квадрат юніта в центрі клітинки (KEEP_OUT).
 const RING_OFFSETS: Array[float] = [YARD_OUT, 0.15, 0.0, -0.12, -0.25]
@@ -196,7 +203,7 @@ const ROAD_PAD: float = 0.05
 const HOUSE_NEAR: int = 2
 ## Той самий шейдер будівлі без розчинення: discard у шейдері вимикає ранню перевірку глибини на
 ## мобільних GPU, тож будівлі моделі, над якою зараз ніхто не стоїть, малюються без нього.
-static var _solid_shader: Shader
+static var _alpha_shader_cache: Shader
 
 ## Модель -> {mesh, local, footprint, aabb, wires, tris}; спільний на процес, бо GLB кешуються.
 static var _models: Dictionary = {}
@@ -227,7 +234,7 @@ var _nodes: Dictionary = {}
 var _slots: Dictionary = {}
 ## Городи садиб з макету: {rect, dir — від хати, green — частка зеленого}.
 var _garden_plots: Array[Dictionary] = []
-## Стежки дворів: [від воріт, до дверей] у координатах дошки.
+## Стежки дворів і під'їзні колії: [від, до, ширина] у координатах дошки.
 var _paths: Array = []
 ## Видимі краї полів ріллі в координатах дошки (GroundSurface.field_edges): тюки — біля них.
 var field_edges: Array[Rect2] = []
@@ -246,6 +253,13 @@ var _drops: Array = []
 var _spans: Array = []
 var _wires: MeshInstance3D
 var _reveal: Dictionary = {}
+## Клітинки юнітів останнього set_reveal_cells: будівля розчиняється, лише коли на екрані закриває юніта.
+var _reveal_units: Array[Vector2i] = []
+## Вузол → MultiMesh напівпрозорих екземплярів тієї ж моделі.
+var _fade_nodes: Dictionary = {}
+## Екземпляр → рівень розчинення 0..1 (0 — суцільний) і куди він іде.
+var _fade_level: Dictionary = {}
+var _fade_target: Dictionary = {}
 var _crushed: Dictionary = {}
 var _board_size: Vector2i = Vector2i.ZERO
 ## Клітинки дошки з лісом: тут стоятимуть дерева, коли їхній вигляд буде готовий.
@@ -503,6 +517,9 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 		child.free()
 	_instances.clear()
 	_nodes.clear()
+	_fade_nodes.clear()
+	_fade_level.clear()
+	_fade_target.clear()
 	_slots.clear()
 	_node_model.clear()
 	_spans.clear()
@@ -539,6 +556,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 ## Новий набір замінює попередній.
 func set_reveal_cells(cells: Array[Vector2i]) -> void:
 	_reveal.clear()
+	_reveal_units = cells.duplicate()
 	for c in cells:
 		for o in REVEAL_OFFSETS:
 			_reveal[c + o] = true
@@ -678,6 +696,21 @@ func _build_nodes(haze: bool) -> void:
 		if fades:
 			_node_materials[key] = {"fade": _fade_material(m, info, haze, false), "solid": _fade_material(m, info, haze, true)}
 			mmi.material_override = _node_materials[key]["solid"]
+			# Напівпрозорі екземпляри — в окремому вузлі з альфа-матеріалом: прозорий прохід лише для
+			# них, решта лишається непрозорою. Схований, доки нема що розчиняти.
+			var fmm := MultiMesh.new()
+			fmm.transform_format = MultiMesh.TRANSFORM_3D
+			fmm.use_custom_data = true
+			fmm.mesh = mm.mesh
+			fmm.instance_count = mm.instance_count
+			var fmi := MultiMeshInstance3D.new()
+			fmi.name = String(mmi.name) + "_fade"
+			fmi.multimesh = fmm
+			fmi.cast_shadow = mmi.cast_shadow
+			fmi.material_override = _node_materials[key]["fade"]
+			fmi.visible = false
+			add_child(fmi)
+			_fade_nodes[key] = fmi
 		add_child(mmi)
 		_nodes[key] = mmi
 		_slots[key] = by_node[key]
@@ -804,10 +837,11 @@ func _build_paths() -> void:
 	for i in _paths.size():
 		var a: Vector2 = _paths[i][0]
 		var b: Vector2 = _paths[i][1]
+		var width: float = _paths[i][2]
 		var mid: Vector2 = (a + b) * 0.5
 		var d: Vector2 = b - a
 		var x := Vector3(d.x, TerrainHeight.ground_y(b.x, b.y) - TerrainHeight.ground_y(a.x, a.y), d.y)
-		var z: Vector3 = Vector3(-d.y, 0.0, d.x).normalized() * PATH_WIDTH
+		var z: Vector3 = Vector3(-d.y, 0.0, d.x).normalized() * width
 		# Права трійка: y = z × x; смуга лицем угору, тож якщо нормаль униз — ширина в інший бік.
 		if z.cross(x).y < 0.0:
 			z = -z
@@ -1032,7 +1066,7 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 		return _fade_materials[key]
 	var src := (info["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
 	var mat := ShaderMaterial.new()
-	mat.shader = _solid() if solid else _FADE_SHADER
+	mat.shader = _FADE_SHADER if solid else _alpha_shader()
 	if src != null:
 		# Усе, що є в матеріалі GLB: карта шорсткості з її каналом, метал, AO, сила нормалей і
 		# спекуляр; інакше атлас із фактурою в бою читається рівним пластиком.
@@ -1089,7 +1123,7 @@ static func _thin_solid() -> Shader:
 	if _thin_solid_shader == null:
 		_thin_solid_shader = Shader.new()
 		var code: String = _THIN_SHADER.code
-		var cut: String = "\tif (alpha_cut > 0.0 && tex.a < alpha_cut) {\n\t\tdiscard;\n\t}\n"
+		var cut: String = "\tif (alpha_cut > 0.0 && tex.a < cut) {\n\t\tdiscard;\n\t}\n"
 		assert(code.contains(cut), "PropLayer: відсікання в prop_thin.gdshader змінилось")
 		_thin_solid_shader.code = code.replace(cut, "")
 	return _thin_solid_shader
@@ -1100,14 +1134,14 @@ static func _channel(ch: int) -> Vector4:
 	return [Vector4(1, 0, 0, 0), Vector4(0, 1, 0, 0), Vector4(0, 0, 1, 0), Vector4(0, 0, 0, 1), Vector4(0.299, 0.587, 0.114, 0)][ch]
 
 
-static func _solid() -> Shader:
-	if _solid_shader == null:
-		_solid_shader = Shader.new()
+## Варіант prop_fade з FADE_ALPHA: альфа-змішування з проходом глибини.
+static func _alpha_shader() -> Shader:
+	if _alpha_shader_cache == null:
+		_alpha_shader_cache = Shader.new()
 		var code: String = _FADE_SHADER.code
-		var cut: String = "\tif (v_fade > bayer4(FRAGCOORD.xy)) {\n\t\tdiscard;\n\t}\n"
-		assert(code.contains(cut), "PropLayer: розчинення в prop_fade.gdshader змінилось")
-		_solid_shader.code = code.replace(cut, "")
-	return _solid_shader
+		assert(code.contains("shader_type spatial;"), "PropLayer: prop_fade.gdshader без shader_type")
+		_alpha_shader_cache.code = code.replace("shader_type spatial;", "shader_type spatial;\n#define FADE_ALPHA")
+	return _alpha_shader_cache
 
 
 ## Відтінок даху будинку (множник альбедо даху): сіро-синій бляшаний переважає, решта —
@@ -1131,8 +1165,18 @@ func _is_faded(inst: Dictionary) -> bool:
 	var kind: int = int(spec_of(inst["model"])["kind"])
 	if kind != Kind.STRUCTURE and kind != Kind.RUIN:
 		return false
-	for c: Vector2i in inst["cells"]:
-		if _reveal.has(c):
+	# Низьке (купа уламків, сарай по пояс юніту) юніта не ховає: розчиняти нема чого.
+	var h: float = ((model(inst["model"]) as Dictionary)["aabb"] as AABB).size.y * (inst["transform"] as Transform3D).basis.y.length()
+	if h < FADE_MIN_H:
+		return false
+	if not (inst["cells"] as Array).any(func(c: Vector2i) -> bool: return _reveal.has(c)):
+		return false
+	# Лише коли силует будівлі на екрані перекриває юніта (сусід збоку його не ховає).
+	var box: AABB = (inst["transform"] as Transform3D) * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
+	var scr: Rect2 = _Placer._screen_of(Rect2(box.position.x, box.position.z, box.size.x, box.size.z), box.size.y)[0]
+	for u in _reveal_units:
+		var us: Rect2 = _Placer._screen_of(Rect2(Vector2(u) - Vector2(0.3, 0.3), Vector2(0.6, 0.6)), 0.25)[0]
+		if scr.intersects(us):
 			return true
 	return false
 
@@ -1162,24 +1206,54 @@ func _final_transform(inst: Dictionary) -> Transform3D:
 
 func _apply() -> void:
 	_apply_queued = false
+	var moving := false
+	for key: StringName in _fade_nodes:
+		for i in _slots[key]:
+			_fade_target[i] = 1.0 if _is_faded(_instances[i]) else 0.0
+			moving = moving or not is_equal_approx(float(_fade_level.get(i, 0.0)), _fade_target[i])
+	_write_nodes()
+	set_process(moving)
+	_rebuild_wires()
+
+
+## Розчинення плавне: рівень іде до цілі за FADE_TIME (кадр показу, не правила).
+func _process(delta: float) -> void:
+	var moving := false
+	for i in _fade_target:
+		var lv: float = move_toward(float(_fade_level.get(i, 0.0)), _fade_target[i], delta / FADE_TIME)
+		_fade_level[i] = lv
+		moving = moving or not is_equal_approx(lv, _fade_target[i])
+	_write_nodes()
+	set_process(moving)
+
+
+## Екземпляри у вузлах: розчинюваний (рівень > 0) — у вузлі «_fade» з альфою 1 − рівень·(1 − FADE_ALPHA),
+## у суцільному прихований нульовим масштабом; решта — навпаки.
+func _write_nodes() -> void:
+	var hidden := Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO)
 	for key: StringName in _nodes:
 		var m: StringName = _node_model[key]
-		var mmi: MultiMeshInstance3D = _nodes[key]
-		var mm: MultiMesh = mmi.multimesh
+		var mm: MultiMesh = (_nodes[key] as MultiMeshInstance3D).multimesh
+		var fmi: MultiMeshInstance3D = _fade_nodes.get(key)
 		var slots: Array = _slots[key]
 		var local: Transform3D = (model(m) as Dictionary)["local"]
 		var any_faded := false
 		for k in slots.size():
 			var inst: Dictionary = _instances[slots[k]]
-			mm.set_instance_transform(k, _final_transform(inst) * local)
-			if mm.use_custom_data:
-				var faded: bool = _is_faded(inst)
-				any_faded = any_faded or faded
-				var tint: Color = _roof_tint(inst)
-				mm.set_instance_custom_data(k, Color(tint.r, tint.g, tint.b, FADE if faded else 0.0))
-		if _node_materials.has(key):
-			mmi.material_override = _node_materials[key]["fade" if any_faded else "solid"]
-	_rebuild_wires()
+			var t: Transform3D = _final_transform(inst) * local
+			if fmi == null:
+				mm.set_instance_transform(k, t)
+				continue
+			var lv: float = float(_fade_level.get(slots[k], 0.0))
+			var tint: Color = _roof_tint(inst)
+			var faded: bool = lv > 0.0
+			any_faded = any_faded or faded
+			mm.set_instance_transform(k, hidden if faded else t)
+			mm.set_instance_custom_data(k, Color(tint.r, tint.g, tint.b, 0.0))
+			fmi.multimesh.set_instance_transform(k, t if faded else hidden)
+			fmi.multimesh.set_instance_custom_data(k, Color(tint.r, tint.g, tint.b, lv * (1.0 - FADE_ALPHA)))
+		if fmi != null:
+			fmi.visible = any_faded
 
 
 ## Дроти — лінії в пікселях екрана, не геометрія: 1–3 см дроту менші за піксель (props-research).
@@ -1258,9 +1332,9 @@ class _Placer:
 	var gardens: Array[Vector2i] = []
 	## Городи садиб: {rect, dir — від хати, green — частка зеленого, home}.
 	var garden_plots: Array[Dictionary] = []
-	## Стежки від воріт до дверей: [[ворота, двері], …].
+	## Стежки й колії: [[від, до, ширина], …].
 	var paths: Array = []
-	## Садиба -> середина її воріт.
+	## Садиба -> [середина воріт, нормаль сторони воріт назовні].
 	var gates: Dictionary = {}
 	## Обриси дрібних речей дворів: наступна не стає на попередню.
 	var placed_small: Array[Rect2] = []
@@ -1901,8 +1975,26 @@ class _Placer:
 			var door: Vector2 = hr.get_center() + face * (absf(face.x) * hr.size.x + absf(face.y) * hr.size.y) * 0.5
 			var path: Array = []
 			if gates.has(i):
-				path = [gates[i], door]
-				paths.append(path)
+				var gate: Vector2 = gates[i][0]
+				var out: Vector2 = gates[i][1]
+				# Стежка від воріт до дверей — вузька смуга; ворота впритул до дверей — без неї.
+				if gate.distance_to(door) >= 0.25:
+					path = [gate, door, PATH_WIDTH]
+					paths.append(path)
+				# Під'їзна ґрунтова колія від воріт до найближчої точки дороги попереду воріт (не далі
+				# DRIVE_MAX): трохи прямо з воріт, далі до дороги — і на 0.1 в неї, щоб колія з нею зійшлась.
+				var best := Vector2.INF
+				var n: int = roundi(DRIVE_MAX / 0.1)
+				for gy in range(-n, n + 1):
+					for gx in range(-n, n + 1):
+						var q: Vector2 = gate + Vector2(gx, gy) * 0.1
+						if (q - gate).dot(out) > 0.15 and q.distance_to(gate) < best.distance_to(gate) and on_road(q, 0.0):
+							best = q
+				if best != Vector2.INF:
+					var step_out: Vector2 = gate + out * 0.2
+					var into: Vector2 = best + (best - step_out).normalized() * 0.1
+					paths.append([gate, step_out, DRIVE_WIDTH])
+					paths.append([step_out, into, DRIVE_WIDTH])
 			_dress_home(i, homes[i], path)
 
 	## 1–2 дрібні речі на двір із наявних моделей: колода для дров біля хати, на кожному другому дворі
@@ -2154,7 +2246,7 @@ class _Placer:
 				var at: float = clampf((Vector2(hc) - a).dot(dir), GATE_POST + GATE * 0.5, a.distance_to(b) - GATE_POST - GATE * 0.5)
 				_fence_straight(m, a, a + dir * (at - GATE * 0.5), lot)
 				_fence_straight(m, a + dir * (at + GATE * 0.5), b, lot)
-				gates[i] = a + dir * at
+				gates[i] = [a + dir * at, Vector2(sides[int(runs[j][2])]["d"])]
 			else:
 				_fence_straight(m, a, b, lot)
 		return sides

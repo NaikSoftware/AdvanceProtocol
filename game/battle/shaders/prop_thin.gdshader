@@ -23,8 +23,9 @@ const vec3 WET_TONE = vec3(1.0, 0.96, 0.9);
 const float DIRT_H = 0.06;
 const float DIRT = 0.6;
 const float WET_ROUGHNESS = 0.4;
-// 0.35 у sRGB — ~0.1 лінійно.
-const float VALUE_CAP = 0.1;
+// ~0.31 у sRGB (≈ 79 із 255) — ~0.08 лінійно: паркан трохи світліший за ґрунт, не біла лінія.
+const float VALUE_CAP = 0.08;
+const vec3 WEATHERED = vec3(1.05, 0.98, 0.86);
 
 varying float base_h;
 
@@ -37,14 +38,19 @@ void fragment() {
 	if (use_vertex_color) {
 		tex *= COLOR;
 	}
-	if (alpha_cut > 0.0 && tex.a < alpha_cut) {
+	// Здалеку міпмапи усереднюють альфу тонких штакетин нижче порогу, і бік кільця зникав: поріг
+	// знижується з рівнем міпмапи, щоб покриття лишалось.
+	float cut = alpha_cut * clamp(1.0 - 0.3 * textureQueryLod(albedo_tex, UV).y, 0.15, 1.0);
+	if (alpha_cut > 0.0 && tex.a < cut) {
 		discard;
 	}
 	vec3 albedo = tex.rgb;
-	// Яскравість не вища за ~0.35 (sRGB): світлі шапки стовпчиків і свіжа фарба на зумі 14 читались
+	// Яскравість не вища за VALUE_CAP: світлі шапки стовпчиків і свіжа фарба на зумі 14 читались
 	// білими лініями інтерфейсу; вивітрене дерево й оцинковка — не світліші.
 	float value = max(albedo.r, max(albedo.g, albedo.b));
 	albedo *= min(1.0, VALUE_CAP / max(value, 1e-4));
+	// Сіро-бурий вивітреного дерева: рожеві й бузкові відтінки фарби ассета на кадрі читались чужими.
+	albedo = mix(albedo, dot(albedo, vec3(0.2126, 0.7152, 0.0722)) * WEATHERED, 0.6);
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {
 		float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
