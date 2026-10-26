@@ -347,8 +347,8 @@ func test_fire_is_one_column_sized_from_the_hull() -> void:
 	assert_eq(particles[0], layer.ember_emitter(Vector2i(3, 3)))
 
 
-## Мирний дим мапи: 1–3 димарі й 1–2 руїни, вибрані за мапою (той самий вибір щоразу), тонкий
-## атлас і мала густота — ледь помітний шлейф, а не пожежа. Горить завжди: хати й руїни видимі
+## Мирний дим мапи: 1–3 димарі й 1–2 руїни, вибрані за мапою (той самий вибір щоразу); на кожне
+## джерело — один суцільний шлейф малої густоти, а не клуби, що виходили залпами. Горить завжди: хати й руїни видимі
 ## всім, і дим нічого не видає. Анімація не спиняється, поки він є.
 func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	var chimneys: Array[Vector3] = [Vector3(1, 1, 1), Vector3(2, 1, 1), Vector3(3, 1, 1), Vector3(4, 1, 1), Vector3(5, 1, 1)]
@@ -365,16 +365,17 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	layer.set_hearths(chimneys, ruins, 7)
 	assert_eq(layer.hearth_points(), first, "та сама мапа — той самий вибір")
 	var mm: MultiMesh = (layer.get_node("Hearths") as MultiMeshInstance3D).multimesh
-	assert_eq(mm.visible_instance_count, first.size() * WreckLayer.HEARTH_PUFFS)
-	# Дані екземплярів headless-рендер не зберігає: перевіряємо густоти, які шар у них записав
-	# (від'ємна — тонкий атлас, пікова альфа якого 0,35).
+	assert_eq(mm.visible_instance_count, first.size(), "один суцільний шлейф на джерело, а не низка клубів")
+	# Дані екземплярів headless-рендер не зберігає: перевіряємо густоти, які шар у них записав.
 	var dens: Array[float] = layer.hearth_densities()
 	assert_eq(dens.size(), first.size())
 	for i in dens.size():
 		assert_eq(dens[i], WreckLayer.hearth_density(first[i].y < 0.5))
-		assert_true(dens[i] < 0.0 and dens[i] >= -1.0, "тонкий атлас (пікова альфа 0,35), не пожежа")
+		assert_true(dens[i] > 0.0 and dens[i] <= 0.7, "ледь помітний шлейф, не пожежа")
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
-	assert_almost_eq(float(layer.hearth_material().get_shader_parameter("lighten")), WreckLayer.HEARTH_LIGHTEN, 1e-6)
+	var code: String = layer.hearth_material().shader.code
+	assert_true(code.contains("v_s = s;") and code.contains("fx_time * rise"), "густота пливе вгору з димом — без народжень клубів, без періоду")
+	assert_false(code.contains("sin("), "хеш без sin: час росте весь матч")
 	layer.set_wind(Vector3(0.25, 0, 0))
 	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")
 	layer.rebuild(state, 0)

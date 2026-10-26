@@ -31,22 +31,26 @@ const PLUME_LIFE_SEC: float = 9.0
 ## Розігріву досить кількох кадрів.
 const WARM_UP_SEC: float = 0.1
 
-## Мирний дим мапи: 1–3 димарі й 1–2 руїни, що тліють. Той самий стовп, що над уламками, але
-## тонкий атлас, рідкий і світліший: ледь помітний шлейф, а не пожежа. Хати й руїни — частина
-## мапи, видимі всім, тож цей дим нічого не видає і горить завжди.
-const HEARTH_PUFFS: int = 14
+## Мирний дим мапи: 1–3 димарі й 1–2 руїни. Не клуби (ті виходили залпами, наче кільця диму),
+## а один суцільний шлейф на джерело: вузька смуга до камери, що хилиться з вітром і повільно
+## звивається; густоту й рваний край дає шум, що пливе вгору зі швидкістю підйому диму, тож уздовж
+## шлейфу вона міняється плавно й без жодного періоду. Хати й руїни — частина мапи, видимі всім,
+## тож цей дим нічого не видає і горить завжди.
 const HEARTH_MAX: int = 5
-## Густота шлейфу (від'ємна — тонкий атлас, пікова альфа якого 0,35): ледь помітний, але на
-## телефоні читається — нижня третина світліша за тло на 12–18 рівнів.
-const CHIMNEY_DENSITY: float = 1.0
-const RUIN_DENSITY: float = 0.85
-## Стовп 14 м, від 0,6 м біля димаря до 6 м угорі; клуба живе 14 с — повільний шлейф.
+## Густота шлейфу (0–1): ледь помітний, але на телефоні читається — нижня третина світліша за тло
+## на 12–18 рівнів. Руїна тліє густіше й нижче, ширшою смугою.
+const CHIMNEY_DENSITY: float = 0.36
+const RUIN_DENSITY: float = 0.45
+## Димар: 14 м заввишки, від 0,8 м біля труби до клітинки вгорі; руїна — 0,75 висоти, вдвічі ширша внизу.
 const HEARTH_HEIGHT: float = 14.0 / 8.0
-const HEARTH_BASE_W: float = 0.6 / 8.0
-const HEARTH_TOP_W: float = 6.0 / 8.0
-const HEARTH_LIFE_SEC: float = 14.0
-## Деревний дим світліший за мазутний дим уламків і трохи холодніший, сіро-блакитний.
-const HEARTH_LIGHTEN: float = 0.7
+const HEARTH_BASE_W: float = 0.8 / 8.0
+const HEARTH_TOP_W: float = 1.0
+const RUIN_HEIGHT_SCALE: float = 0.75
+const RUIN_BASE_SCALE: float = 2.0
+## Дим здіймається 0,8 м/с: з цією швидкістю пливе вгору шум густоти.
+const HEARTH_RISE: float = 0.8 / 8.0
+## Вертикальних сегментів смуги: шлейф гнеться плавно.
+const HEARTH_SEGMENTS: int = 24
 
 ## Запечені флипбуки 8×8 (assets/vfx/SOURCES.md). Дим грає раз і закінчується порожнім:
 ## стовп — це клуби, що стартують уступами, кожна від кадру 0 біля корпусу до порожнього
@@ -180,18 +184,16 @@ func _init() -> void:
 	_shadows = _multimesh("ColumnShadows", _shadow_mat, MAX_COLUMNS)
 	_fires = _multimesh("Fires", _fire_mat, MAX_COLUMNS * FLAMES_PER_SPOT)
 	_hearth_mat = ShaderMaterial.new()
-	_hearth_mat.shader = column_shader()
-	_hearth_mat.set_shader_parameter("puff_tex", SMOKE_TEX)
-	_hearth_mat.set_shader_parameter("thin_tex", SMOKE_THIN_TEX)
-	_hearth_mat.set_shader_parameter("grid", float(FLIPBOOK_GRID))
+	_hearth_mat.shader = _plume_shader()
 	_hearth_mat.set_shader_parameter("height", HEARTH_HEIGHT)
-	_hearth_mat.set_shader_parameter("base_w", HEARTH_BASE_W * SMOKE_CELL_PER_CLOUD)
-	_hearth_mat.set_shader_parameter("top_w", HEARTH_TOP_W * SMOKE_CELL_PER_CLOUD)
-	_hearth_mat.set_shader_parameter("rise", 1.0 / HEARTH_LIFE_SEC)
-	_hearth_mat.set_shader_parameter("grow", COLUMN_GROW)
-	_hearth_mat.set_shader_parameter("lighten", HEARTH_LIGHTEN)
-	_hearth_mat.set_shader_parameter("min_frame", 8.0)
-	_hearths = _multimesh("Hearths", _hearth_mat, HEARTH_MAX * HEARTH_PUFFS)
+	_hearth_mat.set_shader_parameter("base_w", HEARTH_BASE_W)
+	_hearth_mat.set_shader_parameter("top_w", HEARTH_TOP_W)
+	_hearth_mat.set_shader_parameter("rise", HEARTH_RISE)
+	_hearths = _multimesh("Hearths", _hearth_mat, HEARTH_MAX)
+	var strip := QuadMesh.new()
+	strip.size = Vector2.ONE
+	strip.subdivide_depth = HEARTH_SEGMENTS
+	_hearths.multimesh.mesh = strip
 	for i in MAX_FIRE_LIGHTS:
 		var l := OmniLight3D.new()
 		l.name = "FireLight%d" % i
@@ -321,27 +323,31 @@ func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int) -> 
 	for p: Vector3 in _pick(chimneys, 1 + absi(seed) % 3, seed):
 		_hearth_points.append(p)
 		_hearth_densities.append(hearth_density(false))
+	var ruin_count: int = 0
 	for p: Vector3 in _pick(ruins, 1 + (absi(seed) / 3) % 2, seed):
 		_hearth_points.append(p)
 		_hearth_densities.append(hearth_density(true))
-	_hearth_points.resize(mini(_hearth_points.size(), HEARTH_MAX))
-	_hearth_densities.resize(_hearth_points.size())
+		ruin_count += 1
+	# Руїни — в кінці списку: обрізаємо димарі, щоб тління лишилось.
+	while _hearth_points.size() > HEARTH_MAX:
+		_hearth_points.remove_at(0)
+		_hearth_densities.remove_at(0)
+	ruin_count = mini(ruin_count, _hearth_points.size())
 	var mm: MultiMesh = _hearths.multimesh
 	for h in _hearth_points.size():
-		var at: Vector3 = _hearth_points[h]
-		var sd: float = float(hash(at) % 997) / 997.0
-		for k in HEARTH_PUFFS:
-			var n: int = h * HEARTH_PUFFS + k
-			mm.set_instance_transform(n, Transform3D(Basis(), at))
-			mm.set_instance_custom_data(n, Color(float(k) / float(HEARTH_PUFFS), fposmod(sd + 0.618 * k, 1.0), _hearth_densities[h], LONG_AGO))
-	mm.visible_instance_count = _hearth_points.size() * HEARTH_PUFFS
+		var ruin: bool = h >= _hearth_points.size() - ruin_count
+		# INSTANCE_CUSTOM: x — густота, y — зсув шуму (свій шлейф у кожного джерела), z — частка
+		# висоти, w — частка ширини біля джерела.
+		mm.set_instance_transform(h, Transform3D(Basis(), _hearth_points[h]))
+		mm.set_instance_custom_data(h, Color(_hearth_densities[h], float(hash(_hearth_points[h]) % 997) / 997.0,
+				RUIN_HEIGHT_SCALE if ruin else 1.0, RUIN_BASE_SCALE if ruin else 1.0))
+	mm.visible_instance_count = _hearth_points.size()
 	_refresh_effects()
 
 
-## Густота шлейфу для шейдера стовпа: від'ємна — тонкий атлас (пікова альфа 0,35), за модулем —
-## густота стадії; руїна тліє трохи густіше за димар.
+## Густота шлейфу для шейдера (0–1): руїна тліє трохи густіше за димар.
 static func hearth_density(ruin: bool) -> float:
-	return -(RUIN_DENSITY if ruin else CHIMNEY_DENSITY)
+	return RUIN_DENSITY if ruin else CHIMNEY_DENSITY
 
 
 ## `count` точок із `pts`, перемішаних за `seed`.
@@ -396,7 +402,7 @@ func _end_warm_up() -> void:
 	_warm.free()
 	_warm = null
 	# Розігрів позичав екземпляр 0 і в мирного диму: на мапі без димарів він лишився б.
-	_hearths.multimesh.visible_instance_count = _hearth_points.size() * HEARTH_PUFFS
+	_hearths.multimesh.visible_instance_count = _hearth_points.size()
 	_refresh_effects()
 
 
@@ -744,6 +750,16 @@ static func column_shader() -> Shader:
 	return _column_shader
 
 
+static var _plume_sh: Shader
+
+
+static func _plume_shader() -> Shader:
+	if _plume_sh == null:
+		_plume_sh = Shader.new()
+		_plume_sh.code = _PLUME_CODE
+	return _plume_sh
+
+
 static var _shadow_sh: Shader
 
 
@@ -805,6 +821,93 @@ void fragment() {
 }
 """
 
+## Суцільний шлейф мирного диму: смуга до камери (поворот лише довкола вертикалі), висота й
+## нахил вітру — як у стовпа уламків. Звивання й густота — шум у координаті «частинки диму»
+## s = h − t·rise: візерунок пливе вгору разом із димом і ніде не повторюється. Хеш без sin:
+## fx_time росте весь матч.
+const _PLUME_CODE: String = """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled, skip_vertex_transform;
+
+uniform float fx_time = 0.0;
+uniform float height = 1.75;
+uniform float base_w = 0.1;
+uniform float top_w = 1.0;
+uniform float rise = 0.1;
+uniform vec3 lean = vec3(0.0);
+global uniform vec3 sun_dir;
+global uniform float sky_clear;
+uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
+
+varying float v_h01;
+varying float v_s;
+varying float v_w;
+varying float v_sd;
+varying float v_dens;
+varying vec2 v_sun;
+
+float hash(vec2 p) {
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+float vn(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float fbm(vec2 p) {
+	float a = vn(p);
+	p = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * 2.03 + 11.0;
+	a += 0.5 * vn(p);
+	p = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * p * 2.01 + 23.0;
+	a += 0.25 * vn(p);
+	return a / 1.75;
+}
+
+void vertex() {
+	// INSTANCE_CUSTOM: x — густота, y — зсув шуму, z — частка висоти, w — частка ширини внизу.
+	float H = height * INSTANCE_CUSTOM.z;
+	float h01 = VERTEX.y + 0.5;
+	float h = h01 * H;
+	float sd = INSTANCE_CUSTOM.y * 97.0;
+	float s = h - fx_time * rise;
+	vec3 root = MODEL_MATRIX[3].xyz;
+	vec3 right = normalize(vec3(INV_VIEW_MATRIX[0].x, 0.0, INV_VIEW_MATRIX[0].z));
+	vec3 side = vec3(-right.z, 0.0, right.x);
+	// Звивання росте з висотою й пливе вгору з димом: повільний шум у координаті частинки.
+	vec3 wander = (right * (vn(vec2(s * 1.2 + sd, 3.1)) - 0.5) + side * (vn(vec2(s * 0.9 + sd, 7.7)) - 0.5)) * 0.9 * H * h01 * h01;
+	float w = mix(base_w * INSTANCE_CUSTOM.w, top_w, pow(h01, 0.85));
+	vec3 world = root + vec3(0.0, h, 0.0) + lean * h + wander + right * VERTEX.x * w;
+	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
+	v_h01 = h01;
+	v_s = s;
+	v_w = w;
+	v_sd = sd;
+	v_dens = INSTANCE_CUSTOM.x;
+	v_sun = normalize(vec2(dot(sun_dir, INV_VIEW_MATRIX[0].xyz), -dot(sun_dir, INV_VIEW_MATRIX[1].xyz)) + 1e-4);
+}
+
+void fragment() {
+	float x = UV.x * 2.0 - 1.0;
+	// Шум у метрах поперек і вздовж частинки диму: біля труби дрібний, угорі крупніший.
+	vec2 q = vec2(x * v_w, v_s) * 8.0 / mix(1.5, 4.0, v_h01) + v_sd;
+	float n = fbm(q);
+	float n2 = fbm(q * 2.3 + 5.0);
+	float profile = 1.0 - smoothstep(0.25, 1.0, abs(x) + (n - 0.5) * 0.7);
+	float dens = profile * (0.45 + 0.55 * n2);
+	float fade = smoothstep(0.0, 0.03, v_h01) * (1.0 - smoothstep(0.35, 1.0, v_h01));
+	float lit = clamp(dot(vec2(x, 0.0), v_sun), 0.0, 1.0);
+	ALBEDO = vec3(0.29, 0.31, 0.35) * (0.8 + 0.4 * n2) * (1.0 + 0.3 * sky_clear * lit);
+	ALPHA = clamp(dens * fade * v_dens, 0.0, 1.0);
+	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, край біля даху там буде жорсткішим.
+	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
+	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / (0.5 / 8.0), 0.0, 1.0);
+}
+"""
+
+
 const _COLUMN_CODE: String = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
@@ -823,11 +926,6 @@ uniform vec3 lean = vec3(0.0);
 uniform float rise = 0.0625;
 // Ріст свіжого стовпа, одиниць світу за секунду від народження (INSTANCE_CUSTOM.w).
 uniform float grow = 0.75;
-// Мирний дим (димарі, руїни): світліший за мазутний дим уламків.
-uniform float lighten = 0.0;
-// Перший кадр атласу біля джерела: тонкий атлас на ранніх кадрах майже порожній, і шлейф
-// мирного диму відривався від димаря.
-uniform float min_frame = 2.0;
 // Сонце (WeatherRig): освітлений бік клуби світліший на ясних мапах; у похмурі — нічого.
 global uniform vec3 sun_dir;
 global uniform float sky_clear;
@@ -875,7 +973,7 @@ void vertex() {
 	// Кадр — від шляху клуби: атлас росте й розсіюється разом із нею.
 	// Перші кадри атласу майже порожні (клуба ще не з'явилася): біля вогню тримаємо кадр 2,
 	// інакше між полум'ям і стовпом видно проміжок.
-	v_frame = max(t * (grid * grid - 1.0), min_frame);
+	v_frame = max(t * (grid * grid - 1.0), 2.0);
 	v_thin = INSTANCE_CUSTOM.z < 0.0 ? 1.0 : 0.0;
 	v_sd = sd;
 	v_sun = normalize(vec2(dot(sun_dir, right), -dot(sun_dir, up)) + 1e-4);
@@ -900,7 +998,7 @@ void fragment() {
 	}
 	vec4 tex = mix(a0, a1, fract(v_frame));
 	float lit = clamp(dot(normalize(uv - 0.5 + 1e-4), v_sun), 0.0, 1.0) * smoothstep(0.05, 0.35, length(uv - 0.5));
-	ALBEDO = mix(tex.rgb, vec3(0.29, 0.31, 0.35) * (0.7 + 0.6 * dot(tex.rgb, vec3(0.333)) / 0.25), lighten) * v_dark * (1.0 + 0.45 * sky_clear * lit);
+	ALBEDO = tex.rgb * v_dark * (1.0 + 0.45 * sky_clear * lit);
 	ALPHA = tex.a * v_alpha;
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
