@@ -48,6 +48,12 @@ void vertex() {
 	NORMAL = normalize((MODELVIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
+// Рівень міпмапи з похідних UV: textureQueryLod не компілюється в gl_compatibility.
+float mip_level(sampler2D t, vec2 uv) {
+	vec2 d = uv * vec2(textureSize(t, 0));
+	return max(0.5 * log2(max(max(dot(dFdx(d), dFdx(d)), dot(dFdy(d), dFdy(d))), 1e-8)), 0.0);
+}
+
 void fragment() {
 	// Зміщення mip на −0,5: ближні крони на мінімальному зумі інакше розмиті.
 	vec4 t = texture(albedo_tex, UV, -0.5);
@@ -56,7 +62,7 @@ void fragment() {
 	// На далеких mip-рівнях тонкі гілки усереднюються з прозорим тлом і тануть під порогом:
 	// голе дерево здаля лишилось би самим стовбуром. Тож поріг знижується з рівнем mip —
 	// але не в тіні: там низькі mip зливали голу крону в суцільну пляму тіні.
-	float lod = textureQueryLod(albedo_tex, UV).x;
+	float lod = mip_level(albedo_tex, UV);
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 1.0) / 3.0, 0.0, 1.0));
 	if (t.a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
 		discard;

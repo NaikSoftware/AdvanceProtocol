@@ -34,6 +34,12 @@ void vertex() {
 	base_h = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y - MODEL_MATRIX[3].y;
 }
 
+// Рівень міпмапи з похідних UV: textureQueryLod не компілюється в gl_compatibility.
+float mip_level(sampler2D t, vec2 uv) {
+	vec2 d = uv * vec2(textureSize(t, 0));
+	return max(0.5 * log2(max(max(dot(dFdx(d), dFdx(d)), dot(dFdy(d), dFdy(d))), 1e-8)), 0.0);
+}
+
 void fragment() {
 	vec4 tex = texture(albedo_tex, UV) * albedo_color;
 	if (use_vertex_color) {
@@ -41,7 +47,7 @@ void fragment() {
 	}
 	// Здалеку міпмапи усереднюють альфу тонких штакетин нижче порогу, і бік кільця зникав: поріг
 	// знижується з рівнем міпмапи, щоб покриття лишалось.
-	float cut = alpha_cut * clamp(1.0 - 0.3 * textureQueryLod(albedo_tex, UV).y, 0.15, 1.0);
+	float cut = alpha_cut * clamp(1.0 - 0.3 * mip_level(albedo_tex, UV), 0.15, 1.0);
 	if (alpha_cut > 0.0 && tex.a < cut) {
 		discard;
 	}
