@@ -253,6 +253,8 @@ var _nodes: Dictionary = {}
 var _slots: Dictionary = {}
 ## Городи садиб з макету: {rect, dir — від хати, green — частка зеленого}.
 var _garden_plots: Array[Dictionary] = []
+## Перетворення плиток грядок (одинична площина): без рендера MultiMesh їх не повертає.
+var _garden_xforms: Array[Transform3D] = []
 ## Стежки дворів і під'їзні колії: [від, до, ширина] у координатах дошки.
 var _paths: Array = []
 ## Видимі краї полів ріллі в координатах дошки (GroundSurface.field_edges): тюки — біля них.
@@ -561,6 +563,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_garden_node = null
 	_gardens.clear()
 	_garden_plots.clear()
+	_garden_xforms.clear()
 	_paths.clear()
 	_placer = null
 	_node_materials.clear()
@@ -659,6 +662,10 @@ func instances_on(cell: Vector2i) -> Array[Dictionary]:
 			out.append({"model": inst["model"], "transform": _final_transform(inst),
 					"faded": _is_faded(inst), "crushed": _is_crushed(inst), "yard": inst.get("yard", false)})
 	return out
+
+
+func garden_beds() -> Array[Transform3D]:
+	return _garden_xforms
 
 
 func all_instances() -> Array[Dictionary]:
@@ -815,8 +822,9 @@ func _build_gardens() -> void:
 		var hz: float = TerrainHeight.ground_y(centre.x, centre.y + 0.3) - TerrainHeight.ground_y(centre.x, centre.y - 0.3)
 		var up := Vector3(-hx / 0.6, 1.0, -hz / 0.6).normalized()
 		var right: Vector3 = Vector3(cos(yaw), 0.0, -sin(yaw)).slide(up).normalized()
-		mm.set_instance_transform(i, Transform3D(Basis(right * len_a, up, right.cross(up) * len_b),
+		_garden_xforms.append(Transform3D(Basis(right * len_a, up, right.cross(up) * len_b),
 				Vector3(centre.x, TerrainHeight.ground_y(centre.x, centre.y) + 0.006, centre.y)))
+		mm.set_instance_transform(i, _garden_xforms[i])
 		# r — скільки рядів на ділянці (ряд ~0.9 м), g — зсув візерунка краю.
 		mm.set_instance_custom_data(i, Color(len_a * 8.0 / 0.9, float(hv % 97) / 97.0, 0.0, 0.0))
 	_garden_node = MultiMeshInstance3D.new()
@@ -854,8 +862,9 @@ func _build_garden_plots() -> void:
 		var hz: float = TerrainHeight.ground_y(centre.x, centre.y + 0.3) - TerrainHeight.ground_y(centre.x, centre.y - 0.3)
 		var up := Vector3(-hx / 0.6, 1.0, -hz / 0.6).normalized()
 		var right: Vector3 = Vector3(cos(yaw), 0.0, -sin(yaw)).slide(up).normalized()
-		mm.set_instance_transform(i, Transform3D(Basis(right * along, up, right.cross(up) * across),
+		_garden_xforms.append(Transform3D(Basis(right * along, up, right.cross(up) * across),
 				Vector3(centre.x, TerrainHeight.ground_y(centre.x, centre.y) + 0.004, centre.y)))
+		mm.set_instance_transform(i, _garden_xforms[i])
 		# r — рядів (крок ~0.7 м, клітинка 8 м), g — зерно краю, b — частка зеленого.
 		mm.set_instance_custom_data(i, Color(along * 8.0 / 0.7, float(hv % 97) / 97.0, float(gp["green"]), 0.0))
 	_garden_node = MultiMeshInstance3D.new()
@@ -2075,6 +2084,9 @@ class _Placer:
 				# Частка зеленого: картопля чи капуста на частині городу, решта — голий ґрунт.
 				garden_plots.append({"rect": Rect2(centre - size * 0.5, size), "dir": away,
 						"green": [0.0, 0.4, 0.65][h(hc, 151) % 3], "home": i})
+				# Город — рівна ділянка, як і майданчик хати: плоска плитка грядок на перегині рельєфу
+				# (спад майданчика) різалася б ґрунтом на клапті. Запас покриває поворот плитки (≤ 3°).
+				pad(Rect2(centre - size * 0.5, size).grow(0.03))
 			for c: Vector2i in home["cells"]:
 				if not built.has(c):
 					built[c] = Vector2i.ZERO
