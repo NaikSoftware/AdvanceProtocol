@@ -5,8 +5,8 @@ extends RefCounted
 ## меш; Compatibility не має їх зовсім. Не квади над землею: ті мерехтять на схилах і
 ## коштують виклик малювання кожен.
 ##
-## Канали: R — випалене (пляма під уламками), G — чаша вирви, B — вал викиду довкола неї,
-## A — попіл. Ставиться на CPU,
+## Канали: R — випалене (пляма під уламками), A — попіл; G і B вільні. Єдиний слід бою на
+## ґрунті — пляма під підбитою технікою: стріляють лише по юнітах, вирв нема. Ставиться на CPU,
 ## коли подія вже зіграна; додавання — максимумом, тож пляма, поставлена двічі, не
 ## темнішає.
 ##
@@ -76,47 +76,6 @@ func stamp_scorch(cell: Vector2i) -> void:
 		return
 	_stamped[cell] = true
 	_stamp(cell, SCORCH_RADIUS_M, SCORCH_CORE_M)
-
-
-## Вирва від снаряда чи гармати по ґрунту: чаша `radius_m` метрів із нерівним м'яким краєм
-## (G — глибина, шейдер фарбує її обпаленим буро-сірим і нахиляє нормаль) і світліший вал
-## викинутого ґрунту, на ~15 % ширший за чашу (B). Не чорнильна пляма: R лишається плямі уламків.
-## Кілька влучань у той самий тайл додаються максимумом — не поглиблюються без кінця. Штамп
-## обрізано межами власної клітинки: вал не заходить на сусідню.
-func stamp_crater(cell: Vector2i, radius_m: float) -> void:
-	var noise := FastNoiseLite.new()
-	noise.seed = hash(cell) + 7
-	noise.frequency = 1.0
-	var fine := FastNoiseLite.new()
-	fine.seed = hash(cell) + 8
-	fine.frequency = 0.3
-	var r_px: float = radius_m * 4.0
-	var outer: float = r_px * 1.7
-	var c := Vector2(cell.x * PX_PER_TILE + PX_PER_TILE / 2, cell.y * PX_PER_TILE + PX_PER_TILE / 2)
-	var ri: int = int(outer) + 1
-	for dy in range(-ri, ri + 1):
-		for dx in range(-ri, ri + 1):
-			var p := Vector2i(int(c.x) + dx, int(c.y) + dy)
-			if p.x < 0 or p.y < 0 or p.x / PX_PER_TILE != cell.x or p.y / PX_PER_TILE != cell.y or p.x >= _img.get_width() or p.y >= _img.get_height():
-				continue
-			var dist: float = Vector2(dx, dy).length()
-			if dist >= outer:
-				continue
-			var ang: float = atan2(float(dy), float(dx))
-			var f: float = 0.5 + 0.5 * fine.get_noise_2d(float(p.x), float(p.y))
-			# Нерівний край: радіус гуляє ±15 % по куту, дрібний шум ще ±8 %.
-			var lobes: float = noise.get_noise_2d(cos(ang) * 1.5, sin(ang) * 1.5)
-			# Чаша — гладкий профіль за кутовими пелюстками, без дрібного шуму: той давав у ній
-			# радіальні штрихи. Дрібний шум — лише на валу (грудки).
-			var d: float = dist / (r_px * (1.0 + 0.15 * lobes))
-			var bowl: float = clampf(1.0 - d * d, 0.0, 1.0)
-			bowl = bowl * smoothstep(1.0, 0.8, d)
-			# Вал — піднятий горб уздовж краю, на ~15 % ширший за чашу, грудками (шум).
-			var rim: float = exp(-pow((d - 1.02) / 0.12, 2.0)) * (0.6 + 0.4 * f)
-			rim *= 1.0 - smoothstep(1.15, 1.3, d)
-			var old: Color = _img.get_pixelv(p)
-			_img.set_pixelv(p, Color(old.r, maxf(old.g, bowl), maxf(old.b, rim), old.a))
-	_tex.update(_img)
 
 
 func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:

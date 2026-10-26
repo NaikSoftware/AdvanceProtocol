@@ -54,32 +54,6 @@ func test_apply_hands_both_textures_to_the_ground_material() -> void:
 	assert_eq(mat.get_shader_parameter("scar_size"), Vector2(8, 6))
 
 
-
-## Вирва — чаша (G) радіусом `radius_m` з нерівним краєм і вал викиду (B) довкола до 1,7
-## радіуса; чорної плями (R) вона не лишає — та для уламків.
-func test_crater_is_a_bowl_with_an_ejecta_rim() -> void:
-	scars.stamp_crater(Vector2i(4, 4), 2.5)
-	var c := Vector2i(4 * 32 + 16, 4 * 32 + 16)
-	var img: Image = scars.image()
-	assert_eq(img.get_pixelv(c).g8, 255, "дно чаші")
-	assert_eq(img.get_pixelv(c).r8, 0, "не чорнильна пляма")
-	assert_gt(img.get_pixelv(c + Vector2i(5, 0)).g8, img.get_pixelv(c + Vector2i(8, 0)).g8, "чаша мілішає до краю")
-	var rim: int = 0
-	for d: Vector2i in [Vector2i(11, 0), Vector2i(-11, 0), Vector2i(0, 11), Vector2i(0, -11)]:
-		rim = maxi(rim, img.get_pixelv(c + d).b8)
-	assert_gt(rim, 60, "вал довкола краю")
-	assert_eq(img.get_pixelv(c + Vector2i(18, 0)).b8, 0, "за 1,7 радіуса чисто")
-	assert_eq(img.get_pixelv(c + Vector2i(18, 0)).g8, 0)
-
-
-## Вал не заходить на сусідню клітинку: штамп обрізано межами власної.
-func test_crater_stays_inside_its_cell() -> void:
-	# 3,5 м: вал (до 1,3 радіуса ≈ 4,6 м) виходив би за межу клітинки (4 м від центру).
-	scars.stamp_crater(Vector2i(4, 4), 3.5)
-	var any_rim_at_edge: bool = false
-	for y in range(4 * 32, 5 * 32):
-		any_rim_at_edge = any_rim_at_edge or scars.image().get_pixel(5 * 32 - 1, y).b8 > 0
-	assert_true(any_rim_at_edge, "передумова: вал доходить до краю клітинки")
-	for y in range(4 * 32, 5 * 32):
-		assert_eq(scars.image().get_pixel(5 * 32, y).b8, 0)
-		assert_eq(scars.image().get_pixel(4 * 32 - 1, y).b8, 0)
+## Вирв нема: єдиний шрам бою на ґрунті — пляма під уламками (R).
+func test_scar_map_has_no_craters() -> void:
+	assert_false(scars.has_method("stamp_crater"))

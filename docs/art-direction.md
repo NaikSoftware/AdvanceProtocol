@@ -81,8 +81,9 @@ Techniques that buy atmosphere cheaply here:
   Wave size on open water follows the map's weather: River's rain and wind give the full ripple,
   the calm sunny maps a fraction of it.
 - Post-processing: a colour-grade LUT, light vignette, minimal grain. **No SSAO, no SSR.**
-- **Persistent battle scars.** Wrecks block for a few turns, then their burnt scorch stays. Smoke columns linger for several turns. Craters and
-  mud ruts accumulate. This is the cheapest atmosphere in the game and it doubles as information:
+- **Persistent battle scars.** Wrecks block for a few turns, then their burnt scorch stays. Smoke columns linger for several turns. Mud ruts
+  accumulate. There are no craters: units are the only targets, and the one battle mark on the
+  ground is the scorch under a destroyed vehicle. This is the cheapest atmosphere in the game and it doubles as information:
   the map should tell you where the fighting has been.
 
 Turn-based means the screen is usually static — enable low-processor mode and drop the frame rate
@@ -115,7 +116,7 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
 - **Whatever hides a visible unit turns semi-transparent** — crowns, roofs and walls between the
   camera and a unit the current player can see fade smoothly to about 30–40 % opacity with alpha
   blending. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
-- **Scars respect the fog:** crushed props, wrecks and craters show only where the viewer's
+- **Scars respect the fog:** crushed props, wrecks and their scorch show only where the viewer's
   `seen` covers the tile, or they report enemy movement.
 - Briefs, sizes and routes per prop (Blender, Tripo or CC0): [`art/props-research.md`](art/props-research.md).
 
@@ -140,7 +141,7 @@ does its job:
 | depth | soft particles (depth fade), dissolve by a noise mask | the quad stops cutting the ground on a hard line, and dies by burning away rather than by alpha |
 | the flash | an `OmniLight3D` for 3–5 frames plus emissive on the particle | the only part that actually hits the eye |
 | heat haze | screen-texture refraction on one quad | cheap, and it is what reads as expensive |
-| the scar | a stamp into the ground's scar map (crater, scorching) plus debris meshes | statics, not particles — see §8 |
+| the scar | a stamp into the ground's scar map (scorch under a wreck) plus debris meshes | statics, not particles — see §8 |
 
 The thing that is not obvious: **good fire is not simulated at runtime, it is simulated offline and
 baked into a flipbook.** EmberGen or Blender's Mantaflow run the real fluid sim, render 64 frames
@@ -181,13 +182,12 @@ What our own constraints add on top:
 - **Peaceful smoke:** 1–3 chimneys and 1–2 ruins per map breathe a barely visible, continuous plume —
   the wreck column's technique with the thin atlas at a third of its density, lighter grey, 14 m
   tall, leaning with the same wind. Houses and ruins are public map props, so it is always on.
-- **A crater is burnt soil, not ink:** a brown-grey bowl (about half the brightness of the grass)
-  with a ragged edge, a lighter ejecta rim and a normal that follows the bowl. Debris chunks are
-  irregular, 0.2–0.7 m, fly their whole arc, land and settle.
+- **No crater after a burst:** the cloud, dust and clods play out and leave nothing on the ground.
+  Debris chunks are irregular, 0.2–0.7 m, fly their whole arc, land and settle.
 - Every moment is `one_shot` and frees itself with `queue_free` once its smoke is gone (≤ 6.5 s).
   Setting `emitting = false` is not enough; the particles stay in frame. A handover clears all of
   them: smoke over ground the next player never scouted would show where the target stood.
-- Craters, scorching and crushed-prop debris are stamped into a **scar map**, one texture over the board that the ground shader reads. Not `Decal` nodes: the Mobile renderer applies at most 8 decals per mesh and the Compatibility renderer none, and the ground is one mesh. Not quads over the ground: they z-fight on slopes and cost a draw call each.
+- Scorch under wrecks and crushed-prop debris are stamped into a **scar map**, one texture over the board that the ground shader reads. Not `Decal` nodes: the Mobile renderer applies at most 8 decals per mesh and the Compatibility renderer none, and the ground is one mesh. Not quads over the ground: they z-fight on slopes and cost a draw call each.
 
 Off the table on mobile Vulkan: volumetric smoke, raymarching, GPU particle collision against the
 SDF, and more than one effect sampling `screen_texture` at a time.
