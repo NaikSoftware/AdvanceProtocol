@@ -158,8 +158,32 @@ What our own constraints add on top:
   ribbon) with a shader — scrolling noise on the UV plus a vertex wobble. Otherwise five wrecks are
   five systems simulating forever, and the frame rate never drops between turns — and dropping it
   is the battery budget above.
-- The explosion itself is `one_shot`, lives ~1.5 s, then `queue_free`. Setting `emitting = false`
-  is not enough; the particles stay in frame.
+- **An explosion is sharp, its smoke is slow.** The cloud reaches full volume in 0.1–0.2 s; then
+  the flipbook crawls, the cloud rises with deceleration (1.5–2 m/s at the start), widens and
+  drifts downwind, and thins evenly to zero in 3–6 s (a tank-gun hit puff 3.5 s, a 155 mm burst or
+  a kill 6 s). The cloud keeps its shape for the first third of its life, then dissolves by a
+  noise threshold from 35 % of its life, linearly — thin edges first, the dense core last — never
+  with the last flipbook frame; the rise slows but does not stop. A cloud widens around its middle,
+  not upwards from the blast point, and the rise baked into the dirt flipbook is cancelled: a
+  155 mm cloud centre rises 1.5–3 m in 3 s. The player waits only for
+  the flash (0.3 s), not the smoke.
+- **Smoke never buries a neighbour.** Over the screen footprint of a visible unit other than the
+  target, the main smoke layer is capped at 0.35 and a second layer over it at 0.15 from 0.3 s, so
+  the unit keeps a 0.35–0.45 smoke tint rather than showing through a hole; the cap's edge is
+  feathered over a quarter of a tile.
+- **Hot cores, not white stickers.** A flash core is white-yellow in the middle with an orange edge,
+  alpha-blended, for two frames; sparks cool along the blackbody ramp (white → yellow → orange →
+  dull red) and arc under gravity; a gun firing leaves grey-beige powder smoke along the barrel and a
+  low, ragged dust sheet 1–1.5 tiles wide on the ground under and in front of the hull. A muzzle
+  core is yellow-orange for three frames (~50 ms). Ground dust is one soft radial layer 0.3 m above
+  the ground with a noise-eaten edge, fading softly where the relief meets it — never per-cell
+  alpha or a regular grid.
+- **A crater is burnt soil, not ink:** a brown-grey bowl (about half the brightness of the grass)
+  with a ragged edge, a lighter ejecta rim and a normal that follows the bowl. Debris chunks are
+  irregular, 0.2–0.7 m, fly their whole arc, land and settle.
+- Every moment is `one_shot` and frees itself with `queue_free` once its smoke is gone (≤ 6.5 s).
+  Setting `emitting = false` is not enough; the particles stay in frame. A handover clears all of
+  them: smoke over ground the next player never scouted would show where the target stood.
 - Craters, scorching and crushed-prop debris are stamped into a **scar map**, one texture over the board that the ground shader reads. Not `Decal` nodes: the Mobile renderer applies at most 8 decals per mesh and the Compatibility renderer none, and the ground is one mesh. Not quads over the ground: they z-fight on slopes and cost a draw call each.
 
 Off the table on mobile Vulkan: volumetric smoke, raymarching, GPU particle collision against the

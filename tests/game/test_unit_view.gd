@@ -555,7 +555,7 @@ func test_vehicle_destruction_flashes_and_hides_the_unit_under_the_fireball() ->
 
 
 ## Вибух — одноразовий: чекати його повністю не треба (уламки мусять з'явитися ще
-## під кулею), але й лишатися в кадрі він не сміє — звільняє себе сам.
+## під кулею), а його дим, розвіявшись за 3–6 с, звільняє себе сам.
 func test_explosion_is_one_shot_and_frees_itself() -> void:
 	view.bind(_unit(5))
 	view.play_destroyed()
@@ -564,7 +564,7 @@ func test_explosion_is_one_shot_and_frees_itself() -> void:
 		if t.is_valid():
 			t.custom_step(BattleFx.EXPLOSION_SEC + 0.01)
 	assert_true(boom.is_queued_for_deletion())
-	assert_true(BattleFx.EXPLOSION_SEC <= 2.0, "куля знищення разом із темним хвостом — до 2 с")
+	assert_true(BattleFx.EXPLOSION_SEC <= 6.0, "куля знищення разом із димом — до 6 с")
 
 
 ## §3.5: невидимий ворог не має вузла взагалі — рішення контейнера
