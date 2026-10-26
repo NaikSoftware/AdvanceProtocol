@@ -47,6 +47,11 @@ int plough_id(ivec2 c) {
 // Слот класу двору (`YARD`, клітинки будівель): поле з плямами втоптаного ґрунту 2–6 м;
 // -1 — двору нема.
 uniform int yard_slot = -1;
+// Протоптані стежки (Footpaths.bake): R — знос стежки, G — витоптана пляма; 64 px на клітинку, мипмапи.
+// Маска публічна, туман її не множить; координати дошки, як у scar_size.
+uniform bool has_paths = false;
+uniform sampler2D path_map : filter_linear_mipmap, repeat_disable;
+uniform vec2 path_size = vec2(1.0);
 // Клітинка, що відповідає пікселю (0, 0) карт класів (від'ємна при відступі).
 uniform vec2 map_origin = vec2(0.0);
 // Властивості шарів macro_array (до 16; перші 8 — шари деталі, далі — підтипи):
@@ -1295,6 +1300,20 @@ void fragment() {
 			vec3 sand = dot(alb, vec3(0.299, 0.587, 0.114)) * mix(1.0, 0.6, wet) * mix(mix(SAND_TINT, vec3(1.12, 1.05, 0.8), 0.5), vec3(1.15, 0.98, 0.74), wet) * (1.0 - 0.2 * shore_mask);
 			sand *= 0.78 + 0.44 * vnoise(p * 13.0) + 0.1 * (vnoise(p * 41.0) - 0.5);
 			alb = mix(alb, sand, bar_w * 0.85);
+		}
+
+		// Протоптана стежка (Footpaths): суха витоптана земля — світло-бура, мокра — темна глина (мокра
+		// темніша за довкілля); обидві зберігають дрібну текстуру ґрунту. Пляма біля воріт і сараю —
+		// колір грядок, 30–40 %. Дорога й вода стежку не беруть. Публічна: туман її не множить.
+		if (has_paths) {
+			vec2 puv = (p + 0.5) / path_size;
+			float pin = step(0.0, puv.x) * step(0.0, puv.y) * step(puv.x, 1.0) * step(puv.y, 1.0);
+			vec2 pm = texture(path_map, puv).rg * pin * (1.0 - road_cov);
+			float wet_p = smoothstep(0.1, 0.5, weather_wetness);
+			float lum = dot(alb, vec3(0.299, 0.587, 0.114));
+			vec3 bare = mix(vec3(0.17, 0.115, 0.062), vec3(0.04, 0.028, 0.017), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
+			alb = mix(alb, bare, clamp(pm.r * 1.8, 0.0, 1.0));
+			alb = mix(alb, vec3(0.045, 0.026, 0.014) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.4);
 		}
 
 		float scar_dark = 0.0;

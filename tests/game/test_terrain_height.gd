@@ -4,7 +4,8 @@ extends GutTest
 ## пікінг по піднятій клітинці. 1 м = 0.125 світу.
 
 const M: float = TerrainHeight.M
-## Сума висот _flat_checksum(3), записана з коду без розкиду опори пагорба (поле вже рівне).
+## Сума висот _flat_checksum(3), записана з коду, де хвиля рівнини на полі FIELD уже майже знята
+## (`_flatness`), а опора центру пагорба гуляє за висотою: дошка без пагорбів від опори не залежить.
 const FLAT_CHECKSUM_SEED3: float = -17.680515
 
 
@@ -761,3 +762,37 @@ static func _near_slope(world: Board, c: Vector2i) -> bool:
 			if absi(dx) <= 1 and absi(dy) <= 1 and (k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED):
 				return true
 	return false
+
+
+## Майданчик будівлі на схилі пагорба: ґрунт під слідом рівний і на висоті майданчика, текстура
+## висот (її беруть шейдери землі й води) перезалита з тими самими висотами, що й at(), підніжжя
+## зрізу з горішнього боку темніше (кривизна менша), а ті самі майданчики вдруге текстуру не
+## перезаливають.
+func test_building_pad_levels_the_slope_and_updates_the_height_texture_once() -> void:
+	var b := Board.create(12, 12, Terrain.GroundState.DRY)
+	for y in range(4, 7):
+		for x in range(4, 7):
+			b.set_kind(Vector2i(x, y), Terrain.Kind.HILL)
+	var t := TerrainHeight.bake(b, 0, 3)
+	t.texture()
+	var foot := Vector2i(roundi((6.3 + 0.5) * t.samples), roundi((5.0 + 0.5) * t.samples))
+	var curv_before: float = t.image().get_pixelv(foot).b
+	var pad := Rect2(6.6, 4.6, 0.8, 0.8)
+	var slope: float = t.at(6.6, 5.0) - t.at(7.4, 5.0)
+	assert_gt(slope / M, 0.5, "передумова: майданчик на схилі (%.2f м)" % (slope / M))
+	t.clear_pads()
+	var id: int = t.add_pad(pad)
+	t.finish_pads()
+	var level: float = t.pad_level(id)
+	for v: Vector2 in [pad.position, pad.end, Vector2(pad.position.x, pad.end.y), Vector2(pad.end.x, pad.position.y), pad.get_center()]:
+		assert_almost_eq(t.at(v.x, v.y), level, 1e-5, "ґрунт під слідом у %s" % v)
+	assert_eq(t.texture_updates, 1, "текстура перезалита")
+	var img: Image = t.image()
+	var centre := Vector2i(roundi((7.0 + 0.5) * t.samples), roundi((5.0 + 0.5) * t.samples))
+	assert_almost_eq(img.get_pixelv(centre).r, t.at(7.0, 5.0), 2e-3, "R текстури — висота at()")
+	assert_lt(img.get_pixelv(foot).b, curv_before - 0.1, "підніжжя зрізу темніше")
+	t.clear_pads()
+	t.add_pad(pad)
+	t.finish_pads()
+	assert_eq(t.texture_updates, 1, "ті самі майданчики — без перезаливання")
+	assert_almost_eq(t.at(7.0, 5.0), level, 1e-5, "рельєф той самий")
