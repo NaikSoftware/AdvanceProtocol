@@ -824,8 +824,8 @@ static func _edge_hill_dip(ex: float, ez: float) -> float:
 
 ## Множник хвилі рівнини на кожному відліку: на полі `_FLAT_MEADOW` чи `_FLAT_PLOUGHED` (межа
 ## луки й ріллі розмита на 0.3 клітинки), на дорозі й майданчику — як на луці, поза ними росте
-## до 1 за `_FLAT_RAMP` клітинок від найближчої рівної клітинки. Кільце — 1: його рельєф лишається
-## як є, а стик на краю дошки й так лежить на y = 0 (`_EDGE_FLAT`).
+## до 1 за `_FLAT_RAMP` клітинок від найближчої рівної клітинки. Кільце — так само: поле є полем і
+## за краєм дошки.
 func _flatness(board: Board, surface: PackedByteArray, fs: float) -> PackedFloat32Array:
 	var bw: int = board_width
 	var bh: int = board_height
@@ -838,23 +838,16 @@ func _flatness(board: Board, surface: PackedByteArray, fs: float) -> PackedFloat
 		for i in cols:
 			var cx: int = clampi(roundi(-0.5 - margin + float(i) / fs), 0, bw - 1)
 			var kind: int = board.kind_at(Vector2i(cx, cz))
-			var on_board: bool = cx >= _shift and cz >= _shift and cx < bw - _shift and cz < bh - _shift
 			var k: int = j * cols + i
 			var plough: bool = kind == Terrain.Kind.FIELD and surface.size() == bw * bh \
 					and surface[cz * bw + cx] == MapData.FieldSurface.PLOUGHED
 			k_map[k] = _FLAT_PLOUGHED if plough else _FLAT_MEADOW
 			var flat_kind: bool = kind in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
-			level[k] = 0.0 if on_board and flat_kind else -1.0
+			level[k] = 0.0 if flat_kind else -1.0
 	var dist: PackedFloat32Array = _inner_distance(level)
 	k_map = _blur(k_map, 0.3 * fs, 0.3 * fs)
-	for j in rows:
-		var z: float = -0.5 - margin + float(j) / fs
-		for i in cols:
-			var x: float = -0.5 - margin + float(i) / fs
-			var k: int = j * cols + i
-			var outside: bool = _shift > 0 and maxf(absf(x - (bw - 1) * 0.5) - (bw - 2 * _shift) * 0.5,
-					absf(z - (bh - 1) * 0.5) - (bh - 2 * _shift) * 0.5) > 0.0
-			k_map[k] = 1.0 if outside else lerpf(k_map[k], 1.0, smoothstep(0.0, _FLAT_RAMP, dist[k]))
+	for k in k_map.size():
+		k_map[k] = lerpf(k_map[k], 1.0, smoothstep(0.0, _FLAT_RAMP, dist[k]))
 	return k_map
 
 
