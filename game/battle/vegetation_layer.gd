@@ -76,6 +76,7 @@ const POND_REACH: float = 0.125
 ## Луки: квадрат MEADOW_PATCH × MEADOW_PATCH клітинок має групу з імовірністю MEADOW_ON %.
 const MEADOW_PATCH: int = 4
 const MEADOW_ON: int = 30
+const MEADOW_TRIES: int = 6
 ## Дерево на луці — з імовірністю MEADOW_TREE % (решта — кущі); верба — лише ближче WET_REACH до води.
 const MEADOW_TREE: int = 35
 const WET_REACH: float = 1.5
@@ -194,6 +195,13 @@ static func near_road(props: PropLayer, p: Vector2, crown: float) -> bool:
 		return true
 	for k in 8:
 		if props.on_road(p + Vector2.from_angle(TAU * k / 8.0) * crown, 0.05):
+			return true
+	return false
+
+
+static func _in_fields(fields: Array[Rect2], p: Vector2) -> bool:
+	for r: Rect2 in fields:
+		if r.has_point(p):
 			return true
 	return false
 
@@ -423,11 +431,17 @@ static func _plan_meadows(board: Board, height: TerrainHeight, fields: Array[Rec
 			rng.seed = point_seed(map_seed, Vector2i(px, py), 4)
 			if rng.randi_range(0, 99) >= MEADOW_ON:
 				continue
-			# Опорна клітинка групи — випадкова в квадраті; луг, не ближче HOME_CLEAR до забудови.
-			var c := Vector2i(px * MEADOW_PATCH + rng.randi_range(0, MEADOW_PATCH - 1), py * MEADOW_PATCH + rng.randi_range(0, MEADOW_PATCH - 1))
-			if not board.in_bounds(c) or board.kind_at(c) != Terrain.Kind.FIELD \
-					or _near_kind(board, c, HOME_CLEAR, [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]) \
-					or _near_kind(board, c, NO_BRIDGE, [Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]):
+			# Опорна клітинка групи — випадкова в квадраті; луг, не ближче HOME_CLEAR до забудови. До
+			# MEADOW_TRIES спроб: на тісній карті з ріллею й річкою перша клітинка рідко буває лугом.
+			var c := Vector2i(-1, -1)
+			for t in MEADOW_TRIES:
+				var q := Vector2i(px * MEADOW_PATCH + rng.randi_range(0, MEADOW_PATCH - 1), py * MEADOW_PATCH + rng.randi_range(0, MEADOW_PATCH - 1))
+				if board.in_bounds(q) and board.kind_at(q) == Terrain.Kind.FIELD and not _in_fields(fields, Vector2(q)) \
+						and not _near_kind(board, q, HOME_CLEAR, [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]) \
+						and not _near_kind(board, q, NO_BRIDGE, [Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]):
+					c = q
+					break
+			if c.x < 0:
 				_bump(stats, "meadow_cell")
 				continue
 			var tree: bool = rng.randi_range(0, 99) < MEADOW_TREE

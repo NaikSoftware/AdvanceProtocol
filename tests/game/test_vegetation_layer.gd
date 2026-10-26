@@ -178,3 +178,11 @@ func test_half_of_yards_have_a_tree(p = use_parameters(["river"])) -> void:
 				if (q - Vector2(c)).length() < 1.6:
 					with_tree[h["house"]] = true
 	assert_gte(with_tree.size() * 2, homes.size(), "%s: дерево у %d садибах з %d" % [p, with_tree.size(), homes.size()])
+
+
+## На луках кожної карти є хоча б одне дерево (груша, дуб, верба).
+func test_meadows_have_a_tree(p = use_parameters(MAPS)) -> void:
+	var trees: int = 0
+	for pl: Dictionary in _view(p).vegetation().placements:
+		trees += 1 if pl["group"] == "meadow" and pl["kind"] == "tree" else 0
+	assert_gt(trees, 0, "%s: на луках немає дерев" % p)

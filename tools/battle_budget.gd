@@ -109,7 +109,7 @@ func _ready() -> void:
 						and MatchService.state.unit_at(c) == null:
 					at = c
 				elif what in ["tree", "wind"] and pl["kind"] == "tree" and pl["group"] == "meadow" \
-						and board.kind_at(c) == Terrain.Kind.FIELD:
+						and board.kind_at(c) in [Terrain.Kind.FIELD, Terrain.Kind.HILL]:
 					at = c
 					spot = c
 				elif what == "reed" and pl["kind"] == "reed":
@@ -117,7 +117,7 @@ func _ready() -> void:
 					for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 						var n: Vector2i = c + d
 						var r := Rect2(Vector2(n) - Vector2(0.5, 0.5), Vector2.ONE)
-						if board.in_bounds(n) and board.kind_at(n) == Terrain.Kind.FIELD \
+						if board.in_bounds(n) and board.kind_at(n) in [Terrain.Kind.FIELD, Terrain.Kind.MARSH, Terrain.Kind.HILL] \
 								and VegetationLayer._rect_dist(r, q) < VegetationLayer.crown_of(pl["node"]):
 							at = n
 							spot = n
