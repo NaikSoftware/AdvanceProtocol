@@ -22,9 +22,6 @@ signal playback_finished
 ## Просіку повалено. Без даних: події не фільтровані за спостерігачем (§6), тож що саме
 ## малювати, вигляд бере з BattleState.known_broken_map(глядача), а не з події.
 signal forest_changed
-## Снаряд (будь-де) чи гармата по ґрунту: на тайлі цілі лишається вирва-пляма `radius_m` метрів.
-## Подія не фільтрована за гравцем — карта шрамів сама ховає нерозвідане маскою `seen`.
-signal ground_hit(cell: Vector2i, radius_m: float)
 
 ## Крок руху юніта тайл за тайлом (§1.4 — атмосфера читається, не
 ## пролітає повз). Той самий порядок величини, що й FACE_TURN_DURATION у
@@ -260,8 +257,6 @@ func _play_shot(shooter_id: int, target_id: int, weapon: int = -1) -> Variant:
 		BattleFx.spawn_muzzle(shooter_view.get_parent(), shooter_view.transform, weapon, shooter.type_id if shooter != null else -1)
 	var target: Unit = _resolve_unit(target_id)
 	var armoured: bool = target != null and UnitTypes.is_vehicle(target.unit_class())
-	if target != null and (weapon == BattleFx.Weapon.SHELL or (weapon == BattleFx.Weapon.TANK_GUN and not armoured)):
-		ground_hit.emit(target.pos, 2.5 if weapon == BattleFx.Weapon.SHELL else 1.5)
 	if target_view != null:
 		BattleFx.spawn_hit(target_view.get_parent(), target_view.position, weapon, armoured)
 		awaitable = _pause(BattleFx.HIT_HOLD_SEC)

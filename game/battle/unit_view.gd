@@ -123,6 +123,8 @@ const _DRONE_THREAT_COLOR: Color = TargetOverlay.DRONE_RING_COLOR
 
 ## Поточний факінг (0..7, порядок Board.DIRS_8). Читається ззовні для UI цілей.
 var facing: int = 0
+## Юніт гине (play_destroyed): дим довкола вже не береже його як сусіда (BattleFx).
+var destroyed: bool = false
 
 @onready var _silhouette: Node3D = $Silhouette
 @onready var _crosshair: Sprite3D = $Crosshair
@@ -508,6 +510,7 @@ func play_shot() -> Signal:
 
 
 func play_destroyed() -> Signal:
+	destroyed = true
 	var tween: Tween = create_tween()
 	var cls: int = UnitTypes.get_type(_type_id)["unit_class"]
 	if not UnitTypes.is_vehicle(cls):

@@ -1084,6 +1084,29 @@ func test_chimney_tops_and_ruin_centres() -> void:
 		assert_almost_eq(r.y, view._height.at(r.x, r.z), 0.1)
 
 
+## Руїна тліє з пролому на рівні даху — над землею, усередині обрису руїни, — а не біля
+## уцілілого димаря.
+func test_ruin_smoke_rises_from_the_breach_at_roof_level() -> void:
+	for name in MAPS:
+		var props: PropLayer = _cached(name).props()
+		var m: MapData = _map(name)
+		var pts: Array[Vector3] = props.ruin_smoke_points()
+		var centres: Array[Vector3] = props.ruin_centres()
+		var boxes: Array[AABB] = []
+		for inst in props.all_instances():
+			if int(PropLayer.spec_of(inst["model"])["kind"]) == PropLayer.Kind.RUIN \
+					and Rect2i(0, 0, m.width, m.height).has_point((inst["cells"] as Array)[0]):
+				boxes.append((inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB))
+		assert_eq(pts.size(), centres.size(), name)
+		assert_eq(pts.size(), boxes.size(), name)
+		for i in pts.size():
+			var p: Vector3 = pts[i]
+			assert_gt(p.y, centres[i].y + 0.1, "%s: над землею, на рівні даху" % name)
+			assert_true(p.x > -0.5 and p.z > -0.5 and p.x < m.width - 0.5 and p.z < m.height - 0.5, "%s: на дошці" % name)
+			assert_true(p.x >= boxes[i].position.x and p.x <= boxes[i].end.x and p.z >= boxes[i].position.z and p.z <= boxes[i].end.z,
+					"%s: усередині обрису руїни" % name)
+
+
 ## Пояс бруду довкола кожної хати дошки — одним вузлом.
 func test_houses_get_a_grime_band() -> void:
 	var view: BoardView = _cached("river")
