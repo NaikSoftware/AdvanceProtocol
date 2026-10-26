@@ -323,14 +323,14 @@ func test_embers_fly_while_burning_and_stop_when_smouldering() -> void:
 
 
 
-## Вогонь — стовп полум'я з погона: два екземпляри по ≈ 0,4 ширини корпусу, висота ≈ ширина
+## Вогонь — стовп полум'я з погона: два екземпляри по ≈ 0,4 ширини корпусу, висота ≈ 1,45 ширини
 ## корпусу; два екземпляри атласу з різною фазою й темпом; HDR-яскравий (понад 1).
 func test_fire_is_one_column_sized_from_the_hull() -> void:
 	assert_eq(WreckLayer.FLAMES_PER_SPOT, 2)
 	var hull: Vector3 = UnitSilhouettes.spec(5).hull
-	# Кожен білборд ~0,6 ширини корпусу; з розносом ±0,15 вони перекриваються в одну масу ~0,6 тайла.
-	assert_eq(WreckLayer.flame_width(5), hull.x * 0.6)
-	assert_eq(WreckLayer.flame_height(5), hull.x)
+	# Кожен білборд ~0,88 ширини корпусу (≈ 3,2 м у середнього танка); з розносом ±0,15 вони перекриваються в одну масу.
+	assert_eq(WreckLayer.flame_width(5), hull.x * 0.88)
+	assert_eq(WreckLayer.flame_height(5), hull.x * 1.45)
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
 	var mat := fire.material_override as ShaderMaterial
 	assert_true(float(mat.get_shader_parameter("gain")) > 1.0)
