@@ -244,14 +244,20 @@ func test_second_warm_up_while_warming_is_ignored() -> void:
 
 
 ## Дим і вогонь — запечені флипбуки з assets/vfx, а не заступник.
-func test_column_samples_its_atlases_and_fire_is_procedural() -> void:
+func test_column_samples_its_atlases_and_fire_matches_its_flag() -> void:
 	var col := layer.get_node("Columns") as MultiMeshInstance3D
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
 	var cm := col.material_override as ShaderMaterial
 	assert_eq((cm.get_shader_parameter("puff_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column.png")
 	assert_eq((cm.get_shader_parameter("thin_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column_thin.png")
-	# Полум'я — процедурне (шум, без текстури): жоден атлас не дав суцільного тіла вогню.
-	assert_eq((fire.material_override as ShaderMaterial).shader.code.count("sampler2D"), 1, "лише глибина для м'якого краю")
+	var fm := fire.material_override as ShaderMaterial
+	if WreckLayer.USE_FLAME02:
+		# Атлас полум'я + глибина для м'якого краю.
+		assert_eq((fm.get_shader_parameter("flame_tex") as Texture2D).resource_path, "res://assets/vfx/flame02.png")
+		assert_eq(fm.shader.code.count("sampler2D"), 2)
+	else:
+		# Процедурне полум'я без текстури: лише глибина для м'якого краю.
+		assert_eq(fm.shader.code.count("sampler2D"), 1)
 
 
 

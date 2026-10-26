@@ -135,6 +135,8 @@ baked into a flipbook.** EmberGen or Blender's Mantaflow run the real fluid sim,
 into an atlas, and the game plays one quad with a shader. This is what AAA does too. Procedural
 noise in a shader looks like a gas hob, not like an ammunition rack going up.
 
+The wreck fire is exactly that: the Unity Labs `Flame02` flipbook (16×4, 64 frames, `assets/vfx/flame02.png`), released by the publisher under CC0 1.0 ([provenance](art/vfx-flipbook-sources.md)). A procedural flame with a stable base and detaching tongues stays in `WreckLayer` behind the `USE_FLAME02` flag.
+
 What our own constraints add on top:
 
 - **Overdraw is the killer, not particle count.** Twenty large half-transparent quads covering half
