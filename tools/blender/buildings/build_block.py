@@ -61,6 +61,8 @@ def body(b, xa, xb, nf, front, back, roof):
                 b.poly([(x - LW, yb, z), (x + LW, yb, z), (x + LW, yb, z + FLOOR), (x - LW, yb, z + FLOOR)][::-side], "panel_light")
                 for sx in (-1, 1):
                     b.box(x + sx * (LW - 0.02), (ya + yb) / 2, z, 0.03, LOG, FLOOR - 0.15, "panel_light")
+                if (i * 7 + f * 3 + (1 if side > 0 else 0)) % 2 == 0:                       # засклена лоджія: рама над парапетом
+                    b.window(("y", ye - 0.08 * side, side), x, z + 1.15, 2 * LW - 0.06, FLOOR - 1.4)
             if nf > 2:
                 b.box(x, (ya + yb) / 2, 2 * FLOOR - 0.15, 2 * LW, LOG, 0.15, "panel", top="panel")  # плита між лоджіями
                 b.box(x, (ya + yb) / 2, top_z - 0.2, 2 * LW, LOG, 0.2, "panel", top="bitumen" if roof else "panel")
@@ -80,7 +82,8 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                 yy = y - (LOG * sgn if (i in cols and f >= 1) else 0.0)
                 if (side, i, f) in blown:
                     e = 0.03 * sgn
-                    opening2(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, streak=0.4)
+                    lib.burn_ring(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, g_side=0.35, g_bot=0.1, g_top=2.0, mat="panel_dm")
+                    opening2(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, streak=0.0, sooty=True)
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
                 if not (i in cols and f >= 1):
@@ -121,6 +124,11 @@ def intact():
     windows(b, X0, X1, NF, F, B)
     entrances(b, X1)
     roof_details(b, X1)
+    # бризки біля цоколя, патьоки під кожним підвіконням і від парапету даху; над відкритими лоджіями стіни немає
+    sk = lambda cols: [(bay_x(i) - LW, bay_x(i) + LW) for i in cols]
+    lib.weather(b, "panel", [("y", Y1, 1, X0, X1, 0.0, H)], seed=21, patches=False, skip_u=sk(F), seg=1.5)
+    lib.weather(b, "panel", [("y", Y0, -1, X0, X1, 0.0, H)], seed=22, patches=False, skip_u=sk(B), seg=1.5)
+    lib.weather(b, "panel", [("x", X1, 1, Y0, Y1, 0.0, H), ("x", X0, -1, Y0, Y1, 0.0, H)], seed=23, patches=False, seg=1.5)
     lib.finish(b, "h5_panel_block", out, tri_limit=2500, footprint=(4, 2), anchor=(0, 0))
 
 
@@ -165,7 +173,8 @@ def damaged():
                 continue
             blow = True
             if blow:
-                opening2(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, streak=0.4)
+                lib.burn_ring(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, g_side=0.35, g_bot=0.1, g_top=2.0, mat="panel_dm")
+                opening2(b, "y", Y0, x, z + 0.15, 1.1, 1.1, -1, streak=0.0, sooty=True)
             else:
                 b.window(("y", Y0, -1), x, z, 1.4, 1.4)
     for k in range(6):
@@ -176,7 +185,8 @@ def damaged():
             z = f * FLOOR + 0.95
             if he - 1.4 < z + 1.8 or rnd.random() < 0.4 or (f == 0 and k % 2):          # у нижньому ряду не частіше кожного другого прорізу
                 continue
-            opening2(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, streak=0.4)
+            lib.burn_ring(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, g_side=0.35, g_bot=0.1, g_top=2.0, mat="panel_dm")
+            opening2(b, "x", X1, yy, z + 0.15, 1.1, 1.1, 1, streak=0.0, sooty=True)
     # плити перекриттів, що лишились кронштейнами від стін, і розколота плита даху
     for (x, y, z, sx, sy, ax, ay, az) in ((9.0, -4.0, 2.9, 3.6, 1.8, 0.35, 0.0, 0.0), (13.5, -3.6, 5.9, 2.6, 2.0, 0.38, 0.0, 0.1), (8.0, 4.0, 2.9, 2.4, 1.6, -0.3, 0.0, 0.0)):
         chip_slab(b, x, y, z, sx, sy, 0.22, (ax, ay, az), "slab_dark", "slab_dark", int(x * 10 + y))

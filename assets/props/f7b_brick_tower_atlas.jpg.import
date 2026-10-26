@@ -2,23 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dgvax1wli3xfx"
-path="res://.godot/imported/f7b_brick_tower_f7b_brick_tower_normal.png-72aea6304ea3cb8fea054126c7b1c673.ctex"
+uid="uid://bbuguanncwk8d"
+path.s3tc="res://.godot/imported/f7b_brick_tower_atlas.jpg-a6071967f0491912af843757a8cfc0df.s3tc.ctex"
+path.etc2="res://.godot/imported/f7b_brick_tower_atlas.jpg-a6071967f0491912af843757a8cfc0df.etc2.ctex"
 metadata={
-"vram_texture": false
-}
-generator_parameters={
-"md5": "d5585cf9d933bcf63e2298c02b27797c"
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/props/f7b_brick_tower_f7b_brick_tower_normal.png"
-dest_files=["res://.godot/imported/f7b_brick_tower_f7b_brick_tower_normal.png-72aea6304ea3cb8fea054126c7b1c673.ctex"]
+source_file="res://assets/props/f7b_brick_tower_atlas.jpg"
+dest_files=["res://.godot/imported/f7b_brick_tower_atlas.jpg-a6071967f0491912af843757a8cfc0df.s3tc.ctex", "res://.godot/imported/f7b_brick_tower_atlas.jpg-a6071967f0491912af843757a8cfc0df.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

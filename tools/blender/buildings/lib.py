@@ -575,7 +575,8 @@ def mats():
     g = lambda v: (v, v, v)
     MATS.update({
         # нейтрально-теплий бетон панелей, шви між панелями 3 м і по поверхах
-        "panel": make_material("panel", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, patch=((0.12, 0.13, 0.10), 0.14)),
+        # панелі: кожна плита 3 x 3.1 м свого тону (±6 %), темні шви між ними, без хмаркових плям
+        "panel": make_material("panel", "Concrete034", 1.2, (0.56, 0.54, 0.50), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.3, base_dirt=0.5, cells=("x", 3.0, "z", 3.1, 0.06), rough=0.9),
         # кіптява плавними потьоками, без плям-«корів»
         "panel_scorched": make_material("panel_scorched", "Concrete034", 1.2, (0.20, 0.19, 0.18), seams=[("h", 3.0, 0.04, 0.4), ("z", 3.1, 0.05, 0.4)], streak=1.6, streak_xy=2.5, base_dirt=0.5),
         "char": make_material("char", flat=(0.03, 0.028, 0.026)),
@@ -597,9 +598,11 @@ def mats():
         "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.74, 0.69, 0.60), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], corr=("z", 0.25, 0.01), streak=1.0, streak_col=(0.20, 0.10, 0.05), base_dirt=0.6, rough=0.55),
         "silo_concrete": make_material("silo_concrete", "Concrete034", 1.5, (0.68, 0.60, 0.47), seams=[("z", 1.5, 0.03, 0.2)], streak=1.2, base_dirt=0.6),
         # цегла: червоно-коричнева ~RGB 110/70/58, лише яскравість із текстури
-        "brick": make_material("brick", "Bricks105", 1.3, recolor=(0.50, 0.20, 0.135), streak=0.7, base_dirt=0.4, bump=0.012, patch=((0.10, 0.06, 0.045), 0.4), patch_scale=0.6),
+        # цегла: червоно-коричнева ~RGB 110/70/58, вивітрена патьоками й брудом знизу, без плям-хмар
+        "brick": make_material("brick", "Bricks105", 1.3, recolor=(0.50, 0.20, 0.135), contrast=1.3, streak=1.0, base_dirt=0.6, bump=0.012),
         # сталь: плями іржі лише великі (>3 м), плюс потьоки під швами
-        "steel_paint": make_material("steel_paint", flat=(0.15, 0.19, 0.16), seams=[("z", 1.5, 0.05, 0.3)], base_dirt=0.3, patch=((0.11, 0.14, 0.12), 0.5), patch_scale=0.7, runs=(3.0, (0.30, 0.10, 0.04), 1.0, 18.0)),
+        # сталь: вигоріла сіро-зелена фарба, іржа патьоками під швами й дрібними плямами; без великих хмар
+        "steel_paint": make_material("steel_paint", flat=srgb_lin((0.42, 0.48, 0.43)), seams=[("z", 1.5, 0.05, 0.3)], base_dirt=0.3, patch=((0.20, 0.09, 0.04), 0.05), patch_scale=0.7, runs=(3.0, (0.30, 0.10, 0.04), 1.0, 18.0), rough=0.6),
         "metal_dark": make_material("metal_dark", "MetalPlates013", 1.0, g(0.8), streak=0.5),
         "rust": make_material("rust", "Rust004", 1.0, g(1.0)),
         "galv_cone": make_material("galv_cone", "CorrugatedSteel005", 1.0, (0.66, 0.62, 0.54), seams=[("ang8", 0.9, 0.05, 0.5)], streak=0.6, streak_col=(0.20, 0.10, 0.05), base_dirt=0.1, rough=0.55),
@@ -825,7 +828,7 @@ def apply_palette():
         MATS[nm] = make_material(nm, "Bricks105", 1.0, recolor=rc, streak=0.2, base_dirt=0.3, bump=0.02, patch=((0.09, 0.06, 0.04), 0.2), patch_scale=1.6)
     MATS["ch_plaster"] = make_material("ch_plaster", "Plaster001", 1.0, recolor=(0.80, 0.78, 0.72), streak=0.5, base_dirt=0.3, bump=0.008, patch=((0.2, 0.19, 0.17), 0.2))
     ch = PAL.get("chim") or "brick_face"
-    for n in {"wall_plaster", "wall_plaster_w", "brick_face", "boards", "brick_grey", "plinth_flat"} | {ch}:
+    for n in {"wall_plaster", "wall_plaster_w", "brick_face", "boards", "brick_grey", "plinth_flat", "panel"} | {ch}:
         if n in _KW:
             _dm(n)
 
@@ -834,7 +837,7 @@ def _off(axis, c, sgn, u, z, off):
     return (u, c + sgn * off, z) if axis == "y" else (c + sgn * off, u, z)
 
 
-def weather(b, mat, walls, seed=1, patches=True):
+def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4):
     """Вивітрювання стін декалями-множниками: брудний низ із рваним краєм (-30%), темні патьоки під підвіконнями й від ринви (-25%),
     пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
     import random
@@ -843,7 +846,7 @@ def weather(b, mat, walls, seed=1, patches=True):
     for (axis, c, sgn, u0, u1, zb, ze) in walls:
         nrm = (0, sgn, 0) if axis == "y" else (sgn, 0, 0)
         P = lambda u, z, off=0.005: _off(axis, c, sgn, u, z, off)
-        n = max(2, int((u1 - u0) / 0.4))
+        n = max(2, int((u1 - u0) / seg))                                # seg — довжина відрізка смуг (на довгих фасадах більша: бюджет трикутників)
         us = [u0 + (u1 - u0) * i / n for i in range(n + 1)]
         ph = [rnd.uniform(0, 6.28) for _ in range(3)]
         # низ: бризки з землі до плавної межі 0.4-0.7 м (сума синусоїд 2-5 м, а не випадковий зубець на кожні 0.4 м)
@@ -853,6 +856,8 @@ def weather(b, mat, walls, seed=1, patches=True):
             b.decal([P(us[i], zb), P(us[i + 1], zb), P(us[i + 1], zb + hs[i + 1]), P(us[i], zb + hs[i])], (kb, kb, 1.0, 1.0), dm, nrm)
         eh = 0.75 + rnd.uniform(-0.1, 0.1)
         for i in range(n):                                              # під карнизом: м'яка тінь-пил, без рваного краю
+            if any(a_ <= (us[i] + us[i + 1]) / 2 <= c_ for a_, c_ in skip_u):   # над відкритою лоджією стіни немає
+                continue
             b.decal([P(us[i], ze - eh), P(us[i + 1], ze - eh), P(us[i + 1], ze), P(us[i], ze)], (1.0, 1.0, 0.86, 0.86), dm, nrm)
         wins = [w for w in b.windows if w[0] == axis and abs(w[1] - c) < 0.2 and w[2] == sgn]
         for (_a, _c, _s, u, z, w, h) in wins:                           # патьоки з обох кінців кожного підвіконня: вода стікає з країв відливу
@@ -868,7 +873,7 @@ def weather(b, mat, walls, seed=1, patches=True):
                 b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, zt), P(uu, zt)], (1.0, 1.0, 0.97, k), dm, nrm)
         for _ in range(max(2, int((u1 - u0) / 1.5))):                   # з карниза: короткі патьоки там, де переливається ринва
             uu = rnd.uniform(u0 + 0.3, u1 - 0.3)
-            if any(abs(uu - w[3]) < w[5] / 2 + 0.15 for w in wins):
+            if any(abs(uu - w[3]) < w[5] / 2 + 0.15 for w in wins) or any(a_ - 0.2 <= uu <= c_ + 0.2 for a_, c_ in skip_u):
                 continue
             hw = rnd.uniform(0.05, 0.1)
             zbm = ze - rnd.uniform(0.4, 1.1)

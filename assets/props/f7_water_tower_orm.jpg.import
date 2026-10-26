@@ -2,23 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://crnsyc1t5nisb"
-path="res://.godot/imported/h5_panel_block_damaged_h5_panel_block_damaged_atlas.jpg-c6c3c0dfe1fb92e55449b31fbdfe54f4.ctex"
+uid="uid://uyjwk7ruwa4e"
+path.s3tc="res://.godot/imported/f7_water_tower_orm.jpg-4cd903a3a69574539e6f882a40d3ed6e.s3tc.ctex"
+path.etc2="res://.godot/imported/f7_water_tower_orm.jpg-4cd903a3a69574539e6f882a40d3ed6e.etc2.ctex"
 metadata={
-"vram_texture": false
-}
-generator_parameters={
-"md5": "0b8d48f3516c132ac354606f0bfaa93e"
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/props/h5_panel_block_damaged_h5_panel_block_damaged_atlas.jpg"
-dest_files=["res://.godot/imported/h5_panel_block_damaged_h5_panel_block_damaged_atlas.jpg-c6c3c0dfe1fb92e55449b31fbdfe54f4.ctex"]
+source_file="res://assets/props/f7_water_tower_orm.jpg"
+dest_files=["res://.godot/imported/f7_water_tower_orm.jpg-4cd903a3a69574539e6f882a40d3ed6e.s3tc.ctex", "res://.godot/imported/f7_water_tower_orm.jpg-4cd903a3a69574539e6f882a40d3ed6e.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

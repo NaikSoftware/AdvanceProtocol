@@ -2,23 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bmktus8a5xriu"
-path="res://.godot/imported/f7_water_tower_f7_water_tower_normal.png-fa7bbc318a8af424457c210ae9bcf4dd.ctex"
+uid="uid://dmgbunnqp3v28"
+path.s3tc="res://.godot/imported/f7_water_tower_atlas.jpg-aef36006b0c256fcff007b05b9e66075.s3tc.ctex"
+path.etc2="res://.godot/imported/f7_water_tower_atlas.jpg-aef36006b0c256fcff007b05b9e66075.etc2.ctex"
 metadata={
-"vram_texture": false
-}
-generator_parameters={
-"md5": "63b5e6c17976b58526754e07f8558a14"
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/props/f7_water_tower_f7_water_tower_normal.png"
-dest_files=["res://.godot/imported/f7_water_tower_f7_water_tower_normal.png-fa7bbc318a8af424457c210ae9bcf4dd.ctex"]
+source_file="res://assets/props/f7_water_tower_atlas.jpg"
+dest_files=["res://.godot/imported/f7_water_tower_atlas.jpg-aef36006b0c256fcff007b05b9e66075.s3tc.ctex", "res://.godot/imported/f7_water_tower_atlas.jpg-aef36006b0c256fcff007b05b9e66075.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
