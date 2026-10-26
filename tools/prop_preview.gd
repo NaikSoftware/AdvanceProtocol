@@ -181,7 +181,10 @@ func _ready() -> void:
 			var tm := StandardMaterial3D.new()
 			tm.albedo_color = Color(0.32, 0.36, 0.30)
 			box.material_override = tm
-			box.position = Vector3(1.2, 0.15, 0.0)                     # у кадрі найближчого зуму, не на об'єкті до 1 тайла
+			var ex: float = 0.0                                         # коробка стоїть за найдальшим краєм моделі по +X, а не поверх неї
+			for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
+				ex = maxf(ex, (mi.global_transform * mi.get_aabb()).end.x - inst.global_position.x)
+			box.position = Vector3(maxf(1.2, ex + 0.45), 0.15, 0.0)
 			inst.add_child(box)
 		print("PROP %s tris=%d" % [n, _triangles(inst)])
 		rig.center_on(cell)
