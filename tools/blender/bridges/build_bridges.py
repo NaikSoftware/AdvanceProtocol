@@ -377,6 +377,40 @@ def _noise(rng, sigma_x, sigma_y=None, size=TEX):
     return (n - n.mean()) / (n.std() + 1e-9)
 
 
+MACRO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "assets", "terrain", "macro"))
+MACRO_M = {"road": 30.0, "dirt": 20.0}  # як у GroundSurface.MACRO_M: метрів на один повтор макротекстури
+
+
+def road_texture(layer, metres_u, metres_v, seed):
+    """Шматок макротекстури дороги з землі (assets/terrain/macro/<layer>_albedo_0.png) у масштабі настилу:
+    metres_u x metres_v метрів на TEX x TEX пікселів, sRGB. Той самий знімок, що малює дорогу на березі, тож
+    тон і зернистість на стику збігаються."""
+    import numpy as np
+    im = bpy.data.images.load(os.path.join(MACRO, f"{layer}_albedo_0.png"), check_existing=True)
+    w, h = im.size
+    a = np.array(im.pixels[:]).reshape(h, w, 4)[..., :3]
+    ppm = w / MACRO_M[layer]
+    rng = np.random.default_rng(seed)
+    ox, oy = rng.uniform(0, w), rng.uniform(0, h)
+    xs = ox + np.linspace(0, metres_u * ppm, TEX, endpoint=False)
+    ys = oy + np.linspace(0, metres_v * ppm, TEX, endpoint=False)
+    x0, y0 = np.floor(xs).astype(int), np.floor(ys).astype(int)
+    fx, fy = (xs - x0)[None, :, None], (ys - y0)[:, None, None]
+    g = lambda yy, xx: a[(yy % h)[:, None], (xx % w)[None, :]]
+    return (g(y0, x0) * (1 - fx) * (1 - fy) + g(y0, x0 + 1) * fx * (1 - fy) + g(y0 + 1, x0) * (1 - fx) * fy + g(y0 + 1, x0 + 1) * fx * fy)
+
+
+def _lin(c):
+    import numpy as np
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def _srgb(c):
+    import numpy as np
+    c = np.clip(c, 0, 1)
+    return np.where(c <= 0.0031308, c * 12.92, 1.055 * c ** (1 / 2.4) - 0.055)
+
+
 def make_texture(name):
     """Колір (sRGB), висота в метрах і крок піксельної сітки в метрах (по u, по v).
     Висота пекається в метрах ДО масштабу 1/8 тайла, тож нахил нормалі справжній."""
@@ -402,20 +436,23 @@ def make_texture(name):
             joint = mod(yy, 2) < 0.01  # шов плит кожні 4 м
             h -= 0.012 * joint
             lum -= 0.02 * joint
-    elif name in ("asphalt", "asphalt1", "asphalt_wet"):
-        lum = 0.008 * _noise(rng, 1.0) + 0.008 * _noise(rng, 0.5) + 0.004 * _noise(rng, 8)
-        for cu in (0.28, 0.72):  # смуги, виїжджені колесами
-            lum -= 0.012 * np.exp(-((xx - cu) / 0.07) ** 2)
-        grain = _noise(rng, 0.45) > 2.2
-        lum += 0.016 * grain
-        h = 0.002 * _noise(rng, 0.5) + 0.002 * grain + 0.0008 * _noise(rng, 2.0)
-        for cu in (0.045, 0.955):  # крайові лінії
-            w = (np.abs(xx - cu) < 0.02) * (_noise(rng, 2.0) > -1.2)
-            img = np.where(w[..., None], np.array([0.36, 0.36, 0.34]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
-        dash = (np.abs(xx - 0.5) < 0.03) & ((yy % 0.5) < 0.25) & (_noise(rng, 2.0) > -1.2) & (name == "asphalt")
-        img = np.where(dash[..., None], np.array([0.33, 0.33, 0.31]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
+    elif name in ("asphalt", "asphalt_wet"):
+        # Асфальт мосту — продовження асфальту дороги: той самий знімок, той самий множник сухого покриття
+        # (PAVED_DRY_K = 0.75 у ground.gdshader), без розмітки й без колій (сухий асфальт їх не має).
+        img = _srgb(_lin(road_texture("road", 0.68 * 8.0, 8.0, 3)) * 0.75)
+        lum = 0.006 * _noise(rng, 0.5)
+        h = 0.0015 * _noise(rng, 0.5) + 0.0008 * _noise(rng, 2.0)
         step = (0.68 * 8.0 / TEX, 8.0 / TEX)  # u лягає впоперек настилу
-        rough = np.clip(MATS[name][1] - 0.15 * sum(np.exp(-((xx - cu) / 0.07) ** 2) for cu in (0.28, 0.72)) + 0.03 * _noise(rng, 1.0), 0.75, 1.0)
+        rough = np.clip(0.9 + 0.04 * _noise(rng, 1.5), 0.8, 1.0)
+    elif name == "asphalt1":
+        # Покриття панельного мосту: ґрунтівка заїжджає на настил — той самий знімок ґрунту, колії 1.66 м
+        # (як на дорозі, |v| ≈ 0.83 м), без розмітки. u — упоперек смуги 3.38 м.
+        img = road_texture("dirt", 3.38, 8.0, 5)
+        rut = sum(np.exp(-((xx - cu) / 0.05) ** 2) for cu in (0.5 - 0.246, 0.5 + 0.246))
+        lum = -0.05 * rut * (0.8 + 0.2 * _noise(rng, 0.8, 6)) + 0.006 * _noise(rng, 0.5)
+        h = -0.02 * rut + 0.002 * _noise(rng, 0.5)
+        step = (3.38 / TEX, 8.0 / TEX)
+        rough = np.clip(0.95 - 0.05 * rut + 0.03 * _noise(rng, 1.0), 0.85, 1.0)
     elif name == "steel_gal":
         lum = 0.03 * _noise(rng, 3) + 0.02 * _noise(rng, 0.6) + 0.02 * _noise(rng, 0.8, 10)
         # Світла оцинкована сталь з темними патьоками від води, без дрібних плям.
@@ -434,22 +471,18 @@ def make_texture(name):
         h = 0.0012 * _noise(rng, 0.6) - 0.005 * seam + 0.012 * rib
         lum += -0.06 * seam + 0.05 * rib
     elif name == "deckplate":
-        # Сталевий настил понтона: фарба вигоріла плямами, стики секцій 1 м темні з іржею, що розтікається від шва,
-        # дві колії вздовж мосту затерті до темнішого й гладшого, бруд із коліс плямами 0.5-2 м ближче до країв.
-        lum = 0.02 * _noise(rng, 4.0) + 0.012 * _noise(rng, 1.0) + 0.006 * _noise(rng, 0.4)
-        # листи 2 м упоперек (стики секцій уздовж — це вже щілини в геометрії): шов 3 см, іржа плямами вздовж шва на ~10 см
+        # Сталевий настил понтона під ґрунтом, що його наносять колеса з ґрунтівки: бруд майже суцільний,
+        # густіший у коліях (колія 1.66 м, x = ±0.83 м від осі = u 0.104 / 0.896), сталь проглядає плямами
+        # між коліями й біля бортів; стики листів 2 м — ледь помітні темні лінії.
+        dirt = road_texture("dirt", 8.0, 8.0, 7)
         fx = np.minimum(mod(xx, 4), 1 - mod(xx, 4))
         seam = fx < 0.0075
-        near = np.clip(1.0 - fx / 0.05, 0, 1)
-        rust = np.clip(near * (_noise(rng, 1.2) - 0.2), 0, 1)
-        img = img * (1 - 0.4 * rust[..., None]) + np.array([0.30, 0.15, 0.08]) * 0.4 * rust[..., None]
-        track = sum(np.exp(-((np.minimum(np.abs(xx - cu), 1 - np.abs(xx - cu))) / 0.035) ** 2) for cu in (0.15, 0.85))
-        lum -= 0.08 * track * (0.75 + 0.25 * _noise(rng, 0.8, 6))
-        mud = np.clip(_noise(rng, 3.0) + 0.6 * track - 1.2, 0, 1)                # бруд несуть колеса: густіше в коліях
-        img = img * (1 - 0.6 * mud[..., None]) + np.array([0.22, 0.18, 0.13]) * 0.6 * mud[..., None]
-        lum -= 0.08 * seam
-        h = 0.0012 * _noise(rng, 0.7) - 0.004 * seam + 0.0015 * (_noise(rng, 0.25) > 0.8) + 0.002 * mud
-        rough = np.clip(0.88 - 0.12 * track + 0.1 * mud + 0.03 * _noise(rng, 1.0), 0.75, 1.0)
+        track = sum(np.exp(-((np.minimum(np.abs(xx - cu), 1 - np.abs(xx - cu))) / 0.03) ** 2) for cu in (0.104, 0.896))
+        cover = np.clip(0.62 + 0.3 * _noise(rng, 1.5) + 0.4 * track, 0, 1)
+        img = img * (1 - cover[..., None]) + dirt * cover[..., None]
+        lum = -0.04 * track * (0.8 + 0.2 * _noise(rng, 0.8, 6)) - 0.02 * seam * (1 - cover) + 0.006 * _noise(rng, 0.4)
+        h = -0.012 * track + 0.0012 * _noise(rng, 0.7) - 0.002 * seam * (1 - cover) + 0.002 * cover
+        rough = np.clip(0.8 + 0.15 * cover + 0.03 * _noise(rng, 1.0), 0.75, 1.0)
     img = np.clip(img + lum[..., None], 0, 1)
     px = np.concatenate([img, np.ones((TEX, TEX, 1))], axis=2)
     if rough is not None:
