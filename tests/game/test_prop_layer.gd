@@ -377,7 +377,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	for inst in view.props().all_instances():
 		models[inst["model"]] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
-			func(n: Node) -> bool: return n.name != &"ContactShadows" and n.name != &"GardenBeds")
+			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths"])
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
@@ -780,7 +780,8 @@ func test_no_fence_stubs(p = use_parameters(MAPS)) -> void:
 			assert_gte(_length(inst), PropLayer.MIN_FENCE - 1e-3, "%s: обрубок огорожі на %s" % [p, inst["cells"]])
 
 
-## На мокрій карті мости беруть темнішу й блискучішу копію сітки; суха — імпортовану.
+## Міст — матова копія сітки (ассет мав «мокрі» поверхні з шорсткістю 0.15, міст блищав склом); на
+## мокрій карті ще й темніша.
 func test_wet_map_darkens_bridges() -> void:
 	var m: MapData = _map("river")
 	for wet: bool in [false, true]:
@@ -792,11 +793,13 @@ func test_wet_map_darkens_bridges() -> void:
 		var node: MultiMeshInstance3D = view.props().get_node("bridge_river_centre")
 		var src := (PropLayer.model(&"bridge_river_centre")["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
 		var got := node.multimesh.mesh.surface_get_material(0) as BaseMaterial3D
+		# Міст матовий на будь-якій карті (не скло); на мокрій ще й темніший.
 		if wet:
 			assert_almost_eq(got.albedo_color.r, src.albedo_color.r * PropLayer.WET_DARK, 1e-3)
-			assert_lte(got.roughness, PropLayer.WET_ROUGHNESS + 1e-4)
+			assert_gte(got.roughness, PropLayer.WET_ROUGHNESS - 1e-4)
 		else:
-			assert_eq(got, src, "суха карта — імпортований матеріал")
+			assert_almost_eq(got.albedo_color.r, src.albedo_color.r, 1e-3)
+			assert_gte(got.roughness, PropLayer.BRIDGE_ROUGH - 1e-4)
 
 
 ## Руїна з глухим фронтоном стоїть пошкодженим фасадом (−Z) до камери (+x чи +z).
@@ -901,3 +904,158 @@ func test_crossroads_reads_as_a_village() -> void:
 				and not bool(s.get("tower", false)) and board.in_bounds(c):
 			houses += 1
 	assert_gte(houses, 4)
+
+
+func _box_of(inst: Dictionary) -> AABB:
+	return (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+
+
+## Будівля сидить на рельєфі: підошва не вище найнижчої точки під нею (не висить), а перепад під
+## слідом не більший за 1 м (інакше її треба перенести, підрізка не сховає).
+func test_buildings_sit_on_the_relief(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	# Рельєф саме цієї карти: TerrainHeight.active — рельєф останньої побудованої дошки.
+	var th: TerrainHeight = view._height
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+			continue
+		# Кільце — пейзаж в імлі за дошкою; рельєф перевіряється на дошці.
+		if not Rect2i(0, 0, 26, 22).has_point((inst["cells"] as Array)[0]):
+			continue
+		var box: AABB = _box_of(inst)
+		var lo: float = INF
+		var hi: float = -INF
+		for v: Vector2 in [Vector2(box.position.x, box.position.z), Vector2(box.end.x, box.end.z),
+				Vector2(box.position.x, box.end.z), Vector2(box.end.x, box.position.z), Vector2(box.get_center().x, box.get_center().z)]:
+			var g: float = th.at(v.x, v.y)
+			lo = minf(lo, g)
+			hi = maxf(hi, g)
+		if hi - lo <= PropLayer.PLINTH_FROM + 1e-3:
+			assert_lte(box.position.y, lo + 0.005, "%s: %s на %s висить" % [p, inst["model"], inst["cells"]])
+			continue
+		# Крутий схил: хата на середній висоті й стоїть на цоколі, що сягає землі внизу.
+		var plinth := false
+		for t: Transform3D in view.props().plinths():
+			var foot := Rect2(t.origin.x - t.basis.x.length() * 0.5, t.origin.z - t.basis.z.length() * 0.5,
+					t.basis.x.length(), t.basis.z.length())
+			var bottom: float = t.origin.y - t.basis.y.length() * 0.5
+			if foot.has_point(Vector2(box.get_center().x, box.get_center().z)) and bottom <= lo + 0.03:
+				plinth = true
+		assert_true(plinth, "%s: %s на %s — схил без цоколя" % [p, inst["model"], inst["cells"]])
+
+
+## Секція паркану лежить на рельєфі обома кінцями (нахил за схилом, не висить).
+func test_fences_follow_the_relief(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var th: TerrainHeight = view._height
+	for inst in view.props().all_instances():
+		if _kind(inst["model"]) != PropLayer.Kind.GARDEN_FENCE:
+			continue
+		var t: Transform3D = inst["transform"]
+		var half: float = (PropLayer.model(inst["model"])["aabb"] as AABB).size.x * 0.5
+		for sgn: float in [-1.0, 1.0]:
+			var end: Vector3 = t * Vector3(sgn * half, 0.0, 0.0)
+			assert_almost_eq(end.y, th.at(end.x, end.z), 0.03, "%s: паркан на %s висить" % [p, inst["cells"]])
+
+
+## Будівлі, паркани й стовпи не ближче WATER_CLEAR до води й болота: на березі вони висіли б над руслом.
+func test_nothing_hangs_over_the_bank(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var board: Board = m.to_board()
+	var view: BoardView = _cached(p)
+	var wet: Array[Rect2] = []
+	for y in board.height:
+		for x in board.width:
+			var kd: int = board.kind_at(Vector2i(x, y))
+			if kd == Terrain.Kind.WATER or kd == Terrain.Kind.MARSH:
+				wet.append(Rect2(x - 0.5, y - 0.5, 1.0, 1.0).grow(PropLayer.WATER_CLEAR - 1e-3))
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k not in [PropLayer.Kind.STRUCTURE, PropLayer.Kind.GARDEN_FENCE, PropLayer.Kind.POLE]:
+			continue
+		var box: AABB = _box_of(inst)
+		var r := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+		for w in wet:
+			assert_false(r.intersects(w), "%s: %s на %s над водою" % [p, inst["model"], inst["cells"]])
+
+
+## Кінці мосту сходяться з дорогою на березі.
+func test_bridge_ends_meet_the_bank() -> void:
+	var view: BoardView = _cached("river")
+	var h: TerrainHeight = view._height
+	for g in h.bridge_groups():
+		var cells: Array = g["cells"]
+		var axis: Vector2 = g["axis"]
+		var a := Vector2i(axis)
+		for c: Vector2i in cells:
+			for d: Vector2i in [a, -a]:
+				var n: Vector2i = c + d
+				if cells.has(n) or n.x < 0 or n.y < 0 or n.x >= 26 or n.y >= 22:
+					continue
+				# Настил на кінці — на висоті дороги на березі (центр клітинки дороги).
+				assert_almost_eq(h.deck_y(c), h.at(float(n.x), float(n.y)), 0.05, "кінець мосту %s до %s" % [c, n])
+
+
+## Масштаб у метрах (клітинка — 8 м): стовп 0.4 кВ — 8–9.5 м, 10 кВ — 8.5–10 м; одноповерхова хата
+## разом із димарем — до 8 м, двоповерхова — 8.5–11 м.
+func test_poles_and_houses_have_real_heights(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	for inst in view.props().all_instances():
+		var s: Dictionary = PropLayer.spec_of(inst["model"])
+		var metres: float = _box_of(inst).size.y * 8.0
+		if int(s.get("kind", -1)) == PropLayer.Kind.POLE:
+			var r: Vector2 = Vector2(8.0, 9.5) if s.get("line") == &"04kv" else Vector2(8.5, 10.0)
+			assert_between(metres, r.x, r.y, "%s: %s %.1f м" % [p, inst["model"], metres])
+		elif inst["model"] in [&"house_h5", &"house_h6"] and not inst.get("yard", false):
+			var r: Vector2 = Vector2(8.5, 11.0) if int(s.get("storeys", 1)) >= 2 else Vector2(5.0, 8.0)
+			assert_between(metres, r.x, r.y, "%s: %s %.1f м" % [p, inst["model"], metres])
+
+
+## Хати макету дивляться фасадом (−Z моделі) туди, куди каже садиба.
+func test_layout_houses_face_their_road() -> void:
+	var view: BoardView = _cached("river")
+	for home: Dictionary in VillageLayout.for_map(&"river")["homes"]:
+		var hc: Vector2i = home["house"]
+		var house: Array = view.props().instances_on(hc).filter(
+				func(i: Dictionary) -> bool: return _kind(i["model"]) == PropLayer.Kind.STRUCTURE and not i.get("yard", false))
+		assert_eq(house.size(), 1, "хата на %s" % hc)
+		if house.is_empty():
+			continue
+		var front: Vector3 = -(house[0]["transform"] as Transform3D).basis.z.normalized()
+		var face: Vector2i = home["face"]
+		assert_almost_eq(Vector2(front.x, front.z).dot(Vector2(face)), 1.0, 0.01, "хата на %s фасадом не до дороги" % hc)
+
+
+## Для диму: верх димаря кожної хати дошки (вузол chimney_top) і центри руїн дошки.
+func test_chimney_tops_and_ruin_centres() -> void:
+	var view: BoardView = _cached("crossroads")
+	var props: PropLayer = view.props()
+	var houses: Array = props.all_instances().filter(func(i: Dictionary) -> bool:
+		return i["model"] in [&"house_h5", &"house_h6"] and not i.get("yard", false) \
+				and Rect2i(0, 0, 26, 22).has_point((i["cells"] as Array)[0]))
+	var tops: Array[Vector3] = props.chimney_tops()
+	assert_gte(tops.size(), houses.size(), "у кожної хати дошки — щонайменше один димар")
+	for t in tops:
+		var near := false
+		for hs: Dictionary in houses:
+			var box: AABB = _box_of(hs).grow(0.05)
+			near = near or box.has_point(t)
+		assert_true(near, "димар %s не над хатою" % t)
+	var ruins: Array[Vector3] = props.ruin_centres()
+	assert_eq(ruins.size(), 6, "шість руїн на дошці Перехрестя")
+	for r in ruins:
+		assert_almost_eq(r.y, view._height.at(r.x, r.z), 0.1)
+
+
+## Пояс бруду довкола кожної хати дошки — одним вузлом.
+func test_houses_get_a_grime_band() -> void:
+	var view: BoardView = _cached("river")
+	var node: MultiMeshInstance3D = view.props().get_node("HouseGrime")
+	var houses: int = 0
+	for inst in view.props().all_instances():
+		var s: Dictionary = PropLayer.spec_of(inst["model"])
+		if int(s.get("kind", -1)) == PropLayer.Kind.STRUCTURE and not inst.get("yard", false) \
+				and Rect2i(0, 0, 26, 22).has_point((inst["cells"] as Array)[0]):
+			houses += 1
+	assert_eq(node.multimesh.instance_count, houses)

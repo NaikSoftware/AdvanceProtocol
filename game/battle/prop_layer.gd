@@ -52,7 +52,7 @@ const MODELS: Dictionary = {
 	&"infra_fence_euro": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
 	&"infra_hay_round": {"kind": Kind.HAY, "crush": Crush.SQUASH},
 	&"infra_hay_wrapped": {"kind": Kind.HAY, "crush": Crush.SQUASH},
-	&"infra_pole_concrete_10kv": {"kind": Kind.POLE, "line": &"10kv", "crush": Crush.LAY},
+	&"infra_pole_concrete_10kv": {"kind": Kind.POLE, "line": &"10kv", "crush": Crush.LAY, "scale": 0.85},
 	&"infra_pole_concrete_04kv": {"kind": Kind.POLE, "line": &"04kv", "crush": Crush.LAY},
 	&"infra_pole_wood": {"kind": Kind.POLE, "line": &"04kv", "crush": Crush.LAY},
 	&"infra_trailer_green": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
@@ -108,9 +108,6 @@ const YARD_SHED: StringName = &"f8_shed"
 ## Хата на клітинку (ассет на 0.94 клітинки, ~7.5 м) — рівномірно до ~6.4 м: така сільська хата
 ## звична, а між двома сусідніми з камери гри лишається смуга землі.
 const HOUSE_SCALE: float = 1.0
-## Стовпи ЛЕП у метрах: ассет 0.4 кВ — 9.5 м, 10 кВ — 10.7 м; справжні — 8–9 і ~9–10 м над землею.
-## Без поправки стовп виходив удвічі вищим за одноповерхову хату (гребінь 5.4 м).
-const POLE_SCALE: float = 0.85
 ## Відвід до хати — від стовпа не далі за стільки клітинок.
 const SERVICE_REACH: float = 5.5
 ## Стовп, будівля й паркан тримаються від води й болота щонайменше на стільки клітинок.
@@ -156,6 +153,13 @@ const _THIN_SHADER: Shader = preload("res://game/battle/shaders/prop_thin.gdshad
 static var _thin_solid_shader: Shader
 const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.gdshader")
 const _GARDEN_SHADER: Shader = preload("res://game/battle/shaders/prop_garden.gdshader")
+const _GRIME_SHADER: Shader = preload("res://game/battle/shaders/prop_grime.gdshader")
+## Найбільший перепад рельєфу під хатою без цоколя, клітинки (1 м). Більший — хата стає на середню
+## висоту: вгору по схилу врізана в землю, донизу — на кам'яному цоколі.
+const PLINTH_FROM: float = 0.125
+const PLINTH_ALBEDO: Color = Color(0.34, 0.32, 0.29)
+## Пояс бруду довкола хати, клітинки (~0.5 м).
+const GRIME_M: float = 0.0625
 ## Запас від краю дорожнього покриття для парканів і дрібних пропсів, клітинки (~0.4 м).
 const ROAD_PAD: float = 0.05
 ## Сарай, причіп чи техніка — лише при хаті: хата в межах стількох клітинок (Чебишов).
@@ -196,6 +200,8 @@ var _gardens: Array[Vector2i] = []
 var _garden_node: MultiMeshInstance3D
 ## Наскільки грядки зелені (BattleLook.season): літо — зелень, рання осінь — жовта, пізня — гола рілля.
 var garden_green: float = 0.2
+## Цоколі хат на схилі: перетворення коробки одиничного розміру.
+var _plinths: Array[Transform3D] = []
 ## Відводи до хат: [індекс опори, точка на стіні хати].
 var _drops: Array = []
 ## Опори з дротами: [індекс екземпляра опори A, індекс B] — проліт.
@@ -284,11 +290,15 @@ static func model(name: StringName) -> Variant:
 	named.sort_custom(func(a: Node, b: Node) -> bool: return String(a.name) < String(b.name))
 	for w in named:
 		wires.append(_to_root(w as Node3D, root).origin)
+	# Маркер chimney_top (порожній вузол над шапкою димаря): туди чіпляється дим.
+	var chimneys: Array[Vector3] = []
+	for n in root.find_children("chimney_top*", "", true, false):
+		chimneys.append(_to_root(n as Node3D, root).origin)
 	var tris: int = 0
 	for s in mi.mesh.get_surface_count():
 		tris += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 	var info: Dictionary = {"mesh": _tuned_mesh(name, mi.mesh), "local": local, "footprint": footprint,
-			"aabb": local * mi.mesh.get_aabb(), "wires": wires, "tris": tris}
+			"aabb": local * mi.mesh.get_aabb(), "wires": wires, "tris": tris, "chimneys": chimneys}
 	root.free()
 	_models[name] = info
 	return info
@@ -458,6 +468,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_node_model.clear()
 	_spans.clear()
 	_drops.clear()
+	_plinths.clear()
 	_wires = null
 	_contacts = null
 	_garden_node = null
@@ -498,6 +509,31 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 	for c in cells:
 		_crushed[c] = true
 	_queue_apply()
+
+
+## Світові точки верху димарів хат дошки (вузол chimney_top моделі) — для диму з димарів.
+func chimney_tops() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for inst in _instances:
+		if int(spec_of(inst["model"])["kind"]) != Kind.STRUCTURE or inst.get("yard", false):
+			continue
+		if not _on_board((inst["cells"] as Array)[0]):
+			continue
+		var t: Transform3D = _final_transform(inst) * (model(inst["model"]) as Dictionary)["local"]
+		for p: Vector3 in (model(inst["model"]) as Dictionary).get("chimneys", []):
+			out.append(t * p)
+	return out
+
+
+## Центри руїн дошки на землі (середина обрису, висота підошви) — для тління руїн.
+func ruin_centres() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for inst in _instances:
+		if int(spec_of(inst["model"])["kind"]) != Kind.RUIN or not _on_board((inst["cells"] as Array)[0]):
+			continue
+		var box: AABB = (inst["transform"] as Transform3D) * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		out.append(Vector3(box.get_center().x, box.position.y, box.get_center().z))
+	return out
 
 
 ## Точка на покритті дороги (осі й ширина RoadCourse) з запасом pad, клітинки.
@@ -618,6 +654,8 @@ func _build_nodes(haze: bool) -> void:
 		add_child(_wires)
 	_build_contacts()
 	_build_gardens()
+	_build_grime()
+	_build_plinths()
 
 
 ## Городи: сусідні клітинки городу зливаються в одну ділянку (жадібні прямокутники, тож Г-подібна
@@ -689,6 +727,67 @@ func _garden_rects() -> Array[Rect2i]:
 				left.erase(c + Vector2i(x, y))
 		out.append(Rect2i(c, Vector2i(w, hgt)))
 	return out
+
+
+## Кам'яні цоколі хат на схилі: одна MultiMesh коробок.
+func _build_plinths() -> void:
+	if _plinths.is_empty():
+		return
+	var box := BoxMesh.new()
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = PLINTH_ALBEDO
+	mat.roughness = 1.0
+	box.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = box
+	mm.instance_count = _plinths.size()
+	for i in _plinths.size():
+		mm.set_instance_transform(i, _plinths[i])
+	var node := MultiMeshInstance3D.new()
+	node.name = "Plinths"
+	node.multimesh = mm
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if structure_shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
+
+
+func plinths() -> Array[Transform3D]:
+	return _plinths
+
+
+## Пояс бруду довкола хат дошки: квадрат на сліді хати, ширший на GRIME_M з кожного боку; шейдер
+## темнить смугу вздовж стін. Одна MultiMesh, два трикутники на хату.
+func _build_grime() -> void:
+	var xforms: Array[Transform3D] = []
+	for inst in _instances:
+		if int(spec_of(inst["model"])["kind"]) != Kind.STRUCTURE or inst.get("yard", false):
+			continue
+		if not _on_board((inst["cells"] as Array)[0]):
+			continue
+		var t: Transform3D = inst["transform"]
+		var box: AABB = t * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var size := Vector2(box.size.x, box.size.z) + Vector2.ONE * GRIME_M * 2.0
+		var c := Vector2(box.get_center().x, box.get_center().z)
+		xforms.append(Transform3D(Basis.from_scale(Vector3(size.x, 1.0, size.y)),
+				Vector3(c.x, TerrainHeight.ground_y(c.x, c.y) + 0.005, c.y)))
+	if xforms.is_empty():
+		return
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE
+	var mat := ShaderMaterial.new()
+	mat.shader = _GRIME_SHADER
+	quad.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = quad
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+	var node := MultiMeshInstance3D.new()
+	node.name = "HouseGrime"
+	node.multimesh = mm
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
 
 
 ## Пляма дотику під брилами й блоками: один квадрат на кожен, лягає за схилом, одна MultiMesh. Без
@@ -1066,6 +1165,20 @@ class _Placer:
 				return true
 		return false
 
+	## Точка ближче за clear до клітинки води чи болота.
+	func near_wet(p: Vector2, clear: float) -> bool:
+		var c := Vector2i(roundi(p.x), roundi(p.y))
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var n: Vector2i = c + Vector2i(dx, dy)
+				var kd: int = kind(n)
+				if kd != Terrain.Kind.WATER and kd != Terrain.Kind.MARSH:
+					continue
+				var nearest := Vector2(clampf(p.x, n.x - 0.5, n.x + 0.5), clampf(p.y, n.y - 0.5, n.y + 0.5))
+				if p.distance_to(nearest) < clear:
+					return true
+		return false
+
 	## Хата (будинок, не вежа й не двірське вбрання) в межах HOUSE_NEAR клітинок.
 	func house_near(c: Vector2i) -> bool:
 		for dy in range(-HOUSE_NEAR, HOUSE_NEAR + 1):
@@ -1108,7 +1221,9 @@ class _Placer:
 			var y0: float = ground(x - along.x, z - along.z)
 			var y1: float = ground(x + along.x, z + along.z)
 			basis = Basis(basis.z, atan2(y1 - y0, 2.0 * half_len)) * basis
-			y = minf((y0 + y1) * 0.5, y)
+			# Секція обертається довкола середини: та стоїть на середній висоті кінців, тож обидва
+			# кінці на землі, а не один у ній.
+			y = (y0 + y1) * 0.5
 		var xform := Transform3D(basis * Basis.from_scale(Vector3(length, 1.0, 1.0) * scale), Vector3(x, y, z))
 		if not clear_of_centre(m, xform, c) or _box_on_road(m, xform):
 			return false
@@ -1322,6 +1437,20 @@ class _Placer:
 				# Найнижча точка під слідом: стіна трохи заходить у землю, але ніде не висить.
 				for o: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
 					lo = minf(lo, ground(c.x + o.x, c.y + o.y))
+		# І під самою моделлю: хата буває ширша за 0.8 клітинки, і на схилі її кут висів би.
+		var r_box: Rect2 = _rect_of(m, origin, rot, s)
+		var hi: float = -INF
+		for v: Vector2 in [r_box.position, r_box.end, Vector2(r_box.position.x, r_box.end.y),
+				Vector2(r_box.end.x, r_box.position.y), r_box.get_center()]:
+			lo = minf(lo, ground(v.x, v.y))
+			hi = maxf(hi, ground(v.x, v.y))
+		# Хата дошки на схилі: на середину, уверх по схилу — врізана, донизу — цоколь.
+		if hi - lo > PLINTH_FROM and int(PropLayer.spec_of(m)["kind"]) == Kind.STRUCTURE and on_board(origin):
+			var base: float = (lo + hi) * 0.5
+			var foot: Rect2 = r_box.grow(-0.02)
+			layer._plinths.append(Transform3D(Basis.from_scale(Vector3(foot.size.x, base - lo + 0.02, foot.size.y)),
+					Vector3(foot.get_center().x, (base + lo) * 0.5, foot.get_center().y)))
+			lo = base
 		used[m] = int(used.get(m, 0)) + 1
 		var sp: Dictionary = PropLayer.spec_of(m)
 		if int(sp["kind"]) == Kind.STRUCTURE and not bool(sp.get("tower", false)):
@@ -1594,13 +1723,12 @@ class _Placer:
 		var c := Vector2i(roundi(p.x), roundi(p.y))
 		if not on_board(c) or kind(c) not in [Terrain.Kind.FIELD, Terrain.Kind.HILL] or on_road(p, 0.1):
 			return -1
-		for w: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var n: Vector2i = c + w
-			if kind(n) == Terrain.Kind.WATER or kind(n) == Terrain.Kind.MARSH:
-				if p.distance_to(Vector2(n)) < 0.5 + WATER_CLEAR:
-					return -1
+		# Стовп на березі, не в руслі й не над болотом.
+		if near_wet(p, WATER_CLEAR + 0.15):
+			return -1
 		var before: int = layer._instances.size()
-		if put_small(m, c, p - Vector2(c), atan2(t.x, t.y), POLE_SCALE):
+		# Стовп у метрах: 0.4 кВ — 8.8 м (ассет), 10 кВ — з 10.7 до ~9.1 м (scale у таблиці).
+		if put_small(m, c, p - Vector2(c), atan2(t.x, t.y), float(PropLayer.spec_of(m).get("scale", 1.0))):
 			return before
 		return -1
 
@@ -1835,9 +1963,10 @@ class _Placer:
 	func _span_clear(c: Vector2i, d: Vector2i, t: Vector2i, lo: float, hi: float) -> bool:
 		var mid: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
 		var half_t: Vector2 = (Vector2(t) * (hi - lo) * 0.5).abs()
-		# Паркан не лягає на дорогу: секція коротшає, доки не зійде з покриття.
+		# Паркан не лягає на дорогу й не висить над водою: секція коротшає, доки не зійде з них.
 		for k in 9:
-			if on_road(mid + (Vector2(t) * (hi - lo) * 0.5) * (float(k) / 4.0 - 1.0), ROAD_PAD):
+			var q: Vector2 = mid + (Vector2(t) * (hi - lo) * 0.5) * (float(k) / 4.0 - 1.0)
+			if on_road(q, ROAD_PAD) or near_wet(q, WATER_CLEAR):
 				return false
 		var span := Rect2(mid - half_t, half_t * 2.0).grow(0.3 - 1e-3)
 		for pl: Array in placed:
