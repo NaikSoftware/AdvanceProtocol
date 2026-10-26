@@ -131,6 +131,9 @@ const BUILDING_SHIFT: float = 0.3
 ## Повітка-двірська будівля на клітинці BUILDING без будинку: f8_shed, зменшена так, щоб вільно
 ## стала в клітинку (ассет на 0.96 клітинки не влазить із відступом до огорожі).
 const YARD_SHED: StringName = &"f8_shed"
+## Секція паркану не відходить від ґрунту посередині більш ніж на 5 см; найкоротша секція (клітинки).
+const FENCE_SAG: float = 0.05 * 0.125
+const FENCE_MIN: float = 0.1
 ## Хата на клітинку (ассет на 0.94 клітинки, ~7.5 м) — рівномірно до ~6.4 м: така сільська хата
 ## звична, а між двома сусідніми з камери гри лишається смуга землі.
 const HOUSE_SCALE: float = 1.0
@@ -264,7 +267,6 @@ var _gardens: Array[Vector2i] = []
 var _garden_node: MultiMeshInstance3D
 ## Наскільки грядки зелені (BattleLook.season): літо — зелень, рання осінь — жовта, пізня — гола рілля.
 var garden_green: float = 0.2
-## Цоколі хат на схилі: перетворення коробки одиничного розміру.
 ## Відводи до хат: [індекс опори, точка на стіні хати].
 var _drops: Array = []
 ## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
@@ -574,7 +576,6 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	p.place_all()
 	if height != null:
 		height.finish_pads()
-		p.settle()
 	_spans = p.spans
 	_gardens = p.gardens
 	_garden_plots = p.garden_plots
@@ -2551,10 +2552,14 @@ class _Placer:
 		var along: Vector2 = (b - a) / float(n)
 		var hs: float = float(PropLayer.spec_of(m).get("height", 1.0))
 		var model_len: float = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size.x
+		var spans: Array = []
 		for k in n:
-			var p0: Vector2 = a + along * k
-			var p1: Vector2 = p0 + along
+			_fence_split(a + along * k, a + along * (k + 1), spans)
+		for sp: Array in spans:
+			var p0: Vector2 = sp[0]
+			var p1: Vector2 = sp[1]
 			var mid: Vector2 = (p0 + p1) * 0.5
+			along = p1 - p0
 			var yaw: float = atan2(-along.y, along.x)
 			var y0: float = ground(p0.x, p0.y)
 			var y1: float = ground(p1.x, p1.y)
@@ -2571,6 +2576,22 @@ class _Placer:
 			var cells: Array[Vector2i] = [c]
 			layer._add(m, xf, cells)
 			yard_cells[c] = true
+
+	## Секція p0→p1 — пряма між висотами кінців; де ґрунт під нею (на чверті, середині й трьох
+	## чвертях) відходить від прямої більш ніж на FENCE_SAG (край майданчика будівлі, бровка), вона
+	## ділиться навпіл, але не коротша за FENCE_MIN.
+	func _fence_split(p0: Vector2, p1: Vector2, out: Array) -> void:
+		var y0: float = ground(p0.x, p0.y)
+		var y1: float = ground(p1.x, p1.y)
+		if p0.distance_to(p1) >= 2.0 * FENCE_MIN:
+			for t: float in [0.25, 0.5, 0.75]:
+				var q: Vector2 = p0.lerp(p1, t)
+				if absf(ground(q.x, q.y) - lerpf(y0, y1, t)) > FENCE_SAG:
+					var mid: Vector2 = (p0 + p1) * 0.5
+					_fence_split(p0, mid, out)
+					_fence_split(mid, p1, out)
+					return
+		out.append([p0, p1])
 
 	## Тюки з макету: на краю поля, поодинці чи вільною парою, кожен своїм поворотом.
 	func _layout_hay() -> void:
