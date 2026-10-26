@@ -74,7 +74,7 @@ const TURN_FROM: float = 0.25
 ## іржавий, обидва приглушені й темніші за траву.
 ## Яскравість осінніх тонів — та сама, що в зеленої крони (луминанс ≈ 1): різниться відтінок,
 ## а не світлість, інакше крони лягають світлими й темними плямами.
-const TURNED: Dictionary = {"Birch": Color(1.12, 1.0, 0.57), "Oak": Color(1.12, 0.95, 0.72)}
+const TURNED: Dictionary = {"Birch": Color(1.06, 1.0, 0.8), "Oak": Color(1.06, 0.97, 0.88)}
 
 const FADE_MODES: PackedStringArray = ["none", "silhouette", "soft", "cut"]
 ## Показ юнітів у лісі за замовчуванням — обрис кольору гравця крізь крони.
@@ -366,6 +366,13 @@ func _load_library(season: String) -> void:
 			"|| (!shadow_pass && piece_hash > COLOR.a)", "").replace(
 			"ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = COLOR.a;")
 	assert(soft.code.contains("ALPHA = COLOR.a;"), "шейдер soft не зібрався: змінився forest_crown.gdshader")
+	# М'який край: другий прохід малює лише смугу альфи трохи нижче порогу, прозоро, без
+	# запису глибини — 1–2 пікселі переходу замість сходинки alpha-cut і без растру.
+	var fringe := Shader.new()
+	fringe.code = shader.code.replace("depth_draw_opaque, ", "depth_draw_never, ").replace(
+			"	if (t.a < cut || COLOR.a", "	if (shadow_pass || t.a >= cut || t.a < cut - edge_soft || COLOR.a").replace(
+			"ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = smoothstep(cut - edge_soft, cut, t.a);")
+	assert(fringe.code.contains("ALPHA = smoothstep") and fringe.code.contains("t.a >= cut"), "шейдер краю не зібрався")
 	# Маска для вимірювання: ті самі пікселі крони, неосвітлений колір виду.
 	var mask := Shader.new()
 	mask.code = shader.code.replace("render_mode cull_disabled,", "render_mode unshaded, cull_disabled,").replace(
@@ -400,6 +407,11 @@ func _load_library(season: String) -> void:
 				var broad: bool = prefix in ["Birch", "Oak", "Hero"]
 				m.set_shader_parameter("mask_col", Color(1, 0, 0) if conifer else (Color(0, 1, 0) if broad else Color(0, 0, 1)))
 				(pair[1] as Dictionary)[mi.mesh] = m
+			var fm := ShaderMaterial.new()
+			fm.shader = fringe
+			fm.set_shader_parameter("albedo_tex", src.albedo_texture)
+			fm.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
+			(_material[mi.mesh] as ShaderMaterial).next_pass = fm
 		root.free()
 	var g: Node = (load("res://assets/props/forest/forest_ground.glb") as PackedScene).instantiate()
 	for mi: MeshInstance3D in g.find_children("*", "MeshInstance3D", true, false):
@@ -583,7 +595,8 @@ func _crushed_shrub(p: Vector2) -> void:
 	var mesh: Mesh = (_meshes["Shrub"] as Array)[_rng.randi() % (_meshes["Shrub"] as Array).size()]
 	var tilt := Basis(Vector3(_rng.randf_range(-1, 1), 0, _rng.randf_range(-1, 1)).normalized(), deg_to_rad(_rng.randf_range(15.0, 35.0)))
 	var b: Basis = tilt * Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(1.0, _rng.randf_range(0.4, 0.6), 1.0) * _rng.randf_range(0.7, 1.0))
-	_add_instance(mesh, Transform3D(b, _offset + Vector3(p.x, 0.0, p.y)), p, 0.3)
+	# Прим'ятий кущ темніший: голі світлі гілочки на просіці читались світлими цятками.
+	_add_instance(mesh, Transform3D(b, _offset + Vector3(p.x, 0.0, p.y)), p, 0.3, Color(0.55, 0.55, 0.55))
 
 
 ## Крона з центром p і радіусом r заходить на проламану клітинку.

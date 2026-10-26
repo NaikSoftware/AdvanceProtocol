@@ -10,7 +10,7 @@
     "src": "birch_early",
     "grade": {
      "lab": {
-      "L": 24,
+      "L": 22,
       "C": 10,
       "h": 135,
       "contrast_l": 0.6
@@ -23,7 +23,7 @@
     "src": "broad_early",
     "grade": {
      "lab": {
-      "L": 24,
+      "L": 22,
       "C": 10,
       "h": 135,
       "contrast_l": 0.6
@@ -36,7 +36,7 @@
     "src": "oak_early",
     "grade": {
      "lab": {
-      "L": 24,
+      "L": 22,
       "C": 10,
       "h": 135,
       "contrast_l": 0.6
@@ -49,7 +49,7 @@
     "src": "shrub_early",
     "grade": {
      "lab": {
-      "L": 24,
+      "L": 22,
       "C": 10,
       "h": 135,
       "contrast_l": 0.6

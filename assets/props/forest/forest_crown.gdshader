@@ -27,18 +27,21 @@ global uniform vec3 foliage_tint;
 // М'яке огортання світлом і просвічування: тіньовий бік пучка не чорніє, як у листя.
 uniform float wrap = 0.65;
 uniform float translucency = 0.1;
-// Об'єм крони: місце пучка розтягується до [occlusion, 1] і множить колір. Під рівним
-// небом крона інакше — плоска аплікація одного кольору; так
-// у неї світлий верх, темний низ і темні щілини між кронами, де видно нижні пучки.
-uniform float occlusion = 0.4;
+// Затінення множить колір (AO рендерер тут не застосовує). Два рівні:
+// - пучок: світлий верх → темний низ у межах картки (~±8 L*), тож кожна грудка кругла;
+// - крона: низ і край крони темніші на crown_depth, де крони перекриваються.
+// Різниця між пучками навмисне мала: світлі грудки поверх темних читались камуфляжем.
+uniform float lobe_depth = 0.35;
+uniform float crown_depth = 0.1;
+// Ширина м'якого краю (у частках альфи нижче порогу) для прозорого проходу краю.
+uniform float edge_soft = 0.25;
 // Темний обідок пучка: м'який край замість різкої вирізаної лінії наліпки.
 uniform float rim = 0.15;
 uniform float card_round = 0.7;
-uniform float card_up = 0.8;
-// 0 — вимкнено: крапчастий край читався сіткою; без MSAA лишається сходинка alpha-cut.
-uniform float edge_ramp = 0.0;
+uniform float card_up = 0.9;
 
 varying float is_card;
+varying flat float card_half;
 varying vec3 inst_tone;
 varying flat float piece_hash;
 
@@ -55,6 +58,8 @@ void vertex() {
 	inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);
 	vec3 v = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	is_card = dot(UV2, UV2) > 0.0 ? 1.0 : 0.0;
+	// Півдіагональ картки (усі 4 кути однаково далекі від центру) — для градієнта пучка.
+	card_half = length(UV2);
 	if (is_card > 0.5) {
 		// Масштаб екземпляра по горизонталі: картка росте разом із кроною.
 		float s = length(MODEL_MATRIX[0].xyz);
@@ -86,13 +91,8 @@ void fragment() {
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 2.5) / 2.0, 0.0, 1.0));
 	// Силует — з різкого рівня: обрис пучка — дрібне листя. Розмитіший mip для порогу
 	// робив із пучка кілька великих лопатей — «листки» по метру на ближньому зумі.
-	// Край пучка без сходинок: біля порогу альфа береться наполовину з сусіднього mip, а поріг
-	// тремтить шумом екрана в смузі edge_ramp — сходинка alpha-cut стає м'яким
-	// крапчастим переходом на 1–2 пікселі (MSAA для alpha-to-coverage в проєкті немає).
-	float ign = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
-	float ea = mix(t.a, textureLod(albedo_tex, UV, lod + 1.0).a, 0.5 * is_card);
-	float ecut = shadow_pass ? cut : cut + (ign - 0.5) * edge_ramp * is_card;
-	if ((shadow_pass ? t.a : ea) < ecut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
+	// М'який край пучка малює окремий прозорий прохід (той самий код, поріг навпаки).
+	if (t.a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
 		discard;
 	}
 	vec3 tint = mix(vec3(1.0), foliage_tint, is_card);
@@ -102,10 +102,9 @@ void fragment() {
 	// Зблизька — трохи ширшого mip: світлі й темні листки всередині пучка спокійніші, але
 	// дрібне листя лишається; більше — і пучок стає пласкою лопатевою плямою.
 	vec3 rgb = mix(t.rgb, coarse, is_card * mix(0.15, 0.85, smoothstep(2.0, 3.5, lod)));
-	// Місце пучка в кроні (стале на картці) плюс положення точки на самій картці (UV2 —
-	// зсув від центру, тайли): затінення тече по кроні плавно, а не сходинками пучків.
-	float hf = clamp((COLOR.r - 0.55) / 0.45 + UV2.y * 1.3, 0.0, 1.0);
-	float occ = mix(1.0, mix(occlusion, 1.0, hf), is_card);
+	float crown = clamp((COLOR.r - 0.55) / 0.45, 0.0, 1.0);
+	float lobe = clamp(0.5 + 0.5 * UV2.y / max(card_half * 0.7071, 1e-4), 0.0, 1.0);
+	float occ = mix(1.0, mix(1.0 - lobe_depth, 1.0, lobe) * mix(1.0 - crown_depth, 1.0, crown), is_card);
 	// Альфа сусіднього mip падає біля краю силуету пучка — там він і темніє. Здаля mip уже
 	// усереднений скрізь, і обідок затемнив би всю крону, тож там він гасне.
 	float edge = textureLod(albedo_tex, UV, lod + 1.0).a;
