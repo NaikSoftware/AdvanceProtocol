@@ -11,6 +11,7 @@ extends Node
 ##   --cr     вигляд карти Перехрестя (BattleLook): сонце пізнього літа; суфікс _cr;
 ##   --rg     вигляд карти Хребет (BattleLook): ясна рання осінь; суфікс _ri;
 ##   --z2=N   зум другого кадру (_far) замість MAX_ZOOM;
+##   --with=N  поруч (за 1,6 тайла) ставить ще модель N — наприклад, хату біля паркану для масштабу й тону;
 ##   --road=L:D  біля кожного кінця моста — смуга дороги з макротекстури землі L (road | dirt) на висоті настилу D (тайли),
 ##               щоб бачити стик настилу з дорогою;
 ##   --black  чорний ґрунт без відблисків: у кадрі лишається лише сам об'єкт, тож його середній тон міряється без тла; файли отримують суфікс _black;
@@ -27,7 +28,7 @@ extends Node
 ##   --nodes=a,b,c  лише ці вузли бібліотеки GLB, рядком уздовж X через --gap=G тайлів (типово 0,6);
 ##   --water[=E]  вода в дальній половині поля, край на E тайлів від об'єктів (типово −0,1 — за ними;
 ##            додатне — перед ними, об'єкти стоять у мілині);
-##   --with=res://….glb:X:Z  ще один GLB поруч (зсув у тайлах), напр. хата біля дерева;
+##   --beside=res://….glb:X:Z  ще один GLB поруч (зсув у тайлах), напр. хата біля дерева;
 ##   --tag=T  ім'я знімка замість імені GLB.
 
 var props_dir: String = "res://assets/props"
@@ -40,6 +41,7 @@ var sfx: String = ""
 var look_path: String = ""
 var zoom2: float = IsoCameraRig.MAX_ZOOM
 var road_layer: String = ""
+var with_model: String = ""
 var road_deck: float = 0.0
 ## Метрів на повтор макротекстури дороги й множник сухого покриття (як у GroundSurface і ground.gdshader).
 const ROAD_M: Dictionary = {"road": 30.0, "dirt": 20.0}
@@ -50,7 +52,7 @@ var fade: float = -1.0
 var dissolve: float = -1.0
 var fade_floor: float = 0.0
 var neutral: bool = false
-var tank_at: Vector2 = Vector2(2.6, 1.6)
+var tank_at: Vector2 = Vector2(1.2, 0.0)
 var only_nodes: PackedStringArray = PackedStringArray()
 var gap: float = 0.6
 var water: bool = false
@@ -81,6 +83,8 @@ func _ready() -> void:
 			look_path = "res://maps/crossroads.tres"
 		elif args[i] == "--rg":
 			look_path = "res://maps/ridge.tres"
+		elif args[i].begins_with("--with="):
+			with_model = args[i].substr(7)
 		elif args[i].begins_with("--road="):
 			var parts: PackedStringArray = args[i].substr(7).split(":")
 			road_layer = parts[0]
@@ -115,8 +119,8 @@ func _ready() -> void:
 		elif args[i].begins_with("--water="):
 			water = true
 			water_edge = float(args[i].substr(8))
-		elif args[i].begins_with("--with="):
-			var wp: PackedStringArray = args[i].substr(7).split(":")
+		elif args[i].begins_with("--beside="):
+			var wp: PackedStringArray = args[i].substr(9).split(":")
 			with_path = wp[0] + ":" + wp[1]
 			with_off = Vector2(float(wp[2]), float(wp[3]))
 		elif args[i].begins_with("--tag="):
@@ -187,41 +191,36 @@ func _ready() -> void:
 		ws.position = Vector3(cell.x + with_off.x, 0.0, cell.y + with_off.y)
 		add_child(ws)
 
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-50.0, -30.0, 0.0)
-	sun.light_color = Color(0.86, 0.91, 1.0)
-	sun.light_energy = 0.9
-	sun.light_angular_distance = 2.5
-	sun.shadow_blur = 2.5
-	sun.shadow_enabled = true
-	add_child(sun)
-	var env := WorldEnvironment.new()
-	env.environment = Environment.new()
-	env.environment.background_mode = Environment.BG_COLOR
-	env.environment.background_color = Color(0.42, 0.45, 0.48)
-	env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.environment.ambient_light_color = Color(0.62, 0.66, 0.72)
-	env.environment.ambient_light_energy = 0.8
-	add_child(env)
+	var sun: DirectionalLight3D
 	if rl and look_path == "":
 		look_path = "res://maps/river.tres"
 	if look_path != "":
-		var look: BattleLook = BattleLook.for_map_path(look_path)
-		sun.light_color = look.light_color
-		sun.light_energy = look.light_energy
-		sun.rotation_degrees = Vector3(-look.light_pitch_deg, look.light_yaw_deg, 0.0)
-		sun.shadow_opacity = look.shadow_opacity
-		sun.shadow_blur = look.shadow_blur
-		env.environment.ambient_light_color = look.ambient_color
-		env.environment.ambient_light_energy = look.ambient_energy
-		env.environment.background_color = Color(0.40, 0.44, 0.48)
-		# Тон листя карти, як його ставить WeatherRig у грі.
-		RenderingServer.global_shader_parameter_set(&"foliage_tint", Vector3(look.foliage_tint.r, look.foliage_tint.g, look.foliage_tint.b))
+		# світло, небо, тінь і мокрість — тим самим WeatherRig, що й бій: власний набір світла давав інші числа, ніж у грі
+		var weather := WeatherRig.new()
+		add_child(weather)
+		weather.apply(BattleLook.for_map_path(look_path))
+		weather.rain.visible = false                                       # штрихи дощу лягали б на виміряні ділянки
+		sun = weather.sun
+	else:
+		sun = DirectionalLight3D.new()
+		sun.rotation_degrees = Vector3(-50.0, -30.0, 0.0)
+		sun.light_color = Color(0.86, 0.91, 1.0)
+		sun.light_energy = 0.9
+		sun.light_angular_distance = 2.5
+		sun.shadow_blur = 2.5
+		sun.shadow_enabled = true
+		add_child(sun)
+		var env := WorldEnvironment.new()
+		env.environment = Environment.new()
+		env.environment.background_mode = Environment.BG_COLOR
+		env.environment.background_color = Color(0.42, 0.45, 0.48)
+		env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.environment.ambient_light_color = Color(0.62, 0.66, 0.72)
+		env.environment.ambient_light_energy = 0.8
+		add_child(env)
 	if neutral:
 		sun.light_color = Color(1, 1, 1)
 		sun.light_energy = 1.0
-		env.environment.ambient_light_color = Color(1, 1, 1)
-		env.environment.ambient_light_energy = 0.6
 		RenderingServer.global_shader_parameter_set(&"foliage_tint", Vector3.ONE)
 
 	for n in names:
@@ -238,25 +237,27 @@ func _ready() -> void:
 			_veg_material(inst)
 		if road_layer != "":
 			_road_ends(inst)
-		if rl:
-			# мокрий реквізит із гри: матеріал-накладка зменшує шорсткість, тож дахи й стіни дають мокрий блиск
-			for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
-				for si: int in mi.mesh.get_surface_count():
-					var wm: StandardMaterial3D = mi.get_active_material(si) as StandardMaterial3D
-					if wm != null:
-						var wet: StandardMaterial3D = wm.duplicate() as StandardMaterial3D
-						wet.roughness = 0.4
-						wet.metallic_specular = 0.12
-						mi.set_surface_override_material(si, wet)
+		var other: Node3D = null
+		if with_model != "":
+			var path: String = "%s/%s.glb" % [props_dir, with_model]
+			if ResourceLoader.exists(path):
+				other = (load(path) as PackedScene).instantiate()
+				add_child(other)
+				other.global_position = inst.global_position + Vector3(1.6, 0.0, -0.6)
+			else:
+				push_error("prop_preview: --with=%s не знайдено" % with_model)
+		var kind: int = int(PropLayer.spec_of(StringName(n)).get("kind", -1))
+		if kind == PropLayer.Kind.STRUCTURE or kind == PropLayer.Kind.RUIN:
+			_battle_material(inst)
 		if tank:
 			var box := MeshInstance3D.new()
 			var bm := BoxMesh.new()
-			bm.size = Vector3(0.75, 0.5, 0.9)
+			bm.size = Vector3(0.45, 0.3, 0.9)                         # танк 3,6 x 2,4 x 7,2 м у тайлах по 8 м
 			box.mesh = bm
 			var tm := StandardMaterial3D.new()
 			tm.albedo_color = Color(0.32, 0.36, 0.30)
 			box.material_override = tm
-			box.position = Vector3(tank_at.x, 0.25, tank_at.y)
+			box.position = Vector3(tank_at.x, 0.15, tank_at.y)
 			inst.add_child(box)
 		print("PROP %s tris=%d" % [n, _triangles(inst)])
 		rig.center_on(cell)
@@ -291,6 +292,8 @@ func _ready() -> void:
 				prev.make_current()
 			cam.queue_free()
 		inst.queue_free()
+		if other != null:
+			other.queue_free()
 	get_tree().quit()
 
 func _shoot(rig: IsoCameraRig, zoom: float, path: String) -> void:
@@ -412,3 +415,38 @@ static func veg_mesh(src: Mesh, p_fade: float, p_floor: float) -> Mesh:
 	if mesh.get_surface_count() > 1:
 		mesh.surface_set_material(1, shade)
 	return mesh
+
+
+## Будівлі в бою малює prop_fade (мокрість за weather_wetness, теплі стіни), а не матеріал GLB;
+## параметри — ті самі, що в PropLayer._fade_material (суцільний варіант, без імли кільця).
+## shortcut: копія відображення параметрів з PropLayer._fade_material; якщо там зміниться набір — оновити й тут.
+func _battle_material(root: Node) -> void:
+	for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+		for si: int in mi.mesh.get_surface_count():
+			var src := mi.mesh.surface_get_material(si) as BaseMaterial3D
+			if src == null:
+				continue
+			var mat := ShaderMaterial.new()
+			mat.shader = load("res://game/battle/shaders/prop_fade.gdshader") as Shader
+			mat.set_shader_parameter("albedo_tex", src.albedo_texture)
+			mat.set_shader_parameter("normal_tex", src.normal_texture)
+			mat.set_shader_parameter("normal_scale", src.normal_scale if src.normal_enabled else 1.0)
+			mat.set_shader_parameter("albedo_color", src.albedo_color)
+			mat.set_shader_parameter("roughness", src.roughness)
+			mat.set_shader_parameter("metallic", src.metallic)
+			mat.set_shader_parameter("specular", minf(src.metallic_specular, PropLayer.MINERAL_SPECULAR))
+			mat.set_shader_parameter("use_roughness_tex", src.roughness_texture != null)
+			if src.roughness_texture != null:
+				mat.set_shader_parameter("roughness_tex", src.roughness_texture)
+				mat.set_shader_parameter("roughness_channel", PropLayer._channel(src.roughness_texture_channel))
+			mat.set_shader_parameter("use_metallic_tex", src.metallic_texture != null)
+			if src.metallic_texture != null:
+				mat.set_shader_parameter("metallic_tex", src.metallic_texture)
+				mat.set_shader_parameter("metallic_channel", PropLayer._channel(src.metallic_texture_channel))
+			var ao: bool = src.ao_enabled and src.ao_texture != null
+			mat.set_shader_parameter("use_ao_tex", ao)
+			if ao:
+				mat.set_shader_parameter("ao_tex", src.ao_texture)
+				mat.set_shader_parameter("ao_channel", PropLayer._channel(src.ao_texture_channel))
+				mat.set_shader_parameter("ao_light_affect", src.ao_light_affect)
+			mi.set_surface_override_material(si, mat)

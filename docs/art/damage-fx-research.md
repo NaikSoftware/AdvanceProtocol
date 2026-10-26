@@ -17,7 +17,7 @@ CC0 candidate.
 2. **A destroyed vehicle leaves a wreck that blocks its cell.** That is a rule change for `core/`
    and is outside the scope of this brief. Here it means one thing: the wreck must read as an
    obstacle from above at both zooms, and it must look burnt out once its fire and smoke are gone.
-3. **Killed infantry visibly dies**: fallen figures on the squad base plus a small scorch or crater.
+3. **Killed infantry visibly dies**: fallen figures on the squad base, no ground mark.
    Kept restrained and realistic, with no blood.
 
 ## Camera facts this brief is sized from
@@ -115,6 +115,9 @@ Division frames are ground-level marketing shots and say nothing about the top-d
 | sparks | #FFE6B0 core, life ≤ 0.15 s | same, half the count reads | r_c07 |
 | fallen figure | L* 20–28 (darker than field L* 31), low chroma, plus a baked contact blob L* −8 under it | same | measured ground |
 
+The game has no craters: shots target units only, and the one ground mark of a battle is the
+scorch under a destroyed vehicle. Crater sizes below are measured reality, kept as research.
+
 ## Hit moments (all one-shot, ≤ 1.5 s, since `EventPlayer` awaits each animation)
 
 Weapons by roster class. Sizes are real metres; durations are seconds. Every row is `GPUParticles3D`
@@ -125,8 +128,8 @@ frames, then `queue_free` (art-direction).
 | --- | --- | --- | --- |
 | **Rifle / MG** (rifle squad, assault squad) | 4–8 spark streaks 0.5–0.8 m (k trace_*), in 2–3 bursts over 0.8 s. No flash, no light. Far zoom: 2–3 streaks per burst | 6–12 dirt puffs 0.3–0.6 m (k smoke_07 tinted wet loam) scattered over 4 × 4 m around the base; each rises 0.5 m and fades in 0.6 s | sparks as on armour, plus 1–2 grey puffs 0.5 m |
 | **Autocannon** (armoured car, troop carrier) | 3–5 rounds at 0.15 s spacing; each a flash 0.8–1.2 m (u_Explosion02 frames 0–2 scaled), a spark cone 1.5–2 m, a grey puff 1.5 m drifting up; total 1.2 s | each round a dirt puff 1–1.5 m (u_Explosion01-nofire, brown tint) | as armour; the last round leaves a 2 m grey puff for 1.5 s |
-| **Tank gun** (all tanks) | flash 2–3 m for 0.06–0.1 s + `OmniLight3D` r = 10 m; spark/fragment cone 4–6 m; grey-brown cloud 4 m → 7 m over 1.2 s, alpha 0 at 1.5 s | HE: flash 2 m, dirt burst 6–8 m wide and 5–6 m tall (u_Explosion01-nofire brown), 10–20 chunks 0.2–0.5 m thrown ≤ 8 m, leaves a 2.5–3 m crater mark | as armour; the cloud is darker (fuel, paint) |
-| **Field gun / howitzer** | 152–155 mm HE: flash 3–5 m + light r = 15 m, dirt column 10–15 m wide × 10–15 m tall, chunks 15–25 fall within 1.5 s, residual grey cloud 12 m drifts with the wind and fades by 1.5 s (cut short; the real one lasts 10 s) | same burst; leaves a 4.5 m crater mark (r_c13) | same |
+| **Tank gun** (all tanks) | flash 2–3 m for 0.06–0.1 s + `OmniLight3D` r = 10 m; spark/fragment cone 4–6 m; grey-brown cloud 4 m → 7 m over 1.2 s, alpha 0 at 1.5 s | HE: flash 2 m, dirt burst 6–8 m wide and 5–6 m tall (u_Explosion01-nofire brown), 10–20 chunks 0.2–0.5 m thrown ≤ 8 m, no ground mark after it | as armour; the cloud is darker (fuel, paint) |
+| **Field gun / howitzer** | 152–155 mm HE: flash 3–5 m + light r = 15 m, dirt column 10–15 m wide × 10–15 m tall, chunks 15–25 fall within 1.5 s, residual grey cloud 12 m drifts with the wind and fades by 1.5 s (cut short; the real one lasts 10 s) | same burst; no ground mark after it | same |
 | **Drone strike** (assault squad, vehicles only) | **top attack**: flash 1.5–2 m on the roof (not the side), a black-cored puff 3–4 m (r_c06), sparks downward. No ground burst. If it kills, the kill sequence follows | — (cannot target infantry) | same as armour |
 | **Muzzle** (firing side) | tank 3–5 m flash 0.07 s + a dust ring 10–15 m on the ground under the gun, 1 s; autocannon 0.5 m flashes; rifles none (sub-pixel) | | |
 
@@ -144,7 +147,7 @@ the `UnitView`. "The live unit's own mesh" in the brief means the same mesh reso
 | **light vehicle** | fireball 6–8 m, whole-body fuel fire | fire + column | column | thinning | burnt wreck only | |
 | **towed gun / howitzer** | ammo flash, small fire (tyres, charges) 1 m | column (thinner, 2 m base) | thinning | burnt wreck only | | |
 | **engineer vehicle** | as light vehicle | | | | | |
-| **infantry squad** | figures fall (0.5 s). Rifle/MG kill: figures only. Autocannon: + stamp D (2–3 m scorch). Tank HE, field gun, howitzer: + stamp D + stamp C crater | — | — | — | — | fallen figures persist (see brief) |
+| **infantry squad** | figures fall (0.5 s); no ground mark (there are no craters or infantry scorch: shots target units only, and the one ground mark is the scorch under a wreck) | — | — | — | — | fallen figures persist (see brief) |
 
 The wreck and every ground scar stay for the whole match. They are the battle scars of §8.
 
@@ -182,8 +185,8 @@ The wreck and every ground scar stay for the whole match. They are the battle sc
   fallback renderer. This contradicts the "craters and scorching are `Decal` nodes" line in
   art-direction.md. **Recommendation:** a *scar map*, an RGBA8 texture at 0.25 m per texel
   (32 px per tile), stamped on the CPU when an event lands and sampled by `ground.gdshader`
-  alongside `class_map*`. R = scorch darkness, G = crater (darkening and normal), B = debris mask,
-  A = ash. It costs no draw calls, has no count limit, works on both renderers, and saves as an
+  alongside `class_map*`. R = scorch darkness under a wreck, A = ash; G and B are free (the game has
+  no craters: shots target units only). It costs no draw calls, has no count limit, works on both renderers, and saves as an
   image. The alternative is height-conforming quads using `TerrainHeight`, which brings back
   z-fighting and costs a draw call each. **This is a controller decision.**
 - **Cosmetic randomness** (turret thrown or not, debris layout, puff phases) comes from a hash of
@@ -248,6 +251,7 @@ USE: detail / ground stamps   COVERS: per stamp, in metres (below)
 SOURCE REFS: r_c13 (crater and wreck-scorch size from above), g_coh3_08 (scorch blot shapes at game
   angle), r_c04 (debris density), r_c19 (scorch on asphalt), ph_burned_ground_01 (fine breakup only)
 VIEW: straight top-down orthographic, flat lighting, no cast shadows
+Research only: the game has no craters (shots target units only); only stamp A is used.
 CONTENT, 4 × 2 atlas, 512 px per cell, greyscale masks (R darkness, G crater depth, B debris):
   A wreck scorch 14 × 14 m: irregular dark blot 10–12 m across, a soft 2–3 m edge, 5–9 radial
     streaks 3–6 m long of uneven length (not symmetric, not a star); ash flecks 0.2–0.5 m inside

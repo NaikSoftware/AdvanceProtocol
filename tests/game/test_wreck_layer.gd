@@ -345,3 +345,59 @@ func test_fire_is_one_column_sized_from_the_hull() -> void:
 	var particles: Array[Node] = layer.find_children("*", "GPUParticles3D", true, false)
 	assert_eq(particles.size(), 1)
 	assert_eq(particles[0], layer.ember_emitter(Vector2i(3, 3)))
+
+
+## Мирний дим мапи: 1–3 димарі й 1–2 руїни, вибрані за мапою (той самий вибір щоразу); на кожне
+## джерело — один суцільний шлейф малої густоти, а не клуби, що виходили залпами. Горить завжди: хати й руїни видимі
+## всім, і дим нічого не видає. Анімація не спиняється, поки він є.
+func test_hearth_smoke_picks_a_few_faint_columns() -> void:
+	var chimneys: Array[Vector3] = [Vector3(1, 1, 1), Vector3(2, 1, 1), Vector3(3, 1, 1), Vector3(4, 1, 1), Vector3(5, 1, 1)]
+	var ruins: Array[Vector3] = [Vector3(1, 0, 5), Vector3(2, 0, 5), Vector3(3, 0, 5)]
+	for seed in 12:
+		layer.set_hearths(chimneys, ruins, seed)
+		var pts: Array[Vector3] = layer.hearth_points()
+		assert_true(pts.size() <= WreckLayer.HEARTH_MAX, "шлейфів не більше, ніж екземплярів")
+		var c: int = pts.filter(func(p: Vector3) -> bool: return p.y > 0.5).size()
+		var r: int = pts.size() - c
+		assert_true(c >= 1 and c <= 3, "димарів 1–3")
+		assert_true(r >= 1 and r <= 2, "руїн 1–2")
+	layer.set_hearths(chimneys, ruins, 7)
+	var first: Array[Vector3] = layer.hearth_points().duplicate()
+	layer.set_hearths(chimneys, ruins, 7)
+	assert_eq(layer.hearth_points(), first, "та сама мапа — той самий вибір")
+	var mm: MultiMesh = (layer.get_node("Hearths") as MultiMeshInstance3D).multimesh
+	assert_eq(mm.visible_instance_count, first.size(), "один суцільний шлейф на джерело, а не низка клубів")
+	# Дані екземплярів headless-рендер не зберігає: перевіряємо густоти, які шар у них записав.
+	var dens: Array[float] = layer.hearth_densities()
+	assert_eq(dens.size(), first.size())
+	var shapes: Array[Vector2] = layer.hearth_shapes()
+	assert_eq(shapes.size(), first.size())
+	for i in dens.size():
+		var ruin: bool = first[i].y < 0.5
+		assert_eq(dens[i], WreckLayer.hearth_density(ruin))
+		assert_true(dens[i] > 0.0 and dens[i] <= 0.7, "ледь помітний шлейф, не пожежа")
+		# Руїна — нижча й ширша біля джерела; димар — повні 14 м від вузької труби.
+		assert_eq(shapes[i], Vector2(WreckLayer.RUIN_HEIGHT_SCALE, WreckLayer.RUIN_BASE_SCALE) if ruin else Vector2.ONE)
+	assert_true(WreckLayer.RUIN_HEIGHT_SCALE < 1.0 and WreckLayer.RUIN_BASE_SCALE > 1.0)
+	assert_true(layer.is_animating(), "дим рухається й без уламків")
+	assert_eq(layer.hearth_material().get_shader_parameter("rise"), WreckLayer.HEARTH_RISE, "шум густоти пливе вгору зі швидкістю диму")
+	assert_false(layer.hearth_material().shader.code.contains("sin("), "хеш без sin: час росте весь матч")
+	layer.set_wind(Vector3(0.25, 0, 0))
+	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")
+	layer.rebuild(state, 0)
+	assert_eq(layer.hearth_points(), first, "перебудова уламків мирного диму не гасить")
+
+
+## Полум'я остова не вище за 0,6 клітинки над основою: вище язики м'яко гаснуть і не накривають
+## юніт на сусідній клітинці; стовп диму починається не вище за цю верхівку.
+func test_wreck_flame_is_capped_below_the_neighbouring_cell() -> void:
+	var fires := layer.get_node("Fires") as MultiMeshInstance3D
+	var max_h: float = (fires.material_override as ShaderMaterial).get_shader_parameter("max_h")
+	assert_true(max_h <= 0.6, "стеля полум'я нижча за сусідню клітинку")
+	# Стовп диму найбільшого остова росте не вище за 0,85 стелі полум'я.
+	layer.add(Vector2i(3, 3), 5, 1.0)
+	var c := Vector2i(3, 3)
+	assert_true(layer.smoke_origin(c).y - layer.fire_centre(c).y <= 0.85 * max_h + 1e-5)
+	assert_gt(layer.smoke_origin(c).y, layer.fire_centre(c).y, "дим росте з полум'я, не з землі")
+	# Як гаснуть язики вище стелі — це вже сам шейдер; у безголовому рушії його не прочитати.
+	assert_true(WreckLayer.FIRE_SHADER.code.contains("smoothstep(max_h * 0.7, max_h, v_h)"))

@@ -23,8 +23,11 @@ uniform float fade_in_sec = 0.5;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 // Основа тоне в металі м'яко, а не обрізається рівною лінією по даху.
 uniform float soft_fade = 0.08;
+// Найвищий язик над основою, одиниці світу: вище полум'я м'яко гасне — не накриває сусідню клітинку.
+uniform float max_h = 100.0;
 
 varying float v_frame;
+varying float v_h;
 varying float v_in;
 
 // Хеш без sin: sin великого аргументу у float32 губить точність, а fx_time росте весь матч.
@@ -48,7 +51,8 @@ void vertex() {
 	float qh = qw * cell_aspect;
 	// Основа полум'я (v = base_v) — у точці отвору, на 1 см у металі.
 	float base_y = 0.5 - base_v;
-	vec3 world = root + right * VERTEX.x * qw + vec3(0.0, (VERTEX.y - base_y) * qh - 0.01, 0.0);
+	v_h = (VERTEX.y - base_y) * qh;
+	vec3 world = root + right * VERTEX.x * qw + vec3(0.0, v_h - 0.01, 0.0);
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
 	v_frame = fx_time * play_fps * (0.8 + 0.4 * h1(sd * 17.0)) + sd * frames;
 	v_in = clamp((fx_time - INSTANCE_CUSTOM.z - fade_in_at) / fade_in_sec, 0.0, 1.0);
@@ -61,10 +65,12 @@ vec4 frame_at(float f, vec2 uv) {
 
 void fragment() {
 	vec4 tex = mix(frame_at(v_frame, UV), frame_at(v_frame + 1.0, UV), fract(v_frame));
-	// Біля отвору — майже біле розжарене серце, вище — колір атласу.
-	vec3 col = mix(tex.rgb, vec3(1.0, 0.94, 0.80), smoothstep(base_v - 0.35, base_v, UV.y) * 0.6);
+	// Біля отвору — майже біле розжарене серце, вище — колір атласу. Лише посередині основи: по краях
+	// кваду біле лягало пересвіченою плямою на кути корпусу.
+	float core = 1.0 - smoothstep(0.12, 0.3, abs(UV.x - 0.5));
+	vec3 col = mix(tex.rgb, vec3(1.0, 0.94, 0.80), smoothstep(base_v - 0.35, base_v, UV.y) * 0.6 * core);
 	ALBEDO = col * gain;
-	ALPHA = tex.a * v_in;
+	ALPHA = tex.a * v_in * (1.0 - smoothstep(max_h * 0.7, max_h, v_h));
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);
