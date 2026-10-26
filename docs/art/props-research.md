@@ -385,6 +385,83 @@ in Blender into an atlas (CC0 source, derived asset).
 
 ---
 
+## Bank, yard and meadow vegetation
+
+Reeds and bushes on river and lake banks, trees and shrubs by the houses, and solitary bushes
+and trees in meadows (never on ploughland). Here and there, not in belts: placement decides
+density. The crowns use the forest's card approach and palette so they sit with the wood.
+
+**Sources.** Everything is procedural; nothing is shipped from outside. No CC0 model of reed,
+cattail, willow scrub, alder, fruit trees, walnut, lilac, elder, hawthorn, dog rose or thuja exists
+in a usable form (same finding as the forest). Sprites are rendered in Blender from generated stems,
+blades and leaves (`tools/blender/vegetation/veg_sprites.py`), and bark strips are numpy noise. The
+photos below are reference only and are not shipped.
+
+| id | source | licence | used for |
+| --- | --- | --- | --- |
+| v_reed_green | [Phragmites australis SCA-9604189](https://commons.wikimedia.org/wiki/File:Phragmites_australis_SCA-9604189.jpg), R. A. Nonenmacher | CC BY-SA 4.0 | Summer reed: mid-green blades, dense stand |
+| v_reed_autumn | [Poertschach Phragmites australis](https://commons.wikimedia.org/wiki/File:Poertschach_Halbinselpromenade_Phragmites_australis_21122013_745.jpg), J. Jaritz | CC BY-SA 3.0 AT | Late reed: straw stems, grey-buff plumes, ragged top |
+| v_cattail | [Typha latifolia seed heads](https://commons.wikimedia.org/wiki/File:Zaadpluizen_grote_lisdodde_(Typha_latifolia)._(d.j.b.).jpg), D. J. Bergsma | CC BY-SA 4.0 | Brown head 15–20 cm, fraying in late autumn |
+| v_oak_meadow | [Solitary oaks, Delleboersterheide](https://commons.wikimedia.org/wiki/File:Solitaire_eiken_(Quercus_robur)_in_een_imponerend_landschap._Locatie,_natuurgebied_Delleboersterheide_%E2%80%93_Catspoele_02.jpg), D. J. Bergsma; [Solitary Quercus robur](https://commons.wikimedia.org/wiki/File:Solitary_Quercus_robur.jpg), K. Golik | CC BY-SA 4.0 | Open-grown crown: lobed, gaps, broad |
+| v_walnut | [Juglans regia in a field](https://commons.wikimedia.org/wiki/File:2026-03-07_D500-2006_Achim-Lammerts_Juglans-regia.jpg), A. Lammerts | CC BY-SA 4.0 | Bare walnut: thick limbs, wide low crown |
+| v_hawthorn | [Crataegus monogyna 12](https://commons.wikimedia.org/wiki/File:(ms)_Crataegus_monogyna_12.jpg), Hladac | CC BY-SA 4.0 | Dense dome 2–3 m |
+| v_willow | [Dülmen pollard willows](https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Umland_--_2014_--_7067.jpg), D. Rabich | CC BY-SA 4.0 | Wet-meadow willows, often pollarded |
+| v_elder, v_lilac | [Sambucus nigra 004](https://commons.wikimedia.org/wiki/File:Sambucus_nigra_004.jpg), Willow; [Syringa vulgaris kz01](https://commons.wikimedia.org/wiki/File:Syringa_vulgaris_kz01.jpg), K. Ziarnek | CC BY 2.5 / CC BY-SA 4.0 | Yard shrub masses 2–3 m |
+
+Local copies (gitignored scratch): `~/.cache/ap-scratch/bank-veg/refs/`, with every URL in `urls.tsv`.
+
+### Assets
+
+One library GLB per group and season in `assets/props/vegetation/`:
+`{bank,yard,meadow}_veg_{late,summer,early}.glb` (late = River, summer = Crossroads,
+early = Ridge). Each plant is a node, the same geometry in every season. Only the atlas changes,
+plus how many clumps a bare late crown keeps. Every node has a `<name>_fallen` twin: reeds and
+bushes lie flat as if driven over, and trees fall on their side with the crown along the ground.
+Sizes are in metres; the visible crown is ~1–2 m wider than the clump centres given here.
+
+| node | size (w × d × h) | tris late / summer, early |
+| --- | --- | --- |
+| bank_reed_01, _02, _03 | 1.6 × 1.6 × 2.1; 3.0 × 2.2 × 2.6; strip 3.7 × 1.6 × 2.3 | 28; 48; 56 |
+| bank_cattail_01, _02 | 1.4 × 1.0 × 1.9; 1.7 × 1.9 × 1.9 | 20; 32 |
+| bank_bush_willow_01, _02 | 2.1 × 2.0 × 2.9; 2.6 × 2.2 × 2.2 | 160 / 224; 148 / 212 |
+| bank_bush_alder_01 | 2.8 × 2.7 × 3.8 | 140 / 220 |
+| yard_apple_01, _02 | 3.7 × 3.6 × 4.3; 3.1 × 3.1 × 4.8 | 192 / 324; 176 / 302 |
+| yard_cherry_01 | 3.0 × 2.8 × 4.7 | 172 / 304 |
+| yard_walnut_01 | 6.9 × 5.8 × 9.6 | 304 / 556 |
+| yard_lilac_01, yard_elder_01 | 2.1 × 1.7 × 2.7; 1.8 × 1.9 × 2.9 | 194 / 236; 142 / 212 |
+| yard_berry_row_01 | row 3.9 × 0.6 × 1.2 | 146 / 168 |
+| yard_thuja_01 | 1.0 × 0.9 × 3.8 (evergreen, bronze in late autumn) | 152 |
+| meadow_hawthorn_01, _02 | 2.7 × 2.5 × 2.8; 2.3 × 2.1 × 2.0 | 148 / 220; 114 / 168 |
+| meadow_dogrose_01 | 1.7 × 1.5 × 1.8 | 144 / 184 |
+| meadow_pear_01 | 6.3 × 6.2 × 10.2 | 304 / 556 |
+| meadow_oak_01 | 9.6 × 8.7 × 11.7 | 456 / 688 |
+| meadow_willow_01 | 8.3 × 7.4 × 8.6 | 394 / 628 |
+
+Atlas: 1024² RGBA per library, 128 px cells (a 2 m clump at 1.6 cm per texel), VRAM-compressed
+with mipmaps. Season colours follow the forest: late reeds are straw with grey-buff plumes, fruit
+trees and hawthorn almost bare, walnut keeps yellow remnants, oak keeps brown leaves, alder and
+lilac stay dull green. In summer the plants are green, with a hint of apples, black elderberries
+and red haws.
+
+**Material.** The GLB carries a plain alpha-cut material only so it imports. Placement overrides it
+with `assets/props/vegetation/veg.gdshader` (`albedo_tex` = the GLB's own atlas), which has the same
+body as the forest crown: camera-facing clump cards, `foliage_tint`, alpha-to-coverage under MSAA,
+and dissolve by whole clumps via instance alpha. Over a visible unit, swap the instance's material for
+`veg_fade.gdshader`, which shows instance alpha as true transparency (separate transparent pass,
+no dither). Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen
+edge-on. Shared body: `veg_body.gdshaderinc`.
+
+**Import.** As for the forest: `meshes/force_disable_compression=true`, no generated LODs and no
+shadow meshes; LOD generation collapses cards whose four vertices share one point.
+
+**UV2 trap.** Blender's glTF exporter writes every UV map as `1 − v`. The builder therefore writes
+UV2 pre-flipped (`uv2()` in `veg_build.py`); otherwise every vertex is lifted ~1 tile in view
+space and bark counts as a card. `forest_*.glb` from `tools/blender/forest/build_library.py` does
+not pre-flip yet.
+
+Rebuild: `tools/blender/vegetation/build_all.sh`. Frames: `tools/prop_preview.gd` with `--veg`,
+`--nodes=`, `--water`, `--with=`, `--fade=`, `--rg`.
+
 ## Bridges
 
 The underside is never seen at this camera, so **prestressed concrete beam and steel girder share one
