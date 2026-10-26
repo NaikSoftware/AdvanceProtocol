@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://l0olxxqfgan0"
-path="res://.godot/imported/ruin_h3_ruin_h3_normal.jpg-7198eda7704fbc6c19c7636230bab518.ctex"
+uid="uid://brk108th5ddnh"
+path="res://.godot/imported/ruin_half_shed_ruin_half_shed_normal.png-5b94b58c9739799bb3809f085c49fa9a.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "792aad4764576e446ac45e2cea57c1e6"
+"md5": "955432341f9323b746e065c6e31dfcfa"
 }
 
 [deps]
 
-source_file="res://assets/props/ruin_h3_ruin_h3_normal.jpg"
-dest_files=["res://.godot/imported/ruin_h3_ruin_h3_normal.jpg-7198eda7704fbc6c19c7636230bab518.ctex"]
+source_file="res://assets/props/ruin_half_shed_ruin_half_shed_normal.png"
+dest_files=["res://.godot/imported/ruin_half_shed_ruin_half_shed_normal.png-5b94b58c9739799bb3809f085c49fa9a.ctex"]
 
 [params]
 

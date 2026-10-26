@@ -2,10 +2,13 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bb8xx6tkxlbl0"
+uid="uid://etn2jrk8iu8b"
 path="res://.godot/imported/ruin_h1_ruin_h1_normal.png-f716e9c6134eb16e81c55f4bafead972.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "2c740f1b7db7ce71b0440de84781385e"
 }
 
 [deps]
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
