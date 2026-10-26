@@ -158,6 +158,15 @@ def build_node(item, rects):
         fs_card = 0.85 * math.sqrt(len(cards) / n)
         cards = random.Random(item["node"] + "proxy").sample(cards, n)
         keep = 1.0
+    reach = item.get("card_reach")
+    if reach and meta.get("limbs") and cards:
+        # Голе дерево: пучок гілочок далі за reach від гілки чи стовбура висить у повітрі.
+        tt = meta["crown_base"] + item.get("trunk_into_crown", 0.3) * (meta["top"] - meta["crown_base"])
+        support = [Vector((0.0, 0.0, z * 0.5)) for z in range(int(tt * 2) + 1)]
+        for lm in meta["limbs"]:
+            ps = [Vector(p) for p in lm["pts"]]
+            support += [a.lerp(b, t / 4) for a, b in zip(ps, ps[1:]) for t in range(4)] + ps[-1:]
+        cards = [cd for cd in cards if min((Vector(cd["c"]) - q).length for q in support) <= reach]
     if keep < 1.0 and cards:
         # Голе дерево: та сама будова, але менше пучків — крізь крону видно землю.
         cards = random.Random(item["node"] + "keep").sample(cards, max(1, round(len(cards) * keep)))

@@ -20,8 +20,9 @@ extends Node
 ## - Вид дерева — з шуму `STAND_FREQ` (насадження 10–30 м), а не випадково на кожне дерево:
 ##   ліс складається з плям одного виду, а не з солі з перцем.
 ## - Тон: кожна крона × (1 ± `TONE_VAR`) за великим шумом `TONE_FREQ` — спокійна велика
-##   мінливість замість стрибків від дерева до дерева. Рання осінь: берези й дуби жовтіють
-##   цілими кронами (колір екземпляра `TURNED`) там, де шум `TURN_FREQ` > `TURN_FROM`.
+##   мінливість замість стрибків від дерева до дерева. Рання осінь: атлас листяних крон
+##   оливково-жовтий; цілими кронами (колір екземпляра) за шумом `TURN_FREQ` ~40 % крон
+##   жовто-помаранчеві (`TURN_ORANGE` вище `TURN_HI`), ~20 % ще зелені (`TURN_GREEN` нижче `TURN_LO`).
 ## - Узлісся (`_hedges`): на кожну сторону лісової клітинки, що дивиться в поле, — шматок
 ##   `Hedge_Spruce`/`Hedge_Shrub` (1 тайл × 0,35 × 2–4 м), відступ `HEDGE_INSET` ± шум
 ##   `HEDGE_WANDER`, уздовж сторони ±10°, довжина 0,9–1,15; на опуклому куті 15 % шматків
@@ -69,12 +70,14 @@ const STAND_FREQ: float = 1.0 / 3.0
 const TONE_FREQ: float = 1.0 / 2.5
 const TONE_VAR: float = 0.03
 const TURN_FREQ: float = 1.0 / 2.0
-const TURN_FROM: float = 0.25
-## Рання осінь: близько чверті листяних крон забарвлені цілими кронами — береза жовта, дуб
-## іржавий, обидва приглушені й темніші за траву.
-## Яскравість осінніх тонів — та сама, що в зеленої крони (луминанс ≈ 1): різниться відтінок,
-## а не світлість, інакше крони лягають світлими й темними плямами.
-const TURNED: Dictionary = {"Birch": Color(1.06, 1.0, 0.8), "Oak": Color(1.06, 0.97, 0.88)}
+## Пороги — квантилі шуму `_turn` (60 % і 20 %): частки крон 40 / 40 / 20 %.
+const TURN_HI: float = 0.068
+const TURN_LO: float = -0.22
+## Яскравість осінніх тонів та сама (луминанс ≈ 1): різниться відтінок, а не світлість,
+## інакше крони лягають світлими й темними плямами.
+const TURN_ORANGE := Color(1.12, 0.92, 0.68)
+const TURN_GREEN := Color(0.84, 1.04, 0.9)
+const AUTUMN_SPECIES: PackedStringArray = ["Birch", "Oak", "Hero"]
 
 const FADE_MODES: PackedStringArray = ["none", "silhouette", "soft", "cut"]
 ## Показ юнітів у лісі за замовчуванням — обрис кольору гравця крізь крони.
@@ -106,10 +109,18 @@ const WOODS: Dictionary = {
 	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.4, "density": 3.4},
 }
 
-## Пізня осінь: основа — темні вузькі ялини, листяні (переважно голі) — домішкою.
-const LATE_CANOPY: Dictionary = {"Spruce": 0.78, "Pine": 0.04, "Birch": 0.13, "Oak": 0.05}
-## Ялинник пізньої осені рідший: між зірками крон — темні просвіти землі.
-const LATE_DENSITY: float = 3.2
+## Пізня осінь: основа — темні ялини й сосни, листяні (голі) — рідкою домішкою.
+const LATE_CANOPY: Dictionary = {"Spruce": 0.8, "Pine": 0.1, "Birch": 0.07, "Oak": 0.03}
+## Ялинник пізньої осені густий: голі листяні нічого не ховають, тож танк ховає хвоя.
+const LATE_DENSITY: float = 5.0
+## Ширина крони ялини пізньої осені (замість WIDE): вужчі шпилі, але без просвітів голої
+## землі між ними.
+const LATE_SPRUCE_W: float = 0.85
+## Підріст ялини по всій підлозі пізнього лісу (0,1–0,2 тайла заввишки): земля під голими
+## листяними не світить, а танк не стоїть на голій плямі.
+const LATE_FLOOR_DENSITY: float = 6.0
+const LATE_FLOOR_H: Vector2 = Vector2(0.8, 1.6)
+const LATE_UNDER: Dictionary = {"Spruce_B": 0.7, "Shrub": 0.3}
 const LATE_SPRUCE := Color(0.62, 0.68, 0.76)
 const LATE_EDGE: Dictionary = {"Spruce_B": 0.6, "Birch": 0.3, "Oak": 0.1}
 
@@ -379,7 +390,7 @@ func _load_library(season: String) -> void:
 	var shader: Shader = load("res://assets/props/forest/forest_crown.gdshader")
 	# Режим soft: та сама крона, але альфа екземпляра — справжня прозорість, а не відкидання.
 	var soft := Shader.new()
-	soft.code = shader.code.replace("depth_draw_opaque, ", "").replace(
+	soft.code = shader.code.replace("depth_draw_opaque, ", "").replace(", alpha_to_coverage", "").replace(
 			"|| (!shadow_pass && piece_hash > COLOR.a)", "").replace(
 			"ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = COLOR.a;").replace(
 			"ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));",
@@ -487,14 +498,20 @@ func _scatter() -> void:
 	_layer(4.8, canopy, func(p: Vector2) -> Dictionary: return LATE_CANOPY if _season == "late" else WOODS[_wood_at.call(p)]["canopy"], CANOPY_SCALE, true,
 			func(p: Vector2) -> float: return LATE_DENSITY if _season == "late" else float(WOODS[_wood_at.call(p)]["density"]))
 	_layer(EDGE_DENSITY, edge, func(p: Vector2) -> Dictionary: return LATE_EDGE if _season == "late" else WOODS[_wood_at.call(p)]["edge"], EDGE_SCALE, true)
-	_layer(SHRUB_DENSITY, shrub, func(p: Vector2) -> Dictionary: return WOODS[_wood_at.call(p)]["belt"], SHRUB_H, false)
+	_layer(SHRUB_DENSITY, shrub, func(p: Vector2) -> Dictionary: return LATE_UNDER if _season == "late" else WOODS[_wood_at.call(p)]["belt"], SHRUB_H, false)
 	if _meshes.has("Log"):
 		_layer(LOG_DENSITY, logs, func(_p: Vector2) -> Dictionary: return {"Log": 1.0}, Vector2.ONE, true)
+	# Пізня осінь: голі кущі нічого не ховають, тож підлісок і смуга біля просіки — здебільшого
+	# молоді ялини, інакше поле між просікою й кронами світить голою землею.
+	var under: Dictionary = LATE_UNDER if _season == "late" else {"Shrub": 1.0}
 	_layer(UNDERSTORY_DENSITY, func(d: float) -> bool: return d > SHRUB_BAND,
-			func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0}, UNDERSTORY_H, false)
+			func(_p: Vector2) -> Dictionary: return under, UNDERSTORY_H, false)
+	if _season == "late":
+		_layer(LATE_FLOOR_DENSITY, func(d: float) -> bool: return d > 0.1,
+				func(_p: Vector2) -> Dictionary: return {"Spruce_B": 1.0}, LATE_FLOOR_H, false)
 	# Підлісок обабіч просіки, темний: заповнює поле між просікою й кронами, щоб пролам
 	# лишався смугою, а не галявиною.
-	_layer(LANE_SHRUBS, func(d: float) -> bool: return d > 0.0, func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0},
+	_layer(LANE_SHRUBS, func(d: float) -> bool: return d > 0.0, func(_p: Vector2) -> Dictionary: return under,
 			SHRUB_H, false, func(p: Vector2) -> float: return LANE_SHRUBS if _broken_distance(p) > 0.3 and _broken_distance(p) < 1.2 else 0.0)
 	_hedges()
 	_broken_cells()
@@ -668,7 +685,7 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 		# сусідню клітинку, і вона лишалась порожньою.
 		s *= 0.7
 	elif species == "Spruce" and _season == "late":
-		w = 0.6  # пізня осінь: темні вузькі шпилі ялин, між ними — голі листяні
+		w = LATE_SPRUCE_W
 	elif species in ["Pine", "Spruce", "Birch", "Oak", "Hero"]:
 		w = WIDE
 	elif species == "Shrub":
@@ -687,8 +704,12 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 		rgb *= 0.7  # темний підлісок біля просіки: світлі кущі читались мазками фарби
 	if _season == "late" and species == "Spruce":
 		rgb *= LATE_SPRUCE  # похмуре світло: ялини темніші й холодніші
-	if _season == "early" and TURNED.has(species) and _turn.get_noise_2d(p.x, p.y) > TURN_FROM:
-		rgb = TURNED[species] * tone
+	if _season == "early" and species in AUTUMN_SPECIES:
+		var t: float = _turn.get_noise_2d(p.x, p.y)
+		if t > TURN_HI:
+			rgb *= TURN_ORANGE
+		elif t < TURN_LO:
+			rgb *= TURN_GREEN
 	if not _groups.has(mesh):
 		_groups[mesh] = []
 	(_groups[mesh] as Array).append({"xf": _on_ground(xf), "top": aabb.end.y * s + 0.15, "pos": p, "r": r, "rgb": rgb})

@@ -17,7 +17,8 @@ shader_type spatial;
 // Тон екземпляра (розкид, осіннє забарвлення цілої крони) — у custom data `MultiMesh`, а не
 // в кольорі: Godot множить колір екземпляра на колір вершини ще до коду шейдера, і тон
 // змішався б із місцем пучка.
-render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform;
+// alpha_to_coverage вмикає покриття MSAA: без нього ALPHA_ANTIALIASING_EDGE нічого не дає.
+render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform, alpha_to_coverage;
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float alpha_cutoff : hint_range(0.0, 1.0) = 0.5;
@@ -90,7 +91,9 @@ void fragment() {
 	// голе дерево здаля лишилось би самим стовбуром. Тож поріг знижується з рівнем mip, але лише
 	// здаля (від mip 2,5): на ближньому зумі знижений поріг на розмитому mip роздував обрис
 	// пучка в кілька гладких лопатей. І не в тіні: там гола крона зливалась у пляму.
-	float lod = textureQueryLod(albedo_tex, UV).x;
+	// Рівень mip із похідних UV: textureQueryLod немає в gl_compatibility (GLES3).
+	vec2 texel = UV * vec2(textureSize(albedo_tex, 0));
+	float lod = max(0.5 * log2(max(dot(dFdx(texel), dFdx(texel)), dot(dFdy(texel), dFdy(texel)))), 0.0);
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 2.5) / 2.0, 0.0, 1.0));
 	// Силует — з різкого рівня: обрис пучка — дрібне листя. Розмитіший mip для порогу
 	// робив із пучка кілька великих лопатей — «листки» по метру на ближньому зумі.
