@@ -37,7 +37,16 @@ const FLASH_CORE_M: float = 3.0
 ## Іскри trace_03/04 (клітинки 2 і 3) звиваються блискавкою — їх не беремо.
 const SPARK_CELLS: Array[int] = [0, 1, 4, 5, 6]
 
-const EXPLOSION_SEC: float = 64.0 / EXPLOSION_FPS
+## Куля знищення: вогняна частина (кадри 0–40) — у темпі атласу, темний хвіст (40–63) —
+## ще секунду, щоб полум'я уламків проступило під ним, а не змінило кулю одним кадром.
+const EXPLOSION_TAIL_SEC: float = 1.0
+const EXPLOSION_SEC: float = 40.0 / EXPLOSION_FPS + EXPLOSION_TAIL_SEC
+## Квад влучання піднято на пів радіуса: атлас знято з землі під 45°, і низ клуби інакше
+## різав би землю рівною лінією. Межу з землею ще й м'яко гасить глибина на 1,5 м.
+const HIT_ANCHOR: float = 0.25
+const HIT_SOFT_FADE: float = 1.5 / 8.0
+## Ґрунт гасне з цього кадру: хвіст атласу лишав би темну грудку на траві.
+const DIRT_FADE_FROM: float = 40.0
 ## Світло спалаху — 3–5 кадрів.
 const FLASH_SEC: float = 0.08
 ## Куля починається ~2 м над землею: так вона накриває корпус, а не лежить на траві.
@@ -60,8 +69,14 @@ static func fireball_size(unit_class: int) -> float:
 static func spawn_explosion(parent: Node, at: Vector3, size: float) -> Node3D:
 	var root := _root("Explosion", parent, at)
 	var ball := _sprite(root, "Ball", EXPLOSION_TEX, Vector2(8, 8), 64, size * EXPLOSION_CELL_M / EXPLOSION_BALL_M, LIFT_M / 8.0, 1.0, false)
-	_play(root, ball, 64, EXPLOSION_FPS, 0.0)
+	(ball.material_override as ShaderMaterial).set_shader_parameter("anchor", -0.1)
+	var bmat := ball.material_override as ShaderMaterial
+	var bt: Tween = root.create_tween()
+	bt.tween_method(func(f: float) -> void: bmat.set_shader_parameter("frame", f), 0.0, 40.0, 40.0 / EXPLOSION_FPS)
+	bt.tween_method(func(f: float) -> void: bmat.set_shader_parameter("frame", f), 40.0, 63.0, EXPLOSION_TAIL_SEC)
+	bt.tween_callback(func() -> void: ball.visible = false)
 	var flash := _sprite(root, "Flash", FLASH_TEX, Vector2(4, 4), 16, size * 0.5 * FLASH_CELL_M / FLASH_CORE_M, LIFT_M / 8.0, 2.5, true)
+	(flash.material_override as ShaderMaterial).set_shader_parameter("anchor", -0.1)
 	_play(root, flash, 16, FLASH_FPS, 0.0)
 	_light(root, 10.0, 6.0)
 	var tw: Tween = root.create_tween()
@@ -92,20 +107,34 @@ static func weapon_of(unit_class: int) -> Weapon:
 	return Weapon.RIFLE
 
 
-## Влучання по цілі, розміри в метрах (1 тайл = 8 м). `armoured` — техніка: по броні іскри
-## й клуба вибуху, по піхоті й землі — порох і ґрунт.
+## Діаметр клуби влучання, метри (1 тайл = 8 м): по броні — малий спалах із бризками іскор,
+## по ґрунту — викид землі.
+static func hit_cloud_m(weapon: Weapon, armoured: bool) -> float:
+	match weapon:
+		Weapon.AUTOCANNON:
+			return 0.5 if armoured else 1.5
+		Weapon.TANK_GUN:
+			return 2.5 if armoured else 3.5
+		Weapon.SHELL:
+			return 12.0
+		Weapon.DRONE:
+			return 3.5
+	return 0.6
+
+
+## Влучання по цілі. `armoured` — техніка: по броні біло-жовті бризки іскор і малий спалах,
+## по піхоті й землі — порох і ґрунт.
 static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool) -> Node3D:
 	var root := _root("Hit", parent, at)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(at)
+	var cloud: float = hit_cloud_m(weapon, armoured)
 	match weapon:
 		Weapon.RIFLE:
 			if armoured:
 				# Іскри 2–3 чергами за 0,8 с; на далекому зумі — кілька цяток.
 				for burst in 3:
-					for i in 2:
-						var o := Vector3(rng.randf_range(-0.2, 0.2), rng.randf_range(0.15, 0.4), rng.randf_range(-0.2, 0.2))
-						_spark(root, o, SPARK_CELLS[rng.randi() % SPARK_CELLS.size()], burst * 0.3)
+					_spray(root, rng, 2, Vector3(0, 0.25, 0), 0.2, burst * 0.3, 1.0)
 			else:
 				# 6–12 порохових фонтанчиків на ділянці 4 × 4 м довкола.
 				for i in 9:
@@ -114,26 +143,28 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 		Weapon.AUTOCANNON:
 			for r in 4:
 				var o := Vector3(rng.randf_range(-0.12, 0.12), 0.2 if armoured else 0.0, rng.randf_range(-0.12, 0.12))
-				_flash(root, 1.0, o, r * 0.15)
+				_flash(root, 1.0 if armoured else 0.8, o, r * 0.15)
 				if armoured:
-					_burst(root, 1.5, o, r * 0.15, 0.7)
+					_spray(root, rng, 3, o, 0.1, r * 0.15, 1.4)
+					_burst(root, cloud, o, r * 0.15, 0.7)
 				else:
-					_dirt(root, 1.5, o, r * 0.15, 0.7)
+					_dirt(root, cloud, o, r * 0.15, 0.7)
 		Weapon.TANK_GUN:
 			_flash(root, 2.5, Vector3(0, 0.25, 0), 0.0)
 			_light(root, 10.0, 4.0)
 			if armoured:
-				_burst(root, 5.0, Vector3.ZERO, 0.0, EXPLOSION_SEC)
+				_spray(root, rng, 8, Vector3(0, 0.3, 0), 0.15, 0.0, 2.2)
+				_burst(root, cloud, Vector3(0, 0.15, 0), 0.0, 64.0 / EXPLOSION_FPS)
 			else:
-				_dirt(root, 7.0, Vector3.ZERO, 0.0, 64.0 / DIRT_FPS)
+				_dirt(root, cloud, Vector3.ZERO, 0.0, 64.0 / DIRT_FPS)
 		Weapon.SHELL:
 			_flash(root, 4.0, Vector3(0, 0.2, 0), 0.0)
 			_light(root, 15.0, 4.0)
-			_dirt(root, 12.0, Vector3.ZERO, 0.0, 64.0 / DIRT_FPS)
+			_dirt(root, cloud, Vector3.ZERO, 0.0, 64.0 / DIRT_FPS)
 		Weapon.DRONE:
 			# Удар згори: спалах на даху, клуба вибуху на корпусі, жодного викиду ґрунту.
 			_flash(root, 1.75, Vector3(0, 0.4, 0), 0.0)
-			_burst(root, 3.5, Vector3(0, 0.15, 0), 0.0, EXPLOSION_SEC)
+			_burst(root, cloud, Vector3(0, 0.15, 0), 0.0, 64.0 / EXPLOSION_FPS)
 	_expire(root)
 	return root
 
@@ -197,26 +228,28 @@ static func _burst(root: Node3D, ball_m: float, offset: Vector3, delay: float, s
 ## Хмара ґрунту `cloud_m` метрів.
 static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, sec: float) -> void:
 	var q := _sprite(root, "Dirt", DIRT_TEX, Vector2(8, 8), 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0, false)
-	# Хмара ґрунту лежить на землі: нижче опущена, вона різала б землю рівною лінією.
-	var mat := q.material_override as ShaderMaterial
-	mat.set_shader_parameter("anchor", 0.05)
-	mat.set_shader_parameter("soft_fade", 0.35)
+	(q.material_override as ShaderMaterial).set_shader_parameter("fade_from", DIRT_FADE_FROM)
 	q.position = offset
 	_play(root, q, 64, 64.0 / sec, delay)
 
 
-static func _spark(root: Node3D, offset: Vector3, cell: int, delay: float) -> void:
-	var q := _sprite(root, "Spark", SPARKS_TEX, Vector2(4, 2), 8, 0.8 / 8.0, 0.0, 2.0, true)
-	q.position = offset
-	var mat := q.material_override as ShaderMaterial
-	mat.set_shader_parameter("frame", float(cell))
-	q.visible = delay <= 0.0
-	var tw: Tween = root.create_tween()
-	if delay > 0.0:
-		tw.tween_interval(delay)
-		tw.tween_callback(func() -> void: q.visible = true)
-	tw.tween_interval(0.08)
-	tw.tween_callback(func() -> void: q.visible = false)
+## Віяло з `count` іскор довкола точки влучання: кожна — смуга атласу, повернута в площині
+## кадру на свій кут, `length_m` метрів, 0,12 с.
+static func _spray(root: Node3D, rng: RandomNumberGenerator, count: int, at: Vector3, spread: float, delay: float, length_m: float) -> void:
+	for i in count:
+		var q := _sprite(root, "Spark", SPARKS_TEX, Vector2(4, 2), 8, length_m / 8.0, 0.0, 2.5, true)
+		q.position = at + Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread) * 0.5, rng.randf_range(-spread, spread))
+		var mat := q.material_override as ShaderMaterial
+		mat.set_shader_parameter("frame", float(SPARK_CELLS[rng.randi() % SPARK_CELLS.size()]))
+		mat.set_shader_parameter("roll", rng.randf_range(-1.3, 1.3))
+		mat.set_shader_parameter("anchor", 0.0)
+		q.visible = delay <= 0.0
+		var tw: Tween = root.create_tween()
+		if delay > 0.0:
+			tw.tween_interval(delay)
+			tw.tween_callback(func() -> void: q.visible = true)
+		tw.tween_interval(0.12)
+		tw.tween_callback(func() -> void: q.visible = false)
 
 
 static func _sprite(root: Node3D, node_name: String, tex: Texture2D, grid: Vector2, frames: int, size: float, lift: float, gain: float, additive: bool) -> MeshInstance3D:
@@ -238,7 +271,10 @@ static func _sprite(root: Node3D, node_name: String, tex: Texture2D, grid: Vecto
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.custom_aabb = AABB(Vector3(-2, -1, -2), Vector3(4, 4, 4))
 	mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
-	root.add_child(mi)
+	mat.set_shader_parameter("anchor", HIT_ANCHOR)
+	mat.set_shader_parameter("soft_fade", HIT_SOFT_FADE)
+	# Читабельні імена (Spark2, Spark3): рушій інакше перейменував би однойменних сусідів у @…@.
+	root.add_child(mi, true)
 	return mi
 
 
@@ -285,16 +321,24 @@ const _SPRITE_CODE: String = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 
-uniform sampler2D tex : source_color, filter_linear;
+uniform sampler2D tex : source_color, filter_linear_mipmap;
 uniform vec2 grid = vec2(8.0);
 uniform float frames = 64.0;
 uniform float frame = 0.0;
 uniform float size = 1.0;
 uniform float lift = 0.0;
 uniform float gain = 1.0;
-// Точка вибуху в атласі — на ~0,28 висоти клітинки згори (камера запікання дивилась під 45°),
-// тож квад опускаємо: вогонь народжується на корпусі, а не півтайла над ним.
-uniform float anchor = -0.1;
+// Зсув центру кваду вгору, у частках його розміру; задає BattleFx на кожен ефект
+// (HIT_ANCHOR — влучання, −0,1 — куля й спалах знищення).
+uniform float anchor = 0.0;
+// Поворот смуги в площині кадру (іскри віялом).
+uniform float roll = 0.0;
+// З цього кадру клуба гасне до нуля (хвіст атласу інакше лишається темною грудкою).
+uniform float fade_from = 1000.0;
+// Сонце (WeatherRig): освітлений бік клуби світліший на ясних мапах; у похмурі — нічого.
+global uniform vec3 sun_dir;
+global uniform float sky_clear;
+varying vec2 v_sun;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 // М'які краї (1,2 м) лише там, де квад врізається в землю чи корпус.
 uniform float soft_fade = 0.15;
@@ -302,8 +346,10 @@ uniform float soft_fade = 0.15;
 void vertex() {
 	float s = size * length(MODEL_MATRIX[0].xyz);
 	vec3 c = MODEL_MATRIX[3].xyz + vec3(0.0, lift + s * anchor, 0.0);
-	vec3 world = c + (INV_VIEW_MATRIX[0].xyz * VERTEX.x + INV_VIEW_MATRIX[1].xyz * VERTEX.y) * s;
+	vec2 v = vec2(cos(roll) * VERTEX.x - sin(roll) * VERTEX.y, sin(roll) * VERTEX.x + cos(roll) * VERTEX.y);
+	vec3 world = c + (INV_VIEW_MATRIX[0].xyz * v.x + INV_VIEW_MATRIX[1].xyz * v.y) * s;
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
+	v_sun = normalize(vec2(dot(sun_dir, INV_VIEW_MATRIX[0].xyz), -dot(sun_dir, INV_VIEW_MATRIX[1].xyz)) + 1e-4);
 }
 
 vec4 frame_at(float f, vec2 uv) {
@@ -313,8 +359,10 @@ vec4 frame_at(float f, vec2 uv) {
 
 void fragment() {
 	vec4 t = mix(frame_at(floor(frame), UV), frame_at(floor(frame) + 1.0, UV), fract(frame));
-	ALBEDO = t.rgb * gain;
-	ALPHA = t.a;
+	// Бік клуби до сонця — світліший на 0,3–0,5 сонячного світла (лише на ясних мапах).
+	float lit = clamp(dot(normalize(UV - 0.5 + 1e-4), v_sun), 0.0, 1.0) * smoothstep(0.05, 0.35, length(UV - 0.5));
+	ALBEDO = t.rgb * gain * (1.0 + 0.45 * sky_clear * lit);
+	ALPHA = t.a * (1.0 - smoothstep(fade_from, fade_from + 16.0, frame));
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);

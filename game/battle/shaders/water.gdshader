@@ -78,6 +78,26 @@ void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
+// Висота дна кубічним B-сплайном із чотирьох білінійних відліків: функція гладка (C2), тож її рівень
+// води — плавна крива без зламів на межах текселів.
+float height_bspline(vec2 uv, vec2 size) {
+	vec2 st = uv * size - 0.5;
+	vec2 i = floor(st);
+	vec2 f = st - i;
+	vec2 f2 = f * f;
+	vec2 f3 = f2 * f;
+	vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+	vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+	vec2 w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0;
+	vec2 w3 = f3 / 6.0;
+	vec2 g0 = w0 + w1;
+	vec2 g1 = w2 + w3;
+	vec2 c0 = (i - 0.5 + w1 / g0) / size;
+	vec2 c1 = (i + 1.5 + w3 / g1) / size;
+	return g0.y * (g0.x * textureLod(height_map, vec2(c0.x, c0.y), 0.0).r + g1.x * textureLod(height_map, vec2(c1.x, c0.y), 0.0).r)
+			+ g1.y * (g0.x * textureLod(height_map, vec2(c0.x, c1.y), 0.0).r + g1.x * textureLod(height_map, vec2(c1.x, c1.y), 0.0).r);
+}
+
 void fragment() {
 	vec2 p = world_pos.xz;
 	// Усе, що бере похідні (ширина лінії, міп брижі, видимість дощу), — до discard і до гілки
@@ -99,8 +119,10 @@ void fragment() {
 	if (use_height) {
 		ivec2 hs = textureSize(height_map, 0);
 		vec2 huv = ((p - height_origin) * height_samples + 0.5) / vec2(hs);
-		// Глибина в метрах (1 м = 0.125 одиниці світу).
-		depth_m = (water_level - textureLod(height_map, huv, 0.0).r) / 0.125;
+		// Глибина в метрах (1 м = 0.125 одиниці світу). Річка — висота кубічним B-сплайном (4 білінійні
+		// відліки): нуль білінійної висоти ламається на межах текселів (~2 м), і чіткий уріз мав би зубці.
+		float hbed = water_murk <= 0.0 ? height_bspline(huv, vec2(hs)) : textureLod(height_map, huv, 0.0).r;
+		depth_m = (water_level - hbed) / 0.125;
 		if (depth_m <= 0.0) {
 			discard;
 		}
@@ -108,6 +130,23 @@ void fragment() {
 		// за 0.3 м не просвічує, TerrainHeight тримає його там), без різкої межі урізу.
 		// Каламутний ставок — 0.15 м: на 0.3 м край ставав темним розмитим ореолом, на 0.08 — сходинками.
 		shallow_fade = smoothstep(0.0, mix(0.3, 0.15, clamp(water_murk, 0.0, 1.0)), depth_m);
+		// Річка над пологою мілиною: 0.3 м глибини там тягнуться на багато метрів, тож непрозорість росте
+		// ще й за відстанню від урізу по горизонталі: глибина / нахил дна (центральні різниці висоти).
+		// Перехід — не вужчий за 4 px і за 1.5 м: вужчий показував зубці обрису
+		// берега з рельєфу, а темна смуга берега за ним лишається видимою. Каламутний ставок — лише за
+		// глибиною: чіткий край там показав би трикутники сітки рельєфу на урізі.
+		if (water_murk <= 0.0) {
+			// Нахил дна — центральні різниці білінійної висоти за ±1 тексель: неперервний по площині, тоді
+			// як похідні екрана рахуються блоками 2×2 пікселі й давали гребінчастий край.
+			vec2 tx = vec2(1.0 / float(hs.x), 0.0);
+			vec2 tz = vec2(0.0, 1.0 / float(hs.y));
+			float texel_m = 8.0 / height_samples; // клітинка = 8 м
+			vec2 grad = vec2(textureLod(height_map, huv + tx, 0.0).r - textureLod(height_map, huv - tx, 0.0).r,
+					textureLod(height_map, huv + tz, 0.0).r - textureLod(height_map, huv - tz, 0.0).r) / (2.0 * texel_m * 0.125);
+			float run_m = depth_m / max(length(grad), 0.02);
+			float px_edge = max(length(dpx), length(dpy)) * 8.0; // піксель у метрах, клітинка = 8 м
+			shallow_fade = max(shallow_fade, smoothstep(0.0, max(1.5, 4.0 * px_edge), run_m));
+		}
 		// Схил берега ~0.4 м на метр: глибина 1 м — ~2.5 м від урізу.
 		bank_m = depth_m * 2.5;
 	} else {

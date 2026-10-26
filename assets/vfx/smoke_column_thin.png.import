@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://drslcmtu1t1cg"
-path="res://.godot/imported/smoke_column_thin.png-868f18a154165afc4e00d972570201cc.ctex"
+path.s3tc="res://.godot/imported/smoke_column_thin.png-868f18a154165afc4e00d972570201cc.s3tc.ctex"
+path.etc2="res://.godot/imported/smoke_column_thin.png-868f18a154165afc4e00d972570201cc.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/vfx/smoke_column_thin.png"
-dest_files=["res://.godot/imported/smoke_column_thin.png-868f18a154165afc4e00d972570201cc.ctex"]
+dest_files=["res://.godot/imported/smoke_column_thin.png-868f18a154165afc4e00d972570201cc.s3tc.ctex", "res://.godot/imported/smoke_column_thin.png-868f18a154165afc4e00d972570201cc.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -23,7 +25,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
