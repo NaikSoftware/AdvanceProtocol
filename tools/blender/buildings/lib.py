@@ -503,11 +503,12 @@ def mats():
         "boards_soft": make_material("boards_soft", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, seam_bump=0.0),
         "tile_small": make_material("tile_small", flat=(0.17, 0.18, 0.20), seams=[("y", 0.26, 0.04, 0.75), ("x", 0.30, 0.03, 0.4)], streak=0.15, seam_bump=0.0),
         # завал: фотоскан (ambientCG Ground111 — цегляне сміття в землі; Poly Haven broken_brick_wall — цегла), тон уламка — із вершинного кольору
-        "heap_photo": make_material("heap_photo", "Ground111", 1.0, (0.95, 0.9, 0.85), bump=0.05, streak=0.3, sat=0.85, dust=((0.22, 0.2, 0.17), 0.15)),
+        "heap_photo": make_material("heap_photo", "Ground111", 1.0, (0.86, 0.81, 0.77), bump=0.05, streak=0.3, sat=0.85, dust=((0.22, 0.2, 0.17), 0.15)),
         "heap_photo_mud": make_material("heap_photo_mud", "Ground111", 1.0, (0.62, 0.56, 0.52), bump=0.04, streak=0.4),
-        "chunk_brick": make_material("chunk_brick", "broken_brick_wall", 0.7, (1.0, 0.92, 0.88), bump=0.03, vmul=True, sat=0.65, dust=((0.30, 0.265, 0.225), 0.3)),
-        "chunk_plaster": make_material("chunk_plaster", "Plaster001", 1.0, (1.0, 0.95, 0.88), bump=0.02, vmul=True, streak=0.3, dust=((0.31, 0.285, 0.245), 0.5)),
-        "chunk_concrete": make_material("chunk_concrete", "Concrete034", 1.0, (0.85, 0.82, 0.76), bump=0.03, vmul=True, dust=((0.30, 0.28, 0.245), 0.5)),
+        "chunk_brick": make_material("chunk_brick", "broken_brick_wall", 0.7, (0.9, 0.83, 0.79), bump=0.03, vmul=True, sat=0.65, dust=((0.30, 0.265, 0.225), 0.3)),
+        "chunk_plaster": make_material("chunk_plaster", "Plaster001", 1.0, (0.75, 0.71, 0.66), bump=0.02, vmul=True, streak=0.3, base_dirt=0.3, dust=((0.31, 0.285, 0.245), 0.5)),
+        "chunk_concrete": make_material("chunk_concrete", "Concrete034", 1.0, (0.64, 0.62, 0.57), bump=0.03, vmul=True, base_dirt=0.3, dust=((0.30, 0.28, 0.245), 0.5)),
+        "wall_brick": make_material("wall_brick", "broken_brick_wall", 0.7, (2.0, 1.78, 1.66), bump=0.03, vmul=True, sat=0.72, dust=((0.30, 0.265, 0.225), 0.24), seams=[("zv", 0.3, 0.035, 0.45)], seam_bump=0.0, patch=((0.34, 0.31, 0.27), 0.3), patch_scale=0.9, streak=0.5, base_dirt=0.4),
         "chunk_wet": make_material("chunk_wet", flat=(0.075, 0.07, 0.064), vmul=True),
         "chunk_char": make_material("chunk_char", flat=(0.07, 0.062, 0.055), vmul=True),
         "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
@@ -896,12 +897,13 @@ class HeapSurface:
     контуру з розмахом 0.3-0.6 м і м'які хвилі, що гаснуть у центрі (без радіальних зломів на вершині).
     z(x, y) дає ту саму висоту, що й меш, тож крокви й димар стоять на справжній поверхні."""
 
-    def __init__(self, cx, cy, rx, ry, hmax, seed, bumps=6, lip=0.3, wob=0.2, lump=0.14, hummocks=0, hum_amp=0.35, pw=2.0, sq=0.0, noise=0.0):
+    def __init__(self, cx, cy, rx, ry, hmax, seed, bumps=6, lip=0.3, wob=0.2, lump=0.14, hummocks=0, hum_amp=0.35, pw=2.0, sq=0.0, noise=0.0, feather=0.0):
         import random
         rnd = random.Random(seed)
         self.cx, self.cy, self.rx, self.ry = cx, cy, rx, ry
         self.hmax, self.bumps, self.lip, self.wob, self.lump, self.pw, self.sq = hmax, bumps, lip, wob, lump, pw, sq
         self.noise = noise
+        self.feather = feather
         nr = random.Random(seed + 999)
         self.nph = [nr.uniform(0, 2 * math.pi) for _ in range(12)]
         self.ph = [rnd.uniform(0, 2 * math.pi) for _ in range(6)]
@@ -953,7 +955,11 @@ class HeapSurface:
             for k, (lam, am) in enumerate(((1.5, 0.16), (0.7, 0.09), (0.35, 0.05))):
                 w = 2 * math.pi / lam
                 z += self.noise * am * e * (math.sin(w * x + q[4 + k]) * math.sin(w * y + q[7 + k]) + 0.5 * math.sin(w * 0.8 * (x + y) + q[10 + (k % 2)]))
-        return self.lip + max(-0.1, z) * self.s
+        out = self.lip + max(-0.1, z) * self.s
+        if self.feather:                                                 # по краю висота зводиться до нуля за feather метрів: без борту й вертикальної смуги
+            w = max(0.0, min(1.0, (1.0 - t) * 0.5 * (self.rx + self.ry) / self.feather))
+            out *= w * w * (3 - 2 * w)
+        return out
 
 
 def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.0, skirt_mat=None):
@@ -964,6 +970,8 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
     lip = hs.lip
     rm = 0.5 * (hs.rx + hs.ry)
     rim = [(0.0, lip), (0.22 * skirt / rm, 0.78 * lip), (0.40 * skirt / rm, 0.38 * lip), (0.52 * skirt / rm, -0.12)]
+    if hs.feather:
+        rim = [(0.0, 0.0), (0.25 * skirt / rm, 0.0), (0.45 * skirt / rm, 0.0), (0.6 * skirt / rm, 0.0)]
     ring = []
     top = 0.0
     for k in range(1, rings + 1):
@@ -1541,7 +1549,7 @@ def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="heap_photo_mud",
     return bh
 
 
-def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.2, 0.5), mix=("chunk_brick", "chunk_brick", "chunk_plaster", "chunk_concrete", "chunk_char", "chunk_wet", "chunk_wet")):
+def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.2, 0.5), outer=0, mix=("chunk_brick", "chunk_brick", "chunk_plaster", "chunk_concrete", "chunk_char", "chunk_wet", "chunk_wet")):
     """Грудки 0.2-0.5 м по всій купі: справжня геометрія дає тінь і силует; грані перекошені, тон і матеріал різні."""
     for h in plan:
         for _ in range(n_each):
@@ -1551,6 +1559,12 @@ def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.2, 0.5), mi
             px, py = h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a)
             sz = rnd.uniform(*size)
             b.chunk(px, py, h.z(px, py) + sz * 0.12, sz, rnd.choice(mix), rnd)
+        for _ in range(outer):                                           # розкидані за краєм купи: край не обривається
+            a = rnd.uniform(0, 2 * math.pi)
+            t = rnd.uniform(1.02, 1.25)
+            r = t * h.radius(a)
+            sz = rnd.uniform(0.18, 0.35)
+            b.chunk(h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a), sz * 0.12, sz, rnd.choice(mix), rnd)
 
 
 def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footprint=(1, 1), anchor=None, density=None, hi=None, ground_clip=False, ao=0.65):

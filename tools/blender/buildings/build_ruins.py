@@ -19,7 +19,8 @@ only = sys.argv[sys.argv.index("--") + 2:] if "--" in sys.argv else []
 
 
 def HeapSurface(*a, **k):
-    k.setdefault("noise", 1.0)                                                  # нерівна поверхня й рваний контур для всіх відсипів
+    k.setdefault("noise", 1.0)
+    k.setdefault("feather", 0.5)                                                  # нерівна поверхня й рваний контур для всіх відсипів
     return _HS(*a, **k)
 
 
@@ -294,8 +295,8 @@ def house2(ruined):
     wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 8, "wall_half", "wall_plaster", 31, hcap=5.6, **standing)
     wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half", "wall_plaster", 32, hcap=5.6, **standing)
     wall_run(b, (-hx, N), (-hx, S), 0.4, [E] * 8, "wall_half", "wall_plaster", 33, hcap=5.6, **standing)
-    prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (-hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
-    wall_run(b, (hx, S), (hx, N), 0.4, [1.2, 2.2, 4.2, 5.0, 3.6, 1.8, 1.1, 0.9, 1.5, 2.5, 1.3], "wall_half", "brick_face", 34, hcap=5.2, jag=0.7, brick_mat="brick_face", step=0.4, diag_p=0.85, jit=0.5, **kw)
+    prism(b, [(-hy, E), (hy, E), (1.5, E + 1.2), (1.1, E + 1.9), (0.3, R - 0.5), (-0.5, R - 1.0), (-1.2, E + 1.3), (-hy + 0.2, E + 0.3)], 0.4, (-hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="brick_face")   # зламаний верх фронтону
+    wall_run(b, (hx, S), (hx, N), 0.4, [1.2, 2.2, 4.2, 5.0, 3.6, 1.8, 1.1, 0.9, 1.5, 2.5, 1.3], "wall_half", "chunk_brick", 34, hcap=5.2, jag=0.8, brick_mat="chunk_brick", step=0.7, diag_p=0.6, jit=1.0, cap=0.3, tvar=0.3, **kw)
     zt = E - 0.03
     for fl, z in ((0, 0.9), (1, 3.6)):
         for x in (-1.8, 0.0, 1.8):
@@ -317,6 +318,8 @@ def house2(ruined):
     plane_soot(b, [(xi, -2.5, 2.8), (xi, 2.5, 2.8), (xi, 2.0, 6.7), (xi, -2.0, 6.7)], (0.5, 0.5, 0.12, 0.12), (1, 0, 0))
     for (yy, zz, ww, hh) in ((-1.0, 4.4, 1.2, 0.9), (1.2, 3.6, 0.9, 1.2), (0.0, 5.6, 1.4, 0.7)):
         plane_soot(b, [(xi + 0.004, yy - ww / 2, zz), (xi + 0.004, yy + ww / 2, zz + 0.1), (xi + 0.004, yy + ww * 0.4, zz + hh), (xi + 0.004, yy - ww * 0.5, zz + hh * 0.8)], (0.2, 0.2, 0.09, 0.09), (1, 0, 0))
+    for (yy, zz, ww, hh_) in ((-1.2, 3.4, 1.1, 0.8), (0.9, 4.2, 0.9, 0.9), (1.7, 3.0, 0.7, 0.6)):      # плями втрати штукатурки: проступає цегла
+        b.box(xi + 0.015, yy, zz, 0.03, ww, hh_, "brick_face")
     ph = [rnd.uniform(0, 6.3) for _ in range(3)]
 
     def cutF(v):
