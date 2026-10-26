@@ -870,7 +870,7 @@ def apply_palette():
         MATS[nm] = make_material(nm, "Bricks105", 1.0, recolor=rc, streak=0.2, base_dirt=0.3, bump=0.02, patch=((0.09, 0.06, 0.04), 0.2), patch_scale=1.6)
     MATS["ch_plaster"] = make_material("ch_plaster", "Plaster001", 1.0, recolor=(0.80, 0.78, 0.72), streak=0.5, base_dirt=0.3, bump=0.008, patch=((0.2, 0.19, 0.17), 0.2))
     ch = PAL.get("chim") or "brick_face"
-    for n in {"wall_plaster", "wall_plaster_w", "brick_face", "boards", "brick_grey", "plinth_flat", "panel", "brick", "ch_plaster"} | {ch}:
+    for n in {"wall_plaster", "wall_plaster_w", "brick_face", "boards", "brick_grey", "plinth_flat", "panel", "brick", "ch_plaster", "boards_soft"} | {ch}:
         if n in _KW:
             _dm(n)
 

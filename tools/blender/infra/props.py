@@ -14,7 +14,7 @@ def concrete(name="road_concrete", seed=61, top_z=0.8, **kw):
 def jersey():
     def rel(n):   # нерегулярні виколупини замість рівних смуг; дорожній бруд знизу 20 см
         return 0.55 + 0.45 * fbm(n, 9, 5, 3)
-    mat = concrete(top_z=None, relief=rel, shade=0.12, val=0.8, ground=False, band=(0.0, 0.2, 0.5))
+    mat = concrete(top_z=None, relief=rel, shade=0.12, val=0.8, ground=False, band=(0.0, 0.2, 0.5), tint=(1.05, 1.0, 0.9), moss=0.5, rust_runs=2, chips=True)   # теплий бетон, мох, іржа від петель
     b = B(); bm = b.bm
     # профіль «нью-джерсі» зі сколотими скосами й фасками: вертикальний низ, скіс, крутіший верх
     prof = [(-.30, 0), (.30, 0), (.30, .17), (.20, .50), (.12, .74), (.07, .80),
@@ -206,7 +206,11 @@ def bed_mat():
                tile=2.56, rough=0.95)
 
 
-def trailer(name, paint, seed):
+def trailer(name, paint, seed, kind="tipper"):
+    """kind: tipper — самоскидний 2ПТС з високими бортами; flatbed — одновісна платформа з низькими бортами
+    й дерев'яною підлогою; tank — бочка-водовоз на одновісному шасі."""
+    if kind != "tipper":
+        return trailer_small(name, paint, seed, kind)
     body = sheet_mat(f"trailer_body_{seed}", paint, seed, tile_v=2.1, band=(0.9, 1.5), patch=0.6)
     frame = pbr("trailer_frame", "MetalPlates013", tile=1.0, tint=(0.42, 0.41, 0.39), sat=0.3, rust=0.0, grime=0.0,
                 rough=0.8, seed=seed + 1)
@@ -257,8 +261,38 @@ def trailer(name, paint, seed):
     finish(b, name)
 
 
+def trailer_small(name, paint, seed, kind):
+    body = sheet_mat(f"trailer_body_{seed}", paint, seed, tile_v=1.2, band=(0.4, 0.9), patch=0.7)
+    frame = pbr("trailer_frame", "MetalPlates013", tile=1.0, tint=(0.42, 0.41, 0.39), sat=0.3, rust=0.0, grime=0.0, rough=0.8, seed=seed + 1)
+    b = B()
+    y0, y1, fl = -2.4, 1.6, 0.75
+    ym = (y0 + y1) / 2
+    for s in (-1, 1):
+        b.box(frame, (s * 0.8, ym, fl - 0.12), (0.12, y1 - y0, 0.16))                  # лонжерони
+    if kind == "flatbed":
+        deck = pbr("trailer_deck", "Planks021", tile=1.0, tint=(0.55, 0.48, 0.40), sat=0.5, grime=0.4, rough=0.9, seed=seed + 2)
+        b.box(deck, (0, ym, fl), (2.0, y1 - y0, 0.06))                                   # дощата підлога
+        for s in (-1, 1):
+            b.box(body, (s * 1.0, ym, fl + 0.22), (0.04, y1 - y0, 0.4))                  # низькі борти 40 см
+        b.box(body, (0, y0, fl + 0.22), (2.0, 0.04, 0.4))
+        b.box(body, (0, y1, fl + 0.3), (2.0, 0.05, 0.55))
+    else:
+        b.cyl(body, (0, ym, fl + 0.75), 0.72, y1 - y0 - 0.3, 16, axis="Y")               # бочка 3,7 м
+        b.cyl(frame, (0, ym, fl + 1.5), 0.22, 0.2, 10)                                   # горловина
+        for yy in (y0 + 0.6, y1 - 0.6):
+            b.box(frame, (0, yy, fl + 0.2), (1.5, 0.12, 0.3))                            # ложементи
+    b.cyl(frame, (0, ym - 0.4, 0.42), 0.06, 2.0, 8, axis="X")                           # одна вісь
+    for s in (-1, 1):
+        b.cyl(frame, (s * 0.92, ym - 0.4, 0.42), 0.42, 0.3, 14, axis="X")
+    b.beam(frame, (-0.6, y1, 0.65), (0, y1 + 1.6, 0.7), 0.12)                           # дишло
+    b.beam(frame, (0.6, y1, 0.65), (0, y1 + 1.6, 0.7), 0.12)
+    finish(b, name)
+
+
 reset()
 if want("infra_jersey_block"): jersey()
 if want("infra_culvert"): culvert()
 if want("infra_trailer_green"): trailer("infra_trailer_green", (0.30, 0.34, 0.24), 71)
 if want("infra_trailer_rust"): trailer("infra_trailer_rust", (0.52, 0.34, 0.22), 73)
+if want("infra_trailer_flatbed"): trailer("infra_trailer_flatbed", (0.30, 0.38, 0.46), 75, "flatbed")
+if want("infra_trailer_tank"): trailer("infra_trailer_tank", (0.48, 0.52, 0.54), 77, "tank")

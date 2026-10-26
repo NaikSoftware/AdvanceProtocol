@@ -469,7 +469,44 @@ def shed(ruined):
     lib.finish(b, "ruin_half_shed", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
 
 
+def shed_variant(name, kind):
+    """Інші сараї для дворів: brick — цегляний 5 x 3.6 м під шиферним двосхилим дахом із дерев'яними дверима;
+    lean — дерев'яна прибудова з односхилим дахом із зеленого профлисту."""
+    lib.reset()
+    lib.palette(roof="asb_old" if kind == "brick" else "green_dark", eave=2.4)
+    b = Builder()
+    hx, hy, E = (2.5, 1.8, 2.4) if kind == "brick" else (2.2, 1.6, 2.2)
+    if kind == "brick":
+        R_ = 3.4
+        b.box(0, 0, 0, 2 * hx + 0.08, 2 * hy + 0.08, 0.3, "plinth_dark")
+        b.box(0, 0, 0.3, 2 * hx, 2 * hy, E - 0.3, "brick_face")
+        b.gable(-hx, hx, -hy, hy, E, R_, "fc_roof_xh", "brick_face", ridge_axis="x", overhang=0.3)
+        b.box(0, -hy - 0.03, 0.3, 0.9, 0.06, 1.9, "door_wood")
+        b.window(("x", hx, 1), 0.0, 1.2, 0.6, 0.5, kind=0)
+        lib.window_ring(b, "x", hx, 1, 0.0, 1.2, 0.6, 0.5, t=0.06, mat="brick_face")
+        lib.weather(b, "brick_face", [("y", -hy, -1, -hx, hx, 0.3, E), ("x", hx, 1, -hy, hy, 0.3, E)], seed=61, patches=False)
+    else:
+        Eb = E + 0.9                                                              # задня стіна вища: односхилий дах
+        b.box(0, 0, 0, 2 * hx + 0.06, 2 * hy + 0.06, 0.25, "plinth_dark")
+        b.box(0, 0, 0.25, 2 * hx, 2 * hy, E - 0.25, "boards_soft")
+        lib._quad(b, [(-hx, hy, E), (hx, hy, E), (hx, hy, Eb), (-hx, hy, Eb)], "boards_soft", (0, 1, 0))
+        for sx in (-1, 1):
+            tri = [(sx * hx, -hy, E), (sx * hx, hy, E), (sx * hx, hy, Eb)]
+            v = [__import__("mathutils").Vector(q) for q in tri]
+            n_ = (v[1] - v[0]).cross(v[2] - v[1])
+            f = b.poly(tri if n_.x * sx > 0 else tri[::-1], "boards_soft")
+            b.facing.append((f, __import__("mathutils").Vector((sx, 0, 0))))
+        b.poly_up([(-hx - 0.3, -hy - 0.4, E - 0.12), (hx + 0.3, -hy - 0.4, E - 0.12), (hx + 0.3, hy + 0.25, Eb + 0.06), (-hx - 0.3, hy + 0.25, Eb + 0.06)], "fc_roof_xh")
+        b.box(-0.8, -hy - 0.03, 0.25, 1.0, 0.06, 1.8, "door_steel")
+        lib.weather(b, "boards_soft", [("y", -hy, -1, -hx, hx, 0.25, E)], seed=63, patches=False)
+    lib.finish(b, name, out, tri_limit=1200, footprint=(1, 1))
+
+
 for fn, nm in ((house1, "house1"), (house2, "house2"), (shed, "shed")):
     if want(nm):
         fn(False)
         fn(True)
+if want("shed_brick"):
+    shed_variant("f8_shed_brick", "brick")
+if want("shed_lean"):
+    shed_variant("f8_shed_lean", "lean")
