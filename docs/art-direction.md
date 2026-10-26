@@ -123,7 +123,9 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
 - **Loose vegetation where it really grows:** reed, cattail and willow in patches along some
   banks; fruit trees and shrubs in many yards, not all; a few lone bushes and trees on meadow,
   never on ploughed land. Every species comes in at least three shapes. A vehicle that enters the
-  cell leaves a low pile of crushed branches or a flattened clump, never a flat stain.
+  cell leaves a low pile of crushed branches or a flattened clump, never a flat stain. Fallen and
+  broken wood keeps its bark colour: no pale fresh breaks or splintered ends anywhere, they only
+  litter the picture.
 - **Whatever hides a visible unit turns semi-transparent** — crowns, roofs and walls between the
   camera and a unit the current player can see fade smoothly to about 30–40 % opacity with alpha
   blending. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.

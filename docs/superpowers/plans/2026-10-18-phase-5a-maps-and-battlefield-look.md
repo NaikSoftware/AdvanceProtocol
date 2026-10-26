@@ -475,8 +475,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] One chimney per house, five chimney types; several window forms; trims in the wall tone
 - [x] Concrete fences weathered, three or more types; sheds 3; trailers 4
 - [x] Wet factor in `prop_fade` no longer lightens roofs; no colour roof tints
-- [ ] Roof colours only graphite slate, dark cherry or red-brown, true dark green, galvanised grey, dark brown; no olive, ochre or mustard
-- [ ] Every roof clearly darker than its wall: sRGB luma ratio ≤ 0.6
+- [x] Roof colours only graphite slate, dark cherry or red-brown, true dark green, galvanised grey, dark brown; no olive, ochre or mustard
+- [x] Every roof clearly darker than its wall: sRGB luma ratio ≤ 0.6
 - [ ] Not plastic, not grey; streaks under sills and a damp plinth band visible in battle
 - [ ] Glass reads as glass on intact houses; broken windows only on ruins, as a real opening
 - [ ] Hay and bridges matte; gardens tilled rows; chimney tops open and dark; ruin floors show debris, not grass
@@ -484,7 +484,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 ### Task 18: Damaged panel block
 
-- [ ] Reference photos of real collapsed panel blocks from 40–55° above; heap height, plan shape and piece sizes measured
+- [x] Reference photos of real collapsed panel blocks from 40–55° above; heap height, plan shape and piece sizes measured
 - [ ] Heap shaped like the reference: a tongue below the breach, never a ring around the building
 - [ ] Breach with sagging slabs, ragged facade, plastered rooms, soot on the walls
 - [ ] Accepted side by side with the reference photo in a battle frame
@@ -496,6 +496,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] No pole, transformer cabinet or guy anchor on the drawn road surface
 - [ ] 0.4 kV network is a tree along streets: no crossing spans, no closed loops, no pole that feeds nothing
 - [ ] One transformer per settlement, including the north Ridge ring hamlet
+- [ ] Wires stay visible against the river from every camera angle
 - [ ] Generator takes every rule constant from the game
 - [ ] In `feat/battlefield-dressing`
 
@@ -504,7 +505,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] No path on the road; no segments or seams
 - [ ] A visible worn corridor porch → gate → verge at every yard, zoom 6–8
 - [ ] Reads as wear, not a rug or a pencil line
-- [ ] One or two winding paths to water per map, never across ploughed land or gardens
+- [x] One or two winding paths to water per map, never across ploughed land or gardens
+- [x] Paths to water go somewhere real (from a yard or road to a landing on the bank), not random stripes
 
 ### Task 21: Bank, yard and meadow vegetation
 
@@ -517,7 +519,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 ### Task 22: Forest into battle
 
-- [x] Crowns on their trunks; per-point seeded scatter (`ForestScatter`)
+- [ ] Crowns on their trunks; per-point seeded scatter (`ForestScatter`)
 - [ ] Autumn on Ridge, River mixed with bare birches, dense enough to hide a tank
 - [ ] Placed on FOREST cells in battle; crowns over a visible unit fade with alpha, no dither
 
@@ -525,7 +527,9 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 - [x] Explosions without craters; scorch under wrecks only on `seen`
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
+- [ ] Chimney smoke reads as volume, not flat strokes
 - [ ] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
+- [ ] First scroll across the map is smooth, no hitch
 
 ### Task 24: New props in villages
 
