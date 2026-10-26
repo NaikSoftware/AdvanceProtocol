@@ -104,7 +104,7 @@ const _DRAG_THRESHOLD_DP: float = 10.0
 ## тіні: на сонячних картах вона навмисно м'яка й світліша, ніж під хмарами.
 const STRUCTURE_SHADOW_MIN_SKY_CLEAR: float = 0.5
 ## Частка світла, яку забирає запечена тінь лісу на сонячній карті (ForestLayer).
-const FOREST_SHADOW: float = 0.18
+const FOREST_SHADOW: float = 0.22
 ## Мокра карта для пропсів (мости темніші й блищать): River під дощем — 0.55, сухі — 0.
 const WET_MIN: float = 0.3
 

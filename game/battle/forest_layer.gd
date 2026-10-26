@@ -14,7 +14,7 @@ extends Node3D
 ## - Підріст і низькі дерева (нижче `UNDER_TOP`) — однією сіткою проксі на породу: з такої
 ##   висоти пучків не розрізнити, а вони найчисленніші.
 ## - Тінь лісу запечена (§8: справжню тінь кидають лише юніти): маска плям крон у напрямку сонця
-##   карти лягає на землю одним множенням кольору (`_bake_shadow`).
+##   карти лягає на землю одним напівпрозорим шаром (`_bake_shadow`).
 ## - Крони між камерою й показаним юнітом стають напівпрозорими — цілими деревами, без растру;
 ##   показані — ті самі, що й під дахами (`set_reveal_cells`), тож невидимий ворог себе не видає.
 
@@ -39,11 +39,13 @@ const FORMS: PackedStringArray = ["Pine_A", "Pine_B", "Spruce_A", "Spruce_B", "B
 ## Нижче цієї висоти (тайли) і глибше `UNDER_DEPTH` у лісі — підлісок під наметом.
 const UNDER_TOP: float = 0.45
 const UNDER_DEPTH: float = 0.7
-## Кільце: у смузі `RING_NEAR` клітинок від дошки (її камера бачить біля краю) — повна густота;
-## далі кожне друге дерево з кроною, ширшою в √2 раза, — та сама площа намету.
+## Кільце: у смузі `RING_NEAR` клітинок від дошки (її камера бачить біля краю) — повна густота,
+## крона ширша в `RING_NEAR_WIDE` раза (у кільці немає поясу кущів, смуг узлісся й підросту, що на
+## дошці закривають просвіти); далі кожне друге дерево з кроною, ширшою ще в √2 раза.
 const RING_NEAR: float = 5.0
+const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
-const RING_WIDE: float = 1.41
+const RING_WIDE: float = 1.84
 ## Шматок землі просіки — сітка DRAPE × DRAPE по рельєфу, на DRAPE_LIFT над землею.
 const DRAPE: int = 10
 const DRAPE_LIFT: float = 0.01
@@ -132,8 +134,8 @@ func set_reveal_cells(cells: Array[Vector2i]) -> void:
 
 
 ## Зум камери (IsoCameraRig.zoom_level): підлісок лише до DETAIL_ZOOM. Розчинення залежить
-## від нахилу камери (з зумом), а не від пану — камера не обертається; тож воно перераховується
-## лише на помітну зміну зуму, а не на кожен кадр перетягування.
+## від нахилу камери (з зумом), а не від пану — камера не обертається (`_cover`); тож воно
+## перераховується лише на помітну зміну зуму, а не на кожен кадр перетягування.
 func set_zoom(zoom: float) -> void:
 	_zoom = zoom
 	for n in _under:
@@ -217,7 +219,7 @@ func _build_ring() -> void:
 		var far: bool = _board_distance(p) > RING_NEAR
 		if far and hash(p) % RING_KEEP != 0:
 			continue
-		var wide: float = RING_WIDE if far else 1.0
+		var wide: float = RING_WIDE if far else RING_NEAR_WIDE
 		xf.basis = xf.basis.scaled(Vector3(wide, 1.0, wide))
 		var key: String = proxy
 		if not groups.has(key):
@@ -322,7 +324,7 @@ func _multimesh(mesh: Mesh, list: Array, material: Material) -> MultiMeshInstanc
 
 
 ## Запечена тінь лісу: на кожну крону — м'яка пляма, зсунута від сонця на висоту крони ·
-## котангенс висоти сонця; маска лягає на землю сіткою по рельєфу з множенням кольору.
+## котангенс висоти сонця; маска лягає на землю сіткою по рельєфу напівпрозорим чорним.
 ## Плями не додаються, а беруть більшу: у зімкнутому лісі тінь одна, а не темніша в кілька шарів.
 func _bake_shadow(crowns: Array[Dictionary]) -> void:
 	if _shadow != null:
@@ -386,6 +388,8 @@ func _bake_shadow(crowns: Array[Dictionary]) -> void:
 	_shadow = MeshInstance3D.new()
 	_shadow.name = "Forest_Shadow"
 	_shadow.mesh = st.commit()
+	# Раніше за напівпрозорі крони: тінь лягає лише на землю, а не на розчинену крону над нею.
+	mat.render_priority = -1
 	_shadow.material_override = mat
 	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_shadow)
@@ -397,28 +401,31 @@ static var _shadow_shader_cache: Shader
 static func _shadow_shader() -> Shader:
 	if _shadow_shader_cache == null:
 		_shadow_shader_cache = Shader.new()
-		# Множення кольору того, що вже на землі: тінь лягає й на шрами, колії та просіку.
+		# Чорне з прозорістю strength · маска — те саме, що множення кольору землі на (1 − a): тінь
+		# лягає й на шрами, колії та просіку. blend_mul на мобільному рендері малювався не множенням.
 		_shadow_shader_cache.code = """shader_type spatial;
-render_mode unshaded, blend_mul, depth_draw_never, cull_disabled, fog_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
 uniform sampler2D mask : filter_linear, repeat_disable;
 uniform float strength = 0.15;
 void fragment() {
-	ALBEDO = vec3(1.0 - strength * texture(mask, UV).r);
+	ALBEDO = vec3(0.0);
+	ALPHA = strength * texture(mask, UV).r;
 }
 """
 	return _shadow_shader_cache
 
 
-## Наскільки крона закриває показаних юнітів: 1 — не закриває, 0 — повністю.
-func _cover(entry: Dictionary, cam: Vector3) -> float:
+## Наскільки крона закриває показаних юнітів: 1 — не закриває, 0 — повністю. `back` — напрям
+## від сцени до камери (вісь погляду): він залежить лише від нахилу, тобто від зуму, а не від
+## пану, тож розчинення не треба перераховувати, поки гравець тягне камеру.
+func _cover(entry: Dictionary, back: Vector3) -> float:
 	var a: float = 1.0
+	var flat := Vector2(back.x, back.z)
+	# Крона заввишки top ховає юніта, стоячи до top · (гориз. / верт. складова погляду) ближче.
+	var reach: float = float(entry["top"]) * flat.length() / maxf(back.y, 0.1) + FADE_REACH_EXTRA
+	var dir: Vector2 = flat.normalized()
 	for c in _reveal:
 		var u := Vector2(c)
-		var to_cam: Vector3 = cam - Vector3(u.x, 0.0, u.y)
-		var flat := Vector2(to_cam.x, to_cam.z)
-		# Крона заввишки top ховає юніта, стоячи до top · (гориз. відстань / висота камери) ближче.
-		var reach: float = float(entry["top"]) * flat.length() / maxf(to_cam.y, 0.1) + FADE_REACH_EXTRA
-		var dir: Vector2 = flat.normalized()
 		var p: Vector2 = entry["pos"]
 		var t: float = clampf((p - u).dot(dir), 0.0, reach)
 		var r0: float = FADE_RADIUS + float(entry["r"]) + UNIT_HALF
@@ -430,13 +437,13 @@ func _apply_fade() -> void:
 	_fade_zoom = _zoom
 	_free(_soft_nodes)
 	var cam3d: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
-	var cam: Vector3 = cam3d.global_position if cam3d != null else Vector3(0.0, 1e6, 0.0)
+	var back: Vector3 = cam3d.global_transform.basis.z if cam3d != null else Vector3.UP
 	for node: String in _canopy:
 		var mm: MultiMesh = (_canopy[node]["mmi"] as MultiMeshInstance3D).multimesh
 		var list: Array = _canopy[node]["list"]
 		var faded: Array = []
 		for i in list.size():
-			var k: float = _cover(list[i], cam) if not _reveal.is_empty() else 1.0
+			var k: float = _cover(list[i], back) if not _reveal.is_empty() else 1.0
 			mm.set_instance_color(i, Color(1, 1, 1, 1.0 if k >= 0.999 else 0.0))
 			if k < 0.999:
 				faded.append({"xf": list[i]["xf"], "rgb": list[i]["rgb"], "alpha": lerpf(FADE_ALPHA, 1.0, k)})
