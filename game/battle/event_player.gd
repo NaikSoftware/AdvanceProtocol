@@ -251,13 +251,13 @@ func _handle_shot_retaliated(event: Events.ShotRetaliated) -> Variant:
 func _play_shot(shooter_id: int, target_id: int, weapon: int = -1) -> Variant:
 	var shooter_view: UnitView = _resolve_unit_view(shooter_id)
 	var target_view: UnitView = _resolve_unit_view(target_id)
+	var shooter: Unit = _resolve_unit(shooter_id)
 	if weapon < 0:
-		var shooter: Unit = _resolve_unit(shooter_id)
 		weapon = BattleFx.weapon_of(shooter.unit_class()) if shooter != null else BattleFx.Weapon.RIFLE
 	var awaitable: Variant = null
 	if shooter_view != null:
 		awaitable = shooter_view.play_shot()
-		BattleFx.spawn_muzzle(shooter_view.get_parent(), shooter_view.transform, weapon)
+		BattleFx.spawn_muzzle(shooter_view.get_parent(), shooter_view.transform, weapon, shooter.type_id if shooter != null else -1)
 	var target: Unit = _resolve_unit(target_id)
 	var armoured: bool = target != null and UnitTypes.is_vehicle(target.unit_class())
 	if target != null and (weapon == BattleFx.Weapon.SHELL or (weapon == BattleFx.Weapon.TANK_GUN and not armoured)):

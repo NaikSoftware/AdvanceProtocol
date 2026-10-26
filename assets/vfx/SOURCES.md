@@ -13,7 +13,7 @@ Domain) so you are free to use them however you want!". Each archive also carrie
 
 | pack (as listed on the page) | size / frames | used for |
 | --- | --- | --- |
-| Ground Explosion (`GroundExplosionVDB.zip`) | 661 MB, 200 frames, channels density + flames | `explosion.png` (frames 16–142 step 2, hottest in the first frames, rises, fades to empty over the last 12 with an eased start), `smoke_column.png` / `smoke_column_thin.png` (smoke only, frames 66–129), `dirt_burst.png` (smoke only, brown albedo, frames 20–146 step 2, rises, fades to empty over the last 12 with an eased start), `impact_flash.png` (frames 12–42 step 2, small scale) |
+| Ground Explosion (`GroundExplosionVDB.zip`) | 661 MB, 200 frames, channels density + flames | `explosion.png` (frames 16–142 step 2, hottest in the first frames, rises, fades to empty over the last 12 with an eased start), `smoke_column.png` / `smoke_column_thin.png` (smoke only, frames 66–129; `smoke_column.png` also carries the smoke a kill fireball or drone hit turns into), `dirt_burst.png` (smoke only, brown albedo, frames 20–146 step 2, rises, fades to empty over the last 12 with an eased start), `impact_flash.png` (frames 12–42 step 2, small scale) |
 
 Every other pack on the page (Aerial Explosion, Tornado Looping, Fire Plume, Cloud Pack, Grenade Dust Impact,
 Dust Shockwave, Industrial Chimney Smoke, Building Implosion, Gasoline Explosion, High-Res Smoke Plume, Simple
@@ -35,7 +35,6 @@ pitch). The VDB files themselves are not in the repository.
 | `explosion.png` | fireball then dark smoke, one-shot | 64, 8×8 × 256 px (2048²), 48 fps, cell ≈ 21.7 m | Ground Explosion VDB |
 | `dirt_burst.png` | brown earth and dust cloud, no fire, one-shot | 64, 8×8 × 256 px (2048²), 40 fps, cell ≈ 13.4 m | Ground Explosion VDB (density only, brown albedo) |
 | `impact_flash.png` | muzzle / impact flash into a small fireball, ends empty | 16, 4×4 × 192 px, 60 fps, cell ≈ 9.2 m | Ground Explosion VDB (early frames) |
-| `armour_sparks.png` | 4×2 sheet of 7 spark streaks (8th cell empty), tinted `#FFE6B0` with a white-hot core | 8 cells × 256 px | Kenney Particle Pack 1.1, `PNG (Transparent)/trace_01…trace_07.png`, resized 512→256 and tinted; <https://kenney.nl/assets/particle-pack>; CC0 1.0 (`License.txt` in the pack) |
 | `smoke_puff.png` | 256², white soft puff used by the main menu | **UNKNOWN SOURCE.** Added with the menu shell (first commit `766c8f5`). It matches no file in Kenney Particle Pack or Kenney Smoke Particles, and nobody recorded where it came from. SHA-256 `0cc39934418048c69ed815a3150f1feb03a344dd30a7b90cc361bb0554068522`. Replace it, or establish the source, before release | **unknown** |
 
 ## Cell size and blast point

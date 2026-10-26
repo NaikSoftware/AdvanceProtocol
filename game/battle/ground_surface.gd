@@ -105,6 +105,9 @@ var _ring_mesh_height: TerrainHeight
 ## Для шару, що має файл macro/<шар>_albedo_<n>.<пора>.png, береться він; решта шарів — як є.
 ## Ставити до першого build(): масиви текстур вантажаться один раз.
 var season: StringName = &""
+## Видимі краї полів ріллі (за відступами від доріг) у координатах світу, клітинки: тюки стають
+## біля цих країв.
+var field_edges: Array[Rect2] = []
 
 ## Імена шарів macro_array: перші 8 — TEX_LAYERS, далі — підтипи, чий файл існує.
 var _macro_layers: Array[String] = []
@@ -377,6 +380,7 @@ static func plough_fields(cells: PackedInt32Array, w: int, layer: int) -> Array:
 func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: int, height: TerrainHeight) -> void:
 	var res: Array = plough_fields(cells, w, layer)
 	var rects: Array[Rect2i] = res[1]
+	field_edges.clear()
 	mat.set_shader_parameter("plough_layer", layer if not rects.is_empty() else -1)
 	if rects.is_empty():
 		return
@@ -388,7 +392,10 @@ func _set_plough(mat: ShaderMaterial, cells: PackedInt32Array, w: int, layer: in
 	for r in rects:
 		# Борозни вздовж довгого боку; квадратне поле — вздовж x.
 		axis.append(1 if r.size.y > r.size.x else 0)
-		insets.append(plough_road_insets(r, rc))
+		var inset: Vector4 = plough_road_insets(r, rc)
+		insets.append(inset)
+		field_edges.append(Rect2(Vector2(r.position) - Vector2(0.5, 0.5) + Vector2(inset.x, inset.y),
+				Vector2(r.size) - Vector2(inset.x + inset.z, inset.y + inset.w)))
 	mat.set_shader_parameter("plough_axis", axis)
 	mat.set_shader_parameter("plough_inset", insets)
 

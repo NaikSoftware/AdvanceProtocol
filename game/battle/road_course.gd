@@ -43,6 +43,9 @@ const RING_MEANDER: float = 0.35
 ## одна крива.
 const SMOOTH: float = 1.1
 const STREET_SMOOTH: float = 0.75
+## σ біля забудови (клітинка BUILDING чи RUBBLE за ≤ 1 клітинку): кут вулиці містечка — дуга
+## R ≈ 0.89σ ≈ 4.5 м, а не «гоночна» петля в 8 м; там же дорога не хитається (WANDER_M).
+const TOWN_SMOOTH: float = 0.63
 ## Вісь — не далі за стільки клітинок від центру кожної клітинки ROAD; σ гаусового зміщення, що
 ## виправляє вісь (клітинки): 1.2 дає на сходинці в 1 клітинку два протилежні зміщення за 7 м
 ## (S-вигин), 1.6 — одну плавну дугу.
@@ -80,6 +83,8 @@ var _margin: int = 0
 var _shift: int = 0
 var _mask: PackedByteArray = PackedByteArray()
 var _type: PackedByteArray = PackedByteArray()
+## Клітинки забудови (BUILDING, RUBBLE): 1, решта 0.
+var _built: PackedByteArray = PackedByteArray()
 var _bridge_cells: Array[Vector2i] = []
 var _images: Array[Image] = []
 var _d: PackedFloat32Array = PackedFloat32Array()
@@ -101,6 +106,7 @@ static func build(board: Board, surface: PackedByteArray, margin: int, seed_valu
 	rc._shift = shift
 	rc._mask.resize(rc._w * rc._h)
 	rc._type.resize(rc._w * rc._h)
+	rc._built.resize(rc._w * rc._h)
 	var any := false
 	for y in rc._h:
 		for x in rc._w:
@@ -113,6 +119,8 @@ static func build(board: Board, surface: PackedByteArray, margin: int, seed_valu
 			elif k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED:
 				rc._mask[i] = 2
 				rc._bridge_cells.append(Vector2i(x, y))
+			elif k == Terrain.Kind.BUILDING or k == Terrain.Kind.RUBBLE:
+				rc._built[i] = 1
 	if not any:
 		return null
 	rc._fill_bridge_types()
@@ -461,8 +469,14 @@ func _smooth_chain(raw: PackedVector2Array, ci: int, n_l: FastNoiseLite, closed:
 	# Вужче σ — лише на вулиці (смуга 2 клітинки завдовжки ≥ STREET_RUN): з ним вісь крізь блок
 	# 2×2 на повороті повторює сходинку клітинок і дістає вигини кожні 10–15 м.
 	var street: PackedByteArray = _street_flags(pts)
+	var town := PackedFloat32Array()
+	town.resize(n)
 	for i in n:
 		sig[i] = lerpf(SMOOTH, STREET_SMOOTH, smoothstep(0.7, 0.95, _dt(pts[i])) * street[i])
+		# Смуга 2+ клітинки вже має своє σ (вулиця йде медіальною віссю); тут — одна клітинка.
+		town[i] = _town(pts[i]) * (1.0 - float(street[i]))
+		sig[i] = lerpf(sig[i], minf(sig[i], TOWN_SMOOTH), town[i])
+	town = _gauss_f(town, 0.8)
 	# Різка зміна σ уздовж лінії сама дає злам: профіль σ теж гладкий.
 	sig = _gauss_f(sig, 0.8)
 	var out: PackedVector2Array = pts.duplicate()
@@ -517,7 +531,7 @@ func _smooth_chain(raw: PackedVector2Array, ci: int, n_l: FastNoiseLite, closed:
 		var ia: int = maxi(i - 1, 0)
 		var ib: int = mini(i + 1, n - 1)
 		var kappa: float = tang[ib].distance_to(tang[ia]) / maxf(s[ib] - s[ia], 1e-4)
-		var fade: float = (1.0 if closed else smoothstep(0.6, 2.0, minf(s[i], s[n - 1] - s[i]))) * smoothstep(0.6, 2.0, near_node(out[i])) * smoothstep(0.6, 2.0, near_bridge(out[i])) * (1.0 - smoothstep(0.15, 0.5, kappa))
+		var fade: float = (1.0 if closed else smoothstep(0.6, 2.0, minf(s[i], s[n - 1] - s[i]))) * smoothstep(0.6, 2.0, near_node(out[i])) * smoothstep(0.6, 2.0, near_bridge(out[i])) * (1.0 - smoothstep(0.15, 0.5, kappa)) * (1.0 - town[i])
 		var off: float = WANDER_M * M * clampf(1.6 * n_l.get_noise_2d(s[i], 37.0 * ci), -1.0, 1.0) * fade
 		if _shift > 0:
 			off += RING_MEANDER * clampf(1.6 * n_l.get_noise_2d(s[i] * 0.45, 91.0 + 37.0 * ci), -1.0, 1.0) \
@@ -526,6 +540,19 @@ func _smooth_chain(raw: PackedVector2Array, ci: int, n_l: FastNoiseLite, closed:
 	if closed:
 		moved[n - 1] = moved[0]
 	return moved
+
+
+## 1, якщо поруч (Чебишов ≤ 1 від клітинки точки) є забудова: вулиця містечка, а не польова дорога.
+func _town(p: Vector2) -> float:
+	var cx: int = floori(p.x + 0.5)
+	var cz: int = floori(p.y + 0.5)
+	for dz in range(-1, 2):
+		for dx in range(-1, 2):
+			var x: int = cx + dx
+			var z: int = cz + dz
+			if x >= 0 and z >= 0 and x < _w and z < _h and _built[z * _w + x] == 1:
+				return 1.0
+	return 0.0
 
 
 ## Відстань Чебишова від прямокутника дошки (клітинки; < 0 усередині) у координатах світу.

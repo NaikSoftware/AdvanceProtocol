@@ -466,31 +466,6 @@ func test_fog_clock_pauses_when_the_board_is_rebuilt_without_a_ring() -> void:
 	assert_true(clock.paused, "без кільця годинник стоїть")
 
 
-## Підірваний міст кільця теж лишає руїни: вони йдуть тим самим мультимешем, але не в перелік
-## клітинок руїн дошки, який читають правила й тести дошки.
-func test_destroyed_ring_bridge_draws_ruins_outside_the_board_list() -> void:
-	var m: MapData = (load("res://maps/river.tres") as MapData).duplicate()
-	var tiles: PackedByteArray = m.outer_tiles.duplicate()
-	var hit := -1
-	for i in tiles.size():
-		if tiles[i] == Terrain.Kind.BRIDGE:
-			hit = i
-			break
-	assert_gt(hit, -1, "у кільці River є міст")
-	tiles[hit] = Terrain.Kind.BRIDGE_DESTROYED
-	m.outer_tiles = tiles
-	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
-	add_child_autofree(view)
-	view.ring_map = m
-	view.build(m.to_board())
-	var ruin: MultiMeshInstance3D = view.get_node_or_null("PlaceholderBridgeRuin")
-	assert_not_null(ruin, "руїни кільця намальовані")
-	if ruin != null:
-		# Дві плити, дві опори й третя плита, що впала: її кидає хеш цієї клітинки.
-		assert_eq(ruin.multimesh.instance_count, 5)
-	assert_eq(view._placeholder_bridge_ruin_cells.size(), 0, "на дошці руїн нема")
-
-
 ## Множник улоговини в центрі крайньої клітинки — smoothstep(0, 1.5, 0.5) = 7/27, кутової —
 ## (7/27)²; на самому краю 0, за `_EDGE_HILL_IN` від краю — 1.
 func test_edge_hill_dip_has_exact_values_at_cell_centres() -> void:
@@ -537,23 +512,6 @@ func test_ring_world_keeps_every_board_hill_cell_raised() -> void:
 			else:
 				assert_gt(rise, floor_h - tol, "(%d, %d): %.2f м" % [x, z, rise / M])
 	assert_gt(edge_cells, 0, "на Ridge пагорб перетинає край")
-
-
-## Настил — лише на мостах дошки: плита впоперек русла кільця під напівзакритою імлою
-## обриває річку прямою, і за нею вода читається окремим шматком.
-func test_ring_bridge_lays_no_deck_across_the_river() -> void:
-	var m: MapData = load("res://maps/river.tres")
-	var b: Board = m.to_board()
-	var on_board := 0
-	for k: int in b.tiles:
-		on_board += 1 if k == Terrain.Kind.BRIDGE else 0
-	assert_true(m.outer_tiles.has(Terrain.Kind.BRIDGE), "у кільці River є міст")
-	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
-	add_child_autofree(view)
-	view.ring_map = m
-	view.build(b)
-	var deck: MultiMeshInstance3D = view.get_node("PlaceholderBridgeDeck")
-	assert_eq(deck.multimesh.instance_count, on_board, "настил — лише на клітинках дошки")
 
 
 ## Коліно русла завширшки в клітинку: розмиття тут не додає води зовсім, а замикання заповнює

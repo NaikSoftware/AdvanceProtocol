@@ -84,6 +84,12 @@ var _scars: ScarMap = null
 ## Шейдери ефектів уже розігріто: на старті нового бою, а в бою зі збереження — на першому
 ## гейті, коли камера вже стоїть на юнітах.
 var _fx_warmed: bool = false
+## Клітинки, у які в'їжджала техніка: ПРАВДА про розчавлені пропси, як BattleState.broken_forest
+## для просік. Лише вигляд, тож живе тут, а не в core/; глядачеві показується обрізаною його
+## seen (§3.5), інакше уламки огорожі видали б невидимий танк.
+## shortcut: збереження цю правду не пише, тож «Продовжити» показує пропси цілими; перенести її
+## в BattleState і серіалізатор (як broken_forest), коли розчавлене стане помітним між сесіями.
+var _crushed_truth: Dictionary[Vector2i, bool] = {}
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -93,6 +99,12 @@ var _unit_views: Dictionary = {}
 ## паном камери. ~10dp = 10 логічних px, бо UiScale тримає логічний px ≈ dp
 ## (_drag_threshold_px() нижче) — одне місце, а не розмазане по обробниках.
 const _DRAG_THRESHOLD_DP: float = 10.0
+## Ясне небо (BattleLook.sky_clear): на сонці пропси кидають тінь, інакше висять над землею. Під
+## хмарами River світло розсіяне, і будинки без тіні від землі не відриваються. Не за прозорістю
+## тіні: на сонячних картах вона навмисно м'яка й світліша, ніж під хмарами.
+const STRUCTURE_SHADOW_MIN_SKY_CLEAR: float = 0.5
+## Мокра карта для пропсів (мости темніші й блищать): River під дощем — 0.55, сухі — 0.
+const WET_MIN: float = 0.3
 
 ## Довгий натиск (docs/ui/overlays.md): палець тримається стільки, не перетнувши
 ## поріг драга, — огляд дальності замість тапу; відпускання його знімає.
@@ -251,11 +263,20 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
 	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
 	_board_view.season = look.season
+	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
+	_board_view.wet = look.wetness >= WET_MIN
 	_weather.apply(look)
 	_wire_view(board)
+	# Техніка, що стоїть на клітинці від старту матчу, теж розчавила дрібні пропси під собою; глядач
+	# бачить це, як і решту шрамів, лише на розвіданому (§3.5, _rebuild_units_for_active_player).
+	_crushed_truth.clear()
+	for p in _match_service.state.player_count:
+		for u: Unit in _match_service.state.units_of(p):
+			if u.unit_class() != UnitTypes.UnitClass.INFANTRY:
+				_crushed_truth[u.pos] = true
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
-	_rebuild_units_for_active_player()
+	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
 	_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
 	# fly_to(), не center_on(): у самостійному запуску гейта немає, і програмний
@@ -280,6 +301,8 @@ func resume(match_service: Node = null) -> void:
 		_board_view.ring_map = saved_map
 	var look: BattleLook = BattleLook.for_map_path(mp)
 	_board_view.season = look.season
+	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
+	_board_view.wet = look.wetness >= WET_MIN
 	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
@@ -289,6 +312,7 @@ func resume(match_service: Node = null) -> void:
 
 func _wire_view(board: Board) -> void:
 	_wreck_layer.set_wind(_weather.wind())
+	BattleFx.wind = _weather.wind()
 	_scars = ScarMap.new(Vector2i(board.width, board.height))
 	_board_view.scar_map = _scars
 	_board_view.build(board)
@@ -835,6 +859,7 @@ func _on_events_ready() -> void:
 	var events: Array[Events.BattleEvent] = _match_service.take_events()
 	if events.is_empty():
 		return
+	_record_crushes(events)
 	await _event_player.play(events)
 
 	var turn_started: bool = false
@@ -862,6 +887,9 @@ func _on_events_ready() -> void:
 		if _pointer_down:
 			_camera_rig.end_hold()  # інакше риг крутить _process за гейтом до наступного натиску (§8)
 		_pointer_down = false
+		# Дим влучань висить кілька секунд: над тайлом, якого наступний гравець не розвідав, він
+		# показав би, де стояла ціль (§3.5).
+		BattleFx.clear_all(get_tree())
 		_gate.show_for(_match_service.state.active_player)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
 		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
@@ -889,7 +917,8 @@ func _on_events_ready() -> void:
 ## після confirmed, без жодного кроку кадру; якби тут стояв fly_to(), він
 ## ловив би позицію ще НЕ на цілі й падав.
 func _on_gate_confirmed() -> void:
-	_rebuild_units_for_active_player()
+	# Дахи — одразу в стан нового гравця, без переходу (§3.5): див. PropLayer.set_reveal_cells.
+	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
 	if not _fx_warmed:
 		_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
@@ -907,7 +936,8 @@ func _clear_unit_views() -> void:
 ## рівно ті вузли, які known_occupied_map(активного) дозволяє знати. Юніт, що
 ## щойно рухався, устигає доанімуватись (play() уже дочекався його твіна) до
 ## виклику цієї функції, тож перебудова не рве рух на середині кроку.
-func _rebuild_units_for_active_player() -> void:
+## instant — розчинення дахів без переходу (гейт передачі й перший показ).
+func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	var state: BattleState = _match_service.state
 	_clear_unit_views()
 	# §3.11: міни — той самий знімок знання активного гравця, що й юніти, і в ті
@@ -928,6 +958,16 @@ func _rebuild_units_for_active_player() -> void:
 		_units.add_child(view)
 		view.bind(unit)
 		_unit_views[uid] = view
+	# Дах над показаним юнітом розчиняється — і лише над показаним: невидимий ворог під будинком
+	# прозорим дахом себе не видає.
+	var shown: Array[Vector2i] = []
+	shown.assign(known.keys())
+	_board_view.set_reveal_cells(shown, instant)
+	var crushed: Array[Vector2i] = []
+	for pos: Vector2i in _crushed_truth:
+		if state.vision[state.active_player].is_seen(pos):
+			crushed.append(pos)
+	_board_view.set_crushed_cells(crushed)
 	forest_changed()
 	_apply_threat_marks()
 
@@ -972,6 +1012,26 @@ func _warm_up_fx(cell: Vector2i) -> void:
 ## з перебудови після пакета подій і на гейті, тобто і на ForestBroken, і на передачі ходу.
 func forest_changed() -> void:
 	pass
+
+
+## Техніка, що ввійшла в клітинку, розчавлює її дрібні пропси; піхота проходить повз. Шлях
+## UnitMoved — лише тайли, у які юніт справді ввійшов. Юніт, що загинув на міні, зі стану вже
+## може зникнути: техніка лишає остов (WreckLeft) на останньому тайлі, піхота — ні.
+func _record_crushes(events: Array[Events.BattleEvent]) -> void:
+	var wrecks: Dictionary = {}
+	for e in events:
+		if e is Events.WreckLeft:
+			wrecks[(e as Events.WreckLeft).pos] = true
+	for e in events:
+		if not e is Events.UnitMoved:
+			continue
+		var moved := e as Events.UnitMoved
+		var unit: Unit = _match_service.state.get_unit(moved.unit_id)
+		var vehicle: bool = unit.unit_class() != UnitTypes.UnitClass.INFANTRY if unit != null \
+				else wrecks.has(moved.path.back())
+		if vehicle:
+			for pos in moved.path:
+				_crushed_truth[pos] = true
 
 
 func _first_unit_cell(player: int) -> Vector2i:

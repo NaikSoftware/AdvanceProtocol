@@ -99,7 +99,7 @@ def hangar(damaged):
         b.box(0, y1 - 0.1, 0.6, W, 0.2, EAVE - 0.6, "clad_wall")
         b.box(0, y0 + 0.22, 0.6, W - 0.5, 0.02, EAVE - 0.6, "clad_inner")
         b.box(0, y1 - 0.22, 0.6, W - 0.5, 0.02, EAVE - 0.6, "clad_inner")
-        b.box(0, 0, 0.62, W - 0.4, Ln - 0.4, 0.04, "floor_dark")
+        b.box(0, 0, 0.62, W - 0.4, Ln - 0.4, 0.04, "floor_dark")                          # усередині темно: світла підлога робила з дірок мансардні вікна
         # покрівля: прорізи вирізані прямо в геометрії рваним краєм (зубці 0.3-1 м), а не маскою
         hole_rnd = random.Random(5)
         HOLE = {}
@@ -108,9 +108,10 @@ def hangar(damaged):
             pts = []
             for i in range(n + 1):
                 y = ylo + 0.5 * i
-                e = math.sin(math.pi * (y - ylo) / (yhi - ylo)) ** 0.7
-                wl = 0.36 * e * hole_rnd.uniform(0.7, 1.3) * (1.4 if hole_rnd.random() < 0.18 else 1.0)
-                wh = 0.32 * e * hole_rnd.uniform(0.7, 1.3) * (1.4 if hole_rnd.random() < 0.18 else 1.0)
+                tt = 2.0 * (y - ylo) / (yhi - ylo) - 1.0
+                e = max(0.0, 1.0 - abs(tt) ** 3) ** 0.5                            # тупі заокруглені кінці: синус давав шпичаки
+                wl = 0.36 * e * hole_rnd.uniform(0.72, 1.28)                       # рваний край без зірчастих шпичаків
+                wh = 0.32 * e * hole_rnd.uniform(0.72, 1.28)
                 pts.append((y, max(0.0, cen - wl), min(1.0, cen + wh)))
             HOLE[side] = pts
             for k in range(6):
@@ -164,21 +165,40 @@ def hangar(damaged):
                     ta, tb = (ia[1], ib[1]) if which == "lo" else (ia[2], ib[2])
                     p0 = (side * 9.0 * (1 - ta), ia[0], EAVE + 3.0 * ta + 0.08)
                     p1 = (side * 9.0 * (1 - tb), ib[0], EAVE + 3.0 * tb + 0.08)
-                    if abs(p0[1] - p1[1]) > 0.1:
-                        b.beam(p0, p1, 0.12, "galv_rim", 0.14)
-        flap(1, "lo", -3.2, -1.0, 0.5)
-        flap(1, "hi", 0.5, 2.8, 0.4)
-        flap(1, "lo", 2.0, 4.0, 0.55)
+                    if abs(p0[1] - p1[1]) <= 0.1:
+                        continue
+                    r_ = hole_rnd.random()
+                    if r_ < 0.33:                                                # клапоть листа загнутий усередину провалу
+                        dt = (0.05 if which == "lo" else -0.05)
+                        q0 = (side * 9.0 * (1 - ta - dt), ia[0], EAVE + 3.0 * ta - hole_rnd.uniform(0.25, 0.45))
+                        q1 = (side * 9.0 * (1 - tb - dt), ib[0], EAVE + 3.0 * tb - hole_rnd.uniform(0.25, 0.45))
+                        lib._quad(b, [(p0[0], p0[1], p0[2] - 0.08), (p1[0], p1[1], p1[2] - 0.08), q1, q0], "galv", (0.0, 0.0, 1.0))
+                    # решта краю — голий зрізаний лист: темний завальцьований край читався чорною облямівкою
+        # каркас крізь пролом: дві крокви поперек кожного й прогін уздовж; світла пляма на підлозі під діркою
+        for side in (1, -1):
+            pts = HOLE[side]
+            ylo_, yhi_ = pts[0][0], pts[-1][0]
+            for yy in (ylo_ + (yhi_ - ylo_) * 0.3, ylo_ + (yhi_ - ylo_) * 0.7):
+                q = min(pts, key=lambda r: abs(r[0] - yy))
+                pa_ = slope_pt(side, max(0.0, q[1] - 0.08), yy)
+                pb_ = slope_pt(side, min(1.0, q[2] + 0.08), yy)
+                b.beam((pa_[0], yy, pa_[2] - 0.2), (pb_[0], yy, pb_[2] - 0.2), 0.2, "metal_dark", 0.3)
+            tm = (max(r[1] for r in pts) + min(r[2] for r in pts)) / 2
+            pa_, pb_ = slope_pt(side, tm, ylo_ - 0.6), slope_pt(side, tm, yhi_ + 0.6)
+            b.beam((pa_[0], pa_[1], pa_[2] - 0.35), (pb_[0], pb_[1], pb_[2] - 0.35), 0.16, "metal_dark", 0.22)
+            cx_, cy_ = side * 9.0 * (1 - tm), (ylo_ + yhi_) / 2                   # сонце крізь діру: лише пляма ~1 x 2 м просто під нею
+            b.poly_up([(cx_ - 0.5, cy_ - 1.0, 0.665), (cx_ + 0.5, cy_ - 1.0, 0.665), (cx_ + 0.5, cy_ + 1.0, 0.665), (cx_ - 0.5, cy_ + 1.0, 0.665)], "floor_lit")
+        # довгі язики flap() стирчали в провал трикутниками — прибрано; клапті тепер уздовж краю
         # купа сталі й утеплювача на підлозі під проломом
-        mound(b, 3.0, -0.5, 4.2, 5.0, 1.4, 33, mat="rubble_steel", z0=0.62, rings=5, segs=16)
-        lib.chunks(b, 3.0, -0.5, 3.6, 1.5, 6, ("rubble_steel", "insul", "clad_burnt"), 31, z0=0.62, smin=0.35, smax=0.9)
+        mound(b, 6.2, 1.5, 2.2, 3.2, 1.0, 33, mat="rubble_steel", z0=0.62, rings=5, segs=16)    # купа під краєм діри, не під плямою світла
+        lib.chunks(b, 6.2, 1.5, 2.0, 1.1, 5, ("rubble_steel", "insul", "clad_burnt"), 31, z0=0.62, smin=0.35, smax=0.8)
         for k in range(7):
-            b.box_e(rnd.uniform(-5, 6), rnd.uniform(-5.5, 5.5), 0.75 + rnd.uniform(0, 0.5), 1.1, rnd.uniform(1.6, 2.4), 0.05, rnd.choice(("clad_roof", "clad_burnt")),
-                    euler=(rnd.uniform(-0.5, 0.5), rnd.uniform(-0.5, 0.5), rnd.uniform(0, 3.1)))
+            lib.ground_sheet(b, rnd.uniform(-5, 6), rnd.uniform(-5.5, 5.5), 0.66, rnd.uniform(0, 3.1), rnd.uniform(1.6, 2.4), 1.1, rnd.choice(("sheet_char", "clad_burnt")), rnd)
         # сміття зовні: листи й крихта вздовж стіни
         for k in range(12):
-            b.box_e(rnd.choice((-1, 1)) * rnd.uniform(9.7, 11.4), rnd.uniform(-17, 17), 0.15, 1.1, rnd.uniform(1.6, 2.4), 0.05,
-                    rnd.choice(("clad_burnt", "clad_roof", "fc_roof")), euler=(rnd.uniform(-0.3, 0.3), rnd.uniform(-0.3, 0.3), rnd.uniform(0, 3.1)))
+            # лист на землі: край ~1.5 см, піднятий кут 10-20°, темніший за дах (запилений, у тіні)
+            lib.ground_sheet(b, rnd.choice((-1, 1)) * rnd.uniform(9.7, 11.4), rnd.uniform(-17, 17), 0.0, rnd.uniform(0, 3.1), rnd.uniform(1.6, 2.4), 1.1,
+                             rnd.choice(("clad_burnt", "sheet_char")), rnd)
         lib.chunks(b, 10.5, 5.0, 1.6, 0.9, 3, ("rubble_steel", "clad_burnt", "insul"), 32, smin=0.35, smax=0.8)
     for sx in (x0 - 0.05, x1 + 0.05):                                                # ринви
         b.box(sx - (0.15 if sx < 0 else -0.15), 0, EAVE - 0.3, 0.3, Ln, 0.3, "metal_dark")

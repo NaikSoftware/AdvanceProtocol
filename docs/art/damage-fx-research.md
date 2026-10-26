@@ -301,3 +301,26 @@ ACCEPT IF: (1) at 22 cm/px a lying figure is a ~8 × 2 px dash, visible against 
 4. Unity Labs flipbooks are reference only (unclear licence); ship Kenney CC0 sprites or
    flipbooks rendered offline in Blender.
 5. `assets/vfx/smoke_puff.png` has no recorded source; replace it before release.
+
+## Measured real footage: the burst and the smoke after it
+
+Real-speed clips only (a real-time HE fireball lasts 1–2 frames and debris falls at 9.8 m/s²; slow-motion
+sections give sizes, never times). Sizes against a known vehicle in the same frame, ±10–30 %; times ±1 frame.
+References only, nothing shipped.
+
+| what | measured | source |
+| --- | --- | --- |
+| 155 mm HE on soil | fireball 2 frames (0.07 s), then a neutral black ball 12 m wide by +0.1 s (L* 17–27); cloud top 6.6 m → 9.9 m (+2 s) → 15.8 m (+5 s); width 12 → 17 → 24 m (+6 s); **not faded at +7.8 s**; the dust skirt along the ground is wider than 40 m by +0.13 s | [YouTube -M2-Yr7iaKI](https://www.youtube.com/watch?v=-M2-Yr7iaKI), burst at 2.87 s, truck 5.2 m for scale |
+| tank-gun hit on a turret (120 mm) | frame saturated 0.04–0.08 s; fireball 4.3 × 3 m at +0.12 s; flames gone by 1.2 s; blue-grey smoke over the whole tank by +0.8 s, below 20 % opacity at ≈ 3 s | [YouTube URCtPPdslXk](https://www.youtube.com/watch?v=URCtPPdslXk) 7.79 s |
+| HEAT on a light armoured vehicle (stands in for the drone) | black cloud ≥ 6.7 m wide, ≥ 5 m tall by +0.4 s, still dense at +3.6 s | [YouTube tm_Evn0KLMQ](https://www.youtube.com/watch?v=tm_Evn0KLMQ) ≈ 15.2 s |
+| 30 mm autocannon on soil | 0.1 s between rounds; each a jet 2–2.5 m wide, 3–4.4 m tall at +0.17 s; dust visible 4–5 s (dry desert: shorter on wet ground) | [YouTube Xu-YFwMV7_8](https://www.youtube.com/watch?v=Xu-YFwMV7_8) 33.1 s |
+| rifle / MG on wet grass | dark clods 0.2–0.3 m high, 0.4–0.5 s in the air, no lingering dust | [YouTube 0NOFp08Q4c4](https://www.youtube.com/watch?v=0NOFp08Q4c4) 45 s (240 fps) |
+| tank gun firing | flash ≈ 5 × 4.4 m, 1 saturated frame, 0.07–0.1 s in all; dust 2–3 m tall, ≥ 10 m long under the gun, still visible at +3 s | [YouTube putRj-2hP2Q](https://www.youtube.com/watch?v=putRj-2hP2Q) 14.43 s |
+| ammunition cook-off (drone view) | white core 25–30 m within 0.1 s, saturated ≈ 0.5 s; a burning piece (turret) lands 15–25 m away | [YouTube s_9SAg_h9K0](https://www.youtube.com/watch?v=s_9SAg_h9K0) 20.5 s |
+
+**What we take, and where we depart.** The burst order and the snap to full volume in 0.1–0.2 s are as
+measured. The smoke follows the art-direction rule (rise with deceleration, widen, thin evenly to zero in
+3–6 s), which matches a tank-gun hit puff and autocannon dust; a real 155 mm or HEAT cloud keeps rising
+faster and stays opaque past 8 s, so ours is shorter on purpose — a cloud that hangs for 8 s over a cell
+hides the board. The kill fireball stays at 12 m (the cook-off is 25–30 m): a fireball wider than three
+tiles hides the units around it.

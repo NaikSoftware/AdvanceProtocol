@@ -37,6 +37,21 @@ const WARM_UP_SEC: float = 0.1
 const SMOKE_TEX: Texture2D = preload("res://assets/vfx/smoke_column.png")
 const SMOKE_THIN_TEX: Texture2D = preload("res://assets/vfx/smoke_column_thin.png")
 const FLIPBOOK_GRID: int = 8
+## Вогонь — запечений цикл полум'я 16×4 по 64 кадри (docs/art/vfx-flipbook-sources.md), 30 кадрів/с.
+## true — запечений Flame02, false — процедурний шейдер (_FIRE_CODE).
+const USE_FLAME02: bool = true
+const FIRE_SHADER: Shader = preload("res://game/battle/shaders/fire.gdshader")
+const FIRE_TEX: Texture2D = preload("res://assets/vfx/flame02.png")
+const FIRE_GRID: Vector2 = Vector2(16.0, 4.0)
+const FIRE_FRAMES: float = 64.0
+## Основа язика в клітинці (v згори), частка ширини клітинки під язик і висота клітинки до
+## ширини; верхівка — ≈ 0,18 від верху клітинки, звідти й народжується дим.
+const FIRE_BASE_V: float = 0.92
+const FIRE_FILL: float = 0.55
+const FIRE_CELL_ASPECT: float = 2.0
+const FIRE_TIP_V: float = 0.18
+## Висота верхівки над основою у ширинах полум'я (`flame_width`).
+const FLAME_TIP_PER_WIDTH: float = (FIRE_BASE_V - FIRE_TIP_V) * FIRE_CELL_ASPECT / FIRE_FILL
 ## Клітинка диму ≈ 22 м, сама хмара в ній ≈ 19 м.
 const SMOKE_CELL_PER_CLOUD: float = 22.0 / 19.0
 ## 64 кадри диму по 4 кадри/с: клуба живе 16 с від корпусу до верху стовпа.
@@ -54,11 +69,11 @@ const FIRE_FADE_IN_AT: float = 0.6
 const FIRE_FADE_IN_SEC: float = 0.5
 const COLUMN_BASE_W: float = 2.5 / 8.0
 const COLUMN_TOP_W: float = 12.0 / 8.0
-## Вогонь виходить з погона: два корені обабіч центру даху башти, кожен — білборд ≈ 0,6
-## ширини корпусу; внизу вони перекриваються в одну масу ≈ 0,6 тайла, без голого даху між
-## язиками. Висота ≈ ширина корпусу. Основа трохи в металі, м'який край глибини ховає шов.
-const FLAME_WIDTH_PER_HULL: float = 0.6
-const FLAME_HEIGHT_PER_HULL: float = 1.0
+## Вогонь виходить з погона: два корені обабіч центру даху башти, кожен — білборд ≈ 0,88
+## ширини корпусу (≈ 3,2 м у середнього танка); внизу вони перекриваються в одну масу, без
+## голого даху між язиками. Висота ≈ 1,45 ширини корпусу. Основа трохи в металі, м'який край глибини ховає шов.
+const FLAME_WIDTH_PER_HULL: float = 0.88
+const FLAME_HEIGHT_PER_HULL: float = 1.45
 ## Нахил стовпа на одиницю вітру `WeatherRig.wind()`: дим іде туди ж, куди й дощ. За вітру
 ## River (0,25) це ~20°; у безвітря стовп стоїть прямо.
 const SMOKE_LEAN_PER_WIND: float = 1.46
@@ -122,6 +137,14 @@ func _init() -> void:
 	_fire_mat.shader = fire_shader()
 	# Вогонь — поверх диму власного стовпа, а не за ним.
 	_fire_mat.render_priority = 1
+	if USE_FLAME02:
+		_fire_mat.set_shader_parameter("flame_tex", FIRE_TEX)
+		_fire_mat.set_shader_parameter("grid", FIRE_GRID)
+		_fire_mat.set_shader_parameter("frames", FIRE_FRAMES)
+		_fire_mat.set_shader_parameter("play_fps", FLIPBOOK_FPS)
+		_fire_mat.set_shader_parameter("base_v", FIRE_BASE_V)
+		_fire_mat.set_shader_parameter("fill", FIRE_FILL)
+		_fire_mat.set_shader_parameter("cell_aspect", FIRE_CELL_ASPECT)
 	_fire_mat.set_shader_parameter("gain", 1.6)
 	_fire_mat.set_shader_parameter("fade_in_at", FIRE_FADE_IN_AT)
 	_fire_mat.set_shader_parameter("fade_in_sec", FIRE_FADE_IN_SEC)
@@ -205,7 +228,7 @@ func flame_spots(pos: Vector2i) -> Array[Vector3]:
 	var spec: Dictionary = UnitSilhouettes.spec(e.type_id)
 	var hull: Vector3 = spec.hull
 	# Корені — на даху башти: обидва в межах її сліду, тож нижче башта ховала б їх з усіх боків.
-	var top: float = hull.y - HULL_SAG + (0.14 if (spec.extras as Array).has(&"turret") else 0.0)
+	var top: float = hull.y - HULL_SAG + (UnitSilhouettes.TURRET_HEIGHT if (spec.extras as Array).has(&"turret") else 0.0)
 	# Вогонь виходить з погона в центрі даху: башта стоїть у вогні, корінь видно з будь-якого
 	# боку. Два екземпляри обабіч центру — широка маса, а не один язик.
 	for local: Vector3 in [Vector3(-hull.x * 0.15, top, -hull.z * 0.1), Vector3(hull.x * 0.15, top, hull.z * 0.1)]:
@@ -457,8 +480,9 @@ func _refresh_effects() -> void:
 		# Дим народжується на верхівці полум'я над погоном (чи на самому погоні, коли вогню вже
 		# нема) — не з порожнього повітря поруч.
 		var e: _Entry = _entries[c]
-		# Суцільне тіло вогню — нижні ~60 % висоти, вище язики вже рвуться: дим — звідти.
-		var origin: Vector3 = fire_centre(c) + Vector3(0.0, 0.6 * flame_size(c).y, 0.0)
+		# Процедурний вогонь суцільний у нижні ~60 % висоти; атласний — до верхівки язика.
+		var rise: float = FLAME_TIP_PER_WIDTH * flame_size(c).x if USE_FLAME02 else 0.6 * flame_size(c).y
+		var origin: Vector3 = fire_centre(c) + Vector3(0.0, rise, 0.0)
 		for k in PUFFS_PER_COLUMN:
 			var idx: int = i * PUFFS_PER_COLUMN + k
 			mm.set_instance_transform(idx, Transform3D(Basis(), origin))
@@ -511,9 +535,9 @@ func _step() -> void:
 	_shadow_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("viewport_h", float(get_viewport().get_visible_rect().size.y))
-	# Мерехтіння світла — з того самого кроку, без власного таймера.
+	# Світло дихає повільно (гладкий шум, нижче ~2 Гц): швидке мерехтіння на землі й даху виглядало б стробом.
 	for i in _lights.size():
-		_lights[i].light_energy = FIRE_LIGHT_ENERGY * (0.7 + 0.6 * _noise1(t * (6.1 + 1.7 * i) + 13.0 * i))
+		_lights[i].light_energy = FIRE_LIGHT_ENERGY * (0.85 + 0.3 * _noise1(t * (1.2 + 0.3 * i) + 13.0 * i))
 
 
 func _sync_emitters() -> void:
@@ -634,6 +658,8 @@ static func _shadow_shader() -> Shader:
 
 
 static func fire_shader() -> Shader:
+	if USE_FLAME02:
+		return FIRE_SHADER
 	if _fire_shader == null:
 		_fire_shader = Shader.new()
 		_fire_shader.code = _FIRE_CODE
@@ -785,10 +811,12 @@ shader_type spatial;
 render_mode unshaded, blend_premul_alpha, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
 // Процедурне полум'я без текстури. Густота — шум, чию область великими хвилями гне інший
-// шум, що пливе вгору швидше за дрібницю; поріг густоти росте з висотою, тож верх
-// розпадається на клапті, що злітають і гаснуть. Жар = густота × (1 − h)^1,5: біле — лише
-// біля самого кореня, далі жовте → помаранчеве → темно-червоне → кіптява. Висота язика
-// «дихає» за шумом. Жодного періодичного руху; у кожного білборда свій зсув і свій час.
+// шум, що пливе вгору; поріг густоти росте з висотою. Основа (нижні ~40 %) майже
+// нерухома: бічний зсув і викривлення домену ростуть із висотою від нуля. Жар = густота ×
+// (1 − h)^1,5: біле — лише біля кореня, далі жовте → помаранчеве → темно-червоне → кіптява.
+// Язики — окремі клапті, що відриваються від верху в випадкові миті, летять угору й
+// гаснуть у дим. Дрібний шум лише їде вгору разом з полум'ям, на місці не «кипить».
+// Жодного періодичного руху; у кожного білборда свій зсув і свій час.
 uniform float fx_time = 0.0;
 // Понад 1: біле серце світиться; верхня половина — вдвічі тьмяніша.
 uniform float gain = 1.6;
@@ -806,10 +834,13 @@ uniform float fade_in_sec = 0.5;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 // Основа тоне в металі м'яко, а не обрізається рівною лінією по даху.
 uniform float soft_fade = 0.08;
+// Швидкість підйому язика у світі, одиниць світу за секунду (≈ 2,25 м/с при 8 м на тайл).
+uniform float tongue_speed = 0.28;
 
 varying float v_in;
 varying float v_sd;
 varying float v_lean;
+varying float v_rise;
 
 // Хеш без sin: sin великого аргументу у float32 губить точність і дає прямокутні латки.
 float h2(vec2 p) {
@@ -847,6 +878,8 @@ void vertex() {
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
 	v_in = clamp((fx_time - INSTANCE_CUSTOM.z - fade_in_at) / fade_in_sec, 0.0, 1.0);
 	v_sd = INSTANCE_CUSTOM.y;
+	// Підйом язика у висотах полум'я за секунду.
+	v_rise = tongue_speed / max(INSTANCE_CUSTOM.w, 1e-4);
 	// Куди від кореня центр вогню на екрані, у ширинах полум'я.
 	v_lean = dot(right, MODEL_MATRIX[0].xyz) / max(INSTANCE_CUSTOM.x, 1e-4);
 }
@@ -857,22 +890,21 @@ void fragment() {
 	float y = (1.0 - UV.y) * (tall + sink) - sink;
 	float t = fx_time + v_sd * 37.0;
 	vec2 seed = vec2(v_sd * 7.1, v_sd * 2.3);
-	// Висота «дихає» за шумом, але не нижче 0,8 від найвищої: вогонь не сідає в пласку корону.
-	float pump = 0.88 + 0.22 * vnoise(t * 3.5);
-	float hh = y / pump;
-	// Увесь язик хитається вбік (шум, не синус): біля кореня ледь, угорі — на чверть ширини.
-	x += (vnoise(t * 6.1 + v_sd * 13.0) - 0.5) * (0.12 + 0.35 * clamp(hh, 0.0, 1.0));
-	// Вище кореня язик хилиться до центру даху: обидва сходяться в один вогонь.
-	x -= v_lean * 0.8 * smoothstep(0.0, 0.5, hh);
+	float hh = y;
+	// Вага руху: нуль на корені й у нижніх ~40 %, повна вгорі.
+	float wob = smoothstep(0.4, 1.0, clamp(hh, 0.0, 1.0));
+	// Верх хитається вбік (шум, не синус); основа стоїть.
+	x += (vnoise(t * 2.2 + v_sd * 13.0) - 0.5) * 0.4 * wob;
+	// Вище основи язик хилиться до центру даху: обидва сходяться в один вогонь.
+	x -= v_lean * 0.8 * smoothstep(0.2, 0.7, hh);
 	// Великі хвилі: ~1,75 циклу на ширину, амплітуда ~0,25 ширини, пливуть угору ~2 висоти/с.
 	vec2 big = vec2(x * 1.75, y * 1.2 - t * 2.5) + seed;
-	vec2 warp = (vec2(fbm(big), fbm(big + vec2(4.7, 1.3))) - 0.5) * vec2(0.7, 0.5);
+	vec2 warp = (vec2(fbm(big), fbm(big + vec2(4.7, 1.3))) - 0.5) * vec2(0.7, 0.5) * wob;
 	vec2 q = vec2(x, y) + warp;
 	// Дрібниця пливе повільніше за хвилі.
 	float d = fbm(vec2(q.x * 3.2, q.y * 2.4 - t * 2.1) + seed * 1.7);
 	// Ширина: найширше біля кореня, вужче вгорі; м'який край.
-	// Ширина теж «дихає», своїм шумом: основа не стоїть сталою плямою.
-	float half_w = mix(0.62, 0.26, clamp(hh, 0.0, 1.0)) * (0.7 + 0.5 * vnoise(t * 3.3 + 11.0));
+	float half_w = mix(0.62, 0.26, clamp(hh, 0.0, 1.0)) * 0.9;
 	float shape = 1.0 - smoothstep(half_w * 0.45, half_w, abs(q.x));
 	// Внизу густота рівна й суцільна; угорі контрастна — поріг перетинає її на різній висоті,
 	// тож верх рваний, а не зрізаний рівно.
@@ -906,16 +938,50 @@ void fragment() {
 	// Розсіяне світіння довкола полум'я — ширше за саме полум'я в 1,5 раза.
 	float halo = 1.0 - smoothstep(half_w * 0.6, half_w * 1.5, abs(q.x));
 	// Світіння мерехтить разом із вогнем (шум, не синус), а не стоїть сталою плямою.
-	float glow = 0.3 * (0.5 + 0.9 * vnoise(t * 4.1 + 3.0)) * halo * (1.0 - smoothstep(0.0, 0.8, hh)) * smoothstep(-sink, 0.05, y);
+	float glow = 0.3 * (0.8 + 0.4 * vnoise(t * 1.2 + 3.0)) * halo * (1.0 - smoothstep(0.0, 0.8, hh)) * smoothstep(-sink, 0.05, y);
 	float alpha = a * v_in;
+	// Язики: три місця, у кожного свої випадкові миті. Час кожного місця ділиться на відтинки
+	// різної довжини; у відтинку язик стартує не одразу, живе 0,3–1 с, летить угору, меншає й гасне.
+	float tong = 0.0;
+	float tu = 0.0;
+	for (int k = 0; k < 3; k++) {
+		float kf = float(k);
+		float len = 1.2 + 0.4 * h2(vec2(kf, v_sd * 5.0));
+		float tk = t + kf * 0.37;
+		float ci = floor(tk / len);
+		vec2 cs = vec2(ci + kf * 31.0, v_sd * 9.0 + kf);
+		float start = h2(cs) * 0.45 * len;
+		float life = min(0.3 + 0.7 * h2(cs + 7.3), len - start);
+		float s = tk - ci * len - start;
+		if (s >= 0.0 && s < life) {
+			float u = s / life;
+			float cx = (h2(cs + 3.1) - 0.5) * 0.3;
+			float cy = 0.5 + 0.15 * h2(cs + 5.9) + s * v_rise;
+			float sc = 1.0 - 0.5 * u;
+			vec2 dq = vec2((x - cx) / (0.1 * sc), (y - cy) / (0.16 * sc));
+			float edge = length(dq) + (fbm(vec2(x * 6.0, y * 5.0 - t * 2.0) + seed) - 0.5) * 0.5;
+			float b = (1.0 - smoothstep(0.5, 1.0, edge)) * (1.0 - u);
+			if (b > tong) {
+				tong = b;
+				tu = u;
+			}
+		}
+	}
+	// Колір язика: помаранчеве → темно-червоне зі зростанням віку, вище — сірий дим.
+	vec3 tcol = mix(vec3(1.0, 0.36, 0.03), vec3(0.376, 0.023, 0.003), tu);
+	tcol = mix(tcol, vec3(0.06, 0.055, 0.05), smoothstep(0.7, 1.0, y));
+	float ta = tong * v_in;
+	float ab = alpha * smoothstep(0.35, 0.6, heat);
 	vec3 rgb = col * alpha + vec3(0.79, 0.1, 0.007) * glow * v_in;
+	rgb += tcol * ta * (1.0 - ab);
+	ab = ab + ta * (1.0 - ab);
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	float soft = clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);
 	// Попередньо помножена альфа: гаряче тіло перекриває фон, а холодна кромка лише додає
 	// світло — інакше край ближнього язика лягав би темною смугою на сусідній.
 	ALBEDO = rgb * soft;
-	ALPHA = alpha * smoothstep(0.35, 0.6, heat) * soft;
+	ALPHA = ab * soft;
 }
 """
 

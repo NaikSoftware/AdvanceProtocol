@@ -329,8 +329,9 @@ static func _near_any(p: Vector2, pts: Array[Vector2], r: float) -> bool:
 	return false
 
 
-## Кожен поворот на 90° у ланцюжку клітинок — дуга радіусом 6–14 м; деінде зламів нема
-## (R > 4 м, на вулиці міста R > 3 м). Біля примикання польової дороги чи заїзду — див. `_track_joins`.
+## Кожен поворот на 90° у ланцюжку клітинок — дуга радіусом 6–14 м, а біля забудови (вулиця містечка)
+## — 3–7 м, без «гоночної» петлі; деінде зламів нема (R > 4 м, на вулиці міста й біля забудови
+## R > 3 м). Біля примикання польової дороги чи заїзду — див. `_track_joins`.
 func test_corners_are_arcs_of_6_to_14_metres() -> void:
 	for path in _MAPS:
 		var b := _board(path)
@@ -360,7 +361,7 @@ func test_corners_are_arcs_of_6_to_14_metres() -> void:
 					continue
 				var r: float = _circumradius(pts[i - 2], pts[i], pts[i + 2]) * _TILE_M
 				# Вулиця міста повертає в межах смуги 2 клітинки: радіус бордюру 3–6 м, як у справжньому місті.
-				var lim: float = 3.0 if rc.base_halfs[li][i] >= RoadCourse.STREET_HALF_M - 1.0 else 4.0
+				var lim: float = 3.0 if rc.base_halfs[li][i] >= RoadCourse.STREET_HALF_M - 1.0 or _by_built(b, pts[i]) else 4.0
 				assert_gt(r, lim, "%s: злам осі в %s, R = %.1f м" % [path, pts[i], r])
 		for c in corners:
 			if rc.near_node(c) < 1.6 or _near_any(c, joins, 4.5):
@@ -370,7 +371,21 @@ func test_corners_are_arcs_of_6_to_14_metres() -> void:
 				for i in range(2, pts.size() - 2):
 					if pts[i].distance_to(c) < 1.0:
 						best = minf(best, _circumradius(pts[i - 2], pts[i], pts[i + 2]) * _TILE_M)
-			assert_between(best, 6.0, 14.0, "%s: кут у %s, R = %.1f м" % [path, c, best])
+			if _by_built(b, c):
+				assert_between(best, 3.0, 7.0, "%s: кут вулиці в %s, R = %.1f м" % [path, c, best])
+			else:
+				assert_between(best, 6.0, 14.0, "%s: кут у %s, R = %.1f м" % [path, c, best])
+
+
+## Забудова (BUILDING, RUBBLE) за ≤ 1 клітинку від клітинки точки p.
+static func _by_built(b: Board, p: Vector2) -> bool:
+	var c := Vector2i(floori(p.x + 0.5), floori(p.y + 0.5))
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var n: Vector2i = c + Vector2i(dx, dy)
+			if b.in_bounds(n) and b.kind_at(n) in [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]:
+				return true
+	return false
 
 
 func test_course_is_deterministic() -> void:

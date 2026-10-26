@@ -178,6 +178,31 @@ func test_handover_rebuilds_units_and_recenters_camera_before_gate_lifts() -> vo
 	assert_not_null(screen.unit_view_for(p1_unit_id), "після confirmed дошка мусить показувати юнітів гравця 1")
 	assert_eq(camera.global_position, IsoCameraRig.cell_to_world(service.state.units_of(1)[0].pos),
 		"камера мусить рецентруватися на перший юніт гравця, що заходить")
+	# §3.5: дахи — одразу в стані нового гравця, без переходу через кадри після гейта.
+	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	for i in props._fade_target:
+		assert_eq(float(props._fade_level.get(i, 0.0)), float(props._fade_target[i]), "дах %d ще в переході після гейта" % i)
+	assert_false(props.is_processing(), "після гейта розчинення не доходить кадрами")
+
+
+## §3.5: дим влучання висить кілька секунд; на передачі ходу його прибирають, щоб над
+## тайлом, якого гравець, що заходить, не розвідав, не лишилось сліду цілі.
+func test_handover_clears_lingering_battle_fx() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(4, 4), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var units: Node3D = screen.get_node("%Units")
+	var hit: Node3D = BattleFx.spawn_hit(units, IsoCameraRig.cell_to_world(Vector2i(4, 4)), BattleFx.Weapon.SHELL, false)
+	assert_false(hit.is_queued_for_deletion(), "передумова: дим ще висить")
+	screen.get_node("%Hud").get_node("%EndTurnButton").pressed.emit()
+	assert_true(screen.get_node("%HandoverGate").visible)
+	assert_true(hit.is_queued_for_deletion(), "гейт прибрав дим попереднього ходу")
 
 
 # --- Кінець ходу: рівно одна EndTurnCommand --------------------------------
@@ -1210,7 +1235,7 @@ func test_setup_warms_up_every_fx_material_once() -> void:
 	assert_eq(warm.size(), 1, "куля розігріву")
 	# Розігрів мусить бути невидимим: жодного спалаху чи світла біля юніта гравця.
 	assert_eq((warm[0].get_node("Light") as OmniLight3D).light_energy, 0.0)
-	assert_eq((warm[0].get_node("Flash") as Node3D).scale, Vector3.ONE * 0.0001)
+	assert_eq((warm[0] as Node3D).scale, Vector3.ONE * 0.0001)
 	var ball := (warm[0].get_node("Ball") as MeshInstance3D).material_override as ShaderMaterial
 	assert_lt(float(ball.get_shader_parameter("size")), 0.001)
 	assert_true(layer.is_warming(), "стовп, вогонь і обгорілий матеріал теж малюються раз")
@@ -1238,12 +1263,44 @@ func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
 
 
 
-## Вирва від снаряда — у карті шрамів під ціллю, як пляма від уламків.
+## Вирва від снаряда — у карті шрамів під ціллю.
 func test_ground_hit_stamps_a_crater_scorch() -> void:
 	var service: Node = MatchServiceScript.new()
 	add_child_autofree(service)
 	var screen: Node3D = _two_tanks_in_corners(service)
 	screen._event_player.ground_hit.emit(Vector2i(2, 3), 2.5)
 	var scars: ScarMap = screen._scars
-	assert_eq(scars.image().get_pixel(2 * 32 + 16, 3 * 32 + 16).r8, 255)
-	assert_eq(scars.image().get_pixel(2 * 32 + 16 + 12, 3 * 32 + 16).r8, 0, "вирва 2,5 м — за 3 м від центру чисто")
+	assert_eq(scars.image().get_pixel(2 * 32 + 16, 3 * 32 + 16).g8, 255, "дно чаші")
+	assert_eq(scars.image().get_pixel(2 * 32 + 16 + 18, 3 * 32 + 16).g8, 0, "чаша 2,5 м — за 4,5 м від центру чисто")
+
+
+## §3.5: після підтвердження гейта дах над юнітом гравця, що заходить, уже розчинений (рівень 1.0,
+## вузол «_fade» видно) — без жодного тіку переходу; після наступної передачі, де юніта під дахом
+## нема, — уже суцільний.
+func test_handover_draws_roof_fade_of_the_incoming_player_at_once() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(8, 8)
+	for c: Vector2i in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(2, 3), Vector2i(3, 3)]:
+		m.tiles[c.y * m.width + c.x] = Terrain.Kind.BUILDING
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(7, 7), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(2, 2), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	var gate: Control = screen.get_node("%HandoverGate")
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+	var faded: Array = props._fade_target.keys().filter(func(i: int) -> bool: return props._fade_target[i] == 1.0)
+	assert_false(faded.is_empty(), "передумова: дах над юнітом гравця 1")
+	for i: int in faded:
+		assert_eq(float(props._fade_level[i]), 1.0, "дах розчинений одразу після гейта")
+		assert_true((props._fade_nodes[props._instances[i]["model"]] as MultiMeshInstance3D).visible)
+	assert_false(props.is_processing())
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+	for i: int in faded:
+		assert_eq(float(props._fade_level.get(i, 0.0)), 0.0, "у гравця 0 дах суцільний одразу")
+	assert_false(props.is_processing())

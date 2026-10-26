@@ -53,7 +53,7 @@ const GROUND_STATE_COLORS: Dictionary = {
 const INSPECTOR_GAP: float = 96.0
 ## Підйом точки прив'язки над площиною дошки: тайл лежить у y=0, а сам
 ## юніт має висоту, і панель, приклеєна до підлоги, перекривала б його ноги.
-const INSPECTOR_LIFT: float = 1.0
+const INSPECTOR_LIFT: float = 0.65
 
 var _state: BattleState = null
 var _controller: InputController = null

@@ -101,7 +101,7 @@ const _DEBUG_SHOW_FACING_ARROW: bool = false
 const _DEBUG_ARROW_COLOR: Color = Color("ff26d6")
 
 ## Трохи вище даху корпусу (уникнути z-fighting граней), і однозначно нижче
-## HpBar (y=1.1) / HpLabel (y=1.3) / DroneIcon (y=1.6) з unit_view.tscn —
+## HpBar (y=0.55) / HpLabel (y=0.65) / DroneIcon (y=0.8) з unit_view.tscn —
 ## стрілка не має перекривати жоден із них.
 const _DEBUG_ARROW_Y_OFFSET: float = 0.02
 ## --- ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2), кінець блоку констант -------------------
