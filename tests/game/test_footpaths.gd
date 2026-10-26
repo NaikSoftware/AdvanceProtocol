@@ -179,9 +179,17 @@ func test_one_or_two_water_paths_that_stay_on_dry_ground(p = use_parameters(MAPS
 	var bs: Vector2i = view._board_size
 	for w: Dictionary in water:
 		var pts: PackedVector2Array = w["pts"]
-		assert_between(Footpaths.length(pts), 4.0, 13.0, "%s: довжина стежки до води" % p)
-		assert_false(props._placer.on_road(pts[0], 0.0), "не заходить на полотно")
-		assert_true(props._placer.on_road(pts[0], 0.4), "починається на узбіччі")
+		assert_between(Footpaths.length(pts), 2.0, 14.0, "%s: довжина стежки до води" % p)
+		# Причина: починається від хвіртки двору або від узбіччя дороги.
+		var from_gate := false
+		for gi: int in props._placer.gates:
+			var g: Vector2 = props._placer.gates[gi][0] + (props._placer.gates[gi][1] as Vector2) * 0.15
+			from_gate = from_gate or g.distance_to(pts[0]) < 0.05
+		assert_true(from_gate or props._placer.on_road(pts[0], 0.4), "%s: стежка до води без початку" % p)
+		var landing := false
+		for t in props.trodden:
+			landing = landing or Vector2(t.x, t.y).distance_to(pts[pts.size() - 1]) < 0.05
+		assert_true(landing, "%s: на березі нема витоптаного майданчика" % p)
 		for k in pts.size():
 			assert_true(pts[k].x >= -0.3 and pts[k].y >= -0.3 and pts[k].x <= bs.x - 0.7 and pts[k].y <= bs.y - 0.7, "%s: стежка поза дошкою %s" % [p, pts[k]])
 			assert_gte(view._height.at(pts[k].x, pts[k].y), TerrainHeight.WATER_LEVEL, "%s: стежка у воді в %s" % [p, pts[k]])

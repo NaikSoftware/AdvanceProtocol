@@ -2287,46 +2287,119 @@ class _Placer:
 				return false
 		return true
 
-	## Точка стежки до води придатна: вільна земля, не на дорозі (крім початку), поруч суха (береговий
-	## схил не різав би маски), крім останніх 0.8 до берега.
-	func _water_ok(pts: PackedVector2Array, shore: Vector2) -> bool:
-		for k in pts.size():
-			var q: Vector2 = pts[k]
-			if k > 0 and not _walkable(q):
-				return false
-			if k > 6 and on_road(q, 0.12):
-				return false
-			if q.distance_to(shore) > 0.8:
-				for o: Vector2 in [Vector2(0.12, 0), Vector2(-0.12, 0), Vector2(0, 0.12), Vector2(0, -0.12)]:
-					if not _dry(q + o):
-						return false
+	const _GRID: float = 0.25
+
+	## Клітинки сітки пошуку, зайняті секціями парканів (з запасом 0.2); хвіртка — проміжок між секціями.
+	var _fence_block: Dictionary = {}
+
+	func _index_fences() -> void:
+		_fence_block.clear()
+		for inst: Dictionary in layer._instances:
+			var k: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
+			if k != Kind.GARDEN_FENCE and k != Kind.FIELD_FENCE:
+				continue
+			var xf: Transform3D = inst["transform"]
+			var aabb: AABB = (PropLayer.model(inst["model"]) as Dictionary)["aabb"]
+			var a3: Vector3 = xf * Vector3(aabb.position.x, 0, 0)
+			var b3: Vector3 = xf * Vector3(aabb.end.x, 0, 0)
+			var a := Vector2(a3.x, a3.z)
+			var b := Vector2(b3.x, b3.z)
+			for t in ceili(a.distance_to(b) / 0.08) + 1:
+				var q: Vector2 = a.lerp(b, minf(t * 0.08 / maxf(a.distance_to(b), 1e-6), 1.0))
+				for oy in range(-1, 2):
+					for ox in range(-1, 2):
+						var id := Vector2i(roundi((q.x + 0.4) / _GRID) + ox, roundi((q.y + 0.4) / _GRID) + oy)
+						if (Vector2(-0.4, -0.4) + Vector2(id) * _GRID).distance_to(q) < 0.2:
+							_fence_block[id] = true
+
+	func _cell_ok(q: Vector2, shore: Vector2) -> bool:
+		if _fence_block.has(Vector2i(roundi((q.x + 0.4) / _GRID), roundi((q.y + 0.4) / _GRID))):
+			return false
+		if not _walkable(q):
+			return false
+		if q.distance_to(shore) > 0.8:
+			for o: Vector2 in [Vector2(0.12, 0), Vector2(-0.12, 0), Vector2(0, 0.12), Vector2(0, -0.12)]:
+				if not _dry(q + o):
+					return false
 		return true
 
-	func _line(a: Vector2, b: Vector2) -> Array[Vector2]:
-		var out: Array[Vector2] = []
-		for k in ceili(a.distance_to(b) / 0.15) + 1:
-			out.append(a.lerp(b, minf(k * 0.15 / maxf(a.distance_to(b), 1e-6), 1.0)))
-		return out
+	func _line_clear(a: Vector2, b: Vector2, shore: Vector2) -> bool:
+		for k in range(1, ceili(a.distance_to(b) / 0.1)):
+			if not _cell_ok(a.lerp(b, k * 0.1 / a.distance_to(b)), shore):
+				return false
+		return true
 
-	## До води — 1–2 стежки на карту, лише до деяких місць: від дороги на 5–10 клітинок до берега, з кількома
-	## плавними вигинами. Обидва кінці на дошці.
+	## Крутизна ґрунту в точці (перепад висоти на клітинку).
+	func _slope(q: Vector2) -> float:
+		if height == null:
+			return 0.0
+		return maxf(absf(height.at(q.x + 0.15, q.y) - height.at(q.x - 0.15, q.y)), absf(height.at(q.x, q.y + 0.15) - height.at(q.x, q.y - 0.15))) / 0.3
+
+	## Шлях людини від from до берега: найкоротший зручний, з обходами рельєфу, мокрих місць, ріллі, грядок,
+	## парканів і будівель (A* по сітці 0.25 клітинки), без шуму: вигини дають лише перешкоди.
+	func _walk_route(from: Vector2, shore: Vector2) -> PackedVector2Array:
+		var gw: int = ceili((size.x + 0.8) / _GRID)
+		var gh: int = ceili((size.y + 0.8) / _GRID)
+		var astar := AStarGrid2D.new()
+		astar.region = Rect2i(0, 0, gw, gh)
+		astar.cell_size = Vector2(_GRID, _GRID)
+		astar.offset = Vector2(-0.4, -0.4)
+		astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ALWAYS
+		astar.update()
+		var near: float = from.distance_to(shore) + 3.0
+		for gy in gh:
+			for gx in gw:
+				var q: Vector2 = Vector2(-0.4, -0.4) + Vector2(gx, gy) * _GRID
+				# Лише навколо відрізка від початку до берега: далі пошук не ходить, а клітинки дорогі.
+				if q.distance_to(from) > near or q.distance_to(shore) > near:
+					astar.set_point_solid(Vector2i(gx, gy), true)
+					continue
+				if not _cell_ok(q, shore):
+					astar.set_point_solid(Vector2i(gx, gy), true)
+					continue
+				var w: float = 1.0 + 12.0 * _slope(q)
+				if kind(Vector2i(roundi(q.x), roundi(q.y))) == Terrain.Kind.MARSH:
+					w += 3.0
+				# Дорогу перетинають, але лише коли треба: перехід через неї дорожчий.
+				if on_road(q, 0.0):
+					w += 4.0
+				astar.set_point_weight_scale(Vector2i(gx, gy), w)
+		var a := Vector2i(roundi((from.x + 0.4) / _GRID), roundi((from.y + 0.4) / _GRID))
+		var b := Vector2i(roundi((shore.x + 0.4) / _GRID), roundi((shore.y + 0.4) / _GRID))
+		for id: Vector2i in [a, b]:
+			if astar.is_in_boundsv(id):
+				astar.set_point_solid(id, false)
+		if not astar.is_in_boundsv(a) or not astar.is_in_boundsv(b):
+			return PackedVector2Array()
+		var raw: PackedVector2Array = astar.get_point_path(a, b)
+		if raw.size() < 2:
+			return PackedVector2Array()
+		# Кінці — точно початок і берег; решту спрямлено (найдовші відрізки лінії огляду) й згладжено.
+		var ctrl := PackedVector2Array([from])
+		var cur: int = 0
+		var pts_in := PackedVector2Array([from])
+		pts_in.append_array(raw.slice(1, raw.size() - 1))
+		pts_in.append(shore)
+		while cur < pts_in.size() - 1:
+			var nxt: int = pts_in.size() - 1
+			while nxt > cur + 1 and not _line_clear(pts_in[cur], pts_in[nxt], shore):
+				nxt -= 1
+			ctrl.append(pts_in[nxt])
+			cur = nxt
+		for passes: int in [8, 4, 2, 0]:
+			var pts: PackedVector2Array = Footpaths.resample(Footpaths.smooth(Footpaths.resample(ctrl), passes))
+			var ok := true
+			for k in range(1, pts.size()):
+				ok = ok and _cell_ok(pts[k], shore)
+			if ok:
+				return pts
+		return PackedVector2Array()
+
+	## До води — 1–2 стежки на карту, кожна з причиною: від хвіртки двору, найближчого до води, або від
+	## дороги до пологого спуску на березі, де витоптано майданчик. Лише вигляд.
 	func _water_walks() -> void:
-		if not road_indexed:
-			_index_roads()
-		var road_pts: Array = []
-		var seen: Dictionary = {}
-		for segs: Array in road_index.values():
-			for seg: Array in segs:
-				var a: Vector2 = seg[0]
-				var ab: Vector2 = (seg[1] as Vector2) - a
-				for k in ceili(ab.length() / 0.5) + 1:
-					var q: Vector2 = a + ab * minf(k * 0.5 / maxf(ab.length(), 1e-6), 1.0)
-					var key := Vector2i(roundi(q.x * 2.0), roundi(q.y * 2.0))
-					if _on_board(q) and not seen.has(key):
-						seen[key] = true
-						road_pts.append([q, float(seg[2])])
-		road_pts.sort_custom(func(a: Array, b: Array) -> bool: return (a[0] as Vector2).x < (b[0] as Vector2).x or ((a[0] as Vector2).x == (b[0] as Vector2).x and (a[0] as Vector2).y < (b[0] as Vector2).y))
-		var cands: Array = []
+		_index_fences()
+		var landings: Array = []
 		for y in size.y:
 			for x in size.x:
 				var c := Vector2i(x, y)
@@ -2334,66 +2407,69 @@ class _Placer:
 					continue
 				for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 					if kind(c + d) == Terrain.Kind.WATER:
-						cands.append([h(c, 200 + d.x * 2 + d.y), c, d])
-		cands.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
-		var shores: Array[Vector2] = []
-		for pass_i in 2:
-			var band: Vector2 = Vector2(5.0, 10.0) if pass_i == 0 else Vector2(4.0, 12.0)
-			for cd: Array in cands:
-				if shores.size() >= 2:
+						var shore: Vector2 = _shore(c, d)
+						if shore != Vector2.INF and _on_board(shore):
+							landings.append([shore, _slope(shore)])
+		var starts: Array = []
+		for i: int in gates:
+			var g: Vector2 = gates[i][0] + (gates[i][1] as Vector2) * 0.15
+			starts.append(g)
+		var chosen: Array[Vector2] = []
+		# Спершу від хвірток: хвіртка → берег з найменшою ціною (відстань і крутизна спуску).
+		var pairs: Array = []
+		for st: Vector2 in starts:
+			for l: Array in landings:
+				var dd: float = st.distance_to(l[0])
+				if dd >= 2.0 and dd <= 12.0:
+					pairs.append([dd + 25.0 * float(l[1]), st, l[0]])
+		pairs.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+		for pr: Array in pairs:
+			if chosen.size() >= 1 or pairs.find(pr) > 40:
+				break
+			if _add_water_walk(pr[1], pr[2], chosen, 0):
+				chosen.append(pr[2])
+		# Друга — від дороги до іншого спуску, далеко від першого.
+		if not road_indexed:
+			_index_roads()
+		var cand2: Array = []
+		for l: Array in landings:
+			var shore: Vector2 = l[0]
+			if chosen.any(func(c: Vector2) -> bool: return c.distance_to(shore) < 6.0):
+				continue
+			var v: Vector2 = _verge_point(shore)
+			if v == Vector2.INF:
+				continue
+			var dd: float = v.distance_to(shore)
+			if dd >= 3.0 and dd <= 10.0:
+				cand2.append([dd + 25.0 * float(l[1]), v, shore])
+		cand2.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+		var tried := 0
+		for pr: Array in cand2:
+			if chosen.size() >= 2 or tried >= 12:
+				break
+			tried += 1
+			if _add_water_walk(pr[1], pr[2], chosen, 1):
+				chosen.append(pr[2])
+		# Без хвірток поблизу (чи як перша не склалась) — і першу беремо від дороги.
+		if chosen.is_empty():
+			for pr: Array in cand2:
+				if tried >= 24:
 					break
-				var shore: Vector2 = _shore(cd[1], cd[2])
-				if shore == Vector2.INF or not _on_board(shore) or shores.any(func(s: Vector2) -> bool: return s.distance_to(shore) < 6.0):
-					continue
-				var srcs: Array = road_pts.filter(func(r: Array) -> bool:
-					var dd: float = (r[0] as Vector2).distance_to(shore)
-					return dd >= band.x and dd <= band.y)
-				if srcs.is_empty():
-					continue
-				var start: int = int(cd[0]) % srcs.size()
-				var tried: int = 0
-				for n in srcs.size():
-					if tried >= 10:
-						break
-					var src: Array = srcs[(start + n * 7) % srcs.size()]
-					var axis: Vector2 = src[0]
-					var from: Vector2 = axis + (shore - axis).normalized() * (float(src[1]) + 0.1)
-					if on_road(from, 0.0):
-						continue
-					tried += 1
-					# Рілля й грядки — перешкода: маршрут обходить їх через проміжну точку збоку від хорди.
-					var chord: Vector2 = shore - from
-					var side := Vector2(-chord.y, chord.x).normalized()
-					var sd: int = int(cd[0]) + n * 7919
-					for min_turns in [2, 1]:
-						for off: float in [0.0, 1.0, -1.0, 2.0, -2.0, 3.0, -3.0, 4.5, -4.5, 6.0, -6.0]:
-							var ctrl: Array[Vector2] = [from]
-							if off != 0.0:
-								ctrl.append((from + shore) * 0.5 + side * off)
-							ctrl.append(shore)
-							var clear := true
-							for k in range(1, ctrl.size()):
-								clear = clear and _water_ok(PackedVector2Array(_line(ctrl[k - 1], ctrl[k])), shore)
-							if not clear:
-								continue
-							for amp: float in [0.6, 0.45, 0.3, 0.15, 0.0]:
-								var raw := PackedVector2Array([from])
-								for k in range(1, ctrl.size()):
-									raw.append_array(Footpaths.meander(ctrl[k - 1], ctrl[k], amp,
-											clampf(ctrl[k - 1].distance_to(ctrl[k]) / 2.0, 0.8, 3.0), sd + k).slice(1))
-								var pts: PackedVector2Array = Footpaths.resample(Footpaths.smooth(raw, 10))
-								if Footpaths.turns(pts) >= min_turns and _water_ok(pts, shore):
-									shores.append(shore)
-									walks.append({"kind": &"water", "home": -1, "door": from, "pts": pts, "seed": sd,
-											"fade_start": 0.25, "fade_end": 0.3,
-											"half": Footpaths.widths(pts, Footpaths.HALF, [{"at": shore, "boost": 0.7}])})
-									break
-							if shores.has(shore):
-								break
-						if shores.has(shore):
-							break
-					if shores.has(shore):
-						break
+				tried += 1
+				if _add_water_walk(pr[1], pr[2], chosen, 1):
+					chosen.append(pr[2])
+					break
+
+	func _add_water_walk(from: Vector2, shore: Vector2, chosen: Array[Vector2], serial: int) -> bool:
+		var pts: PackedVector2Array = _walk_route(from, shore)
+		if pts.size() < 8:
+			return false
+		var sd: int = h(Vector2i(roundi(shore.x), roundi(shore.y)), 210 + serial)
+		walks.append({"kind": &"water", "home": -1, "door": from, "pts": pts, "seed": sd, "fade_start": 0.15,
+				"half": Footpaths.widths(pts, Footpaths.HALF, [{"at": shore, "boost": 1.0}])})
+		# Витоптаний майданчик біля води, де беруть воду чи ловлять рибу.
+		patches.append(Vector3(shore.x, shore.y, 0.3))
+		return true
 
 	## 1–2 дрібні речі на двір із наявних моделей: колода для дров біля хати, на кожному другому дворі
 	## ще й причеп. Річ стоїть на клітинках двору, на 0.12 від їхньої межі (паркану), осторонь будівель,
