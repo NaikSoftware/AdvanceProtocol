@@ -378,7 +378,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	for inst in view.props().all_instances():
 		models[inst["model"]] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
-			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts"] and not String(n.name).ends_with("_fade"))
+			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts"] and not String(n.name).ends_with("_fade"))
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
@@ -978,7 +978,7 @@ func test_buildings_sit_on_the_relief(p = use_parameters(MAPS)) -> void:
 	assert_gt(checked, 5, "%s: є будівлі" % p)
 
 
-## Секція паркану лежить на рельєфі обома кінцями (нахил за схилом, не висить).
+## Секція паркану лежить на рельєфі обома кінцями й серединою (нахил за схилом, не висить).
 func test_fences_follow_the_relief(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var th: TerrainHeight = view._height
@@ -990,6 +990,10 @@ func test_fences_follow_the_relief(p = use_parameters(MAPS)) -> void:
 		for sgn: float in [-1.0, 1.0]:
 			var end: Vector3 = t * Vector3(sgn * half, 0.0, 0.0)
 			assert_almost_eq(end.y, th.at(end.x, end.z), 0.03, "%s: паркан на %s висить" % [p, inst["cells"]])
+		# Середина секції — не вище й не нижче ґрунту більш ніж на 5 см (край майданчика будівлі).
+		var mid: Vector3 = t.origin
+		assert_almost_eq(mid.y, th.at(mid.x, mid.z), PropLayer.FENCE_SAG + 0.001,
+				"%s: середина паркану (%.2f; %.2f) відходить від ґрунту на %.2f м" % [p, mid.x, mid.z, (mid.y - th.at(mid.x, mid.z)) / TerrainHeight.M])
 
 
 ## Будівлі, паркани й стовпи не ближче WATER_CLEAR до води й болота: на березі вони висіли б над руслом.
