@@ -70,6 +70,10 @@ def main():
             sel[:, :250] = sel[:, 525:] = False
         ratio = (lon[::2, ::2] / loff[::2, ::2])[sel]
         print(f"{view} ground: {sel.sum()} px, L* on/off median {np.median(ratio):.3f} p25 {np.percentile(ratio, 25):.3f} min {ratio.min():.3f}")
+        lb = lab(off)[::2, ::2][grass]
+        if view.endswith("z8"):
+            a, b = np.median(lb[:, 1]), np.median(lb[:, 2])
+            print(f"{view} grass (без тіні): L {np.median(lb[:, 0]):.1f} a {a:.1f} b {b:.1f} C* {np.hypot(a, b):.1f} h {np.degrees(np.arctan2(b, a)):.1f}")
         print(f"{view} frame L* mean {lon.mean():.2f}")
 
 
