@@ -236,6 +236,11 @@ def build_node(item, rects):
         for face in bm.faces:
             for loop in face.loops:
                 loop[uv2l].uv = (loop[uv2l].uv[0] * fs, loop[uv2l].uv[1] * fs)
+    # Експортер glTF перевертає V кожної UV-карти (v → 1 − v), тож UV2 пишеться вже
+    # перевернутим: шейдер мусить отримати саме зсув кута, а кора, колоди й підстилка — нуль.
+    for face in bm.faces:
+        for loop in face.loops:
+            loop[uv2l].uv = (loop[uv2l].uv[0], 1.0 - loop[uv2l].uv[1])
     me = bpy.data.meshes.new(item["node"])
     bm.verts.index_update()
     order = list(bm.verts)
