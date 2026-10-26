@@ -17,8 +17,6 @@ ATLAS = {
                               lab=(12, 27), tgt_L=26, ab=((-1, 2), (-3, 4))),
     "smoke_column_thin": dict(src="smoke_puff", kind="puff", n=64, cols=8, rows=8, fps=4, m=22.1,
                               lab=(35, 45), tgt_L=40, amax=0.35, ab=((-1, 2), (-3, 4))),
-    "wreck_fire": dict(src="wreck_fire", kind="loop", n=64, cols=16, rows=4, fps=8, bonfire=1, raw=1, m=2.93, sway=0.05,
-                            lab=None),
     "explosion": dict(src="explosion", kind="once", tail=12, n=64, cols=8, rows=8, fps=48, m=21.7, lab=None),
     "dirt_burst": dict(src="dirt_burst", kind="once", tail=12, n=64, cols=8, rows=8, fps=40, m=13.4, desat=0.65,
                        lab=(28, 38), tgt_L=33, ab=((2, 4), (6, 10))),

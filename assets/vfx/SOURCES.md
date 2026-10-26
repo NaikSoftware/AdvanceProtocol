@@ -57,6 +57,6 @@ All atlases import as VRAM-compressed (`compress/mode=2`) with mipmaps on.
 ## Rebuild
 
 `tools/blender/vfx/render_all.sh` holds the exact render arguments of every atlas (Blender 5.2 in batch mode,
-never the MCP) and then packs them with `tools/blender/vfx/assemble.py`. Unpack the two packs above under one
-folder (`VDB`), pick a scratch folder outside `/tmp` (`WORK`, a few GB) and an output folder (`OUT`):
+never the MCP) and then packs them with `tools/blender/vfx/assemble.py`. Unpack the Ground Explosion pack above under
+one folder (`VDB`), pick a scratch folder outside `/tmp` (`WORK`, a few GB) and an output folder (`OUT`):
 `VDB=… WORK=… OUT=… tools/blender/vfx/render_all.sh`.
