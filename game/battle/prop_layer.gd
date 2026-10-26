@@ -166,9 +166,15 @@ const GARDEN_SHARE: float = 0.4
 const HAY_OUT: float = 0.15
 ## Найдальше від точки макету, куди тюк перескакує на край поля.
 const HAY_SNAP: float = 2.0
-## Ширина стежки двору (~0.6 м) і під'їзної колії від воріт до дороги (~2 м); колія — не довша
+## Шафа трансформаторної підстанції на опорі (~1.0 × 1.2 × 0.7 м) і її колір (оцинкована сталь).
+const TRANSFORMER_SIZE: Vector3 = Vector3(0.125, 0.15, 0.085)
+const TRANSFORMER_COLOR: Color = Color(0.42, 0.43, 0.44)
+## Стовп воріт (~0.25 × 1.5 м), темне дерево.
+const GATE_POST_SIZE: Vector3 = Vector3(0.03, 0.19, 0.03)
+const GATE_POST_COLOR: Color = Color(0.2, 0.17, 0.13)
+## Ширина стежки двору (~0.8 м) і під'їзної колії від воріт до дороги (~2 м); колія — не довша
 ## за DRIVE_MAX клітинок.
-const PATH_WIDTH: float = 0.08
+const PATH_WIDTH: float = 0.1
 const DRIVE_WIDTH: float = 0.26
 const DRIVE_MAX: float = 3.0
 ## Відступи сторони кільця паркану від межі двору, від бажаного (назовні) до найглибшого всередину;
@@ -204,6 +210,7 @@ const HOUSE_NEAR: int = 2
 ## Той самий шейдер будівлі без розчинення: discard у шейдері вимикає ранню перевірку глибини на
 ## мобільних GPU, тож будівлі моделі, над якою зараз ніхто не стоїть, малюються без нього.
 static var _alpha_shader_cache: Shader
+static var _depth_shader_cache: Shader
 
 ## Модель -> {mesh, local, footprint, aabb, wires, tris}; спільний на процес, бо GLB кешуються.
 static var _models: Dictionary = {}
@@ -249,6 +256,11 @@ var garden_green: float = 0.2
 var _plinths: Array[Transform3D] = []
 ## Відводи до хат: [індекс опори, точка на стіні хати].
 var _drops: Array = []
+## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
+var _transformers: Dictionary = {}
+var _transformer_node: MultiMeshInstance3D = null
+## Стовпи воріт садиб (центри на дошці): ворота читаються розривом зі стовпами по боках.
+var _gate_posts: Array[Vector2] = []
 ## Опори з дротами: [індекс екземпляра опори A, індекс B] — проліт.
 var _spans: Array = []
 var _wires: MeshInstance3D
@@ -524,6 +536,9 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_node_model.clear()
 	_spans.clear()
 	_drops.clear()
+	_transformers.clear()
+	_transformer_node = null
+	_gate_posts.clear()
 	_plinths.clear()
 	_wires = null
 	_contacts = null
@@ -553,14 +568,23 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 
 
 ## Клітинки юнітів, які зараз показано: їхні будівлі й будівлі між ними та камерою розчиняються.
-## Новий набір замінює попередній.
-func set_reveal_cells(cells: Array[Vector2i]) -> void:
+## Новий набір замінює попередній. instant — без переходу й одразу, не в кінці кадру: на гейті
+## передачі (§3.5) дах, прозорий для попереднього гравця, не має й кадру доповертатись до
+## непрозорості — це показало б, де стоять його юніти.
+func set_reveal_cells(cells: Array[Vector2i], instant: bool = false) -> void:
 	_reveal.clear()
 	_reveal_units = cells.duplicate()
 	for c in cells:
 		for o in REVEAL_OFFSETS:
 			_reveal[c + o] = true
-	_queue_apply()
+	if not instant:
+		_queue_apply()
+		return
+	_apply()
+	for i in _fade_target:
+		_fade_level[i] = _fade_target[i]
+	_write_nodes()
+	set_process(false)
 
 
 ## Клітинки, де розчавлено дрібні пропси, — уже обрізані розвіданим глядача (§3.5): шар не
@@ -820,8 +844,33 @@ func _build_garden_plots() -> void:
 	add_child(_garden_node)
 
 
+## Стовпи воріт — темні дерев'яні бруски на землі з обох боків розриву в паркані.
+func _build_gate_posts() -> void:
+	if _gate_posts.is_empty():
+		return
+	var box := BoxMesh.new()
+	box.size = GATE_POST_SIZE
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = GATE_POST_COLOR
+	mat.roughness = 0.9
+	box.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = box
+	mm.instance_count = _gate_posts.size()
+	for i in _gate_posts.size():
+		var p: Vector2 = _gate_posts[i]
+		mm.set_instance_transform(i, Transform3D(Basis(), Vector3(p.x, TerrainHeight.ground_y(p.x, p.y) + GATE_POST_SIZE.y * 0.5 - 0.01, p.y)))
+	var node := MultiMeshInstance3D.new()
+	node.name = "GatePosts"
+	node.multimesh = mm
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
+
+
 ## Стежки дворів — смуги втоптаної землі (~1 м) по ґрунту, без тіні.
 func _build_paths() -> void:
+	_build_gate_posts()
 	if _paths.is_empty():
 		return
 	var quad := PlaneMesh.new()
@@ -1093,6 +1142,13 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 			mat.set_shader_parameter("ao_light_affect", src.ao_light_affect)
 	if haze:
 		Surroundings.apply(mat, _board_size)
+	if not solid:
+		# Розчинення у два проходи: спершу глибина (раніше за інші прозорі), тоді колір поверх неї.
+		var depth: ShaderMaterial = mat.duplicate()
+		depth.shader = _depth_shader()
+		depth.render_priority = -1
+		depth.next_pass = mat
+		mat = depth
 	_fade_materials[key] = mat
 	return mat
 
@@ -1134,14 +1190,26 @@ static func _channel(ch: int) -> Vector4:
 	return [Vector4(1, 0, 0, 0), Vector4(0, 1, 0, 0), Vector4(0, 0, 1, 0), Vector4(0, 0, 0, 1), Vector4(0.299, 0.587, 0.114, 0)][ch]
 
 
-## Варіант prop_fade з FADE_ALPHA: альфа-змішування з проходом глибини.
+## Варіант prop_fade з FADE_ALPHA: колір з альфою, без запису глибини (другий прохід розчинення).
 static func _alpha_shader() -> Shader:
 	if _alpha_shader_cache == null:
-		_alpha_shader_cache = Shader.new()
-		var code: String = _FADE_SHADER.code
-		assert(code.contains("shader_type spatial;"), "PropLayer: prop_fade.gdshader без shader_type")
-		_alpha_shader_cache.code = code.replace("shader_type spatial;", "shader_type spatial;\n#define FADE_ALPHA")
+		_alpha_shader_cache = _variant("FADE_ALPHA")
 	return _alpha_shader_cache
+
+
+## Варіант prop_fade з FADE_DEPTH: лише глибина (перший прохід розчинення).
+static func _depth_shader() -> Shader:
+	if _depth_shader_cache == null:
+		_depth_shader_cache = _variant("FADE_DEPTH")
+	return _depth_shader_cache
+
+
+static func _variant(define: String) -> Shader:
+	var sh := Shader.new()
+	var code: String = _FADE_SHADER.code
+	assert(code.contains("shader_type spatial;"), "PropLayer: prop_fade.gdshader без shader_type")
+	sh.code = code.replace("shader_type spatial;", "shader_type spatial;\n#define " + define)
+	return sh
 
 
 ## Відтінок даху будинку (множник альбедо даху): сіро-синій бляшаний переважає, решта —
@@ -1171,12 +1239,15 @@ func _is_faded(inst: Dictionary) -> bool:
 		return false
 	if not (inst["cells"] as Array).any(func(c: Vector2i) -> bool: return _reveal.has(c)):
 		return false
-	# Лише коли силует будівлі на екрані перекриває юніта (сусід збоку його не ховає).
+	# Лише коли будівля на екрані перекриває юніта (сусід збоку його не ховає) і стоїть ближче до
+	# камери: ближній край будівлі вглиб — перед юнітом. Будівля за юнітом нічого не закриває.
 	var box: AABB = (inst["transform"] as Transform3D) * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
-	var scr: Rect2 = _Placer._screen_of(Rect2(box.position.x, box.position.z, box.size.x, box.size.z), box.size.y)[0]
+	var proj: Array = _Placer._screen_of(Rect2(box.position.x, box.position.z, box.size.x, box.size.z), box.size.y)
+	var scr: Rect2 = proj[0]
+	var near_depth: float = (proj[1] as Vector2).x
 	for u in _reveal_units:
-		var us: Rect2 = _Placer._screen_of(Rect2(Vector2(u) - Vector2(0.3, 0.3), Vector2(0.6, 0.6)), 0.25)[0]
-		if scr.intersects(us):
+		var us: Array = _Placer._screen_of(Rect2(Vector2(u) - Vector2(0.2, 0.2), Vector2(0.4, 0.4)), 0.25)
+		if near_depth < (us[1] as Vector2).x and scr.intersects(us[0]):
 			return true
 	return false
 
@@ -1214,6 +1285,7 @@ func _apply() -> void:
 	_write_nodes()
 	set_process(moving)
 	_rebuild_wires()
+	_rebuild_transformers()
 
 
 ## Розчинення плавне: рівень іде до цілі за FADE_TIME (кадр показу, не правила).
@@ -1301,6 +1373,40 @@ func _rebuild_wires() -> void:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
 	_wires.mesh = mesh
+
+
+## Щоглова трансформаторна підстанція — сталева шафа на опорі 10 кВ, на ~55 % висоти, збоку від
+## траверси. Повалена опора — без шафи.
+func _rebuild_transformers() -> void:
+	if _transformers.is_empty():
+		return
+	if _transformer_node == null:
+		var box := BoxMesh.new()
+		box.size = TRANSFORMER_SIZE
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = TRANSFORMER_COLOR
+		mat.roughness = 0.75
+		mat.metallic = 0.3
+		box.material = mat
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = box
+		mm.instance_count = _transformers.size()
+		_transformer_node = MultiMeshInstance3D.new()
+		_transformer_node.name = "Transformers"
+		_transformer_node.multimesh = mm
+		_transformer_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_transformer_node)
+	var mm: MultiMesh = _transformer_node.multimesh
+	var k: int = 0
+	for i: int in _transformers:
+		var pole: Dictionary = _instances[i]
+		var t: Transform3D = pole["transform"]
+		var h: float = ((model(pole["model"]) as Dictionary)["aabb"] as AABB).size.y
+		var at: Vector3 = t * Vector3(0.0, h * 0.55, TRANSFORMER_SIZE.z * 0.5 + 0.015)
+		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ZERO), at) if _is_crushed(pole)
+				else Transform3D(t.basis.orthonormalized(), at))
+		k += 1
 
 
 ## Розстановка однієї побудови: окремий об'єкт, щоб стан обходу (зайняте, лічильники) не жив
@@ -2247,6 +2353,8 @@ class _Placer:
 				_fence_straight(m, a, a + dir * (at - GATE * 0.5), lot)
 				_fence_straight(m, a + dir * (at + GATE * 0.5), b, lot)
 				gates[i] = [a + dir * at, Vector2(sides[int(runs[j][2])]["d"])]
+				layer._gate_posts.append(a + dir * (at - GATE * 0.5))
+				layer._gate_posts.append(a + dir * (at + GATE * 0.5))
 			else:
 				_fence_straight(m, a, b, lot)
 		return sides
@@ -2502,6 +2610,9 @@ class _Placer:
 				for j in range(0 if k == 1 else 1, n + 1):
 					var p: Vector2 = a.lerp(b, float(j) / float(n))
 					var idx: int = _pole_near(p, 0.35)
+					# Відгалуження 0.4 кВ від опори 10 кВ — через щоглову підстанцію на ній.
+					if idx >= 0 and kind_name == &"04kv" and _is_10kv(idx):
+						layer._transformers[idx] = true
 					var at: Vector2 = p
 					if idx < 0:
 						var tries: Array[Vector2] = []
@@ -2527,6 +2638,9 @@ class _Placer:
 					prev_at = at
 		_service_drops()
 
+	func _is_10kv(i: int) -> bool:
+		return PropLayer.spec_of(layer._instances[i]["model"]).get("line", &"") == &"10kv"
+
 	## Індекс стовпа в межах r від p, або −1.
 	func _pole_near(p: Vector2, r: float) -> int:
 		for i in layer._instances.size():
@@ -2544,28 +2658,6 @@ class _Placer:
 			out.append_array([-k, k])
 			k += 0.25
 		return out
-
-	func _point_at(pts: Array, s: float) -> Vector2:
-		var acc: float = 0.0
-		for k in range(1, pts.size()):
-			var a: Vector2 = pts[k - 1]
-			var b: Vector2 = pts[k]
-			var l: float = a.distance_to(b)
-			if acc + l >= s:
-				return a.lerp(b, (s - acc) / maxf(l, 1e-6))
-			acc += l
-		return pts.back()
-
-	func _tangent_at(pts: Array, s: float) -> Vector2:
-		var acc: float = 0.0
-		for k in range(1, pts.size()):
-			var a: Vector2 = pts[k - 1]
-			var b: Vector2 = pts[k]
-			var l: float = a.distance_to(b)
-			if acc + l >= s:
-				return (b - a).normalized()
-			acc += l
-		return Vector2(0, 1)
 
 	## Стовп на точці траси, якщо там тверда земля поза садибами й дорогою; індекс екземпляра чи −1.
 	func _pole_on(m: StringName, p: Vector2, t: Vector2) -> int:
@@ -2629,6 +2721,10 @@ class _Placer:
 				if not _wire_clear(fp, wall, roof):
 					continue
 				layer._drops.append([feed, Vector3(wall.x, box.position.y + box.size.y * 0.55, wall.y)])
+				# Хата живиться 0.4 кВ: від опори 10 кВ — лише через підстанцію на ній (на проміжну
+				# опору 0.4 кВ — теж від тієї, що з підстанцією).
+				if _is_10kv(pi):
+					layer._transformers[pi] = true
 				break
 
 	func _pole_xz(i: int) -> Vector2:
@@ -3022,6 +3118,6 @@ class _Placer:
 				continue
 			var before: int = layer._instances.size()
 			# Траверса впоперек дороги: дроти йдуть уздовж (локальна Z — вздовж дороги).
-			if put_small(m, c, q - Vector2(c), atan2(tan.x, tan.y)):
+			if put_small(m, c, q - Vector2(c), atan2(tan.x, tan.y), float(PropLayer.spec_of(m).get("scale", 1.0))):
 				return before
 		return -1

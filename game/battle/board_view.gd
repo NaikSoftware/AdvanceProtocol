@@ -410,8 +410,9 @@ func props() -> PropLayer:
 
 
 ## Клітинки юнітів, що зараз на дошці: будівлі над ними й між ними та камерою розчиняються.
-func set_reveal_cells(cells: Array[Vector2i]) -> void:
-	_props.set_reveal_cells(cells)
+## instant — без переходу (гейт передачі, §3.5): див. PropLayer.set_reveal_cells.
+func set_reveal_cells(cells: Array[Vector2i], instant: bool = false) -> void:
+	_props.set_reveal_cells(cells, instant)
 
 
 ## Клітинки з розчавленими пропсами, уже обрізані розвіданим глядача (§3.5).

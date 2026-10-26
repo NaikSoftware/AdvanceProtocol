@@ -178,6 +178,11 @@ func test_handover_rebuilds_units_and_recenters_camera_before_gate_lifts() -> vo
 	assert_not_null(screen.unit_view_for(p1_unit_id), "після confirmed дошка мусить показувати юнітів гравця 1")
 	assert_eq(camera.global_position, IsoCameraRig.cell_to_world(service.state.units_of(1)[0].pos),
 		"камера мусить рецентруватися на перший юніт гравця, що заходить")
+	# §3.5: дахи — одразу в стані нового гравця, без переходу через кадри після гейта.
+	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	for i in props._fade_target:
+		assert_eq(float(props._fade_level.get(i, 0.0)), float(props._fade_target[i]), "дах %d ще в переході після гейта" % i)
+	assert_false(props.is_processing(), "після гейта розчинення не доходить кадрами")
 
 
 # --- Кінець ходу: рівно одна EndTurnCommand --------------------------------

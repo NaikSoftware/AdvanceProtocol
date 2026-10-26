@@ -1,14 +1,19 @@
 // Будівлі й руїни (PropLayer): матеріал GLB (альбедо, нормалі, шорсткість) плюс напівпрозорість
 // над юнітом, мокрість за погодою і імла кільця. Лише для будівель: дах — єдине, що може сховати
 // юніта, а дрібні пропси й мости лишаються зі своїм матеріалом.
-// З FADE_ALPHA (PropLayer._alpha_shader) — варіант розчинення: звичайна альфа, не растр (сіточка
-// над юнітом читалась шаховою решіткою), з проходом глибини, щоб будівля не просвічувала сама
-// крізь себе — видно лише передні грані.
+// Розчинення над юнітом — звичайна альфа, не растр (сіточка читалась шаховою решіткою), у два
+// проходи (PropLayer._fade_material): FADE_DEPTH пише лише глибину, FADE_ALPHA (next_pass) малює
+// колір без запису глибини — тест глибини пропускає тільки передню грань, тож будівля не
+// просвічує сама крізь себе (вбудований depth_prepass_alpha при альфі 0.35 глибини не пише).
 shader_type spatial;
+#ifdef FADE_DEPTH
+render_mode blend_mix, cull_disabled, depth_draw_always, unshaded;
+#else
 #ifdef FADE_ALPHA
-render_mode blend_mix, cull_disabled, depth_prepass_alpha;
+render_mode blend_mix, cull_disabled, depth_draw_never;
 #else
 render_mode blend_mix, cull_disabled;
+#endif
 #endif
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -42,11 +47,14 @@ const float WET_FULL = 0.5;
 // мокру землю, найяскравішою річчю похмурого кадру.
 const float WET_WALL = 0.36;
 const float WET_ROOF = 0.75;
-// Мокрий дах — м'який полиск: на 0.3 блік лягав на гофр рівними білими смугами.
-const float WET_ROOF_ROUGHNESS = 0.5;
-// Смуга бруду внизу стіни (~0.65 м, клітинка — 8 м) і темніший стик із землею (~0.15 м).
-const float GRIME_H = 0.08;
-const float GRIME = 0.6;
+// Мокрий дах: листовий метал — шорсткість 0.35 і ледь помітний спекуляр неба; черепиця й шифер —
+// 0.45 зі спекуляром мінералу: темнішають, але не блищать. Штукатурка шорсткості не міняє.
+const float WET_ROOF_ROUGHNESS_METAL = 0.35;
+const float WET_ROOF_ROUGHNESS = 0.45;
+const float WET_SPECULAR_METAL = 0.5;
+// Мокрий низ стіни (~0.5 м, клітинка — 8 м) — на 15 % темніший; і темніший стик із землею (~0.15 м).
+const float GRIME_H = 0.0625;
+const float GRIME = 0.85;
 const float CONTACT_H = 0.02;
 const float CONTACT = 0.6;
 const vec3 WALL_WARM = vec3(1.08, 1.0, 0.86);
@@ -84,11 +92,14 @@ void fragment() {
 	if (use_metallic_tex) {
 		metal *= dot(texture(metallic_tex, UV), metallic_channel);
 	}
+	float spec = specular;
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {
 		float roof = smoothstep(0.4, 0.7, world_normal.y);
 		albedo *= mix(1.0, mix(WET_WALL, WET_ROOF, roof), wet);
-		rough = mix(rough, WET_ROOF_ROUGHNESS, wet * roof);
+		float sheet = smoothstep(0.3, 0.6, metal);
+		rough = mix(rough, mix(WET_ROOF_ROUGHNESS, WET_ROOF_ROUGHNESS_METAL, sheet), wet * roof);
+		spec = mix(spec, WET_SPECULAR_METAL, wet * roof * sheet);
 		float grime = 1.0 - smoothstep(0.0, GRIME_H, base_h);
 		float contact = 1.0 - smoothstep(0.0, CONTACT_H, base_h);
 		albedo *= mix(1.0, GRIME, wet * grime) * mix(1.0, CONTACT, wet * contact);
@@ -98,7 +109,7 @@ void fragment() {
 	NORMAL_MAP_DEPTH = normal_scale;
 	ROUGHNESS = rough;
 	METALLIC = metal;
-	SPECULAR = specular;
+	SPECULAR = spec;
 	if (use_ao_tex) {
 		AO = dot(texture(ao_tex, UV), ao_channel);
 		AO_LIGHT_AFFECT = ao_light_affect;
@@ -110,6 +121,9 @@ void fragment() {
 		// Без лінії межі: на стіні вона лягла б зламом, а будинки кільця за межею й так стоять.
 		FOG = surround_fog(haze, 0.0);
 	}
+#ifdef FADE_DEPTH
+	ALPHA = 0.0;
+#endif
 #ifdef FADE_ALPHA
 	ALPHA = 1.0 - v_fade;
 #endif

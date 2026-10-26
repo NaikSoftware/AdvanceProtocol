@@ -4,7 +4,8 @@ extends Node
 ## Запуск (потрібне вікно, не --headless; вікно — за межами екрана):
 ##   $GODOT --path . --position 6000,0 res://tools/battle_budget.tscn -- <out_dir> [--shadows] <map>[@x,y@zoom] ...
 ## --shadows: будівлі й руїни кидають справжню тінь сонця — щоб зміряти, скільки це коштує.
-## Без @… знімається центр дошки на MAX і MIN зумі. <map>@yard@<садиба>@zoom — танк і піхота гравця 0
+## Без @… знімається центр дошки на MAX і MIN зумі. <map>@fadeseq@<модель>@zoom — 12 кадрів розчинення
+## даху: юніт стає за будівлею й іде геть. <map>@yard@<садиба>@zoom — танк і піхота гравця 0
 ## у дворі садиби з макету карти (VillageLayout), камера на хаті. <map>@sel@zoom — вибраний перший юніт гравця 0
 ## із контурами зон руху поверх пропсів. <map>@behind@<модель>@zoom — той самий юніт за першою
 ## такою будівлею (з боку від камери), вибраний: розчинення даху й контур зони поверх сліду. <map>@top@x,y,size — ортографічний погляд згори на
@@ -63,6 +64,37 @@ func _ready() -> void:
 			screen.free()
 			await get_tree().process_frame
 			continue
+		if parts.size() >= 4 and parts[1] == "fadeseq":
+			# Послідовність розчинення: юніт стає за першою такою будівлею (з боку від камери) —
+			# кадри кожні 3 кадри гри (~0.05 с), поки дах стає напівпрозорим; юніт іде — так само назад.
+			var target := Vector2i(-1, -1)
+			for inst in (screen.get_node("%BoardView") as BoardView).props().all_instances():
+				var c: Vector2i = (inst["cells"] as Array)[0]
+				if String(inst["model"]) == parts[2] and board.in_bounds(c - Vector2i.ONE):
+					target = c
+					break
+			if target == Vector2i(-1, -1):
+				push_error("battle_budget: нема %s на дошці" % parts[2])
+			else:
+				var unit: Unit = MatchService.state.units_of(0)[0]
+				var home: Vector2i = unit.pos
+				rig.center_on(target)
+				rig.zoom_by(float(parts[3]) / rig.zoom_level)
+				for f in SETTLE_FRAMES:
+					await get_tree().process_frame
+				var seq: int = 0
+				for spot: Vector2i in [target - Vector2i.ONE, home]:
+					unit.pos = spot
+					screen.call("_rebuild_units_for_active_player")
+					for k in 6:
+						await RenderingServer.frame_post_draw
+						shots.append(["%s_fadeseq_%02d" % [map, seq], get_viewport().get_texture().get_image()])
+						seq += 1
+						for f in 3:
+							await get_tree().process_frame
+			screen.free()
+			await get_tree().process_frame
+			continue
 		if parts.size() >= 4 and parts[1] == "behind":
 			# Юніт за будівлею з боку, протилежного камері: дах чи вежа мусять розчинитися, а
 			# контур зони — лягти поверх сліду будівлі.
@@ -104,20 +136,20 @@ func _ready() -> void:
 			spots.sort_custom(by_key)
 			near.sort_custom(by_key)
 			spots.append_array(near)
-			# Юніт не стоїть на паркані: центр клітинки — щонайменше на півкорпусу від кожної секції.
+			# Юніт не стоїть на паркані: його слід (півкорпусу довкола центру клітинки) — щонайменше на
+			# 0.15 клітинки від кожної секції, кути кільця теж (секції там сходяться кінцями).
 			var fences: Array[Rect2] = []
 			for inst in (screen.get_node("%BoardView") as BoardView).props().all_instances():
 				if int(PropLayer.spec_of(inst["model"])["kind"]) == PropLayer.Kind.GARDEN_FENCE:
 					var fb: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 					fences.append(Rect2(fb.position.x, fb.position.z, fb.size.x, fb.size.z))
-			var want: Array = [[UnitTypes.UnitClass.INFANTRY, 0.2], [UnitTypes.UnitClass.TANK, 0.4]]
+			var want: Array = [[UnitTypes.UnitClass.INFANTRY, 0.22], [UnitTypes.UnitClass.TANK, 0.38]]
 			var taken: Array[Vector2i] = []
 			for w: Array in want:
 				var spot := Vector2i(-1, -1)
 				for c: Vector2i in spots:
-					var p := Vector2(c)
-					if not taken.has(c) and not fences.any(func(r: Rect2) -> bool:
-							return p.distance_to(p.clamp(r.position, r.end)) < float(w[1])):
+					var foot := Rect2(Vector2(c) - Vector2.ONE * float(w[1]), Vector2.ONE * 2.0 * float(w[1])).grow(0.15)
+					if not taken.has(c) and not fences.any(func(r: Rect2) -> bool: return foot.intersects(r)):
 						spot = c
 						break
 				if spot.x < 0:

@@ -18,14 +18,15 @@ uniform float sky_bend = 0.65;
 global uniform float weather_wetness;
 const float WET_FULL = 0.5;
 const float WET_DARK = 0.75;
-const vec3 WET_TONE = vec3(1.0, 0.96, 0.9);
+const vec3 WET_TONE = vec3(1.06, 0.97, 0.85);
 // Бруд біля землі: ~0.5 м (клітинка — 8 м).
 const float DIRT_H = 0.06;
 const float DIRT = 0.6;
 const float WET_ROUGHNESS = 0.4;
-// ~0.31 у sRGB (≈ 79 із 255) — ~0.08 лінійно: паркан трохи світліший за ґрунт, не біла лінія.
-const float VALUE_CAP = 0.08;
-const vec3 WEATHERED = vec3(1.05, 0.98, 0.86);
+// ~0.30 у sRGB (≈ 76 із 255) — ~0.072 лінійно: паркан трохи світліший за ґрунт, не біла лінія.
+const float VALUE_CAP = 0.072;
+// Тепліше за нейтраль: під сірим небом Річки нейтральне дерево виходило холодним (B ≥ R).
+const vec3 WEATHERED = vec3(1.14, 0.98, 0.78);
 
 varying float base_h;
 

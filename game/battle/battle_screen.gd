@@ -269,7 +269,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_wire_view(board)
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
-	_rebuild_units_for_active_player()
+	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
 	_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
 	# fly_to(), не center_on(): у самостійному запуску гейта немає, і програмний
@@ -906,7 +906,8 @@ func _on_events_ready() -> void:
 ## після confirmed, без жодного кроку кадру; якби тут стояв fly_to(), він
 ## ловив би позицію ще НЕ на цілі й падав.
 func _on_gate_confirmed() -> void:
-	_rebuild_units_for_active_player()
+	# Дахи — одразу в стан нового гравця, без переходу (§3.5): див. PropLayer.set_reveal_cells.
+	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
 	if not _fx_warmed:
 		_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
@@ -924,7 +925,8 @@ func _clear_unit_views() -> void:
 ## рівно ті вузли, які known_occupied_map(активного) дозволяє знати. Юніт, що
 ## щойно рухався, устигає доанімуватись (play() уже дочекався його твіна) до
 ## виклику цієї функції, тож перебудова не рве рух на середині кроку.
-func _rebuild_units_for_active_player() -> void:
+## instant — розчинення дахів без переходу (гейт передачі й перший показ).
+func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	var state: BattleState = _match_service.state
 	_clear_unit_views()
 	# §3.11: міни — той самий знімок знання активного гравця, що й юніти, і в ті
@@ -949,7 +951,7 @@ func _rebuild_units_for_active_player() -> void:
 	# прозорим дахом себе не видає.
 	var shown: Array[Vector2i] = []
 	shown.assign(known.keys())
-	_board_view.set_reveal_cells(shown)
+	_board_view.set_reveal_cells(shown, instant)
 	var crushed: Array[Vector2i] = []
 	for pos: Vector2i in _crushed_truth:
 		if state.vision[state.active_player].is_seen(pos):

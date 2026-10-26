@@ -377,7 +377,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	for inst in view.props().all_instances():
 		models[inst["model"]] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
-			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths", &"RubbleFloors", &"RubbleDebris", &"YardPaths"] and not String(n.name).ends_with("_fade"))
+			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"Plinths", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts"] and not String(n.name).ends_with("_fade"))
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
@@ -747,20 +747,24 @@ func test_river_buildings_match_the_golden_fingerprint() -> void:
 	assert_eq(";".join(parts).hash(), RIVER_BUILDINGS_FINGERPRINT, ";".join(parts))
 
 
-
-## §8: кожна клітинка BUILDING дошки видимо забудована — будинком, двором (повітка, дрова, причіп,
-## тюк) чи трав'яним двором за парканом садиби або луком між садибами з макету, а не голою травою
-## серед поля.
+## §8: кожна клітинка BUILDING дошки видимо забудована — будівлею, двором садиби з макету (за
+## парканом) чи луком між садибами з макету, а не голою травою серед поля; і навпаки, кожна клітинка
+## макета — справді BUILDING: макет не малює садибу там, де правила бачать поле.
 func test_every_building_cell_reads_built_up(p = use_parameters(MAPS)) -> void:
 	var m: MapData = _map(p)
 	var board: Board = m.to_board()
 	var view: BoardView = _cached(p)
 	var yards: Dictionary = _layout_yards(p, true)
+	var checked: int = 0
 	for y in board.height:
 		for x in board.width:
 			var c := Vector2i(x, y)
-			if board.kind_at(c) == Terrain.Kind.BUILDING and not yards.has(c):
-				assert_false(view.props().instances_on(c).is_empty(), "%s: порожня клітинка BUILDING %s" % [p, c])
+			if board.kind_at(c) == Terrain.Kind.BUILDING:
+				assert_true(yards.has(c) or not view.props().instances_on(c).is_empty(), "%s: порожня клітинка BUILDING %s" % [p, c])
+				checked += 1
+	assert_gt(checked, 0, "%s: передумова — клітинки BUILDING є" % p)
+	for c: Vector2i in yards:
+		assert_eq(board.kind_at(c), Terrain.Kind.BUILDING, "%s: клітинка макета %s — не BUILDING" % [p, c])
 
 
 ## Клітинки дворів садиб із макету карти (і, за with_orchards, луків між садибами).
@@ -774,7 +778,6 @@ func _layout_yards(map_key: String, with_orchards: bool) -> Dictionary:
 		for c: Vector2i in lay.get("orchards", []):
 			out[c] = true
 	return out
-
 
 
 ## Кільце паркану садиби замкнене: кожен кінець секції сходиться з кінцем іншої або впирається в
@@ -833,13 +836,18 @@ func test_wet_map_darkens_bridges() -> void:
 			assert_gte(got.roughness, PropLayer.BRIDGE_ROUGH - 1e-4)
 
 
-## Руїна з глухим фронтоном стоїть пошкодженим фасадом (−Z) до камери (+x чи +z).
+## Руїна з глухим фронтоном стоїть пошкодженим фасадом (−Z) до камери (+x чи +z). Карта, де такої
+## руїни нема (на Річці вона не випадає), перевіряти нічого: тест це й каже.
 func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
+	var n: int = 0
 	for inst in view.props().all_instances():
 		if PropLayer.CAMERA_FRONT.has(inst["model"]):
 			var front: Vector3 = -(inst["transform"] as Transform3D).basis.z
 			assert_gt(front.x + front.z, 0.5, "%s: %s фасадом від камери" % [p, inst["model"]])
+			n += 1
+	if n == 0:
+		pass_test("%s: руїн із глухим фронтоном на карті нема" % p)
 
 
 ## Дахи будинків мають різні відтінки, руїни й двірське вбрання — без відтінку.
@@ -1044,9 +1052,9 @@ func test_poles_and_houses_have_real_heights(p = use_parameters(MAPS)) -> void:
 
 
 ## Хати макету дивляться фасадом (−Z моделі) туди, куди каже садиба.
-func test_layout_houses_face_their_road() -> void:
-	var view: BoardView = _cached("river")
-	for home: Dictionary in VillageLayout.for_map(&"river")["homes"]:
+func test_layout_houses_face_their_road(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	for home: Dictionary in VillageLayout.for_map(StringName(p))["homes"]:
 		var hc: Vector2i = home["house"]
 		var house: Array = view.props().instances_on(hc).filter(
 				func(i: Dictionary) -> bool: return _kind(i["model"]) == PropLayer.Kind.STRUCTURE and not i.get("yard", false))
@@ -1273,8 +1281,10 @@ func test_dissolve_is_alpha_blend_not_dither() -> void:
 	assert_gte(idx, 0, "передумова: будинок над юнітом")
 	var key: StringName = props._instances[idx]["model"]
 	var fmi: MultiMeshInstance3D = props._fade_nodes[key]
-	var code: String = ((fmi.material_override as ShaderMaterial).shader as Shader).code
-	assert_true(code.contains("#define FADE_ALPHA") and src.contains("depth_prepass_alpha"), "альфа з проходом глибини")
+	var depth := fmi.material_override as ShaderMaterial
+	assert_true(depth.shader.code.contains("#define FADE_DEPTH") and src.contains("depth_draw_always"), "перший прохід — лише глибина")
+	var colour := depth.next_pass as ShaderMaterial
+	assert_true(colour != null and colour.shader.code.contains("#define FADE_ALPHA"), "другий прохід — колір з альфою")
 	assert_false(fmi.visible, "до переходу вузол розчинення схований")
 	props._flush()
 	props._process(PropLayer.FADE_TIME * 2.0)
@@ -1285,3 +1295,41 @@ func test_dissolve_is_alpha_blend_not_dither() -> void:
 	props._flush()
 	props._process(PropLayer.FADE_TIME * 2.0)
 	assert_false(fmi.visible, "юніта нема — дім знову суцільний")
+
+
+## Гейт передачі (§3.5): намальований стан дахів одразу, без жодного тіку _process — рівень
+## розчинення вже на цілі, вузол «_fade» показано чи сховано. Інакше дах, прозорий для попереднього
+## гравця, ще кілька кадрів доповертався б до непрозорості й показував його юнітів.
+func test_instant_reveal_draws_the_final_state_without_ticks() -> void:
+	var view: BoardView = _view(null, _house_board())
+	var props: PropLayer = view.props()
+	var h: Vector2i = _house_cell(view)
+	view.set_reveal_cells([h] as Array[Vector2i], true)
+	var idx: int = -1
+	for i in props._instances.size():
+		if props._is_faded(props._instances[i]):
+			idx = i
+	assert_gte(idx, 0, "передумова: будинок над юнітом")
+	var fmi: MultiMeshInstance3D = props._fade_nodes[props._instances[idx]["model"]]
+	assert_almost_eq(float(props._fade_level[idx]), 1.0, 1e-6, "розчинено одразу")
+	assert_true(fmi.visible)
+	view.set_reveal_cells([] as Array[Vector2i], true)
+	assert_almost_eq(float(props._fade_level[idx]), 0.0, 1e-6, "суцільний одразу")
+	assert_false(fmi.visible, "вузол розчинення схований до зняття гейта")
+	assert_false(props.is_processing(), "переходу нема")
+
+
+## Мокра карта: дах шорсткіший за мокрий не буває — під вологою шорсткість даху знижується (метал до
+## 0.35, черепиця й шифер до 0.45), а на сухій карті (wetness 0) гілка мокрості не діє.
+func test_wet_roofs_get_lower_roughness() -> void:
+	var src: String = (load("res://game/battle/shaders/prop_fade.gdshader") as Shader).code
+	var consts: Dictionary = {}
+	for line in src.split("\n"):
+		var parts: PackedStringArray = line.strip_edges().trim_suffix(";").split(" ")
+		if parts.size() == 5 and parts[0] == "const" and parts[1] == "float":
+			consts[parts[2]] = float(parts[4])
+	assert_between(float(consts["WET_ROOF_ROUGHNESS_METAL"]), 0.3, 0.45)
+	assert_between(float(consts["WET_ROOF_ROUGHNESS"]), 0.35, 0.45)
+	# Дах на сухій карті має шорсткість ассета (~0.8–0.9); мокрий — нижча.
+	assert_lt(float(consts["WET_ROOF_ROUGHNESS"]), 0.8)
+	assert_true(src.contains("if (wet > 0.0)"), "суха карта — без змін")

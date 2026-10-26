@@ -6,8 +6,9 @@ render_mode blend_mix, depth_draw_never, cull_back;
 
 global uniform float weather_wetness;
 
-const vec3 DIRT_DRY = vec3(0.075, 0.06, 0.045);
-const vec3 DIRT_WET = vec3(0.04, 0.03, 0.022);
+// Помітно темніше за траву (на ~0.08–0.1 у sRGB): світліша смуга з травою зливалась.
+const vec3 DIRT_DRY = vec3(0.048, 0.037, 0.027);
+const vec3 DIRT_WET = vec3(0.026, 0.019, 0.013);
 
 varying vec3 world_pos;
 
@@ -30,7 +31,7 @@ void fragment() {
 	float n = vnoise(world_pos.xz * 24.0);
 	float across = abs(UV.y - 0.5) * 2.0 + 0.35 * (n - 0.5);
 	float along = abs(UV.x - 0.5) * 2.0;
-	float alpha = (1.0 - smoothstep(0.45, 1.0, across)) * (1.0 - smoothstep(0.8, 1.0, along)) * 0.85;
+	float alpha = (1.0 - smoothstep(0.45, 1.0, across)) * (1.0 - smoothstep(0.8, 1.0, along)) * 0.95;
 	if (alpha <= 0.01) {
 		discard;
 	}
