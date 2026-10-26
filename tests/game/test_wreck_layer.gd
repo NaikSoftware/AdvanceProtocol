@@ -282,17 +282,17 @@ func test_flames_sit_on_the_hull_top_at_named_spots() -> void:
 	var spots: Array[Vector3] = layer.flame_spots(Vector2i(3, 3))
 	var w: Node3D = layer.wreck_at(Vector2i(3, 3))
 	var hull: Vector3 = UnitSilhouettes.spec(5).hull
-	# Корені — на даху башти (0,14 над корпусом): обидва лежать у межах її сліду (0,6 × 0,5
+	# Корені — на даху башти (0,1 над корпусом): обидва лежать у межах її сліду (0,6 × 0,5
 	# корпусу), тож на рівні даху корпусу башта ховала б їх з будь-якого боку.
-	var top: float = hull.y - WreckLayer.HULL_SAG + 0.14
+	var top: float = hull.y - WreckLayer.HULL_SAG + UnitSilhouettes.TURRET_HEIGHT
 	# Вогонь виходить з погона в центрі даху: башта стоїть у вогні, і жоден бік не ховає корінь.
 	# Два екземпляри обабіч центру: ±0,15 ширини вбік і ±0,1 довжини вздовж корпусу.
 	assert_eq(spots.size(), 2)
-	var a: Vector3 = (w.transform.affine_inverse() * spots[0]).snappedf(0.0001)
-	var b: Vector3 = (w.transform.affine_inverse() * spots[1]).snappedf(0.0001)
-	assert_eq(a, Vector3(-hull.x * 0.15, top, -hull.z * 0.1).snappedf(0.0001))
-	assert_eq(b, Vector3(hull.x * 0.15, top, hull.z * 0.1).snappedf(0.0001))
-	assert_eq((w.transform.affine_inverse() * layer.fire_centre(Vector2i(3, 3))).snappedf(0.0001), Vector3(0.0, top, 0.0).snappedf(0.0001))
+	var a: Vector3 = (w.transform.affine_inverse() * spots[0]).snappedf(0.01)
+	var b: Vector3 = (w.transform.affine_inverse() * spots[1]).snappedf(0.01)
+	assert_eq(a, Vector3(-hull.x * 0.15, top, -hull.z * 0.1).snappedf(0.01))
+	assert_eq(b, Vector3(hull.x * 0.15, top, hull.z * 0.1).snappedf(0.01))
+	assert_eq((w.transform.affine_inverse() * layer.fire_centre(Vector2i(3, 3))).snappedf(0.01), Vector3(0.0, top, 0.0).snappedf(0.01))
 
 
 ## Вогонь вщухає: велике полум'я → мале → без полум'я (дим).

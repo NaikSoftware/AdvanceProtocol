@@ -653,6 +653,10 @@ func test_silhouette_fits_one_tile() -> void:
 						hi = hi.max(fb.end)
 				continue
 			var box: AABB = (m as MeshInstance3D).mesh.get_aabb()
+			if m.name == "Barrel":
+				# Ствол реальної довжини (5–6 м від центру башти) смій виступати за тайл.
+				assert_gte(m.position.z + box.position.z, -0.75, "ствол типу %d" % id)
+				continue
 			lo = lo.min(m.position + box.position)
 			hi = hi.max(m.position + box.end)
 		assert_lte(hi.x - lo.x, 1.0, "x типу %d" % id)
