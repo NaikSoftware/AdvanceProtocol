@@ -31,7 +31,7 @@ def _img(name):
 
 
 def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=(), streak=0.0,
-                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3, corr=None, bump=0.006, patch_scale=0.55, runs=None, recolor=None, vmul=False, ash=None, seam_bump=1.0):
+                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3, corr=None, bump=0.006, patch_scale=0.55, runs=None, recolor=None, vmul=False, ash=None, seam_bump=1.0, dust=None):
     """Матеріал, який запікається в атлас. Текстура тайлиться в метрах (box-проєкція в
     координатах обʼєкта), тож не залежить від UV. seams: (вісь, період м, ширина м, сила);
     вісь h = горизонталь стіни, x/y/z = координата обʼєкта. patch: (колір, частка) —
@@ -109,6 +109,8 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
             L(base, hs.inputs["Color"])
             base = hs.outputs["Color"]
 
+    if dust is not None:                                                  # пил: рівномірне підмішування теплого сірого знижує насиченість і вирівнює тон
+        base = mix(base, dust[0], dust[1], "MIX")
     # смуги потьоків: шум, розтягнутий по висоті
     if streak > 0:
         x, y, z = sep.outputs
@@ -501,11 +503,12 @@ def mats():
         "boards_soft": make_material("boards_soft", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, seam_bump=0.0),
         "tile_small": make_material("tile_small", flat=(0.17, 0.18, 0.20), seams=[("y", 0.26, 0.04, 0.75), ("x", 0.30, 0.03, 0.4)], streak=0.15, seam_bump=0.0),
         # завал: фотоскан (ambientCG Ground111 — цегляне сміття в землі; Poly Haven broken_brick_wall — цегла), тон уламка — із вершинного кольору
-        "heap_photo": make_material("heap_photo", "Ground111", 1.0, (1.0, 0.93, 0.86), bump=0.05, streak=0.3),
+        "heap_photo": make_material("heap_photo", "Ground111", 1.0, (0.95, 0.9, 0.85), bump=0.05, streak=0.3, sat=0.85, dust=((0.22, 0.2, 0.17), 0.15)),
         "heap_photo_mud": make_material("heap_photo_mud", "Ground111", 1.0, (0.62, 0.56, 0.52), bump=0.04, streak=0.4),
-        "chunk_brick": make_material("chunk_brick", "broken_brick_wall", 0.7, (1.15, 1.05, 1.0), bump=0.03, vmul=True),
-        "chunk_plaster": make_material("chunk_plaster", "Plaster001", 1.0, (1.1, 1.05, 0.96), bump=0.02, vmul=True, streak=0.3),
-        "chunk_concrete": make_material("chunk_concrete", "Concrete034", 1.0, (0.85, 0.84, 0.8), bump=0.03, vmul=True),
+        "chunk_brick": make_material("chunk_brick", "broken_brick_wall", 0.7, (1.0, 0.92, 0.88), bump=0.03, vmul=True, sat=0.65, dust=((0.30, 0.265, 0.225), 0.3)),
+        "chunk_plaster": make_material("chunk_plaster", "Plaster001", 1.0, (1.0, 0.95, 0.88), bump=0.02, vmul=True, streak=0.3, dust=((0.31, 0.285, 0.245), 0.5)),
+        "chunk_concrete": make_material("chunk_concrete", "Concrete034", 1.0, (0.85, 0.82, 0.76), bump=0.03, vmul=True, dust=((0.30, 0.28, 0.245), 0.5)),
+        "chunk_wet": make_material("chunk_wet", flat=(0.075, 0.07, 0.064), vmul=True),
         "chunk_char": make_material("chunk_char", flat=(0.07, 0.062, 0.055), vmul=True),
         "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
         "plaster_char": make_material("plaster_char", flat=(0.17, 0.155, 0.14), streak=0.5, base_dirt=0.2),
@@ -532,7 +535,7 @@ def mats():
         "tin_red": make_material("tin_red", "CorrugatedSteel005", 1.0, (0.34, 0.25, 0.21), seams=[("x", 1.0, 0.05, 0.4)], corr=("x", 0.2, 0.03), streak=0.3, patch=((0.2, 0.12, 0.08), 0.3)),
         # обвуглена деревина: майже чорна, а попіл світлим сірим лише на кромках
         "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.026, 0.021, 0.018), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02, ash=((0.22, 0.215, 0.205), 3.5, 0.03)),
-        "cavity": make_material("cavity", flat=(0.05, 0.049, 0.048)),
+        "cavity": make_material("cavity", flat=(0.02, 0.02, 0.02)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
         "wall_ruin": make_material("wall_ruin", "Bricks105", 0.55, recolor=(0.320, 0.278, 0.259), streak=0.35, base_dirt=0.5, bump=0.035, patch=((0.17, 0.16, 0.145), 0.3), patch_scale=1.1, vmul=True, seams=[("zv", 0.30, 0.035, 0.55)]),
@@ -995,7 +998,7 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
     return top
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0):
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0, foot=0.0):
     """Уламок стіни p0-p1: сегменти різної ширини, кожен ламається ще на 1-3 шматки з різними верхами (різниця 0.2-0.5 м,
     тож жодного рівного верху), випадкова ходьба висот довкола задуму heights (не вище hcap); верхні 0.4 м — відкрита
     цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий."""
@@ -1067,7 +1070,9 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             ba, bc = (br_c, br_a) if flip else (br_a, br_c)
             la, lc = (lo_c, lo_a) if flip else (lo_a, lo_c)
             quad([V(q0, 0), V(q1, 0), V(q1, lc), V(q0, la)], (tn,) * 4, mat)
-            quad([V(q0, la), V(q1, lc), V(q1, bc), V(q0, ba)], (tn, tn, tn * top_tone, tn * top_tone), mat)
+            tg = tn * (1.0 - foot) if la <= 0.01 else tn                # AO біля землі: низ стіни темніший, угору світлішає
+            tg2 = tn * (1.0 - foot) if lc <= 0.01 else tn
+            quad([V(q0, la), V(q1, lc), V(q1, bc), V(q0, ba)], (tg, tg2, tn * top_tone, tn * top_tone), mat)
             bp((V(q0, ba), V(q1, bc), V(q1, ch), V(q0, ah)))
         bp((V(pb[0], ha), V(pb[1], hc), V(pb[2], hc), V(pb[3], ha)))
         prev = pieces[i - 1] if i > 0 and pieces[i - 1][1] >= xa - 1e-6 and pieces[i - 1][3] > 0.05 else None
@@ -1510,7 +1515,7 @@ def heap_bake(me, b, hi, mt, img, nimg, atlas_px, ao=0.65):
     bpy.ops.object.select_all(action="DESELECT")
 
 
-RUBBLE_MIX = ("chunk_brick",) * 4 + ("chunk_plaster",) * 3 + ("chunk_concrete",) * 3 + ("chunk_char",)
+RUBBLE_MIX = ("chunk_brick",) * 3 + ("chunk_plaster",) * 2 + ("chunk_concrete",) * 2 + ("chunk_char",) + ("chunk_wet",) * 2
 
 
 def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="heap_photo_mud", low="heap_buff", base="heap_photo", mix=RUBBLE_MIX, rings=None, segs=None):
@@ -1536,7 +1541,7 @@ def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="heap_photo_mud",
     return bh
 
 
-def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.2, 0.5), mix=("chunk_brick", "chunk_brick", "chunk_plaster", "chunk_concrete", "chunk_char")):
+def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.2, 0.5), mix=("chunk_brick", "chunk_brick", "chunk_plaster", "chunk_concrete", "chunk_char", "chunk_wet", "chunk_wet")):
     """Грудки 0.2-0.5 м по всій купі: справжня геометрія дає тінь і силует; грані перекошені, тон і матеріал різні."""
     for h in plan:
         for _ in range(n_each):

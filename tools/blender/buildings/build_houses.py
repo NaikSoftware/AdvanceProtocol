@@ -108,21 +108,29 @@ def house1(hit=False):
         right = [(uR[i], vs[i]) for i in range(nh + 1)] + [(1, 1), (1, 0)]
         b.poly_up([P(u, v) for (u, v) in left], "fc_roof_xh")
         b.poly_up([P(u, v) for (u, v) in right], "fc_roof_xh")
-        # плямиста підпалина: жорсткі багатокутники різної величини вздовж краю, без розмитого німбу
+        # карнизна плита під розривом: той самий лист із швами, а не гладка смуга
+        b.poly_up([P(uL[0], 0.0), P(uR[0], 0.0), P(uR[0], 0.09), P(uL[0], 0.09)], "fc_roof_xh")
+        # одна м'яка підпалина: смуга ~0.3-0.8 м від краю розриву, темна біля краю й без межі переходить у тон даху; вітер зносить її вгору по скату
         for edge, sgn_ in ((uL, -1), (uR, 1)):
-            for i in range(nh):
-                if rr.random() < 0.35:
-                    continue
-                cu, cv = edge[i] + sgn_ * rr.uniform(0.01, 0.05), (vs[i] + vs[i + 1]) / 2
-                du_, dv_ = rr.uniform(0.02, 0.06), rr.uniform(0.04, 0.09)
-                poly_ = [(cu - du_, cv - dv_), (cu + du_ * 0.7, cv - dv_ * 1.1), (cu + du_, cv + dv_ * 0.4), (cu + du_ * 0.2, cv + dv_), (cu - du_ * 1.1, cv + dv_ * 0.5)]
-                pts = [P(u_, v_) for (u_, v_) in poly_]
-                pts = [(x, y - 0.025, z + 0.03) for (x, y, z) in pts]
-                n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
-                tn_ = [rr.uniform(0.09, 0.2)] * 5
-                if n_.z < 0:
-                    pts = pts[::-1]
-                b.soot(pts, tn_, 1)
+            prev = None
+            for k in range(25):
+                v = k / 24
+                xx = v * nh
+                ii = min(nh - 1, int(xx))
+                fr_ = xx - ii
+                u_in = edge[ii] * (1 - fr_) + edge[ii + 1] * fr_
+                p_in = P(u_in, v)
+                p_out = P(u_in + sgn_ * rr.uniform(0.025, 0.07), min(1.0, v + rr.uniform(0.0, 0.05)))
+                cur = (p_in, p_out, rr.uniform(0.08, 0.16), 0.42 + rr.uniform(-0.03, 0.02))
+                if prev is not None:
+                    pts = [prev[0], cur[0], cur[1], prev[1]]
+                    pts = [(x, y - 0.025, z + 0.03) for (x, y, z) in pts]
+                    tn_ = [prev[2], cur[2], cur[3], prev[3]]
+                    n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
+                    if n_.z < 0:
+                        pts, tn_ = pts[::-1], tn_[::-1]
+                    b.soot(pts, tn_, 1)
+                prev = cur
         for edge, sgn_ in ((uL, -1), (uR, 1)):                                    # переламані рейки стирчать у розрив
             for i in range(1, nh):
                 if rr.random() < 0.45:
@@ -183,9 +191,9 @@ def house1(hit=False):
     bh = None
     if hit:
         rr = random.Random(54)
-        plan_ = [lib.HeapSurface(0.0, -4.0, 2.8, 0.45, 0.8, 51, bumps=6, lip=0.24, wob=0.1, lump=0.05, hummocks=2, hum_amp=0.3, sq=3.0, noise=1.0)]
-        bh = lib.rubble_heaps(b, plan_, 54, dens=7.0, skirt=0.3)
-        lib.rubble_lumps(b, plan_, rr, 20, tmin=0.15, tmax=0.95, size=(0.2, 0.45))
+        plan_ = [lib.HeapSurface(-0.6, -3.95, 2.6, 0.55, 1.0, 51, bumps=6, lip=0.2, wob=0.15, lump=0.08, hummocks=3, hum_amp=0.5, sq=2.0, noise=1.5)]
+        bh = lib.rubble_heaps(b, plan_, 54, dens=9.0, skirt=0.25)
+        lib.rubble_lumps(b, plan_, rr, 30, tmin=0.1, tmax=0.95, size=(0.2, 0.5))
     lib.finish(b, "house_h1_hit" if hit else "house_h1", out, tri_limit=2600, footprint=(2, 1), anchor=(0, 0), hi=bh)
 
 
@@ -306,12 +314,12 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
                 hs[-3:] = [1.3, 1.5, 1.5]
             else:
                 hs[:3] = [1.5, 1.4, 1.2]
-        wall_run(b, p0, p1, 0.4, hs, "wall_half_d", "wall_plaster", seed * 3 + si, hcap=1.5, top_tone=0.55, brick_mat="chunk_brick", cap=0.22, step=0.3, diag_p=0.85, jit=0.4, tvar=0.3)
+        wall_run(b, p0, p1, 0.4, hs, "chunk_brick", "wall_plaster", seed * 3 + si, hcap=1.5, top_tone=1.0, brick_mat="chunk_brick", cap=0.22, step=0.45, diag_p=0.6, jit=0.8, tvar=0.3, foot=0.55, soot_h=0.0)
     if os.environ.get("RUIN_WALLS_ONLY"):                                        # діагностика: лише стіни, щоб міряти їхній тон у кадрі
         lib.finish(b, name + "_walls", out, tri_limit=4200, footprint=footprint, anchor=(0, 0), ground_clip=True)
         return
     # --- купа: 1.5-2.5 м з піком не в центрі, контур рваний (0.3-0.5 м), квадратний слід; скан-джерело (фотоскан сміття + уламки) запікається
-    plan = [HeapSurface(0.0, 0.0, L / 2, D / 2, 1.2, seed + 1, bumps=rnd.choice((5, 6, 7)), lip=0.3, wob=0.15, hummocks=4, hum_amp=1.0, sq=4.0, noise=1.0)]
+    plan = [HeapSurface(0.0, 0.0, L / 2 + 0.8, D / 2 + 0.8, 1.2, seed + 1, bumps=rnd.choice((5, 6, 7)), lip=0.2, wob=0.15, hummocks=4, hum_amp=1.0, sq=4.0, noise=1.0, pw=1.2)]
     for k in range(2):                                                            # дрібні відсипи всередині клітинки (8 x 8 м)
         ang = rnd.uniform(0, 2 * math.pi)
         rr_ = rnd.uniform(1.3, 1.8)
@@ -321,7 +329,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
     peak = max(max(h_.z(h_.cx + h_.rx * u / 12.0, h_.cy + h_.ry * v / 12.0) for u in range(-12, 13) for v in range(-12, 13)) for h_ in plan)
     print("HEAPPEAK", name, round(peak, 3))
     assert 1.5 <= peak <= 2.6, f"{name}: гребінь купи {peak:.2f} м"
-    bh = lib.rubble_heaps(b, plan, seed + 5, dens=10.0)
+    bh = lib.rubble_heaps(b, plan, seed + 5, dens=10.0, skirt=0.3, rings=8, segs=40)
 
     def surf(x, y):                                                              # поверхня купи в точці (найвища з куп)
         return max(h_.z(x, y) for h_ in plan)
@@ -333,7 +341,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
         rr_ = hsf.radius(a)
         px, py = hsf.cx + hsf.rx * rr_ * 0.97 * math.cos(a), hsf.cy + hsf.ry * rr_ * 0.97 * math.sin(a)
         b.chunk(px, py, 0.2, rnd.uniform(0.4, 0.6), rnd.choice(("chunk_brick", "chunk_concrete")), rnd)
-    lib.rubble_lumps(b, plan[:1], rnd, 170, tmin=0.03, tmax=0.97, size=(0.18, 0.45))   # грудки 20-55 см дають силует і тінь
+    lib.rubble_lumps(b, plan[:1], rnd, 110, tmin=0.03, tmax=0.97, size=(0.18, 0.45))   # грудки 20-55 см дають силует і тінь
     lib.rubble_lumps(b, plan[1:], rnd, 6, tmin=0.1, tmax=0.9, size=(0.2, 0.4))
     if chimney:                                                                   # димар: пеньок із червоної цегли, що розколовся вгорі
         cx, cy = chimney
@@ -360,7 +368,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
         z1_ = max(0.1, surf(x1_, y1_) + 0.02)
         th = rnd.uniform(0.18, 0.26)
         b.beam((x0_, y0_, z0_), (x1_, y1_, z1_), th, "timber_dark", th * 1.2)
-    lib.finish(b, name, out, tri_limit=4800, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.4")))
+    lib.finish(b, name, out, tri_limit=5200, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.4")))
 
 
 if want("h1"):
@@ -374,5 +382,5 @@ if want("h3"):
 if want("h4"):
     house4()
 if want("ruins"):
-    ruin("ruin_h1", 6.2, 5.0, 0.8, 11, (1, 1), chimney=(1.3, -0.2), tile="fc_roof_x", cap=1.5)
-    ruin("ruin_h3", 5.6, 5.6, 0.6, 29, (1, 1), tile="tile_graphite", corner=True, cap=1.6)
+    ruin("ruin_h1", 4.8, 4.2, 0.8, 11, (1, 1), chimney=(1.0, -0.2), tile="fc_roof_x", cap=1.5)
+    ruin("ruin_h3", 4.6, 4.6, 0.6, 29, (1, 1), tile="tile_graphite", corner=True, cap=1.6)

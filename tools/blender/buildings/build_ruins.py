@@ -222,8 +222,9 @@ def house1(ruined):
     break_dress(b, PF, xsF, 1, rnd)
     break_dress(b, PB, xsB, 1, rnd)
     trim(b, -0.7, xb, ya, yb, E, hx, S, N)
-    plan = [HeapSurface(-1.9, 0.1, 1.25, 1.4, 0.85, 71, bumps=6, lip=0.28, wob=0.15, lump=0.07, hummocks=3, hum_amp=0.25),
-            HeapSurface(-2.1, -2.95, 1.2, 0.5, 0.7, 72, bumps=5, lip=0.25, wob=0.1, lump=0.05, hummocks=1, hum_amp=0.2)]
+    plan = [HeapSurface(-1.9, 0.1, 1.5, 1.8, 1.0, 71, bumps=6, lip=0.28, wob=0.15, lump=0.07, hummocks=3, hum_amp=0.3),
+            HeapSurface(-2.1, -2.95, 1.2, 0.5, 0.7, 72, bumps=5, lip=0.25, wob=0.1, lump=0.05, hummocks=1, hum_amp=0.2),
+            HeapSurface(-3.42, -0.2, 0.5, 1.6, 0.7, 74, bumps=5, lip=0.2, wob=0.1, lump=0.05, hummocks=1, hum_amp=0.2)]
     sf = surface(plan)
     # крокви лежать на верху стіни (консоль) або на завалі; тих, що висіли б у повітрі чи пробивали скат, немає
     for x in (-0.8, -0.2):
@@ -347,11 +348,15 @@ def house2(ruined):
             c = P(x, v1)
             b.beam((x, plate, E + 0.05), (c[0], c[1], c[2] - 0.12), 0.14, "timber_dark", 0.22)
     plan = [HeapSurface(3.4, 0.0, 0.85, 2.1, 1.3, 81, bumps=6, lip=0.28, wob=0.15, lump=0.08, hummocks=3, hum_amp=0.3, pw=1.5),
-            HeapSurface(1.5, 0.3, 1.3, 1.9, 0.8, 82, bumps=5, lip=0.26, wob=0.1, lump=0.05, hummocks=2, hum_amp=0.2)]
+            HeapSurface(1.7, 0.2, 1.5, 2.0, 1.7, 82, bumps=5, lip=0.26, wob=0.15, lump=0.06, hummocks=3, hum_amp=0.5)]
     plan[0].fit_peak(1.0)
     sf = surface(plan)
-    chip_slab(b, 1.7, 0.0, FL - 0.1, 3.4, 5.2, 0.24, (0.0, 0.42, 0.02), "floor_char", "floor_char", 41, rebar=3)
-    bent_sheet(b, (1.6, -2.7, 5.4), (1.8, -1.2, FL + 0.3), 0.9, "sheet_char", 0.2, axis="x")
+    chip_slab(b, 1.4, -1.4, FL - 0.1, 2.8, 2.4, 0.22, (0.0, 0.35, 0.05), "floor_char", "floor_char", 41, rebar=3, per_edge=2)
+    chip_slab(b, 1.8, 1.4, FL - 0.25, 2.6, 2.2, 0.22, (0.0, 0.42, -0.06), "floor_char", "floor_char", 42, rebar=2, per_edge=2)
+    # дах упав трьома шматками з тієї самої черепиці, що стоїть: лежать на крокві й підлозі, провисли всередину
+    chip_slab(b, 1.9, -1.7, 4.7, 2.0, 2.0, 0.12, (-0.5, 0.08, 0.0), "tile_small", "tile_small", 43, rebar=0, per_edge=2)
+    chip_slab(b, 2.5, 0.1, 3.8, 2.1, 1.9, 0.12, (-0.35, 0.12, 0.1), "tile_small", "tile_small", 44, rebar=0, per_edge=2)
+    chip_slab(b, 2.9, 1.7, 3.0, 1.9, 1.7, 0.12, (-0.25, 0.18, -0.2), "tile_small", "tile_small", 45, rebar=0, per_edge=2)
     bent_sheet(b, (3.2, 1.6, sf(3.2, 1.6) + 0.2), (3.9, 2.4, sf(3.9, 2.4) + 0.12), 0.9, "sheet_char", 0.12, axis="y")
     b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
     lumps(b, plan, rnd, 14)
