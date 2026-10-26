@@ -436,6 +436,17 @@ func test_build_passes_the_bank_map_to_the_shader() -> void:
 	assert_eq(img.get_pixel(2, 0).r8, 0)
 
 
+## Нормаль і похил шейдер бере з карти похилу в пікселі, а не з вершин: без неї меш землі мусив би
+## тримати рельєф густотою вершин.
+func test_build_passes_the_gradient_map_to_the_shader() -> void:
+	var board := Board.create(4, 3, Terrain.GroundState.DRY)
+	var th := TerrainHeight.bake(board, 0, 3)
+	ground.build(board, 0, PackedByteArray(), th)
+	var mat := ground.material_override as ShaderMaterial
+	assert_same(mat.get_shader_parameter("gradient_map"), th.gradient_texture())
+	assert_same(mat.get_shader_parameter("height_map"), th.texture())
+
+
 # Калюжі лише на рівному й у низинах: пагорб, схил понад ~7.5° і гребінь — без стоячої води.
 func test_puddle_gate_keeps_hills_slopes_and_crests_dry() -> void:
 	assert_almost_eq(GroundSurface.puddle_gate(0.0, 0.0, 0.0), 1.0, 1e-4, "рівне — калюжа можлива")

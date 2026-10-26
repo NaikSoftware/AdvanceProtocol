@@ -3,6 +3,7 @@ extends Node
 ## draw calls і трикутники кадру (Performance) і знімає кадр. Не входить у гру.
 ## Запуск (потрібне вікно, не --headless; вікно — за межами екрана):
 ##   $GODOT --path . --position 6000,0 res://tools/battle_budget.tscn -- <out_dir> [--shadows] <map>[@x,y@zoom] ...
+## --diag: розкладає трикутники кадру за шарами дошки (рядки DIAG).
 ## --shadows: будівлі й руїни кидають справжню тінь сонця — щоб зміряти, скільки це коштує.
 ## Без @… знімається центр дошки на MAX і MIN зумі. <map>@fadeseq@<модель>@zoom — 12 кадрів розчинення
 ## даху: юніт стає за будівлею й іде геть. <map>@yard@<садиба>@zoom — танк і піхота гравця 0
@@ -32,8 +33,10 @@ func _ready() -> void:
 	var no_shadows: bool = args.has("--noshadows")
 	# --stdmat: будинки з імпортованим матеріалом GLB, без prop_fade — щоб порівняти фактуру.
 	var std_mat: bool = args.has("--stdmat")
+	# --diag: після рядка BUDGET — рядки DIAG з трикутниками кожного шару дошки.
+	var diag: bool = args.has("--diag")
 	for i in range(1, args.size()):
-		if args[i] == "--shadows" or args[i] == "--noshadows" or args[i] == "--stdmat":
+		if args[i] == "--shadows" or args[i] == "--noshadows" or args[i] == "--stdmat" or args[i] == "--diag":
 			continue
 		var parts: PackedStringArray = args[i].split("@")
 		var map: String = parts[0]
@@ -184,6 +187,20 @@ func _ready() -> void:
 			await RenderingServer.frame_post_draw
 			var dc: int = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 			var tris: int = int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+			if diag:
+				# Трикутники за шарами: ховаємо дітей BoardView по одному, різниця — їхня частка кадру.
+				for ch: Node in (screen.get_node("%BoardView") as BoardView).get_children():
+					if not (ch is GeometryInstance3D) or not (ch as GeometryInstance3D).visible:
+						continue
+					(ch as GeometryInstance3D).visible = false
+					for f in 3:
+						await get_tree().process_frame
+					await RenderingServer.frame_post_draw
+					var t2: int = int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+					(ch as GeometryInstance3D).visible = true
+					print("DIAG %s z%d %s tris=%d" % [map, int(v[1]), ch.name, tris - t2])
+				for f in 3:
+					await get_tree().process_frame
 			var name: String = "%s_%d_%d_z%d" % [map, v[0].x, v[0].y, int(v[1])]
 			print("BUDGET %s %s z%d dc=%d tris=%d" % [map, v[0], int(v[1]), dc, tris])
 			shots.append([name, get_viewport().get_texture().get_image()])

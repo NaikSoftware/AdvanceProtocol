@@ -31,11 +31,12 @@ const LINE_GAP_PX: float = 4.0
 const SKIRT_REACH: float = 48.0
 
 
-## Густота меша кільця, квадів на клітинку (docs/art/surroundings-research.md): смугами, бо за
+## Стеля густоти меша кільця, квадів на клітинку (docs/art/surroundings-research.md): смугами, бо за
 ## густоти дошки кільце мало б 169 тис. трикутників — увесь бюджет кадру. Перша клітинка за краєм
 ## — як дошка, щоб на межі не було сходинки; до 6 клітинок — 2 (4 м), далі — 1 (8 м), там імла
-## уже ≥ 50 % і гранування не видно. Смуга — за Чебишовим. Клітинки з водою чи берегом — як дошка
-## на будь-якій відстані (`quads_for`).
+## уже ≥ 50 % і гранування не видно. Смуга — за Чебишовим. Клітинки з водою чи берегом і ті, що зачепили
+## майданчики будівель, стелі не мають (`quads_for`). Скільки квадів клітинка бере насправді,
+## вирішує рельєф під нею (`GroundLod`): смуга лише обмежує зверху.
 const BAND_FINE: int = 1
 const BAND_MID: int = 6
 const MID_QUADS: int = 2
@@ -48,9 +49,9 @@ const FOG_NOISE_SIZE: int = 512
 const FOG_NOISE_SEED: int = 7331
 const FOG_NOISE_RANGE: Vector2 = Vector2(0.275, 0.761)
 
-## Межа трикутників кільця на карті: смуги дають 16.8 тис., решту беруть клітинки води й берега
-## густоти дошки (River — 25.3 тис., Crossroads — 18.9 тис., Ridge — 17.7 тис.); дошка 26×22
-## (56 тис.) разом із кільцем лишається в бюджеті кадру 150 тис.
+## Межа трикутників кільця за самими смугами, без підбору за рельєфом: смуги дають 16.8 тис., решту
+## беруть клітинки води й берега густоти дошки (River — 25.3 тис., Crossroads — 18.9 тис., Ridge —
+## 17.7 тис.). Справжній меш землі з дошкою й кільцем — до 30 тис. (test_ground_lod.gd).
 const RING_TRIS_MAX: int = 26000
 
 const _SKIRT_SHADER: Shader = preload("res://game/battle/shaders/haze_skirt.gdshader")
@@ -120,12 +121,14 @@ static func quads_for(cell: Vector2i, size: Vector2i, board_quads: int,
 	return MID_QUADS if dt <= BAND_MID else FAR_QUADS
 
 
+## `lod` (GroundLod.levels) — густота за рельєфом: клітинка бере меншу з неї та смуги; клітинка без
+## запису в `lod` — лише за смугою.
 ## Меш землі світу: клітинка за клітинкою, кожна — n×n квадів своєї смуги, вершини відносно
 ## центру дошки (там стоїть вузол землі). Вершина дрібної клітинки на ребрі з грубшою сусідкою несе
 ## кінці грубого ребра (UV, UV2) і позначку COLOR.a = 1: шейдер бере висоту з того самого ребра,
 ## тож Т-з'єднання не дає щілини.
 static func ground_mesh(size: Vector2i, ring: int, board_quads: int,
-		fine: Dictionary = {}) -> ArrayMesh:
+		fine: Dictionary = {}, lod: Dictionary = {}) -> ArrayMesh:
 	var centre := Vector2(size - Vector2i.ONE) * 0.5
 	var verts := PackedVector3Array()
 	var uv := PackedVector2Array()
@@ -135,33 +138,34 @@ static func ground_mesh(size: Vector2i, ring: int, board_quads: int,
 	var lo := -ring
 	for cy in range(lo, size.y + ring):
 		for cx in range(lo, size.x + ring):
-			var n: int = quads_for(Vector2i(cx, cy), size, board_quads, fine)
+			var n: int = _quads(Vector2i(cx, cy), size, board_quads, fine, lod)
 			# Сусід поза світом — як сама клітинка: там ребро нічого не стикує.
 			var side := func(d: Vector2i) -> int:
 				var c := Vector2i(cx, cy) + d
 				if c.x < lo or c.y < lo or c.x >= size.x + ring or c.y >= size.y + ring:
 					return n
-				return quads_for(c, size, board_quads, fine)
+				return _quads(c, size, board_quads, fine, lod)
 			var up: int = side.call(Vector2i(0, -1))
 			var down: int = side.call(Vector2i(0, 1))
 			var left: int = side.call(Vector2i(-1, 0))
 			var right: int = side.call(Vector2i(1, 0))
 			var o := Vector2(cx - 0.5, cy - 0.5) - centre
 			var base: int = verts.size()
+			var ax: PackedInt32Array = GroundLod.axis(board_quads, n)
 			for j in n + 1:
 				for i in n + 1:
-					var f := Vector2(float(i) / n, float(j) / n)
+					var f := Vector2(float(ax[i]), float(ax[j])) / board_quads
 					var p: Vector2 = o + f
 					verts.append(Vector3(p.x, 0.0, p.y))
 					var snap := 0.0
 					if j == 0 and up < n:
-						snap = _snap(f.x, up, o, Vector2(1, 0), Vector2.ZERO, uv, uv2)
+						snap = _snap(f.x, GroundLod.axis(board_quads, up), board_quads, o, Vector2(1, 0), Vector2.ZERO, uv, uv2)
 					elif j == n and down < n:
-						snap = _snap(f.x, down, o, Vector2(1, 0), Vector2(0, 1), uv, uv2)
+						snap = _snap(f.x, GroundLod.axis(board_quads, down), board_quads, o, Vector2(1, 0), Vector2(0, 1), uv, uv2)
 					elif i == 0 and left < n:
-						snap = _snap(f.y, left, o, Vector2(0, 1), Vector2.ZERO, uv, uv2)
+						snap = _snap(f.y, GroundLod.axis(board_quads, left), board_quads, o, Vector2(0, 1), Vector2.ZERO, uv, uv2)
 					elif i == n and right < n:
-						snap = _snap(f.y, right, o, Vector2(0, 1), Vector2(1, 0), uv, uv2)
+						snap = _snap(f.y, GroundLod.axis(board_quads, right), board_quads, o, Vector2(0, 1), Vector2(1, 0), uv, uv2)
 					else:
 						uv.append(p)
 						uv2.append(p)
@@ -190,12 +194,29 @@ static func ground_mesh(size: Vector2i, ring: int, board_quads: int,
 	return mesh
 
 
-## Кінці грубого ребра (m квадів) довкола частки s уздовж осі along; повертає позначку 1.
-static func _snap(s: float, m: int, o: Vector2, along: Vector2, edge: Vector2, uv: PackedVector2Array, uv2: PackedVector2Array) -> float:
-	var k: int = mini(floori(s * m), m - 1)
-	var a: Vector2 = o + edge + along * (float(k) / m)
-	uv.append(a)
-	uv2.append(a + along / float(m))
+static func _quads(cell: Vector2i, size: Vector2i, board_quads: int, fine: Dictionary, lod: Dictionary) -> int:
+	return mini(quads_for(cell, size, board_quads, fine), int(lod.get(cell, board_quads)))
+
+
+## Квадів на бік для кожної клітинки світу — ті самі, з якими `ground_mesh` складає меш.
+static func cell_quads(size: Vector2i, ring: int, board_quads: int, fine: Dictionary = {},
+		lod: Dictionary = {}) -> Dictionary:
+	var out: Dictionary = {}
+	for cy in range(-ring, size.y + ring):
+		for cx in range(-ring, size.x + ring):
+			var c := Vector2i(cx, cy)
+			out[c] = _quads(c, size, board_quads, fine, lod)
+	return out
+
+
+## Кінці відрізка грубого ребра (вершини `coarse` у відліках, s на клітинку) довкола частки f уздовж
+## осі along; повертає позначку 1.
+static func _snap(f: float, coarse: PackedInt32Array, s: int, o: Vector2, along: Vector2, edge: Vector2, uv: PackedVector2Array, uv2: PackedVector2Array) -> float:
+	var k: int = 0
+	while k < coarse.size() - 2 and float(coarse[k + 1]) / s <= f + 1e-6:
+		k += 1
+	uv.append(o + edge + along * (float(coarse[k]) / s))
+	uv2.append(o + edge + along * (float(coarse[k + 1]) / s))
 	return 1.0
 
 

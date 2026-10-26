@@ -197,6 +197,8 @@ func build(board: Board) -> void:
 		for sp: Dictionary in ring_map.spawns:
 			spawns.append(sp["pos"])
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields, spawns)
+	# Майданчики під будівлями змінили поле висот: меш землі лягає на нього.
+	_ground.refit(_height, _board_size, ring)
 	# Стежки публічні (§3.5): маска зносу не залежить від туману й ставиться разом із землею.
 	if _ground.material_override is ShaderMaterial and not _props.footpaths.is_empty():
 		Footpaths.apply(_ground.material_override, Footpaths.bake(_props.footpaths, _props.trodden, _board_size, _dry_grid()), _board_size)

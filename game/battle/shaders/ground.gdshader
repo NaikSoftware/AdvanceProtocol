@@ -131,7 +131,9 @@ uniform float detail_gain = 0.8;
 const int POM_STEPS = 8;
 const float METRES_PER_TILE = 8.0;
 
-varying vec3 world_pos;
+varying vec3 world_pos_v;
+// Точка у системі вузла землі: за нею фрагмент читає карти рельєфу (меш грубший за карту).
+varying vec2 height_q;
 
 #include "res://game/battle/shaders/surroundings.gdshaderinc"
 
@@ -450,69 +452,74 @@ void sample_layer(int layer, vec2 p, vec2 dpx, vec2 dpy, vec2 pom_w, float dfade
 }
 
 // Рельєф (TerrainHeight): R — висота землі у світі, G — маска води (для мокрого берега), B — кривизна.
-// Висота — білінійно за позицією вершини, як TerrainHeight.at(): на дошці вершини лежать рівно у
-// відліках (те саме, що texelFetch), а грубіші вершини кільця — між ними. Нормаль — скінченні
-// різниці на кроці одного відліку.
+// Висота вершини — відлік карти (вершини меша лежать у відліках, GroundLod); у пікселі висоту й маски
+// (G, B, A) шейдер бере з карти білінійно, а нормаль — з карти похилу `gradient_map`.
 uniform bool use_height = false;
-// Меш кільця (Surroundings.ground_mesh): вершина дрібної клітинки на ребрі з грубшою лягає на
-// пряму грубого ребра — кінці в UV і UV2, позначка COLOR.a = 1. Без цього між смугами різної
+// Меш землі (Surroundings.ground_mesh): вершина дрібної клітинки на ребрі з грубшою лягає на
+// пряму грубого ребра — кінці в UV і UV2, позначка COLOR.a = 1. Без цього між клітинками різної
 // густоти були б щілини.
 uniform bool snap_edges = false;
 uniform sampler2D height_map : filter_linear, repeat_disable;
 uniform float height_samples = 4.0;
 // Рівень води (TerrainHeight.WATER_LEVEL) для мокрого берега.
 uniform float water_level = -0.05;
-varying float shore_mask;
-varying float curvature;
-varying float bar_mask;
-varying float hill_shade;
-varying float slope_tan;
+// Карта похилу (TerrainHeight.gradient_image): R, G — (h(x - e) - h(x + e)) / 2e по X і по Z у відліках
+// карти. Нормаль, похил і затінення схилу беруться з неї й з карти висот у кожному пікселі, а не
+// з вершин: меш землі тримає лише висоту, густота його вершин вигляду рельєфу не міняє.
+uniform sampler2D gradient_map : filter_linear, repeat_disable;
 // Напрямок НА сонце (`WeatherRig.sun`): запечене світло-тінь рельєфу збігається з тінями юнітів.
 global uniform vec3 sun_dir;
 
 // Відлік карти висот у локальній точці вузла землі (центр вузла — центр карти).
-vec4 height_at(vec2 local) {
+vec2 height_uv(vec2 local) {
 	vec2 hs = vec2(textureSize(height_map, 0));
 	vec2 half_size = (hs - 1.0) / (2.0 * height_samples);
-	return textureLod(height_map, ((local + half_size) * height_samples + 0.5) / hs, 0.0);
+	return ((local + half_size) * height_samples + 0.5) / hs;
+}
+
+vec4 height_at(vec2 local) {
+	return textureLod(height_map, height_uv(local), 0.0);
 }
 
 void vertex() {
+	height_q = VERTEX.xz;
 	if (use_height) {
 		vec2 q = VERTEX.xz;
-		float e = 1.0 / height_samples;
-		vec4 hm = height_at(q);
-		VERTEX.y = hm.r;
+		VERTEX.y = height_at(q).r;
 		if (snap_edges && COLOR.a > 0.5) {
 			// Частка — з позиції, а не з `COLOR`: колір вершини 8-бітний, і частка 1/255 зсунула б
 			// точку з ребра.
 			vec2 ab = UV2 - UV;
 			VERTEX.y = mix(height_at(UV).r, height_at(UV2).r, clamp(dot(q - UV, ab) / dot(ab, ab), 0.0, 1.0));
 		}
-		float hl = height_at(q - vec2(e, 0.0)).r;
-		float hr = height_at(q + vec2(e, 0.0)).r;
-		vec3 n = normalize(vec3(hl - hr, 2.0 * e, height_at(q - vec2(0.0, e)).r - height_at(q + vec2(0.0, e)).r));
-		NORMAL = n;
-		// Та сама умовність, що в PlaneMesh: тангент уздовж +X, бінормаль = n x t (дивиться в -Z).
-		vec3 t = normalize(vec3(1.0, (hr - hl) / (2.0 * e), 0.0));
-		TANGENT = t;
-		BINORMAL = normalize(cross(n, t));
-		shore_mask = hm.g;
-		curvature = hm.b;
-		bar_mask = hm.a;
-		hill_shade = dot(n, normalize(sun_dir)) - normalize(sun_dir).y;
-		slope_tan = length(n.xz) / max(n.y, 0.01);
-	} else {
-		shore_mask = 0.0;
-		curvature = 0.0;
-		bar_mask = 0.0;
-		hill_shade = 0.0;
-		slope_tan = 0.0;
 	}
-	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	world_pos_v = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
+	vec3 world_pos = world_pos_v;
+	float shore_mask = 0.0;
+	float curvature = 0.0;
+	float bar_mask = 0.0;
+	float hill_shade = 0.0;
+	float slope_tan = 0.0;
+	if (use_height) {
+		// Висота й маски — з карти в самому пікселі, не з інтерпольованих вершин. Вузол землі лише
+		// зсунутий, тож нормаль вузла = світова, а у видовий простір її переводить VIEW_MATRIX.
+		vec4 hm = height_at(height_q);
+		vec2 gr = textureLod(gradient_map, height_uv(height_q), 0.0).rg;
+		world_pos.y = hm.r;
+		shore_mask = hm.g;
+		curvature = hm.b;
+		bar_mask = hm.a;
+		vec3 n = normalize(vec3(gr.x, 1.0, gr.y));
+		vec3 t = normalize(vec3(1.0, -gr.x, 0.0));
+		NORMAL = normalize(mat3(VIEW_MATRIX) * n);
+		TANGENT = normalize(mat3(VIEW_MATRIX) * t);
+		BINORMAL = normalize(mat3(VIEW_MATRIX) * cross(n, t));
+		hill_shade = dot(n, normalize(sun_dir)) - normalize(sun_dir).y;
+		slope_tan = length(gr);
+	}
 	vec2 p = world_pos.xz;
 	// Похідні — до гілки суцільної імли: у сусідніх пікселях, що пішли іншою гілкою, вони не
 	// визначені. Текстури в гілці беруть їх звідси (textureGrad) або явний міп. У гілці лишається

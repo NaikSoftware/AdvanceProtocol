@@ -101,6 +101,7 @@ var _kind_image: Image
 ## а форма меша від виду клітинок не залежить, тож він не складається вдруге.
 var _ring_mesh: ArrayMesh
 var _ring_mesh_height: TerrainHeight
+var _ring_mesh_revision: int = -1
 ## Пора року: `summer`, `early` (рання осінь); порожня — пізня осінь, звичайні файли.
 ## Для шару, що має файл macro/<шар>_albedo_<n>.<пора>.png, береться він; решта шарів — як є.
 ## Ставити до першого build(): масиви текстур вантажаться один раз.
@@ -134,10 +135,7 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 
 	var size := Vector2i(board.width - 2 * ring, board.height - 2 * ring)
 	if height != null and ring > 0:
-		if _ring_mesh_height != height:
-			_ring_mesh = Surroundings.ground_mesh(size, ring, height.samples, height.bank_cells())
-			_ring_mesh_height = height
-		mesh = _ring_mesh
+		_fit_mesh(height, size, ring)
 	else:
 		var plane := PlaneMesh.new()
 		plane.size = Vector2(w, h)
@@ -146,10 +144,10 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 			plane.subdivide_width = height.cols - 2
 			plane.subdivide_depth = height.rows - 2
 		mesh = plane
-	if height != null:
-		custom_aabb = AABB(Vector3(-w * 0.5, height.min_height(), -h * 0.5), Vector3(w, height.max_height() - height.min_height(), h))
-	else:
-		custom_aabb = AABB()
+		if height != null:
+			custom_aabb = AABB(Vector3(-w * 0.5, height.min_height(), -h * 0.5), Vector3(w, height.max_height() - height.min_height(), h))
+		else:
+			custom_aabb = AABB()
 	position = Vector3((size.x - 1) * 0.5, 0.0, (size.y - 1) * 0.5)
 	layers = 1
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -203,9 +201,35 @@ func build(board: Board, margin: int, surface: PackedByteArray = PackedByteArray
 	mat.set_shader_parameter("use_height", height != null)
 	if height != null:
 		mat.set_shader_parameter("height_map", height.texture())
+		mat.set_shader_parameter("gradient_map", height.gradient_texture())
 		mat.set_shader_parameter("height_samples", float(height.samples))
 		mat.set_shader_parameter("water_level", TerrainHeight.WATER_LEVEL)
 	material_override = mat
+
+
+## Меш світу з кільцем під поточну висоту. Складений раз на стан поля: підірваний міст форми землі
+## не міняє, а майданчики будівель (TerrainHeight.finish_pads) — міняють, і тоді меш добирається знову.
+func _fit_mesh(height: TerrainHeight, size: Vector2i, ring: int) -> void:
+	if _ring_mesh_height != height or _ring_mesh_revision != height.revision:
+		# Береги й клітинки з майданчиками — з густотою за полем, решта — як при зведенні поля.
+		var fine: Dictionary = height.bank_cells()
+		var lod: Dictionary = height.mesh_quads().duplicate()
+		var pads: Dictionary = height.pad_cells()
+		lod.merge(GroundLod.levels_of(height, pads), true)
+		fine.merge(pads)
+		_ring_mesh = Surroundings.ground_mesh(size, ring, height.samples, fine, lod)
+		_ring_mesh_height = height
+		_ring_mesh_revision = height.revision
+	mesh = _ring_mesh
+	var w: int = size.x + 2 * ring
+	var h: int = size.y + 2 * ring
+	custom_aabb = AABB(Vector3(-w * 0.5, height.min_height(), -h * 0.5), Vector3(w, height.max_height() - height.min_height(), h))
+
+
+## Після того, як майданчики будівель змінили поле висот: меш під нього, без перебудови матеріалу.
+func refit(height: TerrainHeight, board_size: Vector2i, ring: int) -> void:
+	if height != null and ring > 0 and mesh != null:
+		_fit_mesh(height, board_size, ring)
 
 
 func kind_image() -> Image:

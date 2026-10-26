@@ -7,12 +7,13 @@ extends RefCounted
 ##
 ## Масштаб: клітинка = 8 м = 1.0 світу, тож 1 м = M = 0.125.
 ## Карта береться раз за карту з виду клітинок + шуму із seed (ім'я карти) і лежить у
-## полі відліків, `samples` на клітинку; ці ж відліки — вершини меша землі й текстура RGBH,
-## тож CPU і GPU бачать одну поверхню.
+## полі відліків, `samples` на клітинку; ці ж відліки — вершини меша землі й текстура RGBH.
+## У світі з кільцем поле зведене до поверхні меша (GroundLod.surface), тож CPU і GPU бачать
+## одну поверхню, а нормаль і затінення схилу беруться з гладкого поля (`gradient_image`).
 
 const M: float = 0.125
-## Відліків на клітинку за замовчуванням; для великих карт bake() зменшує, щоб меш землі
-## лишився в бюджеті трикутників (§8, ~50k на всю землю).
+## Відліків на клітинку за замовчуванням; для великих карт без кільця bake() зменшує, щоб рівномірний
+## меш землі лишився в бюджеті трикутників (§8). Меш світу з кільцем густоту береже за рельєфом (GroundLod).
 const SAMPLES_PER_TILE: int = 7
 const MAX_GROUND_TRIS: int = 58000
 ## Вода на 1.25 м нижче верху берега (1.0-1.5 м): берег стоїть над водою ≥ 3 м схилу.
@@ -123,6 +124,13 @@ var samples: int = SAMPLES_PER_TILE
 var cols: int = 0
 var rows: int = 0
 var _h: PackedFloat32Array = PackedFloat32Array()
+## Рельєф у повній деталізації: з нього кривизна й похил для шейдера. У світі з кільцем `_h` — поверхня
+## меша землі (GroundLod.surface), що вкладається в густину його вершин, а `_hd` зберігає
+## гладке поле, з якого меш знято, тож нормаль і затінення схилу не стають гранями меша.
+var _hd: PackedFloat32Array = PackedFloat32Array()
+var _hd_base: PackedFloat32Array = PackedFloat32Array()
+## Густота меша землі після зведення поля (GroundLod): клітинка -> квадів на бік.
+var _quads: Dictionary = {}
 var _water: PackedFloat32Array = PackedFloat32Array()
 var _curv: PackedFloat32Array = PackedFloat32Array()
 ## Гладка вісь річки, з якої взято відстань до урізу; null — води нема.
@@ -146,6 +154,7 @@ var _wgrid: PackedByteArray = PackedByteArray()
 ## Ширина кільця, на яку зсунуті координати світу під час bake (0 — кільця нема).
 var _shift: int = 0
 var _texture: ImageTexture = null
+var _gradient_texture: ImageTexture = null
 ## Висоти без майданчиків будівель: PropLayer ставить майданчики заново щоразу, як будує пропси.
 var _h_base: PackedFloat32Array = PackedFloat32Array()
 ## Сліди будівель (координати дошки) і висота кожного майданчика.
@@ -160,6 +169,8 @@ var _pad_blend: PackedFloat32Array = PackedFloat32Array()
 var _finished_pads: Array[Rect2] = []
 ## Скільки разів майданчики перезалили текстуру висот (перевірка в тестах).
 var texture_updates: int = 0
+## Лічильник змін поля відліків після майданчиків: меш землі (GroundLod) перебудовується, коли він інший.
+var revision: int = 0
 
 
 ## seed — з імені карти (BoardView.relief_seed); та сама карта дає той самий рельєф.
@@ -181,7 +192,49 @@ static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedBy
 	t._bake(board, seed_value, surface)
 	if ring > 0:
 		t._to_board_coords(ring)
+		t._conform(ring)
 	return t
+
+
+## Зводить поле висот до поверхні меша землі: висота, на якій стоять юніти й пропси, вода й камера, —
+## та сама, що малює меш (GroundLod), а не гладке поле, з якого меш знято. Береговим клітинкам
+## допуск вужчий (GroundLod.TOL_BANK): ними йде уріз води.
+func _conform(ring: int) -> void:
+	var size := Vector2i(board_width, board_height)
+	var fine: Dictionary = bank_cells()
+	_quads = Surroundings.cell_quads(size, ring, samples, fine, GroundLod.levels(self, size, ring, fine))
+	_h = GroundLod.surface(_h, cols, samples, margin, size, ring, _quads)
+	_h_base = _h.duplicate()
+	_bounds()
+
+
+## Квадів на бік кожної клітинки меша землі, на яких поле зведено до поверхні (порожньо без кільця).
+func mesh_quads() -> Dictionary:
+	return _quads
+
+
+## Клітинки (координати дошки), де майданчики змінили поле порівняно зі зведеним до меша: лише там
+## меш мусить густішати; решта вже лежить на ньому.
+func pad_cells() -> Dictionary:
+	if _pads_dirty:
+		_apply_pads()
+	var out: Dictionary = {}
+	for k in _h.size():
+		if _h[k] != _h_base[k]:
+			var i: int = k % cols
+			var j: int = k / cols
+			for cx: int in [i / samples, (i - 1) / samples] if i % samples == 0 else [i / samples]:
+				for cz: int in [j / samples, (j - 1) / samples] if j % samples == 0 else [j / samples]:
+					out[Vector2i(cx - margin, cz - margin)] = true
+	return out
+
+
+func _bounds() -> void:
+	_min = INF
+	_max = -INF
+	for v in _h:
+		_min = minf(_min, v)
+		_max = maxf(_max, v)
 
 
 func _to_board_coords(ring: int) -> void:
@@ -265,6 +318,13 @@ func bank_cells() -> Dictionary:
 	return out
 
 
+## Поле висот (масив відліків, не копія): його читає GroundLod, щоб обрати густоту меша.
+func heights() -> PackedFloat32Array:
+	if _pads_dirty:
+		_apply_pads()
+	return _h
+
+
 ## Одиничний нормаль поверхні (скінченні різниці на кроці одного відліку).
 func normal_at(x: float, z: float) -> Vector3:
 	var e: float = 1.0 / float(samples)
@@ -294,6 +354,31 @@ func texture() -> ImageTexture:
 	if _texture == null:
 		_texture = ImageTexture.create_from_image(image())
 	return _texture
+
+
+## Похил для шейдера землі: RG16F, R = (h(x - e) - h(x + e)) / 2e по X, G — те саме по Z, e — один
+## відлік (за краєм карти — крайовий). Піксель (i, j) — той самий відлік, що в image().
+func gradient_image() -> Image:
+	if _pads_dirty:
+		_apply_pads()
+	var px := PackedFloat32Array()
+	px.resize(cols * rows * 2)
+	var k2: float = float(samples) * 0.5
+	for j in rows:
+		for i in cols:
+			var k: int = j * cols + i
+			px[k * 2] = (_hd[j * cols + maxi(i - 1, 0)] - _hd[j * cols + mini(i + 1, cols - 1)]) * k2
+			px[k * 2 + 1] = (_hd[maxi(j - 1, 0) * cols + i] - _hd[mini(j + 1, rows - 1) * cols + i]) * k2
+	var img := Image.create_from_data(cols, rows, false, Image.FORMAT_RGF, px.to_byte_array())
+	img.convert(Image.FORMAT_RGH)
+	return img
+
+
+## gradient_image() як текстура, одна на карту, як texture().
+func gradient_texture() -> ImageTexture:
+	if _gradient_texture == null:
+		_gradient_texture = ImageTexture.create_from_image(gradient_image())
+	return _gradient_texture
 
 
 ## Світова точка, де промінь вперше входить у поверхню, або null (промінь не йде вниз чи
@@ -590,23 +675,26 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 			_water[k] = clampf(1.0 - d / run, 0.0, 1.0) if has_water else 0.0
 			_min = minf(_min, v)
 			_max = maxf(_max, v)
-	_bake_curvature()
+	_bake_curvature(_h)
 	_bake_decks(board)
 	_h_base = _h.duplicate()
+	_hd_base = _h.duplicate()
+	_hd = _h.duplicate()
 
 
 ## Кривизна: висота мінус її розмиття на ~1.2 клітинки, у масштабі 1.5 м.
-func _bake_curvature() -> void:
+func _bake_curvature(src: PackedFloat32Array) -> void:
 	var fs: float = float(samples)
-	var soft: PackedFloat32Array = _blur(_h, 1.2 * fs, 1.2 * fs)
+	var soft: PackedFloat32Array = _blur(src, 1.2 * fs, 1.2 * fs)
 	_curv.resize(cols * rows)
-	for k in _h.size():
-		_curv[k] = clampf((_h[k] - soft[k]) / _CURV_RANGE, -1.0, 1.0)
+	for k in src.size():
+		_curv[k] = clampf((src[k] - soft[k]) / _CURV_RANGE, -1.0, 1.0)
 
 
 ## Знімає всі майданчики будівель: рельєф — як щойно запечений.
 func clear_pads() -> void:
 	_h = _h_base.duplicate()
+	_hd = _hd_base.duplicate()
 	_pads.clear()
 	_pad_levels.clear()
 	_pads_dirty = false
@@ -673,6 +761,7 @@ func _apply_pads() -> void:
 					dev = maxf(dev, absf(_h_base[j * cols + i] - _pad_levels[a]))
 		_pad_blend[a] = clampf(_PAD_SLOPE * dev, _PAD_BLEND, _PAD_BLEND_MAX)
 	_h = _h_base.duplicate()
+	_hd = _hd_base.duplicate()
 	# Ядра спершу: відлік ядра — точно висота тераси, і спад сусіднього майданчика його не зрушить.
 	var core := PackedByteArray()
 	core.resize(_h.size())
@@ -688,9 +777,12 @@ func _apply_pads() -> void:
 					var dist: float = _rect_dist(r, Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs))
 					if pass_core and dist == 0.0:
 						_h[k] = _pad_levels[a]
+						_hd[k] = _pad_levels[a]
 						core[k] = 1
 					elif not pass_core and dist < _pad_blend[a]:
-						_h[k] = lerpf(_h[k], _pad_levels[a], 1.0 - smoothstep(0.0, _pad_blend[a], dist))
+						var w: float = 1.0 - smoothstep(0.0, _pad_blend[a], dist)
+						_h[k] = lerpf(_h[k], _pad_levels[a], w)
+						_hd[k] = lerpf(_hd[k], _pad_levels[a], w)
 
 
 ## Відстань від точки до прямокутника (0 усередині).
@@ -725,16 +817,15 @@ func finish_pads() -> void:
 	if _pads == _finished_pads:
 		return
 	_finished_pads = _pads.duplicate()
-	_bake_curvature()
+	_bake_curvature(_hd)
 	_mark_cut_feet()
-	_min = INF
-	_max = -INF
-	for v in _h:
-		_min = minf(_min, v)
-		_max = maxf(_max, v)
+	_bounds()
 	if _texture != null:
 		_texture.update(image())
 		texture_updates += 1
+	if _gradient_texture != null:
+		_gradient_texture.update(gradient_image())
+	revision += 1
 
 
 ## Підніжжя зрізу з горішнього боку майданчика — смуга ~0.5 клітинки вологого темнішого ґрунту
