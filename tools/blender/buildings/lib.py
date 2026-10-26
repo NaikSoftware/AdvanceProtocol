@@ -578,27 +578,27 @@ def mats():
         "char": make_material("char", flat=(0.03, 0.028, 0.026)),
         "bitumen": make_material("bitumen", "Asphalt031", 1.0, g(0.38), patch=((0.04, 0.045, 0.04), 0.2)),
         # шифер: смуги листів ~1.1 м вздовж коника і хвиля кроком 15 см униз по скату
-        "fc_roof": roof_mat("fc_roof", "asb", (0.58, 0.57, 0.53), "x", "y"),
-        "fc_roof_x": roof_mat("fc_roof_x", "asb", (0.52, 0.52, 0.49), "y", "x"),
+        "fc_roof": roof_mat("fc_roof", "asb", (0.58, 0.57, 0.53), "x", "y", moss=False),
+        "fc_roof_x": roof_mat("fc_roof_x", "asb", (0.52, 0.52, 0.49), "y", "x", moss=False),
         "wall_silicate": make_material("wall_silicate", "Bricks105", 1.0, recolor=(1.55, 1.50, 1.36), contrast=1.4, streak=0.8, base_dirt=0.5, bump=0.012),
         "clad_wall": make_material("clad_wall", flat=srgb_lin((0.56, 0.36, 0.30)), seams=[("h", 1.0, 0.04, 0.4)], seam_col=srgb_lin((0.30, 0.18, 0.15)), corr=("h", 0.2, 0.01), streak=1.2, streak_col=(0.16, 0.07, 0.035), base_dirt=0.5, rough=0.6),
         # профнастил даху: ребра тільки від карниза до коника
-        "clad_roof": roof_mat("clad_roof", "corr", (0.62, 0.61, 0.57), "x", "y"),
+        "clad_roof": roof_mat("clad_roof", "corr", (0.62, 0.61, 0.57), "x", "y", moss=False),
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
         "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
         "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.10), patch=((0.02, 0.02, 0.02), 0.3)),
         "clad_burnt": make_material("clad_burnt", "CorrugatedSteel005", 1.0, (0.12, 0.12, 0.11), streak=1.0),
         "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.22, 0.34, 0.29), seams=[("z", 0.25, 0.03, 0.5)], corr=("z", 0.25, 0.008), base_dirt=0.5),
-        "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.70, 0.69, 0.66), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], corr=("z", 0.25, 0.01), streak=1.0, streak_col=(0.20, 0.10, 0.05), base_dirt=0.6, rough=0.55),
-        "silo_concrete": make_material("silo_concrete", "Concrete034", 1.5, (0.62, 0.59, 0.53), seams=[("z", 1.5, 0.03, 0.2)], streak=1.2, base_dirt=0.6),
+        "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.74, 0.69, 0.60), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], corr=("z", 0.25, 0.01), streak=1.0, streak_col=(0.20, 0.10, 0.05), base_dirt=0.6, rough=0.55),
+        "silo_concrete": make_material("silo_concrete", "Concrete034", 1.5, (0.68, 0.60, 0.47), seams=[("z", 1.5, 0.03, 0.2)], streak=1.2, base_dirt=0.6),
         # цегла: червоно-коричнева ~RGB 110/70/58, лише яскравість із текстури
         "brick": make_material("brick", "Bricks105", 1.3, recolor=(0.50, 0.20, 0.135), streak=0.7, base_dirt=0.4, bump=0.012, patch=((0.10, 0.06, 0.045), 0.4), patch_scale=0.6),
         # сталь: плями іржі лише великі (>3 м), плюс потьоки під швами
         "steel_paint": make_material("steel_paint", flat=(0.15, 0.19, 0.16), seams=[("z", 1.5, 0.05, 0.3)], base_dirt=0.3, patch=((0.11, 0.14, 0.12), 0.5), patch_scale=0.7, runs=(3.0, (0.30, 0.10, 0.04), 1.0, 18.0)),
         "metal_dark": make_material("metal_dark", "MetalPlates013", 1.0, g(0.8), streak=0.5),
         "rust": make_material("rust", "Rust004", 1.0, g(1.0)),
-        "galv_cone": make_material("galv_cone", "CorrugatedSteel005", 1.0, (0.62, 0.61, 0.58), seams=[("ang8", 0.9, 0.05, 0.5)], streak=0.6, streak_col=(0.20, 0.10, 0.05), base_dirt=0.1, rough=0.55),
+        "galv_cone": make_material("galv_cone", "CorrugatedSteel005", 1.0, (0.66, 0.62, 0.54), seams=[("ang8", 0.9, 0.05, 0.5)], streak=0.6, streak_col=(0.20, 0.10, 0.05), base_dirt=0.1, rough=0.55),
         "clad_inner": make_material("clad_inner", "CorrugatedSteel005", 1.0, (0.16, 0.17, 0.16), base_dirt=0.5),
         "pvc": make_material("pvc", flat=(0.40, 0.40, 0.38)),
         "pv": make_material("pv", flat=(0.07, 0.085, 0.12), seams=[("x", 1.0, 0.03, 0.7), ("y", 1.7, 0.03, 0.7)], patch=((0.08, 0.09, 0.115), 0.22), patch_scale=0.5),
@@ -746,21 +746,24 @@ ROOFS = {"asb": ("asb", (0.60, 0.59, 0.55)), "asb_old": ("asb", (0.50, 0.50, 0.4
          "green": ("corr", (0.42, 0.54, 0.42)), "ochre": ("corr", (0.72, 0.60, 0.38))}
 
 
-def roof_mat(name, kind, srgb, rows_axis, other, eave=3.0, row=0.34):
+def roof_mat(name, kind, srgb, rows_axis, other, eave=3.0, row=0.34, moss=True):
+    # streak низький: шум патьоків тягнеться лише по висоті, тож на пологому даху він лягав ізотропними хмарами
     """Матеріал даху за видом (asb | tile | corr) і кольором sRGB. rows_axis — вісь, уздовж якої йдуть ряди й нахлести
     (поперек схилу), other — вздовж якої йдуть хвилі й шви листів."""
     rl = srgb_lin(srgb)
     mosscol, lichen = (0.07, 0.10, 0.035), (0.20, 0.19, 0.11)
     dark = tuple(c * 0.55 for c in rl)
+    if not moss:                                       # висоту карниза не знаємо (ферми): смуга моху лягла б плямами посеред схилу
+        eave = -50.0
     if kind == "asb":            # листи 1.1 x 1.75 м: нахлест — тінь, лишайник плямами 0.5-1.5 м, патьоки вниз по скату, мох густішає до карниза
         return make_material(name, "Concrete034", 1.2, tint=tuple(c / 0.48 for c in rl), sat=0.25, seams=[(rows_axis, 1.6, 0.05, 0.5), (other, 1.1, 0.03, 0.3)], seam_col=dark,
-                             streak=1.0, seam_bump=0.0, bump=0.002, patch=[(lichen, 0.05)], patch_scale=1.6, moss=(mosscol, eave - 0.4, eave + 1.2),
+                             streak=0.25, seam_bump=0.0, bump=0.002, patch=[(lichen, 0.05)], patch_scale=1.6, moss=(mosscol, eave - 0.4, eave + 1.2),
                              cells=(other, 1.1, rows_axis, 1.6, 0.14), waves=(other, 0.177, 0.012), rough=0.9, rvar=0.12)
     if kind == "tile":           # ряди черепиці: м'яка хвиля й тінь під кожним рядом; уступ-пилка давав світлі лінії-«плед»
-        return make_material(name, flat=rl, seams=[(rows_axis, row, 0.05, 0.35)], seam_col=dark, streak=0.6, seam_bump=0.0,
+        return make_material(name, flat=rl, seams=[(rows_axis, row, 0.05, 0.35)], seam_col=dark, streak=0.25, seam_bump=0.0,
                              patch=[((0.16, 0.07, 0.035), 0.02)], patch_scale=0.4, moss=(mosscol, eave - 0.4, eave + 0.8),
                              waves=(rows_axis, row, 0.01), rough=0.5, rvar=0.12)
-    return make_material(name, flat=rl, seams=[(other, 1.1, 0.04, 0.45), (rows_axis, 2.0, 0.03, 0.3)], seam_col=dark, streak=0.7, seam_bump=0.0,
+    return make_material(name, flat=rl, seams=[(other, 1.1, 0.04, 0.45), (rows_axis, 2.0, 0.03, 0.3)], seam_col=dark, streak=0.25, seam_bump=0.0,
                          patch=[((0.17, 0.075, 0.035), 0.05)], patch_scale=0.45, moss=(mosscol, eave - 0.4, eave + 0.8),
                          waves=(other, 0.2, 0.012), rough=0.55, rvar=0.15)
 
