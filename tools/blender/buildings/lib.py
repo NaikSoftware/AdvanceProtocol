@@ -615,6 +615,25 @@ class Builder:
         self.wtone = self.bm.loops.layers.color.new("wtone")
         import random
         self.rnd = random.Random(5)
+        self.markers = []                      # (імʼя, (x, y, z) у метрах) → порожні вузли GLB, напр. chimney_top
+
+    def chimney(self, cx, cy, z0, s, h, mat, cap="step", t=0.11, depth=0.6):
+        """Димар з відкритим каналом: цегляні стінки, бетонна шапка-рамка, темна закопчена шахта.
+        Виводить маркер chimney_top над шапкою — туди гра чіпляє легкий дим."""
+        zt, hi, ow, rim = z0 + h, s - 2 * t, 0.07, 0.1
+        k = (s - t) / 2
+        for bx, by, sx, sy in ((cx, cy - k, s, t), (cx, cy + k, s, t), (cx - k, cy, t, hi), (cx + k, cy, t, hi)):
+            self.box(bx, by, z0, sx, sy, h, mat, top=cap)
+        so, e = s + 2 * ow, t + ow                     # шапка виступає на 7 см з усіх боків, отвір лишається
+        ko = (so - e) / 2
+        for bx, by, sx, sy in ((cx, cy - ko, so, e), (cx, cy + ko, so, e), (cx - ko, cy, e, so - 2 * e), (cx + ko, cy, e, so - 2 * e)):
+            self.box(bx, by, zt, sx, sy, rim, cap, top=cap)
+        zf, w = zt - depth, 0.03
+        self.box(cx, cy, zf, hi, hi, 0.02, "dark")      # дно шахти
+        for bx, by, sx, sy in ((cx, cy - (hi - w) / 2, hi, w), (cx, cy + (hi - w) / 2, hi, w),
+                               (cx - (hi - w) / 2, cy, w, hi - 2 * w), (cx + (hi - w) / 2, cy, w, hi - 2 * w)):
+            self.box(bx, by, zf, sx, sy, depth + rim - 0.015, "soot")   # кіптява на стінках каналу
+        self.markers.append(("chimney_top", (cx, cy, zt + rim)))
 
     def _slot(self, name):
         if name not in self.slots:
@@ -1704,6 +1723,11 @@ def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footp
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30))
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
+    for mn, p in b.markers:                           # ті самі зсув і масштаб, що й у меша
+        em = bpy.data.objects.new(mn, None)
+        em.location = ((p[0] - cx) / TILE, (p[1] - cy) / TILE, (p[2] - min(zs)) / TILE)
+        bpy.context.scene.collection.objects.link(em)
+        em.select_set(True)
     glb = os.path.join(out_dir, name + ".glb")
     bpy.ops.export_scene.gltf(filepath=glb, export_format="GLB", use_selection=True, export_apply=True, export_yup=True,
                               export_materials="EXPORT", export_extras=True, export_image_format="AUTO")
@@ -1738,7 +1762,7 @@ def verify(path, tri_limit, mean_l, footprint):
     assert -fx <= lo[0] and hi[0] <= fx and -fz <= lo[2] and hi[2] <= fz, "меш поза слідом"
     ex = [n.get("extras") for n in g["nodes"] if n.get("extras")] + [m.get("extras") for m in g["meshes"] if m.get("extras")]
     assert any("footprint_tiles" in e for e in ex), "нема footprint_tiles у extras"
-    assert not [n for n in g["nodes"] if {"translation", "rotation", "scale", "matrix"} & n.keys()], "трансформ на вузлі"
+    assert not [n for n in g["nodes"] if {"translation", "rotation", "scale", "matrix"} & n.keys() and not n.get("name", "").startswith("chimney_top")], "трансформ на вузлі"
     if tri_limit:
         assert tris <= tri_limit, f"{tris} трикутників > {tri_limit}"
     res = dict(file=os.path.basename(path), tris=tris, size_tiles=(round(hi[0] - lo[0], 3), round(hi[1] - lo[1], 3), round(hi[2] - lo[2], 3)),
