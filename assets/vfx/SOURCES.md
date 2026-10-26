@@ -13,8 +13,7 @@ Domain) so you are free to use them however you want!". Each archive also carrie
 
 | pack (as listed on the page) | size / frames | used for |
 | --- | --- | --- |
-| Ground Explosion (`GroundExplosionVDB.zip`) | 661 MB, 200 frames, channels density + flames | `explosion.png` (frames 6–132 step 2), `smoke_column.png` / `smoke_column_thin.png` (smoke only, frames 66–129), `dirt_burst.png` (smoke only, brown albedo, frames 4–130 step 2), `impact_flash.png` (frames 4–34 step 2, small scale) |
-| Small Camp Fire (`SmallCampfireVDB.zip`) | 59 MB, 200 frames, channels density + flames | `wreck_fire.png` (frames 40–167, 128 frames cross-faded into a 64-frame loop) |
+| Ground Explosion (`GroundExplosionVDB.zip`) | 661 MB, 200 frames, channels density + flames | `explosion.png` (frames 16–142 step 2, hottest in the first frames, rises, fades to empty over the last 12 with an eased start), `smoke_column.png` / `smoke_column_thin.png` (smoke only, frames 66–129), `dirt_burst.png` (smoke only, brown albedo, frames 20–146 step 2, rises, fades to empty over the last 12 with an eased start), `impact_flash.png` (frames 12–42 step 2, small scale) |
 
 Every other pack on the page (Aerial Explosion, Tornado Looping, Fire Plume, Cloud Pack, Grenade Dust Impact,
 Dust Shockwave, Industrial Chimney Smoke, Building Implosion, Gasoline Explosion, High-Res Smoke Plume, Simple
@@ -33,16 +32,31 @@ pitch). The VDB files themselves are not in the repository.
 | --- | --- | --- | --- |
 | `smoke_column.png` | rolling dark smoke, plays once and ends empty (loops without a seam) | 64, 8×8 × 192 px, 4 fps, cell ≈ 22 m (the cloud fills ≈ 19 m, scale the quad) | Ground Explosion VDB |
 | `smoke_column_thin.png` | the same, lighter and thinner (peak alpha 0.35) for the thinning stages | 64, 8×8 × 192 px, 4 fps | Ground Explosion VDB |
-| `wreck_fire.png` | low flames, seamless loop | 64, 8×8 × 192 px, 8 fps, cell ≈ 2.0 m | Small Camp Fire VDB |
-| `explosion.png` | fireball then dark smoke, one-shot | 64, 8×8 × 192 px, 48 fps, cell ≈ 22 m | Ground Explosion VDB |
-| `dirt_burst.png` | brown earth and dust cloud, no fire, one-shot | 64, 8×8 × 192 px, 40 fps, cell ≈ 13.7 m | Ground Explosion VDB (density only, brown albedo) |
-| `impact_flash.png` | muzzle / impact flash into a small fireball, ends empty | 16, 4×4 × 192 px, 60 fps, cell ≈ 6.7 m | Ground Explosion VDB (early frames) |
+| `explosion.png` | fireball then dark smoke, one-shot | 64, 8×8 × 256 px (2048²), 48 fps, cell ≈ 21.7 m | Ground Explosion VDB |
+| `dirt_burst.png` | brown earth and dust cloud, no fire, one-shot | 64, 8×8 × 256 px (2048²), 40 fps, cell ≈ 13.4 m | Ground Explosion VDB (density only, brown albedo) |
+| `impact_flash.png` | muzzle / impact flash into a small fireball, ends empty | 16, 4×4 × 192 px, 60 fps, cell ≈ 9.2 m | Ground Explosion VDB (early frames) |
 | `armour_sparks.png` | 4×2 sheet of 7 spark streaks (8th cell empty), tinted `#FFE6B0` with a white-hot core | 8 cells × 256 px | Kenney Particle Pack 1.1, `PNG (Transparent)/trace_01…trace_07.png`, resized 512→256 and tinted; <https://kenney.nl/assets/particle-pack>; CC0 1.0 (`License.txt` in the pack) |
 | `smoke_puff.png` | 256², white soft puff used by the main menu | **UNKNOWN SOURCE.** Added with the menu shell (first commit `766c8f5`). It matches no file in Kenney Particle Pack or Kenney Smoke Particles, and nobody recorded where it came from. SHA-256 `0cc39934418048c69ed815a3150f1feb03a344dd30a7b90cc361bb0554068522`. Replace it, or establish the source, before release | **unknown** |
+
+## Cell size and blast point
+
+Cell width is the real width of one cell in metres (the camera frame of the render; 1 tile = 8 m). The blast
+point is where the effect starts, as a fraction of the cell from the left and from the top, at frame 0. The
+volumes then rise inside the cell (the explosion's top rises by about a quarter of the cloud height between
+frames 16 and 50), so anchor the quad on the blast point and let the cloud lift out of it.
+
+| atlas | cell | cell width (m) | blast point x from left | blast point y from top | texels across the ball at peak |
+| --- | --- | --- | --- | --- | --- |
+| `explosion.png` | 256 px, 8×8 (2048²) | 21.7 | 0.508 | 0.866 | 197 |
+| `dirt_burst.png` | 256 px, 8×8 (2048²) | 13.4 | 0.495 | 0.882 | 190 |
+| `impact_flash.png` | 192 px, 4×4 (768²) | 9.2 | 0.479 | 0.788 | 112 |
+| `smoke_column.png`, `smoke_column_thin.png` | 192 px, 8×8 (1536²) | 22.1 | about 0.5 | about 0.94 (base of the cloud, estimate) | – |
+
+All atlases import as VRAM-compressed (`compress/mode=2`) with mipmaps on.
 
 ## Rebuild
 
 `tools/blender/vfx/render_all.sh` holds the exact render arguments of every atlas (Blender 5.2 in batch mode,
-never the MCP) and then packs them with `tools/blender/vfx/assemble.py`. Unpack the two packs above under one
-folder (`VDB`), pick a scratch folder outside `/tmp` (`WORK`, a few GB) and an output folder (`OUT`):
+never the MCP) and then packs them with `tools/blender/vfx/assemble.py`. Unpack the Ground Explosion pack above under
+one folder (`VDB`), pick a scratch folder outside `/tmp` (`WORK`, a few GB) and an output folder (`OUT`):
 `VDB=… WORK=… OUT=… tools/blender/vfx/render_all.sh`.
