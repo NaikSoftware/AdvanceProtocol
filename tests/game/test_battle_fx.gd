@@ -232,7 +232,10 @@ func test_muzzle_flash_sits_at_the_barrel_tip() -> void:
 func test_tank_muzzle_has_core_powder_along_the_barrel_and_ground_dust() -> void:
 	var shooter := Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(2, 0, 3))
 	var m: Node3D = BattleFx.spawn_muzzle(parent, shooter, BattleFx.Weapon.TANK_GUN, 5)
-	assert_not_null(m.get_node("Hot"))
+	var hot := _mat(m.get_node("Hot"))
+	assert_almost_eq(float(hot.get_shader_parameter("size")) * 8.0, 2.0, 1e-6, "ядро 1,5–2 м")
+	assert_eq(hot.get_shader_parameter("yellow"), 1.0, "жовто-помаранчеве")
+	assert_true(BattleFx.MUZZLE_HOT_SEC >= 0.045 and BattleFx.MUZZLE_HOT_SEC <= 0.06, "три кадри, ~50 мс")
 	var axis: Vector3 = -shooter.basis.z
 	var powder: Array[Node] = m.find_children("Powder*", "MeshInstance3D", true, false)
 	assert_true(powder.size() >= 3 and powder.size() <= 4)
@@ -244,11 +247,12 @@ func test_tank_muzzle_has_core_powder_along_the_barrel_and_ground_dust() -> void
 		prev = along
 		sizes[_mat(p).get_shader_parameter("size")] = true
 		assert_almost_eq((_mat(p).get_shader_parameter("tint") as Vector4).x, 0.254, 1e-3, "сіро-бежевий #8a8274")
+		assert_eq(_mat(p).get_shader_parameter("feather"), 1.0, "розмитий край")
 	assert_gt(sizes.size(), 1, "клуби різного розміру")
 	var dust := m.get_node("Dust") as MeshInstance3D
 	assert_almost_eq(float(_mat(dust).get_shader_parameter("size")), 10.0 / 8.0, 1e-6)
 	var world: Vector3 = m.position + dust.position
-	assert_almost_eq(world.y, 0.05, 0.01, "лежить на землі")
+	assert_almost_eq(world.y, 0.03 + 0.3 / 8.0, 0.005, "висить на 0,3 м над землею")
 	assert_almost_eq(Vector2(world.x, world.z), Vector2(2.0, 3.0) + Vector2(axis.x, axis.z) * 0.3, Vector2.ONE * 0.01, "під корпусом і перед ним, а не довкола дула")
 	assert_true(_mat(dust).shader.code.contains("vec3(VERTEX.x, 0.0, VERTEX.y)"), "пласкій, а не в камеру")
 	_step_all(2.6)
@@ -381,7 +385,7 @@ func test_hot_cores_are_soft_gradients() -> void:
 
 ## Розміри влучань, діаметр клуби в метрах: по броні — клуба з даху, по ґрунту — викид землі.
 func test_hit_sizes_follow_the_weapon_and_the_target() -> void:
-	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.AUTOCANNON, true), 2.5)
+	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.AUTOCANNON, true), 3.0)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.TANK_GUN, true), 5.0)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.TANK_GUN, false), 6.0)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.SHELL, false), 12.0)
@@ -455,11 +459,13 @@ func test_smoke_spares_visible_neighbours() -> void:
 	assert_almost_eq(occ.x, 1.0, 1e-6)
 	assert_almost_eq(occ.w, BattleFx.OCCLUDE_R, 1e-6)
 	assert_eq(smoke.get_shader_parameter("occ1"), Vector4.ZERO)
-	assert_true(smoke.shader.code.contains("mix(1.0, %s, occ_k)" % str(BattleFx.OCCLUDE_ALPHA)))
 	assert_true(smoke.shader.code.contains("occ[i].w + %s" % str(BattleFx.OCCLUDE_FEATHER)), "край розмитий")
+	assert_true(smoke.shader.code.contains("min(a, occ_cap)"), "над сусідом — без м'якого краю за глибиною, що вирізав дірку")
 	for layer: String in ["Ball", "Smoke"]:
 		assert_eq(_mat(boom.get_node(layer)).get_shader_parameter("occ_n"), 1, "%s — теж під обмеженням" % layer)
+	assert_almost_eq(float(smoke.get_shader_parameter("occ_cap")), BattleFx.OCCLUDE_ALPHA, 1e-6)
+	assert_almost_eq(float(_mat(boom.get_node("Ball")).get_shader_parameter("occ_cap")), BattleFx.OCCLUDE_SECOND, 1e-6)
 	_step_all(0.3)
 	assert_eq(smoke.get_shader_parameter("occ_k"), 1.0, "обмеження повне з 0,3 с")
-	var two_layers: float = 1.0 - pow(1.0 - BattleFx.OCCLUDE_ALPHA, 2.0)
-	assert_true(two_layers <= 0.4, "куля й дим разом над сусідом не густіші за 0,4")
+	var two_layers: float = 1.0 - (1.0 - BattleFx.OCCLUDE_ALPHA) * (1.0 - BattleFx.OCCLUDE_SECOND)
+	assert_true(two_layers >= 0.35 and two_layers <= 0.45, "сусід бере відтінок диму 0,35–0,45, а не світиться в дірці")
