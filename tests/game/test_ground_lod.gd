@@ -192,8 +192,22 @@ func test_ground_mesh_with_pads_fits_the_frame_budget() -> void:
 		gut.p("%s: земля %d трикутників" % [path, tris])
 
 
-## Майданчик на схилі змінює поле після зведення до меша: меш добирається в зачеплених клітинках
-## (GroundSurface.refit), і висота, на якій стоять пропси, лишається на ньому.
+## Помилка меша `mesh` проти поля в відліках навколо клітинки `at`: відліки лежать на краях клітинок і
+## через 1/7 (x = ціле - 0.5 + a / 7).
+func _worst_at_samples(mesh: ArrayMesh, t: TerrainHeight, size: Vector2i, at: Vector2i) -> float:
+	var arr: Array = mesh.surface_get_arrays(0)
+	var centre := Vector2(size - Vector2i.ONE) * 0.5
+	var hs: PackedFloat32Array = _vertex_heights(t, arr, centre)
+	var buckets: Dictionary = _buckets(arr, centre)
+	var worst := 0.0
+	for k in 196:
+		var p := Vector2(at.x - 0.5 + (k % 14 - 3) / 7.0, at.y - 0.5 + (k / 14 - 3) / 7.0)
+		worst = maxf(worst, absf(_mesh_y(arr, buckets, hs, centre, p) - t.at(p.x, p.y)))
+	return worst
+
+
+## Порядок гри: земля будується до пропсів, майданчик і finish_pads змінюють поле після неї, потім refit.
+## До refit старий меш розходиться з полем більше за TOL_FIT, після — ні.
 func test_pad_on_a_slope_refits_the_mesh_to_the_field() -> void:
 	var m: MapData = load("res://maps/ridge.tres")
 	var b: Board = m.to_board()
@@ -210,27 +224,66 @@ func test_pad_on_a_slope_refits_the_mesh_to_the_field() -> void:
 			if t.at(x, y) > TerrainHeight.WATER_LEVEL and d > best:
 				best = d
 				steepest = Vector2i(x, y)
-	var before: int = t.revision
-	t.clear_pads()
-	t.add_pad(Rect2(steepest.x - 0.4, steepest.y - 0.4, 0.8, 0.8))
-	t.finish_pads()
-	assert_eq(t.revision, before + 1, "майданчик міняє поле — лічильник росте")
-	var cells: Dictionary = t.pad_cells()
-	assert_true(cells.has(steepest), "клітинка майданчика позначена")
-	assert_lt(cells.size(), 40, "позначені лише клітинки поруч із майданчиком")
 	var ground := GroundSurface.new()
 	add_child_autofree(ground)
 	ground.build(world, 0, Surroundings.world_surface(m), t, ring)
+	var old_mesh: ArrayMesh = ground.mesh
+	var rev: int = t.revision
+	t.clear_pads()
+	t.add_pad(Rect2(steepest.x - 0.4, steepest.y - 0.4, 0.8, 0.8))
+	t.finish_pads()
+	assert_eq(t.revision, rev + 1, "майданчик міняє поле — лічильник росте")
+	var cells: Dictionary = t.pad_cells()
+	assert_true(cells.has(steepest), "клітинка майданчика позначена")
+	assert_lt(cells.size(), 40, "позначені лише клітинки поруч із майданчиком")
+	assert_gt(_worst_at_samples(old_mesh, t, size, steepest), GroundLod.TOL_FIT, "без refit меш розходиться з полем")
 	ground.refit(t, size, ring)
-	var arr: Array = ground.mesh.surface_get_arrays(0)
-	var centre := Vector2(size - Vector2i.ONE) * 0.5
-	var hs: PackedFloat32Array = _vertex_heights(t, arr, centre)
-	var buckets: Dictionary = _buckets(arr, centre)
-	# У відліках поле й меш мають збігатися (між відліками поле білінійне, меш кусковий: на різкому
-	# переході майданчика це злам до 2 см, і він був би й на меші з усіх відліків).
-	var worst := 0.0
-	for k in 196:
-		# Відліки лежать на краях клітинок і через 1/7: x = ціле - 0.5 + a / 7.
-		var p := Vector2(steepest.x - 0.5 + (k % 14 - 3) / 7.0, steepest.y - 0.5 + (k / 14 - 3) / 7.0)
-		worst = maxf(worst, absf(_mesh_y(arr, buckets, hs, centre, p) - t.at(p.x, p.y)))
-	assert_lte(worst, GroundLod.TOL_FIT, "меш під майданчиком і його схилом лежить на полі")
+	assert_ne(ground.mesh, old_mesh, "refit зібрав інший меш")
+	assert_lte(_worst_at_samples(ground.mesh, t, size, steepest), GroundLod.TOL_FIT, "після refit меш лежить на полі")
+
+
+## Поле, зведене до меша, не міняє бік відносно рівня води: ґрунт у кільці не виринає над водою, а русло не
+## сохне (порівняння з гладким полем, з якого меш знято).
+func test_conformed_field_never_crosses_the_water_level() -> void:
+	for path: String in _MAPS:
+		var t: TerrainHeight = _world(path)[3]
+		var bad := 0
+		for k in t._h.size():
+			if (t._h[k] < TerrainHeight.WATER_LEVEL) != (t._hd_base[k] < TerrainHeight.WATER_LEVEL):
+				bad += 1
+		assert_eq(bad, 0, "%s: відліків, що змінили бік відносно води" % path)
+
+
+## Ті самі інваріанти води, що test_terrain_height перевіряє на дошках без кільця, але на справжніх картах
+## зі зведеним полем: вода не ближче 0.3 клітинки до центру суші, а дно глибше 0.3 м далі за пів клітинки від берега.
+func test_water_invariants_hold_on_the_conformed_ring_worlds() -> void:
+	for path: String in _MAPS:
+		var w: Array = _world(path)
+		var m: MapData = w[0]
+		var t: TerrainHeight = w[3]
+		var b: Board = m.to_board()
+		var bad := 0
+		for y in b.height:
+			for x in b.width:
+				if TerrainHeight._is_water(b.kind_at(Vector2i(x, y))):
+					continue
+				for r10 in 4:
+					for a in 16:
+						var ang: float = TAU * a / 16.0
+						if t.at(x + 0.1 * r10 * cos(ang), y + 0.1 * r10 * sin(ang)) < TerrainHeight.WATER_LEVEL:
+							bad += 1
+		assert_eq(bad, 0, "%s: вода в радіусі 0.3 від центру суші" % path)
+		var r: int = ceili(0.5 * t.samples)
+		var deep_bad := 0
+		for j in range(0, t.rows, 2):
+			for i in range(0, t.cols, 2):
+				if t._h[j * t.cols + i] >= TerrainHeight.WATER_LEVEL:
+					continue
+				var near := false
+				for dj in range(maxi(j - r, 0), mini(j + r + 1, t.rows)):
+					for di in range(maxi(i - r, 0), mini(i + r + 1, t.cols)):
+						if t._h[dj * t.cols + di] >= TerrainHeight.WATER_LEVEL and (di - i) * (di - i) + (dj - j) * (dj - j) <= r * r:
+							near = true
+				if not near and TerrainHeight.WATER_LEVEL - t._h[j * t.cols + i] < 0.3 * TerrainHeight.M:
+					deep_bad += 1
+		assert_eq(deep_bad, 0, "%s: мілке дно далі за пів клітинки від берега" % path)

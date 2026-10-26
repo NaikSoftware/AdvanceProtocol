@@ -17,7 +17,10 @@ extends RefCounted
 ## знову (GroundSurface.refit) у клітинках, які вони зачепили.
 
 ## Допуск зведення поля до меша, світ (8 м = 1.0): 0.016 — 13 см. Береговим клітинкам — вужчий, бо
-## уріз води йде за висотою: 0.008 — 6 см, схил берега ~0.4, тож урізу зсув ≤ 15 см.
+## уріз води йде за висотою: 0.008 — 6 см, схил берега ~0.4, тож урізу зсув ≤ 15 см. Допуск стосується
+## меша клітинки без зшивання; біля ребра з грубішою сусідкою вершини лягають на її ребро, і відхил
+## може сягнути суми двох допусків (виміряно 0.0176 при 0.016). Відлік ніколи не міняє бік
+## відносно рівня води (`level`).
 const TOL_BODY: float = 0.016
 const TOL_BANK: float = 0.008
 ## Допуск меша в клітинках, де майданчики змінили поле: поза ними поле вже лежить на меші точно, а тут
@@ -61,7 +64,8 @@ static func axis(s: int, n: int) -> PackedInt32Array:
 
 ## Клітинка (координати дошки, -ring .. розмір + ring - 1) -> квадів на бік. `height` — світ із
 ## кільцем (TerrainHeight.bake з тим самим ring), `size` — розмір дошки без кільця, `fine` —
-## клітинки берега (TerrainHeight.bank_cells), `tol` — допуск у решті клітинок.
+## клітинки берега (TerrainHeight.bank_cells), `tol` — допуск у решті клітинок. Берегові клітинки допуск
+## з відстанню не збільшують: уріз води йде за висотою, і ґрунт не має виринати над водою в кільці.
 static func levels(height: TerrainHeight, size: Vector2i, ring: int, fine: Dictionary = {},
 		tol: float = TOL_BODY, tol_bank: float = TOL_BANK) -> Dictionary:
 	var h: PackedFloat32Array = height.heights()
@@ -72,7 +76,7 @@ static func levels(height: TerrainHeight, size: Vector2i, ring: int, fine: Dicti
 			var dt: int = maxi(maxi(-cx, cx - size.x + 1), maxi(-cy, cy - size.y + 1))
 			out[c] = level(h, height.cols, height.samples,
 					(cx + height.margin) * height.samples, (cy + height.margin) * height.samples,
-					(tol_bank if fine.has(c) else tol) * (1.0 + RING_GROWTH * maxi(dt - 1, 0)))
+					(tol_bank if fine.has(c) else tol * (1.0 + RING_GROWTH * maxi(dt - 1, 0))))
 	return out
 
 
@@ -98,7 +102,8 @@ static func level(h: PackedFloat32Array, cols: int, s: int, ox: int, oz: int, to
 			lo = minf(lo, v)
 			hi = maxf(hi, v)
 	var all: Array[PackedInt32Array] = axes(s)
-	if hi - lo <= tol:
+	# Рівень води не перетинаємо: клітинка, де поле заходить під воду, грубим мешем не стає.
+	if hi - lo <= tol and not (lo < TerrainHeight.WATER_LEVEL and hi >= TerrainHeight.WATER_LEVEL):
 		return all[0].size() - 1
 	for k in all.size() - 1:
 		if _fits(h, cols, s, ox, oz, all[k], tol):
@@ -110,7 +115,10 @@ static func _fits(h: PackedFloat32Array, cols: int, s: int, ox: int, oz: int, ax
 	var lat: PackedFloat32Array = _lattice(h, cols, ox, oz, ax)
 	for j in s + 1:
 		for i in s + 1:
-			if absf(_on_lattice(lat, ax, i, j) - h[(oz + j) * cols + ox + i]) > tol:
+			var f: float = h[(oz + j) * cols + ox + i]
+			var m: float = _on_lattice(lat, ax, i, j)
+			# Відлік не міняє бік відносно рівня води: сухе лишається сухим, мокре — мокрим.
+			if absf(m - f) > tol or (m < TerrainHeight.WATER_LEVEL) != (f < TerrainHeight.WATER_LEVEL):
 				return false
 	return true
 
