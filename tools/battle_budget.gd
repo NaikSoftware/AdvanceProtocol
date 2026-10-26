@@ -136,11 +136,11 @@ func _ready() -> void:
 			spots.sort_custom(by_key)
 			near.sort_custom(by_key)
 			spots.append_array(near)
-			# Юніт не стоїть на паркані: його слід (півкорпусу довкола центру клітинки) — щонайменше на
-			# 0.15 клітинки від кожної секції, кути кільця теж (секції там сходяться кінцями).
+			# Юніт не стоїть на пропсі: його слід (півкорпусу довкола центру клітинки) — щонайменше на
+			# 0.15 клітинки від кожного пропса (паркан з кутами кільця, причеп, тюк, колода, будівля).
 			var fences: Array[Rect2] = []
 			for inst in (screen.get_node("%BoardView") as BoardView).props().all_instances():
-				if int(PropLayer.spec_of(inst["model"])["kind"]) == PropLayer.Kind.GARDEN_FENCE:
+				if int(PropLayer.spec_of(inst["model"])["kind"]) != PropLayer.Kind.BRIDGE:
 					var fb: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 					fences.append(Rect2(fb.position.x, fb.position.z, fb.size.x, fb.size.z))
 			var want: Array = [[UnitTypes.UnitClass.INFANTRY, 0.22], [UnitTypes.UnitClass.TANK, 0.38]]

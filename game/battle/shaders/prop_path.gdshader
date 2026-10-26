@@ -7,8 +7,9 @@ render_mode blend_mix, depth_draw_never, cull_back;
 global uniform float weather_wetness;
 
 // Помітно темніше за траву (на ~0.08–0.1 у sRGB): світліша смуга з травою зливалась.
-const vec3 DIRT_DRY = vec3(0.048, 0.037, 0.027);
-const vec3 DIRT_WET = vec3(0.026, 0.019, 0.013);
+// Тепла темна земля (~60, 50, 38 у sRGB), мокра — темніша.
+const vec3 DIRT_DRY = vec3(0.045, 0.032, 0.019);
+const vec3 DIRT_WET = vec3(0.03, 0.021, 0.012);
 
 varying vec3 world_pos;
 
@@ -37,6 +38,9 @@ void fragment() {
 	}
 	float wet = smoothstep(0.0, 0.5, weather_wetness);
 	ALBEDO = mix(DIRT_DRY, DIRT_WET, wet) * (0.85 + 0.3 * vnoise(world_pos.xz * 60.0));
-	ROUGHNESS = mix(0.95, 0.7, wet);
+	// Мокра втоптана земля — ледь вологий полиск.
+	ROUGHNESS = mix(0.95, 0.5, wet);
+	// Слабкий спекуляр ґрунту: інакше волога рілля під сірим небом віддзеркалювала його світлою плитою.
+	SPECULAR = 0.1;
 	ALPHA = alpha;
 }

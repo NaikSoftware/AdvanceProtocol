@@ -35,13 +35,14 @@ const LAYOUTS: Dictionary = {
 			{"house": Vector2i(10, 15), "face": S, "cells": [Vector2i(9, 13), Vector2i(10, 13), Vector2i(9, 14), Vector2i(10, 14),
 				Vector2i(9, 15), Vector2i(10, 15)],
 				"garden": [Vector2i(10, 14), Vector2i(9, 14)], "shed": Vector2i(9, 15)},
-			{"house": Vector2i(15, 15), "face": N, "cells": [Vector2i(14, 15), Vector2i(15, 15), Vector2i(15, 16), Vector2i(16, 16), Vector2i(16, 17)],
-				"garden": [Vector2i(14, 15), Vector2i(15, 16), Vector2i(16, 17)], "shed": Vector2i(16, 16)},
+			# Двір — L, не сходинки клітинок: (14,15) і (16,17) — лук поза двором.
+			{"house": Vector2i(15, 15), "face": N, "cells": [Vector2i(15, 15), Vector2i(15, 16), Vector2i(16, 16)],
+				"garden": [Vector2i(15, 16)], "shed": Vector2i(16, 16)},
 			{"house": Vector2i(22, 13), "face": W, "cells": [Vector2i(22, 13), Vector2i(23, 13), Vector2i(22, 14)],
 				"garden": [Vector2i(23, 13)], "shed": Vector2i(22, 14)},
 			{"house": Vector2i(12, 17), "face": E, "cells": [Vector2i(11, 17), Vector2i(12, 17)], "garden": [Vector2i(11, 17)]},
 		],
-		"orchards": [Vector2i(16, 6), Vector2i(16, 7), Vector2i(5, 8)],
+		"orchards": [Vector2i(16, 6), Vector2i(16, 7), Vector2i(5, 8), Vector2i(14, 15), Vector2i(16, 17)],
 		# 10 кВ — уздовж центральної дороги від краю до краю; через річку — поруч із мостом, стовпи на
 		# берегах. 0.4 кВ — уздовж верхньої, нижньої й східної доріг.
 		"lines": [
@@ -78,9 +79,10 @@ const LAYOUTS: Dictionary = {
 				Vector2(17.6, 7.4), Vector2(25.4, 7.4)]},
 			# 0.4 кВ відгалужується від 10 кВ і обходить квартал західною, південною й східною вулицями.
 			# Друга 10 кВ поруч лише дублювала б першу: дві паралельні лінії за клітинку читаються помилкою.
-			# Південно-східний кут вулиць — біля болота (18,16), стовпа там нема: дві гілки без кута.
-			{"kind": &"04kv", "points": [Vector2(7.4, 7.4), Vector2(7.4, 15.6), Vector2(16.6, 15.6)]},
-			{"kind": &"04kv", "points": [Vector2(17.6, 7.4), Vector2(17.6, 14.4)]},
+			# Одна гілка — одна підстанція на поселення: південно-східний кут вулиць біля болота (18,16)
+			# обходить навскіс і закінчується на клітинку нижче 10 кВ, не на її опорі.
+			{"kind": &"04kv", "points": [Vector2(7.4, 7.4), Vector2(7.4, 15.6), Vector2(16.6, 15.6), Vector2(17.6, 14.4),
+				Vector2(17.6, 8.6)]},
 		],
 		"hay": [Vector2(6.0, 10.5), Vector2(19.5, 10.5), Vector2(6.4, 18.4), Vector2(22.5, 4.5)],
 	},

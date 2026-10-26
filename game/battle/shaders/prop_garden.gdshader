@@ -54,7 +54,9 @@ void fragment() {
 	vec3 leaf = mix(LEAF_YELLOW, LEAF, clamp(green * 2.0 - 1.0, 0.0, 1.0));
 	float leaf_k = green_part * bush * smoothstep(0.05, 0.4, green);
 	ALBEDO = mix(soil, leaf, leaf_k);
-	// Мокра рілля — матова: блиск неба робив її сірою плитою.
-	ROUGHNESS = mix(0.95, 0.85, wet);
+	// Мокра рілля — ледь волога; колір теплий, тож сірою плитою вона вже не читається.
+	ROUGHNESS = mix(0.95, 0.5, wet);
+	// Слабкий спекуляр ґрунту: інакше волога рілля під сірим небом віддзеркалювала його світлою плитою.
+	SPECULAR = 0.1;
 	ALPHA = edge;
 }

@@ -192,7 +192,11 @@ func build(board: Board) -> void:
 	var fields: Array[Rect2] = []
 	for r in _ground.field_edges:
 		fields.append(Rect2(r.position - Vector2(ring, ring), r.size))
-	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields)
+	var spawns: Array[Vector2i] = []
+	if ring_map != null:
+		for sp: Dictionary in ring_map.spawns:
+			spawns.append(sp["pos"])
+	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields, spawns)
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.
 		add_child(Surroundings.skirt(Vector2i(board.width, board.height), _height.min_height() - 0.5))

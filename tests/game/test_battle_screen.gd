@@ -1252,3 +1252,35 @@ func test_ground_hit_stamps_a_crater_scorch() -> void:
 	var scars: ScarMap = screen._scars
 	assert_eq(scars.image().get_pixel(2 * 32 + 16, 3 * 32 + 16).r8, 255)
 	assert_eq(scars.image().get_pixel(2 * 32 + 16 + 12, 3 * 32 + 16).r8, 0, "вирва 2,5 м — за 3 м від центру чисто")
+
+
+## §3.5: після підтвердження гейта дах над юнітом гравця, що заходить, уже розчинений (рівень 1.0,
+## вузол «_fade» видно) — без жодного тіку переходу; після наступної передачі, де юніта під дахом
+## нема, — уже суцільний.
+func test_handover_draws_roof_fade_of_the_incoming_player_at_once() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(8, 8)
+	for c: Vector2i in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(2, 3), Vector2i(3, 3)]:
+		m.tiles[c.y * m.width + c.x] = Terrain.Kind.BUILDING
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(7, 7), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(2, 2), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	var gate: Control = screen.get_node("%HandoverGate")
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+	var faded: Array = props._fade_target.keys().filter(func(i: int) -> bool: return props._fade_target[i] == 1.0)
+	assert_false(faded.is_empty(), "передумова: дах над юнітом гравця 1")
+	for i: int in faded:
+		assert_eq(float(props._fade_level[i]), 1.0, "дах розчинений одразу після гейта")
+		assert_true((props._fade_nodes[props._instances[i]["model"]] as MultiMeshInstance3D).visible)
+	assert_false(props.is_processing())
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	(gate.get_node("%ConfirmButton") as Button).pressed.emit()
+	for i: int in faded:
+		assert_eq(float(props._fade_level.get(i, 0.0)), 0.0, "у гравця 0 дах суцільний одразу")
+	assert_false(props.is_processing())

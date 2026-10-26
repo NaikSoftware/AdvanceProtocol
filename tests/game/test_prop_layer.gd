@@ -1333,3 +1333,102 @@ func test_wet_roofs_get_lower_roughness() -> void:
 	# Дах на сухій карті має шорсткість ассета (~0.8–0.9); мокрий — нижча.
 	assert_lt(float(consts["WET_ROOF_ROUGHNESS"]), 0.8)
 	assert_true(src.contains("if (wet > 0.0)"), "суха карта — без змін")
+	# Роль даху — з нормалі, металевість — з каналу metallic ORM-карти, вологість — з погоди.
+	assert_true(src.contains("smoothstep(0.0, WET_FULL, weather_wetness)"), "вологість — з weather_wetness")
+	assert_true(src.contains("metal *= dot(texture(metallic_tex, UV), metallic_channel)"), "метал — з ORM")
+	assert_true(src.contains("float sheet = smoothstep(0.3, 0.6, metal)"), "листовий метал — за металевістю")
+
+
+## Дрібні пропси (тюки, причепи, двірські речі) не заходять у слід юніта (UNIT_HALF) у центрі жодної
+## клітинки, де юніт може стояти; стовп — ще на UNIT_POLE_CLEAR далі від сліду.
+func test_small_props_keep_out_of_unit_footprints(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var board: Board = _map(p).to_board()
+	var n: int = 0
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		var margin: float = 0.0
+		var r: Rect2
+		if k == PropLayer.Kind.POLE:
+			var o: Vector3 = (inst["transform"] as Transform3D).origin
+			r = Rect2(Vector2(o.x, o.z) - Vector2(0.03, 0.03), Vector2(0.06, 0.06))
+			margin = PropLayer.UNIT_POLE_CLEAR
+		elif k == PropLayer.Kind.HAY or k == PropLayer.Kind.TRAILER or k == PropLayer.Kind.YARD:
+			var b: AABB = _box_of(inst)
+			r = Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+		else:
+			continue
+		var cc := Vector2i(roundi(r.get_center().x), roundi(r.get_center().y))
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var c: Vector2i = cc + Vector2i(dx, dy)
+				if not board.in_bounds(c) or board.kind_at(c) == Terrain.Kind.WATER:
+					continue
+				var half: float = PropLayer.UNIT_HALF + margin - 1e-3
+				assert_false(r.intersects(Rect2(Vector2(c) - Vector2(half, half), Vector2(half, half) * 2.0)),
+						"%s: %s заходить у слід юніта на %s" % [p, inst["model"], c])
+		n += 1
+	assert_gt(n, 0, "%s: передумова — дрібні пропси є" % p)
+
+
+## Щоглова підстанція — лише на опорі 10 кВ, від якої йде відвід до хати чи гілка 0.4 кВ, і одна на
+## поселення (SETTLEMENT_R).
+func test_transformers_only_where_needed(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var feeds: Dictionary = {}
+	for d: Array in props._drops:
+		feeds[d[0]] = true
+	for sp: Array in props._spans:
+		for e in 2:
+			var other: int = sp[1 - e]
+			if PropLayer.spec_of(props._instances[other]["model"]).get("line", &"") == &"04kv":
+				feeds[sp[e]] = true
+	var at: Array[Vector2] = []
+	for i: int in props._transformers:
+		assert_eq(PropLayer.spec_of(props._instances[i]["model"]).get("line", &""), &"10kv", "%s: підстанція не на 10 кВ" % p)
+		assert_true(feeds.has(i), "%s: підстанція на опорі без відводу й гілки" % p)
+		var o: Vector3 = (props._instances[i]["transform"] as Transform3D).origin
+		for q in at:
+			assert_gt(q.distance_to(Vector2(o.x, o.z)), PropLayer.SETTLEMENT_R, "%s: дві підстанції в одному поселенні" % p)
+		at.append(Vector2(o.x, o.z))
+	assert_gt(at.size(), 0, "%s: передумова — підстанція є" % p)
+
+
+## Повалена опора — без шафи підстанції.
+func test_crushed_pole_drops_its_transformer() -> void:
+	var view: BoardView = _view(_map("crossroads"))
+	var props: PropLayer = view.props()
+	assert_gt(props.transformers_shown().size(), 0, "передумова")
+	var i: int = props._transformers.keys()[0]
+	var cells: Array[Vector2i] = [(props._instances[i]["cells"] as Array)[0]]
+	props.set_crushed(cells)
+	props._flush()
+	assert_eq(props.transformers_shown().size(), props._transformers.size() - 1)
+
+
+## Ворота є в кожному дворі: два стовпи на садибу.
+func test_every_yard_has_one_gate(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var homes: int = (VillageLayout.for_map(StringName(p)).get("homes", []) as Array).size()
+	assert_eq(props._gate_posts.size(), 2 * homes, "%s: стовпи воріт" % p)
+
+
+## Обрис двору — прямокутник або L (щонайбільше шість кутів): сходинки клітинок видають сітку.
+func test_yards_are_at_most_l_shaped(p = use_parameters(MAPS)) -> void:
+	for home: Dictionary in VillageLayout.for_map(StringName(p)).get("homes", []):
+		var cells: Array = home["cells"]
+		var corners: int = 0
+		var pts: Dictionary = {}
+		for c: Vector2i in cells:
+			for o: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+				pts[c + o] = true
+		for v: Vector2i in pts:
+			# Кут сітки — вершина многокутника, якщо довкола нього 1 чи 3 клітинки двору (або 2 навскіс).
+			var a: bool = cells.has(v + Vector2i(-1, -1))
+			var b: bool = cells.has(v + Vector2i(0, -1))
+			var c2: bool = cells.has(v + Vector2i(-1, 0))
+			var d: bool = cells.has(v)
+			var cnt: int = int(a) + int(b) + int(c2) + int(d)
+			if cnt == 1 or cnt == 3 or (cnt == 2 and a == d):
+				corners += 1
+		assert_lte(corners, 6, "%s: двір хати %s — сходинки" % [p, home["house"]])

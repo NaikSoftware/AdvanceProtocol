@@ -267,6 +267,13 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.wet = look.wetness >= WET_MIN
 	_weather.apply(look)
 	_wire_view(board)
+	# Техніка, що стоїть на клітинці від старту матчу, теж розчавила дрібні пропси під собою; глядач
+	# бачить це, як і решту шрамів, лише на розвіданому (§3.5, _rebuild_units_for_active_player).
+	_crushed_truth.clear()
+	for p in _match_service.state.player_count:
+		for u: Unit in _match_service.state.units_of(p):
+			if u.unit_class() != UnitTypes.UnitClass.INFANTRY:
+				_crushed_truth[u.pos] = true
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
 	_rebuild_units_for_active_player(true)

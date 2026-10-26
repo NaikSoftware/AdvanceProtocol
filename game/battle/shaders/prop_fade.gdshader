@@ -52,9 +52,9 @@ const float WET_ROOF = 0.75;
 const float WET_ROOF_ROUGHNESS_METAL = 0.35;
 const float WET_ROOF_ROUGHNESS = 0.45;
 const float WET_SPECULAR_METAL = 0.5;
-// Мокрий низ стіни (~0.5 м, клітинка — 8 м) — на 15 % темніший; і темніший стик із землею (~0.15 м).
+// Мокрий низ стіни (~0.5 м, клітинка — 8 м) — на ~28 % темніший; і темніший стик із землею (~0.15 м).
 const float GRIME_H = 0.0625;
-const float GRIME = 0.85;
+const float GRIME = 0.72;
 const float CONTACT_H = 0.02;
 const float CONTACT = 0.6;
 const vec3 WALL_WARM = vec3(1.08, 1.0, 0.86);
