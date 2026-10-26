@@ -81,7 +81,9 @@ const FADE_MODES: PackedStringArray = ["none", "silhouette", "soft", "cut"]
 const DEFAULT_MODE: String = "silhouette"
 ## Крони тоншають до просіки поступово: дерево, ближче до проламаної клітинки за
 ## `LANE_THIN` тайла (від краю нависання), стоїть з імовірністю, що росте від 0 до 1.
-const LANE_THIN: float = 0.6
+const LANE_THIN: float = 0.15
+## Кущів на тайл обабіч просіки (0,3–1,2 тайла від проламаної клітинки).
+const LANE_SHRUBS: float = 4.0
 ## Поле між краєм крони й проламаною клітинкою (тайли).
 const LANE_MARGIN: float = 0.3
 ## У скільки разів крона ширша за масштаб висоти: зімкнений ліс, ≥85 % закрито згори.
@@ -108,6 +110,7 @@ const WOODS: Dictionary = {
 const LATE_CANOPY: Dictionary = {"Spruce": 0.78, "Pine": 0.04, "Birch": 0.13, "Oak": 0.05}
 ## Ялинник пізньої осені рідший: між зірками крон — темні просвіти землі.
 const LATE_DENSITY: float = 3.2
+const LATE_SPRUCE := Color(0.62, 0.68, 0.76)
 const LATE_EDGE: Dictionary = {"Spruce_B": 0.6, "Birch": 0.3, "Oak": 0.1}
 
 ## Тон поля тестового лісу; світло, тінь, дощ і тон листя ставить WeatherRig за
@@ -150,7 +153,12 @@ var _proxy_mmi: Dictionary = {}  ## Mesh крони -> MultiMeshInstance3D пр�
 var _area: Rect2i
 
 
+## MSAA 2× (alpha-to-coverage для країв крон); як у проєкті, rendering/anti_aliasing/quality/msaa_3d.
+const MSAA := Viewport.MSAA_2X
+
+
 func _ready() -> void:
+	get_viewport().msaa_3d = MSAA
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	var out: String = args[0]
 	var wood: String = args[1] if args.size() > 1 else "mixed"
@@ -253,6 +261,13 @@ func _map_frames(out: String, wood: String, season: String, look_name: String) -
 		for z: Array in [["z6", IsoCameraRig.MIN_ZOOM], ["z20", IsoCameraRig.MAX_ZOOM]]:
 			_rig.center_on(mid)
 			await _shoot(z[1], "%s/m_%s_%s_%s.png" % [out, look_name, season, z[0]])
+			# Ціна MSAA на тому самому кадрі: середній час GPU без і з.
+			get_viewport().msaa_3d = Viewport.MSAA_DISABLED
+			var t_off: float = await _gpu_avg(90)
+			get_viewport().msaa_3d = MSAA
+			var t_on: float = await _gpu_avg(90)
+			print("MSAA_GPU %s %s off=%.2f on=%.2f calls=%d" % [look_name, z[0], t_off, t_on,
+					RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)])
 			_mask_on(true)
 			await _shoot(z[1], "%s/m_%s_%s_%s_mask.png" % [out, look_name, season, z[0]])
 			_mask_on(false)
@@ -366,21 +381,16 @@ func _load_library(season: String) -> void:
 	var soft := Shader.new()
 	soft.code = shader.code.replace("depth_draw_opaque, ", "").replace(
 			"|| (!shadow_pass && piece_hash > COLOR.a)", "").replace(
-			"ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = COLOR.a;")
+			"ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = COLOR.a;").replace(
+			"ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));",
+			"if (t.a < cut) { discard; }")
 	assert(soft.code.contains("ALPHA = COLOR.a;"), "шейдер soft не зібрався: змінився forest_crown.gdshader")
-	# М'який край: другий прохід малює лише смугу альфи трохи нижче порогу, прозоро, без
-	# запису глибини — 1–2 пікселі переходу замість сходинки alpha-cut і без растру.
-	var fringe := Shader.new()
-	fringe.code = shader.code.replace("depth_draw_opaque, ", "depth_draw_never, ").replace(
-			"	if (t.a < cut || COLOR.a", "	if (shadow_pass || t.a >= cut || t.a < cut - edge_soft || COLOR.a").replace(
-			"ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = smoothstep(cut - edge_soft, cut, t.a);")
-	assert(fringe.code.contains("ALPHA = smoothstep") and fringe.code.contains("t.a >= cut"), "шейдер краю не зібрався")
 	# Маска для вимірювання: ті самі пікселі крони, неосвітлений колір виду.
 	var mask := Shader.new()
 	mask.code = shader.code.replace("render_mode cull_disabled,", "render_mode unshaded, cull_disabled,").replace(
-			"ROUGHNESS = 1.0;", "ALBEDO = mask_col;\n\tROUGHNESS = 1.0;").replace(
+			"ROUGHNESS = 1.0;", "ALBEDO = mix(vec3(1.0, 0.0, 1.0), mask_col, is_card);\n\tROUGHNESS = 1.0;").replace(
 			"shader_type spatial;", "shader_type spatial;\nuniform vec3 mask_col;")
-	assert(mask.code.contains("ALBEDO = mask_col;") and mask.code.contains("unshaded"), "шейдер маски не зібрався")
+	assert(mask.code.contains("mask_col, is_card);") and mask.code.contains("unshaded"), "шейдер маски не зібрався")
 	for path: String in ["res://assets/props/forest/forest_conifer.glb", "res://assets/props/forest/forest_broadleaf_%s.glb" % season]:
 		var root: Node = (load(path) as PackedScene).instantiate()
 		var meshes: Array[Node] = root.find_children("*", "MeshInstance3D", true, false)
@@ -409,11 +419,6 @@ func _load_library(season: String) -> void:
 				var broad: bool = prefix in ["Birch", "Oak", "Hero"]
 				m.set_shader_parameter("mask_col", Color(1, 0, 0) if conifer else (Color(0, 1, 0) if broad else Color(0, 0, 1)))
 				(pair[1] as Dictionary)[mi.mesh] = m
-			var fm := ShaderMaterial.new()
-			fm.shader = fringe
-			fm.set_shader_parameter("albedo_tex", src.albedo_texture)
-			fm.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
-			(_material[mi.mesh] as ShaderMaterial).next_pass = fm
 		root.free()
 	var g: Node = (load("res://assets/props/forest/forest_ground.glb") as PackedScene).instantiate()
 	for mi: MeshInstance3D in g.find_children("*", "MeshInstance3D", true, false):
@@ -487,6 +492,10 @@ func _scatter() -> void:
 		_layer(LOG_DENSITY, logs, func(_p: Vector2) -> Dictionary: return {"Log": 1.0}, Vector2.ONE, true)
 	_layer(UNDERSTORY_DENSITY, func(d: float) -> bool: return d > SHRUB_BAND,
 			func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0}, UNDERSTORY_H, false)
+	# Підлісок обабіч просіки, темний: заповнює поле між просікою й кронами, щоб пролам
+	# лишався смугою, а не галявиною.
+	_layer(LANE_SHRUBS, func(d: float) -> bool: return d > 0.0, func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0},
+			SHRUB_H, false, func(p: Vector2) -> float: return LANE_SHRUBS if _broken_distance(p) > 0.3 and _broken_distance(p) < 1.2 else 0.0)
 	_hedges()
 	_broken_cells()
 
@@ -657,7 +666,7 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 	if near_lane:
 		# Біля просіки крона вужча й нижча: широка з полем до просіки не вміщалась у
 		# сусідню клітинку, і вона лишалась порожньою.
-		s *= 0.85
+		s *= 0.7
 	elif species == "Spruce" and _season == "late":
 		w = 0.6  # пізня осінь: темні вузькі шпилі ялин, між ними — голі листяні
 	elif species in ["Pine", "Spruce", "Birch", "Oak", "Hero"]:
@@ -674,6 +683,10 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 	var xf := Transform3D(Basis(Vector3.UP, _rng.randf() * TAU).scaled(Vector3(s * w, s, s * w)), _offset + Vector3(p.x, 0.0, p.y))
 	var tone: float = 1.0 + TONE_VAR * _tone.get_noise_2d(p.x, p.y)
 	var rgb := Color(tone, tone, tone)
+	if species == "Shrub" and _broken_distance(p) < 1.2:
+		rgb *= 0.7  # темний підлісок біля просіки: світлі кущі читались мазками фарби
+	if _season == "late" and species == "Spruce":
+		rgb *= LATE_SPRUCE  # похмуре світло: ялини темніші й холодніші
 	if _season == "early" and TURNED.has(species) and _turn.get_noise_2d(p.x, p.y) > TURN_FROM:
 		rgb = TURNED[species] * tone
 	if not _groups.has(mesh):

@@ -33,12 +33,15 @@ uniform float translucency = 0.1;
 // Різниця між пучками навмисне мала: світлі грудки поверх темних читались камуфляжем.
 uniform float lobe_depth = 0.35;
 uniform float crown_depth = 0.1;
-// Ширина м'якого краю (у частках альфи нижче порогу) для прозорого проходу краю.
-uniform float edge_soft = 0.25;
+// Ширина краю alpha-to-coverage (у частках альфи).
+uniform float a2c_edge = 0.3;
+// Кора й стовбури темніші: стовбур стоїть у тіні крони, а розсіяне світло неба на нього
+// падає повне — без цього стовбури світилися світліше за ґрунт.
+uniform float bark_dark = 0.45;
 // Темний обідок пучка: м'який край замість різкої вирізаної лінії наліпки.
 uniform float rim = 0.15;
 uniform float card_round = 0.7;
-uniform float card_up = 0.9;
+uniform float card_up = 1.2;
 
 varying float is_card;
 varying flat float card_half;
@@ -91,8 +94,7 @@ void fragment() {
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 2.5) / 2.0, 0.0, 1.0));
 	// Силует — з різкого рівня: обрис пучка — дрібне листя. Розмитіший mip для порогу
 	// робив із пучка кілька великих лопатей — «листки» по метру на ближньому зумі.
-	// М'який край пучка малює окремий прозорий прохід (той самий код, поріг навпаки).
-	if (t.a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
+	if ((shadow_pass && t.a < cut) || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
 		discard;
 	}
 	vec3 tint = mix(vec3(1.0), foliage_tint, is_card);
@@ -111,9 +113,12 @@ void fragment() {
 	float r = mix(1.0, mix(1.0 - rim, 1.0, smoothstep(0.35, 0.85, edge)), is_card * (1.0 - smoothstep(2.0, 3.0, lod)));
 	// Затінення крони — у колір: AO рендерер тут не застосовує (розсіяне світло неба
 	// від нього не змінюється), і без цього крона лишалась пласкою.
-	ALBEDO = rgb * mix(COLOR.rgb, vec3(1.0), is_card) * inst_tone * tint * r * occ;
+	ALBEDO = rgb * mix(COLOR.rgb, vec3(1.0), is_card) * inst_tone * tint * r * occ * mix(bark_dark, 1.0, is_card);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
+	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без
+	// окремого прозорого проходу. Без MSAA це звичайний alpha-cut за тим самим порогом.
+	ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));
 }
 
 void light() {
@@ -122,6 +127,6 @@ void light() {
 	float d = max((ndl + w) / (1.0 + w), 0.0) + is_card * translucency * max(-ndl, 0.0);
 	// Тінь сусідніх пучків на картці — лише на чверть: у справжній кроні світло проходить
 	// крізь листя, а повна тінь із різким краєм малює на кроні двоколірний камуфляж.
-	float att = mix(ATTENUATION, mix(0.75, 1.0, ATTENUATION), is_card);
+	float att = mix(ATTENUATION, mix(0.85, 1.0, ATTENUATION), is_card);
 	DIFFUSE_LIGHT += d * att * LIGHT_COLOR / PI;
 }

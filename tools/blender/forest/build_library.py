@@ -98,7 +98,10 @@ def tier_card(bm, uvl, uv2l, col, c, roll, size, rect, shade):
         loop[uvl].uv = to_atlas(rect, u, v)
         loop[uv2l].uv = (1e-4, 0.0)
         loop[col] = (shade, shade, shade, 1.0)
-    return {v: Vector((0, 0, 1)) for v in vs}
+    # Нормаль — назовні від стовбура й лише трохи вгору: ярус, що дивиться в небо, під
+    # похмурим небом світився світлішим за саму крону.
+    n = Vector((cr, sr, 0.5)).normalized()
+    return {v: n for v in vs}
 
 
 def limb(bm, uvl, rect, pts, radii, sides=3):

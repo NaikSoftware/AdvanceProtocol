@@ -30,7 +30,7 @@ TURNED = {"birch": {"L": 60, "C": 40, "h": 85, "contrast_l": 0.8},
 LITTER = {"L": 18, "C": 5, "h": 70, "contrast_l": 0.7}  # опад темний: світлі цятки на просіці — шум
 CUTOFF = {"summer": 0.45, "early": 0.45, "late": 0.45}
 KEEP = {"summer": 1.0, "early": 1.0, "late": 0.55}
-BARK = {"birch": {"target_y": 0.32, "sat": 0.4}, "oak": {"target_y": 0.06}, "lime": {"target_y": 0.07}}
+BARK = {"birch": {"target_y": 0.14, "sat": 0.4}, "oak": {"target_y": 0.06}, "lime": {"target_y": 0.07}}
 
 # вузол, джерело будови, набір спрайтів, кора, додатково
 ITEMS = [

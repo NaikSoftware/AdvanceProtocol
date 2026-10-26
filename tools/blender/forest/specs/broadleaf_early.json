@@ -103,7 +103,7 @@
    "node": "Birch_A",
    "src": "birch_a",
    "trunk_grade": {
-    "target_y": 0.32,
+    "target_y": 0.14,
     "sat": 0.4
    },
    "sprites": "birch",
@@ -117,7 +117,7 @@
    "node": "Birch_B",
    "src": "birch_b",
    "trunk_grade": {
-    "target_y": 0.32,
+    "target_y": 0.14,
     "sat": 0.4
    },
    "sprites": "birch",
@@ -242,7 +242,7 @@
    "node": "Hero_Birch",
    "src": "hero_birch",
    "trunk_grade": {
-    "target_y": 0.32,
+    "target_y": 0.14,
     "sat": 0.4
    },
    "sprites": "birch",
