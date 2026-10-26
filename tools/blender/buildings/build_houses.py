@@ -70,6 +70,7 @@ def post(b, x, y, z0, h):
 # ----------------------------------------------------------------------- H1
 def house1(hit=False):
     lib.reset()
+    lib.palette(wall=(0.816, 0.737, 0.573), roof="green", eave=3.0)
     b = Builder()
     L, Db, EAVE, RIDGE = 10.0, 6.4, 3.0, 6.5      # корпус 10 x 6.4, веранда ще 1.6 м (разом 8 м)
     y0, y1 = -4.0, 2.4
@@ -210,6 +211,7 @@ def house1(hit=False):
         plan_ = [lib.HeapSurface(-0.6, -3.95, 2.6, 0.55, 1.0, 51, bumps=6, lip=0.2, wob=0.15, lump=0.08, hummocks=3, hum_amp=0.5, sq=2.0, noise=1.5, feather=0.5)]
         bh = lib.rubble_heaps(b, plan_, 54, dens=9.0, skirt=0.25)
         lib.rubble_lumps(b, plan_, rr, 30, tmin=0.1, tmax=0.95, size=(0.2, 0.5))
+    lib.weather(b, "wall_plaster", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE), ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=3)
     lib.finish(b, "house_h1_hit" if hit else "house_h1", out, tri_limit=2600, footprint=(2, 1), anchor=(0, 0), hi=bh)
 
 
@@ -217,6 +219,7 @@ def house1(hit=False):
 def house2():
     lib.reset()
     b = Builder()
+    lib.palette(roof="brown", eave=3.2, chim="ch_brown", row=0.23)
     L, D, EAVE, RIDGE = 11.0, 9.0, 3.2, 7.0
     y0, y1 = -D / 2, D / 2
     b.box(0, 0, 0, L, D, 0.5, "brick_grey")
@@ -236,6 +239,7 @@ def house2():
     b.box(L / 2 + 0.3, 0.0, 5.0, 0.15, 0.7, 0.7, "pvc")
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y1 + 0.4, EAVE - 0.3)
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y0 - 0.4, EAVE - 0.3)
+    lib.weather(b, "brick_face", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE), ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=5, patches=False)
     lib.finish(b, "house_h2", out, tri_limit=2200, footprint=(2, 2))
 
 
@@ -243,6 +247,7 @@ def house2():
 def house3():
     lib.reset()
     b = Builder()
+    lib.palette(wall=(0.647, 0.714, 0.565), roof="slate", eave=6.0)
     L, D, EAVE, RIDGE = 10.0, 10.0, 6.0, 9.5
     y0, y1 = -D / 2, D / 2
     OV = 0.5
@@ -273,6 +278,7 @@ def house3():
     b.box(0, y1 + 1.4, 0.0, 3.2, 1.6, 1.0, "step", top="step")
     gutter(b, -L / 2 - OV, L / 2 + OV, y1 + OV, EAVE - 0.3)
     gutter(b, -L / 2 - OV, L / 2 + OV, y0 - OV, EAVE - 0.3)
+    lib.weather(b, "wall_plaster", [("y", y0, -1, -L / 2, L / 2, 1.0, EAVE), ("y", y1, 1, -L / 2, L / 2, 1.0, EAVE), ("x", -L / 2, -1, y0, y1, 1.0, EAVE), ("x", L / 2, 1, y0, y1, 1.0, EAVE)], seed=7)
     lib.finish(b, "house_h3", out, tri_limit=2400, footprint=(2, 2))
 
 
@@ -280,6 +286,7 @@ def house3():
 def house4():
     lib.reset()
     b = Builder()
+    lib.palette(roof="cherry", eave=3.0, chim="ch_plaster")
     L, D, EAVE, RIDGE = 9.0, 6.0, 3.0, 6.5
     y0, y1 = -D / 2, D / 2
     b.box(0, 0, 0, L, D, 0.4, "brick_grey")
@@ -296,6 +303,7 @@ def house4():
     b.poly_up([(-1.5, y1, 2.7), (1.5, y1, 2.7), (1.5, y1 + 1.6, 2.3), (-1.5, y1 + 1.6, 2.3)], "tin_green")
     b.box(0, y1 + 1.0, 0, 3.0, 1.4, 0.4, "step", top="step")
     b.chimney(2.8, -0.8, 4.8, 0.7, 2.7, "brick_face")           # цегляний димар
+    lib.weather(b, "boards", [("y", y0, -1, -L / 2, L / 2, 0.4, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.4, EAVE), ("x", -L / 2, -1, y0, y1, 0.4, EAVE), ("x", L / 2, 1, y0, y1, 0.4, EAVE)], seed=9, patches=False)
     lib.finish(b, "house_h4", out, tri_limit=1800, footprint=(2, 1))
 
 
