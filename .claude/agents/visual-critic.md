@@ -76,6 +76,13 @@ Give the evidence for every score below 5 — a location in the frame and what y
    no unexplained bright/dark patches, reflections plausible and never leaking hidden information.
 8. **Mood and likeness** — compared side by side with the target frame: palette, value range,
    wetness, atmosphere (haze, rain), how much of the target's feeling the frame has.
+9. **Plausibility of placement** — for every placed object ask "would someone have put it there?"
+   A fence encloses a yard on soil or grass and never stands on asphalt or across a road or
+   driveway; a trailer, a bale stack or a machine stands in a yard, by a shed or at a field edge,
+   alone or in a loose pair, never in a parade row of identical copies; poles follow a road or a
+   line between houses; a shed belongs to a house; a bridge carries a road. Identical objects in a
+   regular row, an object on a road surface, a yard with no house, or a cluster with no reason is a
+   finding, at least **Major**. Trace each suspicious object in the frame and name it.
 
 </criteria>
 
