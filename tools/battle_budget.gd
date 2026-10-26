@@ -4,7 +4,8 @@ extends Node
 ## Запуск (потрібне вікно, не --headless; вікно — за межами екрана):
 ##   $GODOT --path . --position 6000,0 res://tools/battle_budget.tscn -- <out_dir> [--shadows] <map>[@x,y@zoom] ...
 ## --shadows: будівлі й руїни кидають справжню тінь сонця — щоб зміряти, скільки це коштує.
-## Без @… знімається центр дошки на MAX і MIN зумі. <map>@sel@zoom — вибраний перший юніт гравця 0
+## Без @… знімається центр дошки на MAX і MIN зумі. <map>@yard@<садиба>@zoom — танк і піхота гравця 0
+## у дворі садиби з макету карти (VillageLayout), камера на хаті. <map>@sel@zoom — вибраний перший юніт гравця 0
 ## із контурами зон руху поверх пропсів. <map>@behind@<модель>@zoom — той самий юніт за першою
 ## такою будівлею (з боку від камери), вибраний: розчинення даху й контур зони поверх сліду. <map>@top@x,y,size — ортографічний погляд згори на
 ## клітинку x,y (size клітинок у кадрі) з межами будівель (червоні) й огорож (блакитні) і найменшим
@@ -79,6 +80,25 @@ func _ready() -> void:
 				screen.call("_rebuild_units_for_active_player")
 				(screen.get("_controller") as InputController).select_unit(unit)
 				views.append([unit.pos, float(parts[3])])
+		elif parts.size() >= 4 and parts[1] == "yard":
+			# Танк і відділення піхоти гравця 0 у дворі садиби №parts[2] з макету карти: танк — на
+			# клітинці двору без хати й сараю, піхота — на іншій, поруч із хатою; камера — на хаті.
+			var home: Dictionary = VillageLayout.for_map(StringName(map))["homes"][int(parts[2])]
+			var spots: Array = (home["cells"] as Array).filter(func(c: Vector2i) -> bool:
+				return c != home["house"] and c != home.get("shed", Vector2i(-99, -99)))
+			spots.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+				return a.distance_squared_to(home["house"]) < b.distance_squared_to(home["house"]))
+			var want: Array = [UnitTypes.UnitClass.INFANTRY, UnitTypes.UnitClass.TANK]
+			for k in mini(want.size(), spots.size()):
+				for u: Unit in MatchService.state.units_of(0):
+					if u.unit_class() == want[k]:
+						var other: Unit = MatchService.state.unit_at(spots[k])
+						if other != null and other != u:
+							other.pos = u.pos
+						u.pos = spots[k]
+						break
+			screen.call("_rebuild_units_for_active_player")
+			views.append([home["house"], float(parts[3])])
 		elif parts.size() >= 3 and parts[1] == "sel":
 			var unit: Unit = MatchService.state.units_of(0)[0]
 			(screen.get("_controller") as InputController).select_unit(unit)

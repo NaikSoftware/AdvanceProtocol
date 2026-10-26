@@ -23,6 +23,8 @@ const vec3 WET_TONE = vec3(1.0, 0.96, 0.9);
 const float DIRT_H = 0.06;
 const float DIRT = 0.6;
 const float WET_ROUGHNESS = 0.4;
+// 0.35 у sRGB — ~0.1 лінійно.
+const float VALUE_CAP = 0.1;
 
 varying float base_h;
 
@@ -39,6 +41,10 @@ void fragment() {
 		discard;
 	}
 	vec3 albedo = tex.rgb;
+	// Яскравість не вища за ~0.35 (sRGB): світлі шапки стовпчиків і свіжа фарба на зумі 14 читались
+	// білими лініями інтерфейсу; вивітрене дерево й оцинковка — не світліші.
+	float value = max(albedo.r, max(albedo.g, albedo.b));
+	albedo *= min(1.0, VALUE_CAP / max(value, 1e-4));
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {
 		float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));

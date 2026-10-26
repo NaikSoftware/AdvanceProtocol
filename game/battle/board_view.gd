@@ -189,7 +189,10 @@ func build(board: Board) -> void:
 	_props.structure_shadows = structure_shadows
 	_props.wet = wet
 	_props.garden_green = {&"summer": 1.0, &"early": 0.5}.get(season, 0.15)
-	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board))
+	var fields: Array[Rect2] = []
+	for r in _ground.field_edges:
+		fields.append(Rect2(r.position - Vector2(ring, ring), r.size))
+	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields)
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.
 		add_child(Surroundings.skirt(Vector2i(board.width, board.height), _height.min_height() - 0.5))

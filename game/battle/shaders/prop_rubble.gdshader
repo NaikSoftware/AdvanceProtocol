@@ -2,12 +2,13 @@
 // землі під клітинкою RUBBLE лишає між купками траву, і крізь пролом у стіні її було видно.
 // Кольори лінійні; візерунок — шум від світових координат, тож сусідні руїни не однакові.
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_back;
+render_mode blend_mix, depth_draw_never, cull_back;
 
-const vec3 DUST = vec3(0.10, 0.088, 0.072);
-const vec3 BRICK = vec3(0.16, 0.07, 0.045);
-const vec3 STONE = vec3(0.13, 0.125, 0.115);
-const vec3 SOOT = vec3(0.025, 0.022, 0.02);
+// Темні: світлий пил читався пласкою плитою на тлі стін.
+const vec3 DUST = vec3(0.055, 0.048, 0.04);
+const vec3 BRICK = vec3(0.09, 0.04, 0.026);
+const vec3 STONE = vec3(0.07, 0.068, 0.062);
+const vec3 SOOT = vec3(0.015, 0.013, 0.012);
 
 varying vec3 world_pos;
 
@@ -27,10 +28,11 @@ void vertex() {
 }
 
 void fragment() {
-	// Рваний край: уламки розсипаються за стіни нерівно.
+	// Рваний м'який край: без жорсткої межі плити.
 	vec2 q = UV - 0.5;
 	float edge = max(abs(q.x), abs(q.y)) + 0.06 * (vnoise(world_pos.xz * 9.0) - 0.5);
-	if (edge > 0.48) {
+	float alpha = 1.0 - smoothstep(0.38, 0.5, edge);
+	if (alpha <= 0.01) {
 		discard;
 	}
 	vec2 p = world_pos.xz * 8.0; // метри
@@ -42,5 +44,6 @@ void fragment() {
 	c = mix(c, SOOT, smoothstep(0.55, 0.85, soot) * 0.5);
 	ALBEDO = c;
 	ROUGHNESS = 0.95;
+	ALPHA = alpha;
 	NORMAL_MAP = normalize(vec3((chunks - 0.5) * 0.8, (bricks - 0.5) * 0.8, 1.0)) * 0.5 + 0.5;
 }
