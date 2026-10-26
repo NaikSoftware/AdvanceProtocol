@@ -2,23 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d4fp5fbd5q46c"
-path="res://.godot/imported/forest_broadleaf_summer_forest_broadleaf_summer.png-b45c119bfdde19bce110d167df6e359b.ctex"
+uid="uid://bwl0i1cb4qr4k"
+path.s3tc="res://.godot/imported/forest_broadleaf_late.png-1d7e5b453ca1247b96db84c48a0f5d63.s3tc.ctex"
+path.etc2="res://.godot/imported/forest_broadleaf_late.png-1d7e5b453ca1247b96db84c48a0f5d63.etc2.ctex"
 metadata={
-"vram_texture": false
-}
-generator_parameters={
-"md5": "114f772b5ffd1f693aba5c2a036c7fe7"
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/props/forest/forest_broadleaf_summer_forest_broadleaf_summer.png"
-dest_files=["res://.godot/imported/forest_broadleaf_summer_forest_broadleaf_summer.png-b45c119bfdde19bce110d167df6e359b.ctex"]
+source_file="res://assets/props/forest/forest_broadleaf_late.png"
+dest_files=["res://.godot/imported/forest_broadleaf_late.png-1d7e5b453ca1247b96db84c48a0f5d63.s3tc.ctex", "res://.godot/imported/forest_broadleaf_late.png-1d7e5b453ca1247b96db84c48a0f5d63.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +39,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

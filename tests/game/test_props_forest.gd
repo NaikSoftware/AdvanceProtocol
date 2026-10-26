@@ -55,6 +55,18 @@ func _tris(mesh: Mesh) -> int:
 	return t
 
 
+## Пучки — групи вершин з однаковою позицією й ненульовим UV2 (чотири кути картки в центрі).
+func _cards(mesh: Mesh) -> int:
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uv2: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var seen: Dictionary = {}
+	for i in verts.size():
+		if uv2[i].length() >= 1e-3:
+			seen[verts[i]] = true
+	return seen.size()
+
+
 func _check(glb: String, root: Node3D, node: String) -> void:
 	var mi: MeshInstance3D = root.find_child(node, true, false) as MeshInstance3D
 	assert_not_null(mi, "%s: нема вузла %s" % [glb, node])
@@ -167,6 +179,8 @@ func test_tree_shadow_proxies() -> void:
 			assert_not_null(mi, "%s: нема %s_Shadow" % [glb, node])
 			if mi != null:
 				assert_lte(_tris(mi.mesh), 40, "%s/%s_Shadow: трикутників" % [glb, node])
+				# Порожній проксі — дерево без тіні: пучки проксі беруться з уже відібраних.
+				assert_gte(_cards(mi.mesh), 4, "%s/%s_Shadow: пучків у проксі" % [glb, node])
 
 
 func test_card_offsets_centred_bark_zero() -> void:

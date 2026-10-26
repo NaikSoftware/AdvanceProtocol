@@ -2,23 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bvcgo6mlqlfrc"
-path="res://.godot/imported/forest_conifer_forest_conifer.png-61713fa8bef0faae02773f462189976c.ctex"
+uid="uid://bowdyp1eb23qq"
+path.s3tc="res://.godot/imported/forest_conifer.png-cbf4d630c712119e947011e36b49d185.s3tc.ctex"
+path.etc2="res://.godot/imported/forest_conifer.png-cbf4d630c712119e947011e36b49d185.etc2.ctex"
 metadata={
-"vram_texture": false
-}
-generator_parameters={
-"md5": "a3dc0f2a7ec581360274c2ed7b83df27"
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/props/forest/forest_conifer_forest_conifer.png"
-dest_files=["res://.godot/imported/forest_conifer_forest_conifer.png-61713fa8bef0faae02773f462189976c.ctex"]
+source_file="res://assets/props/forest/forest_conifer.png"
+dest_files=["res://.godot/imported/forest_conifer.png-cbf4d630c712119e947011e36b49d185.s3tc.ctex", "res://.godot/imported/forest_conifer.png-cbf4d630c712119e947011e36b49d185.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +39,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

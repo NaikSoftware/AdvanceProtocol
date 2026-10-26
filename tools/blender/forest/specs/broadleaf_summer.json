@@ -63,10 +63,10 @@
     "max": 4,
     "grade": {
      "lab": {
-      "L": 18,
+      "L": 30,
       "C": 5,
       "h": 70,
-      "contrast_l": 0.7
+      "contrast_l": 0.5
      }
     }
    }
@@ -77,6 +77,11 @@
    "node": "Birch_A",
    "src": "birch_a",
    "trunk_grade": {
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
     "target_y": 0.3,
     "sat": 0.4
    },
@@ -91,6 +96,11 @@
    "node": "Birch_B",
    "src": "birch_b",
    "trunk_grade": {
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
     "target_y": 0.3,
     "sat": 0.4
    },
@@ -244,7 +254,9 @@
    "sprites": "oak",
    "trunk_sides": 6,
    "scale": 0.63,
-   "card_scale": 2.08
+   "card_scale": 2.08,
+   "trunk_src": "oak_a",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Lime",
@@ -255,24 +267,33 @@
      1.0,
      0.82
     ],
-    "target_y": 0.24
+    "target_y": 0.22
    },
    "sprites": "broad",
    "trunk_sides": 6,
    "scale": 0.6,
-   "card_scale": 2.08
+   "card_scale": 2.08,
+   "trunk_src": "oak_b",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Birch",
    "src": "hero_birch",
    "trunk_grade": {
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
     "target_y": 0.3,
     "sat": 0.4
    },
    "sprites": "birch",
    "trunk_sides": 6,
    "scale": 0.62,
-   "card_scale": 2.08
+   "card_scale": 2.08,
+   "trunk_src": "birch_a",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Poplar",
@@ -283,12 +304,14 @@
      1.0,
      0.82
     ],
-    "target_y": 0.24
+    "target_y": 0.22
    },
    "sprites": "broad",
    "trunk_sides": 6,
    "scale": 0.56,
-   "card_scale": 2.08
+   "card_scale": 2.08,
+   "trunk_src": "oak_a",
+   "trunk_r_mul": 1.8
   }
  ]
 }

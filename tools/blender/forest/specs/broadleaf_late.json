@@ -63,10 +63,10 @@
     "max": 4,
     "grade": {
      "lab": {
-      "L": 18,
+      "L": 30,
       "C": 5,
       "h": 70,
-      "contrast_l": 0.7
+      "contrast_l": 0.5
      }
     }
    }
@@ -77,12 +77,19 @@
    "node": "Birch_A",
    "src": "birch_a_bare",
    "trunk_grade": {
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
     "target_y": 0.3,
     "sat": 0.4
    },
    "sprites": "birch",
    "card_reach": 1.0,
    "trunk_into_crown": 0.75,
+   "trunk_top": 0.08,
+   "card_keep": 1.0,
    "trunk_r_mul": 2.0,
    "scale": 0.56,
    "card_scale": 1.4
@@ -91,12 +98,19 @@
    "node": "Birch_B",
    "src": "birch_b_bare",
    "trunk_grade": {
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
     "target_y": 0.3,
     "sat": 0.4
    },
    "sprites": "birch",
    "card_reach": 1.0,
    "trunk_into_crown": 0.75,
+   "trunk_top": 0.08,
+   "card_keep": 1.0,
    "trunk_r_mul": 2.0,
    "scale": 0.63,
    "card_scale": 1.4
@@ -115,6 +129,8 @@
    "sprites": "oak",
    "card_reach": 1.0,
    "trunk_into_crown": 0.75,
+   "trunk_top": 0.08,
+   "card_keep": 1.0,
    "scale": 0.58,
    "card_scale": 1.6
   },
@@ -132,6 +148,8 @@
    "sprites": "oak",
    "card_reach": 1.0,
    "trunk_into_crown": 0.75,
+   "trunk_top": 0.08,
+   "card_keep": 1.0,
    "scale": 0.6,
    "card_scale": 1.6
   },
@@ -242,11 +260,13 @@
     "target_y": 0.22
    },
    "sprites": "oak",
-   "card_keep": 0.2,
+   "card_keep": 0.5,
    "card_reach": 1.0,
    "trunk_sides": 6,
    "scale": 0.63,
-   "card_scale": 1.3
+   "card_scale": 1.3,
+   "trunk_src": "oak_a",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Lime",
@@ -257,28 +277,37 @@
      1.0,
      0.82
     ],
-    "target_y": 0.24
+    "target_y": 0.22
    },
    "sprites": "broad",
-   "card_keep": 0.18,
+   "card_keep": 0.45,
    "card_reach": 1.0,
    "trunk_sides": 6,
    "scale": 0.6,
-   "card_scale": 1.3
+   "card_scale": 1.3,
+   "trunk_src": "oak_b",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Birch",
    "src": "hero_birch",
    "trunk_grade": {
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
     "target_y": 0.3,
     "sat": 0.4
    },
    "sprites": "birch",
-   "card_keep": 0.2,
+   "card_keep": 0.5,
    "card_reach": 1.0,
    "trunk_sides": 6,
    "scale": 0.62,
-   "card_scale": 1.3
+   "card_scale": 1.3,
+   "trunk_src": "birch_a",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Poplar",
@@ -289,14 +318,16 @@
      1.0,
      0.82
     ],
-    "target_y": 0.24
+    "target_y": 0.22
    },
    "sprites": "broad",
-   "card_keep": 0.08,
+   "card_keep": 0.2,
    "card_reach": 1.0,
    "trunk_sides": 6,
    "scale": 0.56,
-   "card_scale": 1.3
+   "card_scale": 1.3,
+   "trunk_src": "oak_a",
+   "trunk_r_mul": 1.8
   }
  ]
 }

@@ -5,16 +5,13 @@
 Вузол = окремий меш = окремий MultiMesh на дошці (один виклик малювання на варіант).
 Масштаб гри: 1 тайл = 8 м = 1,0; земля на y = 0; початок координат — вісь стовбура.
 
-Порядок збирання з нуля (джерела — у теці поза репозиторієм):
-  1. src_conifer.py на кожне дерево Poly Haven (pine_tree_01 a/b/c, fir_tree_01 a/b);
-  2. src_leaf_sprites.py на кожен набір × сезон (birch, broad, oak, shrub × late, summer, early);
-  3. src_broadleaf.py (будова листяних, кущів і повалених стовбурів);
-  4. specs/make_broadleaf_specs.py, далі make_atlas.py і цей скрипт на кожен spec.
+Збирання з нуля (джерела, атласи, усі GLB) — build_all.sh поруч, там і порядок кроків.
 """
 import json
 import math
 import os
 import random
+import shutil
 import struct
 import sys
 
@@ -151,16 +148,12 @@ def build_node(item, rects):
     cards = meta["cards"]
     keep = item.get("card_keep", 1.0)
     fs_card = 1.0
-    if item.get("max_cards") and len(cards) > item["max_cards"]:
-        # Проксі тіні: менше пучків, але більших — сумарна площа та сама (×0,85 на
-        # перекриття), тож пляма тіні тієї ж величини й так само дірява.
-        n = item["max_cards"]
-        fs_card = 0.85 * math.sqrt(len(cards) / n)
-        cards = random.Random(item["node"] + "proxy").sample(cards, n)
-        keep = 1.0
+    # Зерно — від вузла дерева, а не його проксі: тінь мусить узяти ті самі пучки, що й колір.
+    seed = item["node"].removesuffix("_Shadow")
     reach = item.get("card_reach")
     if reach and meta.get("limbs") and cards:
         # Голе дерево: пучок гілочок далі за reach від гілки чи стовбура висить у повітрі.
+        # reach — у метрах джерела, до масштабу `scale` (0,56–0,63): 1,0 — це ~0,6 м у грі.
         tt = meta["crown_base"] + item.get("trunk_into_crown", 0.3) * (meta["top"] - meta["crown_base"])
         support = [Vector((0.0, 0.0, z * 0.5)) for z in range(int(tt * 2) + 1)]
         for lm in meta["limbs"]:
@@ -169,7 +162,14 @@ def build_node(item, rects):
         cards = [cd for cd in cards if min((Vector(cd["c"]) - q).length for q in support) <= reach]
     if keep < 1.0 and cards:
         # Голе дерево: та сама будова, але менше пучків — крізь крону видно землю.
-        cards = random.Random(item["node"] + "keep").sample(cards, max(1, round(len(cards) * keep)))
+        cards = random.Random(seed + "keep").sample(cards, max(1, round(len(cards) * keep)))
+    if item.get("max_cards") and len(cards) > item["max_cards"]:
+        # Проксі тіні: менше пучків, але більших — сумарна площа та сама (×0,85 на
+        # перекриття), тож пляма тіні тієї ж величини й так само дірява. Пучки — з уже
+        # відібраних: голе дерево не кидає тіні повної листяної крони.
+        n = item["max_cards"]
+        fs_card = 0.85 * math.sqrt(len(cards) / n)
+        cards = random.Random(seed + "proxy").sample(cards, n)
     cb, top = meta["crown_base"], meta["top"]
     low = item.get("crown_low", 1.0)
     if low < 1.0 and cards:
@@ -227,7 +227,7 @@ def build_node(item, rects):
         # trunk_radius — у метрах готового дерева, після масштабу `scale`.
         r = item.get("trunk_radius", meta["trunk_width"] * 0.3 * fs) / fs * item.get("trunk_r_mul", 1.0)
         th = meta["trunk_render_height"]
-        vnorm.update(trunk(bm, uvl, trect, r, r * 0.45, tt, min(1.0, tt / th),
+        vnorm.update(trunk(bm, uvl, trect, r, r * item.get("trunk_top", 0.45), tt, min(1.0, tt / th),
                            item.get("trunk_sides", 5), tuple(item.get("lean", (0.0, 0.0)))))
     for lm in ([] if item.get("max_cards") else meta.get("limbs", [])):
         vnorm.update(limb(bm, uvl, trect, lm["pts"], lm["r"], lm.get("sides", 3)))
@@ -286,10 +286,14 @@ def material(png, name):
 
 
 def patch_glb(path, cutoff):
-    """Alpha-cut і однобічність у матеріалі: експортер не завжди їх виставляє."""
+    """Alpha-cut і двобічність у матеріалі (експортер не завжди їх виставляє). Атлас лишається
+    зовнішнім файлом (uri); його копію, яку експортер із keep_originals ще й кладе в бінарний
+    блок, вирізаємо — інакше атлас лежав би в репозиторії двічі."""
     data = open(path, "rb").read()
     jl, jt = struct.unpack("<II", data[12:20])
     js = json.loads(data[20:20 + jl])
+    bl = struct.unpack("<I", data[20 + jl:24 + jl])[0]
+    bin_ = data[28 + jl:28 + jl + bl]
     for m in js["materials"]:
         m["alphaMode"] = "MASK"
         m["alphaCutoff"] = cutoff
@@ -299,10 +303,31 @@ def patch_glb(path, cutoff):
         pbr["metallicFactor"] = 0.0
         pbr["roughnessFactor"] = 1.0
         m.pop("extensions", None)
+    drop = set()
+    for im in js.get("images", []):
+        assert "uri" in im, "%s: атлас без uri" % path
+        if "bufferView" in im:
+            drop.add(im.pop("bufferView"))
+    keep = [i for i in range(len(js["bufferViews"])) if i not in drop]
+    remap = {old: new for new, old in enumerate(keep)}
+    out_bin = bytearray()
+    views = []
+    for old in keep:
+        bv = js["bufferViews"][old]
+        chunk = bin_[bv.get("byteOffset", 0):bv.get("byteOffset", 0) + bv["byteLength"]]
+        out_bin += b"\0" * (-len(out_bin) % 4)
+        bv["byteOffset"] = len(out_bin)
+        out_bin += chunk
+        views.append(bv)
+    out_bin += b"\0" * (-len(out_bin) % 4)
+    js["bufferViews"] = views
+    js["buffers"][0]["byteLength"] = len(out_bin)
+    for acc in js.get("accessors", []):
+        acc["bufferView"] = remap[acc["bufferView"]]
     nj = json.dumps(js, separators=(",", ":")).encode()
     nj += b" " * (-len(nj) % 4)
-    rest = data[20 + jl:]
-    out = struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(nj) + len(rest)) + struct.pack("<II", len(nj), jt) + nj + rest
+    out = struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(nj) + 8 + len(out_bin)) + struct.pack("<II", len(nj), jt) + nj
+    out += struct.pack("<II", len(out_bin), 0x004E4942) + bytes(out_bin)
     open(path, "wb").write(out)
 
 
@@ -315,7 +340,10 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     spec = json.load(open(SPEC))
     rects = json.load(open(os.path.join(ATLAS_DIR, spec["atlas"] + ".json")))
-    mat = material(os.path.join(ATLAS_DIR, spec["atlas"] + ".png"), spec["atlas"])
+    # Атлас — один файл поруч із GLB (uri), імпорт Godot стискає його у VRAM.
+    png = os.path.join(os.path.dirname(OUT), spec["atlas"] + ".png")
+    shutil.copyfile(os.path.join(ATLAS_DIR, spec["atlas"] + ".png"), png)
+    mat = material(png, spec["atlas"])
     obs = []
     for item in spec["items"]:
         if "card_keep" in spec and "card_keep" not in item:
@@ -335,7 +363,7 @@ def main():
     bpy.context.view_layer.objects.active = obs[0]
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", use_selection=True, export_yup=True,
-                              export_apply=True, export_image_format="AUTO", export_texcoords=True,
+                              export_apply=True, export_image_format="AUTO", export_keep_originals=True, export_texcoords=True,
                               export_normals=True, export_vertex_color="ACTIVE", export_all_vertex_colors=False, export_cameras=False, export_lights=False)
     patch_glb(OUT, spec.get("alpha_cutoff", 0.5))
     for o in obs:
