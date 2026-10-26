@@ -302,7 +302,7 @@ static func spawn_muzzle(parent: Node, shooter: Transform3D, weapon: Weapon, typ
 	rng.seed = hash(tip)
 	if weapon == Weapon.AUTOCANNON:
 		for r in 3:
-			_hot(root, 1.0, Vector3.ZERO, r * 0.12, PRIORITY_HOT, MUZZLE_HOT_SEC, true)
+			_hot(root, 1.5, Vector3.ZERO, r * 0.12, PRIORITY_HOT, MUZZLE_HOT_SEC, true)
 		_powder(root, rng, 1.2 * rng.randf_range(0.6, 1.4), axis * 0.06, 0.1)
 	else:
 		_hot(root, 2.0, axis * 0.05, 0.0, PRIORITY_HOT, MUZZLE_HOT_SEC, true)
