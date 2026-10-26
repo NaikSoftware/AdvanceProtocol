@@ -16,7 +16,8 @@ const MODEL_DIR: String = "res://assets/props/"
 ## Модель -> {kind, weight, …}. Слід будівлі в тайлах — з метаданих GLB (`footprint_tiles`), тож
 ## нова модель того самого виду стає в слот за самим ім'ям. Модель без файлу пропускається.
 ## max — скільки разів на карту (орієнтир, що має лишатись одним), ring — лише в кільці, gap —
-## власний проміжок до сусідньої будівлі, якщо більший за STRUCTURE_GAP,
+## власний проміжок до сусідньої будівлі й до огорожі двору, якщо більший за STRUCTURE_GAP, tower —
+## вежа, одна на двір, scale — множник розміру брили (ассет завеликий для польового каменя),
 ## map/order/deck_top — міст своєї переправи (DECK_TOP з tools/blender/bridges/build_bridges.py).
 const MODELS: Dictionary = {
 	&"house_h1": {"kind": Kind.STRUCTURE, "weight": 4},
@@ -36,8 +37,8 @@ const MODELS: Dictionary = {
 	&"f4_grain_bins": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f5_silo_battery": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f6_fuel_station": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"f7_water_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.3},
-	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.3},
+	&"f7_water_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.3, "tower": true},
+	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "max": 1, "gap": 0.3, "tower": true},
 	&"ruin_h1": {"kind": Kind.RUIN, "weight": 1},
 	&"ruin_h3": {"kind": Kind.RUIN, "weight": 1},
 	&"bridge_river_west": {"kind": Kind.BRIDGE, "map": &"river", "order": 0, "deck_top": 0.30},
@@ -55,8 +56,8 @@ const MODELS: Dictionary = {
 	&"infra_trailer_green": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
 	&"infra_trailer_rust": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
 	&"infra_jersey_block": {"kind": Kind.BLOCK, "crush": Crush.LAY},
-	&"rock_moss_01": {"kind": Kind.BOULDER, "crush": Crush.SINK},
-	&"rock_moss_02": {"kind": Kind.BOULDER, "crush": Crush.SINK},
+	&"rock_moss_01": {"kind": Kind.BOULDER, "crush": Crush.SINK, "scale": 0.55},
+	&"rock_moss_02": {"kind": Kind.BOULDER, "crush": Crush.SINK, "scale": 0.6},
 	&"rock_moss_03": {"kind": Kind.BOULDER, "crush": Crush.SINK},
 	&"rock_moss_04": {"kind": Kind.BOULDER, "crush": Crush.SINK},
 	&"boulder_01": {"kind": Kind.BOULDER, "crush": Crush.SINK},
@@ -94,17 +95,17 @@ const HAY_CHANCE: int = 2
 ## влазить із ним, поступається іншій моделі чи повороту або лишає двір порожнім, але не заходить
 ## у сусіда.
 const STRUCTURE_GAP: float = 0.1875
-## Огорожа двору стоїть за межею групи BUILDING на ~0.6 м: у двір не заходить, а звіс даху
+## Огорожа двору стоїть за межею групи BUILDING на ~1 м: у двір не заходить, а звіс даху
 ## (будівля не виходить за свій слід) її не торкається.
-const YARD_OUT: float = 0.08
+const YARD_OUT: float = 0.12
 ## Найбільший звіс даху за межу двору, клітинки (~0.5 м): ассет може бути глибшим за слід до 0.1
 ## тайла, а огорожа стоїть на YARD_OUT, тож звіс до неї не дістає.
 const YARD_EAVE: float = 0.065
 ## Кам'яні брили й бетонні блоки темніші за ассет: світлі, вони читались плямами фарби.
 const STONE_TINT: float = 0.85
 ## Пляма дотику під брилою чи блоком: у скільки разів ширша за сам пропс і наскільки темна.
-const CONTACT_SPREAD: float = 1.5
-const CONTACT_ALPHA: float = 0.45
+const CONTACT_SPREAD: float = 1.25
+const CONTACT_ALPHA: float = 0.6
 const _FADE_SHADER: Shader = preload("res://game/battle/shaders/prop_fade.gdshader")
 const _THIN_SHADER: Shader = preload("res://game/battle/shaders/prop_thin.gdshader")
 const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.gdshader")
@@ -511,6 +512,7 @@ func _build_nodes(haze: bool) -> void:
 ## неї світлий камінь на траві читається наклеєним, а справжня тінь по всіх брилах — задорога.
 func _build_contacts() -> void:
 	var xforms: Array[Transform3D] = []
+	var heights: Array[float] = []
 	for inst in _instances:
 		var k: int = int(spec_of(inst["model"])["kind"])
 		if k != Kind.BOULDER and k != Kind.BLOCK:
@@ -526,6 +528,7 @@ func _build_contacts() -> void:
 		var back: Vector3 = right.cross(up)
 		xforms.append(Transform3D(Basis(right * size.x, up, -back * size.y),
 				Vector3(c.x, TerrainHeight.ground_y(c.x, c.y) + 0.004, c.y)))
+		heights.append(box.size.y)
 	if xforms.is_empty():
 		return
 	var quad := PlaneMesh.new()
@@ -533,13 +536,16 @@ func _build_contacts() -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = _CONTACT_SHADER
 	mat.set_shader_parameter("strength", CONTACT_ALPHA)
+	mat.set_shader_parameter("cast", 1.0 if structure_shadows else 0.0)
 	quad.material = mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
 	mm.mesh = quad
 	mm.instance_count = xforms.size()
 	for i in xforms.size():
 		mm.set_instance_transform(i, xforms[i])
+		mm.set_instance_custom_data(i, Color(heights[i], 0.0, 0.0, 0.0))
 	_contacts = MultiMeshInstance3D.new()
 	_contacts.name = "ContactShadows"
 	_contacts.multimesh = mm
@@ -682,6 +688,9 @@ class _Placer:
 	var edges: Dictionary = {}
 	## Клітинки дошки з огорожею двору: польова огорожа й причепи їх оминають.
 	var yard_cells: Dictionary = {}
+	## Клітинки дошки під будівлями: двір без будівлі не обгороджується (порожня огорожа серед поля
+	## читається уламком).
+	var built: Dictionary = {}
 
 	func _init(p_layer: PropLayer, p_world: Board, p_ring: int, p_size: Vector2i,
 			p_height: TerrainHeight, p_map: StringName, p_half: Vector2) -> void:
@@ -805,6 +814,7 @@ class _Placer:
 			free[c] = true
 		var in_group: Dictionary = free.duplicate()
 		var in_ring: bool = not group.any(func(c: Vector2i) -> bool: return on_board(c))
+		var has_tower := false
 		var models: Array[StringName] = PropLayer.models_of(kind_id)
 		var step: int = 0
 		while true:
@@ -815,6 +825,8 @@ class _Placer:
 				if bool(s.get("ring", false)) and not in_ring:
 					continue
 				if s.has("max") and int(used.get(m, 0)) >= int(s["max"]):
+					continue
+				if bool(s.get("tower", false)) and has_tower:
 					continue
 				var fp: Vector2i = (PropLayer.model(m) as Dictionary)["footprint"]
 				if fp == Vector2i.ZERO:
@@ -841,6 +853,7 @@ class _Placer:
 				roll -= int(o[4])
 				if roll < 0:
 					_put_structure(o[0], o[1], o[2], o[3], free)
+					has_tower = has_tower or bool(PropLayer.spec_of(o[0]).get("tower", false))
 					break
 
 	func _rect_of(m: StringName, origin: Vector2i, rot: int, s: Vector2i) -> Rect2:
@@ -864,14 +877,16 @@ class _Placer:
 	func _inside_yard(m: StringName, origin: Vector2i, rot: int, s: Vector2i, in_group: Dictionary) -> bool:
 		var r: Rect2 = _rect_of(m, origin, rot, s)
 		var f := Rect2(Vector2(origin) - Vector2(0.5, 0.5), Vector2(s))
+		# Модель із власним проміжком (вежа) тримає його й до огорожі двору, що стоїть на YARD_OUT.
+		var reach: float = minf(YARD_EAVE, YARD_OUT - float(PropLayer.spec_of(m).get("gap", 0.0)))
 		var sides: Array = []
-		if r.position.x < f.position.x - YARD_EAVE:
+		if r.position.x < f.position.x - reach:
 			sides.append(Vector2i(-1, 0))
-		if r.end.x > f.end.x + YARD_EAVE:
+		if r.end.x > f.end.x + reach:
 			sides.append(Vector2i(1, 0))
-		if r.position.y < f.position.y - YARD_EAVE:
+		if r.position.y < f.position.y - reach:
 			sides.append(Vector2i(0, -1))
-		if r.end.y > f.end.y + YARD_EAVE:
+		if r.end.y > f.end.y + reach:
 			sides.append(Vector2i(0, 1))
 		for d: Vector2i in sides:
 			for dy in s.y:
@@ -908,6 +923,7 @@ class _Placer:
 				var c: Vector2i = origin + Vector2i(dx, dy)
 				free.erase(c)
 				cells.append(c)
+				built[c] = true
 				# Найнижча точка під слідом: стіна трохи заходить у землю, але ніде не висить.
 				for o: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
 					lo = minf(lo, ground(c.x + o.x, c.y + o.y))
@@ -1036,6 +1052,8 @@ class _Placer:
 
 	func _fence_yard(group: Dictionary, first: Vector2i) -> void:
 		var m: StringName = pick_for_half(Kind.GARDEN_FENCE, half(first))
+		if not group.keys().any(func(c: Vector2i) -> bool: return built.has(c)):
+			return
 		var cells: Array = group.keys()
 		cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
 		var sides: Array = []
@@ -1184,8 +1202,8 @@ class _Placer:
 					for attempt in 4:
 						var a: float = float(h(c, 40 + k * 5 + attempt) % 628) / 100.0
 						var r: float = 0.34 + float(h(c, 60 + k) % 10) / 100.0
-						if put_small(m, c, Vector2(cos(a), sin(a)) * r, float(h(c, 70 + k) % 628) / 100.0,
-								0.85 + float(h(c, 80 + k) % 30) / 100.0):
+						var scale: float = float(PropLayer.spec_of(m).get("scale", 1.0)) * (0.85 + float(h(c, 80 + k) % 30) / 100.0)
+						if put_small(m, c, Vector2(cos(a), sin(a)) * r, float(h(c, 70 + k) % 628) / 100.0, scale):
 							break
 
 	## Опори вздовж доріг: асфальт і ґрунтівка — 10 кВ з прольотом ~7.5 клітинки, вулиці (бруківка)

@@ -512,3 +512,58 @@ func test_sunny_map_switches_structure_shadows_on(p = use_parameters([["crossroa
 	add_child_autofree(screen)
 	screen.setup(_map(p[0]), 2, 1, service)
 	assert_eq((screen.get_node("%BoardView") as BoardView).structure_shadows, p[1], p[0])
+
+
+## Огорожа двору стоїть лише довкола групи, де є будівля: порожній обгороджений двір читається
+## уламком огорожі серед поля.
+func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var board: Board = m.to_board()
+	var view: BoardView = _view(m)
+	var built: Dictionary = {}
+	for inst in view.props().all_instances():
+		if _kind(inst["model"]) == PropLayer.Kind.STRUCTURE:
+			for c: Vector2i in inst["cells"]:
+				built[c] = true
+	for inst in view.props().all_instances():
+		if _kind(inst["model"]) != PropLayer.Kind.GARDEN_FENCE:
+			continue
+		var c: Vector2i = (inst["cells"] as Array)[0]
+		var has_built := false
+		for d in Board.DIRS_4:
+			if board.in_bounds(c + d) and board.kind_at(c + d) == Terrain.Kind.BUILDING:
+				has_built = has_built or _group_has(board, c + d, built)
+		assert_true(has_built, "%s: огорожа на %s довкола порожнього двору" % [p, c])
+
+
+func _group_has(board: Board, start: Vector2i, built: Dictionary) -> bool:
+	var seen: Dictionary = {start: true}
+	var queue: Array[Vector2i] = [start]
+	while not queue.is_empty():
+		var q: Vector2i = queue.pop_back()
+		if built.has(q):
+			return true
+		for d in Board.DIRS_4:
+			var n: Vector2i = q + d
+			if board.in_bounds(n) and not seen.has(n) and board.kind_at(n) == Terrain.Kind.BUILDING:
+				seen[n] = true
+				queue.append(n)
+	return false
+
+
+## Вежа тримає свій проміжок (0.3 клітинки, ~2.4 м) і до огорожі двору.
+func test_towers_keep_clear_of_fences(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _view(_map(p))
+	var towers: Array[Rect2] = []
+	var fences: Array[Rect2] = []
+	for inst in view.props().all_instances():
+		var s: Dictionary = PropLayer.spec_of(inst["model"])
+		var box: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var r := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+		if bool(s.get("tower", false)):
+			towers.append(r.grow(float(s["gap"])))
+		elif int(s["kind"]) == PropLayer.Kind.GARDEN_FENCE:
+			fences.append(r)
+	for t in towers:
+		for f in fences:
+			assert_false(t.intersects(f), "%s: вежа ближче 0.3 клітинки до огорожі" % p)

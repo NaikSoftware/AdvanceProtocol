@@ -1,9 +1,25 @@
 // Пляма дотику під брилою чи бетонним блоком (PropLayer): м'яке затемнення землі довкола підошви.
-// Не тінь сонця — та лише юнітам і будівлям; пляма лише прибирає «наклеєність» каменя на траві.
+// На сонячній карті пляма витягується від сонця на довжину тіні предмета — запечена тінь замість
+// проходу тіней по всіх брилах, що коштував би десятки тисяч трикутників.
 shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled, world_vertex_coords;
 
-uniform float strength = 0.45;
+uniform float strength = 0.6;
+// 1 — карта з чіткою тінню сонця (PropLayer.structure_shadows), 0 — похмура: лише кругла пляма.
+uniform float cast = 0.0;
+// Напрям на сонце (WeatherRig): тінь лягає в протилежний бік.
+global uniform vec3 sun_dir;
+
+void vertex() {
+	// INSTANCE_CUSTOM.r — висота предмета, клітинки: від неї довжина тіні.
+	vec3 centre = MODEL_MATRIX[3].xyz;
+	vec2 away = VERTEX.xz - centre.xz;
+	vec2 shadow = -sun_dir.xz / max(sun_dir.y, 0.35) * INSTANCE_CUSTOM.r * cast;
+	if (dot(shadow, shadow) > 1e-8 && dot(away, away) > 1e-8) {
+		float far = 0.5 + 0.5 * dot(normalize(away), normalize(shadow));
+		VERTEX.xz += shadow * far;
+	}
+}
 
 void fragment() {
 	// UV площини 0..1: кругла пляма з м'яким краєм, найтемніша під самим каменем.

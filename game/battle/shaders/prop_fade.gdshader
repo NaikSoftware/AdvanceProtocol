@@ -15,13 +15,15 @@ uniform float metallic = 0.0;
 global uniform float weather_wetness;
 // Повна відповідь уже на мокрості River (0.55); 0 — суха карта без змін.
 const float WET_FULL = 0.5;
-// Мокра стіна темніє до 0.55 альбедо: інакше біла штукатурка — найяскравіше в похмурому кадрі.
-const float WET_WALL = 0.55;
+// Мокра стіна темніє до 0.36 альбедо: світла штукатурка на 0.55 лишалась у 1.4 раза яскравішою за
+// мокру землю, найяскравішою річчю похмурого кадру.
+const float WET_WALL = 0.36;
 const float WET_ROOF = 0.75;
-const float WET_ROOF_ROUGHNESS = 0.3;
-// Смуга бруду внизу стіни (~0.5 м, клітинка — 8 м) і темніший стик із землею (~0.15 м).
-const float GRIME_H = 0.0625;
-const float GRIME = 0.7;
+// Мокрий дах — м'який полиск: на 0.3 блік лягав на гофр рівними білими смугами.
+const float WET_ROOF_ROUGHNESS = 0.5;
+// Смуга бруду внизу стіни (~0.65 м, клітинка — 8 м) і темніший стик із землею (~0.15 м).
+const float GRIME_H = 0.08;
+const float GRIME = 0.6;
 const float CONTACT_H = 0.02;
 const float CONTACT = 0.6;
 
