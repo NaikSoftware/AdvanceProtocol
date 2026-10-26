@@ -174,17 +174,13 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 	return root
 
 
-## Кінчик ствола від центру юніта: танкові стволи 5–6 м, гармати ≈ 3,6 м.
-const MUZZLE_REACH: float = 0.6
-
-
 ## Дульний спалах біля стрільця: танк і гармата — 4 м, автогармата — три малі. Стрілецька
 ## зброя спалаху не має: на екрані він субпіксельний. Стрільця, якого глядач не бачить, сюди
 ## не передають зовсім.
-static func spawn_muzzle(parent: Node, shooter: Transform3D, weapon: Weapon) -> Node3D:
+static func spawn_muzzle(parent: Node, shooter: Transform3D, weapon: Weapon, type_id: int = -1) -> Node3D:
 	if weapon == Weapon.RIFLE or weapon == Weapon.DRONE:
 		return null
-	var tip: Vector3 = shooter.origin - shooter.basis.z.normalized() * MUZZLE_REACH + Vector3(0, 0.2, 0)
+	var tip: Vector3 = shooter * (UnitSilhouettes.muzzle(type_id) if type_id >= 0 else Vector3(0, 0.2, -0.6))
 	var root := _root("Muzzle", parent, tip)
 	if weapon == Weapon.AUTOCANNON:
 		for r in 3:

@@ -38,6 +38,21 @@ const FALLEN_COLOR: Color = Color("3a342c")
 const _FIGURE_SLOTS: Array[Vector2] = [Vector2(-0.1, -0.09), Vector2(0.1, -0.1), Vector2(-0.09, 0.1), Vector2(0.11, 0.09)]
 
 
+## Кінчик ствола в локальних координатах юніта: звідси вилітає спалах.
+static func muzzle(type_id: int) -> Vector3:
+	return Vector3(0.0, barrel_y(type_id), -float(spec(type_id).barrel))
+
+
+## Висота осі ствола: у башті — посередині неї, у гаубиці — над станиною, інакше — з корпусу.
+static func barrel_y(type_id: int) -> float:
+	var s: Dictionary = spec(type_id)
+	var h: float = (s.hull as Vector3).y
+	var extras: Array = s.extras
+	if extras.has(&"turret"):
+		return h + TURRET_HEIGHT * 0.5
+	return h + 0.04 if extras.has(&"tall_barrel") else h * 0.5
+
+
 static func spec(type_id: int) -> Dictionary:
 	return _SPECS[type_id]
 
@@ -80,12 +95,7 @@ static func build(type_id: int, owner_color: Color) -> Node3D:
 	if barrel_len > 0.0:
 		var tall: bool = extras.has(&"tall_barrel")
 		var thick := 0.07 if tall else 0.05
-		var y: float = hull_size.y * 0.5  # без башти ствол стирчить із корпусу
-		if extras.has(&"turret"):
-			y = top - TURRET_HEIGHT * 0.5
-		elif tall:
-			y = hull_size.y + 0.04
-		_box(root, "Barrel", Vector3(thick, thick, barrel_len), Vector3(0, y, -barrel_len * 0.5), _BARREL_COLOR)
+		_box(root, "Barrel", Vector3(thick, thick, barrel_len), Vector3(0, barrel_y(type_id), -barrel_len * 0.5), _BARREL_COLOR)
 	return root
 
 
