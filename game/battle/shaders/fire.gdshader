@@ -1,15 +1,14 @@
-
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
 uniform sampler2D flame_tex : source_color, filter_linear_mipmap;
-uniform vec2 grid = vec2(8.0);
+uniform vec2 grid = vec2(16.0, 4.0);
 uniform float frames = 64.0;
 // Той самий крок таймера, що й у диму. Цикл 64 кадри; кожен екземпляр — свій темп ±20 % і свій стартовий кадр, тож двох у такт нема.
 uniform float fx_time = 0.0;
 uniform float play_fps = 30.0;
 // Понад 1: ядро світиться майже білим, краї й верх — помаранчеві з атласу.
-uniform float gain = 2.8;
+uniform float gain = 1.6;
 // Де в клітинці основа полум'я (v згори), яку частку ширини воно займає, висота клітинки до ширини.
 uniform float base_v = 0.8;
 uniform float fill = 0.6;
@@ -28,8 +27,9 @@ uniform float soft_fade = 0.08;
 varying float v_frame;
 varying float v_in;
 
-float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
-// Шум значень: гладкий, але неперіодичний (синус дав би розмірене «танцювання»).
+// Хеш без sin: sin великого аргументу у float32 губить точність, а fx_time росте весь матч.
+float h1(float x) { float p = fract(x * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
+// Шум значень: гладкий, але неперіодичний.
 float vnoise(float x) { float i = floor(x); float f = fract(x); return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f)); }
 
 void vertex() {
@@ -50,7 +50,7 @@ void vertex() {
 	float base_y = 0.5 - base_v;
 	vec3 world = root + right * VERTEX.x * qw + vec3(0.0, (VERTEX.y - base_y) * qh - 0.01, 0.0);
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
-	v_frame = fx_time * play_fps * (0.8 + 0.4 * fract(sd * 7.31)) + sd * frames;
+	v_frame = fx_time * play_fps * (0.8 + 0.4 * h1(sd * 17.0)) + sd * frames;
 	v_in = clamp((fx_time - INSTANCE_CUSTOM.z - fade_in_at) / fade_in_sec, 0.0, 1.0);
 }
 

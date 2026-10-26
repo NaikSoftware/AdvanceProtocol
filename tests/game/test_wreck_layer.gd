@@ -190,8 +190,8 @@ func test_smoke_is_stepped_by_a_timer_and_stops_when_nothing_burns() -> void:
 	assert_true(layer.is_animating())
 	layer.remove(Vector2i(3, 3))
 	assert_false(layer.is_animating())
-	for code: String in [WreckLayer.column_shader().code, WreckLayer.fire_shader().code]:
-		assert_false(code.contains("TIME"), "шейдер диму не сміє читати TIME")
+	for code: String in [WreckLayer.column_shader().code, WreckLayer.FIRE_SHADER.code, WreckLayer._FIRE_CODE]:
+		assert_false(code.contains("TIME"), "шейдер диму й вогню не сміє читати TIME")
 
 
 ## Дим іде туди ж, куди й дощ: нахил стовпа — та сама горизонтальна вісь вітру, що й у
@@ -251,13 +251,11 @@ func test_column_samples_its_atlases_and_fire_matches_its_flag() -> void:
 	assert_eq((cm.get_shader_parameter("puff_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column.png")
 	assert_eq((cm.get_shader_parameter("thin_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column_thin.png")
 	var fm := fire.material_override as ShaderMaterial
+	# Обидва варіанти вогню перевіряються завжди, а не лише активний.
+	assert_eq(WreckLayer.FIRE_SHADER.code.count("sampler2D"), 2, "атлас полум'я + глибина")
+	assert_eq(WreckLayer._FIRE_CODE.count("sampler2D"), 1, "процедурний: лише глибина")
 	if WreckLayer.USE_FLAME02:
-		# Атлас полум'я + глибина для м'якого краю.
 		assert_eq((fm.get_shader_parameter("flame_tex") as Texture2D).resource_path, "res://assets/vfx/flame02.png")
-		assert_eq(fm.shader.code.count("sampler2D"), 2)
-	else:
-		# Процедурне полум'я без текстури: лише глибина для м'якого краю.
-		assert_eq(fm.shader.code.count("sampler2D"), 1)
 
 
 
