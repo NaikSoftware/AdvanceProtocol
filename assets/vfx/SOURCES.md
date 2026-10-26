@@ -14,7 +14,6 @@ Domain) so you are free to use them however you want!". Each archive also carrie
 | pack (as listed on the page) | size / frames | used for |
 | --- | --- | --- |
 | Ground Explosion (`GroundExplosionVDB.zip`) | 661 MB, 200 frames, channels density + flames | `explosion.png` (frames 16–142 step 2, hottest in the first frames, rises, fades to empty over the last 12 with an eased start), `smoke_column.png` / `smoke_column_thin.png` (smoke only, frames 66–129), `dirt_burst.png` (smoke only, brown albedo, frames 20–146 step 2, rises, fades to empty over the last 12 with an eased start), `impact_flash.png` (frames 12–42 step 2, small scale) |
-| Small Camp Fire (`SmallCampfireVDB.zip`) | 59 MB, 200 frames, channels density + flames | `wreck_fire.png` (frames 0–192 at step 1.5, cross-faded into a 64-frame loop) |
 
 Every other pack on the page (Aerial Explosion, Tornado Looping, Fire Plume, Cloud Pack, Grenade Dust Impact,
 Dust Shockwave, Industrial Chimney Smoke, Building Implosion, Gasoline Explosion, High-Res Smoke Plume, Simple
@@ -33,7 +32,6 @@ pitch). The VDB files themselves are not in the repository.
 | --- | --- | --- | --- |
 | `smoke_column.png` | rolling dark smoke, plays once and ends empty (loops without a seam) | 64, 8×8 × 192 px, 4 fps, cell ≈ 22 m (the cloud fills ≈ 19 m, scale the quad) | Ground Explosion VDB |
 | `smoke_column_thin.png` | the same, lighter and thinner (peak alpha 0.35) for the thinning stages | 64, 8×8 × 192 px, 4 fps | Ground Explosion VDB |
-| `wreck_fire.png` | tall flame rising from the cell bottom, the sim's own emission kept (licks and darker gaps inside): pale yellow-white hot base, yellow-orange middle, orange-red translucent edges and tips, thin dark-grey smoke wisps above; seamless loop | 64, 16×4 × 128×256 px (2048×1024), 8 fps, cell width ≈ 2.9 m (flame ≈ 1.5 m wide, 3.2 m tall), base at the bottom centre, 6% above the cell bottom | Small Camp Fire VDB (vertical stretch 3.6) |
 | `explosion.png` | fireball then dark smoke, one-shot | 64, 8×8 × 256 px (2048²), 48 fps, cell ≈ 21.7 m | Ground Explosion VDB |
 | `dirt_burst.png` | brown earth and dust cloud, no fire, one-shot | 64, 8×8 × 256 px (2048²), 40 fps, cell ≈ 13.4 m | Ground Explosion VDB (density only, brown albedo) |
 | `impact_flash.png` | muzzle / impact flash into a small fireball, ends empty | 16, 4×4 × 192 px, 60 fps, cell ≈ 9.2 m | Ground Explosion VDB (early frames) |
@@ -53,7 +51,6 @@ frames 16 and 50), so anchor the quad on the blast point and let the cloud lift 
 | `dirt_burst.png` | 256 px, 8×8 (2048²) | 13.4 | 0.495 | 0.882 | 190 |
 | `impact_flash.png` | 192 px, 4×4 (768²) | 9.2 | 0.479 | 0.788 | 112 |
 | `smoke_column.png`, `smoke_column_thin.png` | 192 px, 8×8 (1536²) | 22.1 | about 0.5 | about 0.94 (base of the cloud, estimate) | – |
-| `wreck_fire.png` | 128×256 px, 16×4 (2048×1024) | 2.9 (cell height ≈ 5.9 m) | 0.5 | about 0.94 (estimate) | – |
 
 All atlases import as VRAM-compressed (`compress/mode=2`) with mipmaps on.
 

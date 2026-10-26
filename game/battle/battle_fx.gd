@@ -21,19 +21,24 @@ const DIRT_TEX: Texture2D = preload("res://assets/vfx/dirt_burst.png")
 const FLASH_TEX: Texture2D = preload("res://assets/vfx/impact_flash.png")
 const SPARKS_TEX: Texture2D = preload("res://assets/vfx/armour_sparks.png")
 
-## Атласи (кадрів, сітка, швидкість, метрів у клітинці) — за SOURCES.md. Куля вибуху на піку
-## займає ~15 м із 22-метрової клітинки (виміряно на кадрах), хмара ґрунту — ~8 м із 13,7,
-## спалах — ~3 м із 6,7.
+## Атласи (кадрів, сітка, швидкість, метрів у клітинці) — за SOURCES.md. Вміст на піку — з
+## виміряних кадрів: куля 197 текселів із 256, ґрунт 190 із 256, спалах 112 із 192. Кожен
+## виклик задає бажаний розмір вмісту в метрах; квад — у стільки ж разів більший за клітинку.
 const EXPLOSION_FPS: float = 48.0
-const EXPLOSION_CELL_M: float = 22.0
-const EXPLOSION_BALL_M: float = 15.0
+const EXPLOSION_CELL_M: float = 21.7
+const EXPLOSION_BALL_M: float = 21.7 * 197.0 / 256.0
 ## 40 кадрів/с дали б 1,6 с; 44 вкладають усі 64 кадри в межу однієї миті (≤ 1,5 с).
 const DIRT_FPS: float = 44.0
-const DIRT_CELL_M: float = 13.7
-const DIRT_CLOUD_M: float = 8.0
+const DIRT_CELL_M: float = 13.4
+const DIRT_CLOUD_M: float = 13.4 * 190.0 / 256.0
 const FLASH_FPS: float = 60.0
-const FLASH_CELL_M: float = 6.7
-const FLASH_CORE_M: float = 3.0
+const FLASH_CELL_M: float = 9.2
+const FLASH_CORE_M: float = 9.2 * 112.0 / 192.0
+## Точка вибуху в клітинці атласу (частка ширини зліва, висоти згори; SOURCES.md): квад
+## зсунуто так, що вона лягає на точку влучання, а хмара здіймається з неї.
+const EXPLOSION_BLAST := Vector2(0.508, 0.866)
+const DIRT_BLAST := Vector2(0.495, 0.882)
+const FLASH_BLAST := Vector2(0.479, 0.788)
 ## Іскри trace_03/04 (клітинки 2 і 3) звиваються блискавкою — їх не беремо.
 const SPARK_CELLS: Array[int] = [0, 1, 4, 5, 6]
 
@@ -41,16 +46,15 @@ const SPARK_CELLS: Array[int] = [0, 1, 4, 5, 6]
 ## ще секунду, щоб полум'я уламків проступило під ним, а не змінило кулю одним кадром.
 const EXPLOSION_TAIL_SEC: float = 1.0
 const EXPLOSION_SEC: float = 40.0 / EXPLOSION_FPS + EXPLOSION_TAIL_SEC
-## Квад влучання піднято на пів радіуса: атлас знято з землі під 45°, і низ клуби інакше
-## різав би землю рівною лінією. Межу з землею ще й м'яко гасить глибина на 1,5 м.
-const HIT_ANCHOR: float = 0.25
+## Межу клуби з землею й корпусом м'яко гасить глибина на 1,5 м.
 const HIT_SOFT_FADE: float = 1.5 / 8.0
 ## Ґрунт гасне з цього кадру: хвіст атласу лишав би темну грудку на траві.
 const DIRT_FADE_FROM: float = 40.0
 ## Світло спалаху — 3–5 кадрів.
 const FLASH_SEC: float = 0.08
-## Куля починається ~2 м над землею: так вона накриває корпус, а не лежить на траві.
-const LIFT_M: float = 2.0
+## Куля народжується в корпусі, ~1 м над землею: точка вибуху атласу внизу клітинки, і
+## клуба здіймається з неї, накриваючи машину, а не висить над нею.
+const LIFT_M: float = 1.0
 
 static var _mix_shader: Shader
 static var _add_shader: Shader
@@ -69,14 +73,12 @@ static func fireball_size(unit_class: int) -> float:
 static func spawn_explosion(parent: Node, at: Vector3, size: float) -> Node3D:
 	var root := _root("Explosion", parent, at)
 	var ball := _sprite(root, "Ball", EXPLOSION_TEX, Vector2(8, 8), 64, size * EXPLOSION_CELL_M / EXPLOSION_BALL_M, LIFT_M / 8.0, 1.0, false)
-	(ball.material_override as ShaderMaterial).set_shader_parameter("anchor", -0.1)
 	var bmat := ball.material_override as ShaderMaterial
 	var bt: Tween = root.create_tween()
 	bt.tween_method(func(f: float) -> void: bmat.set_shader_parameter("frame", f), 0.0, 40.0, 40.0 / EXPLOSION_FPS)
 	bt.tween_method(func(f: float) -> void: bmat.set_shader_parameter("frame", f), 40.0, 63.0, EXPLOSION_TAIL_SEC)
 	bt.tween_callback(func() -> void: ball.visible = false)
 	var flash := _sprite(root, "Flash", FLASH_TEX, Vector2(4, 4), 16, size * 0.5 * FLASH_CELL_M / FLASH_CORE_M, LIFT_M / 8.0, 2.5, true)
-	(flash.material_override as ShaderMaterial).set_shader_parameter("anchor", -0.1)
 	_play(root, flash, 16, FLASH_FPS, 0.0)
 	_light(root, 10.0, 6.0)
 	var tw: Tween = root.create_tween()
@@ -334,7 +336,6 @@ static func _spray(root: Node3D, rng: RandomNumberGenerator, count: int, at: Vec
 		var mat := q.material_override as ShaderMaterial
 		mat.set_shader_parameter("frame", float(SPARK_CELLS[rng.randi() % SPARK_CELLS.size()]))
 		mat.set_shader_parameter("roll", rng.randf_range(-1.3, 1.3))
-		mat.set_shader_parameter("anchor", 0.0)
 		q.visible = delay <= 0.0
 		var tw: Tween = root.create_tween()
 		if delay > 0.0:
@@ -342,6 +343,19 @@ static func _spray(root: Node3D, rng: RandomNumberGenerator, count: int, at: Vec
 			tw.tween_callback(func() -> void: q.visible = true)
 		tw.tween_interval(0.12)
 		tw.tween_callback(func() -> void: q.visible = false)
+
+
+## Зсув центру кваду від точки влучання, у частках кваду (x — праворуч на екрані, y — угору):
+## точка вибуху атласу лягає на точку влучання. Іскри — смуги з центру.
+static func anchor_of(tex: Texture2D) -> Vector2:
+	var blast := Vector2(0.5, 0.5)
+	if tex == EXPLOSION_TEX:
+		blast = EXPLOSION_BLAST
+	elif tex == DIRT_TEX:
+		blast = DIRT_BLAST
+	elif tex == FLASH_TEX:
+		blast = FLASH_BLAST
+	return Vector2(0.5 - blast.x, blast.y - 0.5)
 
 
 static func _sprite(root: Node3D, node_name: String, tex: Texture2D, grid: Vector2, frames: int, size: float, lift: float, gain: float, additive: bool) -> MeshInstance3D:
@@ -363,7 +377,7 @@ static func _sprite(root: Node3D, node_name: String, tex: Texture2D, grid: Vecto
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.custom_aabb = AABB(Vector3(-2, -1, -2), Vector3(4, 4, 4))
 	mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
-	mat.set_shader_parameter("anchor", HIT_ANCHOR)
+	mat.set_shader_parameter("anchor", anchor_of(tex))
 	mat.set_shader_parameter("soft_fade", HIT_SOFT_FADE)
 	# Читабельні імена (Spark2, Spark3): рушій інакше перейменував би однойменних сусідів у @…@.
 	root.add_child(mi, true)
@@ -420,9 +434,9 @@ uniform float frame = 0.0;
 uniform float size = 1.0;
 uniform float lift = 0.0;
 uniform float gain = 1.0;
-// Зсув центру кваду вгору, у частках його розміру; задає BattleFx на кожен ефект
-// (HIT_ANCHOR — влучання, −0,1 — куля й спалах знищення).
-uniform float anchor = 0.0;
+// Зсув центру кваду від точки влучання в площині кадру, у частках кваду (BattleFx.anchor_of):
+// точка вибуху атласу лягає на точку влучання.
+uniform vec2 anchor = vec2(0.0);
 // Поворот смуги в площині кадру (іскри віялом).
 uniform float roll = 0.0;
 // З цього кадру клуба гасне до нуля (хвіст атласу інакше лишається темною грудкою).
@@ -437,7 +451,7 @@ uniform float soft_fade = 0.15;
 
 void vertex() {
 	float s = size * length(MODEL_MATRIX[0].xyz);
-	vec3 c = MODEL_MATRIX[3].xyz + vec3(0.0, lift + s * anchor, 0.0);
+	vec3 c = MODEL_MATRIX[3].xyz + vec3(0.0, lift, 0.0) + (INV_VIEW_MATRIX[0].xyz * anchor.x + INV_VIEW_MATRIX[1].xyz * anchor.y) * s;
 	vec2 v = vec2(cos(roll) * VERTEX.x - sin(roll) * VERTEX.y, sin(roll) * VERTEX.x + cos(roll) * VERTEX.y);
 	vec3 world = c + (INV_VIEW_MATRIX[0].xyz * v.x + INV_VIEW_MATRIX[1].xyz * v.y) * s;
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);

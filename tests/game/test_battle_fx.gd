@@ -29,11 +29,12 @@ func test_flash_plays_its_sixteen_frames_and_the_light_dies_fast() -> void:
 	assert_false(flash.visible, "спалах дограв і сховався, а не висить над кулею")
 
 
-## Куля стоїть на корпусі й починається ~2 м над землею, а не лежить на траві поруч.
-func test_fireball_is_centred_on_the_hull_two_metres_up() -> void:
+## Куля народжується в корпусі, ~1 м над землею, і здіймається з нього: точка вибуху атласу
+## внизу клітинки, тож вищий корінь підняв би всю кулю над машиною.
+func test_fireball_is_born_inside_the_hull() -> void:
 	var boom: Node3D = BattleFx.spawn_explosion(parent, Vector3(2, 0, 3), 1.5)
 	var mat := (boom.get_node("Ball") as MeshInstance3D).material_override as ShaderMaterial
-	assert_eq(mat.get_shader_parameter("lift"), 2.0 / 8.0)
+	assert_eq(mat.get_shader_parameter("lift"), 1.0 / 8.0)
 	assert_eq(boom.position, Vector3(2, 0, 3))
 
 
@@ -143,16 +144,44 @@ func _params(root: Node, key: String) -> Array:
 	return out
 
 
-## Квад влучання не врізається в землю рівною лінією: центр піднято на ~0,5 радіуса, край
-## м'який на 1,5 м.
-func test_hit_sprites_float_and_fade_into_the_ground() -> void:
+## Кожна клуба народжується в точці вибуху свого атласу (SOURCES.md): квад зсунуто так, що
+## ця точка атласу лягає на точку влучання (дуло, ґрунт, корпус). Край м'який на 1,5 м.
+func test_each_sprite_is_born_at_its_atlas_blast_point() -> void:
+	var expect := {
+		BattleFx.EXPLOSION_TEX: Vector2(0.5 - 0.508, 0.866 - 0.5),
+		BattleFx.DIRT_TEX: Vector2(0.5 - 0.495, 0.882 - 0.5),
+		BattleFx.FLASH_TEX: Vector2(0.5 - 0.479, 0.788 - 0.5),
+		BattleFx.SPARKS_TEX: Vector2.ZERO,
+	}
+	var roots: Array[Node3D] = [BattleFx.spawn_explosion(parent, Vector3.ZERO, 1.5), BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.TANK_GUN)]
 	for w: int in BattleFx.Weapon.values():
-		var hit: Node3D = BattleFx.spawn_hit(parent, Vector3(w, 0, 5), w, false)
-		for a: Variant in _params(hit, "anchor"):
-			assert_eq(a, BattleFx.HIT_ANCHOR)
-		for f: Variant in _params(hit, "soft_fade"):
-			assert_eq(f, 1.5 / 8.0)
-	assert_eq(BattleFx.HIT_ANCHOR, 0.25)
+		roots.append(BattleFx.spawn_hit(parent, Vector3(w, 0, 5), w, false))
+		roots.append(BattleFx.spawn_hit(parent, Vector3(w, 0, 7), w, true))
+	var seen: Dictionary = {}
+	for root: Node3D in roots:
+		if root == null:
+			continue
+		for n: Node in root.find_children("*", "MeshInstance3D", true, false):
+			var mat := (n as MeshInstance3D).material_override as ShaderMaterial
+			var tex: Texture2D = mat.get_shader_parameter("tex")
+			var got: Vector2 = mat.get_shader_parameter("anchor")
+			assert_almost_eq(got, expect[tex], Vector2.ONE * 1e-6, "%s" % tex.resource_path)
+			seen[tex] = true
+	assert_eq(seen.size(), 4, "перевірено всі чотири атласи")
+	for f: Variant in _params(BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.SHELL, false), "soft_fade"):
+		assert_eq(f, 1.5 / 8.0)
+
+
+## Розміри клітинок атласів і вмісту — з SOURCES.md і виміряних кадрів: куля на піку
+## 197 текселів із 256 у 21,7-метровій клітинці, ґрунт 190 із 256 у 13,4 м, спалах 112 із 192
+## у 9,2 м.
+func test_atlas_cells_match_sources() -> void:
+	assert_eq(BattleFx.EXPLOSION_CELL_M, 21.7)
+	assert_eq(BattleFx.DIRT_CELL_M, 13.4)
+	assert_eq(BattleFx.FLASH_CELL_M, 9.2)
+	assert_almost_eq(BattleFx.EXPLOSION_BALL_M, 21.7 * 197.0 / 256.0, 1e-9)
+	assert_almost_eq(BattleFx.DIRT_CLOUD_M, 13.4 * 190.0 / 256.0, 1e-9)
+	assert_almost_eq(BattleFx.FLASH_CORE_M, 9.2 * 112.0 / 192.0, 1e-9)
 
 
 ## Хмара ґрунту гасне з 40-го кадру: хвіст атласу інакше лишав темну грудку на траві.
