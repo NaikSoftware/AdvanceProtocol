@@ -99,9 +99,10 @@ var _unit_views: Dictionary = {}
 ## паном камери. ~10dp = 10 логічних px, бо UiScale тримає логічний px ≈ dp
 ## (_drag_threshold_px() нижче) — одне місце, а не розмазане по обробниках.
 const _DRAG_THRESHOLD_DP: float = 10.0
-## Сонячна карта (чітка тінь сонця): будівлі кидають тінь, інакше висять над землею. Під хмарами
-## River тінь слабка, і будинки без неї не відриваються від землі.
-const STRUCTURE_SHADOW_MIN_OPACITY: float = 0.5
+## Ясне небо (BattleLook.sky_clear): на сонці пропси кидають тінь, інакше висять над землею. Під
+## хмарами River світло розсіяне, і будинки без тіні від землі не відриваються. Не за прозорістю
+## тіні: на сонячних картах вона навмисно м'яка й світліша, ніж під хмарами.
+const STRUCTURE_SHADOW_MIN_SKY_CLEAR: float = 0.5
 
 ## Довгий натиск (docs/ui/overlays.md): палець тримається стільки, не перетнувши
 ## поріг драга, — огляд дальності замість тапу; відпускання його знімає.
@@ -260,7 +261,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
 	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
 	_board_view.season = look.season
-	_board_view.structure_shadows = look.shadow_opacity >= STRUCTURE_SHADOW_MIN_OPACITY
+	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
 	_weather.apply(look)
 	_wire_view(board)
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
@@ -290,7 +291,7 @@ func resume(match_service: Node = null) -> void:
 		_board_view.ring_map = saved_map
 	var look: BattleLook = BattleLook.for_map_path(mp)
 	_board_view.season = look.season
-	_board_view.structure_shadows = look.shadow_opacity >= STRUCTURE_SHADOW_MIN_OPACITY
+	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
 	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)

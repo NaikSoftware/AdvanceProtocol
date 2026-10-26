@@ -41,6 +41,7 @@ const MODELS: Dictionary = {
 	&"f7_water_tower": {"kind": Kind.STRUCTURE, "weight": 1, "gap": 0.5, "tower": true},
 	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "gap": 0.5, "tower": true},
 	&"ruin_h1": {"kind": Kind.RUIN, "weight": 1},
+	&"ruin_h3": {"kind": Kind.RUIN, "weight": 1},
 	&"bridge_river_west": {"kind": Kind.BRIDGE, "map": &"river", "order": 0, "deck_top": 0.30},
 	&"bridge_river_centre": {"kind": Kind.BRIDGE, "map": &"river", "order": 1, "deck_top": 0.30},
 	&"bridge_river_east": {"kind": Kind.BRIDGE, "map": &"river", "order": 2, "deck_top": 0.21},
@@ -65,7 +66,7 @@ const MODELS: Dictionary = {
 ## Руїни, яких у таблиці ще нема, стають у слот за префіксом імені: напівзруйнована будівля —
 ## звичайна, повна руїна — рідкісна. Перший збіг виграє.
 ## Моделі, що лежать на диску, але ще не прийняті: їх не бере ні таблиця, ні префікс.
-const RETIRED: Array[StringName] = [&"ruin_h3"]
+const RETIRED: Array[StringName] = []
 const PREFIX_RULES: Array[Dictionary] = [
 	{"prefix": "ruin_half_", "kind": Kind.RUIN, "weight": 6},
 	{"prefix": "ruin_", "kind": Kind.RUIN, "weight": 1},
@@ -1170,17 +1171,28 @@ class _Placer:
 		var key := Vector4i(c.x, c.y, -d.x, -d.y)
 		if edges.has(key) or hi - lo < 0.05:
 			return
-		var local: Vector2 = -Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
-		# Подовжена на куті секція може дістати до сусідньої будівлі (руїни) — тоді її нема.
-		var mid := Vector2(c) + local
-		var half_t: Vector2 = Vector2(t) * (hi - lo) * 0.5
-		var span := Rect2(mid - half_t.abs(), half_t.abs() * 2.0).grow(0.3 - 1e-3)
-		for pl: Array in placed:
-			if span.intersects(pl[0]):
+		# Секція тримає ≥ 0.3 клітинки від будь-якої будівлі (зокрема руїни на сусідній клітинці):
+		# заважає — коротшає з обох кінців, і лише коротша за 0.3 клітинки не стає зовсім.
+		var cut: float = 0.0
+		while not _span_clear(c, d, t, lo + cut, hi - cut):
+			cut += 0.05
+			if hi - lo - 2.0 * cut < 0.3:
 				return
+		lo += cut
+		hi -= cut
+		var local: Vector2 = -Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
 		if put_small(m, c, local, 0.0 if d.y != 0 else PI * 0.5, 1.0, true, hi - lo):
 			edges[key] = true
 			yard_cells[c] = true
+
+	func _span_clear(c: Vector2i, d: Vector2i, t: Vector2i, lo: float, hi: float) -> bool:
+		var mid: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
+		var half_t: Vector2 = (Vector2(t) * (hi - lo) * 0.5).abs()
+		var span := Rect2(mid - half_t, half_t * 2.0).grow(0.3 - 1e-3)
+		for pl: Array in placed:
+			if span.intersects(pl[0]):
+				return false
+		return true
 
 	## Огорожа поля вздовж дороги: відрізками щонайменше у дві клітинки, з одного боку дороги на
 	## відрізок і не біля дворів — подвійні паралельні ряди й самотня секція серед поля читаються
