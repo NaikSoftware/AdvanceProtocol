@@ -4,8 +4,8 @@ extends GutTest
 ## пікінг по піднятій клітинці. 1 м = 0.125 світу.
 
 const M: float = TerrainHeight.M
-## Сума висот _flat_checksum(3), записана з коду без розкиду опори пагорба.
-const FLAT_CHECKSUM_SEED3: float = -2.141504
+## Сума висот _flat_checksum(3), записана з коду без розкиду опори пагорба (поле вже рівне).
+const FLAT_CHECKSUM_SEED3: float = -17.680515
 
 
 ## 14x14 поле: пагорб 3x3 у (3..5, 3..5), дорога вздовж X на y = 10, річка (2 клітинки) на y = 7..8
@@ -278,7 +278,8 @@ func test_bend_has_a_steep_cut_bank_outside_and_a_gentle_point_bar_inside() -> v
 		nrm = -nrm
 	var outer: float = _bank_run_m(t, mid, nrm)
 	var inner: float = _bank_run_m(t, mid, -nrm)
-	assert_true(outer > 0.0 and outer <= 2.6 and outer < 0.6 * inner, "підмитий берег: падіння 1 м на ≤ 2.6 м і вдвічі різкіший за косу, є %.2f м (коса %.2f)" % [outer, inner])
+	# Верх берега — рівне поле на y = 0, тож 1 м над водою лежить у м'якій верхній частині схилу.
+	assert_true(outer > 0.0 and outer <= 2.7 and outer < 0.6 * inner, "підмитий берег: падіння 1 м на ≤ 2.7 м і вдвічі різкіший за косу, є %.2f м (коса %.2f)" % [outer, inner])
 	assert_true(inner >= 4.0 and inner <= 8.0, "піщана коса: схил на 4-8 м, є %.2f м" % inner)
 
 
@@ -695,3 +696,60 @@ func test_hill_centre_support_stays_in_its_range() -> void:
 		var lo: float = TerrainHeight._HILL_KEEP * TerrainHeight._HILL_MIN
 		var hi: float = 1.4 * TerrainHeight._HILL_KEEP * (TerrainHeight._HILL_MIN + TerrainHeight._HILL_VAR) + 0.25 * 0.8 * TerrainHeight.M
 		assert_between(rise, lo, hi, "сід %d: центр пагорба %.3f" % [seed_value, rise])
+
+
+## Поле майже рівне: на кожній карті всередині кожної клітинки FIELD (відліки ±0.4 клітинки з
+## кроком 0.1) висота гуляє менше ніж на 0.25 м. Поле біля пагорба (до 3 клітинок у світі з
+## кільцем: розмиття пагорба) чи біля води має схил і не рахується. Пагорби лишаються пагорбами:
+## середня висота центрів клітинок HILL — понад 3 м.
+func test_field_cells_are_nearly_level_and_hills_keep_their_height() -> void:
+	for path in _MAPS:
+		var m: MapData = load(path)
+		var board: Board = m.to_board()
+		var ring: int = Surroundings.ring_of(m)
+		var world: Board = Surroundings.world_board(board, m) if ring > 0 else board
+		var ws: PackedByteArray = Surroundings.world_surface(m) if ring > 0 else m.surface
+		var t := TerrainHeight.bake(world, 0, m.name_key.hash(), ws, ring)
+		var worst := 0.0
+		var worst_at := Vector2i(-1, -1)
+		var fields := 0
+		var hill_sum := 0.0
+		var hills := 0
+		for y in board.height:
+			for x in board.width:
+				var c := Vector2i(x, y)
+				var kind: int = board.kind_at(c)
+				if kind == Terrain.Kind.HILL:
+					hill_sum += t.at(x, y)
+					hills += 1
+				if kind != Terrain.Kind.FIELD or _near_slope(world, c + Vector2i(ring, ring)):
+					continue
+				fields += 1
+				var lo := 1e9
+				var hi := -1e9
+				for j in 9:
+					for i in 9:
+						var v: float = t.at(x - 0.4 + i * 0.1, y - 0.4 + j * 0.1)
+						lo = minf(lo, v)
+						hi = maxf(hi, v)
+				if hi - lo > worst:
+					worst = hi - lo
+					worst_at = c
+		gut.p("%s: %d клітинок поля, найбільший розмах %.3f м у %s; пагорб у середньому %.2f м" % [path, fields, worst / M, worst_at, hill_sum / hills / M])
+		assert_true(fields > 50, "%s: є що міряти (%d)" % [path, fields])
+		assert_lt(worst / M, 0.25, "%s: поле рівне, розмах %.3f м у %s" % [path, worst / M, worst_at])
+		assert_gt(hill_sum / hills / M, 3.0, "%s: пагорби стоять" % path)
+
+
+static func _near_slope(world: Board, c: Vector2i) -> bool:
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			var n: Vector2i = c + Vector2i(dx, dy)
+			if not world.in_bounds(n):
+				continue
+			var k: int = world.kind_at(n)
+			if k == Terrain.Kind.HILL:
+				return true
+			if absi(dx) <= 1 and absi(dy) <= 1 and (k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED):
+				return true
+	return false

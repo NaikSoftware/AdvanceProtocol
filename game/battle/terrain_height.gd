@@ -23,6 +23,13 @@ const DECK_LIFT: float = 0.01
 ## Рельєф рівнини: дрібний ±0.35 м (плями 5-20 м) і широкий до ±1.7 м (хвиля 3.7-5.5 клітинки).
 const _MICRO_AMP: float = 0.35 * M
 const _BROAD_AMP: float = 1.7 * M
+## Поле майже рівне: хвиля рівнини на клітинках FIELD — ця частка (лука ≤ ~0.2 м у клітинці,
+## рілля вдвічі рівніша). Дорога й майданчик будівлі — теж рівна земля. Повна хвиля
+## повертається за `_FLAT_RAMP` клітинок уже в сусідніх клітинках (ліс, пагорб, болото), тож
+## клітинка поля рівна до самого краю, а обриву на межі нема.
+const _FLAT_MEADOW: float = 0.12
+const _FLAT_PLOUGHED: float = 0.06
+const _FLAT_RAMP: float = 1.5
 const _HILL_MIN: float = 3.5 * M
 const _HILL_VAR: float = 2.0 * M
 ## Частка висоти пагорба, яку гарантовано тримає центр кожної клітинки HILL, хоч куди
@@ -390,6 +397,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 	var pad_m := PackedFloat32Array()
 	if has_pad:
 		pad_m = _blur(pad, 0.35 * fs, 0.35 * fs)
+	var flat: PackedFloat32Array = _flatness(board, surface, fs)
 
 	var n1 := _nz(seed_value, 0.27)
 	var n2 := _nz(seed_value + 101, 0.65)
@@ -491,7 +499,7 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 			# вода береться за висотою): м'яка підлога на -0.6 м, далі нахил 0.3.
 			if undul < -0.6 * M:
 				undul = -0.6 * M + (undul + 0.6 * M) * 0.3
-			var damp: float = near_water
+			var damp: float = near_water * flat[k]
 			# Відстань Чебишова від краю дошки зі знаком (< 0 усередині); без кільця не потрібна.
 			var edge: float = 0.0
 			if _shift > 0:
@@ -680,6 +688,42 @@ static func _edge_hill_dip(ex: float, ez: float) -> float:
 	if ex < 0.0 and ez < 0.0:
 		return smoothstep(0.0, _EDGE_HILL_IN, -ex) * smoothstep(0.0, _EDGE_HILL_IN, -ez)
 	return smoothstep(0.0, _EDGE_HILL_OUT, Vector2(maxf(ex, 0.0), maxf(ez, 0.0)).length())
+
+
+## Множник хвилі рівнини на кожному відліку: на полі `_FLAT_MEADOW` чи `_FLAT_PLOUGHED` (межа
+## луки й ріллі розмита на 0.3 клітинки), на дорозі й майданчику — як на луці, поза ними росте
+## до 1 за `_FLAT_RAMP` клітинок від найближчої рівної клітинки. Кільце — 1: його рельєф лишається
+## як є, а стик на краю дошки й так лежить на y = 0 (`_EDGE_FLAT`).
+func _flatness(board: Board, surface: PackedByteArray, fs: float) -> PackedFloat32Array:
+	var bw: int = board_width
+	var bh: int = board_height
+	var level := PackedFloat32Array()
+	var k_map := PackedFloat32Array()
+	level.resize(cols * rows)
+	k_map.resize(cols * rows)
+	for j in rows:
+		var cz: int = clampi(roundi(-0.5 - margin + float(j) / fs), 0, bh - 1)
+		for i in cols:
+			var cx: int = clampi(roundi(-0.5 - margin + float(i) / fs), 0, bw - 1)
+			var kind: int = board.kind_at(Vector2i(cx, cz))
+			var on_board: bool = cx >= _shift and cz >= _shift and cx < bw - _shift and cz < bh - _shift
+			var k: int = j * cols + i
+			var plough: bool = kind == Terrain.Kind.FIELD and surface.size() == bw * bh \
+					and surface[cz * bw + cx] == MapData.FieldSurface.PLOUGHED
+			k_map[k] = _FLAT_PLOUGHED if plough else _FLAT_MEADOW
+			var flat_kind: bool = kind in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]
+			level[k] = 0.0 if on_board and flat_kind else -1.0
+	var dist: PackedFloat32Array = _inner_distance(level)
+	k_map = _blur(k_map, 0.3 * fs, 0.3 * fs)
+	for j in rows:
+		var z: float = -0.5 - margin + float(j) / fs
+		for i in cols:
+			var x: float = -0.5 - margin + float(i) / fs
+			var k: int = j * cols + i
+			var outside: bool = _shift > 0 and maxf(absf(x - (bw - 1) * 0.5) - (bw - 2 * _shift) * 0.5,
+					absf(z - (bh - 1) * 0.5) - (bh - 2 * _shift) * 0.5) > 0.0
+			k_map[k] = 1.0 if outside else lerpf(k_map[k], 1.0, smoothstep(0.0, _FLAT_RAMP, dist[k]))
+	return k_map
 
 
 ## Гладкий мінімум (поліноміальний, ширина k): там, де дві водойми сходяться під кутом, берег
