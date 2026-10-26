@@ -851,16 +851,23 @@ func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) 
 
 
 ## Дахи будинків мають різні відтінки, руїни й двірське вбрання — без відтінку.
-func test_roofs_get_varied_tints() -> void:
-	var view: BoardView = _cached("crossroads")
-	var p: PropLayer = view.props()
-	var tints: Dictionary = {}
-	for inst in p.all_instances():
-		if _kind(inst["model"]) == PropLayer.Kind.STRUCTURE and not inst.get("yard", false):
-			tints[p._roof_tint(inst)] = true
-		elif _kind(inst["model"]) == PropLayer.Kind.RUIN:
-			assert_eq(p._roof_tint(inst), Color(1, 1, 1))
-	assert_gte(tints.size(), 3, "щонайменше три відтінки дахів")
+func test_roofs_are_untinted(p = use_parameters(MAPS)) -> void:
+	# Колір даху дає лише текстура моделі: множник відтінку зсував дахи в оливу й вохру.
+	var props: PropLayer = _cached(p).props()
+	for inst in props.all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			assert_eq(props._roof_tint(inst), Color(1, 1, 1), "%s: %s" % [p, inst["model"]])
+
+
+func test_roof_variety_comes_from_house_textures() -> void:
+	var atlases: Dictionary = {}
+	for m: StringName in PropLayer.MODELS:
+		if String(m).begins_with("house_h") and int(PropLayer.spec_of(m)["kind"]) == PropLayer.Kind.STRUCTURE:
+			var mat := (PropLayer.model(m)["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
+			if mat != null and mat.albedo_texture != null:
+				atlases[mat.albedo_texture.resource_path] = true
+	assert_gte(atlases.size(), 3, "щонайменше три хати зі своїм атласом (і своїм дахом)")
 
 
 ## Паркан і дрібний пропс не лягають на дорожнє покриття (осі й ширина дороги, не вид клітинки).
