@@ -253,6 +253,11 @@ def house1(ruined):
     bent_sheet(b, (-1.5, -3.0, sf(-1.5, -3.0) + 0.1), (-2.9, -2.9, sf(-2.9, -2.9) + 0.1), 0.9, "sheet_char", 0.12, axis="y")
     b.chimney(1.6, -0.2, 4.6, 0.6, 3.1, "brick_face", cap="plinth_flat")
     lumps(b, plan, rnd, 14)
+    # на купі — окремі шматки цегляної кладки 0.5-0.7 м і балки, що лежать зверху, а не тонуть у буро запеченій купі
+    for (cx_, cy_, sz_) in ((-2.5, -0.7, 0.7), (-1.4, 1.0, 0.6), (-2.2, -2.7, 0.55), (-3.3, 0.6, 0.5)):
+        b.chunk(cx_, cy_, sf(cx_, cy_) + sz_ * 0.45, sz_, "chunk_brick", rnd, tone=(1.0, 1.15))
+    b.beam((-3.1, -1.5, sf(-3.1, -1.5) + 0.25), (-1.5, -0.3, sf(-1.5, -0.3) + 0.22), 0.2, "timber_dark", 0.22)
+    b.beam((-2.7, 0.7, sf(-2.7, 0.7) + 0.2), (-1.1, 1.5, sf(-1.1, 1.5) + 0.25), 0.18, "timber_dark", 0.2)
     bh = heaps(b, plan, 7)
     lib.finish(b, "ruin_half_house1", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
 
@@ -305,8 +310,9 @@ def house2(ruined):
         return
     kw = dict(top_tone=0.82, inner_tone=0.85, in_mat="plaster_burnt")
     standing = dict(brick_mat="brick_face", cap=0.06, jag=0.1, **kw)
-    wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 31, hcap=6.2, **standing)
-    wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 32, hcap=6.2, **standing)
+    # біля обваленого кута фронтова стіна обламана сходинками цегли до 3 м, а не обрізана рівно
+    wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 7 + [3.0], "wall_half_w", "wall_plaster_w", 31, hcap=6.2, **standing)
+    wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 32, hcap=6.2, **standing)   # задня стіна з фронтоном ціла
     wall_run(b, (-hx, N), (-hx, S), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 33, hcap=6.2, **standing)
     prism(b, [(-hy, E), (hy, E), (hy, E + 0.5), (1.9, E + 0.5), (1.9, E + 1.1), (1.1, E + 1.1), (1.1, E + 1.7), (0.4, E + 1.7), (0.4, E + 1.2), (-0.5, E + 1.2), (-0.5, E + 0.7), (-1.4, E + 0.7), (-1.4, E + 0.2), (-hy, E + 0.2)], 0.4, (-hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster_w", top_mat="brick_dark")   # зламаний верх: п'ять уступів 0.4-0.6 м, на зламі темна цегла   # зламаний верх фронтону
     wall_run(b, (hx, S), (hx, N), 0.4, [1.2, 2.2, 4.2, 5.0, 3.6, 1.8, 1.1, 0.9, 1.5, 2.5, 1.3], "wall_half_w", "chunk_brick", 34, hcap=5.2, jag=0.8, brick_mat="chunk_brick", step=0.7, diag_p=0.6, jit=1.0, cap=0.3, tvar=0.3, **kw)
@@ -366,6 +372,8 @@ def house2(ruined):
     sf = surface(plan)
     chip_slab(b, 1.4, -1.4, FL - 0.1, 2.8, 2.4, 0.22, (0.0, 0.35, 0.05), "slab_dark", "slab_dark", 41, rebar=3, per_edge=2)    # бетон перекриття в кіптяві
     chip_slab(b, 1.8, 1.4, FL - 0.25, 2.6, 2.2, 0.22, (0.0, 0.42, -0.06), "slab_dark", "slab_dark", 42, rebar=2, per_edge=2)
+    for (cx_, cy_, cz_) in ((1.0, -1.8, FL + 0.05), (1.5, -1.0, FL + 0.12), (2.1, 1.0, FL - 0.02)):   # цеглини з обваленої стіни на плиті
+        b.chunk(cx_, cy_, cz_, 0.28, "chunk_brick", rnd, tone=(0.85, 1.05))
     # дах упав трьома шматками з тієї самої черепиці, що стоїть: лежать на крокві й підлозі, провисли всередину
     chip_slab(b, 1.9, -1.7, 4.7, 2.0, 2.0, 0.12, (-0.5, 0.08, 0.0), "sheet_char", "sheet_char", 43, rebar=0, per_edge=2)
     chip_slab(b, 2.5, 0.1, 3.8, 2.1, 1.9, 0.12, (-0.35, 0.12, 0.1), "sheet_char", "sheet_char", 44, rebar=0, per_edge=2)
@@ -421,7 +429,7 @@ def shed(ruined):
         b.box(x, S, 0.0, 0.18, 0.18, h, "timber_dark")
     for (x, y, rot, ln, z, ang) in ((-1.9, -3.1, 0.1, 2.8, 0.2, 0.22), (0.4, -2.9, -0.15, 2.4, 0.3, 0.3), (-0.5, -3.7, 0.4, 1.8, 0.1, 0.1)):
         for k in (-1, 0, 1):                                                  # лист ламаний на три смуги з різним нахилом: блиск не заливає весь лист
-            b.box_e(x - math.sin(rot) * 0.64 * k, y + math.cos(rot) * 0.64 * k, z + 0.2 + 0.03 * k, ln, 0.62, 0.08, "fc_roof_xh", euler=(ang + 0.08 * k, 0.0, rot), top="fc_roof_xh")
+            b.box_e(x - math.sin(rot) * 0.64 * k, y + math.cos(rot) * 0.64 * k, z + 0.2 + 0.03 * k, ln, 0.62, 0.05, "roof_fallen", euler=(ang + 0.2 * k, 0.12 * k, rot), top="roof_fallen")   # лист зламаний на три смуги з помітним заломом
     b.cyl(-2.95, -2.35, 0.0, 0.3, 0.9, 12, "steel_paint")                       # бочка й ящик на землі біля впалої стіни
     b.box(-2.35, -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3)
     zt = E - 0.03
