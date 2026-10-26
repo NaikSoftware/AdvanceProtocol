@@ -25,9 +25,9 @@ const MODELS: Dictionary = {
 	&"house_h2": {"kind": Kind.STRUCTURE, "weight": 4},
 	&"house_h3": {"kind": Kind.STRUCTURE, "weight": 3},
 	&"house_h4": {"kind": Kind.STRUCTURE, "weight": 4},
-	&"house_h5": {"kind": Kind.STRUCTURE, "weight": 3},
-	&"house_h6": {"kind": Kind.STRUCTURE, "weight": 3},
-	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
+	&"house_h5": {"kind": Kind.STRUCTURE, "weight": 4},
+	&"house_h6": {"kind": Kind.STRUCTURE, "weight": 4},
+	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 1},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f1_farm_barn": {"kind": Kind.STRUCTURE, "weight": 1},
@@ -95,12 +95,16 @@ const HAY_CHANCE: int = 2
 ## вужчий прохід ховається за дахом, і два будинки читаються одним. Будівля, що не влазить із ним,
 ## поступається іншій моделі чи повороту або лишає клітинки порожнім двором.
 const STRUCTURE_GAP: float = 0.25
-## Будівля з дахом тримається на стільки всередині своєї групи BUILDING (клітинки, ~2 м): між
-## звісом і огорожею двору (YARD_OUT за межею) лишається ≥ 0.3 клітинки.
+## Велика будівля (слід понад клітинку) зі звісом тримається на стільки всередині своєї групи
+## BUILDING (клітинки, ~2 м). Будинок на одну клітинку стоїть у ній по центру й тримає лише
+## YARD_CLEAR_SMALL до межі: з повним відступом жоден не влазить, а з цим до огорожі на YARD_OUT
+## лишається ≥ 0.3 клітинки й разом із її товщиною.
 const YARD_CLEAR: float = 0.25
-## Огорожа двору стоїть за межею групи BUILDING на ~1 м: у двір не заходить, а звіс даху
-## (будівля не виходить за свій слід) її не торкається.
-const YARD_OUT: float = 0.12
+const YARD_CLEAR_SMALL: float = 0.03
+## Огорожа двору стоїть за межею групи BUILDING на ~2.2 м: будинок на одну клітинку займає її
+## майже всю, і до огорожі однаково лишається ≥ 0.3 клітинки; секція ще далеко від центру сусідньої
+## клітинки, де стоїть юніт.
+const YARD_OUT: float = 0.28
 ## Кам'яні брили й бетонні блоки темніші за ассет: світлі, вони читались плямами фарби.
 const STONE_TINT: float = 0.85
 ## Пляма дотику під брилою чи блоком: у скільки разів ширша за сам пропс і наскільки темна.
@@ -877,7 +881,7 @@ class _Placer:
 	func _inside_yard(m: StringName, origin: Vector2i, rot: int, s: Vector2i, in_group: Dictionary) -> bool:
 		var r: Rect2 = _rect_of(m, origin, rot, s)
 		var f := Rect2(Vector2(origin) - Vector2(0.5, 0.5), Vector2(s))
-		var reach: float = -YARD_CLEAR
+		var reach: float = -YARD_CLEAR_SMALL if s == Vector2i.ONE else -YARD_CLEAR
 		var sides: Array = []
 		if r.position.x < f.position.x - reach:
 			sides.append(Vector2i(-1, 0))
