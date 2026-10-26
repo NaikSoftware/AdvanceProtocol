@@ -180,7 +180,7 @@ func test_one_or_two_water_paths_that_stay_on_dry_ground(p = use_parameters(MAPS
 	for w: Dictionary in water:
 		var pts: PackedVector2Array = w["pts"]
 		assert_between(Footpaths.length(pts), 4.0, 13.0, "%s: довжина стежки до води" % p)
-		assert_gte(Footpaths.turns(pts), 2, "%s: вигинів на стежці до води" % p)
+		assert_gte(Footpaths.turns(pts), 1, "%s: вигинів на стежці до води" % p)
 		assert_false(props._placer.on_road(pts[0], 0.0), "не заходить на полотно")
 		assert_true(props._placer.on_road(pts[0], 0.4), "починається на узбіччі")
 		for k in pts.size():
@@ -193,6 +193,30 @@ func test_one_or_two_water_paths_that_stay_on_dry_ground(p = use_parameters(MAPS
 		for o: Vector2 in [Vector2(0.2, 0), Vector2(-0.2, 0), Vector2(0, 0.2), Vector2(0, -0.2)]:
 			wet = wet or view._height.at(end.x + o.x, end.y + o.y) < TerrainHeight.WATER_LEVEL
 		assert_true(wet, "%s: стежка закінчується біля берега" % p)
+
+
+## Стежки до води обходять ріллю й грядки без винятків; коридор від ґанку до хвіртки ~1.2 м.
+func test_water_paths_go_round_fields_and_gardens(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	for w: Dictionary in props.footpaths:
+		if w["kind"] != &"water":
+			continue
+		for q: Vector2 in w["pts"]:
+			for r: Rect2 in props.field_edges:
+				assert_false(r.has_point(q), "%s: стежка до води на ріллі %s" % [p, q])
+			for gp: Dictionary in props._garden_plots:
+				assert_false((gp["rect"] as Rect2).has_point(q), "%s: стежка до води на грядці %s" % [p, q])
+
+
+func test_yard_corridor_is_wide_at_porch_and_gate(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	for w: Dictionary in _yard_walks(props).values():
+		var hw: PackedFloat32Array = w["half"]
+		assert_gte(hw[0], 0.075 * 1.9, "%s: пляма біля ґанку ×2.5" % p)
+		var mx := 0.0
+		for v in hw:
+			mx = maxf(mx, v)
+		assert_gte(mx, 0.075 * 2.0)
 
 
 func test_paths_keep_off_buildings(p = use_parameters(MAPS)) -> void:

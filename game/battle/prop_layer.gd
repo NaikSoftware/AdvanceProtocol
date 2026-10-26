@@ -2133,9 +2133,26 @@ class _Placer:
 				if ctrl[k].distance_to(ctrl[k - 1]) > 1e-3:
 					pts.append_array(Footpaths.meander(ctrl[k - 1], ctrl[k], 0.04, 1.0, sd + k).slice(1))
 			pts = Footpaths.resample(Footpaths.smooth(pts, 6))
-			walks.append({"kind": &"yard", "home": i, "door": door, "pts": pts, "seed": sd,
-					"fade_end": minf(0.2, 0.3 * Footpaths.length(pts)),
-					"half": Footpaths.widths(pts, Footpaths.HALF, [{"at": door, "boost": 0.9}, {"at": gate, "boost": 0.7}])})
+			# Коридор від ґанку до хвіртки ~1.2 м, потім вузький хвіст до узбіччя; біля ґанку й хвіртки
+			# витоптані плями ×2.5.
+			var kg: int = 0
+			for k in pts.size():
+				if pts[k].distance_to(gate) < pts[kg].distance_to(gate):
+					kg = k
+			var hw := PackedFloat32Array()
+			hw.resize(pts.size())
+			var sg: float = Footpaths.length(pts.slice(0, kg + 1))
+			var acc: float = 0.0
+			for k in pts.size():
+				if k > 0:
+					acc += pts[k].distance_to(pts[k - 1])
+				var tail: float = smoothstep(0.0, 0.4, acc - sg)
+				var f: float = 1.0
+				for pin: Vector2 in [door, gate]:
+					f += 1.5 * exp(-pts[k].distance_to(pin) * pts[k].distance_to(pin) / 0.02)
+				hw[k] = lerpf(0.075, Footpaths.HALF, tail) * f
+			walks.append({"kind": &"yard", "home": i, "door": door, "pts": pts, "seed": sd, "solid": 0.7,
+					"fade_end": minf(0.2, 0.3 * Footpaths.length(pts)), "half": hw})
 			var gp: Vector2 = gate + out * 0.22
 			if not on_road(gp, 0.3) and _on_board(gp):
 				patches.append(Vector3(gp.x, gp.y, 0.28))
@@ -2227,9 +2244,6 @@ class _Placer:
 			last = q
 		return Vector2.INF
 
-	## Стежка до води перетинає ріллю лише коли інакше до берега не дійти.
-	var allow_fields: bool = false
-
 	## Клітинка води тут дозволена: контур берега не лежить на сітці, суха земля може належати їй.
 	func _walkable(q: Vector2) -> bool:
 		var c := Vector2i(roundi(q.x), roundi(q.y))
@@ -2239,10 +2253,12 @@ class _Placer:
 		for p: Array in placed:
 			if (p[0] as Rect2).grow(0.2).has_point(q):
 				return false
-		if not allow_fields:
-			for r: Rect2 in layer.field_edges:
-				if r.grow(0.1).has_point(q):
-					return false
+		for r: Rect2 in layer.field_edges:
+			if r.grow(0.1).has_point(q):
+				return false
+		for gp: Dictionary in garden_plots:
+			if (gp["rect"] as Rect2).grow(0.1).has_point(q):
+				return false
 		return true
 
 	## Точка стежки до води придатна: вільна земля, не на дорозі (крім початку), поруч суха (береговий
@@ -2252,7 +2268,7 @@ class _Placer:
 			var q: Vector2 = pts[k]
 			if k > 0 and not _walkable(q):
 				return false
-			if k > 6 and on_road(q, 0.0):
+			if k > 6 and on_road(q, 0.12):
 				return false
 			if q.distance_to(shore) > 0.8:
 				for o: Vector2 in [Vector2(0.12, 0), Vector2(-0.12, 0), Vector2(0, 0.12), Vector2(0, -0.12)]:
@@ -2295,9 +2311,8 @@ class _Placer:
 						cands.append([h(c, 200 + d.x * 2 + d.y), c, d])
 		cands.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 		var shores: Array[Vector2] = []
-		for pass_i in 3:
+		for pass_i in 2:
 			var band: Vector2 = Vector2(5.0, 10.0) if pass_i == 0 else Vector2(4.0, 12.0)
-			allow_fields = pass_i == 2
 			for cd: Array in cands:
 				if shores.size() >= 2:
 					break
@@ -2312,23 +2327,44 @@ class _Placer:
 				var start: int = int(cd[0]) % srcs.size()
 				var tried: int = 0
 				for n in srcs.size():
-					if tried >= 4:
+					if tried >= 10:
 						break
 					var src: Array = srcs[(start + n * 7) % srcs.size()]
 					var axis: Vector2 = src[0]
 					var from: Vector2 = axis + (shore - axis).normalized() * (float(src[1]) + 0.1)
-					# Дешевий відсів: пряма від дороги до берега мусить бути вільною, інакше звивина її не врятує.
-					if on_road(from, 0.0) or not _water_ok(PackedVector2Array(_line(from, shore)), shore):
+					if on_road(from, 0.0):
 						continue
 					tried += 1
+					# Рілля й грядки — перешкода: маршрут обходить їх через проміжну точку збоку від хорди.
+					var chord: Vector2 = shore - from
+					var side := Vector2(-chord.y, chord.x).normalized()
 					var sd: int = int(cd[0]) + n * 7919
-					for amp: float in [0.9, 0.7, 0.5, 0.35]:
-						var pts: PackedVector2Array = Footpaths.resample(Footpaths.smooth(Footpaths.meander(from, shore,
-								amp, clampf(from.distance_to(shore) / 3.0, 0.8, 3.0), sd)))
-						if Footpaths.turns(pts) >= 2 and _water_ok(pts, shore):
-							shores.append(shore)
-							walks.append({"kind": &"water", "home": -1, "door": from, "pts": pts, "seed": sd, "fade_start": 0.25,
-									"half": Footpaths.widths(pts, Footpaths.HALF, [{"at": shore, "boost": 0.7}])})
+					for min_turns in [2, 1]:
+						for off: float in [0.0, 1.0, -1.0, 2.0, -2.0, 3.0, -3.0, 4.5, -4.5, 6.0, -6.0]:
+							var ctrl: Array[Vector2] = [from]
+							if off != 0.0:
+								ctrl.append((from + shore) * 0.5 + side * off)
+							ctrl.append(shore)
+							var clear := true
+							for k in range(1, ctrl.size()):
+								clear = clear and _water_ok(PackedVector2Array(_line(ctrl[k - 1], ctrl[k])), shore)
+							if not clear:
+								continue
+							for amp: float in [0.6, 0.45, 0.3, 0.15, 0.0]:
+								var raw := PackedVector2Array([from])
+								for k in range(1, ctrl.size()):
+									raw.append_array(Footpaths.meander(ctrl[k - 1], ctrl[k], amp,
+											clampf(ctrl[k - 1].distance_to(ctrl[k]) / 2.0, 0.8, 3.0), sd + k).slice(1))
+								var pts: PackedVector2Array = Footpaths.resample(Footpaths.smooth(raw, 10))
+								if Footpaths.turns(pts) >= min_turns and _water_ok(pts, shore):
+									shores.append(shore)
+									walks.append({"kind": &"water", "home": -1, "door": from, "pts": pts, "seed": sd,
+											"fade_start": 0.25, "fade_end": 0.3,
+											"half": Footpaths.widths(pts, Footpaths.HALF, [{"at": shore, "boost": 0.7}])})
+									break
+							if shores.has(shore):
+								break
+						if shores.has(shore):
 							break
 					if shores.has(shore):
 						break

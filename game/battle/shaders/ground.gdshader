@@ -1312,7 +1312,7 @@ void fragment() {
 			vec2 pm = texture(path_map, puv).rg * pin * (1.0 - road_cov);
 			float wet_p = smoothstep(0.1, 0.5, weather_wetness);
 			float lum = dot(alb, vec3(0.299, 0.587, 0.114));
-			vec3 bare = mix(vec3(0.17, 0.115, 0.062), vec3(0.04, 0.028, 0.017), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
+			vec3 bare = mix(vec3(0.17, 0.115, 0.062), vec3(0.022, 0.015, 0.009), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
 			alb = mix(alb, bare, clamp(pm.r * 1.8, 0.0, 1.0));
 			alb = mix(alb, vec3(0.045, 0.026, 0.014) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.4);
 		}
