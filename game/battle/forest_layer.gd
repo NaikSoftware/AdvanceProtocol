@@ -29,6 +29,8 @@ const FADE_SOFT: float = 0.3
 const FADE_ALPHA: float = 0.35
 const FADE_REACH_EXTRA: float = 0.5
 const UNIT_HALF: float = 0.4
+## Розчинення перераховується, коли зум змінився більше ніж на стільки.
+const FADE_ZOOM_STEP: float = 0.5
 ## Склад лісу клітинки за MapData.ForestSurface (MIXED, PINE, DECIDUOUS).
 const WOOD_OF_SURFACE: PackedStringArray = ["mixed", "pine", "deciduous"]
 const TREES: PackedStringArray = ["Pine", "Spruce", "Birch", "Oak"]
@@ -79,6 +81,7 @@ var _canopy: Dictionary = {}
 var _under: Array[MultiMeshInstance3D] = []
 var _reveal: Array[Vector2i] = []
 var _zoom: float = 12.0
+var _fade_zoom: float = -100.0  ## зум, з яким розчинення рахували востаннє
 ## Записи плану дошки після останньої перебудови — для тестів і бюджету.
 var board_plan: Array[Dictionary] = []
 
@@ -113,9 +116,9 @@ func build(world: Board, world_surface: PackedByteArray, ring: int, board_size: 
 	_rebuild_board()
 
 
-## Проломи, які знає глядач: перебудова лише якщо вони змінились.
+## Проломи, які знає глядач: перебудова лише якщо вони змінились (порядок ключів — ні).
 func set_broken(known: Dictionary) -> void:
-	if known.keys() == _broken.keys() and known.size() == _broken.size():
+	if known.size() == _broken.size() and known.keys().all(func(k: Vector2i) -> bool: return _broken.has(k)):
 		return
 	_broken = known.duplicate()
 	if not _cells.is_empty():
@@ -128,13 +131,15 @@ func set_reveal_cells(cells: Array[Vector2i]) -> void:
 	_apply_fade()
 
 
-## Зум камери (IsoCameraRig.zoom_level): підлісок лише до DETAIL_ZOOM; розчинення залежить
-## від кута камери, тож теж перераховується.
+## Зум камери (IsoCameraRig.zoom_level): підлісок лише до DETAIL_ZOOM. Розчинення залежить
+## від нахилу камери (з зумом), а не від пану — камера не обертається; тож воно перераховується
+## лише на помітну зміну зуму, а не на кожен кадр перетягування.
 func set_zoom(zoom: float) -> void:
 	_zoom = zoom
 	for n in _under:
 		n.visible = zoom <= DETAIL_ZOOM
-	_apply_fade()
+	if absf(zoom - _fade_zoom) > FADE_ZOOM_STEP:
+		_apply_fade()
 
 
 func _load_library() -> void:
@@ -422,6 +427,7 @@ func _cover(entry: Dictionary, cam: Vector3) -> float:
 
 
 func _apply_fade() -> void:
+	_fade_zoom = _zoom
 	_free(_soft_nodes)
 	var cam3d: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
 	var cam: Vector3 = cam3d.global_position if cam3d != null else Vector3(0.0, 1e6, 0.0)
