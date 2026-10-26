@@ -423,9 +423,12 @@ One library GLB per group and season in `assets/props/vegetation/`:
 early = Ridge). Each plant is a node, the same geometry in every season. Only the atlas changes,
 plus how many clumps a bare late crown keeps. Every node has a `<name>_fallen` twin, what is left after a vehicle drives through. Reeds and
 bushes become a bundle of broken stems 0.4–0.8 m high, leaning 30–60° the way the vehicle went,
-with a few leaves. A tree becomes a heap of broken and crushed branches 0.3–0.9 m high, with dry
-pale bark and about 30 % fresh breaks so it reads on dark ground: stubs of trunk, broken limbs at all
-angles but mostly pressed the way of travel, and the season's leaves on top.
+with a few leaves. A tree becomes a heap of brushwood up to 0.9 m high: 36 branches 3–8 cm thick
+and 0.6–1.8 m long, mostly pressed the way of travel, every sixth sticking up at 20–45°, plus
+2–3 short trunk pieces of at most 1 m. The bark is dry and pale, and a third of the pieces in every
+heap show a fresh break, so the heap reads on dark ground. On the real River ground at zoom 6 the
+heap measures p50 ≈ 80–90 and p90 ≈ 110–125 out of 255, against ground ≈ 70
+(`tools/veg_measure.py lum`). The season's leaves lie on top in small clusters.
 
 Trees are grown, not filled into a sphere: a trunk leaning up to 8°, at least three scaffold
 limbs, second- and third-order branches, and leaf clumps at the branch ends, so gaps show between
@@ -467,6 +470,13 @@ texel), VRAM-compressed with mipmaps. Season colours follow the forest. Late aut
 - reeds are straw-brown, darker than early autumn;
 - fruit trees, willows, hawthorn and dog rose keep ≤ 15 % of their clumps, and the sprites inside
   them hold ≤ 15 % leaves on grey-brown twigs;
+- a bare tree crown also gets cards of fine twigs at the ends of its second- and third-order
+  branches, so it reads as a dense grey-brown net of twigs and not 4–6 sticks. These cards use the
+  same bare-twig sprites and the same tone as the late forest (`forest/src_leaf_sprites.py`
+  `broad_late` and `oak_late`, graded to L* 26, C* 3, h 55 as in `forest/specs/broadleaf_late.json`),
+  so bare twigs match across the forest and the meadow. The sprites are read from `$FOREST_SPRITES`;
+  sharing one runtime texture would need an atlas common to both libraries, which waits for the
+  forest merge;
 - oak keeps up to 30 % brown, alder and lilac up to 40 % dull green;
 - walnut keeps yellow remnants and thuja turns bronze.
 
@@ -480,15 +490,20 @@ surfaces, and placement overrides both with the GLB's own atlas as `albedo_tex`:
   `render_mode`; `ALPHA_ANTIALIASING_EDGE` alone leaves the edge identical with and without MSAA
   (measured on a test quad).
 - **Surface 1, the shade patch** under a bush or heap: `veg_shade.gdshader`. It is black with
-  alpha = vertex colour R (0.35–0.45) × a soft, irregular mask from the atlas, casts no shadow and
+  alpha = vertex colour R (0.25) × a soft, irregular mask from the atlas (15–25 % darker at the
+  centre, no hard edge), casts no shadow and
   writes no depth.
 
 Vertex colour carries per-clump data:
-- **R** is the clump tone; the lower third of a crown is darker.
+- **R** is the tone. On a clump it is the place in the crown (the lower third is darker). On bark it
+  is the brightness: 0.45 for trunks and limbs in the crown's shade, 1 for the dry wood of heaps and
+  the hawthorn frame.
 - **G** is the clump id, the same for every vertex of a card or branch, so a dissolve drops whole
-  clumps and never single triangles. The lower half of G marks deciduous plants, the upper half
-  evergreens.
-- **B** is 1 where the clump sways in the wind. Bark, heaps, crushed bushes and fallen reeds are 0.
+  clumps and never single triangles. Trees take [0.02, 0.48]; `fade_floor` applies to them.
+  Everything else (bushes, reeds, thuja) takes [0.52, 0.98] and fades fully. The gap keeps the 16-bit
+  colour export from rounding an id onto the wrong side.
+
+`tests/game/test_props_vegetation.gd` checks this contract on the imported GLBs.
 
 The ids are only correct while the MultiMesh instance colour RGB is 1: put the instance tone in
 custom data and the dissolve in alpha.
@@ -499,22 +514,13 @@ colour pass, the same convention as `FADE_DEPTH_PRIORITY` in `PropLayer`: fire, 
 at priority 1.
 - The depth pass writes the depth of the nearest cards and draws nothing, so the colour pass blends
   only that nearest layer and the crown is evenly translucent instead of smoky.
-- The depth pass also casts the full shadow (`depth_prepass_alpha`), so the shadow does not jump
-  when the fade starts.
+- The shadow does not depend on alpha. The plant stays where it is while it fades, so the depth
+  pass casts the same full shadow (`depth_prepass_alpha`, alpha 1 in the shadow pass). The shadow
+  goes only when whole clumps are dissolved (`veg.gdshader`), because then the plant is removed.
 - Instance alpha is true transparency, with no dither, and bark fades faster than leaves.
-- For late deciduous libraries, set the material uniform `fade_floor` to 0.6. A bare crown hides no
-  unit, and without a floor the tree would vanish. Evergreens (thuja) ignore the floor.
-
-**Wind.** The global shader uniforms `wind_time` (seconds) and `wind_strength` (0 means calm) are
-declared in `project.godot`. They are global so that both fade passes and every plant share one
-value. Crown clumps sway about 6 cm and reed tops 18–25 cm. Each clump has one phase, taken from
-its id and from the instance position and rotation. The two frequencies, 1.7 and 2.93, are
-incommensurate, so the motion has no short repeat.
-
-Placement advances `wind_time` from its own timer, never through `TIME`: a material that reads
-`TIME` forces a redraw every frame and low-processor mode never idles. Updating at about 10 Hz
-looks smooth, while 4–5 Hz steps visibly. Setting `wind_strength = 0` stops the motion, and with
-it the redraws.
+- For late libraries, set the material uniform `fade_floor` to 0.6. A bare crown hides no unit, and
+  without a floor the tree would vanish. The floor reaches only trees, by vertex data (G < 0.5).
+  Bushes, reeds and thuja still fade fully.
 
 Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen edge-on. The
 shared shader body is in `veg_body.gdshaderinc`.
@@ -533,9 +539,16 @@ not pre-flip either.
 
 Reeds belong in the shallows, 0.5–2 m out from the waterline, not on dry bank.
 
+**Measuring.** `tools/veg_measure.py` measures rendered frames only, never sprites or the atlas:
+- `lum`: brightness of the object against the ground, with a mask taken from an empty frame;
+- `leaf`: leaf share, on frames shot with `--neutral`.
+
+`tools/veg_board_shot.gd` puts library nodes on the real ground of a map (the battle screen with its
+light and weather) and shoots zoom 6 and 20.
+
 Rebuild: `tools/blender/vegetation/build_all.sh`. Frames: `tools/prop_preview.gd` with `--veg`,
 `--nodes=`, `--water[=E]`, `--with=`, `--fade=`, `--fade-floor=`, `--dissolve=`, `--tank=X:Z`,
-`--seq=N`, `--rg`.
+`--neutral`, `--rg`.
 
 ## Bridges
 

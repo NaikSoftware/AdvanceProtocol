@@ -107,7 +107,7 @@ REED = {
                        "early": [(0.36, 0.36, 0.15), (0.30, 0.33, 0.14), (0.44, 0.40, 0.19)],
                        "late": [(0.30, 0.25, 0.18), (0.25, 0.21, 0.16), (0.31, 0.27, 0.21), (0.21, 0.19, 0.17)]},
                  # Волоть очерету: 20–40 см, пізнього літа бурo-фіолетова, восени пухнаста сіро-біла.
-                 head="plume", head_l=(0.2, 0.3),
+                 head="plume", head_l=(0.25, 0.35),
                  head_c={"summer": [(0.34, 0.24, 0.24), (0.30, 0.22, 0.22)], "early": [(0.40, 0.30, 0.26), (0.46, 0.36, 0.30)],
                          "late": [(0.40, 0.37, 0.33), (0.36, 0.33, 0.29)]}),
     "cattail": dict(h=(1.2, 2.0), n=32, w=1.1, leaf_w=0.024, leaf_l=(0.9, 1.6), leaves_per=0,
@@ -115,8 +115,9 @@ REED = {
                     leaf={"summer": [(0.18, 0.27, 0.10), (0.21, 0.30, 0.11), (0.24, 0.32, 0.12)],
                           "early": [(0.32, 0.34, 0.14), (0.40, 0.39, 0.18), (0.27, 0.31, 0.13)],
                           "late": [(0.33, 0.27, 0.17), (0.29, 0.23, 0.16), (0.36, 0.30, 0.20), (0.25, 0.22, 0.16)]},
-                    # Качан рогозу: 15–20 см × 2,5 см, темно-бурий; пізньої осені світліший, розпушений.
-                    head="spike", head_l=(0.24, 0.28),
+                    # Качан рогозу: 18–22 см завдовжки, темно-бурий; намальований 12 см завтовшки замість
+                    # справжніх 2,5: тонший на найближчому зумі менший за піксель.
+                    head="spike", head_l=(0.18, 0.22),
                     head_c={"summer": [(0.15, 0.08, 0.045)], "early": [(0.15, 0.08, 0.045)], "late": [(0.20, 0.13, 0.09)]}),
 }
 
@@ -219,7 +220,9 @@ def build_twig(seed):
         start = Vector((math.cos(a), math.sin(a), 0)) * 1.45 * sm + Vector((0, 0, -0.4 * sm))
         d = (-start + Vector((0, 0, 0.9 * sm))).normalized()
         grow(start, d, P["seg"] * rng.uniform(0.85, 1.1), twig_r * 2.5, 0)
-    add_obj("twig", bm, [bark] * len(bm.faces))
+    # Голе гілля — сіро-бура мережа з розкидом тону, а не однотонні палички.
+    tones = [bark] if leafy else [tuple(c * k for c in bark) for k in (0.75, 1.0, 1.3)]
+    add_obj("twig", bm, [rng.choice(tones) for _ in range(len(bm.faces))])
 
     lb = bmesh.new()
     fc = []
@@ -309,15 +312,16 @@ def build_sheaf(seed):
             if rng.random() < 0.85:
                 # Волоть: віяло тонких гілочок, що звисають на один бік.
                 side = rng.choice((-1, 1))
-                # Волоть густа й ширша за справжню: на найближчому зумі вона має читатися рискою 3–4 px.
-                for k in range(14):
+                # Волоть — суцільне віяло 25–35 см, густіше й ширше за справжнє: на найближчому зумі
+                # вона має читатися рискою 3–4 px.
+                for k in range(20):
                     d = Vector((side * rng.uniform(0.1, 0.6), rng.gauss(0, 0.2), rng.uniform(0.2, 1.0))).normalized()
                     blade(bm, top - lean * hl * rng.uniform(0.0, 0.7), d, hl * rng.uniform(0.5, 0.9),
-                          0.05 if SEASON == "late" else 0.035, rng.uniform(0.05, 0.15), fc, hc)
+                          0.06 if SEASON == "late" else 0.05, rng.uniform(0.05, 0.15), fc, hc)
         else:
             if rng.random() < 0.85:
                 c0 = top - lean * (0.12 + hl / 2)
-                bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.035, radius2=0.032, depth=hl,
+                bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.06, radius2=0.055, depth=hl,
                                       matrix=Matrix.Translation(c0) @ lean.to_track_quat("Z", "Y").to_matrix().to_4x4())
                 fc.extend([hc] * (len(bm.faces) - len(fc)))
     add_obj("sheaf", bm, fc)

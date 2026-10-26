@@ -21,6 +21,15 @@ GROUPS = {
     "meadow": ["hawthorn", "dogrose", "pear", "oak", "wwillow"],
 }
 SHEAF = ("reed", "cattail")
+# Дерева, чия гола крона пізньої пори — ще й картки дрібного гілля (<вид>_bare). Джерело — ті самі
+# спрайти голого гілля, що й у пізнього лісу (forest/src_leaf_sprites.py, кадр 2,4 м), з тим самим
+# тоном (forest/specs/broadleaf_late.json): сіро-буре гілля однакове в лісі й на луці. Спрайти лісу
+# лежать поза репозиторієм; тека — $FOREST_SPRITES (типово ~/.cache/ap-scratch/forest/crowns).
+BARE = {"apple": "broad_late", "cherry": "broad_late", "walnut": "broad_late", "pear": "broad_late",
+        "oak": "oak_late", "wwillow": "broad_late"}
+FOREST_SPRITES = os.environ.get("FOREST_SPRITES", os.path.expanduser("~/.cache/ap-scratch/forest/crowns"))
+BARE_GRADE = {"L": 26, "C": 3, "h": 55, "contrast_l": 0.6}
+BARE_N = 4
 # Кора (sRGB): середній тон і розкид світлих смуг. Темніша за листя, як у лісі.
 BARK = {"willow": (0.40, 0.36, 0.26), "alder": (0.26, 0.24, 0.22), "apple": (0.33, 0.29, 0.25),
         "cherry": (0.32, 0.22, 0.19), "walnut": (0.45, 0.43, 0.40), "lilac": (0.36, 0.34, 0.31),
@@ -28,9 +37,42 @@ BARK = {"willow": (0.40, 0.36, 0.26), "alder": (0.26, 0.24, 0.22), "apple": (0.3
         "hawthorn": (0.32, 0.29, 0.26), "dogrose": (0.34, 0.25, 0.18), "pear": (0.24, 0.22, 0.20),
         "oak": (0.30, 0.28, 0.25), "wwillow": (0.36, 0.33, 0.27),
         # Свіжий злам: світла деревина уламків у купі поваленого дерева.
-        "wood": (0.52, 0.44, 0.32),
-        # Висохла кора уламків у купі (L ≈ 95/255): жива кора на темному ґрунті Річки зникала.
-        "deadwood": (0.40, 0.37, 0.33)}
+        "wood": (0.66, 0.57, 0.42),
+        # Висохла кора уламків у купі. Разом зі зламами на кадрі Річки (зум 6, справжній ґрунт,
+        # tools/veg_measure.py lum) купа дає p50 ≈ 80–90 і p90 ≈ 110–125 з 255 при ґрунті ≈ 70:
+        # жива кора там зникала.
+        "deadwood": (0.52, 0.48, 0.43)}
+
+
+def srgb_to_lin(a):
+    return np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4)
+
+
+def lin_to_srgb(a):
+    a = np.clip(a, 0, 1)
+    return np.where(a <= 0.0031308, a * 12.92, 1.055 * a ** (1 / 2.4) - 0.055)
+
+
+def lab_grade(img, g):
+    """Середні L*, C* і тон h непрозорого — до цілі, розкид L* × contrast_l (як forest/make_atlas.py)."""
+    m = img[..., 3] > 0.5
+    M = np.array([[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]])
+    wp = np.array([0.95047, 1.0, 1.08883])
+    xyz = srgb_to_lin(img[..., :3]) @ M.T / wp
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    L, a, b = 116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])
+    L = g["L"] + (L - L[m].mean()) * g["contrast_l"]
+    C, h = np.hypot(a, b), np.arctan2(b, a)
+    h = h + (np.radians(g["h"]) - np.arctan2(b[m].mean(), a[m].mean()))
+    C = C * (g["C"] / max(float(C[m].mean()), 1e-3))
+    a, b = C * np.cos(h), C * np.sin(h)
+    fy = (L + 16) / 116
+    f = np.stack([fy + a / 500, fy, fy - b / 200], -1)
+    xyz = np.where(f > 0.2069, f ** 3, (f - 16 / 116) / 7.787) * wp
+    Mi = np.array([[3.2406, -1.5372, -0.4986], [-0.9689, 1.8758, 0.0415], [0.0557, -0.2040, 1.0570]])
+    out = img.copy()
+    out[..., :3] = lin_to_srgb(xyz @ Mi.T)
+    return out
 
 
 def load(path):
@@ -131,12 +173,27 @@ def main():
     def uv(x, y, w, h):
         return [x / SIZE, y / SIZE, w / SIZE, h / SIZE]
 
+    # Смуги кори — першими: їм потрібні дві клітинки одна над одною, а після спрайтів вільні
+    # клітинки вже розкидані поодинці.
+    woody = [k for k in GROUPS[GROUP] if k not in SHEAF] + ["wood", "deadwood"]
+    for i, kind in enumerate(woody):
+        if i % (CELL // STRIP_W) == 0:
+            block = take(1, 2)
+        y, x = block[0], block[1] + (i % (CELL // STRIP_W)) * STRIP_W
+        atlas[y:y + 256, x:x + STRIP_W] = bark_strip(BARK[kind], i)
+        rects["bark"][kind] = uv(x, y, STRIP_W, 256)
     seed = 0
-    for kind in GROUPS[GROUP]:
-        files = sorted(glob.glob(os.path.join(SRC, "%s_%s" % (kind, SEASON), "sprite_*.png")))
+    sets = [(k, k, SEASON) for k in GROUPS[GROUP]]
+    if SEASON == "late":
+        sets += [(k + "_bare", k, "bare") for k in GROUPS[GROUP] if k in BARE]
+    for key, kind, season in sets:
+        if season == "bare":
+            files = sorted(glob.glob(os.path.join(FOREST_SPRITES, BARE[kind], "sprite_*.png")))[:BARE_N]
+        else:
+            files = sorted(glob.glob(os.path.join(SRC, "%s_%s" % (kind, season), "sprite_*.png")))
         if not files:
-            raise SystemExit("нема спрайтів %s_%s" % (kind, SEASON))
-        rects["sprites"][kind] = []
+            raise SystemExit("нема спрайтів для %s (%s)" % (key, season))
+        rects["sprites"][key] = []
         for f in files:
             img = load(f)
             seed += 1
@@ -146,20 +203,15 @@ def main():
                 h = 2 * CELL
             else:
                 img = soft_edge(resize(img, CELL, CELL), seed)
+                if season == "bare":
+                    img = lab_grade(img, BARE_GRADE)
                 y, x = take(1, 1)
                 h = CELL
             atlas[y:y + h, x:x + CELL] = premul_dilate(img)
-            rects["sprites"][kind].append(uv(x, y, CELL, h))
+            rects["sprites"][key].append(uv(x, y, CELL, h))
     y, x = take(1, 1)
     atlas[y:y + CELL, x:x + CELL] = premul_dilate(litter_sprite(99))
     rects["sprites"]["litter"] = [uv(x, y, CELL, CELL)]
-    woody = [k for k in GROUPS[GROUP] if k not in SHEAF] + ["wood", "deadwood"]
-    for i, kind in enumerate(woody):
-        if i % (CELL // STRIP_W) == 0:
-            block = take(1, 2)
-        y, x = block[0], block[1] + (i % (CELL // STRIP_W)) * STRIP_W
-        atlas[y:y + 256, x:x + STRIP_W] = bark_strip(BARK[kind], i)
-        rects["bark"][kind] = uv(x, y, STRIP_W, 256)
     os.makedirs(OUT, exist_ok=True)
     name = "%s_veg_%s" % (GROUP, SEASON)
     Image.fromarray((np.clip(atlas, 0, 1) * 255 + 0.5).astype(np.uint8), "RGBA").save(os.path.join(OUT, name + ".png"))

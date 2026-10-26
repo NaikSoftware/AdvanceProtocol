@@ -21,7 +21,7 @@ extends Node
 ##            veg_shade.gdshader для плями затінення) з його ж атласом, MSAA 2× (alpha-to-coverage);
 ##            --fade=A — veg_fade_depth.gdshader з next_pass veg_fade.gdshader, альфа екземпляра A;
 ##            --fade-floor=F — нижня межа альфи голої крони (fade_floor);
-##   --seq=N  ще N кадрів вітру на найближчому зумі (wind_time крок 0,15 с) у <name>_seq/NN.png;
+##   --neutral  біле світло й небо, без тону листя: кольори як в атласі (для tools/veg_measure.py leaf);
 ##   --dissolve=A  veg.gdshader з альфою екземпляра A: крона рідшає цілими пучками;
 ##   --tank=X:Z  коробка-танк у цій точці (тайли від об'єкта), напр. під кроною;
 ##   --nodes=a,b,c  лише ці вузли бібліотеки GLB, рядком уздовж X через --gap=G тайлів (типово 0,6);
@@ -49,7 +49,7 @@ var veg: bool = false
 var fade: float = -1.0
 var dissolve: float = -1.0
 var fade_floor: float = 0.0
-var seq: int = 0
+var neutral: bool = false
 var tank_at: Vector2 = Vector2(2.6, 1.6)
 var only_nodes: PackedStringArray = PackedStringArray()
 var gap: float = 0.6
@@ -96,10 +96,10 @@ func _ready() -> void:
 			veg = true
 		elif args[i].begins_with("--fade="):
 			fade = float(args[i].substr(7))
+		elif args[i] == "--neutral":
+			neutral = true
 		elif args[i].begins_with("--fade-floor="):
 			fade_floor = float(args[i].substr(13))
-		elif args[i].begins_with("--seq="):
-			seq = int(args[i].substr(6))
 		elif args[i].begins_with("--dissolve="):
 			dissolve = float(args[i].substr(11))
 		elif args[i].begins_with("--tank="):
@@ -215,6 +215,14 @@ func _ready() -> void:
 		env.environment.ambient_light_color = look.ambient_color
 		env.environment.ambient_light_energy = look.ambient_energy
 		env.environment.background_color = Color(0.40, 0.44, 0.48)
+		# Тон листя карти, як його ставить WeatherRig у грі.
+		RenderingServer.global_shader_parameter_set(&"foliage_tint", Vector3(look.foliage_tint.r, look.foliage_tint.g, look.foliage_tint.b))
+	if neutral:
+		sun.light_color = Color(1, 1, 1)
+		sun.light_energy = 1.0
+		env.environment.ambient_light_color = Color(1, 1, 1)
+		env.environment.ambient_light_energy = 0.6
+		RenderingServer.global_shader_parameter_set(&"foliage_tint", Vector3.ONE)
 
 	for n in names:
 		var scene: PackedScene = load("%s/%s.glb" % [props_dir, n]) as PackedScene
@@ -255,8 +263,6 @@ func _ready() -> void:
 		var shot: String = tag if tag != "" else n
 		await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s%s.png" % [out, shot, sfx])
 		await _shoot(rig, zoom2, "%s/%s_far%s.png" % [out, shot, sfx])
-		if seq > 0:
-			await _wind_seq(rig, "%s/%s_seq%s" % [out, shot, sfx])
 		if graze:
 			var rot0: Vector3 = sun.rotation_degrees
 			var e0: float = sun.light_energy
@@ -291,6 +297,11 @@ func _shoot(rig: IsoCameraRig, zoom: float, path: String) -> void:
 	rig.zoom_by(zoom / rig.zoom_level)
 	for i in 90:
 		await get_tree().process_frame
+	# Масштаб кадру для tools/veg_measure.py: пікселів на метр біля центру (тайл = 8 м).
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var c := Vector3(6.0, 0.0, 6.0)
+	var k: float = Vector2(get_viewport().get_texture().get_size()).x / get_viewport().get_visible_rect().size.x
+	print("PXPERM %s %.2f" % [path.get_file(), cam.unproject_position(c).distance_to(cam.unproject_position(c + Vector3(1, 0, 0))) * k / 8.0])
 	var err: int = get_viewport().get_texture().get_image().save_png(path)
 	if err != OK:
 		push_error("prop_preview: PNG не збережено (%d)" % err)
@@ -347,37 +358,13 @@ func _pick_nodes(inst: Node3D) -> void:
 		push_error("prop_preview: жодного з вузлів %s" % [only_nodes])
 
 
-## Шейдери рослинності з атласом самого GLB, як їх поставить розстановка: поверхня 0 — рослина
-## (veg.gdshader; над юнітом — veg_fade_depth з next_pass veg_fade, пріоритети 5 і 6, як
-## FADE_DEPTH_PRIORITY у PropLayer), поверхня 1 — пляма затінення (veg_shade.gdshader).
-const FADE_DEPTH_PRIORITY: int = 5
-
+## Ставить вузлам бібліотеки рослинності матеріали з veg_mesh(); для --fade і --dissolve —
+## через MultiMesh, як на дошці (альфа розчинення йде кольором екземпляра).
 func _veg_material(inst: Node3D) -> void:
 	for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
 		if mi.is_queued_for_deletion():
 			continue
-		var tex: Texture2D = (mi.mesh.surface_get_material(0) as BaseMaterial3D).albedo_texture
-		var sm := ShaderMaterial.new()
-		sm.set_shader_parameter("albedo_tex", tex)
-		if fade >= 0.0:
-			sm.shader = load("res://assets/props/vegetation/veg_fade_depth.gdshader")
-			sm.render_priority = FADE_DEPTH_PRIORITY
-			var col := ShaderMaterial.new()
-			col.shader = load("res://assets/props/vegetation/veg_fade.gdshader")
-			col.set_shader_parameter("albedo_tex", tex)
-			col.render_priority = FADE_DEPTH_PRIORITY + 1
-			for m: ShaderMaterial in [sm, col]:
-				m.set_shader_parameter("fade_floor", fade_floor)
-			sm.next_pass = col
-		else:
-			sm.shader = load("res://assets/props/vegetation/veg.gdshader")
-		var shade := ShaderMaterial.new()
-		shade.shader = load("res://assets/props/vegetation/veg_shade.gdshader")
-		shade.set_shader_parameter("albedo_tex", tex)
-		var mesh: Mesh = mi.mesh.duplicate()
-		mesh.surface_set_material(0, sm)
-		if mesh.get_surface_count() > 1:
-			mesh.surface_set_material(1, shade)
+		var mesh: Mesh = veg_mesh(mi.mesh, fade, fade_floor)
 		if fade < 0.0 and dissolve < 0.0:
 			mi.mesh = mesh
 			continue
@@ -397,18 +384,31 @@ func _veg_material(inst: Node3D) -> void:
 		mi.visible = false
 
 
-## Послідовність вітру: wind_time іде кроком 0,15 с; кадри зберігаються наприкінці, бо save_png
-## блокує ~1 с.
-func _wind_seq(rig: IsoCameraRig, dir: String) -> void:
-	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
-	for i in 60:
-		await get_tree().process_frame
-	var frames: Array[Image] = []
-	for k in seq:
-		RenderingServer.global_shader_parameter_set(&"wind_time", float(k) * 0.15)
-		for i in 3:
-			await get_tree().process_frame
-		frames.append(get_viewport().get_texture().get_image())
-	DirAccess.make_dir_recursive_absolute(dir)
-	for k in frames.size():
-		frames[k].save_png("%s/%02d.png" % [dir, k])
+## Копія меша вузла рослинності з матеріалами, як їх ставить розстановка: поверхня 0 — рослина
+## (veg.gdshader; над юнітом — veg_fade_depth з next_pass veg_fade, пріоритети
+## PropLayer.FADE_DEPTH_PRIORITY і +1), поверхня 1 — пляма затінення (veg_shade.gdshader). fade < 0 —
+## звичайний вигляд. Спільна з tools/veg_board_shot.gd.
+static func veg_mesh(src: Mesh, p_fade: float, p_floor: float) -> Mesh:
+	var tex: Texture2D = (src.surface_get_material(0) as BaseMaterial3D).albedo_texture
+	var sm := ShaderMaterial.new()
+	sm.set_shader_parameter("albedo_tex", tex)
+	if p_fade >= 0.0:
+		sm.shader = load("res://assets/props/vegetation/veg_fade_depth.gdshader")
+		sm.render_priority = PropLayer.FADE_DEPTH_PRIORITY
+		var col := ShaderMaterial.new()
+		col.shader = load("res://assets/props/vegetation/veg_fade.gdshader")
+		col.set_shader_parameter("albedo_tex", tex)
+		col.render_priority = PropLayer.FADE_DEPTH_PRIORITY + 1
+		for m: ShaderMaterial in [sm, col]:
+			m.set_shader_parameter("fade_floor", p_floor)
+		sm.next_pass = col
+	else:
+		sm.shader = load("res://assets/props/vegetation/veg.gdshader")
+	var shade := ShaderMaterial.new()
+	shade.shader = load("res://assets/props/vegetation/veg_shade.gdshader")
+	shade.set_shader_parameter("albedo_tex", tex)
+	var mesh: Mesh = src.duplicate()
+	mesh.surface_set_material(0, sm)
+	if mesh.get_surface_count() > 1:
+		mesh.surface_set_material(1, shade)
+	return mesh

@@ -90,11 +90,3 @@ haze_color={
 "type": "vec3",
 "value": Vector3(0.1, 0.135, 0.155)
 }
-wind_time={
-"type": "float",
-"value": 0.0
-}
-wind_strength={
-"type": "float",
-"value": 1.0
-}

@@ -21,24 +21,14 @@ uniform float lobe_depth = 0.35;
 uniform float crown_depth = 0.25;
 // Ширина краю alpha-to-coverage (у частках альфи).
 uniform float a2c_edge = 0.3;
-// Кора й стовбури темніші: стовбур стоїть у тіні крони, а розсіяне світло неба на нього
-// падає повне — без цього стовбури світилися світліше за ґрунт.
-uniform float bark_dark = 0.45;
+// Яскравість кори — R кольору вершини (0,45 у стовбура й гілок під кроною, 1 у сухої деревини
+// куп і каркаса глоду): одна стала bark_dark робила й уламки в купі темнішими за ґрунт.
 // Темний обідок пучка: м'який край замість різкої вирізаної лінії наліпки.
 uniform float rim = 0.15;
 uniform float card_round = 0.7;
 uniform float card_up = 1.2;
-// Вітер. Глобальні, щоб обидва проходи прозорості й усі рослини мали той самий час (інакше
-// глибина першого проходу розійдеться з другим). Не TIME: матеріал із TIME змушує
-// перемальовувати кадр щокадру. Частоту оновлення wind_time задає гра: від ~10 Гц рух плавний,
-// 4–5 Гц дають помітні ступені; wind_strength = 0 зупиняє рух зовсім (і перемальовування).
-global uniform float wind_time;
-global uniform float wind_strength;
-// Розмах: пучок крони — 6 см; верх стебла очерету — до ~18 см (картка частково під землею).
-const float WIND_CLUMP = 0.06 / 8.0;
-const float WIND_REED = 0.25 / 8.0;
-// Нижня межа альфи над юнітом для голої крони листопадних (ставить розстановка для пізньої
-// пори, напр. 0,6): гола крона юніта не ховає, а без межі дерево зникало б зовсім.
+// Нижня межа альфи над юнітом для дерев (ставить розстановка для пізньої пори, напр. 0,6): гола
+// крона юніта не ховає, а без межі дерево зникало б зовсім. Кущі й очерет (G ≥ 0,5) — без межі.
 uniform float fade_floor = 0.0;
 
 varying float is_card;
@@ -50,16 +40,16 @@ varying float facing;
 varying flat float card_half;
 varying vec3 inst_tone;
 varying flat float piece_hash;
-varying flat float evergreen;
+varying flat float no_floor;
 
 void vertex() {
 	// Ідентифікатор пучка (картки чи гілки) записано в G кольору вершини під час збирання:
-	// хеш позиції різнився б у кожного трикутника нерухомої картки й гілки. Нижня половина G —
-	// листопадні, верхня — вічнозелені. Правильно, поки RGB кольору екземпляра MultiMesh = 1
+	// хеш позиції різнився б у кожного трикутника нерухомої картки й гілки (розчинення цілими пучками). Нижня половина G —
+	// дерева (їх тримає fade_floor), верхня — решта. Правильно, поки RGB кольору екземпляра MultiMesh = 1
 	// (тон екземпляра йде в custom data, альфа — розчинення): Godot множить колір екземпляра на
 	// колір вершини ще до коду шейдера.
 	piece_hash = fract(COLOR.g * 2.0);
-	evergreen = step(0.5, COLOR.g);
+	no_floor = step(0.5, COLOR.g);
 	// Без custom data (поодинокий MeshInstance3D) INSTANCE_CUSTOM — нулі: тон 1.
 	inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);
 	vec3 v = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -73,16 +63,6 @@ void vertex() {
 		float s = length(MODEL_MATRIX[0].xyz);
 		v.xy += UV2 * s;
 	}
-	// Гойдання: фаза — одна на пучок (ідентифікатор) і екземпляр (положення й поворот), а не з
-	// кожної вершини: інакше нерухома картка очерету «дихала» шириною. Частоти непорівнянні
-	// (1,7 і 2,93), тож рух не повторюється з коротким періодом.
-	float ph = piece_hash * 6.283 + dot(MODEL_MATRIX[3].xyz, vec3(3.1, 0.0, 2.3)) + MODEL_MATRIX[0].z * 7.0;
-	float sway = 0.6 * sin(wind_time * 1.7 + ph) + 0.4 * sin(wind_time * 2.93 + ph * 1.618);
-	// Хитаються лише пучки з B = 1 (крона, стоячий очерет); у нерухомої картки — її верх.
-	float amp = COLOR.b * (is_fixed > 0.5
-			? WIND_REED * clamp((COLOR.r - 0.55) / 0.45, 0.0, 1.0)
-			: WIND_CLUMP * COLOR.r * is_card);
-	v += (MODELVIEW_MATRIX * vec4(normalize(vec3(1.0, 0.0, 0.35)) * amp * sway * wind_strength, 0.0)).xyz;
 	VERTEX = v;
 	NORMAL = normalize((MODELVIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	if (is_card > 0.5) {
@@ -106,12 +86,13 @@ void fragment() {
 	// здаля (від mip 2,5): на ближньому зумі знижений поріг на розмитому mip роздував обрис
 	// пучка в кілька гладких лопатей. І не в тіні: там гола крона зливалась у пляму.
 	// Рівень mip із похідних UV: textureQueryLod немає в gl_compatibility (GLES3).
-	// Анізотропний фільтр бере mip за меншою віссю сліду пікселя (до 16:1), а не за більшою,
-	// тож рівень тут — так само; за більшою віссю пороги нижче спрацьовували б раніше.
+	// Анізотропний фільтр бере mip за меншою віссю сліду пікселя (до 4:1 — проєкт ставить
+	// anisotropic_filtering_level = 2, тобто 4×), а не за більшою; тож рівень тут — так само, інакше
+	// пороги нижче спрацьовували б раніше.
 	vec2 texel = UV * vec2(textureSize(albedo_tex, 0));
 	float ax = dot(dFdx(texel), dFdx(texel));
 	float ay = dot(dFdy(texel), dFdy(texel));
-	float lod = max(0.5 * log2(max(min(ax, ay), max(ax, ay) / 256.0)), 0.0);
+	float lod = max(0.5 * log2(max(min(ax, ay), max(ax, ay) / 16.0)), 0.0);
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 2.5) / 2.0, 0.0, 1.0));
 	// Нерухома картка ребром до камери — смуга з розмитого стебла: вона тоншає й гасне.
 	cut = mix(cut, min(cut + 0.45, 0.97), is_fixed * (1.0 - smoothstep(0.12, 0.4, facing)) * float(!shadow_pass));
@@ -119,8 +100,10 @@ void fragment() {
 	// робив із пучка кілька великих лопатей — «листки» по метру на ближньому зумі.
 #if defined(VEG_FADE) || defined(VEG_FADE_DEPTH)
 	// Напівпрозора крона над юнітом: альфа екземпляра — справжня прозорість, без растру.
-	float inst_a = max(COLOR.a, fade_floor * (1.0 - evergreen));
-	if (t.a < cut || inst_a < (shadow_pass ? 0.5 : 0.001)) {
+	// Тінь не залежить від альфи: рослина прозоріє над юнітом, але стоїть на місці, тож її тінь та
+	// сама. Зникає тінь лише при розчиненні цілими пучками (veg.gdshader), коли рослину прибрано.
+	float inst_a = max(COLOR.a, fade_floor * (1.0 - no_floor));
+	if (t.a < cut || (!shadow_pass && inst_a < 0.001)) {
 		discard;
 	}
 #else
@@ -144,7 +127,7 @@ void fragment() {
 	float r = mix(1.0, mix(1.0 - rim, 1.0, smoothstep(0.35, 0.85, edge)), is_card * (1.0 - smoothstep(2.0, 3.0, lod)));
 	// Затінення крони — у колір: AO рендерер тут не застосовує (розсіяне світло неба
 	// від нього не змінюється), і без цього крона лишалась пласкою.
-	ALBEDO = rgb * mix(vec3(COLOR.r), vec3(1.0), is_card) * inst_tone * tint * r * occ * mix(bark_dark, 1.0, is_card);
+	ALBEDO = rgb * mix(vec3(COLOR.r), vec3(1.0), is_card) * inst_tone * tint * r * occ;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
 	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без
@@ -154,7 +137,7 @@ void fragment() {
 	ALPHA = shadow_pass ? 1.0 : 0.0;
 #elif defined(VEG_FADE)
 	// Кора гасне швидше за листя: гілля над юнітом інакше стирчить темними рисками.
-	ALPHA = max(COLOR.a, fade_floor * (1.0 - evergreen)) * mix(0.6, 1.0, is_card);
+	ALPHA = max(COLOR.a, fade_floor * (1.0 - no_floor)) * mix(0.6, 1.0, is_card);
 #else
 	ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));
 #endif
