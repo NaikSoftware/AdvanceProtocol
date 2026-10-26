@@ -56,6 +56,8 @@ var season: StringName = &"late"
 ## Будівлі кидають тінь сонця (PropLayer.structure_shadows): на сонячній карті без неї дім висить.
 ## Ставить екран бою з вигляду карти до першого build().
 var structure_shadows: bool = false
+## Мокра карта (PropLayer.wet): ставить екран бою з вигляду карти до першого build().
+var wet: bool = false
 ## Час імли для всіх матеріалів світу; з боєм не скидається, бо візерунку однаково, з якого
 ## часу пливти.
 static var fog_time: float = 0.0
@@ -185,6 +187,7 @@ func build(board: Board) -> void:
 		_props.name = "Props"
 		add_child(_props)
 	_props.structure_shadows = structure_shadows
+	_props.wet = wet
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board))
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.

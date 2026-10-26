@@ -103,6 +103,8 @@ const _DRAG_THRESHOLD_DP: float = 10.0
 ## хмарами River світло розсіяне, і будинки без тіні від землі не відриваються. Не за прозорістю
 ## тіні: на сонячних картах вона навмисно м'яка й світліша, ніж під хмарами.
 const STRUCTURE_SHADOW_MIN_SKY_CLEAR: float = 0.5
+## Мокра карта для пропсів (мости темніші й блищать): River під дощем — 0.55, сухі — 0.
+const WET_MIN: float = 0.3
 
 ## Довгий натиск (docs/ui/overlays.md): палець тримається стільки, не перетнувши
 ## поріг драга, — огляд дальності замість тапу; відпускання його знімає.
@@ -262,6 +264,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
+	_board_view.wet = look.wetness >= WET_MIN
 	_weather.apply(look)
 	_wire_view(board)
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
@@ -292,6 +295,7 @@ func resume(match_service: Node = null) -> void:
 	var look: BattleLook = BattleLook.for_map_path(mp)
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
+	_board_view.wet = look.wetness >= WET_MIN
 	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)

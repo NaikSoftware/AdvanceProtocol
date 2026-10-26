@@ -8,7 +8,7 @@ extends Node3D
 ## cell_hash, ніколи Rules.roll чи глобальна випадковість, бо обидва гравці мусять бачити одне.
 ## Одна MultiMesh на модель — один вузол і по draw call на поверхню (§8).
 
-enum Kind { STRUCTURE, RUIN, BRIDGE, FIELD_FENCE, GARDEN_FENCE, HAY, POLE, TRAILER, BLOCK, BOULDER }
+enum Kind { STRUCTURE, RUIN, BRIDGE, FIELD_FENCE, GARDEN_FENCE, HAY, POLE, TRAILER, BLOCK, BOULDER, YARD }
 ## Як виглядає розчавлене: LAY — повалене набік, SQUASH — сплющене, SINK — втиснуте в землю.
 enum Crush { NONE, LAY, SQUASH, SINK }
 
@@ -62,7 +62,10 @@ const MODELS: Dictionary = {
 	&"rock_moss_03": {"kind": Kind.BOULDER, "crush": Crush.SINK},
 	&"rock_moss_04": {"kind": Kind.BOULDER, "crush": Crush.SINK},
 	&"boulder_01": {"kind": Kind.BOULDER, "crush": Crush.SINK},
+	&"dead_tree_trunk_02": {"kind": Kind.YARD, "crush": Crush.SINK},
 }
+## Руїни з глухим фронтоном збоку: ставляться пошкодженим фасадом (−Z) до камери (+x чи +z).
+const CAMERA_FRONT: Array[StringName] = [&"ruin_half_house2"]
 ## Руїни, яких у таблиці ще нема, стають у слот за префіксом імені: напівзруйнована будівля —
 ## звичайна, повна руїна — рідкісна. Перший збіг виграє.
 ## Моделі, що лежать на диску, але ще не прийняті: їх не бере ні таблиця, ні префікс.
@@ -94,10 +97,14 @@ const WIRE_GONE_DIST: float = 34.0
 const FIELD_FENCE_RUN: int = 3
 const FIELD_FENCE_CHANCE: int = 6
 const HAY_CHANCE: int = 2
-## Найменший проміжок між межами будівель (разом зі звісом даху), клітинки: 2 м. З камери під 38°
-## вужчий прохід ховається за дахом, і два будинки читаються одним. Будівля, що не влазить із ним,
-## поступається іншій моделі чи повороту або лишає клітинки порожнім двором.
-const STRUCTURE_GAP: float = 0.25
+## Найменший проміжок між межами будівель (разом зі звісом даху), клітинки: 1 м. Чи читаються два
+## будинки окремо, вирішує правило екрана (SCREEN_DEPTH_SEP); цей проміжок лише не дає стінам
+## зійтися впритул згори.
+const STRUCTURE_GAP: float = 0.125
+## Повітка-двірська будівля на клітинці BUILDING без будинку: f8_shed, зменшена так, щоб вільно
+## стала в клітинку (ассет на 0.96 клітинки не влазить із відступом до огорожі).
+const YARD_SHED: StringName = &"f8_shed"
+const YARD_SHED_SCALE: float = 0.7
 ## Велика будівля (слід понад клітинку) зі звісом тримається на стільки всередині своєї групи
 ## BUILDING (клітинки, ~2 м). Будинок на одну клітинку стоїть у ній по центру й тримає лише
 ## YARD_CLEAR_SMALL до межі: з повним відступом жоден не влазить, а з цим до огорожі на YARD_OUT
@@ -106,11 +113,17 @@ const YARD_CLEAR: float = 0.25
 const YARD_CLEAR_SMALL: float = 0.03
 ## Хвіртка в огорожі двору, клітинки (~3.6 м): решта ребра обгороджена, двір не відкритий на вулицю.
 const GATE: float = 0.45
+## Найкоротша секція огорожі, клітинки (4 м): коротший обрубок читається уламком, не огорожею.
+const MIN_FENCE: float = 0.5
 ## Кут камери для правила екрана (IsoCameraRig: 38–55°, бій здебільшого близько) і найменша глибина
 ## між будівлями, що на екрані накладаються: ближча будівля не сміє ховати дальшу, бо тоді дві
 ## читаються однією, хоч згори між ними й 2 м.
+# shortcut: один кут для правила екрана, хоча риг ходить 38–55°; на 55° силуети коротші, тож 40°
+# суворіше — рахувати на кожному зумі, якщо на дальньому знову злипнуться будинки.
 const SCREEN_PITCH_DEG: float = 40.0
 const SCREEN_DEPTH_SEP: float = 1.2
+## Земля між силуетами на екрані, клітинки: силуети, що лише торкаються кутами, теж читаються одним.
+const SCREEN_GROUND: float = 0.3
 ## Огорожа двору стоїть за межею групи BUILDING на ~2.2 м: будинок на одну клітинку займає її
 ## майже всю, і до огорожі однаково лишається ≥ 0.3 клітинки; секція ще далеко від центру сусідньої
 ## клітинки, де стоїть юніт.
@@ -123,6 +136,8 @@ const CONTACT_SPREAD: float = 1.25
 const CONTACT_ALPHA: float = 0.6
 const _FADE_SHADER: Shader = preload("res://game/battle/shaders/prop_fade.gdshader")
 const _THIN_SHADER: Shader = preload("res://game/battle/shaders/prop_thin.gdshader")
+## Огорожа без прозорих щілин — той самий шейдер без discard: рання перевірка глибини лишається.
+static var _thin_solid_shader: Shader
 const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.gdshader")
 ## Той самий шейдер будівлі без розчинення: discard у шейдері вимикає ранню перевірку глибини на
 ## мобільних GPU, тож будівлі моделі, над якою зараз ніхто не стоїть, малюються без нього.
@@ -134,6 +149,10 @@ static var _models: Dictionary = {}
 static var _fade_materials: Dictionary = {}
 ## Вид -> моделі на диску: перелік теки й сортування не повторюються на кожну групу будівель.
 static var _by_kind: Dictionary = {}
+## Модель -> мокра копія сітки (мости під дощем).
+static var _wet_meshes: Dictionary = {}
+const WET_DARK: float = 0.75
+const WET_ROUGHNESS: float = 0.4
 ## Модель -> {solid, fade} ShaderMaterial будівлі для поточного вузла.
 var _node_materials: Dictionary = {}
 var _contacts: MultiMeshInstance3D
@@ -155,6 +174,9 @@ var forest_cells: Array[Vector2i] = []
 ## Пропси (крім мостів) кидають тінь сонця. Без неї на сонячній карті дім, тюк чи опора висять
 ## над землею; ставити до build().
 var structure_shadows: bool = false
+## Мокра карта (BattleLook.wetness): мости темніші й з полиском. Імпортований матеріал мосту
+## погоди не читає, тож мокра копія сітки; ставити до build().
+var wet: bool = false
 
 
 ## Детермінований хеш клітинки; уся мінливість розстановки береться з нього.
@@ -254,11 +276,11 @@ static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
 			copy.surface_set_material(i, dark)
 			continue
 		var thin := ShaderMaterial.new()
-		thin.shader = _THIN_SHADER
+		var cut: bool = src.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		thin.shader = _THIN_SHADER if cut else _thin_solid()
 		thin.set_shader_parameter("albedo_tex", src.albedo_texture)
 		thin.set_shader_parameter("albedo_color", src.albedo_color)
 		thin.set_shader_parameter("use_vertex_color", src.vertex_color_use_as_albedo)
-		var cut: bool = src.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 		thin.set_shader_parameter("alpha_cut", src.alpha_scissor_threshold if cut else 0.0)
 		thin.set_shader_parameter("roughness", src.roughness)
 		thin.set_shader_parameter("metallic", src.metallic)
@@ -434,7 +456,7 @@ func instances_on(cell: Vector2i) -> Array[Dictionary]:
 	for inst in _instances:
 		if (inst["cells"] as Array).has(cell):
 			out.append({"model": inst["model"], "transform": _final_transform(inst),
-					"faded": _is_faded(inst), "crushed": _is_crushed(inst)})
+					"faded": _is_faded(inst), "crushed": _is_crushed(inst), "yard": inst.get("yard", false)})
 	return out
 
 
@@ -471,9 +493,11 @@ func _flush() -> void:
 		_apply()
 
 
-func _add(model_name: StringName, xform: Transform3D, cells: Array[Vector2i]) -> int:
+## yard — двірське вбрання клітинки без будинку (зменшена повітка, дрова, тюки): правила
+## відстані між будинками його не стосуються.
+func _add(model_name: StringName, xform: Transform3D, cells: Array[Vector2i], yard: bool = false) -> int:
 	_instances.append({"model": model_name, "transform": xform, "cells": cells,
-			"crush": int(spec_of(model_name).get("crush", Crush.NONE))})
+			"crush": int(spec_of(model_name).get("crush", Crush.NONE)), "yard": yard})
 	return _instances.size() - 1
 
 
@@ -493,7 +517,7 @@ func _build_nodes(haze: bool) -> void:
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_custom_data = fades
-		mm.mesh = info["mesh"]
+		mm.mesh = _wet_mesh(m, info["mesh"]) if wet and kind == Kind.BRIDGE else info["mesh"]
 		mm.instance_count = (by_model[m] as Array).size()
 		var mmi := MultiMeshInstance3D.new()
 		mmi.name = String(m)
@@ -543,7 +567,9 @@ func _build_contacts() -> void:
 		var up := Vector3(-hx / 0.1, 1.0, -hz / 0.1).normalized()
 		var right: Vector3 = Vector3.RIGHT.slide(up).normalized()
 		var back: Vector3 = right.cross(up)
-		xforms.append(Transform3D(Basis(right * size.x, up, -back * size.y),
+		# Права трійка (z = x × y): дзеркальна перевернула б обхід трикутників, і cull_back викинув би
+		# пляму зовсім.
+		xforms.append(Transform3D(Basis(right * size.x, up, back * size.y),
 				Vector3(c.x, TerrainHeight.ground_y(c.x, c.y) + 0.004, c.y)))
 		heights.append(box.size.y)
 	if xforms.is_empty():
@@ -592,6 +618,32 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 	return mat
 
 
+static func _wet_mesh(m: StringName, mesh: Mesh) -> Mesh:
+	if _wet_meshes.has(m):
+		return _wet_meshes[m]
+	var copy: Mesh = mesh.duplicate()
+	for i in copy.get_surface_count():
+		var src := copy.surface_get_material(i) as BaseMaterial3D
+		if src == null:
+			continue
+		var w: BaseMaterial3D = src.duplicate()
+		w.albedo_color = src.albedo_color * Color(WET_DARK, WET_DARK, WET_DARK, 1.0)
+		w.roughness = minf(src.roughness, WET_ROUGHNESS)
+		copy.surface_set_material(i, w)
+	_wet_meshes[m] = copy
+	return copy
+
+
+static func _thin_solid() -> Shader:
+	if _thin_solid_shader == null:
+		_thin_solid_shader = Shader.new()
+		var code: String = _THIN_SHADER.code
+		var cut: String = "\tif (alpha_cut > 0.0 && tex.a < alpha_cut) {\n\t\tdiscard;\n\t}\n"
+		assert(code.contains(cut), "PropLayer: відсікання в prop_thin.gdshader змінилось")
+		_thin_solid_shader.code = code.replace(cut, "")
+	return _thin_solid_shader
+
+
 static func _solid() -> Shader:
 	if _solid_shader == null:
 		_solid_shader = Shader.new()
@@ -600,6 +652,19 @@ static func _solid() -> Shader:
 		assert(code.contains(cut), "PropLayer: розчинення в prop_fade.gdshader змінилось")
 		_solid_shader.code = code.replace(cut, "")
 	return _solid_shader
+
+
+## Відтінок даху будинку (множник альбедо даху): сіро-синій бляшаний переважає, решта —
+## червоно-брунатний, зелений і брунатний лист. З хешу клітинки: обидва гравці бачать те саме.
+const ROOF_TINTS: Array[Color] = [Color(1, 1, 1), Color(1, 1, 1), Color(1.25, 0.8, 0.68),
+		Color(0.82, 1.08, 0.82), Color(1.12, 0.92, 0.74)]
+
+
+func _roof_tint(inst: Dictionary) -> Color:
+	if int(spec_of(inst["model"])["kind"]) != Kind.STRUCTURE or inst.get("yard", false):
+		return Color(1, 1, 1)
+	var c: Vector2i = (inst["cells"] as Array)[0]
+	return ROOF_TINTS[absi(cell_hash(c, 9137)) % ROOF_TINTS.size()]
 
 
 func _is_faded(inst: Dictionary) -> bool:
@@ -649,7 +714,8 @@ func _apply() -> void:
 			if mm.use_custom_data:
 				var faded: bool = _is_faded(inst)
 				any_faded = any_faded or faded
-				mm.set_instance_custom_data(k, Color(0, 0, 0, FADE if faded else 0.0))
+				var tint: Color = _roof_tint(inst)
+				mm.set_instance_custom_data(k, Color(tint.r, tint.g, tint.b, FADE if faded else 0.0))
 		if _node_materials.has(m):
 			mmi.material_override = _node_materials[m]["fade" if any_faded else "solid"]
 	_rebuild_wires()
@@ -726,6 +792,7 @@ class _Placer:
 
 	func place_all() -> void:
 		_structures()
+		_dress_yards()
 		_bridges()
 		_yard_fences()
 		_field_fences()
@@ -839,7 +906,6 @@ class _Placer:
 		var free: Dictionary = {}
 		for c in group:
 			free[c] = true
-		var in_group: Dictionary = free.duplicate()
 		var in_ring: bool = not group.any(func(c: Vector2i) -> bool: return on_board(c))
 		var has_tower := false
 		var models: Array[StringName] = PropLayer.models_of(kind_id)
@@ -862,11 +928,14 @@ class _Placer:
 					if not free.has(c):
 						continue
 					for rot in 4:
+						# Фасад до камери: −Z після повороту дивиться на +z (rot 2) чи +x (rot 3).
+						if PropLayer.CAMERA_FRONT.has(m) and rot < 2:
+							continue
 						var size_r: Vector2i = fp if rot % 2 == 0 else Vector2i(fp.y, fp.x)
 						# Руїна стоїть на кожній клітинці RUBBLE (вона й є вид клітинки), тож правила відстані
 						# її не відсувають; будинки ж тримаються від руїн, як від будь-якої будівлі.
 						var ruin: bool = kind_id == Kind.RUIN
-						if _fits(free, c, size_r) and _inside_yard(m, c, rot, size_r, in_group) \
+						if _fits(free, c, size_r) and _inside_yard(m, c, rot, size_r) \
 								and (ruin or (_clear_of_placed(m, c, rot, size_r) and _no_twin(m, c, size_r) \
 								and _tower_apart(m, c, size_r))):
 							var weight: int = int(s.get("weight", 1)) * size_r.x * size_r.y
@@ -903,7 +972,7 @@ class _Placer:
 		for p: Array in placed:
 			if r.grow(maxf(_gap_of(m), float(p[1]))).intersects(p[0]):
 				return false
-			if (scr[0] as Rect2).intersects(p[2]) and _depth_gap(scr[1], p[3]) < SCREEN_DEPTH_SEP:
+			if (scr[0] as Rect2).grow(SCREEN_GROUND).intersects(p[2]) and _depth_gap(scr[1], p[3]) < SCREEN_DEPTH_SEP:
 				return false
 		return true
 
@@ -955,7 +1024,7 @@ class _Placer:
 	## довкола ділянки під будівлями, тож може пройти й між будинком і порожньою клітинкою групи.
 	## Велика будівля — YARD_CLEAR, на одну клітинку — YARD_CLEAR_SMALL (до огорожі однаково ≥ 0.3
 	## клітинки), руїна (її не обгороджують) — лише не за межею клітинки.
-	func _inside_yard(m: StringName, origin: Vector2i, rot: int, s: Vector2i, _in_group: Dictionary) -> bool:
+	func _inside_yard(m: StringName, origin: Vector2i, rot: int, s: Vector2i) -> bool:
 		var r: Rect2 = _rect_of(m, origin, rot, s)
 		var f := Rect2(Vector2(origin) - Vector2(0.5, 0.5), Vector2(s))
 		var ruin: bool = int(PropLayer.spec_of(m)["kind"]) == Kind.RUIN
@@ -1008,6 +1077,47 @@ class _Placer:
 				out.append(c)
 		# Будівля кільця не стоїть на жодній клітинці дошки, але має ключ для пошуку.
 		return out if not out.is_empty() else cells
+
+	# --- двори ------------------------------------------------------------------------------
+
+	## Кожна клітинка BUILDING дошки читається забудованою (§8: вид клітинки видно): де будинок не
+	## став, там двір — зменшена повітка, дрова чи причіп, і тюк. Такі клітинки входять у ділянку
+	## й обгороджуються разом із сусідами одним контуром з однією хвірткою.
+	func _dress_yards() -> void:
+		for y in size.y:
+			for x in size.x:
+				var c := Vector2i(x, y)
+				if kind(c) != Terrain.Kind.BUILDING or built.has(c):
+					continue
+				built[c] = Vector2i.ZERO
+				var cells: Array[Vector2i] = [c]
+				var yaw: float = float(h(c, 140) % 4) * PI * 0.5
+				var lo: float = minf(ground(c.x - 0.3, c.y - 0.3), ground(c.x + 0.3, c.y + 0.3))
+				# Поруч із вежею повітки нема: вежа стоїть у власному дворі, тож тут лише дрова.
+				var by_tower := false
+				for dy in range(-1, 2):
+					for dx in range(-1, 2):
+						var n: StringName = model_at.get(c + Vector2i(dx, dy), &"")
+						by_tower = by_tower or bool(PropLayer.spec_of(n).get("tower", false))
+				match 3 if by_tower else h(c, 141) % 4:
+					0, 1:
+						var shed := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(c.x, lo, c.y))
+						if PropLayer.model(YARD_SHED) != null:
+							layer._add(YARD_SHED, shed, cells, true)
+					2:
+						_yard_item(pick_for_half(Kind.TRAILER, half(c)), c, Vector2(0.0, 0.1), yaw)
+					3:
+						for k in 2:
+							_yard_item(&"dead_tree_trunk_02", c, Vector2(-0.15, -0.1 + 0.1 * k), yaw + 0.1 * k)
+				_yard_item(pick_for_half(Kind.HAY, half(c)), c, Vector2(0.28, 0.28).rotated(yaw), float(h(c, 142) % 628) / 100.0)
+
+	func _yard_item(m: StringName, c: Vector2i, local: Vector2, yaw: float) -> void:
+		if m == &"" or PropLayer.model(m) == null:
+			return
+		var x: float = c.x + local.x
+		var z: float = c.y + local.y
+		var cells: Array[Vector2i] = [c]
+		layer._add(m, Transform3D(Basis(Vector3.UP, yaw), Vector3(x, ground(x, z), z)), cells, true)
 
 	# --- мости -----------------------------------------------------------------------------
 
@@ -1169,14 +1279,14 @@ class _Placer:
 			else:
 				hi -= GATE
 		var key := Vector4i(c.x, c.y, -d.x, -d.y)
-		if edges.has(key) or hi - lo < 0.05:
+		if edges.has(key) or hi - lo < MIN_FENCE:
 			return
 		# Секція тримає ≥ 0.3 клітинки від будь-якої будівлі (зокрема руїни на сусідній клітинці):
 		# заважає — коротшає з обох кінців, і лише коротша за 0.3 клітинки не стає зовсім.
 		var cut: float = 0.0
 		while not _span_clear(c, d, t, lo + cut, hi - cut):
 			cut += 0.05
-			if hi - lo - 2.0 * cut < 0.3:
+			if hi - lo - 2.0 * cut < MIN_FENCE:
 				return
 		lo += cut
 		hi -= cut

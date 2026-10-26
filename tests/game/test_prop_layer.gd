@@ -81,9 +81,9 @@ func test_structures_lie_wholly_inside_building_cells(p = use_parameters(MAPS)) 
 	assert_gt(checked, 0, "%s: будівлі є" % p)
 
 
-## Між будь-якими двома будівлями (зі звісом даху) — щонайменше 2 м: з камери під 38° вужчий прохід
-## ховається за дахом, і два будинки читаються одним.
-func test_structures_keep_two_metres_apart(p = use_parameters(MAPS)) -> void:
+## Між будь-якими двома будівлями (зі звісом даху) — щонайменше STRUCTURE_GAP (1 м); окремість на
+## екрані стереже інший тест. Двірське вбрання (зменшена повітка) — не будівля.
+func test_structures_keep_their_gap(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _view(_map(p))
 	var rects: Array = []
 	for inst in view.props().all_instances():
@@ -91,14 +91,16 @@ func test_structures_keep_two_metres_apart(p = use_parameters(MAPS)) -> void:
 		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
 			continue
 		var box: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
-		# Кожна межа розширена на 1 м: перетин означає прохід, вужчий за 2 м.
+		if inst.get("yard", false):
+			continue
+		# Кожна межа розширена на пів проміжку: перетин означає вужчий прохід.
 		var r := Rect2(box.position.x, box.position.z, box.size.x, box.size.z).grow(PropLayer.STRUCTURE_GAP * 0.5 - 1e-4)
 		var ruin: bool = k == PropLayer.Kind.RUIN
 		for o: Array in rects:
 			# Руїни прив'язані кожна до своєї клітинки RUBBLE; правило стереже будинки.
 			if ruin and o[1]:
 				continue
-			assert_false(r.intersects(o[0]), "%s: %s ближче 2 м до сусіда" % [p, inst["model"]])
+			assert_false(r.intersects(o[0]), "%s: %s ближче за проміжок до сусіда" % [p, inst["model"]])
 		rects.append([r, ruin])
 
 
@@ -109,7 +111,8 @@ func test_nothing_small_on_a_unit_centre(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _view(m)
 	var checked: int = 0
 	for inst in view.props().all_instances():
-		if not _is_small(inst["model"]):
+		# Двірське вбрання стоїть на клітинці BUILDING, як і будинок; правило — для прохідних клітинок.
+		if not _is_small(inst["model"]) or inst.get("yard", false):
 			continue
 		var c: Vector2i = (inst["cells"] as Array)[0]
 		assert_true(board.in_bounds(c), "%s: дрібний пропс поза дошкою" % p)
@@ -418,6 +421,9 @@ func test_boulders_get_contact_blobs() -> void:
 		stones += 1 if k == PropLayer.Kind.BOULDER or k == PropLayer.Kind.BLOCK else 0
 	var blobs: MultiMeshInstance3D = view.props().get_node("ContactShadows")
 	assert_eq(blobs.multimesh.instance_count, stones)
+	# Дзеркальний базис перевертає обхід трикутників, і cull_back викидає пляму зовсім.
+	for i in blobs.multimesh.instance_count:
+		assert_gt(blobs.multimesh.get_instance_transform(i).basis.determinant(), 0.0, "пляма %d дзеркальна" % i)
 
 
 ## Будівлі моделі, над якою ніхто не стоїть, малюються шейдером без discard.
@@ -550,7 +556,7 @@ func test_structure_shadows_only_when_switched_on() -> void:
 
 
 ## Сонячна карта вмикає тіні будівель, похмура River — ні.
-func test_sunny_map_switches_structure_shadows_on(p = use_parameters([["crossroads", true], ["river", false]])) -> void:
+func test_sunny_map_switches_structure_shadows_on(p = use_parameters([["crossroads", true], ["ridge", true], ["river", false]])) -> void:
 	var service: Node = MatchServiceScript.new()
 	add_child_autofree(service)
 	var screen: BattleScreen = BattleScreenScene.instantiate()
@@ -565,11 +571,14 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	var m: MapData = _map(p)
 	var board: Board = m.to_board()
 	var view: BoardView = _view(m)
+	# Забудована — клітинка BUILDING із будинком чи двірським вбранням.
 	var built: Dictionary = {}
 	for inst in view.props().all_instances():
-		if _kind(inst["model"]) == PropLayer.Kind.STRUCTURE:
+		if _kind(inst["model"]) == PropLayer.Kind.STRUCTURE or inst.get("yard", false):
 			for c: Vector2i in inst["cells"]:
-				built[c] = true
+				if board.in_bounds(c) and board.kind_at(c) == Terrain.Kind.BUILDING:
+					built[c] = true
+	var fences: int = 0
 	for inst in view.props().all_instances():
 		if _kind(inst["model"]) != PropLayer.Kind.GARDEN_FENCE:
 			continue
@@ -578,21 +587,8 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 		for d in Board.DIRS_4:
 			has_built = has_built or built.has(c + d)
 		assert_true(has_built, "%s: огорожа на %s не при будинку" % [p, c])
-
-
-func _group_has(board: Board, start: Vector2i, built: Dictionary) -> bool:
-	var seen: Dictionary = {start: true}
-	var queue: Array[Vector2i] = [start]
-	while not queue.is_empty():
-		var q: Vector2i = queue.pop_back()
-		if built.has(q):
-			return true
-		for d in Board.DIRS_4:
-			var n: Vector2i = q + d
-			if board.in_bounds(n) and not seen.has(n) and board.kind_at(n) == Terrain.Kind.BUILDING:
-				seen[n] = true
-				queue.append(n)
-	return false
+		fences += 1
+	assert_gt(fences, 0, "%s: передумова — двори обгороджені" % p)
 
 
 ## Огорожа двору — щонайменше 0.3 клітинки від даху будь-якої будівлі, вежа — 0.5 від будівель.
@@ -611,6 +607,7 @@ func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 			houses.append(r)
 		elif int(s["kind"]) == PropLayer.Kind.GARDEN_FENCE:
 			fences.append(r)
+	assert_gt(fences.size(), 0, "%s: передумова — огорожі є" % p)
 	for f in fences:
 		for b in houses + towers:
 			assert_false(b.grow(0.3 - 1e-4).intersects(f), "%s: огорожа %s ближче 0.3 клітинки до будівлі %s" % [p, f, b])
@@ -620,14 +617,16 @@ func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 
 
 
-## З камери гри будівлі не накладаються на екрані, хіба що одна далеко за іншою вглиб: ближча
+## З камери гри будівлі не накладаються на екрані й не торкаються (≥ 0.3 клітинки землі між
+## силуетами, і по діагоналі теж — так злиплися руїна й хата на південному заході Crossroads), хіба
+## що одна далеко за іншою вглиб: ближча
 ## будівля інакше ховає звіс дальшої, і дві читаються однією, хоч згори між ними й 2 м.
 func test_buildings_never_overlap_on_screen(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _view(_map(p))
 	var proj: Array = []
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
-		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+		if (k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN) or inst.get("yard", false):
 			continue
 		var box: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 		var scr: Array = PropLayer._Placer._screen_of(Rect2(box.position.x, box.position.z, box.size.x, box.size.z), box.size.y)
@@ -636,7 +635,8 @@ func test_buildings_never_overlap_on_screen(p = use_parameters(MAPS)) -> void:
 			# Руїни прив'язані кожна до своєї клітинки RUBBLE; правило стереже будинки.
 			if scr[2] and o[2]:
 				continue
-			var overlap: bool = (scr[0] as Rect2).intersects(o[0])
+			# Між силуетами — щонайменше SCREEN_GROUND землі (кути, що торкаються, теж злипаються).
+			var overlap: bool = (scr[0] as Rect2).grow(PropLayer.SCREEN_GROUND - 1e-4).intersects(o[0])
 			assert_false(overlap and PropLayer._Placer._depth_gap(scr[1], o[1]) < PropLayer.SCREEN_DEPTH_SEP,
 					"%s: %s накладається на сусіда на екрані" % [p, inst["model"]])
 		proj.append(scr)
@@ -649,7 +649,7 @@ func test_one_tower_per_map_in_its_own_lot(p = use_parameters(MAPS)) -> void:
 	var others: Dictionary = {}
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
-		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+		if (k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN) or inst.get("yard", false):
 			continue
 		for c: Vector2i in inst["cells"]:
 			if bool(PropLayer.spec_of(inst["model"]).get("tower", false)):
@@ -670,7 +670,7 @@ func test_villages_are_varied(p = use_parameters(MAPS)) -> void:
 	var houses: int = 0
 	var tall: int = 0
 	for inst in view.props().all_instances():
-		if _kind(inst["model"]) != PropLayer.Kind.STRUCTURE:
+		if _kind(inst["model"]) != PropLayer.Kind.STRUCTURE or inst.get("yard", false):
 			continue
 		var s: Dictionary = PropLayer.spec_of(inst["model"])
 		if not bool(s.get("tower", false)):
@@ -707,7 +707,7 @@ func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
 ## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
 ## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
 ## разом зі свідомою зміною таблиці моделей чи правил розстановки.
-const RIVER_BUILDINGS_FINGERPRINT: int = 825888417
+const RIVER_BUILDINGS_FINGERPRINT: int = 3050175260
 
 
 func test_river_buildings_match_the_golden_fingerprint() -> void:
@@ -720,3 +720,67 @@ func test_river_buildings_match_the_golden_fingerprint() -> void:
 			parts.append("%s@%d,%d" % [inst["model"], c.x, c.y])
 	parts.sort()
 	assert_eq(";".join(parts).hash(), RIVER_BUILDINGS_FINGERPRINT, ";".join(parts))
+
+
+
+## §8: кожна клітинка BUILDING дошки видимо забудована — будинком або двором (повітка, дрова,
+## причіп, тюк), а не голою травою.
+func test_every_building_cell_reads_built_up(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var board: Board = m.to_board()
+	var view: BoardView = _view(m)
+	for y in board.height:
+		for x in board.width:
+			var c := Vector2i(x, y)
+			if board.kind_at(c) == Terrain.Kind.BUILDING:
+				assert_false(view.props().instances_on(c).is_empty(), "%s: порожня клітинка BUILDING %s" % [p, c])
+
+
+
+## Секція огорожі двору не коротша за MIN_FENCE: обрубок читається уламком.
+func test_no_fence_stubs(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _view(_map(p))
+	for inst in view.props().all_instances():
+		if _kind(inst["model"]) == PropLayer.Kind.GARDEN_FENCE:
+			assert_gte(_length(inst), PropLayer.MIN_FENCE - 1e-3, "%s: обрубок огорожі на %s" % [p, inst["cells"]])
+
+
+## На мокрій карті мости беруть темнішу й блискучішу копію сітки; суха — імпортовану.
+func test_wet_map_darkens_bridges() -> void:
+	var m: MapData = _map("river")
+	for wet: bool in [false, true]:
+		var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
+		add_child_autofree(view)
+		view.ring_map = m
+		view.wet = wet
+		view.build(m.to_board())
+		var node: MultiMeshInstance3D = view.props().get_node("bridge_river_centre")
+		var src := (PropLayer.model(&"bridge_river_centre")["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
+		var got := node.multimesh.mesh.surface_get_material(0) as BaseMaterial3D
+		if wet:
+			assert_almost_eq(got.albedo_color.r, src.albedo_color.r * PropLayer.WET_DARK, 1e-3)
+			assert_lte(got.roughness, PropLayer.WET_ROUGHNESS + 1e-4)
+		else:
+			assert_eq(got, src, "суха карта — імпортований матеріал")
+
+
+## Руїна з глухим фронтоном стоїть пошкодженим фасадом (−Z) до камери (+x чи +z).
+func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _view(_map(p))
+	for inst in view.props().all_instances():
+		if PropLayer.CAMERA_FRONT.has(inst["model"]):
+			var front: Vector3 = -(inst["transform"] as Transform3D).basis.z
+			assert_gt(front.x + front.z, 0.5, "%s: %s фасадом від камери" % [p, inst["model"]])
+
+
+## Дахи будинків мають різні відтінки, руїни й двірське вбрання — без відтінку.
+func test_roofs_get_varied_tints() -> void:
+	var view: BoardView = _view(_map("crossroads"))
+	var p: PropLayer = view.props()
+	var tints: Dictionary = {}
+	for inst in p.all_instances():
+		if _kind(inst["model"]) == PropLayer.Kind.STRUCTURE and not inst.get("yard", false):
+			tints[p._roof_tint(inst)] = true
+		elif _kind(inst["model"]) == PropLayer.Kind.RUIN:
+			assert_eq(p._roof_tint(inst), Color(1, 1, 1))
+	assert_gte(tints.size(), 3, "щонайменше три відтінки дахів")

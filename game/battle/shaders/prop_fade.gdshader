@@ -33,6 +33,8 @@ varying vec3 world_normal;
 varying float base_h;
 // Частка викинутих пікселів (INSTANCE_CUSTOM.a): 0 — суцільна, 0.7 — крізь дах видно юніта.
 varying flat float v_fade;
+// Відтінок даху екземпляра (INSTANCE_CUSTOM.rgb); нулі — поза MultiMesh, без відтінку.
+varying flat vec3 v_roof_tint;
 
 #include "res://game/battle/shaders/surroundings.gdshaderinc"
 
@@ -50,6 +52,7 @@ void vertex() {
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	base_h = world_pos.y - MODEL_MATRIX[3].y;
 	v_fade = INSTANCE_CUSTOM.a;
+	v_roof_tint = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) < 1e-4 ? vec3(1.0) : INSTANCE_CUSTOM.rgb;
 }
 
 void fragment() {
@@ -57,6 +60,8 @@ void fragment() {
 		discard;
 	}
 	vec3 albedo = texture(albedo_tex, UV).rgb * albedo_color.rgb;
+	float roof_k = smoothstep(0.4, 0.7, world_normal.y);
+	albedo *= mix(vec3(1.0), v_roof_tint, roof_k);
 	float rough = roughness;
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {
