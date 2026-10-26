@@ -197,7 +197,8 @@ func _paths(root: Node) -> Array[String]:
 
 
 ## Кожна мить бере свій запечений атлас: куля — вибух, дим і спалах; сіра клуба по броні —
-## знебарвлений атлас ґрунту; іскри — частинки без атласу.
+## знебарвлений атлас ґрунту, а гармата ще й коротка вогняна куля; фугас у ґрунті — чорне ядро
+## з атласу диму; іскри — частинки без атласу.
 func test_each_effect_samples_its_atlas() -> void:
 	assert_eq(_paths(BattleFx.spawn_explosion(parent, Vector3.ZERO, 1.5)), ["explosion.png", "impact_flash.png", "smoke_column.png"])
 	var expect: Dictionary = {
@@ -205,9 +206,9 @@ func test_each_effect_samples_its_atlas() -> void:
 		[BattleFx.Weapon.RIFLE, false]: ["dirt_burst.png"],
 		[BattleFx.Weapon.AUTOCANNON, true]: ["dirt_burst.png", "impact_flash.png"],
 		[BattleFx.Weapon.AUTOCANNON, false]: ["dirt_burst.png", "impact_flash.png"],
-		[BattleFx.Weapon.TANK_GUN, true]: ["dirt_burst.png", "impact_flash.png"],
-		[BattleFx.Weapon.TANK_GUN, false]: ["dirt_burst.png", "impact_flash.png"],
-		[BattleFx.Weapon.SHELL, false]: ["dirt_burst.png", "impact_flash.png"],
+		[BattleFx.Weapon.TANK_GUN, true]: ["dirt_burst.png", "explosion.png", "impact_flash.png"],
+		[BattleFx.Weapon.TANK_GUN, false]: ["dirt_burst.png", "impact_flash.png", "smoke_column.png"],
+		[BattleFx.Weapon.SHELL, false]: ["dirt_burst.png", "impact_flash.png", "smoke_column.png"],
 		[BattleFx.Weapon.DRONE, true]: ["explosion.png", "impact_flash.png", "smoke_column.png"],
 	}
 	for k: Array in expect:

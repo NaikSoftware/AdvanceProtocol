@@ -215,14 +215,24 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 			_light(root, 10.0, 4.0)
 			if armoured:
 				_sparks(root, "Sparks", 18, Vector3(0, ROOF, 0), 12.0, 26.0, 1.0, 2.5, 0.15, 0.4, 70.0, 0.0)
-				_puff(root, cloud, Vector3(0, ROOF, 0), 0.0, 0.12, life, 1.5, 0.75)
+				# Дим іде за вогнем: клуба проступає, коли куля вже на піку.
+				_puff(root, cloud, Vector3(0, ROOF, 0), 0.15, 0.12, life, 1.5, 0.75)
+				# Вогняна куля на корпусі 4,5 м, що гасне за 0,6 с (120 мм по башті: 4,3 м на +0,12 с); яскравіша
+				# за атлас, бо мала куля на тлі корпусу інакше читається темною.
+				var ball := _sprite(root, "Ball", EXPLOSION_TEX, Vector2(8, 8), 64, 4.5 * EXPLOSION_CELL_M / EXPLOSION_BALL_M / 8.0, 0.0, 1.6, false)
+				ball.position = Vector3(0, ROOF, 0)
+				# Вогонь — поверх сірої клуби, що народжується в тій самій точці.
+				ball.sorting_offset = 1.0
+				_play_smoke(root, ball, snap_tau(0.1, 0.0, 30.0), 0.6, 0.0, 1.5, 0.3, 1.0, Vector2(0.0, 30.0), Vector2.ZERO, 0.2)
 			else:
 				_dirt(root, cloud, Vector3.ZERO, 0.0, 0.15, life, 1.5, 0.6)
+				_core(root, cloud, 0.6 * life, 1.5, 0.6)
 				_debris(root, cloud)
 		Weapon.SHELL:
 			_flash(root, 3.5, Vector3(0, 0.2, 0), 0.0)
 			_light(root, 15.0, 4.0)
 			_dirt(root, cloud, Vector3.ZERO, 0.0, 0.2, life, 2.0, 0.5)
+			_core(root, cloud, 0.5 * life, 2.0, 0.5)
 			_debris(root, cloud)
 		Weapon.DRONE:
 			# Удар згори: спалах на даху, чорна клуба на корпусі, іскри вниз і вбік, без ґрунту.
@@ -463,6 +473,17 @@ static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, f
 	var q := _sprite(root, "Dirt", DIRT_TEX, Vector2(8, 8), 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0, false)
 	q.position = offset
 	_play_smoke(root, q, snap_tau(full, 0.0, LAST_FRAME), life, delay, rise, grow, opacity)
+
+
+## Чорне ядро фугасного розриву в ґрунті: 155 мм на +0,1 с — чорна куля, і лише за 1–2 с її
+## розбавляє бурий пил. Квад диму на 0,8 хмари ґрунту, поверх неї, з'являється за 0,05–0,15 с і
+## розчиняється за `life` с; рухається тією ж кривою, що й хмара.
+static func _core(root: Node3D, cloud_m: float, life: float, rise: float, grow: float) -> void:
+	var side: float = 0.8 * cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0
+	var q := _sprite(root, "Core", SMOKE_TEX, Vector2(8, 8), 64, side, 0.0, 1.0, false)
+	# Ядро малюється поверх ґрунту, хоча стоїть у тій самій точці.
+	q.sorting_offset = 1.0
+	_play_smoke(root, q, life, life, 0.0, rise, grow, 0.9, Vector2(4.0, 30.0), Vector2(0.05, 0.15), 0.15)
 
 
 ## Сіра клуба диму й окалини (влучання в броню, пороховий дим біля дула): той самий атлас
