@@ -295,7 +295,7 @@ def house2(ruined):
     wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 8, "wall_half", "wall_plaster", 31, hcap=5.6, **standing)
     wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half", "wall_plaster", 32, hcap=5.6, **standing)
     wall_run(b, (-hx, N), (-hx, S), 0.4, [E] * 8, "wall_half", "wall_plaster", 33, hcap=5.6, **standing)
-    prism(b, [(-hy, E), (hy, E), (1.5, E + 1.2), (1.1, E + 1.9), (0.3, R - 0.5), (-0.5, R - 1.0), (-1.2, E + 1.3), (-hy + 0.2, E + 0.3)], 0.4, (-hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="brick_face")   # зламаний верх фронтону
+    prism(b, [(-hy, E), (hy, E), (hy, E + 0.5), (1.9, E + 0.5), (1.9, E + 1.1), (1.1, E + 1.1), (1.1, E + 1.7), (0.4, E + 1.7), (0.4, E + 1.2), (-0.5, E + 1.2), (-0.5, E + 0.7), (-1.4, E + 0.7), (-1.4, E + 0.2), (-hy, E + 0.2)], 0.4, (-hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="brick_dark")   # зламаний верх: п'ять уступів 0.4-0.6 м, на зламі темна цегла   # зламаний верх фронтону
     wall_run(b, (hx, S), (hx, N), 0.4, [1.2, 2.2, 4.2, 5.0, 3.6, 1.8, 1.1, 0.9, 1.5, 2.5, 1.3], "wall_half", "chunk_brick", 34, hcap=5.2, jag=0.8, brick_mat="chunk_brick", step=0.7, diag_p=0.6, jit=1.0, cap=0.3, tvar=0.3, **kw)
     zt = E - 0.03
     for fl, z in ((0, 0.9), (1, 3.6)):
