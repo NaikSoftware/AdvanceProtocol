@@ -29,8 +29,7 @@ func _smoke_sprites(root: Node) -> Array[MeshInstance3D]:
 	var out: Array[MeshInstance3D] = []
 	for n: Node in root.find_children("*", "MeshInstance3D", true, false):
 		if _mat(n).get_shader_parameter("erode") != null:
-			if not String(n.name).begins_with("Flash"):
-				out.append(n as MeshInstance3D)
+			out.append(n as MeshInstance3D)
 	return out
 
 
@@ -99,7 +98,8 @@ func test_no_moment_is_freed_while_its_smoke_shows() -> void:
 	assert_true(BattleFx.HIT_SEC <= 6.5)
 
 
-## Клуба ховається, лише коли вже розчинилась (ерозія), а не обривається з кінцем флипбука.
+## Клуба ховається, лише коли вже розчинилась (ерозія чи рівне згасання порохового диму), а не
+## обривається з кінцем флипбука.
 func test_smoke_dissolves_before_it_hides() -> void:
 	var roots: Array[Node3D] = [BattleFx.spawn_explosion(parent, Vector3.ZERO, 1.5), BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.TANK_GUN)]
 	for w: int in BattleFx.Weapon.values():
@@ -111,10 +111,10 @@ func test_smoke_dissolves_before_it_hides() -> void:
 		for r: Node3D in roots:
 			for q: MeshInstance3D in _smoke_sprites(r):
 				if not q.visible and last.has(q) and last[q] >= 0.0:
-					assert_gt(last[q], 0.9, "%s сховався, не розчинившись" % q.name)
+					assert_lt(last[q], 0.15, "%s сховався, не розчинившись" % q.name)
 					last[q] = -1.0
 				elif q.visible:
-					last[q] = float(_mat(q).get_shader_parameter("erode"))
+					last[q] = (1.0 - float(_mat(q).get_shader_parameter("erode"))) * float(_mat(q).get_shader_parameter("opacity"))
 
 
 ## Дим здіймається й ширшає, і підйом гальмує, але не зупиняється до самого кінця.
@@ -149,7 +149,9 @@ func test_smoke_curves() -> void:
 	assert_gt(early, late * 10.0, "швидко на старті, повільно в кінці")
 	assert_eq(BattleFx.smoke_erode(0.5, 4.0, 1.0), 0.0)
 	assert_eq(BattleFx.smoke_erode(4.0, 4.0, 1.0), 1.0)
-	assert_gt(BattleFx.smoke_erode(3.9, 4.0, 0.0), 0.99, "останні кадри — майже розчинена: обриву нема")
+	assert_almost_eq(BattleFx.smoke_erode(2.5, 4.0, 1.0), 0.5, 1e-6, "лінійно: без обвалу в кінці")
+	assert_eq(BattleFx.ERODE_FROM, 0.35, "форму тримає перші 35 % життя")
+	assert_true(BattleFx._SPRITE_CODE.contains("(1.0 - erode)"), "уся клуба рівно тане разом з ерозією")
 
 
 ## Сіра клуба влучання в броню майже повна вже за 0,15 с: далі лише ширшає й здіймається.
@@ -224,26 +226,35 @@ func test_muzzle_flash_sits_at_the_barrel_tip() -> void:
 	assert_almost_eq(how.position, Vector3(0.0, 0.34, -0.45), Vector3.ONE * 0.05)
 
 
-## Постріл гармати: гаряче ядро на два кадри, пороховий дим уздовж осі ствола (далі від дула —
-## більший), низьке кільце пилу на землі під дулом 1,25 клітинки, що розсіюється за 1,5–2 с.
-func test_tank_muzzle_has_core_powder_along_the_barrel_and_a_dust_ring() -> void:
+## Постріл гармати: гаряче ядро на два кадри, 3–4 клуби сіро-бежевого порохового диму вздовж
+## осі ствола (різні розміри, рівне згасання), низький рваний шар пилу 1,25 клітинки під корпусом
+## і перед ним, що осідає за 1,5–2 с.
+func test_tank_muzzle_has_core_powder_along_the_barrel_and_ground_dust() -> void:
 	var shooter := Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(2, 0, 3))
 	var m: Node3D = BattleFx.spawn_muzzle(parent, shooter, BattleFx.Weapon.TANK_GUN, 5)
 	assert_not_null(m.get_node("Hot"))
 	var axis: Vector3 = -shooter.basis.z
 	var powder: Array[Node] = m.find_children("Powder*", "MeshInstance3D", true, false)
-	assert_eq(powder.size(), 3)
+	assert_true(powder.size() >= 3 and powder.size() <= 4)
 	var prev: float = -1.0
+	var sizes: Dictionary = {}
 	for p: Node in powder:
 		var along: float = (p as Node3D).position.dot(axis)
 		assert_gt(along, prev, "клуби йдуть від дула вздовж ствола")
 		prev = along
-	var ring := m.get_node("Ring") as MeshInstance3D
-	assert_almost_eq(float(_mat(ring).get_shader_parameter("size")), 10.0 / 8.0, 1e-6)
-	assert_almost_eq(m.position.y + ring.position.y, 0.05, 0.01, "кільце лежить на землі під дулом")
-	assert_true(_mat(ring).shader.code.contains("vec3(VERTEX.x, 0.0, VERTEX.y)"), "пласке, а не в камеру")
-	_step_all(2.0)
-	assert_false(ring.visible, "розсіялось за 1,8 с")
+		sizes[_mat(p).get_shader_parameter("size")] = true
+		assert_almost_eq((_mat(p).get_shader_parameter("tint") as Vector4).x, 0.254, 1e-3, "сіро-бежевий #8a8274")
+	assert_gt(sizes.size(), 1, "клуби різного розміру")
+	var dust := m.get_node("Dust") as MeshInstance3D
+	assert_almost_eq(float(_mat(dust).get_shader_parameter("size")), 10.0 / 8.0, 1e-6)
+	var world: Vector3 = m.position + dust.position
+	assert_almost_eq(world.y, 0.05, 0.01, "лежить на землі")
+	assert_almost_eq(Vector2(world.x, world.z), Vector2(2.0, 3.0) + Vector2(axis.x, axis.z) * 0.3, Vector2.ONE * 0.01, "під корпусом і перед ним, а не довкола дула")
+	assert_true(_mat(dust).shader.code.contains("vec3(VERTEX.x, 0.0, VERTEX.y)"), "пласкій, а не в камеру")
+	_step_all(2.6)
+	assert_false(dust.visible, "осів за 1,8 с")
+	for p: Node in powder:
+		assert_false((p as MeshInstance3D).visible, "пороховий дим розтанув за 1,5–2,5 с")
 
 
 func _paths(root: Node) -> Array[String]:
@@ -262,10 +273,10 @@ func test_each_effect_samples_its_atlas() -> void:
 	var expect: Dictionary = {
 		[BattleFx.Weapon.RIFLE, true]: [],
 		[BattleFx.Weapon.RIFLE, false]: ["dirt_burst.png"],
-		[BattleFx.Weapon.AUTOCANNON, true]: ["dirt_burst.png", "impact_flash.png"],
-		[BattleFx.Weapon.AUTOCANNON, false]: ["dirt_burst.png", "impact_flash.png"],
-		[BattleFx.Weapon.TANK_GUN, true]: ["dirt_burst.png", "explosion.png", "impact_flash.png"],
-		[BattleFx.Weapon.TANK_GUN, false]: ["dirt_burst.png", "impact_flash.png", "smoke_column.png"],
+		[BattleFx.Weapon.AUTOCANNON, true]: ["dirt_burst.png"],
+		[BattleFx.Weapon.AUTOCANNON, false]: ["dirt_burst.png"],
+		[BattleFx.Weapon.TANK_GUN, true]: ["dirt_burst.png", "explosion.png"],
+		[BattleFx.Weapon.TANK_GUN, false]: ["dirt_burst.png", "smoke_column.png"],
 		[BattleFx.Weapon.SHELL, false]: ["dirt_burst.png", "smoke_column.png"],
 		[BattleFx.Weapon.DRONE, true]: ["explosion.png", "smoke_column.png"],
 	}
@@ -290,10 +301,11 @@ func test_armour_sparks_are_blackbody_streaks_with_random_fans() -> void:
 	for i in 8:
 		var hit: Node3D = BattleFx.spawn_hit(parent, Vector3(i * 2, 0, 1), BattleFx.Weapon.TANK_GUN, true)
 		var em: GPUParticles3D = _spark_emitters(hit)[0]
-		assert_true(em.amount >= 12 and em.amount <= 20)
+		assert_true(em.amount >= 7 and em.amount <= 12, "менше на третину–половину")
 		counts[em.amount] = true
 		var pm := em.process_material as ParticleProcessMaterial
 		dirs[pm.direction] = true
+		assert_true(pm.spread <= 35.0, "конус довкола напряму рикошету, не віяло")
 		assert_eq(em.transform_align, GPUParticles3D.TRANSFORM_ALIGN_Z_BILLBOARD_Y_TO_VELOCITY)
 		assert_true(em.one_shot)
 		assert_eq(pm.gravity, Vector3(0.0, -9.8 / 8.0, 0.0))
@@ -316,7 +328,6 @@ func test_each_sprite_is_born_at_its_atlas_blast_point() -> void:
 	var expect := {
 		BattleFx.EXPLOSION_TEX: Vector2(0.5 - 0.508, 0.866 - 0.5),
 		BattleFx.DIRT_TEX: Vector2(0.5 - 0.495, 0.882 - 0.5),
-		BattleFx.FLASH_TEX: Vector2(0.5 - 0.479, 0.788 - 0.5),
 		BattleFx.SMOKE_TEX: Vector2(0.5 - 0.514, 0.835 - 0.5),
 	}
 	var roots: Array[Node3D] = [BattleFx.spawn_explosion(parent, Vector3.ZERO, 1.5), BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.TANK_GUN)]
@@ -333,17 +344,15 @@ func test_each_sprite_is_born_at_its_atlas_blast_point() -> void:
 			assert_almost_eq(mat.get_shader_parameter("anchor"), expect[tex], Vector2.ONE * 1e-6, "%s" % tex.resource_path)
 			assert_almost_eq(float(mat.get_shader_parameter("soft_fade")), minf(BattleFx.HIT_SOFT_FADE, float(mat.get_shader_parameter("size")) * 0.2), 1e-6)
 			seen[tex] = true
-	assert_eq(seen.size(), 4, "перевірено всі чотири атласи")
+	assert_eq(seen.size(), 3, "перевірено всі три атласи")
 
 
 ## Розміри клітинок атласів і вмісту — з SOURCES.md і виміряних кадрів.
 func test_atlas_cells_match_sources() -> void:
 	assert_eq(BattleFx.EXPLOSION_CELL_M, 21.7)
 	assert_eq(BattleFx.DIRT_CELL_M, 13.4)
-	assert_eq(BattleFx.FLASH_CELL_M, 9.2)
 	assert_almost_eq(BattleFx.EXPLOSION_BALL_M, 21.7 * 197.0 / 256.0, 1e-9)
 	assert_almost_eq(BattleFx.DIRT_CLOUD_M, 13.4 * 190.0 / 256.0, 1e-9)
-	assert_almost_eq(BattleFx.FLASH_CORE_M, 9.2 * 112.0 / 192.0, 1e-9)
 
 
 ## Атлас клуби не доходить до кадрів, де сам гасне до порожнечі: розчинення веде ерозія.
@@ -357,14 +366,17 @@ func test_smoke_never_plays_the_atlas_own_fade() -> void:
 	assert_true(top <= BattleFx.LAST_FRAME + 1e-4)
 
 
-## Спалах влучання не вигорає в чисто біле: перші ~4 кадри тьмяніші, край холоне. Клуби цього
-## не мають.
-func test_hit_flash_starts_soft_and_cools_at_its_edge() -> void:
-	var hit: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.TANK_GUN, true)
-	for n: Node in hit.find_children("Flash*", "MeshInstance3D", true, false):
-		assert_eq(_mat(n).get_shader_parameter("early_gain"), BattleFx.FLASH_EARLY_GAIN)
-		assert_eq(_mat(n).get_shader_parameter("cool_edge"), 1.0)
-	assert_eq(_mat(hit.get_node("Puff")).get_shader_parameter("cool_edge"), 0.0)
+## Гаряче ядро — м'який радіальний градієнт (біле → жовте → помаранчеве) зі спадом прозорості,
+## звичайне змішування й кольори не вище 1: без білого багатокутника й рожевої облямівки.
+## Адитивного спалаху над корпусом (бузкова пляма) нема зовсім.
+func test_hot_cores_are_soft_gradients() -> void:
+	var code: String = BattleFx._HOT_CODE
+	assert_false(code.contains("blend_add"))
+	assert_true(code.contains("pow(clamp(1.0 - re, 0.0, 1.0), 1.5)"), "прозорість спадає до краю")
+	assert_false(code.contains("* 1.6"), "без пересвіту")
+	for w: int in BattleFx.Weapon.values():
+		for n: Node in BattleFx.spawn_hit(parent, Vector3(w, 0, 0), w, true).find_children("*", "MeshInstance3D", true, false):
+			assert_false(_mat(n).shader.code.contains("blend_add"), "%s" % n.name)
 
 
 ## Розміри влучань, діаметр клуби в метрах: по броні — клуба з даху, по ґрунту — викид землі.
@@ -393,7 +405,8 @@ func test_he_ground_burst_layers() -> void:
 	assert_true(size >= 0.5 and size <= 0.8)
 	assert_true(_mat(hit.get_node("Core")).render_priority > hot.render_priority, "ядро — під чорним")
 	assert_true(hot.render_priority > _mat(hit.get_node("Dirt")).render_priority)
-	assert_not_null(hit.get_node("Ring"))
+	var dust := hit.get_node("Dust") as MeshInstance3D
+	assert_true(float(_mat(dust).get_shader_parameter("size")) <= 3.0, "радіус пилу не більший за 1,5 клітинки")
 
 
 ## Уламки: неправильні шматки 0,2–0,7 м (не кубики), живуть увесь політ 2v/g і ще 0,6 с —
@@ -419,7 +432,10 @@ func test_debris_flies_its_whole_arc_lands_and_settles() -> void:
 	var clods := shell.get_node("Debris") as GPUParticles3D
 	assert_eq(clods.amount, 18)
 	assert_almost_eq((clods.process_material as ParticleProcessMaterial).scale_max, 0.4 / 8.0, 1e-7)
-	assert_eq((shell.get_node("DebrisStreaks") as GPUParticles3D).amount, 4)
+	assert_null(shell.get_node_or_null("DebrisStreaks"), "без тонких палиць-смуг")
+	var box: AABB = wreckage.draw_pass_1.get_aabb()
+	var dims: Array[float] = [box.size.x, box.size.y, box.size.z]
+	assert_true(dims.max() / dims.min() <= 2.1, "шматок не довший за 2:1")
 	for weapon: BattleFx.Weapon in [BattleFx.Weapon.TANK_GUN, BattleFx.Weapon.DRONE, BattleFx.Weapon.AUTOCANNON]:
 		var hit: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, weapon, true)
 		assert_eq(hit.find_children("Debris*", "GPUParticles3D", true, false).size(), 0)
@@ -435,9 +451,15 @@ func test_smoke_spares_visible_neighbours() -> void:
 	var boom: Node3D = BattleFx.spawn_explosion(parent, Vector3.ZERO, 1.5)
 	var smoke := _mat(boom.get_node("Smoke"))
 	assert_eq(smoke.get_shader_parameter("occ_n"), 1, "лише сусід за тайл; ціль і далекий — ні")
-	var occ: PackedVector4Array = smoke.get_shader_parameter("occ")
-	assert_almost_eq(occ[0].x, 1.0, 1e-6)
-	assert_almost_eq(occ[0].w, BattleFx.OCCLUDE_R, 1e-6)
-	assert_true(smoke.shader.code.contains("min(ALPHA, %s)" % str(BattleFx.OCCLUDE_ALPHA)))
+	var occ: Vector4 = smoke.get_shader_parameter("occ0")
+	assert_almost_eq(occ.x, 1.0, 1e-6)
+	assert_almost_eq(occ.w, BattleFx.OCCLUDE_R, 1e-6)
+	assert_eq(smoke.get_shader_parameter("occ1"), Vector4.ZERO)
+	assert_true(smoke.shader.code.contains("mix(1.0, %s, occ_k)" % str(BattleFx.OCCLUDE_ALPHA)))
+	assert_true(smoke.shader.code.contains("occ[i].w + %s" % str(BattleFx.OCCLUDE_FEATHER)), "край розмитий")
+	for layer: String in ["Ball", "Smoke"]:
+		assert_eq(_mat(boom.get_node(layer)).get_shader_parameter("occ_n"), 1, "%s — теж під обмеженням" % layer)
+	_step_all(0.3)
+	assert_eq(smoke.get_shader_parameter("occ_k"), 1.0, "обмеження повне з 0,3 с")
 	var two_layers: float = 1.0 - pow(1.0 - BattleFx.OCCLUDE_ALPHA, 2.0)
 	assert_true(two_layers <= 0.4, "куля й дим разом над сусідом не густіші за 0,4")

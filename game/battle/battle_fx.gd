@@ -29,7 +29,6 @@ const GROUP: StringName = &"battle_fx"
 
 const EXPLOSION_TEX: Texture2D = preload("res://assets/vfx/explosion.png")
 const DIRT_TEX: Texture2D = preload("res://assets/vfx/dirt_burst.png")
-const FLASH_TEX: Texture2D = preload("res://assets/vfx/impact_flash.png")
 ## Густий темний дим тієї ж симуляції, що й куля (SOURCES.md): у нього куля перетікає, коли
 ## вогонь згас, і саме він висить, здіймається й розчиняється.
 const SMOKE_TEX: Texture2D = preload("res://assets/vfx/smoke_column.png")
@@ -41,17 +40,10 @@ const EXPLOSION_CELL_M: float = 21.7
 const EXPLOSION_BALL_M: float = 21.7 * 197.0 / 256.0
 const DIRT_CELL_M: float = 13.4
 const DIRT_CLOUD_M: float = 13.4 * 190.0 / 256.0
-## Спалах влучання: перші два кадри атласу — суцільний білий диск, тож починаємо з третього;
-## 90 кадрів/с лишають біле ядро на ~60 мс, далі воно холоне в помаранчеве.
-const FLASH_FPS: float = 90.0
-const FLASH_FIRST: int = 2
-const FLASH_CELL_M: float = 9.2
-const FLASH_CORE_M: float = 9.2 * 112.0 / 192.0
 ## Точка вибуху в клітинці атласу (частка ширини зліва, висоти згори; SOURCES.md): квад
 ## зсунуто так, що вона лягає на точку влучання, а хмара здіймається з неї.
 const EXPLOSION_BLAST := Vector2(0.508, 0.866)
 const DIRT_BLAST := Vector2(0.495, 0.882)
-const FLASH_BLAST := Vector2(0.479, 0.788)
 ## Дим кадрований майже як куля на кадрі 40 (хмара 0,68 клітинки проти 0,75): квад диму в
 ## SMOKE_SCALE разів більший за квад кулі, а ця точка ставить центр його хмари на центр кулі.
 const SMOKE_BLAST := Vector2(0.514, 0.835)
@@ -67,9 +59,9 @@ const FIRE_SEC: float = 1.0
 const EXPLOSION_SEC: float = 6.0
 ## Гаряче ядро спалаху — два кадри екрана.
 const HOT_SEC: float = 0.035
-## Клуба тримає форму першу третину життя й розчиняється решту: інакше рідкі краї
+## Клуба тримає форму перші 35 % життя й рівно розчиняється решту: інакше рідкі краї
 ## з'їдались із першої ж секунди, і клуба зникала задовго до кінця.
-const ERODE_FROM: float = 0.3
+const ERODE_FROM: float = 0.35
 ## Підйом клуби: на старті `rise` м/с, швидкість спадає з τ до RISE_FLOOR від стартової —
 ## гарячий газ гальмує, але не зависає.
 const RISE_TAU_SEC: float = 2.0
@@ -83,8 +75,6 @@ static var wind: Vector3 = Vector3.ZERO
 ## Межу клуби з землею й корпусом м'яко гасить глибина на 1,5 м — для малої клуби на п'яту
 ## її кваду: інакше пилок завбільшки з метр, що цілий лежить у смузі згасання, зник би.
 const HIT_SOFT_FADE: float = 1.5 / 8.0
-## Спалах не вигорає в чисто біле: перші ~4 кадри — з цією часткою підсилення.
-const FLASH_EARLY_GAIN: float = 0.55
 ## Світло спалаху — 3–5 кадрів.
 const FLASH_SEC: float = 0.08
 ## Куля народжується в корпусі, ~1 м над землею: точка вибуху атласу внизу клітинки, і
@@ -99,8 +89,10 @@ const ARMOUR_PULL: float = 0.5
 ## Дим не ховає сусідів: там, де клуба лягає на екранний слід видимого юніта (крім цілі), разом
 ## вона не густіша за 0,4. Шарів диму в одній точці до двох (куля й дим, ґрунт і чорне ядро),
 ## тож кожен — не густіший за OCCLUDE_ALPHA: 1 − (1 − 0,22)² ≈ 0,39. Слід — коло OCCLUDE_R тайла
-## довкола середини корпусу.
+## довкола середини корпусу, край розмитий на OCCLUDE_FEATHER тайла. Шари знищення діють так
+## з 0,3 с: перші кадри кулі можуть накрити все.
 const OCCLUDE_ALPHA: float = 0.22
+const OCCLUDE_FEATHER: float = 0.25
 const OCCLUDE_R: float = 0.45
 const OCCLUDE_MAX: int = 6
 ## Порядок прозорих квадів у тій самій точці: ґрунт, під ним гаряче ядро, над ними чорне ядро
@@ -109,9 +101,8 @@ const PRIORITY_HOT: int = 1
 const PRIORITY_CORE: int = 2
 
 static var _mix_shader: Shader
-static var _add_shader: Shader
 static var _hot_shader: Shader
-static var _ring_shader: Shader
+static var _dust_shader: Shader
 static var _quad: QuadMesh
 
 
@@ -234,7 +225,7 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 			if armoured:
 				# Іскри 2–3 чергами за 0,8 с; на далекому зумі — кілька рисок.
 				for burst in 3:
-					_sparks(root, "Sparks", rng.randi_range(2, 4), Vector3(0, ROOF, 0), _ricochet(rng), 60.0, 5.0, 10.0, 0.3, 0.7, 0.12, 0.22, burst * 0.3)
+					_sparks(root, "Sparks", rng.randi_range(1, 3), Vector3(0, ROOF, 0), _ricochet(rng), 35.0, 5.0, 10.0, 0.3, 0.7, 0.12, 0.22, burst * 0.3)
 			else:
 				# 6–12 порохових фонтанчиків на ділянці 4 × 4 м довкола: кожен підскакує й осідає.
 				for i in 9:
@@ -243,54 +234,59 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 		Weapon.AUTOCANNON:
 			for r in 4:
 				var o := Vector3(rng.randf_range(-0.12, 0.12), ROOF if armoured else 0.0, rng.randf_range(-0.12, 0.12))
-				_flash(root, 1.0 if armoured else 0.8, o, r * 0.12)
+				_hot(root, 1.0 if armoured else 0.8, o, r * 0.12)
 				if armoured:
-					_sparks(root, "Sparks", rng.randi_range(3, 6), o, _ricochet(rng), 60.0, 6.0, 12.0, 0.5, 1.2, 0.15, 0.25, r * 0.12)
+					_sparks(root, "Sparks", rng.randi_range(2, 4), o, _ricochet(rng), 35.0, 6.0, 12.0, 0.5, 1.2, 0.15, 0.25, r * 0.12)
 					_puff(root, cloud, o, r * 0.12, 0.1, life, 0.6, 0.6)
 				else:
 					_dirt(root, cloud, o, r * 0.12, 0.1, life, 0.6, 0.5)
 		Weapon.TANK_GUN:
-			_flash(root, 3.0, Vector3(0, ROOF if armoured else 0.15, 0), 0.0)
 			_light(root, 10.0, 4.0)
 			if armoured:
-				_sparks(root, "Sparks", rng.randi_range(12, 20), Vector3(0, ROOF, 0), _ricochet(rng), 55.0, 8.0, 16.0, 0.6, 1.8, 0.15, 0.3, 0.0)
+				_hot(root, 3.0, Vector3(0, ROOF, 0), 0.0, PRIORITY_CORE + 1)
+				_sparks(root, "Sparks", rng.randi_range(7, 12), Vector3(0, ROOF, 0), _ricochet(rng), 35.0, 8.0, 16.0, 0.4, 1.8, 0.15, 0.3, 0.0)
 				# Вогняна куля на корпусі 4,5 м, що розчиняється за 0,6 с (120 мм по башті: 4,3 м на
 				# +0,12 с), над сірою клубою, що за 0,15 с уже майже повна (там само, нижче за порядком).
-				var ball := _sprite(root, "Ball", EXPLOSION_TEX, 64, 4.5 * EXPLOSION_CELL_M / EXPLOSION_BALL_M / 8.0, 0.0, 1.6, false)
+				var ball := _sprite(root, "Ball", EXPLOSION_TEX, 64, 4.5 * EXPLOSION_CELL_M / EXPLOSION_BALL_M / 8.0, 0.0, 1.6)
 				ball.position = Vector3(0, ROOF, 0)
 				(ball.material_override as ShaderMaterial).render_priority = PRIORITY_CORE
 				(ball.material_override as ShaderMaterial).set_shader_parameter("warm", 1.0)
-				_play_smoke(root, ball, 0.08, 0.6, 0.0, 1.0, 0.3, Vector2(0.0, 30.0), Vector2.ZERO, 0.15)
+				_play_smoke(root, ball, 0.08, 0.6, 0.0, 1.0, 0.3, Vector2(0.0, 30.0), Vector2.ZERO, 0.1)
 				_puff(root, cloud, Vector3(0, ROOF, 0), 0.0, 0.12, life, 1.0, 0.75)
 			else:
 				_hot(root, 4.0, Vector3(0, 0.1, 0))
-				_dirt(root, cloud, Vector3.ZERO, 0.0, 0.15, life, 1.5, 0.6)
-				_core(root, cloud, 0.6 * life, 1.5, 0.6)
-				_ring(root, 8.0, Vector3.ZERO, 2.5, 0.8)
+				# Ґрунт піднімається повільно (~4 м за 3 с разом із рухом усередині атласу).
+				_dirt(root, cloud, Vector3.ZERO, 0.0, 0.15, life, 0.5, 0.4)
+				_core(root, cloud, 0.6 * life, 0.5, 0.4)
+				_dust(root, 8.0, Vector3.ZERO, 2.5, 0.8)
 				_debris(root, cloud)
 		Weapon.SHELL:
 			_hot(root, 5.0, Vector3(0, 0.12, 0))
 			_light(root, 15.0, 4.0)
-			_dirt(root, cloud, Vector3.ZERO, 0.0, 0.2, life, 2.0, 0.5)
-			_core(root, cloud, 0.5 * life, 2.0, 0.5)
-			_ring(root, 16.0, Vector3.ZERO, 3.5, 0.9)
+			# 155 мм: верх хмари ~4–5 м за 3 с (половину дає сам атлас), не 10–15.
+			_dirt(root, cloud, Vector3.ZERO, 0.0, 0.2, life, 0.5, 0.3)
+			_core(root, cloud, 0.5 * life, 0.5, 0.3)
+			_dust(root, 16.0, Vector3.ZERO, 3.5, 0.9)
 			_debris(root, cloud)
 		Weapon.DRONE:
 			# Удар згори: гаряче ядро на даху, чорна клуба на корпусі, іскри вниз і вбік, без ґрунту.
 			_hot(root, 3.0, Vector3(0, ROOF + 0.05, 0), 0.0, PRIORITY_CORE + 1)
-			_sparks(root, "Sparks", rng.randi_range(8, 14), Vector3(0, ROOF, 0), _ricochet(rng), 75.0, 6.0, 14.0, 0.5, 1.4, 0.15, 0.3, 0.0)
+			_sparks(root, "Sparks", rng.randi_range(5, 9), Vector3(0, ROOF, 0), _ricochet(rng), 45.0, 6.0, 14.0, 0.4, 1.4, 0.15, 0.3, 0.0)
 			_fireball(root, cloud, Vector3(0, ROOF, 0), 0.0, life, 1.0, 0.7)
 	if armoured:
 		for n: Node in root.find_children("*", "MeshInstance3D", true, false):
-			((n as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("pull", ARMOUR_PULL)
+			var mat := (n as MeshInstance3D).material_override as ShaderMaterial
+			if mat != null:
+				mat.set_shader_parameter("pull", ARMOUR_PULL)
 	_shield(root, parent, at)
 	_expire(root, HIT_SEC)
 	return root
 
 
 ## Дульний спалах біля стрільця: танк і гармата — жовто-біле гаряче ядро на два кадри, сіро-
-## бежевий пороховий дим уздовж осі ствола й низьке кільце пилу на землі під дулом; автогармата —
-## три малі ядра й клубок диму. Стрілецька зброя спалаху не має: на екрані він субпіксельний.
+## бежевий пороховий дим уздовж осі ствола й низький рваний шар пилу на землі під корпусом і перед
+## ним; автогармата — три малі ядра й клубок диму. Розміри, крок і життя клубів — свої для кожного
+## пострілу. Стрілецька зброя спалаху не має: на екрані він субпіксельний.
 ## Стрільця, якого глядач не бачить, сюди не передають зовсім.
 static func spawn_muzzle(parent: Node, shooter: Transform3D, weapon: Weapon, type_id: int = -1) -> Node3D:
 	if weapon == Weapon.RIFLE or weapon == Weapon.DRONE:
@@ -298,17 +294,22 @@ static func spawn_muzzle(parent: Node, shooter: Transform3D, weapon: Weapon, typ
 	var tip: Vector3 = shooter * (UnitSilhouettes.muzzle(type_id) if type_id >= 0 else Vector3(0, 0.2, -0.6))
 	var root := _root("Muzzle", parent, tip)
 	var axis: Vector3 = Vector3(-shooter.basis.z.x, 0.0, -shooter.basis.z.z).normalized()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(tip)
 	if weapon == Weapon.AUTOCANNON:
 		for r in 3:
 			_hot(root, 0.8, Vector3.ZERO, r * 0.12)
-		_powder(root, 1.2, axis * 0.06, 0.1, 2.0)
+		_powder(root, rng, 1.2 * rng.randf_range(0.6, 1.4), axis * 0.06, 0.1)
 	else:
 		_hot(root, 2.5, axis * 0.05)
-		# Пороховий дим — три клуби вздовж ствола, 0,4–2,4 м від дула, що ширшають і здіймаються.
-		for i in 3:
-			_powder(root, 1.6 + 0.6 * i, axis * (0.05 + 0.125 * i), 0.02 * i, 2.5)
-		# Ударна хвиля пострілу здіймає пил: низьке кільце 1,25 клітинки на землі під дулом.
-		_ring(root, 10.0, Vector3(0, -tip.y + shooter.origin.y + 0.03, 0), 1.8, 0.7)
+		# Пороховий дим — 3–4 клуби вздовж ствола: розмір 0,6–1,4 від 2,2 м, крок 0,6–1,3 м.
+		var along: float = 0.0
+		for i in rng.randi_range(3, 4):
+			along += rng.randf_range(0.08, 0.16)
+			_powder(root, rng, 2.2 * rng.randf_range(0.6, 1.4), axis * along, rng.randf_range(0.0, 0.04))
+		# Ударна хвиля пострілу здіймає пил під корпусом і перед ним, а не кільцем довкола дула.
+		var dust_at: Vector3 = shooter.origin + axis * 0.3 - tip
+		_dust(root, 10.0, Vector3(dust_at.x, shooter.origin.y - tip.y + 0.03, dust_at.z), 1.8, 0.7)
 	_shield(root, parent, shooter.origin)
 	_expire(root, HIT_SEC)
 	return root
@@ -330,8 +331,8 @@ static func _ricochet(rng: RandomNumberGenerator) -> Vector3:
 
 
 ## Викид ґрунту чи уламків: шматки `s_min`–`s_max` метрів неправильної форми летять
-## балістичними дугами, падають на землю, лежать і за останні 0,5 с осідають; плюс кілька
-## смуг пилу вздовж польоту. Життя — з часу польоту 2v/g, тож у повітрі ніщо не зникає.
+## балістичними дугами, падають на землю, лежать і за останні 0,5 с осідають. Життя — з часу
+## польоту 2v/g, тож у повітрі ніщо не зникає.
 static func _debris(root: Node3D, cloud_m: float, s_min: float = 0.1, s_max: float = 0.4, count: int = -1, scrap: bool = false) -> void:
 	var k: float = clampf((cloud_m - 3.5) / 8.5, 0.0, 1.0)
 	# Злітає вище за хмару ґрунту (снаряд — ~10 м, гармата по ґрунту — ~3 м) і падає за її
@@ -345,15 +346,6 @@ static func _debris(root: Node3D, cloud_m: float, s_min: float = 0.1, s_max: flo
 	floor_box.size = Vector3(6.0, 0.5, 6.0)
 	floor_box.position = Vector3(0, -0.25, 0)
 	root.add_child(floor_box)
-	var streaks := _debris_emitter(root, "DebrisStreaks", 2 + roundi(2.0 * k), v_ms * 1.15 / 8.0, _streak(), 1.0 / 8.0, 2.0 / 8.0, flight * 0.6)
-	var spm := streaks.process_material as ParticleProcessMaterial
-	spm.particle_flag_align_y = true
-	spm.collision_mode = ParticleProcessMaterial.COLLISION_DISABLED
-	var fade := Gradient.new()
-	fade.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
-	var ft := GradientTexture1D.new()
-	ft.gradient = fade
-	spm.color_ramp = ft
 
 
 ## Час польоту шматка, кинутого вгору на `v_ms` м/с, до повернення на землю, с.
@@ -363,12 +355,11 @@ static func debris_flight_sec(v_ms: float) -> float:
 
 static var _clod_mesh: ArrayMesh
 static var _scrap_mesh: ArrayMesh
-static var _streak_mesh: ArrayMesh
 static var _spark_mesh: QuadMesh
 
 
-## Неправильний гранчастий шматок (розтягнутий і зім'ятий октаедр-сфера): грудка землі чи
-## уламок металу — не кубик.
+## Неправильний гранчастий шматок (зім'ята сфера, сторони не довші за 2:1): грудка землі чи
+## уламок металу — не кубик і не палиця.
 static func _chunk(scrap: bool) -> ArrayMesh:
 	if (_scrap_mesh if scrap else _clod_mesh) != null:
 		return _scrap_mesh if scrap else _clod_mesh
@@ -387,7 +378,7 @@ static func _chunk(scrap: bool) -> ArrayMesh:
 		var v: Vector3 = verts[i]
 		# Той самий шум для тієї самої точки: шов сфери не рветься.
 		var h: float = fposmod(sin(v.dot(Vector3(12.9898, 78.233, 37.719))) * 43758.5453, 1.0)
-		st.add_vertex(v * (0.7 + 0.6 * h) * Vector3(1.0, 0.8, 1.25))
+		st.add_vertex(v * (0.85 + 0.3 * h) * Vector3(1.0, 1.0, 1.2))
 	st.generate_normals()
 	var mesh: ArrayMesh = st.commit()
 	var m := StandardMaterial3D.new()
@@ -402,19 +393,6 @@ static func _chunk(scrap: bool) -> ArrayMesh:
 		_clod_mesh = mesh
 	mesh.surface_set_material(0, m)
 	return mesh
-
-
-static func _streak() -> ArrayMesh:
-	if _streak_mesh == null:
-		_streak_mesh = _cross_quad()
-		var sm := StandardMaterial3D.new()
-		sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		sm.albedo_color = Color(0.05, 0.04, 0.03, 0.85)
-		sm.vertex_color_use_as_albedo = true
-		sm.cull_mode = BaseMaterial3D.CULL_DISABLED
-		_streak_mesh.surface_set_material(0, sm)
-	return _streak_mesh
 
 
 static func _debris_emitter(root: Node3D, node_name: String, amount: int, v: float, mesh: Mesh, s_min: float, s_max: float, life: float) -> GPUParticles3D:
@@ -525,20 +503,6 @@ static func _sparks(root: Node3D, node_name: String, amount: int, at: Vector3, d
 	return em
 
 
-## Два схрещені вузькі квади: смугу видно з будь-якого боку, а не ребром.
-static func _cross_quad() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for basis: Basis in [Basis(), Basis(Vector3.UP, PI * 0.5)]:
-		var a: Vector3 = basis * Vector3(-0.06, -0.5, 0)
-		var b: Vector3 = basis * Vector3(0.06, -0.5, 0)
-		var c: Vector3 = basis * Vector3(0.06, 0.5, 0)
-		var d: Vector3 = basis * Vector3(-0.06, 0.5, 0)
-		for q: Vector3 in [a, b, c, a, c, d]:
-			st.add_vertex(q)
-	return st.commit()
-
-
 static func _root(node_name: String, parent: Node, at: Vector3) -> Node3D:
 	var root := Node3D.new()
 	root.name = node_name
@@ -557,7 +521,7 @@ static func _expire(root: Node3D, sec: float) -> void:
 
 ## Видимі юніти поруч (крім `except` — цілі чи стрільця) стають «щитом» для диму цієї миті.
 static func _shield(root: Node3D, parent: Node, except: Vector3) -> void:
-	var occ := PackedVector4Array()
+	var occ: Array[Vector4] = []
 	for c: Node in parent.get_children():
 		var u := c as UnitView
 		if u == null or not u.visible:
@@ -566,29 +530,19 @@ static func _shield(root: Node3D, parent: Node, except: Vector3) -> void:
 		if flat.length() < 0.3 or flat.length() > 3.0 or occ.size() >= OCCLUDE_MAX:
 			continue
 		occ.append(Vector4(u.position.x, u.position.y + 0.15, u.position.z, OCCLUDE_R))
-	var count: int = occ.size()
-	if count == 0:
+	if occ.is_empty():
 		return
-	occ.resize(OCCLUDE_MAX)
 	for n: Node in root.find_children("*", "MeshInstance3D", true, false):
 		var mat := (n as MeshInstance3D).material_override as ShaderMaterial
-		if mat.shader == _mix_shader:
-			mat.set_shader_parameter("occ", occ)
-			mat.set_shader_parameter("occ_n", count)
+		if mat == null or mat.shader != _mix_shader:
+			continue
+		for i in OCCLUDE_MAX:
+			mat.set_shader_parameter("occ%d" % i, occ[i] if i < occ.size() else Vector4.ZERO)
+		mat.set_shader_parameter("occ_n", occ.size())
 
 
-## Спалах влучання: ядро `core_m` метрів.
-static func _flash(root: Node3D, core_m: float, offset: Vector3, delay: float) -> void:
-	var q := _sprite(root, "Flash", FLASH_TEX, 16, core_m * FLASH_CELL_M / FLASH_CORE_M / 8.0, 0.0, 2.5, true)
-	var mat := q.material_override as ShaderMaterial
-	mat.set_shader_parameter("grid", Vector2(4, 4))
-	mat.set_shader_parameter("early_gain", FLASH_EARLY_GAIN)
-	mat.set_shader_parameter("cool_edge", 1.0)
-	q.position = offset
-	_play(root, q, FLASH_FIRST, 16, FLASH_FPS, delay)
-
-
-## Гаряче ядро спалаху `d_m` метрів: біло-жовте в середині, помаранчеве по краю, два кадри.
+## Гаряче ядро спалаху `d_m` метрів: м'який радіальний градієнт — біле в середині, жовте,
+## помаранчевий край, прозорість спадає до краю; два кадри.
 static func _hot(root: Node3D, d_m: float, offset: Vector3, delay: float = 0.0, priority: int = PRIORITY_HOT) -> void:
 	if _hot_shader == null:
 		_hot_shader = Shader.new()
@@ -610,18 +564,19 @@ static func _hot(root: Node3D, d_m: float, offset: Vector3, delay: float = 0.0, 
 	tw.tween_callback(func() -> void: q.visible = false)
 
 
-## Низьке кільце пилу `d_m` метрів на землі (ударна хвиля): біжить від центру й розсіюється за
-## `life` с. Пласкі квади лежать на землі, а не дивляться в камеру.
-static func _ring(root: Node3D, d_m: float, offset: Vector3, life: float, opacity: float) -> void:
-	if _ring_shader == null:
-		_ring_shader = Shader.new()
-		_ring_shader.code = _RING_CODE
+## Низький рваний шар пилу `d_m` метрів на землі (ударна хвиля): заповнений, з шумовими
+## пелюстками по краю, свій для кожного місця; розходиться й осідає за `life` с. Пласкі квади
+## лежать на землі, а не дивляться в камеру.
+static func _dust(root: Node3D, d_m: float, offset: Vector3, life: float, opacity: float) -> void:
+	if _dust_shader == null:
+		_dust_shader = Shader.new()
+		_dust_shader.code = _DUST_CODE
 	var mat := ShaderMaterial.new()
-	mat.shader = _ring_shader
+	mat.shader = _dust_shader
 	mat.set_shader_parameter("size", d_m / 8.0)
 	mat.set_shader_parameter("opacity", opacity)
-	mat.set_shader_parameter("seed", float(hash(root.position) % 89))
-	var q := _quad_instance(root, "Ring", mat)
+	mat.set_shader_parameter("seed", float(hash(root.position + offset) % 89))
+	var q := _quad_instance(root, "Dust", mat)
 	q.position = offset + Vector3(0, 0.02, 0)
 	var tw: Tween = root.create_tween()
 	tw.tween_method(func(f: float) -> void: mat.set_shader_parameter("progress", f), 0.0, 1.0, life)
@@ -633,21 +588,21 @@ static func _ring(root: Node3D, d_m: float, offset: Vector3, life: float, opacit
 ## «темно → світло → темно». Обидва квади рухаються однією кривою, тож це одна клуба.
 static func _fireball(root: Node3D, ball_m: float, offset: Vector3, lift: float, life: float, rise: float, grow: float) -> void:
 	var side: float = ball_m * EXPLOSION_CELL_M / EXPLOSION_BALL_M / 8.0
-	var ball := _sprite(root, "Ball", EXPLOSION_TEX, 64, side, lift, 1.0, false)
+	var ball := _sprite(root, "Ball", EXPLOSION_TEX, 64, side, lift, 1.0)
 	ball.position = offset
 	var bmat := ball.material_override as ShaderMaterial
 	bmat.render_priority = PRIORITY_CORE
 	bmat.set_shader_parameter("warm", 1.0)
 	_play_smoke(root, ball, 0.12, FIRE_SEC, 0.0, rise, grow, Vector2(0.0, LAST_FRAME), Vector2.ZERO, 0.4)
-	var smoke := _sprite(root, "Smoke", SMOKE_TEX, 64, side * SMOKE_SCALE, lift, 1.0, false)
+	var smoke := _sprite(root, "Smoke", SMOKE_TEX, 64, side * SMOKE_SCALE, lift, 1.0)
 	smoke.position = offset
-	_play_smoke(root, smoke, 0.3, life, 0.0, rise, grow, Vector2(6.0, LAST_FRAME), Vector2(0.1, 0.35), 0.8)
+	_play_smoke(root, smoke, 0.3, life, 0.0, rise, grow, Vector2(6.0, LAST_FRAME), Vector2(0.1, 0.35), ERODE_FROM * life)
 
 
 ## Хмара ґрунту `cloud_m` метрів: ~80 % об'єму за `full` с, живе `life` с, здіймається на
 ## `rise` м/с і ширшає на частку `grow`.
 static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, full: float, life: float, rise: float, grow: float) -> void:
-	var q := _sprite(root, "Dirt", DIRT_TEX, 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0, false)
+	var q := _sprite(root, "Dirt", DIRT_TEX, 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0)
 	q.position = offset
 	_play_smoke(root, q, full, life, delay, rise, grow, Vector2(0.0, LAST_FRAME), Vector2.ZERO, ERODE_FROM * life)
 
@@ -657,27 +612,28 @@ static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, f
 ## з'являється за 0,05–0,15 с і розчиняється за `life` с; рухається тією ж кривою, що й хмара.
 static func _core(root: Node3D, cloud_m: float, life: float, rise: float, grow: float) -> void:
 	var side: float = 0.8 * cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0
-	var q := _sprite(root, "Core", SMOKE_TEX, 64, side, 0.0, 1.0, false)
+	var q := _sprite(root, "Core", SMOKE_TEX, 64, side, 0.0, 1.0)
 	(q.material_override as ShaderMaterial).render_priority = PRIORITY_CORE
-	_play_smoke(root, q, 0.15, life, 0.0, rise, grow, Vector2(4.0, 30.0), Vector2(0.05, 0.15), 0.1, 0.9)
+	_play_smoke(root, q, 0.15, life, 0.0, rise, grow, Vector2(4.0, 30.0), Vector2(0.05, 0.15), ERODE_FROM * life, 0.9)
 
 
 ## Сіра клуба диму й окалини (влучання в броню): той самий атлас ґрунту, знебарвлений і
 ## трохи світліший.
 static func _puff(root: Node3D, cloud_m: float, offset: Vector3, delay: float, full: float, life: float, rise: float, grow: float) -> void:
-	var q := _sprite(root, "Puff", DIRT_TEX, 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.15, false)
+	var q := _sprite(root, "Puff", DIRT_TEX, 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.15)
 	q.position = offset
 	(q.material_override as ShaderMaterial).set_shader_parameter("desat", 1.0)
 	_play_smoke(root, q, full, life, delay, rise, grow, Vector2(0.0, LAST_FRAME), Vector2.ZERO, ERODE_FROM * life)
 
 
-## Пороховий дим біля дула: сіро-бежевий (атлас ґрунту, знебарвлений на дві третини), повний
-## за 0,06 с, повільно здіймається й розходиться.
-static func _powder(root: Node3D, cloud_m: float, offset: Vector3, delay: float, life: float) -> void:
-	var q := _sprite(root, "Powder", DIRT_TEX, 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.25, false)
+## Пороховий дим біля дула `cloud_m` метрів: сіро-бежевий (#8a8274), свій кадр атласу й своє
+## життя 1,5–2,5 с; повільно здіймається, розходиться й рівно (лінійно) тане.
+static func _powder(root: Node3D, rng: RandomNumberGenerator, cloud_m: float, offset: Vector3, delay: float) -> void:
+	var q := _sprite(root, "Powder", DIRT_TEX, 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0)
 	q.position = offset
-	(q.material_override as ShaderMaterial).set_shader_parameter("desat", 0.65)
-	_play_smoke(root, q, 0.06, life, delay, 0.5, 0.9, Vector2(0.0, LAST_FRAME), Vector2.ZERO, 0.2 * life, 0.85)
+	(q.material_override as ShaderMaterial).set_shader_parameter("tint", Vector4(0.254, 0.223, 0.175, 0.85))
+	var life: float = rng.randf_range(1.5, 2.5)
+	_play_smoke(root, q, 0.06, life, delay, 0.5, 0.9, Vector2(rng.randf_range(0.0, 6.0), LAST_FRAME), Vector2.ZERO, life, 0.85, true)
 
 
 ## Зсув центру кваду від точки влучання, у частках кваду (x — праворуч на екрані, y — угору):
@@ -688,8 +644,6 @@ static func anchor_of(tex: Texture2D) -> Vector2:
 		blast = EXPLOSION_BLAST
 	elif tex == DIRT_TEX:
 		blast = DIRT_BLAST
-	elif tex == FLASH_TEX:
-		blast = FLASH_BLAST
 	elif tex == SMOKE_TEX:
 		blast = SMOKE_BLAST
 	return Vector2(0.5 - blast.x, blast.y - 0.5)
@@ -707,14 +661,17 @@ static func _quad_instance(root: Node3D, node_name: String, mat: ShaderMaterial)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.custom_aabb = AABB(Vector3(-2, -1, -2), Vector3(4, 4, 4))
 	mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
-	# Читабельні імена (Flash2, Dirt3): рушій інакше перейменував би однойменних сусідів у @…@.
+	# Читабельні імена (Hot2, Dirt3): рушій інакше перейменував би однойменних сусідів у @…@.
 	root.add_child(mi, true)
 	return mi
 
 
-static func _sprite(root: Node3D, node_name: String, tex: Texture2D, frames: int, size: float, lift: float, gain: float, additive: bool) -> MeshInstance3D:
+static func _sprite(root: Node3D, node_name: String, tex: Texture2D, frames: int, size: float, lift: float, gain: float) -> MeshInstance3D:
+	if _mix_shader == null:
+		_mix_shader = Shader.new()
+		_mix_shader.code = _SPRITE_CODE
 	var mat := ShaderMaterial.new()
-	mat.shader = _shader(additive)
+	mat.shader = _mix_shader
 	mat.set_shader_parameter("tex", tex)
 	mat.set_shader_parameter("grid", Vector2(8, 8))
 	mat.set_shader_parameter("frames", float(frames))
@@ -722,45 +679,36 @@ static func _sprite(root: Node3D, node_name: String, tex: Texture2D, frames: int
 	mat.set_shader_parameter("size", size)
 	mat.set_shader_parameter("lift", lift)
 	mat.set_shader_parameter("gain", gain)
-	mat.set_shader_parameter("early_gain", 1.0)
-	mat.set_shader_parameter("cool_edge", 0.0)
 	mat.set_shader_parameter("desat", 0.0)
+	mat.set_shader_parameter("tint", Vector4.ZERO)
 	mat.set_shader_parameter("opacity", 1.0)
 	mat.set_shader_parameter("erode", 0.0)
 	mat.set_shader_parameter("warm", 0.0)
 	mat.set_shader_parameter("pull", 0.0)
 	mat.set_shader_parameter("occ_n", 0)
+	mat.set_shader_parameter("occ_k", 0.0)
 	mat.set_shader_parameter("seed", float(hash(root.position + Vector3(size, lift, frames)) % 101))
 	mat.set_shader_parameter("anchor", anchor_of(tex))
 	mat.set_shader_parameter("soft_fade", minf(HIT_SOFT_FADE, size * 0.2))
 	return _quad_instance(root, node_name, mat)
 
 
-## Кадри `first` → frames−1 у темпі fps, далі квад ховається (атлас спалаху закінчується порожнім).
-static func _play(root: Node3D, q: MeshInstance3D, first: int, frames: int, fps: float, delay: float) -> void:
-	var mat := q.material_override as ShaderMaterial
-	mat.set_shader_parameter("frame", float(first))
-	q.visible = delay <= 0.0
-	var tw: Tween = root.create_tween()
-	if delay > 0.0:
-		tw.tween_interval(delay)
-		tw.tween_callback(func() -> void: q.visible = true)
-	tw.tween_method(func(f: float) -> void: mat.set_shader_parameter("frame", f), float(first), float(frames - 1), float(frames - first) / fps)
-	tw.tween_callback(func() -> void: q.visible = false)
-
-
 ## Клуба, що живе `life` с. Атлас — `smoke_frame`: кадри `frames` до FULL_FRAME (~80 % об'єму)
 ## за `full` с, далі повзе до кінця життя. Проступає за `fade_in` (нуль — одразу), розчиняється
-## ерозією від `erode_from` с до `life` (`smoke_erode`). Увесь цей час квад здіймається
-## (`rise_m`), ширшає (`smoke_scale`) і зноситься вітром. Ховається, лише коли вже розчинився.
-static func _play_smoke(root: Node3D, q: MeshInstance3D, full: float, life: float, delay: float, rise: float, grow: float, frames: Vector2 = Vector2(0.0, LAST_FRAME), fade_in: Vector2 = Vector2.ZERO, erode_from: float = 0.0, opacity: float = 1.0) -> void:
+## ерозією від `erode_from` с до `life` (`smoke_erode`), а з `linear_fade` — рівно тане вся
+## (пороховий дим). Увесь цей час квад здіймається (`rise_m`), ширшає (`smoke_scale`) довкола
+## середини хмари й зноситься вітром. Обмеження над сусідами вмикається до 0,3 с. Ховається,
+## лише коли вже розчинився.
+static func _play_smoke(root: Node3D, q: MeshInstance3D, full: float, life: float, delay: float, rise: float, grow: float, frames: Vector2 = Vector2(0.0, LAST_FRAME), fade_in: Vector2 = Vector2.ZERO, erode_from: float = 0.0, opacity: float = 1.0, linear_fade: bool = false) -> void:
 	var mat := q.material_override as ShaderMaterial
 	var base: Vector3 = q.position
 	var drift: Vector3 = wind * DRIFT_PER_WIND
 	var step := func(t: float) -> void:
 		mat.set_shader_parameter("frame", smoke_frame(t, full, life, frames))
-		mat.set_shader_parameter("opacity", opacity * (smoothstep(fade_in.x, fade_in.y, t) if fade_in.y > 0.0 else 1.0))
+		var o: float = opacity * (smoothstep(fade_in.x, fade_in.y, t) if fade_in.y > 0.0 else 1.0)
+		mat.set_shader_parameter("opacity", o * (1.0 - t / life) if linear_fade else o)
 		mat.set_shader_parameter("erode", smoke_erode(t, life, erode_from))
+		mat.set_shader_parameter("occ_k", clampf((t - 0.15) / 0.15, 0.0, 1.0))
 		q.position = base + Vector3(0.0, rise_m(rise, t), 0.0) / 8.0 + drift * drift_m(t) / 8.0
 		q.scale = Vector3.ONE * smoke_scale(grow, t)
 	step.call(0.0)
@@ -776,17 +724,20 @@ static func _play_smoke(root: Node3D, q: MeshInstance3D, full: float, life: floa
 ## Кадр атласу клуби на `t` с: від `frames.x` до FULL_FRAME за `full` с зі спадом (вибух різкий),
 ## далі до `frames.y` на `life` — ледь сповільнюючись, але не зупиняючись: клуба крутиться до кінця.
 static func smoke_frame(t: float, full: float, life: float, frames: Vector2 = Vector2(0.0, LAST_FRAME)) -> float:
-	var f_full: float = minf(FULL_FRAME, frames.y)
+	var f_full: float = maxf(minf(FULL_FRAME, frames.y), frames.x)
 	if t < full:
 		var u: float = t / full
 		return lerpf(frames.x, f_full, 1.0 - (1.0 - u) * (1.0 - u))
 	return lerpf(f_full, frames.y, pow(clampf((t - full) / maxf(life - full, 1e-3), 0.0, 1.0), 0.75))
 
 
-## Ерозія клуби на `t` с, 0–1: нуль до `erode_from`, далі рівно до 1 на `life` без зламу.
-## Шейдер з'їдає за шумовим порогом спершу рідкі краї, наостанок — густе ядро.
+## Ерозія клуби на `t` с, 0–1: нуль до `erode_from`, далі лінійно до 1 на `life`. Шейдер з'їдає
+## за шумовим порогом спершу рідкі краї, наостанок — густе ядро, і ще множить усю клубу на
+## (1 − ерозія): кінець рівний, без обвалу.
 static func smoke_erode(t: float, life: float, erode_from: float = 0.0) -> float:
-	return smoothstep(erode_from, life, t)
+	if erode_from >= life:
+		return 0.0
+	return clampf((t - erode_from) / (life - erode_from), 0.0, 1.0)
 
 
 ## Висота підйому клуби за `t` с, метри: на старті `rise` м/с, гальмує з τ до RISE_FLOOR · rise.
@@ -819,16 +770,6 @@ static func _light(root: Node3D, range_m: float, energy: float) -> void:
 	tw.tween_callback(light.queue_free)
 
 
-static func _shader(additive: bool) -> Shader:
-	if additive:
-		if _add_shader == null:
-			_add_shader = Shader.new()
-			_add_shader.code = _SPRITE_CODE.replace("blend_mix", "blend_add")
-		return _add_shader
-	if _mix_shader == null:
-		_mix_shader = Shader.new()
-		_mix_shader.code = _SPRITE_CODE
-	return _mix_shader
 
 
 ## Риска іскри вздовж швидкості: колір чорного тіла й згасання — з рампи частинки; яскравіша в
@@ -840,7 +781,7 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabl
 void fragment() {
 	float across = 1.0 - abs(UV.x * 2.0 - 1.0);
 	float along = sin(UV.y * 3.14159);
-	ALBEDO = COLOR.rgb * 1.5;
+	ALBEDO = COLOR.rgb;
 	ALPHA = clamp(COLOR.a * across * 1.6 * sqrt(along), 0.0, 1.0);
 }
 """
@@ -860,8 +801,9 @@ float vnoise(vec2 p) {
 """
 
 
-## Гаряче ядро спалаху: біло-жовте в середині, помаранчеве по нерівному краю; `heat` 0 → 1
-## за два кадри. Звичайне змішування — без рожевої облямівки адитиву над синім.
+## Гаряче ядро спалаху: м'який радіальний градієнт біле → жовте → помаранчеве, прозорість
+## спадає до краю; `heat` 0 → 1 за два кадри. Звичайне змішування, кольори не вище 1: без
+## білого багатокутника й без рожевої облямівки.
 const _HOT_CODE: String = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
@@ -880,18 +822,18 @@ void vertex() {
 
 void fragment() {
 	float r = length(UV - 0.5) * 2.0;
-	float n = vnoise(UV * 6.0 + seed);
-	float re = r * (0.8 + 0.4 * n);
-	float a = 1.0 - smoothstep(0.35 + 0.3 * heat, 1.0, re);
-	vec3 col = mix(vec3(1.0, 0.42, 0.08), vec3(1.0, 0.93, 0.72), 1.0 - smoothstep(0.0, 0.55 - 0.25 * heat, re));
-	ALBEDO = col * 1.6;
-	ALPHA = a * (1.0 - 0.5 * heat);
+	float re = r * (0.92 + 0.16 * vnoise(UV * 5.0 + seed));
+	vec3 col = mix(vec3(1.0, 0.97, 0.9), vec3(1.0, 0.82, 0.4), smoothstep(0.0, 0.35, re));
+	col = mix(col, vec3(0.95, 0.45, 0.12), smoothstep(0.35, 0.75, re));
+	ALBEDO = col;
+	ALPHA = pow(clamp(1.0 - re, 0.0, 1.0), 1.5) * (1.0 - 0.6 * heat);
 }
 """
 
 
-## Низьке кільце пилу на землі: пласкій квад, кільце біжить від 0,3 до краю й розсіюється.
-const _RING_CODE: String = """
+## Низький рваний шар пилу на землі: пласкій квад, заповнений, край — шумові пелюстки (радіус
+## гуляє 0,55–1,0 за кутом), свій для кожного `seed`; розходиться з 0,35 до краю й осідає.
+const _DUST_CODE: String = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 
@@ -908,25 +850,26 @@ void vertex() {
 }
 
 void fragment() {
-	float r = length(UV - 0.5) * 2.0;
+	vec2 q = UV - 0.5;
+	float r = length(q) * 2.0;
+	vec2 dir = q / max(length(q), 1e-4);
+	float petals = vnoise(dir * 2.0 + seed) * 0.6 + vnoise(dir * 5.0 + seed * 1.3) * 0.4;
 	float e = 1.0 - pow(1.0 - progress, 3.0);
-	float R = mix(0.3, 1.0, e);
-	float w = 0.25 + 0.35 * progress;
-	float n = vnoise(UV * 9.0 + seed) * 0.6 + vnoise(UV * 23.0 + seed * 1.7) * 0.4;
-	float band = smoothstep(R - w, R - w * 0.3, r) * (1.0 - smoothstep(R - w * 0.3, R, r));
-	float inner = (1.0 - smoothstep(0.0, R, r)) * 0.25;
-	ALBEDO = vec3(0.20, 0.18, 0.15) * (0.85 + 0.3 * n) * (1.0 + 0.4 * sky_clear);
-	ALPHA = max(band, inner) * (0.4 + 0.6 * n) * opacity * (1.0 - smoothstep(0.35, 1.0, progress));
+	float R = mix(0.35, 1.0, e) * (0.55 + 0.45 * petals);
+	float d = vnoise(UV * 8.0 + seed) * 0.6 + vnoise(UV * 21.0 + seed * 1.7) * 0.4;
+	float fill = 1.0 - smoothstep(0.55, 1.0, r / R);
+	ALBEDO = vec3(0.23, 0.20, 0.16) * (0.85 + 0.3 * d) * (1.0 + 0.3 * sky_clear);
+	ALPHA = fill * (0.45 + 0.55 * d) * opacity * 0.85 * (1.0 - smoothstep(0.3, 1.0, progress));
 }
 """
 
 
 ## Квад флипбука в камеру. Колір і пряма альфа — з самого атласу (він уже освітлений і
 ## розфарбований); між кадрами — плавний перехід, бо один кадр атласу триває кілька кадрів
-## екрана. `gain` > 1 — для спалаху: він мусить бути найяскравішим на екрані.
+## екрана.
 const _SPRITE_CODE: String = """
 shader_type spatial;
-render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, skip_vertex_transform;
 
 uniform sampler2D tex : source_color, filter_linear_mipmap;
 uniform vec2 grid = vec2(8.0);
@@ -936,27 +879,32 @@ uniform float size = 1.0;
 uniform float lift = 0.0;
 uniform float gain = 1.0;
 // Зсув центру кваду від точки влучання в площині кадру, у частках кваду (BattleFx.anchor_of):
-// точка вибуху атласу лягає на точку влучання.
+// точка вибуху атласу лягає на точку влучання. Береться від розміру без ширшання, тож клуба
+// ширшає довкола своєї середини, а не росте вгору від точки вибуху.
 uniform vec2 anchor = vec2(0.0);
-// Спалах: перші ~4 кадри — з такою часткою підсилення (без чисто білої плями), а край, де
-// альфа спадає, холоне до #B8400F. Клуби — без цього.
-uniform float early_gain = 1.0;
-uniform float cool_edge = 0.0;
 // Сіра клуба з бурого атласу ґрунту: 1 — повністю знебарвлена.
 uniform float desat = 0.0;
-// Прозорість усієї клуби: проступання й легший пил; згасання — не тут, а в `erode`.
+// Перефарбування (пороховий дим): rgb — колір, a — частка.
+uniform vec4 tint = vec4(0.0);
+// Прозорість усієї клуби: проступання, легший пил, рівне згасання порохового диму.
 uniform float opacity = 1.0;
 // Розчинення 0–1: шумовий поріг з'їдає спершу рідкі краї, наостанок густе ядро.
 uniform float erode = 0.0;
 uniform float seed = 0.0;
-// Вогняна куля: перші кадри атласу (кремово-білі) гарячіші — біло-жовті з помаранчевим.
+// Вогняна куля: перші кадри атласу гарячіші в середині й темніші по краю, наче їх уже затягує дим.
 uniform float warm = 0.0;
 // Зсув до камери, тайли: клуба влучання стоїть перед корпусом, а не в ньому.
 uniform float pull = 0.0;
 // Видимі сусіди (xyz — середина корпусу, w — радіус сліду в тайлах): над ними шар не густіший
-// за 0,22, тож два шари разом — за 0,4.
-uniform vec4 occ[6];
+// за 0,22 (два шари разом — за 0,4), край розмитий на 0,25 тайла; `occ_k` вмикає це до 0,3 с.
+uniform vec4 occ0;
+uniform vec4 occ1;
+uniform vec4 occ2;
+uniform vec4 occ3;
+uniform vec4 occ4;
+uniform vec4 occ5;
 uniform int occ_n = 0;
+uniform float occ_k = 0.0;
 // Сонце (WeatherRig): освітлений бік клуби світліший на ясних мапах; у похмурі — нічого.
 global uniform vec3 sun_dir;
 global uniform float sky_clear;
@@ -967,9 +915,12 @@ uniform float soft_fade = 0.15;
 """ + _NOISE_CODE + """
 void vertex() {
 	float s = size * length(MODEL_MATRIX[0].xyz);
-	vec3 c = MODEL_MATRIX[3].xyz + vec3(0.0, lift, 0.0) + INV_VIEW_MATRIX[2].xyz * pull + (INV_VIEW_MATRIX[0].xyz * anchor.x + INV_VIEW_MATRIX[1].xyz * anchor.y) * s;
+	vec3 c = MODEL_MATRIX[3].xyz + vec3(0.0, lift, 0.0) + INV_VIEW_MATRIX[2].xyz * pull + (INV_VIEW_MATRIX[0].xyz * anchor.x + INV_VIEW_MATRIX[1].xyz * anchor.y) * size;
 	vec3 world = c + (INV_VIEW_MATRIX[0].xyz * VERTEX.x + INV_VIEW_MATRIX[1].xyz * VERTEX.y) * s;
-	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
+	// VERTEX — справжня позиція кваду в просторі камери: з нею фрагмент знає, де він на екрані
+	// (обмеження над сусідами) і на якій глибині (м'який край). Запис лише в POSITION лишав би
+	// у фрагменті позицію неповернутого кваду в корені миті.
+	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	v_sun = normalize(vec2(dot(sun_dir, INV_VIEW_MATRIX[0].xyz), -dot(sun_dir, INV_VIEW_MATRIX[1].xyz)) + 1e-4);
 }
 
@@ -982,18 +933,24 @@ void fragment() {
 	vec4 t = mix(frame_at(floor(frame), UV), frame_at(floor(frame) + 1.0, UV), fract(frame));
 	// Бік клуби до сонця — світліший на 0,3–0,5 сонячного світла (лише на ясних мапах).
 	float lit = clamp(dot(normalize(UV - 0.5 + 1e-4), v_sun), 0.0, 1.0) * smoothstep(0.05, 0.35, length(UV - 0.5));
-	vec3 rgb = mix(t.rgb, vec3(0.479, 0.051, 0.005) * 2.0, cool_edge * (1.0 - smoothstep(0.15, 0.7, t.a)));
-	rgb = mix(rgb, vec3(dot(rgb, vec3(0.2126, 0.7152, 0.0722))), desat);
-	rgb *= mix(vec3(1.0), vec3(1.0, 0.62, 0.3), warm * (1.0 - smoothstep(4.0, 16.0, frame)));
-	ALBEDO = rgb * gain * mix(early_gain, 1.0, smoothstep(0.0, 4.0, frame)) * (1.0 + 0.45 * sky_clear * lit);
+	vec3 rgb = t.rgb;
+	float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+	rgb = mix(rgb, vec3(luma), desat);
+	rgb = mix(rgb, tint.rgb * (0.7 + 0.6 * smoothstep(0.0, 0.3, luma)), tint.a);
+	float early = warm * (1.0 - smoothstep(3.0, 12.0, frame));
+	float edge = smoothstep(0.08, 0.3, length(UV - vec2(0.53, 0.6)));
+	rgb = mix(rgb, rgb * mix(vec3(1.0, 0.82, 0.5), vec3(0.32, 0.2, 0.13), edge), early);
+	ALBEDO = rgb * gain * (1.0 + 0.45 * sky_clear * lit);
 	float n = vnoise(UV * 7.0 + seed) * 0.6 + vnoise(UV * 17.0 + seed * 1.7) * 0.4;
-	float e = erode * 1.25;
-	float keep = smoothstep(e - 0.2, e, t.a * (0.6 + 0.4 * n));
-	ALPHA = t.a * keep * opacity * (1.0 - 0.25 * erode);
+	float thr = erode * 1.05;
+	float keep = smoothstep(thr - 0.25, thr, t.a * (0.6 + 0.4 * n));
+	ALPHA = t.a * keep * opacity * (1.0 - erode);
+	vec4 occ[6] = vec4[6](occ0, occ1, occ2, occ3, occ4, occ5);
+	float cap = mix(1.0, 0.22, occ_k);
 	for (int i = 0; i < occ_n; i++) {
 		vec3 ov = (VIEW_MATRIX * vec4(occ[i].xyz, 1.0)).xyz;
 		float d = length(VERTEX.xy / -VERTEX.z - ov.xy / -ov.z) * -ov.z;
-		ALPHA = mix(min(ALPHA, 0.22), ALPHA, smoothstep(occ[i].w, occ[i].w * 1.4, d));
+		ALPHA = mix(min(ALPHA, cap), ALPHA, smoothstep(occ[i].w, occ[i].w + 0.25, d));
 	}
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);

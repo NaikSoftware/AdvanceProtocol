@@ -70,3 +70,11 @@ func test_crater_is_a_bowl_with_an_ejecta_rim() -> void:
 	assert_gt(rim, 60, "вал довкола краю")
 	assert_eq(img.get_pixelv(c + Vector2i(18, 0)).b8, 0, "за 1,7 радіуса чисто")
 	assert_eq(img.get_pixelv(c + Vector2i(18, 0)).g8, 0)
+
+
+## Вал не заходить на сусідню клітинку: штамп обрізано межами власної.
+func test_crater_stays_inside_its_cell() -> void:
+	scars.stamp_crater(Vector2i(4, 4), 2.5)
+	for y in range(4 * 32, 5 * 32):
+		assert_eq(scars.image().get_pixel(5 * 32, y).b8, 0)
+		assert_eq(scars.image().get_pixel(4 * 32 - 1, y).b8, 0)

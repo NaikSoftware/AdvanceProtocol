@@ -81,7 +81,8 @@ func stamp_scorch(cell: Vector2i) -> void:
 ## Вирва від снаряда чи гармати по ґрунту: чаша `radius_m` метрів із нерівним м'яким краєм
 ## (G — глибина, шейдер фарбує її обпаленим буро-сірим і нахиляє нормаль) і світліший вал
 ## викинутого ґрунту до 1,7 радіуса (B). Не чорнильна пляма: R лишається плямі уламків.
-## Кілька влучань у той самий тайл додаються максимумом — не поглиблюються без кінця.
+## Кілька влучань у той самий тайл додаються максимумом — не поглиблюються без кінця. Штамп
+## обрізано межами власної клітинки: вал не заходить на сусідню.
 func stamp_crater(cell: Vector2i, radius_m: float) -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = hash(cell) + 7
@@ -96,7 +97,7 @@ func stamp_crater(cell: Vector2i, radius_m: float) -> void:
 	for dy in range(-ri, ri + 1):
 		for dx in range(-ri, ri + 1):
 			var p := Vector2i(int(c.x) + dx, int(c.y) + dy)
-			if p.x < 0 or p.y < 0 or p.x >= _img.get_width() or p.y >= _img.get_height():
+			if p.x < 0 or p.y < 0 or p.x / PX_PER_TILE != cell.x or p.y / PX_PER_TILE != cell.y or p.x >= _img.get_width() or p.y >= _img.get_height():
 				continue
 			var dist: float = Vector2(dx, dy).length()
 			if dist >= outer:

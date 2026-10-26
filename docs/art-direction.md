@@ -160,15 +160,17 @@ What our own constraints add on top:
   the flipbook crawls, the cloud rises with deceleration (1.5–2 m/s at the start), widens and
   drifts downwind, and thins evenly to zero in 3–6 s (a tank-gun hit puff 3.5 s, a 155 mm burst or
   a kill 6 s). The cloud keeps its shape for the first third of its life, then dissolves by a
-  noise threshold — thin edges first, the dense core last — never by fading the whole cloud and
-  never with the last flipbook frame; the rise slows but does not stop. The player waits only for
+  noise threshold from 35 % of its life, linearly — thin edges first, the dense core last — never
+  with the last flipbook frame; the rise slows but does not stop. A cloud widens around its middle,
+  not upwards from the blast point: a 155 mm cloud top rises 4–5 m in 3 s. The player waits only for
   the flash (0.3 s), not the smoke.
 - **Smoke never buries a neighbour.** Over the screen footprint of a visible unit other than the
-  target, each smoke layer is capped at 0.22 opacity, so two stacked layers stay under 0.4.
+  target, each smoke layer is capped at 0.22 opacity from 0.3 s, so two stacked layers stay under
+  0.4; the cap's edge is feathered over a quarter of a tile.
 - **Hot cores, not white stickers.** A flash core is white-yellow in the middle with an orange edge,
   alpha-blended, for two frames; sparks cool along the blackbody ramp (white → yellow → orange →
   dull red) and arc under gravity; a gun firing leaves grey-beige powder smoke along the barrel and a
-  low dust ring 1–1.5 tiles wide on the ground.
+  low, ragged dust sheet 1–1.5 tiles wide on the ground under and in front of the hull.
 - **A crater is burnt soil, not ink:** a brown-grey bowl (about half the brightness of the grass)
   with a ragged edge, a lighter ejecta rim and a normal that follows the bowl. Debris chunks are
   irregular, 0.2–0.7 m, fly their whole arc, land and settle.
