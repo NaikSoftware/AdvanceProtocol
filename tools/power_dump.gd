@@ -87,6 +87,9 @@ func _run() -> void:
 					sx -= 0.02
 				lips.append(found)
 			homes.append({"rect": [bb.position.x, bb.position.z, bb.size.x, bb.size.z], "model": String(inst["model"]), "lips": lips})
+		for gp: Dictionary in props._garden_plots:
+			var gr: Rect2 = gp["rect"]
+			others.append({"model": "garden", "rect": [gr.position.x, gr.position.y, gr.size.x, gr.size.y]})
 		var spawns: Array = []
 		for c: Vector2i in props.spawn_cells:
 			spawns.append([c.x, c.y])

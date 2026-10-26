@@ -113,6 +113,7 @@ const DROP_GAP: float = 0.25
 const POLE_BUILDING_CLEAR: float = 0.5
 const POLE_HOME_CLEAR: float = 0.3
 const POLE_PROP_CLEAR: float = 0.1
+const POLE_GARDEN_CLEAR: float = 0.02
 const POLE_ROAD_CLEAR: float = 0.2
 ## Нижче цієї висоти над ґрунтом (клітинки, ~2.4 м) відвід на стіні не кріпиться.
 const DROP_MIN_H: float = 0.3
@@ -1644,6 +1645,7 @@ class _Placer:
 	var _bld_is_home: Array[bool] = []
 	var _bridge_rects: Array[Rect2] = []
 	var _prop_rects: Array[Rect2] = []
+	var _garden_rects: Array[Rect2] = []
 	## Клітинка дошки -> відрізки осі дороги поруч [a, b, півширина в клітинках]: покриття дороги
 	## — власна геометрія (RoadCourse), не вид клітинки, тож паркан на «полі» міг лягти на асфальт.
 	var road_index: Dictionary = {}
@@ -2891,6 +2893,7 @@ class _Placer:
 		_bld_rects.clear()
 		_bld_is_home.clear()
 		_prop_rects.clear()
+		_garden_rects.clear()
 		_bridge_rects.clear()
 		for inst: Dictionary in layer._instances:
 			var k: int = int(PropLayer.spec_of(inst["model"])["kind"])
@@ -2905,6 +2908,9 @@ class _Placer:
 				_bridge_rects.append(r)
 			else:
 				_prop_rects.append(r)
+		# Грядки — теж не місце для стовпа (край городу — місце).
+		for gp: Dictionary in garden_plots:
+			_garden_rects.append(gp["rect"])
 
 	## Чи може тут стояти стовп: тверда земля (поле, пагорб, двір), не асфальт, не вода, не слід юніта,
 	## не ближче POLE_BUILDING_CLEAR до обрису будівлі, не в парканах і дрібних речах, не на мосту.
@@ -2922,6 +2928,9 @@ class _Placer:
 				return false
 		for r: Rect2 in _prop_rects:
 			if r.grow(PropLayer.POLE_PROP_CLEAR).has_point(p):
+				return false
+		for r: Rect2 in _garden_rects:
+			if r.grow(PropLayer.POLE_GARDEN_CLEAR).has_point(p):
 				return false
 		for r: Rect2 in _bridge_rects:
 			if r.grow(0.3).has_point(p):

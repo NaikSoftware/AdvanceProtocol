@@ -1841,6 +1841,8 @@ func test_poles_keep_off_road_water_bridges_and_buildings(p = use_parameters(MAP
 			assert_false(r.grow(0.3).has_point(at), "%s: стовп %s на мосту %s" % [p, at, r])
 		for r in smalls:
 			assert_false(r.grow(PropLayer.POLE_PROP_CLEAR).has_point(at), "%s: стовп %s в обрисі паркану чи дрібної речі %s" % [p, at, r])
+		for gp: Dictionary in props._garden_plots:
+			assert_false((gp["rect"] as Rect2).has_point(at), "%s: стовп %s на грядках %s" % [p, at, gp["rect"]])
 	# Проліт не ближче POLE_BUILDING_CLEAR до обрису будівлі (біля хати, яку живить кінець, — POLE_HOME_CLEAR).
 	for sp: Array in props._spans:
 		var a: Vector2 = _pole_at(props, sp[0])

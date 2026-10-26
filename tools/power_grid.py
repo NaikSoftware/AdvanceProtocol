@@ -28,6 +28,7 @@ from pathlib import Path
 BLD = 0.5       # стовп і проліт від обрису будь-якої будівлі
 BLD_HOME = 0.3  # стовп, що живить хату, може стояти ближче до неї самої (PropLayer.POLE_HOME_CLEAR)
 PROP = 0.1      # стовп від паркану й дрібної речі
+GARDEN = 0.02   # стовп від грядок (край городу — місце)
 ROAD = 0.2      # стовп від краю асфальту
 WET = 0.55      # стовп від води й болота
 MAXSPAN = 4.5
@@ -56,7 +57,8 @@ class Net:
         self.bld = [b["rect"] for b in data["buildings"]]
         self.homes = data["homes"]
         self.houses = [h["rect"] for h in self.homes]
-        self.oth = [o["rect"] for o in data["others"]]
+        self.oth = [o["rect"] for o in data["others"] if o["model"] != "garden"]
+        self.gar = [o["rect"] for o in data["others"] if o["model"] == "garden"]
         self.brg = [b["rect"] for b in data["bridges"]]
         self.spawns = [tuple(s) for s in data["spawns"]]
         self.roads = data["roads"]
@@ -68,6 +70,7 @@ class Net:
         self._rix = self._road_index()
         self._bix = self._rect_index(self.bld)
         self._oix = self._rect_index(self.oth)
+        self._gix = self._rect_index(self.gar)
         self._xix = self._rect_index(self.brg)
 
     # --- індекси ------------------------------------------------------------------------
@@ -153,7 +156,7 @@ class Net:
             return "cell%d" % k
         if self._near_building(p, relax):
             return "bld"
-        if self._inside(self._oix, p, PROP) or self._inside(self._xix, p, 0.3):
+        if self._inside(self._oix, p, PROP) or self._inside(self._xix, p, 0.3) or self._inside(self._gix, p, GARDEN):
             return "prop"
         if self.road_d(p) < ROAD:
             return "road"
