@@ -95,6 +95,7 @@ def trim(b, xa, xb, ya, yb, E, hx, S, N, front=True, back=True):
 
 
 _RAIN = random.Random(7)
+DM = ["wall_plaster_dm"]                 # матеріал декалей-множників поточної стіни: патьоки й бруд темнять саму стіну, а не фарбують сірим
 
 
 def pane_dress(b, axis, c, sgn, u, z, w, h, rain=True):
@@ -116,20 +117,20 @@ def pane_dress(b, axis, c, sgn, u, z, w, h, rain=True):
         hw = _RAIN.uniform(0.06, 0.11)
         if axis == "y":
             pts = [(uu - hw, c + sgn * 0.012, z1), (uu + hw, c + sgn * 0.012, z1), (uu + hw, c + sgn * 0.012, z - 0.1), (uu - hw, c + sgn * 0.012, z - 0.1)]
-            plane_soot(b, pts, (0.7, 0.7, 0.55, 0.55), (0, sgn, 0))
+            b.decal(pts, (1.0, 1.0, 0.76, 0.76), DM[0], (0, sgn, 0))
         else:
             pts = [(c + sgn * 0.012, uu - hw, z1), (c + sgn * 0.012, uu + hw, z1), (c + sgn * 0.012, uu + hw, z - 0.1), (c + sgn * 0.012, uu - hw, z - 0.1)]
-            plane_soot(b, pts, (0.7, 0.7, 0.55, 0.55), (sgn, 0, 0))
+            b.decal(pts, (1.0, 1.0, 0.76, 0.76), DM[0], (sgn, 0, 0))
 
 
 def grime(b, axis, c, sgn, u0, u1, z0, h=0.55):
     """Смуга бруду біля цоколя: темніше внизу, поступово до тону стіни."""
     if axis == "y":
         pts = [(u0, c + sgn * 0.012, z0), (u1, c + sgn * 0.012, z0), (u1, c + sgn * 0.012, z0 + h), (u0, c + sgn * 0.012, z0 + h)]
-        plane_soot(b, pts, (0.4, 0.4, 0.76, 0.76), (0, sgn, 0))
+        b.decal(pts, (0.62, 0.62, 1.0, 1.0), DM[0], (0, sgn, 0))
     else:
         pts = [(c + sgn * 0.012, u0, z0), (c + sgn * 0.012, u1, z0), (c + sgn * 0.012, u1, z0 + h), (c + sgn * 0.012, u0, z0 + h)]
-        plane_soot(b, pts, (0.4, 0.4, 0.76, 0.76), (sgn, 0, 0))
+        b.decal(pts, (0.62, 0.62, 1.0, 1.0), DM[0], (sgn, 0, 0))
 
 
 def gable_roof(b, pf, pb, xw, xb, mat):
@@ -147,6 +148,8 @@ def house1(ruined):
     """Одноповерховий дім 6.6 x 4.8 м. Напівзруйнований: східна половина даху ціла, західна провалилась, обвалена частина
     фронтальної й західної стін, завал усередині й невеликий зсув перед обваленою стіною."""
     lib.reset()
+    lib.palette(wall=(0.84, 0.68, 0.56), roof="cherry", eave=3.0, chim="ch_orange", row=0.3)
+    DM[0] = "wall_plaster_dm" if not ruined else "wall_half"
     b = Builder()
     rnd = random.Random(14)
     hx, hy = 3.3, 2.4
@@ -168,7 +171,7 @@ def house1(ruined):
         trim(b, xw, xb, ya, yb, E, hx, S, N)
         for x in (-2.3, -0.8, 1.5, 2.65):
             b.window(("y", S - 0.19, -1), x, 1.0, 1.0, 1.4)
-            pane_dress(b, "y", S - 0.19, -1, x, 1.0, 1.0, 1.4)
+            pane_dress(b, "y", S - 0.19, -1, x, 1.0, 1.0, 1.4, rain=False)
         b.box(0.1, S - 0.19 + 0.03, 0.0, 1.0, 0.06, 2.0, "door_panel")
         b.box(0.1, S - 0.19 + 0.05, 2.0, 1.2, 0.07, 0.1, "step")
         for sx in (-0.55, 0.55):
@@ -177,14 +180,13 @@ def house1(ruined):
         for y in (-1.0, 1.0):
             for sx, sgn in ((hx + 0.19, 1), (-hx - 0.19, -1)):
                 b.window(("x", sx, sgn), y, 1.0, 1.1, 1.4)
-                pane_dress(b, "x", sx, sgn, y, 1.0, 1.1, 1.4)
+                pane_dress(b, "x", sx, sgn, y, 1.0, 1.1, 1.4, rain=False)
         for x in (-2.3, -0.6, 1.2, 2.6):
             b.window(("y", N + 0.19, 1), x, 1.0, 1.0, 1.4)
-            pane_dress(b, "y", N + 0.19, 1, x, 1.0, 1.0, 1.4)
-        grime(b, "y", S - 0.19, -1, -hx, hx, 0.5)
-        grime(b, "y", N + 0.19, 1, -hx, hx, 0.5)
-        grime(b, "x", hx + 0.19, 1, S, N, 0.5)
+            pane_dress(b, "y", N + 0.19, 1, x, 1.0, 1.0, 1.4, rain=False)
         b.chimney(1.6, -0.2, 4.6, 0.6, 3.1, "brick_face", cap="plinth_flat")
+        c_ = 0.19
+        lib.weather(b, "wall_plaster", [("y", S - c_, -1, -hx - c_, hx + c_, 0.5, E), ("y", N + c_, 1, -hx - c_, hx + c_, 0.5, E), ("x", hx + c_, 1, S - c_, N + c_, 0.5, E), ("x", -hx - c_, -1, S - c_, N + c_, 0.5, E)], seed=11)
         lib.finish(b, "house_h5", out, tri_limit=2200, footprint=(1, 1))
         return
     kw = dict(top_tone=0.82)
@@ -199,18 +201,20 @@ def house1(ruined):
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
     zt = E - 0.03
     for x in (1.5, 2.65):
-        burn_ring(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, g_side=0.3, g_bot=0.1, g_top=0.6, t_in=0.22, t_out=0.62, ztop=zt)
-        opening2(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, ztop=zt)
-    burn_ring(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, g_side=0.3, g_bot=0.0, g_top=0.6, t_in=0.22, t_out=0.62, ztop=zt)
-    opening2(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, ztop=zt)
+        burn_ring(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, g_side=0.45, g_bot=0.1, g_top=1.3, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+        opening2(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, ztop=zt, streak=0.0, sooty=True)
+    burn_ring(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, g_side=0.45, g_bot=0.0, g_top=1.3, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+    opening2(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, ztop=zt, streak=0.0, sooty=True)
     for y, w, h, z in ((-1.0, 1.1, 1.2, 0.9), (1.0, 1.4, 1.3, 0.8)):
-        burn_ring(b, "x", hx + 0.2, y, z, w, h, 1, g_side=0.3, g_bot=0.15, g_top=0.7, t_in=0.22, t_out=0.62, ztop=zt)
-        opening2(b, "x", hx + 0.2, y, z, w, h, 1, ztop=zt)
+        burn_ring(b, "x", hx + 0.2, y, z, w, h, 1, g_side=0.45, g_bot=0.15, g_top=1.3, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+        opening2(b, "x", hx + 0.2, y, z, w, h, 1, ztop=zt, streak=0.0, sooty=True)
     for x in (0.6, 2.0):
-        burn_ring(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, g_side=0.3, g_bot=0.1, g_top=0.6, t_in=0.22, t_out=0.62, ztop=zt)
-        opening2(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, ztop=zt)
+        burn_ring(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, g_side=0.45, g_bot=0.1, g_top=1.3, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+        opening2(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, ztop=zt, streak=0.0, sooty=True)
     grime(b, "y", S - 0.2, -1, -0.9, hx, 0.0)
     grime(b, "x", hx + 0.2, 1, S, N, 0.0)
+    lib.pocks(b, "y", S - 0.2, -1, 1.2, 1.4, 2.0, 45, 41, zmin=0.2, zmax=2.9)
+    lib.pocks(b, "x", hx + 0.2, 1, 0.0, 1.5, 1.8, 30, 42, zmin=0.2, zmax=2.9)
     ph = [rnd.uniform(0, 6.3) for _ in range(3)]
 
     def cutF(v):
@@ -251,6 +255,8 @@ def house1(ruined):
 def house2(ruined):
     """Двоповерховий дім 6 x 5.6 м. Напівзруйнований: західна половина даху ціла, східний фронтон обвалений, перекриття нахилене в завал."""
     lib.reset()
+    lib.palette(wall=(0.86, 0.78, 0.55), roof="asb_old", eave=6.0, chim="ch_sand", frame=1)
+    DM[0] = "wall_plaster_dm" if not ruined else "wall_half_w"
     b = Builder()
     rnd = random.Random(33)
     hx, hy = 3.0, 2.8
@@ -273,21 +279,21 @@ def house2(ruined):
         for z in (0.9, 3.6):
             for x in (-1.8, 0.0, 1.8):
                 b.window(("y", S - 0.19, -1), x, z, 1.2, 1.4)
-                pane_dress(b, "y", S - 0.19, -1, x, z, 1.2, 1.4)
+                pane_dress(b, "y", S - 0.19, -1, x, z, 1.2, 1.4, rain=False)
             for x in (-1.2, 1.2):
                 b.window(("y", N + 0.19, 1), x, z, 1.2, 1.4)
-                pane_dress(b, "y", N + 0.19, 1, x, z, 1.2, 1.4)
+                pane_dress(b, "y", N + 0.19, 1, x, z, 1.2, 1.4, rain=False)
             for y in (-1.0, 1.0):
                 b.window(("x", hx + 0.19, 1), y, z, 1.1, 1.4)
-                pane_dress(b, "x", hx + 0.19, 1, y, z, 1.1, 1.4)
+                pane_dress(b, "x", hx + 0.19, 1, y, z, 1.1, 1.4, rain=False)
         b.box(2.2, S - 0.19 + 0.03, 0.0, 1.0, 0.06, 2.0, "door_panel")
         b.box(2.2, S - 0.19 + 0.05, 2.0, 1.2, 0.07, 0.1, "step")
         for sx in (-0.55, 0.55):
             b.box(2.2 + sx, S - 0.19 + 0.05, 0.0, 0.1, 0.07, 2.1, "step")
         b.box(2.2, S - 0.5, 0.0, 1.8, 0.7, 0.2, "plinth_flat")
-        grime(b, "y", S - 0.19, -1, -hx, hx, 0.6)
-        grime(b, "x", hx + 0.19, 1, S, N, 0.6)
         b.chimney(-1.8, 0.0, 8.0, 0.6, 2.4, "brick_face", cap="plinth_flat")
+        c_ = 0.19
+        lib.weather(b, "wall_plaster", [("y", S - c_, -1, -hx - c_, hx + c_, 0.6, E), ("y", N + c_, 1, -hx - c_, hx + c_, 0.6, E), ("x", hx + c_, 1, S - c_, N + c_, 0.6, E), ("x", -hx - c_, -1, S - c_, N + c_, 0.6, E)], seed=13)
         lib.finish(b, "house_h6", out, tri_limit=2600, footprint=(1, 1))
         return
     kw = dict(top_tone=0.82)
@@ -302,17 +308,18 @@ def house2(ruined):
         for x in (-1.8, 0.0, 1.8):
             blown = (fl == 1 and x != 0.0) or (fl == 0 and x == 1.8)
             if blown:
-                burn_ring(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, g_side=0.3, g_bot=0.15, g_top=0.7, t_in=0.22, t_out=0.62, ztop=zt)
-                opening2(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, ztop=zt)
+                burn_ring(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, g_side=0.45, g_bot=0.15, g_top=1.3, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+                opening2(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, ztop=zt, streak=0.0, sooty=True)
             else:
                 b.window(("y", S - 0.2, -1), x, z, 1.2, 1.4)
                 pane_dress(b, "y", S - 0.2, -1, x, z, 1.2, 1.4)
         for x in (-1.2, 1.2):
             b.window(("y", N + 0.2, 1), x, z, 1.2, 1.4)
             pane_dress(b, "y", N + 0.2, 1, x, z, 1.2, 1.4)
-    burn_ring(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, g_side=0.3, g_bot=0.0, g_top=0.7, t_in=0.22, t_out=0.62, ztop=zt)
-    opening2(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, ztop=zt)
+    burn_ring(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, g_side=0.45, g_bot=0.0, g_top=1.3, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+    opening2(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, ztop=zt, streak=0.0, sooty=True)
     grime(b, "y", S - 0.2, -1, -hx, hx, 0.0)
+    lib.pocks(b, "y", S - 0.2, -1, 0.5, 3.0, 2.6, 60, 43, zmin=0.2, zmax=5.9)
     # внутрішня грань західного фронтону не чиста штукатурка: кіптява згори, облуплені плями
     xi = -hx + 0.21
     plane_soot(b, [(xi, -2.5, 2.8), (xi, 2.5, 2.8), (xi, 2.0, 7.2), (xi, -2.0, 7.2)], (0.5, 0.5, 0.12, 0.12), (1, 0, 0))
@@ -370,6 +377,8 @@ def house2(ruined):
 def shed(ruined):
     """Господарський сарай 6.8 x 4.2 м. Напівзруйнований: фронтальна (на камеру) стіна впала, дах з цього боку провис уздовж того самого коника."""
     lib.reset()
+    lib.palette(roof="asb_old", eave=2.8)
+    DM[0] = "boards_soft_vc"
     b = Builder()
     rnd = random.Random(57)
     hx, hy = 3.4, 2.1
@@ -413,11 +422,11 @@ def shed(ruined):
     b.cyl(-2.95, -2.35, 0.0, 0.3, 0.9, 12, "steel_paint")                       # бочка й ящик на землі біля впалої стіни
     b.box(-2.35, -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3)
     zt = E - 0.03
-    opening2(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, ztop=zt)
-    burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.3, g_bot=0.0, g_top=0.5, t_in=0.22, t_out=0.62, ztop=zt)
-    opening2(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, ztop=zt)
-    burn_ring(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, g_side=0.3, g_bot=0.15, g_top=0.6, t_in=0.22, t_out=0.62, ztop=zt)
-    opening2(b, "y", N + 0.1, -2.0, 1.1, 0.8, 0.9, 1, ztop=zt)
+    opening2(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, ztop=zt, streak=0.0, sooty=True)
+    burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.45, g_bot=0.0, g_top=1.3, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+    opening2(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, ztop=zt, streak=0.0, sooty=True)
+    burn_ring(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, g_side=0.45, g_bot=0.15, g_top=1.3, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+    opening2(b, "y", N + 0.1, -2.0, 1.1, 0.8, 0.9, 1, ztop=zt, streak=0.0, sooty=True)
 
     def hpost(x):
         for i in range(len(post_x) - 1):

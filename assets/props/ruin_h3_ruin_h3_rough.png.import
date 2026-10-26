@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://pevwbgmcspjt"
-path="res://.godot/imported/house_h1_hit_house_h1_hit_normal.png-81897e283c41925274976401f6cf29eb.ctex"
+uid="uid://fri0uvw4gv82"
+path="res://.godot/imported/ruin_h3_ruin_h3_rough.png-20ae24e2edd290b96693e1fd506dc378.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "3e783948888bc65739af4755bc3a52d3"
+"md5": "6281a8808ae5d52ce828be49846a3121"
 }
 
 [deps]
 
-source_file="res://assets/props/house_h1_hit_house_h1_hit_normal.png"
-dest_files=["res://.godot/imported/house_h1_hit_house_h1_hit_normal.png-81897e283c41925274976401f6cf29eb.ctex"]
+source_file="res://assets/props/ruin_h3_ruin_h3_rough.png"
+dest_files=["res://.godot/imported/ruin_h3_ruin_h3_rough.png-20ae24e2edd290b96693e1fd506dc378.ctex"]
 
 [params]
 

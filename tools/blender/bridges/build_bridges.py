@@ -379,6 +379,7 @@ def make_texture(name):
     Висота пекається в метрах ДО масштабу 1/8 тайла, тож нахил нормалі справжній."""
     import numpy as np
     rng = np.random.default_rng(sum(map(ord, name)))
+    rough = None
     base = np.array(MATS[name][0])
     yy, xx = np.mgrid[0:TEX, 0:TEX] / TEX  # yy — рядки (v), xx — стовпці (u)
     img = np.ones((TEX, TEX, 3)) * base
@@ -411,6 +412,7 @@ def make_texture(name):
         dash = (np.abs(xx - 0.5) < 0.03) & ((yy % 0.5) < 0.25) & (_noise(rng, 2.0) > -1.2) & (name == "asphalt")
         img = np.where(dash[..., None], np.array([0.33, 0.33, 0.31]) * (1 + 0.1 * _noise(rng, 0.6))[..., None], img)
         step = (0.68 * 8.0 / TEX, 8.0 / TEX)  # u лягає впоперек настилу
+        rough = np.clip(MATS[name][1] - 0.15 * sum(np.exp(-((xx - cu) / 0.07) ** 2) for cu in (0.28, 0.72)) + 0.03 * _noise(rng, 1.0), 0.75, 1.0)
     elif name == "steel_gal":
         lum = 0.03 * _noise(rng, 3) + 0.02 * _noise(rng, 0.6) + 0.02 * _noise(rng, 0.8, 10)
         # Світла оцинкована сталь з темними патьоками від води, без дрібних плям.
@@ -429,14 +431,27 @@ def make_texture(name):
         h = 0.0012 * _noise(rng, 0.6) - 0.005 * seam + 0.012 * rib
         lum += -0.06 * seam + 0.05 * rib
     elif name == "deckplate":
-        lum = 0.008 * _noise(rng, 2.5) + 0.006 * _noise(rng, 0.5)
-        seam = (mod(xx, 16) < 0.012) | (mod(yy, 16) < 0.012)  # стики листів 0,5 м
-        pad = _noise(rng, 6) > 1.0
-        lum += -0.0 * seam
-        h = 0.0012 * _noise(rng, 0.7) - 0.002 * seam
+        # Сталевий настил понтона: фарба вигоріла плямами, стики секцій 1 м темні з іржею, що розтікається від шва,
+        # дві колії вздовж мосту затерті до темнішого й гладшого, бруд із коліс плямами 0.5-2 м ближче до країв.
+        lum = 0.02 * _noise(rng, 4.0) + 0.012 * _noise(rng, 1.0) + 0.006 * _noise(rng, 0.4)
+        # листи 2 м упоперек (стики секцій уздовж — це вже щілини в геометрії): шов 3 см, іржа плямами вздовж шва на ~10 см
+        fx = np.minimum(mod(xx, 4), 1 - mod(xx, 4))
+        seam = fx < 0.0075
+        near = np.clip(1.0 - fx / 0.05, 0, 1)
+        rust = np.clip(near * (_noise(rng, 1.2) - 0.2), 0, 1)
+        img = img * (1 - 0.4 * rust[..., None]) + np.array([0.30, 0.15, 0.08]) * 0.4 * rust[..., None]
+        track = sum(np.exp(-((np.minimum(np.abs(xx - cu), 1 - np.abs(xx - cu))) / 0.035) ** 2) for cu in (0.15, 0.85))
+        lum -= 0.08 * track * (0.75 + 0.25 * _noise(rng, 0.8, 6))
+        mud = np.clip(_noise(rng, 3.0) + 0.6 * track - 1.2, 0, 1)                # бруд несуть колеса: густіше в коліях
+        img = img * (1 - 0.6 * mud[..., None]) + np.array([0.22, 0.18, 0.13]) * 0.6 * mud[..., None]
+        lum -= 0.08 * seam
+        h = 0.0012 * _noise(rng, 0.7) - 0.004 * seam + 0.0015 * (_noise(rng, 0.25) > 0.8) + 0.002 * mud
+        rough = np.clip(0.88 - 0.12 * track + 0.1 * mud + 0.03 * _noise(rng, 1.0), 0.75, 1.0)
     img = np.clip(img + lum[..., None], 0, 1)
     px = np.concatenate([img, np.ones((TEX, TEX, 1))], axis=2)
-    return px.astype("float32"), h, step
+    if rough is not None:
+        rough = np.concatenate([np.repeat(rough[..., None], 3, axis=2), np.ones((TEX, TEX, 1))], axis=2).astype("float32")
+    return px.astype("float32"), h, step, rough
 
 
 def bake_normal(h, step):
@@ -474,7 +489,7 @@ def build(name, fn, broken):
         c, r, m = MATS[k]
         if k not in TEXCACHE:
             TEXCACHE[k] = make_texture(k)
-        col, h, step = TEXCACHE[k]
+        col, h, step, rgh = TEXCACHE[k]
         img = _save_image(f"{k}", col, "sRGB")
         nrm = _save_image(f"{k}_n", bake_normal(h, step), "Non-Color")
         mat = bpy.data.materials.new(f"bridge_{k}")
@@ -489,6 +504,10 @@ def build(name, fn, broken):
         mat.node_tree.links.new(tn.outputs["Color"], nm.inputs["Color"])
         mat.node_tree.links.new(nm.outputs["Normal"], b.inputs["Normal"])
         b.inputs["Roughness"].default_value = r
+        if rgh is not None:                                           # затерті колії гладші, бруд матовий
+            tr = mat.node_tree.nodes.new("ShaderNodeTexImage")
+            tr.image = _save_image(f"{k}_r", rgh, "Non-Color")
+            mat.node_tree.links.new(tr.outputs["Color"], b.inputs["Roughness"])
         b.inputs["Metallic"].default_value = m
         mats[k] = mat
     verts, faces, midx, uvs = [], [], [], []

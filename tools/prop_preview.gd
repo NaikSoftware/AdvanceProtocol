@@ -8,6 +8,8 @@ extends Node
 ##   --graze  додає <name>_graze.png: низьке бічне сонце, щоб побачити рельєф карти нормалей;
 ##   --back   додає <name>_back.png: об'єкт, повернутий на 180°, щоб побачити протилежний фасад;
 ##   --rl     вигляд карти Річка з гри (BattleLook): розсіяне похмуре світло з дальнього боку, сильне небо, мокрий ґрунт; суфікс _rl;
+##   --cr     вигляд карти Перехрестя (BattleLook): сонце пізнього літа; суфікс _cr;
+##   --z2=N   зум другого кадру (_far) замість MAX_ZOOM;
 ##   --black  чорний ґрунт без відблисків: у кадрі лишається лише сам об'єкт, тож його середній тон міряється без тла; файли отримують суфікс _black;
 ##   --river  ґрунт із текстури River (мокрий мул) замість сірої площини; файли отримують суфікс _river;
 ##   --side   додає <name>_side.png: ортографічний вид збоку для перевірки кутів балок і висот;
@@ -20,6 +22,8 @@ var river: bool = false
 var black: bool = false
 var rl: bool = false
 var sfx: String = ""
+var look_path: String = ""
+var zoom2: float = IsoCameraRig.MAX_ZOOM
 var side: bool = false
 const WINDOW: Vector2i = Vector2i(1280, 720)
 ## Ширина смуги поля під об'єктом: мосту потрібна довжина з запасом, дому — тайл навколо.
@@ -39,6 +43,10 @@ func _ready() -> void:
 			river = true
 		elif args[i] == "--black":
 			black = true
+		elif args[i] == "--cr":
+			look_path = "res://maps/crossroads.tres"
+		elif args[i].begins_with("--z2="):
+			zoom2 = float(args[i].substr(5))
 		elif args[i] == "--rl":
 			rl = true
 			river = true
@@ -52,7 +60,7 @@ func _ready() -> void:
 			out = args[i]
 		else:
 			names.append(args[i])
-	sfx = ("_rl" if rl else ("_river" if river else "")) + ("_black" if black else "")
+	sfx = ("_cr" if look_path != "" else "") + ("_rl" if rl else ("_river" if river else "")) + ("_black" if black else "")
 	if names.is_empty():
 		for f in DirAccess.get_files_at(props_dir):
 			if f.ends_with(".glb"):
@@ -107,8 +115,10 @@ func _ready() -> void:
 	env.environment.ambient_light_color = Color(0.62, 0.66, 0.72)
 	env.environment.ambient_light_energy = 0.8
 	add_child(env)
-	if rl:
-		var look: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
+	if rl and look_path == "":
+		look_path = "res://maps/river.tres"
+	if look_path != "":
+		var look: BattleLook = BattleLook.for_map_path(look_path)
 		sun.light_color = look.light_color
 		sun.light_energy = look.light_energy
 		sun.rotation_degrees = Vector3(-look.light_pitch_deg, look.light_yaw_deg, 0.0)
@@ -149,13 +159,16 @@ func _ready() -> void:
 		print("PROP %s tris=%d" % [n, _triangles(inst)])
 		rig.center_on(cell)
 		await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s%s.png" % [out, n, sfx])
-		await _shoot(rig, IsoCameraRig.MAX_ZOOM, "%s/%s_far%s.png" % [out, n, sfx])
+		await _shoot(rig, zoom2, "%s/%s_far%s.png" % [out, n, sfx])
 		if graze:
+			var rot0: Vector3 = sun.rotation_degrees
+			var e0: float = sun.light_energy
 			sun.rotation_degrees = Vector3(-14.0, -70.0, 0.0)
 			sun.light_energy = 1.6
 			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_graze%s.png" % [out, n, sfx])
-			sun.rotation_degrees = Vector3(-50.0, -30.0, 0.0)
-			sun.light_energy = 0.9
+			# світло мапи (--rl, --cr) повертається, а не типове: інакше наступні об'єкти знімались би під чужим сонцем
+			sun.rotation_degrees = rot0
+			sun.light_energy = e0
 		if back:
 			inst.rotation.y = PI
 			await _shoot(rig, IsoCameraRig.MIN_ZOOM, "%s/%s_back%s.png" % [out, n, sfx])
