@@ -30,7 +30,7 @@ const LAYOUTS: Dictionary = {
 			# південної дороги, городи й сарай за нею.
 			{"house": Vector2i(10, 15), "face": S, "cells": [Vector2i(9, 13), Vector2i(10, 13), Vector2i(9, 14), Vector2i(10, 14),
 				Vector2i(9, 15), Vector2i(10, 15)],
-				"garden": [Vector2i(9, 13), Vector2i(10, 13), Vector2i(9, 14), Vector2i(9, 15)], "shed": Vector2i(10, 14)},
+				"garden": [Vector2i(10, 14), Vector2i(9, 14)], "shed": Vector2i(9, 15)},
 			{"house": Vector2i(15, 15), "face": N, "cells": [Vector2i(14, 15), Vector2i(15, 15), Vector2i(15, 16), Vector2i(16, 16), Vector2i(16, 17)],
 				"garden": [Vector2i(14, 15), Vector2i(15, 16), Vector2i(16, 17)], "shed": Vector2i(16, 16)},
 			{"house": Vector2i(22, 13), "face": W, "cells": [Vector2i(22, 13), Vector2i(23, 13), Vector2i(22, 14)],

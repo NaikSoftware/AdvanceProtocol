@@ -46,10 +46,12 @@ const MODELS: Dictionary = {
 	&"bridge_river_west": {"kind": Kind.BRIDGE, "map": &"river", "order": 0, "deck_top": 0.30},
 	&"bridge_river_centre": {"kind": Kind.BRIDGE, "map": &"river", "order": 1, "deck_top": 0.30},
 	&"bridge_river_east": {"kind": Kind.BRIDGE, "map": &"river", "order": 2, "deck_top": 0.21},
-	&"infra_fence_picket": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY},
-	&"infra_fence_sheet_green": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
-	&"infra_fence_sheet_brown": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
-	&"infra_fence_euro": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
+	&"infra_fence_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
+	# Сільська садиба: дерев'яний штакетник або низький коричневий профлист (ассет 2 м — до ~1.4 м).
+	# Зелений профлист з камери гри сірів до бетонних плит — він, як і єврозабір, для ферм.
+	&"infra_fence_sheet_green": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
+	&"infra_fence_sheet_brown": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "height": 0.7},
+	&"infra_fence_euro": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY},
 	&"infra_hay_round": {"kind": Kind.HAY, "crush": Crush.SQUASH},
 	&"infra_hay_wrapped": {"kind": Kind.HAY, "crush": Crush.SQUASH},
 	&"infra_pole_concrete_10kv": {"kind": Kind.POLE, "line": &"10kv", "crush": Crush.LAY, "scale": 0.85},
@@ -139,6 +141,11 @@ const SCREEN_GROUND_RUIN: float = 0.05
 ## клітинки, де стоїть юніт.
 ## 0.285: лице секції (півтовщини 0.0125) лишається за 0.2 від центру сусідньої клітинки.
 const YARD_OUT: float = 0.285
+## Город займає таку частку двору садиби (30–50 %): решта — трава, хата, сарай.
+const GARDEN_SHARE: float = 0.4
+## Відступи сторони кільця паркану від межі двору, від бажаного (назовні) до найглибшого всередину;
+## глибше −0.25 паркан зайшов би в квадрат юніта в центрі клітинки (KEEP_OUT).
+const RING_OFFSETS: Array[float] = [YARD_OUT, 0.15, 0.0, -0.12, -0.25]
 ## Кам'яні брили й бетонні блоки темніші за ассет: світлі, вони читались плямами фарби.
 const STONE_TINT: float = 0.85
 ## Опори ЛЕП: альбедо ассета ~0.56 (світлий бетон), і на сонці тонкий стовп світився білим поверх
@@ -196,6 +203,8 @@ var _node_model: Dictionary = {}
 ## Вузол -> MultiMeshInstance3D і індекси екземплярів у ньому.
 var _nodes: Dictionary = {}
 var _slots: Dictionary = {}
+## Городи садиб з макету: {rect, dir — від хати, green — частка зеленого}.
+var _garden_plots: Array[Dictionary] = []
 ## Розстановка останньої побудови: для перевірки дорожнього покриття (тести, інструменти).
 var _placer: RefCounted
 ## Городні грядки: клітинка BUILDING без будинку й без повітки — город (лише вигляд).
@@ -476,6 +485,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_contacts = null
 	_garden_node = null
 	_gardens.clear()
+	_garden_plots.clear()
 	_placer = null
 	_node_materials.clear()
 	forest_cells.clear()
@@ -486,6 +496,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	p.place_all()
 	_spans = p.spans
 	_gardens = p.gardens
+	_garden_plots = p.garden_plots
 	_placer = p
 	for y in board_size.y:
 		for x in board_size.x:
@@ -666,6 +677,9 @@ func _build_nodes(haze: bool) -> void:
 ## група не ляже на хату), трохи повернуту й з відступом від меж — один город на двір, а не плитка
 ## на кожну клітинку. Ряди — шейдер, крок у метрах однаковий для будь-якого розміру ділянки.
 func _build_gardens() -> void:
+	if not _garden_plots.is_empty():
+		_build_garden_plots()
+		return
 	if _gardens.is_empty():
 		return
 	var plots: Array[Rect2i] = _garden_rects()
@@ -697,6 +711,45 @@ func _build_gardens() -> void:
 				Vector3(centre.x, TerrainHeight.ground_y(centre.x, centre.y) + 0.006, centre.y)))
 		# r — скільки рядів на ділянці (ряд ~0.9 м), g — зсув візерунка краю.
 		mm.set_instance_custom_data(i, Color(len_a * 8.0 / 0.9, float(hv % 97) / 97.0, 0.0, 0.0))
+	_garden_node = MultiMeshInstance3D.new()
+	_garden_node.name = "GardenBeds"
+	_garden_node.multimesh = mm
+	_garden_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_garden_node)
+
+
+## Город садиби — частина двору за хатою (GARDEN_SHARE двору), м'який рваний край у траву.
+func _build_garden_plots() -> void:
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE
+	var mat := ShaderMaterial.new()
+	mat.shader = _GARDEN_SHADER
+	mat.set_shader_parameter("green", garden_green)
+	quad.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = quad
+	mm.instance_count = _garden_plots.size()
+	for i in _garden_plots.size():
+		var gp: Dictionary = _garden_plots[i]
+		var rect: Rect2 = gp["rect"]
+		var away: Vector2 = gp["dir"]
+		var centre: Vector2 = rect.get_center()
+		var hv: int = absi(cell_hash(Vector2i(centre.floor()), 144))
+		# Ряди впоперек напряму від хати (UV.x уздовж away), трохи повернуто.
+		var along_x: bool = absf(away.x) >= absf(away.y)
+		var along: float = rect.size.x if along_x else rect.size.y
+		var across: float = rect.size.y if along_x else rect.size.x
+		var yaw: float = (0.0 if along_x else PI * 0.5) + (float(hv / 16 % 21) / 20.0 - 0.5) * 0.06
+		var hx: float = TerrainHeight.ground_y(centre.x + 0.3, centre.y) - TerrainHeight.ground_y(centre.x - 0.3, centre.y)
+		var hz: float = TerrainHeight.ground_y(centre.x, centre.y + 0.3) - TerrainHeight.ground_y(centre.x, centre.y - 0.3)
+		var up := Vector3(-hx / 0.6, 1.0, -hz / 0.6).normalized()
+		var right: Vector3 = Vector3(cos(yaw), 0.0, -sin(yaw)).slide(up).normalized()
+		mm.set_instance_transform(i, Transform3D(Basis(right * along, up, right.cross(up) * across),
+				Vector3(centre.x, TerrainHeight.ground_y(centre.x, centre.y) + 0.004, centre.y)))
+		# r — рядів (крок ~0.7 м, клітинка 8 м), g — зерно краю, b — частка зеленого.
+		mm.set_instance_custom_data(i, Color(along * 8.0 / 0.7, float(hv % 97) / 97.0, float(gp["green"]), 0.0))
 	_garden_node = MultiMeshInstance3D.new()
 	_garden_node.name = "GardenBeds"
 	_garden_node.multimesh = mm
@@ -1103,6 +1156,8 @@ class _Placer:
 	## Клітинки дошки, на яких уже стоїть дрібний пропс (одна річ на ребро).
 	var edges: Dictionary = {}
 	var gardens: Array[Vector2i] = []
+	## Городи садиб: {rect, dir — від хати, green — частка зеленого}.
+	var garden_plots: Array[Dictionary] = []
 	## Клітинка дошки -> відрізки осі дороги поруч [a, b, півширина в клітинках]: покриття дороги
 	## — власна геометрія (RoadCourse), не вид клітинки, тож паркан на «полі» міг лягти на асфальт.
 	var road_index: Dictionary = {}
@@ -1605,42 +1660,60 @@ class _Placer:
 
 	# --- села за макетом карти -----------------------------------------------------------------
 
-	## Садиби з VillageLayout: хата на своїй клітинці фасадом до дороги, город за нею, сарай, двір
-	## і сади між садибами; кожна клітинка BUILDING дошки — частина садиби чи саду.
+	## Садиби з VillageLayout: хата на своїй клітинці фасадом до дороги, город за нею (30–50 % двору,
+	## частина зелена, частина гола), сарай, решта двору — трава. Клітинки між садибами (orchards) —
+	## трав'яні двори й лук із поодиноким дров'яником, без городів.
 	func _homesteads() -> void:
 		var homes: Array = layout.get("homes", [])
 		var owner_of: Dictionary = {}
-		var solid: Dictionary = {}
 		for i in homes.size():
 			for c: Vector2i in homes[i]["cells"]:
 				owner_of[c] = i
-			solid[homes[i]["house"]] = true
-			if homes[i].has("shed"):
-				solid[homes[i]["shed"]] = true
+		var sheds: Array[Rect2] = []
 		for i in homes.size():
 			var home: Dictionary = homes[i]
 			var hc: Vector2i = home["house"]
 			var rot: int = [N_FACE, W_FACE, S_FACE, E_FACE].find(home["face"])
 			_put_structure(_house_model(hc, i), hc, rot, Vector2i.ONE, {})
-			for g: Vector2i in home.get("garden", []):
-				gardens.append(g)
-			# Клітинка двору без хати, сараю й городу — теж город: клітинка BUILDING не лишається голою.
+			var gcells: Array = home.get("garden", [])
+			if not gcells.is_empty():
+				# Город — одна ділянка по клітинках городу, площею ~40 % двору (не більше 80 % тих клітинок),
+				# зсунута від хати вглиб.
+				var lo := Vector2(gcells[0])
+				var hi := Vector2(gcells[0])
+				for g: Vector2i in gcells:
+					lo = lo.min(Vector2(g))
+					hi = hi.max(Vector2(g))
+					gardens.append(g)
+				var box := Rect2(lo - Vector2(0.5, 0.5), hi - lo + Vector2.ONE)
+				var f: float = sqrt(minf(GARDEN_SHARE * float((home["cells"] as Array).size()), 0.8 * box.get_area()) / box.get_area())
+				var away: Vector2 = (box.get_center() - Vector2(hc)).normalized()
+				var size: Vector2 = box.size * f
+				var centre: Vector2 = box.get_center() + away * (box.size - size) * 0.25
+				# Частка зеленого: картопля чи капуста на частині городу, решта — голий ґрунт.
+				garden_plots.append({"rect": Rect2(centre - size * 0.5, size), "dir": away,
+						"green": [0.0, 0.4, 0.65][h(hc, 151) % 3]})
 			for c: Vector2i in home["cells"]:
 				if not built.has(c):
 					built[c] = Vector2i.ZERO
-					if c != home.get("shed", Vector2i(-99, -99)) and not gardens.has(c):
-						gardens.append(c)
 			if home.has("shed") and PropLayer.model(YARD_SHED) != null:
 				var sc: Vector2i = home["shed"]
 				var lo: float = minf(ground(sc.x - 0.3, sc.y - 0.3), ground(sc.x + 0.3, sc.y + 0.3))
 				var cells: Array[Vector2i] = [sc]
-				layer._add(YARD_SHED, Transform3D(Basis(Vector3.UP, rot * PI * 0.5).scaled(Vector3.ONE * YARD_SHED_SCALE),
-						Vector3(sc.x, lo, sc.y)), cells, true)
+				var xf := Transform3D(Basis(Vector3.UP, rot * PI * 0.5).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(sc.x, lo, sc.y))
+				layer._add(YARD_SHED, xf, cells, true)
+				var box: AABB = xf * ((PropLayer.model(YARD_SHED) as Dictionary)["aabb"] as AABB)
+				sheds.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z))
 		for c: Vector2i in layout.get("orchards", []):
 			built[c] = Vector2i.ZERO
-			gardens.append(c)
+			# Трав'яний двір; на кожному четвертому — дров'яник під стіною двору.
+			if h(c, 152) % 4 == 0:
+				var yaw: float = float(h(c, 153) % 4) * PI * 0.5
+				for k in 2:
+					var local: Vector2 = Vector2(0.3, -0.25 + 0.1 * k).rotated(yaw)
+					_yard_item(&"dead_tree_trunk_02", c, local, yaw + PI * 0.5 + 0.05 * k)
 		for i in homes.size():
-			_fence_home(i, homes[i], owner_of, solid)
+			_fence_ring(i, homes[i], owner_of, sheds)
 
 	## Хата садиби: здебільшого одноповерхова, двоповерхова — кожна четверта за хешем; сусідні садиби
 	## не повторюють модель.
@@ -1652,41 +1725,221 @@ class _Placer:
 			m = single if m == tall else tall
 		return m if PropLayer.model(m) != null else single
 
-	## Один замкнений паркан довкола двору садиби з воротами на боці фасаду. Межа з сусідньою садибою —
-	## одна спільна секція, що стоїть у городі чи дворі сусіда, не впритул до хати чи сараю.
-	func _fence_home(i: int, home: Dictionary, owner_of: Dictionary, solid: Dictionary) -> void:
+	## Паркан садиби — одне замкнене кільце по межі двору з одними воротами GATE до дороги. Межа двору
+	## обходиться як многокутник; кожна сторона стає на YARD_OUT назовні, а якщо там дорога, вода чи
+	## будівля ближче 0.3 клітинки — зсувається всередину двору, але не зникає. Кути — перетини
+	## сусідніх сторін, тож завжди зімкнуті. Межу з сусідньою садибою ставить одна з них, рівно по межі.
+	func _fence_ring(i: int, home: Dictionary, owner_of: Dictionary, sheds: Array[Rect2]) -> void:
 		var lot: Dictionary = {}
 		for c: Vector2i in home["cells"]:
 			lot[c] = true
+		var hc: Vector2i = home["house"]
 		var palette: Array[StringName] = PropLayer.models_of(Kind.GARDEN_FENCE)
 		if palette.is_empty():
 			return
-		var hc: Vector2i = home["house"]
 		var base: int = absi(hash(Vector2i(salt, Kind.GARDEN_FENCE))) + half(hc)
-		var m: StringName = palette[(base + h(hc, 121) % 2) % palette.size()]
-		var gate := [hc, home["face"]]
+		var m: StringName = palette[(base + h(hc, 121)) % palette.size()]
+		var sides: Array[Dictionary] = _lot_sides(lot, owner_of)
+		if sides.is_empty():
+			return
+		# Ворота: на стороні, що містить ребро фасаду хати; інакше — на стороні до дороги.
+		var gate_side: int = -1
+		for k in sides.size():
+			for e: Array in sides[k]["edges"]:
+				if e[0] == hc and e[1] == home["face"] and int(sides[k]["nb"]) < 0:
+					gate_side = k
+		if gate_side < 0:
+			for k in sides.size():
+				if int(sides[k]["nb"]) < 0 and kind((sides[k]["edges"][0] as Array)[0] + sides[k]["d"]) == Terrain.Kind.ROAD:
+					gate_side = k
+					break
+		# Відступ кожної сторони: найдальший назовні, де сторона найменше перекрита дорогою, водою чи
+		# будівлями; що лишилось перекритим — _fence_run обходить. Межа з сусідом — рівно по межі.
+		for k in sides.size():
+			var sd: Dictionary = sides[k]
+			sd["o"] = 0.0
+			if int(sd["nb"]) >= 0:
+				continue
+			var best: float = INF
+			for o: float in RING_OFFSETS:
+				var blocked: float = _ring_side_blocked(sd, o, sheds)
+				if blocked < best - 1e-3:
+					best = blocked
+					sd["o"] = o
+				if blocked == 0.0:
+					break
+		var n: int = sides.size()
+		for k in n:
+			var sd: Dictionary = sides[k]
+			if int(sd["nb"]) >= 0 and int(sd["nb"]) < i:
+				continue
+			var p0: Vector2 = _ring_corner(sides[(k - 1 + n) % n], sd)
+			var p1: Vector2 = _ring_corner(sd, sides[(k + 1) % n])
+			var spans_out: Array = [[p0, p1]]
+			if k == gate_side:
+				# Ворота навпроти хати, уздовж сторони; кінці воріт не ближче 0.15 до кутів.
+				var along: Vector2 = (p1 - p0).normalized()
+				var total: float = p0.distance_to(p1)
+				# Ворота навпроти хати; шматок паркану біля воріт або ≥ MIN_FENCE, або нуль (ворота в куті).
+				var at: float = (Vector2(hc) - p0).dot(along) - GATE * 0.5
+				if at < MIN_FENCE:
+					at = 0.0 if at < MIN_FENCE * 0.5 or total - GATE < 2.0 * MIN_FENCE else MIN_FENCE
+				if total - at - GATE < MIN_FENCE:
+					at = total - GATE if total - at - GATE < MIN_FENCE * 0.5 or at < MIN_FENCE else total - GATE - MIN_FENCE
+				at = clampf(at, 0.0, maxf(total - GATE, 0.0))
+				spans_out = [[p0, p0 + along * at], [p0 + along * (at + GATE), p1]]
+			for sp: Array in spans_out:
+				_fence_run(m, sp[0], sp[1], lot, sheds)
+
+	## Сторони межі двору як замкнений обхід: кожна — {d: нормаль назовні, nb: садиба по той бік чи −1,
+	## edges: [[клітинка, d], …], line: координата межі (x для вертикальної, y для горизонтальної)}.
+	func _lot_sides(lot: Dictionary, owner_of: Dictionary) -> Array[Dictionary]:
+		var by_start: Dictionary = {}
 		var cells: Array = lot.keys()
 		cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
-		var plans: Array[Dictionary] = []
 		for g: Vector2i in cells:
 			for d in Board.DIRS_4:
-				var c: Vector2i = g + d
-				if lot.has(c) or not on_board(c):
+				if lot.has(g + d):
 					continue
-				if owner_of.has(c):
-					# Спільна межа: секцію ставить той, із чийого боку хата чи сарай; інакше — менший номер.
-					if solid.has(c) or (not solid.has(g) and int(owner_of[c]) < i):
-						continue
-				elif kind(c) not in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.HILL, Terrain.Kind.BUILDING]:
-					continue
-				var plan: Dictionary = _yard_segment(lot, g, d, [g, d] == gate)
-				if not plan.is_empty():
-					plans.append(plan)
-		for plan in plans:
-			var c: Vector2i = plan["c"]
-			if put_small(m, c, plan["local"], plan["yaw"], 1.0, true, plan["length"]):
-				edges[plan["key"]] = true
-				yard_cells[c] = true
+				var c := Vector2(g)
+				var a: Vector2
+				var b: Vector2
+				if d == Vector2i(0, -1):
+					a = c + Vector2(0.5, -0.5)
+					b = c + Vector2(-0.5, -0.5)
+				elif d == Vector2i(-1, 0):
+					a = c + Vector2(-0.5, -0.5)
+					b = c + Vector2(-0.5, 0.5)
+				elif d == Vector2i(0, 1):
+					a = c + Vector2(-0.5, 0.5)
+					b = c + Vector2(0.5, 0.5)
+				else:
+					a = c + Vector2(0.5, 0.5)
+					b = c + Vector2(0.5, -0.5)
+				by_start[Vector2i(roundi(a.x * 2.0), roundi(a.y * 2.0))] = {"g": g, "d": d, "a": a, "b": b,
+						"nb": int(owner_of.get(g + d, -1))}
+		if by_start.is_empty():
+			return []
+		# Обхід від найменшого початку; кожне ребро веде до наступного, що починається в його кінці.
+		var keys: Array = by_start.keys()
+		keys.sort()
+		var chain: Array[Dictionary] = []
+		var cur: Dictionary = by_start[keys[0]]
+		for guard in by_start.size():
+			chain.append(cur)
+			var nk := Vector2i(roundi(cur["b"].x * 2.0), roundi(cur["b"].y * 2.0))
+			if not by_start.has(nk) or by_start[nk] == chain[0]:
+				break
+			cur = by_start[nk]
+		# Зливаємо підряд ребра з тією самою нормаллю й тим самим сусідом у сторону.
+		var sides: Array[Dictionary] = []
+		for e in chain:
+			if not sides.is_empty() and sides.back()["d"] == e["d"] and sides.back()["nb"] == e["nb"]:
+				(sides.back()["edges"] as Array).append([e["g"], e["d"]])
+				continue
+			var line: float = e["a"].y if (e["d"] as Vector2i).y != 0 else e["a"].x
+			sides.append({"d": e["d"], "nb": e["nb"], "edges": [[e["g"], e["d"]]], "line": line,
+					"from": e["a"], "o": 0.0})
+		# Перша й остання сторони можуть бути однією, розірваною початком обходу.
+		if sides.size() > 1 and sides[0]["d"] == sides.back()["d"] and sides[0]["nb"] == sides.back()["nb"]:
+			(sides[0]["edges"] as Array).append_array(sides.back()["edges"])
+			sides.pop_back()
+		return sides
+
+	## Кут між двома послідовними сторонами: x — з вертикальної, y — з горизонтальної (зі зсувами).
+	func _ring_corner(s0: Dictionary, s1: Dictionary) -> Vector2:
+		var v: Dictionary = s0 if (s0["d"] as Vector2i).x != 0 else s1
+		var hz: Dictionary = s1 if v == s0 else s0
+		var x: float = float(v["line"]) + float((v["d"] as Vector2i).x) * float(v["o"])
+		var y: float = float(hz["line"]) + float((hz["d"] as Vector2i).y) * float(hz["o"])
+		return Vector2(x, y)
+
+	## Частка сторони на відступі o, що лягла б на дорогу, воду чи ближче 0.3 до будівлі або сараю.
+	## Назовні на болото чи уламки сторона не виходить зовсім (частка 1).
+	func _ring_side_blocked(sd: Dictionary, o: float, sheds: Array[Rect2]) -> float:
+		var d: Vector2i = sd["d"]
+		var hit: int = 0
+		var n: int = 0
+		for e: Array in sd["edges"]:
+			var g: Vector2i = e[0]
+			if o > 0.0 and kind(g + d) not in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.HILL, Terrain.Kind.BUILDING]:
+				return 1.0
+			var mid: Vector2 = Vector2(g) + Vector2(d) * (0.5 + o)
+			var t := Vector2(absf(d.y), absf(d.x))
+			for k in 9:
+				n += 1
+				if _fence_blocked(mid + t * (float(k) / 8.0 - 0.5), sheds):
+					hit += 1
+		return float(hit) / float(maxi(n, 1))
+
+	## Точка паркану заборонена: дорога, вода, ближче 0.3 до будівлі чи сараю; +0.02 — товщина секції.
+	func _fence_blocked(q: Vector2, sheds: Array[Rect2]) -> bool:
+		if on_road(q, ROAD_PAD + 0.02):
+			return true
+		# Вода й болото — квадратом довкола клітинки, не колом: паркан не підходить і до кута берега.
+		# +0.08: на крутому березі секція нахилена схилом і верхом виходить за свій кінець.
+		var c := Vector2i(roundi(q.x), roundi(q.y))
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var n: Vector2i = c + Vector2i(dx, dy)
+				if kind(n) in [Terrain.Kind.WATER, Terrain.Kind.MARSH] \
+						and absf(q.x - n.x) < 0.5 + WATER_CLEAR + 0.08 and absf(q.y - n.y) < 0.5 + WATER_CLEAR + 0.08:
+					return true
+		for p: Array in placed:
+			if (p[0] as Rect2).grow(0.32).has_point(q):
+				return true
+		for r in sheds:
+			if r.grow(0.32).has_point(q):
+				return true
+		return false
+
+	## Ділянка паркану від a до b, розірвана там, де дорога, вода чи хата (≥ 0.3 від даху): стіна хати
+	## сама замикає двір. Шматки, коротші за MIN_FENCE, читаються уламком — їх нема.
+	func _fence_run(m: StringName, a: Vector2, b: Vector2, lot: Dictionary, sheds: Array[Rect2]) -> void:
+		var total: float = a.distance_to(b)
+		if total < 0.05:
+			return
+		var dir: Vector2 = (b - a) / total
+		# Вільні проміжки з кроком 0.04 (~0.3 м): паркан рветься на дорозі, воді й біля будівель.
+		var steps: int = maxi(1, ceili(total / 0.04))
+		var from: float = -1.0
+		for k in steps + 1:
+			var t: float = total * float(k) / float(steps)
+			var free: bool = not _fence_blocked(a + dir * t, sheds)
+			if free and from < 0.0:
+				from = t
+			if (not free or k == steps) and from >= 0.0:
+				var to: float = t if free else t - total / float(steps)
+				if to - from >= MIN_FENCE:
+					_fence_straight(m, a + dir * from, a + dir * to, lot)
+				from = -1.0
+
+	## Пряма ділянка паркану: рівні секції не довші за клітинку, кожна лежить на землі обома кінцями;
+	## секція належить найближчій клітинці двору, тож давить її той, хто заїхав у двір.
+	func _fence_straight(m: StringName, a: Vector2, b: Vector2, lot: Dictionary) -> void:
+		var total: float = a.distance_to(b)
+		var n: int = maxi(1, ceili(total / 1.0))
+		var along: Vector2 = (b - a) / float(n)
+		var hs: float = float(PropLayer.spec_of(m).get("height", 1.0))
+		var model_len: float = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size.x
+		for k in n:
+			var p0: Vector2 = a + along * k
+			var p1: Vector2 = p0 + along
+			var mid: Vector2 = (p0 + p1) * 0.5
+			var yaw: float = atan2(-along.y, along.x)
+			var y0: float = ground(p0.x, p0.y)
+			var y1: float = ground(p1.x, p1.y)
+			var length: float = along.length()
+			var basis := Basis(Vector3.UP, yaw)
+			basis = Basis(basis.z, atan2(y1 - y0, length)) * basis
+			var xf := Transform3D(basis * Basis.from_scale(Vector3(length / model_len, hs, 1.0)), Vector3(mid.x, (y0 + y1) * 0.5, mid.y))
+			var c: Vector2i = lot.keys()[0]
+			for g: Vector2i in lot:
+				if Vector2(g).distance_squared_to(mid) < Vector2(c).distance_squared_to(mid):
+					c = g
+			var cells: Array[Vector2i] = [c]
+			layer._add(m, xf, cells)
+			yard_cells[c] = true
 
 	## Тюки з макету: на краю поля, поодинці чи вільною парою, кожен своїм поворотом.
 	func _layout_hay() -> void:

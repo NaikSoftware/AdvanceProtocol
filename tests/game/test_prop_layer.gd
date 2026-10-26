@@ -191,10 +191,10 @@ func test_bridge_segments_stay_inside_their_cell() -> void:
 
 
 func test_bridge_deck_meets_the_road() -> void:
-	var view: BoardView = _view(_map("river"))
+	var view: BoardView = _cached("river")
 	var inst: Dictionary = view.props().instances_on(Vector2i(13, 10))[0]
 	var t: Transform3D = inst["transform"]
-	assert_almost_eq(t.origin.y + 0.30, TerrainHeight.active.deck_y(Vector2i(13, 10)), 1e-4)
+	assert_almost_eq(t.origin.y + 0.30, view._height.deck_y(Vector2i(13, 10)), 1e-4)
 	assert_almost_eq(t.origin.x, 13.0, 1e-4)
 	assert_almost_eq(t.origin.z, 10.0, 1e-4, "центр переправи 9–11")
 
@@ -332,7 +332,7 @@ func test_crushed_pole_drops_its_wires() -> void:
 
 ## Половини мають власний набір: та сама роль — інша модель (не віддзеркалена копія).
 func test_halves_use_different_models() -> void:
-	var view: BoardView = _view(_map("river"))
+	var view: BoardView = _cached("river")
 	var by_half: Array[Dictionary] = [{}, {}]
 	var mid := Vector2(12.5, 10.5)
 	for inst in view.props().all_instances():
@@ -347,7 +347,7 @@ func test_halves_use_different_models() -> void:
 
 ## Лісові клітинки чекають на дерева: шар знає їх, але нічого на них не ставить.
 func test_forest_cells_are_known_and_left_empty() -> void:
-	var view: BoardView = _view(_map("river"))
+	var view: BoardView = _cached("river")
 	var forest: Array[Vector2i] = view.props().forest_cells
 	assert_gt(forest.size(), 0)
 	for c in forest:
@@ -356,7 +356,7 @@ func test_forest_cells_are_known_and_left_empty() -> void:
 
 ## Міст кільця моделі не має: у нього нема й настилу, а правила його не бачать.
 func test_ring_bridges_carry_no_prop() -> void:
-	var view: BoardView = _view(_map("river"))
+	var view: BoardView = _cached("river")
 	var bridges: int = 0
 	for inst in view.props().all_instances():
 		if _kind(inst["model"]) == PropLayer.Kind.BRIDGE:
@@ -392,7 +392,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 
 ## Будівлі кільця тонуть в імлі разом із землею: матеріал розчинення несе параметри кільця.
 func test_ring_structures_take_the_haze() -> void:
-	var view: BoardView = _view(_map("crossroads"))
+	var view: BoardView = _cached("crossroads")
 	var mmi: MultiMeshInstance3D = null
 	for n: MultiMeshInstance3D in view.props().find_children("*", "MultiMeshInstance3D", false, false):
 		if n.name != &"ContactShadows" and _kind(StringName(n.name)) == PropLayer.Kind.STRUCTURE:
@@ -446,7 +446,7 @@ func test_yard_gate_faces_the_road() -> void:
 
 ## Під брилами, блоками й руїнами — пляма дотику, одним вузлом.
 func test_boulders_get_contact_blobs() -> void:
-	var view: BoardView = _view(_map("ridge"))
+	var view: BoardView = _cached("ridge")
 	var stones: int = 0
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
@@ -598,14 +598,14 @@ func test_sunny_map_switches_structure_shadows_on(p = use_parameters([["crossroa
 	assert_eq((screen.get_node("%BoardView") as BoardView).structure_shadows, p[1], p[0])
 
 
-## Огорожа двору стоїть лише довкола групи, де є будівля: порожній обгороджений двір читається
-## уламком огорожі серед поля.
+## Огорожа двору стоїть лише довкола садиби (на карті з макетом — на клітинці її двору) чи групи,
+## де є будівля: порожній обгороджений двір читається уламком огорожі серед поля.
 func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	var m: MapData = _map(p)
 	var board: Board = m.to_board()
-	var view: BoardView = _view(m)
-	# Забудована — клітинка BUILDING із будинком, двірським вбранням чи городом.
-	var built: Dictionary = {}
+	var view: BoardView = _cached(p)
+	# Забудована — клітинка BUILDING із будинком, двірським вбранням чи городом, або двір садиби.
+	var built: Dictionary = _layout_yards(p, false)
 	for y in board.height:
 		for x in board.width:
 			var c := Vector2i(x, y)
@@ -616,7 +616,7 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 		if _kind(inst["model"]) != PropLayer.Kind.GARDEN_FENCE:
 			continue
 		var c: Vector2i = (inst["cells"] as Array)[0]
-		var has_built := false
+		var has_built: bool = built.has(c)
 		for d in Board.DIRS_4:
 			has_built = has_built or built.has(c + d)
 		assert_true(has_built, "%s: огорожа на %s не при будинку" % [p, c])
@@ -742,11 +742,11 @@ func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
 ## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
 ## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
 ## разом зі свідомою зміною таблиці моделей чи правил розстановки.
-const RIVER_BUILDINGS_FINGERPRINT: int = 2262903032
+const RIVER_BUILDINGS_FINGERPRINT: int = 2853600657
 
 
 func test_river_buildings_match_the_golden_fingerprint() -> void:
-	var view: BoardView = _view(_map("river"))
+	var view: BoardView = _cached("river")
 	var parts: PackedStringArray = []
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
@@ -758,17 +758,32 @@ func test_river_buildings_match_the_golden_fingerprint() -> void:
 
 
 
-## §8: кожна клітинка BUILDING дошки видимо забудована — будинком або двором (повітка, дрова,
-## причіп, тюк), а не голою травою.
+## §8: кожна клітинка BUILDING дошки видимо забудована — будинком, двором (повітка, дрова, причіп,
+## тюк) чи трав'яним двором за парканом садиби або луком між садибами з макету, а не голою травою
+## серед поля.
 func test_every_building_cell_reads_built_up(p = use_parameters(MAPS)) -> void:
 	var m: MapData = _map(p)
 	var board: Board = m.to_board()
-	var view: BoardView = _view(m)
+	var view: BoardView = _cached(p)
+	var yards: Dictionary = _layout_yards(p, true)
 	for y in board.height:
 		for x in board.width:
 			var c := Vector2i(x, y)
-			if board.kind_at(c) == Terrain.Kind.BUILDING:
+			if board.kind_at(c) == Terrain.Kind.BUILDING and not yards.has(c):
 				assert_false(view.props().instances_on(c).is_empty(), "%s: порожня клітинка BUILDING %s" % [p, c])
+
+
+## Клітинки дворів садиб із макету карти (і, за with_orchards, луків між садибами).
+func _layout_yards(map_key: String, with_orchards: bool) -> Dictionary:
+	var out: Dictionary = {}
+	var lay: Dictionary = VillageLayout.for_map(StringName(map_key))
+	for home: Dictionary in lay.get("homes", []):
+		for c: Vector2i in home["cells"]:
+			out[c] = true
+	if with_orchards:
+		for c: Vector2i in lay.get("orchards", []):
+			out[c] = true
+	return out
 
 
 
@@ -813,7 +828,7 @@ func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) 
 
 ## Дахи будинків мають різні відтінки, руїни й двірське вбрання — без відтінку.
 func test_roofs_get_varied_tints() -> void:
-	var view: BoardView = _view(_map("crossroads"))
+	var view: BoardView = _cached("crossroads")
 	var p: PropLayer = view.props()
 	var tints: Dictionary = {}
 	for inst in p.all_instances():
@@ -881,7 +896,7 @@ func test_sheds_and_trailers_stand_by_a_house(p = use_parameters(MAPS)) -> void:
 
 ## На кожному хуторі Ridge — щонайменше один цілий будинок, не самі руїни.
 func test_ridge_hamlets_keep_an_intact_house() -> void:
-	var view: BoardView = _view(_map("ridge"))
+	var view: BoardView = _cached("ridge")
 	for group: Array in [[Vector2i(13, 4), Vector2i(13, 5), Vector2i(14, 5)], [Vector2i(11, 16), Vector2i(12, 16), Vector2i(12, 17)]]:
 		var houses: int = 0
 		for c: Vector2i in group:

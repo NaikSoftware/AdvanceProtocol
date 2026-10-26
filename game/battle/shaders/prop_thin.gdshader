@@ -13,8 +13,8 @@ uniform float metallic = 0.0;
 // Частка неба в нормалі: 0 — нормаль ассета, 1 — освітлення як у горизонтальної площини.
 uniform float sky_bend = 0.65;
 
-// Мокрість карти (WeatherRig): на мокрій River панель темніша, сіро-бежева (насиченість ≤ 0.1) і
-// з брудом унизу — кольорова огорожа світилась би, як пофарбована щойно.
+// Мокрість карти (WeatherRig): на мокрій River панель темніша, трохи приглушена й з брудом унизу —
+// яскрава огорожа світилась би, як пофарбована щойно.
 global uniform float weather_wetness;
 const float WET_FULL = 0.5;
 const float WET_DARK = 0.75;
@@ -42,7 +42,8 @@ void fragment() {
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {
 		float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
-		albedo = mix(albedo, luma * WET_TONE, wet) * mix(1.0, WET_DARK, wet);
+		// Лише на чверть до сіро-бежевого: знебарвлений штакетник читався бетонною панеллю.
+		albedo = mix(albedo, luma * WET_TONE, wet * 0.25) * mix(1.0, WET_DARK, wet);
 		albedo *= mix(1.0, DIRT, wet * (1.0 - smoothstep(0.0, DIRT_H, base_h)));
 	}
 	ALBEDO = albedo;
