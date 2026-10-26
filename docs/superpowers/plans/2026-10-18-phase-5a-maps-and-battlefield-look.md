@@ -517,7 +517,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 ### Task 22: Forest into battle
 
-- [x] Crowns on their trunks; per-point seeded scatter (`ForestScatter`)
+- [ ] Crowns on their trunks; per-point seeded scatter (`ForestScatter`)
 - [ ] Autumn on Ridge, River mixed with bare birches, dense enough to hide a tank
 - [ ] Placed on FOREST cells in battle; crowns over a visible unit fade with alpha, no dither
 
