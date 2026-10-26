@@ -135,6 +135,9 @@ const SCREEN_GROUND: float = 0.15
 const YARD_OUT: float = 0.285
 ## Кам'яні брили й бетонні блоки темніші за ассет: світлі, вони читались плямами фарби.
 const STONE_TINT: float = 0.85
+## Опори ЛЕП: альбедо ассета ~0.56 (світлий бетон), і на сонці тонкий стовп світився білим поверх
+## трави. Вивітрене дерево й брудний бетон — не світліші за ґрунт поруч.
+const POLE_TINT: float = 0.45
 ## Пляма дотику під брилою чи блоком: у скільки разів ширша за сам пропс і наскільки темна.
 const CONTACT_SPREAD: float = 1.25
 const CONTACT_ALPHA: float = 0.6
@@ -169,7 +172,9 @@ var _apply_queued: bool = false
 
 ## Кожен екземпляр: {model, transform, cells (клітинки дошки під ним), crush, broken_of}.
 var _instances: Array[Dictionary] = []
-## Модель -> MultiMeshInstance3D і індекси екземплярів у ній.
+## Вузол (модель або «модель@ring») -> модель.
+var _node_model: Dictionary = {}
+## Вузол -> MultiMeshInstance3D і індекси екземплярів у ньому.
 var _nodes: Dictionary = {}
 var _slots: Dictionary = {}
 ## Розстановка останньої побудови: для перевірки дорожнього покриття (тести, інструменти).
@@ -279,16 +284,18 @@ static func model(name: StringName) -> Variant:
 ## не чіпаємо: load() ділить його сітку з усіма, хто його вантажить.
 static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
 	var kind: int = int(spec_of(name).get("kind", -1))
-	if kind != Kind.FIELD_FENCE and kind != Kind.GARDEN_FENCE and kind != Kind.BOULDER and kind != Kind.BLOCK:
+	if kind not in [Kind.FIELD_FENCE, Kind.GARDEN_FENCE, Kind.BOULDER, Kind.BLOCK, Kind.POLE]:
 		return mesh
 	var copy: Mesh = mesh.duplicate()
 	for i in copy.get_surface_count():
 		var src := copy.surface_get_material(i) as BaseMaterial3D
 		if src == null:
 			continue
-		if kind == Kind.BOULDER or kind == Kind.BLOCK:
+		if kind == Kind.BOULDER or kind == Kind.BLOCK or kind == Kind.POLE:
+			var tint: float = POLE_TINT if kind == Kind.POLE else STONE_TINT
 			var dark: BaseMaterial3D = src.duplicate()
-			dark.albedo_color = src.albedo_color * Color(STONE_TINT, STONE_TINT, STONE_TINT, 1.0)
+			dark.albedo_color = src.albedo_color * Color(tint, tint, tint, 1.0)
+			dark.roughness = maxf(src.roughness, 0.95 if kind == Kind.POLE else src.roughness)
 			copy.surface_set_material(i, dark)
 			continue
 		var thin := ShaderMaterial.new()
@@ -428,6 +435,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_instances.clear()
 	_nodes.clear()
 	_slots.clear()
+	_node_model.clear()
 	_spans.clear()
 	_wires = null
 	_contacts = null
@@ -530,16 +538,25 @@ func _add(model_name: StringName, xform: Transform3D, cells: Array[Vector2i], ya
 	return _instances.size() - 1
 
 
+## Будівлі кільця — окремий вузол на модель, без тіні: MultiMesh відсікається камерою й тінню
+## цілим, тож спільний із дошкою вузол малював би кільце (і його тінь) навіть на близькому зумі.
 func _build_nodes(haze: bool) -> void:
-	var by_model: Dictionary = {}
+	var by_node: Dictionary = {}
 	for i in _instances.size():
 		var m: StringName = _instances[i]["model"]
-		if not by_model.has(m):
-			by_model[m] = []
-		(by_model[m] as Array).append(i)
-	var names: Array = by_model.keys()
+		var key: StringName = m
+		var k: int = int(spec_of(m)["kind"])
+		if (k == Kind.STRUCTURE or k == Kind.RUIN) and not _on_board((_instances[i]["cells"] as Array)[0]):
+			key = StringName(String(m) + "@ring")
+		if not by_node.has(key):
+			by_node[key] = []
+			_node_model[key] = m
+		(by_node[key] as Array).append(i)
+	var names: Array = by_node.keys()
 	names.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
-	for m: StringName in names:
+	for key: StringName in names:
+		var m: StringName = _node_model[key]
+		var ring: bool = String(key).ends_with("@ring")
 		var info: Dictionary = model(m)
 		var kind: int = int(spec_of(m)["kind"])
 		var fades: bool = kind == Kind.STRUCTURE or kind == Kind.RUIN
@@ -547,20 +564,23 @@ func _build_nodes(haze: bool) -> void:
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_custom_data = fades
 		mm.mesh = _wet_mesh(m, info["mesh"]) if wet and kind == Kind.BRIDGE else info["mesh"]
-		mm.instance_count = (by_model[m] as Array).size()
+		mm.instance_count = (by_node[key] as Array).size()
 		var mmi := MultiMeshInstance3D.new()
-		mmi.name = String(m)
+		# Godot міняє «@» в імені вузла на «_», тож вузол кільця — «модель_ring».
+		mmi.name = String(key).replace("@ring", "_ring")
 		mmi.multimesh = mm
-		# §8: тіні — юнітам; пропсам — лише там, де без тіні на сонці річ висить над землею. Каміння
-		# без тіні: низьке, а прохід тіней по ~50 брилах Ridge коштує понад 50 тис. трикутників.
-		var casts: bool = structure_shadows and kind in [Kind.STRUCTURE, Kind.RUIN, Kind.FIELD_FENCE, Kind.GARDEN_FENCE, Kind.POLE]
+		# §8: тіні — юнітам; пропсам — лише будинкам дошки, де без тіні на сонці дім висить над
+		# землею. Руїни (низькі й важкі, до 4 тис. трикутників) лягають плямою дотику, як каміння;
+		# огорожі, опори й дрібнота без тіні: їхній прохід тіней коштував десятки тисяч трикутників
+		# на кадр, а тонка тінь на м'якому сонці майже не видна.
+		var casts: bool = structure_shadows and not ring and kind == Kind.STRUCTURE
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if fades:
-			_node_materials[m] = {"fade": _fade_material(m, info, haze, false), "solid": _fade_material(m, info, haze, true)}
-			mmi.material_override = _node_materials[m]["solid"]
+			_node_materials[key] = {"fade": _fade_material(m, info, haze, false), "solid": _fade_material(m, info, haze, true)}
+			mmi.material_override = _node_materials[key]["solid"]
 		add_child(mmi)
-		_nodes[m] = mmi
-		_slots[m] = by_model[m]
+		_nodes[key] = mmi
+		_slots[key] = by_node[key]
 	if not _spans.is_empty():
 		_wires = MeshInstance3D.new()
 		_wires.name = "Wires"
@@ -585,7 +605,7 @@ func _build_gardens() -> void:
 	if _gardens.is_empty():
 		return
 	var quad := PlaneMesh.new()
-	quad.size = Vector2.ONE * 0.78
+	quad.size = Vector2.ONE * 0.62
 	var mat := ShaderMaterial.new()
 	mat.shader = _GARDEN_SHADER
 	mat.set_shader_parameter("green", garden_green)
@@ -596,13 +616,19 @@ func _build_gardens() -> void:
 	mm.instance_count = _gardens.size()
 	for i in _gardens.size():
 		var c: Vector2i = _gardens[i]
-		var yaw: float = PI * 0.5 if absi(cell_hash(c, 144)) % 2 else 0.0
+		# Город не по сітці клітинок: трохи повернутий і зсунутий, ряди — то вздовж, то впоперек.
+		var hv: int = absi(cell_hash(c, 144))
+		var yaw: float = (PI * 0.5 if hv % 2 else 0.0) + (float(hv / 2 % 61) / 60.0 - 0.5) * 0.5
+		var shift := Vector2(float(hv / 128 % 21) / 20.0 - 0.5, float(hv / 4096 % 21) / 20.0 - 0.5) * 0.16
 		var hx: float = TerrainHeight.ground_y(c.x + 0.3, c.y) - TerrainHeight.ground_y(c.x - 0.3, c.y)
 		var hz: float = TerrainHeight.ground_y(c.x, c.y + 0.3) - TerrainHeight.ground_y(c.x, c.y - 0.3)
 		var up := Vector3(-hx / 0.6, 1.0, -hz / 0.6).normalized()
 		var right: Vector3 = Vector3(cos(yaw), 0.0, -sin(yaw)).slide(up).normalized()
-		mm.set_instance_transform(i, Transform3D(Basis(right, up, right.cross(up)),
-				Vector3(c.x, TerrainHeight.ground_y(c.x, c.y) + 0.006, c.y)))
+		var at := Vector2(c) + shift
+		# Різний розмір городу: від ~3.6 до ~5.5 м.
+		var size: float = 0.75 + float(hv / 65536 % 31) / 100.0
+		mm.set_instance_transform(i, Transform3D(Basis(right * size, up, right.cross(up) * size),
+				Vector3(at.x, TerrainHeight.ground_y(at.x, at.y) + 0.006, at.y)))
 	_garden_node = MultiMeshInstance3D.new()
 	_garden_node.name = "GardenBeds"
 	_garden_node.multimesh = mm
@@ -617,7 +643,7 @@ func _build_contacts() -> void:
 	var heights: Array[float] = []
 	for inst in _instances:
 		var k: int = int(spec_of(inst["model"])["kind"])
-		if k != Kind.BOULDER and k != Kind.BLOCK:
+		if k != Kind.BOULDER and k != Kind.BLOCK and k != Kind.RUIN:
 			continue
 		var t: Transform3D = inst["transform"]
 		var box: AABB = t * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
@@ -728,6 +754,10 @@ func _roof_tint(inst: Dictionary) -> Color:
 	return ROOF_TINTS[absi(cell_hash(c, 9137)) % ROOF_TINTS.size()]
 
 
+func _on_board(c: Vector2i) -> bool:
+	return c.x >= 0 and c.y >= 0 and c.x < _board_size.x and c.y < _board_size.y
+
+
 func _is_faded(inst: Dictionary) -> bool:
 	var kind: int = int(spec_of(inst["model"])["kind"])
 	if kind != Kind.STRUCTURE and kind != Kind.RUIN:
@@ -763,10 +793,11 @@ func _final_transform(inst: Dictionary) -> Transform3D:
 
 func _apply() -> void:
 	_apply_queued = false
-	for m: StringName in _nodes:
-		var mmi: MultiMeshInstance3D = _nodes[m]
+	for key: StringName in _nodes:
+		var m: StringName = _node_model[key]
+		var mmi: MultiMeshInstance3D = _nodes[key]
 		var mm: MultiMesh = mmi.multimesh
-		var slots: Array = _slots[m]
+		var slots: Array = _slots[key]
 		var local: Transform3D = (model(m) as Dictionary)["local"]
 		var any_faded := false
 		for k in slots.size():
@@ -777,8 +808,8 @@ func _apply() -> void:
 				any_faded = any_faded or faded
 				var tint: Color = _roof_tint(inst)
 				mm.set_instance_custom_data(k, Color(tint.r, tint.g, tint.b, FADE if faded else 0.0))
-		if _node_materials.has(m):
-			mmi.material_override = _node_materials[m]["fade" if any_faded else "solid"]
+		if _node_materials.has(key):
+			mmi.material_override = _node_materials[key]["fade" if any_faded else "solid"]
 	_rebuild_wires()
 
 
@@ -1237,10 +1268,23 @@ class _Placer:
 				elif roll == 1 and not trailer_in.has(yard):
 					trailer_in[yard] = true
 					_yard_item(pick_for_half(Kind.TRAILER, half(c)), c, Vector2(0.0, 0.1), yaw)
-				else:
+				elif _house_beside(c) and h(c, 145) % 3 != 0:
+					# Город — при самій хаті, і не на кожній вільній клітинці.
 					gardens.append(c)
-					if h(c, 143) % 2 == 0:
-						_yard_item(pick_for_half(Kind.HAY, half(c)), c, Vector2(0.3, 0.3).rotated(yaw), float(h(c, 142) % 628) / 100.0)
+				else:
+					_yard_item(pick_for_half(Kind.HAY, half(c)), c, Vector2(0.25, 0.25).rotated(yaw), float(h(c, 142) % 628) / 100.0)
+
+	## Хата на сусідній клітинці (і по діагоналі).
+	func _house_beside(c: Vector2i) -> bool:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var n: StringName = model_at.get(c + Vector2i(dx, dy), &"")
+				if n == &"":
+					continue
+				var sp: Dictionary = PropLayer.spec_of(n)
+				if int(sp["kind"]) == Kind.STRUCTURE and not bool(sp.get("tower", false)):
+					return true
+		return false
 
 	## Двір — зв'язна група BUILDING дошки; ключ — її найменша клітинка.
 	func _yard_key(c: Vector2i) -> Vector2i:
@@ -1405,10 +1449,29 @@ class _Placer:
 			if pool.is_empty():
 				pool = alt
 		var gate: Array = pool[h(first, 120) % pool.size()]
+		var plans: Array[Dictionary] = []
 		for e: Array in sides:
-			_yard_segment(m, lot, e[0], e[1], e == gate)
+			var plan: Dictionary = _yard_segment(lot, e[0], e[1], e == gate)
+			if not plan.is_empty():
+				plans.append(plan)
+		# Секція, що ні з ким не стикується кінцем, — самотня панель серед двору: її нема.
+		for plan in plans:
+			var joined := false
+			for other in plans:
+				if other == plan:
+					continue
+				for a: Vector2 in plan["ends"]:
+					for b: Vector2 in other["ends"]:
+						joined = joined or a.distance_to(b) < 0.15
+			if not joined:
+				continue
+			var c: Vector2i = plan["c"]
+			if put_small(m, c, plan["local"], plan["yaw"], 1.0, true, plan["length"]):
+				edges[plan["key"]] = true
+				yard_cells[c] = true
 
-	func _yard_segment(m: StringName, lot: Dictionary, g: Vector2i, d: Vector2i, gate: bool) -> void:
+	## План секції огорожі на ребрі ділянки (без розстановки): {} — секції тут не буде.
+	func _yard_segment(lot: Dictionary, g: Vector2i, d: Vector2i, gate: bool) -> Dictionary:
 		var c: Vector2i = g + d
 		var t := Vector2i(absi(d.y), absi(d.x))
 		var ext: Dictionary = {}
@@ -1427,20 +1490,20 @@ class _Placer:
 				hi -= GATE
 		var key := Vector4i(c.x, c.y, -d.x, -d.y)
 		if edges.has(key) or hi - lo < MIN_FENCE:
-			return
-		# Секція тримає ≥ 0.3 клітинки від будь-якої будівлі (зокрема руїни на сусідній клітинці):
-		# заважає — коротшає з обох кінців, і лише коротша за 0.3 клітинки не стає зовсім.
+			return {}
+		# Секція тримає ≥ 0.3 клітинки від будь-якої будівлі (зокрема руїни на сусідній клітинці) і
+		# не лягає на дорогу: заважає — коротшає з обох кінців, коротша за MIN_FENCE не стає зовсім.
 		var cut: float = 0.0
 		while not _span_clear(c, d, t, lo + cut, hi - cut):
 			cut += 0.05
 			if hi - lo - 2.0 * cut < MIN_FENCE:
-				return
+				return {}
 		lo += cut
 		hi -= cut
-		var local: Vector2 = -Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
-		if put_small(m, c, local, 0.0 if d.y != 0 else PI * 0.5, 1.0, true, hi - lo):
-			edges[key] = true
-			yard_cells[c] = true
+		var base: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT)
+		return {"c": c, "key": key, "length": hi - lo, "yaw": 0.0 if d.y != 0 else PI * 0.5,
+				"local": base - Vector2(c) + Vector2(t) * ((lo + hi) * 0.5),
+				"ends": [base + Vector2(t) * lo, base + Vector2(t) * hi]}
 
 	func _span_clear(c: Vector2i, d: Vector2i, t: Vector2i, lo: float, hi: float) -> bool:
 		var mid: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
@@ -1562,7 +1625,10 @@ class _Placer:
 				var c := Vector2i(x, y)
 				if kind(c) != Terrain.Kind.HILL:
 					continue
-				var n: int = 1 + h(c, 30) % 2
+				# Одна брила на клітинку, і не на кожній: дрібнота коштувала ~17 тис. трикутників на кадр.
+				if h(c, 29) % 3 == 0:
+					continue
+				var n: int = 1
 				var pool: Array[StringName] = PropLayer.models_of(Kind.BOULDER)
 				var base: int = absi(hash(Vector2i(salt, Kind.BOULDER))) + half(c) * 2
 				for k in n:

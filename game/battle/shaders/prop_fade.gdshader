@@ -26,6 +26,7 @@ const float GRIME_H = 0.08;
 const float GRIME = 0.6;
 const float CONTACT_H = 0.02;
 const float CONTACT = 0.6;
+const vec3 WALL_WARM = vec3(1.08, 1.0, 0.86);
 
 varying vec3 world_pos;
 varying vec3 world_normal;
@@ -62,6 +63,8 @@ void fragment() {
 	vec3 albedo = texture(albedo_tex, UV).rgb * albedo_color.rgb;
 	float roof_k = smoothstep(0.4, 0.7, world_normal.y);
 	albedo *= mix(vec3(1.0), v_roof_tint, roof_k);
+	// Стіни тепліші: під блакитним небом сонячних карт сіра штукатурка ставала синюватою.
+	albedo *= mix(WALL_WARM, vec3(1.0), roof_k);
 	float rough = roughness;
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {

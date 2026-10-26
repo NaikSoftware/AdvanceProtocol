@@ -378,9 +378,14 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 		models[inst["model"]] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
 			func(n: Node) -> bool: return n.name != &"ContactShadows" and n.name != &"GardenBeds")
-	assert_eq(mmis.size(), models.size(), p)
+	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
+	var keys: Dictionary = {}
 	for n in mmis:
-		assert_true(models.has(StringName(n.name)), "%s: вузол %s" % [p, n.name])
+		var m := StringName(String(n.name).trim_suffix("_ring"))
+		assert_true(models.has(m), "%s: вузол %s" % [p, n.name])
+		keys[m] = true
+	assert_eq(keys.size(), models.size(), p)
+	for n in mmis:
 		assert_eq((n as MultiMeshInstance3D).cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "§8: тіні лише юнітам")
 		assert_eq((n as MultiMeshInstance3D).layers, 1, "світ: зонд відбиттів їх бачить")
 
@@ -439,13 +444,13 @@ func test_yard_gate_faces_the_road() -> void:
 	assert_almost_eq(total, 3.0 * (1.0 + 2.0 * PropLayer.YARD_OUT), 0.02, "хвіртка — на дорогу, решта обгороджена")
 
 
-## Під брилами й блоками — пляма дотику, одним вузлом.
+## Під брилами, блоками й руїнами — пляма дотику, одним вузлом.
 func test_boulders_get_contact_blobs() -> void:
 	var view: BoardView = _view(_map("ridge"))
 	var stones: int = 0
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
-		stones += 1 if k == PropLayer.Kind.BOULDER or k == PropLayer.Kind.BLOCK else 0
+		stones += 1 if k in [PropLayer.Kind.BOULDER, PropLayer.Kind.BLOCK, PropLayer.Kind.RUIN] else 0
 	var blobs: MultiMeshInstance3D = view.props().get_node("ContactShadows")
 	assert_eq(blobs.multimesh.instance_count, stones)
 	# Дзеркальний базис перевертає обхід трикутників, і cull_back викидає пляму зовсім.
@@ -577,8 +582,8 @@ func test_structure_shadows_only_when_switched_on() -> void:
 	view.build(_house_board())
 	for n: MultiMeshInstance3D in view.props().find_children("*", "MultiMeshInstance3D", false, false):
 		var k: int = _kind(StringName(n.name))
-		var casts: bool = k in [PropLayer.Kind.STRUCTURE, PropLayer.Kind.RUIN, PropLayer.Kind.FIELD_FENCE,
-				PropLayer.Kind.GARDEN_FENCE, PropLayer.Kind.POLE]
+		# Тінь кидають лише будинки дошки; руїни — плямою дотику, кільце й дрібнота — без тіні.
+		var casts: bool = k == PropLayer.Kind.STRUCTURE and not String(n.name).ends_with("_ring")
 		var want: int = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		assert_eq(n.cast_shadow, want, n.name)
 

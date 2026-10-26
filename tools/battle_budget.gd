@@ -26,8 +26,10 @@ func _ready() -> void:
 	get_window().size = WINDOW
 	var shots: Array = []
 	var shadows: bool = args.has("--shadows")
+	# --noshadows: пропси без тіні сонця — щоб зміряти, скільки коштує прохід тіней.
+	var no_shadows: bool = args.has("--noshadows")
 	for i in range(1, args.size()):
-		if args[i] == "--shadows":
+		if args[i] == "--shadows" or args[i] == "--noshadows":
 			continue
 		var parts: PackedStringArray = args[i].split("@")
 		var map: String = parts[0]
@@ -35,6 +37,10 @@ func _ready() -> void:
 		add_child(screen)
 		screen.setup(load("res://maps/%s.tres" % map) as MapData, 2, 1)
 		var board: Board = MatchService.state.board
+		if no_shadows:
+			var bv: BoardView = screen.get_node("%BoardView")
+			bv.structure_shadows = false
+			bv.rebuild_tiles(board)
 		if shadows:
 			var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
 			for mmi: MultiMeshInstance3D in props.find_children("*", "MultiMeshInstance3D", false, false):
