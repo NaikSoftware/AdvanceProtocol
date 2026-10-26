@@ -350,7 +350,8 @@ CONCRETE_GREY = (0.564, 0.53, 0.484)
 
 
 def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, top_z=None, shade=0.18,
-                 ground=True, k=5.0, seams=False, val=1.0, band=None, streak_k=0.5, streak_len=0.5, tint=(1, 1, 1)):
+                 ground=True, k=5.0, seams=False, val=1.0, band=None, streak_k=0.5, streak_len=0.5, tint=(1, 1, 1),
+                 moss=0.0, rust_runs=0, chips=False, paint=None, peel=0.0):
     """Блідий бетон одного значення для всіх виробів. relief(size) -> висоти 0..1 (йдуть у нормаль);
     бруд знизу (до 0,3 м від землі), патьоки під верхом (top_z, м) і плями з періодом у плитку."""
     tv = tile_v or tile
@@ -365,9 +366,31 @@ def concrete_mat(name, tile=1.5, tile_v=None, relief=None, seed=61, size=128, to
         a = a * (1 - streak_k * streak * ramp)[..., None]
     if band:                                                                # мокра смуга: (z0, z1, сила)
         a = a * (1 - band[2] * np.clip(1 - np.abs(z - (band[0] + band[1]) / 2) / ((band[1] - band[0]) / 2), 0, 1) ** 0.5)[..., None]
+    u = ((np.arange(size) + 0.5) / size)[None, :]
+    rng_ = np.random.default_rng(seed + 90)
+    dent = np.zeros((size, size))
+    if paint is not None:                                                   # вицвіла фарба, що облазить плямами: під нею бетон
+        pc = np.array(paint) * (0.85 + 0.3 * fbm(size, seed + 31, 3, 3))[..., None]
+        pm = np.clip((fbm(size, seed + 21, 6, 4) - 0.6) * 6, 0, 1) * peel
+        a = pc * (1 - pm[..., None]) + a * pm[..., None]
+    if moss:                                                                # мох і бруд у нижніх 0,3-0,5 м
+        mm = np.clip((fbm(size, seed + 11, 4, 3) - 0.42) * 3, 0, 1) * np.clip(1 - z / 0.45, 0, 1) * moss
+        a = a * (1 - mm[..., None]) + np.array([0.27, 0.30, 0.18]) * mm[..., None]
+    for _ in range(rust_runs):                                              # іржаві потьоки від закладних і арматури біля верху
+        u0, w_, ln = rng_.uniform(0.08, 0.92), rng_.uniform(0.006, 0.014), rng_.uniform(0.3, 0.9)
+        zt_ = (top_z or tv) - rng_.uniform(0.05, 0.25)
+        rm = np.exp(-((u - u0) / w_) ** 2) * np.clip(1 - (zt_ - z) / ln, 0, 1) * (z <= zt_)
+        a = a * (1 - 0.55 * rm[..., None]) + np.array([0.42, 0.22, 0.10]) * 0.55 * rm[..., None]
+    if chips:                                                               # відколи на кутах плити
+        for (cu, cz) in ((0.02, 0.05), (0.98, 0.05), (0.02, tv - 0.08), (0.98, tv - 0.08)):
+            if rng_.random() < 0.6:
+                r_ = rng_.uniform(0.03, 0.06)
+                d_ = np.clip(1 - np.sqrt(((u - cu) * tile / r_) ** 2 + ((z - cz) / r_) ** 2), 0, 1)
+                dent = np.maximum(dent, d_)
+        a = a * (1 - 0.3 * dent[..., None])
     n = load_acg("Concrete034", "NormalGL", size)
     pit = 0.5 * tile_noise(48, 48, size, seed + 5) + 0.5 * tile_noise(16, 16, size, seed + 6)
-    h = (relief(size) if relief is not None else np.ones((size, size))) + 0.3 * pit
+    h = (relief(size) if relief is not None else np.ones((size, size))) + 0.3 * pit - 0.8 * dent
     if seams:                                                               # стики опалубки через 0,25 м
         h = h - 0.6 * (np.abs(np.sin(np.pi * z / 0.25)) ** 40)
     r = normal_from_height(h, k)

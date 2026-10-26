@@ -10,6 +10,7 @@ extends Node
 ##   --rl     вигляд карти Річка з гри (BattleLook): розсіяне похмуре світло з дальнього боку, сильне небо, мокрий ґрунт; суфікс _rl;
 ##   --cr     вигляд карти Перехрестя (BattleLook): сонце пізнього літа; суфікс _cr;
 ##   --z2=N   зум другого кадру (_far) замість MAX_ZOOM;
+##   --with=N  поруч (за 1,6 тайла) ставить ще модель N — наприклад, хату біля паркану для масштабу й тону;
 ##   --road=L:D  біля кожного кінця моста — смуга дороги з макротекстури землі L (road | dirt) на висоті настилу D (тайли),
 ##               щоб бачити стик настилу з дорогою;
 ##   --black  чорний ґрунт без відблисків: у кадрі лишається лише сам об'єкт, тож його середній тон міряється без тла; файли отримують суфікс _black;
@@ -27,6 +28,7 @@ var sfx: String = ""
 var look_path: String = ""
 var zoom2: float = IsoCameraRig.MAX_ZOOM
 var road_layer: String = ""
+var with_model: String = ""
 var road_deck: float = 0.0
 ## Метрів на повтор макротекстури дороги й множник сухого покриття (як у GroundSurface і ground.gdshader).
 const ROAD_M: Dictionary = {"road": 30.0, "dirt": 20.0}
@@ -52,6 +54,8 @@ func _ready() -> void:
 			black = true
 		elif args[i] == "--cr":
 			look_path = "res://maps/crossroads.tres"
+		elif args[i].begins_with("--with="):
+			with_model = args[i].substr(7)
 		elif args[i].begins_with("--road="):
 			var parts: PackedStringArray = args[i].substr(7).split(":")
 			road_layer = parts[0]
@@ -149,6 +153,10 @@ func _ready() -> void:
 		add_child(inst)
 		if road_layer != "":
 			_road_ends(inst)
+		if with_model != "":
+			var other: Node3D = (load("%s/%s.glb" % [props_dir, with_model]) as PackedScene).instantiate()
+			other.position = Vector3(1.6, 0.0, -0.6)
+			inst.add_child(other)
 		if rl:
 			# мокрий реквізит із гри: матеріал-накладка зменшує шорсткість, тож дахи й стіни дають мокрий блиск
 			for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):

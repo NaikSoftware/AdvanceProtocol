@@ -83,7 +83,9 @@ def windows(b, xa, xb, nf, front, back, blown=()):
                 if (side, i, f) in blown:
                     e = 0.03 * sgn
                     lib.burn_ring(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, g_side=0.35, g_bot=0.1, g_top=5.0, ztop=H - 0.05, mat="panel_dm", strong=True)
+                    lib.plume(b, "y", yy, sgn, x, z + 1.25, 1.1, H - 0.05, "panel_dm")          # шлейф над прорізом на чистій стіні
                     opening2(b, "y", yy, x, z + 0.15, 1.1, 1.1, sgn, streak=0.0, sooty=True)
+                    lib.window_ring(b, "y", yy, sgn, x, z + 0.15, 1.1, 1.1, d=0.15, t=0.03, mat="panel")   # укіс: справжній отвір усередину
                     continue
                 b.window(("y", yy, sgn), x, z, 1.4, 1.4)
                 if not (i in cols and f >= 1):
@@ -127,9 +129,9 @@ def intact():
     roof_details(b, X1)
     # бризки біля цоколя, патьоки під кожним підвіконням і від парапету даху; над відкритими лоджіями стіни немає
     sk = lambda cols: [(bay_x(i) - LW, bay_x(i) + LW) for i in cols]
-    lib.weather(b, "panel", [("y", Y1, 1, X0, X1, 0.0, H)], seed=21, patches=False, skip_u=sk(F), seg=1.5, band=0.75, kband=(0.66, 0.72), ksill=(0.55, 0.65), lsill=(1.0, 1.5))
-    lib.weather(b, "panel", [("y", Y0, -1, X0, X1, 0.0, H)], seed=22, patches=False, skip_u=sk(B), seg=1.5, band=0.75, kband=(0.66, 0.72), ksill=(0.55, 0.65), lsill=(1.0, 1.5))
-    lib.weather(b, "panel", [("x", X1, 1, Y0, Y1, 0.0, H), ("x", X0, -1, Y0, Y1, 0.0, H)], seed=23, patches=False, seg=1.5, band=0.75, kband=(0.66, 0.72))
+    lib.weather(b, "panel", [("y", Y1, 1, X0, X1, 0.0, H)], seed=21, patches=False, skip_u=sk(F), seg=1.5, band=0.75, kband=(0.66, 0.72), ksill=(0.55, 0.65), lsill=(1.0, 1.5), eave_streaks=False)
+    lib.weather(b, "panel", [("y", Y0, -1, X0, X1, 0.0, H)], seed=22, patches=False, skip_u=sk(B), seg=1.5, band=0.75, kband=(0.66, 0.72), ksill=(0.55, 0.65), lsill=(1.0, 1.5), eave_streaks=False)
+    lib.weather(b, "panel", [("x", X1, 1, Y0, Y1, 0.0, H), ("x", X0, -1, Y0, Y1, 0.0, H)], seed=23, patches=False, seg=1.5, band=0.75, kband=(0.66, 0.72), eave_streaks=False)
     lib.finish(b, "h5_panel_block", out, tri_limit=2500, footprint=(4, 2), anchor=(0, 0))
 
 
@@ -144,7 +146,9 @@ def broken_end(b, xc, rnd):
         for k in range(5):
             ov = rnd.uniform(0.15, 0.6)
             th = rnd.uniform(0.14, 0.22)
-            b.box(xc + ov / 2, (ys[k] + ys[k + 1]) / 2, f * FLOOR - th, ov, ys[k + 1] - ys[k], th, "slab_dark", top="slab_dark")
+            b.box(xc + ov / 2, (ys[k] + ys[k + 1]) / 2, f * FLOOR - th, ov, ys[k + 1] - ys[k], th, "slab_dark", top="slab_dark", rot=rnd.uniform(-0.2, 0.2))
+    for (x_, y_, h_) in ((xc + 1.6, -2.0, 3.6), (xc + 2.8, 1.8, 2.2), (xc + 1.2, 3.0, 1.4)):   # огризки колон і перегородок у порожнечі
+        b.box(x_, y_, 0.0, 0.35, 0.35, h_, "panel_frag", top="panel_frag", rot=rnd.uniform(-0.3, 0.3))
     for (y, sgn) in ((Y1 - 0.2, 1), (Y0 + 0.2, -1)):                              # огризки фасадного шару: зубці 0.4-1.2 м різної висоти
         for f in range(NF):
             if rnd.random() < 0.35:
@@ -164,7 +168,8 @@ def damaged():
     xc = 6.0
     F, B = (2, 4), (0, 3)
     body(b, X0, xc, NF, F, B, True)
-    windows(b, X0, xc, NF, F, B, blown={(sd, 6, f) for sd in ('front', 'back') for f in range(3)} | {("front", 5, 2), ("back", 5, 1), ("back", 5, 2)})
+    # вибиті розкидано, не цілим стовпчиком: над кожним лишається чиста стіна, на якій видно шлейф
+    windows(b, X0, xc, NF, F, B, blown={("back", 6, 0), ("back", 4, 0), ("back", 5, 1), ("front", 6, 0), ("front", 5, 1)})
     broken_end(b, xc, rnd)
     entrances(b, xc)
     roof_details(b, xc)
@@ -177,9 +182,9 @@ def damaged():
             out_.append(h * FLOOR + rnd.uniform(-0.25, 0.25))
         return out_
     # прямі збірні панелі по 3 м із двома рівнями зламаного верху і легким відхиленням від виска
-    back = [FLOOR, FLOOR, 2 * FLOOR]
-    east = [2 * FLOOR, FLOOR, 2 * FLOOR, FLOOR]
-    front = [FLOOR, 2 * FLOOR]
+    back = [FLOOR, 2 * FLOOR]                                                   # на третину менше стоячих панелей
+    east = [2 * FLOOR, FLOOR, 2 * FLOOR]
+    front = [FLOOR]
     roots = []
     roots += panel_wall(b, (xc, Y0 + 0.2), (X1, Y0 + 0.2), 0.4, back, "panel_frag", 5, piece=3.0, tilt=0.03, inner=(0.0, 1.0), lips=(FLOOR,), in_mat="panel_in")
     roots += panel_wall(b, (X1 - 0.2, Y0), (X1 - 0.2, Y1), 0.4, east, "panel_frag", 6, piece=3.0, tilt=0.04, inner=(-1.0, 0.0), lips=(FLOOR, 2 * FLOOR), in_mat="panel_in")
@@ -233,12 +238,12 @@ def damaged():
     # край купи сходить у землю (feather), без бортика; перехід у колір ґрунту — спідницею 1.5 м
     plan = [HeapSurface(11.0, 0.5, 4.8, 4.6, 4.3, 61, bumps=6, lip=0.0, wob=0.45, lump=0.25, hummocks=6, hum_amp=0.9, pw=1.35, noise=1.0, feather=1.5),
             HeapSurface(12.8, -5.0, 4.6, 2.2, 2.0, 62, bumps=5, lip=0.0, wob=0.2, lump=0.12, hummocks=3, hum_amp=0.4, pw=1.5, noise=1.0, feather=1.2),
-            HeapSurface(16.2, -1.5, 2.6, 5.0, 1.7, 63, bumps=7, lip=0.0, wob=0.2, lump=0.12, hummocks=3, hum_amp=0.4, pw=1.5, noise=1.0, feather=1.2)]
+            HeapSurface(16.2, -1.5, 2.6, 5.0, 1.7, 63, bumps=7, lip=0.0, wob=0.35, lump=0.3, hummocks=6, hum_amp=0.9, pw=1.5, noise=1.5, feather=1.2)]   # правий горб не гладкий купол
     plan[0].fit_peak(4.6)
     print("HEAPPEAK h5", [round(max(h_.z(h_.cx + h_.rx * u / 20.0, h_.cy + h_.ry * v / 20.0) for u in range(-20, 21) for v in range(-20, 21)), 2) for h_ in plan], "s", round(plan[0].s, 3))
     for k, hsf in enumerate(plan):
         big = k == 0
-        heap_mound(b, hsf, "heap_grey", rings=5 if big else 3, segs=24 if big else 14, skirt=1.5, skirt_mat="edge_ground")      # без світлого обідка: край у колір ґрунту
+        heap_mound(b, hsf, "heap_grey", rings=5 if big else 3, segs=24 if big else 14, skirt=0.05)      # без спідниці: запечений колір ґрунту давав світле кільце; край сам сходить у землю
         heap_mound(bh, hsf, "heap_base_grey", rings=18 if big else 8, segs=110 if big else 56, jitter=0.1 * hsf.hmax / 4.0, seed=61 + k)
     hrnd = random.Random(99)
     for hsf in plan:
