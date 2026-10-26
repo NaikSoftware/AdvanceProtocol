@@ -39,7 +39,7 @@ def blown(b, x, y, sgn, z, w, h, axis="y"):
         opening2(b, "y", y, x, z, w, h, sgn, streak=0.0, sooty=True)
     else:
         opening2(b, "x", x, y, z, w, h, sgn, streak=0.0, sooty=True)
-    burn_ring(b, axis, y if axis == "y" else x, x if axis == "y" else y, z, w, h, sgn, g_side=0.45, g_bot=0.1, g_top=1.4, ztop=2.95, mat="wall_plaster_dm")
+    burn_ring(b, axis, y if axis == "y" else x, x if axis == "y" else y, z, w, h, sgn, g_side=0.3, g_bot=0.1, g_top=1.9, ztop=2.95, mat="wall_plaster_dm")
     lib.pocks(b, axis, y if axis == "y" else x, sgn, x if axis == "y" else y, z + h / 2, 1.6, 10, int(abs(x * 7 + y * 13)) + 3, zmin=0.55, zmax=2.9)
 
 

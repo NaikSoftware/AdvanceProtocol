@@ -186,7 +186,7 @@ def house1(ruined):
         lib.weather(b, "wall_plaster", [("y", S - c_, -1, -hx - c_, hx + c_, 0.5, E), ("y", N + c_, 1, -hx - c_, hx + c_, 0.5, E), ("x", hx + c_, 1, S - c_, N + c_, 0.5, E), ("x", -hx - c_, -1, S - c_, N + c_, 0.5, E)], seed=11)
         lib.finish(b, "house_h5", out, tri_limit=2200, footprint=(1, 1))
         return
-    kw = dict(top_tone=0.82, inner_tone=0.3)                                     # внутрішні грані обвуглені
+    kw = dict(top_tone=0.82, inner_tone=0.85, in_mat="plaster_burnt")             # внутрішні грані — обгоріла штукатурка
     standing = dict(brick_mat="brick_face", cap=0.06, jag=0.12, **kw)          # на зламі — цегла, а не фарба
     broken = dict(brick_mat="brick_face", step=0.35, diag_p=0.85, jit=0.5, **kw)
     wall_run(b, (-0.9, S), (hx + 0.2, S), 0.4, [E] * 6, "wall_half", "wall_plaster", 21, hcap=3.1, **standing)
@@ -198,18 +198,20 @@ def house1(ruined):
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
     zt = E - 0.03
     for x in (1.5, 2.65):
-        burn_ring(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, g_side=0.6, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-        opening2(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, ztop=zt, streak=0.0, sooty=True)
-    burn_ring(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, g_side=0.6, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+        burn_ring(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, g_side=0.35, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+        opening2(b, "y", S - 0.2, x, 1.0, 1.0, 1.4, -1, ztop=zt, streak=0.0, sooty=True)
+        lib.window_ring(b, "y", S - 0.2, -1, x, 1.0, 1.0, 1.4)   # лиштва лишилась: проріз читається розміром вікна
+    burn_ring(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
     opening2(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, ztop=zt, streak=0.0, sooty=True)
-    for y, w, h, z in ((-1.0, 1.1, 1.2, 0.9), (1.0, 1.4, 1.3, 0.8)):
-        burn_ring(b, "x", hx + 0.2, y, z, w, h, 1, g_side=0.6, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+    for y, w, h, z in ((-1.0, 1.1, 1.4, 1.0), (1.0, 1.1, 1.4, 1.0)):              # пропорції вікон цілої h5
+        burn_ring(b, "x", hx + 0.2, y, z, w, h, 1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
         opening2(b, "x", hx + 0.2, y, z, w, h, 1, ztop=zt, streak=0.0, sooty=True)
+        lib.window_ring(b, "x", hx + 0.2, 1, y, z, w, h)   # лиштва лишилась: проріз читається розміром вікна
     for x in (0.6, 2.0):
-        burn_ring(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, g_side=0.6, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-        opening2(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, ztop=zt, streak=0.0, sooty=True)
-    grime(b, "y", S - 0.2, -1, -0.9, hx, 0.0)
-    grime(b, "x", hx + 0.2, 1, S, N, 0.0)
+        burn_ring(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, g_side=0.35, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+        opening2(b, "y", N + 0.2, x, 1.0, 1.0, 1.4, 1, ztop=zt, streak=0.0, sooty=True)
+        lib.window_ring(b, "y", N + 0.2, 1, x, 1.0, 1.0, 1.4)   # лиштва лишилась: проріз читається розміром вікна
+    lib.weather(b, "wall_half", [("y", S - 0.2, -1, -0.9, hx + 0.2, 0.0, E), ("x", hx + 0.2, 1, S - 0.2, N + 0.2, 0.0, E)], seed=17, patches=False)
     lib.pocks(b, "y", S - 0.2, -1, 1.2, 1.4, 2.0, 45, 41, zmin=0.2, zmax=2.9)
     lib.pocks(b, "x", hx + 0.2, 1, 0.0, 1.5, 1.8, 30, 42, zmin=0.2, zmax=2.9)
     ph = [rnd.uniform(0, 6.3) for _ in range(3)]
@@ -252,7 +254,7 @@ def house1(ruined):
 def house2(ruined):
     """Двоповерховий дім 6 x 5.6 м. Напівзруйнований: західна половина даху ціла, східний фронтон обвалений, перекриття нахилене в завал."""
     lib.reset()
-    lib.palette(wall=(0.86, 0.78, 0.55), roof="ochre", eave=6.0, chim="ch_sand", frame=1, trim=(0.92, 0.91, 0.88))
+    lib.palette(wall=(0.86, 0.78, 0.55), roof="ochre", eave=6.0, chim="ch_sand", frame=1, trim=(0.75, 0.74, 0.71))   # кутові камені ~190 sRGB: білі давали рвану світлу облямівку
     DM[0] = "wall_plaster_dm" if not ruined else "wall_half_w"
     b = Builder()
     rnd = random.Random(33)
@@ -295,7 +297,7 @@ def house2(ruined):
         lib.weather(b, "wall_plaster", [("y", S - c_, -1, -hx - c_, hx + c_, 0.6, E), ("y", N + c_, 1, -hx - c_, hx + c_, 0.6, E), ("x", hx + c_, 1, S - c_, N + c_, 0.6, E), ("x", -hx - c_, -1, S - c_, N + c_, 0.6, E)], seed=13)
         lib.finish(b, "house_h6", out, tri_limit=2600, footprint=(1, 1))
         return
-    kw = dict(top_tone=0.82, inner_tone=0.3)
+    kw = dict(top_tone=0.82, inner_tone=0.85, in_mat="plaster_burnt")
     standing = dict(brick_mat="brick_face", cap=0.06, jag=0.1, **kw)
     wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 31, hcap=6.2, **standing)
     wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 32, hcap=6.2, **standing)
@@ -307,17 +309,18 @@ def house2(ruined):
         for x in (-1.8, 0.0, 1.8):
             blown = (fl == 1 and x != 0.0) or (fl == 0 and x == 1.8)
             if blown:
-                burn_ring(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, g_side=0.6, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+                burn_ring(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
                 opening2(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, ztop=zt, streak=0.0, sooty=True)
+                lib.window_ring(b, "y", S - 0.2, -1, x, z, 1.2, 1.4)   # лиштва лишилась: проріз читається розміром вікна
             else:
                 b.window(("y", S - 0.2, -1), x, z, 1.2, 1.4)
                 pane_dress(b, "y", S - 0.2, -1, x, z, 1.2, 1.4)
         for x in (-1.2, 1.2):
             b.window(("y", N + 0.2, 1), x, z, 1.2, 1.4)
             pane_dress(b, "y", N + 0.2, 1, x, z, 1.2, 1.4)
-    burn_ring(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, g_side=0.6, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+    burn_ring(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
     opening2(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, ztop=zt, streak=0.0, sooty=True)
-    grime(b, "y", S - 0.2, -1, -hx, hx, 0.0)
+    lib.weather(b, "wall_half_w", [("y", S - 0.2, -1, -hx - 0.2, hx + 0.2, 0.0, E)], seed=19, patches=False)
     lib.pocks(b, "y", S - 0.2, -1, 0.5, 3.0, 2.6, 60, 43, zmin=0.2, zmax=5.9)
     # внутрішня грань західного фронтону не чиста штукатурка: кіптява згори, облуплені плями
     xi = -hx + 0.21
@@ -422,10 +425,12 @@ def shed(ruined):
     b.box(-2.35, -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3)
     zt = E - 0.03
     opening2(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, ztop=zt, streak=0.0, sooty=True)
-    burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.6, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+    burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
     opening2(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, ztop=zt, streak=0.0, sooty=True)
-    burn_ring(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, g_side=0.6, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+    lib.window_ring(b, "y", N + 0.1, 1, 1.8, 0.9, 1.4, 1.3)   # лиштва лишилась: проріз читається розміром вікна
+    burn_ring(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
     opening2(b, "y", N + 0.1, -2.0, 1.1, 0.8, 0.9, 1, ztop=zt, streak=0.0, sooty=True)
+    lib.window_ring(b, "y", N + 0.1, 1, -2.0, 1.1, 0.8, 0.9)   # лиштва лишилась: проріз читається розміром вікна
 
     def hpost(x):
         for i in range(len(post_x) - 1):

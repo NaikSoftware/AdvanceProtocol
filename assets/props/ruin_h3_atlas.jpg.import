@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dkx0sijg4026x"
-path="res://.godot/imported/ruin_h3_atlas.jpg-b7f1017ebf8a561459c900e4f9cf42e2.ctex"
+path.s3tc="res://.godot/imported/ruin_h3_atlas.jpg-b7f1017ebf8a561459c900e4f9cf42e2.s3tc.ctex"
+path.etc2="res://.godot/imported/ruin_h3_atlas.jpg-b7f1017ebf8a561459c900e4f9cf42e2.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/props/ruin_h3_atlas.jpg"
-dest_files=["res://.godot/imported/ruin_h3_atlas.jpg-b7f1017ebf8a561459c900e4f9cf42e2.ctex"]
+dest_files=["res://.godot/imported/ruin_h3_atlas.jpg-b7f1017ebf8a561459c900e4f9cf42e2.s3tc.ctex", "res://.godot/imported/ruin_h3_atlas.jpg-b7f1017ebf8a561459c900e4f9cf42e2.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -23,7 +25,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

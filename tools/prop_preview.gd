@@ -10,6 +10,8 @@ extends Node
 ##   --rl     вигляд карти Річка з гри (BattleLook): розсіяне похмуре світло з дальнього боку, сильне небо, мокрий ґрунт; суфікс _rl;
 ##   --cr     вигляд карти Перехрестя (BattleLook): сонце пізнього літа; суфікс _cr;
 ##   --z2=N   зум другого кадру (_far) замість MAX_ZOOM;
+##   --road=L:D  біля кожного кінця моста — смуга дороги з макротекстури землі L (road | dirt) на висоті настилу D (тайли),
+##               щоб бачити стик настилу з дорогою;
 ##   --black  чорний ґрунт без відблисків: у кадрі лишається лише сам об'єкт, тож його середній тон міряється без тла; файли отримують суфікс _black;
 ##   --river  ґрунт із текстури River (мокрий мул) замість сірої площини; файли отримують суфікс _river;
 ##   --side   додає <name>_side.png: ортографічний вид збоку для перевірки кутів балок і висот;
@@ -24,6 +26,11 @@ var rl: bool = false
 var sfx: String = ""
 var look_path: String = ""
 var zoom2: float = IsoCameraRig.MAX_ZOOM
+var road_layer: String = ""
+var road_deck: float = 0.0
+## Метрів на повтор макротекстури дороги й множник сухого покриття (як у GroundSurface і ground.gdshader).
+const ROAD_M: Dictionary = {"road": 30.0, "dirt": 20.0}
+const ROAD_K: Dictionary = {"road": 0.75, "dirt": 1.0}
 var side: bool = false
 const WINDOW: Vector2i = Vector2i(1280, 720)
 ## Ширина смуги поля під об'єктом: мосту потрібна довжина з запасом, дому — тайл навколо.
@@ -45,6 +52,10 @@ func _ready() -> void:
 			black = true
 		elif args[i] == "--cr":
 			look_path = "res://maps/crossroads.tres"
+		elif args[i].begins_with("--road="):
+			var parts: PackedStringArray = args[i].substr(7).split(":")
+			road_layer = parts[0]
+			road_deck = float(parts[1])
 		elif args[i].begins_with("--z2="):
 			zoom2 = float(args[i].substr(5))
 		elif args[i] == "--rl":
@@ -136,6 +147,8 @@ func _ready() -> void:
 		var inst: Node3D = scene.instantiate()
 		inst.position = Vector3(cell.x, 0.0, cell.y)
 		add_child(inst)
+		if road_layer != "":
+			_road_ends(inst)
 		if rl:
 			# мокрий реквізит із гри: матеріал-накладка зменшує шорсткість, тож дахи й стіни дають мокрий блиск
 			for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
@@ -207,3 +220,30 @@ func _triangles(root: Node) -> int:
 			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
 			t += (idx.size() if not idx.is_empty() else (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
 	return t
+
+
+## Дві смуги дороги вздовж осі моста (локальна Z) за його кінцями, на висоті настилу.
+func _road_ends(inst: Node3D) -> void:
+	var box := AABB()
+	var first := true
+	for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
+		var a: AABB = mi.get_aabb()
+		box = a if first else box.merge(a)
+		first = false
+	var w: float = box.size.x * 0.75
+	var ln: float = 1.5
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load("res://assets/terrain/macro/%s_albedo_0.png" % road_layer)
+	var k: float = pow(float(ROAD_K[road_layer]), 1.0 / 2.2)            # множник у лінійному світлі → sRGB-колір матеріалу
+	m.albedo_color = Color(k, k, k)
+	m.roughness = 0.9
+	m.uv1_scale = Vector3(w * 8.0 / float(ROAD_M[road_layer]), ln * 8.0 / float(ROAD_M[road_layer]), 1.0)
+	for sgn: float in [-1.0, 1.0]:
+		var strip := MeshInstance3D.new()
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(w, ln)
+		strip.mesh = pm
+		strip.material_override = m
+		strip.position = Vector3(box.get_center().x, road_deck + 0.002, box.get_center().z + sgn * (box.size.z * 0.5 + ln * 0.5))
+		inst.add_child(strip)
+
