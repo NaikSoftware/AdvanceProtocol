@@ -210,10 +210,6 @@ const _GARDEN_SHADER: Shader = preload("res://game/battle/shaders/prop_garden.gd
 const _PATH_SHADER: Shader = preload("res://game/battle/shaders/prop_path.gdshader")
 const _GRIME_SHADER: Shader = preload("res://game/battle/shaders/prop_grime.gdshader")
 const _RUBBLE_SHADER: Shader = preload("res://game/battle/shaders/prop_rubble.gdshader")
-## Найбільший перепад рельєфу під хатою без цоколя, клітинки (1 м). Більший — хата стає на середню
-## висоту: вгору по схилу врізана в землю, донизу — на кам'яному цоколі.
-const PLINTH_FROM: float = 0.125
-const PLINTH_ALBEDO: Color = Color(0.34, 0.32, 0.29)
 ## Пояс бруду довкола хати, клітинки (~0.5 м).
 const GRIME_M: float = 0.0625
 ## Запас від краю дорожнього покриття для парканів і дрібних пропсів, клітинки (~0.4 м).
@@ -269,7 +265,6 @@ var _garden_node: MultiMeshInstance3D
 ## Наскільки грядки зелені (BattleLook.season): літо — зелень, рання осінь — жовта, пізня — гола рілля.
 var garden_green: float = 0.2
 ## Цоколі хат на схилі: перетворення коробки одиничного розміру.
-var _plinths: Array[Transform3D] = []
 ## Відводи до хат: [індекс опори, точка на стіні хати].
 var _drops: Array = []
 ## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
@@ -559,7 +554,6 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_transformers.clear()
 	_transformer_node = null
 	_gate_posts.clear()
-	_plinths.clear()
 	_wires = null
 	_contacts = null
 	_garden_node = null
@@ -573,7 +567,14 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	if world.width <= 0 or world.height <= 0:
 		return
 	var p := _Placer.new(self, world, ring, board_size, height, map_key, half_dir)
+	# Будівлі стоять на рівних майданчиках, урізаних у рельєф (TerrainHeight.add_pad); решта пропсів
+	# ставиться вже на вирівняний ґрунт.
+	if height != null:
+		height.clear_pads()
 	p.place_all()
+	if height != null:
+		height.finish_pads()
+		p.settle()
 	_spans = p.spans
 	_gardens = p.gardens
 	_garden_plots = p.garden_plots
@@ -775,7 +776,6 @@ func _build_nodes(haze: bool) -> void:
 	_build_contacts()
 	_build_gardens()
 	_build_grime()
-	_build_plinths()
 	_build_rubble_floors()
 
 
@@ -1024,32 +1024,6 @@ func _build_rubble_floors() -> void:
 	node.multimesh = mm
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
-
-
-## Кам'яні цоколі хат на схилі: одна MultiMesh коробок.
-func _build_plinths() -> void:
-	if _plinths.is_empty():
-		return
-	var box := BoxMesh.new()
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = PLINTH_ALBEDO
-	mat.roughness = 1.0
-	box.material = mat
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = box
-	mm.instance_count = _plinths.size()
-	for i in _plinths.size():
-		mm.set_instance_transform(i, _plinths[i])
-	var node := MultiMeshInstance3D.new()
-	node.name = "Plinths"
-	node.multimesh = mm
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if structure_shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(node)
-
-
-func plinths() -> Array[Transform3D]:
-	return _plinths
 
 
 ## Пояс бруду довкола хат дошки: квадрат на сліді хати, ширший на GRIME_M з кожного боку; шейдер
@@ -1475,6 +1449,8 @@ class _Placer:
 	var storeys: Array[int] = [0, 0]
 	## Макет сіл карти (VillageLayout); порожній — розстановка процедурою, як для тестових дощок.
 	var layout: Dictionary = {}
+	## [індекс екземпляра, номер майданчика] будівель на майданчиках.
+	var padded: Array = []
 	## Клітинки дошки, на яких уже стоїть дрібний пропс (одна річ на ребро).
 	var edges: Dictionary = {}
 	var gardens: Array[Vector2i] = []
@@ -1512,6 +1488,7 @@ class _Placer:
 		if not layout.is_empty():
 			_structures()
 			_homesteads()
+			settle()
 			_bridges()
 			_layout_hay()
 			_blocks()
@@ -1520,6 +1497,7 @@ class _Placer:
 			return
 		_structures()
 		_dress_yards()
+		settle()
 		_bridges()
 		_yard_fences()
 		_field_fences()
@@ -1561,6 +1539,23 @@ class _Placer:
 
 	func ground(x: float, z: float) -> float:
 		return height.at(x, z) if height != null else 0.0
+
+	## Рівний майданчик під слідом будівлі (TerrainHeight.add_pad); -1 — рельєфу нема.
+	func pad(r: Rect2) -> int:
+		return height.add_pad(r) if height != null else -1
+
+	## Екземпляр idx стане підошвою на майданчик id наприкінці розстановки: висота тераси ще може
+	## змінитися, коли поруч стане інша будівля.
+	func seat(idx: int, id: int) -> void:
+		if id >= 0:
+			padded.append([idx, id])
+
+	## Підошви всіх будівель — на висоти їхніх терас.
+	func settle() -> void:
+		for e: Array in padded:
+			var t: Transform3D = layer._instances[e[0]]["transform"]
+			t.origin.y = height.pad_level(e[1])
+			layer._instances[e[0]]["transform"] = t
 
 	## Точка на покритті дороги (з запасом pad), за осями RoadCourse і їхньою шириною.
 	func on_road(p: Vector2, pad: float) -> bool:
@@ -1882,7 +1877,6 @@ class _Placer:
 
 	func _put_structure(m: StringName, origin: Vector2i, rot: int, s: Vector2i, free: Dictionary) -> void:
 		var cells: Array[Vector2i] = []
-		var lo: float = INF
 		# Будівля дошки відсувається в межах своєї клітинки від уже поставлених на BUILDING_GAP.
 		var shift: Vector2 = _best_shift(_rect_of(m, origin, rot, s), BUILDING_SHIFT) if on_board(origin) else Vector2.ZERO
 		for dy in s.y:
@@ -1891,24 +1885,9 @@ class _Placer:
 				free.erase(c)
 				cells.append(c)
 				built[c] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(1, 0)][rot]
-				# Найнижча точка під слідом: стіна трохи заходить у землю, але ніде не висить.
-				for o: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
-					lo = minf(lo, ground(c.x + o.x, c.y + o.y))
-		# І під самою моделлю: хата буває ширша за 0.8 клітинки, і на схилі її кут висів би.
 		var r_box: Rect2 = _rect_of(m, origin, rot, s)
 		r_box.position += shift
-		var hi: float = -INF
-		for v: Vector2 in [r_box.position, r_box.end, Vector2(r_box.position.x, r_box.end.y),
-				Vector2(r_box.end.x, r_box.position.y), r_box.get_center()]:
-			lo = minf(lo, ground(v.x, v.y))
-			hi = maxf(hi, ground(v.x, v.y))
-		# Хата дошки на схилі: на середину, уверх по схилу — врізана, донизу — цоколь.
-		if hi - lo > PLINTH_FROM and int(PropLayer.spec_of(m)["kind"]) == Kind.STRUCTURE and on_board(origin):
-			var base: float = (lo + hi) * 0.5
-			var foot: Rect2 = r_box.grow(-0.02)
-			layer._plinths.append(Transform3D(Basis.from_scale(Vector3(foot.size.x, base - lo + 0.02, foot.size.y)),
-					Vector3(foot.get_center().x, (base + lo) * 0.5, foot.get_center().y)))
-			lo = base
+		var pid: int = pad(r_box)
 		used[m] = int(used.get(m, 0)) + 1
 		var sp: Dictionary = PropLayer.spec_of(m)
 		if int(sp["kind"]) == Kind.STRUCTURE and not bool(sp.get("tower", false)):
@@ -1919,7 +1898,7 @@ class _Placer:
 		for c in cells:
 			model_at[c] = m
 		var centre := Vector2(origin) + Vector2(s - Vector2i.ONE) * 0.5 + shift
-		layer._add(m, Transform3D(_basis_of(m, rot), Vector3(centre.x, lo, centre.y)), _board_only(cells))
+		seat(layer._add(m, Transform3D(_basis_of(m, rot), Vector3(centre.x, 0.0, centre.y)), _board_only(cells)), pid)
 
 	## Найменший зсув обрису r (кроком 0.05, не далі limit), за якого він на BUILDING_GAP від усіх уже
 	## поставлених будівель; якщо такого нема — зсув із найбільшим проміжком.
@@ -2000,7 +1979,6 @@ class _Placer:
 				built[c] = Vector2i.ZERO
 				var yard: Vector2i = _yard_key(c)
 				var yaw: float = float(h(c, 140) % 4) * PI * 0.5
-				var lo: float = minf(ground(c.x - 0.3, c.y - 0.3), ground(c.x + 0.3, c.y + 0.3))
 				# Поруч із вежею повітки нема: вежа стоїть у власному дворі.
 				var by_tower := false
 				for dy in range(-1, 2):
@@ -2011,8 +1989,9 @@ class _Placer:
 				if roll == 0 and not by_tower and not shed_in.has(yard) and PropLayer.model(YARD_SHED) != null:
 					shed_in[yard] = true
 					var cells: Array[Vector2i] = [c]
-					layer._add(YARD_SHED, Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * YARD_SHED_SCALE),
-							Vector3(c.x, lo, c.y)), cells, true)
+					var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(c.x, 0.0, c.y))
+					var box: AABB = xf * ((PropLayer.model(YARD_SHED) as Dictionary)["aabb"] as AABB)
+					seat(layer._add(YARD_SHED, xf, cells, true), pad(Rect2(box.position.x, box.position.z, box.size.x, box.size.z)))
 				elif roll == 1 and not trailer_in.has(yard):
 					trailer_in[yard] = true
 					_yard_item(pick_for_half(Kind.TRAILER, half(c)), c, Vector2(0.0, 0.1), yaw)
@@ -2100,9 +2079,8 @@ class _Placer:
 					built[c] = Vector2i.ZERO
 			if home.has("shed") and PropLayer.model(YARD_SHED) != null:
 				var sc: Vector2i = home["shed"]
-				var lo: float = minf(ground(sc.x - 0.3, sc.y - 0.3), ground(sc.x + 0.3, sc.y + 0.3))
 				var cells: Array[Vector2i] = [sc]
-				var xf := Transform3D(Basis(Vector3.UP, rot * PI * 0.5).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(sc.x, lo, sc.y))
+				var xf := Transform3D(Basis(Vector3.UP, rot * PI * 0.5).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(sc.x, 0.0, sc.y))
 				var box: AABB = xf * ((PropLayer.model(YARD_SHED) as Dictionary)["aabb"] as AABB)
 				var shift: Vector2 = _best_shift(Rect2(box.position.x, box.position.z, box.size.x, box.size.z), BUILDING_SHIFT + 0.1)
 				var sr := Rect2(box.position.x + shift.x, box.position.z + shift.y, box.size.x, box.size.z)
@@ -2110,11 +2088,7 @@ class _Placer:
 				if placed.any(func(p: Array) -> bool: return sr.grow(BUILDING_GAP - 1e-3).intersects(p[0])):
 					continue
 				xf.origin += Vector3(shift.x, 0.0, shift.y)
-				# Найнижча точка під слідом сараю: на схилі жоден кут не висить.
-				xf.origin.y = INF
-				for v: Vector2 in [sr.position, sr.end, Vector2(sr.position.x, sr.end.y), Vector2(sr.end.x, sr.position.y)]:
-					xf.origin.y = minf(xf.origin.y, ground(v.x, v.y))
-				layer._add(YARD_SHED, xf, cells, true)
+				seat(layer._add(YARD_SHED, xf, cells, true), pad(sr))
 				sheds.append(sr)
 				var scr: Array = _screen_of(sr, _height_of(YARD_SHED) * YARD_SHED_SCALE)
 				placed.append([sr, STRUCTURE_GAP, scr[0], scr[1], false])

@@ -240,9 +240,11 @@ func test_rebuild_tiles_requests_a_probe_recapture() -> void:
 func test_water_height_map_follows_the_smooth_course() -> void:
 	view.build(_river())
 	var mat: ShaderMaterial = _waters()[0].material_override
-	var img: Image = (mat.get_shader_parameter("height_map") as ImageTexture).get_image()
 	var h: TerrainHeight = view._height
-	assert_eq(img.get_data(), h.image().get_data(), "та сама карта висот")
+	# Той самий об'єкт текстури: майданчики будівель оновлюють її на місці (без рендера get_image()
+	# повертає дані з часу створення, тож порівнюється об'єкт, а не байти).
+	assert_same(mat.get_shader_parameter("height_map"), h.texture(), "та сама карта висот")
+	var img: Image = h.image()
 	var s: int = h.samples
 	var pts: PackedVector2Array = h.course.lines[0]
 	var checked := 0

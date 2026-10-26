@@ -94,6 +94,10 @@ const _RING_WIDTH_VAR: float = 0.3
 const _RING_CLOSE: float = 0.8
 ## Ширина гладкого мінімуму, яким об'єднано поля осей дошки й світу (клітинки).
 const _COURSE_ROUND: float = 0.4
+## Майданчик будівлі: запас довкола сліду (клітинки, 1 м, але не менше кроку відліків — інакше
+## білінійна висота на краю сліду брала б відлік поза майданчиком) і спад до рельєфу довкола.
+const _PAD_MARGIN: float = 0.125
+const _PAD_BLEND: float = 0.5
 
 ## Поточна карта висот бою. Одна на процес: BoardView ставить її в build() і знімає, виходячи
 ## зі сцени; без неї (тести, меню) все лежить на y = 0.
@@ -132,6 +136,14 @@ var _wgrid: PackedByteArray = PackedByteArray()
 ## Ширина кільця, на яку зсунуті координати світу під час bake (0 — кільця нема).
 var _shift: int = 0
 var _texture: ImageTexture = null
+## Висоти без майданчиків будівель: PropLayer ставить майданчики заново щоразу, як будує пропси.
+var _h_base: PackedFloat32Array = PackedFloat32Array()
+## Сліди будівель (координати дошки) і висота кожного майданчика.
+var _pads: Array[Rect2] = []
+var _pad_levels: PackedFloat32Array = PackedFloat32Array()
+## Майданчики додано, а рельєф ще не перераховано: перерахунок — при першому читанні висоти, тож
+## будівлі, поставлені поспіль, коштують один перерахунок, а не по одному на кожну.
+var _pads_dirty: bool = false
 
 
 ## seed — з імені карти (BoardView.relief_seed); та сама карта дає той самий рельєф.
@@ -188,6 +200,8 @@ func bridge_groups() -> Array[Dictionary]:
 
 ## Висота землі під світовою точкою (білінійно по відліках, за межею — крайова).
 func at(x: float, z: float) -> float:
+	if _pads_dirty:
+		_apply_pads()
 	var s: float = float(samples)
 	var fx: float = clampf((x + 0.5 + margin) * s, 0.0, float(cols - 1))
 	var fz: float = clampf((z + 0.5 + margin) * s, 0.0, float(rows - 1))
@@ -560,12 +574,130 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 			_water[k] = clampf(1.0 - d / run, 0.0, 1.0) if has_water else 0.0
 			_min = minf(_min, v)
 			_max = maxf(_max, v)
-	# Кривизна: висота мінус її розмиття на ~1.2 клітинки, у масштабі 1.5 м.
+	_bake_curvature()
+	_bake_decks(board)
+	_h_base = _h.duplicate()
+
+
+## Кривизна: висота мінус її розмиття на ~1.2 клітинки, у масштабі 1.5 м.
+func _bake_curvature() -> void:
+	var fs: float = float(samples)
 	var soft: PackedFloat32Array = _blur(_h, 1.2 * fs, 1.2 * fs)
 	_curv.resize(cols * rows)
 	for k in _h.size():
 		_curv[k] = clampf((_h[k] - soft[k]) / _CURV_RANGE, -1.0, 1.0)
-	_bake_decks(board)
+
+
+## Знімає всі майданчики будівель: рельєф — як щойно запечений.
+func clear_pads() -> void:
+	_h = _h_base.duplicate()
+	_pads.clear()
+	_pad_levels.clear()
+	_pads_dirty = false
+
+
+## Додає слід будівлі (rect — координати дошки, XZ) і повертає номер майданчика; висоту підошви
+## дає pad_level(), бо вона може змінитися з наступними майданчиками.
+## Ґрунт під слідом із запасом рівняється до однієї висоти, а за запасом за `_PAD_BLEND` клітинки
+## повертається до рельєфу. Висота — середня під слідом, тож на схилі майданчик урізається вгору й
+## насипається вниз. Майданчики, чиї ядра (слід із запасом) стикаються, — одна тераса з однією
+## висотою (середня під усіма їхніми слідами): інакше будівля впритул до двох інших стояла б на
+## сходинці. Мокрі відліки (нижче рівня води) не змінюються: уріз лишається, де був.
+func add_pad(rect: Rect2) -> int:
+	_pads.append(rect)
+	_pads_dirty = true
+	return _pads.size() - 1
+
+
+func pad_level(id: int) -> float:
+	if _pads_dirty:
+		_apply_pads()
+	return _pad_levels[id]
+
+
+func _apply_pads() -> void:
+	_pads_dirty = false
+	var fs: float = float(samples)
+	var grow: float = maxf(_PAD_MARGIN, 1.0 / fs + 0.01)
+	var n: int = _pads.size()
+	# Тераси: зв'язні групи ядер, що перетинаються.
+	var group := PackedInt32Array()
+	group.resize(n)
+	for a in n:
+		group[a] = a
+	for a in n:
+		for b in range(a + 1, n):
+			if _pads[a].grow(grow).intersects(_pads[b].grow(grow)):
+				var ga: int = group[a]
+				var gb: int = group[b]
+				for c in n:
+					if group[c] == gb:
+						group[c] = ga
+	var sums: Dictionary = {}
+	for a in n:
+		var r: Rect2 = _pads[a]
+		var acc: Vector2 = sums.get(group[a], Vector2.ZERO)
+		for j in range(_sample_lo(r.position.y, fs, rows), _sample_hi(r.end.y, fs, rows) + 1):
+			for i in range(_sample_lo(r.position.x, fs, cols), _sample_hi(r.end.x, fs, cols) + 1):
+				if r.has_point(Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs)):
+					acc += Vector2(_h_base[j * cols + i], 1.0)
+		sums[group[a]] = acc
+	_pad_levels.resize(n)
+	for a in n:
+		var acc: Vector2 = sums[group[a]]
+		var c: Vector2 = _pads[a].get_center()
+		_pad_levels[a] = maxf(acc.x / acc.y if acc.y > 0.0 else _h_base_at(c.x, c.y), WATER_LEVEL + 0.3 * M)
+	_h = _h_base.duplicate()
+	# Ядра спершу: відлік ядра — точно висота тераси, і спад сусіднього майданчика його не зрушить.
+	var core := PackedByteArray()
+	core.resize(_h.size())
+	for pass_core in [true, false]:
+		for a in n:
+			var r: Rect2 = _pads[a].grow(grow)
+			var outer: Rect2 = r.grow(_PAD_BLEND)
+			for j in range(_sample_lo(outer.position.y, fs, rows), _sample_hi(outer.end.y, fs, rows) + 1):
+				for i in range(_sample_lo(outer.position.x, fs, cols), _sample_hi(outer.end.x, fs, cols) + 1):
+					var k: int = j * cols + i
+					if core[k] == 1 or _h_base[k] < WATER_LEVEL:
+						continue
+					var q: Vector2 = (Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs) - r.get_center()).abs() - r.size * 0.5
+					var dist: float = Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length()
+					if pass_core and dist == 0.0:
+						_h[k] = _pad_levels[a]
+						core[k] = 1
+					elif not pass_core and dist < _PAD_BLEND:
+						_h[k] = lerpf(_h[k], _pad_levels[a], 1.0 - smoothstep(0.0, _PAD_BLEND, dist))
+
+
+## Перший (lo) і останній (hi) відлік уздовж осі з n відліків, що покривають координату v.
+func _sample_lo(v: float, fs: float, n: int) -> int:
+	return clampi(floori((v + 0.5 + margin) * fs), 0, n - 1)
+
+
+func _sample_hi(v: float, fs: float, n: int) -> int:
+	return clampi(ceili((v + 0.5 + margin) * fs), 0, n - 1)
+
+
+func _h_base_at(x: float, z: float) -> float:
+	var keep: PackedFloat32Array = _h
+	_h = _h_base
+	var v: float = at(x, z)
+	_h = keep
+	return v
+
+
+## Після майданчиків: кривизна, межі висот і текстура (та сама, що вже в шейдерах землі й води).
+func finish_pads() -> void:
+	if _pads_dirty:
+		_apply_pads()
+	_bake_curvature()
+	_min = INF
+	_max = -INF
+	for v in _h:
+		_min = minf(_min, v)
+		_max = maxf(_max, v)
+	if _texture != null:
+		_texture.update(image())
 
 
 ## Річка на дошці — та сама, що й без кільця: вісь світу інша (скелет довшої маски, медіана
