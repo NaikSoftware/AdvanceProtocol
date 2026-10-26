@@ -16,8 +16,9 @@ const PX_PER_TILE: int = 64
 const STEP: float = 0.1
 ## Скільки півширин від осі ще може лежати знос (край зсунуто шумом до 0.35 півширини).
 const REACH: float = 1.4
-## Півширина стежки: 0.6 м у центрі = 0.075 клітинки, ±0.2 м шумом.
-const HALF: float = 0.0375
+## Півширина втоптаної середини: 0.64 м завширшки = 0.08 клітинки, ±0.2 м шумом. Довкола неї зону прим'ятої
+## трави шейдер бере з розмитого (mip) зносу.
+const HALF: float = 0.04
 
 
 static func _hash(x: int, y: int, seed_value: int) -> float:
@@ -210,7 +211,7 @@ static func _seg_dist(q: Vector2, a: Vector2, ab: Vector2) -> float:
 static func _wear(s: float, d: float, r: float, total: float, fade_in: float, fade_out: float, sd: int, solid: float) -> float:
 	var edge: float = 0.6 * _noise(s * 7.0, d * 11.0, sd) + 0.4 * _noise(s * 15.0, d * 23.0, sd + 5)
 	var rr: float = r + 0.7 * (edge - 0.5)
-	var prof: float = pow(clampf(1.0 - rr, 0.0, 1.0), 1.15)
+	var prof: float = clampf(1.3 * (1.0 - rr), 0.0, 1.0)
 	var bare: float = smoothstep(0.3, 0.55, _noise(s * 7.0, d * 10.0, sd + 11))
 	var along: float = 0.65 + 0.35 * _noise(s * 1.4, 3.5, sd + 17)
 	var v: float = prof * (solid + (1.0 - solid) * bare) * along

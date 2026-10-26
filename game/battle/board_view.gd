@@ -483,7 +483,7 @@ func _request_probe_capture() -> void:
 	probe_captures_requested += 1
 
 
-## Де суха земля, для маски стежок: сітка 8 відліків на клітинку, пораховано раз (а не `height.at` на
+## Де суха земля й не дорога, для маски стежок: сітка 8 відліків на клітинку, пораховано раз (а не `height.at` на
 ## кожен піксель). null — рельєфу нема, маска не обрізається.
 func _dry_grid() -> Callable:
 	if _height == null:
@@ -496,7 +496,9 @@ func _dry_grid() -> Callable:
 	for y in h:
 		for x in w:
 			grid[y * w + x] = 1 if _height.at((x + 0.5) / PER - 0.5, (y + 0.5) / PER - 0.5) >= TerrainHeight.WATER_LEVEL else 0
+	# Знос не лягає й на полотно дороги: широкі плями біля воріт дотягуються до неї.
+	var placer = _props._placer if _props != null else null
 	return func(q: Vector2) -> bool:
 		var x: int = clampi(floori((q.x + 0.5) * PER), 0, w - 1)
 		var y: int = clampi(floori((q.y + 0.5) * PER), 0, h - 1)
-		return grid[y * w + x] == 1
+		return grid[y * w + x] == 1 and (placer == null or not placer.on_road(q, 0.0))

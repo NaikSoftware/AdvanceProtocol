@@ -1312,9 +1312,14 @@ void fragment() {
 			// Стан ґрунту MUD мокрий і без дощу, як колії.
 			float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);
 			float lum = dot(alb, vec3(0.299, 0.587, 0.114));
+			// Зона прим'ятої, рідшої й світлішої трави довкола втоптаної середини: розмитий (mip) знос
+			// з рваним краєм; мокра — темніша, як і сама стежка.
+			float zone_src = textureLod(path_map, puv, 3.0).r * pin * (1.0 - road_cov);
+			float zone = smoothstep(0.04, 0.2, zone_src * (0.55 + 0.9 * vnoise(p * 9.0 + 3.0)));
+			alb = mix(alb, lum * mix(vec3(1.35, 1.22, 0.9), vec3(0.85, 0.78, 0.62), wet_p), zone * 0.55);
 			vec3 bare = mix(vec3(0.17, 0.115, 0.062), vec3(0.022, 0.015, 0.009), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
 			alb = mix(alb, bare, clamp(pm.r * 1.8, 0.0, 1.0));
-			alb = mix(alb, vec3(0.045, 0.026, 0.014) * mix(1.0, 0.6, wet_p) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.4);
+			alb = mix(alb, vec3(0.045, 0.026, 0.014) * mix(1.0, 0.6, wet_p) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.55);
 			rough = mix(rough, rough * 0.9, wet_p * clamp(pm.r * 1.8 + pm.g * 0.4, 0.0, 1.0));
 		}
 
