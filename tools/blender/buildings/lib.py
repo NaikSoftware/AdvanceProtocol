@@ -365,7 +365,10 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
     return m
 
 
-def make_window_material():
+FRAMES = [(0.42, 0.42, 0.40), (0.17, 0.095, 0.055), (0.07, 0.075, 0.08), (0.45, 0.40, 0.30), (0.24, 0.25, 0.26)]   # біла (~75 %), коричнева, графітова, кремова, сіра
+
+
+def make_window_material(frame_i=0):
     """Вікно одним квадом за локальними UV (шар "local"): зовнішній темний відкіс імітує
     заглиблення 10-15 см, далі рама, середник і скло. Тон з атрибута wtone: 0 небесно-сіре
     скло, 0.5 темне, 1 тепла штора."""
@@ -426,7 +429,7 @@ def make_window_material():
     t = tone.outputs[0]
     g1 = mixc(glass_sky, (0.02, 0.025, 0.03), math("MULTIPLY", t, 2.0, True))
     g2 = mixc(g1, (0.42, 0.36, 0.27), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))       # штора: тепла, світліша за скло
-    fcol = mixc(mixc((0.5, 0.5, 0.48), (0.17, 0.095, 0.055), tone.outputs[1]), (0.07, 0.075, 0.08), tone.outputs[2])   # рама: біла, коричнева або графітова
+    fcol = FRAMES[frame_i]                                                     # рама — одна на будинок, з палітри
     fr = mixc(g2, fcol, mask)
     rv = mixc(fr, (0.05, 0.045, 0.04), reveal)
     L(rv, bs.inputs["Base Color"])
@@ -578,12 +581,12 @@ def mats():
         "char": make_material("char", flat=(0.03, 0.028, 0.026)),
         "bitumen": make_material("bitumen", "Asphalt031", 1.0, g(0.38), patch=((0.04, 0.045, 0.04), 0.2)),
         # шифер: смуги листів ~1.1 м вздовж коника і хвиля кроком 15 см униз по скату
-        "fc_roof": roof_mat("fc_roof", "asb", (0.58, 0.57, 0.53), "x", "y", moss=False),
-        "fc_roof_x": roof_mat("fc_roof_x", "asb", (0.52, 0.52, 0.49), "y", "x", moss=False),
+        "fc_roof": roof_mat("fc_roof", "asb", (0.58, 0.57, 0.53), "x", "y", moss=False, sheet=(1.0, 4.0), cell_amp=0.04, streak=0.0),
+        "fc_roof_x": roof_mat("fc_roof_x", "asb", (0.52, 0.52, 0.49), "y", "x", moss=False, sheet=(1.0, 4.0), cell_amp=0.04, streak=0.0),
         "wall_silicate": make_material("wall_silicate", "Bricks105", 1.0, recolor=(1.55, 1.50, 1.36), contrast=1.4, streak=0.8, base_dirt=0.5, bump=0.012),
         "clad_wall": make_material("clad_wall", flat=srgb_lin((0.56, 0.36, 0.30)), seams=[("h", 1.0, 0.04, 0.4)], seam_col=srgb_lin((0.30, 0.18, 0.15)), corr=("h", 0.2, 0.01), streak=1.2, streak_col=(0.16, 0.07, 0.035), base_dirt=0.5, rough=0.6),
         # профнастил даху: ребра тільки від карниза до коника
-        "clad_roof": roof_mat("clad_roof", "corr", (0.62, 0.61, 0.57), "x", "y", moss=False),
+        "clad_roof": roof_mat("clad_roof", "corr", (0.62, 0.61, 0.57), "x", "y", moss=False, sheet=(1.0, 4.0), cell_amp=0.04, streak=0.0),
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
         "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
@@ -746,7 +749,7 @@ ROOFS = {"asb": ("asb", (0.60, 0.59, 0.55)), "asb_old": ("asb", (0.50, 0.50, 0.4
          "green": ("corr", (0.42, 0.54, 0.42)), "ochre": ("corr", (0.72, 0.60, 0.38))}
 
 
-def roof_mat(name, kind, srgb, rows_axis, other, eave=3.0, row=0.34, moss=True):
+def roof_mat(name, kind, srgb, rows_axis, other, eave=3.0, row=0.34, moss=True, sheet=(1.1, 1.6), cell_amp=0.14, streak=0.25):
     # streak низький: шум патьоків тягнеться лише по висоті, тож на пологому даху він лягав ізотропними хмарами
     """Матеріал даху за видом (asb | tile | corr) і кольором sRGB. rows_axis — вісь, уздовж якої йдуть ряди й нахлести
     (поперек схилу), other — вздовж якої йдуть хвилі й шви листів."""
@@ -757,14 +760,14 @@ def roof_mat(name, kind, srgb, rows_axis, other, eave=3.0, row=0.34, moss=True):
         eave = -50.0
         lichen = rl
     if kind == "asb":            # листи 1.1 x 1.75 м: нахлест — тінь, лишайник плямами 0.5-1.5 м, патьоки вниз по скату, мох густішає до карниза
-        return make_material(name, "Concrete034", 1.2, tint=tuple(c / 0.48 for c in rl), sat=0.25, seams=[(rows_axis, 1.6, 0.05, 0.5), (other, 1.1, 0.03, 0.3)], seam_col=dark,
-                             streak=0.25, seam_bump=0.0, bump=0.002, patch=[(lichen, 0.05)], patch_scale=1.6, moss=(mosscol, eave - 0.4, eave + 1.2),
-                             cells=(other, 1.1, rows_axis, 1.6, 0.14), waves=(other, 0.177, 0.012), rough=0.9, rvar=0.12)
+        return make_material(name, "Concrete034", 1.2, tint=tuple(c / 0.48 for c in rl), sat=0.25, seams=[(rows_axis, sheet[1], 0.05, 0.5), (other, sheet[0], 0.03, 0.3)], seam_col=dark,
+                             streak=streak, seam_bump=0.0, bump=0.002, patch=[(lichen, 0.05)], patch_scale=1.6, moss=(mosscol, eave - 0.4, eave + 1.2),
+                             cells=(other, sheet[0], rows_axis, sheet[1], cell_amp), waves=(other, 0.177, 0.012), rough=0.9, rvar=0.12)
     if kind == "tile":           # ряди черепиці: м'яка хвиля й тінь під кожним рядом; уступ-пилка давав світлі лінії-«плед»
-        return make_material(name, flat=rl, seams=[(rows_axis, row, 0.05, 0.35)], seam_col=dark, streak=0.25, seam_bump=0.0,
+        return make_material(name, flat=rl, seams=[(rows_axis, row, 0.05, 0.35)], seam_col=dark, streak=streak, seam_bump=0.0,
                              patch=[((0.16, 0.07, 0.035), 0.02)], patch_scale=0.4, moss=(mosscol, eave - 0.4, eave + 0.8),
                              waves=(rows_axis, row, 0.01), rough=0.5, rvar=0.12)
-    return make_material(name, flat=rl, seams=[(other, 1.1, 0.04, 0.45), (rows_axis, 2.0, 0.03, 0.3)], seam_col=dark, streak=0.25, seam_bump=0.0,
+    return make_material(name, flat=rl, seams=[(other, 1.1, 0.04, 0.45), (rows_axis, 2.0, 0.03, 0.3)], seam_col=dark, streak=streak, seam_bump=0.0,
                          patch=[((0.17, 0.075, 0.035), 0.05)], patch_scale=0.45, moss=(mosscol, eave - 0.4, eave + 0.8),
                          waves=(other, 0.2, 0.012), rough=0.55, rvar=0.15)
 
@@ -789,9 +792,12 @@ def apply_palette():
                                       undul=(1.5, 0.03), cracks=(1.0, 0.005, tuple(c * 0.4 for c in lin)), patch=[(tuple(c * 0.9 for c in lin), 0.35)], patch_scale=0.12, vmul=True)
             _dm(nm_)
     # обгоріла штукатурка всередині: темно-сіро-бура, світліший попіл патьоками донизу, зерно тиньку лишається
-    MATS["plaster_burnt"] = make_material("plaster_burnt", "Plaster001", 1.0, recolor=(0.075, 0.068, 0.062), contrast=2.5, streak=1.2, streak_col=(0.16, 0.15, 0.14),
+    MATS["plaster_burnt"] = make_material("plaster_burnt", "Plaster001", 1.0, recolor=(0.15, 0.14, 0.13), contrast=2.5, streak=1.2, streak_col=(0.05, 0.045, 0.04),
                                           bump=0.006, rough=0.95, rvar=0.1, cracks=(1.4, 0.006, (0.01, 0.01, 0.01)))
+    if wall is not None:                                                  # кутові камені в тон стіни, трохи світліші: білі давали пилку
+        MATS["quoin"] = make_material("quoin", "Plaster001", 1.0, recolor=tuple(min(c * 1.12, 0.9) / 0.66 for c in srgb_lin(wall)), contrast=2.5, streak=0.4, bump=0.006, rough=0.88)
     tl = srgb_lin(PAL.get("trim") or (0.86, 0.85, 0.80))                 # наличники, кути й відливи: фарбована штукатурка, світліша за стіну
+    MATS["window"] = make_window_material(PAL.get("frame", 0))
     MATS["trim"] = make_material("trim", "Plaster001", 1.0, recolor=tuple(c / 0.66 for c in tl), contrast=2.0, streak=0.4, bump=0.004, rough=0.82, rvar=0.1)
     if PAL.get("boards") is not None:                                     # фарбована обшивка: вигоріла фарба, волокно дошки лишається
         bl = srgb_lin(PAL["boards"])
@@ -1663,7 +1669,7 @@ def window_ring(b, axis, c, sgn, u, z, w, h, d=0.12, t=0.1, mat="trim"):
     _quad(b, [P(a - t, zt + t, 0), P(bb + t, zt + t, 0), P(bb + t, zt + t, d), P(a - t, zt + t, d)], mat, (0, 0, 1))
 
 
-def quoins(b, corners, z0, z1, mat="trim", p=0.025, row=0.3, gap=0.035):
+def quoins(b, corners, z0, z1, mat="quoin", p=0.025, row=0.28, gap=0.03):
     """Рустовані кути: блоки 0.3 м заввишки на p з площини стін, по черзі довгі й короткі на кожній стіні кута.
     corners: (x, y, sx, sy) — кут і в який бік від нього йдуть стіни по X і по Y."""
     for (x, y, sx, sy) in corners:

@@ -83,7 +83,7 @@ def post(b, x, y, z0, h):
 # ----------------------------------------------------------------------- H1
 def house1(hit=False):
     lib.reset()
-    lib.palette(wall=(0.80, 0.68, 0.47), roof="asb", eave=3.0, chim="ch_grey")
+    lib.palette(wall=(0.80, 0.68, 0.47), roof="asb", eave=3.0, chim="ch_grey", frame=3)
     RING[0] = "trim"
     b = Builder()
     L, Db, EAVE, RIDGE = 10.0, 6.4, 3.0, 6.5      # корпус 10 x 6.4, веранда ще 1.6 м (разом 8 м)
