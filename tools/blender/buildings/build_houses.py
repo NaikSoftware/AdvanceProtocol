@@ -71,7 +71,7 @@ def post(b, x, y, z0, h):
 def house1(hit=False):
     lib.reset()
     b = Builder()
-    L, Db, EAVE, RIDGE = 10.0, 6.4, 3.0, 5.8      # корпус 10 x 6.4, веранда ще 1.6 м (разом 8 м)
+    L, Db, EAVE, RIDGE = 10.0, 6.4, 3.0, 6.5      # корпус 10 x 6.4, веранда ще 1.6 м (разом 8 м)
     y0, y1 = -4.0, 2.4
     b.box(0, (y0 + y1) / 2, 0, L, Db, 0.5, "brick_grey")
     b.box(0, (y0 + y1) / 2, 0.5, L - 0.02, Db - 0.02, EAVE - 0.5, "wall_plaster")
@@ -186,7 +186,7 @@ def house1(hit=False):
             b.soot([(x0_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE), (x0_, y0 - 0.03, EAVE)][::-1], (0.2, 0.2, 0.6, 0.6), 1)
     if not hit:
         b.box(0, ym, RIDGE, xr1 - xr0 + 0.6, 0.3, 0.16, "gutter")
-    b.chimney(2.2, -0.2, 4.0, 0.75, 3.3, "brick_face")        # цегляний димар
+    b.chimney(2.2, -0.2, 4.4, 0.75, 3.3, "brick_face")        # цегляний димар
     bl = (-3.2, 0.0) if hit else ()
     win_front(b, y0, -1, (-3.2, 0.0, 3.2), 1.0, bl=bl)
     win_front(b, y1, 1, (-4.0, 4.0), 1.0)
@@ -280,22 +280,22 @@ def house3():
 def house4():
     lib.reset()
     b = Builder()
-    L, D, EAVE, RIDGE = 9.0, 6.0, 2.8, 5.5
+    L, D, EAVE, RIDGE = 9.0, 6.0, 3.0, 6.5
     y0, y1 = -D / 2, D / 2
     b.box(0, 0, 0, L, D, 0.4, "brick_grey")
     b.box(0, 0, 0.4, L - 0.02, D - 0.02, EAVE - 0.4, "boards")
     b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tin_green", "boards", ridge_axis="x", overhang=0.4)
     b.box(0, 0, RIDGE, L + 0.8, 0.28, 0.16, "gutter")
-    win_front(b, y1, 1, (-3.0, 3.0), 0.9, 1.0, 1.2)
-    win_front(b, y0, -1, (-2.5, 2.5), 0.9, 1.0, 1.2)
-    win_side(b, -L / 2, -1, (0.0,), 0.9, 1.0, 1.2)
-    win_side(b, L / 2, 1, (0.0,), 0.9, 1.0, 1.2)
+    win_front(b, y1, 1, (-3.0, 3.0), 1.0, 1.0, 1.4)
+    win_front(b, y0, -1, (-2.5, 2.5), 1.0, 1.0, 1.4)
+    win_side(b, -L / 2, -1, (0.0,), 1.0, 1.0, 1.4)
+    win_side(b, L / 2, 1, (0.0,), 1.0, 1.0, 1.4)
     b.box(0, y1 + 0.03, 0.4, 1.0, 0.06, 2.0, "dark")
     for px in (-1.1, 1.1):
         post(b, px, y1 + 1.4, 0.4, 2.2)
     b.poly_up([(-1.5, y1, 2.7), (1.5, y1, 2.7), (1.5, y1 + 1.6, 2.3), (-1.5, y1 + 1.6, 2.3)], "tin_green")
     b.box(0, y1 + 1.0, 0, 3.0, 1.4, 0.4, "step", top="step")
-    b.chimney(2.8, -0.8, 4.2, 0.7, 2.2, "brick_face")           # цегляний димар
+    b.chimney(2.8, -0.8, 4.8, 0.7, 2.7, "brick_face")           # цегляний димар
     lib.finish(b, "house_h4", out, tri_limit=1800, footprint=(2, 1))
 
 
