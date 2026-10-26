@@ -502,6 +502,7 @@ def mats():
         "panel_in": make_material("panel_in", flat=(0.30, 0.29, 0.27)),
         "panel_frag": make_material("panel_frag", "Concrete034", 1.2, (0.43, 0.41, 0.38), streak=0.4, base_dirt=0.5, bump=0.02),
         # напівруїни: ті самі світлі штукатурка, цегла й сірі дахи, що в цілих будинків; кіптява й руйнування зверху
+        "wall_half_w": make_material("wall_half_w", "Plaster001", 2.5, (0.56, 0.52, 0.45), streak=0.65, base_dirt=0.85, bump=0.004, patch=((0.22, 0.17, 0.13), 0.35), patch_scale=1.0, vmul=True),
         "wall_half": make_material("wall_half", "Plaster001", 2.5, (0.66, 0.62, 0.55), streak=0.35, base_dirt=0.5, bump=0.004, patch=((0.40, 0.21, 0.14), 0.22), patch_scale=1.0, vmul=True),
         "wall_half_d": make_material("wall_half_d", "Plaster001", 2.5, (0.46, 0.43, 0.38), streak=0.4, base_dirt=0.5, bump=0.004, patch=((0.30, 0.15, 0.10), 0.22), patch_scale=1.0, vmul=True),
         "boards_vc": make_material("boards_vc", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02, vmul=True),
@@ -543,8 +544,10 @@ def mats():
         "blown_dark": make_material("blown_dark", flat=(0.09, 0.09, 0.095)),
         "tin_red": make_material("tin_red", "CorrugatedSteel005", 1.0, (0.34, 0.25, 0.21), seams=[("x", 1.0, 0.05, 0.4)], corr=("x", 0.2, 0.03), streak=0.3, patch=((0.2, 0.12, 0.08), 0.3)),
         # обвуглена деревина: майже чорна, а попіл світлим сірим лише на кромках
+        "timber_hit": make_material("timber_hit", "Planks021", 1.0, (0.085, 0.072, 0.062), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02),
+        "wall_plaster_w": make_material("wall_plaster_w", "Plaster001", 1.0, (0.56, 0.52, 0.45), streak=0.6, base_dirt=0.8, bump=0.008, patch=((0.26, 0.24, 0.21), 0.4), patch_scale=0.9),
         "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.026, 0.021, 0.018), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02, ash=((0.22, 0.215, 0.205), 3.5, 0.03)),
-        "cavity": make_material("cavity", flat=(0.045, 0.045, 0.045)),
+        "cavity": make_material("cavity", flat=(0.16, 0.16, 0.16)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
         "wall_ruin": make_material("wall_ruin", "Bricks105", 0.55, recolor=(0.320, 0.278, 0.259), streak=0.35, base_dirt=0.5, bump=0.035, patch=((0.17, 0.16, 0.145), 0.3), patch_scale=1.1, vmul=True, seams=[("zv", 0.30, 0.035, 0.55)]),

@@ -153,13 +153,13 @@ def house1(hit=False):
                     continue
                 a_ = P(edge[i] + sgn_ * 0.02, vs[i])
                 c_ = P(edge[i] - sgn_ * rr.uniform(0.03, 0.08), vs[i])
-                b.beam((a_[0], a_[1], a_[2] - 0.05), (c_[0], c_[1], c_[2] - 0.1), 0.05, "timber_dark", 0.04)
+                b.beam((a_[0], a_[1], a_[2] - 0.05), (c_[0], c_[1], c_[2] - 0.1), 0.05, "timber_hit", 0.04)
         for v_ in (0.17, 0.33, 0.62, 0.8):                                        # 4 рейки впоперек скату з нерівними проміжками, одна обламана й звисає
             iL = min(range(nh + 1), key=lambda k: abs(vs[k] - v_))
             a_, c_ = P(uL[iL] - 0.02, v_), P(uR[iL] + 0.02, v_)
             if v_ == 0.62:
                 c_ = (c_[0] - (c_[0] - a_[0]) * 0.45, c_[1], c_[2] - 0.55)
-            b.beam((a_[0], a_[1], a_[2] - 0.06), (c_[0], c_[1], c_[2] - 0.06), 0.05, "timber_dark", 0.05)
+            b.beam((a_[0], a_[1], a_[2] - 0.06), (c_[0], c_[1], c_[2] - 0.06), 0.05, "timber_hit", 0.05)
         lib.bent_sheet(b, P(uL[3] + 0.01, vs[3]), (P(uL[3] + 0.06, vs[3])[0], P(uL[3], vs[3])[1] + 0.9, P(uL[3], vs[3])[2] - 0.9), 0.9, "sheet_char", 0.18, axis="x")
         lib.bent_sheet(b, P(uR[6] - 0.01, vs[6]), (P(uR[6] - 0.05, vs[6])[0], P(uR[6], vs[6])[1] + 0.8, P(uR[6], vs[6])[2] - 0.8), 0.9, "sheet_char", 0.15, axis="x")
         # +Y скат з надірваним гребенем
@@ -168,12 +168,12 @@ def house1(hit=False):
             u = 0.34 + 0.05 * k
             if u > 0.69:
                 break
-            b.beam(P(u, 0.06 + 0.1 * rr.random()), P(u + 0.01, 0.9 - 0.25 * rr.random()), 0.14, "timber_dark", 0.2)
-        b.beam(P(0.32, 0.55), P(0.68, 0.6), 0.14, "timber_dark", 0.2)
+            b.beam(P(u, 0.06 + 0.1 * rr.random()), P(u + 0.01, 0.9 - 0.25 * rr.random()), 0.14, "timber_hit", 0.2)
+        b.beam(P(0.32, 0.55), P(0.68, 0.6), 0.14, "timber_hit", 0.2)
         # порожнина: один неосвітлений майже чорний чотирикутник над верхами стін (ними плашка штукатурки світилась)
         b.poly([(-4.7, y0 + 0.1, EAVE + 0.12), (4.7, y0 + 0.1, EAVE + 0.12), (4.7, y1 - 0.1, EAVE + 0.12), (-4.7, y1 - 0.1, EAVE + 0.12)][::-1], "cavity")
         for k in range(9):                                                        # балки перекриття горища: тьмяно видно крізь розрив
-            b.box(-4.0 + 1.0 * k, (y0 + y1) / 2, EAVE + 0.12, 0.14, y1 - y0 - 0.4, 0.16, "timber_dark")
+            b.box(-4.0 + 1.0 * k, (y0 + y1) / 2, EAVE + 0.12, 0.14, y1 - y0 - 0.4, 0.16, "timber_hit")
         for (sx_, sw_, sh_) in ((-1.4, 0.9, 0.35), (-0.3, 0.7, 0.6), (0.8, 1.0, 0.25)):    # східчастий зламаний верх стіни
             b.box(xa + (xb - xa) * 0.51 + sx_, y0 + 0.2, EAVE, sw_, 0.4, sh_, "plaster_char", top="brick_dark")
         # стіна під розривом карниза: темна зверху, світлішає донизу (кіптява над місцем виходу диму)
@@ -316,7 +316,9 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
     for ci, c in enumerate(cs):
         for di, d in enumerate(dirs[ci]):
             low_ = ci == open_c and not tall_open
-            ln = A if not low_ else 0.45
+            if low_:                                                              # чистий низький пенечок поза купою читався сторонньою цеглою: кут лишається відкритим
+                continue
+            ln = A
             hc = (rnd.uniform(1.2, 1.8) if tall_open and ci == open_c else rnd.uniform(1.8, 3.0)) if not low_ else 0.5
             p1 = (c[0] + d[0] * ln, c[1] + d[1] * ln)
             hs = [hc, hc * 0.8, hc * 0.55] if not low_ else [0.5, 0.4]
@@ -354,12 +356,10 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
 
     lib.rubble_lumps(b, plan[:1], rnd, 70, tmin=0.03, tmax=0.97, size=(0.18, 0.45), outer=4)   # грудки 20-45 см дають силует і тінь
     lib.rubble_lumps(b, plan[1:], rnd, 12, tmin=0.1, tmax=0.95, size=(0.2, 0.4), outer=5)
-    if chimney:                                                                   # димар: нижня частина стоїть, верхня звалилась і лежить на купі
+    if chimney:                                                                   # димар: розвалився на кілька грудок із відбитими краями, втоплених у купу
         cx, cy = chimney
-        zb = surf(cx, cy) - 0.3
-        b.box_e(cx, cy, (zb + 0.9) / 2, 0.85, 0.85, 0.9 - zb, "brick_face", euler=(0, 0, 0.15), top="brick_face")
-        b.box_e(cx - 0.05, cy, 0.9, 0.7, 0.7, 0.18, "brick_face", euler=(0.25, 0.2, 0.9), top="brick_face")
-        b.box_e(cx + 1.0, cy - 0.35, surf(cx + 1.0, cy - 0.35) + 0.32, 0.72, 0.72, 1.7, "brick_face", euler=(0.1, 1.42, 0.55), top="brick_face")
+        for dx, dy, sz in ((0.0, 0.0, 0.62), (0.55, 0.3, 0.55), (-0.35, -0.45, 0.6)):
+            b.chunk(cx + dx, cy + dy, surf(cx + dx, cy + dy) + sz * 0.5 - 0.12, sz, "chunk_brick", rnd, tone=(0.9, 1.1))
     for k in range(4):                                                            # підняті шматки: поле кидає тінь
         a = rnd.uniform(0, 2 * math.pi)
         t = rnd.uniform(0.2, 0.7)
