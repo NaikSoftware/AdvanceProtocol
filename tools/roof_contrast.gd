@@ -11,12 +11,13 @@ const SETTLE_FRAMES: int = 60
 const ZOOM: float = 8.0
 const HALF: int = 3
 ## Точки моделей у метрах збирача Blender (x, y, z): дах посеред скату з боку -Y і стіна під ним між вікнами;
-## бік +Y — дзеркально по y зі своїм x стіни. Дах — вздовж осі X, скати до ±Y.
+## бік +Y — дзеркально по y зі своїм x стіни. Дах — вздовж осі X, скати до ±Y. c — центр габариту в метрах
+## збирача: finish ставить у початок GLB саме його, тож несиметричний ґанок чи димар зсуває модель.
 const POINTS: Dictionary = {
 	&"house_h5": {"roof": Vector3(0.0, -1.4, 4.75), "wall_s": Vector3(0.85, -2.62, 1.6), "wall_n": Vector3(0.3, 2.62, 1.6)},
 	&"house_h6": {"roof": Vector3(0.0, -1.6, 7.75), "wall_s": Vector3(-0.9, -3.02, 3.1), "wall_n": Vector3(0.0, 3.02, 3.1)},
-	&"house_h7": {"roof": Vector3(0.0, -1.62, 4.1), "wall_s": Vector3(-1.1, -2.82, 1.6), "wall_n": Vector3(0.0, 2.82, 1.6)},
-	&"house_h8": {"roof": Vector3(0.0, -1.37, 4.15), "wall_s": Vector3(-2.7, -2.42, 1.6), "wall_n": Vector3(0.0, 2.42, 1.6)},
+	&"house_h7": {"roof": Vector3(0.0, -1.62, 4.1), "wall_s": Vector3(-1.1, -2.82, 1.6), "wall_n": Vector3(0.0, 2.82, 1.6), "c": Vector3(0.0, -0.225, 0.0)},
+	&"house_h8": {"roof": Vector3(0.0, -1.37, 4.15), "wall_s": Vector3(-0.8, -2.42, 1.4), "wall_n": Vector3(0.0, 2.42, 1.6), "c": Vector3(0.335, -0.475, 0.0)},
 }
 
 
@@ -48,17 +49,18 @@ func _ready() -> void:
 				var img: Image = get_viewport().get_texture().get_image()
 				var cam: Camera3D = get_viewport().get_camera_3d()
 				var p: Dictionary = POINTS[model]
+				var c0: Vector3 = p.get("c", Vector3.ZERO)
 				# скат до камери: той, чия зовнішня нормаль дивиться на камеру
 				var best: Array = []
 				for side in [-1.0, 1.0]:
 					var r0: Vector3 = p["roof"]
 					var r := Vector3(r0.x, absf(r0.y) * side, r0.z)
 					var w: Vector3 = p["wall_s"] if side < 0 else p["wall_n"]
-					var rp: Vector3 = xf * _local(r)
+					var rp: Vector3 = xf * _local(r - c0)
 					var nrm: Vector3 = (xf.basis * Vector3(0, 1, -side)).normalized()          # бік -Y збирача — +Z у Godot
 					var facing: float = nrm.dot((cam.global_position - rp).normalized())
 					if best.is_empty() or facing > best[0]:
-						best = [facing, rp, xf * _local(w)]
+						best = [facing, rp, xf * _local(w - c0)]
 				# unproject_position дає точки в базовій роздільності вікна (розтяг), кадр — у справжній
 				var sc := Vector2(img.get_width(), img.get_height()) / get_viewport().get_visible_rect().size
 				var rs: Vector2 = cam.unproject_position(best[1]) * sc

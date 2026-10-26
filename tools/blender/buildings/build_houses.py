@@ -484,7 +484,7 @@ def house8():
     профлист червоно-брунатний, віконниці, ґанок із дашком до камери, цегляний димар біля фронтону."""
     lib.reset()
     b = Builder()
-    lib.palette(roof="oxide_dark", eave=2.9, chim="ch_orange", boards=(0.55, 0.60, 0.62), trim=(0.40, 0.33, 0.26))
+    lib.palette(roof="oxide_deep", eave=2.9, chim="ch_orange", boards=(0.66, 0.70, 0.72), trim=(0.40, 0.33, 0.26))
     RING[:] = ["trim", 0.08, True]
     b.win_kind = 0
     L, D, EAVE, RIDGE = 5.8, 4.8, 2.9, 5.4                                     # з ґанком і димарем 7.2 x 6.5 м: влазить у клітинку
