@@ -2216,13 +2216,13 @@ class _Placer:
 			tgt = porch.lerp(sum / float(home["cells"].size()), 0.6)
 		for a: Vector2 in [inside, porch + (porch - door).normalized() * 0.06, tgt]:
 			walks.append({"kind": &"yard_floor", "home": i, "door": a, "pts": PackedVector2Array([a, a + Vector2(0.03, 0.0)]),
-					"seed": sd + 3, "solid": 0.7, "half": PackedFloat32Array([0.17, 0.17])})
+					"seed": sd + 3, "solid": 0.85, "flat": 3.0, "half": PackedFloat32Array([0.26, 0.26])})
 		for pair: Array in [[inside, tgt], [porch, tgt]]:
 			var pts: PackedVector2Array = Footpaths.resample(Footpaths.smooth(Footpaths.meander(pair[0], pair[1], 0.04, 0.8, sd + 5), 4))
 			var hw := PackedFloat32Array()
 			hw.resize(pts.size())
-			hw.fill(0.07)
-			walks.append({"kind": &"yard_floor", "home": i, "door": pair[0], "pts": pts, "seed": sd + 7, "solid": 0.75, "half": hw})
+			hw.fill(0.1)
+			walks.append({"kind": &"yard_floor", "home": i, "door": pair[0], "pts": pts, "seed": sd + 7, "solid": 0.9, "flat": 3.0, "half": hw})
 
 	func _on_board(q: Vector2) -> bool:
 		return q.x >= -0.3 and q.y >= -0.3 and q.x <= size.x - 0.7 and q.y <= size.y - 0.7

@@ -1315,7 +1315,7 @@ void fragment() {
 			float core_t = smoothstep(0.5, 0.78, pm.r);
 			float band_t = smoothstep(0.08, 0.3, pm.r);
 			alb = mix(alb, lum * mix(vec3(1.22, 1.16, 0.95), vec3(1.3, 1.1, 0.8), wet_p), band_t * 0.8);
-			vec3 bare = mix(vec3(0.165, 0.138, 0.102), vec3(0.15, 0.098, 0.058), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
+			vec3 bare = mix(vec3(0.29, 0.235, 0.16), vec3(0.15, 0.098, 0.058), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
 			alb = mix(alb, bare, core_t);
 			alb = mix(alb, vec3(0.045, 0.026, 0.014) * mix(1.0, 0.6, wet_p) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.65);
 			rough = mix(rough, rough * 0.9, wet_p * clamp(pm.r * 1.8 + pm.g * 0.4, 0.0, 1.0));
