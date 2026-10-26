@@ -10,11 +10,17 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, wall_run, burn_ring, opening2, chip_slab, prism, bent_sheet, HeapSurface, heap_mound
+from lib import Builder, wall_run, burn_ring, opening2, chip_slab, prism, bent_sheet, heap_mound
+from lib import HeapSurface as _HS
 from mathutils import Vector
 
 out = lib.out_dir()
 only = sys.argv[sys.argv.index("--") + 2:] if "--" in sys.argv else []
+
+
+def HeapSurface(*a, **k):
+    k.setdefault("noise", 1.0)                                                  # нерівна поверхня й рваний контур для всіх відсипів
+    return _HS(*a, **k)
 
 
 def want(n):
@@ -22,23 +28,8 @@ def want(n):
 
 
 def heaps(b, plan, seed, dens=7.0):
-    """Купи: низький меш у b, високе скан-джерело для запікання (темна основа, уламки цегли й штукатурки 20-50 см зверху)."""
-    bh = Builder()
-    hr = random.Random(seed)
-    for k, h in enumerate(plan):
-        big = h.rx * h.ry > 8
-        heap_mound(b, h, "heap_buff", rings=7 if big else 3, segs=32 if big else 16, skirt=0.5, skirt_mat="mud_skirt")
-        heap_mound(bh, h, "heap_base_buff", rings=16 if big else 6, segs=96 if big else 40, jitter=0.04, seed=seed + k, skirt=0.5)
-        for _ in range(int(math.pi * h.rx * h.ry * dens)):
-            a = hr.uniform(0, 2 * math.pi)
-            t = math.sqrt(hr.uniform(0, 1.0)) * 1.12
-            r = t * h.radius(a)
-            px, py = h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a)
-            z = h.z(px, py) if t < 1.0 else h.lip * max(0.0, 1.0 - (t - 1.0) / 0.12) * 0.8
-            q = hr.random()
-            size = hr.uniform(0.2, 0.42) if q < 0.7 else (hr.uniform(0.42, 0.6) if q < 0.95 else hr.uniform(0.6, 0.85))
-            bh.rock(px, py, z + 0.04, size, "rubble_buff", hr, buried=0.3)
-    return bh
+    """Купи: низький меш, високе скан-джерело для запікання (фотоскан сміття + уламки 20-60 см різного матеріалу й тону)."""
+    return lib.rubble_heaps(b, plan, seed, dens=dens, skirt=0.5)
 
 
 def surface(plan):
@@ -46,18 +37,7 @@ def surface(plan):
 
 
 def lumps(b, plan, rnd, n_each=8):
-    """Край купи розбитий на грудки цегли й штукатурки 0.3-0.5 м: низькі грані, що стирчать зі схилу й кидають тінь."""
-    for h in plan:
-        for _ in range(n_each):
-            a = rnd.uniform(0, 2 * math.pi)
-            t = rnd.uniform(0.55, 1.0)
-            r = t * h.radius(a)
-            px, py = h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a)
-            z = h.z(px, py)
-            sz = rnd.uniform(0.3, 0.5)
-            b.box_e(px, py, z + sz * 0.22, sz * rnd.uniform(0.8, 1.4), sz * rnd.uniform(0.6, 1.0), sz * rnd.uniform(0.4, 0.7),
-                    rnd.choice(("brick_face", "wall_plaster", "brick_face", "brick_dark")),
-                    euler=(rnd.uniform(-0.4, 0.4), rnd.uniform(-0.4, 0.4), rnd.uniform(0, 3.14)))
+    lib.rubble_lumps(b, plan, rnd, n_each, tmin=0.1, tmax=1.0, size=(0.18, 0.45))
 
 
 def plane_soot(b, pts, tones, nrm):
@@ -85,18 +65,18 @@ def roof_part(b, P, x_end, cut, mat, rnd, nv=18, battens=True):
     return xs
 
 
-def break_dress(b, P, xs, sgn, rnd, nv=18):
+def break_dress(b, P, xs, sgn, rnd, nv=18, battens=True):
     """Кіптява вздовж краю (вузька) і рейки 5x4 см, що стирчать за край на 0.2-0.5 м."""
     for i in range(nv):
         v0, v1 = i / nv, (i + 1) / nv
         pts = [P(xs[i], v0), P(xs[i], v1), P(xs[i] + 0.2 * sgn, v1), P(xs[i] + 0.2 * sgn, v0)]
         pts = [(x, y, z + 0.03) for (x, y, z) in pts]
         n_ = (Vector(pts[1]) - Vector(pts[0])).cross(Vector(pts[2]) - Vector(pts[1]))
-        tones = (0.09, 0.09, 0.3, 0.3)
+        tones = (0.15, 0.15, 0.38, 0.38)
         if n_.z < 0:
             pts, tones = pts[::-1], tones[::-1]
         b.soot(pts, tones, 1)
-    for i in range(1, nv, 2):
+    for i in range(1, nv, 2) if battens else ():
         v = (i + 0.5) / nv
         a = P(xs[i] + 0.1 * sgn, v)
         c = P(xs[i] - sgn * rnd.uniform(0.2, 0.5), v)
@@ -113,6 +93,9 @@ def trim(b, xa, xb, ya, yb, E, hx, S, N, front=True, back=True):
     b.box(hx + 0.12, ya + 0.04, E - 0.3, 0.08, 0.13, 0.12, "gutter_d")
 
 
+_RAIN = random.Random(7)
+
+
 def pane_dress(b, axis, c, sgn, u, z, w, h, rain=True):
     """Вікно, посаджене в рамку: підвіконня 11 см, лиштва 7 см навколо скла (її тінь читається як врізання) і потік від підвіконня."""
     if axis == "y":
@@ -125,16 +108,17 @@ def pane_dress(b, axis, c, sgn, u, z, w, h, rain=True):
         b.box(c + sgn * 0.035, u, z + h, 0.07, w + 0.16, 0.07, "step")
         for sx in (-1, 1):
             b.box(c + sgn * 0.035, u + sx * (w / 2 + 0.04), z, 0.07, 0.08, h, "step")
-    if rain and z - 0.3 > 0.55:
-        z1 = max(0.6, z - 1.0)
-        for sx in (-0.28, 0.28):
-            uu = u + sx * w
-            if axis == "y":
-                pts = [(uu - 0.07, c + sgn * 0.012, z1), (uu + 0.07, c + sgn * 0.012, z1), (uu + 0.07, c + sgn * 0.012, z - 0.1), (uu - 0.07, c + sgn * 0.012, z - 0.1)]
-                plane_soot(b, pts, (0.6, 0.6, 0.38, 0.38), (0, sgn, 0))
-            else:
-                pts = [(c + sgn * 0.012, uu - 0.07, z1), (c + sgn * 0.012, uu + 0.07, z1), (c + sgn * 0.012, uu + 0.07, z - 0.1), (c + sgn * 0.012, uu - 0.07, z - 0.1)]
-                plane_soot(b, pts, (0.6, 0.6, 0.38, 0.38), (sgn, 0, 0))
+    if rain and z - 0.3 > 0.55 and _RAIN.random() < 0.5:
+        ln_ = _RAIN.uniform(0.4, 1.2)
+        z1 = max(0.6, z - 0.1 - ln_)
+        uu = u + _RAIN.uniform(-0.3, 0.3) * w
+        hw = _RAIN.uniform(0.06, 0.11)
+        if axis == "y":
+            pts = [(uu - hw, c + sgn * 0.012, z1), (uu + hw, c + sgn * 0.012, z1), (uu + hw, c + sgn * 0.012, z - 0.1), (uu - hw, c + sgn * 0.012, z - 0.1)]
+            plane_soot(b, pts, (0.7, 0.7, 0.55, 0.55), (0, sgn, 0))
+        else:
+            pts = [(c + sgn * 0.012, uu - hw, z1), (c + sgn * 0.012, uu + hw, z1), (c + sgn * 0.012, uu + hw, z - 0.1), (c + sgn * 0.012, uu - hw, z - 0.1)]
+            plane_soot(b, pts, (0.7, 0.7, 0.55, 0.55), (sgn, 0, 0))
 
 
 def grime(b, axis, c, sgn, u0, u1, z0, h=0.55):
@@ -188,7 +172,7 @@ def house1(ruined):
         b.box(0.1, S - 0.19 + 0.05, 2.0, 1.2, 0.07, 0.1, "step")
         for sx in (-0.55, 0.55):
             b.box(0.1 + sx, S - 0.19 + 0.05, 0.0, 0.1, 0.07, 2.1, "step")
-        b.box(0.1, S - 0.5, 0.0, 1.8, 0.7, 0.2, "step")
+        b.box(0.1, S - 0.5, 0.0, 1.8, 0.7, 0.2, "plinth_flat")
         for y in (-1.0, 1.0):
             for sx, sgn in ((hx + 0.19, 1), (-hx - 0.19, -1)):
                 b.window(("x", sx, sgn), y, 0.9, 1.1, 1.2)
@@ -257,7 +241,7 @@ def house1(ruined):
     bent_sheet(b, (-1.6, -1.2, sf(-1.6, -1.2) + 0.2), (-1.4, 0.5, sf(-1.4, 0.5) + 0.2), 0.9, "sheet_char", 0.18, axis="x")
     bent_sheet(b, (-1.5, -3.0, sf(-1.5, -3.0) + 0.1), (-2.9, -2.9, sf(-2.9, -2.9) + 0.1), 0.9, "sheet_char", 0.12, axis="y")
     b.box(1.6, -0.2, 3.5, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
-    lumps(b, plan, rnd, 6)
+    lumps(b, plan, rnd, 14)
     bh = heaps(b, plan, 7)
     lib.finish(b, "ruin_half_house1", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
 
@@ -298,7 +282,7 @@ def house2(ruined):
         b.box(2.2, S - 0.19 + 0.05, 2.0, 1.2, 0.07, 0.1, "step")
         for sx in (-0.55, 0.55):
             b.box(2.2 + sx, S - 0.19 + 0.05, 0.0, 0.1, 0.07, 2.1, "step")
-        b.box(2.2, S - 0.5, 0.0, 1.8, 0.7, 0.2, "step")
+        b.box(2.2, S - 0.5, 0.0, 1.8, 0.7, 0.2, "plinth_flat")
         grime(b, "y", S - 0.19, -1, -hx, hx, 0.6)
         grime(b, "x", hx + 0.19, 1, S, N, 0.6)
         b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
@@ -352,11 +336,11 @@ def house2(ruined):
         return xs
     xsF = roof_west(PF, cutF)
     xsB = roof_west(PB, cutB)
-    break_dress(b, PF, xsF, -1, rnd)
-    break_dress(b, PB, xsB, -1, rnd)
+    break_dress(b, PF, xsF, -1, rnd, battens=False)
+    break_dress(b, PB, xsB, -1, rnd, battens=False)
     trim(b, xw, 1.0, ya, yb, E, hx, S, N)
     for x in (1.5, 2.2, 2.8):
-        for plate, P, cut in ((S + 0.05, PF, cutF), (N - 0.05, PB, cutB)):
+        for plate, P, cut in ((S + 0.05, PF, cutF),):
             v1 = rnd.uniform(0.25, 0.55)
             if rnd.random() < 0.2 or not tooth_ok(x, cut, v1, -1):
                 continue
@@ -364,13 +348,13 @@ def house2(ruined):
             b.beam((x, plate, E + 0.05), (c[0], c[1], c[2] - 0.12), 0.14, "timber_dark", 0.22)
     plan = [HeapSurface(3.4, 0.0, 0.85, 2.1, 1.3, 81, bumps=6, lip=0.28, wob=0.15, lump=0.08, hummocks=3, hum_amp=0.3, pw=1.5),
             HeapSurface(1.5, 0.3, 1.3, 1.9, 0.8, 82, bumps=5, lip=0.26, wob=0.1, lump=0.05, hummocks=2, hum_amp=0.2)]
-    plan[0].fit_peak(1.45)
+    plan[0].fit_peak(1.0)
     sf = surface(plan)
     chip_slab(b, 1.7, 0.0, FL - 0.1, 3.4, 5.2, 0.24, (0.0, 0.42, 0.02), "floor_char", "floor_char", 41, rebar=3)
     bent_sheet(b, (1.6, -2.7, 5.4), (1.8, -1.2, FL + 0.3), 0.9, "sheet_char", 0.2, axis="x")
     bent_sheet(b, (3.2, 1.6, sf(3.2, 1.6) + 0.2), (3.9, 2.4, sf(3.9, 2.4) + 0.12), 0.9, "sheet_char", 0.12, axis="y")
     b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
-    lumps(b, plan, rnd, 6)
+    lumps(b, plan, rnd, 14)
     bh = heaps(b, plan, 9)
     lib.finish(b, "ruin_half_house2", out, tri_limit=4800, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
 
@@ -389,7 +373,7 @@ def shed(ruined):
         b.poly_up([(xs[i], yb, E), (xs[i + 1], yb, E), (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_xh")
     b.box(0, yb - 0.04, E - 0.14, 2 * hx + 0.8, 0.13, 0.1, "gutter_d")
     if not ruined:
-        b.box(0, 0, 0, 2 * hx + 0.3, 2 * hy + 0.3, 0.5, "plinth_flat")
+        b.box(0, 0, 0, 2 * hx + 0.3, 2 * hy + 0.3, 0.5, "plinth_dark")
         b.box(0, 0, 0.5, 2 * hx + 0.28, 2 * hy + 0.28, E - 0.5, "boards_soft")
         for sx in (hx, -hx):
             prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.3, (sx, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
@@ -416,7 +400,10 @@ def shed(ruined):
     for x, h in zip(post_x, post_h):
         b.box(x, S, 0.0, 0.18, 0.18, h, "timber_dark")
     for (x, y, rot, ln, z, ang) in ((-1.9, -3.1, 0.1, 2.8, 0.2, 0.22), (0.4, -2.9, -0.15, 2.4, 0.3, 0.3), (-0.5, -3.7, 0.4, 1.8, 0.1, 0.1)):
-        b.box_e(x, y, z + 0.2, ln, 1.9, 0.08, "fc_roof_xh", euler=(ang, 0.0, rot), top="fc_roof_xh")
+        for k in (-1, 0, 1):                                                  # лист ламаний на три смуги з різним нахилом: блиск не заливає весь лист
+            b.box_e(x - math.sin(rot) * 0.64 * k, y + math.cos(rot) * 0.64 * k, z + 0.2 + 0.03 * k, ln, 0.62, 0.08, "fc_roof_xh", euler=(ang + 0.08 * k, 0.0, rot), top="fc_roof_xh")
+    b.cyl(-2.95, -2.35, 0.0, 0.3, 0.9, 12, "steel_paint")                       # бочка й ящик на землі біля впалої стіни
+    b.box(-2.35, -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3)
     zt = E - 0.03
     opening2(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, ztop=zt)
     burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.3, g_bot=0.0, g_top=0.5, t_in=0.22, t_out=0.62, ztop=zt)
@@ -441,9 +428,8 @@ def shed(ruined):
     for x in (-1.8, -1.5, -1.2):
         j = min(range(len(xs)), key=lambda k: abs(xs[k] - x))
         b.beam(pts[j], (xs[j], ym, R - 0.05), 0.1, "timber_dark", 0.16)
-    plan = [HeapSurface(-1.2, -3.0, 1.7, 0.65, 0.65, 91, bumps=6, lip=0.24, wob=0.1, lump=0.05, hummocks=1, hum_amp=0.15),
-            HeapSurface(-0.8, 0.1, 1.3, 0.9, 0.5, 92, bumps=5, lip=0.22, wob=0.08, lump=0.04, hummocks=1, hum_amp=0.12)]
-    lumps(b, plan, rnd, 5)
+    plan = [HeapSurface(-0.8, 0.1, 1.3, 0.9, 0.5, 92, bumps=5, lip=0.22, wob=0.08, lump=0.04, hummocks=1, hum_amp=0.12)]
+    lumps(b, plan, rnd, 8)
     bh = heaps(b, plan, 11, dens=6.0)
     lib.finish(b, "ruin_half_shed", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
 

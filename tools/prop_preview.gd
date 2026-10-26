@@ -133,7 +133,8 @@ func _ready() -> void:
 					var wm: StandardMaterial3D = mi.get_active_material(si) as StandardMaterial3D
 					if wm != null:
 						var wet: StandardMaterial3D = wm.duplicate() as StandardMaterial3D
-						wet.roughness = 0.32
+						wet.roughness = 0.4
+						wet.metallic_specular = 0.3
 						mi.set_surface_override_material(si, wet)
 		if tank:
 			var box := MeshInstance3D.new()

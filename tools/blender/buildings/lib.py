@@ -23,8 +23,11 @@ TILE = 8.0
 # --------------------------------------------------------------------------- матеріали
 
 def _img(name):
-    path = os.path.join(TEX_DIR, name, f"{name}_1K-JPG_Color.jpg")
-    return bpy.data.images.load(path, check_existing=True)
+    for rel in (f"{name}_1K-JPG_Color.jpg", f"{name}_2K-JPG_Color.jpg", "diff.jpg"):
+        path = os.path.join(TEX_DIR, name, rel)
+        if os.path.exists(path):
+            return bpy.data.images.load(path, check_existing=True)
+    raise FileNotFoundError(name)
 
 
 def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=(), streak=0.0,
@@ -497,7 +500,16 @@ def mats():
         # дошки 18 см: м'які зміни тону без крупи (плоский колір, вертикальні шви, низькочастотні розводи)
         "boards_soft": make_material("boards_soft", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, seam_bump=0.0),
         "tile_small": make_material("tile_small", flat=(0.17, 0.18, 0.20), seams=[("y", 0.26, 0.04, 0.75), ("x", 0.30, 0.03, 0.4)], streak=0.15, seam_bump=0.0),
+        # завал: фотоскан (ambientCG Ground111 — цегляне сміття в землі; Poly Haven broken_brick_wall — цегла), тон уламка — із вершинного кольору
+        "heap_photo": make_material("heap_photo", "Ground111", 1.0, (1.0, 0.93, 0.86), bump=0.05, streak=0.3),
+        "heap_photo_mud": make_material("heap_photo_mud", "Ground111", 1.0, (0.62, 0.56, 0.52), bump=0.04, streak=0.4),
+        "chunk_brick": make_material("chunk_brick", "broken_brick_wall", 0.7, (1.15, 1.05, 1.0), bump=0.03, vmul=True),
+        "chunk_plaster": make_material("chunk_plaster", "Plaster001", 1.0, (1.1, 1.05, 0.96), bump=0.02, vmul=True, streak=0.3),
+        "chunk_concrete": make_material("chunk_concrete", "Concrete034", 1.0, (0.85, 0.84, 0.8), bump=0.03, vmul=True),
+        "chunk_char": make_material("chunk_char", flat=(0.07, 0.062, 0.055), vmul=True),
         "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
+        "plaster_char": make_material("plaster_char", flat=(0.17, 0.155, 0.14), streak=0.5, base_dirt=0.2),
+        "plinth_dark": make_material("plinth_dark", flat=(0.20, 0.195, 0.185), base_dirt=0.5, streak=0.4),
         "plinth_flat": make_material("plinth_flat", flat=(0.33, 0.32, 0.30), base_dirt=0.5, streak=0.4),
         "door_panel": make_material("door_panel", flat=(0.30, 0.22, 0.15), seams=[("h", 0.22, 0.015, 0.5)], streak=0.3, seam_bump=0.0),
         "mud_skirt": make_material("mud_skirt", flat=(0.10, 0.082, 0.065), streak=0.6, base_dirt=0.2),
@@ -515,7 +527,7 @@ def mats():
         "fc_roof_burnt": make_material("fc_roof_burnt", "Concrete034", 1.2, (0.07, 0.07, 0.07), seams=[("x", 1.1, 0.05, 0.3), ("x", 0.4, 0.09, 0.14)], corr=("x", 0.4, 0.005), streak=1.0),
         # дахи малих будинків: плоский колір (без крупи текстури), шви листів кожні 0.5 м, черепиця 0.30 x 0.30 м
         "fc_roof_xh": make_material("fc_roof_xh", flat=(0.15, 0.155, 0.16), seams=[("x", 0.5, 0.03, 0.4)], streak=0.15, seam_bump=0.0),
-        "fc_roof_h": make_material("fc_roof_h", flat=(0.32, 0.325, 0.31), seams=[("y", 0.5, 0.03, 0.3)], streak=0.15, seam_bump=0.0),
+        "fc_roof_h": make_material("fc_roof_h", flat=(0.15, 0.155, 0.16), seams=[("y", 0.5, 0.03, 0.3)], streak=0.15, seam_bump=0.0),
         "blown_dark": make_material("blown_dark", flat=(0.09, 0.09, 0.095)),
         "tin_red": make_material("tin_red", "CorrugatedSteel005", 1.0, (0.34, 0.25, 0.21), seams=[("x", 1.0, 0.05, 0.4)], corr=("x", 0.2, 0.03), streak=0.3, patch=((0.2, 0.12, 0.08), 0.3)),
         # обвуглена деревина: майже чорна, а попіл світлим сірим лише на кромках
@@ -668,7 +680,7 @@ class Builder:
         n = (v[1] - v[0]).cross(v[2] - v[1])
         return self.poly(pts if n.z >= 0 else pts[::-1], mat)
 
-    def rock(self, cx, cy, cz, size, mat, rnd, buried=0.3):
+    def rock(self, cx, cy, cz, size, mat, rnd, buried=0.3, tone=None):
         """Уламок зі скану Poly Haven (CC0, ~110 трикутників): випадкова деталь, масштаб, поворот; наполовину вкопаний."""
         from mathutils import Euler
         global _SCANS
@@ -689,6 +701,34 @@ class Builder:
             except ValueError:
                 pass
         self._finish(faces, mat)
+        if tone:                                                       # кожен уламок має свій тон: колір не однаковий на всіх
+            t = rnd.uniform(*tone)
+            for f in faces:
+                for lp in f.loops:
+                    lp[self.wtone] = (t, t, t, 1.0)
+
+    def chunk(self, cx, cy, cz, size, mat, rnd, tone=(0.65, 1.1)):
+        """Грудка завалу з гранями: перекошений куб або сплющена ікосфера, випадковий поворот, власний тон; не гладкий брусок."""
+        from mathutils import Euler
+        if rnd.random() < 0.6:
+            r = bmesh.ops.create_cube(self.bm, size=1.0)
+            asp = (rnd.uniform(0.9, 1.5), rnd.uniform(0.6, 1.1), rnd.uniform(0.35, 0.8))
+            jit = 0.2
+        else:
+            r = bmesh.ops.create_icosphere(self.bm, subdivisions=1, radius=0.5)
+            asp = (rnd.uniform(0.9, 1.4), rnd.uniform(0.7, 1.1), rnd.uniform(0.4, 0.75))
+            jit = 0.25
+        verts = r["verts"]
+        rot = Euler((rnd.uniform(-0.6, 0.6), rnd.uniform(-0.6, 0.6), rnd.uniform(0, 3.14))).to_matrix()
+        for v in verts:
+            p = Vector((v.co.x * (1 + rnd.uniform(-jit, jit)) * asp[0], v.co.y * (1 + rnd.uniform(-jit, jit)) * asp[1], v.co.z * (1 + rnd.uniform(-jit, jit)) * asp[2])) * size
+            v.co = rot @ p + Vector((cx, cy, cz))
+        faces = list({f for v in verts for f in v.link_faces})
+        self._finish(faces, mat)
+        t = rnd.uniform(*tone)
+        for f in faces:
+            for lp in f.loops:
+                lp[self.wtone] = (t, t, t, 1.0)
 
     def soot(self, pts, tones, side=1):
         """Кіптява: грань з вершинними тонами (темніше внизу, світліше вгорі)."""
@@ -853,11 +893,14 @@ class HeapSurface:
     контуру з розмахом 0.3-0.6 м і м'які хвилі, що гаснуть у центрі (без радіальних зломів на вершині).
     z(x, y) дає ту саму висоту, що й меш, тож крокви й димар стоять на справжній поверхні."""
 
-    def __init__(self, cx, cy, rx, ry, hmax, seed, bumps=6, lip=0.3, wob=0.2, lump=0.14, hummocks=0, hum_amp=0.35, pw=2.0, sq=0.0):
+    def __init__(self, cx, cy, rx, ry, hmax, seed, bumps=6, lip=0.3, wob=0.2, lump=0.14, hummocks=0, hum_amp=0.35, pw=2.0, sq=0.0, noise=0.0):
         import random
         rnd = random.Random(seed)
         self.cx, self.cy, self.rx, self.ry = cx, cy, rx, ry
         self.hmax, self.bumps, self.lip, self.wob, self.lump, self.pw, self.sq = hmax, bumps, lip, wob, lump, pw, sq
+        self.noise = noise
+        nr = random.Random(seed + 999)
+        self.nph = [nr.uniform(0, 2 * math.pi) for _ in range(12)]
         self.ph = [rnd.uniform(0, 2 * math.pi) for _ in range(6)]
         # горби й одна западина (де був будинок): гауси 1-1.6 м, щоб купа читалась як звал, а не як диск
         self.hum = []
@@ -876,6 +919,9 @@ class HeapSurface:
     def radius(self, a):
         ph, k = self.ph, self.bumps
         r = 1.0 + 0.065 * math.sin(k * a + ph[0]) + 0.03 * math.sin((k - 1) * a + ph[1]) + 0.025 * math.sin((k + 1) * a + ph[2])
+        if self.noise:                                                   # контур 0.3-0.5 м рваний: високі гармоніки, без гладкого обводу
+            q = self.nph
+            r += self.noise * (0.05 * math.sin(9 * a + q[0]) + 0.04 * math.sin(13 * a + q[1]) + 0.035 * math.sin(19 * a + q[2]) + 0.03 * math.sin(27 * a + q[3]))
         if self.sq:                                                      # суперелліпс: купа тримає квадратний слід будинку, а не круглий диск
             r *= (abs(math.cos(a)) ** self.sq + abs(math.sin(a)) ** self.sq) ** (-1.0 / self.sq)
         return r
@@ -899,6 +945,11 @@ class HeapSurface:
         z += self.lump * e * math.sin(kk * x + ph[5]) * math.sin(kk * y + ph[0])
         for (hx, hy, sg, am) in self.hum:
             z += am * e * math.exp(-((x - hx) ** 2 + (y - hy) ** 2) / (2 * sg * sg))
+        if self.noise:                                                   # три октави зсуву: поверхня нерівна в масштабі уламків
+            q = self.nph
+            for k, (lam, am) in enumerate(((1.5, 0.16), (0.7, 0.09), (0.35, 0.05))):
+                w = 2 * math.pi / lam
+                z += self.noise * am * e * (math.sin(w * x + q[4 + k]) * math.sin(w * y + q[7 + k]) + 0.5 * math.sin(w * 0.8 * (x + y) + q[10 + (k % 2)]))
         return self.lip + max(-0.1, z) * self.s
 
 
@@ -944,7 +995,7 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
     return top
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0):
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0):
     """Уламок стіни p0-p1: сегменти різної ширини, кожен ламається ще на 1-3 шматки з різними верхами (різниця 0.2-0.5 м,
     тож жодного рівного верху), випадкова ходьба висот довкола задуму heights (не вище hcap); верхні 0.4 м — відкрита
     цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий."""
@@ -998,28 +1049,35 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
     for i, (xa, xc, ha, hc) in enumerate(pieces):
         if ha <= 0.05 and hc <= 0.05:
             continue
+        tb = 1.0 - tvar * rnd.random()                      # тон шматка: стіна не однакова по всій довжині
+        tbr = 1.0 - 0.4 * tvar * rnd.random() if tvar else 1.0
+
+        def bp(pts_):
+            f_ = b.poly([tuple(q) for q in pts_], brick_mat)
+            for lp in f_.loops:
+                lp[b.wtone] = (tbr, tbr, tbr, 1.0)
         a = Vector((p0[0], p0[1], 0)) + u * xa
         c = Vector((p0[0], p0[1], 0)) + u * xc
         pb = [a + nrm, c + nrm, c - nrm, a - nrm]
         br_a, br_c = max(0.0, ha - cap), max(0.0, hc - cap)
         lo_a, lo_c = max(0.0, br_a - soot_h), max(0.0, br_c - soot_h)
-        for (q0, q1, tn) in ((pb[0], pb[1], 1.0), (pb[2], pb[3], inner_tone)):
+        for (q0, q1, tn) in ((pb[0], pb[1], tb), (pb[2], pb[3], inner_tone * tb)):
             flip = q0 is pb[2]
             ah, ch = (hc, ha) if flip else (ha, hc)
             ba, bc = (br_c, br_a) if flip else (br_a, br_c)
             la, lc = (lo_c, lo_a) if flip else (lo_a, lo_c)
             quad([V(q0, 0), V(q1, 0), V(q1, lc), V(q0, la)], (tn,) * 4, mat)
             quad([V(q0, la), V(q1, lc), V(q1, bc), V(q0, ba)], (tn, tn, tn * top_tone, tn * top_tone), mat)
-            b.poly([tuple(q) for q in (V(q0, ba), V(q1, bc), V(q1, ch), V(q0, ah))], brick_mat)
-        b.poly([tuple(q) for q in (V(pb[0], ha), V(pb[1], hc), V(pb[2], hc), V(pb[3], ha))], brick_mat)
+            bp((V(q0, ba), V(q1, bc), V(q1, ch), V(q0, ah)))
+        bp((V(pb[0], ha), V(pb[1], hc), V(pb[2], hc), V(pb[3], ha)))
         prev = pieces[i - 1] if i > 0 and pieces[i - 1][1] >= xa - 1e-6 and pieces[i - 1][3] > 0.05 else None
         nxt = pieces[i + 1] if i + 1 < len(pieces) and pieces[i + 1][0] <= xc + 1e-6 and pieces[i + 1][2] > 0.05 else None
         lo_end = min(hc, nxt[2]) if nxt else 0.0
         lo_start = min(ha, prev[3]) if prev else 0.0
         if hc - lo_end > 0.02:
-            b.poly([tuple(q) for q in (V(pb[1], lo_end), V(pb[2], lo_end), V(pb[2], hc), V(pb[1], hc))], brick_mat)
+            bp((V(pb[1], lo_end), V(pb[2], lo_end), V(pb[2], hc), V(pb[1], hc)))
         if ha - lo_start > 0.02:
-            b.poly([tuple(q) for q in (V(pb[3], lo_start), V(pb[0], lo_start), V(pb[0], ha), V(pb[3], ha))], brick_mat)
+            bp((V(pb[3], lo_start), V(pb[0], lo_start), V(pb[0], ha), V(pb[3], ha)))
 
 
 def prism(b, prof, thick, origin, yaw, lean, mat, top_mat=None, in_mat=None, inner=(0.0, 0.0)):
@@ -1452,39 +1510,42 @@ def heap_bake(me, b, hi, mt, img, nimg, atlas_px, ao=0.65):
     bpy.ops.object.select_all(action="DESELECT")
 
 
-def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="mud_skirt", low="heap_buff", base="heap_base_buff", rock="rubble_buff"):
-    """Купи із скан-джерелом для запікання: темна основа, уламки 20-85 см зверху; круті боки губи — темний мул, а не світла смуга."""
+RUBBLE_MIX = ("chunk_brick",) * 4 + ("chunk_plaster",) * 3 + ("chunk_concrete",) * 3 + ("chunk_char",)
+
+
+def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="heap_photo_mud", low="heap_buff", base="heap_photo", mix=RUBBLE_MIX, rings=None, segs=None):
+    """Купи зі скан-джерелом для запікання: основа — фотоскан цегляного сміття, зверху уламки 0.2-0.6 м кількох матеріалів, кожен свого тону;
+    круті боки губи — темний мул із тієї ж фотографії."""
     import random
     bh = Builder()
     hr = random.Random(seed)
     for k, h in enumerate(plan):
         big = h.rx * h.ry > 8
-        heap_mound(b, h, low, rings=7 if big else 3, segs=32 if big else 16, skirt=skirt, skirt_mat=skirt_mat)
-        heap_mound(bh, h, base, rings=16 if big else 6, segs=96 if big else 40, jitter=0.04, seed=seed + k, skirt=skirt)
+        r_lo, s_lo = (rings or (10 if big else 3)), (segs or (48 if big else 20))
+        heap_mound(b, h, low, rings=r_lo, segs=s_lo, skirt=skirt, skirt_mat=skirt_mat)
+        heap_mound(bh, h, base, rings=18 if big else 7, segs=110 if big else 44, jitter=0.04, seed=seed + k, skirt=skirt)
         for _ in range(int(math.pi * h.rx * h.ry * dens)):
             a = hr.uniform(0, 2 * math.pi)
-            t = math.sqrt(hr.uniform(0, 1.0)) * 1.12
+            t = math.sqrt(hr.uniform(0, 1.0)) * 1.1
             r = t * h.radius(a)
             px, py = h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a)
             z = h.z(px, py) if t < 1.0 else h.lip * max(0.0, 1.0 - (t - 1.0) / 0.12) * 0.8
             q = hr.random()
-            size = hr.uniform(0.2, 0.42) if q < 0.7 else (hr.uniform(0.42, 0.6) if q < 0.95 else hr.uniform(0.6, 0.85))
-            bh.rock(px, py, z + 0.04, size, rock, hr, buried=0.3)
+            size = hr.uniform(0.2, 0.4) if q < 0.7 else (hr.uniform(0.4, 0.6) if q < 0.96 else hr.uniform(0.6, 0.8))
+            bh.rock(px, py, z + 0.04, size, hr.choice(mix), hr, buried=0.3, tone=(0.75, 1.15))
     return bh
 
 
-def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.22, 0.42), mats=("brick_face", "wall_plaster", "brick_face", "brick_dark")):
-    """Грудки цегли й штукатурки 20-40 см по всій купі: справжня геометрія дає тінь і силует, а не лише запечену плями."""
+def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.2, 0.5), mix=("chunk_brick", "chunk_brick", "chunk_plaster", "chunk_concrete", "chunk_char")):
+    """Грудки 0.2-0.5 м по всій купі: справжня геометрія дає тінь і силует; грані перекошені, тон і матеріал різні."""
     for h in plan:
         for _ in range(n_each):
             a = rnd.uniform(0, 2 * math.pi)
             t = rnd.uniform(tmin, tmax)
             r = t * h.radius(a)
             px, py = h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a)
-            z = h.z(px, py)
             sz = rnd.uniform(*size)
-            b.box_e(px, py, z + sz * 0.2, sz * rnd.uniform(0.8, 1.4), sz * rnd.uniform(0.55, 1.0), sz * rnd.uniform(0.4, 0.8), rnd.choice(mats),
-                    euler=(rnd.uniform(-0.5, 0.5), rnd.uniform(-0.5, 0.5), rnd.uniform(0, 3.14)))
+            b.chunk(px, py, h.z(px, py) + sz * 0.12, sz, rnd.choice(mix), rnd)
 
 
 def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footprint=(1, 1), anchor=None, density=None, hi=None, ground_clip=False, ao=0.65):

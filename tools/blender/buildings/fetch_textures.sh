@@ -12,3 +12,16 @@ for m in Concrete034 Concrete046 Plaster001 CorrugatedSteel005 CorrugatedSteel00
   python3 -I -c "import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$OUT/$m.zip" "$OUT/$m"
   rm "$OUT/$m.zip"
 done
+
+# завал: ambientCG Ground111 (2K) і Poly Haven broken_brick_wall (2K, CC0)
+if [ ! -d "$OUT/Ground111" ]; then
+  mkdir -p "$OUT/Ground111"
+  curl -sL -o "$OUT/Ground111.zip" "https://ambientcg.com/get?file=Ground111_2K-JPG.zip"
+  python3 -I -c "import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$OUT/Ground111.zip" "$OUT/Ground111"
+  rm "$OUT/Ground111.zip"
+fi
+if [ ! -f "$OUT/broken_brick_wall/diff.jpg" ]; then
+  mkdir -p "$OUT/broken_brick_wall"
+  U=$(curl -s https://api.polyhaven.com/files/broken_brick_wall | python3 -I -c "import json,sys;print(json.load(sys.stdin)['Diffuse']['2k']['jpg']['url'])")
+  curl -sL -o "$OUT/broken_brick_wall/diff.jpg" "$U"
+fi

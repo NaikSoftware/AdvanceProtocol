@@ -23,3 +23,15 @@ ambientCG, ліцензія CC0 (<https://docs.ambientcg.com/license/>), 1K JPG,
 `fetch_textures.sh`: Concrete034, Concrete046, Concrete019, Plaster001, CorrugatedSteel005, CorrugatedSteel007A,
 Bricks105, MetalPlates013, Asphalt031, PaintedMetal012, Rust004, Planks021. Кожен атласується (запікається) разом
 із картою нормалей у одну текстуру на будівлю.
+
+## Завал
+
+Фотоскани CC0 для основи й уламків завалу (запікаються в атлас, текстури не поставляються окремо):
+
+| матеріал | джерело | ліцензія |
+| --- | --- | --- |
+| Ground111 (цегляне сміття в землі, 2K) | ambientCG, <https://ambientcg.com/a/Ground111> | CC0 |
+| broken_brick_wall (цегляна стіна, 2K) | Poly Haven, <https://polyhaven.com/a/broken_brick_wall> | CC0 |
+
+`fetch_textures.sh` завантажує лише ambientCG 1K; ці два кладуться в `art-refs/buildings_tex/<імʼя>/` (ambientCG — `<імʼя>_2K-JPG_Color.jpg`,
+Poly Haven — `diff.jpg`).
