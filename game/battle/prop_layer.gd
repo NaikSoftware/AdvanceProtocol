@@ -2179,6 +2179,7 @@ class _Placer:
 				hw[k] = Footpaths.HALF * f
 			walks.append({"kind": &"yard", "home": i, "door": door, "pts": pts, "seed": sd, "solid": 0.8,
 					"fade_end": minf(0.08, 0.2 * Footpaths.length(pts)), "half": hw})
+			_yard_floor(i, homes[i], inside, porch, door, sd)
 			var gp: Vector2 = gate + out * 0.22
 			if not on_road(gp, 0.3) and _on_board(gp):
 				patches.append(Vector3(gp.x, gp.y, 0.28))
@@ -2193,6 +2194,35 @@ class _Placer:
 				if not on_road(at, 0.3) and _on_board(at):
 					patches.append(Vector3(at.x, at.y, 0.2))
 		_water_walks()
+
+	## Збите подвір'я: пляма на трикутник «хвіртка — двері — сарай чи город» (~20–40 м²) і проходи 1–1.5 м від
+	## хвіртки та від дверей до сараю, з рваним краєм й острівцями трави. Видно й коли хата частково закриває двері.
+	func _yard_floor(i: int, home: Dictionary, inside: Vector2, porch: Vector2, door: Vector2, sd: int) -> void:
+		var tgt := Vector2.INF
+		if shed_of.has(i):
+			var sr: Rect2 = shed_of[i]
+			var dir: Vector2 = (door - sr.get_center()).normalized()
+			tgt = sr.get_center() + dir * (maxf(sr.size.x, sr.size.y) * 0.5 + 0.12)
+		else:
+			for gp: Dictionary in garden_plots:
+				if int(gp["home"]) == i:
+					var gr: Rect2 = gp["rect"]
+					tgt = gr.get_center() + (door - gr.get_center()).normalized() * (maxf(gr.size.x, gr.size.y) * 0.5 + 0.1)
+					break
+		if tgt == Vector2.INF:
+			var sum := Vector2.ZERO
+			for c: Vector2i in home["cells"]:
+				sum += Vector2(c)
+			tgt = porch.lerp(sum / float(home["cells"].size()), 0.6)
+		for a: Vector2 in [inside, porch + (porch - door).normalized() * 0.06, tgt]:
+			walks.append({"kind": &"yard_floor", "home": i, "door": a, "pts": PackedVector2Array([a, a + Vector2(0.03, 0.0)]),
+					"seed": sd + 3, "solid": 0.7, "half": PackedFloat32Array([0.17, 0.17])})
+		for pair: Array in [[inside, tgt], [porch, tgt]]:
+			var pts: PackedVector2Array = Footpaths.resample(Footpaths.smooth(Footpaths.meander(pair[0], pair[1], 0.04, 0.8, sd + 5), 4))
+			var hw := PackedFloat32Array()
+			hw.resize(pts.size())
+			hw.fill(0.07)
+			walks.append({"kind": &"yard_floor", "home": i, "door": pair[0], "pts": pts, "seed": sd + 7, "solid": 0.75, "half": hw})
 
 	func _on_board(q: Vector2) -> bool:
 		return q.x >= -0.3 and q.y >= -0.3 and q.x <= size.x - 0.7 and q.y <= size.y - 0.7
@@ -2436,6 +2466,7 @@ class _Placer:
 			var g: Vector2 = gates[i][0] + (gates[i][1] as Vector2) * 0.15
 			starts.append(g)
 		var chosen: Array[Vector2] = []
+		var used_starts: Array[Vector2] = []
 		# Спершу від хвірток: хвіртка → берег з найменшою ціною (відстань і крутизна спуску).
 		var pairs: Array = []
 		for st: Vector2 in starts:
@@ -2445,10 +2476,14 @@ class _Placer:
 					pairs.append([dd + 8.0 * float(l[1]), st, l[0]])
 		pairs.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 		for pr: Array in pairs:
-			if chosen.size() >= 1 or pairs.find(pr) > 40:
+			if chosen.size() >= 2 or pairs.find(pr) > 60:
 				break
+			# Дві стежки від хвірток — з різних дворів до берегів не ближче 6 клітинок один від одного.
+			if used_starts.has(pr[1]) or chosen.any(func(c: Vector2) -> bool: return c.distance_to(pr[2]) < 6.0):
+				continue
 			if _add_water_walk(pr[1], pr[2], chosen, 0):
 				chosen.append(pr[2])
+				used_starts.append(pr[1])
 		# Друга — від дороги до іншого спуску, далеко від першого.
 		if not road_indexed:
 			_index_roads()
