@@ -100,6 +100,8 @@ const OCCLUDE_TOTAL: float = 0.45
 const OCCLUDE_FEATHER: float = 1.0
 ## Межа однієї клуби хвилі пилу над сусідом.
 const WAVE_CAP: float = 0.1
+## Скільки секунд вогняна куля над видимим сусідом вирізана повністю.
+const FIREBALL_CUT_SEC: float = 0.1
 const OCCLUDE_R: float = 0.45
 const OCCLUDE_MAX: int = 6
 ## Порядок прозорих квадів у тій самій точці: ґрунт, під ним гаряче ядро, над ними чорне ядро
@@ -623,8 +625,12 @@ static func _fireball(root: Node3D, ball_m: float, offset: Vector3, lift: float,
 	var bmat := ball.material_override as ShaderMaterial
 	bmat.render_priority = PRIORITY_CORE
 	bmat.set_shader_parameter("warm", 1.0)
-	# Над сусідом куля не густіша за 0,6 від першого кадру, а не лише з 0,3 с.
-	bmat.set_shader_parameter("occ_floor", 0.6)
+	# Над сусідом найяскравіша фаза кулі (перші FIREBALL_CUT_SEC) вирізана зовсім, далі куля не
+	# густіша за 0,6, а з 0,3 с — за спільну межу миті.
+	bmat.set_shader_parameter("occ_floor", 0.0)
+	var cut: Tween = root.create_tween()
+	cut.tween_interval(FIREBALL_CUT_SEC)
+	cut.tween_method(func(f: float) -> void: bmat.set_shader_parameter("occ_floor", f), 0.0, 0.6, 0.05)
 	_play_smoke(root, ball, 0.12, FIRE_SEC, 0.0, rise, grow, Vector2(0.0, LAST_FRAME), Vector2.ZERO, 0.4)
 	var smoke := _sprite(root, "Smoke", SMOKE_TEX, 64, side * SMOKE_SCALE, lift, 1.0)
 	smoke.position = offset
@@ -640,15 +646,15 @@ static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, f
 	_play_smoke(root, q, full, life, delay, rise, grow, Vector2(f0, LAST_FRAME), Vector2.ZERO, ERODE_FROM * life, 1.0, false, true)
 
 
-## Низька хвиля пилу, що розбігається від розриву: 16 невисоких (~2 м) рідких бежевих клубів по колу
-## зливаються в суцільний вал і з ease-out за DUST_SPREAD_SEC доходять до `d_m`/2 від центру;
+## Низька хвиля пилу, що розбігається від розриву: 24 невисокі (~2 м) рідкі бежеві клуби по колу,
+## кожна ширша за крок між ними, зливаються в суцільний вал без «намиста» і з ease-out за DUST_SPREAD_SEC доходять до `d_m`/2 від центру;
 ## розчиняються за `life` с. Над сусідом вони лише рідшають (WAVE_CAP), а не вирізаються.
 static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: float) -> void:
-	var n: int = 16
+	var n: int = 24
 	for i in n:
 		var ang: float = TAU * (float(i) + rng.randf_range(-0.3, 0.3)) / float(n)
 		var dir := Vector3(cos(ang), 0.0, sin(ang))
-		var q := _sprite(root, "Wave", DIRT_TEX, 64, 2.6 * rng.randf_range(0.75, 1.25) * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0)
+		var q := _sprite(root, "Wave", DIRT_TEX, 64, 3.25 * rng.randf_range(0.75, 1.25) * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0)
 		# Розбіг від 0,25 клітинки (пляма 0,5 клітинки) до краю хвилі.
 		q.position = dir * 0.25
 		var mat := q.material_override as ShaderMaterial
@@ -1082,6 +1088,7 @@ void fragment() {
 		inside = max(inside, 1.0 - smoothstep(occ[i].w, occ[i].w + 1.0, d));
 	}
 	float lim = mix(occ_floor, occ_cap, occ_k);
-	ALPHA = mix(a * soft, min(a, lim), inside * step(lim, 0.999));
+	// Межа вмикається плавно (від 1 до 0,9), а не стрибком, коли м'який край зникає над сусідом.
+	ALPHA = mix(a * soft, min(a, lim), inside * (1.0 - smoothstep(0.9, 1.0, lim)));
 }
 """

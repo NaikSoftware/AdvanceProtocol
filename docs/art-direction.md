@@ -179,9 +179,16 @@ What our own constraints add on top:
   core is yellow-orange for three frames (~50 ms). Ground dust is one soft radial layer 0.3 m above
   the ground with a noise-eaten edge, fading softly where the relief meets it — never per-cell
   alpha or a regular grid.
-- **Peaceful smoke:** 1–3 chimneys and 1–2 ruins per map breathe a barely visible, continuous plume —
-  the wreck column's technique with the thin atlas at a third of its density, lighter grey, 14 m
-  tall, leaning with the same wind. Houses and ruins are public map props, so it is always on.
+- **Peaceful smoke:** 1–3 chimneys and 1–2 ruins per map breathe a barely visible plume — one
+  continuous strip per source, never puffs: puffs born at a steady rate read as smoke rings fired
+  in volleys. A chimney plume is 14 m tall, 0.8 m wide at the pot and a tile wide at the top; a ruin
+  rises from the breach at roof level, 0.75 as tall and twice as wide at its source, and a little
+  denser (density 0.65 against the chimney's 0.36), because wind lays it flat and thins it. Density
+  and the ragged edge come from noise that scrolls up at the smoke's own 0.8 m/s, so nothing along
+  the plume repeats; a slow edge noise bites up to ~30 % of the width so the outline is torn, not a
+  cone. The plume leans with the wind like the wreck columns. No `sin` in the shader — game time
+  grows all match. Target: the lower third reads 12–18 levels lighter than the ground behind it at
+  zoom 8. Houses and ruins are public map props, so it is always on.
 - **No crater after a burst:** the cloud, dust and clods play out and leave nothing on the ground.
   Debris chunks are irregular, 0.2–0.7 m, fly their whole arc, land and settle.
 - Every moment is `one_shot` and frees itself with `queue_free` once its smoke is gone (≤ 6.5 s).

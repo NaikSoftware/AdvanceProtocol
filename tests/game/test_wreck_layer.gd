@@ -356,6 +356,7 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	for seed in 12:
 		layer.set_hearths(chimneys, ruins, seed)
 		var pts: Array[Vector3] = layer.hearth_points()
+		assert_true(pts.size() <= WreckLayer.HEARTH_MAX, "шлейфів не більше, ніж екземплярів")
 		var c: int = pts.filter(func(p: Vector3) -> bool: return p.y > 0.5).size()
 		var r: int = pts.size() - c
 		assert_true(c >= 1 and c <= 3, "димарів 1–3")
@@ -369,13 +370,18 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	# Дані екземплярів headless-рендер не зберігає: перевіряємо густоти, які шар у них записав.
 	var dens: Array[float] = layer.hearth_densities()
 	assert_eq(dens.size(), first.size())
+	var shapes: Array[Vector2] = layer.hearth_shapes()
+	assert_eq(shapes.size(), first.size())
 	for i in dens.size():
-		assert_eq(dens[i], WreckLayer.hearth_density(first[i].y < 0.5))
+		var ruin: bool = first[i].y < 0.5
+		assert_eq(dens[i], WreckLayer.hearth_density(ruin))
 		assert_true(dens[i] > 0.0 and dens[i] <= 0.7, "ледь помітний шлейф, не пожежа")
+		# Руїна — нижча й ширша біля джерела; димар — повні 14 м від вузької труби.
+		assert_eq(shapes[i], Vector2(WreckLayer.RUIN_HEIGHT_SCALE, WreckLayer.RUIN_BASE_SCALE) if ruin else Vector2.ONE)
+	assert_true(WreckLayer.RUIN_HEIGHT_SCALE < 1.0 and WreckLayer.RUIN_BASE_SCALE > 1.0)
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
-	var code: String = layer.hearth_material().shader.code
-	assert_true(code.contains("v_s = s;") and code.contains("fx_time * rise"), "густота пливе вгору з димом — без народжень клубів, без періоду")
-	assert_false(code.contains("sin("), "хеш без sin: час росте весь матч")
+	assert_eq(layer.hearth_material().get_shader_parameter("rise"), WreckLayer.HEARTH_RISE, "шум густоти пливе вгору зі швидкістю диму")
+	assert_false(layer.hearth_material().shader.code.contains("sin("), "хеш без sin: час росте весь матч")
 	layer.set_wind(Vector3(0.25, 0, 0))
 	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")
 	layer.rebuild(state, 0)
@@ -386,6 +392,12 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 ## юніт на сусідній клітинці; стовп диму починається не вище за цю верхівку.
 func test_wreck_flame_is_capped_below_the_neighbouring_cell() -> void:
 	var fires := layer.get_node("Fires") as MultiMeshInstance3D
-	assert_eq((fires.material_override as ShaderMaterial).get_shader_parameter("max_h"), WreckLayer.FLAME_MAX_H)
-	assert_true(WreckLayer.FLAME_MAX_H <= 0.6)
+	var max_h: float = (fires.material_override as ShaderMaterial).get_shader_parameter("max_h")
+	assert_true(max_h <= 0.6, "стеля полум'я нижча за сусідню клітинку")
+	# Стовп диму найбільшого остова росте не вище за 0,85 стелі полум'я.
+	layer.add(Vector2i(3, 3), 5, 1.0)
+	var c := Vector2i(3, 3)
+	assert_true(layer.smoke_origin(c).y - layer.fire_centre(c).y <= 0.85 * max_h + 1e-5)
+	assert_gt(layer.smoke_origin(c).y, layer.fire_centre(c).y, "дим росте з полум'я, не з землі")
+	# Як гаснуть язики вище стелі — це вже сам шейдер; у безголовому рушії його не прочитати.
 	assert_true(WreckLayer.FIRE_SHADER.code.contains("smoothstep(max_h * 0.7, max_h, v_h)"))

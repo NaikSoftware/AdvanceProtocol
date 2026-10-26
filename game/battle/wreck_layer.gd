@@ -38,9 +38,10 @@ const WARM_UP_SEC: float = 0.1
 ## тож цей дим нічого не видає і горить завжди.
 const HEARTH_MAX: int = 5
 ## Густота шлейфу (0–1): ледь помітний, але на телефоні читається — нижня третина світліша за тло
-## на 12–18 рівнів. Руїна тліє густіше й нижче, ширшою смугою.
+## на 12–18 рівнів. Руїна тліє густіше й нижче, ширшою смугою: її шлейф розлягається з вітром
+## і рідшає, тож без запасу густоти на зумі 14 зникає.
 const CHIMNEY_DENSITY: float = 0.36
-const RUIN_DENSITY: float = 0.45
+const RUIN_DENSITY: float = 0.65
 ## Димар: 14 м заввишки, від 0,8 м біля труби до клітинки вгорі; руїна — 0,75 висоти, вдвічі ширша внизу.
 const HEARTH_HEIGHT: float = 14.0 / 8.0
 const HEARTH_BASE_W: float = 0.8 / 8.0
@@ -147,6 +148,7 @@ var _hearths: MultiMeshInstance3D
 var _hearth_mat: ShaderMaterial
 var _hearth_points: Array[Vector3] = []
 var _hearth_densities: Array[float] = []
+var _hearth_shapes: Array[Vector2] = []
 var _fire_cells: Array[Vector2i] = []
 
 
@@ -315,32 +317,27 @@ func set_wind(wind: Vector3) -> void:
 	_hearth_mat.set_shader_parameter("lean", wind * SMOKE_LEAN_PER_WIND)
 
 
-## Мирний дим: з `chimneys` (верхи димарів) — 1–3, з `ruins` (середини руїн на землі) — 1–2,
-## вибрані за `seed` мапи, тож у кожного гравця й у кожному бою на цій мапі ті самі.
+## Мирний дим: з `chimneys` (верхи димарів) — 1–3, з `ruins` (точки в проломах руїн на рівні
+## даху, `PropLayer.ruin_smoke_points`) — 1–2, вибрані за `seed` мапи, тож у кожного гравця й у
+## кожному бою на цій мапі ті самі.
 func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int) -> void:
 	_hearth_points.clear()
 	_hearth_densities.clear()
-	for p: Vector3 in _pick(chimneys, 1 + absi(seed) % 3, seed):
-		_hearth_points.append(p)
-		_hearth_densities.append(hearth_density(false))
-	var ruin_count: int = 0
-	for p: Vector3 in _pick(ruins, 1 + (absi(seed) / 3) % 2, seed):
-		_hearth_points.append(p)
-		_hearth_densities.append(hearth_density(true))
-		ruin_count += 1
-	# Руїни — в кінці списку: обрізаємо димарі, щоб тління лишилось.
-	while _hearth_points.size() > HEARTH_MAX:
-		_hearth_points.remove_at(0)
-		_hearth_densities.remove_at(0)
-	ruin_count = mini(ruin_count, _hearth_points.size())
+	_hearth_shapes.clear()
+	for ruin: bool in [false, true]:
+		var pts: Array[Vector3] = _pick(ruins, 1 + (absi(seed) / 3) % 2, seed) if ruin else _pick(chimneys, 1 + absi(seed) % 3, seed)
+		for p: Vector3 in pts:
+			_hearth_points.append(p)
+			_hearth_densities.append(hearth_density(ruin))
+			_hearth_shapes.append(hearth_shape(ruin))
+	assert(_hearth_points.size() <= HEARTH_MAX, "3 димарі + 2 руїни — більше шлейфів не буває")
 	var mm: MultiMesh = _hearths.multimesh
 	for h in _hearth_points.size():
-		var ruin: bool = h >= _hearth_points.size() - ruin_count
 		# INSTANCE_CUSTOM: x — густота, y — зсув шуму (свій шлейф у кожного джерела), z — частка
 		# висоти, w — частка ширини біля джерела.
 		mm.set_instance_transform(h, Transform3D(Basis(), _hearth_points[h]))
 		mm.set_instance_custom_data(h, Color(_hearth_densities[h], float(hash(_hearth_points[h]) % 997) / 997.0,
-				RUIN_HEIGHT_SCALE if ruin else 1.0, RUIN_BASE_SCALE if ruin else 1.0))
+				_hearth_shapes[h].x, _hearth_shapes[h].y))
 	mm.visible_instance_count = _hearth_points.size()
 	_refresh_effects()
 
@@ -348,6 +345,19 @@ func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int) -> 
 ## Густота шлейфу для шейдера (0–1): руїна тліє трохи густіше за димар.
 static func hearth_density(ruin: bool) -> float:
 	return RUIN_DENSITY if ruin else CHIMNEY_DENSITY
+
+
+## Звідки росте стовп диму остова: з верхівки полум'я над погоном (чи з самого погону, коли
+## вогню вже нема) — не з порожнього повітря поруч, і не вище за 0,85 стелі полум'я.
+func smoke_origin(c: Vector2i) -> Vector3:
+	# Процедурний вогонь суцільний у нижні ~60 % висоти; атласний — до верхівки язика.
+	var rise: float = minf(FLAME_TIP_PER_WIDTH * flame_size(c).x if USE_FLAME02 else 0.6 * flame_size(c).y, FLAME_MAX_H * 0.85)
+	return fire_centre(c) + Vector3(0.0, rise, 0.0)
+
+
+## Форма шлейфу: x — частка висоти HEARTH_HEIGHT, y — частка ширини HEARTH_BASE_W біля джерела.
+static func hearth_shape(ruin: bool) -> Vector2:
+	return Vector2(RUIN_HEIGHT_SCALE, RUIN_BASE_SCALE) if ruin else Vector2.ONE
 
 
 ## `count` точок із `pts`, перемішаних за `seed`.
@@ -361,6 +371,11 @@ static func _pick(pts: Array[Vector3], count: int, seed: int) -> Array[Vector3]:
 ## Густота, яку отримав кожен шлейф (у тому ж порядку, що й `hearth_points`).
 func hearth_densities() -> Array[float]:
 	return _hearth_densities
+
+
+## Форма, яку отримав кожен шлейф (`hearth_shape`), у тому ж порядку.
+func hearth_shapes() -> Array[Vector2]:
+	return _hearth_shapes
 
 
 func hearth_points() -> Array[Vector3]:
@@ -576,12 +591,7 @@ func _refresh_effects() -> void:
 		var c: Vector2i = _column_cells[i]
 		var seed: float = float(hash(c) % 997) / 997.0
 		var opacity: float = column_opacity_for(_entries[c].life)
-		# Дим народжується на верхівці полум'я над погоном (чи на самому погоні, коли вогню вже
-		# нема) — не з порожнього повітря поруч.
-		var e: _Entry = _entries[c]
-		# Процедурний вогонь суцільний у нижні ~60 % висоти; атласний — до верхівки язика.
-		var rise: float = minf(FLAME_TIP_PER_WIDTH * flame_size(c).x if USE_FLAME02 else 0.6 * flame_size(c).y, FLAME_MAX_H * 0.85)
-		var origin: Vector3 = fire_centre(c) + Vector3(0.0, rise, 0.0)
+		var origin: Vector3 = smoke_origin(c)
 		for k in PUFFS_PER_COLUMN:
 			var idx: int = i * PUFFS_PER_COLUMN + k
 			mm.set_instance_transform(idx, Transform3D(Basis(), origin))
@@ -879,7 +889,8 @@ void vertex() {
 	// Звивання росте з висотою й пливе вгору з димом: повільний шум у координаті частинки.
 	vec3 wander = (right * (vn(vec2(s * 1.2 + sd, 3.1)) - 0.5) + side * (vn(vec2(s * 0.9 + sd, 7.7)) - 0.5)) * 0.9 * H * h01 * h01;
 	float w = mix(base_w * INSTANCE_CUSTOM.w, top_w, pow(h01, 0.85));
-	vec3 world = root + vec3(0.0, h, 0.0) + lean * h + wander + right * VERTEX.x * w;
+	// Смуга на 35 % ширша за шлейф: рваний край вилазить за обрис і не впирається в межу кваду.
+	vec3 world = root + vec3(0.0, h, 0.0) + lean * h + wander + right * VERTEX.x * w * 1.35;
 	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	v_h01 = h01;
 	v_s = s;
@@ -890,12 +901,19 @@ void vertex() {
 }
 
 void fragment() {
-	float x = UV.x * 2.0 - 1.0;
+	float x = (UV.x * 2.0 - 1.0) * 1.35;
 	// Шум у метрах поперек і вздовж частинки диму: біля труби дрібний, угорі крупніший.
 	vec2 q = vec2(x * v_w, v_s) * 8.0 / mix(1.5, 4.0, v_h01) + v_sd;
 	float n = fbm(q);
 	float n2 = fbm(q * 2.3 + 5.0);
-	float profile = 1.0 - smoothstep(0.25, 1.0, abs(x) + (n - 0.5) * 0.7);
+	// Повільний шум краю, окремий для лівого й правого боку, пливе вгору з димом: край
+	// виїдається вглиб до 30 % ширини, і від нього відходять клапті, — обрис не конус.
+	float side_sd = v_sd + (x < 0.0 ? 0.0 : 31.0);
+	float lo = vn(vec2(v_s * 8.0 / 3.5 + side_sd, side_sd * 0.37));
+	float bite = (lo - 0.35) * 0.9 * smoothstep(0.05, 0.25, v_h01);
+	float profile = 1.0 - smoothstep(0.25, 1.0, abs(x) + (n - 0.5) * 0.7 + bite);
+	float tear = vn(vec2(x * v_w * 8.0 / 2.5, v_s * 8.0 / 2.5) + side_sd + 13.0);
+	profile *= mix(1.0, smoothstep(0.3, 0.55, tear), smoothstep(0.35, 0.9, abs(x)));
 	float dens = profile * (0.45 + 0.55 * n2);
 	float fade = smoothstep(0.0, 0.03, v_h01) * (1.0 - smoothstep(0.35, 1.0, v_h01));
 	float lit = clamp(dot(vec2(x, 0.0), v_sun), 0.0, 1.0);

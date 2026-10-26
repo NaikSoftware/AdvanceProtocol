@@ -657,6 +657,10 @@ func ruin_smoke_points() -> Array[Vector3]:
 			if away.length() > 1e-4:
 				var push: Vector2 = away.normalized() * minf(box.size.x, box.size.z) * 0.3
 				c += Vector3(push.x, 0.0, push.y)
+		# Зсуви від кількох димарів додаються: тримаємо точку в обрисі, на 15 % від його краю.
+		var m: Vector3 = box.size * 0.15
+		c.x = clampf(c.x, box.position.x + m.x, box.end.x - m.x)
+		c.z = clampf(c.z, box.position.z + m.z, box.end.z - m.z)
 		out.append(c)
 	return out
 
