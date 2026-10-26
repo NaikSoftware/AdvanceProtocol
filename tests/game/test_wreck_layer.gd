@@ -190,8 +190,8 @@ func test_smoke_is_stepped_by_a_timer_and_stops_when_nothing_burns() -> void:
 	assert_true(layer.is_animating())
 	layer.remove(Vector2i(3, 3))
 	assert_false(layer.is_animating())
-	for code: String in [WreckLayer.column_shader().code, WreckLayer.fire_shader().code]:
-		assert_false(code.contains("TIME"), "шейдер диму не сміє читати TIME")
+	for code: String in [WreckLayer.column_shader().code, WreckLayer.FIRE_SHADER.code, WreckLayer._FIRE_CODE]:
+		assert_false(code.contains("TIME"), "шейдер диму й вогню не сміє читати TIME")
 
 
 ## Дим іде туди ж, куди й дощ: нахил стовпа — та сама горизонтальна вісь вітру, що й у
@@ -244,14 +244,18 @@ func test_second_warm_up_while_warming_is_ignored() -> void:
 
 
 ## Дим і вогонь — запечені флипбуки з assets/vfx, а не заступник.
-func test_column_samples_its_atlases_and_fire_is_procedural() -> void:
+func test_column_samples_its_atlases_and_fire_matches_its_flag() -> void:
 	var col := layer.get_node("Columns") as MultiMeshInstance3D
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
 	var cm := col.material_override as ShaderMaterial
 	assert_eq((cm.get_shader_parameter("puff_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column.png")
 	assert_eq((cm.get_shader_parameter("thin_tex") as Texture2D).resource_path, "res://assets/vfx/smoke_column_thin.png")
-	# Полум'я — процедурне (шум, без текстури): жоден атлас не дав суцільного тіла вогню.
-	assert_eq((fire.material_override as ShaderMaterial).shader.code.count("sampler2D"), 1, "лише глибина для м'якого краю")
+	var fm := fire.material_override as ShaderMaterial
+	# Обидва варіанти вогню перевіряються завжди, а не лише активний.
+	assert_eq(WreckLayer.FIRE_SHADER.code.count("sampler2D"), 2, "атлас полум'я + глибина")
+	assert_eq(WreckLayer._FIRE_CODE.count("sampler2D"), 1, "процедурний: лише глибина")
+	if WreckLayer.USE_FLAME02:
+		assert_eq((fm.get_shader_parameter("flame_tex") as Texture2D).resource_path, "res://assets/vfx/flame02.png")
 
 
 
@@ -319,14 +323,14 @@ func test_embers_fly_while_burning_and_stop_when_smouldering() -> void:
 
 
 
-## Вогонь — стовп полум'я з погона: два екземпляри по ≈ 0,4 ширини корпусу, висота ≈ ширина
+## Вогонь — стовп полум'я з погона: два екземпляри по ≈ 0,4 ширини корпусу, висота ≈ 1,45 ширини
 ## корпусу; два екземпляри атласу з різною фазою й темпом; HDR-яскравий (понад 1).
 func test_fire_is_one_column_sized_from_the_hull() -> void:
 	assert_eq(WreckLayer.FLAMES_PER_SPOT, 2)
 	var hull: Vector3 = UnitSilhouettes.spec(5).hull
-	# Кожен білборд ~0,6 ширини корпусу; з розносом ±0,15 вони перекриваються в одну масу ~0,6 тайла.
-	assert_eq(WreckLayer.flame_width(5), hull.x * 0.6)
-	assert_eq(WreckLayer.flame_height(5), hull.x)
+	# Кожен білборд ~0,88 ширини корпусу (≈ 3,2 м у середнього танка); з розносом ±0,15 вони перекриваються в одну масу.
+	assert_eq(WreckLayer.flame_width(5), hull.x * 0.88)
+	assert_eq(WreckLayer.flame_height(5), hull.x * 1.45)
 	var fire := layer.get_node("Fires") as MultiMeshInstance3D
 	var mat := fire.material_override as ShaderMaterial
 	assert_true(float(mat.get_shader_parameter("gain")) > 1.0)
