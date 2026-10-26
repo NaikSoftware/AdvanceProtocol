@@ -176,12 +176,12 @@ func _ready() -> void:
 		if tank:
 			var box := MeshInstance3D.new()
 			var bm := BoxMesh.new()
-			bm.size = Vector3(0.75, 0.5, 0.9)
+			bm.size = Vector3(0.45, 0.3, 0.9)                         # танк 3,6 x 2,4 x 7,2 м у тайлах по 8 м
 			box.mesh = bm
 			var tm := StandardMaterial3D.new()
 			tm.albedo_color = Color(0.32, 0.36, 0.30)
 			box.material_override = tm
-			box.position = Vector3(2.6, 0.25, 1.6)
+			box.position = Vector3(1.2, 0.15, 0.0)                     # у кадрі найближчого зуму, не на об'єкті до 1 тайла
 			inst.add_child(box)
 		print("PROP %s tris=%d" % [n, _triangles(inst)])
 		rig.center_on(cell)

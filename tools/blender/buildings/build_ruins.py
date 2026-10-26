@@ -474,7 +474,7 @@ def shed_variant(name, kind):
     """Інші сараї для дворів: brick — цегляний 5 x 3.6 м під шиферним двосхилим дахом із дерев'яними дверима;
     lean — дерев'яна прибудова з односхилим дахом із зеленого профлисту."""
     lib.reset()
-    lib.palette(roof="asb_dark" if kind == "brick" else "green_dark", eave=2.4)
+    lib.palette(roof="asb_black" if kind == "brick" else "green_dark", eave=2.4)
     b = Builder()
     hx, hy, E = (2.5, 1.8, 2.4) if kind == "brick" else (2.2, 1.6, 2.2)
     if kind == "brick":
