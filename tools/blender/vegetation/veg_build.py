@@ -408,7 +408,7 @@ def crown(it, rects, fallen):
 
 
 def crushed(it, m, rects, bark, cards, travel, base, top, rng):
-    """Кущ, який переїхала техніка: 10–16 зламаних стебел лежать на землі (3–12° від неї) уздовж руху
+    """Кущ, який переїхала техніка: 16–22 зламаних стебла лежать на землі (3–12° від неї) уздовж руху
     техніки, на плямі ~0,7 півосей куща (≥ 40 % його площі), не ширшій за 0,3 клітинки. Колір —
     сіро-бура мертва деревина (смуга кори dead), однакова для всіх видів; кілька дрібних пучків
     листя між стеблами, не плаский клапоть; м'яка пляма затінення."""
@@ -416,14 +416,15 @@ def crushed(it, m, rects, bark, cards, travel, base, top, rng):
     along = Vector((math.cos(travel), math.sin(travel), 0.0))
     side = Vector((-along.y, along.x, 0.0))
     ra, rs = min(it["rx"], 1.2) * 0.7, min(it["ry"], 1.2) * 0.7
-    n = rng.randint(10, 16)
-    rad = 0.06
+    n = rng.randint(16, 22)
+    rad = 0.09
     stems = []
     for k in range(n):
         # Основа — рівномірно в еліпсі плями; стебло лягає вздовж руху з розкидом.
         r, a = math.sqrt(rng.random()), rng.uniform(0, 2 * math.pi)
         b0 = along * (math.cos(a) * r * ra) + side * (math.sin(a) * r * rs) + Vector((0, 0, 0.03))
-        ang = travel + rng.gauss(0, 0.45)
+        # Розкид напрямку широкий: стебла, що лежать уздовж погляду камери, читаються вертикальними рисками.
+        ang = travel + rng.gauss(0, 0.9)
         pitch = math.radians(rng.uniform(3, 12))
         d = Vector((math.cos(ang) * math.cos(pitch), math.sin(ang) * math.cos(pitch), math.sin(pitch)))
         tip = b0 + d * rng.uniform(0.6, 1.2)
