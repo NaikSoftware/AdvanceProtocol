@@ -261,7 +261,8 @@ func _play_shot(shooter_id: int, target_id: int, weapon: int = -1) -> Variant:
 	var target: Unit = _resolve_unit(target_id)
 	var armoured: bool = target != null and UnitTypes.is_vehicle(target.unit_class())
 	if target != null and (weapon == BattleFx.Weapon.SHELL or (weapon == BattleFx.Weapon.TANK_GUN and not armoured)):
-		ground_hit.emit(target.pos, 2.5 if weapon == BattleFx.Weapon.SHELL else 1.5)
+		# Чаша вирви: 155 мм — радіус 1,5 м (з валом ~4 м, пів клітинки), гармата — 1 м.
+		ground_hit.emit(target.pos, 1.5 if weapon == BattleFx.Weapon.SHELL else 1.0)
 	if target_view != null:
 		BattleFx.spawn_hit(target_view.get_parent(), target_view.position, weapon, armoured)
 		awaitable = _pause(BattleFx.HIT_HOLD_SEC)

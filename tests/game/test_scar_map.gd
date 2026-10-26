@@ -74,7 +74,12 @@ func test_crater_is_a_bowl_with_an_ejecta_rim() -> void:
 
 ## Вал не заходить на сусідню клітинку: штамп обрізано межами власної.
 func test_crater_stays_inside_its_cell() -> void:
-	scars.stamp_crater(Vector2i(4, 4), 2.5)
+	# 3,5 м: вал (до 1,3 радіуса ≈ 4,6 м) виходив би за межу клітинки (4 м від центру).
+	scars.stamp_crater(Vector2i(4, 4), 3.5)
+	var any_rim_at_edge: bool = false
+	for y in range(4 * 32, 5 * 32):
+		any_rim_at_edge = any_rim_at_edge or scars.image().get_pixel(5 * 32 - 1, y).b8 > 0
+	assert_true(any_rim_at_edge, "передумова: вал доходить до краю клітинки")
 	for y in range(4 * 32, 5 * 32):
 		assert_eq(scars.image().get_pixel(5 * 32, y).b8, 0)
 		assert_eq(scars.image().get_pixel(4 * 32 - 1, y).b8, 0)

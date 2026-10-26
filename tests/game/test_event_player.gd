@@ -556,7 +556,7 @@ func test_shell_and_ground_gun_hits_report_a_crater() -> void:
 		func(id: int) -> Unit: return gun if id == 1 else (target_unit if id == 2 else null))
 	player.ground_hit.connect(func(cell: Vector2i, radius_m: float) -> void: craters.append([cell, radius_m]))
 	player.play([Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
-	assert_eq(craters, [[Vector2i(3, 3), 2.5]])
+	assert_eq(craters, [[Vector2i(3, 3), 1.5]])
 	_finish_all_processed_tweens()
 
 
@@ -572,11 +572,11 @@ func _craters_for(shooter: Unit, target_unit: Unit, events: Array[Events.BattleE
 	return craters
 
 
-## Танкова гармата по піхоті б'є в ґрунт — мала вирва 1,5 м.
+## Танкова гармата по піхоті б'є в ґрунт — мала вирва, радіус чаші 1 м.
 func test_tank_gun_on_infantry_leaves_a_small_crater() -> void:
 	var craters: Array = _craters_for(_unit(1, 5, 1, Vector2i(6, 3)), _unit(2, 0, 0, Vector2i(3, 3)),
 		[Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
-	assert_eq(craters, [[Vector2i(3, 3), 1.5]])
+	assert_eq(craters, [[Vector2i(3, 3), 1.0]])
 
 
 ## По броні гармата й дрон влучають у машину, не в землю: вирви нема.
@@ -594,4 +594,4 @@ func test_tank_gun_and_drone_on_a_vehicle_leave_no_crater() -> void:
 func test_crater_is_reported_without_a_target_view() -> void:
 	var craters: Array = _craters_for(_unit(1, 9, 1, Vector2i(7, 3)), _unit(2, 0, 0, Vector2i(3, 3)),
 		[Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent], false)
-	assert_eq(craters, [[Vector2i(3, 3), 2.5]])
+	assert_eq(craters, [[Vector2i(3, 3), 1.5]])

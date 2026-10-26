@@ -1328,10 +1328,21 @@ void fragment() {
 			// вона замінює нормаль ріллі, а не додається до неї.
 			vec2 crater_n = (g * 0.8 - gr * 0.3) * texture(scar_seen, suv).r * inside;
 			nxy = mix(nxy, crater_n, bowl) + crater_n * (1.0 - bowl);
-			scar_dark = max(sc.r, sc.g * 0.6);
-			// Дно матове: гладше дно ловило відблиск неба й світлішало за поле.
-			rough = mix(rough, 1.0, max(max(sc.r, sc.b), bowl));
-			refl *= 1.0 - max(sc.r, bowl);
+			// Чашу видно як чашу під будь-яким небом: стінка, звернена до камери (дальня), світліша
+			// на ~15 L*, ближня — темніша, на дальньому валу — відблиск. g дивиться до центру чаші,
+			// тож на дальній стінці він іде назустріч погляду камери.
+			vec2 view_xz = normalize(-INV_VIEW_MATRIX[2].xz + 1e-5);
+			float facing = -dot(normalize(g + 1e-5), view_xz);
+			float wall = smoothstep(0.02, 0.12, length(g)) * texture(scar_seen, suv).r * inside;
+			alb *= 1.0 + 0.55 * facing * wall;
+			float rim_face = -dot(normalize(gr + 1e-5), view_xz);
+			alb += vec3(0.02, 0.017, 0.012) * max(-rim_face, 0.0) * smoothstep(0.02, 0.1, length(gr)) * sc.b;
+			// Уся вирва з валом матова й без дзеркала неба: гладше дно світлішало за поле, а відблиск
+			// неба синив ближній край.
+			float crater_zone = max(smoothstep(0.0, 0.2, sc.g), sc.b);
+			scar_dark = max(sc.r, crater_zone);
+			rough = mix(rough, 1.0, max(sc.r, crater_zone));
+			refl *= 1.0 - max(sc.r, crater_zone);
 		}
 		// Тінь хмари: плями ~10 клітинок, пливуть ~0.5 клітинки/с (4 м/с), тож пляма минає точку
 		// за 15–20 с. Край вузький (0.52–0.64), щоб тінь читалась плямою, а не загальною рябизною.

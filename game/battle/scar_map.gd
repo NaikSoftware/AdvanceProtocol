@@ -106,7 +106,9 @@ func stamp_crater(cell: Vector2i, radius_m: float) -> void:
 			var f: float = 0.5 + 0.5 * fine.get_noise_2d(float(p.x), float(p.y))
 			# Нерівний край: радіус гуляє ±15 % по куту, дрібний шум ще ±8 %.
 			var lobes: float = noise.get_noise_2d(cos(ang) * 1.5, sin(ang) * 1.5)
-			var d: float = dist / (r_px * (1.0 + 0.15 * lobes + 0.08 * (f - 0.5)))
+			# Чаша — гладкий профіль за кутовими пелюстками, без дрібного шуму: той давав у ній
+			# радіальні штрихи. Дрібний шум — лише на валу (грудки).
+			var d: float = dist / (r_px * (1.0 + 0.15 * lobes))
 			var bowl: float = clampf(1.0 - d * d, 0.0, 1.0)
 			bowl = bowl * smoothstep(1.0, 0.8, d)
 			# Вал — піднятий горб уздовж краю, на ~15 % ширший за чашу, грудками (шум).
