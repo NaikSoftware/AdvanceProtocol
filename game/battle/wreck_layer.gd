@@ -122,7 +122,7 @@ func _init() -> void:
 	_fire_mat.shader = fire_shader()
 	# Вогонь — поверх диму власного стовпа, а не за ним.
 	_fire_mat.render_priority = 1
-	_fire_mat.set_shader_parameter("gain", 2.8)
+	_fire_mat.set_shader_parameter("gain", 1.6)
 	_fire_mat.set_shader_parameter("fade_in_at", FIRE_FADE_IN_AT)
 	_fire_mat.set_shader_parameter("fade_in_sec", FIRE_FADE_IN_SEC)
 	_columns = _multimesh("Columns", _column_mat, MAX_COLUMNS * PUFFS_PER_COLUMN)
@@ -478,7 +478,10 @@ func _refresh_effects() -> void:
 		for j in FLAMES_PER_SPOT:
 			# Свій зсув шуму на кожен язик: два стовпи ніколи не рухаються в такт.
 			var sd: float = fposmod(float(hash(c) % 89) / 89.0 + 0.41 * float(j), 1.0)
-			fm.set_instance_transform(n, Transform3D(Basis(), flame_spots(c)[j]))
+			# Перший стовпець базису — шлях від кореня до центру вогню: язики хиляться до центру,
+			# і вогонь читається одним, а не двома пучками по кутах.
+			var to_centre: Vector3 = fire_centre(c) - flame_spots(c)[j]
+			fm.set_instance_transform(n, Transform3D(Basis(Vector3(to_centre.x, 0.0, to_centre.z), Vector3.UP, Vector3.BACK), flame_spots(c)[j]))
 			fm.set_instance_custom_data(n, Color(size.x, sd, e.birth, size.y))
 			n += 1
 	fm.visible_instance_count = n
@@ -788,7 +791,7 @@ render_mode unshaded, blend_premul_alpha, depth_draw_never, cull_disabled, shado
 // «дихає» за шумом. Жодного періодичного руху; у кожного білборда свій зсув і свій час.
 uniform float fx_time = 0.0;
 // Понад 1: біле серце світиться; верхня половина — вдвічі тьмяніша.
-uniform float gain = 2.8;
+uniform float gain = 1.6;
 // Квад ширший і вищий за полум'я, щоб м'який край і клапті не різались рамкою.
 uniform float pad = 2.6;
 uniform float sink = 0.08;
@@ -806,6 +809,7 @@ uniform float soft_fade = 0.08;
 
 varying float v_in;
 varying float v_sd;
+varying float v_lean;
 
 // Хеш без sin: sin великого аргументу у float32 губить точність і дає прямокутні латки.
 float h2(vec2 p) {
@@ -843,6 +847,8 @@ void vertex() {
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
 	v_in = clamp((fx_time - INSTANCE_CUSTOM.z - fade_in_at) / fade_in_sec, 0.0, 1.0);
 	v_sd = INSTANCE_CUSTOM.y;
+	// Куди від кореня центр вогню на екрані, у ширинах полум'я.
+	v_lean = dot(right, MODEL_MATRIX[0].xyz) / max(INSTANCE_CUSTOM.x, 1e-4);
 }
 
 void fragment() {
@@ -851,11 +857,13 @@ void fragment() {
 	float y = (1.0 - UV.y) * (tall + sink) - sink;
 	float t = fx_time + v_sd * 37.0;
 	vec2 seed = vec2(v_sd * 7.1, v_sd * 2.3);
-	// Висота «дихає» 0,5–1,15 за шумом.
-	float pump = 0.5 + 0.65 * vnoise(t * 3.5);
+	// Висота «дихає» за шумом, але не нижче 0,8 від найвищої: вогонь не сідає в пласку корону.
+	float pump = 0.88 + 0.22 * vnoise(t * 3.5);
 	float hh = y / pump;
 	// Увесь язик хитається вбік (шум, не синус): біля кореня ледь, угорі — на чверть ширини.
 	x += (vnoise(t * 6.1 + v_sd * 13.0) - 0.5) * (0.12 + 0.35 * clamp(hh, 0.0, 1.0));
+	// Вище кореня язик хилиться до центру даху: обидва сходяться в один вогонь.
+	x -= v_lean * 0.8 * smoothstep(0.0, 0.5, hh);
 	// Великі хвилі: ~1,75 циклу на ширину, амплітуда ~0,25 ширини, пливуть угору ~2 висоти/с.
 	vec2 big = vec2(x * 1.75, y * 1.2 - t * 2.5) + seed;
 	vec2 warp = (vec2(fbm(big), fbm(big + vec2(4.7, 1.3))) - 0.5) * vec2(0.7, 0.5);
@@ -884,10 +892,10 @@ void fragment() {
 	float heat = clamp(1.4 * n * pow(clamp(1.0 - 0.7 * hh, 0.0, 1.0), 1.5) + (fine - 0.5) * 0.4, 0.0, 1.0);
 	// Кольори лінійні (екран переводить у sRGB): темно-червоне — #A52A0A, помаранчеве, жовте, біле.
 	vec3 col = mix(vec3(0.033, 0.005, 0.002), vec3(0.376, 0.023, 0.003), smoothstep(0.05, 0.25, heat));
-	col = mix(col, vec3(0.89, 0.133, 0.007), smoothstep(0.25, 0.45, heat));
+	col = mix(col, vec3(1.0, 0.22, 0.015), smoothstep(0.2, 0.4, heat));
 	col = mix(col, vec3(1.0, 0.477, 0.051), smoothstep(0.5, 0.7, heat));
-	// Біле — лише тонке серце біля кореня.
-	col = mix(col, vec3(1.0, 0.89, 0.69), smoothstep(0.85, 0.97, heat));
+	// Блідо-жовто-біле серце — лише в нижній чверті висоти.
+	col = mix(col, vec3(1.0, 0.83, 0.40), smoothstep(0.62, 0.8, heat) * (1.0 - smoothstep(0.25, 0.38, hh)));
 	// HDR — лише гарячому серцю: помаранчеве й червоне, помножене на gain, вигоріло б у жовте.
 	// Верхня половина — вдвічі тьмяніша: світиться серце, а не язики.
 	col *= mix(1.0, gain, smoothstep(0.5, 0.9, heat)) * mix(1.0, 0.5, smoothstep(0.5, 0.9, hh));
