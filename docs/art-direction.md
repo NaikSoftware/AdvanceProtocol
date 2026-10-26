@@ -156,8 +156,14 @@ What our own constraints add on top:
   ribbon) with a shader — scrolling noise on the UV plus a vertex wobble. Otherwise five wrecks are
   five systems simulating forever, and the frame rate never drops between turns — and dropping it
   is the battery budget above.
-- The explosion itself is `one_shot`, lives ~1.5 s, then `queue_free`. Setting `emitting = false`
-  is not enough; the particles stay in frame.
+- **An explosion is sharp, its smoke is slow.** The cloud reaches full volume in 0.1–0.2 s; then
+  the flipbook crawls, the cloud rises with deceleration (1.5–2 m/s at the start), widens and
+  drifts downwind, and thins evenly to zero in 3–6 s (a tank-gun hit puff 3.5 s, a 155 mm burst or
+  a kill 6 s). The end is set by the cloud's own opacity curve, never by the last flipbook frame:
+  smoke does not vanish on the spot. The player waits only for the flash (0.3 s), not the smoke.
+- Every moment is `one_shot` and frees itself with `queue_free` once its smoke is gone (≤ 6.5 s).
+  Setting `emitting = false` is not enough; the particles stay in frame. A handover clears all of
+  them: smoke over ground the next player never scouted would show where the target stood.
 - Craters, scorching and crushed-prop debris are stamped into a **scar map**, one texture over the board that the ground shader reads. Not `Decal` nodes: the Mobile renderer applies at most 8 decals per mesh and the Compatibility renderer none, and the ground is one mesh. Not quads over the ground: they z-fight on slopes and cost a draw call each.
 
 Off the table on mobile Vulkan: volumetric smoke, raymarching, GPU particle collision against the
