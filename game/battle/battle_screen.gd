@@ -269,9 +269,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
 	_board_view.wet = look.wetness >= WET_MIN
-	_board_view.sun_dir = Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0)).z
-	# Запечена тінь лісу слабша під похмурим небом (менше прямого світла).
-	_board_view.forest_shadow = FOREST_SHADOW * clampf(look.light_energy / 1.5, 0.4, 1.0)
+	_apply_forest_sun(look)
 	_weather.apply(look)
 	_wire_view(board)
 	# Техніка, що стоїть на клітинці від старту матчу, теж розчавила дрібні пропси під собою; глядач
@@ -310,9 +308,7 @@ func resume(match_service: Node = null) -> void:
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
 	_board_view.wet = look.wetness >= WET_MIN
-	_board_view.sun_dir = Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0)).z
-	# Запечена тінь лісу слабша під похмурим небом (менше прямого світла).
-	_board_view.forest_shadow = FOREST_SHADOW * clampf(look.light_energy / 1.5, 0.4, 1.0)
+	_apply_forest_sun(look)
 	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
@@ -1017,6 +1013,13 @@ func _warm_up_fx(cell: Vector2i) -> void:
 	var at: Vector3 = IsoCameraRig.cell_to_world(cell)
 	BattleFx.warm_up(_units, at)
 	_wreck_layer.warm_up(at)
+
+
+## Сонце карти для запеченої тіні лісу: напрям НА сонце, як у WeatherRig (sun.basis.z), і сила —
+## слабша під похмурим небом (менше прямого світла).
+func _apply_forest_sun(look: BattleLook) -> void:
+	_board_view.sun_dir = Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0)).z
+	_board_view.forest_shadow = FOREST_SHADOW * clampf(look.light_energy / 1.5, 0.4, 1.0)
 
 
 ## Зум камери для лісу: підлісок лише до ForestLayer.DETAIL_ZOOM.

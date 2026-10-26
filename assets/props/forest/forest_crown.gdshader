@@ -44,6 +44,10 @@ uniform float rim = 0.15;
 uniform float card_round = 0.7;
 uniform float card_up = 1.2;
 
+#include "res://game/battle/shaders/surroundings.gdshaderinc"
+
+// Точка у світі після розгортання картки: для імли кільця (fog_bank), як у пропсів.
+varying vec3 world_pos;
 varying float is_card;
 varying flat float card_half;
 varying vec3 inst_tone;
@@ -70,6 +74,7 @@ void vertex() {
 		v.xy += UV2 * s;
 	}
 	VERTEX = v;
+	world_pos = (INV_VIEW_MATRIX * vec4(v, 1.0)).xyz;
 	NORMAL = normalize((MODELVIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	if (is_card > 0.5) {
 		// Кути картки нахилені назовні: світло котиться по пучку, як по кулі, і крона
@@ -119,6 +124,13 @@ void fragment() {
 	ALBEDO = rgb * mix(COLOR.rgb, vec3(1.0), is_card) * inst_tone * tint * r * occ * mix(bark_dark, 1.0, is_card);
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
+	// Імла кільця, як у землі й будинків: крона за краєм дошки тоне в ній, а не висить над нею.
+	FOG = vec4(0.0);
+	if (surround) {
+		vec4 haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
+		ALBEDO = surround_grade(ALBEDO, haze.a);
+		FOG = surround_fog(haze, 0.0);
+	}
 	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без
 	// окремого прозорого проходу. Без MSAA це звичайний alpha-cut за тим самим порогом.
 	ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));

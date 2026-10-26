@@ -77,7 +77,8 @@ func test_autumn_shares() -> void:
 
 
 func test_fixed_trees_get_every_autumn_tone() -> void:
-	# П'ять поодиноких дерев: два жовто-помаранчеві, два оливкові, одне зелене.
+	# П'ять поодиноких дерев за частками 22 / 58 / 20 %: одне жовто-помаранчеве, три оливкові,
+	# одне зелене.
 	var fixed: Array = []
 	for i in 5:
 		fixed.append(["Hero_Oak", Vector2(30 + 3 * i, 2)])
@@ -85,11 +86,11 @@ func test_fixed_trees_get_every_autumn_tone() -> void:
 	for e: Dictionary in ForestScatter.plan(_cells(4, 4), func(_p: Vector2) -> String: return "mixed", {}, "early", 7, LIB, fixed):
 		if e["node"] == "Hero_Oak":
 			counts[e["turn"]] += 1
-	assert_eq(counts, {"orange": 2, "green": 1, "": 2}, "частки осені серед поставлених вручну")
+	assert_eq(counts, {"orange": 1, "green": 1, "": 3}, "частки осені серед поставлених вручну")
 
 
 func test_species_follow_weights() -> void:
-	# Пізня осінь: ~30 % голих беріз і дубів у верхньому ярусі (намет і крайовий ряд — дерева з
+	# Пізня осінь: ~70 % листяних (голих і з бурим листям) у верхньому ярусі (намет і крайовий ряд — дерева з
 	# масштабом ≥ 0,85; підріст і крони біля просіки менші).
 	var broad: int = 0
 	var all: int = 0
@@ -100,4 +101,4 @@ func test_species_follow_weights() -> void:
 			if species in ["Birch", "Oak"]:
 				broad += 1
 	assert_gt(all, 300, "дерев досить для частки")
-	assert_almost_eq(float(broad) / all, 0.3, 0.1, "частка листяних у верхньому ярусі пізньої осені")
+	assert_almost_eq(float(broad) / all, 0.7, 0.1, "частка листяних у верхньому ярусі пізньої осені")

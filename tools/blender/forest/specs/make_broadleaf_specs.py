@@ -24,15 +24,20 @@ GREEN = {
     "early": {"L": 26, "C": 10, "h": 135, "contrast_l": 0.6},
     "late": {"L": 26, "C": 3, "h": 55, "contrast_l": 0.6},
 }
-# Рання осінь: листяні крони оливково-жовті; дошка робить частину крон жовто-помаранчевими,
+# Рання осінь: листяні крони оливково-жовті (не бурштинові: основа не мусить читатись помаранчем); дошка робить частину крон жовто-помаранчевими,
 # частину ще зеленими (колір екземпляра). Кущі лишаються зеленими (GREEN).
-AUTUMN = {"L": 41, "C": 26, "h": 82, "contrast_l": 0.6}
+AUTUMN = {"L": 40, "C": 22, "h": 95, "contrast_l": 0.6}
 TURNED = {"birch": {"L": 60, "C": 40, "h": 85, "contrast_l": 0.8},
           "oak": {"L": 43, "C": 30, "h": 68, "contrast_l": 0.8}}
+# Пізня осінь: третина листяних ще тримає буре й руде листя (форми `*_R`, лише в пізньому
+# наборі), решта голі.
+RUST = {"L": 26, "C": 14, "h": 50, "contrast_l": 0.6}
 LITTER = {"L": 30, "C": 5, "h": 70, "contrast_l": 0.5}  # опад приглушений: чорні плями читались кляксами, світлі цятки — шумом
 CUTOFF = {"summer": 0.45, "early": 0.45, "late": 0.45}
 KEEP = {"summer": 1.0, "early": 1.0, "late": 0.55}
 # Кора тепло-сіро-бура: синє небо інакше робить темну кору синюватою.
+# Кора повалених стовбурів сіро-бура, трохи темніша за стоячі стовбури.
+LOG_BARK = {"tint": [1.1, 1.0, 0.86], "target_y": 0.16}
 BARK = {"birch": {"tint": [1.12, 1.0, 0.85], "target_y": 0.3, "sat": 0.4}, "oak": {"tint": [1.15, 1.0, 0.82], "target_y": 0.22},
         "lime": {"tint": [1.15, 1.0, 0.82], "target_y": 0.24}}
 
@@ -45,8 +50,10 @@ ITEMS = [
     ("Shrub_Hazel", "shrub_hazel", "shrub", "lime", {"trunk": False, "strip": True}),
     ("Shrub_Thorn", "shrub_thorn", "shrub", "oak", {"trunk": False, "strip": True}),
     ("Hedge_Shrub", "hedge_shrub", "shrub", "lime", {"trunk": False, "strip": True}),
-    ("Log_A", "log_a", None, "oak", {"trunk": False, "strip": True}),
-    ("Log_B", "log_b", None, "oak", {"trunk": False, "strip": True}),
+    ("Log_A", "log_a", None, "oak", {"trunk": False, "strip": True, "trunk_grade": LOG_BARK}),
+    ("Log_B", "log_b", None, "oak", {"trunk": False, "strip": True, "trunk_grade": LOG_BARK}),
+    ("Birch_R", "birch_a", "rust", "birch", {"only": "late", "trunk_r_mul": 2.0, "card_keep": 0.5, "crown_low": 0.6, "scale": 0.56, "card_scale": 1.4, "limbs": False}),
+    ("Oak_R", "oak_b", "rust", "oak", {"only": "late", "card_keep": 0.5, "crown_low": 0.6, "scale": 0.6, "card_scale": 1.6, "limbs": False}),
     ("Litter_A", "litter_a", None, "oak", {"trunk": False, "flat_sprites": "litter"}),
     ("Hero_Oak", "hero_oak", "oak", "oak", {"trunk_sides": 6, "late_keep": 0.5, "scale": 0.63, "card_scale": 1.3, "trunk_src": "oak_a"}),
     ("Hero_Lime", "hero_lime", "broad", "oak", {"trunk_sides": 6, "late_keep": 0.45, "scale": 0.6, "card_scale": 1.3, "trunk_src": "oak_b"}),
@@ -58,12 +65,16 @@ for season in ("late", "summer", "early"):
     sets = {k: [{"src": "%s_%s" % (k, season), "grade": {"lab": AUTUMN if season == "early" and k != "shrub" else GREEN[season]}}]
             for k in ("birch", "broad", "oak", "shrub")}
     sets["litter"] = [{"src": "broad_late", "max": 4, "grade": {"lab": LITTER}}]
+    if season == "late":
+        sets["rust"] = [{"src": "%s_turned" % k, "grade": {"lab": RUST}} for k in ("oak", "birch")]
     if season == "early":
         for k, g in TURNED.items():
             sets["%s_turned" % k] = [{"src": "%s_turned" % k, "grade": {"lab": g}}]
     items = []
     for node, src, spr, bark, extra in ITEMS:
         extra = dict(extra)
+        if extra.pop("only", season) != season:
+            continue
         early_set = extra.pop("early_set", None)
         late_keep = extra.pop("late_keep", None)
         late_src = extra.pop("late_src", None)

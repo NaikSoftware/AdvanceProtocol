@@ -10,9 +10,9 @@
     "src": "birch_early",
     "grade": {
      "lab": {
-      "L": 41,
-      "C": 26,
-      "h": 82,
+      "L": 40,
+      "C": 22,
+      "h": 95,
       "contrast_l": 0.6
      }
     }
@@ -23,9 +23,9 @@
     "src": "broad_early",
     "grade": {
      "lab": {
-      "L": 41,
-      "C": 26,
-      "h": 82,
+      "L": 40,
+      "C": 22,
+      "h": 95,
       "contrast_l": 0.6
      }
     }
@@ -36,9 +36,9 @@
     "src": "oak_early",
     "grade": {
      "lab": {
-      "L": 41,
-      "C": 26,
-      "h": 82,
+      "L": 40,
+      "C": 22,
+      "h": 95,
       "contrast_l": 0.6
      }
     }
@@ -234,11 +234,11 @@
    "src": "log_a",
    "trunk_grade": {
     "tint": [
-     1.15,
+     1.1,
      1.0,
-     0.82
+     0.86
     ],
-    "target_y": 0.22
+    "target_y": 0.16
    },
    "card_keep": 1.0,
    "trunk": false,
@@ -249,11 +249,11 @@
    "src": "log_b",
    "trunk_grade": {
     "tint": [
-     1.15,
+     1.1,
      1.0,
-     0.82
+     0.86
     ],
-    "target_y": 0.22
+    "target_y": 0.16
    },
    "card_keep": 1.0,
    "trunk": false,

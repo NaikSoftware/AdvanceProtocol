@@ -44,11 +44,16 @@ const WIDE: float = 1.45
 ## Біля просіки: крони тоншають до неї поступово (`LANE_THIN`) і не заходять ближче за
 ## `LANE_MARGIN`; обабіч — `LANE_SHRUBS` кущів на тайл (0,3–1,2 тайла від проламу).
 const LANE_THIN: float = 0.15
-const LANE_MARGIN: float = 0.3
+const LANE_MARGIN: float = 0.45
 const LANE_SHRUBS: float = 4.0
 ## Ближче за `LANE_NEAR` тайла до проламу крона вужча й нижча (×0,7): широка з полем до
 ## просіки не вміщалась у сусідню клітинку, і та лишалась порожньою.
 const LANE_NEAR: float = 2.0
+## Тон повалених стовбурів просіки (множник кольору екземпляра) за порою року — кожна пора має
+## свою карту й своє світло. Під похмурим небом пізньої осені тонкий циліндр світлішав до сірої
+## жердини; на сонячних картах низьке сонце світить у тіньовий бік, що бере блакитне небо, і
+## стовбур синів до чорного. Тон теплий — кора сіро-бура.
+const LOG_TONE: Dictionary = {"late": Color(1.0, 0.86, 0.68), "summer": Color(1.8, 1.5, 1.15), "early": Color(1.8, 1.5, 1.15)}
 
 ## Склад лісу: частки видів (префікс вузла або ім'я вузла) у наметі й у крайовому ряду.
 const WOODS: Dictionary = {
@@ -57,33 +62,36 @@ const WOODS: Dictionary = {
 	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.4, "density": 3.4},
 }
 
-## Пізня осінь: мішаний ліс — ялини й сосни, у верхньому ярусі ~30 % голих беріз і дубів;
-## густоту тримає підріст, а не одна порода.
-const LATE_CANOPY: Dictionary = {"Spruce": 0.58, "Pine": 0.12, "Birch": 0.22, "Oak": 0.08}
+## Пізня осінь: листяний ліс з хвойною домішкою (~30 %): зелені лише хвойні, а листяні на дві
+## третини голі, решта з бурим листям (форми `*_R` у бібліотеці пізньої осені).
+const LATE_CANOPY: Dictionary = {"Spruce": 0.2, "Pine": 0.1, "Birch": 0.4, "Oak": 0.3}
 const LATE_DENSITY: float = 5.0
-const LATE_EDGE: Dictionary = {"Spruce_B": 0.6, "Birch": 0.3, "Oak": 0.1}
+const LATE_EDGE: Dictionary = {"Spruce_B": 0.3, "Birch": 0.4, "Oak": 0.3}
 ## Ширина крони ялини пізньої осені (замість WIDE): вужчі шпилі, але без просвітів голої
 ## землі між ними.
 const LATE_SPRUCE_W: float = 0.85
 const LATE_SPRUCE := Color(0.62, 0.68, 0.76)
-## Підріст ялини по всій підлозі пізнього лісу (0,1–0,2 тайла заввишки): земля під голими
-## листяними не світить, а танк не стоїть на голій плямі. Голі кущі нічого не ховають, тож
-## пояс узлісся, підлісок і смуга біля просіки — здебільшого молоді ялини.
+## Підріст по всій підлозі пізнього лісу (0,1–0,2 тайла заввишки): голі бурі кущі з рідкою
+## молодою ялиною — земля під голими кронами не світить, а зеленого — лише хвоя.
 const LATE_FLOOR_DENSITY: float = 6.0
 const LATE_FLOOR_H: Vector2 = Vector2(0.8, 1.6)
-const LATE_UNDER: Dictionary = {"Spruce_B": 0.7, "Shrub": 0.3}
-const LATE_HEDGE_EVERGREEN: float = 0.7
+const LATE_FLOOR: Dictionary = {"Shrub": 0.7, "Spruce_B": 0.3}
+## Пояс узлісся, підлісок і смуга біля просіки пізньої осені.
+const LATE_UNDER: Dictionary = {"Shrub": 0.7, "Spruce_B": 0.3}
+const LATE_HEDGE_EVERGREEN: float = 0.35
 
 ## Рання осінь: атлас листяних крон оливково-жовтий; цілими кронами частка `TURN_ORANGE_SHARE`
 ## жовто-помаранчеві, `TURN_GREEN_SHARE` ще зелені. Пороги — квантилі шуму `TURN_FREQ` по
 ## лісових клітинках цієї карти, тож частки ті самі на будь-якій карті. Яскравість тонів та
 ## сама (≈ 1): різниться відтінок, а не світлість, інакше крони лягають плямами.
 const TURN_FREQ: float = 1.0 / 2.0
-const TURN_ORANGE_SHARE: float = 0.4
+const TURN_ORANGE_SHARE: float = 0.22
 const TURN_GREEN_SHARE: float = 0.2
 const TURN_ORANGE := Color(1.08, 0.94, 0.76)
 const TURN_GREEN := Color(0.84, 1.04, 0.9)
 const AUTUMN_SPECIES: PackedStringArray = ["Birch", "Oak", "Hero"]
+## Літо: береза світліша й жовтіша, дуб темніший — породи не зливаються в один тон.
+const SUMMER_TONE: Dictionary = {"Birch": Color(1.07, 1.08, 0.9), "Oak": Color(0.9, 0.95, 0.88)}
 
 ## Номери шарів для зерна точки: однакова точка різних шарів не має однакових кидків.
 enum Layer { CANOPY, EDGE, BELT, LOGS, UNDER, FLOOR, LANE, HEDGE, BROKEN, FIXED }
@@ -240,7 +248,7 @@ func _scatter() -> void:
 	_layer(Layer.UNDER, UNDERSTORY_DENSITY, func(d: float) -> bool: return d > SHRUB_BAND, func(_p: Vector2) -> Dictionary: return under, UNDERSTORY_H, false)
 	if late:
 		_layer(Layer.FLOOR, LATE_FLOOR_DENSITY, func(d: float) -> bool: return d > 0.1,
-				func(_p: Vector2) -> Dictionary: return {"Spruce_B": 1.0}, LATE_FLOOR_H, false)
+				func(_p: Vector2) -> Dictionary: return LATE_FLOOR, LATE_FLOOR_H, false)
 	# Підлісок обабіч просіки, темний: заповнює поле між просікою й кронами, щоб пролам
 	# лишався смугою, а не галявиною.
 	_layer(Layer.LANE, LANE_SHRUBS, func(d: float) -> bool: return d > 0.0, func(_p: Vector2) -> Dictionary: return under, SHRUB_H, false,
@@ -325,6 +333,8 @@ func _place(name: String, p: Vector2, s: float, rng: RandomNumberGenerator, fixe
 		rgb *= 0.7  # темний підлісок біля просіки: світлі кущі читались мазками фарби
 	if _season == "late" and species == "Spruce":
 		rgb *= LATE_SPRUCE  # похмуре світло: ялини темніші й холодніші
+	if _season == "summer" and SUMMER_TONE.has(species):
+		rgb *= SUMMER_TONE[species]
 	var turn: String = ""
 	if _season == "early" and species in AUTUMN_SPECIES:
 		turn = _turn_of(species, p)
@@ -408,50 +418,35 @@ func _broken_cells() -> void:
 		var along := Vector2(cos(yaw), -sin(yaw))
 		var across := Vector2(-along.y, along.x)
 		_lane_damage(c, along, across, rng)
-		for k in rng.randi_range(2, 3):
-			var p := Vector2(c) + across * (1.0 if k % 2 == 0 else -1.0) * rng.randf_range(0.3, 0.4) + along * rng.randf_range(-0.2, 0.2)
-			_pressed_log(p, yaw + deg_to_rad(rng.randf_range(-20.0, 20.0)))
+		# Один-два повалені стовбури вздовж просіки, по різних її боках.
+		for k in rng.randi_range(1, 2):
+			var p := Vector2(c) + across * (1.0 if k % 2 == 0 else -1.0) * rng.randf_range(0.2, 0.35) + along * rng.randf_range(-0.2, 0.2)
+			_pressed_log(p, yaw + deg_to_rad(rng.randf_range(-15.0, 15.0)), rng)
 
 
-## Межа просіки рвана, а не по лінії клітинки: по боках — прим'яті кущі, гілля й поодинокий
-## стовбур на 0,3–0,5 тайла за краєм. Нічого стоячого всередині просіки. Там, де просіка
-## виходить у поле, — прим'яті кущі й гілля врозкид біля виходу (ще в лісовій клітинці): вхід
-## розірваний, а не двері.
+## Межа просіки рвана, а не по лінії клітинки: по боках — гілля на 0,3–0,5 тайла за краєм під
+## стоячими деревами. Нічого стоячого чи прим'ятого, що стирчить, усередині просіки: прим'ятий
+## кущ з камери читався кущем, що стоїть. Там, де просіка виходить у поле, — гілля врозкид біля
+## виходу (ще в лісовій клітинці): вхід розірваний, а не двері.
 func _lane_damage(c: Vector2i, along: Vector2, across: Vector2, rng: RandomNumberGenerator) -> void:
 	for side: float in [1.0, -1.0]:
 		var n := Vector2i(roundi(c.x + across.x * side), roundi(c.y + across.y * side))
 		if _broken.has(n) or not _cells.has(n):
 			continue
-		var out: Vector2 = across * side
-		_crushed_shrub(Vector2(c) + out * rng.randf_range(0.6, 0.75) + along * rng.randf_range(-0.4, 0.4), rng)
-		var lp: Vector2 = Vector2(c) + out * rng.randf_range(0.8, 1.0) + along * rng.randf_range(-0.3, 0.3)
+		var lp: Vector2 = Vector2(c) + across * side * rng.randf_range(0.8, 1.0) + along * rng.randf_range(-0.3, 0.3)
 		_add("Litter_A", Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.55, 1.0, 0.55)), Vector3(lp.x, 0.0, lp.y)), lp, 0.3)
-		if rng.randf() < 0.35:
-			_pressed_log(lp, atan2(-along.y, along.x) + rng.randf_range(-0.6, 0.6))
 	for dir: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		if _cells.has(c + dir):
 			continue
-		for k in 3:
+		for k in 2:
 			var p: Vector2 = Vector2(c) + Vector2(dir) * rng.randf_range(0.3, 0.45) + across * rng.randf_range(-0.45, 0.45)
-			if k == 0:
-				_add("Litter_A", Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.6, 1.0, 0.6)), Vector3(p.x, 0.0, p.y)), p, 0.3)
-			else:
-				_crushed_shrub(p, rng)
+			_add("Litter_A", Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.6, 1.0, 0.6)), Vector3(p.x, 0.0, p.y)), p, 0.3)
 
 
-## Прим'ятий кущ: сплющений по висоті й завалений набік, темніший (голі світлі гілочки на
-## просіці читались світлими цятками).
-func _crushed_shrub(p: Vector2, rng: RandomNumberGenerator) -> void:
-	if not _prefixes.has("Shrub"):
-		return
-	var names: Array = _prefixes["Shrub"]
-	var name: String = names[rng.randi() % names.size()]
-	var tilt := Basis(Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)).normalized(), deg_to_rad(rng.randf_range(15.0, 35.0)))
-	var b: Basis = tilt * Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(1.0, rng.randf_range(0.4, 0.6), 1.0) * rng.randf_range(0.7, 1.0))
-	_add(name, Transform3D(b, Vector3(p.x, 0.0, p.y)), p, 0.3, Color(0.55, 0.55, 0.55))
-
-
-## Стовбур на просіці: втиснутий у землю на ~10 см і вдвічі темніший — під похмурим
-## небом верх циліндра інакше світиться сірим, а світла деревина на просіці — шум.
-func _pressed_log(p: Vector2, yaw: float) -> void:
-	_add("Log_B", Transform3D(Basis(Vector3.UP, yaw), Vector3(p.x, -0.012, p.y)), p, 0.3, Color(0.45, 0.45, 0.45))
+## Повалений стовбур на просіці: 1,5–2,5 клітинки завдовжки (Log_B — 4,5 м уздовж x), товщий у
+## 1,3 раза (тонкий з камери читався жердиною), втиснутий у глину на ~10 см. Шейдер крони темнить
+## кору стоячих стовбурів (bark_dark 0,45: вони в тіні крони), а цей лежить на відкритій просіці,
+## тож тон `LOG_TONE` повертає йому сіро-бурий колір кори, а не чорний і не світлий.
+func _pressed_log(p: Vector2, yaw: float, rng: RandomNumberGenerator) -> void:
+	var b := Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(rng.randf_range(2.7, 4.4), 1.3, 1.3))
+	_add("Log_B", Transform3D(b, Vector3(p.x, -0.012, p.y)), p, 0.3, LOG_TONE.get(_season, Color.WHITE))

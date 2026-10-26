@@ -6,17 +6,20 @@ extends Node3D
 ## - Дошка: дерева, кущі, підріст, смуги узлісся, колоди, по дві форми на породу. Проломи — ті,
 ##   що знає глядач (`BattleState.known_broken_map`), а не правда: інакше ліс видав би, де
 ##   пройшов ворог. Розкид має зерно на кожну точку, тож новий пролам змінює лише дерева біля нього.
-## - Кільце: лише намет, по одній формі на породу сітками проксі (~16 трикутників замість 50–100),
-##   удвічі рідше й ширшими кронами — та сама зімкнутість. Туди юніти не заходять, і камера
-##   дивиться здаля. Один MultiMesh на породу на все кільце: ~10 тис. трикутників дешевші за
-##   зайві виклики малювання.
+## - Кільце: намет по одній формі на породу сітками проксі (~16 трикутників замість 50–100),
+##   далі від дошки — удвічі рідше й ширшими кронами, та сама зімкнутість. Біля дошки
+##   (`RING_NEAR`) — ще смуги узлісся й пояс кущів, а листяні в смузі `RING_DETAIL` — справжніми
+##   сітками: проксі пожовклої крони з камери читалась пласкою латкою. Туди юніти не заходять.
+##   Один MultiMesh на вузол на все кільце: ~10 тис. трикутників дешевші за зайві виклики.
+## - Крони кільця тонуть в імлі (`Surroundings.apply`), як земля й будинки.
 ## - Понад `DETAIL_ZOOM` підлісок під наметом не малюється: з такої висоти його не видно.
 ## - Підріст і низькі дерева (нижче `UNDER_TOP`) — однією сіткою проксі на породу: з такої
 ##   висоти пучків не розрізнити, а вони найчисленніші.
 ## - Тінь лісу запечена (§8: справжню тінь кидають лише юніти): маска плям крон у напрямку сонця
 ##   карти лягає на землю одним напівпрозорим шаром (`_bake_shadow`).
-## - Крони між камерою й показаним юнітом стають напівпрозорими — цілими деревами, без растру;
-##   показані — ті самі, що й під дахами (`set_reveal_cells`), тож невидимий ворог себе не видає.
+## - Усе листя (крони, узлісся, кущі, підріст — дошки й кільця) між камерою й показаним юнітом
+##   стає напівпрозорим — цілими деревами й кущами, без растру; показані — ті самі, що й під
+##   дахами (`set_reveal_cells`), тож невидимий ворог себе не видає.
 
 const _SHADER: Shader = preload("res://assets/props/forest/forest_crown.gdshader")
 const _DIR: String = "res://assets/props/forest/"
@@ -35,7 +38,9 @@ const FADE_ZOOM_STEP: float = 0.5
 const WOOD_OF_SURFACE: PackedStringArray = ["mixed", "pine", "deciduous"]
 const TREES: PackedStringArray = ["Pine", "Spruce", "Birch", "Oak"]
 ## Форми порід у бою: по дві на породу (кожна форма — виклик малювання).
-const FORMS: PackedStringArray = ["Pine_A", "Pine_B", "Spruce_A", "Spruce_B", "Birch_A", "Birch_B", "Oak_A", "Oak_B"]
+## `*_R` — лише в бібліотеці пізньої осені: листяні, що ще тримають буре листя.
+const FORMS: PackedStringArray = ["Pine_A", "Pine_B", "Spruce_A", "Spruce_B", "Birch_A", "Birch_B", "Oak_A", "Oak_B", "Birch_R", "Oak_R"]
+const BROADLEAF: PackedStringArray = ["Birch", "Oak"]
 ## Нижче цієї висоти (тайли) і глибше `UNDER_DEPTH` у лісі — підлісок під наметом.
 const UNDER_TOP: float = 0.45
 const UNDER_DEPTH: float = 0.7
@@ -43,6 +48,15 @@ const UNDER_DEPTH: float = 0.7
 ## крона ширша в `RING_NEAR_WIDE` раза (у кільці немає поясу кущів, смуг узлісся й підросту, що на
 ## дошці закривають просвіти); далі кожне друге дерево з кроною, ширшою ще в √2 раза.
 const RING_NEAR: float = 5.0
+## Смуга кільця з узліссям і поясом кущів (її камера бачить біля краю дошки) і смуга, де листяні
+## в сезон листя — справжніми сітками (голі дерева пізньої осені проксі передають і так).
+const RING_EDGE: float = 3.0
+const RING_DETAIL: float = 1.5
+## Розчиняється листя від цієї висоти (тайли, ~1,6 м): нижчий підріст юніта не ховає, а кожна
+## група розчинення — виклик малювання.
+const FADE_MIN_TOP: float = 0.2
+## Новий пролам перепланує лише клітинки в межах стількох від зміни (ForestScatter.LANE_NEAR + крона).
+const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
 const RING_WIDE: float = 1.84
@@ -69,17 +83,23 @@ var _world := Rect2i()  ## дошка разом із кільцем, коорд
 var _lib: Dictionary = {}  ## ім'я вузла -> {"h", "half"}
 var _mesh: Dictionary = {}  ## ім'я вузла -> Mesh (і проксі `<вузол>_Shadow`)
 var _mat: Dictionary = {}  ## Mesh -> ShaderMaterial
-var _soft_mat: Dictionary = {}  ## Mesh -> ShaderMaterial (прозорість)
+## Розчинення: атлас -> ShaderMaterial прохід лише глибини, а в його next_pass — прохід кольору
+## з прозорістю. Mesh -> атлас; Mesh -> масиви поверхні (для злиття розчинених екземплярів).
+var _fade_mat: Dictionary = {}
+var _atlas_of: Dictionary = {}
+var _arrays: Dictionary = {}
 var _ground_mesh: Mesh
 var _signature: String = ""
 var _broken: Dictionary = {}
+var _ring: int = 0
 var _ring_crowns: Array[Dictionary] = []  ## крони кільця для запеченої тіні
+## Групи листя, що розчиняються: {"mmi", "list", "mesh"} — кільця (будуються раз) і дошки.
+var _ring_fadable: Array[Dictionary] = []
+var _fadable: Array[Dictionary] = []
 var _ring_nodes: Array[Node] = []
 var _board_nodes: Array[Node] = []
 var _soft_nodes: Array[Node] = []
 var _shadow: MeshInstance3D
-## Вузол дерева -> {"mmi": MultiMeshInstance3D, "list": Array[Dictionary]} — крони, що розчиняються.
-var _canopy: Dictionary = {}
 var _under: Array[MultiMeshInstance3D] = []
 var _reveal: Array[Vector2i] = []
 var _zoom: float = 12.0
@@ -110,10 +130,17 @@ func build(world: Board, world_surface: PackedByteArray, ring: int, board_size: 
 	_wood = wood
 	_board = Rect2i(Vector2i.ZERO, board_size)
 	_world = Rect2i(-Vector2i(ring, ring), Vector2i(world.width, world.height))
+	_ring = ring
 	_seed = seed
 	if String(season) != _season:
 		_season = String(season)
 		_load_library()
+	if ring > 0:
+		var mats: Array = _mat.values()
+		for fm: ShaderMaterial in _fade_mat.values():
+			mats.append_array([fm, fm.next_pass])
+		for m: ShaderMaterial in mats:
+			Surroundings.apply(m, board_size)
 	_build_ring()
 	_rebuild_board()
 
@@ -122,9 +149,22 @@ func build(world: Board, world_surface: PackedByteArray, ring: int, board_size: 
 func set_broken(known: Dictionary) -> void:
 	if known.size() == _broken.size() and known.keys().all(func(k: Vector2i) -> bool: return _broken.has(k)):
 		return
+	# Перепланується лише ділянка навколо змінених клітинок: пролам змінює дерева не далі
+	# `ForestScatter.LANE_NEAR` + крона (~3 клітинки), а весь план дошки — ривок посеред руху танка.
+	var changed: Array[Vector2i] = []
+	for c: Vector2i in known:
+		if not _broken.has(c):
+			changed.append(c)
+	for c: Vector2i in _broken:
+		if not known.has(c):
+			changed.append(c)
 	_broken = known.duplicate()
-	if not _cells.is_empty():
-		_rebuild_board()
+	if _cells.is_empty():
+		return
+	var region := Rect2i(changed[0], Vector2i.ONE)
+	for c in changed:
+		region = region.expand(c).expand(c + Vector2i.ONE)
+	_rebuild_board(region.grow(REPLAN_MARGIN))
 
 
 ## Клітинки показаних глядачеві юнітів: крони між ними й камерою стають напівпрозорими.
@@ -148,14 +188,26 @@ func _load_library() -> void:
 	_lib.clear()
 	_mesh.clear()
 	_mat.clear()
-	_soft_mat.clear()
-	var soft := Shader.new()
-	soft.code = _SHADER.code.replace("depth_draw_opaque, ", "").replace(", alpha_to_coverage", "").replace(
-			"|| (!shadow_pass && piece_hash > COLOR.a)", "").replace(
-			"ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = COLOR.a;").replace(
-			"ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));",
-			"if (t.a < cut) { discard; }")
-	assert(soft.code.contains("ALPHA = COLOR.a;") and soft.code.contains("if (t.a < cut)"), "шейдер розчинення крон не зібрався: змінився forest_crown.gdshader")
+	_fade_mat.clear()
+	_atlas_of.clear()
+	_arrays.clear()
+	# Розчинення: розчинені екземпляри всіх форм одного атласу — одна злита сітка (тон — у CUSTOM0,
+	# прозорість — в альфі кольору вершини). Два проходи: спершу лише глибина розчинених крон,
+	# потім колір із прозорістю — проходить лише найближча поверхня, тож над юнітом лягає один
+	# шар 30–40 %, а не стос із трьох-чотирьох крон, крізь який юніта вже не видно.
+	var color_code: String = _replace_checked(_SHADER.code, [
+			["depth_draw_opaque, ", ""], [", alpha_to_coverage", ""],
+			["|| (!shadow_pass && piece_hash > COLOR.a)", ""],
+			["ROUGHNESS = 1.0;", "ROUGHNESS = 1.0;\n\tALPHA = COLOR.a;"],
+			["ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));", "if (t.a < cut) { discard; }"],
+			["inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);", "inst_tone = CUSTOM0.rgb;"]])
+	var depth_code: String = _replace_checked(color_code, [
+			["render_mode cull_disabled, skip_vertex_transform", "render_mode cull_disabled, depth_draw_always, skip_vertex_transform"],
+			["ALPHA = COLOR.a;", "ALPHA = 0.0;"]])
+	var color_shader := Shader.new()
+	color_shader.code = color_code
+	var depth_shader := Shader.new()
+	depth_shader.code = depth_code
 	for path: String in [_DIR + "forest_conifer.glb", _DIR + "forest_broadleaf_%s.glb" % _season]:
 		var root: Node = (load(path) as PackedScene).instantiate()
 		for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
@@ -168,12 +220,23 @@ func _load_library() -> void:
 				var a: AABB = mi.mesh.get_aabb()
 				_lib[name] = {"h": a.end.y, "half": maxf(maxf(-a.position.x, a.end.x), maxf(-a.position.z, a.end.z))}
 			var src: StandardMaterial3D = mi.mesh.surface_get_material(0) as StandardMaterial3D
-			for pair: Array in [[_SHADER, _mat], [soft, _soft_mat]]:
-				var m := ShaderMaterial.new()
-				m.shader = pair[0]
-				m.set_shader_parameter("albedo_tex", src.albedo_texture)
-				m.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
-				(pair[1] as Dictionary)[mi.mesh] = m
+			var m := ShaderMaterial.new()
+			m.shader = _SHADER
+			m.set_shader_parameter("albedo_tex", src.albedo_texture)
+			m.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
+			_mat[mi.mesh] = m
+			_atlas_of[mi.mesh] = src.albedo_texture
+			if not _fade_mat.has(src.albedo_texture):
+				var color := ShaderMaterial.new()
+				color.shader = color_shader
+				var depth := ShaderMaterial.new()
+				depth.shader = depth_shader
+				depth.render_priority = -1
+				depth.next_pass = color
+				for fm: ShaderMaterial in [color, depth]:
+					fm.set_shader_parameter("albedo_tex", src.albedo_texture)
+					fm.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
+				_fade_mat[src.albedo_texture] = depth
 		root.free()
 	var g: Node = (load(_DIR + "forest_ground.glb") as PackedScene).instantiate()
 	for mi: MeshInstance3D in g.find_children("*", "MeshInstance3D", true, false):
@@ -202,55 +265,87 @@ func _free(nodes: Array[Node]) -> void:
 	nodes.clear()
 
 
-## Кільце: намет проксі-кронами однієї форми на породу, по MultiMesh на (бік, порода).
+## Кільце: намет проксі-кронами однієї форми на породу; біля дошки — узлісся, пояс кущів і
+## листяні справжніми сітками. По MultiMesh на вузол.
 func _build_ring() -> void:
 	_free(_ring_nodes)
 	_ring_crowns.clear()
-	var groups: Dictionary = {}  ## проксі -> Array[Dictionary]
+	_ring_fadable.clear()
+	var groups: Dictionary = {}  ## вузол -> Array[Dictionary]
 	for e: Dictionary in ForestScatter.plan(_cells, _wood_at, {}, _season, _seed, _lib):
 		var p: Vector2 = e["pos"]
-		var species: String = String(e["node"]).get_slice("_", 0)
-		var proxy: String = species + "_A_Shadow"
-		if _in_board(p) or not species in TREES or not _mesh.has(proxy):
+		var node: String = e["node"]
+		if _in_board(p) or e["ground"] or not _lib.has(node):
 			continue
+		var species: String = node.get_slice("_", 0)
+		var d: float = _board_distance(p)
 		var xf: Transform3D = e["xf"]
-		if xf.basis.get_scale().y < 0.5:
-			continue  # підріст у кільці не видно
-		var far: bool = _board_distance(p) > RING_NEAR
-		if far and hash(p) % RING_KEEP != 0:
+		var top: float = float(_lib[node]["h"]) * xf.basis.get_scale().y
+		var key: String = ""
+		var crown: bool = false
+		if species in TREES and top >= UNDER_TOP:
+			crown = true
+			if species in BROADLEAF and d <= RING_DETAIL and node in FORMS and _season != "late":
+				key = node
+			else:
+				key = species + "_A_Shadow"
+				var far: bool = d > RING_NEAR
+				if far and hash(p) % RING_KEEP != 0:
+					continue
+				var wide: float = RING_WIDE if far else RING_NEAR_WIDE
+				xf.basis = xf.basis.scaled(Vector3(wide, 1.0, wide))
+		elif d <= RING_EDGE and species == "Hedge":
+			key = node
+		elif d <= RING_EDGE and top < UNDER_TOP and ForestScatter.depth(_cells, p) <= UNDER_DEPTH:
+			# Пояс кущів на краю лісу кільця; підріст під наметом кільця не видно.
+			key = (species + "_A_Shadow") if species in TREES else node + "_Shadow"
+		if key.is_empty() or not _mesh.has(key):
 			continue
-		var wide: float = RING_WIDE if far else RING_NEAR_WIDE
-		xf.basis = xf.basis.scaled(Vector3(wide, 1.0, wide))
-		var key: String = proxy
 		if not groups.has(key):
 			groups[key] = []
-		var it: Dictionary = {"xf": _on_ground(xf), "rgb": e["rgb"], "pos": p, "r": float(e["r"]) * wide,
-				"top": float(_lib[String(e["node"])]["h"]) * xf.basis.get_scale().y}
+		var it: Dictionary = {"xf": _on_ground(xf), "rgb": e["rgb"], "pos": p, "r": float(e["r"]) * xf.basis.get_scale().x / maxf(e["xf"].basis.get_scale().x, 1e-3),
+				"top": top}
 		(groups[key] as Array).append(it)
-		_ring_crowns.append(it)
+		if crown:
+			_ring_crowns.append(it)
 	for key: String in groups:
 		var mesh: Mesh = _mesh[key]
 		var n := _multimesh(mesh, groups[key], _mat[mesh])
 		n.name = "Ring_" + key
 		_ring_nodes.append(n)
+		_ring_fadable.append({"mmi": n, "list": groups[key], "mesh": mesh})
 
 
-func _rebuild_board() -> void:
+## `region` (клітинки) — перепланувати лише її, решту плану взяти з попереднього; порожня —
+## увесь план дошки.
+func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 	_free(_board_nodes)
 	_free(_soft_nodes)
-	_canopy.clear()
+	_fadable.clear()
 	_under.clear()
-	board_plan.clear()
-	# Площа на клітинку ширша за дошку: точки з краю кільця, що зсунулись на дошку, — теж її.
-	var area := Rect2i(_board.position - Vector2i.ONE, _board.size + Vector2i(2, 2))
+	var plan: Array[Dictionary] = []
+	if region.has_area() and not board_plan.is_empty():
+		# Ділянка в тайлах: клітинка c — [c − 0,5; c + 0,5). Площа плану на клітинку ширша: точки
+		# з-за краю ділянки, що зсунулись у неї, — теж її.
+		var rr := Rect2(Vector2(region.position) - Vector2(0.5, 0.5), Vector2(region.size))
+		for e: Dictionary in board_plan:
+			if not rr.has_point(e["pos"]):
+				plan.append(e)
+		for e: Dictionary in ForestScatter.plan(_cells, _wood_at, _broken, _season, _seed, _lib, [], region.grow(1)):
+			if rr.has_point(e["pos"]) and _in_board(e["pos"]):
+				plan.append(e)
+	else:
+		# Площа на клітинку ширша за дошку: точки з краю кільця, що зсунулись на дошку, — теж її.
+		var area := Rect2i(_board.position - Vector2i.ONE, _board.size + Vector2i(2, 2))
+		for e: Dictionary in ForestScatter.plan(_cells, _wood_at, _broken, _season, _seed, _lib, [], area):
+			if _in_board(e["pos"]):
+				plan.append(e)
+	board_plan = plan
 	var groups: Dictionary = {}  ## "клас/вузол" -> Array[Dictionary]
 	var lanes: Array[Transform3D] = []
 	var crowns: Array[Dictionary] = _ring_crowns.duplicate()
-	for e: Dictionary in ForestScatter.plan(_cells, _wood_at, _broken, _season, _seed, _lib, [], area):
+	for e: Dictionary in board_plan:
 		var p: Vector2 = e["pos"]
-		if not _in_board(p):
-			continue
-		board_plan.append(e)
 		var xf: Transform3D = _on_ground(e["xf"])
 		if e["ground"]:
 			lanes.append(xf)
@@ -286,8 +381,7 @@ func _rebuild_board() -> void:
 		if cls == "under":
 			n.visible = _zoom <= DETAIL_ZOOM
 			_under.append(n)
-		if cls == "canopy":
-			_canopy[node] = {"mmi": n, "list": list}
+		_fadable.append({"mmi": n, "list": list, "mesh": mesh})
 	if not lanes.is_empty() and _ground_mesh != null:
 		var g := MeshInstance3D.new()
 		g.name = "Forest_Soil_Lane"
@@ -385,6 +479,8 @@ func _bake_shadow(crowns: Array[Dictionary]) -> void:
 	mat.shader = _shadow_shader()
 	mat.set_shader_parameter("mask", ImageTexture.create_from_image(img))
 	mat.set_shader_parameter("strength", shadow_strength)
+	if _ring > 0:
+		Surroundings.apply(mat, _board.size)
 	_shadow = MeshInstance3D.new()
 	_shadow.name = "Forest_Shadow"
 	_shadow.mesh = st.commit()
@@ -405,11 +501,20 @@ static func _shadow_shader() -> Shader:
 		# лягає й на шрами, колії та просіку. blend_mul на мобільному рендері малювався не множенням.
 		_shadow_shader_cache.code = """shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled;
+#include "res://game/battle/shaders/surroundings.gdshaderinc"
 uniform sampler2D mask : filter_linear, repeat_disable;
 uniform float strength = 0.15;
+varying vec3 world_pos;
+void vertex() {
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
 void fragment() {
 	ALBEDO = vec3(0.0);
 	ALPHA = strength * texture(mask, UV).r;
+	// Під імлою кільця тіні немає: темна пляма крізь імлу читалась би брудом.
+	if (surround) {
+		ALPHA *= 1.0 - fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz)).a;
+	}
 }
 """
 	return _shadow_shader_cache
@@ -438,20 +543,96 @@ func _apply_fade() -> void:
 	_free(_soft_nodes)
 	var cam3d: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
 	var back: Vector3 = cam3d.global_transform.basis.z if cam3d != null else Vector3.UP
-	for node: String in _canopy:
-		var mm: MultiMesh = (_canopy[node]["mmi"] as MultiMeshInstance3D).multimesh
-		var list: Array = _canopy[node]["list"]
-		var faded: Array = []
+	var faded: Dictionary = {}  ## атлас -> Array[{mesh, xf, rgb, alpha}]
+	for g: Dictionary in _ring_fadable + _fadable:
+		var mm: MultiMesh = (g["mmi"] as MultiMeshInstance3D).multimesh
+		var list: Array = g["list"]
+		# Альфа екземплярів і тут: колір екземпляра MultiMesh під headless назад не читається.
+		var alpha := PackedFloat32Array()
+		alpha.resize(list.size())
 		for i in list.size():
-			var k: float = _cover(list[i], back) if not _reveal.is_empty() else 1.0
-			mm.set_instance_color(i, Color(1, 1, 1, 1.0 if k >= 0.999 else 0.0))
+			var k: float = _cover(list[i], back) if not _reveal.is_empty() and float(list[i]["top"]) >= FADE_MIN_TOP else 1.0
+			alpha[i] = 1.0 if k >= 0.999 else 0.0
+			mm.set_instance_color(i, Color(1, 1, 1, alpha[i]))
 			if k < 0.999:
-				faded.append({"xf": list[i]["xf"], "rgb": list[i]["rgb"], "alpha": lerpf(FADE_ALPHA, 1.0, k)})
-		if not faded.is_empty():
-			var mesh: Mesh = _mesh[node]
-			var n := _multimesh(mesh, faded, _soft_mat[mesh])
-			n.name = "Fade_" + node
-			_soft_nodes.append(n)
+				var atlas: Texture2D = _atlas_of[g["mesh"]]
+				if not faded.has(atlas):
+					faded[atlas] = []
+				(faded[atlas] as Array).append({"mesh": g["mesh"], "xf": list[i]["xf"], "rgb": list[i]["rgb"], "alpha": lerpf(FADE_ALPHA, 1.0, k)})
+		g["alpha"] = alpha
+	var idx: int = 0
+	for atlas: Texture2D in faded:
+		var n := MeshInstance3D.new()
+		n.name = "Fade_%d" % idx
+		idx += 1
+		n.mesh = _fade_mesh(faded[atlas])
+		n.material_override = _fade_mat[atlas]
+		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		n.extra_cull_margin = 0.4
+		n.set_meta("alphas", (faded[atlas] as Array).map(func(it: Dictionary) -> float: return it["alpha"]))
+		add_child(n)
+		_soft_nodes.append(n)
+
+
+## Розчинені екземпляри одного атласу — одна сітка у світових координатах: вершини й нормалі
+## перетворені, зсув кута картки (UV2) помножено на горизонтальний масштаб екземпляра (шейдер
+## множить на масштаб моделі, а в злитої сітки він 1), тон — у CUSTOM0, прозорість — в альфі кольору.
+func _fade_mesh(items: Array) -> ArrayMesh:
+	var v := PackedVector3Array()
+	var nrm := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var uv2 := PackedVector2Array()
+	var col := PackedColorArray()
+	var tone := PackedFloat32Array()
+	var idx := PackedInt32Array()
+	for it: Dictionary in items:
+		var mesh: Mesh = it["mesh"]
+		if not _arrays.has(mesh):
+			_arrays[mesh] = mesh.surface_get_arrays(0)
+		var a: Array = _arrays[mesh]
+		var xf: Transform3D = it["xf"]
+		var s: float = xf.basis.x.length()
+		var rgb: Color = it["rgb"]
+		var base: int = v.size()
+		var src_v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var src_n: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+		var src_uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
+		var src_uv2: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2]
+		var src_c: PackedColorArray = a[Mesh.ARRAY_COLOR]
+		for i in src_v.size():
+			v.append(xf * src_v[i])
+			nrm.append((xf.basis * src_n[i]).normalized())
+			uv.append(src_uv[i])
+			uv2.append(src_uv2[i] * s)
+			var c: Color = src_c[i] if not src_c.is_empty() else Color.WHITE
+			col.append(Color(c.r, c.g, c.b, float(it["alpha"])))
+			tone.append_array([rgb.r, rgb.g, rgb.b, 1.0])
+		for i: int in a[Mesh.ARRAY_INDEX]:
+			idx.append(base + i)
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = v
+	arrays[Mesh.ARRAY_NORMAL] = nrm
+	arrays[Mesh.ARRAY_TEX_UV] = uv
+	arrays[Mesh.ARRAY_TEX_UV2] = uv2
+	arrays[Mesh.ARRAY_COLOR] = col
+	arrays[Mesh.ARRAY_CUSTOM0] = tone
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {},
+			Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT)
+	return m
+
+
+## Шейдер розчинення збирається заміною рядків forest_crown.gdshader; заміна, що не знайшла
+## рядка, — помилка навіть у релізі (assert у релізі зникає), і ліс тоді лишається без розчинення.
+static func _replace_checked(code: String, pairs: Array) -> String:
+	for pair: Array in pairs:
+		if not code.contains(pair[0]):
+			push_error("ForestLayer: у forest_crown.gdshader немає рядка «%s» — шейдер розчинення не зібрано" % pair[0])
+			continue
+		code = code.replace(pair[0], pair[1])
+	return code
 
 
 func _on_ground(xf: Transform3D) -> Transform3D:
