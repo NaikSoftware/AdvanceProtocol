@@ -88,8 +88,9 @@ const ROAD_PAD: float = 0.5
 const FENCE_CLEAR: float = 0.08
 ## Двори: садиба має рослини з імовірністю YARD_ON %, 1–2 штуки.
 const YARD_ON: int = 70
-## Розчинення над юнітом (як у PropLayer) і нижня межа альфи голої крони пізньої пори.
-const FADE_ALPHA: float = 0.35
+## Розчинення над юнітом і нижня межа альфи голої крони пізньої пори. Альфа вища, ніж у будинків
+## (PropLayer, 0,35): зелена крона з такою альфою на літній траві зливалась із ґрунтом і зникала.
+const FADE_ALPHA: float = 0.5
 const FADE_FLOOR: float = 0.6
 
 ## Розставлення: {node, pos (Vector3, світ), yaw, scale, cell, kind ("reed" | "bush" | "tree"), group}.

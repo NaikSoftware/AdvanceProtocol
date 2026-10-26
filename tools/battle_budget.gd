@@ -126,6 +126,12 @@ func _ready() -> void:
 			if at.x < 0:
 				push_error("battle_budget: нема рослини для %s" % what)
 			else:
+				if what == "tree":
+					# Юніт — на сусідній клітинці за деревом (далі від камери): крона між ним і камерою.
+					var fwd: Vector3 = -rig.get_viewport().get_camera_3d().global_basis.z
+					var step := Vector2i(int(signf(fwd.x)), 0) if absf(fwd.x) > absf(fwd.z) else Vector2i(0, int(signf(fwd.z)))
+					if step != Vector2i.ZERO and board.in_bounds(at + step) and board.kind_at(at + step) in [Terrain.Kind.FIELD, Terrain.Kind.HILL]:
+						spot = at + step
 				if spot.x >= 0:
 					var other: Unit = MatchService.state.unit_at(spot)
 					if other != null and other != unit:
