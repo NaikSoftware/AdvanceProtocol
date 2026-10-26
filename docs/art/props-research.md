@@ -105,7 +105,8 @@ watermark, no recognisable building, no national colours.
 | [fir_tree_01](https://polyhaven.com/a/fir_tree_01) | 19.3 m tall | 7.9 M | Same use: spruce or fir texture source for the conifer clumps |
 | [modular_electricity_poles](https://polyhaven.com/a/modular_electricity_poles) | kit, 7.0 m poles | 201k | Wooden urban kit. Useful only for crossarm and insulator parts; the rural pole is **concrete** (k_pylon4) |
 | Kenney, Quaternius | — | — | Stylised: never a reference |
-| ambientCG materials | CorrugatedSteel005/007, RoofingTiles006/013A, Bricks105, Plaster001, Concrete034/046, Planks021, MetalPlates013, Bark012 | — | **ship** as tiling PBR for the Blender-built props. Darken and desaturate to the mood |
+| ambientCG materials (CC0) | CorrugatedSteel005/007A, RoofingTiles006/013A, Bricks105, Plaster001, Concrete019/034/046, Planks021, MetalPlates013, Bark012, Rust004, PaintedMetal012, Asphalt031, Ground111 | — | **ship** as tiling PBR for the Blender-built props (fetched by `tools/blender/buildings/fetch_textures.sh`). Darken and desaturate to the mood |
+| [broken_brick_wall](https://polyhaven.com/a/broken_brick_wall) (Poly Haven, CC0) | texture, 2K | — | **ship** as the rubble and broken-wall source for ruins and heaps |
 
 No realistic CC0 birch, oak, lime or shrub model exists on Poly Haven or ambientCG. Those come from
 Tripo (single hero trees) or are built in Blender (clumps), as below.

@@ -445,27 +445,83 @@ func test_debris_flies_its_whole_arc_lands_and_settles() -> void:
 		assert_eq(hit.find_children("Debris*", "GPUParticles3D", true, false).size(), 0)
 
 
-## Дим не ховає сусідів: видимі юніти поруч (не ціль) стають щитом, над яким дим разом (до двох
-## шарів) не густіший за 0,4; далекі юніти й сама ціль — ні.
+## Дим не ховає сусідів: видимі живі юніти поруч (не ціль) стають щитом, над яким усі шари миті
+## разом не густіші за 0,45 — сусід бере відтінок диму, а не світиться в дірці; далекі юніти,
+## невидимі (поза розвіданим) і ті, що гинуть, — ні.
 func test_smoke_spares_visible_neighbours() -> void:
-	for pos: Vector3 in [Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(6, 0, 0)]:
-		var u: Node3D = UnitViewScene.instantiate()
+	var views: Array[UnitView] = []
+	for pos: Vector3 in [Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(6, 0, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0)]:
+		var u: UnitView = UnitViewScene.instantiate()
 		parent.add_child(u)
 		u.position = pos
+		views.append(u)
+	views[3].visible = false
+	views[4].destroyed = true
 	var boom: Node3D = BattleFx.spawn_explosion(parent, Vector3.ZERO, 1.5)
 	var smoke := _mat(boom.get_node("Smoke"))
-	assert_eq(smoke.get_shader_parameter("occ_n"), 1, "лише сусід за тайл; ціль і далекий — ні")
+	assert_eq(smoke.get_shader_parameter("occ_n"), 1, "лише живий видимий сусід за тайл")
 	var occ: Vector4 = smoke.get_shader_parameter("occ0")
 	assert_almost_eq(occ.x, 1.0, 1e-6)
 	assert_almost_eq(occ.w, BattleFx.OCCLUDE_R, 1e-6)
 	assert_eq(smoke.get_shader_parameter("occ1"), Vector4.ZERO)
-	assert_true(smoke.shader.code.contains("occ[i].w + %s" % str(BattleFx.OCCLUDE_FEATHER)), "край розмитий")
-	assert_true(smoke.shader.code.contains("min(a, occ_cap)"), "над сусідом — без м'якого краю за глибиною, що вирізав дірку")
-	for layer: String in ["Ball", "Smoke"]:
-		assert_eq(_mat(boom.get_node(layer)).get_shader_parameter("occ_n"), 1, "%s — теж під обмеженням" % layer)
-	assert_almost_eq(float(smoke.get_shader_parameter("occ_cap")), BattleFx.OCCLUDE_ALPHA, 1e-6)
-	assert_almost_eq(float(_mat(boom.get_node("Ball")).get_shader_parameter("occ_cap")), BattleFx.OCCLUDE_SECOND, 1e-6)
+	assert_true(smoke.shader.code.contains("occ[i].w + %s" % str(BattleFx.OCCLUDE_FEATHER)), "спад розмитий")
+	assert_true(BattleFx.OCCLUDE_FEATHER >= 1.0, "спад на тайл — без виїмки в стовпі")
+	assert_true(smoke.shader.code.contains("min(a, lim)"), "над сусідом — без м'якого краю за глибиною, що вирізав дірку")
+	var ball := _mat(boom.get_node("Ball"))
+	assert_eq(ball.get_shader_parameter("occ_floor"), 0.0, "найяскравіша фаза кулі над сусідом вирізана зовсім")
+	_step_all(BattleFx.FIREBALL_CUT_SEC + 0.06)
+	assert_almost_eq(float(ball.get_shader_parameter("occ_floor")), 0.6, 1e-4, "далі куля над сусідом ≤ 0,6")
+	assert_eq(smoke.get_shader_parameter("occ_floor"), 1.0)
 	_step_all(0.3)
 	assert_eq(smoke.get_shader_parameter("occ_k"), 1.0, "обмеження повне з 0,3 с")
-	var two_layers: float = 1.0 - (1.0 - BattleFx.OCCLUDE_ALPHA) * (1.0 - BattleFx.OCCLUDE_SECOND)
-	assert_true(two_layers >= 0.35 and two_layers <= 0.45, "сусід бере відтінок диму 0,35–0,45, а не світиться в дірці")
+	_assert_total_cap(boom)
+
+
+func _assert_total_cap(root: Node3D) -> void:
+	var clear: float = 1.0
+	var n: int = 0
+	for q: Node in root.find_children("*", "MeshInstance3D", true, false):
+		var cap: Variant = _mat(q).get_shader_parameter("occ_cap")
+		if cap != null and int(_mat(q).get_shader_parameter("occ_n")) > 0:
+			clear *= 1.0 - float(cap)
+			n += 1
+	assert_gt(n, 0)
+	assert_almost_eq(1.0 - clear, BattleFx.OCCLUDE_TOTAL, 1e-4, "усі шари миті над сусідом — разом 0,45")
+
+
+## Кілька клубів однієї миті (4 снаряди автогармати, 3–4 клуби пороху) над сусідом разом теж ≤ 0,45.
+func test_overlapping_puffs_share_the_cap() -> void:
+	var u: UnitView = UnitViewScene.instantiate()
+	parent.add_child(u)
+	u.position = Vector3(1, 0, 0)
+	_assert_total_cap(BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.AUTOCANNON, true))
+	_assert_total_cap(BattleFx.spawn_muzzle(parent, Transform3D(Basis(), Vector3(0.2, 0, 0)), BattleFx.Weapon.TANK_GUN, 5))
+	assert_almost_eq(BattleFx.occlude_cap(4), 1.0 - pow(0.55, 0.25), 1e-6)
+
+
+## Хвиля пилу фугаса розбігається низькими клубами по колу й над сусідом лише рідшає — малий окремий
+## бюджет, що не з'їдає межу самої хмари.
+func test_he_dust_wave_runs_out_and_only_thins_over_a_neighbour() -> void:
+	var u: UnitView = UnitViewScene.instantiate()
+	parent.add_child(u)
+	u.position = Vector3(1, 0, 0)
+	var hit: Node3D = BattleFx.spawn_hit(parent, Vector3.ZERO, BattleFx.Weapon.SHELL, false)
+	var wave: Array[Node] = hit.find_children("Wave*", "MeshInstance3D", true, false)
+	assert_gt(wave.size(), 8)
+	var start: float = (wave[0] as Node3D).position.length()
+	for q: Node in wave:
+		assert_almost_eq(float(_mat(q).get_shader_parameter("occ_cap")), BattleFx.WAVE_CAP, 1e-6)
+	assert_almost_eq(float(_mat(hit.get_node("Dirt")).get_shader_parameter("occ_cap")), BattleFx.occlude_cap(2), 1e-6, "хмара й ядро — свій бюджет")
+	_step_all(BattleFx.DUST_SPREAD_SEC + 0.05)
+	var reached: float = Vector2((wave[0] as Node3D).position.x, (wave[0] as Node3D).position.z).length()
+	assert_gt(reached, 1.0, "за 0,5 с хвиля дійшла понад клітинку від розриву")
+	assert_lt(start, 0.3, "і почалась біля нього")
+
+
+## Дрібні клуби різняться поворотом і початковим кадром: однакові «капустини» читались штампом.
+func test_small_puffs_vary() -> void:
+	var hit: Node3D = BattleFx.spawn_hit(parent, Vector3(2, 0, 2), BattleFx.Weapon.AUTOCANNON, true)
+	var rolls: Dictionary = {}
+	for q: Node in hit.find_children("Puff*", "MeshInstance3D", true, false):
+		rolls[_mat(q).get_shader_parameter("roll")] = true
+	assert_gt(rolls.size(), 1)

@@ -199,9 +199,7 @@ func build(board: Board) -> void:
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields, spawns)
 	# Стежки публічні (§3.5): маска зносу не залежить від туману й ставиться разом із землею.
 	if _ground.material_override is ShaderMaterial and not _props.footpaths.is_empty():
-		var h: TerrainHeight = _height
-		var dry: Callable = (func(q: Vector2) -> bool: return h.at(q.x, q.y) >= TerrainHeight.WATER_LEVEL) if h != null else Callable()
-		Footpaths.apply(_ground.material_override, Footpaths.bake(_props.footpaths, _props.trodden, _board_size, dry), _board_size)
+		Footpaths.apply(_ground.material_override, Footpaths.bake(_props.footpaths, _props.trodden, _board_size, _dry_grid()), _board_size)
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.
 		add_child(Surroundings.skirt(Vector2i(board.width, board.height), _height.min_height() - 0.5))
@@ -483,3 +481,26 @@ static func _bridge_axis(board: Board, cell: Vector2i) -> Vector2i:
 func _request_probe_capture() -> void:
 	_probe.update_mode = ReflectionProbe.UPDATE_ONCE
 	probe_captures_requested += 1
+
+
+## Де суха земля й не дорога, для маски стежок: сітка 8 відліків на клітинку, пораховано раз (а не
+## `height.at` на кожен піксель). Без рельєфу вода не відсікається, але дорога відсікається завжди:
+## широкі плями біля воріт дотягуються до полотна.
+func _dry_grid() -> Callable:
+	const PER: int = 8
+	var w: int = _board_size.x * PER
+	var h: int = _board_size.y * PER
+	var grid := PackedByteArray()
+	if _height != null:
+		grid.resize(w * h)
+		for y in h:
+			for x in w:
+				grid[y * w + x] = 1 if _height.at((x + 0.5) / PER - 0.5, (y + 0.5) / PER - 0.5) >= TerrainHeight.WATER_LEVEL else 0
+	var props: PropLayer = _props
+	return func(q: Vector2) -> bool:
+		if not grid.is_empty():
+			var x: int = clampi(floori((q.x + 0.5) * PER), 0, w - 1)
+			var y: int = clampi(floori((q.y + 0.5) * PER), 0, h - 1)
+			if grid[y * w + x] != 1:
+				return false
+		return props == null or not props.on_road(q, 0.0)

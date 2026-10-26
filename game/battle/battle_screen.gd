@@ -316,6 +316,9 @@ func _wire_view(board: Board) -> void:
 	_scars = ScarMap.new(Vector2i(board.width, board.height))
 	_board_view.scar_map = _scars
 	_board_view.build(board)
+	# Мирний дим 1–3 димарів і 1–2 руїн: мапа та сама — і вибір той самий.
+	if _board_view.props() != null:
+		_wreck_layer.set_hearths(_board_view.props().chimney_tops(), _board_view.props().ruin_smoke_points(), board.width * 73 + board.height * 31)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
 	_weather.attach_probe(_board_view.reflection_probe())
 	_follow_weather()
@@ -327,7 +330,6 @@ func _wire_view(board: Board) -> void:
 		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
 		_on_wreck_left, _on_wreck_removed)
 	_event_player.forest_changed.connect(forest_changed)
-	_event_player.ground_hit.connect(func(cell: Vector2i, radius_m: float) -> void: _scars.stamp_crater(cell, radius_m))
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
 	# але власний шар і власний сигнал: action_preview малює його для прев'ю

@@ -40,10 +40,11 @@ def blown(b, x, y, sgn, z, w, h, axis="y"):
     else:
         opening2(b, "x", x, y, z, w, h, sgn, streak=0.0, sooty=True)
     burn_ring(b, axis, y if axis == "y" else x, x if axis == "y" else y, z, w, h, sgn, g_side=0.3, g_bot=0.1, g_top=1.9, ztop=2.95, mat="wall_plaster_dm")
+    lib.window_ring(b, axis, y if axis == "y" else x, sgn, x if axis == "y" else y, z, w, h)   # проріз у лиштві: читається втопленим отвором, а не плямою
     lib.pocks(b, axis, y if axis == "y" else x, sgn, x if axis == "y" else y, z + h / 2, 1.6, 10, int(abs(x * 7 + y * 13)) + 3, zmin=0.55, zmax=2.9)
 
 
-RING = ["trim"]                          # матеріал наличника поточного будинку
+RING = ["trim", 0.1, False]              # наличник поточного будинку: матеріал, ширина лиштви (мала — лише укіс), віконниці
 
 
 def win_front(b, y, sgn, xs, z, w=1.2, h=1.4, bl=()):
@@ -52,7 +53,9 @@ def win_front(b, y, sgn, xs, z, w=1.2, h=1.4, bl=()):
             blown(b, x, y, sgn, z, w, h)
         else:
             b.window(("y", y, sgn), x, z, w, h)
-            lib.window_ring(b, "y", y, sgn, x, z, w, h, mat=RING[0])
+            lib.window_ring(b, "y", y, sgn, x, z, w, h, t=RING[1], mat=RING[0])
+            if RING[2]:
+                shutters(b, "y", y, sgn, x, z, w, h)
         sills(b, x, y, sgn, w, z, "y")
 
 
@@ -62,8 +65,20 @@ def win_side(b, x, sgn, ys, z, w=1.2, h=1.4, bl=()):
             blown(b, x, y, sgn, z, w, h, "x")
         else:
             b.window(("x", x, sgn), y, z, w, h)
-            lib.window_ring(b, "x", x, sgn, y, z, w, h, mat=RING[0])
+            lib.window_ring(b, "x", x, sgn, y, z, w, h, t=RING[1], mat=RING[0])
+            if RING[2]:
+                shutters(b, "x", x, sgn, y, z, w, h)
         sills(b, x, y, sgn, w, z, "x")
+
+
+def shutters(b, axis, c, sgn, u, z, w, h):
+    """Дерев'яні віконниці обабіч вікна, відчинені до стіни."""
+    for sx in (-1, 1):
+        uu = u + sx * (w / 2 + RING[1] + w / 4 + 0.02)
+        if axis == "y":
+            b.box(uu, c + 0.03 * sgn, z, w / 2, 0.04, h, "door_wood")
+        else:
+            b.box(c + 0.03 * sgn, uu, z, 0.04, w / 2, h, "door_wood")
 
 
 def gutter(b, x0, x1, y, z):
@@ -83,14 +98,16 @@ def post(b, x, y, z0, h):
 # ----------------------------------------------------------------------- H1
 def house1(hit=False):
     lib.reset()
-    lib.palette(wall=(0.80, 0.68, 0.47), roof="asb", eave=3.0, chim="ch_grey", frame=3)
-    RING[0] = "trim"
+    lib.palette(wall=(0.70, 0.63, 0.53), roof="asb_dark", eave=3.0, chim="ch_grey", frame=3, trim=0.88)
+    RING[:] = ["trim", 0.1, False]
     b = Builder()
+    b.win_kind, b.win_mix = 0, (1, 0.4)                                     # старі дерев'яні на три стулки, частину замінено пластиковими
     L, Db, EAVE, RIDGE = 10.0, 6.4, 3.0, 6.5      # корпус 10 x 6.4, веранда ще 1.6 м (разом 8 м)
     y0, y1 = -4.0, 2.4
     b.box(0, (y0 + y1) / 2, 0, L + 0.08, Db + 0.08, 0.5, "brick_grey")          # цоколь на 4 см за стіною
     b.box(0, (y0 + y1) / 2, 0.5, L - 0.02, Db - 0.02, EAVE - 0.5, "wall_plaster")
-    lib.quoins(b, ([] if hit else [(-L / 2, y0, 1, 1)]) + [(L / 2, y0, -1, 1), (L / 2, y1, -1, -1)], 0.5, EAVE - 0.05)   # біля пролому кут обсипався
+    if not hit:                                                                  # у пошкодженої хати кути обсипались (і бюджет трикутників)
+        lib.quoins(b, [(-L / 2, y0, 1, 1), (L / 2, y0, -1, 1), (L / 2, y1, -1, -1)], 0.5, EAVE - 0.05)
     ym = (y0 + y1) / 2
     d = Db / 2
     OV = 0.5
@@ -210,16 +227,16 @@ def house1(hit=False):
             b.decal([(x0_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE - dep), (x1_, y0 - 0.03, EAVE), (x0_, y0 - 0.03, EAVE)], (1.0, 1.0, 0.12, 0.12), "wall_plaster_dm", (0, -1, 0))
     if not hit:
         b.box(0, ym, RIDGE, xr1 - xr0 + 0.6, 0.3, 0.16, "gutter")
-    b.chimney(2.2, -0.2, 4.4, 0.75, 3.3, "brick_face")        # цегляний димар
+    b.chimney2("brick" if hit else "hood", 2.2, -0.2, 5.4, 2.3, "brick_face")   # один димар: у цілої хати з зонтом, у пошкодженої цегляний
     bl = (-3.2, 0.0) if hit else ()
     win_front(b, y0, -1, (-3.2, 0.0, 3.2), 1.0, bl=bl)
     win_front(b, y1, 1, (-4.0, 4.0), 1.0)
     win_side(b, -L / 2, -1, (-1.0,), 1.0)
     win_side(b, L / 2, 1, (-1.0, 1.0), 1.0, bl=((-1.0,) if hit else ()))
-    b.box(-3.9, y1 + 0.03, 0.5, 1.0, 0.06, 2.0, "pvc")
+    b.box(-3.9, y1 + 0.03, 0.5, 1.0, 0.06, 2.0, "door_red")
     b.box(0, 3.2, 0, 6.0, 1.6, 0.35, "step", top="step")                         # засклена веранда
     for px in (-3.0, -1.0, 1.0, 3.0):
-        post(b, px, 3.9, 0.35, 2.2)
+        post(b, px, 3.9, 0.35, 1.95)                                              # верх під дахом веранди, не крізь нього
     for px in (-2.0, 0.0, 2.0):
         b.window(("y", 3.92, 1), px, 0.6, 1.8, 1.55)
     b.poly_up([(-3.4, 2.4, 2.75), (3.4, 2.4, 2.75), (3.4, 4.3, 2.35), (-3.4, 4.3, 2.35)], "fc_roof_xh")
@@ -243,21 +260,24 @@ def house1(hit=False):
 def house2():
     lib.reset()
     b = Builder()
-    lib.palette(roof="brown", eave=3.2, chim="ch_orange", row=0.25, frame=1)
-    RING[0] = "brick_face"
+    b.win_kind = 2                                                                # широкі двостулкові з фрамугою
+    lib.palette(roof="brown_dark", eave=3.2, chim="ch_orange", row=0.25, frame=1)
+    RING[:] = ["brick_muted", 0.1, False]
     L, D, EAVE, RIDGE = 11.0, 9.0, 3.2, 7.0
     y0, y1 = -D / 2, D / 2
     b.box(0, 0, 0, L + 0.08, D + 0.08, 0.5, "brick_grey")
-    b.box(0, 0, 0.5, L - 0.02, D - 0.02, EAVE - 0.5, "brick_face")
-    b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tile_brown", "brick_face", ridge_axis="x", overhang=0.4)
+    b.box(0, 0, 0.5, L - 0.02, D - 0.02, EAVE - 0.5, "brick_muted")
+    b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tile_brown", "brick_muted", ridge_axis="x", overhang=0.4)
     b.box(0, 0, RIDGE, L + 0.8, 0.3, 0.18, "gutter")
-    b.chimney(-2.5, 0.4, 4.4, 0.6, 3.4, "brick_face")
-    win_front(b, y1, 1, (-4.0, 4.0), 1.1)
-    win_front(b, y0, -1, (-3.5, 0.0, 3.5), 1.1)
-    win_side(b, -L / 2, -1, (-1.5, 1.5), 1.1)
-    win_side(b, L / 2, 1, (-1.5, 1.5), 1.1)
-    b.box(0, y1 + 1.0, 0, 3.2, 2.0, 2.7, "brick_face", top="tile_brown")
-    b.box(0, y1 + 2.02, 0, 1.2, 0.04, 2.1, "dark")
+    b.chimney2("brick", -2.5, 0.0, 6.4, 1.9, "brick_face")      # високий цегляний на гребені
+    win_front(b, y1, 1, (-4.0, 4.0), 1.1, 1.6, 1.3)
+    win_front(b, y0, -1, (-3.5, 0.0, 3.5), 1.1, 1.6, 1.3)
+    win_side(b, -L / 2, -1, (-1.5, 1.5), 1.1, 1.6, 1.3)
+    win_side(b, L / 2, 1, (-1.5, 1.5), 1.1, 1.6, 1.3)
+    b.window(("x", L / 2, 1), 0.0, EAVE + 1.4, 0.6, 0.8, kind=3)                 # віконце горища у фронтоні
+    lib.window_ring(b, "x", L / 2, 1, 0.0, EAVE + 1.4, 0.6, 0.8, t=0.08, mat="brick_muted")
+    b.box(0, y1 + 1.0, 0, 3.2, 2.0, 2.7, "brick_muted", top="tile_brown")
+    b.box(0, y1 + 2.02, 0, 1.2, 0.04, 2.1, "door_wood")
     b.box(0, y1 + 2.0, 0, 1.8, 0.9, 0.2, "step")
     b.window(("x", 1.6, 1), y1 + 1.0, 1.0, 0.9, 1.0)
     b.window(("x", -1.6, -1), y1 + 1.0, 1.0, 0.9, 1.0)
@@ -265,7 +285,7 @@ def house2():
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y1 + 0.4, EAVE - 0.3)
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y0 - 0.4, EAVE - 0.3)
     pipe(b, L / 2 - 0.35, y0, -1, 0.4, EAVE)
-    lib.weather(b, "brick_face", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE), ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=5, patches=False)
+    lib.weather(b, "brick_muted", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE), ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=5, patches=False)
     lib.finish(b, "house_h2", out, tri_limit=2200, footprint=(2, 2), target_cm=3.6)
 
 
@@ -273,8 +293,8 @@ def house2():
 def house3():
     lib.reset()
     b = Builder()
-    lib.palette(wall=(0.68, 0.71, 0.58), roof="terracotta", eave=6.0, row=0.3, frame=2, trim=(0.80, 0.80, 0.78))
-    RING[0] = "trim"
+    lib.palette(wall=(0.63, 0.65, 0.58), roof="graphite_dark", eave=6.0, row=0.3, frame=2, trim=0.95)
+    RING[:] = ["trim", 0.025, False]                                          # сучасна хата: без виступної лиштви, лише укіс
     L, D, EAVE, RIDGE = 10.0, 10.0, 6.0, 9.5
     y0, y1 = -D / 2, D / 2
     OV = 0.5
@@ -298,7 +318,7 @@ def house3():
         win_front(b, y0, -1, (-3.5, 0.0, 3.5), z, 1.3, 1.5)
         win_side(b, -L / 2, -1, (-2.0, 2.0), z, 1.3, 1.5)
         win_side(b, L / 2, 1, (-2.0, 2.0), z, 1.3, 1.5)
-    b.box(0, y1 + 0.03, 1.0, 1.2, 0.06, 2.2, "dark")
+    b.box(0, y1 + 0.03, 1.0, 1.2, 0.06, 2.2, "metal_dark")
     for px in (-1.4, 1.4):
         post(b, px, y1 + 1.5, 1.0, 2.4)
     b.poly_up([(-1.8, y1, 3.5), (1.8, y1, 3.5), (1.8, y1 + 1.7, 3.1), (-1.8, y1 + 1.7, 3.1)], "tile_graphite")
@@ -309,6 +329,7 @@ def house3():
     b.window(("x", L / 2, 1), 0.0, 6.7, 0.9, 1.1)                                # вікно горища у фронтоні: середник і імпост — у шейдері
     lib.window_ring(b, "x", L / 2, 1, 0.0, 6.7, 0.9, 1.1)
     sills(b, L / 2, 0.0, 1, 0.9, 6.7, "x")
+    b.chimney2("steel", 3.8, -3.5, 7.0, 1.4)                     # новіша хата: сталева труба з ковпаком біля звису
     lib.weather(b, "wall_plaster", [("y", y0, -1, -L / 2, L / 2, 1.0, EAVE), ("y", y1, 1, -L / 2, L / 2, 1.0, EAVE), ("x", -L / 2, -1, y0, y1, 1.0, EAVE), ("x", L / 2, 1, y0, y1, 1.0, EAVE)], seed=7, patches=False)
     lib.finish(b, "house_h3", out, tri_limit=2400, footprint=(2, 2), target_cm=3.6)
 
@@ -317,8 +338,9 @@ def house3():
 def house4():
     lib.reset()
     b = Builder()
-    lib.palette(roof="green", eave=3.0, chim="ch_plaster", boards=(0.52, 0.60, 0.64))
-    RING[0] = "trim"
+    lib.palette(roof="oxide_dark", eave=3.0, chim="ch_orange", boards=(0.50, 0.55, 0.57), trim=(0.44, 0.37, 0.29))
+    RING[:] = ["trim", 0.08, True]                                            # стара дерев'яна хата: віконниці
+    b.win_kind = 0
     L, D, EAVE, RIDGE = 9.0, 6.0, 3.0, 6.5
     y0, y1 = -D / 2, D / 2
     b.box(0, 0, 0, L + 0.08, D + 0.08, 0.4, "brick_grey")
@@ -329,12 +351,12 @@ def house4():
     win_front(b, y0, -1, (-2.5, 2.5), 1.0, 1.0, 1.4)
     win_side(b, -L / 2, -1, (0.0,), 1.0, 1.0, 1.4)
     win_side(b, L / 2, 1, (0.0,), 1.0, 1.0, 1.4)
-    b.box(0, y1 + 0.03, 0.4, 1.0, 0.06, 2.0, "dark")
+    b.box(0, y1 + 0.03, 0.4, 1.0, 0.06, 2.0, "door_wood")
     for px in (-1.1, 1.1):
         post(b, px, y1 + 1.4, 0.4, 2.2)
     b.poly_up([(-1.5, y1, 2.7), (1.5, y1, 2.7), (1.5, y1 + 1.6, 2.3), (-1.5, y1 + 1.6, 2.3)], "tin_green")
     b.box(0, y1 + 1.0, 0, 3.0, 1.4, 0.4, "step", top="step")
-    b.chimney(2.8, -0.8, 4.8, 0.7, 2.7, "brick_face")           # цегляний димар
+    b.chimney(L / 2 + 0.52, 1.0, 0.0, 1.0, 6.0, "brick_face")        # приставний цегляний 1 x 1 м до фронтону, від землі
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y0 - 0.4, EAVE - 0.3)
     gutter(b, -L / 2 - 0.4, L / 2 + 0.4, y1 + 0.4, EAVE - 0.3)
     pipe(b, L / 2 - 0.35, y0, -1, 0.4, EAVE)
@@ -359,7 +381,7 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
     for ci, c in enumerate(cs):
         for di, d in enumerate(dirs[ci]):
             low_ = ci == open_c and not tall_open
-            if low_:                                                              # чистий низький пенечок поза купою читався сторонньою цеглою: кут лишається відкритим
+            if low_:                                                              # чистий низький пенечок поза купою читається сторонньою цеглою: кут лишається відкритим
                 continue
             ln = A
             hc = (rnd.uniform(1.2, 1.8) if tall_open and ci == open_c else rnd.uniform(1.8, 3.0)) if not low_ else 0.5
@@ -425,6 +447,73 @@ def ruin(name, L, D, keep, seed, footprint, chimney=None, tile="tile_graphite", 
     lib.finish(b, name, out, tri_limit=5200, footprint=footprint, hi=None if os.environ.get("RUIN_NO_HI") else bh, ground_clip=True, ao=float(os.environ.get("RUIN_AO", "0.1")))
 
 
+def house7():
+    """H7: хата на одну клітинку з чотирисхилим дахом (рідня H1): корпус 6.4 x 5.6 м, шифер, стара тинькована,
+    вікна на три стулки, димар із зонтом біля короткого гребеня."""
+    lib.reset()
+    lib.palette(wall=(0.63, 0.67, 0.68), roof="asb_dark", eave=2.9, chim="ch_grey", frame=3, trim=0.9)
+    RING[:] = ["trim", 0.1, False]
+    b = Builder()
+    b.win_kind = 0
+    L, D, EAVE, RIDGE, OV = 6.4, 5.6, 2.9, 5.3, 0.45                           # зі звісом 7.3 м: влазить у клітинку з відступом
+    y0, y1 = -D / 2, D / 2
+    b.box(0, 0, 0, L + 0.08, D + 0.08, 0.5, "brick_grey")
+    b.box(0, 0, 0.5, L - 0.02, D - 0.02, EAVE - 0.5, "wall_plaster")
+    xa, xb, ya, yb = -L / 2 - OV, L / 2 + OV, y0 - OV, y1 + OV
+    xr0, xr1 = -0.5, 0.5                                                       # короткий гребінь: скати майже однакові
+    b.poly([(xa, yb, EAVE), (xa, ya, EAVE), (xr0, 0.0, RIDGE)], "fc_roof_h")
+    b.poly([(xb, ya, EAVE), (xb, yb, EAVE), (xr1, 0.0, RIDGE)], "fc_roof_h")
+    b.poly([(xa, ya, EAVE), (xb, ya, EAVE), (xr1, 0.0, RIDGE), (xr0, 0.0, RIDGE)], "fc_roof_xh")
+    b.poly([(xb, yb, EAVE), (xa, yb, EAVE), (xr0, 0.0, RIDGE), (xr1, 0.0, RIDGE)], "fc_roof_xh")
+    win_front(b, y0, -1, (-2.0, 1.5), 1.0, 1.0, 1.4)
+    win_front(b, y1, 1, (-1.6, 1.6), 1.0, 1.0, 1.4)
+    win_side(b, -L / 2, -1, (0.0,), 1.0, 1.0, 1.4)
+    win_side(b, L / 2, 1, (0.0,), 1.0, 1.0, 1.4)
+    b.box(-0.2, y0 - 0.02, 0.5, 1.0, 0.06, 2.0, "door_red")                    # на 4 см перед стіною
+    b.box(-0.2, y0 - 0.5, 0.0, 1.6, 0.8, 0.45, "step", top="step")
+    b.chimney2("hood", 0.4, 0.5, 4.3, 1.7, "brick_face")
+    gutter(b, xa, xb, ya, EAVE - 0.3)
+    pipe(b, L / 2 - 0.35, y0, -1, OV, EAVE)
+    lib.weather(b, "wall_plaster", [("y", y0, -1, -L / 2, L / 2, 0.5, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.5, EAVE),
+                                    ("x", -L / 2, -1, y0, y1, 0.5, EAVE), ("x", L / 2, 1, y0, y1, 0.5, EAVE)], seed=17)
+    lib.finish(b, "house_h7", out, tri_limit=1800, footprint=(1, 1))
+
+
+def house8():
+    """H8: дерев'яна хата на одну клітинку (рідня H4): корпус 5.8 x 4.8 м з дощок, фарбованих у сіро-блакитний,
+    профлист червоно-брунатний, віконниці, ґанок із дашком до камери, цегляний димар біля фронтону."""
+    lib.reset()
+    b = Builder()
+    lib.palette(roof="oxide_deep", eave=2.9, chim="ch_orange", boards=(0.66, 0.70, 0.72), trim=(0.40, 0.33, 0.26))
+    RING[:] = ["trim", 0.08, True]
+    b.win_kind = 0
+    L, D, EAVE, RIDGE = 5.8, 4.8, 2.9, 5.4                                     # з ґанком і димарем 7.2 x 6.5 м: влазить у клітинку
+    y0, y1 = -D / 2, D / 2
+    b.box(0, 0, 0, L + 0.08, D + 0.08, 0.4, "brick_grey")
+    b.box(0, 0, 0.4, L - 0.02, D - 0.02, EAVE - 0.4, "boards")
+    b.gable(-L / 2, L / 2, y0, y1, EAVE, RIDGE, "tin_green", "boards", ridge_axis="x", overhang=0.35)
+    b.box(0, 0, RIDGE, L + 0.7, 0.28, 0.16, "gutter")
+    win_front(b, y0, -1, (-2.0, 2.0), 1.0, 1.0, 1.4)
+    win_front(b, y1, 1, (-1.4, 1.4), 1.0, 1.0, 1.4)
+    win_side(b, -L / 2, -1, (0.0,), 1.0, 1.0, 1.4)
+    win_side(b, L / 2, 1, (-1.0,), 1.0, 1.0, 1.4)
+    b.box(0, y0 - 0.02, 0.4, 1.0, 0.06, 2.0, "door_wood")
+    for px in (-1.1, 1.1):
+        post(b, px, y0 - 1.1, 0.4, 2.0)
+    b.poly_up([(-1.5, y0, 2.6), (1.5, y0, 2.6), (1.5, y0 - 1.3, 2.3), (-1.5, y0 - 1.3, 2.3)], "tin_green")
+    b.box(0, y0 - 0.7, 0, 3.0, 1.2, 0.4, "step", top="step")
+    b.chimney(L / 2 + 0.52, 1.0, 0.0, 1.0, 5.7, "brick_face")                 # приставний цегляний 1 x 1 м до фронтону
+    gutter(b, -L / 2 - 0.35, L / 2 + 0.35, y0 - 0.35, EAVE - 0.3)
+    pipe(b, -L / 2 + 0.35, y0, -1, 0.35, EAVE)
+    lib.weather(b, "boards", [("y", y0, -1, -L / 2, L / 2, 0.4, EAVE), ("y", y1, 1, -L / 2, L / 2, 0.4, EAVE),
+                              ("x", -L / 2, -1, y0, y1, 0.4, EAVE), ("x", L / 2, 1, y0, y1, 0.4, EAVE)], seed=19, patches=False)
+    lib.finish(b, "house_h8", out, tri_limit=1800, footprint=(1, 1))
+
+
+if want("h7"):
+    house7()
+if want("h8"):
+    house8()
 if want("h1"):
     house1(False)
 if want("h1hit"):
