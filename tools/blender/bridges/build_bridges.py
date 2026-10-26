@@ -311,6 +311,9 @@ def pontoon(broken):
         yc = (y0 + y1) / 2
         dz = -0.03 if ramp else 0.0  # аппарель сидить нижче й піднімається до берега
         g = [Box("deckplate", (0, yc, hh + 0.02 + dz), (rwid, n - 0.012, 0.04))]
+        # кожна секція з власним шматком текстури: прольоти по тайлу брали той самий, і бруд повторювався на кожній плиті
+        ox, oy = (yc * 7.31) % 1.0, (yc * 3.77 + 0.41) % 1.0
+        g[0].uv = [[(u + ox, v + oy) for (u, v) in face] for face in g[0].uv]
         lo = y0 + (0.06 if any(sg < 0 for _, sg in bows) else 0.0)
         hi = y1 - (0.06 if any(sg > 0 for _, sg in bows) else 0.0)
         for fx in floats:
