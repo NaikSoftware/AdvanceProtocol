@@ -50,7 +50,7 @@ uniform int yard_slot = -1;
 // Протоптані стежки (Footpaths.bake): R — знос стежки, G — витоптана пляма; 64 px на клітинку, мипмапи.
 // Маска публічна, туман її не множить; координати дошки, як у scar_size.
 uniform bool has_paths = false;
-uniform sampler2D path_map : filter_linear_mipmap, repeat_disable;
+uniform sampler2D path_map : filter_linear_mipmap_anisotropic, repeat_disable;
 uniform vec2 path_size = vec2(1.0);
 // Клітинка, що відповідає пікселю (0, 0) карт класів (від'ємна при відступі).
 uniform vec2 map_origin = vec2(0.0);
@@ -1309,11 +1309,13 @@ void fragment() {
 			vec2 puv = (p + 0.5) / path_size;
 			float pin = step(0.0, puv.x) * step(0.0, puv.y) * step(puv.x, 1.0) * step(puv.y, 1.0);
 			vec2 pm = texture(path_map, puv).rg * pin * (1.0 - road_cov);
-			float wet_p = smoothstep(0.1, 0.5, weather_wetness);
+			// Стан ґрунту MUD мокрий і без дощу, як колії.
+			float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);
 			float lum = dot(alb, vec3(0.299, 0.587, 0.114));
 			vec3 bare = mix(vec3(0.17, 0.115, 0.062), vec3(0.022, 0.015, 0.009), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
 			alb = mix(alb, bare, clamp(pm.r * 1.8, 0.0, 1.0));
-			alb = mix(alb, vec3(0.045, 0.026, 0.014) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.4);
+			alb = mix(alb, vec3(0.045, 0.026, 0.014) * mix(1.0, 0.6, wet_p) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.4);
+			rough = mix(rough, 0.45, wet_p * clamp(pm.r * 1.8 + pm.g * 0.4, 0.0, 1.0));
 		}
 
 		float scar_dark = 0.0;

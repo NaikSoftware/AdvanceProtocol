@@ -186,6 +186,9 @@ static func _stamp_walk(buf: PackedByteArray, w: int, h: int, walk: Dictionary, 
 			for px in range(x0, x1 + 1):
 				var q: Vector2 = _px_pos(px, py)
 				var dist: float = _seg_dist(q, a, ab)
+				# Поза досяжністю знос однаково нуль: сусідні відрізки навіть не міряємо.
+				if dist > reach:
+					continue
 				if (k > 0 and _seg_dist(q, pts[k - 1], a - pts[k - 1]) < dist - 1e-6) \
 						or (k + 2 < pts.size() and _seg_dist(q, pts[k + 1], pts[k + 2] - pts[k + 1]) <= dist):
 					continue

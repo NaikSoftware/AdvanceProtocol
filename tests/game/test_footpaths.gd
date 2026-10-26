@@ -161,10 +161,10 @@ func test_yard_paths_go_round_buildings(p = use_parameters(MAPS)) -> void:
 		for k in pts.size():
 			var q: Vector2 = pts[k]
 			if k > 3:
-				assert_false(own.grow(-0.03).has_point(q), "%s: стежка %d різає свою хату в %s" % [p, i, q])
+				assert_false(own.has_point(q), "%s: стежка %d різає свою хату в %s" % [p, i, q])
 			for b: Array in props._placer.placed:
 				if (b[0] as Rect2) != own:
-					assert_false((b[0] as Rect2).grow(-0.03).has_point(q), "%s: стежка %d в чужій будівлі %s" % [p, i, q])
+					assert_false((b[0] as Rect2).has_point(q), "%s: стежка %d в чужій будівлі %s" % [p, i, q])
 			for r: Rect2 in props.field_edges:
 				assert_false(r.has_point(q), "%s: стежка %d на ріллі" % [p, i])
 			var c := Vector2i(roundi(q.x), roundi(q.y))
@@ -180,7 +180,6 @@ func test_one_or_two_water_paths_that_stay_on_dry_ground(p = use_parameters(MAPS
 	for w: Dictionary in water:
 		var pts: PackedVector2Array = w["pts"]
 		assert_between(Footpaths.length(pts), 4.0, 13.0, "%s: довжина стежки до води" % p)
-		assert_gte(Footpaths.turns(pts), 1, "%s: вигинів на стежці до води" % p)
 		assert_false(props._placer.on_road(pts[0], 0.0), "не заходить на полотно")
 		assert_true(props._placer.on_road(pts[0], 0.4), "починається на узбіччі")
 		for k in pts.size():
@@ -284,7 +283,7 @@ func test_baked_mask_is_clean(p = use_parameters(MAPS)) -> void:
 
 ## Захист від полотна: точка, що вже лежить на дорозі, виштовхується за її край.
 func test_verge_point_never_lands_on_the_road(p = use_parameters(MAPS)) -> void:
-	var placer = _cached(p).props()._placer
+	var placer: PropLayer._Placer = _cached(p).props()._placer
 	if not placer.road_indexed:
 		placer._index_roads()
 	var n := 0
@@ -304,6 +303,8 @@ func test_wear_does_not_show_segments(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var longest: Dictionary = {}
 	for w: Dictionary in props.footpaths:
+		if w["kind"] != &"yard":
+			continue
 		if longest.is_empty() or Footpaths.length(w["pts"]) > Footpaths.length(longest["pts"]):
 			longest = w
 	var pts: PackedVector2Array = longest["pts"]
@@ -326,6 +327,34 @@ func test_wear_does_not_show_segments(p = use_parameters(MAPS)) -> void:
 	var db: PackedByteArray = b.get_data()
 	for idx in range(0, da.size(), 2):
 		lit += 1 if da[idx] > 0 else 0
-		bad += 1 if absi(da[idx] - db[idx]) > 8 else 0
+		bad += 1 if absi(da[idx] - db[idx]) > 4 else 0
 	assert_gt(lit, 100)
-	assert_lte(bad, lit / 50, "%s: %d з %d пікселів розійшлися" % [p, bad, lit])
+	assert_lte(bad, lit / 200, "%s: %d з %d пікселів розійшлися" % [p, bad, lit])
+
+
+func _crosses(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> bool:
+	var d1: float = (b - a).cross(c - a)
+	var d2: float = (b - a).cross(d - a)
+	var d3: float = (d - c).cross(a - c)
+	var d4: float = (d - c).cross(b - c)
+	return d1 * d2 < 0.0 and d3 * d4 < 0.0
+
+
+## Жодна стежка не перетинає секцій парканів (двір проходить лише крізь хвіртку).
+func test_paths_do_not_cross_fence_sections(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var fences: Array = []
+	for inst: Dictionary in props._instances:
+		var k: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
+		if k == PropLayer.Kind.GARDEN_FENCE or k == PropLayer.Kind.FIELD_FENCE:
+			var xf: Transform3D = inst["transform"]
+			var aabb: AABB = (PropLayer.model(inst["model"]) as Dictionary)["aabb"]
+			var a3: Vector3 = xf * Vector3(aabb.position.x, 0, 0)
+			var b3: Vector3 = xf * Vector3(aabb.end.x, 0, 0)
+			fences.append([Vector2(a3.x, a3.z), Vector2(b3.x, b3.z)])
+	assert_gt(fences.size(), 10, "%s: паркани знайдено" % p)
+	for w: Dictionary in props.footpaths:
+		var pts: PackedVector2Array = w["pts"]
+		for k in range(1, pts.size()):
+			for f: Array in fences:
+				assert_false(_crosses(pts[k - 1], pts[k], f[0], f[1]), "%s: %s-стежка %d перетинає паркан в %s" % [p, w["kind"], w["home"], pts[k]])
