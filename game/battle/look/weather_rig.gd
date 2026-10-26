@@ -156,6 +156,7 @@ func _light_probe() -> void:
 	probe.ambient_mode = ReflectionProbe.AMBIENT_COLOR
 	probe.ambient_color = _look.ambient_color
 	probe.ambient_color_energy = _look.ambient_energy
+	probe.intensity = _look.reflection_intensity
 
 
 ## Кількість крапель у меші дощу, що зараз іде (0 — дощу нема); скільки з них малюється,

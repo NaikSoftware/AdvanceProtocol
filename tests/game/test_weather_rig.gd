@@ -135,7 +135,7 @@ func test_water_waves_follow_the_weather() -> void:
 	assert_true(ProjectSettings.has_setting("shader_globals/water_wind"))
 
 
-## На сонячних картах тінь сонця світла й м'яка, тож юніта на землі тримає тінь-контакт;
+## На сонячних картах поряд із тінню сонця юніта на землі тримає тінь-контакт;
 ## на похмурій Річці її нема — там вигляд затверджений як є.
 func test_sunny_maps_give_units_a_contact_shadow() -> void:
 	var river: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
@@ -143,8 +143,10 @@ func test_sunny_maps_give_units_a_contact_shadow() -> void:
 	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres"]:
 		var look: BattleLook = BattleLook.for_map_path(path)
 		assert_almost_eq(look.unit_contact_shadow, 0.6, 1e-5, path)
-		assert_almost_eq(look.shadow_opacity, 0.3, 1e-5, path)
-		assert_lt(look.shadow_opacity, river.shadow_opacity, path + ": під сонцем тінь світліша, ніж під хмарами")
+		# Перехрестя — сильне сонце пізнього літа: чітка темна тінь; Хребет лишається м'яким.
+		assert_almost_eq(look.shadow_opacity, 1.0 if path.ends_with("crossroads.tres") else 0.3, 1e-5, path)
+		if path.ends_with("ridge.tres"):
+			assert_lt(look.shadow_opacity, river.shadow_opacity, path + ": під сонцем тінь світліша, ніж під хмарами")
 		assert_gt(look.sun_angular_deg, 0.0, path + ": м'яка тінь сонця")
 	var rig: WeatherRig = _rig()
 	var look: BattleLook = BattleLook.for_map_path("res://maps/crossroads.tres")
@@ -416,6 +418,25 @@ func test_the_board_probe_gets_the_ambient_light_of_the_look() -> void:
 	assert_eq(probe.ambient_mode, ReflectionProbe.AMBIENT_COLOR)
 	assert_eq(probe.ambient_color, look.ambient_color)
 	assert_almost_eq(probe.ambient_color_energy, look.ambient_energy, 1e-5)
+
+
+## Відбите небо на сонячній карті забарвлює тінь холодним: дах у тіні з вишневого ставав
+## фіолетовим. Вигляд ставить силу відбиття зонда; карти без власного значення лишаються при 1.
+func test_the_board_probe_gets_the_reflection_intensity_of_the_look() -> void:
+	var service: Node = (load("res://game/autoload/match_service.gd") as GDScript).new()
+	add_child_autofree(service)
+	var screen: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(screen)
+	screen.setup(load("res://maps/crossroads.tres") as MapData, 2, 1, service)
+	var probe: ReflectionProbe = (screen.get_node("%BoardView") as BoardView).reflection_probe()
+	assert_almost_eq(probe.intensity, 0.2, 1e-6)
+	var river_screen: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(river_screen)
+	river_screen.setup(load("res://maps/river.tres") as MapData, 2, 1, service)
+	var river_probe: ReflectionProbe = (river_screen.get_node("%BoardView") as BoardView).reflection_probe()
+	assert_eq(river_probe.intensity, 1.0, "Річка не змінилась")
+	assert_eq(BattleLook.for_map_path("res://maps/river.tres").reflection_intensity, 1.0)
+	assert_eq(BattleLook.for_map_path("res://maps/ridge.tres").reflection_intensity, 1.0)
 
 
 func test_the_drops_mesh_is_built_once() -> void:
