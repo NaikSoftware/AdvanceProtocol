@@ -108,6 +108,18 @@ void fragment() {
 		// за 0.3 м не просвічує, TerrainHeight тримає його там), без різкої межі урізу.
 		// Каламутний ставок — 0.15 м: на 0.3 м край ставав темним розмитим ореолом, на 0.08 — сходинками.
 		shallow_fade = smoothstep(0.0, mix(0.3, 0.15, clamp(water_murk, 0.0, 1.0)), depth_m);
+		// Річка над пологою мілиною: 0.3 м глибини там — багато метрів, і вода лягала над травою
+		// прозорою сірою плівкою без берега. Непрозорість ще й за відстанню від урізу по горизонталі
+		// (глибина / нахил дна): уріз чіткий за ~0.5 м. Каламутний ставок — лише за глибиною (чіткий край
+		// показував сходинки сітки рельєфу).
+		if (water_murk <= 0.0) {
+			float h0 = textureLod(height_map, huv, 0.0).r;
+			float hx = textureLod(height_map, huv + vec2(1.0 / float(hs.x), 0.0), 0.0).r;
+			float hz = textureLod(height_map, huv + vec2(0.0, 1.0 / float(hs.y)), 0.0).r;
+			float texel_m = 8.0 / height_samples; // клітинка = 8 м
+			float bed_slope = length(vec2(hx - h0, hz - h0)) / 0.125 / texel_m;
+			shallow_fade = max(shallow_fade, smoothstep(0.0, 0.5, depth_m / max(bed_slope, 0.02)));
+		}
 		// Схил берега ~0.4 м на метр: глибина 1 м — ~2.5 м від урізу.
 		bank_m = depth_m * 2.5;
 	} else {

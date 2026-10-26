@@ -1015,14 +1015,21 @@ void fragment() {
 		vec2 buv = (p - map_origin + 0.5) / bsz;
 		vec2 bank_s = texture(bank_map, buv).rg;
 		vec2 bo = 1.5 / bsz;
-		float near_w = max(bank_s.r, 0.8 * max(max(texture(bank_map, buv + vec2(bo.x, 0.0)).r, texture(bank_map, buv - vec2(bo.x, 0.0)).r),
-				max(texture(bank_map, buv + vec2(0.0, bo.y)).r, texture(bank_map, buv - vec2(0.0, bo.y)).r)));
+		// Чотири додаткові відліки — лише там, де маска щось змінює: на сонці (корекція освітлення берега)
+		// чи де тінь схилу глибша за -0.2 (межа біля води).
+		float near_w = bank_s.r;
+		if (dry_season || shade_k * hill_shade < -0.2) {
+			near_w = max(near_w, 0.8 * max(max(texture(bank_map, buv + vec2(bo.x, 0.0)).r, texture(bank_map, buv - vec2(bo.x, 0.0)).r),
+					max(texture(bank_map, buv + vec2(0.0, bo.y)).r, texture(bank_map, buv - vec2(0.0, bo.y)).r)));
+		}
 		alb *= 1.0 + clamp(shade_k * hill_shade, mix(-0.4, -0.2, near_w), 0.55) * (1.0 - 0.4 * smoothstep(25.0, 45.0, cam_dist));
 		// Під сонцем берег улоговини ставка, повернутий від сонця, сам темнішає за Ламбертом до ~0.6 від
 		// трави: біля води альбедо підняте на відношення освітлення рівного ґрунту до берега (до ×2.2).
 		if (dry_season) {
 			float lambert_fix = clamp(sun_dir.y / max(hill_shade + sun_dir.y, 0.05), 1.0, 2.2);
 			alb *= mix(1.0, lambert_fix, near_w);
+			// Світлий пісок чи дорога біля води після підсилення не вилітають у біле: альбедо не вище 0.6.
+			alb = min(alb, vec3(0.6));
 		}
 		// Макро-варіація 20-50 м (fbm ~ 1/0.2 клітинки = 40 м): ламає повтор тону,
 		// не міняючи масштаб дрібниць.
@@ -1062,6 +1069,10 @@ void fragment() {
 			// Річковий берег не тягне щебінь пагорба: його тип дає вигин русла (нижче).
 			slope_amt *= 1.0 - smoothstep(0.02, 0.25, shore_mask);
 			bank_amt = smoothstep(0.08, 0.55, shore_mask + 0.2 * (fbm(p * 2.1 + 7.0) - 0.5));
+			// Береговий шар (пласка нормаль, стеля яскравості) — лише в ~0.3 клітинки від урізу: далі за ним
+			// широка маска близькості води робила траву й болото розмитим «аерографом».
+			float run_b = max(world_pos.y - water_level, 0.0) / 0.125 / max(slope_tan, 0.05);
+			bank_amt *= 1.0 - smoothstep(1.0, 2.4, run_b);
 			if (slope_amt > 0.01) {
 				// Камінці 10–40 см, а не плити: висота фото пагорба (stone_sample) вирішує, де камінь
 				// визирає з трави, повільне поле rs лише густішає їх на крутішому схилі. Брили й
@@ -1144,9 +1155,10 @@ void fragment() {
 				float straw = smoothstep(thr, thr + 0.35, shore_mask) * (1.0 - cut_amt)
 						* collar_break;
 				alb = mix(alb, alb * vec3(1.12, 1.05, 0.8), straw * 0.6);
-				// Біле на березі читається як відблиск: стеля ~L* 55 (Y ~ 0.1).
+				// Біле на мокрому березі читається як відблиск: стеля ~L* 55 (Y ~ 0.1). На сухій карті — без стелі:
+				// трава біля ставка, піднята проти Ламбертової тіні берега, під нею ставала рівною плямою.
 				float lc = dot(alb, lw);
-				alb *= mix(1.0, min(1.0, 0.1 / max(lc, 1e-4)), bank_amt);
+				alb *= mix(1.0, min(1.0, 0.1 / max(lc, 1e-4)), bank_amt * (dry_season ? 0.0 : 1.0));
 				// Земля, мул і мокрий ґрунт шорсткі: сухим не нижче 0.75, мокра смуга — не глянець.
 				rough = mix(rough, mix(0.9, 0.75, contact), bank_amt);
 			}
@@ -1277,7 +1289,9 @@ void fragment() {
 		if (bar_w > 0.0) {
 			// Тон ближчий до прибережної трави, з дрібною варіацією яскравості: рівний тон
 			// читається як глина.
-			vec3 sand = dot(alb_field, vec3(0.299, 0.587, 0.114)) * mix(1.0, 0.75, wet) * mix(SAND_TINT, vec3(1.12, 1.05, 0.8), 0.5) * (1.0 - 0.2 * shore_mask);
+			// Яскравість — з поточного альбедо (фото з деталлю), а не з рівного поля: інакше коса без фактури
+			// під дощем лягала блідими сіро-білими плямами, як іній. Мокра — темніша (×0.6) і буріша.
+			vec3 sand = dot(alb, vec3(0.299, 0.587, 0.114)) * mix(1.0, 0.6, wet) * mix(mix(SAND_TINT, vec3(1.12, 1.05, 0.8), 0.5), vec3(1.15, 0.98, 0.74), wet) * (1.0 - 0.2 * shore_mask);
 			sand *= 0.78 + 0.44 * vnoise(p * 13.0) + 0.1 * (vnoise(p * 41.0) - 0.5);
 			alb = mix(alb, sand, bar_w * 0.85);
 		}
