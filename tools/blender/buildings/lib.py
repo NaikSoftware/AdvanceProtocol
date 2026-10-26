@@ -31,7 +31,7 @@ def _img(name):
 
 
 def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=(), streak=0.0,
-                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3, corr=None, bump=0.006, patch_scale=0.55, runs=None, recolor=None, vmul=False, ash=None, seam_bump=1.0, dust=None):
+                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3, corr=None, bump=0.006, patch_scale=0.55, runs=None, recolor=None, vmul=False, ash=None, seam_bump=1.0, dust=None, vfade=None):
     """Матеріал, який запікається в атлас. Текстура тайлиться в метрах (box-проєкція в
     координатах обʼєкта), тож не залежить від UV. seams: (вісь, період м, ширина м, сила);
     вісь h = горизонталь стіни, x/y/z = координата обʼєкта. patch: (колір, частка) —
@@ -109,6 +109,12 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
             L(base, hs.inputs["Color"])
             base = hs.outputs["Color"]
 
+    if vfade is not None:                                                 # край купи: вершинний тон 1 — повний колір, 0 — колір землі
+        vcf = N("ShaderNodeVertexColor")
+        vcf.layer_name = "wtone"
+        bwf = N("ShaderNodeRGBToBW")
+        L(vcf.outputs["Color"], bwf.inputs[0])
+        base = mix(vfade, base, bwf.outputs[0], "MIX")
     if dust is not None:                                                  # пил: рівномірне підмішування теплого сірого знижує насиченість і вирівнює тон
         base = mix(base, dust[0], dust[1], "MIX")
     # смуги потьоків: шум, розтягнутий по висоті
@@ -496,6 +502,7 @@ def mats():
         "panel_in": make_material("panel_in", flat=(0.30, 0.29, 0.27)),
         "panel_frag": make_material("panel_frag", "Concrete034", 1.2, (0.43, 0.41, 0.38), streak=0.4, base_dirt=0.5, bump=0.02),
         # напівруїни: ті самі світлі штукатурка, цегла й сірі дахи, що в цілих будинків; кіптява й руйнування зверху
+        "wall_half_w": make_material("wall_half_w", "Plaster001", 2.5, (0.56, 0.52, 0.45), streak=0.65, base_dirt=0.85, bump=0.004, patch=((0.22, 0.17, 0.13), 0.35), patch_scale=1.0, vmul=True),
         "wall_half": make_material("wall_half", "Plaster001", 2.5, (0.66, 0.62, 0.55), streak=0.35, base_dirt=0.5, bump=0.004, patch=((0.40, 0.21, 0.14), 0.22), patch_scale=1.0, vmul=True),
         "wall_half_d": make_material("wall_half_d", "Plaster001", 2.5, (0.46, 0.43, 0.38), streak=0.4, base_dirt=0.5, bump=0.004, patch=((0.30, 0.15, 0.10), 0.22), patch_scale=1.0, vmul=True),
         "boards_vc": make_material("boards_vc", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02, vmul=True),
@@ -504,11 +511,13 @@ def mats():
         "tile_small": make_material("tile_small", flat=(0.17, 0.18, 0.20), seams=[("y", 0.26, 0.04, 0.75), ("x", 0.30, 0.03, 0.4)], streak=0.15, seam_bump=0.0),
         # завал: фотоскан (ambientCG Ground111 — цегляне сміття в землі; Poly Haven broken_brick_wall — цегла), тон уламка — із вершинного кольору
         "heap_photo": make_material("heap_photo", "Ground111", 1.0, (0.86, 0.81, 0.77), bump=0.05, streak=0.3, sat=0.85, dust=((0.22, 0.2, 0.17), 0.15)),
+        "heap_photo_f": make_material("heap_photo_f", "Ground111", 1.0, (0.86, 0.81, 0.77), bump=0.05, streak=0.3, sat=0.85, dust=((0.22, 0.2, 0.17), 0.15), vfade=(0.14, 0.13, 0.115)),
+        "edge_ground": make_material("edge_ground", flat=(0.14, 0.13, 0.115), streak=0.3),
         "heap_photo_mud": make_material("heap_photo_mud", "Ground111", 1.0, (0.62, 0.56, 0.52), bump=0.04, streak=0.4),
         "chunk_brick": make_material("chunk_brick", "broken_brick_wall", 0.7, (0.9, 0.83, 0.79), bump=0.03, vmul=True, sat=0.65, dust=((0.30, 0.265, 0.225), 0.3)),
         "chunk_plaster": make_material("chunk_plaster", "Plaster001", 1.0, (0.75, 0.71, 0.66), bump=0.02, vmul=True, streak=0.3, base_dirt=0.3, dust=((0.31, 0.285, 0.245), 0.5)),
         "chunk_concrete": make_material("chunk_concrete", "Concrete034", 1.0, (0.64, 0.62, 0.57), bump=0.03, vmul=True, base_dirt=0.3, dust=((0.30, 0.28, 0.245), 0.5)),
-        "wall_brick": make_material("wall_brick", "broken_brick_wall", 0.7, (2.0, 1.78, 1.66), bump=0.03, vmul=True, sat=0.72, dust=((0.30, 0.265, 0.225), 0.24), seams=[("zv", 0.3, 0.035, 0.45)], seam_bump=0.0, patch=((0.34, 0.31, 0.27), 0.3), patch_scale=0.9, streak=0.5, base_dirt=0.4),
+        "wall_brick": make_material("wall_brick", "broken_brick_wall", 0.7, recolor=(1.7, 0.94, 0.59), bump=0.03, vmul=True, patch=((0.07, 0.06, 0.05), 0.25), patch_scale=0.8, streak=0.35, streak_xy=2.0, base_dirt=0.25),
         "chunk_wet": make_material("chunk_wet", flat=(0.075, 0.07, 0.064), vmul=True),
         "chunk_char": make_material("chunk_char", flat=(0.07, 0.062, 0.055), vmul=True),
         "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
@@ -535,8 +544,10 @@ def mats():
         "blown_dark": make_material("blown_dark", flat=(0.09, 0.09, 0.095)),
         "tin_red": make_material("tin_red", "CorrugatedSteel005", 1.0, (0.34, 0.25, 0.21), seams=[("x", 1.0, 0.05, 0.4)], corr=("x", 0.2, 0.03), streak=0.3, patch=((0.2, 0.12, 0.08), 0.3)),
         # обвуглена деревина: майже чорна, а попіл світлим сірим лише на кромках
+        "timber_hit": make_material("timber_hit", "Planks021", 1.0, (0.085, 0.072, 0.062), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02),
+        "wall_plaster_w": make_material("wall_plaster_w", "Plaster001", 1.0, (0.56, 0.52, 0.45), streak=0.6, base_dirt=0.8, bump=0.008, patch=((0.26, 0.24, 0.21), 0.4), patch_scale=0.9),
         "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.026, 0.021, 0.018), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02, ash=((0.22, 0.215, 0.205), 3.5, 0.03)),
-        "cavity": make_material("cavity", flat=(0.02, 0.02, 0.02)),
+        "cavity": make_material("cavity", flat=(0.16, 0.16, 0.16)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
         "wall_ruin": make_material("wall_ruin", "Bricks105", 0.55, recolor=(0.320, 0.278, 0.259), streak=0.35, base_dirt=0.5, bump=0.035, patch=((0.17, 0.16, 0.145), 0.3), patch_scale=1.1, vmul=True, seams=[("zv", 0.30, 0.035, 0.55)]),
@@ -962,7 +973,7 @@ class HeapSurface:
         return out
 
 
-def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.0, skirt_mat=None):
+def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.0, skirt_mat=None, edge_fade=0.0):
     """Меш купи за HeapSurface: кільця до губи (t=1, висота lip) і три кільця заокругленої губи, що опускаються під землю
     за 0.5 м; центр — одна грань-шапка, не віяло. jitter — адитивний шум лише для високого джерела запікання. Повертає найвищу вершину."""
     import random
@@ -973,7 +984,13 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
     if hs.feather:
         rim = [(0.0, 0.0), (0.25 * skirt / rm, 0.0), (0.45 * skirt / rm, 0.0), (0.6 * skirt / rm, 0.0)]
     ring = []
+    tv = {}
     top = 0.0
+
+    def fade(t_):                                                       # вершинний тон: 1 всередині, зводиться до 0 на краю за edge_fade метрів
+        rem = (1.0 - t_) * rm
+        w = max(0.0, min(1.0, rem / edge_fade)) if edge_fade else 1.0
+        return w * w * (3 - 2 * w)
     for k in range(1, rings + 1):
         row = []
         t = k / rings
@@ -982,7 +999,9 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
             r = t * hs.radius(a)
             px, py = hs.cx + hs.rx * r * math.cos(a), hs.cy + hs.ry * r * math.sin(a)
             z = hs._z(px, py, a, t) + (jr.uniform(-jitter, jitter) * (1 - t * t) * min(1.0, t * 6.0) if jitter else 0.0)   # біля центру клини вузькі: шум менший за їхню ширину, інакше виходить зірка гострих гребенів
-            row.append(b.bm.verts.new((px, py, z)))
+            v_ = b.bm.verts.new((px, py, z))
+            tv[v_] = fade(t)
+            row.append(v_)
             top = max(top, z)
         ring.append(row)
     for dt, zr in rim[1:]:
@@ -991,7 +1010,9 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
             a = 2 * math.pi * i / segs
             r = hs.radius(a) * (1.0 + dt)
             px, py = hs.cx + hs.rx * r * math.cos(a), hs.cy + hs.ry * r * math.sin(a)
-            row.append(b.bm.verts.new((px, py, zr + (jr.uniform(-jitter, jitter) * 0.3 if jitter and zr > 0 else 0.0))))
+            v_ = b.bm.verts.new((px, py, zr + (jr.uniform(-jitter, jitter) * 0.3 if jitter and zr > 0 else 0.0)))
+            tv[v_] = 0.0
+            row.append(v_)
         ring.append(row)
     fs = [b.bm.faces.new(ring[0])]                                  # центральна шапка однією гранню: без віяла тонких клинів, у яких розгортка давала шви й чорну пляму
     for i in range(segs):
@@ -1003,6 +1024,11 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
             else:
                 fs.append(f_)
     b._finish(fs, mat)
+    if edge_fade:
+        for f_ in fs:
+            for lp in f_.loops:
+                tt = tv.get(lp.vert, 1.0)
+                lp[b.wtone] = (tt, tt, tt, 1.0)
     return top
 
 
@@ -1526,7 +1552,7 @@ def heap_bake(me, b, hi, mt, img, nimg, atlas_px, ao=0.65):
 RUBBLE_MIX = ("chunk_brick",) * 3 + ("chunk_plaster",) * 2 + ("chunk_concrete",) * 2 + ("chunk_char",) + ("chunk_wet",) * 2
 
 
-def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="heap_photo_mud", low="heap_buff", base="heap_photo", mix=RUBBLE_MIX, rings=None, segs=None):
+def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="edge_ground", low="heap_buff", base="heap_photo_f", mix=RUBBLE_MIX, rings=None, segs=None):
     """Купи зі скан-джерелом для запікання: основа — фотоскан цегляного сміття, зверху уламки 0.2-0.6 м кількох матеріалів, кожен свого тону;
     круті боки губи — темний мул із тієї ж фотографії."""
     import random
@@ -1536,7 +1562,7 @@ def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="heap_photo_mud",
         big = h.rx * h.ry > 8
         r_lo, s_lo = (rings or (10 if big else 3)), (segs or (48 if big else 20))
         heap_mound(b, h, low, rings=r_lo, segs=s_lo, skirt=skirt, skirt_mat=skirt_mat)
-        heap_mound(bh, h, base, rings=18 if big else 7, segs=110 if big else 44, jitter=0.04, seed=seed + k, skirt=skirt)
+        heap_mound(bh, h, base, rings=18 if big else 7, segs=110 if big else 44, jitter=0.04, seed=seed + k, skirt=skirt, edge_fade=0.45)
         for _ in range(int(math.pi * h.rx * h.ry * dens)):
             a = hr.uniform(0, 2 * math.pi)
             t = math.sqrt(hr.uniform(0, 1.0)) * 1.1
@@ -1564,7 +1590,7 @@ def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.2, 0.5), ou
             t = rnd.uniform(1.02, 1.25)
             r = t * h.radius(a)
             sz = rnd.uniform(0.18, 0.35)
-            b.chunk(h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a), sz * 0.12, sz, rnd.choice(mix), rnd)
+            b.chunk(h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a), sz * 0.1 - 0.1, sz, rnd.choice(mix), rnd)
 
 
 def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footprint=(1, 1), anchor=None, density=None, hi=None, ground_clip=False, ao=0.65):
