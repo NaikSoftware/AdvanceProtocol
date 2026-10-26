@@ -73,6 +73,11 @@ for season in ("late", "summer", "early"):
             it["card_keep"] = leafy_keep
         if node.startswith(("Hedge", "Shrub", "Log", "Litter")):
             it["card_keep"] = 1.0
+        if node.startswith("Shrub"):
+            # Кущ — 60 % пучків, більших: та сама пляма, на 40 % менше трикутників (кущів
+            # на узліссі й обабіч просіки багато).
+            it["card_keep"] = 0.6
+            it["card_scale"] = 1.3
         it.update(extra)
         if season != "late" and "card_scale" in it:
             # Листяна крона — більші пучки, що перекриваються: одна суцільна кругла маса,

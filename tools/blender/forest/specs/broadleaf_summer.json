@@ -130,7 +130,8 @@
     "target_y": 0.07
    },
    "sprites": "shrub",
-   "card_keep": 1.0,
+   "card_keep": 0.6,
+   "card_scale": 2.08,
    "trunk": false,
    "strip": true
   },
@@ -141,7 +142,8 @@
     "target_y": 0.06
    },
    "sprites": "shrub",
-   "card_keep": 1.0,
+   "card_keep": 0.6,
+   "card_scale": 2.08,
    "trunk": false,
    "strip": true
   },

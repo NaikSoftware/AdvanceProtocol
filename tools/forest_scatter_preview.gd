@@ -50,8 +50,8 @@ const SEED: int = 7
 
 const EDGE_NOISE: float = 0.3
 const SHRUB_BAND: float = 0.6
-const SHRUB_DENSITY: float = 4.0
-const UNDERSTORY_DENSITY: float = 3.0
+const SHRUB_DENSITY: float = 4.5
+const UNDERSTORY_DENSITY: float = 1.0
 const UNDERSTORY_H: Vector2 = Vector2(1.5, 2.5)
 const HEDGE_INSET: float = 0.2
 const HEDGE_WANDER: float = 0.25
@@ -61,10 +61,10 @@ const EDGE_DENSITY: float = 3.5
 const CANOPY_FROM: float = 0.35
 const JITTER: float = 0.4
 const CANOPY_SCALE: Vector2 = Vector2(0.9, 1.1)
-const EDGE_SCALE: Vector2 = Vector2(0.75, 0.9)
+const EDGE_SCALE: Vector2 = Vector2(0.85, 1.0)
 const LOG_DENSITY: float = 0.25
 ## Висота верхнього центра пучка; пучок додає ще ~1 м, тож видима висота 2,5–5 м.
-const SHRUB_H: Vector2 = Vector2(1.6, 4.0)
+const SHRUB_H: Vector2 = Vector2(2.0, 4.0)
 const STAND_FREQ: float = 1.0 / 3.0
 const TONE_FREQ: float = 1.0 / 2.5
 const TONE_VAR: float = 0.06
@@ -85,6 +85,8 @@ const LANE_MARGIN: float = 0.3
 ## У скільки разів крона ширша за масштаб висоти: зімкнений ліс, ≥85 % закрито згори.
 ## Картки ростуть разом (зсув кута — за масштабом екземпляра по горизонталі).
 const WIDE: float = 1.45
+## Кущів на тайл обабіч просіки (0,35–1,3 тайла від проламаної клітинки).
+const LANE_SHRUBS: float = 4.0
 const FADE_RADIUS: float = 0.6
 const FADE_SOFT: float = 0.15
 const FADE_REACH_EXTRA: float = 0.5
@@ -97,13 +99,14 @@ const UNIT_COLOR: Array[Color] = [Color(0.75, 0.2, 0.15), Color(0.95, 0.85, 0.1)
 
 ## Склад лісу: частки видів (префікс вузла або ім'я вузла) у наметі й у крайовому ряду.
 const WOODS: Dictionary = {
-	"pine": {"canopy": {"Pine": 0.35, "Spruce": 0.55, "Birch": 0.1}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.85, "density": 6.0},
-	"mixed": {"canopy": {"Pine": 0.2, "Spruce": 0.4, "Birch": 0.2, "Oak": 0.2}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.6, "density": 5.6},
-	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.4, "density": 4.0},
+	"pine": {"canopy": {"Pine": 0.35, "Spruce": 0.55, "Birch": 0.1}, "edge": {"Spruce_B": 0.45, "Pine": 0.3, "Birch": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.85, "density": 4.8},
+	"mixed": {"canopy": {"Pine": 0.2, "Spruce": 0.4, "Birch": 0.2, "Oak": 0.2}, "edge": {"Spruce_B": 0.35, "Birch": 0.4, "Oak": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.6, "density": 4.6},
+	"deciduous": {"canopy": {"Oak": 0.6, "Birch": 0.3, "Spruce": 0.1}, "edge": {"Birch": 0.45, "Oak": 0.3, "Spruce_B": 0.25}, "belt": {"Shrub": 1.0}, "hedge_evergreen": 0.4, "density": 3.4},
 }
 
 ## Пізня осінь: основа — темні вузькі ялини, листяні (переважно голі) — домішкою.
-const LATE_CANOPY: Dictionary = {"Spruce": 0.55, "Pine": 0.15, "Birch": 0.18, "Oak": 0.12}
+const LATE_CANOPY: Dictionary = {"Spruce": 0.65, "Pine": 0.05, "Birch": 0.18, "Oak": 0.12}
+const LATE_EDGE: Dictionary = {"Spruce_B": 0.6, "Birch": 0.3, "Oak": 0.1}
 
 ## Тон поля тестового лісу; світло, тінь, дощ і тон листя ставить WeatherRig за
 ## game/battle/look/<вигляд>.tres — так само, як на бойовому екрані.
@@ -461,14 +464,18 @@ func _scatter() -> void:
 	var edge := func(d: float) -> bool: return d > EDGE_FROM and d <= EDGE_TO
 	var shrub := func(d: float) -> bool: return d > 0.0 and d <= SHRUB_BAND
 	var logs := func(d: float) -> bool: return d > 0.3
-	_layer(6.0, canopy, func(p: Vector2) -> Dictionary: return LATE_CANOPY if _season == "late" else WOODS[_wood_at.call(p)]["canopy"], CANOPY_SCALE, true,
+	_layer(4.8, canopy, func(p: Vector2) -> Dictionary: return LATE_CANOPY if _season == "late" else WOODS[_wood_at.call(p)]["canopy"], CANOPY_SCALE, true,
 			func(p: Vector2) -> float: return float(WOODS[_wood_at.call(p)]["density"]))
-	_layer(EDGE_DENSITY, edge, func(p: Vector2) -> Dictionary: return WOODS[_wood_at.call(p)]["edge"], EDGE_SCALE, true)
+	_layer(EDGE_DENSITY, edge, func(p: Vector2) -> Dictionary: return LATE_EDGE if _season == "late" else WOODS[_wood_at.call(p)]["edge"], EDGE_SCALE, true)
 	_layer(SHRUB_DENSITY, shrub, func(p: Vector2) -> Dictionary: return WOODS[_wood_at.call(p)]["belt"], SHRUB_H, false)
 	if _meshes.has("Log"):
 		_layer(LOG_DENSITY, logs, func(_p: Vector2) -> Dictionary: return {"Log": 1.0}, Vector2.ONE, true)
 	_layer(UNDERSTORY_DENSITY, func(d: float) -> bool: return d > SHRUB_BAND,
 			func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0}, UNDERSTORY_H, false)
+	# Підлісок обабіч просіки: крони тут вужчі й рідші (поле до просіки), і кущі 2–4 м
+	# закривають землю між ними дешевше за ще одне дерево.
+	_layer(LANE_SHRUBS, func(d: float) -> bool: return d > 0.0, func(_p: Vector2) -> Dictionary: return {"Shrub": 1.0},
+			SHRUB_H, false, func(p: Vector2) -> float: return LANE_SHRUBS if _broken_distance(p) > 0.35 and _broken_distance(p) < 1.3 else 0.0)
 	_hedges()
 	_broken_cells()
 
@@ -643,6 +650,8 @@ func _place_mesh(mesh: Mesh, p: Vector2, s: float) -> void:
 		w = 0.75  # пізня осінь: темні вузькі шпилі ялин, між ними — голі листяні
 	elif species in ["Pine", "Spruce", "Birch", "Oak", "Hero"]:
 		w = WIDE
+	elif species == "Shrub":
+		w = 1.3
 	# AABB меша — центри карток; пучки виходять за нього ще на ~1,2 м угору й до 2 м убік.
 	var r: float = half * s * w + 0.25
 	# Нічого в коридорі просіки: крона з полем LANE_MARGIN від проламаної клітинки; далі
@@ -914,6 +923,11 @@ func _report(what: String) -> void:
 		tris += _triangles(m) * (_groups[m] as Array).size()
 		inst += (_groups[m] as Array).size()
 	print("SCATTER %s instances=%d tris=%d multimeshes=%d" % [what, inst, tris, _groups.size() + _ground_groups.size()])
+	var by: Dictionary = {}
+	for m: Mesh in _groups:
+		var k: String = _species.get(m, "?")
+		by[k] = int(by.get(k, 0)) + _triangles(m) * (_groups[m] as Array).size()
+	print("SCATTER_BY %s" % by)
 
 
 ## Середній час GPU за n кадрів: один кадр шумить у рази, порівнювати можна лише середнє.
