@@ -2,10 +2,13 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://1jjfqqow5uuy"
+uid="uid://tl2rbfixplc3"
 path="res://.godot/imported/infra_fence_picket_picket_post_n.png-de6c4eb48e530eee7232eb01f5ed530c.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "8d75a48f7077e9cd47f2d6b7a975700f"
 }
 
 [deps]
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

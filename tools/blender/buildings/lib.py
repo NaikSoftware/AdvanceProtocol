@@ -28,7 +28,7 @@ def _img(name):
 
 
 def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=(), streak=0.0,
-                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3, corr=None, bump=0.006, patch_scale=0.55, runs=None, recolor=None, vmul=False, ash=None):
+                  base_dirt=0.0, patch=None, rough=0.85, sat=1.0, streak_col=(0.0, 0.0, 0.0), streak_xy=1.3, corr=None, bump=0.006, patch_scale=0.55, runs=None, recolor=None, vmul=False, ash=None, seam_bump=1.0):
     """Матеріал, який запікається в атлас. Текстура тайлиться в метрах (box-проєкція в
     координатах обʼєкта), тож не залежить від UV. seams: (вісь, період м, ширина м, сила);
     вісь h = горизонталь стіни, x/y/z = координата обʼєкта. patch: (колір, частка) —
@@ -167,7 +167,7 @@ def make_material(name, tex=None, scale=1.0, tint=(1, 1, 1), flat=None, seams=()
             L(nzg.outputs["Normal"], nzs.inputs[0])
             line = math("MULTIPLY", line, math("SUBTRACT", 1.0, math("ABSOLUTE", nzs.outputs[2]), clamp=True))
         base = mix(base, (0.0, 0.0, 0.0), math("MULTIPLY", line, strength), "MIX")
-        hparts.append(math("MULTIPLY", line, -0.012))
+        hparts.append(math("MULTIPLY", line, -0.012 * seam_bump))
     if ash is not None:
         # попіл на кромках: Bevel-нормаль розходиться з гранню лише біля ребра, звідти й світліший колір
         acol, again, arad = ash
@@ -495,8 +495,13 @@ def mats():
         "wall_half_d": make_material("wall_half_d", "Plaster001", 2.5, (0.46, 0.43, 0.38), streak=0.4, base_dirt=0.5, bump=0.004, patch=((0.30, 0.15, 0.10), 0.22), patch_scale=1.0, vmul=True),
         "boards_vc": make_material("boards_vc", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02, vmul=True),
         # дошки 18 см: м'які зміни тону без крупи (плоский колір, вертикальні шви, низькочастотні розводи)
-        "boards_soft": make_material("boards_soft", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.012, 0.4)], streak=0.5, base_dirt=0.4),
-        "boards_soft_vc": make_material("boards_soft_vc", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.012, 0.4)], streak=0.5, base_dirt=0.4, vmul=True),
+        "boards_soft": make_material("boards_soft", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, seam_bump=0.0),
+        "tile_small": make_material("tile_small", flat=(0.17, 0.18, 0.20), seams=[("y", 0.26, 0.04, 0.75), ("x", 0.30, 0.03, 0.4)], streak=0.15, seam_bump=0.0),
+        "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
+        "plinth_flat": make_material("plinth_flat", flat=(0.33, 0.32, 0.30), base_dirt=0.5, streak=0.4),
+        "door_panel": make_material("door_panel", flat=(0.30, 0.22, 0.15), seams=[("h", 0.22, 0.015, 0.5)], streak=0.3, seam_bump=0.0),
+        "mud_skirt": make_material("mud_skirt", flat=(0.10, 0.082, 0.065), streak=0.6, base_dirt=0.2),
+        "boards_soft_vc": make_material("boards_soft_vc", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, vmul=True, seam_bump=0.0),
         "galv_rim": make_material("galv_rim", "CorrugatedSteel005", 1.0, (0.30, 0.29, 0.28), seams=[("ang8", 1.1, 0.04, 0.3)], streak=0.9, base_dirt=0.4, patch=((0.16, 0.08, 0.05), 0.3)),
         "sheet_char": make_material("sheet_char", "CorrugatedSteel005", 1.0, (0.34, 0.31, 0.28), streak=0.8, base_dirt=0.3, patch=((0.22, 0.11, 0.06), 0.3)),
         "floor_char": make_material("floor_char", "Planks021", 1.0, (0.17, 0.145, 0.125), sat=0.4, seams=[("h", 0.2, 0.02, 0.8)], streak=0.6, base_dirt=0.3, bump=0.025),
@@ -508,13 +513,14 @@ def mats():
         "soot_v": make_soot_material(),
         # ребра шиферу — в альбедо (смуги 0.4 м згладжуються міпами), а рельєф нормалі ледь помітний: на ковзному світлі не мигає
         "fc_roof_burnt": make_material("fc_roof_burnt", "Concrete034", 1.2, (0.07, 0.07, 0.07), seams=[("x", 1.1, 0.05, 0.3), ("x", 0.4, 0.09, 0.14)], corr=("x", 0.4, 0.005), streak=1.0),
-        "fc_roof_xh": make_material("fc_roof_xh", "Concrete034", 3.5, (0.18, 0.18, 0.17), seams=[("x", 1.1, 0.05, 0.4), ("x", 0.4, 0.09, 0.12)], corr=("x", 0.4, 0.004), streak=0.1, patch=((0.12, 0.16, 0.10), 0.05)),
-        "fc_roof_h": make_material("fc_roof_h", "Concrete034", 3.5, (0.40, 0.40, 0.38), seams=[("y", 1.1, 0.05, 0.35), ("y", 0.4, 0.09, 0.10)], corr=("y", 0.4, 0.005), streak=0.1, patch=((0.12, 0.16, 0.10), 0.05)),
+        # дахи малих будинків: плоский колір (без крупи текстури), шви листів кожні 0.5 м, черепиця 0.30 x 0.30 м
+        "fc_roof_xh": make_material("fc_roof_xh", flat=(0.15, 0.155, 0.16), seams=[("x", 0.5, 0.03, 0.4)], streak=0.15, seam_bump=0.0),
+        "fc_roof_h": make_material("fc_roof_h", flat=(0.32, 0.325, 0.31), seams=[("y", 0.5, 0.03, 0.3)], streak=0.15, seam_bump=0.0),
         "blown_dark": make_material("blown_dark", flat=(0.09, 0.09, 0.095)),
         "tin_red": make_material("tin_red", "CorrugatedSteel005", 1.0, (0.34, 0.25, 0.21), seams=[("x", 1.0, 0.05, 0.4)], corr=("x", 0.2, 0.03), streak=0.3, patch=((0.2, 0.12, 0.08), 0.3)),
         # обвуглена деревина: майже чорна, а попіл світлим сірим лише на кромках
         "timber_dark": make_material("timber_dark", "Planks021", 1.0, (0.026, 0.021, 0.018), sat=0.5, streak=0.5, base_dirt=0.2, bump=0.02, ash=((0.22, 0.215, 0.205), 3.5, 0.03)),
-        "cavity": make_material("cavity", flat=(0.095, 0.093, 0.092)),
+        "cavity": make_material("cavity", flat=(0.05, 0.049, 0.048)),
         "insul": make_material("insul", flat=(0.21, 0.21, 0.175)),
         "pump": make_material("pump", flat=(0.022, 0.026, 0.03)),
         "wall_ruin": make_material("wall_ruin", "Bricks105", 0.55, recolor=(0.320, 0.278, 0.259), streak=0.35, base_dirt=0.5, bump=0.035, patch=((0.17, 0.16, 0.145), 0.3), patch_scale=1.1, vmul=True, seams=[("zv", 0.30, 0.035, 0.55)]),
@@ -847,11 +853,11 @@ class HeapSurface:
     контуру з розмахом 0.3-0.6 м і м'які хвилі, що гаснуть у центрі (без радіальних зломів на вершині).
     z(x, y) дає ту саму висоту, що й меш, тож крокви й димар стоять на справжній поверхні."""
 
-    def __init__(self, cx, cy, rx, ry, hmax, seed, bumps=6, lip=0.3, wob=0.2, lump=0.14, hummocks=0, hum_amp=0.35, pw=2.0):
+    def __init__(self, cx, cy, rx, ry, hmax, seed, bumps=6, lip=0.3, wob=0.2, lump=0.14, hummocks=0, hum_amp=0.35, pw=2.0, sq=0.0):
         import random
         rnd = random.Random(seed)
         self.cx, self.cy, self.rx, self.ry = cx, cy, rx, ry
-        self.hmax, self.bumps, self.lip, self.wob, self.lump, self.pw = hmax, bumps, lip, wob, lump, pw
+        self.hmax, self.bumps, self.lip, self.wob, self.lump, self.pw, self.sq = hmax, bumps, lip, wob, lump, pw, sq
         self.ph = [rnd.uniform(0, 2 * math.pi) for _ in range(6)]
         # горби й одна западина (де був будинок): гауси 1-1.6 м, щоб купа читалась як звал, а не як диск
         self.hum = []
@@ -869,7 +875,10 @@ class HeapSurface:
 
     def radius(self, a):
         ph, k = self.ph, self.bumps
-        return 1.0 + 0.065 * math.sin(k * a + ph[0]) + 0.03 * math.sin((k - 1) * a + ph[1]) + 0.025 * math.sin((k + 1) * a + ph[2])
+        r = 1.0 + 0.065 * math.sin(k * a + ph[0]) + 0.03 * math.sin((k - 1) * a + ph[1]) + 0.025 * math.sin((k + 1) * a + ph[2])
+        if self.sq:                                                      # суперелліпс: купа тримає квадратний слід будинку, а не круглий диск
+            r *= (abs(math.cos(a)) ** self.sq + abs(math.sin(a)) ** self.sq) ** (-1.0 / self.sq)
+        return r
 
     def z(self, x, y):
         u, v = (x - self.cx) / self.rx, (y - self.cy) / self.ry
@@ -935,7 +944,7 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
     return top
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4):
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0):
     """Уламок стіни p0-p1: сегменти різної ширини, кожен ламається ще на 1-3 шматки з різними верхами (різниця 0.2-0.5 м,
     тож жодного рівного верху), випадкова ходьба висот довкола задуму heights (не вище hcap); верхні 0.4 м — відкрита
     цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий."""
@@ -964,8 +973,8 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             pieces.append((cuts[i], cuts[i + 1], 0.0, 0.0))
             h = None
             continue
-        h = hb if h is None else max(0.3, min(hb + 0.5, min(hcap, h + jag * rnd.choice((-0.6, -0.4, -0.2, 0.2, 0.35, 0.6, -1.0, 0.9)))))
-        diag = jag * (rnd.uniform(0.5, 1.1) * rnd.choice((-1, 1)) if rnd.random() < 0.35 else rnd.uniform(-0.1, 0.1))
+        h = hb if h is None else max(0.3, min(hb + 0.5, min(hcap, h + jag * step * rnd.choice((-0.6, -0.4, -0.2, 0.2, 0.35, 0.6, -1.0, 0.9)))))
+        diag = jag * (rnd.uniform(0.4, 1.1) * (0.5 + 0.5 * step) * rnd.choice((-1, 1)) if rnd.random() < diag_p else rnd.uniform(-0.1, 0.1))
         ha, hc = max(0.2, h - diag / 2), max(0.2, h + diag / 2)
         w = cuts[i + 1] - cuts[i]
         nsub = 1 if w < 0.55 else (2 if w < 1.0 else rnd.choice((2, 3)))
@@ -974,7 +983,7 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             def hh(f, edge):
                 z = ha + (hc - ha) * f
                 if edge:                          # зазубрина кожного шматка 0.1-0.25 м вгору чи вниз, разом 0.2-0.5 м
-                    z += jag * rnd.choice((-1, 1)) * rnd.uniform(0.1, 0.25)
+                    z += jag * jit * rnd.choice((-1, 1)) * rnd.uniform(0.06, 0.25)
                 return max(0.2, min(hcap, z))
             pieces.append((cuts[i] + w * fr[k], cuts[i] + w * fr[k + 1], hh(fr[k], True), hh(fr[k + 1], True)))
 
@@ -1441,6 +1450,41 @@ def heap_bake(me, b, hi, mt, img, nimg, atlas_px, ao=0.65):
     for o in (low, high):
         bpy.data.objects.remove(o)
     bpy.ops.object.select_all(action="DESELECT")
+
+
+def rubble_heaps(b, plan, seed, dens=7.0, skirt=0.5, skirt_mat="mud_skirt", low="heap_buff", base="heap_base_buff", rock="rubble_buff"):
+    """Купи із скан-джерелом для запікання: темна основа, уламки 20-85 см зверху; круті боки губи — темний мул, а не світла смуга."""
+    import random
+    bh = Builder()
+    hr = random.Random(seed)
+    for k, h in enumerate(plan):
+        big = h.rx * h.ry > 8
+        heap_mound(b, h, low, rings=7 if big else 3, segs=32 if big else 16, skirt=skirt, skirt_mat=skirt_mat)
+        heap_mound(bh, h, base, rings=16 if big else 6, segs=96 if big else 40, jitter=0.04, seed=seed + k, skirt=skirt)
+        for _ in range(int(math.pi * h.rx * h.ry * dens)):
+            a = hr.uniform(0, 2 * math.pi)
+            t = math.sqrt(hr.uniform(0, 1.0)) * 1.12
+            r = t * h.radius(a)
+            px, py = h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a)
+            z = h.z(px, py) if t < 1.0 else h.lip * max(0.0, 1.0 - (t - 1.0) / 0.12) * 0.8
+            q = hr.random()
+            size = hr.uniform(0.2, 0.42) if q < 0.7 else (hr.uniform(0.42, 0.6) if q < 0.95 else hr.uniform(0.6, 0.85))
+            bh.rock(px, py, z + 0.04, size, rock, hr, buried=0.3)
+    return bh
+
+
+def rubble_lumps(b, plan, rnd, n_each=8, tmin=0.1, tmax=1.0, size=(0.22, 0.42), mats=("brick_face", "wall_plaster", "brick_face", "brick_dark")):
+    """Грудки цегли й штукатурки 20-40 см по всій купі: справжня геометрія дає тінь і силует, а не лише запечену плями."""
+    for h in plan:
+        for _ in range(n_each):
+            a = rnd.uniform(0, 2 * math.pi)
+            t = rnd.uniform(tmin, tmax)
+            r = t * h.radius(a)
+            px, py = h.cx + h.rx * r * math.cos(a), h.cy + h.ry * r * math.sin(a)
+            z = h.z(px, py)
+            sz = rnd.uniform(*size)
+            b.box_e(px, py, z + sz * 0.2, sz * rnd.uniform(0.8, 1.4), sz * rnd.uniform(0.55, 1.0), sz * rnd.uniform(0.4, 0.8), rnd.choice(mats),
+                    euler=(rnd.uniform(-0.5, 0.5), rnd.uniform(-0.5, 0.5), rnd.uniform(0, 3.14)))
 
 
 def finish(b, name, out_dir, atlas_px=None, tri_limit=None, target_cm=3.2, footprint=(1, 1), anchor=None, density=None, hi=None, ground_clip=False, ao=0.65):

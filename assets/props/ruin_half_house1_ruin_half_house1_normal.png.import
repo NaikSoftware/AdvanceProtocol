@@ -2,10 +2,13 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b6vu0digsdkr8"
+uid="uid://dpvd0aatjrdw"
 path="res://.godot/imported/ruin_half_house1_ruin_half_house1_normal.png-fbf8db52c16a4f999310b40148641720.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "c1ccb98310d31daa7b0427d959e2c15b"
 }
 
 [deps]
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

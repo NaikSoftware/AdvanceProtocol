@@ -2,10 +2,13 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c2078bj36jfjn"
+uid="uid://dxkn7eq4uvc11"
 path="res://.godot/imported/f8_shed_f8_shed_normal.png-15724898643bac00009db719e1ca83df.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "8448925997d99fc863342ad5d3727a52"
 }
 
 [deps]
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

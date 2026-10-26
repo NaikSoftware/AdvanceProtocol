@@ -126,6 +126,15 @@ func _ready() -> void:
 		var inst: Node3D = scene.instantiate()
 		inst.position = Vector3(cell.x, 0.0, cell.y)
 		add_child(inst)
+		if rl:
+			# мокрий реквізит із гри: матеріал-накладка зменшує шорсткість, тож дахи й стіни дають мокрий блиск
+			for mi: MeshInstance3D in inst.find_children("*", "MeshInstance3D", true, false):
+				for si: int in mi.mesh.get_surface_count():
+					var wm: StandardMaterial3D = mi.get_active_material(si) as StandardMaterial3D
+					if wm != null:
+						var wet: StandardMaterial3D = wm.duplicate() as StandardMaterial3D
+						wet.roughness = 0.32
+						mi.set_surface_override_material(si, wet)
 		if tank:
 			var box := MeshInstance3D.new()
 			var bm := BoxMesh.new()

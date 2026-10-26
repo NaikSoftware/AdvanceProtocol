@@ -2,10 +2,13 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://37j7vpxrmpfo"
+uid="uid://u1a8n84ygiqg"
 path="res://.godot/imported/ruin_half_shed_ruin_half_shed_normal.png-5b94b58c9739799bb3809f085c49fa9a.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "80365bc8516e3274f1a5f052ea4b5105"
 }
 
 [deps]
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

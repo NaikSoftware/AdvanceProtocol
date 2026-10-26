@@ -2,10 +2,13 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cd65rwyhq5rc3"
+uid="uid://q5h7kmvffndc"
 path="res://.godot/imported/house_h1_house_h1_normal.png-70648bd652a8debb384fce0920a082d7.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "0ec22aa61d618b47f4307389d9924515"
 }
 
 [deps]
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

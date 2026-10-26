@@ -2,10 +2,13 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqw2102rvdc0u"
+uid="uid://b8wbvjmk15lf0"
 path="res://.godot/imported/infra_culvert_culvert_ground_a.png-bf2e367fa573946a5f9fcc74beeb9437.ctex"
 metadata={
 "vram_texture": false
+}
+generator_parameters={
+"md5": "94691ad6dfef1fd00738905895cc7ad2"
 }
 
 [deps]
@@ -23,7 +26,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

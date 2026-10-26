@@ -27,7 +27,7 @@ def heaps(b, plan, seed, dens=7.0):
     hr = random.Random(seed)
     for k, h in enumerate(plan):
         big = h.rx * h.ry > 8
-        heap_mound(b, h, "heap_buff", rings=7 if big else 3, segs=32 if big else 16, skirt=0.5, skirt_mat="rubble_buff")
+        heap_mound(b, h, "heap_buff", rings=7 if big else 3, segs=32 if big else 16, skirt=0.5, skirt_mat="mud_skirt")
         heap_mound(bh, h, "heap_base_buff", rings=16 if big else 6, segs=96 if big else 40, jitter=0.04, seed=seed + k, skirt=0.5)
         for _ in range(int(math.pi * h.rx * h.ry * dens)):
             a = hr.uniform(0, 2 * math.pi)
@@ -106,11 +106,11 @@ def break_dress(b, P, xs, sgn, rnd, nv=18):
 def trim(b, xa, xb, ya, yb, E, hx, S, N, front=True, back=True):
     """Ринви вздовж карнизів і одна водостічна труба на східному куті фронту; навіс і ринва дають силует вже зблизька."""
     if front:
-        b.box((xa + xb) / 2, ya + 0.04, E - 0.14, xb - xa - 0.1, 0.13, 0.1, "gutter")
+        b.box((xa + xb) / 2, ya + 0.04, E - 0.14, xb - xa - 0.1, 0.13, 0.1, "gutter_d")
     if back:
-        b.box((xa + xb) / 2, yb - 0.04, E - 0.14, xb - xa - 0.1, 0.13, 0.1, "gutter")
-    b.box(hx + 0.12, S - 0.27, 0.12, 0.08, 0.08, E - 0.3, "gutter")
-    b.box(hx + 0.12, ya + 0.04, E - 0.3, 0.08, 0.13, 0.12, "gutter")
+        b.box((xa + xb) / 2, yb - 0.04, E - 0.14, xb - xa - 0.1, 0.13, 0.1, "gutter_d")
+    b.box(hx + 0.12, S - 0.27, 0.12, 0.08, 0.08, E - 0.3, "gutter_d")
+    b.box(hx + 0.12, ya + 0.04, E - 0.3, 0.08, 0.13, 0.12, "gutter_d")
 
 
 def pane_dress(b, axis, c, sgn, u, z, w, h, rain=True):
@@ -131,10 +131,10 @@ def pane_dress(b, axis, c, sgn, u, z, w, h, rain=True):
             uu = u + sx * w
             if axis == "y":
                 pts = [(uu - 0.07, c + sgn * 0.012, z1), (uu + 0.07, c + sgn * 0.012, z1), (uu + 0.07, c + sgn * 0.012, z - 0.1), (uu - 0.07, c + sgn * 0.012, z - 0.1)]
-                plane_soot(b, pts, (0.76, 0.76, 0.5, 0.5), (0, sgn, 0))
+                plane_soot(b, pts, (0.6, 0.6, 0.38, 0.38), (0, sgn, 0))
             else:
                 pts = [(c + sgn * 0.012, uu - 0.07, z1), (c + sgn * 0.012, uu + 0.07, z1), (c + sgn * 0.012, uu + 0.07, z - 0.1), (c + sgn * 0.012, uu - 0.07, z - 0.1)]
-                plane_soot(b, pts, (0.76, 0.76, 0.5, 0.5), (sgn, 0, 0))
+                plane_soot(b, pts, (0.6, 0.6, 0.38, 0.38), (sgn, 0, 0))
 
 
 def grime(b, axis, c, sgn, u0, u1, z0, h=0.55):
@@ -175,7 +175,7 @@ def house1(ruined):
     def PB(x, v):
         return (x, yb + (ym - yb) * v, E + (R - E) * v)
     if not ruined:
-        b.box(0, 0, 0, 2 * hx + 0.4, 2 * hy + 0.4, 0.5, "brick_grey")
+        b.box(0, 0, 0, 2 * hx + 0.4, 2 * hy + 0.4, 0.5, "plinth_flat")
         b.box(0, 0, 0.5, 2 * hx + 0.38, 2 * hy + 0.38, E - 0.5, "wall_plaster")
         for sx in (hx, -hx):
             prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (sx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
@@ -184,7 +184,10 @@ def house1(ruined):
         for x in (-2.3, -0.8, 1.5, 2.65):
             b.window(("y", S - 0.19, -1), x, 0.9, 1.0, 1.2)
             pane_dress(b, "y", S - 0.19, -1, x, 0.9, 1.0, 1.2)
-        b.box(0.1, S - 0.19 + 0.03, 0.0, 1.0, 0.06, 2.0, "dark")
+        b.box(0.1, S - 0.19 + 0.03, 0.0, 1.0, 0.06, 2.0, "door_panel")
+        b.box(0.1, S - 0.19 + 0.05, 2.0, 1.2, 0.07, 0.1, "step")
+        for sx in (-0.55, 0.55):
+            b.box(0.1 + sx, S - 0.19 + 0.05, 0.0, 0.1, 0.07, 2.1, "step")
         b.box(0.1, S - 0.5, 0.0, 1.8, 0.7, 0.2, "step")
         for y in (-1.0, 1.0):
             for sx, sgn in ((hx + 0.19, 1), (-hx - 0.19, -1)):
@@ -196,12 +199,12 @@ def house1(ruined):
         grime(b, "y", S - 0.19, -1, -hx, hx, 0.5)
         grime(b, "y", N + 0.19, 1, -hx, hx, 0.5)
         grime(b, "x", hx + 0.19, 1, S, N, 0.5)
-        b.box(1.6, -0.2, 3.5, 0.6, 0.6, 1.9, "brick_face", top="brick_grey")
+        b.box(1.6, -0.2, 3.5, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
         lib.finish(b, "house_h5", out, tri_limit=2200, footprint=(1, 1))
         return
     kw = dict(top_tone=0.82)
     standing = dict(brick_mat="wall_plaster", cap=0.06, jag=0.12, **kw)
-    broken = dict(brick_mat="brick_face", **kw)
+    broken = dict(brick_mat="brick_face", step=0.35, diag_p=0.85, jit=0.5, **kw)
     wall_run(b, (-0.9, S), (hx + 0.2, S), 0.4, [E] * 6, "wall_half", "wall_plaster", 21, hcap=2.6, **standing)
     wall_run(b, (-hx, S), (-0.9, S), 0.4, [0.6, 1.3, 0.9, 1.8], "wall_half", "brick_face", 22, hcap=2.2, **broken)
     wall_run(b, (hx, S), (hx, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 23, hcap=2.6, **standing)
@@ -253,7 +256,7 @@ def house1(ruined):
     bent_sheet(b, (-2.7, -0.9, sf(-2.7, -0.9) + 0.2), (-2.3, 0.8, sf(-2.3, 0.8) + 0.2), 0.9, "sheet_char", 0.18, axis="x")
     bent_sheet(b, (-1.6, -1.2, sf(-1.6, -1.2) + 0.2), (-1.4, 0.5, sf(-1.4, 0.5) + 0.2), 0.9, "sheet_char", 0.18, axis="x")
     bent_sheet(b, (-1.5, -3.0, sf(-1.5, -3.0) + 0.1), (-2.9, -2.9, sf(-2.9, -2.9) + 0.1), 0.9, "sheet_char", 0.12, axis="y")
-    b.box(1.6, -0.2, 3.5, 0.6, 0.6, 1.9, "brick_face", top="brick_grey")
+    b.box(1.6, -0.2, 3.5, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
     lumps(b, plan, rnd, 6)
     bh = heaps(b, plan, 7)
     lib.finish(b, "ruin_half_house1", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
@@ -275,11 +278,11 @@ def house2(ruined):
     def PB(x, v):
         return (x, yb + (ym - yb) * v, E + (R - E) * v)
     if not ruined:
-        b.box(0, 0, 0, 2 * hx + 0.4, 2 * hy + 0.4, 0.6, "brick_grey")
+        b.box(0, 0, 0, 2 * hx + 0.4, 2 * hy + 0.4, 0.6, "plinth_flat")
         b.box(0, 0, 0.6, 2 * hx + 0.38, 2 * hy + 0.38, E - 0.6, "wall_plaster")
         for sx in (hx, -hx):
             prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (sx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
-        gable_roof(b, PF, PB, xw, xb, "tile_graphite")
+        gable_roof(b, PF, PB, xw, xb, "tile_small")
         trim(b, xw, xb, ya, yb, E, hx, S, N)
         for z in (0.9, 3.6):
             for x in (-1.8, 0.0, 1.8):
@@ -291,11 +294,14 @@ def house2(ruined):
             for y in (-1.0, 1.0):
                 b.window(("x", hx + 0.19, 1), y, z, 1.1, 1.4)
                 pane_dress(b, "x", hx + 0.19, 1, y, z, 1.1, 1.4)
-        b.box(2.2, S - 0.19 + 0.03, 0.0, 1.0, 0.06, 2.0, "dark")
+        b.box(2.2, S - 0.19 + 0.03, 0.0, 1.0, 0.06, 2.0, "door_panel")
+        b.box(2.2, S - 0.19 + 0.05, 2.0, 1.2, 0.07, 0.1, "step")
+        for sx in (-0.55, 0.55):
+            b.box(2.2 + sx, S - 0.19 + 0.05, 0.0, 0.1, 0.07, 2.1, "step")
         b.box(2.2, S - 0.5, 0.0, 1.8, 0.7, 0.2, "step")
         grime(b, "y", S - 0.19, -1, -hx, hx, 0.6)
         grime(b, "x", hx + 0.19, 1, S, N, 0.6)
-        b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="brick_grey")
+        b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
         lib.finish(b, "house_h6", out, tri_limit=2600, footprint=(1, 1))
         return
     kw = dict(top_tone=0.82)
@@ -304,7 +310,7 @@ def house2(ruined):
     wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half", "wall_plaster", 32, hcap=5.6, **standing)
     wall_run(b, (-hx, N), (-hx, S), 0.4, [E] * 8, "wall_half", "wall_plaster", 33, hcap=5.6, **standing)
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (-hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
-    wall_run(b, (hx, S), (hx, N), 0.4, [1.2, 2.2, 4.2, 5.0, 3.6, 1.8, 1.1, 0.9, 1.5, 2.5, 1.3], "wall_half", "brick_face", 34, hcap=5.2, jag=0.7, brick_mat="brick_face", **kw)
+    wall_run(b, (hx, S), (hx, N), 0.4, [1.2, 2.2, 4.2, 5.0, 3.6, 1.8, 1.1, 0.9, 1.5, 2.5, 1.3], "wall_half", "brick_face", 34, hcap=5.2, jag=0.7, brick_mat="brick_face", step=0.4, diag_p=0.85, jit=0.5, **kw)
     zt = E - 0.03
     for fl, z in ((0, 0.9), (1, 3.6)):
         for x in (-1.8, 0.0, 1.8):
@@ -323,9 +329,9 @@ def house2(ruined):
     grime(b, "y", S - 0.2, -1, -hx, hx, 0.0)
     # внутрішня грань західного фронтону не чиста штукатурка: кіптява згори, облуплені плями
     xi = -hx + 0.21
-    plane_soot(b, [(xi, -2.5, 2.8), (xi, 2.5, 2.8), (xi, 2.0, 6.7), (xi, -2.0, 6.7)], (0.7, 0.7, 0.22, 0.22), (1, 0, 0))
+    plane_soot(b, [(xi, -2.5, 2.8), (xi, 2.5, 2.8), (xi, 2.0, 6.7), (xi, -2.0, 6.7)], (0.5, 0.5, 0.12, 0.12), (1, 0, 0))
     for (yy, zz, ww, hh) in ((-1.0, 4.4, 1.2, 0.9), (1.2, 3.6, 0.9, 1.2), (0.0, 5.6, 1.4, 0.7)):
-        plane_soot(b, [(xi + 0.004, yy - ww / 2, zz), (xi + 0.004, yy + ww / 2, zz + 0.1), (xi + 0.004, yy + ww * 0.4, zz + hh), (xi + 0.004, yy - ww * 0.5, zz + hh * 0.8)], (0.34, 0.34, 0.18, 0.18), (1, 0, 0))
+        plane_soot(b, [(xi + 0.004, yy - ww / 2, zz), (xi + 0.004, yy + ww / 2, zz + 0.1), (xi + 0.004, yy + ww * 0.4, zz + hh), (xi + 0.004, yy - ww * 0.5, zz + hh * 0.8)], (0.2, 0.2, 0.09, 0.09), (1, 0, 0))
     ph = [rnd.uniform(0, 6.3) for _ in range(3)]
 
     def cutF(v):
@@ -342,7 +348,7 @@ def house2(ruined):
             pts.append(P(xs[i], i / nv))
             pts.append(P(xs[i], (i + 1) / nv))
         pts.append(P(xw, 1.0))
-        b.poly_up(pts, "tile_graphite")
+        b.poly_up(pts, "tile_small")
         return xs
     xsF = roof_west(PF, cutF)
     xsB = roof_west(PB, cutB)
@@ -363,7 +369,7 @@ def house2(ruined):
     chip_slab(b, 1.7, 0.0, FL - 0.1, 3.4, 5.2, 0.24, (0.0, 0.42, 0.02), "floor_char", "floor_char", 41, rebar=3)
     bent_sheet(b, (1.6, -2.7, 5.4), (1.8, -1.2, FL + 0.3), 0.9, "sheet_char", 0.2, axis="x")
     bent_sheet(b, (3.2, 1.6, sf(3.2, 1.6) + 0.2), (3.9, 2.4, sf(3.9, 2.4) + 0.12), 0.9, "sheet_char", 0.12, axis="y")
-    b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="brick_grey")
+    b.box(-1.8, 0.0, 6.2, 0.6, 0.6, 1.9, "brick_face", top="plinth_flat")
     lumps(b, plan, rnd, 6)
     bh = heaps(b, plan, 9)
     lib.finish(b, "ruin_half_house2", out, tri_limit=4800, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
@@ -380,17 +386,17 @@ def shed(ruined):
     S, N, XW, XE = -hy, hy, -hx, hx
     xs = [XW - 0.45 + 0.5 * i for i in range(16)]
     for i in range(len(xs) - 1):
-        b.poly_up([(xs[i], yb, E), (xs[i + 1], yb, E), (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_x")
-    b.box(0, yb - 0.04, E - 0.14, 2 * hx + 0.8, 0.13, 0.1, "gutter")
+        b.poly_up([(xs[i], yb, E), (xs[i + 1], yb, E), (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_xh")
+    b.box(0, yb - 0.04, E - 0.14, 2 * hx + 0.8, 0.13, 0.1, "gutter_d")
     if not ruined:
-        b.box(0, 0, 0, 2 * hx + 0.3, 2 * hy + 0.3, 0.5, "brick_grey")
+        b.box(0, 0, 0, 2 * hx + 0.3, 2 * hy + 0.3, 0.5, "plinth_flat")
         b.box(0, 0, 0.5, 2 * hx + 0.28, 2 * hy + 0.28, E - 0.5, "boards_soft")
         for sx in (hx, -hx):
             prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.3, (sx, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
         for i in range(len(xs) - 1):
-            b.poly_up([(xs[i], ya, E), (xs[i + 1], ya, E), (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_x")
-        b.box(0, ya + 0.04, E - 0.14, 2 * hx + 0.8, 0.13, 0.1, "gutter")
-        b.box(hx + 0.2, S - 0.18, 0.12, 0.08, 0.08, E - 0.3, "gutter")
+            b.poly_up([(xs[i], ya, E), (xs[i + 1], ya, E), (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_xh")
+        b.box(0, ya + 0.04, E - 0.14, 2 * hx + 0.8, 0.13, 0.1, "gutter_d")
+        b.box(hx + 0.2, S - 0.18, 0.12, 0.08, 0.08, E - 0.3, "gutter_d")
         b.box(hx + 0.15, 0.0, 0.0, 0.06, 2.4, 2.4, "door_steel")
         b.window(("y", N + 0.15, 1), 1.8, 1.2, 0.8, 0.6)
         pane_dress(b, "y", N + 0.15, 1, 1.8, 1.2, 0.8, 0.6, rain=False)
@@ -401,7 +407,7 @@ def shed(ruined):
         return
     kw = dict(brick_mat="boards_soft", soot_h=1.0, top_tone=0.82)
     wall_run(b, (XE, N), (XW, N), 0.14, [E] * 8, "boards_soft_vc", "boards_soft", 51, hcap=3.0, jag=0.1, cap=0.06, **kw)
-    wall_run(b, (XW, N), (XW, S), 0.14, [E, E, 2.6, 1.8, 0.7, 0.5], "boards_soft_vc", "boards_soft", 52, hcap=3.0, jag=0.5, **kw)
+    wall_run(b, (XW, N), (XW, S), 0.14, [E, E, 2.6, 1.8, 0.7, 0.5], "boards_soft_vc", "boards_soft", 52, hcap=3.0, jag=0.5, step=0.4, diag_p=0.8, jit=0.5, **kw)
     wall_run(b, (XE, S), (XE, N), 0.14, [E] * 6, "boards_soft_vc", "boards_soft", 53, hcap=3.0, jag=0.1, cap=0.06, **kw)
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.14, (XE, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.14, (XW, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
@@ -410,7 +416,7 @@ def shed(ruined):
     for x, h in zip(post_x, post_h):
         b.box(x, S, 0.0, 0.18, 0.18, h, "timber_dark")
     for (x, y, rot, ln, z, ang) in ((-1.9, -3.1, 0.1, 2.8, 0.2, 0.22), (0.4, -2.9, -0.15, 2.4, 0.3, 0.3), (-0.5, -3.7, 0.4, 1.8, 0.1, 0.1)):
-        b.box_e(x, y, z + 0.2, ln, 1.9, 0.08, "boards_soft", euler=(ang, 0.0, rot), top="boards_soft")
+        b.box_e(x, y, z + 0.2, ln, 1.9, 0.08, "fc_roof_xh", euler=(ang, 0.0, rot), top="fc_roof_xh")
     zt = E - 0.03
     opening2(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, ztop=zt)
     burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.3, g_bot=0.0, g_top=0.5, t_in=0.22, t_out=0.62, ztop=zt)
@@ -431,7 +437,7 @@ def shed(ruined):
     hole = {i for i, x in enumerate(xs[:-1]) if -2.0 < x < -1.0}
     for i in range(len(xs) - 1):
         if i not in hole:
-            b.poly_up([pts[i], pts[i + 1], (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_x")
+            b.poly_up([pts[i], pts[i + 1], (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_xh")
     for x in (-1.8, -1.5, -1.2):
         j = min(range(len(xs)), key=lambda k: abs(xs[k] - x))
         b.beam(pts[j], (xs[j], ym, R - 0.05), 0.1, "timber_dark", 0.16)
