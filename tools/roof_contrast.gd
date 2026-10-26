@@ -15,6 +15,8 @@ const HALF: int = 3
 const POINTS: Dictionary = {
 	&"house_h5": {"roof": Vector3(0.0, -1.4, 4.75), "wall_s": Vector3(0.85, -2.62, 1.6), "wall_n": Vector3(0.3, 2.62, 1.6)},
 	&"house_h6": {"roof": Vector3(0.0, -1.6, 7.75), "wall_s": Vector3(-0.9, -3.02, 3.1), "wall_n": Vector3(0.0, 3.02, 3.1)},
+	&"house_h7": {"roof": Vector3(0.0, -1.62, 4.1), "wall_s": Vector3(-1.1, -2.82, 1.6), "wall_n": Vector3(0.0, 2.82, 1.6)},
+	&"house_h8": {"roof": Vector3(0.0, -1.37, 4.15), "wall_s": Vector3(-2.7, -2.42, 1.6), "wall_n": Vector3(0.0, 2.42, 1.6)},
 }
 
 

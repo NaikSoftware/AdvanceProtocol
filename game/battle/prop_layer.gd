@@ -29,6 +29,8 @@ const MODELS: Dictionary = {
 	&"house_h4": {"kind": Kind.STRUCTURE, "weight": 4},
 	&"house_h5": {"kind": Kind.STRUCTURE, "weight": 6, "scale": HOUSE_SCALE},
 	&"house_h6": {"kind": Kind.STRUCTURE, "weight": 2, "storeys": 2, "scale": HOUSE_SCALE},
+	&"house_h7": {"kind": Kind.STRUCTURE, "weight": 4, "scale": HOUSE_SCALE},
+	&"house_h8": {"kind": Kind.STRUCTURE, "weight": 3, "scale": HOUSE_SCALE},
 	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
@@ -137,6 +139,9 @@ const FENCE_MIN: float = 0.1
 ## Хата на клітинку (ассет на 0.94 клітинки, ~7.5 м) — рівномірно до ~6.4 м: така сільська хата
 ## звична, а між двома сусідніми з камери гри лишається смуга землі.
 const HOUSE_SCALE: float = 1.0
+## Форми хат садиб на одну клітинку і найменша відстань (клітинок) між двома хатами однієї форми.
+const HOUSE_FORMS: Array[StringName] = [&"house_h5", &"house_h7", &"house_h8", &"house_h6"]
+const HOUSE_APART: int = 4
 ## Відвід до хати — від стовпа не далі за стільки клітинок.
 const SERVICE_REACH: float = 5.5
 ## Стовп, будівля й паркан тримаються від води й болота щонайменше на стільки клітинок.
@@ -1442,6 +1447,8 @@ class _Placer:
 	var placed: Array = []
 	## Клітинка -> модель будівлі на ній: однакові моделі поруч не стають.
 	var model_at: Dictionary = {}
+	## Хати, уже поставлені (садиби й процедурні села кільця): [клітинка, модель] — щоб сусіди не повторювали форму.
+	var farm_houses: Array = []
 	var tower_placed := false
 	## Скільки поставлено будинків: [одноповерхових, двоповерхових].
 	var storeys: Array[int] = [0, 0]
@@ -1769,6 +1776,10 @@ class _Placer:
 			# Фасадом до дороги, щойно таке місце є: хата не стоїть до вулиці глухим боком.
 			if options.any(func(o: Array) -> bool: return o[5]):
 				options = options.filter(func(o: Array) -> bool: return o[5])
+			# Хата не повторює форму сусідньої (ближче HOUSE_APART), якщо є з чого вибрати.
+			var varied: Array = options.filter(func(o: Array) -> bool: return not (String(o[0]).begins_with("house_") and _house_near(o[0], o[1])))
+			if not varied.is_empty():
+				options = varied
 			for o: Array in options:
 				total += int(o[4])
 			var roll: int = h(group[0], 100 + step) % total
@@ -1777,6 +1788,8 @@ class _Placer:
 				roll -= int(o[4])
 				if roll < 0:
 					_put_structure(o[0], o[1], o[2], o[3], free)
+					if String(o[0]).begins_with("house_"):
+						farm_houses.append([o[1], o[0]])
 					has_tower = has_tower or bool(PropLayer.spec_of(o[0]).get("tower", false))
 					tower_placed = tower_placed or has_tower
 					break
@@ -2575,15 +2588,34 @@ class _Placer:
 			r = best
 		return r
 
-	## Хата садиби: здебільшого одноповерхова, двоповерхова — кожна четверта за хешем; сусідні садиби
-	## не повторюють модель.
+	## Хата садиби: одна з чотирьох форм на клітинку — щипцева (h5), чотирисхила (h7), дерев'яна з ґанком (h8)
+	## і двоповерхова (h6); почату форму дає хеш клітинки. Садиба не повторює форму жодної хати ближче
+	## HOUSE_APART клітинок, тож у селі з трьох хат — три різні форми.
 	func _house_model(hc: Vector2i, i: int) -> StringName:
-		var single: StringName = &"house_h5"
-		var tall: StringName = &"house_h6"
-		var m: StringName = tall if h(hc, 150) % 4 == 0 else single
-		if not _no_twin(m, hc, Vector2i.ONE):
-			m = single if m == tall else tall
-		return m if PropLayer.model(m) != null else single
+		var start: int = h(hc, 150) % HOUSE_FORMS.size()
+		var pick: StringName = &""
+		for pass_ in 2:
+			for k in HOUSE_FORMS.size():
+				var m: StringName = HOUSE_FORMS[(start + k) % HOUSE_FORMS.size()]
+				if PropLayer.model(m) == null or not _no_twin(m, hc, Vector2i.ONE):
+					continue
+				if pass_ == 0 and _house_near(m, hc):
+					continue
+				pick = m
+				break
+			if pick != &"":
+				break
+		if pick == &"":
+			pick = &"house_h5"
+		farm_houses.append([hc, pick])
+		return pick
+
+	func _house_near(m: StringName, hc: Vector2i) -> bool:
+		for fh: Array in farm_houses:
+			var d: Vector2i = (fh[0] as Vector2i) - hc
+			if fh[1] == m and maxi(absi(d.x), absi(d.y)) <= HOUSE_APART:
+				return true
+		return false
 
 	## Паркан садиби — одне замкнене кільце по межі двору з одними воротами GATE до дороги. Межа двору
 	## обходиться як многокутник; кожна сторона стає на YARD_OUT назовні, а якщо там дорога, вода чи
