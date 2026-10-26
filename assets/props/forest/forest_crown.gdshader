@@ -34,7 +34,8 @@ uniform float occlusion = 0.4;
 // Темний обідок пучка: м'який край замість різкої вирізаної лінії наліпки.
 uniform float rim = 0.15;
 uniform float card_round = 0.7;
-uniform float card_up = 0.5;
+uniform float card_up = 0.65;
+uniform float edge_ramp = 0.3;
 
 varying float is_card;
 varying vec3 inst_tone;
@@ -84,7 +85,13 @@ void fragment() {
 	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 2.5) / 2.0, 0.0, 1.0));
 	// Силует — з різкого рівня: обрис пучка — дрібне листя. Розмитіший mip для порогу
 	// робив із пучка кілька великих лопатей — «листки» по метру на ближньому зумі.
-	if (t.a < cut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
+	// Край пучка без сходинок: біля порогу альфа береться наполовину з сусіднього mip, а поріг
+	// тремтить шумом екрана в смузі edge_ramp — сходинка alpha-cut стає м'яким
+	// крапчастим переходом на 1–2 пікселі (MSAA для alpha-to-coverage в проєкті немає).
+	float ign = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
+	float ea = mix(t.a, textureLod(albedo_tex, UV, lod + 1.0).a, 0.5 * is_card);
+	float ecut = shadow_pass ? cut : cut + (ign - 0.5) * edge_ramp * is_card;
+	if ((shadow_pass ? t.a : ea) < ecut || COLOR.a < (shadow_pass ? 0.5 : 0.001) || (!shadow_pass && piece_hash > COLOR.a)) {
 		discard;
 	}
 	vec3 tint = mix(vec3(1.0), foliage_tint, is_card);
