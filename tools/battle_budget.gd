@@ -84,10 +84,25 @@ func _ready() -> void:
 			# Танк і відділення піхоти гравця 0 у дворі садиби №parts[2] з макету карти: танк — на
 			# клітинці двору без хати й сараю, піхота — на іншій, поруч із хатою; камера — на хаті.
 			var home: Dictionary = VillageLayout.for_map(StringName(map))["homes"][int(parts[2])]
+			var hc: Vector2i = home["house"]
+			# Спершу клітинки двору, потім прохідні сусідні з двором (у дворі буває лише одна вільна).
 			var spots: Array = (home["cells"] as Array).filter(func(c: Vector2i) -> bool:
-				return c != home["house"] and c != home.get("shed", Vector2i(-99, -99)))
-			spots.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-				return a.distance_squared_to(home["house"]) < b.distance_squared_to(home["house"]))
+				return c != hc and c != home.get("shed", Vector2i(-99, -99)))
+			var near: Array = []
+			for c: Vector2i in home["cells"]:
+				for d in Board.DIRS_4:
+					var n: Vector2i = c + d
+					if not (home["cells"] as Array).has(n) and not near.has(n) and board.in_bounds(n) \
+							and board.kind_at(n) in [Terrain.Kind.FIELD, Terrain.Kind.HILL, Terrain.Kind.ROAD]:
+						near.append(n)
+			# Юніт, для якого хата — серед клітинок, що розчиняються (REVEAL_OFFSETS), сховав би її: такі
+			# місця — останніми; далі — ближчі до хати.
+			var key := func(c: Vector2i) -> int:
+				return (100 if PropLayer.REVEAL_OFFSETS.has(hc - c) else 0) + c.distance_squared_to(hc)
+			var by_key := func(a: Vector2i, b: Vector2i) -> bool: return key.call(a) < key.call(b)
+			spots.sort_custom(by_key)
+			near.sort_custom(by_key)
+			spots.append_array(near)
 			var want: Array = [UnitTypes.UnitClass.INFANTRY, UnitTypes.UnitClass.TANK]
 			for k in mini(want.size(), spots.size()):
 				for u: Unit in MatchService.state.units_of(0):
