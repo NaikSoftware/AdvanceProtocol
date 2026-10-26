@@ -65,6 +65,11 @@ var _prev_quit_on_go_back: bool = true
 var _prev_max_fps: int = 0
 ## Об'їзд дошки за гейтом (_warm_board) робиться один раз за життя екрана.
 var _board_warmed: bool = false
+## Тести вмикають об'їзд і без вікна.
+var warm_board_in_headless: bool = false
+var _warm_stops: Array[Vector2i] = []
+## -1: юніти ще не будували; далі — скільки кадрів їх тримати під гейтом.
+var _warm_units_frames: int = -1
 ## Відлік спокою: таймер, а не _process, — у спокої екран не робить нічого щокадру (§8).
 var _idle_timer: Timer
 ## Відкритий оверлей налаштувань (null, поки не відкривали).
@@ -293,6 +298,8 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 ## «Продовжити»: вигляд з уже завантаженого state, без нового матчу. Пристрій
 ## віддають невідомо кому, тож дошка ховається за гейтом активного гравця;
 ## юніти й камера з'являються на confirmed (_on_gate_confirmed), як при передачі ходу.
+## Під гейтом уже стоять міни, шрами, дахи й ліс того самого гравця, а ще йде об'їзд дошки
+## (_warm_board), який на кілька кадрів ставить і одразу прибирає його юнітів.
 func resume(match_service: Node = null) -> void:
 	_match_service = match_service if match_service != null else MatchService
 	# Підтипи поверхні живуть у MapData, не в збереженні: беремо їх з карти збереженої гри.
@@ -1013,33 +1020,41 @@ func _warm_up_fx(cell: Vector2i) -> void:
 	_wreck_layer.warm_up(at)
 
 
-## Поки гейт закриває екран, камера по кадру стоїть над кожним блоком дошки (BoardWarmUp), а потім над
-## першим юнітом з його юнітами: матеріали, що інакше вперше потрапили б у кадр після гейта чи на
-## першому скролі, компілюються тут, невидимо. Гейт не
-## чіпається; якщо гравець устиг підтвердити, об'їзд кидається — камера вже стоїть на його позиції.
-## Без вікна (headless) нічого не малюється, тож і об'їжджати нічого.
+## Поки гейт закриває екран, камера по кадру стоїть над кожним блоком дошки (BoardWarmUp), а потім
+## над першим юнітом гравця, що сідає, з його юнітами: матеріали, які інакше вперше потрапили б у
+## кадр після гейта чи на першому скролі, компілюються тут. Під гейтом лишаються міни, шрами, дахи
+## й ліс того самого гравця (їх і так ставить setup/resume), а юніти після об'їзду знову прибираються
+## й з'являються, як і раніше, на confirmed. Гейт не чіпається; якщо гравець устиг підтвердити,
+## об'їзд кидається: камера вже стоїть на його позиції. Покадрово через сигнал кадру, а не await:
+## з'єднання зі звільненим екраном рушій розриває сам, тож корутина не прокинеться на мертвому вузлі.
+## Без вікна (headless) нічого не малюється; `warm_board_in_headless` — лише для тестів.
 func _warm_board() -> void:
-	if _board_warmed or DisplayServer.get_name() == "headless":
+	if _board_warmed or (DisplayServer.get_name() == "headless" and not warm_board_in_headless):
 		return
 	_board_warmed = true
 	var board: Board = _match_service.state.board
-	await get_tree().process_frame
-	for cell in BoardWarmUp.stops(Vector2i(board.width, board.height)):
-		if not _gate.visible:
-			return
-		_camera_rig.center_on(cell)
-		await get_tree().process_frame
+	_warm_stops = BoardWarmUp.stops(Vector2i(board.width, board.height))
+	_warm_units_frames = -1
+	get_tree().process_frame.connect(_warm_tick, CONNECT_ONE_SHOT)
+
+
+func _warm_tick() -> void:
 	if not _gate.visible:
 		return
-	# Юніти з'являються лише на confirmed, тож їхні матеріали й підписи теж уперше малювалися б у першому
-	# кадрі після гейта. Малюємо їх тут, під непрозорим гейтом, і знову прибираємо: на confirmed вони
-	# ставляться як і раніше.
-	_rebuild_units_for_active_player(true)
-	_camera_rig.center_on(_first_unit_cell(_match_service.state.active_player))
-	await get_tree().process_frame
-	await get_tree().process_frame
-	if _gate.visible:
+	if not _warm_stops.is_empty():
+		_camera_rig.center_on(_warm_stops.pop_front())
+	elif _warm_units_frames < 0:
+		# Юніти з'являються лише на confirmed, тож їхні матеріали й підписи теж уперше малювалися б
+		# у першому кадрі після гейта.
+		_rebuild_units_for_active_player(true)
+		_camera_rig.center_on(_first_unit_cell(_match_service.state.active_player))
+		_warm_units_frames = 2
+	elif _warm_units_frames > 0:
+		_warm_units_frames -= 1
+	else:
 		_clear_unit_views()
+		return
+	get_tree().process_frame.connect(_warm_tick, CONNECT_ONE_SHOT)
 
 
 ## Гачок вигляду лісу: тут його перемальовують з known_broken_map(активного) — ніколи

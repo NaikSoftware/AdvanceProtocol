@@ -17,7 +17,7 @@ func _ready() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	var map: String = args[0]
 	var wait: int = 120
-	for a in args:
+	for a: String in args:
 		if a.begins_with("--wait="):
 			wait = int(a.get_slice("=", 1))
 	get_window().size = WINDOW
@@ -27,23 +27,23 @@ func _ready() -> void:
 		screen.set("_board_warmed", args.has("--nowarm"))
 		MatchService.configure("res://maps/%s.tres" % map, 2, 1)
 		screen.launch(MatchService)
-		for f in wait:
+		for f: int in wait:
 			await get_tree().process_frame
 		(screen.get("_gate") as Node).call("_on_confirm_pressed")
 	else:
 		screen.setup(load("res://maps/%s.tres" % map) as MapData, 2, 1)
-		for f in wait:
+		for f: int in wait:
 			await get_tree().process_frame
 	var legs: Array[Vector2] = [Vector2(-STEP_PX, 0), Vector2(0, STEP_PX), Vector2(STEP_PX, 0), Vector2(0, -STEP_PX)]
-	for pass_no in 2:
+	for pass_no: int in 2:
 		var times: Array[float] = []
 		var comp0: int = _compilations()
 		var last: int = Time.get_ticks_usec()
 		# Справжні події дотику: _input екрана бою знімає обмеження частоти кадрів, як у гравця.
 		var pos := Vector2(800, 450)
 		_touch(pos, true)
-		for leg in legs:
-			for f in LEG_FRAMES:
+		for leg: Vector2 in legs:
+			for f: int in LEG_FRAMES:
 				pos += leg
 				var drag := InputEventScreenDrag.new()
 				drag.index = 0
@@ -60,10 +60,10 @@ func _ready() -> void:
 		sorted.reverse()
 		var over: int = sorted.filter(func(t: float) -> bool: return t > 33.0).size()
 		var top: Array[String] = []
-		for i in 5:
+		for i: int in 5:
 			top.append("%.1f@%d" % [sorted[i], times.find(sorted[i])])
 		print("HITCH %s pass=%d frames=%d median=%.1f max=%.1f over33=%d top=%s pipelines=%d" % [map, pass_no + 1, times.size(), sorted[sorted.size() / 2], sorted[0], over, top, _compilations() - comp0])
-		for f in 30:
+		for f: int in 30:
 			await get_tree().process_frame
 	get_tree().quit()
 
@@ -78,7 +78,7 @@ func _touch(pos: Vector2, pressed: bool) -> void:
 
 func _compilations() -> int:
 	var n: int = 0
-	for m in PIPELINE_MONITORS:
+	for m: String in PIPELINE_MONITORS:
 		if ClassDB.class_has_integer_constant("Performance", m):
 			n += int(Performance.get_monitor(ClassDB.class_get_integer_constant("Performance", m)))
 	return n
