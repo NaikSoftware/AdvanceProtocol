@@ -112,7 +112,7 @@ func test_tone_wet_trodden_earth_is_darker_than_grass() -> void:
 	assert_almost_eq(_lum(core), l * 0.84, 1e-6, "середина стежки в багні")
 	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 1.0)), l * 0.6, 1e-6, "середина в дощ")
 	assert_true(core.r > core.g and core.g > core.b, "бура земля, не рожева й не сіра: %s" % core)
-	assert_almost_eq(core.b / core.g, 0.335, 1e-4, "синього мало — не рожевий пісок")
+	assert_almost_eq(core.b / core.g, 0.365, 1e-4, "синього мало — не рожевий пісок")
 
 
 ## Відтінок землі не береться з трави: на сірій траві стежка однаково бура, а не сіра пляма.
@@ -122,8 +122,8 @@ func test_tone_earth_hue_does_not_follow_grey_grass() -> void:
 	assert_almost_eq(wet.r / wet.g, 2.0, 1e-4)
 	assert_almost_eq(wet.b / wet.g, 0.35, 1e-4)
 	var dry: Color = Footpaths.tone(grey, Vector2(1.0, 0.0), 0.0)
-	assert_almost_eq(dry.r / dry.g, 1.4, 1e-4)
-	assert_almost_eq(dry.b / dry.g, 0.3, 1e-4)
+	assert_almost_eq(dry.r / dry.g, 1.5, 1e-4)
+	assert_almost_eq(dry.b / dry.g, 0.4, 1e-4)
 
 
 func test_tone_dry_trodden_earth_is_only_slightly_lighter() -> void:
@@ -144,20 +144,50 @@ func test_tone_trampled_verge_keeps_grass_brightness_near() -> void:
 	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.3, 0.0), 1.0)), l * (0.2 + 0.8 * 0.72), 1e-6)
 
 
+## Суха земля — своя на кожній карті (BattleLook.path_earth_dry, path_trod_dry, path_dry_k): на блідій
+## вохристій траві Хребта загальний відтінок збігався з травою, і стежка зникала.
+func test_tone_uses_the_map_dry_hue_and_k() -> void:
+	var grey := Color(0.1, 0.1, 0.1)
+	var earth := Vector3(1.6, 1.0, 0.3)
+	var k := Vector3(1.5, 1.4, 1.6)
+	var core: Color = Footpaths.tone(grey, Vector2(1.0, 0.0), 0.0, earth, Footpaths.TRAMPLED_DRY, k)
+	assert_almost_eq(core.r / core.g, 1.6, 1e-4)
+	assert_almost_eq(core.b / core.g, 0.3, 1e-4)
+	assert_almost_eq(_lum(core), _lum(grey) * 1.5, 1e-6)
+	var band: Color = Footpaths.tone(grey, Vector2(0.3, 0.0), 0.0, earth, Vector3(1.45, 1.0, 0.3), k)
+	assert_almost_eq(_lum(band), _lum(grey) * (0.2 + 0.8 * 1.4), 1e-6)
+	var patch: Color = Footpaths.tone(grey, Vector2(0.0, 1.0), 0.0, earth, Footpaths.TRAMPLED_DRY, k)
+	assert_almost_eq(_lum(patch), _lum(grey) * 1.6, 1e-6)
+	# У дощ сухі значення карти не діють.
+	assert_eq(Footpaths.tone(grey, Vector2(1.0, 0.0), 1.0, earth, Footpaths.TRAMPLED_DRY, k), Footpaths.tone(grey, Vector2(1.0, 0.0), 1.0))
+
+
+## Карти задають свої сухі тони стежки, Хребет — тепліші й світліші, ніж типові.
+func test_map_looks_carry_the_dry_path_tone() -> void:
+	var ridge: BattleLook = BattleLook.for_map_path("res://maps/ridge.tres")
+	var cross: BattleLook = BattleLook.for_map_path("res://maps/crossroads.tres")
+	assert_eq(cross.path_earth_dry, Footpaths.EARTH_DRY)
+	assert_eq(cross.path_trod_dry, Footpaths.TRAMPLED_DRY)
+	assert_eq(cross.path_dry_k, Footpaths.DRY_K)
+	assert_ne(ridge.path_earth_dry, Footpaths.EARTH_DRY)
+	assert_gt(ridge.path_dry_k.x, Footpaths.DRY_K.x)
+
+
 ## Шейдер не запускається в тесті, тож Footpaths.tone — його дзеркало: ті самі рядки мають стояти
 ## в ground.gdshader, інакше тести перевіряють GDScript, а не те, що на екрані.
 func test_tone_matches_the_ground_shader() -> void:
 	var src: String = FileAccess.get_file_as_string("res://game/battle/shaders/ground.gdshader")
 	for s in ["float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);",
-			"vec3 earth = mix(%s, %s, wet_p);" % [_glsl(Footpaths.EARTH_DRY), _glsl(Footpaths.EARTH_WET)],
+			"vec3 earth = mix(path_earth_dry, %s, wet_p);" % _glsl(Footpaths.EARTH_WET),
 			"earth /= dot(earth, lw_p);",
-			"vec3 trod = mix(%s, %s, wet_p);" % [_glsl(Footpaths.TRAMPLED_DRY), _glsl(Footpaths.TRAMPLED_WET)],
+			"vec3 trod = mix(path_trod_dry, %s, wet_p);" % _glsl(Footpaths.TRAMPLED_WET),
 			"trod /= dot(trod, lw_p);",
 			"float core_t = smoothstep(0.5, 0.78, pm.r);",
 			"float band_t = smoothstep(0.08, 0.3, pm.r);",
-			"alb = mix(alb, trod * lum * mix(1.3, 0.72, wet_p), band_t * 0.8);",
-			"alb = mix(alb, earth * lum * mix(1.4, 0.6, wet_p), core_t);",
-			"alb = mix(alb, earth * lum * mix(1.45, 0.5, wet_p), smoothstep(0.05, 0.4, pm.g));"]:
+			"alb = mix(alb, trod * lum * mix(path_dry_k.y, 0.72, wet_p), band_t * 0.8);",
+			"alb = mix(alb, earth * lum * mix(path_dry_k.x, 0.6, wet_p), core_t);",
+			"alb = mix(alb, earth * lum * mix(path_dry_k.z, 0.5, wet_p), smoothstep(0.05, 0.4, pm.g));",
+			"global uniform vec3 path_earth_dry;", "global uniform vec3 path_trod_dry;", "global uniform vec3 path_dry_k;"]:
 		assert_true(src.contains(s), "у шейдері нема: " + s)
 
 

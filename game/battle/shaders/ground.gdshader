@@ -11,6 +11,10 @@ global uniform float cloud_shadow_strength;
 global uniform float sky_reflection_gain;
 // Тон трави й листя за порою року (`BattleLook.foliage_tint`); дорогу не зачіпає.
 global uniform vec3 foliage_tint;
+// Суха протоптана стежка карти (`BattleLook.path_earth_dry`, `path_trod_dry`, `path_dry_k`).
+global uniform vec3 path_earth_dry;
+global uniform vec3 path_trod_dry;
+global uniform vec3 path_dry_k;
 // Каламутність стоячої води під ясним небом (як у water.gdshader): вікна болота не блакитні.
 global uniform float water_murk;
 
@@ -1331,15 +1335,15 @@ void fragment() {
 			float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);
 			vec3 lw_p = vec3(0.299, 0.587, 0.114);
 			float lum = dot(alb, lw_p);
-			vec3 earth = mix(vec3(1.4, 1.0, 0.3), vec3(2.0, 1.0, 0.35), wet_p);
+			vec3 earth = mix(path_earth_dry, vec3(2.0, 1.0, 0.35), wet_p);
 			earth /= dot(earth, lw_p);
-			vec3 trod = mix(vec3(1.25, 1.0, 0.3), vec3(1.35, 1.0, 0.4), wet_p);
+			vec3 trod = mix(path_trod_dry, vec3(1.35, 1.0, 0.4), wet_p);
 			trod /= dot(trod, lw_p);
 			float core_t = smoothstep(0.5, 0.78, pm.r);
 			float band_t = smoothstep(0.08, 0.3, pm.r);
-			alb = mix(alb, trod * lum * mix(1.3, 0.72, wet_p), band_t * 0.8);
-			alb = mix(alb, earth * lum * mix(1.4, 0.6, wet_p), core_t);
-			alb = mix(alb, earth * lum * mix(1.45, 0.5, wet_p), smoothstep(0.05, 0.4, pm.g));
+			alb = mix(alb, trod * lum * mix(path_dry_k.y, 0.72, wet_p), band_t * 0.8);
+			alb = mix(alb, earth * lum * mix(path_dry_k.x, 0.6, wet_p), core_t);
+			alb = mix(alb, earth * lum * mix(path_dry_k.z, 0.5, wet_p), smoothstep(0.05, 0.4, pm.g));
 		}
 
 		float scar_dark = 0.0;

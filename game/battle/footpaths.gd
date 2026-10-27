@@ -271,34 +271,40 @@ static func _stamp_patch(buf: PackedByteArray, w: int, h: int, patch: Vector3, i
 ## Відтінки землі й прим'ятої трави: R:G:B, яскравість тут не 1 — тон ділить відтінок на його
 ## яскравість у момент змішування, тож відтінок і яскравість — окремі ручки. Відтінок не береться з
 ## трави: на блідій траві (Хребет) чи під сірою імлою дощу стежка однаково бура, а не сіра пляма.
-## Суха — курна жовто-бура (на екрані ~(118, 100, 74)), синього менше, ніж у трави: з B/G 0.5 стежка
-## на Хребті мала рожево-лілуватий відтінок. Мокра — тепліша й темніша бура, синього мало.
-const EARTH_DRY := Vector3(1.4, 1.0, 0.3)
+## Суха — курна жовто-бура; це типові значення, карта ставить свої (BattleLook.path_*_dry): на блідій
+## вохристій траві Хребта стежка потребує теплішого відтінку й більшого k, і синього менше, ніж у трави,
+## інакше вона рожево-ліловіє. Мокра — тепліша й темніша бура, синього мало, однакова для всіх карт.
+const EARTH_DRY := Vector3(1.5, 1.0, 0.4)
 const EARTH_WET := Vector3(2.0, 1.0, 0.35)
-const TRAMPLED_DRY := Vector3(1.25, 1.0, 0.3)
+const TRAMPLED_DRY := Vector3(1.3, 1.0, 0.45)
 const TRAMPLED_WET := Vector3(1.35, 1.0, 0.4)
+## k сухої стежки: (середина, прим'ята смуга, пляма біля дверей і воріт).
+const DRY_K := Vector3(1.4, 1.2, 1.45)
 const LUMA := Vector3(0.299, 0.587, 0.114)
 
 
 ## Колір землі під стежкою — та сама формула, що в ground.gdshader (блок Footpaths). Тон —
 ## яскравість трави в цьому пікселі × відтінок × k, а не сталий колір: у дощ трава темнішає разом зі
 ## стежкою, текстура ґрунту лишається, і стежка відрізняється від трави лише трохи. k середини:
-## суха 1.4, мокра 0.6; прим'ятої смуги — 1.3 / 0.72; плями біля дверей і воріт — 1.45 / 0.5, у повну
+## суха 1.4, мокра 0.6; прим'ятої смуги — 1.2 / 0.72; плями біля дверей і воріт — 1.45 / 0.5, у повну
 ## силу вже з G 0.4, щоб вхід у двір читався й на краю плями. Імла й небо на екрані стискають різницю
 ## альбедо приблизно до k^0.35: k 1.4 дає ~1.12 яскравості трави, 0.6 — ~0.83 (насичений відтінок
 ## на екрані трохи світліший, тож мокрі k нижчі, ніж без нього). wet_p — 0 сухо, 1 дощ (MUD — 0.7).
-static func tone(alb: Color, pm: Vector2, wet_p: float) -> Color:
+## Сухі відтінки й k — карти (BattleLook.path_earth_dry, path_trod_dry, path_dry_k); типові — EARTH_DRY,
+## TRAMPLED_DRY, DRY_K.
+static func tone(alb: Color, pm: Vector2, wet_p: float, earth_dry: Vector3 = EARTH_DRY,
+		trod_dry: Vector3 = TRAMPLED_DRY, dry_k: Vector3 = DRY_K) -> Color:
 	var a := Vector3(alb.r, alb.g, alb.b)
 	var lum: float = a.dot(LUMA)
-	var earth: Vector3 = EARTH_DRY.lerp(EARTH_WET, wet_p)
+	var earth: Vector3 = earth_dry.lerp(EARTH_WET, wet_p)
 	earth /= earth.dot(LUMA)
-	var trampled: Vector3 = TRAMPLED_DRY.lerp(TRAMPLED_WET, wet_p)
+	var trampled: Vector3 = trod_dry.lerp(TRAMPLED_WET, wet_p)
 	trampled /= trampled.dot(LUMA)
 	var core_t: float = smoothstep(0.5, 0.78, pm.x)
 	var band_t: float = smoothstep(0.08, 0.3, pm.x)
-	a = a.lerp(trampled * lum * lerpf(1.3, 0.72, wet_p), band_t * 0.8)
-	a = a.lerp(earth * lum * lerpf(1.4, 0.6, wet_p), core_t)
-	a = a.lerp(earth * lum * lerpf(1.45, 0.5, wet_p), smoothstep(0.05, 0.4, pm.y))
+	a = a.lerp(trampled * lum * lerpf(dry_k.y, 0.72, wet_p), band_t * 0.8)
+	a = a.lerp(earth * lum * lerpf(dry_k.x, 0.6, wet_p), core_t)
+	a = a.lerp(earth * lum * lerpf(dry_k.z, 0.5, wet_p), smoothstep(0.05, 0.4, pm.y))
 	return Color(a.x, a.y, a.z, alb.a)
 
 

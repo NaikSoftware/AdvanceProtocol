@@ -40,6 +40,12 @@ extends Resource
 @export var haze_color: Color = Color(0.10, 0.135, 0.155)
 ## Множник кольору трави й листя за порою року; дорогу й воду не зачіпає.
 @export var foliage_tint: Color = Color(1, 1, 1)
+## Суха протоптана стежка (Footpaths.tone): відтінок голої землі, прим'ятої трави (R:G:B) і k
+## (середина, смуга, пляма біля дверей). Своя на карті: на блідій вохристій траві типовий відтінок
+## збігався з травою, і стежка зникала. У дощ і багні діють мокрі значення, ці — ні.
+@export var path_earth_dry: Vector3 = Footpaths.EARTH_DRY
+@export var path_trod_dry: Vector3 = Footpaths.TRAMPLED_DRY
+@export var path_dry_k: Vector3 = Footpaths.DRY_K
 ## 0..1: каламутна вода під ясним небом — відбите небо сіріше й тьмяніше, товща оливкова.
 @export_range(0.0, 1.0) var water_murk: float = 0.0
 ## Вітер над водою: 1 — брижа Річки; менше — дрібніша й повільніша брижа тихого дня.

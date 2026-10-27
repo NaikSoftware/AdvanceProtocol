@@ -163,10 +163,12 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   brightness under it times an earth hue, never a fixed colour, so the ground texture always shows
   through. On screen the middle of a path is about 0.85 of the grass beside it in rain or mud (wet
   earth) and about 1.1 on a dry map (dust); the patch at a door or gate is a little stronger, so the
-  way into a yard reads at zoom 6–8. The noise lives in path coordinates (along, across), never in
-  a world texture. A path fades out on the verge and never reaches the carriageway or the water. No
-  puddles or standing water on a footpath or trodden patch, even in rain or on marsh. Public: the
-  fog never touches it, and it changes no rule.
+  way into a yard reads at zoom 6–8. The dry earth hue and strength are set per map in its look
+  (`BattleLook.path_earth_dry`, `path_trod_dry`, `path_dry_k`): on pale ochre grass a path needs a
+  warmer, stronger tone with little blue, or it vanishes into the grass or turns mauve. The noise
+  lives in path coordinates (along, across), never in a world texture. A path fades out on the verge
+  and never reaches the carriageway or the water. No puddles or standing water on a footpath or
+  trodden patch, even in rain or on marsh. Public: the fog never touches it, and it changes no rule.
 - Briefs, sizes and routes per prop (Blender, Tripo or CC0): [`art/props-research.md`](art/props-research.md).
 
 ## Effects — fire, explosions, smoke
