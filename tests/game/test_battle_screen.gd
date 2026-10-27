@@ -1263,6 +1263,126 @@ func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
 
 
 
+# --- Об'їзд дошки за гейтом (_warm_board) ---------------------------------
+
+## Кадрів з запасом: 12 точок об'їзду, по три кадри розчинення лісу й рослин, кадр на юнітів, три
+## кадри під гейтом, прибирання.
+const WARM_FRAMES: int = 45
+
+
+func _launched_with_warm_up() -> Array:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	service.configure("res://maps/river.tres", 2, 1)
+	var screen: Node3D = _screen()
+	screen.warm_board_in_headless = true
+	screen.launch(service)
+	return [screen, service]
+
+
+func _resumed_with_warm_up() -> Array:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	_two_tanks_in_corners(service)
+	var screen: Node3D = _screen()
+	screen.warm_board_in_headless = true
+	screen.resume(service)
+	return [screen, service]
+
+
+## У %Units лежать ще й миті ефектів, тож рахуємо лише вигляди юнітів.
+func _unit_view_nodes(screen: Node3D) -> int:
+	return screen.get_node("%Units").get_children().filter(func(n: Node) -> bool: return n is UnitView).size()
+
+
+func _camera_at_first_unit(screen: Node3D, service: Node) -> bool:
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	var cell: Vector2i = screen._first_unit_cell(service.state.active_player)
+	return rig.global_position.is_equal_approx(rig._clamp_to_bounds(IsoCameraRig.cell_to_world(cell)))
+
+
+func _assert_confirmed_mid_warm_up(pair: Array) -> void:
+	var screen: Node3D = pair[0]
+	var service: Node = pair[1]
+	var gate: Control = screen.get_node("%HandoverGate")
+	await wait_frames(3)
+	assert_true(gate.visible, "об'їзд іде під гейтом")
+	assert_eq(_unit_view_nodes(screen), 0, "юнітів під гейтом ще нема")
+	gate.get_node("%ConfirmButton").pressed.emit()
+	await wait_frames(WARM_FRAMES)
+	assert_false(gate.visible)
+	assert_true(_camera_at_first_unit(screen, service), "камера на першому юніті гравця")
+	var units: Node3D = screen.get_node("%Units")
+	var views: Dictionary = screen._unit_views
+	assert_gt(views.size(), 0)
+	for uid: int in views:
+		assert_true(is_instance_valid(views[uid]), "вигляд юніта цілий")
+		assert_eq((views[uid] as Node).get_parent(), units)
+
+
+func _assert_finished_warm_up_leaves_no_units(pair: Array) -> void:
+	var screen: Node3D = pair[0]
+	await wait_frames(WARM_FRAMES)
+	assert_true((screen.get_node("%HandoverGate") as Control).visible, "гейт стоїть")
+	assert_eq(screen._unit_views.size(), 0, "після об'їзду під гейтом юнітів нема")
+	assert_eq(_unit_view_nodes(screen), 0)
+
+
+func test_launch_confirm_in_the_middle_of_the_warm_up_leaves_camera_and_units_right() -> void:
+	await _assert_confirmed_mid_warm_up(_launched_with_warm_up())
+
+
+func test_resume_confirm_in_the_middle_of_the_warm_up_leaves_camera_and_units_right() -> void:
+	await _assert_confirmed_mid_warm_up(_resumed_with_warm_up())
+
+
+func test_warm_up_shows_forest_fade_under_the_gate() -> void:
+	# Матеріали розчинення лісу (прохід глибини й колір) компілюються за гейтом, а не на першому
+	# юніті під кроною: під час об'їзду розчинена крона показується, поки гейт закриває екран.
+	var pair: Array = _launched_with_warm_up()
+	var screen: Node3D = pair[0]
+	var gate: Control = screen.get_node("%HandoverGate")
+	var forest: ForestLayer = (screen.get_node("%BoardView") as BoardView).forest()
+	var seen: Dictionary = {"fade": false}
+	forest.child_entered_tree.connect(func(n: Node) -> void:
+		if String(n.name).begins_with("Fade_") and gate.visible:
+			seen["fade"] = true)
+	await wait_frames(WARM_FRAMES)
+	assert_true(seen["fade"], "розчинення лісу показано за гейтом")
+
+
+func test_warm_up_shows_vegetation_fade_under_the_gate() -> void:
+	# Те саме для рослин (кущ, дерево, очерет): розчинений екземпляр показується, поки стоїть гейт.
+	var pair: Array = _launched_with_warm_up()
+	var screen: Node3D = pair[0]
+	var gate: Control = screen.get_node("%HandoverGate")
+	var veg: VegetationLayer = (screen.get_node("%BoardView") as BoardView).vegetation()
+	var seen: Dictionary = {"fade": false}
+	veg.child_entered_tree.connect(func(n: Node) -> void:
+		if String(n.name).ends_with("_faded") and gate.visible:
+			seen["fade"] = true)
+	await wait_frames(WARM_FRAMES)
+	assert_true(seen["fade"], "розчинення рослин показано за гейтом")
+
+
+func test_launch_warm_up_that_runs_to_the_end_leaves_no_units_under_the_gate() -> void:
+	await _assert_finished_warm_up_leaves_no_units(_launched_with_warm_up())
+
+
+func test_resume_warm_up_that_runs_to_the_end_leaves_no_units_under_the_gate() -> void:
+	await _assert_finished_warm_up_leaves_no_units(_resumed_with_warm_up())
+
+
+func test_confirm_after_a_finished_warm_up_builds_the_units_once() -> void:
+	var pair: Array = _launched_with_warm_up()
+	var screen: Node3D = pair[0]
+	await wait_frames(WARM_FRAMES)
+	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	assert_true(_camera_at_first_unit(screen, pair[1]))
+	assert_eq(_unit_view_nodes(screen), screen._unit_views.size())
+	assert_gt(screen._unit_views.size(), 0)
+
+
 ## Вирв нема: снаряд гаубиці по піхоті грає розрив, але карта шрамів лишається порожньою —
 ## єдиний слід на ґрунті лишає підбита техніка.
 func test_a_shell_on_infantry_leaves_no_ground_mark() -> void:
@@ -1313,3 +1433,36 @@ func test_handover_draws_roof_fade_of_the_incoming_player_at_once() -> void:
 	for i: int in faded:
 		assert_eq(float(props._fade_level.get(i, 0.0)), 0.0, "у гравця 0 дах суцільний одразу")
 	assert_false(props.is_processing())
+
+
+func test_handover_forest_shows_only_what_incoming_player_knows() -> void:
+	# §3.5: ліс гравця, що заходить, — його проломи (known_broken_map), а розчинення крон — лише
+	# над юнітами, яких він знає (known_occupied_map). Проломи й юніти попереднього гравця, яких
+	# новий не бачив, через ліс не видно.
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(10, 10)
+	for y in range(1, 9):
+		for x in range(1, 9):
+			m.tiles[y * 10 + x] = Terrain.Kind.FOREST
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(8, 8), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var state: BattleState = service.state
+	state.broken_forest = {Vector2i(1, 1): true, Vector2i(2, 1): true, Vector2i(8, 8): true}
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
+	assert_eq(state.active_player, 1, "передумова: хід гравця 1")
+	var forest: ForestLayer = (screen.get_node("%BoardView") as BoardView).forest()
+	var known: Dictionary = state.known_broken_map(1)
+	assert_false(known.has(Vector2i(2, 1)), "передумова: пролам гравця 0 гравцеві 1 невідомий")
+	assert_eq(forest._broken.keys().size(), known.size(), "проломи лісу — рівно ті, що знає гравець 1")
+	for c: Vector2i in known:
+		assert_true(forest._broken.has(c), "пролам %s, який знає гравець 1, у лісі є" % c)
+	var shown: Dictionary = state.known_occupied_map(1)
+	assert_eq(forest._reveal.size(), shown.size(), "розчинення — лише над юнітами, яких знає гравець 1")
+	for c: Vector2i in forest._reveal:
+		assert_true(shown.has(c), "розчинення над %s, якого гравець 1 не знає" % c)

@@ -26,10 +26,10 @@ VARIANTS = {
     "birch_b": dict(h=16.0, cb=6.0, w=5.5, limbs=5, rise=36, leader=0.8, cards=32, r=0.15, shape="egg", bark="birch", seed=12),
     "oak_a": dict(h=20.0, cb=6.5, w=9.5, limbs=5, rise=58, leader=0.3, cards=40, r=0.30, shape="dome", bark="oak", seed=21),
     "oak_b": dict(h=19.0, cb=5.5, w=8.5, limbs=5, rise=50, leader=0.45, cards=38, r=0.27, shape="dome", bark="oak", seed=22),
-    "hero_oak": dict(sec=2, ter=1, lobes=9, lobe_r=2.9, h=19.0, cb=3.6, w=15.0, limbs=7, rise=62, leader=0.3, cards=820, r=0.45, shape="dome", bark="oak", seed=31),
-    "hero_lime": dict(sec=2, ter=1, lobes=9, lobe_r=2.6, h=20.0, cb=3.2, w=12.0, limbs=7, rise=42, leader=0.6, cards=780, r=0.38, shape="egg", bark="lime", seed=32),
-    "hero_birch": dict(sec=2, ter=1, lobes=8, lobe_r=1.6, spacing=0.8, h=17.0, cb=4.0, w=6.0, limbs=6, rise=30, leader=0.88, cards=230, r=0.2, shape="egg", bark="birch", seed=33),
-    "hero_poplar": dict(sec=1, ter=1, lobes=9, lobe_r=1.5, spacing=0.45, h=25.0, cb=2.5, w=4.5, limbs=8, rise=14, leader=0.92, cards=660, r=0.32, shape="column", bark="lime", seed=34),
+    "hero_oak": dict(low_limbs=3, sec=2, ter=1, lobes=9, lobe_r=2.9, h=19.0, cb=8.9, w=15.0, limbs=7, rise=62, leader=0.3, cards=820, r=0.45, shape="dome", bark="oak", seed=31),
+    "hero_lime": dict(low_limbs=3, sec=2, ter=1, lobes=9, lobe_r=2.6, h=20.0, cb=11.4, w=12.0, limbs=7, rise=42, leader=0.6, cards=780, r=0.38, shape="egg", bark="lime", seed=32),
+    "hero_birch": dict(low_limbs=3, sec=2, ter=1, lobes=8, lobe_r=1.6, spacing=0.8, h=17.0, cb=10.2, w=6.0, limbs=6, rise=30, leader=0.88, cards=230, r=0.2, shape="egg", bark="birch", seed=33),
+    "hero_poplar": dict(low_limbs=3, sec=1, ter=1, lobes=9, lobe_r=1.5, spacing=0.45, h=25.0, cb=13.0, w=4.5, limbs=8, rise=14, leader=0.92, cards=660, r=0.32, shape="column", bark="lime", seed=34),
     # Пізня осінь: та сама будова, але з другорядними й третинними гілками — голу крону
     # тримає гілля, а не пучки (тих лишається третина).
     "birch_a_bare": dict(sec=1, ter=1, h=18.0, cb=7.5, w=5.0, limbs=5, rise=32, leader=0.85, cards=34, r=0.16, shape="egg", bark="birch", seed=11),
@@ -137,6 +137,19 @@ def build(tag, v):
         cards.append({"c": p.round(3).tolist(), "n": d.round(3).tolist(), "roll": float(rng.uniform(0, 6.283)),
                       "size": round(float(rng.uniform(2.0, 2.7) * (0.75 if v.get("stems") else 1.0)), 3),
                       "shade": round(min(shade, 1.0), 3)})
+    # Видимі гілки під кроною поодинокого дерева: від стовбура нижче крони навскіс угору до її
+    # низу — інакше крона на голому стовбурі читається грибом на паличці. Окреме зерно: пучки
+    # і решта дерев не змінюються.
+    lr = np.random.default_rng(v["seed"] + 1000)
+    for j in range(v.get("low_limbs", 0)):
+        az = 2 * math.pi * j / v["low_limbs"] + lr.uniform(-0.5, 0.5)
+        h0 = cb * lr.uniform(0.6, 0.8)
+        reach = v["w"] * lr.uniform(0.22, 0.3)
+        d = np.array([math.cos(az), math.sin(az), 0.0])
+        pts = [np.array([0.0, 0.0, h0]), d * reach * 0.5 + np.array([0, 0, h0 + (cb - h0) * 0.7]),
+               d * reach + np.array([0, 0, cb + 0.8])]
+        r0 = v["r"] * 0.5
+        limbs.append({"pts": [p.round(3).tolist() for p in pts], "r": [round(r0, 3), round(r0 * 0.6, 3), 0.04], "sides": 4})
     th = max(cb + v["leader"] * (top - cb), 1.0)
     d = os.path.join(OUT, tag)
     os.makedirs(d, exist_ok=True)

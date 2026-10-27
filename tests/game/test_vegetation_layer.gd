@@ -208,3 +208,43 @@ func test_meadows_have_a_tree(p = use_parameters(MAPS)) -> void:
 	for pl: Dictionary in _view(p).vegetation().placements:
 		trees += 1 if pl["group"] == "meadow" and pl["kind"] == "tree" else 0
 	assert_gt(trees, 0, "%s: на луках немає дерев" % p)
+
+
+## Ліс має свій шар: рослина не стоїть на клітинці FOREST поверх нього.
+func test_no_plant_on_forest_cells(p = use_parameters(MAPS)) -> void:
+	var board: Board = _board(p)
+	var bad: Array = []
+	for pl: Dictionary in _view(p).vegetation().placements:
+		var c := Vector2i(roundi(pl["pos"].x), roundi(pl["pos"].z))
+		if board.in_bounds(c) and board.kind_at(c) == Terrain.Kind.FOREST:
+			bad.append([pl["node"], c])
+	assert_eq(bad, [], "%s: рослина на клітинці лісу" % p)
+
+
+## Юніт під деревом поруч із лісом: розчиняються і рослина, і ліс — обидва шари з одного set_reveal_cells.
+func test_unit_reveal_fades_plants_and_forest_together() -> void:
+	var view: BoardView = _view("river")
+	var board: Board = _board("river")
+	var cell := Vector2i(-1, -1)
+	for pl: Dictionary in view.vegetation().placements:
+		var c := Vector2i(roundi(pl["pos"].x), roundi(pl["pos"].z))
+		if pl["kind"] == "tree" and VegetationLayer._near_kind(board, c, 1, [Terrain.Kind.FOREST]):
+			cell = c
+			break
+	if cell.x < 0:
+		pass_test("на Річці немає дерева біля лісу")
+		return
+	var forest_cell := Vector2i(-1, -1)
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			if board.in_bounds(cell + Vector2i(dx, dy)) and board.kind_at(cell + Vector2i(dx, dy)) == Terrain.Kind.FOREST:
+				forest_cell = cell + Vector2i(dx, dy)
+	gut.p("дерево %s, ліс %s" % [cell, forest_cell])
+	var cells: Array[Vector2i] = [cell, forest_cell]
+	view.set_reveal_cells(cells, true)
+	var veg_faded: bool = view.vegetation().get_children().any(func(n: Node) -> bool: return String(n.name).ends_with("_faded"))
+	var forest_faded: bool = view.forest().get_children().any(func(n: Node) -> bool: return String(n.name).begins_with("Fade_"))
+	var empty: Array[Vector2i] = []
+	view.set_reveal_cells(empty, true)
+	assert_true(veg_faded, "рослина над юнітом розчинена")
+	assert_true(forest_faded, "ліс над юнітом розчинений")

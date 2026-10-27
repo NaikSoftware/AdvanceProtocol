@@ -519,9 +519,9 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 ### Task 22: Forest into battle
 
-- [ ] Crowns on their trunks; per-point seeded scatter (`ForestScatter`)
-- [ ] Autumn on Ridge, River mixed with bare birches, dense enough to hide a tank
-- [ ] Placed on FOREST cells in battle; crowns over a visible unit fade with alpha, no dither
+- [x] Crowns on their trunks; per-point seeded scatter (`ForestScatter`)
+- [x] Autumn on Ridge, River mixed with bare birches, dense enough to hide a tank
+- [x] Placed on FOREST cells in battle; crowns over a visible unit fade with alpha, no dither
 
 ### Task 23: Effects and light
 
@@ -529,7 +529,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
 - [ ] Chimney smoke reads as volume, not flat strokes
 - [ ] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
-- [ ] First scroll across the map is smooth, no hitch
+- [x] First scroll across the map is smooth, no hitch
 
 ### Task 24: New props in villages
 

@@ -167,8 +167,10 @@ static func _rect_dist(r: Rect2, p: Vector2) -> float:
 static func _free(board: Board, height: TerrainHeight, props: PropLayer, obst: Dictionary, fields: Array[Rect2],
 		p: Vector2, crown: float, stats: Dictionary) -> bool:
 	var c := Vector2i(roundi(p.x), roundi(p.y))
+	# Ліс (FOREST) має свій шар — рослина поверх нього стояла б у кронах.
 	if not board.in_bounds(c) or board.kind_at(c) in [Terrain.Kind.ROAD, Terrain.Kind.BRIDGE,
-			Terrain.Kind.BRIDGE_DESTROYED, Terrain.Kind.WATER, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]:
+			Terrain.Kind.BRIDGE_DESTROYED, Terrain.Kind.WATER, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE,
+			Terrain.Kind.FOREST]:
 		_bump(stats, "bad_cell")
 		return false
 	if near_road(props, p, crown):
@@ -644,6 +646,25 @@ func set_reveal_cells(cells: Array[Vector2i]) -> void:
 		return
 	_reveal = next
 	_rebuild()
+
+
+## Прогрів за гейтом (BattleScreen._warm_board): рослина, найближча до `near`, показана розчиненою,
+## щоб прохід глибини й колір розчинення скомпілювались до першого юніта під нею (шейдери спільні
+## для всіх вузлів — досить однієї). Повертає її клітинку (−1, −1 — рослин немає); показане скидає
+## наступний set_reveal_cells.
+func warm_fade(near: Vector2i) -> Vector2i:
+	var cell := Vector2i(-1, -1)
+	var best: float = INF
+	for p: Dictionary in placements:
+		var c := Vector2i(roundi(p["pos"].x), roundi(p["pos"].z))
+		var d: float = Vector2(c).distance_squared_to(Vector2(near))
+		if d < best:
+			best = d
+			cell = c
+	if cell.x >= 0:
+		_reveal = {cell: true}
+		_rebuild()
+	return cell
 
 
 func _covers(p: Dictionary) -> bool:

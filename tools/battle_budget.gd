@@ -11,6 +11,10 @@ extends Node
 ## такою будівлею (з боку від камери), вибраний: розчинення даху й контур зони поверх сліду. <map>@top@x,y,size — ортографічний погляд згори на
 ## клітинку x,y (size клітинок у кадрі) з межами будівель (червоні) й огорож (блакитні) і найменшим
 ## проміжком між будівлями та між будівлею й огорожею в метрах. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=….
+## --diag: після кожного кадру ховає по черзі групи вузлів (ліс за класами, діти BoardView, 3D-діти
+## екрана) і друкує, скільки кожна коштує: рядок DIAG <map> <cell> z<zoom> <група>(<вузлів>) dc=… tris=….
+## <map>@forest@x,y@zoom — танк гравця 0 проламав ліс на x,y і сусідню клітинку, піхота — у стоячому
+## лісі поруч; камера на танку.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -32,8 +36,9 @@ func _ready() -> void:
 	var no_shadows: bool = args.has("--noshadows")
 	# --stdmat: будинки з імпортованим матеріалом GLB, без prop_fade — щоб порівняти фактуру.
 	var std_mat: bool = args.has("--stdmat")
+	var diag: bool = args.has("--diag")
 	for i in range(1, args.size()):
-		if args[i] == "--shadows" or args[i] == "--noshadows" or args[i] == "--stdmat":
+		if args[i] in ["--shadows", "--noshadows", "--stdmat", "--diag"]:
 			continue
 		var parts: PackedStringArray = args[i].split("@")
 		var map: String = parts[0]
@@ -176,6 +181,39 @@ func _ready() -> void:
 				screen.call("_rebuild_units_for_active_player")
 				(screen.get("_controller") as InputController).select_unit(unit)
 				views.append([unit.pos, float(parts[3])])
+		elif parts.size() >= 4 and parts[1] == "forest":
+			# Танк гравця 0 заїхав у ліс на x,y: його клітинка й сусідня вздовж ряду проламані
+			# (правда; глядач бачить їх, бо стоїть поруч), відділення піхоти — у стоячому лісі
+			# за дві клітинки. Камера — на танку: просіка, повалені стовбури й розчинення крон.
+			var a: PackedStringArray = parts[2].split(",")
+			var c := Vector2i(int(a[0]), int(a[1]))
+			var state: BattleState = MatchService.state
+			var lane: Array[Vector2i] = [c]
+			for d: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+				if board.kind_at(c + d) == Terrain.Kind.FOREST:
+					lane.append(c + d)
+					break
+			var inf := Vector2i(-1, -1)
+			for r in range(2, 5):
+				for dy in range(-r, r + 1):
+					for dx in range(-r, r + 1):
+						var q: Vector2i = c + Vector2i(dx, dy)
+						if inf.x < 0 and board.in_bounds(q) and board.kind_at(q) == Terrain.Kind.FOREST and not lane.has(q) \
+								and state.unit_at(q) == null and absi(dx) + absi(dy) >= 2:
+							inf = q
+			for w: Array in [[UnitTypes.UnitClass.TANK, c], [UnitTypes.UnitClass.INFANTRY, inf]]:
+				for u: Unit in state.units_of(0):
+					if u.unit_class() == w[0] and (w[1] as Vector2i).x >= 0:
+						var other: Unit = state.unit_at(w[1])
+						if other != null and other != u:
+							other.pos = u.pos
+						u.pos = w[1]
+						break
+			for q: Vector2i in lane:
+				state.broken_forest[q] = true
+			state.refresh_vision(0)
+			screen.call("_rebuild_units_for_active_player")
+			views.append([c, float(parts[3])])
 		elif parts.size() >= 4 and parts[1] == "yard":
 			# Танк і відділення піхоти гравця 0 у дворі садиби №parts[2] з макету карти: танк — на
 			# клітинці двору без хати й сараю, піхота — на іншій, поруч із хатою; камера — на хаті.
@@ -245,17 +283,82 @@ func _ready() -> void:
 			rig.zoom_by(float(v[1]) / rig.zoom_level)
 			for f in SETTLE_FRAMES:
 				await get_tree().process_frame
+			# Камера, що ще доїжджає (кут дошки, клемп зуму), щокадру перемальовує каскади тіні:
+			# лічильник тоді на десятки викликів більший, ніж у кадрі, на який дивиться гравець.
+			var cam: Camera3D = get_viewport().get_camera_3d()
+			var still: int = 0
+			var last: Transform3D = cam.global_transform
+			for f in 600:
+				await get_tree().process_frame
+				still = still + 1 if cam.global_transform.is_equal_approx(last) else 0
+				last = cam.global_transform
+				if still >= 30:
+					break
 			await RenderingServer.frame_post_draw
-			var dc: int = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
-			var tris: int = int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
-			var name: String = "%s_%d_%d_z%d" % [map, v[0].x, v[0].y, int(v[1])]
+			var m: Vector2i = await _median_frame()
+			var dc: int = m.x
+			var tris: int = m.y
+			var zl: String = str(int(v[1])) if is_equal_approx(v[1], roundf(v[1])) else "%.1f" % v[1]
+			var name: String = "%s_%d_%d_z%s" % [map, v[0].x, v[0].y, zl]
 			print("BUDGET %s %s z%d dc=%d tris=%d" % [map, v[0], int(v[1]), dc, tris])
 			shots.append([name, get_viewport().get_texture().get_image()])
+			if diag:
+				await _diag(screen, "%s %s z%d" % [map, v[0], int(v[1])], Vector2i(dc, tris))
 		screen.free()
 		await get_tree().process_frame
 	for s: Array in shots:
 		(s[1] as Image).save_jpg("%s/%s.jpg" % [out, s[0]], 0.9)
 	get_tree().quit()
+
+
+## Медіана draw calls і трикутників за 9 кадрів: лічильник окремого кадру стрибає (тіні й зонд
+## оновлюються не щокадру), і один кадр бреше на десятки викликів.
+func _median_frame() -> Vector2i:
+	var dcs: Array[int] = []
+	var tris: Array[int] = []
+	for f in 9:
+		await RenderingServer.frame_post_draw
+		dcs.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
+		tris.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)))
+	dcs.sort()
+	tris.sort()
+	return Vector2i(dcs[4], tris[4])
+
+
+## Скільки коштує кожна група вузлів: сховати, виміряти, повернути.
+func _diag(screen: BattleScreen, tag: String, all: Vector2i) -> void:
+	var bv: BoardView = screen.get_node("%BoardView")
+	var groups: Dictionary = {}
+	var forest: Node = bv.forest()
+	if forest != null:
+		for n: Node in forest.get_children():
+			var g: String = "forest_" + String(n.name)
+			if not groups.has(g):
+				groups[g] = []
+			(groups[g] as Array).append(n)
+	for n: Node in bv.get_children():
+		if n != forest and n is Node3D:
+			var g: String = "board_" + String(n.name).rstrip("0123456789@")
+			if not groups.has(g):
+				groups[g] = []
+			(groups[g] as Array).append(n)
+	for n: Node in screen.get_children():
+		if n != bv and n is Node3D:
+			var g: String = "screen_" + String(n.name)
+			if not groups.has(g):
+				groups[g] = []
+			(groups[g] as Array).append(n)
+	for g: String in groups:
+		var was: Array[bool] = []
+		for n: Node3D in groups[g]:
+			was.append(n.visible)
+			n.visible = false
+		var m: Vector2i = await _median_frame()
+		var dc: int = m.x
+		var tris: int = m.y
+		print("DIAG %s %s(%d) dc=%d tris=%d" % [tag, g, (groups[g] as Array).size(), all.x - dc, all.y - tris])
+		for i in was.size():
+			(groups[g][i] as Node3D).visible = was[i]
 
 
 ## Погляд згори: межі будівель і огорож, найменші проміжки — числом у кадрі й у виводі.

@@ -136,6 +136,11 @@ def premul_dilate(img, steps=6):
         new = (~m) & (cnt > 0)
         rgb[new] = acc[new] / cnt[new][:, None]
         m = m | new
+    # Решта прозорих текселів — середній колір пучка: далекі mip усереднюють блоки по
+    # 16×16 і інакше тягнуть чорне тло в край крони — чорне конфеті здаля.
+    solid = a > 0.05
+    if solid.any():
+        rgb[~m] = rgb[solid].mean(axis=0)
     out = img.copy()
     out[..., :3] = rgb
     return out

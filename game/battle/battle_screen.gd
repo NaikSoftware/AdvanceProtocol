@@ -63,6 +63,17 @@ var _match_service: Node = null
 var _prev_quit_on_go_back: bool = true
 ## Обмеження кадрів до бою; _exit_tree() повертає його.
 var _prev_max_fps: int = 0
+## Об'їзд дошки за гейтом (_warm_board) робиться один раз за життя екрана.
+var _board_warmed: bool = false
+## Тести вмикають об'їзд і без вікна.
+var warm_board_in_headless: bool = false
+var _warm_stops: Array[Vector2i] = []
+## -1: юніти ще не будували; далі — скільки кадрів їх тримати під гейтом.
+var _warm_units_frames: int = -1
+## Кадри прогріву розчинення лісу за гейтом: −1 — ще не почато.
+var _warm_forest_frames: int = -1
+## Те саме для розчинення рослинності (VegetationLayer).
+var _warm_veg_frames: int = -1
 ## Відлік спокою: таймер, а не _process, — у спокої екран не робить нічого щокадру (§8).
 var _idle_timer: Timer
 ## Відкритий оверлей налаштувань (null, поки не відкривали).
@@ -103,6 +114,8 @@ const _DRAG_THRESHOLD_DP: float = 10.0
 ## хмарами River світло розсіяне, і будинки без тіні від землі не відриваються. Не за прозорістю
 ## тіні: на сонячних картах вона навмисно м'яка й світліша, ніж під хмарами.
 const STRUCTURE_SHADOW_MIN_SKY_CLEAR: float = 0.5
+## Частка світла, яку забирає запечена тінь лісу на сонячній карті (ForestLayer).
+const FOREST_SHADOW: float = 0.22
 ## Мокра карта для пропсів (мости темніші й блищать): River під дощем — 0.55, сухі — 0.
 const WET_MIN: float = 0.3
 
@@ -188,6 +201,8 @@ func _ready() -> void:
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
 	_camera_rig.view_changed.connect(_follow_weather)
+	_camera_rig.view_changed.connect(_follow_forest)
+	_follow_forest()
 	# Android «назад» інакше виходить із гри разом із матчем; на цьому екрані
 	# воно відкриває паузу. Значення меню повертає _exit_tree().
 	_prev_quit_on_go_back = get_tree().quit_on_go_back
@@ -234,6 +249,7 @@ func launch(match_service: Node) -> void:
 	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
 	_clear_unit_views()
 	_gate.show_for(_match_service.state.active_player)
+	_warm_board()
 
 
 ## Ґрунт дошки завжди з карти (MapData.ground_state).
@@ -265,6 +281,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
 	_board_view.wet = look.wetness >= WET_MIN
+	_apply_forest_sun(look)
 	_weather.apply(look)
 	_wire_view(board)
 	# Техніка, що стоїть на клітинці від старту матчу, теж розчавила дрібні пропси під собою; глядач
@@ -290,6 +307,8 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 ## «Продовжити»: вигляд з уже завантаженого state, без нового матчу. Пристрій
 ## віддають невідомо кому, тож дошка ховається за гейтом активного гравця;
 ## юніти й камера з'являються на confirmed (_on_gate_confirmed), як при передачі ходу.
+## Під гейтом уже стоять міни, шрами, дахи й ліс того самого гравця, а ще йде об'їзд дошки
+## (_warm_board), який на кілька кадрів ставить і одразу прибирає його юнітів.
 func resume(match_service: Node = null) -> void:
 	_match_service = match_service if match_service != null else MatchService
 	# Підтипи поверхні живуть у MapData, не в збереженні: беремо їх з карти збереженої гри.
@@ -303,9 +322,11 @@ func resume(match_service: Node = null) -> void:
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
 	_board_view.wet = look.wetness >= WET_MIN
+	_apply_forest_sun(look)
 	_weather.apply(look)
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
+	_warm_board()
 	_match_service.events_ready.connect(_on_events_ready)
 	_match_service.launch_mode = MatchService.Launch.NONE
 
@@ -1009,11 +1030,83 @@ func _warm_up_fx(cell: Vector2i) -> void:
 	_wreck_layer.warm_up(at)
 
 
-## Гачок вигляду лісу: тут його перемальовують з known_broken_map(активного) — ніколи
-## з події. Вигляду повалених дерев на цій гілці ще немає, тож порожньо. Викликається
-## з перебудови після пакета подій і на гейті, тобто і на ForestBroken, і на передачі ходу.
+## Поки гейт закриває екран, камера по кадру стоїть над кожним блоком дошки (BoardWarmUp), а потім
+## над першим юнітом гравця, що сідає, з його юнітами: матеріали, які інакше вперше потрапили б у
+## кадр після гейта чи на першому скролі, компілюються тут. Під гейтом лишаються міни, шрами, дахи
+## й ліс того самого гравця (їх і так ставить setup/resume), а юніти після об'їзду знову прибираються
+## й з'являються, як і раніше, на confirmed. Гейт не чіпається; якщо гравець устиг підтвердити,
+## об'їзд кидається: камера вже стоїть на його позиції. Покадрово через сигнал кадру, а не await:
+## з'єднання зі звільненим екраном рушій розриває сам, тож корутина не прокинеться на мертвому вузлі.
+## Без вікна (headless) нічого не малюється; `warm_board_in_headless` — лише для тестів.
+func _warm_board() -> void:
+	if _board_warmed or (DisplayServer.get_name() == "headless" and not warm_board_in_headless):
+		return
+	_board_warmed = true
+	var board: Board = _match_service.state.board
+	_warm_stops = BoardWarmUp.stops(Vector2i(board.width, board.height))
+	_warm_units_frames = -1
+	_warm_forest_frames = -1
+	_warm_veg_frames = -1
+	get_tree().process_frame.connect(_warm_tick, CONNECT_ONE_SHOT)
+
+
+func _warm_tick() -> void:
+	if not _gate.visible:
+		return
+	if not _warm_stops.is_empty():
+		_camera_rig.center_on(_warm_stops.pop_front())
+	elif _warm_forest_frames < 0:
+		# Матеріали розчинення лісу (прохід глибини й колір) з'являються, лише коли юніт стоїть під
+		# кроною: розчинена крона кожного атласу біля середини дошки — тут, за гейтом.
+		var board: Board = _match_service.state.board
+		var cell: Vector2i = _board_view.forest().warm_fade(Vector2i(board.width / 2, board.height / 2))
+		if cell.x >= 0:
+			_camera_rig.center_on(cell)
+		_warm_forest_frames = 2
+	elif _warm_forest_frames > 0:
+		_warm_forest_frames -= 1
+	elif _warm_veg_frames < 0:
+		# Розчинення рослин (кущ, дерево, очерет над юнітом) — так само за гейтом.
+		var board: Board = _match_service.state.board
+		var veg: VegetationLayer = _board_view.vegetation()
+		var cell: Vector2i = veg.warm_fade(Vector2i(board.width / 2, board.height / 2)) if veg != null else Vector2i(-1, -1)
+		if cell.x >= 0:
+			_camera_rig.center_on(cell)
+		_warm_veg_frames = 2
+	elif _warm_veg_frames > 0:
+		_warm_veg_frames -= 1
+	elif _warm_units_frames < 0:
+		# Юніти з'являються лише на confirmed, тож їхні матеріали й підписи теж уперше малювалися б
+		# у першому кадрі після гейта.
+		_rebuild_units_for_active_player(true)
+		_camera_rig.center_on(_first_unit_cell(_match_service.state.active_player))
+		_warm_units_frames = 2
+	elif _warm_units_frames > 0:
+		_warm_units_frames -= 1
+	else:
+		_clear_unit_views()
+		return
+	get_tree().process_frame.connect(_warm_tick, CONNECT_ONE_SHOT)
+
+
+## Сонце карти для запеченої тіні лісу: напрям НА сонце, як у WeatherRig (sun.basis.z), і сила —
+## слабша під похмурим небом (менше прямого світла).
+func _apply_forest_sun(look: BattleLook) -> void:
+	_board_view.sun_dir = Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0)).z
+	_board_view.forest_shadow = FOREST_SHADOW * clampf(look.light_energy / 1.5, 0.4, 1.0)
+
+
+## Зум камери для лісу: підлісок лише до ForestLayer.DETAIL_ZOOM.
+func _follow_forest() -> void:
+	_board_view.set_forest_zoom(_camera_rig.zoom_level)
+
+
+## Гачок вигляду лісу: його перемальовують з known_broken_map(активного) — ніколи з
+## події. Викликається з перебудови після пакета подій і на гейті, тобто і на ForestBroken,
+## і на передачі ходу.
 func forest_changed() -> void:
-	pass
+	var state: BattleState = _match_service.state
+	_board_view.set_forest_broken(state.known_broken_map(state.active_player))
 
 
 ## Техніка, що ввійшла в клітинку, розчавлює її дрібні пропси; піхота проходить повз. Шлях
