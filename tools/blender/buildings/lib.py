@@ -1576,7 +1576,7 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
         pa = Vector((p0[0], p0[1], 0)) + u * hu0
         pc = Vector((p0[0], p0[1], 0)) + u * hu1
         for pe, dirn in ((pa, 1), (pc, -1)):
-            _quad(b, [V(pe + nrm, hz0), V(pe - nrm, hz0), V(pe - nrm, hz1), V(pe + nrm, hz1)], jamb_mat or in_mat or mat, tuple(u * dirn))   # відкоси темні: крізь проріз вони займають більшу частину видимого, світлі читались блідою панеллю
+            _quad(b, [V(pe + nrm, hz0), V(pe - nrm, hz0), V(pe - nrm, hz1), V(pe + nrm, hz1)], jamb_mat or "interior_back", tuple(u * dirn))   # відкоси темні: крізь проріз вони займають більшу частину видимого, світлі читались блідою панеллю
         mid_ = (pa + pc) / 2                              # тло проріму: темна «кімната» за 0.45 м усередині, інакше крізь проріз видно залиту сонцем купу (бліда панель)
         inw = nrm.normalized()
         if inw.dot(-mid_) < 0:
