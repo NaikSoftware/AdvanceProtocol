@@ -478,8 +478,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Roof colours only graphite slate, dark cherry or red-brown, true dark green, galvanised grey, dark brown; no olive, ochre or mustard
 - [x] Every roof clearly darker than its wall: sRGB luma ratio ≤ 0.6
 - [ ] Not plastic, not grey; streaks under sills and a damp plinth band visible in battle
-- [ ] Glass reads as glass on intact houses; broken windows only on ruins, as a real opening
-- [ ] Hay and bridges matte; gardens tilled rows; chimney tops open and dark; ruin floors show debris, not grass
+- [x] Glass reads as glass on intact houses; broken windows only on ruins, as dark openings
+- [x] Hay and bridges matte; gardens tilled rows; chimney tops open and dark; ruin floors show debris, not grass
 - [ ] No village looks bought in one shop: three or more forms, ages and wear per category
 
 ### Task 18: Damaged panel block
