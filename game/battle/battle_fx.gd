@@ -631,9 +631,11 @@ static func _fireball(root: Node3D, ball_m: float, offset: Vector3, lift: float,
 	var cut: Tween = root.create_tween()
 	cut.tween_interval(FIREBALL_CUT_SEC)
 	cut.tween_method(func(f: float) -> void: bmat.set_shader_parameter("occ_floor", f), 0.0, 0.6, 0.05)
+	bmat.set_shader_parameter("crown", 1.0)
 	_play_smoke(root, ball, 0.12, FIRE_SEC, 0.0, rise, grow, Vector2(0.0, LAST_FRAME), Vector2.ZERO, 0.4)
 	var smoke := _sprite(root, "Smoke", SMOKE_TEX, 64, side * SMOKE_SCALE, lift, 1.0)
 	smoke.position = offset
+	(smoke.material_override as ShaderMaterial).set_shader_parameter("crown", 1.0)
 	_play_smoke(root, smoke, 0.3, life, 0.0, rise, grow, Vector2(6.0, LAST_FRAME), Vector2(0.1, 0.35), ERODE_FROM * life)
 
 
@@ -642,6 +644,7 @@ static func _fireball(root: Node3D, ball_m: float, offset: Vector3, lift: float,
 static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, full: float, life: float, rise: float, grow: float) -> void:
 	var q := _sprite(root, "Dirt", DIRT_TEX, 64, cloud_m * DIRT_CELL_M / DIRT_CLOUD_M / 8.0, 0.0, 1.0)
 	q.position = offset
+	(q.material_override as ShaderMaterial).set_shader_parameter("crown", 1.0)
 	var f0: float = 4.0 + _vary(q, 0.35)
 	_play_smoke(root, q, full, life, delay, rise, grow, Vector2(f0, LAST_FRAME), Vector2.ZERO, ERODE_FROM * life, 1.0, false, true)
 
@@ -990,6 +993,9 @@ void fragment() {
 ## екрана.
 const _SPRITE_CODE: String = """
 shader_type spatial;
+const float CROWN_TOP = 0.05;
+const float CROWN_BASE = 0.42;
+const float CROWN_FROM = 10.0;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, skip_vertex_transform;
 
 uniform sampler2D tex : source_color, filter_linear_mipmap;
@@ -1034,6 +1040,10 @@ uniform float occ_floor = 1.0;
 uniform float roll = 0.0;
 // Розмитий край клуби (пороховий дим): рідкі краї атласу ще прозоріші.
 uniform float feather = 0.0;
+// Верх хмари: в атласах симуляції на пізніх кадрах угорі сидить щільна темна «голівка» стовпа з
+// плоским зрізом об стелю обсягу. 0 — як в атласі; 1 — вона рвано розсіюється (поріг шуму тим
+// вищий, чим ближче до верху клітинки), а не висить окремою кулею над димом.
+uniform float crown = 0.0;
 // Сонце (WeatherRig): освітлений бік клуби світліший на ясних мапах; у похмурі — нічого.
 global uniform vec3 sun_dir;
 global uniform float sky_clear;
@@ -1075,6 +1085,10 @@ void fragment() {
 	float thr = erode * 1.05;
 	float keep = smoothstep(thr - 0.25, thr, t.a * (0.6 + 0.4 * n));
 	float a = t.a * mix(1.0, smoothstep(0.0, 0.7, t.a), feather) * keep * opacity * (1.0 - erode);
+	// «Голівка» проступає з кадру CROWN_FROM: у перших кадрах вогняна куля ще цілком, її верх не чіпаємо.
+	float top = (1.0 - smoothstep(CROWN_TOP, CROWN_BASE, UV.y)) * crown * smoothstep(CROWN_FROM, CROWN_FROM + 8.0, frame);
+	float rag = vnoise(UV * 9.0 + seed * 1.3) * 0.6 + vnoise(UV * 23.0 + seed * 2.1) * 0.4;
+	a *= mix(1.0, 0.5 * smoothstep(0.35, 0.7, rag), top);
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	float soft = clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);
