@@ -124,19 +124,16 @@ const DROP_CROSS_COS: float = 0.906
 const DROP_CROSS: float = 1.75
 ## Проліт 0.4 кВ через вулицю (опора до опори впоперек) не довший за стільки (клітинки, 40 м).
 const SPAN_CROSS: float = 5.0
-## Дріт не йде над смугою такої ширини перед будівлею з боку камери (+x, +z), клітинки на вісь: звідти він читається
-## над дахом. Проліт 0.4 кВ висить на ~7 м, на зумі гри нахил ~40–45°: зсув на екрані ~1 клітинка навскіс (0.7 на
-## вісь); відвід спускається до ~3 м під звісом.
-const SPAN_CAMERA_SHADOW: float = 0.7
-const DROP_CAMERA_SHADOW: float = 0.3
+## Відвід може читатися над власною хатою лише на стільки біля кріплення (клітинки, ~0.3 м).
+const DROP_END_FREE: float = 0.04
 ## Над асфальтом дріт не довший за стільки ширин дороги: прямо впоперек — одна ширина, на 25° — 1.1.
 const ROAD_SPAN_K: float = 1.2
 ## Дріт, що не перетинає вісь дороги, висить над асфальтом не довше за стільки (клітинки).
 const ROAD_CLIP: float = 0.3
 ## Проліт уздовж дороги, що на екрані (слід, зсунутий від камери) висить над асфальтом не довше за стільки (клітинки).
 const ROAD_SEEN_CLIP: float = 1.0
-## Стовп ЛЕП — поза обрисом паркану двору; на самій лінії паркану стояти може (клітинки).
-const POLE_FENCE_CLEAR: float = 0.0
+## Стовп ЛЕП — поза обрисом паркану двору й не ближче за стільки до лінії паркану (клітинки, 1.6 м).
+const POLE_FENCE_CLEAR: float = 0.2
 ## Стовп ЛЕП не ближче за стільки до прорізу воріт садиби (клітинки, 1.6 м).
 const POLE_GATE_CLEAR: float = 0.2
 ## Стовп ЛЕП не ближче за стільки до тюка сіна (клітинки).
@@ -3675,18 +3672,8 @@ class _Placer:
 		for r: Rect2 in _garden_rects:
 			if _seg_hits_rect(a, b, r):
 				return false
-		# Камера дивиться з +x, +z: дріт на висоті h проєктується на землю на h·ctg(нахилу) далі від неї, тож будівля
-		# за ним «під дротом», якщо дріт проходить над смугою перед нею з боку камери. Проліт висить на 7–8 м — смуга
-		# широка; відвід спускається до стіни під звісом — вузька.
-		# Смуга — обрис будівлі, зсунутий навскіс до камери (+x, +z) на 0…strip по кожній осі: три зсуви з кроком у
-		# півсмуги покривають її, бо будівлі ширші за півсмуги.
-		var strip: float = PropLayer.DROP_CAMERA_SHADOW if own.has_area() else PropLayer.SPAN_CAMERA_SHADOW
-		for r: Rect2 in _bld_rects:
-			if r.is_equal_approx(own):
-				continue
-			for f: float in [0.0, 0.5, 1.0]:
-				if _seg_hits_rect(a, b, Rect2(r.position + Vector2.ONE * strip * f, r.size)):
-					return false
+		if not _seen_clear(a, b, own):
+			return false
 		if own.has_area() and absf((b - a).normalized().dot(Vector2.ONE.normalized())) > PropLayer.DROP_VIEW_COS:
 			return false
 		var home: Variant = yard_owner.get(Vector2i(roundi(own.get_center().x), roundi(own.get_center().y))) if own.has_area() else null
@@ -3711,16 +3698,6 @@ class _Placer:
 		# 25° від прямого кута, і над асфальтом не довше за ROAD_SPAN_K ширини дороги (ширина — удвічі найглибша точка під
 		# дротом). Дріт, що лише зрізає край асфальту на повороті, висить над ним не далі ROAD_CLIP: кут в одній точці
 		# пропускав навскісні проліти над внутрішнім боком повороту.
-		# На екрані дріт проліта висить над точкою землі, зсунутою від камери (−x, −z) на ~1 клітинку навскіс: уздовж
-		# узбіччя з боку камери він читається над асфальтом, хоч на землі стоїть поруч. Перевіряється й цей слід.
-		if not own.has_area() and not _crosses_axis(a, b):
-			var shift: Vector2 = -Vector2.ONE * PropLayer.SPAN_CAMERA_SHADOW
-			var seen_on_road: int = 0
-			for j in range(0, n + 1):
-				if road_edge_m(a.lerp(b, float(j) / n) + shift) < 0.0:
-					seen_on_road += 1
-			if len_ * seen_on_road / (n + 1) > PropLayer.ROAD_SEEN_CLIP:
-				return false
 		if on_road > 0:
 			var over: float = len_ * on_road / (n + 1)
 			if not _crosses_axis(a, b):
@@ -3729,6 +3706,68 @@ class _Placer:
 			if len_ > cross_max or over > PropLayer.ROAD_SPAN_K * 2.0 * -deepest / 8.0 + len_ / n:
 				return false
 			if absf((b - a).normalized().dot(street_dir(a.lerp(b, 0.5), a, b))) > sqrt(1.0 - PropLayer.DROP_CROSS_COS * PropLayer.DROP_CROSS_COS):
+				return false
+		return true
+
+	## Висота дроту від a до b над ґрунтом у частці t (клітинки): проліт — між траверсами опор 0.4 кВ із провисом,
+	## відвід — від траверси до кріплення на стіні під звісом.
+	func _wire_h(a: Vector2, b: Vector2, t: float, drop: bool) -> float:
+		var top: float = _pole_top()
+		var q: Vector2 = a.lerp(b, t)
+		var base: float = lerpf(ground(a.x, a.y), ground(b.x, b.y), t) - ground(q.x, q.y)
+		if drop:
+			return base + lerpf(top, PropLayer.DROP_ATTACH_H, t)
+		return base + top - PropLayer.WIRE_SAG_RATIO * a.distance_to(b) * 4.0 * t * (1.0 - t)
+
+	func _pole_top() -> float:
+		var info: Variant = PropLayer.model(&"infra_pole_concrete_04kv")
+		if info == null:
+			return 0.9
+		var top: float = INF
+		for w: Vector3 in (info as Dictionary)["wires"]:
+			top = minf(top, w.y)
+		return top
+
+	## Дріт на висоті h у точці q камера бачить над точкою землі q − (до камери)·h·ctg(нахилу). Камера стоїть на +x, +z
+	## від фокуса (IsoCameraRig.YAW_DEGREES), нахил — від PITCH_NEAR_DEG до PITCH_FAR_DEG залежно від зуму: перевіряються
+	## обидва краї. Дріт не має читатися ні над будівлею (дах із звісом: зсув від дроту до гребеня — з кроком у чверть),
+	## ні над грядкою, ні над чужим двором (рівна земля — повний зсув); проліт уздовж дороги — ні над асфальтом довше за
+	## ROAD_SEEN_CLIP. Відвід може читатися над власною хатою лише в останніх DROP_END_FREE біля стіни.
+	func _seen_clear(a: Vector2, b: Vector2, own: Rect2) -> bool:
+		var drop: bool = own.has_area()
+		var home: int = int(yard_owner.get(Vector2i(roundi(own.get_center().x), roundi(own.get_center().y)), -1)) if drop else -1
+		var away := -Vector2(sin(deg_to_rad(IsoCameraRig.YAW_DEGREES)), cos(deg_to_rad(IsoCameraRig.YAW_DEGREES)))
+		var len_: float = a.distance_to(b)
+		var reach: float = (_pole_top() + 0.1) / tan(deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG))
+		# Лише ті будівлі й грядки, до яких дріт зі зсувом узагалі може дістати.
+		var box := Rect2(a, Vector2.ZERO).expand(b).expand(a + away * reach).expand(b + away * reach).grow(0.05)
+		var blds: Array[Rect2] = _bld_rects.filter(func(r: Rect2) -> bool: return r.intersects(box))
+		var gardens: Array[Rect2] = _garden_rects.filter(func(r: Rect2) -> bool: return r.intersects(box))
+		var crossing: bool = not drop and _crosses_axis(a, b)
+		var n: int = maxi(2, ceili(len_ / 0.15))
+		for pitch: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
+			var cot: float = 1.0 / tan(deg_to_rad(pitch))
+			var seen_road: int = 0
+			for j in range(0, n + 1):
+				var t: float = float(j) / n
+				var q: Vector2 = a.lerp(b, t)
+				var shift: Vector2 = away * _wire_h(a, b, t, drop) * cot
+				var end_free: bool = drop and (1.0 - t) * len_ < PropLayer.DROP_END_FREE
+				for f: float in [1.0, 0.75, 0.5, 0.25]:
+					var g: Vector2 = q + shift * f
+					for r: Rect2 in blds:
+						if r.has_point(g) and not (end_free and r.is_equal_approx(own)):
+							return false
+				var g1: Vector2 = q + shift
+				for r: Rect2 in gardens:
+					if r.has_point(g1):
+						return false
+				for yi in yard_polys.size():
+					if yi != home and yard_polys[yi].size() >= 3 and Geometry2D.is_point_in_polygon(g1, yard_polys[yi]):
+						return false
+				if not crossing and road_edge_m(g1) < 0.0:
+					seen_road += 1
+			if not drop and len_ * seen_road / (n + 1) > PropLayer.ROAD_SEEN_CLIP:
 				return false
 		return true
 
@@ -3772,7 +3811,8 @@ class _Placer:
 		return false
 
 	## Обрис паркану двору зі сторін _fence_ring: сторона — на своїй межі клітинок із відступом o назовні; кут двох
-	## перпендикулярних сторін — їх перетин, сходинка між паралельними — дві точки на місці переходу.
+	## перпендикулярних сторін — їх перетин, сходинка між паралельними — дві точки на місці переходу. Вирізів паркану
+	## навколо перешкод і прорізу воріт обрис не має: двір — суцільний, ворота стереже near_gate.
 	static func _ring_polygon(sides: Array) -> PackedVector2Array:
 		var out := PackedVector2Array()
 		var n: int = sides.size()

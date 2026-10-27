@@ -129,12 +129,12 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   where a street pole reaches it with a short straight span (≤ 16 m) that keeps off gardens and a
   neighbour's yard; a drop may cross the street only square to it (within 25°) and no longer than
   14 m, and never points straight along the view (it reads as a vertical stroke) — then it takes another
-  wall facing the pole. Poles never stand inside a yard's fence line, in a gate opening or next to a
+  wall facing the pole. Poles stand at least 1.6 m outside a yard's fence line, never in a gate opening or next to a
   hay bale; a 0.4 kV span keeps off yards, gardens and forest (a wire coming out from under the canopy
-  reads as from nowhere) and off the strip about one tile deep in front of a building on the camera
-  side (from there it reads as over the roof), hangs at least 6 m above the ground, and over asphalt
-  runs only square across the road, to a pole set opposite, never along the inside of a bend nor
-  where, seen from the camera, it would hang along the asphalt. A
+  reads as from nowhere), and must not read from the camera (any pitch of the rig) as hanging over a
+  roof, a garden, another homestead's yard or along the asphalt; it hangs at least 6 m above the
+  ground and over asphalt runs only square across the road, to a pole set opposite, never along the
+  inside of a bend. A
   street pole carries at most three spans; a transformer pole its two 10 kV spans plus at most two
   0.4 kV. The three bare 10 kV wires are fainter each, so the trunk reads no darker than a village
   cable. No pole is added just to reach a house, and about one reachable house in three in each

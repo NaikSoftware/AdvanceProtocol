@@ -29,9 +29,11 @@ const BEND_ANGLE: float = 0.9
 const BEND_WINDOW: int = 5
 ## Синус 25° — найбільший відхил переходу через дорогу від прямого кута (як PropLayer.DROP_CROSS_COS).
 const SQUARE_SIN: float = 0.423
-## Скільки разів пробуємо сполучити відрізану станцію з деревом, і скільки спроб на все село.
+## Межі пошуку, щоб будова карти не дорожчала від вулиць без виходу: скільки разів пробуємо сполучити відрізану
+## станцію з деревом, скільки спроб на все село (BRIDGE_BUDGET), скільки кандидатів ТП перевіряємо на зв'язок із
+## вулицею (TP_PROBES) і наскільки опора переходу через дорогу може відійти від місця прямо навпроти (HOP_R, клітинки).
 const BRIDGE_TRIES: int = 3
-## Наскільки опора переходу через дорогу може відійти від місця прямо навпроти, клітинки.
+const TP_PROBES: int = 12
 const HOP_R: float = 1.2
 const BRIDGE_BUDGET: int = 40
 ## Найбільше прольотів на опорі 0.4 кВ (відводи не лічаться); на ТП — два прольоти 10 кВ і до MAX_SPANS − 1 прольотів 0.4 кВ.
@@ -63,6 +65,9 @@ var transformers: Array[Vector2] = []
 ## Центри хат із відводом і хат, до яких опора дістала б, але відводу навмисно нема (SKIP_ONE_IN).
 var fed: Array[Vector2] = []
 var skipped: Array[Vector2] = []
+## Найбільше спроб мосту в одному селі й на одну станцію за весь план (тест стереже межі пошуку).
+var peak_attempts: int = 0
+var peak_tries: int = 0
 
 
 func plan(placer: PropLayer._Placer) -> void:
@@ -144,9 +149,15 @@ func _snap(target: Vector2, radius: float, accept: Callable = Callable()) -> Vec
 		var db: float = b.distance_squared_to(target)
 		return da < db or (da == db and (a.x < b.x or (a.x == b.x and a.y < b.y))))
 	# Порядок місць: поле, узбіччя дороги, двір уздовж паркану (PropLayer pole_spot_ok).
+	# Місце, придатне на нижчому ярусі, придатне й на вищих: accept для нього рахується раз, а не тричі.
+	var accepted: Dictionary = {}
 	for tier in 3:
 		for q in cands:
-			if _spot_ok(q, tier) and not _near_avoid(q) and (accept.is_null() or accept.call(q)):
+			if not _spot_ok(q, tier) or _near_avoid(q):
+				continue
+			if not accepted.has(q):
+				accepted[q] = accept.is_null() or accept.call(q)
+			if accepted[q]:
 				return q
 	return Vector2.INF
 
@@ -457,6 +468,8 @@ func _village(homes: Array, trunk: Array) -> void:
 		# Станцію, до якої вже BRIDGE_TRIES разів не дотягнулись, більше не пробуємо: кожна спроба — це пошук місць
 		# для опор, а будова карти не повинна дорожчати від кожної вулиці без виходу.
 		tries[link[1]] = int(tries.get(link[1], 0)) + 1
+		peak_attempts = maxi(peak_attempts, attempts)
+		peak_tries = maxi(peak_tries, tries[link[1]])
 		if int(tries[link[1]]) >= BRIDGE_TRIES:
 			bridged[link[1]] = true
 		if stations[link[0]].distance_to(stations[link[1]]) <= MAX_04KV and _span_clear(stations[link[0]], stations[link[1]], trunk_segs):
@@ -611,6 +624,10 @@ func _spans_04_at(p: Vector2) -> int:
 func _tp_reaches(p: Vector2, stations: Array[Vector2], trunk: Array) -> bool:
 	if _reach_cache.has(p):
 		return _reach_cache[p]
+	# Кандидатів ТП у селі — десятки (кожен стовп магістралі й проєкції станцій); далі за TP_PROBES найближчих вони вже
+	# не виграють, а кожна проба — пошук переходу через дорогу.
+	if _reach_cache.size() >= TP_PROBES:
+		return false
 	_reach_cache[p] = false
 	var segs: Array = []
 	for line: Array in trunk:

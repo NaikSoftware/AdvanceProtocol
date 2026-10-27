@@ -1813,6 +1813,92 @@ func test_drop_share_per_map(p = use_parameters(MAPS)) -> void:
 		assert_eq(props._skipped.size(), 0, "ridge: досяжні хати в поселеннях з однієї-двох")
 
 
+# --- окремі правила дроту й місця опори, на рукотворних випадках (не через план мережі) ---------------------------
+
+func _river_placer():
+	return _cached("river").props()._placer
+
+
+## Дріт крізь клітинку лісу неможливий: лінія з-під крон читається лінією нізвідки.
+func test_wire_rule_forest() -> void:
+	var placer = _river_placer()
+	var forest := Vector2i(-1, -1)
+	for y in 24:
+		for x in 24:
+			if forest.x < 0 and placer.kind(Vector2i(x, y)) == Terrain.Kind.FOREST:
+				forest = Vector2i(x, y)
+	assert_true(forest.x >= 0, "передумова — ліс є")
+	var c := Vector2(forest)
+	assert_false(placer.wire_ok(c - Vector2(0.4, 0.0), c + Vector2(0.4, 0.0), PropLayer.SPAN_CROSS))
+
+
+## Проліт уздовж дороги над асфальтом (не перетинає вісь) неможливий довше за ROAD_CLIP.
+func test_wire_rule_along_asphalt() -> void:
+	var placer = _river_placer()
+	var pts: PackedVector2Array = placer.height.roads.lines[0]
+	var ring := Vector2(placer.ring, placer.ring)
+	var k: int = pts.size() / 2
+	var a: Vector2 = pts[k] - ring
+	var dir: Vector2 = (pts[k + 4] - pts[k]).normalized()
+	var off: Vector2 = dir.orthogonal() * 0.05
+	assert_lt(placer.road_edge_m(a + off), 0.0, "передумова — точка на асфальті")
+	assert_false(placer.wire_ok(a + off, a + off + dir * 1.5, PropLayer.SPAN_CROSS))
+
+
+## Проліт перед будівлею з боку камери (+x, +z), що на екрані лягає на дах, неможливий.
+func test_wire_rule_projection_over_building() -> void:
+	var placer = _river_placer()
+	var r: Rect2 = Rect2()
+	for b: Rect2 in placer._bld_rects:
+		if b.size.x > 0.5 and b.size.y > 0.5 and b.position.x > 2.0 and b.position.y > 2.0:
+			r = b
+			break
+	assert_true(r.has_area(), "передумова — будівля є")
+	var y: float = r.end.y + 0.35
+	var a := Vector2(r.position.x, y) + Vector2(0.35, 0.0)
+	var b := Vector2(r.end.x, y) + Vector2(0.35, 0.0)
+	assert_false(placer._seen_clear(a, b, Rect2()), "проліт перед дахом з боку камери")
+
+
+## Відвід, що йде майже вздовж напряму погляду камери, неможливий: на екрані — вертикальна риска.
+func test_wire_rule_drop_along_view() -> void:
+	var placer = _river_placer()
+	var r: Rect2 = Rect2()
+	for b: Rect2 in placer._home_rects:
+		r = b
+		break
+	assert_true(r.has_area(), "передумова — хата є")
+	var lip: Vector2 = r.end
+	assert_false(placer.wire_ok(lip + Vector2.ONE.normalized() * 1.0, lip, PropLayer.DROP_CROSS, r))
+
+
+## Стовп поруч із тюком сіна чи у прорізі воріт не стоїть.
+func test_pole_spot_rules_hay_and_gate() -> void:
+	var props: PropLayer = _cached("river").props()
+	var placer = props._placer
+	var hay := Vector2.INF
+	for inst in props._instances:
+		if _kind(inst["model"]) == PropLayer.Kind.HAY:
+			var o: Vector3 = (inst["transform"] as Transform3D).origin
+			hay = Vector2(o.x, o.z)
+			break
+	assert_true(hay.is_finite(), "передумова — тюк є")
+	assert_false(placer.pole_spot_ok(hay + Vector2(0.15, 0.0), 2), "опора впритул до тюка")
+	assert_gt(props._gate_posts.size(), 1, "передумова — ворота є")
+	var gate: Vector2 = (props._gate_posts[0] + props._gate_posts[1]) * 0.5
+	assert_true(placer.near_gate(gate))
+	assert_false(placer.pole_spot_ok(gate, 2), "опора в прорізі воріт")
+
+
+## Пошук мосту між відрізаною станцією й деревом обмежений: не більше BRIDGE_TRIES спроб на станцію й BRIDGE_BUDGET на
+## село — будова карти не дорожчає від вулиць без виходу.
+func test_power_grid_search_is_capped(p = use_parameters(MAPS)) -> void:
+	var grid := PowerGrid.new()
+	grid.plan(_cached(p).props()._placer)
+	assert_lte(grid.peak_tries, PowerGrid.BRIDGE_TRIES, p)
+	assert_lte(grid.peak_attempts, PowerGrid.BRIDGE_BUDGET, p)
+
+
 ## Стовп не стоїть у дворі садиби (PropLayer in_yard: обрис паркану) і ближче POLE_GATE_CLEAR до прорізу воріт, а
 ## проліт 0.4 кВ не йде над грядкою, крізь двір, над будівлею з боку камери, а через дорогу — лише прямо впоперек.
 ## На опорі 0.4 кВ щонайбільше три прольоти, на ТП (і спільній) — щонайбільше два прольоти 0.4 кВ. Будь-який проліт
