@@ -110,13 +110,18 @@ const SPAN: Dictionary = {&"10kv": 9.0, &"04kv": 5.0}
 ## не відрізняється від параболи.
 const WIRE_SAG_RATIO: float = 0.012
 const WIRE_SEGMENTS: int = 8
-## Відвід до хати — від найближчої опори її вулиці до стіни з боку вулиці: не довший за це (25 м) і не коротший за
-## DROP_MIN (клітинки); кріпиться на висоті DROP_ATTACH_H (2.9 м) під звісом.
-const DROP_DIRECT: float = 3.1
+## Відвід до хати — від найближчої опори її вулиці до стіни з боку вулиці: не довший за це (16 м: довший проліт
+## тягнеться над полем чи навскіс через вулицю) і не коротший за DROP_MIN (клітинки); кріпиться на висоті
+## DROP_ATTACH_H (2.9 м) під звісом.
+const DROP_DIRECT: float = 2.0
 const DROP_MIN: float = 0.05
 const DROP_ATTACH_H: float = 0.36
 ## Відвід тримається від чужих хат щонайменше на стільки.
 const DROP_GAP: float = 0.1
+## Далі за стільки від опори (клітинки) відвід не заходить у чужий двір: ближче — ще околиця стовпа на межі клітинок.
+const DROP_POLE_GAP: float = 0.15
+## Кожна така за ліком хата лишається без відводу (за хешем центру): сусідні хати не всі під дротами.
+const UNPOWERED_ONE_IN: int = 3
 ## Стовп стоїть на межі клітинок біля вулиці, тож до обрису будівлі (двір починається за 0.1 від межі) — не ближче за
 ## стільки; від паркану чи дрібної речі — щоб не стояти в самому паркані (клітинки).
 const POLE_BUILDING_CLEAR: float = 0.1
@@ -138,7 +143,9 @@ const POLE_SNAP: float = 0.05
 const GUY_REACH: float = 0.3
 ## Опора з прольотами, чия векторна сума коротша за це, — пряма (чи тавр): відтяжки не має.
 const GUY_PULL_MIN: float = 0.6
-const WIRE_COLOR: Color = Color(0.12, 0.12, 0.115, 0.85)
+## Дріт — сіро-оливковий напівпрозорий, ближчий до тону землі: майже чорна лінія тягла око з кожної хати. На зумі 8
+## він ще читається лінією.
+const WIRE_COLOR: Color = Color(0.15, 0.145, 0.13, 0.72)
 ## Пріоритет прозорого проходу дротів: після води (0), як вогонь і дощ.
 const WIRE_RENDER_PRIORITY: int = 1
 ## Імовірності з хешу на клітинку, у шістнадцятих: огорожа вздовж дороги йде відрізками по три
@@ -304,7 +311,7 @@ var _garden_node: MultiMeshInstance3D
 var garden_green: float = 0.2
 ## Відводи до хат: [індекс опори, точка на стіні хати].
 var _drops: Array = []
-## Центри хат, до яких мережа не дотягнулась (PowerGrid): тест їх називає.
+## Центри цілих хат без відводу: мережа їх не живить (powered_homes) чи опора не дістає (drop_ok); тест їх називає.
 var _unfed: Array[Vector2] = []
 ## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
 var _transformers: Dictionary = {}
@@ -1578,12 +1585,16 @@ static func drop_attach(rect: Rect2, from: Vector2) -> Vector2:
 	return Vector2(clampf(from.x, rect.position.x, rect.end.x), clampf(from.y, rect.position.y, rect.end.y))
 
 
-## Яку з хат живить мережа: кожну цілу — і на дошці, і в кільці, і хутірську. centres — центри хат, on_board — чи лежить
-## хата на дошці. Мережа (PowerGrid) і тести беруть це визначення звідси.
+## Яку з хат живить мережа: кожну цілу, крім кожної UNPOWERED_ONE_IN-ї за хешем центру — відвід до кожної хати
+## обплітав село дротами. Чи дістане до хати опора, вирішує вже drop_ok. centres — центри хат, on_board — чи лежить
+## хата на дошці. Мережа (PowerGrid), розстановка відводів і тести беруть це визначення звідси.
 static func powered_homes(centres: Array[Vector2], _on_board: Array[bool]) -> Array[bool]:
 	var out: Array[bool] = []
-	out.resize(centres.size())
-	out.fill(true)
+	for c: Vector2 in centres:
+		# Хутір (без сусідньої хати в SETTLEMENT_R) світло має завжди: до нього й веде окрема лінія 10 кВ, а без
+		# хати вона обірвалась би нізвідки.
+		var alone: bool = centres.all(func(o: Vector2) -> bool: return o == c or o.distance_to(c) > SETTLEMENT_R)
+		out.append(alone or hash(Vector2i(roundi(c.x * 4.0), roundi(c.y * 4.0))) % UNPOWERED_ONE_IN != 0)
 	return out
 
 
@@ -1730,6 +1741,8 @@ class _Placer:
 	var road_indexed := false
 	## Клітинки дошки з огорожею двору: польова огорожа й причепи їх оминають.
 	var yard_cells: Dictionary = {}
+	## Клітинка двору садиби з макету -> індекс садиби: відвід не йде чужим двором (drop_ok).
+	var yard_owner: Dictionary = {}
 	## Клітинки дошки під будівлями -> напрям фасаду (−Z моделі) на дошці: двір без будівлі не
 	## обгороджується (порожня огорожа серед поля читається уламком), а хвіртка стає перед дверима.
 	var built: Dictionary = {}
@@ -2350,6 +2363,7 @@ class _Placer:
 		for i in homes.size():
 			for c: Vector2i in homes[i]["cells"]:
 				owner_of[c] = i
+		yard_owner = owner_of
 		var sheds: Array[Rect2] = []
 		var house_rects: Dictionary = {}
 		for i in homes.size():
@@ -3363,7 +3377,6 @@ class _Placer:
 		_index_obstacles()
 		var grid := PowerGrid.new()
 		grid.plan(self)
-		layer._unfed = grid.unfed
 		for line: Dictionary in grid.lines:
 			var kind_name: StringName = line["kind"]
 			var m: StringName = &"infra_pole_concrete_10kv" if kind_name == &"10kv" else &"infra_pole_concrete_04kv"
@@ -3531,41 +3544,48 @@ class _Placer:
 		var cells: Array[Vector2i] = [c]
 		return layer._add(m, xform, cells)
 
-	## Відвід до кожної цілої хати від найближчої опори 0.4 кВ (чи 10 кВ із підстанцією), від якої він можливий
-	## (_drop_target). Не вийшло — відводу нема, і це видно в тесті.
+	## Відвід до цілої хати, яку живить мережа (PropLayer.powered_homes), від найближчої опори 0.4 кВ (чи 10 кВ із
+	## підстанцією), від якої він можливий (_drop_target). Хати без відводу — у layer._unfed.
 	func _service_drops() -> void:
-		var fed: Array[Vector2] = []
 		var poles: Array[int] = []
 		for i in layer._instances.size():
 			if int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.POLE \
 					and (not _is_10kv(i) or layer._transformers.has(i)):
 				poles.append(i)
+		var homes: Array[int] = []
+		var centres: Array[Vector2] = []
+		var on_boards: Array[bool] = []
 		for house_i in layer._instances.size():
 			var inst: Dictionary = layer._instances[house_i]
-			if not PropLayer.is_home(inst):
-				continue
-			var box: AABB = _box_of(inst)
-			var centre := Vector2(box.get_center().x, box.get_center().z)
-			var order: Array[int] = poles.duplicate()
+			if PropLayer.is_home(inst):
+				var box: AABB = _box_of(inst)
+				homes.append(house_i)
+				centres.append(Vector2(box.get_center().x, box.get_center().z))
+				on_boards.append(on_board((inst["cells"] as Array)[0]))
+		var powered: Array[bool] = PropLayer.powered_homes(centres, on_boards)
+		layer._unfed.clear()
+		for k in homes.size():
+			var centre: Vector2 = centres[k]
+			var fed: bool = false
+			var order: Array[int] = []
+			if powered[k]:
+				order = poles.duplicate()
 			order.sort_custom(func(x: int, y: int) -> bool: return _pole_xz(x).distance_to(centre) < _pole_xz(y).distance_to(centre))
 			for pi in order:
-				var at: Vector3 = _drop_target(house_i, pi)
+				var at: Vector3 = _drop_target(homes[k], pi)
 				if at.is_finite():
 					layer._drops.append([pi, at])
-					fed.append(centre)
+					fed = true
 					break
-		# Хата, до якої дотягнулась опора сусіднього села, без відводу не лишилась.
-		var still: Array[Vector2] = []
-		for u: Vector2 in layer._unfed:
-			if not fed.any(func(c: Vector2) -> bool: return c.distance_to(u) < 0.05):
-				still.append(u)
-		layer._unfed = still
+			if not fed:
+				layer._unfed.append(centre)
 
 	func _box_of(inst: Dictionary) -> AABB:
 		return (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 
 	## Відвід від точки from до хати з обрисом rect можливий: стіна з боку from не далі за DROP_DIRECT і не ближче за
-	## DROP_MIN, відрізок не ближче DROP_GAP до чужих хат (вулицю він може перетинати: ствол іде одним боком вулиці).
+	## DROP_MIN, відрізок не ближче DROP_GAP до чужих хат, не перетинає асфальт і далі за DROP_POLE_GAP від опори не
+	## заходить у чужий двір.
 	func drop_ok(rect: Rect2, from: Vector2) -> bool:
 		var a: Vector2 = PropLayer.drop_attach(rect, from)
 		if not a.is_finite():
@@ -3576,6 +3596,18 @@ class _Placer:
 		# Відвід не лягає на жодну чужу будівлю, не ближче DROP_GAP.
 		for r: Rect2 in _bld_rects:
 			if not r.is_equal_approx(rect) and _seg_hits_rect(from, a, r.grow(PropLayer.DROP_GAP)):
+				return false
+		# Навскісні відводи через вулицю, поле й сусідні двори до кожної хати робили село павутинням: відвід — лише
+		# коротко (DROP_DIRECT) від опори свого боку вулиці, не над асфальтом і не чужим двором. Опора стоїть на межі
+		# клітинок, тож її найближча околиця ще може бути в сусідньому дворі.
+		var own: Variant = yard_owner.get(Vector2i(roundi(a.x), roundi(a.y)))
+		var n: int = maxi(2, ceili(d / 0.1))
+		for j in range(1, n + 1):
+			var q: Vector2 = from.lerp(a, float(j) / n)
+			if q.distance_to(from) < PropLayer.DROP_POLE_GAP:
+				continue
+			var c := Vector2i(roundi(q.x), roundi(q.y))
+			if road_edge_m(q) < 0.0 or (yard_owner.has(c) and yard_owner[c] != own):
 				return false
 		return true
 

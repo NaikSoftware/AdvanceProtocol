@@ -123,9 +123,14 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   buildings look dry in the rain.
 - **Placed as a real village would be.** The layout of each map is authored, not scattered cell
   by cell: power lines run along roads across the board and on through the ring to its outer
-  edge, so no line visibly starts or ends; a pole stands on every bend, one transformer feeds each
-  settlement, and every house gets a drop under its eaves — never a lone pole, a wire over a roof
-  or a line from nowhere; a yard is a house facing the road, a garden of tilled rows
+  edge, so no line visibly starts or ends; a pole stands on every bend and one transformer feeds each
+  settlement. A house gets a drop under its eaves only where a pole of its own side of the street
+  reaches it with a short straight span (≤ 16 m) that crosses neither the asphalt nor a neighbour's
+  yard; no pole is added just to reach a house, and about one house in three in a village is left
+  without a drop, so neighbours are never all wired and the village does not turn into a web. A
+  lone farmstead at the end of its own line always has one. Wires are a thin, half-transparent
+  grey-olive close to the ground tone, still readable as a line at play zoom. Never a lone pole, a
+  wire over a roof or a line from nowhere; a yard is a house facing the road, a garden of tilled rows
   behind it, a shed, and one fence around them with a gate to the road; bales and trailers stand
   at field edges or by a shed, never on a garden or the road; nothing hangs over a bank or stands
   within ~0.4 tile of water; bridge ends meet the banks. Every building stands on a levelled pad

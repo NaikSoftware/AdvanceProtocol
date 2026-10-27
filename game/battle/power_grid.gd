@@ -7,11 +7,12 @@ extends RefCounted
 ## - 0.4 кВ — один ствол уздовж кожної вулиці села на смузі між асфальтом і хатами (з боку дворів; де вона
 ##   заставлена — з протилежного боку, крім кільцевої дороги), опори через ≤ MAX_04KV клітинок і на поворотах;
 ##   мережа — дерево (Прима від ТП) лише по сусідах уздовж вулиці, без перетинів і без зрізів крізь квартали;
-## - до кожної цілої хати — один відвід від найближчої опори вулиці (PropLayer drop_ok); коли жодна не дістає,
-##   на землі поблизу ставиться ще одна опора, з'єднана коротким прольотом із деревом.
+## - відвід — лише до хати, яку живить мережа (PropLayer.powered_homes), і лише коли опора вулиці дістає до неї коротким
+##   прольотом просто у свій двір (PropLayer drop_ok); опор заради далекої хати не ставимо — хата лишається без
+##   відводу. Гілки дерева, що нікого не живлять, не будуються: дротів у селі менше.
 ## Розстановка поступається там, де стовпу не місце (pole_spot_ok): місце шукається поряд на межах клітинок, а
 ## не знайшлось — стовпа нема, і це видно в тесті.
-## Результат: lines — ламані з опор (kind, points), transformers — точки підстанцій, unfed — хати без відводу.
+## Результат: lines — ламані з опор (kind, points), transformers — точки підстанцій.
 
 const STREET_R: float = 7.0
 const SIDE_PROBE: float = 0.8
@@ -39,8 +40,6 @@ var _ring: int = 0
 var _size := Vector2i.ZERO
 var lines: Array[Dictionary] = []
 var transformers: Array[Vector2] = []
-## Центри хат, до яких дотягнутись не вдалось (тест їх називає).
-var unfed: Array[Vector2] = []
 
 
 func plan(placer: PropLayer._Placer) -> void:
@@ -291,15 +290,13 @@ func _village(homes: Array, trunk: Array) -> void:
 	var runs: Array = []
 	_streets(homes, stations, runs)
 	if stations.is_empty():
-		# Хата без вулиці поряд (хутір): ТП на найближчому стовпі 10 кВ, відвід — опорою-запаскою біля хати.
+		# Хата без вулиці поряд (хутір): ТП на найближчому стовпі 10 кВ, відвід — від неї, якщо дістає.
 		var nearest := Vector2.INF
 		for line: Array in trunk:
 			for pt: Vector2 in line:
 				if not nearest.is_finite() or pt.distance_to(homes[0]["centre"]) < nearest.distance_to(homes[0]["centre"]):
 					nearest = pt
 		if not nearest.is_finite():
-			for h: Dictionary in homes:
-				unfed.append(h["centre"])
 			return
 		stations.append(nearest)
 	# ТП: стовп 10 кВ магістралі (наявний чи вставлений у проліт), найближчий до станції, що найближча до магістралі;
@@ -323,8 +320,6 @@ func _village(homes: Array, trunk: Array) -> void:
 							best = dp
 							tp = s
 	if not tp.is_finite():
-		for h: Dictionary in homes:
-			unfed.append(h["centre"])
 		return
 	# Одна ТП на поселення: близька наявна ТП — спільна.
 	var shared: bool = false
@@ -412,15 +407,12 @@ func _village(homes: Array, trunk: Array) -> void:
 		bridged[link[1]] = true
 		if _span_clear(stations[link[0]], stations[link[1]], trunk_segs):
 			edges.append([link[0], link[1], 1.0])
-	# Відводи: кожна хата — до найближчої станції дерева, звідки відвід можливий; коли такої нема — нова опора
-	# на землі поблизу, з'єднана коротким прольотом із деревом.
+	# Відводи: хата — до найближчої станції дерева, звідки відвід можливий; такої нема — хата без відводу. Лишаються
+	# лише станції на шляху від ТП до хат із відводом.
 	var needed: Dictionary = {}
 	for h: Dictionary in homes:
 		var pick: int = _pick_station(h["rect"], stations, parent)
 		if pick < 0:
-			pick = _add_station_for(h["rect"], stations, parent, tree_edges, trunk_segs)
-		if pick < 0:
-			unfed.append(h["centre"])
 			continue
 		var u: int = pick
 		while u >= 0 and not needed.has(u):
@@ -476,77 +468,6 @@ func _pick_station(rect: Rect2, stations: Array[Vector2], parent: Dictionary) ->
 				pick_d = d
 				pick = i
 	return pick
-
-
-## Нова опора на землі біля хати, від якої можливий відвід і яка сполучається з деревом одним прольотом ≤ MAX_04KV
-## (вільним від будівель, магістралі й гілок дерева). Повертає її індекс у stations, -1 — місця нема.
-func _add_station_for(rect: Rect2, stations: Array[Vector2], parent: Dictionary, tree_edges: Array, trunk_segs: Array) -> int:
-	var accept := func(q: Vector2) -> bool:
-		# Опора-запаска стоїть на вулиці перед хатою (не далі 20 м від асфальту), а не в полі.
-		if not _p.drop_ok(rect, q) or _p.road_edge_m(q) > 20.0:
-			return false
-		for s in stations:
-			if s.distance_to(q) < 1.4:
-				return false
-		for i: int in parent:
-			if stations[i].distance_to(q) <= MAX_04KV and _span_clear(stations[i], q, trunk_segs) and not _crosses(stations[i], q, tree_edges):
-				return true
-		return false
-	var q: Vector2 = _snap(rect.get_center(), 3.4, accept)
-	if not q.is_finite():
-		# Дерево далі за проліт: опора на вулиці перед хатою й ланцюжок опор до найближчої досяжної станції дерева.
-		var far := func(c: Vector2) -> bool:
-			if not _p.drop_ok(rect, c) or _p.road_edge_m(c) > 20.0:
-				return false
-			for s in stations:
-				if s.distance_to(c) < 1.4:
-					return false
-			var probe: Array[Vector2] = stations.duplicate()
-			return not _chain_to_tree(probe, parent, c, trunk_segs, tree_edges).is_empty()
-		q = _snap(rect.get_center(), 3.4, far)
-		if not q.is_finite():
-			return -1
-		var ids: Array[int] = _chain_to_tree(stations, parent, q, trunk_segs, tree_edges)
-		if ids.is_empty():
-			return -1
-		for k in range(1, ids.size()):
-			parent[ids[k]] = ids[k - 1]
-			tree_edges.append([stations[ids[k - 1]], stations[ids[k]]])
-		return ids.back()
-	var best: int = -1
-	for i: int in parent:
-		if stations[i].distance_to(q) <= MAX_04KV and _span_clear(stations[i], q, trunk_segs) and not _crosses(stations[i], q, tree_edges) \
-				and (best < 0 or stations[i].distance_to(q) < stations[best].distance_to(q)):
-			best = i
-	stations.append(q)
-	parent[stations.size() - 1] = best
-	tree_edges.append([stations[best], q])
-	return stations.size() - 1
-
-
-## Ланцюжок опор від найближчої досяжної станції дерева до нової опори в точці c (станції додаються в stations; c —
-## остання); порожній, якщо жодна станція в межах BRIDGE_CHAIN_MAX не сполучається вільним від будівель, магістралі й
-## гілок дерева ланцюжком.
-func _chain_to_tree(stations: Array[Vector2], parent: Dictionary, c: Vector2, trunk_segs: Array, tree_edges: Array) -> Array[int]:
-	var order: Array[int] = []
-	for i: int in parent:
-		if stations[i].distance_to(c) <= BRIDGE_CHAIN_MAX:
-			order.append(i)
-	order.sort_custom(func(a: int, b: int) -> bool: return stations[a].distance_to(c) < stations[b].distance_to(c) or (stations[a].distance_to(c) == stations[b].distance_to(c) and a < b))
-	stations.append(c)
-	var qi: int = stations.size() - 1
-	for i in order:
-		var base: int = stations.size()
-		var ids: Array[int] = _chain_ids(stations, i, qi, trunk_segs)
-		var ok: bool = not ids.is_empty()
-		for k in range(1, ids.size()):
-			if _crosses(stations[ids[k - 1]], stations[ids[k]], tree_edges):
-				ok = false
-		if ok:
-			return ids
-		stations.resize(base)
-	stations.resize(qi)
-	return []
 
 
 ## Ланцюжок станцій від i до j з проміжними опорами (кожен проліт ≤ MAX_04KV, вільний від будівель і магістралі), у

@@ -1681,11 +1681,11 @@ func _transformers_of(props: PropLayer, start: int) -> Array[int]:
 	return found
 
 
-## До кожної цілої хати мережі — один відвід від найближчої опори, від якої він можливий: не довший за DROP_DIRECT (25 м),
+## До хати — щонайбільше один відвід, від найближчої опори, від якої він можливий: не довший за DROP_DIRECT (25 м),
 ## на стіні з боку опори на висоті 2.8–3 м, відрізок не заходить у обрис даху власної хати й не ближче DROP_GAP до чужих.
-## Руїни, сараї й пошкоджені хати відводу не мають. Хати, до яких не дотягнулись (PropLayer._unfed), названі й справді
-## без відводу.
-func test_every_home_has_one_short_drop_to_its_wall(p = use_parameters(MAPS)) -> void:
+## Хата, яку мережа лишає без світла (PropLayer.powered_homes), відводу не має. Руїни, сараї й пошкоджені хати відводу
+## не мають. Хати без відводу (PropLayer._unfed) названі й справді без відводу.
+func test_homes_have_at_most_one_short_drop_to_their_wall(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var props: PropLayer = view.props()
 	var m: MapData = _map(p)
@@ -1699,12 +1699,14 @@ func test_every_home_has_one_short_drop_to_its_wall(p = use_parameters(MAPS)) ->
 		if _is_04(props, i) or props._transformers.has(i):
 			eligible.append(i)
 	assert_gt(powered.size(), 0, "%s: передумова — хати є" % p)
-	assert_eq(props._unfed.size(), 0, "%s: хати без відводу: %s" % [p, props._unfed])
-	assert_eq(powered.size(), _homes(props, m).size(), "%s: не кожну цілу хату живить мережа" % p)
+	assert_gt(props._drops.size(), 0, "%s: передумова — відводи є" % p)
+	for h in all_homes:
+		if not h["powered"]:
+			assert_eq(_drops_to(props, h["rect"]).size(), 0, "%s: хата %s без світла, а відвід є" % [p, (h["rect"] as Rect2).get_center()])
 	for h in powered:
 		var drops: Array = _drops_to(props, h["rect"])
 		var centre: Vector2 = (h["rect"] as Rect2).get_center()
-		assert_eq(drops.size(), 1, "%s: відводів до хати %s — %d" % [p, centre, drops.size()])
+		assert_lte(drops.size(), 1, "%s: відводів до хати %s — %d" % [p, centre, drops.size()])
 		if drops.is_empty():
 			continue
 		var d: Array = drops[0]
@@ -1750,6 +1752,53 @@ func test_every_home_has_one_short_drop_to_its_wall(p = use_parameters(MAPS)) ->
 		var k: int = _kind(inst["model"])
 		if (k == PropLayer.Kind.RUIN or k == PropLayer.Kind.STRUCTURE) and not PropLayer.is_home(inst):
 			assert_eq(_drops_to(props, _rect_of(inst)).size(), 0, "%s: відвід до сараю чи руїни %s" % [p, inst["cells"]])
+
+
+## Відвід іде від опори свого боку вулиці: не довший за DROP_DIRECT (16 м), жодна точка відрізка не на асфальті, а далі
+## за DROP_POLE_GAP від опори — не в чужому дворі. Довгий навскісний відвід через вулицю чи поле — павутиння, а не село.
+func test_drops_stay_on_their_side_of_the_street(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var placer = props._placer
+	assert_eq(PropLayer.DROP_DIRECT, 2.0)
+	assert_gt(props._drops.size(), 0, "%s: передумова — відводи є" % p)
+	for d: Array in props._drops:
+		var from: Vector2 = _pole_at(props, d[0])
+		var lip := Vector2((d[1] as Vector3).x, (d[1] as Vector3).z)
+		assert_lte(from.distance_to(lip), PropLayer.DROP_DIRECT + 1e-3, "%s: відвід до %s задовгий" % [p, lip])
+		var own: Variant = placer.yard_owner.get(Vector2i(roundi(lip.x), roundi(lip.y)))
+		for j in range(0, 41):
+			var q: Vector2 = from.lerp(lip, float(j) / 40.0)
+			assert_gte(placer.road_edge_m(q), 0.0, "%s: відвід до %s перетинає вулицю" % [p, lip])
+			var c := Vector2i(roundi(q.x), roundi(q.y))
+			if q.distance_to(from) >= PropLayer.DROP_POLE_GAP and placer.yard_owner.has(c):
+				assert_eq(placer.yard_owner[c], own, "%s: відвід до %s іде чужим двором %s" % [p, lip, c])
+
+
+## Частка хат без світла (PropLayer.powered_homes) — за хешем центру, щоразу та сама; хутір світло має завжди.
+func test_powered_homes_are_a_seeded_share(p = use_parameters(MAPS)) -> void:
+	const POWERED: Dictionary = {"river": [11, 16], "crossroads": [15, 21], "ridge": [4, 4]}
+	var powered: int = 0
+	var homes: Array[Dictionary] = _homes(_cached(p).props(), _map(p))
+	for h in homes:
+		powered += int(h["powered"])
+	assert_eq([powered, homes.size()], POWERED[p], "%s: хат під мережею з усіх" % p)
+
+
+## Сусідні хати не всі під дротами: серед хат без відводу є такі, до яких опора вулиці дістала б (відвід можливий) —
+## їх лишено навмисно (powered_homes), а не через те, що не дотягнулись. На Перехресті такі опори вже не будуються:
+## гілка, що нікого не живить, зникає, тож навмисність видно лише на Річці.
+func test_some_reachable_homes_are_left_without_a_drop(p = use_parameters(["river"])) -> void:
+	var props: PropLayer = _cached(p).props()
+	var m: MapData = _map(p)
+	var skipped: int = 0
+	for h in _homes(props, m):
+		if h["powered"] or _drops_to(props, h["rect"]).size() > 0:
+			continue
+		for i in _pole_ids(props):
+			if (_is_04(props, i) or props._transformers.has(i)) and props._placer._drop_target(h["i"], i).is_finite():
+				skipped += 1
+				break
+	assert_gt(skipped, 0, "%s: кожна хата, до якої дістає опора, має відвід" % p)
 
 
 ## Кабелі: між двома опорами 10 кВ — три голі дроти, фаза до фази, без перехресть у плані; решта (0.4 кВ, ТП, відводи) —
