@@ -507,6 +507,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] Reads as wear, not a rug or a pencil line
 - [x] One or two winding paths to water per map, never across ploughed land or gardens
 - [x] Paths to water go somewhere real (from a yard or road to a landing on the bank), not random stripes
+- [x] No puddles or standing water on a path or trodden patch, even in rain or on marsh
 
 ### Task 21: Bank, yard and meadow vegetation
 
