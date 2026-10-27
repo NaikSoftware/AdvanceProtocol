@@ -41,9 +41,9 @@ Each map has its own season and sky, and the sky decides the light:
 
 | map | season and sky | light and shadows |
 | --- | --- | --- |
-| River | late autumn, overcast, rain | soft diffuse light, weak soft shadows, high cool ambient, bare broadleaf |
-| Crossroads | late summer, sunny, dry | strong warm low sun, crisp shadows, sky-blue ambient, full leaf |
-| Ridge | early autumn, clear | bright sun higher up, crisp shadows, yellow-orange birch and oak |
+| River | late autumn, overcast, rain | soft diffuse light, faint blurred shadows, high cool ambient, bare broadleaf |
+| Crossroads | late summer, sunny, dry | strong warm low sun, strong soft-edged shadows, sky-blue ambient, full leaf |
+| Ridge | early autumn, clear | bright sun higher up, soft light shadows, yellow-orange birch and oak |
 
 The season never contradicts the map's ground state (§3.12): snow needs `FROZEN`, rain needs a
 wet ground state. Deciduous trees and grass come in three seasonal variants; pine serves every map.
@@ -73,8 +73,19 @@ Budget on a mid-range phone at 60 fps: under ~100 draw calls and ~150k triangles
 
 Techniques that buy atmosphere cheaply here:
 
-- **Bake** static terrain lighting. One directional light with shadows for units only. On sunny
-  maps props carry baked or contact shadows cast along that map's sun, or they float.
+- **Bake** static terrain lighting. One directional light casts every real shadow, set per map in
+  `game/battle/look/*.tres`:
+  - **Sunny maps** (Crossroads, Ridge): a 2° sun disc, so a shadow's edge softens with distance
+    from its caster. Crossroads keeps full shadow opacity; Ridge's shadows are light (opacity 0.3),
+    so the ground in shadow stays readable. Units and the board's buildings cast through the light;
+    ruins, boulders and blocks lay a contact patch stretched along the sun, and fences, poles and
+    other small props cast nothing. Units also get a contact shadow (0.6) under the hull, or they
+    float.
+  - **River** (overcast): shadow opacity 0.35 with a wide blur — a faint smudge, as under cloud.
+    Only units cast through the light.
+  - Trees never cast through the light: the forest's shadow is baked onto the ground in the map's
+    sun direction, and lone trees and bushes lay a shade patch under them, stretched along the sun on
+    sunny maps.
 - Time of day is a **per-map baked preset**, not a dynamic cycle.
 - Weather = particles + a screen overlay + a wind parameter on foliage shaders + an audio bed.
 - Skip volumetric fog. A depth-based fog gradient reads nearly as well and costs almost nothing.
@@ -102,9 +113,14 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   silhouette from above is geometry. Textures sit at 1.5–3 cm per texel. Check every asset at both
   zooms: no blur close, no shimmer far.
 - **Props add no rule.** A structure stands only on `BUILDING` cells and fits a whole number of
-  tiles, so no unit ever stands inside a neighbour's wall. Small props (fences, bales, poles,
-  trailers, blocks) sit near cell edges on passable cells; a vehicle that enters the cell crushes
-  them and the debris stays as a scar, infantry passes them by.
+  tiles, so no unit ever stands inside a neighbour's wall. Ruins stand on `RUBBLE` and are mostly
+  half-destroyed: a standing wall or two reads as a ruin from above, a flat heap reads as noise.
+  Small props (fences, bales, poles, trailers, blocks) sit near cell edges on passable cells; a
+  vehicle that enters the cell crushes them and the debris stays as a scar, infantry passes them by.
+- **Props never hide a rule.** Fences and other low props draw under the movement-zone contours,
+  which always read on top (§3.13).
+- **Wet maps wet the props too:** on River walls darken and roofs take on a wet sheen, or the
+  buildings look dry in the rain.
 - **Placed as a real village would be.** The layout of each map is authored, not scattered cell
   by cell: power lines run along roads across the board and on through the ring to its outer
   edge, so no line visibly starts or ends; a pole stands on every bend, one transformer feeds each
@@ -119,11 +135,13 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   dry steel never shine. Ruins show floor debris inside, never grass. A few chimneys and ruins
   give off a faint smoke.
 - **Forests are dense woods** a tank could hide in — canopy masses, a shrub belt at the edge, not
-  a few trees with units visible between them. Two shapes per tree species, each tree turned and
-  scaled on its own. Forest shadows are baked onto the ground in the map's sun direction (only
-  units cast real shadows); the ring beyond the board carries canopy only, and the understory
-  under the canopy drops out above zoom 15 (play zoom is 12). A tank that enters a forest cell
-  breaks it: no standing trees or stumps, fallen trunks lying in the dug-up soil.
+  a few trees with units visible between them. The wood is a calm mass of even tone: bright or
+  busy foliage competes with the units and the zone contours. Two shapes per tree species, each
+  tree turned and scaled on its own. Forest shadows are baked onto the ground in the map's sun
+  direction (the canopy casts no real shadow); the ring beyond the board carries canopy only, and
+  the understory under the canopy drops out above zoom 15 (play zoom is 12). A tank that enters a forest cell
+  breaks it: no standing trees or stumps, fallen trunks lying in the dug-up soil, and the lane it
+  leaves stays visible — crowns keep clear of it.
 - **Loose vegetation where it really grows:** reed, cattail and willow in patches along some
   banks; fruit trees and shrubs in many yards, not all; a few lone bushes and trees on meadow,
   never on ploughed land. Every species comes in at least three shapes. A vehicle that enters the
@@ -134,15 +152,17 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   camera and a unit the current player can see fade smoothly to about 30–40 % opacity with alpha
   blending. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
 - **Scars respect the fog:** crushed props, wrecks and their scorch show only where the viewer's
-  `seen` covers the tile, or they report enemy movement.
+  `seen` covers the tile, or they report enemy movement. A prop is crushed only on a cell the
+  viewer has seen.
 - **Footpaths are wear, not a laid strip.** From each house door through the gate to the road, plus
   trodden patches at gates and sheds and one or two meandering tracks from a road to the water.
   `Footpaths` bakes one R8 mask per board (128 px per tile); `ground.gdshader` darkens and browns the
   ground with it, so there are no nodes, decals or draw calls. 0.4–0.8 m wide, wider at doors and
   gates, one smooth curve with a ragged, noisy edge, bare earth in patches with grass sprouting even
   in the middle, low contrast. The noise lives in path coordinates (along, across), never in a world
-  texture. A path fades out on the verge and never reaches the carriageway or the water. Public: the
-  fog never touches it, and it changes no rule.
+  texture. A path fades out on the verge and never reaches the carriageway or the water. No puddles
+  or standing water on a footpath or trodden patch, even in rain or on marsh. Public: the fog never
+  touches it, and it changes no rule.
 - Briefs, sizes and routes per prop (Blender, Tripo or CC0): [`art/props-research.md`](art/props-research.md).
 
 ## Effects — fire, explosions, smoke
@@ -156,32 +176,36 @@ restrained, and no obstacle. Effects attach only to units the current player can
 Sizes, durations, colours and sources: [`art/damage-fx-research.md`](art/damage-fx-research.md).
 
 
-Never one technique. A single explosion is four or five layers, each one the cheapest thing that
-does its job:
+Each effect is the cheapest technique that reads at both zooms, in `game/battle/`:
 
-| layer | technique | what it buys |
+| effect | technique | why |
 | --- | --- | --- |
-| the mass of smoke and flame | `GPUParticles3D`, billboarded quads | motion, spread, lifetime |
-| the look of one particle | **flipbook** sprite atlas (8×8) in the particle shader | rolling, turning smoke — without it these are blobs |
-| depth | soft particles (depth fade), dissolve by a noise mask | the quad stops cutting the ground on a hard line, and dies by burning away rather than by alpha |
-| the flash | an `OmniLight3D` for 3–5 frames plus emissive on the particle | the only part that actually hits the eye |
-| heat haze | screen-texture refraction on one quad | cheap, and it is what reads as expensive |
-| the scar | a stamp into the ground's scar map (scorch under a wreck) plus debris meshes | statics, not particles — see §8 |
+| explosion, ground dirt, impact and muzzle flash | one camera-facing quad per layer playing a **baked flipbook atlas** (`assets/vfx/`, offline renders of CC0 sims), soft depth fade where it meets the ground or a hull, dissolving by a noise threshold rather than by alpha | rolling smoke and fire need a real fluid sim; one quad with a 64-frame atlas costs one draw |
+| where the blob is born | each atlas's **blast point** (`SOURCES.md`) is pinned to the hit point — the ground for bursts, the hull for a kill, the gun tip for a muzzle flash | without it the fireball floats above the hull or sinks under the ground |
+| the flash | an `OmniLight3D` for 3–5 frames plus a hot core quad | the light is what hits the eye |
+| debris (ground bursts, kills) | one `GPUParticles3D` of irregular dark chunks, ballistic under real gravity, landing on a collision box and settling; shared meshes and materials | a brown cloud alone reads as smoke, not as earth thrown up |
+| fire on a wreck | the Unity Labs **`Flame02` flipbook** (16×4, 64 frames, `assets/vfx/flame02.png`) on two billboards rooted on the turret roof either side of the ring, each with its own phase and rate; one warm noise-flickering light per fire (at most 4 on the board); a few sparks | a baked loop costs one quad per root; with its own phase and rate per instance, no two flicker in step and nothing moves periodically |
+| smoke column | one `MultiMesh` of flipbook puffs for every column on the board, born at the flame tip | a column stands for several turns; a particle system per wreck would simulate forever |
+| the scar | a stamp into the ground's **scar map** (scorch under wrecks only) | statics, not particles — see below |
 
 The thing that is not obvious: **good fire is not simulated at runtime, it is simulated offline and
 baked into a flipbook.** EmberGen or Blender's Mantaflow run the real fluid sim, render 64 frames
-into an atlas, and the game plays one quad with a shader. This is what AAA does too. Procedural
-noise in a shader looks like a gas hob, not like an ammunition rack going up.
+into an atlas, and the game plays one quad with a shader. Procedural noise in a shader looks like a
+gas hob, not like an ammunition rack going up. `Flame02` is CC0 1.0 per the publisher's blog page;
+see the [licence notes](art/vfx-flipbook-sources.md#licence-notes). A procedural flame with a
+stable base and detaching tongues stays in `WreckLayer` behind the `USE_FLAME02` flag.
 
-The wreck fire is exactly that: the Unity Labs `Flame02` flipbook (16×4, 64 frames, `assets/vfx/flame02.png`), CC0 1.0 per the publisher's blog page; see the [licence notes](art/vfx-flipbook-sources.md#licence-notes). A procedural flame with a stable base and detaching tongues stays in `WreckLayer` behind the `USE_FLAME02` flag.
+The fire burns at full size, shrinks to about half, then leaves only smoke over the wreck's life.
+Fire and smoke step on one timer at 30 per second, not on `TIME`, and the timer stops when nothing
+burns, so the idle frame cap can engage.
 
 What our own constraints add on top:
 
 - **Overdraw is the killer, not particle count.** Twenty large half-transparent quads covering half
   the screen cost more than five hundred small ones. So: fewer particles, larger atlas, better
   flipbook.
-- **A smoke column standing for three turns must not be a particle system.** It is a mesh (cone or
-  ribbon) with a shader — scrolling noise on the UV plus a vertex wobble. Otherwise five wrecks are
+- **A smoke column standing for three turns must not be a particle system.** Every column on the
+  board is one `MultiMesh` of flipbook puffs stepped by the shared timer. Otherwise five wrecks are
   five systems simulating forever, and the frame rate never drops between turns — and dropping it
   is the battery budget above.
 - **An explosion is sharp, its smoke is slow.** The cloud reaches full volume in 0.1–0.2 s; then
@@ -194,9 +218,8 @@ What our own constraints add on top:
   155 mm cloud centre rises 1.5–3 m in 3 s. The player waits only for
   the flash (0.3 s), not the smoke.
 - **Smoke never buries a neighbour.** Over the screen footprint of a visible unit other than the
-  target, the main smoke layer is capped at 0.35 and a second layer over it at 0.15 from 0.3 s, so
-  the unit keeps a 0.35–0.45 smoke tint rather than showing through a hole; the cap's edge is
-  feathered over a quarter of a tile.
+  target, all the moment's smoke layers together are capped at 0.45 from 0.3 s, so the unit keeps
+  a smoke tint rather than showing through a hole; the cap's edge is feathered over a tile.
 - **Hot cores, not white stickers.** A flash core is white-yellow in the middle with an orange edge,
   alpha-blended, for two frames; sparks cool along the blackbody ramp (white → yellow → orange →
   dull red) and arc under gravity; a gun firing leaves grey-beige powder smoke along the barrel and a
@@ -232,13 +255,10 @@ What our own constraints add on top:
 - Every moment is `one_shot` and frees itself with `queue_free` once its smoke is gone (≤ 6.5 s).
   Setting `emitting = false` is not enough; the particles stay in frame. A handover clears all of
   them: smoke over ground the next player never scouted would show where the target stood.
-- Scorch under wrecks and crushed-prop debris are stamped into a **scar map**, one texture over the board that the ground shader reads. Not `Decal` nodes: the Mobile renderer applies at most 8 decals per mesh and the Compatibility renderer none, and the ground is one mesh. Not quads over the ground: they z-fight on slopes and cost a draw call each.
+- Scorch under wrecks is stamped into a **scar map**, one texture over the board that the ground shader reads, masked by the viewer's `seen`. Not `Decal` nodes: the Mobile renderer applies at most 8 decals per mesh and the Compatibility renderer none, and the ground is one mesh. Not quads over the ground: they z-fight on slopes and cost a draw call each.
 
 Off the table on mobile Vulkan: volumetric smoke, raymarching, GPU particle collision against the
 SDF, and more than one effect sampling `screen_texture` at a time.
-
-Build order when this comes up: the **smoke column first** — it is persistent, and persistence is
-what makes it atmosphere ([§8](../CLAUDE.md), battle scars) — and the explosion after it.
 
 3D asset generation, poly budgets and the GLB pipeline are covered by the **`asset-manager`
 skill** — read it before generating anything, and do not duplicate its guidance here.

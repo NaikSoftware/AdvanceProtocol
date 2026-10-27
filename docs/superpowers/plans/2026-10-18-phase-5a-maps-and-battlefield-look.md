@@ -507,6 +507,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] Reads as wear, not a rug or a pencil line
 - [x] One or two winding paths to water per map, never across ploughed land or gardens
 - [x] Paths to water go somewhere real (from a yard or road to a landing on the bank), not random stripes
+- [x] No puddles or standing water on a path or trodden patch, even in rain or on marsh
 
 ### Task 21: Bank, yard and meadow vegetation
 
@@ -526,6 +527,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 23: Effects and light
 
 - [x] Explosions without craters; scorch under wrecks only on `seen`
+- [x] Explosion cloud top breaks up in ragged wisps, no dark ball sitting on the smoke
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
 - [x] Chimney smoke reads as volume, not flat strokes
 - [x] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
