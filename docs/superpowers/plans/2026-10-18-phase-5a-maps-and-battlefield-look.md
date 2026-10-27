@@ -503,8 +503,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 20: Footpaths
 
 - [x] No path on the road; no segments or seams
-- [ ] A visible worn corridor porch → gate → verge at every yard, zoom 6–8
-- [ ] Reads as wear, not a rug or a pencil line
+- [x] A visible worn corridor porch → gate → verge at every yard, zoom 6–8
+- [x] Reads as wear, not a rug or a pencil line
 - [x] One or two winding paths to water per map, never across ploughed land or gardens
 - [x] Paths to water go somewhere real (from a yard or road to a landing on the bank), not random stripes
 - [x] No puddles or standing water on a path or trodden patch, even in rain or on marsh

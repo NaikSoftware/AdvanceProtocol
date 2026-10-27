@@ -140,6 +140,9 @@ func apply(look: BattleLook) -> void:
 	_set_global(&"sun_dir", sun.basis.z)
 	_set_global(&"haze_color", _rgb(look.haze_color))
 	_set_global(&"foliage_tint", _rgb(look.foliage_tint))
+	_set_global(&"path_earth_dry", look.path_earth_dry)
+	_set_global(&"path_trod_dry", look.path_trod_dry)
+	_set_global(&"path_dry_k", look.path_dry_k)
 
 
 ## Зонд відбиття дошки з'являється, коли дошку збудовано. У його коробці Mobile бере розсіяне

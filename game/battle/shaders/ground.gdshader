@@ -11,6 +11,10 @@ global uniform float cloud_shadow_strength;
 global uniform float sky_reflection_gain;
 // Тон трави й листя за порою року (`BattleLook.foliage_tint`); дорогу не зачіпає.
 global uniform vec3 foliage_tint;
+// Суха протоптана стежка карти (`BattleLook.path_earth_dry`, `path_trod_dry`, `path_dry_k`).
+global uniform vec3 path_earth_dry;
+global uniform vec3 path_trod_dry;
+global uniform vec3 path_dry_k;
 // Каламутність стоячої води під ясним небом (як у water.gdshader): вікна болота не блакитні.
 global uniform float water_murk;
 
@@ -1318,20 +1322,28 @@ void fragment() {
 			alb = mix(alb, sand, bar_w * 0.85);
 		}
 
-		// Протоптана стежка (Footpaths), два тони: середина — гола місцева земля (суха сіро-бура, мокра світліша
-		// за мокрий ґрунт глина) з острівцями трави, з боків прим'ята рідша трава (слабший знос). Обидва зберігають дрібну
-		// текстуру ґрунту. Пляма біля воріт і сараю — колір грядок. Дорога й вода стежку не беруть; публічна.
+		// Протоптана стежка (Footpaths): середина — гола земля з острівцями трави, з боків прим'ята рідша
+		// трава, біля воріт і сараю — витоптана пляма. Дорога й вода стежку не беруть; публічна.
+		// Кожен тон — яскравість трави в цьому пікселі × відтінок з яскравістю 1 × k, а не сталий колір:
+		// стала «гола земля» не темнішала разом із мокрою травою й у дощ лягала світлою рожево-піщаною
+		// плямою з рівною заливкою. Відтінок насичений і не береться з трави: з відтінком, близьким до
+		// сірого, стежка під імлою дощу чи на блідій траві читалась сірою плямою чи попелом. Так стежка
+		// зберігає текстуру ґрунту, у дощ темніша за траву, а на сухій карті трохи світліша.
+		// Та сама формула — Footpaths.tone (тест).
 		if (has_paths) {
 			// Стан ґрунту MUD мокрий і без дощу, як колії.
 			float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);
-			float lum = dot(alb, vec3(0.299, 0.587, 0.114));
+			vec3 lw_p = vec3(0.299, 0.587, 0.114);
+			float lum = dot(alb, lw_p);
+			vec3 earth = mix(path_earth_dry, vec3(2.0, 1.0, 0.35), wet_p);
+			earth /= dot(earth, lw_p);
+			vec3 trod = mix(path_trod_dry, vec3(1.35, 1.0, 0.4), wet_p);
+			trod /= dot(trod, lw_p);
 			float core_t = smoothstep(0.5, 0.78, pm.r);
 			float band_t = smoothstep(0.08, 0.3, pm.r);
-			alb = mix(alb, lum * mix(vec3(1.22, 1.16, 0.95), vec3(1.3, 1.1, 0.8), wet_p), band_t * 0.8);
-			vec3 bare = mix(vec3(0.29, 0.235, 0.16), vec3(0.15, 0.098, 0.058), wet_p) * (0.65 + 0.35 * clamp(lum / 0.1, 0.0, 2.0));
-			alb = mix(alb, bare, core_t);
-			alb = mix(alb, vec3(0.045, 0.026, 0.014) * mix(1.0, 0.6, wet_p) * (0.7 + 0.3 * clamp(lum / 0.1, 0.0, 2.0)), pm.g * 0.65);
-			rough = mix(rough, rough * 0.9, wet_p * clamp(pm.r * 1.8 + pm.g * 0.4, 0.0, 1.0));
+			alb = mix(alb, trod * lum * mix(path_dry_k.y, 0.72, wet_p), band_t * 0.8);
+			alb = mix(alb, earth * lum * mix(path_dry_k.x, 0.6, wet_p), core_t);
+			alb = mix(alb, earth * lum * mix(path_dry_k.z, 0.5, wet_p), smoothstep(0.05, 0.4, pm.g));
 		}
 
 		float scar_dark = 0.0;

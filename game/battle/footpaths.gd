@@ -247,7 +247,7 @@ static func _wear(s: float, d: float, r: float, total: float, fade_in: float, fa
 ## Пляма: рваний овал, в канал G; усередині шматки голішої землі.
 static func _stamp_patch(buf: PackedByteArray, w: int, h: int, patch: Vector3, index: int, dry: Callable) -> void:
 	var c := Vector2(patch.x, patch.y)
-	var reach: float = patch.z * 1.3
+	var reach: float = patch.z * 1.45
 	var x0: int = maxi(0, floori((c.x - reach + 0.5) * PX_PER_TILE))
 	var x1: int = mini(w - 1, ceili((c.x + reach + 0.5) * PX_PER_TILE))
 	var y0: int = maxi(0, floori((c.y - reach + 0.5) * PX_PER_TILE))
@@ -257,12 +257,55 @@ static func _stamp_patch(buf: PackedByteArray, w: int, h: int, patch: Vector3, i
 			var q: Vector2 = _px_pos(px, py)
 			var u: Vector2 = (q - c) / patch.z
 			var rr: float = u.length()
-			if rr > 1.3:
+			if rr > 1.45:
 				continue
-			var edge: float = 0.6 * _noise(u.x * 2.4 + 9.0, u.y * 2.4 + 9.0, 401 + index) + 0.4 * _noise(u.x * 5.0, u.y * 5.0, 433 + index)
+			# Третя, дрібна октава й більший розмах краю: рівний край плями біля паркану читався лінією
+			# вздовж його основи.
+			var edge: float = 0.5 * _noise(u.x * 2.4 + 9.0, u.y * 2.4 + 9.0, 401 + index) + 0.3 * _noise(u.x * 5.0, u.y * 5.0, 433 + index) \
+					+ 0.2 * _noise(u.x * 7.0 + 2.0, u.y * 7.0, 449 + index)
 			var bare: float = smoothstep(0.25, 0.65, _noise(u.x * 3.0 + 4.0, u.y * 3.0, 467 + index))
-			var v: float = (0.5 + 0.5 * bare) * (1.0 - smoothstep(0.1, 1.0, rr + 0.6 * (edge - 0.5)))
+			var v: float = (0.5 + 0.5 * bare) * (1.0 - smoothstep(0.1, 1.0, rr + 0.9 * (edge - 0.5)))
 			_put(buf, (py * w + px) * 2 + 1, v, q, dry)
+
+
+## Відтінки землі й прим'ятої трави: R:G:B, яскравість тут не 1 — тон ділить відтінок на його
+## яскравість у момент змішування, тож відтінок і яскравість — окремі ручки. Відтінок не береться з
+## трави: на блідій траві (Хребет) чи під сірою імлою дощу стежка однаково бура, а не сіра пляма.
+## Суха — курна жовто-бура; це типові значення, карта ставить свої (BattleLook.path_*_dry): на блідій
+## вохристій траві Хребта стежка потребує теплішого відтінку й більшого k, і синього менше, ніж у трави,
+## інакше вона рожево-ліловіє. Мокра — тепліша й темніша бура, синього мало, однакова для всіх карт.
+const EARTH_DRY := Vector3(1.5, 1.0, 0.4)
+const EARTH_WET := Vector3(2.0, 1.0, 0.35)
+const TRAMPLED_DRY := Vector3(1.3, 1.0, 0.45)
+const TRAMPLED_WET := Vector3(1.35, 1.0, 0.4)
+## k сухої стежки: (середина, прим'ята смуга, пляма біля дверей і воріт).
+const DRY_K := Vector3(1.4, 1.2, 1.45)
+const LUMA := Vector3(0.299, 0.587, 0.114)
+
+
+## Колір землі під стежкою — та сама формула, що в ground.gdshader (блок Footpaths). Тон —
+## яскравість трави в цьому пікселі × відтінок × k, а не сталий колір: у дощ трава темнішає разом зі
+## стежкою, текстура ґрунту лишається, і стежка відрізняється від трави лише трохи. k середини:
+## суха 1.4, мокра 0.6; прим'ятої смуги — 1.2 / 0.72; плями біля дверей і воріт — 1.45 / 0.5, у повну
+## силу вже з G 0.4, щоб вхід у двір читався й на краю плями. Імла й небо на екрані стискають різницю
+## альбедо приблизно до k^0.35: k 1.4 дає ~1.12 яскравості трави, 0.6 — ~0.83 (насичений відтінок
+## на екрані трохи світліший, тож мокрі k нижчі, ніж без нього). wet_p — 0 сухо, 1 дощ (MUD — 0.7).
+## Сухі відтінки й k — карти (BattleLook.path_earth_dry, path_trod_dry, path_dry_k); типові — EARTH_DRY,
+## TRAMPLED_DRY, DRY_K.
+static func tone(alb: Color, pm: Vector2, wet_p: float, earth_dry: Vector3 = EARTH_DRY,
+		trod_dry: Vector3 = TRAMPLED_DRY, dry_k: Vector3 = DRY_K) -> Color:
+	var a := Vector3(alb.r, alb.g, alb.b)
+	var lum: float = a.dot(LUMA)
+	var earth: Vector3 = earth_dry.lerp(EARTH_WET, wet_p)
+	earth /= earth.dot(LUMA)
+	var trampled: Vector3 = trod_dry.lerp(TRAMPLED_WET, wet_p)
+	trampled /= trampled.dot(LUMA)
+	var core_t: float = smoothstep(0.5, 0.78, pm.x)
+	var band_t: float = smoothstep(0.08, 0.3, pm.x)
+	a = a.lerp(trampled * lum * lerpf(dry_k.y, 0.72, wet_p), band_t * 0.8)
+	a = a.lerp(earth * lum * lerpf(dry_k.x, 0.6, wet_p), core_t)
+	a = a.lerp(earth * lum * lerpf(dry_k.z, 0.5, wet_p), smoothstep(0.05, 0.4, pm.y))
+	return Color(a.x, a.y, a.z, alb.a)
 
 
 static func apply(mat: ShaderMaterial, img: Image, board_size: Vector2i) -> void:

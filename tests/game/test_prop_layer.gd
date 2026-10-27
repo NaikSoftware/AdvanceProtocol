@@ -1062,7 +1062,8 @@ func test_poles_and_houses_have_real_heights(p = use_parameters(MAPS)) -> void:
 			assert_between(metres, r.x, r.y, "%s: %s %.1f м" % [p, inst["model"], metres])
 
 
-## Хати макету дивляться фасадом (−Z моделі) туди, куди каже садиба.
+## Хати макету дивляться фасадом — стіною з дверима — туди, куди каже садиба: −Z моделі, а в house_h5,
+## де двері на тильній стіні, +Z.
 func test_layout_houses_face_their_road(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	for home: Dictionary in VillageLayout.for_map(StringName(p))["homes"]:
@@ -1073,6 +1074,8 @@ func test_layout_houses_face_their_road(p = use_parameters(MAPS)) -> void:
 		if house.is_empty():
 			continue
 		var front: Vector3 = -(house[0]["transform"] as Transform3D).basis.z.normalized()
+		if house[0]["model"] == &"house_h5":
+			front = -front
 		var face: Vector2i = home["face"]
 		assert_almost_eq(Vector2(front.x, front.z).dot(Vector2(face)), 1.0, 0.01, "хата на %s фасадом не до дороги" % hc)
 
