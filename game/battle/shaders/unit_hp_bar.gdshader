@@ -5,8 +5,8 @@ shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, depth_test_disabled, cull_disabled, shadows_disabled;
 
 uniform sampler2DArray bars : source_color, filter_linear, repeat_disable;
-// Розмір смуги у світі: ширина × висота квада.
-uniform vec2 bar_size = vec2(0.96, 0.12);
+// Розмір смуги у світі: ширина × висота квада (ставить UnitHpBars з розміру текстури).
+uniform vec2 bar_size;
 
 varying flat float layer;
 

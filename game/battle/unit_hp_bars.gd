@@ -32,6 +32,7 @@ func _init() -> void:
 		_material = ShaderMaterial.new()
 		_material.shader = _SHADER
 		_material.set_shader_parameter("bars", _layer_array())
+		_material.set_shader_parameter("bar_size", Vector2(UnitView._HP_BAR_SIZE) * UnitView.HP_BAR_PIXEL_SIZE)
 		_material.render_priority = UnitView.OVERLAY_PRIORITY
 	material_override = _material
 	set_process(false)

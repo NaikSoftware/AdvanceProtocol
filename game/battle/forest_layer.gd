@@ -10,7 +10,7 @@ extends Node3D
 ##   далі від дошки — удвічі рідше й ширшими кронами, та сама зімкнутість. Біля дошки
 ##   (`RING_NEAR`) — ще смуги узлісся й пояс кущів, а листяні в смузі `RING_DETAIL` — справжніми
 ##   сітками: проксі пожовклої крони з камери читалась пласкою латкою. Туди юніти не заходять.
-##   Кільце й дошка — один меш на атлас: ~10 тис. трикутників дешевші за зайві виклики.
+##   Дошка — один меш на атлас: ~10 тис. трикутників дешевші за зайві виклики.
 ## - Крони кільця тонуть в імлі (`Surroundings.apply`), як земля й будинки.
 ## - Понад `DETAIL_ZOOM` підлісок під наметом не малюється: з такої висоти його не видно.
 ## - Підріст і низькі дерева (нижче `UNDER_TOP`) — однією сіткою проксі на породу: з такої
@@ -99,11 +99,10 @@ var _broken: Dictionary = {}
 var _ring: int = 0
 var _ring_crowns: Array[Dictionary] = []  ## крони кільця для запеченої тіні
 ## Групи листя, що розчиняються: {"mmi" (вузол батча), "batch", "first" (номер першого
-## екземпляра групи в батчі), "list", "mesh", "ring"} — кільця й дошки.
+## екземпляра групи в батчі), "list", "mesh"} — кільця й дошки.
 var _ring_fadable: Array[Dictionary] = []
 var _fadable: Array[Dictionary] = []
-## Записи кільця для батча {mesh, list}: будуються раз, а меш збирається разом із дошкою.
-var _ring_entries: Array[Dictionary] = []
+var _ring_nodes: Array[Node] = []
 var _board_nodes: Array[Node] = []
 var _soft_nodes: Array[Node] = []
 var _shadow: MeshInstance3D
@@ -277,10 +276,11 @@ func _free(nodes: Array[Node]) -> void:
 
 
 ## Кільце: намет проксі-кронами однієї форми на породу; біля дошки — узлісся, пояс кущів і
-## листяні справжніми сітками. Записи йдуть у батч разом із дошкою (`_rebuild_board`).
+## листяні справжніми сітками. Власний батч, будується раз.
 func _build_ring() -> void:
-	_ring_entries.clear()
+	_free(_ring_nodes)
 	_ring_crowns.clear()
+	_ring_fadable.clear()
 	var groups: Dictionary = {}  ## вузол -> Array[Dictionary]
 	for e: Dictionary in ForestScatter.plan(_cells, _wood_at, {}, _season, _seed, _lib):
 		var p: Vector2 = e["pos"]
@@ -318,8 +318,11 @@ func _build_ring() -> void:
 		(groups[key] as Array).append(it)
 		if crown:
 			_ring_crowns.append(it)
+	var entries: Array[Dictionary] = []
 	for key: String in groups:
-		_ring_entries.append({"mesh": _mesh[key], "list": groups[key], "ring": true})
+		entries.append({"mesh": _mesh[key], "list": groups[key]})
+	# Кільце статичне: власна сітка, щоб кожен пролам не зливав його наново разом із дошкою.
+	_ring_fadable.append_array(_batch("Ring", entries, _ring_nodes))
 
 
 ## `region` (клітинки) — перепланувати лише її, решту плану взяти з попереднього; порожня —
@@ -328,7 +331,6 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 	_free(_board_nodes)
 	_free(_soft_nodes)
 	_fadable.clear()
-	_ring_fadable.clear()
 	_under.clear()
 	var plan: Array[Dictionary] = []
 	if region.has_area() and not board_plan.is_empty():
@@ -377,14 +379,12 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 		(groups[key] as Array).append(it)
 		if cls == "canopy":
 			crowns.append(it)
-	# Кільце й дошка — один меш на атлас: кільце статичне, але окремий його меш був би ще викликом.
-	var main_entries: Array[Dictionary] = _ring_entries.duplicate()
+	var main_entries: Array[Dictionary] = []
 	var under_entries: Array[Dictionary] = []
 	for key: String in groups:
 		var entry: Dictionary = {"mesh": _mesh[key.get_slice("/", 1)], "list": groups[key]}
 		(under_entries if key.get_slice("/", 0) == "under" else main_entries).append(entry)
-	for g: Dictionary in _batch("Forest", main_entries, _board_nodes):
-		(_ring_fadable if g["ring"] else _fadable).append(g)
+	_fadable.append_array(_batch("Forest", main_entries, _board_nodes))
 	for g: Dictionary in _batch("Forest_under", under_entries, _board_nodes):
 		(g["mmi"] as Node3D).visible = _zoom <= DETAIL_ZOOM
 		if not _under.has(g["mmi"]):
@@ -446,7 +446,7 @@ func _batch(label: String, entries: Array[Dictionary], nodes: Array[Node]) -> Ar
 		add_child(n)
 		nodes.append(n)
 		for e: Dictionary in by_atlas[atlas]:
-			out.append({"mmi": n, "batch": batch, "first": e["first"], "list": e["list"], "mesh": e["mesh"], "ring": e.get("ring", false)})
+			out.append({"mmi": n, "batch": batch, "first": e["first"], "list": e["list"], "mesh": e["mesh"]})
 	return out
 
 

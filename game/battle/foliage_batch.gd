@@ -61,13 +61,15 @@ static func glsl_decl() -> String:
 	return "uniform sampler2D inst_data : filter_nearest, repeat_disable;"
 
 
-## Початок vertex(): `iid` і доступ до таблиці. Далі шейдер бере `batch_tone()`, `batch_alive()`,
-## `batch_scale()` і `batch_origin()` (замість INSTANCE_CUSTOM, масштабу й початку матриці екземпляра).
-static func glsl_fetch() -> String:
-	return ("int iid = int(CUSTOM0.x + 0.5) * {n};\n"
+## Початок vertex(): `iid` і доступ до таблиці — `batch_a` (тон, видимість) і `batch_scale`; з
+## `with_origin` ще й `batch_origin` (точка постановки: потрібна лише плямі затінення).
+static func glsl_fetch(with_origin: bool = false) -> String:
+	var code: String = ("int iid = int(CUSTOM0.x + 0.5) * {n};\n"
 			+ "\tvec4 batch_a = texelFetch(inst_data, ivec2(iid % {w}, iid / {w}), 0);\n"
-			+ "\tfloat batch_scale = texelFetch(inst_data, ivec2((iid + 1) % {w}, (iid + 1) / {w}), 0).x;\n"
-			+ "\tvec3 batch_origin = texelFetch(inst_data, ivec2((iid + 2) % {w}, (iid + 2) / {w}), 0).xyz;").format({"n": TEXELS, "w": W})
+			+ "\tfloat batch_scale = texelFetch(inst_data, ivec2((iid + 1) % {w}, (iid + 1) / {w}), 0).x;")
+	if with_origin:
+		code += "\n\tvec3 batch_origin = texelFetch(inst_data, ivec2((iid + 2) % {w}, (iid + 2) / {w}), 0).xyz;"
+	return code.format({"n": TEXELS, "w": W})
 
 
 ## Зливає поверхню зі списків екземплярів: `entries` — [{"arrays": масиви поверхні, "list": [{"xf",

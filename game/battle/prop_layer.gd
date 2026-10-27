@@ -308,13 +308,11 @@ var _drops: Array = []
 var _unfed: Array[Vector2] = []
 ## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
 var _transformers: Dictionary = {}
-## Однакові коробки — стовпи воріт, уламки руїн, шафи підстанцій — одним MultiMesh (§8: виклик
-## малювання на кожну з трьох груп коштував би втричі більше). `_small_base` — перетворення без
-## зменшення за зумом; шафи підстанцій стоять у ньому з `_small_transformers`.
-var _small: MultiMeshInstance3D = null
+## Однакові коробки — стовпи воріт і уламки руїн — одним MultiMesh (§8: виклик малювання на
+## кожну групу коштував би вдвічі більше). Збираються під час побудови й далі не міняються.
 var _small_base: Array[Transform3D] = []
 var _small_colors: Array[Color] = []
-var _small_transformers: int = 0
+var _transformer_node: MultiMeshInstance3D = null
 ## Стовпи воріт садиб (центри на дошці): ворота читаються розривом зі стовпами по боках.
 var _gate_posts: Array[Vector2] = []
 ## Опори з дротами: [індекс екземпляра опори A, індекс B] — проліт.
@@ -597,7 +595,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_spans.clear()
 	_drops.clear()
 	_transformers.clear()
-	_small = null
+	_transformer_node = null
 	_small_base.clear()
 	_small_colors.clear()
 	_gate_posts.clear()
@@ -979,12 +977,8 @@ func _add_small(xf: Transform3D, color: Color) -> void:
 	_small_colors.append(color)
 
 
-## Один вузол на всі дрібні коробки, коли їх уже зібрано; шафи підстанцій — останні, їх ставить
-## `_rebuild_transformers`.
+## Один вузол на всі дрібні коробки, коли їх уже зібрано.
 func _build_small_boxes() -> void:
-	_small_transformers = _small_base.size()
-	for i in _transformers.size():
-		_add_small(Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO), TRANSFORMER_COLOR)
 	if _small_base.is_empty():
 		return
 	var box := BoxMesh.new()
@@ -999,21 +993,13 @@ func _build_small_boxes() -> void:
 	mm.mesh = box
 	mm.instance_count = _small_base.size()
 	for i in _small_base.size():
-		mm.set_instance_color(i, _small_colors[i])
-	_small = MultiMeshInstance3D.new()
-	_small.name = "SmallBoxes"
-	_small.multimesh = mm
-	_small.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_small)
-	_write_small()
-
-
-func _write_small() -> void:
-	if _small == null:
-		return
-	var mm: MultiMesh = _small.multimesh
-	for i in _small_base.size():
 		mm.set_instance_transform(i, _small_base[i])
+		mm.set_instance_color(i, _small_colors[i])
+	var node := MultiMeshInstance3D.new()
+	node.name = "SmallBoxes"
+	node.multimesh = mm
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
 
 
 ## Жадібне покриття клітинок городу прямокутниками: рядок за рядком, вшир, потім углиб.
@@ -1657,17 +1643,35 @@ func transformers_shown() -> Array[Vector3]:
 ## Комплектна трансформаторна підстанція (КТП) — сталева шафа ~1.6 × 2.4 × 1.1 м на землі біля опори
 ## 10 кВ. Повалена опора — без шафи.
 func _rebuild_transformers() -> void:
-	if _transformers.is_empty() or _small == null:
+	if _transformers.is_empty():
 		return
-	var k: int = _small_transformers
+	if _transformer_node == null:
+		# Власний матеріал: сталева шафа (шорсткість 0.75, метал 0.3) — інший за дерев'яні стовпи й уламки.
+		var box := BoxMesh.new()
+		box.size = TRANSFORMER_SIZE
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = TRANSFORMER_COLOR
+		mat.roughness = 0.75
+		mat.metallic = 0.3
+		box.material = mat
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = box
+		mm.instance_count = _transformers.size()
+		_transformer_node = MultiMeshInstance3D.new()
+		_transformer_node.name = "Transformers"
+		_transformer_node.multimesh = mm
+		_transformer_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_transformer_node)
+	var mm: MultiMesh = _transformer_node.multimesh
+	var k: int = 0
 	for i: int in _transformers:
 		var pole: Dictionary = _instances[i]
 		var at: Vector3 = _cabinet_at(pole)
 		var basis: Basis = (pole["transform"] as Transform3D).basis.orthonormalized()
-		_small_base[k] = Transform3D(Basis.from_scale(Vector3.ZERO), at) if _is_crushed(pole) \
-				else Transform3D(basis.scaled_local(TRANSFORMER_SIZE), at)
+		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ZERO), at) if _is_crushed(pole)
+				else Transform3D(basis, at))
 		k += 1
-	_write_small()
 
 
 ## Розстановка однієї побудови: окремий об'єкт, щоб стан обходу (зайняте, лічильники) не жив

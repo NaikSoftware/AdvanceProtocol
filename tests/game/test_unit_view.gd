@@ -70,6 +70,15 @@ func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 		assert_eq(contacts.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 
 
+## Пляма реєструється вже після повороту: перша синхронізація бачить facing юніта.
+func test_contact_shadow_starts_in_the_units_facing() -> void:
+	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
+	view.bind(_unit(5, 0, Vector2i(2, 2), 2))
+	assert_eq(contacts.transform_of(0), view.contact_transform())
+	assert_almost_eq(contacts.transform_of(0).basis.x.normalized().dot(view.global_transform.basis.x.normalized()), 1.0, 0.0001, "пляма повернута разом з юнітом")
+
+
 ## Без тіні-контакту у вигляді карти пляму не будують зовсім: прозорий квад під кожним юнітом —
 ## зайвий виклик малювання.
 func test_no_contact_shadow_when_the_look_has_none() -> void:
@@ -396,6 +405,11 @@ func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
 	assert_true(opaque < total / 2, "і не мусить бути залитим квадратом")
 
 
+## Кольори вершин сітки тіла: колір власника живе в них, а не в спільному матеріалі.
+func _hull_colors() -> PackedColorArray:
+	return (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+
+
 ## Корпус фарбує ВЛАСНИК і більше ніщо. Раніше bind() ще й приглушував
 ## корпус юніта, який уже стріляв, — власник цього не замовляв і прибрав
 ## («прибери приглушення взагалі»). Тест тримає саме це: жоден стан юніта,
@@ -403,14 +417,14 @@ func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
 func test_hull_colour_comes_from_owner_and_nothing_else() -> void:
 	var fresh := _unit(5)
 	view.bind(fresh)
-	var base_color: Color = view._hull_material.albedo_color
+	var base_colors: PackedColorArray = _hull_colors()
 
 	var fired := _unit(5)
 	fired.exhaust()
 	fired.hp = fired.max_hp() / 2
 	view.bind(fired)
-	assert_eq(view._hull_material.albedo_color, base_color,
-		"постріл і поранення не мусять міняти колір корпусу")
+	assert_false(base_colors.is_empty(), "передумова: у сітці є кольори")
+	assert_eq(_hull_colors(), base_colors, "постріл і поранення не мусять міняти колір корпусу")
 
 
 ## Await на tween.finished крихкий у headless-тестах — прокручуємо твін
@@ -544,7 +558,7 @@ func _fallen_figures() -> int:
 func test_squad_shows_one_standing_figure_per_quarter_of_hp() -> void:
 	view.bind(_unit(0))
 	assert_eq(UnitView.SQUAD_FIGURES, 4)
-	assert_eq(view.get_node("Silhouette").get_child_count(), 1 + (1 if WeatherRig.unit_contact > 0.0 else 0), "тіло — одна сітка")
+	assert_eq(view.get_node("Silhouette").get_child_count(), 1, "тіло — одна сітка")
 	var cases: Dictionary = {100: 4, 76: 4, 75: 3, 74: 3, 50: 2, 26: 2, 25: 1, 1: 1, 0: 0}
 	for hp: int in cases:
 		view.set_hp(hp, 100)

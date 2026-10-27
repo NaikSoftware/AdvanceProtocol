@@ -868,7 +868,7 @@ static func _batch_shader(kind: StringName) -> Shader:
 	else:
 		code = _replace((load("res://assets/props/vegetation/veg_shade.gdshader") as Shader).code, [
 				["uniform float cast = 0.0;", "uniform float cast = 0.0;\n" + FoliageBatch.glsl_decl()],
-				["vec3 centre = MODEL_MATRIX[3].xyz;", FoliageBatch.glsl_fetch() + "\n\tvec3 centre = batch_origin;"]])
+				["vec3 centre = MODEL_MATRIX[3].xyz;", FoliageBatch.glsl_fetch(true) + "\n\tvec3 centre = batch_origin;"]])
 	var sh := Shader.new()
 	sh.code = code
 	_batch_shaders[kind] = sh

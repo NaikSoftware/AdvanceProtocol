@@ -227,8 +227,8 @@ func test_foliage_is_one_mesh_per_atlas_and_layer() -> void:
 		assert_gt(f.board_plan.size(), 20, "%s: ліс на дошці" % season)
 		for n: Node in drawn:
 			assert_false(n is MultiMeshInstance3D, "%s: %s — MultiMesh на форму" % [season, n.name])
-		# 2 атласи × (дошка з кільцем, підлісок).
-		assert_lte(drawn.size(), 4, "%s: %d вузлів листя" % [season, drawn.size()])
+		# 2 атласи × (кільце, дошка, підлісок).
+		assert_lte(drawn.size(), 6, "%s: %d вузлів листя" % [season, drawn.size()])
 		assert_gt(f._ring_fadable.size(), 0, "%s: кільце в злитій сітці" % season)
 
 
@@ -240,7 +240,6 @@ func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:
 	add_child_autofree(cam)
 	cam.look_at_from_position(Vector3(-4.0, 14.0, -4.0), Vector3(5.0, 0.0, 5.0))
 	cam.make_current()
-	var shown: int = 0
 	for g: Dictionary in f._fadable:
 		for i in (g["list"] as Array).size():
 			assert_true((g["batch"] as FoliageBatch).is_alive(int(g["first"]) + i), "до розчинення всі цілі")

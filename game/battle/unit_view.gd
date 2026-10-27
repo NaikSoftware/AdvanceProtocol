@@ -39,6 +39,8 @@ const _MAX_DRONES: int = 2
 ## ширину тайла, як у референсі (там смуга рівно `tile_width - 1` завширшки
 ## і 3 px заввишки).
 const _HP_BAR_SIZE: Vector2i = Vector2i(48, 6)
+## Розмір пікселя смуги у світі (тайли): той самий у спрайті-носії стану й у спільного MultiMesh.
+const HP_BAR_PIXEL_SIZE: float = 0.02
 
 ## Рамка й порожнє тло — всередині ТІЄЇ САМОЇ текстури, що й заливка.
 ## Три накладені білборд-спрайти на одній висоті дали б z-fighting і три
@@ -162,6 +164,7 @@ func _ready() -> void:
 	# підхід, що й нейтральні кольори-плейсхолдери мін (MineLayer). HP-смуга сюди не
 	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
 	# з кожного bind().
+	_hp_bar.pixel_size = HP_BAR_PIXEL_SIZE
 	_drone_icon.texture = _flat_texture(Color("d9b23a"))
 	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
 	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
@@ -201,6 +204,12 @@ func bind(unit: Unit) -> void:
 	set_targeted(false)
 	set_forbidden(false)
 	_put_on_unit_layer(self)
+	# Плями стежать за вже виставленим поворотом і позою, тож реєструються наприкінці bind().
+	if contacts != null:
+		if _contact_on:
+			contacts.track(self)
+		else:
+			contacts.untrack(self)
 	if hp_bars != null:
 		# Спрайт лишається вузлом стану (текстура, видимість), а малює смугу спільний MultiMesh.
 		_hp_bar.layers = 0
@@ -564,11 +573,6 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 	_hull_material = hull.material_override as StandardMaterial3D
 	_hull_size = hull_size
 	_contact_on = contacts != null and WeatherRig.unit_contact > 0.0
-	if contacts != null:
-		if _contact_on:
-			contacts.track(self)
-		else:
-			contacts.untrack(self)
 
 	# ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2) — єдиний виклик, єдине місце, де стрілку
 	# додають на дошку. Прибрати стрілку — це прибрати рівно ці два рядки

@@ -463,7 +463,7 @@ func set_forest_broken(known: Dictionary) -> void:
 
 
 ## Зум камери: підлісок лише до ForestLayer.DETAIL_ZOOM.
-func set_zoom(zoom: float) -> void:
+func set_forest_zoom(zoom: float) -> void:
 	if _forest != null:
 		_forest.set_zoom(zoom)
 
