@@ -311,8 +311,10 @@ var _garden_node: MultiMeshInstance3D
 var garden_green: float = 0.2
 ## Відводи до хат: [індекс опори, точка на стіні хати].
 var _drops: Array = []
-## Центри цілих хат без відводу: мережа їх не живить (powered_homes) чи опора не дістає (drop_ok); тест їх називає.
+## Центри цілих хат без відводу: мережа їх не живить (PowerGrid.fed) чи опора не дістає (drop_ok); тест їх називає.
 var _unfed: Array[Vector2] = []
+## Центри хат, до яких опора дістала б, а відводу навмисно нема (PowerGrid.skipped): тест їх називає.
+var _skipped: Array[Vector2] = []
 ## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
 var _transformers: Dictionary = {}
 ## Однакові коробки — стовпи воріт і уламки руїн — одним MultiMesh (§8: виклик малювання на
@@ -601,6 +603,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_node_model.clear()
 	_spans.clear()
 	_drops.clear()
+	_skipped = []
 	_transformers.clear()
 	_transformer_node = null
 	_small_base.clear()
@@ -1586,15 +1589,12 @@ static func drop_attach(rect: Rect2, from: Vector2) -> Vector2:
 
 
 ## Яку з хат живить мережа: кожну цілу, крім кожної UNPOWERED_ONE_IN-ї за хешем центру — відвід до кожної хати
-## обплітав село дротами. Чи дістане до хати опора, вирішує вже drop_ok. centres — центри хат, on_board — чи лежить
-## хата на дошці. Мережа (PowerGrid), розстановка відводів і тести беруть це визначення звідси.
+## обплітав село дротами. Чи дістане до хати опора, вирішує вже drop_ok, а село без жодної такої хати PowerGrid однаково
+## живить (PowerGrid.fed). centres — центри хат, on_board — чи лежить хата на дошці.
 static func powered_homes(centres: Array[Vector2], _on_board: Array[bool]) -> Array[bool]:
 	var out: Array[bool] = []
 	for c: Vector2 in centres:
-		# Хутір (без сусідньої хати в SETTLEMENT_R) світло має завжди: до нього й веде окрема лінія 10 кВ, а без
-		# хати вона обірвалась би нізвідки.
-		var alone: bool = centres.all(func(o: Vector2) -> bool: return o == c or o.distance_to(c) > SETTLEMENT_R)
-		out.append(alone or hash(Vector2i(roundi(c.x * 4.0), roundi(c.y * 4.0))) % UNPOWERED_ONE_IN != 0)
+		out.append(hash(Vector2i(roundi(c.x * 4.0), roundi(c.y * 4.0))) % UNPOWERED_ONE_IN != 0)
 	return out
 
 
@@ -3406,7 +3406,8 @@ class _Placer:
 			var i: int = _pole_near(p, PropLayer.POLE_SNAP)
 			if i >= 0 and _is_10kv(i):
 				layer._transformers[i] = true
-		_service_drops()
+		layer._skipped = grid.skipped
+		_service_drops(grid.fed)
 
 	func _is_10kv(i: int) -> bool:
 		return PropLayer.spec_of(layer._instances[i]["model"]).get("line", &"") == &"10kv"
@@ -3544,35 +3545,28 @@ class _Placer:
 		var cells: Array[Vector2i] = [c]
 		return layer._add(m, xform, cells)
 
-	## Відвід до цілої хати, яку живить мережа (PropLayer.powered_homes), від найближчої опори 0.4 кВ (чи 10 кВ із
+	## Відвід до цілої хати, яку мережа вирішила живити (PowerGrid.fed), від найближчої опори 0.4 кВ (чи 10 кВ із
 	## підстанцією), від якої він можливий (_drop_target). Хати без відводу — у layer._unfed.
-	func _service_drops() -> void:
+	func _service_drops(fed_homes: Array[Vector2]) -> void:
 		var poles: Array[int] = []
 		for i in layer._instances.size():
 			if int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.POLE \
 					and (not _is_10kv(i) or layer._transformers.has(i)):
 				poles.append(i)
-		var homes: Array[int] = []
-		var centres: Array[Vector2] = []
-		var on_boards: Array[bool] = []
+		layer._unfed.clear()
 		for house_i in layer._instances.size():
 			var inst: Dictionary = layer._instances[house_i]
-			if PropLayer.is_home(inst):
-				var box: AABB = _box_of(inst)
-				homes.append(house_i)
-				centres.append(Vector2(box.get_center().x, box.get_center().z))
-				on_boards.append(on_board((inst["cells"] as Array)[0]))
-		var powered: Array[bool] = PropLayer.powered_homes(centres, on_boards)
-		layer._unfed.clear()
-		for k in homes.size():
-			var centre: Vector2 = centres[k]
+			if not PropLayer.is_home(inst):
+				continue
+			var box: AABB = _box_of(inst)
+			var centre := Vector2(box.get_center().x, box.get_center().z)
 			var fed: bool = false
 			var order: Array[int] = []
-			if powered[k]:
+			if fed_homes.any(func(c: Vector2) -> bool: return c.distance_to(centre) < 0.05):
 				order = poles.duplicate()
 			order.sort_custom(func(x: int, y: int) -> bool: return _pole_xz(x).distance_to(centre) < _pole_xz(y).distance_to(centre))
 			for pi in order:
-				var at: Vector3 = _drop_target(homes[k], pi)
+				var at: Vector3 = _drop_target(house_i, pi)
 				if at.is_finite():
 					layer._drops.append([pi, at])
 					fed = true

@@ -12,7 +12,8 @@ extends RefCounted
 ##   відводу. Гілки дерева, що нікого не живлять, не будуються: дротів у селі менше.
 ## Розстановка поступається там, де стовпу не місце (pole_spot_ok): місце шукається поряд на межах клітинок, а
 ## не знайшлось — стовпа нема, і це видно в тесті.
-## Результат: lines — ламані з опор (kind, points), transformers — точки підстанцій.
+## Результат: lines — ламані з опор (kind, points), transformers — точки підстанцій, fed і skipped — хати з відводом
+## і без нього, хоч опора й дістала б.
 
 const STREET_R: float = 7.0
 const SIDE_PROBE: float = 0.8
@@ -40,13 +41,16 @@ var _ring: int = 0
 var _size := Vector2i.ZERO
 var lines: Array[Dictionary] = []
 var transformers: Array[Vector2] = []
+## Центри хат із відводом і хат, до яких опора дістала б, але відводу навмисно нема (powered_homes).
+var fed: Array[Vector2] = []
+var skipped: Array[Vector2] = []
 
 
 func plan(placer: PropLayer._Placer) -> void:
 	_p = placer
 	_ring = placer.ring
 	_size = placer.size
-	var homes: Array[Dictionary] = _powered_homes()
+	var homes: Array[Dictionary] = _homes()
 	var trunk: Array = _trunk()
 	for line: Array in trunk:
 		lines.append({"kind": &"10kv", "points": line})
@@ -58,7 +62,7 @@ func plan(placer: PropLayer._Placer) -> void:
 
 # --- хати й села ---------------------------------------------------------------------------
 
-func _powered_homes() -> Array[Dictionary]:
+func _homes() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var centres: Array[Vector2] = []
 	var on_board: Array[bool] = []
@@ -71,10 +75,11 @@ func _powered_homes() -> Array[Dictionary]:
 		items.append({"rect": r, "centre": r.get_center()})
 		centres.append(r.get_center())
 		on_board.append(_p.on_board((inst["cells"] as Array)[0]))
+	# Вулиці й ТП плануються від усіх хат: котра з них без відводу, вирішує лише вибір відводів, а не де йде ствол.
 	var powered: Array[bool] = PropLayer.powered_homes(centres, on_board)
 	for i in items.size():
-		if powered[i]:
-			out.append(items[i])
+		items[i]["powered"] = powered[i]
+		out.append(items[i])
 	return out
 
 
@@ -407,14 +412,22 @@ func _village(homes: Array, trunk: Array) -> void:
 		bridged[link[1]] = true
 		if _span_clear(stations[link[0]], stations[link[1]], trunk_segs):
 			edges.append([link[0], link[1], 1.0])
-	# Відводи: хата — до найближчої станції дерева, звідки відвід можливий; такої нема — хата без відводу. Лишаються
-	# лише станції на шляху від ТП до хат із відводом.
-	var needed: Dictionary = {}
+	# Відводи: хата — до найближчої станції дерева, звідки відвід можливий; такої нема — хата без відводу. Хату, яку
+	# powered_homes лишає без світла, пропускаємо, але село, де дістає лише до таких, одну все ж живить: інакше
+	# лінія 10 кВ до нього обірвалась би нізвідки. Лишаються лише станції на шляху від ТП до хат із відводом.
+	var reach: Array = []
 	for h: Dictionary in homes:
 		var pick: int = _pick_station(h["rect"], stations, parent)
-		if pick < 0:
-			continue
-		var u: int = pick
+		if pick >= 0:
+			reach.append([h, pick])
+	var chosen: Array = reach.filter(func(r: Array) -> bool: return r[0]["powered"])
+	if chosen.is_empty() and not reach.is_empty():
+		chosen = [reach[0]]
+	var needed: Dictionary = {}
+	for r: Array in reach:
+		(fed if chosen.has(r) else skipped).append(r[0]["centre"])
+	for r: Array in chosen:
+		var u: int = r[1]
 		while u >= 0 and not needed.has(u):
 			needed[u] = true
 			u = parent[u]
