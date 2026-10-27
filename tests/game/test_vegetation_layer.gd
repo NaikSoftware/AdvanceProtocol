@@ -127,9 +127,7 @@ func test_plants_over_a_unit_fade_and_crushed_ones_fall() -> void:
 	assert_true(faded, "дерево над юнітом мусить стати напівпрозорим")
 	veg.set_reveal_cells([])
 	veg.set_crushed([cell])
-	var fallen: bool = false
-	for ch in veg.get_children():
-		fallen = fallen or String(ch.name).ends_with("_fallen")
+	var fallen: bool = veg.drawn_nodes().any(func(n: StringName) -> bool: return String(n).ends_with("_fallen"))
 	assert_true(fallen, "розчавлене дерево мусить показати повалений двійник")
 	veg.set_crushed([])
 
@@ -263,3 +261,38 @@ func test_no_crown_under_power_lines(p = use_parameters(MAPS)) -> void:
 		if VegetationLayer._power_dist(obst, q) < VegetationLayer.crown_of(pl["node"]) - 0.001:
 			bad.append([pl["node"], q])
 	assert_eq(bad, [], "%s: крона під ЛЕП" % p)
+
+
+## Бюджет кадру (§8): рослини — по мешу на атлас бібліотеки (берег, луки, двори), а не MultiMesh на
+## вузол: у кожної моделі ще й поверхня плями затінення, тож це подвоєні виклики. Тінь сонця
+## рослини не кидають: вона — пляма на землі.
+func test_plants_are_one_mesh_per_atlas(p = use_parameters(MAPS)) -> void:
+	var veg: VegetationLayer = _view(p).vegetation()
+	var drawn: Array[Node] = veg.get_children().filter(func(n: Node) -> bool: return not String(n.name).ends_with("_faded"))
+	assert_between(drawn.size(), 1, 3, "%s: по мешу на атлас" % p)
+	for n: Node in drawn:
+		assert_true(n is MeshInstance3D, "%s: %s — не MultiMesh" % [p, n.name])
+		assert_eq((n as MeshInstance3D).cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "%s: %s кидає тінь" % [p, n.name])
+		assert_lte((n as MeshInstance3D).mesh.get_surface_count(), 2, "рослина й пляма")
+	var shown: int = 0
+	for i in veg.placements.size():
+		shown += 1 if veg.plant_visible(i) else 0
+	assert_eq(shown, veg.placements.size(), "%s: усі рослини в мешах і цілі" % p)
+
+
+## Розчинення працює і зі злитим мешем: рослина над юнітом гасне в таблиці батча (її малює
+## напівпрозорий двійник `_faded`), а коли юніт іде — вертається.
+func test_fade_hides_the_plant_inside_the_merged_mesh() -> void:
+	var veg: VegetationLayer = _view("river").vegetation()
+	var idx: int = -1
+	for i in veg.placements.size():
+		if veg.placements[i]["kind"] == "tree":
+			idx = i
+			break
+	assert_gt(idx, -1, "на Річці є дерево")
+	veg.set_reveal_cells([veg.placements[idx]["cell"]])
+	assert_false(veg.plant_visible(idx), "у злитому мейші дерево над юнітом зникло")
+	assert_true(veg.get_children().any(func(n: Node) -> bool: return String(n.name).ends_with("_faded")), "а замість нього — напівпрозоре")
+	veg.set_reveal_cells([])
+	assert_true(veg.plant_visible(idx), "юніт пішов — дерево знову ціле")
+

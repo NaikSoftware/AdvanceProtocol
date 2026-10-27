@@ -28,6 +28,9 @@ const _SPECS: Array[Dictionary] = [
 const TURRET_HEIGHT: float = 0.10
 
 static var _materials: Dictionary = {}
+## Злита сітка тіла за типом і кольором власника: один меш на всі юніти того самого вигляду.
+static var _merged_meshes: Dictionary = {}
+static var _merged_material: StandardMaterial3D
 static var _figure_mesh: BoxMesh
 static var _figure_material: StandardMaterial3D
 
@@ -97,6 +100,74 @@ static func build(type_id: int, owner_color: Color) -> Node3D:
 		var thick := 0.07 if tall else 0.05
 		_box(root, "Barrel", Vector3(thick, thick, barrel_len), Vector3(0, barrel_y(type_id), -barrel_len * 0.5), _BARREL_COLOR)
 	return root
+
+
+## Той самий силует, але корпус, башта, ствол, ходова й фігури відділення — одна сітка `Hull` з
+## кольорами у вершинах (колір власника — на корпусі, башті й живих фігурах, решта нейтральна):
+## один виклик малювання й один у тіні замість трьох-п'яти на юніт (§8). `standing` — скільки
+## фігур стоїть, решта лежить.
+static func build_merged(type_id: int, owner_color: Color, standing: int = -1) -> Node3D:
+	var hull := MeshInstance3D.new()
+	hull.name = "Hull"
+	hull.mesh = merged_mesh(type_id, owner_color, standing)
+	hull.material_override = _merged_mat()
+	var out := Node3D.new()
+	out.add_child(hull)
+	return out
+
+
+static func _merged_mat() -> StandardMaterial3D:
+	if _merged_material == null:
+		_merged_material = StandardMaterial3D.new()
+		_merged_material.vertex_color_use_as_albedo = true
+		_merged_material.vertex_color_is_srgb = true
+	return _merged_material
+
+
+## Сітка тіла на тип, колір власника й кількість стоячих фігур; спільна для всіх юнітів того
+## самого вигляду, тож падіння фігури — підміна сітки, а не нова.
+static func merged_mesh(type_id: int, owner_color: Color, standing: int = -1) -> ArrayMesh:
+	var has_figures: bool = (spec(type_id).extras as Array).has(&"figures")
+	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
+	var key := "%d:%s:%d" % [type_id, owner_color.to_html(), up if has_figures else 0]
+	if _merged_meshes.has(key):
+		return _merged_meshes[key]
+	var root := build(type_id, owner_color)
+	var pieces: Array[Array] = []  ## [масиви сітки, перетворення, колір]
+	for part: Node in root.get_children():
+		if part is MeshInstance3D:
+			var mi := part as MeshInstance3D
+			pieces.append([mi.mesh.surface_get_arrays(0), Transform3D(Basis(), mi.position), (mi.material_override as StandardMaterial3D).albedo_color])
+		elif part is MultiMeshInstance3D:
+			for i in _FIGURE_SLOTS.size():
+				pieces.append([_figure_mesh.surface_get_arrays(0), figure_transform(i, i < up), owner_color if i < up else FALLEN_COLOR])
+	root.free()
+	var v := PackedVector3Array()
+	var n := PackedVector3Array()
+	var c := PackedColorArray()
+	var idx := PackedInt32Array()
+	for piece: Array in pieces:
+		var src: Array = piece[0]
+		var xf: Transform3D = piece[1]
+		var base: int = v.size()
+		var src_v: PackedVector3Array = src[Mesh.ARRAY_VERTEX]
+		var src_n: PackedVector3Array = src[Mesh.ARRAY_NORMAL]
+		for i in src_v.size():
+			v.append(xf * src_v[i])
+			n.append(xf.basis * src_n[i])
+			c.append(piece[2])
+		for i: int in src[Mesh.ARRAY_INDEX]:
+			idx.append(base + i)
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = v
+	arrays[Mesh.ARRAY_NORMAL] = n
+	arrays[Mesh.ARRAY_COLOR] = c
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_merged_meshes[key] = mesh
+	return mesh
 
 
 ## Четвірка фігур одним MultiMesh: стоять перші `standing`, решта лежить на тих самих місцях.

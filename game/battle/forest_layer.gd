@@ -1,7 +1,7 @@
 class_name ForestLayer
 extends Node3D
-## Ліс на клітинках FOREST дошки й кільця: розкид `ForestScatter.plan()`, по MultiMesh на
-## вузол бібліотеки (forest_conifer.glb, forest_broadleaf_<сезон>.glb).
+## Ліс на клітинках FOREST дошки й кільця: розкид `ForestScatter.plan()`, форми з бібліотек
+## (forest_conifer.glb, forest_broadleaf_<сезон>.glb) злиті в один меш на атлас (`FoliageBatch`).
 ##
 ## - Дошка: дерева, кущі, підріст, смуги узлісся, колоди, по дві форми на породу. Проломи — ті,
 ##   що знає глядач (`BattleState.known_broken_map`), а не правда: інакше ліс видав би, де
@@ -10,7 +10,7 @@ extends Node3D
 ##   далі від дошки — удвічі рідше й ширшими кронами, та сама зімкнутість. Біля дошки
 ##   (`RING_NEAR`) — ще смуги узлісся й пояс кущів, а листяні в смузі `RING_DETAIL` — справжніми
 ##   сітками: проксі пожовклої крони з камери читалась пласкою латкою. Туди юніти не заходять.
-##   Один MultiMesh на вузол на все кільце: ~10 тис. трикутників дешевші за зайві виклики.
+##   Дошка — один меш на атлас: ~10 тис. трикутників дешевші за зайві виклики.
 ## - Крони кільця тонуть в імлі (`Surroundings.apply`), як земля й будинки.
 ## - Понад `DETAIL_ZOOM` підлісок під наметом не малюється: з такої висоти його не видно.
 ## - Підріст і низькі дерева (нижче `UNDER_TOP`) — однією сіткою проксі на породу: з такої
@@ -85,7 +85,9 @@ var _board := Rect2i()
 var _world := Rect2i()  ## дошка разом із кільцем, координати дошки
 var _lib: Dictionary = {}  ## ім'я вузла -> {"h", "half"}
 var _mesh: Dictionary = {}  ## ім'я вузла -> Mesh (і проксі `<вузол>_Shadow`)
-var _mat: Dictionary = {}  ## Mesh -> ShaderMaterial
+## Злиті сітки: шейдер із таблицею даних екземплярів і поріг альфи на атлас.
+var _batch_shader: Shader
+var _atlas_cut: Dictionary = {}
 ## Розчинення: атлас -> ShaderMaterial прохід лише глибини, а в його next_pass — прохід кольору
 ## з прозорістю. Mesh -> атлас; Mesh -> масиви поверхні (для злиття розчинених екземплярів).
 var _fade_mat: Dictionary = {}
@@ -96,14 +98,15 @@ var _signature: String = ""
 var _broken: Dictionary = {}
 var _ring: int = 0
 var _ring_crowns: Array[Dictionary] = []  ## крони кільця для запеченої тіні
-## Групи листя, що розчиняються: {"mmi", "list", "mesh"} — кільця (будуються раз) і дошки.
+## Групи листя, що розчиняються: {"mmi" (вузол батча), "batch", "first" (номер першого
+## екземпляра групи в батчі), "list", "mesh"} — кільця й дошки.
 var _ring_fadable: Array[Dictionary] = []
 var _fadable: Array[Dictionary] = []
 var _ring_nodes: Array[Node] = []
 var _board_nodes: Array[Node] = []
 var _soft_nodes: Array[Node] = []
 var _shadow: MeshInstance3D
-var _under: Array[MultiMeshInstance3D] = []
+var _under: Array[Node3D] = []
 var _reveal: Array[Vector2i] = []
 var _zoom: float = 12.0
 var _fade_zoom: float = -100.0  ## зум, з яким розчинення рахували востаннє
@@ -139,7 +142,7 @@ func build(world: Board, world_surface: PackedByteArray, ring: int, board_size: 
 		_season = String(season)
 		_load_library()
 	if ring > 0:
-		var mats: Array = _mat.values()
+		var mats: Array = []
 		for fm: ShaderMaterial in _fade_mat.values():
 			mats.append_array([fm, fm.next_pass])
 		for m: ShaderMaterial in mats:
@@ -190,8 +193,8 @@ func set_zoom(zoom: float) -> void:
 func _load_library() -> void:
 	_lib.clear()
 	_mesh.clear()
-	_mat.clear()
 	_fade_mat.clear()
+	_atlas_cut.clear()
 	_atlas_of.clear()
 	_arrays.clear()
 	# Розчинення: розчинені екземпляри всіх форм одного атласу — одна злита сітка (тон — у CUSTOM0,
@@ -207,6 +210,14 @@ func _load_library() -> void:
 	var depth_code: String = _replace_checked(color_code, [
 			["render_mode cull_disabled, skip_vertex_transform", "render_mode cull_disabled, depth_draw_always, skip_vertex_transform"],
 			["ALPHA = COLOR.a;", "ALPHA = 0.0;"]])
+	# Злита сітка: тон, масштаб картки й видимість екземпляра беруться з таблиці за номером у
+	# CUSTOM0.x (у MultiMesh це були б INSTANCE_CUSTOM і масштаб матриці).
+	var fetch: String = FoliageBatch.glsl_fetch() + "\n\tinst_tone = batch_a.rgb;\n\tCOLOR.a *= batch_a.a;"
+	_batch_shader = Shader.new()
+	_batch_shader.code = _replace_checked(_SHADER.code, [
+			["varying flat float piece_hash;", "varying flat float piece_hash;\n" + FoliageBatch.glsl_decl()],
+			["inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);", fetch],
+			["float s = length(MODEL_MATRIX[0].xyz);", "float s = batch_scale;"]])
 	var color_shader := Shader.new()
 	color_shader.code = color_code
 	var depth_shader := Shader.new()
@@ -223,12 +234,8 @@ func _load_library() -> void:
 				var a: AABB = mi.mesh.get_aabb()
 				_lib[name] = {"h": a.end.y, "half": maxf(maxf(-a.position.x, a.end.x), maxf(-a.position.z, a.end.z))}
 			var src: StandardMaterial3D = mi.mesh.surface_get_material(0) as StandardMaterial3D
-			var m := ShaderMaterial.new()
-			m.shader = _SHADER
-			m.set_shader_parameter("albedo_tex", src.albedo_texture)
-			m.set_shader_parameter("alpha_cutoff", src.alpha_scissor_threshold)
-			_mat[mi.mesh] = m
 			_atlas_of[mi.mesh] = src.albedo_texture
+			_atlas_cut[src.albedo_texture] = src.alpha_scissor_threshold
 			if not _fade_mat.has(src.albedo_texture):
 				var color := ShaderMaterial.new()
 				color.shader = color_shader
@@ -269,7 +276,7 @@ func _free(nodes: Array[Node]) -> void:
 
 
 ## Кільце: намет проксі-кронами однієї форми на породу; біля дошки — узлісся, пояс кущів і
-## листяні справжніми сітками. По MultiMesh на вузол.
+## листяні справжніми сітками. Власний батч, будується раз.
 func _build_ring() -> void:
 	_free(_ring_nodes)
 	_ring_crowns.clear()
@@ -311,12 +318,11 @@ func _build_ring() -> void:
 		(groups[key] as Array).append(it)
 		if crown:
 			_ring_crowns.append(it)
+	var entries: Array[Dictionary] = []
 	for key: String in groups:
-		var mesh: Mesh = _mesh[key]
-		var n := _multimesh(mesh, groups[key], _mat[mesh])
-		n.name = "Ring_" + key
-		_ring_nodes.append(n)
-		_ring_fadable.append({"mmi": n, "list": groups[key], "mesh": mesh})
+		entries.append({"mesh": _mesh[key], "list": groups[key]})
+	# Кільце статичне: власна сітка, щоб кожен пролам не зливав його наново разом із дошкою.
+	_ring_fadable.append_array(_batch("Ring", entries, _ring_nodes))
 
 
 ## `region` (клітинки) — перепланувати лише її, решту плану взяти з попереднього; порожня —
@@ -373,18 +379,17 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 		(groups[key] as Array).append(it)
 		if cls == "canopy":
 			crowns.append(it)
+	var main_entries: Array[Dictionary] = []
+	var under_entries: Array[Dictionary] = []
 	for key: String in groups:
-		var cls: String = key.get_slice("/", 0)
-		var node: String = key.get_slice("/", 1)
-		var mesh: Mesh = _mesh[node]
-		var list: Array = groups[key]
-		var n := _multimesh(mesh, list, _mat[mesh])
-		n.name = "Forest_" + key.replace("/", "_")
-		_board_nodes.append(n)
-		if cls == "under":
-			n.visible = _zoom <= DETAIL_ZOOM
-			_under.append(n)
-		_fadable.append({"mmi": n, "list": list, "mesh": mesh})
+		var entry: Dictionary = {"mesh": _mesh[key.get_slice("/", 1)], "list": groups[key]}
+		(under_entries if key.get_slice("/", 0) == "under" else main_entries).append(entry)
+	_fadable.append_array(_batch("Forest", main_entries, _board_nodes))
+	for g: Dictionary in _batch("Forest_under", under_entries, _board_nodes):
+		(g["mmi"] as Node3D).visible = _zoom <= DETAIL_ZOOM
+		if not _under.has(g["mmi"]):
+			_under.append(g["mmi"])
+		_fadable.append(g)
 	if not lanes.is_empty() and _ground_mesh != null:
 		var g := MeshInstance3D.new()
 		g.name = "Forest_Soil_Lane"
@@ -396,28 +401,53 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 	_apply_fade()
 
 
-func _multimesh(mesh: Mesh, list: Array, material: Material) -> MultiMeshInstance3D:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.use_custom_data = true
-	mm.mesh = mesh
-	mm.instance_count = list.size()
-	for i in list.size():
-		mm.set_instance_transform(i, list[i]["xf"])
-		var c: Color = list[i]["rgb"]
-		# Тон крони — у custom data; у кольорі лише розчинення (альфа).
-		mm.set_instance_custom_data(i, Color(c.r, c.g, c.b, 1.0))
-		mm.set_instance_color(i, Color(1, 1, 1, list[i].get("alpha", 1.0)))
-	var n := MultiMeshInstance3D.new()
-	n.multimesh = mm
-	n.material_override = material
-	# Тінь лісу запечена: справжню тінь кидають лише юніти (§8).
-	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# Картки розгортаються в шейдері, тож AABB меша не містить країв пучків.
-	n.extra_cull_margin = 0.4
-	add_child(n)
-	return n
+## Усе листя шару одним мешем на атлас, а не MultiMesh на форму: кожна форма була окремим викликом
+## малювання. Вершини екземплярів переносяться у світ масово (`Transform3D * Packed…`), тож
+## перебудова дошки після пролому — десятки мілісекунд. Повертає групи для розчинення: номер першого
+## екземпляра групи в батчі лежить у "first".
+func _batch(label: String, entries: Array[Dictionary], nodes: Array[Node]) -> Array[Dictionary]:
+	var by_atlas: Dictionary = {}  ## атлас -> Array[Dictionary]
+	for e: Dictionary in entries:
+		var atlas: Texture2D = _atlas_of[e["mesh"]]
+		if not by_atlas.has(atlas):
+			by_atlas[atlas] = []
+		if not _arrays.has(e["mesh"]):
+			_arrays[e["mesh"]] = (e["mesh"] as Mesh).surface_get_arrays(0)
+		e["arrays"] = _arrays[e["mesh"]]
+		(by_atlas[atlas] as Array).append(e)
+	var out: Array[Dictionary] = []
+	var k: int = 0
+	for atlas: Texture2D in by_atlas:
+		var total: int = 0
+		for e: Dictionary in by_atlas[atlas]:
+			total += (e["list"] as Array).size()
+		if total == 0:
+			continue
+		var batch: FoliageBatch = FoliageBatch.create(total)
+		var m := ArrayMesh.new()
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, batch.merge(by_atlas[atlas], true), [], {}, FoliageBatch.custom_flags())
+		batch.texture.update(batch.image)
+		var mat := ShaderMaterial.new()
+		mat.shader = _batch_shader
+		mat.set_shader_parameter("albedo_tex", atlas)
+		mat.set_shader_parameter("alpha_cutoff", _atlas_cut[atlas])
+		mat.set_shader_parameter("inst_data", batch.texture)
+		if _ring > 0:
+			Surroundings.apply(mat, _board.size)
+		var n := MeshInstance3D.new()
+		n.name = "%s_%d" % [label, k]
+		k += 1
+		n.mesh = m
+		n.material_override = mat
+		# Тінь лісу запечена: справжню тінь кидають лише юніти (§8).
+		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# Картки розгортаються в шейдері, тож AABB меша не містить країв пучків.
+		n.extra_cull_margin = 0.4
+		add_child(n)
+		nodes.append(n)
+		for e: Dictionary in by_atlas[atlas]:
+			out.append({"mmi": n, "batch": batch, "first": e["first"], "list": e["list"], "mesh": e["mesh"]})
+	return out
 
 
 ## Запечена тінь лісу: на кожну крону — м'яка пляма, зсунута від сонця на висоту крони ·
@@ -556,21 +586,23 @@ func _apply_fade() -> void:
 	var back: Vector3 = cam3d.global_transform.basis.z if cam3d != null else Vector3.UP
 	var faded: Dictionary = {}  ## атлас -> Array[{mesh, xf, rgb, alpha}]
 	for g: Dictionary in _ring_fadable + _fadable:
-		var mm: MultiMesh = (g["mmi"] as MultiMeshInstance3D).multimesh
+		var batch: FoliageBatch = g["batch"]
 		var list: Array = g["list"]
-		# Альфа екземплярів і тут: колір екземпляра MultiMesh під headless назад не читається.
+		# Альфа екземплярів зберігається і тут: тести читають її, не зазираючи в таблицю батча.
 		var alpha := PackedFloat32Array()
 		alpha.resize(list.size())
 		for i in list.size():
 			var k: float = _cover(list[i], back) if not _reveal.is_empty() and float(list[i]["top"]) >= FADE_MIN_TOP else 1.0
 			alpha[i] = 1.0 if k >= 0.999 else 0.0
-			mm.set_instance_color(i, Color(1, 1, 1, alpha[i]))
+			batch.set_alive(int(g["first"]) + i, alpha[i] >= 1.0)
 			if k < 0.999:
 				var atlas: Texture2D = _atlas_of[g["mesh"]]
 				if not faded.has(atlas):
 					faded[atlas] = []
 				(faded[atlas] as Array).append({"mesh": g["mesh"], "xf": list[i]["xf"], "rgb": list[i]["rgb"], "alpha": lerpf(FADE_ALPHA, 1.0, k)})
 		g["alpha"] = alpha
+	for g: Dictionary in _ring_fadable + _fadable:
+		(g["batch"] as FoliageBatch).upload()
 	_show_fade(faded)
 
 

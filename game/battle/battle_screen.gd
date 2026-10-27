@@ -48,6 +48,10 @@ const _FallbackMap := preload("res://maps/river.tres")
 @onready var _camera_rig: IsoCameraRig = %CameraRig
 @onready var _board_view: BoardView = %BoardView
 @onready var _units: Node3D = %Units
+## Тіні-контакт усіх юнітів — один MultiMesh; поза %Units, де лежать лише вигляди юнітів і ефекти.
+var _contacts := UnitContacts.new()
+## Смуги HP усіх юнітів — теж один MultiMesh.
+var _hp_bars := UnitHpBars.new()
 @onready var _mine_layer: MineLayer = %MineLayer
 @onready var _wreck_layer: WreckLayer = %WreckLayer
 @onready var _hud: Hud = %Hud
@@ -189,6 +193,8 @@ var _gesture_had_pinch: bool = false
 func _ready() -> void:
 	# Кадр потрібен лише поки тримається натиск (§8: нерухомий екран нічого не коштує).
 	set_process(false)
+	add_child(_contacts)
+	add_child(_hp_bars)
 	_prev_max_fps = Engine.max_fps
 	_idle_timer = Timer.new()
 	_idle_timer.one_shot = true
@@ -978,6 +984,8 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 		if unit == null:
 			continue
 		var view: UnitView = _UnitViewScene.instantiate()
+		view.contacts = _contacts
+		view.hp_bars = _hp_bars
 		_units.add_child(view)
 		view.bind(unit)
 		_unit_views[uid] = view

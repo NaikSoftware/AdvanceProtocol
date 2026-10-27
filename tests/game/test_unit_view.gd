@@ -40,41 +40,83 @@ func test_bind_picks_a_distinct_silhouette_per_class() -> void:
 	for type_id in type_ids:
 		view.bind(_unit(type_id))
 		var hull: MeshInstance3D = view.get_node("Silhouette/Hull")
-		var size: Vector3 = (hull.mesh as BoxMesh).size
-		seen_sizes[size] = true
+		assert_eq(hull.mesh.get_surface_count(), 1, "тіло — одна сітка")
+		seen_sizes[UnitSilhouettes.spec(type_id).hull] = true
 	assert_eq(seen_sizes.size(), type_ids.size(), "кожен клас мусить мати власний, ні на який інший не схожий силует")
 
 
-## Тінь-контакт: плаский квад під корпусом, ширший за його слід, сам тіні від сонця не кидає;
-## лежить у силуеті, тож нахиляється й ховається разом із юнітом.
+## Тінь-контакт: плаский квад під корпусом, ширший за його слід; сам тіні від сонця не кидає. Усі
+## плями одного екрана — один MultiMesh (`UnitContacts`), а не вузол і виклик малювання на юніт.
+func _with_contacts() -> UnitContacts:
+	var contacts := UnitContacts.new()
+	add_child_autofree(contacts)
+	view.contacts = contacts
+	return contacts
+
+
 func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
 	for type_id: int in [0, 5, 11]:
 		view.bind(_unit(type_id))
-		var blob: MeshInstance3D = view.get_node("Silhouette/ContactShadow")
-		var hull: Vector3 = (view.get_node("Silhouette/Hull").mesh as BoxMesh).size
-		var size: Vector2 = (blob.mesh as PlaneMesh).size
-		assert_gt(size.x, hull.x)
-		assert_gt(size.y, hull.z)
-		assert_between(blob.position.y, 0.0, 0.05, "на ґрунті, під корпусом")
-		assert_eq(blob.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+		assert_eq(contacts.count(), 1, "одна пляма на юніта, не більше")
+		var hull: Vector3 = UnitSilhouettes.spec(type_id).hull
+		var xf: Transform3D = contacts.transform_of(0)
+		assert_almost_eq(xf.basis.x.length(), hull.x * UnitView.CONTACT_SPREAD, 0.0001, "ширша за слід по x")
+		assert_almost_eq(xf.basis.z.length(), hull.z * UnitView.CONTACT_SPREAD, 0.0001, "і по z")
+		assert_almost_eq(xf.origin.y - view.position.y, 0.01, 0.0001, "на ґрунті, під корпусом")
+		assert_almost_eq(xf.origin.x, view.position.x, 0.0001)
+		assert_almost_eq(xf.origin.z, view.position.z, 0.0001)
+		assert_eq(contacts.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+## Пляма реєструється вже після повороту: перша синхронізація бачить facing юніта.
+func test_contact_shadow_starts_in_the_units_facing() -> void:
+	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
+	view.bind(_unit(5, 0, Vector2i(2, 2), 2))
+	assert_eq(contacts.transform_of(0), view.contact_transform())
+	assert_almost_eq(contacts.transform_of(0).basis.x.normalized().dot(view.global_transform.basis.x.normalized()), 1.0, 0.0001, "пляма повернута разом з юнітом")
 
 
 ## Без тіні-контакту у вигляді карти пляму не будують зовсім: прозорий квад під кожним юнітом —
 ## зайвий виклик малювання.
 func test_no_contact_shadow_when_the_look_has_none() -> void:
 	WeatherRig.unit_contact = 0.0
+	var contacts := _with_contacts()
 	for type_id: int in [0, 5]:
 		view.bind(_unit(type_id))
-		assert_null(view.get_node_or_null("Silhouette/ContactShadow"))
+		assert_eq(contacts.count(), 0)
 
 
 ## Загиблі фігури лежать на ґрунті, тож пляма під відділенням зникає разом зі стоячими.
 func test_squad_contact_shadow_goes_with_the_squad() -> void:
 	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
 	view.bind(_unit(0))
+	assert_true(contacts.is_shown(0))
 	view.play_destroyed()
-	assert_false((view.get_node("Silhouette/ContactShadow") as Node3D).visible)
+	contacts.sync()
+	assert_false(contacts.is_shown(0))
+
+
+## Пляма їде за юнітом: позицію вузла твін міняє щокадру, а пляма — спільна, тож її сітка
+## синхронізується окремо (UnitContacts._process).
+func test_contact_shadow_follows_the_unit_and_dies_with_its_node() -> void:
+	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
+	view.bind(_unit(5, 0, Vector2i(2, 2)))
+	var path: Array[Vector2i] = [Vector2i(3, 2)]
+	(view.move_along(path, 0.05).get_object() as Tween).custom_step(10.0)
+	contacts.sync()
+	assert_almost_eq(contacts.transform_of(0).origin.x, view.position.x, 0.0001)
+	var other: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(other)
+	other.contacts = contacts
+	other.bind(_unit(5, 1, Vector2i(6, 6)))
+	assert_eq(contacts.count(), 2)
+	other.free()
+	assert_eq(contacts.count(), 1, "звільнений юніт плями не лишає")
 
 
 ## R14: face() твінується (не клацає миттєво), тож перевіряємо ціль твіна
@@ -363,6 +405,11 @@ func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
 	assert_true(opaque < total / 2, "і не мусить бути залитим квадратом")
 
 
+## Кольори вершин сітки тіла: колір власника живе в них, а не в спільному матеріалі.
+func _hull_colors() -> PackedColorArray:
+	return (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+
+
 ## Корпус фарбує ВЛАСНИК і більше ніщо. Раніше bind() ще й приглушував
 ## корпус юніта, який уже стріляв, — власник цього не замовляв і прибрав
 ## («прибери приглушення взагалі»). Тест тримає саме це: жоден стан юніта,
@@ -370,14 +417,14 @@ func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
 func test_hull_colour_comes_from_owner_and_nothing_else() -> void:
 	var fresh := _unit(5)
 	view.bind(fresh)
-	var base_color: Color = view._hull_material.albedo_color
+	var base_colors: PackedColorArray = _hull_colors()
 
 	var fired := _unit(5)
 	fired.exhaust()
 	fired.hp = fired.max_hp() / 2
 	view.bind(fired)
-	assert_eq(view._hull_material.albedo_color, base_color,
-		"постріл і поранення не мусять міняти колір корпусу")
+	assert_false(base_colors.is_empty(), "передумова: у сітці є кольори")
+	assert_eq(_hull_colors(), base_colors, "постріл і поранення не мусять міняти колір корпусу")
 
 
 ## Await на tween.finished крихкий у headless-тестах — прокручуємо твін
@@ -500,20 +547,23 @@ func test_destroyed_squad_lays_all_figures_down_instead_of_shrinking() -> void:
 	assert_false(view._hp_bar.visible)
 
 
-func _figures() -> MultiMeshInstance3D:
-	return view.get_node("Silhouette/Figures") as MultiMeshInstance3D
+## Лежачі фігури — вершини кольору загиблих у сітці тіла (кожна фігура — коробка в 24 вершини).
+func _fallen_figures() -> int:
+	var colors: PackedColorArray = (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	return colors.count(UnitSilhouettes.FALLEN_COLOR) / 24
 
 
-## Відділення — чотири фігури одним викликом малювання; стоїть одна на кожну чверть HP, що
+## Відділення — чотири фігури в одній сітці з основою; стоїть одна на кожну чверть HP, що
 ## лишилась (`ceil(4 · hp / max_hp)`), решта лежить на тій самій основі.
 func test_squad_shows_one_standing_figure_per_quarter_of_hp() -> void:
 	view.bind(_unit(0))
-	assert_eq(_figures().multimesh.instance_count, UnitView.SQUAD_FIGURES)
 	assert_eq(UnitView.SQUAD_FIGURES, 4)
+	assert_eq(view.get_node("Silhouette").get_child_count(), 1, "тіло — одна сітка")
 	var cases: Dictionary = {100: 4, 76: 4, 75: 3, 74: 3, 50: 2, 26: 2, 25: 1, 1: 1, 0: 0}
 	for hp: int in cases:
 		view.set_hp(hp, 100)
 		assert_eq(view.standing_figures(), cases[hp], "hp %d" % hp)
+		assert_eq(_fallen_figures(), UnitView.SQUAD_FIGURES - cases[hp], "hp %d: лежачих у сітці" % hp)
 
 
 func test_fallen_figure_lies_flat_and_low() -> void:
@@ -600,9 +650,9 @@ func test_views_of_same_owner_share_textures_and_materials() -> void:
 	assert_same(view._crosshair.texture, other._crosshair.texture)
 	assert_same(view._hp_bar.texture, other._hp_bar.texture)
 	assert_same(view._hull_material, other._hull_material)
-	assert_same(view.get_node("Silhouette/Barrel").material_override, other.get_node("Silhouette/Barrel").material_override)
+	assert_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "той самий власник — та сама сітка")
 	other.bind(_unit(5, 1))
-	assert_not_same(view._hull_material, other._hull_material, "інший власник — інший колір")
+	assert_not_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "інший власник — інший колір")
 
 
 func test_no_debug_facing_arrow_in_shipped_build() -> void:
@@ -730,7 +780,7 @@ func _relief() -> TerrainHeight:
 ## Кути основи корпусу у світі: низ Hull, ±половина його розміру.
 func _base_corners(v: UnitView) -> Array[Vector3]:
 	var sil: Node3D = v.get_node("Silhouette")
-	var size: Vector3 = ((sil.get_node("Hull") as MeshInstance3D).mesh as BoxMesh).size
+	var size: Vector3 = UnitSilhouettes.spec(v._type_id).hull
 	var out: Array[Vector3] = []
 	for sx: float in [-0.5, 0.5]:
 		for sz: float in [-0.5, 0.5]:

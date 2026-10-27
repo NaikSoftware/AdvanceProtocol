@@ -308,6 +308,10 @@ var _drops: Array = []
 var _unfed: Array[Vector2] = []
 ## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
 var _transformers: Dictionary = {}
+## Однакові коробки — стовпи воріт і уламки руїн — одним MultiMesh (§8: виклик малювання на
+## кожну групу коштував би вдвічі більше). Збираються під час побудови й далі не міняються.
+var _small_base: Array[Transform3D] = []
+var _small_colors: Array[Color] = []
 var _transformer_node: MultiMeshInstance3D = null
 ## Стовпи воріт садиб (центри на дошці): ворота читаються розривом зі стовпами по боках.
 var _gate_posts: Array[Vector2] = []
@@ -592,6 +596,8 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_drops.clear()
 	_transformers.clear()
 	_transformer_node = null
+	_small_base.clear()
+	_small_colors.clear()
 	_gate_posts.clear()
 	_wires = null
 	_contacts = null
@@ -860,6 +866,7 @@ func _build_nodes(haze: bool) -> void:
 	_build_gardens()
 	_build_grime()
 	_build_rubble_floors()
+	_build_small_boxes()
 
 
 ## Городи: сусідні клітинки городу зливаються в одну ділянку (жадібні прямокутники, тож Г-подібна
@@ -953,29 +960,43 @@ func _build_garden_plots() -> void:
 func _build_gate_posts() -> void:
 	if _gate_posts.is_empty():
 		return
-	var box := BoxMesh.new()
-	box.size = GATE_POST_SIZE
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = GATE_POST_COLOR
-	mat.roughness = 0.9
-	box.material = mat
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = box
 	# Стовпи парами (по воротах) і поперечина над кожною парою — та сама коробка, розтягнута.
-	mm.instance_count = _gate_posts.size() + _gate_posts.size() / 2
-	for i in _gate_posts.size():
-		var p: Vector2 = _gate_posts[i]
-		mm.set_instance_transform(i, Transform3D(Basis(), Vector3(p.x, TerrainHeight.ground_y(p.x, p.y) + GATE_POST_SIZE.y * 0.5 - 0.01, p.y)))
+	for p: Vector2 in _gate_posts:
+		_add_small(Transform3D(Basis.from_scale(GATE_POST_SIZE), Vector3(p.x, TerrainHeight.ground_y(p.x, p.y) + GATE_POST_SIZE.y * 0.5 - 0.01, p.y)), GATE_POST_COLOR)
 	for g in _gate_posts.size() / 2:
 		var a: Vector2 = _gate_posts[2 * g]
 		var b: Vector2 = _gate_posts[2 * g + 1]
 		var mid: Vector2 = (a + b) * 0.5
 		var top: float = maxf(TerrainHeight.ground_y(a.x, a.y), TerrainHeight.ground_y(b.x, b.y)) + GATE_POST_SIZE.y - 0.01 - GATE_BAR * 0.5
-		var bar := Basis(Vector3.UP, atan2(-(b - a).y, (b - a).x)).scaled_local(Vector3(a.distance_to(b) / GATE_POST_SIZE.x, GATE_BAR / GATE_POST_SIZE.y, 1.0))
-		mm.set_instance_transform(_gate_posts.size() + g, Transform3D(bar, Vector3(mid.x, top, mid.y)))
+		var bar := Basis(Vector3.UP, atan2(-(b - a).y, (b - a).x)).scaled_local(Vector3(a.distance_to(b), GATE_BAR, GATE_POST_SIZE.z))
+		_add_small(Transform3D(bar, Vector3(mid.x, top, mid.y)), GATE_POST_COLOR)
+
+
+func _add_small(xf: Transform3D, color: Color) -> void:
+	_small_base.append(xf)
+	_small_colors.append(color)
+
+
+## Один вузол на всі дрібні коробки, коли їх уже зібрано.
+func _build_small_boxes() -> void:
+	if _small_base.is_empty():
+		return
+	var box := BoxMesh.new()
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
+	mat.roughness = 0.95
+	box.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = box
+	mm.instance_count = _small_base.size()
+	for i in _small_base.size():
+		mm.set_instance_transform(i, _small_base[i])
+		mm.set_instance_color(i, _small_colors[i])
 	var node := MultiMeshInstance3D.new()
-	node.name = "GatePosts"
+	node.name = "SmallBoxes"
 	node.multimesh = mm
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
@@ -1036,26 +1057,8 @@ func _build_rubble_floors() -> void:
 			var b := Basis(Vector3.UP, float(r % 628) / 100.0) * Basis(Vector3.RIGHT, (float(r / 7 % 9) - 4.0) * 0.06)
 			debris.append(Transform3D(b.scaled_local(size), Vector3(at.x, TerrainHeight.ground_y(at.x, at.y) + size.y * 0.3, at.y)))
 			debris_col.append(DEBRIS_COLORS[2] if beam else DEBRIS_COLORS[r % 2])
-	if not debris.is_empty():
-		var bm := BoxMesh.new()
-		var dmat := StandardMaterial3D.new()
-		dmat.vertex_color_use_as_albedo = true
-		dmat.vertex_color_is_srgb = true
-		dmat.roughness = 0.95
-		bm.material = dmat
-		var dmm := MultiMesh.new()
-		dmm.transform_format = MultiMesh.TRANSFORM_3D
-		dmm.use_colors = true
-		dmm.mesh = bm
-		dmm.instance_count = debris.size()
-		for i in debris.size():
-			dmm.set_instance_transform(i, debris[i])
-			dmm.set_instance_color(i, debris_col[i])
-		var dnode := MultiMeshInstance3D.new()
-		dnode.name = "RubbleDebris"
-		dnode.multimesh = dmm
-		dnode.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(dnode)
+	for i in debris.size():
+		_add_small(debris[i], debris_col[i])
 	if xforms.is_empty():
 		return
 	var quad := PlaneMesh.new()
@@ -1643,6 +1646,7 @@ func _rebuild_transformers() -> void:
 	if _transformers.is_empty():
 		return
 	if _transformer_node == null:
+		# Власний матеріал: сталева шафа (шорсткість 0.75, метал 0.3) — інший за дерев'яні стовпи й уламки.
 		var box := BoxMesh.new()
 		box.size = TRANSFORMER_SIZE
 		var mat := StandardMaterial3D.new()

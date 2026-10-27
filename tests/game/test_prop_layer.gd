@@ -383,7 +383,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	for inst in view.props().all_instances():
 		models[inst["model"]] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
-			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts"] and not String(n.name).ends_with("_fade"))
+			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts", &"SmallBoxes"] and not String(n.name).ends_with("_fade"))
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
@@ -2029,3 +2029,27 @@ func test_ridge_ring_landmark_keeps_clear_of_forest_and_power_line() -> void:
 				var w: Vector2i = c + Vector2i(dx, dy) + Vector2i(ring, ring)
 				if world.in_bounds(w):
 					assert_ne(world.kind_at(w), Terrain.Kind.FOREST, "ліс біля орієнтира на %s" % w)
+
+
+## Бюджет кадру (§8): стовпи воріт і уламки руїн — однакові дерев'яні коробки, тож один MultiMesh.
+func test_small_boxes_share_one_multimesh(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	for gone: StringName in [&"GatePosts", &"RubbleDebris"]:
+		assert_null(props.get_node_or_null(NodePath(gone)), "%s: %s злито" % [p, gone])
+	var boxes: MultiMeshInstance3D = props.get_node_or_null("SmallBoxes")
+	assert_not_null(boxes, "%s: спільний вузол є" % p)
+	assert_eq(boxes.multimesh.instance_count, props._small_base.size(), "%s: екземплярів стільки, скільки коробок" % p)
+	assert_gte(props._small_base.size(), props._gate_posts.size(), p)
+	assert_eq(boxes.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+## Дрібні пропси з зумом не зникають: на найбільшому віддаленні сіно, брили й коробки видно.
+func test_small_props_stay_drawn_at_max_zoom() -> void:
+	var view: BoardView = _cached("crossroads")
+	view.set_forest_zoom(IsoCameraRig.MAX_ZOOM)
+	var props: PropLayer = view.props()
+	var small: Array[Node] = props.find_children("*", "MultiMeshInstance3D", false, false).filter(func(n: Node) -> bool:
+		return n.name == &"SmallBoxes" or int(PropLayer.spec_of(StringName(n.name)).get("kind", -1)) in [PropLayer.Kind.HAY, PropLayer.Kind.BOULDER])
+	assert_gt(small.size(), 1, "передумова: на карті є дрібні вузли")
+	for n: Node in small:
+		assert_true((n as Node3D).visible, "%s: видно на будь-якому зумі" % n.name)

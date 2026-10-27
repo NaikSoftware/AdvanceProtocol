@@ -185,6 +185,30 @@ func test_handover_rebuilds_units_and_recenters_camera_before_gate_lifts() -> vo
 	assert_false(props.is_processing(), "після гейта розчинення не доходить кадрами")
 
 
+## Спільні MultiMesh смуг HP і плям-контакту після передачі ходу тримають рівно тих юнітів, яких знає
+## гравець, що заходить: ні чужих (§3.5), ні вже звільнених.
+func test_handover_batches_track_exactly_the_incoming_players_known_units() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 0, "owner": 0, "pos": Vector2i(2, 1), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(4, 4), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	WeatherRig.unit_contact = 0.6
+	screen.get_node("%Hud").get_node("%EndTurnButton").pressed.emit()
+	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	var known: int = service.state.known_occupied_map(service.state.active_player).size()
+	assert_gt(known, 0, "передумова: гравець, що заходить, знає юнітів")
+	assert_eq(screen._hp_bars.count(), known, "смуги HP — рівно відомі юніти")
+	assert_eq(screen._contacts.count(), known, "плями-контакт — рівно відомі юніти")
+	assert_eq(screen._unit_views.size(), known)
+	WeatherRig.unit_contact = 0.0
+
+
 ## §3.5: дим влучання висить кілька секунд; на передачі ходу його прибирають, щоб над
 ## тайлом, якого гравець, що заходить, не розвідав, не лишилось сліду цілі.
 func test_handover_clears_lingering_battle_fx() -> void:
