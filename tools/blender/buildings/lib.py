@@ -616,8 +616,9 @@ def mats():
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
         "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.60, 0.53, 0.45), sat=0.5, streak=0.9, base_dirt=0.4),
-        "sill_back": make_material("sill_back", flat=(0.12, 0.11, 0.10), streak=0.3),   # підвіконня проріму: ~1.1-1.3 стіни, а не біла пляма
-        "interior_back": make_material("interior_back", flat=(0.030, 0.028, 0.025), streak=0.3),   # тло прорізів руїн: ~35-45 sRGB у кадрі, глибина без чорної плями
+        "sill_back": make_material("sill_back", flat=(0.055, 0.05, 0.045), streak=0.3),   # підвіконня проріму: смужка ~0.8 стіни на сонці, не світліша за неї
+        "ring_char": make_material("ring_char", flat=(0.02, 0.018, 0.016), streak=0.3),   # лиштва прорізів руїн: обгоріла, щоб проріз у тіні читався темним, а не сірим
+        "interior_back": make_material("interior_back", flat=(0.011, 0.010, 0.009), streak=0.3),   # тло прорізів руїн: ~25-35 sRGB під хмарним небом (0.03 давало 50 на Річці)
         "interior_burnt": make_material("interior_burnt", flat=(0.010, 0.0095, 0.009), streak=0.6),   # вигоріле нутро на зламі: ≤ 35 sRGB навіть під небом
         "door_red": make_material("door_red", flat=srgb_lin((0.42, 0.20, 0.15)), seams=[("z", 0.5, 0.015, 0.4)], seam_col=srgb_lin((0.25, 0.12, 0.09)), streak=0.5, rough=0.5),   # фарбований метал
         "door_wood": make_material("door_wood", "Planks021", 1.0, (0.55, 0.42, 0.30), seams=[("h", 0.12, 0.012, 0.5)], streak=0.6, bump=0.01, rough=0.8),
@@ -959,6 +960,7 @@ class Builder:
         self.slots = []
         self.local = self.bm.loops.layers.uv.new("local")
         self.wtone = self.bm.loops.layers.color.new("wtone")
+        self.win_tone = None                   # None — тон шибки випадковий; число — усі вікна цього тону
         import random
         self.rnd = random.Random(5)
         self.markers = []                      # (імʼя, (x, y, z) у метрах) → порожні вузли GLB, напр. chimney_top
@@ -1260,7 +1262,7 @@ class Builder:
         layer = self.local
         self.windows.append((axis, c, sgn, pos, z0, w, h))
         tone = self.rnd.choices((0.0, 0.5, 1.0), weights=(45, 25, 30))[0]       # скло з небом, темне нутро, фіранка
-        if getattr(self, 'win_tone', None) is not None:                         # пошкоджена хата: усі шибки темні, без світлих фіранок
+        if self.win_tone is not None:                         # пошкоджена хата: усі шибки темні, без світлих фіранок
             tone = self.win_tone
         if kind is None:                                                         # тип вікна будинку; частину могли замінити на нові пластикові
             kind = self.win_kind
@@ -1580,7 +1582,9 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
         if inw.dot(-mid_) < 0:
             inw = -inw
         off = inw * (nrm.length + 0.45)
-        _quad(b, [V(pa + off, max(0.0, hz0 - 0.4)), V(pc + off, max(0.0, hz0 - 0.4)), V(pc + off, hz1), V(pa + off, hz1)], "interior_back", tuple(-inw))
+        # тло ширше за проріз на 0.7 м з кожного боку: на косому ракурсі промінь виходить повз край тла й бачить купу (блакитно-сірий клин)
+        pa2, pc2 = pa + off - u * min(0.7, hu0), pc + off + u * min(0.7, ln - hu1)   # не за межі стіни: інакше габарит моделі росте й карта міняє розстановку
+        _quad(b, [V(pa2, max(0.0, hz0 - 0.8)), V(pc2, max(0.0, hz0 - 0.8)), V(pc2, hz1), V(pa2, hz1)], "interior_back", tuple(-inw))
         if hz0 > 0.02:
             _quad(b, [V(pa + nrm, hz0), V(pc + nrm, hz0), V(pc - nrm, hz0), V(pa - nrm, hz0)], "sill_back", (0, 0, 1))
         _quad(b, [V(pa - nrm, hz1), V(pc - nrm, hz1), V(pc + nrm, hz1), V(pa + nrm, hz1)], mat, (0, 0, -1))
