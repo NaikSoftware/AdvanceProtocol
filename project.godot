@@ -78,6 +78,18 @@ foliage_tint={
 "type": "vec3",
 "value": Vector3(1, 1, 1)
 }
+path_earth_dry={
+"type": "vec3",
+"value": Vector3(1.5, 1, 0.4)
+}
+path_trod_dry={
+"type": "vec3",
+"value": Vector3(1.3, 1, 0.45)
+}
+path_dry_k={
+"type": "vec3",
+"value": Vector3(1.4, 1.2, 1.45)
+}
 water_murk={
 "type": "float",
 "value": 0.0
