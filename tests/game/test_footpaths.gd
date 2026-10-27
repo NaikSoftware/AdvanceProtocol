@@ -92,6 +92,114 @@ func test_trodden_patch_is_soft_and_centred() -> void:
 	assert_eq(_px(img, Vector2(4.4, 4), 1), 0)
 
 
+func _lum(c: Color) -> float:
+	return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
+
+
+## Тон стежки — від яскравості трави під нею, а не сталий колір: у дощ трава темнішає ×0.66, і
+## стала «гола земля» лягала світлою піщаною плямою (~1.4 яскравості трави).
+const GRASS_WET := Color(0.08, 0.075, 0.055)
+
+
+func test_tone_leaves_grass_without_wear() -> void:
+	assert_eq(Footpaths.tone(GRASS_WET, Vector2.ZERO, 1.0), GRASS_WET)
+
+
+func test_tone_wet_trodden_earth_is_darker_than_grass() -> void:
+	var core: Color = Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 0.7)
+	var l: float = _lum(GRASS_WET)
+	# wet_p 0.7 (MUD): k = lerp(1.4, 0.6, 0.7) = 0.84.
+	assert_almost_eq(_lum(core), l * 0.84, 1e-6, "середина стежки в багні")
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 1.0)), l * 0.6, 1e-6, "середина в дощ")
+	assert_true(core.r > core.g and core.g > core.b, "бура земля, не рожева й не сіра: %s" % core)
+	assert_almost_eq(core.b / core.g, 0.365, 1e-4, "синього мало — не рожевий пісок")
+
+
+## Відтінок землі не береться з трави: на сірій траві стежка однаково бура, а не сіра пляма.
+func test_tone_earth_hue_does_not_follow_grey_grass() -> void:
+	var grey := Color(0.1, 0.1, 0.1)
+	var wet: Color = Footpaths.tone(grey, Vector2(1.0, 0.0), 1.0)
+	assert_almost_eq(wet.r / wet.g, 2.0, 1e-4)
+	assert_almost_eq(wet.b / wet.g, 0.35, 1e-4)
+	var dry: Color = Footpaths.tone(grey, Vector2(1.0, 0.0), 0.0)
+	assert_almost_eq(dry.r / dry.g, 1.5, 1e-4)
+	assert_almost_eq(dry.b / dry.g, 0.4, 1e-4)
+
+
+func test_tone_dry_trodden_earth_is_only_slightly_lighter() -> void:
+	var grass := Color(0.16, 0.15, 0.09)
+	assert_almost_eq(_lum(Footpaths.tone(grass, Vector2(1.0, 0.0), 0.0)), _lum(grass) * 1.4, 1e-6)
+
+
+func test_tone_trodden_patch_follows_grass() -> void:
+	var l: float = _lum(GRASS_WET)
+	# Пляма в повну силу вже з G 0.4 (вхід у двір читається навіть на краю плями): k 0.5 у дощ, 1.45 сухо.
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.0, 1.0), 1.0)), l * 0.5, 1e-6)
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.0, 0.4), 0.0)), l * 1.45, 1e-6)
+
+
+func test_tone_trampled_verge_keeps_grass_brightness_near() -> void:
+	var l: float = _lum(GRASS_WET)
+	# Смуга прим'ятої трави (pm.r 0.3): band_t = 1, вага 0.8, k = 0.72 у дощ, ядра ще нема.
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.3, 0.0), 1.0)), l * (0.2 + 0.8 * 0.72), 1e-6)
+
+
+## Суха земля — своя на кожній карті (BattleLook.path_earth_dry, path_trod_dry, path_dry_k): на блідій
+## вохристій траві Хребта загальний відтінок збігався з травою, і стежка зникала.
+func test_tone_uses_the_map_dry_hue_and_k() -> void:
+	var grey := Color(0.1, 0.1, 0.1)
+	var earth := Vector3(1.6, 1.0, 0.3)
+	var k := Vector3(1.5, 1.4, 1.6)
+	var core: Color = Footpaths.tone(grey, Vector2(1.0, 0.0), 0.0, earth, Footpaths.TRAMPLED_DRY, k)
+	assert_almost_eq(core.r / core.g, 1.6, 1e-4)
+	assert_almost_eq(core.b / core.g, 0.3, 1e-4)
+	assert_almost_eq(_lum(core), _lum(grey) * 1.5, 1e-6)
+	var band: Color = Footpaths.tone(grey, Vector2(0.3, 0.0), 0.0, earth, Vector3(1.45, 1.0, 0.3), k)
+	assert_almost_eq(_lum(band), _lum(grey) * (0.2 + 0.8 * 1.4), 1e-6)
+	var patch: Color = Footpaths.tone(grey, Vector2(0.0, 1.0), 0.0, earth, Footpaths.TRAMPLED_DRY, k)
+	assert_almost_eq(_lum(patch), _lum(grey) * 1.6, 1e-6)
+	# У дощ сухі значення карти не діють.
+	assert_eq(Footpaths.tone(grey, Vector2(1.0, 0.0), 1.0, earth, Footpaths.TRAMPLED_DRY, k), Footpaths.tone(grey, Vector2(1.0, 0.0), 1.0))
+
+
+## Карти задають свої сухі тони стежки, Хребет — тепліші й світліші, ніж типові.
+func test_map_looks_carry_the_dry_path_tone() -> void:
+	var ridge: BattleLook = BattleLook.for_map_path("res://maps/ridge.tres")
+	var cross: BattleLook = BattleLook.for_map_path("res://maps/crossroads.tres")
+	assert_eq(cross.path_earth_dry, Footpaths.EARTH_DRY)
+	assert_eq(cross.path_trod_dry, Footpaths.TRAMPLED_DRY)
+	assert_eq(cross.path_dry_k, Footpaths.DRY_K)
+	assert_ne(ridge.path_earth_dry, Footpaths.EARTH_DRY)
+	assert_gt(ridge.path_dry_k.x, Footpaths.DRY_K.x)
+
+
+## Шейдер не запускається в тесті, тож Footpaths.tone — його дзеркало: ті самі рядки мають стояти
+## в ground.gdshader, інакше тести перевіряють GDScript, а не те, що на екрані.
+func test_tone_matches_the_ground_shader() -> void:
+	var src: String = FileAccess.get_file_as_string("res://game/battle/shaders/ground.gdshader")
+	for s in ["float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);",
+			"vec3 earth = mix(path_earth_dry, %s, wet_p);" % _glsl(Footpaths.EARTH_WET),
+			"earth /= dot(earth, lw_p);",
+			"vec3 trod = mix(path_trod_dry, %s, wet_p);" % _glsl(Footpaths.TRAMPLED_WET),
+			"trod /= dot(trod, lw_p);",
+			"float core_t = smoothstep(0.5, 0.78, pm.r);",
+			"float band_t = smoothstep(0.08, 0.3, pm.r);",
+			"alb = mix(alb, trod * lum * mix(path_dry_k.y, 0.72, wet_p), band_t * 0.8);",
+			"alb = mix(alb, earth * lum * mix(path_dry_k.x, 0.6, wet_p), core_t);",
+			"alb = mix(alb, earth * lum * mix(path_dry_k.z, 0.5, wet_p), smoothstep(0.05, 0.4, pm.g));",
+			"global uniform vec3 path_earth_dry;", "global uniform vec3 path_trod_dry;", "global uniform vec3 path_dry_k;"]:
+		assert_true(src.contains(s), "у шейдері нема: " + s)
+
+
+## Vector3 у запису шейдера: vec3(1.25, 1.0, 0.6) — float32 без хвоста 0.55000001.
+func _glsl(v: Vector3) -> String:
+	var parts: PackedStringArray = []
+	for c in [v.x, v.y, v.z]:
+		var t: String = String.num(c, 3)
+		parts.append(t if t.contains(".") else t + ".0")
+	return "vec3(%s)" % ", ".join(parts)
+
+
 func test_water_cuts_the_wear() -> void:
 	var dry := func(p: Vector2) -> bool: return p.x < 5.0
 	var img: Image = Footpaths.bake([_walk(Vector2(2, 5), Vector2(9, 5))], PackedVector3Array(), Vector2i(12, 10), dry)
@@ -287,6 +395,49 @@ func test_baked_mask_is_clean(p = use_parameters(MAPS)) -> void:
 		for q: Vector2 in wk["pts"]:
 			best = maxi(best, _px(img, q))
 		assert_gte(best, 100, "%s: стежка хати %d непомітна" % [p, wk["home"]])
+
+
+## Вхід у двір читається в кожній садибі: витоптана пляма є біля кожної хвіртки, навіть коли хвіртка
+## за ~0.3 клітинки від дороги (там пляма менша й ближча до хвіртки).
+func test_every_gate_has_a_trodden_patch(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	for gi: int in props._placer.gates:
+		var g: Vector2 = props._placer.gates[gi][0]
+		var near := false
+		for t: Vector3 in props.trodden:
+			near = near or Vector2(t.x, t.y).distance_to(g) <= 0.25
+		assert_true(near, "%s: біля хвіртки садиби %d нема плями" % [p, gi])
+
+
+## Двері хати дивляться на фасад до воріт: у house_h5 двері й сходинка на тильній стіні моделі (+Z),
+## тож її ставимо задом наперед. Інакше стежка й пляма «біля дверей» лягали під глуху стіну. Біля дверей
+## кожної хати є витоптана пляма.
+func test_every_door_faces_its_gate_and_has_a_trodden_patch(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var pl: PropLayer._Placer = props._placer
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	for i in homes.size():
+		if not pl.doors.has(i):
+			continue
+		var face := Vector2(homes[i]["face"])
+		var hc := Vector2(homes[i]["house"])
+		var found := false
+		for inst: Dictionary in props.all_instances():
+			var xf: Transform3D = inst["transform"]
+			if inst["model"] != pl.house_models[i] or Vector2(xf.origin.x, xf.origin.z).distance_to(hc) > 0.5:
+				continue
+			found = true
+			# Стіна з дверима моделі: −Z, у house_h5 — +Z (так зроблено саму модель).
+			var local := Vector3(0, 0, 1) if inst["model"] == &"house_h5" else Vector3(0, 0, -1)
+			var w: Vector3 = xf.basis * local
+			assert_almost_eq(Vector2(w.x, w.z).normalized(), face, Vector2.ONE * 1e-3,
+					"%s: двері хати %d (%s) не на фасаді" % [p, i, inst["model"]])
+		assert_true(found, "%s: нема моделі хати %d" % [p, i])
+		var door: Vector2 = pl.doors[i][0]
+		var near := false
+		for t: Vector3 in props.trodden:
+			near = near or Vector2(t.x, t.y).distance_to(door) <= 0.25
+		assert_true(near, "%s: біля дверей хати %d нема плями" % [p, i])
 
 
 ## Захист від полотна: точка, що вже лежить на дорозі, виштовхується за її край.

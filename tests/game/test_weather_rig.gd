@@ -92,7 +92,10 @@ func test_apply_sends_the_haze_foliage_and_sky_to_every_material() -> void:
 	assert_eq(rig.applied_globals[&"foliage_tint"], Vector3(c.r, c.g, c.b))
 	assert_almost_eq(rig.applied_globals[&"sky_clear"], look.sky_clear, 1e-5)
 	assert_almost_eq(rig.applied_globals[&"water_murk"], look.water_murk, 1e-5)
-	for g: String in ["sun_dir", "sky_clear", "foliage_tint", "haze_color", "water_murk"]:
+	assert_eq(rig.applied_globals[&"path_earth_dry"], look.path_earth_dry)
+	assert_eq(rig.applied_globals[&"path_trod_dry"], look.path_trod_dry)
+	assert_eq(rig.applied_globals[&"path_dry_k"], look.path_dry_k)
+	for g: String in ["sun_dir", "sky_clear", "foliage_tint", "haze_color", "water_murk", "path_earth_dry", "path_trod_dry", "path_dry_k"]:
 		assert_true(ProjectSettings.has_setting("shader_globals/" + g), g)
 
 
