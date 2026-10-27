@@ -446,14 +446,14 @@ def make_window_material(frame_i=0, dark=False):
     mask = math("MAXIMUM", frame, bars)
     sky = math("SUBTRACT", 1.0, v)                                             # відбите небо світліше вгорі шибки
     # скло віддзеркалює небо: світліше вгорі, косий відблиск, гладке (roughness 0.08)
-    glass_sky = mixc((0.16, 0.18, 0.21), (0.045, 0.05, 0.06), sky)
+    glass_sky = mixc((0.032, 0.034, 0.038), (0.011, 0.012, 0.014), sky)   # темне нейтральне скло: під сонцем і дощем не синій екран
     glint = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", math("ADD", u, math("MULTIPLY", v, 0.6)), 0.55)), 0.06)   # косий відблиск неба
-    glass_sky = mixc(glass_sky, (0.30, 0.32, 0.35), math("MULTIPLY", glint, 0.5))
+    glass_sky = mixc(glass_sky, (0.14, 0.145, 0.15), math("MULTIPLY", glint, 0.5))   # лише ледь помітний відблиск неба
     tone = N("ShaderNodeSeparateColor")
     L(ca.outputs["Color"], tone.inputs[0])
     t = tone.outputs[0]
-    g1 = mixc(glass_sky, (0.02, 0.025, 0.03), math("MULTIPLY", t, 2.0, True))
-    g2 = mixc(g1, (0.12, 0.11, 0.095), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))   # фіранка лише трохи світліша за скло
+    g1 = mixc(glass_sky, (0.009, 0.010, 0.011), math("MULTIPLY", t, 2.0, True))
+    g2 = mixc(g1, (0.040, 0.036, 0.030), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))   # фіранка: тепліша за скло, але теж темна, не світла пляма
     fcol = FRAMES[frame_i]                                                     # рама — одна на будинок, з палітри
     fr = mixc(g2, fcol, mask)
     rv = mixc(fr, (0.05, 0.045, 0.04), reveal)
@@ -615,7 +615,7 @@ def mats():
         "clad_roof": roof_mat("clad_roof", "corr", (0.62, 0.61, 0.57), "x", "y", moss=False, sheet=(1.0, 4.0), cell_amp=0.04, streak=0.0),
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
-        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
+        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.47, 0.41, 0.35), sat=0.5, streak=0.9, base_dirt=0.9),
         "interior_burnt": make_material("interior_burnt", flat=(0.010, 0.0095, 0.009), streak=0.6),   # вигоріле нутро на зламі: ≤ 35 sRGB навіть під небом
         "door_red": make_material("door_red", flat=srgb_lin((0.42, 0.20, 0.15)), seams=[("z", 0.5, 0.015, 0.4)], seam_col=srgb_lin((0.25, 0.12, 0.09)), streak=0.5, rough=0.5),   # фарбований метал
         "door_wood": make_material("door_wood", "Planks021", 1.0, (0.55, 0.42, 0.30), seams=[("h", 0.12, 0.012, 0.5)], streak=0.6, bump=0.01, rough=0.8),
@@ -683,7 +683,7 @@ def mats():
         "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
         "plaster_char": make_material("plaster_char", flat=(0.17, 0.155, 0.14), streak=0.5, base_dirt=0.2),
         "plinth_dark": make_material("plinth_dark", flat=(0.20, 0.195, 0.185), base_dirt=0.5, streak=0.4),
-        "plinth_flat": make_material("plinth_flat", flat=(0.33, 0.32, 0.30), base_dirt=0.5, streak=0.4),
+        "plinth_flat": make_material("plinth_flat", flat=(0.28, 0.235, 0.19), base_dirt=0.9, streak=0.6),   # вологий цоколь: темний і теплий, а не світло-сірий
         "door_panel": make_material("door_panel", flat=(0.30, 0.22, 0.15), seams=[("h", 0.22, 0.015, 0.5)], streak=0.3, seam_bump=0.0),
         "mud_skirt": make_material("mud_skirt", flat=(0.10, 0.082, 0.065), streak=0.6, base_dirt=0.2),
         "boards_soft_vc": make_material("boards_soft_vc", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, vmul=True, seam_bump=0.8, undul=(1.2, 0.01), rough=0.9),
@@ -748,7 +748,7 @@ def mats():
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.36, 0.42, 0.44), streak=0.5),
         "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.2), patch=((0.03, 0.03, 0.03), 0.3)),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.50, 0.48), sat=0.25, seams=[("h", 0.2, 0.012, 0.5)], streak=1.0, base_dirt=0.5),
-        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
+        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.47, 0.41, 0.35), sat=0.5, streak=0.9, base_dirt=0.9),
         "clad_burnt": make_material("clad_burnt", "CorrugatedSteel005", 1.0, (0.12, 0.12, 0.11), streak=1.0),
         "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.20, 0.36, 0.30), seams=[("z", 0.25, 0.03, 0.5)], base_dirt=0.5),
         "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.62, 0.66, 0.70), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], streak=0.8, base_dirt=0.4),
@@ -883,7 +883,7 @@ def _off(axis, c, sgn, u, z, off):
     return (u, c + sgn * off, z) if axis == "y" else (c + sgn * off, u, z)
 
 
-def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.5, kband=(0.42, 0.5), ksill=(0.5, 0.62), lsill=(0.7, 1.5), eave_streaks=True):
+def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, kband=(0.46, 0.56), ksill=(0.25, 0.38), lsill=(1.0, 1.9), eave_streaks=True):
     """Вивітрювання стін декалями-множниками: брудний низ із рваним краєм (-30%), темні патьоки під підвіконнями й від ринви (-25%),
     пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
     import random
@@ -891,7 +891,7 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.5, k
     dm = mat + "_dm"
     for (axis, c, sgn, u0, u1, zb, ze) in walls:
         nrm = (0, sgn, 0) if axis == "y" else (sgn, 0, 0)
-        P = lambda u, z, off=0.005: _off(axis, c, sgn, u, z, off)
+        P = lambda u, z, off=0.025: _off(axis, c, sgn, u, z, off)   # 2.5 см над стіною: при 5 мм декаль тонула в глибині й у кадрі її не було видно
         n = max(2, int((u1 - u0) / seg))                                # seg — довжина відрізка смуг (на довгих фасадах більша: бюджет трикутників)
         us = [u0 + (u1 - u0) * i / n for i in range(n + 1)]
         ph = [rnd.uniform(0, 6.28) for _ in range(3)]
@@ -909,21 +909,26 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.5, k
         for (_a, _c, _s, u, z, w, h) in wins:                           # патьоки з обох кінців кожного підвіконня: вода стікає з країв відливу
             for end in (-1, 1):
                 uu = u + end * (w / 2 + 0.06) + rnd.uniform(-0.04, 0.04)
-                hw = rnd.uniform(0.07, 0.12)
+                hw = rnd.uniform(0.17, 0.26)   # у кадрі бою ≥ 3 пікселі: тонші патьоки зливались зі стіною
                 zt = z - 0.12
-                zbm = max(zb + 0.3, zt - rnd.uniform(*lsill))
+                zbm = max(zb + 0.04, zt - rnd.uniform(*lsill))   # вікна низько (1 м): патьоку доводиться йти майже до цоколя
                 if zt - zbm < 0.25:
                     continue
                 k = rnd.uniform(*ksill)
                 b.decal([P(uu - hw, zbm), P(uu, zbm), P(uu, zt), P(uu - hw, zt)], (1.0, 1.0, k, 0.97), dm, nrm)
                 b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, zt), P(uu, zt)], (1.0, 1.0, 0.97, k), dm, nrm)
+        if wins:                                                        # вологий слід під усім підвіконням: широка пляма, що згасає вниз
+            for (_a, _c, _s, u, z, w, h) in wins:
+                zt2, zb2 = z - 0.1, max(zb + 0.04, z - 0.5)
+                if zt2 - zb2 > 0.2:
+                    b.decal([P(u - w / 2 - 0.1, zb2), P(u + w / 2 + 0.1, zb2), P(u + w / 2 + 0.1, zt2), P(u - w / 2 - 0.1, zt2)], (1.0, 1.0, 0.55, 0.55), dm, nrm)
         for _ in (range(max(2, int((u1 - u0) / 1.5))) if eave_streaks else ()):   # з карниза: короткі патьоки там, де переливається ринва
             uu = rnd.uniform(u0 + 0.3, u1 - 0.3)
             if any(abs(uu - w[3]) < w[5] / 2 + 0.15 for w in wins) or any(a_ - 0.2 <= uu <= c_ + 0.2 for a_, c_ in skip_u):
                 continue
             hw = rnd.uniform(0.05, 0.1)
             zbm = ze - rnd.uniform(0.4, 1.1)
-            k = rnd.uniform(0.74, 0.84)
+            k = rnd.uniform(0.84, 0.92)   # слабше: після виправлення глибини декалі стріхові патьоки читались рваною гребінкою під карнизом
             b.decal([P(uu - hw, zbm), P(uu, zbm), P(uu, ze - 0.1), P(uu - hw, ze - 0.1)], (1.0, 1.0, k, 0.96), dm, nrm)
             b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, ze - 0.1), P(uu, ze - 0.1)], (1.0, 1.0, 0.96, k), dm, nrm)
         if patches and u1 - u0 > 6:                                     # одна латка обсипаної штукатурки, де цегла проступає
@@ -1446,10 +1451,11 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
     return top
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0, foot=0.0, in_mat=None):
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0, foot=0.0, in_mat=None, holes=()):
     """Уламок стіни p0-p1: сегменти різної ширини, кожен ламається ще на 1-3 шматки з різними верхами (різниця 0.2-0.5 м,
     тож жодного рівного верху), випадкова ходьба висот довкола задуму heights (не вище hcap); верхні 0.4 м — відкрита
-    цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий."""
+    цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий.
+    holes — справжні прорізи (u0, u1, z0, z1; u від p0): шматки в межах проріму не мають граней між z0 і z1, відкоси й підвіконня — окремі грані."""
     import random
     rnd = random.Random(seed)
     n0 = len(heights) - 1
@@ -1466,6 +1472,9 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
     while cuts[-1] < ln - 0.3:
         cuts.append(min(ln, cuts[-1] + rnd.uniform(0.35, 1.5)))
     cuts[-1] = ln
+    edges = {e for h_ in holes for e in (h_[0], h_[1])}   # краї проріму — на стиках шматків, інакше проріз різав би шматок навпіл
+    if edges:
+        cuts[:] = sorted({c_ for c_ in cuts if c_ in (0.0, ln) or all(abs(c_ - e) > 0.2 for e in edges)} | edges)
     pieces = []                                   # (x0, x1, h0, h1) вздовж стіни; висота 0 — пролом
     h = None
     for i in range(len(cuts) - 1):
@@ -1500,6 +1509,8 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
     for i, (xa, xc, ha, hc) in enumerate(pieces):
         if ha <= 0.05 and hc <= 0.05:
             continue
+        mid_ = (xa + xc) / 2
+        hole = next((h_ for h_ in holes if h_[0] <= mid_ <= h_[1]), None)
         tb = 1.0 - tvar * rnd.random()                      # тон шматка: стіна не однакова по всій довжині
         tbr = 1.0 - 0.4 * tvar * rnd.random() if tvar else 1.0
 
@@ -1520,10 +1531,25 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             side_n = nrm if q0 is pb[0] else -nrm                     # внутрішній — бік, звернений до центру будинку (руїни будуються навколо 0,0)
             inner = side_n.dot(-(a + c) * 0.5) > 0.0
             mq = (in_mat or mat) if inner else mat                      # внутрішній бік — обгоріла штукатурка, а не та сама фарба
-            quad([V(q0, 0), V(q1, 0), V(q1, lc), V(q0, la)], (tn,) * 4, mq)
+            skip_band = False
+            if hole is None:
+                quad([V(q0, 0), V(q1, 0), V(q1, lc), V(q0, la)], (tn,) * 4, mq)
+            else:                                                       # стіна під і над прорізом; між ними — порожнеча
+                hz0, hz1 = hole[2], hole[3]
+                if hz0 > 0.02:
+                    quad([V(q0, 0), V(q1, 0), V(q1, hz0), V(q0, hz0)], (tn * (1.0 - foot), tn * (1.0 - foot), tn, tn), mq)
+                if hz1 < min(la, lc) - 0.02:
+                    quad([V(q0, hz1), V(q1, hz1), V(q1, lc), V(q0, la)], (tn,) * 4, mq)
+                else:                                                   # проріз сягає кіптявого пояса: над ним лишається лише частина пояса
+                    assert hz1 < min(ba, bc) - 0.02, "проріз сягає верху стіни"
+                    k_ = (hz1 - min(la, lc)) / max(1e-3, min(ba, bc) - min(la, lc))
+                    tm = tn + (tn * top_tone - tn) * k_
+                    quad([V(q0, hz1), V(q1, hz1), V(q1, bc), V(q0, ba)], (tm, tm, tn * top_tone, tn * top_tone), mq)
+                    skip_band = True
             tg = tn * (1.0 - foot) if la <= 0.01 else tn                # AO біля землі: низ стіни темніший, угору світлішає
             tg2 = tn * (1.0 - foot) if lc <= 0.01 else tn
-            quad([V(q0, la), V(q1, lc), V(q1, bc), V(q0, ba)], (tg, tg2, tn * top_tone, tn * top_tone), mq)
+            if not skip_band:
+                quad([V(q0, la), V(q1, lc), V(q1, bc), V(q0, ba)], (tg, tg2, tn * top_tone, tn * top_tone), mq)
             bp((V(q0, ba), V(q1, bc), V(q1, ch), V(q0, ah)))
         bp((V(pb[0], ha), V(pb[1], hc), V(pb[2], hc), V(pb[3], ha)))
         prev = pieces[i - 1] if i > 0 and pieces[i - 1][1] >= xa - 1e-6 and pieces[i - 1][3] > 0.05 else None
@@ -1534,6 +1560,15 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             bp((V(pb[1], lo_end), V(pb[2], lo_end), V(pb[2], hc), V(pb[1], hc)))
         if ha - lo_start > 0.02:
             bp((V(pb[3], lo_start), V(pb[0], lo_start), V(pb[0], ha), V(pb[3], ha)))
+
+    for hu0, hu1, hz0, hz1 in holes:                    # відкоси, підвіконня й перемичка проріму
+        pa = Vector((p0[0], p0[1], 0)) + u * hu0
+        pc = Vector((p0[0], p0[1], 0)) + u * hu1
+        for pe, dirn in ((pa, 1), (pc, -1)):
+            _quad(b, [V(pe + nrm, hz0), V(pe - nrm, hz0), V(pe - nrm, hz1), V(pe + nrm, hz1)], mat, tuple(u * dirn))
+        if hz0 > 0.02:
+            _quad(b, [V(pa + nrm, hz0), V(pc + nrm, hz0), V(pc - nrm, hz0), V(pa - nrm, hz0)], mat, (0, 0, 1))
+        _quad(b, [V(pa - nrm, hz1), V(pc - nrm, hz1), V(pc + nrm, hz1), V(pa + nrm, hz1)], mat, (0, 0, -1))
 
 
 def prism(b, prof, thick, origin, yaw, lean, mat, top_mat=None, in_mat=None, inner=(0.0, 0.0)):

@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
-from lib import Builder, wall_run, burn_ring, opening2, chip_slab, prism, bent_sheet, heap_mound
+from lib import Builder, wall_run, burn_ring, chip_slab, prism, bent_sheet, heap_mound
 from lib import HeapSurface as _HS
 from mathutils import Vector
 
@@ -197,27 +197,27 @@ def house1(ruined):
     kw = dict(top_tone=0.82, inner_tone=0.85, in_mat="plaster_burnt")             # внутрішні грані — обгоріла штукатурка
     standing = dict(brick_mat="brick_face", cap=0.06, jag=0.12, **kw)          # на зламі — цегла, а не фарба
     broken = dict(brick_mat="brick_face", step=0.35, diag_p=0.85, jit=0.5, **kw)
-    wall_run(b, (-0.9, S), (hx + 0.2, S), 0.4, [E] * 6, "wall_half", "wall_plaster", 21, hcap=3.1, **standing)
+    # справжні прорізи в стоячих стінах (u — від початку стіни): вікна 1.0-1.1 x 1.4 м на 1.0 м, двері 1.0 x 2.0 м
+    holes_s = [(0.5, 1.5, 0.0, 2.05), (1.9, 2.9, 1.0, 2.4), (3.05, 4.05, 1.0, 2.4)]
+    holes_e = [(0.85, 1.95, 1.0, 2.4), (2.85, 3.95, 1.0, 2.4)]
+    holes_n = [(1.0, 2.0, 1.0, 2.4), (2.4, 3.4, 1.0, 2.4)]
+    wall_run(b, (-0.9, S), (hx + 0.2, S), 0.4, [E] * 6, "wall_half", "wall_plaster", 21, hcap=3.1, holes=holes_s, **standing)
     wall_run(b, (-hx, S), (-0.9, S), 0.4, [0.6, 1.3, 0.9, 1.8], "wall_half", "brick_face", 22, hcap=2.2, **broken)
-    wall_run(b, (hx, S), (hx, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 23, hcap=3.1, **standing)
-    wall_run(b, (hx + 0.2, N), (-1.6, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 24, hcap=3.1, **standing)
+    wall_run(b, (hx, S), (hx, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 23, hcap=3.1, holes=holes_e, **standing)
+    wall_run(b, (hx + 0.2, N), (-1.6, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 24, hcap=3.1, holes=holes_n, **standing)
     wall_run(b, (-1.6, N), (-hx, N), 0.4, [1.7, 1.1, 2.0, 0.8], "wall_half", "brick_face", 25, hcap=2.2, **broken)
     wall_run(b, (-hx, N), (-hx, S), 0.4, [2.2, 1.3, 0.7, 1.0, 0.6], "wall_half", "brick_face", 26, hcap=2.2, **broken)
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
     zt = E - 0.03
     for x in (1.5, 2.65):
         burn_ring(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, g_side=0.35, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-        opening2(b, "y", S - 0.2, x, 1.0, 1.0, 1.4, -1, ztop=zt, streak=0.0, sooty=True)
         lib.window_ring(b, "y", S - 0.2, -1, x, 1.0, 1.0, 1.4)   # лиштва лишилась: проріз читається розміром вікна
     burn_ring(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-    opening2(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, ztop=zt, streak=0.0, sooty=True)
     for y, w, h, z in ((-1.0, 1.1, 1.4, 1.0), (1.0, 1.1, 1.4, 1.0)):              # пропорції вікон цілої h5
         burn_ring(b, "x", hx + 0.2, y, z, w, h, 1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-        opening2(b, "x", hx + 0.2, y, z, w, h, 1, ztop=zt, streak=0.0, sooty=True)
         lib.window_ring(b, "x", hx + 0.2, 1, y, z, w, h)   # лиштва лишилась: проріз читається розміром вікна
     for x in (0.6, 2.0):
         burn_ring(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, g_side=0.35, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-        opening2(b, "y", N + 0.2, x, 1.0, 1.0, 1.4, 1, ztop=zt, streak=0.0, sooty=True)
         lib.window_ring(b, "y", N + 0.2, 1, x, 1.0, 1.0, 1.4)   # лиштва лишилась: проріз читається розміром вікна
     lib.weather(b, "wall_half", [("y", S - 0.2, -1, -0.9, hx + 0.2, 0.0, E), ("x", hx + 0.2, 1, S - 0.2, N + 0.2, 0.0, E)], seed=17, patches=False)
     lib.pocks(b, "y", S - 0.2, -1, 1.2, 1.4, 2.0, 45, 41, zmin=0.2, zmax=2.9)
@@ -315,7 +315,8 @@ def house2(ruined):
     kw = dict(top_tone=0.82, inner_tone=0.85, in_mat="plaster_burnt")
     standing = dict(brick_mat="brick_face", cap=0.06, jag=0.1, **kw)
     # біля обваленого кута фронтова стіна обламана сходинками цегли до 3 м, а не обрізана рівно
-    wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 7 + [3.0], "wall_half_w", "wall_plaster_w", 31, hcap=6.2, **standing)
+    holes_s = [(0.8, 2.0, 3.6, 5.0), (4.9, 5.9, 0.0, 2.05)]                      # справжні: вікно другого поверху й двері; u — від p0 стіни
+    wall_run(b, (-hx - 0.2, S), (hx + 0.2, S), 0.4, [E] * 7 + [3.0], "wall_half_w", "wall_plaster_w", 31, hcap=6.2, holes=holes_s, **standing)
     wall_run(b, (hx + 0.2, N), (-hx - 0.2, N), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 32, hcap=6.2, **standing)   # задня стіна з фронтоном ціла
     wall_run(b, (-hx, N), (-hx, S), 0.4, [E] * 8, "wall_half_w", "wall_plaster_w", 33, hcap=6.2, **standing)
     prism(b, [(-hy, E), (hy, E), (hy, E + 0.5), (1.9, E + 0.5), (1.9, E + 1.1), (1.1, E + 1.1), (1.1, E + 1.7), (0.4, E + 1.7), (0.4, E + 1.2), (-0.5, E + 1.2), (-0.5, E + 0.7), (-1.4, E + 0.7), (-1.4, E + 0.2), (-hy, E + 0.2)], 0.4, (-hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster_w", top_mat="brick_dark")   # зламаний верх: п'ять уступів 0.4-0.6 м, на зламі темна цегла   # зламаний верх фронтону
@@ -323,10 +324,11 @@ def house2(ruined):
     zt = E - 0.03
     for fl, z in ((0, 0.9), (1, 3.6)):
         for x in (-1.8, 0.0, 1.8):
-            blown = (fl == 1 and x != 0.0) or (fl == 0 and x == 1.8)
+            blown = fl == 1 and x == -1.8
+            if fl == 0 and x == 1.8:                                       # тут двері (проріз)
+                continue
             if blown:
                 burn_ring(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-                opening2(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, ztop=zt, streak=0.0, sooty=True)
                 lib.window_ring(b, "y", S - 0.2, -1, x, z, 1.2, 1.4)   # лиштва лишилась: проріз читається розміром вікна
             else:
                 b.window(("y", S - 0.2, -1), x, z, 1.2, 1.4)
@@ -335,7 +337,6 @@ def house2(ruined):
             b.window(("y", N + 0.2, 1), x, z, 1.2, 1.4)
             pane_dress(b, "y", N + 0.2, 1, x, z, 1.2, 1.4)
     burn_ring(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-    opening2(b, "y", S - 0.2, 2.2, 0.05, 1.0, 2.0, -1, ztop=zt, streak=0.0, sooty=True)
     lib.weather(b, "wall_half_w", [("y", S - 0.2, -1, -hx - 0.2, hx + 0.2, 0.0, E)], seed=19, patches=False)
     lib.pocks(b, "y", S - 0.2, -1, 0.5, 3.0, 2.6, 60, 43, zmin=0.2, zmax=5.9)
     # внутрішня грань західного фронтону не чиста штукатурка: кіптява згори, облуплені плями
@@ -422,9 +423,10 @@ def shed(ruined):
         lib.finish(b, "f8_shed", out, tri_limit=1600, footprint=(1, 1))
         return
     kw = dict(brick_mat="boards_soft", soot_h=1.0, top_tone=0.82)
-    wall_run(b, (XE, N), (XW, N), 0.14, [E] * 8, "boards_soft_vc", "boards_soft", 51, hcap=3.0, jag=0.1, cap=0.06, **kw)
+    # справжні прорізи (u — від початку стіни): два вікна на задній стіні, двері на східній
+    wall_run(b, (XE, N), (XW, N), 0.14, [E] * 8, "boards_soft_vc", "boards_soft", 51, hcap=3.0, jag=0.1, cap=0.06, holes=[(0.9, 2.3, 0.9, 2.2), (5.0, 5.8, 1.1, 2.0)], **kw)
     wall_run(b, (XW, N), (XW, S), 0.14, [E, E, 2.6, 1.8, 0.7, 0.5], "boards_soft_vc", "boards_soft", 52, hcap=3.0, jag=0.5, step=0.4, diag_p=0.8, jit=0.5, **kw)
-    wall_run(b, (XE, S), (XE, N), 0.14, [E] * 6, "boards_soft_vc", "boards_soft", 53, hcap=3.0, jag=0.1, cap=0.06, **kw)
+    wall_run(b, (XE, S), (XE, N), 0.14, [E] * 6, "boards_soft_vc", "boards_soft", 53, hcap=3.0, jag=0.1, cap=0.06, holes=[(1.15, 2.45, 0.0, 2.25)], **kw)
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.14, (XE, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.14, (XW, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
     post_x = (-3.4, -2.27, -1.13, 0.0, 1.13, 2.27, 3.4)
@@ -437,12 +439,9 @@ def shed(ruined):
     b.cyl(-2.95, -2.35, 0.0, 0.3, 0.9, 12, "steel_paint")                       # бочка й ящик на землі біля впалої стіни
     b.box(-2.35, -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3)
     zt = E - 0.03
-    opening2(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, ztop=zt, streak=0.0, sooty=True)
     burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-    opening2(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, ztop=zt, streak=0.0, sooty=True)
     lib.window_ring(b, "y", N + 0.1, 1, 1.8, 0.9, 1.4, 1.3)   # лиштва лишилась: проріз читається розміром вікна
     burn_ring(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-    opening2(b, "y", N + 0.1, -2.0, 1.1, 0.8, 0.9, 1, ztop=zt, streak=0.0, sooty=True)
     lib.window_ring(b, "y", N + 0.1, 1, -2.0, 1.1, 0.8, 0.9)   # лиштва лишилась: проріз читається розміром вікна
 
     def hpost(x):
