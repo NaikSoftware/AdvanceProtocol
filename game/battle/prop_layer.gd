@@ -2468,6 +2468,12 @@ class _Placer:
 			var gp: Vector2 = gate + out * 0.22
 			if not on_road(gp, 0.3) and _on_board(gp):
 				patches.append(Vector3(gp.x, gp.y, 0.28))
+			else:
+				# Хвіртка майже на узбіччі: менша пляма впритул до неї, інакше вхід у двір не читався
+				# зовсім. На полотно дороги вона однаково не лягає — маску ріже dry.
+				gp = gate + out * 0.06
+				if not on_road(gp, 0.12) and _on_board(gp):
+					patches.append(Vector3(gp.x, gp.y, 0.2))
 			var pp: Vector2 = porch + face * 0.06
 			if _on_board(pp):
 				patches.append(Vector3(pp.x, pp.y, 0.2))
