@@ -542,20 +542,23 @@ from the map seed.
   cell centre. Willow and alder stand on the dry bank in groups of 1–3, at the edge of a land cell
   and within 0.4 of the water. Everything comes in patches rather than a ring: more on quiet bends
   and near marsh, nothing within 2 cells of a bridge or next to a road.
-- **Ponds.** A water body of at most 16 cells is a pond. Its reeds come in 3–5 patches that together
-  cover 25–40 % of the shoreline (by angle around the pond's centre), each clump within 1 m of the
-  waterline, never out in open water.
+- **Ponds.** A water body of at most 16 cells is a pond. Its reeds come in 3–5 patches that, with
+  the spread of the clumps, cover 25–40 % of the waterline length (measured along the waterline, not
+  by angle), each clump within 1 m of the waterline, never out in open water.
 - **Meadows.** Rare groups of 1–3 hawthorn and dog-rose bushes, or a lone pear or oak (a willow
   near water), only on unploughed field and away from the villages. Oak and willow are scaled up in
   battle (`GROW`) to 10–15 m: the bare late crown is bounded by the branch reach, so the model is
   built smaller and the shader grows the cards with the instance.
-- **Yards.** About 70 % of the homesteads in the village layout get 1–2 plants, inside the yard or
-  just outside its fence. The first is a 5–6 m apple or cherry tree; lilac, elder, thuja or a berry
-  row takes its place only where a tree does not fit by a roof or a road.
+- **Yards.** About 70 % of the homesteads in the village layout get 1–2 plants, only inside the
+  fence: a tree outside it reads as a meadow tree and makes the house beside it look taller. The
+  first is a 5–6 m apple or cherry tree, the second lilac, elder, thuja or a berry row. Where no tree
+  fits by a roof or a road, the yard stays empty.
 
 No trunk stands within 0.5 of a road and no crown hangs over one; nothing stands on a bridge, in
 water, in ploughland, on a fence or garden bed, and no crown reaches a roof. When a unit stands under a crown or a reed bed, the plant fades (`set_reveal_cells`, with the `fade_floor` 0.6 for bare late crowns). A
-vehicle's cell shows the `_fallen` twin (`set_crushed`). On a sunny map the shade patch stretches
+vehicle's cell shows the `_fallen` twin (`set_crushed`): a crushed bush is 16–22 stems lying flat
+over at least 40 % of the bush's footprint, a felled tree a low brushwood pile, both in the same
+grey-brown dead wood (about (65, 57, 46) on frames), never lighter than the ground. On a sunny map the shade patch stretches
 away from the sun by the crown's height. The battle ground shows no real sun shadow, so this
 follows the houses' contact patch (`prop_contact.gdshader`). `tests/game/test_vegetation_layer.gd`
 checks all of this on the three maps.
