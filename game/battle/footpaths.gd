@@ -277,7 +277,9 @@ const LUMA := Vector3(0.299, 0.587, 0.114)
 ## Колір землі під стежкою — та сама формула, що в ground.gdshader (блок Footpaths). Тон —
 ## яскравість трави в цьому пікселі × відтінок × k, а не сталий колір: у дощ трава темнішає разом зі
 ## стежкою, текстура ґрунту лишається, і стежка відрізняється від трави лише трохи. k середини:
-## суха 1.15, мокра 0.85; прим'ятої смуги — 1.05 / 0.93; плями біля воріт — 1.0 / 0.78.
+## суха 1.4, мокра 0.62; прим'ятої смуги — 1.2 / 0.8; плями біля воріт — 1.45 / 0.58 (вхід у двір
+## читається трохи сильніше за стежку). Імла й небо на екрані стискають різницю приблизно до k^0.35:
+## k 1.4 дає ~1.12 яскравості трави, 0.62 — ~0.85; з меншими k стежка зникала зовсім.
 ## wet_p — 0 сухо, 1 дощ (MUD — 0.7).
 static func tone(alb: Color, pm: Vector2, wet_p: float) -> Color:
 	var a := Vector3(alb.r, alb.g, alb.b)
@@ -288,9 +290,9 @@ static func tone(alb: Color, pm: Vector2, wet_p: float) -> Color:
 	trampled /= trampled.dot(LUMA)
 	var core_t: float = smoothstep(0.5, 0.78, pm.x)
 	var band_t: float = smoothstep(0.08, 0.3, pm.x)
-	a = a.lerp(trampled * lum * lerpf(1.05, 0.93, wet_p), band_t * 0.8)
-	a = a.lerp(earth * lum * lerpf(1.15, 0.85, wet_p), core_t)
-	a = a.lerp(earth * lum * lerpf(1.0, 0.78, wet_p), pm.y * 0.8)
+	a = a.lerp(trampled * lum * lerpf(1.2, 0.8, wet_p), band_t * 0.8)
+	a = a.lerp(earth * lum * lerpf(1.4, 0.62, wet_p), core_t)
+	a = a.lerp(earth * lum * lerpf(1.45, 0.58, wet_p), pm.y * 0.8)
 	return Color(a.x, a.y, a.z, alb.a)
 
 

@@ -108,29 +108,29 @@ func test_tone_leaves_grass_without_wear() -> void:
 func test_tone_wet_trodden_earth_is_darker_than_grass() -> void:
 	var core: Color = Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 0.7)
 	var l: float = _lum(GRASS_WET)
-	# wet_p 0.7 (MUD): k = lerp(1.15, 0.85, 0.7) = 0.94.
-	assert_almost_eq(_lum(core), l * 0.94, 1e-6, "середина стежки в багні")
-	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 1.0)), l * 0.85, 1e-6, "середина в дощ")
+	# wet_p 0.7 (MUD): k = lerp(1.4, 0.62, 0.7) = 0.854.
+	assert_almost_eq(_lum(core), l * 0.854, 1e-6, "середина стежки в багні")
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 1.0)), l * 0.62, 1e-6, "середина в дощ")
 	assert_true(core.r > core.g and core.g > core.b, "бура земля, не рожева й не сіра: %s" % core)
 	assert_almost_eq(core.b / core.g, 0.5492, 1e-3, "синього мало — не рожевий пісок")
 
 
 func test_tone_dry_trodden_earth_is_only_slightly_lighter() -> void:
 	var grass := Color(0.16, 0.15, 0.09)
-	assert_almost_eq(_lum(Footpaths.tone(grass, Vector2(1.0, 0.0), 0.0)), _lum(grass) * 1.15, 1e-6)
+	assert_almost_eq(_lum(Footpaths.tone(grass, Vector2(1.0, 0.0), 0.0)), _lum(grass) * 1.4, 1e-6)
 
 
 func test_tone_trodden_patch_follows_grass() -> void:
 	var l: float = _lum(GRASS_WET)
-	# Пляма: вага 0.8 × G, k — 0.78 у дощ, 1.0 сухо: lum = l × (1 − 0.8 + 0.8 × 0.78).
-	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.0, 1.0), 1.0)), l * (0.2 + 0.8 * 0.78), 1e-6)
-	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.0, 1.0), 0.0)), l * (0.2 + 0.8 * 1.0), 1e-6)
+	# Пляма: вага 0.8 × G, k — 0.58 у дощ, 1.45 сухо: lum = l × (1 − 0.8 + 0.8 × 0.58).
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.0, 1.0), 1.0)), l * (0.2 + 0.8 * 0.58), 1e-6)
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.0, 1.0), 0.0)), l * (0.2 + 0.8 * 1.45), 1e-6)
 
 
 func test_tone_trampled_verge_keeps_grass_brightness_near() -> void:
 	var l: float = _lum(GRASS_WET)
-	# Смуга прим'ятої трави (pm.r 0.3): band_t = 1, вага 0.8, k = 0.93 у дощ, ядра ще нема.
-	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.3, 0.0), 1.0)), l * (0.2 + 0.8 * 0.93), 1e-6)
+	# Смуга прим'ятої трави (pm.r 0.3): band_t = 1, вага 0.8, k = 0.8 у дощ, ядра ще нема.
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.3, 0.0), 1.0)), l * (0.2 + 0.8 * 0.8), 1e-6)
 
 
 ## Шейдер не запускається в тесті, тож Footpaths.tone — його дзеркало: ті самі числа мають стояти
@@ -139,9 +139,9 @@ func test_tone_matches_the_ground_shader() -> void:
 	var src: String = FileAccess.get_file_as_string("res://game/battle/shaders/ground.gdshader")
 	for s in ["vec3 earth = mix(%s, %s, wet_p);" % [_glsl(Footpaths.EARTH_DRY), _glsl(Footpaths.EARTH_WET)],
 			"vec3 trod = mix(%s, %s, wet_p);" % [_glsl(Footpaths.TRAMPLED_DRY), _glsl(Footpaths.TRAMPLED_WET)],
-			"alb = mix(alb, trod * lum * mix(1.05, 0.93, wet_p), band_t * 0.8);",
-			"alb = mix(alb, earth * lum * mix(1.15, 0.85, wet_p), core_t);",
-			"alb = mix(alb, earth * lum * mix(1.0, 0.78, wet_p), pm.g * 0.8);"]:
+			"alb = mix(alb, trod * lum * mix(1.2, 0.8, wet_p), band_t * 0.8);",
+			"alb = mix(alb, earth * lum * mix(1.4, 0.62, wet_p), core_t);",
+			"alb = mix(alb, earth * lum * mix(1.45, 0.58, wet_p), pm.g * 0.8);"]:
 		assert_true(src.contains(s), "у шейдері нема: " + s)
 
 

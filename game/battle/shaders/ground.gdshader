@@ -1335,9 +1335,9 @@ void fragment() {
 			trod /= dot(trod, lw_p);
 			float core_t = smoothstep(0.5, 0.78, pm.r);
 			float band_t = smoothstep(0.08, 0.3, pm.r);
-			alb = mix(alb, trod * lum * mix(1.05, 0.93, wet_p), band_t * 0.8);
-			alb = mix(alb, earth * lum * mix(1.15, 0.85, wet_p), core_t);
-			alb = mix(alb, earth * lum * mix(1.0, 0.78, wet_p), pm.g * 0.8);
+			alb = mix(alb, trod * lum * mix(1.2, 0.8, wet_p), band_t * 0.8);
+			alb = mix(alb, earth * lum * mix(1.4, 0.62, wet_p), core_t);
+			alb = mix(alb, earth * lum * mix(1.45, 0.58, wet_p), pm.g * 0.8);
 		}
 
 		float scar_dark = 0.0;
