@@ -485,7 +485,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 18: Damaged panel block
 
 - [x] Reference photos of real collapsed panel blocks from 40–55° above; heap height, plan shape and piece sizes measured
-- [ ] Heap shaped like the reference: a tongue below the breach, never a ring around the building
+- [x] Heap shaped like the reference: a tongue below the breach, never a ring around the building
 - [ ] Breach with sagging slabs, ragged facade, plastered rooms, soot on the walls
 - [ ] Accepted side by side with the reference photo in a battle frame
 
@@ -510,11 +510,11 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 ### Task 21: Bank, yard and meadow vegetation
 
-- [ ] No wind sway
+- [x] No wind sway
 - [ ] Trees with branches, own silhouette per species, three or more forms; bare late crowns as dense twig networks
-- [ ] Fallen form is a low pile of broken branches; crushed bushes as leaning stems
-- [ ] Reed with plumes and cattail with heads, standing in the shallows
-- [ ] Reed and bushes in patches along some banks; trees or bushes in many yards, not all; a few lone bushes and trees on meadow, never on ploughed land
+- [x] Fallen form is a low pile of broken branches; crushed bushes as leaning stems
+- [x] Reed with plumes and cattail with heads, standing in the shallows
+- [x] Reed and bushes in patches along some banks; trees or bushes in many yards, not all; a few lone bushes and trees on meadow, never on ploughed land
 - [ ] Accepted in battle frames on all three maps
 
 ### Task 22: Forest into battle
