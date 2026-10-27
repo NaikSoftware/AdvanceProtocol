@@ -807,16 +807,78 @@ func test_fence_rings_are_closed(p = use_parameters(MAPS)) -> void:
 		var joined := false
 		for j in ends.size():
 			joined = joined or (j != i and ends[j].distance_to(ends[i]) < 0.03)
-		# Біля стіни (ближче FENCE_WALL) паркан кінчається, а стіна лишається межею двору.
 		for w in walls:
-			joined = joined or w.grow(PropLayer.FENCE_WALL + 0.12).has_point(ends[i])
+			joined = joined or w.grow(0.03).has_point(ends[i])
 		if not joined:
 			loose.append(ends[i])
 	var homes: int = (VillageLayout.for_map(StringName(p)).get("homes", []) as Array).size()
-	assert_lte(loose.size(), 2 * homes, "%s: вільні кінці паркану %s" % [p, loose])
+	assert_eq(loose.size(), 2 * homes, "%s: вільні кінці паркану %s" % [p, loose])
 	for e in loose:
-		var pair: bool = ends.any(func(o: Vector2) -> bool: return o != e and o.distance_to(e) <= PropLayer.GATE + 0.03)
+		var pair: bool = loose.any(func(o: Vector2) -> bool: return o != e and o.distance_to(e) <= PropLayer.GATE + 0.03)
 		assert_true(pair, "%s: кінець паркану %s без пари воріт — кільце розірване" % [p, e])
+
+
+## Кожен ланцюг секцій паркану (з'єднаних кінцями) кінчається лише на грані будівлі (з вистрілом даху, ≤ 0.03), на
+## кінці іншого ланцюга чи на стовпі воріт; ланцюг коротший за MIN_FENCE (0.5 клітинки, 4 м) — уламок, крім
+## того, що тримає стовп воріт (вузька сторона двору); секції на дорозі нема.
+func test_fence_runs_end_on_walls_or_gate_posts(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var props: PropLayer = view.props()
+	var walls: Array[Rect2] = []
+	var secs: Array = []
+	for inst in props.all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			var b: AABB = _box_of(inst)
+			walls.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+		elif k == PropLayer.Kind.GARDEN_FENCE or k == PropLayer.Kind.FIELD_FENCE:
+			var xf: Transform3D = inst["transform"]
+			var box: AABB = (PropLayer.model(inst["model"]) as Dictionary)["aabb"]
+			var a3: Vector3 = xf * Vector3(box.position.x, 0.0, 0.0)
+			var b3: Vector3 = xf * Vector3(box.end.x, 0.0, 0.0)
+			secs.append([Vector2(a3.x, a3.z), Vector2(b3.x, b3.z), k == PropLayer.Kind.GARDEN_FENCE])
+			for t in 5:
+				var q: Vector2 = Vector2(a3.x, a3.z).lerp(Vector2(b3.x, b3.z), float(t) / 4.0)
+				assert_false(props.on_road(q), "%s: секція паркану на дорозі в %s" % [p, q])
+	var posts: Array[Vector2] = []
+	for g: Dictionary in props._gates:
+		posts.append_array([g["a"], g["mid"], g["b"]])
+	# Ланцюги садибних секцій: союз за збіг кінців.
+	var garden: Array = secs.filter(func(s: Array) -> bool: return s[2])
+	var parent: Array[int] = []
+	for i in garden.size():
+		parent.append(i)
+	var root := func(i: int) -> int:
+		while parent[i] != i:
+			i = parent[i]
+		return i
+	for i in garden.size():
+		for j in range(i + 1, garden.size()):
+			for ea: Vector2 in [garden[i][0], garden[i][1]]:
+				for eb: Vector2 in [garden[j][0], garden[j][1]]:
+					if ea.distance_to(eb) < 0.03:
+						parent[root.call(i)] = root.call(j)
+	var size_of: Dictionary = {}
+	var gated: Dictionary = {}
+	for i in garden.size():
+		var ri: int = root.call(i)
+		size_of[ri] = float(size_of.get(ri, 0.0)) + (garden[i][0] as Vector2).distance_to(garden[i][1])
+		for q in posts:
+			if q.distance_to(garden[i][0]) < 0.04 or q.distance_to(garden[i][1]) < 0.04:
+				gated[ri] = true
+	for r: int in size_of:
+		assert_true(float(size_of[r]) >= PropLayer.MIN_FENCE - 1e-3 or gated.has(r), "%s: уламок паркану завдовжки %.2f біля %s" % [p, size_of[r], garden[r][0]])
+	for i in garden.size():
+		for e: Vector2 in [garden[i][0], garden[i][1]]:
+			var ok := false
+			for j in garden.size():
+				for eb: Vector2 in [garden[j][0], garden[j][1]]:
+					ok = ok or (j != i and eb.distance_to(e) < 0.03)
+			for w in walls:
+				ok = ok or w.grow(0.03).has_point(e)
+			for q in posts:
+				ok = ok or q.distance_to(e) < 0.04
+			assert_true(ok, "%s: кінець паркану %s висить у повітрі" % [p, e])
 
 
 ## Міст — матова копія сітки (ассет мав «мокрі» поверхні з шорсткістю 0.15, міст блищав склом); на
@@ -1496,8 +1558,9 @@ func test_gates_keep_clear_of_buildings(p = use_parameters(MAPS)) -> void:
 		assert_gte(float(g["clear"]), PropLayer.GATE_CLEARS[1], "%s: ворота зі запасом менше %.2f" % [p, PropLayer.GATE_CLEARS[1]])
 
 
-## Паркан не йде вздовж стіни ближче FENCE_WALL: секція впирається в стіну кінцем (напрям до стіни — вздовж ходу),
-## але не лежить паралельно в двох метрах від фасаду, затуляючи вікна.
+## Паркан не йде вздовж стіни ближче FENCE_WALL: проєкція його ходу на стіну (з відступом 0.03 від рогів — крок
+## розрізання) не лежить у межах стіни, коли між ними менше 0.25. Секція впирається в стіну кінцем, але не
+## лежить паралельно в двох метрах від фасаду, затуляючи вікна.
 func test_fences_keep_off_walls(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var rects: Array[Rect2] = []
@@ -1515,14 +1578,16 @@ func test_fences_keep_off_walls(p = use_parameters(MAPS)) -> void:
 		var a3: Vector3 = xf * Vector3(box.position.x, 0.0, 0.0)
 		var b3: Vector3 = xf * Vector3(box.end.x, 0.0, 0.0)
 		var a := Vector2(a3.x, a3.z)
-		var dir: Vector2 = (Vector2(b3.x, b3.z) - a).normalized()
+		var along_x: bool = absf(b3.x - a3.x) >= absf(b3.z - a3.z)
 		for t in 11:
 			var q: Vector2 = a.lerp(Vector2(b3.x, b3.z), float(t) / 10.0)
 			for r in rects:
-				var v: Vector2 = q.clamp(r.position, r.end) - q
-				var d: float = v.length()
-				assert_false(d > 0.03 and d < PropLayer.FENCE_WALL - 0.01 and absf(v.dot(dir)) < 0.5 * d,
-						"%s: паркан біля %s вздовж стіни %s на %.2f" % [p, q, r, d])
+				var pos: float = q.x if along_x else q.y
+				var lo: float = r.position.x if along_x else r.position.y
+				var hi: float = r.end.x if along_x else r.end.y
+				var gap: float = maxf(maxf(r.position.y - q.y, q.y - r.end.y), 0.0) if along_x else maxf(maxf(r.position.x - q.x, q.x - r.end.x), 0.0)
+				assert_false(pos > lo + 0.03 and pos < hi - 0.03 and gap > 0.03 and gap < PropLayer.FENCE_WALL - 0.01,
+						"%s: паркан біля %s вздовж стіни %s на %.2f" % [p, q, r, gap])
 		checked += 1
 	assert_gt(checked, 0, p)
 
@@ -1571,6 +1636,8 @@ func test_neighbouring_yards_do_not_repeat_forms(p = use_parameters(MAPS)) -> vo
 				var b: Variant = (placer.forms[j] as Dictionary).get(key)
 				if a != null and b != null:
 					assert_ne(a, b, "%s: садиби %d і %d мають однаковий %s" % [p, i, j, key])
+					if key == &"fence":
+						assert_ne(String(a).get_slice("|", 1), String(b).get_slice("|", 1), "%s: сусіди %d і %d одної висоти паркану" % [p, i, j])
 	# На Хребті дві садиби далеко одна від одної: сусідів нема, перевіряти нічого.
 	assert_true(pairs > 0 or p == "ridge", "%s: передумова — є сусіди" % p)
 	# Записане справді стоїть на дошці.
@@ -2224,3 +2291,31 @@ func test_hay_is_dimmed_on_a_wet_map() -> void:
 	var got := node.multimesh.mesh.surface_get_material(0) as BaseMaterial3D
 	for ch in 3:
 		assert_almost_eq(got.albedo_color[ch], src.albedo_color[ch] * PropLayer.HAY_WET[ch], 1e-4)
+
+
+## Стулка й хвіртка воріт одного тону: найбільша коробка кожної частини має однаковий колір (сталь і профнастил).
+func test_wicket_has_the_leaf_colour(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var checked: int = 0
+	for g: Dictionary in props._gates:
+		if g["kind"] != &"metal" and g["kind"] != &"sheet":
+			continue
+		var u: Vector2 = ((g["b"] as Vector2) - (g["a"] as Vector2)).normalized()
+		var best: Array = [0.0, Color.BLACK, 0.0, Color.BLACK]
+		for k in props._small_base.size():
+			var xf: Transform3D = props._small_base[k]
+			var q := Vector2(xf.origin.x, xf.origin.z)
+			var s: float = (q - (g["a"] as Vector2)).dot(u)
+			if absf(((q - (g["a"] as Vector2)) - u * s).length()) > 0.02 or s < 0.0 or s > (g["a"] as Vector2).distance_to(g["b"]):
+				continue
+			var area: float = xf.basis.x.length() * xf.basis.y.length()
+			# Стовпи (0.245 і вище) поза діапазоном висот полотна; береться найбільша площа лицьової грані.
+			var idx: int = 0 if s < (g["a"] as Vector2).distance_to(g["mid"]) else 2
+			if xf.basis.y.length() < 0.19 or xf.basis.y.length() > 0.23 or area <= best[idx]:
+				continue
+			best[idx] = area
+			best[idx + 1] = props._small_colors[k]
+		if best[0] > 0.0 and best[2] > 0.0:
+			assert_eq(best[1], best[3], "%s: хвіртка іншого тону, ніж полотно (%s)" % [p, g["kind"]])
+			checked += 1
+	assert_gt(checked, 0, p)

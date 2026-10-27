@@ -2,7 +2,8 @@
 // горизонтально, тож на сонці освітлено лише один бік, а другий бере тільки синє небо й чорніє.
 // Нормаль нахилено до неба: обидва боки освітлені майже як дерево на сонці, тіньовий — ~0.83.
 shader_type spatial;
-render_mode blend_mix, cull_disabled;
+// alpha_to_coverage: край штакетини на зумі розмивається покриттям MSAA, а не відсікається ступінчасто (цятки).
+render_mode cull_disabled, depth_draw_opaque, alpha_to_coverage;
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec4 albedo_color : source_color = vec4(1.0);
@@ -14,8 +15,6 @@ uniform float metallic = 0.0;
 uniform float sky_bend = 0.65;
 // Висота верху секції в моделі (множиться на масштаб екземпляра): верхні ~0.02 затемнені, щоб шапки не читались білим пунктиром.
 uniform float top_local = 1000.0;
-// 1 — прозорі щілини заливаються темним дерев'яним тоном замість відсікання.
-uniform float fill_gaps = 0.0;
 
 // Мокрість карти (WeatherRig): на мокрій River панель темніша, трохи приглушена й з брудом унизу —
 // яскрава огорожа світилась би, як пофарбована щойно.
@@ -53,9 +52,6 @@ void fragment() {
 	}
 	// Здалеку міпмапи усереднюють альфу тонких штакетин нижче порогу, і бік кільця зникав: поріг
 	// знижується з рівнем міпмапи, щоб покриття лишалось.
-	if (fill_gaps > 0.5 && tex.a < alpha_cut) {
-		tex = vec4(vec3(0.05), 1.0);
-	}
 	float cut = alpha_cut * clamp(1.0 - 0.3 * mip_level(albedo_tex, UV), 0.15, 1.0);
 	if (alpha_cut > 0.0 && tex.a < cut) {
 		discard;
@@ -77,6 +73,7 @@ void fragment() {
 		albedo *= mix(1.0, DIRT, wet * (1.0 - smoothstep(0.0, DIRT_H, base_h)));
 	}
 	ALBEDO = albedo;
+	ALPHA = mix(1.0, tex.a, step(0.0001, alpha_cut));
 	// Мокра фарбована бляха — м'який полиск, не матова картка.
 	// Шапка секції матова: мокрий полиск горішніх граней блищав білими цятками вздовж огорожі.
 	ROUGHNESS = mix(mix(roughness, WET_ROUGHNESS, wet), 1.0, cap);
