@@ -152,6 +152,8 @@ const GUY_PULL_MIN: float = 0.6
 ## Дріт — сіро-оливковий напівпрозорий, ближчий до тону землі: майже чорна лінія тягла око з кожної хати. На зумі 8
 ## він ще читається лінією.
 const WIRE_COLOR: Color = Color(0.15, 0.145, 0.13, 0.72)
+## Найнижчий дріт прольоту 0.4 кВ над ґрунтом чи водою, метри (з невеликим запасом над 6 м норми).
+const WIRE_CLEAR_M: float = 6.2
 ## Множник прозорості кожного з трьох голих дротів 10 кВ.
 const WIRE_10KV_ALPHA: float = 0.55
 ## Пріоритет прозорого проходу дротів: після води (0), як вогонь і дощ.
@@ -3622,6 +3624,8 @@ class _Placer:
 	## над будівлею з боку камери (окрім own), а асфальт перетинає лише прямо впоперек вулиці (DROP_CROSS_COS) і не
 	## довшим за cross_max прольотом.
 	func wire_ok(a: Vector2, b: Vector2, cross_max: float, own: Rect2 = Rect2()) -> bool:
+		if not own.has_area() and not _span_above_ground(a, b):
+			return false
 		for r: Rect2 in _garden_rects:
 			if _seg_hits_rect(a, b, r):
 				return false
@@ -3647,6 +3651,26 @@ class _Placer:
 			# Опора стоїть на межі клітинок: точка в двір глибше за YARD_EPS — уже крізь двір.
 			var c := Vector2i(roundi(q.x), roundi(q.y))
 			if yard_owner.has(c) and yard_owner[c] != home and minf(0.5 - absf(q.x - c.x), 0.5 - absf(q.y - c.y)) > PropLayer.YARD_EPS:
+				return false
+		return true
+
+	## Проліт 0.4 кВ між опорами в a і b висить не нижче WIRE_CLEAR_M над ґрунтом чи водою (з провисом): горб між
+	## опорами — опора на горбі, а не дріт по траві.
+	func _span_above_ground(a: Vector2, b: Vector2) -> bool:
+		var info: Variant = PropLayer.model(&"infra_pole_concrete_04kv")
+		if info == null or height == null:
+			return true
+		var top: float = INF
+		for w: Vector3 in (info as Dictionary)["wires"]:
+			top = minf(top, w.y)
+		var sag: float = PropLayer.WIRE_SAG_RATIO * a.distance_to(b)
+		var ga: float = ground(a.x, a.y)
+		var gb: float = ground(b.x, b.y)
+		for j in range(1, 20):
+			var t: float = j / 20.0
+			var q: Vector2 = a.lerp(b, t)
+			var y: float = lerpf(ga, gb, t) + top - sag * 4.0 * t * (1.0 - t)
+			if (y - maxf(ground(q.x, q.y), TerrainHeight.WATER_LEVEL)) * 8.0 < PropLayer.WIRE_CLEAR_M:
 				return false
 		return true
 
