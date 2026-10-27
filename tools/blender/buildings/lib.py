@@ -616,6 +616,7 @@ def mats():
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
         "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.60, 0.53, 0.45), sat=0.5, streak=0.9, base_dirt=0.4),
+        "sill_back": make_material("sill_back", flat=(0.12, 0.11, 0.10), streak=0.3),   # підвіконня проріму: ~1.1-1.3 стіни, а не біла пляма
         "interior_back": make_material("interior_back", flat=(0.030, 0.028, 0.025), streak=0.3),   # тло прорізів руїн: ~35-45 sRGB у кадрі, глибина без чорної плями
         "interior_burnt": make_material("interior_burnt", flat=(0.010, 0.0095, 0.009), streak=0.6),   # вигоріле нутро на зламі: ≤ 35 sRGB навіть під небом
         "door_red": make_material("door_red", flat=srgb_lin((0.42, 0.20, 0.15)), seams=[("z", 0.5, 0.015, 0.4)], seam_col=srgb_lin((0.25, 0.12, 0.09)), streak=0.5, rough=0.5),   # фарбований метал
@@ -684,7 +685,7 @@ def mats():
         "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
         "plaster_char": make_material("plaster_char", flat=(0.17, 0.155, 0.14), streak=0.5, base_dirt=0.2),
         "plinth_dark": make_material("plinth_dark", flat=(0.20, 0.195, 0.185), base_dirt=0.5, streak=0.4),
-        "plinth_flat": make_material("plinth_flat", flat=(0.42, 0.36, 0.30), base_dirt=0.4, streak=0.6),   # вологий цоколь: темний і теплий, а не світло-сірий
+        "plinth_flat": make_material("plinth_flat", flat=(0.42, 0.36, 0.30), base_dirt=0.4, streak=0.6),   # цоколь теплий і темніший за стіну (вологий), але не чорний: контакт із землею темнить шейдер
         "door_panel": make_material("door_panel", flat=(0.30, 0.22, 0.15), seams=[("h", 0.22, 0.015, 0.5)], streak=0.3, seam_bump=0.0),
         "mud_skirt": make_material("mud_skirt", flat=(0.10, 0.082, 0.065), streak=0.6, base_dirt=0.2),
         "boards_soft_vc": make_material("boards_soft_vc", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, vmul=True, seam_bump=0.8, undul=(1.2, 0.01), rough=0.9),
@@ -1259,6 +1260,8 @@ class Builder:
         layer = self.local
         self.windows.append((axis, c, sgn, pos, z0, w, h))
         tone = self.rnd.choices((0.0, 0.5, 1.0), weights=(45, 25, 30))[0]       # скло з небом, темне нутро, фіранка
+        if getattr(self, 'win_tone', None) is not None:                         # пошкоджена хата: усі шибки темні, без світлих фіранок
+            tone = self.win_tone
         if kind is None:                                                         # тип вікна будинку; частину могли замінити на нові пластикові
             kind = self.win_kind
             if self.win_mix and self.rnd.random() < self.win_mix[1]:
@@ -1451,7 +1454,7 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
     return top
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0, foot=0.0, in_mat=None, holes=()):
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0, foot=0.0, in_mat=None, holes=(), jamb_mat=None):
     """Уламок стіни p0-p1: сегменти різної ширини, кожен ламається ще на 1-3 шматки з різними верхами (різниця 0.2-0.5 м,
     тож жодного рівного верху), випадкова ходьба висот довкола задуму heights (не вище hcap); верхні 0.4 м — відкрита
     цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий.
@@ -1571,7 +1574,7 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
         pa = Vector((p0[0], p0[1], 0)) + u * hu0
         pc = Vector((p0[0], p0[1], 0)) + u * hu1
         for pe, dirn in ((pa, 1), (pc, -1)):
-            _quad(b, [V(pe + nrm, hz0), V(pe - nrm, hz0), V(pe - nrm, hz1), V(pe + nrm, hz1)], in_mat or mat, tuple(u * dirn))   # відкоси темні: крізь проріз вони займають більшу частину видимого, світлі читались блідою панеллю
+            _quad(b, [V(pe + nrm, hz0), V(pe - nrm, hz0), V(pe - nrm, hz1), V(pe + nrm, hz1)], jamb_mat or in_mat or mat, tuple(u * dirn))   # відкоси темні: крізь проріз вони займають більшу частину видимого, світлі читались блідою панеллю
         mid_ = (pa + pc) / 2                              # тло проріму: темна «кімната» за 0.45 м усередині, інакше крізь проріз видно залиту сонцем купу (бліда панель)
         inw = nrm.normalized()
         if inw.dot(-mid_) < 0:
@@ -1579,7 +1582,7 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
         off = inw * (nrm.length + 0.45)
         _quad(b, [V(pa + off, max(0.0, hz0 - 0.4)), V(pc + off, max(0.0, hz0 - 0.4)), V(pc + off, hz1), V(pa + off, hz1)], "interior_back", tuple(-inw))
         if hz0 > 0.02:
-            _quad(b, [V(pa + nrm, hz0), V(pc + nrm, hz0), V(pc - nrm, hz0), V(pa - nrm, hz0)], mat, (0, 0, 1))
+            _quad(b, [V(pa + nrm, hz0), V(pc + nrm, hz0), V(pc - nrm, hz0), V(pa - nrm, hz0)], "sill_back", (0, 0, 1))
         _quad(b, [V(pa - nrm, hz1), V(pc - nrm, hz1), V(pc + nrm, hz1), V(pa + nrm, hz1)], mat, (0, 0, -1))
 
 

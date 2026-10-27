@@ -211,14 +211,14 @@ def house1(ruined):
     zt = E - 0.03
     for x in (1.5, 2.65):
         burn_ring(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, g_side=0.35, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-        lib.window_ring(b, "y", S - 0.2, -1, x, 1.0, 1.0, 1.4)   # лиштва лишилась: проріз читається розміром вікна
+        lib.window_ring(b, "y", S - 0.2, -1, x, 1.0, 1.0, 1.4, mat="plaster_char")   # лиштва лишилась, але обгоріла: світла читалась блідою смугою на тіньовому боці
     burn_ring(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
     for y, w, h, z in ((-1.0, 1.1, 1.4, 1.0), (1.0, 1.1, 1.4, 1.0)):              # пропорції вікон цілої h5
         burn_ring(b, "x", hx + 0.2, y, z, w, h, 1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-        lib.window_ring(b, "x", hx + 0.2, 1, y, z, w, h)   # лиштва лишилась: проріз читається розміром вікна
+        lib.window_ring(b, "x", hx + 0.2, 1, y, z, w, h, mat="plaster_char")   # лиштва лишилась, але обгоріла: світла читалась блідою смугою на тіньовому боці
     for x in (0.6, 2.0):
         burn_ring(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, g_side=0.35, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-        lib.window_ring(b, "y", N + 0.2, 1, x, 1.0, 1.0, 1.4)   # лиштва лишилась: проріз читається розміром вікна
+        lib.window_ring(b, "y", N + 0.2, 1, x, 1.0, 1.0, 1.4, mat="plaster_char")   # лиштва лишилась, але обгоріла: світла читалась блідою смугою на тіньовому боці
     lib.weather(b, "wall_half", [("y", S - 0.2, -1, -0.9, hx + 0.2, 0.0, E), ("x", hx + 0.2, 1, S - 0.2, N + 0.2, 0.0, E)], seed=17, patches=False)
     lib.pocks(b, "y", S - 0.2, -1, 1.2, 1.4, 2.0, 45, 41, zmin=0.2, zmax=2.9)
     lib.pocks(b, "x", hx + 0.2, 1, 0.0, 1.5, 1.8, 30, 42, zmin=0.2, zmax=2.9)
@@ -329,7 +329,7 @@ def house2(ruined):
                 continue
             if blown:
                 burn_ring(b, "y", S - 0.2, x, z, 1.2, 1.4, -1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-                lib.window_ring(b, "y", S - 0.2, -1, x, z, 1.2, 1.4)   # лиштва лишилась: проріз читається розміром вікна
+                lib.window_ring(b, "y", S - 0.2, -1, x, z, 1.2, 1.4, mat="plaster_char")   # лиштва лишилась, але обгоріла: світла читалась блідою смугою на тіньовому боці
             else:
                 b.window(("y", S - 0.2, -1), x, z, 1.2, 1.4)
                 pane_dress(b, "y", S - 0.2, -1, x, z, 1.2, 1.4)
@@ -422,7 +422,7 @@ def shed(ruined):
         grime(b, "y", S - 0.14, -1, -hx, hx, 0.5, 0.5)
         lib.finish(b, "f8_shed", out, tri_limit=1600, footprint=(1, 1))
         return
-    kw = dict(brick_mat="boards_soft", soot_h=1.0, top_tone=0.82)
+    kw = dict(brick_mat="boards_soft", soot_h=1.0, top_tone=0.82, jamb_mat="interior_back")   # відкоси сараю темні, як у хат
     # справжні прорізи (u — від початку стіни): два вікна на задній стіні, двері на східній
     wall_run(b, (XE, N), (XW, N), 0.14, [E] * 8, "boards_soft_vc", "boards_soft", 51, hcap=3.0, jag=0.1, cap=0.06, holes=[(0.9, 2.3, 0.9, 2.2), (5.0, 5.8, 1.1, 2.0)], **kw)
     wall_run(b, (XW, N), (XW, S), 0.14, [E, E, 2.6, 1.8, 0.7, 0.5], "boards_soft_vc", "boards_soft", 52, hcap=3.0, jag=0.5, step=0.4, diag_p=0.8, jit=0.5, **kw)
@@ -440,9 +440,9 @@ def shed(ruined):
     b.box(-2.35, -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3)
     zt = E - 0.03
     burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-    lib.window_ring(b, "y", N + 0.1, 1, 1.8, 0.9, 1.4, 1.3)   # лиштва лишилась: проріз читається розміром вікна
+    lib.window_ring(b, "y", N + 0.1, 1, 1.8, 0.9, 1.4, 1.3, mat="plaster_char")   # лиштва лишилась, але обгоріла: світла читалась блідою смугою на тіньовому боці
     burn_ring(b, "y", N + 0.1, 1.8, 0.9, 1.4, 1.3, 1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-    lib.window_ring(b, "y", N + 0.1, 1, -2.0, 1.1, 0.8, 0.9)   # лиштва лишилась: проріз читається розміром вікна
+    lib.window_ring(b, "y", N + 0.1, 1, -2.0, 1.1, 0.8, 0.9, mat="plaster_char")   # лиштва лишилась, але обгоріла: світла читалась блідою смугою на тіньовому боці
 
     def hpost(x):
         for i in range(len(post_x) - 1):

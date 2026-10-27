@@ -98,10 +98,11 @@ def post(b, x, y, z0, h):
 # ----------------------------------------------------------------------- H1
 def house1(hit=False):
     lib.reset()
-    lib.palette(wall=(0.70, 0.63, 0.53), roof="asb_dark", eave=3.0, chim="ch_grey", frame=3, trim=0.88)
+    lib.palette(wall=(0.70, 0.63, 0.53), roof="asb_dark", eave=3.0, chim="ch_grey", frame=1 if hit else 3, trim=0.88)   # у пошкодженої хати рами темно-коричневі: світлі читались блідими плямами на тіньовому боці
     RING[:] = ["trim", 0.1, False]
     b = Builder()
     b.win_kind, b.win_mix = 0, (1, 0.4)                                     # старі дерев'яні на три стулки, частину замінено пластиковими
+    b.win_tone = 0.5 if hit else None                                       # у пошкодженої хати шибки темні
     L, Db, EAVE, RIDGE = 10.0, 6.4, 3.0, 6.5      # корпус 10 x 6.4, веранда ще 1.6 м (разом 8 м)
     y0, y1 = -4.0, 2.4
     b.box(0, (y0 + y1) / 2, 0, L + 0.08, Db + 0.08, 0.5, "brick_grey")          # цоколь на 4 см за стіною
