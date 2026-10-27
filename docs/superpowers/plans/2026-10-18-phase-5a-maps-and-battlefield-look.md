@@ -505,8 +505,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] No path on the road; no segments or seams
 - [ ] A visible worn corridor porch → gate → verge at every yard, zoom 6–8
 - [ ] Reads as wear, not a rug or a pencil line
-- [ ] One or two winding paths to water per map, never across ploughed land or gardens
-- [ ] Paths to water go somewhere real (from a yard or road to a landing on the bank), not random stripes
+- [x] One or two winding paths to water per map, never across ploughed land or gardens
+- [x] Paths to water go somewhere real (from a yard or road to a landing on the bank), not random stripes
 
 ### Task 21: Bank, yard and meadow vegetation
 
@@ -529,7 +529,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
 - [ ] Chimney smoke reads as volume, not flat strokes
 - [ ] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
-- [ ] First scroll across the map is smooth, no hitch
+- [x] First scroll across the map is smooth, no hitch
 
 ### Task 24: New props in villages
 

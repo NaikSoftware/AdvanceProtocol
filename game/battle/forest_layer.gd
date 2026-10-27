@@ -571,6 +571,35 @@ func _apply_fade() -> void:
 					faded[atlas] = []
 				(faded[atlas] as Array).append({"mesh": g["mesh"], "xf": list[i]["xf"], "rgb": list[i]["rgb"], "alpha": lerpf(FADE_ALPHA, 1.0, k)})
 		g["alpha"] = alpha
+	_show_fade(faded)
+
+
+## Прогрів за гейтом (BattleScreen._warm_board): розчинена крона кожного атласу — найближча до
+## `near` — показана, щоб прохід глибини й колір розчинення скомпілювались до першого юніта під
+## кроною. Повертає клітинку крони (−1, −1 — лісу немає); показане скидає set_reveal_cells.
+func warm_fade(near: Vector2i) -> Vector2i:
+	var pick: Dictionary = {}  ## атлас -> [відстань², запис]
+	for g: Dictionary in _fadable:
+		var atlas: Texture2D = _atlas_of[g["mesh"]]
+		for it: Dictionary in g["list"]:
+			if float(it["top"]) < FADE_MIN_TOP:
+				continue
+			var d: float = (it["pos"] as Vector2).distance_squared_to(Vector2(near))
+			if not pick.has(atlas) or d < float(pick[atlas][0]):
+				pick[atlas] = [d, {"mesh": g["mesh"], "xf": it["xf"], "rgb": it["rgb"], "alpha": FADE_ALPHA, "pos": it["pos"]}]
+	_free(_soft_nodes)
+	var faded: Dictionary = {}
+	var cell := Vector2i(-1, -1)
+	for atlas: Texture2D in pick:
+		var it: Dictionary = pick[atlas][1]
+		faded[atlas] = [it]
+		var p: Vector2 = it["pos"]
+		cell = Vector2i(roundi(p.x), roundi(p.y))
+	_show_fade(faded)
+	return cell
+
+
+func _show_fade(faded: Dictionary) -> void:
 	var idx: int = 0
 	for atlas: Texture2D in faded:
 		var n := MeshInstance3D.new()
