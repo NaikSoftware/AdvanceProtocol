@@ -24,8 +24,9 @@ What this fixes, concretely:
 - **Light and audio:** per-map daylight (see below), turbine and diesel notes, radio chatter as
   texture rather than language.
 - **Countryside:** contemporary Eastern-European — brick and plaster houses under metal or
-  fibre-cement roofs, panel blocks, farm hangars, silos, concrete fences and poles, modern bridges.
+  fibre-cement roofs, farm hangars, silos, concrete fences and poles, modern bridges.
   **Nothing medieval or old-world:** no stone-arch bridges, no slate-and-fieldstone cottages.
+  Panel blocks are urban and stay off the village maps.
 - **Infantry:** plate carriers, ballistic helmets, optics on rifles.
 
 **Vehicles follow real contemporary designs under altered names**: a player recognises the
