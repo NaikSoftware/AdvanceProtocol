@@ -112,7 +112,7 @@ func test_tone_wet_trodden_earth_is_darker_than_grass() -> void:
 	assert_almost_eq(_lum(core), l * 0.84, 1e-6, "середина стежки в багні")
 	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 1.0)), l * 0.6, 1e-6, "середина в дощ")
 	assert_true(core.r > core.g and core.g > core.b, "бура земля, не рожева й не сіра: %s" % core)
-	assert_almost_eq(core.b / core.g, 0.395, 1e-4, "синього мало — не рожевий пісок")
+	assert_almost_eq(core.b / core.g, 0.335, 1e-4, "синього мало — не рожевий пісок")
 
 
 ## Відтінок землі не береться з трави: на сірій траві стежка однаково бура, а не сіра пляма.
@@ -122,8 +122,8 @@ func test_tone_earth_hue_does_not_follow_grey_grass() -> void:
 	assert_almost_eq(wet.r / wet.g, 2.0, 1e-4)
 	assert_almost_eq(wet.b / wet.g, 0.35, 1e-4)
 	var dry: Color = Footpaths.tone(grey, Vector2(1.0, 0.0), 0.0)
-	assert_almost_eq(dry.r / dry.g, 1.65, 1e-4)
-	assert_almost_eq(dry.b / dry.g, 0.5, 1e-4)
+	assert_almost_eq(dry.r / dry.g, 1.4, 1e-4)
+	assert_almost_eq(dry.b / dry.g, 0.3, 1e-4)
 
 
 func test_tone_dry_trodden_earth_is_only_slightly_lighter() -> void:
@@ -155,7 +155,7 @@ func test_tone_matches_the_ground_shader() -> void:
 			"trod /= dot(trod, lw_p);",
 			"float core_t = smoothstep(0.5, 0.78, pm.r);",
 			"float band_t = smoothstep(0.08, 0.3, pm.r);",
-			"alb = mix(alb, trod * lum * mix(1.2, 0.72, wet_p), band_t * 0.8);",
+			"alb = mix(alb, trod * lum * mix(1.3, 0.72, wet_p), band_t * 0.8);",
 			"alb = mix(alb, earth * lum * mix(1.4, 0.6, wet_p), core_t);",
 			"alb = mix(alb, earth * lum * mix(1.45, 0.5, wet_p), smoothstep(0.05, 0.4, pm.g));"]:
 		assert_true(src.contains(s), "у шейдері нема: " + s)
@@ -377,6 +377,37 @@ func test_every_gate_has_a_trodden_patch(p = use_parameters(MAPS)) -> void:
 		for t: Vector3 in props.trodden:
 			near = near or Vector2(t.x, t.y).distance_to(g) <= 0.25
 		assert_true(near, "%s: біля хвіртки садиби %d нема плями" % [p, gi])
+
+
+## Двері хати дивляться на фасад до воріт: у house_h5 двері й сходинка на тильній стіні моделі (+Z),
+## тож її ставимо задом наперед. Інакше стежка й пляма «біля дверей» лягали під глуху стіну. Біля дверей
+## кожної хати є витоптана пляма.
+func test_every_door_faces_its_gate_and_has_a_trodden_patch(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var pl: PropLayer._Placer = props._placer
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	for i in homes.size():
+		if not pl.doors.has(i):
+			continue
+		var face := Vector2(homes[i]["face"])
+		var hc := Vector2(homes[i]["house"])
+		var found := false
+		for inst: Dictionary in props.all_instances():
+			var xf: Transform3D = inst["transform"]
+			if inst["model"] != pl.house_models[i] or Vector2(xf.origin.x, xf.origin.z).distance_to(hc) > 0.5:
+				continue
+			found = true
+			# Стіна з дверима моделі: −Z, у house_h5 — +Z (так зроблено саму модель).
+			var local := Vector3(0, 0, 1) if inst["model"] == &"house_h5" else Vector3(0, 0, -1)
+			var w: Vector3 = xf.basis * local
+			assert_almost_eq(Vector2(w.x, w.z).normalized(), face, Vector2.ONE * 1e-3,
+					"%s: двері хати %d (%s) не на фасаді" % [p, i, inst["model"]])
+		assert_true(found, "%s: нема моделі хати %d" % [p, i])
+		var door: Vector2 = pl.doors[i][0]
+		var near := false
+		for t: Vector3 in props.trodden:
+			near = near or Vector2(t.x, t.y).distance_to(door) <= 0.25
+		assert_true(near, "%s: біля дверей хати %d нема плями" % [p, i])
 
 
 ## Захист від полотна: точка, що вже лежить на дорозі, виштовхується за її край.

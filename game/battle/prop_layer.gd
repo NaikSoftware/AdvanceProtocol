@@ -338,6 +338,12 @@ var structure_shadows: bool = false
 var wet: bool = false
 
 
+## Хати, у моделі яких двері й сходинка на тильній стіні (+Z), а не на фасаді (−Z): їх ставимо
+## задом наперед, щоб двері дивились до воріт і дороги. Інакше стежка й пляма біля дверей лягали
+## під глуху стіну, а до справжніх дверей від хвіртки не було проходу.
+const HOUSE_BACK_DOOR: Array[StringName] = [&"house_h5"]
+
+
 ## Детермінований хеш клітинки; уся мінливість розстановки береться з нього.
 static func cell_hash(cell: Vector2i, salt: int) -> int:
 	return hash(Vector3i(cell.x, cell.y, salt))
@@ -1710,8 +1716,10 @@ class _Placer:
 	## Стежки (Footpaths) і витоптані плями; домішок до воріт і сараїв збирає _homesteads.
 	var walks: Array = []
 	var patches: PackedVector3Array = PackedVector3Array()
-	## Садиба -> двері, фасад, вхід на стежку: [двері, нормаль фасаду].
+	## Садиба -> [двері, нормаль фасаду, обрис хати].
 	var doors: Dictionary = {}
+	## Садиба -> модель хати.
+	var house_models: Dictionary = {}
 	## Садиба -> обрис сараю.
 	var shed_of: Dictionary = {}
 	## Садиба -> [середина воріт, нормаль сторони воріт назовні].
@@ -2356,7 +2364,9 @@ class _Placer:
 			var home: Dictionary = homes[i]
 			var hc: Vector2i = home["house"]
 			var rot: int = [N_FACE, W_FACE, S_FACE, E_FACE].find(home["face"])
-			_put_structure(_house_model(hc, i), hc, rot, Vector2i.ONE, {})
+			house_models[i] = _house_model(hc, i)
+			var house_rot: int = (rot + 2) % 4 if PropLayer.HOUSE_BACK_DOOR.has(house_models[i]) else rot
+			_put_structure(house_models[i], hc, house_rot, Vector2i.ONE, {})
 			house_rects[i] = placed.back()[0]
 			var gcells: Array = home.get("garden", [])
 			if not gcells.is_empty():
@@ -2465,15 +2475,14 @@ class _Placer:
 			walks.append({"kind": &"yard", "home": i, "door": door, "pts": pts, "seed": sd, "solid": 0.8,
 					"fade_end": minf(0.08, 0.2 * Footpaths.length(pts)), "half": hw})
 			_yard_floor(i, homes[i], inside, porch, door, sd)
-			var gp: Vector2 = gate + out * 0.22
-			if not on_road(gp, 0.3) and _on_board(gp):
-				patches.append(Vector3(gp.x, gp.y, 0.28))
-			else:
-				# Хвіртка майже на узбіччі: менша пляма впритул до неї, інакше вхід у двір не читався
-				# зовсім. На полотно дороги вона однаково не лягає — маску ріже dry.
-				gp = gate + out * 0.06
-				if not on_road(gp, 0.12) and _on_board(gp):
-					patches.append(Vector3(gp.x, gp.y, 0.2))
+			# Пляма біля хвіртки: назовні, коли там є узбіччя; хвіртка майже на узбіччі — менша впритул до
+			# неї; хвіртка на самому краю дороги — у дворі перед нею. Без плями вхід у двір не читався.
+			# На полотно дороги вона однаково не лягає — маску ріже dry.
+			for cand: Array in [[0.22, 0.28, 0.3], [0.06, 0.2, 0.12], [-0.12, 0.18, 0.0]]:
+				var gp: Vector2 = gate + out * float(cand[0])
+				if not on_road(gp, float(cand[2])) and _on_board(gp):
+					patches.append(Vector3(gp.x, gp.y, float(cand[1])))
+					break
 			var pp: Vector2 = porch + face * 0.06
 			if _on_board(pp):
 				patches.append(Vector3(pp.x, pp.y, 0.2))

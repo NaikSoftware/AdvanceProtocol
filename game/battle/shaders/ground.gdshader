@@ -1331,13 +1331,13 @@ void fragment() {
 			float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);
 			vec3 lw_p = vec3(0.299, 0.587, 0.114);
 			float lum = dot(alb, lw_p);
-			vec3 earth = mix(vec3(1.65, 1.0, 0.5), vec3(2.0, 1.0, 0.35), wet_p);
+			vec3 earth = mix(vec3(1.4, 1.0, 0.3), vec3(2.0, 1.0, 0.35), wet_p);
 			earth /= dot(earth, lw_p);
-			vec3 trod = mix(vec3(1.3, 1.0, 0.45), vec3(1.35, 1.0, 0.4), wet_p);
+			vec3 trod = mix(vec3(1.25, 1.0, 0.3), vec3(1.35, 1.0, 0.4), wet_p);
 			trod /= dot(trod, lw_p);
 			float core_t = smoothstep(0.5, 0.78, pm.r);
 			float band_t = smoothstep(0.08, 0.3, pm.r);
-			alb = mix(alb, trod * lum * mix(1.2, 0.72, wet_p), band_t * 0.8);
+			alb = mix(alb, trod * lum * mix(1.3, 0.72, wet_p), band_t * 0.8);
 			alb = mix(alb, earth * lum * mix(1.4, 0.6, wet_p), core_t);
 			alb = mix(alb, earth * lum * mix(1.45, 0.5, wet_p), smoothstep(0.05, 0.4, pm.g));
 		}
