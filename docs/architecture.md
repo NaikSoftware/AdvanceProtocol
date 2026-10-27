@@ -69,10 +69,10 @@ core/                    # pure rules — no Node, no scene tree, no rendering
   commands/
   events.gd
 game/                    # Godot scenes and nodes
-  battle/                # board view, unit views, selection, zone overlay
+  battle/                # board view, unit views, selection, zone overlay, effects (fire,
+                         # smoke, explosions, scar map); look/ holds weather and light
   ui/                    # HUD, unit inspector, handover gate
   camera/                # fixed-angle rig: pan, clamped zoom
-  fx/                    # weather, smoke, wrecks, impacts
   audio/
 maps/
 assets/
