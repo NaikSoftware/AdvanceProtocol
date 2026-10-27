@@ -141,7 +141,11 @@ func test_fade_reaches_every_foliage_group() -> void:
 		var tested: int = 0
 		for g: Dictionary in f._fadable:
 			var list: Array = g["list"]
-			var i: int = list.find_custom(func(it: Dictionary) -> bool: return float(it["top"]) >= ForestLayer.FADE_MIN_TOP)
+			# Екземпляр близько центру своєї клітинки: юніт стоїть у центрі, а без камери (погляд згори)
+			# крона закриває його, лише стоячи над ним.
+			var i: int = list.find_custom(func(it: Dictionary) -> bool:
+				var q: Vector2 = it["pos"]
+				return float(it["top"]) >= ForestLayer.FADE_MIN_TOP and q.distance_to(Vector2(roundi(q.x), roundi(q.y))) < 0.25)
 			if i < 0:
 				continue
 			tested += 1
@@ -160,4 +164,34 @@ func test_fade_reaches_every_foliage_group() -> void:
 					var color := depth.next_pass as ShaderMaterial
 					assert_true(depth.shader.code.contains("depth_draw_always"), "%s: спершу прохід глибини" % n.name)
 					assert_true(color != null and color.shader.code.contains("ALPHA = COLOR.a;"), "%s: потім колір із прозорістю" % n.name)
-		assert_gt(tested, 4, "%s: груп листя перевірено" % season)
+		assert_gt(tested, 3, "%s: груп листя перевірено" % season)
+
+
+func test_fade_only_crowns_on_the_view_axis() -> void:
+	# Над юнітом розчиняються лише крони, що на екрані його перекривають: 1–4 дерева, а не шмат
+	# лісу довкола. Крони за ~1 клітинку вбік від осі погляду лишаються цілими.
+	for season: StringName in [&"summer", &"late"]:
+		var f := _layer(season)
+		var cam := Camera3D.new()
+		add_child_autofree(cam)
+		cam.look_at_from_position(Vector3(-4.0, 14.0, -4.0), Vector3(5.0, 0.0, 5.0))
+		cam.make_current()
+		var u := Vector2i(5, 5)
+		f.set_reveal_cells([u] as Array[Vector2i])
+		var back: Vector3 = cam.global_transform.basis.z
+		var dir := Vector2(back.x, back.z).normalized()
+		var faded: int = 0
+		for g: Dictionary in f._fadable:
+			var list: Array = g["list"]
+			var alpha: PackedFloat32Array = g["alpha"]
+			for i in list.size():
+				if float(list[i]["top"]) < ForestLayer.UNDER_TOP:
+					continue
+				if alpha[i] < 1.0:
+					faded += 1
+				var rel: Vector2 = (list[i]["pos"] as Vector2) - Vector2(u)
+				var lateral: float = absf(rel.x * dir.y - rel.y * dir.x)
+				if lateral > 1.0:
+					assert_eq(alpha[i], 1.0, "%s: крона за %.1f клітинки вбік від осі погляду лишається цілою" % [season, lateral])
+		assert_between(faded, 1, 4, "%s: розчинено крон над юнітом" % season)
+		cam.free()

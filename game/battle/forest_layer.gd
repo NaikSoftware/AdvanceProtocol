@@ -25,13 +25,16 @@ const _SHADER: Shader = preload("res://assets/props/forest/forest_crown.gdshader
 const _DIR: String = "res://assets/props/forest/"
 ## Типовий зум гри — 12 (IsoCameraRig.zoom_level); до цього зуму включно ліс повний.
 const DETAIL_ZOOM: float = 15.0
-## Розчинення над юнітом: відстань від променя «юніт → камера» до центру крони (тайли),
-## ширина м'якого переходу й найменша непрозорість.
-const FADE_RADIUS: float = 0.6
-const FADE_SOFT: float = 0.3
+## Розчинення над юнітом — лише крони, що на екрані справді його перекривають: центр крони в
+## циліндрі вздовж променя «юніт → камера» радіусом у півсилует юніта (`UNIT_HALF`) плюс
+## `FADE_MARGIN`, і лише на тій відстані вздовж променя, де він проходить крізь висоту крони (від
+## `CROWN_LOW` висоти дерева до верху; нижня частина крони — рідкі гілочки): 1–4 дерева на юніта. Ширший вибір (радіус крони й поле
+## довкола клітинки) розчиняв шмат лісу 6 × 4 клітинки — пляму-«привид» довкола юніта.
+const UNIT_HALF: float = 0.25
+const FADE_MARGIN: float = 0.1
+const CROWN_LOW: float = 0.5
+const FADE_SOFT: float = 0.08
 const FADE_ALPHA: float = 0.35
-const FADE_REACH_EXTRA: float = 0.5
-const UNIT_HALF: float = 0.4
 ## Розчинення перераховується, коли зум змінився більше ніж на стільки.
 const FADE_ZOOM_STEP: float = 0.5
 ## Склад лісу клітинки за MapData.ForestSurface (MIXED, PINE, DECIDUOUS).
@@ -526,15 +529,23 @@ void fragment() {
 func _cover(entry: Dictionary, back: Vector3) -> float:
 	var a: float = 1.0
 	var flat := Vector2(back.x, back.z)
-	# Крона заввишки top ховає юніта, стоячи до top · (гориз. / верт. складова погляду) ближче.
-	var reach: float = float(entry["top"]) * flat.length() / maxf(back.y, 0.1) + FADE_REACH_EXTRA
 	var dir: Vector2 = flat.normalized()
+	# Висота променя над землею на кожну клітинку вздовж погляду; без нахилу (погляд згори) — без
+	# перевірки висоти: крона закриває юніта, лише стоячи над ним.
+	var slope: float = back.y / flat.length() if flat.length() > 0.05 else -1.0
+	var p: Vector2 = entry["pos"]
+	var top: float = entry["top"]
+	var reach: float = FADE_MARGIN + UNIT_HALF
 	for c in _reveal:
 		var u := Vector2(c)
-		var p: Vector2 = entry["pos"]
-		var t: float = clampf((p - u).dot(dir), 0.0, reach)
-		var r0: float = FADE_RADIUS + float(entry["r"]) + UNIT_HALF
-		a = minf(a, smoothstep(r0, r0 + FADE_SOFT, p.distance_to(u + dir * t)))
+		var t: float = 0.0
+		if slope > 0.0:
+			t = (p - u).dot(dir)
+			var y: float = t * slope
+			if t < 0.0 or y < top * CROWN_LOW - 0.1 or y > top:
+				continue  # позаду юніта або промінь іде під кроною чи над нею
+		var d: float = p.distance_to(u + dir * t)
+		a = minf(a, smoothstep(reach, reach + FADE_SOFT, d))
 	return a
 
 
