@@ -133,6 +133,27 @@ func test_tone_trampled_verge_keeps_grass_brightness_near() -> void:
 	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.3, 0.0), 1.0)), l * (0.2 + 0.8 * 0.93), 1e-6)
 
 
+## Шейдер не запускається в тесті, тож Footpaths.tone — його дзеркало: ті самі числа мають стояти
+## в ground.gdshader, інакше тести перевіряють GDScript, а не те, що на екрані.
+func test_tone_matches_the_ground_shader() -> void:
+	var src: String = FileAccess.get_file_as_string("res://game/battle/shaders/ground.gdshader")
+	for s in ["vec3 earth = mix(%s, %s, wet_p);" % [_glsl(Footpaths.EARTH_DRY), _glsl(Footpaths.EARTH_WET)],
+			"vec3 trod = mix(%s, %s, wet_p);" % [_glsl(Footpaths.TRAMPLED_DRY), _glsl(Footpaths.TRAMPLED_WET)],
+			"alb = mix(alb, trod * lum * mix(1.05, 0.93, wet_p), band_t * 0.8);",
+			"alb = mix(alb, earth * lum * mix(1.15, 0.85, wet_p), core_t);",
+			"alb = mix(alb, earth * lum * mix(1.0, 0.78, wet_p), pm.g * 0.8);"]:
+		assert_true(src.contains(s), "у шейдері нема: " + s)
+
+
+## Vector3 у запису шейдера: vec3(1.25, 1.0, 0.6) — float32 без хвоста 0.55000001.
+func _glsl(v: Vector3) -> String:
+	var parts: PackedStringArray = []
+	for c in [v.x, v.y, v.z]:
+		var t: String = String.num(c, 3)
+		parts.append(t if t.contains(".") else t + ".0")
+	return "vec3(%s)" % ", ".join(parts)
+
+
 func test_water_cuts_the_wear() -> void:
 	var dry := func(p: Vector2) -> bool: return p.x < 5.0
 	var img: Image = Footpaths.bake([_walk(Vector2(2, 5), Vector2(9, 5))], PackedVector3Array(), Vector2i(12, 10), dry)
