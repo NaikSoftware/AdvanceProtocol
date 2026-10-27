@@ -120,8 +120,10 @@ const DROP_ATTACH_H: float = 0.36
 const DROP_GAP: float = 0.1
 ## Далі за стільки від опори (клітинки) відвід не заходить у чужий двір: ближче — ще околиця стовпа на межі клітинок.
 const DROP_POLE_GAP: float = 0.15
-## Кожна така за ліком хата лишається без відводу (за хешем центру): сусідні хати не всі під дротами.
-const UNPOWERED_ONE_IN: int = 3
+## Відвід через вулицю — лише прямо впоперек: косинус кута до нормалі вулиці не менший (25°), проліт не довший
+## (14 м, клітинки).
+const DROP_CROSS_COS: float = 0.906
+const DROP_CROSS: float = 1.75
 ## Стовп стоїть на межі клітинок біля вулиці, тож до обрису будівлі (двір починається за 0.1 від межі) — не ближче за
 ## стільки; від паркану чи дрібної речі — щоб не стояти в самому паркані (клітинки).
 const POLE_BUILDING_CLEAR: float = 0.1
@@ -1586,16 +1588,6 @@ static func drop_attach(rect: Rect2, from: Vector2) -> Vector2:
 	if rect.has_point(from):
 		return Vector2.INF
 	return Vector2(clampf(from.x, rect.position.x, rect.end.x), clampf(from.y, rect.position.y, rect.end.y))
-
-
-## Яку з хат живить мережа: кожну цілу, крім кожної UNPOWERED_ONE_IN-ї за хешем центру — відвід до кожної хати
-## обплітав село дротами. Чи дістане до хати опора, вирішує вже drop_ok, а село без жодної такої хати PowerGrid однаково
-## живить (PowerGrid.fed). centres — центри хат, on_board — чи лежить хата на дошці.
-static func powered_homes(centres: Array[Vector2], _on_board: Array[bool]) -> Array[bool]:
-	var out: Array[bool] = []
-	for c: Vector2 in centres:
-		out.append(hash(Vector2i(roundi(c.x * 4.0), roundi(c.y * 4.0))) % UNPOWERED_ONE_IN != 0)
-	return out
 
 
 static var _tri_cache: Dictionary = {}
@@ -3578,8 +3570,8 @@ class _Placer:
 		return (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 
 	## Відвід від точки from до хати з обрисом rect можливий: стіна з боку from не далі за DROP_DIRECT і не ближче за
-	## DROP_MIN, відрізок не ближче DROP_GAP до чужих хат, не перетинає асфальт і далі за DROP_POLE_GAP від опори не
-	## заходить у чужий двір.
+	## DROP_MIN, відрізок не ближче DROP_GAP до чужих хат, не над грядками, далі за DROP_POLE_GAP від опори не заходить
+	## у чужий двір, а асфальт перетинає лише впоперек вулиці (DROP_CROSS_COS) і не довшим за DROP_CROSS прольотом.
 	func drop_ok(rect: Rect2, from: Vector2) -> bool:
 		var a: Vector2 = PropLayer.drop_attach(rect, from)
 		if not a.is_finite():
@@ -3591,19 +3583,45 @@ class _Placer:
 		for r: Rect2 in _bld_rects:
 			if not r.is_equal_approx(rect) and _seg_hits_rect(from, a, r.grow(PropLayer.DROP_GAP)):
 				return false
-		# Навскісні відводи через вулицю, поле й сусідні двори до кожної хати робили село павутинням: відвід — лише
-		# коротко (DROP_DIRECT) від опори свого боку вулиці, не над асфальтом і не чужим двором. Опора стоїть на межі
-		# клітинок, тож її найближча околиця ще може бути в сусідньому дворі.
+		for r: Rect2 in _garden_rects:
+			if _seg_hits_rect(from, a, r):
+				return false
+		# Навскісні відводи через вулицю, поле й сусідні двори до кожної хати робили село павутинням: відвід — коротко
+		# від опори, через вулицю лише прямо впоперек, не чужим двором. Опора стоїть на межі клітинок, тож її найближча
+		# околиця ще може бути в сусідньому дворі.
 		var own: Variant = yard_owner.get(Vector2i(roundi(a.x), roundi(a.y)))
+		var dir: Vector2 = (a - from) / d
 		var n: int = maxi(2, ceili(d / 0.1))
+		var crossed: bool = false
 		for j in range(1, n + 1):
 			var q: Vector2 = from.lerp(a, float(j) / n)
+			# Вулиця одна на відвід: її напрям — у першій точці над асфальтом.
+			if road_edge_m(q) < 0.0 and not crossed:
+				crossed = true
+				if d > PropLayer.DROP_CROSS or absf(dir.dot(street_dir(q))) > sqrt(1.0 - PropLayer.DROP_CROSS_COS * PropLayer.DROP_CROSS_COS):
+					return false
 			if q.distance_to(from) < PropLayer.DROP_POLE_GAP:
 				continue
 			var c := Vector2i(roundi(q.x), roundi(q.y))
-			if road_edge_m(q) < 0.0 or (yard_owner.has(c) and yard_owner[c] != own):
+			if yard_owner.has(c) and yard_owner[c] != own:
 				return false
 		return true
+
+	## Напрям осі вулиці, найближчої до p (одиничний; нуль — доріг нема).
+	func street_dir(p: Vector2) -> Vector2:
+		if height == null or height.roads == null:
+			return Vector2.ZERO
+		var best: float = INF
+		var out := Vector2.ZERO
+		for pts: PackedVector2Array in (height.roads as RoadCourse).lines:
+			for k in range(1, pts.size()):
+				var a: Vector2 = pts[k - 1] - Vector2(ring, ring)
+				var b: Vector2 = pts[k] - Vector2(ring, ring)
+				var dd: float = Geometry2D.get_closest_point_to_segment(p, a, b).distance_squared_to(p)
+				if dd < best and a != b:
+					best = dd
+					out = (b - a).normalized()
+		return out
 
 	## Точка кріплення відводу від опори pole_i до хати house_i: на стіні з боку стовпа, на висоті DROP_ATTACH_H над
 	## ґрунтом; Vector3.INF — відводу нема.

@@ -1512,31 +1512,35 @@ func _rect_gap(p: Vector2, r: Rect2) -> float:
 	return Vector2(maxf(maxf(r.position.x - p.x, 0.0), p.x - r.end.x), maxf(maxf(r.position.y - p.y, 0.0), p.y - r.end.y)).length()
 
 
-## Цілі хати карти: індекс екземпляра, обрис, чи лежить хата на дошці і чи живить її мережа
-## (PropLayer.powered_homes).
+## Цілі хати карти: індекс екземпляра, обрис, чи лежить хата на дошці.
 func _homes(props: PropLayer, m: MapData) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	var centres: Array[Vector2] = []
-	var on_board: Array[bool] = []
 	var board := Rect2i(0, 0, m.width, m.height)
 	for i in props._instances.size():
 		var inst: Dictionary = props._instances[i]
 		if PropLayer.is_home(inst):
-			var r: Rect2 = _rect_of(inst)
-			out.append({"i": i, "rect": r, "board": board.has_point((inst["cells"] as Array)[0])})
-			centres.append(r.get_center())
-			on_board.append(out.back()["board"])
-	var powered: Array[bool] = PropLayer.powered_homes(centres, on_board)
-	for k in out.size():
-		out[k]["powered"] = powered[k]
+			out.append({"i": i, "rect": _rect_of(inst), "board": board.has_point((inst["cells"] as Array)[0])})
 	return out
 
 
-func _powered_homes(props: PropLayer, m: MapData) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	for h in _homes(props, m):
-		if h["powered"]:
-			out.append(h)
+## Поселення: ланцюги точок із кроком до SETTLEMENT_R.
+func _settlements(pts: Array[Vector2]) -> Array:
+	var out: Array = []
+	var seen: Dictionary = {}
+	for i in pts.size():
+		if seen.has(i):
+			continue
+		var group: Array[Vector2] = []
+		var stack: Array[int] = [i]
+		seen[i] = true
+		while not stack.is_empty():
+			var u: int = stack.pop_back()
+			group.append(pts[u])
+			for j in pts.size():
+				if not seen.has(j) and pts[u].distance_to(pts[j]) <= PropLayer.SETTLEMENT_R:
+					seen[j] = true
+					stack.append(j)
+		out.append(group)
 	return out
 
 
@@ -1555,11 +1559,12 @@ func _angle_at(props: PropLayer, b: int, a: int, c: int) -> float:
 
 
 ## Мережа: кожна зв'язна частина виходить на зовнішній край кільця (магістраль 10 кВ) і не має одиноких опор; кінці, що не на
-## краю, — підстанція (10 кВ) чи опора з відводом (0.4 кВ). Магістралей на краю — щонайменше дві.
+## краю, — підстанція (10 кВ) чи опора 0.4 кВ з відводом або не далі PowerGrid.STREET_END від хати. Магістралей на краю — щонайменше дві.
 func test_power_network_is_connected_and_leaves_the_world(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var props: PropLayer = view.props()
 	var m: MapData = _map(p)
+	var homes: Array[Dictionary] = _homes(props, m)
 	var adj: Dictionary = _neighbours(props)
 	var ids: Array[int] = _pole_ids(props)
 	assert_gt(ids.size(), 0, "%s: передумова — опори є" % p)
@@ -1589,7 +1594,10 @@ func test_power_network_is_connected_and_leaves_the_world(p = use_parameters(MAP
 			continue
 		var gap: float = _edge_gap(view, m, _pole_at(props, i))
 		if _is_04(props, i):
-			assert_true(fed.has(i), "%s: гілка 0.4 кВ обривається на %s без відводу" % [p, _pole_at(props, i)])
+			# Кінець вулиці: опора з відводом або навпроти хати (головна вулиця тягнеться на всю довжину села).
+			var at: Vector2 = _pole_at(props, i)
+			assert_true(fed.has(i) or homes.any(func(h: Dictionary) -> bool: return (h["rect"] as Rect2).get_center().distance_to(at) <= PowerGrid.STREET_END),
+					"%s: гілка 0.4 кВ обривається на %s без відводу й далеко від хат" % [p, at])
 		elif gap <= 0.5:
 			edge_ends += 1
 		else:
@@ -1633,7 +1641,7 @@ func test_trunk_does_not_fold_back(p = use_parameters(MAPS)) -> void:
 func test_each_settlement_has_exactly_one_transformer(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var m: MapData = _map(p)
-	var homes: Array[Dictionary] = _powered_homes(props, m)
+	var homes: Array[Dictionary] = _homes(props, m)
 	assert_gt(homes.size(), 0, "%s: передумова — хати є" % p)
 	var tp_of: Dictionary = {}
 	for h in homes:
@@ -1754,47 +1762,77 @@ func test_homes_have_at_most_one_short_drop_to_their_wall(p = use_parameters(MAP
 			assert_eq(_drops_to(props, _rect_of(inst)).size(), 0, "%s: відвід до сараю чи руїни %s" % [p, inst["cells"]])
 
 
-## Відвід іде від опори свого боку вулиці: не довший за DROP_DIRECT (16 м), жодна точка відрізка не на асфальті, а далі
-## за DROP_POLE_GAP від опори — не в чужому дворі. Довгий навскісний відвід через вулицю чи поле — павутиння, а не село.
-func test_drops_stay_on_their_side_of_the_street(p = use_parameters(MAPS)) -> void:
+## Відвід короткий: не довший за DROP_DIRECT (16 м), не над грядками, далі за DROP_POLE_GAP від опори — не в чужому
+## дворі. Через вулицю — лише прямо впоперек: кут до нормалі вулиці не більший за 25° і проліт не довший за DROP_CROSS
+## (14 м). Довгий навскісний відвід через вулицю чи поле — павутиння, а не село.
+func test_drops_are_short_and_cross_streets_square(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var placer = props._placer
-	assert_eq(PropLayer.DROP_DIRECT, 2.0)
+	assert_eq([PropLayer.DROP_DIRECT, PropLayer.DROP_CROSS, PropLayer.DROP_CROSS_COS], [2.0, 1.75, 0.906])
 	assert_gt(props._drops.size(), 0, "%s: передумова — відводи є" % p)
+	var crossing: int = 0
 	for d: Array in props._drops:
 		var from: Vector2 = _pole_at(props, d[0])
 		var lip := Vector2((d[1] as Vector3).x, (d[1] as Vector3).z)
-		assert_lte(from.distance_to(lip), PropLayer.DROP_DIRECT + 1e-3, "%s: відвід до %s задовгий" % [p, lip])
+		var len_: float = from.distance_to(lip)
+		assert_lte(len_, PropLayer.DROP_DIRECT + 1e-3, "%s: відвід до %s задовгий" % [p, lip])
+		for r: Rect2 in placer._garden_rects:
+			assert_false(PropLayer._Placer._seg_hits_rect(from, lip, r), "%s: відвід до %s над грядкою" % [p, lip])
 		var own: Variant = placer.yard_owner.get(Vector2i(roundi(lip.x), roundi(lip.y)))
+		var crossed: bool = false
 		for j in range(0, 41):
 			var q: Vector2 = from.lerp(lip, float(j) / 40.0)
-			assert_gte(placer.road_edge_m(q), 0.0, "%s: відвід до %s перетинає вулицю" % [p, lip])
+			if placer.road_edge_m(q) < 0.0 and not crossed:
+				crossed = true
+				crossing += 1
+				assert_lte(len_, PropLayer.DROP_CROSS + 1e-3, "%s: відвід через вулицю до %s завдовжки %.2f" % [p, lip, len_])
+				var sin_a: float = absf((lip - from).normalized().dot(placer.street_dir(q)))
+				assert_lte(rad_to_deg(asin(sin_a)), 25.0 + 0.1, "%s: відвід до %s іде через вулицю навскіс" % [p, lip])
 			var c := Vector2i(roundi(q.x), roundi(q.y))
 			if q.distance_to(from) >= PropLayer.DROP_POLE_GAP and placer.yard_owner.has(c):
 				assert_eq(placer.yard_owner[c], own, "%s: відвід до %s іде чужим двором %s" % [p, lip, c])
+	gut.p("%s: відводів через вулицю %d" % [p, crossing])
 
 
-## Частка хат без світла (PropLayer.powered_homes) — за хешем центру, щоразу та сама.
-func test_powered_homes_are_a_seeded_share(p = use_parameters(MAPS)) -> void:
-	const POWERED: Dictionary = {"river": [8, 16], "crossroads": [15, 21], "ridge": [3, 4]}
-	var powered: int = 0
-	var homes: Array[Dictionary] = _homes(_cached(p).props(), _map(p))
-	for h in homes:
-		powered += int(h["powered"])
-	assert_eq([powered, homes.size()], POWERED[p], "%s: хат під мережею з усіх" % p)
-
-
-## Сусідні хати не всі під дротами: є хати, до яких опора вулиці дістала б, а відводу навмисно нема (PropLayer._skipped),
-## і відводу в них справді нема (вони серед PropLayer._unfed). На Річці й Хребті кожна така хата випала живленою за
-## хешем, тож перевіряє Перехрестя.
-func test_some_reachable_homes_are_left_without_a_drop(p = use_parameters(["crossroads"])) -> void:
+## Відводи мають близько половини хат кожної карти (точні числа: розстановка детермінована) — село з електрикою, але
+## не павутиння: [хат із відводом, хат, до яких опора дістала б, але відводу навмисно нема, хат усього].
+func test_drop_share_per_map(p = use_parameters(MAPS)) -> void:
+	const SHARE: Dictionary = {"river": [8, 1, 16], "crossroads": [11, 5, 21], "ridge": [3, 0, 4]}
 	var props: PropLayer = _cached(p).props()
-	assert_gt(props._skipped.size(), 0, "%s: кожна хата, до якої дістає опора, має відвід" % p)
+	assert_eq([props._drops.size(), props._skipped.size(), _homes(props, _map(p)).size()], SHARE[p], "%s: частка хат із відводом" % p)
+
+
+## Сусідні хати не всі під дротами: у кожному поселенні з трьома й більше хатами, до яких опора дістає, щонайменше одна
+## лишена без відводу (PropLayer._skipped), і відводу в неї справді нема (вона серед PropLayer._unfed).
+func test_some_reachable_homes_are_left_without_a_drop(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var reach: Array[Vector2] = props._skipped.duplicate()
+	for d: Array in props._drops:
+		for h in _homes(props, _map(p)):
+			if (h["rect"] as Rect2).grow(0.02).has_point(Vector2((d[1] as Vector3).x, (d[1] as Vector3).z)):
+				reach.append((h["rect"] as Rect2).get_center())
+	for group: Array in _settlements(reach):
+		if group.size() >= 3:
+			assert_true(group.any(func(c: Vector2) -> bool: return props._skipped.has(c)), "%s: у поселенні %s відвід до кожної досяжної хати" % [p, group])
 	for u: Vector2 in props._skipped:
-		var found: bool = false
-		for c: Vector2 in props._unfed:
-			found = found or c.distance_to(u) < 0.05
-		assert_true(found, "%s: хата %s лишена без світла, а відвід є" % [p, u])
+		assert_true(props._unfed.any(func(c: Vector2) -> bool: return c.distance_to(u) < 0.05), "%s: хата %s лишена без світла, а відвід є" % [p, u])
+
+
+## Кожне поселення з двох і більше хат має свою вулицю з лінією 0.4 кВ: опора 0.4 кВ не далі за STREET_R від його хати.
+func test_every_settlement_has_a_street_line(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var centres: Array[Vector2] = []
+	for h in _homes(props, _map(p)):
+		centres.append((h["rect"] as Rect2).get_center())
+	var poles04: Array[Vector2] = []
+	for i in _pole_ids(props):
+		if _is_04(props, i):
+			poles04.append(_pole_at(props, i))
+	for group: Array in _settlements(centres):
+		if group.size() < 2:
+			continue
+		assert_true(group.any(func(c: Vector2) -> bool: return poles04.any(func(q: Vector2) -> bool: return q.distance_to(c) <= PowerGrid.STREET_R)),
+				"%s: поселення %s без лінії 0.4 кВ" % [p, group])
 
 
 ## Кабелі: між двома опорами 10 кВ — три голі дроти, фаза до фази, без перехресть у плані; решта (0.4 кВ, ТП, відводи) —
