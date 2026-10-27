@@ -616,9 +616,6 @@ def mats():
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
         "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.60, 0.53, 0.45), sat=0.5, streak=0.9, base_dirt=0.4),
-        "sill_back": make_material("sill_back", flat=(0.055, 0.05, 0.045), streak=0.3),   # підвіконня проріму: смужка ~0.8 стіни на сонці, не світліша за неї
-        "ring_char": make_material("ring_char", flat=(0.02, 0.018, 0.016), streak=0.3),   # лиштва прорізів руїн: обгоріла, щоб проріз у тіні читався темним, а не сірим
-        "interior_back": make_material("interior_back", flat=(0.011, 0.010, 0.009), streak=0.3),   # тло прорізів руїн: ~25-35 sRGB під хмарним небом (0.03 давало 50 на Річці)
         "interior_burnt": make_material("interior_burnt", flat=(0.010, 0.0095, 0.009), streak=0.6),   # вигоріле нутро на зламі: ≤ 35 sRGB навіть під небом
         "door_red": make_material("door_red", flat=srgb_lin((0.42, 0.20, 0.15)), seams=[("z", 0.5, 0.015, 0.4)], seam_col=srgb_lin((0.25, 0.12, 0.09)), streak=0.5, rough=0.5),   # фарбований метал
         "door_wood": make_material("door_wood", "Planks021", 1.0, (0.55, 0.42, 0.30), seams=[("h", 0.12, 0.012, 0.5)], streak=0.6, bump=0.01, rough=0.8),
@@ -1456,11 +1453,10 @@ def heap_mound(b, hs, mat="heap", rings=6, segs=36, jitter=0.0, seed=0, skirt=1.
     return top
 
 
-def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0, foot=0.0, in_mat=None, holes=(), jamb_mat=None):
+def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=1.5, top_tone=0.8, inner_tone=0.9, brick_mat="brick_ruin", hcap=3.2, jag=1.0, cap=0.4, step=1.0, diag_p=0.35, jit=1.0, tvar=0.0, foot=0.0, in_mat=None):
     """Уламок стіни p0-p1: сегменти різної ширини, кожен ламається ще на 1-3 шматки з різними верхами (різниця 0.2-0.5 м,
     тож жодного рівного верху), випадкова ходьба висот довкола задуму heights (не вище hcap); верхні 0.4 м — відкрита
-    цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий.
-    holes — справжні прорізи (u0, u1, z0, z1; u від p0): шматки в межах проріму не мають граней між z0 і z1, відкоси й підвіконня — окремі грані."""
+    цегла. Торці між сусідніми шматками малюються лише там, де один вищий за другий."""
     import random
     rnd = random.Random(seed)
     n0 = len(heights) - 1
@@ -1477,11 +1473,6 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
     while cuts[-1] < ln - 0.3:
         cuts.append(min(ln, cuts[-1] + rnd.uniform(0.35, 1.5)))
     cuts[-1] = ln
-    for h_ in holes:
-        assert 0 <= h_[0] < h_[1] <= ln, f"проріз {h_} поза стіною завдовжки {ln:.2f}"
-    edges = {e for h_ in holes for e in (h_[0], h_[1])}   # краї проріму — на стиках шматків, інакше проріз різав би шматок навпіл
-    if edges:
-        cuts[:] = sorted({c_ for c_ in cuts if c_ in (0.0, ln) or all(abs(c_ - e) > 0.2 for e in edges)} | edges)
     pieces = []                                   # (x0, x1, h0, h1) вздовж стіни; висота 0 — пролом
     h = None
     for i in range(len(cuts) - 1):
@@ -1516,8 +1507,6 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
     for i, (xa, xc, ha, hc) in enumerate(pieces):
         if ha <= 0.05 and hc <= 0.05:
             continue
-        mid_ = (xa + xc) / 2
-        hole = next((h_ for h_ in holes if h_[0] <= mid_ <= h_[1]), None)
         tb = 1.0 - tvar * rnd.random()                      # тон шматка: стіна не однакова по всій довжині
         tbr = 1.0 - 0.4 * tvar * rnd.random() if tvar else 1.0
 
@@ -1537,30 +1526,11 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             la, lc = (lo_c, lo_a) if flip else (lo_a, lo_c)
             side_n = nrm if q0 is pb[0] else -nrm                     # внутрішній — бік, звернений до центру будинку (руїни будуються навколо 0,0)
             inner = side_n.dot(-(a + c) * 0.5) > 0.0
-            if inner:                                                   # темнішає лише справжній внутрішній бік: сторона пари q0/q1 з inner_tone може бути зовнішньою
-                tn = inner_tone * tb
-            elif q0 is pb[2]:
-                tn = tb
             mq = (in_mat or mat) if inner else mat                      # внутрішній бік — обгоріла штукатурка, а не та сама фарба
-            skip_band = False
-            if hole is None:
-                quad([V(q0, 0), V(q1, 0), V(q1, lc), V(q0, la)], (tn,) * 4, mq)
-            else:                                                       # стіна під і над прорізом; між ними — порожнеча
-                hz0, hz1 = hole[2], hole[3]
-                if hz0 > 0.02:
-                    quad([V(q0, 0), V(q1, 0), V(q1, hz0), V(q0, hz0)], (tn * (1.0 - foot), tn * (1.0 - foot), tn, tn), mq)
-                if hz1 < min(la, lc) - 0.02:
-                    quad([V(q0, hz1), V(q1, hz1), V(q1, lc), V(q0, la)], (tn,) * 4, mq)
-                else:                                                   # проріз сягає кіптявого пояса: над ним лишається лише частина пояса
-                    assert hz1 < min(ba, bc) - 0.02, "проріз сягає верху стіни"
-                    k_ = (hz1 - min(la, lc)) / max(1e-3, min(ba, bc) - min(la, lc))
-                    tm = tn + (tn * top_tone - tn) * k_
-                    quad([V(q0, hz1), V(q1, hz1), V(q1, bc), V(q0, ba)], (tm, tm, tn * top_tone, tn * top_tone), mq)
-                    skip_band = True
+            quad([V(q0, 0), V(q1, 0), V(q1, lc), V(q0, la)], (tn,) * 4, mq)
             tg = tn * (1.0 - foot) if la <= 0.01 else tn                # AO біля землі: низ стіни темніший, угору світлішає
             tg2 = tn * (1.0 - foot) if lc <= 0.01 else tn
-            if not skip_band:
-                quad([V(q0, la), V(q1, lc), V(q1, bc), V(q0, ba)], (tg, tg2, tn * top_tone, tn * top_tone), mq)
+            quad([V(q0, la), V(q1, lc), V(q1, bc), V(q0, ba)], (tg, tg2, tn * top_tone, tn * top_tone), mq)
             bp((V(q0, ba), V(q1, bc), V(q1, ch), V(q0, ah)))
         bp((V(pb[0], ha), V(pb[1], hc), V(pb[2], hc), V(pb[3], ha)))
         prev = pieces[i - 1] if i > 0 and pieces[i - 1][1] >= xa - 1e-6 and pieces[i - 1][3] > 0.05 else None
@@ -1571,23 +1541,6 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             bp((V(pb[1], lo_end), V(pb[2], lo_end), V(pb[2], hc), V(pb[1], hc)))
         if ha - lo_start > 0.02:
             bp((V(pb[3], lo_start), V(pb[0], lo_start), V(pb[0], ha), V(pb[3], ha)))
-
-    for hu0, hu1, hz0, hz1 in holes:                    # відкоси, підвіконня й перемичка проріму
-        pa = Vector((p0[0], p0[1], 0)) + u * hu0
-        pc = Vector((p0[0], p0[1], 0)) + u * hu1
-        for pe, dirn in ((pa, 1), (pc, -1)):
-            _quad(b, [V(pe + nrm, hz0), V(pe - nrm, hz0), V(pe - nrm, hz1), V(pe + nrm, hz1)], jamb_mat or "interior_back", tuple(u * dirn))   # відкоси темні: крізь проріз вони займають більшу частину видимого, світлі читались блідою панеллю
-        mid_ = (pa + pc) / 2                              # тло проріму: темна «кімната» за 0.45 м усередині, інакше крізь проріз видно залиту сонцем купу (бліда панель)
-        inw = nrm.normalized()
-        if inw.dot(-mid_) < 0:
-            inw = -inw
-        off = inw * (nrm.length + 0.45)
-        # тло ширше за проріз на 0.7 м з кожного боку: на косому ракурсі промінь виходить повз край тла й бачить купу (блакитно-сірий клин)
-        pa2, pc2 = pa + off - u * min(0.7, hu0), pc + off + u * min(0.7, ln - hu1)   # не за межі стіни: інакше габарит моделі росте й карта міняє розстановку
-        _quad(b, [V(pa2, max(0.0, hz0 - 0.8)), V(pc2, max(0.0, hz0 - 0.8)), V(pc2, hz1), V(pa2, hz1)], "interior_back", tuple(-inw))
-        if hz0 > 0.02:
-            _quad(b, [V(pa + nrm, hz0), V(pc + nrm, hz0), V(pc - nrm, hz0), V(pa - nrm, hz0)], "sill_back", (0, 0, 1))
-        _quad(b, [V(pa - nrm, hz1), V(pc - nrm, hz1), V(pc + nrm, hz1), V(pa + nrm, hz1)], mat, (0, 0, -1))
 
 
 def prism(b, prof, thick, origin, yaw, lean, mat, top_mat=None, in_mat=None, inner=(0.0, 0.0)):
