@@ -527,6 +527,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 23: Effects and light
 
 - [x] Explosions without craters; scorch under wrecks only on `seen`
+- [x] Explosion cloud top breaks up in ragged wisps, no dark ball sitting on the smoke
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
 - [x] Chimney smoke reads as volume, not flat strokes
 - [x] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
