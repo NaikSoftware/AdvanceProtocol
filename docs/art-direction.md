@@ -133,7 +133,8 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   hay bale; a 0.4 kV span keeps off yards, gardens and forest (a wire coming out from under the canopy
   reads as from nowhere) and off the strip about one tile deep in front of a building on the camera
   side (from there it reads as over the roof), hangs at least 6 m above the ground, and over asphalt
-  runs only square across the road, to a pole set opposite, never along the inside of a bend. A
+  runs only square across the road, to a pole set opposite, never along the inside of a bend nor
+  where, seen from the camera, it would hang along the asphalt. A
   street pole carries at most three spans; a transformer pole its two 10 kV spans plus at most two
   0.4 kV. The three bare 10 kV wires are fainter each, so the trunk reads no darker than a village
   cable. No pole is added just to reach a house, and about one reachable house in three in each

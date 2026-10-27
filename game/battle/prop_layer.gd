@@ -133,6 +133,8 @@ const DROP_CAMERA_SHADOW: float = 0.3
 const ROAD_SPAN_K: float = 1.2
 ## Дріт, що не перетинає вісь дороги, висить над асфальтом не довше за стільки (клітинки).
 const ROAD_CLIP: float = 0.3
+## Проліт уздовж дороги, що на екрані (слід, зсунутий від камери) висить над асфальтом не довше за стільки (клітинки).
+const ROAD_SEEN_CLIP: float = 1.0
 ## Стовп ЛЕП — поза обрисом паркану двору; на самій лінії паркану стояти може (клітинки).
 const POLE_FENCE_CLEAR: float = 0.0
 ## Стовп ЛЕП не ближче за стільки до прорізу воріт садиби (клітинки, 1.6 м).
@@ -3709,6 +3711,16 @@ class _Placer:
 		# 25° від прямого кута, і над асфальтом не довше за ROAD_SPAN_K ширини дороги (ширина — удвічі найглибша точка під
 		# дротом). Дріт, що лише зрізає край асфальту на повороті, висить над ним не далі ROAD_CLIP: кут в одній точці
 		# пропускав навскісні проліти над внутрішнім боком повороту.
+		# На екрані дріт проліта висить над точкою землі, зсунутою від камери (−x, −z) на ~1 клітинку навскіс: уздовж
+		# узбіччя з боку камери він читається над асфальтом, хоч на землі стоїть поруч. Перевіряється й цей слід.
+		if not own.has_area() and not _crosses_axis(a, b):
+			var shift: Vector2 = -Vector2.ONE * PropLayer.SPAN_CAMERA_SHADOW
+			var seen_on_road: int = 0
+			for j in range(0, n + 1):
+				if road_edge_m(a.lerp(b, float(j) / n) + shift) < 0.0:
+					seen_on_road += 1
+			if len_ * seen_on_road / (n + 1) > PropLayer.ROAD_SEEN_CLIP:
+				return false
 		if on_road > 0:
 			var over: float = len_ * on_road / (n + 1)
 			if not _crosses_axis(a, b):
