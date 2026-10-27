@@ -796,3 +796,17 @@ func test_building_pad_levels_the_slope_and_updates_the_height_texture_once() ->
 	t.finish_pads()
 	assert_eq(t.texture_updates, 1, "ті самі майданчики — без перезаливання")
 	assert_almost_eq(t.at(7.0, 5.0), level, 1e-5, "рельєф той самий")
+
+
+## Похил для шейдера землі: R, G — (h(x - e) - h(x + e)) / 2e й те саме по Z у відліку (e — один відлік).
+func test_gradient_image_holds_the_central_difference_of_the_field() -> void:
+	var t := TerrainHeight.bake(_board(), 0, 5)
+	var img: Image = t.gradient_image()
+	assert_eq(Vector2i(img.get_width(), img.get_height()), Vector2i(t.cols, t.rows))
+	var e: float = 1.0 / float(t.samples)
+	for ij: Vector2i in [Vector2i(9, 7), Vector2i(14, 12), Vector2i(20, 5)]:
+		var x: float = -0.5 - t.margin + ij.x * e
+		var z: float = -0.5 - t.margin + ij.y * e
+		var c: Color = img.get_pixel(ij.x, ij.y)
+		assert_almost_eq(c.r, (t.at(x - e, z) - t.at(x + e, z)) / (2.0 * e), 2e-3, "R у %s" % ij)
+		assert_almost_eq(c.g, (t.at(x, z - e) - t.at(x, z + e)) / (2.0 * e), 2e-3, "G у %s" % ij)

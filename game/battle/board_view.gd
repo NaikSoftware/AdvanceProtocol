@@ -206,6 +206,8 @@ func build(board: Board) -> void:
 		for sp: Dictionary in ring_map.spawns:
 			spawns.append(sp["pos"])
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields, spawns)
+	# Майданчики під будівлями змінили поле висот: меш землі лягає на нього.
+	_ground.refit(_height, _board_size, ring)
 	_vegetation = VegetationLayer.new()
 	_vegetation.name = "Vegetation"
 	_vegetation.cast_shadows = structure_shadows

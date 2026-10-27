@@ -130,13 +130,21 @@ CONTENT: the board uses 7 quads/tile (98 tris/tile), and 1 728 ring tiles at tha
   50 % at 3–9 tiles; none beyond 9 tiles (haze ≥ 84 %), where forest is a dark canopy texture. Trees
   share the board's MultiMesh where possible. Ground texture detail finer than 0.3 m can drop
   beyond 4 tiles, since nothing under 28–34 cm/px resolves there.
-  Ring cells with water or a bank slope (`TerrainHeight.bank_cells`) take the board's 7 quads/tile
-  at any distance: a coarse quad over a river bed rises above the water plane and hides the water
-  along straight triangle edges, and the bank masks are vertex values that a coarse quad cannot
-  shape. Board and ring together stay inside the 150k-triangle frame budget, so the ring's limit is
-  set by the River, the map with the most ring water.
-ACCEPT IF: ≤ 26k extra tris on every map (`Surroundings.RING_TRIS_MAX`, checked by
-  test_surroundings.gd) and ≤ 6 extra draw calls at zoom 20; no visible seam or density step at
+  Ring cells with water or a bank slope (`TerrainHeight.bank_cells`) have no band ceiling: a coarse
+  quad over a river bed rises above the water plane and hides the water along straight triangle
+  edges. How many quads a cell actually takes is decided by the relief under it (`GroundLod`): the
+  least density whose mesh stays within a height tolerance of the sample field (13 cm on open
+  ground, 6 cm on banks, growing with distance from the board), so a level field is 2 triangles
+  per tile and a bank or a hill up to 98. Mesh vertices lie on the height samples, the density
+  levels nest (so a seam between densities has no gap), and the normal, the bank masks and the
+  curvature come from the maps per pixel, so vertex density does not change how the relief is lit.
+  The height field of a world with a ring is reduced to that mesh surface once after baking
+  (`GroundLod.surface`), so units, props and water stand on the surface that is drawn; building
+  pads change the field later and the mesh is refitted only in the cells they touched. Ground
+  with board and ring stays under 30k triangles on every map (22k River, 20k Ridge, 12k
+  Crossroads), which leaves the rest of the 150k frame budget to props and forest.
+ACCEPT IF: ≤ 26k extra tris on every map with band density alone (`Surroundings.RING_TRIS_MAX`, checked by
+  test_surroundings.gd; the real ground mesh is capped at 30k by test_ground_lod.gd) and ≤ 6 extra draw calls at zoom 20; no visible seam or density step at
   the board edge at zoom 6; faceting is visible only where haze is ≥ 50 %.
 ```
 
