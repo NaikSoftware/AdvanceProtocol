@@ -1110,3 +1110,21 @@ func d_from(img: Image, p: Vector2) -> float:
 func d_grid() -> PackedFloat32Array:
 	rasterise()
 	return _d
+
+
+## Знакова відстань (м, мінус на дорозі) до краю дороги в точці p дошки (координати дошки, не світу) — те
+## саме поле d, що малює шейдер землі (заокруглення розвилок і площі включно), білінійно за d_grid() так,
+## як d_from.
+func d_at(p: Vector2) -> float:
+	var g: PackedFloat32Array = d_grid()
+	var rw: int = (_w + 2 * _margin) * PX
+	var rh: int = (_h + 2 * _margin) * PX
+	var tx: float = (p.x + _shift + 0.5 + _margin) * PX - 0.5
+	var tz: float = (p.y + _shift + 0.5 + _margin) * PX - 0.5
+	var ix: int = clampi(floori(tx), 0, rw - 2)
+	var iz: int = clampi(floori(tz), 0, rh - 2)
+	var fx: float = clampf(tx - ix, 0.0, 1.0)
+	var fz: float = clampf(tz - iz, 0.0, 1.0)
+	var a: float = lerpf(g[iz * rw + ix], g[iz * rw + ix + 1], fx)
+	var b: float = lerpf(g[(iz + 1) * rw + ix], g[(iz + 1) * rw + ix + 1], fx)
+	return lerpf(a, b, fz)
