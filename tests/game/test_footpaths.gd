@@ -92,6 +92,47 @@ func test_trodden_patch_is_soft_and_centred() -> void:
 	assert_eq(_px(img, Vector2(4.4, 4), 1), 0)
 
 
+func _lum(c: Color) -> float:
+	return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
+
+
+## Тон стежки — від яскравості трави під нею, а не сталий колір: у дощ трава темнішає ×0.66, і
+## стала «гола земля» лягала світлою піщаною плямою (~1.4 яскравості трави).
+const GRASS_WET := Color(0.08, 0.075, 0.055)
+
+
+func test_tone_leaves_grass_without_wear() -> void:
+	assert_eq(Footpaths.tone(GRASS_WET, Vector2.ZERO, 1.0), GRASS_WET)
+
+
+func test_tone_wet_trodden_earth_is_darker_than_grass() -> void:
+	var core: Color = Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 0.7)
+	var l: float = _lum(GRASS_WET)
+	# wet_p 0.7 (MUD): k = lerp(1.15, 0.85, 0.7) = 0.94.
+	assert_almost_eq(_lum(core), l * 0.94, 1e-6, "середина стежки в багні")
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(1.0, 0.0), 1.0)), l * 0.85, 1e-6, "середина в дощ")
+	assert_true(core.r > core.g and core.g > core.b, "бура земля, не рожева й не сіра: %s" % core)
+	assert_almost_eq(core.b / core.g, 0.5492, 1e-3, "синього мало — не рожевий пісок")
+
+
+func test_tone_dry_trodden_earth_is_only_slightly_lighter() -> void:
+	var grass := Color(0.16, 0.15, 0.09)
+	assert_almost_eq(_lum(Footpaths.tone(grass, Vector2(1.0, 0.0), 0.0)), _lum(grass) * 1.15, 1e-6)
+
+
+func test_tone_trodden_patch_follows_grass() -> void:
+	var l: float = _lum(GRASS_WET)
+	# Пляма: вага 0.8 × G, k — 0.78 у дощ, 1.0 сухо: lum = l × (1 − 0.8 + 0.8 × 0.78).
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.0, 1.0), 1.0)), l * (0.2 + 0.8 * 0.78), 1e-6)
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.0, 1.0), 0.0)), l * (0.2 + 0.8 * 1.0), 1e-6)
+
+
+func test_tone_trampled_verge_keeps_grass_brightness_near() -> void:
+	var l: float = _lum(GRASS_WET)
+	# Смуга прим'ятої трави (pm.r 0.3): band_t = 1, вага 0.8, k = 0.93 у дощ, ядра ще нема.
+	assert_almost_eq(_lum(Footpaths.tone(GRASS_WET, Vector2(0.3, 0.0), 1.0)), l * (0.2 + 0.8 * 0.93), 1e-6)
+
+
 func test_water_cuts_the_wear() -> void:
 	var dry := func(p: Vector2) -> bool: return p.x < 5.0
 	var img: Image = Footpaths.bake([_walk(Vector2(2, 5), Vector2(9, 5))], PackedVector3Array(), Vector2i(12, 10), dry)

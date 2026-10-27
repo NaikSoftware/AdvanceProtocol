@@ -265,6 +265,35 @@ static func _stamp_patch(buf: PackedByteArray, w: int, h: int, patch: Vector3, i
 			_put(buf, (py * w + px) * 2 + 1, v, q, dry)
 
 
+## Відтінки стежки з яскравістю 1 (ділимо на неї): відтінок і яскравість — окремі ручки.
+## Суха земля — курна сіро-бура, мокра — темніша бура з малою часткою синього (не рожевий пісок).
+const EARTH_DRY := Vector3(1.25, 1.0, 0.6)
+const EARTH_WET := Vector3(1.4, 0.95, 0.5)
+const TRAMPLED_DRY := Vector3(1.12, 1.0, 0.55)
+const TRAMPLED_WET := Vector3(1.1, 1.0, 0.5)
+const LUMA := Vector3(0.299, 0.587, 0.114)
+
+
+## Колір землі під стежкою — та сама формула, що в ground.gdshader (блок Footpaths). Тон —
+## яскравість трави в цьому пікселі × відтінок × k, а не сталий колір: у дощ трава темнішає разом зі
+## стежкою, текстура ґрунту лишається, і стежка відрізняється від трави лише трохи. k середини:
+## суха 1.15, мокра 0.85; прим'ятої смуги — 1.05 / 0.93; плями біля воріт — 1.0 / 0.78.
+## wet_p — 0 сухо, 1 дощ (MUD — 0.7).
+static func tone(alb: Color, pm: Vector2, wet_p: float) -> Color:
+	var a := Vector3(alb.r, alb.g, alb.b)
+	var lum: float = a.dot(LUMA)
+	var earth: Vector3 = EARTH_DRY.lerp(EARTH_WET, wet_p)
+	earth /= earth.dot(LUMA)
+	var trampled: Vector3 = TRAMPLED_DRY.lerp(TRAMPLED_WET, wet_p)
+	trampled /= trampled.dot(LUMA)
+	var core_t: float = smoothstep(0.5, 0.78, pm.x)
+	var band_t: float = smoothstep(0.08, 0.3, pm.x)
+	a = a.lerp(trampled * lum * lerpf(1.05, 0.93, wet_p), band_t * 0.8)
+	a = a.lerp(earth * lum * lerpf(1.15, 0.85, wet_p), core_t)
+	a = a.lerp(earth * lum * lerpf(1.0, 0.78, wet_p), pm.y * 0.8)
+	return Color(a.x, a.y, a.z, alb.a)
+
+
 static func apply(mat: ShaderMaterial, img: Image, board_size: Vector2i) -> void:
 	img.generate_mipmaps()
 	mat.set_shader_parameter("has_paths", true)

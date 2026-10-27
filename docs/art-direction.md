@@ -159,10 +159,12 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   `Footpaths` bakes one R8 mask per board (128 px per tile); `ground.gdshader` darkens and browns the
   ground with it, so there are no nodes, decals or draw calls. 0.4–0.8 m wide, wider at doors and
   gates, one smooth curve with a ragged, noisy edge, bare earth in patches with grass sprouting even
-  in the middle, low contrast. The noise lives in path coordinates (along, across), never in a world
-  texture. A path fades out on the verge and never reaches the carriageway or the water. No puddles
-  or standing water on a footpath or trodden patch, even in rain or on marsh. Public: the fog never
-  touches it, and it changes no rule.
+  in the middle, low contrast. Every path tone is the grass's own brightness under it times an
+  earth hue, never a fixed colour: in rain or mud darker than the wet grass, on a dry map a dusty
+  shade only slightly lighter, and the ground texture always shows through. The noise lives in
+  path coordinates (along, across), never in a world texture. A path fades out on the verge and
+  never reaches the carriageway or the water. No puddles or standing water on a footpath or trodden
+  patch, even in rain or on marsh. Public: the fog never touches it, and it changes no rule.
 - Briefs, sizes and routes per prop (Blender, Tripo or CC0): [`art/props-research.md`](art/props-research.md).
 
 ## Effects — fire, explosions, smoke
