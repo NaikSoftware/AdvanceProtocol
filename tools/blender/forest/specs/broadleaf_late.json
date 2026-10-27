@@ -10,10 +10,10 @@
     "src": "birch_late",
     "grade": {
      "lab": {
-      "L": 30,
-      "C": 4,
-      "h": 70,
-      "contrast_l": 0.9
+      "L": 26,
+      "C": 3,
+      "h": 55,
+      "contrast_l": 0.6
      }
     }
    }
@@ -23,10 +23,10 @@
     "src": "broad_late",
     "grade": {
      "lab": {
-      "L": 30,
-      "C": 4,
-      "h": 70,
-      "contrast_l": 0.9
+      "L": 26,
+      "C": 3,
+      "h": 55,
+      "contrast_l": 0.6
      }
     }
    }
@@ -36,10 +36,10 @@
     "src": "oak_late",
     "grade": {
      "lab": {
-      "L": 30,
-      "C": 4,
-      "h": 70,
-      "contrast_l": 0.9
+      "L": 26,
+      "C": 3,
+      "h": 55,
+      "contrast_l": 0.6
      }
     }
    }
@@ -49,10 +49,10 @@
     "src": "shrub_late",
     "grade": {
      "lab": {
-      "L": 30,
-      "C": 4,
-      "h": 70,
-      "contrast_l": 0.9
+      "L": 26,
+      "C": 3,
+      "h": 55,
+      "contrast_l": 0.6
      }
     }
    }
@@ -63,10 +63,34 @@
     "max": 4,
     "grade": {
      "lab": {
-      "L": 28,
-      "C": 6,
+      "L": 30,
+      "C": 5,
       "h": 70,
-      "contrast_l": 0.9
+      "contrast_l": 0.5
+     }
+    }
+   }
+  ],
+  "rust": [
+   {
+    "src": "oak_turned",
+    "grade": {
+     "lab": {
+      "L": 26,
+      "C": 14,
+      "h": 50,
+      "contrast_l": 0.6
+     }
+    }
+   },
+   {
+    "src": "birch_turned",
+    "grade": {
+     "lab": {
+      "L": 26,
+      "C": 14,
+      "h": 50,
+      "contrast_l": 0.6
      }
     }
    }
@@ -77,10 +101,21 @@
    "node": "Birch_A",
    "src": "birch_a_bare",
    "trunk_grade": {
-    "target_y": 0.16,
-    "sat": 0.5
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
+    "target_y": 0.3,
+    "sat": 0.4
    },
    "sprites": "birch",
+   "card_reach": 1.0,
+   "trunk_into_crown": 0.75,
+   "trunk_top": 0.08,
+   "card_keep": 1.0,
+   "limbs": false,
+   "trunk_r_mul": 2.0,
    "scale": 0.56,
    "card_scale": 1.4
   },
@@ -88,10 +123,21 @@
    "node": "Birch_B",
    "src": "birch_b_bare",
    "trunk_grade": {
-    "target_y": 0.16,
-    "sat": 0.5
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
+    "target_y": 0.3,
+    "sat": 0.4
    },
    "sprites": "birch",
+   "card_reach": 1.0,
+   "trunk_into_crown": 0.75,
+   "trunk_top": 0.08,
+   "card_keep": 1.0,
+   "limbs": false,
+   "trunk_r_mul": 2.0,
    "scale": 0.63,
    "card_scale": 1.4
   },
@@ -99,9 +145,19 @@
    "node": "Oak_A",
    "src": "oak_a_bare",
    "trunk_grade": {
-    "target_y": 0.06
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.22
    },
    "sprites": "oak",
+   "card_reach": 1.0,
+   "trunk_into_crown": 0.75,
+   "trunk_top": 0.08,
+   "card_keep": 1.0,
+   "limbs": false,
    "scale": 0.58,
    "card_scale": 1.6
   },
@@ -109,9 +165,19 @@
    "node": "Oak_B",
    "src": "oak_b_bare",
    "trunk_grade": {
-    "target_y": 0.06
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.22
    },
    "sprites": "oak",
+   "card_reach": 1.0,
+   "trunk_into_crown": 0.75,
+   "trunk_top": 0.08,
+   "card_keep": 1.0,
+   "limbs": false,
    "scale": 0.6,
    "card_scale": 1.6
   },
@@ -119,40 +185,66 @@
    "node": "Shrub_Hazel",
    "src": "shrub_hazel",
    "trunk_grade": {
-    "target_y": 0.07
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.24
    },
    "sprites": "shrub",
-   "card_keep": 1.0,
+   "card_keep": 0.6,
+   "card_scale": 1.3,
    "trunk": false,
-   "strip": true
+   "strip": true,
+   "limbs": false
   },
   {
    "node": "Shrub_Thorn",
    "src": "shrub_thorn",
    "trunk_grade": {
-    "target_y": 0.06
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.22
    },
    "sprites": "shrub",
-   "card_keep": 1.0,
+   "card_keep": 0.6,
+   "card_scale": 1.3,
    "trunk": false,
-   "strip": true
+   "strip": true,
+   "limbs": false
   },
   {
    "node": "Hedge_Shrub",
    "src": "hedge_shrub",
    "trunk_grade": {
-    "target_y": 0.07
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.24
    },
    "sprites": "shrub",
    "card_keep": 1.0,
    "trunk": false,
-   "strip": true
+   "strip": true,
+   "limbs": false,
+   "card_budget": 35
   },
   {
    "node": "Log_A",
    "src": "log_a",
    "trunk_grade": {
-    "target_y": 0.06
+    "tint": [
+     1.1,
+     1.0,
+     0.86
+    ],
+    "target_y": 0.16
    },
    "card_keep": 1.0,
    "trunk": false,
@@ -162,17 +254,65 @@
    "node": "Log_B",
    "src": "log_b",
    "trunk_grade": {
-    "target_y": 0.06
+    "tint": [
+     1.1,
+     1.0,
+     0.86
+    ],
+    "target_y": 0.16
    },
    "card_keep": 1.0,
    "trunk": false,
    "strip": true
   },
   {
+   "node": "Birch_R",
+   "src": "birch_a",
+   "trunk_grade": {
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
+    "target_y": 0.3,
+    "sat": 0.4
+   },
+   "sprites": "rust",
+   "trunk_r_mul": 2.0,
+   "card_keep": 0.5,
+   "crown_low": 0.6,
+   "scale": 0.56,
+   "card_scale": 1.4,
+   "limbs": false
+  },
+  {
+   "node": "Oak_R",
+   "src": "oak_b",
+   "trunk_grade": {
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.22
+   },
+   "sprites": "rust",
+   "card_keep": 0.5,
+   "crown_low": 0.6,
+   "scale": 0.6,
+   "card_scale": 1.6,
+   "limbs": false
+  },
+  {
    "node": "Litter_A",
    "src": "litter_a",
    "trunk_grade": {
-    "target_y": 0.06
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.22
    },
    "card_keep": 1.0,
    "trunk": false,
@@ -182,50 +322,82 @@
    "node": "Hero_Oak",
    "src": "hero_oak",
    "trunk_grade": {
-    "target_y": 0.06
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.22
    },
    "sprites": "oak",
-   "card_keep": 0.2,
+   "card_keep": 0.5,
+   "card_reach": 1.0,
    "trunk_sides": 6,
    "scale": 0.63,
-   "card_scale": 1.3
+   "card_scale": 1.3,
+   "trunk_src": "oak_a",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Lime",
    "src": "hero_lime",
    "trunk_grade": {
-    "target_y": 0.07
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.22
    },
    "sprites": "broad",
-   "card_keep": 0.18,
+   "card_keep": 0.45,
+   "card_reach": 1.0,
    "trunk_sides": 6,
    "scale": 0.6,
-   "card_scale": 1.3
+   "card_scale": 1.3,
+   "trunk_src": "oak_b",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Birch",
    "src": "hero_birch",
    "trunk_grade": {
-    "target_y": 0.16,
-    "sat": 0.5
+    "tint": [
+     1.12,
+     1.0,
+     0.85
+    ],
+    "target_y": 0.3,
+    "sat": 0.4
    },
    "sprites": "birch",
-   "card_keep": 0.2,
+   "card_keep": 0.5,
+   "card_reach": 1.0,
    "trunk_sides": 6,
    "scale": 0.62,
-   "card_scale": 1.3
+   "card_scale": 1.3,
+   "trunk_src": "birch_a",
+   "trunk_r_mul": 1.8
   },
   {
    "node": "Hero_Poplar",
    "src": "hero_poplar",
    "trunk_grade": {
-    "target_y": 0.07
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.22
    },
    "sprites": "broad",
-   "card_keep": 0.08,
+   "card_keep": 0.2,
+   "card_reach": 1.0,
    "trunk_sides": 6,
    "scale": 0.56,
-   "card_scale": 1.3
+   "card_scale": 1.3,
+   "trunk_src": "oak_a",
+   "trunk_r_mul": 1.8
   }
  ]
 }

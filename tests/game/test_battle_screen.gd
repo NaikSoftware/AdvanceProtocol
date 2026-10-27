@@ -1265,8 +1265,9 @@ func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
 
 # --- Об'їзд дошки за гейтом (_warm_board) ---------------------------------
 
-## Кадрів з запасом: 12 точок об'їзду, кадр на юнітів, три кадри під гейтом, прибирання.
-const WARM_FRAMES: int = 40
+## Кадрів з запасом: 12 точок об'їзду, три кадри розчинення лісу, кадр на юнітів, три кадри під
+## гейтом, прибирання.
+const WARM_FRAMES: int = 45
 
 
 func _launched_with_warm_up() -> Array:
@@ -1333,6 +1334,21 @@ func test_launch_confirm_in_the_middle_of_the_warm_up_leaves_camera_and_units_ri
 
 func test_resume_confirm_in_the_middle_of_the_warm_up_leaves_camera_and_units_right() -> void:
 	await _assert_confirmed_mid_warm_up(_resumed_with_warm_up())
+
+
+func test_warm_up_shows_forest_fade_under_the_gate() -> void:
+	# Матеріали розчинення лісу (прохід глибини й колір) компілюються за гейтом, а не на першому
+	# юніті під кроною: під час об'їзду розчинена крона показується, поки гейт закриває екран.
+	var pair: Array = _launched_with_warm_up()
+	var screen: Node3D = pair[0]
+	var gate: Control = screen.get_node("%HandoverGate")
+	var forest: ForestLayer = (screen.get_node("%BoardView") as BoardView).forest()
+	var seen: Dictionary = {"fade": false}
+	forest.child_entered_tree.connect(func(n: Node) -> void:
+		if String(n.name).begins_with("Fade_") and gate.visible:
+			seen["fade"] = true)
+	await wait_frames(WARM_FRAMES)
+	assert_true(seen["fade"], "розчинення лісу показано за гейтом")
 
 
 func test_launch_warm_up_that_runs_to_the_end_leaves_no_units_under_the_gate() -> void:
@@ -1403,3 +1419,36 @@ func test_handover_draws_roof_fade_of_the_incoming_player_at_once() -> void:
 	for i: int in faded:
 		assert_eq(float(props._fade_level.get(i, 0.0)), 0.0, "у гравця 0 дах суцільний одразу")
 	assert_false(props.is_processing())
+
+
+func test_handover_forest_shows_only_what_incoming_player_knows() -> void:
+	# §3.5: ліс гравця, що заходить, — його проломи (known_broken_map), а розчинення крон — лише
+	# над юнітами, яких він знає (known_occupied_map). Проломи й юніти попереднього гравця, яких
+	# новий не бачив, через ліс не видно.
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(10, 10)
+	for y in range(1, 9):
+		for x in range(1, 9):
+			m.tiles[y * 10 + x] = Terrain.Kind.FOREST
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(8, 8), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var state: BattleState = service.state
+	state.broken_forest = {Vector2i(1, 1): true, Vector2i(2, 1): true, Vector2i(8, 8): true}
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
+	assert_eq(state.active_player, 1, "передумова: хід гравця 1")
+	var forest: ForestLayer = (screen.get_node("%BoardView") as BoardView).forest()
+	var known: Dictionary = state.known_broken_map(1)
+	assert_false(known.has(Vector2i(2, 1)), "передумова: пролам гравця 0 гравцеві 1 невідомий")
+	assert_eq(forest._broken.keys().size(), known.size(), "проломи лісу — рівно ті, що знає гравець 1")
+	for c: Vector2i in known:
+		assert_true(forest._broken.has(c), "пролам %s, який знає гравець 1, у лісі є" % c)
+	var shown: Dictionary = state.known_occupied_map(1)
+	assert_eq(forest._reveal.size(), shown.size(), "розчинення — лише над юнітами, яких знає гравець 1")
+	for c: Vector2i in forest._reveal:
+		assert_true(shown.has(c), "розчинення над %s, якого гравець 1 не знає" % c)

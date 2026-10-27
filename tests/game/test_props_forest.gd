@@ -21,8 +21,10 @@ const LIMITS: Dictionary = {
 	"Oak": [9.0, 13.0, 0.8, 40, 260],
 	"Shrub": [1.5, 5.0, 0.4, 10, 100],
 	"Log": [0.2, 1.5, 0.5, 10, 60],
-	# Смуга узлісся завдовжки з тайл; гілля проламаної клітинки лежить на землі.
-	"Hedge": [2.0, 4.5, 0.62, 60, 200],
+	# Смуга узлісся завдовжки з тайл; гілля проламаної клітинки лежить на землі. Нижня межа 40:
+	# у бою смуга має бюджет пучків (Hedge_Spruce — 24 пучки, ~48 трикутників): узлісся на кожній
+	# стороні лісу, що дивиться в поле, — сотні екземплярів на карту.
+	"Hedge": [2.0, 4.5, 0.62, 40, 200],
 	"Litter": [0.0, 0.5, 0.66, 10, 60],
 	# Поодинокі восени голі (лишається 8–18 % пучків), влітку — 1500–2000 трикутників.
 	"Hero": [9.0, 15.0, 1.3, 200, 3000],
@@ -55,6 +57,18 @@ func _tris(mesh: Mesh) -> int:
 	return t
 
 
+## Пучки — групи вершин з однаковою позицією й ненульовим UV2 (чотири кути картки в центрі).
+func _cards(mesh: Mesh) -> int:
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uv2: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var seen: Dictionary = {}
+	for i in verts.size():
+		if uv2[i].length() >= 1e-3:
+			seen[verts[i]] = true
+	return seen.size()
+
+
 func _check(glb: String, root: Node3D, node: String) -> void:
 	var mi: MeshInstance3D = root.find_child(node, true, false) as MeshInstance3D
 	assert_not_null(mi, "%s: нема вузла %s" % [glb, node])
@@ -65,10 +79,20 @@ func _check(glb: String, root: Node3D, node: String) -> void:
 	assert_eq(mi.transform, Transform3D.IDENTITY, "%s: перетворення вузла запечене в меш" % label)
 	assert_eq(mi.mesh.get_surface_count(), 1, "%s: одна поверхня — один виклик малювання" % label)
 	var box: AABB = mi.mesh.get_aabb()
-	# У смуги узлісся немає стовбура: нижня точка меша — центр нижнього пучка, а сам пучок
-	# сягає землі (картка розгортається на ±0,1 тайла).
-	var ground_tol: float = 0.1 if node.begins_with("Hedge") else GROUND_TOL
-	assert_almost_eq(box.position.y, 0.0, ground_tol, "%s: земля на y = 0" % label)
+	# Меш лише з пучків (смуга узлісся, кущ без стебел): нижня точка меша — центр нижнього
+	# пучка, а сама картка розгортається на |UV2| / √2 нижче. Видимий низ — на землі.
+	var arrays: Array = mi.mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uv2s: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var cards_only: bool = true
+	var bottom: float = INF
+	for i in verts.size():
+		cards_only = cards_only and uv2s[i].length() >= 1e-3
+		bottom = minf(bottom, verts[i].y - uv2s[i].length() * 0.7071)
+	if cards_only:
+		assert_between(bottom, -0.1, GROUND_TOL, "%s: видимий низ пучків на землі (%.3f)" % [label, bottom])
+	else:
+		assert_almost_eq(box.position.y, 0.0, GROUND_TOL, "%s: земля на y = 0" % label)
 	var h_m: float = box.end.y * TILE_M
 	assert_between(h_m, float(lim[0]), float(lim[1]), "%s: висота %.1f м" % [label, h_m])
 	var half: float = maxf(maxf(absf(box.position.x), absf(box.end.x)), maxf(absf(box.position.z), absf(box.end.z)))
@@ -136,7 +160,7 @@ func test_ground_pieces() -> void:
 	var root: Node3D = _load("forest_ground")
 	if root == null:
 		return
-	for node in ["Soil_Lane", "Floor_Shade"]:
+	for node in ["Soil_Lane"]:
 		var mi: MeshInstance3D = root.find_child(node, true, false) as MeshInstance3D
 		assert_not_null(mi, "forest_ground: нема вузла %s" % node)
 		if mi == null:
@@ -148,3 +172,58 @@ func test_ground_pieces() -> void:
 		# glTF BLEND Godot імпортує як ALPHA_DEPTH_PRE_PASS; головне — справжня прозорість.
 		assert_true(mat.transparency in [BaseMaterial3D.TRANSPARENCY_ALPHA, BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS],
 				"%s: напівпрозорий" % node)
+
+
+func test_tree_shadow_proxies() -> void:
+	# Кожне дерево й кущ мають сітку лише для тіні: дешевий тіньовий прохід без зміни форми тіні.
+	var sets: Dictionary = {"forest_conifer": CONIFER}
+	for season in SEASONS:
+		sets["forest_broadleaf_%s" % season] = BROADLEAF
+	for glb: String in sets:
+		var root: Node3D = _load(glb)
+		if root == null:
+			continue
+		for node: String in sets[glb]:
+			if not node.begins_with("Pine") and not node.begins_with("Spruce") and not node.begins_with("Birch") \
+					and not node.begins_with("Oak") and not node.begins_with("Hero") and not node.begins_with("Shrub"):
+				continue
+			var mi: MeshInstance3D = root.find_child(node + "_Shadow", true, false) as MeshInstance3D
+			assert_not_null(mi, "%s: нема %s_Shadow" % [glb, node])
+			if mi != null:
+				assert_lte(_tris(mi.mesh), 40, "%s/%s_Shadow: трикутників" % [glb, node])
+				# Порожній проксі — дерево без тіні: пучки проксі беруться з уже відібраних.
+				assert_gte(_cards(mi.mesh), 4, "%s/%s_Shadow: пучків у проксі" % [glb, node])
+
+
+func test_card_offsets_centred_bark_zero() -> void:
+	# Експортер glTF у Blender перевертає V кожної UV-карти: незкомпенсований UV2 доходить як
+	# (x, 1 − y), і шейдер крони зсуває кожну вершину — і кору — на клітинку вгору екрана.
+	# Крона тоді висить над стовбуром і своєю тінню. Чотири кути картки стоять в одній точці,
+	# тож середнє їхнього UV2 — центр пучка, і він мусить бути в нулі; решта вершин
+	# (кора, колоди, підстилка, яруси ялини з позначкою 1e-4) — у нулі самі.
+	for glb: String in ["forest_conifer", "forest_broadleaf_late", "forest_broadleaf_summer", "forest_broadleaf_early"]:
+		var root: Node3D = _load(glb)
+		if root == null:
+			continue
+		for mi: Node in root.find_children("*", "MeshInstance3D", true, false):
+			var arrays: Array = (mi as MeshInstance3D).mesh.surface_get_arrays(0)
+			var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var uv2: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+			var groups: Dictionary = {}
+			for i in verts.size():
+				groups.get_or_add(verts[i], []).append(uv2[i])
+			var worst_card: float = 0.0
+			var worst_rest: float = 0.0
+			for g: Array in groups.values():
+				var sum := Vector2.ZERO
+				var far: float = 0.0
+				for v: Vector2 in g:
+					sum += v
+					far = maxf(far, v.length())
+				if far >= 1e-3:
+					worst_card = maxf(worst_card, (sum / g.size()).length())
+				else:
+					worst_rest = maxf(worst_rest, far)
+			var label: String = "%s/%s" % [glb, mi.name]
+			assert_lt(worst_card, 0.01, "%s: центр картки в UV2 зсунутий на %.3f" % [label, worst_card])
+			assert_lt(worst_rest, 1e-3, "%s: кора, колоди й підстилка мають UV2 = (0,0)" % label)

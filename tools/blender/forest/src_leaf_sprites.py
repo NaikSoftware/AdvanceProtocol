@@ -8,8 +8,8 @@
 (crown_lib.SPRITE_M). Готових CC0-моделей берези, дуба чи липи немає, а атласи від
 генератора мають темний обвід і білий ореол по краю; тут листок і гілка — геометрія,
 тож край пучка рваний сам собою, а колір кожного листка задано числом.
-Лист 5–12 см на екрані менший за піксель; видно лише маси, у які він збирається на
-кінцях пагонів (0,3–1 м) — саме тому листки сидять купками на останніх двох рівнях.
+Лист 4–9 см на екрані менший за піксель; з камери гри видно дрібнозернисту масу з рваним
+краєм і власною тінню між шарами листя, а не окремі купки.
 """
 import math
 import os
@@ -38,6 +38,14 @@ P = {
 }[KIND]
 KEEP = {"summer": 1.0, "early": 0.9, "turned": 0.92, "late": {"oak": 0.08, "birch": 0.008}.get(KIND, 0.02)}[SEASON]
 BARK = (0.33, 0.30, 0.27) if KIND != "birch" else (0.30, 0.27, 0.25)
+# Листяна крона — суцільна дрібнозерниста маса: листки на трьох останніх рівнях, удвічі
+# густіше й дрібніше. Купки лише на кінцях пагонів з камери гри читались окремими
+# лопатями по 0,3–1 м — «величезним листям», а не кроною.
+LEAFY = SEASON in ("summer", "early", "turned")
+LEAF_LEVELS = 3 if LEAFY else 2
+PER_NODE = round(P["per_node"] * (2.2 if LEAFY else 1.0))
+LEAF_M = P["leaf"] * (0.75 if LEAFY else 1.0)
+SCATTER = 0.07 if LEAFY else 0.04
 GREENS = [(0.20, 0.30, 0.10), (0.24, 0.34, 0.12), (0.17, 0.26, 0.09), (0.28, 0.36, 0.14)]
 EARLY = [(0.40, 0.42, 0.16), (0.46, 0.45, 0.17), (0.34, 0.38, 0.15)]
 ORANGE = [(0.58, 0.40, 0.14), (0.62, 0.48, 0.16)]
@@ -76,12 +84,12 @@ def grow(rng, bm, leaves, p, d, length, radius, level):
                                 depth=length, matrix=Matrix.Translation((p + e) / 2) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4())
     for v in seg["verts"]:
         v[bm.verts.layers.int["kind"]] = 0
-    if level >= P["depth"] - 2:
-        for _ in range(P["per_node"]):
+    if level >= P["depth"] - LEAF_LEVELS:
+        for _ in range(PER_NODE):
             if rng.random() > KEEP:
                 continue
             t = rng.random()
-            q = p + (e - p) * t + Vector([rng.gauss(0, 0.04) for _ in range(3)])
+            q = p + (e - p) * t + Vector([rng.gauss(0, SCATTER) for _ in range(3)])
             leaves.append((q, leaf_colour(rng)))
     if level == P["depth"]:
         return
@@ -121,7 +129,7 @@ def build(seed):
     lb = bmesh.new()
     cols = {}
     for q, c in leaves:
-        s = P["leaf"] * rng.uniform(0.8, 1.2)
+        s = LEAF_M * rng.uniform(0.8, 1.2)
         n = Vector((rng.gauss(0, 0.5), rng.gauss(0, 0.5), 1.0)).normalized()
         r = n.to_track_quat("Z", "Y").to_matrix() @ Matrix.Rotation(rng.uniform(0, 6.28), 3, "Z")
         pts = [Vector((0, -0.5, 0)), Vector((0.3, -0.1, 0)), Vector((0.22, 0.35, 0)), Vector((0, 0.5, 0)), Vector((-0.22, 0.35, 0)), Vector((-0.3, -0.1, 0))]

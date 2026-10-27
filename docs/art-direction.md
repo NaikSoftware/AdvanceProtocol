@@ -119,7 +119,11 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   dry steel never shine. Ruins show floor debris inside, never grass. A few chimneys and ruins
   give off a faint smoke.
 - **Forests are dense woods** a tank could hide in — canopy masses, a shrub belt at the edge, not
-  a few trees with units visible between them.
+  a few trees with units visible between them. Two shapes per tree species, each tree turned and
+  scaled on its own. Forest shadows are baked onto the ground in the map's sun direction (only
+  units cast real shadows); the ring beyond the board carries canopy only, and the understory
+  under the canopy drops out above zoom 15 (play zoom is 12). A tank that enters a forest cell
+  breaks it: no standing trees or stumps, fallen trunks lying in the dug-up soil.
 - **Loose vegetation where it really grows:** reed, cattail and willow in patches along some
   banks; fruit trees and shrubs in many yards, not all; a few lone bushes and trees on meadow,
   never on ploughed land. Every species comes in at least three shapes. A vehicle that enters the
