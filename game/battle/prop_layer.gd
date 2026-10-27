@@ -72,16 +72,15 @@ const MODELS: Dictionary = {
 	&"tree_stump_01": {"kind": Kind.YARD, "crush": Crush.SINK, "scale": 0.5},
 }
 ## Руїни з глухим фронтоном збоку: ставляться пошкодженим фасадом (−Z) до камери (+x чи +z).
-const CAMERA_FRONT: Array[StringName] = [&"ruin_half_house2", &"h5_panel_block_damaged"]
+const CAMERA_FRONT: Array[StringName] = [&"ruin_half_house2"]
 ## Орієнтир кільця: кільце — декорація без правил, тож карта може мати в ньому свою велику руїну. Модель ставиться в кільці
 ## найближче до near (клітинка дошки), поворотом rot (2 — фасад із язиком завалу до камери), лише на вільному полі.
-const RING_LANDMARKS: Dictionary = {
-	&"ridge": {"model": &"h5_panel_block_damaged", "near": Vector2i(-8, 11), "rot": 2},
-}
+const RING_LANDMARKS: Dictionary = {}
 ## Руїни, яких у таблиці ще нема, стають у слот за префіксом імені: напівзруйнована будівля —
 ## звичайна, повна руїна — рідкісна. Перший збіг виграє.
-## Моделі, що лежать на диску, але ще не прийняті: їх не бере ні таблиця, ні префікс.
-const RETIRED: Array[StringName] = []
+## Моделі, що лежать на диску, але не ставляться: їх не бере ні таблиця, ні префікс.
+## Панельні блоки — міська забудова, на сільських картах їм не місце; ресурси лишені для майбутньої карти міста.
+const RETIRED: Array[StringName] = [&"h5_panel_block", &"h5_panel_block_damaged"]
 const PREFIX_RULES: Array[Dictionary] = [
 	{"prefix": "ruin_half_", "kind": Kind.RUIN, "weight": 6},
 	{"prefix": "ruin_", "kind": Kind.RUIN, "weight": 1},

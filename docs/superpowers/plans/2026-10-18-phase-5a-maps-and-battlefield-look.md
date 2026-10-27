@@ -486,8 +486,9 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 - [x] Reference photos of real collapsed panel blocks from 40–55° above; heap height, plan shape and piece sizes measured
 - [x] Heap shaped like the reference: a tongue below the breach, never a ring around the building
-- [ ] Breach with sagging slabs, ragged facade, plastered rooms, soot on the walls
-- [ ] Accepted side by side with the reference photo in a battle frame
+- [ ] ~~Breach with sagging slabs, ragged facade, plastered rooms, soot on the walls~~ — dropped: not placed on any map
+- [ ] ~~Accepted side by side with the reference photo in a battle frame~~ — dropped: not placed on any map
+- [x] Panel block kept off village maps (urban building; asset kept for a future town map)
 
 ### Task 19: Power lines
 
