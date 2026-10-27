@@ -1201,13 +1201,22 @@ void fragment() {
 		// і клітинка пагорба (bank_map.g) — без калюж і вікон. Мокре затемнення там лишається.
 		// Та сама формула — GroundSurface.puddle_gate (тест).
 		vec2 water_mask = bank_s;
+		// Маска стежки (Footpaths) — тут, бо нею гасяться й калюжі: на протоптаній стежці
+		// і плямі біля воріт води не стоїть навіть у дощ чи на болоті.
+		vec2 pm = vec2(0.0);
+		if (has_paths) {
+			vec2 puv = (p + 0.5) / path_size;
+			float pin = step(0.0, puv.x) * step(0.0, puv.y) * step(puv.x, 1.0) * step(puv.y, 1.0);
+			pm = texture(path_map, puv).rg * pin * (1.0 - road_cov);
+		}
+		float path_dry = 1.0 - smoothstep(0.05, 0.25, max(pm.r, pm.g));
 		float pud_gate = (1.0 - smoothstep(PUDDLE_SLOPE_LO, PUDDLE_SLOPE_HI, slope_tan))
 				* (1.0 - smoothstep(0.0, 0.08, curvature)) * (1.0 - smoothstep(0.2, 0.6, water_mask.g));
 		// Калюжі ґрунтівки: у коліях і на всю ширину в низинах (координати дороги, див. вище).
 		// У колії вода збігає вже з 2–4°: ґрунтівка вниз по схилу пагорба мала світлі смужки калюж.
 		float puddle = rut_pud * road_cov * pud_gate * (1.0 - smoothstep(0.035, 0.07, slope_tan));
 		// Калюжі в западинах асфальту й бруківки (paved_sheen — їхня маска).
-		puddle = max(puddle, paved_sheen * road_cov * pud_gate);
+		puddle = max(puddle, paved_sheen * road_cov * pud_gate) * path_dry;
 		// Вікна стоячої води в болоті 0.5–2 м (~10 % площі): темні, з відблиском неба. Лише в
 		// мокрому вигляді: на сухій карті на їхньому місці — висохлий торф (сезонне макро болота),
 		// а стояча вода під сонцем читалась би як калюжа без дощу.
@@ -1219,12 +1228,12 @@ void fragment() {
 		// Вода лише там, де болото переважає: у суміші з лісом чи кущами пів-вага вікна давала сіру
 		// плівку поверх крон.
 		float pool_wet = smoothstep(0.6, 0.9, marsh_w) * smoothstep(0.1, 0.35, weather_wetness) * (1.0 - smoothstep(0.2, 0.6, bank_k)) * pud_gate;
-		float pool = pool_wet * (1.0 - smoothstep(0.27, 0.33, pool_f));
+		float pool = pool_wet * path_dry * (1.0 - smoothstep(0.27, 0.33, pool_f));
 		// Середина вікна відбиває більше неба (до ~40 % сірого), край — оливковий: рівна пляма читалась
 		// плямою на ґрунті, а небо на всю ширину давало сірий обідок на переході.
 		float pool_ctr = 1.0 - smoothstep(0.12, 0.27, pool_f);
 		// Обідок ~0.3–0.5 м: темний мокрий мул (~0.35 від трави поруч), у який вода м'яко переходить.
-		float pool_rim = pool_wet * (1.0 - smoothstep(0.31, 0.45, pool_f)) * (1.0 - pool);
+		float pool_rim = pool_wet * path_dry * (1.0 - smoothstep(0.31, 0.45, pool_f)) * (1.0 - pool);
 		alb *= mix(1.0, 0.35, pool_rim) * mix(vec3(1.0), vec3(0.95, 0.97, 0.85), pool_rim);
 		puddle = max(puddle, pool);
 		alb *= mix(1.0, 0.55, puddle) * mix(1.0, 0.6, max(rut_rim * road_cov, pool * 0.5)) * (1.0 - 0.25 * paved_rim * road_cov);
@@ -1313,9 +1322,6 @@ void fragment() {
 		// за мокрий ґрунт глина) з острівцями трави, з боків прим'ята рідша трава (слабший знос). Обидва зберігають дрібну
 		// текстуру ґрунту. Пляма біля воріт і сараю — колір грядок. Дорога й вода стежку не беруть; публічна.
 		if (has_paths) {
-			vec2 puv = (p + 0.5) / path_size;
-			float pin = step(0.0, puv.x) * step(0.0, puv.y) * step(puv.x, 1.0) * step(puv.y, 1.0);
-			vec2 pm = texture(path_map, puv).rg * pin * (1.0 - road_cov);
 			// Стан ґрунту MUD мокрий і без дощу, як колії.
 			float wet_p = max(smoothstep(0.1, 0.5, weather_wetness), mud_amount > 0.0 ? 0.7 : 0.0);
 			float lum = dot(alb, vec3(0.299, 0.587, 0.114));
