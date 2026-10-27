@@ -1785,7 +1785,7 @@ class _Placer:
 					for dx in range(-1, s.x + 1):
 						if kind(o + Vector2i(dx, dy)) == Terrain.Kind.FOREST:
 							ok = false
-				if ok and _under_line(_rect_of(m, o, rot, s).grow(0.6)):
+				if ok and _on_route(_rect_of(m, o, rot, s).grow(0.6)):
 					ok = false
 				if ok and _clear_of_placed(m, o, rot, s):
 					best = o
@@ -2219,6 +2219,15 @@ class _Placer:
 				best_gap = g
 				best = v
 		return best
+
+	## Чи заходить траса 10 кВ макета (вісь дороги, уздовж якої PowerGrid ставить стовпи) у прямокутник.
+	func _on_route(r: Rect2) -> bool:
+		for route: Dictionary in layout.get("routes", []):
+			var pts: Array = route["axis"]
+			for k in range(1, pts.size()):
+				if _seg_hits_rect(pts[k - 1], pts[k], r):
+					return true
+		return false
 
 	static func _seg_hits_rect(a: Vector2, b: Vector2, r: Rect2) -> bool:
 		if r.has_point(a) or r.has_point(b):
