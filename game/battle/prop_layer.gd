@@ -308,7 +308,13 @@ var _drops: Array = []
 var _unfed: Array[Vector2] = []
 ## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
 var _transformers: Dictionary = {}
-var _transformer_node: MultiMeshInstance3D = null
+## Однакові коробки — стовпи воріт, уламки руїн, шафи підстанцій — одним MultiMesh (§8: виклик
+## малювання на кожну з трьох груп коштував би втричі більше). `_small_base` — перетворення без
+## зменшення за зумом; шафи підстанцій стоять у ньому з `_small_transformers`.
+var _small: MultiMeshInstance3D = null
+var _small_base: Array[Transform3D] = []
+var _small_colors: Array[Color] = []
+var _small_transformers: int = 0
 ## Стовпи воріт садиб (центри на дошці): ворота читаються розривом зі стовпами по боках.
 var _gate_posts: Array[Vector2] = []
 ## Опори з дротами: [індекс екземпляра опори A, індекс B] — проліт.
@@ -591,7 +597,9 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_spans.clear()
 	_drops.clear()
 	_transformers.clear()
-	_transformer_node = null
+	_small = null
+	_small_base.clear()
+	_small_colors.clear()
 	_gate_posts.clear()
 	_wires = null
 	_contacts = null
@@ -860,6 +868,7 @@ func _build_nodes(haze: bool) -> void:
 	_build_gardens()
 	_build_grime()
 	_build_rubble_floors()
+	_build_small_boxes()
 
 
 ## Городи: сусідні клітинки городу зливаються в одну ділянку (жадібні прямокутники, тож Г-подібна
@@ -953,32 +962,58 @@ func _build_garden_plots() -> void:
 func _build_gate_posts() -> void:
 	if _gate_posts.is_empty():
 		return
-	var box := BoxMesh.new()
-	box.size = GATE_POST_SIZE
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = GATE_POST_COLOR
-	mat.roughness = 0.9
-	box.material = mat
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = box
 	# Стовпи парами (по воротах) і поперечина над кожною парою — та сама коробка, розтягнута.
-	mm.instance_count = _gate_posts.size() + _gate_posts.size() / 2
-	for i in _gate_posts.size():
-		var p: Vector2 = _gate_posts[i]
-		mm.set_instance_transform(i, Transform3D(Basis(), Vector3(p.x, TerrainHeight.ground_y(p.x, p.y) + GATE_POST_SIZE.y * 0.5 - 0.01, p.y)))
+	for p: Vector2 in _gate_posts:
+		_add_small(Transform3D(Basis.from_scale(GATE_POST_SIZE), Vector3(p.x, TerrainHeight.ground_y(p.x, p.y) + GATE_POST_SIZE.y * 0.5 - 0.01, p.y)), GATE_POST_COLOR)
 	for g in _gate_posts.size() / 2:
 		var a: Vector2 = _gate_posts[2 * g]
 		var b: Vector2 = _gate_posts[2 * g + 1]
 		var mid: Vector2 = (a + b) * 0.5
 		var top: float = maxf(TerrainHeight.ground_y(a.x, a.y), TerrainHeight.ground_y(b.x, b.y)) + GATE_POST_SIZE.y - 0.01 - GATE_BAR * 0.5
-		var bar := Basis(Vector3.UP, atan2(-(b - a).y, (b - a).x)).scaled_local(Vector3(a.distance_to(b) / GATE_POST_SIZE.x, GATE_BAR / GATE_POST_SIZE.y, 1.0))
-		mm.set_instance_transform(_gate_posts.size() + g, Transform3D(bar, Vector3(mid.x, top, mid.y)))
-	var node := MultiMeshInstance3D.new()
-	node.name = "GatePosts"
-	node.multimesh = mm
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(node)
+		var bar := Basis(Vector3.UP, atan2(-(b - a).y, (b - a).x)).scaled_local(Vector3(a.distance_to(b), GATE_BAR, GATE_POST_SIZE.z))
+		_add_small(Transform3D(bar, Vector3(mid.x, top, mid.y)), GATE_POST_COLOR)
+
+
+func _add_small(xf: Transform3D, color: Color) -> void:
+	_small_base.append(xf)
+	_small_colors.append(color)
+
+
+## Один вузол на всі дрібні коробки, коли їх уже зібрано; шафи підстанцій — останні, їх ставить
+## `_rebuild_transformers`.
+func _build_small_boxes() -> void:
+	_small_transformers = _small_base.size()
+	for i in _transformers.size():
+		_add_small(Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO), TRANSFORMER_COLOR)
+	if _small_base.is_empty():
+		return
+	var box := BoxMesh.new()
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
+	mat.roughness = 0.95
+	box.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = box
+	mm.instance_count = _small_base.size()
+	for i in _small_base.size():
+		mm.set_instance_color(i, _small_colors[i])
+	_small = MultiMeshInstance3D.new()
+	_small.name = "SmallBoxes"
+	_small.multimesh = mm
+	_small.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_small)
+	_write_small()
+
+
+func _write_small() -> void:
+	if _small == null:
+		return
+	var mm: MultiMesh = _small.multimesh
+	for i in _small_base.size():
+		mm.set_instance_transform(i, _small_base[i])
 
 
 ## Жадібне покриття клітинок городу прямокутниками: рядок за рядком, вшир, потім углиб.
@@ -1036,26 +1071,8 @@ func _build_rubble_floors() -> void:
 			var b := Basis(Vector3.UP, float(r % 628) / 100.0) * Basis(Vector3.RIGHT, (float(r / 7 % 9) - 4.0) * 0.06)
 			debris.append(Transform3D(b.scaled_local(size), Vector3(at.x, TerrainHeight.ground_y(at.x, at.y) + size.y * 0.3, at.y)))
 			debris_col.append(DEBRIS_COLORS[2] if beam else DEBRIS_COLORS[r % 2])
-	if not debris.is_empty():
-		var bm := BoxMesh.new()
-		var dmat := StandardMaterial3D.new()
-		dmat.vertex_color_use_as_albedo = true
-		dmat.vertex_color_is_srgb = true
-		dmat.roughness = 0.95
-		bm.material = dmat
-		var dmm := MultiMesh.new()
-		dmm.transform_format = MultiMesh.TRANSFORM_3D
-		dmm.use_colors = true
-		dmm.mesh = bm
-		dmm.instance_count = debris.size()
-		for i in debris.size():
-			dmm.set_instance_transform(i, debris[i])
-			dmm.set_instance_color(i, debris_col[i])
-		var dnode := MultiMeshInstance3D.new()
-		dnode.name = "RubbleDebris"
-		dnode.multimesh = dmm
-		dnode.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(dnode)
+	for i in debris.size():
+		_add_small(debris[i], debris_col[i])
 	if xforms.is_empty():
 		return
 	var quad := PlaneMesh.new()
@@ -1640,34 +1657,17 @@ func transformers_shown() -> Array[Vector3]:
 ## Комплектна трансформаторна підстанція (КТП) — сталева шафа ~1.6 × 2.4 × 1.1 м на землі біля опори
 ## 10 кВ. Повалена опора — без шафи.
 func _rebuild_transformers() -> void:
-	if _transformers.is_empty():
+	if _transformers.is_empty() or _small == null:
 		return
-	if _transformer_node == null:
-		var box := BoxMesh.new()
-		box.size = TRANSFORMER_SIZE
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = TRANSFORMER_COLOR
-		mat.roughness = 0.75
-		mat.metallic = 0.3
-		box.material = mat
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = box
-		mm.instance_count = _transformers.size()
-		_transformer_node = MultiMeshInstance3D.new()
-		_transformer_node.name = "Transformers"
-		_transformer_node.multimesh = mm
-		_transformer_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(_transformer_node)
-	var mm: MultiMesh = _transformer_node.multimesh
-	var k: int = 0
+	var k: int = _small_transformers
 	for i: int in _transformers:
 		var pole: Dictionary = _instances[i]
 		var at: Vector3 = _cabinet_at(pole)
 		var basis: Basis = (pole["transform"] as Transform3D).basis.orthonormalized()
-		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ZERO), at) if _is_crushed(pole)
-				else Transform3D(basis, at))
+		_small_base[k] = Transform3D(Basis.from_scale(Vector3.ZERO), at) if _is_crushed(pole) \
+				else Transform3D(basis.scaled_local(TRANSFORMER_SIZE), at)
 		k += 1
+	_write_small()
 
 
 ## Розстановка однієї побудови: окремий об'єкт, щоб стан обходу (зайняте, лічильники) не жив

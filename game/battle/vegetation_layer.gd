@@ -111,6 +111,14 @@ var _reveal: Dictionary = {}
 ## шейдери ті самі для кожної дошки (без кешу кожна побудова дошки завантажувала три бібліотеки).
 static var _lib_meshes: Dictionary = {}
 static var _ready_meshes: Dictionary = {}
+## Шейдери злитого меша (рослина й пляма) і масиви поверхонь вузлів бібліотеки.
+static var _batch_shaders: Dictionary = {}
+static var _surface_arrays: Dictionary = {}
+## Для кожної рослини з `placements`: батч, у якому вона зліпилась, і номер у ньому (−1 — не малюється).
+var _slot_batch: Array[FoliageBatch] = []
+var _slot_id: PackedInt32Array = PackedInt32Array()
+## Вузли бібліотеки, що малюються (повалені — з суфіксом `_fallen`): для тестів.
+var _drawn: Array[StringName] = []
 
 
 ## Зерно точки: окреме для кожної клітинки й солі, від зерна карти — однакове в усіх гравців.
@@ -661,7 +669,7 @@ func set_reveal_cells(cells: Array[Vector2i]) -> void:
 	if next == _reveal:
 		return
 	_reveal = next
-	_rebuild()
+	_refade()
 
 
 ## Прогрів за гейтом (BattleScreen._warm_board): рослина, найближча до `near`, показана розчиненою,
@@ -679,7 +687,7 @@ func warm_fade(near: Vector2i) -> Vector2i:
 			cell = c
 	if cell.x >= 0:
 		_reveal = {cell: true}
-		_rebuild()
+		_refade()
 	return cell
 
 
@@ -694,45 +702,188 @@ func _covers(p: Dictionary) -> bool:
 	return false
 
 
+func drawn_nodes() -> Array[StringName]:
+	return _drawn
+
+
+## Чи стоїть рослина `i` у злитому мейші цілою (над юнітом її малює напівпрозорий двійник `_faded`).
+func plant_visible(i: int) -> bool:
+	return _slot_batch[i] != null and _slot_batch[i].is_alive(_slot_id[i])
+
+
+## Усі рослини — по мешу на атлас бібліотеки (береги, луки, двори), а не MultiMesh на вузол: у кожної
+## моделі ще й поверхня плями затінення, тож вузлів було вдвічі більше, ніж моделей (§8). Тіні сонця
+## рослини не кидають — це пляма на землі, а не прохід тіней. Перебудова — лише коли міняється розстановка
+## чи розчавлене; розчинення над юнітом (`_refade`) пише в таблицю батча.
 func _rebuild() -> void:
 	for ch in get_children():
 		ch.free()
+	_slot_batch.clear()
+	_slot_batch.resize(placements.size())
+	_slot_id.resize(placements.size())
+	_slot_id.fill(-1)
+	_drawn.clear()
+	if placements.is_empty():
+		return
+	var meshes: Dictionary = _meshes_of(_season)
+	var by_node: Dictionary = {}  ## вузол -> {"list", "idx", "mesh"}
+	for i in placements.size():
+		var p: Dictionary = placements[i]
+		var node: StringName = p["node"]
+		if p["kind"] != "reed" and _crushed.has(p["cell"]):
+			node = StringName(String(node) + "_fallen")
+		if not meshes.has(node):
+			push_error("VegetationLayer: нема вузла %s" % node)
+			continue
+		if not by_node.has(node):
+			by_node[node] = {"list": [], "idx": [], "mesh": meshes[node], "arrays": _arrays_of(meshes[node])}
+			_drawn.append(node)
+		(by_node[node]["list"] as Array).append({"xf": Transform3D(Basis(Vector3.UP, p["yaw"]).scaled(Vector3.ONE * float(p.get("scale", 1.0))), p["pos"]), "rgb": Color.WHITE})
+		(by_node[node]["idx"] as Array).append(i)
+	var by_atlas: Dictionary = {}  ## атлас -> Array[entry]
+	for node: StringName in by_node:
+		var e: Dictionary = by_node[node]
+		var atlas: Texture2D = ((e["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D).albedo_texture
+		if not by_atlas.has(atlas):
+			by_atlas[atlas] = []
+		e["arrays"] = (e["arrays"] as Array)[0]
+		(by_atlas[atlas] as Array).append(e)
+	var k: int = 0
+	for atlas: Texture2D in by_atlas:
+		var entries: Array = by_atlas[atlas]
+		var total: int = 0
+		for e: Dictionary in entries:
+			total += (e["list"] as Array).size()
+		var batch: FoliageBatch = FoliageBatch.create(total)
+		var m := ArrayMesh.new()
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, batch.merge(entries, true), [], {}, FoliageBatch.custom_flags())
+		var plant := ShaderMaterial.new()
+		plant.shader = _batch_shader(&"plant")
+		plant.set_shader_parameter("albedo_tex", atlas)
+		plant.set_shader_parameter("inst_data", batch.texture)
+		m.surface_set_material(0, plant)
+		# Пляма затінення — друга поверхня, лише в моделей, що її мають; номери екземплярів ті самі.
+		var shade_entries: Array = []
+		for e: Dictionary in entries:
+			if _arrays_of(e["mesh"]).size() > 1:
+				shade_entries.append({"arrays": _arrays_of(e["mesh"])[1], "list": e["list"], "first": e["first"]})
+		if not shade_entries.is_empty():
+			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, batch.merge(shade_entries, false), [], {}, FoliageBatch.custom_flags())
+			var shade := ShaderMaterial.new()
+			shade.shader = _batch_shader(&"shade")
+			shade.set_shader_parameter("albedo_tex", atlas)
+			shade.set_shader_parameter("cast", 1.0 if cast_shadows else 0.0)
+			shade.set_shader_parameter("inst_data", batch.texture)
+			m.surface_set_material(1, shade)
+		batch.texture.update(batch.image)
+		for e: Dictionary in entries:
+			var idx: Array = e["idx"]
+			for j in idx.size():
+				_slot_batch[idx[j]] = batch
+				_slot_id[idx[j]] = int(e["first"]) + j
+		var mi := MeshInstance3D.new()
+		mi.name = "Plants_%d" % k
+		k += 1
+		mi.mesh = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# Картки розгортаються в шейдері, тож AABB меша не містить країв пучків.
+		mi.extra_cull_margin = 0.6
+		add_child(mi)
+	_refade()
+
+
+## Рослини над юнітом: у злитому мейші гаснуть, а їхні напівпрозорі двійники — по вузлу бібліотеки на
+## MultiMesh (їх лише кілька, і лише поки юніт стоїть під кроною).
+func _refade() -> void:
+	for ch in get_children():
+		if String(ch.name).ends_with("_faded"):
+			ch.free()
 	if placements.is_empty():
 		return
 	var meshes: Dictionary = _meshes_of(_season)
 	var groups: Dictionary = {}
-	for p: Dictionary in placements:
-		var node: StringName = p["node"]
-		if p["kind"] != "reed" and _crushed.has(p["cell"]):
-			node = StringName(String(node) + "_fallen")
-		var key: Array = [node, _covers(p) and not String(node).ends_with("_fallen")]
-		if not groups.has(key):
-			groups[key] = []
-		(groups[key] as Array).append(p)
-	for key: Array in groups:
-		var node: StringName = key[0]
-		var faded: bool = key[1]
-		if not meshes.has(node):
-			push_error("VegetationLayer: нема вузла %s" % node)
-			continue
+	var touched: Dictionary = {}
+	for i in placements.size():
+		var p: Dictionary = placements[i]
+		var fallen: bool = p["kind"] != "reed" and _crushed.has(p["cell"])
+		var faded: bool = not fallen and _covers(p)
+		var batch: FoliageBatch = _slot_batch[i]
+		if batch != null:
+			batch.set_alive(_slot_id[i], not faded)
+			touched[batch] = true
+		if faded and meshes.has(p["node"]):
+			if not groups.has(p["node"]):
+				groups[p["node"]] = []
+			(groups[p["node"]] as Array).append(p)
+	for batch: FoliageBatch in touched:
+		batch.upload()
+	for node: StringName in groups:
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_colors = faded
-		var mkey: Array = [_season, node, faded, cast_shadows]
+		mm.use_colors = true
+		var mkey: Array = [_season, node, true, cast_shadows]
 		if not _ready_meshes.has(mkey):
-			_ready_meshes[mkey] = veg_mesh(meshes[node], FADE_ALPHA if faded else -1.0, FADE_FLOOR if _season == &"late" else 0.0, cast_shadows)
+			_ready_meshes[mkey] = veg_mesh(meshes[node], FADE_ALPHA, FADE_FLOOR if _season == &"late" else 0.0, cast_shadows, false)
 		mm.mesh = _ready_meshes[mkey]
-		var list: Array = groups[key]
+		var list: Array = groups[node]
 		mm.instance_count = list.size()
 		for i in list.size():
 			var p: Dictionary = list[i]
 			mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, p["yaw"]).scaled(Vector3.ONE * float(p.get("scale", 1.0))), p["pos"]))
-			if faded:
-				mm.set_instance_color(i, Color(1, 1, 1, FADE_ALPHA))
+			mm.set_instance_color(i, Color(1, 1, 1, FADE_ALPHA))
 		var mmi := MultiMeshInstance3D.new()
-		mmi.name = "%s%s" % [node, "_faded" if faded else ""]
+		mmi.name = "%s_faded" % node
 		mmi.multimesh = mm
+		# §8: сонце кидає тінь лише на юнітів.
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mmi)
+
+
+## Масиви поверхонь вузла бібліотеки (0 — рослина, 1 — пляма): спільні на процес.
+static func _arrays_of(mesh: Mesh) -> Array:
+	if not _surface_arrays.has(mesh):
+		var out: Array = []
+		for s in mesh.get_surface_count():
+			out.append(mesh.surface_get_arrays(s))
+		_surface_arrays[mesh] = out
+	return _surface_arrays[mesh]
+
+
+## Шейдери злитого меша: ті самі veg.gdshader (+ тіло з veg_body.gdshaderinc) і veg_shade.gdshader, але
+## тон, масштаб картки й видимість екземпляра беруться з таблиці батча (FoliageBatch) за номером у
+## CUSTOM0.x, а не з матриці й кольору екземпляра MultiMesh.
+static func _batch_shader(kind: StringName) -> Shader:
+	if _batch_shaders.has(kind):
+		return _batch_shaders[kind]
+	var code: String
+	if kind == &"plant":
+		var body: String = (load("res://assets/props/vegetation/veg_body.gdshaderinc") as ShaderInclude).code
+		body = _replace(body, [
+				["varying flat float no_floor;", "varying flat float no_floor;\n" + FoliageBatch.glsl_decl()],
+				["inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);",
+						FoliageBatch.glsl_fetch() + "\n\tinst_tone = batch_a.rgb;\n\tCOLOR.a *= batch_a.a;"],
+				["float s = length(MODEL_MATRIX[0].xyz);", "float s = batch_scale;"]])
+		code = _replace((load("res://assets/props/vegetation/veg.gdshader") as Shader).code, [
+				['#include "res://assets/props/vegetation/veg_body.gdshaderinc"', body]])
+	else:
+		code = _replace((load("res://assets/props/vegetation/veg_shade.gdshader") as Shader).code, [
+				["uniform float cast = 0.0;", "uniform float cast = 0.0;\n" + FoliageBatch.glsl_decl()],
+				["vec3 centre = MODEL_MATRIX[3].xyz;", FoliageBatch.glsl_fetch() + "\n\tvec3 centre = batch_origin;"]])
+	var sh := Shader.new()
+	sh.code = code
+	_batch_shaders[kind] = sh
+	return sh
+
+
+## Заміна рядків шейдера; рядок, що зник із джерела, — помилка навіть у релізі: злитий меш без неї
+## мовчки малював би рослини без таблиці.
+static func _replace(code: String, pairs: Array) -> String:
+	for pair: Array in pairs:
+		if not code.contains(pair[0]):
+			push_error("VegetationLayer: у шейдері рослинності немає рядка «%s» — злитий шейдер не зібрано" % pair[0])
+			continue
+		code = code.replace(pair[0], pair[1])
+	return code
 
 
 static func _meshes_of(season: StringName) -> Dictionary:
@@ -755,7 +906,7 @@ static func _meshes_of(season: StringName) -> Dictionary:
 ## veg_fade_depth з next_pass veg_fade, пріоритети PropLayer.FADE_DEPTH_PRIORITY і +1), поверхня 1 —
 ## пляма затінення (veg_shade.gdshader). fade < 0 — звичайний вигляд; fade_floor — нижня межа
 ## альфи голої крони дерев; cast — пляма витягується в тінь від сонця. Атлас — albedo_tex матеріалу GLB.
-static func veg_mesh(src: Mesh, fade: float = -1.0, fade_floor: float = 0.0, cast: bool = false) -> Mesh:
+static func veg_mesh(src: Mesh, fade: float = -1.0, fade_floor: float = 0.0, cast: bool = false, with_shade: bool = true) -> Mesh:
 	var tex: Texture2D = (src.surface_get_material(0) as BaseMaterial3D).albedo_texture
 	var sm := ShaderMaterial.new()
 	sm.set_shader_parameter("albedo_tex", tex)
@@ -772,8 +923,13 @@ static func veg_mesh(src: Mesh, fade: float = -1.0, fade_floor: float = 0.0, cas
 	else:
 		sm.shader = load("res://assets/props/vegetation/veg.gdshader")
 	var mesh: Mesh = src.duplicate()
+	if not with_shade and mesh.get_surface_count() > 1:
+		# Пляма затінення вже в злитому мейші: двійник над юнітом малює лише рослину, інакше пляма темнішала б удвічі.
+		var plant := ArrayMesh.new()
+		plant.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, src.surface_get_arrays(0))
+		mesh = plant
 	mesh.surface_set_material(0, sm)
-	if mesh.get_surface_count() > 1:
+	if with_shade and mesh.get_surface_count() > 1:
 		var shade := ShaderMaterial.new()
 		shade.shader = load("res://assets/props/vegetation/veg_shade.gdshader")
 		shade.set_shader_parameter("albedo_tex", tex)

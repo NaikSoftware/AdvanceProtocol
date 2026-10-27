@@ -163,6 +163,9 @@ func _ready() -> void:
 	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
 	# з кожного bind().
 	_drone_icon.texture = _flat_texture(Color("d9b23a"))
+	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
+	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
+		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	for n: Node in [_hp_bar, _hp_label]:
 		n.set("no_depth_test", true)
 		n.set("render_priority", OVERLAY_PRIORITY)
@@ -198,6 +201,10 @@ func bind(unit: Unit) -> void:
 	set_targeted(false)
 	set_forbidden(false)
 	_put_on_unit_layer(self)
+	if hp_bars != null:
+		# Спрайт лишається вузлом стану (текстура, видимість), а малює смугу спільний MultiMesh.
+		_hp_bar.layers = 0
+		hp_bars.track(self)
 
 
 ## Силует перебудовується на кожен bind(), тож шар ставиться після нього.
@@ -421,12 +428,22 @@ func hp_ratio() -> float:
 ## завширшки ratio — одна текстура, один спрайт. Заливка росте зліва
 ## направо, як у референсі; старий scale.x стискав смугу до центру.
 static func _hp_bar_texture(ratio: float) -> ImageTexture:
-	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
-	var fill_width: int = roundi(float(inner.size.x) * ratio)
+	var fill_width: int = _hp_fill(ratio)
 	# Ключ — ціла ширина заливки: різних текстур не більше, ніж пікселів смуги.
 	var key: Array = ["hp", fill_width]
-	if _texture_cache.has(key):
-		return _texture_cache[key]
+	if not _texture_cache.has(key):
+		_texture_cache[key] = ImageTexture.create_from_image(hp_bar_image(fill_width))
+	return _texture_cache[key]
+
+
+## Ширина заливки в пікселях для співвідношення HP.
+static func _hp_fill(ratio: float) -> int:
+	return roundi(float(_HP_BAR_SIZE.x - 2) * ratio)
+
+
+## Малюнок смуги з заливкою завширшки `fill_width` пікселів: рамка, тло й заливка.
+static func hp_bar_image(fill_width: int) -> Image:
+	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
 	var image := Image.create(_HP_BAR_SIZE.x, _HP_BAR_SIZE.y, false, Image.FORMAT_RGBA8)
 	image.fill(_HP_BAR_FRAME_COLOR)
 	image.fill_rect(inner, _HP_BAR_BACK_COLOR)
@@ -434,8 +451,7 @@ static func _hp_bar_texture(ratio: float) -> ImageTexture:
 		# Колір з показаної ширини, а не з ratio: одна ширина — один вигляд.
 		var shown: float = float(fill_width) / float(inner.size.x)
 		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), Color.RED.lerp(Color.GREEN, shown))
-	_texture_cache[key] = ImageTexture.create_from_image(image)
-	return _texture_cache[key]
+	return image
 
 
 ## §3.9: залишок дронів публічний — показується на будь-якому видимому
@@ -492,12 +508,11 @@ static func _figures_for(hp: int, max_hp: int) -> int:
 
 
 func _set_standing(count: int) -> void:
-	var figs := _silhouette.get_node_or_null("Figures") as MultiMeshInstance3D
-	if figs == null:
+	if not (UnitSilhouettes.spec(_type_id).extras as Array).has(&"figures"):
 		_standing = 0
 		return
 	_standing = count
-	UnitSilhouettes.set_standing(figs, count, _owner_color)
+	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, _owner_color, count)
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
@@ -518,8 +533,7 @@ func play_destroyed() -> Signal:
 		for n: Node3D in [_hp_bar, _hp_label, _drone_icon]:
 			n.visible = false
 		_set_standing(0)
-		if _contact != null:
-			_contact.visible = false
+		_contact_on = false
 		tween.tween_interval(_FALL_SEC)
 		return tween.finished
 	# Куля — у контейнері, не в цьому вузлі: вузол юніта звільнить перебудова дошки,
@@ -539,19 +553,22 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 		child.free()
 
 	_owner_color = PLAYER_COLORS[owner % PLAYER_COLORS.size()]
-	var built := UnitSilhouettes.build(type_id, _owner_color)
+	var built := UnitSilhouettes.build_merged(type_id, _owner_color)
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)
 	built.free()
 	var hull := _silhouette.get_node("Hull") as MeshInstance3D
-	var hull_size: Vector3 = (hull.mesh as BoxMesh).size
+	var hull_size: Vector3 = UnitSilhouettes.spec(type_id).hull
 	_half_base = Vector2(hull_size.x, hull_size.z) * 0.5
 	_hull_material = hull.material_override as StandardMaterial3D
-	_contact = null
-	if WeatherRig.unit_contact > 0.0:
-		_contact = _build_contact_shadow(hull_size)
-		_silhouette.add_child(_contact)
+	_hull_size = hull_size
+	_contact_on = contacts != null and WeatherRig.unit_contact > 0.0
+	if contacts != null:
+		if _contact_on:
+			contacts.track(self)
+		else:
+			contacts.untrack(self)
 
 	# ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2) — єдиний виклик, єдине місце, де стрілку
 	# додають на дошку. Прибрати стрілку — це прибрати рівно ці два рядки
@@ -560,40 +577,47 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 		_silhouette.add_child(_build_facing_arrow(hull_size))
 
 
-const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/unit_contact_shadow.gdshader")
 ## Пляма тіні-контакту ширша за слід корпусу: край гасне вже за корпусом.
 const CONTACT_SPREAD: float = 2.0
-## Вершини кваду: на пагорбі шейдер кладе їх на рельєф, і ґрунт плями не ріже.
-const CONTACT_SUBDIVIDE: int = 5
-static var _contact_material: ShaderMaterial
+## Спільний MultiMesh плям екрана (`UnitContacts`); без нього — без плям. Ставить власник
+## вигляду до bind().
+var contacts: UnitContacts = null
+## Спільний MultiMesh смуг HP екрана (`UnitHpBars`); без нього смугу малює сам спрайт HpBar.
+var hp_bars: UnitHpBars = null
 ## Нема, коли вигляд карти тіні-контакту не має: інакше кожен юніт платить прозорий виклик малювання.
-var _contact: MeshInstance3D = null
+var _contact_on: bool = false
+var _hull_size: Vector3 = Vector3.ZERO
 
 
-## Тінь-контакт: квад під корпусом у силуеті, тож нахиляється разом із ним на схилі й
-## ховається разом із юнітом; де ґрунт вищий за квад, шейдер кладе вершини на рельєф. Сонця не чекає — силу ставить вигляд карти глобальним uniform.
-func _build_contact_shadow(hull_size: Vector3) -> MeshInstance3D:
-	if _contact_material == null:
-		_contact_material = ShaderMaterial.new()
-		_contact_material.shader = _CONTACT_SHADER
-	var th: TerrainHeight = TerrainHeight.active
-	_contact_material.set_shader_parameter("use_height", th != null)
-	if th != null:
-		_contact_material.set_shader_parameter("height_map", th.texture())
-		_contact_material.set_shader_parameter("height_samples", float(th.samples))
-		_contact_material.set_shader_parameter("height_origin", -0.5 - th.margin)
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(hull_size.x, hull_size.z) * CONTACT_SPREAD
-	plane.subdivide_width = CONTACT_SUBDIVIDE
-	plane.subdivide_depth = CONTACT_SUBDIVIDE
-	var mi := MeshInstance3D.new()
-	mi.name = "ContactShadow"
-	mi.mesh = plane
-	mi.material_override = _contact_material
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.layers = 1 << (UNIT_LAYER - 1)
-	mi.position = Vector3(0.0, 0.01, 0.0)
-	return mi
+## Тінь-контакт: квад під корпусом у системі силуету, тож нахиляється разом із ним на схилі й
+## ховається разом із юнітом; де ґрунт вищий за квад, шейдер кладе вершини на рельєф. Сонця не
+## чекає — силу ставить вигляд карти глобальним uniform. Світове перетворення для `UnitContacts`.
+func contact_transform() -> Transform3D:
+	if not _contact_on or not is_visible_in_tree() or not _silhouette.visible:
+		return UnitContacts.HIDDEN
+	var size := Basis.from_scale(Vector3(_hull_size.x * CONTACT_SPREAD, 1.0, _hull_size.z * CONTACT_SPREAD))
+	return _silhouette.global_transform * Transform3D(size, Vector3(0.0, 0.01, 0.0))
+
+
+func _exit_tree() -> void:
+	if contacts != null and is_instance_valid(contacts):
+		contacts.untrack(self)
+	if hp_bars != null and is_instance_valid(hp_bars):
+		hp_bars.untrack(self)
+
+
+## Стан смуги HP для `UnitHpBars`: шар — ширина заливки (текстура спрайта — той самий малюнок),
+## точка — там, де стоїть спрайт, показ — як у спрайта.
+func hp_bar_layer() -> int:
+	return _hp_fill(_hp_ratio)
+
+
+func hp_bar_world() -> Vector3:
+	return global_position + Vector3(0.0, _hp_bar.position.y, 0.0)
+
+
+func hp_bar_shown() -> bool:
+	return _hp_bar.visible and is_visible_in_tree()
 
 
 ## Перебудова юнітів після кожної дії створює десяток вузлів: матеріал і

@@ -195,3 +195,67 @@ func test_fade_only_crowns_on_the_view_axis() -> void:
 					assert_eq(alpha[i], 1.0, "%s: крона за %.1f клітинки вбік від осі погляду лишається цілою" % [season, lateral])
 		assert_between(faded, 1, 4, "%s: розчинено крон над юнітом" % season)
 		cam.free()
+
+
+## Світ 18 × 14 із кільцем у 3 клітинки: дошка 12 × 8, ліс і на дошці, і в кільці.
+func _ring_layer(season: StringName = &"summer") -> ForestLayer:
+	var f := ForestLayer.new()
+	add_child_autofree(f)
+	var w: Board = Board.create(18, 14, Terrain.GroundState.DRY)
+	for y in 14:
+		for x in 18:
+			if (x < 3 or y < 3 or x >= 15 or y >= 11) or (x in range(6, 12) and y in range(5, 9)):
+				w.tiles[y * w.width + x] = Terrain.Kind.FOREST
+	f.build(w, PackedByteArray(), 3, Vector2i(12, 8), season, 7)
+	return f
+
+
+func _drawn(f: ForestLayer) -> Array[Node]:
+	var out: Array[Node] = []
+	for n: Node in f.get_children():
+		if n is GeometryInstance3D and not (String(n.name).begins_with("Fade_") or n.name == &"Forest_Shadow" or n.name == &"Forest_Soil_Lane"):
+			out.append(n)
+	return out
+
+
+## Бюджет кадру (§8): ліс — один виклик малювання на атлас і шар (кільце з дошкою, підлісок), а не на
+## кожну форму. Без цього тридцять з гаком MultiMesh з'їдали третину ліміту викликів.
+func test_foliage_is_one_mesh_per_atlas_and_layer() -> void:
+	for season: StringName in [&"early", &"late"]:
+		var f := _ring_layer(season)
+		var drawn := _drawn(f)
+		assert_gt(f.board_plan.size(), 20, "%s: ліс на дошці" % season)
+		for n: Node in drawn:
+			assert_false(n is MultiMeshInstance3D, "%s: %s — MultiMesh на форму" % [season, n.name])
+		# 2 атласи × (дошка з кільцем, підлісок).
+		assert_lte(drawn.size(), 4, "%s: %d вузлів листя" % [season, drawn.size()])
+		assert_gt(f._ring_fadable.size(), 0, "%s: кільце в злитій сітці" % season)
+
+
+## Розчинення працює і зі злитою сіткою: розчинений екземпляр гасне в таблиці даних батча (й
+## вертає, коли юніт іде), а решта лишається.
+func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:
+	var f := _ring_layer()
+	var cam := Camera3D.new()
+	add_child_autofree(cam)
+	cam.look_at_from_position(Vector3(-4.0, 14.0, -4.0), Vector3(5.0, 0.0, 5.0))
+	cam.make_current()
+	var shown: int = 0
+	for g: Dictionary in f._fadable:
+		for i in (g["list"] as Array).size():
+			assert_true((g["batch"] as FoliageBatch).is_alive(int(g["first"]) + i), "до розчинення всі цілі")
+	var u := Vector2i(5, 3)
+	f.set_reveal_cells([u] as Array[Vector2i])
+	var gone: int = 0
+	for g: Dictionary in f._fadable + f._ring_fadable:
+		var alpha: PackedFloat32Array = g["alpha"]
+		for i in alpha.size():
+			var alive: bool = (g["batch"] as FoliageBatch).is_alive(int(g["first"]) + i)
+			assert_eq(alive, alpha[i] >= 1.0, "таблиця батча збігається з альфою")
+			if not alive:
+				gone += 1
+	assert_between(gone, 1, 4, "над юнітом зникли 1–4 крони")
+	f.set_reveal_cells([] as Array[Vector2i])
+	for g: Dictionary in f._fadable + f._ring_fadable:
+		for i in (g["list"] as Array).size():
+			assert_true((g["batch"] as FoliageBatch).is_alive(int(g["first"]) + i), "юніт пішов — усе знову ціле")

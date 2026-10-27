@@ -10,15 +10,25 @@ extends Node
 ## із контурами зон руху поверх пропсів. <map>@behind@<модель>@zoom — той самий юніт за першою
 ## такою будівлею (з боку від камери), вибраний: розчинення даху й контур зони поверх сліду. <map>@top@x,y,size — ортографічний погляд згори на
 ## клітинку x,y (size клітинок у кадрі) з межами будівель (червоні) й огорож (блакитні) і найменшим
-## проміжком між будівлями та між будівлею й огорожею в метрах. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=….
-## --diag: після кожного кадру ховає по черзі групи вузлів (ліс за класами, діти BoardView, 3D-діти
-## екрана) і друкує, скільки кожна коштує: рядок DIAG <map> <cell> z<zoom> <група>(<вузлів>) dc=… tris=….
+## проміжком між будівлями та між будівлею й огорожею в метрах. Рядок BUDGET <map> <cell> z<zoom> dc=… tris=…
+## shadow_dc=… canvas_dc=…: медіана 9 кадрів, коли камера вже стала (shadow_dc — прохід тіней, canvas_dc — інтерфейс).
+## Годинник імли зупинено, тож кадри до й після правки збігаються піксель у піксель (дощ на Річці — ні).
+## Паралельні запуски Godot спотворюють лічильник на ±10 викликів: міряти по одному.
+## --diag: після кожного кадру ховає по черзі групи вузлів (ліс, діти BoardView, пропси, рослини, юніти,
+## інтерфейс, 3D-діти екрана) і друкує, скільки кожна коштує: рядок DIAG <map> <cell> z<zoom> <група>(<вузлів>)
+## dc=… tris=… surfs=… inst=… vis=… (vis — скільки екземплярів MultiMesh у кадрі). Базу беруть перед кожною групою.
+## --only=<підрядок> лишає в --diag групи з таким підрядком в імені.
 ## <map>@forest@x,y@zoom — танк гравця 0 проламав ліс на x,y і сусідню клітинку, піхота — у стоячому
 ## лісі поруч; камера на танку.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 90
+## --only=<підрядок>: --diag міряє лише групи, чиє ім'я його містить (повний прогін не вкладається в хвилини).
+var _only: String = ""
+## Скільки з draw calls кадру — прохід тіней (медіана останнього _median_frame).
+var shadow_dc: int = 0
+var canvas_dc: int = 0
 
 
 func _ready() -> void:
@@ -37,7 +47,12 @@ func _ready() -> void:
 	# --stdmat: будинки з імпортованим матеріалом GLB, без prop_fade — щоб порівняти фактуру.
 	var std_mat: bool = args.has("--stdmat")
 	var diag: bool = args.has("--diag")
+	for a in args:
+		if a.begins_with("--only="):
+			_only = a.trim_prefix("--only=")
 	for i in range(1, args.size()):
+		if args[i].begins_with("--only="):
+			continue
 		if args[i] in ["--shadows", "--noshadows", "--stdmat", "--diag"]:
 			continue
 		var parts: PackedStringArray = args[i].split("@")
@@ -46,6 +61,10 @@ func _ready() -> void:
 		add_child(screen)
 		screen.setup(load("res://maps/%s.tres" % map) as MapData, 2, 1)
 		var board: Board = MatchService.state.board
+		# Годинник імли стоїть: кадри до й після правки мусять збігатися піксель у піксель.
+		var fog_clock: Timer = (screen.get_node("%BoardView") as BoardView).get("_fog_clock")
+		if fog_clock != null:
+			fog_clock.stop()
 		if no_shadows:
 			var bv: BoardView = screen.get_node("%BoardView")
 			bv.structure_shadows = false
@@ -326,7 +345,7 @@ func _ready() -> void:
 			var tris: int = m.y
 			var zl: String = str(int(v[1])) if is_equal_approx(v[1], roundf(v[1])) else "%.1f" % v[1]
 			var name: String = "%s_%d_%d_z%s" % [map, v[0].x, v[0].y, zl]
-			print("BUDGET %s %s z%d dc=%d tris=%d" % [map, v[0], int(v[1]), dc, tris])
+			print("BUDGET %s %s z%d dc=%d tris=%d shadow_dc=%d canvas_dc=%d" % [map, v[0], int(v[1]), dc, tris, shadow_dc, canvas_dc])
 			shots.append([name, get_viewport().get_texture().get_image()])
 			if diag:
 				await _diag(screen, "%s %s z%d" % [map, v[0], int(v[1])], Vector2i(dc, tris))
@@ -342,12 +361,21 @@ func _ready() -> void:
 func _median_frame() -> Vector2i:
 	var dcs: Array[int] = []
 	var tris: Array[int] = []
+	var shadow: Array[int] = []
+	var canvas: Array[int] = []
+	var vp: RID = get_viewport().get_viewport_rid()
 	for f in 9:
 		await RenderingServer.frame_post_draw
+		shadow.append(RenderingServer.viewport_get_render_info(vp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
+		canvas.append(RenderingServer.viewport_get_render_info(vp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_CANVAS, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
 		dcs.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
 		tris.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)))
 	dcs.sort()
 	tris.sort()
+	shadow.sort()
+	canvas.sort()
+	shadow_dc = shadow[4]
+	canvas_dc = canvas[4]
 	return Vector2i(dcs[4], tris[4])
 
 
@@ -368,23 +396,96 @@ func _diag(screen: BattleScreen, tag: String, all: Vector2i) -> void:
 			if not groups.has(g):
 				groups[g] = []
 			(groups[g] as Array).append(n)
+	# Пропси: по іменах вузлів шару (кожен MultiMesh — окремий виклик, а часом і окремий у тіні).
+	var props: Node = bv.get_node_or_null("Props")
+	if props != null:
+		for n: Node in props.find_children("*", "GeometryInstance3D", true, false):
+			var g: String = "prop_" + String(n.name).rstrip("0123456789@")
+			if not groups.has(g):
+				groups[g] = []
+			(groups[g] as Array).append(n)
+	var veg: Node = bv.get_node_or_null("Vegetation")
+	if veg != null:
+		for n: Node in veg.find_children("*", "GeometryInstance3D", true, false):
+			var g: String = "veg_" + String(n.name).rstrip("0123456789@")
+			if not groups.has(g):
+				groups[g] = []
+			(groups[g] as Array).append(n)
+	var hud: Node = screen.get_node_or_null("UI")
+	if hud != null:
+		for n: Node in hud.find_children("*", "CanvasItem", true, false):
+			if (n as CanvasItem).visible and (n as CanvasItem).is_visible_in_tree() and (n is Label or n is Button or n is ColorRect or n is Panel or n is PanelContainer or n is TextureRect):
+				var g: String = "ui_" + String(n.name)
+				if not groups.has(g):
+					groups[g] = []
+				(groups[g] as Array).append(n)
+	# Юніти: по іменах візуальних вузлів усередині, а не одним блоком.
+	var units: Node = screen.get_node_or_null("Units")
+	if units != null:
+		for n: Node in units.find_children("*", "GeometryInstance3D", true, false):
+			var g: String = "unit_" + String(n.name).rstrip("0123456789@")
+			if not groups.has(g):
+				groups[g] = []
+			(groups[g] as Array).append(n)
 	for n: Node in screen.get_children():
 		if n != bv and n is Node3D:
 			var g: String = "screen_" + String(n.name)
 			if not groups.has(g):
 				groups[g] = []
 			(groups[g] as Array).append(n)
+	groups["ALL_forest"] = [forest] if forest != null else []
+	var ui: Array = []
+	for n: Node in screen.get_children():
+		if n is CanvasItem or n is CanvasLayer:
+			ui.append(n)
+	groups["ALL_ui"] = ui
+	var wr: Node = screen.get_node_or_null("WeatherRig")
+	if wr != null:
+		groups["ALL_sun"] = [wr.get_node("Sun")]
+		groups["ALL_rain"] = [wr.get_node("Rain")]
+	groups["ALL_both"] = ui.duplicate()
+	groups["ALL_3D_but_cam"] = []
+	for n: Node in screen.get_children():
+		if n is Node3D and not n is Camera3D and n.name != "CameraRig":
+			(groups["ALL_3D_but_cam"] as Array).append(n)
+			(groups["ALL_both"] as Array).append(n)
 	for g: String in groups:
+		if not _only.is_empty() and not g.contains(_only):
+			continue
+		# Базу міряємо перед кожною групою: після ховання/повернення вузла лічильник сам дрейфує
+		# (кеш тіней, видимість шарів), і одна база на кадр дає накопичену похибку.
+		var base: Vector2i = await _median_frame()
 		var was: Array[bool] = []
-		for n: Node3D in groups[g]:
+		groups[g] = (groups[g] as Array).filter(func(n: Variant) -> bool: return is_instance_valid(n))
+		for n in groups[g]:
 			was.append(n.visible)
 			n.visible = false
 		var m: Vector2i = await _median_frame()
 		var dc: int = m.x
 		var tris: int = m.y
-		print("DIAG %s %s(%d) dc=%d tris=%d" % [tag, g, (groups[g] as Array).size(), all.x - dc, all.y - tris])
+		var surfs: int = 0
+		var insts: int = 0
+		for n in groups[g]:
+			if n is MultiMeshInstance3D and (n as MultiMeshInstance3D).multimesh.mesh != null:
+				surfs += (n as MultiMeshInstance3D).multimesh.mesh.get_surface_count()
+				insts += (n as MultiMeshInstance3D).multimesh.instance_count
+			elif n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+				surfs += (n as MeshInstance3D).mesh.get_surface_count()
+		# Скільки екземплярів MultiMesh потрапляє в кадр (з запасом 80 px): вузол без жодного
+		# малюється даремно — його AABB охоплює всю карту.
+		var vis: int = 0
+		var cam: Camera3D = get_viewport().get_camera_3d()
+		var rect: Rect2 = get_viewport().get_visible_rect().grow(80.0)
+		for n in groups[g]:
+			if n is MultiMeshInstance3D:
+				var mm: MultiMesh = (n as MultiMeshInstance3D).multimesh
+				for i in mm.instance_count:
+					var wp: Vector3 = (n as Node3D).global_transform * mm.get_instance_transform(i).origin
+					if not cam.is_position_behind(wp) and rect.has_point(cam.unproject_position(wp)):
+						vis += 1
+		print("DIAG %s %s(%d) dc=%d tris=%d surfs=%d inst=%d vis=%d" % [tag, g, (groups[g] as Array).size(), base.x - dc, base.y - tris, surfs, insts, vis])
 		for i in was.size():
-			(groups[g][i] as Node3D).visible = was[i]
+			groups[g][i].visible = was[i]
 
 
 ## Погляд згори: межі будівель і огорож, найменші проміжки — числом у кадрі й у виводі.
