@@ -382,6 +382,14 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
 	assert_eq(layer.hearth_material().get_shader_parameter("rise"), WreckLayer.HEARTH_RISE, "шум густоти пливе вгору зі швидкістю диму")
 	assert_false(layer.hearth_material().shader.code.contains("sin("), "хеш без sin: час росте весь матч")
+	# Освітлення, об'єм і мокра гілка живуть у шейдері; headless його не малює, тож їхній вигляд
+	# (яскравість над ґрунтом, відсутність пульсації) перевіряє tools/smoke_seq.gd у вікні. Тут —
+	# лише що шейдер має параметри, які шар виставляє.
+	var uniforms: Array[String] = []
+	for u: Dictionary in layer.hearth_material().shader.get_shader_uniform_list():
+		uniforms.append(String(u["name"]))
+	for name: String in ["fx_time", "height", "base_w", "top_w", "rise", "lean"]:
+		assert_true(uniforms.has(name), "шейдер диму має uniform %s" % name)
 	layer.set_wind(Vector3(0.25, 0, 0))
 	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")
 	layer.rebuild(state, 0)
