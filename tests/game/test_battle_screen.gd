@@ -1265,8 +1265,8 @@ func test_resume_warms_up_fx_on_the_first_gate_confirm() -> void:
 
 # --- Об'їзд дошки за гейтом (_warm_board) ---------------------------------
 
-## Кадрів з запасом: 12 точок об'їзду, три кадри розчинення лісу, кадр на юнітів, три кадри під
-## гейтом, прибирання.
+## Кадрів з запасом: 12 точок об'їзду, по три кадри розчинення лісу й рослин, кадр на юнітів, три
+## кадри під гейтом, прибирання.
 const WARM_FRAMES: int = 45
 
 
@@ -1349,6 +1349,20 @@ func test_warm_up_shows_forest_fade_under_the_gate() -> void:
 			seen["fade"] = true)
 	await wait_frames(WARM_FRAMES)
 	assert_true(seen["fade"], "розчинення лісу показано за гейтом")
+
+
+func test_warm_up_shows_vegetation_fade_under_the_gate() -> void:
+	# Те саме для рослин (кущ, дерево, очерет): розчинений екземпляр показується, поки стоїть гейт.
+	var pair: Array = _launched_with_warm_up()
+	var screen: Node3D = pair[0]
+	var gate: Control = screen.get_node("%HandoverGate")
+	var veg: VegetationLayer = (screen.get_node("%BoardView") as BoardView).vegetation()
+	var seen: Dictionary = {"fade": false}
+	veg.child_entered_tree.connect(func(n: Node) -> void:
+		if String(n.name).ends_with("_faded") and gate.visible:
+			seen["fade"] = true)
+	await wait_frames(WARM_FRAMES)
+	assert_true(seen["fade"], "розчинення рослин показано за гейтом")
 
 
 func test_launch_warm_up_that_runs_to_the_end_leaves_no_units_under_the_gate() -> void:

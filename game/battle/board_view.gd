@@ -92,6 +92,8 @@ var probe_captures_requested: int = 0
 ## Будівлі, мости й дрібні пропси (PropLayer). Переживає build(): набір клітинок під юнітами й
 ## розчавлених лишається між перебудовами мосту.
 var _props: PropLayer
+## Очерет, рогіз і кущі на берегах (VegetationLayer); перебудовується з кожним build().
+var _vegetation: VegetationLayer
 ## Ліс на клітинках FOREST дошки й кільця (ForestLayer); переживає build(): розкид дорогий, а
 ## перебудова мосту лісу не міняє.
 var _forest: ForestLayer
@@ -204,6 +206,11 @@ func build(board: Board) -> void:
 		for sp: Dictionary in ring_map.spawns:
 			spawns.append(sp["pos"])
 	_props.build(world, ring, _board_size, _height, _map_key(), _half_dir(board), fields, spawns)
+	_vegetation = VegetationLayer.new()
+	_vegetation.name = "Vegetation"
+	_vegetation.cast_shadows = structure_shadows
+	add_child(_vegetation)
+	_vegetation.build(board, _height, fields, relief_seed, season, _props, VillageLayout.for_map(_map_key()).get("homes", []))
 	if _forest == null:
 		_forest = ForestLayer.new()
 		_forest.name = "Forest"
@@ -431,10 +438,16 @@ func props() -> PropLayer:
 	return _props
 
 
+func vegetation() -> VegetationLayer:
+	return _vegetation
+
+
 ## Клітинки юнітів, що зараз на дошці: будівлі над ними й між ними та камерою розчиняються.
 ## instant — без переходу (гейт передачі, §3.5): див. PropLayer.set_reveal_cells.
 func set_reveal_cells(cells: Array[Vector2i], instant: bool = false) -> void:
 	_props.set_reveal_cells(cells, instant)
+	if _vegetation != null:
+		_vegetation.set_reveal_cells(cells)
 	if _forest != null:
 		_forest.set_reveal_cells(cells)
 
@@ -458,6 +471,8 @@ func set_forest_zoom(zoom: float) -> void:
 ## Клітинки з розчавленими пропсами, уже обрізані розвіданим глядача (§3.5).
 func set_crushed_cells(cells: Array[Vector2i]) -> void:
 	_props.set_crushed(cells)
+	if _vegetation != null:
+		_vegetation.set_crushed(cells)
 
 
 ## Ім'я файлу карти без розширення: мости своєї карти й сіль хешу розстановки.

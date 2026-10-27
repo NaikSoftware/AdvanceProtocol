@@ -386,6 +386,197 @@ in Blender into an atlas (CC0 source, derived asset).
 
 ---
 
+## Bank, yard and meadow vegetation
+
+Reeds and bushes on river and lake banks, trees and shrubs by the houses, and solitary bushes
+and trees in meadows (never on ploughland). Here and there, not in belts: placement decides
+density. The crowns use the forest's card approach and palette so they sit with the wood.
+
+**Sources.** Everything is procedural; nothing is shipped from outside. No CC0 model of reed,
+cattail, willow scrub, alder, fruit trees, walnut, lilac, elder, hawthorn, dog rose or thuja exists
+in a usable form (same finding as the forest). Sprites are rendered in Blender from generated stems,
+blades and leaves (`tools/blender/vegetation/veg_sprites.py`), and bark strips are numpy noise. The
+photos below are reference only and are not shipped.
+
+| id | source | licence | used for |
+| --- | --- | --- | --- |
+| v_reed_green | [Phragmites australis SCA-9604189](https://commons.wikimedia.org/wiki/File:Phragmites_australis_SCA-9604189.jpg), R. A. Nonenmacher | CC BY-SA 4.0 | Summer reed: mid-green blades, dense stand |
+| v_reed_autumn | [Poertschach Phragmites australis](https://commons.wikimedia.org/wiki/File:Poertschach_Halbinselpromenade_Phragmites_australis_21122013_745.jpg), J. Jaritz | CC BY-SA 3.0 AT | Late reed: straw stems, grey-buff plumes, ragged top |
+| v_cattail | [Typha latifolia seed heads](https://commons.wikimedia.org/wiki/File:Zaadpluizen_grote_lisdodde_(Typha_latifolia)._(d.j.b.).jpg), D. J. Bergsma | CC BY-SA 4.0 | Brown head 15–20 cm, fraying in late autumn |
+| v_oak_meadow | [Solitary oaks, Delleboersterheide](https://commons.wikimedia.org/wiki/File:Solitaire_eiken_(Quercus_robur)_in_een_imponerend_landschap._Locatie,_natuurgebied_Delleboersterheide_%E2%80%93_Catspoele_02.jpg), D. J. Bergsma; [Solitary Quercus robur](https://commons.wikimedia.org/wiki/File:Solitary_Quercus_robur.jpg), K. Golik | CC BY-SA 4.0 | Open-grown crown: lobed, gaps, broad |
+| v_walnut | [Juglans regia in a field](https://commons.wikimedia.org/wiki/File:2026-03-07_D500-2006_Achim-Lammerts_Juglans-regia.jpg), A. Lammerts | CC BY-SA 4.0 | Bare walnut: thick limbs, wide low crown |
+| v_hawthorn | [Crataegus monogyna 12](https://commons.wikimedia.org/wiki/File:(ms)_Crataegus_monogyna_12.jpg), Hladac | CC BY-SA 4.0 | Dense dome 2–3 m |
+| v_willow | [Dülmen pollard willows](https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Umland_--_2014_--_7067.jpg), D. Rabich | CC BY-SA 4.0 | Wet-meadow willows, often pollarded |
+| v_elder, v_lilac | [Sambucus nigra 004](https://commons.wikimedia.org/wiki/File:Sambucus_nigra_004.jpg), Willow; [Syringa vulgaris kz01](https://commons.wikimedia.org/wiki/File:Syringa_vulgaris_kz01.jpg), K. Ziarnek | CC BY 2.5 / CC BY-SA 4.0 | Yard shrub masses 2–3 m |
+
+| v_oblique | [Krasnoselye aerial view](https://commons.wikimedia.org/wiki/File:Krasnoselye_PSRER_Aerial_view_of_abandoned_village_2026-04-22.jpg), Budgawl | CC BY-SA 4.0 | Village gardens from ~45°: fruit trees and shrubs by houses at the game angle |
+| v_top | [Schönwald, Escheckstraße](https://commons.wikimedia.org/wiki/File:Sch%C3%B6nwald_im_Schwarzwald,_Escheckstra%C3%9Fe_--_2025_--_0147.jpg), D. Rabich | CC BY-SA 4.0 | Solitary crowns from above: lobed outline and shadow |
+| v_reed_aerial | [Fotoflug Leer–Papenburg](https://commons.wikimedia.org/wiki/File:2013-05-03_Fotoflug_Leer_Papenburg_DSCF7214.jpg), M. Nolte; [Virginia shoreline](https://commons.wikimedia.org/wiki/File:DSC_0070_(15283482670).jpg), Virginia State Parks | CC BY-SA 3.0 DE / CC BY 2.0 | Reed beds and bank scrub from the air: dense straw mat, scrub on the bank line |
+| v_flattened | [Reeds flattened by Dorian](https://commons.wikimedia.org/wiki/File:Reeds_flattened_by_Tropical_Storm_Dorian,_Mount_Stewart_Salt_Marshes,_PEI_(48740483167).jpg), Larry from Charlottetown; [Wind-flattened reeds, Myton Fields](https://commons.wikimedia.org/wiki/File:Wind-flattened_reeds,_Myton_Fields,_Warwick_-_geograph.org.uk_-_7411186.jpg), R. Stott | CC BY 2.0 / CC BY-SA 2.0 | Crushed reed: stems laid one way, low bundle |
+| v_heap | [Overgrown bushes](https://commons.wikimedia.org/wiki/File:Overgrown_Bushes.jpg), Paul The Writer; [Pile burning](https://commons.wikimedia.org/wiki/File:(Sierra_Elko)_Pile_Burning_1_(52637186468).jpg), USFS; [Sihlwald windthrow](https://commons.wikimedia.org/wiki/File:Sihlwald_windthrow_Spinnerweg_20200204_1.jpg), D. Kraft | CC0 / PD / CC BY-SA 3.0 | Crushed shrubs and broken-branch piles: volume, limbs at all angles |
+
+Local copies (gitignored scratch): `~/.cache/ap-scratch/bank-veg/refs/`, with every URL in `urls.tsv`.
+
+### Assets
+
+One library GLB per group and season in `assets/props/vegetation/`:
+`{bank,yard,meadow}_veg_{late,summer,early}.glb` (late = River, summer = Crossroads,
+early = Ridge). Each plant is a node, the same geometry in every season. Only the atlas changes,
+plus how many clumps a bare late crown keeps. Every node has a `<name>_fallen` twin, what is left after a vehicle drives through. Reeds and
+bushes become 5–9 broken stems 1–1.4 m long, leaning 35–60° from the vertical the way the vehicle
+went, tips at most 0.8 m high, with gaps between them and a few leaves (bush bark at tone 0.6). A tree becomes a dense heap of brushwood up to 0.9 m high: 36 branches 5–12 cm
+thick and 0.6–1.8 m long, mostly pressed the way of travel, every sixth sticking up at 20–45°, plus
+2–3 short trunk pieces of at most 1 m. Everything has the tree's own bark at the trunk's tone
+(0.45), with no pale wood or fresh breaks: on the game zoom, light wood read as white litter. The
+heap reads by its silhouette and its shade, not by brightness. The season's leaves lie on top in small clusters.
+
+Trees are grown, not filled into a sphere: a trunk leaning up to 8°, at least three scaffold
+limbs, second- and third-order branches, and leaf clumps at the branch ends, so gaps show between
+them. Each species keeps its own habit:
+- oak: crooked thick limbs and an open crown;
+- wild pear: narrow and tall, with a leader;
+- walnut: forks at 1.5–2 m into 3–4 limbs, with a wide low crown;
+- willow: pollarded head, several trunks, or a broad single trunk;
+- fruit trees: scaffold limbs from about 1 m.
+
+There are three forms of every tree and of the willow and alder bushes, varied by branch seed,
+lean and crown asymmetry. The skeleton has its own seed, so a plant is the same in every season;
+late autumn only shows the third-order twigs and keeps fewer clumps.
+
+| plant (forms) | size w × d × h, m (summer) | tris late / summer | fallen tris |
+| --- | --- | --- | --- |
+| bank_reed _01, _02, _03 | 2 × 3 × 3.0; 3 × 2 × 3.2; 4 × 2 × 3.1 | 36–72 / 36–72 | 72–144 |
+| bank_cattail _01, _02 | 1 × 1 × 2.0; 3 × 2 × 2.2 | 20–32 / 20–32 | 40–64 |
+| bank_bush_willow _01, _02, _03 | 3 × 3 × 3.0; 3 × 3 × 2.0; 3 × 2 × 3.5 | 94–132 / 214–260 | 226–362 |
+| bank_bush_alder _01, _02, _03 | 3 × 3 × 3.7; 4 × 4 × 3.1; 3 × 3 × 3.9 | 98–126 / 188–222 | 184–222 |
+| yard_apple _01, _02, _03 | 5 × 6 × 4.5; 6 × 5 × 5.0; 4 × 4 × 4.3 | 380 / 540 | 314–494 |
+| yard_cherry _01, _02, _03 | 4 × 4 × 5.8; 4 × 4 × 5.4; 4 × 4 × 5.5 | 378 / 520 | 314–474 |
+| yard_walnut _01, _02, _03 | 10 × 8 × 9.4; 10 × 9 × 9.6; 10 × 10 × 8.0 | 372 / 616 | 326–606 |
+| yard_lilac _01 | 2 × 3 × 2.7 | 154 / 238 | 304–324 |
+| yard_elder _01 | 4 × 4 × 2.9 | 94 / 214 | 226–252 |
+| yard_berry_row _01 | 4 × 2 × 1.1 | 120 / 170 | 298–308 |
+| yard_thuja _01 | 2 × 2 × 4.1 | 154 / 154 | 204 |
+| meadow_hawthorn _01, _02 | 3 × 3 × 2.9; 3 × 2 × 2.1 | 164–206 / 266–342 | 178–222 |
+| meadow_dogrose _01 | 3 × 3 × 1.7 | 270 / 354 | 262–278 |
+| meadow_pear _01, _02, _03 | 6 × 6 × 11.7; 6 × 4 × 9.7; 7 × 7 × 11.2 | 540 / 736 | 314–606 |
+| meadow_oak _01, _02, _03 | 10 × 10 × 13.0; 9 × 14 × 9.0; 12 × 11 × 9.7 | 600 / 736 | 314–606 |
+| meadow_willow _01, _02, _03 | 3 × 3 × 6.7; 11 × 9 × 9.2; 9 × 9 × 8.6 | 540–684 / 736–800 | 314–606 |
+
+Sizes include the litter patch under shrubs; the visible crown edge is up to ~1 m beyond the clump centres. Fallen forms stand 0.3–0.9 m high.
+
+Atlas: one 1024² RGBA PNG per library, `<group>_veg_<season>.png`, next to the GLB. The GLB
+references it by `uri` and carries no copy of its own. Cells are 128 px (a 2 m clump at 1.6 cm per
+texel), VRAM-compressed with mipmaps. Season colours follow the forest. Late autumn:
+- reeds are straw-brown, darker than early autumn;
+- fruit trees, willows, hawthorn and dog rose keep ≤ 15 % of their clumps, and the sprites inside
+  them hold ≤ 15 % leaves on grey-brown twigs;
+- a bare tree crown also gets cards of fine twigs at the ends of its second- and third-order
+  branches, so it reads as a dense grey-brown net of twigs and not 4–6 sticks. These cards use the
+  same bare-twig sprites and the same tone as the late forest (`forest/src_leaf_sprites.py`
+  `broad_late` and `oak_late`, graded to L* 26, C* 3, h 55 as in `forest/specs/broadleaf_late.json`),
+  so bare twigs match across the forest and the meadow. The sprites are read from `$FOREST_SPRITES`;
+- oak keeps up to 30 % brown, alder and lilac up to 40 % dull green;
+- walnut keeps yellow remnants and thuja turns bronze.
+
+In summer the plants are green, with a hint of apples, black elderberries and red haws.
+
+**Materials.** The GLB's materials are plain placeholders so it imports. Each node has two
+surfaces, and placement overrides both with the GLB's own atlas as `albedo_tex`:
+- **Surface 0, the plant:** `assets/props/vegetation/veg.gdshader`. It has the same body as the
+  forest crown: camera-facing clump cards, `foliage_tint`, alpha-to-coverage under MSAA, and
+  dissolve by whole clumps through instance alpha. Alpha-to-coverage needs `alpha_to_coverage` in
+  `render_mode`; `ALPHA_ANTIALIASING_EDGE` alone leaves the edge identical with and without MSAA
+  (measured on a test quad).
+- **Surface 1, the shade patch** under a bush or heap: `veg_shade.gdshader`. It is black with
+  alpha = vertex colour R (0.25) × a soft, irregular mask from the atlas (15–25 % darker at the
+  centre, no hard edge), casts no shadow and
+  writes no depth.
+
+Vertex colour carries per-clump data:
+- **R** is the tone. On a clump it is the place in the crown (the lower third is darker). On bark it
+  is the brightness: 0.45 everywhere, for trunks, limbs, heap brushwood and bush stems.
+- **G** is the clump id, the same for every vertex of a card or branch, so a dissolve drops whole
+  clumps and never single triangles. Trees take [0.02, 0.48]; `fade_floor` applies to them.
+  Everything else (bushes, reeds, thuja) takes [0.52, 0.98] and fades fully. The gap keeps the 16-bit
+  colour export from rounding an id onto the wrong side.
+
+`tests/game/test_props_vegetation.gd` checks this contract on the imported GLBs.
+
+The ids are only correct while the MultiMesh instance colour RGB is 1: put the instance tone in
+custom data and the dissolve in alpha.
+
+**Over a visible unit**, swap that instance's surface 0 for `veg_fade_depth.gdshader` with
+`veg_fade.gdshader` as its `next_pass`. Use render priority 5 for the depth pass and 6 for the
+colour pass, the same convention as `FADE_DEPTH_PRIORITY` in `PropLayer`: fire, smoke and rain draw
+at priority 1.
+- The depth pass writes the depth of the nearest cards and draws nothing, so the colour pass blends
+  only that nearest layer and the crown is evenly translucent instead of smoky.
+- The shadow does not depend on alpha. The plant stays where it is while it fades, so the depth
+  pass casts the same full shadow (`depth_prepass_alpha`, alpha 1 in the shadow pass). The shadow
+  goes only when whole clumps are dissolved (`veg.gdshader`), because then the plant is removed.
+- Instance alpha is true transparency, with no dither, and bark fades faster than leaves.
+- For late libraries, set the material uniform `fade_floor` to 0.6. A bare crown hides no unit, and
+  without a floor the tree would vanish. The floor reaches only trees, by vertex data (G < 0.5).
+  Bushes, reeds and thuja still fade fully.
+
+Reed and cattail cards are fixed vertical cards (UV2 = (1e-4, 0)) that fade when seen edge-on. The
+shared shader body is in `veg_body.gdshaderinc`.
+
+**Import.** As for the forest: `meshes/force_disable_compression=true`, with no generated LODs and
+no shadow meshes, because LOD generation collapses cards whose four vertices share one point. No
+tangents are generated, since there is no normal map. The shader also compiles under
+`gl_compatibility`, where `textureQueryLod` is not available. Instead, the mip level is derived from
+UV derivatives along the shorter axis of the pixel footprint, which is what anisotropic filtering
+uses.
+
+**UV2 trap.** Blender's glTF exporter writes every UV map as `1 − v`. The builder therefore writes
+UV2 pre-flipped (`uv2()` in `veg_build.py`); otherwise every vertex is lifted ~1 tile in view
+space and bark counts as a card. `forest_*.glb` from `tools/blender/forest/build_library.py` did
+not pre-flip either.
+
+**Placement in battle.** `game/battle/vegetation_layer.gd` (`VegetationLayer`, built by `BoardView`
+after the props) places the libraries. It adds no rule, and every point has its own seed derived
+from the map seed.
+- **Banks.** Reed and cattail beds stand in the shallows (0–1 m under the waterline) of water cells
+  that border field or marsh: 8–14 clumps per cell, following the shore, at least 0.3 from any land
+  cell centre. Willow and alder stand on the dry bank in groups of 1–3, at the edge of a land cell
+  and within 0.4 of the water. Everything comes in patches rather than a ring: more on quiet bends
+  and near marsh, nothing within 2 cells of a bridge or next to a road.
+- **Ponds.** A water body of at most 16 cells is a pond. Its reeds come in 3–5 patches that, with
+  the spread of the clumps, cover 25–40 % of the waterline length (measured along the waterline, not
+  by angle), each clump within 1 m of the waterline, never out in open water.
+- **Meadows.** Rare groups of 1–3 hawthorn and dog-rose bushes, or a lone pear or oak (a willow
+  near water), only on unploughed field and away from the villages. Oak and willow are scaled up in
+  battle (`GROW`) to 10–15 m: the bare late crown is bounded by the branch reach, so the model is
+  built smaller and the shader grows the cards with the instance.
+- **Yards.** About two thirds of the homesteads on every map get 1–2 plants, only inside the
+  fence: a tree outside it reads as a meadow tree and makes the house beside it look taller. The
+  first is a 5–6 m apple or cherry tree; where none fits by a roof or a road, a bush takes its place
+  (lilac, elder, a berry row or a narrow thuja), and a bush may grow close under a wall. A yard too
+  tight even for a thuja passes its turn to the next homestead.
+
+No trunk stands within 0.5 of a road and no crown hangs over one; nothing stands on a bridge, in
+water, in ploughland, on a fence or garden bed, and no crown reaches a roof. When a unit stands under a crown or a reed bed, the plant fades (`set_reveal_cells`, with the `fade_floor` 0.6 for bare late crowns). A
+vehicle's cell shows the `_fallen` twin (`set_crushed`): a crushed bush is 16–22 stems lying flat
+over at least 40 % of the bush's footprint, a felled tree a low brushwood pile, both in the same
+grey-brown dead wood (about (65, 57, 46) on frames), never lighter than the ground. On a sunny map the shade patch stretches
+away from the sun by the crown's height. The battle ground shows no real sun shadow, so this
+follows the houses' contact patch (`prop_contact.gdshader`). `tests/game/test_vegetation_layer.gd`
+checks all of this on the three maps.
+
+Reeds belong in the shallows, never on dry bank; on a pond they keep within 1 m of the waterline.
+
+**Measuring.** `tools/veg_measure.py` measures rendered frames only, never sprites or the atlas:
+- `lum`: brightness of the object against the ground, with a mask taken from an empty frame;
+- `leaf`: leaf share, on frames shot with `--neutral`.
+
+`tools/veg_board_shot.gd` puts library nodes on the real ground of a map (the battle screen with its
+light and weather) and shoots zoom 6 and 20.
+
+Rebuild: `tools/blender/vegetation/build_all.sh`. Frames: `tools/prop_preview.gd` with `--veg`,
+`--nodes=`, `--water[=E]`, `--beside=`, `--fade=`, `--fade-floor=`, `--dissolve=`, `--tank=X:Z`,
+`--neutral`, `--rg`.
+
 ## Bridges
 
 The underside is never seen at this camera, so **prestressed concrete beam and steel girder share one

@@ -739,6 +739,21 @@ func triangle_count() -> int:
 	return t
 
 
+## Дроти ЛЕП на площині XZ: прольоти між опорами й відводи до хат, [a, b] (Vector2) — щоб рослинність
+## не росла під ними.
+func wire_lines() -> Array:
+	var out: Array = []
+	for s: Array in _spans:
+		var a: Vector3 = (_instances[s[0]]["transform"] as Transform3D).origin
+		var b: Vector3 = (_instances[s[1]]["transform"] as Transform3D).origin
+		out.append([Vector2(a.x, a.z), Vector2(b.x, b.z)])
+	for dr: Array in _drops:
+		var a: Vector3 = (_instances[dr[0]]["transform"] as Transform3D).origin
+		var at: Variant = dr[1]
+		out.append([Vector2(a.x, a.z), Vector2(at.x, at.z) if at is Vector3 else at])
+	return out
+
+
 func wire_spans() -> int:
 	var n: int = 0
 	for s: Array in _spans:

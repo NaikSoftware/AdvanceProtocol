@@ -72,6 +72,8 @@ var _warm_stops: Array[Vector2i] = []
 var _warm_units_frames: int = -1
 ## Кадри прогріву розчинення лісу за гейтом: −1 — ще не почато.
 var _warm_forest_frames: int = -1
+## Те саме для розчинення рослинності (VegetationLayer).
+var _warm_veg_frames: int = -1
 ## Відлік спокою: таймер, а не _process, — у спокої екран не робить нічого щокадру (§8).
 var _idle_timer: Timer
 ## Відкритий оверлей налаштувань (null, поки не відкривали).
@@ -1044,6 +1046,7 @@ func _warm_board() -> void:
 	_warm_stops = BoardWarmUp.stops(Vector2i(board.width, board.height))
 	_warm_units_frames = -1
 	_warm_forest_frames = -1
+	_warm_veg_frames = -1
 	get_tree().process_frame.connect(_warm_tick, CONNECT_ONE_SHOT)
 
 
@@ -1062,6 +1065,16 @@ func _warm_tick() -> void:
 		_warm_forest_frames = 2
 	elif _warm_forest_frames > 0:
 		_warm_forest_frames -= 1
+	elif _warm_veg_frames < 0:
+		# Розчинення рослин (кущ, дерево, очерет над юнітом) — так само за гейтом.
+		var board: Board = _match_service.state.board
+		var veg: VegetationLayer = _board_view.vegetation()
+		var cell: Vector2i = veg.warm_fade(Vector2i(board.width / 2, board.height / 2)) if veg != null else Vector2i(-1, -1)
+		if cell.x >= 0:
+			_camera_rig.center_on(cell)
+		_warm_veg_frames = 2
+	elif _warm_veg_frames > 0:
+		_warm_veg_frames -= 1
 	elif _warm_units_frames < 0:
 		# Юніти з'являються лише на confirmed, тож їхні матеріали й підписи теж уперше малювалися б
 		# у першому кадрі після гейта.
