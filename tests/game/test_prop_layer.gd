@@ -1612,6 +1612,7 @@ func test_power_network_is_connected_and_leaves_the_world(p = use_parameters(MAP
 func test_spans_keep_their_length(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	assert_gt(props._spans.size(), 0, "%s: передумова — прольоти є" % p)
+	assert_eq([float(PropLayer.SPAN[&"04kv"]), float(PropLayer.SPAN[&"10kv"])], [PowerGrid.MAX_04KV, PowerGrid.MAX_10KV], "межі прольотів у розстановці й у мережі — ті самі")
 	var long10: int = 0
 	for sp: Array in props._spans:
 		var len_: float = _pole_at(props, sp[0]).distance_to(_pole_at(props, sp[1]))
@@ -1800,29 +1801,40 @@ func test_drops_are_short_and_cross_streets_square(p = use_parameters(MAPS)) -> 
 	gut.p("%s: відводів через вулицю %d" % [p, crossing])
 
 
-## Відводи має частина хат: на карті з десятьма й більше хатами — 40–70 % (село з електрикою, але не павутиння).
+## Відводи має частина хат: на карті з десятьма й більше хатами — 40–70 % (село з електрикою, але не павутиння). На
+## Хребті досяжні хати стоять поселеннями з однієї-двох, тож жодну не лишено без відводу навмисно.
 func test_drop_share_per_map(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var homes: int = _homes(props, _map(p)).size()
 	assert_gt(props._drops.size(), 0, "%s: передумова — відводи є" % p)
 	if homes >= 10:
 		assert_between(float(props._drops.size()) / homes, 0.4, 0.7, "%s: відводів %d з %d хат" % [p, props._drops.size(), homes])
+	if p == "ridge":
+		assert_eq(props._skipped.size(), 0, "ridge: досяжні хати в поселеннях з однієї-двох")
 
 
-## Стовп не стоїть у дворі садиби (PropLayer in_yard: клітинки двору разом зі смугою, куди може відступити паркан), а
+## Стовп не стоїть у дворі садиби (PropLayer in_yard: обрис паркану) і ближче POLE_GATE_CLEAR до прорізу воріт, а
 ## проліт 0.4 кВ не йде над грядкою, крізь двір, над будівлею з боку камери, а через дорогу — лише прямо впоперек.
-## На опорі 0.4 кВ щонайбільше три прольоти, на ТП — щонайбільше два прольоти 0.4 кВ.
+## На опорі 0.4 кВ щонайбільше три прольоти, на ТП (і спільній) — щонайбільше два прольоти 0.4 кВ. Будь-який проліт
+## 0.4 кВ — не довший за PowerGrid.MAX_04KV.
 func test_poles_and_spans_keep_out_of_yards(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var placer = props._placer
+	assert_gt(props._gate_posts.size(), 0, "%s: передумова — ворота є" % p)
 	for i in _pole_ids(props):
-		assert_false(placer.in_yard(_pole_at(props, i)), "%s: опора %s у дворі" % [p, _pole_at(props, i)])
+		var at: Vector2 = _pole_at(props, i)
+		assert_false(placer.in_yard(at), "%s: опора %s у дворі" % [p, at])
+		for g in props._gate_posts.size() / 2:
+			assert_gte(Geometry2D.get_closest_point_to_segment(at, props._gate_posts[2 * g], props._gate_posts[2 * g + 1]).distance_to(at),
+					PropLayer.POLE_GATE_CLEAR, "%s: опора %s у воротах" % [p, at])
 	var adj: Dictionary = _neighbours(props)
 	var checked: int = 0
 	for sp: Array in props._spans:
 		if not (_is_04(props, sp[0]) or _is_04(props, sp[1])):
 			continue
 		checked += 1
+		assert_lte(_pole_at(props, sp[0]).distance_to(_pole_at(props, sp[1])), PowerGrid.MAX_04KV + 1e-3,
+				"%s: проліт %s–%s довший за MAX_04KV" % [p, _pole_at(props, sp[0]), _pole_at(props, sp[1])])
 		assert_true(placer.wire_ok(_pole_at(props, sp[0]), _pole_at(props, sp[1]), PropLayer.SPAN_CROSS),
 				"%s: проліт %s–%s над грядкою, двором чи будівлею або навскіс через дорогу" % [p, _pole_at(props, sp[0]), _pole_at(props, sp[1])])
 	for i: int in adj:

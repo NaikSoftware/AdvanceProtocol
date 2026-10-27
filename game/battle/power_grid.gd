@@ -29,7 +29,12 @@ const BEND_ANGLE: float = 0.9
 const BEND_WINDOW: int = 5
 ## Синус 25° — найбільший відхил переходу через дорогу від прямого кута (як PropLayer.DROP_CROSS_COS).
 const SQUARE_SIN: float = 0.423
-## Найбільше прольотів на опорі 0.4 кВ (відводи не лічаться).
+## Скільки разів пробуємо сполучити відрізану станцію з деревом, і скільки спроб на все село.
+const BRIDGE_TRIES: int = 3
+## Наскільки опора переходу через дорогу може відійти від місця прямо навпроти, клітинки.
+const HOP_R: float = 1.2
+const BRIDGE_BUDGET: int = 40
+## Найбільше прольотів на опорі 0.4 кВ (відводи не лічаться); на ТП — два прольоти 10 кВ і до MAX_SPANS − 1 прольотів 0.4 кВ.
 const MAX_SPANS: int = 3
 ## Кінцева опора головної вулиці стоїть не далі за стільки (клітинки) від хати.
 const STREET_END: float = 3.0
@@ -51,6 +56,7 @@ var _avoid: Array[Vector2] = []
 var _ring: int = 0
 ## ТП-кандидат -> чи сполучається з вулицею села (_tp_reaches), у межах одного села.
 var _reach_cache: Dictionary = {}
+var _spot_cache: Dictionary = {}
 var _size := Vector2i.ZERO
 var lines: Array[Dictionary] = []
 var transformers: Array[Vector2] = []
@@ -140,9 +146,18 @@ func _snap(target: Vector2, radius: float, accept: Callable = Callable()) -> Vec
 	# Порядок місць: поле, узбіччя дороги, двір уздовж паркану (PropLayer pole_spot_ok).
 	for tier in 3:
 		for q in cands:
-			if _p.pole_spot_ok(q, tier) and not _near_avoid(q) and (accept.is_null() or accept.call(q)):
+			if _spot_ok(q, tier) and not _near_avoid(q) and (accept.is_null() or accept.call(q)):
 				return q
 	return Vector2.INF
+
+
+## PropLayer pole_spot_ok з кешем: перешкоди за час планування не змінюються, а ті самі місця на межах клітинок
+## перебираються сотні разів (переходи через дорогу, ТП).
+func _spot_ok(q: Vector2, tier: int) -> bool:
+	var key := Vector3(q.x, q.y, tier)
+	if not _spot_cache.has(key):
+		_spot_cache[key] = _p.pole_spot_ok(q, tier)
+	return _spot_cache[key]
 
 
 func _near_avoid(q: Vector2) -> bool:
@@ -381,14 +396,19 @@ func _village(homes: Array, trunk: Array) -> void:
 				# Станцію між ними не вдалось поставити (двір, вода): опора посередині тієї ж вулиці.
 				edges.append_array(_chain_edges(stations, i, j, trunk_segs, dead))
 	var from_tp: int = 0
-	for i in stations.size():
+	var near_tp: Array = range(stations.size())
+	near_tp.sort_custom(func(x: int, y: int) -> bool: return stations[root].distance_to(stations[x]) < stations[root].distance_to(stations[y]))
+	var hops: int = 0
+	for i: int in near_tp:
 		var d: float = stations[root].distance_to(stations[i])
 		if i == root or dead.has(i):
 			continue
 		if d <= MAX_04KV and _span_clear(stations[root], stations[i], trunk_segs):
 			edges.append([mini(root, i), maxi(root, i), d * 1.6])
 			from_tp += 1
-		elif d <= MAX_04KV * 2.0:
+		elif d <= MAX_04KV * 2.0 and from_tp == 0 and hops < 3:
+			# ТП за дорогою від вулиці: перехід до однієї з трьох найближчих станцій, поки прямого прольоту нема.
+			hops += 1
 			var hop: Array = _square_hop(stations, root, i, trunk_segs)
 			edges.append_array(hop)
 			from_tp += int(not hop.is_empty())
@@ -405,8 +425,11 @@ func _village(homes: Array, trunk: Array) -> void:
 	var parent: Dictionary = {root: -1}
 	var tree_edges: Array = []
 	var bridged: Dictionary = dead.duplicate()
-	# Опора несе щонайбільше MAX_SPANS прольотів (ТП — ще й два прольоти 10 кВ): розвилка на чотири дроти — павутиння.
-	var degree: Dictionary = {root: 1}
+	# Опора 0.4 кВ несе щонайбільше MAX_SPANS прольотів: розвилка на чотири дроти — павутиння. ТП — два прольоти 10 кВ
+	# (лічаться за один) і щонайбільше MAX_SPANS − 1 прольотів 0.4 кВ, разом із тими, що вже йдуть від спільної ТП.
+	var degree: Dictionary = {root: 1 + _spans_04_at(tp)}
+	var attempts: int = 0
+	var tries: Dictionary = {}
 	while true:
 		var grown: bool = true
 		while grown:
@@ -427,9 +450,15 @@ func _village(homes: Array, trunk: Array) -> void:
 				grown = true
 				break
 		var link: Array = _nearest_gap(stations, parent, bridged)
-		if link.is_empty():
+		if link.is_empty() or attempts >= BRIDGE_BUDGET:
 			break
+		attempts += 1
 		bridged[Vector2i(link[0], link[1])] = true
+		# Станцію, до якої вже BRIDGE_TRIES разів не дотягнулись, більше не пробуємо: кожна спроба — це пошук місць
+		# для опор, а будова карти не повинна дорожчати від кожної вулиці без виходу.
+		tries[link[1]] = int(tries.get(link[1], 0)) + 1
+		if int(tries[link[1]]) >= BRIDGE_TRIES:
+			bridged[link[1]] = true
 		if stations[link[0]].distance_to(stations[link[1]]) <= MAX_04KV and _span_clear(stations[link[0]], stations[link[1]], trunk_segs):
 			edges.append([link[0], link[1], 1.0])
 		else:
@@ -564,6 +593,19 @@ func _chain_edges(stations: Array[Vector2], i: int, j: int, trunk_segs: Array, d
 	return out
 
 
+## Скільки прольотів 0.4 кВ уже виходить з опори в точці p (спільна ТП двох сіл).
+func _spans_04_at(p: Vector2) -> int:
+	var n: int = 0
+	for line: Dictionary in lines:
+		if line["kind"] != &"04kv":
+			continue
+		var pts: Array = line["points"]
+		for k in pts.size():
+			if pts[k] == p:
+				n += int(k > 0) + int(k < pts.size() - 1)
+	return n
+
+
 ## Чи сполучається ТП у точці p з якоюсь станцією вулиці: прямим прольотом чи переходом через дорогу (_square_hop).
 ## Проба на копії станцій — нічого не додає.
 func _tp_reaches(p: Vector2, stations: Array[Vector2], trunk: Array) -> bool:
@@ -613,12 +655,12 @@ func _square_hop(stations: Array[Vector2], i: int, j: int, trunk_segs: Array) ->
 			# Нова опора c не впритул до наявної станції (як і решта опор — не ближче 1.4), проліт u–v через дорогу прямо.
 			var square := func(u: Vector2, v: Vector2, c: Vector2) -> bool:
 				return absf((v - u).normalized().dot(t)) <= SQUARE_SIN and stations.all(func(o: Vector2) -> bool: return o.distance_to(c) >= 1.4)
-			var q: Vector2 = _snap(a + n * 2.0 * absf((a - p0).dot(n)), 1.2, func(c: Vector2) -> bool:
-				return c.distance_to(b) <= MAX_04KV and c.distance_to(b) >= 1.4 and square.call(a, c, c) \
+			var q: Vector2 = _snap(a + n * 2.0 * absf((a - p0).dot(n)), HOP_R, func(c: Vector2) -> bool:
+				return c.distance_to(b) <= MAX_04KV and a.distance_to(c) <= MAX_04KV and c.distance_to(b) >= 1.4 and square.call(a, c, c) \
 						and _span_clear(a, c, trunk_segs) and _span_clear(c, b, trunk_segs))
 			if not q.is_finite():
-				q = _snap(b - n * 2.0 * absf((b - p0).dot(n)), 1.2, func(c: Vector2) -> bool:
-					return c.distance_to(a) <= MAX_04KV and c.distance_to(a) >= 1.4 and square.call(c, b, c) \
+				q = _snap(b - n * 2.0 * absf((b - p0).dot(n)), HOP_R, func(c: Vector2) -> bool:
+					return c.distance_to(a) <= MAX_04KV and c.distance_to(b) <= MAX_04KV and c.distance_to(a) >= 1.4 and square.call(c, b, c) \
 							and _span_clear(a, c, trunk_segs) and _span_clear(c, b, trunk_segs))
 			if not q.is_finite():
 				return []

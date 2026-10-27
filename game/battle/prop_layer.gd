@@ -122,10 +122,26 @@ const DROP_GAP: float = 0.1
 ## (14 м, клітинки).
 const DROP_CROSS_COS: float = 0.906
 const DROP_CROSS: float = 1.75
-## Проліт 0.4 кВ через вулицю (опора до опори впоперек) не довший за стільки (клітинки, 24 м).
+## Проліт 0.4 кВ через вулицю (опора до опори впоперек) не довший за стільки (клітинки, 40 м).
 const SPAN_CROSS: float = 5.0
-## Дріт не йде над смугою такої ширини перед будівлею з боку камери (+x, +z), клітинки: звідти він читається над дахом.
-const WIRE_CAMERA_SHADOW: float = 0.3
+## Дріт не йде над смугою такої ширини перед будівлею з боку камери (+x, +z), клітинки на вісь: звідти він читається
+## над дахом. Проліт 0.4 кВ висить на ~7 м, на зумі гри нахил ~40–45°: зсув на екрані ~1 клітинка навскіс (0.7 на
+## вісь); відвід спускається до ~3 м під звісом.
+const SPAN_CAMERA_SHADOW: float = 0.7
+const DROP_CAMERA_SHADOW: float = 0.3
+## Над асфальтом дріт не довший за стільки ширин дороги: прямо впоперек — одна ширина, на 25° — 1.1.
+const ROAD_SPAN_K: float = 1.2
+## Дріт, що не перетинає вісь дороги, висить над асфальтом не довше за стільки (клітинки).
+const ROAD_CLIP: float = 0.3
+## Стовп ЛЕП — поза обрисом паркану двору; на самій лінії паркану стояти може (клітинки).
+const POLE_FENCE_CLEAR: float = 0.0
+## Стовп ЛЕП не ближче за стільки до прорізу воріт садиби (клітинки, 1.6 м).
+const POLE_GATE_CLEAR: float = 0.2
+## Стовп ЛЕП не ближче за стільки до тюка сіна (клітинки).
+const POLE_HAY_CLEAR: float = 0.3
+## Відвід, що йде від опори майже прямо до камери чи від неї (косинус кута з напрямом погляду), на екрані — вертикальна
+## риска над сусіднім дахом.
+const DROP_VIEW_COS: float = 0.97
 ## Точка дроту глибше за стільки в клітинку чужого двору (клітинки) — дріт іде крізь двір.
 const YARD_EPS: float = 0.05
 ## Стовп стоїть на межі клітинок біля вулиці, тож до обрису будівлі (двір починається за 0.1 від межі) — не ближче за
@@ -1750,6 +1766,7 @@ class _Placer:
 	var _home_rects: Array[Rect2] = []
 	var _prop_rects: Array[Rect2] = []
 	var _garden_rects: Array[Rect2] = []
+	var _hay_rects: Array[Rect2] = []
 	## Клітинка дошки -> відрізки осі дороги поруч [a, b, півширина в клітинках]: покриття дороги
 	## — власна геометрія (RoadCourse), не вид клітинки, тож паркан на «полі» міг лягти на асфальт.
 	var road_index: Dictionary = {}
@@ -1758,6 +1775,8 @@ class _Placer:
 	var yard_cells: Dictionary = {}
 	## Клітинка двору садиби з макету -> індекс садиби: відвід не йде чужим двором (drop_ok).
 	var yard_owner: Dictionary = {}
+	## Обриси дворів садиб так, як стоїть паркан (сторони з відступом _fence_ring): стовп ЛЕП туди не ставиться.
+	var yard_polys: Array[PackedVector2Array] = []
 	## Клітинки дошки під будівлями -> напрям фасаду (−Z моделі) на дошці: двір без будівлі не
 	## обгороджується (порожня огорожа серед поля читається уламком), а хвіртка стає перед дверима.
 	var built: Dictionary = {}
@@ -2436,6 +2455,7 @@ class _Placer:
 		var rings: Dictionary = {}
 		for i in homes.size():
 			rings[i] = _fence_ring(i, homes[i], owner_of, sheds)
+			yard_polys.append(_ring_polygon(rings[i]))
 		# Город — усередині кільця й осторонь будівель: не під руїною, не за парканом.
 		for gp: Dictionary in garden_plots:
 			gp["rect"] = _clip_garden(gp["rect"], rings.get(gp["home"], []))
@@ -3186,6 +3206,7 @@ class _Placer:
 		# Перша й остання сторони можуть бути однією, розірваною початком обходу.
 		if sides.size() > 1 and sides[0]["d"] == sides.back()["d"] and sides[0]["nb"] == sides.back()["nb"]:
 			(sides[0]["edges"] as Array).append_array(sides.back()["edges"])
+			sides[0]["from"] = sides.back()["from"]
 			sides.pop_back()
 		return sides
 
@@ -3451,6 +3472,7 @@ class _Placer:
 		_prop_rects.clear()
 		_garden_rects.clear()
 		_bridge_rects.clear()
+		_hay_rects.clear()
 		for inst: Dictionary in layer._instances:
 			var k: int = int(PropLayer.spec_of(inst["model"])["kind"])
 			if k == Kind.POLE:
@@ -3465,6 +3487,8 @@ class _Placer:
 				_bridge_rects.append(r)
 			else:
 				_prop_rects.append(r)
+				if k == Kind.HAY:
+					_hay_rects.append(r)
 		for gp: Dictionary in garden_plots:
 			_garden_rects.append(gp["rect"])
 
@@ -3491,12 +3515,12 @@ class _Placer:
 	func pole_spot_ok(p: Vector2, tier: int = 2) -> bool:
 		var c := Vector2i(roundi(p.x), roundi(p.y))
 		# Стовп у дворі садиби — між сараєм і городом — не стоїть: лише на вулиці чи в полі.
-		if in_yard(p):
+		if in_yard(p) or near_gate(p):
 			return false
 		var k: int = kind(c)
 		var ground_kind: bool = k == Terrain.Kind.FIELD or k == Terrain.Kind.HILL
-		# Порядок місць: 0 — поле й пагорб; 1 — узбіччя клітинки дороги поза асфальтом; 2 — двір лише вздовж
-		# паркану з боку вулиці.
+		# Порядок місць: 0 — поле й пагорб; 1 — узбіччя клітинки дороги поза асфальтом; 2 — край клітинки забудови чи
+		# руїн з боку вулиці: двори садиб макету відкидає in_yard вище, тож це лише забудова кільця без двору.
 		if not ground_kind:
 			var shoulder: bool = tier >= 1 and k == Terrain.Kind.ROAD
 			var fence_line: bool = tier >= 2 and (k == Terrain.Kind.BUILDING or k == Terrain.Kind.RUBBLE) and _on_fence_line(p, c)
@@ -3521,6 +3545,10 @@ class _Placer:
 				return false
 		for r: Rect2 in _bridge_rects:
 			if r.grow(PropLayer.POLE_BRIDGE_CLEAR).has_point(p):
+				return false
+		# Опора поруч із тюком читається шафою підстанції.
+		for r: Rect2 in _hay_rects:
+			if r.grow(PropLayer.POLE_HAY_CLEAR).has_point(p):
 				return false
 		# Не ближче UNIT_POLE_CLEAR до сліду юніта будь-якої клітинки дошки: стовп впритул до корпусу.
 		return clear_of_units(Rect2(p - Vector2(0.03, 0.03), Vector2(0.06, 0.06)), PropLayer.UNIT_POLE_CLEAR)
@@ -3606,19 +3634,35 @@ class _Placer:
 	## DROP_MIN, відрізок не ближче DROP_GAP до чужих хат і як дріт можливий (wire_ok; через вулицю — не довший за
 	## DROP_CROSS).
 	func drop_ok(rect: Rect2, from: Vector2) -> bool:
-		var a: Vector2 = PropLayer.drop_attach(rect, from)
-		if not a.is_finite():
-			return false
-		var d: float = from.distance_to(a)
-		if d > PropLayer.DROP_DIRECT or d < PropLayer.DROP_MIN:
-			return false
-		# Відвід не лягає на жодну чужу будівлю, не ближче DROP_GAP.
-		for r: Rect2 in _bld_rects:
-			if not r.is_equal_approx(rect) and _seg_hits_rect(from, a, r.grow(PropLayer.DROP_GAP)):
-				return false
-		# Навскісні відводи через вулицю, поле й сусідні двори до кожної хати робили село павутинням: відвід — коротко
-		# від опори, через вулицю лише прямо впоперек, не чужим двором і не над грядкою.
-		return wire_ok(from, a, PropLayer.DROP_CROSS, rect)
+		return drop_point(rect, from).is_finite()
+
+	## Куди на стіні хати rect чіпляється відвід від опори from: найближча точка обрису, а коли відвід туди неможливий
+	## (над грядкою, прямо до камери) — середина іншої стіни, повернутої до опори. INF — відводу нема.
+	func drop_point(rect: Rect2, from: Vector2) -> Vector2:
+		var near: Vector2 = PropLayer.drop_attach(rect, from)
+		if not near.is_finite():
+			return Vector2.INF
+		var cands: Array[Vector2] = [near]
+		var c: Vector2 = rect.get_center()
+		for wall: Vector2 in [Vector2(rect.position.x, c.y), Vector2(rect.end.x, c.y), Vector2(c.x, rect.position.y), Vector2(c.x, rect.end.y)]:
+			# Стіна повернута до опори: опора з її зовнішнього боку, тож дріт не йде над власним дахом.
+			if (from - wall).dot(wall - c) > 0.0:
+				cands.append(wall)
+		for a: Vector2 in cands:
+			var d: float = from.distance_to(a)
+			if d > PropLayer.DROP_DIRECT or d < PropLayer.DROP_MIN:
+				continue
+			# Відвід не лягає на жодну чужу будівлю, не ближче DROP_GAP.
+			var clear: bool = true
+			for r: Rect2 in _bld_rects:
+				if not r.is_equal_approx(rect) and _seg_hits_rect(from, a, r.grow(PropLayer.DROP_GAP)):
+					clear = false
+					break
+			# Навскісні відводи через вулицю, поле й сусідні двори до кожної хати робили село павутинням: відвід —
+			# коротко від опори, через вулицю лише прямо впоперек, не чужим двором і не над грядкою.
+			if clear and wire_ok(from, a, PropLayer.DROP_CROSS, rect):
+				return a
+		return Vector2.INF
 
 	## Дріт від a до b (проліт 0.4 кВ чи відвід до хати own): не над грядкою, не крізь двір садиби (крім двору own), не
 	## над будівлею з боку камери (окрім own), а асфальт перетинає лише прямо впоперек вулиці (DROP_CROSS_COS) і не
@@ -3629,28 +3673,50 @@ class _Placer:
 		for r: Rect2 in _garden_rects:
 			if _seg_hits_rect(a, b, r):
 				return false
-		# Камера дивиться з +x, +z: дріт на висоті 6–8 м проєктується на землю далі від неї, тож будівля за ним «під
-		# дротом», якщо дріт проходить над смугою перед нею з боку камери.
+		# Камера дивиться з +x, +z: дріт на висоті h проєктується на землю на h·ctg(нахилу) далі від неї, тож будівля
+		# за ним «під дротом», якщо дріт проходить над смугою перед нею з боку камери. Проліт висить на 7–8 м — смуга
+		# широка; відвід спускається до стіни під звісом — вузька.
+		# Смуга — обрис будівлі, зсунутий навскіс до камери (+x, +z) на 0…strip по кожній осі: три зсуви з кроком у
+		# півсмуги покривають її, бо будівлі ширші за півсмуги.
+		var strip: float = PropLayer.DROP_CAMERA_SHADOW if own.has_area() else PropLayer.SPAN_CAMERA_SHADOW
 		for r: Rect2 in _bld_rects:
-			if not r.is_equal_approx(own) and _seg_hits_rect(a, b, Rect2(r.position, r.size + Vector2.ONE * PropLayer.WIRE_CAMERA_SHADOW)):
-				return false
+			if r.is_equal_approx(own):
+				continue
+			for f: float in [0.0, 0.5, 1.0]:
+				if _seg_hits_rect(a, b, Rect2(r.position + Vector2.ONE * strip * f, r.size)):
+					return false
+		if own.has_area() and absf((b - a).normalized().dot(Vector2.ONE.normalized())) > PropLayer.DROP_VIEW_COS:
+			return false
 		var home: Variant = yard_owner.get(Vector2i(roundi(own.get_center().x), roundi(own.get_center().y))) if own.has_area() else null
 		var len_: float = a.distance_to(b)
 		var n: int = maxi(2, ceili(len_ / 0.1))
-		var crossed: bool = false
+		var on_road: int = 0
+		var deepest: float = 0.0
 		for j in range(0, n + 1):
 			var q: Vector2 = a.lerp(b, float(j) / n)
-			if road_edge_m(q) < 0.0 and not crossed:
-				crossed = true
-				# Проліт, що лише зрізає край асфальту на повороті й лишається з того ж боку вулиці (вісь не перетинає), —
-				# не перехід; перехід — прямо впоперек і коротко.
-				var t: Vector2 = street_dir(q, a, b)
-				if (cross_max <= PropLayer.DROP_CROSS or _crosses_axis(a, b)) and (len_ > cross_max
-						or absf((b - a).normalized().dot(t)) > sqrt(1.0 - PropLayer.DROP_CROSS_COS * PropLayer.DROP_CROSS_COS)):
-					return false
+			var dm: float = road_edge_m(q)
+			if dm < 0.0:
+				on_road += 1
+				deepest = minf(deepest, dm)
 			# Опора стоїть на межі клітинок: точка в двір глибше за YARD_EPS — уже крізь двір.
 			var c := Vector2i(roundi(q.x), roundi(q.y))
+			# Дріт крізь ліс не видно: лінія, що виходить з-під крон, читається лінією нізвідки.
+			if kind(c) == Terrain.Kind.FOREST:
+				return false
 			if yard_owner.has(c) and yard_owner[c] != home and minf(0.5 - absf(q.x - c.x), 0.5 - absf(q.y - c.y)) > PropLayer.YARD_EPS:
+				return false
+		# Над асфальтом дріт лише прямо впоперек. Перехід (дріт перетинає вісь): не довший за cross_max, на осі не далі за
+		# 25° від прямого кута, і над асфальтом не довше за ROAD_SPAN_K ширини дороги (ширина — удвічі найглибша точка під
+		# дротом). Дріт, що лише зрізає край асфальту на повороті, висить над ним не далі ROAD_CLIP: кут в одній точці
+		# пропускав навскісні проліти над внутрішнім боком повороту.
+		if on_road > 0:
+			var over: float = len_ * on_road / (n + 1)
+			if not _crosses_axis(a, b):
+				return over <= PropLayer.ROAD_CLIP
+			# Точки дроту — через 0.1 клітинки, тож довжина над асфальтом відома з точністю до кроку: він — у допуску.
+			if len_ > cross_max or over > PropLayer.ROAD_SPAN_K * 2.0 * -deepest / 8.0 + len_ / n:
+				return false
+			if absf((b - a).normalized().dot(street_dir(a.lerp(b, 0.5), a, b))) > sqrt(1.0 - PropLayer.DROP_CROSS_COS * PropLayer.DROP_CROSS_COS):
 				return false
 		return true
 
@@ -3674,24 +3740,44 @@ class _Placer:
 				return false
 		return true
 
-	## Чи лежить p у дворі садиби з макету: клітинки двору з полем до YARD_OUT назовні — так далеко паркан може
-	## відступати від межі клітинок; з боку дороги паркан не відступає на асфальт, тож там поля нема.
+	## Чи стоїть p у прорізі воріт садиби чи ближче POLE_GATE_CLEAR до нього (стовп у воротах ними не проїхати).
+	func near_gate(p: Vector2) -> bool:
+		for g in layer._gate_posts.size() / 2:
+			if Geometry2D.get_closest_point_to_segment(p, layer._gate_posts[2 * g], layer._gate_posts[2 * g + 1]).distance_to(p) < PropLayer.POLE_GATE_CLEAR:
+				return true
+		return false
+
+	## Чи лежить p у дворі садиби з макету: усередині обрису паркану чи ближче POLE_FENCE_CLEAR до нього.
 	func in_yard(p: Vector2) -> bool:
-		var c := Vector2i(roundi(p.x), roundi(p.y))
-		for dy in range(-1, 2):
-			for dx in range(-1, 2):
-				var y := c + Vector2i(dx, dy)
-				if not yard_owner.has(y):
-					continue
-				var lo := Vector2(y) - Vector2(0.5, 0.5)
-				var hi := Vector2(y) + Vector2(0.5, 0.5)
-				for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-					var out: float = 0.0 if kind(y + d) == Terrain.Kind.ROAD or yard_owner.has(y + d) else PropLayer.YARD_OUT
-					lo += Vector2(minf(d.x, 0), minf(d.y, 0)) * out
-					hi += Vector2(maxf(d.x, 0), maxf(d.y, 0)) * out
-				if p.x > lo.x and p.x < hi.x and p.y > lo.y and p.y < hi.y:
+		for poly: PackedVector2Array in yard_polys:
+			if poly.size() < 3:
+				continue
+			if Geometry2D.is_point_in_polygon(p, poly):
+				return true
+			for k in poly.size():
+				if Geometry2D.get_closest_point_to_segment(p, poly[k], poly[(k + 1) % poly.size()]).distance_to(p) < PropLayer.POLE_FENCE_CLEAR:
 					return true
 		return false
+
+	## Обрис паркану двору зі сторін _fence_ring: сторона — на своїй межі клітинок із відступом o назовні; кут двох
+	## перпендикулярних сторін — їх перетин, сходинка між паралельними — дві точки на місці переходу.
+	static func _ring_polygon(sides: Array) -> PackedVector2Array:
+		var out := PackedVector2Array()
+		var n: int = sides.size()
+		for k in n:
+			var a: Dictionary = sides[k]
+			var b: Dictionary = sides[(k + 1) % n]
+			var da := Vector2(a["d"])
+			var db := Vector2(b["d"])
+			var la: float = float(a["line"]) + (da.x + da.y) * float(a["o"])
+			var lb: float = float(b["line"]) + (db.x + db.y) * float(b["o"])
+			if absf(da.dot(db)) < 0.5:
+				out.append(Vector2(la, lb) if da.x != 0.0 else Vector2(lb, la))
+			else:
+				var t: Vector2 = b["from"]
+				out.append(t + da * float(a["o"]))
+				out.append(t + db * float(b["o"]))
+		return out
 
 	## Чи перетинає відрізок a–b вісь якоїсь дороги.
 	func _crosses_axis(a: Vector2, b: Vector2) -> bool:
@@ -3729,10 +3815,9 @@ class _Placer:
 	func _drop_target(house_i: int, pole_i: int) -> Vector3:
 		var box: AABB = _box_of(layer._instances[house_i])
 		var rect := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
-		var fp: Vector2 = _pole_xz(pole_i)
-		if not drop_ok(rect, fp):
+		var a: Vector2 = drop_point(rect, _pole_xz(pole_i))
+		if not a.is_finite():
 			return Vector3.INF
-		var a: Vector2 = PropLayer.drop_attach(rect, fp)
 		return Vector3(a.x, ground(a.x, a.y) + PropLayer.DROP_ATTACH_H, a.y)
 
 	func _pole_xz(i: int) -> Vector2:
