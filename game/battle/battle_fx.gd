@@ -993,6 +993,8 @@ void fragment() {
 ## екрана.
 const _SPRITE_CODE: String = """
 shader_type spatial;
+// Смуга «голівки» в клітинці атласу (UV.y від верху) і кадр, з якого вона з'являється в симуляції:
+// раніше верх — ще вогняна куля, і рвати його не можна.
 const float CROWN_TOP = 0.05;
 const float CROWN_BASE = 0.42;
 const float CROWN_FROM = 10.0;
@@ -1086,9 +1088,12 @@ void fragment() {
 	float keep = smoothstep(thr - 0.25, thr, t.a * (0.6 + 0.4 * n));
 	float a = t.a * mix(1.0, smoothstep(0.0, 0.7, t.a), feather) * keep * opacity * (1.0 - erode);
 	// «Голівка» проступає з кадру CROWN_FROM: у перших кадрах вогняна куля ще цілком, її верх не чіпаємо.
-	float top = (1.0 - smoothstep(CROWN_TOP, CROWN_BASE, UV.y)) * crown * smoothstep(CROWN_FROM, CROWN_FROM + 8.0, frame);
-	float rag = vnoise(UV * 9.0 + seed * 1.3) * 0.6 + vnoise(UV * 23.0 + seed * 2.1) * 0.4;
-	a *= mix(1.0, 0.5 * smoothstep(0.35, 0.7, rag), top);
+	// Шум рахується лише на шарах із crown > 0: решта шарів вибуху за нього не платить.
+	if (crown > 0.0) {
+		float top = (1.0 - smoothstep(CROWN_TOP, CROWN_BASE, UV.y)) * crown * smoothstep(CROWN_FROM, CROWN_FROM + 8.0, frame);
+		float rag = vnoise(UV * 9.0 + seed * 1.3) * 0.6 + vnoise(UV * 23.0 + seed * 2.1) * 0.4;
+		a *= mix(1.0, 0.5 * smoothstep(0.35, 0.7, rag), top);
+	}
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, краї там будуть жорсткіші.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	float soft = clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);
