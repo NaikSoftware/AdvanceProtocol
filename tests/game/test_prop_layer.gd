@@ -1533,3 +1533,30 @@ func test_village_houses_vary(p = use_parameters(MAPS)) -> void:
 			forms[houses[v][1]] = true
 		if village.size() >= 3:
 			assert_gte(forms.size(), 3, "%s: село біля %s — лише %d форми на %d хат" % [p, houses[a][0], forms.size(), village.size()])
+
+
+## Орієнтир кільця Хребта не стоїть під лісом і ЛЕП: ні опора, ні трасa дроту, ні клітинка FOREST з запасом в одну клітинку не лежать на його сліду.
+func test_ridge_ring_landmark_keeps_clear_of_forest_and_power_line() -> void:
+	var m: MapData = _map("ridge")
+	var view: BoardView = _view(m)
+	var ring: int = Surroundings.ring_of(m)
+	var world: Board = Surroundings.world_board(m.to_board(), m)
+	var land: Dictionary = {}
+	for inst in view.props().all_instances():
+		if inst["model"] == &"h5_panel_block_damaged":
+			land = inst
+	assert_false(land.is_empty(), "орієнтир є")
+	if land.is_empty():
+		return
+	var box: AABB = (land["transform"] as Transform3D) * ((PropLayer.model(land["model"]) as Dictionary)["aabb"] as AABB)
+	var rect := Rect2(box.position.x, box.position.z, box.size.x, box.size.z).grow(0.3)
+	for inst in view.props().all_instances():
+		if _kind(inst["model"]) == PropLayer.Kind.POLE:
+			var o: Vector3 = (inst["transform"] as Transform3D).origin
+			assert_false(rect.has_point(Vector2(o.x, o.z)), "опора на орієнтирі: %s" % o)
+	for c: Vector2i in land["cells"]:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var w: Vector2i = c + Vector2i(dx, dy) + Vector2i(ring, ring)
+				if world.in_bounds(w):
+					assert_ne(world.kind_at(w), Terrain.Kind.FOREST, "ліс біля орієнтира на %s" % w)

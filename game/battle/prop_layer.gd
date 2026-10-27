@@ -1552,6 +1552,13 @@ class _Placer:
 						var c: Vector2i = o + Vector2i(dx, dy)
 						if on_board(c) or model_at.has(c) or not [Terrain.Kind.FIELD, Terrain.Kind.HILL].has(kind(c)):
 							ok = false
+				# Ліс і ЛЕП кільця: ні крона, ні опора, ні траса дроту не заходять на орієнтир (крона виступає за клітинку — запас 1 клітинка).
+				for dy in range(-1, s.y + 1):
+					for dx in range(-1, s.x + 1):
+						if kind(o + Vector2i(dx, dy)) == Terrain.Kind.FOREST:
+							ok = false
+				if ok and _under_line(_rect_of(m, o, rot, s).grow(0.6)):
+					ok = false
 				if ok and _clear_of_placed(m, o, rot, s):
 					best = o
 					best_d = d
