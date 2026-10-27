@@ -549,10 +549,11 @@ from the map seed.
   near water), only on unploughed field and away from the villages. Oak and willow are scaled up in
   battle (`GROW`) to 10–15 m: the bare late crown is bounded by the branch reach, so the model is
   built smaller and the shader grows the cards with the instance.
-- **Yards.** About 70 % of the homesteads in the village layout get 1–2 plants, only inside the
+- **Yards.** About two thirds of the homesteads on every map get 1–2 plants, only inside the
   fence: a tree outside it reads as a meadow tree and makes the house beside it look taller. The
-  first is a 5–6 m apple or cherry tree, the second lilac, elder, thuja or a berry row. Where no tree
-  fits by a roof or a road, the yard stays empty.
+  first is a 5–6 m apple or cherry tree; where none fits by a roof or a road, a bush takes its place
+  (lilac, elder, a berry row or a narrow thuja), and a bush may grow close under a wall. A yard too
+  tight even for a thuja passes its turn to the next homestead.
 
 No trunk stands within 0.5 of a road and no crown hangs over one; nothing stands on a bridge, in
 water, in ploughland, on a fence or garden bed, and no crown reaches a roof. When a unit stands under a crown or a reed bed, the plant fades (`set_reveal_cells`, with the `fade_floor` 0.6 for bare late crowns). A

@@ -83,8 +83,10 @@ func test_land_plants_keep_off_roads_water_fields_fences_and_roofs(p = use_param
 		for r: Rect2 in veg.fields:
 			if r.has_point(q):
 				bad.append([pl["node"], q, "ploughed"])
+		# Кущ садиби може рости попід стіною (YARD_BUSH_WALL радіуса крони від даху).
+		var wall: float = VegetationLayer.YARD_BUSH_WALL if pl["group"] == "yard" and pl["kind"] == "bush" else 1.0
 		for r: Rect2 in obst["roofs"]:
-			if VegetationLayer._rect_dist(r, q) < VegetationLayer.crown_of(pl["node"]):
+			if VegetationLayer._rect_dist(r, q) < VegetationLayer.crown_of(pl["node"]) * wall - 0.001:
 				bad.append([pl["node"], q, "crown on roof"])
 		for r: Rect2 in obst["small"]:
 			if VegetationLayer._rect_dist(r, q) < VegetationLayer.FENCE_CLEAR:
@@ -169,6 +171,23 @@ func test_pond_reeds_patchy_and_hug_the_shore(p = use_parameters(["crossroads", 
 		# там лише верхня межа.
 		assert_between(covered / total, 0.25 if p == "crossroads" else 0.0, 0.4, "%s %s: частка урізу під очеретом" % [p, pond[0]])
 		assert_between(runs, 3 if p == "crossroads" else 1, 5, "%s %s: плям очерету" % [p, pond[0]])
+
+
+## Рослина (дерево чи кущ) — у 60–75 % садиб кожної карти, де садиби є.
+func test_most_yards_have_a_plant(p = use_parameters(MAPS)) -> void:
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	if homes.is_empty():
+		pass_test("%s: садиб немає" % p)
+		return
+	var green: int = 0
+	for h: Dictionary in homes:
+		var cells: Array = h.get("cells", [h["house"]])
+		if _view(p).vegetation().placements.any(func(pl: Dictionary) -> bool:
+				return pl["group"] == "yard" and cells.has(pl["cell"])):
+			green += 1
+	gut.p("%s: рослина у %d садибах з %d" % [p, green, homes.size()])
+	# На карті з кількома садибами частку округлено до цілих садиб.
+	assert_between(green, floori(0.6 * homes.size()), ceili(0.75 * homes.size()), "%s: садиб з рослиною" % p)
 
 
 ## Рослини садиби — лише всередині паркану (клітинки садиби з макета).

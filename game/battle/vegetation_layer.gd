@@ -5,8 +5,8 @@ extends Node3D
 ##   березі — плямами, не суцільним кільцем; більше на тихих вигинах і біля боліт;
 ## - луки: рідкі поодинокі кущі (глід, шипшина) й дерева (груша, дуб, біля води — верба), по
 ##   одному або групками з 2–3, лише на неораному полі;
-## - двори: у частині садиб, лише всередині паркану — яблуня чи вишня, другою — бузок, бузина, туя
-##   або ягідний ряд.
+## - двори: у 60–75 % садиб, лише всередині паркану — яблуня чи вишня, а де дерево не влазить, і
+##   другою — бузок, бузина, туя або ягідний ряд.
 ## Нічого біля мостів, на дорогах з узбіччям, у ріллі, на парканах і грядках; крона не заходить на
 ## будівлю. Кожна точка має власне зерно (point_seed) від зерна карти, тож розстановка однакова в
 ## усіх гравців. Юніта рослини не ховають: дерево чи кущ, чия крона над клітинкою юніта або між
@@ -88,8 +88,12 @@ const HOME_CLEAR: int = 1
 const ROAD_PAD: float = 0.5
 ## Стовбур — не ближче FENCE_CLEAR до паркана й інших дрібних пропсів.
 const FENCE_CLEAR: float = 0.08
-## Двори: садиба має рослини з імовірністю YARD_ON %, 1–2 штуки.
-const YARD_ON: int = 70
+## Двори: рослини (1–2) — у YARD_SHARE садиб карти, де вони влазять.
+const YARD_SHARE: float = 0.68
+## Кущ росте попід стіною: досить YARD_BUSH_WALL радіуса крони від даху (дерево — повний радіус).
+const YARD_BUSH_WALL: float = 0.55
+## Крок сітки точок двору (тайли).
+const YARD_STEP: float = 0.05
 ## Розчинення над юнітом (як у PropLayer) і нижня межа альфи голої крони пізньої пори.
 const FADE_ALPHA: float = 0.35
 const FADE_FLOOR: float = 0.6
@@ -516,51 +520,65 @@ static func _plan_meadows(board: Board, height: TerrainHeight, fields: Array[Rec
 ## Двори: у частині садиб 1–2 рослини в клітинках двору; крона не на хаті й сараї.
 static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2], map_seed: int, props: PropLayer,
 		obst: Dictionary, homes: Array, out: Array[Dictionary], stats: Dictionary) -> void:
-	for h: Dictionary in homes:
+	# Рослини — у YARD_SHARE садиб карти: садиби по черзі за зерном; затісна садиба віддає своє
+	# місце наступній, тож частка не залежить від того, скільки садиб затісні.
+	var order: Array = homes.duplicate()
+	order.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return point_seed(map_seed, a["house"], 5) < point_seed(map_seed, b["house"], 5))
+	var target: int = roundi(YARD_SHARE * homes.size())
+	var green: int = 0
+	for h: Dictionary in order:
+		if green >= target:
+			break
 		var house: Vector2i = h["house"]
 		var rng := RandomNumberGenerator.new()
 		rng.seed = point_seed(map_seed, house, 5)
-		if rng.randi_range(0, 99) >= YARD_ON:
-			continue
 		# Лише всередині паркану: дерево за парканом глядач бачить лучним, і хата поруч здається вищою.
-		var cells: Array = h.get("cells", [house])
-		var want: int = rng.randi_range(1, 2)
+		# Вільне місце в дворі — вузькі смужки між хатою, сараєм, грядками й парканом: точки шукаються
+		# перебором сітки YARD_STEP, а не випадково (випадкові спроби в смужки рідко влучали).
+		var spots: Array = []
+		for c: Vector2i in h.get("cells", [house]):
+			for j in roundi(0.9 / YARD_STEP) + 1:
+				for i in roundi(0.9 / YARD_STEP) + 1:
+					var q: Vector2 = Vector2(c) + Vector2(i, j) * YARD_STEP - Vector2(0.45, 0.45)
+					if height.at(q.x, q.y) < TerrainHeight.WATER_LEVEL + DRY \
+							or obst["small"].any(func(r: Rect2) -> bool: return _rect_dist(r, q) < FENCE_CLEAR):
+						continue
+					var room: float = INF
+					for r: Rect2 in obst["roofs"]:
+						room = minf(room, _rect_dist(r, q))
+					spots.append([q, c, room])
+		_shuffle(spots, rng)
 		var placed: Array[Vector2] = []
-		for t in 80:
-			if placed.size() >= want:
+		# Перша рослина — дерево 5–6 м (яблуня, вишня); не влазить біля даху чи дороги — кущ (бузок,
+		# бузина, ягідний ряд, туя). Друга, не завжди, — кущ.
+		var plan: Array[StringName] = [YARD_TREES[rng.randi_range(0, YARD_TREES.size() - 1)]]
+		var small: StringName = YARD_SMALL[rng.randi_range(0, YARD_SMALL.size() - 1)]
+		if rng.randi_range(0, 1) == 0:
+			plan.append(YARD_SMALL[rng.randi_range(0, YARD_SMALL.size() - 1)])
+		for k in plan.size():
+			var choice: Array = []
+			# Найвужча — туя: останній запасний варіант для тісного двору.
+			for node: StringName in ([plan[k], small, &"yard_thuja_01"] if k == 0 else [plan[k]]):
+				var need: float = crown_of(node) * (1.0 if YARD_TREES.has(node) else YARD_BUSH_WALL)
+				for e: Array in spots:
+					var q: Vector2 = e[0]
+					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
+							and not near_road(props, q, crown_of(node)):
+						choice = [node, e]
+						break
+				if not choice.is_empty():
+					break
+			if choice.is_empty():
+				_bump(stats, "yard_no_room")
 				break
-			# Перша рослина — дерево 5–6 м (яблуня, вишня); не влазить біля даху чи дороги — у
-			# дворі нічого. Друга — кущ.
-			var pool: Array[StringName] = YARD_TREES if placed.is_empty() else YARD_SMALL
-			var node: StringName = pool[rng.randi_range(0, pool.size() - 1)]
-			var cell: Vector2i = cells[rng.randi_range(0, cells.size() - 1)]
-			var p: Vector2 = Vector2(cell) + Vector2(rng.randf_range(-0.45, 0.45), rng.randf_range(-0.45, 0.45))
-			var far: bool = true
-			for o: Vector2 in placed:
-				far = far and (p - o).length() >= 0.35
-			if not far:
-				continue
-			# Двір стоїть на клітинці BUILDING — перевірка клітинки тут не діє, решта правил та сама.
-			if near_road(props, p, crown_of(node)):
-				_bump(stats, "on_road")
-				continue
-			var why: String = ""
-			var room: float = INF
-			for r: Rect2 in obst["roofs"]:
-				room = minf(room, _rect_dist(r, p))
-			if room < crown_of(node):
-				why = "yard_roof"
-			for r: Rect2 in obst["small"]:
-				if why == "" and _rect_dist(r, p) < FENCE_CLEAR:
-					why = "yard_small"
-			if why == "" and height.at(p.x, p.y) < TerrainHeight.WATER_LEVEL + DRY:
-				why = "yard_wet"
-			if why != "":
-				_bump(stats, why)
-				continue
-			placed.append(p)
-			out.append({"node": node, "pos": Vector3(p.x, height.at(p.x, p.y), p.y), "yaw": rng.randf_range(0.0, TAU),
-					"scale": rng.randf_range(0.9, 1.1) * grow_of(node), "cell": cell,
+			if k == 0:
+				green += 1
+			var node: StringName = choice[0]
+			var q: Vector2 = choice[1][0]
+			placed.append(q)
+			out.append({"node": node, "pos": Vector3(q.x, height.at(q.x, q.y), q.y), "yaw": rng.randf_range(0.0, TAU),
+					"scale": rng.randf_range(0.9, 1.1) * grow_of(node), "cell": choice[1][1],
 					"kind": "tree" if YARD_TREES.has(node) else "bush", "group": "yard"})
 
 
