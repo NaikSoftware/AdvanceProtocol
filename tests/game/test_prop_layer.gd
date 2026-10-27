@@ -738,7 +738,7 @@ func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
 ## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
 ## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
 ## разом зі свідомою зміною таблиці моделей чи правил розстановки.
-const RIVER_BUILDINGS_FINGERPRINT: int = 1817935571
+const RIVER_BUILDINGS_FINGERPRINT: int = 1357154823
 
 
 func test_river_buildings_match_the_golden_fingerprint() -> void:
@@ -972,7 +972,7 @@ func test_buildings_sit_on_the_relief(p = use_parameters(MAPS)) -> void:
 	var checked := 0
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
-		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN and inst["model"] != PropLayer.YARD_SHED:
+		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN and not PropLayer.YARD_SHEDS.has(inst["model"]):
 			continue
 		checked += 1
 		var box: AABB = _box_of(inst)
@@ -1439,11 +1439,118 @@ func test_crushed_pole_drops_its_transformer() -> void:
 	assert_eq(props.transformers_shown().size(), props._transformers.size() - 1)
 
 
-## Ворота є в кожному дворі: два стовпи на садибу.
+## Ворота є в кожному дворі: одні ворота з хвірткою поруч.
 func test_every_yard_has_one_gate(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var homes: int = (VillageLayout.for_map(StringName(p)).get("homes", []) as Array).size()
-	assert_eq(props._gate_posts.size(), 2 * homes, "%s: стовпи воріт" % p)
+	assert_eq(props._gates.size(), homes, "%s: ворота" % p)
+	assert_eq(props._placer.gates.size(), homes, "%s: ворота з точкою стежки" % p)
+
+
+## Ворота мають форму з переліку, полотно 3–4 м завширшки й 1,8–2 м заввишки (клітинка — 8 м), а
+## хвіртка — окремий отвір поруч, вужчий за півтора метра.
+func test_gates_have_human_size_and_a_wicket_beside(p = use_parameters(MAPS)) -> void:
+	for g: Dictionary in _cached(p).props()._gates:
+		assert_true(PropLayer.GATE_KINDS.has(g["kind"]), "%s: форма воріт %s" % [p, g["kind"]])
+		var leaf: float = (g["a"] as Vector2).distance_to(g["mid"]) * 8.0
+		assert_between(leaf - PropLayer.GATE_POST_SIZE.x * 8.0, 3.0, 4.0, "%s: ширина полотна, м" % p)
+		assert_between(float(g["height"]) * 8.0, 1.8, 2.0, "%s: висота полотна, м" % p)
+		var wicket: float = (g["mid"] as Vector2).distance_to(g["b"]) * 8.0
+		assert_between(wicket - PropLayer.GATE_POST_SIZE.x * 8.0, 0.8, 1.5, "%s: ширина хвіртки, м" % p)
+		assert_almost_eq((g["a"] as Vector2).distance_to(g["b"]), PropLayer.GATE, 1e-4, "%s: отвір воріт" % p)
+
+
+## Ворота дивляться на дорогу: промінь від них назовні впирається в покриття дороги не далі, ніж
+## за GATE_SIGHT клітинок (хвіртка зсунута від середини сторони, тож запас на її півширини).
+func test_gates_face_the_road(p = use_parameters(MAPS)) -> void:
+	var placer: RefCounted = _cached(p).props()._placer
+	assert_gt(placer.gates.size(), 0, "%s: передумова — ворота є" % p)
+	for i: int in placer.gates:
+		var at: Vector2 = placer.gates[i][0]
+		var out: Vector2 = placer.gates[i][1]
+		assert_lte(placer.road_ahead_of(at, out), PropLayer.GATE_SIGHT, "%s: ворота %s не до дороги" % [p, at])
+
+
+## Сусідні садиби (хата в межах HOUSE_APART клітинок) не мають однакових воріт, паркану, сараю чи
+## причепа; причепів, сараїв і парканів є з чого вибирати.
+func test_neighbouring_yards_do_not_repeat_forms(p = use_parameters(MAPS)) -> void:
+	var placer: RefCounted = _cached(p).props()._placer
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	assert_gte(PropLayer.models_of(PropLayer.Kind.GARDEN_FENCE).size(), 3)
+	assert_gte(PropLayer.YARD_SHEDS.filter(func(m: StringName) -> bool: return PropLayer.model(m) != null).size(), 2)
+	assert_gte(PropLayer.models_of(PropLayer.Kind.TRAILER).size(), 2)
+	assert_eq(placer.forms.size(), homes.size(), "%s: форми записані на кожну садибу" % p)
+	var pairs: int = 0
+	for i in homes.size():
+		for j in range(i + 1, homes.size()):
+			var d: Vector2i = (homes[i]["house"] as Vector2i) - (homes[j]["house"] as Vector2i)
+			if maxi(absi(d.x), absi(d.y)) > PropLayer.HOUSE_APART:
+				continue
+			pairs += 1
+			for key: StringName in [&"fence", &"shed", &"trailer", &"gate"]:
+				var a: Variant = (placer.forms[i] as Dictionary).get(key)
+				var b: Variant = (placer.forms[j] as Dictionary).get(key)
+				if a != null and b != null:
+					assert_ne(a, b, "%s: садиби %d і %d мають однаковий %s" % [p, i, j, key])
+	# На Хребті дві садиби далеко одна від одної: сусідів нема, перевіряти нічого.
+	assert_true(pairs > 0 or p == "ridge", "%s: передумова — є сусіди" % p)
+	# Записане справді стоїть на дошці.
+	var present: Dictionary = {}
+	for inst in _cached(p).props().all_instances():
+		present[inst["model"]] = true
+	for i: int in placer.forms:
+		for key: StringName in [&"fence", &"shed", &"trailer"]:
+			if (placer.forms[i] as Dictionary).has(key):
+				assert_true(present.has(placer.forms[i][key]), "%s: %s садиби %d нема на дошці" % [p, key, i])
+
+
+## Усі чотири форми воріт трапляються в селах трьох карт.
+func test_every_gate_form_is_used_on_some_map() -> void:
+	var seen: Dictionary = {}
+	for p in MAPS:
+		for g: Dictionary in _cached(p).props()._gates:
+			seen[g["kind"]] = true
+	for k: StringName in PropLayer.GATE_KINDS:
+		assert_true(seen.has(k), "форма воріт %s не вжита" % k)
+
+
+## Відстань від точки до найближчої клітинки води чи болота (клітинки дошки, чверть-квадрат навколо).
+func _water_gap(world: Board, ring: int, q: Vector2) -> float:
+	var best: float = INF
+	var c := Vector2i(roundi(q.x), roundi(q.y))
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			var n: Vector2i = c + Vector2i(dx, dy)
+			var w: Vector2i = n + Vector2i(ring, ring)
+			if not world.in_bounds(w):
+				continue
+			var kd: int = world.kind_at(w)
+			if kd != Terrain.Kind.WATER and kd != Terrain.Kind.MARSH:
+				continue
+			var nearest := Vector2(clampf(q.x, n.x - 0.5, n.x + 0.5), clampf(q.y, n.y - 0.5, n.y + 0.5))
+			best = minf(best, q.distance_to(nearest))
+	return best
+
+
+## Нічого дрібного — тюка, причепа, сараю, воріт — ближче WATER_CLEAR (0,4 клітинки) до води чи болота.
+func test_nothing_small_stands_near_water(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var world: Board = Surroundings.world_board(m.to_board(), m)
+	var ring: int = Surroundings.ring_of(m)
+	var props: PropLayer = _cached(p).props()
+	var checked: int = 0
+	for inst in props.all_instances():
+		var is_shed: bool = PropLayer.YARD_SHEDS.has(inst["model"]) and inst.get("yard", false)
+		if _kind(inst["model"]) not in [PropLayer.Kind.HAY, PropLayer.Kind.TRAILER] and not is_shed:
+			continue
+		var o: Vector3 = (inst["transform"] as Transform3D).origin
+		assert_gte(_water_gap(world, ring, Vector2(o.x, o.z)), PropLayer.WATER_CLEAR - 1e-3, "%s: %s на %s біля води" % [p, inst["model"], inst["cells"]])
+		checked += 1
+	for g: Dictionary in props._gates:
+		for k: String in ["a", "mid", "b"]:
+			assert_gte(_water_gap(world, ring, g[k]), PropLayer.WATER_CLEAR - 1e-3, "%s: ворота біля води" % p)
+		checked += 1
+	assert_gt(checked, 0, p)
 
 
 ## Обрис двору — прямокутник або L (щонайбільше шість кутів): сходинки клітинок видають сітку.
@@ -2039,7 +2146,7 @@ func test_small_boxes_share_one_multimesh(p = use_parameters(MAPS)) -> void:
 	var boxes: MultiMeshInstance3D = props.get_node_or_null("SmallBoxes")
 	assert_not_null(boxes, "%s: спільний вузол є" % p)
 	assert_eq(boxes.multimesh.instance_count, props._small_base.size(), "%s: екземплярів стільки, скільки коробок" % p)
-	assert_gte(props._small_base.size(), props._gate_posts.size(), p)
+	assert_gte(props._small_base.size(), 3 * props._gates.size(), p)
 	assert_eq(boxes.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 
 
