@@ -493,12 +493,12 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 - [x] Trunks along roads to the outer edge of the ring; a pole on every bend; no lone poles
 - [x] A drop to every house on the board, under the eaves; no wire through a roof; 10 kV pole 10.7 m
-- [ ] No pole, transformer cabinet or guy anchor on the drawn road surface
+- [x] No pole, transformer cabinet or guy anchor on the drawn road surface
 - [ ] 0.4 kV network is a tree along streets: no crossing spans, no closed loops, no pole that feeds nothing
-- [ ] One transformer per settlement, including the north Ridge ring hamlet
-- [ ] Wires stay visible against the river from every camera angle
-- [ ] Generator takes every rule constant from the game
-- [ ] In `feat/battlefield-dressing`
+- [x] One transformer per settlement, including the north Ridge ring hamlet
+- [x] Wires stay visible against the river from every camera angle
+- [x] Generator takes every rule constant from the game
+- [x] In `feat/battlefield-dressing`
 
 ### Task 20: Footpaths
 

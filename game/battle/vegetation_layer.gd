@@ -137,8 +137,9 @@ static func grow_of(node: StringName) -> float:
 static func obstacles(props: PropLayer) -> Dictionary:
 	var roofs: Array[Rect2] = []
 	var small: Array[Rect2] = []
+	var poles: Array[Rect2] = []
 	if props == null:
-		return {"roofs": roofs, "small": small}
+		return {"roofs": roofs, "small": small, "poles": poles, "wires": []}
 	for inst: Dictionary in props.all_instances():
 		var info: Variant = PropLayer.model(inst["model"])
 		if not (info is Dictionary) or not (info as Dictionary).has("aabb"):
@@ -150,10 +151,22 @@ static func obstacles(props: PropLayer) -> Dictionary:
 			roofs.append(r)
 		else:
 			small.append(r)
+		if kind == PropLayer.Kind.POLE:
+			poles.append(r)
 	for t: Transform3D in props.garden_beds():
 		var box: AABB = t * AABB(Vector3(-0.5, 0, -0.5), Vector3(1, 0.1, 1))
 		small.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z))
-	return {"roofs": roofs, "small": small}
+	return {"roofs": roofs, "small": small, "poles": poles, "wires": props.wire_lines()}
+
+
+## Відстань від точки до найближчої опори чи дроту ЛЕП: крона не росте під ними.
+static func _power_dist(obst: Dictionary, p: Vector2) -> float:
+	var d: float = INF
+	for r: Rect2 in obst.get("poles", []):
+		d = minf(d, _rect_dist(r, p))
+	for w: Array in obst.get("wires", []):
+		d = minf(d, p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])))
+	return d
 
 
 static func _rect_dist(r: Rect2, p: Vector2) -> float:
@@ -191,6 +204,9 @@ static func _free(board: Board, height: TerrainHeight, props: PropLayer, obst: D
 		if _rect_dist(r, p) < FENCE_CLEAR:
 			_bump(stats, "fence")
 			return false
+	if _power_dist(obst, p) < maxf(crown, FENCE_CLEAR):
+		_bump(stats, "power_line")
+		return false
 	return true
 
 
@@ -331,7 +347,7 @@ static func _plan_banks(board: Board, height: TerrainHeight, fields: Array[Rect2
 					var far: bool = true
 					for o: Vector2 in taken:
 						far = far and (p - o).length() >= BUSH_GAP
-					if not far or not _free(board, height, null, obst, fields, p, 0.0, stats):
+					if not far or not _free(board, height, null, obst, fields, p, crown_of(BUSHES[0]), stats):
 						continue
 					if not near_water(height, p, SHORE_REACH):
 						_bump(stats, "bush_far_from_water")
@@ -566,7 +582,7 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 				for e: Array in spots:
 					var q: Vector2 = e[0]
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
-							and not near_road(props, q, crown_of(node)):
+							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= crown_of(node):
 						choice = [node, e]
 						break
 				if not choice.is_empty():

@@ -266,6 +266,32 @@ func _ready() -> void:
 						break
 			screen.call("_rebuild_units_for_active_player")
 			views.append([home["house"], float(parts[3])])
+		elif parts.size() >= 5 and parts[1] == "place":
+			# Модель, якої розстановка карт ще не ставить, — на клітинку x,y із поворотом rot (0..3; 0 — торець +X до камери):
+			# вільне місце обирає той, хто знімає. <map>@place@<модель>@x,y@zoom[@rot]
+			var pxy: PackedStringArray = parts[3].split(",")
+			var pc := Vector2i(int(pxy[0]), int(pxy[1]))
+			var pl: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+			for child in pl.get_children():
+				child.free()
+			pl._nodes.clear()
+			pl._fade_nodes.clear()
+			pl._fade_level.clear()
+			pl._fade_target.clear()
+			pl._slots.clear()
+			pl._node_model.clear()
+			var fp: Vector2i = (PropLayer.model(StringName(parts[2])) as Dictionary)["footprint"]
+			var rot: int = int(parts[5]) if parts.size() > 5 else 0
+			var size_r: Vector2i = fp if rot % 2 == 0 else Vector2i(fp.y, fp.x)
+			var centre := Vector2(pc) + Vector2(size_r - Vector2i.ONE) * 0.5
+			var cells: Array[Vector2i] = []
+			for dy in size_r.y:
+				for dx in size_r.x:
+					cells.append(pc + Vector2i(dx, dy))
+			pl._add(StringName(parts[2]), Transform3D(Basis(Vector3.UP, rot * PI * 0.5), Vector3(centre.x, 0.0, centre.y)), cells)
+			pl._build_nodes(not board.in_bounds(pc))                       # за краєм дошки — будівля кільця (з серпанком, без тіні)
+			pl._apply()
+			views.append([pc + size_r / 2, float(parts[4])])
 		elif parts.size() >= 3 and parts[1] == "sel":
 			var unit: Unit = MatchService.state.units_of(0)[0]
 			(screen.get("_controller") as InputController).select_unit(unit)

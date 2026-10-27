@@ -56,7 +56,7 @@ const MODELS: Dictionary = {
 	&"infra_fence_euro": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY},
 	&"infra_hay_round": {"kind": Kind.HAY, "crush": Crush.SQUASH},
 	&"infra_hay_wrapped": {"kind": Kind.HAY, "crush": Crush.SQUASH},
-	&"infra_pole_concrete_10kv": {"kind": Kind.POLE, "line": &"10kv", "crush": Crush.LAY, "scale": 0.85},
+	&"infra_pole_concrete_10kv": {"kind": Kind.POLE, "line": &"10kv", "crush": Crush.LAY},
 	&"infra_pole_concrete_04kv": {"kind": Kind.POLE, "line": &"04kv", "crush": Crush.LAY},
 	&"infra_pole_wood": {"kind": Kind.POLE, "line": &"04kv", "crush": Crush.LAY},
 	&"infra_trailer_green": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
@@ -72,7 +72,12 @@ const MODELS: Dictionary = {
 	&"tree_stump_01": {"kind": Kind.YARD, "crush": Crush.SINK, "scale": 0.5},
 }
 ## Руїни з глухим фронтоном збоку: ставляться пошкодженим фасадом (−Z) до камери (+x чи +z).
-const CAMERA_FRONT: Array[StringName] = [&"ruin_half_house2"]
+const CAMERA_FRONT: Array[StringName] = [&"ruin_half_house2", &"h5_panel_block_damaged"]
+## Орієнтир кільця: кільце — декорація без правил, тож карта може мати в ньому свою велику руїну. Модель ставиться в кільці
+## найближче до near (клітинка дошки), поворотом rot (2 — фасад із язиком завалу до камери), лише на вільному полі.
+const RING_LANDMARKS: Dictionary = {
+	&"ridge": {"model": &"h5_panel_block_damaged", "near": Vector2i(-8, 11), "rot": 2},
+}
 ## Руїни, яких у таблиці ще нема, стають у слот за префіксом імені: напівзруйнована будівля —
 ## звичайна, повна руїна — рідкісна. Перший збіг виграє.
 ## Моделі, що лежать на диску, але ще не прийняті: їх не бере ні таблиця, ні префікс.
@@ -99,20 +104,43 @@ const FADE_MIN_H: float = 0.5
 ## Сусіди, що розчиняються разом із клітинкою юніта: камера стоїть на +x, +z від фокуса (yaw 45°),
 ## тож саме ці клітинки лежать між юнітом і камерою.
 const REVEAL_OFFSETS: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]
-## Найдовший проліт ліній, клітинки: 36 м (30–40 м у селі) для обох напруг.
-const SPAN: Dictionary = {&"10kv": 4.5, &"04kv": 4.5}
+## Найдовший проліт ліній, клітинки: 10 кВ — 72 м, 0.4 кВ — 40 м (у селі 30–40 м).
+const SPAN: Dictionary = {&"10kv": 9.0, &"04kv": 5.0}
 ## Провис дроту посередині прольоту — частка прольоту (~2.5 %): ланцюгова лінія при такому провисі
 ## не відрізняється від параболи.
-const WIRE_SAG_RATIO: float = 0.025
+const WIRE_SAG_RATIO: float = 0.012
 const WIRE_SEGMENTS: int = 8
-## Відвід до хати, довший за це (клітинки), — через проміжний стовп.
-const DROP_DIRECT: float = 3.0
+## Відвід до хати — від найближчої опори її вулиці до стіни з боку вулиці: не довший за це (25 м) і не коротший за
+## DROP_MIN (клітинки); кріпиться на висоті DROP_ATTACH_H (2.9 м) під звісом.
+const DROP_DIRECT: float = 3.1
+const DROP_MIN: float = 0.05
+const DROP_ATTACH_H: float = 0.36
+## Відвід тримається від чужих хат щонайменше на стільки.
+const DROP_GAP: float = 0.1
+## Стовп стоїть на межі клітинок біля вулиці, тож до обрису будівлі (двір починається за 0.1 від межі) — не ближче за
+## стільки; від паркану чи дрібної речі — щоб не стояти в самому паркані (клітинки).
+const POLE_BUILDING_CLEAR: float = 0.1
+## Від цілої хати стовп стоїть не ближче (смуга вулиці, не двір), і проліт не заходить ближче.
+const POLE_HOME_CLEAR: float = 0.3
+## Стовп у клітинці двору стоїть не далі за стільки (клітинки) від межі двору з боку вулиці.
+const YARD_EDGE: float = 0.15
+const POLE_PROP_CLEAR: float = 0.0
+## Стовп від води й болота (WATER_CLEAR плюс півширини основи) і від мосту.
+const POLE_WET_CLEAR: float = 0.55
+const POLE_BRIDGE_CLEAR: float = 0.3
+const POLE_GARDEN_CLEAR: float = 0.0
+## Стовп, шафа ТП і анкер відтяжки — не ближче за стільки метрів до краю асфальту за полем d дороги
+## (RoadCourse.d_at), яке малює шейдер землі; 1.6 м = 0.2 клітинки.
+const POLE_ROAD_CLEAR_M: float = 2.4
+## Стовп лінії стоїть у своїй точці з цією точністю (клітинки).
+const POLE_SNAP: float = 0.05
+## Відтяжка кутової чи кінцевої опори лягає на землю на стільки клітинок від неї.
+const GUY_REACH: float = 0.3
+## Опора з прольотами, чия векторна сума коротша за це, — пряма (чи тавр): відтяжки не має.
+const GUY_PULL_MIN: float = 0.6
 const WIRE_COLOR: Color = Color(0.12, 0.12, 0.115, 0.85)
-## Відстань камери (клітинки), до якої дріт суцільний, і та, де він зник би зовсім: на дальньому
-## зумі (~26) лишається третина — справжній дріт там тонший за піксель, а чорна лінія в пікселі
-## обводила б містечко рамкою.
-const WIRE_OPAQUE_DIST: float = 9.0
-const WIRE_GONE_DIST: float = 34.0
+## Пріоритет прозорого проходу дротів: після води (0), як вогонь і дощ.
+const WIRE_RENDER_PRIORITY: int = 1
 ## Імовірності з хешу на клітинку, у шістнадцятих: огорожа вздовж дороги йде відрізками по три
 ## клітинки, тюки — на кожній ~восьмій луці.
 const FIELD_FENCE_RUN: int = 3
@@ -142,8 +170,6 @@ const HOUSE_SCALE: float = 1.0
 ## Форми хат садиб на одну клітинку і найменша відстань (клітинок) між двома хатами однієї форми.
 const HOUSE_FORMS: Array[StringName] = [&"house_h5", &"house_h7", &"house_h8", &"house_h6"]
 const HOUSE_APART: int = 4
-## Відвід до хати — від стовпа не далі за стільки клітинок.
-const SERVICE_REACH: float = 5.5
 ## Стовп, будівля й паркан тримаються від води й болота щонайменше на стільки клітинок.
 const WATER_CLEAR: float = 0.4
 const YARD_SHED_SCALE: float = 0.7
@@ -181,9 +207,13 @@ const GARDEN_SHARE: float = 0.4
 const HAY_OUT: float = 0.15
 ## Найдальше від точки макету, куди тюк перескакує на край поля.
 const HAY_SNAP: float = 2.0
-## Шафа трансформаторної підстанції на опорі (~1.0 × 1.2 × 0.7 м) і її колір (оцинкована сталь,
-## сіро-зелена, value ≤ 0.3).
-const TRANSFORMER_SIZE: Vector3 = Vector3(0.125, 0.15, 0.085)
+## КТП-шафа на землі біля опори (~1.6 × 2.4 × 1.1 м) і її колір (оцинкована сталь, сіро-зелена,
+## value ≤ 0.3).
+const TRANSFORMER_SIZE: Vector3 = Vector3(0.2, 0.3, 0.14)
+## Центр шафи — за стільки клітинок від стовпа: між стовпом і гранню шафи лишається 0.6–1 м.
+## Радіус стовпа (клітинки) і щілина між його поверхнею й гранню шафи, метри.
+const POLE_RADIUS: float = 0.02
+const CABINET_GAP_M: float = 0.4
 const TRANSFORMER_COLOR: Color = Color(0.25, 0.28, 0.26)
 ## Поселення — опори в межах стількох клітинок: одна підстанція на поселення.
 const SETTLEMENT_R: float = 6.0
@@ -274,6 +304,8 @@ var _garden_node: MultiMeshInstance3D
 var garden_green: float = 0.2
 ## Відводи до хат: [індекс опори, точка на стіні хати].
 var _drops: Array = []
+## Центри хат, до яких мережа не дотягнулась (PowerGrid): тест їх називає.
+var _unfed: Array[Vector2] = []
 ## Опори 10 кВ із щогловою трансформаторною підстанцією (індекси екземплярів): від неї 0.4 кВ до хат.
 var _transformers: Dictionary = {}
 var _transformer_node: MultiMeshInstance3D = null
@@ -707,6 +739,21 @@ func triangle_count() -> int:
 	return t
 
 
+## Дроти ЛЕП на площині XZ: прольоти між опорами й відводи до хат, [a, b] (Vector2) — щоб рослинність
+## не росла під ними.
+func wire_lines() -> Array:
+	var out: Array = []
+	for s: Array in _spans:
+		var a: Vector3 = (_instances[s[0]]["transform"] as Transform3D).origin
+		var b: Vector3 = (_instances[s[1]]["transform"] as Transform3D).origin
+		out.append([Vector2(a.x, a.z), Vector2(b.x, b.z)])
+	for dr: Array in _drops:
+		var a: Vector3 = (_instances[dr[0]]["transform"] as Transform3D).origin
+		var at: Variant = dr[1]
+		out.append([Vector2(a.x, a.z), Vector2(at.x, at.z) if at is Vector3 else at])
+	return out
+
+
 func wire_spans() -> int:
 	var n: int = 0
 	for s: Array in _spans:
@@ -803,10 +850,10 @@ func _build_nodes(haze: bool) -> void:
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.albedo_color = WIRE_COLOR
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
-		# min > max: дріт гасне з відстанню, а не з'являється.
-		mat.distance_fade_min_distance = WIRE_GONE_DIST
-		mat.distance_fade_max_distance = WIRE_OPAQUE_DIST
+		# Дріт — лінія в один піксель, що не гасне з відстанню: на дальньому зумі над світлою водою згасання
+		# прибрало б його зовсім. Малюється після води (вода — прозорий прохід з пріоритетом 0), щоб порядок
+		# не залежав від ракурсу.
+		mat.render_priority = WIRE_RENDER_PRIORITY
 		_wires.material_override = mat
 		add_child(_wires)
 	_build_contacts()
@@ -1347,31 +1394,17 @@ func _rebuild_wires() -> void:
 		var b: Dictionary = _instances[s[1]]
 		if _is_crushed(a) or _is_crushed(b):
 			continue
-		var wa: Array[Vector3] = (model(a["model"]) as Dictionary)["wires"]
-		var wb: Array[Vector3] = (model(b["model"]) as Dictionary)["wires"]
-		for k in mini(wa.size(), wb.size()):
-			var pa: Vector3 = (a["transform"] as Transform3D) * wa[k]
-			var pb: Vector3 = (b["transform"] as Transform3D) * wb[k]
-			var sag: float = WIRE_SAG_RATIO * Vector2(pb.x - pa.x, pb.z - pa.z).length()
-			for j in WIRE_SEGMENTS:
-				for t: float in [float(j) / WIRE_SEGMENTS, float(j + 1) / WIRE_SEGMENTS]:
-					verts.append(pa.lerp(pb, t) - Vector3(0.0, sag * 4.0 * t * (1.0 - t), 0.0))
-	# Відвід до хати: два дроти від траверси стовпа до стіни під дахом, з невеликим провисом.
+		for pr: Array in span_wire_pairs(a, b):
+			_append_wire(verts, pr[0], pr[1])
+	# Відвід до хати: два дроти від траверси стовпа до стіни під звісом даху, з невеликим провисом.
 	for dr: Array in _drops:
 		var pole: Dictionary = _instances[dr[0]]
 		if _is_crushed(pole):
 			continue
-		var wp: Array[Vector3] = (model(pole["model"]) as Dictionary)["wires"]
-		if wp.is_empty():
-			continue
-		var target: Vector3 = dr[1]
-		for k in [0, wp.size() - 1]:
-			var pa: Vector3 = (pole["transform"] as Transform3D) * wp[k]
-			var pb: Vector3 = target + Vector3(0.0, 0.0, 0.02 * (k - 0.5))
-			var sag: float = WIRE_SAG_RATIO * Vector2(pb.x - pa.x, pb.z - pa.z).length()
-			for j in WIRE_SEGMENTS:
-				for t: float in [float(j) / WIRE_SEGMENTS, float(j + 1) / WIRE_SEGMENTS]:
-					verts.append(pa.lerp(pb, t) - Vector3(0.0, sag * 4.0 * t * (1.0 - t), 0.0))
+		for pr: Array in drop_wire_pairs(pole, dr[1]):
+			_append_wire(verts, pr[0], pr[1])
+	for g: Array in _guy_lines():
+		_append_wire(verts, g[1], g[2])
 	if verts.is_empty():
 		_wires.mesh = null
 		return
@@ -1383,19 +1416,229 @@ func _rebuild_wires() -> void:
 	_wires.mesh = mesh
 
 
+## Відтяжки: кутова й кінцева опора тягнеться від ~85 % висоти до землі в бік, протилежний прольотам
+## (дріт, що тягне опору, вона мусить утримати). Пряма опора відтяжки не має. Анкер стоїть на ґрунті
+## (висота TerrainHeight), не ближче POLE_ROAD_CLEAR_M до асфальту й не в сліду юніта: бік і виліт
+## добираються. Елемент: [індекс опори, верх відтяжки, анкер].
+func _guy_lines() -> Array:
+	var pull: Dictionary = {}
+	var degree: Dictionary = {}
+	for s: Array in _spans:
+		for e in 2:
+			var a: Dictionary = _instances[s[e]]
+			var b: Dictionary = _instances[s[1 - e]]
+			if _is_crushed(a) or _is_crushed(b):
+				continue
+			var d: Vector3 = (b["transform"] as Transform3D).origin - (a["transform"] as Transform3D).origin
+			pull[s[e]] = pull.get(s[e], Vector3.ZERO) + Vector3(d.x, 0.0, d.z).normalized()
+			degree[s[e]] = int(degree.get(s[e], 0)) + 1
+	var out: Array = []
+	for i: int in pull:
+		# Пряма (сума ≈ 0) чи розгалуження під прямими кутами (сума мала) відтяжки не мають.
+		if int(degree[i]) >= 2 and (pull[i] as Vector3).length() < GUY_PULL_MIN:
+			continue
+		var t: Transform3D = _instances[i]["transform"]
+		var h: float = ((model(_instances[i]["model"]) as Dictionary)["aabb"] as AABB).size.y
+		var away := Vector2(-(pull[i] as Vector3).x, -(pull[i] as Vector3).z).normalized()
+		var anchor: Vector3 = _guy_anchor(Vector2(t.origin.x, t.origin.z), away)
+		if anchor.is_finite():
+			out.append([i, t.origin + Vector3(0.0, h * 0.85, 0.0), anchor])
+	return out
+
+
+## Анкер відтяжки: у бік away від основи, на ґрунті; бік і виліт добираються, поки місце не стане
+## придатним. Vector3.INF — місця нема.
+func _guy_anchor(base: Vector2, away: Vector2) -> Vector3:
+	for reach: float in [GUY_REACH, 0.2, 0.12, 0.08]:
+		for rot: float in [0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.0, -2.0, 2.6, -2.6, PI]:
+			var q: Vector2 = base + away.rotated(rot) * reach
+			if _placer != null and _placer.anchor_ok(q):
+				return Vector3(q.x, _placer.ground(q.x, q.y), q.y)
+	return Vector3.INF
+
+
+## Основа не ближче POLE_ROAD_CLEAR_M до асфальту за полем дороги (RoadCourse.d_at), у метрах.
+func road_edge_m(p: Vector2) -> float:
+	return _placer.road_edge_m(p) if _placer != null else 1e9
+
+
+static func _append_wire(verts: PackedVector3Array, pa: Vector3, pb: Vector3) -> void:
+	var pts: PackedVector3Array = wire_points(pa, pb, WIRE_SEGMENTS)
+	for j in WIRE_SEGMENTS:
+		verts.append(pts[j])
+		verts.append(pts[j + 1])
+
+
+## Точки дроту від pa до pb з провисом посередині: n відрізків, n + 1 точка.
+static func wire_points(pa: Vector3, pb: Vector3, n: int) -> PackedVector3Array:
+	var sag: float = WIRE_SAG_RATIO * Vector2(pb.x - pa.x, pb.z - pa.z).length()
+	var out := PackedVector3Array()
+	for j in n + 1:
+		var t: float = float(j) / n
+		out.append(pa.lerp(pb, t) - Vector3(0.0, sag * 4.0 * t * (1.0 - t), 0.0))
+	return out
+
+
+## Ізолятори опори у світі.
+static func _insulators(inst: Dictionary) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for w: Vector3 in (model(inst["model"]) as Dictionary)["wires"]:
+		out.append((inst["transform"] as Transform3D) * w)
+	return out
+
+
+## Три фази з чотирьох ізоляторів 0.4 кВ (дві пари: верхня й нижня): верхні два й середина нижніх.
+## Нуль на перехідному прольоті не тягнеться.
+static func _phases(ws: Array[Vector3], n: int) -> Array[Vector3]:
+	if ws.size() == n:
+		return ws
+	var sorted: Array[Vector3] = ws.duplicate()
+	sorted.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.y > b.y)
+	if ws.size() == 4 and n == 3:
+		return [sorted[0], sorted[1], (sorted[2] + sorted[3]) * 0.5]
+	return sorted.slice(0, n)
+
+
+## Середина траверси опори: куди чіпляється одножильний кабель 0.4 кВ.
+static func _attach_point(inst: Dictionary) -> Vector3:
+	var ws: Array[Vector3] = _insulators(inst)
+	var sum := Vector3.ZERO
+	for w in ws:
+		sum += w
+	return sum / maxf(float(ws.size()), 1.0)
+
+
+static func _is_10kv_inst(inst: Dictionary) -> bool:
+	return spec_of(inst["model"]).get("line", &"") == &"10kv"
+
+
+## Пари кінців дротів прольоту між опорами a і b. Між двома опорами 10 кВ — три голі дроти, фаза до фази (з
+## перестановок, де дроти не перехрещуються у плані, а потім найкоротша); решта — один скручений кабель СІП від
+## траверси до траверси.
+static func span_wire_pairs(a: Dictionary, b: Dictionary) -> Array:
+	if not (_is_10kv_inst(a) and _is_10kv_inst(b)):
+		return [[_attach_point(a), _attach_point(b)]]
+	var wa: Array[Vector3] = _insulators(a)
+	var wb: Array[Vector3] = _insulators(b)
+	var n: int = mini(wa.size(), wb.size())
+	if n == 0:
+		return []
+	wa = _phases(wa, n)
+	wb = _phases(wb, n)
+	var best: Array = []
+	var best_cost: float = INF
+	for perm: Array in _permutations(n):
+		var cost: float = 0.0
+		for i in n:
+			for j in range(i + 1, n):
+				if Geometry2D.segment_intersects_segment(Vector2(wa[i].x, wa[i].z), Vector2(wb[perm[i]].x, wb[perm[i]].z),
+						Vector2(wa[j].x, wa[j].z), Vector2(wb[perm[j]].x, wb[perm[j]].z)) != null:
+					cost += 1000.0
+			cost += wa[i].distance_to(wb[perm[i]]) + absf(wa[i].y - wb[perm[i]].y) * 4.0
+		if cost < best_cost - 1e-9:
+			best_cost = cost
+			best = []
+			for i in n:
+				best.append([wa[i], wb[perm[i]]])
+	return best
+
+
+static func _permutations(n: int) -> Array:
+	if n <= 1:
+		return [[0]] if n == 1 else [[]]
+	var out: Array = []
+	for rest: Array in _permutations(n - 1):
+		for pos in n:
+			var q: Array = rest.duplicate()
+			q.insert(pos, n - 1)
+			out.append(q)
+	return out
+
+
+## Відвід — один кабель СІП від траверси опори до кріплення на стіні.
+static func drop_wire_pairs(pole: Dictionary, target: Vector3) -> Array:
+	return [[_attach_point(pole), target]]
+
+
+## Житлова будівля: ціла хата (house_*). Пошкоджена хата (ruin_half_house*), сарай і решта руїн — не житлові:
+## відводу до них нема.
+static func is_home(inst: Dictionary) -> bool:
+	if inst.get("yard", false):
+		return false
+	return int(spec_of(inst["model"])["kind"]) == Kind.STRUCTURE and String(inst["model"]).begins_with("house")
+
+
+## Найближча до from точка обрису будівлі rect (куди чіпляється відвід з боку from); INF, коли from — усередині.
+static func drop_attach(rect: Rect2, from: Vector2) -> Vector2:
+	if rect.has_point(from):
+		return Vector2.INF
+	return Vector2(clampf(from.x, rect.position.x, rect.end.x), clampf(from.y, rect.position.y, rect.end.y))
+
+
+## Яку з хат живить мережа: кожну цілу — і на дошці, і в кільці, і хутірську. centres — центри хат, on_board — чи лежить
+## хата на дошці. Мережа (PowerGrid) і тести беруть це визначення звідси.
+static func powered_homes(centres: Array[Vector2], _on_board: Array[bool]) -> Array[bool]:
+	var out: Array[bool] = []
+	out.resize(centres.size())
+	out.fill(true)
+	return out
+
+
+static var _tri_cache: Dictionary = {}
+
+
+## Трикутники меша моделі (для перевірки, що дріт не проходить крізь дах).
+static func triangles_of(name: StringName) -> TriangleMesh:
+	if not _tri_cache.has(name):
+		_tri_cache[name] = ((model(name) as Dictionary)["mesh"] as Mesh).generate_triangle_mesh()
+	return _tri_cache[name]
+
+
+## Центр шафи ТП біля опори в точці pos (along — вздовж лінії, side — упоперек): на землі, щілина між стовпом і
+## гранню 0.6–1 м; уся площа не ближче POLE_ROAD_CLEAR_M до асфальту, не в будівлях і не в сліду юніта. INF — місця
+## нема. Без розстановки (placer == null) беться перший кандидат.
+static func cabinet_centre(pos: Vector2, along: Vector2, side: Vector2, placer: Variant) -> Vector2:
+	var hx: Vector2 = side * TRANSFORMER_SIZE.x * 0.5
+	var hz: Vector2 = along * TRANSFORMER_SIZE.z * 0.5
+	var first := Vector2.INF
+	# Корпус упритул до зазору CABINET_GAP_M від стовпа, далі кроками, якщо місце зайняте.
+	var along_off: float = POLE_RADIUS + CABINET_GAP_M / 8.0 + TRANSFORMER_SIZE.z * 0.5
+	var side_off: float = POLE_RADIUS + CABINET_GAP_M / 8.0 + TRANSFORMER_SIZE.x * 0.5
+	for dir: Array in [[along, along_off], [-along, along_off], [side, side_off], [-side, side_off],
+			[along, along_off + 0.03], [-along, along_off + 0.03], [side, side_off + 0.03], [-side, side_off + 0.03],
+			[along, along_off + 0.06], [-along, along_off + 0.06], [side, side_off + 0.06], [-side, side_off + 0.06]]:
+		var c: Vector2 = pos + (dir[0] as Vector2) * float(dir[1])
+		first = c if not first.is_finite() else first
+		if placer == null:
+			return first
+		if placer.cabinet_ok([c + hx + hz, c + hx - hz, c - hx + hz, c - hx - hz, c] as Array[Vector2]):
+			return c
+	return Vector2.INF
+
+
+func _cabinet_at(pole: Dictionary) -> Vector3:
+	var t: Transform3D = pole["transform"]
+	var along := Vector2(t.basis.z.x, t.basis.z.z).normalized()
+	var side := Vector2(t.basis.x.x, t.basis.x.z).normalized()
+	var o := Vector2(t.origin.x, t.origin.z)
+	var c: Vector2 = PropLayer.cabinet_centre(o, along, side, _placer)
+	if not c.is_finite():
+		c = o + along * (POLE_RADIUS + CABINET_GAP_M / 8.0 + TRANSFORMER_SIZE.z * 0.5)
+	return Vector3(c.x, t.origin.y + TRANSFORMER_SIZE.y * 0.5, c.y)
+
+
 ## Центри шаф підстанцій, що зараз показано (на поваленій опорі шафи нема).
 func transformers_shown() -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	for i: int in _transformers:
 		var pole: Dictionary = _instances[i]
 		if not _is_crushed(pole):
-			var h: float = ((model(pole["model"]) as Dictionary)["aabb"] as AABB).size.y
-			out.append((pole["transform"] as Transform3D) * Vector3(0.0, h * 0.55, TRANSFORMER_SIZE.z * 0.5 + 0.015))
+			out.append(_cabinet_at(pole))
 	return out
 
 
-## Щоглова трансформаторна підстанція — сталева шафа на опорі 10 кВ, на ~55 % висоти, збоку від
-## траверси. Повалена опора — без шафи.
+## Комплектна трансформаторна підстанція (КТП) — сталева шафа ~1.6 × 2.4 × 1.1 м на землі біля опори
+## 10 кВ. Повалена опора — без шафи.
 func _rebuild_transformers() -> void:
 	if _transformers.is_empty():
 		return
@@ -1420,11 +1663,10 @@ func _rebuild_transformers() -> void:
 	var k: int = 0
 	for i: int in _transformers:
 		var pole: Dictionary = _instances[i]
-		var t: Transform3D = pole["transform"]
-		var h: float = ((model(pole["model"]) as Dictionary)["aabb"] as AABB).size.y
-		var at: Vector3 = t * Vector3(0.0, h * 0.55, TRANSFORMER_SIZE.z * 0.5 + 0.015)
+		var at: Vector3 = _cabinet_at(pole)
+		var basis: Basis = (pole["transform"] as Transform3D).basis.orthonormalized()
 		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ZERO), at) if _is_crushed(pole)
-				else Transform3D(t.basis.orthonormalized(), at))
+				else Transform3D(basis, at))
 		k += 1
 
 
@@ -1472,6 +1714,12 @@ class _Placer:
 	var gates: Dictionary = {}
 	## Обриси дрібних речей дворів: наступна не стає на попередню.
 	var placed_small: Array[Rect2] = []
+	## Обриси для стовпів і дротів ЛЕП: будівлі й руїни, мости, решта пропсів (_index_obstacles).
+	var _bld_rects: Array[Rect2] = []
+	var _bridge_rects: Array[Rect2] = []
+	var _home_rects: Array[Rect2] = []
+	var _prop_rects: Array[Rect2] = []
+	var _garden_rects: Array[Rect2] = []
 	## Клітинка дошки -> відрізки осі дороги поруч [a, b, півширина в клітинках]: покриття дороги
 	## — власна геометрія (RoadCourse), не вид клітинки, тож паркан на «полі» міг лягти на асфальт.
 	var road_index: Dictionary = {}
@@ -1497,6 +1745,7 @@ class _Placer:
 	func place_all() -> void:
 		if not layout.is_empty():
 			_structures()
+			_ring_landmark()
 			_homesteads()
 			settle()
 			_footpaths()
@@ -1507,6 +1756,7 @@ class _Placer:
 			_layout_poles()
 			return
 		_structures()
+		_ring_landmark()
 		_dress_yards()
 		settle()
 		_bridges()
@@ -1517,6 +1767,50 @@ class _Placer:
 		_blocks()
 		_boulders()
 		_poles()
+
+	## Орієнтир кільця карти (RING_LANDMARKS): найближче до near вільне поле, що цілком лежить за краєм дошки.
+	func _ring_landmark() -> void:
+		var spec: Dictionary = PropLayer.RING_LANDMARKS.get(map_key, {})
+		if spec.is_empty() or ring <= 0:
+			return
+		var m: StringName = spec["model"]
+		var fp: Vector2i = (PropLayer.model(m) as Dictionary)["footprint"]
+		if fp == Vector2i.ZERO:
+			return
+		var rot: int = int(spec["rot"])
+		var s: Vector2i = fp if rot % 2 == 0 else Vector2i(fp.y, fp.x)
+		var near: Vector2 = Vector2(spec["near"]) + Vector2(s) * 0.5
+		var best := Vector2i.ZERO
+		var best_d: float = INF
+		var free: Dictionary = {}
+		for oy in range(-ring, size.y + ring - s.y + 1):
+			for ox in range(-ring, size.x + ring - s.x + 1):
+				var o := Vector2i(ox, oy)
+				var d: float = (Vector2(o) + Vector2(s) * 0.5 - near).length_squared()
+				if d >= best_d:
+					continue
+				var ok := true
+				for dy in s.y:
+					for dx in s.x:
+						var c: Vector2i = o + Vector2i(dx, dy)
+						if on_board(c) or model_at.has(c) or not [Terrain.Kind.FIELD, Terrain.Kind.HILL].has(kind(c)):
+							ok = false
+				# Ліс і ЛЕП кільця: ні крона, ні опора, ні траса дроту не заходять на орієнтир (крона виступає за клітинку — запас 1 клітинка).
+				for dy in range(-1, s.y + 1):
+					for dx in range(-1, s.x + 1):
+						if kind(o + Vector2i(dx, dy)) == Terrain.Kind.FOREST:
+							ok = false
+				if ok and _on_route(_rect_of(m, o, rot, s).grow(0.6)):
+					ok = false
+				if ok and _clear_of_placed(m, o, rot, s):
+					best = o
+					best_d = d
+		if best_d == INF:
+			return
+		for dy in s.y:
+			for dx in s.x:
+				free[best + Vector2i(dx, dy)] = true
+		_put_structure(m, best, rot, s, free)
 
 	## Клітинка світу -> клітинка дошки.
 	func board_cell(w: Vector2i) -> Vector2i:
@@ -1930,9 +2224,6 @@ class _Placer:
 		var best_gap: float = -INF
 		for v in cands:
 			var q := Rect2(r.position + v, r.size)
-			# Будівля не стає під трасу ЛЕП з макету: дріт над дахом.
-			if _under_line(q.grow(0.12)):
-				continue
 			var g: float = INF
 			for p: Array in placed:
 				var o: Rect2 = p[0]
@@ -1944,10 +2235,10 @@ class _Placer:
 				best = v
 		return best
 
-	## Прямокутник r перетинає якусь трасу ЛЕП з макету.
-	func _under_line(r: Rect2) -> bool:
-		for line: Dictionary in layout.get("lines", []):
-			var pts: Array = line["points"]
+	## Чи заходить траса 10 кВ макета (вісь дороги, уздовж якої PowerGrid ставить стовпи) у прямокутник.
+	func _on_route(r: Rect2) -> bool:
+		for route: Dictionary in layout.get("routes", []):
+			var pts: Array = route["axis"]
 			for k in range(1, pts.size()):
 				if _seg_hits_rect(pts[k - 1], pts[k], r):
 					return true
@@ -1961,16 +2252,6 @@ class _Placer:
 			if Geometry2D.segment_intersects_segment(a, b, c[k], c[(k + 1) % 4]) != null:
 				return true
 		return false
-
-	## Дріт a→b не йде над жодною будівлею (крім except — своєї хати на кінці відводу).
-	func _wire_clear(a: Vector2, b: Vector2, except: Rect2 = Rect2()) -> bool:
-		for p: Array in placed:
-			var r: Rect2 = p[0]
-			if r == except:
-				continue
-			if _seg_hits_rect(a, b, r.grow(0.02)):
-				return false
-		return true
 
 	func _board_only(cells: Array[Vector2i]) -> Array[Vector2i]:
 		var out: Array[Vector2i] = []
@@ -3071,61 +3352,44 @@ class _Placer:
 					layer._add(m, xform, cells)
 					break
 
-	## Траси ЛЕП з макету: стовп на кожному зламі ламаної й рівномірно між зламами, проліт не довший
-	## за SPAN (інакше дріт зрізав би кут траси над дахами). Стовп — на твердій землі поза дорогою й
-	## садибою; не стає — найближче місце вздовж відрізка. Відгалуження починається зі стовпа лінії,
-	## що вже стоїть у точці розгалуження. Хату з'єднує відвід (_service_drops).
+	## ЛЕП: мережу будує PowerGrid (10 кВ за намірами routes макета, ТП і 0.4 кВ уздовж вулиць сіл); тут — стовпи на її
+	## точках, повернуті по бісектрисі, щоб траверса не лягала вздовж прольоту, підстанції й відводи. Точка, де стовпу
+	## не місце, лишає розрив, який ловить тест, а не мовчки зсувається.
 	func _layout_poles() -> void:
-		for line: Dictionary in layout.get("lines", []):
+		_index_obstacles()
+		var grid := PowerGrid.new()
+		grid.plan(self)
+		layer._unfed = grid.unfed
+		for line: Dictionary in grid.lines:
 			var kind_name: StringName = line["kind"]
 			var m: StringName = &"infra_pole_concrete_10kv" if kind_name == &"10kv" else &"infra_pole_concrete_04kv"
 			if PropLayer.model(m) == null:
 				continue
 			var pts: Array = line["points"]
-			var step: float = SPAN[kind_name]
 			var prev: int = -1
-			var prev_at := Vector2.INF
-			for k in range(1, pts.size()):
-				var a: Vector2 = pts[k - 1]
-				var b: Vector2 = pts[k]
-				var seg: float = a.distance_to(b)
-				var n: int = maxi(1, ceili(seg / step - 1e-3))
-				for j in range(0 if k == 1 else 1, n + 1):
-					var p: Vector2 = a.lerp(b, float(j) / float(n))
-					var idx: int = _pole_near(p, 0.35)
-					# Відгалуження 0.4 кВ від опори 10 кВ — через щоглову підстанцію на ній.
-					if idx >= 0 and kind_name == &"04kv" and _is_10kv(idx):
-						layer._transformers[idx] = true
-					var at: Vector2 = p
-					if idx < 0:
-						var tries: Array[Vector2] = []
-						if j == 0 or j == n:
-							# Злам: поруч зі зламом у будь-який бік, а не вздовж одного відрізка — інакше
-							# сусідній проліт зрізав би кут.
-							for rad: float in [0.2, 0.35, 0.5, 0.65, 0.8]:
-								for q in 16:
-									tries.append(p + Vector2.from_angle(q * PI * 0.125) * rad)
-						else:
-							for off: float in _pole_offsets(minf(step, seg)):
-								tries.append(a.lerp(b, clampf(float(j) / float(n) + off / maxf(seg, 1e-3), 0.0, 1.0)))
-						for q in [p] + tries:
-							idx = _pole_on(m, q, (b - a).normalized())
-							if idx >= 0:
-								at = q
-								break
-					if idx < 0:
-						continue
-					if prev >= 0 and prev != idx and prev_at.distance_to(at) <= step * 1.5 + 0.5 and _wire_clear(prev_at, at):
-						spans.append([prev, idx])
-					prev = idx
-					prev_at = at
+			for k in pts.size():
+				var p: Vector2 = pts[k]
+				var idx: int = _pole_near(p, PropLayer.POLE_SNAP)
+				if idx < 0:
+					var t := Vector2.ZERO
+					if k > 0:
+						t += (p - (pts[k - 1] as Vector2)).normalized()
+					if k < pts.size() - 1:
+						t += ((pts[k + 1] as Vector2) - p).normalized()
+					if t.length() < 0.1:
+						t = (p - (pts[maxi(k - 1, 0)] as Vector2)).normalized()
+					idx = _pole_on(m, p, t.normalized())
+				if idx < 0:
+					prev = -1
+					continue
+				if prev >= 0 and prev != idx:
+					spans.append([prev, idx])
+				prev = idx
+		for p: Vector2 in grid.transformers:
+			var i: int = _pole_near(p, PropLayer.POLE_SNAP)
+			if i >= 0 and _is_10kv(i):
+				layer._transformers[i] = true
 		_service_drops()
-
-	func _settlement_has_transformer(p: Vector2) -> bool:
-		for t: int in layer._transformers:
-			if _pole_xz(t).distance_to(p) <= SETTLEMENT_R:
-				return true
-		return false
 
 	func _is_10kv(i: int) -> bool:
 		return PropLayer.spec_of(layer._instances[i]["model"]).get("line", &"") == &"10kv"
@@ -3140,97 +3404,191 @@ class _Placer:
 				return i
 		return -1
 
-	func _pole_offsets(step: float) -> Array[float]:
-		# Дрібний крок: стовп має стати біля межі клітинок, поза слідом юніта (UNIT_POLE_CLEAR).
-		var out: Array[float] = [0.0]
-		var k: float = 0.02
-		while k <= step * 0.5:
-			out.append_array([-k, k])
-			k += 0.02
-		return out
+	## Обриси для стовпів і дротів ЛЕП: будівлі й руїни, мости, решта пропсів (паркани, тюки, причепи), грядки.
+	func _index_obstacles() -> void:
+		_bld_rects.clear()
+		_home_rects.clear()
+		_prop_rects.clear()
+		_garden_rects.clear()
+		_bridge_rects.clear()
+		for inst: Dictionary in layer._instances:
+			var k: int = int(PropLayer.spec_of(inst["model"])["kind"])
+			if k == Kind.POLE:
+				continue
+			var b: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+			var r := Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+			if k == Kind.STRUCTURE or k == Kind.RUIN:
+				_bld_rects.append(r)
+				if PropLayer.is_home(inst):
+					_home_rects.append(r)
+			elif k == Kind.BRIDGE:
+				_bridge_rects.append(r)
+			else:
+				_prop_rects.append(r)
+		for gp: Dictionary in garden_plots:
+			_garden_rects.append(gp["rect"])
 
-	## Стовп на точці траси, якщо там тверда земля поза садибами й дорогою; індекс екземпляра чи −1.
-	func _pole_on(m: StringName, p: Vector2, t: Vector2) -> int:
+	## Знакова відстань (м, мінус на дорозі) від p до краю асфальту за полем дороги, яке малює шейдер землі.
+	func road_edge_m(p: Vector2) -> float:
+		if height == null or height.roads == null:
+			return 1e9
+		return (height.roads as RoadCourse).d_at(p)
+
+	## Точка p клітинки двору c не далі YARD_EDGE від межі двору з боку вулиці (сусідня клітинка — не двір).
+	func _on_fence_line(p: Vector2, c: Vector2i) -> bool:
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: int = kind(c + d)
+			if n == Terrain.Kind.BUILDING or n == Terrain.Kind.RUBBLE:
+				continue
+			var inside: float = 0.5 - (p - Vector2(c)).dot(Vector2(d))
+			if inside >= 0.0 and inside <= PropLayer.YARD_EDGE:
+				return true
+		return false
+
+	## Чи може тут стояти стовп: тверда земля (поле, пагорб; двір і поле руїн — лише коли yard_ok), не асфальт (за полем дороги), не
+	## вода, не слід юніта, не ближче POLE_BUILDING_CLEAR до обрису будівлі, не в парканах, грядках і дрібних
+	## речах, не на мосту.
+	func pole_spot_ok(p: Vector2, tier: int = 2) -> bool:
 		var c := Vector2i(roundi(p.x), roundi(p.y))
-		if not on_board(c) or kind(c) not in [Terrain.Kind.FIELD, Terrain.Kind.HILL] or on_road(p, 0.1):
-			return -1
+		var k: int = kind(c)
+		var ground_kind: bool = k == Terrain.Kind.FIELD or k == Terrain.Kind.HILL
+		# Порядок місць: 0 — поле й пагорб; 1 — узбіччя клітинки дороги поза асфальтом; 2 — двір лише вздовж
+		# паркану з боку вулиці.
+		if not ground_kind:
+			var shoulder: bool = tier >= 1 and k == Terrain.Kind.ROAD
+			var fence_line: bool = tier >= 2 and (k == Terrain.Kind.BUILDING or k == Terrain.Kind.RUBBLE) and _on_fence_line(p, c)
+			if not shoulder and not fence_line:
+				return false
+		if road_edge_m(p) < PropLayer.POLE_ROAD_CLEAR_M:
+			return false
 		# Стовп на березі, не в руслі й не над болотом.
-		if near_wet(p, WATER_CLEAR + 0.15):
-			return -1
-		# Не ближче UNIT_POLE_CLEAR до сліду юніта будь-якої клітинки: стовп впритул до корпусу.
-		if not clear_of_units(Rect2(p - Vector2(0.03, 0.03), Vector2(0.06, 0.06)), PropLayer.UNIT_POLE_CLEAR):
-			return -1
-		var before: int = layer._instances.size()
-		# Стовп у метрах: 0.4 кВ — 8.8 м (ассет), 10 кВ — з 10.7 до ~9.1 м (scale у таблиці).
-		if put_small(m, c, p - Vector2(c), atan2(t.x, t.y), float(PropLayer.spec_of(m).get("scale", 1.0))):
-			return before
-		return -1
+		if near_wet(p, PropLayer.POLE_WET_CLEAR):
+			return false
+		for r: Rect2 in _bld_rects:
+			if r.grow(PropLayer.POLE_BUILDING_CLEAR).has_point(p):
+				return false
+		for r: Rect2 in _home_rects:
+			if r.grow(PropLayer.POLE_HOME_CLEAR).has_point(p):
+				return false
+		for r: Rect2 in _prop_rects:
+			if r.grow(PropLayer.POLE_PROP_CLEAR).has_point(p):
+				return false
+		for r: Rect2 in _garden_rects:
+			if r.grow(PropLayer.POLE_GARDEN_CLEAR).has_point(p):
+				return false
+		for r: Rect2 in _bridge_rects:
+			if r.grow(PropLayer.POLE_BRIDGE_CLEAR).has_point(p):
+				return false
+		# Не ближче UNIT_POLE_CLEAR до сліду юніта будь-якої клітинки дошки: стовп впритул до корпусу.
+		return clear_of_units(Rect2(p - Vector2(0.03, 0.03), Vector2(0.06, 0.06)), PropLayer.UNIT_POLE_CLEAR)
 
-	## Відвід до кожної хати від найближчого стовпа (до SERVICE_REACH клітинок): два дроти до стіни
-	## під дахом, з боку стовпа, — не в землю.
+	## Проліт a–b не лягає на жодну будівлю.
+	func span_hits_building(a: Vector2, b: Vector2) -> bool:
+		for r: Rect2 in _bld_rects:
+			if _seg_hits_rect(a, b, r.grow(PropLayer.POLE_BUILDING_CLEAR)):
+				return true
+		return false
+
+	## Анкер відтяжки: на ґрунті поза асфальтом, будівлями й слідом юніта.
+	func anchor_ok(q: Vector2) -> bool:
+		if road_edge_m(q) < PropLayer.POLE_ROAD_CLEAR_M or near_wet(q, PropLayer.POLE_WET_CLEAR):
+			return false
+		for r: Rect2 in _bld_rects:
+			if r.grow(0.05).has_point(q):
+				return false
+		return clear_of_units(Rect2(q - Vector2(0.02, 0.02), Vector2(0.04, 0.04)), 0.0)
+
+	## Площа шафи ТП (кути й центр): поза асфальтом (≥ POLE_ROAD_CLEAR_M), будівлями, парканами й слідом юніта.
+	func cabinet_ok(corners: Array[Vector2]) -> bool:
+		var lo := Vector2.INF
+		var hi := -Vector2.INF
+		for q in corners:
+			if road_edge_m(q) < PropLayer.POLE_ROAD_CLEAR_M:
+				return false
+			for r: Rect2 in _bld_rects:
+				if r.grow(0.05).has_point(q):
+					return false
+			for r: Rect2 in _prop_rects:
+				if r.has_point(q):
+					return false
+			lo = lo.min(q)
+			hi = hi.max(q)
+		return clear_of_units(Rect2(lo, hi - lo), 0.0)
+
+	## Стовп на точці, якщо там можна; індекс екземпляра чи −1. Кільце теж: лінія йде за межу дошки.
+	## Не put_small: той міряє дорогу за ламаною осі, а тут — за полем дороги, яке малює шейдер.
+	func _pole_on(m: StringName, p: Vector2, t: Vector2) -> int:
+		if not pole_spot_ok(p, 2):
+			return -1
+		var c := Vector2i(roundi(p.x), roundi(p.y))
+		var xform := Transform3D(Basis(Vector3.UP, atan2(t.x, t.y)), Vector3(p.x, ground(p.x, p.y), p.y))
+		if not clear_of_centre(m, xform, c):
+			return -1
+		var cells: Array[Vector2i] = [c]
+		return layer._add(m, xform, cells)
+
+	## Відвід до кожної цілої хати від найближчої опори 0.4 кВ (чи 10 кВ із підстанцією), від якої він можливий
+	## (_drop_target). Не вийшло — відводу нема, і це видно в тесті.
 	func _service_drops() -> void:
+		var fed: Array[Vector2] = []
 		var poles: Array[int] = []
 		for i in layer._instances.size():
-			if int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.POLE:
+			if int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.POLE \
+					and (not _is_10kv(i) or layer._transformers.has(i)):
 				poles.append(i)
-		for home: Dictionary in layout.get("homes", []):
-			var hc: Vector2i = home["house"]
-			var house_i: int = -1
-			for i in layer._instances.size():
-				if (layer._instances[i]["cells"] as Array).has(hc) and int(PropLayer.spec_of(layer._instances[i]["model"])["kind"]) == Kind.STRUCTURE \
-						and not layer._instances[i].get("yard", false):
-					house_i = i
-			if house_i < 0:
+		for house_i in layer._instances.size():
+			var inst: Dictionary = layer._instances[house_i]
+			if not PropLayer.is_home(inst):
 				continue
-			var box: AABB = (layer._instances[house_i]["transform"] as Transform3D) * ((PropLayer.model(layer._instances[house_i]["model"]) as Dictionary)["aabb"] as AABB)
-			var roof := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
-			var centre: Vector2 = roof.get_center()
-			# Найближчий стовп, від якого дріт дійде до хати не над чужим дахом: напряму (до DROP_DIRECT),
-			# інакше через проміжний стовп 0.4 кВ біля середини.
-			# Хата живиться 0.4 кВ: від опори 0.4 кВ чи від опори 10 кВ, що вже має підстанцію; опора 10 кВ
-			# без неї — лише якщо в поселенні (SETTLEMENT_R) ще нема жодної підстанції.
-			var order: Array[int] = poles.filter(func(i: int) -> bool:
-				return _pole_xz(i).distance_to(centre) <= SERVICE_REACH \
-						and (not _is_10kv(i) or layer._transformers.has(i) or not _settlement_has_transformer(_pole_xz(i))))
+			var box: AABB = _box_of(inst)
+			var centre := Vector2(box.get_center().x, box.get_center().z)
+			var order: Array[int] = poles.duplicate()
 			order.sort_custom(func(x: int, y: int) -> bool: return _pole_xz(x).distance_to(centre) < _pole_xz(y).distance_to(centre))
 			for pi in order:
-				var po: Vector2 = _pole_xz(pi)
-				var feed: int = pi
-				if po.distance_to(centre) > DROP_DIRECT:
-					feed = -1
-					var dir: Vector2 = (centre - po).normalized()
-					for f: float in [0.5, 0.45, 0.55, 0.4, 0.6]:
-						for side: float in [0.0, 0.3, -0.3]:
-							var q: Vector2 = po.lerp(centre, f) + Vector2(-dir.y, dir.x) * side
-							if not _wire_clear(po, q) or not _wire_clear(q, _wall_point(roof, q), roof):
-								continue
-							feed = _pole_on(&"infra_pole_concrete_04kv", q, dir)
-							if feed >= 0:
-								spans.append([pi, feed])
-								break
-						if feed >= 0:
-							break
-					if feed < 0:
-						continue
-				var fp: Vector2 = _pole_xz(feed)
-				var wall: Vector2 = _wall_point(roof, fp)
-				if not _wire_clear(fp, wall, roof):
-					continue
-				layer._drops.append([feed, Vector3(wall.x, box.position.y + box.size.y * 0.55, wall.y)])
-				# Хата живиться 0.4 кВ: від опори 10 кВ — лише через підстанцію на ній (на проміжну
-				# опору 0.4 кВ — теж від тієї, що з підстанцією).
-				if _is_10kv(pi):
-					layer._transformers[pi] = true
-				break
+				var at: Vector3 = _drop_target(house_i, pi)
+				if at.is_finite():
+					layer._drops.append([pi, at])
+					fed.append(centre)
+					break
+		# Хата, до якої дотягнулась опора сусіднього села, без відводу не лишилась.
+		var still: Array[Vector2] = []
+		for u: Vector2 in layer._unfed:
+			if not fed.any(func(c: Vector2) -> bool: return c.distance_to(u) < 0.05):
+				still.append(u)
+		layer._unfed = still
+
+	func _box_of(inst: Dictionary) -> AABB:
+		return (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+
+	## Відвід від точки from до хати з обрисом rect можливий: стіна з боку from не далі за DROP_DIRECT і не ближче за
+	## DROP_MIN, відрізок не ближче DROP_GAP до чужих хат (вулицю він може перетинати: ствол іде одним боком вулиці).
+	func drop_ok(rect: Rect2, from: Vector2) -> bool:
+		var a: Vector2 = PropLayer.drop_attach(rect, from)
+		if not a.is_finite():
+			return false
+		var d: float = from.distance_to(a)
+		if d > PropLayer.DROP_DIRECT or d < PropLayer.DROP_MIN:
+			return false
+		# Відвід не лягає на жодну чужу будівлю, не ближче DROP_GAP.
+		for r: Rect2 in _bld_rects:
+			if not r.is_equal_approx(rect) and _seg_hits_rect(from, a, r.grow(PropLayer.DROP_GAP)):
+				return false
+		return true
+
+	## Точка кріплення відводу від опори pole_i до хати house_i: на стіні з боку стовпа, на висоті DROP_ATTACH_H над
+	## ґрунтом; Vector3.INF — відводу нема.
+	func _drop_target(house_i: int, pole_i: int) -> Vector3:
+		var box: AABB = _box_of(layer._instances[house_i])
+		var rect := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+		var fp: Vector2 = _pole_xz(pole_i)
+		if not drop_ok(rect, fp):
+			return Vector3.INF
+		var a: Vector2 = PropLayer.drop_attach(rect, fp)
+		return Vector3(a.x, ground(a.x, a.y) + PropLayer.DROP_ATTACH_H, a.y)
 
 	func _pole_xz(i: int) -> Vector2:
 		var o: Vector3 = (layer._instances[i]["transform"] as Transform3D).origin
 		return Vector2(o.x, o.z)
-
-	## Точка на стіні хати (під дахом) з боку від from.
-	func _wall_point(roof: Rect2, from: Vector2) -> Vector2:
-		var c: Vector2 = roof.get_center()
-		return c + (from - c).normalized() * minf(roof.size.x, roof.size.y) * 0.48
 
 	# --- мости -----------------------------------------------------------------------------
 
