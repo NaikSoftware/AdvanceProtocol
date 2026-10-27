@@ -927,9 +927,9 @@ def damaged():
     M["heap_light"] = lib.make_material("heap_light", "Concrete034", 2.0, (0.60, 0.59, 0.57), streak=0.3, base_dirt=0.4, bump=0.05)           # світло-сірий дрібняк завалу
     M["slab_light"] = lib.make_material("slab_light", "Concrete034", 1.2, (0.78, 0.76, 0.73), streak=0.9, streak_xy=1.6, base_dirt=0.5, bump=0.03, patch=((0.12, 0.11, 0.10), 0.25))
     M["frag_light"] = lib.make_material("frag_light", "Concrete034", 1.2, (0.70, 0.68, 0.65), streak=1.0, streak_xy=1.6, base_dirt=0.6, bump=0.03, patch=((0.10, 0.09, 0.08), 0.25))
-    M["heap_rubble"] = lib.make_material("heap_rubble", "rubble", 2.0, (1.12, 1.02, 0.90), bump=0.07, rough=0.95, streak=0.2)
-    M["heap_base_rubble"] = lib.make_material("heap_base_rubble", "rubble", 2.0, (1.12, 1.02, 0.90), bump=0.07, rough=0.95, streak=0.2)    # Poly Haven rubble, повтор 2 м, тон майже нейтральний
-    M["debris_apron"] = lib.make_material("debris_apron", "concrete_debris", 2.0, (0.92, 0.84, 0.74), bump=0.05, rough=0.95)    # Poly Haven concrete_debris навколо язика
+    M["heap_rubble"] = lib.make_material("heap_rubble", "rubble", 2.0, (1.07, 1.06, 0.98), bump=0.07, rough=0.95, streak=0.2)
+    M["heap_base_rubble"] = lib.make_material("heap_base_rubble", "rubble", 2.0, (1.07, 1.06, 0.98), bump=0.07, rough=0.95, streak=0.2)    # Poly Haven rubble, повтор 2 м, тон майже нейтральний
+    M["debris_apron"] = lib.make_material("debris_apron", "concrete_debris", 2.0, (0.9, 0.96, 1.02), bump=0.05, rough=0.95)    # Poly Haven concrete_debris навколо язика
     M["panel_warm"] = lib.make_material("panel_warm", "Concrete034", 1.2, (0.98, 0.78, 0.54), seams=[("h", 3.0, 0.04, 0.55), ("z", 3.1, 0.05, 0.5)], streak=0.5, base_dirt=0.6, cells=("x", 3.0, "z", 3.1, 0.19), rough=0.9)   # торець: тепліший бетон, щоб небо не робило його синім
     lib.FLAT.add("rebar")                                                                   # прути: плоский зразок без AO, інакше тонкі призми запікаються чорними
     M["rebar"] = lib.make_material("rebar", flat=(0.13, 0.075, 0.05))
