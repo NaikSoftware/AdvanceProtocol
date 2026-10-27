@@ -554,20 +554,10 @@ func _chain_to_tree(stations: Array[Vector2], parent: Dictionary, c: Vector2, tr
 func _chain_ids(stations: Array[Vector2], i: int, j: int, trunk_segs: Array) -> Array[int]:
 	var ids: Array[int] = [i]
 	for q in _between(stations[i], stations[j], MAX_04KV, STATION_GAP):
-		# Станція, що вже стоїть ближче 1.4, — та сама опора: ланки ділять її, а не ставлять другу в півклітинці.
-		var at: int = -1
-		for si in stations.size():
-			if si != j and stations[si].distance_to(q) < 1.4:
-				at = si
-				break
-		var to: Vector2 = q if at < 0 else stations[at]
-		if not _span_clear(stations[ids.back()], to, trunk_segs):
+		if not _span_clear(stations[ids.back()], q, trunk_segs):
 			return []
-		if at < 0:
-			stations.append(q)
-			at = stations.size() - 1
-		if at != ids.back():
-			ids.append(at)
+		stations.append(q)
+		ids.append(stations.size() - 1)
 	if stations[ids.back()].distance_to(stations[j]) > MAX_04KV or not _span_clear(stations[ids.back()], stations[j], trunk_segs):
 		return []
 	ids.append(j)

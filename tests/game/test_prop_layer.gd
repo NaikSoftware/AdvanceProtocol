@@ -738,7 +738,7 @@ func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
 ## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
 ## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
 ## разом зі свідомою зміною таблиці моделей чи правил розстановки.
-const RIVER_BUILDINGS_FINGERPRINT: int = 1357154823
+const RIVER_BUILDINGS_FINGERPRINT: int = 1817935571
 
 
 func test_river_buildings_match_the_golden_fingerprint() -> void:
@@ -1460,24 +1460,67 @@ func test_gates_have_human_size_and_a_wicket_beside(p = use_parameters(MAPS)) ->
 		assert_almost_eq((g["a"] as Vector2).distance_to(g["b"]), PropLayer.GATE, 1e-4, "%s: отвір воріт" % p)
 
 
-## Ворота дивляться на дорогу: промінь від них назовні впирається в покриття дороги не далі, ніж
-## за GATE_SIGHT клітинок (хвіртка зсунута від середини сторони, тож запас на її півширини).
+## Ворота дивляться на дорогу: промінь від хвіртки назовні впирається в покриття не далі, ніж за
+## GATE_SIGHT клітинок. Двір, де жоден вільний відрізок огорожі не дивиться на дорогу, явно «сліпий»
+## (gate_blind): ворота там — на найближчому до хати відрізку; на нинішніх картах таких нема.
 func test_gates_face_the_road(p = use_parameters(MAPS)) -> void:
 	var placer: RefCounted = _cached(p).props()._placer
 	assert_gt(placer.gates.size(), 0, "%s: передумова — ворота є" % p)
+	assert_eq(placer.gate_blind.size(), 0, "%s: двори без дороги перед воротами" % p)
 	for i: int in placer.gates:
 		var at: Vector2 = placer.gates[i][0]
 		var out: Vector2 = placer.gates[i][1]
 		assert_lte(placer.road_ahead_of(at, out), PropLayer.GATE_SIGHT, "%s: ворота %s не до дороги" % [p, at])
 
 
+## Ворота не лізуть на фасад: увесь отвір (від стовпа до стовпа) далі за 0.1 клітинки від кожної будівлі,
+## руїни й сараю, а сама хвіртка — від води не ближче WATER_CLEAR.
+func test_gates_keep_clear_of_buildings(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var rects: Array[Rect2] = []
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			var b: AABB = _box_of(inst)
+			rects.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+	assert_gt(view.props()._gates.size(), 0, p)
+	for g: Dictionary in view.props()._gates:
+		for t in 21:
+			var q: Vector2 = (g["a"] as Vector2).lerp(g["b"], float(t) / 20.0)
+			for r in rects:
+				assert_false(r.grow(0.1 - 1e-3).has_point(q), "%s: ворота %s ближче 0.1 до будівлі %s" % [p, q, r])
+
+
+## Паркан садиби не заходить у клітинки чужого двору (дві огорожі не схрещуються хрестом).
+func test_fence_never_enters_another_yard(p = use_parameters(MAPS)) -> void:
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	var owner_of: Dictionary = {}
+	for i in homes.size():
+		for c: Vector2i in homes[i]["cells"]:
+			owner_of[c] = i
+	var checked: int = 0
+	for inst in _cached(p).props().all_instances():
+		if _kind(inst["model"]) != PropLayer.Kind.GARDEN_FENCE:
+			continue
+		var mine: int = int(owner_of.get((inst["cells"] as Array)[0], -1))
+		var xf: Transform3D = inst["transform"]
+		var box: AABB = (PropLayer.model(inst["model"]) as Dictionary)["aabb"]
+		for t in 11:
+			var w: Vector3 = xf * Vector3(lerpf(box.position.x, box.end.x, float(t) / 10.0), 0.0, 0.0)
+			var c := Vector2i(roundi(w.x), roundi(w.z))
+			var o: int = int(owner_of.get(c, -1))
+			var inside: bool = absf(w.x - c.x) < 0.5 - 0.02 and absf(w.z - c.y) < 0.5 - 0.02
+			assert_false(o >= 0 and o != mine and inside, "%s: паркан двору %d у дворі %d на %s" % [p, mine, o, Vector2(w.x, w.z)])
+		checked += 1
+	assert_gt(checked, 0, p)
+
+
 ## Сусідні садиби (хата в межах HOUSE_APART клітинок) не мають однакових воріт, паркану, сараю чи
-## причепа; причепів, сараїв і парканів є з чого вибирати.
+## причепа; парканів, причепів і воріт є з чого вибирати (сараїв — одна модель: друга коштує виклик малювання).
 func test_neighbouring_yards_do_not_repeat_forms(p = use_parameters(MAPS)) -> void:
 	var placer: RefCounted = _cached(p).props()._placer
 	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
-	assert_gte(PropLayer.models_of(PropLayer.Kind.GARDEN_FENCE).size(), 3)
-	assert_gte(PropLayer.YARD_SHEDS.filter(func(m: StringName) -> bool: return PropLayer.model(m) != null).size(), 2)
+	assert_gte(PropLayer.FENCE_FORMS.size(), 3)
 	assert_gte(PropLayer.models_of(PropLayer.Kind.TRAILER).size(), 2)
 	assert_eq(placer.forms.size(), homes.size(), "%s: форми записані на кожну садибу" % p)
 	var pairs: int = 0
@@ -1487,7 +1530,7 @@ func test_neighbouring_yards_do_not_repeat_forms(p = use_parameters(MAPS)) -> vo
 			if maxi(absi(d.x), absi(d.y)) > PropLayer.HOUSE_APART:
 				continue
 			pairs += 1
-			for key: StringName in [&"fence", &"shed", &"trailer", &"gate"]:
+			for key: StringName in [&"fence", &"trailer", &"gate"]:
 				var a: Variant = (placer.forms[i] as Dictionary).get(key)
 				var b: Variant = (placer.forms[j] as Dictionary).get(key)
 				if a != null and b != null:
@@ -1501,7 +1544,7 @@ func test_neighbouring_yards_do_not_repeat_forms(p = use_parameters(MAPS)) -> vo
 	for i: int in placer.forms:
 		for key: StringName in [&"fence", &"shed", &"trailer"]:
 			if (placer.forms[i] as Dictionary).has(key):
-				assert_true(present.has(placer.forms[i][key]), "%s: %s садиби %d нема на дошці" % [p, key, i])
+				assert_true(present.has(StringName(String(placer.forms[i][key]).get_slice("|", 0))), "%s: %s садиби %d нема на дошці" % [p, key, i])
 
 
 ## Усі чотири форми воріт трапляються в селах трьох карт.
@@ -2160,3 +2203,24 @@ func test_small_props_stay_drawn_at_max_zoom() -> void:
 	assert_gt(small.size(), 1, "передумова: на карті є дрібні вузли")
 	for n: Node in small:
 		assert_true((n as Node3D).visible, "%s: видно на будь-якому зумі" % n.name)
+
+
+## Тюки на мокрій карті темніші за суху: у дощ не світяться жовто-зеленою плямою на траві.
+func test_hay_is_dimmed_on_a_wet_map() -> void:
+	var m: MapData = _map("river")
+	var node: MultiMeshInstance3D = null
+	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
+	add_child_autofree(view)
+	view.ring_map = m
+	view.surface = m.surface
+	view.relief_seed = m.name_key.hash()
+	view.wet = true
+	view.build(m.to_board())
+	for n in view.props().get_children():
+		if String(n.name).begins_with("infra_hay"):
+			node = n
+			break
+	assert_not_null(node, "тюки на River")
+	var src := (PropLayer.model(StringName(node.name))["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
+	var got := node.multimesh.mesh.surface_get_material(0) as BaseMaterial3D
+	assert_almost_eq(got.albedo_color.r, src.albedo_color.r * PropLayer.HAY_WET.r, 1e-4)

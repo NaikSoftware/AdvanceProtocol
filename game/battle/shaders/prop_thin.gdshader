@@ -12,6 +12,8 @@ uniform float roughness = 0.9;
 uniform float metallic = 0.0;
 // Частка неба в нормалі: 0 — нормаль ассета, 1 — освітлення як у горизонтальної площини.
 uniform float sky_bend = 0.65;
+// Висота верху секції в моделі (множиться на масштаб екземпляра): верхні ~0.02 затемнені, щоб шапки не читались білим пунктиром.
+uniform float top_local = 1000.0;
 
 // Мокрість карти (WeatherRig): на мокрій River панель темніша, трохи приглушена й з брудом унизу —
 // яскрава огорожа світилась би, як пофарбована щойно.
@@ -29,9 +31,11 @@ const float VALUE_CAP = 0.072;
 const vec3 WEATHERED = vec3(1.14, 0.98, 0.78);
 
 varying float base_h;
+varying float top_h;
 
 void vertex() {
 	base_h = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y - MODEL_MATRIX[3].y;
+	top_h = top_local * length(MODEL_MATRIX[1].xyz);
 }
 
 // Рівень міпмапи з похідних UV: textureQueryLod не компілюється в gl_compatibility.
@@ -56,6 +60,8 @@ void fragment() {
 	// білими лініями інтерфейсу; вивітрене дерево й оцинковка — не світліші.
 	float value = max(albedo.r, max(albedo.g, albedo.b));
 	albedo *= min(1.0, VALUE_CAP / max(value, 1e-4));
+	float cap = smoothstep(top_h - 0.03, top_h - 0.01, base_h);
+	albedo *= mix(1.0, 0.45, cap);
 	// Сіро-бурий вивітреного дерева: рожеві й бузкові відтінки фарби ассета на кадрі читались чужими.
 	albedo = mix(albedo, dot(albedo, vec3(0.2126, 0.7152, 0.0722)) * WEATHERED, 0.6);
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
@@ -67,7 +73,8 @@ void fragment() {
 	}
 	ALBEDO = albedo;
 	// Мокра фарбована бляха — м'який полиск, не матова картка.
-	ROUGHNESS = mix(roughness, WET_ROUGHNESS, wet);
+	// Шапка секції матова: мокрий полиск горішніх граней блищав білими цятками вздовж огорожі.
+	ROUGHNESS = mix(mix(roughness, WET_ROUGHNESS, wet), 1.0, cap);
 	METALLIC = metallic;
 	vec3 up = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
 	// Тильний бік рушій сам перевертає (cull_disabled); нахил до неба вирівнює обидва.
