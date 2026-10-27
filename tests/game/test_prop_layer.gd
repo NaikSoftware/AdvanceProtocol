@@ -809,14 +809,15 @@ func test_fence_rings_are_closed(p = use_parameters(MAPS)) -> void:
 		var joined := false
 		for j in ends.size():
 			joined = joined or (j != i and ends[j].distance_to(ends[i]) < 0.03)
+		# Біля стіни (ближче FENCE_WALL) паркан кінчається, а стіна лишається межею двору.
 		for w in walls:
-			joined = joined or w.grow(0.05).has_point(ends[i])
+			joined = joined or w.grow(PropLayer.FENCE_WALL + 0.12).has_point(ends[i])
 		if not joined:
 			loose.append(ends[i])
 	var homes: int = (VillageLayout.for_map(StringName(p)).get("homes", []) as Array).size()
-	assert_eq(loose.size(), 2 * homes, "%s: вільні кінці паркану %s" % [p, loose])
+	assert_lte(loose.size(), 2 * homes, "%s: вільні кінці паркану %s" % [p, loose])
 	for e in loose:
-		var pair: bool = loose.any(func(o: Vector2) -> bool: return o != e and o.distance_to(e) <= PropLayer.GATE + 0.03)
+		var pair: bool = ends.any(func(o: Vector2) -> bool: return o != e and o.distance_to(e) <= PropLayer.GATE + 0.03)
 		assert_true(pair, "%s: кінець паркану %s без пари воріт — кільце розірване" % [p, e])
 
 
@@ -1460,21 +1461,23 @@ func test_gates_have_human_size_and_a_wicket_beside(p = use_parameters(MAPS)) ->
 		assert_almost_eq((g["a"] as Vector2).distance_to(g["b"]), PropLayer.GATE, 1e-4, "%s: отвір воріт" % p)
 
 
-## Ворота дивляться на дорогу: промінь від хвіртки назовні впирається в покриття не далі, ніж за
-## GATE_SIGHT клітинок. Двір, де жоден вільний відрізок огорожі не дивиться на дорогу, явно «сліпий»
-## (gate_blind): ворота там — на найближчому до хати відрізку; на нинішніх картах таких нема.
+## Ворота дивляться на дорогу, коли вільний відрізок огорожі з запасом від стін на неї дивиться: промінь від хвіртки
+## назовні впирається в покриття не далі, ніж за GATE_SIGHT клітинок. Двір, де такого відрізка нема (фасад стоїть
+## за 1 м від узбіччя, і паркан вздовж нього заборонений), — «сліпий» (gate_blind): ворота там на бічному відрізку,
+## але двір без воріт не лишається ніколи.
 func test_gates_face_the_road(p = use_parameters(MAPS)) -> void:
 	var placer: RefCounted = _cached(p).props()._placer
-	assert_gt(placer.gates.size(), 0, "%s: передумова — ворота є" % p)
-	assert_eq(placer.gate_blind.size(), 0, "%s: двори без дороги перед воротами" % p)
+	var homes: int = (VillageLayout.for_map(StringName(p)).get("homes", []) as Array).size()
+	assert_eq(placer.gates.size(), homes, "%s: двір без воріт" % p)
 	for i: int in placer.gates:
 		var at: Vector2 = placer.gates[i][0]
 		var out: Vector2 = placer.gates[i][1]
-		assert_lte(placer.road_ahead_of(at, out), PropLayer.GATE_SIGHT, "%s: ворота %s не до дороги" % [p, at])
+		var sees: bool = placer.road_ahead_of(at, out) <= PropLayer.GATE_SIGHT
+		assert_true(sees or placer.gate_blind.has(i), "%s: ворота %s не до дороги і двір не «сліпий»" % [p, at])
 
 
-## Ворота не лізуть на фасад: увесь отвір (від стовпа до стовпа) далі за 0.1 клітинки від кожної будівлі,
-## руїни й сараю, а сама хвіртка — від води не ближче WATER_CLEAR.
+## Ворота не лізуть на фасад: увесь отвір (від стовпа до стовпа) далі свого запасу (GATE_CLEAR 0.35 клітинки,
+## а коли з ним воріт нема ніде — наступний з GATE_CLEARS, не менший за 0.25) від кожної будівлі, руїни й сараю. Не залежить від того, котра стіна хати фасад: міряється від усього обрису.
 func test_gates_keep_clear_of_buildings(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var rects: Array[Rect2] = []
@@ -1488,7 +1491,39 @@ func test_gates_keep_clear_of_buildings(p = use_parameters(MAPS)) -> void:
 		for t in 21:
 			var q: Vector2 = (g["a"] as Vector2).lerp(g["b"], float(t) / 20.0)
 			for r in rects:
-				assert_false(r.grow(0.1 - 1e-3).has_point(q), "%s: ворота %s ближче 0.1 до будівлі %s" % [p, q, r])
+				assert_false(r.grow(float(g["clear"]) - 1e-3).has_point(q), "%s: ворота %s ближче %.2f до будівлі %s" % [p, q, g["clear"], r])
+		assert_gte(float(g["clear"]), PropLayer.GATE_CLEARS[1], "%s: ворота зі запасом менше %.2f" % [p, PropLayer.GATE_CLEARS[1]])
+
+
+## Паркан не йде вздовж стіни ближче FENCE_WALL: секція впирається в стіну кінцем (напрям до стіни — вздовж ходу),
+## але не лежить паралельно в двох метрах від фасаду, затуляючи вікна.
+func test_fences_keep_off_walls(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var rects: Array[Rect2] = []
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			var b: AABB = _box_of(inst)
+			rects.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+	var checked: int = 0
+	for inst in view.props().all_instances():
+		if _kind(inst["model"]) != PropLayer.Kind.GARDEN_FENCE:
+			continue
+		var xf: Transform3D = inst["transform"]
+		var box: AABB = (PropLayer.model(inst["model"]) as Dictionary)["aabb"]
+		var a3: Vector3 = xf * Vector3(box.position.x, 0.0, 0.0)
+		var b3: Vector3 = xf * Vector3(box.end.x, 0.0, 0.0)
+		var a := Vector2(a3.x, a3.z)
+		var dir: Vector2 = (Vector2(b3.x, b3.z) - a).normalized()
+		for t in 11:
+			var q: Vector2 = a.lerp(Vector2(b3.x, b3.z), float(t) / 10.0)
+			for r in rects:
+				var v: Vector2 = q.clamp(r.position, r.end) - q
+				var d: float = v.length()
+				assert_false(d > 0.03 and d < PropLayer.FENCE_WALL - 0.01 and absf(v.dot(dir)) < 0.5 * d,
+						"%s: паркан біля %s вздовж стіни %s на %.2f" % [p, q, r, d])
+		checked += 1
+	assert_gt(checked, 0, p)
 
 
 ## Паркан садиби не заходить у клітинки чужого двору (дві огорожі не схрещуються хрестом).
@@ -2223,4 +2258,5 @@ func test_hay_is_dimmed_on_a_wet_map() -> void:
 	assert_not_null(node, "тюки на River")
 	var src := (PropLayer.model(StringName(node.name))["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
 	var got := node.multimesh.mesh.surface_get_material(0) as BaseMaterial3D
-	assert_almost_eq(got.albedo_color.r, src.albedo_color.r * PropLayer.HAY_WET.r, 1e-4)
+	for ch in 3:
+		assert_almost_eq(got.albedo_color[ch], src.albedo_color[ch] * PropLayer.HAY_WET[ch], 1e-4)
