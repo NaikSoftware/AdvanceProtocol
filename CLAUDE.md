@@ -377,8 +377,11 @@ movement number, and visual water stays ≥ 0.3 tile from any land-cell centre, 
 texture and effect from real metres.
 
 Budget on a mid-range phone at 60 fps: **under ~100 draw calls and ~150k triangles on screen.**
-Bake static terrain lighting; one directional light with shadows for units only. No SSAO, no SSR,
-no volumetric fog. **Persistent battle scars** — wrecks, the scorch under them, lingering smoke, ruts — are the
+Bake static terrain lighting. One directional light: it casts real shadows from units on every
+map and from the board's buildings on sunny maps, where units also add a contact shadow; forest
+shadows are baked, and under River's overcast the light's shadows are faint and blurred
+([details](docs/art-direction.md#rendering-and-mobile-budget)). No SSAO, no SSR, no volumetric
+fog. **Persistent battle scars** — wrecks, the scorch under them, lingering smoke, ruts — are the
 cheapest atmosphere in the game and double as information.
 
 Turn-based means the screen is usually static: enable low-processor mode and drop the frame rate
