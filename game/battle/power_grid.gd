@@ -1,40 +1,49 @@
 class_name PowerGrid
 extends RefCounted
 ## Мережа ЛЕП, яку гра будує сама й однаково щоразу (без пошуку й без збережених точок):
-## - 10 кВ іде за намірами routes макета вздовж головних доріг, стовпи через ≤ MAX_10KV клітинок;
-## - у кожного поселення (хати, зв'язані кроком SETTLEMENT_R) — одна ТП на стовпі 10 кВ біля в'їзду;
-## - 0.4 кВ — один ствол уздовж кожної вулиці села з боку дворів, по межі клітинок за ~0.3 клітинки від краю
-##   асфальту, опори через ≤ MAX_04KV клітинок і на поворотах; мережа — дерево (Прима від ТП), без перетинів;
-##   поза вулицями, крізь квартали й двори ствол не ходить;
-## - до кожної цілої хати — один відвід від найближчої опори її вулиці (PropLayer.drop_ok).
-## Розстановку поза місцями, де стовпу не місце (PropLayer pole_spot_ok), поступається: місце шукається поряд на межах
-## клітинок, а не знайшлось — стовпа нема, і це видно в тесті.
-## Результат — ті самі lines і transformers, що й раніше брала розстановка: ламані з опор і точки підстанцій.
+## - 10 кВ іде за намірами routes макета вздовж головних доріг (вісь спрощена), стовпи через ≤ MAX_10KV клітинок;
+## - у кожного поселення (хати, зв'язані кроком SETTLEMENT_R) — одна ТП на стовпі 10 кВ біля в'їзду; ТП ближче
+##   за TP_GAP одна до одної — спільна;
+## - 0.4 кВ — один ствол уздовж кожної вулиці села на смузі між асфальтом і хатами (з боку дворів; де вона
+##   заставлена — з протилежного боку, крім кільцевої дороги), опори через ≤ MAX_04KV клітинок і на поворотах;
+##   мережа — дерево (Прима від ТП) лише по сусідах уздовж вулиці, без перетинів і без зрізів крізь квартали;
+## - до кожної цілої хати — один відвід від найближчої опори вулиці (PropLayer drop_ok); коли жодна не дістає,
+##   на землі поблизу ставиться ще одна опора, з'єднана коротким прольотом із деревом.
+## Розстановка поступається там, де стовпу не місце (pole_spot_ok): місце шукається поряд на межах клітинок, а
+## не знайшлось — стовпа нема, і це видно в тесті.
+## Результат: lines — ламані з опор (kind, points), transformers — точки підстанцій, unfed — хати без відводу.
 
 const STREET_R: float = 7.0
 const SIDE_PROBE: float = 0.8
-const VERGE: float = 0.5
+const VERGE: float = 0.9
 const STATION_GAP: float = 4.5
 const MAX_04KV: float = 5.0
 const MAX_10KV: float = 9.0
-const TRUNK_GAP: float = 8.5
+const TRUNK_GAP: float = 7.5
 const BEND_ANGLE: float = 0.9
 const BEND_WINDOW: int = 5
-## Найдовший міст між частинами вулиць села, клітинки.
-const BRIDGE_MAX: float = 9.0
+## Найдовший проліт, яким відокремлена частина вулиць сполучається з деревом, клітинки.
+const BRIDGE_MAX: float = 5.0
+## Дві ТП ближче за стільки клітинок — одна: друге село підключається до наявної.
+const TP_GAP: float = 6.0
+## Найдовша ланка вздовж вулиці, яку ще добудовують проміжними опорами, клітинки.
+const BRIDGE_CHAIN_MAX: float = 12.0
+## Допуск спрощення осі дороги для 10 кВ, клітинки, і найкоротший проліт між вершинами траси.
+const SIMPLIFY_TOL: float = 1.0
+const MIN_VERTEX_GAP: float = 6.0
 
-var _p: Variant
+var _p: PropLayer._Placer
 ## Опори, ближче за 1.4 до яких нових не ставимо: стовпи магістралі й уже побудованих сіл.
 var _avoid: Array[Vector2] = []
 var _ring: int = 0
 var _size := Vector2i.ZERO
-var lines: Array = []
+var lines: Array[Dictionary] = []
 var transformers: Array[Vector2] = []
 ## Центри хат, до яких дотягнутись не вдалось (тест їх називає).
 var unfed: Array[Vector2] = []
 
 
-func plan(placer: Variant) -> void:
+func plan(placer: PropLayer._Placer) -> void:
 	_p = placer
 	_ring = placer.ring
 	_size = placer.size
@@ -94,7 +103,7 @@ func _villages(homes: Array[Dictionary]) -> Array:
 # --- місце стовпа --------------------------------------------------------------------------
 
 ## Найближче до target придатне місце на межі клітинок (k ± 0.01) у радіусі radius; INF — нема.
-func _snap(target: Vector2, radius: float) -> Vector2:
+func _snap(target: Vector2, radius: float, accept: Callable = Callable()) -> Vector2:
 	var cands: Array[Vector2] = []
 	var c := Vector2i(roundi(target.x), roundi(target.y))
 	var reach: int = ceili(radius) + 1
@@ -116,9 +125,11 @@ func _snap(target: Vector2, radius: float) -> Vector2:
 		var da: float = a.distance_squared_to(target)
 		var db: float = b.distance_squared_to(target)
 		return da < db or (da == db and (a.x < b.x or (a.x == b.x and a.y < b.y))))
-	for q in cands:
-		if _p.pole_spot_ok(q) and not _near_avoid(q):
-			return q
+	# Порядок місць: поле, узбіччя дороги, двір уздовж паркану (PropLayer pole_spot_ok).
+	for tier in 3:
+		for q in cands:
+			if _p.pole_spot_ok(q, tier) and not _near_avoid(q) and (accept.is_null() or accept.call(q)):
+				return q
 	return Vector2.INF
 
 
@@ -166,7 +177,7 @@ static func offset_poly(pts: Array, side: float, d: float) -> Array[Vector2]:
 func _trunk() -> Array:
 	var out: Array = []
 	for route: Dictionary in _p.layout.get("routes", []):
-		var axis: Array = route["axis"]
+		var axis: Array = _simplify(route["axis"])
 		var spur: bool = int(route.get("from", -1)) >= 0
 		var off: Array[Vector2] = offset_poly(axis, float(route.get("side", 1.0)), VERGE)
 		var verts: Array[Vector2] = []
@@ -196,14 +207,14 @@ func _trunk() -> Array:
 	return out
 
 
-## Проліт, що лягає на будівлю, ділиться опорою збоку від неї: з обох боків проліт вільний і не довший за MAX_10KV.
+## Проліт, що лягає на будівлю чи довший за MAX_10KV, ділиться опорою збоку: з обох боків проліт вільний і не довший за MAX_10KV.
 func _clear_buildings(pts: Array[Vector2]) -> void:
 	var k: int = 1
 	var guard: int = 0
 	while k < pts.size() and guard < 40:
 		var a: Vector2 = pts[k - 1]
 		var b: Vector2 = pts[k]
-		if not _p.span_hits_building(a, b):
+		if not _p.span_hits_building(a, b) and a.distance_to(b) <= MAX_10KV:
 			k += 1
 			continue
 		guard += 1
@@ -224,6 +235,39 @@ func _detour(a: Vector2, b: Vector2) -> Vector2:
 					and not _p.span_hits_building(a, s) and not _p.span_hits_building(s, b):
 				return s
 	return Vector2.INF
+
+
+## Вісь дороги для 10 кВ без дрібних вигинів: Дуглас–Пекер з допуском SIMPLIFY_TOL, потім вершини не ближче за
+## MIN_VERTEX_GAP одна до одної (кінці лишаються): траса не смикається на кожному повороті звивистої дороги.
+func _simplify(axis: Array) -> Array:
+	var keep: Array[bool] = []
+	keep.resize(axis.size())
+	keep.fill(false)
+	keep[0] = true
+	keep[axis.size() - 1] = true
+	var stack: Array = [[0, axis.size() - 1]]
+	while not stack.is_empty():
+		var seg: Array = stack.pop_back()
+		var far: int = -1
+		var far_d: float = SIMPLIFY_TOL
+		for k in range(seg[0] + 1, seg[1]):
+			var d: float = (axis[k] as Vector2).distance_to(Geometry2D.get_closest_point_to_segment(axis[k], axis[seg[0]], axis[seg[1]]))
+			if d > far_d:
+				far_d = d
+				far = k
+		if far >= 0:
+			keep[far] = true
+			stack.append([seg[0], far])
+			stack.append([far, seg[1]])
+	var out: Array = []
+	for k in axis.size():
+		if not keep[k]:
+			continue
+		if k == axis.size() - 1 and not out.is_empty() and (out.back() as Vector2).distance_to(axis[k]) < MIN_VERTEX_GAP and out.size() > 1:
+			out.pop_back()
+		if out.is_empty() or k == axis.size() - 1 or (out.back() as Vector2).distance_to(axis[k]) >= MIN_VERTEX_GAP:
+			out.append(axis[k])
+	return out
 
 
 ## Проміжні стовпи між a і b (не включаючи кінців): рівномірно, кожен проліт ≤ max_span.
@@ -247,13 +291,20 @@ func _village(homes: Array, trunk: Array) -> void:
 	var runs: Array = []
 	_streets(homes, stations, runs)
 	if stations.is_empty():
-		for h: Dictionary in homes:
-			unfed.append(h["centre"])
-		return
+		# Хата без вулиці поряд (хутір): ТП на найближчому стовпі 10 кВ, відвід — опорою-запаскою біля хати.
+		var nearest := Vector2.INF
+		for line: Array in trunk:
+			for pt: Vector2 in line:
+				if not nearest.is_finite() or pt.distance_to(homes[0]["centre"]) < nearest.distance_to(homes[0]["centre"]):
+					nearest = pt
+		if not nearest.is_finite():
+			for h: Dictionary in homes:
+				unfed.append(h["centre"])
+			return
+		stations.append(nearest)
 	# ТП: стовп 10 кВ магістралі (наявний чи вставлений у проліт), найближчий до станції, що найближча до магістралі;
 	# біля стовпа має знайтись місце під шафу.
 	var tp := Vector2.INF
-	var entry: int = -1
 	var best: float = INF
 	for i in stations.size():
 		for line: Array in trunk:
@@ -261,7 +312,6 @@ func _village(homes: Array, trunk: Array) -> void:
 				var d: float = stations[i].distance_to(line[k])
 				if d < best and _cabinet_fits(line[k], _pole_dir(line, k)):
 					best = d
-					entry = i
 					tp = line[k]
 				if k > 0:
 					var proj: Vector2 = Geometry2D.get_closest_point_to_segment(stations[i], line[k - 1], line[k])
@@ -271,16 +321,23 @@ func _village(homes: Array, trunk: Array) -> void:
 						if s.is_finite() and s.distance_to(line[k - 1]) >= 2.0 and s.distance_to(line[k]) >= 2.0 \
 								and _cabinet_fits(s, ((s - line[k - 1]).normalized() + (line[k] - s).normalized()).normalized()):
 							best = dp
-							entry = i
 							tp = s
 	if not tp.is_finite():
 		for h: Dictionary in homes:
 			unfed.append(h["centre"])
 		return
-	_insert_pole(trunk, tp)
-	_avoid.append(tp)
-	transformers.append(tp)
-	# ТП — корінь дерева: станція, що опинилась упритул до неї, і є ТП; інакше ТП — нова станція.
+	# Одна ТП на поселення: близька наявна ТП — спільна.
+	var shared: bool = false
+	for t: Vector2 in transformers:
+		if t.distance_to(tp) < TP_GAP:
+			tp = t
+			shared = true
+			break
+	var inserted: bool = false
+	if not shared:
+		inserted = _insert_pole(trunk, tp)
+		_avoid.append(tp)
+	# ТП — корінь дерева: станція упритул до неї і є ТП; інакше ТП — нова станція.
 	var root: int = -1
 	for i in stations.size():
 		if stations[i].distance_to(tp) < 1.4 and (root < 0 or stations[i].distance_to(tp) < stations[root].distance_to(tp)):
@@ -290,8 +347,6 @@ func _village(homes: Array, trunk: Array) -> void:
 	else:
 		stations.append(tp)
 		root = stations.size() - 1
-	entry = root
-	# Решта станцій упритул до ТП зливається з нею: дві опори так близько не стоять.
 	var dead: Dictionary = {}
 	for i in stations.size():
 		if i != root and stations[i].distance_to(tp) < 1.4:
@@ -300,27 +355,38 @@ func _village(homes: Array, trunk: Array) -> void:
 	for line: Array in trunk:
 		for k in range(1, line.size()):
 			trunk_segs.append([line[k - 1], line[k]])
-	# Ребра-кандидати: сусіди вздовж вулиці (дешевші) і будь-які пари ближче за MAX_04KV, де проліт не лягає на
-	# будівлю й не перетинає магістраль.
+	# Ребра-кандидати: лише сусіди вздовж вулиці й проліти від ТП; жодних зрізів через квартали.
 	var edges: Array = []
-	var consecutive: Dictionary = {}
 	for run: Array in runs:
 		for k in range(1, run.size()):
-			consecutive[Vector2i(mini(run[k - 1], run[k]), maxi(run[k - 1], run[k]))] = true
-	for i in stations.size():
-		if dead.has(i):
-			continue
-		for j in range(i + 1, stations.size()):
-			if dead.has(j):
-				continue
+			var i: int = run[k - 1]
+			var j: int = run[k]
 			var d: float = stations[i].distance_to(stations[j])
-			if d <= MAX_04KV and d >= 1.4 and not _p.span_hits_building(stations[i], stations[j]) \
-					and not _crosses(stations[i], stations[j], trunk_segs):
-				edges.append([i, j, d * (0.9 if consecutive.has(Vector2i(i, j)) else 1.6)])
+			if i == j or dead.has(i) or dead.has(j):
+				continue
+			if d <= MAX_04KV:
+				if _span_clear(stations[i], stations[j], trunk_segs):
+					edges.append([mini(i, j), maxi(i, j), d])
+			elif d <= BRIDGE_CHAIN_MAX:
+				# Станцію між ними не вдалось поставити (двір, вода): опора посередині тієї ж вулиці.
+				edges.append_array(_chain_edges(stations, i, j, trunk_segs))
+	var from_tp: int = 0
+	for i in stations.size():
+		var d: float = stations[root].distance_to(stations[i])
+		if i != root and not dead.has(i) and d <= MAX_04KV and _span_clear(stations[root], stations[i], trunk_segs):
+			edges.append([mini(root, i), maxi(root, i), d * 1.6])
+			from_tp += 1
+	# ТП далі за проліт від вулиці: пряма ланка опор 0.4 кВ до найближчої станції, якщо вона не зачіпає будівель.
+	if from_tp == 0:
+		var near_i: int = -1
+		for i in stations.size():
+			if i != root and not dead.has(i) and (near_i < 0 or stations[i].distance_to(tp) < stations[near_i].distance_to(tp)):
+				near_i = i
+		if near_i >= 0 and stations[near_i].distance_to(tp) <= BRIDGE_CHAIN_MAX:
+			edges.append_array(_chain_edges(stations, root, near_i, trunk_segs))
 	edges.sort_custom(func(a: Array, b: Array) -> bool: return a[2] < b[2] or (a[2] == b[2] and (a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))))
-	# Дерево Прима від ТП. Частина вулиць, що не дотягується до дерева звичайним прольотом, сполучається з ним коротким
-	# ланцюжком опор по прямій між найближчими станціями.
-	var parent: Dictionary = {entry: -1}
+	# Дерево Прима від ТП. Частина вулиць, відрізана від дерева, сполучається з ним одним коротким прольотом.
+	var parent: Dictionary = {root: -1}
 	var tree_edges: Array = []
 	var bridged: Dictionary = dead.duplicate()
 	while true:
@@ -344,32 +410,15 @@ func _village(homes: Array, trunk: Array) -> void:
 		if link.is_empty():
 			break
 		bridged[link[1]] = true
-		var chain: Array[Vector2] = _between(stations[link[0]], stations[link[1]], MAX_04KV, STATION_GAP)
-		var prev_i: int = link[0]
-		var ok: bool = true
-		var added: Array = []
-		for q in chain:
-			if _p.span_hits_building(stations[prev_i], q) or _crosses(stations[prev_i], q, trunk_segs):
-				ok = false
-				break
-			stations.append(q)
-			added.append([prev_i, stations.size() - 1, 1.0])
-			prev_i = stations.size() - 1
-		if ok and not _p.span_hits_building(stations[prev_i], stations[link[1]]) and not _crosses(stations[prev_i], stations[link[1]], trunk_segs) \
-				and stations[prev_i].distance_to(stations[link[1]]) <= MAX_04KV:
-			added.append([prev_i, link[1], 1.0])
-			edges.append_array(added)
-	# Відводи: кожна хата — до найближчої станції дерева, звідки відвід можливий.
+		if _span_clear(stations[link[0]], stations[link[1]], trunk_segs):
+			edges.append([link[0], link[1], 1.0])
+	# Відводи: кожна хата — до найближчої станції дерева, звідки відвід можливий; коли такої нема — нова опора
+	# на землі поблизу, з'єднана коротким прольотом із деревом.
 	var needed: Dictionary = {}
 	for h: Dictionary in homes:
-		var pick: int = -1
-		var pick_d: float = INF
-		for i: int in parent:
-			if _p.drop_ok(h["rect"], stations[i]):
-				var d: float = stations[i].distance_to(PropLayer.drop_attach(h["rect"], stations[i]))
-				if d < pick_d - 1e-9 or (absf(d - pick_d) <= 1e-9 and i < pick):
-					pick_d = d
-					pick = i
+		var pick: int = _pick_station(h["rect"], stations, parent)
+		if pick < 0:
+			pick = _add_station_for(h["rect"], stations, parent, tree_edges, trunk_segs)
 		if pick < 0:
 			unfed.append(h["centre"])
 			continue
@@ -378,11 +427,17 @@ func _village(homes: Array, trunk: Array) -> void:
 			needed[u] = true
 			u = parent[u]
 	if needed.is_empty():
+		# ТП, яка нікого не живить, не лишається ні в мережі, ні на лінії 10 кВ.
+		if inserted:
+			_remove_pole(trunk, tp)
+			_avoid.erase(tp)
 		return
-	needed[entry] = true
+	if not shared:
+		transformers.append(tp)
+	needed[root] = true
 	for i: int in needed:
 		_avoid.append(stations[i])
-	# Ламані: від ТП через вхід, далі гілками дерева (як lines).
+	# Ламані: від ТП гілками дерева (як lines).
 	var kids: Dictionary = {}
 	for i: int in needed:
 		var par: int = parent[i]
@@ -390,14 +445,11 @@ func _village(homes: Array, trunk: Array) -> void:
 			if not kids.has(par):
 				kids[par] = []
 			(kids[par] as Array).append(i)
-	var chain_first: Array[Vector2] = []
-	var stack: Array = [[entry, chain_first]]
+	var stack: Array = [[root, [] as Array[Vector2]]]
 	while not stack.is_empty():
 		var item: Array = stack.pop_back()
-		var node: int = item[0]
-		var pts: Array[Vector2] = item[1]
-		var cur: int = node
-		var ch: Array[Vector2] = pts.duplicate()
+		var cur: int = item[0]
+		var ch: Array[Vector2] = (item[1] as Array[Vector2]).duplicate()
 		ch.append(stations[cur])
 		while true:
 			var ks: Array = kids.get(cur, [])
@@ -408,7 +460,126 @@ func _village(homes: Array, trunk: Array) -> void:
 				stack.append([ks[k], [stations[cur]] as Array[Vector2]])
 			cur = ks[0]
 			ch.append(stations[cur])
-		lines.append({"kind": &"04kv", "points": ch})
+		if ch.size() >= 2:
+			lines.append({"kind": &"04kv", "points": ch})
+
+
+## Станція дерева, найближча до центру хати, від якої відвід можливий (-1 — жодна не дістає): так само обирає відвід
+## розстановка (PropLayer _service_drops).
+func _pick_station(rect: Rect2, stations: Array[Vector2], parent: Dictionary) -> int:
+	var pick: int = -1
+	var pick_d: float = INF
+	for i: int in parent:
+		if _p.drop_ok(rect, stations[i]):
+			var d: float = stations[i].distance_to(rect.get_center())
+			if d < pick_d - 1e-9 or (absf(d - pick_d) <= 1e-9 and i < pick):
+				pick_d = d
+				pick = i
+	return pick
+
+
+## Нова опора на землі біля хати, від якої можливий відвід і яка сполучається з деревом одним прольотом ≤ MAX_04KV
+## (вільним від будівель, магістралі й гілок дерева). Повертає її індекс у stations, -1 — місця нема.
+func _add_station_for(rect: Rect2, stations: Array[Vector2], parent: Dictionary, tree_edges: Array, trunk_segs: Array) -> int:
+	var accept := func(q: Vector2) -> bool:
+		# Опора-запаска стоїть на вулиці перед хатою (не далі 20 м від асфальту), а не в полі.
+		if not _p.drop_ok(rect, q) or _p.road_edge_m(q) > 20.0:
+			return false
+		for s in stations:
+			if s.distance_to(q) < 1.4:
+				return false
+		for i: int in parent:
+			if stations[i].distance_to(q) <= MAX_04KV and _span_clear(stations[i], q, trunk_segs) and not _crosses(stations[i], q, tree_edges):
+				return true
+		return false
+	var q: Vector2 = _snap(rect.get_center(), 3.4, accept)
+	if not q.is_finite():
+		# Дерево далі за проліт: опора на вулиці перед хатою й ланцюжок опор до найближчої досяжної станції дерева.
+		var far := func(c: Vector2) -> bool:
+			if not _p.drop_ok(rect, c) or _p.road_edge_m(c) > 20.0:
+				return false
+			for s in stations:
+				if s.distance_to(c) < 1.4:
+					return false
+			var probe: Array[Vector2] = stations.duplicate()
+			return not _chain_to_tree(probe, parent, c, trunk_segs, tree_edges).is_empty()
+		q = _snap(rect.get_center(), 3.4, far)
+		if not q.is_finite():
+			return -1
+		var ids: Array[int] = _chain_to_tree(stations, parent, q, trunk_segs, tree_edges)
+		if ids.is_empty():
+			return -1
+		for k in range(1, ids.size()):
+			parent[ids[k]] = ids[k - 1]
+			tree_edges.append([stations[ids[k - 1]], stations[ids[k]]])
+		return ids.back()
+	var best: int = -1
+	for i: int in parent:
+		if stations[i].distance_to(q) <= MAX_04KV and _span_clear(stations[i], q, trunk_segs) and not _crosses(stations[i], q, tree_edges) \
+				and (best < 0 or stations[i].distance_to(q) < stations[best].distance_to(q)):
+			best = i
+	stations.append(q)
+	parent[stations.size() - 1] = best
+	tree_edges.append([stations[best], q])
+	return stations.size() - 1
+
+
+## Ланцюжок опор від найближчої досяжної станції дерева до нової опори в точці c (станції додаються в stations; c —
+## остання); порожній, якщо жодна станція в межах BRIDGE_CHAIN_MAX не сполучається вільним від будівель, магістралі й
+## гілок дерева ланцюжком.
+func _chain_to_tree(stations: Array[Vector2], parent: Dictionary, c: Vector2, trunk_segs: Array, tree_edges: Array) -> Array[int]:
+	var order: Array[int] = []
+	for i: int in parent:
+		if stations[i].distance_to(c) <= BRIDGE_CHAIN_MAX:
+			order.append(i)
+	order.sort_custom(func(a: int, b: int) -> bool: return stations[a].distance_to(c) < stations[b].distance_to(c) or (stations[a].distance_to(c) == stations[b].distance_to(c) and a < b))
+	stations.append(c)
+	var qi: int = stations.size() - 1
+	for i in order:
+		var base: int = stations.size()
+		var ids: Array[int] = _chain_ids(stations, i, qi, trunk_segs)
+		var ok: bool = not ids.is_empty()
+		for k in range(1, ids.size()):
+			if _crosses(stations[ids[k - 1]], stations[ids[k]], tree_edges):
+				ok = false
+		if ok:
+			return ids
+		stations.resize(base)
+	stations.resize(qi)
+	return []
+
+
+## Ланцюжок станцій від i до j з проміжними опорами (кожен проліт ≤ MAX_04KV, вільний від будівель і магістралі), у
+## порядку від i до j; порожній, якщо не вийшло.
+func _chain_ids(stations: Array[Vector2], i: int, j: int, trunk_segs: Array) -> Array[int]:
+	var ids: Array[int] = [i]
+	for q in _between(stations[i], stations[j], MAX_04KV, STATION_GAP):
+		if not _span_clear(stations[ids.back()], q, trunk_segs):
+			return []
+		stations.append(q)
+		ids.append(stations.size() - 1)
+	if stations[ids.back()].distance_to(stations[j]) > MAX_04KV or not _span_clear(stations[ids.back()], stations[j], trunk_segs):
+		return []
+	ids.append(j)
+	return ids
+
+
+func _chain_edges(stations: Array[Vector2], i: int, j: int, trunk_segs: Array) -> Array:
+	var ids: Array[int] = _chain_ids(stations, i, j, trunk_segs)
+	var out: Array = []
+	for k in range(1, ids.size()):
+		out.append([mini(ids[k - 1], ids[k]), maxi(ids[k - 1], ids[k]), 1.0])
+	return out
+
+
+## Проліт a–b не лягає на будівлю й не перетинає магістраль.
+func _span_clear(a: Vector2, b: Vector2, trunk_segs: Array) -> bool:
+	if _p.span_hits_building(a, b):
+		return false
+	for e: Array in trunk_segs:
+		if _seg_crosses(a, b, e[0], e[1]):
+			return false
+	return true
 
 
 ## Чи знайдеться біля стовпа в точці p, повернутого вздовж t, місце під шафу ТП.
@@ -444,17 +615,22 @@ func _nearest_gap(stations: Array[Vector2], parent: Dictionary, bridged: Diction
 	return pick
 
 
-## Вставити ТП у проліт магістралі, якщо її там ще нема.
-func _insert_pole(trunk: Array, pt: Vector2) -> void:
+## Вставити ТП у проліт магістралі, якщо її там ще нема; true — вставлено.
+func _insert_pole(trunk: Array, pt: Vector2) -> bool:
 	for line: Array in trunk:
 		if line.has(pt):
-			return
-	for li in trunk.size():
-		var line: Array = trunk[li]
+			return false
+	for line: Array in trunk:
 		for k in range(1, line.size()):
 			if Geometry2D.get_closest_point_to_segment(pt, line[k - 1], line[k]).distance_to(pt) <= 0.6:
 				line.insert(k, pt)
-				return
+				return true
+	return false
+
+
+func _remove_pole(trunk: Array, pt: Vector2) -> void:
+	for line: Array in trunk:
+		line.erase(pt)
 
 
 static func _seg_crosses(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> bool:
@@ -486,6 +662,9 @@ func _streets(homes: Array, stations: Array[Vector2], runs: Array) -> void:
 		var run: Array[Vector2] = []
 		var normals: Array[Vector2] = []
 		var run_side: float = 0.0
+		var last_near: int = -1
+		# Кільцева дорога: ствол лише з боку дворів, а не навколо кварталу по зовнішньому боці.
+		var closed: bool = pts.size() > 2 and pts[0].distance_to(pts[pts.size() - 1]) < 1.5
 		for k in pts.size():
 			var a: Vector2 = pts[k] - Vector2(_ring, _ring)
 			var dir: Vector2 = (pts[mini(k + 1, pts.size() - 1)] - pts[maxi(k - 1, 0)]).normalized()
@@ -494,15 +673,20 @@ func _streets(homes: Array, stations: Array[Vector2], runs: Array) -> void:
 			for h: Dictionary in homes:
 				near = near or a.distance_to(h["centre"]) <= STREET_R
 			var side: float = _side(a, nrm, homes, run_side) if near else 0.0
-			if side == 0.0 or (not run.is_empty() and side != run_side):
-				_flush(run, normals, run_side, stations, runs)
+			if side != 0.0 and not run.is_empty() and side != run_side:
+				_flush(run.slice(0, last_near + 1), normals, run_side, stations, runs, not closed)
 				run = []
 				normals = []
-			if side != 0.0:
+				last_near = -1
+			if side != 0.0 and run.is_empty():
+				run_side = side
+			# Ділянка між двома дворами лишається на тому ж боці: ствол іде вздовж вулиці без розривів.
+			if side != 0.0 or not run.is_empty():
 				run.append(a)
 				normals.append(nrm)
-				run_side = side
-		_flush(run, normals, run_side, stations, runs)
+				if side != 0.0:
+					last_near = run.size() - 1
+		_flush(run.slice(0, last_near + 1), normals, run_side, stations, runs, not closed)
 
 
 ## З якого боку вулиці двори: +1 — вздовж нормалі, −1 — проти, 0 — з жодного. Коли двори з обох боків, лишається
@@ -524,7 +708,7 @@ func _side(a: Vector2, nrm: Vector2, homes: Array, prefer: float) -> float:
 	return 1.0 if near_d[0] <= near_d[1] else -1.0
 
 
-func _flush(run: Array[Vector2], normals: Array[Vector2], side: float, stations: Array[Vector2], runs: Array) -> void:
+func _flush(run: Array[Vector2], normals: Array[Vector2], side: float, stations: Array[Vector2], runs: Array, may_flip: bool) -> void:
 	if run.size() < 6:
 		return
 	var cum: PackedFloat32Array = PackedFloat32Array([0.0])
@@ -568,12 +752,15 @@ func _flush(run: Array[Vector2], normals: Array[Vector2], side: float, stations:
 				m += 1
 			picks.append(m)
 		picks.append(g1)
+	# Бік дворів, а коли смуга між асфальтом і хатами заставлена (проліти лягають на будівлі) — протилежний бік
+	# вулиці: відводи тоді перетинають вулицю.
+	var spots: Array[Vector2] = _spots(run, normals, picks, side)
+	if may_flip:
+		var other: Array[Vector2] = _spots(run, normals, picks, -side)
+		if _blocked(other) < _blocked(spots):
+			spots = other
 	var ids: Array[int] = []
-	for idx in picks:
-		var q: Vector2 = run[idx] + normals[idx] * side * VERGE
-		var s: Vector2 = _snap_wide(q, 0.4)
-		if not s.is_finite():
-			continue
+	for s: Vector2 in spots:
 		var at: int = stations.find(s)
 		if at < 0:
 			# Станція, що опинилась упритул до наявної (розвилка вулиць), — та сама опора.
@@ -590,3 +777,22 @@ func _flush(run: Array[Vector2], normals: Array[Vector2], side: float, stations:
 			ids.append(at)
 	if ids.size() >= 2:
 		runs.append(ids)
+
+
+## Місця станцій уздовж вулиці з боку side (пропуск там, де придатного місця нема).
+func _spots(run: Array[Vector2], normals: Array[Vector2], picks: Array[int], side: float) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for idx in picks:
+		var s: Vector2 = _snap_wide(run[idx] + normals[idx] * side * VERGE, 0.6)
+		if s.is_finite() and (out.is_empty() or out.back().distance_to(s) >= 1.4):
+			out.append(s)
+	return out
+
+
+## Скільки прольотів між сусідніми місцями лягають на будівлю або надто довгі, і скільки місць не знайшлось.
+func _blocked(spots: Array[Vector2]) -> int:
+	var bad: int = 0
+	for k in range(1, spots.size()):
+		if _p.span_hits_building(spots[k - 1], spots[k]) or spots[k - 1].distance_to(spots[k]) > BRIDGE_CHAIN_MAX:
+			bad += 1
+	return bad * 2 + (0 if spots.size() >= 2 else 4)

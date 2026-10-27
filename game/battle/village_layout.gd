@@ -45,6 +45,9 @@ const LAYOUTS: Dictionary = {
 		"orchards": [Vector2i(16, 6), Vector2i(16, 7), Vector2i(5, 8), Vector2i(14, 15), Vector2i(16, 17)],
 		"routes": [
 			{"kind": &"10kv", "axis": [Vector2(6, -13), Vector2(6, 3), Vector2(13, 3), Vector2(13, 5), Vector2(21, 5), Vector2(21, 18), Vector2(19, 18), Vector2(19, 34)], "side": 1.0},
+			# Хутори на краю світу: лінія від краю вздовж бічної дороги до хати.
+			{"kind": &"10kv", "axis": [Vector2(38, -0.8), Vector2(33, -0.8)], "side": 1.0},
+			{"kind": &"10kv", "axis": [Vector2(-13, 22.5), Vector2(-8, 22.5)], "side": 1.0},
 		],
 		"hay": [Vector2(17.0, 4.2), Vector2(9.3, 5.0), Vector2(18.5, 14.5), Vector2(9.5, 19.4)],
 	},
