@@ -74,13 +74,13 @@ def _panel(rnd, w, h, t, hole):
 
 
 def _rock(rnd, size):
-    """Брила: опукла оболонка 12-16 випадкових точок на витягнутій сфері."""
-    n = rnd.randint(12, 16)
-    a, b, c = size, size * rnd.uniform(0.6, 1.0), size * rnd.uniform(0.45, 0.8)
+    """Брила: опукла оболонка 16-22 точок на витягнутій сфері, повнотіла (об'єм ~0.45 від куба зі стороною size)."""
+    n = rnd.randint(16, 22)
+    a, b, c = size, size * rnd.uniform(0.75, 1.0), size * rnd.uniform(0.6, 0.9)
     pts = []
     for _ in range(n):
         v = Vector((rnd.gauss(0, 1), rnd.gauss(0, 1), rnd.gauss(0, 1))).normalized()
-        pts.append((v.x * a / 2 * rnd.uniform(0.8, 1.0), v.y * b / 2 * rnd.uniform(0.8, 1.0), v.z * c / 2 * rnd.uniform(0.8, 1.0)))
+        pts.append((v.x * a / 2 * rnd.uniform(0.9, 1.0), v.y * b / 2 * rnd.uniform(0.9, 1.0), v.z * c / 2 * rnd.uniform(0.9, 1.0)))
     bm = bmesh.new()
     for p in pts:
         bm.verts.new(p)
@@ -252,8 +252,8 @@ def simulate(seed, mound_h, boxes, region, counts, frames=240, floor_stubs=(), m
 # (лягле заморожується) і зберігає w<k>.blend та pieces_<k>.pkl. Порядок: ядро з великих брил, середні шматки, плити й панелі, дрібняк у щілини.
 
 WAVES = {
-    1: dict(name="boulders", comp=(("rock", 180, 0.8, 1.5),)),
-    2: dict(name="chunks", comp=(("rock", 650, 0.3, 0.8),)),
+    1: dict(name="boulders", comp=(("rock", 190, 0.95, 1.5),)),
+    2: dict(name="chunks", comp=(("rock", 720, 0.4, 0.8),)),
     3: dict(name="slabs", comp=(("slab", 10, 0, 0), ("panel", 60, 0, 0))),
     4: dict(name="fines_a", comp=(("rock", 625, 0.1, 0.3),)),
     5: dict(name="fines_b", comp=(("rock", 375, 0.1, 0.3),)),
