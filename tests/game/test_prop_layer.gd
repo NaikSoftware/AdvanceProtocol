@@ -1766,7 +1766,7 @@ func test_homes_have_at_most_one_short_drop_to_their_wall(p = use_parameters(MAP
 			assert_eq(_drops_to(props, _rect_of(inst)).size(), 0, "%s: відвід до сараю чи руїни %s" % [p, inst["cells"]])
 
 
-## Відвід короткий: не довший за DROP_DIRECT (16 м), не над грядками, не крізь чужий двір. Через вулицю — лише прямо впоперек: кут до нормалі вулиці не більший за 25° і проліт не довший за DROP_CROSS
+## Відвід короткий: не довший за DROP_DIRECT (16 м), не над грядками, не крізь чужий двір, кінець — не біля димаря. Через вулицю — лише прямо впоперек: кут до нормалі вулиці не більший за 25° і проліт не довший за DROP_CROSS
 ## (14 м). Довгий навскісний відвід через вулицю чи поле — павутиння, а не село.
 func test_drops_are_short_and_cross_streets_square(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
@@ -1779,6 +1779,8 @@ func test_drops_are_short_and_cross_streets_square(p = use_parameters(MAPS)) -> 
 		var lip := Vector2((d[1] as Vector3).x, (d[1] as Vector3).z)
 		var len_: float = from.distance_to(lip)
 		assert_lte(len_, PropLayer.DROP_DIRECT + 1e-3, "%s: відвід до %s задовгий" % [p, lip])
+		for ch: Vector2 in placer._chimneys:
+			assert_gte(ch.distance_to(lip), PropLayer.DROP_CHIMNEY_CLEAR, "%s: відвід до %s закінчується біля димаря" % [p, lip])
 		for r: Rect2 in placer._garden_rects:
 			assert_false(PropLayer._Placer._seg_hits_rect(from, lip, r), "%s: відвід до %s над грядкою" % [p, lip])
 		var house: Rect2
@@ -1872,22 +1874,35 @@ func test_wire_rule_drop_along_view() -> void:
 	assert_false(placer.wire_ok(lip + Vector2.ONE.normalized() * 1.0, lip, PropLayer.DROP_CROSS, r))
 
 
-## Стовп поруч із тюком сіна чи у прорізі воріт не стоїть.
-func test_pole_spot_rules_hay_and_gate() -> void:
+## Стовп поруч із тюком сіна (ближче POLE_HAY_CLEAR) не стоїть: жодне місце в цій смузі довкола будь-якого тюка не
+## придатне. Без правила частина таких місць придатна (поле біля тюка).
+func test_pole_spot_rule_hay() -> void:
 	var props: PropLayer = _cached("river").props()
 	var placer = props._placer
-	var hay := Vector2.INF
-	for inst in props._instances:
-		if _kind(inst["model"]) == PropLayer.Kind.HAY:
-			var o: Vector3 = (inst["transform"] as Transform3D).origin
-			hay = Vector2(o.x, o.z)
-			break
-	assert_true(hay.is_finite(), "передумова — тюк є")
-	assert_false(placer.pole_spot_ok(hay + Vector2(0.15, 0.0), 2), "опора впритул до тюка")
+	var n: int = 0
+	for r: Rect2 in placer._hay_rects:
+		for k in 24:
+			var q: Vector2 = r.get_center() + Vector2.from_angle(TAU * k / 24.0) * (maxf(r.size.x, r.size.y) * 0.5 + PropLayer.POLE_HAY_CLEAR * 0.6)
+			if r.grow(PropLayer.POLE_HAY_CLEAR).has_point(q):
+				n += 1
+				assert_false(placer.pole_spot_ok(q, 2), "опора впритул до тюка %s" % q)
+	assert_gt(n, 0, "передумова — тюки є")
+
+
+## Стовп у прорізі воріт (ближче POLE_GATE_CLEAR до відрізка між стовпами воріт) не стоїть: жодне місце там не придатне.
+func test_pole_spot_rule_gate(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var placer = props._placer
 	assert_gt(props._gate_posts.size(), 1, "передумова — ворота є")
-	var gate: Vector2 = (props._gate_posts[0] + props._gate_posts[1]) * 0.5
-	assert_true(placer.near_gate(gate))
-	assert_false(placer.pole_spot_ok(gate, 2), "опора в прорізі воріт")
+	for g in props._gate_posts.size() / 2:
+		var a: Vector2 = props._gate_posts[2 * g]
+		var b: Vector2 = props._gate_posts[2 * g + 1]
+		var nrm: Vector2 = (b - a).normalized().orthogonal()
+		for t in 5:
+			for o: float in [-0.15, -0.08, 0.0, 0.08, 0.15]:
+				var q: Vector2 = a.lerp(b, t / 4.0) + nrm * o
+				assert_true(placer.near_gate(q))
+				assert_false(placer.pole_spot_ok(q, 2), "опора у воротах %s" % q)
 
 
 ## Пошук мосту між відрізаною станцією й деревом обмежений: не більше BRIDGE_TRIES спроб на станцію й BRIDGE_BUDGET на
