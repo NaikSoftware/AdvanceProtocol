@@ -2591,16 +2591,21 @@ class _Placer:
 			var road: Vector2 = _verge_point(outside)
 			# Двері можуть дивитися від воріт (Хребет): тоді стежка обходить хату, а не різає її.
 			var ctrl := PackedVector2Array([door, porch])
-			ctrl.append_array(_route(porch, inside, house, 0.04 if tight else 0.12))
+			var route: PackedVector2Array = _yard_route(porch, inside)
+			if route.is_empty():
+				route = _route(porch, inside, house, 0.04 if tight else 0.12)
+			ctrl.append_array(route)
 			ctrl.append_array([gate, outside])
 			if road != Vector2.INF and road.distance_to(outside) > 0.02:
-				ctrl.append(road)
+				# Узбіччя може бути за сусідньою будівлею чи парканом: теж обхід, а не пряма.
+				# Дорога по той бік паркану (ворота дивляться від неї): стежка кінчається біля воріт, не крізь двір.
+				ctrl.append_array(_yard_route(outside, road, 1.8, false))
 			var pts := PackedVector2Array([ctrl[0]])
 			for k in range(1, ctrl.size()):
 				if ctrl[k].distance_to(ctrl[k - 1]) > 1e-3:
-					pts.append_array(Footpaths.meander(ctrl[k - 1], ctrl[k], 0.01 if tight else 0.04, 1.0, sd + k).slice(1))
-			pts = Footpaths.resample(Footpaths.smooth(pts, 2 if tight else 6))
-			if tight and _path_hits_fence(pts):
+					pts.append_array(Footpaths.meander(ctrl[k - 1], ctrl[k], 0.01, 1.0, sd + k).slice(1))
+			pts = Footpaths.resample(Footpaths.smooth(pts, 2))
+			if _path_hits_fence(pts) or _path_in_building(pts):
 				pts = Footpaths.resample(ctrl)
 			# Безперервна смуга від дверей через хвіртку до узбіччя: ~0.7 м, біля дверей і хвіртки вдвічі ширша.
 			var hw := PackedFloat32Array()
@@ -2658,12 +2663,102 @@ class _Placer:
 		for pair: Array in [[inside, tgt], [porch, tgt]]:
 			var pts: PackedVector2Array = Footpaths.resample(Footpaths.smooth(Footpaths.meander(pair[0], pair[1], 0.04, 0.8, sd + 5), 4))
 			# Стежка до сараю не лізе крізь паркан двору (сарай по той бік вигину кільця): такої стежки нема.
-			if _path_hits_fence(pts):
+			if _path_hits_fence(pts) or _path_in_building(pts):
 				continue
 			var hw := PackedFloat32Array()
 			hw.resize(pts.size())
 			hw.fill(0.1)
 			walks.append({"kind": &"yard_floor", "home": i, "door": pair[0], "pts": pts, "seed": sd + 7, "solid": 0.9, "flat": 3.0, "half": hw})
+
+	## Найкоротша ламана від a до b (без a, з b) між будівлями й парканами двору: хвиля по сітці 0.05 і вирівнювання
+	## по прямій видимості. Ворота не навпроти дверей, тож пряма лінія від дверей до хвіртки різала б хату чи паркан.
+	## Порожня — шляху нема (тоді _route обходить лише хату).
+	func _yard_route(a: Vector2, b: Vector2, margin: float = 0.7, free_goal: bool = true) -> PackedVector2Array:
+		var step: float = 0.05
+		var lo: Vector2 = a.min(b) - Vector2(margin, margin)
+		var nx: int = ceili((a.max(b).x + margin - lo.x) / step) + 1
+		var ny: int = ceili((a.max(b).y + margin - lo.y) / step) + 1
+		var blocked := PackedByteArray()
+		blocked.resize(nx * ny)
+		for pl: Array in placed:
+			var r: Rect2 = (pl[0] as Rect2).grow(0.03)
+			for gy in range(maxi(0, floori((r.position.y - lo.y) / step)), mini(ny, ceili((r.end.y - lo.y) / step) + 1)):
+				for gx in range(maxi(0, floori((r.position.x - lo.x) / step)), mini(nx, ceili((r.end.x - lo.x) / step) + 1)):
+					if r.has_point(lo + Vector2(gx, gy) * step):
+						blocked[gy * nx + gx] = 1
+		for sg: Array in _fence_segments():
+			var n: int = maxi(1, ceili((sg[0] as Vector2).distance_to(sg[1]) / (step * 0.5)))
+			for k in n + 1:
+				var q: Vector2 = (sg[0] as Vector2).lerp(sg[1], float(k) / float(n)) - lo
+				for oy in range(-1, 2):
+					for ox in range(-1, 2):
+						var gx: int = roundi(q.x / step) + ox
+						var gy: int = roundi(q.y / step) + oy
+						if gx >= 0 and gy >= 0 and gx < nx and gy < ny:
+							blocked[gy * nx + gx] = 1
+		# Початок і кінець стоять упритул до стіни чи паркану: довкола них вільно.
+		for e: Vector2 in [a, b]:
+			var rad: int = 2 if (free_goal or e == a) else 1
+			for oy in range(-rad, rad + 1):
+				for ox in range(-rad, rad + 1):
+					var gx: int = roundi((e.x - lo.x) / step) + ox
+					var gy: int = roundi((e.y - lo.y) / step) + oy
+					if gx >= 0 and gy >= 0 and gx < nx and gy < ny and Vector2(ox, oy).length() <= float(rad):
+						blocked[gy * nx + gx] = 0
+		var from := Vector2i(roundi((a.x - lo.x) / step), roundi((a.y - lo.y) / step))
+		var goal := Vector2i(roundi((b.x - lo.x) / step), roundi((b.y - lo.y) / step))
+		var prev: Dictionary = {from: from}
+		var queue: Array[Vector2i] = [from]
+		var head: int = 0
+		while head < queue.size() and not prev.has(goal):
+			var c: Vector2i = queue[head]
+			head += 1
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]:
+				var n: Vector2i = c + d
+				if n.x < 0 or n.y < 0 or n.x >= nx or n.y >= ny or prev.has(n) or blocked[n.y * nx + n.x] == 1:
+					continue
+				prev[n] = c
+				queue.append(n)
+		if not prev.has(goal):
+			return PackedVector2Array()
+		var cells: Array[Vector2] = []
+		var cur: Vector2i = goal
+		while cur != from:
+			cells.append(lo + Vector2(cur) * step)
+			cur = prev[cur]
+		cells.append(lo + Vector2(from) * step)
+		cells.reverse()
+		# Вирівнювання: з кожної точки — до найдальшої, яку видно напряму по вільних клітинках.
+		var out := PackedVector2Array()
+		var i: int = 0
+		while i < cells.size() - 1:
+			var j: int = cells.size() - 1
+			while j > i + 1:
+				var seen := true
+				var span: float = cells[i].distance_to(cells[j])
+				var n_s: int = ceili(span / (step * 0.5))
+				for k in range(1, n_s):
+					var q: Vector2 = cells[i].lerp(cells[j], float(k) / float(n_s)) - lo
+					if blocked[roundi(q.y / step) * nx + roundi(q.x / step)] == 1:
+						seen = false
+						break
+				if seen:
+					break
+				j -= 1
+			out.append(cells[j])
+			i = j
+		if out.is_empty():
+			out.append(b)
+		out[out.size() - 1] = b
+		return out
+
+	## Чи ламана заходить у будівлю (крім двох перших точок біля дверей).
+	func _path_in_building(pts: PackedVector2Array) -> bool:
+		for k in range(2, pts.size()):
+			for pl: Array in placed:
+				if (pl[0] as Rect2).grow(-0.005).has_point(pts[k]):
+					return true
+		return false
 
 	## Секції парканів двору як відрізки по осі моделі.
 	func _fence_segments() -> Array:
@@ -2943,7 +3038,7 @@ class _Placer:
 		for st: Vector2 in starts:
 			for l: Array in landings:
 				var dd: float = st.distance_to(l[0])
-				if dd >= 2.0 and dd <= 12.0:
+				if dd >= 2.2 and dd <= 12.0:
 					pairs.append([dd + 8.0 * float(l[1]), st, l[0]])
 		pairs.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 		for pr: Array in pairs:
