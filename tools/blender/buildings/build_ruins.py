@@ -194,7 +194,7 @@ def house1(ruined):
         lib.weather(b, "wall_plaster", [("y", S - c_, -1, -hx - c_, hx + c_, 0.5, E), ("y", N + c_, 1, -hx - c_, hx + c_, 0.5, E), ("x", hx + c_, 1, S - c_, N + c_, 0.5, E), ("x", -hx - c_, -1, S - c_, N + c_, 0.5, E)], seed=11)
         lib.finish(b, "house_h5", out, tri_limit=2200, footprint=(1, 1))
         return
-    kw = dict(top_tone=0.82, inner_tone=0.85, in_mat="plaster_burnt")             # внутрішні грані — обгоріла штукатурка
+    kw = dict(top_tone=0.82, inner_tone=0.5, in_mat="plaster_burnt")             # внутрішні грані — обгоріла штукатурка
     standing = dict(brick_mat="brick_face", cap=0.06, jag=0.12, **kw)          # на зламі — цегла, а не фарба
     broken = dict(brick_mat="brick_face", step=0.35, diag_p=0.85, jit=0.5, **kw)
     # справжні прорізи в стоячих стінах (u — від початку стіни): вікна 1.0-1.1 x 1.4 м на 1.0 м, двері 1.0 x 2.0 м
@@ -261,7 +261,7 @@ def house1(ruined):
     b.beam((-3.1, -1.5, sf(-3.1, -1.5) + 0.25), (-1.5, -0.3, sf(-1.5, -0.3) + 0.22), 0.2, "timber_dark", 0.22)
     b.beam((-2.7, 0.7, sf(-2.7, 0.7) + 0.2), (-1.1, 1.5, sf(-1.1, 1.5) + 0.25), 0.18, "timber_dark", 0.2)
     bh = heaps(b, plan, 7)
-    lib.finish(b, "ruin_half_house1", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    lib.finish(b, "ruin_half_house1", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.85)
 
 
 def house2(ruined):
@@ -312,7 +312,7 @@ def house2(ruined):
         lib.weather(b, "wall_plaster", [("y", S - c_, -1, -hx - c_, hx + c_, 0.6, E), ("y", N + c_, 1, -hx - c_, hx + c_, 0.6, E), ("x", hx + c_, 1, S - c_, N + c_, 0.6, E), ("x", -hx - c_, -1, S - c_, N + c_, 0.6, E)], seed=13)
         lib.finish(b, "house_h6", out, tri_limit=2600, footprint=(1, 1))
         return
-    kw = dict(top_tone=0.82, inner_tone=0.85, in_mat="plaster_burnt")
+    kw = dict(top_tone=0.82, inner_tone=0.5, in_mat="plaster_burnt")
     standing = dict(brick_mat="brick_face", cap=0.06, jag=0.1, **kw)
     # біля обваленого кута фронтова стіна обламана сходинками цегли до 3 м, а не обрізана рівно
     holes_s = [(0.8, 2.0, 3.6, 5.0), (4.9, 5.9, 0.0, 2.05)]                      # справжні: вікно другого поверху й двері; u — від p0 стіни
@@ -387,7 +387,7 @@ def house2(ruined):
     b.chimney(-1.8, 0.0, 8.0, 0.6, 2.4, "brick_face", cap="plinth_flat")
     lumps(b, plan, rnd, 14)
     bh = heaps(b, plan, 9)
-    lib.finish(b, "ruin_half_house2", out, tri_limit=4800, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    lib.finish(b, "ruin_half_house2", out, tri_limit=4800, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.85)
 
 
 def shed(ruined):

@@ -615,7 +615,8 @@ def mats():
         "clad_roof": roof_mat("clad_roof", "corr", (0.62, 0.61, 0.57), "x", "y", moss=False, sheet=(1.0, 4.0), cell_amp=0.04, streak=0.0),
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
-        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.47, 0.41, 0.35), sat=0.5, streak=0.9, base_dirt=0.9),
+        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.60, 0.53, 0.45), sat=0.5, streak=0.9, base_dirt=0.4),
+        "interior_back": make_material("interior_back", flat=(0.030, 0.028, 0.025), streak=0.3),   # тло прорізів руїн: ~35-45 sRGB у кадрі, глибина без чорної плями
         "interior_burnt": make_material("interior_burnt", flat=(0.010, 0.0095, 0.009), streak=0.6),   # вигоріле нутро на зламі: ≤ 35 sRGB навіть під небом
         "door_red": make_material("door_red", flat=srgb_lin((0.42, 0.20, 0.15)), seams=[("z", 0.5, 0.015, 0.4)], seam_col=srgb_lin((0.25, 0.12, 0.09)), streak=0.5, rough=0.5),   # фарбований метал
         "door_wood": make_material("door_wood", "Planks021", 1.0, (0.55, 0.42, 0.30), seams=[("h", 0.12, 0.012, 0.5)], streak=0.6, bump=0.01, rough=0.8),
@@ -683,7 +684,7 @@ def mats():
         "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
         "plaster_char": make_material("plaster_char", flat=(0.17, 0.155, 0.14), streak=0.5, base_dirt=0.2),
         "plinth_dark": make_material("plinth_dark", flat=(0.20, 0.195, 0.185), base_dirt=0.5, streak=0.4),
-        "plinth_flat": make_material("plinth_flat", flat=(0.28, 0.235, 0.19), base_dirt=0.9, streak=0.6),   # вологий цоколь: темний і теплий, а не світло-сірий
+        "plinth_flat": make_material("plinth_flat", flat=(0.42, 0.36, 0.30), base_dirt=0.4, streak=0.6),   # вологий цоколь: темний і теплий, а не світло-сірий
         "door_panel": make_material("door_panel", flat=(0.30, 0.22, 0.15), seams=[("h", 0.22, 0.015, 0.5)], streak=0.3, seam_bump=0.0),
         "mud_skirt": make_material("mud_skirt", flat=(0.10, 0.082, 0.065), streak=0.6, base_dirt=0.2),
         "boards_soft_vc": make_material("boards_soft_vc", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, vmul=True, seam_bump=0.8, undul=(1.2, 0.01), rough=0.9),
@@ -748,7 +749,7 @@ def mats():
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.36, 0.42, 0.44), streak=0.5),
         "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.2), patch=((0.03, 0.03, 0.03), 0.3)),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.50, 0.48), sat=0.25, seams=[("h", 0.2, 0.012, 0.5)], streak=1.0, base_dirt=0.5),
-        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.47, 0.41, 0.35), sat=0.5, streak=0.9, base_dirt=0.9),
+        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.60, 0.53, 0.45), sat=0.5, streak=0.9, base_dirt=0.4),
         "clad_burnt": make_material("clad_burnt", "CorrugatedSteel005", 1.0, (0.12, 0.12, 0.11), streak=1.0),
         "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.20, 0.36, 0.30), seams=[("z", 0.25, 0.03, 0.5)], base_dirt=0.5),
         "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.62, 0.66, 0.70), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], streak=0.8, base_dirt=0.4),
@@ -885,7 +886,7 @@ def _off(axis, c, sgn, u, z, off):
 
 def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, kband=(0.46, 0.56), ksill=(0.25, 0.38), lsill=(1.0, 1.9), eave_streaks=True):
     """Вивітрювання стін декалями-множниками: брудний низ із рваним краєм (-30%), темні патьоки під підвіконнями й від ринви (-25%),
-    пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
+    пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. Під кожним підвіконням — вологий слід: м'яка тінь завширшки 1.5 вікна, що згасає вниз до цоколя. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
     import random
     rnd = random.Random(seed)
     dm = mat + "_dm"
@@ -917,11 +918,10 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, 
                 k = rnd.uniform(*ksill)
                 b.decal([P(uu - hw, zbm), P(uu, zbm), P(uu, zt), P(uu - hw, zt)], (1.0, 1.0, k, 0.97), dm, nrm)
                 b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, zt), P(uu, zt)], (1.0, 1.0, 0.97, k), dm, nrm)
-        if wins:                                                        # вологий слід під усім підвіконням: широка пляма, що згасає вниз
-            for (_a, _c, _s, u, z, w, h) in wins:
-                zt2, zb2 = z - 0.1, max(zb + 0.04, z - 0.5)
-                if zt2 - zb2 > 0.2:
-                    b.decal([P(u - w / 2 - 0.1, zb2), P(u + w / 2 + 0.1, zb2), P(u + w / 2 + 0.1, zt2), P(u - w / 2 - 0.1, zt2)], (1.0, 1.0, 0.55, 0.55), dm, nrm)
+        for (_a, _c, _s, u, z, w, h) in wins:                           # вологий слід під усім підвіконням: м'яка тінь 1.5 вікна, ~20 % темніше, згасає вниз
+            zt2, zb2 = z - 0.1, max(zb + 0.04, z - 0.8)
+            if zt2 - zb2 > 0.2:
+                b.decal([P(u - w * 0.75, zb2), P(u + w * 0.75, zb2), P(u + w * 0.75, zt2), P(u - w * 0.75, zt2)], (1.0, 1.0, 0.8, 0.8), dm, nrm)
         for _ in (range(max(2, int((u1 - u0) / 1.5))) if eave_streaks else ()):   # з карниза: короткі патьоки там, де переливається ринва
             uu = rnd.uniform(u0 + 0.3, u1 - 0.3)
             if any(abs(uu - w[3]) < w[5] / 2 + 0.15 for w in wins) or any(a_ - 0.2 <= uu <= c_ + 0.2 for a_, c_ in skip_u):
@@ -1472,6 +1472,8 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
     while cuts[-1] < ln - 0.3:
         cuts.append(min(ln, cuts[-1] + rnd.uniform(0.35, 1.5)))
     cuts[-1] = ln
+    for h_ in holes:
+        assert 0 <= h_[0] < h_[1] <= ln, f"проріз {h_} поза стіною завдовжки {ln:.2f}"
     edges = {e for h_ in holes for e in (h_[0], h_[1])}   # краї проріму — на стиках шматків, інакше проріз різав би шматок навпіл
     if edges:
         cuts[:] = sorted({c_ for c_ in cuts if c_ in (0.0, ln) or all(abs(c_ - e) > 0.2 for e in edges)} | edges)
@@ -1530,6 +1532,10 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
             la, lc = (lo_c, lo_a) if flip else (lo_a, lo_c)
             side_n = nrm if q0 is pb[0] else -nrm                     # внутрішній — бік, звернений до центру будинку (руїни будуються навколо 0,0)
             inner = side_n.dot(-(a + c) * 0.5) > 0.0
+            if inner:                                                   # темнішає лише справжній внутрішній бік: сторона пари q0/q1 з inner_tone може бути зовнішньою
+                tn = inner_tone * tb
+            elif q0 is pb[2]:
+                tn = tb
             mq = (in_mat or mat) if inner else mat                      # внутрішній бік — обгоріла штукатурка, а не та сама фарба
             skip_band = False
             if hole is None:
@@ -1565,7 +1571,13 @@ def wall_run(b, p0, p1, thick, heights, mat, top_mat, seed=0, pitch=1.0, soot_h=
         pa = Vector((p0[0], p0[1], 0)) + u * hu0
         pc = Vector((p0[0], p0[1], 0)) + u * hu1
         for pe, dirn in ((pa, 1), (pc, -1)):
-            _quad(b, [V(pe + nrm, hz0), V(pe - nrm, hz0), V(pe - nrm, hz1), V(pe + nrm, hz1)], mat, tuple(u * dirn))
+            _quad(b, [V(pe + nrm, hz0), V(pe - nrm, hz0), V(pe - nrm, hz1), V(pe + nrm, hz1)], in_mat or mat, tuple(u * dirn))   # відкоси темні: крізь проріз вони займають більшу частину видимого, світлі читались блідою панеллю
+        mid_ = (pa + pc) / 2                              # тло проріму: темна «кімната» за 0.45 м усередині, інакше крізь проріз видно залиту сонцем купу (бліда панель)
+        inw = nrm.normalized()
+        if inw.dot(-mid_) < 0:
+            inw = -inw
+        off = inw * (nrm.length + 0.45)
+        _quad(b, [V(pa + off, max(0.0, hz0 - 0.4)), V(pc + off, max(0.0, hz0 - 0.4)), V(pc + off, hz1), V(pa + off, hz1)], "interior_back", tuple(-inw))
         if hz0 > 0.02:
             _quad(b, [V(pa + nrm, hz0), V(pc + nrm, hz0), V(pc - nrm, hz0), V(pa - nrm, hz0)], mat, (0, 0, 1))
         _quad(b, [V(pa - nrm, hz1), V(pc - nrm, hz1), V(pc + nrm, hz1), V(pa + nrm, hz1)], mat, (0, 0, -1))
