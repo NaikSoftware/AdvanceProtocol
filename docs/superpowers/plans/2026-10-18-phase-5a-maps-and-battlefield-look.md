@@ -527,8 +527,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 - [x] Explosions without craters; scorch under wrecks only on `seen`
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
-- [ ] Chimney smoke reads as volume, not flat strokes
-- [ ] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
+- [x] Chimney smoke reads as volume, not flat strokes
+- [x] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
 - [x] First scroll across the map is smooth, no hitch
 
 ### Task 24: New props in villages
