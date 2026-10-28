@@ -130,13 +130,16 @@ const DROP_END_FREE: float = 0.04
 const ROAD_SPAN_K: float = 1.2
 ## Дріт, що не перетинає вісь дороги, висить над асфальтом не довше за стільки (клітинки).
 const ROAD_CLIP: float = 0.3
-## Нахил камери, під яким дріт перевіряється на «над дахом»: зум гри (на дальньому зумі дріт — один піксель).
-const WIRE_SEEN_PITCH_DEG: float = 45.0
+## Нахил камери, під яким дріт перевіряється на «над дахом»: найнижчий нахил рига — під ним дріт на екрані зсунутий
+## найдалі, тож перевірка покриває кожен зум.
+const WIRE_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG
 ## Кінець відводу не ближче за стільки (клітинки, ~2 м) до димаря в плані: інакше відвід читається таким, що
 ## закінчується на димарі.
 const DROP_CHIMNEY_CLEAR: float = 0.25
-## Стовп ЛЕП — поза обрисом паркану двору й не ближче за стільки до лінії паркану (клітинки, 0.8 м).
-const POLE_FENCE_CLEAR: float = 0.1
+## Дріт на екрані не ближче за стільки (клітинки, ~1.2 м) до стовпчика димаря.
+const WIRE_CHIMNEY_CLEAR: float = 0.15
+## Стовп ЛЕП — поза обрисом паркану двору й не ближче за стільки до лінії паркану (клітинки, 1.6 м).
+const POLE_FENCE_CLEAR: float = 0.2
 ## Стовп ЛЕП не ближче за стільки до прорізу воріт садиби (клітинки, 1.6 м).
 const POLE_GATE_CLEAR: float = 0.2
 ## Стовп ЛЕП не ближче за стільки до тюка сіна (клітинки).
@@ -1771,8 +1774,8 @@ class _Placer:
 	var _prop_rects: Array[Rect2] = []
 	var _garden_rects: Array[Rect2] = []
 	var _hay_rects: Array[Rect2] = []
-	## Димарі будівель у плані.
-	var _chimneys: Array[Vector2] = []
+	## Шапки димарів будівель: x, z у плані, y — висота над ґрунтом під будівлею (клітинки).
+	var _chimneys: Array[Vector3] = []
 	## Клітинка дошки -> відрізки осі дороги поруч [a, b, півширина в клітинках]: покриття дороги
 	## — власна геометрія (RoadCourse), не вид клітинки, тож паркан на «полі» міг лягти на асфальт.
 	var road_index: Dictionary = {}
@@ -3493,7 +3496,7 @@ class _Placer:
 				var xf: Transform3D = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary).get("local", Transform3D()) as Transform3D)
 				for ch: Vector3 in (PropLayer.model(inst["model"]) as Dictionary).get("chimneys", []):
 					var w: Vector3 = xf * ch
-					_chimneys.append(Vector2(w.x, w.z))
+					_chimneys.append(Vector3(w.x, w.y - b.position.y, w.z))
 				if PropLayer.is_home(inst):
 					_home_rects.append(r)
 			elif k == Kind.BRIDGE:
@@ -3665,7 +3668,7 @@ class _Placer:
 			var d: float = from.distance_to(a)
 			if d > PropLayer.DROP_DIRECT or d < PropLayer.DROP_MIN:
 				continue
-			if _chimneys.any(func(ch: Vector2) -> bool: return ch.distance_to(a) < PropLayer.DROP_CHIMNEY_CLEAR):
+			if _chimneys.any(func(ch: Vector3) -> bool: return Vector2(ch.x, ch.z).distance_to(a) < PropLayer.DROP_CHIMNEY_CLEAR):
 				continue
 			# Відвід не лягає на жодну чужу будівлю, не ближче DROP_GAP.
 			var clear: bool = true
@@ -3751,38 +3754,50 @@ class _Placer:
 	func _seen_clear(a: Vector2, b: Vector2, own: Rect2) -> bool:
 		var drop: bool = own.has_area()
 		var away := -Vector2(sin(deg_to_rad(IsoCameraRig.YAW_DEGREES)), cos(deg_to_rad(IsoCameraRig.YAW_DEGREES)))
-		var cot: float = 1.0 / tan(deg_to_rad(PropLayer.WIRE_SEEN_PITCH_DEG))
-		var reach: float = (_pole_top() + 0.1) * cot
-		# Лише ті будівлі, до яких дріт зі зсувом узагалі може дістати.
-		var box := Rect2(a, Vector2.ZERO).expand(b).expand(a + away * reach).expand(b + away * reach).grow(0.05)
+		# Найнижча камера (PITCH_NEAR_DEG) зсуває дріт на екрані найдалі: що не лягає на будівлю під нею, не ляже й
+		# під крутішою.
+		var cot_max: float = 1.0 / tan(deg_to_rad(PropLayer.WIRE_SEEN_PITCH_DEG))
+		var reach: float = (_pole_top() + 0.1) * cot_max
+		# Лише ті будівлі й димарі, до яких дріт зі зсувом (від камери на висоту дроту, до камери — на висоту будівлі над
+		# ним) узагалі може дістати.
+		var box := Rect2(a, Vector2.ZERO).expand(b).expand(a + away * reach).expand(b + away * reach) \
+				.expand(a - away * reach).expand(b - away * reach).grow(0.05)
 		var near: Array[int] = []
 		for i in _bld_rects.size():
 			if _bld_rects[i].intersects(box):
 				near.append(i)
-		if near.is_empty():
+		var chims: Array[Vector3] = _chimneys.filter(func(c: Vector3) -> bool: return box.has_point(Vector2(c.x, c.z)))
+		if near.is_empty() and chims.is_empty():
 			return true
 		var len_: float = a.distance_to(b)
 		var n: int = maxi(2, ceili(len_ / 0.15))
+		var cot: float = cot_max
 		for j in range(0, n + 1):
 			var t: float = float(j) / n
 			var q: Vector2 = a.lerp(b, t)
 			var h: float = _wire_h(a, b, t, drop)
-			var shift: Vector2 = away * h * cot
 			var end_free: bool = drop and (1.0 - t) * len_ < PropLayer.DROP_END_FREE
 			for i: int in near:
 				var r: Rect2 = _bld_rects[i]
 				var mine: bool = drop and r.is_equal_approx(own)
 				if end_free and mine:
 					continue
-				# Точка будівлі на висоті z на екрані збігається з дротом, якщо лежить на зсуві (h − z)·ctg від нього:
-				# стіна внизу — повний зсув, гребінь — найменший. Відвід кріпиться на стіні власної хати, тож над її стіною
-				# він і має читатися — заборонено лише над її дахом (вище за звіс, DROP_ATTACH_H + 1 м).
-				var f0: float = clampf((h - _bld_heights[i]) / maxf(h, 0.01), 0.0, 1.0)
-				var f1: float = clampf((h - PropLayer.DROP_ATTACH_H - 0.125) / maxf(h, 0.01), 0.0, 1.0) if mine else 1.0
-				if f1 < f0:
-					continue
-				for k in 4:
-					if r.has_point(q + shift * lerpf(f0, f1, k / 3.0)):
+				# Точка будівлі на висоті z (до висоти дроту) на екрані збігається з дротом на висоті h, якщо лежить на
+				# (h − z)·ctg від нього в бік від камери: стіна внизу — найдалі, на висоті дроту — під ним. Відвід
+				# кріпиться на стіні власної хати, тож над її стіною він і має читатися — заборонено лише над дахом
+				# (вище за звіс, DROP_ATTACH_H + 1 м).
+				var z: float = PropLayer.DROP_ATTACH_H + 0.125 if mine else 0.0
+				# Частина будівлі вища за дріт стоїть між камерою й дротом і ховає його, а не лягає під нього.
+				var ztop: float = minf(_bld_heights[i], h)
+				while z <= ztop + 1e-3:
+					if r.has_point(q + away * (h - z) * cot):
+						return false
+					z += 0.1
+			# Димар — стовпчик від гребеня до шапки: дріт не має читатися біля нього (відвід, що «закінчується» на
+			# димарі).
+			for c: Vector3 in chims:
+				for zc: float in [c.y, c.y - 0.15, c.y - 0.3]:
+					if (q + away * (h - zc) * cot).distance_to(Vector2(c.x, c.z)) < PropLayer.WIRE_CHIMNEY_CLEAR:
 						return false
 		return true
 

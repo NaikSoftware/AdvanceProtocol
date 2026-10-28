@@ -1779,8 +1779,8 @@ func test_drops_are_short_and_cross_streets_square(p = use_parameters(MAPS)) -> 
 		var lip := Vector2((d[1] as Vector3).x, (d[1] as Vector3).z)
 		var len_: float = from.distance_to(lip)
 		assert_lte(len_, PropLayer.DROP_DIRECT + 1e-3, "%s: відвід до %s задовгий" % [p, lip])
-		for ch: Vector2 in placer._chimneys:
-			assert_gte(ch.distance_to(lip), PropLayer.DROP_CHIMNEY_CLEAR, "%s: відвід до %s закінчується біля димаря" % [p, lip])
+		for ch3: Vector3 in placer._chimneys:
+			assert_gte(Vector2(ch3.x, ch3.z).distance_to(lip), PropLayer.DROP_CHIMNEY_CLEAR, "%s: відвід до %s закінчується біля димаря" % [p, lip])
 		for r: Rect2 in placer._garden_rects:
 			assert_false(PropLayer._Placer._seg_hits_rect(from, lip, r), "%s: відвід до %s над грядкою" % [p, lip])
 		var house: Rect2
@@ -1890,6 +1890,9 @@ func test_pole_spot_rule_hay() -> void:
 
 
 ## Стовп у прорізі воріт (ближче POLE_GATE_CLEAR до відрізка між стовпами воріт) не стоїть: жодне місце там не придатне.
+## Поки обрис паркану (in_yard) не має прорізу на місці воріт, ці місця відкидає ще й відступ від паркану
+## (POLE_FENCE_CLEAR), тож near_gate у pole_spot_ok затінено і без нього тест не впаде; він стереже ворота на той час,
+## коли паркан отримає проріз.
 func test_pole_spot_rule_gate(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var placer = props._placer
@@ -1903,6 +1906,30 @@ func test_pole_spot_rule_gate(p = use_parameters(MAPS)) -> void:
 				var q: Vector2 = a.lerp(b, t / 4.0) + nrm * o
 				assert_true(placer.near_gate(q))
 				assert_false(placer.pole_spot_ok(q, 2), "опора у воротах %s" % q)
+
+
+## Кожне поселення (ланцюг хат із кроком SETTLEMENT_R), до якого мережа дотягнула хоч одну опору 0.4 кВ чи відвід,
+## має свою підстанцію: стовп 10 кВ із ТП не далі за TP_GAP від якоїсь його опори 0.4 кВ чи хати з відводом.
+func test_every_settlement_has_a_transformer(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var centres: Array[Vector2] = []
+	for h in _homes(props, _map(p)):
+		centres.append((h["rect"] as Rect2).get_center())
+	var tps: Array[Vector2] = []
+	for i: int in props._transformers:
+		tps.append(_pole_at(props, i))
+	var checked: int = 0
+	for group: Array in _settlements(centres):
+		var fed: Array = group.filter(func(c: Vector2) -> bool: return not props._unfed.any(func(u: Vector2) -> bool: return u.distance_to(c) < 0.05))
+		if fed.is_empty():
+			continue
+		checked += 1
+		assert_true(fed.any(func(c: Vector2) -> bool: return tps.any(func(t: Vector2) -> bool: return t.distance_to(c) <= PowerGrid.STREET_R + PowerGrid.TP_GAP)),
+				"%s: поселення %s без підстанції поруч" % [p, group])
+	assert_gt(checked, 0, "%s: передумова — поселення з відводами є" % p)
+	# Кожна хата з відводом живиться від мережі з підстанцією (не від обірваної гілки).
+	for d: Array in props._drops:
+		assert_eq(_transformers_of(props, d[0]).size(), 1, "%s: відвід від %s без підстанції" % [p, _pole_at(props, d[0])])
 
 
 ## Пошук мосту між відрізаною станцією й деревом обмежений: не більше BRIDGE_TRIES спроб на станцію й BRIDGE_BUDGET на

@@ -340,26 +340,32 @@ func _village(homes: Array, trunk: Array) -> void:
 		stations.append(nearest)
 	# ТП: стовп 10 кВ магістралі (наявний чи вставлений у проліт), найближчий до станції, що найближча до магістралі;
 	# біля стовпа має знайтись місце під шафу, а від нього — проліт до вулиці (_tp_reaches).
-	var tp := Vector2.INF
-	var best: float = INF
-	_reach_cache.clear()
+	# Кандидати — за відстанню до станції (вставка в проліт — із запасом 0.5 на користь наявного стовпа); перевіряються
+	# по черзі від найближчого, і перший, від якого є проліт до вулиці, — ТП. TP_PROBES обмежує саме найближчих.
+	var cands: Dictionary = {}
 	for i in stations.size():
 		for line: Array in trunk:
 			for k in line.size():
 				var d: float = stations[i].distance_to(line[k])
-				if d < best and _cabinet_fits(line[k], _pole_dir(line, k)) and _tp_reaches(line[k], stations, trunk):
-					best = d
-					tp = line[k]
+				if d < float(cands.get(line[k], INF)) and _cabinet_fits(line[k], _pole_dir(line, k)):
+					cands[line[k]] = d
 				if k > 0:
 					var proj: Vector2 = Geometry2D.get_closest_point_to_segment(stations[i], line[k - 1], line[k])
-					var dp: float = stations[i].distance_to(proj)
-					if dp < best - 0.5 and proj.distance_to(line[k - 1]) >= 2.0 and proj.distance_to(line[k]) >= 2.0:
+					var dp: float = stations[i].distance_to(proj) + 0.5
+					if proj.distance_to(line[k - 1]) >= 2.0 and proj.distance_to(line[k]) >= 2.0:
 						var s: Vector2 = _snap(proj, 0.6)
-						if s.is_finite() and s.distance_to(line[k - 1]) >= 2.0 and s.distance_to(line[k]) >= 2.0 \
-								and _cabinet_fits(s, ((s - line[k - 1]).normalized() + (line[k] - s).normalized()).normalized()) \
-								and _tp_reaches(s, stations, trunk):
-							best = dp
-							tp = s
+						if s.is_finite() and dp < float(cands.get(s, INF)) and s.distance_to(line[k - 1]) >= 2.0 and s.distance_to(line[k]) >= 2.0 \
+								and _cabinet_fits(s, ((s - line[k - 1]).normalized() + (line[k] - s).normalized()).normalized()):
+							cands[s] = dp
+	var order: Array = cands.keys()
+	order.sort_custom(func(x: Vector2, y: Vector2) -> bool:
+		return cands[x] < cands[y] or (cands[x] == cands[y] and (x.x < y.x or (x.x == y.x and x.y < y.y))))
+	var tp := Vector2.INF
+	_reach_cache.clear()
+	for c: Vector2 in order:
+		if _tp_reaches(c, stations, trunk):
+			tp = c
+			break
 	if not tp.is_finite():
 		return
 	# Одна ТП на поселення: близька наявна ТП — спільна.
