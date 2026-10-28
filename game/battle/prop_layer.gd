@@ -142,6 +142,8 @@ const CHIMNEY_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG
 ## Кінець відводу не ближче за стільки (клітинки, ~2 м) до димаря в плані: інакше відвід читається таким, що
 ## закінчується на димарі.
 const DROP_CHIMNEY_CLEAR: float = 0.25
+## Стіна, до лінії якої димар ближчий за стільки (клітинки, ~2.8 м), — не стіна для відводу.
+const DROP_CHIMNEY_WALL: float = 0.35
 ## Дріт на екрані не ближче за стільки (клітинки, ~1.2 м) до стовпчика димаря.
 const WIRE_CHIMNEY_CLEAR: float = 0.15
 ## Стовп ЛЕП — поза обрисом паркану двору й не ближче за стільки до лінії паркану (клітинки, 1.6 м).
@@ -1636,6 +1638,13 @@ static func drop_attach(rect: Rect2, from: Vector2) -> Vector2:
 	if rect.has_point(from):
 		return Vector2.INF
 	return Vector2(clampf(from.x, rect.position.x, rect.end.x), clampf(from.y, rect.position.y, rect.end.y))
+
+
+## Зовнішня нормаль сторони обрису rect, на якій (найближче до якої) лежить точка a.
+static func wall_normal(rect: Rect2, a: Vector2) -> Vector2:
+	var d: Array[float] = [absf(a.x - rect.position.x), absf(a.x - rect.end.x), absf(a.y - rect.position.y), absf(a.y - rect.end.y)]
+	var k: int = d.find(d.min())
+	return [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)][k]
 
 
 static var _tri_cache: Dictionary = {}
@@ -3652,6 +3661,23 @@ class _Placer:
 	func _box_of(inst: Dictionary) -> AABB:
 		return (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 
+	## Стіна хати rect, на якій лежить точка a, придатна для відводу: без димаря біля неї (ближче DROP_CHIMNEY_WALL до її
+	## лінії і помітно ближче, ніж до протилежної стіни) — інакше відвід на екрані кінчається на шапці димаря (димар на
+	## щиті чи зовнішній).
+	func drop_face_ok(rect: Rect2, a: Vector2) -> bool:
+		var n: Vector2 = PropLayer.wall_normal(rect, a)
+		for ch: Vector3 in _chimneys:
+			var q := Vector2(ch.x, ch.z)
+			if not rect.grow(PropLayer.DROP_CHIMNEY_WALL).has_point(q):
+				continue
+			# Відстань від димаря до лінії стіни й до протилежної стіни: димар на гребені вузької хати однаково близько
+			# до обох довгих стін і жодній не належить.
+			var off: float = absf((q - a).dot(n))
+			var depth: float = absf(rect.size.dot(n))
+			if off < PropLayer.DROP_CHIMNEY_WALL and off < absf(depth - off) - 0.1:
+				return false
+		return true
+
 	## Відвід від точки from до хати з обрисом rect можливий: стіна з боку from не далі за DROP_DIRECT і не ближче за
 	## DROP_MIN, відрізок не ближче DROP_GAP до чужих хат і як дріт можливий (wire_ok; через вулицю — не довший за
 	## DROP_CROSS).
@@ -3667,14 +3693,17 @@ class _Placer:
 		var cands: Array[Vector2] = [near]
 		var c: Vector2 = rect.get_center()
 		for wall: Vector2 in [Vector2(rect.position.x, c.y), Vector2(rect.end.x, c.y), Vector2(c.x, rect.position.y), Vector2(c.x, rect.end.y)]:
-			# Стіна повернута до опори: опора з її зовнішнього боку, тож дріт не йде над власним дахом.
+			# Стіна повернута до опори: опора з її зовнішнього боку, тож дріт не йде над власним дахом. Середина й чверті
+			# стіни: кінець біля димаря відпадає, а дальній кінець тієї ж стіни лишається.
 			if (from - wall).dot(wall - c) > 0.0:
-				cands.append(wall)
+				var along: Vector2 = (wall - c).normalized().orthogonal() * absf(rect.size.dot((wall - c).normalized().orthogonal())) * 0.25
+				cands.append_array([wall, wall + along, wall - along])
 		for a: Vector2 in cands:
 			var d: float = from.distance_to(a)
 			if d > PropLayer.DROP_DIRECT or d < PropLayer.DROP_MIN:
 				continue
-			if _chimneys.any(func(ch: Vector3) -> bool: return Vector2(ch.x, ch.z).distance_to(a) < PropLayer.DROP_CHIMNEY_CLEAR):
+			if _chimneys.any(func(ch: Vector3) -> bool: return Vector2(ch.x, ch.z).distance_to(a) < PropLayer.DROP_CHIMNEY_CLEAR) \
+					or not drop_face_ok(rect, a):
 				continue
 			# Відвід не лягає на жодну чужу будівлю, не ближче DROP_GAP.
 			var clear: bool = true

@@ -1801,6 +1801,32 @@ func test_drops_are_short_and_cross_streets_square(p = use_parameters(MAPS)) -> 
 	gut.p("%s: відводів через вулицю %d" % [p, crossing])
 
 
+## Відвід не кріпиться до стіни з димарем (на щиті чи зовнішнім): димар ближче DROP_CHIMNEY_WALL до лінії стіни й
+## помітно ближче, ніж до протилежної, — на екрані відвід тоді кінчається на шапці димаря.
+func test_drops_avoid_chimney_walls(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var placer = props._placer
+	var homes: Array[Dictionary] = _homes(props, _map(p))
+	var checked: int = 0
+	for d: Array in props._drops:
+		var lip := Vector2((d[1] as Vector3).x, (d[1] as Vector3).z)
+		var house := Rect2()
+		for h in homes:
+			if (h["rect"] as Rect2).grow(0.02).has_point(lip):
+				house = h["rect"]
+		var n: Vector2 = PropLayer.wall_normal(house, lip)
+		var depth: float = absf(house.size.dot(n))
+		for ch3: Vector3 in placer._chimneys:
+			var q := Vector2(ch3.x, ch3.z)
+			if not house.grow(PropLayer.DROP_CHIMNEY_WALL).has_point(q):
+				continue
+			checked += 1
+			var off: float = absf((q - lip).dot(n))
+			assert_false(off < PropLayer.DROP_CHIMNEY_WALL and off < absf(depth - off) - 0.1,
+					"%s: відвід до %s на стіні з димарем %s" % [p, lip, q])
+	assert_gt(checked, 0, "%s: передумова — хати з відводом мають димарі" % p)
+
+
 ## Відводи має частина хат: на карті з десятьма й більше хатами — 40–70 % (село з електрикою, але не павутиння). На
 ## Хребті досяжні хати стоять поселеннями з однієї-двох, тож жодну не лишено без відводу навмисно.
 func test_drop_share_per_map(p = use_parameters(MAPS)) -> void:
