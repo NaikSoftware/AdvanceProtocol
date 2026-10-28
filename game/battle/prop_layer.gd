@@ -2922,6 +2922,7 @@ class _Placer:
 	var _fence_segs: Dictionary = {}
 	## Біля початку маршруту (хвіртка — прохід між секціями) запас від парканів не вимагаємо.
 	var _free_from: Vector2 = Vector2(-99, -99)
+	var _walk_cache: Dictionary = {}
 	const FENCE_MARGIN: float = 0.2
 
 	func _index_fences() -> void:
@@ -2981,6 +2982,23 @@ class _Placer:
 
 	## Шлях людини від from до берега: найкоротший зручний, з обходами рельєфу, мокрих місць, ріллі, грядок,
 	## парканів і будівель (A* по сітці 0.25 клітинки), без шуму: вигини дають лише перешкоди.
+	## Відстань до паркану, прохідність, суха ґрунтова окіл і вага клітинки сітки стежок (кеш на розставлення).
+	func _walk_cell(id: Vector2i, q: Vector2) -> Array:
+		if _walk_cache.has(id):
+			return _walk_cache[id]
+		var dry4 := true
+		for o: Vector2 in [Vector2(0.12, 0), Vector2(-0.12, 0), Vector2(0, 0.12), Vector2(0, -0.12)]:
+			dry4 = dry4 and _dry(q + o)
+		var w: float = 1.0 + 12.0 * _slope(q)
+		if kind(Vector2i(roundi(q.x), roundi(q.y))) == Terrain.Kind.MARSH:
+			w += 3.0
+		# Дорогу перетинають, але лише коли треба: перехід через неї дорожчий.
+		if on_road(q, 0.0):
+			w += 4.0
+		var info: Array = [fence_dist(q), _walkable(q), dry4, w]
+		_walk_cache[id] = info
+		return info
+
 	func _walk_route(from: Vector2, shore: Vector2) -> PackedVector2Array:
 		var gw: int = ceili((size.x + 0.8) / _GRID)
 		var gh: int = ceili((size.y + 0.8) / _GRID)
@@ -2999,15 +3017,13 @@ class _Placer:
 				if q.distance_to(from) > near or q.distance_to(shore) > near:
 					astar.set_point_solid(Vector2i(gx, gy), true)
 					continue
-				if not _cell_ok(q, shore):
+				# Властивості клітинки не залежать від початку й берега — рахуються раз на все розставлення.
+				var info: Array = _walk_cell(Vector2i(gx, gy), q)
+				if (q.distance_to(from) > 0.7 and float(info[0]) < FENCE_MARGIN) or not bool(info[1]) \
+						or (q.distance_to(shore) > 0.8 and not bool(info[2])):
 					astar.set_point_solid(Vector2i(gx, gy), true)
 					continue
-				var w: float = 1.0 + 12.0 * _slope(q)
-				if kind(Vector2i(roundi(q.x), roundi(q.y))) == Terrain.Kind.MARSH:
-					w += 3.0
-				# Дорогу перетинають, але лише коли треба: перехід через неї дорожчий.
-				if on_road(q, 0.0):
-					w += 4.0
+				var w: float = float(info[3])
 				astar.set_point_weight_scale(Vector2i(gx, gy), w)
 		var a := Vector2i(roundi((from.x + 0.4) / _GRID), roundi((from.y + 0.4) / _GRID))
 		var b := Vector2i(roundi((shore.x + 0.4) / _GRID), roundi((shore.y + 0.4) / _GRID))
@@ -3059,11 +3075,14 @@ class _Placer:
 		var starts: Array = []
 		for i: int in gates:
 			var g: Vector2 = gates[i][0] + (gates[i][1] as Vector2) * 0.15
-			starts.append(g)
+			# Ворота в щілині між сусідніми парканами (не ширшій за двічі FENCE_MARGIN) — глухий кут для стежки:
+			# повна сітка A* там нічого не знайде, а коштує десятки мілісекунд.
+			var beyond: Vector2 = g + (gates[i][1] as Vector2) * 0.7
+			if _walkable(beyond) and fence_dist(beyond) >= FENCE_MARGIN and not gate_blind.has(i):
+				starts.append(g)
 		var chosen: Array[Vector2] = []
 		var used_starts: Array[Vector2] = []
 		# Спершу від хвірток: хвіртка → берег з найменшою ціною (відстань і крутизна спуску).
-		var gate_tries: int = 0
 		var pairs: Array = []
 		for st: Vector2 in starts:
 			for l: Array in landings:
@@ -3072,13 +3091,11 @@ class _Placer:
 					pairs.append([dd + 8.0 * float(l[1]), st, l[0]])
 		pairs.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 		for pr: Array in pairs:
-			# Кожна спроба — повна сітка A*: не більше двох від хвірток, далі стежки від дороги.
-			if chosen.size() >= 2 or gate_tries >= 2:
+			if chosen.size() >= 2 or pairs.find(pr) > 60:
 				break
 			# Дві стежки від хвірток — з різних дворів до берегів не ближче 6 клітинок один від одного.
 			if used_starts.has(pr[1]) or chosen.any(func(c: Vector2) -> bool: return c.distance_to(pr[2]) < 6.0):
 				continue
-			gate_tries += 1
 			if _add_water_walk(pr[1], pr[2], chosen, 0):
 				chosen.append(pr[2])
 				used_starts.append(pr[1])
@@ -3099,7 +3116,7 @@ class _Placer:
 		cand2.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 		var tried := 0
 		for pr: Array in cand2:
-			if chosen.size() >= 2 or tried >= 3:
+			if chosen.size() >= 2 or tried >= 12:
 				break
 			tried += 1
 			if _add_water_walk(pr[1], pr[2], chosen, 1):
@@ -3107,7 +3124,7 @@ class _Placer:
 		# Без хвірток поблизу (чи як перша не склалась) — і першу беремо від дороги.
 		if chosen.is_empty():
 			for pr: Array in cand2:
-				if tried >= 8:
+				if tried >= 24:
 					break
 				tried += 1
 				if _add_water_walk(pr[1], pr[2], chosen, 1):
