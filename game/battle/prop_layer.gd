@@ -3796,10 +3796,13 @@ class _Placer:
 				var z: float = PropLayer.DROP_ATTACH_H + 0.125 if mine else 0.0
 				# Частина будівлі вища за дріт стоїть між камерою й дротом і ховає його, а не лягає під нього.
 				var ztop: float = minf(_bld_heights[i], h)
-				while z <= ztop + 1e-3:
+				# Крок 0.1 і окремо сама верхня точка (z = ztop): інакше крок міг би її проминути.
+				while z < ztop:
 					if r.has_point(q + away * (h - z) * cot_bld):
 						return false
 					z += 0.1
+				if ztop >= (PropLayer.DROP_ATTACH_H + 0.125 if mine else 0.0) and r.has_point(q + away * (h - ztop) * cot_bld):
+					return false
 			# Димар — стовпчик від гребеня до шапки: дріт не має читатися біля нього (відвід, що «закінчується» на
 			# димарі).
 			for c: Vector3 in chims:

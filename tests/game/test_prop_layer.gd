@@ -1908,25 +1908,29 @@ func test_pole_spot_rule_gate(p = use_parameters(MAPS)) -> void:
 				assert_false(placer.pole_spot_ok(q, 2), "опора у воротах %s" % q)
 
 
-## Кожне поселення (ланцюг хат із кроком SETTLEMENT_R), до якого мережа дотягнула хоч одну опору 0.4 кВ чи відвід,
-## має свою підстанцію: стовп 10 кВ із ТП не далі за TP_GAP від якоїсь його опори 0.4 кВ чи хати з відводом.
+## Кожне поселення з двох і більше хат має свою мережу 0.4 кВ із підстанцією: опори 0.4 кВ не далі за STREET_R від його
+## хат є, і мережа, до якої вони належать, доходить до ТП (стовпа 10 кВ із підстанцією). Без ТП не було б і відводів —
+## тож поселення без відводів тут не пропускаються.
 func test_every_settlement_has_a_transformer(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var centres: Array[Vector2] = []
 	for h in _homes(props, _map(p)):
 		centres.append((h["rect"] as Rect2).get_center())
-	var tps: Array[Vector2] = []
-	for i: int in props._transformers:
-		tps.append(_pole_at(props, i))
+	var poles04: Array[int] = []
+	for i in _pole_ids(props):
+		if _is_04(props, i):
+			poles04.append(i)
 	var checked: int = 0
 	for group: Array in _settlements(centres):
-		var fed: Array = group.filter(func(c: Vector2) -> bool: return not props._unfed.any(func(u: Vector2) -> bool: return u.distance_to(c) < 0.05))
-		if fed.is_empty():
+		if group.size() < 2:
 			continue
 		checked += 1
-		assert_true(fed.any(func(c: Vector2) -> bool: return tps.any(func(t: Vector2) -> bool: return t.distance_to(c) <= PowerGrid.STREET_R + PowerGrid.TP_GAP)),
-				"%s: поселення %s без підстанції поруч" % [p, group])
-	assert_gt(checked, 0, "%s: передумова — поселення з відводами є" % p)
+		var own: Array[int] = poles04.filter(func(i: int) -> bool:
+			return group.any(func(c: Vector2) -> bool: return _pole_at(props, i).distance_to(c) <= PowerGrid.STREET_R))
+		assert_gt(own.size(), 0, "%s: поселення %s без опор 0.4 кВ" % [p, group])
+		assert_true(own.any(func(i: int) -> bool: return _transformers_of(props, i).size() == 1),
+				"%s: мережа 0.4 кВ поселення %s не доходить до підстанції" % [p, group])
+	assert_gt(checked, 0, "%s: передумова — поселення з двох і більше хат є" % p)
 	# Кожна хата з відводом живиться від мережі з підстанцією (не від обірваної гілки).
 	for d: Array in props._drops:
 		assert_eq(_transformers_of(props, d[0]).size(), 1, "%s: відвід від %s без підстанції" % [p, _pole_at(props, d[0])])
