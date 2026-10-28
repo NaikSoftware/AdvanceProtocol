@@ -495,7 +495,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Trunks along roads to the outer edge of the ring; a pole on every bend; no lone poles
 - [x] Drops to about half the houses, never all on one street; on the wall under the eaves, clear of chimneys; no wire across a facade or roof from the play camera; 10 kV pole 10.7 m
 - [x] Quiet wires, no web over villages; every settlement keeps its street line and transformer
-- [ ] No pole in a yard or gateway; drops never end at a chimney on a gable; no doubled poles
+- [x] No pole in a yard or gateway; drops never end at a chimney on a gable; no doubled poles
 - [x] No pole, transformer cabinet or guy anchor on the drawn road surface
 - [x] 0.4 kV network is a tree along streets: no crossing spans, no closed loops, no pole that feeds nothing
 - [x] One transformer per settlement, including the north Ridge ring hamlet
@@ -519,6 +519,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Fallen form is a low pile of broken branches; crushed bushes as leaning stems
 - [x] Reed with plumes and cattail with heads, standing in the shallows
 - [x] Reed and bushes in patches along some banks; trees or bushes in many yards, not all; a few lone bushes and trees on meadow, never on ploughed land
+- [ ] No tree crown under a power line
 - [ ] Accepted in battle frames on all three maps
 
 ### Task 22: Forest into battle
