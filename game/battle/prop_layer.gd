@@ -130,9 +130,16 @@ const DROP_END_FREE: float = 0.04
 const ROAD_SPAN_K: float = 1.2
 ## Дріт, що не перетинає вісь дороги, висить над асфальтом не довше за стільки (клітинки).
 const ROAD_CLIP: float = 0.3
-## Нахил камери, під яким дріт перевіряється на «над дахом»: найнижчий нахил рига — під ним дріт на екрані зсунутий
-## найдалі, тож перевірка покриває кожен зум.
-const WIRE_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG
+## Нахил камери, під яким дріт перевіряється на «над будівлею» — нахил рига на зумі WIRE_SEEN_ZOOM. Що нижча камера,
+## то далі дріт зсунутий на екрані й то більше прольотів уздовж дворів відпадає. Це найнижчий нахил, за якого кожне
+## поселення лишається з лінією й ТП, а відводи має 40–70 % хат на Річці й Перехресті (перебір нахилів 38–46.5°: нижче
+## за ~44° головне село Перехрестя гасне). Під нижчою камерою (зум 6–10) окремий проліт може читатися біля фасаду.
+const WIRE_SEEN_ZOOM: float = 11.0
+const WIRE_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG + (IsoCameraRig.PITCH_FAR_DEG - IsoCameraRig.PITCH_NEAR_DEG) \
+		* (WIRE_SEEN_ZOOM - IsoCameraRig.MIN_ZOOM) / (IsoCameraRig.MAX_ZOOM - IsoCameraRig.MIN_ZOOM)
+## Нахил, під яким дріт перевіряється біля стовпчика димаря: найнижчий нахил рига — відвід не «закінчується» на димарі
+## на жодному зумі, а густоти це не коштує.
+const CHIMNEY_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG
 ## Кінець відводу не ближче за стільки (клітинки, ~2 м) до димаря в плані: інакше відвід читається таким, що
 ## закінчується на димарі.
 const DROP_CHIMNEY_CLEAR: float = 0.25
@@ -3748,15 +3755,16 @@ class _Placer:
 		return top
 
 	## Дріт на висоті h у точці q камера бачить над точкою землі q − (до камери)·h·ctg(нахилу); камера стоїть на +x, +z
-	## від фокуса (IsoCameraRig.YAW_DEGREES), нахил — гри (WIRE_SEEN_PITCH_DEG). Дріт не має читатися над будівлею: стіна,
-	## звіс і дах — зсув від дроту до гребеня з кроком у чверть. Двір, грядку й асфальт видно згори таким, як є, — вони
+	## від фокуса (IsoCameraRig.YAW_DEGREES). Дріт не має читатися над будівлею (стіна, звіс і дах до висоти дроту — під
+	## нахилом WIRE_SEEN_PITCH_DEG) і біля стовпчика димаря (під CHIMNEY_SEEN_PITCH_DEG). Двір, грядку й асфальт видно згори таким, як є, — вони
 	## перевіряються на землі (wire_ok). Відвід може читатися над власною хатою лише в останніх DROP_END_FREE біля стіни.
 	func _seen_clear(a: Vector2, b: Vector2, own: Rect2) -> bool:
 		var drop: bool = own.has_area()
 		var away := -Vector2(sin(deg_to_rad(IsoCameraRig.YAW_DEGREES)), cos(deg_to_rad(IsoCameraRig.YAW_DEGREES)))
-		# Найнижча камера (PITCH_NEAR_DEG) зсуває дріт на екрані найдалі: що не лягає на будівлю під нею, не ляже й
-		# під крутішою.
-		var cot_max: float = 1.0 / tan(deg_to_rad(PropLayer.WIRE_SEEN_PITCH_DEG))
+		# Найбільший зсув — під найнижчим із двох нахилів.
+		var cot_max: float = 1.0 / tan(deg_to_rad(minf(PropLayer.WIRE_SEEN_PITCH_DEG, PropLayer.CHIMNEY_SEEN_PITCH_DEG)))
+		var cot_bld: float = 1.0 / tan(deg_to_rad(PropLayer.WIRE_SEEN_PITCH_DEG))
+		var cot_chim: float = 1.0 / tan(deg_to_rad(PropLayer.CHIMNEY_SEEN_PITCH_DEG))
 		var reach: float = (_pole_top() + 0.1) * cot_max
 		# Лише ті будівлі й димарі, до яких дріт зі зсувом (від камери на висоту дроту, до камери — на висоту будівлі над
 		# ним) узагалі може дістати.
@@ -3771,7 +3779,6 @@ class _Placer:
 			return true
 		var len_: float = a.distance_to(b)
 		var n: int = maxi(2, ceili(len_ / 0.15))
-		var cot: float = cot_max
 		for j in range(0, n + 1):
 			var t: float = float(j) / n
 			var q: Vector2 = a.lerp(b, t)
@@ -3790,14 +3797,14 @@ class _Placer:
 				# Частина будівлі вища за дріт стоїть між камерою й дротом і ховає його, а не лягає під нього.
 				var ztop: float = minf(_bld_heights[i], h)
 				while z <= ztop + 1e-3:
-					if r.has_point(q + away * (h - z) * cot):
+					if r.has_point(q + away * (h - z) * cot_bld):
 						return false
 					z += 0.1
 			# Димар — стовпчик від гребеня до шапки: дріт не має читатися біля нього (відвід, що «закінчується» на
 			# димарі).
 			for c: Vector3 in chims:
 				for zc: float in [c.y, c.y - 0.15, c.y - 0.3]:
-					if (q + away * (h - zc) * cot).distance_to(Vector2(c.x, c.z)) < PropLayer.WIRE_CHIMNEY_CLEAR:
+					if (q + away * (h - zc) * cot_chim).distance_to(Vector2(c.x, c.z)) < PropLayer.WIRE_CHIMNEY_CLEAR:
 						return false
 		return true
 

@@ -131,7 +131,7 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   14 m, and never points straight along the view (it reads as a vertical stroke) — then it takes another
   wall facing the pole. Poles stand at least 1.6 m outside a yard's fence line, never in a gate opening or next to a
   hay bale; a 0.4 kV span keeps off yards, gardens and forest (a wire coming out from under the canopy
-  reads as from nowhere) and must not read from the camera at its lowest pitch (every zoom) as hanging over a building
+  reads as from nowhere) and must not read from the camera as hanging over a building (checked at the zoom-11 pitch, the lowest that keeps every settlement powered; chimneys at the lowest pitch)
   (wall, eaves, roof, chimney) — a drop only over its own wall, never its roof, and it ends clear of
   the chimney; gardens, yards and asphalt are judged on the ground, as seen from above; it hangs at least 6 m above the
   ground and over asphalt runs only square across the road, to a pole set opposite, never along the
