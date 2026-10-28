@@ -124,9 +124,26 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   buildings look dry in the rain.
 - **Placed as a real village would be.** The layout of each map is authored, not scattered cell
   by cell: power lines run along roads across the board and on through the ring to its outer
-  edge, so no line visibly starts or ends; a pole stands on every bend, one transformer feeds each
-  settlement, and every house gets a drop under its eaves — never a lone pole, a wire over a roof
-  or a line from nowhere; a yard is a house facing the road, a garden of tilled rows
+  edge, so no line visibly starts or ends; a pole stands on every bend and one transformer feeds each
+  settlement. Every settlement keeps a 0.4 kV line on the verge of its main street, running from
+  the transformer to the last pole in front of a house. A house gets a drop under its eaves only
+  where a street pole reaches it with a short straight span (≤ 16 m) that keeps off gardens and a
+  neighbour's yard; a drop may cross the street only square to it (within 25°) and no longer than
+  14 m, and never points straight along the view (it reads as a vertical stroke) — then it takes another
+  wall facing the pole. Poles stand at least 1.6 m outside a yard's fence line, never in a gate opening or next to a
+  hay bale; a 0.4 kV span keeps off yards, gardens and forest (a wire coming out from under the canopy
+  reads as from nowhere) and must not read from the camera as hanging over a building (checked at the zoom-11 pitch, the lowest that keeps every settlement powered; chimneys at the lowest pitch)
+  (wall, eaves, roof, chimney) — a drop only over its own wall, never its roof, and it ends clear of
+  the chimney; gardens, yards and asphalt are judged on the ground, as seen from above; it hangs at least 6 m above the
+  ground and over asphalt runs only square across the road, to a pole set opposite, never along the
+  inside of a bend. A
+  street pole carries at most three spans; a transformer pole its two 10 kV spans plus at most two
+  0.4 kV. The three bare 10 kV wires are fainter each, so the trunk reads no darker than a village
+  cable. No pole is added just to reach a house, and about one reachable house in three in each
+  settlement is left without a drop, so neighbours are never all wired and the village does not
+  turn into a web. Wires are a thin, half-transparent
+  grey-olive close to the ground tone, still readable as a line at play zoom. Never a lone pole, a
+  wire over a roof or a line from nowhere; a yard is a house facing the road, a garden of tilled rows
   behind it, a shed, and one fence around them with a gate to the road; bales and trailers stand
   at field edges or by a shed, never on a garden or the road; nothing hangs over a bank or stands
   within ~0.4 tile of water; bridge ends meet the banks. Every building stands on a levelled pad
