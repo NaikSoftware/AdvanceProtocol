@@ -493,9 +493,11 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 19: Power lines
 
 - [x] Trunks along roads to the outer edge of the ring; a pole on every bend; no lone poles
-- [x] A drop to every house on the board, under the eaves; no wire through a roof; 10 kV pole 10.7 m
+- [x] Drops to about half the houses, never all on one street; on the wall under the eaves, clear of chimneys; no wire across a facade or roof from the play camera; 10 kV pole 10.7 m
+- [x] Quiet wires, no web over villages; every settlement keeps its street line and transformer
+- [ ] No pole in a yard or gateway; drops never end at a chimney on a gable; no doubled poles
 - [x] No pole, transformer cabinet or guy anchor on the drawn road surface
-- [ ] 0.4 kV network is a tree along streets: no crossing spans, no closed loops, no pole that feeds nothing
+- [x] 0.4 kV network is a tree along streets: no crossing spans, no closed loops, no pole that feeds nothing
 - [x] One transformer per settlement, including the north Ridge ring hamlet
 - [x] Wires stay visible against the river from every camera angle
 - [x] Generator takes every rule constant from the game
