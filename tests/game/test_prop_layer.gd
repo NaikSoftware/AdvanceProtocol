@@ -1801,6 +1801,47 @@ func test_drops_are_short_and_cross_streets_square(p = use_parameters(MAPS)) -> 
 	gut.p("%s: відводів через вулицю %d" % [p, crossing])
 
 
+## Відвід не кріпиться до стіни з власним димарем хати (на щиті чи зовнішнім): димар у обрисі хати ближче
+## DROP_CHIMNEY_WALL до лінії стіни й помітно ближче, ніж до протилежної, — на екрані відвід тоді кінчається на шапці
+## димаря. Точка на розі лежить на двох стінах — перевіряються обидві. Правило мусить спрацьовувати хоч на одній карті:
+## стіни з димарем у хат є, інакше тест нічого б не стеріг.
+func test_drops_avoid_chimney_walls() -> void:
+	var excluded: int = 0
+	for p in MAPS:
+		var props: PropLayer = _cached(p).props()
+		var placer = props._placer
+		var homes: Array[Dictionary] = _homes(props, _map(p))
+		for h in homes:
+			for n: Vector2 in [Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1), Vector2(0, 1)]:
+				excluded += int(_chimney_wall(placer, h["rect"], n))
+		for d: Array in props._drops:
+			var lip := Vector2((d[1] as Vector3).x, (d[1] as Vector3).z)
+			var house := Rect2()
+			for h in homes:
+				if (h["rect"] as Rect2).grow(0.02).has_point(lip):
+					house = h["rect"]
+			assert_true(house.has_area(), "%s: хату відводу до %s не знайдено" % [p, lip])
+			if not house.has_area():
+				continue
+			for n: Vector2 in PropLayer.wall_normals(house, lip):
+				assert_false(_chimney_wall(placer, house, n), "%s: відвід до %s на стіні %s з димарем" % [p, lip, n])
+	assert_gt(excluded, 0, "правило стіни з димарем жодного разу не спрацювало")
+
+
+## Незалежно від коду розстановки: чи стоїть власний димар хати rect біля її стіни з нормаллю n.
+func _chimney_wall(placer, rect: Rect2, n: Vector2) -> bool:
+	var wall: float = (rect.get_center() + rect.size * 0.5 * n).dot(n)
+	var depth: float = absf(rect.size.dot(n))
+	for ch3: Vector3 in placer._chimneys:
+		var q := Vector2(ch3.x, ch3.z)
+		if not rect.grow(0.02).has_point(q):
+			continue
+		var off: float = absf(wall - q.dot(n))
+		if off < PropLayer.DROP_CHIMNEY_WALL and off < absf(depth - off) - 0.1:
+			return true
+	return false
+
+
 ## Відводи має частина хат: на карті з десятьма й більше хатами — 40–70 % (село з електрикою, але не павутиння). На
 ## Хребті досяжні хати стоять поселеннями з однієї-двох, тож жодну не лишено без відводу навмисно.
 func test_drop_share_per_map(p = use_parameters(MAPS)) -> void:
