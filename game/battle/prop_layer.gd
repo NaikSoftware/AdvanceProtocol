@@ -18,12 +18,12 @@ const MODEL_DIR: String = "res://assets/props/"
 ## max — скільки разів на карту (орієнтир, що має лишатись одним), ring — лише в кільці, gap —
 ## власний проміжок до сусідньої будівлі, якщо більший за STRUCTURE_GAP, tower —
 ## вежа (одна на карту, у власному дворі), storeys — двоповерховий (у селі їх не більше половини),
-## scale — рівномірний множник розміру (брила завелика для польового каменя, хата на клітинку
+## damaged — пошкоджена модель (її димар не димить), scale — рівномірний множник розміру (брила завелика для польового каменя, хата на клітинку
 ## заширока, щоб між сусідніми з камери гри було видно землю),
 ## map/order/deck_top — міст своєї переправи (DECK_TOP з tools/blender/bridges/build_bridges.py).
 const MODELS: Dictionary = {
 	&"house_h1": {"kind": Kind.STRUCTURE, "weight": 4},
-	&"house_h1_hit": {"kind": Kind.STRUCTURE, "weight": 1},
+	&"house_h1_hit": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 1},
 	&"house_h2": {"kind": Kind.STRUCTURE, "weight": 3},
 	&"house_h3": {"kind": Kind.STRUCTURE, "weight": 2, "storeys": 2},
 	&"house_h4": {"kind": Kind.STRUCTURE, "weight": 4},
@@ -33,11 +33,11 @@ const MODELS: Dictionary = {
 	&"house_h8": {"kind": Kind.STRUCTURE, "weight": 3, "scale": HOUSE_SCALE},
 	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
+	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 2, "max": 1},
 	&"f1_farm_barn": {"kind": Kind.STRUCTURE, "weight": 1},
 	&"f2_livestock_barn": {"kind": Kind.STRUCTURE, "weight": 2, "ring": true},
 	&"f3_hangar": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"f3_hangar_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
+	&"f3_hangar_damaged": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 2, "max": 1},
 	&"f4_grain_bins": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f5_silo_battery": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f6_fuel_station": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
@@ -723,7 +723,9 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 func chimney_tops() -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	for inst in _instances:
-		if int(spec_of(inst["model"])["kind"]) != Kind.STRUCTURE or inst.get("yard", false):
+		var spec: Dictionary = spec_of(inst["model"])
+		# у пошкодженої хати димар не димить: це руїна з проламом, а не житло
+		if int(spec["kind"]) != Kind.STRUCTURE or inst.get("yard", false) or bool(spec.get("damaged", false)):
 			continue
 		if not _on_board((inst["cells"] as Array)[0]):
 			continue

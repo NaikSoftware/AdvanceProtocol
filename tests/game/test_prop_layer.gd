@@ -1098,6 +1098,24 @@ func test_chimney_tops_and_ruin_centres() -> void:
 		assert_almost_eq(r.y, view._height.at(r.x, r.z), 0.1)
 
 
+## Дим із димаря — лише з цілої хати: жодна точка не лежить над пошкодженою моделлю чи руїною.
+func test_no_chimney_smoke_over_damaged_houses_or_ruins() -> void:
+	var damaged: Array[StringName] = [&"house_h1_hit", &"f3_hangar_damaged", &"h5_panel_block_damaged"]
+	for name in MAPS:
+		var props: PropLayer = _cached(name).props()
+		for t in props.chimney_tops():
+			var owners: int = 0
+			for inst in props.all_instances():
+				if not _box_of(inst).grow(0.05).has_point(t):
+					continue
+				owners += 1
+				assert_false(inst["model"] in damaged, "%s: дим над %s" % [name, inst["model"]])
+				assert_ne(int(PropLayer.spec_of(inst["model"])["kind"]), PropLayer.Kind.RUIN, "%s: дим над руїною %s" % [name, inst["model"]])
+			assert_gt(owners, 0, "%s: димар %s без будівлі" % [name, t])
+		for m in damaged:
+			assert_true(bool(PropLayer.spec_of(m).get("damaged", false)), "%s не позначена damaged" % m)
+
+
 ## Руїна тліє з пролому на рівні даху — над землею, усередині обрису руїни, — а не біля
 ## уцілілого димаря.
 func test_ruin_smoke_rises_from_the_breach_at_roof_level() -> void:
