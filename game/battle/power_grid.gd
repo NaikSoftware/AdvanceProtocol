@@ -28,6 +28,8 @@ const TRUNK_GAP: float = 7.5
 ## (BRIDGE_TRIES), скільки гілок на все село (BRIDGE_BUDGET) і скільки кандидатів ТП пробуємо (TP_PROBES).
 const BRIDGE_TRIES: int = 6
 const TP_PROBES: int = 40
+## Пошуків шляху від кандидата ТП до хат: невдалий кандидат не вартий повного перебору — є наступний.
+const TP_TRIES: int = 2
 const BRIDGE_BUDGET: int = 40
 ## Найбільше прольотів на опорі 0.4 кВ (відводи не лічаться); на ТП — два прольоти 10 кВ і до MAX_SPANS − 1 прольотів 0.4 кВ.
 const MAX_SPANS: int = 3
@@ -56,14 +58,14 @@ const BACKTRACK: int = 12
 ## Шлях сходинками (_path): запас рамки навколо місць біля хати й найближчої опори, клітинки; ціна повороту й
 ## множник ціни дроту далі за клітинку від асфальту, у клітинках шляху; синус 25° —
 ## найбільший відхил переходу через дорогу від прямого кута (як PropLayer.DROP_CROSS_COS).
-const ROUTE_MARGIN: float = 4.0
+const ROUTE_MARGIN: float = 2.0
 const TURN_COST: float = 2.0
 const FIELD_COST: float = 1.5
 const SQUARE_SIN: float = 0.423
 ## Скільки місць опори з відводом біля хати пробує дерево.
 const DROP_SPOTS: int = 6
-## Скільки разів дерево обходить хати, до яких ще не дійшло.
-const GROW_PASSES: int = 2
+## Скільки найближчих до хати придатних місць зважує вибір місць із відводом.
+const DROP_SCAN: int = 24
 ## Опора відступає від центру клітинки хоч за однією віссю щонайменше на стільки (клітинки) і на кільці теж: стоїть
 ## біля межі клітинок, а не посеред місця, де міг би стояти юніт (PropLayer clear_of_centre, сторож у тесті).
 const CENTRE_CLEAR: float = 0.45
@@ -75,7 +77,11 @@ var _p: PropLayer._Placer
 var _avoid: Array[Vector2] = []
 var _ring: int = 0
 var _spot_cache: Dictionary = {}
+## Місце -> чи стане там кут (_corner_ok); скидається, щойно змінюється _avoid.
+var _corner_cache: Dictionary = {}
 var _piece_cache: Dictionary = {}
+## Середина відрізка шляху -> чи вона далі за клітинку від асфальту (FIELD_COST).
+var _far_cache: Dictionary = {}
 var _size := Vector2i.ZERO
 var lines: Array[Dictionary] = []
 var transformers: Array[Vector2] = []
@@ -97,6 +103,7 @@ func plan(placer: PropLayer._Placer) -> void:
 		lines.append({"kind": &"10kv", "points": line})
 	for line: Array in trunk:
 		_avoid.append_array(line)
+		_corner_cache.clear()
 	for village: Array in _villages(homes):
 		_village(village, trunk)
 	_trim_dead_ends(trunk)
@@ -114,8 +121,10 @@ func _trim_dead_ends(trunk: Array) -> void:
 	for line: Array in trunk:
 		while line.size() >= 2 and not keep.call(line, line.back()):
 			_avoid.erase(line.pop_back())
+			_corner_cache.clear()
 		while line.size() >= 2 and not keep.call(line, line.front()):
 			_avoid.erase(line.pop_front())
+			_corner_cache.clear()
 	for k in range(lines.size() - 1, -1, -1):
 		if lines[k]["kind"] == &"10kv" and (lines[k]["points"] as Array).size() < 2:
 			lines.remove_at(k)
@@ -390,7 +399,9 @@ func _lay(lines: Array, s0: float, s1: float, gap: float, max_span: float, ok: C
 
 ## Кут двох прямих придатний під опору.
 func _corner_ok(c: Vector2) -> bool:
-	return _spot_ok(c, 2) and not _near_avoid(c)
+	if not _corner_cache.has(c):
+		_corner_cache[c] = _spot_ok(c, 2) and not _near_avoid(c)
+	return _corner_cache[c]
 
 
 ## Чи стоїть на прямій (h, v) відрізок від a0 до a1 цілий: кінцеві опори біля a0 і a1 (не далі за ra, rb) і проміжні між
@@ -486,6 +497,7 @@ func _trunk() -> Array:
 		if line_pts.size() >= 2:
 			out.append(line_pts)
 			_avoid.append_array(line_pts)
+			_corner_cache.clear()
 	return out
 
 
@@ -562,7 +574,7 @@ func _village(homes: Array, trunk: Array) -> void:
 			first.append_array(spots[hi])
 		# Хутір з однієї хати біля самої траси: відвід прямо з опори ТП, без лінії 0.4 кВ; поселенню — своя лінія.
 		if (homes.size() == 1 and _pick_station(homes[0]["rect"], stations, parent) >= 0) \
-				or _grow(homes[by_dist[0]]["rect"], first, stations, parent, tree_edges, degree, trunk_segs):
+				or _grow(homes[by_dist[0]]["rect"], first, stations, parent, tree_edges, degree, trunk_segs, TP_TRIES):
 			tp = c
 			shared = is_shared
 			break
@@ -572,22 +584,18 @@ func _village(homes: Array, trunk: Array) -> void:
 	if not shared:
 		inserted = _insert_pole(trunk, tp)
 		_avoid.append(tp)
+		_corner_cache.clear()
 	# Дерево від ТП: кожна наступна найближча хата, до якої ще жодна опора не дістає відводом, — шлях сходинками
-	# вздовж осей (_path) від опор дерева до місця опори біля неї. Хата, до якої не дійшли, пробується ще раз, коли
-	# дерево виросло (GROW_PASSES обходи).
+	# вздовж осей (_path) від опор дерева до місця опори біля неї.
 	var attempts: int = 0
-	for pass_i in GROW_PASSES:
-		var grown: bool = false
-		for hi: int in by_dist:
-			if attempts >= BRIDGE_BUDGET:
-				break
-			if _pick_station(homes[hi]["rect"], stations, parent) >= 0:
-				continue
-			grown = _grow(homes[hi]["rect"], spots[hi], stations, parent, tree_edges, degree, trunk_segs) or grown
-			attempts += 1
-			peak_attempts = maxi(peak_attempts, attempts)
-		if not grown:
+	for hi: int in by_dist:
+		if attempts >= BRIDGE_BUDGET:
 			break
+		if _pick_station(homes[hi]["rect"], stations, parent) >= 0:
+			continue
+		_grow(homes[hi]["rect"], spots[hi], stations, parent, tree_edges, degree, trunk_segs)
+		attempts += 1
+		peak_attempts = maxi(peak_attempts, attempts)
 	# Відводи: хата — до найближчої станції дерева, звідки відвід можливий; такої нема — хата без відводу. З досяжних
 	# хат села кожна SKIP_ONE_IN-а (за хешем центру, найменші хеші) лишається без відводу: сусідні хати не всі під
 	# дротами, а село з однією-двома досяжними хатами не лишається без жодного відводу.
@@ -619,12 +627,14 @@ func _village(homes: Array, trunk: Array) -> void:
 		if inserted:
 			_remove_pole(trunk, tp)
 			_avoid.erase(tp)
+			_corner_cache.clear()
 		return
 	if not shared:
 		transformers.append(tp)
 	needed[0] = true
 	for i: int in needed:
 		_avoid.append(stations[i])
+		_corner_cache.clear()
 	# Ламані: від ТП гілками дерева (як lines).
 	var kids: Dictionary = {}
 	for i: int in needed:
@@ -655,7 +665,7 @@ func _village(homes: Array, trunk: Array) -> void:
 ## Гілка дерева до хати rect: найкоротший шлях сходинками вздовж осей (_path) від будь-якої опори дерева, що ще має
 ## вільний проліт (MAX_SPANS) і стоїть не далі за BRIDGE_MAX від хати, до одного з місць spots, без перетину з деревом;
 ## між поворотами — проміжні опори (_straight). true — гілку додано (stations, parent, tree_edges, degree оновлено).
-func _grow(rect: Rect2, spots: Array[Vector2], stations: Array[Vector2], parent: Dictionary, tree_edges: Array, degree: Dictionary, trunk_segs: Array) -> bool:
+func _grow(rect: Rect2, spots: Array[Vector2], stations: Array[Vector2], parent: Dictionary, tree_edges: Array, degree: Dictionary, trunk_segs: Array, tries: int = BRIDGE_TRIES) -> bool:
 	var c: Vector2 = rect.get_center()
 	var from: Array[int] = []
 	for k: int in parent:
@@ -677,7 +687,7 @@ func _grow(rect: Rect2, spots: Array[Vector2], stations: Array[Vector2], parent:
 	var all_spots: Array[Vector2] = []
 	for k: int in to:
 		all_spots.append(stations[k])
-	for attempt in BRIDGE_TRIES:
+	for attempt in tries:
 		peak_tries = maxi(peak_tries, attempt + 1)
 		stations.resize(base)
 		stations.append_array(all_spots)
@@ -700,6 +710,15 @@ func _grow(rect: Rect2, spots: Array[Vector2], stations: Array[Vector2], parent:
 				chain = []
 				break
 			chain.append_array(e)
+		# Гачок шляху не перетинає сам себе й дерева: проліт, що перетинає, виключається, і пошук повторюється.
+		var spans: Array = []
+		for k in range(1, chain.size()):
+			var sp: Array = [stations[chain[k - 1]], stations[chain[k]]]
+			if _crosses(sp[0], sp[1], spans + tree_edges):
+				blocked.append(sp)
+				chain = []
+				break
+			spans.append(sp)
 		if not chain.is_empty():
 			break
 	if chain.is_empty():
@@ -736,6 +755,9 @@ func _path(stations: Array[Vector2], from: Array[int], to: Array[int], trunk_seg
 			near = k
 	lo = lo.min(stations[near]) - Vector2(ROUTE_MARGIN, ROUTE_MARGIN)
 	hi = hi.max(stations[near]) + Vector2(ROUTE_MARGIN, ROUTE_MARGIN)
+	# Перетин перевіряється лише з ребрами дерева, що заходять у рамку: кожен крок пошуку — перевірка відрізка.
+	var box := Rect2(lo, hi - lo).grow(0.5)
+	tree_edges = tree_edges.filter(func(e: Array) -> bool: return box.intersects(Rect2(e[0], Vector2.ZERO).expand(e[1]).grow(0.01)))
 	var xs: Array[float] = _route_vals(lo.x, hi.x, keep_x)
 	var zs: Array[float] = _route_vals(lo.y, hi.y, keep_z)
 	var nx: int = xs.size()
@@ -764,19 +786,30 @@ func _path(stations: Array[Vector2], from: Array[int], to: Array[int], trunk_seg
 	var gap: Dictionary = {}
 	var prev: Dictionary = {}
 	var open: Array = []
+	# A*: у купі — ціна з оцінкою решти шляху (манхеттенська відстань до найближчої мети, не більша за справжню ціну),
+	# тож пошук не розтікається рамкою, а йде до хати.
+	var goal_pts: Array[Vector2] = []
+	for k: int in to:
+		goal_pts.append(stations[k])
+	var h_of := func(q: Vector2) -> float:
+		var best: float = INF
+		for gp in goal_pts:
+			best = minf(best, absf(gp.x - q.x) + absf(gp.y - q.y))
+		return best
 	for k: int in from:
 		var s0: int = node_of.call(stations[k])
 		if s0 >= 0:
 			dist[(s0 * 5 + 4) * 2] = 0.0
 			run[(s0 * 5 + 4) * 2] = 0.0
 			gap[(s0 * 5 + 4) * 2] = 0.0
-			_heap_push(open, [0.0, (s0 * 5 + 4) * 2])
+			_heap_push(open, [h_of.call(stations[k]), (s0 * 5 + 4) * 2, 0.0])
 	var found: int = -1
 	var corner_cache: Dictionary = {}
+	var spot_cache: Dictionary = {}
 	while not open.is_empty():
 		var item: Array = _heap_pop(open)
 		var s: int = item[1]
-		if item[0] > float(dist.get(s, INF)):
+		if item[2] > float(dist.get(s, INF)):
 			continue
 		var node: int = s / 10
 		var d_in: int = (s / 2) % 5
@@ -803,21 +836,26 @@ func _path(stations: Array[Vector2], from: Array[int], to: Array[int], trunk_seg
 			if ux < 0 or uz < 0 or ux >= nx or uz >= zs.size():
 				continue
 			var q := Vector2(xs[ux], zs[uz])
-			if poles.has(ux + uz * nx) or not _piece_ok(p, q, trunk_segs) or _crosses(p, q, tree_edges) or _on_blocked(p, q, blocked):
-				continue
 			var g: float = (0.0 if turn else float(gap[s])) + p.distance_to(q)
-			if g > MAX_04KV:
+			if g > MAX_04KV or poles.has(ux + uz * nx) or _on_blocked(p, q, blocked) or _crosses(p, q, tree_edges) \
+					or not _piece_ok(p, q, trunk_segs):
 				continue
-			var far: bool = _p.road_edge_m(p.lerp(q, 0.5)) > 8.0
+			var mid := p.lerp(q, 0.5)
+			if not _far_cache.has(mid):
+				_far_cache[mid] = _p.road_edge_m(mid) > 8.0
+			var far: bool = _far_cache[mid]
 			var r: float = (0.0 if turn else float(run[s])) + p.distance_to(q)
 			var t: int = ((ux + uz * nx) * 5 + d) * 2 + int(r >= POLE_GAP)
-			var cost: float = float(item[0]) + p.distance_to(q) * (FIELD_COST if far else 1.0) + (TURN_COST if turn else 0.0)
+			var cost: float = float(item[2]) + p.distance_to(q) * (FIELD_COST if far else 1.0) + (TURN_COST if turn else 0.0)
 			if cost < float(dist.get(t, INF)):
 				dist[t] = cost
 				run[t] = r
-				gap[t] = 0.0 if _corner_ok(q) else g
+				var qn: int = ux + uz * nx
+				if not spot_cache.has(qn):
+					spot_cache[qn] = _corner_ok(q)
+				gap[t] = 0.0 if spot_cache[qn] else g
 				prev[t] = s
-				_heap_push(open, [cost, t])
+				_heap_push(open, [cost + h_of.call(q), t, cost])
 	if found < 0:
 		return []
 	var at := func(st: int) -> Vector2: return Vector2(xs[(st / 10) % nx], zs[(st / 10) / nx])
@@ -845,16 +883,28 @@ func _drop_spots(rect: Rect2) -> Array[Vector2]:
 			for o: float in [0.49, 0.51]:
 				var t: float = lo.y if axis == 0 else lo.x
 				while t <= (hi.y if axis == 0 else hi.x) + 1e-6:
-					cands.append(Vector2(k + o, snappedf(t, 0.01)) if axis == 0 else Vector2(snappedf(t, 0.01), k + o))
+					var q: Vector2 = Vector2(k + o, snappedf(t, 0.01)) if axis == 0 else Vector2(snappedf(t, 0.01), k + o)
+					# Далі за відвід від стіни — не місце для відводу; так перевірок місця (дорогих) учетверо менше.
+					var gap: float = Vector2(maxf(maxf(rect.position.x - q.x, 0.0), q.x - rect.end.x), maxf(maxf(rect.position.y - q.y, 0.0), q.y - rect.end.y)).length()
+					if gap <= r:
+						cands.append(q)
 					t += 0.2
-	var key := func(q: Vector2) -> float: return q.distance_to(rect.get_center()) + minf(_p.road_edge_m(q), 16.0) / 8.0
+	# Спершу ближчі до хати; із перших DROP_SCAN придатних — ближчі до вулиці (відстань до асфальту — дорогий запит).
 	cands.sort_custom(func(a: Vector2, b: Vector2) -> bool:
-		var ka: float = key.call(a)
-		var kb: float = key.call(b)
-		return ka < kb or (ka == kb and (a.x < b.x or (a.x == b.x and a.y < b.y))))
+		var da: float = a.distance_squared_to(rect.get_center())
+		var db: float = b.distance_squared_to(rect.get_center())
+		return da < db or (da == db and (a.x < b.x or (a.x == b.x and a.y < b.y))))
+	var keyed: Array = []
 	for q in cands:
-		if _spot_ok(q, 2) and not _near_avoid(q) and out.all(func(o: Vector2) -> bool: return o.distance_to(q) >= POLE_GAP) \
-				and _p.drop_ok(rect, q):
+		if _corner_ok(q):
+			keyed.append([q.distance_to(rect.get_center()) + minf(_p.road_edge_m(q), 16.0) / 8.0, q])
+			if keyed.size() >= DROP_SCAN:
+				break
+	keyed.sort_custom(func(a: Array, b: Array) -> bool:
+		return a[0] < b[0] or (a[0] == b[0] and (a[1].x < b[1].x or (a[1].x == b[1].x and a[1].y < b[1].y))))
+	for kq: Array in keyed:
+		var q: Vector2 = kq[1]
+		if out.all(func(o: Vector2) -> bool: return o.distance_to(q) >= POLE_GAP) and _p.drop_ok(rect, q):
 			out.append(q)
 			if out.size() >= DROP_SPOTS:
 				break
@@ -896,7 +946,7 @@ static func _on_blocked(p: Vector2, q: Vector2, blocked: Array) -> bool:
 	return false
 
 
-## Двійкова купа [ціна, стан] за ціною (за рівної — за станом, щоб шлях був однаковий щоразу).
+## Двійкова купа [ціна, стан, …] за ціною (за рівної — за станом, щоб шлях був однаковий щоразу).
 static func _heap_less(a: Array, b: Array) -> bool:
 	return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1])
 
