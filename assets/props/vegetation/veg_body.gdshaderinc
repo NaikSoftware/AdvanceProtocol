@@ -77,8 +77,9 @@ void vertex() {
 }
 
 void fragment() {
-	// Зміщення mip на −0,5: ближні крони на мінімальному зумі інакше розмиті.
-	vec4 t = texture(albedo_tex, UV, -0.5);
+	// Зміщення mip на −0,5: ближні крони на мінімальному зумі інакше розмиті. Сніп очерету — без
+	// зміщення: його стебла на піксель-два, і різкіший mip робить із них мерехтливі сходинки.
+	vec4 t = texture(albedo_tex, UV, mix(-0.5, 0.0, is_fixed));
 	// Тінь напрямленого світла рендериться ортографічно, а камера гри — у перспективі.
 	bool shadow_pass = PROJECTION_MATRIX[3][3] > 0.5;
 	// На далеких mip-рівнях тонкі гілки усереднюються з прозорим тлом і тануть під порогом:
@@ -94,7 +95,9 @@ void fragment() {
 	float ax = dot(dFdx(texel), dFdx(texel));
 	float ay = dot(dFdy(texel), dFdy(texel));
 	float lod = max(0.5 * log2(max(min(ax, ay), max(ax, ay) / 16.0)), 0.0);
-	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - 2.5) / 2.0, 0.0, 1.0));
+	// Сніп — від mip 1,5: волоть і вістря стебел тонші за тексель уже на найближчому зумі, і з
+	// повним порогом верх снопа зрізається рівною лінією.
+	float cut = shadow_pass ? alpha_cutoff : alpha_cutoff * mix(1.0, 0.3, clamp((lod - mix(2.5, 1.5, is_fixed)) / 2.0, 0.0, 1.0));
 	// Нерухома картка ребром до камери — смуга з розмитого стебла: вона тоншає й гасне.
 	cut = mix(cut, min(cut + 0.45, 0.97), is_fixed * (1.0 - smoothstep(0.12, 0.4, facing)) * float(!shadow_pass));
 	// Силует — з різкого рівня: обрис пучка — дрібне листя. Розмитіший mip для порогу

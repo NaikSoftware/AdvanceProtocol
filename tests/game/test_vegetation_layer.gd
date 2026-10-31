@@ -54,6 +54,8 @@ func test_reeds_stand_in_shallow_water_off_land(p = use_parameters(MAPS)) -> voi
 		var g: float = h.at(q.x, q.y)
 		if g > TerrainHeight.WATER_LEVEL + 0.001 or g < TerrainHeight.WATER_LEVEL - VegetationLayer.SHALLOW - 0.001:
 			bad.append([pl["node"], q, "not shallow"])
+		if pl["pos"].y < TerrainHeight.WATER_LEVEL - VegetationLayer.REED_DIP - 1e-4:
+			bad.append([pl["node"], q, "base too deep under water"])
 		if VegetationLayer._land_dist(board, q) < VegetationLayer.LAND_CLEAR:
 			bad.append([pl["node"], q, "too close to land centre"])
 		if VegetationLayer._near_kind(board, pl["cell"], VegetationLayer.NO_BRIDGE, [Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]):
