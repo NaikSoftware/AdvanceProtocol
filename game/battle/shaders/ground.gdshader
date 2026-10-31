@@ -625,12 +625,16 @@ void fragment() {
 			if (rf.x < 4.0) {
 				vec2 tsz = vec2(textureSize(road_type, 0));
 				rt = textureLod(road_type, ((p - map_origin + 0.5) * road_px) / tsz, 0.0);
-				// Кінець асфальту (перехід у ґрунтівку чи бруківку): растр дає перепад ~1 м, а межу
-				// ріжемо по шуму 0.5–1 м — ламаний край, не градієнт. Вага (0.5 - r) читається як метри
-				// через ширину перепаду ~1.2 м.
+				// Кінець асфальту (перехід у ґрунтівку чи бруківку): растр дає перепад завдовжки один крок
+				// лінії (~1.6 м, з фільтром ~2.5 м). Вагу (0.5 - r) читаємо як метри до краю й ріжемо по
+				// шуму: глибина зубців змінюється повільним шумом (0.1–0.45 м), на межах перепаду зубці
+				// гаснуть (4r(1-r)), тож зони без перепаду лишаються рівно такими, як були.
 				if (rt.r > 0.001 && rt.r < 0.999) {
-					asph_se = (0.5 - rt.r) * 1.2 + 1.4 * (vnoise(p * 4.0 + 71.0) - 0.5) + 0.9 * (vnoise(p * 8.0 + 17.0) - 0.5) + 0.4 * (vnoise(p * 19.0 + 5.0) - 0.5);
-					float apv = 1.0 - smoothstep(-0.1, 0.1, asph_se);
+					float tooth = mix(0.1, 0.45, vnoise(p * 1.3 + 9.0));
+					float jag = tooth * (2.0 * (vnoise(p * 7.0 + 71.0) - 0.5) + (vnoise(p * 17.0 + 5.0) - 0.5))
+							+ 0.12 * (vnoise(p * 40.0 + 3.0) - 0.5);
+					asph_se = (0.5 - rt.r) * 1.8 + jag * 4.0 * rt.r * (1.0 - rt.r);
+					float apv = 1.0 - smoothstep(-0.05, 0.05, asph_se);
 					rt.gb = rt.gb / max(1.0 - rt.r, 1e-4) * (1.0 - apv);
 					rt.r = apv;
 				}
@@ -950,13 +954,17 @@ void fragment() {
 			// Мокрий гравій темніший і тепліший: сухо-світлий у дощ лягав сірим серпанком біля кінця асфальту.
 			gravel *= mix(vec3(1.0), vec3(0.56, 0.54, 0.5), clamp(weather_wetness, 0.0, 1.0));
 			float crumble = smoothstep(-0.45, -0.05, de + 0.35 * (vnoise(vec2(u * 1.4, side * 7.0 + 3.0)) - 0.5));
-			// Кінець асфальту: за 1 м до рваного краю асфальт кришиться — гравій шматками, що густішають
-			// до краю, і темні тріщини; далі ґрунтівка (або бруківка) йде вже без нього.
-			float edge_k = smoothstep(-1.0, 0.0, asph_se);
-			float chip = smoothstep(0.0, 0.08, edge_k * 0.75 - vnoise(p * 15.0 + 3.0) + 0.1);
-			float crack_e = 1.0 - smoothstep(0.0, 0.03 + (abs(dpx.x) + abs(dpy.x)) * 3.0, abs(vnoise(p * 6.0 + 19.0) - 0.5));
-			asph *= 1.0 - 0.6 * crack_e * edge_k;
-			asph = mix(asph, gravel * 0.72, max(crumble, chip));
+			// Кінець асфальту: за ~0.9 м до рваного краю — шматки зі своїм тоном асфальту, темні
+			// тріщини між ними й щілини; рідкі крупинки гравію не світліші за ґрунт. Усе множиться на
+			// edge_k, що є нулем поза зоною переходу, тож звичайна дорога не змінюється.
+			float edge_k = smoothstep(-0.9, 0.0, asph_se);
+			float gap = smoothstep(0.0, 0.08, edge_k * 1.1 - vnoise(p * 9.0 + 3.0) - 0.1);
+			float seam = 1.0 - smoothstep(0.0, 0.05 + (abs(dpx.x) + abs(dpy.x)) * 3.0, abs(vnoise(p * 6.0 + 19.0) - 0.5));
+			asph = mix(asph, gravel, crumble);
+			asph *= 1.0 - 0.45 * seam * edge_k;
+			asph *= 1.0 - 0.4 * gap;
+			asph = mix(asph, gravel * 0.5, step(0.82, vnoise(p * 34.0 + 11.0)) * edge_k * 0.8);
+			float broken = smoothstep(0.1, 0.4, edge_k);
 			// Бруківка: бордюр — трохи темніша смуга ~0.15 м по краю вулиці з розривами: суцільна темна
 			// лінія 0.3 м (×0.68) читалась намальованою обвідкою кожної дороги.
 			float kerb = smoothstep(-0.4, -0.33, de) * rt.b * smoothstep(0.3, 0.6, vnoise(vec2(u * 0.6, side * 13.0 + 1.0)));
@@ -971,9 +979,19 @@ void fragment() {
 			// ΔL*.
 			road_mul *= mix(1.0, 0.84, kerb * (1.0 - g_k));
 			vec3 road_alb = mix(paved_alb, dirt_alb, g_k);
-			// Розсип щебеню за краєм асфальту ~0.9 м: висотна суміш шумом, не плавна пляма.
-			float spill = smoothstep(0.5, 0.65, vnoise(p * 16.0 + 7.0) + 0.45 * (1.0 - smoothstep(0.0, 0.9, asph_se))) * step(0.0, asph_se) * (1.0 - smoothstep(0.7, 1.2, asph_se));
-			road_alb = mix(road_alb, gravel * 0.72, spill * 0.8);
+			// За краєм: темніша кромка 1–2 пікселі (рельєф), рідкі крупинки гравію, що гаснуть до кінця
+			// перепаду (нуль там, де є вага r = 0, — без прямої лінії), і кілька уламків асфальту 20–60 см.
+			float past = step(0.0, asph_se);
+			float lip = smoothstep(0.0, 0.04, asph_se) * (1.0 - smoothstep(0.08, 0.22, asph_se)) * past;
+			float spill = smoothstep(0.62, 0.72, vnoise(p * 20.0 + 7.0) + 0.3 * (1.0 - smoothstep(0.0, 0.9, asph_se)))
+					* past * (1.0 - smoothstep(0.4, 0.95, asph_se));
+			float isle = smoothstep(0.72, 0.78, vnoise(p * 6.0 + 31.0)) * smoothstep(0.1, 0.2, asph_se)
+					* (1.0 - smoothstep(0.5, 0.85, asph_se)) * past;
+			road_alb = mix(road_alb, gravel * 0.5, spill * 0.7);
+			road_alb = mix(road_alb, asph, isle);
+			road_alb *= 1.0 - 0.18 * lip;
+			// Шматки й уламки мають нерівну нормаль.
+			rn += (vec2(vnoise(p * 11.0 + 13.0), vnoise(p * 11.0 + 27.0)) - 0.5) * 0.5 * max(broken, isle);
 			// Калюжі в коліях — у дощ і при ґрунті MUD, на кожній колії свої (хеш комірки й боку),
 			// тож не стають у ряд пунктиром. Сухо без MUD — жодної. На всю ширину в низинах — лише
 			// в дощ.
@@ -1009,7 +1027,7 @@ void fragment() {
 						+ 0.18 * wheel - 0.15 * (1.0 - pcl);
 				// fwidth у розгалуженні не визначений: крок fbm ~3 на клітинку × розмір пікселя.
 				float pfw = 3.0 * max(length(dpx), length(dpy)) + 0.004;
-				paved_sheen = wetr * (rt.r + rt.b) * smoothstep(0.70, 0.79 + pfw, pf);
+				paved_sheen = wetr * (rt.r + rt.b) * smoothstep(0.70, 0.79 + pfw, pf) * (1.0 - broken);
 				// Мокрий обідок: асфальт довкола калюжі темніший, сходить нанівець за ~0.3 м.
 				paved_rim = wetr * (rt.r + rt.b) * smoothstep(0.63, 0.70, pf) * (1.0 - paved_sheen);
 			}

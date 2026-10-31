@@ -463,7 +463,7 @@ func test_no_map_road_end_sits_just_past_the_free_end_threshold() -> void:
 				assert_false(d > 1.0 and d < 1.5, "%s: кінець %s за %.2f клітинки від вузла" % [path, e, d])
 
 
-## Асфальт переходить у ґрунтівку різко: вага асфальту падає з 1 до 0 у межах 0.15 клітинки вздовж осі
+## Асфальт переходить у ґрунтівку різко: вага асфальту падає з 1 до 0 у межах 0.25 клітинки вздовж осі
 ## (раніше гаус розмивав перехід на ~0.8 клітинки — сірий серпанок замість зламаного краю).
 func test_asphalt_weight_drops_within_a_fraction_of_a_tile_at_a_join_to_dirt() -> void:
 	var surface := PackedByteArray()
@@ -487,4 +487,5 @@ func test_asphalt_weight_drops_within_a_fraction_of_a_tile_at_a_join_to_dirt() -
 			first_dirt = x
 	assert_gt(last_asphalt, 4.5, "асфальт доходить до переходу")
 	assert_gt(first_dirt, 0.0, "далі — ґрунтівка")
-	assert_lte(first_dirt - last_asphalt, 0.15, "перехід довший за 0.15 клітинки")
+	# Перепад — один крок лінії (0.2 клітинки, від 95 % до 5 % — 0.18); 0.25 лишає запас на піксель растра (0.125).
+	assert_lte(first_dirt - last_asphalt, 0.25, "перехід довший за 0.25 клітинки")
