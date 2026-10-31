@@ -123,9 +123,10 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
 - **Wet maps wet the props too:** on River walls darken and roofs take on a wet sheen, or the
   buildings look dry in the rain.
 - **Placed as a real village would be.** The layout of each map is authored, not scattered cell
-  by cell: power lines run along roads across the board and on through the ring to its outer
-  edge, so no line visibly starts or ends; a pole stands on every bend and one transformer feeds each
-  settlement. Every settlement keeps a 0.4 kV line on the verge of its main street, running from
+  by cell: power lines run beside the roads across the board and on through the ring to its outer
+  edge, so no line visibly starts or ends. Lines are straight runs on the map axes that turn only at
+  right angles, with a pole at every corner; they never follow the curve of a road. Only a drop to a
+  house may run at another angle. One transformer feeds each settlement. Every settlement keeps a 0.4 kV line on the verge of its main street, running from
   the transformer to the last pole in front of a house. A house gets a drop under its eaves only
   where a street pole reaches it with a short straight span (≤ 16 m) that keeps off gardens and a
   neighbour's yard; a drop may cross the street only square to it (within 25°) and no longer than
