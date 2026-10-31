@@ -637,7 +637,6 @@ func _widths(li: int, n_w: FastNoiseLite, n_w2: FastNoiseLite) -> void:
 		var single: float = tw[i].x * HALF_M[0] + tw[i].y * HALF_M[1] + tw[i].z * HALF_M[2]
 		base.append(maxf(STREET_HALF_M, _wide_half_m(pts[i])) if street[i] == 1 else single)
 	base = _gauss_f(base, 0.35)
-	tw = _gauss_v3(tw, 0.3)
 	var hw := PackedFloat32Array()
 	for i in n:
 		# Шум підсилено ×2.5 з обрізанням до ±1: симплекс рідко сягає ±1, і CV ширини < 3 %.
@@ -698,21 +697,6 @@ static func _gauss_f(v: PackedFloat32Array, sigma: float) -> PackedFloat32Array:
 	var r: int = ceili(2.5 * sigma / STEP)
 	for i in n:
 		var acc: float = 0.0
-		var ws: float = 0.0
-		for k in range(-r, r + 1):
-			var g: float = exp(-0.5 * pow(float(k) * STEP / sigma, 2.0))
-			acc += v[clampi(i + k, 0, n - 1)] * g
-			ws += g
-		out[i] = acc / ws
-	return out
-
-
-static func _gauss_v3(v: PackedVector3Array, sigma: float) -> PackedVector3Array:
-	var n: int = v.size()
-	var out: PackedVector3Array = v.duplicate()
-	var r: int = ceili(2.5 * sigma / STEP)
-	for i in n:
-		var acc := Vector3.ZERO
 		var ws: float = 0.0
 		for k in range(-r, r + 1):
 			var g: float = exp(-0.5 * pow(float(k) * STEP / sigma, 2.0))
@@ -881,7 +865,9 @@ func rasterise() -> Array[Image]:
 						d[k] = dd
 						v[k] = (abn.x * qz - abn.y * qx) * 8.0
 						u[k] = (s0 + t * seg_len) * 8.0
-						tw[k] = ty[si].lerp(ty[si + 1], t)
+						# Зміну типу (асфальт → ґрунтівка) не розмиваємо: різкий злам у межах кількох сантиметрів,
+						# рваність краю додає шейдер. Розмитий перехід лягав сірим серпанком на кілька метрів.
+						tw[k] = ty[si].lerp(ty[si + 1], smoothstep(0.45, 0.55, t))
 						# Відстань за глухим кінцем уздовж осі (м; мінус — ще до кінця): колії гаснуть
 						# за ~2 м до кінця й зникають на заокругленні.
 						var past: float = -INF
