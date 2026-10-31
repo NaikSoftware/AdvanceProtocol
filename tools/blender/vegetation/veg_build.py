@@ -28,7 +28,7 @@ argv = sys.argv[sys.argv.index("--") + 1:]
 ATLAS_DIR, GROUP, SEASON, OUT = argv[:4]
 TILE_M = 8.0
 # Тон кори стовбура й гілок: у кадрі кора ~(55–60, 50–55, 40–45) — не чорна й не світліша за ґрунт.
-BARK_TONE = 0.75
+BARK_TONE = 0.68
 # Тон хмизу й стебел зім'ятого куща (смуга dead): у кадрі ~(65, 57, 46), темніше за ґрунт.
 HEAP_TONE = 0.9
 FIXED = (1e-4, 0.0)  # UV2 (до перевертання, див. uv2()) нерухомої картки: листя для шейдера, але не розгортається до камери
@@ -45,11 +45,11 @@ FIXED = (1e-4, 0.0)  # UV2 (до перевертання, див. uv2()) нер
 TREE = {
     "apple": dict(h=4.5, cb=1.2, w=4.4, r=0.13, fork=1.0, limbs=4, rise=52, crook=0.22, leader=0.25, sec=2, ter=1,
                   lobe_r=0.85, cards=150, card=(1.0, 1.5), bare=0.15),
-    "cherry": dict(h=5.6, cb=1.4, w=3.6, r=0.11, fork=1.1, limbs=4, rise=36, crook=0.15, leader=0.6, sec=2, ter=1,
+    "cherry": dict(h=5.6, cb=1.3, w=3.6, r=0.15, fork=1.1, limbs=4, rise=36, crook=0.15, leader=0.6, sec=2, ter=1,
                    lobe_r=0.75, cards=140, card=(0.9, 1.4), bare=0.15),
     "walnut": dict(h=11.0, cb=2.2, w=8.5, r=0.28, fork=1.7, limbs=4, rise=40, crook=0.2, leader=0.0, sec=2, ter=1,
                    lobe_r=1.8, cards=200, card=(1.5, 2.3), bare=0.15),
-    "pear": dict(h=10.5, cb=2.0, w=5.0, r=0.24, fork=2.0, limbs=6, rise=22, crook=0.22, leader=0.85, sec=2, ter=1,
+    "pear": dict(h=9.5, cb=1.5, w=5.0, r=0.36, fork=1.3, limbs=6, rise=22, crook=0.22, leader=0.85, sec=2, ter=1,
                  lobe_r=1.05, cards=200, card=(1.3, 1.9), bare=0.15),
     "oak": dict(h=12.5, cb=2.6, w=6.0, r=0.45, fork=2.6, limbs=6, rise=62, crook=0.42, leader=0.3, sec=2, ter=1,
                 lobe_r=1.8, cards=200, card=(1.8, 2.7), bare=0.30, droop=0.06),
@@ -103,9 +103,9 @@ ASSETS = {
     ]) + tree_variants("yard_cherry", "cherry", extra=[
         {},
         # Стовпчаста: вузька, гілки круто вгору, провідник до верхівки.
-        dict(h=6.7, cb=1.8, w=2.6, rise=20, limbs=5, leader=0.9),
+        dict(h=6.2, cb=1.3, w=2.8, fork=1.0, rise=30, limbs=6, leader=0.75),
         # Два стовбури від землі, широка чаша.
-        dict(multi=2, fork=0.4, h=5.2, w=4.6, r=0.14, rise=34, limbs=3, leader=0.0),
+        dict(multi=2, fork=0.4, h=5.2, w=4.4, r=0.14, rise=16, limbs=3, leader=0.0, lean_deg=3.0),
     ])
     + tree_variants("yard_walnut", "walnut", extra=[
         {},
@@ -157,9 +157,9 @@ ASSETS = {
     ] + tree_variants("meadow_pear", "pear", extra=[
         {},
         # Розлога: ширша, провідник короткий.
-        dict(h=8.5, cb=1.8, w=6.9, rise=40, leader=0.5),
+        dict(h=8.0, cb=1.4, w=6.9, fork=1.2, rise=40, leader=0.5),
         # Струнка нахилена піраміда.
-        dict(h=11.8, cb=2.4, w=3.6, rise=14, limbs=5, leader=0.95, lean_deg=8.0),
+        dict(h=10.5, cb=1.7, w=3.6, fork=1.4, rise=24, limbs=5, leader=0.95, lean_deg=8.0),
     ]) + tree_variants("meadow_oak", "oak", extra=[
         {},
         # Розлогий низький дуб: гілки майже горизонтально, без провідника.
@@ -625,7 +625,7 @@ def tree(it, rects, fallen):
         n = it["limbs"]
         for i in range(n):
             az = 2 * math.pi * i / n + skel.uniform(-0.45, 0.45)
-            start = F.lerp(leader_top, 0.1 + 0.7 * i / n) if (leader_top is not None and not pollard) else F
+            start = F.lerp(leader_top, 0.6 * i / n) if (leader_top is not None and not pollard) else F
             rise = math.radians(it["rise"] * skel.uniform(0.8, 1.2))
             d = Vector((math.sin(rise) * math.cos(az), math.sin(rise) * math.sin(az), math.cos(rise)))
             reach = R * (1.0 + it["asym"] * math.cos(az - adir))
@@ -645,6 +645,8 @@ def tree(it, rects, fallen):
         centres += [lm["pts"][1].lerp(lm["pts"][2], 0.5) for lm in limbs]
     if leader_top is not None:
         centres.append(leader_top + Vector((0, 0, it["lobe_r"] * 0.3)))
+        for f in (0.2, 0.45):
+            centres.append(F.lerp(leader_top, f) + Vector((0, 0, it["lobe_r"] * 0.2)))
     radii = [it["lobe_r"] * skel.uniform(0.7, 1.25) for _ in centres]
     mid = sum(centres, Vector()) / len(centres)
     cards = []
@@ -687,13 +689,18 @@ def tree(it, rects, fallen):
         # сіро-бура мережа з розкидом тону, а не 4–6 палиць із грудками. Листкові картки вже
         # лежать у сітці, тож решту бюджету (BUDGET["tree_late"]) забирає гілля.
         trng = random.Random(it["node"] + "twigs")
-        tips = [lm["pts"][-1] for lm in ter + sec] + [lm["pts"][1] for lm in sec + limbs] + [lm["pts"][2] for lm in limbs]
+        outer = [lm["pts"][-1] for lm in ter + sec]
+        inner = [lm["pts"][1] for lm in sec + limbs] + [lm["pts"][2] for lm in limbs]
         room = (BUDGET["tree_late"] - m.tris()) // 2
-        for k in range(max(min(room, 7 * len(tips)), 0)):
-            c = tips[k % len(tips)] + Vector([trng.gauss(0, 0.3 * it["lobe_r"]) for _ in range(3)])
+        for k in range(max(min(room, 7 * (len(outer) + len(inner))), 0)):
+            # Кожна третя картка — дрібніша й темніша, всередині крони: гілля в глибині, а не кілька грубих
+            # гілок із крапками; решта — зовнішній шар, удвічі частіше.
+            deep = k % 3 == 0
+            src = inner if deep else outer
+            c = src[(k // 3) % len(src)] + Vector([trng.gauss(0, (0.2 if deep else 0.3) * it["lobe_r"]) for _ in range(3)])
             nrm = ((c - mid).normalized() + Vector((0, 0, 0.3))).normalized()
-            m.card(c, trng.uniform(0, 2 * math.pi), trng.uniform(*it["card"]) * trng.uniform(0.6, 0.9),
-                   trng.choice(twig), lambda _c, n_=nrm: n_, trng.uniform(0.6, 1.0))
+            m.card(c, trng.uniform(0, 2 * math.pi), trng.uniform(*it["card"]) * trng.uniform(0.6, 0.9) * (0.6 if deep else 1.0),
+                   trng.choice(twig), lambda _c, n_=nrm: n_, trng.uniform(0.3, 0.55) if deep else trng.uniform(0.6, 1.0))
     check_budget(m, it, "tree_late" if late_bare else "tree")
     return m
 

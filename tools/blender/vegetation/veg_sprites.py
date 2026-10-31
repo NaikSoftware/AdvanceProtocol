@@ -76,7 +76,7 @@ K = {
                   fruit={"summer": (0.08, 0.025, [(0.55, 0.10, 0.10), (0.12, 0.06, 0.08)])}),
     "thuja": dict(seg=0.45, depth=6, kids=(3, 3), spread=30, droop=0.0, leaf=0.07, shape="scale", per_node=8,
                   twig_r=0.008, bark=(0.30, 0.22, 0.17), sm=1.8,
-                  leaves={"summer": (1.0, G_DARK, None), "early": (1.0, G_DARK, None), "late": (1.0, [(0.32, 0.25, 0.12), (0.36, 0.28, 0.13), (0.28, 0.22, 0.11)], (0.25, G_DARK))}),
+                  leaves={"summer": (1.0, G_DARK, None), "early": (1.0, G_DARK, None), "late": (1.0, [(0.17, 0.21, 0.11), (0.20, 0.24, 0.12), (0.15, 0.19, 0.10)], (0.25, G_DARK))}),
     "hawthorn": dict(seg=0.45, depth=6, kids=(2, 3), spread=55, droop=0.0, leaf=0.05, shape="ovate", per_node=7,
                      twig_r=0.010, bark=(0.30, 0.27, 0.24), sm=2.0,
                      leaves={"summer": (1.0, G_DARK, (0.3, G)), "early": (0.85, EARLY, (0.3, G_DARK)), "late": (0.05, BROWN, None)},
