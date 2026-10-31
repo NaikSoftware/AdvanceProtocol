@@ -261,7 +261,7 @@ const GATE_ALONG: float = 0.4
 ## Верх полотна воріт на екрані не ближче стільки (клітинки площини фокуса, ~15 px на зумі 8) до силуету ближчої
 ## будівлі з димарем: інакше ворота визирають з-за даху й читаються частиною хати.
 const GATE_SCREEN_GAP: float = 0.13
-## Паркан двору не ближче стільки (клітинки) до намальованого асфальту: панель упритул читалась такою, що стоїть на ньому.
+## Паркан двору не ближче стільки (клітинки, ~0.5 м) до краю намальованого асфальту: між панеллю й покриттям лишається узбіччя.
 const FENCE_ROAD_INSET: float = 0.06
 ## Прямий хід паркану, коротший за це (клітинки, ~2 м), стоїть лише як сполучник воріт чи довгого ходу (_drop_short_runs).
 const SHORT_RUN: float = 0.25
@@ -2005,8 +2005,6 @@ class _Placer:
 	## для воріт (_gate_at).
 	var _wall_tops: Array[float] = []
 	var _wall_chims: Array = []
-	## Відстань на екрані до силуетів будівель, якої досягло останнє _gate_at (INF — правило екрана не діяло).
-	var _gate_gap: float = INF
 	const SCREEN_OFF: int = 0
 	const SCREEN_STRICT: int = 1
 	const SCREEN_WIDEST: int = 2
@@ -2930,8 +2928,7 @@ class _Placer:
 						blocked[gy * nx + gx] = 0
 		var from := Vector2i(roundi((a.x - lo.x) / step), roundi((a.y - lo.y) / step))
 		var goal := Vector2i(roundi((b.x - lo.x) / step), roundi((b.y - lo.y) / step))
-		# Найкоротша ламана по вільних клітинках (вісім сусідів) — рушієм: хвиля в GDScript на сітці 0.05 коштувала
-		# десятки мілісекунд на двір.
+		# Найкоротша ламана по вільних клітинках (вісім сусідів, діагональ — √2): пошук іде в рушії, не в GDScript.
 		var astar := AStarGrid2D.new()
 		astar.region = Rect2i(0, 0, nx, ny)
 		astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ALWAYS
@@ -3159,7 +3156,7 @@ class _Placer:
 		return true
 
 	## Обриси, що не пускають стежку (будівлі й речі з запасом 0.2, межі полів і городи — 0.1), за клітинкою, де
-	## вони можуть торкнутися точки: _walkable питають для тисяч клітинок сітки, а перебір усіх обрисів і був ціною.
+	## вони можуть торкнутися точки: _walkable питають для тисяч клітинок сітки, і кожна перебирає лише обриси своєї клітинки.
 	func _walk_blockers(c: Vector2i) -> Array:
 		var n: int = placed.size() + layer.field_edges.size() + garden_plots.size()
 		if n != _walk_idx_n:
@@ -3747,12 +3744,13 @@ class _Placer:
 						if total < GATE + 2.0 * flank:
 							continue
 						var dir: Vector2 = (b - a) / total
-						var at: float = _gate_at(a, b, sheds, (Vector2(hc) - a).dot(dir), clear, flank, GATE_ALONG * tier.x, tier.y)
+						var found: Vector2 = _gate_at(a, b, sheds, (Vector2(hc) - a).dot(dir), clear, flank, GATE_ALONG * tier.x, tier.y)
+						var at: float = found.x
 						if at < 0.0:
 							continue
 						# Спершу отвір, що дивиться на дорогу (з запасом на зсув хвіртки), потім на боці фасаду, потім найближчий до хати.
 						var facing: bool = road_ahead_of(a + dir * at, Vector2(sides[k]["d"] as Vector2i)) <= GATE_SIGHT - 0.3
-						var pref: float = (0.0 if k == gate_side else 1.0) if tier.y == SCREEN_STRICT else -_gate_gap
+						var pref: float = (0.0 if k == gate_side else 1.0) if tier.y == SCREEN_STRICT else -found.y
 						var score := Vector3(0.0 if facing else 1.0, pref, (a + dir * at).distance_to(Vector2(hc)))
 						if score.x < best_score.x or (score.x == best_score.x and (score.y < best_score.y or (score.y == best_score.y and score.z < best_score.z))):
 							best_score = score
@@ -3805,10 +3803,9 @@ class _Placer:
 	## стовпів) далі clear від будівель, далі clear + 0.1 від сараїв (ворота проти комори читались дверима гаража)
 	## і далі WATER_CLEAR від води; -1 — такого місця нема. Уздовж стіни отвір далі side від неї. screen: SCREEN_STRICT —
 	## верх полотна на екрані далі GATE_SCREEN_GAP від силуетів будівель (_hull_gap); SCREEN_WIDEST — місце, найдальше
-	## від них, хоч і ближче (досягнута відстань — у _gate_gap).
+	## від них, хоч і ближче. Повертає (центр отвору, відстань на екрані до силуетів; INF — силуетів поруч нема).
 	func _gate_at(a: Vector2, b: Vector2, sheds: Array[Rect2], want: float, clear: float, flank: float, side: float = 0.0,
-			screen: int = SCREEN_OFF) -> float:
-		_gate_gap = INF
+			screen: int = SCREEN_OFF) -> Vector2:
 		var total: float = a.distance_to(b)
 		var dir: Vector2 = (b - a) / total
 		var lo: float = flank + GATE * 0.5
@@ -3838,10 +3835,14 @@ class _Placer:
 			if r.intersects(box):
 				near.append(r.grow(clear + 0.1))
 		var best: float = -1.0
-		var best_gap: float = -1.0
+		var best_gap: float = INF
+		# Без силуетів поруч відстань на екрані скрізь INF: вибір — найближче до want, як без правила екрана.
+		var widest: bool = screen == SCREEN_WIDEST and not hulls.is_empty()
+		if widest:
+			best_gap = -1.0
 		var t: float = lo
 		while t <= total - lo + 1e-6:
-			if screen != SCREEN_WIDEST and best >= 0.0 and absf(t - want) >= absf(best - want):
+			if not widest and best >= 0.0 and absf(t - want) >= absf(best - want):
 				t += 0.04
 				continue
 			var ok := true
@@ -3872,12 +3873,11 @@ class _Placer:
 						ok = false
 						break
 			# SCREEN_WIDEST: найдальше на екрані від силуетів; за рівного — найближче до want.
-			if ok and (screen != SCREEN_WIDEST or gap > best_gap + 1e-4 or (absf(gap - best_gap) <= 1e-4 and absf(t - want) < absf(best - want))):
+			if ok and (not widest or gap > best_gap + 1e-4 or (absf(gap - best_gap) <= 1e-4 and absf(t - want) < absf(best - want))):
 				best = t
 				best_gap = gap
 			t += 0.04
-		_gate_gap = best_gap
-		return best
+		return Vector2(best, best_gap if best >= 0.0 else INF)
 
 	## Точка всередині клітинки чужого двору, не на межі: межу двох дворів ставить один з них.
 	func _in_other_lot(q: Vector2) -> bool:
@@ -4121,7 +4121,7 @@ class _Placer:
 					out.append([e, e + reach_d * reach])
 				elif hit_d != Vector2.ZERO:
 					out.append([e, e + hit_d * best])
-		out = _prune_dangling(_drop_short_runs(out, posts, earlier_segs, known), known)
+		out = _prune_dangling(_drop_short_runs(out, posts, earlier_segs, known, _wall_rects), known, _wall_rects)
 		# Ланцюги за збігом кінців.
 		var parent: Array[int] = []
 		for k in out.size():
@@ -4158,26 +4158,42 @@ class _Placer:
 		return kept
 
 	## Купки коротких (за SHORT_RUN) прямих ходів кільця, що не тримають ні воріт, ні довгого ходу (свого чи сусіднього
-	## двору): шматки довкола рогу хати, що замикаються самі на себе через стіну, читались уламком, що закінчується в
+	## двору), викидаються: шматки довкола рогу хати, що замикаються самі на себе через стіну, — уламок, що закінчується в
 	## нікуди. Купка, де хоч один хід тримає стовп воріт чи довгий хід (бічна стійка воріт, обхід перешкоди), лишається
 	## цілою — інакше кільце розімкнулось би. Що після цього повисне, прибирає прохід «висить у повітрі».
-	func _drop_short_runs(out: Array, posts: Array[Vector2], others: Array, known: Array[Vector2]) -> Array:
-		for cl: Array in _short_clusters(_collinear_runs(out + others), posts):
-			if bool(cl[1]):
-				continue
-			var segs: Array = []
-			for run: Dictionary in cl[0]:
-				segs.append_array(run["segs"])
-			var rest: Array = out.filter(func(pc: Array) -> bool: return not segs.has(pc))
-			# Купка, без якої повис би довгий хід, — частина замкненого кільця, а не уламок: лишається.
-			var pruned: Array = _prune_dangling(rest, known)
-			if rest.all(func(pc: Array) -> bool: return pruned.has(pc) or (pc[0] as Vector2).distance_to(pc[1]) < SHORT_RUN):
+	static func _drop_short_runs(out: Array, posts: Array, others: Array, known: Array, walls: Array) -> Array:
+		# Купки — з поточного набору: після кожного викидання ходи й купки рахуються заново.
+		var kept: Array = []
+		var changed := true
+		while changed:
+			changed = false
+			for cl: Array in _short_clusters(_collinear_runs(out + others), posts):
+				var segs: Array = []
+				for run: Dictionary in cl[0]:
+					segs.append_array(run["segs"])
+				if bool(cl[1]) or kept.has(segs):
+					continue
+				var rest: Array = out.filter(func(pc: Array) -> bool: return not segs.has(pc))
+				var pruned: Array = _prune_dangling(rest, known, walls)
+				# Купка, без якої повис би довгий хід (за довжиною всього прямого ходу, а не шматка), — частина замкненого
+				# кільця, а не уламок: лишається.
+				var lost_long := false
+				for run: Dictionary in _collinear_runs(rest + others):
+					if float(run["len"]) < SHORT_RUN:
+						continue
+					for sg: Array in run["segs"]:
+						lost_long = lost_long or (rest.has(sg) and not pruned.has(sg))
+				if lost_long:
+					kept.append(segs)
+					continue
 				out = pruned
+				changed = true
+				break
 		return out
 
 	## Відрізок із кінцем, що висить у повітрі (ні стовпа, ні іншого відрізка, ні стіни поруч), викидається разом із
 	## наслідками.
-	func _prune_dangling(out: Array, known: Array[Vector2]) -> Array:
+	static func _prune_dangling(out: Array, known: Array, walls: Array) -> Array:
 		for pass_id in 6:
 			var survivors: Array = []
 			for pc: Array in out:
@@ -4190,7 +4206,7 @@ class _Placer:
 					for o: Array in out:
 						for oe in 2:
 							anchored = anchored or (o != pc and (o[oe] as Vector2).distance_to(e) < 0.03)
-					for r: Rect2 in _wall_rects:
+					for r: Rect2 in walls:
 						anchored = anchored or r.grow(0.03).has_point(e)
 					dangling = dangling or not anchored
 				if not dangling:

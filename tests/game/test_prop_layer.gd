@@ -1597,8 +1597,9 @@ func test_gates_keep_clear_of_buildings(p = use_parameters(MAPS)) -> void:
 ## запас — лише для стіни, що стоїть торцем до воріт. Ворота паралельно стіні за два-три метри від неї на екрані
 ## виходять з-під звису даху чи затуляють перший поверх і читаються прибудовою до хати. Виняток — двір, де інакше
 ## воріт нема ніде (along = false), як «сліпий» двір у test_gates_face_the_road. Воріт із будь-яким послабленням (ні
-## along, ні screen з test_gates_are_not_hidden_behind_buildings) — не більше RELAXED_GATES на карту: тісні двори
-## Перехрестя (хата між дорогами з трьох боків) іншого місця не мають, а решта карт — жодного.
+## along, ні screen з test_gates_are_not_hidden_behind_buildings) — рівно RELAXED_GATES на карту: тісні двори
+## Перехрестя (хата між дорогами з трьох боків) іншого місця не мають, а решта карт — жодного. Число точне, щоб
+## новий послаблений двір не пройшов непомітно.
 func test_gates_do_not_run_alongside_walls(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var rects: Array[Rect2] = []
@@ -1609,8 +1610,8 @@ func test_gates_do_not_run_alongside_walls(p = use_parameters(MAPS)) -> void:
 			rects.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
 	var gates: Array = view.props()._gates
 	assert_gt(gates.size(), 0, p)
-	assert_lte(gates.filter(func(g: Dictionary) -> bool: return not (g["along"] and g["screen"])).size(), RELAXED_GATES.get(p, 0),
-			"%s: забагато воріт з послабленим правилом" % p)
+	assert_eq(gates.filter(func(g: Dictionary) -> bool: return not (g["along"] and g["screen"])).size(), RELAXED_GATES.get(p, 0),
+			"%s: воріт з послабленим правилом" % p)
 	for g: Dictionary in gates:
 		var a: Vector2 = g["a"]
 		var b: Vector2 = g["b"]
@@ -1630,7 +1631,6 @@ func test_gates_do_not_run_alongside_walls(p = use_parameters(MAPS)) -> void:
 ## Виняток — двір, де інакше воріт нема (screen = false).
 func test_gates_are_not_hidden_behind_buildings(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
-	var fwd: Vector2 = _cam_fwd()
 	var shapes: Array = []
 	for inst in view.props().all_instances():
 		var k: int = _kind(inst["model"])
@@ -1639,16 +1639,14 @@ func test_gates_are_not_hidden_behind_buildings(p = use_parameters(MAPS)) -> voi
 		var b: AABB = _box_of(inst)
 		var r := Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
 		var pts := PackedVector2Array()
-		var near: float = INF
 		for c: Vector2 in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
-			near = minf(near, c.dot(fwd))
 			for y: float in [0.0, b.size.y]:
 				pts.append(_on_screen(c, y))
 		var xf: Transform3D = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary).get("local", Transform3D()) as Transform3D)
 		for ch: Vector3 in (PropLayer.model(inst["model"]) as Dictionary).get("chimneys", []):
 			var w: Vector3 = xf * ch
 			pts.append(_on_screen(Vector2(w.x, w.z), w.y - b.position.y))
-		shapes.append([r, Geometry2D.convex_hull(pts), near])
+		shapes.append([r, Geometry2D.convex_hull(pts)])
 	var checked: int = 0
 	for g: Dictionary in view.props()._gates:
 		if not g["screen"]:
@@ -1666,6 +1664,52 @@ func test_gates_are_not_hidden_behind_buildings(p = use_parameters(MAPS)) -> voi
 	assert_gt(checked, 0, "%s: передумова — ворота не лише з послабленим правилом" % p)
 
 
+## Проєкція правила екрана, перевірена рукою (рискання 45°, нахил 38°, sin = 0.615661, cos = 0.788011). Камера
+## дивиться з +x, +z: глибина точки — −(x + z)/√2, вертикаль екрана — глибина·sin + висота·cos, горизонталь — (x − z)/√2.
+## Будівля — куб 1×1×1 у (0, 0); ворота заввишки 0.23:
+## - за нею, у (−0.3, −0.3): глибина 0.424264, верх на екрані (0, 0.442443) — усередині силуету, відстань 0;
+## - перед нею, у (1.5, 1.5): глибина −2.121320, верх (0, −1.124779); найнижча вершина силуету — ріг (1, 1) біля землі,
+##   (0, −0.870677), тож відстань 0.254102.
+## Хибний знак напряму погляду чи переставлені sin і cos дають інші числа.
+func test_gate_screen_projection_by_hand() -> void:
+	assert_eq(IsoCameraRig.YAW_DEGREES, 45.0, "передумова — рискання рига")
+	assert_eq(IsoCameraRig.PITCH_NEAR_DEG, 38.0, "передумова — найнижчий нахил рига")
+	var pts := PackedVector2Array()
+	for c: Vector2 in [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]:
+		for y: float in [0.0, 1.0]:
+			pts.append(PropLayer._Placer._screen_pt(c, y))
+	var hull: PackedVector2Array = Geometry2D.convex_hull(pts)
+	for impl: Callable in [PropLayer._Placer._screen_pt, _on_screen]:
+		var behind: Vector2 = impl.call(Vector2(-0.3, -0.3), 0.23)
+		assert_almost_eq(behind.x, 0.0, 1e-5)
+		assert_almost_eq(behind.y, 0.442443, 1e-5)
+		var front: Vector2 = impl.call(Vector2(1.5, 1.5), 0.23)
+		assert_almost_eq(front.x, 0.0, 1e-5)
+		assert_almost_eq(front.y, -1.124779, 1e-5)
+		var corner: Vector2 = impl.call(Vector2(1, 1), 0.0)
+		assert_almost_eq(corner.y, -0.870677, 1e-5)
+	assert_eq(PropLayer._Placer._hull_gap(Vector2(-0.3, -0.3), 0.23, [hull]), 0.0)
+	assert_almost_eq(PropLayer._Placer._hull_gap(Vector2(1.5, 1.5), 0.23, [hull]), 0.254102, 1e-5)
+
+
+## Купка коротких ходів, без якої повис би довгий хід, лишається, навіть коли цей довгий хід складено з шматків коротших
+## за SHORT_RUN: рахується довжина прямого ходу, а не шматка. Стіна ліворуч (x ≤ 0); довгий хід — чотири шматки по 0.2
+## від неї до (0.8, 0); у його кінці — коротка поперечна купка (0.8, −0.1)–(0.8, 0.1), чиї кінці тримають дві малі стіни.
+## Купка ні воріт, ні довгого ходу кінцями не тримає (кінець довгого ходу — у її середині), але без неї він повис би.
+## Друга, відірвана купка (3, 0)–(3, 0.2) між двома стінами — уламок і викидається.
+func test_short_cluster_holding_a_long_run_of_short_pieces_stays() -> void:
+	var walls: Array = [Rect2(-0.5, -0.5, 0.5, 1.0), Rect2(0.7, 0.1, 0.2, 0.2), Rect2(0.7, -0.3, 0.2, 0.2),
+			Rect2(2.9, -0.2, 0.2, 0.2), Rect2(2.9, 0.2, 0.2, 0.2)]
+	var long_run: Array = [[Vector2(0, 0), Vector2(0.2, 0)], [Vector2(0.2, 0), Vector2(0.4, 0)],
+			[Vector2(0.4, 0), Vector2(0.6, 0)], [Vector2(0.6, 0), Vector2(0.8, 0)]]
+	var cluster: Array = [[Vector2(0.8, -0.1), Vector2(0.8, 0)], [Vector2(0.8, 0), Vector2(0.8, 0.1)]]
+	var stray: Array = [[Vector2(3, 0), Vector2(3, 0.2)]]
+	var got: Array = PropLayer._Placer._drop_short_runs(long_run + cluster + stray, [], [], [], walls)
+	for pc: Array in long_run + cluster:
+		assert_true(got.has(pc), "шматок %s викинуто" % [pc])
+	assert_false(got.has(stray[0]), "відірвана купка лишилась")
+
+
 ## Напрям погляду камери в плані (IsoCameraRig.YAW_DEGREES): від камери вглиб.
 func _cam_fwd() -> Vector2:
 	return -Vector2(sin(deg_to_rad(IsoCameraRig.YAW_DEGREES)), cos(deg_to_rad(IsoCameraRig.YAW_DEGREES)))
@@ -1680,7 +1724,7 @@ func _on_screen(c: Vector2, y: float) -> Vector2:
 
 ## Паркан двору не заходить на асфальт: жодна точка секції (від стовпа до стовпа) не ближче FENCE_ROAD_INSET до краю
 ## дороги так, як її малює шейдер землі (road_edge_m: поле RoadCourse з заокругленими кутами розвилок, а не осі з
-## півшириною, як on_road). Панель на заокругленні розвилки стояла на асфальті.
+## півшириною, як on_road), тож і на заокругленнях розвилок між панеллю й асфальтом лишається узбіччя.
 func test_yard_fences_keep_off_the_asphalt(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var checked: int = 0
