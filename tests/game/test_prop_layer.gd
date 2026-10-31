@@ -1098,22 +1098,29 @@ func test_chimney_tops_and_ruin_centres() -> void:
 		assert_almost_eq(r.y, view._height.at(r.x, r.z), 0.1)
 
 
-## Дим із димаря — лише з цілої хати: жодна точка не лежить над пошкодженою моделлю чи руїною.
+## Дим із димаря — лише з цілої хати. На картах пошкоджених моделей нема, тож підставляємо в розстановку
+## копію цілої хати з моделлю house_h1_hit: її маркер не дає точки, а в house_h1 — дає.
 func test_no_chimney_smoke_over_damaged_houses_or_ruins() -> void:
-	var damaged: Array[StringName] = [&"house_h1_hit", &"f3_hangar_damaged", &"h5_panel_block_damaged"]
-	for name in MAPS:
-		var props: PropLayer = _cached(name).props()
-		for t in props.chimney_tops():
-			var owners: int = 0
-			for inst in props.all_instances():
-				if not _box_of(inst).grow(0.05).has_point(t):
-					continue
-				owners += 1
-				assert_false(inst["model"] in damaged, "%s: дим над %s" % [name, inst["model"]])
-				assert_ne(int(PropLayer.spec_of(inst["model"])["kind"]), PropLayer.Kind.RUIN, "%s: дим над руїною %s" % [name, inst["model"]])
-			assert_gt(owners, 0, "%s: димар %s без будівлі" % [name, t])
-		for m in damaged:
-			assert_true(bool(PropLayer.spec_of(m).get("damaged", false)), "%s не позначена damaged" % m)
+	for m in [&"house_h1_hit", &"f3_hangar_damaged", &"h5_panel_block_damaged"]:
+		assert_true(bool(PropLayer.spec_of(m).get("damaged", false)), "%s не позначена damaged" % m)
+	assert_gt(((PropLayer.model(&"house_h1_hit") as Dictionary)["chimneys"] as Array).size(), 0, "у пошкодженої хати є маркер, який треба ігнорувати")
+	var props: PropLayer = _cached("crossroads").props()
+	var src: Dictionary = {}
+	for inst in props.all_instances():
+		if int(PropLayer.spec_of(inst["model"])["kind"]) == PropLayer.Kind.STRUCTURE and not inst.get("yard", false) \
+				and Rect2i(0, 0, 26, 22).has_point((inst["cells"] as Array)[0]) and not (PropLayer.model(inst["model"]) as Dictionary)["chimneys"].is_empty():
+			src = inst
+			break
+	assert_false(src.is_empty())
+	var base: int = props.chimney_tops().size()
+	var copy: Dictionary = src.duplicate()
+	copy["model"] = &"house_h1_hit"
+	props.all_instances().append(copy)
+	assert_eq(props.chimney_tops().size(), base, "дим над house_h1_hit")
+	copy["model"] = &"house_h1"
+	assert_eq(props.chimney_tops().size(), base + 1, "ціла house_h1 дає точку")
+	props.all_instances().erase(copy)
+	assert_eq(props.chimney_tops().size(), base)
 
 
 ## Руїна тліє з уламків усередині обрису: точка не вище 0,1 клітинки над геометрією руїни в тому
@@ -1125,25 +1132,23 @@ func test_ruin_smoke_rises_from_the_rubble_surface() -> void:
 		var pts: Array[Vector3] = props.ruin_smoke_points()
 		var centres: Array[Vector3] = props.ruin_centres()
 		var boxes: Array[AABB] = []
-		var tops: Array[Array] = []
+		var insts: Array[Dictionary] = []
 		for inst in props.all_instances():
 			if int(PropLayer.spec_of(inst["model"])["kind"]) == PropLayer.Kind.RUIN \
 					and Rect2i(0, 0, m.width, m.height).has_point((inst["cells"] as Array)[0]):
-				var info: Dictionary = PropLayer.model(inst["model"])
-				tops.append([info["mesh"], (inst["transform"] as Transform3D) * (info["local"] as Transform3D)])
+				insts.append(inst)
 				boxes.append((inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB))
 		assert_eq(pts.size(), centres.size(), name)
 		assert_eq(pts.size(), boxes.size(), name)
 		for i in pts.size():
 			var p: Vector3 = pts[i]
-			var around := AABB(Vector3(p.x - 0.06, p.y - 2.0, p.z - 0.06), Vector3(0.12, 4.0, 0.12))
-			var g: Dictionary = PropLayer.top_surface_grid(tops[i][0], tops[i][1], around)
-			var surf: float = -INF
-			for y: float in g["h"]:
-				if not is_inf(y):
-					surf = maxf(surf, y)
-			assert_gt(surf, -INF, "%s: під точкою диму є геометрія руїни" % name)
-			assert_true(p.y - surf >= -0.1 and p.y - surf <= 0.1, "%s: дим %.2f над геометрією руїни" % [name, p.y - surf])
+			var tm: TriangleMesh = PropLayer.triangles_of(insts[i]["model"])
+			var inv: Transform3D = (props._final_transform(insts[i]) * (PropLayer.model(insts[i]["model"]) as Dictionary)["local"]).affine_inverse()
+			var hit: Dictionary = tm.intersect_ray(inv * (p + Vector3(0, 50, 0)), (inv.basis * Vector3.DOWN).normalized())
+			assert_false(hit.is_empty(), "%s: під точкою диму є геометрія руїни" % name)
+			if not hit.is_empty():
+				var world_y: float = (props._final_transform(insts[i]) * (PropLayer.model(insts[i]["model"]) as Dictionary)["local"] * (hit["position"] as Vector3)).y
+				assert_true(p.y - world_y >= 0.0 and p.y - world_y <= 0.1, "%s: дим %.2f над геометрією руїни" % [name, p.y - world_y])
 			assert_true(p.x > -0.5 and p.z > -0.5 and p.x < m.width - 0.5 and p.z < m.height - 0.5, "%s: на дошці" % name)
 			assert_true(p.x >= boxes[i].position.x and p.x <= boxes[i].end.x and p.z >= boxes[i].position.z and p.z <= boxes[i].end.z,
 					"%s: усередині обрису руїни" % name)

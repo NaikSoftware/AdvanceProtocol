@@ -376,9 +376,9 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 		var ruin: bool = first[i].y < 0.5
 		assert_eq(dens[i], WreckLayer.hearth_density(ruin))
 		assert_true(dens[i] > 0.0 and dens[i] <= 0.7, "ледь помітний шлейф, не пожежа")
-		# Руїна — нижча й ширша біля джерела; димар — повні 14 м від вузької труби.
+		# Руїна — нижча й вужча біля джерела; димар — повні 14 м від вузької труби.
 		assert_eq(shapes[i], Vector2(WreckLayer.RUIN_HEIGHT_SCALE, WreckLayer.RUIN_BASE_SCALE) if ruin else Vector2.ONE)
-	assert_true(WreckLayer.RUIN_HEIGHT_SCALE < 1.0 and WreckLayer.RUIN_BASE_SCALE <= 1.0 and WreckLayer.RUIN_DENSITY <= WreckLayer.CHIMNEY_DENSITY)
+	assert_true(WreckLayer.RUIN_HEIGHT_SCALE < 1.0 and WreckLayer.RUIN_BASE_SCALE < 1.0 and WreckLayer.RUIN_DENSITY <= WreckLayer.CHIMNEY_DENSITY)
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
 	assert_eq(layer.hearth_material().get_shader_parameter("rise"), WreckLayer.HEARTH_RISE, "шум густоти пливе вгору зі швидкістю диму")
 	assert_false(layer.hearth_material().shader.code.contains("sin("), "хеш без sin: час росте весь матч")

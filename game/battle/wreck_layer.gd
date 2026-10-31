@@ -319,17 +319,17 @@ func set_wind(wind: Vector3) -> void:
 	_hearth_mat.set_shader_parameter("lean", wind * SMOKE_LEAN_PER_WIND)
 
 
-## Мирний дим: з `chimneys` (верхи димарів) — 1–3, з `ruins` (точки в проломах руїн на рівні
-## даху, `PropLayer.ruin_smoke_points`) — 1–2, вибрані за `seed` мапи, тож у кожного гравця й у
-## кожному бою на цій мапі ті самі.
-func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int) -> void:
+## Мирний дим: з `chimneys` (верхи димарів) — 1–3, з `ruins` (центри руїн) — 1–2, вибрані за `seed`
+## мапи, тож у кожного гравця й у кожному бою на цій мапі ті самі. `locate` (якщо задано) переводить
+## обраний центр руїни в точку на її уламках (`PropLayer.ruin_smoke_point_at`): важка вибірка лише для обраних.
+func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int, locate: Callable = Callable()) -> void:
 	_hearth_points.clear()
 	_hearth_densities.clear()
 	_hearth_shapes.clear()
 	for ruin: bool in [false, true]:
 		var pts: Array[Vector3] = _pick(ruins, 1 + (absi(seed) / 3) % 2, seed) if ruin else _pick(chimneys, 1 + absi(seed) % 3, seed)
 		for p: Vector3 in pts:
-			_hearth_points.append(p)
+			_hearth_points.append(locate.call(p) if ruin and locate.is_valid() else p)
 			_hearth_densities.append(hearth_density(ruin))
 			_hearth_shapes.append(hearth_shape(ruin))
 	assert(_hearth_points.size() <= HEARTH_MAX, "3 димарі + 2 руїни — більше шлейфів не буває")
