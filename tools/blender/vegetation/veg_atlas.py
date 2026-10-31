@@ -30,6 +30,9 @@ BARE = {"apple": "broad_late", "cherry": "broad_late", "walnut": "broad_late", "
 FOREST_SPRITES = os.environ.get("FOREST_SPRITES", os.path.expanduser("~/.cache/ap-scratch/forest/crowns"))
 BARE_GRADE = {"L": 26, "C": 3, "h": 55, "contrast_l": 0.6}
 BARE_N = 4
+# Вільха в спрайтах темніша за верболіз і ґрунт поруч (медіана кадру 52–80 проти 97 у верби): підсилення
+# тону листя й гілок за порою, щоб крона сиділа в одному ряду з іншими видами.
+GAIN = {"alder": {"summer": 1.8, "early": 1.65, "late": 1.3}}
 # Кора (sRGB): середній тон і розкид світлих смуг. Темніша за листя, як у лісі.
 # Не темніша за ~0,33: з тоном кори в кадрі стовбур і гілки виходили майже чорними.
 # dead — сіро-бура деревина зім'ятих кущів і хмизу повалених дерев, однакова для всіх видів.
@@ -192,6 +195,9 @@ def main():
         rects["sprites"][key] = []
         for f in files:
             img = load(f)
+            g = GAIN.get(kind, {}).get(season)
+            if g:
+                img[..., :3] = np.clip(img[..., :3] * g, 0, 1)
             seed += 1
             if kind in SHEAF:
                 img = side_edge(resize(img, CELL, 2 * CELL))

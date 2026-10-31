@@ -16,24 +16,31 @@ extends Node3D
 
 const LIB: String = "res://assets/props/vegetation/%s_veg_%s.glb"
 const REEDS: Array[StringName] = [&"bank_reed_01", &"bank_reed_02", &"bank_reed_03"]
-const CATTAILS: Array[StringName] = [&"bank_cattail_01", &"bank_cattail_02"]
+const CATTAILS: Array[StringName] = [&"bank_cattail_01", &"bank_cattail_02", &"bank_cattail_03"]
 const BUSHES: Array[StringName] = [
 	&"bank_bush_willow_01", &"bank_bush_willow_02", &"bank_bush_willow_03",
 	&"bank_bush_alder_01", &"bank_bush_alder_02", &"bank_bush_alder_03",
 ]
-const MEADOW_BUSHES: Array[StringName] = [&"meadow_hawthorn_01", &"meadow_hawthorn_02", &"meadow_dogrose_01"]
+const MEADOW_BUSHES: Array[StringName] = [
+	&"meadow_hawthorn_01", &"meadow_hawthorn_02", &"meadow_hawthorn_03",
+	&"meadow_dogrose_01", &"meadow_dogrose_02", &"meadow_dogrose_03",
+]
 const MEADOW_TREES: Array[StringName] = [&"meadow_pear_01", &"meadow_pear_02", &"meadow_pear_03",
 	&"meadow_oak_01", &"meadow_oak_02", &"meadow_oak_03"]
 const WET_TREES: Array[StringName] = [&"meadow_willow_01", &"meadow_willow_02", &"meadow_willow_03"]
 const YARD_TREES: Array[StringName] = [&"yard_apple_01", &"yard_apple_02", &"yard_apple_03",
 	&"yard_cherry_01", &"yard_cherry_02", &"yard_cherry_03"]
-const YARD_SMALL: Array[StringName] = [&"yard_lilac_01", &"yard_elder_01", &"yard_berry_row_01", &"yard_thuja_01"]
+const YARD_SMALL: Array[StringName] = [
+	&"yard_lilac_01", &"yard_lilac_02", &"yard_lilac_03", &"yard_elder_01", &"yard_elder_02", &"yard_elder_03",
+	&"yard_berry_row_01", &"yard_berry_row_02", &"yard_berry_row_03",
+	&"yard_thuja_01", &"yard_thuja_02", &"yard_thuja_03",
+]
 ## Радіус крони (тайли, з запасом) за префіксом вузла: для правила «крона не на будівлі» й розчинення.
 const CROWN: Dictionary = {
 	&"bank_reed": 0.18, &"bank_cattail": 0.15, &"bank_bush": 0.22,
-	&"meadow_hawthorn": 0.2, &"meadow_dogrose": 0.18, &"meadow_pear": 0.45, &"meadow_oak": 0.45,
-	&"meadow_willow": 0.45, &"yard_apple": 0.32, &"yard_cherry": 0.28, &"yard_walnut": 0.6,
-	&"yard_lilac": 0.18, &"yard_elder": 0.22, &"yard_berry_row": 0.26, &"yard_thuja": 0.12,
+	&"meadow_hawthorn": 0.2, &"meadow_dogrose": 0.26, &"meadow_pear": 0.45, &"meadow_oak": 0.55,
+	&"meadow_willow": 0.45, &"yard_apple": 0.34, &"yard_cherry": 0.28, &"yard_walnut": 0.66,
+	&"yard_lilac": 0.24, &"yard_elder": 0.26, &"yard_berry_row": 0.32, &"yard_thuja": 0.12,
 }
 
 ## Масштаб екземпляра за префіксом вузла: дуб і верба на луках — 10–15 м, яблуня й вишня у дворі — 5–6 м.

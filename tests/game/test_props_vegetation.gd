@@ -5,7 +5,7 @@ extends GutTest
 ## - G — ідентифікатор пучка: дерева в нижній половині [0; 0,5) (їх тримає fade_floor), решта —
 ##   у верхній [0,5; 1);
 ## - поверхня 1 (пляма затінення) — у всіх, крім снопів очерету й рогозу;
-## - бюджет трикутників: дерево 800, кущ біля хати 400, інший кущ 600, сніп 300.
+## - бюджет трикутників: дерево 800 (гола крона пізньої пори — 1500: щільна мережа гілочок), кущ біля хати 400, інший кущ 600, сніп 300.
 
 const LIBS: Array[String] = [
 	"bank_veg_late", "bank_veg_summer", "bank_veg_early",
@@ -52,6 +52,6 @@ func test_vertex_contract(p = use_parameters(LIBS)) -> void:
 		var tris: int = 0
 		for s in mi.mesh.get_surface_count():
 			tris += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-		var limit: int = 800 if tree else (300 if sheaf else (400 if p.begins_with("yard") else 600))
+		var limit: int = (1500 if p.ends_with("_late") else 800) if tree else (300 if sheaf else (400 if p.begins_with("yard") else 600))
 		assert_lte(tris, limit, "%s/%s: трикутників %d" % [p, name, tris])
 	assert_gt(nodes, 0, "%s: нема вузлів" % p)

@@ -80,40 +80,93 @@ ASSETS = {
         dict(node="bank_reed_03", kind="reed", type="sheaf", rx=1.6, ry=0.6, h=(1.5, 2.9), cards=36),
         dict(node="bank_cattail_01", kind="cattail", type="sheaf", rx=0.5, ry=0.45, h=(1.2, 1.8), cards=10),
         dict(node="bank_cattail_02", kind="cattail", type="sheaf", rx=0.9, ry=0.6, h=(1.3, 2.0), cards=16),
+        dict(node="bank_cattail_03", kind="cattail", type="sheaf", rx=1.4, ry=0.5, h=(1.2, 1.9), cards=22),
         dict(node="bank_bush_willow_01", kind="willow", type="crown", top=3.0, base=0.5, rx=1.5, ry=1.4, stems=7,
-             card=(1.0, 1.5), cards=70, vase=0.5, bare=0.15),
+             card=(1.0, 1.5), cards=70, vase=0.5, bare=0.6),
         dict(node="bank_bush_willow_02", kind="willow", type="crown", top=2.2, base=0.3, rx=1.8, ry=1.4, stems=6,
-             card=(0.9, 1.4), cards=70, vase=0.3, bare=0.15),
+             card=(0.9, 1.4), cards=70, vase=0.3, bare=0.6),
         dict(node="bank_bush_willow_03", kind="willow", type="crown", top=3.6, base=0.6, rx=1.3, ry=1.1, stems=9,
-             card=(0.9, 1.4), cards=75, vase=0.65, bare=0.15, lean=(0.4, 0.1)),
+             card=(0.9, 1.4), cards=75, vase=0.65, bare=0.6, lean=(0.4, 0.1)),
         dict(node="bank_bush_alder_01", kind="alder", type="crown", top=3.8, base=0.7, rx=1.6, ry=1.5, stems=5,
-             card=(1.0, 1.6), cards=80, bare=0.40),
+             card=(1.0, 1.6), cards=80, bare=0.8),
         dict(node="bank_bush_alder_02", kind="alder", type="crown", top=3.2, base=0.5, rx=1.9, ry=1.4, stems=4,
-             card=(1.0, 1.6), cards=80, bare=0.40, lean=(-0.3, 0.2)),
+             card=(1.0, 1.6), cards=80, bare=0.8, lean=(-0.3, 0.2)),
         dict(node="bank_bush_alder_03", kind="alder", type="crown", top=4.0, base=1.0, rx=1.3, ry=1.3, stems=3,
-             card=(1.0, 1.5), cards=75, vase=0.3, bare=0.40),
+             card=(1.0, 1.5), cards=75, vase=0.3, bare=0.8),
     ],
-    "yard": tree_variants("yard_apple", "apple") + tree_variants("yard_cherry", "cherry")
-    + tree_variants("yard_walnut", "walnut") + [
+    "yard": tree_variants("yard_apple", "apple", extra=[
+        {},
+        # Низька розлога старого саду: широка, гілки майже горизонтально, без провідника.
+        dict(h=3.7, cb=0.9, w=5.4, fork=0.7, limbs=5, rise=68, leader=0.0, crook=0.3, lean_deg=3.0),
+        # Висока й вузька, нахилена.
+        dict(h=5.5, cb=1.5, w=3.3, fork=1.3, rise=32, leader=0.55, lean_deg=9.0),
+    ]) + tree_variants("yard_cherry", "cherry", extra=[
+        {},
+        # Стовпчаста: вузька, гілки круто вгору, провідник до верхівки.
+        dict(h=6.7, cb=1.8, w=2.6, rise=20, limbs=5, leader=0.9),
+        # Два стовбури від землі, широка чаша.
+        dict(multi=2, fork=0.4, h=5.2, w=4.6, r=0.14, rise=34, limbs=3, leader=0.0),
+    ])
+    + tree_variants("yard_walnut", "walnut", extra=[
+        {},
+        dict(h=8.5, cb=1.8, w=10.5, rise=58, leader=0.0, crook=0.3),
+        dict(h=13.0, cb=3.0, w=7.0, rise=30, leader=0.5),
+    ]) + [
         dict(node="yard_lilac_01", kind="lilac", type="crown", top=2.8, base=0.6, rx=1.3, ry=1.2, stems=8,
-             card=(0.9, 1.3), cards=70, vase=0.25, bare=0.40),
+             card=(0.9, 1.3), cards=70, vase=0.25, bare=0.8),
+        dict(node="yard_lilac_02", kind="lilac", type="crown", top=3.7, base=0.8, rx=1.0, ry=0.95, stems=10,
+             card=(0.9, 1.3), cards=70, vase=0.65, bare=0.8),
+        dict(node="yard_lilac_03", kind="lilac", type="crown", top=2.0, base=0.35, rx=1.8, ry=1.3, stems=6,
+             card=(0.9, 1.3), cards=66, vase=0.1, bare=0.8, lean=(0.35, 0.1)),
         dict(node="yard_elder_01", kind="elder", type="crown", top=3.0, base=0.8, rx=1.6, ry=1.5, stems=6,
-             card=(1.0, 1.4), cards=70, vase=0.5, bare=0.15),
+             card=(1.0, 1.4), cards=70, vase=0.5, bare=0.65),
+        dict(node="yard_elder_02", kind="elder", type="crown", top=3.9, base=0.9, rx=1.15, ry=1.1, stems=8,
+             card=(1.0, 1.4), cards=70, vase=0.75, bare=0.65),
+        dict(node="yard_elder_03", kind="elder", type="crown", top=2.4, base=0.5, rx=2.0, ry=1.7, stems=5,
+             card=(1.0, 1.4), cards=72, vase=0.15, bare=0.65, lean=(-0.35, 0.2)),
         dict(node="yard_berry_row_01", kind="berry", type="crown", top=1.1, base=0.15, rx=2.0, ry=0.4, stems=8,
-             card=(0.55, 0.8), cards=36, row=True, bare=0.30),
+             card=(0.55, 0.8), cards=36, row=True, bare=0.75),
+        dict(node="yard_berry_row_02", kind="berry", type="crown", top=0.85, base=0.1, rx=1.3, ry=0.4, stems=5,
+             card=(0.5, 0.75), cards=26, row=True, bare=0.75),
+        dict(node="yard_berry_row_03", kind="berry", type="crown", top=1.45, base=0.2, rx=2.4, ry=0.45, stems=10,
+             card=(0.55, 0.8), cards=46, row=True, bare=0.75),
         dict(node="yard_thuja_01", kind="thuja", type="crown", top=4.0, base=0.2, rx=0.7, ry=0.7, stems=1,
              card=(0.8, 1.1), cards=70, cone=True, bare=1.00),
+        dict(node="yard_thuja_02", kind="thuja", type="crown", top=2.9, base=0.15, rx=0.95, ry=0.95, stems=1,
+             card=(0.8, 1.1), cards=64, cone=True, bare=1.00),
+        dict(node="yard_thuja_03", kind="thuja", type="crown", top=5.3, base=0.3, rx=0.55, ry=0.55, stems=1,
+             card=(0.8, 1.0), cards=76, cone=True, bare=1.00, lean=(0.2, -0.1)),
     ],
     "meadow": [
         # Глід і шипшина: колючий каркас із гілок (frame — дочірніх гілок на стебло), пізньої пори
         # половина пучків (голі гілочки з гронами ягід).
         dict(node="meadow_hawthorn_01", kind="hawthorn", type="crown", top=2.9, base=0.4, rx=1.5, ry=1.4, stems=5,
-             card=(1.0, 1.4), cards=80, bare=0.15, frame=2),
+             card=(1.0, 1.4), cards=80, bare=0.65, frame=2),
         dict(node="meadow_hawthorn_02", kind="hawthorn", type="crown", top=2.0, base=0.3, rx=1.3, ry=1.1, stems=4,
-             card=(0.9, 1.3), cards=60, bare=0.15, frame=2),
+             card=(0.9, 1.3), cards=60, bare=0.65, frame=2),
+        # Глід-деревце: прямий вузький кущ на кількох стеблах.
+        dict(node="meadow_hawthorn_03", kind="hawthorn", type="crown", top=3.7, base=0.5, rx=0.95, ry=1.0, stems=4,
+             card=(0.9, 1.3), cards=70, vase=0.55, bare=0.65, frame=2, lean=(0.25, -0.15)),
         dict(node="meadow_dogrose_01", kind="dogrose", type="crown", top=1.7, base=0.15, rx=1.3, ry=1.1, stems=7,
-             card=(0.8, 1.2), cards=50, vase=0.6, bare=0.15, frame=2),
-    ] + tree_variants("meadow_pear", "pear") + tree_variants("meadow_oak", "oak")
+             card=(0.8, 1.2), cards=50, vase=0.6, bare=0.65, frame=2),
+        # Шипшина: низький розлогий кущ-купа, що провисає, і прямий високий кущ.
+        dict(node="meadow_dogrose_02", kind="dogrose", type="crown", top=1.15, base=0.1, rx=1.9, ry=1.6, stems=9,
+             card=(0.8, 1.2), cards=56, vase=0.2, bare=0.65, frame=2),
+        dict(node="meadow_dogrose_03", kind="dogrose", type="crown", top=2.4, base=0.2, rx=0.9, ry=0.9, stems=6,
+             card=(0.8, 1.2), cards=50, vase=0.85, bare=0.65, frame=2, lean=(-0.3, 0.2)),
+    ] + tree_variants("meadow_pear", "pear", extra=[
+        {},
+        # Розлога: ширша, провідник короткий.
+        dict(h=8.5, cb=1.8, w=6.9, rise=40, leader=0.5),
+        # Струнка нахилена піраміда.
+        dict(h=11.8, cb=2.4, w=3.6, rise=14, limbs=5, leader=0.95, lean_deg=8.0),
+    ]) + tree_variants("meadow_oak", "oak", extra=[
+        {},
+        # Розлогий низький дуб: гілки майже горизонтально, без провідника.
+        dict(h=9.5, cb=2.2, w=9.2, fork=2.0, rise=76, leader=0.0, crook=0.55, limbs=7),
+        # Високий дуб у зімкнутому стою: вужча крона, прямі гілки.
+        dict(h=14.5, cb=3.4, w=5.4, fork=3.4, rise=44, leader=0.5, crook=0.3, limbs=5),
+    ])
     + tree_variants("meadow_willow", "wwillow", extra=[
         # Верба «головою»: товстий стовбур до 2,4 м і пучок прямих пагонів.
         dict(pollard=True, h=6.5, cb=2.4, w=5.0, fork=2.4, r=0.42, limbs=16, rise=12, crook=0.04, leader=0.0,
@@ -125,7 +178,7 @@ ASSETS = {
 # Пізня пора: у спрайтах цих видів листя ≤ 15 %, лишається темний каркас гілочок.
 LATE_BARE = {"willow", "alder", "apple", "cherry", "walnut", "lilac", "elder", "berry", "hawthorn", "dogrose", "pear", "oak", "wwillow"}
 # Межі трикутників (мобільний бюджет): дерево, кущ біля хати, кущ на березі й на луці, сніп.
-BUDGET = {"tree": 800, "yard": 400, "crown": 600, "sheaf": 300}
+BUDGET = {"tree": 800, "tree_late": 1500, "yard": 400, "crown": 600, "sheaf": 300}
 
 
 def uv2(u, v):
@@ -615,21 +668,8 @@ def tree(it, rects, fallen):
     if SEASON == "late":
         for lm in ter:
             m.tube(lm["pts"], lm["r"], bark, sides=3)
-    n = len(cards)
-    if SEASON == "late" and it["kind"] in LATE_BARE:
-        n = round(len(cards) * it["bare"])
-    twig = rects["sprites"].get(it["kind"] + "_bare")
-    if SEASON == "late" and twig:
-        # Гола крона: картки дрібного гілля (спрайти без листя) біля кінців гілок другого й
-        # третього порядку — густа сіро-бура мережа з розкидом тону, а не 4–6 палиць із грудками.
-        trng = random.Random(it["node"] + "twigs")
-        tips = [lm["pts"][-1] for lm in ter + sec] + [lm["pts"][1] for lm in sec]
-        room = (BUDGET["tree"] - m.tris()) // 2 - n
-        for k in range(max(min(room, 4 * len(tips), 220), 0)):
-            c = tips[k % len(tips)] + Vector([trng.gauss(0, 0.3 * it["lobe_r"]) for _ in range(3)])
-            nrm = ((c - mid).normalized() + Vector((0, 0, 0.3))).normalized()
-            m.card(c, trng.uniform(0, 2 * math.pi), trng.uniform(*it["card"]) * trng.uniform(0.6, 0.9),
-                   trng.choice(twig), lambda _c, n_=nrm: n_, trng.uniform(0.6, 1.0))
+    late_bare = SEASON == "late" and it["kind"] in LATE_BARE
+    n = round(len(cards) * it["bare"]) if late_bare else len(cards)
     # Пляма затінення під кроною; на сонячній карті шейдер витягує її в тінь від сонця.
     # Сила 0,55 — близько до плями дотику будівель (PropLayer.CONTACT_ALPHA 0,6): поруч із хатою тінь
     # дерева не має бути слабшою.
@@ -641,7 +681,20 @@ def tree(it, rects, fallen):
         nrm = (p - mid).normalized()
         nrm = (nrm + Vector((0, 0, 0.3))).normalized()
         m.card(p, roll, size, rect, lambda _c, n_=nrm: n_, shade_of(hfrac, rfrac))
-    check_budget(m, it, "tree")
+    twig = rects["sprites"].get(it["kind"] + "_bare")
+    if late_bare and twig:
+        # Гола крона: картки дрібного гілля (спрайти без листя) уздовж гілок усіх порядків — густа
+        # сіро-бура мережа з розкидом тону, а не 4–6 палиць із грудками. Листкові картки вже
+        # лежать у сітці, тож решту бюджету (BUDGET["tree_late"]) забирає гілля.
+        trng = random.Random(it["node"] + "twigs")
+        tips = [lm["pts"][-1] for lm in ter + sec] + [lm["pts"][1] for lm in sec + limbs] + [lm["pts"][2] for lm in limbs]
+        room = (BUDGET["tree_late"] - m.tris()) // 2
+        for k in range(max(min(room, 7 * len(tips)), 0)):
+            c = tips[k % len(tips)] + Vector([trng.gauss(0, 0.3 * it["lobe_r"]) for _ in range(3)])
+            nrm = ((c - mid).normalized() + Vector((0, 0, 0.3))).normalized()
+            m.card(c, trng.uniform(0, 2 * math.pi), trng.uniform(*it["card"]) * trng.uniform(0.6, 0.9),
+                   trng.choice(twig), lambda _c, n_=nrm: n_, trng.uniform(0.6, 1.0))
+    check_budget(m, it, "tree_late" if late_bare else "tree")
     return m
 
 
