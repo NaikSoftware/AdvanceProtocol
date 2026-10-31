@@ -1116,24 +1116,34 @@ func test_no_chimney_smoke_over_damaged_houses_or_ruins() -> void:
 			assert_true(bool(PropLayer.spec_of(m).get("damaged", false)), "%s не позначена damaged" % m)
 
 
-## Руїна тліє з пролому на рівні даху — над землею, усередині обрису руїни, — а не біля
-## уцілілого димаря.
-func test_ruin_smoke_rises_from_the_breach_at_roof_level() -> void:
+## Руїна тліє з уламків усередині обрису: точка не вище 0,1 клітинки над геометрією руїни в тому
+## самому місці (не в повітрі).
+func test_ruin_smoke_rises_from_the_rubble_surface() -> void:
 	for name in MAPS:
 		var props: PropLayer = _cached(name).props()
 		var m: MapData = _map(name)
 		var pts: Array[Vector3] = props.ruin_smoke_points()
 		var centres: Array[Vector3] = props.ruin_centres()
 		var boxes: Array[AABB] = []
+		var tops: Array[Array] = []
 		for inst in props.all_instances():
 			if int(PropLayer.spec_of(inst["model"])["kind"]) == PropLayer.Kind.RUIN \
 					and Rect2i(0, 0, m.width, m.height).has_point((inst["cells"] as Array)[0]):
+				var info: Dictionary = PropLayer.model(inst["model"])
+				tops.append([info["mesh"], (inst["transform"] as Transform3D) * (info["local"] as Transform3D)])
 				boxes.append((inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB))
 		assert_eq(pts.size(), centres.size(), name)
 		assert_eq(pts.size(), boxes.size(), name)
 		for i in pts.size():
 			var p: Vector3 = pts[i]
-			assert_gt(p.y, centres[i].y + 0.1, "%s: над землею, на рівні даху" % name)
+			var around := AABB(Vector3(p.x - 0.06, p.y - 2.0, p.z - 0.06), Vector3(0.12, 4.0, 0.12))
+			var g: Dictionary = PropLayer.top_surface_grid(tops[i][0], tops[i][1], around)
+			var surf: float = -INF
+			for y: float in g["h"]:
+				if not is_inf(y):
+					surf = maxf(surf, y)
+			assert_gt(surf, -INF, "%s: під точкою диму є геометрія руїни" % name)
+			assert_true(p.y - surf >= -0.1 and p.y - surf <= 0.1, "%s: дим %.2f над геометрією руїни" % [name, p.y - surf])
 			assert_true(p.x > -0.5 and p.z > -0.5 and p.x < m.width - 0.5 and p.z < m.height - 0.5, "%s: на дошці" % name)
 			assert_true(p.x >= boxes[i].position.x and p.x <= boxes[i].end.x and p.z >= boxes[i].position.z and p.z <= boxes[i].end.z,
 					"%s: усередині обрису руїни" % name)
