@@ -538,8 +538,10 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Explosion cloud top breaks up in ragged wisps, no dark ball sitting on the smoke
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
 - [x] Chimney smoke reads as volume, not flat strokes
-- [ ] Smoke from only a few intact houses; never from a damaged house or a ruin chimney
-- [ ] Chimney opening a dark sooty grey, not a black hole
+- [x] Smoke from only a few intact houses; never from a damaged house or a ruin chimney
+- [x] Ruins smoulder faintly from the rubble itself, never from mid-air
+- [x] River reeds are soft clumps with ragged tops, not flat comb cards
+- [x] Chimney opening a dark sooty grey, not a black hole
 - [x] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
 - [x] First scroll across the map is smooth, no hitch
 
