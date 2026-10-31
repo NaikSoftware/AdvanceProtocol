@@ -446,14 +446,14 @@ def make_window_material(frame_i=0, dark=False):
     mask = math("MAXIMUM", frame, bars)
     sky = math("SUBTRACT", 1.0, v)                                             # відбите небо світліше вгорі шибки
     # скло віддзеркалює небо: світліше вгорі, косий відблиск, гладке (roughness 0.08)
-    glass_sky = mixc((0.16, 0.18, 0.21), (0.045, 0.05, 0.06), sky)
+    glass_sky = mixc((0.032, 0.034, 0.038), (0.011, 0.012, 0.014), sky)   # темне нейтральне скло: під сонцем і дощем не синій екран
     glint = math("LESS_THAN", math("ABSOLUTE", math("SUBTRACT", math("ADD", u, math("MULTIPLY", v, 0.6)), 0.55)), 0.06)   # косий відблиск неба
-    glass_sky = mixc(glass_sky, (0.30, 0.32, 0.35), math("MULTIPLY", glint, 0.5))
+    glass_sky = mixc(glass_sky, (0.14, 0.145, 0.15), math("MULTIPLY", glint, 0.5))   # лише ледь помітний відблиск неба
     tone = N("ShaderNodeSeparateColor")
     L(ca.outputs["Color"], tone.inputs[0])
     t = tone.outputs[0]
-    g1 = mixc(glass_sky, (0.02, 0.025, 0.03), math("MULTIPLY", t, 2.0, True))
-    g2 = mixc(g1, (0.12, 0.11, 0.095), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))   # фіранка лише трохи світліша за скло
+    g1 = mixc(glass_sky, (0.009, 0.010, 0.011), math("MULTIPLY", t, 2.0, True))
+    g2 = mixc(g1, (0.040, 0.036, 0.030), math("SUBTRACT", math("MULTIPLY", t, 2.0), 1.0, True))   # фіранка: тепліша за скло, але теж темна, не світла пляма
     fcol = FRAMES[frame_i]                                                     # рама — одна на будинок, з палітри
     fr = mixc(g2, fcol, mask)
     rv = mixc(fr, (0.05, 0.045, 0.04), reveal)
@@ -615,7 +615,7 @@ def mats():
         "clad_roof": roof_mat("clad_roof", "corr", (0.62, 0.61, 0.57), "x", "y", moss=False, sheet=(1.0, 4.0), cell_amp=0.04, streak=0.0),
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.42, 0.50, 0.52), corr=("y", 0.2, 0.004), streak=0.3),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.45, 0.38), sat=0.35, seams=[("h", 0.2, 0.02, 0.85)], streak=1.0, base_dirt=0.5, bump=0.02),
-        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
+        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.60, 0.53, 0.45), sat=0.5, streak=0.9, base_dirt=0.4),
         "interior_burnt": make_material("interior_burnt", flat=(0.010, 0.0095, 0.009), streak=0.6),   # вигоріле нутро на зламі: ≤ 35 sRGB навіть під небом
         "door_red": make_material("door_red", flat=srgb_lin((0.42, 0.20, 0.15)), seams=[("z", 0.5, 0.015, 0.4)], seam_col=srgb_lin((0.25, 0.12, 0.09)), streak=0.5, rough=0.5),   # фарбований метал
         "door_wood": make_material("door_wood", "Planks021", 1.0, (0.55, 0.42, 0.30), seams=[("h", 0.12, 0.012, 0.5)], streak=0.6, bump=0.01, rough=0.8),
@@ -683,7 +683,7 @@ def mats():
         "gutter_d": make_material("gutter_d", flat=(0.14, 0.145, 0.15), streak=0.3),
         "plaster_char": make_material("plaster_char", flat=(0.17, 0.155, 0.14), streak=0.5, base_dirt=0.2),
         "plinth_dark": make_material("plinth_dark", flat=(0.20, 0.195, 0.185), base_dirt=0.5, streak=0.4),
-        "plinth_flat": make_material("plinth_flat", flat=(0.33, 0.32, 0.30), base_dirt=0.5, streak=0.4),
+        "plinth_flat": make_material("plinth_flat", flat=(0.42, 0.36, 0.30), base_dirt=0.4, streak=0.6),   # цоколь теплий і темніший за стіну (вологий), але не чорний: контакт із землею темнить шейдер
         "door_panel": make_material("door_panel", flat=(0.30, 0.22, 0.15), seams=[("h", 0.22, 0.015, 0.5)], streak=0.3, seam_bump=0.0),
         "mud_skirt": make_material("mud_skirt", flat=(0.10, 0.082, 0.065), streak=0.6, base_dirt=0.2),
         "boards_soft_vc": make_material("boards_soft_vc", flat=(0.36, 0.325, 0.28), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4, vmul=True, seam_bump=0.8, undul=(1.2, 0.01), rough=0.9),
@@ -748,7 +748,7 @@ def mats():
         "glass_roof": make_material("glass_roof", "CorrugatedSteel005", 1.0, (0.36, 0.42, 0.44), streak=0.5),
         "floor_dark": make_material("floor_dark", "Concrete034", 1.5, g(0.2), patch=((0.03, 0.03, 0.03), 0.3)),
         "boards": make_material("boards", "Planks021", 1.0, (0.50, 0.50, 0.48), sat=0.25, seams=[("h", 0.2, 0.012, 0.5)], streak=1.0, base_dirt=0.5),
-        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.58, 0.54, 0.51), sat=0.3, streak=0.9, base_dirt=0.5),
+        "brick_grey": make_material("brick_grey", "Bricks105", 1.0, (0.60, 0.53, 0.45), sat=0.5, streak=0.9, base_dirt=0.4),
         "clad_burnt": make_material("clad_burnt", "CorrugatedSteel005", 1.0, (0.12, 0.12, 0.11), streak=1.0),
         "door_steel": make_material("door_steel", "CorrugatedSteel005", 1.0, (0.20, 0.36, 0.30), seams=[("z", 0.25, 0.03, 0.5)], base_dirt=0.5),
         "galv": make_material("galv", "CorrugatedSteel005", 1.0, (0.62, 0.66, 0.70), seams=[("z", 1.5, 0.04, 0.35), ("ang8", 1.1, 0.04, 0.3)], streak=0.8, base_dirt=0.4),
@@ -883,15 +883,15 @@ def _off(axis, c, sgn, u, z, off):
     return (u, c + sgn * off, z) if axis == "y" else (c + sgn * off, u, z)
 
 
-def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.5, kband=(0.42, 0.5), ksill=(0.5, 0.62), lsill=(0.7, 1.5), eave_streaks=True):
+def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, kband=(0.46, 0.56), ksill=(0.25, 0.38), lsill=(1.0, 1.9), eave_streaks=True):
     """Вивітрювання стін декалями-множниками: брудний низ із рваним краєм (-30%), темні патьоки під підвіконнями й від ринви (-25%),
-    пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
+    пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. Під кожним підвіконням — вологий слід: м'яка тінь завширшки 1.5 вікна, що згасає вниз до цоколя. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
     import random
     rnd = random.Random(seed)
     dm = mat + "_dm"
     for (axis, c, sgn, u0, u1, zb, ze) in walls:
         nrm = (0, sgn, 0) if axis == "y" else (sgn, 0, 0)
-        P = lambda u, z, off=0.005: _off(axis, c, sgn, u, z, off)
+        P = lambda u, z, off=0.025: _off(axis, c, sgn, u, z, off)   # 2.5 см над стіною: при 5 мм декаль тонула в глибині й у кадрі її не було видно
         n = max(2, int((u1 - u0) / seg))                                # seg — довжина відрізка смуг (на довгих фасадах більша: бюджет трикутників)
         us = [u0 + (u1 - u0) * i / n for i in range(n + 1)]
         ph = [rnd.uniform(0, 6.28) for _ in range(3)]
@@ -909,21 +909,25 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.5, k
         for (_a, _c, _s, u, z, w, h) in wins:                           # патьоки з обох кінців кожного підвіконня: вода стікає з країв відливу
             for end in (-1, 1):
                 uu = u + end * (w / 2 + 0.06) + rnd.uniform(-0.04, 0.04)
-                hw = rnd.uniform(0.07, 0.12)
+                hw = rnd.uniform(0.17, 0.26)   # у кадрі бою ≥ 3 пікселі: тонші патьоки зливались зі стіною
                 zt = z - 0.12
-                zbm = max(zb + 0.3, zt - rnd.uniform(*lsill))
+                zbm = max(zb + 0.04, zt - rnd.uniform(*lsill))   # вікна низько (1 м): патьоку доводиться йти майже до цоколя
                 if zt - zbm < 0.25:
                     continue
                 k = rnd.uniform(*ksill)
                 b.decal([P(uu - hw, zbm), P(uu, zbm), P(uu, zt), P(uu - hw, zt)], (1.0, 1.0, k, 0.97), dm, nrm)
                 b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, zt), P(uu, zt)], (1.0, 1.0, 0.97, k), dm, nrm)
+        for (_a, _c, _s, u, z, w, h) in wins:                           # вологий слід під усім підвіконням: м'яка тінь 1.5 вікна, ~20 % темніше, згасає вниз
+            zt2, zb2 = z - 0.1, max(zb + 0.04, z - 0.8)
+            if zt2 - zb2 > 0.2:
+                b.decal([P(u - w * 0.75, zb2), P(u + w * 0.75, zb2), P(u + w * 0.75, zt2), P(u - w * 0.75, zt2)], (1.0, 1.0, 0.8, 0.8), dm, nrm)
         for _ in (range(max(2, int((u1 - u0) / 1.5))) if eave_streaks else ()):   # з карниза: короткі патьоки там, де переливається ринва
             uu = rnd.uniform(u0 + 0.3, u1 - 0.3)
             if any(abs(uu - w[3]) < w[5] / 2 + 0.15 for w in wins) or any(a_ - 0.2 <= uu <= c_ + 0.2 for a_, c_ in skip_u):
                 continue
             hw = rnd.uniform(0.05, 0.1)
             zbm = ze - rnd.uniform(0.4, 1.1)
-            k = rnd.uniform(0.74, 0.84)
+            k = rnd.uniform(0.84, 0.92)   # слабше: після виправлення глибини декалі стріхові патьоки читались рваною гребінкою під карнизом
             b.decal([P(uu - hw, zbm), P(uu, zbm), P(uu, ze - 0.1), P(uu - hw, ze - 0.1)], (1.0, 1.0, k, 0.96), dm, nrm)
             b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, ze - 0.1), P(uu, ze - 0.1)], (1.0, 1.0, 0.96, k), dm, nrm)
         if patches and u1 - u0 > 6:                                     # одна латка обсипаної штукатурки, де цегла проступає
@@ -953,6 +957,7 @@ class Builder:
         self.slots = []
         self.local = self.bm.loops.layers.uv.new("local")
         self.wtone = self.bm.loops.layers.color.new("wtone")
+        self.win_tone = None                   # None — тон шибки випадковий; число — усі вікна цього тону
         import random
         self.rnd = random.Random(5)
         self.markers = []                      # (імʼя, (x, y, z) у метрах) → порожні вузли GLB, напр. chimney_top
@@ -1254,6 +1259,8 @@ class Builder:
         layer = self.local
         self.windows.append((axis, c, sgn, pos, z0, w, h))
         tone = self.rnd.choices((0.0, 0.5, 1.0), weights=(45, 25, 30))[0]       # скло з небом, темне нутро, фіранка
+        if self.win_tone is not None:                         # пошкоджена хата: усі шибки темні, без світлих фіранок
+            tone = self.win_tone
         if kind is None:                                                         # тип вікна будинку; частину могли замінити на нові пластикові
             kind = self.win_kind
             if self.win_mix and self.rnd.random() < self.win_mix[1]:
