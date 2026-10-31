@@ -18,12 +18,12 @@ const MODEL_DIR: String = "res://assets/props/"
 ## max — скільки разів на карту (орієнтир, що має лишатись одним), ring — лише в кільці, gap —
 ## власний проміжок до сусідньої будівлі, якщо більший за STRUCTURE_GAP, tower —
 ## вежа (одна на карту, у власному дворі), storeys — двоповерховий (у селі їх не більше половини),
-## scale — рівномірний множник розміру (брила завелика для польового каменя, хата на клітинку
+## damaged — пошкоджена модель (її димар не димить), scale — рівномірний множник розміру (брила завелика для польового каменя, хата на клітинку
 ## заширока, щоб між сусідніми з камери гри було видно землю),
 ## map/order/deck_top — міст своєї переправи (DECK_TOP з tools/blender/bridges/build_bridges.py).
 const MODELS: Dictionary = {
 	&"house_h1": {"kind": Kind.STRUCTURE, "weight": 4},
-	&"house_h1_hit": {"kind": Kind.STRUCTURE, "weight": 1},
+	&"house_h1_hit": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 1},
 	&"house_h2": {"kind": Kind.STRUCTURE, "weight": 3},
 	&"house_h3": {"kind": Kind.STRUCTURE, "weight": 2, "storeys": 2},
 	&"house_h4": {"kind": Kind.STRUCTURE, "weight": 4},
@@ -33,11 +33,11 @@ const MODELS: Dictionary = {
 	&"house_h8": {"kind": Kind.STRUCTURE, "weight": 3, "scale": HOUSE_SCALE},
 	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
+	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 2, "max": 1},
 	&"f1_farm_barn": {"kind": Kind.STRUCTURE, "weight": 1},
 	&"f2_livestock_barn": {"kind": Kind.STRUCTURE, "weight": 2, "ring": true},
 	&"f3_hangar": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"f3_hangar_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
+	&"f3_hangar_damaged": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 2, "max": 1},
 	&"f4_grain_bins": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f5_silo_battery": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f6_fuel_station": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
@@ -139,6 +139,10 @@ const WIRE_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG + (IsoCameraRig.P
 ## Нахил, під яким дріт перевіряється біля стовпчика димаря: найнижчий нахил рига — відвід не «закінчується» на димарі
 ## на жодному зумі, а густоти це не коштує.
 const CHIMNEY_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG
+## Дим руїни: вага висоти (клітинки на клітинку) проти відстані до центру, відступ від уцілілого димаря й підйом над уламком, клітинки.
+const RUIN_SMOKE_HEIGHT_W: float = 3.0
+const RUIN_SMOKE_CHIMNEY_GAP: float = 0.5
+const RUIN_SMOKE_LIFT: float = 0.03
 ## Кінець відводу не ближче за стільки (клітинки, ~2 м) до димаря в плані: інакше відвід читається таким, що
 ## закінчується на димарі.
 const DROP_CHIMNEY_CLEAR: float = 0.25
@@ -723,7 +727,9 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 func chimney_tops() -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	for inst in _instances:
-		if int(spec_of(inst["model"])["kind"]) != Kind.STRUCTURE or inst.get("yard", false):
+		var spec: Dictionary = spec_of(inst["model"])
+		# у пошкодженої хати димар не димить: це руїна з проламом, а не житло
+		if int(spec["kind"]) != Kind.STRUCTURE or inst.get("yard", false) or bool(spec.get("damaged", false)):
 			continue
 		if not _on_board((inst["cells"] as Array)[0]):
 			continue
@@ -744,27 +750,109 @@ func ruin_centres() -> Array[Vector3]:
 	return out
 
 
-## Звідки тліє руїна: у проломі на рівні даху (0,55 висоти обрису), відсунуто від уцілілого
-## димаря — дим біля цілого димаря читався б як дим із димаря.
+## Звідки тліє руїна: з уламків усередині обрису — низька частина верху сітки, ближча до центру, не
+## біля уцілілого димаря (дим біля цілого димаря читався б як дим із димаря) і не над порожнім повітрям.
 func ruin_smoke_points() -> Array[Vector3]:
 	var out: Array[Vector3] = []
+	for inst in _instances:
+		if int(spec_of(inst["model"])["kind"]) == Kind.RUIN and _on_board((inst["cells"] as Array)[0]):
+			out.append(_ruin_smoke_point(inst))
+	return out
+
+
+## Точка диму лише тієї руїни, центр якої (`ruin_centres`) збігається з `centre`: важка вибірка по сітці
+## йде тільки для руїн, що справді димлять.
+func ruin_smoke_point_at(centre: Vector3) -> Vector3:
 	for inst in _instances:
 		if int(spec_of(inst["model"])["kind"]) != Kind.RUIN or not _on_board((inst["cells"] as Array)[0]):
 			continue
 		var box: AABB = (inst["transform"] as Transform3D) * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
-		var c := Vector3(box.get_center().x, box.position.y + box.size.y * 0.55, box.get_center().z)
-		var t: Transform3D = _final_transform(inst) * (model(inst["model"]) as Dictionary)["local"]
-		for ch: Vector3 in (model(inst["model"]) as Dictionary).get("chimneys", []):
-			var away := Vector2(c.x, c.z) - Vector2((t * ch).x, (t * ch).z)
-			if away.length() > 1e-4:
-				var push: Vector2 = away.normalized() * minf(box.size.x, box.size.z) * 0.3
-				c += Vector3(push.x, 0.0, push.y)
-		# Зсуви від кількох димарів додаються: тримаємо точку в обрисі, на 15 % від його краю.
-		var m: Vector3 = box.size * 0.15
-		c.x = clampf(c.x, box.position.x + m.x, box.end.x - m.x)
-		c.z = clampf(c.z, box.position.z + m.z, box.end.z - m.z)
-		out.append(c)
-	return out
+		if Vector3(box.get_center().x, box.position.y, box.get_center().z).is_equal_approx(centre):
+			return _ruin_smoke_point(inst)
+	return centre
+
+
+func _ruin_smoke_point(inst: Dictionary) -> Vector3:
+	var info: Dictionary = model(inst["model"])
+	var t: Transform3D = _final_transform(inst) * (info["local"] as Transform3D)
+	var box: AABB = (inst["transform"] as Transform3D) * (info["aabb"] as AABB)
+	var chims: Array[Vector2] = []
+	for ch: Vector3 in info.get("chimneys", []):
+		chims.append(Vector2((t * ch).x, (t * ch).z))
+	var top: Dictionary = top_surface_grid(info["mesh"] as Mesh, t, box)
+	var step: float = top["step"]
+	var h: PackedFloat32Array = top["h"]
+	var centre := Vector2(box.get_center().x, box.get_center().z)
+	var best := Vector3.INF
+	var best_score: float = INF
+	var tm: TriangleMesh = triangles_of(inst["model"])
+	var inv: Transform3D = t.affine_inverse()
+	var down: Vector3 = (inv.basis * Vector3.DOWN).normalized()
+	for iz in int(top["nz"]):
+		for ix in int(top["nx"]):
+			var y: float = h[iz * int(top["nx"]) + ix]
+			if is_inf(y):
+				continue
+			var xz := Vector2(box.position.x + (ix + 0.5) * step, box.position.z + (iz + 0.5) * step)
+			if chims.any(func(c: Vector2) -> bool: return c.distance_to(xz) < RUIN_SMOKE_CHIMNEY_GAP):
+				continue
+			# Висота важить більше за відстань до центру: огризок стіни не виграє в справжнього завалу.
+			var score: float = xz.distance_to(centre) + RUIN_SMOKE_HEIGHT_W * (y - box.position.y)
+			if score < best_score:
+				# Сітка наближена: біля ребра трикутників вона може схибити, тож точну висоту дає промінь, а
+				# осередок, де вони розходяться, відкидаємо.
+				var hit: Dictionary = tm.intersect_ray(inv * Vector3(xz.x, y + 50.0, xz.y), down)
+				if hit.is_empty():
+					continue
+				var hy: float = (t * (hit["position"] as Vector3)).y
+				if absf(hy - y) > 0.03:
+					continue
+				best_score = score
+				best = Vector3(xz.x, hy + RUIN_SMOKE_LIFT, xz.y)
+	if best == Vector3.INF:
+		best = Vector3(centre.x, box.position.y + RUIN_SMOKE_LIFT, centre.y)
+	return best
+
+
+## Верх сітки в світі: найвища точка трикутників над кожною клітинкою решітки кроку 0,1 у межах box
+## (inf — над порожнім). Для диму руїни й для тесту, що дим не висить у повітрі.
+static func top_surface_grid(mesh: Mesh, xf: Transform3D, box: AABB) -> Dictionary:
+	var step: float = 0.1
+	var nx: int = maxi(1, ceili(box.size.x / step))
+	var nz: int = maxi(1, ceili(box.size.z / step))
+	var h := PackedFloat32Array()
+	h.resize(nx * nz)
+	h.fill(-INF)
+	for sidx in mesh.get_surface_count():
+		var arr: Array = mesh.surface_get_arrays(sidx)
+		var vs: PackedVector3Array = xf * (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array)
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX] if arr[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		for k in range(0, idx.size() - 2, 3):
+			var a: Vector3 = vs[idx[k]]
+			var b: Vector3 = vs[idx[k + 1]]
+			var c: Vector3 = vs[idx[k + 2]]
+			var den: float = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z)
+			# Лицьова грань Godot — за годинниковою стрілкою; грані, що дивляться вниз чи вбік, верху не дають.
+			if den > -1e-9:
+				continue
+			var ix0: int = maxi(0, floori((minf(a.x, minf(b.x, c.x)) - box.position.x) / step))
+			var ix1: int = mini(nx - 1, floori((maxf(a.x, maxf(b.x, c.x)) - box.position.x) / step))
+			var iz0: int = maxi(0, floori((minf(a.z, minf(b.z, c.z)) - box.position.z) / step))
+			var iz1: int = mini(nz - 1, floori((maxf(a.z, maxf(b.z, c.z)) - box.position.z) / step))
+			for iz in range(iz0, iz1 + 1):
+				for ix in range(ix0, ix1 + 1):
+					var px: float = box.position.x + (ix + 0.5) * step
+					var pz: float = box.position.z + (iz + 0.5) * step
+					var l1: float = ((b.z - c.z) * (px - c.x) + (c.x - b.x) * (pz - c.z)) / den
+					var l2: float = ((c.z - a.z) * (px - c.x) + (a.x - c.x) * (pz - c.z)) / den
+					var l3: float = 1.0 - l1 - l2
+					if l1 < -1e-4 or l2 < -1e-4 or l3 < -1e-4:
+						continue
+					h[iz * nx + ix] = maxf(h[iz * nx + ix], l1 * a.y + l2 * b.y + l3 * c.y)
+	for i in h.size():
+		if h[i] == -INF:
+			h[i] = INF
+	return {"h": h, "nx": nx, "nz": nz, "step": step}
 
 
 ## Точка на покритті дороги (осі й ширина RoadCourse) з запасом pad, клітинки.
