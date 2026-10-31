@@ -55,3 +55,60 @@ func test_vertex_contract(p = use_parameters(LIBS)) -> void:
 		var limit: int = (1500 if p.ends_with("_late") else 800) if tree else (300 if sheaf else (400 if p.begins_with("yard") else 600))
 		assert_lte(tris, limit, "%s/%s: трикутників %d" % [p, name, tris])
 	assert_gt(nodes, 0, "%s: нема вузлів" % p)
+
+
+## Береговий кущ — приглушений оливковий, як верболіз і трава поруч: середній колір непрозорих
+## текселів його пучків має насиченість (max − min) / max каналів sRGB не вищу за BUSH_SATURATION.
+## Верболіз — 0,17–0,27, вільха — 0,14–0,37. Розтяг контрасту кожного каналу від сірого (GAIN у
+## veg_atlas.py) множить насиченість разом із яскравістю: вільха виходить салатовою, ~0,72.
+const BUSH_SATURATION: float = 0.45
+## Гілля в пучку — кольору кори, не світле: текселів листя пучка з яскравістю (середнє каналів
+## sRGB) вище BUSH_PALE — менше за BUSH_PALE_SHARE. Розтяг контрасту робить із гілочок,
+## світліших за листя, майже білі цятки.
+const BUSH_PALE: float = 0.8
+const BUSH_PALE_SHARE: float = 0.01
+
+
+func test_bank_bushes_are_muted(p = use_parameters(["bank_veg_late", "bank_veg_summer", "bank_veg_early"])) -> void:
+	# Сам PNG, а не імпортована текстура: та стиснута у VRAM-формат із втратами.
+	var img := Image.new()
+	assert_eq(img.load_png_from_buffer(FileAccess.get_file_as_bytes("res://assets/props/vegetation/%s.png" % p)), OK, "атлас %s" % p)
+	var root: Node3D = (load("res://assets/props/vegetation/%s.glb" % p) as PackedScene).instantiate()
+	add_child_autofree(root)
+	var size := Vector2(img.get_size())
+	var bushes: int = 0
+	for mi: MeshInstance3D in root.find_children("bank_bush_*", "MeshInstance3D", true, false):
+		if String(mi.name).ends_with("_fallen"):
+			continue
+		bushes += 1
+		var a: Array = mi.mesh.surface_get_arrays(0)
+		var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
+		var uv2: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2]
+		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+		# Прямокутник спрайта — межі UV трикутника картки (UV2 ≠ 0); кора й гілки (UV2 = 0) — не листя.
+		var rects := {}
+		for t in range(0, idx.size(), 3):
+			if uv2[idx[t]].length() < 1e-3:
+				continue
+			var r := Rect2(uv[idx[t]], Vector2.ZERO).expand(uv[idx[t + 1]]).expand(uv[idx[t + 2]])
+			rects[Rect2i(Vector2i((r.position * size).round()), Vector2i((r.size * size).round()))] = true
+		var sum := Vector3.ZERO
+		var n: int = 0
+		var pale: int = 0
+		for r: Rect2i in rects:
+			for y in range(r.position.y, r.end.y):
+				for x in range(r.position.x, r.end.x):
+					var c := img.get_pixel(x, y)
+					if c.a > 0.5:
+						sum += Vector3(c.r, c.g, c.b)
+						n += 1
+						if (c.r + c.g + c.b) / 3.0 > BUSH_PALE:
+							pale += 1
+		assert_gt(n, 0, "%s/%s: нема непрозорих текселів листя" % [p, mi.name])
+		var m := sum / maxf(n, 1) * 255.0
+		var hi: float = maxf(m.x, maxf(m.y, m.z))
+		var sat: float = (hi - minf(m.x, minf(m.y, m.z))) / maxf(hi, 1.0)
+		var share: float = float(pale) / maxf(n, 1)
+		assert_lt(share, BUSH_PALE_SHARE, "%s/%s: світлих текселів %.4f" % [p, mi.name, share])
+		assert_lte(sat, BUSH_SATURATION, "%s/%s: насиченість листя %.2f, середній колір %s" % [p, mi.name, sat, m])
+	assert_gt(bushes, 0, "%s: нема кущів" % p)
