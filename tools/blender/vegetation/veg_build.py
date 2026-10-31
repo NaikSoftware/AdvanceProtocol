@@ -105,7 +105,7 @@ ASSETS = {
         # Стовпчаста: вузька, гілки круто вгору, провідник до верхівки.
         dict(h=6.2, cb=1.3, w=2.8, fork=1.0, rise=30, limbs=6, leader=0.75),
         # Два стовбури від землі, широка чаша.
-        dict(multi=2, fork=0.4, h=5.2, w=4.4, r=0.14, rise=16, limbs=3, leader=0.0, lean_deg=3.0),
+        dict(multi=2, fork=0.4, h=5.2, w=4.4, r=0.14, rise=10, limbs=3, leader=0.0, lean_deg=3.0),
     ])
     + tree_variants("yard_walnut", "walnut", extra=[
         {},
@@ -436,7 +436,7 @@ def crown(it, rects, fallen):
         # Береговий кущ стоїть на відкритому березі: без нижньої межі тону гола крона пізньої пори
         # темніла до ~(40, 37, 27) — чорна пляма на березі.
         if GROUP == "bank":
-            sh = max(sh, 0.75)
+            sh = max(sh, 0.62)
         m.card(p, roll, size, rect, lambda _c, n=nrm: n, sh)
     stems = []
     for k in range(it.get("stems", 0)):
@@ -641,11 +641,15 @@ def tree(it, rects, fallen):
     # Клуби листя — на кінцях гілок першого й другого порядку (у верби «головою» — уздовж
     # пагонів), а не в еліпсоїді: між клубами просвіти, обрис рваний.
     centres = [lm["pts"][-1] for lm in limbs + sec]
+    if it.get("multi"):
+        # Крони двох стовбурів перекриваються: клуб посередині між кінцями, а не два дерева із проміжком.
+        tops = [lm["pts"][-1] for lm in limbs[:it["multi"]]]
+        centres.append(sum(tops, Vector()) / len(tops))
     if pollard:
         centres += [lm["pts"][1].lerp(lm["pts"][2], 0.5) for lm in limbs]
     if leader_top is not None:
         centres.append(leader_top + Vector((0, 0, it["lobe_r"] * 0.3)))
-        for f in (0.2, 0.45):
+        for f in (0.2, 0.45, 0.7):
             centres.append(F.lerp(leader_top, f) + Vector((0, 0, it["lobe_r"] * 0.2)))
     radii = [it["lobe_r"] * skel.uniform(0.7, 1.25) for _ in centres]
     mid = sum(centres, Vector()) / len(centres)
@@ -692,14 +696,14 @@ def tree(it, rects, fallen):
         outer = [lm["pts"][-1] for lm in ter + sec]
         inner = [lm["pts"][1] for lm in sec + limbs] + [lm["pts"][2] for lm in limbs]
         room = (BUDGET["tree_late"] - m.tris()) // 2
-        for k in range(max(min(room, 7 * (len(outer) + len(inner))), 0)):
+        for k in range(max(min(room, 16 * (len(outer) + len(inner))), 0)):
             # Кожна третя картка — дрібніша й темніша, всередині крони: гілля в глибині, а не кілька грубих
             # гілок із крапками; решта — зовнішній шар, удвічі частіше.
             deep = k % 3 == 0
             src = inner if deep else outer
             c = src[(k // 3) % len(src)] + Vector([trng.gauss(0, (0.2 if deep else 0.3) * it["lobe_r"]) for _ in range(3)])
             nrm = ((c - mid).normalized() + Vector((0, 0, 0.3))).normalized()
-            m.card(c, trng.uniform(0, 2 * math.pi), trng.uniform(*it["card"]) * trng.uniform(0.6, 0.9) * (0.6 if deep else 1.0),
+            m.card(c, trng.uniform(0, 2 * math.pi), trng.uniform(*it["card"]) * trng.uniform(0.6, 0.9) * (0.6 if deep else 0.8),
                    trng.choice(twig), lambda _c, n_=nrm: n_, trng.uniform(0.3, 0.55) if deep else trng.uniform(0.6, 1.0))
     check_budget(m, it, "tree_late" if late_bare else "tree")
     return m

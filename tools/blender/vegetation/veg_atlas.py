@@ -39,8 +39,8 @@ GAIN = {"alder": {"summer": 1.8, "early": 1.65, "late": 1.3}}
 BARK = {"willow": (0.32, 0.28, 0.20), "alder": (0.34, 0.31, 0.27), "apple": (0.33, 0.29, 0.25),
         "cherry": (0.36, 0.29, 0.24), "walnut": (0.27, 0.22, 0.17), "lilac": (0.36, 0.34, 0.31),
         "elder": (0.31, 0.27, 0.21), "berry": (0.38, 0.28, 0.21), "thuja": (0.36, 0.26, 0.20),
-        "hawthorn": (0.36, 0.32, 0.27), "dogrose": (0.36, 0.28, 0.21), "pear": (0.33, 0.30, 0.26),
-        "oak": (0.34, 0.31, 0.27), "wwillow": (0.31, 0.27, 0.21), "dead": (0.36, 0.31, 0.25)}
+        "hawthorn": (0.36, 0.32, 0.27), "dogrose": (0.36, 0.28, 0.21), "pear": (0.35, 0.29, 0.23),
+        "oak": (0.36, 0.30, 0.23), "wwillow": (0.31, 0.27, 0.21), "dead": (0.36, 0.31, 0.25)}
 
 
 def srgb_to_lin(a):
@@ -202,7 +202,7 @@ def main():
                 mk = img[..., 3] > 0.5
                 new = img[..., :3] * g
                 mu = new[mk].mean()
-                img[..., :3] = np.clip(mu + (new - mu) * 1.5, 0, 1)
+                img[..., :3] = np.clip(mu + (new - mu) * 2.8, 0, 1)
             seed += 1
             if kind in SHEAF:
                 img = side_edge(resize(img, CELL, 2 * CELL))
