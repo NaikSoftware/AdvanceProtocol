@@ -515,11 +515,12 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 21: Bank, yard and meadow vegetation
 
 - [x] No wind sway
-- [ ] Trees with branches, own silhouette per species, three or more forms; bare late crowns as dense twig networks
+- [x] Trees with branches, own silhouette per species, three or more forms; bare late crowns as dense twig networks
 - [x] Fallen form is a low pile of broken branches; crushed bushes as leaning stems
 - [x] Reed with plumes and cattail with heads, standing in the shallows
 - [x] Reed and bushes in patches along some banks; trees or bushes in many yards, not all; a few lone bushes and trees on meadow, never on ploughed land
 - [ ] No tree crown under a power line
+- [ ] Power line through a forest runs in a cleared corridor: no crowns over the wires, undergrowth stays
 - [ ] Accepted in battle frames on all three maps
 
 ### Task 22: Forest into battle
