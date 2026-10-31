@@ -803,15 +803,21 @@ func triangle_count() -> int:
 ## Дроти ЛЕП на площині XZ: прольоти між опорами й відводи до хат, [a, b] (Vector2) — щоб рослинність
 ## не росла під ними.
 func wire_lines() -> Array:
+	var out: Array = span_lines()
+	for dr: Array in _drops:
+		var a: Vector3 = (_instances[dr[0]]["transform"] as Transform3D).origin
+		var at: Variant = dr[1]
+		out.append([Vector2(a.x, a.z), Vector2(at.x, at.z) if at is Vector3 else at])
+	return out
+
+
+## Лише прольоти між опорами, [a, b] (Vector2), без відводів: просіка в лісі йде за лінією, а не до хат.
+func span_lines() -> Array:
 	var out: Array = []
 	for s: Array in _spans:
 		var a: Vector3 = (_instances[s[0]]["transform"] as Transform3D).origin
 		var b: Vector3 = (_instances[s[1]]["transform"] as Transform3D).origin
 		out.append([Vector2(a.x, a.z), Vector2(b.x, b.z)])
-	for dr: Array in _drops:
-		var a: Vector3 = (_instances[dr[0]]["transform"] as Transform3D).origin
-		var at: Variant = dr[1]
-		out.append([Vector2(a.x, a.z), Vector2(at.x, at.z) if at is Vector3 else at])
 	return out
 
 
@@ -3441,8 +3447,8 @@ class _Placer:
 					layer._add(m, xform, cells)
 					break
 
-	## ЛЕП: мережу будує PowerGrid (10 кВ за намірами routes макета, ТП і 0.4 кВ уздовж вулиць сіл); тут — стовпи на її
-	## точках, повернуті по бісектрисі, щоб траверса не лягала вздовж прольоту, підстанції й відводи. Точка, де стовпу
+	## ЛЕП: мережу будує PowerGrid (10 кВ за намірами routes макета, ТП і дерево 0.4 кВ до хат, усе вздовж осей карти);
+	## тут — стовпи на її точках, траверса впоперек прольоту, на куті — по бісектрисі; підстанції й відводи. Точка, де стовпу
 	## не місце, лишає розрив, який ловить тест, а не мовчки зсувається.
 	func _layout_poles() -> void:
 		_index_obstacles()

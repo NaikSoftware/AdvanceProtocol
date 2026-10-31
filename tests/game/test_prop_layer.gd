@@ -10,6 +10,10 @@ const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 const TRIS_GUARD: int = 150000
 const ARMOURED_CAR: int = 2
 const RIFLE: int = 0
+## Опора 0.4 кВ не далі за стільки клітинок від хати поселення — це його лінія; кінець гілки 0.4 кВ без відводу —
+## не далі за STREET_END від хати.
+const STREET_R: float = 7.0
+const STREET_END: float = 3.0
 
 
 func _view(map: MapData, board: Board = null) -> BoardView:
@@ -1560,7 +1564,7 @@ func _angle_at(props: PropLayer, b: int, a: int, c: int) -> float:
 
 
 ## Мережа: кожна зв'язна частина виходить на зовнішній край кільця (магістраль 10 кВ) і не має одиноких опор; кінці, що не на
-## краю, — підстанція (10 кВ) чи опора 0.4 кВ з відводом або не далі PowerGrid.STREET_END від хати. Магістралей на краю — щонайменше дві.
+## краю, — підстанція (10 кВ) чи опора 0.4 кВ з відводом або не далі STREET_END від хати. Магістралей на краю — щонайменше дві.
 func test_power_network_is_connected_and_leaves_the_world(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var props: PropLayer = view.props()
@@ -1597,7 +1601,7 @@ func test_power_network_is_connected_and_leaves_the_world(p = use_parameters(MAP
 		if _is_04(props, i):
 			# Кінець вулиці: опора з відводом або навпроти хати (головна вулиця тягнеться на всю довжину села).
 			var at: Vector2 = _pole_at(props, i)
-			assert_true(fed.has(i) or homes.any(func(h: Dictionary) -> bool: return (h["rect"] as Rect2).get_center().distance_to(at) <= PowerGrid.STREET_END),
+			assert_true(fed.has(i) or homes.any(func(h: Dictionary) -> bool: return (h["rect"] as Rect2).get_center().distance_to(at) <= STREET_END),
 					"%s: гілка 0.4 кВ обривається на %s без відводу й далеко від хат" % [p, at])
 		elif gap <= 0.5:
 			edge_ends += 1
@@ -1623,6 +1627,19 @@ func test_spans_keep_their_length(p = use_parameters(MAPS)) -> void:
 	for x in ids.size():
 		for y in range(x + 1, ids.size()):
 			assert_gte(_pole_at(props, ids[x]).distance_to(_pole_at(props, ids[y])), 1.4, "%s: опори %s скупчені" % [p, _pole_at(props, ids[x])])
+
+
+## Лінії 0.4 і 10 кВ — прямі відрізки вздовж осей карти з поворотами під прямим кутом: кожен проліт між опорами
+## лежить уздовж x чи z (допуск 0.02 клітинки). Під іншим кутом іде лише відвід до хати.
+func test_spans_run_along_the_map_axes(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	assert_gt(props._spans.size(), 0, "%s: передумова — прольоти є" % p)
+	for sp: Array in props._spans:
+		var d: Vector2 = _pole_at(props, sp[1]) - _pole_at(props, sp[0])
+		assert_lte(minf(absf(d.x), absf(d.y)), 0.02, "%s: проліт %s → %s навскіс" % [p, _pole_at(props, sp[0]), _pole_at(props, sp[1])])
+	# Прольоти окремо від відводів: просіка в лісі йде лише за лінією.
+	assert_eq(props.span_lines().size(), props._spans.size(), p)
+	assert_eq(props.wire_lines().size(), props._spans.size() + props._drops.size(), p)
 
 
 ## Магістраль 10 кВ не повертає назад: кут між прольотами — не гостріший за 60°.
@@ -1965,7 +1982,7 @@ func test_every_settlement_has_a_transformer(p = use_parameters(MAPS)) -> void:
 			continue
 		checked += 1
 		var own: Array[int] = poles04.filter(func(i: int) -> bool:
-			return group.any(func(c: Vector2) -> bool: return _pole_at(props, i).distance_to(c) <= PowerGrid.STREET_R))
+			return group.any(func(c: Vector2) -> bool: return _pole_at(props, i).distance_to(c) <= STREET_R))
 		assert_gt(own.size(), 0, "%s: поселення %s без опор 0.4 кВ" % [p, group])
 		assert_true(own.any(func(i: int) -> bool: return _transformers_of(props, i).size() == 1),
 				"%s: мережа 0.4 кВ поселення %s не доходить до підстанції" % [p, group])
@@ -2046,7 +2063,7 @@ func test_every_settlement_has_a_street_line(p = use_parameters(MAPS)) -> void:
 	for group: Array in _settlements(centres):
 		if group.size() < 2:
 			continue
-		assert_true(group.any(func(c: Vector2) -> bool: return poles04.any(func(q: Vector2) -> bool: return q.distance_to(c) <= PowerGrid.STREET_R)),
+		assert_true(group.any(func(c: Vector2) -> bool: return poles04.any(func(q: Vector2) -> bool: return q.distance_to(c) <= STREET_R)),
 				"%s: поселення %s без лінії 0.4 кВ" % [p, group])
 
 
