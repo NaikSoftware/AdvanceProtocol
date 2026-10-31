@@ -15,6 +15,12 @@ uniform float metallic = 0.0;
 uniform float sky_bend = 0.65;
 // Висота верху секції в моделі (множиться на масштаб екземпляра): верхні ~0.02 затемнені, щоб шапки не читались білим пунктиром.
 uniform float top_local = 1000.0;
+// Картка з кількома видами паркану (смуги атласу згори вниз, вид — floor(UV.y · kinds)): лишається вид екземпляра
+// (INSTANCE_CUSTOM.r), решта вершин стягується в точку. 0 — звичайна модель.
+uniform int kinds = 0;
+// Крок повтору текстури вздовж секції, м (клітинка — 8 м): від початку секції, хоч би яка вона завдовжки.
+uniform float tile_m = 2.5;
+uniform float kind_top[8];
 
 // Мокрість карти (WeatherRig): на мокрій River панель темніша, трохи приглушена й з брудом унизу —
 // яскрава огорожа світилась би, як пофарбована щойно.
@@ -46,8 +52,17 @@ varying float base_h;
 varying float top_h;
 
 void vertex() {
+	float top = top_local;
+	if (kinds > 0) {
+		int kind = int(floor(UV.y * float(kinds)));
+		top = kind_top[clamp(kind, 0, 7)];
+		UV.x = (VERTEX.x + 0.5) * length(MODEL_MATRIX[0].xyz) * 8.0 / tile_m;
+		if (abs(float(kind) - INSTANCE_CUSTOM.r) > 0.5) {
+			VERTEX = vec3(0.0);
+		}
+	}
 	base_h = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y - MODEL_MATRIX[3].y;
-	top_h = top_local * length(MODEL_MATRIX[1].xyz);
+	top_h = top * length(MODEL_MATRIX[1].xyz);
 }
 
 // Рівень міпмапи з похідних UV: textureQueryLod не компілюється в gl_compatibility.

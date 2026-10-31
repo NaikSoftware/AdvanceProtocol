@@ -49,6 +49,19 @@ const MODELS: Dictionary = {
 	&"bridge_river_centre": {"kind": Kind.BRIDGE, "map": &"river", "order": 1, "deck_top": 0.30},
 	&"bridge_river_east": {"kind": Kind.BRIDGE, "map": &"river", "order": 2, "deck_top": 0.21},
 	&"infra_fence_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
+	# Паркани дворів: п'ять видів однієї моделі (infra_fence_yard) і одного атласу — один вузол «batch» на всі двори,
+	# вид екземпляра — fence_kind у INSTANCE_CUSTOM (prop_thin лишає з картки лише його смугу). gate — форма воріт
+	# цього паркану.
+	&"infra_fence_yard_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "fence_kind": 0, "gate": &"wood"},
+	&"infra_fence_yard_sheet": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "fence_kind": 1, "gate": &"sheet"},
+	&"infra_fence_yard_chainlink": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "fence_kind": 2, "gate": &"lattice"},
+	&"infra_fence_yard_brickbars": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "fence_kind": 3, "gate": &"metal"},
+	&"infra_fence_yard_slat": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "fence_kind": 4, "gate": &"slat"},
 	# Сільська садиба — дерев'яний штакетник. Профлист (ассет 2 м — до ~1.4 м) з камери гри читався
 	# пласкою бузковою коробкою без стовпчиків і швів — він, як і єврозабір, для ферм.
 	&"infra_fence_sheet_green": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
@@ -213,11 +226,19 @@ const BUILDING_SHIFT: float = 0.3
 const YARD_SHED: StringName = &"f8_shed"
 ## Повітки двору: сусідні садиби беруть різні (як хати — HOUSE_FORMS).
 const YARD_SHEDS: Array[StringName] = [&"f8_shed"]
-## Форми паркану садиби: «модель|множник висоти». Однієї моделі на дві форми досить: висота (1.2 чи 1.8 м)
-## читається на екрані краще за фарбу, а нова модель — це ще виклики малювання.
-const FENCE_FORMS: Array[StringName] = [&"infra_fence_picket|1.0", &"infra_fence_picket|1.3", &"infra_fence_picket|1.6"]
-## Форми воріт садиби: суцільні металеві, з профнастилу, дерев'яні, ґратчасті.
-const GATE_KINDS: Array[StringName] = [&"metal", &"sheet", &"wood", &"lattice"]
+## Форми паркану садиби: «модель|множник висоти». Види відрізняються формою (штахет 1.3 м, суцільний профлист 1.8 м,
+## сітка на трубах 1.5 м, цегляний цоколь із прутами 1.6 м, горизонтальні дошки 1.45 м), а не фарбою, яку prop_thin
+## знебарвлює; множник висоти в кожного свій, тож сусіди різняться й висотою. Усі види — один вузол малювання.
+const FENCE_FORMS: Array[StringName] = [&"infra_fence_yard_picket|1.0", &"infra_fence_yard_sheet|0.95",
+		&"infra_fence_yard_chainlink|1.05", &"infra_fence_yard_brickbars|0.9", &"infra_fence_yard_slat|1.1"]
+## Модель усіх видів паркану двору: смуг атласу (видів) і крок стовпів, м (tools/blender/infra/yard_fences.py).
+const YARD_FENCE_KINDS: int = 5
+const YARD_FENCE_TILE_M: float = 2.5
+## Верх кожного виду в моделі (клітинки): по ньому шейдер темнить шапки, як у решти огорож.
+const YARD_FENCE_TOPS: Array[float] = [1.3 / 8.0, 1.8 / 8.0, 1.52 / 8.0, 1.66 / 8.0, 1.5 / 8.0]
+## Форми воріт садиби: суцільні металеві, з профнастилу, дерев'яні, ґратчасті, з горизонтальних дощок. Ворота беруть
+## форму свого паркану (spec «gate»).
+const GATE_KINDS: Array[StringName] = [&"metal", &"sheet", &"wood", &"lattice", &"slat"]
 ## Секція паркану не відходить від ґрунту посередині більш ніж на 5 см; найкоротша секція (клітинки).
 const FENCE_SAG: float = 0.05 * 0.125
 const FENCE_MIN: float = 0.1
@@ -482,7 +503,14 @@ static func model(name: StringName) -> Variant:
 	if String(name).contains("#"):
 		_models[name] = _segment(name)
 		return _models[name]
-	var path: String = MODEL_DIR + String(name) + ".glb"
+	# Вид паркану двору ділить модель і сітку з рештою видів: один ресурс на всі, бо вони — один вузол малювання.
+	var glb := StringName(spec_of(name).get("glb", name))
+	if glb != name:
+		for other: StringName in _models:
+			if StringName(spec_of(other).get("glb", other)) == glb and other != glb and _models[other] != null:
+				_models[name] = _models[other]
+				return _models[name]
+	var path: String = MODEL_DIR + String(glb) + ".glb"
 	if not ResourceLoader.exists(path):
 		_models[name] = null
 		return null
@@ -564,6 +592,12 @@ static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
 		thin.set_shader_parameter("metallic", src.metallic)
 		# Верх секції темніший: світлі шапки стовпчиків читались білим пунктиром уздовж огорожі.
 		thin.set_shader_parameter("top_local", mesh.get_aabb().end.y)
+		if spec_of(name).has("batch"):
+			# Картка з усіма видами: шейдер лишає смугу виду екземпляра й тягне текстуру кроком стовпів від початку
+			# секції, а не розтягує її з масштабом секції.
+			thin.set_shader_parameter("kinds", YARD_FENCE_KINDS)
+			thin.set_shader_parameter("tile_m", YARD_FENCE_TILE_M)
+			thin.set_shader_parameter("kind_top", PackedFloat32Array(YARD_FENCE_TOPS))
 		copy.surface_set_material(i, thin)
 	return copy
 
@@ -990,7 +1024,8 @@ func _build_nodes(haze: bool) -> void:
 	var by_node: Dictionary = {}
 	for i in _instances.size():
 		var m: StringName = _instances[i]["model"]
-		var key: StringName = m
+		# Види паркану двору — один вузол «batch»: вид екземпляра йде в INSTANCE_CUSTOM (_write_nodes).
+		var key: StringName = StringName(spec_of(m).get("batch", m))
 		var k: int = int(spec_of(m)["kind"])
 		if (k == Kind.STRUCTURE or k == Kind.RUIN) and not _on_board((_instances[i]["cells"] as Array)[0]):
 			key = StringName(String(m) + "@ring")
@@ -1008,7 +1043,7 @@ func _build_nodes(haze: bool) -> void:
 		var fades: bool = kind == Kind.STRUCTURE or kind == Kind.RUIN
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_custom_data = fades
+		mm.use_custom_data = fades or spec_of(m).has("batch")
 		mm.mesh = _bridge_mesh(m, info["mesh"], wet) if kind == Kind.BRIDGE else info["mesh"]
 		if kind == Kind.HAY and wet:
 			mm.mesh = _dimmed(info["mesh"], HAY_WET)
@@ -1206,6 +1241,15 @@ func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float,
 			for k in n:
 				var t: float = (float(k) + 0.5) / float(n) - 0.5
 				_gate_box_at(mid + u * (t * span), u, out * 0.005, Vector3(0.012, h - 0.01, 0.006), base + h * 0.5, c * (1.15 if k % 2 == 0 else 0.95))
+		&"slat":
+			# Горизонтальні дошки з просвітом між двома стійками, як паркан із дощок.
+			var rows: int = maxi(3, floori(h / 0.022))
+			for k in rows:
+				var y: float = (float(k) + 0.5) / float(rows) * h
+				var vary: int = absi(hash(Vector2i(sd, k))) % 5
+				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h / float(rows) * 0.72, 0.01), base + y, GATE_WOOD * (0.8 + 0.06 * float(vary)))
+			for t: float in [-0.5, 0.5]:
+				_gate_box_at(mid + u * (t * (span - 0.012)), u, -out * 0.008, Vector3(0.012, h, 0.012), base + h * 0.5, GATE_WOOD * 0.55)
 		&"wood":
 			var n: int = maxi(1, floori(span / 0.05))
 			var w: float = span / float(n)
@@ -1637,6 +1681,8 @@ func _write_nodes() -> void:
 			var t: Transform3D = _final_transform(inst) * local
 			if fmi == null:
 				mm.set_instance_transform(k, t)
+				if mm.use_custom_data:
+					mm.set_instance_custom_data(k, Color(float(spec_of(inst["model"]).get("fence_kind", 0)), 0.0, 0.0, 0.0))
 				continue
 			var lv: float = float(_fade_level.get(slots[k], 0.0))
 			var tint: Color = _roof_tint(inst)
@@ -3781,7 +3827,9 @@ class _Placer:
 				var from: Vector2 = p0 if wicket_far else p1
 				var to: Vector2 = p1 if wicket_far else p0
 				var leaf_mid: Vector2 = from + (to - from).normalized() * (GATE_LEAF + GATE_POST_SIZE.x)
-				var kind_id: StringName = _pick_apart(PropLayer.GATE_KINDS, hc, &"gate", h(hc, 172) % PropLayer.GATE_KINDS.size())
+				# Ворота — того самого роду, що й паркан двору; модель без своєї форми воріт бере вільну від сусідів.
+				var kind_id: StringName = StringName(PropLayer.spec_of(m).get("gate",
+						_pick_apart(PropLayer.GATE_KINDS, hc, &"gate", h(hc, 172) % PropLayer.GATE_KINDS.size())))
 				_note_form(i, hc, &"gate", kind_id)
 				gates[i] = [(leaf_mid + to) * 0.5, out]
 				gate_segments.append([from, to])
