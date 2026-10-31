@@ -468,6 +468,7 @@ the current player can see; scars respect the viewer's `seen`. Reference brief:
 - [x] Every building on a levelled pad cut into the slope, none sunk to the windows or on a plinth
 - [x] Fences and garden beds follow the ground (section midpoint within 5 cm)
 - [ ] Where asphalt ends, it ends like real asphalt (broken edge, gravel or packed track beyond), not a blur
+- [x] Roads are asphalt or dirt only, no cobble; a bridge meets the same surface on both sides
 
 ### Task 17: House models and roofs
 
