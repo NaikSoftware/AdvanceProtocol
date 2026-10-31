@@ -377,11 +377,13 @@ func test_props_have_no_runaway_geometry(p = use_parameters(MAPS)) -> void:
 	assert_lte(view.props().triangle_count(), TRIS_GUARD, p)
 
 
+## Один вузол MultiMesh на модель (на «batch» моделей), без тіні.
 func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
+	# Вузол — модель, а моделі одного «batch» (види паркану двору) — один спільний вузол.
 	var models: Dictionary = {}
 	for inst in view.props().all_instances():
-		models[inst["model"]] = true
+		models[StringName(PropLayer.spec_of(inst["model"]).get("batch", inst["model"]))] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
 			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts", &"SmallBoxes"] and not String(n.name).ends_with("_fade"))
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
@@ -1859,7 +1861,42 @@ func test_neighbouring_yards_do_not_repeat_forms(p = use_parameters(MAPS)) -> vo
 				assert_true(present.has(StringName(String(placer.forms[i][key]).get_slice("|", 0))), "%s: %s садиби %d нема на дошці" % [p, key, i])
 
 
-## Усі чотири форми воріт трапляються в селах трьох карт.
+## Кожен двір обгороджений одним видом паркану (усі його секції — одна модель із FENCE_FORMS), а в селі кожної карти
+## з трьома й більше дворами трапляються щонайменше три види: паркани села не однакові. Ворота — роду свого паркану.
+func test_each_yard_has_one_fence_kind_and_villages_mix_kinds(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	var yard_of: Dictionary = {}
+	for i in homes.size():
+		for c: Vector2i in homes[i]["cells"]:
+			yard_of[c] = i
+	var kinds_of: Dictionary = {}
+	for inst in props.all_instances():
+		if _kind(inst["model"]) != PropLayer.Kind.GARDEN_FENCE:
+			continue
+		var c: Vector2i = (inst["cells"] as Array)[0]
+		if not yard_of.has(c):
+			continue
+		var i: int = yard_of[c]
+		if not kinds_of.has(i):
+			kinds_of[i] = {}
+		kinds_of[i][inst["model"]] = true
+	var used: Dictionary = {}
+	for i: int in kinds_of:
+		assert_eq((kinds_of[i] as Dictionary).size(), 1, "%s: двір %d має види %s" % [p, i, (kinds_of[i] as Dictionary).keys()])
+		var m: StringName = (kinds_of[i] as Dictionary).keys()[0]
+		assert_true(PropLayer.FENCE_FORMS.any(func(f: StringName) -> bool: return String(f).get_slice("|", 0) == String(m)),
+				"%s: паркан двору %d — %s, не з FENCE_FORMS" % [p, i, m])
+		used[m] = true
+		var form: Variant = (props._placer.forms[i] as Dictionary).get(&"gate")
+		if form != null and PropLayer.spec_of(m).has("gate"):
+			assert_eq(form, PropLayer.spec_of(m)["gate"], "%s: ворота двору %d не того роду, що паркан %s" % [p, i, m])
+	assert_gt(kinds_of.size(), 0, "%s: передумова — двори обгороджені" % p)
+	if homes.size() >= 3:
+		assert_gte(used.size(), 3, "%s: видів паркану в селі лише %s" % [p, used.keys()])
+
+
+## Усі форми воріт трапляються в селах трьох карт.
 func test_every_gate_form_is_used_on_some_map() -> void:
 	var seen: Dictionary = {}
 	for p in MAPS:

@@ -22,6 +22,7 @@ const SPEC: Dictionary = {
 	"infra_fence_po2": [Vector3(8.0, 2.5, 0.64), 0.2, 500, 0],
 	"infra_fence_po2_corner": [Vector3(4.42, 2.5, 4.42), 0.2, 500, 0],
 	"infra_fence_picket": [Vector3(8.0, 1.45, 0.1), 0.2, 500, 0],
+	"infra_fence_yard": [Vector3(8.0, 1.86, 0.0), 0.2, 20, 0],
 	"infra_fence_picket_corner": [Vector3(4.1, 1.45, 4.1), 0.2, 500, 0],
 	"infra_hay_round": [Vector3(1.2, 1.31, 1.35), 0.1, 300, 0],
 	"infra_hay_wrapped": [Vector3(1.2, 1.31, 1.35), 0.1, 300, 0],
