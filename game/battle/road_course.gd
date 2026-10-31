@@ -835,6 +835,9 @@ func rasterise() -> Array[Image]:
 	tw.resize(n)
 	var jw := PackedFloat32Array()
 	jw.resize(n)
+	# Півширина лінії в найближчій до пікселя точці, м.
+	var hk := PackedFloat32Array()
+	hk.resize(n)
 	var inv: float = 1.0 / PX
 	for li in lines.size():
 		var pts: PackedVector2Array = lines[li]
@@ -873,10 +876,10 @@ func rasterise() -> Array[Image]:
 						d[k] = dd
 						v[k] = (abn.x * qz - abn.y * qx) * 8.0
 						u[k] = (s0 + t * seg_len) * 8.0
-						# Зміну типу (асфальт → ґрунтівка) не розмиваємо гаусом: перепад — один крок лінії
-						# (0.2 клітинки), рваність краю й кришіння додає шейдер. Розмитий перехід лягав сірим
-						# серпанком на кілька метрів.
+						# Зміна типу — один крок лінії (0.2 клітинки) без згладжування: рваність краю й
+						# кришіння додає шейдер, а розмитий перехід лягав би сірим серпанком на кілька метрів.
 						tw[k] = ty[si].lerp(ty[si + 1], t)
+						hk[k] = lerpf(hw[si], hw[si + 1], t)
 						# Відстань за глухим кінцем уздовж осі (м; мінус — ще до кінця): колії гаснуть
 						# за ~2 м до кінця й зникають на заокругленні.
 						var past: float = -INF
@@ -888,11 +891,12 @@ func rasterise() -> Array[Image]:
 							jw[k] = maxf(jw[k], smoothstep(-2.0, 0.5, past))
 			s0 += seg_len
 	_close_junctions(d, jw, tw, rw, rh, org)
-	# Асфальт — лише проїзна частина (~5.4 м від осі найближчої лінії). Смуга шириною у 2 клітинки й
-	# заокруглення розвилок (CLOSE_M) значно ширші: решта там — гравійне узбіччя (вага B; бруківки на картах нема),
-	# а не плита асфальту.
+	# Асфальт — лише проїзна частина: не далі CARRIAGE_HALF_M від осі й не ширше за саму лінію. Смуга шириною
+	# у 2 клітинки й заокруглення розвилок (CLOSE_M) значно ширші: решта там — гравійне узбіччя (вага B;
+	# бруківки на картах нема), а не плита асфальту.
 	for k in n:
-		var cut: float = smoothstep(CARRIAGE_HALF_M, CARRIAGE_HALF_M + 0.4, absf(v[k]))
+		var half: float = minf(hk[k], CARRIAGE_HALF_M)
+		var cut: float = smoothstep(half, half + 0.4, absf(v[k]))
 		if cut > 0.0 and tw[k].x > 0.0:
 			tw[k] = Vector3(tw[k].x * (1.0 - cut), tw[k].y, tw[k].z + tw[k].x * cut)
 	_plazas(d, tw, jw, rw, rh, org)

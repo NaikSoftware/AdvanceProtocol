@@ -464,7 +464,7 @@ func test_no_map_road_end_sits_just_past_the_free_end_threshold() -> void:
 
 
 ## Асфальт переходить у ґрунтівку різко: вага асфальту падає з 1 до 0 у межах 0.25 клітинки вздовж осі
-## (раніше гаус розмивав перехід на ~0.8 клітинки — сірий серпанок замість зламаного краю).
+## і далі вже не повертається.
 func test_asphalt_weight_drops_within_a_fraction_of_a_tile_at_a_join_to_dirt() -> void:
 	var surface := PackedByteArray()
 	surface.resize(15 * 9)
@@ -485,14 +485,16 @@ func test_asphalt_weight_drops_within_a_fraction_of_a_tile_at_a_join_to_dirt() -
 			last_asphalt = x
 		if r <= 0.05 and first_dirt < 0.0:
 			first_dirt = x
+		if first_dirt > 0.0:
+			assert_lt(r, 0.5, "асфальт знову з'являється за ґрунтівкою на x = %.2f" % x)
 	assert_gt(last_asphalt, 4.5, "асфальт доходить до переходу")
 	assert_gt(first_dirt, 0.0, "далі — ґрунтівка")
 	# Перепад — один крок лінії (0.2 клітинки, від 95 % до 5 % — 0.18); 0.25 лишає запас на піксель растра (0.125).
 	assert_lte(first_dirt - last_asphalt, 0.25, "перехід довший за 0.25 клітинки")
 
 
-## Асфальт — лише проїзна частина: далі за 3.0 м від осі найближчої лінії (крім площ) лежить ґрунтівка-
-## узбіччя. Інакше заокруглення розвилок і смуги шириною у 2 клітинки малювались асфальтом на 7–15 м.
+## Асфальт — лише проїзна частина: далі за 3.0 м від осі найближчої лінії лежить гравійне узбіччя. Ядра
+## розвилок і площ (вага розвилки 1) не перевіряються: там вісь не задає ширину.
 func test_asphalt_stays_within_the_carriageway_of_the_nearest_axis() -> void:
 	for path in _MAPS:
 		var rc: RoadCourse = _bake(path).roads
@@ -512,8 +514,8 @@ func test_asphalt_stays_within_the_carriageway_of_the_nearest_axis() -> void:
 ## Ґрунтівка, що відходить від асфальтової дороги, починається одразу від краю проїзної частини: вздовж
 ## її осі асфальт не заходить далі за ~0.5 м від краю головної дороги (півширина до 2.7 м) — без язика.
 func test_dirt_branch_starts_at_the_asphalt_edge() -> void:
-	var checked := 0
 	for path in _MAPS:
+		var checked := 0
 		var rc: RoadCourse = _bake(path).roads
 		if rc == null:
 			continue
@@ -524,7 +526,7 @@ func test_dirt_branch_starts_at_the_asphalt_edge() -> void:
 			var ty: PackedVector3Array = rc.types[li]
 			for end in [0, pts.size() - 1]:
 				var node: Vector2 = pts[end]
-				if rc.near_node(node) > 0.05:
+				if rc.near_node(node) > 0.05 or rc._type_near(node) != 0:
 					continue
 				# Гілка — ґрунтівка за 1.5 клітинки від вузла.
 				var step: int = 1 if end == 0 else -1
@@ -545,4 +547,5 @@ func test_dirt_branch_starts_at_the_asphalt_edge() -> void:
 							reach = maxf(reach, p.distance_to(node) * _TILE_M)
 					i += step
 				assert_lte(reach, 3.2, "%s: лінія %d, асфальт заходить у відгалуження на %.1f м від вузла" % [path, li, reach])
-	assert_gt(checked, 0, "жодного відгалуження ґрунтівки від вузла")
+		assert_gt(checked, 0, "%s: жодного відгалуження ґрунтівки від асфальтового вузла" % path)
+
