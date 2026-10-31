@@ -254,7 +254,7 @@ func test_widths_single_lane_town_street_and_variation() -> void:
 					continue
 				var tg: Vector2 = (pts[i + 1] - pts[i - 1]).normalized()
 				var wm: float = _width_at(rc, img, p, Vector2(-tg.y, tg.x))
-				assert_lt(wm, 8.0 + 1e-3, "%s: ширина %.1f м у %s" % [path, wm, p])
+				assert_lt(wm, 10.0 + 1e-3, "%s: ширина %.1f м у %s" % [path, wm, p])
 				if rc.base_halfs[li][i] * 2.0 < 5.5:
 					assert_lt(wm, 0.65 * _TILE_M, "%s: одна смуга %.1f м у %s" % [path, wm, p])
 				ratios.append(rc.halfs[li][i] / rc.base_halfs[li][i])
@@ -268,14 +268,14 @@ func test_widths_single_lane_town_street_and_variation() -> void:
 					v += (r - mean) * (r - mean)
 				var cv: float = sqrt(v / ratios.size()) / mean
 				assert_between(cv, 0.03, 0.15, "%s: CV ширини лінії %d = %.3f" % [path, li, cv])
-	# Смуга у 2 клітинки на Crossroads (стовпці 12–13, рядки 9–12) — одна вулиця 6–8 м, не дві.
+	# Смуга у 2 клітинки на Crossroads (стовпці 12–13, рядки 9–12) — одна вулиця: проїзна частина 5.4 м і гравійні узбіччя, разом 8–10 м, не дві.
 	var rc: RoadCourse = _bake("res://maps/crossroads.tres").roads
 	var img: Image = rc.rasterise()[0]
 	for y: float in [10.0, 10.5, 11.0]:
 		var p := Vector2(12.5, y)
 		assert_lt(_dist_to_lines(rc, p), 0.3, "вісь вулиці посередині смуги у %s" % p)
 		var wm: float = _width_at(rc, img, p, Vector2(1, 0))
-		assert_between(wm, 6.0, 8.0, "вулиця у %s: %.1f м" % [p, wm])
+		assert_between(wm, 8.0, 10.0, "вулиця у %s: %.1f м" % [p, wm])
 	var near_lines := 0
 	for pts in rc.lines:
 		for q in pts:
