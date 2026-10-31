@@ -10,6 +10,8 @@ const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 const TRIS_GUARD: int = 150000
 const ARMOURED_CAR: int = 2
 const RIFLE: int = 0
+## Скільки воріт карти може стояти з послабленим правилом стіни чи екрана (test_gates_do_not_run_alongside_walls).
+const RELAXED_GATES: Dictionary = {"crossroads": 2}
 
 
 func _view(map: MapData, board: Board = null) -> BoardView:
@@ -1558,6 +1560,136 @@ func test_gates_keep_clear_of_buildings(p = use_parameters(MAPS)) -> void:
 		assert_gte(float(g["clear"]), PropLayer.GATE_CLEARS[1], "%s: ворота зі запасом менше %.2f" % [p, PropLayer.GATE_CLEARS[1]])
 
 
+## Отвір воріт не йде вздовж стіни ближче GATE_ALONG навіть тоді, коли двір узяв менший запас з GATE_CLEARS: менший
+## запас — лише для стіни, що стоїть торцем до воріт. Ворота паралельно стіні за два-три метри від неї на екрані
+## виходять з-під звису даху чи затуляють перший поверх і читаються прибудовою до хати. Виняток — двір, де інакше
+## воріт нема ніде (along = false), як «сліпий» двір у test_gates_face_the_road. Воріт із будь-яким послабленням (ні
+## along, ні screen з test_gates_are_not_hidden_behind_buildings) — не більше RELAXED_GATES на карту: тісні двори
+## Перехрестя (хата між дорогами з трьох боків) іншого місця не мають, а решта карт — жодного.
+func test_gates_do_not_run_alongside_walls(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var rects: Array[Rect2] = []
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			var b: AABB = _box_of(inst)
+			rects.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+	var gates: Array = view.props()._gates
+	assert_gt(gates.size(), 0, p)
+	assert_lte(gates.filter(func(g: Dictionary) -> bool: return not (g["along"] and g["screen"])).size(), RELAXED_GATES.get(p, 0),
+			"%s: забагато воріт з послабленим правилом" % p)
+	for g: Dictionary in gates:
+		var a: Vector2 = g["a"]
+		var b: Vector2 = g["b"]
+		if not g["along"]:
+			continue
+		var ax: int = 0 if absf(b.x - a.x) > absf(b.y - a.y) else 1
+		for r in rects:
+			if minf(a[ax], b[ax]) >= r.end[ax] or maxf(a[ax], b[ax]) <= r.position[ax]:
+				continue
+			var gap: float = maxf(r.position[1 - ax] - a[1 - ax], a[1 - ax] - r.end[1 - ax])
+			assert_gte(gap, PropLayer.GATE_ALONG - 1e-3, "%s: ворота %s–%s уздовж стіни %s" % [p, a, b, r])
+
+
+## Ворота не стоять на екрані за ближчою до камери будівлею: верх полотна далі GATE_SCREEN_GAP від її силуету
+## (обрис зі звисом і дахом, піднятий на висоту моделі, разом із шапками димарів) під найнижчим нахилом рига. Ворота,
+## що визирають з-за гребеня даху чи димаря, читаються частиною хати, хоч у плані до неї й три метри.
+## Виняток — двір, де інакше воріт нема (screen = false).
+func test_gates_are_not_hidden_behind_buildings(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var fwd: Vector2 = _cam_fwd()
+	var shapes: Array = []
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		if k != PropLayer.Kind.STRUCTURE and k != PropLayer.Kind.RUIN:
+			continue
+		var b: AABB = _box_of(inst)
+		var r := Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+		var pts := PackedVector2Array()
+		var near: float = INF
+		for c: Vector2 in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+			near = minf(near, c.dot(fwd))
+			for y: float in [0.0, b.size.y]:
+				pts.append(_on_screen(c, y))
+		var xf: Transform3D = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary).get("local", Transform3D()) as Transform3D)
+		for ch: Vector3 in (PropLayer.model(inst["model"]) as Dictionary).get("chimneys", []):
+			var w: Vector3 = xf * ch
+			pts.append(_on_screen(Vector2(w.x, w.z), w.y - b.position.y))
+		shapes.append([r, Geometry2D.convex_hull(pts), near])
+	var checked: int = 0
+	for g: Dictionary in view.props()._gates:
+		if not g["screen"]:
+			continue
+		checked += 1
+		for sh: Array in shapes:
+			var hull: PackedVector2Array = sh[1]
+			for t in 11:
+				var q: Vector2 = (g["a"] as Vector2).lerp(g["b"], t / 10.0)
+				var s: Vector2 = _on_screen(q, float(g["height"]))
+				var gap: float = INF if not Geometry2D.is_point_in_polygon(s, hull) else 0.0
+				for k in hull.size() - 1:
+					gap = minf(gap, Geometry2D.get_closest_point_to_segment(s, hull[k], hull[k + 1]).distance_to(s))
+				assert_gte(gap, PropLayer.GATE_SCREEN_GAP, "%s: ворота %s за будівлею %s на екрані" % [p, q, sh[0]])
+	assert_gt(checked, 0, "%s: передумова — ворота не лише з послабленим правилом" % p)
+
+
+## Напрям погляду камери в плані (IsoCameraRig.YAW_DEGREES): від камери вглиб.
+func _cam_fwd() -> Vector2:
+	return -Vector2(sin(deg_to_rad(IsoCameraRig.YAW_DEGREES)), cos(deg_to_rad(IsoCameraRig.YAW_DEGREES)))
+
+
+## Точка плану на висоті y — на екрані камери під найнижчим нахилом рига (IsoCameraRig.PITCH_NEAR_DEG), у клітинках.
+func _on_screen(c: Vector2, y: float) -> Vector2:
+	var pitch: float = deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG)
+	var fwd: Vector2 = _cam_fwd()
+	return Vector2(c.dot(Vector2(-fwd.y, fwd.x)), c.dot(fwd) * sin(pitch) + y * cos(pitch))
+
+
+## Паркан двору не заходить на асфальт: жодна точка секції (від стовпа до стовпа) не ближче FENCE_ROAD_INSET до краю
+## дороги так, як її малює шейдер землі (road_edge_m: поле RoadCourse з заокругленими кутами розвилок, а не осі з
+## півшириною, як on_road). Панель на заокругленні розвилки стояла на асфальті.
+func test_yard_fences_keep_off_the_asphalt(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var checked: int = 0
+	for sg: Array in _yard_segments(props):
+		checked += 1
+		for t in 11:
+			var q: Vector2 = (sg[0] as Vector2).lerp(sg[1], float(t) / 10.0)
+			assert_gte(props.road_edge_m(q), PropLayer.FENCE_ROAD_INSET * 8.0, "%s: паркан %s–%s на асфальті в %s" % [p, sg[0], sg[1], q])
+	assert_gt(checked, 0, p)
+
+
+## Прямі ходи паркану двору, коротші за SHORT_RUN (~2 м), стоять лише купкою, яка тримає ворота (кінець котрогось
+## ходу на стовпі воріт) чи довгий хід (кінець на ході не коротшому за SHORT_RUN), як бічна стійка воріт чи сполучник зі
+## стіною. Купка коротких шматків довкола рогу хати, що замикаються самі на себе через стіну, — уламок у нікуди.
+func test_short_fence_runs_hold_a_gate_or_a_long_run(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var posts: Array[Vector2] = []
+	for g: Dictionary in props._gates:
+		posts.append_array([g["a"], g["mid"], g["b"]])
+	var clusters: Array = PropLayer._Placer._short_clusters(PropLayer._Placer._collinear_runs(_yard_segments(props)), posts)
+	for cl: Array in clusters:
+		var ends: Array = []
+		for run: Dictionary in cl[0]:
+			ends.append_array(run["ends"])
+		assert_true(cl[1], "%s: купка коротких ходів паркану з кінцями %s ні до чого не веде" % [p, ends])
+	gut.p("%s: купок коротких ходів %d" % [p, clusters.size()])
+
+
+## Секції парканів дворів як відрізки по осі моделі.
+func _yard_segments(props: PropLayer) -> Array:
+	var out: Array = []
+	for inst in props.all_instances():
+		if _kind(inst["model"]) != PropLayer.Kind.GARDEN_FENCE:
+			continue
+		var xf: Transform3D = inst["transform"]
+		var box: AABB = (PropLayer.model(inst["model"]) as Dictionary)["aabb"]
+		var a3: Vector3 = xf * Vector3(box.position.x, 0.0, 0.0)
+		var b3: Vector3 = xf * Vector3(box.end.x, 0.0, 0.0)
+		out.append([Vector2(a3.x, a3.z), Vector2(b3.x, b3.z)])
+	return out
+
+
 ## Паркан не йде вздовж стіни ближче FENCE_WALL: проєкція його ходу на стіну (з відступом 0.03 від рогів — крок
 ## розрізання) не лежить у межах стіни, коли між ними менше 0.25. Секція впирається в стіну кінцем, але не
 ## лежить паралельно в двох метрах від фасаду, затуляючи вікна.
@@ -2187,10 +2319,10 @@ func test_pole_spot_rule_hay() -> void:
 func test_pole_spot_rule_gate(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var placer = props._placer
-	assert_gt(props._gate_posts.size(), 1, "передумова — ворота є")
-	for g in props._gate_posts.size() / 2:
-		var a: Vector2 = props._gate_posts[2 * g]
-		var b: Vector2 = props._gate_posts[2 * g + 1]
+	assert_gt(placer.gate_segments.size(), 0, "передумова — ворота є")
+	for g: Array in placer.gate_segments:
+		var a: Vector2 = g[0]
+		var b: Vector2 = g[1]
 		var nrm: Vector2 = (b - a).normalized().orthogonal()
 		for t in 5:
 			for o: float in [-0.15, -0.08, 0.0, 0.08, 0.15]:
@@ -2243,12 +2375,12 @@ func test_power_grid_search_is_capped(p = use_parameters(MAPS)) -> void:
 func test_poles_and_spans_keep_out_of_yards(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	var placer = props._placer
-	assert_gt(props._gate_posts.size(), 0, "%s: передумова — ворота є" % p)
+	assert_gt(placer.gate_segments.size(), 0, "%s: передумова — ворота є" % p)
 	for i in _pole_ids(props):
 		var at: Vector2 = _pole_at(props, i)
 		assert_false(placer.in_yard(at), "%s: опора %s у дворі" % [p, at])
-		for g in props._gate_posts.size() / 2:
-			assert_gte(Geometry2D.get_closest_point_to_segment(at, props._gate_posts[2 * g], props._gate_posts[2 * g + 1]).distance_to(at),
+		for g: Array in placer.gate_segments:
+			assert_gte(Geometry2D.get_closest_point_to_segment(at, g[0], g[1]).distance_to(at),
 					PropLayer.POLE_GATE_CLEAR, "%s: опора %s у воротах" % [p, at])
 	var adj: Dictionary = _neighbours(props)
 	var checked: int = 0

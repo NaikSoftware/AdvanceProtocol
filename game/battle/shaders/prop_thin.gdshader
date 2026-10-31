@@ -28,6 +28,17 @@ const float DIRT = 0.6;
 const float WET_ROUGHNESS = 0.4;
 // ~0.30 у sRGB (≈ 76 із 255) — ~0.072 лінійно: паркан трохи світліший за ґрунт, не біла лінія.
 const float VALUE_CAP = 0.072;
+// Уся огорожа на чверть темніша за дерево ассета: світлі штакетини над темним ґрунтом читались блідою сіткою цяток.
+const float FENCE_DARK = 0.75;
+// Здалеку (міпмапа ≥ FAR_MIP) рисунок штакетин і шапок стовпчиків — рівний темніший тон, без пунктиру.
+const float FAR_MIP = 3.0;
+const float FAR_DARK = 0.8;
+// Нижній брус (до BASE_H, ~0.3 м) темніший: лінія паркану тримається на темному ґрунті й тоді, коли штакетини
+// здалеку тоншають.
+const float BASE_H = 0.04;
+const float BASE_DARK = 0.6;
+// Здалеку покриття тонких штакетин росте з рівнем міпмапи: alpha-to-coverage інакше розріджує лінію до невидимої.
+const float FAR_ALPHA = 0.12;
 // Тепліше за нейтраль: під сірим небом Річки нейтральне дерево виходило холодним (B ≥ R).
 const vec3 WEATHERED = vec3(1.14, 0.98, 0.78);
 
@@ -52,7 +63,8 @@ void fragment() {
 	}
 	// Здалеку міпмапи усереднюють альфу тонких штакетин нижче порогу, і бік кільця зникав: поріг
 	// знижується з рівнем міпмапи, щоб покриття лишалось.
-	float cut = alpha_cut * clamp(1.0 - 0.3 * mip_level(albedo_tex, UV), 0.15, 1.0);
+	float mip = mip_level(albedo_tex, UV);
+	float cut = alpha_cut * clamp(1.0 - 0.3 * mip, 0.15, 1.0);
 	if (alpha_cut > 0.0 && tex.a < cut) {
 		discard;
 	}
@@ -65,6 +77,9 @@ void fragment() {
 	albedo *= mix(1.0, 0.45, cap);
 	// Сіро-бурий вивітреного дерева: рожеві й бузкові відтінки фарби ассета на кадрі читались чужими.
 	albedo = mix(albedo, dot(albedo, vec3(0.2126, 0.7152, 0.0722)) * WEATHERED, 0.6);
+	albedo *= FENCE_DARK * mix(BASE_DARK, 1.0, smoothstep(BASE_H * 0.5, BASE_H, base_h));
+	float far = smoothstep(1.0, FAR_MIP, mip);
+	albedo = mix(albedo, vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))) * WEATHERED * FAR_DARK, far);
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {
 		float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
@@ -73,7 +88,7 @@ void fragment() {
 		albedo *= mix(1.0, DIRT, wet * (1.0 - smoothstep(0.0, DIRT_H, base_h)));
 	}
 	ALBEDO = albedo;
-	ALPHA = mix(1.0, tex.a, step(0.0001, alpha_cut));
+	ALPHA = mix(1.0, clamp(tex.a * (1.0 + FAR_ALPHA * mip), 0.0, 1.0), step(0.0001, alpha_cut));
 	// Мокра фарбована бляха — м'який полиск, не матова картка.
 	// Шапка секції матова: мокрий полиск горішніх граней блищав білими цятками вздовж огорожі.
 	ROUGHNESS = mix(mix(roughness, WET_ROUGHNESS, wet), 1.0, cap);
