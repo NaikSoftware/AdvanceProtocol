@@ -173,6 +173,10 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
 - **Scars respect the fog:** crushed props, wrecks and their scorch show only where the viewer's
   `seen` covers the tile, or they report enemy movement. A prop is crushed only on a cell the
   viewer has seen.
+- **Roads are asphalt or dirt, never cobble.** A town street is clearly narrower than the houses
+  beside it: about 5 m of asphalt, with gravel or dirt verges filling the rest of a two-cell band.
+  A dirt road that branches off an asphalt one is dirt from the asphalt's edge: no asphalt tongue
+  runs into the branch, and the asphalt keeps its edge through the junction.
 - **Footpaths are wear, not a laid strip.** From each house door through the gate to the road, plus
   trodden patches at gates and sheds and one or two meandering tracks from a road to the water.
   `Footpaths` bakes one RG8 mask per board (64 px per tile; R is path wear, G a trodden patch);

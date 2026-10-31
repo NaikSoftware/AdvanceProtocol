@@ -60,6 +60,9 @@ const NO_BRIDGE: int = 2
 const NO_ROAD: int = 1
 ## Мілина для очерету: ґрунт нижче рівня води на 0…SHALLOW тайла (0–1 м).
 const SHALLOW: float = 0.12
+## Основа куртини — не глибше REED_DIP під поверхнею води (16 см), хоч дно й глибше: вода майже непрозора, і
+## з основою на дні під нею ховається весь темний мокрий низ снопа — над водою лишаються самі волоті.
+const REED_DIP: float = 0.02
 ## Кущ і дерево — на сухому: ґрунт вище води щонайменше на DRY; схил не крутіший за STEEP (y нормалі).
 const DRY: float = 0.02
 const STEEP: float = 0.85
@@ -331,7 +334,7 @@ static func _plan_banks(board: Board, height: TerrainHeight, fields: Array[Rect2
 							continue
 						if _land_dist(board, p) < LAND_CLEAR:
 							continue
-						cand.append(Vector3(p.x, g, p.y))
+						cand.append(Vector3(p.x, maxf(g, TerrainHeight.WATER_LEVEL - REED_DIP), p.y))
 				_shuffle(cand, rng)
 				var want: int = rng.randi_range(8, 14)
 				var taken: Array[Vector3] = []
@@ -461,7 +464,7 @@ static func _plan_pond(board: Board, height: TerrainHeight, map_seed: int, pond:
 				# Місце точки вздовж урізу — за її кутом, між сусідніми променями.
 				var t: float = fposmod((p - centre).angle(), TAU) / TAU * POND_RAYS
 				var k: int = mini(floori(t), POND_RAYS - 1)
-				shore.append([Vector3(p.x, g, p.y), c, lerpf(along[k], along[k + 1], t - k)])
+				shore.append([Vector3(p.x, maxf(g, TerrainHeight.WATER_LEVEL - REED_DIP), p.y), c, lerpf(along[k], along[k + 1], t - k)])
 	if shore.is_empty():
 		return
 	# Пляма — відрізок урізу навколо придатної точки; уріз поділено на рівні частини, по плямі в

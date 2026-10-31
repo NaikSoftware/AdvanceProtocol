@@ -336,25 +336,29 @@ def sheaf(it, rects, fallen):
     m = Mesh(it["node"])
     sprites = rects["sprites"][it["kind"]]
     fall_dir = rng.uniform(0, 2 * math.pi)
+    yaw0 = rng.uniform(0, math.pi)
     for i in range(it["cards"]):
         # Густіше до середини: край плями рідшає, як у справжньої куртини.
         r = math.sqrt(rng.random()) * 0.85
         a = rng.uniform(0, 2 * math.pi)
         x, y = math.cos(a) * r * it["rx"], math.sin(a) * r * it["ry"]
         h = rng.uniform(*it["h"]) * (1.0 - 0.25 * r * r)
-        w = h * rng.uniform(0.3, 0.5)
-        yaw = rng.uniform(0, math.pi)
+        # Ширина близька до пропорції кадру спрайта (1:2): вужча стискає стебла в гребінку.
+        w = h * rng.uniform(0.4, 0.5)
+        # Сусідні картки — навхрест (±90° з розкидом): з будь-якого боку частина снопа стоїть до
+        # камери лицем, і пласкої стінки-гребінки не видно.
+        yaw = yaw0 + (i % 2) * math.pi / 2 + rng.gauss(0, 0.35)
         fd = fall_dir + rng.gauss(0, 0.3)
         hb = rng.uniform(0.25, 0.45)
         sag = rng.uniform(-0.1, 0.12)
         rect = rng.choice(sprites)
         # Нижче землі на різну глибину: на схилі берега картка не висить, а низ куртини не рівний.
         base = Vector((x, y, -rng.uniform(0.08, 0.35)))
-        tilt = Vector((rng.gauss(0, 0.12), rng.gauss(0, 0.12), 0.0))
+        tilt = Vector((rng.gauss(0, 0.15), rng.gauss(0, 0.15), 0.0))
         if not fallen:
             d = Vector((math.cos(yaw), math.sin(yaw), 0.0))
-            # Невеликий нахил назовні від середини: куртина розходиться віялом.
-            up = (Vector((0, 0, 1)) + Vector((x, y, 0.0)) * 0.22 + tilt).normalized() * (h - base.z)
+            # Нахил назовні від середини: куртина розходиться віялом.
+            up = (Vector((0, 0, 1)) + Vector((x, y, 0.0)) * 0.35 + tilt).normalized() * (h - base.z)
             m.fixed([base - d * w / 2, base + d * w / 2, base + d * w / 2 + up, base - d * w / 2 + up], rect,
                     (0.85, 0.85, 1.0, 1.0), Vector((-d.y, d.x, 0.0)))
         else:
