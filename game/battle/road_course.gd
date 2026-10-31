@@ -895,7 +895,9 @@ func rasterise() -> Array[Image]:
 	# у 2 клітинки й заокруглення розвилок (CLOSE_M) значно ширші: решта там — гравійне узбіччя (вага B;
 	# бруківки на картах нема), а не плита асфальту.
 	for k in n:
-		var half: float = minf(hk[k], CARRIAGE_HALF_M)
+		# Одна смуга (півширина ≤ проїзної частини): обрізання лише за її власним краєм із запасом на м'який край,
+		# тож узбіччя є тільки в заокругленнях розвилок, а не облямівкою вздовж дороги.
+		var half: float = CARRIAGE_HALF_M if hk[k] > CARRIAGE_HALF_M else hk[k] + 0.3
 		var cut: float = smoothstep(half, half + 0.4, absf(v[k]))
 		if cut > 0.0 and tw[k].x > 0.0:
 			tw[k] = Vector3(tw[k].x * (1.0 - cut), tw[k].y, tw[k].z + tw[k].x * cut)

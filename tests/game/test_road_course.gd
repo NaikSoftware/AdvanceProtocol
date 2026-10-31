@@ -549,3 +549,38 @@ func test_dirt_branch_starts_at_the_asphalt_edge() -> void:
 				assert_lte(reach, 3.2, "%s: лінія %d, асфальт заходить у відгалуження на %.1f м від вузла" % [path, li, reach])
 		assert_gt(checked, 0, "%s: жодного відгалуження ґрунтівки від асфальтового вузла" % path)
 
+
+
+## Вага B (гравійне узбіччя) є лише там, де проїзна частина вужча за смугу: на вулиці в 2 клітинки; уздовж
+## однієї смуги (півширина < 2.65 м, поза розвилками) її нема навіть у м'якому краї (d до 0.15 м), а на
+## площі — і поготів.
+func test_shoulder_weight_only_on_streets_not_on_single_lane_or_plazas() -> void:
+	var street_px := 0
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		var imgs: Array[Image] = rc.rasterise()
+		var leaks := 0
+		for j in imgs[0].get_height():
+			for i in imgs[0].get_width():
+				var f: Color = imgs[0].get_pixel(i, j)
+				var t: Color = imgs[1].get_pixel(i, j)
+				var half: float = absf(f.g) - f.r
+				if t.a < 0.05 and f.r < 0.15 and half < 2.65 and t.b > 0.02:
+					leaks += 1
+				if t.a < 0.05 and f.r < -0.2 and half > 3.5 and absf(f.g) > 3.0 and absf(f.g) < 4.0 and t.b > 0.5:
+					street_px += 1
+		assert_eq(leaks, 0, "%s: гравійне узбіччя на одній смузі" % path)
+	assert_gt(street_px, 0, "на вулиці в 2 клітинки немає гравійного узбіччя")
+	# Площа 3×3: усередині жодного узбіччя, лише асфальт.
+	var plaza := _rect(3, 3, 5, 5)
+	var rc := RoadCourse.build(_synthetic(9, 9, plaza), PackedByteArray(), 2, 7)
+	assert_not_null(rc)
+	if rc == null:
+		return
+	var imgs: Array[Image] = rc.rasterise()
+	for j in imgs[0].get_height():
+		for i in imgs[0].get_width():
+			if imgs[0].get_pixel(i, j).r < -2.0:
+				assert_lt(imgs[1].get_pixel(i, j).b, 0.01, "узбіччя всередині площі (%d, %d)" % [i, j])

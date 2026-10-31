@@ -66,8 +66,8 @@ uniform int layer_aligned[16];
 // Метрів на повтор макро шару (CC0-скани мають власний фізичний розмір: 20 м, 25 м тощо).
 uniform float macro_m[16];
 // Дорога (RoadCourse.rasterise): R — знакова відстань до краю (м), G — бокове v (м),
-// B — (u mod 64) / 16, A — floor(u / 64); типи: асфальт, ґрунтівка, бруківка,
-// A — близькість розвилки.
+// B — (u mod 64) / 16, A — floor(u / 64); типи: асфальт, ґрунтівка, гравійне узбіччя
+// (вага B; бруківки нема), A — близькість розвилки.
 uniform bool has_roads = false;
 uniform sampler2D road_field : filter_nearest, repeat_disable;
 uniform sampler2D road_type : filter_linear, repeat_disable;
