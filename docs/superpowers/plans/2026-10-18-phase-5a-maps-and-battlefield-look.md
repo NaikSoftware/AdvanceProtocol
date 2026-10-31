@@ -467,6 +467,7 @@ the current player can see; scars respect the viewer's `seen`. Reference brief:
 - [x] Fields nearly level on the board and in the ring (≤0.25 m within a cell)
 - [x] Every building on a levelled pad cut into the slope, none sunk to the windows or on a plinth
 - [x] Fences and garden beds follow the ground (section midpoint within 5 cm)
+- [ ] Where asphalt ends, it ends like real asphalt (broken edge, gravel or packed track beyond), not a blur
 
 ### Task 17: House models and roofs
 
