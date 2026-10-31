@@ -16,24 +16,31 @@ extends Node3D
 
 const LIB: String = "res://assets/props/vegetation/%s_veg_%s.glb"
 const REEDS: Array[StringName] = [&"bank_reed_01", &"bank_reed_02", &"bank_reed_03"]
-const CATTAILS: Array[StringName] = [&"bank_cattail_01", &"bank_cattail_02"]
+const CATTAILS: Array[StringName] = [&"bank_cattail_01", &"bank_cattail_02", &"bank_cattail_03"]
 const BUSHES: Array[StringName] = [
 	&"bank_bush_willow_01", &"bank_bush_willow_02", &"bank_bush_willow_03",
 	&"bank_bush_alder_01", &"bank_bush_alder_02", &"bank_bush_alder_03",
 ]
-const MEADOW_BUSHES: Array[StringName] = [&"meadow_hawthorn_01", &"meadow_hawthorn_02", &"meadow_dogrose_01"]
+const MEADOW_BUSHES: Array[StringName] = [
+	&"meadow_hawthorn_01", &"meadow_hawthorn_02", &"meadow_hawthorn_03",
+	&"meadow_dogrose_01", &"meadow_dogrose_02", &"meadow_dogrose_03",
+]
 const MEADOW_TREES: Array[StringName] = [&"meadow_pear_01", &"meadow_pear_02", &"meadow_pear_03",
 	&"meadow_oak_01", &"meadow_oak_02", &"meadow_oak_03"]
 const WET_TREES: Array[StringName] = [&"meadow_willow_01", &"meadow_willow_02", &"meadow_willow_03"]
 const YARD_TREES: Array[StringName] = [&"yard_apple_01", &"yard_apple_02", &"yard_apple_03",
 	&"yard_cherry_01", &"yard_cherry_02", &"yard_cherry_03"]
-const YARD_SMALL: Array[StringName] = [&"yard_lilac_01", &"yard_elder_01", &"yard_berry_row_01", &"yard_thuja_01"]
+const YARD_SMALL: Array[StringName] = [
+	&"yard_lilac_01", &"yard_lilac_02", &"yard_lilac_03", &"yard_elder_01", &"yard_elder_02", &"yard_elder_03",
+	&"yard_berry_row_01", &"yard_berry_row_02", &"yard_berry_row_03",
+	&"yard_thuja_01", &"yard_thuja_02", &"yard_thuja_03",
+]
 ## Радіус крони (тайли, з запасом) за префіксом вузла: для правила «крона не на будівлі» й розчинення.
 const CROWN: Dictionary = {
 	&"bank_reed": 0.18, &"bank_cattail": 0.15, &"bank_bush": 0.22,
-	&"meadow_hawthorn": 0.2, &"meadow_dogrose": 0.18, &"meadow_pear": 0.45, &"meadow_oak": 0.45,
-	&"meadow_willow": 0.45, &"yard_apple": 0.32, &"yard_cherry": 0.28, &"yard_walnut": 0.6,
-	&"yard_lilac": 0.18, &"yard_elder": 0.22, &"yard_berry_row": 0.26, &"yard_thuja": 0.12,
+	&"meadow_hawthorn": 0.2, &"meadow_dogrose": 0.26, &"meadow_pear": 0.45, &"meadow_oak": 0.55,
+	&"meadow_willow": 0.45, &"yard_apple": 0.34, &"yard_cherry": 0.28, &"yard_walnut": 0.66,
+	&"yard_lilac": 0.24, &"yard_elder": 0.26, &"yard_berry_row": 0.32, &"yard_thuja": 0.12,
 }
 
 ## Масштаб екземпляра за префіксом вузла: дуб і верба на луках — 10–15 м, яблуня й вишня у дворі — 5–6 м.
@@ -53,6 +60,9 @@ const NO_BRIDGE: int = 2
 const NO_ROAD: int = 1
 ## Мілина для очерету: ґрунт нижче рівня води на 0…SHALLOW тайла (0–1 м).
 const SHALLOW: float = 0.12
+## Основа куртини — не глибше REED_DIP під поверхнею води (16 см), хоч дно й глибше: вода майже непрозора, і
+## з основою на дні під нею ховається весь темний мокрий низ снопа — над водою лишаються самі волоті.
+const REED_DIP: float = 0.02
 ## Кущ і дерево — на сухому: ґрунт вище води щонайменше на DRY; схил не крутіший за STEEP (y нормалі).
 const DRY: float = 0.02
 const STEEP: float = 0.85
@@ -88,6 +98,9 @@ const HOME_CLEAR: int = 1
 const ROAD_PAD: float = 0.5
 ## Стовбур — не ближче FENCE_CLEAR до паркана й інших дрібних пропсів.
 const FENCE_CLEAR: float = 0.08
+## Під дротом ЛЕП крона не стоїть ближче за WIRE_PAD від прольоту (розкид масштабу 1,1 × радіус), а стовбур — ближче за POLE_CLEAR від опори.
+const WIRE_PAD: float = 0.15
+const POLE_CLEAR: float = 0.3
 ## Двори: рослини (1–2) — у YARD_SHARE садиб карти, де вони влазять.
 const YARD_SHARE: float = 0.68
 ## Кущ росте попід стіною: досить YARD_BUSH_WALL радіуса крони від даху (дерево — повний радіус).
@@ -167,6 +180,11 @@ static func obstacles(props: PropLayer) -> Dictionary:
 	return {"roofs": roofs, "small": small, "poles": poles, "wires": props.wire_lines()}
 
 
+## Мінімальна відстань стовбура до осі ЛЕП: крона з розкидом масштабу й запасом, не менше POLE_CLEAR.
+static func power_clear(crown: float) -> float:
+	return maxf(crown * 1.1 + WIRE_PAD, POLE_CLEAR)
+
+
 ## Відстань від точки до найближчої опори чи дроту ЛЕП: крона не росте під ними.
 static func _power_dist(obst: Dictionary, p: Vector2) -> float:
 	var d: float = INF
@@ -212,7 +230,7 @@ static func _free(board: Board, height: TerrainHeight, props: PropLayer, obst: D
 		if _rect_dist(r, p) < FENCE_CLEAR:
 			_bump(stats, "fence")
 			return false
-	if _power_dist(obst, p) < maxf(crown, FENCE_CLEAR):
+	if _power_dist(obst, p) < power_clear(crown):
 		_bump(stats, "power_line")
 		return false
 	return true
@@ -316,7 +334,7 @@ static func _plan_banks(board: Board, height: TerrainHeight, fields: Array[Rect2
 							continue
 						if _land_dist(board, p) < LAND_CLEAR:
 							continue
-						cand.append(Vector3(p.x, g, p.y))
+						cand.append(Vector3(p.x, maxf(g, TerrainHeight.WATER_LEVEL - REED_DIP), p.y))
 				_shuffle(cand, rng)
 				var want: int = rng.randi_range(8, 14)
 				var taken: Array[Vector3] = []
@@ -446,7 +464,7 @@ static func _plan_pond(board: Board, height: TerrainHeight, map_seed: int, pond:
 				# Місце точки вздовж урізу — за її кутом, між сусідніми променями.
 				var t: float = fposmod((p - centre).angle(), TAU) / TAU * POND_RAYS
 				var k: int = mini(floori(t), POND_RAYS - 1)
-				shore.append([Vector3(p.x, g, p.y), c, lerpf(along[k], along[k + 1], t - k)])
+				shore.append([Vector3(p.x, maxf(g, TerrainHeight.WATER_LEVEL - REED_DIP), p.y), c, lerpf(along[k], along[k + 1], t - k)])
 	if shore.is_empty():
 		return
 	# Пляма — відрізок урізу навколо придатної точки; уріз поділено на рівні частини, по плямі в
@@ -590,7 +608,7 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 				for e: Array in spots:
 					var q: Vector2 = e[0]
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
-							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= crown_of(node):
+							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)):
 						choice = [node, e]
 						break
 				if not choice.is_empty():

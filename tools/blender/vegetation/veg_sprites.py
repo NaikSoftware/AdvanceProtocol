@@ -76,7 +76,7 @@ K = {
                   fruit={"summer": (0.08, 0.025, [(0.55, 0.10, 0.10), (0.12, 0.06, 0.08)])}),
     "thuja": dict(seg=0.45, depth=6, kids=(3, 3), spread=30, droop=0.0, leaf=0.07, shape="scale", per_node=8,
                   twig_r=0.008, bark=(0.30, 0.22, 0.17), sm=1.8,
-                  leaves={"summer": (1.0, G_DARK, None), "early": (1.0, G_DARK, None), "late": (1.0, [(0.32, 0.25, 0.12), (0.36, 0.28, 0.13), (0.28, 0.22, 0.11)], (0.25, G_DARK))}),
+                  leaves={"summer": (1.0, G_DARK, None), "early": (1.0, G_DARK, None), "late": (1.0, [(0.17, 0.21, 0.11), (0.20, 0.24, 0.12), (0.15, 0.19, 0.10)], (0.25, G_DARK))}),
     "hawthorn": dict(seg=0.45, depth=6, kids=(2, 3), spread=55, droop=0.0, leaf=0.05, shape="ovate", per_node=7,
                      twig_r=0.010, bark=(0.30, 0.27, 0.24), sm=2.0,
                      leaves={"summer": (1.0, G_DARK, (0.3, G)), "early": (0.85, EARLY, (0.3, G_DARK)), "late": (0.05, BROWN, None)},
@@ -101,26 +101,33 @@ K = {
 # Снопи: висота (м), стебел, ширина кадру (м), колір стебел і листків, волоть / качан.
 REED = {
     # Літо й рання осінь — сіро-оливкові стебла з рудуватою волоттю, яскравістю як трава поруч.
-    "reed": dict(h=(1.5, 3.0), n=34, w=1.25, leaf_w=0.03, leaf_l=(0.15, 0.3), leaves_per=2,
+    # Пізня осінь — солом'яно-буре сухе листя й стебла (не темніші за суху траву берега) і
+    # сріблясто-бежева пухнаста волоть.
+    "reed": dict(h=(1.5, 3.0), n=60, w=1.25, leaf_w=0.035, leaf_l=(0.25, 0.45), leaves_per=4,
                  stem={"summer": [(0.52, 0.52, 0.36), (0.47, 0.48, 0.33)], "early": [(0.53, 0.50, 0.32), (0.48, 0.47, 0.30)],
-                       "late": [(0.31, 0.26, 0.17), (0.28, 0.23, 0.15), (0.32, 0.28, 0.19)]},
+                       "late": [(0.37, 0.31, 0.21), (0.33, 0.28, 0.19), (0.39, 0.34, 0.24)]},
                  leaf={"summer": [(0.49, 0.51, 0.34), (0.55, 0.55, 0.36), (0.44, 0.47, 0.31)],
                        "early": [(0.50, 0.49, 0.30), (0.55, 0.53, 0.32), (0.46, 0.46, 0.28)],
-                       "late": [(0.30, 0.25, 0.18), (0.25, 0.21, 0.16), (0.31, 0.27, 0.21), (0.21, 0.19, 0.17)]},
-                 # Волоть очерету: 20–40 см, пізнього літа бурo-фіолетова, восени пухнаста сіро-біла.
-                 head="plume", head_l=(0.25, 0.35),
+                       "late": [(0.37, 0.31, 0.22), (0.31, 0.27, 0.20), (0.41, 0.35, 0.25), (0.27, 0.24, 0.20)]},
+                 # Волоть очерету: 25–40 см, пізнього літа буро-фіолетова, восени пухнаста сіро-біла.
+                 head="plume", head_l=(0.25, 0.4),
                  head_c={"summer": [(0.60, 0.42, 0.28), (0.56, 0.39, 0.27)], "early": [(0.60, 0.44, 0.30), (0.56, 0.41, 0.28)],
-                         "late": [(0.40, 0.37, 0.33), (0.36, 0.33, 0.29)]}),
-    "cattail": dict(h=(1.2, 2.0), n=32, w=1.1, leaf_w=0.024, leaf_l=(0.9, 1.6), leaves_per=0,
+                         "late": [(0.50, 0.47, 0.42), (0.45, 0.42, 0.37)]}),
+    # Рогіз — передусім довге дугасте листя від землі; качан лише на частині стебел (head_p).
+    "cattail": dict(h=(1.2, 2.0), n=40, w=1.1, leaf_w=0.03, leaf_l=(0.9, 1.6), leaves_per=0,
                     stem={"summer": [(0.49, 0.51, 0.34)], "early": [(0.50, 0.49, 0.30)], "late": [(0.45, 0.38, 0.25)]},
                     leaf={"summer": [(0.49, 0.51, 0.34), (0.55, 0.55, 0.36), (0.44, 0.47, 0.31)],
                           "early": [(0.50, 0.49, 0.30), (0.55, 0.53, 0.32), (0.46, 0.46, 0.28)],
-                          "late": [(0.33, 0.27, 0.17), (0.29, 0.23, 0.16), (0.36, 0.30, 0.20), (0.25, 0.22, 0.16)]},
-                    # Качан рогозу: 18–22 см завдовжки, бурий (не чорний); намальований 12 см завтовшки замість
-                    # справжніх 2,5: тонший на найближчому зумі менший за піксель.
-                    head="spike", head_l=(0.18, 0.22),
+                          "late": [(0.37, 0.30, 0.19), (0.32, 0.26, 0.18), (0.40, 0.33, 0.22), (0.28, 0.24, 0.18)]},
+                    # Качан рогозу: 18–22 см завдовжки, бурий (не чорний), веретеном; намальований 7 см
+                    # завтовшки замість справжніх 2,5: тонший на найближчому зумі менший за піксель, а
+                    # товщий читається цеглиною.
+                    head="spike", head_l=(0.18, 0.22), head_p=0.45,
                     head_c={"summer": [(0.45, 0.30, 0.18)], "early": [(0.45, 0.30, 0.18)], "late": [(0.36, 0.26, 0.17)]}),
 }
+# Рендер снопа в SHEAF_SS разів більший за клітинку атласу; атлас зменшує його (Lanczos), і край
+# тонкого стебла виходить м'якою альфою, а не сходинками.
+SHEAF_SS = 4
 
 _mats = {}
 
@@ -283,49 +290,53 @@ def build_sheaf(seed):
     for _ in range(R["n"]):
         x = rng.choice(groups) + rng.gauss(0, R["w"] * 0.035)
         y = rng.uniform(-0.25, 0.25)
-        h = rng.uniform(*R["h"])
-        lean = Vector((rng.gauss(0, 0.06) + x * 0.08, rng.gauss(0, 0.05), 1.0)).normalized()
+        # Куполом: до краю снопа стебла нижчі, і висота кожного рвана — верх не рівна лінія.
+        dome = 1.0 - 0.45 * min((x / (R["w"] * 0.5)) ** 2, 1.0)
+        h = R["h"][1] * dome * rng.uniform(0.55, 1.0)
+        lean = Vector((rng.gauss(0, 0.09) + x * 0.12, rng.gauss(0, 0.05), 1.0)).normalized()
         base = Vector((x, y, -0.05))
         top = base + lean * h
         sc = rng.choice(R["stem"][SEASON])
-        # Стебло: чотиригранна трубка, намальована 2–3 см замість справжніх 7–9 мм — тонше на
-        # найближчому зумі менше за піксель, і сніп читається листяною грудкою без вертикалей.
-        bmesh.ops.create_cone(bm, cap_ends=False, segments=4, radius1=0.014, radius2=0.009, depth=h,
+        # Стебло: чотиригранна трубка, звужена до вістря; намальована 2–3 см замість справжніх
+        # 7–9 мм — тонше на найближчому зумі менше за піксель.
+        bmesh.ops.create_cone(bm, cap_ends=False, segments=4, radius1=0.014, radius2=0.004, depth=h,
                               matrix=Matrix.Translation((base + top) / 2) @ lean.to_track_quat("Z", "Y").to_matrix().to_4x4())
         fc.extend([sc] * (len(bm.faces) - len(fc)))
         if R["leaves_per"]:
-            # Очерет: листки по стеблу, відходять убік і звисають кінцями.
+            # Очерет: сухі листки відходять від стебла під 35–70° і звисають кінцями — косі риски
+            # ламають ряд вертикалей.
             for k in range(R["leaves_per"]):
-                t = 0.15 + 0.7 * (k + rng.random() * 0.5) / R["leaves_per"]
+                t = 0.1 + 0.75 * (k + rng.random() * 0.5) / R["leaves_per"]
                 a = rng.uniform(0, 2 * math.pi)
-                d = Vector((math.cos(a), math.sin(a) * 0.5, rng.uniform(1.2, 3.7))).normalized()  # 15–40° від стебла
-                blade(bm, base + lean * h * t, d, rng.uniform(*R["leaf_l"]), R["leaf_w"], rng.uniform(0.04, 0.12), fc,
+                d = Vector((math.cos(a), math.sin(a) * 0.5, rng.uniform(0.4, 1.4))).normalized()
+                blade(bm, base + lean * h * t, d, rng.uniform(*R["leaf_l"]), R["leaf_w"], rng.uniform(0.08, 0.25), fc,
                       rng.choice(R["leaf"][SEASON]))
         else:
-            # Рогіз: листки від землі, прямі й довгі, вигинаються до кінця.
-            for k in range(1):
+            # Рогіз: два листки від землі, довгі, дугою назовні.
+            for k in range(2):
                 a = rng.uniform(0, 2 * math.pi)
-                d = Vector((math.cos(a) * 0.3, math.sin(a) * 0.15, 1.0)).normalized()
-                blade(bm, base + Vector((rng.gauss(0, 0.04), 0, 0)), d, rng.uniform(0.5, 0.75) * h, R["leaf_w"],
-                      rng.uniform(0.0, 0.05), fc, rng.choice(R["leaf"][SEASON]))
+                d = Vector((math.cos(a) * 0.45, math.sin(a) * 0.2, 1.0)).normalized()
+                blade(bm, base + Vector((rng.gauss(0, 0.04), 0, 0)), d, rng.uniform(0.5, 0.9) * h, R["leaf_w"],
+                      rng.uniform(0.02, 0.09), fc, rng.choice(R["leaf"][SEASON]))
         hl = rng.uniform(*R["head_l"])
         hc = rng.choice(R["head_c"][SEASON])
         if R["head"] == "plume":
             if rng.random() < 0.85:
-                # Волоть: віяло тонких гілочок, що звисають на один бік.
+                # Волоть: віяло тонких гілочок, що схиляються на один бік.
                 side = rng.choice((-1, 1))
-                # Волоть — суцільне віяло 25–35 см, густіше й ширше за справжнє: на найближчому зумі
+                # Волоть — суцільне віяло 25–40 см, густіше й ширше за справжнє: на найближчому зумі
                 # вона має читатися рискою 3–4 px.
-                for k in range(20):
-                    d = Vector((side * rng.uniform(0.1, 0.6), rng.gauss(0, 0.2), rng.uniform(0.2, 1.0))).normalized()
+                for k in range(24):
+                    d = Vector((side * rng.uniform(0.15, 0.8), rng.gauss(0, 0.25), rng.uniform(0.15, 1.0))).normalized()
                     blade(bm, top - lean * hl * rng.uniform(0.0, 0.7), d, hl * rng.uniform(0.5, 0.9),
-                          0.06 if SEASON == "late" else 0.05, rng.uniform(0.05, 0.15), fc, hc)
-        else:
-            if rng.random() < 0.95:
-                c0 = top - lean * (0.12 + hl / 2)
-                bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=0.06, radius2=0.055, depth=hl,
-                                      matrix=Matrix.Translation(c0) @ lean.to_track_quat("Z", "Y").to_matrix().to_4x4())
-                fc.extend([hc] * (len(bm.faces) - len(fc)))
+                          0.06 if SEASON == "late" else 0.05, rng.uniform(0.08, 0.2), fc, hc)
+        elif rng.random() < R["head_p"]:
+            # Веретено зі звуженими кінцями, а не циліндр із пласкими торцями.
+            c0 = top - lean * (0.12 + hl / 2)
+            for z0, r0, r1 in ((-hl / 4, 0.022, 0.035), (hl / 4, 0.035, 0.018)):
+                bmesh.ops.create_cone(bm, cap_ends=True, segments=6, radius1=r0, radius2=r1, depth=hl / 2,
+                                      matrix=Matrix.Translation(c0 + lean * z0) @ lean.to_track_quat("Z", "Y").to_matrix().to_4x4())
+            fc.extend([hc] * (len(bm.faces) - len(fc)))
     add_obj("sheaf", bm, fc)
     return R["n"]
 
@@ -336,9 +347,11 @@ def render():
     os.makedirs(out, exist_ok=True)
     if KIND in REED:
         R = REED[KIND]
-        h = R["h"][1] + 0.1
+        # Волоть стирчить над стеблом, тож кадр очерету вищий на її довжину, щоб межа кадру не зрізала
+        # її прямою. Качан рогозу сидить нижче вістря — йому запас не потрібен.
+        h = R["h"][1] + (R["head_l"][1] if R["head"] == "plume" else 0.0) + 0.1
         # Вертикальний кадр 1:2; низ кадру — земля (z = −0.05 за кадром).
-        sc.render.resolution_x, sc.render.resolution_y = 128, 256
+        sc.render.resolution_x, sc.render.resolution_y = 128 * SHEAF_SS, 256 * SHEAF_SS
         cam.data.ortho_scale = h
         for i in range(N):
             n = build_sheaf(SEED * 100 + i)

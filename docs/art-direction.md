@@ -123,9 +123,10 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
 - **Wet maps wet the props too:** on River walls darken and roofs take on a wet sheen, or the
   buildings look dry in the rain.
 - **Placed as a real village would be.** The layout of each map is authored, not scattered cell
-  by cell: power lines run along roads across the board and on through the ring to its outer
-  edge, so no line visibly starts or ends; a pole stands on every bend and one transformer feeds each
-  settlement. Every settlement keeps a 0.4 kV line on the verge of its main street, running from
+  by cell: power lines run beside the roads across the board and on through the ring to its outer
+  edge, so no line visibly starts or ends. Lines are straight runs on the map axes that turn only at
+  right angles, with a pole at every corner; they never follow the curve of a road. Only a drop to a
+  house may run at another angle. One transformer feeds each settlement. Every settlement keeps a 0.4 kV line on the verge of its main street, running from
   the transformer to the last pole in front of a house. A house gets a drop under its eaves only
   where a street pole reaches it with a short straight span (≤ 16 m) that keeps off gardens and a
   neighbour's yard; a drop may cross the street only square to it (within 25°) and no longer than
@@ -172,6 +173,10 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
 - **Scars respect the fog:** crushed props, wrecks and their scorch show only where the viewer's
   `seen` covers the tile, or they report enemy movement. A prop is crushed only on a cell the
   viewer has seen.
+- **Roads are asphalt or dirt, never cobble.** A town street is clearly narrower than the houses
+  beside it: about 5 m of asphalt, with gravel or dirt verges filling the rest of a two-cell band.
+  A dirt road that branches off an asphalt one is dirt from the asphalt's edge: no asphalt tongue
+  runs into the branch, and the asphalt keeps its edge through the junction.
 - **Footpaths are wear, not a laid strip.** From each house door through the gate to the road, plus
   trodden patches at gates and sheds and one or two meandering tracks from a road to the water.
   `Footpaths` bakes one RG8 mask per board (64 px per tile; R is path wear, G a trodden patch);

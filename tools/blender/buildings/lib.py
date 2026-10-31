@@ -655,7 +655,9 @@ def mats():
         "step": make_material("step", "Concrete034", 1.0, (0.50, 0.49, 0.46), streak=0.4, base_dirt=0.5),
         "gutter": make_material("gutter", flat=(0.30, 0.31, 0.31)),
         "rebar": make_material("rebar", flat=(0.11, 0.06, 0.04)),
-        "soot": make_material("soot", flat=(0.045, 0.04, 0.036)),
+        # отвір димаря: закопчений сірий, не чорна діра — чорне з камери гри різко рветься від цегли навколо
+        "soot": make_material("soot", flat=(0.29, 0.275, 0.26)),
+        "flue": make_material("flue", flat=(0.33, 0.31, 0.29)),
         "clad_vc": make_material("clad_vc", "CorrugatedSteel005", 1.0, (0.46, 0.40, 0.34), seams=[("zv", 0.5, 0.04, 0.3)], corr=("h", 0.2, 0.008), streak=1.0, base_dirt=0.5, patch=((0.18, 0.09, 0.05), 0.25), vmul=True),
         "boards_ruin": make_material("boards_ruin", "Planks021", 1.0, (0.30, 0.27, 0.24), sat=0.35, seams=[("h", 0.2, 0.02, 0.8)], streak=1.0, base_dirt=0.5, bump=0.02),
         "panel_in": make_material("panel_in", flat=(0.30, 0.29, 0.27)),
@@ -996,7 +998,7 @@ class Builder:
         elif kind == "steel":
             self.cyl(cx, cy, z0, 0.11, h, 10, "galv", cap=False)
             zt = z0 + h
-            self.box(cx, cy, zt - 0.02, 0.17, 0.17, 0.02, "dark")            # темний отвір труби під ковпаком
+            self.box(cx, cy, zt - 0.02, 0.17, 0.17, 0.02, "flue")            # закіптявлений отвір труби під ковпаком
             for k in range(3):
                 a_ = 2 * math.pi * k / 3
                 self.box(cx + 0.1 * math.cos(a_), cy + 0.1 * math.sin(a_), zt, 0.025, 0.025, 0.14, "galv")
@@ -1017,7 +1019,7 @@ class Builder:
         for bx, by, sx, sy in ((cx, cy - ko, so, e), (cx, cy + ko, so, e), (cx - ko, cy, e, so - 2 * e), (cx + ko, cy, e, so - 2 * e)):
             self.box(bx, by, zt, sx, sy, rim, cap, top=cap)
         zf, w = zt - depth, 0.03
-        self.box(cx, cy, zf, hi, hi, 0.02, "dark")      # дно шахти
+        self.box(cx, cy, zf, hi, hi, 0.02, "flue")      # дно шахти
         for bx, by, sx, sy in ((cx, cy - (hi - w) / 2, hi, w), (cx, cy + (hi - w) / 2, hi, w),
                                (cx - (hi - w) / 2, cy, w, hi - 2 * w), (cx + (hi - w) / 2, cy, w, hi - 2 * w)):
             self.box(bx, by, zf, sx, sy, depth + rim - 0.015, "soot")   # кіптява на стінках каналу

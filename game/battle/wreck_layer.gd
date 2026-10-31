@@ -41,16 +41,15 @@ const WARM_UP_SEC: float = 0.1
 ## тож цей дим нічого не видає і горить завжди.
 const HEARTH_MAX: int = 5
 ## Густота шлейфу (0–1): ледь помітний, але на телефоні читається — шлейф у середньому світліший за
-## ґрунт на 15–25 рівнів (Річка 16, Перехрестя 20 на зумі 8; найяскравіша десята частина — 36–39). Руїна тліє густіше й нижче, ширшою смугою: її шлейф розлягається з вітром
-## і рідшає, тож без запасу густоти на зумі 14 зникає.
+## ґрунт на 15–25 рівнів (Річка 16, Перехрестя 20 на зумі 8; найяскравіша десята частина — 36–39). Руїна тліє слабше за димар: тонка низька цівка просто з уламків, вужча в основі за димар.
 const CHIMNEY_DENSITY: float = 0.36
-const RUIN_DENSITY: float = 0.65
-## Димар: 14 м заввишки, від 0,8 м біля труби до клітинки вгорі; руїна — 0,75 висоти, вдвічі ширша внизу.
+const RUIN_DENSITY: float = 0.3
+## Димар: 14 м заввишки, від 0,8 м біля труби до клітинки вгорі; руїна — 0,55 висоти, вужча внизу за димар.
 const HEARTH_HEIGHT: float = 14.0 / 8.0
 const HEARTH_BASE_W: float = 0.8 / 8.0
 const HEARTH_TOP_W: float = 1.0
-const RUIN_HEIGHT_SCALE: float = 0.75
-const RUIN_BASE_SCALE: float = 2.0
+const RUIN_HEIGHT_SCALE: float = 0.55
+const RUIN_BASE_SCALE: float = 0.8
 ## Дим здіймається 0,8 м/с: з цією швидкістю пливе вгору шум густоти.
 const HEARTH_RISE: float = 0.8 / 8.0
 ## Вертикальних сегментів смуги: шлейф гнеться плавно.
@@ -320,17 +319,17 @@ func set_wind(wind: Vector3) -> void:
 	_hearth_mat.set_shader_parameter("lean", wind * SMOKE_LEAN_PER_WIND)
 
 
-## Мирний дим: з `chimneys` (верхи димарів) — 1–3, з `ruins` (точки в проломах руїн на рівні
-## даху, `PropLayer.ruin_smoke_points`) — 1–2, вибрані за `seed` мапи, тож у кожного гравця й у
-## кожному бою на цій мапі ті самі.
-func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int) -> void:
+## Мирний дим: з `chimneys` (верхи димарів) — 1–3, з `ruins` (центри руїн) — 1–2, вибрані за `seed`
+## мапи, тож у кожного гравця й у кожному бою на цій мапі ті самі. `locate` (якщо задано) переводить
+## обраний центр руїни в точку на її уламках (`PropLayer.ruin_smoke_point_at`): важка вибірка лише для обраних.
+func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int, locate: Callable = Callable()) -> void:
 	_hearth_points.clear()
 	_hearth_densities.clear()
 	_hearth_shapes.clear()
 	for ruin: bool in [false, true]:
 		var pts: Array[Vector3] = _pick(ruins, 1 + (absi(seed) / 3) % 2, seed) if ruin else _pick(chimneys, 1 + absi(seed) % 3, seed)
 		for p: Vector3 in pts:
-			_hearth_points.append(p)
+			_hearth_points.append(locate.call(p) if ruin and locate.is_valid() else p)
 			_hearth_densities.append(hearth_density(ruin))
 			_hearth_shapes.append(hearth_shape(ruin))
 	assert(_hearth_points.size() <= HEARTH_MAX, "3 димарі + 2 руїни — більше шлейфів не буває")
@@ -345,7 +344,7 @@ func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int) -> 
 	_refresh_effects()
 
 
-## Густота шлейфу для шейдера (0–1): руїна тліє трохи густіше за димар.
+## Густота шлейфу для шейдера (0–1): руїна тліє слабше за димар.
 static func hearth_density(ruin: bool) -> float:
 	return RUIN_DENSITY if ruin else CHIMNEY_DENSITY
 
