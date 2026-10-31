@@ -56,6 +56,8 @@ const ANCHOR_SIGMA: float = 0.7
 ## Півдовжина відрізка осі на окремій клітинці дороги (клітинки).
 const STUB: float = 0.35
 const CLOSE_M: float = 7.0
+## Півширина проїзної частини асфальту, м: далі від осі — узбіччя (на вулиці в 2 клітинки й у закругленнях розвилок).
+const CARRIAGE_HALF_M: float = 2.7
 const BEND_CLOSE_M: float = 2.0
 ## Радіус заокруглення опуклих кутів площі, м.
 const PLAZA_R: float = 4.0
@@ -630,6 +632,12 @@ func _widths(li: int, n_w: FastNoiseLite, n_w2: FastNoiseLite) -> void:
 		for q in _bend_nodes:
 			if pts[i].distance_to(q) < 0.75 and pts[i].distance_to(q) > 1e-4:
 				t = _type_near(q + (pts[i] - q).normalized())
+		# Відгалуження від розвилки: далі за краєм проїзної частини головної дороги (0.3 клітинки від вузла)
+		# воно має тип своєї клітинки, а не вузла — без асфальтового язика в ґрунтівці.
+		for q in nodes:
+			var dq: float = pts[i].distance_to(q)
+			if dq >= 0.3 and dq < 0.75 and not _bend_nodes.has(q):
+				t = _type_near(q + (pts[i] - q).normalized())
 		tw.append(Vector3(1.0 if t == 0 else 0.0, 1.0 if t == 1 else 0.0, 1.0 if t == 2 else 0.0))
 	var street: PackedByteArray = _street_flags(pts)
 	var base := PackedFloat32Array()
@@ -880,6 +888,12 @@ func rasterise() -> Array[Image]:
 							jw[k] = maxf(jw[k], smoothstep(-2.0, 0.5, past))
 			s0 += seg_len
 	_close_junctions(d, jw, rw, rh, org)
+	# Асфальт — лише проїзна частина (~5.4 м від осі найближчої лінії). Смуга шириною у 2 клітинки й
+	# заокруглення розвилок (CLOSE_M) значно ширші: решта там — укатане узбіччя ґрунтівки, а не плита асфальту.
+	for k in n:
+		var cut: float = smoothstep(CARRIAGE_HALF_M, CARRIAGE_HALF_M + 0.4, absf(v[k]))
+		if cut > 0.0 and tw[k].x > 0.0:
+			tw[k] = Vector3(tw[k].x * (1.0 - cut), tw[k].y + tw[k].x * cut, tw[k].z)
 	_plazas(d, tw, jw, rw, rh, org)
 	var fimg := Image.create_empty(rw, rh, false, Image.FORMAT_RGBAH)
 	var timg := Image.create_empty(rw, rh, false, Image.FORMAT_RGBA8)

@@ -489,3 +489,60 @@ func test_asphalt_weight_drops_within_a_fraction_of_a_tile_at_a_join_to_dirt() -
 	assert_gt(first_dirt, 0.0, "далі — ґрунтівка")
 	# Перепад — один крок лінії (0.2 клітинки, від 95 % до 5 % — 0.18); 0.25 лишає запас на піксель растра (0.125).
 	assert_lte(first_dirt - last_asphalt, 0.25, "перехід довший за 0.25 клітинки")
+
+
+## Асфальт — лише проїзна частина: далі за 3.0 м від осі найближчої лінії (крім площ) лежить ґрунтівка-
+## узбіччя. Інакше заокруглення розвилок і смуги шириною у 2 клітинки малювались асфальтом на 7–15 м.
+func test_asphalt_stays_within_the_carriageway_of_the_nearest_axis() -> void:
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		var imgs: Array[Image] = rc.rasterise()
+		var worst: float = 0.0
+		for j in imgs[0].get_height():
+			for i in imgs[0].get_width():
+				var f: Color = imgs[0].get_pixel(i, j)
+				var t: Color = imgs[1].get_pixel(i, j)
+				if f.r < 0.0 and t.r > 0.5 and t.a < 0.99:
+					worst = maxf(worst, absf(f.g))
+		assert_lte(worst, 3.0, "%s: асфальт на %.1f м від осі" % [path, worst])
+
+
+## Ґрунтівка, що відходить від асфальтової дороги, починається одразу від краю проїзної частини: вздовж
+## її осі асфальт не заходить далі за ~0.5 м від краю головної дороги (півширина до 2.7 м) — без язика.
+func test_dirt_branch_starts_at_the_asphalt_edge() -> void:
+	var checked := 0
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		var t_img: Image = rc.rasterise()[1]
+		var f_img: Image = rc.rasterise()[0]
+		for li in rc.lines.size():
+			var pts: PackedVector2Array = rc.lines[li]
+			var ty: PackedVector3Array = rc.types[li]
+			for end in [0, pts.size() - 1]:
+				var node: Vector2 = pts[end]
+				if rc.near_node(node) > 0.05:
+					continue
+				# Гілка — ґрунтівка за 1.5 клітинки від вузла.
+				var step: int = 1 if end == 0 else -1
+				var far: int = clampi(end + step * 8, 0, pts.size() - 1)
+				if ty[far].y < 0.5:
+					continue
+				checked += 1
+				var reach: float = 0.0
+				var i: int = end
+				while i != far:
+					var a: Vector2 = pts[i]
+					var b: Vector2 = pts[i + step]
+					for s in 4:
+						var p: Vector2 = a.lerp(b, s / 4.0)
+						var px: int = clampi(roundi((p.x + 0.5 + rc._margin) * RoadCourse.PX - 0.5), 0, t_img.get_width() - 1)
+						var py: int = clampi(roundi((p.y + 0.5 + rc._margin) * RoadCourse.PX - 0.5), 0, t_img.get_height() - 1)
+						if t_img.get_pixel(px, py).r > 0.5 and f_img.get_pixel(px, py).r < 0.0:
+							reach = maxf(reach, p.distance_to(node) * _TILE_M)
+					i += step
+				assert_lte(reach, 3.2, "%s: лінія %d, асфальт заходить у відгалуження на %.1f м від вузла" % [path, li, reach])
+	assert_gt(checked, 0, "жодного відгалуження ґрунтівки від вузла")
