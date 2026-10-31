@@ -248,7 +248,8 @@ func test_unit_reveal_fades_plants_and_forest_together() -> void:
 	assert_true(forest_faded, "ліс над юнітом розчинений")
 
 
-## Крона не росте під дротами ЛЕП і не накриває опору (траси й опори — з PropLayer).
+## Крона (з розкидом масштабу й запасом 0,15) не росте під дротами ЛЕП, стовбур — не ближче 0,3 до опори
+## (траси й опори — з PropLayer).
 func test_no_crown_under_power_lines(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _view(p)
 	var obst: Dictionary = VegetationLayer.obstacles(view.props())
@@ -258,7 +259,7 @@ func test_no_crown_under_power_lines(p = use_parameters(MAPS)) -> void:
 		if pl["kind"] == "reed":
 			continue
 		var q := Vector2(pl["pos"].x, pl["pos"].z)
-		if VegetationLayer._power_dist(obst, q) < VegetationLayer.crown_of(pl["node"]) - 0.001:
+		if VegetationLayer._power_dist(obst, q) < maxf(VegetationLayer.crown_of(pl["node"]) * 1.1 + 0.15, 0.3) - 0.001:
 			bad.append([pl["node"], q])
 	assert_eq(bad, [], "%s: крона під ЛЕП" % p)
 

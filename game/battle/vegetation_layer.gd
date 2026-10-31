@@ -88,6 +88,9 @@ const HOME_CLEAR: int = 1
 const ROAD_PAD: float = 0.5
 ## Стовбур — не ближче FENCE_CLEAR до паркана й інших дрібних пропсів.
 const FENCE_CLEAR: float = 0.08
+## Під дротом ЛЕП крона не стоїть ближче за WIRE_PAD від прольоту (розкид масштабу 1,1 × радіус), а стовбур — ближче за POLE_CLEAR від опори.
+const WIRE_PAD: float = 0.15
+const POLE_CLEAR: float = 0.3
 ## Двори: рослини (1–2) — у YARD_SHARE садиб карти, де вони влазять.
 const YARD_SHARE: float = 0.68
 ## Кущ росте попід стіною: досить YARD_BUSH_WALL радіуса крони від даху (дерево — повний радіус).
@@ -167,6 +170,11 @@ static func obstacles(props: PropLayer) -> Dictionary:
 	return {"roofs": roofs, "small": small, "poles": poles, "wires": props.wire_lines()}
 
 
+## Мінімальна відстань стовбура до осі ЛЕП: крона з розкидом масштабу й запасом, не менше POLE_CLEAR.
+static func power_clear(crown: float) -> float:
+	return maxf(crown * 1.1 + WIRE_PAD, POLE_CLEAR)
+
+
 ## Відстань від точки до найближчої опори чи дроту ЛЕП: крона не росте під ними.
 static func _power_dist(obst: Dictionary, p: Vector2) -> float:
 	var d: float = INF
@@ -212,7 +220,7 @@ static func _free(board: Board, height: TerrainHeight, props: PropLayer, obst: D
 		if _rect_dist(r, p) < FENCE_CLEAR:
 			_bump(stats, "fence")
 			return false
-	if _power_dist(obst, p) < maxf(crown, FENCE_CLEAR):
+	if _power_dist(obst, p) < power_clear(crown):
 		_bump(stats, "power_line")
 		return false
 	return true
@@ -590,7 +598,7 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 				for e: Array in spots:
 					var q: Vector2 = e[0]
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
-							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= crown_of(node):
+							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)):
 						choice = [node, e]
 						break
 				if not choice.is_empty():
