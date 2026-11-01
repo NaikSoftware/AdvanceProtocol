@@ -550,6 +550,85 @@ func test_dirt_branch_starts_at_the_asphalt_edge() -> void:
 		assert_gt(checked, 0, "%s: жодного відгалуження ґрунтівки від асфальтового вузла" % path)
 
 
+## Асфальт обривається об ґрунтівку, що повертає в тому ж вузлі (клітинка вузла — ґрунтівка, асфальтова
+## клітинка поруч): колії гілок ґрунтівки мусять починатися одразу за краєм асфальту, а не за півтора
+## тайла порожнього ґрунту.
+func test_dirt_ruts_start_at_an_asphalt_end_that_meets_a_dirt_corner() -> void:
+	var checked := 0
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		for node in rc.nodes:
+			if rc._type_near(node) == 0 or not rc._asphalt_end_at(node):
+				continue
+			for li in rc.lines.size():
+				var pts: PackedVector2Array = rc.lines[li]
+				var ty: PackedVector3Array = rc.types[li]
+				for i in pts.size():
+					var d: float = pts[i].distance_to(node)
+					if d >= 0.6 and d <= 0.9 and ty[i].y > 0.5:
+						checked += 1
+						assert_lt(_jw_at(rc, pts[i]), 0.1, "%s: колії гасне за %.2f клітинки від вузла %s" % [path, d, node])
+	assert_gt(checked, 0, "на картах є кут ґрунтівки при кінці асфальту")
+
+
+## Кінець асфальту об поворот ґрунтівки на картах — рівно один: Перехрестя (21, 13).
+func test_the_only_asphalt_end_at_a_dirt_corner_is_crossroads_21_13() -> void:
+	var found: Array[String] = []
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		for node in rc.nodes:
+			if rc._type_near(node) != 0 and rc._asphalt_end_at(node):
+				found.append("%s %s" % [path, node])
+	assert_eq(found, ["res://maps/crossroads.tres (21.0, 13.0)"] as Array[String])
+
+
+## Колія ґрунтівки сягає торця асфальту, що обривається об її поворот: найближча точка колії (|v| ≈ 0.83 м
+## від осі з допуском на піксель растра в 1 м, вага розвилки ~0) до центру торця — не далі 0.15 клітинки (з допуском 0.01 на піксель растра).
+func test_dirt_rut_reaches_the_asphalt_end_face_at_a_dirt_corner() -> void:
+	var checked := 0
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		var imgs: Array[Image] = rc.rasterise()
+		for node in rc.nodes:
+			if rc._type_near(node) == 0 or not rc._asphalt_end_at(node):
+				continue
+			for li in rc.lines.size():
+				var pts: PackedVector2Array = rc.lines[li]
+				var ty: PackedVector3Array = rc.types[li]
+				for end in [0, pts.size() - 1]:
+					if pts[end].distance_to(node) > 0.05:
+						continue
+					# Торець — остання точка лінії, де асфальт ще є, при русі від вузла.
+					var step: int = 1 if end == 0 else -1
+					var face := Vector2.INF
+					var i: int = end
+					while i + step >= 0 and i + step < pts.size() and pts[i].distance_to(node) < 1.5:
+						if ty[i].x > 0.5:
+							face = pts[i]
+							break
+						i += step
+					if not face.is_finite():
+						continue
+					checked += 1
+					var best: float = 1e9
+					var r: int = ceili(0.5 * RoadCourse.PX)
+					var ci: int = roundi((face.x + 0.5 + rc._margin) * RoadCourse.PX - 0.5)
+					var cj: int = roundi((face.y + 0.5 + rc._margin) * RoadCourse.PX - 0.5)
+					for j in range(cj - r, cj + r + 1):
+						for ii in range(ci - r, ci + r + 1):
+							var f: Color = imgs[0].get_pixel(ii, j)
+							var t: Color = imgs[1].get_pixel(ii, j)
+							if t.g > 0.5 and t.a < 0.1 and f.r < 0.0 and absf(absf(f.g) - 0.83) < 0.5:
+								var q := Vector2((ii + 0.5) / RoadCourse.PX - 0.5 - rc._margin, (j + 0.5) / RoadCourse.PX - 0.5 - rc._margin)
+								best = minf(best, q.distance_to(face))
+					assert_lte(best, 0.16, "%s: колія за %.2f клітинки від торця асфальту біля %s" % [path, best, node])
+	assert_gt(checked, 0, "на картах є торець асфальту при куті ґрунтівки")
 
 ## Вага B (гравійне узбіччя) є лише там, де проїзна частина вужча за смугу: на вулиці в 2 клітинки; уздовж
 ## однієї смуги (півширина < 2.65 м, поза розвилками) її нема навіть у м'якому краї (d до 0.15 м), а на

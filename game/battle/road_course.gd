@@ -780,6 +780,24 @@ func _type_near(p: Vector2) -> int:
 	return t
 
 
+## У вузлі рівно одна лінія кінчається асфальтом, що переходить у ґрунтівку (кінець лінії — ґрунтівка,
+## за ~0.6 клітинки від кінця — асфальт): асфальт обривається об поворот ґрунтівки, і його торець — край,
+## від якого мають починатися колії. Ґрунтівкова Т-розвилка чи гравій біля асфальту сюди не потрапляють.
+func _asphalt_end_at(node: Vector2) -> bool:
+	var n := 0
+	for li in lines.size():
+		var pts: PackedVector2Array = lines[li]
+		var ty: PackedVector3Array = types[li]
+		for end in [0, pts.size() - 1]:
+			if pts[end].distance_to(node) > 0.05 or ty[end].y < 0.5:
+				continue
+			var step: int = 1 if end == 0 else -1
+			var k: int = clampi(end + step * 3, 0, pts.size() - 1)
+			if ty[k].x > 0.5:
+				n += 1
+	return n == 1
+
+
 ## Відстань до найближчої розвилки (клітинки).
 func near_node(p: Vector2) -> float:
 	var best := 1e9
@@ -930,6 +948,8 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 		# дороги з дугою; радіус CLOSE_M заповнив би зовнішній бік дуги до прямого кута.
 		var cm: float = BEND_CLOSE_M if _bend_nodes.has(node) else CLOSE_M
 		var asphalt_node: bool = _type_near(node) == 0
+		# Асфальт обривається об поворот ґрунтівки в самому вузлі: колії йдуть від торця без перерви.
+		var asphalt_end: bool = not asphalt_node and _asphalt_end_at(node)
 		var ci: int = floori((node.x - org) * PX)
 		var cj: int = floori((node.y - org) * PX)
 		var i0: int = maxi(ci - half, 0)
@@ -960,6 +980,10 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 				var wj: float = w
 				if asphalt_node and tw[k].y > 0.5:
 					wj = 1.0 - smoothstep(0.3, 0.5, dist)
+				elif asphalt_end and tw[k].y > 0.5:
+					# Колії йдуть від торця без перерви; вага лишається лише на боці за краєм, де домішаний
+					# залишок асфальту піде в узбіччя.
+					wj = smoothstep(0.0, 0.1, tw[k].x) if d[k] > -0.6 else 0.0
 				jw[k] = maxf(jw[k], wj)
 
 

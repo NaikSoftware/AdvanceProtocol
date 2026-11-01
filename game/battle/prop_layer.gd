@@ -269,6 +269,12 @@ const GATE_LEAF: float = 0.4
 const GATE_H: float = 0.23
 ## Найкоротша секція огорожі, клітинки (4 м): коротший обрубок читається уламком, не огорожею.
 const MIN_FENCE: float = 0.5
+## Паркан за стовпом воріт до стіни чи розриву — не коротший за стільки (3.6 м): коротше — уламок біля воріт, і двір читається
+## двома панелями, що нічого не обгороджують. Менший за MIN_FENCE, бо тісний двір (хата, сарай і руїна по периметру)
+## інакше не вміщує навіть стулку з упором у кут.
+const GATE_FLANK: float = 0.45
+## Город не ближче стільки до розриву в паркані (_clip_garden).
+const OPEN_SIDE_CLEAR: float = 0.5
 ## Найкоротший шматок кільця біля воріт: стовп і прольот (~1.2 м).
 const GATE_POST: float = 0.15
 ## Ворота дивляться на дорогу, коли промінь від них назовні впирається в покриття не далі, ніж за стільки клітинок.
@@ -323,16 +329,17 @@ const TRANSFORMER_COLOR: Color = Color(0.25, 0.28, 0.26)
 const SETTLEMENT_R: float = 6.0
 ## Стовп воріт (~0.25 м в перерізі), на ~0.4 м вищий за полотно.
 const GATE_POST_SIZE: Vector3 = Vector3(0.03, 0.245, 0.03)
-## Стовп дерев'яних воріт — бура кора: бічні грані коробки освітлені слабше за картку паркану, темніший тон читається чорним.
-const GATE_POST_COLOR: Color = Color(0.33, 0.26, 0.18)
+## Стовп дерев'яних воріт — темна бура кора, не світліша за стовпи паркану поруч.
+const GATE_POST_COLOR: Color = Color(0.2, 0.15, 0.1)
 ## Тони полотна воріт (sRGB; вершинний колір множить альбедо коробки): сталь, фарбований профнастил
 ## (бурий чи зелений), дошки, оцинкована ґратка.
 const GATE_STEEL: Array[Color] = [Color(0.22, 0.28, 0.34), Color(0.28, 0.31, 0.27)]
 const GATE_SHEET: Array[Color] = [Color(0.36, 0.2, 0.13), Color(0.2, 0.32, 0.22)]
-## Дошки воріт — середня бура кора, на відтінок світліші за свій паркан (вертикальні грані коробки темніють
-## сильніше за картку з нахиленою до неба нормаллю, а небо їх холодить — тому альбедо тепліше й світліше за
-## атлас). На кадрі — середня кора, не світле дерево.
-const GATE_WOOD: Color = Color(0.62, 0.4, 0.19)
+## Дошки воріт — тон свого паркану (середнє по атласу), на ~15 % темніше: полотно вертикальними гранями коробки
+## освітлене так само, як картка паркану, тож альбедо більше за паркан давало б світле дерево на кадрі. Штахетник
+## і горизонтальні дошки мають різну кору — по тону на кожен (test_yard_fence_tone).
+const GATE_WOOD: Color = Color(0.15, 0.115, 0.08)
+const GATE_SLAT: Color = Color(0.27, 0.19, 0.11)
 ## Частка, на яку фарба воріт зсувається до сірого (_gate_box_at).
 const GATE_DESAT: float = 0.3
 ## Ворота рабиці — оцинковка, як сітка й труби паркану (chainlink у tools/blender/infra/yard_fences.py), тон у тон
@@ -1001,6 +1008,11 @@ func triangle_count() -> int:
 	return t
 
 
+## Ворота дворів: {a, mid, b, kind, out, height, …} — стовпи a, mid, b і висота полотна.
+func gates() -> Array[Dictionary]:
+	return _gates
+
+
 ## Дроти ЛЕП на площині XZ: прольоти між опорами й відводи до хат, [a, b] (Vector2) — щоб рослинність
 ## не росла під ними.
 func wire_lines() -> Array:
@@ -1281,9 +1293,9 @@ func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float,
 			for k in rows:
 				var y: float = (float(k) + 0.5) / float(rows) * h
 				var vary: int = absi(hash(Vector2i(sd, k))) % 5
-				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h / float(rows) * 0.72, 0.01), base + y, GATE_WOOD * (0.8 + 0.06 * float(vary)))
+				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h / float(rows) * 0.72, 0.01), base + y, GATE_SLAT * (0.8 + 0.06 * float(vary)))
 			for t: float in [-0.5, 0.5]:
-				_gate_box_at(mid + u * (t * (span - 0.012)), u, -out * 0.008, Vector3(0.012, h, 0.012), base + h * 0.5, GATE_WOOD * 0.55)
+				_gate_box_at(mid + u * (t * (span - 0.012)), u, -out * 0.008, Vector3(0.012, h, 0.012), base + h * 0.5, GATE_SLAT * 0.55)
 		&"wood":
 			var n: int = maxi(1, floori(span / 0.05))
 			var w: float = span / float(n)
@@ -3565,6 +3577,7 @@ class _Placer:
 		for sd: Dictionary in sides:
 			var d: Vector2i = sd["d"]
 			var b: float = float(sd["line"]) + float(d.x + d.y) * float(sd["o"])
+			var margin: float = PropLayer.OPEN_SIDE_CLEAR if sd.get("open", false) else 0.1
 			var lo: float = INF
 			var hi: float = -INF
 			for e: Array in sd["edges"]:
@@ -3578,11 +3591,11 @@ class _Placer:
 				continue
 			var end: Vector2 = r.end
 			if d.x + d.y > 0:
-				end[ax] = minf(end[ax], b - 0.1)
+				end[ax] = minf(end[ax], b - margin)
 				r.end = end
 			else:
 				var pos: Vector2 = r.position
-				var shift: float = maxf(pos[ax], b + 0.1) - pos[ax]
+				var shift: float = maxf(pos[ax], b + margin) - pos[ax]
 				pos[ax] += shift
 				r.position = pos
 				var sz: Vector2 = r.size
@@ -3817,8 +3830,8 @@ class _Placer:
 		# завдовжки MIN_FENCE (коротший лишає стовп без пари, і сторона читається уламком); далі запас від стін за
 		# GATE_CLEARS. Двір, де суворого місця нема, бере місце, найдальше на екрані від силуетів, а коли нема й такого
 		# уздовж стін — і ближче до стіни: двір без воріт гірший.
-		for tier: Vector2i in [Vector2i(1, SCREEN_STRICT), Vector2i(1, SCREEN_WIDEST), Vector2i(0, SCREEN_WIDEST)]:
-			for flank: float in [MIN_FENCE, GATE_POST]:
+		for flank: float in [GATE_FLANK, GATE_POST]:
+			for tier: Vector2i in [Vector2i(1, SCREEN_STRICT), Vector2i(1, SCREEN_WIDEST), Vector2i(0, SCREEN_WIDEST)]:
 				for clear: float in GATE_CLEARS:
 					if gate_run >= 0:
 						break
@@ -3829,10 +3842,14 @@ class _Placer:
 						var a: Vector2 = runs[j][0]
 						var b: Vector2 = runs[j][1]
 						var total: float = a.distance_to(b)
-						if total < GATE + 2.0 * flank:
+						# На кінці, де кільце повертає за кут, паркан за стовпом триває далі боковою стороною, тож
+						# ворота можуть стати майже до кута (на GATE_POST); біля стіни чи розриву за стовпом потрібен повний flank.
+						var flank_a: float = minf(flank, GATE_POST) if _ring_continues(runs, j, a) else flank
+						var flank_b: float = minf(flank, GATE_POST) if _ring_continues(runs, j, b) else flank
+						if total < GATE + flank_a + flank_b:
 							continue
 						var dir: Vector2 = (b - a) / total
-						var found: Vector2 = _gate_at(a, b, sheds, (Vector2(hc) - a).dot(dir), clear, flank, GATE_ALONG * tier.x, tier.y)
+						var found: Vector2 = _gate_at(a, b, sheds, (Vector2(hc) - a).dot(dir), clear, flank_a, GATE_ALONG * tier.x, tier.y, flank_b)
 						var at: float = found.x
 						if at < 0.0:
 							continue
@@ -3880,6 +3897,27 @@ class _Placer:
 						"along": gate_tier.x > 0, "screen": gate_tier.y == SCREEN_STRICT})
 			else:
 				_fence_straight(m, a, b, lot)
+		# Сторона з розривом (ні секція чи ворота, ні стіна її не замикають) — _clip_garden тримає город подалі від неї.
+		for k in n:
+			if int(sides[k]["nb"]) >= 0:
+				continue
+			var open_len: float = 0.0
+			var side_len: float = (starts[k] as Vector2).distance_to(ends[k] as Vector2)
+			for step in ceili(side_len / 0.05) + 1:
+				var q: Vector2 = (starts[k] as Vector2).lerp(ends[k] as Vector2, minf(1.0, float(step) * 0.05 / maxf(side_len, 1e-6)))
+				var shut := false
+				for r: Array in runs:
+					shut = shut or (r[2] == k and Geometry2D.get_closest_point_to_segment(q, r[0], r[1]).distance_to(q) < 0.06)
+				if gate_run >= 0 and gates.has(i):
+					var gs: Array = gate_segments.back()
+					shut = shut or Geometry2D.get_closest_point_to_segment(q, gs[0], gs[1]).distance_to(q) < 0.06
+				for r: Rect2 in _wall_rects:
+					shut = shut or r.grow(0.15).has_point(q)
+				for r: Rect2 in sheds:
+					shut = shut or r.grow(0.15).has_point(q)
+				if not shut:
+					open_len += 0.05
+			sides[k]["open"] = open_len > 0.1
 		_collecting = false
 		var posts: Array[Vector2] = []
 		for g: Dictionary in layer._gates.slice(layer._gates.size() - (1 if gates.has(i) else 0)):
@@ -3889,16 +3927,24 @@ class _Placer:
 		_note_form(i, hc, &"fence", form)
 		return sides
 
+	## Кінець e вільної ділянки j — кут кільця, де вона переходить в іншу ділянку (кінці збігаються).
+	func _ring_continues(runs: Array, j: int, e: Vector2) -> bool:
+		for o in runs.size():
+			if o != j and (runs[o][0] as Vector2).distance_to(e) < 0.03 or o != j and (runs[o][1] as Vector2).distance_to(e) < 0.03:
+				return true
+		return false
+
 	## Центр отвору воріт на відрізку a→b (відстань від a), найближчий до want, де увесь отвір (з півтовщиною
 	## стовпів) далі clear від будівель, далі clear + 0.1 від сараїв (ворота проти комори читались дверима гаража)
 	## і далі WATER_CLEAR від води; -1 — такого місця нема. Уздовж стіни отвір далі side від неї. screen: SCREEN_STRICT —
 	## верх полотна на екрані далі GATE_SCREEN_GAP від силуетів будівель (_hull_gap); SCREEN_WIDEST — місце, найдальше
-	## від них, хоч і ближче. Повертає (центр отвору, відстань на екрані до силуетів; INF — силуетів поруч нема).
+	## від них, хоч і ближче. flank — запас паркану від початку відрізка, flank_b — від кінця (−1: той самий). Повертає (центр отвору, відстань на екрані до силуетів; INF — силуетів поруч нема).
 	func _gate_at(a: Vector2, b: Vector2, sheds: Array[Rect2], want: float, clear: float, flank: float, side: float = 0.0,
-			screen: int = SCREEN_OFF) -> Vector2:
+			screen: int = SCREEN_OFF, flank_b: float = -1.0) -> Vector2:
 		var total: float = a.distance_to(b)
 		var dir: Vector2 = (b - a) / total
 		var lo: float = flank + GATE * 0.5
+		var hi: float = (flank if flank_b < 0.0 else flank_b) + GATE * 0.5
 		var half: float = GATE * 0.5 + GATE_POST_SIZE.x
 		# Обриси, що взагалі можуть зачепити відрізок (з запасом): решта вибірок їх не перебирає.
 		var near: Array[Rect2] = []
@@ -3931,7 +3977,7 @@ class _Placer:
 		if widest:
 			best_gap = -1.0
 		var t: float = lo
-		while t <= total - lo + 1e-6:
+		while t <= total - hi + 1e-6:
 			if not widest and best >= 0.0 and absf(t - want) >= absf(best - want):
 				t += 0.04
 				continue
