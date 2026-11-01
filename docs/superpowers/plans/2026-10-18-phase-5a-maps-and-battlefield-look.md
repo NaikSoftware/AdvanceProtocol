@@ -488,7 +488,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Garden beds read as ridges with lit crests and shaded furrows, not a printed stripe
 - [x] Glass reads as glass on intact houses; broken windows only on ruins, as dark openings
 - [x] Hay and bridges matte; gardens tilled rows; chimney tops open and dark; ruin floors show debris, not grass
-- [ ] No village looks bought in one shop: three or more forms, ages and wear per category
+- [x] No village looks bought in one shop: three or more forms, ages and wear per category
 
 ### Task 18: Damaged panel block
 
@@ -563,7 +563,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Gates of several types facing the road
 - [x] New fence, shed and trailer variants alternate between neighbours
 - [ ] Bales only at field edges; nothing within 0.4 tile of water
-- [ ] Neighbouring houses differ in model or colour
+- [x] Neighbouring houses differ in model or colour
 - [x] Gates in their fence's tone under every light; a gate stands between real fence on both sides
 - [x] Draw calls under 100 at every zoom on every map
 - [x] Battle board builds noticeably faster, with identical pixels
