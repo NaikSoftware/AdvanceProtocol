@@ -664,7 +664,7 @@ func _widths(li: int, n_w: FastNoiseLite, n_w2: FastNoiseLite) -> void:
 	for i in n:
 		# Шум підсилено ×2.5 з обрізанням до ±1: симплекс рідко сягає ±1, і CV ширини < 3 %.
 		var f: float = 1.0 + WIDTH_VAR * clampf(2.5 * n_w.get_noise_2d(s[i], 11.0 * li + 5.3), -1.0, 1.0) + WIDTH_FINE * clampf(2.5 * n_w2.get_noise_2d(s[i], 11.0 * li + 5.3), -1.0, 1.0)
-		# На дузі шум ширини гасне, як і хвилястість осі: пік шуму на вершині дуги малював лопать зовнішнього краю.
+		# На дузі шум ширини гасне, як і хвилястість осі: інакше пік шуму на вершині дуги роздуває зовнішній край.
 		var ia: int = maxi(i - 1, 0)
 		var ib: int = mini(i + 1, n - 1)
 		var kappa: float = tang[ib].distance_to(tang[ia]) / maxf(s[ib] - s[ia], 1e-4)
@@ -1004,7 +1004,7 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 		var ww: int = i1 - i0 + 1
 		var wh: int = j1 - j0 + 1
 		# Т-розвилка (крізь вузол іде лінія, а бічна в ньому кінчається): закруглюються лише кути з боку бічної дороги.
-		# На протилежному боці край головної — пряма, і замикання лягало б туди горбом там, де вісь трохи вигнута
+		# На протилежному боці край головної — пряма, і замикання лягло б туди горбом там, де вісь трохи вигнута
 		# чи шум звузив дорогу.
 		var branches: Array[Vector2] = []
 		if not _bend_nodes.has(node):
