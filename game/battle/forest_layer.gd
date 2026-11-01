@@ -59,7 +59,9 @@ const RING_DETAIL: float = 1.5
 ## група розчинення — виклик малювання.
 const FADE_MIN_TOP: float = 0.2
 ## Новий пролам перепланує лише клітинки в межах стількох від зміни (ForestScatter.LANE_NEAR + крона).
-const WIRE_CLEAR: float = 0.15
+## Напівширина просіки й смуга розрідження за нею, тайли (1 тайл ≈ 8 м): вісім метрів в обидва боки.
+const CORRIDOR_HALF: float = 1.0
+const CORRIDOR_FEATHER: float = 0.6
 const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
@@ -77,9 +79,9 @@ const SHADOW_BLUR: int = 2
 ## ставить дошка з вигляду карти до build().
 var sun_dir := Vector3(0.5, 0.7071, 0.5)
 var shadow_strength: float = 0.15
-## Дроти ЛЕП (PropLayer.wire_lines(), тайли дошки): під ними крони не ростуть — справжні лінії йдуть
-## через ліс просікою, а підлісок лишається.
-var wires: Array = []
+## Проліти ЛЕП (PropLayer.span_lines(), тайли дошки): уздовж них ліс вирубано смугою, а підлісок
+## і кущі лишаються — справжні лінії йдуть через ліс просікою.
+var spans: Array = []
 
 var _season: String = ""
 var _seed: int = 0
@@ -132,7 +134,7 @@ func build(world: Board, world_surface: PackedByteArray, ring: int, board_size: 
 			var i: int = y * world.width + x
 			var s: int = world_surface[i] if i < world_surface.size() else 0
 			wood[c] = WOOD_OF_SURFACE[clampi(s, 0, WOOD_OF_SURFACE.size() - 1)]
-	var signature: String = "%s:%d:%d:%d:%s:%f:%d" % [season, seed, hash(cells.keys()), hash(wood.values()), sun_dir, shadow_strength, hash(wires)]
+	var signature: String = "%s:%d:%d:%d:%s:%f:%d" % [season, seed, hash(cells.keys()), hash(wood.values()), sun_dir, shadow_strength, hash(spans)]
 	if signature == _signature:
 		return
 	_signature = signature
@@ -267,18 +269,37 @@ func _in_board(p: Vector2) -> bool:
 	return p.x >= -0.5 and p.y >= -0.5 and p.x < _board.size.x - 0.5 and p.y < _board.size.y - 0.5
 
 
-## Крона дерева (не підлісок) накриває дріт із запасом WIRE_CLEAR: така не садиться.
-func _under_wire(e: Dictionary) -> bool:
+## Запис плану після просіки під прольотом ЛЕП: дерево в смузі напівширини CORRIDOR_HALF заміщене
+## низьким кущем (смуга не лисіє), у смузі розрідження за нею частину дерев пропущено, решта —
+## як було. Порожній словник — запису нема. Відводи до хат сюди не входять: ліс вони не рубають.
+func _cleared(e: Dictionary) -> Dictionary:
 	var node: String = e["node"]
-	if wires.is_empty() or e["ground"] or not node.get_slice("_", 0) in TREES or not _lib.has(node):
-		return false
+	if spans.is_empty() or e["ground"] or not node.get_slice("_", 0) in TREES or not _lib.has(node):
+		return e
 	if float(_lib[node]["h"]) * e["xf"].basis.get_scale().y < UNDER_TOP:
-		return false
+		return e
 	var p: Vector2 = e["pos"]
-	for w: Array in wires:
-		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])) < float(e["r"]) + WIRE_CLEAR:
-			return true
-	return false
+	var d: float = INF
+	for w: Array in spans:
+		d = minf(d, p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])))
+	if d >= CORRIDOR_HALF + CORRIDOR_FEATHER:
+		return e
+	var u: float = float(absi(hash(p)) % 1000) / 1000.0
+	if d >= CORRIDOR_HALF:
+		# Край смуги тоншає поступово: що ближче до просіки, то менше дерев лишається.
+		return e if u < (d - CORRIDOR_HALF) / CORRIDOR_FEATHER else {}
+	var shrubs: Array[String] = []
+	for k: String in _lib:
+		if k.begins_with("Shrub_"):
+			shrubs.append(k)
+	if shrubs.is_empty():
+		return {}
+	shrubs.sort()
+	var out: Dictionary = e.duplicate()
+	out["node"] = shrubs[int(u * 997.0) % shrubs.size()]
+	out["xf"] = Transform3D(Basis(Vector3.UP, u * TAU), (e["xf"] as Transform3D).origin)
+	out["r"] = 0.3
+	return out
 
 
 ## Відстань від точки до дошки (тайли), 0 — на дошці.
@@ -303,8 +324,12 @@ func _build_ring() -> void:
 	for e: Dictionary in ForestScatter.plan(_cells, _wood_at, {}, _season, _seed, _lib):
 		var p: Vector2 = e["pos"]
 		var node: String = e["node"]
-		if _in_board(p) or e["ground"] or not _lib.has(node) or _under_wire(e):
+		if _in_board(p) or e["ground"] or not _lib.has(node):
 			continue
+		e = _cleared(e)
+		if e.is_empty():
+			continue
+		node = e["node"]
 		var species: String = node.get_slice("_", 0)
 		var d: float = _board_distance(p)
 		var xf: Transform3D = e["xf"]
@@ -359,14 +384,18 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 			if not rr.has_point(e["pos"]):
 				plan.append(e)
 		for e: Dictionary in ForestScatter.plan(_cells, _wood_at, _broken, _season, _seed, _lib, [], region.grow(1)):
-			if rr.has_point(e["pos"]) and _in_board(e["pos"]) and not _under_wire(e):
-				plan.append(e)
+			if rr.has_point(e["pos"]) and _in_board(e["pos"]):
+				var c: Dictionary = _cleared(e)
+				if not c.is_empty():
+					plan.append(c)
 	else:
 		# Площа на клітинку ширша за дошку: точки з краю кільця, що зсунулись на дошку, — теж її.
 		var area := Rect2i(_board.position - Vector2i.ONE, _board.size + Vector2i(2, 2))
 		for e: Dictionary in ForestScatter.plan(_cells, _wood_at, _broken, _season, _seed, _lib, [], area):
-			if _in_board(e["pos"]) and not _under_wire(e):
-				plan.append(e)
+			if _in_board(e["pos"]):
+				var c: Dictionary = _cleared(e)
+				if not c.is_empty():
+					plan.append(c)
 	board_plan = plan
 	var groups: Dictionary = {}  ## "клас/вузол" -> Array[Dictionary]
 	var lanes: Array[Transform3D] = []

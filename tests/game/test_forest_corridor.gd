@@ -1,6 +1,6 @@
 extends GutTest
-## Просіка ЛЕП у лісі: на справжніх картах жодна крона дерева не накриває дріт (запас 0,15 тайла —
-## літерал, не допоміжна функція шару), а клітинка лісу під дротом лишається лісом.
+## Просіка ЛЕП у лісі: на справжніх картах жодна крона дерева не стоїть ближче за півширину просіки
+## (1 тайл — літерал, не стала шару) до прольоту, а клітинка лісу під прольотом лишається лісом.
 
 var _views: Dictionary = {}
 
@@ -31,32 +31,34 @@ func _is_crown(f: ForestLayer, e: Dictionary) -> bool:
 	return float(f._lib[node]["h"]) * e["xf"].basis.get_scale().y >= ForestLayer.UNDER_TOP
 
 
-func test_no_crown_over_wires(p = use_parameters(["river", "ridge"])) -> void:
+func test_no_crown_over_spans(p = use_parameters(["river", "ridge", "crossroads"])) -> void:
 	var view: BoardView = _view(p)
 	var f: ForestLayer = view.forest()
-	var wires: Array = view.props().wire_lines()
+	var spans: Array = view.props().span_lines()
 	var board: Board = (load("res://maps/%s.tres" % p) as MapData).to_board()
+	# Клітинки лісу, чий центр лежить не далі за 1,5 тайла від прольоту: туди просіка заходить.
 	var crossed: Dictionary = {}
-	for w: Array in wires:
-		for i in 41:
-			var s: Vector2 = (w[0] as Vector2).lerp(w[1], i / 40.0)
-			var c := Vector2i(roundi(s.x), roundi(s.y))
-			if board.in_bounds(c) and board.kind_at(c) == Terrain.Kind.FOREST:
-				crossed[c] = true
-	assert_gt(crossed.size(), 0, "%s: дріт перетинає ліс" % p)
+	for w: Array in spans:
+		for y in board.height:
+			for x in board.width:
+				var c := Vector2i(x, y)
+				if board.kind_at(c) == Terrain.Kind.FOREST and Vector2(c).distance_to(Geometry2D.get_closest_point_to_segment(Vector2(c), w[0], w[1])) < 1.5:
+					crossed[c] = true
+	if p != "crossroads":
+		assert_gt(crossed.size(), 0, "%s: проліт перетинає ліс" % p)
 	var bad: int = 0
 	for e: Dictionary in f.board_plan:
 		if not _is_crown(f, e):
 			continue
-		for w: Array in wires:
+		for w: Array in spans:
 			var q: Vector2 = Geometry2D.get_closest_point_to_segment(e["pos"], w[0], w[1])
-			if q.distance_to(e["pos"]) < float(e["r"]) + 0.15:
+			if q.distance_to(e["pos"]) < 1.0:
 				bad += 1
 				break
-	assert_eq(bad, 0, "%s: крон над дротами" % p)
+	assert_eq(bad, 0, "%s: крон у просіці" % p)
 	for c: Vector2i in crossed:
 		var left: int = 0
 		for e: Dictionary in f.board_plan:
 			if not e["ground"] and Vector2i(roundi(e["pos"].x), roundi(e["pos"].y)) == c:
 				left += 1
-		assert_gt(left, 0, "%s: клітинка лісу %s під дротом спорожніла" % [p, c])
+		assert_gt(left, 0, "%s: клітинка лісу %s під прольотом спорожніла" % [p, c])
