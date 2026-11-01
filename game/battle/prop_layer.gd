@@ -243,6 +243,8 @@ const YARD_FENCE_TILE_M: float = 2.5
 ## форму свого паркану (spec «gate»).
 ## Види паркану двору в прозорому проході: сітка з частими просвітами (рабиця) зникає в непрозорому. Решта видів — суцільні
 ## планки й панелі з широкими просвітами: непрозорий прохід із alpha-відсіканням, тож з димом (прозорим) сортуються за глибиною.
+## Прозорий паркан малюється до диму (його пріоритет 0).
+const FENCE_ALPHA_PRIORITY: int = -1
 const FENCE_ALPHA_FORMS: Array[StringName] = [&"infra_fence_yard_chainlink"]
 const GATE_KINDS: Array[StringName] = [&"metal", &"sheet", &"wood", &"lattice", &"slat"]
 ## Секція паркану не відходить від ґрунту посередині більш ніж на 5 см; найкоротша секція (клітинки).
@@ -1113,8 +1115,8 @@ func _build_nodes(haze: bool) -> void:
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_custom_data = fades or spec_of(m).has("batch")
 		mm.mesh = _bridge_mesh(m, info["mesh"], wet) if kind == Kind.BRIDGE else info["mesh"]
-		if spec_of(m).has("batch") and not FENCE_ALPHA_FORMS.has(m):
-			mm.mesh = _opaque_fence_mesh(info["mesh"])
+		if spec_of(m).has("batch"):
+			mm.mesh = _alpha_fence_mesh(info["mesh"]) if FENCE_ALPHA_FORMS.has(m) else _opaque_fence_mesh(info["mesh"])
 		if kind == Kind.HAY and wet:
 			mm.mesh = _dimmed(info["mesh"], HAY_WET)
 		mm.instance_count = (by_node[key] as Array).size()
@@ -1632,6 +1634,19 @@ static func _thin_opaque() -> Shader:
 		code = code.replace("uniform float alpha_cut = 0.0;", "uniform float alpha_cut = 0.0;\nuniform float a2c_edge = 0.25;")
 		_thin_opaque_shader.code = code
 	return _thin_opaque_shader
+
+
+## Копія сітки паркану в прозорому проході: render_priority −1, тож рабиця завжди малюється раніше за дим (пріоритет 0).
+static func _alpha_fence_mesh(mesh: Mesh) -> Mesh:
+	var copy: Mesh = mesh.duplicate()
+	for i in copy.get_surface_count():
+		var src := copy.surface_get_material(i) as ShaderMaterial
+		if src == null:
+			continue
+		var mat: ShaderMaterial = src.duplicate()
+		mat.render_priority = FENCE_ALPHA_PRIORITY
+		copy.surface_set_material(i, mat)
+	return copy
 
 
 ## Копія сітки картки паркану з матеріалами непрозорого проходу (_thin_opaque).
