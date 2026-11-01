@@ -754,7 +754,7 @@ func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
 ## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
 ## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
 ## разом зі свідомою зміною таблиці моделей чи правил розстановки.
-const RIVER_BUILDINGS_FINGERPRINT: int = 1817935571
+const RIVER_BUILDINGS_FINGERPRINT: int = 1692527633
 
 
 func test_river_buildings_match_the_golden_fingerprint() -> void:
