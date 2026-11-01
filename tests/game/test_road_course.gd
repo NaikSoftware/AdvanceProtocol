@@ -550,6 +550,27 @@ func test_dirt_branch_starts_at_the_asphalt_edge() -> void:
 		assert_gt(checked, 0, "%s: жодного відгалуження ґрунтівки від асфальтового вузла" % path)
 
 
+## Асфальт обривається об ґрунтівку, що повертає в тому ж вузлі (клітинка вузла — ґрунтівка, асфальтова
+## клітинка поруч): колії гілок ґрунтівки мусять починатися одразу за краєм асфальту, а не за півтора
+## тайла порожнього ґрунту.
+func test_dirt_ruts_start_at_an_asphalt_end_that_meets_a_dirt_corner() -> void:
+	var checked := 0
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		for node in rc.nodes:
+			if rc._type_near(node) == 0 or not rc._asphalt_beside(node):
+				continue
+			for li in rc.lines.size():
+				var pts: PackedVector2Array = rc.lines[li]
+				var ty: PackedVector3Array = rc.types[li]
+				for i in pts.size():
+					var d: float = pts[i].distance_to(node)
+					if d >= 0.6 and d <= 0.9 and ty[i].y > 0.5:
+						checked += 1
+						assert_lt(_jw_at(rc, pts[i]), 0.1, "%s: колії гасне за %.2f клітинки від вузла %s" % [path, d, node])
+	assert_gt(checked, 0, "на картах є кут ґрунтівки при кінці асфальту")
 
 ## Вага B (гравійне узбіччя) є лише там, де проїзна частина вужча за смугу: на вулиці в 2 клітинки; уздовж
 ## однієї смуги (півширина < 2.65 м, поза розвилками) її нема навіть у м'якому краї (d до 0.15 м), а на

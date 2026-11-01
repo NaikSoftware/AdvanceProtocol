@@ -780,6 +780,17 @@ func _type_near(p: Vector2) -> int:
 	return t
 
 
+## Поруч із клітинкою вузла (орто) є асфальтова клітинка дороги: асфальт обривається об ґрунтівку, що
+## повертає в самому вузлі, і його кінець — край, від якого мають починатися колії.
+func _asphalt_beside(node: Vector2) -> bool:
+	var c := Vector2i(roundi(node.x), roundi(node.y))
+	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var q: Vector2i = c + d
+		if q.x >= 0 and q.y >= 0 and q.x < _w and q.y < _h and _mask[q.y * _w + q.x] == 1 and _type[q.y * _w + q.x] == 0:
+			return true
+	return false
+
+
 ## Відстань до найближчої розвилки (клітинки).
 func near_node(p: Vector2) -> float:
 	var best := 1e9
@@ -929,7 +940,7 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 		# На повороті з бічною дорогою — замикання радіусом BEND_CLOSE_M: воно лише з'єднує кінець бічної
 		# дороги з дугою; радіус CLOSE_M заповнив би зовнішній бік дуги до прямого кута.
 		var cm: float = BEND_CLOSE_M if _bend_nodes.has(node) else CLOSE_M
-		var asphalt_node: bool = _type_near(node) == 0
+		var asphalt_node: bool = _type_near(node) == 0 or _asphalt_beside(node)
 		var ci: int = floori((node.x - org) * PX)
 		var cj: int = floori((node.y - org) * PX)
 		var i0: int = maxi(ci - half, 0)
