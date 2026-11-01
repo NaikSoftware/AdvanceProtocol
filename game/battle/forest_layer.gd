@@ -70,11 +70,11 @@ const WIRE_HEIGHT: float = 1.2
 const CROWN_FOOT: float = 0.25
 ## Низьким вважається підлісок не вищий за стільки (тайли): просіка його не чіпає, він тримає клітину лісом під проводом.
 const LOW_KEEP: float = 0.4
-## Камера гри (виміряно через unproject_position): тайл висоти зсуває точку на екрані так, ніби вона на PROJ_K тайлів
-## далі вглиб (на зумі 6 — 3.1, 8 — 2.5, 11 — 1.8, 14 — 1.5, 20 — 1.0); тайл вглиб на екрані — DEPTH_SIN від тайла вшир.
-## Береться зум 8, на якому дивиться гравець; на дальших зумах зсув менший, і те, що чисте тут, чисте всюди.
-const PROJ_K: float = 2.5
-const DEPTH_SIN: float = 0.63
+## Зум і екранна висота (−1 низ, +1 верх кадру), за яких просіка рахує, що лежить на дроті: зум, на якому дивиться
+## гравець, і верхня частина кадру — там проводи й крони найдалі (view_k). На ближчому зумі зсув більший, тож край
+## крони там ще може торкнутись дроту; на дальшому — менший, і те, що чисте тут, чисте й там.
+const REF_ZOOM: float = 8.0
+const REF_V: float = 0.9
 const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
@@ -298,9 +298,8 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 		return e
 	var p: Vector2 = e["pos"]
 	var top: float = float(_lib[node]["h"]) * e["xf"].basis.get_scale().y
-	var tall: bool = top > LOW_KEEP
 	# Просіка в лісі тримає низький підлісок під проводом: без нього клітина лісу читалась би лугом.
-	if not tall:
+	if top <= LOW_KEEP:
 		return e
 	# Стовбур не стоїть у самій просіці; далі від дроту дерево лишається, поки його крона не лягає на дріт на екрані.
 	if _ground_gap(p) >= TRUNK_CLEAR and screen_gap(p, top, float(e["r"]) * widen, spans, node) >= CROWN_MARGIN:
@@ -308,7 +307,7 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	# Знято дерево — на його місці низький кущ: ліс під проводом не лисіє.
 	var shrubs: Array[String] = []
 	for k: String in _lib:
-		if k.begins_with("Shrub_"):
+		if k.begins_with("Shrub_") and float(_lib[k]["h"]) <= LOW_KEEP:
 			shrubs.append(k)
 	if shrubs.is_empty():
 		return {}
@@ -331,29 +330,74 @@ func _ground_gap(p: Vector2) -> float:
 
 ## Рослині основою в p, заввишки top і завширшки r (тайли) — зазор на екрані до найближчого дроту з spans: тіло
 ## (від землі до верхівки: ялини сягають землі) й дріт на висоті опори проєктуються на землю вздовж погляду, відстань міряється
-## в екранних одиницях (вшир — тайл, вглиб — DEPTH_SIN тайла), мінус радіус. Від’ємний — рослина лежить на дроті.
+## в екранних одиницях (вшир — тайл, вглиб — S тайла, view_k), мінус радіус. Від’ємний — рослина лежить на дроті.
 static func screen_gap(p: Vector2, top: float, r: float, span_list: Array, node: String = "") -> float:
 	var fwd: Vector2 = _view_fwd()
+	var kv: Vector2 = ref_k()
 	var foot: float = CROWN_FOOT * top if node.get_slice("_", 0) in BROADLEAF and top > LOW_KEEP else 0.0
-	var a: Vector2 = _scr(p + fwd * PROJ_K * (foot - WIRE_HEIGHT))
-	var b: Vector2 = _scr(p + fwd * PROJ_K * (top - WIRE_HEIGHT))
+	var a: Vector2 = _scr(p + fwd * kv.x * (foot - WIRE_HEIGHT), kv.y)
+	var b: Vector2 = _scr(p + fwd * kv.x * (top - WIRE_HEIGHT), kv.y)
 	var best: float = INF
-	var item_a: Vector2 = _scr(p + fwd * PROJ_K * foot)
-	var item_b: Vector2 = _scr(p + fwd * PROJ_K * top)
+	var item_a: Vector2 = _scr(p + fwd * kv.x * foot, kv.y)
+	var item_b: Vector2 = _scr(p + fwd * kv.x * top, kv.y)
 	for w: Array in span_list:
 		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])) > 12.0:
 			continue
-		best = minf(best, _seg_dist(a, b, _scr(w[0]), _scr(w[1])))
+		best = minf(best, _seg_dist(a, b, _scr(w[0], kv.y), _scr(w[1], kv.y)))
 		# Стовп — вертикаль від землі до дроту на кінцях прольоту: крона не лягає й на нього.
 		for q: Vector2 in w:
-			best = minf(best, _seg_dist(item_a, item_b, _scr(q), _scr(q + fwd * PROJ_K * WIRE_HEIGHT)) - POLE_PAD)
+			best = minf(best, _seg_dist(item_a, item_b, _scr(q, kv.y), _scr(q + fwd * kv.x * WIRE_HEIGHT, kv.y)) - POLE_PAD)
 	return best - r
 
 
-## Точка плану → екранні одиниці (вшир, вглиб·DEPTH_SIN).
-static func _scr(q: Vector2) -> Vector2:
+## Перспективна проєкція камери гри (IsoCameraRig: нахил pitch_for(zoom), відстань за FOV): для точки землі на екранній
+## висоті v (−1 низ, +1 верх кадру) — Vector2(K, S): K — на скільки тайлів вглиб зсуває точку на екрані тайл її висоти,
+## S — скільки екрана займає тайл вглиб відносно тайла вшир. Верх кадру — найгірший випадок (там K найбільший).
+static func view_k(zoom: float, v: float) -> Vector2:
+	var pitch: float = deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG + (IsoCameraRig.PITCH_FAR_DEG - IsoCameraRig.PITCH_NEAR_DEG) \
+			* inverse_lerp(IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM, zoom))
+	var tan_half: float = tan(deg_to_rad(IsoCameraRig.FOV_DEG) * 0.5)
+	var dist: float = zoom / (2.0 * tan_half)
+	var cam := Vector3(0.0, -dist * cos(pitch), dist * sin(pitch))  # (вшир, вглиб, вгору)
+	var fwd := Vector3(0.0, cos(pitch), -sin(pitch))
+	var up := Vector3(0.0, sin(pitch), cos(pitch))
+	var sy := func(u: float, d: float, y: float) -> float:
+		var rel := Vector3(u, d, y) - cam
+		return rel.dot(up) / rel.dot(fwd)
+	var sx := func(u: float, d: float, y: float) -> float:
+		var rel := Vector3(u, d, y) - cam
+		return rel.x / rel.dot(fwd)
+	# Глибина точки землі, що стоїть на висоті екрана v: бісекція по d.
+	var lo: float = -dist * 0.5
+	var hi: float = dist * 4.0
+	for i in 40:
+		var mid: float = (lo + hi) * 0.5
+		if sy.call(0.0, mid, 0.0) / tan_half < v:
+			lo = mid
+		else:
+			hi = mid
+	var d: float = (lo + hi) * 0.5
+	var e: float = 0.001
+	var dy: float = (sy.call(0.0, d, e) - sy.call(0.0, d, 0.0)) / e
+	var dd: float = (sy.call(0.0, d + e, 0.0) - sy.call(0.0, d, 0.0)) / e
+	var du: float = (sx.call(e, d, 0.0) - sx.call(0.0, d, 0.0)) / e
+	return Vector2(dy / dd, dd / du)
+
+
+## K і S камери на REF_ZOOM, REF_V (один раз).
+static var _ref: Vector2 = Vector2.ZERO
+
+
+static func ref_k() -> Vector2:
+	if _ref == Vector2.ZERO:
+		_ref = view_k(REF_ZOOM, REF_V)
+	return _ref
+
+
+## Точка плану → екранні одиниці (вшир, вглиб·s).
+static func _scr(q: Vector2, s: float) -> Vector2:
 	var fwd: Vector2 = _view_fwd()
-	return Vector2(q.dot(Vector2(-fwd.y, fwd.x)), q.dot(fwd) * DEPTH_SIN)
+	return Vector2(q.dot(Vector2(-fwd.y, fwd.x)), q.dot(fwd) * s)
 
 
 ## Напрям погляду камери в плані: від камери вглиб.
