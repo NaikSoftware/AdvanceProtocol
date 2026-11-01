@@ -182,7 +182,7 @@ static func obstacles(props: PropLayer) -> Dictionary:
 	var poles: Array[Rect2] = []
 	var fences: Array[Rect2] = []
 	if props == null:
-		return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": [], "plots": [], "plot_hulls": [], "wires": []}
+		return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": [], "plots": [], "plot_hulls": [], "wires": [], "spans": []}
 	for inst: Dictionary in props.all_instances():
 		var info: Variant = PropLayer.model(inst["model"])
 		if not (info is Dictionary) or not (info as Dictionary).has("aabb"):
@@ -218,7 +218,7 @@ static func obstacles(props: PropLayer) -> Dictionary:
 			for y: float in [0.0, FENCE_TOP]:
 				pts.append(PropLayer.screen_pt(c, y))
 		hulls.append(Geometry2D.convex_hull(pts))
-	return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": hulls, "plots": plots, "plot_hulls": plot_hulls, "wires": props.wire_lines()}
+	return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": hulls, "plots": plots, "plot_hulls": plot_hulls, "wires": props.wire_lines(), "spans": props.span_lines()}
 
 
 ## Відстань на екрані від диска крони (радіус crown) стовбура q до силуету найближчої секції чи воріт.
@@ -293,7 +293,17 @@ static func _free(board: Board, height: TerrainHeight, props: PropLayer, obst: D
 	if _power_dist(obst, p) < power_clear(crown):
 		_bump(stats, "power_line")
 		return false
+	if power_on_screen(obst, p, crown):
+		_bump(stats, "power_line")
+		return false
 	return true
+
+
+## Камера дивиться під кутом: дріт на висоті опори лягає на високу крону, що стоїть за ним на землі, тож крону
+## перевіряємо ще й на екрані — так само, як просіку в лісі. Низьке (до LOW_KEEP) під дротом лишається.
+static func power_on_screen(obst: Dictionary, p: Vector2, crown: float) -> bool:
+	var top: float = CROWN_H_K * crown * SCALE_MAX
+	return top > ForestLayer.LOW_KEEP and ForestLayer.screen_gap(p, top, crown * SCALE_MAX, obst["spans"]) < ForestLayer.CROWN_MARGIN
 
 
 ## Стовбур ближче ROAD_PAD до дороги або край крони радіуса crown над дорогою. Край крони —
@@ -674,7 +684,8 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 							and fence_screen_gap(obst, q, crown_of(node), not YARD_TREES.has(node)) >= crown_of(node) * SCALE_MAX + (0.0 if YARD_TREES.has(node) else YARD_BUSH_FENCE_PAD) \
 							and (obst["plots"] as Array).all(func(r: Rect2) -> bool: return not r.has_point(q)) \
 							and PropLayer.hull_gap(q, CROWN_H_K * crown_of(node) * SCALE_MAX, obst["plot_hulls"]) >= PLOT_GAP_SHARE * crown_of(node) * SCALE_MAX \
-							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)):
+							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)) \
+							and not power_on_screen(obst, q, crown_of(node)):
 						choice = [node, e]
 						break
 				if not choice.is_empty():

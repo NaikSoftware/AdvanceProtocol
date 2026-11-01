@@ -64,8 +64,8 @@ func test_branches_do_not_double_back_to_the_trunk(p = use_parameters(MAPS)) -> 
 
 ## Скільки хат живить мережа й скільки ТП вона ставить: ці числа не падають, коли гілку перекладено, а не зрізано.
 func test_fed_homes_per_map() -> void:
-	# Хребет: хата (13, 5.15) не живиться — її єдине місце опори (11.51, 5.08) за 1.41 від траси, а найближча ТП — за 3.9 від
-	# нього, тож відвід був би гілкою назад уздовж траси (з нею — петля навколо поля), і мережа його не будує. Решта — як було.
+	# Хребет: хата (13, 5.15) стоїть за 1.4 від кута магістралі (13.49, 6.49) — ТП там, відвід прямо з її стовпа, гілки 0.4 кВ
+	# нема (див. test_lone_home_by_the_trunk_is_dropped_from_the_corner); решта села живиться від своїх гілок.
 	var want: Dictionary = {"river": [7, 0, 5], "crossroads": [10, 4, 4], "ridge": [3, 0, 2]}
 	for p: String in want:
 		var g: PowerGrid = _grid(p)
@@ -186,3 +186,49 @@ func test_view_projection_follows_the_rig() -> void:
 	assert_between(ref.x, 1.5, 3.5, "K на опорному зумі в межах виміряного камерою (2.5 на зумі 8 за стовпом, 3.1 на зумі 6)")
 
 
+## Дерева й високі кущі лугів і дворів (VegetationLayer) теж не лежать кроною під дротом на екрані: як і в лісі, зазор між тілом
+## крони й дротом на висоті опори, спроєктованими вздовж погляду, не менший за CROWN_MARGIN. Низьке (до LOW_KEEP) лишається.
+func test_vegetation_crowns_are_off_the_wires_on_screen(p = use_parameters(MAPS)) -> void:
+	_props(p)
+	var view: BoardView = _views[p]
+	var spans: Array = view.props().span_lines()
+	var bad: Array = []
+	var trees: int = 0
+	for pl: Dictionary in view.vegetation().placements:
+		if pl["kind"] == "reed":
+			continue
+		var crown: float = VegetationLayer.crown_of(pl["node"]) * VegetationLayer.SCALE_MAX
+		var top: float = VegetationLayer.CROWN_H_K * crown
+		if top <= ForestLayer.LOW_KEEP:
+			continue
+		trees += 1
+		var q := Vector2(pl["pos"].x, pl["pos"].z)
+		var gap: float = ForestLayer.screen_gap(q, top, crown, spans, "Birch_A")
+		if gap < ForestLayer.CROWN_MARGIN - 1e-4:
+			bad.append([pl["node"], q, snappedf(gap, 0.01)])
+	gut.p("%s: високих рослин %d, на дроті %d" % [p, trees, bad.size()])
+	assert_eq(bad, [], "%s: крона рослини на дроті" % p)
+
+
+## Проліти йдуть лише вздовж осей карти (на екрані вони діагональні через поворот камери на 45°); по діагоналі — тільки відводи до хат.
+func test_spans_run_on_map_axes(p = use_parameters(MAPS)) -> void:
+	for s: Array in _props(p).span_lines():
+		var d: Vector2 = (s[1] as Vector2) - (s[0] as Vector2)
+		assert_true(absf(d.x) < 0.02 or absf(d.y) < 0.02, "%s: проліт %s не вздовж осі" % [p, s])
+
+
+## Хата Хребта (13, 5.15) біля кута магістралі живиться одним коротким відводом із ТП на куті, а не гілкою 0.4 кВ, що з трасою
+## замикала б навколо поля майже прямокутник; шафа ТП на куті стоїть уздовж прольоту.
+func test_lone_home_by_the_trunk_is_dropped_from_the_corner() -> void:
+	var g: PowerGrid = _grid("ridge")
+	var corner := Vector2(13.49, 6.49)
+	assert_true(g.transformers.has(corner), "ТП на куті магістралі")
+	assert_true(g.fed.has(Vector2(13.0, 5.15)), "хата живиться")
+	assert_eq(g.lines.filter(func(l: Dictionary) -> bool: return l["kind"] == &"04kv" and (l["points"] as Array).any(func(q: Vector2) -> bool: return q.y < 6.0 and q.x > 8.0 and q.x < 14.0)).size(), 0, "гілки 0.4 кВ біля хати нема")
+	var props: PropLayer = _props("ridge")
+	var drops: int = 0
+	for d: Array in props._drops:
+		if ((props._instances[d[0]]["transform"] as Transform3D).origin as Vector3).distance_to(Vector3(corner.x, 0.0, corner.y)) < 0.1:
+			drops += 1
+			assert_lt(Vector2(d[1].x, d[1].z).distance_to(corner), 1.5, "відвід короткий")
+	assert_eq(drops, 1, "один відвід від стовпа на куті")
