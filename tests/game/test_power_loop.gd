@@ -135,7 +135,7 @@ func test_low_undergrowth_stays_under_the_wires(p = use_parameters(MAPS)) -> voi
 func test_tree_behind_the_wire_lies_on_it_on_screen() -> void:
 	var wire: Array = [[Vector2(13.9, 3.51), Vector2(20.51, 3.51)]]
 	assert_lt(ForestLayer.screen_gap(Vector2(17.0, 1.0), 1.4, 0.5, wire, "Spruce_B"), ForestLayer.CROWN_MARGIN, "крона 1.4 тайла за дротом на екрані лежить на ньому")
-	assert_gt(ForestLayer.screen_gap(Vector2(17.0, 5.5), 1.4, 0.5, wire, "Spruce_B"), ForestLayer.CROWN_MARGIN, "а перед дротом (ближче до камери) — ні")
+	assert_gt(ForestLayer.screen_gap(Vector2(17.0, 8.5), 1.4, 0.5, wire, "Spruce_B"), ForestLayer.CROWN_MARGIN, "а перед дротом (ближче до камери) — ні")
 	_props("river")
 	var f: ForestLayer = (_views["river"] as BoardView).forest()
 	for e: Dictionary in f.board_plan:

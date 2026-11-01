@@ -64,7 +64,8 @@ const CORRIDOR_HALF: float = 1.0
 const CORRIDOR_FEATHER: float = 0.6
 ## Зазор на екрані між краєм рослини й проводом (тайли): просіка рубає лише те, що лягає на дріт.
 const CROWN_MARGIN: float = 0.1
-## Висота проводу над землею (тайли).
+## Висота проводу над землею (тайли) й додатковий зазор до опори: траверса, розтяжка й гілки, що виходять за радіус крони.
+const POLE_PAD: float = 0.35
 const WIRE_HEIGHT: float = 1.2
 ## Частка висоти листяного дерева від землі, нижче якої крона ще рідка (стовбур): дріт над ним крону не ховає. Хвойні сягають землі.
 const CROWN_FOOT: float = 0.25
@@ -356,7 +357,7 @@ static func screen_gap(p: Vector2, top: float, r: float, span_list: Array, node:
 		best = minf(best, _seg_dist(a, b, _scr(w[0]), _scr(w[1])))
 		# Стовп — вертикаль від землі до дроту на кінцях прольоту: крона не лягає й на нього.
 		for q: Vector2 in w:
-			best = minf(best, _seg_dist(item_a, item_b, _scr(q), _scr(q + fwd * PROJ_K * WIRE_HEIGHT)))
+			best = minf(best, _seg_dist(item_a, item_b, _scr(q), _scr(q + fwd * PROJ_K * WIRE_HEIGHT)) - POLE_PAD)
 	return best - r
 
 
