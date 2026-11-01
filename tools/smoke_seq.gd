@@ -28,13 +28,6 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	var p: Vector3 = layer.to_global(pts[int(a[3]) % pts.size()])
-	for i in pts.size():
-		print("HEARTH %d %s щільність=%s" % [i, pts[i], layer.hearth_densities()[i]])
-	var pl: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
-	for inst: Dictionary in pl.get("_instances"):
-		var c: Vector3 = (inst["transform"] as Transform3D).origin
-		if Vector2(c.x, c.z).distance_to(Vector2(p.x, p.z)) < 2.5:
-			print("INST ", inst["model"], " origin=", c, " chimneys=", (PropLayer.model(inst["model"]) as Dictionary).get("chimneys", []))
 	# off — той самий кадр без мирного диму: різниця з ним дає яскравість диму над ґрунтом.
 	if a.size() > 6 and a[6] == "off":
 		(layer.get("_hearths") as Node3D).visible = false
@@ -47,7 +40,6 @@ func _ready() -> void:
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	var cam: Camera3D = get_viewport().get_camera_3d()
-	print("CAM fwd=", -cam.global_transform.basis.z)
 	var frames: Array[Image] = []
 	var dt: float = 1.0 / float(a[5])
 	var t0: int = Time.get_ticks_usec()

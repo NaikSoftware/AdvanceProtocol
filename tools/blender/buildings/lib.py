@@ -920,7 +920,9 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, 
                 continue
             b.decal([P(us[i], ze - eh), P(us[i + 1], ze - eh), P(us[i + 1], ze), P(us[i], ze)], (1.0, 1.0, 0.7, 0.7), dm, nrm)
         wins = [w for w in b.windows if w[0] == axis and abs(w[1] - c) < 0.2 and w[2] == sgn]
-        for (_a, _c, _s, u, z, w, h) in wins:                           # патьоки з обох кінців кожного підвіконня: вода стікає з країв відливу
+        # Віконця горища у фронтоні (вище за карниз): під ними патьок перетинав уступ і читався двома темними прямокутниками.
+        lows = [w for w in wins if w[4] < ze - 0.2]
+        for (_a, _c, _s, u, z, w, h) in lows:                           # патьоки з обох кінців кожного підвіконня: вода стікає з країв відливу
             for end in (-1, 1):
                 uu = u + end * (w / 2 + 0.06) + rnd.uniform(-0.04, 0.04)
                 if rnd.random() < 0.4:   # не під кожним кутом вікна: рівний ряд однакових смуг читається штампом
@@ -932,7 +934,7 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, 
                     continue
                 k = rnd.uniform(*ksill)
                 _streak(b, P, uu, zbm, zt, hw, k, dm, nrm)
-        for (_a, _c, _s, u, z, w, h) in wins:                           # вологий слід під усім підвіконням: м'яка тінь 1.5 вікна, ~20 % темніше, згасає вниз
+        for (_a, _c, _s, u, z, w, h) in lows:                           # вологий слід під усім підвіконням: м'яка тінь 1.5 вікна, ~20 % темніше, згасає вниз
             zt2, zb2 = z - 0.1, max(zb + 0.04, z - 0.8)
             if zt2 - zb2 > 0.2:
                 _streak(b, P, u, zb2, zt2, w * 0.75, 0.82, dm, nrm, up=0.1)
