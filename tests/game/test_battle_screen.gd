@@ -565,9 +565,11 @@ func test_tap_resolves_from_the_press_position_not_the_release_position() -> voi
 	assert_eq(selections[0], unit, "і мусить вибрати юніт під точкою НАТИСКУ, а не відпускання (сусідня клітинка)")
 
 
+## Камера й ввід не залежать від карти, тож ці тести ставлять малу дошку:
+## збірка «Річки» триває ~11 с на кожен тест.
 func test_mouse_wheel_up_zooms_in_and_clamps_at_min_zoom() -> void:
 	var screen: Node3D = _screen()
-	screen._start_fallback_match_if_not_injected()
+	screen.setup(_map(), 2, 1)
 	var camera: IsoCameraRig = screen.get_node("%CameraRig")
 
 	for i in 100:
@@ -580,7 +582,7 @@ func test_mouse_wheel_up_zooms_in_and_clamps_at_min_zoom() -> void:
 
 func test_mouse_wheel_down_zooms_out_and_clamps_at_max_zoom() -> void:
 	var screen: Node3D = _screen()
-	screen._start_fallback_match_if_not_injected()
+	screen.setup(_map(), 2, 1)
 	var camera: IsoCameraRig = screen.get_node("%CameraRig")
 
 	for i in 100:
@@ -596,7 +598,7 @@ func test_mouse_wheel_down_zooms_out_and_clamps_at_max_zoom() -> void:
 ## перевіряють тести щипка нижче, зібраного напряму з ScreenTouch/ScreenDrag.
 func test_magnify_gesture_zooms_in_and_clamps_at_min_zoom() -> void:
 	var screen: Node3D = _screen()
-	screen._start_fallback_match_if_not_injected()
+	screen.setup(_map(), 2, 1)
 	var camera: IsoCameraRig = screen.get_node("%CameraRig")
 
 	for i in 100:
@@ -848,7 +850,7 @@ func test_third_finger_does_not_disturb_an_active_pinch_or_hang_the_camera() -> 
 
 func test_drag_threshold_is_ten_logical_px_at_any_content_scale_factor() -> void:
 	var screen: Node3D = _screen()
-	screen._start_fallback_match_if_not_injected()
+	screen.setup(_map(), 2, 1)
 	var window: Window = screen.get_window()
 	var original_factor: float = window.content_scale_factor
 
