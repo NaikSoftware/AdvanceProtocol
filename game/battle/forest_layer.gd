@@ -62,6 +62,8 @@ const FADE_MIN_TOP: float = 0.2
 ## Напівширина просіки й смуга розрідження за нею, тайли (1 тайл ≈ 8 м): вісім метрів в обидва боки.
 const CORRIDOR_HALF: float = 1.0
 const CORRIDOR_FEATHER: float = 0.6
+## Зазор між краєм крони й проводом: дерево з широкою кроною (проксі кільця) просіка відсуває далі за CORRIDOR_HALF.
+const CROWN_MARGIN: float = 0.6
 const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
@@ -274,7 +276,8 @@ func _in_board(p: Vector2) -> bool:
 ## Запис плану після просіки під прольотом ЛЕП: дерево в смузі напівширини CORRIDOR_HALF заміщене
 ## низьким кущем (смуга не лисіє), у смузі розрідження за нею частину дерев пропущено, решта —
 ## як було. Порожній словник — запису нема. Відводи до хат сюди не входять: ліс вони не рубають.
-func _cleared(e: Dictionary) -> Dictionary:
+## widen — у скільки разів проксі розширить крону пізніше (кільце): просіка рахується за кроною, яку побачать.
+func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	var node: String = e["node"]
 	if not e["ground"] and fences.any(func(r: Rect2) -> bool:
 			return VegetationLayer._rect_dist(r, e["pos"]) < float(e["r"]) + VegetationLayer.FENCE_CROWN_PAD):
@@ -287,12 +290,13 @@ func _cleared(e: Dictionary) -> Dictionary:
 	var d: float = INF
 	for w: Array in spans:
 		d = minf(d, p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])))
-	if d >= CORRIDOR_HALF + CORRIDOR_FEATHER:
+	var half: float = maxf(CORRIDOR_HALF, float(e["r"]) * widen + CROWN_MARGIN)
+	if d >= half + CORRIDOR_FEATHER:
 		return e
 	var u: float = float(absi(hash(p)) % 1000) / 1000.0
-	if d >= CORRIDOR_HALF:
+	if d >= half:
 		# Край смуги тоншає поступово: що ближче до просіки, то менше дерев лишається.
-		return e if u < (d - CORRIDOR_HALF) / CORRIDOR_FEATHER else {}
+		return e if u < (d - half) / CORRIDOR_FEATHER else {}
 	var shrubs: Array[String] = []
 	for k: String in _lib:
 		if k.begins_with("Shrub_"):
@@ -331,7 +335,7 @@ func _build_ring() -> void:
 		var node: String = e["node"]
 		if _in_board(p) or e["ground"] or not _lib.has(node):
 			continue
-		e = _cleared(e)
+		e = _cleared(e, RING_WIDE)
 		if e.is_empty():
 			continue
 		node = e["node"]

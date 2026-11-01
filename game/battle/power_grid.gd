@@ -73,6 +73,9 @@ const DROP_SCAN: int = 24
 const CENTRE_CLEAR: float = 0.45
 ## Найменша відстань між двома опорами, клітинки: 1.4 за правилом і запас на округлення місця до 0.01.
 const POLE_GAP: float = 1.41
+## Кінець відгалуження 0.4 кВ не ближче за стільки до магістралі: інакше він лише дублює її біля хати, а лінії
+## замикають навколо поля кільце, схоже на павутину.
+const LEAF_CLEAR: float = 1.5
 
 var _p: PropLayer._Placer
 ## Опори, ближче за 1.4 до яких нових не ставимо: стовпи магістралі й уже побудованих сіл.
@@ -695,7 +698,8 @@ func _grow(rect: Rect2, spots: Array[Vector2], stations: Array[Vector2], parent:
 	var base: int = stations.size()
 	var to: Array[int] = []
 	for s: Vector2 in spots:
-		if stations.all(func(o: Vector2) -> bool: return o.distance_to(s) >= POLE_GAP):
+		if stations.all(func(o: Vector2) -> bool: return o.distance_to(s) >= POLE_GAP) \
+				and trunk_segs.all(func(e: Array) -> bool: return Geometry2D.get_closest_point_to_segment(s, e[0], e[1]).distance_to(s) >= LEAF_CLEAR):
 			stations.append(s)
 			to.append(stations.size() - 1)
 	if from.is_empty() or to.is_empty():
