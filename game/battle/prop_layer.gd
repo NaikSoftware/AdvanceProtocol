@@ -47,6 +47,8 @@ const MODELS: Dictionary = {
 	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "gap": 0.5, "tower": true},
 	&"ruin_half_shed_b": {"kind": Kind.RUIN, "weight": 6, "yard_only": true},
 	&"ruin_half_house1_b": {"kind": Kind.RUIN, "weight": 6, "yard_only": true},
+	&"ruin_half_shed_c": {"kind": Kind.RUIN, "weight": 6, "yard_only": true},
+	&"ruin_half_house1_c": {"kind": Kind.RUIN, "weight": 6, "yard_only": true},
 	&"ruin_h1": {"kind": Kind.RUIN, "weight": 1},
 	&"ruin_h3": {"kind": Kind.RUIN, "weight": 1},
 	&"bridge_river_west": {"kind": Kind.BRIDGE, "map": &"river", "order": 0, "deck_top": 0.30},
@@ -268,11 +270,29 @@ const RUIN_APART: int = 4
 const RUIN_FAR: int = 8
 ## Руїна міняється лише на таку, чий слід відрізняється не більш ніж на цю частку площі: інакше зсувається паркан і ворота садиби.
 const RUIN_SWAP_AREA: float = 0.12
-const RUIN_TWIN: Dictionary = {&"ruin_half_house2": &"house_h6", &"ruin_half_house1": &"house_h5", &"ruin_half_house1_b": &"house_h5"}
-## Руїна -> її двійник того самого сліду, інший виріз даху, завал і розкидані листи (tools/blender/buildings/build_ruins.py, «b»).
-## Двійник не береться в загальний вибір (yard_only), а лише замінює повторну руїну в радіусі RUIN_FAR: слід той самий, тож двори не зсуваються.
-const RUIN_VARIANT: Dictionary = {&"ruin_half_shed": &"ruin_half_shed_b", &"ruin_half_shed_b": &"ruin_half_shed",
-		&"ruin_half_house1": &"ruin_half_house1_b", &"ruin_half_house1_b": &"ruin_half_house1"}
+const RUIN_TWIN: Dictionary = {&"ruin_half_house2": &"house_h6", &"ruin_half_house1": &"house_h5", &"ruin_half_house1_b": &"house_h5", &"ruin_half_house1_c": &"house_h5"}
+## Сімейства руїн одного сліду: база й двійники «b», «c» — інший виріз даху, завал і листи, а головне — свій колір даху (RUIN_ROOF).
+## Двійники не беруться в загальний вибір (yard_only), а лише замінюють повторну руїну в радіусі RUIN_FAR: слід той самий, тож двори не зсуваються.
+const RUIN_FAMILY: Array = [
+	[&"ruin_half_shed", &"ruin_half_shed_b", &"ruin_half_shed_c"],
+	[&"ruin_half_house1", &"ruin_half_house1_b", &"ruin_half_house1_c"]]
+## Колір даху руїн за ROOF_PALETTE (запечений в атлас моделі, tools/blender/buildings/build_ruins.py): графіт 0, вишня 1, зелень 2, коричневий 4.
+const RUIN_ROOF: Dictionary = {
+	&"ruin_half_shed": 0, &"ruin_half_shed_b": 4, &"ruin_half_shed_c": 1,
+	&"ruin_half_house1": 1, &"ruin_half_house1_b": 0, &"ruin_half_house1_c": 4, &"ruin_half_house2": 2}
+
+
+## Сімейство руїни (вона сама, якщо двійників нема).
+static func ruin_family(m: StringName) -> Array:
+	for fam: Array in RUIN_FAMILY:
+		if fam.has(m):
+			return fam
+	return [m]
+
+
+## Клас руїни: повітка заміщується лише повіткою, хата — не повіткою.
+static func ruin_class(m: StringName) -> StringName:
+	return &"shed" if String(m).contains("shed") else &"house"
 ## Стовп, будівля й паркан тримаються від води й болота щонайменше на стільки клітинок.
 const WATER_CLEAR: float = 0.4
 const YARD_SHED_SCALE: float = 0.7
@@ -4044,11 +4064,13 @@ class _Placer:
 	## з таких — найближча за площею обрису до вибраної, щоб розкладка садиб (паркан, ворота, город) лишалась на місці.
 	## Нема на що міняти — лишається вибрана.
 	func _ruin_swap(pick: Array, options: Array) -> Array:
-		var twin: StringName = PropLayer.RUIN_VARIANT.get(pick[0], &"")
-		if twin != &"" and PropLayer.model(twin) != null and _ruin_near(pick[0], pick[1], RUIN_FAR) and not _ruin_near(twin, pick[1], RUIN_FAR):
-			var swapped: Array = pick.duplicate()
-			swapped[0] = twin
-			return swapped
+		# Двійник свого сімейства (той самий слід, інший колір даху), якого нема в радіусі RUIN_FAR.
+		if _ruin_near(pick[0], pick[1], RUIN_FAR):
+			for m: StringName in PropLayer.ruin_family(pick[0]):
+				if m != pick[0] and PropLayer.model(m) != null and not _ruin_near(m, pick[1], RUIN_FAR):
+					var swapped: Array = pick.duplicate()
+					swapped[0] = m
+					return swapped
 		if not _ruin_near(pick[0], pick[1]):
 			return pick
 		var area := func(m: StringName) -> float:
@@ -4060,7 +4082,8 @@ class _Placer:
 		for reach: int in [RUIN_FAR, RUIN_APART]:
 			var best_d: float = INF
 			for o: Array in options:
-				if o[1] != pick[1] or o[2] != pick[2] or _ruin_near(o[0], o[1], reach) or not _closes_yard(o[0], o[1]):
+				if o[1] != pick[1] or o[2] != pick[2] or PropLayer.ruin_class(o[0]) != PropLayer.ruin_class(pick[0]) \
+						or _ruin_near(o[0], o[1], reach) or not _closes_yard(o[0], o[1]):
 					continue
 				var d: float = absf(float(area.call(o[0])) - want)
 				if d < best_d and d <= want * RUIN_SWAP_AREA:
