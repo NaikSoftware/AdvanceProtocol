@@ -4067,7 +4067,7 @@ class _Placer:
 		# Двійник свого сімейства (той самий слід, інший колір даху), якого нема в радіусі RUIN_FAR.
 		if _ruin_near(pick[0], pick[1], RUIN_FAR):
 			for m: StringName in PropLayer.ruin_family(pick[0]):
-				if m != pick[0] and PropLayer.model(m) != null and not _ruin_near(m, pick[1], RUIN_FAR):
+				if m != pick[0] and PropLayer.model(m) != null and not _ruin_near(m, pick[1], RUIN_FAR) and _closes_yard(m, pick[1]):
 					var swapped: Array = pick.duplicate()
 					swapped[0] = m
 					return swapped
