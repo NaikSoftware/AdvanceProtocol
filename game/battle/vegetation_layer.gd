@@ -60,6 +60,9 @@ const NO_BRIDGE: int = 2
 const NO_ROAD: int = 1
 ## Мілина для очерету: ґрунт нижче рівня води на 0…SHALLOW тайла (0–1 м).
 const SHALLOW: float = 0.12
+## Основа куртини — не глибше REED_DIP під поверхнею води (16 см), хоч дно й глибше: вода майже непрозора, і
+## з основою на дні під нею ховається весь темний мокрий низ снопа — над водою лишаються самі волоті.
+const REED_DIP: float = 0.02
 ## Кущ і дерево — на сухому: ґрунт вище води щонайменше на DRY; схил не крутіший за STEEP (y нормалі).
 const DRY: float = 0.02
 const STEEP: float = 0.85
@@ -95,6 +98,9 @@ const HOME_CLEAR: int = 1
 const ROAD_PAD: float = 0.5
 ## Стовбур — не ближче FENCE_CLEAR до паркана й інших дрібних пропсів.
 const FENCE_CLEAR: float = 0.08
+## Дерево садиби — стовбуром не ближче за стільки радіусів крони до паркану: крона не звисає над секцією, бо з камери
+## дерево поруч із парканом читається таким, що проросло крізь нього.
+const YARD_TREE_FENCE: float = 1.0
 ## Під дротом ЛЕП крона не стоїть ближче за WIRE_PAD від прольоту (розкид масштабу 1,1 × радіус), а стовбур — ближче за POLE_CLEAR від опори.
 const WIRE_PAD: float = 0.15
 const POLE_CLEAR: float = 0.3
@@ -156,8 +162,9 @@ static func obstacles(props: PropLayer) -> Dictionary:
 	var roofs: Array[Rect2] = []
 	var small: Array[Rect2] = []
 	var poles: Array[Rect2] = []
+	var fences: Array[Rect2] = []
 	if props == null:
-		return {"roofs": roofs, "small": small, "poles": poles, "wires": []}
+		return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "wires": []}
 	for inst: Dictionary in props.all_instances():
 		var info: Variant = PropLayer.model(inst["model"])
 		if not (info is Dictionary) or not (info as Dictionary).has("aabb"):
@@ -171,10 +178,12 @@ static func obstacles(props: PropLayer) -> Dictionary:
 			small.append(r)
 		if kind == PropLayer.Kind.POLE:
 			poles.append(r)
+		if kind == PropLayer.Kind.GARDEN_FENCE or kind == PropLayer.Kind.FIELD_FENCE:
+			fences.append(r)
 	for t: Transform3D in props.garden_beds():
 		var box: AABB = t * AABB(Vector3(-0.5, 0, -0.5), Vector3(1, 0.1, 1))
 		small.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z))
-	return {"roofs": roofs, "small": small, "poles": poles, "wires": props.wire_lines()}
+	return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "wires": props.wire_lines()}
 
 
 ## Мінімальна відстань стовбура до осі ЛЕП: крона з розкидом масштабу й запасом, не менше POLE_CLEAR.
@@ -331,7 +340,7 @@ static func _plan_banks(board: Board, height: TerrainHeight, fields: Array[Rect2
 							continue
 						if _land_dist(board, p) < LAND_CLEAR:
 							continue
-						cand.append(Vector3(p.x, g, p.y))
+						cand.append(Vector3(p.x, maxf(g, TerrainHeight.WATER_LEVEL - REED_DIP), p.y))
 				_shuffle(cand, rng)
 				var want: int = rng.randi_range(8, 14)
 				var taken: Array[Vector3] = []
@@ -461,7 +470,7 @@ static func _plan_pond(board: Board, height: TerrainHeight, map_seed: int, pond:
 				# Місце точки вздовж урізу — за її кутом, між сусідніми променями.
 				var t: float = fposmod((p - centre).angle(), TAU) / TAU * POND_RAYS
 				var k: int = mini(floori(t), POND_RAYS - 1)
-				shore.append([Vector3(p.x, g, p.y), c, lerpf(along[k], along[k + 1], t - k)])
+				shore.append([Vector3(p.x, maxf(g, TerrainHeight.WATER_LEVEL - REED_DIP), p.y), c, lerpf(along[k], along[k + 1], t - k)])
 	if shore.is_empty():
 		return
 	# Пляма — відрізок урізу навколо придатної точки; уріз поділено на рівні частини, по плямі в
@@ -602,9 +611,11 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 			# Найвужча — туя: останній запасний варіант для тісного двору.
 			for node: StringName in ([plan[k], small, &"yard_thuja_01"] if k == 0 else [plan[k]]):
 				var need: float = crown_of(node) * (1.0 if YARD_TREES.has(node) else YARD_BUSH_WALL)
+				var fence_room: float = crown_of(node) * YARD_TREE_FENCE if YARD_TREES.has(node) else 0.0
 				for e: Array in spots:
 					var q: Vector2 = e[0]
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
+							and obst["fences"].all(func(r: Rect2) -> bool: return _rect_dist(r, q) >= fence_room) \
 							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)):
 						choice = [node, e]
 						break

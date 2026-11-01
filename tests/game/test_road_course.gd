@@ -254,7 +254,7 @@ func test_widths_single_lane_town_street_and_variation() -> void:
 					continue
 				var tg: Vector2 = (pts[i + 1] - pts[i - 1]).normalized()
 				var wm: float = _width_at(rc, img, p, Vector2(-tg.y, tg.x))
-				assert_lt(wm, 8.0 + 1e-3, "%s: ширина %.1f м у %s" % [path, wm, p])
+				assert_lt(wm, 10.0 + 1e-3, "%s: ширина %.1f м у %s" % [path, wm, p])
 				if rc.base_halfs[li][i] * 2.0 < 5.5:
 					assert_lt(wm, 0.65 * _TILE_M, "%s: одна смуга %.1f м у %s" % [path, wm, p])
 				ratios.append(rc.halfs[li][i] / rc.base_halfs[li][i])
@@ -268,14 +268,14 @@ func test_widths_single_lane_town_street_and_variation() -> void:
 					v += (r - mean) * (r - mean)
 				var cv: float = sqrt(v / ratios.size()) / mean
 				assert_between(cv, 0.03, 0.15, "%s: CV ширини лінії %d = %.3f" % [path, li, cv])
-	# Смуга у 2 клітинки на Crossroads (стовпці 12–13, рядки 9–12) — одна вулиця 6–8 м, не дві.
+	# Смуга у 2 клітинки на Crossroads (стовпці 12–13, рядки 9–12) — одна вулиця: проїзна частина 5.4 м і гравійні узбіччя, разом 8–10 м, не дві.
 	var rc: RoadCourse = _bake("res://maps/crossroads.tres").roads
 	var img: Image = rc.rasterise()[0]
 	for y: float in [10.0, 10.5, 11.0]:
 		var p := Vector2(12.5, y)
 		assert_lt(_dist_to_lines(rc, p), 0.3, "вісь вулиці посередині смуги у %s" % p)
 		var wm: float = _width_at(rc, img, p, Vector2(1, 0))
-		assert_between(wm, 6.0, 8.0, "вулиця у %s: %.1f м" % [p, wm])
+		assert_between(wm, 8.0, 10.0, "вулиця у %s: %.1f м" % [p, wm])
 	var near_lines := 0
 	for pts in rc.lines:
 		for q in pts:
@@ -461,3 +461,126 @@ func test_no_map_road_end_sits_just_past_the_free_end_threshold() -> void:
 			for e in [pts[0], pts[pts.size() - 1]]:
 				var d: float = rc.near_node(e)
 				assert_false(d > 1.0 and d < 1.5, "%s: кінець %s за %.2f клітинки від вузла" % [path, e, d])
+
+
+## Асфальт переходить у ґрунтівку різко: вага асфальту падає з 1 до 0 у межах 0.25 клітинки вздовж осі
+## і далі вже не повертається.
+func test_asphalt_weight_drops_within_a_fraction_of_a_tile_at_a_join_to_dirt() -> void:
+	var surface := PackedByteArray()
+	surface.resize(15 * 9)
+	for x in range(7, 15):
+		surface[4 * 15 + x] = 1
+	var rc := RoadCourse.build(_synthetic(15, 9, _rect(3, 4, 11, 4)), surface, 2, 7)
+	assert_not_null(rc)
+	if rc == null:
+		return
+	var img: Image = rc.rasterise()[1]
+	var j: int = roundi((4.0 + 0.5 + 2) * RoadCourse.PX - 0.5)
+	var last_asphalt: float = -1.0
+	var first_dirt: float = -1.0
+	for i in range(roundi((4.0 + 0.5 + 2) * RoadCourse.PX - 0.5), roundi((9.0 + 0.5 + 2) * RoadCourse.PX - 0.5)):
+		var x: float = (i + 0.5) / RoadCourse.PX - 2.5
+		var r: float = img.get_pixel(i, j).r
+		if r >= 0.95:
+			last_asphalt = x
+		if r <= 0.05 and first_dirt < 0.0:
+			first_dirt = x
+		if first_dirt > 0.0:
+			assert_lt(r, 0.5, "асфальт знову з'являється за ґрунтівкою на x = %.2f" % x)
+	assert_gt(last_asphalt, 4.5, "асфальт доходить до переходу")
+	assert_gt(first_dirt, 0.0, "далі — ґрунтівка")
+	# Перепад — один крок лінії (0.2 клітинки, від 95 % до 5 % — 0.18); 0.25 лишає запас на піксель растра (0.125).
+	assert_lte(first_dirt - last_asphalt, 0.25, "перехід довший за 0.25 клітинки")
+
+
+## Асфальт — лише проїзна частина: далі за 3.0 м від осі найближчої лінії лежить гравійне узбіччя. Ядра
+## розвилок і площ (вага розвилки 1) не перевіряються: там вісь не задає ширину.
+func test_asphalt_stays_within_the_carriageway_of_the_nearest_axis() -> void:
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		var imgs: Array[Image] = rc.rasterise()
+		var worst: float = 0.0
+		for j in imgs[0].get_height():
+			for i in imgs[0].get_width():
+				var f: Color = imgs[0].get_pixel(i, j)
+				var t: Color = imgs[1].get_pixel(i, j)
+				if f.r < 0.0 and t.r > 0.5 and t.a < 0.99:
+					worst = maxf(worst, absf(f.g))
+		assert_lte(worst, 3.0, "%s: асфальт на %.1f м від осі" % [path, worst])
+
+
+## Ґрунтівка, що відходить від асфальтової дороги, починається одразу від краю проїзної частини: вздовж
+## її осі асфальт не заходить далі за ~0.5 м від краю головної дороги (півширина до 2.7 м) — без язика.
+func test_dirt_branch_starts_at_the_asphalt_edge() -> void:
+	for path in _MAPS:
+		var checked := 0
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		var t_img: Image = rc.rasterise()[1]
+		var f_img: Image = rc.rasterise()[0]
+		for li in rc.lines.size():
+			var pts: PackedVector2Array = rc.lines[li]
+			var ty: PackedVector3Array = rc.types[li]
+			for end in [0, pts.size() - 1]:
+				var node: Vector2 = pts[end]
+				if rc.near_node(node) > 0.05 or rc._type_near(node) != 0:
+					continue
+				# Гілка — ґрунтівка за 1.5 клітинки від вузла.
+				var step: int = 1 if end == 0 else -1
+				var far: int = clampi(end + step * 8, 0, pts.size() - 1)
+				if ty[far].y < 0.5:
+					continue
+				checked += 1
+				var reach: float = 0.0
+				var i: int = end
+				while i != far:
+					var a: Vector2 = pts[i]
+					var b: Vector2 = pts[i + step]
+					for s in 4:
+						var p: Vector2 = a.lerp(b, s / 4.0)
+						var px: int = clampi(roundi((p.x + 0.5 + rc._margin) * RoadCourse.PX - 0.5), 0, t_img.get_width() - 1)
+						var py: int = clampi(roundi((p.y + 0.5 + rc._margin) * RoadCourse.PX - 0.5), 0, t_img.get_height() - 1)
+						if t_img.get_pixel(px, py).r > 0.5 and f_img.get_pixel(px, py).r < 0.0:
+							reach = maxf(reach, p.distance_to(node) * _TILE_M)
+					i += step
+				assert_lte(reach, 3.2, "%s: лінія %d, асфальт заходить у відгалуження на %.1f м від вузла" % [path, li, reach])
+		assert_gt(checked, 0, "%s: жодного відгалуження ґрунтівки від асфальтового вузла" % path)
+
+
+
+## Вага B (гравійне узбіччя) є лише там, де проїзна частина вужча за смугу: на вулиці в 2 клітинки; уздовж
+## однієї смуги (півширина < 2.65 м, поза розвилками) її нема навіть у м'якому краї (d до 0.15 м), а на
+## площі — і поготів.
+func test_shoulder_weight_only_on_streets_not_on_single_lane_or_plazas() -> void:
+	var street_px := 0
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		var imgs: Array[Image] = rc.rasterise()
+		var leaks := 0
+		for j in imgs[0].get_height():
+			for i in imgs[0].get_width():
+				var f: Color = imgs[0].get_pixel(i, j)
+				var t: Color = imgs[1].get_pixel(i, j)
+				var half: float = absf(f.g) - f.r
+				if t.a < 0.05 and f.r < 0.15 and half < 2.65 and t.b > 0.02:
+					leaks += 1
+				if t.a < 0.05 and f.r < -0.2 and half > 3.5 and absf(f.g) > 3.0 and absf(f.g) < 4.0 and t.b > 0.5:
+					street_px += 1
+		assert_eq(leaks, 0, "%s: гравійне узбіччя на одній смузі" % path)
+	assert_gt(street_px, 0, "на вулиці в 2 клітинки немає гравійного узбіччя")
+	# Площа 3×3: усередині жодного узбіччя, лише асфальт.
+	var plaza := _rect(3, 3, 5, 5)
+	var rc := RoadCourse.build(_synthetic(9, 9, plaza), PackedByteArray(), 2, 7)
+	assert_not_null(rc)
+	if rc == null:
+		return
+	var imgs: Array[Image] = rc.rasterise()
+	for j in imgs[0].get_height():
+		for i in imgs[0].get_width():
+			if imgs[0].get_pixel(i, j).r < -2.0:
+				assert_lt(imgs[1].get_pixel(i, j).b, 0.01, "узбіччя всередині площі (%d, %d)" % [i, j])

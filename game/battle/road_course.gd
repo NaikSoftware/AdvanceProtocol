@@ -21,8 +21,8 @@ const M: float = 0.125
 ## Півширина однієї смуги, м (індекс — тип): ширина асфальту 4.6, ґрунтівки 2.7, бруківки 4.4.
 ## Асфальт не 5.0: шум ширини понад 2.5 м обрізає верхня межа SINGLE_MAX_HALF_M.
 const HALF_M: Array[float] = [2.3, 1.35, 2.2]
-## Вулиця в смузі 2 клітинки: 7 м.
-const STREET_HALF_M: float = 3.5
+## Вулиця в смузі 2 клітинки: проїзна частина CARRIAGE_HALF_M + узбіччя ~1.8 м з кожного боку.
+const STREET_HALF_M: float = 4.5
 ## Верхня межа півширини однієї смуги (ширина 5 м): на дугах капсули додають ~0.2 м, тож
 ## ширина ≤ 0.65 клітинки = 5.2 м.
 const SINGLE_MAX_HALF_M: float = 2.5
@@ -56,6 +56,8 @@ const ANCHOR_SIGMA: float = 0.7
 ## Півдовжина відрізка осі на окремій клітинці дороги (клітинки).
 const STUB: float = 0.35
 const CLOSE_M: float = 7.0
+## Півширина проїзної частини асфальту, м: далі від осі — узбіччя (на вулиці в 2 клітинки й у закругленнях розвилок).
+const CARRIAGE_HALF_M: float = 2.7
 const BEND_CLOSE_M: float = 2.0
 ## Радіус заокруглення опуклих кутів площі, м.
 const PLAZA_R: float = 4.0
@@ -630,6 +632,12 @@ func _widths(li: int, n_w: FastNoiseLite, n_w2: FastNoiseLite) -> void:
 		for q in _bend_nodes:
 			if pts[i].distance_to(q) < 0.75 and pts[i].distance_to(q) > 1e-4:
 				t = _type_near(q + (pts[i] - q).normalized())
+		# Відгалуження від розвилки: далі за краєм проїзної частини головної дороги (0.3 клітинки від вузла)
+		# воно має тип своєї клітинки, а не вузла — без асфальтового язика в ґрунтівці.
+		for q in nodes:
+			var dq: float = pts[i].distance_to(q)
+			if dq >= 0.3 and dq < 0.75 and not _bend_nodes.has(q):
+				t = _type_near(q + (pts[i] - q).normalized())
 		tw.append(Vector3(1.0 if t == 0 else 0.0, 1.0 if t == 1 else 0.0, 1.0 if t == 2 else 0.0))
 	var street: PackedByteArray = _street_flags(pts)
 	var base := PackedFloat32Array()
@@ -637,7 +645,6 @@ func _widths(li: int, n_w: FastNoiseLite, n_w2: FastNoiseLite) -> void:
 		var single: float = tw[i].x * HALF_M[0] + tw[i].y * HALF_M[1] + tw[i].z * HALF_M[2]
 		base.append(maxf(STREET_HALF_M, _wide_half_m(pts[i])) if street[i] == 1 else single)
 	base = _gauss_f(base, 0.35)
-	tw = _gauss_v3(tw, 0.3)
 	var hw := PackedFloat32Array()
 	for i in n:
 		# Шум підсилено ×2.5 з обрізанням до ±1: симплекс рідко сягає ±1, і CV ширини < 3 %.
@@ -698,21 +705,6 @@ static func _gauss_f(v: PackedFloat32Array, sigma: float) -> PackedFloat32Array:
 	var r: int = ceili(2.5 * sigma / STEP)
 	for i in n:
 		var acc: float = 0.0
-		var ws: float = 0.0
-		for k in range(-r, r + 1):
-			var g: float = exp(-0.5 * pow(float(k) * STEP / sigma, 2.0))
-			acc += v[clampi(i + k, 0, n - 1)] * g
-			ws += g
-		out[i] = acc / ws
-	return out
-
-
-static func _gauss_v3(v: PackedVector3Array, sigma: float) -> PackedVector3Array:
-	var n: int = v.size()
-	var out: PackedVector3Array = v.duplicate()
-	var r: int = ceili(2.5 * sigma / STEP)
-	for i in n:
-		var acc := Vector3.ZERO
 		var ws: float = 0.0
 		for k in range(-r, r + 1):
 			var g: float = exp(-0.5 * pow(float(k) * STEP / sigma, 2.0))
@@ -843,6 +835,9 @@ func rasterise() -> Array[Image]:
 	tw.resize(n)
 	var jw := PackedFloat32Array()
 	jw.resize(n)
+	# Півширина лінії в найближчій до пікселя точці, м.
+	var hk := PackedFloat32Array()
+	hk.resize(n)
 	var inv: float = 1.0 / PX
 	for li in lines.size():
 		var pts: PackedVector2Array = lines[li]
@@ -881,7 +876,10 @@ func rasterise() -> Array[Image]:
 						d[k] = dd
 						v[k] = (abn.x * qz - abn.y * qx) * 8.0
 						u[k] = (s0 + t * seg_len) * 8.0
+						# Зміна типу — один крок лінії (0.2 клітинки) без згладжування: рваність краю й
+						# кришіння додає шейдер, а розмитий перехід лягав би сірим серпанком на кілька метрів.
 						tw[k] = ty[si].lerp(ty[si + 1], t)
+						hk[k] = lerpf(hw[si], hw[si + 1], t)
 						# Відстань за глухим кінцем уздовж осі (м; мінус — ще до кінця): колії гаснуть
 						# за ~2 м до кінця й зникають на заокругленні.
 						var past: float = -INF
@@ -892,7 +890,17 @@ func rasterise() -> Array[Image]:
 						if past > -2.0:
 							jw[k] = maxf(jw[k], smoothstep(-2.0, 0.5, past))
 			s0 += seg_len
-	_close_junctions(d, jw, rw, rh, org)
+	_close_junctions(d, jw, tw, rw, rh, org)
+	# Асфальт — лише проїзна частина: не далі CARRIAGE_HALF_M від осі й не ширше за саму лінію. Смуга шириною
+	# у 2 клітинки й заокруглення розвилок (CLOSE_M) значно ширші: решта там — гравійне узбіччя (вага B;
+	# бруківки на картах нема), а не плита асфальту.
+	for k in n:
+		# Одна смуга (півширина ≤ проїзної частини): обрізання лише за її власним краєм із запасом на м'який край,
+		# тож узбіччя є тільки в заокругленнях розвилок, а не облямівкою вздовж дороги.
+		var half: float = CARRIAGE_HALF_M if hk[k] > CARRIAGE_HALF_M else hk[k] + 0.3
+		var cut: float = smoothstep(half, half + 0.4, absf(v[k]))
+		if cut > 0.0 and tw[k].x > 0.0:
+			tw[k] = Vector3(tw[k].x * (1.0 - cut), tw[k].y, tw[k].z + tw[k].x * cut)
 	_plazas(d, tw, jw, rw, rh, org)
 	var fimg := Image.create_empty(rw, rh, false, Image.FORMAT_RGBAH)
 	var timg := Image.create_empty(rw, rh, false, Image.FORMAT_RGBA8)
@@ -914,13 +922,14 @@ func rasterise() -> Array[Image]:
 ## дугами радіуса CLOSE_M, а прямі й опуклі краї не змінюються. Точна відстань
 ## (Felzenszwalb–Huttenlocher) у вікні навколо вузла; вага спадає від NODE_INNER до NODE_REACH
 ## клітинки.
-func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, rw: int, rh: int, org: float) -> void:
+func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedVector3Array, rw: int, rh: int, org: float) -> void:
 	var d0: PackedFloat32Array = d.duplicate()
 	var half: int = ceili(NODE_REACH * PX + CLOSE_M + 4.0)
 	for node in nodes:
 		# На повороті з бічною дорогою — замикання радіусом BEND_CLOSE_M: воно лише з'єднує кінець бічної
 		# дороги з дугою; радіус CLOSE_M заповнив би зовнішній бік дуги до прямого кута.
 		var cm: float = BEND_CLOSE_M if _bend_nodes.has(node) else CLOSE_M
+		var asphalt_node: bool = _type_near(node) == 0
 		var ci: int = floori((node.x - org) * PX)
 		var cj: int = floori((node.y - org) * PX)
 		var i0: int = maxi(ci - half, 0)
@@ -946,7 +955,12 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, rw: int, rh
 					continue
 				var dc: float = cm - sqrt(f[j * ww + i])
 				d[k] = minf(d[k], lerpf(d0[k], minf(d0[k], dc), w))
-				jw[k] = maxf(jw[k], w)
+				# Колії ґрунтівки, що відходить від асфальту, мають іти до самого краю проїзної частини: вагу
+				# розвилки там знімаємо вже з 0.3–0.5 клітинки від вузла (інакше між асфальтом і колією — трава).
+				var wj: float = w
+				if asphalt_node and tw[k].y > 0.5:
+					wj = 1.0 - smoothstep(0.3, 0.5, dist)
+				jw[k] = maxf(jw[k], wj)
 
 
 ## Площі: клітинки ROAD, що входять у суцільний блок 3×3, і окремі блоки 2×2. Скелет такого блоку

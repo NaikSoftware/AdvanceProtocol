@@ -227,8 +227,9 @@ class B:
                 l[uv].uv = (l.vert.co[a] / t, l.vert.co[b] / (tv if b == 2 else t))
 
 
-def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True, floor=None):
-    """floor — висота землі в метрах до масштабу; без неї найнижча вершина стає нулем."""
+def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True, floor=None, extras=None):
+    """floor — висота землі в метрах до масштабу; без неї найнижча вершина стає нулем. extras — властивості об'єкта,
+    що йдуть у GLB (glTF extras) і доходять до Godot метаданими вузла."""
     bm = b.bm
     tile_of = lambda m: m.get("tile", 1.0)
     b.uv_box(tile_of)
@@ -249,6 +250,8 @@ def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True, floor=Non
     for m in b.mats:
         me.materials.append(m)
     ob = bpy.data.objects.new(name, me)
+    for k, v in (extras or {}).items():
+        ob[k] = v
     bpy.context.scene.collection.objects.link(ob)
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
@@ -267,7 +270,7 @@ def finish(b, name, wires=(), center=True, extra_tile=None, jpeg=True, floor=Non
     os.makedirs(OUT, exist_ok=True)
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_apply=True,
                               export_image_format="JPEG" if jpeg else "AUTO", export_jpeg_quality=80, export_vertex_color="ACTIVE", export_cameras=False, export_lights=False,
-                              export_yup=True)
+                              export_yup=True, export_extras=bool(extras))
     patch_gltf(path)
     print("BUILT", json.dumps(report(path, tris)))
     # чистимо сцену для наступного активу

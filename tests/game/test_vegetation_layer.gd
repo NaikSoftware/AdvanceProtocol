@@ -54,6 +54,8 @@ func test_reeds_stand_in_shallow_water_off_land(p = use_parameters(MAPS)) -> voi
 		var g: float = h.at(q.x, q.y)
 		if g > TerrainHeight.WATER_LEVEL + 0.001 or g < TerrainHeight.WATER_LEVEL - VegetationLayer.SHALLOW - 0.001:
 			bad.append([pl["node"], q, "not shallow"])
+		if pl["pos"].y < TerrainHeight.WATER_LEVEL - VegetationLayer.REED_DIP - 1e-4:
+			bad.append([pl["node"], q, "base too deep under water"])
 		if VegetationLayer._land_dist(board, q) < VegetationLayer.LAND_CLEAR:
 			bad.append([pl["node"], q, "too close to land centre"])
 		if VegetationLayer._near_kind(board, pl["cell"], VegetationLayer.NO_BRIDGE, [Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]):
@@ -198,6 +200,26 @@ func test_yard_plants_stay_inside_the_fence(p = use_parameters(["river", "crossr
 		if not homes.any(func(h: Dictionary) -> bool: return (h.get("cells", [h["house"]]) as Array).has(pl["cell"])):
 			bad.append([pl["node"], pl["cell"]])
 	assert_eq(bad, [], "%s: рослина садиби за парканом" % p)
+
+
+## Дерево садиби не росте крізь паркан: стовбур далі YARD_TREE_FENCE радіуса крони від кожної секції паркану.
+## Стовбур ближче до секції читається з камери деревом, що проросло крізь неї.
+func test_yard_trees_keep_clear_of_fences(p = use_parameters(["river", "crossroads"])) -> void:
+	var view: BoardView = _view(p)
+	var obst: Dictionary = VegetationLayer.obstacles(view.props())
+	var bad: Array = []
+	var checked: int = 0
+	for pl: Dictionary in view.vegetation().placements:
+		if pl["group"] != "yard" or pl["kind"] != "tree":
+			continue
+		checked += 1
+		var q := Vector2(pl["pos"].x, pl["pos"].z)
+		var need: float = VegetationLayer.crown_of(pl["node"]) * VegetationLayer.YARD_TREE_FENCE
+		for r: Rect2 in obst["fences"]:
+			if VegetationLayer._rect_dist(r, q) < need - 0.001:
+				bad.append([pl["node"], q, r])
+	assert_eq(bad, [], "%s: дерево садиби впритул до паркану" % p)
+	assert_gt(checked, 0, "%s: передумова — дерева в садибах є" % p)
 
 
 ## На луках кожної карти є хоча б одне дерево (груша, дуб, верба).
