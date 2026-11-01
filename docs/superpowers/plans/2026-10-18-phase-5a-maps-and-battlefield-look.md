@@ -566,4 +566,4 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] Neighbouring houses differ in model or colour
 - [ ] Gates in their fence's tone under every light; a gate stands between real fence on both sides
 - [x] Draw calls under 100 at every zoom on every map
-- [ ] Battle board builds noticeably faster, with identical pixels
+- [x] Battle board builds noticeably faster, with identical pixels
