@@ -68,3 +68,19 @@ func test_height_from_cache_equals_a_fresh_bake() -> void:
 	assert_eq(second.roads.d_grid(), fresh.roads.d_grid())
 	var k: String = BuildCache.key([board.width, board.height, board.tiles, 0, seed_value, m.surface, 0, TerrainHeight.undulation_scale], TerrainHeight.CACHE_SCRIPTS)
 	DirAccess.remove_absolute("%s/height_%s.bin" % [BuildCache.DIR, k])
+
+
+func test_height_from_cache_keeps_the_river_course() -> void:
+	var m: MapData = load("res://maps/river.tres")
+	var board: Board = m.to_board()
+	var seed_value: int = m.name_key.hash()
+	var fresh := TerrainHeight.bake(board, 0, seed_value, m.surface)
+	TerrainHeight.bake(board, 0, seed_value, m.surface, 0, true)
+	var second := TerrainHeight.bake(board, 0, seed_value, m.surface, 0, true)
+	assert_not_null(second.course, "вісь річки в зліпку")
+	assert_eq(second.course.lines, fresh.course.lines)
+	assert_eq(second.course.axis_lines, fresh.course.axis_lines)
+	assert_eq(second.course._warp_x.get_noise_2d(1.5, 2.5), fresh.course._warp_x.get_noise_2d(1.5, 2.5))
+	assert_eq(var_to_bytes(second._to_cache()), var_to_bytes(fresh._to_cache()))
+	var k: String = BuildCache.key([board.width, board.height, board.tiles, 0, seed_value, m.surface, 0, TerrainHeight.undulation_scale], TerrainHeight.CACHE_SCRIPTS)
+	DirAccess.remove_absolute("%s/height_%s.bin" % [BuildCache.DIR, k])

@@ -180,15 +180,14 @@ var revision: int = 0
 ## ширший з кожного боку. Запікається в координатах світу, потім зсувається на ring, тож at(),
 ## deck_y(), bridge_groups() і image() далі говорять координатами дошки. course і roads лишаються
 ## в координатах світу: їх читають лише растри, а ті й так покривають увесь світ.
-## cache — узяти поле з диска (BuildCache) і зберегти туди; річкова вісь `course` у зліпок не входить
-## (після запікання її читають лише тести), тож на кеш-шляху вона null.
+## cache — узяти поле з диска (BuildCache) і зберегти туди.
 static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedByteArray = PackedByteArray(), ring: int = 0, cache: bool = false) -> TerrainHeight:
 	var cache_key: String = ""
 	if cache:
 		cache_key = BuildCache.key([board.width, board.height, board.tiles, p_margin, seed_value, surface, ring, undulation_scale], CACHE_SCRIPTS)
 		var cached: Variant = BuildCache.fetch("height", cache_key)
 		if cached is Dictionary:
-			return _from_cache(cached)
+			return _from_cache(cached, seed_value)
 	var t := TerrainHeight.new()
 	t.margin = p_margin
 	t.board_width = board.width
@@ -214,6 +213,8 @@ const CACHE_SCRIPTS: PackedStringArray = [
 
 func _to_cache() -> Dictionary:
 	var state: Dictionary = BuildCache.dump_vars(self, ["course", "roads"])
+	if course != null:
+		state["#course"] = BuildCache.dump_vars(course)
 	if roads != null:
 		var images: Array = []
 		for img in roads.rasterise():
@@ -222,12 +223,19 @@ func _to_cache() -> Dictionary:
 	return state
 
 
-static func _from_cache(state: Dictionary) -> TerrainHeight:
+static func _from_cache(state: Dictionary, seed_value: int) -> TerrainHeight:
 	var t := TerrainHeight.new()
 	var vars: Dictionary = state.duplicate()
+	var course_state: Variant = vars.get("#course")
+	vars.erase("#course")
 	var road_state: Variant = vars.get("#roads")
 	vars.erase("#roads")
 	BuildCache.load_vars(t, vars)
+	if course_state != null:
+		var rv := RiverCourse.new()
+		BuildCache.load_vars(rv, course_state)
+		rv.make_warps(seed_value)
+		t.course = rv
 	if road_state != null:
 		var rc := RoadCourse.new()
 		BuildCache.load_vars(rc, road_state[0])
