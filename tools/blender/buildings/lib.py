@@ -885,7 +885,7 @@ def _off(axis, c, sgn, u, z, off):
     return (u, c + sgn * off, z) if axis == "y" else (c + sgn * off, u, z)
 
 
-def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, kband=(0.46, 0.56), ksill=(0.25, 0.38), lsill=(1.0, 1.9), eave_streaks=True):
+def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, kband=(0.62, 0.72), ksill=(0.66, 0.8), lsill=(0.7, 1.6), eave_streaks=True):
     """Вивітрювання стін декалями-множниками: брудний низ із рваним краєм (-30%), темні патьоки під підвіконнями й від ринви (-25%),
     пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. Під кожним підвіконням — вологий слід: м'яка тінь завширшки 1.5 вікна, що згасає вниз до цоколя. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
     import random
@@ -911,7 +911,9 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, 
         for (_a, _c, _s, u, z, w, h) in wins:                           # патьоки з обох кінців кожного підвіконня: вода стікає з країв відливу
             for end in (-1, 1):
                 uu = u + end * (w / 2 + 0.06) + rnd.uniform(-0.04, 0.04)
-                hw = rnd.uniform(0.17, 0.26)   # у кадрі бою ≥ 3 пікселі: тонші патьоки зливались зі стіною
+                if rnd.random() < 0.4:   # не під кожним кутом вікна: рівний ряд однакових смуг читається штампом
+                    continue
+                hw = rnd.uniform(0.13, 0.22)   # у кадрі бою ≥ 2-3 пікселі: тонші патьоки зливались зі стіною
                 zt = z - 0.12
                 zbm = max(zb + 0.04, zt - rnd.uniform(*lsill))   # вікна низько (1 м): патьоку доводиться йти майже до цоколя
                 if zt - zbm < 0.25:
