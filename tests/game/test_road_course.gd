@@ -401,6 +401,57 @@ func test_ridge_column_jog_is_one_s_bend() -> void:
 		y += 0.2
 
 
+## Асфальт Хребта (дошка з кільцем, як у бою) — рівної ширини: намальована півширина кожного боку не відходить від
+## медіани далі за шум ширини (±WIDTH_VAR і ±WIDTH_FINE від 2.3 м — до ±0.3 м), а на дузі — далі за кілька сантиметрів від номіналу. Бік, до якого примикає інша дорога
+## (заокруглення розвилки), і глухі кінці не міряються; протилежний бік розвилки — міряється: замикання розвилки
+## не сміє лягати туди горбом.
+func test_ridge_asphalt_half_width_is_steady() -> void:
+	var m: MapData = load("res://maps/ridge.tres")
+	var ring: int = Surroundings.ring_of(m)
+	var rc: RoadCourse = RoadCourse.build(Surroundings.world_board(m.to_board(), m), Surroundings.world_surface(m), 0,
+			m.name_key.hash(), ring)
+	var img: Image = rc.rasterise()[0]
+	var sides: Array = []
+	for li in rc.lines.size():
+		var pts: PackedVector2Array = rc.lines[li]
+		var n: int = pts.size()
+		for i in range(5, n - 5, 2):
+			var p: Vector2 = pts[i]
+			var b: Vector2 = p - Vector2(ring, ring)
+			if rc.types[li][i].x < 0.99 or b.x < -6.0 or b.y < -6.0 or b.x > m.width + 5.0 or b.y > m.height + 5.0:
+				continue
+			if (rc.is_free_end(pts[0]) and p.distance_to(pts[0]) < 1.0) or (rc.is_free_end(pts[n - 1]) and p.distance_to(pts[n - 1]) < 1.0):
+				continue
+			var tg: Vector2 = (pts[i + 1] - pts[i - 1]).normalized()
+			var curve: bool = _circumradius(pts[i - 5], p, pts[i + 5]) * _TILE_M < 14.0 and rc.near_node(p) > 1.6
+			for sgn: float in [-1.0, 1.0]:
+				var nrm: Vector2 = Vector2(-tg.y, tg.x) * sgn
+				var touched := false
+				for lj in rc.lines.size():
+					if lj == li:
+						continue
+					for q in rc.lines[lj]:
+						if q.distance_to(p) < 1.6 and (q - p).dot(nrm) > 0.2:
+							touched = true
+							break
+				if touched:
+					continue
+				var t := 0.0
+				while t < 1.5 and rc.d_from(img, p + nrm * t) < 0.0:
+					t += 0.0025
+				sides.append([t * _TILE_M, rc.base_halfs[li][i], curve, b])
+	assert_gt(sides.size(), 100)
+	var ws: Array[float] = []
+	for e: Array in sides:
+		ws.append(e[0])
+	ws.sort()
+	var med: float = ws[ws.size() / 2]
+	for e: Array in sides:
+		assert_almost_eq(float(e[0]), med, 0.35, "Хребет: півширина %.2f м у %s, медіана %.2f" % [e[0], e[3], med])
+		if e[2]:
+			assert_almost_eq(float(e[0]), float(e[1]), 0.15, "Хребет: півширина на дузі %.2f м у %s, номінал %.2f" % [e[0], e[3], e[1]])
+
+
 ## x перетину осі з рядком y серед ліній, що проходять у смузі x0..x1 (клітинки).
 static func _axis_x_at(rc: RoadCourse, y: float, x0: float, x1: float) -> float:
 	for pts in rc.lines:
