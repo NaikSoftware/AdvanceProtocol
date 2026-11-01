@@ -150,6 +150,12 @@ static func point_seed(map_seed: int, cell: Vector2i, salt: int) -> int:
 	return hash([map_seed, cell.x, cell.y, salt])
 
 
+## Пляма затінення під рослиною. Очерет стоїть у воді: на похмурій карті (без сонця) чорна пляма лише темнила б воду
+## довкола куртини, а на сонячній вона — єдина тінь очерету (cast), тож лишається.
+static func has_shade(node: StringName, sunny: bool) -> bool:
+	return sunny or not (REEDS.has(node) or CATTAILS.has(node))
+
+
 static func crown_of(node: StringName) -> float:
 	for k: StringName in CROWN:
 		if String(node).begins_with(String(k)):
@@ -802,7 +808,8 @@ func _rebuild() -> void:
 			push_error("VegetationLayer: нема вузла %s" % node)
 			continue
 		if not by_node.has(node):
-			by_node[node] = {"list": [], "idx": [], "mesh": meshes[node], "arrays": _arrays_of(meshes[node])}
+			by_node[node] = {"list": [], "idx": [], "mesh": meshes[node], "arrays": _arrays_of(meshes[node]),
+					"shade": has_shade(node, cast_shadows)}
 			_drawn.append(node)
 		(by_node[node]["list"] as Array).append({"xf": Transform3D(Basis(Vector3.UP, p["yaw"]).scaled(Vector3.ONE * float(p.get("scale", 1.0))), p["pos"]), "rgb": Color.WHITE})
 		(by_node[node]["idx"] as Array).append(i)
@@ -831,7 +838,7 @@ func _rebuild() -> void:
 		# Пляма затінення — друга поверхня, лише в моделей, що її мають; номери екземплярів ті самі.
 		var shade_entries: Array = []
 		for e: Dictionary in entries:
-			if _arrays_of(e["mesh"]).size() > 1:
+			if e["shade"] and _arrays_of(e["mesh"]).size() > 1:
 				shade_entries.append({"arrays": _arrays_of(e["mesh"])[1], "list": e["list"], "first": e["first"]})
 		if not shade_entries.is_empty():
 			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, batch.merge(shade_entries, false), [], {}, FoliageBatch.custom_flags())
