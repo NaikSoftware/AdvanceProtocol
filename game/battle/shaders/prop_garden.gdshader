@@ -50,29 +50,41 @@ void fragment() {
 	// Борозна — прямокутний профіль із краєм завширшки в піксель, а не синусоїда: на зумі 8 крок 0.7 м — ~5 px, і
 	// синус розпливався в рівну пляму. Кожен гребінь — своєї ширини й сили (±20 %), а кінці рядів обірвані
 	// нерівно, тож грядки не читаються надрукованою смугою. Коли крок ≲ 2 px, рядки зливаються в середній тон.
-	float rid = floor(ph);
+	// Гребінь трохи гуляє вбік уздовж ряду (плавний шум, не різкий зсув між гребенями).
+	float wob_r = 0.22 * (vnoise(vec2(UV.y * 5.0, UV.x * rows * 0.35 + v_custom.g * 9.0)) - 0.5);
+	float pw = ph + wob_r;
+	float rid = floor(pw);
 	float h1 = hash(vec2(rid, v_custom.g * 31.0));
 	float h2 = hash(vec2(rid + 17.0, v_custom.g * 31.0));
 	float h3 = hash(vec2(rid + 43.0, v_custom.g * 31.0));
 	float thr = 1.0 - 0.5 * (1.0 + 0.4 * (h1 - 0.5));
-	float row = 1.0 - smoothstep(thr - aa, thr + aa, abs(fract(ph) - 0.5) * 2.0);
+	float fr = fract(pw) - 0.5;
+	float row = 1.0 - smoothstep(thr - aa, thr + aa, abs(fr) * 2.0);
 	row = 0.5 + (row - 0.5) * (1.0 + 0.4 * (h2 - 0.5));
+	// Кінці рядів обриваються на різній довжині: гребінь розсипається в рівний ґрунт.
 	float along = min(UV.y, 1.0 - UV.y);
-	row = mix(0.5, row, smoothstep(0.02 + 0.06 * h3, 0.05 + 0.1 * h3, along));
+	float keep = smoothstep(0.03 + 0.12 * h3, 0.06 + 0.17 * h3, along);
+	row = mix(0.5, row, keep);
+	// Перетин гребеня: освітлена верхівка й затінена борозна — нахил нормалі впоперек ряду (за TANGENT уздовж UV.x),
+	// а не лише яскравість, тож на зумі 8 борозни читаються рельєфом. Нормаль міняється м'яко (cos), без нових текстур.
+	float slope = -sin(6.2832 * fr) * keep * (1.0 - smoothstep(0.3, 0.6, aa));
+	NORMAL = normalize(NORMAL + TANGENT * slope * 0.55);
 	row = mix(row, 0.5, smoothstep(0.3, 0.6, aa));
+	float clod = vnoise(world_pos.xz * 70.0);
 	float wet = smoothstep(0.0, 0.5, weather_wetness);
 	// Рядки — ±24 % яскравості: зорані борозни читаються на зумі бою й під дощем, де ґрунт майже чорний;
 	// менший розмах (±3 %) давав ±5 з 255 і зливався в рівну пляму.
-	vec3 soil = mix(SOIL_DRY, SOIL_WET, wet) * (0.76 + 0.48 * row) * (0.9 + 0.2 * vnoise(world_pos.xz * 20.0));
+	vec3 soil = mix(SOIL_DRY, SOIL_WET, wet) * (0.76 + 0.48 * row) * (0.9 + 0.2 * vnoise(world_pos.xz * 20.0)) * (0.86 + 0.28 * clod);
 	// Зелена частина — з одного кінця ділянки; на ній кущі по гребенях, між ними земля.
 	float green_part = step(UV.y, v_custom.b);
 	float bush = smoothstep(0.45, 0.75, vnoise(vec2(UV.x * rows * 2.0, UV.y * 9.0) + v_custom.g * 7.0)) * smoothstep(0.3, 0.8, row);
 	vec3 leaf = mix(LEAF_YELLOW, LEAF, clamp(green * 2.0 - 1.0, 0.0, 1.0));
 	float leaf_k = green_part * bush * smoothstep(0.05, 0.4, green);
 	ALBEDO = mix(soil, leaf, leaf_k);
-	// Мокра рілля — ледь волога; колір теплий, тож сірою плитою вона вже не читається.
-	ROUGHNESS = mix(0.95, 0.5, wet);
-	// Слабкий спекуляр ґрунту: інакше волога рілля під сірим небом віддзеркалювала його світлою плитою.
-	SPECULAR = 0.1;
+	// Мокра рілля — ледь волога; колір теплий, тож сірою плитою вона вже не читається. Шорсткість лишається високою
+	// (≥0.8): спекуляр ґрунту слабкий, і під сірим небом волога рілля не віддзеркалює його світлою плитою.
+	// SPECULAR тут не задаємо: на gl_compatibility значення, що не дорівнює 0.5, чорнить усе альбедо (грядки ставали
+	// майже чорними).
+	ROUGHNESS = mix(0.95, 0.8, wet);
 	ALPHA = edge;
 }

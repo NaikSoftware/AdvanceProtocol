@@ -69,6 +69,7 @@ const TAIL_LEN: float = 1.0
 const TAIL_BACK: float = 0.35
 ## Звуження до ширини ґрунтівки закінчується тут (клітинки від вузла), далі — до кінця відрізка вона вже вузька.
 const TAIL_TAPER: float = 0.6
+const TAIL_FEATHER: float = 0.3
 ## Поле відстані пишеться на стільки метрів за край; далі — FAR_M.
 const REACH_M: float = 4.0
 const FAR_M: float = 16.0
@@ -1020,17 +1021,23 @@ func _asphalt_end_tail(node: Vector2, d: PackedFloat32Array, jw: PackedFloat32Ar
 					var k: int = j * rw + i
 					var q := Vector2(org + (i + 0.5) / PX, org + (j + 0.5) / PX) - node
 					var s: float = q.dot(ax)
-					if s < -TAIL_BACK or s > TAIL_LEN or tw[k].x > 0.5:
+					# Перехід асфальт -> ґрунтівка (tw.x > 0) не чіпаємо: так кришиться весь торець, а не лише
+					# його частину, що лишилась поза відрізком.
+					if s < -TAIL_BACK or s > TAIL_LEN or tw[k].x > 0.02:
 						continue
 					var l: float = sg * (ax.x * q.y - ax.y * q.x) * 8.0
 					var hw: float = lerpf(CARRIAGE_HALF_M, HALF_M[1], smoothstep(0.0, 1.0, (s + TAIL_BACK) / (TAIL_TAPER + TAIL_BACK)))
 					var dn: float = absf(l) - hw
-					if dn < d[k]:
-						d[k] = dn
-						v[k] = l
-						u[k] = u_end + sg * s * 8.0
-						tw[k] = Vector3(0.0, 1.0, 0.0)
-						jw[k] = 0.0
+					# Кінець відрізка розтушовано на TAIL_FEATHER клітинки: він дотичний до гілки дуги, без темної виїмки.
+					var f: float = 1.0 - smoothstep(TAIL_LEN - TAIL_FEATHER, TAIL_LEN, s)
+					# Усередині смуги координати колій — від осі відрізка, навіть де ближча гілка дуги: інакше ліва колія
+					# обривається гачком на шві, а права довша й виразніша.
+					if dn < d[k] or dn < 0.0:
+						d[k] = lerpf(d[k], minf(d[k], dn), f)
+						v[k] = lerpf(v[k], l, f)
+						u[k] = lerpf(u[k], u_end + sg * s * 8.0, f)
+						tw[k] = tw[k].lerp(Vector3(0.0, 1.0, 0.0), f)
+						jw[k] *= 1.0 - f
 
 
 ## Площі: клітинки ROAD, що входять у суцільний блок 3×3, і окремі блоки 2×2. Скелет такого блоку
