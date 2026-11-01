@@ -184,7 +184,7 @@ var revision: int = 0
 static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedByteArray = PackedByteArray(), ring: int = 0, cache: bool = false) -> TerrainHeight:
 	var cache_key: String = ""
 	if cache:
-		cache_key = BuildCache.key([board.width, board.height, board.tiles, p_margin, seed_value, surface, ring, undulation_scale], CACHE_SCRIPTS)
+		cache_key = _cache_key(board, p_margin, seed_value, surface, ring)
 		var cached: Variant = BuildCache.fetch("height", cache_key)
 		if cached is Dictionary:
 			return _from_cache(cached, seed_value)
@@ -208,7 +208,11 @@ static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedBy
 ## Скрипти, чий код і константи визначають поле висот: правка будь-якого міняє ключ кешу.
 const CACHE_SCRIPTS: PackedStringArray = [
 	"res://game/battle/terrain_height.gd", "res://game/battle/river_course.gd", "res://game/battle/road_course.gd",
-	"res://game/battle/surroundings.gd", "res://game/battle/ground_lod.gd", "res://core/terrain.gd", "res://core/map_data.gd"]
+	"res://game/battle/surroundings.gd", "res://game/battle/ground_lod.gd", "res://core/terrain.gd", "res://core/map_data.gd", "res://core/board.gd"]
+
+
+static func _cache_key(board: Board, p_margin: int, seed_value: int, surface: PackedByteArray, ring: int) -> String:
+	return BuildCache.key([board.width, board.height, board.tiles, p_margin, seed_value, surface, ring, undulation_scale], CACHE_SCRIPTS)
 
 
 func _to_cache() -> Dictionary:

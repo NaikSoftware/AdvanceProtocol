@@ -429,7 +429,7 @@ func _free(nodes: Array[Node]) -> void:
 ## План лісу всього світу без проламів: чиста функція клітинок, порід, сезону, зерна й бібліотеки —
 ## тож береться з дискового кешу (BuildCache), а не рахується щоразу.
 func _ring_plan() -> Array:
-	var k: String = BuildCache.key([_cells.keys(), _wood.values(), _season, _seed, _lib], ["res://game/battle/forest_scatter.gd"])
+	var k: String = BuildCache.key([_cells.keys(), _wood.values(), _season, _seed, _lib], ["res://game/battle/forest_scatter.gd", "res://game/battle/forest_layer.gd"])
 	var cached: Variant = BuildCache.fetch("forest_ring", k)
 	if cached is Array:
 		return cached
