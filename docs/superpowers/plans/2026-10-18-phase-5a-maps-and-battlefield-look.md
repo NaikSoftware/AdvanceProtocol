@@ -556,7 +556,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] First scroll across the map is smooth, no hitch
 - [x] Chimney smoke: one narrow column from the opening, fading before it reaches buildings behind
 - [x] Movement-zone contours draw above every effect, smoke and rain
-- [ ] Smoke and fences draw in depth order: a fence behind the smoke never covers it
+- [x] Smoke and fences draw in depth order: a fence behind the smoke never covers it
 
 ### Task 24: New props in villages
 
@@ -564,6 +564,6 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] New fence, shed and trailer variants alternate between neighbours
 - [ ] Bales only at field edges; nothing within 0.4 tile of water
 - [ ] Neighbouring houses differ in model or colour
-- [ ] Gates in their fence's tone under every light; a gate stands between real fence on both sides
+- [x] Gates in their fence's tone under every light; a gate stands between real fence on both sides
 - [x] Draw calls under 100 at every zoom on every map
 - [x] Battle board builds noticeably faster, with identical pixels
