@@ -195,7 +195,7 @@ Prompts (agy, one image each, flags before `-p`, see memory `agy image generatio
 - [x] **Step 1:** Write `terrain_tex.py`; self-check: `python3 -I tools/terrain_tex.py check` on a random-noise PNG fails, on its `seamless` output passes.
 - [x] **Step 2:** Generate the 8 albedos with agy; run `seamless` then `normal` on each.
 - [x] **Step 3:** `python3 -I tools/terrain_tex.py check assets/terrain/*.png` → exit 0.
-- [ ] **Step 4:** Publish a page showing each texture tiled 2×2 beside the target frame; regenerate any that look wrong against the target (owner may interject).
+- [ ] ~~**Step 4:** Publish a page showing each texture tiled 2×2 beside the target frame; regenerate any that look wrong against the target (owner may interject).~~ — dropped: no interim showing pages
 - [x] **Step 5: Commit** — `git commit -m "feat(art): текстури місцевості для ґрунтового шейдера"`
 
 ---
