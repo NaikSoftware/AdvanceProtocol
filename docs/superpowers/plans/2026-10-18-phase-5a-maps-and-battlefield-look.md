@@ -561,7 +561,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 24: New props in villages
 
 - [x] Gates of several types facing the road
-- [ ] New fence, shed and trailer variants alternate between neighbours
+- [x] New fence, shed and trailer variants alternate between neighbours
 - [ ] Bales only at field edges; nothing within 0.4 tile of water
 - [ ] Neighbouring houses differ in model or colour
 - [x] Gates in their fence's tone under every light; a gate stands between real fence on both sides
