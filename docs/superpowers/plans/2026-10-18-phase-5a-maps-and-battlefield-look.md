@@ -66,7 +66,7 @@ spawns:
 ```
 Player 1's spawns are generated: position `(W-1-x, H-1-y)`, facing `(f + 4) % 8` (`Board.DIRS_8` index 0 is north).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```gdscript
 func test_parse_reads_size_tiles_ground_and_name() -> void
@@ -79,10 +79,10 @@ func test_parse_rejects_ragged_rows_and_unknown_chars() -> void
 	# a row one char short → null; a 'Q' in the grid → null
 ```
 
-- [ ] **Step 2: Run, expect FAIL** — `./run_tests.sh -gtest=res://tests/game/test_map_ascii.gd` → fails, `MapAscii` not found.
-- [ ] **Step 3: Implement `MapAscii.parse` and `tools/build_maps.gd`.**
-- [ ] **Step 4: Run, expect PASS**, and check the GUT "Scripts" count went up by one.
-- [ ] **Step 5: Commit** — `git commit -m "feat(tools): ASCII-формат карт і конвертер у MapData"`
+- [x] **Step 2: Run, expect FAIL** — `./run_tests.sh -gtest=res://tests/game/test_map_ascii.gd` → fails, `MapAscii` not found.
+- [x] **Step 3: Implement `MapAscii.parse` and `tools/build_maps.gd`.**
+- [x] **Step 4: Run, expect PASS**, and check the GUT "Scripts" count went up by one.
+- [x] **Step 5: Commit** — `git commit -m "feat(tools): ASCII-формат карт і конвертер у MapData"`
 
 ---
 
@@ -102,7 +102,7 @@ func test_parse_rejects_ragged_rows_and_unknown_chars() -> void
 
 Layouts start from `docs/art/map_sketches.py` (run it; concepts A/B/C = river/crossroads/ridge). The sketch measured pace under `DRY`; River is `MUD`, so retune it.
 
-- [ ] **Step 1: Write the failing tests in `tests/game/test_maps.gd`**
+- [x] **Step 1: Write the failing tests in `tests/game/test_maps.gd`**
 
 ```gdscript
 func test_exactly_the_three_new_maps() -> void
@@ -130,10 +130,10 @@ func test_a_save_pointing_at_a_deleted_map_falls_back_to_river() -> void
 	# match_service.map_path = "res://maps/urban.tres" → battle starts; board is 26×22
 ```
 
-- [ ] **Step 2: Run, expect FAIL** (old maps still present).
-- [ ] **Step 3: Author the three `.txt` files, run `tools/build_maps.gd`, delete/move the old maps, update strings and references.** Iterate the layouts until `test_map_pace` passes; keep "no straight base-to-base road".
-- [ ] **Step 4: Run the full suite** — `./run_tests.sh` → all green; Scripts count unchanged from Task 1 (no new test file here). Publish the three map sketches (re-run `docs/art/map_sketches.py`-style render from the real `.tres`) to the owner's browser page.
-- [ ] **Step 5: Commit** — `git commit -m "feat(maps): Річка, Перехрестя, Хребет замість п'яти старих карт"`
+- [x] **Step 2: Run, expect FAIL** (old maps still present).
+- [x] **Step 3: Author the three `.txt` files, run `tools/build_maps.gd`, delete/move the old maps, update strings and references.** Iterate the layouts until `test_map_pace` passes; keep "no straight base-to-base road".
+- [x] **Step 4: Run the full suite** — `./run_tests.sh` → all green; Scripts count unchanged from Task 1 (no new test file here). Publish the three map sketches (re-run `docs/art/map_sketches.py`-style render from the real `.tres`) to the owner's browser page.
+- [x] **Step 5: Commit** — `git commit -m "feat(maps): Річка, Перехрестя, Хребет замість п'яти старих карт"`
 
 ---
 
@@ -151,7 +151,7 @@ func test_a_save_pointing_at_a_deleted_map_falls_back_to_river() -> void
 - Produces: `const UNIT_LAYER: int = 2` on `UnitView`.
 - Unchanged: every other public method of `IsoCameraRig`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```gdscript
 # test_project_settings.gd
@@ -173,10 +173,10 @@ func test_a_unit_moves_on_river_through_real_taps_at_both_zoom_ends() -> void
 ```
 Existing camera tests (anchor fixed under zoom, pan clamp, pan keeps point under finger, centre_on, fly_to) must pass unchanged — they are the acceptance for the projection switch.
 
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement.** Camera local transform on the `Yaw` node: `position = Vector3(0, d·sin(p), d·cos(p))`, `rotation_degrees.x = -p`, with `d = zoom_level`, `p = pitch_for(d)`; `_apply_zoom_keep_anchor` sets this instead of `_camera.size`.
-- [ ] **Step 4: Run the full suite → green.** Take screenshots of River (current box tiles) at MIN and MAX zoom and publish them to the owner's page.
-- [ ] **Step 5: Commit** — `git commit -m "feat(camera): перспективна камера з нахилом від зуму; рендерер Mobile"`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement.** Camera local transform on the `Yaw` node: `position = Vector3(0, d·sin(p), d·cos(p))`, `rotation_degrees.x = -p`, with `d = zoom_level`, `p = pitch_for(d)`; `_apply_zoom_keep_anchor` sets this instead of `_camera.size`.
+- [x] **Step 4: Run the full suite → green.** Take screenshots of River (current box tiles) at MIN and MAX zoom and publish them to the owner's page.
+- [x] **Step 5: Commit** — `git commit -m "feat(camera): перспективна камера з нахилом від зуму; рендерер Mobile"`
 
 ---
 
@@ -534,7 +534,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] No tree crown under a power line
 - [x] Power line through a forest runs in a cleared corridor: no crowns over the wires, undergrowth stays
 - [x] A forest cell under a line still reads as forest, with tall trees outside the cut
-- [ ] Accepted in battle frames on all three maps
+- [x] Accepted in battle frames on all three maps
 
 ### Task 22: Forest into battle
 
@@ -562,7 +562,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 - [x] Gates of several types facing the road
 - [x] New fence, shed and trailer variants alternate between neighbours
-- [ ] Bales only at field edges; nothing within 0.4 tile of water
+- [x] Bales only at field edges; nothing within 0.4 tile of water
 - [x] Neighbouring houses differ in model or colour
 - [x] Gates in their fence's tone under every light; a gate stands between real fence on both sides
 - [x] Draw calls under 100 at every zoom on every map
