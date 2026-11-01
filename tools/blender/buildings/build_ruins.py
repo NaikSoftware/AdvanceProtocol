@@ -30,6 +30,17 @@ def want(n):
     return not only or n in only
 
 
+def record_roof(name, key="ruin_roof"):
+    """Колір даху руїни (sRGB), що йде в атлас, — у roof_colours.json поруч зі збирачами: тест звіряє його з RUIN_ROOF у prop_layer.gd."""
+    import json
+    path = os.path.join(lib.HERE, "roof_colours.json")
+    data = json.load(open(path)) if os.path.exists(path) else {}
+    data[name] = list(lib.ROOFS[key][1])
+    with open(path, "w") as f:
+        json.dump(dict(sorted(data.items())), f, indent=1)
+        f.write("\n")
+
+
 def heaps(b, plan, seed, dens=7.0):
     """Купи: низький меш, високе скан-джерело для запікання (фотоскан сміття + уламки 20-60 см різного матеріалу й тону)."""
     return lib.rubble_heaps(b, plan, seed, dens=dens, skirt=0.5)
@@ -199,29 +210,35 @@ def house1(ruined, variant=0):
     kw = dict(top_tone=0.82, inner_tone=0.85, in_mat="plaster_burnt")             # внутрішні грані — обгоріла штукатурка
     standing = dict(brick_mat="brick_face", cap=0.06, jag=0.12, **kw)          # на зламі — цегла, а не фарба
     broken = dict(brick_mat="brick_face", step=0.35, diag_p=0.85, jit=0.5, **kw)
-    wall_run(b, (-0.9, S), (hx + 0.2, S), 0.4, [E] * 6, "wall_half", "wall_plaster", 21, hcap=3.1, **standing)
-    wall_run(b, (-hx, S), (-0.9, S), 0.4, [0.6, 1.3, 0.9, 1.8], "wall_half", "brick_face", 22, hcap=2.2, **broken)
+    # Обвал у кожного з трьох варіантів інший: де кінчається стояча частина фронтальної (S) й північної (N) стін, де вікна, двері й димар.
+    # Слід, завал із заходу й східна стіна лишаються: двір і паркан не зсуваються.
+    sx = (-0.9, -1.9, 0.4)[variant]
+    nx = (-1.6, -0.2, -2.4)[variant]
+    wall_run(b, (sx, S), (hx + 0.2, S), 0.4, [E] * 6, "wall_half", "wall_plaster", 21, hcap=3.1, **standing)
+    wall_run(b, (-hx, S), (sx, S), 0.4, ([0.6, 1.3, 0.9, 1.8], [0.8, 1.5, 1.0], [0.6, 1.3, 0.9, 1.8, 1.2, 0.7, 1.5])[variant], "wall_half", "brick_face", 22, hcap=2.2, **broken)
     wall_run(b, (hx, S), (hx, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 23, hcap=3.1, **standing)
-    wall_run(b, (hx + 0.2, N), (-1.6, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 24, hcap=3.1, **standing)
-    wall_run(b, (-1.6, N), (-hx, N), 0.4, [1.7, 1.1, 2.0, 0.8], "wall_half", "brick_face", 25, hcap=2.2, **broken)
+    wall_run(b, (hx + 0.2, N), (nx, N), 0.4, [E] * 6, "wall_half", "wall_plaster", 24, hcap=3.1, **standing)
+    wall_run(b, (nx, N), (-hx, N), 0.4, ([1.7, 1.1, 2.0, 0.8], [1.7, 1.1, 2.0, 0.8, 1.4, 0.9], [1.2, 0.7])[variant], "wall_half", "brick_face", 25, hcap=2.2, **broken)
     wall_run(b, (-hx, N), (-hx, S), 0.4, [2.2, 1.3, 0.7, 1.0, 0.6], "wall_half", "brick_face", 26, hcap=2.2, **broken)
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.4, (hx, 0.0, 0.0), math.pi / 2, 0.0, "wall_plaster", top_mat="wall_plaster")
     zt = E - 0.03
-    for x in (1.5, 2.65):
+    for x in ((1.5, 2.65), (0.3, 2.0), (1.5, 2.65))[variant]:
         burn_ring(b, "y", S - 0.2, x, 0.9, 1.0, 1.2, -1, g_side=0.35, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
         opening2(b, "y", S - 0.2, x, 1.0, 1.0, 1.4, -1, ztop=zt, streak=0.0, sooty=True)
         lib.window_ring(b, "y", S - 0.2, -1, x, 1.0, 1.0, 1.4)   # лиштва лишилась: проріз читається розміром вікна
-    burn_ring(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
-    opening2(b, "y", S - 0.2, 0.1, 0.05, 1.0, 2.0, -1, ztop=zt, streak=0.0, sooty=True)
-    for y, w, h, z in ((-1.0, 1.1, 1.4, 1.0), (1.0, 1.1, 1.4, 1.0)):              # пропорції вікон цілої h5
+    if variant < 2:                                                              # у варіанті 2 двері в обваленій частині
+        door_x = (0.1, -1.0)[variant]
+        burn_ring(b, "y", S - 0.2, door_x, 0.05, 1.0, 2.0, -1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
+        opening2(b, "y", S - 0.2, door_x, 0.05, 1.0, 2.0, -1, ztop=zt, streak=0.0, sooty=True)
+    for y, w, h, z in (((-1.0, 1.1, 1.4, 1.0), (1.0, 1.1, 1.4, 1.0)), ((-1.0, 1.1, 1.4, 1.0), (1.4, 1.1, 1.4, 1.0)), ((1.0, 1.4, 1.4, 1.0), (-1.5, 1.1, 1.4, 1.0)))[variant]:              # пропорції вікон цілої h5
         burn_ring(b, "x", hx + 0.2, y, z, w, h, 1, g_side=0.35, g_bot=0.15, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
         opening2(b, "x", hx + 0.2, y, z, w, h, 1, ztop=zt, streak=0.0, sooty=True)
         lib.window_ring(b, "x", hx + 0.2, 1, y, z, w, h)   # лиштва лишилась: проріз читається розміром вікна
-    for x in (0.6, 2.0):
+    for x in ((0.6, 2.0), (0.8, 2.4), (0.6, 2.0))[variant]:
         burn_ring(b, "y", N + 0.2, x, 0.9, 1.0, 1.2, 1, g_side=0.35, g_bot=0.1, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
         opening2(b, "y", N + 0.2, x, 1.0, 1.0, 1.4, 1, ztop=zt, streak=0.0, sooty=True)
         lib.window_ring(b, "y", N + 0.2, 1, x, 1.0, 1.0, 1.4)   # лиштва лишилась: проріз читається розміром вікна
-    lib.weather(b, "wall_half", [("y", S - 0.2, -1, -0.9, hx + 0.2, 0.0, E), ("x", hx + 0.2, 1, S - 0.2, N + 0.2, 0.0, E)], seed=17, patches=False)
+    lib.weather(b, "wall_half", [("y", S - 0.2, -1, sx, hx + 0.2, 0.0, E), ("x", hx + 0.2, 1, S - 0.2, N + 0.2, 0.0, E)], seed=17, patches=False)
     lib.pocks(b, "y", S - 0.2, -1, 1.2, 1.4, 2.0, 45, 41, zmin=0.2, zmax=2.9)
     lib.pocks(b, "x", hx + 0.2, 1, 0.0, 1.5, 1.8, 30, 42, zmin=0.2, zmax=2.9)
     ph = [rnd.uniform(0, 6.3) for _ in range(3)]
@@ -244,7 +261,7 @@ def house1(ruined, variant=0):
     for x in (-0.8, -0.2):
         for plate, P, cut in ((S + 0.05, PF, cutF), (N - 0.05, PB, cutB)):
             v1 = rnd.uniform(0.3, 0.6)
-            if not tooth_ok(x, cut, v1, 1) or (plate < 0 and x < -0.9) or (plate > 0 and x < -1.6):
+            if not tooth_ok(x, cut, v1, 1) or (plate < 0 and x < sx) or (plate > 0 and x < nx):
                 continue
             c = P(x, v1)
             b.beam((x, plate, E + 0.05), (c[0], c[1], c[2] - 0.1), 0.12, "timber_dark", 0.18)
@@ -255,7 +272,7 @@ def house1(ruined, variant=0):
     bent_sheet(b, (-2.7, -0.9, sf(-2.7, -0.9) + 0.2), (-2.3, 0.8, sf(-2.3, 0.8) + 0.2), 0.9, "sheet_char", 0.18, axis="x")
     bent_sheet(b, (-1.6, -1.2, sf(-1.6, -1.2) + 0.2), (-1.4, 0.5, sf(-1.4, 0.5) + 0.2), 0.9, "sheet_char", 0.18, axis="x")
     bent_sheet(b, (-1.5, -3.0, sf(-1.5, -3.0) + 0.1), (-2.9, -2.9, sf(-2.9, -2.9) + 0.1), 0.9, "sheet_char", 0.12, axis="y")
-    b.chimney(1.6 + 1.0 * (variant % 2), -0.2, 4.6, 0.6, 3.1, "brick_face", cap="plinth_flat")                # variant: димар ближче до східного причілку
+    b.chimney((1.6, 3.0, 2.2)[variant], -0.2, 4.6, 0.6, 3.1, "brick_face", cap="plinth_flat")                # variant: димар ближче до східного причілку
     lumps(b, plan, rnd, 14)
     # на купі — окремі шматки цегляної кладки 0.5-0.7 м і балки, що лежать зверху, а не тонуть у буро запеченій купі
     for (cx_, cy_, sz_) in ((-2.5, -0.7, 0.7), (-1.4, 1.0, 0.6), (-2.2, -2.7, 0.55), (-3.3, 0.6, 0.5)):
@@ -263,7 +280,9 @@ def house1(ruined, variant=0):
     b.beam((-3.1, -1.5, sf(-3.1, -1.5) + 0.25), (-1.5, -0.3, sf(-1.5, -0.3) + 0.22), 0.2, "timber_dark", 0.22)
     b.beam((-2.7, 0.7, sf(-2.7, 0.7) + 0.2), (-1.1, 1.5, sf(-1.1, 1.5) + 0.25), 0.18, "timber_dark", 0.2)
     bh = heaps(b, plan, 7 + 5 * variant)
-    lib.finish(b, "ruin_half_house1" + ("_" + "abc"[variant] if variant else ""), out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    name = "ruin_half_house1" + ("_" + "abc"[variant] if variant else "")
+    lib.finish(b, name, out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    record_roof(name)
 
 
 def house2(ruined, variant=0):
@@ -392,6 +411,7 @@ def house2(ruined, variant=0):
     lumps(b, plan, rnd, 14)
     bh = heaps(b, plan, 9)
     lib.finish(b, "ruin_half_house2", out, tri_limit=4800, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    record_roof("ruin_half_house2", "green_ruin")
 
 
 def shed(ruined, variant=0):
@@ -443,16 +463,17 @@ def shed(ruined, variant=0):
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.14, (XE, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.14, (XW, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
     post_x = (-3.4, -2.27, -1.13, 0.0, 1.13, 2.27, 3.4)
-    post_h = (E, 1.8, 0.8, 1.2, 2.3, E, E) if variant % 2 == 0 else (E, E, 2.3, 1.0, 0.7, 1.7, E)
+    post_h = ((E, 1.8, 0.8, 1.2, 2.3, E, E), (E, E, 2.3, 1.0, 0.7, 1.7, E), (E, 0.8, E, 1.9, 1.1, 0.6, E))[variant]
     for x, h in zip(post_x, post_h):
         b.box(x, S, 0.0, 0.18, 0.18, h, "timber_dark")
-    sheets = ((-1.9, -3.1, 0.1, 2.8, 0.2, 0.22), (0.4, -2.9, -0.15, 2.4, 0.3, 0.3), (-0.5, -3.7, 0.4, 1.8, 0.1, 0.1)) if variant % 2 == 0 else \
-        ((0.9, -3.2, -0.25, 2.5, 0.2, 0.25), (-1.2, -3.0, 0.2, 2.2, 0.3, 0.28), (2.0, -3.7, 0.5, 1.7, 0.1, 0.1))
+    sheets = (((-1.9, -3.1, 0.1, 2.8, 0.2, 0.22), (0.4, -2.9, -0.15, 2.4, 0.3, 0.3), (-0.5, -3.7, 0.4, 1.8, 0.1, 0.1)),
+              ((0.9, -3.2, -0.25, 2.5, 0.2, 0.25), (-1.2, -3.0, 0.2, 2.2, 0.3, 0.28), (2.0, -3.7, 0.5, 1.7, 0.1, 0.1)),
+              ((-0.2, -3.3, 0.3, 2.6, 0.2, 0.2), (1.8, -3.0, -0.4, 2.0, 0.3, 0.3), (-2.6, -3.6, 0.0, 1.5, 0.1, 0.15)))[variant]
     for (x, y, rot, ln, z, ang) in sheets:
         for k in (-1, 0, 1):                                                  # лист ламаний на три смуги з різним нахилом: блиск не заливає весь лист
             b.box_e(x - math.sin(rot) * 0.64 * k, y + math.cos(rot) * 0.64 * k, z + 0.2 + 0.03 * k, ln, 0.62, 0.05, "roof_fallen", euler=(ang + 0.2 * k, 0.12 * k, rot), top="roof_fallen")   # лист зламаний на три смуги з помітним заломом
-    b.cyl(-2.95 + 5.2 * (variant % 2), -2.35, 0.0, 0.3, 0.9, 12, "steel_paint")                       # бочка й ящик на землі біля впалої стіни
-    b.box(-2.35 + 4.4 * (variant % 2), -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3 + 0.9 * (variant % 2))
+    b.cyl((-2.95, 2.25, -0.4)[variant], -2.35, 0.0, 0.3, 0.9, 12, "steel_paint")                       # бочка й ящик на землі біля впалої стіни
+    b.box((-2.35, 2.05, 0.6)[variant], -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3 + 0.9 * (variant % 2))
     zt = E - 0.03
     opening2(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, ztop=zt, streak=0.0, sooty=True)
     burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
@@ -472,17 +493,19 @@ def shed(ruined, variant=0):
     for x in xs:
         ez = max(0.8, hpost(max(XW, min(XE, x))) + 0.06) + (rnd.uniform(-0.06, 0.06) if x < 1.5 else 0.0)
         pts.append((x, ya + (E - ez) * 0.3, ez))
-    hole = {i for i, x in enumerate(xs[:-1]) if (-2.0 < x < -1.0 if variant % 2 == 0 else 0.9 < x < 1.9)}
+    hole = {i for i, x in enumerate(xs[:-1]) if ((-2.0, -1.0), (0.9, 1.9), (-0.1, 1.0))[variant][0] < x < ((-2.0, -1.0), (0.9, 1.9), (-0.1, 1.0))[variant][1]}
     for i in range(len(xs) - 1):
         if i not in hole:
             b.poly_up([pts[i], pts[i + 1], (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_xh")
     for x in (-1.8, -1.5, -1.2):
         j = min(range(len(xs)), key=lambda k: abs(xs[k] - x))
         b.beam(pts[j], (xs[j], ym, R - 0.05), 0.1, "timber_dark", 0.16)
-    plan = [HeapSurface(-0.8 + 2.0 * (variant % 2), 0.1, 1.3, 0.9, 0.5, 92 + variant, bumps=5, lip=0.22, wob=0.08, lump=0.04, hummocks=1, hum_amp=0.12)]
+    plan = [HeapSurface((-0.8, 1.2, -2.0)[variant], 0.1, 1.3, 0.9, 0.5, 92 + variant, bumps=5, lip=0.22, wob=0.08, lump=0.04, hummocks=1, hum_amp=0.12)]
     lumps(b, plan, rnd, 8)
     bh = heaps(b, plan, 11 + 3 * variant, dens=6.0)
-    lib.finish(b, "ruin_half_shed" + ("_" + "abc"[variant] if variant else ""), out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    name = "ruin_half_shed" + ("_" + "abc"[variant] if variant else "")
+    lib.finish(b, name, out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    record_roof(name)
 
 
 def shed_variant(name, kind):
