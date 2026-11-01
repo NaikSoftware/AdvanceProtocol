@@ -165,6 +165,9 @@ const DROP_CHIMNEY_WALL: float = 0.35
 const WIRE_CHIMNEY_CLEAR: float = 0.15
 ## Стовп ЛЕП — поза обрисом паркану двору й не ближче за стільки до лінії паркану (клітинки, 1.6 м).
 const POLE_FENCE_CLEAR: float = 0.2
+## Стовп ЛЕП не ближче за стільки до самих секцій паркану — двору чи поля (клітинки, 2.4 м): стовп на розі паркану
+## читається стовпом у дворі.
+const POLE_FENCE_SEG_CLEAR: float = 0.3
 ## Стовп ЛЕП не ближче за стільки до прорізу воріт садиби (клітинки, 1.6 м).
 const POLE_GATE_CLEAR: float = 0.2
 ## Стовп ЛЕП не ближче за стільки до тюка сіна (клітинки).
@@ -198,6 +201,9 @@ const GUY_PULL_MIN: float = 0.6
 ## Дріт — сіро-оливковий напівпрозорий, ближчий до тону землі: майже чорна лінія тягла око з кожної хати. На зумі 8
 ## він ще читається лінією.
 const WIRE_COLOR: Color = Color(0.15, 0.145, 0.13, 0.72)
+## На мокрій карті земля темна, і темний дріт на ній зникав — стовпи читались окремими палицями. Мокрий дріт
+## світліший (відблиск неба), на ~0.2 яскравіший за сухий: тихий, але лінією.
+const WIRE_COLOR_WET: Color = Color(0.36, 0.355, 0.34, 0.72)
 ## Найнижчий дріт прольоту 0.4 кВ над ґрунтом чи водою, метри (з невеликим запасом над 6 м норми).
 const WIRE_CLEAR_M: float = 6.2
 ## Множник прозорості кожного з трьох голих дротів 10 кВ.
@@ -1108,7 +1114,7 @@ func _build_nodes(haze: bool) -> void:
 		_wires.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = WIRE_COLOR
+		mat.albedo_color = WIRE_COLOR_WET if wet else WIRE_COLOR
 		mat.vertex_color_use_as_albedo = true
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		# Дріт — лінія в один піксель, що не гасне з відстанню: на дальньому зумі над світлою водою згасання
@@ -4535,6 +4541,7 @@ class _Placer:
 
 	## Обриси для стовпів і дротів ЛЕП: будівлі й руїни, мости, решта пропсів (паркани, тюки, причепи), грядки.
 	func _index_obstacles() -> void:
+		_index_fences()
 		_bld_rects.clear()
 		_bld_heights.clear()
 		_home_rects.clear()
@@ -4591,6 +4598,9 @@ class _Placer:
 		var c := Vector2i(roundi(p.x), roundi(p.y))
 		# Стовп у дворі садиби — між сараєм і городом — не стоїть: лише на вулиці чи в полі.
 		if in_yard(p) or near_gate(p):
+			return false
+		# Секції паркану стоять не точно на обрисі двору (вид паркану, відступ від перешкод): стовп міряє і до них.
+		if fence_dist(p) < PropLayer.POLE_FENCE_SEG_CLEAR:
 			return false
 		var k: int = kind(c)
 		var ground_kind: bool = k == Terrain.Kind.FIELD or k == Terrain.Kind.HILL

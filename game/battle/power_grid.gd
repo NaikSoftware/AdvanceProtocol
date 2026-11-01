@@ -10,7 +10,9 @@ extends RefCounted
 ##   вдається провести лінію; ТП ближче за TP_GAP одна до одної — спільна;
 ## - 0.4 кВ — дерево від ТП (_grow): до кожної хати, до якої ще жодна опора не дістає відводом, — найкоротший шлях
 ##   сходинками узбіччям (_path) до місця, звідки відвід можливий (_drop_spots); опори через ≤ MAX_04KV, не ближче
-##   POLE_GAP, щонайбільше MAX_SPANS прольотів на опорі, без перетинів. Лишаються лише гілки до хат із відводом;
+##   POLE_GAP, щонайбільше MAX_SPANS прольотів на опорі, без перетинів. Лишаються гілки до хат із відводом, а в
+##   поселенні з кількох хат, де всі відводи дістали прямо з ТП, — ще й перша гілка до опори навпроти хати: у
+##   поселення своя лінія вулицею, кінець якої стоїть перед хатою;
 ## - відвід — лише коротким прольотом від опори поряд (PropLayer drop_ok: через вулицю лише впоперек, не чужим двором,
 ##   не над грядками); з досяжних хат села кожна SKIP_ONE_IN-а лишається без відводу.
 ## Стовп стоїть лише там, де йому місце (pole_spot_ok, CENTRE_CLEAR): пряма відходить від дороги цілою, а не
@@ -101,9 +103,6 @@ func plan(placer: PropLayer._Placer) -> void:
 	var trunk: Array = _trunk()
 	for line: Array in trunk:
 		lines.append({"kind": &"10kv", "points": line})
-	for line: Array in trunk:
-		_avoid.append_array(line)
-		_corner_cache.clear()
 	for village: Array in _villages(homes):
 		_village(village, trunk)
 	_trim_dead_ends(trunk)
@@ -208,9 +207,14 @@ func _along(p: Vector2, h: bool, radius: float, accept: Callable = Callable()) -
 ## pole_spot_ok). Місце, придатне на нижчому ярусі, придатне й на вищих: accept для нього рахується раз, а не тричі.
 func _first_ok(cands: Array[Vector2], accept: Callable) -> Vector2:
 	var accepted: Dictionary = {}
+	var near: Dictionary = {}
 	for tier in 3:
 		for q in cands:
-			if not _spot_ok(q, tier) or _near_avoid(q):
+			if not _spot_ok(q, tier):
+				continue
+			if not near.has(q):
+				near[q] = _near_avoid(q)
+			if near[q]:
 				continue
 			if not accepted.has(q):
 				accepted[q] = accept.is_null() or accept.call(q)
@@ -390,11 +394,32 @@ func _lay(lines: Array, s0: float, s1: float, gap: float, max_span: float, ok: C
 				p1 = _along(_pt(h, v, coords[i + 1]), h, 1.0, apart)
 		if not p1.is_finite():
 			continue
+		# Де законного прольоту нема (ліс, вода), проміжних опор нема; такий відрізок прибирає _legal_runs.
 		var mid: Variant = _fill(p0, p1, gap, max_span, ok)
-		# Де проліт неможливий (ліс, вода), опори однаково стоять уздовж прямої, де їм є місце; навскіс лінія не йде.
-		out.append_array(mid if mid != null else _fill(p0, p1, gap, max_span, func(_a: Vector2, _b: Vector2) -> bool: return true, true))
+		if mid != null:
+			out.append_array(mid)
 		out.append(p1)
 	return out
+
+
+## Ламана опор, розрізана на шматки з самих лише законних прольотів (уздовж осі, ok): незаконний проліт — розрив.
+## Лишаються шматки, що виходять на край світу чи починаються з опори start (відгалуження від іншої траси): шматок
+## посеред поля був би лінією нізвідки.
+func _legal_runs(pts: Array[Vector2], ok: Callable, start: Vector2) -> Array:
+	var runs: Array = []
+	var cur: Array[Vector2] = []
+	for k in pts.size():
+		if not cur.is_empty() and not (aligned(cur.back(), pts[k]) and ok.call(cur.back(), pts[k])):
+			runs.append(cur)
+			cur = []
+		cur.append(pts[k])
+	runs.append(cur)
+	var lo: float = -_ring - 0.5
+	var hi := Vector2(_size.x + _ring - 0.5, _size.y + _ring - 0.5)
+	var at_edge := func(p: Vector2) -> bool:
+		return minf(minf(p.x - lo, hi.x - p.x), minf(p.y - lo, hi.y - p.y)) <= 0.5
+	return runs.filter(func(r: Array) -> bool:
+		return r.size() >= 2 and (at_edge.call(r.front()) or at_edge.call(r.back()) or r.front() == start))
 
 
 ## Кут двох прямих придатний під опору.
@@ -439,8 +464,7 @@ func _square_up(pts: Array[Vector2], ok: Callable) -> void:
 
 
 ## Проміжні опори на прямій a–b (уздовж осі), кожен проліт ≤ max_span, не ближче POLE_GAP і ok; null — не вийшло.
-## loose — опори там, де їм є місце, без вимог до прольоту (пропуск, де місця нема); завжди масив, не null.
-func _fill(a: Vector2, b: Vector2, gap: float, max_span: float, ok: Callable, loose: bool = false) -> Variant:
+func _fill(a: Vector2, b: Vector2, gap: float, max_span: float, ok: Callable) -> Variant:
 	var out: Array[Vector2] = []
 	var len_: float = a.distance_to(b)
 	var h: bool = absf(b.y - a.y) <= AXIS_EPS
@@ -449,13 +473,10 @@ func _fill(a: Vector2, b: Vector2, gap: float, max_span: float, ok: Callable, lo
 		for i in range(1, n):
 			var prev: Vector2 = out.back() if not out.is_empty() else a
 			var q: Vector2 = _along(a.lerp(b, float(i) / n), h, 1.0, func(c: Vector2) -> bool:
-				return c.distance_to(prev) >= POLE_GAP and (loose or c.distance_to(prev) <= max_span) and c.distance_to(b) >= POLE_GAP and ok.call(prev, c))
-			if q.is_finite():
-				out.append(q)
-			elif not loose:
+				return c.distance_to(prev) >= POLE_GAP and c.distance_to(prev) <= max_span and c.distance_to(b) >= POLE_GAP and ok.call(prev, c))
+			if not q.is_finite():
 				return null
-	if loose:
-		return out
+			out.append(q)
 	var last: Vector2 = out.back() if not out.is_empty() else a
 	if last.distance_to(b) > max_span or not ok.call(last, b):
 		return null
@@ -494,9 +515,9 @@ func _trunk() -> Array:
 		var line_pts: Array[Vector2] = _lay(lines, c0.x if lines[0]["h"] else c0.y, c1.x if lines.back()["h"] else c1.y,
 				TRUNK_GAP, MAX_10KV, ok, _end_r(pts[0]), _end_r(pts.back()), start)
 		_square_up(line_pts, ok)
-		if line_pts.size() >= 2:
-			out.append(line_pts)
-			_avoid.append_array(line_pts)
+		for run: Array[Vector2] in _legal_runs(line_pts, ok, start):
+			out.append(run)
+			_avoid.append_array(run)
 			_corner_cache.clear()
 	return out
 
@@ -1005,7 +1026,8 @@ static func _route_vals(lo: float, hi: float, keep: Array) -> Array[float]:
 ## Відрізок обходу p–q: не на будівлі й не через магістраль; над асфальтом — лише впоперек вулиці, поза ним — як дріт
 ## (PropLayer wire_ok: двори, грядки, ліс). Кеш на весь план.
 func _piece_ok(p: Vector2, q: Vector2, trunk_segs: Array) -> bool:
-	var key := Rect2(p, q - p)
+	# Той самий відрізок в обидва боки — один запис.
+	var key := Rect2(p, q - p) if p.x < q.x or (p.x == q.x and p.y <= q.y) else Rect2(q, p - q)
 	if _piece_cache.has(key):
 		return _piece_cache[key]
 	var ok: bool = not _p.span_hits_building(p, q)
