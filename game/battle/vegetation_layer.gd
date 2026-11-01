@@ -105,6 +105,9 @@ const FENCE_CROWN_PAD: float = 0.1
 ## лягає на паркан чи ворота за деревом, хоч у плані до них є запас. Диск не ближче за свій радіус до силуету
 ## секції (верх FENCE_TOP, клітинки, ~1.8 м) чи воріт.
 const FENCE_TOP: float = 0.23
+## Рослина двору не росте на грядках: диск крони на екрані не ближче до ділянки городу за цю частку радіуса
+## (нависає над краєм не глибше за решту), а стовбур — поза ділянкою.
+const PLOT_GAP_SHARE: float = 0.8
 const CROWN_H_K: float = 2.2
 ## Під дротом ЛЕП крона не стоїть ближче за WIRE_PAD від прольоту (розкид масштабу 1,1 × радіус), а стовбур — ближче за POLE_CLEAR від опори.
 const WIRE_PAD: float = 0.15
@@ -169,7 +172,7 @@ static func obstacles(props: PropLayer) -> Dictionary:
 	var poles: Array[Rect2] = []
 	var fences: Array[Rect2] = []
 	if props == null:
-		return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": [], "wires": []}
+		return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": [], "plots": [], "plot_hulls": [], "wires": []}
 	for inst: Dictionary in props.all_instances():
 		var info: Variant = PropLayer.model(inst["model"])
 		if not (info is Dictionary) or not (info as Dictionary).has("aabb"):
@@ -185,9 +188,16 @@ static func obstacles(props: PropLayer) -> Dictionary:
 			poles.append(r)
 		if kind == PropLayer.Kind.GARDEN_FENCE or kind == PropLayer.Kind.FIELD_FENCE:
 			fences.append(r)
+	var plots: Array[Rect2] = []
+	var plot_hulls: Array = []
 	for t: Transform3D in props.garden_beds():
 		var box: AABB = t * AABB(Vector3(-0.5, 0, -0.5), Vector3(1, 0.1, 1))
 		small.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z))
+		plots.append(small.back())
+		var ppts := PackedVector2Array()
+		for c: Vector2 in [small.back().position, Vector2(small.back().end.x, small.back().position.y), small.back().end, Vector2(small.back().position.x, small.back().end.y)]:
+			ppts.append(PropLayer._Placer._screen_pt(c, 0.0))
+		plot_hulls.append(Geometry2D.convex_hull(ppts))
 	# Ворота — теж паркан: стовпи a, b (mid між ними), полотно не вище FENCE_TOP.
 	for g: Dictionary in props.gates():
 		fences.append(Rect2(g["a"], Vector2.ZERO).expand(g["b"]).grow(0.03))
@@ -198,7 +208,7 @@ static func obstacles(props: PropLayer) -> Dictionary:
 			for y: float in [0.0, FENCE_TOP]:
 				pts.append(PropLayer._Placer._screen_pt(c, y))
 		hulls.append(Geometry2D.convex_hull(pts))
-	return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": hulls, "wires": props.wire_lines()}
+	return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": hulls, "plots": plots, "plot_hulls": plot_hulls, "wires": props.wire_lines()}
 
 
 ## Відстань на екрані від диска крони (радіус crown) стовбура q до силуету найближчої секції чи воріт.
@@ -644,6 +654,8 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
 							and obst["fences"].all(func(r: Rect2) -> bool: return _rect_dist(r, q) >= fence_room) \
 							and fence_screen_gap(obst, q, crown_of(node)) >= crown_of(node) \
+							and (obst["plots"] as Array).all(func(r: Rect2) -> bool: return not r.has_point(q)) \
+							and PropLayer._Placer._hull_gap(q, CROWN_H_K * crown_of(node), obst["plot_hulls"]) >= PLOT_GAP_SHARE * crown_of(node) \
 							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)):
 						choice = [node, e]
 						break
