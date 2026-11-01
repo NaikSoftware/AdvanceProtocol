@@ -660,9 +660,15 @@ func _widths(li: int, n_w: FastNoiseLite, n_w2: FastNoiseLite) -> void:
 		base.append(maxf(STREET_HALF_M, _wide_half_m(pts[i])) if street[i] == 1 else single)
 	base = _gauss_f(base, 0.35)
 	var hw := PackedFloat32Array()
+	var tang: PackedVector2Array = RiverCourse._tangents(pts)
 	for i in n:
 		# Шум підсилено ×2.5 з обрізанням до ±1: симплекс рідко сягає ±1, і CV ширини < 3 %.
 		var f: float = 1.0 + WIDTH_VAR * clampf(2.5 * n_w.get_noise_2d(s[i], 11.0 * li + 5.3), -1.0, 1.0) + WIDTH_FINE * clampf(2.5 * n_w2.get_noise_2d(s[i], 11.0 * li + 5.3), -1.0, 1.0)
+		# На дузі шум ширини гасне, як і хвилястість осі: інакше пік шуму на вершині дуги роздуває зовнішній край.
+		var ia: int = maxi(i - 1, 0)
+		var ib: int = mini(i + 1, n - 1)
+		var kappa: float = tang[ib].distance_to(tang[ia]) / maxf(s[ib] - s[ia], 1e-4)
+		f = lerpf(f, 1.0, smoothstep(0.15, 0.5, kappa))
 		# Верхня межа росте разом із базовою півшириною на переході до вулиці: ширина без сходинки.
 		hw.append(minf(base[i] * f, SINGLE_MAX_HALF_M + maxf(base[i] - HALF_M[0], 0.0) * 1.5))
 	halfs.append(hw)
@@ -997,6 +1003,12 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 		var j1: int = mini(cj + half, rh - 1)
 		var ww: int = i1 - i0 + 1
 		var wh: int = j1 - j0 + 1
+		# Т-розвилка (крізь вузол іде лінія, а бічна в ньому кінчається): закруглюються лише кути з боку бічної дороги.
+		# На протилежному боці край головної — пряма, і замикання лягло б туди горбом там, де вісь трохи вигнута
+		# чи шум звузив дорогу.
+		var branches: Array[Vector2] = []
+		if not _bend_nodes.has(node):
+			branches = _branch_dirs(node)
 		var f := PackedFloat32Array()
 		f.resize(ww * wh)
 		for j in wh:
@@ -1010,6 +1022,12 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 					continue
 				var dist: float = Vector2(org + (i + i0 + 0.5) / PX, org + (j + j0 + 0.5) / PX).distance_to(node)
 				var w: float = 1.0 - smoothstep(NODE_INNER, NODE_REACH, dist)
+				if not branches.is_empty():
+					var q := Vector2(org + (i + i0 + 0.5) / PX, org + (j + j0 + 0.5) / PX) - node
+					var side: float = -INF
+					for bd: Vector2 in branches:
+						side = maxf(side, q.dot(bd))
+					w *= smoothstep(-0.15, 0.15, side)
 				if w <= 0.0:
 					continue
 				var dc: float = cm - sqrt(f[j * ww + i])
@@ -1026,6 +1044,29 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 				jw[k] = maxf(jw[k], wj)
 		if asphalt_end:
 			_asphalt_end_tail(node, d, jw, tw, u, v, rw, org, i0, i1, j0, j1)
+
+
+## Напрями бічних доріг Т-розвилки node: лінії, що в ній кінчаються, коли крізь неї ж іде інша лінія; інакше (хрестовина
+## з двох наскрізних, Y з самих кінців) — порожньо, і замикання — довкола всього вузла.
+func _branch_dirs(node: Vector2) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	var through := false
+	for pts in lines:
+		var last: int = pts.size() - 1
+		var at_end := false
+		for e: int in [0, last]:
+			if pts[e].distance_to(node) < 0.05:
+				at_end = true
+				var k: int = clampi(e + (3 if e == 0 else -3), 0, last)
+				out.append((pts[k] - pts[e]).normalized())
+		if not at_end:
+			for q in pts:
+				if q.distance_to(node) < 0.3:
+					through = true
+					break
+	if not through:
+		out.clear()
+	return out
 
 
 ## Ґрунтівка від торця асфальту, що обривається об поворот: прямий відрізок осі асфальту за торцем, завширшки
