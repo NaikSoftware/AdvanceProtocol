@@ -940,7 +940,9 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 		# На повороті з бічною дорогою — замикання радіусом BEND_CLOSE_M: воно лише з'єднує кінець бічної
 		# дороги з дугою; радіус CLOSE_M заповнив би зовнішній бік дуги до прямого кута.
 		var cm: float = BEND_CLOSE_M if _bend_nodes.has(node) else CLOSE_M
-		var asphalt_node: bool = _type_near(node) == 0 or _asphalt_beside(node)
+		var asphalt_node: bool = _type_near(node) == 0
+		# Асфальт обривається об поворот ґрунтівки в самому вузлі: колії йдуть від торця без перерви.
+		var asphalt_end: bool = not asphalt_node and _asphalt_beside(node)
 		var ci: int = floori((node.x - org) * PX)
 		var cj: int = floori((node.y - org) * PX)
 		var i0: int = maxi(ci - half, 0)
@@ -971,6 +973,12 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 				var wj: float = w
 				if asphalt_node and tw[k].y > 0.5:
 					wj = 1.0 - smoothstep(0.3, 0.5, dist)
+				elif asphalt_end and tw[k].y > 0.5:
+					# Вага лишається там, де асфальт ще переважає, і на боці за краєм, де його залишок піде в
+					# узбіччя; уздовж осі решта — колії.
+					wj = smoothstep(0.5, 0.9, tw[k].x)
+					if d[k] > -0.6:
+						wj = maxf(wj, smoothstep(0.0, 0.1, tw[k].x))
 				jw[k] = maxf(jw[k], wj)
 
 
