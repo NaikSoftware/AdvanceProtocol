@@ -109,25 +109,31 @@ func test_no_tree_crown_under_a_power_line(p = use_parameters(MAPS)) -> void:
 				assert_gte(gap, ForestLayer.CROWN_MARGIN - 1e-4, "%s: крона %s (r=%.2f, h=%.2f) за %.2f від проліту %s" % [p, at, e["r"], top, gap, w])
 
 
-## Підлісок вищий за 0.4 тайла (кущі, молоді дерева) теж не лежить на дроті на екрані: низький кущ лишається, решта — ні.
-func test_no_tall_undergrowth_under_a_power_line(p = use_parameters(MAPS)) -> void:
+## Увесь рослинний план дошки (дерева, кущі, живопліт, будь-якої висоти) лежить на екрані поза дротом: тіло рослини
+## проєктується на землю вздовж погляду, і ця смуга від проліту не ближче за CROWN_MARGIN.
+func test_no_foliage_under_a_power_line_on_screen(p = use_parameters(MAPS)) -> void:
 	_props(p)
 	var view: BoardView = _views[p]
 	var spans: Array = view.props().span_lines()
 	var f: ForestLayer = view.forest()
 	var fwd: Vector2 = ForestLayer._view_fwd()
 	var seen: int = 0
+	var covers: int = 0
 	for e: Dictionary in f.board_plan:
-		if e["ground"] or not f._lib.has(e["node"]) or str(e["node"]).begins_with("Hedge"):
+		var species: String = str(e["node"]).get_slice("_", 0)
+		if e["ground"] or not f._lib.has(e["node"]) or not (species in ForestLayer.TREES or species in ["Shrub", "Hedge"]):
 			continue
-		var top: float = float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y
-		if top <= 0.4:
+		# Один кущ на клітинку, з якої просіка зняла все, лишається, щоб клітина лишилась лісом.
+		if e.get("cover", false):
+			covers += 1
 			continue
 		seen += 1
+		var top: float = float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y
 		var sh: Vector2 = ForestLayer.crown_shift(top)
 		for k in 9:
 			var q: Vector2 = (e["pos"] as Vector2) + fwd * lerpf(sh.x, sh.y, k / 8.0)
 			for w: Array in spans:
 				var gap: float = q.distance_to(Geometry2D.get_closest_point_to_segment(q, w[0], w[1])) - float(e["r"])
 				assert_gte(gap, ForestLayer.CROWN_MARGIN - 1e-4, "%s: %s (h=%.2f) %s за %.2f від проліту %s" % [p, e["node"], top, e["pos"], gap, w])
-	assert_gt(seen, 0, "%s: передумова — високий підлісок є" % p)
+	assert_gt(seen, 0, "%s: передумова — рослини є" % p)
+	gut.p("%s: покривних кущів %d" % [p, covers])

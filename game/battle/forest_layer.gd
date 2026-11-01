@@ -66,9 +66,10 @@ const CORRIDOR_FEATHER: float = 0.6
 const CROWN_MARGIN: float = 0.6
 ## Висота проводу над землею (тайли) і частка висоти дерева, де кінчається голий стовбур: крона, що лежить за
 ## проводом ближче до камери, на екрані перекриває його — вище точка зсувається в плані вглиб, на висоту·ctg(нахилу).
-const WIRE_HEIGHT: float = 1.0
+const WIRE_HEIGHT: float = 1.2
 const TRUNK_FRAC: float = 0.35
-## Нижчий за стільки (тайли) підлісок просіка не чіпає: його не видно крізь дріт. Вищі кущі й молоді дерева рубаються як крони.
+## Низьким вважається підлісок не вищий за стільки (тайли): йому просіка не дає півширини крони, лише дивиться, де він
+## лежить на екрані відносно дроту.
 const LOW_KEEP: float = 0.4
 const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
@@ -289,25 +290,23 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 			return VegetationLayer._rect_dist(r, e["pos"]) < float(e["r"]) + VegetationLayer.FENCE_CROWN_PAD):
 		return {}
 	var species: String = node.get_slice("_", 0)
-	if spans.is_empty() or e["ground"] or not (species in TREES or species == "Shrub") or not _lib.has(node):
-		return e
-	if float(_lib[node]["h"]) * e["xf"].basis.get_scale().y <= LOW_KEEP:
+	if spans.is_empty() or e["ground"] or not (species in TREES or species == "Shrub" or species == "Hedge") or not _lib.has(node):
 		return e
 	var p: Vector2 = e["pos"]
-	var sh: Vector2 = crown_shift(float(_lib[node]["h"]) * e["xf"].basis.get_scale().y)
-	var fwd: Vector2 = _view_fwd()
-	var d: float = INF
-	for w: Array in spans:
-		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])) > 8.0:
-			continue
-		d = minf(d, _sweep_dist(p + fwd * sh.x, p + fwd * sh.y, w[0], w[1]))
-	var half: float = maxf(CORRIDOR_HALF, float(e["r"]) * widen + CROWN_MARGIN)
+	var top: float = float(_lib[node]["h"]) * e["xf"].basis.get_scale().y
+	var d: float = _sweep_to_spans(p, top)
+	# Низький підлісок не має півширини просіки: його ховає лише те, що він на екрані лежить під проводом.
+	var half: float = float(e["r"]) * widen + CROWN_MARGIN
+	if top > LOW_KEEP:
+		half = maxf(CORRIDOR_HALF, half)
 	if d >= half + CORRIDOR_FEATHER:
 		return e
 	var u: float = float(absi(hash(p)) % 1000) / 1000.0
 	if d >= half:
 		# Край смуги тоншає поступово: що ближче до просіки, то менше дерев лишається.
 		return e if u < (d - half) / CORRIDOR_FEATHER else {}
+	if top <= LOW_KEEP:
+		return {}
 	var shrubs: Array[String] = []
 	for k: String in _lib:
 		if k.begins_with("Shrub_"):
@@ -319,7 +318,54 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	out["node"] = shrubs[int(u * 997.0) % shrubs.size()]
 	out["xf"] = Transform3D(Basis(Vector3.UP, u * TAU), (e["xf"] as Transform3D).origin)
 	out["r"] = 0.3
-	return out
+	# Кущ замість дерева теж не лягає під дріт на екрані.
+	var sd: float = _sweep_to_spans(p, float(_lib[out["node"]]["h"]))
+	return out if sd >= float(out["r"]) + CROWN_MARGIN else {}
+
+
+## Найменша відстань у плані від зсуву крони (з основою в p, заввишки top) до проліту: так, як вона лежить на екрані.
+func _sweep_to_spans(p: Vector2, top: float) -> float:
+	var sh: Vector2 = crown_shift(top)
+	var fwd: Vector2 = _view_fwd()
+	var d: float = INF
+	for w: Array in spans:
+		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])) > 8.0:
+			continue
+		d = minf(d, _sweep_dist(p + fwd * sh.x, p + fwd * sh.y, w[0], w[1]))
+	return d
+
+
+## Клітинка лісу, з якої просіка зняла все, лишається лісом: один кущ — той, що найдалі від проводу на екрані, —
+## повертається (cover), щоб клітина не читалась лугом (рід місцевості видно з кожної клітинки).
+func _keep_cover(plan: Array[Dictionary], lost: Array[Dictionary]) -> void:
+	var has: Dictionary = {}
+	for e: Dictionary in plan:
+		if not e["ground"]:
+			has[Vector2i(roundi(e["pos"].x), roundi(e["pos"].y))] = true
+	var best: Dictionary = {}
+	for e: Dictionary in lost:
+		var c := Vector2i(roundi(e["pos"].x), roundi(e["pos"].y))
+		if has.has(c) or e["ground"] or fences.any(func(r: Rect2) -> bool:
+				return VegetationLayer._rect_dist(r, e["pos"]) < float(e["r"]) + VegetationLayer.FENCE_CROWN_PAD):
+			continue
+		if spans.all(func(w: Array) -> bool: return Vector2(c).distance_to(Geometry2D.get_closest_point_to_segment(Vector2(c), w[0], w[1])) >= 1.5):
+			continue
+		var d: float = _sweep_to_spans(e["pos"], float(_lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y) if _lib.has(e["node"]) else 0.0
+		if not best.has(c) or d > float(best[c][0]):
+			best[c] = [d, e]
+	var shrub: String = ""
+	for k: String in _lib:
+		if k.begins_with("Shrub_") and (shrub.is_empty() or k < shrub):
+			shrub = k
+	if shrub.is_empty():
+		return
+	for c: Vector2i in best:
+		var out: Dictionary = (best[c][1] as Dictionary).duplicate()
+		out["node"] = shrub
+		out["xf"] = Transform3D(Basis.IDENTITY, ((best[c][1] as Dictionary)["xf"] as Transform3D).origin)
+		out["r"] = 0.3
+		out["cover"] = true
+		plan.append(out)
 
 
 ## Напрям погляду камери в плані: від камери вглиб.
@@ -332,6 +378,9 @@ static func _view_fwd() -> Vector2:
 ## верху за найнижчого нахилу рига (там крони «лежать» найдалі); 0 — сама земля — завжди всередині.
 static func crown_shift(top: float) -> Vector2:
 	var cot: float = 1.0 / tan(deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG))
+	if top <= LOW_KEEP:
+		# Низький кущ — весь від землі; його місце на екрані — лише тіло, без запасу на землю під ним.
+		return Vector2(-WIRE_HEIGHT * cot, (top - WIRE_HEIGHT) * cot)
 	return Vector2(minf((TRUNK_FRAC * top - WIRE_HEIGHT) * cot, 0.0), maxf((top - WIRE_HEIGHT) * cot, 0.0))
 
 
@@ -417,6 +466,7 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 	_fadable.clear()
 	_under.clear()
 	var plan: Array[Dictionary] = []
+	var lost: Array[Dictionary] = []
 	if region.has_area() and not board_plan.is_empty():
 		# Ділянка в тайлах: клітинка c — [c − 0,5; c + 0,5). Площа плану на клітинку ширша: точки
 		# з-за краю ділянки, що зсунулись у неї, — теж її.
@@ -427,7 +477,9 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 		for e: Dictionary in ForestScatter.plan(_cells, _wood_at, _broken, _season, _seed, _lib, [], region.grow(1)):
 			if rr.has_point(e["pos"]) and _in_board(e["pos"]):
 				var c: Dictionary = _cleared(e)
-				if not c.is_empty():
+				if c.is_empty():
+					lost.append(e)
+				else:
 					plan.append(c)
 	else:
 		# Площа на клітинку ширша за дошку: точки з краю кільця, що зсунулись на дошку, — теж її.
@@ -435,8 +487,11 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 		for e: Dictionary in ForestScatter.plan(_cells, _wood_at, _broken, _season, _seed, _lib, [], area):
 			if _in_board(e["pos"]):
 				var c: Dictionary = _cleared(e)
-				if not c.is_empty():
+				if c.is_empty():
+					lost.append(e)
+				else:
 					plan.append(c)
+	_keep_cover(plan, lost)
 	board_plan = plan
 	var groups: Dictionary = {}  ## "клас/вузол" -> Array[Dictionary]
 	var lanes: Array[Transform3D] = []
