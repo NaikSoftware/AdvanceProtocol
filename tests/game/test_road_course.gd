@@ -630,6 +630,46 @@ func test_dirt_rut_reaches_the_asphalt_end_face_at_a_dirt_corner() -> void:
 					assert_lte(best, 0.16, "%s: колія за %.2f клітинки від торця асфальту біля %s" % [path, best, node])
 	assert_gt(checked, 0, "на картах є торець асфальту при куті ґрунтівки")
 
+
+## Ґрунтівка за торцем асфальту об поворот (Перехрестя (21, 13)): завширшки з проїзну частину (±10 %), без
+## розриву колій від торця до дуги — вага розвилки на обох коліях (|v| 0.83 м) лишається ~0 на всій довжині
+## відрізка, а не гасне посередині.
+func test_dirt_tail_past_an_asphalt_end_is_as_wide_as_the_carriageway_and_ruts_run_through() -> void:
+	var rc: RoadCourse = _bake("res://maps/crossroads.tres").roads
+	var node := Vector2(21, 13)
+	assert_true(rc._asphalt_end_at(node))
+	var ax := Vector2.INF
+	for li in rc.lines.size():
+		var pts: PackedVector2Array = rc.lines[li]
+		for end in [0, pts.size() - 1]:
+			if pts[end].distance_to(node) < 0.05 and rc.types[li][end].y > 0.5:
+				var step: int = 1 if end == 0 else -1
+				ax = (pts[end] - pts[clampi(end + step * 3, 0, pts.size() - 1)]).normalized()
+	assert_true(ax.is_finite())
+	var perp := Vector2(-ax.y, ax.x)
+	var img: Image = rc.rasterise()[0]
+	# Ширина смуги (м) на осі за вузлом: рахуємо від осі в обидва боки, поки d < 0.
+	for s: float in [-0.1, 0.0]:
+		var w := 0.0
+		for sign_ in [-1.0, 1.0]:
+			var l := 0.0
+			while l < 6.0 and rc.d_from(img, node + ax * s + perp * sign_ * l / 8.0) < 0.0:
+				l += 0.1
+			w += l
+		assert_almost_eq(w, 2.0 * RoadCourse.CARRIAGE_HALF_M, 0.1 * 2.0 * RoadCourse.CARRIAGE_HALF_M, "ширина ґрунтівки за торцем на s=%.2f" % s)
+	var s2 := 0.0
+	while s2 <= 0.9:
+		for sign_ in [-1.0, 1.0]:
+			var p: Vector2 = node + ax * s2 + perp * sign_ * 0.83 / 8.0
+			assert_lt(_jw_at(rc, p), 0.1, "колія гасне на s=%.2f від вузла" % s2)
+			# Координата v у растрі — від осі відрізка: колія (|v| ≈ 0.83 м) на місці, а не від найближчої дуги.
+			if s2 <= 0.55:
+				var i: int = clampi(roundi((p.x + 0.5 + rc._margin) * RoadCourse.PX - 0.5), 0, img.get_width() - 1)
+				var j: int = clampi(roundi((p.y + 0.5 + rc._margin) * RoadCourse.PX - 0.5), 0, img.get_height() - 1)
+				assert_almost_eq(absf(img.get_pixel(i, j).g), 0.83, 0.5, "колія за віссю відрізка на s=%.2f" % s2)
+		s2 += 0.05
+
+
 ## Вага B (гравійне узбіччя) є лише там, де проїзна частина вужча за смугу: на вулиці в 2 клітинки; уздовж
 ## однієї смуги (півширина < 2.65 м, поза розвилками) її нема навіть у м'якому краї (d до 0.15 м), а на
 ## площі — і поготів.

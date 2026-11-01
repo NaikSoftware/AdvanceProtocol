@@ -1,9 +1,9 @@
-"""Атлас групи рослинності на сезон: спрайти пучків і снопів та смуги кори.
+"""Атлас групи рослинності на сезон: спрайти пучків і кущиків очерету та смуги кори.
 
 Запуск (звичайний python): python3 -I veg_atlas.py <тека_спрайтів> <група> <сезон> <вихід>
 група: bank | yard | meadow. Пише <вихід>/<група>_veg_<сезон>.png і .json (прямокутники в UV).
 Клітинка 128 px: пучок ~2 м — 1,6 см на тексель, на найближчому зумі гри (7 см/px) це mip 2;
-сніп очерету — 128×256 на ~2,5 м заввишки.
+кущик очерету чи рогозу — 128×256 на ~2,5 м заввишки.
 """
 import glob
 import json
@@ -23,16 +23,20 @@ GROUPS = {
 SHEAF = ("reed", "cattail")
 # Дерева, чия гола крона пізньої пори — ще й картки дрібного гілля (<вид>_bare). Джерело — ті самі
 # спрайти голого гілля, що й у пізнього лісу (forest/src_leaf_sprites.py, кадр 2,4 м), з тим самим
-# тоном (forest/specs/broadleaf_late.json): сіро-буре гілля однакове в лісі й на луці. Спрайти лісу
-# лежать поза репозиторієм; тека — $FOREST_SPRITES (типово ~/.cache/ap-scratch/forest/crowns).
+# тоном (forest/specs/broadleaf_late.json): сіро-буре гілля однакове в лісі й на луці. Ці спрайти
+# копіями (перші BARE_N кадрів кожної теки) лежать у sprites/forest поруч зі скриптом; тека — $FOREST_SPRITES.
 BARE = {"apple": "broad_late", "cherry": "broad_late", "walnut": "broad_late", "pear": "broad_late",
         "oak": "oak_late", "wwillow": "broad_late"}
-FOREST_SPRITES = os.environ.get("FOREST_SPRITES", os.path.expanduser("~/.cache/ap-scratch/forest/crowns"))
+FOREST_SPRITES = os.environ.get("FOREST_SPRITES", os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprites", "forest"))
 BARE_GRADE = {"L": 26, "C": 3, "h": 55, "contrast_l": 0.6}
 BARE_N = 4
 # Вільха в спрайтах темніша за верболіз і ґрунт поруч (медіана кадру 52–80 проти 97 у верби): підсилення
 # тону листя й гілок за порою, щоб крона сиділа в одному ряду з іншими видами.
-GAIN = {"alder": {"summer": 1.8, "early": 1.65, "late": 1.3}}
+GAIN = {"alder": {"summer": 1.65, "early": 1.58, "late": 1.02}}
+# Вільха: (насиченість, контраст) — множники для крони за порою. Розтяг контрасту вище лишає в кроні
+# крапчастість і зайву насиченість, чужі сіро-зеленому лісу поруч; тут вони стискаються до кольору й
+# розкиду яскравості сусідніх видів.
+TONE = {"alder": {"summer": (0.9, 0.6), "early": (0.5, 0.6)}}
 # Кора (sRGB): середній тон і розкид світлих смуг. Темніша за листя, як у лісі.
 # Теплий коричневий, не світліший за ґрунт у кадрі (кора — одне з правил «без блідого дерева»); нижня межа
 # ~0,22 по каналу (горіх): з меншим тоном стовбур і гілки виходили майже чорними.
@@ -75,6 +79,21 @@ def lab_grade(img, g):
     return out
 
 
+def tone(img, sat, contrast):
+    """Яскравість текселя тягнеться до середньої (contrast), а відхил кольору від його ж яскравості
+    множиться на sat і на зміну яскравості: насиченість змінюється, яскравість — лише за contrast."""
+    mk = img[..., 3] > 0.5
+    rgb = img[..., :3]
+    lum = rgb @ np.array([0.299, 0.587, 0.114])
+    mu = lum[mk].mean()
+    new = mu + (lum - mu) * contrast
+    k = (new / np.maximum(lum, 1e-3))[..., None]
+    out = np.clip(new[..., None] + (rgb - lum[..., None]) * sat * k, 0, 1)
+    img = img.copy()
+    img[..., :3] = np.where(mk[..., None], out, rgb)
+    return img
+
+
 def load(path):
     return np.asarray(Image.open(path).convert("RGBA")).astype(np.float64) / 255.0
 
@@ -97,8 +116,8 @@ def soft_edge(img, seed):
 
 
 def side_edge(img):
-    """Сніп: бічні краї гаснуть, щоб стебла не обривались прямою лінією кадру; низ лишається, але
-    темніший — мокрі стебла в тіні снопа. Уріз води перетинає картку в нижній половині, і на темному
+    """Кущик очерету чи рогозу: бічні краї гаснуть, щоб стебла не обривались прямою лінією кадру; низ лишається, але
+    темніший — мокрі стебла в тіні кущика очерету. Уріз води перетинає картку в нижній половині, і на темному
     низі ця пряма лінія майже не видна."""
     h, w = img.shape[:2]
     x = (np.arange(w) + 0.5) / w * 2 - 1
@@ -223,6 +242,9 @@ def main():
                     img[..., :3] = np.where(leaf[..., None] | ~mk[..., None], out, rgb)
                 else:
                     img[..., :3] = np.clip(new, 0, 1)
+            t = TONE.get(kind, {}).get(season)
+            if t:
+                img = tone(img, *t)
             seed += 1
             if kind in SHEAF:
                 img = side_edge(resize(img, CELL, 2 * CELL))
