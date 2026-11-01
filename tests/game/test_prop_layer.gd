@@ -830,7 +830,7 @@ func test_every_rubble_cell_shows_a_ruin(p = use_parameters(MAPS)) -> void:
 ## Відбиток будівель River: розстановка та сама в кожному процесі, а не лише в межах одного
 ## (сортування StringName за вказівником міняло вибір моделей між запусками). Число міняють лише
 ## разом зі свідомою зміною таблиці моделей чи правил розстановки.
-const RIVER_BUILDINGS_FINGERPRINT: int = 1817935571
+const RIVER_BUILDINGS_FINGERPRINT: int = 1692527633
 
 
 func test_river_buildings_match_the_golden_fingerprint() -> void:
@@ -1027,14 +1027,14 @@ func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) 
 		pass_test("%s: руїн із глухим фронтоном на карті нема" % p)
 
 
-## Дахи будинків мають різні відтінки, руїни й двірське вбрання — без відтінку.
-func test_roofs_are_untinted(p = use_parameters(MAPS)) -> void:
-	# Колір даху дає лише текстура моделі: множник відтінку зсував дахи в оливу й вохру.
+## Колір даху з палітри мають лише хати: руїни, сараї й ферми лишаються з текстури моделі.
+func test_only_houses_get_a_roof_colour(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _cached(p).props()
 	for inst in props.all_instances():
 		var k: int = _kind(inst["model"])
 		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
-			assert_eq(props._roof_tint(inst), Color(1, 1, 1), "%s: %s" % [p, inst["model"]])
+			var house: bool = String(inst["model"]).begins_with("house_") and not inst.get("yard", false)
+			assert_eq(props._roof_tint(inst) != Color(0, 0, 0), house, "%s: %s" % [p, inst["model"]])
 
 
 func test_roof_variety_comes_from_house_textures() -> void:

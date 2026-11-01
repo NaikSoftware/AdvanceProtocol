@@ -32,6 +32,8 @@ const MODELS: Dictionary = {
 	&"house_h7": {"kind": Kind.STRUCTURE, "weight": 4, "scale": HOUSE_SCALE},
 	&"house_h8": {"kind": Kind.STRUCTURE, "weight": 3, "scale": HOUSE_SCALE},
 	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
+	&"f8_shed_brick": {"kind": Kind.STRUCTURE, "weight": 2, "yard_only": true},
+	&"f8_shed_lean": {"kind": Kind.STRUCTURE, "weight": 2, "yard_only": true},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 2, "max": 1},
 	&"f1_farm_barn": {"kind": Kind.STRUCTURE, "weight": 1},
@@ -74,6 +76,8 @@ const MODELS: Dictionary = {
 	&"infra_pole_wood": {"kind": Kind.POLE, "line": &"04kv", "crush": Crush.LAY},
 	&"infra_trailer_green": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
 	&"infra_trailer_rust": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
+	&"infra_trailer_flatbed": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
+	&"infra_trailer_tank": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
 	&"infra_jersey_block": {"kind": Kind.BLOCK, "crush": Crush.LAY},
 	&"rock_moss_01": {"kind": Kind.BOULDER, "crush": Crush.SINK, "scale": 0.55},
 	&"rock_moss_02": {"kind": Kind.BOULDER, "crush": Crush.SINK, "scale": 0.6},
@@ -227,11 +231,9 @@ const DEBRIS_COLORS: Array[Color] = [Color(0.36, 0.2, 0.15), Color(0.42, 0.4, 0.
 const BUILDING_GAP: float = 0.25
 ## Найдальше, на скільки будівля дошки відсувається від центру своєї клітинки заради BUILDING_GAP.
 const BUILDING_SHIFT: float = 0.3
-## Повітка-двірська будівля на клітинці BUILDING без будинку: f8_shed, зменшена так, щоб вільно
-## стала в клітинку (ассет на 0.96 клітинки не влазить із відступом до огорожі).
-const YARD_SHED: StringName = &"f8_shed"
-## Повітки двору: сусідні садиби беруть різні (як хати — HOUSE_FORMS).
-const YARD_SHEDS: Array[StringName] = [&"f8_shed"]
+## Повітки двору стоять на клітинці BUILDING без будинку зменшеними (YARD_SHED_SCALE: ассет на 0.96
+## клітинки не влазить із відступом до огорожі); сусідні двори беруть різні (як хати — HOUSE_FORMS).
+const YARD_SHEDS: Array[StringName] = [&"f8_shed", &"f8_shed_brick", &"f8_shed_lean"]
 ## Форми паркану садиби: «модель|множник висоти». Види відрізняються формою (штахет 1.3 м, суцільний профлист 1.8 м,
 ## сітка на трубах 1.5 м, цегляний цоколь із прутами 1.6 м, горизонтальні дошки 1.45 м), а не фарбою, яку prop_thin
 ## знебарвлює; множник висоти в кожного свій, тож сусіди різняться й висотою. Усі види — один вузол малювання.
@@ -256,6 +258,15 @@ const HOUSE_SCALE: float = 1.0
 ## Форми хат садиб на одну клітинку і найменша відстань (клітинок) між двома хатами однієї форми.
 const HOUSE_FORMS: Array[StringName] = [&"house_h5", &"house_h7", &"house_h8", &"house_h6"]
 const HOUSE_APART: int = 4
+## Руїна -> ціла хата з тим самим силуетом; ближче RUIN_TWIN_NEAR клітинок вони не стоять (ця відстань лишає ще вибір форми хати).
+const RUIN_TWIN_NEAR: int = 1
+## Однакові руїни ближче за стільки клітинок (Чебишов) не стоять.
+const RUIN_APART: int = 4
+## Заміна руїни воліє модель, якої нема й у цьому радіусі.
+const RUIN_FAR: int = 8
+## Руїна міняється лише на таку, чий слід відрізняється не більш ніж на цю частку площі: інакше зсувається паркан і ворота садиби.
+const RUIN_SWAP_AREA: float = 0.12
+const RUIN_TWIN: Dictionary = {&"ruin_half_house2": &"house_h6", &"ruin_half_house1": &"house_h5"}
 ## Стовп, будівля й паркан тримаються від води й болота щонайменше на стільки клітинок.
 const WATER_CLEAR: float = 0.4
 const YARD_SHED_SCALE: float = 0.7
@@ -345,6 +356,8 @@ const YARD_OUT: float = 0.285
 const GARDEN_SHARE: float = 0.4
 ## Тюк — на такій відстані за краєм ріллі (центр), не далі 0.3: біля поля, не в ньому.
 const HAY_OUT: float = 0.15
+## Найдалі від краю поля, де ще стоїть тюк, клітинки.
+const HAY_EDGE: float = 0.3
 ## Найдальше від точки макету, куди тюк перескакує на край поля.
 const HAY_SNAP: float = 2.0
 ## КТП-шафа на землі біля опори (~1.6 × 2.4 × 1.1 м) і її колір (оцинкована сталь, сіро-зелена,
@@ -893,6 +906,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	p.place_all()
 	if height != null:
 		height.finish_pads()
+	_assign_roofs()
 	_spans = p.spans
 	_gardens = p.gardens
 	_garden_plots = p.garden_plots
@@ -1807,17 +1821,111 @@ static func _variant(define: String) -> Shader:
 	return sh
 
 
-## Відтінок даху будинку (множник альбедо даху), з хешу клітинки. Лише нейтральний: кольорові
-## множники поверх кольорових дахів давали брудні оливкові й вохристі тони, тож колір даху
-## задає текстура моделі.
-const ROOF_TINTS: Array[Color] = [Color(1, 1, 1)]
+## Дахи хат — п'ять сільських кольорів (sRGB): графітовий шифер, темна вишня, справжня темна зелень,
+## оцинковка, темно-коричневий. Шейдер не множить текстуру, а підставляє цей колір, зберігши її
+## рельєф (множник по кольоровому даху давав брудні оливкові й вохристі тони), і кожен колір темніший
+## за стіну щонайменше в 1/0.6 раза.
+const ROOF_PALETTE: Array[Color] = [Color(0.2, 0.21, 0.23), Color(0.26, 0.09, 0.095), Color(0.12, 0.27, 0.16),
+		Color(0.314, 0.329, 0.345), Color(0.24, 0.17, 0.12)]
+## Найдалі від стіни по яскравості: дах хати не світліший за стільки її стіни (гамма-яскравість sRGB).
+const ROOF_WALL_MAX: float = 0.6
+## Найтемніший відтінок стіни в шейдері (WALL_TINTS у prop_fade.gdshader): із ним дах теж має вкластись у ROOF_WALL_MAX.
+const WALL_TINT_MIN: float = 0.93
+static var _wall_luma: Dictionary = {}
 
 
+## Яскравість стіни моделі (sRGB, медіана за площею вертикальних граней по атласу); 1 — немає текстури, тож без обмеження.
+static func wall_luma(m: StringName) -> float:
+	if _wall_luma.has(m):
+		return _wall_luma[m]
+	var out: float = 1.0
+	var info: Variant = model(m)
+	var mesh: Mesh = (info as Dictionary)["mesh"] if info != null else null
+	var mat: BaseMaterial3D = mesh.surface_get_material(0) as BaseMaterial3D if mesh != null else null
+	if mat != null and mat.albedo_texture != null:
+		var img: Image = mat.albedo_texture.get_image()
+		if img.is_compressed():
+			img.decompress()
+		var arr: Array = mesh.surface_get_arrays(0)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		var samples: Array = []
+		for t in idx.size() / 3:
+			var a: int = idx[t * 3]
+			var b: int = idx[t * 3 + 1]
+			var c: int = idx[t * 3 + 2]
+			var n: Vector3 = (v[b] - v[a]).cross(v[c] - v[a])
+			if n.length() < 1e-9 or absf(n.normalized().y) > 0.3:
+				continue
+			var q: Vector2 = (uv[a] + uv[b] + uv[c]) / 3.0
+			var px: Color = img.get_pixel(clampi(int(q.x * img.get_width()), 0, img.get_width() - 1),
+					clampi(int(q.y * img.get_height()), 0, img.get_height() - 1))
+			samples.append([px.r * 0.2126 + px.g * 0.7152 + px.b * 0.0722, n.length()])
+		samples.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
+		var total: float = 0.0
+		for sm: Array in samples:
+			total += sm[1]
+		var acc: float = 0.0
+		for sm: Array in samples:
+			acc += sm[1]
+			if acc >= total * 0.5:
+				out = sm[0]
+				break
+	_wall_luma[m] = out
+	return out
+## Дві хати ближче за стільки клітинок мають різні дахи, поки є вільний колір.
+const ROOF_APART: int = HOUSE_APART
+
+
+static func _has_roof_colour(inst: Dictionary) -> bool:
+	return String(inst["model"]).begins_with("house_") and not inst.get("yard", false)
+
+
+## Номер кольору даху хати з ROOF_PALETTE; −1 — дах не перефарбовується (руїна, сарай, ферма).
+static func roof_of(inst: Dictionary) -> int:
+	return int(inst.get("roof", -1))
+
+
+## Жадібно по порядку розстановки: з кольору за хешем клітинки — перший, якого нема в хатах ближче ROOF_APART;
+## коли вільного нема — той, чий найближчий двійник найдалі.
+func _assign_roofs() -> void:
+	var done: Array = []
+	for inst: Dictionary in _instances:
+		if not _has_roof_colour(inst):
+			continue
+		var c: Vector2i = (inst["cells"] as Array)[0]
+		var start: int = absi(cell_hash(c, 9137)) % ROOF_PALETTE.size()
+		var best: int = start
+		var best_gap: int = -1
+		var wall: float = wall_luma(inst["model"]) * WALL_TINT_MIN
+		for k in ROOF_PALETTE.size():
+			var idx: int = (start + k) % ROOF_PALETTE.size()
+			if ROOF_PALETTE[idx].get_luminance() > wall * ROOF_WALL_MAX:
+				continue
+			var gap: int = 1 << 20
+			for d: Array in done:
+				if d[1] == idx:
+					var o: Vector2i = (d[0] as Vector2i) - c
+					gap = mini(gap, maxi(absi(o.x), absi(o.y)))
+			if gap > ROOF_APART:
+				best = idx
+				best_gap = gap
+				break
+			if gap > best_gap:
+				best_gap = gap
+				best = idx
+		# Темна стіна, для якої не проходить жоден колір: найтемніший з палітри (тест тримає, що таких хат на картах нема).
+		if best_gap < 0:
+			best = ROOF_PALETTE.find(ROOF_PALETTE.reduce(func(a: Color, b: Color) -> Color: return a if a.get_luminance() < b.get_luminance() else b))
+		inst["roof"] = best
+		done.append([c, best])
+
+
+## Колір даху для шейдера (лінійний); нулі — дах лишається з текстури моделі.
 func _roof_tint(inst: Dictionary) -> Color:
-	if int(spec_of(inst["model"])["kind"]) != Kind.STRUCTURE or inst.get("yard", false):
-		return Color(1, 1, 1)
-	var c: Vector2i = (inst["cells"] as Array)[0]
-	return ROOF_TINTS[absi(cell_hash(c, 9137)) % ROOF_TINTS.size()]
+	var idx: int = roof_of(inst)
+	return Color(0, 0, 0) if idx < 0 else ROOF_PALETTE[idx].srgb_to_linear()
 
 
 func _on_board(c: Vector2i) -> bool:
@@ -2248,6 +2356,8 @@ class _Placer:
 	var model_at: Dictionary = {}
 	## Хати, уже поставлені (садиби й процедурні села кільця): [клітинка, модель] — щоб сусіди не повторювали форму.
 	var farm_houses: Array = []
+	## [клітинка, модель] поставлених руїн: сусідні руїни не повторюють вигляд.
+	var farm_ruins: Array = []
 	var tower_placed := false
 	## Скільки поставлено будинків: [одноповерхових, двоповерхових].
 	var storeys: Array[int] = [0, 0]
@@ -2688,9 +2798,13 @@ class _Placer:
 			for o: Array in options:
 				roll -= int(o[4])
 				if roll < 0:
+					if kind_id == Kind.RUIN:
+						o = _ruin_swap(o, options)
 					_put_structure(o[0], o[1], o[2], o[3], free)
 					if String(o[0]).begins_with("house_"):
 						farm_houses.append([o[1], o[0]])
+					if kind_id == Kind.RUIN:
+						farm_ruins.append([o[1], o[0]])
 					has_tower = has_tower or bool(PropLayer.spec_of(o[0]).get("tower", false))
 					tower_placed = tower_placed or has_tower
 					break
@@ -2914,20 +3028,33 @@ class _Placer:
 						var n: StringName = model_at.get(c + Vector2i(dx, dy), &"")
 						by_tower = by_tower or bool(PropLayer.spec_of(n).get("tower", false))
 				var roll: int = h(c, 141) % 3 if house_near(c) else 2
-				if roll == 0 and not by_tower and not shed_in.has(yard) and PropLayer.model(YARD_SHED) != null:
+				if roll == 0 and not by_tower and not shed_in.has(yard):
 					shed_in[yard] = true
+					var shed_m: StringName = _pick_apart(YARD_SHEDS, c, &"shed", h(yard, 143) % YARD_SHEDS.size())
+					if not _taken.has(&"shed"):
+						_taken[&"shed"] = []
+					(_taken[&"shed"] as Array).append([c, shed_m])
 					var cells: Array[Vector2i] = [c]
 					var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(c.x, 0.0, c.y))
-					var box: AABB = xf * ((PropLayer.model(YARD_SHED) as Dictionary)["aabb"] as AABB)
-					seat(layer._add(YARD_SHED, xf, cells, true), pad(Rect2(box.position.x, box.position.z, box.size.x, box.size.z)))
+					var box: AABB = xf * ((PropLayer.model(shed_m) as Dictionary)["aabb"] as AABB)
+					seat(layer._add(shed_m, xf, cells, true), pad(Rect2(box.position.x, box.position.z, box.size.x, box.size.z)))
 				elif roll == 1 and not trailer_in.has(yard):
 					trailer_in[yard] = true
-					_yard_item(pick_for_half(Kind.TRAILER, half(c)), c, Vector2(0.0, 0.1), yaw)
+					_yard_item(_trailer_apart(c), c, Vector2(0.0, 0.1), yaw)
 				elif _house_beside(c) and h(c, 145) % 3 != 0:
 					# Город — при самій хаті, і не на кожній вільній клітинці.
 					gardens.append(c)
-				else:
-					_yard_item(pick_for_half(Kind.HAY, half(c)), c, Vector2(0.25, 0.25).rotated(yaw), float(h(c, 142) % 628) / 100.0)
+
+	## Причіп поблизу клітинки c: вид, якого нема в причепів ближче HOUSE_APART клітинок (_pick_apart); &"" — моделей нема.
+	func _trailer_apart(c: Vector2i) -> StringName:
+		var forms_of: Array[StringName] = PropLayer.models_of(Kind.TRAILER)
+		if forms_of.is_empty():
+			return &""
+		var m: StringName = _pick_apart(forms_of, c, &"trailer", half(c))
+		if not _taken.has(&"trailer"):
+			_taken[&"trailer"] = []
+		(_taken[&"trailer"] as Array).append([c, m])
+		return m
 
 	## Хата на сусідній клітинці (і по діагоналі).
 	func _house_beside(c: Vector2i) -> bool:
@@ -3817,12 +3944,12 @@ class _Placer:
 	func _house_model(hc: Vector2i, i: int) -> StringName:
 		var start: int = h(hc, 150) % HOUSE_FORMS.size()
 		var pick: StringName = &""
-		for pass_ in 2:
+		for pass_ in 3:
 			for k in HOUSE_FORMS.size():
 				var m: StringName = HOUSE_FORMS[(start + k) % HOUSE_FORMS.size()]
 				if PropLayer.model(m) == null or not _no_twin(m, hc, Vector2i.ONE):
 					continue
-				if pass_ == 0 and _house_near(m, hc):
+				if (pass_ == 0 and _ruin_twin_near(m, hc)) or (pass_ < 2 and _house_near(m, hc)):
 					continue
 				pick = m
 				break
@@ -3860,6 +3987,57 @@ class _Placer:
 		if not _taken.has(key):
 			_taken[key] = []
 		(_taken[key] as Array).append([hc, m])
+
+	## Та сама руїна ближче RUIN_APART клітинок: однакові руїни поруч читаються копіями.
+	func _ruin_near(m: StringName, c: Vector2i, reach: int = RUIN_APART) -> bool:
+		for fr: Array in farm_ruins:
+			var d: Vector2i = (fr[0] as Vector2i) - c
+			if fr[1] == m and maxi(absi(d.x), absi(d.y)) <= reach:
+				return true
+		return false
+
+	## Руїна з повним слідом (ruin_half_*) або далі клітинки від садиб макета: низька не замикає двір, і город лишається біля розриву паркану.
+	func _closes_yard(m: StringName, c: Vector2i) -> bool:
+		if String(m).begins_with("ruin_half_"):
+			return true
+		for home: Dictionary in layout.get("homes", []):
+			for hc: Vector2i in home["cells"]:
+				if maxi(absi(hc.x - c.x), absi(hc.y - c.y)) <= 1:
+					return false
+		return true
+
+	## Руїна на тій самій клітинці й з тим самим поворотом, що й вибрана, але не повторює сусідню й не двійник хати макета;
+	## з таких — найближча за площею обрису до вибраної, щоб розкладка садиб (паркан, ворота, город) лишалась на місці.
+	## Нема на що міняти — лишається вибрана.
+	func _ruin_swap(pick: Array, options: Array) -> Array:
+		if not _ruin_near(pick[0], pick[1]):
+			return pick
+		var area := func(m: StringName) -> float:
+			var sz: Vector3 = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size
+			return sz.x * sz.z
+		var want: float = area.call(pick[0])
+		var best: Array = pick
+		# Спершу такі, що не повторюють руїну й далі (RUIN_FAR), потім хоч не ближче RUIN_APART.
+		for reach: int in [RUIN_FAR, RUIN_APART]:
+			var best_d: float = INF
+			for o: Array in options:
+				if o[1] != pick[1] or o[2] != pick[2] or _ruin_near(o[0], o[1], reach) or not _closes_yard(o[0], o[1]):
+					continue
+				var d: float = absf(float(area.call(o[0])) - want)
+				if d < best_d and d <= want * RUIN_SWAP_AREA:
+					best_d = d
+					best = o
+			if best_d < INF:
+				return best
+		return best
+
+	## Руїна цієї ж хати поруч (RUIN_TWIN): ціла хата й її розбитий двійник на сусідніх ділянках — той самий силует двічі.
+	func _ruin_twin_near(house: StringName, hc: Vector2i) -> bool:
+		for fr: Array in farm_ruins:
+			var d: Vector2i = (fr[0] as Vector2i) - hc
+			if PropLayer.RUIN_TWIN.get(fr[1], &"") == house and maxi(absi(d.x), absi(d.y)) <= RUIN_TWIN_NEAR:
+				return true
+		return false
 
 	func _house_near(m: StringName, hc: Vector2i) -> bool:
 		for fh: Array in farm_houses:
@@ -5822,8 +6000,16 @@ class _Placer:
 				for k in n:
 					var off := Vector2(float(h(c, 8 + k) % 100) / 100.0 - 0.5, float(h(c, 12 + k) % 100) / 100.0 - 0.5) * 0.12
 					var at: Vector2 = corner + off - corner.normalized() * 0.09 * k
-					if not near_wet(Vector2(c) + at, WATER_CLEAR):
+					# Тюки лише край поля: на лузі й у дворі їм не місце.
+					if not near_wet(Vector2(c) + at, WATER_CLEAR) and _at_field_edge(Vector2(c) + at):
 						put_small(m, c, at, float(h(c, 16 + k) % 628) / 100.0)
+
+	## Точка поза полем, але не далі HAY_EDGE від його краю.
+	func _at_field_edge(q: Vector2) -> bool:
+		for r: Rect2 in layer.field_edges:
+			if not r.has_point(q) and q.distance_to(q.clamp(r.position, r.end)) <= HAY_EDGE:
+				return true
+		return false
 
 	## Причіп біля подвір'я: один на групу, на полі за огорожею двору (ближче — сама огорожа), уздовж
 	## ребра в бік двору.
@@ -5839,7 +6025,7 @@ class _Placer:
 					var b: Vector2i = f + d
 					if not yard_cells.has(f) or kind(b) != Terrain.Kind.BUILDING or done.has(b / 4) or not house_near(c):
 						continue
-					if put_on_edge(pick_for_half(Kind.TRAILER, half(c)), c, d, 0.39):
+					if put_on_edge(_trailer_apart(c), c, d, 0.39):
 						done[b / 4] = true
 					break
 
