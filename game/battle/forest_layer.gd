@@ -319,6 +319,18 @@ func _free(nodes: Array[Node]) -> void:
 	nodes.clear()
 
 
+## План лісу всього світу без проламів: чиста функція клітинок, порід, сезону, зерна й бібліотеки —
+## тож береться з дискового кешу (BuildCache), а не рахується щоразу.
+func _ring_plan() -> Array:
+	var k: String = BuildCache.key([_cells.keys(), _wood.values(), _season, _seed, _lib], ["res://game/battle/forest_scatter.gd"])
+	var cached: Variant = BuildCache.fetch("forest_ring", k)
+	if cached is Array:
+		return cached
+	var plan: Array = ForestScatter.plan(_cells, _wood_at, {}, _season, _seed, _lib)
+	BuildCache.store("forest_ring", k, plan)
+	return plan
+
+
 ## Кільце: намет проксі-кронами однієї форми на породу; біля дошки — узлісся, пояс кущів і
 ## листяні справжніми сітками. Власний батч, будується раз.
 func _build_ring() -> void:
@@ -326,7 +338,7 @@ func _build_ring() -> void:
 	_ring_crowns.clear()
 	_ring_fadable.clear()
 	var groups: Dictionary = {}  ## вузол -> Array[Dictionary]
-	for e: Dictionary in ForestScatter.plan(_cells, _wood_at, {}, _season, _seed, _lib):
+	for e: Dictionary in _ring_plan():
 		var p: Vector2 = e["pos"]
 		var node: String = e["node"]
 		if _in_board(p) or e["ground"] or not _lib.has(node):

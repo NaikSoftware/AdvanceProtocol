@@ -180,7 +180,15 @@ var revision: int = 0
 ## ширший з кожного боку. Запікається в координатах світу, потім зсувається на ring, тож at(),
 ## deck_y(), bridge_groups() і image() далі говорять координатами дошки. course і roads лишаються
 ## в координатах світу: їх читають лише растри, а ті й так покривають увесь світ.
-static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedByteArray = PackedByteArray(), ring: int = 0) -> TerrainHeight:
+## cache — узяти поле з диска (BuildCache) і зберегти туди; річкова вісь `course` у зліпок не входить
+## (після запікання її читають лише тести), тож на кеш-шляху вона null.
+static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedByteArray = PackedByteArray(), ring: int = 0, cache: bool = false) -> TerrainHeight:
+	var cache_key: String = ""
+	if cache:
+		cache_key = BuildCache.key([board.width, board.height, board.tiles, p_margin, seed_value, surface, ring, undulation_scale], CACHE_SCRIPTS)
+		var cached: Variant = BuildCache.fetch("height", cache_key)
+		if cached is Dictionary:
+			return _from_cache(cached)
 	var t := TerrainHeight.new()
 	t.margin = p_margin
 	t.board_width = board.width
@@ -193,6 +201,41 @@ static func bake(board: Board, p_margin: int, seed_value: int, surface: PackedBy
 	if ring > 0:
 		t._to_board_coords(ring)
 		t._conform(ring)
+	if cache:
+		BuildCache.store("height", cache_key, t._to_cache())
+	return t
+
+
+## Скрипти, чий код і константи визначають поле висот: правка будь-якого міняє ключ кешу.
+const CACHE_SCRIPTS: PackedStringArray = [
+	"res://game/battle/terrain_height.gd", "res://game/battle/river_course.gd", "res://game/battle/road_course.gd",
+	"res://game/battle/surroundings.gd", "res://game/battle/ground_lod.gd", "res://core/terrain.gd", "res://core/map_data.gd"]
+
+
+func _to_cache() -> Dictionary:
+	var state: Dictionary = BuildCache.dump_vars(self, ["course", "roads"])
+	if roads != null:
+		var images: Array = []
+		for img in roads.rasterise():
+			images.append(BuildCache.pack_image(img))
+		state["#roads"] = [BuildCache.dump_vars(roads, ["_images"]), images]
+	return state
+
+
+static func _from_cache(state: Dictionary) -> TerrainHeight:
+	var t := TerrainHeight.new()
+	var vars: Dictionary = state.duplicate()
+	var road_state: Variant = vars.get("#roads")
+	vars.erase("#roads")
+	BuildCache.load_vars(t, vars)
+	if road_state != null:
+		var rc := RoadCourse.new()
+		BuildCache.load_vars(rc, road_state[0])
+		var images: Array[Image] = []
+		for a: Array in road_state[1]:
+			images.append(BuildCache.unpack_image(a))
+		rc._images = images
+		t.roads = rc
 	return t
 
 
@@ -574,8 +617,17 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 				dc[k] = soft_c[k]
 		if _shift > 0:
 			_round_ring_shores(dc, cw, ch, cstep, seed_value)
+		# RiverCourse.upsample розгорнуто: розміри грубої сітки й виклик функції на кожен відлік — марні.
+		var ucw: int = (cols - 1 + _RIVER_STEP - 1) / _RIVER_STEP + 1
+		var uch: int = (rows - 1 + _RIVER_STEP - 1) / _RIVER_STEP + 1
 		for k in dg.size():
-			dg[k] = RiverCourse.upsample(dc, cols, rows, _RIVER_STEP, k % cols, k / cols)
+			var fx: float = float(k % cols) / float(_RIVER_STEP)
+			var fz: float = float(k / cols) / float(_RIVER_STEP)
+			var ux: int = mini(int(fx), ucw - 2)
+			var uz: int = mini(int(fz), uch - 2)
+			var tx: float = fx - ux
+			var tz: float = fz - uz
+			dg[k] = lerpf(lerpf(dc[uz * ucw + ux], dc[uz * ucw + ux + 1], tx), lerpf(dc[(uz + 1) * ucw + ux], dc[(uz + 1) * ucw + ux + 1], tx), tz)
 		_restore_land_clearance(dg, dc, dc0)
 		for j in rows:
 			var z: float = -0.5 - margin + float(j) / fs
@@ -1339,6 +1391,15 @@ static func _box_pass(src: PackedFloat32Array, dst: PackedFloat32Array, n: int, 
 		var acc := 0.0
 		for k in range(-r, r + 1):
 			acc += src[base + clampi(k, 0, n - 1) * stride]
-		for i in n:
+		# Посередині лінії обидва індекси вже в межах: clampi там зайвий, а арифметика та сама.
+		var lo: int = mini(r, n)
+		var hi: int = maxi(lo, n - 1 - r)
+		for i in range(0, lo):
+			dst[base + i * stride] = acc * inv
+			acc += src[base + clampi(i + r + 1, 0, n - 1) * stride] - src[base + clampi(i - r, 0, n - 1) * stride]
+		for i in range(lo, hi):
+			dst[base + i * stride] = acc * inv
+			acc += src[base + (i + r + 1) * stride] - src[base + (i - r) * stride]
+		for i in range(hi, n):
 			dst[base + i * stride] = acc * inv
 			acc += src[base + clampi(i + r + 1, 0, n - 1) * stride] - src[base + clampi(i - r, 0, n - 1) * stride]
