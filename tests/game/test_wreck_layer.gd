@@ -427,3 +427,5 @@ func test_zone_contour_is_drawn_after_smoke_fire_and_rain() -> void:
 	assert_gt(contour, (wl.get_node("Columns") as MultiMeshInstance3D).material_override.render_priority, "дим стовпа")
 	assert_gt(contour, wl.hearth_material().render_priority, "мирний дим")
 	assert_gt(contour, rain.render_priority, "дощ")
+	assert_gt(contour, PropLayer.WIRE_RENDER_PRIORITY, "дроти")
+	assert_gt(contour, BattleFx.PRIORITY_CORE + 1, "найгарячіший спалах BattleFx")
