@@ -59,9 +59,22 @@ const RING_DETAIL: float = 1.5
 ## група розчинення — виклик малювання.
 const FADE_MIN_TOP: float = 0.2
 ## Новий пролам перепланує лише клітинки в межах стількох від зміни (ForestScatter.LANE_NEAR + крона).
-## Напівширина просіки й смуга розрідження за нею, тайли (1 тайл ≈ 8 м): вісім метрів в обидва боки.
-const CORRIDOR_HALF: float = 1.0
-const CORRIDOR_FEATHER: float = 0.6
+## Стовбур дерева не ближче за стільки до проліту (тайли): сама просіка вільна від стовбурів.
+const TRUNK_CLEAR: float = 0.45
+## Зазор на екрані між краєм рослини й проводом (тайли): просіка рубає лише те, що лягає на дріт.
+const CROWN_MARGIN: float = 0.1
+## Висота проводу над землею (тайли) й додатковий зазор до опори: траверса, розтяжка й гілки, що виходять за радіус крони.
+const POLE_PAD: float = 0.5
+const WIRE_HEIGHT: float = 1.2
+## Частка висоти листяного дерева від землі, нижче якої крона ще рідка (стовбур): дріт над ним крону не ховає. Хвойні сягають землі.
+const CROWN_FOOT: float = 0.25
+## Низьким вважається підлісок не вищий за стільки (тайли): просіка його не чіпає, він тримає клітину лісом під проводом.
+const LOW_KEEP: float = 0.4
+## Зум і екранна висота (−1 низ, +1 верх кадру), за яких просіка рахує, що лежить на дроті: зум, на якому дивиться
+## гравець, і верхня частина кадру — там проводи й крони найдалі (view_k). На ближчому зумі зсув більший, тож край
+## крони там ще може торкнутись дроту; на дальшому — менший, і те, що чисте тут, чисте й там.
+const REF_ZOOM: float = 8.0
+const REF_V: float = 0.9
 const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
@@ -271,40 +284,134 @@ func _in_board(p: Vector2) -> bool:
 	return p.x >= -0.5 and p.y >= -0.5 and p.x < _board.size.x - 0.5 and p.y < _board.size.y - 0.5
 
 
-## Запис плану після просіки під прольотом ЛЕП: дерево в смузі напівширини CORRIDOR_HALF заміщене
-## низьким кущем (смуга не лисіє), у смузі розрідження за нею частину дерев пропущено, решта —
-## як було. Порожній словник — запису нема. Відводи до хат сюди не входять: ліс вони не рубають.
-func _cleared(e: Dictionary) -> Dictionary:
+## Запис плану після просіки під прольотом ЛЕП: дерево із стовбуром у самій просіці (TRUNK_CLEAR)
+## чи з кроною на дроті заміщене низьким кущем (смуга не лисіє), решта —
+## як було, низький підлісок теж лишається. Порожній словник — запису нема. Відводи до хат сюди не входять.
+## widen — у скільки разів проксі розширить крону пізніше (кільце): просіка рахується за кроною, яку побачать.
+func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	var node: String = e["node"]
 	if not e["ground"] and fences.any(func(r: Rect2) -> bool:
 			return VegetationLayer._rect_dist(r, e["pos"]) < float(e["r"]) + VegetationLayer.FENCE_CROWN_PAD):
 		return {}
-	if spans.is_empty() or e["ground"] or not node.get_slice("_", 0) in TREES or not _lib.has(node):
-		return e
-	if float(_lib[node]["h"]) * e["xf"].basis.get_scale().y < UNDER_TOP:
+	var species: String = node.get_slice("_", 0)
+	if spans.is_empty() or e["ground"] or not (species in TREES or species == "Shrub" or species == "Hedge") or not _lib.has(node):
 		return e
 	var p: Vector2 = e["pos"]
-	var d: float = INF
-	for w: Array in spans:
-		d = minf(d, p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])))
-	if d >= CORRIDOR_HALF + CORRIDOR_FEATHER:
+	var top: float = float(_lib[node]["h"]) * e["xf"].basis.get_scale().y
+	# Просіка в лісі тримає низький підлісок під проводом: без нього клітина лісу читалась би лугом.
+	if top <= LOW_KEEP:
 		return e
-	var u: float = float(absi(hash(p)) % 1000) / 1000.0
-	if d >= CORRIDOR_HALF:
-		# Край смуги тоншає поступово: що ближче до просіки, то менше дерев лишається.
-		return e if u < (d - CORRIDOR_HALF) / CORRIDOR_FEATHER else {}
+	# Стовбур не стоїть у самій просіці; далі від дроту дерево лишається, поки його крона не лягає на дріт на екрані.
+	if _ground_gap(p) >= TRUNK_CLEAR and screen_gap(p, top, float(e["r"]) * widen, spans, node) >= CROWN_MARGIN:
+		return e
+	# Знято дерево — на його місці низький кущ: ліс під проводом не лисіє.
 	var shrubs: Array[String] = []
 	for k: String in _lib:
-		if k.begins_with("Shrub_"):
+		if k.begins_with("Shrub_") and float(_lib[k]["h"]) <= LOW_KEEP:
 			shrubs.append(k)
 	if shrubs.is_empty():
 		return {}
 	shrubs.sort()
+	var u: float = float(absi(hash(p)) % 1000) / 1000.0
 	var out: Dictionary = e.duplicate()
 	out["node"] = shrubs[int(u * 997.0) % shrubs.size()]
 	out["xf"] = Transform3D(Basis(Vector3.UP, u * TAU), (e["xf"] as Transform3D).origin)
 	out["r"] = 0.3
 	return out
+
+
+## Відстань у плані від точки до найближчого проліту.
+func _ground_gap(p: Vector2) -> float:
+	var d: float = INF
+	for w: Array in spans:
+		d = minf(d, p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])))
+	return d
+
+
+## Рослині основою в p, заввишки top і завширшки r (тайли) — зазор на екрані до найближчого дроту з spans: тіло
+## (від землі до верхівки: ялини сягають землі) й дріт на висоті опори проєктуються на землю вздовж погляду, відстань міряється
+## в екранних одиницях (вшир — тайл, вглиб — S тайла, view_k), мінус радіус. Від’ємний — рослина лежить на дроті.
+static func screen_gap(p: Vector2, top: float, r: float, span_list: Array, node: String = "") -> float:
+	var fwd: Vector2 = _view_fwd()
+	var kv: Vector2 = ref_k()
+	var foot: float = CROWN_FOOT * top if node.get_slice("_", 0) in BROADLEAF and top > LOW_KEEP else 0.0
+	var a: Vector2 = _scr(p + fwd * kv.x * (foot - WIRE_HEIGHT), kv.y)
+	var b: Vector2 = _scr(p + fwd * kv.x * (top - WIRE_HEIGHT), kv.y)
+	var best: float = INF
+	var item_a: Vector2 = _scr(p + fwd * kv.x * foot, kv.y)
+	var item_b: Vector2 = _scr(p + fwd * kv.x * top, kv.y)
+	for w: Array in span_list:
+		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])) > 12.0:
+			continue
+		best = minf(best, _seg_dist(a, b, _scr(w[0], kv.y), _scr(w[1], kv.y)))
+		# Стовп — вертикаль від землі до дроту на кінцях прольоту: крона не лягає й на нього.
+		for q: Vector2 in w:
+			best = minf(best, _seg_dist(item_a, item_b, _scr(q, kv.y), _scr(q + fwd * kv.x * WIRE_HEIGHT, kv.y)) - POLE_PAD)
+	return best - r
+
+
+## Перспективна проєкція камери гри (IsoCameraRig: нахил pitch_for(zoom), відстань за FOV): для точки землі на екранній
+## висоті v (−1 низ, +1 верх кадру) — Vector2(K, S): K — на скільки тайлів вглиб зсуває точку на екрані тайл її висоти,
+## S — скільки екрана займає тайл вглиб відносно тайла вшир. Верх кадру — найгірший випадок (там K найбільший).
+static func view_k(zoom: float, v: float) -> Vector2:
+	var pitch: float = deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG + (IsoCameraRig.PITCH_FAR_DEG - IsoCameraRig.PITCH_NEAR_DEG) \
+			* inverse_lerp(IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM, zoom))
+	var tan_half: float = tan(deg_to_rad(IsoCameraRig.FOV_DEG) * 0.5)
+	var dist: float = zoom / (2.0 * tan_half)
+	var cam := Vector3(0.0, -dist * cos(pitch), dist * sin(pitch))  # (вшир, вглиб, вгору)
+	var fwd := Vector3(0.0, cos(pitch), -sin(pitch))
+	var up := Vector3(0.0, sin(pitch), cos(pitch))
+	var sy := func(u: float, d: float, y: float) -> float:
+		var rel := Vector3(u, d, y) - cam
+		return rel.dot(up) / rel.dot(fwd)
+	var sx := func(u: float, d: float, y: float) -> float:
+		var rel := Vector3(u, d, y) - cam
+		return rel.x / rel.dot(fwd)
+	# Глибина точки землі, що стоїть на висоті екрана v: бісекція по d.
+	var lo: float = -dist * 0.5
+	var hi: float = dist * 4.0
+	for i in 40:
+		var mid: float = (lo + hi) * 0.5
+		if sy.call(0.0, mid, 0.0) / tan_half < v:
+			lo = mid
+		else:
+			hi = mid
+	var d: float = (lo + hi) * 0.5
+	var e: float = 0.001
+	var dy: float = (sy.call(0.0, d, e) - sy.call(0.0, d, 0.0)) / e
+	var dd: float = (sy.call(0.0, d + e, 0.0) - sy.call(0.0, d, 0.0)) / e
+	var du: float = (sx.call(e, d, 0.0) - sx.call(0.0, d, 0.0)) / e
+	return Vector2(dy / dd, dd / du)
+
+
+## K і S камери на REF_ZOOM, REF_V (один раз).
+static var _ref: Vector2 = Vector2.ZERO
+
+
+static func ref_k() -> Vector2:
+	if _ref == Vector2.ZERO:
+		_ref = view_k(REF_ZOOM, REF_V)
+	return _ref
+
+
+## Точка плану → екранні одиниці (вшир, вглиб·s).
+static func _scr(q: Vector2, s: float) -> Vector2:
+	var fwd: Vector2 = _view_fwd()
+	return Vector2(q.dot(Vector2(-fwd.y, fwd.x)), q.dot(fwd) * s)
+
+
+## Напрям погляду камери в плані: від камери вглиб.
+static func _view_fwd() -> Vector2:
+	var yaw: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
+	return -Vector2(sin(yaw), cos(yaw))
+
+
+## Найменша відстань між відрізками a–b та c–d.
+static func _seg_dist(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> float:
+	if Geometry2D.segment_intersects_segment(a, b, c, d) != null:
+		return 0.0
+	return minf(minf(a.distance_to(Geometry2D.get_closest_point_to_segment(a, c, d)), b.distance_to(Geometry2D.get_closest_point_to_segment(b, c, d))),
+			minf(c.distance_to(Geometry2D.get_closest_point_to_segment(c, a, b)), d.distance_to(Geometry2D.get_closest_point_to_segment(d, a, b))))
 
 
 ## Відстань від точки до дошки (тайли), 0 — на дошці.
@@ -343,7 +450,7 @@ func _build_ring() -> void:
 		var node: String = e["node"]
 		if _in_board(p) or e["ground"] or not _lib.has(node):
 			continue
-		e = _cleared(e)
+		e = _cleared(e, RING_WIDE)
 		if e.is_empty():
 			continue
 		node = e["node"]
@@ -374,7 +481,7 @@ func _build_ring() -> void:
 		if not groups.has(key):
 			groups[key] = []
 		var it: Dictionary = {"xf": _on_ground(xf), "rgb": e["rgb"], "pos": p, "r": float(e["r"]) * xf.basis.get_scale().x / maxf(e["xf"].basis.get_scale().x, 1e-3),
-				"top": top}
+				"top": top, "node": node}
 		(groups[key] as Array).append(it)
 		if crown:
 			_ring_crowns.append(it)

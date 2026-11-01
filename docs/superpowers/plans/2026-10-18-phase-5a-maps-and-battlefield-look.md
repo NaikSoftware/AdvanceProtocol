@@ -407,7 +407,7 @@ func test_leaving_battle_restores_the_previous_cap() -> void
 ```
 - [x] **Step 2: Run, expect FAIL.**
 - [x] **Step 3: Implement**; run `$GODOT --path . -s res://tools/frame_budget.gd` (windowed, Mobile renderer).
-- [ ] **Step 4:** Draw calls < 100 at every measured view; if not, merge or cut and re-measure. Primitives are recorded, not enforced (soft budget). Write `docs/performance.md`. Run the suite → green.
+- [x] **Step 4:** Draw calls < 100 at every measured view; if not, merge or cut and re-measure. Primitives are recorded, not enforced (soft budget). Write `docs/performance.md`. Run the suite → green.
 - [x] **Step 5: Commit** — `git commit -m "perf(battle): 30 fps у спокої; заміряний бюджет кадру Річки"`
 
 ---
@@ -527,9 +527,9 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Reed tops loose and soft, no round lumps; reed shade patch only on sunny maps
 - [x] Alder sits with the other trees in every season (brightness, saturation, speckle)
 - [x] Plant source sprites live in the repository, outside Godot import
-- [ ] No tree crown under a power line
+- [x] No tree crown under a power line
 - [x] Power line through a forest runs in a cleared corridor: no crowns over the wires, undergrowth stays
-- [ ] A forest cell under a line still reads as forest, with tall trees outside the cut
+- [x] A forest cell under a line still reads as forest, with tall trees outside the cut
 - [ ] Accepted in battle frames on all three maps
 
 ### Task 22: Forest into battle
@@ -561,5 +561,5 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [ ] Bales only at field edges; nothing within 0.4 tile of water
 - [ ] Neighbouring houses differ in model or colour
 - [ ] Gates in their fence's tone under every light; a gate stands between real fence on both sides
-- [ ] Draw calls under 100 at every zoom on every map
+- [x] Draw calls under 100 at every zoom on every map
 - [ ] Battle board builds noticeably faster, with identical pixels
