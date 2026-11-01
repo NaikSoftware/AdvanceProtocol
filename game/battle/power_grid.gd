@@ -698,9 +698,13 @@ func _grow(rect: Rect2, spots: Array[Vector2], stations: Array[Vector2], parent:
 		if int(degree.get(k, 0)) < MAX_SPANS and stations[k].distance_to(c) <= BRIDGE_MAX:
 			from.append(k)
 	var base: int = stations.size()
+	# Короткий відвід дозволено лише від опори, з якої гілка справді може піти, а не від сусіднього місця тієї ж хати.
+	var sources: Array[Vector2] = []
+	for k: int in from:
+		sources.append(stations[k])
 	var to: Array[int] = []
 	for s: Vector2 in spots:
-		if stations.all(func(o: Vector2) -> bool: return o.distance_to(s) >= POLE_GAP) and _hooks_ok(s, stations, trunk_segs):
+		if stations.all(func(o: Vector2) -> bool: return o.distance_to(s) >= POLE_GAP) and _hooks_ok(s, sources, trunk_segs):
 			stations.append(s)
 			to.append(stations.size() - 1)
 	if from.is_empty() or to.is_empty():
