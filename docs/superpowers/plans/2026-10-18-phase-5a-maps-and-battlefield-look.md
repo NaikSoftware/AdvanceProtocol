@@ -420,9 +420,9 @@ func test_leaving_battle_restores_the_previous_cap() -> void
 - Modify: `docs/reference/blitzkrieg.md` — the class costing 100 is water/riverbank (sprites 49–75, `GameCanvas.java:2377-2379`), not built-up
 - Modify: `docs/superpowers/plans/2026-08-09-advance-protocol-implementation.md` — Phase 5 table: mark 5.1, 5.3–5.7 (rain preset only) as done by this slice with a link to this plan
 
-- [ ] **Step 1:** Edit the docs (`write` skill: English, project vocabulary).
+- [ ] ~~**Step 1:** Edit the docs (`write` skill: English, project vocabulary).~~ — dropped: no final docs pass
 - [ ] **Step 2:** Full verification: `./run_tests.sh` (note Scripts count), shader import check → 0 errors, `tools/frame_budget.gd` numbers match `docs/performance.md`.
-- [ ] **Step 3:** Publish a final page: River at MAX zoom, MIN zoom, a selected unit with zones, a unit in the forest, the bridge, all beside `river_target.jpg`; plus Crossroads and Ridge at MAX zoom.
+- [ ] ~~**Step 3:** Publish a final page: River at MAX zoom, MIN zoom, a selected unit with zones, a unit in the forest, the bridge, all beside `river_target.jpg`; plus Crossroads and Ridge at MAX zoom.~~ — dropped: no showcase page, a final check of all three maps instead
 - [x] **Step 4: Commit** — `git commit -m "docs: перспективна камера, вигляд поля бою, бюджет кадру"`
 
 ---
