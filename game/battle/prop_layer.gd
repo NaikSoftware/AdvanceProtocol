@@ -1613,11 +1613,9 @@ static func _thin_solid() -> Shader:
 	if _thin_solid_shader == null:
 		_thin_solid_shader = Shader.new()
 		var code: String = _THIN_SHADER.code
-		var begin: int = code.find("\t//SCISSOR_BEGIN")
-		var end: int = code.find("\t//SCISSOR_END")
-		assert(begin >= 0 and end > begin, "PropLayer: блок прозорості в prop_thin.gdshader змінився")
-		# Без ALPHA матеріал лишається непрозорим; суцільна панель не відсікається.
-		_thin_solid_shader.code = code.substr(0, begin) + code.substr(end + "\t//SCISSOR_END\n".length())
+		var cut: String = "\tif (alpha_cut > 0.0 && tex.a < cut) {\n\t\tdiscard;\n\t}\n"
+		assert(code.contains(cut), "PropLayer: відсікання в prop_thin.gdshader змінилось")
+		_thin_solid_shader.code = code.replace(cut, "")
 	return _thin_solid_shader
 
 

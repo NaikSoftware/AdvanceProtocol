@@ -9,8 +9,6 @@ uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, r
 uniform vec4 albedo_color : source_color = vec4(1.0);
 uniform bool use_vertex_color = false;
 uniform float alpha_cut = 0.0;
-// Ширина покриття MSAA на краю штакетини (alpha_to_coverage).
-uniform float a2c_edge = 0.25;
 uniform float roughness = 0.9;
 uniform float metallic = 0.0;
 // Частка неба в нормалі: 0 — нормаль ассета, 1 — освітлення як у горизонтальної площини.
@@ -89,6 +87,9 @@ void fragment() {
 	// знижується з рівнем міпмапи, щоб покриття лишалось.
 	float mip = mip_level(albedo_tex, UV);
 	float cut = alpha_cut * clamp(1.0 - 0.3 * mip, 0.15, 1.0);
+	if (alpha_cut > 0.0 && tex.a < cut) {
+		discard;
+	}
 	vec3 albedo = tex.rgb;
 	bool yard = kinds > 0;
 	// Яскравість не вища за VALUE_CAP: світлі шапки стовпчиків і свіжа фарба на зумі 14 читались
@@ -116,15 +117,7 @@ void fragment() {
 		albedo *= mix(1.0, DIRT, wet * (1.0 - smoothstep(0.0, DIRT_H, base_h)));
 	}
 	ALBEDO = albedo;
-	// ALPHA_SCISSOR_THRESHOLD (з alpha_to_coverage у render_mode) лишає паркан у непрозорому проході: без нього ALPHA < 1
-	// кидає його в прозорий, де він сортується з димом за центром AABB, а не за глибиною. Суцільний варіант (alpha_cut = 0)
-	// не пише ALPHA зовсім (_thin_solid вирізає цей блок).
-	//SCISSOR_BEGIN
-	ALPHA = clamp(tex.a * (1.0 + FAR_ALPHA * mip), 0.0, 1.0);
-	ALPHA_SCISSOR_THRESHOLD = cut;
-	ALPHA_ANTIALIASING_EDGE = a2c_edge;
-	ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));
-	//SCISSOR_END
+	ALPHA = mix(1.0, clamp(tex.a * (1.0 + FAR_ALPHA * mip), 0.0, 1.0), step(0.0001, alpha_cut));
 	// Мокра фарбована бляха — м'який полиск, не матова картка.
 	// Шапка секції матова: мокрий полиск горішніх граней блищав білими цятками вздовж огорожі.
 	ROUGHNESS = mix(mix(roughness, WET_ROUGHNESS, wet), 1.0, cap);
