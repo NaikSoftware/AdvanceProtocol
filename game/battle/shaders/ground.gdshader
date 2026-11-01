@@ -636,14 +636,16 @@ void fragment() {
 				// шуму: глибина зубців змінюється повільним шумом (0.2–0.7 м), на межах перепаду зубці
 				// гаснуть (4r(1-r)), тож зони без перепаду лишаються рівно такими, як були.
 				if (rt.r > 0.001 && rt.r < 0.999) {
-					float tooth = mix(0.2, 0.7, vnoise(p * 1.3 + 9.0));
+					// Глибші зубці лише на справжньому кінці; на гравійному узбіччі лишається стара глибина.
+					float tn = vnoise(p * 1.3 + 9.0);
+					float tooth = mix(mix(0.2, 0.7, tn), mix(0.1, 0.45, tn), gravel_k);
 					float jag = tooth * (2.0 * (vnoise(p * 7.0 + 71.0) - 0.5) + (vnoise(p * 17.0 + 5.0) - 0.5))
 							+ 0.12 * (vnoise(p * 40.0 + 3.0) - 0.5);
 					asph_se = (0.5 - rt.r) * 1.8 + jag * 4.0 * rt.r * (1.0 - rt.r);
 					float apv = 1.0 - smoothstep(-0.05, 0.05, asph_se);
 					// Уламки: дрібні шматки асфальту за краєм, на 0.05–0.45 м у ґрунт. Лише в зоні перепаду,
 					// тож бічні краї дороги їх не мають.
-					float bits = step(0.68, vnoise(p * 26.0 + 19.0)) * step(0.0, asph_se) * (1.0 - smoothstep(0.05, 0.45, asph_se));
+					float bits = step(0.68, vnoise(p * 26.0 + 19.0)) * step(0.0, asph_se) * (1.0 - smoothstep(0.05, 0.45, asph_se)) * (1.0 - gravel_k);
 					apv = max(apv, 0.85 * bits);
 					rt.gb = rt.gb / max(1.0 - rt.r, 1e-4) * (1.0 - apv);
 					rt.r = apv;

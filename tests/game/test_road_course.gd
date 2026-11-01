@@ -560,7 +560,7 @@ func test_dirt_ruts_start_at_an_asphalt_end_that_meets_a_dirt_corner() -> void:
 		if rc == null:
 			continue
 		for node in rc.nodes:
-			if rc._type_near(node) == 0 or not rc._asphalt_beside(node):
+			if rc._type_near(node) == 0 or not rc._asphalt_end_at(node):
 				continue
 			for li in rc.lines.size():
 				var pts: PackedVector2Array = rc.lines[li]
@@ -573,6 +573,19 @@ func test_dirt_ruts_start_at_an_asphalt_end_that_meets_a_dirt_corner() -> void:
 	assert_gt(checked, 0, "на картах є кут ґрунтівки при кінці асфальту")
 
 
+## Кінець асфальту об поворот ґрунтівки на картах — рівно один: Перехрестя (21, 13).
+func test_the_only_asphalt_end_at_a_dirt_corner_is_crossroads_21_13() -> void:
+	var found: Array[String] = []
+	for path in _MAPS:
+		var rc: RoadCourse = _bake(path).roads
+		if rc == null:
+			continue
+		for node in rc.nodes:
+			if rc._type_near(node) != 0 and rc._asphalt_end_at(node):
+				found.append("%s %s" % [path, node])
+	assert_eq(found, ["res://maps/crossroads.tres (21.0, 13.0)"] as Array[String])
+
+
 ## Колія ґрунтівки сягає торця асфальту, що обривається об її поворот: найближча точка колії (|v| ≈ 0.83 м
 ## від осі з допуском на піксель растра в 1 м, вага розвилки ~0) до центру торця — не далі 0.15 клітинки (з допуском 0.01 на піксель растра).
 func test_dirt_rut_reaches_the_asphalt_end_face_at_a_dirt_corner() -> void:
@@ -583,7 +596,7 @@ func test_dirt_rut_reaches_the_asphalt_end_face_at_a_dirt_corner() -> void:
 			continue
 		var imgs: Array[Image] = rc.rasterise()
 		for node in rc.nodes:
-			if rc._type_near(node) == 0 or not rc._asphalt_beside(node):
+			if rc._type_near(node) == 0 or not rc._asphalt_end_at(node):
 				continue
 			for li in rc.lines.size():
 				var pts: PackedVector2Array = rc.lines[li]

@@ -780,15 +780,22 @@ func _type_near(p: Vector2) -> int:
 	return t
 
 
-## Поруч із клітинкою вузла (орто) є асфальтова клітинка дороги: асфальт обривається об ґрунтівку, що
-## повертає в самому вузлі, і його кінець — край, від якого мають починатися колії.
-func _asphalt_beside(node: Vector2) -> bool:
-	var c := Vector2i(roundi(node.x), roundi(node.y))
-	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-		var q: Vector2i = c + d
-		if q.x >= 0 and q.y >= 0 and q.x < _w and q.y < _h and _mask[q.y * _w + q.x] == 1 and _type[q.y * _w + q.x] == 0:
-			return true
-	return false
+## У вузлі рівно одна лінія кінчається асфальтом, що переходить у ґрунтівку (кінець лінії — ґрунтівка,
+## за ~0.6 клітинки від кінця — асфальт): асфальт обривається об поворот ґрунтівки, і його торець — край,
+## від якого мають починатися колії. Ґрунтівкова Т-розвилка чи гравій біля асфальту сюди не потрапляють.
+func _asphalt_end_at(node: Vector2) -> bool:
+	var n := 0
+	for li in lines.size():
+		var pts: PackedVector2Array = lines[li]
+		var ty: PackedVector3Array = types[li]
+		for end in [0, pts.size() - 1]:
+			if pts[end].distance_to(node) > 0.05 or ty[end].y < 0.5:
+				continue
+			var step: int = 1 if end == 0 else -1
+			var k: int = clampi(end + step * 3, 0, pts.size() - 1)
+			if ty[k].x > 0.5:
+				n += 1
+	return n == 1
 
 
 ## Відстань до найближчої розвилки (клітинки).
@@ -942,7 +949,7 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 		var cm: float = BEND_CLOSE_M if _bend_nodes.has(node) else CLOSE_M
 		var asphalt_node: bool = _type_near(node) == 0
 		# Асфальт обривається об поворот ґрунтівки в самому вузлі: колії йдуть від торця без перерви.
-		var asphalt_end: bool = not asphalt_node and _asphalt_beside(node)
+		var asphalt_end: bool = not asphalt_node and _asphalt_end_at(node)
 		var ci: int = floori((node.x - org) * PX)
 		var cj: int = floori((node.y - org) * PX)
 		var i0: int = maxi(ci - half, 0)
@@ -974,11 +981,9 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 				if asphalt_node and tw[k].y > 0.5:
 					wj = 1.0 - smoothstep(0.3, 0.5, dist)
 				elif asphalt_end and tw[k].y > 0.5:
-					# Вага лишається там, де асфальт ще переважає, і на боці за краєм, де його залишок піде в
-					# узбіччя; уздовж осі решта — колії.
-					wj = smoothstep(0.5, 0.9, tw[k].x)
-					if d[k] > -0.6:
-						wj = maxf(wj, smoothstep(0.0, 0.1, tw[k].x))
+					# Колії йдуть від торця без перерви; вага лишається лише на боці за краєм, де домішаний
+					# залишок асфальту піде в узбіччя.
+					wj = smoothstep(0.0, 0.1, tw[k].x) if d[k] > -0.6 else 0.0
 				jw[k] = maxf(jw[k], wj)
 
 
