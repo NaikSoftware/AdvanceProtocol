@@ -469,6 +469,10 @@ the current player can see; scars respect the viewer's `seen`. Reference brief:
 - [x] Fences and garden beds follow the ground (section midpoint within 5 cm)
 - [x] Where asphalt ends, it ends like real asphalt (broken edge, gravel or packed track beyond), not a blur
 - [x] Roads are asphalt or dirt only, no cobble; a bridge meets the same surface on both sides
+- [x] At an asphalt end: no pale pad; ruts leave both corners and run into the dirt road
+- [x] Junction corners take the grass tone, no light gravel; the verge along the asphalt stays
+- [x] Crumbled edge only at a real asphalt end, never where a dirt road meets the side of the asphalt
+- [x] Dirt roads read on wet ground: darker continuous ruts, no light border
 
 ### Task 17: House models and roofs
 
