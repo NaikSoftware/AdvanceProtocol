@@ -231,6 +231,9 @@ func refit(height: TerrainHeight, board_size: Vector2i, ring: int) -> void:
 	if height != null and ring > 0 and mesh != null:
 		_fit_mesh(height, board_size, ring)
 
+## Місць під кінці асфальту в шейдері (uniform asphalt_ends).
+const ASPHALT_ENDS_MAX: int = 16
+
 
 func kind_image() -> Image:
 	return _kind_image
@@ -269,7 +272,8 @@ static func class_layers(board: Board, margin: int, surface: PackedByteArray, ta
 				var votes: Dictionary = {}
 				for d in Board.DIRS_4:
 					var q := Vector2i(px, py) + d
-					if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and out[q.y * w + q.x] != -1:
+					# Двір будівлі не береться: заокруглення розвилки біля будинку лягало б сірим ґрунтом двору, а не травою.
+					if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and out[q.y * w + q.x] != -1 and out[q.y * w + q.x] != YARD:
 						votes[out[q.y * w + q.x]] = int(votes.get(out[q.y * w + q.x], 0)) + 1
 				var best := -1
 				for l: int in votes:
@@ -468,6 +472,17 @@ func _set_roads(mat: ShaderMaterial, height: TerrainHeight) -> void:
 	mat.set_shader_parameter("road_field", ImageTexture.create_from_image(imgs[0]))
 	mat.set_shader_parameter("road_type", ImageTexture.create_from_image(imgs[1]))
 	mat.set_shader_parameter("road_px", float(RoadCourse.PX))
+	# Кришіння й уламки асфальту — лише біля справжніх кінців (RoadCourse.asphalt_ends).
+	# vec4 на кінець: масив vec2 з GDScript у шейдер не доходить, xy — клітинка кінця.
+	var ends := PackedVector4Array()
+	for e in rc.asphalt_ends():
+		ends.append(Vector4(e.x, e.y, 0.0, 0.0))
+	var count: int = mini(ends.size(), ASPHALT_ENDS_MAX)
+	if ends.size() > ASPHALT_ENDS_MAX:
+		push_warning("GroundSurface: кінців асфальту %d, шейдер бере лише %d" % [ends.size(), ASPHALT_ENDS_MAX])
+	ends.resize(ASPHALT_ENDS_MAX)
+	mat.set_shader_parameter("asphalt_ends", ends)
+	mat.set_shader_parameter("asphalt_end_count", count)
 	var road_layers := PackedInt32Array()
 	for n: String in SURFACE_LAYERS[Terrain.Kind.ROAD]:
 		var idx: int = _macro_layers.find(n)
