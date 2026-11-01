@@ -76,33 +76,57 @@ func test_pole_graph_has_no_cycle(p = use_parameters(MAPS)) -> void:
 		par[ra] = rb
 
 
-## Увесь рослинний план дошки (дерева, кущі, живопліт) і крони кільця лежать на екрані поза дротом: тіло рослини й дріт
-## на висоті опори проєктуються вздовж погляду, і зазор між ними не менший за CROWN_MARGIN. Покривний підлісок
-## (cover) іде за тим самим правилом, лишень у клітинці, де чистого місця нема зовсім, бере найкраще.
-func test_no_foliage_under_a_power_line_on_screen(p = use_parameters(MAPS)) -> void:
+## Крони дерев (вищих за LOW_KEEP) дошки й кільця лежать на екрані поза дротом: тіло крони й дріт на висоті опори
+## проєктуються вздовж погляду, і зазор між ними не менший за CROWN_MARGIN. Низький підлісок під дротом лишається.
+func test_no_tree_crown_under_a_power_line_on_screen(p = use_parameters(MAPS)) -> void:
 	_props(p)
 	var view: BoardView = _views[p]
 	var spans: Array = view.props().span_lines()
 	var f: ForestLayer = view.forest()
-	var seen: int = 0
-	var tight: int = 0
 	var items: Array[Dictionary] = []
 	for e: Dictionary in f.board_plan:
 		var species: String = str(e["node"]).get_slice("_", 0)
-		if e["ground"] or not f._lib.has(e["node"]) or not (species in ForestLayer.TREES or species in ["Shrub", "Hedge"]):
+		if e["ground"] or not f._lib.has(e["node"]) or not species in ForestLayer.TREES:
 			continue
-		items.append({"pos": e["pos"], "r": e["r"], "top": float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y, "node": e["node"], "cover": e.get("cover", false)})
+		var top: float = float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y
+		if top > ForestLayer.LOW_KEEP:
+			items.append({"pos": e["pos"], "r": e["r"], "top": top, "node": e["node"]})
 	for e: Dictionary in f._ring_crowns:
-		items.append({"pos": e["pos"], "r": e["r"], "top": e["top"], "node": e.get("node", "Spruce_ring"), "cover": false})
+		items.append({"pos": e["pos"], "r": e["r"], "top": e["top"], "node": e["node"]})
+	assert_gt(items.size(), 0, "%s: передумова — крони є" % p)
 	for it: Dictionary in items:
-		seen += 1
 		var gap: float = ForestLayer.screen_gap(it["pos"], it["top"], it["r"], spans, it["node"])
-		if it["cover"] and gap < ForestLayer.CROWN_MARGIN - 1e-4:
-			tight += 1
-			continue
 		assert_gte(gap, ForestLayer.CROWN_MARGIN - 1e-4, "%s: %s (h=%.2f) %s на екрані за %.2f від дроту" % [p, it["node"], it["top"], it["pos"], gap])
-	assert_gt(seen, 0, "%s: передумова — рослини є" % p)
-	gut.p("%s: рослин %d, тісних покривних %d" % [p, seen, tight])
+
+
+## Підлісок під проводом лишається: просіка не знімає низьких кущів і живоплоту — вони тримають клітину лісом. Скільки
+## рослин лишилось у лісовій клітині під прольотом (на екрані тут видно, що ліс не лисіє), тест лише друкує.
+func test_low_undergrowth_stays_under_the_wires(p = use_parameters(MAPS)) -> void:
+	_props(p)
+	var view: BoardView = _views[p]
+	var spans: Array = view.props().span_lines()
+	var f: ForestLayer = view.forest()
+	var low_under: int = 0
+	var bare: Array[Vector2i] = []
+	var count: Dictionary = {}
+	for e: Dictionary in f.board_plan:
+		if e["ground"] or not f._lib.has(e["node"]):
+			continue
+		var c := Vector2i(roundi(e["pos"].x), roundi(e["pos"].y))
+		count[c] = int(count.get(c, 0)) + 1
+		var top: float = float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y
+		if top <= ForestLayer.LOW_KEEP and ForestLayer.screen_gap(e["pos"], top, e["r"], spans, e["node"]) < 0.0:
+			low_under += 1
+	for c: Vector2i in f._cells:
+		if f._in_board(Vector2(c)) and int(count.get(c, 0)) < 3 and f._ground_gap(Vector2(c)) < 1.5:
+			bare.append(c)
+	gut.p("%s: низького підліску на дроті %d; лісових клітин під прольотом майже без рослин: %s" % [p, low_under, bare])
+	if p == "river":
+		gut.p("river, шелтербелт x=13: клітини (13,0) %d, (13,1) %d, (13,2) %d рослин" % [count.get(Vector2i(13, 0), 0), count.get(Vector2i(13, 1), 0), count.get(Vector2i(13, 2), 0)])
+	if p != "crossroads":
+		assert_gt(low_under, 0, "%s: низький підлісок під дротом лишається" % p)
+	else:
+		pass_test("crossroads: без підліску під дротом")
 
 
 ## Група дерев Ріки біля (17, 1) стоїть за дротом (13.9, 3.51)–(20.51, 3.51) на 2.5 тайла вглиб, але на екрані дріт
@@ -122,3 +146,20 @@ func test_tree_behind_the_wire_lies_on_it_on_screen() -> void:
 				fail_test("дерево %s %s за дротом лишилось" % [e["node"], e["pos"]])
 				return
 	pass_test("ok")
+
+
+## Береза Ріки (16.71, 0.58) у пізню осінь стоїть без листя: це одне ціле дерево з однієї сітки (стовбур і крона — один
+## екземпляр), просіка знімає рослину цілою, а не крону окремо від стовбура. Тож білий стовбур без крони на кадрі — голе
+## дерево, а не недорубане.
+func test_plants_are_culled_whole() -> void:
+	_props("river")
+	var f: ForestLayer = (_views["river"] as BoardView).forest()
+	assert_eq(f._season, "late", "Ріка — пізня осінь: береза гола")
+	for name: String in ["Birch_A", "Birch_B", "Birch_R", "Spruce_A", "Spruce_B", "Pine_A"]:
+		assert_eq((f._mesh[name] as Mesh).get_surface_count(), 1, "%s: стовбур і крона — одна поверхня" % name)
+	var kept: bool = false
+	for e: Dictionary in f.board_plan:
+		if e["node"] == "Birch_A" and (e["pos"] as Vector2).distance_to(Vector2(16.71053, 0.58127)) < 0.01:
+			kept = true
+	assert_true(kept, "береза (16.71, 0.58) лишилась цілою: на дроті її крони нема")
+

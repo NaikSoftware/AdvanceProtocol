@@ -68,15 +68,13 @@ const CROWN_MARGIN: float = 0.1
 const WIRE_HEIGHT: float = 1.2
 ## Частка висоти листяного дерева від землі, нижче якої крона ще рідка (стовбур): дріт над ним крону не ховає. Хвойні сягають землі.
 const CROWN_FOOT: float = 0.25
-## Низьким вважається підлісок не вищий за стільки (тайли): йому просіка не дає смуги за CORRIDOR_HALF — лише екран.
+## Низьким вважається підлісок не вищий за стільки (тайли): просіка його не чіпає, він тримає клітину лісом під проводом.
 const LOW_KEEP: float = 0.4
 ## Камера гри (виміряно через unproject_position): тайл висоти зсуває точку на екрані так, ніби вона на PROJ_K тайлів
 ## далі вглиб (на зумі 6 — 3.1, 8 — 2.5, 11 — 1.8, 14 — 1.5, 20 — 1.0); тайл вглиб на екрані — DEPTH_SIN від тайла вшир.
 ## Береться зум 8, на якому дивиться гравець; на дальших зумах зсув менший, і те, що чисте тут, чисте всюди.
 const PROJ_K: float = 2.5
 const DEPTH_SIN: float = 0.63
-## Клітинка лісу під прольотом, у якій лишилось менше за стільки рослин, добирає низький густий підлісок.
-const COVER_MIN: int = 3
 const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
@@ -288,7 +286,7 @@ func _in_board(p: Vector2) -> bool:
 
 ## Запис плану після просіки під прольотом ЛЕП: дерево в смузі напівширини CORRIDOR_HALF заміщене
 ## низьким кущем (смуга не лисіє), у смузі розрідження за нею частину дерев пропущено, решта —
-## як було; рослина, що на екрані лягає на дріт, зникає. Порожній словник — запису нема. Відводи до хат сюди не входять.
+## як було; крона дерева, що на екрані лягає на дріт, зникає, а низький підлісок лишається. Порожній словник — запису нема. Відводи до хат сюди не входять.
 ## widen — у скільки разів проксі розширить крону пізніше (кільце): просіка рахується за кроною, яку побачать.
 func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	var node: String = e["node"]
@@ -301,6 +299,9 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	var p: Vector2 = e["pos"]
 	var top: float = float(_lib[node]["h"]) * e["xf"].basis.get_scale().y
 	var tall: bool = top > LOW_KEEP
+	# Просіка в лісі тримає низький підлісок під проводом: без нього клітина лісу читалась би лугом.
+	if not tall:
+		return e
 	var out: Dictionary = e
 	var replaced: bool = false
 	if tall:
@@ -325,8 +326,9 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 				out["r"] = 0.3
 				top = float(_lib[out["node"]]["h"])
 				replaced = true
-	var r: float = float(out["r"]) * (widen if tall and not replaced else 1.0)
-	return out if screen_gap(p, top, r, spans, str(out["node"])) >= CROWN_MARGIN else {}
+	if replaced:
+		return out
+	return out if screen_gap(p, top, float(out["r"]) * widen, spans, str(out["node"])) >= CROWN_MARGIN else {}
 
 
 ## Відстань у плані від точки до найближчого проліту.
@@ -371,53 +373,6 @@ static func _seg_dist(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> float:
 		return 0.0
 	return minf(minf(a.distance_to(Geometry2D.get_closest_point_to_segment(a, c, d)), b.distance_to(Geometry2D.get_closest_point_to_segment(b, c, d))),
 			minf(c.distance_to(Geometry2D.get_closest_point_to_segment(c, a, b)), d.distance_to(Geometry2D.get_closest_point_to_segment(d, a, b))))
-
-
-## Клітинки лісу під прольотом, у яких просіка лишила менше за COVER_MIN рослин, добирають низький густий вічнозелений
-## підлісок (лише там, де на екрані він поза дротом): клітина читається лісом, а не лугом. Порода — за хешем клітини.
-func _top_up_cover(plan: Array[Dictionary]) -> void:
-	if spans.is_empty():
-		return
-	var count: Dictionary = {}
-	var tone: Dictionary = {}
-	for e: Dictionary in plan:
-		if not e["ground"]:
-			var k := Vector2i(roundi(e["pos"].x), roundi(e["pos"].y))
-			count[k] = int(count.get(k, 0)) + 1
-			tone[k] = e["rgb"]
-	var kinds: Array[String] = []
-	for k: String in ["Hedge_Spruce", "Spruce_B", "Hedge_Shrub"]:
-		if _lib.has(k):
-			kinds.append(k)
-	if kinds.is_empty():
-		return
-	for c: Vector2i in _cells:
-		if not _in_board(Vector2(c)) or int(count.get(c, 0)) >= COVER_MIN or _ground_gap(Vector2(c)) >= 1.5:
-			continue
-		var cands: Array = []
-		for j in range(-2, 3):
-			for i in range(-2, 3):
-				var q: Vector2 = Vector2(c) + Vector2(i, j) * 0.22
-				if fences.any(func(r: Rect2) -> bool: return VegetationLayer._rect_dist(r, q) < 0.4 + VegetationLayer.FENCE_CROWN_PAD):
-					continue
-				var h: int = absi(hash(Vector2i(roundi(q.x * 10.0), roundi(q.y * 10.0))))
-				var node: String = kinds[h % kinds.size()]
-				var sc: float = 0.36 / float(_lib[node]["h"])
-				var r: float = float(_lib[node]["half"]) * sc * 0.9
-				cands.append([screen_gap(q, 0.36, r, spans, node), q, node, sc, r, h])
-		cands.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
-		var placed: Array[Vector2] = []
-		for it: Array in cands:
-			if int(count.get(c, 0)) >= COVER_MIN or (float(it[0]) < CROWN_MARGIN and not placed.is_empty()):
-				break
-			# Найкращий кандидат бере навіть тісне місце: клітина без жодної рослини читається лугом.
-			if placed.any(func(o: Vector2) -> bool: return o.distance_to(it[1]) < 0.4):
-				continue
-			placed.append(it[1])
-			var yaw: float = float(it[5] % 628) / 100.0
-			plan.append({"node": it[2], "xf": Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * float(it[3])), Vector3(it[1].x, 0.0, it[1].y)),
-					"pos": it[1], "r": it[4], "rgb": tone.get(c, Color.WHITE), "turn": "", "ground": false, "cover": true})
-			count[c] = int(count.get(c, 0)) + 1
 
 
 ## Відстань від точки до дошки (тайли), 0 — на дошці.
@@ -514,7 +469,6 @@ func _rebuild_board(region: Rect2i = Rect2i()) -> void:
 				var c: Dictionary = _cleared(e)
 				if not c.is_empty():
 					plan.append(c)
-	_top_up_cover(plan)
 	board_plan = plan
 	var groups: Dictionary = {}  ## "клас/вузол" -> Array[Dictionary]
 	var lanes: Array[Transform3D] = []
