@@ -78,14 +78,18 @@ const LAYOUTS: Dictionary = {
 	},
 	&"ridge": {
 		"homes": [
-			{"house": Vector2i(13, 5), "face": W, "cells": [Vector2i(13, 4), Vector2i(13, 5), Vector2i(14, 5)],
-				"garden": [Vector2i(14, 5)], "shed": Vector2i(13, 4)},
-			{"house": Vector2i(12, 16), "face": E, "cells": [Vector2i(11, 16), Vector2i(12, 16), Vector2i(12, 17)],
-				"garden": [Vector2i(11, 16)], "shed": Vector2i(12, 17)},
+			# Садиба відступає від дороги на клітинку: між парканом і узбіччям — смуга лугу, ворота — на дорогу.
+			{"house": Vector2i(14, 5), "face": W, "cells": [Vector2i(14, 4), Vector2i(14, 5), Vector2i(15, 5)],
+				"garden": [Vector2i(15, 5)], "shed": Vector2i(14, 4)},
+			{"house": Vector2i(11, 16), "face": E, "cells": [Vector2i(10, 16), Vector2i(11, 16), Vector2i(11, 17)],
+				"garden": [Vector2i(10, 16)], "shed": Vector2i(11, 17)},
 		],
 		"orchards": [],
 		"routes": [
-			{"kind": &"10kv", "axis": [Vector2(-13, -5), Vector2(-4, -5), Vector2(-4, 2), Vector2(8, 2), Vector2(8, 6), Vector2(12, 6), Vector2(12.5, 11), Vector2(13, 12.5), Vector2(13, 15), Vector2(17, 15), Vector2(17, 19), Vector2(29, 19), Vector2(29, 26), Vector2(38, 26)], "side": 1.0},
+			# Траса не йде впритул до дороги, а зрізає поле сходинками з кутами біля обох хат (ТП на куті, хата живиться
+			# відводом) і перетинає дорогу впоперек: на півночі вона на схід від дороги, на півдні — на захід, обабіч
+			# хати. Вісь тут — намічена лінія мінус узбіччя (PowerGrid.VERGE), а не вісь дороги.
+			{"kind": &"10kv", "axis": [Vector2(-13, -5), Vector2(-4, -5), Vector2(-4, 3.8), Vector2(7.6, 3.8), Vector2(7.6, 7.4), Vector2(12.6, 7.4), Vector2(12.6, 10.4), Vector2(10.6, 10.4), Vector2(10.6, 15.4), Vector2(15.6, 15.4), Vector2(15.6, 19), Vector2(29, 19), Vector2(29, 26), Vector2(38, 26)], "side": 1.0},
 			{"kind": &"10kv", "axis": [Vector2(29, 26), Vector2(20, 26)], "side": 1.0, "from": 0},
 		],
 		"hay": [Vector2(16.5, 4.5), Vector2(9.5, 17.5), Vector2(7.5, 9.5), Vector2(19.5, 7.5)],
