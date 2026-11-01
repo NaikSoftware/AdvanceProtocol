@@ -186,3 +186,32 @@ func test_view_projection_follows_the_rig() -> void:
 	assert_between(ref.x, 1.5, 3.5, "K на опорному зумі в межах виміряного камерою (2.5 на зумі 8 за стовпом, 3.1 на зумі 6)")
 
 
+## Дерева й високі кущі лугів і дворів (VegetationLayer) теж не лежать кроною під дротом на екрані: як і в лісі, зазор між тілом
+## крони й дротом на висоті опори, спроєктованими вздовж погляду, не менший за CROWN_MARGIN. Низьке (до LOW_KEEP) лишається.
+func test_vegetation_crowns_are_off_the_wires_on_screen(p = use_parameters(MAPS)) -> void:
+	_props(p)
+	var view: BoardView = _views[p]
+	var spans: Array = view.props().span_lines()
+	var bad: Array = []
+	var trees: int = 0
+	for pl: Dictionary in view.vegetation().placements:
+		if pl["kind"] == "reed":
+			continue
+		var crown: float = VegetationLayer.crown_of(pl["node"]) * VegetationLayer.SCALE_MAX
+		var top: float = VegetationLayer.CROWN_H_K * crown
+		if top <= ForestLayer.LOW_KEEP:
+			continue
+		trees += 1
+		var q := Vector2(pl["pos"].x, pl["pos"].z)
+		var gap: float = ForestLayer.screen_gap(q, top, crown, spans, "Birch_A")
+		if gap < ForestLayer.CROWN_MARGIN - 1e-4:
+			bad.append([pl["node"], q, snappedf(gap, 0.01)])
+	gut.p("%s: високих рослин %d, на дроті %d" % [p, trees, bad.size()])
+	assert_eq(bad, [], "%s: крона рослини на дроті" % p)
+
+
+## Проліти йдуть лише вздовж осей карти (на екрані вони діагональні через поворот камери на 45°); по діагоналі — тільки відводи до хат.
+func test_spans_run_on_map_axes(p = use_parameters(MAPS)) -> void:
+	for s: Array in _props(p).span_lines():
+		var d: Vector2 = (s[1] as Vector2) - (s[0] as Vector2)
+		assert_true(absf(d.x) < 0.02 or absf(d.y) < 0.02, "%s: проліт %s не вздовж осі" % [p, s])
