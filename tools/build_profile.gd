@@ -23,6 +23,19 @@ func _init() -> void:
 		print("HASH %s props %s" % [map, var_to_str(view.props().all_instances()).sha256_text()])
 		print("HASH %s footpaths %s" % [map, var_to_str([view.props().footpaths, view.props().trodden]).sha256_text()])
 		print("HASH %s veg %s" % [map, var_to_str(view.vegetation().placements).sha256_text()])
+		var ground: MeshInstance3D = view.get("_ground")
+		var mesh_bytes := PackedByteArray()
+		for si in ground.mesh.get_surface_count():
+			for a in ground.mesh.surface_get_arrays(si):
+				if a != null:
+					mesh_bytes.append_array(var_to_bytes(a))
+		print("HASH %s ground-mesh %s" % [map, _hh(mesh_bytes)])
+		var imgs := PackedByteArray()
+		if h.roads != null:
+			for img in h.roads.rasterise():
+				imgs.append_array(img.get_data())
+		print("HASH %s road-images %s" % [map, _hh(imgs)])
+		print("HASH %s forest %s" % [map, var_to_str([view.forest().board_plan, view.forest().get("_ring_crowns")]).sha256_text().substr(0, 16)])
 		var props: PropLayer = view.props()
 		var size := Vector2i(data.width, data.height)
 		var t1: int = Time.get_ticks_usec()
