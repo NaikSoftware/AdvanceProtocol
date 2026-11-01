@@ -34,8 +34,20 @@ static func _noise(x: float, y: float, seed_value: int) -> float:
 	var fy: float = y - iy
 	var ux: float = fx * fx * (3.0 - 2.0 * fx)
 	var uy: float = fy * fy * (3.0 - 2.0 * fy)
-	return lerpf(lerpf(_hash(ix, iy, seed_value), _hash(ix + 1, iy, seed_value), ux),
-			lerpf(_hash(ix, iy + 1, seed_value), _hash(ix + 1, iy + 1, seed_value), ux), uy)
+	# _hash розгорнуто в чотири кути вручну: виклик функції у гарячому циклі дорожчий за саму арифметику.
+	var sh: int = seed_value * 1274126177
+	var jx: int = ix * 374761393
+	var jy: int = iy * 668265263
+	var n00: int = (jx + jy + sh) & 0x7fffffff
+	var n10: int = (jx + 374761393 + jy + sh) & 0x7fffffff
+	var n01: int = (jx + jy + 668265263 + sh) & 0x7fffffff
+	var n11: int = (jx + 374761393 + jy + 668265263 + sh) & 0x7fffffff
+	n00 = ((n00 ^ (n00 >> 13)) * 1274126177) & 0x7fffffff
+	n10 = ((n10 ^ (n10 >> 13)) * 1274126177) & 0x7fffffff
+	n01 = ((n01 ^ (n01 >> 13)) * 1274126177) & 0x7fffffff
+	n11 = ((n11 ^ (n11 >> 13)) * 1274126177) & 0x7fffffff
+	return lerpf(lerpf(float(n00 ^ (n00 >> 16)) / 2147483647.0, float(n10 ^ (n10 >> 16)) / 2147483647.0, ux),
+			lerpf(float(n01 ^ (n01 >> 16)) / 2147483647.0, float(n11 ^ (n11 >> 16)) / 2147483647.0, ux), uy)
 
 
 ## Звивиста лінія від a до b рівно в a і b: зсув вбік — шум у двох масштабах, нуль на кінцях.
@@ -147,16 +159,39 @@ static func widths(pts: PackedVector2Array, base: float, pins: Array) -> PackedF
 	return out
 
 
-## Маска зносу. dry (Vector2 -> bool): де сухо; на воді знос обнуляється.
-static func bake(walks: Array, patches: PackedVector3Array, board_size: Vector2i, dry: Callable = Callable()) -> Image:
+## Маска зносу. dry (Vector2 -> bool): де сухо; на воді знос обнуляється. cache — узяти з диска
+## (BuildCache) і зберегти туди зліпок без dry: сухість залежить лише від піксельної позиції, тож
+## знос у мокрому пікселі просто обнуляється, а решта пікселів — ті самі, що дав би штамп із dry.
+static func bake(walks: Array, patches: PackedVector3Array, board_size: Vector2i, dry: Callable = Callable(), cache: bool = false) -> Image:
 	var w: int = maxi(1, board_size.x * PX_PER_TILE)
 	var h: int = maxi(1, board_size.y * PX_PER_TILE)
+	var k: String = BuildCache.key([walks, patches, board_size], ["res://game/battle/footpaths.gd"]) if cache else ""
 	var buf := PackedByteArray()
-	buf.resize(w * h * 2)
-	for walk: Dictionary in walks:
-		_stamp_walk(buf, w, h, walk, dry)
-	for pi in patches.size():
-		_stamp_patch(buf, w, h, patches[pi], pi, dry)
+	var touched := PackedInt32Array()
+	var cached: Variant = BuildCache.fetch("footpaths", k) if cache else null
+	if cached is Array and (cached as Array).size() == 2 and (cached[0] as PackedByteArray).size() == w * h * 2:
+		buf = cached[0]
+		touched = cached[1]
+	else:
+		buf.resize(w * h * 2)
+		for walk: Dictionary in walks:
+			_stamp_walk(buf, w, h, walk, touched)
+		for pi in patches.size():
+			_stamp_patch(buf, w, h, patches[pi], pi, touched)
+		if cache:
+			BuildCache.store("footpaths", k, [buf, touched])
+	if dry.is_valid():
+		# Лише пікселі, де щось записано, і кожен раз: в touched піксель стоїть стільки разів, скільки в нього писали.
+		var checked := PackedByteArray()
+		checked.resize(w * h)
+		for i in touched:
+			var pix: int = i / 2
+			if checked[pix] == 1:
+				continue
+			checked[pix] = 1
+			if not dry.call(_px_pos(pix % w, pix / w)):
+				buf[pix * 2] = 0
+				buf[pix * 2 + 1] = 0
 	return Image.create_from_data(w, h, false, Image.FORMAT_RG8, buf)
 
 
@@ -164,18 +199,17 @@ static func _px_pos(px: int, py: int) -> Vector2:
 	return Vector2((px + 0.5) / PX_PER_TILE - 0.5, (py + 0.5) / PX_PER_TILE - 0.5)
 
 
-static func _put(buf: PackedByteArray, idx: int, v: float, q: Vector2, dry: Callable) -> void:
+static func _put(buf: PackedByteArray, idx: int, v: float, touched: PackedInt32Array) -> void:
 	var b: int = int(clampf(v, 0.0, 1.0) * 255.0 + 0.5)
 	if b <= buf[idx]:
 		return
-	if dry.is_valid() and not dry.call(q):
-		return
 	buf[idx] = b
+	touched.append(idx)
 
 
 ## Кожен піксель обчислює лише найближчий до нього відрізок (сусідні — для стиків), а s і d беруться
 ## від проєкції на нього: шум неперервний уздовж усієї кривої, відрізків і стиків не видно.
-static func _stamp_walk(buf: PackedByteArray, w: int, h: int, walk: Dictionary, dry: Callable) -> void:
+static func _stamp_walk(buf: PackedByteArray, w: int, h: int, walk: Dictionary, touched: PackedInt32Array) -> void:
 	var pts: PackedVector2Array = walk["pts"]
 	var hw: PackedFloat32Array = walk["half"]
 	var sd: int = int(walk["seed"])
@@ -201,22 +235,36 @@ static func _stamp_walk(buf: PackedByteArray, w: int, h: int, walk: Dictionary, 
 		var y0: int = maxi(0, floori((lo.y + 0.5) * PX_PER_TILE))
 		var y1: int = mini(h - 1, ceili((hi.y + 0.5) * PX_PER_TILE))
 		var dir: Vector2 = ab / seg
+		# Сусідні відрізки й квадрат довжини — раз на відрізок, а не на піксель. Дистанції лишено на
+		# Vector2 (float32), як у _seg_dist: інакше байт на межі кроку міг би змінитись.
+		var l2: float = maxf(ab.length_squared(), 1e-9)
+		var has_prev: bool = k > 0
+		var has_next: bool = k + 2 < pts.size()
+		var pa: Vector2 = pts[k - 1] if has_prev else Vector2.ZERO
+		var pab: Vector2 = a - pa
+		var pl2: float = maxf(pab.length_squared(), 1e-9)
+		var na: Vector2 = pts[k + 1]
+		var nab: Vector2 = pts[k + 2] - na if has_next else Vector2.ZERO
+		var nl2: float = maxf(nab.length_squared(), 1e-9)
+		var hw_a: float = hw[k]
+		var hw_b: float = hw[k + 1]
 		for py in range(y0, y1 + 1):
+			var qy: float = (py + 0.5) / PX_PER_TILE - 0.5
 			for px in range(x0, x1 + 1):
-				var q: Vector2 = _px_pos(px, py)
-				var dist: float = _seg_dist(q, a, ab)
+				var q := Vector2((px + 0.5) / PX_PER_TILE - 0.5, qy)
+				var dist: float = q.distance_to(a + ab * clampf((q - a).dot(ab) / l2, 0.0, 1.0))
 				# Поза досяжністю знос однаково нуль: сусідні відрізки навіть не міряємо.
 				if dist > reach:
 					continue
-				if (k > 0 and _seg_dist(q, pts[k - 1], a - pts[k - 1]) < dist - 1e-6) \
-						or (k + 2 < pts.size() and _seg_dist(q, pts[k + 1], pts[k + 2] - pts[k + 1]) <= dist):
+				if (has_prev and q.distance_to(pa + pab * clampf((q - pa).dot(pab) / pl2, 0.0, 1.0)) < dist - 1e-6) \
+						or (has_next and q.distance_to(na + nab * clampf((q - na).dot(nab) / nl2, 0.0, 1.0)) <= dist):
 					continue
 				var t: float = clampf((q - a).dot(dir) / seg, 0.0, 1.0)
 				var s: float = cum[k] + seg * t
 				var d: float = dir.cross(q - a)
 				# Ширина гуляє на ±0.2 м плавним шумом уздовж стежки.
-				var half: float = lerpf(hw[k], hw[k + 1], t) * (0.67 + 0.66 * _noise(s * 1.7, 5.5, sd + 3))
-				_put(buf, (py * w + px) * 2, _wear(s, d, dist / half, total, fade_in, fade_out, sd, solid, flat), q, dry)
+				var half: float = lerpf(hw_a, hw_b, t) * (0.67 + 0.66 * _noise(s * 1.7, 5.5, sd + 3))
+				_put(buf, (py * w + px) * 2, _wear(s, d, dist / half, total, fade_in, fade_out, sd, solid, flat), touched)
 
 
 static func _seg_dist(q: Vector2, a: Vector2, ab: Vector2) -> float:
@@ -245,7 +293,7 @@ static func _wear(s: float, d: float, r: float, total: float, fade_in: float, fa
 
 
 ## Пляма: рваний овал, в канал G; усередині шматки голішої землі.
-static func _stamp_patch(buf: PackedByteArray, w: int, h: int, patch: Vector3, index: int, dry: Callable) -> void:
+static func _stamp_patch(buf: PackedByteArray, w: int, h: int, patch: Vector3, index: int, touched: PackedInt32Array) -> void:
 	var c := Vector2(patch.x, patch.y)
 	var reach: float = patch.z * 1.45
 	var x0: int = maxi(0, floori((c.x - reach + 0.5) * PX_PER_TILE))
@@ -265,7 +313,7 @@ static func _stamp_patch(buf: PackedByteArray, w: int, h: int, patch: Vector3, i
 					+ 0.2 * _noise(u.x * 7.0 + 2.0, u.y * 7.0, 449 + index)
 			var bare: float = smoothstep(0.25, 0.65, _noise(u.x * 3.0 + 4.0, u.y * 3.0, 467 + index))
 			var v: float = (0.5 + 0.5 * bare) * (1.0 - smoothstep(0.1, 1.0, rr + 0.9 * (edge - 0.5)))
-			_put(buf, (py * w + px) * 2 + 1, v, q, dry)
+			_put(buf, (py * w + px) * 2 + 1, v, touched)
 
 
 ## Відтінки землі й прим'ятої трави: R:G:B, яскравість тут не 1 — тон ділить відтінок на його

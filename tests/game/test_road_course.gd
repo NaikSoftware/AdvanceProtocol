@@ -703,3 +703,43 @@ func test_shoulder_weight_only_on_streets_not_on_single_lane_or_plazas() -> void
 		for i in imgs[0].get_width():
 			if imgs[0].get_pixel(i, j).r < -2.0:
 				assert_lt(imgs[1].get_pixel(i, j).b, 0.01, "узбіччя всередині площі (%d, %d)" % [i, j])
+
+
+## Кришіння, уламки й рвані зубці асфальту — лише біля справжнього кінця. Де ґрунтівка прилягає збоку
+## до асфальтової дороги (вузли 4,8, 17,8 і 8,13 на Перехресті), край проїзної частини лишається рівним,
+## тож таких вузлів у списку кінців нема, а єдиний справжній кінець — вузол 21,13.
+func test_asphalt_ends_list_has_the_real_end_and_no_side_junction() -> void:
+	var rc: RoadCourse = _bake("res://maps/crossroads.tres").roads
+	assert_not_null(rc)
+	if rc == null:
+		return
+	var ends: PackedVector2Array = rc.asphalt_ends()
+	var near := func(p: Vector2) -> float:
+		var best := 1e9
+		for e in ends:
+			best = minf(best, e.distance_to(p))
+		return best
+	assert_lt(near.call(Vector2(21, 13)), 0.5, "кінець асфальту у вузлі 21,13 є в списку")
+	for side in [Vector2(4, 8), Vector2(17, 8), Vector2(8, 13)]:
+		assert_gt(near.call(side), 1.5, "бічне прилягання %s не кінець асфальту" % side)
+	for path in _MAPS:
+		var r: RoadCourse = _bake(path).roads
+		if r != null:
+			assert_lte(r.asphalt_ends().size(), 16, "%s: кінців більше, ніж місця в шейдері" % path)
+
+
+## Шейдер читає кінці в клітинках дошки: зсув кільця світу (Surroundings) з них віднімається.
+func test_asphalt_ends_are_in_board_cells_in_a_ring_world() -> void:
+	var m: MapData = load("res://maps/crossroads.tres")
+	var ring: int = Surroundings.ring_of(m)
+	assert_gt(ring, 0, "Перехрестя має кільце світу")
+	var th := TerrainHeight.bake(Surroundings.world_board(m.to_board(), m), 0, m.name_key.hash(), Surroundings.world_surface(m), ring)
+	var rc: RoadCourse = th.roads
+	assert_not_null(rc)
+	if rc == null:
+		return
+	assert_eq(rc._shift, ring)
+	var best := 1e9
+	for e in rc.asphalt_ends():
+		best = minf(best, e.distance_to(Vector2(21, 13)))
+	assert_lt(best, 0.5, "кінець у вузлі 21,13 при кільці %d: %s" % [ring, rc.asphalt_ends()])

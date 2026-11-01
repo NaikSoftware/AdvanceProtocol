@@ -48,6 +48,9 @@ const float FAR_ALPHA = 0.12;
 // Паркани дворів (kinds > 0): вид читається кольором так само, як формою — іржава бляха, кора, оцинковка, цегла.
 // Їм — вища межа яскравості (оцинкована сітка світліша за дерево) і лише легке знебарвлення; затемнення й тон здалеку
 // зберігають відтінок, а не зводять усе до сіро-бурого.
+const float GAIN_PICKET = 2.4;
+const float GAIN_SHEET = 1.6;
+const float GAIN_SLAT = 1.6;
 const float YARD_VALUE_CAP = 0.35;
 const float YARD_DESAT = 0.05;
 // Тепліше за нейтраль: під сірим небом Річки нейтральне дерево виходило холодним (B ≥ R).
@@ -55,11 +58,13 @@ const vec3 WEATHERED = vec3(1.14, 0.98, 0.78);
 
 varying float base_h;
 varying float top_h;
+varying float kind_v;
 
 void vertex() {
 	float top = top_local;
 	if (kinds > 0) {
 		int kind = int(floor(UV.y * float(kinds)));
+		kind_v = float(kind);
 		top = kind_top[clamp(kind, 0, 7)];
 		UV.x = (VERTEX.x + 0.5) * length(MODEL_MATRIX[0].xyz) * 8.0 / tile_m;
 		if (abs(float(kind) - INSTANCE_CUSTOM.r) > 0.5) {
@@ -94,6 +99,11 @@ void fragment() {
 	// білими лініями інтерфейсу; вивітрене дерево й оцинковка — не світліші.
 	float value = max(albedo.r, max(albedo.g, albedo.b));
 	albedo *= min(1.0, (yard ? YARD_VALUE_CAP : VALUE_CAP) / max(value, 1e-4));
+	// Рабиця (вид 2 атласу): суцільні частини (стовпи, труба зверху: покриття ~1) світяться білим на тлі напівпрозорого дроту
+	// й темного асфальту, хоч альбедо в них не світліше за дріт, — вдвічі темніше; дріт, чиє покриття розмите міпмапою, не чіпаємо.
+	if (yard && abs(kind_v - 2.0) < 0.5) {
+		albedo *= mix(1.0, 0.5, smoothstep(0.85, 1.0, tex.a));
+	}
 	float cap = smoothstep(top_h - 0.03, top_h - 0.01, base_h);
 	albedo *= mix(1.0, 0.45, cap);
 	// Сіро-бурий вивітреного дерева: рожеві й бузкові відтінки фарби ассета на кадрі читались чужими.
@@ -103,6 +113,12 @@ void fragment() {
 	vec3 far_tone = yard ? albedo * FAR_DARK : vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))) * WEATHERED * FAR_DARK;
 	albedo = mix(albedo, far_tone, far);
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
+	// Штахетник (вид 0), профнастил (1) і дошки (4) під дощем темніють до майже чорного на тлі ґрунту: мокрий підйом albedo
+	// за видом; ті самі числа в prop_gate (GAIN_*), щоб ворота лишались у тоні свого паркану.
+	if (yard) {
+		float gain = abs(kind_v - 0.0) < 0.5 ? GAIN_PICKET : (abs(kind_v - 1.0) < 0.5 ? GAIN_SHEET : (abs(kind_v - 4.0) < 0.5 ? GAIN_SLAT : 1.0));
+		albedo *= mix(1.0, gain, wet);
+	}
 	if (wet > 0.0) {
 		float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
 		// Лише на чверть до сіро-бежевого: знебарвлений штакетник читався бетонною панеллю.

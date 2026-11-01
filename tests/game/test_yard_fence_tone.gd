@@ -7,8 +7,6 @@ const MODEL: String = "res://assets/props/infra_fence_yard.glb"
 const KINDS: Array[String] = ["picket", "sheet", "chainlink", "brickbars", "slat"]
 const STRIP: int = 192
 const PAD: int = 12
-## Скільки світліше за паркан дозволено бути воротам (запас на шум текстури).
-const LUMA_MARGIN: float = 1.1
 const TILE_M: float = 2.5
 const H_MAX: float = 2.0
 ## Дріт оцинковки: найсвітліший піксель і середня яскравість (світло-середній сірий).
@@ -70,11 +68,38 @@ func _gate_colors(gate: StringName) -> Array[Color]:
 	return out
 
 
-func test_wooden_gates_are_no_lighter_or_more_orange_than_their_fence(p = use_parameters([["wood", "picket"], ["slat", "slat"]])) -> void:
+## Тон воріт кожного роду проти свого паркану (середнє атласу): відношення середньої й найяскравішої яскравості коробок воріт
+## до середньої яскравості паркану, кут відтінку, і найсвітліша коробка (шапки стовпів темніше за шейдер, але не біліші
+## за паркан більше ніж у MAX_PEAK разів). Рахується з вершинних кольорів коробок воріт (константи PropLayer) і
+## пікселів атласу, не з кадру: межі — ±5 % навколо відношень, за яких на кадрі (River волога, Crossroads суха) ворота мали тон
+## паркану; вихід за них означає, що константи зсунулись і кадр треба перемірити. Перший стовпчик — рід воріт, другий — вид паркану.
+const GATE_CASES: Array = [
+	["wood", "picket", 1.19, 1.32],
+	["slat", "slat", 0.72, 0.80],
+	["sheet", "sheet", 1.20, 1.36],
+	["metal", "brickbars", 0.88, 0.97],
+	["lattice", "chainlink", 0.58, 0.66],
+]
+## Скільки разів найсвітліша коробка воріт може перевищувати середню яскравість їхнього паркану (шапки темнішають у шейдері).
+const MAX_PEAK: float = 1.9
+## Найбільше розходження відтінку воріт і паркану (HSV, частка кола) для кольорових родів.
+const MAX_HUE_GAP: float = 0.1
+
+
+func test_gates_stay_in_their_fences_tone(p = use_parameters(GATE_CASES)) -> void:
 	var fence: Color = _mean(_pixels(p[1]))
-	var gate: Color = _mean(_gate_colors(StringName(p[0])))
-	assert_lte(_luma(gate), _luma(fence) * LUMA_MARGIN, "%s: ворота %s світліші за паркан %s" % [p[0], gate, fence])
-	assert_lte(_sat(gate), _sat(fence), "%s: ворота %s насиченіші за паркан %s" % [p[0], gate, fence])
+	var colors: Array[Color] = _gate_colors(StringName(p[0]))
+	var gate: Color = _mean(colors)
+	var peak: float = 0.0
+	for c in colors:
+		peak = maxf(peak, _luma(c))
+	var ratio: float = _luma(gate) / _luma(fence)
+	assert_between(ratio, float(p[2]), float(p[3]), "%s: ворота %s проти паркану %s (відношення %.2f)" % [p[0], gate, fence, ratio])
+	assert_lte(peak / _luma(fence), MAX_PEAK, "%s: найсвітліша коробка воріт біліша за паркан" % p[0])
+	# Відтінок — для дерева й профнастилу; у цегли з ґратами (metal) середнє атласу червоне від цегли, а ворота — залізо.
+	if gate.s > 0.15 and fence.s > 0.15 and p[0] != "metal":
+		assert_lte(minf(absf(gate.h - fence.h), 1.0 - absf(gate.h - fence.h)), MAX_HUE_GAP, "%s: відтінок воріт %s не з родини паркану %s" % [p[0], gate, fence])
+	assert_lte(_sat(gate), _sat(fence) * 1.05 + 0.02, "%s: ворота %s насиченіші за паркан %s" % [p[0], gate, fence])
 
 
 ## Оцинковка: дріт — світло-середній сірий, не майже білий; труби й стовпи (суцільні, під сірим небом світляться

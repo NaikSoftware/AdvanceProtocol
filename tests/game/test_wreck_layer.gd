@@ -367,6 +367,18 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	assert_eq(layer.hearth_points(), first, "та сама мапа — той самий вибір")
 	var mm: MultiMesh = (layer.get_node("Hearths") as MultiMeshInstance3D).multimesh
 	assert_eq(mm.visible_instance_count, first.size(), "один суцільний шлейф на джерело, а не низка клубів")
+	# AABB вузла — навколо самих шлейфів, а не на всю дошку: прозорий об'єкт сортується за його центром.
+	var box: AABB = (layer.get_node("Hearths") as MultiMeshInstance3D).custom_aabb
+	for pt in first:
+		assert_true(box.has_point(pt + Vector3.UP * 0.5), "AABB охоплює шлейф")
+	assert_lt(box.size.x, 40.0, "AABB тісний, а не на всю дошку (2000)")
+	# Верх шлейфу на повну висоту при найбільшому нахилі вітром в усі боки лишається всередині AABB.
+	var reach: float = WreckLayer.hearth_reach()
+	for h in first.size():
+		var top_y: float = WreckLayer.HEARTH_HEIGHT * layer.hearth_shapes()[h].x
+		for sx in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				assert_true(box.has_point(first[h] + Vector3(sx * reach * 0.99, top_y, sz * reach * 0.99)), "верх шлейфу при найбільшому нахилі в AABB")
 	# Дані екземплярів headless-рендер не зберігає: перевіряємо густоти, які шар у них записав.
 	var dens: Array[float] = layer.hearth_densities()
 	assert_eq(dens.size(), first.size())

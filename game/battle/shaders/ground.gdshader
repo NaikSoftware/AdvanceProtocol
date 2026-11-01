@@ -72,6 +72,9 @@ uniform bool has_roads = false;
 uniform sampler2D road_field : filter_nearest, repeat_disable;
 uniform sampler2D road_type : filter_linear, repeat_disable;
 uniform float road_px = 8.0;
+// Справжні кінці асфальту (клітинки): кришіння, зубці й уламки — лише біля них, бічний край лишається рівним.
+uniform vec4 asphalt_ends[16];
+uniform int asphalt_end_count = 0;
 // Шари macro_array для асфальту, ґрунтівки, бруківки.
 uniform int road_layer[3];
 uniform sampler2DArray albedo_array : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -623,6 +626,8 @@ void fragment() {
 		float asph_se = -1e3;
 		// Частка гравійного узбіччя (вага B растра типів) серед неасфальтової частини.
 		float gravel_k = 0.0;
+		// 1 біля справжнього кінця асфальту (до ~1.2 клітинки), далі гасне до 0 на 2 клітинках.
+		float end_k = 0.0;
 		if (has_roads) {
 			if (rf.x < 4.0) {
 				vec2 tsz = vec2(textureSize(road_type, 0));
@@ -636,16 +641,19 @@ void fragment() {
 				// шуму: глибина зубців змінюється повільним шумом (0.2–0.7 м), на межах перепаду зубці
 				// гаснуть (4r(1-r)), тож зони без перепаду лишаються рівно такими, як були.
 				if (rt.r > 0.001 && rt.r < 0.999) {
+					for (int ei = 0; ei < asphalt_end_count && ei < 16; ei++) {
+						end_k = max(end_k, 1.0 - smoothstep(1.2, 2.0, distance(p, asphalt_ends[ei].xy)));
+					}
 					// Глибші зубці лише на справжньому кінці; на гравійному узбіччі лишається стара глибина.
 					float tn = vnoise(p * 1.3 + 9.0);
 					float tooth = mix(mix(0.2, 0.7, tn), mix(0.1, 0.45, tn), gravel_k);
 					float jag = tooth * (2.0 * (vnoise(p * 7.0 + 71.0) - 0.5) + (vnoise(p * 17.0 + 5.0) - 0.5))
 							+ 0.12 * (vnoise(p * 40.0 + 3.0) - 0.5);
-					asph_se = (0.5 - rt.r) * 1.8 + jag * 4.0 * rt.r * (1.0 - rt.r);
+					asph_se = (0.5 - rt.r) * 1.8 + jag * 4.0 * rt.r * (1.0 - rt.r) * end_k;
 					float apv = 1.0 - smoothstep(-0.05, 0.05, asph_se);
 					// Уламки: дрібні шматки асфальту за краєм, на 0.05–0.45 м у ґрунт. Лише в зоні перепаду,
 					// тож бічні краї дороги їх не мають.
-					float bits = step(0.68, vnoise(p * 26.0 + 19.0)) * step(0.0, asph_se) * (1.0 - smoothstep(0.05, 0.45, asph_se)) * (1.0 - gravel_k);
+					float bits = step(0.68, vnoise(p * 26.0 + 19.0)) * step(0.0, asph_se) * (1.0 - smoothstep(0.05, 0.45, asph_se)) * (1.0 - gravel_k) * end_k;
 					apv = max(apv, 0.85 * bits);
 					rt.gb = rt.gb / max(1.0 - rt.r, 1e-4) * (1.0 - apv);
 					rt.r = apv;
@@ -919,8 +927,8 @@ void fragment() {
 			float wet_now = clamp(weather_wetness, 0.0, 1.0);
 			float wear_k = 1.0 - 0.1 * wheel * wet_now;
 			// Колії й знос множаться після стиснення яскравості (нижче): до нього ΔL* вдвічі
-			// менший. Колія темніша за тіло дороги на ΔL* ~6–13 (×0.58–0.78), але не чорна.
-			// Суха колія темнішає слабше (0.22): на 0.32 сухий ґрунт ставав буряково-темним (~35).
+			// менший. У центрі колії тіло дороги множиться на 0.78 (суха) або 0.5 (мокра, MUD): темніше, але не чорне.
+			// Суха колія темнішає слабше: сильніше затемнення робило сухий ґрунт буряково-темним.
 			road_mul = (1.0 - rut * rut_k * (dry_season ? 0.22 : 0.5) * rt.g) * wear_k;
 			// Асфальт і бруківка темніші за траву: сухі ~0.8, мокрі ~0.7 її яскравості. Множиться тут, після
 			// стиснення яскравості рельєфу (нижче), — темніше альбедо воно з'їдало майже повністю.
@@ -970,7 +978,7 @@ void fragment() {
 			vec3 gravel = vec3(la * 1.3) * vec3(1.02, 1.0, 0.95) * (0.75 + 0.5 * vnoise(p * 45.0));
 			// Мокрий гравій темніший і тепліший: сухо-світлий у дощ лягав сірим серпанком біля кінця асфальту.
 			gravel *= mix(vec3(1.0), vec3(0.56, 0.54, 0.5), clamp(weather_wetness, 0.0, 1.0));
-			float crumble = smoothstep(-0.45, -0.05, de + 0.35 * (vnoise(vec2(u * 1.4, side * 7.0 + 3.0)) - 0.5));
+			float crumble = smoothstep(-0.45, -0.05, de + 0.35 * (vnoise(vec2(u * 1.4, side * 7.0 + 3.0)) - 0.5)) * end_k;
 			// Кінець асфальту (не бічний край проїзної частини: там гравійне узбіччя, gravel_k): за ~0.9 м
 			// до рваного краю — шматки зі своїм тоном асфальту, темні тріщини між ними й щілини, рідкі
 			// крупинки гравію не світліші за ґрунт. Поза зоною переходу (asph_se далеко) нічого не рахується.
@@ -978,7 +986,7 @@ void fragment() {
 			float edge_k = 0.0;
 			float broken = 0.0;
 			if (asph_se > -100.0) {
-				edge_k = smoothstep(-0.9, 0.0, asph_se) * (1.0 - gravel_k);
+				edge_k = smoothstep(-0.9, 0.0, asph_se) * (1.0 - gravel_k) * end_k;
 				float gap = smoothstep(0.0, 0.08, edge_k * 1.1 - vnoise(p * 9.0 + 3.0) - 0.1);
 				float seam = 1.0 - smoothstep(0.0, 0.05 + (abs(dpx.x) + abs(dpy.x)) * 3.0, abs(vnoise(p * 6.0 + 19.0) - 0.5));
 				// Крупинки з м'яким краєм завширшки в піксель: різкий поріг мерехтить на далекому зумі.
@@ -1007,7 +1015,7 @@ void fragment() {
 			// кінця перепаду (нуль там, де вага r = 0, — без прямої лінії), і кілька уламків асфальту 20–60 см.
 			float isle = 0.0;
 			if (asph_se > -100.0) {
-				float past = step(0.0, asph_se) * (1.0 - gravel_k);
+				float past = step(0.0, asph_se) * (1.0 - gravel_k) * end_k;
 				float lip = smoothstep(0.0, 0.04, asph_se) * (1.0 - smoothstep(0.08, 0.22, asph_se)) * past;
 				float spill = smoothstep(0.62, 0.72, vnoise(p * 20.0 + 7.0) + 0.3 * (1.0 - smoothstep(0.0, 0.9, asph_se)))
 						* past * (1.0 - smoothstep(0.4, 0.95, asph_se));
@@ -1017,9 +1025,9 @@ void fragment() {
 				road_alb = mix(road_alb, asph, isle);
 				road_alb *= 1.0 - 0.18 * lip;
 			}
-			// Узбіччя вулиці в заокругленнях розвилок: колір трави піксель у піксель (і яскравість, і відтінок), а не
-			// світлий гравій, що лягав сірими клинами світліше за траву — світлої обвідки край не має.
-			// Вага 1, не 0.9: залишок тону ґрунту дороги тонкою теплою смужкою лишався там, де вага B починається біля краю асфальту.
+			// Узбіччя вулиці в заокругленнях розвилок: трава цього ж пікселя, трохи темніша (×0.72–0.92) і на 5 %
+			// менш насичена: світлої обвідки край не має.
+			// Вага 1: менша лишає тонку теплу смужку ґрунту дороги там, де вага B починається біля краю асфальту.
 			vec3 wedge = mix(alb, vec3(dot(alb, lw)), 0.05) * (0.72 + 0.2 * vnoise(p * 45.0));
 			road_alb = mix(road_alb, wedge, gravel_k * (1.0 - rt.r));
 			// Шматки й уламки мають нерівну нормаль.

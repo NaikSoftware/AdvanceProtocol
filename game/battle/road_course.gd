@@ -804,6 +804,31 @@ func _asphalt_end_at(node: Vector2) -> bool:
 	return n == 1
 
 
+## Справжні кінці асфальту (клітинки дошки, без зсуву кільця): місця, де асфальт переходить у ґрунтівку вздовж лінії, і вузли, де він
+## обривається об поворот ґрунтівки. Бічне прилягання ґрунтівки до асфальтової дороги сюди не входить: там
+## край проїзної частини лишається рівним, а кришіння й уламки шейдер малює лише біля цих точок.
+func asphalt_ends() -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var sh := Vector2(_shift, _shift)
+	for li in lines.size():
+		var pts: PackedVector2Array = lines[li]
+		var ty: PackedVector3Array = types[li]
+		for i in pts.size() - 1:
+			if (ty[i].x > 0.5 and ty[i + 1].y > 0.5) or (ty[i].y > 0.5 and ty[i + 1].x > 0.5):
+				var mid: Vector2 = pts[i].lerp(pts[i + 1], 0.5)
+				# Відгалуження ґрунтівки від асфальтового вузла саме так і починається: тип міняється за 0.3 клітинки від вузла.
+				var at_side_node := false
+				for node in nodes:
+					if mid.distance_to(node) < 0.6 and _type_near(node) == 0:
+						at_side_node = true
+				if not at_side_node:
+					out.append(mid - sh)
+	for node in nodes:
+		if _asphalt_end_at(node):
+			out.append(node - sh)
+	return out
+
+
 ## Відстань до найближчої розвилки (клітинки).
 func near_node(p: Vector2) -> float:
 	var best := 1e9
@@ -1008,6 +1033,9 @@ func _asphalt_end_tail(node: Vector2, d: PackedFloat32Array, jw: PackedFloat32Ar
 			if pts[end].distance_to(node) > 0.05 or ty[end].y < 0.5:
 				continue
 			var step: int = 1 if end == 0 else -1
+			# Як і в _asphalt_end_at: хвіст — лише там, де за кінцем лінії справді асфальт.
+			if ty[clampi(end + step * 3, 0, pts.size() - 1)].x <= 0.5:
+				continue
 			var ax: Vector2 = (pts[end] - pts[clampi(end + step * 3, 0, pts.size() - 1)]).normalized()
 			# u росте вздовж індексів лінії: від кінця в індекс 0 він спадає.
 			var sg: float = 1.0 if end != 0 else -1.0

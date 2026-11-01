@@ -181,7 +181,7 @@ func build(board: Board) -> void:
 	if board.width <= 0 or board.height <= 0:
 		_height = null
 	elif _height == null or signature != _height_signature or _height_kind_classes != _classes(board):
-		_height = TerrainHeight.bake(world, 0, relief_seed, world_surface, ring)
+		_height = TerrainHeight.bake(world, 0, relief_seed, world_surface, ring, true)
 		_height_signature = signature
 		_height_kind_classes = _classes(board)
 	TerrainHeight.active = _height
@@ -230,7 +230,7 @@ func build(board: Board) -> void:
 		_forest.build(world, world_surface, ring, _board_size, season, relief_seed)
 	# Стежки публічні (§3.5): маска зносу не залежить від туману й ставиться разом із землею.
 	if _ground.material_override is ShaderMaterial and not _props.footpaths.is_empty():
-		Footpaths.apply(_ground.material_override, Footpaths.bake(_props.footpaths, _props.trodden, _board_size, _dry_grid()), _board_size)
+		Footpaths.apply(_ground.material_override, Footpaths.bake(_props.footpaths, _props.trodden, _board_size, _dry_grid(), true), _board_size)
 	if ring > 0:
 		# Під найнижчою точкою землі: усередині кільця його закриває земля, за ним — лише він.
 		add_child(Surroundings.skirt(Vector2i(board.width, board.height), _height.min_height() - 0.5))
