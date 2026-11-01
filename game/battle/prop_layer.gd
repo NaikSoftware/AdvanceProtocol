@@ -246,8 +246,9 @@ const FENCE_FORMS: Array[StringName] = [&"infra_fence_yard_picket|1.0", &"infra_
 ## Крок стовпів паркану двору, м: один повтор атласу вздовж секції (TILE_M у tools/blender/infra/yard_fences.py).
 const YARD_FENCE_TILE_M: float = 2.5
 ## Види паркану двору в прозорому проході: сітка з частими просвітами (рабиця) зникає в непрозорому. Решта видів — суцільні
-## планки й панелі з широкими просвітами: непрозорий прохід із alpha-відсіканням, тож з димом (прозорим) сортуються за глибиною.
-## Прозорий паркан малюється до диму (його пріоритет 0), але після тіні й глибинного проходу лісу (FOREST_PRIORITY).
+## планки й панелі з широкими просвітами: справжній непрозорий прохід (discard, глибина пишеться), тож з димом і водою
+## сортуються за глибиною в обидва боки. Прозорий паркан малюється до диму (його пріоритет 0), але після тіні й
+## глибинного проходу лісу (FOREST_PRIORITY).
 const FENCE_ALPHA_PRIORITY: int = -1
 const FENCE_ALPHA_FORMS: Array[StringName] = [&"infra_fence_yard_chainlink"]
 ## Форми воріт садиби: суцільні металеві, з профнастилу, дерев'яні, ґратчасті, з горизонтальних дощок. Ворота беруть
@@ -1766,8 +1767,9 @@ static func _bridge_mesh(m: StringName, mesh: Mesh, wet_look: bool) -> Mesh:
 	return copy
 
 
-## Шейдер паркану з alpha-відсіканням у непрозорому проході (ALPHA_SCISSOR_THRESHOLD + alpha_to_coverage з render_mode):
-## той самий prop_thin, лише замість discard і прозорого ALPHA — відсікання рушієм. Суцільні планки з широкими просвітами.
+## Шейдер суцільного паркану в справжньому непрозорому проході: той самий prop_thin, лише без запису ALPHA і без
+## alpha_to_coverage — просвіти вирізає discard. Шейдер, що пише ALPHA, рушій кладе в чергу прозорих без запису глибини,
+## і дим чи вода сортувались би з таким парканом за пріоритетом, а не за глибиною.
 static var _thin_opaque_shader: Shader = null
 
 
@@ -1775,12 +1777,9 @@ static func _thin_opaque() -> Shader:
 	if _thin_opaque_shader == null:
 		_thin_opaque_shader = Shader.new()
 		var code: String = _THIN_SHADER.code
-		var cut: String = "\tif (alpha_cut > 0.0 && tex.a < cut) {\n\t\tdiscard;\n\t}\n"
 		var alpha: String = "\tALPHA = mix(1.0, clamp(tex.a * (1.0 + FAR_ALPHA * mip), 0.0, 1.0), step(0.0001, alpha_cut));\n"
-		assert(code.contains(cut) and code.contains(alpha), "PropLayer: прозорість у prop_thin.gdshader змінилась")
-		code = code.replace(cut, "").replace(alpha, "\tALPHA = tex.a;\n\tALPHA_SCISSOR_THRESHOLD = cut;\n\tALPHA_ANTIALIASING_EDGE = a2c_edge;\n\tALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));\n")
-		code = code.replace("uniform float alpha_cut = 0.0;", "uniform float alpha_cut = 0.0;\nuniform float a2c_edge = 0.25;")
-		_thin_opaque_shader.code = code
+		assert(code.contains(alpha) and code.contains(", alpha_to_coverage"), "PropLayer: прозорість у prop_thin.gdshader змінилась")
+		_thin_opaque_shader.code = code.replace(alpha, "").replace(", alpha_to_coverage", "")
 	return _thin_opaque_shader
 
 
@@ -1806,9 +1805,6 @@ static func _opaque_fence_mesh(mesh: Mesh) -> Mesh:
 			continue
 		var mat: ShaderMaterial = src.duplicate()
 		mat.shader = _thin_opaque()
-		# Шейдер пише ALPHA, тож рушій кладе його в чергу прозорих: без пріоритету −1 непрозорий паркан малювався б
-		# після диму (пріоритет 0) і різав нижню частину стовпа, хоч стоїть далі за нього.
-		mat.render_priority = FENCE_ALPHA_PRIORITY
 		copy.surface_set_material(i, mat)
 	return copy
 
