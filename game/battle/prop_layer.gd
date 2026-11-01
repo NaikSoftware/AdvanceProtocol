@@ -4585,7 +4585,54 @@ class _Placer:
 	func _reach_foots(pieces: Array, posts: Array[Vector2]) -> Array:
 		var out: Array = []
 		var extra: Array = []
+		# Короткий стик pc від кінця довгого ходу до обрису: коли його кінець не дістає сліду стін, стик замінюється одним
+		# проходом від кута ходу до сліду — інакше ступінь стику плюс «Г» дають два щаблі підряд.
+		var replaced: Array = []
 		for pc: Array in pieces:
+			var pl: float = (pc[0] as Vector2).distance_to(pc[1])
+			if pl >= 0.3 or pl < 0.02:
+				continue
+			for end in 2:
+				var c: Vector2 = pc[end]
+				var f: Vector2 = pc[1 - end]
+				var run: Array = []
+				for o: Array in pieces:
+					if o != pc and ((o[0] as Vector2).distance_to(c) < 0.03 or (o[1] as Vector2).distance_to(c) < 0.03) \
+							and (o[0] as Vector2).distance_to(o[1]) >= 0.3:
+						run = o
+				if run.is_empty():
+					continue
+				var dc: Vector2 = (f - c).normalized()
+				var dr: Vector2 = ((run[1] as Vector2) - (run[0] as Vector2)).normalized()
+				if absf(dc.cross(dr)) < 0.7:
+					continue
+				var idx: Array[int] = []
+				for w in _wall_rects.size():
+					if (_wall_rects[w] as Rect2).grow(0.03).has_point(f):
+						idx.append(w)
+				if idx.is_empty():
+					continue
+				var reach: float = INF
+				for w: int in idx:
+					reach = minf(reach, _ray_rect(f, dc, _wall_foots[w]))
+				if reach <= REACH_FOOT:
+					continue
+				var tgt := Vector2.ZERO
+				var tgt_d: float = INF
+				for w: int in idx:
+					var ft: Rect2 = _wall_foots[w]
+					var q := Vector2(clampf(c.x, ft.position.x, ft.end.x), clampf(c.y, ft.position.y, ft.end.y))
+					if c.distance_to(q) < tgt_d:
+						tgt_d = c.distance_to(q)
+						tgt = q
+				if tgt_d <= REACH_FOOT and _leg_ok(c, tgt, posts, pieces, extra):
+					replaced.append(pc)
+					extra.append([c, tgt])
+					detour_legs.append([c, tgt])
+					break
+		for pc: Array in pieces:
+			if replaced.has(pc):
+				continue
 			var ends: Array = [pc[0], pc[1]]
 			for end in 2:
 				var e: Vector2 = ends[end]
