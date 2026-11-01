@@ -6,6 +6,8 @@ const MAPS: Array[String] = ["river", "crossroads", "ridge"]
 const HOUSE_GAP: int = PropLayer.HOUSE_APART
 ## Повітки й причепи ближче за стільки клітинок не повторюють модель.
 const SMALL_GAP: int = 3
+## Хат на дошці кожної карти (за макетом сіл): менше — розстановка зламалась.
+const HOUSES_ON_BOARD: Dictionary = {"river": 9, "crossroads": 5, "ridge": 2}
 var _views: Dictionary = {}
 
 
@@ -52,6 +54,13 @@ func _is_house(inst: Dictionary) -> bool:
 	return String(inst["model"]).begins_with("house_") and not inst.get("yard", false)
 
 
+## Екземпляр стоїть на дошці карти (кільце за краєм — фон без правил розстановки).
+func _on_board(inst: Dictionary, map_name: String) -> bool:
+	var map: MapData = load("res://maps/%s.tres" % map_name) as MapData
+	var c: Vector2i = _centre(inst)
+	return c.x >= 0 and c.y >= 0 and c.x < map.width and c.y < map.height
+
+
 func _kind(inst: Dictionary) -> int:
 	return int(PropLayer.spec_of(inst["model"]).get("kind", -1))
 
@@ -64,15 +73,79 @@ func test_neighbouring_houses_differ(p = use_parameters(MAPS)) -> void:
 func test_neighbouring_houses_have_different_roofs(p = use_parameters(MAPS)) -> void:
 	var houses: Array = []
 	for inst in _props(p).all_instances():
-		if _is_house(inst):
+		if _is_house(inst) and _on_board(inst, p):
 			houses.append([_centre(inst), PropLayer.roof_of(inst), inst["model"]])
-	assert_gt(houses.size(), 3, "%s: передумова" % p)
+	assert_gte(houses.size(), HOUSES_ON_BOARD[p], "%s: передумова" % p)
 	for i in houses.size():
 		assert_gte(houses[i][1], 0, "%s: хата без кольору даху" % p)
 		for j in range(i + 1, houses.size()):
 			var d: Vector2i = (houses[i][0] as Vector2i) - (houses[j][0] as Vector2i)
 			if maxi(absi(d.x), absi(d.y)) <= PropLayer.ROOF_APART:
 				assert_ne(houses[i][1], houses[j][1], "%s: %s і %s з однаковим дахом поруч" % [p, houses[i], houses[j]])
+
+
+## Хати однієї моделі в радіусі ROOF_SAME_MODEL різняться дахом, коли палітра для моделі дає хоч три кольори.
+func test_same_model_houses_differ_in_roof_within_reach(p = use_parameters(MAPS)) -> void:
+	var houses: Array = []
+	for inst in _props(p).all_instances():
+		if _is_house(inst) and _on_board(inst, p):
+			houses.append([_centre(inst), PropLayer.roof_of(inst), inst["model"]])
+	for i in houses.size():
+		var allowed: int = 0
+		for c: Color in PropLayer.ROOF_PALETTE:
+			allowed += 1 if c.get_luminance() <= PropLayer.wall_luma(houses[i][2]) * PropLayer.WALL_TINT_MIN * PropLayer.ROOF_WALL_MAX else 0
+		if allowed < 3:
+			continue
+		for j in range(i + 1, houses.size()):
+			var d: Vector2i = (houses[i][0] as Vector2i) - (houses[j][0] as Vector2i)
+			if houses[i][2] == houses[j][2] and maxi(absi(d.x), absi(d.y)) <= PropLayer.ROOF_SAME_MODEL:
+				assert_ne(houses[i][1], houses[j][1], "%s: %s і %s однієї моделі з одним дахом" % [p, houses[i], houses[j]])
+
+
+## Двійники руїн мають той самий слід (інакше двір зсунеться).
+func test_ruin_variants_share_the_footprint() -> void:
+	for fam: Array in PropLayer.RUIN_FAMILY:
+		var base: Vector3 = ((PropLayer.model(fam[0]) as Dictionary)["aabb"] as AABB).size
+		for m: StringName in fam:
+			assert_not_null(PropLayer.model(m), "%s: моделі нема" % m)
+			var sz: Vector3 = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size
+			assert_almost_eq(sz.x, base.x, 0.03, "%s: слід x" % m)
+			assert_almost_eq(sz.z, base.z, 0.03, "%s: слід z" % m)
+			assert_true(PropLayer.RUIN_ROOF.has(m), "%s: кольору даху нема в RUIN_ROOF" % m)
+		var roofs: Array = fam.map(func(m: StringName) -> int: return PropLayer.RUIN_ROOF[m])
+		for i in roofs.size():
+			assert_eq(roofs.count(roofs[i]), 1, "%s: два двійники з одним кольором даху" % [fam])
+
+
+## Руїни дошки одного сімейства (база й двійники «b», «c») ближче RUIN_FAR різняться кольором даху: повтор моделі, а то й кольору — копія.
+func test_ruins_of_one_family_differ_in_roof_within_reach(p = use_parameters(MAPS)) -> void:
+	var ruins: Array = []
+	for inst in _props(p).all_instances():
+		if _kind(inst) == PropLayer.Kind.RUIN and PropLayer.RUIN_ROOF.has(inst["model"]) and _on_board(inst, p):
+			ruins.append([inst["model"], _centre(inst)])
+	assert_gte(ruins.size(), 2, "%s: передумова" % p)
+	for i in ruins.size():
+		for j in range(i + 1, ruins.size()):
+			var d: Vector2i = (ruins[i][1] as Vector2i) - (ruins[j][1] as Vector2i)
+			if maxi(absi(d.x), absi(d.y)) > PropLayer.RUIN_FAR:
+				continue
+			if PropLayer.ruin_family(ruins[i][0]) == PropLayer.ruin_family(ruins[j][0]):
+				assert_ne(PropLayer.RUIN_ROOF[ruins[i][0]], PropLayer.RUIN_ROOF[ruins[j][0]], "%s: %s і %s — копії поруч" % [p, ruins[i], ruins[j]])
+
+
+## Повітка заміщується лише повіткою, хата — хатою: заміна руїни не міняє клас, навіть коли слід підходить.
+func test_ruin_swap_never_turns_a_shed_into_a_house(p = use_parameters(MAPS)) -> void:
+	var placer: Variant = _props(p)._placer
+	var saved: Array = placer.farm_ruins.duplicate()
+	var cell := Vector2i(5, 5)
+	var options: Array = []
+	for m: StringName in [&"ruin_half_shed", &"ruin_half_house1", &"ruin_half_house2", &"ruin_h1", &"ruin_h3"]:
+		options.append([m, cell, 0, Vector2i.ONE, 6, false])
+	# Така сама повітка поруч (4 клітинки): її двійники теж близько, тож лишається замінювати за площею.
+	placer.farm_ruins = [[Vector2i(7, 5), &"ruin_half_shed"], [Vector2i(7, 6), &"ruin_half_shed_b"], [Vector2i(6, 7), &"ruin_half_shed_c"]]
+	var out: Array = placer._ruin_swap(options[0], options)
+	placer.farm_ruins = saved
+	assert_eq(PropLayer.ruin_class(out[0]), &"shed", "%s: повітка стала %s" % [p, out[0]])
 
 
 ## Палітра дахів — лише сільські кольори: не оливкові й не вохристі, усі помітно темні.

@@ -45,6 +45,10 @@ const MODELS: Dictionary = {
 	&"f6_fuel_station": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f7_water_tower": {"kind": Kind.STRUCTURE, "weight": 1, "gap": 0.5, "tower": true},
 	&"f7b_brick_tower": {"kind": Kind.STRUCTURE, "weight": 1, "gap": 0.5, "tower": true},
+	&"ruin_half_shed_b": {"kind": Kind.RUIN, "weight": 6, "yard_only": true},
+	&"ruin_half_house1_b": {"kind": Kind.RUIN, "weight": 6, "yard_only": true},
+	&"ruin_half_shed_c": {"kind": Kind.RUIN, "weight": 6, "yard_only": true},
+	&"ruin_half_house1_c": {"kind": Kind.RUIN, "weight": 6, "yard_only": true},
 	&"ruin_h1": {"kind": Kind.RUIN, "weight": 1},
 	&"ruin_h3": {"kind": Kind.RUIN, "weight": 1},
 	&"bridge_river_west": {"kind": Kind.BRIDGE, "map": &"river", "order": 0, "deck_top": 0.30},
@@ -266,7 +270,29 @@ const RUIN_APART: int = 4
 const RUIN_FAR: int = 8
 ## Руїна міняється лише на таку, чий слід відрізняється не більш ніж на цю частку площі: інакше зсувається паркан і ворота садиби.
 const RUIN_SWAP_AREA: float = 0.12
-const RUIN_TWIN: Dictionary = {&"ruin_half_house2": &"house_h6", &"ruin_half_house1": &"house_h5"}
+const RUIN_TWIN: Dictionary = {&"ruin_half_house2": &"house_h6", &"ruin_half_house1": &"house_h5", &"ruin_half_house1_b": &"house_h5", &"ruin_half_house1_c": &"house_h5"}
+## Сімейства руїн одного сліду: база й двійники «b», «c» — інший виріз даху, завал і листи, а головне — свій колір даху (RUIN_ROOF).
+## Двійники не беруться в загальний вибір (yard_only), а лише замінюють повторну руїну в радіусі RUIN_FAR: слід той самий, тож двори не зсуваються.
+const RUIN_FAMILY: Array = [
+	[&"ruin_half_shed", &"ruin_half_shed_b", &"ruin_half_shed_c"],
+	[&"ruin_half_house1", &"ruin_half_house1_b", &"ruin_half_house1_c"]]
+## Колір даху руїн за ROOF_PALETTE (запечений в атлас моделі, tools/blender/buildings/build_ruins.py): графіт 0, вишня 1, зелень 2, коричневий 4.
+const RUIN_ROOF: Dictionary = {
+	&"ruin_half_shed": 0, &"ruin_half_shed_b": 4, &"ruin_half_shed_c": 1,
+	&"ruin_half_house1": 1, &"ruin_half_house1_b": 0, &"ruin_half_house1_c": 4, &"ruin_half_house2": 2}
+
+
+## Сімейство руїни (вона сама, якщо двійників нема).
+static func ruin_family(m: StringName) -> Array:
+	for fam: Array in RUIN_FAMILY:
+		if fam.has(m):
+			return fam
+	return [m]
+
+
+## Клас руїни: повітка заміщується лише повіткою, хата — не повіткою.
+static func ruin_class(m: StringName) -> StringName:
+	return &"shed" if String(m).contains("shed") else &"house"
 ## Стовп, будівля й паркан тримаються від води й болота щонайменше на стільки клітинок.
 const WATER_CLEAR: float = 0.4
 const YARD_SHED_SCALE: float = 0.7
@@ -1827,8 +1853,9 @@ static func _variant(define: String) -> Shader:
 ## за стіну щонайменше в 1/0.6 раза.
 const ROOF_PALETTE: Array[Color] = [Color(0.2, 0.21, 0.23), Color(0.26, 0.09, 0.095), Color(0.12, 0.27, 0.16),
 		Color(0.314, 0.329, 0.345), Color(0.24, 0.17, 0.12)]
-## Найдалі від стіни по яскравості: дах хати не світліший за стільки її стіни (гамма-яскравість sRGB).
-const ROOF_WALL_MAX: float = 0.6
+## Дах хати не світліший за стільки яскравості її стіни за атласом (гамма-яскравість sRGB); межа гри — 0.6, решта — запас на освітлення:
+## сонячний дах проти затіненого причілка в кадрі темніший за стіну в атласі менше.
+const ROOF_WALL_MAX: float = 0.55
 ## Найтемніший відтінок стіни в шейдері (WALL_TINTS у prop_fade.gdshader): із ним дах теж має вкластись у ROOF_WALL_MAX.
 const WALL_TINT_MIN: float = 0.93
 static var _wall_luma: Dictionary = {}
@@ -1876,6 +1903,8 @@ static func wall_luma(m: StringName) -> float:
 	return out
 ## Дві хати ближче за стільки клітинок мають різні дахи, поки є вільний колір.
 const ROOF_APART: int = HOUSE_APART
+## Хати однієї моделі різняться дахом і в такому радіусі (клітинки), коли палітра дозволяє.
+const ROOF_SAME_MODEL: int = 8
 
 
 static func _has_roof_colour(inst: Dictionary) -> bool:
@@ -1891,35 +1920,60 @@ static func roof_of(inst: Dictionary) -> int:
 ## коли вільного нема — той, чий найближчий двійник найдалі.
 func _assign_roofs() -> void:
 	var done: Array = []
+	# Хати з найменшим вибором кольорів — першими: хата, якій годиться лише вишня, не віддає її сусідній, що мала з чого вибирати.
+	var order: Array[Dictionary] = []
+	var choices: Dictionary = {}
 	for inst: Dictionary in _instances:
-		if not _has_roof_colour(inst):
-			continue
+		if _has_roof_colour(inst):
+			order.append(inst)
+			if not choices.has(inst["model"]):
+				var n: int = 0
+				for col: Color in ROOF_PALETTE:
+					n += 1 if col.get_luminance() <= wall_luma(inst["model"]) * WALL_TINT_MIN * ROOF_WALL_MAX else 0
+				choices[inst["model"]] = n
+	order.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return choices[x["model"]] < choices[y["model"]])
+	for inst: Dictionary in order:
 		var c: Vector2i = (inst["cells"] as Array)[0]
 		var start: int = absi(cell_hash(c, 9137)) % ROOF_PALETTE.size()
 		var best: int = start
 		var best_gap: int = -1
+		var fallback: int = -1
+		var fallback_gap: int = -1
 		var wall: float = wall_luma(inst["model"]) * WALL_TINT_MIN
 		for k in ROOF_PALETTE.size():
 			var idx: int = (start + k) % ROOF_PALETTE.size()
 			if ROOF_PALETTE[idx].get_luminance() > wall * ROOF_WALL_MAX:
 				continue
 			var gap: int = 1 << 20
+			var same: int = 1 << 20
 			for d: Array in done:
 				if d[1] == idx:
 					var o: Vector2i = (d[0] as Vector2i) - c
-					gap = mini(gap, maxi(absi(o.x), absi(o.y)))
+					var dist: int = maxi(absi(o.x), absi(o.y))
+					gap = mini(gap, dist)
+					if d[2] == inst["model"]:
+						same = mini(same, dist)
 			if gap > ROOF_APART:
-				best = idx
-				best_gap = gap
-				break
+				if same > ROOF_SAME_MODEL:
+					best = idx
+					best_gap = gap
+					break
+				# Годиться, але та сама модель із цим дахом близько: лишається запасним, пошук іде далі.
+				if fallback < 0:
+					fallback = idx
+					fallback_gap = gap
+				continue
 			if gap > best_gap:
 				best_gap = gap
 				best = idx
+		if fallback >= 0 and best_gap <= ROOF_APART:
+			best = fallback
+			best_gap = fallback_gap
 		# Темна стіна, для якої не проходить жоден колір: найтемніший з палітри (тест тримає, що таких хат на картах нема).
 		if best_gap < 0:
 			best = ROOF_PALETTE.find(ROOF_PALETTE.reduce(func(a: Color, b: Color) -> Color: return a if a.get_luminance() < b.get_luminance() else b))
 		inst["roof"] = best
-		done.append([c, best])
+		done.append([c, best, inst["model"]])
 
 
 ## Колір даху для шейдера (лінійний); нулі — дах лишається з текстури моделі.
@@ -4010,6 +4064,13 @@ class _Placer:
 	## з таких — найближча за площею обрису до вибраної, щоб розкладка садиб (паркан, ворота, город) лишалась на місці.
 	## Нема на що міняти — лишається вибрана.
 	func _ruin_swap(pick: Array, options: Array) -> Array:
+		# Двійник свого сімейства (той самий слід, інший колір даху), якого нема в радіусі RUIN_FAR.
+		if _ruin_near(pick[0], pick[1], RUIN_FAR):
+			for m: StringName in PropLayer.ruin_family(pick[0]):
+				if m != pick[0] and PropLayer.model(m) != null and not _ruin_near(m, pick[1], RUIN_FAR):
+					var swapped: Array = pick.duplicate()
+					swapped[0] = m
+					return swapped
 		if not _ruin_near(pick[0], pick[1]):
 			return pick
 		var area := func(m: StringName) -> float:
@@ -4021,7 +4082,8 @@ class _Placer:
 		for reach: int in [RUIN_FAR, RUIN_APART]:
 			var best_d: float = INF
 			for o: Array in options:
-				if o[1] != pick[1] or o[2] != pick[2] or _ruin_near(o[0], o[1], reach) or not _closes_yard(o[0], o[1]):
+				if o[1] != pick[1] or o[2] != pick[2] or PropLayer.ruin_class(o[0]) != PropLayer.ruin_class(pick[0]) \
+						or _ruin_near(o[0], o[1], reach) or not _closes_yard(o[0], o[1]):
 					continue
 				var d: float = absf(float(area.call(o[0])) - want)
 				if d < best_d and d <= want * RUIN_SWAP_AREA:
