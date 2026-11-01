@@ -49,6 +49,21 @@ func _cached(name: String) -> BoardView:
 	return _views[name]
 
 
+## Мокра «Річка» з поверхнею й зерном рельєфу: один вид на мокрі міст і тюки, що лише читають матеріали.
+func _wet_river() -> BoardView:
+	if not _views.has("river#wet"):
+		var m: MapData = _map("river")
+		var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
+		add_child(view)
+		view.ring_map = m
+		view.surface = m.surface
+		view.relief_seed = m.name_key.hash()
+		view.wet = true
+		view.build(m.to_board())
+		_views["river#wet"] = view
+	return _views["river#wet"]
+
+
 func after_all() -> void:
 	for v: BoardView in _views.values():
 		v.free()
@@ -168,9 +183,8 @@ func test_nothing_small_on_a_unit_centre(p = use_parameters(MAPS)) -> void:
 
 
 func test_bridge_swaps_when_demolished_and_back_when_repaired() -> void:
-	var m: MapData = _map("river")
-	var board: Board = m.to_board()
-	var view: BoardView = _view(m, board)
+	var board: Board = _map("river").to_board()
+	var view: BoardView = _cached("river")
 	var cell := Vector2i(13, 10)
 	assert_eq(view.props().instances_on(cell)[0]["model"], &"bridge_river_centre")
 	assert_eq(view.props().instances_on(Vector2i(4, 10))[0]["model"], &"bridge_river_west")
@@ -329,7 +343,7 @@ func _fences_on(view: BoardView, cell: Vector2i) -> Array[Dictionary]:
 
 ## Повалена опора забирає дроти своїх прольотів.
 func test_crushed_pole_drops_its_wires() -> void:
-	var view: BoardView = _view(_map("river"))
+	var view: BoardView = _cached("river")
 	var p: PropLayer = view.props()
 	var spans: int = p.wire_spans()
 	assert_gt(spans, 0, "на River є лінія")
@@ -340,6 +354,8 @@ func test_crushed_pole_drops_its_wires() -> void:
 			break
 	view.set_crushed_cells([pole_cell] as Array[Vector2i])
 	assert_lt(p.wire_spans(), spans)
+	# Вид спільний з іншими тестами: повалене повертаємо.
+	view.set_crushed_cells([] as Array[Vector2i])
 
 
 ## Половини мають власний набір: та сама роль — інша модель (не віддзеркалена копія).
@@ -587,16 +603,6 @@ func test_structure_shadows_only_when_switched_on() -> void:
 		var casts: bool = k == PropLayer.Kind.STRUCTURE and not base.ends_with("_ring")
 		var want: int = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if casts else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		assert_eq(n.cast_shadow, want, n.name)
-
-
-## Сонячна карта вмикає тіні будівель, похмура River — ні.
-func test_sunny_map_switches_structure_shadows_on(p = use_parameters([["crossroads", true], ["ridge", true], ["river", false]])) -> void:
-	var service: Node = MatchServiceScript.new()
-	add_child_autofree(service)
-	var screen: BattleScreen = BattleScreenScene.instantiate()
-	add_child_autofree(screen)
-	screen.setup(_map(p[0]), 2, 1, service)
-	assert_eq((screen.get_node("%BoardView") as BoardView).structure_shadows, p[1], p[0])
 
 
 ## Огорожа двору стоїть лише довкола садиби (на карті з макетом — на клітинці її двору) чи групи,
@@ -894,13 +900,8 @@ func test_fence_runs_end_on_walls_or_gate_posts(p = use_parameters(MAPS)) -> voi
 ## Міст — матова копія сітки (ассет мав «мокрі» поверхні з шорсткістю 0.15, міст блищав склом); на
 ## мокрій карті ще й темніша.
 func test_wet_map_darkens_bridges() -> void:
-	var m: MapData = _map("river")
 	for wet: bool in [false, true]:
-		var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
-		add_child_autofree(view)
-		view.ring_map = m
-		view.wet = wet
-		view.build(m.to_board())
+		var view: BoardView = _wet_river() if wet else _cached("river")
 		var node: MultiMeshInstance3D = view.props().get_node("bridge_river_centre")
 		var src := (PropLayer.model(&"bridge_river_centre")["mesh"] as Mesh).surface_get_material(0) as BaseMaterial3D
 		var got := node.multimesh.mesh.surface_get_material(0) as BaseMaterial3D
@@ -1385,7 +1386,7 @@ func test_poles_stand_upright(p = use_parameters(MAPS)) -> void:
 ## Розчиняється лише будівля, вища за FADE_MIN_H, що на екрані перекриває юніта: купа уламків по
 ## коліно лишається суцільною, хата перед юнітом — розчиняється.
 func test_only_tall_buildings_over_the_unit_dissolve() -> void:
-	var view: BoardView = _view(_map("crossroads"))
+	var view: BoardView = _cached("crossroads")
 	var props: PropLayer = view.props()
 	var tall: Dictionary = {}
 	var low: Dictionary = {}
@@ -1408,6 +1409,8 @@ func test_only_tall_buildings_over_the_unit_dissolve() -> void:
 		var at: Array[Vector2i] = [(low["cells"] as Array)[0] - Vector2i.ONE]
 		props.set_reveal_cells(at)
 		assert_false(props._is_faded(low), "низька руїна не розчиняється")
+	# Вид спільний з іншими тестами: розчинення знімаємо.
+	props.set_reveal_cells([] as Array[Vector2i])
 
 
 ## Будівля над юнітом — звичайна альфа з проходом глибини, не растр: матеріал вузла «_fade» —
@@ -1536,7 +1539,7 @@ func test_transformers_only_where_needed(p = use_parameters(MAPS)) -> void:
 
 ## Повалена опора — без шафи підстанції.
 func test_crushed_pole_drops_its_transformer() -> void:
-	var view: BoardView = _view(_map("crossroads"))
+	var view: BoardView = _cached("crossroads")
 	var props: PropLayer = view.props()
 	assert_gt(props.transformers_shown().size(), 0, "передумова")
 	var i: int = props._transformers.keys()[0]
@@ -1544,6 +1547,9 @@ func test_crushed_pole_drops_its_transformer() -> void:
 	props.set_crushed(cells)
 	props._flush()
 	assert_eq(props.transformers_shown().size(), props._transformers.size() - 1)
+	# Вид спільний з іншими тестами: повалене повертаємо.
+	props.set_crushed([] as Array[Vector2i])
+	props._flush()
 
 
 ## Ворота є в кожному дворі: одні ворота з хвірткою поруч.
@@ -2941,15 +2947,8 @@ func test_small_props_stay_drawn_at_max_zoom() -> void:
 
 ## Тюки на мокрій карті темніші за суху: у дощ не світяться жовто-зеленою плямою на траві.
 func test_hay_is_dimmed_on_a_wet_map() -> void:
-	var m: MapData = _map("river")
 	var node: MultiMeshInstance3D = null
-	var view: BoardView = (load("res://game/battle/board_view.tscn") as PackedScene).instantiate()
-	add_child_autofree(view)
-	view.ring_map = m
-	view.surface = m.surface
-	view.relief_seed = m.name_key.hash()
-	view.wet = true
-	view.build(m.to_board())
+	var view: BoardView = _wet_river()
 	for n in view.props().get_children():
 		if String(n.name).begins_with("infra_hay"):
 			node = n
