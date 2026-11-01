@@ -993,4 +993,4 @@ func test_hp_bar_and_label_draw_over_every_effect() -> void:
 	for n: GeometryInstance3D in [view._hp_bar, view._hp_label]:
 		assert_true(n.get("no_depth_test"), n.name)
 		assert_eq(n.get("render_priority"), UnitView.OVERLAY_PRIORITY, n.name)
-	assert_true(UnitView.OVERLAY_PRIORITY > 1, "вище за вогонь (1)")
+	assert_true(UnitView.OVERLAY_PRIORITY > BoardView.CONTOUR_PRIORITY, "вище за контури зон, вогонь і дощ")

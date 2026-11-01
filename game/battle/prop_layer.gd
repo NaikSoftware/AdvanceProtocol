@@ -1555,7 +1555,7 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 		Surroundings.apply(mat, _board_size)
 	if not solid:
 		# Розчинення у два проходи: спершу глибина (раніше за інші прозорі), тоді колір поверх неї.
-		# Прохід глибини — після інших прозорих (вогонь і дим остова, дощ: пріоритет 1), тож те, що
+		# Прохід глибини — після інших прозорих (ефекти, дим, дощ, дроти, контури зон), тож те, що
 		# за дахом, уже намальоване й не губиться за невидимою глибиною; колір даху — поверх нього.
 		var depth: ShaderMaterial = mat.duplicate()
 		depth.shader = _depth_shader()
