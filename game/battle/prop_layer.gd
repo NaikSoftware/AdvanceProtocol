@@ -1806,6 +1806,9 @@ static func _opaque_fence_mesh(mesh: Mesh) -> Mesh:
 			continue
 		var mat: ShaderMaterial = src.duplicate()
 		mat.shader = _thin_opaque()
+		# Шейдер пише ALPHA, тож рушій кладе його в чергу прозорих: без пріоритету −1 непрозорий паркан малювався б
+		# після диму (пріоритет 0) і різав нижню частину стовпа, хоч стоїть далі за нього.
+		mat.render_priority = FENCE_ALPHA_PRIORITY
 		copy.surface_set_material(i, mat)
 	return copy
 

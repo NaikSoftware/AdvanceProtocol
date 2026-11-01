@@ -417,18 +417,17 @@ def house2(ruined, variant=0):
 def shed(ruined, variant=0):
     """Господарський сарай 6.8 x 4.2 м. Напівзруйнований: фронтальна (на камеру) стіна впала, дах з цього боку провис уздовж того самого коника."""
     lib.reset()
-    # Дах руїни повітки темний (сланець, коричневий руберойд, вишня): variant 0, 1, 2 різняться кольором; дах темніший за дошки.
+    # Дах повітки (і цілої, і руїни) темний (сланець, коричневий руберойд, вишня): variant 0, 1, 2 різняться кольором; дах темніший за дошки.
     lib.ROOFS["ruin_roof"] = ("tile", ((0.15, 0.155, 0.17), (0.19, 0.135, 0.105), (0.2, 0.075, 0.08))[variant])
-    lib.palette(roof="ruin_roof" if ruined else "asb_old", eave=2.8)
+    lib.palette(roof="ruin_roof", eave=2.8)
     DM[0] = "boards_soft_vc"
-    if ruined:
-        # дошки сірі й темні (на чверть темніші за бежеві): світле дерево заборонене, а дах мусить лишатись темнішим за стіну
-        mt = lib.mats()
-        mt["boards_soft"] = lib.make_material("boards_soft", flat=(0.27, 0.245, 0.21), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4,
-                                              seam_bump=0.8, undul=(1.2, 0.01), rough=0.9)
-        mt["boards_soft_vc"] = lib.make_material("boards_soft_vc", flat=(0.27, 0.245, 0.21), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4,
-                                                 vmul=True, seam_bump=0.8, undul=(1.2, 0.01), rough=0.9)
-        lib._dm("boards_soft")
+    # дошки сірі й темні (на чверть темніші за бежеві): світле дерево заборонене, а дах мусить лишатись темнішим за стіну; цілий сарай — так само
+    mt = lib.mats()
+    mt["boards_soft"] = lib.make_material("boards_soft", flat=(0.27, 0.245, 0.21), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4,
+                                          seam_bump=0.8, undul=(1.2, 0.01), rough=0.9)
+    mt["boards_soft_vc"] = lib.make_material("boards_soft_vc", flat=(0.27, 0.245, 0.21), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4,
+                                             vmul=True, seam_bump=0.8, undul=(1.2, 0.01), rough=0.9)
+    lib._dm("boards_soft")
     b = Builder()
     rnd = random.Random(57 + 19 * variant)
     hx, hy = 3.4, 2.1
