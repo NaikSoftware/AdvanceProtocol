@@ -472,6 +472,7 @@ the current player can see; scars respect the viewer's `seen`. Reference brief:
 - [x] At an asphalt end: no pale pad; ruts leave both corners and run into the dirt road
 - [x] Junction corners take the grass tone, no light gravel; the verge along the asphalt stays
 - [x] Crumbled edge only at a real asphalt end, never where a dirt road meets the side of the asphalt
+- [ ] Ridge asphalt runs straight with smooth bends, no chain of S-wiggles; clean edges, steady width
 - [x] Dirt roads read on wet ground: darker continuous ruts, no light border
 
 ### Task 17: House models and roofs
