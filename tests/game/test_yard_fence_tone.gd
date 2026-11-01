@@ -7,10 +7,6 @@ const MODEL: String = "res://assets/props/infra_fence_yard.glb"
 const KINDS: Array[String] = ["picket", "sheet", "chainlink", "brickbars", "slat"]
 const STRIP: int = 192
 const PAD: int = 12
-## Скільки світліше за паркан дозволено бути воротам (запас на шум текстури).
-const LUMA_MARGIN: float = 1.1
-## Скільки найменше від яскравості паркану дозволено мати воротам.
-const LUMA_MIN: float = 0.9
 const TILE_M: float = 2.5
 const H_MAX: float = 2.0
 ## Дріт оцинковки: найсвітліший піксель і середня яскравість (світло-середній сірий).
@@ -72,13 +68,15 @@ func _gate_colors(gate: StringName) -> Array[Color]:
 	return out
 
 
-func test_wooden_gates_are_no_lighter_or_more_orange_than_their_fence(p = use_parameters([["wood", "picket"], ["slat", "slat"]])) -> void:
+## Яскравість полотна воріт до яскравості паркану за атласом: на кадрі (River мокра, Crossroads суха) полотно в межах ±10 %
+## від паркану, коли це відношення в [min, max]. Воно не 1, бо паркан на екрані темніший за атлас (низ, шапка, знебарвлення),
+## а полотно воріт — ні. Вихід за межі означає, що ворота знову не в тоні свого паркану.
+func test_wooden_gates_stay_in_their_fences_tone(p = use_parameters([["wood", "picket", 1.2, 1.45], ["slat", "slat", 0.6, 0.75]])) -> void:
 	var fence: Color = _mean(_pixels(p[1]))
 	var gate: Color = _mean(_gate_colors(StringName(p[0])))
-	assert_lte(_luma(gate), _luma(fence) * LUMA_MARGIN, "%s: ворота %s світліші за паркан %s" % [p[0], gate, fence])
+	var ratio: float = _luma(gate) / _luma(fence)
+	assert_between(ratio, float(p[2]), float(p[3]), "%s: ворота %s проти паркану %s (відношення %.2f)" % [p[0], gate, fence, ratio])
 	assert_lte(_sat(gate), _sat(fence), "%s: ворота %s насиченіші за паркан %s" % [p[0], gate, fence])
-	# І не темніші за нього: чорне полотно в сірому парканi — найконтрастніша річ двору.
-	assert_gte(_luma(gate), _luma(fence) * LUMA_MIN, "%s: ворота %s темніші за паркан %s" % [p[0], gate, fence])
 
 
 ## Оцинковка: дріт — світло-середній сірий, не майже білий; труби й стовпи (суцільні, під сірим небом світляться

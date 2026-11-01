@@ -413,7 +413,7 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
-		var m := StringName(String(n.name).trim_suffix("_ring"))
+		var m := StringName(String(n.name).trim_suffix("_ring").trim_suffix("_alpha"))
 		assert_true(models.has(m), "%s: вузол %s" % [p, n.name])
 		keys[m] = true
 	assert_eq(keys.size(), models.size(), p)
@@ -1932,16 +1932,24 @@ func test_yard_fence_kinds_agree_across_mesh_specs_and_instances(p = use_paramet
 		assert_eq(count[k], 4, "картка виду %s" % kinds[k])
 		assert_almost_eq(top[k], float(tops[k]), 1e-3, "верх картки виду %s" % kinds[k])
 	var props: PropLayer = _cached(p).props()
-	var node: MultiMeshInstance3D = props.get_node("infra_fence_yard")
-	assert_true(node.multimesh.use_custom_data, p)
-	var slots: Array = props._slots[&"infra_fence_yard"]
-	assert_gt(slots.size(), 0, p)
-	# Записане в INSTANCE_CUSTOM — з дзеркала: без рендера (headless) MultiMesh його не віддає.
-	var written: Array = props._custom_written[&"infra_fence_yard"]
-	assert_eq(written.size(), slots.size(), p)
-	for k in slots.size():
-		var m: StringName = props._instances[slots[k]]["model"]
-		assert_eq(written[k], PropLayer.fence_kind_of(m), "%s: слот %d (%s)" % [p, k, m])
+	# Два вузли «batch»: непрозорий (суцільні планки) і «_alpha» (рабиця); на карті може бути один із них.
+	var total := 0
+	for key: StringName in [&"infra_fence_yard", &"infra_fence_yard_alpha"]:
+		if not props._slots.has(key):
+			continue
+		var node: MultiMeshInstance3D = props.get_node(NodePath(key))
+		assert_true(node.multimesh.use_custom_data, p)
+		var slots: Array = props._slots[key]
+		assert_gt(slots.size(), 0, p)
+		total += slots.size()
+		# Записане в INSTANCE_CUSTOM — з дзеркала: без рендера (headless) MultiMesh його не віддає.
+		var written: Array = props._custom_written[key]
+		assert_eq(written.size(), slots.size(), p)
+		for k in slots.size():
+			var m: StringName = props._instances[slots[k]]["model"]
+			assert_eq(written[k], PropLayer.fence_kind_of(m), "%s: слот %d (%s)" % [p, k, m])
+			assert_eq(key == &"infra_fence_yard_alpha", PropLayer.FENCE_ALPHA_FORMS.has(m), "%s: вид %s не в своєму проході" % [p, m])
+	assert_gt(total, 0, p)
 
 
 ## Кожен двір обгороджений одним видом паркану (усі його секції — одна модель із FENCE_FORMS), а в селі кожної карти

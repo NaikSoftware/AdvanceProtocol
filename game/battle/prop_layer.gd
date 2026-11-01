@@ -241,6 +241,9 @@ const FENCE_FORMS: Array[StringName] = [&"infra_fence_yard_picket|1.0", &"infra_
 const YARD_FENCE_TILE_M: float = 2.5
 ## Форми воріт садиби: суцільні металеві, з профнастилу, дерев'яні, ґратчасті, з горизонтальних дощок. Ворота беруть
 ## форму свого паркану (spec «gate»).
+## Види паркану двору в прозорому проході: сітка з частими просвітами (рабиця) зникає в непрозорому. Решта видів — суцільні
+## планки й панелі з широкими просвітами: непрозорий прохід із alpha-відсіканням, тож з димом (прозорим) сортуються за глибиною.
+const FENCE_ALPHA_FORMS: Array[StringName] = [&"infra_fence_yard_chainlink"]
 const GATE_KINDS: Array[StringName] = [&"metal", &"sheet", &"wood", &"lattice", &"slat"]
 ## Секція паркану не відходить від ґрунту посередині більш ніж на 5 см; найкоротша секція (клітинки).
 const FENCE_SAG: float = 0.05 * 0.125
@@ -339,16 +342,16 @@ const GATE_POST_COLOR: Color = Color(0.2, 0.15, 0.1)
 ## (бурий чи зелений), дошки, оцинкована ґратка.
 const GATE_STEEL: Array[Color] = [Color(0.22, 0.28, 0.34), Color(0.28, 0.31, 0.27)]
 const GATE_SHEET: Array[Color] = [Color(0.36, 0.2, 0.13), Color(0.2, 0.32, 0.22)]
-## Дошки воріт — тон свого паркану (середнє по атласу), не темніше за 0.9 і не світліше за 1.1 його яскравості: полотно вертикальними гранями коробки
-## освітлене так само, як картка паркану, тож альбедо більше за паркан давало б світле дерево на кадрі. Штахетник
-## і горизонтальні дошки мають різну кору — по тону на кожен (test_yard_fence_tone).
-const GATE_WOOD: Color = Color(0.18, 0.138, 0.096)
-const GATE_SLAT: Color = Color(0.34, 0.24, 0.14)
+## Дошки воріт підібрано за кадром (prop_gate веде їх як паркан: нормаль до неба, мокрість): середнє полотна в межах ±10 % від
+## свого паркану на мокрій River і сухому Crossroads; відношення до середнього атласу паркану стережуть test_yard_fence_tone.
+## Штахетник і горизонтальні дошки мають різну кору — по тону на кожен.
+const GATE_WOOD: Color = Color(0.234, 0.179, 0.125)
+const GATE_SLAT: Color = Color(0.228, 0.16, 0.094)
 ## Частка, на яку фарба воріт зсувається до сірого (_gate_box_at).
 const GATE_DESAT: float = 0.3
 ## Ворота рабиці — оцинковка, як сітка й труби паркану (chainlink у tools/blender/infra/yard_fences.py), тон у тон
 ## з нею: і чорна, і біла ґратка — найконтрастніша річ двору й перебиває сам двір.
-const GATE_IRON: Color = Color(0.3, 0.31, 0.3)
+const GATE_IRON: Color = Color(0.375, 0.39, 0.375)
 ## Півширина стежки двору для відступу дрібних речей від неї (самі стежки — Footpaths).
 const PATH_WIDTH: float = 0.1
 ## Відступи сторони кільця паркану від межі двору, від бажаного (назовні) до найглибшого всередину;
@@ -1089,6 +1092,8 @@ func _build_nodes(haze: bool) -> void:
 		var m: StringName = _instances[i]["model"]
 		# Види паркану двору — один вузол «batch»: вид екземпляра йде в INSTANCE_CUSTOM (_write_nodes).
 		var key: StringName = StringName(spec_of(m).get("batch", m))
+		if spec_of(m).has("batch") and FENCE_ALPHA_FORMS.has(m):
+			key = StringName(String(key) + "_alpha")
 		var k: int = int(spec_of(m)["kind"])
 		if (k == Kind.STRUCTURE or k == Kind.RUIN) and not _on_board((_instances[i]["cells"] as Array)[0]):
 			key = StringName(String(m) + "@ring")
@@ -1108,6 +1113,8 @@ func _build_nodes(haze: bool) -> void:
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_custom_data = fades or spec_of(m).has("batch")
 		mm.mesh = _bridge_mesh(m, info["mesh"], wet) if kind == Kind.BRIDGE else info["mesh"]
+		if spec_of(m).has("batch") and not FENCE_ALPHA_FORMS.has(m):
+			mm.mesh = _opaque_fence_mesh(info["mesh"])
 		if kind == Kind.HAY and wet:
 			mm.mesh = _dimmed(info["mesh"], HAY_WET)
 		mm.instance_count = (by_node[key] as Array).size()
@@ -1606,6 +1613,37 @@ static func _bridge_mesh(m: StringName, mesh: Mesh, wet_look: bool) -> Mesh:
 		w.metallic = minf(src.metallic, 0.1)
 		copy.surface_set_material(i, w)
 	_wet_meshes[key] = copy
+	return copy
+
+
+## Шейдер паркану з alpha-відсіканням у непрозорому проході (ALPHA_SCISSOR_THRESHOLD + alpha_to_coverage з render_mode):
+## той самий prop_thin, лише замість discard і прозорого ALPHA — відсікання рушієм. Суцільні планки з широкими просвітами.
+static var _thin_opaque_shader: Shader = null
+
+
+static func _thin_opaque() -> Shader:
+	if _thin_opaque_shader == null:
+		_thin_opaque_shader = Shader.new()
+		var code: String = _THIN_SHADER.code
+		var cut: String = "\tif (alpha_cut > 0.0 && tex.a < cut) {\n\t\tdiscard;\n\t}\n"
+		var alpha: String = "\tALPHA = mix(1.0, clamp(tex.a * (1.0 + FAR_ALPHA * mip), 0.0, 1.0), step(0.0001, alpha_cut));\n"
+		assert(code.contains(cut) and code.contains(alpha), "PropLayer: прозорість у prop_thin.gdshader змінилась")
+		code = code.replace(cut, "").replace(alpha, "\tALPHA = tex.a;\n\tALPHA_SCISSOR_THRESHOLD = cut;\n\tALPHA_ANTIALIASING_EDGE = a2c_edge;\n\tALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));\n")
+		code = code.replace("uniform float alpha_cut = 0.0;", "uniform float alpha_cut = 0.0;\nuniform float a2c_edge = 0.25;")
+		_thin_opaque_shader.code = code
+	return _thin_opaque_shader
+
+
+## Копія сітки картки паркану з матеріалами непрозорого проходу (_thin_opaque).
+static func _opaque_fence_mesh(mesh: Mesh) -> Mesh:
+	var copy: Mesh = mesh.duplicate()
+	for i in copy.get_surface_count():
+		var src := copy.surface_get_material(i) as ShaderMaterial
+		if src == null:
+			continue
+		var mat: ShaderMaterial = src.duplicate()
+		mat.shader = _thin_opaque()
+		copy.surface_set_material(i, mat)
 	return copy
 
 

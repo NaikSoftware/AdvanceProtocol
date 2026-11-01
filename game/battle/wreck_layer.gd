@@ -45,6 +45,8 @@ const HEARTH_MAX: int = 5
 const CHIMNEY_DENSITY: float = 0.36
 const RUIN_DENSITY: float = 0.3
 ## Димар: 14 м заввишки, від 0,8 м біля труби до ~3 м угорі; руїна — 0,55 висоти, вужча внизу за димар.
+## Запас AABB шлейфу на нахил вітром, тайли.
+const HEARTH_LEAN_MARGIN: float = 0.35
 const HEARTH_HEIGHT: float = 14.0 / 8.0
 const HEARTH_BASE_W: float = 0.8 / 8.0
 const HEARTH_TOP_W: float = 0.42
@@ -148,7 +150,9 @@ var _warm: MeshInstance3D = null
 ## Загиблі відділення: чотири лежачі фігури на тайлі, де відділення полягло.
 var _fallen: Dictionary[Vector2i, MultiMeshInstance3D] = {}
 var _column_cells: Array[Vector2i] = []
-var _hearths: MultiMeshInstance3D
+## По вузлу на шлейф (HEARTH_MAX): прозорі об'єкти сортуються за центром AABB, а спільний вузол з AABB на всю дошку
+## мав центр у кутку дошки, тож дим сортувався з парканами навпаки. Кожен вузол — свій тісний custom_aabb.
+var _hearths: Array[MultiMeshInstance3D] = []
 var _hearth_mat: ShaderMaterial
 var _hearth_points: Array[Vector3] = []
 var _hearth_densities: Array[float] = []
@@ -195,11 +199,13 @@ func _init() -> void:
 	_hearth_mat.set_shader_parameter("base_w", HEARTH_BASE_W)
 	_hearth_mat.set_shader_parameter("top_w", HEARTH_TOP_W)
 	_hearth_mat.set_shader_parameter("rise", HEARTH_RISE)
-	_hearths = _multimesh("Hearths", _hearth_mat, HEARTH_MAX)
 	var strip := QuadMesh.new()
 	strip.size = Vector2.ONE
 	strip.subdivide_depth = HEARTH_SEGMENTS
-	_hearths.multimesh.mesh = strip
+	for h in HEARTH_MAX:
+		var node: MultiMeshInstance3D = _multimesh("Hearth%d" % h, _hearth_mat, 1)
+		node.multimesh.mesh = strip
+		_hearths.append(node)
 	for i in MAX_FIRE_LIGHTS:
 		var l := OmniLight3D.new()
 		l.name = "FireLight%d" % i
@@ -335,15 +341,25 @@ func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int, loc
 			_hearth_densities.append(hearth_density(ruin))
 			_hearth_shapes.append(hearth_shape(ruin))
 	assert(_hearth_points.size() <= HEARTH_MAX, "3 димарі + 2 руїни — більше шлейфів не буває")
-	var mm: MultiMesh = _hearths.multimesh
-	for h in _hearth_points.size():
+	_apply_hearths()
+	_refresh_effects()
+
+
+## Шлейфи в вузлах: екземпляр, його дані й тісний AABB навколо стовпа (висота й ширина з форми шлейфу, запас на нахил вітром).
+func _apply_hearths() -> void:
+	for h in HEARTH_MAX:
+		var mm: MultiMesh = _hearths[h].multimesh
+		if h >= _hearth_points.size():
+			mm.visible_instance_count = 0
+			continue
+		var at: Vector3 = _hearth_points[h]
 		# INSTANCE_CUSTOM: x — густота, y — зсув шуму (свій шлейф у кожного джерела), z — частка
 		# висоти, w — частка ширини біля джерела.
-		mm.set_instance_transform(h, Transform3D(Basis(), _hearth_points[h]))
-		mm.set_instance_custom_data(h, Color(_hearth_densities[h], float(hash(_hearth_points[h]) % 997) / 997.0,
-				_hearth_shapes[h].x, _hearth_shapes[h].y))
-	mm.visible_instance_count = _hearth_points.size()
-	_refresh_effects()
+		mm.set_instance_transform(0, Transform3D(Basis(), at))
+		mm.set_instance_custom_data(0, Color(_hearth_densities[h], float(hash(at) % 997) / 997.0, _hearth_shapes[h].x, _hearth_shapes[h].y))
+		mm.visible_instance_count = 1
+		var reach: float = HEARTH_TOP_W + HEARTH_LEAN_MARGIN
+		_hearths[h].custom_aabb = AABB(at + Vector3(-reach, -0.1, -reach), Vector3(2.0 * reach, HEARTH_HEIGHT * _hearth_shapes[h].x + 0.2, 2.0 * reach))
 
 
 ## Густота шлейфу для шейдера (0–1): руїна тліє слабше за димар.
@@ -404,7 +420,7 @@ func warm_up(at: Vector3) -> void:
 	add_child(_warm)
 	# Іскри теж компілюють шейдери на першому вбивстві — одна крихітна.
 	_ember_emitter(at, 1, 1).reparent(_warm)
-	for mi: MultiMeshInstance3D in [_columns, _fires, _shadows, _hearths]:
+	for mi: MultiMeshInstance3D in [_columns, _fires, _shadows, _hearths[0]]:
 		if mi.multimesh.visible_instance_count == 0:
 			mi.multimesh.set_instance_transform(0, Transform3D(Basis.from_scale(Vector3.ONE * 0.0001), at))
 			mi.multimesh.set_instance_custom_data(0, Color(0, 0, 0, 0))
@@ -421,7 +437,7 @@ func _end_warm_up() -> void:
 	_warm.free()
 	_warm = null
 	# Розігрів позичав екземпляр 0 і в мирного диму: на мапі без димарів він лишився б.
-	_hearths.multimesh.visible_instance_count = _hearth_points.size()
+	_apply_hearths()
 	_refresh_effects()
 
 

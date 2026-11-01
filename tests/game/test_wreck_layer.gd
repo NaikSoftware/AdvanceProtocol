@@ -365,8 +365,19 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	var first: Array[Vector3] = layer.hearth_points().duplicate()
 	layer.set_hearths(chimneys, ruins, 7)
 	assert_eq(layer.hearth_points(), first, "та сама мапа — той самий вибір")
-	var mm: MultiMesh = (layer.get_node("Hearths") as MultiMeshInstance3D).multimesh
-	assert_eq(mm.visible_instance_count, first.size(), "один суцільний шлейф на джерело, а не низка клубів")
+	# По вузлу на шлейф, кожен із тісним AABB навколо свого стовпа (прозорий об'єкт сортується за його центром).
+	var shown: int = 0
+	for h in WreckLayer.HEARTH_MAX:
+		var node := layer.get_node("Hearth%d" % h) as MultiMeshInstance3D
+		if node.multimesh.visible_instance_count == 0:
+			continue
+		assert_eq(node.multimesh.visible_instance_count, 1, "один суцільний шлейф на джерело, а не низка клубів")
+		var box: AABB = node.custom_aabb
+		assert_true(box.has_point(first[shown] + Vector3.UP * 0.5), "AABB шлейфу охоплює його стовп")
+		assert_lt(box.size.x, 3.0, "AABB тісний, а не на всю дошку")
+		assert_lt(box.get_center().distance_to(first[shown]), 2.0, "центр AABB — біля джерела")
+		shown += 1
+	assert_eq(shown, first.size(), "вузлів із шлейфом стільки, скільки джерел")
 	# Дані екземплярів headless-рендер не зберігає: перевіряємо густоти, які шар у них записав.
 	var dens: Array[float] = layer.hearth_densities()
 	assert_eq(dens.size(), first.size())
