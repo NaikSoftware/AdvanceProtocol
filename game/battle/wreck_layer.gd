@@ -44,10 +44,10 @@ const HEARTH_MAX: int = 5
 ## ґрунт на 15–25 рівнів (Річка 16, Перехрестя 20 на зумі 8; найяскравіша десята частина — 36–39). Руїна тліє слабше за димар: тонка низька цівка просто з уламків, вужча в основі за димар.
 const CHIMNEY_DENSITY: float = 0.36
 const RUIN_DENSITY: float = 0.3
-## Димар: 14 м заввишки, від 0,8 м біля труби до клітинки вгорі; руїна — 0,55 висоти, вужча внизу за димар.
+## Димар: 14 м заввишки, від 0,8 м біля труби до ~3 м угорі; руїна — 0,55 висоти, вужча внизу за димар.
 const HEARTH_HEIGHT: float = 14.0 / 8.0
 const HEARTH_BASE_W: float = 0.8 / 8.0
-const HEARTH_TOP_W: float = 1.0
+const HEARTH_TOP_W: float = 0.42
 const RUIN_HEIGHT_SCALE: float = 0.55
 const RUIN_BASE_SCALE: float = 0.8
 ## Дим здіймається 0,8 м/с: з цією швидкістю пливе вгору шум густоти.
@@ -89,6 +89,9 @@ const COLUMN_GROW: float = 6.0 / 8.0
 ## Народження уламків зі стану (перебудова, збереження): горять давно, стовп уже повний.
 const LONG_AGO: float = -10000.0
 ## Полум'я проступає під темним хвостом кулі: з цієї секунди після загибелі, за пів секунди.
+## Дим малюється після прозорих пропсів (огорожі, дроти, рослини з пріоритетом 0): інакше перші, що пізніше в черзі,
+## накривають дим, хай і стоять далі за нього. Вогонь — ще пізніше, поверх диму власного стовпа.
+const SMOKE_PRIORITY: int = 1
 const FIRE_FADE_IN_AT: float = 0.6
 const FIRE_FADE_IN_SEC: float = 0.5
 const COLUMN_BASE_W: float = 2.5 / 8.0
@@ -157,6 +160,7 @@ var _fire_cells: Array[Vector2i] = []
 func _init() -> void:
 	_column_mat = ShaderMaterial.new()
 	_column_mat.shader = column_shader()
+	_column_mat.render_priority = SMOKE_PRIORITY
 	_column_mat.set_shader_parameter("puff_tex", SMOKE_TEX)
 	_column_mat.set_shader_parameter("thin_tex", SMOKE_THIN_TEX)
 	_column_mat.set_shader_parameter("grid", float(FLIPBOOK_GRID))
@@ -168,7 +172,7 @@ func _init() -> void:
 	_fire_mat = ShaderMaterial.new()
 	_fire_mat.shader = fire_shader()
 	# Вогонь — поверх диму власного стовпа, а не за ним.
-	_fire_mat.render_priority = 1
+	_fire_mat.render_priority = SMOKE_PRIORITY + 1
 	if USE_FLAME02:
 		_fire_mat.set_shader_parameter("flame_tex", FIRE_TEX)
 		_fire_mat.set_shader_parameter("grid", FIRE_GRID)
@@ -189,6 +193,7 @@ func _init() -> void:
 	_fires = _multimesh("Fires", _fire_mat, MAX_COLUMNS * FLAMES_PER_SPOT)
 	_hearth_mat = ShaderMaterial.new()
 	_hearth_mat.shader = _plume_shader()
+	_hearth_mat.render_priority = SMOKE_PRIORITY
 	_hearth_mat.set_shader_parameter("height", HEARTH_HEIGHT)
 	_hearth_mat.set_shader_parameter("base_w", HEARTH_BASE_W)
 	_hearth_mat.set_shader_parameter("top_w", HEARTH_TOP_W)
@@ -897,13 +902,15 @@ void vertex() {
 	vec3 right = normalize(vec3(INV_VIEW_MATRIX[0].x, 0.0, INV_VIEW_MATRIX[0].z));
 	vec3 side = vec3(-right.z, 0.0, right.x);
 	// Звивання росте з висотою й пливе вгору з димом: повільний шум у координаті частинки.
-	vec3 wander = (right * (vn(vec2(s * 1.2 + sd, 3.1)) - 0.5) + side * (vn(vec2(s * 0.9 + sd, 7.7)) - 0.5)) * 0.9 * H * h01 * h01;
+	vec3 wander = (right * (vn(vec2(s * 1.2 + sd, 3.1)) - 0.5) + side * (vn(vec2(s * 0.9 + sd, 7.7)) - 0.5)) * 0.4 * H * h01 * h01;
 	// Мокра погода: дим важчий — ширший біля труби й не лягає на землю (нахил обмежено).
 	float heavy = 1.0 - sky_clear;
 	float w = mix(base_w * INSTANCE_CUSTOM.w * (1.0 + 1.2 * heavy), top_w, pow(h01, 0.85));
-	vec3 lean_c = lean * mix(1.0, min(1.0, 0.16 / max(length(lean), 1e-4)), heavy);
+	// Зніс угору не більший за пів підйому навіть у ясну погоду (рясний — 0,16), інакше стовп повзе пласко й врізається в стіни.
+	vec3 lean_c = lean * mix(min(1.0, 0.45 / max(length(lean), 1e-4)), min(1.0, 0.16 / max(length(lean), 1e-4)), heavy);
 	// Смуга на 35 % ширша за шлейф: пухнастий край вилазить за обрис і не впирається в межу кваду.
-	vec3 world = root + vec3(0.0, h, 0.0) + lean_c * h + wander + right * VERTEX.x * w * 1.35;
+	// Корінь на 0,5 м у шахті: стінки димаря ховають низ смуги, і дим виходить із самого отвору, а не з повітря над шапкою.
+	vec3 world = root + vec3(0.0, h - 0.5 / 8.0, 0.0) + lean_c * h + wander + right * VERTEX.x * w * 1.35;
 	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	v_h01 = h01;
 	v_s = s;
@@ -934,7 +941,7 @@ void fragment() {
 	// Запас до краю: клуби відкушують його, угорі дим розривається на клапті. М'яка рампа — пух, а не контур.
 	float e = 1.0 - abs(x) + (lump - 0.5) * mix(0.45, 0.3, 1.0 - sky_clear) * smoothstep(0.2, 0.7, abs(x)) - bite - 0.25 * smoothstep(0.4, 1.0, v_h01);
 	float dens = smoothstep(0.0, 0.6, e) * mix(0.6 + 0.4 * lump, 0.7 + 0.3 * lump, 1.0 - sky_clear);
-	float fade = smoothstep(0.0, 0.03, v_h01) * (1.0 - smoothstep(0.35, 1.0, v_h01));
+	float fade = smoothstep(0.03, 0.08, v_h01) * (1.0 - smoothstep(0.35, 1.0, v_h01));
 	// Нормаль: клуби поверх округлого шлейфу в цілому.
 	// Висота росте вгору (a.y — за q.y), а базис нормалі має y вниз: знак y перевернуто.
 	vec3 n = normalize(vec3(vec2(-a.x, a.y) * mix(2.6, 1.1, sky_clear), 1.0) + vec3(x * 0.8, 0.0, 0.4 * sqrt(max(1.0 - x * x, 0.0))));
@@ -950,9 +957,10 @@ void fragment() {
 	col *= mix(0.55, 1.0, smoothstep(0.1, 0.8, lump));
 	ALBEDO = col;
 	ALPHA = clamp(dens * fade * v_dens * 0.55, 0.0, 1.0);
+	// М'яке стикування з геометрією: угорі 0,9 м, а біля отвору лише 0,2 м — ширше з'їдало б перші метри диму, і він починався б вище за димар.
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, край біля даху там буде жорсткішим.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
-	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / (0.5 / 8.0), 0.0, 1.0);
+	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / (mix(0.2, 0.9, smoothstep(0.0, 0.25, v_h01)) / 8.0), 0.0, 1.0);
 }
 """
 
