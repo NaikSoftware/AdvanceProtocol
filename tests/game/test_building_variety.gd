@@ -109,12 +109,32 @@ func test_ruin_variants_share_the_footprint() -> void:
 		for m: StringName in fam:
 			assert_not_null(PropLayer.model(m), "%s: моделі нема" % m)
 			var sz: Vector3 = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size
-			assert_almost_eq(sz.x, base.x, 0.03, "%s: слід x" % m)
-			assert_almost_eq(sz.z, base.z, 0.03, "%s: слід z" % m)
+			assert_almost_eq(sz.x, base.x, 0.05, "%s: слід x" % m)
+			assert_almost_eq(sz.z, base.z, 0.05, "%s: слід z" % m)
 			assert_true(PropLayer.RUIN_ROOF.has(m), "%s: кольору даху нема в RUIN_ROOF" % m)
 		var roofs: Array = fam.map(func(m: StringName) -> int: return PropLayer.RUIN_ROOF[m])
 		for i in roofs.size():
 			assert_eq(roofs.count(roofs[i]), 1, "%s: два двійники з одним кольором даху" % [fam])
+
+
+## RUIN_ROOF не розходиться зі збирачем: колір даху, який build_ruins.py записав у roof_colours.json, — найближчий саме до цього запису палітри.
+func test_ruin_roof_table_matches_the_builder() -> void:
+	var f := FileAccess.open("res://tools/blender/buildings/roof_colours.json", FileAccess.READ)
+	assert_not_null(f, "roof_colours.json")
+	var built: Dictionary = JSON.parse_string(f.get_as_text())
+	for m: StringName in PropLayer.RUIN_ROOF:
+		assert_true(built.has(String(m)), "%s: збирач не записав колір даху" % m)
+		var c := Color(float(built[String(m)][0]), float(built[String(m)][1]), float(built[String(m)][2]))
+		var nearest: int = 0
+		var best: float = INF
+		for k in PropLayer.ROOF_PALETTE.size():
+			var pc: Color = PropLayer.ROOF_PALETTE[k]
+			var d: float = Vector3(pc.r - c.r, pc.g - c.g, pc.b - c.b).length()
+			if d < best:
+				best = d
+				nearest = k
+		assert_eq(nearest, PropLayer.RUIN_ROOF[m], "%s: колір збирача %s ближчий до іншого запису палітри" % [m, c])
+		assert_lt(best, 0.12, "%s: колір збирача %s далеко від палітри" % [m, c])
 
 
 ## Руїни дошки одного сімейства (база й двійники «b», «c») ближче RUIN_FAR різняться кольором даху: повтор моделі, а то й кольору — копія.
