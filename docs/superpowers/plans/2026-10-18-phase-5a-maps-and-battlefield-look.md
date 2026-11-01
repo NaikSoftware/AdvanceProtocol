@@ -479,7 +479,9 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Wet factor in `prop_fade` no longer lightens roofs; no colour roof tints
 - [x] Roof colours only graphite slate, dark cherry or red-brown, true dark green, galvanised grey, dark brown; no olive, ochre or mustard
 - [x] Every roof clearly darker than its wall: sRGB luma ratio ≤ 0.6
-- [ ] Not plastic, not grey; streaks under sills and a damp plinth band visible in battle
+- [x] Not plastic, not grey; streaks under sills and a damp plinth band visible in battle
+- [x] Wall streaks soft and fading downward, never hard dark blocks or ticks; none under attic windows
+- [x] Garden beds read as ridges with lit crests and shaded furrows, not a printed stripe
 - [x] Glass reads as glass on intact houses; broken windows only on ruins, as dark openings
 - [x] Hay and bridges matte; gardens tilled rows; chimney tops open and dark; ruin floors show debris, not grass
 - [ ] No village looks bought in one shop: three or more forms, ages and wear per category
@@ -522,8 +524,12 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Fallen form is a low pile of broken branches; crushed bushes as leaning stems
 - [x] Reed with plumes and cattail with heads, standing in the shallows
 - [x] Reed and bushes in patches along some banks; trees or bushes in many yards, not all; a few lone bushes and trees on meadow, never on ploughed land
+- [x] Reed tops loose and soft, no round lumps; reed shade patch only on sunny maps
+- [x] Alder sits with the other trees in every season (brightness, saturation, speckle)
+- [x] Plant source sprites live in the repository, outside Godot import
 - [ ] No tree crown under a power line
 - [x] Power line through a forest runs in a cleared corridor: no crowns over the wires, undergrowth stays
+- [ ] A forest cell under a line still reads as forest, with tall trees outside the cut
 - [ ] Accepted in battle frames on all three maps
 
 ### Task 22: Forest into battle
@@ -544,9 +550,16 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Chimney opening a dark sooty grey, not a black hole
 - [x] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
 - [x] First scroll across the map is smooth, no hitch
+- [x] Chimney smoke: one narrow column from the opening, fading before it reaches buildings behind
+- [x] Movement-zone contours draw above every effect, smoke and rain
+- [ ] Smoke and fences draw in depth order: a fence behind the smoke never covers it
 
 ### Task 24: New props in villages
 
 - [x] Gates of several types facing the road
 - [ ] New fence, shed and trailer variants alternate between neighbours
 - [ ] Bales only at field edges; nothing within 0.4 tile of water
+- [ ] Neighbouring houses differ in model or colour
+- [ ] Gates in their fence's tone under every light; a gate stands between real fence on both sides
+- [ ] Draw calls under 100 at every zoom on every map
+- [ ] Battle board builds noticeably faster, with identical pixels
