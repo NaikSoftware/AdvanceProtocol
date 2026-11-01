@@ -138,10 +138,7 @@ static func build(wgrid: PackedByteArray, w: int, h: int, pad: int, bridges: Arr
 	n_l2.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	n_l2.seed = seed_value + 939
 	n_l2.frequency = 0.45
-	rc._warp_x = _mk_noise(seed_value + 961, 0.9)
-	rc._warp_z = _mk_noise(seed_value + 971, 0.9)
-	rc._warp_x2 = _mk_noise(seed_value + 981, 2.2)
-	rc._warp_z2 = _mk_noise(seed_value + 991, 2.2)
+	rc.make_warps(seed_value)
 	var pinned: Array[bool] = []
 	pinned.resize(bridges.size())
 	for path in _trace(img, nx, ny):
@@ -288,6 +285,14 @@ func _water_d(x: float, z: float) -> float:
 	for dc in _discs:
 		best = minf(best, pw.distance_to(Vector2(dc.x, dc.y)) - dc.z)
 	return best
+
+
+## Шум зсуву берегів: окремо від build, щоб курс з кешу (TerrainHeight) мав той самий.
+func make_warps(seed_value: int) -> void:
+	_warp_x = _mk_noise(seed_value + 961, 0.9)
+	_warp_z = _mk_noise(seed_value + 971, 0.9)
+	_warp_x2 = _mk_noise(seed_value + 981, 2.2)
+	_warp_z2 = _mk_noise(seed_value + 991, 2.2)
 
 
 static func _mk_noise(seed_value: int, freq: float) -> FastNoiseLite:
