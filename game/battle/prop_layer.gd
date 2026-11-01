@@ -32,6 +32,8 @@ const MODELS: Dictionary = {
 	&"house_h7": {"kind": Kind.STRUCTURE, "weight": 4, "scale": HOUSE_SCALE},
 	&"house_h8": {"kind": Kind.STRUCTURE, "weight": 3, "scale": HOUSE_SCALE},
 	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
+	&"f8_shed_brick": {"kind": Kind.STRUCTURE, "weight": 2, "yard_only": true},
+	&"f8_shed_lean": {"kind": Kind.STRUCTURE, "weight": 2, "yard_only": true},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 2, "max": 1},
 	&"f1_farm_barn": {"kind": Kind.STRUCTURE, "weight": 1},
@@ -74,6 +76,8 @@ const MODELS: Dictionary = {
 	&"infra_pole_wood": {"kind": Kind.POLE, "line": &"04kv", "crush": Crush.LAY},
 	&"infra_trailer_green": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
 	&"infra_trailer_rust": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
+	&"infra_trailer_flatbed": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
+	&"infra_trailer_tank": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
 	&"infra_jersey_block": {"kind": Kind.BLOCK, "crush": Crush.LAY},
 	&"rock_moss_01": {"kind": Kind.BOULDER, "crush": Crush.SINK, "scale": 0.55},
 	&"rock_moss_02": {"kind": Kind.BOULDER, "crush": Crush.SINK, "scale": 0.6},
@@ -231,7 +235,7 @@ const BUILDING_SHIFT: float = 0.3
 ## стала в клітинку (ассет на 0.96 клітинки не влазить із відступом до огорожі).
 const YARD_SHED: StringName = &"f8_shed"
 ## Повітки двору: сусідні садиби беруть різні (як хати — HOUSE_FORMS).
-const YARD_SHEDS: Array[StringName] = [&"f8_shed"]
+const YARD_SHEDS: Array[StringName] = [&"f8_shed", &"f8_shed_brick", &"f8_shed_lean"]
 ## Форми паркану садиби: «модель|множник висоти». Види відрізняються формою (штахет 1.3 м, суцільний профлист 1.8 м,
 ## сітка на трубах 1.5 м, цегляний цоколь із прутами 1.6 м, горизонтальні дошки 1.45 м), а не фарбою, яку prop_thin
 ## знебарвлює; множник висоти в кожного свій, тож сусіди різняться й висотою. Усі види — один вузол малювання.
@@ -315,6 +319,8 @@ const YARD_OUT: float = 0.285
 const GARDEN_SHARE: float = 0.4
 ## Тюк — на такій відстані за краєм ріллі (центр), не далі 0.3: біля поля, не в ньому.
 const HAY_OUT: float = 0.15
+## Найдалі від краю поля, де ще стоїть тюк, клітинки.
+const HAY_EDGE: float = 0.3
 ## Найдальше від точки макету, куди тюк перескакує на край поля.
 const HAY_SNAP: float = 2.0
 ## КТП-шафа на землі біля опори (~1.6 × 2.4 × 1.1 м) і її колір (оцинкована сталь, сіро-зелена,
@@ -2725,20 +2731,19 @@ class _Placer:
 						var n: StringName = model_at.get(c + Vector2i(dx, dy), &"")
 						by_tower = by_tower or bool(PropLayer.spec_of(n).get("tower", false))
 				var roll: int = h(c, 141) % 3 if house_near(c) else 2
-				if roll == 0 and not by_tower and not shed_in.has(yard) and PropLayer.model(YARD_SHED) != null:
+				var shed_m: StringName = YARD_SHEDS[h(yard, 143) % YARD_SHEDS.size()]
+				if roll == 0 and not by_tower and not shed_in.has(yard) and PropLayer.model(shed_m) != null:
 					shed_in[yard] = true
 					var cells: Array[Vector2i] = [c]
 					var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(c.x, 0.0, c.y))
-					var box: AABB = xf * ((PropLayer.model(YARD_SHED) as Dictionary)["aabb"] as AABB)
-					seat(layer._add(YARD_SHED, xf, cells, true), pad(Rect2(box.position.x, box.position.z, box.size.x, box.size.z)))
+					var box: AABB = xf * ((PropLayer.model(shed_m) as Dictionary)["aabb"] as AABB)
+					seat(layer._add(shed_m, xf, cells, true), pad(Rect2(box.position.x, box.position.z, box.size.x, box.size.z)))
 				elif roll == 1 and not trailer_in.has(yard):
 					trailer_in[yard] = true
 					_yard_item(pick_for_half(Kind.TRAILER, half(c)), c, Vector2(0.0, 0.1), yaw)
 				elif _house_beside(c) and h(c, 145) % 3 != 0:
 					# Город — при самій хаті, і не на кожній вільній клітинці.
 					gardens.append(c)
-				else:
-					_yard_item(pick_for_half(Kind.HAY, half(c)), c, Vector2(0.25, 0.25).rotated(yaw), float(h(c, 142) % 628) / 100.0)
 
 	## Хата на сусідній клітинці (і по діагоналі).
 	func _house_beside(c: Vector2i) -> bool:
@@ -5348,8 +5353,16 @@ class _Placer:
 				for k in n:
 					var off := Vector2(float(h(c, 8 + k) % 100) / 100.0 - 0.5, float(h(c, 12 + k) % 100) / 100.0 - 0.5) * 0.12
 					var at: Vector2 = corner + off - corner.normalized() * 0.09 * k
-					if not near_wet(Vector2(c) + at, WATER_CLEAR):
+					# Тюки лише край поля: на лузі й у дворі їм не місце.
+					if not near_wet(Vector2(c) + at, WATER_CLEAR) and _at_field_edge(Vector2(c) + at):
 						put_small(m, c, at, float(h(c, 16 + k) % 628) / 100.0)
+
+	## Точка поза полем, але не далі HAY_EDGE від його краю.
+	func _at_field_edge(q: Vector2) -> bool:
+		for r: Rect2 in layer.field_edges:
+			if not r.has_point(q) and q.distance_to(q.clamp(r.position, r.end)) <= HAY_EDGE:
+				return true
+		return false
 
 	## Причіп біля подвір'я: один на групу, на полі за огорожею двору (ближче — сама огорожа), уздовж
 	## ребра в бік двору.
