@@ -122,7 +122,13 @@ func test_low_undergrowth_stays_under_the_wires(p = use_parameters(MAPS)) -> voi
 			bare.append(c)
 	gut.p("%s: низького підліску на дроті %d; лісових клітин під прольотом майже без рослин: %s" % [p, low_under, bare])
 	if p == "river":
-		gut.p("river, шелтербелт x=13: клітини (13,0) %d, (13,1) %d, (13,2) %d рослин" % [count.get(Vector2i(13, 0), 0), count.get(Vector2i(13, 1), 0), count.get(Vector2i(13, 2), 0)])
+		var tall: Dictionary = {}
+		for e: Dictionary in f.board_plan:
+			var species: String = str(e["node"]).get_slice("_", 0)
+			if not e["ground"] and f._lib.has(e["node"]) and species in ForestLayer.TREES and float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y > ForestLayer.LOW_KEEP:
+				var c := Vector2i(roundi(e["pos"].x), roundi(e["pos"].y))
+				tall[c] = int(tall.get(c, 0)) + 1
+		gut.p("river, шелтербелт x=13: рослин (13,0) %d, (13,1) %d, (13,2) %d; високих дерев (13,0) %d, (13,1) %d, (13,2) %d" % [count.get(Vector2i(13, 0), 0), count.get(Vector2i(13, 1), 0), count.get(Vector2i(13, 2), 0), tall.get(Vector2i(13, 0), 0), tall.get(Vector2i(13, 1), 0), tall.get(Vector2i(13, 2), 0)])
 	if p != "crossroads":
 		assert_gt(low_under, 0, "%s: низький підлісок під дротом лишається" % p)
 	else:

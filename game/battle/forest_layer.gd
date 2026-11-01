@@ -59,13 +59,12 @@ const RING_DETAIL: float = 1.5
 ## група розчинення — виклик малювання.
 const FADE_MIN_TOP: float = 0.2
 ## Новий пролам перепланує лише клітинки в межах стількох від зміни (ForestScatter.LANE_NEAR + крона).
-## Напівширина просіки й смуга розрідження за нею, тайли (1 тайл ≈ 8 м): вісім метрів в обидва боки.
-const CORRIDOR_HALF: float = 1.0
-const CORRIDOR_FEATHER: float = 0.6
+## Стовбур дерева не ближче за стільки до проліту (тайли): сама просіка вільна від стовбурів.
+const TRUNK_CLEAR: float = 0.45
 ## Зазор на екрані між краєм рослини й проводом (тайли): просіка рубає лише те, що лягає на дріт.
 const CROWN_MARGIN: float = 0.1
 ## Висота проводу над землею (тайли) й додатковий зазор до опори: траверса, розтяжка й гілки, що виходять за радіус крони.
-const POLE_PAD: float = 0.35
+const POLE_PAD: float = 0.5
 const WIRE_HEIGHT: float = 1.2
 ## Частка висоти листяного дерева від землі, нижче якої крона ще рідка (стовбур): дріт над ним крону не ховає. Хвойні сягають землі.
 const CROWN_FOOT: float = 0.25
@@ -285,9 +284,9 @@ func _in_board(p: Vector2) -> bool:
 	return p.x >= -0.5 and p.y >= -0.5 and p.x < _board.size.x - 0.5 and p.y < _board.size.y - 0.5
 
 
-## Запис плану після просіки під прольотом ЛЕП: дерево в смузі напівширини CORRIDOR_HALF заміщене
-## низьким кущем (смуга не лисіє), у смузі розрідження за нею частину дерев пропущено, решта —
-## як було; крона дерева, що на екрані лягає на дріт, зникає, а низький підлісок лишається. Порожній словник — запису нема. Відводи до хат сюди не входять.
+## Запис плану після просіки під прольотом ЛЕП: дерево із стовбуром у самій просіці (TRUNK_CLEAR)
+## чи з кроною на дроті заміщене низьким кущем (смуга не лисіє), решта —
+## як було, низький підлісок теж лишається. Порожній словник — запису нема. Відводи до хат сюди не входять.
 ## widen — у скільки разів проксі розширить крону пізніше (кільце): просіка рахується за кроною, яку побачать.
 func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	var node: String = e["node"]
@@ -303,33 +302,23 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	# Просіка в лісі тримає низький підлісок під проводом: без нього клітина лісу читалась би лугом.
 	if not tall:
 		return e
-	var out: Dictionary = e
-	var replaced: bool = false
-	if tall:
-		var g: float = _ground_gap(p)
-		if g < CORRIDOR_HALF + CORRIDOR_FEATHER:
-			var u: float = float(absi(hash(p)) % 1000) / 1000.0
-			if g >= CORRIDOR_HALF:
-				# Край смуги тоншає поступово: що ближче до просіки, то менше дерев лишається.
-				if u >= (g - CORRIDOR_HALF) / CORRIDOR_FEATHER:
-					return {}
-			else:
-				var shrubs: Array[String] = []
-				for k: String in _lib:
-					if k.begins_with("Shrub_"):
-						shrubs.append(k)
-				if shrubs.is_empty():
-					return {}
-				shrubs.sort()
-				out = e.duplicate()
-				out["node"] = shrubs[int(u * 997.0) % shrubs.size()]
-				out["xf"] = Transform3D(Basis(Vector3.UP, u * TAU), (e["xf"] as Transform3D).origin)
-				out["r"] = 0.3
-				top = float(_lib[out["node"]]["h"])
-				replaced = true
-	if replaced:
-		return out
-	return out if screen_gap(p, top, float(out["r"]) * widen, spans, str(out["node"])) >= CROWN_MARGIN else {}
+	# Стовбур не стоїть у самій просіці; далі від дроту дерево лишається, поки його крона не лягає на дріт на екрані.
+	if _ground_gap(p) >= TRUNK_CLEAR and screen_gap(p, top, float(e["r"]) * widen, spans, node) >= CROWN_MARGIN:
+		return e
+	# Знято дерево — на його місці низький кущ: ліс під проводом не лисіє.
+	var shrubs: Array[String] = []
+	for k: String in _lib:
+		if k.begins_with("Shrub_"):
+			shrubs.append(k)
+	if shrubs.is_empty():
+		return {}
+	shrubs.sort()
+	var u: float = float(absi(hash(p)) % 1000) / 1000.0
+	var out: Dictionary = e.duplicate()
+	out["node"] = shrubs[int(u * 997.0) % shrubs.size()]
+	out["xf"] = Transform3D(Basis(Vector3.UP, u * TAU), (e["xf"] as Transform3D).origin)
+	out["r"] = 0.3
+	return out
 
 
 ## Відстань у плані від точки до найближчого проліту.
