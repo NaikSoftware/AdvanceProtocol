@@ -48,13 +48,15 @@ func _ready() -> void:
 	# --stdmat: будинки з імпортованим матеріалом GLB, без prop_fade — щоб порівняти фактуру.
 	var std_mat: bool = args.has("--stdmat")
 	var diag: bool = args.has("--diag")
+	# --fencemask: до кожного кадру ще кадр «_nofence» без парканів дворів (маска для виміру їхнього кольору).
+	var fence_mask: bool = args.has("--fencemask")
 	for a in args:
 		if a.begins_with("--only="):
 			_only = a.trim_prefix("--only=")
 	for i in range(1, args.size()):
 		if args[i].begins_with("--only="):
 			continue
-		if args[i] in ["--shadows", "--noshadows", "--stdmat", "--diag"]:
+		if args[i] in ["--shadows", "--noshadows", "--stdmat", "--diag", "--fencemask"]:
 			continue
 		var parts: PackedStringArray = args[i].split("@")
 		var map: String = parts[0]
@@ -348,6 +350,16 @@ func _ready() -> void:
 			var name: String = "%s_%d_%d_z%s" % [map, v[0].x, v[0].y, zl]
 			print("BUDGET %s %s z%d dc=%d tris=%d shadow_dc=%d canvas_dc=%d" % [map, v[0], int(v[1]), dc, tris, shadow_dc, canvas_dc])
 			shots.append([name, get_viewport().get_texture().get_image()])
+			if fence_mask:
+				# Той самий кадр без парканів дворів: різниця двох кадрів — маска парканів, щоб міряти їхній колір.
+				var fence: Node3D = (screen.get_node("%BoardView") as BoardView).props().get_node_or_null("infra_fence_yard")
+				if fence != null:
+					fence.visible = false
+					for f in 3:
+						await get_tree().process_frame
+					await RenderingServer.frame_post_draw
+					shots.append([name + "_nofence", get_viewport().get_texture().get_image()])
+					fence.visible = true
 			if diag:
 				await _diag(screen, "%s %s z%d" % [map, v[0], int(v[1])], Vector2i(dc, tris))
 		screen.free()

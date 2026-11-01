@@ -1861,6 +1861,54 @@ func test_neighbouring_yards_do_not_repeat_forms(p = use_parameters(MAPS)) -> vo
 				assert_true(present.has(StringName(String(placer.forms[i][key]).get_slice("|", 0))), "%s: %s садиби %d нема на дошці" % [p, key, i])
 
 
+## Порядок видів паркану двору один на всіх: GLB (extras fence_kinds/fence_tops із tools/blender/infra/yard_fences.py)
+## задає номер виду, і з ним сходяться картки сітки (вид k — смуга k атласу, floor(UV.y·n) = k, верх картки —
+## fence_tops[k]), матеріал (kinds = n), моделі «infra_fence_yard_вид» у MODELS і FENCE_FORMS, а кожен екземпляр вузла
+## несе в INSTANCE_CUSTOM.r номер виду своєї моделі.
+func test_yard_fence_kinds_agree_across_mesh_specs_and_instances(p = use_parameters(MAPS)) -> void:
+	var info: Dictionary = PropLayer.model(&"infra_fence_yard_picket")
+	var kinds: Array = info["fence_kinds"]
+	var tops: Array = info["fence_tops"]
+	var n: int = kinds.size()
+	assert_eq(n, 5, "видів паркану двору")
+	assert_eq(tops.size(), n)
+	for k in n:
+		var m := StringName("infra_fence_yard_" + String(kinds[k]))
+		assert_true(PropLayer.MODELS.has(m), "%s нема в MODELS" % m)
+		assert_eq(PropLayer.fence_kind_of(m), k, String(m))
+		assert_true(PropLayer.FENCE_FORMS.any(func(f: StringName) -> bool: return String(f).get_slice("|", 0) == String(m)), "%s нема у FENCE_FORMS" % m)
+	var mesh: Mesh = info["mesh"]
+	assert_eq(((mesh.surface_get_material(0) as ShaderMaterial).get_shader_parameter("kinds") as int), n, "kinds матеріалу")
+	var arr: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+	assert_eq((arr[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3, 2 * n, "по картці (два трикутники) на вид")
+	var count: Array[int] = []
+	var top: Array[float] = []
+	for k in n:
+		count.append(0)
+		top.append(-INF)
+	for i in verts.size():
+		var k: int = floori(uvs[i].y * n)
+		assert_between(k, 0, n - 1, "вершина %s поза атласом" % verts[i])
+		count[k] += 1
+		top[k] = maxf(top[k], verts[i].y)
+	for k in n:
+		assert_eq(count[k], 4, "картка виду %s" % kinds[k])
+		assert_almost_eq(top[k], float(tops[k]), 1e-3, "верх картки виду %s" % kinds[k])
+	var props: PropLayer = _cached(p).props()
+	var node: MultiMeshInstance3D = props.get_node("infra_fence_yard")
+	assert_true(node.multimesh.use_custom_data, p)
+	var slots: Array = props._slots[&"infra_fence_yard"]
+	assert_gt(slots.size(), 0, p)
+	# Записане в INSTANCE_CUSTOM — з дзеркала: без рендера (headless) MultiMesh його не віддає.
+	var written: Array = props._custom_written[&"infra_fence_yard"]
+	assert_eq(written.size(), slots.size(), p)
+	for k in slots.size():
+		var m: StringName = props._instances[slots[k]]["model"]
+		assert_eq(written[k], PropLayer.fence_kind_of(m), "%s: слот %d (%s)" % [p, k, m])
+
+
 ## Кожен двір обгороджений одним видом паркану (усі його секції — одна модель із FENCE_FORMS), а в селі кожної карти
 ## з трьома й більше дворами трапляються щонайменше три види: паркани села не однакові. Ворота — роду свого паркану.
 func test_each_yard_has_one_fence_kind_and_villages_mix_kinds(p = use_parameters(MAPS)) -> void:
@@ -1894,6 +1942,25 @@ func test_each_yard_has_one_fence_kind_and_villages_mix_kinds(p = use_parameters
 	assert_gt(kinds_of.size(), 0, "%s: передумова — двори обгороджені" % p)
 	if homes.size() >= 3:
 		assert_gte(used.size(), 3, "%s: видів паркану в селі лише %s" % [p, used.keys()])
+
+
+## Кожна коробка воріт (стовпи, полотно, хвіртка, планки) — на висоті воріт: центр не вище GATE_H + 0.05 над ґрунтом.
+## Планка, що висить над воротами, на екрані зсувається вглиб і читається рискою посеред двору.
+func test_gate_boxes_stay_within_gate_height(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	# Рельєф саме цієї карти: TerrainHeight.ground_y читає рельєф останньої побудованої дошки.
+	var th: TerrainHeight = _cached(p)._height
+	var checked: int = 0
+	for xf: Transform3D in props._small_base:
+		var c := Vector2(xf.origin.x, xf.origin.z)
+		for g: Dictionary in props._gates:
+			if Geometry2D.get_closest_point_to_segment(c, g["a"], g["b"]).distance_to(c) > 0.03:
+				continue
+			checked += 1
+			var up: float = xf.origin.y - th.at(c.x, c.y)
+			assert_lte(up, PropLayer.GATE_H + 0.05, "%s: коробка воріт %s на висоті %.3f" % [p, c, up])
+			break
+	assert_gt(checked, 0, "%s: передумова — коробки воріт є" % p)
 
 
 ## Усі форми воріт трапляються в селах трьох карт.

@@ -202,6 +202,26 @@ func test_yard_plants_stay_inside_the_fence(p = use_parameters(["river", "crossr
 	assert_eq(bad, [], "%s: рослина садиби за парканом" % p)
 
 
+## Дерево садиби не росте крізь паркан: стовбур далі YARD_TREE_FENCE радіуса крони від кожної секції паркану.
+## Стовбур ближче до секції читається з камери деревом, що проросло крізь неї.
+func test_yard_trees_keep_clear_of_fences(p = use_parameters(["river", "crossroads"])) -> void:
+	var view: BoardView = _view(p)
+	var obst: Dictionary = VegetationLayer.obstacles(view.props())
+	var bad: Array = []
+	var checked: int = 0
+	for pl: Dictionary in view.vegetation().placements:
+		if pl["group"] != "yard" or pl["kind"] != "tree":
+			continue
+		checked += 1
+		var q := Vector2(pl["pos"].x, pl["pos"].z)
+		var need: float = VegetationLayer.crown_of(pl["node"]) * VegetationLayer.YARD_TREE_FENCE
+		for r: Rect2 in obst["fences"]:
+			if VegetationLayer._rect_dist(r, q) < need - 0.001:
+				bad.append([pl["node"], q, r])
+	assert_eq(bad, [], "%s: дерево садиби впритул до паркану" % p)
+	assert_gt(checked, 0, "%s: передумова — дерева в садибах є" % p)
+
+
 ## На луках кожної карти є хоча б одне дерево (груша, дуб, верба).
 func test_meadows_have_a_tree(p = use_parameters(MAPS)) -> void:
 	var trees: int = 0

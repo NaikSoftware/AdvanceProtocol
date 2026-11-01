@@ -49,21 +49,21 @@ const MODELS: Dictionary = {
 	&"bridge_river_centre": {"kind": Kind.BRIDGE, "map": &"river", "order": 1, "deck_top": 0.30},
 	&"bridge_river_east": {"kind": Kind.BRIDGE, "map": &"river", "order": 2, "deck_top": 0.21},
 	&"infra_fence_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
-	# Паркани дворів: п'ять видів однієї моделі (infra_fence_yard) і одного атласу — один вузол «batch» на всі двори,
-	# вид екземпляра — fence_kind у INSTANCE_CUSTOM (prop_thin лишає з картки лише його смугу). gate — форма воріт
-	# цього паркану.
+	# Паркани дворів: п'ять видів однієї моделі (infra_fence_yard) і одного атласу — один вузол «batch» на всі двори.
+	# Ім'я — «модель_вид»; номер виду (fence_kind_of) і верх кожного беруться з extras самої моделі
+	# (tools/blender/infra/yard_fences.py), і номер іде в INSTANCE_CUSTOM (prop_thin лишає з картки лише його смугу).
+	# gate — форма воріт цього паркану.
 	&"infra_fence_yard_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
-			"batch": &"infra_fence_yard", "fence_kind": 0, "gate": &"wood"},
+			"batch": &"infra_fence_yard", "gate": &"wood"},
 	&"infra_fence_yard_sheet": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
-			"batch": &"infra_fence_yard", "fence_kind": 1, "gate": &"sheet"},
+			"batch": &"infra_fence_yard", "gate": &"sheet"},
 	&"infra_fence_yard_chainlink": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
-			"batch": &"infra_fence_yard", "fence_kind": 2, "gate": &"lattice"},
+			"batch": &"infra_fence_yard", "gate": &"lattice"},
 	&"infra_fence_yard_brickbars": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
-			"batch": &"infra_fence_yard", "fence_kind": 3, "gate": &"metal"},
+			"batch": &"infra_fence_yard", "gate": &"metal"},
 	&"infra_fence_yard_slat": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
-			"batch": &"infra_fence_yard", "fence_kind": 4, "gate": &"slat"},
-	# Сільська садиба — дерев'яний штакетник. Профлист (ассет 2 м — до ~1.4 м) з камери гри читався
-	# пласкою бузковою коробкою без стовпчиків і швів — він, як і єврозабір, для ферм.
+			"batch": &"infra_fence_yard", "gate": &"slat"},
+	# Паркани ферм і полів (FIELD_FENCE): профлист і єврозабір; двори обгороджує infra_fence_yard.
 	&"infra_fence_sheet_green": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
 	&"infra_fence_sheet_brown": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
 	&"infra_fence_euro": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY},
@@ -231,11 +231,8 @@ const YARD_SHEDS: Array[StringName] = [&"f8_shed"]
 ## знебарвлює; множник висоти в кожного свій, тож сусіди різняться й висотою. Усі види — один вузол малювання.
 const FENCE_FORMS: Array[StringName] = [&"infra_fence_yard_picket|1.0", &"infra_fence_yard_sheet|0.95",
 		&"infra_fence_yard_chainlink|1.05", &"infra_fence_yard_brickbars|0.9", &"infra_fence_yard_slat|1.1"]
-## Модель усіх видів паркану двору: смуг атласу (видів) і крок стовпів, м (tools/blender/infra/yard_fences.py).
-const YARD_FENCE_KINDS: int = 5
+## Крок стовпів паркану двору, м: один повтор атласу вздовж секції (TILE_M у tools/blender/infra/yard_fences.py).
 const YARD_FENCE_TILE_M: float = 2.5
-## Верх кожного виду в моделі (клітинки): по ньому шейдер темнить шапки, як у решти огорож.
-const YARD_FENCE_TOPS: Array[float] = [1.3 / 8.0, 1.8 / 8.0, 1.52 / 8.0, 1.66 / 8.0, 1.5 / 8.0]
 ## Форми воріт садиби: суцільні металеві, з профнастилу, дерев'яні, ґратчасті, з горизонтальних дощок. Ворота беруть
 ## форму свого паркану (spec «gate»).
 const GATE_KINDS: Array[StringName] = [&"metal", &"sheet", &"wood", &"lattice", &"slat"]
@@ -327,6 +324,8 @@ const GATE_POST_COLOR: Color = Color(0.25, 0.21, 0.16)
 const GATE_STEEL: Array[Color] = [Color(0.22, 0.28, 0.34), Color(0.28, 0.31, 0.27)]
 const GATE_SHEET: Array[Color] = [Color(0.36, 0.2, 0.13), Color(0.2, 0.32, 0.22)]
 const GATE_WOOD: Color = Color(0.34, 0.23, 0.14)
+## Частка, на яку фарба воріт зсувається до сірого (_gate_box_at).
+const GATE_DESAT: float = 0.3
 const GATE_IRON: Color = Color(0.05, 0.06, 0.055)
 ## Півширина стежки двору для відступу дрібних речей від неї (самі стежки — Footpaths).
 const PATH_WIDTH: float = 0.1
@@ -420,6 +419,8 @@ var _transformers: Dictionary = {}
 ## Однакові коробки — стовпи воріт і уламки руїн — одним MultiMesh (§8: виклик малювання на
 ## кожну групу коштував би вдвічі більше). Збираються під час побудови й далі не міняються.
 var _small_base: Array[Transform3D] = []
+## Вузол «batch» -> вид, записаний у INSTANCE_CUSTOM кожного слота (_write_nodes).
+var _custom_written: Dictionary = {}
 var _small_colors: Array[Color] = []
 var _transformer_node: MultiMeshInstance3D = null
 ## Ворота садиб: {a, mid, b — центри стовпів (полотно a→mid, хвіртка mid→b), kind, out — нормаль до дороги,
@@ -521,11 +522,16 @@ static func model(name: StringName) -> Variant:
 	var mi: MeshInstance3D = meshes[0]
 	var local: Transform3D = _to_root(mi, root)
 	var footprint := Vector2i.ZERO
+	var fence_kinds: Array = []
+	var fence_tops: Array = []
 	for n in [root] + root.find_children("*", "", true, false):
 		var ex: Variant = n.get_meta("extras") if n.has_meta("extras") else null
 		if ex is Dictionary and (ex as Dictionary).has("footprint_tiles"):
 			var f: Array = ex["footprint_tiles"]
 			footprint = Vector2i(roundi(f[0]), roundi(f[1]))
+		if ex is Dictionary and (ex as Dictionary).has("fence_kinds"):
+			fence_kinds = ex["fence_kinds"]
+			fence_tops = ex["fence_tops"]
 	var wires: Array[Vector3] = []
 	var named: Array[Node] = root.find_children("wire_*", "", true, false)
 	named.sort_custom(func(a: Node, b: Node) -> bool: return String(a.name) < String(b.name))
@@ -538,11 +544,21 @@ static func model(name: StringName) -> Variant:
 	var tris: int = 0
 	for s in mi.mesh.get_surface_count():
 		tris += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-	var info: Dictionary = {"mesh": _tuned_mesh(name, mi.mesh), "local": local, "footprint": footprint,
-			"aabb": local * mi.mesh.get_aabb(), "wires": wires, "tris": tris, "chimneys": chimneys}
+	var info: Dictionary = {"mesh": _tuned_mesh(name, mi.mesh, fence_tops), "local": local, "footprint": footprint,
+			"aabb": local * mi.mesh.get_aabb(), "wires": wires, "tris": tris, "chimneys": chimneys,
+			"fence_kinds": fence_kinds, "fence_tops": fence_tops}
 	root.free()
 	_models[name] = info
 	return info
+
+
+## Номер виду паркану двору «модель_вид» у fence_kinds його моделі (порядок задає GLB); −1 — не вид паркану.
+static func fence_kind_of(name: StringName) -> int:
+	var glb := StringName(spec_of(name).get("glb", name))
+	var info: Variant = model(name)
+	if glb == name or info == null:
+		return -1
+	return ((info as Dictionary)["fence_kinds"] as Array).find(String(name).trim_prefix(String(glb) + "_"))
 
 
 ## Копія сітки, що множить альбедо кожної поверхні на tint.
@@ -559,7 +575,7 @@ static func _dimmed(mesh: Mesh, tint: Color) -> Mesh:
 
 ## Копія сітки з власними матеріалами для огорож (двобічне світло) і каміння (темніше). Сам GLB
 ## не чіпаємо: load() ділить його сітку з усіма, хто його вантажить.
-static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
+static func _tuned_mesh(name: StringName, mesh: Mesh, fence_tops: Array = []) -> Mesh:
 	var kind: int = int(spec_of(name).get("kind", -1))
 	if kind not in [Kind.FIELD_FENCE, Kind.GARDEN_FENCE, Kind.BOULDER, Kind.BLOCK, Kind.POLE, Kind.HAY]:
 		return mesh
@@ -595,9 +611,9 @@ static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
 		if spec_of(name).has("batch"):
 			# Картка з усіма видами: шейдер лишає смугу виду екземпляра й тягне текстуру кроком стовпів від початку
 			# секції, а не розтягує її з масштабом секції.
-			thin.set_shader_parameter("kinds", YARD_FENCE_KINDS)
+			thin.set_shader_parameter("kinds", fence_tops.size())
 			thin.set_shader_parameter("tile_m", YARD_FENCE_TILE_M)
-			thin.set_shader_parameter("kind_top", PackedFloat32Array(YARD_FENCE_TOPS))
+			thin.set_shader_parameter("kind_top", PackedFloat32Array(fence_tops))
 		copy.surface_set_material(i, thin)
 	return copy
 
@@ -734,6 +750,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_fade_level.clear()
 	_fade_target.clear()
 	_slots.clear()
+	_custom_written.clear()
 	_node_model.clear()
 	_spans.clear()
 	_drops.clear()
@@ -1261,7 +1278,7 @@ func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float,
 			for y: float in [0.22, 0.74]:
 				_gate_box_at(mid, u, -out * 0.008, Vector3(span, 0.016, 0.008), base + h * y, GATE_WOOD * 0.6)
 		_:
-			for y: float in [0.0, 0.5, h - 0.01]:
+			for y: float in [0.0, h * 0.5, h - 0.01]:
 				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, 0.01, 0.01), base + y + 0.005, GATE_IRON)
 			var n: int = maxi(2, roundi(span / 0.045))
 			for k in n + 1:
@@ -1277,7 +1294,9 @@ func _gate_box(p: Vector2, u: Vector2, off: Vector2, size: Vector3, dy: float, c
 ## Те саме, висота центру y задана у світі: ґрунт під стулкою береться один раз на всю стулку.
 func _gate_box_at(p: Vector2, u: Vector2, off: Vector2, size: Vector3, y: float, color: Color) -> void:
 	var basis := Basis(Vector3.UP, atan2(-u.y, u.x)).scaled_local(size)
-	_add_small(Transform3D(basis, Vector3(p.x + off.x, y, p.y + off.y)), color)
+	# Фарба воріт приглушена на GATE_DESAT до сірого тієї ж яскравості: вивітрена, а не іграшкова.
+	var grey: float = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
+	_add_small(Transform3D(basis, Vector3(p.x + off.x, y, p.y + off.y)), color.lerp(Color(grey, grey, grey, color.a), GATE_DESAT))
 
 
 func _add_small(xf: Transform3D, color: Color) -> void:
@@ -1682,7 +1701,13 @@ func _write_nodes() -> void:
 			if fmi == null:
 				mm.set_instance_transform(k, t)
 				if mm.use_custom_data:
-					mm.set_instance_custom_data(k, Color(float(spec_of(inst["model"]).get("fence_kind", 0)), 0.0, 0.0, 0.0))
+					var kind_id: int = fence_kind_of(inst["model"])
+					mm.set_instance_custom_data(k, Color(float(kind_id), 0.0, 0.0, 0.0))
+					# Дзеркало для тестів: без рендера (headless) MultiMesh записаного не віддає.
+					if not _custom_written.has(key):
+						_custom_written[key] = []
+						(_custom_written[key] as Array).resize(slots.size())
+					(_custom_written[key] as Array)[k] = kind_id
 				continue
 			var lv: float = float(_fade_level.get(slots[k], 0.0))
 			var tint: Color = _roof_tint(inst)
@@ -2327,7 +2352,7 @@ class _Placer:
 	## рівно, одним кінцем у повітрі.
 	## length — масштаб уздовж локальної X: огорожа двору подовжується на кутах до сусідньої.
 	func put_small(m: StringName, c: Vector2i, local: Vector2, yaw: float, scale: float = 1.0, tilt: bool = false,
-			length: float = 1.0) -> bool:
+			length: float = 1.0, height: float = 1.0) -> bool:
 		if m == &"":
 			return false
 		var x: float = c.x + local.x
@@ -2343,7 +2368,7 @@ class _Placer:
 			# Секція обертається довкола середини: та стоїть на середній висоті кінців, тож обидва
 			# кінці на землі, а не один у ній.
 			y = (y0 + y1) * 0.5
-		var xform := Transform3D(basis * Basis.from_scale(Vector3(length, 1.0, 1.0) * scale), Vector3(x, y, z))
+		var xform := Transform3D(basis * Basis.from_scale(Vector3(length, height, 1.0) * scale), Vector3(x, y, z))
 		if not clear_of_centre(m, xform, c) or _box_on_road(m, xform):
 			return false
 		var cells: Array[Vector2i] = [c]
@@ -5077,12 +5102,18 @@ class _Placer:
 			_fence_yard(lot, start)
 
 	func _fence_yard(lot: Dictionary, first: Vector2i) -> void:
-		# Два типи огорожі на половину, двір бере свій: сусідні двори не однакові.
-		var palette: Array[StringName] = PropLayer.models_of(Kind.GARDEN_FENCE)
+		# Один вид паркану двору з FENCE_FORMS на двір (за зерном двору й половиною карти) і ворота того самого роду,
+		# як у дворів із макета.
+		var palette: Array[StringName] = []
+		for f: StringName in PropLayer.FENCE_FORMS:
+			if PropLayer.model(StringName(String(f).get_slice("|", 0))) != null:
+				palette.append(f)
 		if palette.is_empty():
 			return
 		var base: int = absi(hash(Vector2i(salt, Kind.GARDEN_FENCE))) + half(first)
-		var m: StringName = palette[(base + h(first, 121) % 2) % palette.size()]
+		var form: StringName = palette[(base + h(first, 121)) % palette.size()]
+		var m := StringName(String(form).get_slice("|", 0))
+		var hmul: float = float(String(form).get_slice("|", 1))
 		var cells: Array = lot.keys()
 		cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
 		var sides: Array = []
@@ -5121,9 +5152,15 @@ class _Placer:
 			if not joined:
 				continue
 			var c: Vector2i = plan["c"]
-			if put_small(m, c, plan["local"], plan["yaw"], 1.0, true, plan["length"]):
+			if put_small(m, c, plan["local"], plan["yaw"], 1.0, true, plan["length"], hmul):
 				edges[plan["key"]] = true
 				yard_cells[c] = true
+				if plan.has("gate"):
+					var from: Vector2 = plan["gate"][0]
+					var to: Vector2 = plan["gate"][1]
+					layer._gates.append({"a": from, "mid": from + (to - from).normalized() * (GATE_LEAF + GATE_POST_SIZE.x),
+							"b": to, "kind": PropLayer.spec_of(m).get("gate", PropLayer.GATE_KINDS[0]), "out": Vector2(plan["out"]),
+							"height": GATE_H, "seed": h(first, 173), "clear": 0.0, "along": true, "screen": true})
 
 	## План секції огорожі на ребрі ділянки (без розстановки): {} — секції тут не буде.
 	func _yard_segment(lot: Dictionary, g: Vector2i, d: Vector2i, gate: bool) -> Dictionary:
@@ -5138,10 +5175,13 @@ class _Placer:
 		# Проліт від lo до hi уздовж t (від центру клітинки); хвіртка вирізає GATE з одного кінця.
 		var lo: float = -0.5 - float(ext[-t])
 		var hi: float = 0.5 + float(ext[t])
+		var opening := Vector2.ZERO
 		if gate:
 			if h(c, 122) & 1:
+				opening = Vector2(lo, lo + GATE)
 				lo += GATE
 			else:
+				opening = Vector2(hi - GATE, hi)
 				hi -= GATE
 		var key := Vector4i(c.x, c.y, -d.x, -d.y)
 		if edges.has(key) or hi - lo < MIN_FENCE:
@@ -5156,9 +5196,13 @@ class _Placer:
 		lo += cut
 		hi -= cut
 		var base: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT)
-		return {"c": c, "key": key, "length": hi - lo, "yaw": 0.0 if d.y != 0 else PI * 0.5,
+		var plan: Dictionary = {"c": c, "key": key, "length": hi - lo, "yaw": 0.0 if d.y != 0 else PI * 0.5,
 				"local": base - Vector2(c) + Vector2(t) * ((lo + hi) * 0.5),
 				"ends": [base + Vector2(t) * lo, base + Vector2(t) * hi]}
+		if gate:
+			plan["gate"] = [base + Vector2(t) * opening.x, base + Vector2(t) * opening.y]
+			plan["out"] = d
+		return plan
 
 	func _span_clear(c: Vector2i, d: Vector2i, t: Vector2i, lo: float, hi: float) -> bool:
 		var mid: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
