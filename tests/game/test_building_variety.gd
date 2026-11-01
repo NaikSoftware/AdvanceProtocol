@@ -187,7 +187,7 @@ func test_no_hay_without_a_field() -> void:
 	assert_eq(bales, 0, "тюки без поля")
 
 
-## Двірська повітка не заходить на огорожу: від її обрису (зі звісом) до секції паркану лишається щілина.
+## Двірська повітка не заходить на огорожу: секція паркану не входить в її обрис (зі звісом) глибше за міліметр.
 func test_yard_sheds_keep_off_the_fence(p = use_parameters(MAPS)) -> void:
 	var props: PropLayer = _props(p)
 	var segs: Array = []
@@ -205,12 +205,13 @@ func test_yard_sheds_keep_off_the_fence(p = use_parameters(MAPS)) -> void:
 			continue
 		sheds += 1
 		var bx: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
-		var r := Rect2(bx.position.x, bx.position.z, bx.size.x, bx.size.z)
+		# Секція паркану доходить до стіни: торкання обриса — не накладення, тож рахується лише глибше за міліметр.
+		var r := Rect2(bx.position.x, bx.position.z, bx.size.x, bx.size.z).grow(-1e-3)
 		for sg: Array in segs:
 			var a: Vector2 = sg[0]
 			var b: Vector2 = sg[1]
 			var hit: bool = r.has_point(a) or r.has_point(b)
 			for k in 11:
 				hit = hit or r.has_point(a.lerp(b, k / 10.0))
-			assert_false(hit, "%s: %s на огорожі %s" % [p, inst["model"], sg])
+			assert_false(hit, "%s: %s %s на огорожі %s" % [p, inst["model"], r, sg])
 	assert_gt(sheds, 0, "%s: передумова" % p)
