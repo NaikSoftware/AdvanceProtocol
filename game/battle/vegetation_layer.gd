@@ -662,8 +662,9 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 			plan.append(YARD_SMALL[rng.randi_range(0, YARD_SMALL.size() - 1)])
 		for k in plan.size():
 			var choice: Array = []
-			# Найвужча — туя: останній запасний варіант для тісного двору.
-			for node: StringName in ([plan[k], small, &"yard_thuja_01"] if k == 0 else [plan[k]]):
+			# Тісний двір: після обраної рослини пробуються решта дерев (вишня вужча за яблуню), потім решта
+			# кущів; найвужча — туя — в кінці.
+			for node: StringName in (([plan[k], small] + YARD_TREES + YARD_SMALL) if k == 0 else [plan[k]]):
 				var need: float = crown_of(node) * (1.0 if YARD_TREES.has(node) else YARD_BUSH_WALL)
 				var fence_room: float = crown_of(node) + FENCE_CROWN_PAD
 				for e: Array in spots:
