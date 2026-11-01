@@ -256,7 +256,11 @@ const HOUSE_APART: int = 4
 ## Руїна -> ціла хата з тим самим силуетом; ближче RUIN_TWIN_NEAR клітинок вони не стоять (ця відстань лишає ще вибір форми хати).
 const RUIN_TWIN_NEAR: int = 1
 ## Однакові руїни ближче за стільки клітинок (Чебишов) не стоять.
-const RUIN_APART: int = HOUSE_APART
+const RUIN_APART: int = 4
+## Заміна руїни воліє модель, якої нема й у цьому радіусі.
+const RUIN_FAR: int = 8
+## Руїна міняється лише на таку, чий слід відрізняється не більш ніж на цю частку площі: інакше зсувається паркан і ворота садиби.
+const RUIN_SWAP_AREA: float = 0.12
 const RUIN_TWIN: Dictionary = {&"ruin_half_house2": &"house_h6", &"ruin_half_house1": &"house_h5"}
 ## Стовп, будівля й паркан тримаються від води й болота щонайменше на стільки клітинок.
 const WATER_CLEAR: float = 0.4
@@ -1640,8 +1644,55 @@ static func _variant(define: String) -> Shader:
 ## оцинковка, темно-коричневий. Шейдер не множить текстуру, а підставляє цей колір, зберігши її
 ## рельєф (множник по кольоровому даху давав брудні оливкові й вохристі тони), і кожен колір темніший
 ## за стіну щонайменше в 1/0.6 раза.
-const ROOF_PALETTE: Array[Color] = [Color(0.2, 0.21, 0.23), Color(0.36, 0.13, 0.11), Color(0.12, 0.27, 0.16),
-		Color(0.32, 0.34, 0.35), Color(0.24, 0.17, 0.12)]
+const ROOF_PALETTE: Array[Color] = [Color(0.2, 0.21, 0.23), Color(0.26, 0.09, 0.095), Color(0.12, 0.27, 0.16),
+		Color(0.314, 0.329, 0.345), Color(0.24, 0.17, 0.12)]
+## Найдалі від стіни по яскравості: дах хати не світліший за стільки її стіни (гамма-яскравість sRGB).
+const ROOF_WALL_MAX: float = 0.6
+## Найтемніший відтінок стіни в шейдері (WALL_TINTS у prop_fade.gdshader): із ним дах теж має вкластись у ROOF_WALL_MAX.
+const WALL_TINT_MIN: float = 0.93
+static var _wall_luma: Dictionary = {}
+
+
+## Яскравість стіни моделі (sRGB, медіана за площею вертикальних граней по атласу); 1 — немає текстури, тож без обмеження.
+static func wall_luma(m: StringName) -> float:
+	if _wall_luma.has(m):
+		return _wall_luma[m]
+	var out: float = 1.0
+	var info: Variant = model(m)
+	var mesh: Mesh = (info as Dictionary)["mesh"] if info != null else null
+	var mat: BaseMaterial3D = mesh.surface_get_material(0) as BaseMaterial3D if mesh != null else null
+	if mat != null and mat.albedo_texture != null:
+		var img: Image = mat.albedo_texture.get_image()
+		if img.is_compressed():
+			img.decompress()
+		var arr: Array = mesh.surface_get_arrays(0)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		var samples: Array = []
+		for t in idx.size() / 3:
+			var a: int = idx[t * 3]
+			var b: int = idx[t * 3 + 1]
+			var c: int = idx[t * 3 + 2]
+			var n: Vector3 = (v[b] - v[a]).cross(v[c] - v[a])
+			if n.length() < 1e-9 or absf(n.normalized().y) > 0.3:
+				continue
+			var q: Vector2 = (uv[a] + uv[b] + uv[c]) / 3.0
+			var px: Color = img.get_pixel(clampi(int(q.x * img.get_width()), 0, img.get_width() - 1),
+					clampi(int(q.y * img.get_height()), 0, img.get_height() - 1))
+			samples.append([px.r * 0.2126 + px.g * 0.7152 + px.b * 0.0722, n.length()])
+		samples.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
+		var total: float = 0.0
+		for sm: Array in samples:
+			total += sm[1]
+		var acc: float = 0.0
+		for sm: Array in samples:
+			acc += sm[1]
+			if acc >= total * 0.5:
+				out = sm[0]
+				break
+	_wall_luma[m] = out
+	return out
 ## Дві хати ближче за стільки клітинок мають різні дахи, поки є вільний колір.
 const ROOF_APART: int = HOUSE_APART
 
@@ -1666,8 +1717,11 @@ func _assign_roofs() -> void:
 		var start: int = absi(cell_hash(c, 9137)) % ROOF_PALETTE.size()
 		var best: int = start
 		var best_gap: int = -1
+		var wall: float = wall_luma(inst["model"]) * WALL_TINT_MIN
 		for k in ROOF_PALETTE.size():
 			var idx: int = (start + k) % ROOF_PALETTE.size()
+			if ROOF_PALETTE[idx].get_luminance() > wall * ROOF_WALL_MAX:
+				continue
 			var gap: int = 1 << 20
 			for d: Array in done:
 				if d[1] == idx:
@@ -3741,12 +3795,22 @@ class _Placer:
 		(_taken[key] as Array).append([hc, m])
 
 	## Та сама руїна ближче RUIN_APART клітинок: однакові руїни поруч читаються копіями.
-	func _ruin_near(m: StringName, c: Vector2i) -> bool:
+	func _ruin_near(m: StringName, c: Vector2i, reach: int = RUIN_APART) -> bool:
 		for fr: Array in farm_ruins:
 			var d: Vector2i = (fr[0] as Vector2i) - c
-			if fr[1] == m and maxi(absi(d.x), absi(d.y)) <= RUIN_APART:
+			if fr[1] == m and maxi(absi(d.x), absi(d.y)) <= reach:
 				return true
 		return false
+
+	## Руїна з повним слідом (ruin_half_*) або далі клітинки від садиб макета: низька не замикає двір, і город лишається біля розриву паркану.
+	func _closes_yard(m: StringName, c: Vector2i) -> bool:
+		if String(m).begins_with("ruin_half_"):
+			return true
+		for home: Dictionary in layout.get("homes", []):
+			for hc: Vector2i in home["cells"]:
+				if maxi(absi(hc.x - c.x), absi(hc.y - c.y)) <= 1:
+					return false
+		return true
 
 	## Руїна на тій самій клітинці й з тим самим поворотом, що й вибрана, але не повторює сусідню й не двійник хати макета;
 	## з таких — найближча за площею обрису до вибраної, щоб розкладка садиб (паркан, ворота, город) лишалась на місці.
@@ -3759,14 +3823,18 @@ class _Placer:
 			return sz.x * sz.z
 		var want: float = area.call(pick[0])
 		var best: Array = pick
-		var best_d: float = INF
-		for o: Array in options:
-			if o[1] != pick[1] or o[2] != pick[2] or _ruin_near(o[0], o[1]):
-				continue
-			var d: float = absf(float(area.call(o[0])) - want)
-			if d < best_d:
-				best_d = d
-				best = o
+		# Спершу такі, що не повторюють руїну й далі (RUIN_FAR), потім хоч не ближче RUIN_APART.
+		for reach: int in [RUIN_FAR, RUIN_APART]:
+			var best_d: float = INF
+			for o: Array in options:
+				if o[1] != pick[1] or o[2] != pick[2] or _ruin_near(o[0], o[1], reach) or not _closes_yard(o[0], o[1]):
+					continue
+				var d: float = absf(float(area.call(o[0])) - want)
+				if d < best_d and d <= want * RUIN_SWAP_AREA:
+					best_d = d
+					best = o
+			if best_d < INF:
+				return best
 		return best
 
 	## Руїна цієї ж хати поруч (RUIN_TWIN): ціла хата й її розбитий двійник на сусідніх ділянках — той самий силует двічі.
