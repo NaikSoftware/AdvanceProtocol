@@ -64,6 +64,12 @@ const PLAZA_R: float = 4.0
 ## Вага замикання — 1 до NODE_INNER клітинки від розвилки й спадає до 0 на NODE_REACH.
 const NODE_INNER: float = 0.7
 const NODE_REACH: float = 1.6
+## Ґрунтівка від торця асфальту (_asphalt_end_tail): довжина за вузол і запас до торця, клітинки.
+const TAIL_LEN: float = 1.0
+const TAIL_BACK: float = 0.35
+## Звуження до ширини ґрунтівки закінчується тут (клітинки від вузла), далі — до кінця відрізка вона вже вузька.
+const TAIL_TAPER: float = 0.6
+const TAIL_FEATHER: float = 0.3
 ## Поле відстані пишеться на стільки метрів за край; далі — FAR_M.
 const REACH_M: float = 4.0
 const FAR_M: float = 16.0
@@ -908,7 +914,7 @@ func rasterise() -> Array[Image]:
 						if past > -2.0:
 							jw[k] = maxf(jw[k], smoothstep(-2.0, 0.5, past))
 			s0 += seg_len
-	_close_junctions(d, jw, tw, rw, rh, org)
+	_close_junctions(d, jw, tw, rw, rh, org, u, v)
 	# Асфальт — лише проїзна частина: не далі CARRIAGE_HALF_M від осі й не ширше за саму лінію. Смуга шириною
 	# у 2 клітинки й заокруглення розвилок (CLOSE_M) значно ширші: решта там — гравійне узбіччя (вага B;
 	# бруківки на картах нема), а не плита асфальту.
@@ -940,7 +946,7 @@ func rasterise() -> Array[Image]:
 ## дугами радіуса CLOSE_M, а прямі й опуклі краї не змінюються. Точна відстань
 ## (Felzenszwalb–Huttenlocher) у вікні навколо вузла; вага спадає від NODE_INNER до NODE_REACH
 ## клітинки.
-func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedVector3Array, rw: int, rh: int, org: float) -> void:
+func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedVector3Array, rw: int, rh: int, org: float, u: PackedFloat32Array, v: PackedFloat32Array) -> void:
 	var d0: PackedFloat32Array = d.duplicate()
 	var half: int = ceili(NODE_REACH * PX + CLOSE_M + 4.0)
 	for node in nodes:
@@ -985,6 +991,53 @@ func _close_junctions(d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedV
 					# залишок асфальту піде в узбіччя.
 					wj = smoothstep(0.0, 0.1, tw[k].x) if d[k] > -0.6 else 0.0
 				jw[k] = maxf(jw[k], wj)
+		if asphalt_end:
+			_asphalt_end_tail(node, d, jw, tw, u, v, rw, org, i0, i1, j0, j1)
+
+
+## Ґрунтівка від торця асфальту, що обривається об поворот: прямий відрізок осі асфальту за торцем, завширшки
+## з проїзну частину (CARRIAGE_HALF_M), що звужується до ґрунтівки за TAIL_TAPER клітинки. Усередині нього
+## u, v беруться від осі асфальту й вага розвилки нульова: дві колії йдуть безперервно від краю асфальту
+## в колії дуги, а не замикаються рамкою на шві, і смуга не ширша за асфальт.
+func _asphalt_end_tail(node: Vector2, d: PackedFloat32Array, jw: PackedFloat32Array, tw: PackedVector3Array,
+		u: PackedFloat32Array, v: PackedFloat32Array, rw: int, org: float, i0: int, i1: int, j0: int, j1: int) -> void:
+	for li in lines.size():
+		var pts: PackedVector2Array = lines[li]
+		var ty: PackedVector3Array = types[li]
+		for end in [0, pts.size() - 1]:
+			if pts[end].distance_to(node) > 0.05 or ty[end].y < 0.5:
+				continue
+			var step: int = 1 if end == 0 else -1
+			var ax: Vector2 = (pts[end] - pts[clampi(end + step * 3, 0, pts.size() - 1)]).normalized()
+			# u росте вздовж індексів лінії: від кінця в індекс 0 він спадає.
+			var sg: float = 1.0 if end != 0 else -1.0
+			var u_end: float = 0.0
+			if end != 0:
+				for i in pts.size() - 1:
+					u_end += pts[i].distance_to(pts[i + 1])
+				u_end *= 8.0
+			for j in range(j0, j1 + 1):
+				for i in range(i0, i1 + 1):
+					var k: int = j * rw + i
+					var q := Vector2(org + (i + 0.5) / PX, org + (j + 0.5) / PX) - node
+					var s: float = q.dot(ax)
+					# Перехід асфальт -> ґрунтівка (tw.x > 0) не чіпаємо: так кришиться весь торець, а не лише
+					# його частину, що лишилась поза відрізком.
+					if s < -TAIL_BACK or s > TAIL_LEN or tw[k].x > 0.02:
+						continue
+					var l: float = sg * (ax.x * q.y - ax.y * q.x) * 8.0
+					var hw: float = lerpf(CARRIAGE_HALF_M, HALF_M[1], smoothstep(0.0, 1.0, (s + TAIL_BACK) / (TAIL_TAPER + TAIL_BACK)))
+					var dn: float = absf(l) - hw
+					# Кінець відрізка розтушовано на TAIL_FEATHER клітинки: він дотичний до гілки дуги, без темної виїмки.
+					var f: float = 1.0 - smoothstep(TAIL_LEN - TAIL_FEATHER, TAIL_LEN, s)
+					# Усередині смуги координати колій — від осі відрізка, навіть де ближча гілка дуги: інакше ліва колія
+					# обривається гачком на шві, а права довша й виразніша.
+					if dn < d[k] or dn < 0.0:
+						d[k] = lerpf(d[k], minf(d[k], dn), f)
+						v[k] = lerpf(v[k], l, f)
+						u[k] = lerpf(u[k], u_end + sg * s * 8.0, f)
+						tw[k] = tw[k].lerp(Vector3(0.0, 1.0, 0.0), f)
+						jw[k] *= 1.0 - f
 
 
 ## Площі: клітинки ROAD, що входять у суцільний блок 3×3, і окремі блоки 2×2. Скелет такого блоку

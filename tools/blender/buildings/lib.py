@@ -653,6 +653,7 @@ def mats():
         "tin_green": make_material("tin_green", "CorrugatedSteel005", 1.0, (0.33, 0.37, 0.34), seams=[("x", 1.0, 0.05, 0.5)], corr=("x", 0.2, 0.035), streak=0.08),
         "tin_ochre": make_material("tin_ochre", "CorrugatedSteel005", 1.0, (0.55, 0.46, 0.32), seams=[("x", 1.0, 0.05, 0.45)], corr=("x", 0.2, 0.018), streak=0.08),
         "step": make_material("step", "Concrete034", 1.0, (0.50, 0.49, 0.46), streak=0.4, base_dirt=0.5),
+        "ch_cap": make_material("ch_cap", "Concrete034", 1.0, (0.25, 0.245, 0.23), streak=0.4, base_dirt=0.5),   # шапка димаря темніша за сходи: вгорі світла бетонна рамка читалась снігом
         "gutter": make_material("gutter", flat=(0.30, 0.31, 0.31)),
         "rebar": make_material("rebar", flat=(0.11, 0.06, 0.04)),
         # отвір димаря: закопчений сірий, не чорна діра — чорне з камери гри різко рветься від цегли навколо
@@ -885,7 +886,18 @@ def _off(axis, c, sgn, u, z, off):
     return (u, c + sgn * off, z) if axis == "y" else (c + sgn * off, u, z)
 
 
-def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, kband=(0.46, 0.56), ksill=(0.25, 0.38), lsill=(1.0, 1.9), eave_streaks=True):
+def _streak(b, P, uc, zb, zt, hw, k, dm, nrm, up=0.15):
+    """М'який патьок: темний посередині (k) і на верхівці zt, до країв, донизу (zb) і вгору (zt+up) згасає до 1 — без жорстких країв."""
+    zs = (zb, zt, zt + up)
+    ts = ((1.0, 1.0, 1.0), (1.0, k, 1.0), (1.0, 1.0, 1.0))
+    us = (uc - hw, uc, uc + hw)
+    for r in range(2):
+        for c in range(2):
+            b.decal([P(us[c], zs[r]), P(us[c + 1], zs[r]), P(us[c + 1], zs[r + 1]), P(us[c], zs[r + 1])],
+                    (ts[r][c], ts[r][c + 1], ts[r + 1][c + 1], ts[r + 1][c]), dm, nrm)
+
+
+def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, kband=(0.62, 0.72), ksill=(0.66, 0.8), lsill=(0.7, 1.6), eave_streaks=True):
     """Вивітрювання стін декалями-множниками: брудний низ із рваним краєм (-30%), темні патьоки під підвіконнями й від ринви (-25%),
     пояс під карнизом (-25%) і 2-4 латки обсипаної штукатурки з цеглою на довгу стіну. Під кожним підвіконням — вологий слід: м'яка тінь завширшки 1.5 вікна, що згасає вниз до цоколя. walls: (вісь, c, знак, u0, u1, z_низ, z_карниз)."""
     import random
@@ -908,30 +920,32 @@ def weather(b, mat, walls, seed=1, patches=True, skip_u=(), seg=0.4, band=0.32, 
                 continue
             b.decal([P(us[i], ze - eh), P(us[i + 1], ze - eh), P(us[i + 1], ze), P(us[i], ze)], (1.0, 1.0, 0.7, 0.7), dm, nrm)
         wins = [w for w in b.windows if w[0] == axis and abs(w[1] - c) < 0.2 and w[2] == sgn]
-        for (_a, _c, _s, u, z, w, h) in wins:                           # патьоки з обох кінців кожного підвіконня: вода стікає з країв відливу
+        # Віконця горища у фронтоні (вище за карниз): під ними патьок перетинав уступ і читався двома темними прямокутниками.
+        lows = [w for w in wins if w[4] < ze - 0.2]
+        for (_a, _c, _s, u, z, w, h) in lows:                           # патьоки з обох кінців кожного підвіконня: вода стікає з країв відливу
             for end in (-1, 1):
                 uu = u + end * (w / 2 + 0.06) + rnd.uniform(-0.04, 0.04)
-                hw = rnd.uniform(0.17, 0.26)   # у кадрі бою ≥ 3 пікселі: тонші патьоки зливались зі стіною
+                if rnd.random() < 0.4:   # не під кожним кутом вікна: рівний ряд однакових смуг читається штампом
+                    continue
+                hw = rnd.uniform(0.13, 0.22)   # у кадрі бою ≥ 2-3 пікселі: тонші патьоки зливались зі стіною
                 zt = z - 0.12
                 zbm = max(zb + 0.04, zt - rnd.uniform(*lsill))   # вікна низько (1 м): патьоку доводиться йти майже до цоколя
                 if zt - zbm < 0.25:
                     continue
                 k = rnd.uniform(*ksill)
-                b.decal([P(uu - hw, zbm), P(uu, zbm), P(uu, zt), P(uu - hw, zt)], (1.0, 1.0, k, 0.97), dm, nrm)
-                b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, zt), P(uu, zt)], (1.0, 1.0, 0.97, k), dm, nrm)
-        for (_a, _c, _s, u, z, w, h) in wins:                           # вологий слід під усім підвіконням: м'яка тінь 1.5 вікна, ~20 % темніше, згасає вниз
+                _streak(b, P, uu, zbm, zt, hw, k, dm, nrm)
+        for (_a, _c, _s, u, z, w, h) in lows:                           # вологий слід під усім підвіконням: м'яка тінь 1.5 вікна, ~20 % темніше, згасає вниз
             zt2, zb2 = z - 0.1, max(zb + 0.04, z - 0.8)
             if zt2 - zb2 > 0.2:
-                b.decal([P(u - w * 0.75, zb2), P(u + w * 0.75, zb2), P(u + w * 0.75, zt2), P(u - w * 0.75, zt2)], (1.0, 1.0, 0.8, 0.8), dm, nrm)
-        for _ in (range(max(2, int((u1 - u0) / 1.5))) if eave_streaks else ()):   # з карниза: короткі патьоки там, де переливається ринва
+                _streak(b, P, u, zb2, zt2, w * 0.75, 0.82, dm, nrm, up=0.1)
+        # з карниза: короткі м'які патьоки там, де переливається ринва; лише на довгих стінах — на фронтонах карниза нема, і патьок висів би в повітрі
+        for _ in (range(max(2, int((u1 - u0) / 1.5))) if eave_streaks and axis == "y" else ()):
             uu = rnd.uniform(u0 + 0.3, u1 - 0.3)
             if any(abs(uu - w[3]) < w[5] / 2 + 0.15 for w in wins) or any(a_ - 0.2 <= uu <= c_ + 0.2 for a_, c_ in skip_u):
                 continue
-            hw = rnd.uniform(0.05, 0.1)
-            zbm = ze - rnd.uniform(0.4, 1.1)
-            k = rnd.uniform(0.84, 0.92)   # слабше: після виправлення глибини декалі стріхові патьоки читались рваною гребінкою під карнизом
-            b.decal([P(uu - hw, zbm), P(uu, zbm), P(uu, ze - 0.1), P(uu - hw, ze - 0.1)], (1.0, 1.0, k, 0.96), dm, nrm)
-            b.decal([P(uu, zbm), P(uu + hw, zbm), P(uu + hw, ze - 0.1), P(uu, ze - 0.1)], (1.0, 1.0, 0.96, k), dm, nrm)
+            hw = rnd.uniform(0.07, 0.12)
+            zbm = ze - rnd.uniform(0.5, 1.1)
+            _streak(b, P, uu, zbm, ze - 0.12, hw, rnd.uniform(0.86, 0.92), dm, nrm, up=0.1)
         if patches and u1 - u0 > 6:                                     # одна латка обсипаної штукатурки, де цегла проступає
             for _ in range(12):
                 uu = rnd.uniform(u0 + 0.7, u1 - 0.7)
@@ -1005,7 +1019,7 @@ class Builder:
             self.cone(cx, cy, zt + 0.14, 0.24, 0.12, 10, "galv")
             self.markers.append(("chimney_top", (cx, cy, zt + 0.06)))
 
-    def chimney(self, cx, cy, z0, s, h, mat, cap="step", t=0.11, depth=0.6, keep=False):
+    def chimney(self, cx, cy, z0, s, h, mat, cap="ch_cap", t=0.11, depth=0.6, keep=False):
         """Димар з відкритим каналом: цегляні стінки, бетонна шапка-рамка, темна закопчена шахта.
         Виводить маркер chimney_top над шапкою — туди гра чіпляє легкий дим."""
         if not keep:

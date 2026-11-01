@@ -409,3 +409,23 @@ func test_wreck_flame_is_capped_below_the_neighbouring_cell() -> void:
 	assert_gt(layer.smoke_origin(c).y, layer.fire_centre(c).y, "дим росте з полум'я, не з землі")
 	# Як гаснуть язики вище стелі — це вже сам шейдер; у безголовому рушії його не прочитати.
 	assert_true(WreckLayer.FIRE_SHADER.code.contains("smoothstep(max_h * 0.7, max_h, v_h)"))
+
+
+## Контури зон руху — головний інтерфейс (§3.2): вони малюються після диму, вогню й дощу, а не нарівні з ними,
+## бо порядок серед рівних залежить від камери.
+func test_zone_contour_is_drawn_after_smoke_fire_and_rain() -> void:
+	var service: Node = (load("res://game/autoload/match_service.gd") as GDScript).new()
+	add_child_autofree(service)
+	var screen: Node = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
+	add_child_autofree(screen)
+	screen.setup(load("res://maps/river.tres") as MapData, 2, 1, service)
+	var contour: int = ((screen.get_node("%BoardView") as BoardView).call("_contour_material") as Material).render_priority
+	var wl: WreckLayer = screen.get("_wreck_layer")
+	var rain: Material = (screen.get_node("WeatherRig") as WeatherRig).rain.material_override
+	assert_eq(contour, BoardView.CONTOUR_PRIORITY)
+	assert_gt(contour, (wl.get_node("Fires") as MultiMeshInstance3D).material_override.render_priority, "вогонь")
+	assert_gt(contour, (wl.get_node("Columns") as MultiMeshInstance3D).material_override.render_priority, "дим стовпа")
+	assert_gt(contour, wl.hearth_material().render_priority, "мирний дим")
+	assert_gt(contour, rain.render_priority, "дощ")
+	assert_gt(contour, PropLayer.WIRE_RENDER_PRIORITY, "дроти")
+	assert_gt(contour, BattleFx.PRIORITY_CORE + 1, "найгарячіший спалах BattleFx")

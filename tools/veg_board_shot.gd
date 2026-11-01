@@ -60,7 +60,8 @@ func _ready() -> void:
 		if i < 0:
 			continue
 		var inst := MeshInstance3D.new()
-		inst.mesh = VegetationLayer.veg_mesh(mi.mesh, -1.0, 0.0, (screen.get_node("%BoardView") as BoardView).structure_shadows)
+		var sunny: bool = (screen.get_node("%BoardView") as BoardView).structure_shadows
+		inst.mesh = VegetationLayer.veg_mesh(mi.mesh, -1.0, 0.0, sunny, VegetationLayer.has_shade(mi.name, sunny))
 		var x: float = float(cell.x) + (float(i) - float(nodes.size() - 1) * 0.5) * 1.0
 		var z: float = float(cell.y)
 		inst.position = Vector3(x, TerrainHeight.ground_y(x, z), z)
