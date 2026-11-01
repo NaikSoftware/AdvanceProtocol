@@ -220,6 +220,7 @@ func build(board: Board) -> void:
 	_forest.sun_dir = sun_dir
 	_forest.shadow_strength = forest_shadow
 	_forest.spans = _props.span_lines()
+	_forest.fences.assign(VegetationLayer.obstacles(_props)["fences"])
 	if board.width > 0 and board.height > 0:
 		_forest.build(world, world_surface, ring, _board_size, season, relief_seed)
 	# Стежки публічні (§3.5): маска зносу не залежить від туману й ставиться разом із землею.

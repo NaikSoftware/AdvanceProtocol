@@ -82,6 +82,8 @@ var shadow_strength: float = 0.15
 ## Проліти ЛЕП (PropLayer.span_lines(), тайли дошки): уздовж них ліс вирубано смугою, а підлісок
 ## і кущі лишаються — справжні лінії йдуть через ліс просікою.
 var spans: Array = []
+## Прямокутники XZ секцій парканів (VegetationLayer.obstacles): крона не нависає над жодною.
+var fences: Array[Rect2] = []
 
 var _season: String = ""
 var _seed: int = 0
@@ -134,7 +136,7 @@ func build(world: Board, world_surface: PackedByteArray, ring: int, board_size: 
 			var i: int = y * world.width + x
 			var s: int = world_surface[i] if i < world_surface.size() else 0
 			wood[c] = WOOD_OF_SURFACE[clampi(s, 0, WOOD_OF_SURFACE.size() - 1)]
-	var signature: String = "%s:%d:%d:%d:%s:%f:%d" % [season, seed, hash(cells.keys()), hash(wood.values()), sun_dir, shadow_strength, hash(spans)]
+	var signature: String = "%s:%d:%d:%d:%s:%f:%d:%d" % [season, seed, hash(cells.keys()), hash(wood.values()), sun_dir, shadow_strength, hash(spans), hash(fences)]
 	if signature == _signature:
 		return
 	_signature = signature
@@ -274,6 +276,9 @@ func _in_board(p: Vector2) -> bool:
 ## як було. Порожній словник — запису нема. Відводи до хат сюди не входять: ліс вони не рубають.
 func _cleared(e: Dictionary) -> Dictionary:
 	var node: String = e["node"]
+	if not e["ground"] and fences.any(func(r: Rect2) -> bool:
+			return VegetationLayer._rect_dist(r, e["pos"]) < float(e["r"]) + VegetationLayer.FENCE_CROWN_PAD):
+		return {}
 	if spans.is_empty() or e["ground"] or not node.get_slice("_", 0) in TREES or not _lib.has(node):
 		return e
 	if float(_lib[node]["h"]) * e["xf"].basis.get_scale().y < UNDER_TOP:

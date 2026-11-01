@@ -98,9 +98,9 @@ const HOME_CLEAR: int = 1
 const ROAD_PAD: float = 0.5
 ## Стовбур — не ближче FENCE_CLEAR до паркана й інших дрібних пропсів.
 const FENCE_CLEAR: float = 0.08
-## Дерево садиби — стовбуром не ближче за стільки радіусів крони до паркану: крона не звисає над секцією, бо з камери
-## дерево поруч із парканом читається таким, що проросло крізь нього.
-const YARD_TREE_FENCE: float = 1.0
+## Будь-яка крона — не ближче за свій радіус плюс FENCE_CROWN_PAD до секції паркану: з камери крона над
+## секцією читається рослиною, що проросла крізь паркан.
+const FENCE_CROWN_PAD: float = 0.1
 ## Під дротом ЛЕП крона не стоїть ближче за WIRE_PAD від прольоту (розкид масштабу 1,1 × радіус), а стовбур — ближче за POLE_CLEAR від опори.
 const WIRE_PAD: float = 0.15
 const POLE_CLEAR: float = 0.3
@@ -234,6 +234,10 @@ static func _free(board: Board, height: TerrainHeight, props: PropLayer, obst: D
 			return false
 	for r: Rect2 in obst["small"]:
 		if _rect_dist(r, p) < FENCE_CLEAR:
+			_bump(stats, "fence")
+			return false
+	for r: Rect2 in obst["fences"]:
+		if _rect_dist(r, p) < crown + FENCE_CROWN_PAD:
 			_bump(stats, "fence")
 			return false
 	if _power_dist(obst, p) < power_clear(crown):
@@ -611,7 +615,7 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 			# Найвужча — туя: останній запасний варіант для тісного двору.
 			for node: StringName in ([plan[k], small, &"yard_thuja_01"] if k == 0 else [plan[k]]):
 				var need: float = crown_of(node) * (1.0 if YARD_TREES.has(node) else YARD_BUSH_WALL)
-				var fence_room: float = crown_of(node) * YARD_TREE_FENCE if YARD_TREES.has(node) else 0.0
+				var fence_room: float = crown_of(node) + FENCE_CROWN_PAD
 				for e: Array in spots:
 					var q: Vector2 = e[0]
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \

@@ -202,24 +202,32 @@ func test_yard_plants_stay_inside_the_fence(p = use_parameters(["river", "crossr
 	assert_eq(bad, [], "%s: рослина садиби за парканом" % p)
 
 
-## Дерево садиби не росте крізь паркан: стовбур далі YARD_TREE_FENCE радіуса крони від кожної секції паркану.
-## Стовбур ближче до секції читається з камери деревом, що проросло крізь неї.
-func test_yard_trees_keep_clear_of_fences(p = use_parameters(["river", "crossroads"])) -> void:
+## Жодна крона (кущ двору, лука, берег, узлісся) не нависає над парканом: стовбур далі радіуса крони
+## плюс FENCE_CROWN_PAD від кожної секції — з камери крона над секцією читається рослиною крізь паркан.
+func test_no_crown_over_a_fence(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _view(p)
-	var obst: Dictionary = VegetationLayer.obstacles(view.props())
+	var fences: Array = VegetationLayer.obstacles(view.props())["fences"]
 	var bad: Array = []
 	var checked: int = 0
 	for pl: Dictionary in view.vegetation().placements:
-		if pl["group"] != "yard" or pl["kind"] != "tree":
+		if pl["kind"] == "reed":
 			continue
-		checked += 1
 		var q := Vector2(pl["pos"].x, pl["pos"].z)
-		var need: float = VegetationLayer.crown_of(pl["node"]) * VegetationLayer.YARD_TREE_FENCE
-		for r: Rect2 in obst["fences"]:
+		var need: float = VegetationLayer.crown_of(pl["node"]) + VegetationLayer.FENCE_CROWN_PAD
+		checked += 1
+		for r: Rect2 in fences:
 			if VegetationLayer._rect_dist(r, q) < need - 0.001:
-				bad.append([pl["node"], q, r])
-	assert_eq(bad, [], "%s: дерево садиби впритул до паркану" % p)
-	assert_gt(checked, 0, "%s: передумова — дерева в садибах є" % p)
+				bad.append([pl["group"], pl["node"], q, snappedf(VegetationLayer._rect_dist(r, q), 0.01)])
+				break
+	for e: Dictionary in view.forest().board_plan:
+		var q: Vector2 = e["pos"]
+		checked += 1
+		for r: Rect2 in fences:
+			if VegetationLayer._rect_dist(r, q) < float(e["r"]) + VegetationLayer.FENCE_CROWN_PAD - 0.001:
+				bad.append(["forest", e["node"], q, snappedf(VegetationLayer._rect_dist(r, q), 0.01)])
+				break
+	assert_eq(bad, [], "%s: крона над парканом" % p)
+	assert_gt(checked, 0, "%s: передумова — рослини є" % p)
 
 
 ## На луках кожної карти є хоча б одне дерево (груша, дуб, верба).

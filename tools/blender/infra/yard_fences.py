@@ -44,7 +44,7 @@ def _post(xx, x0, w):
 
 
 def picket():
-    """Штахет: дошки 8 см з просвітом 7.6 см, верх дошки трохи гуляє, дві планки позаду, стовп 10 см на стику."""
+    """Штахет: дошки 9.8 см з просвітом 5.8 см (тонші на зумі 20 зливаються в тон без рисунка), верх дошки трохи гуляє, дві планки позаду, стовп 10 см на стику."""
     xx, zz = _grid()
     rng = np.random.default_rng(71)
     pitch = TILE_M / 16
@@ -52,7 +52,7 @@ def picket():
     fx = (xx / pitch) % 1.0
     top = 1.22 + rng.uniform(-0.05, 0.03, 16)[idx]
     point = top - 0.06 * np.abs(fx - 0.5) * 2                    # скошений верх дошки
-    board = (np.abs(fx - 0.5) < 0.26) & (zz > 0.06) & (zz < point)
+    board = (np.abs(fx - 0.5) < 0.31) & (zz > 0.06) & (zz < point)
     rail = ((np.abs(zz - 0.3) < 0.035) | (np.abs(zz - 1.0) < 0.035)) & (zz < 1.3)
     post = _post(xx, 0.05, 0.10) & (zz < 1.3)
     tone = rng.uniform(0.82, 1.08, 16)[idx]
@@ -60,7 +60,7 @@ def picket():
     base = np.array([0.22, 0.17, 0.12])                         # темна кора й стара дошка, не світла
     col = base * (tone * (0.82 + 0.3 * g))[..., None]
     col = np.where(board[..., None], col, col * 0.6)            # планки й стовп — у тіні дощок
-    col = np.where((board & (np.abs(fx - 0.5) > 0.2))[..., None], col * 0.6, col)   # темні краї дощок
+    col = np.where((board & (np.abs(fx - 0.5) > 0.24))[..., None], col * 0.6, col)   # темні краї дощок
     col = np.where(post[..., None], base * 0.62 * (0.85 + 0.3 * g)[..., None], col)
     col = col * np.where(zz < 0.18, 0.75, 1.0)[..., None]       # бруд біля землі
     return col, (board | rail | post).astype(float)
@@ -75,7 +75,7 @@ def sheet():
     # профіль ребра: верх 0.3 кроку, схили по 0.12, жолоб 0.46 — світло-тінь рельєфу під денним світлом
     shade = np.select([f < 0.30, f < 0.42, f < 0.88], [1.2, 0.95, 0.7], 0.85)
     g = tile_noise(8, 8, max(W, HS), 75)[:HS, :W]
-    base = np.array([0.27, 0.17, 0.10])                         # іржаво-темно-коричневий
+    base = np.array([0.30, 0.17, 0.085])                        # іржаво-коричневий з помаранчем: на зумі 20 не зливається з дошками
     col = base * (shade * (0.9 + 0.2 * g))[..., None]
     col = col * np.where(zz < 0.25, 0.7 + 0.3 * zz / 0.25, 1.0)[..., None]      # бруд і бризки знизу
     col = np.where(((zz > 1.70) & (zz < 1.77))[..., None], base * 0.55, col)     # планка-шапка
