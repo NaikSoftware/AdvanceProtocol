@@ -3093,3 +3093,12 @@ func test_wicket_has_the_leaf_colour(p = use_parameters(MAPS)) -> void:
 			assert_eq(best[1], best[3], "%s: хвіртка іншого тону, ніж полотно (%s)" % [p, g["kind"]])
 			checked += 1
 	assert_gt(checked, 0, p)
+
+
+## Суцільний паркан у справжньому непрозорому проході: шейдер не пише ALPHA і не вмикає alpha_to_coverage, інакше рушій
+## кладе його в чергу прозорих без запису глибини, і дим чи вода сортувались би з ним за пріоритетом, а не за глибиною.
+func test_solid_fence_shader_is_truly_opaque() -> void:
+	var code: String = PropLayer._thin_opaque().code
+	assert_false(code.contains("\tALPHA = "), "запис ALPHA")
+	assert_false(code.contains(", alpha_to_coverage"), "alpha_to_coverage у render_mode")
+	assert_true(code.contains("discard"), "просвіти вирізає discard")
