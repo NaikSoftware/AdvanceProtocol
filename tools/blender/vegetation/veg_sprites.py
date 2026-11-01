@@ -324,12 +324,12 @@ def build_sheaf(seed):
             if rng.random() < 0.85:
                 # Волоть: віяло тонких гілочок, що схиляються на один бік.
                 side = rng.choice((-1, 1))
-                # Волоть — суцільне віяло 25–40 см, густіше й ширше за справжнє: на найближчому зумі
-                # вона має читатися рискою 3–4 px.
-                for k in range(24):
-                    d = Vector((side * rng.uniform(0.15, 0.8), rng.gauss(0, 0.25), rng.uniform(0.15, 1.0))).normalized()
-                    blade(bm, top - lean * hl * rng.uniform(0.0, 0.7), d, hl * rng.uniform(0.5, 0.9),
-                          0.06 if SEASON == "late" else 0.05, rng.uniform(0.08, 0.2), fc, hc)
+                # Волоть — розпушене віяло тонких нитей різної довжини: широкі стрічки зливалися в
+                # круглі грудки. Нитки тонші, їх більше, розкид кутів ширший, кінці звисають.
+                for k in range(30):
+                    d = Vector((side * rng.uniform(0.1, 1.0), rng.gauss(0, 0.35), rng.uniform(0.1, 1.0))).normalized()
+                    blade(bm, top - lean * hl * rng.uniform(0.0, 0.8), d, hl * rng.uniform(0.35, 0.95),
+                          0.03 if SEASON == "late" else 0.025, rng.uniform(0.1, 0.3), fc, hc)
         elif rng.random() < R["head_p"]:
             # Веретено зі звуженими кінцями, а не циліндр із пласкими торцями.
             c0 = top - lean * (0.12 + hl / 2)
