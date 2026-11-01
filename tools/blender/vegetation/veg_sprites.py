@@ -323,6 +323,7 @@ def build_sheaf(seed):
         if R["head"] == "plume":
             if rng.random() < 0.85:
                 # Верхівка — віяло з 30 тонких ниток різної довжини, що схиляються на один бік; кінці звисають.
+                side = rng.choice((-1, 1))
                 for k in range(30):
                     d = Vector((side * rng.uniform(0.1, 1.0), rng.gauss(0, 0.35), rng.uniform(0.1, 1.0))).normalized()
                     blade(bm, top - lean * hl * rng.uniform(0.0, 0.8), d, hl * rng.uniform(0.35, 0.95),
