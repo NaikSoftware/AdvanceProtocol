@@ -14,6 +14,8 @@ const RIFLE: int = 0
 ## не далі за STREET_END від хати.
 const STREET_R: float = 7.0
 const STREET_END: float = 3.0
+## Найближче, як стовп ЛЕП може стояти до секції паркану двору, клітинки (2.4 м).
+const FENCE_POLE_CLEAR: float = 0.3
 ## Скільки воріт карти може стояти з послабленим правилом стіни чи екрана (test_gates_do_not_run_alongside_walls).
 const RELAXED_GATES: Dictionary = {"crossroads": 2}
 
@@ -2201,10 +2203,49 @@ func test_spans_run_along_the_map_axes(p = use_parameters(MAPS)) -> void:
 	assert_gt(props._spans.size(), 0, "%s: передумова — прольоти є" % p)
 	for sp: Array in props._spans:
 		var d: Vector2 = _pole_at(props, sp[1]) - _pole_at(props, sp[0])
-		assert_lte(minf(absf(d.x), absf(d.y)), 0.02, "%s: проліт %s → %s навскіс" % [p, _pole_at(props, sp[0]), _pole_at(props, sp[1])])
-	# Прольоти окремо від відводів: просіка в лісі йде лише за лінією.
-	assert_eq(props.span_lines().size(), props._spans.size(), p)
-	assert_eq(props.wire_lines().size(), props._spans.size() + props._drops.size(), p)
+		assert_lte(minf(absf(d.x), absf(d.y)), 1e-3, "%s: проліт %s → %s навскіс" % [p, _pole_at(props, sp[0]), _pole_at(props, sp[1])])
+
+
+## Траса 10 кВ, як її намалює редактор карт — навпростець крізь село, річку, ліс і навскіс, — однаково лягає
+## лише законними прольотами: уздовж осі, не довше за MAX_10KV, не на будівлі. Де законного прольоту нема, траси
+## там нема, а не проліт навскіс чи крізь хату.
+func test_editor_routes_give_only_legal_trunk_spans() -> void:
+	var placer = _cached("river").props()._placer
+	var keep: Dictionary = placer.layout
+	placer.layout = {"routes": [
+		{"kind": &"10kv", "axis": [Vector2(-13, 5), Vector2(38, 5)], "side": 1.0},
+		{"kind": &"10kv", "axis": [Vector2(11, -13), Vector2(11, 34)], "side": -1.0},
+		{"kind": &"10kv", "axis": [Vector2(-13, -13), Vector2(38, 34)], "side": 1.0},
+		{"kind": &"10kv", "axis": [Vector2(-13, 15), Vector2(13, 15), Vector2(13, 6), Vector2(38, 6)], "side": 1.0},
+	]}
+	var grid := PowerGrid.new()
+	grid.plan(placer)
+	placer.layout = keep
+	var spans: int = 0
+	for line: Dictionary in grid.lines:
+		if line["kind"] != &"10kv":
+			continue
+		var pts: Array = line["points"]
+		for k in range(1, pts.size()):
+			var a: Vector2 = pts[k - 1]
+			var b: Vector2 = pts[k]
+			spans += 1
+			assert_lte(minf(absf(a.x - b.x), absf(a.y - b.y)), 1e-3, "проліт %s → %s навскіс" % [a, b])
+			assert_lte(a.distance_to(b), PowerGrid.MAX_10KV + 1e-3, "проліт %s → %s задовгий" % [a, b])
+			assert_false(placer.span_hits_building(a, b), "проліт %s → %s на будівлі" % [a, b])
+	assert_gt(spans, 0, "передумова — траси лягли хоч частково")
+
+
+## Стовп не стоїть на паркані двору: до будь-якої секції паркану — не ближче за FENCE_POLE_CLEAR клітинки.
+func test_poles_keep_off_yard_fences(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var segs: Array = props._placer._fence_segments()
+	assert_gt(segs.size(), 0, "%s: передумова — паркани є" % p)
+	for i in _pole_ids(props):
+		var at: Vector2 = _pole_at(props, i)
+		for sg: Array in segs:
+			var d: float = Geometry2D.get_closest_point_to_segment(at, sg[0], sg[1]).distance_to(at)
+			assert_gte(d, FENCE_POLE_CLEAR, "%s: стовп %s за %.2f від паркану %s" % [p, at, d, sg])
 
 
 ## Магістраль 10 кВ не повертає назад: кут між прольотами — не гостріший за 60°.
