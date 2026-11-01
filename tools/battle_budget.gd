@@ -342,6 +342,12 @@ func _ready() -> void:
 				last = cam.global_transform
 				if still >= 30:
 					break
+			# Прогрів ефектів (Units/Explosion, Hit, Muzzle…) малює десятки викликів ще секунду після старту
+			# й сам прибирається: міряти треба кадр без нього, інакше лічильник на ~25 завищений.
+			for f in 900:
+				if screen.get_node_or_null("Units/Explosion") == null:
+					break
+				await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			var m: Vector2i = await _median_frame()
 			var dc: int = m.x

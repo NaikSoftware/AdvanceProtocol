@@ -16,6 +16,7 @@ CLAUDE.md section it expands.
 | [reference/blitzkrieg.md](reference/blitzkrieg.md) | What did the original do, where is it in the sources, and where does this project depart from it? (§4) |
 | [architecture.md](architecture.md) | Why is `core/` separate from `game/`, how does an action flow through it, and where does a file go? (§6) |
 | [art-direction.md](art-direction.md) | What does the game look like, and what may it cost to draw on a phone? (§2 setting, §8) |
+| [performance.md](performance.md) | How many draw calls and triangles may a battle frame cost, and how is it measured? (§8) |
 
 Also here: [superpowers/plans/](superpowers/plans/) — implementation plans, written before the work
 and kept as a record of it.
