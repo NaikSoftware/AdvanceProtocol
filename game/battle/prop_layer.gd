@@ -284,13 +284,23 @@ const OPEN_SIDE_CLEAR: float = 0.5
 const GATE_POST: float = 0.15
 ## Підсилення кольору (sRGB) стовпів воріт: вертикальні грані тонкого стовпа ловлять мало неба.
 const GATE_POST_GAIN: float = 1.3
+## Середній стовп воріт (між стулкою й хвірткою) — така частка кольору крайніх; підкладка полотна зі штахет-дощок — така частка кольору дощок.
+const GATE_MID_POST_SHARE: float = 0.85
+const GATE_SLAT_BACK: float = 0.85
 ## Слід стін: вершини нижче WALL_TOP висоти моделі, у кошиках WALL_BIN (тайли); стіною вважається грань, у кошику якої не менше
 ## WALL_FACE_SHARE від найбільшого кошика осі.
 const WALL_TOP: float = 0.55
 const WALL_BIN: float = 0.01
 const WALL_FACE_SHARE: float = 0.4
-## Слід, менший за цю частку обрису по осі, — не стіни, а випадкова площина вершин: беремо обрис.
-const WALL_MIN_SHARE: float = 0.7
+## Розміри стін хат (x уздовж коника, z упоперек), тайли: корпус разом із цоколем з tools/blender/buildings (build_houses.py:
+## L+0.08, D+0.08 м; build_ruins.py: 2·hx+0.46, 2·hy+0.46 м), метри / 8. h1 (веранда) тут нема — лишається обрис.
+const WALL_SIZES: Dictionary = {
+	&"house_h2": Vector2(1.385, 1.135), &"house_h3": Vector2(1.26, 1.26), &"house_h4": Vector2(1.135, 0.76),
+	&"house_h5": Vector2(0.8825, 0.6575), &"house_h6": Vector2(0.8075, 0.7575), &"house_h7": Vector2(0.81, 0.71),
+	&"house_h8": Vector2(0.735, 0.61),
+}
+## Допуск збігу виміряного сліду з довідковим розміром, тайли.
+const WALL_SIZE_TOL: float = 0.02
 ## Дальше за стільки (тайли) від обрису зі звісом до сліду стін кінець секції не дотягується.
 const REACH_FOOT: float = 0.45
 ## Ворота дивляться на дорогу, коли промінь від них назовні впирається в покриття не далі, ніж за стільки клітинок.
@@ -354,7 +364,7 @@ const GATE_POST_COLOR: Color = Color(0.2, 0.15, 0.1)
 ## Тони полотна воріт (sRGB; вершинний колір множить альбедо коробки): сталь, фарбований профнастил
 ## (бурий чи зелений), дошки, оцинкована ґратка.
 const GATE_STEEL: Array[Color] = [Color(0.22, 0.28, 0.34), Color(0.28, 0.31, 0.27)]
-const GATE_SHEET: Array[Color] = [Color(0.3, 0.16, 0.11), Color(0.26, 0.15, 0.11)]
+const GATE_SHEET: Array[Color] = [Color(0.34, 0.18, 0.125), Color(0.3, 0.17, 0.125)]
 ## Дошки воріт підібрано за кадром (prop_gate веде їх як паркан: нормаль до неба, мокрість): середнє полотна в межах ±10 % від
 ## свого паркану на мокрій River і сухому Crossroads; відношення до середнього атласу паркану стережуть test_yard_fence_tone.
 ## Штахетник і горизонтальні дошки мають різну кору — по тону на кожен.
@@ -622,8 +632,11 @@ static func model(name: StringName) -> Variant:
 	var foot: AABB = full
 	var fx: Vector2 = _wall_faces(bins_x)
 	var fz: Vector2 = _wall_faces(bins_z)
-	# Лише для хат: гістограма сараїв, веж і руїн (мало вершин в одній площині) дає вироджений слід, тож вони лишаються на обрисі.
-	if fx.y - fx.x >= WALL_MIN_SHARE * full.size.x and fz.y - fz.x >= WALL_MIN_SHARE * full.size.z:
+	# Слід — за гістограмою лише для моделей зі списку WALL_SIZES (розміри стін з tools/blender/buildings) і лише коли розмір
+	# збігається з довідковим; інакше (сараї, вежі, руїни, ґанок) лишається обрис зі звісом.
+	var want: Variant = WALL_SIZES.get(name)
+	if want != null and absf((fx.y - fx.x) - float((want as Vector2).x)) <= WALL_SIZE_TOL \
+			and absf((fz.y - fz.x) - float((want as Vector2).y)) <= WALL_SIZE_TOL:
 		foot = AABB(Vector3(fx.x, full.position.y, fz.x), Vector3(fx.y - fx.x, full.size.y, fz.y - fz.x))
 	var info: Dictionary = {"mesh": _tuned_mesh(name, mi.mesh, fence_tops), "local": local, "footprint": footprint,
 			"aabb": full, "foot": foot, "wires": wires, "tris": tris, "chimneys": chimneys,
@@ -1336,7 +1349,7 @@ func _build_gates() -> void:
 			&"metal":
 				post_color = Color(0.17, 0.18, 0.19)
 			&"sheet":
-				post_color = (GATE_SHEET[tone] as Color) * 0.6
+				post_color = (GATE_SHEET[tone] as Color) * 0.9
 			&"lattice":
 				post_color = GATE_IRON
 		# Тонкий стовп (3 см) з вертикальними гранями ловить мало неба й виходить удвічі темнішим за стовп паркану того ж кольору:
@@ -1346,7 +1359,7 @@ func _build_gates() -> void:
 			_gate_box(p, u, Vector2.ZERO, GATE_POST_SIZE, GATE_POST_SIZE.y * 0.5 - 0.01, post_color)
 		# Стовп між полотном і хвірткою товщий, вищий і темніший: на зумі 8 видно, де закінчується полотно.
 		_gate_box(mid, u, Vector2.ZERO, Vector3(GATE_POST_SIZE.x * 1.5, GATE_POST_SIZE.y + 0.03, GATE_POST_SIZE.z * 1.5),
-				(GATE_POST_SIZE.y + 0.03) * 0.5 - 0.01, post_color * 0.85)
+				(GATE_POST_SIZE.y + 0.03) * 0.5 - 0.01, post_color * GATE_MID_POST_SHARE)
 		# Полотно стоїть між гранями стовпів; на схилі — від нижчого кінця, щоб не висіло.
 		var half_post: float = GATE_POST_SIZE.x * 0.5
 		var spans: Array = [[a + u * half_post, mid - u * half_post * 1.5, true], [mid + u * half_post * 1.5, b - u * half_post, false]]
@@ -1375,11 +1388,11 @@ func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float,
 			var n: int = maxi(1, roundi(span / 0.045))
 			for k in n:
 				var t: float = (float(k) + 0.5) / float(n) - 0.5
-				_gate_box_at(mid + u * (t * span), u, out * 0.005, Vector3(0.012, h - 0.01, 0.006), base + h * 0.5, c * (1.15 if k % 2 == 0 else 0.95))
+				_gate_box_at(mid + u * (t * span), u, out * 0.005, Vector3(0.012, h - 0.01, 0.006), base + h * 0.5, c * (1.3 if k % 2 == 0 else 0.8))
 		&"slat":
 			# Горизонтальні дошки з просвітом між двома стійками, як паркан із дощок: темна підкладка й чотири широкі дошки;
 			# дрібніші за піксель дошки дають на екрані шахові плями світлих верхніх граней.
-			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h - 0.01, 0.004), base + h * 0.5, GATE_SLAT * 0.85)
+			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h - 0.01, 0.004), base + h * 0.5, GATE_SLAT * GATE_SLAT_BACK)
 			var rows: int = 4
 			for k in rows:
 				var y: float = (float(k) + 0.5) / float(rows) * h
@@ -2273,6 +2286,8 @@ class _Placer:
 	var _wall_rects: Array[Rect2] = []
 	## Слід стін тих самих будівель (без звісу даху й димаря): кінці секцій, що стоять на обрисі, дотягуються до нього.
 	var _wall_foots: Array[Rect2] = []
+	## Ланки Г-подібних обходів до сліду стін (_reach_foots), для тестів.
+	var detour_legs: Array = []
 	## Висота кожного обрису з _wall_rects (клітинки) і шапки його димарів (x, z, висота): силует будівлі на екрані
 	## для воріт (_gate_at).
 	var _wall_tops: Array[float] = []
@@ -4563,50 +4578,88 @@ class _Placer:
 				r = parent[r]
 			if float(length[r]) >= MIN_FENCE or tied.has(r):
 				kept.append(out[k])
-		return _reach_foots(_drop_twin_runs(kept, posts, home))
+		return _reach_foots(_drop_twin_runs(kept, posts, home), posts)
 
 	## Кінець секції, що стоїть на обрисі будівлі (зі звісом даху чи димарем), дотягується вздовж себе до сліду стін: без цього
 	## паркан зупинявся за звісом, у метрі від справжньої стіни. Лише до грані сліду, не всередину.
-	func _reach_foots(pieces: Array) -> Array:
+	func _reach_foots(pieces: Array, posts: Array[Vector2]) -> Array:
 		var out: Array = []
 		var extra: Array = []
 		for pc: Array in pieces:
 			var ends: Array = [pc[0], pc[1]]
 			for end in 2:
 				var e: Vector2 = ends[end]
-				var on_box := false
-				for r: Rect2 in _wall_rects:
-					on_box = on_box or r.grow(0.03).has_point(e)
-				if not on_box:
+				# Будівлі, на обрисі яких стоїть кінець (його слід — паралельний елемент _wall_foots).
+				var hit_idx: Array[int] = []
+				for w in _wall_rects.size():
+					if (_wall_rects[w] as Rect2).grow(0.03).has_point(e):
+						hit_idx.append(w)
+				if hit_idx.is_empty():
 					continue
 				var d: Vector2 = (e - (ends[1 - end] as Vector2)).normalized()
 				var best: float = INF
-				for f: Rect2 in _wall_foots:
+				for w: int in hit_idx:
+					var f: Rect2 = _wall_foots[w]
 					if f.grow(0.02).has_point(e):
 						best = 0.0
 						break
-					var t: float = _ray_rect(e, d, f)
-					if t < best:
-						best = t
+					best = minf(best, _ray_rect(e, d, f))
 				if best > 0.0 and best <= REACH_FOOT:
 					ends[end] = e + d * (best + 0.02)
 				elif best > REACH_FOOT:
-					# Промінь минає слід стін (кут корпусу далі за димар чи звіс): обхід «Г» — убік до межі сліду й далі вздовж себе
-					# до грані; обидві ланки лежать поза обрисом зі звісом по осі першої.
+					# Промінь минає слід стін (кут корпусу далі за димар чи звіс): одне «Г» — убік до межі сліду й далі вздовж себе
+					# до грані. Кінець, що вже з'єднаний з іншою секцією, не добудовується; ланка, що не проходить перевірок
+					# звичайної секції (_leg_ok), відкидається разом з обходом.
 					var near := Vector2.ZERO
 					var near_d: float = INF
-					for f: Rect2 in _wall_foots:
+					for w: int in hit_idx:
+						var f: Rect2 = _wall_foots[w]
 						var q := Vector2(clampf(e.x, f.position.x, f.end.x), clampf(e.y, f.position.y, f.end.y))
 						if e.distance_to(q) < near_d:
 							near_d = e.distance_to(q)
 							near = q
-					if near_d > 0.0 and near_d <= REACH_FOOT:
+					if near_d > 0.0 and near_d <= REACH_FOOT and not _end_joined(pieces, pc, e):
 						var side: Vector2 = Vector2(near.x, e.y) if absf(d.y) > absf(d.x) else Vector2(e.x, near.y)
-						extra.append([e, side])
-						extra.append([side, near])
+						# Обхід — рівно одне «Г» з двох ненульових ланок: коли кінець уже стоїть навпроти грані по одній осі, ланка нульова.
+						if e.distance_to(side) < 0.02 or side.distance_to(near) < 0.02:
+							if _leg_ok(e, near, posts, pieces, extra):
+								extra.append([e, near])
+								detour_legs.append([e, near])
+						elif _leg_ok(e, side, posts, pieces, extra) and _leg_ok(side, near, posts, pieces, extra):
+							extra.append([e, side])
+							extra.append([side, near])
+							detour_legs.append([e, side])
+							detour_legs.append([side, near])
 			out.append(ends)
 		out.append_array(extra)
 		return out
+
+	## Кінець e секції pc збігається з кінцем іншої секції (ланцюг іде далі).
+	func _end_joined(pieces: Array, pc: Array, e: Vector2) -> bool:
+		for o: Array in pieces:
+			if o != pc and ((o[0] as Vector2).distance_to(e) < 0.03 or (o[1] as Vector2).distance_to(e) < 0.03):
+				return true
+		return false
+
+	## Ланка a→b обходу проходить ті самі перевірки, що й звичайна секція: не на дорозі чи воді й не в чужому дворі (_fence_hard),
+	## не в сліді жодної будівлі, не на стовпі воріт і не перетинає іншу секцію (ні цього кільця, ні раніше поставлену).
+	func _leg_ok(a: Vector2, b: Vector2, posts: Array[Vector2], pieces: Array, extra: Array) -> bool:
+		for j in 6:
+			var q: Vector2 = a.lerp(b, float(j) / 5.0)
+			if _fence_hard(q):
+				return false
+			for f: Rect2 in _wall_foots:
+				if f.grow(-0.005).has_point(q):
+					return false
+			for g: Vector2 in posts:
+				if g.distance_to(q) < 0.03:
+					return false
+		var others: Array = pieces + extra + _fence_segments()
+		for o: Array in others:
+			var x: Variant = Geometry2D.segment_intersects_segment(a, b, o[0], o[1])
+			if x != null and (x as Vector2).distance_to(a) > 0.02 and (x as Vector2).distance_to(b) > 0.02:
+				return false
+		return true
 
 	## Два паралельні ходи від стіни до стіни ближче TWIN_GAP, між якими нічого нема (ні будівлі, ні воріт), обгороджують
 	## смужку порожньої трави: лишається той, що ближчий до хати двору, — двір читається одним.

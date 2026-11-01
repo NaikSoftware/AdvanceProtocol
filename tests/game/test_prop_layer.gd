@@ -633,8 +633,8 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	assert_gt(fences, 0, "%s: передумова — двори обгороджені" % p)
 
 
-## Слід стін моделі (model()["foot"]) — без звісу даху й димаря: контрольні числа двох хат, щоб помилка в обчисленні сліду
-## не проходила сама собою (інші тести міряють від нього ж). Кінець по +x у координатах моделі, тайли.
+## Слід стін моделі: контрольні числа двох хат (кінець по +x у координатах моделі, тайли), щоб помилка в обчисленні сліду не
+## проходила сама собою (інші тести міряють від нього ж).
 func test_wall_footprint_of_known_houses() -> void:
 	for pair: Array in [[&"house_h8", 0.32], [&"house_h4", 0.52]]:
 		var info: Variant = PropLayer.model(pair[0])
@@ -644,6 +644,66 @@ func test_wall_footprint_of_known_houses() -> void:
 		var full: AABB = (info as Dictionary)["aabb"]
 		assert_almost_eq(foot.end.x, float(pair[1]), 0.01, "%s: слід стін по +x" % pair[0])
 		assert_lte(foot.end.x, full.end.x + 1e-4, "%s: слід у межах обрису" % pair[0])
+
+
+## Слід стін хат (model()["foot"]) збігається з розмірами стін у конвеєрі Blender (PropLayer.WALL_SIZES, ±0,02) і покриває
+## щонайменше 85 % обрису по кожній осі; виняток — із причиною (ґанок із дашком, веранда, димар виступають за стіну).
+const FOOT_EXCEPTIONS: Dictionary = {
+	&"house_h2": "ґанок з дашком виступає за стіну по z",
+	&"house_h3": "ґанок з дашком виступає за стіну по z",
+	&"house_h4": "ґанок з дашком виступає за стіну по z",
+	&"house_h7": "ґанок з дашком виступає за стіну по z",
+	&"house_h8": "ґанок з дашком й приставний димар виступають за стіну",
+}
+
+
+func test_wall_footprints_match_the_builders() -> void:
+	for name: StringName in PropLayer.WALL_SIZES:
+		var info: Variant = PropLayer.model(name)
+		if info == null:
+			continue
+		var foot: AABB = (info as Dictionary)["foot"]
+		var full: AABB = (info as Dictionary)["aabb"]
+		var want: Vector2 = PropLayer.WALL_SIZES[name]
+		assert_almost_eq(foot.size.x, want.x, 0.02, "%s: слід по x відповідає розміру стін з Blender" % name)
+		assert_almost_eq(foot.size.z, want.y, 0.02, "%s: слід по z відповідає розміру стін з Blender" % name)
+		var share: Vector2 = Vector2(foot.size.x / full.size.x, foot.size.z / full.size.z)
+		if not FOOT_EXCEPTIONS.has(name):
+			assert_gte(minf(share.x, share.y), 0.85, "%s: слід покриває мало обрису (%s)" % [name, share])
+	# Модель поза списком (сарай, комора) — слід дорівнює обрису.
+	var barn: Variant = PropLayer.model(&"f2_livestock_barn")
+	if barn != null:
+		assert_eq((barn as Dictionary)["foot"], (barn as Dictionary)["aabb"], "поза списком — обрис")
+
+
+## Ланки Г-подібних обходів до сліду стін (detour_legs) підпорядковані тим самим правилам, що й секції: не на дорозі, не в сліді
+## будівлі, не на опорі й не на стовпі воріт, не перетинають інших секцій.
+func test_detour_legs_obey_fence_rules(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var legs: Array = props._placer.detour_legs
+	var foots: Array[Rect2] = []
+	var poles: Array[Rect2] = []
+	for inst in props.all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			foots.append(PropLayer.wall_rect(inst))
+		elif k == PropLayer.Kind.POLE:
+			var b: AABB = _box_of(inst)
+			poles.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+	var posts: Array[Vector2] = []
+	for g: Dictionary in props._gates:
+		posts.append_array([g["a"], g["mid"], g["b"]])
+	for leg: Array in legs:
+		for t in 6:
+			var q: Vector2 = (leg[0] as Vector2).lerp(leg[1], float(t) / 5.0)
+			assert_gte(props.road_edge_m(q), PropLayer.FENCE_ROAD_INSET * 8.0, "%s: ланка обходу %s на асфальті" % [p, q])
+			for f: Rect2 in foots:
+				assert_false(f.grow(-0.005).has_point(q), "%s: ланка обходу %s у сліді стін" % [p, q])
+			for r: Rect2 in poles:
+				assert_false(r.grow(0.02).has_point(q), "%s: ланка обходу %s на опорі" % [p, q])
+			for g: Vector2 in posts:
+				assert_gt(g.distance_to(q), 0.03, "%s: ланка обходу %s на стовпі воріт" % [p, q])
+	gut.p("%s: ланок обходу %d" % [p, legs.size()])
 
 
 ## Огорожа двору доходить до стіни, але не заходить у слід її стін (без звісу даху й димаря) і тримається
@@ -910,7 +970,7 @@ func test_fence_runs_end_on_walls_or_gate_posts(p = use_parameters(MAPS)) -> voi
 			for e: Vector2 in [garden[i][0], garden[i][1]]:
 				var shared := false
 				for j in garden.size():
-					shared = shared or (j != i and root.call(j) == r and (e.distance_to(garden[j][0]) < 0.03 or e.distance_to(garden[j][1]) < 0.03))
+					shared = shared or (j != i and root.call(j) == r and (e.distance_to(garden[j][0]) < 0.005 or e.distance_to(garden[j][1]) < 0.005))
 				if not shared:
 					free_ends.append(e)
 		var on_walls := not free_ends.is_empty()
