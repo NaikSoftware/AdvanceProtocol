@@ -184,6 +184,8 @@ func test_nothing_small_on_a_unit_centre(p = use_parameters(MAPS)) -> void:
 
 func test_bridge_swaps_when_demolished_and_back_when_repaired() -> void:
 	var board: Board = _map("river").to_board()
+	# Спільний вигляд Річки перебудовується двічі: зруйнувати й полагодити міст.
+	# Наприкінці він має бути таким самим, як до тесту, бо на ньому йдуть інші тести Річки.
 	var view: BoardView = _cached("river")
 	var cell := Vector2i(13, 10)
 	assert_eq(view.props().instances_on(cell)[0]["model"], &"bridge_river_centre")
