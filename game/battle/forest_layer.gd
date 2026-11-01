@@ -348,10 +348,15 @@ static func screen_gap(p: Vector2, top: float, r: float, span_list: Array, node:
 	var a: Vector2 = _scr(p + fwd * PROJ_K * (foot - WIRE_HEIGHT))
 	var b: Vector2 = _scr(p + fwd * PROJ_K * (top - WIRE_HEIGHT))
 	var best: float = INF
+	var item_a: Vector2 = _scr(p + fwd * PROJ_K * foot)
+	var item_b: Vector2 = _scr(p + fwd * PROJ_K * top)
 	for w: Array in span_list:
 		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])) > 12.0:
 			continue
 		best = minf(best, _seg_dist(a, b, _scr(w[0]), _scr(w[1])))
+		# Стовп — вертикаль від землі до дроту на кінцях прольоту: крона не лягає й на нього.
+		for q: Vector2 in w:
+			best = minf(best, _seg_dist(item_a, item_b, _scr(q), _scr(q + fwd * PROJ_K * WIRE_HEIGHT)))
 	return best - r
 
 

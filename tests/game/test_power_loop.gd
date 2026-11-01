@@ -163,3 +163,10 @@ func test_plants_are_culled_whole() -> void:
 			kept = true
 	assert_true(kept, "береза (16.71, 0.58) лишилась цілою: на дроті її крони нема")
 
+
+
+## Опора теж не стоїть у кроні: крона впритул до опори лягає на неї на екрані, далека — ні.
+func test_crown_beside_a_pole_lies_on_it() -> void:
+	var span: Array = [[Vector2(0.0, 0.0), Vector2(5.0, 0.0)]]
+	assert_lt(ForestLayer.screen_gap(Vector2(0.3, -1.2), 1.2, 0.5, span, "Birch_A"), ForestLayer.CROWN_MARGIN, "крона впритул до опори")
+	assert_gt(ForestLayer.screen_gap(Vector2(0.3, 4.0), 1.2, 0.5, span, "Birch_A"), ForestLayer.CROWN_MARGIN, "а на камерному боці далеко — ні")
