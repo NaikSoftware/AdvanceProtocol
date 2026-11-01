@@ -1065,6 +1065,24 @@ func test_nothing_small_lies_on_the_road_surface(p = use_parameters(MAPS)) -> vo
 	assert_gt(checked, 0, p)
 
 
+## Блок біля мосту не впирається в підніжжя опори: від його габариту до стовпа щонайменше 0.3 клітинки.
+func test_blocks_keep_clear_of_poles(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _cached(p)
+	var poles: Array[Vector2] = []
+	var blocks: Array[Rect2] = []
+	for inst in view.props().all_instances():
+		var k: int = _kind(inst["model"])
+		var xf: Transform3D = inst["transform"]
+		if k == PropLayer.Kind.POLE:
+			poles.append(Vector2(xf.origin.x, xf.origin.z))
+		elif k == PropLayer.Kind.BLOCK:
+			var b: AABB = xf * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+			blocks.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+	for r: Rect2 in blocks:
+		for q: Vector2 in poles:
+			assert_false(r.grow(PropLayer.BLOCK_POLE_GAP).has_point(q), "%s: блок %s ближче за %.1f до опори %s" % [p, r, PropLayer.BLOCK_POLE_GAP, q])
+
+
 ## Не більше двох однакових дрібних пропсів ближче за клітинку: ряд копій читається складом.
 func test_no_rows_of_identical_small_props(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
