@@ -467,6 +467,8 @@ the current player can see; scars respect the viewer's `seen`. Reference brief:
 - [x] Fields nearly level on the board and in the ring (≤0.25 m within a cell)
 - [x] Every building on a levelled pad cut into the slope, none sunk to the windows or on a plinth
 - [x] Fences and garden beds follow the ground (section midpoint within 5 cm)
+- [ ] Where asphalt ends, it ends like real asphalt (broken edge, gravel or packed track beyond), not a blur
+- [x] Roads are asphalt or dirt only, no cobble; a bridge meets the same surface on both sides
 
 ### Task 17: House models and roofs
 
@@ -493,6 +495,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 19: Power lines
 
 - [x] Trunks along roads to the outer edge of the ring; a pole on every bend; no lone poles
+- [ ] Lines run straight on the map axes and turn only at 90°; only house drops take other angles
 - [x] Drops to about half the houses, never all on one street; on the wall under the eaves, clear of chimneys; no wire across a facade or roof from the play camera; 10 kV pole 10.7 m
 - [x] Quiet wires, no web over villages; every settlement keeps its street line and transformer
 - [x] No pole in a yard or gateway; drops never end at a chimney on a gable; no doubled poles
@@ -535,6 +538,10 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Explosion cloud top breaks up in ragged wisps, no dark ball sitting on the smoke
 - [x] Chimney and ruin smoke as one continuous plume, no pulsing
 - [x] Chimney smoke reads as volume, not flat strokes
+- [x] Smoke from only a few intact houses; never from a damaged house or a ruin chimney
+- [x] Ruins smoulder faintly from the rubble itself, never from mid-air
+- [x] River reeds are soft clumps with ragged tops, not flat comb cards
+- [x] Chimney opening a dark sooty grey, not a black hole
 - [x] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
 - [x] First scroll across the map is smooth, no hitch
 

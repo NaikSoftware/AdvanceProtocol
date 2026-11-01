@@ -18,12 +18,12 @@ const MODEL_DIR: String = "res://assets/props/"
 ## max — скільки разів на карту (орієнтир, що має лишатись одним), ring — лише в кільці, gap —
 ## власний проміжок до сусідньої будівлі, якщо більший за STRUCTURE_GAP, tower —
 ## вежа (одна на карту, у власному дворі), storeys — двоповерховий (у селі їх не більше половини),
-## scale — рівномірний множник розміру (брила завелика для польового каменя, хата на клітинку
+## damaged — пошкоджена модель (її димар не димить), scale — рівномірний множник розміру (брила завелика для польового каменя, хата на клітинку
 ## заширока, щоб між сусідніми з камери гри було видно землю),
 ## map/order/deck_top — міст своєї переправи (DECK_TOP з tools/blender/bridges/build_bridges.py).
 const MODELS: Dictionary = {
 	&"house_h1": {"kind": Kind.STRUCTURE, "weight": 4},
-	&"house_h1_hit": {"kind": Kind.STRUCTURE, "weight": 1},
+	&"house_h1_hit": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 1},
 	&"house_h2": {"kind": Kind.STRUCTURE, "weight": 3},
 	&"house_h3": {"kind": Kind.STRUCTURE, "weight": 2, "storeys": 2},
 	&"house_h4": {"kind": Kind.STRUCTURE, "weight": 4},
@@ -33,11 +33,11 @@ const MODELS: Dictionary = {
 	&"house_h8": {"kind": Kind.STRUCTURE, "weight": 3, "scale": HOUSE_SCALE},
 	&"f8_shed": {"kind": Kind.STRUCTURE, "weight": 2},
 	&"h5_panel_block": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
+	&"h5_panel_block_damaged": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 2, "max": 1},
 	&"f1_farm_barn": {"kind": Kind.STRUCTURE, "weight": 1},
 	&"f2_livestock_barn": {"kind": Kind.STRUCTURE, "weight": 2, "ring": true},
 	&"f3_hangar": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
-	&"f3_hangar_damaged": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
+	&"f3_hangar_damaged": {"kind": Kind.STRUCTURE, "damaged": true, "weight": 2, "max": 1},
 	&"f4_grain_bins": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f5_silo_battery": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
 	&"f6_fuel_station": {"kind": Kind.STRUCTURE, "weight": 2, "max": 1},
@@ -49,8 +49,21 @@ const MODELS: Dictionary = {
 	&"bridge_river_centre": {"kind": Kind.BRIDGE, "map": &"river", "order": 1, "deck_top": 0.30},
 	&"bridge_river_east": {"kind": Kind.BRIDGE, "map": &"river", "order": 2, "deck_top": 0.21},
 	&"infra_fence_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
-	# Сільська садиба — дерев'яний штакетник. Профлист (ассет 2 м — до ~1.4 м) з камери гри читався
-	# пласкою бузковою коробкою без стовпчиків і швів — він, як і єврозабір, для ферм.
+	# Паркани дворів: п'ять видів однієї моделі (infra_fence_yard) і одного атласу — один вузол «batch» на всі двори.
+	# Ім'я — «модель_вид»; номер виду (fence_kind_of) і верх кожного беруться з extras самої моделі
+	# (tools/blender/infra/yard_fences.py), і номер іде в INSTANCE_CUSTOM (prop_thin лишає з картки лише його смугу).
+	# gate — форма воріт цього паркану.
+	&"infra_fence_yard_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "gate": &"wood"},
+	&"infra_fence_yard_sheet": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "gate": &"sheet"},
+	&"infra_fence_yard_chainlink": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "gate": &"lattice"},
+	&"infra_fence_yard_brickbars": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "gate": &"metal"},
+	&"infra_fence_yard_slat": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+			"batch": &"infra_fence_yard", "gate": &"slat"},
+	# Паркани ферм і полів (FIELD_FENCE): профлист і єврозабір; двори обгороджує infra_fence_yard.
 	&"infra_fence_sheet_green": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
 	&"infra_fence_sheet_brown": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
 	&"infra_fence_euro": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY},
@@ -139,6 +152,10 @@ const WIRE_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG + (IsoCameraRig.P
 ## Нахил, під яким дріт перевіряється біля стовпчика димаря: найнижчий нахил рига — відвід не «закінчується» на димарі
 ## на жодному зумі, а густоти це не коштує.
 const CHIMNEY_SEEN_PITCH_DEG: float = IsoCameraRig.PITCH_NEAR_DEG
+## Дим руїни: вага висоти (клітинки на клітинку) проти відстані до центру, відступ від уцілілого димаря й підйом над уламком, клітинки.
+const RUIN_SMOKE_HEIGHT_W: float = 3.0
+const RUIN_SMOKE_CHIMNEY_GAP: float = 0.5
+const RUIN_SMOKE_LIFT: float = 0.03
 ## Кінець відводу не ближче за стільки (клітинки, ~2 м) до димаря в плані: інакше відвід читається таким, що
 ## закінчується на димарі.
 const DROP_CHIMNEY_CLEAR: float = 0.25
@@ -207,6 +224,18 @@ const BUILDING_SHIFT: float = 0.3
 ## Повітка-двірська будівля на клітинці BUILDING без будинку: f8_shed, зменшена так, щоб вільно
 ## стала в клітинку (ассет на 0.96 клітинки не влазить із відступом до огорожі).
 const YARD_SHED: StringName = &"f8_shed"
+## Повітки двору: сусідні садиби беруть різні (як хати — HOUSE_FORMS).
+const YARD_SHEDS: Array[StringName] = [&"f8_shed"]
+## Форми паркану садиби: «модель|множник висоти». Види відрізняються формою (штахет 1.3 м, суцільний профлист 1.8 м,
+## сітка на трубах 1.5 м, цегляний цоколь із прутами 1.6 м, горизонтальні дошки 1.45 м), а не фарбою, яку prop_thin
+## знебарвлює; множник висоти в кожного свій, тож сусіди різняться й висотою. Усі види — один вузол малювання.
+const FENCE_FORMS: Array[StringName] = [&"infra_fence_yard_picket|1.0", &"infra_fence_yard_sheet|0.95",
+		&"infra_fence_yard_chainlink|1.05", &"infra_fence_yard_brickbars|0.9", &"infra_fence_yard_slat|1.1"]
+## Крок стовпів паркану двору, м: один повтор атласу вздовж секції (TILE_M у tools/blender/infra/yard_fences.py).
+const YARD_FENCE_TILE_M: float = 2.5
+## Форми воріт садиби: суцільні металеві, з профнастилу, дерев'яні, ґратчасті, з горизонтальних дощок. Ворота беруть
+## форму свого паркану (spec «gate»).
+const GATE_KINDS: Array[StringName] = [&"metal", &"sheet", &"wood", &"lattice", &"slat"]
 ## Секція паркану не відходить від ґрунту посередині більш ніж на 5 см; найкоротша секція (клітинки).
 const FENCE_SAG: float = 0.05 * 0.125
 const FENCE_MIN: float = 0.1
@@ -225,12 +254,35 @@ const YARD_SHED_SCALE: float = 0.7
 ## лишається ≥ 0.3 клітинки й разом із її товщиною.
 const YARD_CLEAR: float = 0.25
 const YARD_CLEAR_SMALL: float = 0.03
-## Хвіртка в огорожі двору, клітинки (~3.6 м): решта ребра обгороджена, двір не відкритий на вулицю.
-const GATE: float = 0.4
+## Отвір воріт у огорожі двору разом із хвірткою, клітинки (~4.6 м): решта ребра обгороджена, двір не
+## відкритий на вулицю.
+const GATE: float = 0.58
+## Ворота садиби — стовп, полотно завширшки GATE_LEAF (3.2 м), стовп, хвіртка (~1 м) і стовп: у GATE між
+## центрами крайніх стовпів. Висота полотна 1.84 м.
+const GATE_LEAF: float = 0.4
+const GATE_H: float = 0.23
 ## Найкоротша секція огорожі, клітинки (4 м): коротший обрубок читається уламком, не огорожею.
 const MIN_FENCE: float = 0.5
 ## Найкоротший шматок кільця біля воріт: стовп і прольот (~1.2 м).
 const GATE_POST: float = 0.15
+## Ворота дивляться на дорогу, коли промінь від них назовні впирається в покриття не далі, ніж за стільки клітинок.
+const GATE_SIGHT: float = 2.0
+## Отвір воріт далі стільки (клітинки, ~2.8 м) від будь-якої будівлі чи сараю: ворота не лізуть на фасад. Двір, де такого
+## місця нема, бере менший запас (_GATE_CLEARS): двір без воріт не лишається.
+const GATE_CLEAR: float = 0.35
+## Паркан не йде вздовж стіни ближче за стільки (клітинки, ~2 м): стіна сама межа двору.
+const FENCE_WALL: float = 0.25
+const GATE_CLEARS: Array[float] = [GATE_CLEAR, 0.25]
+## Отвір воріт уздовж стіни (паралельно їй) не ближче стільки (клітинки, ~3.2 м), хоч би який запас узяв двір: ближче
+## ворота виходять з-під звису даху чи затуляють перший поверх фасаду.
+const GATE_ALONG: float = 0.4
+## Верх полотна воріт на екрані не ближче стільки (клітинки площини фокуса, ~15 px на зумі 8) до силуету ближчої
+## будівлі з димарем: інакше ворота визирають з-за даху й читаються частиною хати.
+const GATE_SCREEN_GAP: float = 0.13
+## Паркан двору не ближче стільки (клітинки, ~0.5 м) до краю намальованого асфальту: між панеллю й покриттям лишається узбіччя.
+const FENCE_ROAD_INSET: float = 0.06
+## Прямий хід паркану, коротший за це (клітинки, ~2 м), стоїть лише як сполучник воріт чи довгого ходу (_drop_short_runs).
+const SHORT_RUN: float = 0.25
 ## Кут камери для правила екрана (IsoCameraRig: 38–55°, бій здебільшого близько) і найменша глибина
 ## між будівлями, що на екрані накладаються: ближча будівля не сміє ховати дальшу, бо тоді дві
 ## читаються однією, хоч згори між ними й 2 м.
@@ -263,12 +315,18 @@ const CABINET_GAP_M: float = 0.4
 const TRANSFORMER_COLOR: Color = Color(0.25, 0.28, 0.26)
 ## Поселення — опори в межах стількох клітинок: одна підстанція на поселення.
 const SETTLEMENT_R: float = 6.0
-## Стовп воріт (~0.25 × 1.5 м), темне дерево.
-const GATE_POST_SIZE: Vector3 = Vector3(0.03, 0.19, 0.03)
+## Стовп воріт (~0.25 м в перерізі), на ~0.4 м вищий за полотно.
+const GATE_POST_SIZE: Vector3 = Vector3(0.03, 0.245, 0.03)
 ## Value ~0.25: темне дерево, видно на траві й ґрунті.
 const GATE_POST_COLOR: Color = Color(0.25, 0.21, 0.16)
-## Поперечина над воротами (~0.15 м), між верхами стовпів.
-const GATE_BAR: float = 0.018
+## Тони полотна воріт (sRGB; вершинний колір множить альбедо коробки): сталь, фарбований профнастил
+## (бурий чи зелений), дошки, чорна ґратка.
+const GATE_STEEL: Array[Color] = [Color(0.22, 0.28, 0.34), Color(0.28, 0.31, 0.27)]
+const GATE_SHEET: Array[Color] = [Color(0.36, 0.2, 0.13), Color(0.2, 0.32, 0.22)]
+const GATE_WOOD: Color = Color(0.34, 0.23, 0.14)
+## Частка, на яку фарба воріт зсувається до сірого (_gate_box_at).
+const GATE_DESAT: float = 0.3
+const GATE_IRON: Color = Color(0.05, 0.06, 0.055)
 ## Півширина стежки двору для відступу дрібних речей від неї (самі стежки — Footpaths).
 const PATH_WIDTH: float = 0.1
 ## Відступи сторони кільця паркану від межі двору, від бажаного (назовні) до найглибшого всередину;
@@ -303,6 +361,8 @@ static var _depth_shader_cache: Shader
 
 ## Модель -> {mesh, local, footprint, aabb, wires, tris}; спільний на процес, бо GLB кешуються.
 static var _models: Dictionary = {}
+## Тюк на мокрій карті: у дощ солома темна й сірувата, не жовто-зелена пляма на траві.
+const HAY_WET: Color = Color(0.62, 0.6, 0.5)
 ## Модель -> ShaderMaterial розчинення (лише будівлі й руїни).
 static var _fade_materials: Dictionary = {}
 ## Вид -> моделі на диску: перелік теки й сортування не повторюються на кожну групу будівель.
@@ -359,10 +419,13 @@ var _transformers: Dictionary = {}
 ## Однакові коробки — стовпи воріт і уламки руїн — одним MultiMesh (§8: виклик малювання на
 ## кожну групу коштував би вдвічі більше). Збираються під час побудови й далі не міняються.
 var _small_base: Array[Transform3D] = []
+## Вузол «batch» -> вид, записаний у INSTANCE_CUSTOM кожного слота (_write_nodes).
+var _custom_written: Dictionary = {}
 var _small_colors: Array[Color] = []
 var _transformer_node: MultiMeshInstance3D = null
-## Стовпи воріт садиб (центри на дошці): ворота читаються розривом зі стовпами по боках.
-var _gate_posts: Array[Vector2] = []
+## Ворота садиб: {a, mid, b — центри стовпів (полотно a→mid, хвіртка mid→b), kind, out — нормаль до дороги,
+## height, seed}; з них збираються дрібні коробки.
+var _gates: Array[Dictionary] = []
 ## Опори з дротами: [індекс екземпляра опори A, індекс B] — проліт.
 var _spans: Array = []
 var _wires: MeshInstance3D
@@ -441,7 +504,14 @@ static func model(name: StringName) -> Variant:
 	if String(name).contains("#"):
 		_models[name] = _segment(name)
 		return _models[name]
-	var path: String = MODEL_DIR + String(name) + ".glb"
+	# Вид паркану двору ділить модель і сітку з рештою видів: один ресурс на всі, бо вони — один вузол малювання.
+	var glb := StringName(spec_of(name).get("glb", name))
+	if glb != name:
+		for other: StringName in _models:
+			if StringName(spec_of(other).get("glb", other)) == glb and other != glb and _models[other] != null:
+				_models[name] = _models[other]
+				return _models[name]
+	var path: String = MODEL_DIR + String(glb) + ".glb"
 	if not ResourceLoader.exists(path):
 		_models[name] = null
 		return null
@@ -452,11 +522,16 @@ static func model(name: StringName) -> Variant:
 	var mi: MeshInstance3D = meshes[0]
 	var local: Transform3D = _to_root(mi, root)
 	var footprint := Vector2i.ZERO
+	var fence_kinds: Array = []
+	var fence_tops: Array = []
 	for n in [root] + root.find_children("*", "", true, false):
 		var ex: Variant = n.get_meta("extras") if n.has_meta("extras") else null
 		if ex is Dictionary and (ex as Dictionary).has("footprint_tiles"):
 			var f: Array = ex["footprint_tiles"]
 			footprint = Vector2i(roundi(f[0]), roundi(f[1]))
+		if ex is Dictionary and (ex as Dictionary).has("fence_kinds"):
+			fence_kinds = ex["fence_kinds"]
+			fence_tops = ex["fence_tops"]
 	var wires: Array[Vector3] = []
 	var named: Array[Node] = root.find_children("wire_*", "", true, false)
 	named.sort_custom(func(a: Node, b: Node) -> bool: return String(a.name) < String(b.name))
@@ -469,16 +544,38 @@ static func model(name: StringName) -> Variant:
 	var tris: int = 0
 	for s in mi.mesh.get_surface_count():
 		tris += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-	var info: Dictionary = {"mesh": _tuned_mesh(name, mi.mesh), "local": local, "footprint": footprint,
-			"aabb": local * mi.mesh.get_aabb(), "wires": wires, "tris": tris, "chimneys": chimneys}
+	var info: Dictionary = {"mesh": _tuned_mesh(name, mi.mesh, fence_tops), "local": local, "footprint": footprint,
+			"aabb": local * mi.mesh.get_aabb(), "wires": wires, "tris": tris, "chimneys": chimneys,
+			"fence_kinds": fence_kinds, "fence_tops": fence_tops}
 	root.free()
 	_models[name] = info
 	return info
 
 
+## Номер виду паркану двору «модель_вид» у fence_kinds його моделі (порядок задає GLB); −1 — не вид паркану.
+static func fence_kind_of(name: StringName) -> int:
+	var glb := StringName(spec_of(name).get("glb", name))
+	var info: Variant = model(name)
+	if glb == name or info == null:
+		return -1
+	return ((info as Dictionary)["fence_kinds"] as Array).find(String(name).trim_prefix(String(glb) + "_"))
+
+
+## Копія сітки, що множить альбедо кожної поверхні на tint.
+static func _dimmed(mesh: Mesh, tint: Color) -> Mesh:
+	var copy: Mesh = mesh.duplicate()
+	for i in copy.get_surface_count():
+		var src := copy.surface_get_material(i) as BaseMaterial3D
+		if src != null:
+			var dark: BaseMaterial3D = src.duplicate()
+			dark.albedo_color = src.albedo_color * tint
+			copy.surface_set_material(i, dark)
+	return copy
+
+
 ## Копія сітки з власними матеріалами для огорож (двобічне світло) і каміння (темніше). Сам GLB
 ## не чіпаємо: load() ділить його сітку з усіма, хто його вантажить.
-static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
+static func _tuned_mesh(name: StringName, mesh: Mesh, fence_tops: Array = []) -> Mesh:
 	var kind: int = int(spec_of(name).get("kind", -1))
 	if kind not in [Kind.FIELD_FENCE, Kind.GARDEN_FENCE, Kind.BOULDER, Kind.BLOCK, Kind.POLE, Kind.HAY]:
 		return mesh
@@ -509,6 +606,14 @@ static func _tuned_mesh(name: StringName, mesh: Mesh) -> Mesh:
 		thin.set_shader_parameter("alpha_cut", src.alpha_scissor_threshold if cut else 0.0)
 		thin.set_shader_parameter("roughness", src.roughness)
 		thin.set_shader_parameter("metallic", src.metallic)
+		# Верх секції темніший: світлі шапки стовпчиків читались білим пунктиром уздовж огорожі.
+		thin.set_shader_parameter("top_local", mesh.get_aabb().end.y)
+		if spec_of(name).has("batch"):
+			# Картка з усіма видами: шейдер лишає смугу виду екземпляра й тягне текстуру кроком стовпів від початку
+			# секції, а не розтягує її з масштабом секції.
+			thin.set_shader_parameter("kinds", fence_tops.size())
+			thin.set_shader_parameter("tile_m", YARD_FENCE_TILE_M)
+			thin.set_shader_parameter("kind_top", PackedFloat32Array(fence_tops))
 		copy.surface_set_material(i, thin)
 	return copy
 
@@ -645,6 +750,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_fade_level.clear()
 	_fade_target.clear()
 	_slots.clear()
+	_custom_written.clear()
 	_node_model.clear()
 	_spans.clear()
 	_drops.clear()
@@ -653,7 +759,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_transformer_node = null
 	_small_base.clear()
 	_small_colors.clear()
-	_gate_posts.clear()
+	_gates.clear()
 	_wires = null
 	_contacts = null
 	_garden_node = null
@@ -723,7 +829,9 @@ func set_crushed(cells: Array[Vector2i]) -> void:
 func chimney_tops() -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	for inst in _instances:
-		if int(spec_of(inst["model"])["kind"]) != Kind.STRUCTURE or inst.get("yard", false):
+		var spec: Dictionary = spec_of(inst["model"])
+		# у пошкодженої хати димар не димить: це руїна з проламом, а не житло
+		if int(spec["kind"]) != Kind.STRUCTURE or inst.get("yard", false) or bool(spec.get("damaged", false)):
 			continue
 		if not _on_board((inst["cells"] as Array)[0]):
 			continue
@@ -744,27 +852,109 @@ func ruin_centres() -> Array[Vector3]:
 	return out
 
 
-## Звідки тліє руїна: у проломі на рівні даху (0,55 висоти обрису), відсунуто від уцілілого
-## димаря — дим біля цілого димаря читався б як дим із димаря.
+## Звідки тліє руїна: з уламків усередині обрису — низька частина верху сітки, ближча до центру, не
+## біля уцілілого димаря (дим біля цілого димаря читався б як дим із димаря) і не над порожнім повітрям.
 func ruin_smoke_points() -> Array[Vector3]:
 	var out: Array[Vector3] = []
+	for inst in _instances:
+		if int(spec_of(inst["model"])["kind"]) == Kind.RUIN and _on_board((inst["cells"] as Array)[0]):
+			out.append(_ruin_smoke_point(inst))
+	return out
+
+
+## Точка диму лише тієї руїни, центр якої (`ruin_centres`) збігається з `centre`: важка вибірка по сітці
+## йде тільки для руїн, що справді димлять.
+func ruin_smoke_point_at(centre: Vector3) -> Vector3:
 	for inst in _instances:
 		if int(spec_of(inst["model"])["kind"]) != Kind.RUIN or not _on_board((inst["cells"] as Array)[0]):
 			continue
 		var box: AABB = (inst["transform"] as Transform3D) * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
-		var c := Vector3(box.get_center().x, box.position.y + box.size.y * 0.55, box.get_center().z)
-		var t: Transform3D = _final_transform(inst) * (model(inst["model"]) as Dictionary)["local"]
-		for ch: Vector3 in (model(inst["model"]) as Dictionary).get("chimneys", []):
-			var away := Vector2(c.x, c.z) - Vector2((t * ch).x, (t * ch).z)
-			if away.length() > 1e-4:
-				var push: Vector2 = away.normalized() * minf(box.size.x, box.size.z) * 0.3
-				c += Vector3(push.x, 0.0, push.y)
-		# Зсуви від кількох димарів додаються: тримаємо точку в обрисі, на 15 % від його краю.
-		var m: Vector3 = box.size * 0.15
-		c.x = clampf(c.x, box.position.x + m.x, box.end.x - m.x)
-		c.z = clampf(c.z, box.position.z + m.z, box.end.z - m.z)
-		out.append(c)
-	return out
+		if Vector3(box.get_center().x, box.position.y, box.get_center().z).is_equal_approx(centre):
+			return _ruin_smoke_point(inst)
+	return centre
+
+
+func _ruin_smoke_point(inst: Dictionary) -> Vector3:
+	var info: Dictionary = model(inst["model"])
+	var t: Transform3D = _final_transform(inst) * (info["local"] as Transform3D)
+	var box: AABB = (inst["transform"] as Transform3D) * (info["aabb"] as AABB)
+	var chims: Array[Vector2] = []
+	for ch: Vector3 in info.get("chimneys", []):
+		chims.append(Vector2((t * ch).x, (t * ch).z))
+	var top: Dictionary = top_surface_grid(info["mesh"] as Mesh, t, box)
+	var step: float = top["step"]
+	var h: PackedFloat32Array = top["h"]
+	var centre := Vector2(box.get_center().x, box.get_center().z)
+	var best := Vector3.INF
+	var best_score: float = INF
+	var tm: TriangleMesh = triangles_of(inst["model"])
+	var inv: Transform3D = t.affine_inverse()
+	var down: Vector3 = (inv.basis * Vector3.DOWN).normalized()
+	for iz in int(top["nz"]):
+		for ix in int(top["nx"]):
+			var y: float = h[iz * int(top["nx"]) + ix]
+			if is_inf(y):
+				continue
+			var xz := Vector2(box.position.x + (ix + 0.5) * step, box.position.z + (iz + 0.5) * step)
+			if chims.any(func(c: Vector2) -> bool: return c.distance_to(xz) < RUIN_SMOKE_CHIMNEY_GAP):
+				continue
+			# Висота важить більше за відстань до центру: огризок стіни не виграє в справжнього завалу.
+			var score: float = xz.distance_to(centre) + RUIN_SMOKE_HEIGHT_W * (y - box.position.y)
+			if score < best_score:
+				# Сітка наближена: біля ребра трикутників вона може схибити, тож точну висоту дає промінь, а
+				# осередок, де вони розходяться, відкидаємо.
+				var hit: Dictionary = tm.intersect_ray(inv * Vector3(xz.x, y + 50.0, xz.y), down)
+				if hit.is_empty():
+					continue
+				var hy: float = (t * (hit["position"] as Vector3)).y
+				if absf(hy - y) > 0.03:
+					continue
+				best_score = score
+				best = Vector3(xz.x, hy + RUIN_SMOKE_LIFT, xz.y)
+	if best == Vector3.INF:
+		best = Vector3(centre.x, box.position.y + RUIN_SMOKE_LIFT, centre.y)
+	return best
+
+
+## Верх сітки в світі: найвища точка трикутників над кожною клітинкою решітки кроку 0,1 у межах box
+## (inf — над порожнім). Для диму руїни й для тесту, що дим не висить у повітрі.
+static func top_surface_grid(mesh: Mesh, xf: Transform3D, box: AABB) -> Dictionary:
+	var step: float = 0.1
+	var nx: int = maxi(1, ceili(box.size.x / step))
+	var nz: int = maxi(1, ceili(box.size.z / step))
+	var h := PackedFloat32Array()
+	h.resize(nx * nz)
+	h.fill(-INF)
+	for sidx in mesh.get_surface_count():
+		var arr: Array = mesh.surface_get_arrays(sidx)
+		var vs: PackedVector3Array = xf * (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array)
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX] if arr[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		for k in range(0, idx.size() - 2, 3):
+			var a: Vector3 = vs[idx[k]]
+			var b: Vector3 = vs[idx[k + 1]]
+			var c: Vector3 = vs[idx[k + 2]]
+			var den: float = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z)
+			# Лицьова грань Godot — за годинниковою стрілкою; грані, що дивляться вниз чи вбік, верху не дають.
+			if den > -1e-9:
+				continue
+			var ix0: int = maxi(0, floori((minf(a.x, minf(b.x, c.x)) - box.position.x) / step))
+			var ix1: int = mini(nx - 1, floori((maxf(a.x, maxf(b.x, c.x)) - box.position.x) / step))
+			var iz0: int = maxi(0, floori((minf(a.z, minf(b.z, c.z)) - box.position.z) / step))
+			var iz1: int = mini(nz - 1, floori((maxf(a.z, maxf(b.z, c.z)) - box.position.z) / step))
+			for iz in range(iz0, iz1 + 1):
+				for ix in range(ix0, ix1 + 1):
+					var px: float = box.position.x + (ix + 0.5) * step
+					var pz: float = box.position.z + (iz + 0.5) * step
+					var l1: float = ((b.z - c.z) * (px - c.x) + (c.x - b.x) * (pz - c.z)) / den
+					var l2: float = ((c.z - a.z) * (px - c.x) + (a.x - c.x) * (pz - c.z)) / den
+					var l3: float = 1.0 - l1 - l2
+					if l1 < -1e-4 or l2 < -1e-4 or l3 < -1e-4:
+						continue
+					h[iz * nx + ix] = maxf(h[iz * nx + ix], l1 * a.y + l2 * b.y + l3 * c.y)
+	for i in h.size():
+		if h[i] == -INF:
+			h[i] = INF
+	return {"h": h, "nx": nx, "nz": nz, "step": step}
 
 
 ## Точка на покритті дороги (осі й ширина RoadCourse) з запасом pad, клітинки.
@@ -803,15 +993,21 @@ func triangle_count() -> int:
 ## Дроти ЛЕП на площині XZ: прольоти між опорами й відводи до хат, [a, b] (Vector2) — щоб рослинність
 ## не росла під ними.
 func wire_lines() -> Array:
+	var out: Array = span_lines()
+	for dr: Array in _drops:
+		var a: Vector3 = (_instances[dr[0]]["transform"] as Transform3D).origin
+		var at: Variant = dr[1]
+		out.append([Vector2(a.x, a.z), Vector2(at.x, at.z) if at is Vector3 else at])
+	return out
+
+
+## Лише прольоти між опорами, [a, b] (Vector2), без відводів: просіка в лісі йде за лінією, а не до хат.
+func span_lines() -> Array:
 	var out: Array = []
 	for s: Array in _spans:
 		var a: Vector3 = (_instances[s[0]]["transform"] as Transform3D).origin
 		var b: Vector3 = (_instances[s[1]]["transform"] as Transform3D).origin
 		out.append([Vector2(a.x, a.z), Vector2(b.x, b.z)])
-	for dr: Array in _drops:
-		var a: Vector3 = (_instances[dr[0]]["transform"] as Transform3D).origin
-		var at: Variant = dr[1]
-		out.append([Vector2(a.x, a.z), Vector2(at.x, at.z) if at is Vector3 else at])
 	return out
 
 
@@ -851,7 +1047,8 @@ func _build_nodes(haze: bool) -> void:
 	var by_node: Dictionary = {}
 	for i in _instances.size():
 		var m: StringName = _instances[i]["model"]
-		var key: StringName = m
+		# Види паркану двору — один вузол «batch»: вид екземпляра йде в INSTANCE_CUSTOM (_write_nodes).
+		var key: StringName = StringName(spec_of(m).get("batch", m))
 		var k: int = int(spec_of(m)["kind"])
 		if (k == Kind.STRUCTURE or k == Kind.RUIN) and not _on_board((_instances[i]["cells"] as Array)[0]):
 			key = StringName(String(m) + "@ring")
@@ -869,8 +1066,10 @@ func _build_nodes(haze: bool) -> void:
 		var fades: bool = kind == Kind.STRUCTURE or kind == Kind.RUIN
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_custom_data = fades
+		mm.use_custom_data = fades or spec_of(m).has("batch")
 		mm.mesh = _bridge_mesh(m, info["mesh"], wet) if kind == Kind.BRIDGE else info["mesh"]
+		if kind == Kind.HAY and wet:
+			mm.mesh = _dimmed(info["mesh"], HAY_WET)
 		mm.instance_count = (by_node[key] as Array).size()
 		var mmi := MultiMeshInstance3D.new()
 		# Godot міняє «@» в імені вузла на «_», тож вузол кільця — «модель_ring».
@@ -929,7 +1128,7 @@ func _build_nodes(haze: bool) -> void:
 ## група не ляже на хату), трохи повернуту й з відступом від меж — один город на двір, а не плитка
 ## на кожну клітинку. Ряди — шейдер, крок у метрах однаковий для будь-якого розміру ділянки.
 func _build_gardens() -> void:
-	_build_gate_posts()
+	_build_gates()
 	if not _garden_plots.is_empty():
 		_build_garden_plots()
 		return
@@ -1012,20 +1211,98 @@ func _build_garden_plots() -> void:
 	add_child(_garden_node)
 
 
-## Стовпи воріт — темні дерев'яні бруски на землі з обох боків розриву в паркані.
-func _build_gate_posts() -> void:
-	if _gate_posts.is_empty():
-		return
-	# Стовпи парами (по воротах) і поперечина над кожною парою — та сама коробка, розтягнута.
-	for p: Vector2 in _gate_posts:
-		_add_small(Transform3D(Basis.from_scale(GATE_POST_SIZE), Vector3(p.x, TerrainHeight.ground_y(p.x, p.y) + GATE_POST_SIZE.y * 0.5 - 0.01, p.y)), GATE_POST_COLOR)
-	for g in _gate_posts.size() / 2:
-		var a: Vector2 = _gate_posts[2 * g]
-		var b: Vector2 = _gate_posts[2 * g + 1]
-		var mid: Vector2 = (a + b) * 0.5
-		var top: float = maxf(TerrainHeight.ground_y(a.x, a.y), TerrainHeight.ground_y(b.x, b.y)) + GATE_POST_SIZE.y - 0.01 - GATE_BAR * 0.5
-		var bar := Basis(Vector3.UP, atan2(-(b - a).y, (b - a).x)).scaled_local(Vector3(a.distance_to(b), GATE_BAR, GATE_POST_SIZE.z))
-		_add_small(Transform3D(bar, Vector3(mid.x, top, mid.y)), GATE_POST_COLOR)
+## Ворота садиби з _gates: стовпи, полотно (дві стулки) і хвіртка збираються з дрібних коробок у спільному
+## вузлі SmallBoxes — нового виклику малювання вони не додають. Вигляд полотна — за kind.
+func _build_gates() -> void:
+	for g: Dictionary in _gates:
+		var a: Vector2 = g["a"]
+		var mid: Vector2 = g["mid"]
+		var b: Vector2 = g["b"]
+		var u: Vector2 = (b - a).normalized()
+		var kind_id: StringName = g["kind"]
+		var sd: int = int(g["seed"])
+		var tone: int = sd % 2
+		var post_color: Color = GATE_POST_COLOR
+		match kind_id:
+			&"metal":
+				post_color = Color(0.17, 0.18, 0.19)
+			&"sheet":
+				post_color = (GATE_SHEET[tone] as Color) * 0.6
+			&"lattice":
+				post_color = GATE_IRON
+		for p: Vector2 in [a, b]:
+			_gate_box(p, u, Vector2.ZERO, GATE_POST_SIZE, GATE_POST_SIZE.y * 0.5 - 0.01, post_color)
+		# Стовп між полотном і хвірткою товщий, вищий і темніший: на зумі 8 видно, де закінчується полотно.
+		_gate_box(mid, u, Vector2.ZERO, Vector3(GATE_POST_SIZE.x * 1.5, GATE_POST_SIZE.y + 0.03, GATE_POST_SIZE.z * 1.5),
+				(GATE_POST_SIZE.y + 0.03) * 0.5 - 0.01, post_color * 0.6)
+		# Полотно стоїть між гранями стовпів; на схилі — від нижчого кінця, щоб не висіло.
+		var half_post: float = GATE_POST_SIZE.x * 0.5
+		var spans: Array = [[a + u * half_post, mid - u * half_post * 1.5, true], [mid + u * half_post * 1.5, b - u * half_post, false]]
+		for sp: Array in spans:
+			var p0: Vector2 = sp[0]
+			var p1: Vector2 = sp[1]
+			var base: float = minf(TerrainHeight.ground_y(p0.x, p0.y), TerrainHeight.ground_y(p1.x, p1.y)) + 0.012
+			var halves: Array = [[p0, p0.lerp(p1, 0.5) - u * 0.002], [p0.lerp(p1, 0.5) + u * 0.002, p1]] if sp[2] else [[p0, p1]]
+			for lf: Array in halves:
+				_gate_leaf(lf[0], lf[1], u, g["out"], base, float(g["height"]) - 0.012, kind_id, tone, sd)
+
+
+## Одна стулка від p0 до p1 (вздовж u), нижній край на висоті base, висота h; out — бік до дороги.
+func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float, h: float, kind_id: StringName, tone: int, sd: int) -> void:
+	var span: float = p0.distance_to(p1)
+	var mid: Vector2 = (p0 + p1) * 0.5
+	match kind_id:
+		&"metal":
+			var c: Color = GATE_STEEL[tone]
+			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h - 0.02, 0.01), base + 0.01 + (h - 0.02) * 0.5, c)
+			for y: float in [0.0, h - 0.014]:
+				_gate_box_at(mid, u, out * 0.003, Vector3(span, 0.014, 0.014), base + y + 0.007, c * 0.7)
+		&"sheet":
+			var c: Color = GATE_SHEET[tone]
+			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h, 0.008), base + h * 0.5, c * 0.85)
+			var n: int = maxi(1, roundi(span / 0.045))
+			for k in n:
+				var t: float = (float(k) + 0.5) / float(n) - 0.5
+				_gate_box_at(mid + u * (t * span), u, out * 0.005, Vector3(0.012, h - 0.01, 0.006), base + h * 0.5, c * (1.15 if k % 2 == 0 else 0.95))
+		&"slat":
+			# Горизонтальні дошки з просвітом між двома стійками, як паркан із дощок.
+			var rows: int = maxi(3, floori(h / 0.022))
+			for k in rows:
+				var y: float = (float(k) + 0.5) / float(rows) * h
+				var vary: int = absi(hash(Vector2i(sd, k))) % 5
+				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h / float(rows) * 0.72, 0.01), base + y, GATE_WOOD * (0.8 + 0.06 * float(vary)))
+			for t: float in [-0.5, 0.5]:
+				_gate_box_at(mid + u * (t * (span - 0.012)), u, -out * 0.008, Vector3(0.012, h, 0.012), base + h * 0.5, GATE_WOOD * 0.55)
+		&"wood":
+			var n: int = maxi(1, floori(span / 0.05))
+			var w: float = span / float(n)
+			for k in n:
+				var t: float = (float(k) + 0.5) / float(n) - 0.5
+				var vary: int = absi(hash(Vector2i(sd, k))) % 5
+				var ph: float = h - 0.012 * float(vary % 3)
+				_gate_box_at(mid + u * (t * span), u, Vector2.ZERO, Vector3(w - 0.003, ph, 0.01), base + ph * 0.5, GATE_WOOD * (0.85 + 0.08 * float(vary)))
+			for y: float in [0.22, 0.74]:
+				_gate_box_at(mid, u, -out * 0.008, Vector3(span, 0.016, 0.008), base + h * y, GATE_WOOD * 0.6)
+		_:
+			for y: float in [0.0, h * 0.5, h - 0.01]:
+				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, 0.01, 0.01), base + y + 0.005, GATE_IRON)
+			var n: int = maxi(2, roundi(span / 0.045))
+			for k in n + 1:
+				var t: float = float(k) / float(n) - 0.5
+				_gate_box_at(mid + u * (t * span), u, Vector2.ZERO, Vector3(0.006, h, 0.006), base + h * 0.5, GATE_IRON)
+
+
+## Коробка size із центром над точкою p, зсунута впоперек на off, висота центру над ґрунтом dy.
+func _gate_box(p: Vector2, u: Vector2, off: Vector2, size: Vector3, dy: float, color: Color) -> void:
+	_gate_box_at(p, u, off, size, TerrainHeight.ground_y(p.x, p.y) + dy, color)
+
+
+## Те саме, висота центру y задана у світі: ґрунт під стулкою береться один раз на всю стулку.
+func _gate_box_at(p: Vector2, u: Vector2, off: Vector2, size: Vector3, y: float, color: Color) -> void:
+	var basis := Basis(Vector3.UP, atan2(-u.y, u.x)).scaled_local(size)
+	# Фарба воріт приглушена на GATE_DESAT до сірого тієї ж яскравості: вивітрена, а не іграшкова.
+	var grey: float = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
+	_add_small(Transform3D(basis, Vector3(p.x + off.x, y, p.y + off.y)), color.lerp(Color(grey, grey, grey, color.a), GATE_DESAT))
 
 
 func _add_small(xf: Transform3D, color: Color) -> void:
@@ -1429,6 +1706,14 @@ func _write_nodes() -> void:
 			var t: Transform3D = _final_transform(inst) * local
 			if fmi == null:
 				mm.set_instance_transform(k, t)
+				if mm.use_custom_data:
+					var kind_id: int = fence_kind_of(inst["model"])
+					mm.set_instance_custom_data(k, Color(float(kind_id), 0.0, 0.0, 0.0))
+					# Дзеркало для тестів: без рендера (headless) MultiMesh записаного не віддає.
+					if not _custom_written.has(key):
+						_custom_written[key] = []
+						(_custom_written[key] as Array).resize(slots.size())
+					(_custom_written[key] as Array)[k] = kind_id
 				continue
 			var lv: float = float(_fade_level.get(slots[k], 0.0))
 			var tint: Color = _roof_tint(inst)
@@ -1780,8 +2065,37 @@ class _Placer:
 	var house_models: Dictionary = {}
 	## Садиба -> обрис сараю.
 	var shed_of: Dictionary = {}
-	## Садиба -> [середина воріт, нормаль сторони воріт назовні].
+	## Садиба -> [середина хвіртки (там іде стежка), нормаль сторони воріт назовні].
 	var gates: Dictionary = {}
+	## Садиби, де жоден вільний відрізок огорожі не дивиться на дорогу ближче GATE_SIGHT: ворота там — на найближчому до хати.
+	var gate_blind: Dictionary = {}
+	## Садиба -> запас від будівель, з яким удалось поставити ворота (GATE_CLEARS).
+	var gate_clear: Dictionary = {}
+	## Садиба, чиє кільце будується зараз, і власники клітинок дворів: чужий двір паркан не перетинає.
+	var _ring_i: int = -1
+	var _owner_of: Dictionary = {}
+	## Множник висоти секцій кільця, що будується (форма паркану).
+	var _ring_hmul: float = 1.0
+	## Обриси стін (з будівель і сараїв) для кільця, що будується, і його відрізки до постановки.
+	var _wall_rects: Array[Rect2] = []
+	## Висота кожного обрису з _wall_rects (клітинки) і шапки його димарів (x, z, висота): силует будівлі на екрані
+	## для воріт (_gate_at).
+	var _wall_tops: Array[float] = []
+	var _wall_chims: Array = []
+	const SCREEN_OFF: int = 0
+	const SCREEN_STRICT: int = 1
+	const SCREEN_WIDEST: int = 2
+	var _pieces: Array = []
+	var _collecting: bool = false
+	## Відрізки парканів двору для _fence_segments: рахуються заново, лише коли додались екземпляри.
+	var _fence_cache: Array = []
+	var _fence_cache_n: int = -1
+	## Відрізки воріт [від стовпа до стовпа]: для тих, хто ставить щось поруч (стовпи ЛЕП).
+	var gate_segments: Array = []
+	## Садиба -> {fence, shed, trailer, gate}: яку форму вона взяла (чого нема — того на дворі нема).
+	var forms: Dictionary = {}
+	## Вид форми -> [[хата садиби, форма], …]: за ним сусіди не повторюють форм (_pick_apart).
+	var _taken: Dictionary = {}
 	## Обриси дрібних речей дворів: наступна не стає на попередню.
 	var placed_small: Array[Rect2] = []
 	## Обриси для стовпів і дротів ЛЕП: будівлі й руїни, мости, решта пропсів (_index_obstacles).
@@ -1808,6 +2122,8 @@ class _Placer:
 	## Клітинки дошки під будівлями -> напрям фасаду (−Z моделі) на дошці: двір без будівлі не
 	## обгороджується (порожня огорожа серед поля читається уламком), а хвіртка стає перед дверима.
 	var built: Dictionary = {}
+	var _walk_idx: Dictionary = {}
+	var _walk_idx_n: int = -1
 
 	func _init(p_layer: PropLayer, p_world: Board, p_ring: int, p_size: Vector2i,
 			p_height: TerrainHeight, p_map: StringName, p_half: Vector2) -> void:
@@ -2042,7 +2358,7 @@ class _Placer:
 	## рівно, одним кінцем у повітрі.
 	## length — масштаб уздовж локальної X: огорожа двору подовжується на кутах до сусідньої.
 	func put_small(m: StringName, c: Vector2i, local: Vector2, yaw: float, scale: float = 1.0, tilt: bool = false,
-			length: float = 1.0) -> bool:
+			length: float = 1.0, height: float = 1.0) -> bool:
 		if m == &"":
 			return false
 		var x: float = c.x + local.x
@@ -2058,7 +2374,7 @@ class _Placer:
 			# Секція обертається довкола середини: та стоїть на середній висоті кінців, тож обидва
 			# кінці на землі, а не один у ній.
 			y = (y0 + y1) * 0.5
-		var xform := Transform3D(basis * Basis.from_scale(Vector3(length, 1.0, 1.0) * scale), Vector3(x, y, z))
+		var xform := Transform3D(basis * Basis.from_scale(Vector3(length, height, 1.0) * scale), Vector3(x, y, z))
 		if not clear_of_centre(m, xform, c) or _box_on_road(m, xform):
 			return false
 		var cells: Array[Vector2i] = [c]
@@ -2116,7 +2432,7 @@ class _Placer:
 			var total: int = 0
 			for m in models:
 				var s: Dictionary = PropLayer.spec_of(m)
-				if bool(s.get("ring", false)) and not in_ring:
+				if bool(s.get("ring", false)) and not in_ring or bool(s.get("yard_only", false)):
 					continue
 				if s.has("max") and int(used.get(m, 0)) >= int(s["max"]):
 					continue
@@ -2213,6 +2529,29 @@ class _Placer:
 				lo = lo.min(p)
 				hi = hi.max(p)
 		return [Rect2(lo, hi - lo), d]
+
+	## Напрям погляду камери в плані (IsoCameraRig.YAW_DEGREES): від камери вглиб, як у _seen_clear.
+	static func _cam_fwd() -> Vector2:
+		return -Vector2(sin(deg_to_rad(IsoCameraRig.YAW_DEGREES)), cos(deg_to_rad(IsoCameraRig.YAW_DEGREES)))
+
+	## Точка плану (x, z) на висоті y — на екрані камери під найнижчим нахилом рига (там силуети найвищі), у клітинках
+	## площини фокуса.
+	static func _screen_pt(c: Vector2, y: float) -> Vector2:
+		var pitch: float = deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG)
+		var fwd: Vector2 = _cam_fwd()
+		return Vector2(c.dot(Vector2(-fwd.y, fwd.x)), c.dot(fwd) * sin(pitch) + y * cos(pitch))
+
+	## Відстань на екрані (клітинки площини фокуса) від верху q (висота h) до найближчого силуету з hulls; 0 — усередині.
+	## Байдуже, перед будівлею точка чи за нею: за — ворота визирають з-за даху, перед — затуляють перший поверх.
+	static func _hull_gap(q: Vector2, h: float, hulls: Array) -> float:
+		var s: Vector2 = _screen_pt(q, h)
+		var gap: float = INF
+		for hull: PackedVector2Array in hulls:
+			if Geometry2D.is_point_in_polygon(s, hull):
+				return 0.0
+			for k in hull.size() - 1:
+				gap = minf(gap, Geometry2D.get_closest_point_to_segment(s, hull[k], hull[k + 1]).distance_to(s))
+		return gap
 
 	static func _depth_gap(a: Vector2, b: Vector2) -> float:
 		return maxf(0.0, maxf(b.x - a.y, a.x - b.y))
@@ -2460,21 +2799,27 @@ class _Placer:
 			for c: Vector2i in home["cells"]:
 				if not built.has(c):
 					built[c] = Vector2i.ZERO
-			if home.has("shed") and PropLayer.model(YARD_SHED) != null:
+			var shed_models: Array[StringName] = PropLayer.YARD_SHEDS.filter(func(m: StringName) -> bool: return PropLayer.model(m) != null)
+			if home.has("shed") and not shed_models.is_empty():
+				var shed_m: StringName = _pick_apart(shed_models, hc, &"shed", h(hc, 171) % shed_models.size())
 				var sc: Vector2i = home["shed"]
 				var cells: Array[Vector2i] = [sc]
 				var xf := Transform3D(Basis(Vector3.UP, rot * PI * 0.5).scaled(Vector3.ONE * YARD_SHED_SCALE), Vector3(sc.x, 0.0, sc.y))
-				var box: AABB = xf * ((PropLayer.model(YARD_SHED) as Dictionary)["aabb"] as AABB)
+				var box: AABB = xf * ((PropLayer.model(shed_m) as Dictionary)["aabb"] as AABB)
 				var shift: Vector2 = _best_shift(Rect2(box.position.x, box.position.z, box.size.x, box.size.z), BUILDING_SHIFT + 0.1)
 				var sr := Rect2(box.position.x + shift.x, box.position.z + shift.y, box.size.x, box.size.z)
+				# Біля води сарай не ставимо.
+				if near_wet(sr.get_center(), WATER_CLEAR) or near_wet(sr.position, WATER_CLEAR) or near_wet(sr.end, WATER_CLEAR):
+					continue
 				# Сарай, якому між хатою й руїною нема місця, не ставимо: впритул вони читаються одним.
 				if placed.any(func(p: Array) -> bool: return sr.grow(BUILDING_GAP - 1e-3).intersects(p[0])):
 					continue
 				xf.origin += Vector3(shift.x, 0.0, shift.y)
-				seat(layer._add(YARD_SHED, xf, cells, true), pad(sr))
+				seat(layer._add(shed_m, xf, cells, true), pad(sr))
+				_note_form(i, hc, &"shed", shed_m)
 				sheds.append(sr)
 				shed_of[i] = sr
-				var scr: Array = _screen_of(sr, _height_of(YARD_SHED) * YARD_SHED_SCALE)
+				var scr: Array = _screen_of(sr, _height_of(shed_m) * YARD_SHED_SCALE)
 				placed.append([sr, STRUCTURE_GAP, scr[0], scr[1], false])
 		# Лук між садибами — трава; поодинокі колоди читались мотлохом, тож дров нема, доки нема моделі
 		# складених дров.
@@ -2519,20 +2864,39 @@ class _Placer:
 				out = gates[i][1]
 			var sd: int = h(homes[i]["house"], 190)
 			var porch: Vector2 = door + face * 0.14
+			# Огорожа впритул до фасаду (смуга вужча за ґанок) — ґанок і стежка лишаються в смузі, не за парканом.
+			var front: float = _fence_ray(door, face, 0.14)
+			var tight: bool = front < 0.14
+			if tight:
+				porch = door + face * maxf(0.02, front - 0.04)
 			var inside: Vector2 = gate - out * 0.12
 			var outside: Vector2 = gate + out * 0.15
 			var road: Vector2 = _verge_point(outside)
 			# Двері можуть дивитися від воріт (Хребет): тоді стежка обходить хату, а не різає її.
 			var ctrl := PackedVector2Array([door, porch])
-			ctrl.append_array(_route(porch, inside, house))
-			ctrl.append_array([gate, outside])
+			var route: PackedVector2Array = _yard_route(porch, inside)
+			var via_gate: bool = not route.is_empty()
+			if via_gate:
+				ctrl.append_array(route)
+				ctrl.append_array([gate, outside])
+			else:
+				# Двері по той бік паркану (вони стоять на вулиці): стежка йде від дверей на узбіччя, повз ворота.
+				outside = porch
+				road = _verge_point(porch)
 			if road != Vector2.INF and road.distance_to(outside) > 0.02:
-				ctrl.append(road)
+				# Узбіччя може бути за сусідньою будівлею чи парканом: теж обхід, а не пряма.
+				# Дорога по той бік паркану (ворота дивляться від неї): стежка кінчається біля воріт, не крізь двір.
+				ctrl.append_array(_yard_route(outside, road, 1.8, false))
 			var pts := PackedVector2Array([ctrl[0]])
 			for k in range(1, ctrl.size()):
 				if ctrl[k].distance_to(ctrl[k - 1]) > 1e-3:
-					pts.append_array(Footpaths.meander(ctrl[k - 1], ctrl[k], 0.04, 1.0, sd + k).slice(1))
-			pts = Footpaths.resample(Footpaths.smooth(pts, 6))
+					pts.append_array(Footpaths.meander(ctrl[k - 1], ctrl[k], 0.01, 1.0, sd + k).slice(1))
+			pts = Footpaths.resample(Footpaths.smooth(pts, 2))
+			if _path_hits_fence(pts) or _path_in_building(pts):
+				pts = Footpaths.resample(ctrl)
+				# Ламана з маршрутів сітки перевірена по прямій видимості; якщо й вона перетинає — стежки двору нема.
+				if _path_hits_fence(pts) or _path_in_building(pts):
+					continue
 			# Безперервна смуга від дверей через хвіртку до узбіччя: ~0.7 м, біля дверей і хвіртки вдвічі ширша.
 			var hw := PackedFloat32Array()
 			hw.resize(pts.size())
@@ -2552,7 +2916,7 @@ class _Placer:
 				if not on_road(gp, float(cand[2])) and _on_board(gp):
 					patches.append(Vector3(gp.x, gp.y, float(cand[1])))
 					break
-			var pp: Vector2 = porch + face * 0.06
+			var pp: Vector2 = porch + face * (0.06 if not tight else 0.0)
 			if _on_board(pp):
 				patches.append(Vector3(pp.x, pp.y, 0.2))
 			if shed_of.has(i):
@@ -2588,17 +2952,202 @@ class _Placer:
 					"seed": sd + 3, "solid": 0.85, "flat": 3.0, "half": PackedFloat32Array([0.26, 0.26])})
 		for pair: Array in [[inside, tgt], [porch, tgt]]:
 			var pts: PackedVector2Array = Footpaths.resample(Footpaths.smooth(Footpaths.meander(pair[0], pair[1], 0.04, 0.8, sd + 5), 4))
+			# Стежка до сараю не лізе крізь паркан двору (сарай по той бік вигину кільця): такої стежки нема.
+			if _path_hits_fence(pts) or _path_in_building(pts):
+				continue
 			var hw := PackedFloat32Array()
 			hw.resize(pts.size())
 			hw.fill(0.1)
 			walks.append({"kind": &"yard_floor", "home": i, "door": pair[0], "pts": pts, "seed": sd + 7, "solid": 0.9, "flat": 3.0, "half": hw})
 
+	## Найкоротша ламана від a до b (без a, з b) між будівлями й парканами двору: хвиля по сітці 0.05 і вирівнювання
+	## по прямій видимості. Ворота не навпроти дверей, тож пряма лінія від дверей до хвіртки різала б хату чи паркан.
+	## Порожня — шляху нема (тоді _route обходить лише хату).
+	const LOS_CELLS: int = 60
+
+	func _yard_route(a: Vector2, b: Vector2, margin: float = 0.7, free_goal: bool = true) -> PackedVector2Array:
+		var step: float = 0.05
+		var lo: Vector2 = a.min(b) - Vector2(margin, margin)
+		var nx: int = ceili((a.max(b).x + margin - lo.x) / step) + 1
+		var ny: int = ceili((a.max(b).y + margin - lo.y) / step) + 1
+		var blocked := PackedByteArray()
+		blocked.resize(nx * ny)
+		# Сітка — лише довкола a–b: решта будівель і парканів карти її не торкається.
+		var grid := Rect2(lo, Vector2(nx, ny) * step).grow(step * 2.0)
+		for pl: Array in placed:
+			var r: Rect2 = (pl[0] as Rect2).grow(0.03)
+			if not r.intersects(grid):
+				continue
+			for gy in range(maxi(0, floori((r.position.y - lo.y) / step)), mini(ny, ceili((r.end.y - lo.y) / step) + 1)):
+				for gx in range(maxi(0, floori((r.position.x - lo.x) / step)), mini(nx, ceili((r.end.x - lo.x) / step) + 1)):
+					if r.has_point(lo + Vector2(gx, gy) * step):
+						blocked[gy * nx + gx] = 1
+		for sg: Array in _fence_segments():
+			if not Rect2(sg[0], Vector2.ZERO).expand(sg[1]).intersects(grid, true):
+				continue
+			var n: int = maxi(1, ceili((sg[0] as Vector2).distance_to(sg[1]) / (step * 0.5)))
+			for k in n + 1:
+				var q: Vector2 = (sg[0] as Vector2).lerp(sg[1], float(k) / float(n)) - lo
+				for oy in range(-1, 2):
+					for ox in range(-1, 2):
+						var gx: int = roundi(q.x / step) + ox
+						var gy: int = roundi(q.y / step) + oy
+						if gx >= 0 and gy >= 0 and gx < nx and gy < ny:
+							blocked[gy * nx + gx] = 1
+		# Початок і кінець стоять упритул до стіни чи паркану: довкола них вільно.
+		for e: Vector2 in [a, b]:
+			var rad: int = 2 if (free_goal or e == a) else 1
+			for oy in range(-rad, rad + 1):
+				for ox in range(-rad, rad + 1):
+					var gx: int = roundi((e.x - lo.x) / step) + ox
+					var gy: int = roundi((e.y - lo.y) / step) + oy
+					if gx >= 0 and gy >= 0 and gx < nx and gy < ny and Vector2(ox, oy).length() <= float(rad):
+						blocked[gy * nx + gx] = 0
+		var from := Vector2i(roundi((a.x - lo.x) / step), roundi((a.y - lo.y) / step))
+		var goal := Vector2i(roundi((b.x - lo.x) / step), roundi((b.y - lo.y) / step))
+		# Найкоротша ламана по вільних клітинках (вісім сусідів, діагональ — √2): пошук іде в рушії, не в GDScript.
+		var astar := AStarGrid2D.new()
+		astar.region = Rect2i(0, 0, nx, ny)
+		astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ALWAYS
+		astar.update()
+		for idx in blocked.size():
+			if blocked[idx] == 1:
+				astar.set_point_solid(Vector2i(idx % nx, idx / nx))
+		var ids: Array[Vector2i] = astar.get_id_path(from, goal)
+		if ids.is_empty():
+			return PackedVector2Array()
+		var cells: Array[Vector2] = []
+		for id: Vector2i in ids:
+			cells.append(lo + Vector2(id) * step)
+		# Вирівнювання: з кожної точки — до найдальшої, яку видно напряму по вільних клітинках.
+		var out := PackedVector2Array()
+		var i: int = 0
+		while i < cells.size() - 1:
+			# Пряма видимість — не далі LOS_CELLS кроків уперед: інакше вирівнювання квадратичне в довжині стежки.
+			var j: int = mini(cells.size() - 1, i + LOS_CELLS)
+			while j > i + 1:
+				var seen := true
+				var span: float = cells[i].distance_to(cells[j])
+				var n_s: int = ceili(span / (step * 0.5))
+				for k in range(1, n_s):
+					var q: Vector2 = cells[i].lerp(cells[j], float(k) / float(n_s)) - lo
+					if blocked[roundi(q.y / step) * nx + roundi(q.x / step)] == 1:
+						seen = false
+						break
+				if seen:
+					break
+				j -= 1
+			out.append(cells[j])
+			i = j
+		if out.is_empty():
+			out.append(b)
+		out[out.size() - 1] = b
+		return out
+
+	## Чи ламана заходить у будівлю (крім двох перших точок біля дверей).
+	func _path_in_building(pts: PackedVector2Array) -> bool:
+		var box: Rect2 = _pts_box(pts)
+		for pl: Array in placed:
+			var r: Rect2 = (pl[0] as Rect2).grow(-0.005)
+			if not r.intersects(box, true):
+				continue
+			for k in range(2, pts.size()):
+				if r.has_point(pts[k]):
+					return true
+		return false
+
+	## Прямі ходи парканів: відрізки, що стикуються кінцями й лежать на одній прямій, — один хід. Кожен —
+	## {segs: [[a, b], …], len, ends: кінці, не спільні з іншим відрізком ходу}.
+	static func _collinear_runs(segs: Array) -> Array:
+		var parent: Array[int] = []
+		for k in segs.size():
+			parent.append(k)
+		var root := func(k: int) -> int:
+			while parent[k] != k:
+				k = parent[k]
+			return k
+		for k in segs.size():
+			var dk: Vector2 = ((segs[k][1] as Vector2) - (segs[k][0] as Vector2)).normalized()
+			for m in range(k + 1, segs.size()):
+				var dm: Vector2 = ((segs[m][1] as Vector2) - (segs[m][0] as Vector2)).normalized()
+				if absf(dk.cross(dm)) > 0.05:
+					continue
+				for ea: Vector2 in segs[k]:
+					for eb: Vector2 in segs[m]:
+						if ea.distance_to(eb) < 0.03:
+							parent[root.call(k)] = root.call(m)
+		var by_root: Dictionary = {}
+		for k in segs.size():
+			var r: int = root.call(k)
+			if not by_root.has(r):
+				by_root[r] = {"segs": [], "len": 0.0, "ends": []}
+			by_root[r]["segs"].append(segs[k])
+			by_root[r]["len"] = float(by_root[r]["len"]) + (segs[k][0] as Vector2).distance_to(segs[k][1])
+		for run: Dictionary in by_root.values():
+			for sg: Array in run["segs"]:
+				for e: Vector2 in sg:
+					var shared := false
+					for o: Array in run["segs"]:
+						if o != sg and ((o[0] as Vector2).distance_to(e) < 0.03 or (o[1] as Vector2).distance_to(e) < 0.03):
+							shared = true
+					if not shared:
+						run["ends"].append(e)
+		return by_root.values()
+
+	static func _pts_box(pts: PackedVector2Array) -> Rect2:
+		var box := Rect2(pts[0] if not pts.is_empty() else Vector2.ZERO, Vector2.ZERO)
+		for q: Vector2 in pts:
+			box = box.expand(q)
+		return box
+
+	## Секції парканів двору як відрізки по осі моделі.
+	func _fence_segments() -> Array:
+		var n_inst: int = layer._instances.size()
+		if _fence_cache_n == n_inst:
+			return _fence_cache
+		# Екземпляри лише додаються: дочитуємо нові, а з нуля — тільки коли список скоротився.
+		if _fence_cache_n < 0 or _fence_cache_n > n_inst:
+			_fence_cache = []
+			_fence_cache_n = 0
+		var out: Array = _fence_cache
+		for idx in range(_fence_cache_n, n_inst):
+			var inst: Dictionary = layer._instances[idx]
+			if int(PropLayer.spec_of(inst["model"]).get("kind", -1)) != Kind.GARDEN_FENCE:
+				continue
+			var xf: Transform3D = inst["transform"]
+			var box: AABB = (PropLayer.model(inst["model"]) as Dictionary)["aabb"]
+			var a3: Vector3 = xf * Vector3(box.position.x, 0.0, 0.0)
+			var b3: Vector3 = xf * Vector3(box.end.x, 0.0, 0.0)
+			out.append([Vector2(a3.x, a3.z), Vector2(b3.x, b3.z)])
+		_fence_cache_n = n_inst
+		return out
+
+	## Чи ламана перетинає якусь секцію паркану двору (кінці секції — по осі моделі).
+	func _path_hits_fence(pts: PackedVector2Array) -> bool:
+		var box: Rect2 = _pts_box(pts)
+		for sg: Array in _fence_segments():
+			if not Rect2(sg[0], Vector2.ZERO).expand(sg[1]).intersects(box, true):
+				continue
+			for k in range(1, pts.size()):
+				if Geometry2D.segment_intersects_segment(pts[k - 1], pts[k], sg[0], sg[1]) != null:
+					return true
+		return false
+
+	## Відстань від from уздовж dir до першої секції паркану не далі за reach; INF — нема.
+	func _fence_ray(from: Vector2, dir: Vector2, reach: float) -> float:
+		var best: float = INF
+		for sg: Array in _fence_segments():
+			var hit: Variant = Geometry2D.segment_intersects_segment(from, from + dir * reach, sg[0], sg[1])
+			if hit != null:
+				best = minf(best, from.distance_to(hit as Vector2))
+		return best
+
 	func _on_board(q: Vector2) -> bool:
 		return q.x >= -0.3 and q.y >= -0.3 and q.x <= size.x - 0.7 and q.y <= size.y - 0.7
 
 	## Найкоротший обхід прямокутника box (відступ 0.12): прямо, через один кут чи через два сусідні.
-	func _route(a: Vector2, b: Vector2, box: Rect2) -> PackedVector2Array:
-		var r: Rect2 = box.grow(0.12)
+	func _route(a: Vector2, b: Vector2, box: Rect2, margin: float = 0.12) -> PackedVector2Array:
+		var r: Rect2 = box.grow(margin)
 		if not _cuts(a, b, r):
 			return PackedVector2Array()
 		var cs: Array[Vector2] = [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
@@ -2678,16 +3227,33 @@ class _Placer:
 		if not _on_board(q) or not _dry(q) or built.has(c) or yard_cells.has(c) \
 				or [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE, Terrain.Kind.FOREST, Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED].has(kind(c)):
 			return false
-		for p: Array in placed:
-			if (p[0] as Rect2).grow(0.2).has_point(q):
-				return false
-		for r: Rect2 in layer.field_edges:
-			if r.grow(0.1).has_point(q):
-				return false
-		for gp: Dictionary in garden_plots:
-			if (gp["rect"] as Rect2).grow(0.1).has_point(q):
+		for r: Rect2 in _walk_blockers(c):
+			if r.has_point(q):
 				return false
 		return true
+
+	## Обриси, що не пускають стежку (будівлі й речі з запасом 0.2, межі полів і городи — 0.1), за клітинкою, де
+	## вони можуть торкнутися точки: _walkable питають для тисяч клітинок сітки, і кожна перебирає лише обриси своєї клітинки.
+	func _walk_blockers(c: Vector2i) -> Array:
+		var n: int = placed.size() + layer.field_edges.size() + garden_plots.size()
+		if n != _walk_idx_n:
+			_walk_idx.clear()
+			_walk_idx_n = n
+			var rects: Array[Rect2] = []
+			for p: Array in placed:
+				rects.append((p[0] as Rect2).grow(0.2))
+			for r: Rect2 in layer.field_edges:
+				rects.append(r.grow(0.1))
+			for gp: Dictionary in garden_plots:
+				rects.append((gp["rect"] as Rect2).grow(0.1))
+			for r: Rect2 in rects:
+				for cy in range(floori(r.position.y + 0.5) - 1, ceili(r.end.y + 0.5) + 1):
+					for cx in range(floori(r.position.x + 0.5) - 1, ceili(r.end.x + 0.5) + 1):
+						var key := Vector2i(cx, cy)
+						if not _walk_idx.has(key):
+							_walk_idx[key] = []
+						(_walk_idx[key] as Array).append(r)
+		return _walk_idx.get(c, [])
 
 	const _GRID: float = 0.25
 
@@ -2696,6 +3262,7 @@ class _Placer:
 	var _fence_segs: Dictionary = {}
 	## Біля початку маршруту (хвіртка — прохід між секціями) запас від парканів не вимагаємо.
 	var _free_from: Vector2 = Vector2(-99, -99)
+	var _walk_cache: Dictionary = {}
 	const FENCE_MARGIN: float = 0.2
 
 	func _index_fences() -> void:
@@ -2755,6 +3322,23 @@ class _Placer:
 
 	## Шлях людини від from до берега: найкоротший зручний, з обходами рельєфу, мокрих місць, ріллі, грядок,
 	## парканів і будівель (A* по сітці 0.25 клітинки), без шуму: вигини дають лише перешкоди.
+	## Відстань до паркану, прохідність, суха ґрунтова окіл і вага клітинки сітки стежок (кеш на розставлення).
+	func _walk_cell(id: Vector2i, q: Vector2) -> Array:
+		if _walk_cache.has(id):
+			return _walk_cache[id]
+		var dry4 := true
+		for o: Vector2 in [Vector2(0.12, 0), Vector2(-0.12, 0), Vector2(0, 0.12), Vector2(0, -0.12)]:
+			dry4 = dry4 and _dry(q + o)
+		var w: float = 1.0 + 12.0 * _slope(q)
+		if kind(Vector2i(roundi(q.x), roundi(q.y))) == Terrain.Kind.MARSH:
+			w += 3.0
+		# Дорогу перетинають, але лише коли треба: перехід через неї дорожчий.
+		if on_road(q, 0.0):
+			w += 4.0
+		var info: Array = [fence_dist(q), _walkable(q), dry4, w]
+		_walk_cache[id] = info
+		return info
+
 	func _walk_route(from: Vector2, shore: Vector2) -> PackedVector2Array:
 		var gw: int = ceili((size.x + 0.8) / _GRID)
 		var gh: int = ceili((size.y + 0.8) / _GRID)
@@ -2773,15 +3357,13 @@ class _Placer:
 				if q.distance_to(from) > near or q.distance_to(shore) > near:
 					astar.set_point_solid(Vector2i(gx, gy), true)
 					continue
-				if not _cell_ok(q, shore):
+				# Властивості клітинки не залежать від початку й берега — рахуються раз на все розставлення.
+				var info: Array = _walk_cell(Vector2i(gx, gy), q)
+				if (q.distance_to(from) > 0.7 and float(info[0]) < FENCE_MARGIN) or not bool(info[1]) \
+						or (q.distance_to(shore) > 0.8 and not bool(info[2])):
 					astar.set_point_solid(Vector2i(gx, gy), true)
 					continue
-				var w: float = 1.0 + 12.0 * _slope(q)
-				if kind(Vector2i(roundi(q.x), roundi(q.y))) == Terrain.Kind.MARSH:
-					w += 3.0
-				# Дорогу перетинають, але лише коли треба: перехід через неї дорожчий.
-				if on_road(q, 0.0):
-					w += 4.0
+				var w: float = float(info[3])
 				astar.set_point_weight_scale(Vector2i(gx, gy), w)
 		var a := Vector2i(roundi((from.x + 0.4) / _GRID), roundi((from.y + 0.4) / _GRID))
 		var b := Vector2i(roundi((shore.x + 0.4) / _GRID), roundi((shore.y + 0.4) / _GRID))
@@ -2833,7 +3415,11 @@ class _Placer:
 		var starts: Array = []
 		for i: int in gates:
 			var g: Vector2 = gates[i][0] + (gates[i][1] as Vector2) * 0.15
-			starts.append(g)
+			# Ворота в щілині між сусідніми парканами (не ширшій за двічі FENCE_MARGIN) — глухий кут для стежки:
+			# повна сітка A* там нічого не знайде, а коштує десятки мілісекунд.
+			var beyond: Vector2 = g + (gates[i][1] as Vector2) * 0.7
+			if _walkable(beyond) and fence_dist(beyond) >= FENCE_MARGIN and not gate_blind.has(i):
+				starts.append(g)
 		var chosen: Array[Vector2] = []
 		var used_starts: Array[Vector2] = []
 		# Спершу від хвірток: хвіртка → берег з найменшою ціною (відстань і крутизна спуску).
@@ -2841,7 +3427,7 @@ class _Placer:
 		for st: Vector2 in starts:
 			for l: Array in landings:
 				var dd: float = st.distance_to(l[0])
-				if dd >= 2.0 and dd <= 12.0:
+				if dd >= 2.2 and dd <= 9.0:
 					pairs.append([dd + 8.0 * float(l[1]), st, l[0]])
 		pairs.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 		for pr: Array in pairs:
@@ -2889,9 +3475,9 @@ class _Placer:
 		var pts: PackedVector2Array = _walk_route(from, shore)
 		if pts.size() < 8:
 			return false
-		# Спуск закінчується майданчиком діаметром ~2 м за 0.15 клітинки від води.
+		# Спуск закінчується майданчиком діаметром ~2 м за 0.1 клітинки від води.
 		var dir: Vector2 = (pts[pts.size() - 1] - pts[pts.size() - 4]).normalized()
-		var centre: Vector2 = shore - dir * 0.15
+		var centre: Vector2 = shore - dir * 0.1
 		while pts.size() > 8 and pts[pts.size() - 1].distance_to(centre) < 0.12:
 			pts.remove_at(pts.size() - 1)
 		pts.append(centre)
@@ -2911,7 +3497,7 @@ class _Placer:
 		var items: Array[StringName] = [&"tree_stump_01"]
 		var trailers: Array[StringName] = PropLayer.models_of(Kind.TRAILER)
 		if h(home["house"], 160) % 2 == 0 and not trailers.is_empty():
-			items.append(trailers[h(home["house"], 161) % trailers.size()])
+			items.append(_pick_apart(trailers, home["house"], &"trailer", h(home["house"], 161) % trailers.size()))
 		var gr: Array[Rect2] = []
 		for gp: Dictionary in garden_plots:
 			if int(gp["home"]) == i:
@@ -2937,10 +3523,12 @@ class _Placer:
 					var cells: Array[Vector2i] = [Vector2i(roundi(q.x), roundi(q.y))]
 					layer._add(m, xf, cells, true)
 					placed_small.append(r)
+					if int(PropLayer.spec_of(m)["kind"]) == Kind.TRAILER:
+						_note_form(i, home["house"], &"trailer", m)
 					break
 
 	func _yard_spot_ok(r: Rect2, lot: Array, path: Array, gardens_of: Array[Rect2]) -> bool:
-		if not clear_of_units(r):
+		if not clear_of_units(r) or near_wet(r.get_center(), WATER_CLEAR):
 			return false
 		for v: Vector2 in [r.position, r.end, Vector2(r.position.x, r.end.y), Vector2(r.end.x, r.position.y)]:
 			for o: Vector2 in [Vector2(0.12, 0), Vector2(-0.12, 0), Vector2(0, 0.12), Vector2(0, -0.12)]:
@@ -3031,6 +3619,34 @@ class _Placer:
 		farm_houses.append([hc, pick])
 		return pick
 
+	## Форма з forms для садиби з хатою hc: починаючи з номера start, перша, що не стоїть у садибі ближче
+	## HOUSE_APART клітинок (Чебишов); коли поруч є вже всі — та, чия найближча така сама найдалі.
+	func _pick_apart(forms_of: Array[StringName], hc: Vector2i, key: StringName, start: int) -> StringName:
+		var best: StringName = &""
+		var best_gap: int = -1
+		for k in forms_of.size():
+			var m: StringName = forms_of[(start + k) % forms_of.size()]
+			var gap: int = 1 << 20
+			for t: Array in _taken.get(key, []):
+				if t[1] == m:
+					var d: Vector2i = (t[0] as Vector2i) - hc
+					gap = mini(gap, maxi(absi(d.x), absi(d.y)))
+			if gap > HOUSE_APART:
+				return m
+			if gap > best_gap:
+				best_gap = gap
+				best = m
+		return best
+
+	## Садиба i справді взяла форму m виду key: далі її бачать сусіди.
+	func _note_form(i: int, hc: Vector2i, key: StringName, m: StringName) -> void:
+		if not forms.has(i):
+			forms[i] = {}
+		(forms[i] as Dictionary)[key] = m
+		if not _taken.has(key):
+			_taken[key] = []
+		(_taken[key] as Array).append([hc, m])
+
 	func _house_near(m: StringName, hc: Vector2i) -> bool:
 		for fh: Array in farm_houses:
 			var d: Vector2i = (fh[0] as Vector2i) - hc
@@ -3048,19 +3664,52 @@ class _Placer:
 		for c: Vector2i in home["cells"]:
 			lot[c] = true
 		var hc: Vector2i = home["house"]
-		var palette: Array[StringName] = PropLayer.models_of(Kind.GARDEN_FENCE)
+		_ring_i = i
+		_owner_of = owner_of
+		# Стіни — обриси моделей зі звісом даху, ті самі, що бачить глядач (а не поля розстановки в placed).
+		_wall_rects.clear()
+		_wall_tops.clear()
+		_wall_chims.clear()
+		for inst: Dictionary in layer._instances:
+			var kd: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
+			if kd == Kind.STRUCTURE or kd == Kind.RUIN:
+				var bx: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+				_wall_rects.append(Rect2(bx.position.x, bx.position.z, bx.size.x, bx.size.z))
+				_wall_tops.append(bx.size.y)
+				var chims: Array[Vector3] = []
+				var xf: Transform3D = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary).get("local", Transform3D()) as Transform3D)
+				for ch: Vector3 in (PropLayer.model(inst["model"]) as Dictionary).get("chimneys", []):
+					var w: Vector3 = xf * ch
+					chims.append(Vector3(w.x, w.z, w.y - bx.position.y))
+				_wall_chims.append(chims)
+		_pieces.clear()
+		_collecting = true
+		var palette: Array[StringName] = PropLayer.FENCE_FORMS.filter(func(f: StringName) -> bool:
+			return PropLayer.model(StringName(String(f).get_slice("|", 0))) != null)
 		if palette.is_empty():
 			return []
 		var base: int = absi(hash(Vector2i(salt, Kind.GARDEN_FENCE))) + half(hc)
-		var m: StringName = palette[(base + h(hc, 121)) % palette.size()]
+		var form: StringName = _pick_apart(palette, hc, &"fence", (base + h(hc, 121)) % palette.size())
+		var m := StringName(String(form).get_slice("|", 0))
+		_ring_hmul = float(String(form).get_slice("|", 1))
 		var sides: Array[Dictionary] = _lot_sides(lot, owner_of)
 		if sides.is_empty():
+			_collecting = false
 			return []
 		# Ворота: на стороні, що містить ребро фасаду хати; інакше — на стороні до дороги.
 		var gate_side: int = -1
 		for k in sides.size():
 			for e: Array in sides[k]["edges"]:
 				if e[0] == hc and e[1] == home["face"] and int(sides[k]["nb"]) < 0:
+					gate_side = k
+		# Ворота дивляться на дорогу: фасад, що дивиться повз неї (дорога збоку чи за рогом), поступається
+		# стороні, яка до дороги ближча.
+		if gate_side >= 0 and _road_ahead(sides[gate_side]) > GATE_SIGHT:
+			var best_gap: float = GATE_SIGHT
+			for k in sides.size():
+				var gap: float = _road_ahead(sides[k]) if int(sides[k]["nb"]) < 0 else INF
+				if gap < best_gap:
+					best_gap = gap
 					gate_side = k
 		if gate_side < 0:
 			for k in sides.size():
@@ -3149,38 +3798,187 @@ class _Placer:
 		# спершу на боці фасаду, інакше на будь-якій зовнішній стороні. З обох боків — щонайменше
 		# GATE_POST паркану, бо ворота впритул до кута чи стіни лишили б один стовп без пари.
 		var gate_run: int = -1
-		for pass_id in 2:
-			var best_d: float = INF
-			for j in runs.size():
-				var k: int = runs[j][2]
-				if (pass_id == 0 and k != gate_side) or int(sides[k]["nb"]) >= 0:
-					continue
-				var a: Vector2 = runs[j][0]
-				var b: Vector2 = runs[j][1]
-				var total: float = a.distance_to(b)
-				if total < GATE + 2.0 * GATE_POST:
-					continue
-				var at: float = clampf((Vector2(hc) - a).dot((b - a) / total), GATE_POST + GATE * 0.5, total - GATE_POST - GATE * 0.5)
-				var dist: float = (a + (b - a) / total * at).distance_to(Vector2(hc))
-				if dist < best_d:
-					best_d = dist
-					gate_run = j
-			if gate_run >= 0:
-				break
+		var gate_at: float = 0.0
+		var best_score := Vector3(INF, INF, INF)
+		var gate_tier := Vector2i.ZERO
+		# Порядок переваг: суворий прохід — уздовж стіни отвір не ближче GATE_ALONG (x) і на екрані ворота далі
+		# GATE_SCREEN_GAP від силуетів будівель (y), бо інакше читаються прибудовою до хати; далі паркан обабіч
+		# завдовжки MIN_FENCE (коротший лишає стовп без пари, і сторона читається уламком); далі запас від стін за
+		# GATE_CLEARS. Двір, де суворого місця нема, бере місце, найдальше на екрані від силуетів, а коли нема й такого
+		# уздовж стін — і ближче до стіни: двір без воріт гірший.
+		for tier: Vector2i in [Vector2i(1, SCREEN_STRICT), Vector2i(1, SCREEN_WIDEST), Vector2i(0, SCREEN_WIDEST)]:
+			for flank: float in [MIN_FENCE, GATE_POST]:
+				for clear: float in GATE_CLEARS:
+					if gate_run >= 0:
+						break
+					for j in runs.size():
+						var k: int = runs[j][2]
+						if int(sides[k]["nb"]) >= 0:
+							continue
+						var a: Vector2 = runs[j][0]
+						var b: Vector2 = runs[j][1]
+						var total: float = a.distance_to(b)
+						if total < GATE + 2.0 * flank:
+							continue
+						var dir: Vector2 = (b - a) / total
+						var found: Vector2 = _gate_at(a, b, sheds, (Vector2(hc) - a).dot(dir), clear, flank, GATE_ALONG * tier.x, tier.y)
+						var at: float = found.x
+						if at < 0.0:
+							continue
+						# Спершу отвір, що дивиться на дорогу (з запасом на зсув хвіртки), потім на боці фасаду, потім найближчий до хати.
+						var facing: bool = road_ahead_of(a + dir * at, Vector2(sides[k]["d"] as Vector2i)) <= GATE_SIGHT - 0.3
+						var pref: float = (0.0 if k == gate_side else 1.0) if tier.y == SCREEN_STRICT else -found.y
+						var score := Vector3(0.0 if facing else 1.0, pref, (a + dir * at).distance_to(Vector2(hc)))
+						if score.x < best_score.x or (score.x == best_score.x and (score.y < best_score.y or (score.y == best_score.y and score.z < best_score.z))):
+							best_score = score
+							gate_run = j
+							gate_at = at
+					# Менший запас — лише коли з більшим воріт нема ніде: легше ворота біля стіни, ніж двір без воріт.
+					if gate_run >= 0:
+						gate_clear[i] = clear
+						gate_tier = tier
+						break
+		# Двір, де жоден вільний відрізок не дивиться на дорогу, — явно «сліпий»: ворота на найближчому відрізку.
+		if gate_run >= 0 and best_score.x > 0.0:
+			gate_blind[i] = true
 		for j in runs.size():
 			var a: Vector2 = runs[j][0]
 			var b: Vector2 = runs[j][1]
 			if j == gate_run:
 				var dir: Vector2 = (b - a).normalized()
-				var at: float = clampf((Vector2(hc) - a).dot(dir), GATE_POST + GATE * 0.5, a.distance_to(b) - GATE_POST - GATE * 0.5)
-				_fence_straight(m, a, a + dir * (at - GATE * 0.5), lot)
-				_fence_straight(m, a + dir * (at + GATE * 0.5), b, lot)
-				gates[i] = [a + dir * at, Vector2(sides[int(runs[j][2])]["d"])]
-				layer._gate_posts.append(a + dir * (at - GATE * 0.5))
-				layer._gate_posts.append(a + dir * (at + GATE * 0.5))
+				var proj: float = (Vector2(hc) - a).dot(dir)
+				var at: float = gate_at
+				var p0: Vector2 = a + dir * (at - GATE * 0.5)
+				var p1: Vector2 = a + dir * (at + GATE * 0.5)
+				_fence_straight(m, a, p0, lot)
+				_fence_straight(m, p1, b, lot)
+				var out: Vector2 = Vector2(sides[int(runs[j][2])]["d"])
+				# Хвіртка — з того краю отвору, що ближче до хати: стежка від дверей не обходить полотно.
+				var wicket_far: bool = proj > at or (proj == at and h(hc, 170) % 2 == 0)
+				var from: Vector2 = p0 if wicket_far else p1
+				var to: Vector2 = p1 if wicket_far else p0
+				var leaf_mid: Vector2 = from + (to - from).normalized() * (GATE_LEAF + GATE_POST_SIZE.x)
+				# Ворота — того самого роду, що й паркан двору; модель без своєї форми воріт бере вільну від сусідів.
+				var kind_id: StringName = StringName(PropLayer.spec_of(m).get("gate",
+						_pick_apart(PropLayer.GATE_KINDS, hc, &"gate", h(hc, 172) % PropLayer.GATE_KINDS.size())))
+				_note_form(i, hc, &"gate", kind_id)
+				gates[i] = [(leaf_mid + to) * 0.5, out]
+				gate_segments.append([from, to])
+				layer._gates.append({"a": from, "mid": leaf_mid, "b": to, "kind": kind_id, "out": out,
+						"height": GATE_H, "seed": h(hc, 173), "clear": float(gate_clear.get(i, 0.0)),
+						"along": gate_tier.x > 0, "screen": gate_tier.y == SCREEN_STRICT})
 			else:
 				_fence_straight(m, a, b, lot)
+		_collecting = false
+		var posts: Array[Vector2] = []
+		for g: Dictionary in layer._gates.slice(layer._gates.size() - (1 if gates.has(i) else 0)):
+			posts.append_array([g["a"], g["mid"], g["b"]])
+		for pc: Array in _finish_pieces(_pieces, posts):
+			_fence_straight(m, pc[0], pc[1], lot)
+		_note_form(i, hc, &"fence", form)
 		return sides
+
+	## Центр отвору воріт на відрізку a→b (відстань від a), найближчий до want, де увесь отвір (з півтовщиною
+	## стовпів) далі clear від будівель, далі clear + 0.1 від сараїв (ворота проти комори читались дверима гаража)
+	## і далі WATER_CLEAR від води; -1 — такого місця нема. Уздовж стіни отвір далі side від неї. screen: SCREEN_STRICT —
+	## верх полотна на екрані далі GATE_SCREEN_GAP від силуетів будівель (_hull_gap); SCREEN_WIDEST — місце, найдальше
+	## від них, хоч і ближче. Повертає (центр отвору, відстань на екрані до силуетів; INF — силуетів поруч нема).
+	func _gate_at(a: Vector2, b: Vector2, sheds: Array[Rect2], want: float, clear: float, flank: float, side: float = 0.0,
+			screen: int = SCREEN_OFF) -> Vector2:
+		var total: float = a.distance_to(b)
+		var dir: Vector2 = (b - a) / total
+		var lo: float = flank + GATE * 0.5
+		var half: float = GATE * 0.5 + GATE_POST_SIZE.x
+		# Обриси, що взагалі можуть зачепити відрізок (з запасом): решта вибірок їх не перебирає.
+		var near: Array[Rect2] = []
+		var box := Rect2(a, Vector2.ZERO).expand(b).grow(clear + 0.1 + 0.02)
+		var walls: Array[Rect2] = []
+		# Силуети будівель на екрані — лише коли правило екрана діє.
+		var hulls: Array = []
+		for w in _wall_rects.size():
+			var r: Rect2 = _wall_rects[w]
+			if r.intersects(box):
+				near.append(r.grow(clear))
+			if r.intersects(Rect2(a, Vector2.ZERO).expand(b).grow(side + 0.1)):
+				walls.append(r)
+			if screen != SCREEN_OFF and r.intersects(Rect2(a, Vector2.ZERO).expand(b).grow(_wall_tops[w] * 2.0 + 0.5)):
+				var pts := PackedVector2Array()
+				for c: Vector2 in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+					for y: float in [0.0, _wall_tops[w]]:
+						pts.append(_screen_pt(c, y))
+				for ch: Vector3 in _wall_chims[w]:
+					pts.append(_screen_pt(Vector2(ch.x, ch.y), ch.z))
+				hulls.append(Geometry2D.convex_hull(pts))
+		var ax: int = 0 if absf(dir.x) > absf(dir.y) else 1
+		for r: Rect2 in sheds:
+			if r.intersects(box):
+				near.append(r.grow(clear + 0.1))
+		var best: float = -1.0
+		var best_gap: float = INF
+		# Без силуетів поруч відстань на екрані скрізь INF: вибір — найближче до want, як без правила екрана.
+		var widest: bool = screen == SCREEN_WIDEST and not hulls.is_empty()
+		if widest:
+			best_gap = -1.0
+		var t: float = lo
+		while t <= total - lo + 1e-6:
+			if not widest and best >= 0.0 and absf(t - want) >= absf(best - want):
+				t += 0.04
+				continue
+			var ok := true
+			for u: float in [-half, -half * 0.5, 0.0, half * 0.5, half]:
+				var q: Vector2 = a + dir * (t + u)
+				for r: Rect2 in near:
+					if r.has_point(q):
+						ok = false
+						break
+				if not ok:
+					break
+			if ok:
+				var p0: Vector2 = a + dir * (t - half)
+				var p1: Vector2 = a + dir * (t + half)
+				for r: Rect2 in walls:
+					if minf(p0[ax], p1[ax]) < r.end[ax] and maxf(p0[ax], p1[ax]) > r.position[ax] \
+							and maxf(r.position[1 - ax] - p0[1 - ax], p0[1 - ax] - r.end[1 - ax]) < side:
+						ok = false
+						break
+			var gap: float = INF
+			if ok and not hulls.is_empty():
+				for u in 11:
+					gap = minf(gap, _hull_gap(a + dir * (t - GATE * 0.5 + GATE * u / 10.0), GATE_H, hulls))
+				ok = screen == SCREEN_WIDEST or gap >= GATE_SCREEN_GAP
+			if ok:
+				for u: float in [-half, 0.0, half]:
+					if near_wet(a + dir * (t + u), WATER_CLEAR):
+						ok = false
+						break
+			# SCREEN_WIDEST: найдальше на екрані від силуетів; за рівного — найближче до want.
+			if ok and (not widest or gap > best_gap + 1e-4 or (absf(gap - best_gap) <= 1e-4 and absf(t - want) < absf(best - want))):
+				best = t
+				best_gap = gap
+			t += 0.04
+		return Vector2(best, best_gap if best >= 0.0 else INF)
+
+	## Точка всередині клітинки чужого двору, не на межі: межу двох дворів ставить один з них.
+	func _in_other_lot(q: Vector2) -> bool:
+		var c := Vector2i(roundi(q.x), roundi(q.y))
+		var o: int = int(_owner_of.get(c, -1))
+		return o >= 0 and o != _ring_i and absf(q.x - c.x) < 0.5 - 0.01 and absf(q.y - c.y) < 0.5 - 0.01
+
+	## Скільки клітинок від середини сторони назовні до покриття дороги; INF — не далі за GATE_SIGHT.
+	func _road_ahead(side: Dictionary) -> float:
+		var mid := Vector2.ZERO
+		var d := Vector2(side["d"] as Vector2i)
+		for e: Array in side["edges"]:
+			mid += Vector2(e[0] as Vector2i) + d * 0.5
+		mid /= float((side["edges"] as Array).size())
+		return road_ahead_of(mid, d)
+
+	## Те саме від довільної точки: крок 0.05, щоб не проскочити вузьке покриття.
+	func road_ahead_of(from: Vector2, dir: Vector2) -> float:
+		for k in range(0, int(GATE_SIGHT / 0.05) + 1):
+			if on_road(from + dir * (0.05 * k), 0.0):
+				return 0.05 * k
+		return INF
 
 	## Сторони межі двору як замкнений обхід: кожна — {d: нормаль назовні, nb: садиба по той бік чи −1,
 	## edges: [[клітинка, d], …], line: координата межі (x для вертикальної, y для горизонтальної)}.
@@ -3260,7 +4058,7 @@ class _Placer:
 			var t := Vector2(absf(d.y), absf(d.x))
 			for k in 9:
 				n += 1
-				if _fence_blocked(mid + t * (float(k) / 8.0 - 0.5), sheds, 0.32):
+				if _fence_blocked(mid + t * (float(k) / 8.0 - 0.5), sheds, 0.32, t):
 					hit += 1
 		return float(hit) / float(maxi(n, 1))
 
@@ -3270,7 +4068,8 @@ class _Placer:
 
 	## Точка паркану на дорозі чи над водою — там паркану бути не може взагалі (будівлю він обходить).
 	func _fence_hard(q: Vector2) -> bool:
-		if on_road(q, ROAD_PAD + 0.02):
+		# Ще й за полем дороги, яке малює шейдер: на заокругленнях розвилок асфальт ширший за осі з півшириною.
+		if on_road(q, ROAD_PAD + 0.02) or road_edge_m(q) < FENCE_ROAD_INSET * 8.0 or _in_other_lot(q):
 			return true
 		# Вода й болото — квадратом довкола клітинки, не колом: паркан не підходить і до кута берега.
 		# +0.08: на крутому березі секція нахилена схилом і верхом виходить за свій кінець.
@@ -3285,8 +4084,8 @@ class _Placer:
 
 	## Точка паркану заборонена: дорога, вода, ближче clear до обрису будівлі чи сараю (зі звісом
 	## даху); +0.02 — товщина секції.
-	func _fence_blocked(q: Vector2, sheds: Array[Rect2], clear: float) -> bool:
-		if _fence_hard(q):
+	func _fence_blocked(q: Vector2, sheds: Array[Rect2], clear: float, dir: Vector2 = Vector2.ZERO) -> bool:
+		if _fence_hard(q) or (dir != Vector2.ZERO and _hugs_wall(q, dir)):
 			return true
 		for p: Array in placed:
 			if (p[0] as Rect2).grow(clear).has_point(q):
@@ -3295,6 +4094,244 @@ class _Placer:
 			if r.grow(clear).has_point(q):
 				return true
 		return false
+
+	## Паркан, що йде вздовж стіни (проєкція на його напрям лежить у межах стіни) ближче FENCE_WALL, заслонює фасад
+	## і вікна: там стіна сама межа двору. Прогін кінчається рівно на розі стіни, не за ним, і до стіни його
+	## доводить _wall_connector. Стіни — обриси зі звісом даху (_wall_rects, зібрані один раз на кільце).
+	func _hugs_wall(q: Vector2, dir: Vector2, slack: float = 0.005) -> bool:
+		var along_x: bool = absf(dir.x) >= absf(dir.y)
+		var a: float = q.x if along_x else q.y
+		for r: Rect2 in _wall_rects:
+			if a < (r.position.x if along_x else r.position.y) + slack or a > (r.end.x if along_x else r.end.y) - slack:
+				continue
+			var gap: float = maxf(maxf(r.position.y - q.y, q.y - r.end.y), 0.0) if along_x \
+					else maxf(maxf(r.position.x - q.x, q.x - r.end.x), 0.0)
+			if gap > (0.02 if slack < 0.01 else 0.03) and gap < (FENCE_WALL if slack < 0.01 else FENCE_WALL - 0.01):
+				return true
+		return false
+
+	## Відрізок a→b у напрямі d іде вздовж якоїсь стіни (з відступом 0.03 від рогів).
+	func _piece_hugs(a: Vector2, b: Vector2, d: Vector2) -> bool:
+		for t in 6:
+			if _hugs_wall(a.lerp(b, float(t) / 5.0), d, 0.03):
+				return true
+		return false
+
+	## Відстань від e уздовж d до обрису r (розширеного на 0.02, щоб кінець не лишався на волосину від грані); INF —
+	## промінь не влучає.
+	func _ray_rect(e: Vector2, d: Vector2, r: Rect2) -> float:
+		var g: Rect2 = r.grow(0.02)
+		var t0: float = 0.0
+		var t1: float = INF
+		for ax in 2:
+			if absf(d[ax]) < 1e-6:
+				if e[ax] < g.position[ax] or e[ax] > g.end[ax]:
+					return INF
+				continue
+			var ta: float = (g.position[ax] - e[ax]) / d[ax]
+			var tb: float = (g.end[ax] - e[ax]) / d[ax]
+			t0 = maxf(t0, minf(ta, tb))
+			t1 = minf(t1, maxf(ta, tb))
+		return t0 if t0 <= t1 else INF
+
+	## Кінці секцій кільця, що висять у повітрі біля стіни, доводяться до її грані перпендикулярним відрізком;
+	## ланцюги коротші за MIN_FENCE (уламки), які ні до чого не примикають, викидаються. Повертає відрізки для постановки.
+	func _finish_pieces(pieces: Array, posts: Array[Vector2]) -> Array:
+		# Кінці чужих парканів — лише довкола цього кільця: далі 0.03 від кінця вони нічого не прив'язують.
+		var extent := Rect2(pieces[0][0] if not pieces.is_empty() else Vector2.ZERO, Vector2.ZERO)
+		for pc: Array in pieces:
+			extent = extent.expand(pc[0]).expand(pc[1])
+		extent = extent.grow(0.7)
+		var earlier: Array[Vector2] = []
+		var earlier_segs: Array = []
+		for sg: Array in _fence_segments():
+			if extent.has_point(sg[0]) or extent.has_point(sg[1]):
+				earlier.append_array([sg[0], sg[1]])
+				earlier_segs.append(sg)
+		# Відрізок, що все ж ліг уздовж стіни (кути кілець двох дворів, шов між ними), викидається: стіна — межа.
+		var kept_pieces: Array = []
+		for pc: Array in pieces:
+			var along: Vector2 = ((pc[1] as Vector2) - (pc[0] as Vector2)).normalized()
+			if not _piece_hugs(pc[0], pc[1], along):
+				kept_pieces.append(pc)
+		pieces = kept_pieces
+		var out: Array = pieces.duplicate()
+		var known: Array[Vector2] = posts + earlier
+		for pc: Array in pieces:
+			for end in 2:
+				var e: Vector2 = pc[end]
+				var dir: Vector2 = ((pc[1 - end] as Vector2) - e).normalized()
+				var anchored: bool = false
+				for q: Vector2 in known:
+					anchored = anchored or q.distance_to(e) < 0.03
+				for o: Array in pieces:
+					for oe in 2:
+						anchored = anchored or (o != pc and (o[oe] as Vector2).distance_to(e) < 0.03)
+				for r: Rect2 in _wall_rects:
+					anchored = anchored or r.grow(0.03).has_point(e)
+				if anchored:
+					continue
+				var best: float = 0.6
+				var hit_d := Vector2.ZERO
+				for d: Vector2 in [Vector2(-dir.y, dir.x), Vector2(dir.y, -dir.x)]:
+					for r: Rect2 in _wall_rects:
+						var t: float = _ray_rect(e, d, r)
+						if t < best and not _piece_hugs(e, e + d * t, d):
+							best = t
+							hit_d = d
+				# Кінець, що впирається у стіну чи в кінець іншого відрізка уздовж ходу ближче FENCE_WALL, дотягується до них:
+				# ближче паркан і не ліг би (_hugs_wall), тож кінець там — обрізаний стіною хід, а не уламок.
+				var out_dir: Vector2 = -dir
+				var reach: float = FENCE_WALL
+				var reach_d := Vector2.ZERO
+				for r: Rect2 in _wall_rects:
+					var t2: float = _ray_rect(e, out_dir, r)
+					if t2 < reach and not _piece_hugs(e, e + out_dir * t2, out_dir):
+						reach = t2
+						reach_d = out_dir
+				for o: Array in pieces:
+					for oe in 2:
+						var v: Vector2 = (o[oe] as Vector2) - e
+						if o != pc and v.dot(out_dir) > 0.02 and v.length() < reach and absf(v.cross(out_dir)) < 0.03 \
+								and not _piece_hugs(e, e + out_dir * v.length(), out_dir):
+							reach = v.length()
+							reach_d = out_dir
+				if reach_d != Vector2.ZERO and (hit_d == Vector2.ZERO or reach < best):
+					out.append([e, e + reach_d * reach])
+				elif hit_d != Vector2.ZERO:
+					out.append([e, e + hit_d * best])
+		out = _prune_dangling(_drop_short_runs(out, posts, earlier_segs, known, _wall_rects), known, _wall_rects)
+		# Ланцюги за збігом кінців.
+		var parent: Array[int] = []
+		for k in out.size():
+			parent.append(k)
+		for k in out.size():
+			for m in range(k + 1, out.size()):
+				for ea: Vector2 in out[k]:
+					for eb: Vector2 in out[m]:
+						if ea.distance_to(eb) < 0.03:
+							var rk: int = k
+							while parent[rk] != rk:
+								rk = parent[rk]
+							var rm: int = m
+							while parent[rm] != rm:
+								rm = parent[rm]
+							parent[rk] = rm
+		var length: Dictionary = {}
+		var tied: Dictionary = {}
+		for k in out.size():
+			var r: int = k
+			while parent[r] != r:
+				r = parent[r]
+			length[r] = float(length.get(r, 0.0)) + (out[k][0] as Vector2).distance_to(out[k][1])
+			for q: Vector2 in known:
+				if q.distance_to(out[k][0]) < 0.03 or q.distance_to(out[k][1]) < 0.03:
+					tied[r] = true
+		var kept: Array = []
+		for k in out.size():
+			var r: int = k
+			while parent[r] != r:
+				r = parent[r]
+			if float(length[r]) >= MIN_FENCE or tied.has(r):
+				kept.append(out[k])
+		return kept
+
+	## Купки коротких (за SHORT_RUN) прямих ходів кільця, що не тримають ні воріт, ні довгого ходу (свого чи сусіднього
+	## двору), викидаються: шматки довкола рогу хати, що замикаються самі на себе через стіну, — уламок, що закінчується в
+	## нікуди. Купка, де хоч один хід тримає стовп воріт чи довгий хід (бічна стійка воріт, обхід перешкоди), лишається
+	## цілою — інакше кільце розімкнулось би. Що після цього повисне, прибирає прохід «висить у повітрі».
+	static func _drop_short_runs(out: Array, posts: Array, others: Array, known: Array, walls: Array) -> Array:
+		# Купки — з поточного набору: після кожного викидання ходи й купки рахуються заново.
+		var kept: Array = []
+		var changed := true
+		while changed:
+			changed = false
+			for cl: Array in _short_clusters(_collinear_runs(out + others), posts):
+				var segs: Array = []
+				for run: Dictionary in cl[0]:
+					segs.append_array(run["segs"])
+				if bool(cl[1]) or kept.has(segs):
+					continue
+				var rest: Array = out.filter(func(pc: Array) -> bool: return not segs.has(pc))
+				var pruned: Array = _prune_dangling(rest, known, walls)
+				# Купка, без якої повис би довгий хід (за довжиною всього прямого ходу, а не шматка), — частина замкненого
+				# кільця, а не уламок: лишається.
+				var lost_long := false
+				for run: Dictionary in _collinear_runs(rest + others):
+					if float(run["len"]) < SHORT_RUN:
+						continue
+					for sg: Array in run["segs"]:
+						lost_long = lost_long or (rest.has(sg) and not pruned.has(sg))
+				if lost_long:
+					kept.append(segs)
+					continue
+				out = pruned
+				changed = true
+				break
+		return out
+
+	## Відрізок із кінцем, що висить у повітрі (ні стовпа, ні іншого відрізка, ні стіни поруч), викидається разом із
+	## наслідками.
+	static func _prune_dangling(out: Array, known: Array, walls: Array) -> Array:
+		for pass_id in 6:
+			var survivors: Array = []
+			for pc: Array in out:
+				var dangling := false
+				for end in 2:
+					var e: Vector2 = pc[end]
+					var anchored := false
+					for q: Vector2 in known:
+						anchored = anchored or q.distance_to(e) < 0.03
+					for o: Array in out:
+						for oe in 2:
+							anchored = anchored or (o != pc and (o[oe] as Vector2).distance_to(e) < 0.03)
+					for r: Rect2 in walls:
+						anchored = anchored or r.grow(0.03).has_point(e)
+					dangling = dangling or not anchored
+				if not dangling:
+					survivors.append(pc)
+			if survivors.size() == out.size():
+				break
+			out = survivors
+		return out
+
+	## Короткі ходи, згруповані за спільними кінцями: [[ходи…], тримає?] — тримає, коли кінець котрогось ходу на стовпі
+	## воріт (ближче 0.04) чи на довгому ході (ближче 0.03).
+	static func _short_clusters(runs: Array, posts: Array) -> Array:
+		var short: Array = runs.filter(func(r: Dictionary) -> bool: return float(r["len"]) < SHORT_RUN)
+		var long: Array = runs.filter(func(r: Dictionary) -> bool: return float(r["len"]) >= SHORT_RUN)
+		var parent: Array[int] = []
+		for k in short.size():
+			parent.append(k)
+		var root := func(k: int) -> int:
+			while parent[k] != k:
+				k = parent[k]
+			return k
+		for k in short.size():
+			for m in range(k + 1, short.size()):
+				var touch := false
+				for sa: Array in short[k]["segs"]:
+					for sb: Array in short[m]["segs"]:
+						for ea: Vector2 in sa:
+							for eb: Vector2 in sb:
+								touch = touch or ea.distance_to(eb) < 0.03
+				if touch:
+					parent[root.call(k)] = root.call(m)
+		var by_root: Dictionary = {}
+		for k in short.size():
+			var r: int = root.call(k)
+			if not by_root.has(r):
+				by_root[r] = [[], false]
+			by_root[r][0].append(short[k])
+			for e: Vector2 in short[k]["ends"]:
+				for q: Vector2 in posts:
+					if q.distance_to(e) < 0.04:
+						by_root[r][1] = true
+				for other: Dictionary in long:
+					for sg: Array in other["segs"]:
+						if Geometry2D.get_closest_point_to_segment(e, sg[0], sg[1]).distance_to(e) < 0.03:
+							by_root[r][1] = true
+		return by_root.values()
 
 	## Ділянка паркану від a до b, розірвана там, де дорога, вода чи будівля: паркан доходить до стіни
 	## (обрису зі звісом), і стіна хати чи сараю сама замикає двір. Коротких шматків не викидаємо —
@@ -3325,7 +4362,7 @@ class _Placer:
 		var from: float = -1.0
 		for k in steps + 1:
 			var t: float = total * float(k) / float(steps)
-			var free: bool = not _fence_blocked(a + dir * t, sheds, 0.02)
+			var free: bool = not _fence_blocked(a + dir * t, sheds, 0.02, dir)
 			if free and from < 0.0:
 				from = t
 			if (not free or k == steps) and from >= 0.0:
@@ -3338,10 +4375,13 @@ class _Placer:
 	## Пряма ділянка паркану: рівні секції не довші за клітинку, кожна лежить на землі обома кінцями;
 	## секція належить найближчій клітинці двору, тож давить її той, хто заїхав у двір.
 	func _fence_straight(m: StringName, a: Vector2, b: Vector2, lot: Dictionary) -> void:
+		if _collecting:
+			_pieces.append([a, b])
+			return
 		var total: float = a.distance_to(b)
 		var n: int = maxi(1, ceili(total / 1.0))
 		var along: Vector2 = (b - a) / float(n)
-		var hs: float = float(PropLayer.spec_of(m).get("height", 1.0))
+		var hs: float = float(PropLayer.spec_of(m).get("height", 1.0)) * _ring_hmul
 		var model_len: float = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size.x
 		var spans: Array = []
 		for k in n:
@@ -3431,7 +4471,7 @@ class _Placer:
 					var q: Vector2 = best + normal * cand.x + edge_dir * (cand.y + 0.18 * k)
 					var qc := Vector2i(roundi(q.x), roundi(q.y))
 					if not on_board(qc) or kind(qc) in [Terrain.Kind.WATER, Terrain.Kind.MARSH, Terrain.Kind.FOREST, Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE] \
-							or layer.field_edges.any(func(r: Rect2) -> bool: return r.has_point(q)):
+							or near_wet(q, WATER_CLEAR) or layer.field_edges.any(func(r: Rect2) -> bool: return r.has_point(q)):
 						continue
 					var xform := Transform3D(Basis(Vector3.UP, float(h(c, 16 + k) % 628) / 100.0), Vector3(q.x, ground(q.x, q.y), q.y))
 					var box: AABB = xform * ((PropLayer.model(m) as Dictionary)["aabb"] as AABB)
@@ -3441,8 +4481,8 @@ class _Placer:
 					layer._add(m, xform, cells)
 					break
 
-	## ЛЕП: мережу будує PowerGrid (10 кВ за намірами routes макета, ТП і 0.4 кВ уздовж вулиць сіл); тут — стовпи на її
-	## точках, повернуті по бісектрисі, щоб траверса не лягала вздовж прольоту, підстанції й відводи. Точка, де стовпу
+	## ЛЕП: мережу будує PowerGrid (10 кВ за намірами routes макета, ТП і дерево 0.4 кВ до хат, усе вздовж осей карти);
+	## тут — стовпи на її точках, траверса впоперек прольоту, на куті — по бісектрисі; підстанції й відводи. Точка, де стовпу
 	## не місце, лишає розрив, який ловить тест, а не мовчки зсувається.
 	func _layout_poles() -> void:
 		_index_obstacles()
@@ -3873,8 +4913,8 @@ class _Placer:
 
 	## Чи стоїть p у прорізі воріт садиби чи ближче POLE_GATE_CLEAR до нього (стовп у воротах ними не проїхати).
 	func near_gate(p: Vector2) -> bool:
-		for g in layer._gate_posts.size() / 2:
-			if Geometry2D.get_closest_point_to_segment(p, layer._gate_posts[2 * g], layer._gate_posts[2 * g + 1]).distance_to(p) < PropLayer.POLE_GATE_CLEAR:
+		for g: Array in gate_segments:
+			if Geometry2D.get_closest_point_to_segment(p, g[0], g[1]).distance_to(p) < PropLayer.POLE_GATE_CLEAR:
 				return true
 		return false
 
@@ -4068,12 +5108,18 @@ class _Placer:
 			_fence_yard(lot, start)
 
 	func _fence_yard(lot: Dictionary, first: Vector2i) -> void:
-		# Два типи огорожі на половину, двір бере свій: сусідні двори не однакові.
-		var palette: Array[StringName] = PropLayer.models_of(Kind.GARDEN_FENCE)
+		# Один вид паркану двору з FENCE_FORMS на двір (за зерном двору й половиною карти) і ворота того самого роду,
+		# як у дворів із макета.
+		var palette: Array[StringName] = []
+		for f: StringName in PropLayer.FENCE_FORMS:
+			if PropLayer.model(StringName(String(f).get_slice("|", 0))) != null:
+				palette.append(f)
 		if palette.is_empty():
 			return
 		var base: int = absi(hash(Vector2i(salt, Kind.GARDEN_FENCE))) + half(first)
-		var m: StringName = palette[(base + h(first, 121) % 2) % palette.size()]
+		var form: StringName = palette[(base + h(first, 121)) % palette.size()]
+		var m := StringName(String(form).get_slice("|", 0))
+		var hmul: float = float(String(form).get_slice("|", 1))
 		var cells: Array = lot.keys()
 		cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
 		var sides: Array = []
@@ -4112,9 +5158,15 @@ class _Placer:
 			if not joined:
 				continue
 			var c: Vector2i = plan["c"]
-			if put_small(m, c, plan["local"], plan["yaw"], 1.0, true, plan["length"]):
+			if put_small(m, c, plan["local"], plan["yaw"], 1.0, true, plan["length"], hmul):
 				edges[plan["key"]] = true
 				yard_cells[c] = true
+				if plan.has("gate"):
+					var from: Vector2 = plan["gate"][0]
+					var to: Vector2 = plan["gate"][1]
+					layer._gates.append({"a": from, "mid": from + (to - from).normalized() * (GATE_LEAF + GATE_POST_SIZE.x),
+							"b": to, "kind": PropLayer.spec_of(m).get("gate", PropLayer.GATE_KINDS[0]), "out": Vector2(plan["out"]),
+							"height": GATE_H, "seed": h(first, 173), "clear": 0.0, "along": true, "screen": true})
 
 	## План секції огорожі на ребрі ділянки (без розстановки): {} — секції тут не буде.
 	func _yard_segment(lot: Dictionary, g: Vector2i, d: Vector2i, gate: bool) -> Dictionary:
@@ -4129,10 +5181,13 @@ class _Placer:
 		# Проліт від lo до hi уздовж t (від центру клітинки); хвіртка вирізає GATE з одного кінця.
 		var lo: float = -0.5 - float(ext[-t])
 		var hi: float = 0.5 + float(ext[t])
+		var opening := Vector2.ZERO
 		if gate:
 			if h(c, 122) & 1:
+				opening = Vector2(lo, lo + GATE)
 				lo += GATE
 			else:
+				opening = Vector2(hi - GATE, hi)
 				hi -= GATE
 		var key := Vector4i(c.x, c.y, -d.x, -d.y)
 		if edges.has(key) or hi - lo < MIN_FENCE:
@@ -4147,9 +5202,13 @@ class _Placer:
 		lo += cut
 		hi -= cut
 		var base: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT)
-		return {"c": c, "key": key, "length": hi - lo, "yaw": 0.0 if d.y != 0 else PI * 0.5,
+		var plan: Dictionary = {"c": c, "key": key, "length": hi - lo, "yaw": 0.0 if d.y != 0 else PI * 0.5,
 				"local": base - Vector2(c) + Vector2(t) * ((lo + hi) * 0.5),
 				"ends": [base + Vector2(t) * lo, base + Vector2(t) * hi]}
+		if gate:
+			plan["gate"] = [base + Vector2(t) * opening.x, base + Vector2(t) * opening.y]
+			plan["out"] = d
+		return plan
 
 	func _span_clear(c: Vector2i, d: Vector2i, t: Vector2i, lo: float, hi: float) -> bool:
 		var mid: Vector2 = Vector2(c) - Vector2(d) * (0.5 - YARD_OUT) + Vector2(t) * ((lo + hi) * 0.5)
@@ -4227,7 +5286,9 @@ class _Placer:
 				var n: int = 1 + h(c, 7) % 2
 				for k in n:
 					var off := Vector2(float(h(c, 8 + k) % 100) / 100.0 - 0.5, float(h(c, 12 + k) % 100) / 100.0 - 0.5) * 0.12
-					put_small(m, c, corner + off - corner.normalized() * 0.09 * k, float(h(c, 16 + k) % 628) / 100.0)
+					var at: Vector2 = corner + off - corner.normalized() * 0.09 * k
+					if not near_wet(Vector2(c) + at, WATER_CLEAR):
+						put_small(m, c, at, float(h(c, 16 + k) % 628) / 100.0)
 
 	## Причіп біля подвір'я: один на групу, на полі за огорожею двору (ближче — сама огорожа), уздовж
 	## ребра в бік двору.
