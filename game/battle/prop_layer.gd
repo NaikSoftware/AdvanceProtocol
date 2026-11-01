@@ -403,7 +403,8 @@ const GATE_POST_SIZE: Vector3 = Vector3(0.03, 0.245, 0.03)
 const GATE_POST_COLOR: Color = Color(0.2, 0.15, 0.1)
 ## Тони полотна воріт (sRGB; вершинний колір множить альбедо коробки): сталь, фарбований профнастил
 ## (бурий чи зелений), дошки, оцинкована ґратка.
-const GATE_STEEL: Array[Color] = [Color(0.22, 0.28, 0.34), Color(0.28, 0.31, 0.27)]
+## Сталь воріт цегли з ґратами — нейтрально-темна, як прути й рейки того паркану, без синяви: світла блакитна ставала плямою.
+const GATE_STEEL: Array[Color] = [Color(0.21, 0.22, 0.23), Color(0.22, 0.23, 0.22)]
 const GATE_SHEET: Array[Color] = [Color(0.34, 0.18, 0.125), Color(0.3, 0.17, 0.125)]
 ## Дошки воріт підібрано за кадром (prop_gate веде їх як паркан: нормаль до неба, мокрість): середнє полотна в межах ±10 % від
 ## свого паркану на мокрій River і сухому Crossroads; відношення до середнього атласу паркану стережуть test_yard_fence_tone.
@@ -428,6 +429,8 @@ const POLE_TINT: float = 0.45
 ## Пляма дотику під брилою чи блоком: у скільки разів ширша за сам пропс і наскільки темна.
 const CONTACT_SPREAD: float = 1.25
 const CONTACT_ALPHA: float = 0.6
+## Найменший просвіт між габаритом блока біля мосту й підніжжям опори (клітинок).
+const BLOCK_POLE_GAP: float = 0.3
 const _FADE_SHADER: Shader = preload("res://game/battle/shaders/prop_fade.gdshader")
 const _THIN_SHADER: Shader = preload("res://game/battle/shaders/prop_thin.gdshader")
 const _GATE_SHADER: Shader = preload("res://game/battle/shaders/prop_gate.gdshader")
@@ -2521,9 +2524,9 @@ class _Placer:
 			_footpaths()
 			_bridges()
 			_layout_hay()
-			_blocks()
 			_boulders()
 			_layout_poles()
+			_blocks()
 			return
 		_structures()
 		_ring_landmark()
@@ -2534,9 +2537,9 @@ class _Placer:
 		_field_fences()
 		_hay()
 		_trailers()
-		_blocks()
 		_boulders()
 		_poles()
+		_blocks()
 
 	## Орієнтир кільця карти (RING_LANDMARKS): найближче до near вільне поле, що цілком лежить за краєм дошки.
 	func _ring_landmark() -> void:
@@ -6105,8 +6108,21 @@ class _Placer:
 					var side := Vector2(d.y, d.x).abs()
 					var yaw: float = PI * 0.5 if d.y == 0 else 0.0
 					# На узбіччі, не на асфальті: put_small відкидає блок на покритті дороги.
-					put_small(m, c, side * 0.43 - Vector2(d) * 0.2, yaw + 0.15)
-					put_small(m, c, -side * 0.43 - Vector2(d) * 0.3, yaw - 0.1)
+					for spot: Array in [[side * 0.43 - Vector2(d) * 0.2, yaw + 0.15], [-side * 0.43 - Vector2(d) * 0.3, yaw - 0.1]]:
+						if _clear_of_poles(m, c, spot[0], spot[1]):
+							put_small(m, c, spot[0], spot[1])
+
+	## Блок ставиться після опор, щоб відступити від кожної: габарит не ближче за BLOCK_POLE_GAP до підніжжя.
+	func _clear_of_poles(m: StringName, c: Vector2i, local: Vector2, yaw: float) -> bool:
+		var xf := Transform3D(Basis(Vector3.UP, yaw), Vector3(c.x + local.x, 0.0, c.y + local.y))
+		var b: AABB = xf * ((PropLayer.model(m) as Dictionary)["aabb"] as AABB)
+		var r := Rect2(b.position.x, b.position.z, b.size.x, b.size.z).grow(PropLayer.BLOCK_POLE_GAP)
+		for inst: Dictionary in layer._instances:
+			if int(PropLayer.spec_of(inst["model"])["kind"]) == Kind.POLE:
+				var o: Vector3 = (inst["transform"] as Transform3D).origin
+				if r.has_point(Vector2(o.x, o.z)):
+					return false
+		return true
 
 	## Каміння на пагорбах: одна-дві брили біля краю клітинки, кожна половина — свої дві породи.
 	func _boulders() -> void:

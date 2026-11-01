@@ -77,7 +77,6 @@ const GATE_CASES: Array = [
 	["wood", "picket", 1.19, 1.32],
 	["slat", "slat", 0.72, 0.80],
 	["sheet", "sheet", 1.20, 1.36],
-	["metal", "brickbars", 0.88, 0.97],
 	["lattice", "chainlink", 0.58, 0.66],
 ]
 ## Скільки разів найсвітліша коробка воріт може перевищувати середню яскравість їхнього паркану (шапки темнішають у шейдері).
@@ -100,6 +99,20 @@ func test_gates_stay_in_their_fences_tone(p = use_parameters(GATE_CASES)) -> voi
 	if gate.s > 0.15 and fence.s > 0.15 and p[0] != "metal":
 		assert_lte(minf(absf(gate.h - fence.h), 1.0 - absf(gate.h - fence.h)), MAX_HUE_GAP, "%s: відтінок воріт %s не з родини паркану %s" % [p[0], gate, fence])
 	assert_lte(_sat(gate), _sat(fence) * 1.05 + 0.02, "%s: ворота %s насиченіші за паркан %s" % [p[0], gate, fence])
+
+
+## Ворота цегли з ґратами тоном у тон полотну паркану (прути, рейки: усе, що не червона цегла), а не середньому з цеглою:
+## середня яскравість коробок воріт у межах ±10 % від яскравості полотна, без синяви.
+func test_metal_gate_matches_fence_panels() -> void:
+	var panels: Array[Color] = []
+	for c in _pixels("brickbars"):
+		if c.r <= c.g * 1.6:
+			panels.append(c)
+	var fence: Color = _mean(panels)
+	var gate: Color = _mean(_gate_colors(&"metal"))
+	var ratio: float = _luma(gate) / _luma(fence)
+	assert_between(ratio, 0.9, 1.1, "ворота %s проти полотна %s (відношення %.2f)" % [gate, fence, ratio])
+	assert_lte(gate.b - gate.r, 0.03, "ворота %s синіші за полотно %s" % [gate, fence])
 
 
 ## Оцинковка: дріт — світло-середній сірий, не майже білий; труби й стовпи (суцільні, під сірим небом світляться
