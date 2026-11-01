@@ -272,7 +272,8 @@ static func class_layers(board: Board, margin: int, surface: PackedByteArray, ta
 				var votes: Dictionary = {}
 				for d in Board.DIRS_4:
 					var q := Vector2i(px, py) + d
-					if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and out[q.y * w + q.x] != -1:
+					# Двір будівлі не береться: заокруглення розвилки біля будинку лягало б сірим ґрунтом двору, а не травою.
+					if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and out[q.y * w + q.x] != -1 and out[q.y * w + q.x] != YARD:
 						votes[out[q.y * w + q.x]] = int(votes.get(out[q.y * w + q.x], 0)) + 1
 				var best := -1
 				for l: int in votes:
@@ -477,6 +478,8 @@ func _set_roads(mat: ShaderMaterial, height: TerrainHeight) -> void:
 	for e in rc.asphalt_ends():
 		ends.append(Vector4(e.x, e.y, 0.0, 0.0))
 	var count: int = mini(ends.size(), ASPHALT_ENDS_MAX)
+	if ends.size() > ASPHALT_ENDS_MAX:
+		push_warning("GroundSurface: кінців асфальту %d, шейдер бере лише %d" % [ends.size(), ASPHALT_ENDS_MAX])
 	ends.resize(ASPHALT_ENDS_MAX)
 	mat.set_shader_parameter("asphalt_ends", ends)
 	mat.set_shader_parameter("asphalt_end_count", count)

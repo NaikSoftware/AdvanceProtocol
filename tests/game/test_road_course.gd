@@ -728,14 +728,18 @@ func test_asphalt_ends_list_has_the_real_end_and_no_side_junction() -> void:
 			assert_lte(r.asphalt_ends().size(), 16, "%s: кінців більше, ніж місця в шейдері" % path)
 
 
-## Шейдер читає кінці в клітинках дошки: поле навколо дошки (зсув ліній) з них віднімається.
-func test_asphalt_ends_are_in_board_cells_whatever_the_margin() -> void:
+## Шейдер читає кінці в клітинках дошки: зсув кільця світу (Surroundings) з них віднімається.
+func test_asphalt_ends_are_in_board_cells_in_a_ring_world() -> void:
 	var m: MapData = load("res://maps/crossroads.tres")
-	var rc: RoadCourse = TerrainHeight.bake(m.to_board(), 12, m.name_key.hash(), m.surface).roads
+	var ring: int = Surroundings.ring_of(m)
+	assert_gt(ring, 0, "Перехрестя має кільце світу")
+	var th := TerrainHeight.bake(Surroundings.world_board(m.to_board(), m), 0, m.name_key.hash(), Surroundings.world_surface(m), ring)
+	var rc: RoadCourse = th.roads
 	assert_not_null(rc)
 	if rc == null:
 		return
+	assert_eq(rc._shift, ring)
 	var best := 1e9
 	for e in rc.asphalt_ends():
 		best = minf(best, e.distance_to(Vector2(21, 13)))
-	assert_lt(best, 0.5, "кінець у вузлі 21,13 при полі 12: %s, зсув %d" % [rc.asphalt_ends(), rc._shift])
+	assert_lt(best, 0.5, "кінець у вузлі 21,13 при кільці %d: %s" % [ring, rc.asphalt_ends()])

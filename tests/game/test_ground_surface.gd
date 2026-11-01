@@ -473,3 +473,38 @@ func test_hill_mask_marks_every_hill_cell() -> void:
 				if hill:
 					assert_eq(GroundSurface.puddle_gate(0.0, 0.0, mask[y * board.width + x] / 255.0), 0.0)
 		assert_eq(bad, 0, file)
+
+
+## Дорога біля будинку не бере покриття двору: заокруглення розвилки там лягало б сірим ґрунтом двору.
+func test_road_cell_beside_a_building_takes_the_other_neighbour_not_the_yard() -> void:
+	var board := Board.create(3, 3, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(1, 1), Terrain.Kind.ROAD)
+	board.set_kind(Vector2i(0, 1), Terrain.Kind.BUILDING)
+	board.set_kind(Vector2i(1, 0), Terrain.Kind.BUILDING)
+	board.set_kind(Vector2i(2, 1), Terrain.Kind.FOREST)
+	board.set_kind(Vector2i(1, 2), Terrain.Kind.FOREST)
+	ground.build(board, 0)
+	var mat := ground.material_override as ShaderMaterial
+	var slots: PackedInt32Array = mat.get_shader_parameter("class_layer")
+	var maps: Array[Image] = [(mat.get_shader_parameter("class_map0") as ImageTexture).get_image(), (mat.get_shader_parameter("class_map1") as ImageTexture).get_image()]
+	var found: Array[String] = []
+	for sl in GroundSurface.CLASS_SLOTS:
+		if maps[sl / 4].get_pixel(1, 1)[sl % 4] > 0.5:
+			found.append(GroundSurface.TEX_LAYERS[slots[sl]])
+	assert_eq(found, ["forest"] as Array[String])
+
+
+## Шейдер малює кришіння асфальту лише біля кінців, які дає RoadCourse: вони мусять дійти до матеріалу.
+func test_relief_build_passes_the_asphalt_ends_to_the_shader() -> void:
+	var m: MapData = load("res://maps/crossroads.tres")
+	var board: Board = m.to_board()
+	var height := TerrainHeight.bake(board, 0, m.name_key.hash(), m.surface)
+	ground.build(board, 0, m.surface, height)
+	var mat := ground.material_override as ShaderMaterial
+	var ends: PackedVector2Array = height.roads.asphalt_ends()
+	assert_gt(ends.size(), 0)
+	assert_eq(mat.get_shader_parameter("asphalt_end_count"), ends.size())
+	var sent: PackedVector4Array = mat.get_shader_parameter("asphalt_ends")
+	assert_eq(sent.size(), GroundSurface.ASPHALT_ENDS_MAX)
+	for i in ends.size():
+		assert_eq(Vector2(sent[i].x, sent[i].y), ends[i])
