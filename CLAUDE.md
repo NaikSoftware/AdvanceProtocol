@@ -297,7 +297,7 @@ and every finding recovered so far: **[docs/reference/blitzkrieg.md](docs/refere
 | --- | --- |
 | Engine | Godot **4.7.2 stable** |
 | Language | GDScript, statically typed |
-| Renderer | Mobile (Vulkan); `gl_compatibility` fallback for old devices |
+| Renderer | Mobile (Vulkan; Metal on Apple). Visuals are tuned for current devices. The `gl_compatibility` fallback for old devices must run and stay playable; small visual differences there are accepted |
 | Targets | Android and iOS, **landscape** |
 | Tests | GUT, run headless |
 | 3D assets | GLB, generated with `asset-manager`, edited with `3d-modelling` |

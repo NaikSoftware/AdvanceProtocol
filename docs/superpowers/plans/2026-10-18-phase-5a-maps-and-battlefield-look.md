@@ -192,11 +192,11 @@ Existing camera tests (anchor fixed under zoom, pan clamp, pan keeps point under
 
 Prompts (agy, one image each, flags before `-p`, see memory `agy image generation`): seamless top-down photo texture, overcast diffuse light, no shadows, no perspective, no objects; road = *wet dark asphalt with fine cracks*, field = *short autumn meadow grass, wet*, forest = *forest floor, pine needles, birch leaves, moss*, hill = *rocky scrub, grey stones in brown soil*, marsh = *bog, dark water between sedge tufts*, mud = *churned wet mud with tyre ruts and standing water*, rubble = *broken brick and concrete debris*, bank = *wet river bank, silt and pebbles*. Palette per `docs/art-direction.md` and `docs/art/mood/river_target.jpg`.
 
-- [ ] **Step 1:** Write `terrain_tex.py`; self-check: `python3 -I tools/terrain_tex.py check` on a random-noise PNG fails, on its `seamless` output passes.
-- [ ] **Step 2:** Generate the 8 albedos with agy; run `seamless` then `normal` on each.
-- [ ] **Step 3:** `python3 -I tools/terrain_tex.py check assets/terrain/*.png` → exit 0.
+- [x] **Step 1:** Write `terrain_tex.py`; self-check: `python3 -I tools/terrain_tex.py check` on a random-noise PNG fails, on its `seamless` output passes.
+- [x] **Step 2:** Generate the 8 albedos with agy; run `seamless` then `normal` on each.
+- [x] **Step 3:** `python3 -I tools/terrain_tex.py check assets/terrain/*.png` → exit 0.
 - [ ] **Step 4:** Publish a page showing each texture tiled 2×2 beside the target frame; regenerate any that look wrong against the target (owner may interject).
-- [ ] **Step 5: Commit** — `git commit -m "feat(art): текстури місцевості для ґрунтового шейдера"`
+- [x] **Step 5: Commit** — `git commit -m "feat(art): текстури місцевості для ґрунтового шейдера"`
 
 ---
 
@@ -215,7 +215,7 @@ Prompts (agy, one image each, flags before `-p`, see memory `agy image generatio
 - Produces: `const TEX_LAYER_FOR_KIND: Dictionary` — `Terrain.Kind → texture layer` (ROAD→road, BRIDGE→road, FIELD→field, FOREST→forest, HILL→hill, MARSH→marsh, WATER→bank, BRIDGE_DESTROYED→bank, BUILDING→rubble, RUBBLE→rubble). Under `ground_state == MUD`, FIELD and HILL blend toward `mud` (factor is the builder's).
 - `BoardView.kind_at`, contours and circles behave exactly as before.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```gdscript
 # test_board_view.gd — replace the four MultiMesh-per-kind tests with:
@@ -229,10 +229,10 @@ func test_mesh_covers_the_board_at_y_zero() -> void              # AABB x∈[-0.
 ```
 Keep `test_no_apply_fog_and_no_vision_reference` as is.
 
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement.** Shader: sample `kind_map` with `filter_nearest` at the 4 cells around the fragment, weight them bilinearly with the position perturbed by a noise texture (~0.3 tile amplitude) so borders are soft and irregular; sample the `Texture2DArray` with world-space UVs (~1 texture repeat per 3 tiles) for albedo and normal; roughness lowered and albedo darkened by `weather_wetness`; puddles on road/mud where a low-frequency noise < `weather_wetness` threshold (flat normal, roughness ~0.05).
-- [ ] **Step 4: Run** `./run_tests.sh` → green; `$GODOT --headless --path . --import 2>&1 | grep -c "SHADER ERROR"` → `0`. Screenshot River at MAX and MIN zoom, with a unit selected (zone contours visible), publish beside the target frame.
-- [ ] **Step 5: Commit** — `git commit -m "feat(board): суцільна земля з текстурами замість плиток"`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement.** Shader: sample `kind_map` with `filter_nearest` at the 4 cells around the fragment, weight them bilinearly with the position perturbed by a noise texture (~0.3 tile amplitude) so borders are soft and irregular; sample the `Texture2DArray` with world-space UVs (~1 texture repeat per 3 tiles) for albedo and normal; roughness lowered and albedo darkened by `weather_wetness`; puddles on road/mud where a low-frequency noise < `weather_wetness` threshold (flat normal, roughness ~0.05).
+- [x] **Step 4: Run** `./run_tests.sh` → green; `$GODOT --headless --path . --import 2>&1 | grep -c "SHADER ERROR"` → `0`. Screenshot River at MAX and MIN zoom, with a unit selected (zone contours visible), publish beside the target frame.
+- [x] **Step 5: Commit** — `git commit -m "feat(board): суцільна земля з текстурами замість плиток"`
 
 ---
 
@@ -248,7 +248,7 @@ Keep `test_no_apply_fog_and_no_vision_reference` as is.
 - Produces: `WaterSurface.build(board: Board, margin: int, kind_map: ImageTexture) -> void` — one plane at `y = 0.02`, shader discards where the cell is not WATER / BRIDGE_DESTROYED (soft shoreline from the same noise as the ground).
 - Produces: `BoardView.reflection_probe() -> ReflectionProbe`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```gdscript
 func test_board_with_water_gets_one_water_surface() -> void       # River → 1 WaterSurface child of BoardView
@@ -260,10 +260,10 @@ func test_unit_meshes_are_on_the_unit_layer_only() -> void
 	# instantiate unit_view.tscn, bind a unit: every VisualInstance3D descendant has layers == 1 << (UNIT_LAYER - 1)
 ```
 
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement.** Water: dark base colour, two scrolling normal maps plus rain ripple rings (procedural, strength × `weather_wetness`), fresnel blend to the probe's reflection; puddles in the ground shader also take the probe's reflection (radiance), so no screen-space pass is used.
-- [ ] **Step 4: Run** suite + shader import check. Screenshot the river and the central bridge at MIN zoom, publish.
-- [ ] **Step 5: Commit** — `git commit -m "feat(board): річка з відбиттями без SSR; зонд не бачить юнітів"`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement.** Water: dark base colour, two scrolling normal maps plus rain ripple rings (procedural, strength × `weather_wetness`), fresnel blend to the probe's reflection; puddles in the ground shader also take the probe's reflection (radiance), so no screen-space pass is used.
+- [x] **Step 4: Run** suite + shader import check. Screenshot the river and the central bridge at MIN zoom, publish.
+- [x] **Step 5: Commit** — `git commit -m "feat(board): річка з відбиттями без SSR; зонд не бачить юнітів"`
 
 ---
 
@@ -278,17 +278,17 @@ func test_unit_meshes_are_on_the_unit_layer_only() -> void
 - Produces: the GLBs above, each normalised with the `3d-modelling` skill: origin at the footprint centre on the ground, `y = 0` ground, front `−Z`, footprint ≤ 1.0 × 1.0 (bridge pieces exactly 1.0 along the road), houses ≤ 1.6 tall.
 - Produces: `const PROP_FACE_LIMITS: Dictionary` in the test = trees 600, rocks 400, wall_fence 600, bridge pieces 1500, houses and ruin 3000 (Tripo `-p face_limit=` uses these).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```gdscript
 func test_every_prop_exists_is_grounded_and_within_budget(p = use_parameters(PROP_NAMES)) -> void
 	# load res://assets/props/<p>.glb, instantiate; merged AABB: min.y ≈ 0 (±0.02), x and z extents ≤ 1.05,
 	# total triangle count ≤ PROP_FACE_LIMITS[group]
 ```
-- [ ] **Step 2: Run, expect FAIL** (files missing).
-- [ ] **Step 3: Build** each asset by the route, sizes and accept checks in [`docs/art/props-research.md`](../../art/props-research.md) (Blender for geometric props, bridges and forest clumps; Tripo for houses, ruins and hero trees; CC0 for rocks and deadfall) and the rules in [`docs/art-direction.md`](../../art-direction.md) "Props": realistic, 2030s countryside, detail matched to screen scale, integer-tile footprints for structures, one bridge design per crossing, deciduous trees in three seasons. Normalise each with `3d-modelling`, uniform scale only. Render with `prop_preview` at both zooms; accept or re-roll (max 3).
-- [ ] **Step 4: Run, expect PASS.**
-- [ ] **Step 5: Commit** — `git commit -m "feat(art): 3D-об'єкти поля бою — дерева, будинки, міст, каміння"`
+- [x] **Step 2: Run, expect FAIL** (files missing).
+- [x] **Step 3: Build** each asset by the route, sizes and accept checks in [`docs/art/props-research.md`](../../art/props-research.md) (Blender for geometric props, bridges and forest clumps; Tripo for houses, ruins and hero trees; CC0 for rocks and deadfall) and the rules in [`docs/art-direction.md`](../../art-direction.md) "Props": realistic, 2030s countryside, detail matched to screen scale, integer-tile footprints for structures, one bridge design per crossing, deciduous trees in three seasons. Normalise each with `3d-modelling`, uniform scale only. Render with `prop_preview` at both zooms; accept or re-roll (max 3).
+- [x] **Step 4: Run, expect PASS.**
+- [x] **Step 5: Commit** — `git commit -m "feat(art): 3D-об'єкти поля бою — дерева, будинки, міст, каміння"`
 
 ---
 
@@ -307,7 +307,7 @@ func test_every_prop_exists_is_grounded_and_within_budget(p = use_parameters(PRO
 - Placement follows [`docs/art-direction.md`](../../art-direction.md) "Props" and "Maps": the map's season picks the deciduous variant, each half of a map gets its own prop mix (never a 180° copy), structures only on whole `BUILDING` groups that fit their `footprint_tiles`, small props near cell edges and crushed by an entering vehicle (scar shown only on the viewer's `seen`), forest cells use canopy tiles inside and edge clumps facing open ground, power-line wires are screen-space lines between `wire_N` nodes. Original sketch, superseded where it conflicts: FOREST → 2–3 trees mixed pine/birch/bare; BUILDING → one house variant; RUBBLE → `house_ruin`; BRIDGE → `bridge_span`, BRIDGE_DESTROYED → `bridge_broken`, both oriented along the bridge's road axis; HILL → `rocks`; FIELD cells orthogonally next to ROAD → `wall_fence` on ~1 in 4 cells (by hash). Out-of-board margin cells get the same rules from their clamped kind.
 - Fade: a unit cell `c` reveals props on `c`, `c + (1,0)`, `c + (0,1)`, `c + (1,1)` (the camera sits at +x, +z of its focus at yaw 45°).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```gdscript
 func test_same_board_gives_identical_props() -> void            # build twice → instances_on() equal for every cell
@@ -325,10 +325,10 @@ E2E (add to `test_river_e2e.gd`):
 func test_a_unit_walking_into_a_forest_fades_the_trees_over_it() -> void
 ```
 
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** suite + shader import check. Screenshot River at MAX and MIN zoom, with the rifle squad inside the forest and inside the town, publish.
-- [ ] **Step 5: Commit** — `git commit -m "feat(board): дерева, будинки й міст на карті; крона розчиняється над юнітом"`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** suite + shader import check. Screenshot River at MAX and MIN zoom, with the rifle squad inside the forest and inside the town, publish.
+- [x] **Step 5: Commit** — `git commit -m "feat(board): дерева, будинки й міст на карті; крона розчиняється над юнітом"`
 
 ---
 
@@ -342,17 +342,17 @@ func test_a_unit_walking_into_a_forest_fades_the_trees_over_it() -> void
 **Interfaces:**
 - Consumes: `IsoCameraRig.MAX_ZOOM`, `BOARD_MARGIN`, `_ray_ground_point` (Task 3).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```gdscript
 func test_surroundings_fill_the_view_at_max_zoom_from_every_board_corner() -> void
 	# River board; rig at MAX zoom; for each of the 4 board corners: centre_on(corner) then pan to the clamp;
 	# ground point under each viewport corner lies inside the ground mesh AABB
 ```
-- [ ] **Step 2: Run, expect FAIL** (margin 0).
-- [ ] **Step 3: Implement.** If the river continues off both sides it must (clamped kinds already give that).
-- [ ] **Step 4: Run** suite; recheck `test_river_props_have_no_runaway_geometry` with the margin included. Screenshot River corners at MAX zoom, publish.
-- [ ] **Step 5: Commit** — `git commit -m "feat(board): місцевість за межами карти тоне в серпанку"`
+- [x] **Step 2: Run, expect FAIL** (margin 0).
+- [x] **Step 3: Implement.** If the river continues off both sides it must (clamped kinds already give that).
+- [x] **Step 4: Run** suite; recheck `test_river_props_have_no_runaway_geometry` with the margin included. Screenshot River corners at MAX zoom, publish.
+- [x] **Step 5: Commit** — `git commit -m "feat(board): місцевість за межами карти тоне в серпанку"`
 
 ---
 
@@ -372,7 +372,7 @@ Each map gets its own season and sky, which drive light and shadows — table in
 - Produces: `WeatherRig.apply(look: BattleLook) -> void` — sets `DirectionalLight3D` (shadows on), `WorldEnvironment` depth fog, rain `GPUParticles3D.emitting = look.rain`, global shader uniforms `weather_wetness` and `cloud_shadow_strength`.
 - Cloud shadows: the ground shader multiplies by `1 - cloud_shadow_strength · smoothstep(noise(world_xz · scale + TIME · speed))`, mostly clear with a passing patch every ~10–20 s.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```gdscript
 func test_river_gets_rain_and_others_stay_dry() -> void
@@ -383,10 +383,10 @@ func test_apply_sets_the_global_wetness_and_rain() -> void
 func test_a_look_has_no_rule_fields() -> void
 	# BattleLook property list contains none of: vision, range, ap, cost, damage, penalty
 ```
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement**, tuning `river_rain.tres` against `docs/art/mood/river_target.jpg` (cool overcast, light from the far side, haze greys out the distance).
-- [ ] **Step 4: Run** suite + shader import check. Record a short frame sequence (`tools/ui_seq`) of River at MAX zoom: rain moves, a cloud shadow passes; publish frames beside the target.
-- [ ] **Step 5: Commit** — `git commit -m "feat(look): дощ, мокрі поверхні, хмарні тіні — пресет Річки"`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement**, tuning `river_rain.tres` against `docs/art/mood/river_target.jpg` (cool overcast, light from the far side, haze greys out the distance).
+- [x] **Step 4: Run** suite + shader import check. Record a short frame sequence (`tools/ui_seq`) of River at MAX zoom: rain moves, a cloud shadow passes; publish frames beside the target.
+- [x] **Step 5: Commit** — `git commit -m "feat(look): дощ, мокрі поверхні, хмарні тіні — пресет Річки"`
 
 ---
 
@@ -398,17 +398,17 @@ func test_a_look_has_no_rule_fields() -> void
 - Create: `docs/performance.md` — the measured numbers, date, machine, renderer
 - Test: `tests/game/test_battle_screen.gd`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```gdscript
 func test_battle_caps_the_frame_rate_when_idle() -> void       # simulate 1.2 s without input → Engine.max_fps == 30
 func test_input_uncaps_the_frame_rate() -> void                # after an InputEventScreenTouch → Engine.max_fps == 0
 func test_leaving_battle_restores_the_previous_cap() -> void
 ```
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement**; run `$GODOT --path . -s res://tools/frame_budget.gd` (windowed, Mobile renderer).
-- [ ] **Step 4:** Draw calls < 100 at every measured view; if not, merge or cut and re-measure. Primitives are recorded, not enforced (soft budget). Write `docs/performance.md`. Run the suite → green.
-- [ ] **Step 5: Commit** — `git commit -m "perf(battle): 30 fps у спокої; заміряний бюджет кадру Річки"`
+- [x] **Step 2: Run, expect FAIL.**
+- [x] **Step 3: Implement**; run `$GODOT --path . -s res://tools/frame_budget.gd` (windowed, Mobile renderer).
+- [x] **Step 4:** Draw calls < 100 at every measured view; if not, merge or cut and re-measure. Primitives are recorded, not enforced (soft budget). Write `docs/performance.md`. Run the suite → green.
+- [x] **Step 5: Commit** — `git commit -m "perf(battle): 30 fps у спокої; заміряний бюджет кадру Річки"`
 
 ---
 
@@ -420,10 +420,10 @@ func test_leaving_battle_restores_the_previous_cap() -> void
 - Modify: `docs/reference/blitzkrieg.md` — the class costing 100 is water/riverbank (sprites 49–75, `GameCanvas.java:2377-2379`), not built-up
 - Modify: `docs/superpowers/plans/2026-08-09-advance-protocol-implementation.md` — Phase 5 table: mark 5.1, 5.3–5.7 (rain preset only) as done by this slice with a link to this plan
 
-- [ ] **Step 1:** Edit the docs (`write` skill: English, project vocabulary).
+- [ ] ~~**Step 1:** Edit the docs (`write` skill: English, project vocabulary).~~ — dropped: no final docs pass
 - [ ] **Step 2:** Full verification: `./run_tests.sh` (note Scripts count), shader import check → 0 errors, `tools/frame_budget.gd` numbers match `docs/performance.md`.
-- [ ] **Step 3:** Publish a final page: River at MAX zoom, MIN zoom, a selected unit with zones, a unit in the forest, the bridge, all beside `river_target.jpg`; plus Crossroads and Ridge at MAX zoom.
-- [ ] **Step 4: Commit** — `git commit -m "docs: перспективна камера, вигляд поля бою, бюджет кадру"`
+- [ ] ~~**Step 3:** Publish a final page: River at MAX zoom, MIN zoom, a selected unit with zones, a unit in the forest, the bridge, all beside `river_target.jpg`; plus Crossroads and Ridge at MAX zoom.~~ — dropped: no showcase page, a final check of all three maps instead
+- [x] **Step 4: Commit** — `git commit -m "docs: перспективна камера, вигляд поля бою, бюджет кадру"`
 
 ---
 
@@ -437,11 +437,11 @@ model's base on the uphill side and leaves it floating on the downhill side.
 - Modify: `game/battle/unit_view.gd` — pose from the height map under the footprint, while moving and at rest
 - Test: `tests/game/test_unit_view.gd`
 
-- [ ] **Step 1:** Decide the pose with the visual critic on a Ridge hill-edge frame: tilt to the ground normal averaged over the footprint (vehicles), or level at the highest corner (squads on one base). The turret and hull stay one piece (§3.4).
-- [ ] **Step 2: Write the failing tests** — on a sloped cell, no footprint corner lies below the ground by more than 2 cm, and none floats more than 10 cm above it; on flat ground the pose is unchanged.
-- [ ] **Step 3: Implement**; the facing tween and the walk keep the pose every frame of the move.
-- [ ] **Step 4:** Frames of units on Ridge hill edges and River banks, z12 and z20, through the visual critic. Run the suite → green.
-- [ ] **Step 5: Commit** — `git commit -m "fix(battle): юніт стоїть на рельєфі всією основою"`
+- [x] **Step 1:** Decide the pose with the visual critic on a Ridge hill-edge frame: tilt to the ground normal averaged over the footprint (vehicles), or level at the highest corner (squads on one base). The turret and hull stay one piece (§3.4).
+- [x] **Step 2: Write the failing tests** — on a sloped cell, no footprint corner lies below the ground by more than 2 cm, and none floats more than 10 cm above it; on flat ground the pose is unchanged.
+- [x] **Step 3: Implement**; the facing tween and the walk keep the pose every frame of the move.
+- [x] **Step 4:** Frames of units on Ridge hill edges and River banks, z12 and z20, through the visual critic. Run the suite → green.
+- [x] **Step 5: Commit** — `git commit -m "fix(battle): юніт стоїть на рельєфі всією основою"`
 
 ---
 
@@ -479,7 +479,9 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Wet factor in `prop_fade` no longer lightens roofs; no colour roof tints
 - [x] Roof colours only graphite slate, dark cherry or red-brown, true dark green, galvanised grey, dark brown; no olive, ochre or mustard
 - [x] Every roof clearly darker than its wall: sRGB luma ratio ≤ 0.6
-- [ ] Not plastic, not grey; streaks under sills and a damp plinth band visible in battle
+- [x] Not plastic, not grey; streaks under sills and a damp plinth band visible in battle
+- [x] Wall streaks soft and fading downward, never hard dark blocks or ticks; none under attic windows
+- [x] Garden beds read as ridges with lit crests and shaded furrows, not a printed stripe
 - [x] Glass reads as glass on intact houses; broken windows only on ruins, as dark openings
 - [x] Hay and bridges matte; gardens tilled rows; chimney tops open and dark; ruin floors show debris, not grass
 - [ ] No village looks bought in one shop: three or more forms, ages and wear per category
@@ -522,8 +524,12 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Fallen form is a low pile of broken branches; crushed bushes as leaning stems
 - [x] Reed with plumes and cattail with heads, standing in the shallows
 - [x] Reed and bushes in patches along some banks; trees or bushes in many yards, not all; a few lone bushes and trees on meadow, never on ploughed land
-- [ ] No tree crown under a power line
+- [x] Reed tops loose and soft, no round lumps; reed shade patch only on sunny maps
+- [x] Alder sits with the other trees in every season (brightness, saturation, speckle)
+- [x] Plant source sprites live in the repository, outside Godot import
+- [x] No tree crown under a power line
 - [x] Power line through a forest runs in a cleared corridor: no crowns over the wires, undergrowth stays
+- [x] A forest cell under a line still reads as forest, with tall trees outside the cut
 - [ ] Accepted in battle frames on all three maps
 
 ### Task 22: Forest into battle
@@ -544,9 +550,16 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Chimney opening a dark sooty grey, not a black hole
 - [x] Crossroads: shaded walls not blue, cast shadows clearly darker than lit ground
 - [x] First scroll across the map is smooth, no hitch
+- [x] Chimney smoke: one narrow column from the opening, fading before it reaches buildings behind
+- [x] Movement-zone contours draw above every effect, smoke and rain
+- [ ] Smoke and fences draw in depth order: a fence behind the smoke never covers it
 
 ### Task 24: New props in villages
 
 - [x] Gates of several types facing the road
 - [ ] New fence, shed and trailer variants alternate between neighbours
 - [ ] Bales only at field edges; nothing within 0.4 tile of water
+- [ ] Neighbouring houses differ in model or colour
+- [ ] Gates in their fence's tone under every light; a gate stands between real fence on both sides
+- [x] Draw calls under 100 at every zoom on every map
+- [ ] Battle board builds noticeably faster, with identical pixels

@@ -1,6 +1,6 @@
 extends GutTest
-## Просіка ЛЕП у лісі: на справжніх картах жодна крона дерева не стоїть ближче за півширину просіки
-## (1 тайл — літерал, не стала шару) до прольоту, а клітинка лісу під прольотом лишається лісом.
+## Просіка ЛЕП у лісі: на справжніх картах жодне дерево не стоїть стовбуром ближче за TRUNK_CLEAR
+## до прольоту, а клітинка лісу під прольотом лишається лісом.
 
 var _views: Dictionary = {}
 
@@ -52,7 +52,7 @@ func test_no_crown_over_spans(p = use_parameters(["river", "ridge", "crossroads"
 			continue
 		for w: Array in spans:
 			var q: Vector2 = Geometry2D.get_closest_point_to_segment(e["pos"], w[0], w[1])
-			if q.distance_to(e["pos"]) < 1.0:
+			if q.distance_to(e["pos"]) < ForestLayer.TRUNK_CLEAR:
 				bad += 1
 				break
 	assert_eq(bad, 0, "%s: крон у просіці" % p)
