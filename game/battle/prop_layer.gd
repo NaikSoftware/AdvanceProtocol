@@ -5277,7 +5277,7 @@ class _Placer:
 						t += ((pts[k + 1] as Vector2) - p).normalized()
 					if t.length() < 0.1:
 						t = (p - (pts[maxi(k - 1, 0)] as Vector2)).normalized()
-					idx = _pole_on(m, p, t.normalized())
+					idx = _pole_on(m, p, grid.tp_dir.get(p, t.normalized()))
 				if idx < 0:
 					prev = -1
 					continue

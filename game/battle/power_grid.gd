@@ -92,6 +92,8 @@ var _far_cache: Dictionary = {}
 var _size := Vector2i.ZERO
 var lines: Array[Dictionary] = []
 var transformers: Array[Vector2] = []
+## Напрям стовпа ТП на куті магістралі, коли шафа не влізає по бісектрисі, а вздовж одного з прольотів — влізає.
+var tp_dir: Dictionary = {}
 ## Центри хат із відводом і хат, до яких опора дістала б, але відводу навмисно нема (SKIP_ONE_IN).
 var fed: Array[Vector2] = []
 var skipped: Array[Vector2] = []
@@ -548,10 +550,20 @@ func _village(homes: Array, trunk: Array) -> void:
 	# ТП: стовп 10 кВ магістралі (наявний чи вставлений у проліт навпроти хати), біля якого є місце під шафу; кандидати —
 	# від найближчого до хат, і перший, від якого вдається провести лінію до хати, — ТП. Близька наявна ТП — спільна.
 	var cands: Dictionary = {}
+	var corner_dir: Dictionary = {}
 	for line: Array in trunk:
 		for k in line.size():
 			if _cabinet_fits(line[k], _pole_dir(line, k)):
 				cands[line[k]] = near_home.call(line[k])
+			elif k > 0 and k < line.size() - 1 and homes.size() == 1 and _p.drop_ok(homes[0]["rect"], line[k]):
+				# Кут, від якого єдина хата села дістає відводом: шафа не влізає по бісектрисі, а вздовж прольоту — так. Хата
+				# живиться прямо з цього стовпа, без гілки 0.4 кВ, що з трасою замкнула б навколо поля майже прямокутник.
+				for nb: Vector2 in [line[k - 1], line[k + 1]]:
+					var ax: Vector2 = (nb - line[k]).normalized()
+					if _cabinet_fits(line[k], ax):
+						cands[line[k]] = near_home.call(line[k])
+						corner_dir[line[k]] = ax
+						break
 			if k == 0:
 				continue
 			for h: Dictionary in homes:
@@ -606,6 +618,8 @@ func _village(homes: Array, trunk: Array) -> void:
 			break
 	if not tp.is_finite():
 		return
+	if corner_dir.has(tp):
+		tp_dir[tp] = corner_dir[tp]
 	var inserted: bool = false
 	if not shared:
 		inserted = _insert_pole(trunk, tp)
