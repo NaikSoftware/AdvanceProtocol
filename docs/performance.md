@@ -48,7 +48,7 @@ Densest views at z20, the corner of the board with the most buildings:
 | river | (20, 16) | 73 | 137.5 |
 | ridge | (20, 16) | 71 | 103.2 |
 
-Every measured view is under the budget; the tightest margin is triangles on river (about 138k of 150k).
+Every measured view is under the budget; the tightest margin is triangles on river at z12 (about 140k of 150k).
 
 ## Main cost groups
 
