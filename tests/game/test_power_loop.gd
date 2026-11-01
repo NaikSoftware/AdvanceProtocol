@@ -96,8 +96,14 @@ func test_no_tree_crown_under_a_power_line(p = use_parameters(MAPS)) -> void:
 			crowns.append(e)
 	crowns.append_array(f._ring_crowns)
 	assert_gt(crowns.size(), 0, "%s: передумова — крони є" % p)
+	var fwd: Vector2 = ForestLayer._view_fwd()
 	for e: Dictionary in crowns:
 		var at: Vector2 = e["pos"]
-		for w: Array in spans:
-			var gap: float = at.distance_to(Geometry2D.get_closest_point_to_segment(at, w[0], w[1])) - float(e["r"])
-			assert_gte(gap, ForestLayer.CROWN_MARGIN - 1e-4, "%s: крона %s (r=%.2f) за %.2f від проліту %s" % [p, at, e["r"], gap, w])
+		var top: float = float(e["top"]) if e.has("top") else float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y
+		var sh: Vector2 = ForestLayer.crown_shift(top)
+		# Крона на екрані лежить уздовж зсуву: кожна її точка далі за CROWN_MARGIN від проліту (на екрані — від дроту).
+		for k in 9:
+			var q: Vector2 = at + fwd * lerpf(sh.x, sh.y, k / 8.0)
+			for w: Array in spans:
+				var gap: float = q.distance_to(Geometry2D.get_closest_point_to_segment(q, w[0], w[1])) - float(e["r"])
+				assert_gte(gap, ForestLayer.CROWN_MARGIN - 1e-4, "%s: крона %s (r=%.2f, h=%.2f) за %.2f від проліту %s" % [p, at, e["r"], top, gap, w])

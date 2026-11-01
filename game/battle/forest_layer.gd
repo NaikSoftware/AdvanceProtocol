@@ -64,6 +64,10 @@ const CORRIDOR_HALF: float = 1.0
 const CORRIDOR_FEATHER: float = 0.6
 ## Зазор між краєм крони й проводом: дерево з широкою кроною (проксі кільця) просіка відсуває далі за CORRIDOR_HALF.
 const CROWN_MARGIN: float = 0.6
+## Висота проводу над землею (тайли) і частка висоти дерева, де кінчається голий стовбур: крона, що лежить за
+## проводом ближче до камери, на екрані перекриває його — вище точка зсувається в плані вглиб, на висоту·ctg(нахилу).
+const WIRE_HEIGHT: float = 1.0
+const TRUNK_FRAC: float = 0.35
 const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
@@ -287,9 +291,13 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	if float(_lib[node]["h"]) * e["xf"].basis.get_scale().y < UNDER_TOP:
 		return e
 	var p: Vector2 = e["pos"]
+	var sh: Vector2 = crown_shift(float(_lib[node]["h"]) * e["xf"].basis.get_scale().y)
+	var fwd: Vector2 = _view_fwd()
 	var d: float = INF
 	for w: Array in spans:
-		d = minf(d, p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])))
+		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, w[0], w[1])) > 8.0:
+			continue
+		d = minf(d, _sweep_dist(p + fwd * sh.x, p + fwd * sh.y, w[0], w[1]))
 	var half: float = maxf(CORRIDOR_HALF, float(e["r"]) * widen + CROWN_MARGIN)
 	if d >= half + CORRIDOR_FEATHER:
 		return e
@@ -309,6 +317,27 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	out["xf"] = Transform3D(Basis(Vector3.UP, u * TAU), (e["xf"] as Transform3D).origin)
 	out["r"] = 0.3
 	return out
+
+
+## Напрям погляду камери в плані: від камери вглиб.
+static func _view_fwd() -> Vector2:
+	var yaw: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
+	return -Vector2(sin(yaw), cos(yaw))
+
+
+## Межі зсуву крони дерева заввишки top на екрані відносно проводу вздовж _view_fwd (тайли в плані): від низу крони до
+## верху за найнижчого нахилу рига (там крони «лежать» найдалі); 0 — сама земля — завжди всередині.
+static func crown_shift(top: float) -> Vector2:
+	var cot: float = 1.0 / tan(deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG))
+	return Vector2(minf((TRUNK_FRAC * top - WIRE_HEIGHT) * cot, 0.0), maxf((top - WIRE_HEIGHT) * cot, 0.0))
+
+
+## Найменша відстань між відрізками a–b та c–d.
+static func _sweep_dist(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> float:
+	if Geometry2D.segment_intersects_segment(a, b, c, d) != null:
+		return 0.0
+	return minf(minf(a.distance_to(Geometry2D.get_closest_point_to_segment(a, c, d)), b.distance_to(Geometry2D.get_closest_point_to_segment(b, c, d))),
+			minf(c.distance_to(Geometry2D.get_closest_point_to_segment(c, a, b)), d.distance_to(Geometry2D.get_closest_point_to_segment(d, a, b))))
 
 
 ## Відстань від точки до дошки (тайли), 0 — на дошці.
