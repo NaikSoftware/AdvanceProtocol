@@ -79,13 +79,23 @@ func test_gate_has_a_real_fence_on_both_sides(p = use_parameters(MAPS)) -> void:
 
 
 ## Будівлі й сараї дворів як прямокутники (стіна теж замикає двір).
-func _buildings(props: PropLayer) -> Array[Rect2]:
+func _boxes(props: PropLayer) -> Array[Rect2]:
 	var out: Array[Rect2] = []
 	for inst in props.all_instances():
 		var k: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
 		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN or k == PropLayer.Kind.YARD:
 			var b: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
 			out.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+	return out
+
+
+## Слід стін будівель і сараїв дворів (без звісу даху й димаря): паркан доходить до нього, але не заходить.
+func _buildings(props: PropLayer) -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for inst in props.all_instances():
+		var k: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN or k == PropLayer.Kind.YARD:
+			out.append(PropLayer.wall_rect(inst))
 	return out
 
 
@@ -96,7 +106,7 @@ func test_garden_keeps_off_open_fence_sides(p = use_parameters(MAPS)) -> void:
 	var segs: Array = _segments(props)
 	for g: Dictionary in props._gates:
 		segs.append([g["a"], g["b"]])
-	var walls: Array[Rect2] = _buildings(props)
+	var walls: Array[Rect2] = _boxes(props)
 	var plots: Array = props._placer.garden_plots
 	var worst := INF
 	for poly: PackedVector2Array in props._placer.yard_polys:
@@ -147,7 +157,7 @@ func test_open_flag_reads_the_drawn_fence(p = use_parameters(MAPS)) -> void:
 	var segs: Array = _segments(props)
 	for g: Dictionary in props._gates:
 		segs.append([g["a"], g["b"]])
-	var walls: Array[Rect2] = _buildings(props)
+	var walls: Array[Rect2] = _boxes(props)
 	var sides_checked := 0
 	for i: int in props._placer.ring_sides:
 		for sd: Dictionary in props._placer.ring_sides[i]:
@@ -300,11 +310,10 @@ func test_gates_and_fences_keep_off_asphalt_houses_and_poles(p = use_parameters(
 	for inst in props.all_instances():
 		var k: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
 		var b: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
-		var r := Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
 		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
-			walls.append(r)
+			walls.append(PropLayer.wall_rect(inst))
 		elif k == PropLayer.Kind.POLE:
-			poles.append(r)
+			poles.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
 	var items: Array = _segments(props)
 	for g: Dictionary in props._gates:
 		items.append([g["a"], g["b"]])

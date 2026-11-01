@@ -633,12 +633,13 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	assert_gt(fences, 0, "%s: передумова — двори обгороджені" % p)
 
 
-## Огорожа двору доходить до стіни, але не заходить під обрис будівлі (зі звісом даху) і тримається
+## Огорожа двору доходить до стіни, але не заходить у слід її стін (без звісу даху й димаря) і тримається
 ## 0.3 клітинки від вежі; вежа — 0.5 від будівель.
 func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var towers: Array[Rect2] = []
 	var houses: Array[Rect2] = []
+	var house_boxes: Array[Rect2] = []
 	var fences: Array[Rect2] = []
 	for inst in view.props().all_instances():
 		var s: Dictionary = PropLayer.spec_of(inst["model"])
@@ -647,7 +648,9 @@ func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 		if bool(s.get("tower", false)):
 			towers.append(r)
 		elif int(s["kind"]) == PropLayer.Kind.STRUCTURE or int(s["kind"]) == PropLayer.Kind.RUIN:
-			houses.append(r)
+			# Слід стін без звісу даху й димаря: паркан доходить до стіни, але не заходить у неї.
+			houses.append(PropLayer.wall_rect(inst))
+			house_boxes.append(r)
 		elif int(s["kind"]) == PropLayer.Kind.GARDEN_FENCE:
 			fences.append(r)
 	assert_gt(fences.size(), 0, "%s: передумова — огорожі є" % p)
@@ -657,7 +660,7 @@ func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 		for b in towers:
 			assert_false(b.grow(0.3 - 1e-4).intersects(f), "%s: огорожа %s ближче 0.3 клітинки до вежі %s" % [p, f, b])
 	for t in towers:
-		for b in houses:
+		for b in house_boxes:
 			assert_false(t.grow(0.5 - 1e-4).intersects(b), "%s: вежа ближче 0.5 клітинки до будівлі" % p)
 
 
