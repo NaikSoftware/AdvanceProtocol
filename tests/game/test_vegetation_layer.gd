@@ -335,7 +335,8 @@ func test_fade_hides_the_plant_inside_the_merged_mesh() -> void:
 func test_no_crown_over_a_fence_on_screen(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _view(p)
 	var props: PropLayer = view.props()
-	var hulls: Array = VegetationLayer.obstacles(props)["fence_hulls"]
+	var obst: Dictionary = VegetationLayer.obstacles(props)
+	var hulls: Array = obst["fence_hulls"]
 	var bad: Array = []
 	var checked: int = 0
 	for pl: Dictionary in view.vegetation().placements:
@@ -345,6 +346,9 @@ func test_no_crown_over_a_fence_on_screen(p = use_parameters(MAPS)) -> void:
 		var crown: float = VegetationLayer.crown_of(pl["node"])
 		checked += 1
 		var gap: float = PropLayer.hull_gap(q, VegetationLayer.CROWN_H_K * crown * VegetationLayer.SCALE_MAX, hulls)
+		# Кущ і туя двору — тіло від землі (так колона туї на паркані не лишалась непоміченою, бо диск крони далеко вгорі).
+		if pl["group"] == "yard" and pl["kind"] == "bush":
+			gap = VegetationLayer.fence_screen_gap(obst, q, crown, true)
 		if gap < crown * VegetationLayer.SCALE_MAX - 0.001:
 			bad.append([pl["group"], pl["node"], q, snappedf(gap, 0.01)])
 	assert_eq(bad, [], "%s: крона над парканом чи воротами на екрані" % p)

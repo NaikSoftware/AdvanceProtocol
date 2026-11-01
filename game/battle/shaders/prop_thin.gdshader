@@ -55,11 +55,13 @@ const vec3 WEATHERED = vec3(1.14, 0.98, 0.78);
 
 varying float base_h;
 varying float top_h;
+varying float kind_v;
 
 void vertex() {
 	float top = top_local;
 	if (kinds > 0) {
 		int kind = int(floor(UV.y * float(kinds)));
+		kind_v = float(kind);
 		top = kind_top[clamp(kind, 0, 7)];
 		UV.x = (VERTEX.x + 0.5) * length(MODEL_MATRIX[0].xyz) * 8.0 / tile_m;
 		if (abs(float(kind) - INSTANCE_CUSTOM.r) > 0.5) {
@@ -94,6 +96,11 @@ void fragment() {
 	// білими лініями інтерфейсу; вивітрене дерево й оцинковка — не світліші.
 	float value = max(albedo.r, max(albedo.g, albedo.b));
 	albedo *= min(1.0, (yard ? YARD_VALUE_CAP : VALUE_CAP) / max(value, 1e-4));
+	// Рабиця (вид 2 атласу): суцільні частини (стовпи, труба зверху: покриття ~1) світяться білим на тлі напівпрозорого дроту
+	// й темного асфальту, хоч альбедо в них не світліше за дріт, — вдвічі темніше; дріт, чиє покриття розмите міпмапою, не чіпаємо.
+	if (yard && abs(kind_v - 2.0) < 0.5) {
+		albedo *= mix(1.0, 0.5, smoothstep(0.85, 1.0, tex.a));
+	}
 	float cap = smoothstep(top_h - 0.03, top_h - 0.01, base_h);
 	albedo *= mix(1.0, 0.45, cap);
 	// Сіро-бурий вивітреного дерева: рожеві й бузкові відтінки фарби ассета на кадрі читались чужими.

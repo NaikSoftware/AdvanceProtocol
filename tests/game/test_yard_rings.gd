@@ -172,21 +172,123 @@ func test_open_length_counts_only_drawn_fence() -> void:
 	assert_almost_eq(PropLayer._Placer._open_length(a, b, drawn, wall), 0.25, 0.001)
 
 
-## Східна сторона двору River біля руїни (x = 10,5, y 13,53–15,65) не має власного паркану навпроти руїни й хати —
-## її замикають їхні стіни (звіс до x = 10,46, між ними менше за SHORT_RUN), тож сторона не відкрита.
-func test_river_east_side_beside_the_ruin_is_shut_by_walls() -> void:
+## Просвіт між руїною й хатою на східній стороні двору River (x = 10,5, між y = 14,47 і 14,72) вужчий за ворота: його
+## замикає секція від стіни до стіни (не лише звіс стін), так що двір не лишає проходу з боку дороги. Обидва кінці секції
+## стоять на стінах (руїна зверху, хата знизу, стик до хати — не довший за 0,05).
+func test_river_ruin_yard_gap_is_closed_by_a_fence_piece() -> void:
 	var props: PropLayer = _props("river")
+	var ruin := Rect2()
+	var house := Rect2()
+	for inst in props.all_instances():
+		var b: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		if inst["model"] == &"ruin_half_shed":
+			ruin = Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+		elif inst["model"] == &"house_h7" and absf(b.position.x - 9.54) < 0.05:
+			house = Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+	assert_gt(ruin.size.x, 0.0, "передумова: руїна на місці")
+	assert_gt(house.size.x, 0.0, "передумова: хата на місці")
 	var found := 0
-	for i: int in props._placer.ring_sides:
-		for sd: Dictionary in props._placer.ring_sides[i]:
-			var a: Vector2 = sd["a"]
-			var b: Vector2 = sd["b"]
-			if absf(a.x - 10.5) < 0.02 and absf(b.x - 10.5) < 0.02 and minf(a.y, b.y) < 13.6 and maxf(a.y, b.y) > 15.6:
-				found += 1
-				assert_false(bool(sd["open"]), "східна сторона %s–%s відкрита" % [a, b])
-				var walls: Array[Rect2] = _buildings(props)
-				assert_lt(_uncovered(sd, _segments(props), walls), 0.1, "східна сторона %s–%s не замкнена" % [a, b])
-	assert_eq(found, 1)
+	var reach_ruin := 0
+	var reach_house := 0
+	for sg: Array in _segments(props):
+		var a: Vector2 = sg[0]
+		var b: Vector2 = sg[1]
+		if absf(a.x - 10.5) > 0.03 or absf(b.x - 10.5) > 0.03:
+			continue
+		for e: Vector2 in [a, b]:
+			reach_ruin += 1 if ruin.grow(0.03).has_point(e) else 0
+			reach_house += 1 if house.grow(0.05).has_point(e) else 0
+		if minf(a.y, b.y) < ruin.end.y + 0.05 and maxf(a.y, b.y) > house.position.y - 0.05 and absf(a.y - b.y) < 0.4:
+			found += 1
+	assert_gte(reach_ruin, 2, "паркан сходить до руїни знизу й зверху її (кінці секцій на стіні)")
+	assert_gte(found, 1, "між руїною й хатою стоїть секція паркану")
+	assert_gte(reach_house, 1, "секція доходить до хати")
+
+
+## Прямі ходи паркану: секції на одній прямій, що стикаються кінцями (в межах 0,03), — один хід; повертає [початок, кінець]
+## крайніх точок.
+func _runs(segs: Array) -> Array:
+	var parent: Array[int] = []
+	for i in segs.size():
+		parent.append(i)
+	var root := func(i: int) -> int:
+		while parent[i] != i:
+			i = parent[i]
+		return i
+	for i in segs.size():
+		for j in range(i + 1, segs.size()):
+			var di: Vector2 = ((segs[i][1] as Vector2) - (segs[i][0] as Vector2)).normalized()
+			var dj: Vector2 = ((segs[j][1] as Vector2) - (segs[j][0] as Vector2)).normalized()
+			if absf(di.cross(dj)) > 0.05:
+				continue
+			for ea: Vector2 in segs[i]:
+				for eb: Vector2 in segs[j]:
+					if ea.distance_to(eb) < 0.03:
+						parent[root.call(i)] = root.call(j)
+	var by: Dictionary = {}
+	for i in segs.size():
+		var r: int = root.call(i)
+		if not by.has(r):
+			by[r] = []
+		by[r].append(i)
+	var out: Array = []
+	for idx: Array in by.values():
+		var dir: Vector2 = ((segs[idx[0]][1] as Vector2) - (segs[idx[0]][0] as Vector2)).normalized()
+		var lo: Vector2 = segs[idx[0]][0]
+		var hi: Vector2 = lo
+		for i: int in idx:
+			for e: Vector2 in segs[i]:
+				lo = e if e.dot(dir) < lo.dot(dir) else lo
+				hi = e if e.dot(dir) > hi.dot(dir) else hi
+		out.append([lo, hi])
+	return out
+
+
+## Два паралельні ходи паркану від стіни до стіни ближче TWIN_GAP, між якими нічого нема (ні будівлі, ні воріт),
+## обгороджують смужку порожньої трави: двір читається двома. Провулок між двома дворами (ходи різних дворів) — не про це:
+## тут обидва кінці кожного ходу стоять на стінах.
+func test_no_parallel_fence_runs_around_an_empty_strip(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _props(p)
+	var walls: Array[Rect2] = _buildings(props)
+	var runs: Array = []
+	for r: Array in _runs(_segments(props)):
+		var on := true
+		for e: Vector2 in r:
+			var hit := false
+			for w: Rect2 in walls:
+				hit = hit or w.grow(0.05).has_point(e)
+			on = on and hit
+		if on and (r[0] as Vector2).distance_to(r[1]) > 0.2:
+			runs.append(r)
+	var posts: Array[Vector2] = []
+	for g: Dictionary in props._gates:
+		posts.append_array([g["a"], g["b"]])
+	var bad: Array = []
+	for i in runs.size():
+		for j in range(i + 1, runs.size()):
+			var a0: Vector2 = runs[i][0]
+			var a1: Vector2 = runs[i][1]
+			var b0: Vector2 = runs[j][0]
+			var b1: Vector2 = runs[j][1]
+			var ax: int = 0 if absf(a1.x - a0.x) > absf(a1.y - a0.y) else 1
+			if absf(a1[1 - ax] - a0[1 - ax]) > 0.03 or absf(b1[1 - ax] - b0[1 - ax]) > 0.03 or absf(b1[ax] - b0[ax]) < 0.1:
+				continue
+			var gap: float = absf(b0[1 - ax] - a0[1 - ax])
+			var lo: float = maxf(minf(a0[ax], a1[ax]), minf(b0[ax], b1[ax]))
+			var hi: float = minf(maxf(a0[ax], a1[ax]), maxf(b0[ax], b1[ax]))
+			if gap < 0.05 or gap > PropLayer.TWIN_GAP or hi - lo < 0.2:
+				continue
+			var cross_lo: float = minf(a0[1 - ax], b0[1 - ax])
+			var strip := Rect2(Vector2(lo, cross_lo), Vector2(hi - lo, gap)) if ax == 0 else Rect2(Vector2(cross_lo, lo), Vector2(gap, hi - lo))
+			strip = strip.grow(-0.02)
+			var holds := false
+			for r: Rect2 in walls:
+				holds = holds or r.intersects(strip)
+			for q: Vector2 in posts:
+				holds = holds or strip.has_point(q)
+			if not holds:
+				bad.append([a0, a1, b0, b1])
+	assert_eq(bad, [], "%s: паралельні ходи паркану від стіни до стіни навколо порожньої смужки" % p)
 
 
 ## Ні ворота, ні паркан не стоять на асфальті (за полем дороги, яке малює шейдер), у хаті чи руїні та на опорі ЛЕП: це

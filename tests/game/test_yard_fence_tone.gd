@@ -9,6 +9,8 @@ const STRIP: int = 192
 const PAD: int = 12
 ## Скільки світліше за паркан дозволено бути воротам (запас на шум текстури).
 const LUMA_MARGIN: float = 1.1
+## Скільки найменше від яскравості паркану дозволено мати воротам.
+const LUMA_MIN: float = 0.9
 const TILE_M: float = 2.5
 const H_MAX: float = 2.0
 ## Дріт оцинковки: найсвітліший піксель і середня яскравість (світло-середній сірий).
@@ -75,6 +77,8 @@ func test_wooden_gates_are_no_lighter_or_more_orange_than_their_fence(p = use_pa
 	var gate: Color = _mean(_gate_colors(StringName(p[0])))
 	assert_lte(_luma(gate), _luma(fence) * LUMA_MARGIN, "%s: ворота %s світліші за паркан %s" % [p[0], gate, fence])
 	assert_lte(_sat(gate), _sat(fence), "%s: ворота %s насиченіші за паркан %s" % [p[0], gate, fence])
+	# І не темніші за нього: чорне полотно в сірому парканi — найконтрастніша річ двору.
+	assert_gte(_luma(gate), _luma(fence) * LUMA_MIN, "%s: ворота %s темніші за паркан %s" % [p[0], gate, fence])
 
 
 ## Оцинковка: дріт — світло-середній сірий, не майже білий; труби й стовпи (суцільні, під сірим небом світляться

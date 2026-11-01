@@ -884,8 +884,29 @@ func test_fence_runs_end_on_walls_or_gate_posts(p = use_parameters(MAPS)) -> voi
 		for q in posts:
 			if q.distance_to(garden[i][0]) < 0.04 or q.distance_to(garden[i][1]) < 0.04:
 				gated[ri] = true
+	# Секція між двома стінами (просвіт між хатою й руїною вужчий за ворота): обидва вільні кінці ланцюга стоять на стінах.
+	var spans: Dictionary = {}
 	for r: int in size_of:
-		assert_true(float(size_of[r]) >= PropLayer.MIN_FENCE - 1e-3 or gated.has(r), "%s: уламок паркану завдовжки %.2f біля %s" % [p, size_of[r], garden[r][0]])
+		var free_ends: Array[Vector2] = []
+		for i in garden.size():
+			if root.call(i) != r:
+				continue
+			for e: Vector2 in [garden[i][0], garden[i][1]]:
+				var shared := false
+				for j in garden.size():
+					shared = shared or (j != i and root.call(j) == r and (e.distance_to(garden[j][0]) < 0.03 or e.distance_to(garden[j][1]) < 0.03))
+				if not shared:
+					free_ends.append(e)
+		var on_walls := not free_ends.is_empty()
+		for e: Vector2 in free_ends:
+			var hit := false
+			for w in walls:
+				hit = hit or w.grow(0.05).has_point(e)
+			on_walls = on_walls and hit
+		if on_walls:
+			spans[r] = true
+	for r: int in size_of:
+		assert_true(float(size_of[r]) >= PropLayer.MIN_FENCE - 1e-3 or gated.has(r) or spans.has(r), "%s: уламок паркану завдовжки %.2f біля %s" % [p, size_of[r], garden[r][0]])
 	for i in garden.size():
 		for e: Vector2 in [garden[i][0], garden[i][1]]:
 			var ok := false

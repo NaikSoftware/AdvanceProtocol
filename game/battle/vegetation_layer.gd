@@ -214,8 +214,15 @@ static func obstacles(props: PropLayer) -> Dictionary:
 
 
 ## Відстань на екрані від диска крони (радіус crown) стовбура q до силуету найближчої секції чи воріт.
-static func fence_screen_gap(obst: Dictionary, q: Vector2, crown: float) -> float:
-	return PropLayer.hull_gap(q, CROWN_H_K * crown * SCALE_MAX, obst["fence_hulls"])
+## Кущ і туя стоять від землі, а не диском над стовбуром: тіло — від низу до диска, тож перевіряється ще й низ (bushy);
+## інакше колона туї, диск якої далеко вгорі, стояла б на паркані, хоч диск його й не торкається.
+static func fence_screen_gap(obst: Dictionary, q: Vector2, crown: float, bushy: bool = false) -> float:
+	var top: float = CROWN_H_K * crown * SCALE_MAX
+	var gap: float = PropLayer.hull_gap(q, top, obst["fence_hulls"])
+	if bushy:
+		for f: float in [0.0, 0.5]:
+			gap = minf(gap, PropLayer.hull_gap(q, top * f, obst["fence_hulls"]))
+	return gap
 
 
 ## Мінімальна відстань стовбура до осі ЛЕП: крона з розкидом масштабу й запасом, не менше POLE_CLEAR.
@@ -655,7 +662,7 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 					var q: Vector2 = e[0]
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
 							and obst["fences"].all(func(r: Rect2) -> bool: return _rect_dist(r, q) >= fence_room) \
-							and fence_screen_gap(obst, q, crown_of(node)) >= crown_of(node) * SCALE_MAX \
+							and fence_screen_gap(obst, q, crown_of(node), not YARD_TREES.has(node)) >= crown_of(node) * SCALE_MAX \
 							and (obst["plots"] as Array).all(func(r: Rect2) -> bool: return not r.has_point(q)) \
 							and PropLayer.hull_gap(q, CROWN_H_K * crown_of(node) * SCALE_MAX, obst["plot_hulls"]) >= PLOT_GAP_SHARE * crown_of(node) * SCALE_MAX \
 							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)):
