@@ -191,7 +191,7 @@ func test_river_ruin_yard_gap_is_closed_by_a_fence_piece() -> void:
 	var house := Rect2()
 	for inst in props.all_instances():
 		var b: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
-		if inst["model"] == &"ruin_half_shed":
+		if String(inst["model"]).begins_with("ruin_half_shed"):
 			ruin = Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
 		elif inst["model"] == &"house_h7" and absf(b.position.x - 9.54) < 0.05:
 			house = Rect2(b.position.x, b.position.z, b.size.x, b.size.z)

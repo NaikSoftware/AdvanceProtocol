@@ -33,6 +33,8 @@ const _PROPS: Dictionary = {
 	"ruin_half_house1": [1, 1, 4600],
 	"ruin_half_house2": [1, 1, 4800],
 	"ruin_half_shed": [1, 1, 4600],
+	"ruin_half_shed_b": [1, 1, 4600],
+	"ruin_half_house1_b": [1, 1, 4600],
 }
 ## На кожній хаті рівно один димар, отже рівно один маркер chimney_top: гра чіпляє до нього дим.
 const _CHIMNEYS: Array[String] = ["house_h1", "house_h1_hit", "house_h2", "house_h3", "house_h4", "house_h5", "house_h6", "house_h7", "house_h8"]

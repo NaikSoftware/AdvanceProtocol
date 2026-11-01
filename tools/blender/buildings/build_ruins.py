@@ -147,15 +147,16 @@ def tooth_ok(x, cut, v1, side):
     return x < min(vs) - 0.12 if side > 0 else x > max(vs) + 0.12
 
 
-def house1(ruined):
+def house1(ruined, variant=0):
     """Одноповерховий дім 6.6 x 4.8 м. Напівзруйнований: східна половина даху ціла, західна провалилась, обвалена частина
     фронтальної й західної стін, завал усередині й невеликий зсув перед обваленою стіною."""
     lib.reset()
-    lib.palette(wall=(0.73, 0.64, 0.57), roof="cherry_dark", eave=3.0, chim="ch_orange", row=0.3, trim=0.95, frame=4)
+    lib.ROOFS["cherry_ruin"] = ("tile", (0.24, 0.09, 0.09))                    # темна вишня, як дахи хат у грі: яскраво-червоний давав тоновий розрив зі стінами
+    lib.palette(wall=(0.73, 0.64, 0.57), roof="cherry_ruin" if ruined else "cherry_dark", eave=3.0, chim="ch_orange", row=0.3, trim=0.95, frame=4)
     DM[0] = "wall_plaster_dm" if not ruined else "wall_half"
     b = Builder()
     b.win_kind = 3                                                               # вузькі вертикальні з фрамугою
-    rnd = random.Random(14)
+    rnd = random.Random(14 + 101 * variant)                                    # variant: той самий корпус, інший виріз даху, крокви й завал
     hx, hy = 3.3, 2.4
     E, R = 3.0, 6.5
     ya, yb, ym, xb, xw = -(hy + 0.4), hy + 0.4, 0.0, hx + 0.45, -(hx + 0.45)
@@ -234,9 +235,9 @@ def house1(ruined):
     break_dress(b, PF, xsF, 1, rnd)
     break_dress(b, PB, xsB, 1, rnd)
     trim(b, -0.7, xb, ya, yb, E, hx, S, N)
-    plan = [HeapSurface(-1.9, 0.1, 1.5, 1.8, 1.0, 71, bumps=6, lip=0.28, wob=0.15, lump=0.07, hummocks=3, hum_amp=0.3),
-            HeapSurface(-2.1, -2.95, 1.2, 0.5, 0.7, 72, bumps=5, lip=0.25, wob=0.1, lump=0.05, hummocks=1, hum_amp=0.2),
-            HeapSurface(-3.42, -0.2, 0.5, 1.6, 0.7, 74, bumps=5, lip=0.2, wob=0.1, lump=0.05, hummocks=1, hum_amp=0.2)]
+    plan = [HeapSurface(-1.9, 0.1, 1.5, 1.8, 1.0, 71 + 10 * variant, bumps=6, lip=0.28, wob=0.15, lump=0.07, hummocks=3, hum_amp=0.3),
+            HeapSurface(-2.1, -2.95, 1.2, 0.5, 0.7, 72 + 10 * variant, bumps=5, lip=0.25, wob=0.1, lump=0.05, hummocks=1, hum_amp=0.2),
+            HeapSurface(-3.42, -0.2, 0.5, 1.6, 0.7, 74 + 10 * variant, bumps=5, lip=0.2, wob=0.1, lump=0.05, hummocks=1, hum_amp=0.2)]
     sf = surface(plan)
     # крокви лежать на верху стіни (консоль) або на завалі; тих, що висіли б у повітрі чи пробивали скат, немає
     for x in (-0.8, -0.2):
@@ -260,14 +261,17 @@ def house1(ruined):
         b.chunk(cx_, cy_, sf(cx_, cy_) + sz_ * 0.45, sz_, "chunk_brick", rnd, tone=(1.0, 1.15))
     b.beam((-3.1, -1.5, sf(-3.1, -1.5) + 0.25), (-1.5, -0.3, sf(-1.5, -0.3) + 0.22), 0.2, "timber_dark", 0.22)
     b.beam((-2.7, 0.7, sf(-2.7, 0.7) + 0.2), (-1.1, 1.5, sf(-1.1, 1.5) + 0.25), 0.18, "timber_dark", 0.2)
-    bh = heaps(b, plan, 7)
-    lib.finish(b, "ruin_half_house1", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    bh = heaps(b, plan, 7 + 5 * variant)
+    lib.finish(b, "ruin_half_house1" + ("_b" if variant else ""), out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
 
 
-def house2(ruined):
+def house2(ruined, variant=0):
     """Двоповерховий дім 6 x 5.6 м. Напівзруйнований: західна половина даху ціла, східний фронтон обвалений, перекриття нахилене в завал."""
     lib.reset()
     lib.palette(wall=(0.76, 0.72, 0.60), roof="green_mid", eave=6.0, chim="ch_sand", frame=1, trim=0.92)
+    if ruined:
+        lib.ROOFS["green_ruin"] = ("corr", (0.12, 0.27, 0.16))                 # справжня темна зелень палітри хат
+        lib.palette(wall=(0.76, 0.72, 0.60), roof="green_ruin", eave=6.0, chim="ch_sand", frame=1, trim=0.92)
     DM[0] = "wall_plaster_dm" if not ruined else "wall_half_w"
     b = Builder()
     b.win_kind = 0                                                               # старі дерев'яні на три стулки
@@ -389,13 +393,22 @@ def house2(ruined):
     lib.finish(b, "ruin_half_house2", out, tri_limit=4800, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
 
 
-def shed(ruined):
+def shed(ruined, variant=0):
     """Господарський сарай 6.8 x 4.2 м. Напівзруйнований: фронтальна (на камеру) стіна впала, дах з цього боку провис уздовж того самого коника."""
     lib.reset()
-    lib.palette(roof="asb_old", eave=2.8)
+    lib.ROOFS["slate_ruin"] = ("tile", (0.15, 0.155, 0.17))                     # темний дах: світлий шифер над бежевими дошками читався блідим деревом
+    lib.palette(roof="slate_ruin" if ruined else "asb_old", eave=2.8)
     DM[0] = "boards_soft_vc"
+    if ruined:
+        # дошки темніші на чверть: бежеві читались блідим деревом, а дах мусить лишатись темнішим за стіну
+        mt = lib.mats()
+        mt["boards_soft"] = lib.make_material("boards_soft", flat=(0.27, 0.245, 0.21), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4,
+                                              seam_bump=0.8, undul=(1.2, 0.01), rough=0.9)
+        mt["boards_soft_vc"] = lib.make_material("boards_soft_vc", flat=(0.27, 0.245, 0.21), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4,
+                                                 vmul=True, seam_bump=0.8, undul=(1.2, 0.01), rough=0.9)
+        lib._dm("boards_soft")
     b = Builder()
-    rnd = random.Random(57)
+    rnd = random.Random(57 + 19 * variant)
     hx, hy = 3.4, 2.1
     E, R = 2.8, 3.8
     ya, yb, ym = -(hy + 0.4), hy + 0.4, 0.0
@@ -428,14 +441,16 @@ def shed(ruined):
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.14, (XE, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
     prism(b, [(-hy, E), (hy, E), (0.0, R)], 0.14, (XW, 0.0, 0.0), math.pi / 2, 0.0, "boards_soft", top_mat="boards_soft")
     post_x = (-3.4, -2.27, -1.13, 0.0, 1.13, 2.27, 3.4)
-    post_h = (E, 1.8, 0.8, 1.2, 2.3, E, E)
+    post_h = (E, 1.8, 0.8, 1.2, 2.3, E, E) if variant == 0 else (E, E, 2.3, 1.0, 0.7, 1.7, E)
     for x, h in zip(post_x, post_h):
         b.box(x, S, 0.0, 0.18, 0.18, h, "timber_dark")
-    for (x, y, rot, ln, z, ang) in ((-1.9, -3.1, 0.1, 2.8, 0.2, 0.22), (0.4, -2.9, -0.15, 2.4, 0.3, 0.3), (-0.5, -3.7, 0.4, 1.8, 0.1, 0.1)):
+    sheets = ((-1.9, -3.1, 0.1, 2.8, 0.2, 0.22), (0.4, -2.9, -0.15, 2.4, 0.3, 0.3), (-0.5, -3.7, 0.4, 1.8, 0.1, 0.1)) if variant == 0 else \
+        ((0.9, -3.2, -0.25, 2.5, 0.2, 0.25), (-1.2, -3.0, 0.2, 2.2, 0.3, 0.28), (2.0, -3.7, 0.5, 1.7, 0.1, 0.1))
+    for (x, y, rot, ln, z, ang) in sheets:
         for k in (-1, 0, 1):                                                  # лист ламаний на три смуги з різним нахилом: блиск не заливає весь лист
             b.box_e(x - math.sin(rot) * 0.64 * k, y + math.cos(rot) * 0.64 * k, z + 0.2 + 0.03 * k, ln, 0.62, 0.05, "roof_fallen", euler=(ang + 0.2 * k, 0.12 * k, rot), top="roof_fallen")   # лист зламаний на три смуги з помітним заломом
-    b.cyl(-2.95, -2.35, 0.0, 0.3, 0.9, 12, "steel_paint")                       # бочка й ящик на землі біля впалої стіни
-    b.box(-2.35, -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3)
+    b.cyl(-2.95 + 5.2 * variant, -2.35, 0.0, 0.3, 0.9, 12, "steel_paint")                       # бочка й ящик на землі біля впалої стіни
+    b.box(-2.35 + 4.4 * variant, -2.5, 0.0, 0.7, 0.5, 0.5, "boards_soft", rot=0.3 + 0.9 * variant)
     zt = E - 0.03
     opening2(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, ztop=zt, streak=0.0, sooty=True)
     burn_ring(b, "x", XE + 0.1, -0.3, 0.05, 1.3, 2.2, 1, g_side=0.35, g_bot=0.0, g_top=2.2, t_in=0.22, t_out=0.62, ztop=zt, mat=DM[0])
@@ -455,17 +470,17 @@ def shed(ruined):
     for x in xs:
         ez = max(0.8, hpost(max(XW, min(XE, x))) + 0.06) + (rnd.uniform(-0.06, 0.06) if x < 1.5 else 0.0)
         pts.append((x, ya + (E - ez) * 0.3, ez))
-    hole = {i for i, x in enumerate(xs[:-1]) if -2.0 < x < -1.0}
+    hole = {i for i, x in enumerate(xs[:-1]) if (-2.0 < x < -1.0 if variant == 0 else 0.9 < x < 1.9)}
     for i in range(len(xs) - 1):
         if i not in hole:
             b.poly_up([pts[i], pts[i + 1], (xs[i + 1], ym, R), (xs[i], ym, R)], "fc_roof_xh")
     for x in (-1.8, -1.5, -1.2):
         j = min(range(len(xs)), key=lambda k: abs(xs[k] - x))
         b.beam(pts[j], (xs[j], ym, R - 0.05), 0.1, "timber_dark", 0.16)
-    plan = [HeapSurface(-0.8, 0.1, 1.3, 0.9, 0.5, 92, bumps=5, lip=0.22, wob=0.08, lump=0.04, hummocks=1, hum_amp=0.12)]
+    plan = [HeapSurface(-0.8 + 2.0 * variant, 0.1, 1.3, 0.9, 0.5, 92 + variant, bumps=5, lip=0.22, wob=0.08, lump=0.04, hummocks=1, hum_amp=0.12)]
     lumps(b, plan, rnd, 8)
-    bh = heaps(b, plan, 11, dens=6.0)
-    lib.finish(b, "ruin_half_shed", out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
+    bh = heaps(b, plan, 11 + 3 * variant, dens=6.0)
+    lib.finish(b, "ruin_half_shed" + ("_b" if variant else ""), out, tri_limit=4600, footprint=(1, 1), hi=bh, ground_clip=True, ao=0.35)
 
 
 def shed_variant(name, kind):
@@ -517,6 +532,10 @@ for fn, nm in ((house1, "house1"), (house2, "house2"), (shed, "shed")):
     if want(nm):
         fn(False)
         fn(True)
+# Лише руїни: перебудова ruin_*, не чіпаючи цілих двійників; «b» — той самий слід, інший виріз даху, завал і розкидані листи.
+for fn, nm, v in ((house1, "ruin_house1", 0), (house1, "ruin_house1b", 1), (house2, "ruin_house2", 0), (shed, "ruin_shed", 0), (shed, "ruin_shedb", 1)):
+    if want(nm):
+        fn(True, v)
 if want("shed_brick"):
     shed_variant("f8_shed_brick", "brick")
 if want("shed_lean"):
