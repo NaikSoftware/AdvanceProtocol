@@ -65,7 +65,7 @@ func test_branches_do_not_double_back_to_the_trunk(p = use_parameters(MAPS)) -> 
 ## Скільки хат живить мережа й скільки ТП вона ставить: ці числа не падають, коли гілку перекладено, а не зрізано.
 func test_fed_homes_per_map() -> void:
 	# Хребет: хата (13, 5.15) стоїть за 1.4 від кута магістралі (13.49, 6.49) — ТП там, відвід прямо з її стовпа, гілки 0.4 кВ
-	# нема (див. test_lone_home_by_the_trunk_is_dropped_from_the_corner); решта села — як було.
+	# нема (див. test_lone_home_by_the_trunk_is_dropped_from_the_corner); решта села живиться від своїх гілок.
 	var want: Dictionary = {"river": [7, 0, 5], "crossroads": [10, 4, 4], "ridge": [3, 0, 2]}
 	for p: String in want:
 		var g: PowerGrid = _grid(p)
