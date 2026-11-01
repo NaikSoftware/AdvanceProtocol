@@ -74,10 +74,10 @@ func _gate_colors(gate: StringName) -> Array[Color]:
 ## означає, що ворота знову не в тоні свого паркану. Перший стовпчик — рід воріт, другий — вид паркану.
 const GATE_CASES: Array = [
 	["wood", "picket", 1.19, 1.32],
-	["slat", "slat", 0.60, 0.66],
+	["slat", "slat", 0.52, 0.58],
 	["sheet", "sheet", 1.09, 1.20],
 	["metal", "brickbars", 0.88, 0.97],
-	["lattice", "chainlink", 0.62, 0.70],
+	["lattice", "chainlink", 0.58, 0.66],
 ]
 ## Скільки разів найсвітліша коробка воріт може перевищувати середню яскравість їхнього паркану (шапки темнішають у шейдері).
 const MAX_PEAK: float = 1.9

@@ -1343,12 +1343,14 @@ func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float,
 				var t: float = (float(k) + 0.5) / float(n) - 0.5
 				_gate_box_at(mid + u * (t * span), u, out * 0.005, Vector3(0.012, h - 0.01, 0.006), base + h * 0.5, c * (1.15 if k % 2 == 0 else 0.95))
 		&"slat":
-			# Горизонтальні дошки з просвітом між двома стійками, як паркан із дощок.
-			var rows: int = maxi(3, floori(h / 0.022))
+			# Горизонтальні дошки з просвітом між двома стійками, як паркан із дощок: темна підкладка й чотири широкі дошки
+			# (десять дрібних, менших за піксель, давали шахові плями світлих верхніх граней).
+			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h - 0.01, 0.004), base + h * 0.5, GATE_SLAT * 0.5)
+			var rows: int = 4
 			for k in rows:
 				var y: float = (float(k) + 0.5) / float(rows) * h
 				var vary: int = absi(hash(Vector2i(sd, k))) % 5
-				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h / float(rows) * 0.72, 0.01), base + y, GATE_SLAT * (0.8 + 0.06 * float(vary)))
+				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h / float(rows) * 0.6, 0.01), base + y, GATE_SLAT * (0.8 + 0.06 * float(vary)))
 			for t: float in [-0.5, 0.5]:
 				_gate_box_at(mid + u * (t * (span - 0.012)), u, -out * 0.008, Vector3(0.012, h, 0.012), base + h * 0.5, GATE_SLAT * 0.55)
 		&"wood":
@@ -1362,13 +1364,15 @@ func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float,
 			for y: float in [0.22, 0.74]:
 				_gate_box_at(mid, u, -out * 0.008, Vector3(span, 0.016, 0.008), base + h * y, GATE_WOOD * 0.6)
 		_:
+			# Сітка воріт — суцільна темна підкладка (дрібні прути менші за піксель дробились на шаховий візерунок світлих
+			# плям) і кілька широких рейок поверх неї.
+			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h - 0.01, 0.004), base + h * 0.5, GATE_IRON * 0.5)
 			for y: float in [0.0, h * 0.5, h - 0.01]:
-				_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, 0.012, 0.012), base + y + 0.006, GATE_IRON)
-			# Рідші й товщі прути: тонкі (менші за піксель) дробились в шаховий візерунок світлих плям.
-			var n: int = maxi(2, roundi(span / 0.09))
+				_gate_box_at(mid, u, out * 0.003, Vector3(span, 0.014, 0.014), base + y + 0.007, GATE_IRON)
+			var n: int = maxi(2, roundi(span / 0.15))
 			for k in n + 1:
 				var t: float = float(k) / float(n) - 0.5
-				_gate_box_at(mid + u * (t * span), u, Vector2.ZERO, Vector3(0.012, h, 0.012), base + h * 0.5, GATE_IRON)
+				_gate_box_at(mid + u * (t * span), u, out * 0.003, Vector3(0.014, h, 0.014), base + h * 0.5, GATE_IRON)
 
 
 ## Коробка size із центром над точкою p, зсунута впоперек на off, висота центру над ґрунтом dy.

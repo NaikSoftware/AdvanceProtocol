@@ -9,10 +9,8 @@ global uniform float weather_wetness;
 uniform float sky_bend = 0.65;
 const float WET_FULL = 0.5;
 const float WET_DARK = 0.75;
-const float TOP_DARK = 0.45;
+const float TOP_DARK = 0.28;
 const float SLAT_WET_GAIN = 1.6;
-const float ROUGHNESS_DRY = 0.92;
-const float ROUGHNESS_WET = 0.4;
 
 varying flat float gate_v;
 varying float up_v;
@@ -33,12 +31,13 @@ void fragment() {
 	// Уламки руїни — звичайна матова коробка (шорсткість 0.95, без мокрості й нахилу нормалі).
 	float gate = step(0.5, gate_v);
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness) * gate;
-	// Верхні грані й шапки стовпів ловили все небо й світились білими плямами: вдвічі темніші, як верх секції паркану.
+	// Верхні грані й шапки стовпів ловили все небо й світились білими плямами: удвічі-втричі темніші, як верх секції паркану.
 	albedo *= mix(1.0, TOP_DARK, gate * smoothstep(0.5, 0.9, up_v));
 	// Штахет-дошки на мокрій карті: паркан того ж виду підсвічено (prop_thin, SLAT_WET_GAIN), інакше чорний.
 	albedo *= mix(1.0, SLAT_WET_GAIN, wet * step(1.5, gate_v));
 	ALBEDO = albedo * mix(1.0, WET_DARK, wet);
-	ROUGHNESS = mix(0.95, mix(ROUGHNESS_DRY, ROUGHNESS_WET, wet), gate);
+	// Мокра шорсткість 0.4 давала на гранях дрібних коробок білі іскри відблиску (шаховий візерунок): ворота завжди матові.
+	ROUGHNESS = 1.0;
 	METALLIC = 0.0;
 	vec3 up = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
 	NORMAL = normalize(mix(NORMAL, up, sky_bend * gate));
