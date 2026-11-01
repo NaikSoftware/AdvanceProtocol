@@ -607,8 +607,16 @@ func _repair() -> void:
 			bad += 1
 			var delta: Vector2 = (c - q[bk]) * ((d - lim + 0.08) / d)
 			var ring: bool = q.size() > 2 and q[0].distance_squared_to(q[q.size() - 1]) < 1e-10
-			for j in range(maxi(bk - reach, 0), mini(bk + reach + 1, q.size())):
-				q[j] += delta * exp(-0.5 * pow(float(j - bk) * STEP / REPAIR_SIGMA, 2.0)) * _pin(q[j])
+			# Зміщення не переходить за закріплену розвилку: за нею воно лягало б горбом на пряму
+			# сусіднього відрізка, і одна виправлена клітинка давала три вигини замість одного.
+			for dir: int in [-1, 1]:
+				var j: int = bk if dir == 1 else bk - 1
+				while j >= 0 and j < q.size() and absi(j - bk) <= reach:
+					var pin: float = _pin(q[j])
+					if pin < 0.01:
+						break
+					q[j] += delta * exp(-0.5 * pow(float(j - bk) * STEP / REPAIR_SIGMA, 2.0)) * pin
+					j += dir
 			if ring:
 				q[q.size() - 1] = q[0]
 			lines[bl] = q

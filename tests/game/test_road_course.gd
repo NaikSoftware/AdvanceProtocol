@@ -377,6 +377,44 @@ func test_corners_are_arcs_of_6_to_14_metres() -> void:
 				assert_between(best, 6.0, 14.0, "%s: кут у %s, R = %.1f м" % [path, c, best])
 
 
+## Дорога Хребта зі стовпця 12 у стовпець 13 (кути в рядках 2 і 19, розвилки ґрунтівок у рядках 9 і 12,
+## блок 2×2 у рядках 10–11): прямі стовпці й один плавний S, а не ланцюжок вигинів. Хвилястість осі
+## (±WANDER_M, від гребеня до западини 0.15 клітинки на довгій прямій) — задум, тож поворотом назад
+## вважається лише відступ, більший за її розмах; горб від виправлення осі, що переходить за розвилку, — близько 0.3.
+func test_ridge_column_jog_is_one_s_bend() -> void:
+	var rc: RoadCourse = _bake("res://maps/ridge.tres").roads
+	assert_not_null(rc)
+	if rc == null:
+		return
+	var wander: float = 2.0 * RoadCourse.WANDER_M * RoadCourse.M + 0.02
+	var top := 0.0
+	var y: float = 3.2
+	while y <= 17.81:
+		var x: float = _axis_x_at(rc, y, 11.0, 14.0)
+		assert_gt(x, top - wander, "Хребет: вісь повертає назад у рядку %.1f: x = %.2f після %.2f" % [y, x, top])
+		top = maxf(top, x)
+		# За кутом (рядки 2 і 19) дуга R ≈ 8 м сягає ще ~1 клітинку.
+		if y <= 8.6:
+			assert_almost_eq(x, 12.0, 0.1, "Хребет: прямий стовпець 12, рядок %.1f" % y)
+		if y >= 12.4:
+			assert_almost_eq(x, 13.0, 0.1, "Хребет: прямий стовпець 13, рядок %.1f" % y)
+		y += 0.2
+
+
+## x перетину осі з рядком y серед ліній, що проходять у смузі x0..x1 (клітинки).
+static func _axis_x_at(rc: RoadCourse, y: float, x0: float, x1: float) -> float:
+	for pts in rc.lines:
+		for i in pts.size() - 1:
+			var a: Vector2 = pts[i]
+			var b: Vector2 = pts[i + 1]
+			if (a.y - y) * (b.y - y) > 0.0 or is_equal_approx(a.y, b.y):
+				continue
+			var x: float = lerpf(a.x, b.x, (y - a.y) / (b.y - a.y))
+			if x > x0 and x < x1:
+				return x
+	return -1.0
+
+
 ## Забудова (BUILDING, RUBBLE) за ≤ 1 клітинку від клітинки точки p.
 static func _by_built(b: Board, p: Vector2) -> bool:
 	var c := Vector2i(floori(p.x + 0.5), floori(p.y + 0.5))

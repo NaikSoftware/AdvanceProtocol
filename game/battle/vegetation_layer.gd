@@ -598,9 +598,7 @@ static func _plan_meadows(board: Board, height: TerrainHeight, fields: Array[Rec
 			var c := Vector2i(-1, -1)
 			for t in MEADOW_TRIES:
 				var q := Vector2i(px * MEADOW_PATCH + rng.randi_range(0, MEADOW_PATCH - 1), py * MEADOW_PATCH + rng.randi_range(0, MEADOW_PATCH - 1))
-				if board.in_bounds(q) and board.kind_at(q) == Terrain.Kind.FIELD and not _in_fields(fields, Vector2(q)) \
-						and not _near_kind(board, q, HOME_CLEAR, [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]) \
-						and not _near_kind(board, q, NO_BRIDGE, [Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED]):
+				if _meadow_ok(board, fields, q):
 					c = q
 					break
 			if c.x < 0:
@@ -608,27 +606,45 @@ static func _plan_meadows(board: Board, height: TerrainHeight, fields: Array[Rec
 				continue
 			var tree: bool = rng.randi_range(0, 99) < MEADOW_TREE
 			var n: int = 1 if tree and rng.randi_range(0, 2) > 0 else rng.randi_range(1, 3)
-			var anchor := Vector2(c) + Vector2(rng.randf_range(-0.4, 0.4), rng.randf_range(-0.4, 0.4))
-			var placed: int = 0
-			for t in 12 * n:
-				if placed >= n:
+			# Група, що біля своєї клітинки не стала жодною рослиною (дроти на екрані, дорога, схил), пробує решту
+			# клітинок луки в квадраті по черзі, а не зникає.
+			var cells: Array[Vector2i] = [c]
+			for qy in range(py * MEADOW_PATCH, (py + 1) * MEADOW_PATCH):
+				for qx in range(px * MEADOW_PATCH, (px + 1) * MEADOW_PATCH):
+					if Vector2i(qx, qy) != c and _meadow_ok(board, fields, Vector2i(qx, qy)):
+						cells.append(Vector2i(qx, qy))
+			for cell: Vector2i in cells:
+				c = cell
+				var anchor := Vector2(c) + Vector2(rng.randf_range(-0.4, 0.4), rng.randf_range(-0.4, 0.4))
+				var placed: int = 0
+				for t in 12 * n:
+					if placed >= n:
+						break
+					var p: Vector2 = anchor + (Vector2.ZERO if placed == 0 else Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(0.35, 0.7))
+					var node: StringName
+					if tree:
+						var wet: bool = near_water(height, p, WET_REACH)
+						var pool: Array[StringName] = WET_TREES if wet and rng.randi_range(0, 1) == 0 else MEADOW_TREES
+						node = pool[rng.randi_range(0, pool.size() - 1)]
+					else:
+						node = MEADOW_BUSHES[rng.randi_range(0, MEADOW_BUSHES.size() - 1)]
+					if not _free(board, height, props, obst, fields, p, crown_of(node), stats):
+						if placed == 0:
+							anchor = Vector2(c) + Vector2(rng.randf_range(-0.4, 0.4), rng.randf_range(-0.4, 0.4))
+						continue
+					out.append({"node": node, "pos": Vector3(p.x, height.at(p.x, p.y), p.y), "yaw": rng.randf_range(0.0, TAU),
+							"scale": rng.randf_range(0.9, 1.1) * grow_of(node), "cell": Vector2i(roundi(p.x), roundi(p.y)),
+							"kind": "tree" if tree else "bush", "group": "meadow"})
+					placed += 1
+				if placed > 0:
 					break
-				var p: Vector2 = anchor + (Vector2.ZERO if placed == 0 else Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(0.35, 0.7))
-				var node: StringName
-				if tree:
-					var wet: bool = near_water(height, p, WET_REACH)
-					var pool: Array[StringName] = WET_TREES if wet and rng.randi_range(0, 1) == 0 else MEADOW_TREES
-					node = pool[rng.randi_range(0, pool.size() - 1)]
-				else:
-					node = MEADOW_BUSHES[rng.randi_range(0, MEADOW_BUSHES.size() - 1)]
-				if not _free(board, height, props, obst, fields, p, crown_of(node), stats):
-					if placed == 0:
-						anchor = Vector2(c) + Vector2(rng.randf_range(-0.4, 0.4), rng.randf_range(-0.4, 0.4))
-					continue
-				out.append({"node": node, "pos": Vector3(p.x, height.at(p.x, p.y), p.y), "yaw": rng.randf_range(0.0, TAU),
-						"scale": rng.randf_range(0.9, 1.1) * grow_of(node), "cell": Vector2i(roundi(p.x), roundi(p.y)),
-						"kind": "tree" if tree else "bush", "group": "meadow"})
-				placed += 1
+
+
+## Клітинка під групу луки: луг (FIELD поза ріллею), не ближче HOME_CLEAR до забудови й NO_BRIDGE до мосту.
+static func _meadow_ok(board: Board, fields: Array[Rect2], q: Vector2i) -> bool:
+	return board.in_bounds(q) and board.kind_at(q) == Terrain.Kind.FIELD and not _in_fields(fields, Vector2(q)) \
+			and not _near_kind(board, q, HOME_CLEAR, [Terrain.Kind.BUILDING, Terrain.Kind.RUBBLE]) \
+			and not _near_kind(board, q, NO_BRIDGE, [Terrain.Kind.BRIDGE, Terrain.Kind.BRIDGE_DESTROYED])
 
 
 ## Двори: у частині садиб 1–2 рослини в клітинках двору; крона не на хаті й сараї.
