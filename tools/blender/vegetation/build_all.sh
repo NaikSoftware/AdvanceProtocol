@@ -1,6 +1,7 @@
 #!/bin/bash
 # Повне збирання рослинності: спрайти (Blender, GPU), атласи (python), бібліотеки GLB.
 # Спрайти — вхід, лежать у tools/blender/vegetation/sprites (там .gdignore: Godot їх не імпортує);
+# голі гілки пізніх дерев двору й луки беруться з sprites/forest (копії кадрів лісу; інша тека — $FOREST_SPRITES);
 # проміжні атласи — у $VEG_ATLAS (поза репозиторієм), GLB — у assets/props/vegetation/.
 # Після збирання: $GODOT --headless --path . --import і git checkout project.godot.
 # Потрібні: blender на PATH, python3 з numpy і Pillow. SKIP_SPRITES=1 бере вже готові спрайти.
