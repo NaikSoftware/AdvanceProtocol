@@ -1729,10 +1729,14 @@ func _assign_roofs() -> void:
 					gap = mini(gap, maxi(absi(o.x), absi(o.y)))
 			if gap > ROOF_APART:
 				best = idx
+				best_gap = gap
 				break
 			if gap > best_gap:
 				best_gap = gap
 				best = idx
+		# Темна стіна, для якої не проходить жоден колір: найтемніший з палітри (тест тримає, що таких хат на картах нема).
+		if best_gap < 0:
+			best = ROOF_PALETTE.find(ROOF_PALETTE.reduce(func(a: Color, b: Color) -> Color: return a if a.get_luminance() < b.get_luminance() else b))
 		inst["roof"] = best
 		done.append([c, best])
 

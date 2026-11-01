@@ -62,7 +62,7 @@ const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 // Рівень мипу, що усереднює ділянку даху в атласі.
 const float ROOF_AVG_LOD = 5.0;
 // Відтінки стін за кольором даху: світліша, сірувата, тепла рожевувата штукатурка; найтемніший не нижче WALL_TINT_MIN
-// у prop_layer.gd (з ним дах теж лишається удвічі темнішим за стіну) — різниця 6–10 % яскравості, без пастелі й насиченості.
+// у prop_layer.gd (з ним дах теж лишається не світлішим за ROOF_WALL_MAX стіни) — різниця 6–10 % яскравості, без пастелі й насиченості.
 const vec3 WALL_TINTS[4] = vec3[4](vec3(1.0), vec3(1.07, 1.06, 1.02), vec3(0.93, 0.94, 0.96), vec3(1.0, 0.95, 0.9));
 
 varying vec3 world_pos;
@@ -88,7 +88,7 @@ void vertex() {
 
 void fragment() {
 	vec3 albedo = texture(albedo_tex, UV).rgb * albedo_color.rgb;
-	float roof_k = smoothstep(0.4, 0.7, world_normal.y);
+	float roof_k = smoothstep(0.3, 0.55, world_normal.y);
 	// Стіни тепліші: під блакитним небом сонячних карт сіра штукатурка ставала синюватою.
 	albedo *= mix(WALL_WARM, vec3(1.0), roof_k);
 	if (v_recolour > 0.5) {
@@ -96,9 +96,13 @@ void fragment() {
 		float lum = dot(albedo, LUMA);
 		float avg = max(dot(textureLod(albedo_tex, UV, ROOF_AVG_LOD).rgb * albedo_color.rgb, LUMA), 0.01);
 		vec3 roof = v_roof_tint * clamp(lum / avg, 0.75, 1.3);
+		// Колір ставиться лише на скати: справжня (не згладжена) нормаль грані; плоскі грані вгору — цоколь, підвіконня, шапка димаря,
+		// підлога крізь розчинений дах — лишаються з текстури. Скати хат стоять між 0.3 і 0.93 за y нормалі.
+		vec3 face_n = normalize(cross(dFdx(world_pos), dFdy(world_pos)));
+		float roof_only = smoothstep(0.3, 0.55, abs(face_n.y)) * (1.0 - smoothstep(0.93, 0.97, abs(face_n.y)));
 		// Стіни трохи різняться за тим самим кольором даху: чотири ледь помітні відтінки штукатурки.
 		int wk = int(fract(sin(dot(v_roof_tint, vec3(12.9898, 78.233, 37.719))) * 43758.5453) * 4.0);
-		albedo = mix(albedo * WALL_TINTS[wk], roof, roof_k);
+		albedo = mix(albedo * WALL_TINTS[wk], roof, roof_only);
 	}
 	float rough = roughness;
 	if (use_roughness_tex) {

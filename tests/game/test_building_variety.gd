@@ -84,22 +84,33 @@ func test_roof_palette_is_rural_and_dark() -> void:
 		assert_false(hue_deg >= 40.0 and hue_deg <= 100.0 and c.s > 0.3, "%s — олива чи вохра" % c)
 
 
-## Дах кожної хати не світліший за ROOF_WALL_MAX її стіни (яскравість стіни — за атласом моделі, з найтемнішим відтінком стіни);
-## кожна модель має хоч один колір палітри, що проходить (темні стіни кільця — лише найтемніший).
+## Дах кожної хати не світліший за ROOF_WALL_MAX її стіни (яскравість стіни — за атласом моделі, з найтемнішим відтінком стіни).
 func test_roofs_stay_darker_than_the_wall(p = use_parameters(MAPS)) -> void:
-	var models: Array[StringName] = []
+	var houses: int = 0
 	for inst in _props(p).all_instances():
 		if _is_house(inst):
+			houses += 1
 			var limit: float = PropLayer.wall_luma(inst["model"]) * PropLayer.WALL_TINT_MIN * PropLayer.ROOF_WALL_MAX
 			var roof: float = PropLayer.ROOF_PALETTE[PropLayer.roof_of(inst)].get_luminance()
 			assert_lte(roof, limit, "%s: дах %s хати %s світліший за %.3f" % [p, PropLayer.ROOF_PALETTE[PropLayer.roof_of(inst)], inst["model"], limit])
-			if not models.has(inst["model"]):
-				models.append(inst["model"])
+	assert_gt(houses, 3, "%s: передумова" % p)
+
+
+## Кожна модель хати має хоч один колір палітри, що проходить за стіною (темні стіни кільця — лише найтемніший); пари «колір × модель» друкуються.
+func test_every_house_model_has_a_roof_that_passes() -> void:
+	var models: Array[StringName] = []
+	for m: StringName in PropLayer.models_of(PropLayer.Kind.STRUCTURE):
+		if String(m).begins_with("house_") and not bool(PropLayer.spec_of(m).get("damaged", false)):
+			models.append(m)
+	assert_gt(models.size(), 3)
 	for m: StringName in models:
-		var ok: int = 0
-		for c: Color in PropLayer.ROOF_PALETTE:
-			ok += 1 if c.get_luminance() <= PropLayer.wall_luma(m) * PropLayer.WALL_TINT_MIN * PropLayer.ROOF_WALL_MAX else 0
-		assert_gte(ok, 1, "%s: стіна %s надто темна для палітри (%.3f)" % [p, m, PropLayer.wall_luma(m)])
+		var wall: float = PropLayer.wall_luma(m) * PropLayer.WALL_TINT_MIN * PropLayer.ROOF_WALL_MAX
+		var ok: Array = []
+		for k in PropLayer.ROOF_PALETTE.size():
+			if PropLayer.ROOF_PALETTE[k].get_luminance() <= wall:
+				ok.append(k)
+		gut.p("%s: стіна %.3f, проходять кольори %s" % [m, PropLayer.wall_luma(m), ok])
+		assert_gte(ok.size(), 1, "%s: жоден колір палітри не темніший за стіну %.3f" % [m, wall])
 
 
 ## Руїна не повторює сусідню й не стоїть поруч із цілим двійником.
@@ -131,6 +142,7 @@ func test_neighbouring_sheds_differ(p = use_parameters(MAPS)) -> void:
 
 ## Лише знімок розстановки трьох карт (причепів на них зараз нема, тож тест порожній, доки вони з'являться); правило перевіряє синтетична дошка нижче.
 func test_pin_trailers_on_the_maps_never_repeat_nearby(p = use_parameters(MAPS)) -> void:
+	# Навмисно порожній, поки на картах нема причепів: перевірка живе в синтетичній дошці нижче.
 	var is_trailer := func(i: Dictionary) -> bool: return _kind(i) == PropLayer.Kind.TRAILER
 	assert_eq(_twins(_props(p), is_trailer, SMALL_GAP), [], "%s: однакові причепи поруч" % p)
 
