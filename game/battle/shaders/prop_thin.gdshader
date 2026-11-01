@@ -45,6 +45,11 @@ const float BASE_H = 0.04;
 const float BASE_DARK = 0.6;
 // Здалеку покриття тонких штакетин росте з рівнем міпмапи: alpha-to-coverage інакше розріджує лінію до невидимої.
 const float FAR_ALPHA = 0.12;
+// Паркани дворів (kinds > 0): вид читається кольором так само, як формою — іржава бляха, кора, оцинковка, цегла.
+// Їм — вища межа яскравості (оцинкована сітка світліша за дерево) і лише легке знебарвлення; затемнення й тон здалеку
+// зберігають відтінок, а не зводять усе до сіро-бурого.
+const float YARD_VALUE_CAP = 0.35;
+const float YARD_DESAT = 0.05;
 // Тепліше за нейтраль: під сірим небом Річки нейтральне дерево виходило холодним (B ≥ R).
 const vec3 WEATHERED = vec3(1.14, 0.98, 0.78);
 
@@ -84,22 +89,24 @@ void fragment() {
 		discard;
 	}
 	vec3 albedo = tex.rgb;
+	bool yard = kinds > 0;
 	// Яскравість не вища за VALUE_CAP: світлі шапки стовпчиків і свіжа фарба на зумі 14 читались
 	// білими лініями інтерфейсу; вивітрене дерево й оцинковка — не світліші.
 	float value = max(albedo.r, max(albedo.g, albedo.b));
-	albedo *= min(1.0, VALUE_CAP / max(value, 1e-4));
+	albedo *= min(1.0, (yard ? YARD_VALUE_CAP : VALUE_CAP) / max(value, 1e-4));
 	float cap = smoothstep(top_h - 0.03, top_h - 0.01, base_h);
 	albedo *= mix(1.0, 0.45, cap);
 	// Сіро-бурий вивітреного дерева: рожеві й бузкові відтінки фарби ассета на кадрі читались чужими.
-	albedo = mix(albedo, dot(albedo, vec3(0.2126, 0.7152, 0.0722)) * WEATHERED, 0.6);
-	albedo *= FENCE_DARK * mix(BASE_DARK, 1.0, smoothstep(BASE_H * 0.5, BASE_H, base_h));
+	albedo = mix(albedo, dot(albedo, vec3(0.2126, 0.7152, 0.0722)) * WEATHERED, yard ? YARD_DESAT : 0.6);
+	albedo *= (yard ? 1.0 : FENCE_DARK) * mix(BASE_DARK, 1.0, smoothstep(BASE_H * 0.5, BASE_H, base_h));
 	float far = smoothstep(1.0, FAR_MIP, mip);
-	albedo = mix(albedo, vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))) * WEATHERED * FAR_DARK, far);
+	vec3 far_tone = yard ? albedo * FAR_DARK : vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))) * WEATHERED * FAR_DARK;
+	albedo = mix(albedo, far_tone, far);
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
 	if (wet > 0.0) {
 		float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
 		// Лише на чверть до сіро-бежевого: знебарвлений штакетник читався бетонною панеллю.
-		albedo = mix(albedo, luma * WET_TONE, wet * 0.25) * mix(1.0, WET_DARK, wet);
+		albedo = mix(albedo, luma * WET_TONE, wet * (yard ? 0.08 : 0.25)) * mix(1.0, WET_DARK, wet);
 		albedo *= mix(1.0, DIRT, wet * (1.0 - smoothstep(0.0, DIRT_H, base_h)));
 	}
 	ALBEDO = albedo;
