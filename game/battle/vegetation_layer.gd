@@ -105,10 +105,14 @@ const FENCE_CROWN_PAD: float = 0.1
 ## лягає на паркан чи ворота за деревом, хоч у плані до них є запас. Диск не ближче за свій радіус до силуету
 ## секції (верх FENCE_TOP, клітинки, ~1.8 м) чи воріт.
 const FENCE_TOP: float = 0.23
-## Рослина двору не росте на грядках: диск крони на екрані не ближче до ділянки городу за цю частку радіуса
-## (нависає над краєм не глибше за решту), а стовбур — поза ділянкою.
-const PLOT_GAP_SHARE: float = 0.8
+## Рослина двору не росте на грядках: диск крони на екрані не ближче до ділянки городу за цю частку радіуса (1 — крона
+## не накриває грядки зовсім), а стовбур — поза ділянкою.
+const PLOT_GAP_SHARE: float = 1.0
 const CROWN_H_K: float = 2.2
+## Розкид масштабу рослини (0,9–1,1): перевірки крони на екрані беруть найбільший, щоб найбільший примірник не лягав на паркан чи грядки.
+const SCALE_MAX: float = 1.1
+## Кущ двору не ближче за стільки (на екрані, тайли) понад свою крону до силуету паркану: голий кущ без листя упритул до кінця паркану читався приростом до нього.
+const YARD_BUSH_FENCE_PAD: float = 0.08
 ## Під дротом ЛЕП крона не стоїть ближче за WIRE_PAD від прольоту (розкид масштабу 1,1 × радіус), а стовбур — ближче за POLE_CLEAR від опори.
 const WIRE_PAD: float = 0.15
 const POLE_CLEAR: float = 0.3
@@ -202,7 +206,7 @@ static func obstacles(props: PropLayer) -> Dictionary:
 		plots.append(small.back())
 		var ppts := PackedVector2Array()
 		for c: Vector2 in [small.back().position, Vector2(small.back().end.x, small.back().position.y), small.back().end, Vector2(small.back().position.x, small.back().end.y)]:
-			ppts.append(PropLayer._Placer._screen_pt(c, 0.0))
+			ppts.append(PropLayer.screen_pt(c, 0.0))
 		plot_hulls.append(Geometry2D.convex_hull(ppts))
 	# Ворота — теж паркан: стовпи a, b (mid між ними), полотно не вище FENCE_TOP.
 	for g: Dictionary in props.gates():
@@ -212,19 +216,26 @@ static func obstacles(props: PropLayer) -> Dictionary:
 		var pts := PackedVector2Array()
 		for c: Vector2 in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
 			for y: float in [0.0, FENCE_TOP]:
-				pts.append(PropLayer._Placer._screen_pt(c, y))
+				pts.append(PropLayer.screen_pt(c, y))
 		hulls.append(Geometry2D.convex_hull(pts))
 	return {"roofs": roofs, "small": small, "poles": poles, "fences": fences, "fence_hulls": hulls, "plots": plots, "plot_hulls": plot_hulls, "wires": props.wire_lines()}
 
 
 ## Відстань на екрані від диска крони (радіус crown) стовбура q до силуету найближчої секції чи воріт.
-static func fence_screen_gap(obst: Dictionary, q: Vector2, crown: float) -> float:
-	return PropLayer._Placer._hull_gap(q, CROWN_H_K * crown, obst["fence_hulls"])
+## Кущ і туя стоять від землі, а не диском над стовбуром: тіло — від низу до диска, тож перевіряється ще й низ (bushy);
+## інакше колона туї, диск якої далеко вгорі, стояла б на паркані, хоч диск його й не торкається.
+static func fence_screen_gap(obst: Dictionary, q: Vector2, crown: float, bushy: bool = false) -> float:
+	var top: float = CROWN_H_K * crown * SCALE_MAX
+	var gap: float = PropLayer.hull_gap(q, top, obst["fence_hulls"])
+	if bushy:
+		for f: float in [0.0, 0.5]:
+			gap = minf(gap, PropLayer.hull_gap(q, top * f, obst["fence_hulls"]))
+	return gap
 
 
 ## Мінімальна відстань стовбура до осі ЛЕП: крона з розкидом масштабу й запасом, не менше POLE_CLEAR.
 static func power_clear(crown: float) -> float:
-	return maxf(crown * 1.1 + WIRE_PAD, POLE_CLEAR)
+	return maxf(crown * SCALE_MAX + WIRE_PAD, POLE_CLEAR)
 
 
 ## Відстань від точки до найближчої опори чи дроту ЛЕП: крона не росте під ними.
@@ -276,7 +287,7 @@ static func _free(board: Board, height: TerrainHeight, props: PropLayer, obst: D
 		if _rect_dist(r, p) < crown + FENCE_CROWN_PAD:
 			_bump(stats, "fence")
 			return false
-	if fence_screen_gap(obst, p, crown) < crown:
+	if fence_screen_gap(obst, p, crown) < crown * SCALE_MAX:
 		_bump(stats, "fence")
 		return false
 	if _power_dist(obst, p) < power_clear(crown):
@@ -659,9 +670,9 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 					var q: Vector2 = e[0]
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
 							and obst["fences"].all(func(r: Rect2) -> bool: return _rect_dist(r, q) >= fence_room) \
-							and fence_screen_gap(obst, q, crown_of(node)) >= crown_of(node) \
+							and fence_screen_gap(obst, q, crown_of(node), not YARD_TREES.has(node)) >= crown_of(node) * SCALE_MAX + (0.0 if YARD_TREES.has(node) else YARD_BUSH_FENCE_PAD) \
 							and (obst["plots"] as Array).all(func(r: Rect2) -> bool: return not r.has_point(q)) \
-							and PropLayer._Placer._hull_gap(q, CROWN_H_K * crown_of(node), obst["plot_hulls"]) >= PLOT_GAP_SHARE * crown_of(node) \
+							and PropLayer.hull_gap(q, CROWN_H_K * crown_of(node) * SCALE_MAX, obst["plot_hulls"]) >= PLOT_GAP_SHARE * crown_of(node) * SCALE_MAX \
 							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)):
 						choice = [node, e]
 						break

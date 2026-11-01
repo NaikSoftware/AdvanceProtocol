@@ -17,7 +17,7 @@ const STREET_END: float = 3.0
 ## Найближче, як стовп ЛЕП може стояти до секції паркану двору, клітинки (2.4 м).
 const FENCE_POLE_CLEAR: float = 0.3
 ## Скільки воріт карти може стояти з послабленим правилом стіни чи екрана (test_gates_do_not_run_alongside_walls).
-const RELAXED_GATES: Dictionary = {"crossroads": 2}
+const RELAXED_GATES: Dictionary = {"crossroads": 1}
 
 
 func _view(map: MapData, board: Board = null) -> BoardView:
@@ -409,11 +409,11 @@ func test_one_multimesh_per_model(p = use_parameters(MAPS)) -> void:
 	for inst in view.props().all_instances():
 		models[StringName(PropLayer.spec_of(inst["model"]).get("batch", inst["model"]))] = true
 	var mmis: Array[Node] = view.props().find_children("*", "MultiMeshInstance3D", false, false).filter(
-			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts", &"SmallBoxes"] and not String(n.name).ends_with("_fade"))
+			func(n: Node) -> bool: return not n.name in [&"ContactShadows", &"GardenBeds", &"HouseGrime", &"RubbleFloors", &"RubbleDebris", &"YardPaths", &"Transformers", &"GatePosts", &"SmallBoxes", &"GateMesh"] and not String(n.name).ends_with("_fade"))
 	# Модель — вузол дошки й, для будівель кільця, ще «модель_ring» (кільце відсікається окремо).
 	var keys: Dictionary = {}
 	for n in mmis:
-		var m := StringName(String(n.name).trim_suffix("_ring"))
+		var m := StringName(String(n.name).trim_suffix("_ring").trim_suffix("_alpha"))
 		assert_true(models.has(m), "%s: вузол %s" % [p, n.name])
 		keys[m] = true
 	assert_eq(keys.size(), models.size(), p)
@@ -633,12 +633,86 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	assert_gt(fences, 0, "%s: передумова — двори обгороджені" % p)
 
 
-## Огорожа двору доходить до стіни, але не заходить під обрис будівлі (зі звісом даху) і тримається
+## Слід стін моделі: контрольні числа двох хат (кінець по +x у координатах моделі, тайли), щоб помилка в обчисленні сліду не
+## проходила сама собою (інші тести міряють від нього ж).
+func test_wall_footprint_of_known_houses() -> void:
+	for pair: Array in [[&"house_h8", 0.32], [&"house_h4", 0.52]]:
+		var info: Variant = PropLayer.model(pair[0])
+		if info == null:
+			continue
+		var foot: AABB = (info as Dictionary)["foot"]
+		var full: AABB = (info as Dictionary)["aabb"]
+		assert_almost_eq(foot.end.x, float(pair[1]), 0.01, "%s: слід стін по +x" % pair[0])
+		assert_lte(foot.end.x, full.end.x + 1e-4, "%s: слід у межах обрису" % pair[0])
+
+
+## Слід стін хат (model()["foot"]) збігається з розмірами стін у конвеєрі Blender (PropLayer.WALL_SIZES, ±0,02) і покриває
+## щонайменше 85 % обрису по кожній осі; виняток — із причиною (ґанок із дашком, веранда, димар виступають за стіну).
+const FOOT_EXCEPTIONS: Dictionary = {
+	&"house_h2": "ґанок з дашком виступає за стіну по z",
+	&"house_h3": "ґанок з дашком виступає за стіну по z",
+	&"house_h4": "ґанок з дашком виступає за стіну по z",
+	&"house_h7": "ґанок з дашком виступає за стіну по z",
+	&"house_h8": "ґанок з дашком й приставний димар виступають за стіну",
+}
+
+
+func test_wall_footprints_match_the_builders() -> void:
+	for name: StringName in PropLayer.WALL_SIZES:
+		var info: Variant = PropLayer.model(name)
+		if info == null:
+			continue
+		var foot: AABB = (info as Dictionary)["foot"]
+		var full: AABB = (info as Dictionary)["aabb"]
+		var want: Vector2 = PropLayer.WALL_SIZES[name]
+		assert_almost_eq(foot.size.x, want.x, 0.02, "%s: слід по x відповідає розміру стін з Blender" % name)
+		assert_almost_eq(foot.size.z, want.y, 0.02, "%s: слід по z відповідає розміру стін з Blender" % name)
+		var share: Vector2 = Vector2(foot.size.x / full.size.x, foot.size.z / full.size.z)
+		if not FOOT_EXCEPTIONS.has(name):
+			assert_gte(minf(share.x, share.y), 0.85, "%s: слід покриває мало обрису (%s)" % [name, share])
+	# Модель поза списком (сарай, комора) — слід дорівнює обрису.
+	var barn: Variant = PropLayer.model(&"f2_livestock_barn")
+	if barn != null:
+		assert_eq((barn as Dictionary)["foot"], (barn as Dictionary)["aabb"], "поза списком — обрис")
+
+
+## Ланки Г-подібних обходів до сліду стін (detour_legs) підпорядковані тим самим правилам, що й секції: не на дорозі, не в сліді
+## будівлі, не на опорі й не на стовпі воріт, не перетинають інших секцій.
+func test_detour_legs_obey_fence_rules(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _cached(p).props()
+	var legs: Array = props._placer.detour_legs
+	var foots: Array[Rect2] = []
+	var poles: Array[Rect2] = []
+	for inst in props.all_instances():
+		var k: int = _kind(inst["model"])
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			foots.append(PropLayer.wall_rect(inst))
+		elif k == PropLayer.Kind.POLE:
+			var b: AABB = _box_of(inst)
+			poles.append(Rect2(b.position.x, b.position.z, b.size.x, b.size.z))
+	var posts: Array[Vector2] = []
+	for g: Dictionary in props._gates:
+		posts.append_array([g["a"], g["mid"], g["b"]])
+	for leg: Array in legs:
+		for t in 6:
+			var q: Vector2 = (leg[0] as Vector2).lerp(leg[1], float(t) / 5.0)
+			assert_gte(props.road_edge_m(q), PropLayer.FENCE_ROAD_INSET * 8.0, "%s: ланка обходу %s на асфальті" % [p, q])
+			for f: Rect2 in foots:
+				assert_false(f.grow(-0.005).has_point(q), "%s: ланка обходу %s у сліді стін" % [p, q])
+			for r: Rect2 in poles:
+				assert_false(r.grow(0.02).has_point(q), "%s: ланка обходу %s на опорі" % [p, q])
+			for g: Vector2 in posts:
+				assert_gt(g.distance_to(q), 0.03, "%s: ланка обходу %s на стовпі воріт" % [p, q])
+	gut.p("%s: ланок обходу %d" % [p, legs.size()])
+
+
+## Огорожа двору доходить до стіни, але не заходить у слід її стін (без звісу даху й димаря) і тримається
 ## 0.3 клітинки від вежі; вежа — 0.5 від будівель.
 func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	var towers: Array[Rect2] = []
 	var houses: Array[Rect2] = []
+	var house_boxes: Array[Rect2] = []
 	var fences: Array[Rect2] = []
 	for inst in view.props().all_instances():
 		var s: Dictionary = PropLayer.spec_of(inst["model"])
@@ -647,7 +721,9 @@ func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 		if bool(s.get("tower", false)):
 			towers.append(r)
 		elif int(s["kind"]) == PropLayer.Kind.STRUCTURE or int(s["kind"]) == PropLayer.Kind.RUIN:
-			houses.append(r)
+			# Слід стін без звісу даху й димаря: паркан доходить до стіни, але не заходить у неї.
+			houses.append(PropLayer.wall_rect(inst))
+			house_boxes.append(r)
 		elif int(s["kind"]) == PropLayer.Kind.GARDEN_FENCE:
 			fences.append(r)
 	assert_gt(fences.size(), 0, "%s: передумова — огорожі є" % p)
@@ -657,7 +733,7 @@ func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:
 		for b in towers:
 			assert_false(b.grow(0.3 - 1e-4).intersects(f), "%s: огорожа %s ближче 0.3 клітинки до вежі %s" % [p, f, b])
 	for t in towers:
-		for b in houses:
+		for b in house_boxes:
 			assert_false(t.grow(0.5 - 1e-4).intersects(b), "%s: вежа ближче 0.5 клітинки до будівлі" % p)
 
 
@@ -884,8 +960,29 @@ func test_fence_runs_end_on_walls_or_gate_posts(p = use_parameters(MAPS)) -> voi
 		for q in posts:
 			if q.distance_to(garden[i][0]) < 0.04 or q.distance_to(garden[i][1]) < 0.04:
 				gated[ri] = true
+	# Секція між двома стінами (просвіт між хатою й руїною вужчий за ворота): обидва вільні кінці ланцюга стоять на стінах.
+	var spans: Dictionary = {}
 	for r: int in size_of:
-		assert_true(float(size_of[r]) >= PropLayer.MIN_FENCE - 1e-3 or gated.has(r), "%s: уламок паркану завдовжки %.2f біля %s" % [p, size_of[r], garden[r][0]])
+		var free_ends: Array[Vector2] = []
+		for i in garden.size():
+			if root.call(i) != r:
+				continue
+			for e: Vector2 in [garden[i][0], garden[i][1]]:
+				var shared := false
+				for j in garden.size():
+					shared = shared or (j != i and root.call(j) == r and (e.distance_to(garden[j][0]) < 0.005 or e.distance_to(garden[j][1]) < 0.005))
+				if not shared:
+					free_ends.append(e)
+		var on_walls := not free_ends.is_empty()
+		for e: Vector2 in free_ends:
+			var hit := false
+			for w in walls:
+				hit = hit or w.grow(0.05).has_point(e)
+			on_walls = on_walls and hit
+		if on_walls:
+			spans[r] = true
+	for r: int in size_of:
+		assert_true(float(size_of[r]) >= PropLayer.MIN_FENCE - 1e-3 or gated.has(r) or spans.has(r), "%s: уламок паркану завдовжки %.2f біля %s" % [p, size_of[r], garden[r][0]])
 	for i in garden.size():
 		for e: Vector2 in [garden[i][0], garden[i][1]]:
 			var ok := false
@@ -1911,16 +2008,24 @@ func test_yard_fence_kinds_agree_across_mesh_specs_and_instances(p = use_paramet
 		assert_eq(count[k], 4, "картка виду %s" % kinds[k])
 		assert_almost_eq(top[k], float(tops[k]), 1e-3, "верх картки виду %s" % kinds[k])
 	var props: PropLayer = _cached(p).props()
-	var node: MultiMeshInstance3D = props.get_node("infra_fence_yard")
-	assert_true(node.multimesh.use_custom_data, p)
-	var slots: Array = props._slots[&"infra_fence_yard"]
-	assert_gt(slots.size(), 0, p)
-	# Записане в INSTANCE_CUSTOM — з дзеркала: без рендера (headless) MultiMesh його не віддає.
-	var written: Array = props._custom_written[&"infra_fence_yard"]
-	assert_eq(written.size(), slots.size(), p)
-	for k in slots.size():
-		var m: StringName = props._instances[slots[k]]["model"]
-		assert_eq(written[k], PropLayer.fence_kind_of(m), "%s: слот %d (%s)" % [p, k, m])
+	# Два вузли «batch»: непрозорий (суцільні планки) і «_alpha» (рабиця); на карті може бути один із них.
+	var total := 0
+	for key: StringName in [&"infra_fence_yard", &"infra_fence_yard_alpha"]:
+		if not props._slots.has(key):
+			continue
+		var node: MultiMeshInstance3D = props.get_node(NodePath(key))
+		assert_true(node.multimesh.use_custom_data, p)
+		var slots: Array = props._slots[key]
+		assert_gt(slots.size(), 0, p)
+		total += slots.size()
+		# Записане в INSTANCE_CUSTOM — з дзеркала: без рендера (headless) MultiMesh його не віддає.
+		var written: Array = props._custom_written[key]
+		assert_eq(written.size(), slots.size(), p)
+		for k in slots.size():
+			var m: StringName = props._instances[slots[k]]["model"]
+			assert_eq(written[k], PropLayer.fence_kind_of(m), "%s: слот %d (%s)" % [p, k, m])
+			assert_eq(key == &"infra_fence_yard_alpha", PropLayer.FENCE_ALPHA_FORMS.has(m), "%s: вид %s не в своєму проході" % [p, m])
+	assert_gt(total, 0, p)
 
 
 ## Кожен двір обгороджений одним видом паркану (усі його секції — одна модель із FENCE_FORMS), а в селі кожної карти
