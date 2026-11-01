@@ -1008,6 +1008,11 @@ func triangle_count() -> int:
 	return t
 
 
+## Ворота дворів: {a, mid, b, kind, out, height, …} — стовпи a, mid, b і висота полотна.
+func gates() -> Array[Dictionary]:
+	return _gates
+
+
 ## Дроти ЛЕП на площині XZ: прольоти між опорами й відводи до хат, [a, b] (Vector2) — щоб рослинність
 ## не росла під ними.
 func wire_lines() -> Array:

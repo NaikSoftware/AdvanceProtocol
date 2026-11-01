@@ -124,3 +124,4 @@ func test_garden_keeps_off_open_fence_sides(p = use_parameters(MAPS)) -> void:
 						worst = d.length()
 	gut.p("%s: найближчий город до розриву %.3f" % [p, worst])
 	assert_gte(worst, PropLayer.OPEN_SIDE_CLEAR - 1e-3, "%s: город підходить до розриву паркану на %.3f" % [p, worst])
+

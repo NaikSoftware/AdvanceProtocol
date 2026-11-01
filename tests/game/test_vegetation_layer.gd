@@ -327,3 +327,36 @@ func test_fade_hides_the_plant_inside_the_merged_mesh() -> void:
 	veg.set_reveal_cells([])
 	assert_true(veg.plant_visible(idx), "юніт пішов — дерево знову ціле")
 
+
+
+## Крона не накриває паркан чи ворота на екрані: у плані стовбур далі радіуса крони, але камера дивиться під кутом,
+## і крона на висоті над стовбуром лягає на паркан за ним. Диск крони (центр на VegetationLayer.CROWN_H_K радіусів над ґрунтом)
+## не ближче за радіус до силуету секції чи воріт на екрані.
+func test_no_crown_over_a_fence_on_screen(p = use_parameters(MAPS)) -> void:
+	var view: BoardView = _view(p)
+	var props: PropLayer = view.props()
+	var hulls: Array = []
+	var rects: Array[Rect2] = []
+	for r: Rect2 in VegetationLayer.obstacles(props)["fences"]:
+		rects.append(r)
+	for g: Dictionary in props.gates():
+		rects.append(Rect2(g["a"], Vector2.ZERO).expand(g["b"]).grow(0.03))
+	for r: Rect2 in rects:
+		var pts := PackedVector2Array()
+		for c: Vector2 in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+			for y: float in [0.0, VegetationLayer.FENCE_TOP]:
+				pts.append(PropLayer._Placer._screen_pt(c, y))
+		hulls.append(Geometry2D.convex_hull(pts))
+	var bad: Array = []
+	var checked: int = 0
+	for pl: Dictionary in view.vegetation().placements:
+		if pl["kind"] == "reed":
+			continue
+		var q := Vector2(pl["pos"].x, pl["pos"].z)
+		var crown: float = VegetationLayer.crown_of(pl["node"])
+		checked += 1
+		var gap: float = PropLayer._Placer._hull_gap(q, VegetationLayer.CROWN_H_K * crown, hulls)
+		if gap < crown - 0.001:
+			bad.append([pl["group"], pl["node"], q, snappedf(gap, 0.01)])
+	assert_eq(bad, [], "%s: крона над парканом чи воротами на екрані" % p)
+	assert_gt(checked, 0, "%s: передумова — рослини є" % p)

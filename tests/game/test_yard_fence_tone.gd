@@ -9,6 +9,11 @@ const STRIP: int = 192
 const PAD: int = 12
 ## Скільки світліше за паркан дозволено бути воротам (запас на шум текстури).
 const LUMA_MARGIN: float = 1.1
+const TILE_M: float = 2.5
+const H_MAX: float = 2.0
+## Дріт оцинковки: найсвітліший піксель і середня яскравість (світло-середній сірий).
+const WIRE_MAX: float = 0.6
+const WIRE_MIN_MEAN: float = 0.42
 
 
 ## Атлас з GLB: PNG у буферному вікні першого зображення (заголовок 12 байт, далі шматки JSON і BIN).
@@ -72,8 +77,31 @@ func test_wooden_gates_are_no_lighter_or_more_orange_than_their_fence(p = use_pa
 	assert_lte(_sat(gate), _sat(fence), "%s: ворота %s насиченіші за паркан %s" % [p[0], gate, fence])
 
 
-func test_chainlink_is_galvanised_mid_grey() -> void:
-	var worst: float = 0.0
-	for c in _pixels("chainlink"):
-		worst = maxf(worst, maxf(c.r, maxf(c.g, c.b)))
-	assert_lte(worst, 0.5, "найсвітліший піксель сітки й труб")
+## Оцинковка: дріт — світло-середній сірий, не майже білий; труби й стовпи (суцільні, під сірим небом світляться
+## самі) — не світліші за дріт і темніші за стіну хати, без білого відблиску.
+func test_chainlink_is_galvanised_grey() -> void:
+	var img: Image = _atlas()
+	var top: int = KINDS.find("chainlink") * (STRIP + 2 * PAD) + PAD
+	var wire: Array[Color] = []
+	var steel: Array[Color] = []
+	for r in STRIP:
+		var z: float = (float(STRIP - 1 - r) + 0.5) / float(STRIP) * H_MAX
+		for x in img.get_width():
+			var c: Color = img.get_pixel(x, top + r)
+			if c.a <= 0.5:
+				continue
+			var xm: float = (float(x) + 0.5) / float(img.get_width()) * TILE_M
+			var on_post: bool = absf(fposmod(xm - 0.04 + TILE_M / 2.0, TILE_M) - TILE_M / 2.0) < 0.04
+			(steel if on_post or absf(z - 1.46) < 0.02 else wire).append(c)
+	assert_gt(wire.size(), 0)
+	assert_gt(steel.size(), 0)
+	var wire_max: float = 0.0
+	var steel_max: float = 0.0
+	for c in wire:
+		wire_max = maxf(wire_max, maxf(c.r, maxf(c.g, c.b)))
+	for c in steel:
+		steel_max = maxf(steel_max, maxf(c.r, maxf(c.g, c.b)))
+	assert_lte(_luma(_mean(steel)), _luma(_mean(wire)), "труби не світліші за дріт")
+	assert_lte(steel_max, wire_max, "найсвітліша точка труби не світліша за найсвітлішу точку дроту")
+	assert_lte(wire_max, WIRE_MAX, "дріт майже білий")
+	assert_gte(_luma(_mean(wire)), WIRE_MIN_MEAN, "сітка зникає на тлі")
