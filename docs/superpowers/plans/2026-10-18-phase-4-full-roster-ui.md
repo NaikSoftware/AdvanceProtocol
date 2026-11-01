@@ -98,7 +98,7 @@ T4b core: дрон/обвідна┼─► T10 дрон (4.4) ─► T14 кіл�
   - `static func small_targets(root: Control, min_px: float = 48.0) -> Array[String]` — видимі `BaseButton` з `size.x` або `size.y` < `min_px`
   - `static func overlapping(controls: Array[Control]) -> Array[String]` — пари видимих, чиї прямокутники перетинаються
 
-- [ ] **Step 1: Тест чистої функції**
+- [x] **Step 1: Тест чистої функції**
 
 ```gdscript
 func test_large_phone_gets_dp_factor() -> void:   # приклад: Pixel 10 Pro XL
@@ -121,10 +121,10 @@ func test_dpi_override_parsed_from_user_args() -> void:
 	assert_eq(UiScale.dpi_override(PackedStringArray()), -1.0)
 ```
 
-- [ ] **Step 2:** `./run_tests.sh -gselect=test_ui_scale.gd` — FAIL (`UiScale` не існує).
-- [ ] **Step 3:** Реалізувати `UiScale`; викликати `UiScale.apply(get_tree().root)` у `SceneRouter._ready()`. DPI — `DisplayServer.screen_get_dpi()`; `screen_get_scale()` на Android не використовувати (у Godot 4 він підтримується лише на macOS/iOS/Wayland/Web). Факт DPI на пристрої звіряється у Фазі 7.3. Там само `_drag_threshold_px()` (`battle_screen.gd:634`) повертає 10 логічних px без ділення на `content_scale_factor` (відкрите питання 4).
-- [ ] **Step 4:** Тест PASS. Ручна перевірка емуляції на ПК: `$GODOT --path . --resolution 1496x672 -- --ui-dpi=243` — у консолі `get_viewport().get_visible_rect().size` (тимчасовий `print` в `UiScale.apply`, прибрати перед комітом) ≈ `(985, 442)`. Якщо Godot дає інший логічний розмір — зупинитись і повідомити: уся решта плану спирається на те, що логічний px ≈ dp.
-- [ ] **Step 5: Тест розкладки наявних екранів**
+- [x] **Step 2:** `./run_tests.sh -gselect=test_ui_scale.gd` — FAIL (`UiScale` не існує).
+- [x] **Step 3:** Реалізувати `UiScale`; викликати `UiScale.apply(get_tree().root)` у `SceneRouter._ready()`. DPI — `DisplayServer.screen_get_dpi()`; `screen_get_scale()` на Android не використовувати (у Godot 4 він підтримується лише на macOS/iOS/Wayland/Web). Факт DPI на пристрої звіряється у Фазі 7.3. Там само `_drag_threshold_px()` (`battle_screen.gd:634`) повертає 10 логічних px без ділення на `content_scale_factor` (відкрите питання 4).
+- [x] **Step 4:** Тест PASS. Ручна перевірка емуляції на ПК: `$GODOT --path . --resolution 1496x672 -- --ui-dpi=243` — у консолі `get_viewport().get_visible_rect().size` (тимчасовий `print` в `UiScale.apply`, прибрати перед комітом) ≈ `(985, 442)`. Якщо Godot дає інший логічний розмір — зупинитись і повідомити: уся решта плану спирається на те, що логічний px ≈ dp.
+- [x] **Step 5: Тест розкладки наявних екранів**
 
 ```gdscript
 # test_layout_screens.gd — один параметризований тест на сцену × розмір
@@ -143,9 +143,9 @@ func test_menu_content_capped_on_wide() -> void:
 ```
 
 `pause_menu`/`results_screen`/`hud` для показу вмісту потребують прив'язки до стану — у тесті дати їм мінімальний `BattleState` (той самий прийом, що в `tests/game/test_hud.gd:41`).
-- [ ] **Step 6:** Запустити — очікувано FAIL на PHONE_SMALL/PHONE_LARGE щонайменше для `hud.tscn` (три кнопки по 160 + прев'ю в один `HBox` не влазять у 985 − 2·56). Виправити розкладку контейнерами: прев'ю пострілу/руху — окремим рядком над кнопками або `HFlowContainer`; кнопки — `size_flags`, мінімум 48×48, без фіксованої ширини 160. Жодних абсолютних координат.
-- [ ] **Step 7:** Повний прогін `./run_tests.sh` зелений, `Scripts` = кількість `test_*.gd`.
-- [ ] **Step 8: Коміт** `feat(ui): масштаб під dp від DPI екрана й перевірка розкладки на телефонах, ПК і планшеті`
+- [x] **Step 6:** Запустити — очікувано FAIL на PHONE_SMALL/PHONE_LARGE щонайменше для `hud.tscn` (три кнопки по 160 + прев'ю в один `HBox` не влазять у 985 − 2·56). Виправити розкладку контейнерами: прев'ю пострілу/руху — окремим рядком над кнопками або `HFlowContainer`; кнопки — `size_flags`, мінімум 48×48, без фіксованої ширини 160. Жодних абсолютних координат.
+- [x] **Step 7:** Повний прогін `./run_tests.sh` зелений, `Scripts` = кількість `test_*.gd`.
+- [x] **Step 8: Коміт** `feat(ui): масштаб під dp від DPI екрана й перевірка розкладки на телефонах, ПК і планшеті`
 
 ---
 
@@ -163,9 +163,9 @@ func test_menu_content_capped_on_wide() -> void:
   - `func tap(cell: Vector2i)`, `func press(button: BaseButton)`, `func confirm()`, `func end_turn()`, `func confirm_gate()`, `func act(from, to)`, `func hud() -> Hud`, `func gate() -> HandoverGate`, `func events_of(cls) -> Array[Events.BattleEvent]`, властивості `service`, `screen`
   - `click_at(p: Vector2, vp: Viewport = null)` — необов'язковий viewport для сцен у `SubViewport` (Task 13)
 
-- [ ] **Step 1:** Перенести каркас; `test_battle_e2e.gd` викликає його. Виправити коментар у шапці (`:10`) — «дронів і мін немає, бо UI немає» стає неправдою після T5/T10, тепер він посилається на `test_engineer_e2e.gd`/`test_drone_e2e.gd`.
-- [ ] **Step 2:** `./run_tests.sh -gselect=test_battle_e2e.gd` — та сама кількість тестів, усі PASS (рефакторинг тесту без зміни очікувань).
-- [ ] **Step 3: Коміт** `test(e2e): спільний каркас бою з гравцями й підготовкою стану`
+- [x] **Step 1:** Перенести каркас; `test_battle_e2e.gd` викликає його. Виправити коментар у шапці (`:10`) — «дронів і мін немає, бо UI немає» стає неправдою після T5/T10, тепер він посилається на `test_engineer_e2e.gd`/`test_drone_e2e.gd`.
+- [x] **Step 2:** `./run_tests.sh -gselect=test_battle_e2e.gd` — та сама кількість тестів, усі PASS (рефакторинг тесту без зміни очікувань).
+- [x] **Step 3: Коміт** `test(e2e): спільний каркас бою з гравцями й підготовкою стану`
 
 ---
 
@@ -181,7 +181,7 @@ func test_menu_content_capped_on_wide() -> void:
 
 Тимчасові примітиви до асетів Фази 5.2 — мінімум, що відрізняє типи з висоти; ціна — кількість мешів (§8: ≤ 4 меші на юніт).
 
-- [ ] **Step 1: Тест**
+- [x] **Step 1: Тест**
 
 ```gdscript
 func test_every_type_has_a_distinct_silhouette() -> void:
@@ -195,9 +195,9 @@ func test_silhouette_stays_within_four_meshes() -> void:      # для кожн�
 func test_silhouette_fits_one_tile() -> void:                 # AABB x,z <= 1.0, низ y >= 0
 ```
 
-- [ ] **Step 2:** FAIL → реалізувати → PASS.
-- [ ] **Step 3:** Візуальна перевірка: `tools/ui_shot` зі сценою на 12 юнітів у ряд, скріншот у фіксованому ракурсі; жодні два не однакові на 100 px. Скріншот — у PR, не в репозиторій.
-- [ ] **Step 4: Коміт** `feat(battle): силует-заступник на кожен із 12 типів`
+- [x] **Step 2:** FAIL → реалізувати → PASS.
+- [x] **Step 3:** Візуальна перевірка: `tools/ui_shot` зі сценою на 12 юнітів у ряд, скріншот у фіксованому ракурсі; жодні два не однакові на 100 px. Скріншот — у PR, не в репозиторій.
+- [x] **Step 4: Коміт** `feat(battle): силует-заступник на кожен із 12 типів`
 
 ---
 
@@ -212,7 +212,7 @@ func test_silhouette_fits_one_tile() -> void:                 # AABB x,z <= 1.0,
   - `static func action_status(state: BattleState, unit_id: int, action: int) -> Dictionary` — `{"tiles": Array[Vector2i], "reason": String}`. Перебирає `Board.DIRS_4` у їхньому порядку, для кожного сусіда в межах дошки — `create(unit_id, action, p).validate(state)`. `tiles` — де `""`; `reason` — `""`, якщо `tiles` не порожні, інакше причина **першого** сусіда в порядку `DIRS_4` (причини рівня юніта — AP, `has_fired`, чужий хід — однакові для всіх сусідів, тож випадають природно)
   - `static func repair_bounds(engineer: Unit, target: Unit) -> Vector2i` — `x = mini(20, missing)`, `y = mini((40 + maxi(0, engineer.ap - engineer.fire_cost())) / 2, missing)`, де `missing = target.max_hp() - target.hp`; без RNG
 
-- [ ] **Step 1: Тести**
+- [x] **Step 1: Тести**
 
 ```gdscript
 func test_lay_mine_status_lists_free_adjacent_tiles_only() -> void   # 4 сусіди, один зайнятий → 3 тайли
@@ -229,8 +229,8 @@ func test_repair_bounds_capped_by_missing_hp() -> void   # бракує 12 HP �
 func test_repair_bounds_bracket_actual_roll() -> void    # 200 сідів: repair_amount ∈ [x, y] до кепу
 ```
 
-- [ ] **Step 2:** FAIL → реалізувати → PASS (повний прогін, `Scripts` звірено).
-- [ ] **Step 3: Коміт** `feat(core): допустимі тайли й межі ремонту для панелі інженера`
+- [x] **Step 2:** FAIL → реалізувати → PASS (повний прогін, `Scripts` звірено).
+- [x] **Step 3: Коміт** `feat(core): допустимі тайли й межі ремонту для панелі інженера`
 
 ---
 
@@ -246,7 +246,7 @@ func test_repair_bounds_bracket_actual_roll() -> void    # 200 сідів: repai
   - `Targeting.reach_tiles(state: BattleState, unit_id: int, radius: int) -> Array[Vector2i]` — тайли кола `in_radius(u.pos, p, radius)` у межах дошки, перетнуті з `state.vision[state.active_player].is_seen(p)`; порожньо, якщо юніт не видимий активному гравцеві (`seen` під ним). Це обвідна з `docs/ui/overlays.md` («коло ∩ seen спостерігача»), спільна для своїх і чужих
   - `Targeting.drone_marks(state: BattleState, unit_id: int) -> Dictionary` — `{target_id: String}` для кожного живого ворожого юніта на `seen`-тайлі активного гравця всередині `DroneCommand.RANGE`; значення — `DroneCommand.check_strike()` (`""` = можна бити). Лише для свого загону; для чужого — `{}`
 
-- [ ] **Step 1: Тести**
+- [x] **Step 1: Тести**
 
 ```gdscript
 func test_drone_bounds_match_roll_range() -> void          # 500 кидків ∈ [120, 180], обидві межі досягнуті
@@ -260,8 +260,8 @@ func test_drone_marks_empty_without_drones() -> void       # усі значен
 func test_queries_do_not_touch_state() -> void
 ```
 
-- [ ] **Step 2:** FAIL → реалізувати → PASS.
-- [ ] **Step 3: Коміт** `feat(core): тайли обвідної й позначки дрона для оверлея`
+- [x] **Step 2:** FAIL → реалізувати → PASS.
+- [x] **Step 3: Коміт** `feat(core): тайли обвідної й позначки дрона для оверлея`
 
 ---
 
@@ -276,7 +276,7 @@ func test_queries_do_not_touch_state() -> void
 - Consumes: `Mines.Mine.known_to`, `state.mines`; каркас T2
 - Produces: `func rebuild(state: BattleState, observer: int) -> void` — один маркер на міну з `m.owner == observer` (стиль `OWN`) або `m.known_to[observer]` (стиль `ENEMY_REVEALED`); `func marker_count() -> int`; `func marker_at(p: Vector2i) -> Node3D` (null — немає). Нічого не читає з потоку подій.
 
-- [ ] **Step 1: Модульні тести шару**
+- [x] **Step 1: Модульні тести шару**
 
 ```gdscript
 func test_own_mines_always_drawn() -> void
@@ -285,7 +285,7 @@ func test_unrevealed_enemy_mine_has_no_node() -> void     # marker_count() == 0,
 func test_rebuild_replaces_not_accumulates() -> void
 ```
 
-- [ ] **Step 2: e2e (`test_mines_e2e.gd`)**
+- [x] **Step 2: e2e (`test_mines_e2e.gd`)**
 
 ```gdscript
 func test_engineer_lays_mine_and_it_shows_for_owner() -> void
@@ -303,8 +303,8 @@ func test_engineer_reveals_enemy_mine_in_its_diamond() -> void
 	# інженер P1 у межах ромба 3 → після confirm_gate marker_at((3,1)) зі стилем ENEMY_REVEALED
 ```
 
-- [ ] **Step 3:** FAIL → реалізувати → PASS; повний прогін, `Scripts` звірено.
-- [ ] **Step 4: Коміт** `feat(battle): шар мін для активного гравця`
+- [x] **Step 3:** FAIL → реалізувати → PASS; повний прогін, `Scripts` звірено.
+- [x] **Step 4: Коміт** `feat(battle): шар мін для активного гравця`
 
 ---
 
@@ -336,7 +336,7 @@ func test_engineer_reveals_enemy_mine_in_its_diamond() -> void
 
 Поведінка панелі: п'ять кнопок завжди (порядок `EngineerCommand.Action`), на кожній назва і `fire_cost` («30 AP»). Недоступна — сірий стиль теми (`theme_type_variation`), але **не `disabled`**: тап по ній показує `tr(reason)` у рядку причини панелі (на телефоні немає наведення для підказки). Розкладка — `GridContainer` на 2 колонки праворуч у `Middle` HUD; на жодному з `SIZES` не перекриває `TopBar`/`BottomBar`; на PHONE_SMALL сітка може згортатися (`HFlowContainer`/прокрутка), але кнопки лишаються ≥ 48.
 
-- [ ] **Step 1: Тести контролера**
+- [x] **Step 1: Тести контролера**
 
 ```gdscript
 func test_arm_engineer_emits_valid_tiles() -> void
@@ -347,8 +347,8 @@ func test_selecting_another_unit_disarms() -> void
 func test_targets_cleared_after_confirm() -> void
 ```
 
-- [ ] **Step 2: Тести панелі** — `test_five_buttons_with_ap_cost`, `test_unavailable_button_shows_reason_on_press`, `test_engineer_panel_relabels_on_locale_change`, `test_panel_fits_phone_without_overlapping_bars` (`LayoutProbe.mount(hud.tscn, size)` для кожного з `SIZES`, вибраний інженер; `overflowing == []`, `small_targets == []`, `overlapping([TopBar, BottomBar, EngineerPanel]) == []`).
-- [ ] **Step 3: e2e (`test_engineer_e2e.gd`) — кожна з п'яти верб через кнопки**
+- [x] **Step 2: Тести панелі** — `test_five_buttons_with_ap_cost`, `test_unavailable_button_shows_reason_on_press`, `test_engineer_panel_relabels_on_locale_change`, `test_panel_fits_phone_without_overlapping_bars` (`LayoutProbe.mount(hud.tscn, size)` для кожного з `SIZES`, вибраний інженер; `overflowing == []`, `small_targets == []`, `overlapping([TopBar, BottomBar, EngineerPanel]) == []`).
+- [x] **Step 3: e2e (`test_engineer_e2e.gd`) — кожна з п'яти верб через кнопки**
 
 ```gdscript
 func test_lay_and_clear_mine() -> void          # state.mines.size() 1 → (наступний хід) 0; AP 0 після кожної
@@ -361,8 +361,8 @@ func test_repair_unit_heals_within_bounds() -> void  # див. T9 — тут л�
 func test_engineer_buttons_hidden_for_non_engineer() -> void
 ```
 
-- [ ] **Step 4:** FAIL → реалізувати → PASS; повний прогін, `Scripts` звірено.
-- [ ] **Step 5: Коміт** `feat(ui): панель верб інженера з допустимими тайлами й причинами`
+- [x] **Step 4:** FAIL → реалізувати → PASS; повний прогін, `Scripts` звірено.
+- [x] **Step 5: Коміт** `feat(ui): панель верб інженера з допустимими тайлами й причинами`
 
 ---
 
@@ -377,7 +377,7 @@ func test_engineer_buttons_hidden_for_non_engineer() -> void
 - Consumes: `EngineerCommand.repair_bounds()` (T4a), режим ENGINEER (T8)
 - Produces: прев'ю `{type: ENGINEER, unit_id, action: REPAIR_UNIT, target, heal_min: int, heal_max: int}`; HUD показує «20–43» без перерахунку
 
-- [ ] **Step 1: e2e**
+- [x] **Step 1: e2e**
 
 ```gdscript
 func test_repair_preview_full_ap_shows_20_to_43() -> void
@@ -387,8 +387,8 @@ func test_repair_preview_after_one_field_step_shows_20_to_30() -> void
 func test_repair_preview_capped_by_missing_hp() -> void    # hp 388/400 → "12–12"
 ```
 
-- [ ] **Step 2:** FAIL → реалізувати → PASS; `LayoutProbe` по `SIZES` з видимим `PreviewRepairBox` — без виходу за межі.
-- [ ] **Step 3: Коміт** `feat(ui): межі ремонту видно до підтвердження`
+- [x] **Step 2:** FAIL → реалізувати → PASS; `LayoutProbe` по `SIZES` з видимим `PreviewRepairBox` — без виходу за межі.
+- [x] **Step 3: Коміт** `feat(ui): межі ремонту видно до підтвердження`
 
 ---
 
@@ -410,8 +410,8 @@ func test_repair_preview_capped_by_missing_hp() -> void    # hp 388/400 → "12�
 
 Кнопка — окрема дія поруч із «Підтвердити», не перемикач режиму стрільби. Звичайний тап по ворогу без натиснутої кнопки лишається пострілом.
 
-- [ ] **Step 1: Тести контролера** — `test_arm_drone_emits_ring_and_marks`, `test_drone_tap_on_infantry_refused_with_reason`, `test_drone_tap_on_vehicle_sets_preview_120_180`, `test_plain_tap_on_enemy_still_previews_shot`, `test_arm_drone_without_drones_refused`.
-- [ ] **Step 2: e2e (`test_drone_e2e.gd`)**
+- [x] **Step 1: Тести контролера** — `test_arm_drone_emits_ring_and_marks`, `test_drone_tap_on_infantry_refused_with_reason`, `test_drone_tap_on_vehicle_sets_preview_120_180`, `test_plain_tap_on_enemy_still_previews_shot`, `test_arm_drone_without_drones_refused`.
+- [x] **Step 2: e2e (`test_drone_e2e.gd`)**
 
 ```gdscript
 # 10×3, усе розвідано; штурмовий загін (1) P0 на (0,1), середній танк (5) P1 на (5,1), стрілецький (0) P1 на (3,1)
@@ -426,8 +426,8 @@ func test_drone_button_hidden_for_rifle_squad() -> void
 func test_third_strike_refused() -> void   # prepare: drones_left 0 → натиск кнопки дає ERR_NO_DRONES_LEFT
 ```
 
-- [ ] **Step 3:** FAIL → реалізувати → PASS; `LayoutProbe` по `SIZES`: кнопка ≥ 48, `BottomBar` не виходить за межі з нею.
-- [ ] **Step 4: Коміт** `feat(ui): кнопка дронового удару з кільцем і забороненими цілями`
+- [x] **Step 3:** FAIL → реалізувати → PASS; `LayoutProbe` по `SIZES`: кнопка ≥ 48, `BottomBar` не виходить за межі з нею.
+- [x] **Step 4: Коміт** `feat(ui): кнопка дронового удару з кільцем і забороненими цілями`
 
 ---
 
@@ -442,8 +442,8 @@ func test_third_strike_refused() -> void   # prepare: drones_left 0 → нати
 **Interfaces:**
 - Consumes: каркас T2 (`players: 3`), `MatchSetup.map_supports()` (`game/ui/match_setup.gd:69`)
 
-- [ ] **Step 1: Тест core** — `test_populate_skips_spawns_beyond_player_count` (спавни 0,1,2 при `player_count` 2 → 2 власники, `populate` повертає `true`, жодного юніта з `owner` 2).
-- [ ] **Step 2: Структурний тест карт (`test_maps.gd`) — для кожного `maps/*.tres`**
+- [x] **Step 1: Тест core** — `test_populate_skips_spawns_beyond_player_count` (спавни 0,1,2 при `player_count` 2 → 2 власники, `populate` повертає `true`, жодного юніта з `owner` 2).
+- [x] **Step 2: Структурний тест карт (`test_maps.gd`) — для кожного `maps/*.tres`**
 
 ```gdscript
 func test_map_is_well_formed(p = use_parameters(_map_paths())) -> void:
@@ -459,7 +459,7 @@ func test_five_maps_with_required_kinds() -> void
 ```
 
 Розміри й склад — контент-рішення: орієнтир 16×12…20×14, по 5–7 юнітів на гравця з різних класів, щонайменше один інженер і одна артилерія на гравця.
-- [ ] **Step 3: e2e (`test_three_players_e2e.gd`)**
+- [x] **Step 3: e2e (`test_three_players_e2e.gd`)**
 
 ```gdscript
 func test_eliminated_player_is_skipped_and_gate_names_next() -> void
@@ -470,8 +470,8 @@ func test_match_continues_between_remaining_two() -> void   # state.eliminated =
 func test_three_player_map_runs_with_two_players() -> void   # maps/urban.tres, players 2 → матч стартує, 2 власники
 ```
 
-- [ ] **Step 4:** FAIL → реалізувати → PASS; ручний прогін кожної карти на 3 гравці на ПК (кілька ходів) і скріншот у PR.
-- [ ] **Step 5: Коміт** `feat(maps): п'ять карт на 2 і 3 гравці; спавн поза кількістю гравців пропускається`
+- [x] **Step 4:** FAIL → реалізувати → PASS; ручний прогін кожної карти на 3 гравці на ПК (кілька ходів) і скріншот у PR.
+- [x] **Step 5: Коміт** `feat(maps): п'ять карт на 2 і 3 гравці; спавн поза кількістю гравців пропускається`
 
 ---
 
@@ -491,11 +491,11 @@ func test_three_player_map_runs_with_two_players() -> void   # maps/urban.tres, 
   - Свій юніт (за таблицею overlays.md): кільце завжди, навіть при 0 AP; позначені — `firing_targets()` (дальність, видимість, AP). Ворог: кільце завжди; позначені — `threatened_units(state, id, state.active_player)` (лише сам юніт, **AP не перевіряється**), `is_floor = true`. Штурмовий загін з `drones_left > 0` (свій чи ворожий) — окреме `drone_ring` радіуса `DroneCommand.RANGE` і позначки з `drone_threatened_units`; без дронів — `drone_ring` порожнє
   - Тап по ворогу, коли нічого не вибрано, → `inspect_unit`; тап по ворогу з вибраним своїм юнітом лишається прев'ю пострілу (поведінка не змінюється); тап по порожньому → `inspect_clear`
 
-- [ ] **Step 1: Тести core** (якщо T4b їх ще не покрив) — `test_enemy_threat_ignores_ap` (ворог з AP 0 позначає мій юніт у дальності), `test_enemy_threat_uses_that_unit_vision_only` (мій юніт, видимий лише іншому ворогу, не позначений), `test_enemy_drone_threat_reaches_5_when_drones_left`, `test_no_drone_threat_when_drones_spent`.
-- [ ] **Step 2: Тести контролера** — `test_tap_enemy_with_nothing_selected_inspects`, `test_tap_enemy_with_unit_selected_still_previews_shot`, `test_own_unit_ring_shown_at_zero_ap`, `test_inspect_cleared_on_empty_tap`, `test_inspect_cleared_after_handover` (нічого з інспекції не переживає гейт).
-- [ ] **Step 3: e2e (`test_threat_e2e.gd`)** — 10×3, усе розвідано: P1 середній танк (5) на (6,1) з AP 0, P0 броньовик (2) на (3,1) і загін (0) на (0,1). Тап по танку без вибору: `contour_segments(LAYER_TARGETS)` не порожній; броньовик `is_threatened()`, загін — ні (поза дальністю); рядок `hud_threat_floor` видимий. Ворожий штурмовий загін з 2 дронами — `drone_ring` непорожній, мій броньовик на відстані 5 позначений; той самий бут з `drones_left = 0` — не позначений.
-- [ ] **Step 4:** FAIL → реалізувати → PASS; `LayoutProbe` по `SIZES`: рядок «нижня межа» не виходить за межі; повний прогін, `Scripts` звірено.
-- [ ] **Step 5: Коміт** `feat(battle): кільце дальності й позначки загроз для будь-якого видимого юніта`
+- [x] **Step 1: Тести core** (якщо T4b їх ще не покрив) — `test_enemy_threat_ignores_ap` (ворог з AP 0 позначає мій юніт у дальності), `test_enemy_threat_uses_that_unit_vision_only` (мій юніт, видимий лише іншому ворогу, не позначений), `test_enemy_drone_threat_reaches_5_when_drones_left`, `test_no_drone_threat_when_drones_spent`.
+- [x] **Step 2: Тести контролера** — `test_tap_enemy_with_nothing_selected_inspects`, `test_tap_enemy_with_unit_selected_still_previews_shot`, `test_own_unit_ring_shown_at_zero_ap`, `test_inspect_cleared_on_empty_tap`, `test_inspect_cleared_after_handover` (нічого з інспекції не переживає гейт).
+- [x] **Step 3: e2e (`test_threat_e2e.gd`)** — 10×3, усе розвідано: P1 середній танк (5) на (6,1) з AP 0, P0 броньовик (2) на (3,1) і загін (0) на (0,1). Тап по танку без вибору: `contour_segments(LAYER_TARGETS)` не порожній; броньовик `is_threatened()`, загін — ні (поза дальністю); рядок `hud_threat_floor` видимий. Ворожий штурмовий загін з 2 дронами — `drone_ring` непорожній, мій броньовик на відстані 5 позначений; той самий бут з `drones_left = 0` — не позначений.
+- [x] **Step 4:** FAIL → реалізувати → PASS; `LayoutProbe` по `SIZES`: рядок «нижня межа» не виходить за межі; повний прогін, `Scripts` звірено.
+- [x] **Step 5: Коміт** `feat(battle): кільце дальності й позначки загроз для будь-якого видимого юніта`
 
 ---
 
@@ -508,7 +508,7 @@ func test_three_player_map_runs_with_two_players() -> void   # maps/urban.tres, 
 **Interfaces:**
 - Consumes: `LayoutProbe.mount` (T1), каркас T2 з `click_at(p, vp)`, усі панелі T8–T10 і T14
 
-- [ ] **Step 1: e2e**
+- [x] **Step 1: e2e**
 
 ```gdscript
 func test_full_hud_fits_every_size(p = use_parameters(LayoutProbe.SIZES)) -> void:
@@ -523,10 +523,10 @@ func test_board_still_tappable_on_phone() -> void
 	# на PHONE_SMALL тап у центр смуги дошки вибирає юніт, що там стоїть (не з'їдено панеллю)
 ```
 
-- [ ] **Step 2:** Запуск; якщо FAIL — виправити розкладку контейнерами (не числами позицій), повторити до PASS.
-- [ ] **Step 3:** Ручна перевірка на ПК: `$GODOT --path . --resolution 1496x672 -- --ui-dpi=243` (емуляція Pixel) і `--resolution 1280x720`; скріншоти обох у PR.
-- [ ] **Step 4:** Повний прогін `./run_tests.sh` зелений, `Scripts` = `find tests -name 'test_*.gd' | wc -l`.
-- [ ] **Step 5: Коміт** `test(e2e): увесь HUD бою влазить у телефони, ПК і планшет`
+- [x] **Step 2:** Запуск; якщо FAIL — виправити розкладку контейнерами (не числами позицій), повторити до PASS.
+- [x] **Step 3:** Ручна перевірка на ПК: `$GODOT --path . --resolution 1496x672 -- --ui-dpi=243` (емуляція Pixel) і `--resolution 1280x720`; скріншоти обох у PR.
+- [x] **Step 4:** Повний прогін `./run_tests.sh` зелений, `Scripts` = `find tests -name 'test_*.gd' | wc -l`.
+- [x] **Step 5: Коміт** `test(e2e): увесь HUD бою влазить у телефони, ПК і планшет`
 
 ---
 
