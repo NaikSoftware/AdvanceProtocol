@@ -36,6 +36,10 @@ void vertex() {
 
 void fragment() {
 	vec2 q = UV - 0.5;
+	// Похідна — до discard: у неоднорідному потоці fwidth невизначений.
+	float rows = max(v_custom.r, 4.0);
+	float ph = UV.x * rows;
+	float aa = max(fwidth(ph), 1e-3);
 	// Межа з травою: шум по світу, тож край нерівний і м'який (обмежка з трави).
 	float wob = 0.08 * (vnoise(world_pos.xz * 6.0 + v_custom.g * 13.0) - 0.5);
 	float d = max(abs(q.x), abs(q.y)) + wob;
@@ -43,12 +47,18 @@ void fragment() {
 	if (edge <= 0.01) {
 		discard;
 	}
-	float rows = max(v_custom.r, 4.0);
 	// Борозна — прямокутний профіль із краєм завширшки в піксель, а не синусоїда: на зумі 8 крок 0.7 м — ~5 px, і
-	// синус розпливався в рівну пляму. Коли крок ≲ 2 px, рядки зливаються в середній тон, а не мерехтять.
-	float ph = UV.x * rows;
-	float aa = max(fwidth(ph), 1e-3);
-	float row = 1.0 - smoothstep(0.5 - aa, 0.5 + aa, abs(fract(ph) - 0.5) * 2.0);
+	// синус розпливався в рівну пляму. Кожен гребінь — своєї ширини й сили (±20 %), а кінці рядів обірвані
+	// нерівно, тож грядки не читаються надрукованою смугою. Коли крок ≲ 2 px, рядки зливаються в середній тон.
+	float rid = floor(ph);
+	float h1 = hash(vec2(rid, v_custom.g * 31.0));
+	float h2 = hash(vec2(rid + 17.0, v_custom.g * 31.0));
+	float h3 = hash(vec2(rid + 43.0, v_custom.g * 31.0));
+	float thr = 1.0 - 0.5 * (1.0 + 0.4 * (h1 - 0.5));
+	float row = 1.0 - smoothstep(thr - aa, thr + aa, abs(fract(ph) - 0.5) * 2.0);
+	row = 0.5 + (row - 0.5) * (1.0 + 0.4 * (h2 - 0.5));
+	float along = min(UV.y, 1.0 - UV.y);
+	row = mix(0.5, row, smoothstep(0.02 + 0.06 * h3, 0.05 + 0.1 * h3, along));
 	row = mix(row, 0.5, smoothstep(0.3, 0.6, aa));
 	float wet = smoothstep(0.0, 0.5, weather_wetness);
 	// Рядки — ±24 % яскравості: зорані борозни читаються на зумі бою й під дощем, де ґрунт майже чорний;

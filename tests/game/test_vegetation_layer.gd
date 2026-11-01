@@ -393,3 +393,12 @@ func test_yard_plants_stay_off_garden_plots(p = use_parameters(MAPS)) -> void:
 				break
 	assert_eq(bad, [], "%s: рослина двору на грядках" % p)
 	assert_gt(checked, 0, "%s: передумова — рослини двору є" % p)
+
+
+## Пляма затінення очерету: на сонячній карті вона — його тінь (cast), на похмурій лише темнить воду; решта рослин — завжди.
+func test_reed_shade_only_on_sunny_maps() -> void:
+	assert_true(VegetationLayer.has_shade(&"bank_reed_01", true))
+	assert_true(VegetationLayer.has_shade(&"bank_cattail_02", true))
+	assert_false(VegetationLayer.has_shade(&"bank_reed_01", false))
+	assert_false(VegetationLayer.has_shade(&"bank_cattail_02", false))
+	assert_true(VegetationLayer.has_shade(&"bank_bush_01", false))
