@@ -113,8 +113,8 @@ void fragment() {
 	vec3 far_tone = yard ? albedo * FAR_DARK : vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))) * WEATHERED * FAR_DARK;
 	albedo = mix(albedo, far_tone, far);
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
-	// Штахетник (вид 0), профнастил (1) і дошки (4) на мокрій карті читались майже чорними (L 24–47 при ґрунті 71): мокрий підйом;
-	// ті самі числа в prop_gate (GAIN_*), щоб ворота лишались у тоні.
+	// Штахетник (вид 0), профнастил (1) і дошки (4) під дощем темніють до майже чорного на тлі ґрунту: мокрий підйом albedo
+	// за видом; ті самі числа в prop_gate (GAIN_*), щоб ворота лишались у тоні свого паркану.
 	if (yard) {
 		float gain = abs(kind_v - 0.0) < 0.5 ? GAIN_PICKET : (abs(kind_v - 1.0) < 0.5 ? GAIN_SHEET : (abs(kind_v - 4.0) < 0.5 ? GAIN_SLAT : 1.0));
 		albedo *= mix(1.0, gain, wet);

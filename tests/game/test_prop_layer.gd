@@ -633,6 +633,19 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	assert_gt(fences, 0, "%s: передумова — двори обгороджені" % p)
 
 
+## Слід стін моделі (model()["foot"]) — без звісу даху й димаря: контрольні числа двох хат, щоб помилка в обчисленні сліду
+## не проходила сама собою (інші тести міряють від нього ж). Кінець по +x у координатах моделі, тайли.
+func test_wall_footprint_of_known_houses() -> void:
+	for pair: Array in [[&"house_h8", 0.341], [&"house_h4", 0.541]]:
+		var info: Variant = PropLayer.model(pair[0])
+		if info == null:
+			continue
+		var foot: AABB = (info as Dictionary)["foot"]
+		var full: AABB = (info as Dictionary)["aabb"]
+		assert_almost_eq(foot.end.x, float(pair[1]), 0.01, "%s: слід стін по +x" % pair[0])
+		assert_lte(foot.end.x, full.end.x + 1e-4, "%s: слід у межах обрису" % pair[0])
+
+
 ## Огорожа двору доходить до стіни, але не заходить у слід її стін (без звісу даху й димаря) і тримається
 ## 0.3 клітинки від вежі; вежа — 0.5 від будівель.
 func test_fences_and_towers_keep_clear(p = use_parameters(MAPS)) -> void:

@@ -45,8 +45,9 @@ const HEARTH_MAX: int = 5
 const CHIMNEY_DENSITY: float = 0.36
 const RUIN_DENSITY: float = 0.3
 ## Димар: 14 м заввишки, від 0,8 м біля труби до ~3 м угорі; руїна — 0,55 висоти, вужча внизу за димар.
-## Запас AABB шлейфу на нахил вітром, тайли.
-const HEARTH_LEAN_MARGIN: float = 0.35
+## Найбільший знос шлейфу вітром на тайл висоти й розмах звивання (коефіцієнти шейдера _PLUME_CODE): з них AABB шлейфу.
+const HEARTH_MAX_LEAN: float = 0.45
+const HEARTH_WANDER: float = 0.4
 const HEARTH_HEIGHT: float = 14.0 / 8.0
 const HEARTH_BASE_W: float = 0.8 / 8.0
 const HEARTH_TOP_W: float = 0.42
@@ -349,17 +350,23 @@ func set_hearths(chimneys: Array[Vector3], ruins: Array[Vector3], seed: int, loc
 	_refresh_effects()
 
 
-## Тісний AABB усіх шлейфів (з запасом на нахил вітром): прозорі об'єкти сортуються за центром AABB, а коробка на всю дошку
-## мала центр у кутку дошки, тож дим сортувався з парканами навпаки. Шлейфів мало, тож спільна коробка лишається тісною.
+## Тісний AABB усіх шлейфів із запасом на ширину, нахил вітром і звивання: прозорі об'єкти сортуються за центром AABB,
+## тож коробка мусить стояти біля самих шлейфів, а не на всю дошку. Шлейфів мало, тож спільна коробка лишається тісною.
 func _hearth_bounds() -> AABB:
 	if _hearth_points.is_empty():
 		return AABB(Vector3.ZERO, Vector3(0.1, 0.1, 0.1))
-	var reach: float = HEARTH_TOP_W + HEARTH_LEAN_MARGIN
+	var reach: float = hearth_reach()
 	var box := AABB()
 	for h in _hearth_points.size():
 		var one := AABB(_hearth_points[h] + Vector3(-reach, -0.1, -reach), Vector3(2.0 * reach, HEARTH_HEIGHT * _hearth_shapes[h].x + 0.2, 2.0 * reach))
 		box = one if h == 0 else box.merge(one)
 	return box
+
+
+## Найбільший горизонтальний виліт шлейфу від джерела: напівширина угорі (смуга на 35 % ширша за шлейф), знос вітром на повну
+## висоту й половина звивання.
+static func hearth_reach() -> float:
+	return HEARTH_TOP_W * 1.35 + HEARTH_MAX_LEAN * HEARTH_HEIGHT + HEARTH_WANDER * HEARTH_HEIGHT * 0.5
 
 
 ## Густота шлейфу для шейдера (0–1): руїна тліє слабше за димар.
@@ -970,7 +977,8 @@ void fragment() {
 	col *= mix(0.55, 1.0, smoothstep(0.1, 0.8, lump));
 	ALBEDO = col;
 	ALPHA = clamp(dens * fade * v_dens * 0.55, 0.0, 1.0);
-	// М'який перехід на стику з геометрією: угорі 0,9 м, а біля отвору лише 0,2 м — ширше з'їдало б перші метри диму, і він починався б вище за димар.
+	// М'який перехід на стику з геометрією (дах, стіна димаря): 1,1 м біля отвору, до 1,6 м вище — ширина росте з висотою,
+	// щоб жорсткого краю не лишалось там, де шлейф торкається покрівлі поруч із трубою.
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, край біля даху там буде жорсткішим.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / (mix(1.1, 1.6, smoothstep(0.0, 0.25, v_h01)) / 8.0), 0.0, 1.0);

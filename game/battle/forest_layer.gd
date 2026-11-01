@@ -21,6 +21,8 @@ extends Node3D
 ##   стає напівпрозорим — цілими деревами й кущами, без растру; показані — ті самі, що й під
 ##   дахами (`set_reveal_cells`), тож невидимий ворог себе не видає.
 
+## Тінь і глибинний прохід розчинених крон — раніше за прозорий паркан (PropLayer.FENCE_ALPHA_PRIORITY, −1) і дим (0).
+const FOREST_PRIORITY: int = -2
 const _SHADER: Shader = preload("res://assets/props/forest/forest_crown.gdshader")
 const _DIR: String = "res://assets/props/forest/"
 ## Типовий зум гри — 12 (IsoCameraRig.zoom_level); до цього зуму включно ліс повний.
@@ -249,7 +251,7 @@ func _load_library() -> void:
 				color.shader = color_shader
 				var depth := ShaderMaterial.new()
 				depth.shader = depth_shader
-				depth.render_priority = -1
+				depth.render_priority = FOREST_PRIORITY
 				depth.next_pass = color
 				for fm: ShaderMaterial in [color, depth]:
 					fm.set_shader_parameter("albedo_tex", src.albedo_texture)
@@ -570,7 +572,7 @@ func _bake_shadow(crowns: Array[Dictionary]) -> void:
 	_shadow.name = "Forest_Shadow"
 	_shadow.mesh = st.commit()
 	# Раніше за напівпрозорі крони: тінь лягає лише на землю, а не на розчинену крону над нею.
-	mat.render_priority = -1
+	mat.render_priority = FOREST_PRIORITY
 	_shadow.material_override = mat
 	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_shadow)
