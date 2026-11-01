@@ -107,3 +107,27 @@ func test_no_tree_crown_under_a_power_line(p = use_parameters(MAPS)) -> void:
 			for w: Array in spans:
 				var gap: float = q.distance_to(Geometry2D.get_closest_point_to_segment(q, w[0], w[1])) - float(e["r"])
 				assert_gte(gap, ForestLayer.CROWN_MARGIN - 1e-4, "%s: крона %s (r=%.2f, h=%.2f) за %.2f від проліту %s" % [p, at, e["r"], top, gap, w])
+
+
+## Підлісок вищий за 0.4 тайла (кущі, молоді дерева) теж не лежить на дроті на екрані: низький кущ лишається, решта — ні.
+func test_no_tall_undergrowth_under_a_power_line(p = use_parameters(MAPS)) -> void:
+	_props(p)
+	var view: BoardView = _views[p]
+	var spans: Array = view.props().span_lines()
+	var f: ForestLayer = view.forest()
+	var fwd: Vector2 = ForestLayer._view_fwd()
+	var seen: int = 0
+	for e: Dictionary in f.board_plan:
+		if e["ground"] or not f._lib.has(e["node"]) or str(e["node"]).begins_with("Hedge"):
+			continue
+		var top: float = float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y
+		if top <= 0.4:
+			continue
+		seen += 1
+		var sh: Vector2 = ForestLayer.crown_shift(top)
+		for k in 9:
+			var q: Vector2 = (e["pos"] as Vector2) + fwd * lerpf(sh.x, sh.y, k / 8.0)
+			for w: Array in spans:
+				var gap: float = q.distance_to(Geometry2D.get_closest_point_to_segment(q, w[0], w[1])) - float(e["r"])
+				assert_gte(gap, ForestLayer.CROWN_MARGIN - 1e-4, "%s: %s (h=%.2f) %s за %.2f від проліту %s" % [p, e["node"], top, e["pos"], gap, w])
+	assert_gt(seen, 0, "%s: передумова — високий підлісок є" % p)

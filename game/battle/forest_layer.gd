@@ -68,6 +68,8 @@ const CROWN_MARGIN: float = 0.6
 ## проводом ближче до камери, на екрані перекриває його — вище точка зсувається в плані вглиб, на висоту·ctg(нахилу).
 const WIRE_HEIGHT: float = 1.0
 const TRUNK_FRAC: float = 0.35
+## Нижчий за стільки (тайли) підлісок просіка не чіпає: його не видно крізь дріт. Вищі кущі й молоді дерева рубаються як крони.
+const LOW_KEEP: float = 0.4
 const REPLAN_MARGIN: int = 3
 const RING_NEAR_WIDE: float = 1.3
 const RING_KEEP: int = 2
@@ -286,9 +288,10 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 	if not e["ground"] and fences.any(func(r: Rect2) -> bool:
 			return VegetationLayer._rect_dist(r, e["pos"]) < float(e["r"]) + VegetationLayer.FENCE_CROWN_PAD):
 		return {}
-	if spans.is_empty() or e["ground"] or not node.get_slice("_", 0) in TREES or not _lib.has(node):
+	var species: String = node.get_slice("_", 0)
+	if spans.is_empty() or e["ground"] or not (species in TREES or species == "Shrub") or not _lib.has(node):
 		return e
-	if float(_lib[node]["h"]) * e["xf"].basis.get_scale().y < UNDER_TOP:
+	if float(_lib[node]["h"]) * e["xf"].basis.get_scale().y <= LOW_KEEP:
 		return e
 	var p: Vector2 = e["pos"]
 	var sh: Vector2 = crown_shift(float(_lib[node]["h"]) * e["xf"].basis.get_scale().y)
