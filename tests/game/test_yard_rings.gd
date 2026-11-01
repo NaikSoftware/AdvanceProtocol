@@ -322,3 +322,30 @@ func test_gates_and_fences_keep_off_asphalt_houses_and_poles(p = use_parameters(
 				bad.append(q)
 				break
 	assert_eq(bad, [], "%s: паркан чи ворота на асфальті, у будівлі чи на опорі" % p)
+
+
+## Жоден кінець секції паркану не висить у повітрі: щонайбільше за FREE_END від стіни (обрис моделі), стовпа
+## воріт чи іншої секції. Хід, що доходив лише до обрису з димарем, закінчувався за метр-два від справжньої стіни.
+const FREE_END: float = 0.15
+
+
+func test_no_fence_end_hangs_in_the_air(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _props(p)
+	var segs: Array = _segments(props)
+	var walls: Array[Rect2] = _buildings(props)
+	var posts: Array[Vector2] = []
+	for g: Dictionary in props._gates:
+		posts.append_array([g["a"], g["mid"], g["b"]])
+	var bad: Array = []
+	for i in segs.size():
+		for e: Vector2 in segs[i]:
+			var ok := false
+			for w: Rect2 in walls:
+				ok = ok or w.grow(FREE_END).has_point(e)
+			for q: Vector2 in posts:
+				ok = ok or q.distance_to(e) < FREE_END
+			for j in segs.size():
+				ok = ok or (j != i and _dist_seg(e, segs[j][0], segs[j][1]) < FREE_END)
+			if not ok:
+				bad.append(e)
+	assert_eq(bad, [], "%s: кінці паркану в повітрі" % p)

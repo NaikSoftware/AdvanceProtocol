@@ -364,6 +364,7 @@ const CONTACT_SPREAD: float = 1.25
 const CONTACT_ALPHA: float = 0.6
 const _FADE_SHADER: Shader = preload("res://game/battle/shaders/prop_fade.gdshader")
 const _THIN_SHADER: Shader = preload("res://game/battle/shaders/prop_thin.gdshader")
+const _GATE_SHADER: Shader = preload("res://game/battle/shaders/prop_gate.gdshader")
 ## Огорожа без прозорих щілин — той самий шейдер без discard: рання перевірка глибини лишається.
 static var _thin_solid_shader: Shader
 const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.gdshader")
@@ -444,6 +445,8 @@ var _small_base: Array[Transform3D] = []
 ## Вузол «batch» -> вид, записаний у INSTANCE_CUSTOM кожного слота (_write_nodes).
 var _custom_written: Dictionary = {}
 var _small_colors: Array[Color] = []
+## Паралельно _small_base: коробка належить воротам (shader prop_gate), а не уламкам руїни.
+var _small_gate: Array[bool] = []
 var _transformer_node: MultiMeshInstance3D = null
 ## Ворота садиб: {a, mid, b — центри стовпів (полотно a→mid, хвіртка mid→b), kind, out — нормаль до дороги,
 ## height, seed}; з них збираються дрібні коробки.
@@ -790,6 +793,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_transformer_node = null
 	_small_base.clear()
 	_small_colors.clear()
+	_small_gate.clear()
 	_gates.clear()
 	_wires = null
 	_contacts = null
@@ -1338,32 +1342,35 @@ func _gate_box_at(p: Vector2, u: Vector2, off: Vector2, size: Vector3, y: float,
 	var basis := Basis(Vector3.UP, atan2(-u.y, u.x)).scaled_local(size)
 	# Фарба воріт приглушена на GATE_DESAT до сірого тієї ж яскравості: вивітрена, а не іграшкова.
 	var grey: float = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
-	_add_small(Transform3D(basis, Vector3(p.x + off.x, y, p.y + off.y)), color.lerp(Color(grey, grey, grey, color.a), GATE_DESAT))
+	_add_small(Transform3D(basis, Vector3(p.x + off.x, y, p.y + off.y)), color.lerp(Color(grey, grey, grey, color.a), GATE_DESAT), true)
 
 
-func _add_small(xf: Transform3D, color: Color) -> void:
+func _add_small(xf: Transform3D, color: Color, gate: bool = false) -> void:
 	_small_base.append(xf)
 	_small_colors.append(color)
+	_small_gate.append(gate)
 
 
 ## Один вузол на всі дрібні коробки, коли їх уже зібрано.
 func _build_small_boxes() -> void:
 	if _small_base.is_empty():
 		return
+	# Один вузол і один матеріал: коробка воріт (_small_gate) отримує в INSTANCE_CUSTOM.r одиницю, і prop_gate веде її як
+	# паркан (нормаль до неба, мокрість), а уламок руїни лишається звичайною матовою коробкою.
 	var box := BoxMesh.new()
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.vertex_color_is_srgb = true
-	mat.roughness = 0.95
+	var mat := ShaderMaterial.new()
+	mat.shader = _GATE_SHADER
 	box.material = mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
+	mm.use_custom_data = true
 	mm.mesh = box
 	mm.instance_count = _small_base.size()
 	for i in _small_base.size():
 		mm.set_instance_transform(i, _small_base[i])
 		mm.set_instance_color(i, _small_colors[i])
+		mm.set_instance_custom_data(i, Color(1.0 if _small_gate[i] else 0.0, 0.0, 0.0, 0.0))
 	var node := MultiMeshInstance3D.new()
 	node.name = "SmallBoxes"
 	node.multimesh = mm
@@ -1606,9 +1613,11 @@ static func _thin_solid() -> Shader:
 	if _thin_solid_shader == null:
 		_thin_solid_shader = Shader.new()
 		var code: String = _THIN_SHADER.code
-		var cut: String = "\tif (alpha_cut > 0.0 && tex.a < cut) {\n\t\tdiscard;\n\t}\n"
-		assert(code.contains(cut), "PropLayer: відсікання в prop_thin.gdshader змінилось")
-		_thin_solid_shader.code = code.replace(cut, "")
+		var begin: int = code.find("\t//SCISSOR_BEGIN")
+		var end: int = code.find("\t//SCISSOR_END")
+		assert(begin >= 0 and end > begin, "PropLayer: блок прозорості в prop_thin.gdshader змінився")
+		# Без ALPHA матеріал лишається непрозорим; суцільна панель не відсікається.
+		_thin_solid_shader.code = code.substr(0, begin) + code.substr(end + "\t//SCISSOR_END\n".length())
 	return _thin_solid_shader
 
 
