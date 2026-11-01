@@ -66,11 +66,13 @@ const CORRIDOR_FEATHER: float = 0.6
 const CROWN_MARGIN: float = 0.1
 ## Висота проводу над землею (тайли).
 const WIRE_HEIGHT: float = 1.2
+## Частка висоти листяного дерева від землі, нижче якої крона ще рідка (стовбур): дріт над ним крону не ховає. Хвойні сягають землі.
+const CROWN_FOOT: float = 0.25
 ## Низьким вважається підлісок не вищий за стільки (тайли): йому просіка не дає смуги за CORRIDOR_HALF — лише екран.
 const LOW_KEEP: float = 0.4
-## Камера гри (виміряно через unproject_position на зумі 8): тайл висоти зсуває точку на екрані так, ніби вона
-## на PROJ_K тайлів далі вглиб; тайл вглиб на екрані — DEPTH_SIN від тайла вшир. Коефіцієнт беремо за найгірший зум,
-## де крона лягає далі, — на вищих зумах зсув менший, і те, що чисте тут, чисте всюди.
+## Камера гри (виміряно через unproject_position): тайл висоти зсуває точку на екрані так, ніби вона на PROJ_K тайлів
+## далі вглиб (на зумі 6 — 3.1, 8 — 2.5, 11 — 1.8, 14 — 1.5, 20 — 1.0); тайл вглиб на екрані — DEPTH_SIN від тайла вшир.
+## Береться зум 8, на якому дивиться гравець; на дальших зумах зсув менший, і те, що чисте тут, чисте всюди.
 const PROJ_K: float = 2.5
 const DEPTH_SIN: float = 0.63
 ## Клітинка лісу під прольотом, у якій лишилось менше за стільки рослин, добирає низький густий підлісок.
@@ -324,7 +326,7 @@ func _cleared(e: Dictionary, widen: float = 1.0) -> Dictionary:
 				top = float(_lib[out["node"]]["h"])
 				replaced = true
 	var r: float = float(out["r"]) * (widen if tall and not replaced else 1.0)
-	return out if screen_gap(p, top, r, spans) >= CROWN_MARGIN else {}
+	return out if screen_gap(p, top, r, spans, str(out["node"])) >= CROWN_MARGIN else {}
 
 
 ## Відстань у плані від точки до найближчого проліту.
@@ -338,9 +340,10 @@ func _ground_gap(p: Vector2) -> float:
 ## Рослині основою в p, заввишки top і завширшки r (тайли) — зазор на екрані до найближчого дроту з spans: тіло
 ## (від землі до верхівки: ялини сягають землі) й дріт на висоті опори проєктуються на землю вздовж погляду, відстань міряється
 ## в екранних одиницях (вшир — тайл, вглиб — DEPTH_SIN тайла), мінус радіус. Від’ємний — рослина лежить на дроті.
-static func screen_gap(p: Vector2, top: float, r: float, span_list: Array) -> float:
+static func screen_gap(p: Vector2, top: float, r: float, span_list: Array, node: String = "") -> float:
 	var fwd: Vector2 = _view_fwd()
-	var a: Vector2 = _scr(p - fwd * PROJ_K * WIRE_HEIGHT)
+	var foot: float = CROWN_FOOT * top if node.get_slice("_", 0) in BROADLEAF and top > LOW_KEEP else 0.0
+	var a: Vector2 = _scr(p + fwd * PROJ_K * (foot - WIRE_HEIGHT))
 	var b: Vector2 = _scr(p + fwd * PROJ_K * (top - WIRE_HEIGHT))
 	var best: float = INF
 	for w: Array in span_list:
@@ -401,7 +404,7 @@ func _top_up_cover(plan: Array[Dictionary]) -> void:
 				var node: String = kinds[h % kinds.size()]
 				var sc: float = 0.36 / float(_lib[node]["h"])
 				var r: float = float(_lib[node]["half"]) * sc * 0.9
-				cands.append([screen_gap(q, 0.36, r, spans), q, node, sc, r, h])
+				cands.append([screen_gap(q, 0.36, r, spans, node), q, node, sc, r, h])
 		cands.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
 		var placed: Array[Vector2] = []
 		for it: Array in cands:
@@ -472,7 +475,7 @@ func _build_ring() -> void:
 		if not groups.has(key):
 			groups[key] = []
 		var it: Dictionary = {"xf": _on_ground(xf), "rgb": e["rgb"], "pos": p, "r": float(e["r"]) * xf.basis.get_scale().x / maxf(e["xf"].basis.get_scale().x, 1e-3),
-				"top": top}
+				"top": top, "node": node}
 		(groups[key] as Array).append(it)
 		if crown:
 			_ring_crowns.append(it)

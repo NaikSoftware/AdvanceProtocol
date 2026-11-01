@@ -93,10 +93,10 @@ func test_no_foliage_under_a_power_line_on_screen(p = use_parameters(MAPS)) -> v
 			continue
 		items.append({"pos": e["pos"], "r": e["r"], "top": float(f._lib[e["node"]]["h"]) * e["xf"].basis.get_scale().y, "node": e["node"], "cover": e.get("cover", false)})
 	for e: Dictionary in f._ring_crowns:
-		items.append({"pos": e["pos"], "r": e["r"], "top": e["top"], "node": "ring", "cover": false})
+		items.append({"pos": e["pos"], "r": e["r"], "top": e["top"], "node": e.get("node", "Spruce_ring"), "cover": false})
 	for it: Dictionary in items:
 		seen += 1
-		var gap: float = ForestLayer.screen_gap(it["pos"], it["top"], it["r"], spans)
+		var gap: float = ForestLayer.screen_gap(it["pos"], it["top"], it["r"], spans, it["node"])
 		if it["cover"] and gap < ForestLayer.CROWN_MARGIN - 1e-4:
 			tight += 1
 			continue
@@ -110,8 +110,8 @@ func test_no_foliage_under_a_power_line_on_screen(p = use_parameters(MAPS)) -> v
 ## дерева в плані немає, а штучне — лягає на дріт.
 func test_tree_behind_the_wire_lies_on_it_on_screen() -> void:
 	var wire: Array = [[Vector2(13.9, 3.51), Vector2(20.51, 3.51)]]
-	assert_lt(ForestLayer.screen_gap(Vector2(17.0, 1.0), 1.4, 0.5, wire), ForestLayer.CROWN_MARGIN, "крона 1.4 тайла за дротом на екрані лежить на ньому")
-	assert_gt(ForestLayer.screen_gap(Vector2(17.0, 5.5), 1.4, 0.5, wire), ForestLayer.CROWN_MARGIN, "а перед дротом (ближче до камери) — ні")
+	assert_lt(ForestLayer.screen_gap(Vector2(17.0, 1.0), 1.4, 0.5, wire, "Spruce_B"), ForestLayer.CROWN_MARGIN, "крона 1.4 тайла за дротом на екрані лежить на ньому")
+	assert_gt(ForestLayer.screen_gap(Vector2(17.0, 5.5), 1.4, 0.5, wire, "Spruce_B"), ForestLayer.CROWN_MARGIN, "а перед дротом (ближче до камери) — ні")
 	_props("river")
 	var f: ForestLayer = (_views["river"] as BoardView).forest()
 	for e: Dictionary in f.board_plan:
