@@ -636,7 +636,7 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 ## Слід стін моделі (model()["foot"]) — без звісу даху й димаря: контрольні числа двох хат, щоб помилка в обчисленні сліду
 ## не проходила сама собою (інші тести міряють від нього ж). Кінець по +x у координатах моделі, тайли.
 func test_wall_footprint_of_known_houses() -> void:
-	for pair: Array in [[&"house_h8", 0.341], [&"house_h4", 0.541]]:
+	for pair: Array in [[&"house_h8", 0.32], [&"house_h4", 0.52]]:
 		var info: Variant = PropLayer.model(pair[0])
 		if info == null:
 			continue

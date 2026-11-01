@@ -282,9 +282,17 @@ const GATE_FLANK: float = 0.45
 const OPEN_SIDE_CLEAR: float = 0.5
 ## Найкоротший шматок кільця біля воріт: стовп і прольот (~1.2 м).
 const GATE_POST: float = 0.15
-## Стіни — вершини нижче цієї частки висоти моделі; половина квадрата довкола маркера димаря, що не лічиться стіною.
-const WALL_LOW: float = 0.3
-const CHIMNEY_HALF: float = 0.1
+## Підсилення кольору стовпів воріт: вертикальні грані тонкого стовпа ловлять мало неба.
+const GATE_POST_GAIN: float = 2.0
+## Слід стін: вершини нижче WALL_TOP висоти моделі, у кошиках WALL_BIN (тайли); стіною вважається грань, у кошику якої не менше
+## WALL_FACE_SHARE від найбільшого кошика осі.
+const WALL_TOP: float = 0.55
+const WALL_BIN: float = 0.01
+const WALL_FACE_SHARE: float = 0.4
+## Слід, менший за цю частку обрису по осі, — не стіни, а випадкова площина вершин: беремо обрис.
+const WALL_MIN_SHARE: float = 0.7
+## Дальше за стільки (тайли) від обрису зі звісом до сліду стін кінець секції не дотягується.
+const REACH_FOOT: float = 0.45
 ## Ворота дивляться на дорогу, коли промінь від них назовні впирається в покриття не далі, ніж за стільки клітинок.
 const GATE_SIGHT: float = 2.0
 ## Далі цього (клітинки) шукається дорога для двору, що жодним боком не дивиться на неї ближче GATE_SIGHT: ворота — на ближчий до дороги бік.
@@ -595,31 +603,49 @@ static func model(name: StringName) -> Variant:
 	for n in root.find_children("chimney_top*", "", true, false):
 		chimneys.append(_to_root(n as Node3D, root).origin)
 	var tris: int = 0
-	# Слід стін: вершини нижче WALL_LOW висоти моделі (стіни й цоколь, без звісу даху, що вище), поза квадратом
-	# CHIMNEY_HALF довкола маркера димаря. Паркан доходить до цієї грані, а не до обрису зі звісом.
+	# Слід стін: грань стіни — координата, де лежить багато вершин нижньої частини моделі (до WALL_TOP висоти): кожна стіна
+	# дає сотні вершин в одній площині, а звіс даху, цоколь, ґанок і димар — одиниці. Крайні такі грані по x й z — стіни.
 	var full: AABB = local * mi.mesh.get_aabb()
-	var y_cut: float = full.position.y + full.size.y * WALL_LOW
-	var foot := AABB()
-	var foot_set := false
+	var y_cut: float = full.position.y + full.size.y * WALL_TOP
+	var bins_x: Dictionary = {}
+	var bins_z: Dictionary = {}
 	for s in mi.mesh.get_surface_count():
 		tris += (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 		for v: Vector3 in (mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
 			var w: Vector3 = local * v
 			if w.y > y_cut:
 				continue
-			var in_chimney := false
-			for ch: Vector3 in chimneys:
-				in_chimney = in_chimney or (absf(w.x - ch.x) < CHIMNEY_HALF and absf(w.z - ch.z) < CHIMNEY_HALF)
-			if in_chimney:
-				continue
-			foot = foot.expand(w) if foot_set else AABB(w, Vector3.ZERO)
-			foot_set = true
+			var kx: int = roundi(w.x / WALL_BIN)
+			var kz: int = roundi(w.z / WALL_BIN)
+			bins_x[kx] = int(bins_x.get(kx, 0)) + 1
+			bins_z[kz] = int(bins_z.get(kz, 0)) + 1
+	var foot: AABB = full
+	var fx: Vector2 = _wall_faces(bins_x)
+	var fz: Vector2 = _wall_faces(bins_z)
+	# Лише для хат: гістограма сараїв, веж і руїн (мало вершин в одній площині) дає вироджений слід, тож вони лишаються на обрисі.
+	if fx.y - fx.x >= WALL_MIN_SHARE * full.size.x and fz.y - fz.x >= WALL_MIN_SHARE * full.size.z:
+		foot = AABB(Vector3(fx.x, full.position.y, fz.x), Vector3(fx.y - fx.x, full.size.y, fz.y - fz.x))
 	var info: Dictionary = {"mesh": _tuned_mesh(name, mi.mesh, fence_tops), "local": local, "footprint": footprint,
-			"aabb": full, "foot": foot if foot_set else full, "wires": wires, "tris": tris, "chimneys": chimneys,
+			"aabb": full, "foot": foot, "wires": wires, "tris": tris, "chimneys": chimneys,
 			"fence_kinds": fence_kinds, "fence_tops": fence_tops}
 	root.free()
 	_models[name] = info
 	return info
+
+
+## Крайні грані стін на осі за гістограмою вершин (ключ — номер кошика WALL_BIN): найменша й найбільша координата, де
+## вершин не менше WALL_FACE_SHARE від найбільшого кошика.
+static func _wall_faces(bins: Dictionary) -> Vector2:
+	var top: int = 0
+	for k: int in bins:
+		top = maxi(top, int(bins[k]))
+	var lo := INF
+	var hi := -INF
+	for k: int in bins:
+		if float(bins[k]) >= WALL_FACE_SHARE * float(top):
+			lo = minf(lo, float(k) * WALL_BIN)
+			hi = maxf(hi, float(k) * WALL_BIN)
+	return Vector2(lo, hi)
 
 
 ## Номер виду паркану двору «модель_вид» у fence_kinds його моделі (порядок задає GLB); −1 — не вид паркану.
@@ -1313,11 +1339,14 @@ func _build_gates() -> void:
 				post_color = (GATE_SHEET[tone] as Color) * 0.6
 			&"lattice":
 				post_color = GATE_IRON
+		# Тонкий стовп (3 см) з вертикальними гранями ловить мало неба й виходить удвічі темнішим за стовп паркану того ж кольору:
+		# GATE_POST_GAIN вирівнює його з паркановим (prop_gate не підсвічує грані вбік).
+		post_color = Color(post_color.r * GATE_POST_GAIN, post_color.g * GATE_POST_GAIN, post_color.b * GATE_POST_GAIN, 1.0)
 		for p: Vector2 in [a, b]:
 			_gate_box(p, u, Vector2.ZERO, GATE_POST_SIZE, GATE_POST_SIZE.y * 0.5 - 0.01, post_color)
 		# Стовп між полотном і хвірткою товщий, вищий і темніший: на зумі 8 видно, де закінчується полотно.
 		_gate_box(mid, u, Vector2.ZERO, Vector3(GATE_POST_SIZE.x * 1.5, GATE_POST_SIZE.y + 0.03, GATE_POST_SIZE.z * 1.5),
-				(GATE_POST_SIZE.y + 0.03) * 0.5 - 0.01, post_color * 0.6)
+				(GATE_POST_SIZE.y + 0.03) * 0.5 - 0.01, post_color * 0.85)
 		# Полотно стоїть між гранями стовпів; на схилі — від нижчого кінця, щоб не висіло.
 		var half_post: float = GATE_POST_SIZE.x * 0.5
 		var spans: Array = [[a + u * half_post, mid - u * half_post * 1.5, true], [mid + u * half_post * 1.5, b - u * half_post, false]]
@@ -1350,7 +1379,7 @@ func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float,
 		&"slat":
 			# Горизонтальні дошки з просвітом між двома стійками, як паркан із дощок: темна підкладка й чотири широкі дошки;
 			# дрібніші за піксель дошки дають на екрані шахові плями світлих верхніх граней.
-			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h - 0.01, 0.004), base + h * 0.5, GATE_SLAT * 0.5)
+			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h - 0.01, 0.004), base + h * 0.5, GATE_SLAT * 0.85)
 			var rows: int = 4
 			for k in rows:
 				var y: float = (float(k) + 0.5) / float(rows) * h
@@ -4559,9 +4588,9 @@ class _Placer:
 					var t: float = _ray_rect(e, d, f)
 					if t < best:
 						best = t
-				if best > 0.0 and best <= 0.3:
+				if best > 0.0 and best <= REACH_FOOT:
 					ends[end] = e + d * (best + 0.02)
-				elif best == INF:
+				elif best > REACH_FOOT:
 					# Промінь минає слід стін (кут корпусу далі за димар чи звіс): обхід «Г» — убік до межі сліду й далі вздовж себе
 					# до грані; обидві ланки лежать поза обрисом зі звісом по осі першої.
 					var near := Vector2.ZERO
@@ -4571,7 +4600,7 @@ class _Placer:
 						if e.distance_to(q) < near_d:
 							near_d = e.distance_to(q)
 							near = q
-					if near_d > 0.0 and near_d <= 0.3:
+					if near_d > 0.0 and near_d <= REACH_FOOT:
 						var side: Vector2 = Vector2(near.x, e.y) if absf(d.y) > absf(d.x) else Vector2(e.x, near.y)
 						extra.append([e, side])
 						extra.append([side, near])

@@ -75,7 +75,7 @@ func _gate_colors(gate: StringName) -> Array[Color]:
 ## паркану; вихід за них означає, що константи зсунулись і кадр треба перемірити. Перший стовпчик — рід воріт, другий — вид паркану.
 const GATE_CASES: Array = [
 	["wood", "picket", 1.19, 1.32],
-	["slat", "slat", 0.68, 0.75],
+	["slat", "slat", 0.72, 0.80],
 	["sheet", "sheet", 1.09, 1.20],
 	["metal", "brickbars", 0.88, 0.97],
 	["lattice", "chainlink", 0.58, 0.66],
