@@ -48,7 +48,9 @@ const float FAR_ALPHA = 0.12;
 // Паркани дворів (kinds > 0): вид читається кольором так само, як формою — іржава бляха, кора, оцинковка, цегла.
 // Їм — вища межа яскравості (оцинкована сітка світліша за дерево) і лише легке знебарвлення; затемнення й тон здалеку
 // зберігають відтінок, а не зводять усе до сіро-бурого.
-const float SLAT_WET_GAIN = 1.6;
+const float GAIN_PICKET = 2.4;
+const float GAIN_SHEET = 1.6;
+const float GAIN_SLAT = 1.6;
 const float YARD_VALUE_CAP = 0.35;
 const float YARD_DESAT = 0.05;
 // Тепліше за нейтраль: під сірим небом Річки нейтральне дерево виходило холодним (B ≥ R).
@@ -111,9 +113,11 @@ void fragment() {
 	vec3 far_tone = yard ? albedo * FAR_DARK : vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))) * WEATHERED * FAR_DARK;
 	albedo = mix(albedo, far_tone, far);
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness);
-	// Штахет-дошки (вид 4) на мокрій карті читались чорним контуром (39–47 на екрані): піднято до ~55–60, як ворота (prop_gate).
-	if (yard && abs(kind_v - 4.0) < 0.5) {
-		albedo *= mix(1.0, SLAT_WET_GAIN, wet);
+	// Штахетник (вид 0), профнастил (1) і дошки (4) на мокрій карті читались майже чорними (L 24–47 при ґрунті 71): мокрий підйом;
+	// ті самі числа в prop_gate (GAIN_*), щоб ворота лишались у тоні.
+	if (yard) {
+		float gain = abs(kind_v - 0.0) < 0.5 ? GAIN_PICKET : (abs(kind_v - 1.0) < 0.5 ? GAIN_SHEET : (abs(kind_v - 4.0) < 0.5 ? GAIN_SLAT : 1.0));
+		albedo *= mix(1.0, gain, wet);
 	}
 	if (wet > 0.0) {
 		float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));

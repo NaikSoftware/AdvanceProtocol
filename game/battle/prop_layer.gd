@@ -351,7 +351,7 @@ const GATE_SHEET: Array[Color] = [Color(0.3, 0.16, 0.11), Color(0.26, 0.15, 0.11
 ## свого паркану на мокрій River і сухому Crossroads; відношення до середнього атласу паркану стережуть test_yard_fence_tone.
 ## Штахетник і горизонтальні дошки мають різну кору — по тону на кожен.
 const GATE_WOOD: Color = Color(0.234, 0.179, 0.125)
-const GATE_SLAT: Color = Color(0.228, 0.16, 0.094)
+const GATE_SLAT: Color = Color(0.296, 0.208, 0.122)
 ## Частка, на яку фарба воріт зсувається до сірого (_gate_box_at).
 const GATE_DESAT: float = 0.3
 ## Ворота рабиці — оцинковка, як сітка й труби паркану (chainlink у tools/blender/infra/yard_fences.py), тон у тон
@@ -455,8 +455,11 @@ var _custom_written: Dictionary = {}
 var _small_colors: Array[Color] = []
 ## Паралельно _small_base: коробка належить воротам (shader prop_gate), а не уламкам руїни.
 var _small_gate: Array[float] = []
-## Код коробок воріт, що збираються зараз (INSTANCE_CUSTOM.r у prop_gate): 1 — ворота, 2 — ворота зі штахет-дошок (slat).
+## Код коробок воріт, що збираються зараз (INSTANCE_CUSTOM.r у prop_gate): 1 — ворота, 2 — slat, 3 — wood, 4 — sheet
+## (мокрий підйом тону дорівнює підйому їхнього паркану в prop_thin).
 var _gate_code: float = 1.0
+## Стулки воріт з рабиці: [p0, p1, низ, висота] — їх малює вузол GateMesh тим самим полотном, що й паркан.
+var _gate_meshes: Array = []
 var _transformer_node: MultiMeshInstance3D = null
 ## Ворота садиб: {a, mid, b — центри стовпів (полотно a→mid, хвіртка mid→b), kind, out — нормаль до дороги,
 ## height, seed}; з них збираються дрібні коробки.
@@ -827,6 +830,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_small_base.clear()
 	_small_colors.clear()
 	_small_gate.clear()
+	_gate_meshes.clear()
 	_gates.clear()
 	_wires = null
 	_contacts = null
@@ -1199,6 +1203,7 @@ func _build_nodes(haze: bool) -> void:
 	_build_grime()
 	_build_rubble_floors()
 	_build_small_boxes()
+	_build_gate_mesh()
 
 
 ## Городи: сусідні клітинки городу зливаються в одну ділянку (жадібні прямокутники, тож Г-подібна
@@ -1297,7 +1302,7 @@ func _build_gates() -> void:
 		var b: Vector2 = g["b"]
 		var u: Vector2 = (b - a).normalized()
 		var kind_id: StringName = g["kind"]
-		_gate_code = 2.0 if kind_id == &"slat" else 1.0
+		_gate_code = {&"slat": 2.0, &"wood": 3.0, &"sheet": 4.0}.get(kind_id, 1.0)
 		var sd: int = int(g["seed"])
 		var tone: int = sd % 2
 		var post_color: Color = GATE_POST_COLOR
@@ -1364,15 +1369,12 @@ func _gate_leaf(p0: Vector2, p1: Vector2, u: Vector2, out: Vector2, base: float,
 			for y: float in [0.22, 0.74]:
 				_gate_box_at(mid, u, -out * 0.008, Vector3(span, 0.016, 0.008), base + h * y, GATE_WOOD * 0.6)
 		_:
-			# Сітка воріт — суцільна темна підкладка (дрібні прути менші за піксель дробились на шаховий візерунок світлих
-			# плям) і кілька широких рейок поверх неї.
-			_gate_box_at(mid, u, Vector2.ZERO, Vector3(span, h - 0.01, 0.004), base + h * 0.5, GATE_IRON * 0.5)
-			for y: float in [0.0, h * 0.5, h - 0.01]:
+			# Сітка воріт — те саме прозоре полотно рабиці, що й паркан (_gate_meshes), у рамі кольору стовпів паркану.
+			_gate_meshes.append([p0, p1, base, h])
+			for y: float in [0.0, h - 0.014]:
 				_gate_box_at(mid, u, out * 0.003, Vector3(span, 0.014, 0.014), base + y + 0.007, GATE_IRON)
-			var n: int = maxi(2, roundi(span / 0.15))
-			for k in n + 1:
-				var t: float = float(k) / float(n) - 0.5
-				_gate_box_at(mid + u * (t * span), u, out * 0.003, Vector3(0.014, h, 0.014), base + h * 0.5, GATE_IRON)
+			for t: float in [-0.5, 0.5]:
+				_gate_box_at(mid + u * (t * (span - 0.014)), u, out * 0.003, Vector3(0.014, h, 0.014), base + h * 0.5, GATE_IRON)
 
 
 ## Коробка size із центром над точкою p, зсунута впоперек на off, висота центру над ґрунтом dy.
@@ -1416,6 +1418,36 @@ func _build_small_boxes() -> void:
 		mm.set_instance_custom_data(i, Color(_small_gate[i], 0.0, 0.0, 0.0))
 	var node := MultiMeshInstance3D.new()
 	node.name = "SmallBoxes"
+	node.multimesh = mm
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
+
+
+## Полотно воріт з рабиці: екземпляри моделі паркану (вид «рабиця») на стулках — той самий прозорий матеріал і крок сітки.
+func _build_gate_mesh() -> void:
+	if _gate_meshes.is_empty():
+		return
+	var m := &"infra_fence_yard_chainlink"
+	var info: Dictionary = model(m)
+	var model_len: float = (info["aabb"] as AABB).size.x
+	var model_h: float = (info["aabb"] as AABB).size.y
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = _alpha_fence_mesh(info["mesh"])
+	mm.instance_count = _gate_meshes.size()
+	for i in _gate_meshes.size():
+		var g: Array = _gate_meshes[i]
+		var a: Vector2 = g[0]
+		var b: Vector2 = g[1]
+		var along: Vector2 = b - a
+		var basis := Basis(Vector3.UP, atan2(-along.y, along.x))
+		basis = basis.scaled_local(Vector3(along.length() / model_len, float(g[3]) / model_h, 1.0))
+		var mid: Vector2 = (a + b) * 0.5
+		mm.set_instance_transform(i, Transform3D(basis, Vector3(mid.x, float(g[2]), mid.y)) * (info["local"] as Transform3D))
+		mm.set_instance_custom_data(i, Color(float(fence_kind_of(m)), 0.0, 0.0, 0.0))
+	var node := MultiMeshInstance3D.new()
+	node.name = "GateMesh"
 	node.multimesh = mm
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
@@ -4508,6 +4540,7 @@ class _Placer:
 	## паркан зупинявся за звісом, у метрі від справжньої стіни. Лише до грані сліду, не всередину.
 	func _reach_foots(pieces: Array) -> Array:
 		var out: Array = []
+		var extra: Array = []
 		for pc: Array in pieces:
 			var ends: Array = [pc[0], pc[1]]
 			for end in 2:
@@ -4528,7 +4561,22 @@ class _Placer:
 						best = t
 				if best > 0.0 and best <= 0.3:
 					ends[end] = e + d * (best + 0.02)
+				elif best == INF:
+					# Промінь минає слід стін (кут корпусу далі за димар чи звіс): обхід «Г» — убік до межі сліду й далі вздовж себе
+					# до грані; обидві ланки лежать поза обрисом зі звісом по осі першої.
+					var near := Vector2.ZERO
+					var near_d: float = INF
+					for f: Rect2 in _wall_foots:
+						var q := Vector2(clampf(e.x, f.position.x, f.end.x), clampf(e.y, f.position.y, f.end.y))
+						if e.distance_to(q) < near_d:
+							near_d = e.distance_to(q)
+							near = q
+					if near_d > 0.0 and near_d <= 0.3:
+						var side: Vector2 = Vector2(near.x, e.y) if absf(d.y) > absf(d.x) else Vector2(e.x, near.y)
+						extra.append([e, side])
+						extra.append([side, near])
 			out.append(ends)
+		out.append_array(extra)
 		return out
 
 	## Два паралельні ходи від стіни до стіни ближче TWIN_GAP, між якими нічого нема (ні будівлі, ні воріт), обгороджують

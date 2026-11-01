@@ -349,7 +349,8 @@ func test_no_crown_over_a_fence_on_screen(p = use_parameters(MAPS)) -> void:
 		# Кущ і туя двору — тіло від землі (так колона туї на паркані не лишалась непоміченою, бо диск крони далеко вгорі).
 		if pl["group"] == "yard" and pl["kind"] == "bush":
 			gap = VegetationLayer.fence_screen_gap(obst, q, crown, true)
-		if gap < crown * VegetationLayer.SCALE_MAX - 0.001:
+		var pad: float = VegetationLayer.YARD_BUSH_FENCE_PAD if pl["group"] == "yard" and pl["kind"] == "bush" else 0.0
+		if gap < crown * VegetationLayer.SCALE_MAX + pad - 0.001:
 			bad.append([pl["group"], pl["node"], q, snappedf(gap, 0.01)])
 	assert_eq(bad, [], "%s: крона над парканом чи воротами на екрані" % p)
 	assert_gt(checked, 0, "%s: передумова — рослини є" % p)

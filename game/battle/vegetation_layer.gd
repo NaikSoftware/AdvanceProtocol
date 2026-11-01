@@ -111,6 +111,8 @@ const PLOT_GAP_SHARE: float = 1.0
 const CROWN_H_K: float = 2.2
 ## Розкид масштабу рослини (0,9–1,1): перевірки крони на екрані беруть найбільший, щоб найбільший примірник не лягав на паркан чи грядки.
 const SCALE_MAX: float = 1.1
+## Кущ двору не ближче за стільки (на екрані, тайли) понад свою крону до силуету паркану: голий кущ без листя упритул до кінця паркану читався приростом до нього.
+const YARD_BUSH_FENCE_PAD: float = 0.08
 ## Під дротом ЛЕП крона не стоїть ближче за WIRE_PAD від прольоту (розкид масштабу 1,1 × радіус), а стовбур — ближче за POLE_CLEAR від опори.
 const WIRE_PAD: float = 0.15
 const POLE_CLEAR: float = 0.3
@@ -668,7 +670,7 @@ static func _plan_yards(board: Board, height: TerrainHeight, fields: Array[Rect2
 					var q: Vector2 = e[0]
 					if float(e[2]) >= need and placed.all(func(o: Vector2) -> bool: return (q - o).length() >= 0.35) \
 							and obst["fences"].all(func(r: Rect2) -> bool: return _rect_dist(r, q) >= fence_room) \
-							and fence_screen_gap(obst, q, crown_of(node), not YARD_TREES.has(node)) >= crown_of(node) * SCALE_MAX \
+							and fence_screen_gap(obst, q, crown_of(node), not YARD_TREES.has(node)) >= crown_of(node) * SCALE_MAX + (0.0 if YARD_TREES.has(node) else YARD_BUSH_FENCE_PAD) \
 							and (obst["plots"] as Array).all(func(r: Rect2) -> bool: return not r.has_point(q)) \
 							and PropLayer.hull_gap(q, CROWN_H_K * crown_of(node) * SCALE_MAX, obst["plot_hulls"]) >= PLOT_GAP_SHARE * crown_of(node) * SCALE_MAX \
 							and not near_road(props, q, crown_of(node)) and _power_dist(obst, q) >= power_clear(crown_of(node)):

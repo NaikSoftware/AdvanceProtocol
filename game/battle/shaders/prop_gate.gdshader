@@ -10,7 +10,10 @@ uniform float sky_bend = 0.65;
 const float WET_FULL = 0.5;
 const float WET_DARK = 0.75;
 const float TOP_DARK = 0.28;
-const float SLAT_WET_GAIN = 1.6;
+// Мокрий підйом за кодом воріт (INSTANCE_CUSTOM.r): 2 — slat, 3 — wood, 4 — sheet; ті самі числа в prop_thin.
+const float GAIN_SLAT = 1.6;
+const float GAIN_WOOD = 2.4;
+const float GAIN_SHEET = 1.6;
 
 varying flat float gate_v;
 varying float up_v;
@@ -33,8 +36,9 @@ void fragment() {
 	float wet = smoothstep(0.0, WET_FULL, weather_wetness) * gate;
 	// Верхні грані й шапки стовпів ловили все небо й світились білими плямами: удвічі-втричі темніші, як верх секції паркану.
 	albedo *= mix(1.0, TOP_DARK, gate * smoothstep(0.5, 0.9, up_v));
-	// Штахет-дошки на мокрій карті: паркан того ж виду підсвічено (prop_thin, SLAT_WET_GAIN), інакше чорний.
-	albedo *= mix(1.0, SLAT_WET_GAIN, wet * step(1.5, gate_v));
+	// Штахет-дошки на мокрій карті: паркан того ж виду підсвічено (prop_thin, GAIN_*), інакше чорний.
+	float gain = gate_v > 3.5 ? GAIN_SHEET : (gate_v > 2.5 ? GAIN_WOOD : (gate_v > 1.5 ? GAIN_SLAT : 1.0));
+	albedo *= mix(1.0, gain, wet);
 	ALBEDO = albedo * mix(1.0, WET_DARK, wet);
 	// Мокра шорсткість 0.4 давала на гранях дрібних коробок білі іскри відблиску (шаховий візерунок): ворота завжди матові.
 	ROUGHNESS = 1.0;
