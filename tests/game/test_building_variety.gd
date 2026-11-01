@@ -109,8 +109,8 @@ func test_ruin_variants_share_the_footprint() -> void:
 		for m: StringName in fam:
 			assert_not_null(PropLayer.model(m), "%s: моделі нема" % m)
 			var sz: Vector3 = ((PropLayer.model(m) as Dictionary)["aabb"] as AABB).size
-			assert_almost_eq(sz.x, base.x, 0.05, "%s: слід x" % m)
-			assert_almost_eq(sz.z, base.z, 0.05, "%s: слід z" % m)
+			assert_almost_eq(sz.x, base.x, 0.03, "%s: слід x" % m)
+			assert_almost_eq(sz.z, base.z, 0.03, "%s: слід z" % m)
 			assert_true(PropLayer.RUIN_ROOF.has(m), "%s: кольору даху нема в RUIN_ROOF" % m)
 		var roofs: Array = fam.map(func(m: StringName) -> int: return PropLayer.RUIN_ROOF[m])
 		for i in roofs.size():
