@@ -58,6 +58,11 @@ const float GRIME = 0.8;
 const float CONTACT_H = 0.02;
 const float CONTACT = 0.8;   // 0.6 давало чорну лінію на землі
 const vec3 WALL_WARM = vec3(1.08, 1.0, 0.86);
+const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+// Рівень мипу, що усереднює ділянку даху в атласі.
+const float ROOF_AVG_LOD = 5.0;
+// Відтінки стін за кольором даху: не темніші за 0.97, щоб дах лишався вдвічі темнішим за стіну.
+const vec3 WALL_TINTS[4] = vec3[4](vec3(1.0), vec3(1.0, 0.98, 0.94), vec3(1.05, 1.03, 0.97), vec3(0.97, 1.0, 1.03));
 
 varying vec3 world_pos;
 varying vec3 world_normal;
@@ -65,8 +70,9 @@ varying vec3 world_normal;
 varying float base_h;
 // Прозорість (INSTANCE_CUSTOM.a): 0 — суцільна; у варіанті FADE_ALPHA альфа = 1 − v_fade.
 varying flat float v_fade;
-// Відтінок даху екземпляра (INSTANCE_CUSTOM.rgb); нулі — поза MultiMesh, без відтінку.
+// Колір даху екземпляра (INSTANCE_CUSTOM.rgb, лінійний); нулі — дах лишається з текстури моделі.
 varying flat vec3 v_roof_tint;
+varying flat float v_recolour;
 
 #include "res://game/battle/shaders/surroundings.gdshaderinc"
 
@@ -75,15 +81,24 @@ void vertex() {
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	base_h = world_pos.y - MODEL_MATRIX[3].y;
 	v_fade = INSTANCE_CUSTOM.a;
-	v_roof_tint = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) < 1e-4 ? vec3(1.0) : INSTANCE_CUSTOM.rgb;
+	v_roof_tint = INSTANCE_CUSTOM.rgb;
+	v_recolour = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) < 1e-4 ? 0.0 : 1.0;
 }
 
 void fragment() {
 	vec3 albedo = texture(albedo_tex, UV).rgb * albedo_color.rgb;
 	float roof_k = smoothstep(0.4, 0.7, world_normal.y);
-	albedo *= mix(vec3(1.0), v_roof_tint, roof_k);
 	// Стіни тепліші: під блакитним небом сонячних карт сіра штукатурка ставала синюватою.
 	albedo *= mix(WALL_WARM, vec3(1.0), roof_k);
+	if (v_recolour > 0.5) {
+		// Дах — колір екземпляра, а рельєф дошок і швів — відношення яскравості текстури до її середньої довкола.
+		float lum = dot(albedo, LUMA);
+		float avg = max(dot(textureLod(albedo_tex, UV, ROOF_AVG_LOD).rgb * albedo_color.rgb, LUMA), 0.01);
+		vec3 roof = v_roof_tint * clamp(lum / avg, 0.75, 1.3);
+		// Стіни трохи різняться за тим самим кольором даху: чотири ледь помітні відтінки штукатурки.
+		int wk = int(fract(sin(dot(v_roof_tint, vec3(12.9898, 78.233, 37.719))) * 43758.5453) * 4.0);
+		albedo = mix(albedo * WALL_TINTS[wk], roof, roof_k);
+	}
 	float rough = roughness;
 	if (use_roughness_tex) {
 		rough *= dot(texture(roughness_tex, UV), roughness_channel);

@@ -469,10 +469,21 @@ def shed(ruined):
 
 
 def shed_variant(name, kind):
-    """Інші сараї для дворів: brick — цегляний 5 x 3.6 м під шиферним двосхилим дахом із дерев'яними дверима;
+    """Інші сараї для дворів: brick — цегляний 5 x 3.6 м під темно-коричневим двосхилим дахом із темними сталевими дверима;
     lean — дерев'яна прибудова з односхилим дахом із зеленого профлисту."""
     lib.reset()
-    lib.palette(roof="asb_black" if kind == "brick" else "green_dark", eave=2.4)
+    lib.palette(roof="brown_dark" if kind == "brick" else "green_dark", eave=2.4)
+    mt = lib.mats()
+    if kind == "brick":
+        # темна цегла під темно-коричневим руберойдом: на сонці світла цегла й зелений дах читалися живоплотом
+        mt["brick_face"] = lib.make_material("brick_face", "Bricks105", 1.0, recolor=(0.40, 0.22, 0.17), streak=0.3, base_dirt=0.6, bump=0.02,
+                                             patch=((0.09, 0.06, 0.04), 0.2), patch_scale=1.6)
+        lib._dm("brick_face")
+    else:
+        # дошки прибудови сірі й темні, не бежеві: світле дерево лишалося плямою на траві
+        mt["boards_soft"] = lib.make_material("boards_soft", flat=(0.22, 0.205, 0.185), seams=[("h", 0.18, 0.02, 0.4)], streak=0.5, base_dirt=0.4,
+                                              seam_bump=0.8, undul=(1.2, 0.01), rough=0.9)
+        lib._dm("boards_soft")
     b = Builder()
     hx, hy, E = (2.5, 1.8, 2.4) if kind == "brick" else (2.2, 1.6, 2.2)
     if kind == "brick":
@@ -480,7 +491,7 @@ def shed_variant(name, kind):
         b.box(0, 0, 0, 2 * hx + 0.08, 2 * hy + 0.08, 0.3, "plinth_dark")
         b.box(0, 0, 0.3, 2 * hx, 2 * hy, E - 0.3, "brick_face")
         b.gable(-hx, hx, -hy, hy, E, R_, "fc_roof_xh", "brick_face", ridge_axis="x", overhang=0.3)
-        b.box(0, -hy - 0.03, 0.3, 0.9, 0.06, 1.9, "door_wood")
+        b.box(0, -hy - 0.03, 0.3, 0.9, 0.06, 1.9, "door_steel")
         b.window(("x", hx, 1), 0.0, 1.2, 0.6, 0.5, kind=0)
         lib.window_ring(b, "x", hx, 1, 0.0, 1.2, 0.6, 0.5, t=0.06, mat="brick_face")
         lib.weather(b, "brick_face", [("y", -hy, -1, -hx, hx, 0.3, E), ("x", hx, 1, -hy, hy, 0.3, E)], seed=61, patches=False)
