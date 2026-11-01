@@ -17,7 +17,7 @@ const STREET_END: float = 3.0
 ## Найближче, як стовп ЛЕП може стояти до секції паркану двору, клітинки (2.4 м).
 const FENCE_POLE_CLEAR: float = 0.3
 ## Скільки воріт карти може стояти з послабленим правилом стіни чи екрана (test_gates_do_not_run_alongside_walls).
-const RELAXED_GATES: Dictionary = {"crossroads": 2}
+const RELAXED_GATES: Dictionary = {"crossroads": 1}
 
 
 func _view(map: MapData, board: Board = null) -> BoardView:

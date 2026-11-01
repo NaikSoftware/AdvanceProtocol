@@ -63,11 +63,6 @@ func _flank(segs: Array, post: Vector2) -> float:
 	return total
 
 
-## Скільки воріт карти може стояти біля уламка паркану: їхня сторона двору коротша за ворота й GATE_FLANK з обох кінців
-## (хата, сарай і руїна по периметру) — відрізок між кутом і стіною просто не вміщує ні тих, ні тих.
-const CRAMPED_GATES: Dictionary = {"crossroads": 1}
-
-
 ## Ворота не стоять на уламку: з кожного боку від стовпа паркан тягнеться щонайменше GATE_FLANK (за кутом — далі),
 ## інакше двір читається двома короткими панелями біля воріт, що нічого не обгороджують.
 func test_gate_has_a_real_fence_on_both_sides(p = use_parameters(MAPS)) -> void:
@@ -80,7 +75,7 @@ func test_gate_has_a_real_fence_on_both_sides(p = use_parameters(MAPS)) -> void:
 		var fb: float = _flank(segs, g["b"])
 		if minf(fa, fb) < PropLayer.GATE_FLANK:
 			short.append([g["a"], snappedf(fa, 0.01), snappedf(fb, 0.01)])
-	assert_eq(short.size(), CRAMPED_GATES.get(p, 0), "%s: ворота біля уламка паркану (стовп, паркан від a, від b) %s" % [p, short])
+	assert_eq(short, [], "%s: ворота біля уламка паркану (стовп, паркан від a, від b)" % p)
 
 
 ## Будівлі й сараї дворів як прямокутники (стіна теж замикає двір).
@@ -125,3 +120,103 @@ func test_garden_keeps_off_open_fence_sides(p = use_parameters(MAPS)) -> void:
 	gut.p("%s: найближчий город до розриву %.3f" % [p, worst])
 	assert_gte(worst, PropLayer.OPEN_SIDE_CLEAR - 1e-3, "%s: город підходить до розриву паркану на %.3f" % [p, worst])
 
+
+
+## Скільки довжини сторони кільця (a→b) не замикає ні намальований паркан чи ворота, ні стіна (як у _fence_ring).
+func _uncovered(sd: Dictionary, segs: Array, walls: Array[Rect2]) -> float:
+	var a: Vector2 = sd["a"]
+	var b: Vector2 = sd["b"]
+	var open_len := 0.0
+	for j in ceili(a.distance_to(b) / 0.05) + 1:
+		var q: Vector2 = a.lerp(b, minf(1.0, float(j) * 0.05 / maxf(a.distance_to(b), 1e-6)))
+		var covered := false
+		for s: Array in segs:
+			covered = covered or _dist_seg(q, s[0], s[1]) < 0.06
+		for r: Rect2 in walls:
+			covered = covered or r.grow(0.15).has_point(q)
+		if not covered:
+			open_len += 0.05
+	return open_len
+
+
+## Прапорець «сторона відкрита» читає паркан, який справді намальований (після відсіву уламків), а не плановані ходи:
+## хід, що його відсіяли, не замикає сторону. Кожна сторона кільця без сусіда: відкрита рівно тоді, коли її
+## довжина поза парканом, воротами й стінами більша за 0,1.
+func test_open_flag_reads_the_drawn_fence(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _props(p)
+	var segs: Array = _segments(props)
+	for g: Dictionary in props._gates:
+		segs.append([g["a"], g["b"]])
+	var walls: Array[Rect2] = _buildings(props)
+	var sides_checked := 0
+	for i: int in props._placer.ring_sides:
+		for sd: Dictionary in props._placer.ring_sides[i]:
+			if int(sd["nb"]) >= 0:
+				continue
+			sides_checked += 1
+			var open_len: float = _uncovered(sd, segs, walls)
+			assert_eq(bool(sd["open"]), open_len > 0.1, "%s: двір %d, сторона %s–%s, поза парканом %.2f" % [p, i, sd["a"], sd["b"], open_len])
+	assert_gt(sides_checked, 0, p)
+
+
+## Хід, якого в намальованому парканi нема (відсіяний як уламок), сторону не замикає: з двох ходів лишився один —
+## друга половина відкрита; стіна поруч замикає свою частину (стіна 1,5 зі звісом 0,15 → відкрито від 1,05 до 1,35).
+func test_open_length_counts_only_drawn_fence() -> void:
+	var a := Vector2(0, 0)
+	var b := Vector2(2, 0)
+	var drawn: Array = [[Vector2(0, 0), Vector2(1, 0)]]
+	var none: Array[Rect2] = []
+	assert_almost_eq(PropLayer._Placer._open_length(a, b, drawn, none), 1.0 - 0.06, 0.06)
+	assert_almost_eq(PropLayer._Placer._open_length(a, b, [], none), 2.0, 0.051)
+	var wall: Array[Rect2] = [Rect2(1.5, -1, 1, 2)]
+	assert_almost_eq(PropLayer._Placer._open_length(a, b, drawn, wall), 0.25, 0.001)
+
+
+## Східна сторона двору River біля руїни (x = 10,5, y 13,53–15,65) не має власного паркану навпроти руїни й хати —
+## її замикають їхні стіни (звіс до x = 10,46, між ними менше за SHORT_RUN), тож сторона не відкрита.
+func test_river_east_side_beside_the_ruin_is_shut_by_walls() -> void:
+	var props: PropLayer = _props("river")
+	var found := 0
+	for i: int in props._placer.ring_sides:
+		for sd: Dictionary in props._placer.ring_sides[i]:
+			var a: Vector2 = sd["a"]
+			var b: Vector2 = sd["b"]
+			if absf(a.x - 10.5) < 0.02 and absf(b.x - 10.5) < 0.02 and minf(a.y, b.y) < 13.6 and maxf(a.y, b.y) > 15.6:
+				found += 1
+				assert_false(bool(sd["open"]), "східна сторона %s–%s відкрита" % [a, b])
+				var walls: Array[Rect2] = _buildings(props)
+				assert_lt(_uncovered(sd, _segments(props), walls), 0.1, "східна сторона %s–%s не замкнена" % [a, b])
+	assert_eq(found, 1)
+
+
+## Ні ворота, ні паркан не стоять на асфальті (за полем дороги, яке малює шейдер), у хаті чи руїні та на опорі ЛЕП: це
+## перевіряє й кожна карта окремо, але саме ворота тут пересуваються ближче до кута, тож стережемо всі три.
+func test_gates_and_fences_keep_off_asphalt_houses_and_poles(p = use_parameters(MAPS)) -> void:
+	var props: PropLayer = _props(p)
+	var walls: Array[Rect2] = []
+	var poles: Array[Rect2] = []
+	for inst in props.all_instances():
+		var k: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
+		var b: AABB = (inst["transform"] as Transform3D) * ((PropLayer.model(inst["model"]) as Dictionary)["aabb"] as AABB)
+		var r := Rect2(b.position.x, b.position.z, b.size.x, b.size.z)
+		if k == PropLayer.Kind.STRUCTURE or k == PropLayer.Kind.RUIN:
+			walls.append(r)
+		elif k == PropLayer.Kind.POLE:
+			poles.append(r)
+	var items: Array = _segments(props)
+	for g: Dictionary in props._gates:
+		items.append([g["a"], g["b"]])
+	assert_gt(props._gates.size(), 0, p)
+	var bad: Array = []
+	for sg: Array in items:
+		for t in 11:
+			var q: Vector2 = (sg[0] as Vector2).lerp(sg[1], float(t) / 10.0)
+			var hit := props.road_edge_m(q) < PropLayer.FENCE_ROAD_INSET * 8.0
+			for r: Rect2 in walls:
+				hit = hit or r.grow(-0.01).has_point(q)
+			for r: Rect2 in poles:
+				hit = hit or r.grow(0.02).has_point(q)
+			if hit:
+				bad.append(q)
+				break
+	assert_eq(bad, [], "%s: паркан чи ворота на асфальті, у будівлі чи на опорі" % p)

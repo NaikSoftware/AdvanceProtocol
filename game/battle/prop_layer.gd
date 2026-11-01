@@ -473,6 +473,15 @@ var wet: bool = false
 const HOUSE_BACK_DOOR: Array[StringName] = [&"house_h5"]
 
 
+## Екранна проєкція й відстань до силуетів для шару рослинності (вони не мають власної камери).
+static func screen_pt(c: Vector2, y: float) -> Vector2:
+	return _Placer._screen_pt(c, y)
+
+
+static func hull_gap(q: Vector2, h: float, hulls: Array) -> float:
+	return _Placer._hull_gap(q, h, hulls)
+
+
 ## Детермінований хеш клітинки; уся мінливість розстановки береться з нього.
 static func cell_hash(cell: Vector2i, salt: int) -> int:
 	return hash(Vector3i(cell.x, cell.y, salt))
@@ -2094,6 +2103,8 @@ class _Placer:
 	var gate_blind: Dictionary = {}
 	## Садиба -> запас від будівель, з яким удалось поставити ворота (GATE_CLEARS).
 	var gate_clear: Dictionary = {}
+	## Садиба -> сторони її кільця ({d, edges, nb, a, b, open, ...}); a, b — кути сторони.
+	var ring_sides: Dictionary = {}
 	## Садиба, чиє кільце будується зараз, і власники клітинок дворів: чужий двір паркан не перетинає.
 	var _ring_i: int = -1
 	var _owner_of: Dictionary = {}
@@ -2852,6 +2863,7 @@ class _Placer:
 		for i in homes.size():
 			rings[i] = _fence_ring(i, homes[i], owner_of, sheds)
 			yard_polys.append(_ring_polygon(rings[i]))
+		ring_sides = rings
 		# Город — усередині кільця й осторонь будівель: не під руїною, не за парканом.
 		for gp: Dictionary in garden_plots:
 			gp["rect"] = _clip_garden(gp["rect"], rings.get(gp["home"], []))
@@ -3825,12 +3837,15 @@ class _Placer:
 		var gate_at: float = 0.0
 		var best_score := Vector3(INF, INF, INF)
 		var gate_tier := Vector2i.ZERO
-		# Порядок переваг: суворий прохід — уздовж стіни отвір не ближче GATE_ALONG (x) і на екрані ворота далі
-		# GATE_SCREEN_GAP від силуетів будівель (y), бо інакше читаються прибудовою до хати; далі паркан обабіч
-		# завдовжки MIN_FENCE (коротший лишає стовп без пари, і сторона читається уламком); далі запас від стін за
-		# GATE_CLEARS. Двір, де суворого місця нема, бере місце, найдальше на екрані від силуетів, а коли нема й такого
-		# уздовж стін — і ближче до стіни: двір без воріт гірший.
-		for flank: float in [GATE_FLANK, GATE_POST]:
+		# Порядок пошуку (зовнішній цикл — GATE_FLANK, далі екранний прохід, далі запас GATE_CLEARS; перший, що дав місце,
+		# виграє): паркан обабіч завдовжки GATE_FLANK, а на кінці, де кільце повертає за кут (_ring_continues), досить
+		# GATE_POST; тоді так само, але ворота можуть стати впритул до такого кута (паркан за кутом сам тримає стовп) —
+		# так тісний двір (хата, сарай і руїна по периметру) все ж отримує ворота з парканом з обох боків; і лише тоді,
+		# коли й так місця нема, — GATE_POST з обох боків. Усередині: суворий прохід — уздовж стіни отвір не ближче
+		# GATE_ALONG (x) і на екрані ворота далі GATE_SCREEN_GAP від силуетів будівель (y), бо інакше читаються прибудовою
+		# до хати; потім місце, найдальше на екрані від силуетів; а коли нема й такого уздовж стін — і ближче до стіни: двір
+		# без воріт гірший. Менший запас від стін (GATE_CLEARS) — лише коли з більшим воріт нема ніде.
+		for flank: Vector2 in [Vector2(GATE_FLANK, GATE_POST), Vector2(GATE_FLANK, 0.0), Vector2(GATE_POST, GATE_POST)]:
 			for tier: Vector2i in [Vector2i(1, SCREEN_STRICT), Vector2i(1, SCREEN_WIDEST), Vector2i(0, SCREEN_WIDEST)]:
 				for clear: float in GATE_CLEARS:
 					if gate_run >= 0:
@@ -3844,8 +3859,8 @@ class _Placer:
 						var total: float = a.distance_to(b)
 						# На кінці, де кільце повертає за кут, паркан за стовпом триває далі боковою стороною, тож
 						# ворота можуть стати майже до кута (на GATE_POST); біля стіни чи розриву за стовпом потрібен повний flank.
-						var flank_a: float = minf(flank, GATE_POST) if _ring_continues(runs, j, a) else flank
-						var flank_b: float = minf(flank, GATE_POST) if _ring_continues(runs, j, b) else flank
+						var flank_a: float = flank.y if _ring_continues(runs, j, a) else flank.x
+						var flank_b: float = flank.y if _ring_continues(runs, j, b) else flank.x
 						if total < GATE + flank_a + flank_b:
 							continue
 						var dir: Vector2 = (b - a) / total
@@ -3878,8 +3893,11 @@ class _Placer:
 				var at: float = gate_at
 				var p0: Vector2 = a + dir * (at - GATE * 0.5)
 				var p1: Vector2 = a + dir * (at + GATE * 0.5)
-				_fence_straight(m, a, p0, lot)
-				_fence_straight(m, p1, b, lot)
+				# Ворота впритул до кута (flank 0): секції нульової довжини нема, а сусідній бік кільця починається від самого стовпа.
+				if a.distance_to(p0) > 0.01:
+					_fence_straight(m, a, p0, lot)
+				if p1.distance_to(b) > 0.01:
+					_fence_straight(m, p1, b, lot)
 				var out: Vector2 = Vector2(sides[int(runs[j][2])]["d"])
 				# Хвіртка — з того краю отвору, що ближче до хати: стежка від дверей не обходить полотно.
 				var wicket_far: bool = proj > at or (proj == at and h(hc, 170) % 2 == 0)
@@ -3897,27 +3915,9 @@ class _Placer:
 						"along": gate_tier.x > 0, "screen": gate_tier.y == SCREEN_STRICT})
 			else:
 				_fence_straight(m, a, b, lot)
-		# Сторона з розривом (ні секція чи ворота, ні стіна її не замикають) — _clip_garden тримає город подалі від неї.
 		for k in n:
-			if int(sides[k]["nb"]) >= 0:
-				continue
-			var open_len: float = 0.0
-			var side_len: float = (starts[k] as Vector2).distance_to(ends[k] as Vector2)
-			for step in ceili(side_len / 0.05) + 1:
-				var q: Vector2 = (starts[k] as Vector2).lerp(ends[k] as Vector2, minf(1.0, float(step) * 0.05 / maxf(side_len, 1e-6)))
-				var shut := false
-				for r: Array in runs:
-					shut = shut or (r[2] == k and Geometry2D.get_closest_point_to_segment(q, r[0], r[1]).distance_to(q) < 0.06)
-				if gate_run >= 0 and gates.has(i):
-					var gs: Array = gate_segments.back()
-					shut = shut or Geometry2D.get_closest_point_to_segment(q, gs[0], gs[1]).distance_to(q) < 0.06
-				for r: Rect2 in _wall_rects:
-					shut = shut or r.grow(0.15).has_point(q)
-				for r: Rect2 in sheds:
-					shut = shut or r.grow(0.15).has_point(q)
-				if not shut:
-					open_len += 0.05
-			sides[k]["open"] = open_len > 0.1
+			sides[k]["a"] = starts[k]
+			sides[k]["b"] = ends[k]
 		_collecting = false
 		var posts: Array[Vector2] = []
 		for g: Dictionary in layer._gates.slice(layer._gates.size() - (1 if gates.has(i) else 0)):
@@ -3925,7 +3925,37 @@ class _Placer:
 		for pc: Array in _finish_pieces(_pieces, posts):
 			_fence_straight(m, pc[0], pc[1], lot)
 		_note_form(i, hc, &"fence", form)
+		# Сторона з розривом (ні секція чи ворота, ні стіна її не замикають) — _clip_garden тримає город подалі від неї.
+		# Міряється по паркану, що справді намальований: плановані ходи _finish_pieces міг відсіяти (уламки, повислі кінці).
+		var extent := Rect2(starts[0], Vector2.ZERO)
+		for k in n:
+			extent = extent.expand(starts[k]).expand(ends[k])
+		extent = extent.grow(0.3)
+		var drawn: Array = _fence_segments().filter(func(sg: Array) -> bool: return extent.intersects(Rect2(sg[0], Vector2.ZERO).expand(sg[1])))
+		if gates.has(i):
+			drawn.append(gate_segments.back())
+		var barriers: Array[Rect2] = _wall_rects.duplicate()
+		barriers.append_array(sheds)
+		for k in n:
+			if int(sides[k]["nb"]) < 0:
+				sides[k]["open"] = _open_length(starts[k], ends[k], drawn, barriers) > 0.1
 		return sides
+
+	## Довжина відрізка a→b, яку не замикає ні одна з секцій паркану segs (ближче 0.06), ні стіна чи сарай з barriers
+	## (зі звісом 0.15).
+	static func _open_length(a: Vector2, b: Vector2, segs: Array, barriers: Array[Rect2]) -> float:
+		var len: float = a.distance_to(b)
+		var open_len: float = 0.0
+		for step in ceili(len / 0.05) + 1:
+			var q: Vector2 = a.lerp(b, minf(1.0, float(step) * 0.05 / maxf(len, 1e-6)))
+			var shut := false
+			for sg: Array in segs:
+				shut = shut or Geometry2D.get_closest_point_to_segment(q, sg[0], sg[1]).distance_to(q) < 0.06
+			for r: Rect2 in barriers:
+				shut = shut or r.grow(0.15).has_point(q)
+			if not shut:
+				open_len += 0.05
+		return open_len
 
 	## Кінець e вільної ділянки j — кут кільця, де вона переходить в іншу ділянку (кінці збігаються).
 	func _ring_continues(runs: Array, j: int, e: Vector2) -> bool:
