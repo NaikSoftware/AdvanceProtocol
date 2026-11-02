@@ -36,19 +36,19 @@ Draw calls / triangles (thousands), view centred on cell (13, 11):
 
 | map | z8 | z12 | z20 |
 | --- | --- | --- | --- |
-| crossroads | 53 / 100.6 | 57 / 100.1 | 60 / 99.1 |
-| river | 52 / 135.7 | 54 / 139.9 | 66 / 138.6 |
-| ridge | 49 / 104.9 | 51 / 104.8 | 63 / 110.4 |
+| crossroads | 59 / 106.4 | 64 / 105.9 | 68 / 104.6 |
+| river | 56 / 131.2 | 58 / 135.4 | 70 / 133.3 |
+| ridge | 47 / 96.0 | 50 / 96.8 | 68 / 119.9 |
 
 Densest views at z20, the corner of the board with the most buildings:
 
 | map | cell | draw calls | triangles (k) |
 | --- | --- | --- | --- |
-| crossroads | (20, 16) | 80 | 102.0 |
-| river | (20, 16) | 73 | 137.5 |
-| ridge | (20, 16) | 71 | 103.2 |
+| crossroads | (20, 16) | 88 | 107.5 |
+| river | (20, 16) | 77 | 132.3 |
+| ridge | (20, 16) | 71 | 95.2 |
 
-Every measured view is under the budget; the tightest margin is triangles on river at z12 (about 140k of 150k).
+Every measured view is under the budget; the tightest margin is triangles on river at z12 (about 135k of 150k).
 
 ## Main cost groups
 
