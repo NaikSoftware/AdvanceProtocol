@@ -59,9 +59,10 @@ func _verts_by_material(name: String) -> Dictionary:
 	return out
 
 
-## Кінець мосту вбудований у насип (TerrainHeight.SEAT_*): покриття на кінці на 1.6 см вище за
-## насип (deck_top + SEAT_TOP), тож сходинки нема; під настилом бетонна опора від краю клітинки до
-## SEAT_END углиб: її стіна ховає місце, де насип сходить до берега.
+## Кінець мосту вбудований у насип (TerrainHeight.SEAT_*): покриття на кінці на 1.6 см нижче за
+## насип (deck_top + SEAT_TOP), тож торця плити не видно; під настилом бетонна опора від краю клітинки
+## до SEAT_END углиб, не вужча за насип у клітинці мосту (SEAT_SIDE): її стіна ховає місце, де насип
+## сходить до берега. Обрізи стіни обабіч настилу теж під насипом — згори не видно коробки.
 func test_intact_bridge_ends_sit_flush_on_concrete_seats(p = use_parameters(BRIDGES.keys())) -> void:
 	var by_mat: Dictionary = _verts_by_material(p)
 	var top: float = float(PropLayer.spec_of(StringName(p))["deck_top"])
@@ -72,7 +73,12 @@ func test_intact_bridge_ends_sit_flush_on_concrete_seats(p = use_parameters(BRID
 			for v: Vector3 in by_mat.get(key, PackedVector3Array()):
 				if sgn * v.z > half - 0.02:
 					road = maxf(road, v.y)
-		assert_almost_eq(road, top + TerrainHeight.SEAT_TOP + 0.002, 0.002, "%s: покриття на кінці %+d" % [p, sgn])
+		assert_almost_eq(road, top + TerrainHeight.SEAT_TOP - 0.002, 0.0005, "%s: покриття на кінці %+d" % [p, sgn])
+		var crest := -INF
+		for v: Vector3 in by_mat.get("bridge_abutment", PackedVector3Array()):
+			if sgn * v.z > half - TerrainHeight.SEAT_END - 0.01:
+				crest = maxf(crest, v.y)
+		assert_lt(crest, top + TerrainHeight.SEAT_TOP, "%s: опора виступає з насипу на кінці %+d" % [p, sgn])
 		var seat := AABB()
 		var first := true
 		for v: Vector3 in by_mat.get("bridge_abutment", PackedVector3Array()):
@@ -84,4 +90,4 @@ func test_intact_bridge_ends_sit_flush_on_concrete_seats(p = use_parameters(BRID
 			continue
 		var inner: float = half - sgn * (seat.end.z if sgn < 0.0 else seat.position.z)
 		assert_almost_eq(inner, TerrainHeight.SEAT_END, 0.01, "%s: стіна опори на кінці %+d" % [p, sgn])
-		assert_gte(seat.size.x, 0.72, "%s: опора вужча за насип на кінці %+d" % [p, sgn])
+		assert_gte(seat.size.x, 2.0 * TerrainHeight.SEAT_SIDE - 0.001, "%s: опора вужча за насип на кінці %+d" % [p, sgn])

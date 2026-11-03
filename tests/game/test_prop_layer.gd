@@ -1013,6 +1013,38 @@ func test_wet_map_darkens_bridges() -> void:
 			assert_gte(got.roughness, PropLayer.BRIDGE_ROUGH - 1e-4)
 
 
+## Ґрунтове покриття настилу (панельний і понтонний мости) на мокрій карті не блищить і тоном іде за
+## ґрунтівкою: шорсткість як у ґрунтової дороги в шейдері землі (0.85+), колір — DIRT_DECK_WET, а не
+## сіра мокра сталь (з 0.55 воно відбивало небо й читалось холодною сірою плитою на брунатній дорозі).
+func test_wet_map_keeps_dirt_decks_in_the_road_tone() -> void:
+	var view: BoardView = _wet_river()
+	for m: String in ["bridge_river_west", "bridge_river_east"]:
+		var mesh: Mesh = (view.props().get_node(m) as MultiMeshInstance3D).multimesh.mesh
+		var src: Mesh = PropLayer.model(StringName(m))["mesh"]
+		var found := 0
+		for i in mesh.get_surface_count():
+			var got := mesh.surface_get_material(i) as BaseMaterial3D
+			if got.resource_name not in PropLayer.DIRT_DECKS:
+				continue
+			found += 1
+			var a: Color = (src.surface_get_material(i) as BaseMaterial3D).albedo_color * PropLayer.DIRT_DECK_WET
+			assert_almost_eq(got.albedo_color.r, a.r, 1e-3, "%s: %s" % [m, got.resource_name])
+			assert_almost_eq(got.albedo_color.b, a.b, 1e-3, "%s: %s" % [m, got.resource_name])
+			assert_gte(got.roughness, PropLayer.DIRT_DECK_ROUGH - 1e-4, "%s: %s блищить" % [m, got.resource_name])
+		assert_gt(found, 0, "%s: нема ґрунтового покриття" % m)
+	# Асфальт центрального мосту — між тонами асфальту на південному й північному в'їздах.
+	var centre: Mesh = (view.props().get_node("bridge_river_centre") as MultiMeshInstance3D).multimesh.mesh
+	var csrc: Mesh = PropLayer.model(&"bridge_river_centre")["mesh"]
+	var asphalt := 0
+	for i in centre.get_surface_count():
+		var got := centre.surface_get_material(i) as BaseMaterial3D
+		if got.resource_name == "bridge_asphalt":
+			asphalt += 1
+			var r: float = (csrc.surface_get_material(i) as BaseMaterial3D).albedo_color.r * PropLayer.ASPHALT_DECK_WET
+			assert_almost_eq(got.albedo_color.r, r, 1e-3, "асфальт центрального мосту")
+	assert_eq(asphalt, 1, "асфальт на центральному мосту")
+
+
 ## Руїна з глухим фронтоном стоїть пошкодженим фасадом (−Z) до камери (+x чи +z). Карта, де такої
 ## руїни нема (на Річці вона не випадає), перевіряти нічого: тест це й каже.
 func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) -> void:

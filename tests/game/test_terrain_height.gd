@@ -591,6 +591,32 @@ func test_river_centreline_has_no_lateral_steps() -> void:
 
 
 ## Під мостом вісь пряма на настил + 0.1 клітинки й перпендикулярна його осі.
+## Насип в'їзду в клітинці мосту не ширший за стіну опори (SEAT_SIDE): поза нею, в руслі, рельєф
+## той самий, що й без насипу, — сухого виступу біля торця стіни нема. Під стіною насип є.
+func test_bridge_embankment_stays_behind_the_abutment_wall() -> void:
+	var m: MapData = load("res://maps/river.tres")
+	var board: Board = m.to_board()
+	TerrainHeight.embank = false
+	var bare := TerrainHeight.bake(board, 0, m.name_key.hash())
+	TerrainHeight.embank = true
+	var t := TerrainHeight.bake(board, 0, m.name_key.hash())
+	var ends := 0
+	for g in t.bridge_groups():
+		var axis: Vector2 = g["axis"]
+		var side := Vector2(-axis.y, axis.x)
+		for s: float in [-1.0, 1.0]:
+			var edge: Vector2 = (g["centre"] as Vector2) + axis * s * (0.5 * float(g["length"]))
+			ends += 1
+			var under: Vector2 = edge - axis * s * 0.1
+			assert_gt(t.at(under.x, under.y), bare.at(under.x, under.y) + 0.5 * M, "%s: під стіною опори насипу нема" % edge)
+			for u: float in [0.05, 0.15, 0.25]:
+				for off: float in [-0.7, -0.6, 0.6, 0.7]:
+					var p: Vector2 = edge - axis * s * u + side * off
+					assert_almost_eq(t.at(p.x, p.y), bare.at(p.x, p.y), 1e-5,
+							"%s: насип за стіною опори на %.2f углиб, %.1f убік" % [edge, u, off])
+	assert_eq(ends, 6, "кінців переправ")
+
+
 func test_river_runs_straight_and_square_under_each_deck() -> void:
 	var r: Array = _river_bake()
 	var t: TerrainHeight = r[1]

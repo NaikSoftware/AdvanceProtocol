@@ -21,12 +21,17 @@ const WATER_LEVEL: float = -1.25 * M
 ## Висота настилу над верхом берега: щоб міст не зливався з дорогою.
 const DECK_LIFT: float = 0.01
 ## Насип в'їзду на міст: від краю клітинки мосту на SEAT_REACH углиб ґрунт лежить на
-## deck_y + SEAT_TOP — на 1.6 см нижче покриття настилу (воно на 6.4 см над deck_y), тож дорога
-## заходить на настил без сходинки, а сам настил ляже на насип. Далі до SEAT_END ґрунт сходить до
-## берега всередині тіла опори (build_bridges.py, SEAT_END), щоб схил не вилазив перед її стіною.
-const SEAT_TOP: float = 0.006
+## deck_y + SEAT_TOP — на 1.6 см ВИЩЕ покриття настилу (воно на 6.4 см над deck_y): кінець настилу
+## захований під дорогою, і видно лише лінію, де ґрунт сходить під настил, а не торець плити. Далі
+## до SEAT_END ґрунт сходить до берега всередині тіла опори (build_bridges.py, SEAT_END), щоб схил
+## не вилазив перед її стіною. У клітинці мосту насип рівний до SEAT_HALF від осі й сходить до SEAT_SIDE
+## (один відлік меша, межа клітинки) під стіною опори, що йде до SEAT_SIDE: укіс за її краєм лишив би
+## сухий виступ у руслі.
+const SEAT_TOP: float = 0.010
 const SEAT_REACH: float = 0.15
 const SEAT_END: float = 0.28
+const SEAT_HALF: float = 0.36
+const SEAT_SIDE: float = 0.49
 
 ## Рельєф рівнини: дрібний ±0.35 м (плями 5-20 м) і широкий до ±1.7 м (хвиля 3.7-5.5 клітинки).
 const _MICRO_AMP: float = 0.35 * M
@@ -122,6 +127,8 @@ const _PAD_FOOT: float = 0.6
 static var active: TerrainHeight = null
 ## Лише для перевірки вигляду (скріншоти «з хвилями / без»): множник широкої хвилі рівнини.
 static var undulation_scale: float = 1.0
+## Лише для перевірки (тест «насип не виходить за стіну опори»): false — без насипів біля мостів.
+static var embank: bool = true
 
 var margin: int = 0
 var board_width: int = 0
@@ -1172,6 +1179,8 @@ func _bake_decks(board: Board) -> void:
 ## з кожного боку, далі укіс на 0.4 клітинки (3.2 м). Углиб берега насип за 0.8 клітинки сходить
 ## до рівня самого берега й за 1.3 зникає.
 func _embank_bridges() -> void:
+	if not embank:
+		return
 	var fs: float = float(samples)
 	for g in _course_groups:
 		var axis: Vector2 = g["axis"]
@@ -1189,15 +1198,21 @@ func _embank_bridges() -> void:
 				for i in range(_sample_lo(box.position.x, fs, cols), _sample_hi(box.end.x, fs, cols) + 1):
 					var p := Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs)
 					var u: float = (p - edge).dot(out)
-					var w: float = (1.0 - smoothstep(flat, wide, absf((p - centre).dot(side)))) \
+					# У клітинці мосту (u < 0) насип рівний до SEAT_HALF і сходить до SEAT_SIDE під стіною
+					# опори; на березі — повний укіс.
+					var lo: float = SEAT_HALF if u < 0.0 else lerpf(SEAT_HALF, flat, smoothstep(0.0, 0.3, u))
+					var hi: float = SEAT_SIDE if u < 0.0 else lerpf(SEAT_SIDE, wide, smoothstep(0.0, 0.3, u))
+					var w: float = (1.0 - smoothstep(lo, hi, absf((p - centre).dot(side)))) \
 							* (1.0 - smoothstep(0.8, 1.3, u)) * clampf((u + SEAT_END) / (SEAT_END - SEAT_REACH), 0.0, 1.0)
 					var k: int = j * cols + i
 					var target: float = deck + SEAT_TOP - (SEAT_TOP + DECK_LIFT) * smoothstep(0.05, 0.8, u)
 					if w <= 0.0 or target <= _h[k]:
 						continue
 					_h[k] = lerpf(_h[k], target, w)
-					# Насип сухий: маска берега під ним гасне, інакше верх насипу малювався б мулом.
-					_water[k] *= 1.0 - w
+					# Насип сухий: маска берега під ним гасне, інакше верх насипу малювався б мулом. Відлік,
+					# що й піднятий лишився під водою, — дно: його мокрий вигляд не чіпаємо.
+					if _h[k] >= WATER_LEVEL:
+						_water[k] *= 1.0 - w
 					_max = maxf(_max, _h[k])
 
 

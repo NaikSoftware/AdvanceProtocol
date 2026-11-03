@@ -464,6 +464,15 @@ static var _wet_meshes: Dictionary = {}
 const WET_DARK: float = 0.75
 const WET_ROUGHNESS: float = 0.55
 const BRIDGE_ROUGH: float = 0.85
+## Ґрунтове покриття настилу (матеріали build_bridges.py) на мокрій карті йде за ґрунтівкою, а не за
+## мокрою сталлю: шейдер землі лишає ґрунтову дорогу під дощем матовою (0.85) і теплою, а з
+## WET_ROUGHNESS настил відбивав сіре небо й читався холодною плитою. Тон підібрано за кадром River.
+const DIRT_DECKS: PackedStringArray = ["bridge_asphalt1", "bridge_deckplate"]
+const DIRT_DECK_ROUGH: float = 0.9
+const DIRT_DECK_WET := Color(0.80, 0.70, 0.56, 1.0)
+## Асфальт центрального мосту на мокрій карті: трохи світліший за WET_DARK — між асфальтом південного
+## (темнішого) і північного в'їздів, тож на жодному кінці настил не різниться з дорогою більш ніж на 10 %.
+const ASPHALT_DECK_WET: float = 0.78
 ## Тюки: загорнутий у плівку мав шорсткість 0.35 і блищав, як метал.
 const HAY_ROUGH: float = 0.8
 ## Спекуляр будівель: мінеральні поверхні (тиньк, цегла, шифер) ≤ 0.3, якщо GLB не каже менше.
@@ -1764,6 +1773,11 @@ static func _bridge_mesh(m: StringName, mesh: Mesh, wet_look: bool) -> Mesh:
 		var dark: float = WET_DARK if wet_look else 1.0
 		w.albedo_color = src.albedo_color * Color(dark, dark, dark, 1.0)
 		w.roughness = maxf(src.roughness, WET_ROUGHNESS if wet_look else BRIDGE_ROUGH)
+		if wet_look and src.resource_name in DIRT_DECKS:
+			w.albedo_color = src.albedo_color * DIRT_DECK_WET
+			w.roughness = maxf(src.roughness, DIRT_DECK_ROUGH)
+		elif wet_look and src.resource_name == "bridge_asphalt":
+			w.albedo_color = src.albedo_color * Color(ASPHALT_DECK_WET, ASPHALT_DECK_WET, ASPHALT_DECK_WET, 1.0)
 		w.metallic = minf(src.metallic, 0.1)
 		copy.surface_set_material(i, w)
 	_wet_meshes[key] = copy
