@@ -1013,6 +1013,52 @@ func test_wet_map_darkens_bridges() -> void:
 			assert_gte(got.roughness, PropLayer.BRIDGE_ROUGH - 1e-4)
 
 
+## Покриття настилу на мокрій карті йде за дорогою: ґрунтове (панельний і понтонний мости, також
+## зруйновані) — тоном ґрунтівки DIRT_DECK_WET і матове, як ґрунтова дорога в шейдері землі (з 0.55
+## воно відбивало небо холодною сірою плитою); асфальт центрального — ASPHALT_DECK_WET. Обидва кінці
+## настилу переходять до тону дороги свого в'їзду (DECK_END_TINT): один тон на весь настил не
+## збігався з обома в'їздами, і на стику лишалась сходинка яскравості.
+func test_wet_map_keeps_decks_in_the_road_tone() -> void:
+	var expect: Dictionary = {
+		&"bridge_river_west": ["bridge_asphalt1", "bridge_deckplate"],
+		&"bridge_river_west_broken": ["bridge_asphalt1", "bridge_deckplate"],
+		&"bridge_river_east": ["bridge_deckplate"],
+		&"bridge_river_east_broken": ["bridge_deckplate"],
+		&"bridge_river_centre": ["bridge_asphalt"],
+		&"bridge_river_centre_broken": ["bridge_asphalt"],
+	}
+	for m: StringName in expect:
+		var src: Mesh = PropLayer.model(m)["mesh"]
+		var mesh: Mesh = PropLayer._bridge_mesh(m, src, true)
+		var tint: Array = PropLayer.DECK_END_TINT[StringName(String(m).trim_suffix("_broken"))]
+		var found: Array = []
+		for i in mesh.get_surface_count():
+			var name: String = src.surface_get_material(i).resource_name
+			if name not in expect[m]:
+				continue
+			found.append(name)
+			var got := mesh.surface_get_material(i) as ShaderMaterial
+			assert_not_null(got, "%s: %s без переходу до дороги" % [m, name])
+			if got == null:
+				continue
+			var k: Color = Color(PropLayer.ASPHALT_DECK_WET, PropLayer.ASPHALT_DECK_WET, PropLayer.ASPHALT_DECK_WET) \
+					if name == "bridge_asphalt" else PropLayer.DIRT_DECK_WET
+			var a: Color = (src.surface_get_material(i) as BaseMaterial3D).albedo_color * k
+			var alb: Color = got.get_shader_parameter("albedo")
+			assert_almost_eq(alb.r, a.r, 1e-3, "%s: %s" % [m, name])
+			assert_almost_eq(alb.b, a.b, 1e-3, "%s: %s" % [m, name])
+			assert_eq(got.get_shader_parameter("end_lo"), Vector3(tint[0].r, tint[0].g, tint[0].b), "%s: %s кінець -Z" % [m, name])
+			assert_eq(got.get_shader_parameter("end_hi"), Vector3(tint[1].r, tint[1].g, tint[1].b), "%s: %s кінець +Z" % [m, name])
+			# Перехід згасає до бортів: півширина покриття — з його ж вершин.
+			assert_between(float(got.get_shader_parameter("edge_x")), 0.15, 0.5, "%s: %s півширина покриття" % [m, name])
+			if name != "bridge_asphalt":
+				assert_gte(float(got.get_shader_parameter("roughness")), PropLayer.DIRT_DECK_ROUGH - 1e-4, "%s: %s блищить" % [m, name])
+		found.sort()
+		var want: Array = (expect[m] as Array).duplicate()
+		want.sort()
+		assert_eq(found, want, "%s: покриття настилу" % m)
+
+
 ## Руїна з глухим фронтоном стоїть пошкодженим фасадом (−Z) до камери (+x чи +z). Карта, де такої
 ## руїни нема (на Річці вона не випадає), перевіряти нічого: тест це й каже.
 func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) -> void:
@@ -1233,6 +1279,38 @@ func test_bridge_ends_meet_the_bank() -> void:
 					continue
 				# Настил на кінці — на висоті дороги на березі (центр клітинки дороги).
 				assert_almost_eq(h.deck_y(c), h.at(float(n.x), float(n.y)), 0.05, "кінець мосту %s до %s" % [c, n])
+
+
+## В'їзд на міст — насип: від центру клітинки дороги до опори ґрунт лише піднімається (ні ями
+## перед мостом, ні горба), а від краю клітинки мосту на 0.1 клітинки (там кінці настилів усіх трьох
+## моделей; SEAT_REACH далі — лише до відліку меша) лежить урівень із покриттям
+## настилу (deck_y + SEAT_TOP), тож дорога заходить на настил без сходинки.
+func test_bridge_approach_rises_to_the_deck_without_a_dip() -> void:
+	var view: BoardView = _cached("river")
+	var h: TerrainHeight = view._height
+	var ends := 0
+	for g in h.bridge_groups():
+		var cells: Array = g["cells"]
+		var a := Vector2i(g["axis"])
+		for c: Vector2i in cells:
+			for d: Vector2i in [a, -a]:
+				var n: Vector2i = c + d
+				if cells.has(n) or n.x < 0 or n.y < 0 or n.x >= 26 or n.y >= 22:
+					continue
+				ends += 1
+				var seat: float = h.deck_y(c) + TerrainHeight.SEAT_TOP
+				for off: float in [-0.3, 0.0, 0.3]:
+					var side := Vector2(-d.y, d.x) * off
+					var top := -INF
+					for k in 57:
+						var t: float = float(k) / 56.0 * 0.6
+						var p: Vector2 = Vector2(n) - Vector2(d) * t + side
+						var y: float = h.at(p.x, p.y)
+						assert_gt(y, top - 0.002, "%s->%s бік %.1f: яма перед мостом на %.2f клітинки, %.2f м нижче" % [n, c, off, t, (top - y) / TerrainHeight.M])
+						top = maxf(top, y)
+						if t >= 0.5:
+							assert_almost_eq(y, seat, 0.004, "%s->%s бік %.1f: на %.2f клітинки ґрунт на %.2f м від настилу" % [n, c, off, t, (y - seat) / TerrainHeight.M])
+	assert_eq(ends, 6, "відкритих кінців переправ на дошці")
 
 
 ## Масштаб у метрах (клітинка — 8 м): стовп 0.4 кВ — 8.6–9.0 м, 10 кВ — 10–11 м; одноповерхова хата
