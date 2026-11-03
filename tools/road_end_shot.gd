@@ -2,7 +2,8 @@ extends Node
 ## Кадри кінців асфальту на справжньому ґрунті карти, камера гри на зумі 8 і 12. Не входить у гру.
 ## Запуск (потрібне вікно, не --headless):
 ##   $GODOT --path . res://tools/road_end_shot.tscn -- <out_dir> <map> <tag=x,y> [<tag=x,y> ...]
-## Параметр --z=5,8 задає зуми (типово 8 і 12). Кадри <tag>_z<зум>.png пишуться наприкінці (save_png блокує ~1 с).
+## Параметр --z=5,8 задає зуми (типово 8 і 12); --seq=N — ще N кадрів поспіль (<tag>_z<зум>_s<i>.png),
+## щоб дивитись рух. Кадри <tag>_z<зум>.png пишуться наприкінці (save_png блокує ~1 с).
 
 const SETTLE_FRAMES: int = 45
 
@@ -21,7 +22,10 @@ func _ready() -> void:
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	var shots: Array = []
 	var zooms: Array = [8.0, 12.0]
+	var seq: int = 0
 	for a in args.slice(2):
+		if a.begins_with("--seq="):
+			seq = int(a.substr(6))
 		if a.begins_with("--z="):
 			zooms = []
 			for zs in a.substr(4).split(","):
@@ -38,6 +42,10 @@ func _ready() -> void:
 				await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			shots.append(["%s/%s_z%d.png" % [args[0], tag, int(z)], get_viewport().get_texture().get_image()])
+			for i in seq:
+				await get_tree().process_frame
+				await RenderingServer.frame_post_draw
+				shots.append(["%s/%s_z%d_s%02d.png" % [args[0], tag, int(z), i], get_viewport().get_texture().get_image()])
 	for s: Array in shots:
 		(s[1] as Image).save_png(s[0])
 	get_tree().quit()

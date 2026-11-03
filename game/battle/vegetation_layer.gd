@@ -160,6 +160,35 @@ static func has_shade(node: StringName, sunny: bool) -> bool:
 	return sunny or not (REEDS.has(node) or CATTAILS.has(node))
 
 
+## Маска очерету для води (WaterSurface.set_reeds): пікселів на клітинку, частка крони, де стебла густі.
+const REED_MASK_PX: int = 16
+const REED_MASK_CORE: float = 0.9
+
+
+## Де у воді стоять стебла очерету й рогозу: L8, REED_MASK_PX на клітинку, піксель (0, 0) — кут
+## клітинки (0, 0) у (−0.5, −0.5). М'який диск під кожною куртиною — вода там і довкола відбиває темні
+## стебла, а не світле небо; без цього очерет на сріблястій воді висить у повітрі. З міпмапами: шейдер
+## бере з грубшого рівня ширшу темну облямівку. Без очерету — порожня.
+static func reed_mask(plants: Array[Dictionary], size: Vector2i) -> Image:
+	if size.x <= 0 or size.y <= 0 or not plants.any(func(p: Dictionary) -> bool: return p["kind"] == "reed"):
+		return Image.new()
+	var img := Image.create(size.x * REED_MASK_PX, size.y * REED_MASK_PX, false, Image.FORMAT_L8)
+	var px := float(REED_MASK_PX)
+	for p: Dictionary in plants:
+		if p["kind"] != "reed":
+			continue
+		var r: float = crown_of(p["node"]) * float(p.get("scale", 1.0)) * REED_MASK_CORE * px
+		var c := Vector2(p["pos"].x + 0.5, p["pos"].z + 0.5) * px
+		for y in range(maxi(floori(c.y - r), 0), mini(ceili(c.y + r), img.get_height())):
+			for x in range(maxi(floori(c.x - r), 0), mini(ceili(c.x + r), img.get_width())):
+				var d: float = Vector2(x + 0.5, y + 0.5).distance_to(c) / r
+				if d < 1.0:
+					var k: float = (1.0 - d * d) * (1.0 - d * d)
+					img.set_pixel(x, y, Color(maxf(img.get_pixel(x, y).r, k), 0, 0))
+	img.generate_mipmaps()
+	return img
+
+
 static func crown_of(node: StringName) -> float:
 	for k: StringName in CROWN:
 		if String(node).begins_with(String(k)):

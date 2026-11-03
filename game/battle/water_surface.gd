@@ -74,6 +74,18 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 	material_override = mat
 
 
+## Маска очерету (VegetationLayer.reed_mask) над клітинками дошки size: біля куртин вода відбиває темні
+## стебла. Порожня маска вимикає це.
+func set_reeds(mask: Image, size: Vector2i) -> void:
+	var mat := material_override as ShaderMaterial
+	if mat == null:
+		return
+	mat.set_shader_parameter("use_reeds", not mask.is_empty())
+	if not mask.is_empty():
+		mat.set_shader_parameter("reed_mask", ImageTexture.create_from_image(mask))
+		mat.set_shader_parameter("reed_size", Vector2(size))
+
+
 static func _is_water(board: Board, cell: Vector2i) -> bool:
 	if cell.x >= board.width or cell.y >= board.height:
 		return false

@@ -63,6 +63,14 @@ uniform float far_sheen = 1.2;
 uniform float glint_elevation_deg = 42.0;
 uniform float glint_strength = 0.9;
 
+// Очерет у воді (VegetationLayer.reed_mask): L8 з міпмапами над клітинками дошки, (0, 0) — кут
+// клітинки (0, 0). Біля куртини вода відбиває темні стебла, а не небо.
+uniform bool use_reeds = false;
+uniform sampler2D reed_mask : hint_default_black, filter_linear_mipmap, repeat_disable;
+uniform vec2 reed_size = vec2(1.0);
+// Висота густої частини стебел (одиниці світу, клітинка = 8 м): з неї довжина відбиття.
+uniform float reed_height = 0.25;
+
 varying vec3 world_pos;
 
 #include "res://game/battle/shaders/surroundings.gdshaderinc"
@@ -72,6 +80,14 @@ varying vec3 world_pos;
 float water_at(ivec2 px, ivec2 size) {
 	int kind = int(texelFetch(kind_map, clamp(px, ivec2(0), size - 1), 0).r * 255.0 + 0.5);
 	return (kind == water_kind || kind == bridge_kind || kind == broken_bridge_kind) ? 1.0 : 0.0;
+}
+
+float reed_at(vec2 p, float lod) {
+	vec2 uv = (p + 0.5) / reed_size;
+	if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
+		return 0.0;
+	}
+	return textureLod(reed_mask, uv, lod).r;
 }
 
 void vertex() {
@@ -239,6 +255,27 @@ void fragment() {
 		f *= 1.0 + 0.16 * sky_clear * (vnoise(fp * 0.12 + 3.0) - 0.5);
 		// Біля берега у воді відбивається сам берег, а не небо: темна смуга ~1–2 м.
 		f *= 1.0 - 0.7 * exp(-1.2 * bank_m);
+		// Очерет: стебла в точці q + fh·s видно у відбитті з q, поки промінь не вищий за них
+		// (s · tg кута погляду < висоти), тож темне відбиття лягає від куртини до камери, коротке й
+		// поламане брижею, смугами окремих стебел уздовж погляду. Плюс м'яка темна облямівка під
+		// самою куртиною з грубшого міпу: вода там відбиває стебла й тінь, а не світле небо.
+		float reed = 0.0;
+		float reed_refl = 0.0;
+		if (use_reeds) {
+			vec2 rfh = normalize(-INV_VIEW_MATRIX[2].xz);
+			float reach = reed_height * length(v.xz) / max(v.y, 0.2);
+			vec2 q = p + slope * 0.6;
+			for (int i = 0; i < 4; i++) {
+				float t = (float(i) + 0.5) / 4.0;
+				reed_refl = max(reed_refl, reed_at(q + rfh * reach * t, 0.0) * (1.0 - 0.6 * t));
+			}
+			// Смуги стебел ~0.3 м упоперек погляду, що тремтять разом із брижею.
+			vec2 rq = vec2(dot(q, vec2(-rfh.y, rfh.x)), dot(q, rfh));
+			reed_refl *= 0.55 + 0.45 * vnoise(rq * vec2(26.0, 3.0));
+			reed_refl = clamp(3.0 * reed_refl, 0.0, 1.0);
+			reed = max(reed_refl, clamp(1.4 * reed_at(p, 2.0), 0.0, 1.0));
+			f *= 1.0 - 0.9 * reed;
+		}
 		// Піксель ~0.08 м (MIN zoom) -> 0, ~0.3 м (MAX zoom) -> 1.
 		float far = smoothstep(0.012, 0.04, px_m);
 		float murk_k = clamp(water_murk, 0.0, 1.0);
@@ -261,6 +298,8 @@ void fragment() {
 		sky = mix(sky, vec3(dot(sky, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.92, 0.98, 1.02),
 				murk_k) * (1.0 - 0.8 * murk_k);
 		vec3 e = sky * reflection_tint * f * sky_reflection_gain * shallow_fade;
+		// Сухі стебла у відбитті — тьмяно-бурі, а не чорні.
+		e += vec3(0.028, 0.02, 0.01) * reed_refl * shallow_fade;
 		// Оливково-бура товща мілководдя (згасає за ~0.2 м глибини).
 		e += vec3(0.045, 0.04, 0.02) * exp(-depth_m * 5.0) * shallow_fade;
 	#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
@@ -274,7 +313,7 @@ void fragment() {
 		vec3 body = mix(deep_color, shallow_color, murk);
 		body = mix(body, vec3(0.06, 0.045, 0.022), 0.5 * margin_t);
 		body = mix(body, vec3(0.032, 0.036, 0.02), 0.7 * murk_k);
-		ALBEDO = body * (1.0 - f);
+		ALBEDO = body * (1.0 - f) * (1.0 - 0.5 * reed);
 		if (surround) {
 			ALBEDO = surround_grade(ALBEDO, haze.a);
 			e = surround_grade(e, haze.a);
@@ -285,7 +324,7 @@ void fragment() {
 		// Низькочастотна мінливість шорсткості (~12 клітинок, ~100 м), без зміни напрямку брижі.
 		ROUGHNESS = 0.1 + 0.1 * wet * (1.0 - rv) + 0.04 * vnoise(p * 0.08 + 9.0);
 		// Зонд знімає те саме синє небо: каламутна вода віддзеркалює його слабше.
-		SPECULAR = 0.5 * (1.0 - 0.8 * murk_k);
+		SPECULAR = 0.5 * (1.0 - 0.8 * murk_k) * (1.0 - reed);
 		NORMAL_MAP = slope_to_normal_map(slope);
 		EMISSION = e;
 		// Мілководдя прозоріше: крізь воду видно мул берега.
