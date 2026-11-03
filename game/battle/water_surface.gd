@@ -37,6 +37,8 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 				along_y += 1 if _is_water(board, Vector2i(x, y + 1)) else 0
 	visible = has_water
 	if not has_water:
+		# Матеріал попередньої дошки (з її маскою очерету) не має пережити перебудову.
+		material_override = null
 		return
 
 	# Площина — лише над клітинками води з запасом у клітинку (берег, виступи русла), у межах
@@ -72,6 +74,18 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 		mat.set_shader_parameter("water_level", WATER_Y)
 	mat.set_shader_parameter("flow_dir", Vector2(1, 0) if along_x >= along_y else Vector2(0, 1))
 	material_override = mat
+
+
+## Маска очерету (VegetationLayer.reed_mask) над клітинками дошки size: біля куртин вода відбиває темні
+## стебла. Порожня маска вимикає це.
+func set_reeds(mask: Image, size: Vector2i) -> void:
+	var mat := material_override as ShaderMaterial
+	if mat == null:
+		return
+	mat.set_shader_parameter("use_reeds", not mask.is_empty())
+	if not mask.is_empty():
+		mat.set_shader_parameter("reed_mask", ImageTexture.create_from_image(mask))
+		mat.set_shader_parameter("reed_size", Vector2(size))
 
 
 static func _is_water(board: Board, cell: Vector2i) -> bool:
