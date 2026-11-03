@@ -308,6 +308,7 @@ the Godot MCP server defaults to `/usr/bin/godot` and fails with `ENOENT` otherw
 ```bash
 $GODOT --path .                                   # run
 ./run_tests.sh                                    # tests (needs $GODOT)
+tools/godot_run.sh [--solo] <godot args>          # agents: ≤2 runs at once, 180 s each
 $GODOT --headless --path . --export-release "Android" build/advance-protocol.apk
 ```
 
