@@ -20,6 +20,13 @@ const MAX_GROUND_TRIS: int = 58000
 const WATER_LEVEL: float = -1.25 * M
 ## Висота настилу над верхом берега: щоб міст не зливався з дорогою.
 const DECK_LIFT: float = 0.01
+## Насип в'їзду на міст: від краю клітинки мосту на SEAT_REACH углиб ґрунт лежить на
+## deck_y + SEAT_TOP — на 1.6 см нижче покриття настилу (воно на 6.4 см над deck_y), тож дорога
+## заходить на настил без сходинки, а сам настил ляже на насип. Далі до SEAT_END ґрунт сходить до
+## берега всередині тіла опори (build_bridges.py, SEAT_END), щоб схил не вилазив перед її стіною.
+const SEAT_TOP: float = 0.006
+const SEAT_REACH: float = 0.15
+const SEAT_END: float = 0.28
 
 ## Рельєф рівнини: дрібний ±0.35 м (плями 5-20 м) і широкий до ±1.7 м (хвиля 3.7-5.5 клітинки).
 const _MICRO_AMP: float = 0.35 * M
@@ -739,8 +746,9 @@ func _bake(board: Board, seed_value: int, surface: PackedByteArray) -> void:
 			_water[k] = clampf(1.0 - d / run, 0.0, 1.0) if has_water else 0.0
 			_min = minf(_min, v)
 			_max = maxf(_max, v)
-	_bake_curvature(_h)
 	_bake_decks(board)
+	_embank_bridges()
+	_bake_curvature(_h)
 	_h_base = _h.duplicate()
 	_hd_base = _h.duplicate()
 	_hd = _h.duplicate()
@@ -1156,6 +1164,41 @@ func _bake_decks(board: Board) -> void:
 			top = 0.0
 		for c: Vector2i in g["cells"]:
 			_deck[c] = top + DECK_LIFT
+
+
+## Насип на кожному кінці переправи дошки: берег падає до води ще в клітинці дороги, і без насипу
+## перед мостом була яма, а настил лежав на землі сходинкою. Ґрунт лише піднімається (max), тож
+## уріз і вода під серединою мосту не змінюються. Смуга насипу — ширина переправи без 0.14 клітинки
+## з кожного боку, далі укіс на 0.4 клітинки (3.2 м). Углиб берега насип за 0.8 клітинки сходить
+## до рівня самого берега й за 1.3 зникає.
+func _embank_bridges() -> void:
+	var fs: float = float(samples)
+	for g in _course_groups:
+		var axis: Vector2 = g["axis"]
+		var side := Vector2(-axis.y, axis.x)
+		var centre: Vector2 = g["centre"]
+		var flat: float = 0.5 * float(g["across"]) - 0.14
+		var wide: float = flat + 0.4
+		var deck: float = _deck[(g["cells"] as Array)[0]]
+		for s: float in [-1.0, 1.0]:
+			var out: Vector2 = axis * s
+			var edge: Vector2 = centre + out * (0.5 * float(g["length"]))
+			var box := Rect2(edge, Vector2.ZERO).expand(edge + out * 1.3 + side * wide).expand(edge + out * 1.3 - side * wide) \
+					.expand(edge - out * SEAT_END + side * wide).expand(edge - out * SEAT_END - side * wide)
+			for j in range(_sample_lo(box.position.y, fs, rows), _sample_hi(box.end.y, fs, rows) + 1):
+				for i in range(_sample_lo(box.position.x, fs, cols), _sample_hi(box.end.x, fs, cols) + 1):
+					var p := Vector2(-0.5 - margin + i / fs, -0.5 - margin + j / fs)
+					var u: float = (p - edge).dot(out)
+					var w: float = (1.0 - smoothstep(flat, wide, absf((p - centre).dot(side)))) \
+							* (1.0 - smoothstep(0.8, 1.3, u)) * clampf((u + SEAT_END) / (SEAT_END - SEAT_REACH), 0.0, 1.0)
+					var k: int = j * cols + i
+					var target: float = deck + SEAT_TOP - (SEAT_TOP + DECK_LIFT) * smoothstep(0.05, 0.8, u)
+					if w <= 0.0 or target <= _h[k]:
+						continue
+					_h[k] = lerpf(_h[k], target, w)
+					# Насип сухий: маска берега під ним гасне, інакше верх насипу малювався б мулом.
+					_water[k] *= 1.0 - w
+					_max = maxf(_max, _h[k])
 
 
 ## Вузол грубого поля далі за 0.45 клітинки від краю дошки: розмиття продовжує крайові відліки, тож

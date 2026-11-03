@@ -1235,6 +1235,38 @@ func test_bridge_ends_meet_the_bank() -> void:
 				assert_almost_eq(h.deck_y(c), h.at(float(n.x), float(n.y)), 0.05, "кінець мосту %s до %s" % [c, n])
 
 
+## В'їзд на міст — насип: від центру клітинки дороги до опори ґрунт лише піднімається (ні ями
+## перед мостом, ні горба), а від краю клітинки мосту на 0.1 клітинки (там кінці настилів усіх трьох
+## моделей; SEAT_REACH далі — лише до відліку меша) лежить урівень із покриттям
+## настилу (deck_y + SEAT_TOP), тож дорога заходить на настил без сходинки.
+func test_bridge_approach_rises_to_the_deck_without_a_dip() -> void:
+	var view: BoardView = _cached("river")
+	var h: TerrainHeight = view._height
+	var ends := 0
+	for g in h.bridge_groups():
+		var cells: Array = g["cells"]
+		var a := Vector2i(g["axis"])
+		for c: Vector2i in cells:
+			for d: Vector2i in [a, -a]:
+				var n: Vector2i = c + d
+				if cells.has(n) or n.x < 0 or n.y < 0 or n.x >= 26 or n.y >= 22:
+					continue
+				ends += 1
+				var seat: float = h.deck_y(c) + TerrainHeight.SEAT_TOP
+				for off: float in [-0.3, 0.0, 0.3]:
+					var side := Vector2(-d.y, d.x) * off
+					var top := -INF
+					for k in 57:
+						var t: float = float(k) / 56.0 * 0.6
+						var p: Vector2 = Vector2(n) - Vector2(d) * t + side
+						var y: float = h.at(p.x, p.y)
+						assert_gt(y, top - 0.002, "%s->%s бік %.1f: яма перед мостом на %.2f клітинки, %.2f м нижче" % [n, c, off, t, (top - y) / TerrainHeight.M])
+						top = maxf(top, y)
+						if t >= 0.5:
+							assert_almost_eq(y, seat, 0.004, "%s->%s бік %.1f: на %.2f клітинки ґрунт на %.2f м від настилу" % [n, c, off, t, (y - seat) / TerrainHeight.M])
+	assert_eq(ends, 6, "відкритих кінців переправ на дошці")
+
+
 ## Масштаб у метрах (клітинка — 8 м): стовп 0.4 кВ — 8.6–9.0 м, 10 кВ — 10–11 м; одноповерхова хата
 ## разом із димарем — до 8 м, двоповерхова — 8.5–11 м.
 func test_poles_and_houses_have_real_heights(p = use_parameters(MAPS)) -> void:
