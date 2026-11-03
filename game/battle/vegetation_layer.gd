@@ -161,8 +161,9 @@ static func has_shade(node: StringName, sunny: bool) -> bool:
 	return sunny or not (REEDS.has(node) or CATTAILS.has(node))
 
 
-## Маска очерету для води (WaterSurface.set_reeds): пікселів на клітинку, частка крони, де стебла густі.
+## Маска очерету для води (WaterSurface.set_reeds): пікселів на клітинку — 0.5 м, щоб диск куртини мав кілька пікселів.
 const REED_MASK_PX: int = 16
+## Радіус диска під куртиною — така частка її крони: стебла густі ближче до середини.
 const REED_MASK_CORE: float = 0.9
 
 

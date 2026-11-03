@@ -37,6 +37,8 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 				along_y += 1 if _is_water(board, Vector2i(x, y + 1)) else 0
 	visible = has_water
 	if not has_water:
+		# Матеріал попередньої дошки (з її маскою очерету) не має пережити перебудову.
+		material_override = null
 		return
 
 	# Площина — лише над клітинками води з запасом у клітинку (берег, виступи русла), у межах
