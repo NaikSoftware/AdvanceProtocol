@@ -5,6 +5,8 @@ const BRIDGES: Dictionary = {
 	"bridge_river_centre": 3, "bridge_river_west": 2, "bridge_river_east": 2,
 }
 const TRIS_MAX: int = 1500
+## Крила устоїв центрального мосту виходять за край переправи в насип (build_bridges.py, WING).
+const WING: float = 0.15
 const GROUND_TOLERANCE: float = 0.02
 ## Уламки можуть зсунутись за течією за клітинку мосту, але не далі за сусідню.
 const HALF_WIDTH_MAX: float = 0.75
@@ -31,7 +33,16 @@ func test_intact_bridge_has_exact_length_and_sits_on_ground(p = use_parameters(B
 	var r: Dictionary = _bounds(p)
 	var box: AABB = r["box"]
 	assert_almost_eq(box.position.y, 0.0, GROUND_TOLERANCE, "%s: має стояти на y = 0" % p)
-	assert_almost_eq(box.size.z, float(BRIDGES[p]), 0.02, "%s: довжина" % p)
+	assert_lte(box.size.z, float(BRIDGES[p]) + 2.0 * WING + 0.02, "%s: довжина з крилами" % p)
+	var road := AABB()
+	var first := true
+	var by_mat: Dictionary = _verts_by_material(p)
+	for key: String in ["bridge_asphalt", "bridge_asphalt1", "bridge_deckplate"]:
+		for v: Vector3 in by_mat.get(key, PackedVector3Array()):
+			road = AABB(v, Vector3.ZERO) if first else road.expand(v)
+			first = false
+	assert_almost_eq(road.size.z, float(BRIDGES[p]), 0.02, "%s: довжина настилу" % p)
+	assert_almost_eq(road.get_center().z, 0.0, 0.01, "%s: настил не по центру" % p)
 	assert_lte(box.size.x, 1.0, "%s: ширина" % p)
 	assert_lte(r["tris"], TRIS_MAX, "%s: трикутників %d" % [p, r["tris"]])
 
@@ -39,7 +50,7 @@ func test_broken_bridge_stays_in_footprint(p = use_parameters(BRIDGES.keys())) -
 	var r: Dictionary = _bounds(p + "_broken")
 	var box: AABB = r["box"]
 	assert_gte(box.position.y, -float(BROKEN_BELOW_GROUND.get(p, GROUND_TOLERANCE)), "%s: руїна нижче дна" % p)
-	assert_lte(box.size.z, float(BRIDGES[p]) + 0.02, "%s: руїна довша за переправу" % p)
+	assert_lte(box.size.z, float(BRIDGES[p]) + 2.0 * WING + 0.02, "%s: руїна довша за переправу з крилами" % p)
 	assert_lte(maxf(absf(box.position.x), absf(box.end.x)), HALF_WIDTH_MAX, "%s: уламки далеко вбік" % p)
 	assert_lte(r["tris"], TRIS_MAX, "%s: трикутників %d" % [p, r["tris"]])
 
@@ -78,7 +89,8 @@ func test_intact_bridge_ends_sit_flush_on_concrete_seats(p = use_parameters(BRID
 		for v: Vector3 in by_mat.get("bridge_abutment", PackedVector3Array()):
 			if sgn * v.z > half - TerrainHeight.SEAT_END - 0.01:
 				crest = maxf(crest, v.y)
-		assert_lt(crest, top + TerrainHeight.SEAT_TOP, "%s: опора виступає з насипу на кінці %+d" % [p, sgn])
+		# Лише опорні подушки під фермою стоять на 2.4 см над насипом.
+		assert_lt(crest, top + TerrainHeight.SEAT_TOP + 0.004, "%s: опора виступає з насипу на кінці %+d" % [p, sgn])
 		var seat := AABB()
 		var first := true
 		for v: Vector3 in by_mat.get("bridge_abutment", PackedVector3Array()):
@@ -91,3 +103,38 @@ func test_intact_bridge_ends_sit_flush_on_concrete_seats(p = use_parameters(BRID
 		var inner: float = half - sgn * (seat.end.z if sgn < 0.0 else seat.position.z)
 		assert_almost_eq(inner, TerrainHeight.SEAT_END, 0.01, "%s: стіна опори на кінці %+d" % [p, sgn])
 		assert_gte(seat.size.x, 2.0 * TerrainHeight.SEAT_SIDE - 0.001, "%s: опора вужча за насип на кінці %+d" % [p, sgn])
+
+
+## Парапет центрального мосту не обривається над берегом: за краєм переправи — крило, що сходить до
+## насипу й сидить у ньому нижче настилу.
+func test_centre_parapets_end_in_wing_walls() -> void:
+	var by_mat: Dictionary = _verts_by_material("bridge_river_centre")
+	var top: float = float(PropLayer.spec_of(&"bridge_river_centre")["deck_top"])
+	for sgn: float in [-1.0, 1.0]:
+		for sx: float in [-1.0, 1.0]:
+			var wing: Array = Array(by_mat["bridge_concrete"] as PackedVector3Array).filter(
+					func(v: Vector3) -> bool: return sgn * v.z > 1.5 + 0.01 and sx * v.x > 0.3)
+			assert_gt(wing.size(), 0, "крило на кінці %+d, бік %+d" % [sgn, sx])
+			if wing.is_empty():
+				continue
+			var lo := INF
+			var tip := -INF
+			for v: Vector3 in wing:
+				lo = minf(lo, v.y)
+				if sgn * v.z > 1.5 + WING - 0.01:
+					tip = maxf(tip, v.y)
+			assert_lt(lo, top - 0.1, "крило на кінці %+d, бік %+d не сидить у насипі" % [sgn, sx])
+			assert_almost_eq(tip, top + TerrainHeight.SEAT_TOP, 0.002, "крило на кінці %+d, бік %+d не сходить до насипу" % [sgn, sx])
+
+
+## Кінцеві стійки панельного мосту стоять на бетонних подушках устою, що виступають із насипу.
+func test_truss_end_posts_stand_on_concrete() -> void:
+	var by_mat: Dictionary = _verts_by_material("bridge_river_west")
+	var top: float = float(PropLayer.spec_of(&"bridge_river_west")["deck_top"])
+	for sgn: float in [-1.0, 1.0]:
+		for sx: float in [-1.0, 1.0]:
+			var crest := -INF
+			for v: Vector3 in by_mat["bridge_abutment"]:
+				if sgn * v.z > 0.9 and sx * v.x > 0.2 and sx * v.x < 0.3:
+					crest = maxf(crest, v.y)
+			assert_gt(crest, top + TerrainHeight.SEAT_TOP, "стійка на кінці %+d, бік %+d стоїть на ґрунті" % [sgn, sx])

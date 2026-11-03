@@ -1,4 +1,5 @@
 extends GutTest
+
 ## Косметичний рельєф: висота нічого не змінює в правилах,
 ## тому тут перевіряється лише сама карта висот — детермінізм, співвідношення видів, міст,
 ## пікінг по піднятій клітинці. 1 м = 0.125 світу.
@@ -7,6 +8,11 @@ const M: float = TerrainHeight.M
 ## Сума висот _flat_checksum(3), записана з коду, де хвиля рівнини на полі FIELD уже майже знята
 ## (`_flatness`), а опора центру пагорба гуляє за висотою: дошка без пагорбів від опори не залежить.
 const FLAT_CHECKSUM_SEED3: float = -17.680515
+
+
+## Тест насипу вимикає його статичним перемикачем: хоч би як тест закінчився, наступні бачать насип.
+func after_each() -> void:
+	TerrainHeight.embank = true
 
 
 ## 14x14 поле: пагорб 3x3 у (3..5, 3..5), дорога вздовж X на y = 10, річка (2 клітинки) на y = 7..8
@@ -590,7 +596,6 @@ func test_river_centreline_has_no_lateral_steps() -> void:
 			assert_lt(absf(k), 0.85, "кривизна осі")
 
 
-## Під мостом вісь пряма на настил + 0.1 клітинки й перпендикулярна його осі.
 ## Насип в'їзду в клітинці мосту не ширший за стіну опори (SEAT_SIDE): поза нею, в руслі, рельєф
 ## той самий, що й без насипу, — сухого виступу біля торця стіни нема. Під стіною насип є.
 func test_bridge_embankment_stays_behind_the_abutment_wall() -> void:
@@ -617,6 +622,23 @@ func test_bridge_embankment_stays_behind_the_abutment_wall() -> void:
 	assert_eq(ends, 6, "кінців переправ")
 
 
+## Верх насипу не світліший за дорогу: запечена опуклість (кривизна, B текстури висот) на ньому
+## нульова, інакше насип читався світлою плямою, від якої настил відрізнявся сходинкою тону.
+func test_bridge_embankment_carries_no_baked_convexity() -> void:
+	var r: Array = _river_bake()
+	var t: TerrainHeight = r[1]
+	for g in t.bridge_groups():
+		var axis: Vector2 = g["axis"]
+		for s: float in [-1.0, 1.0]:
+			var edge: Vector2 = (g["centre"] as Vector2) + axis * s * (0.5 * float(g["length"]))
+			for u: float in [-0.1, 0.0, 0.15, 0.3]:
+				var p: Vector2 = edge + axis * s * u
+				var i: int = roundi((p.x + 0.5 + t.margin) * t.samples)
+				var j: int = roundi((p.y + 0.5 + t.margin) * t.samples)
+				assert_lt(t._curv[j * t.cols + i], 0.05, "%s: насип опуклий на %.2f" % [edge, u])
+
+
+## Під мостом вісь пряма на настил + 0.1 клітинки й перпендикулярна його осі.
 func test_river_runs_straight_and_square_under_each_deck() -> void:
 	var r: Array = _river_bake()
 	var t: TerrainHeight = r[1]

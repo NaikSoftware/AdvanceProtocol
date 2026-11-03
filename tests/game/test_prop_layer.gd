@@ -1013,36 +1013,48 @@ func test_wet_map_darkens_bridges() -> void:
 			assert_gte(got.roughness, PropLayer.BRIDGE_ROUGH - 1e-4)
 
 
-## Ґрунтове покриття настилу (панельний і понтонний мости) на мокрій карті не блищить і тоном іде за
-## ґрунтівкою: шорсткість як у ґрунтової дороги в шейдері землі (0.85+), колір — DIRT_DECK_WET, а не
-## сіра мокра сталь (з 0.55 воно відбивало небо й читалось холодною сірою плитою на брунатній дорозі).
-func test_wet_map_keeps_dirt_decks_in_the_road_tone() -> void:
-	var view: BoardView = _wet_river()
-	for m: String in ["bridge_river_west", "bridge_river_east"]:
-		var mesh: Mesh = (view.props().get_node(m) as MultiMeshInstance3D).multimesh.mesh
-		var src: Mesh = PropLayer.model(StringName(m))["mesh"]
-		var found := 0
+## Покриття настилу на мокрій карті йде за дорогою: ґрунтове (панельний і понтонний мости, також
+## зруйновані) — тоном ґрунтівки DIRT_DECK_WET і матове, як ґрунтова дорога в шейдері землі (з 0.55
+## воно відбивало небо холодною сірою плитою); асфальт центрального — ASPHALT_DECK_WET. Обидва кінці
+## настилу переходять до тону дороги свого в'їзду (DECK_END_TINT): один тон на весь настил не
+## збігався з обома в'їздами, і на стику лишалась сходинка яскравості.
+func test_wet_map_keeps_decks_in_the_road_tone() -> void:
+	var expect: Dictionary = {
+		&"bridge_river_west": ["bridge_asphalt1", "bridge_deckplate"],
+		&"bridge_river_west_broken": ["bridge_asphalt1", "bridge_asphalt_wet", "bridge_deckplate"],
+		&"bridge_river_east": ["bridge_deckplate"],
+		&"bridge_river_east_broken": ["bridge_deckplate"],
+		&"bridge_river_centre": ["bridge_asphalt"],
+		&"bridge_river_centre_broken": ["bridge_asphalt"],
+	}
+	for m: StringName in expect:
+		var src: Mesh = PropLayer.model(m)["mesh"]
+		var mesh: Mesh = PropLayer._bridge_mesh(m, src, true)
+		var tint: Array = PropLayer.DECK_END_TINT[StringName(String(m).trim_suffix("_broken"))]
+		var found: Array = []
 		for i in mesh.get_surface_count():
-			var got := mesh.surface_get_material(i) as BaseMaterial3D
-			if got.resource_name not in PropLayer.DIRT_DECKS:
+			var name: String = src.surface_get_material(i).resource_name
+			if name not in expect[m]:
 				continue
-			found += 1
-			var a: Color = (src.surface_get_material(i) as BaseMaterial3D).albedo_color * PropLayer.DIRT_DECK_WET
-			assert_almost_eq(got.albedo_color.r, a.r, 1e-3, "%s: %s" % [m, got.resource_name])
-			assert_almost_eq(got.albedo_color.b, a.b, 1e-3, "%s: %s" % [m, got.resource_name])
-			assert_gte(got.roughness, PropLayer.DIRT_DECK_ROUGH - 1e-4, "%s: %s блищить" % [m, got.resource_name])
-		assert_gt(found, 0, "%s: нема ґрунтового покриття" % m)
-	# Асфальт центрального мосту — між тонами асфальту на південному й північному в'їздах.
-	var centre: Mesh = (view.props().get_node("bridge_river_centre") as MultiMeshInstance3D).multimesh.mesh
-	var csrc: Mesh = PropLayer.model(&"bridge_river_centre")["mesh"]
-	var asphalt := 0
-	for i in centre.get_surface_count():
-		var got := centre.surface_get_material(i) as BaseMaterial3D
-		if got.resource_name == "bridge_asphalt":
-			asphalt += 1
-			var r: float = (csrc.surface_get_material(i) as BaseMaterial3D).albedo_color.r * PropLayer.ASPHALT_DECK_WET
-			assert_almost_eq(got.albedo_color.r, r, 1e-3, "асфальт центрального мосту")
-	assert_eq(asphalt, 1, "асфальт на центральному мосту")
+			found.append(name)
+			var got := mesh.surface_get_material(i) as ShaderMaterial
+			assert_not_null(got, "%s: %s без переходу до дороги" % [m, name])
+			if got == null:
+				continue
+			var k: Color = Color(PropLayer.ASPHALT_DECK_WET, PropLayer.ASPHALT_DECK_WET, PropLayer.ASPHALT_DECK_WET) \
+					if name == "bridge_asphalt" else PropLayer.DIRT_DECK_WET
+			var a: Color = (src.surface_get_material(i) as BaseMaterial3D).albedo_color * k
+			var alb: Color = got.get_shader_parameter("albedo")
+			assert_almost_eq(alb.r, a.r, 1e-3, "%s: %s" % [m, name])
+			assert_almost_eq(alb.b, a.b, 1e-3, "%s: %s" % [m, name])
+			assert_eq(got.get_shader_parameter("end_lo"), Vector3(tint[0].r, tint[0].g, tint[0].b), "%s: %s кінець -Z" % [m, name])
+			assert_eq(got.get_shader_parameter("end_hi"), Vector3(tint[1].r, tint[1].g, tint[1].b), "%s: %s кінець +Z" % [m, name])
+			if name != "bridge_asphalt":
+				assert_gte(float(got.get_shader_parameter("roughness")), PropLayer.DIRT_DECK_ROUGH - 1e-4, "%s: %s блищить" % [m, name])
+		found.sort()
+		var want: Array = (expect[m] as Array).duplicate()
+		want.sort()
+		assert_eq(found, want, "%s: покриття настилу" % m)
 
 
 ## Руїна з глухим фронтоном стоїть пошкодженим фасадом (−Z) до камери (+x чи +z). Карта, де такої

@@ -147,6 +147,8 @@ var _hd_base: PackedFloat32Array = PackedFloat32Array()
 var _quads: Dictionary = {}
 var _water: PackedFloat32Array = PackedFloat32Array()
 var _curv: PackedFloat32Array = PackedFloat32Array()
+## Вага насипу біля мостів у кожному відліку (0 — насипу нема): на ній гаситься запечена опуклість.
+var _embank_w: PackedFloat32Array = PackedFloat32Array()
 ## Гладка вісь річки, з якої взято відстань до урізу; null — води нема.
 var course: RiverCourse = null
 ## Переправи (RiverCourse.build): клітинки, центр, вісь, довжина й ширина настилу.
@@ -768,6 +770,11 @@ func _bake_curvature(src: PackedFloat32Array) -> void:
 	_curv.resize(cols * rows)
 	for k in src.size():
 		_curv[k] = clampf((src[k] - soft[k]) / _CURV_RANGE, -1.0, 1.0)
+	# Насип — гребінь над руслом, і запечена опуклість світлила його плямою, світлішою за дорогу на
+	# березі й за настил: на насипі лишається лише западина.
+	for k in _embank_w.size():
+		if _embank_w[k] > 0.0:
+			_curv[k] = lerpf(_curv[k], minf(_curv[k], 0.0), _embank_w[k])
 
 
 ## Знімає всі майданчики будівель: рельєф — як щойно запечений.
@@ -1181,6 +1188,7 @@ func _bake_decks(board: Board) -> void:
 func _embank_bridges() -> void:
 	if not embank:
 		return
+	_embank_w.resize(cols * rows)
 	var fs: float = float(samples)
 	for g in _course_groups:
 		var axis: Vector2 = g["axis"]
@@ -1209,6 +1217,7 @@ func _embank_bridges() -> void:
 					if w <= 0.0 or target <= _h[k]:
 						continue
 					_h[k] = lerpf(_h[k], target, w)
+					_embank_w[k] = maxf(_embank_w[k], w)
 					# Насип сухий: маска берега під ним гасне, інакше верх насипу малювався б мулом. Відлік,
 					# що й піднятий лишився під водою, — дно: його мокрий вигляд не чіпаємо.
 					if _h[k] >= WATER_LEVEL:

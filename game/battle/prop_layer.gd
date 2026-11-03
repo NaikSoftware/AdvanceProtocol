@@ -467,7 +467,15 @@ const BRIDGE_ROUGH: float = 0.85
 ## Ґрунтове покриття настилу (матеріали build_bridges.py) на мокрій карті йде за ґрунтівкою, а не за
 ## мокрою сталлю: шейдер землі лишає ґрунтову дорогу під дощем матовою (0.85) і теплою, а з
 ## WET_ROUGHNESS настил відбивав сіре небо й читався холодною плитою. Тон підібрано за кадром River.
-const DIRT_DECKS: PackedStringArray = ["bridge_asphalt1", "bridge_deckplate"]
+const DIRT_DECKS: PackedStringArray = ["bridge_asphalt1", "bridge_asphalt_wet", "bridge_deckplate"]
+## Множники лінійного альбедо покриття на кінцях −Z і +Z моделі (шейдер bridge_deck): дорога на кожному
+## в'їзді своя, і кінець настилу переходить до її тону (за кадром River, різниця на стику ≤ ~5 %).
+const DECK_END_TINT: Dictionary = {
+	&"bridge_river_west": [Color(1.43, 1.45, 1.57), Color(1.75, 1.69, 1.63)],
+	&"bridge_river_centre": [Color(0.698, 0.696, 0.797), Color(0.713, 0.686, 0.778)],
+	&"bridge_river_east": [Color(0.816, 0.893, 0.970), Color(2.27, 2.22, 2.50)],
+}
+const _DECK_SHADER: Shader = preload("res://game/battle/shaders/bridge_deck.gdshader")
 const DIRT_DECK_ROUGH: float = 0.9
 const DIRT_DECK_WET := Color(0.80, 0.70, 0.56, 1.0)
 ## Асфальт центрального мосту на мокрій карті: трохи світліший за WET_DARK — між асфальтом південного
@@ -1779,9 +1787,34 @@ static func _bridge_mesh(m: StringName, mesh: Mesh, wet_look: bool) -> Mesh:
 		elif wet_look and src.resource_name == "bridge_asphalt":
 			w.albedo_color = src.albedo_color * Color(ASPHALT_DECK_WET, ASPHALT_DECK_WET, ASPHALT_DECK_WET, 1.0)
 		w.metallic = minf(src.metallic, 0.1)
+		var ends: Array = DECK_END_TINT.get(StringName(String(m).get_slice("#", 0).trim_suffix("_broken")), [])
+		if wet_look and not ends.is_empty() and (src.resource_name in DIRT_DECKS or src.resource_name == "bridge_asphalt"):
+			# Довжина переправи в клітинках: крила устоїв можуть виходити за кінці моделі.
+			copy.surface_set_material(i, _deck_material(w, ends, float(roundi(mesh.get_aabb().size.z)) * 0.5))
+			continue
 		copy.surface_set_material(i, w)
 	_wet_meshes[key] = copy
 	return copy
+
+
+## Покриття настилу шейдером bridge_deck: ті самі текстури й тон, що й `w`, плюс перехід кінців до тону
+## дороги на в'їздах. Стик — там, де насип сходить під настил (TerrainHeight.SEAT_REACH).
+static func _deck_material(w: BaseMaterial3D, ends: Array, half_len: float) -> ShaderMaterial:
+	var s := ShaderMaterial.new()
+	s.shader = _DECK_SHADER
+	s.resource_name = w.resource_name
+	s.set_shader_parameter("albedo_tex", w.albedo_texture)
+	s.set_shader_parameter("normal_tex", w.normal_texture)
+	s.set_shader_parameter("rough_tex", w.roughness_texture)
+	s.set_shader_parameter("use_rough_tex", w.roughness_texture != null)
+	s.set_shader_parameter("albedo", w.albedo_color)
+	s.set_shader_parameter("roughness", w.roughness)
+	s.set_shader_parameter("specular", w.metallic_specular)
+	s.set_shader_parameter("end_lo", Vector3(ends[0].r, ends[0].g, ends[0].b))
+	s.set_shader_parameter("end_hi", Vector3(ends[1].r, ends[1].g, ends[1].b))
+	s.set_shader_parameter("half_len", half_len)
+	s.set_shader_parameter("joint", TerrainHeight.SEAT_REACH + 0.04)
+	return s
 
 
 ## Шейдер суцільного паркану в справжньому непрозорому проході: той самий prop_thin, лише без запису ALPHA і без
