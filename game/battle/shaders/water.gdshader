@@ -272,15 +272,21 @@ void fragment() {
 			float reach = min(reed_height * length(v.xz) / max(v.y, 0.2), 1.2 * reed_height);
 			vec2 rs = fdir * sf_reed.x + fperp * sf_reed.y;
 			vec2 warp = (vec2(vnoise(p * 9.0), vnoise(p * 9.0 + 7.3)) - 0.5) * 0.1;
-			vec2 q = p + warp + rfh * dot(rs, rfh) * 0.35 + rpp * dot(rs, rpp) * 0.12;
+			vec2 q = p + warp + rfh * dot(rs, rfh) * 0.35 + rpp * dot(rs, rpp) * 0.25;
 			for (int i = 0; i < 4; i++) {
 				float t = (float(i) + 0.5) / 4.0;
-				reed_refl = max(reed_refl, reed_at(q + rfh * reach * t, 0.0) * (1.0 - 0.75 * t));
+				// Стебло є чи нема — поріг, а не густота маски: інакше насичення робило всю смугу однаково темною.
+				// Сила спадає від кореня (1) до кінчика (0.35).
+				reed_refl = max(reed_refl, smoothstep(0.02, 0.18, reed_at(q + rfh * reach * t, 0.0)) * (1.0 - 0.75 * t));
 			}
 			// Стебла ~0.4 м одне від одного упоперек погляду; брижа гне їх, тож смуги не стоять.
 			float stem = vnoise(vec2(dot(q, rpp) * 20.0, dot(q, rfh) * 1.2));
-			reed_refl = clamp(3.5 * reed_refl, 0.0, 1.0) * smoothstep(0.22, 0.6, stem);
-			float contact = clamp(1.4 * reed_at(p + warp, 2.0), 0.0, 1.0) * (0.5 + 0.35 * vnoise(p * 14.0 + 3.1));
+			// Смуга вужчає до кінчика: поріг шуму росте, коли слабшає сила.
+			float lo = mix(0.55, 0.2, reed_refl);
+			reed_refl *= smoothstep(lo, lo + 0.25, stem);
+			float contact = clamp(2.2 * reed_at(p + warp, 2.0), 0.0, 1.0) * (0.6 + 0.3 * vnoise(p * 14.0 + 3.1));
+			// Вузька темна облямівка там, де стебла входять у воду: м'який край замість різкої межі картки.
+			contact = max(contact, 0.8 * smoothstep(0.02, 0.3, reed_at(p + warp * 0.5, 1.0)) * (0.7 + 0.3 * vnoise(p * 30.0)));
 			reed = max(reed_refl, contact);
 			f *= 1.0 - 0.9 * reed;
 		}
