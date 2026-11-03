@@ -51,9 +51,11 @@ than leading them: the drone strike (§3.9) is already load-bearing, and a conte
 simply has drones. Materials, palette and the audio brief are in
 [docs/art-direction.md](docs/art-direction.md).
 
-**No real army, nation, flag, insignia or identifiable vehicle** — anywhere in code, data, UI or
-assets, now or later. The sides are fictional and stay fictional. The *rules* remain era-neutral:
-nothing in `core/` encodes a period, and the unit names in §3.6 are role labels.
+**Vehicles are modelled on real contemporary ones, under altered names** — recognisable kit, never
+its real designation. **No real army, flag or insignia** anywhere in code, data, UI or assets.
+Each player fields one national set: every vehicle and squad in it comes from one country's
+family, and the sets differ in numbers as well as looks (§3.6). The *rules* remain era-neutral:
+nothing in `core/` encodes a period, and the class names in §3.6 are role labels.
 
 ---
 
@@ -90,6 +92,12 @@ rifle squad and the engineer.
 - **Terrain penalties are widely spaced on purpose** (`0 / 5 / 10 / 20 / 100 / impassable`).
   Compressing them makes every terrain free for every vehicle and silently deletes the off-road
   model.
+- **Tanks break forest; other vehicles need the path.** A `TANK` entering a forest tile pays the
+  forest cost and fells it for good — a *broken* forest tile, penalty 10. `LIGHT_VEHICLE`,
+  `ARTILLERY` and `ENGINEER` cannot enter standing forest at all (an infinite cost for those
+  classes), only broken tiles. Infantry walks through and never breaks it. No single tile penalty
+  can wall the wheels in and let the tanks through — the wheels have more AP — so the gate is one
+  class check in `Rules.entry_cost_at()`, not a unit×terrain matrix.
 - **Firing sets the unit's AP to 0.** A unit fires at most once per turn, and firing ends its
   activity. Every AP-consuming action other than movement is a decision to stop moving.
 - **Movement is spent, not committed.** A unit may move in as many separate steps as its AP
@@ -98,10 +106,12 @@ rifle squad and the engineer.
   AP left, red = reachable but cannot act. Recomputed after every action that changes AP or
   occupancy.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
-  the zones use fog-filtered occupancy plus known enemy mines; the walk checks the truth and
-  **stops on the tile before** anything it could not see or an engineer has just found. AP is
-  charged only for tiles actually entered. Planning against the true occupancy would leak — the
-  route would detour around an invisible enemy and give away where it stands.
+  the zones use fog-filtered occupancy plus known enemy mines and, for a vehicle, known wrecks;
+  the walk checks the truth and **stops on the tile before** anything it could not see or an
+  engineer has just found. AP is charged only for tiles actually entered. Planning against the
+  true occupancy would leak — the route would detour around an invisible enemy and give away
+  where it stands. **Broken forest is planned the same way:** from the tiles the player knows
+  are broken (§3.5), walked against the truth.
 
 ### 3.3 Combat → [formula and worked reasoning](docs/rules/combat.md)
 
@@ -120,13 +130,19 @@ them. The shape it produces, which is the intended one:
 ### 3.3.1 Retaliation → [details](docs/rules/combat.md)
 
 **A target that survives a shot fires back immediately, in the same exchange**, at full strength,
-if it has the AP, the range, and **can see its attacker**. Engineers never retaliate. It costs the
-retaliator its AP for the rest of the attacker's turn, not its own next turn. **A retaliator turns
-to face its attacker after the damage lands, never before** (§3.4), and only when it actually
-fired back.
+if it has the AP and the range. That is the whole gate: no vision condition, no facing or sector
+condition. Engineers never retaliate. It costs the retaliator its AP for the rest of the
+attacker's turn, not its own next turn, and a retaliation never provokes another.
 
-The consequence is the point: **an attacker the defender cannot see fires with impunity.** Vision
-is a weapon, not a convenience.
+**A hit reveals the shooter.** Every shot that resolves against a target, the drone strike
+included, marks the attacker's tile `seen` for the target's side, permanently, before the damage
+lands. The consequence is the point: **there is no shooting from the fog without an answer.** A
+unit inside its target's range is answered whether or not that side had ever scouted it; vision
+decides what you may fire on, not whether you are fired back at.
+
+**The survivor always turns to face its attacker, after the damage lands, never before** (§3.4) —
+also when it cannot answer (no AP, out of range, an engineer). If it answers, it fires from the
+new facing.
 
 ### 3.4 Directional armour → [details](docs/rules/combat.md)
 
@@ -136,27 +152,33 @@ product against the target's facing. No trigonometry, no division.
 - **`front >= side >= rear` for every unit. Hard invariant, enforced by a test.** If a rear plate
   is thicker than a side plate, flanking is punished instead of rewarded and the most
   skill-expressive move in the game becomes a mistake.
-- **Firing turns the shooter; being shot does not turn the target.** The attacker turns before its
-  own shot resolves; a retaliator turns only **after** the damage lands, and only if it answered.
-  The order is the rule — inverting it deletes flanking. Consequences, costs and the whole-unit
-  (not turret-only) decision are in the linked document.
-- **A unit with AP left may turn in place toward any tile, free, on its own turn.** At 0 AP it stays
-  as it is — so a unit that fired or spent its AP is still flankable.
+- **Firing turns the shooter; surviving a shot turns the target.** The attacker turns before its
+  own shot resolves; the target turns onto its attacker only **after** the damage lands, so the
+  shot that hit it still reads the old facing — and it turns whether or not it answers. The order
+  is the rule — inverting it deletes flanking. A flank is therefore worth one shot: the next
+  attacker from the same side finds the front. Consequences, costs and the whole-unit (not
+  turret-only) decision are in the linked document.
+- **A unit with AP left may turn in place toward any tile, free, on its own turn.** At 0 AP it cannot
+  turn itself — so a unit that fired or spent its AP is flankable, but for one shot only: surviving
+  that shot turns it onto the attacker.
 - The UI must always show which sector a shot will land in **before** the player commits.
 
 ### 3.5 Vision and fog of war → [details](docs/rules/vision-and-fog.md)
 
 - **The fog hides enemy units and their mines — never the map.** Terrain is public from the first
-  turn, at full brightness. Hiding the ground would make the two movement zones lie, since a
-  contour bending around unscouted obstacles is itself a tell. **It hides enemy units only until
-  the ground under them is scouted**, and since scouting is permanent, by mid-match it hides little
-  but mines — an opening mechanic, not a standing one. See the linked document.
+  turn, at full brightness. The one exception is forest a tank has broken (§3.2): a player knows a
+  tile is broken only once it is in their `seen` grid, so knowledge can lag the truth but never
+  contradict it, and planning never reads the truth. Hiding the ground would make the two movement
+  zones lie, since a contour bending around unscouted obstacles is itself a tell. **It hides enemy
+  units only until the ground under them is scouted**, and since scouting is permanent, by
+  mid-match it hides little but mines — an opening mechanic, not a standing one. See the linked
+  document.
 - Every player keeps **two grids**, and **`seen` is the one the rules read**: a tile ever scouted
   stays scouted, and an enemy standing on it is visible, shootable, inspectable and able to fire
   back. `visible` (inside a vision diamond right now) exists only to extend `seen`.
 - **Scouting is permanent and one-way** — a scout that dies on turn two has still bought you
-  everything it saw. The cost is that impunity from being unseen (§3.3.1) applies only to ground
-  the enemy has *never* scouted, and shrinks as the match goes on. See the linked document.
+  everything it saw. Scouting is not the only way in: a hit reveals the shooter's tile to the side
+  it hit (§3.3.1), so being unscouted protects a unit only until it fires. See the linked document.
 - Recomputed for the active player from scratch at turn start and after every move step.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not
@@ -174,6 +196,10 @@ is documentation. Two invariants hold there and are tested:
 - `front >= side >= rear`, every unit (§3.4).
 - **Tank mobility is strictly ordered** light → medium → tank destroyer → heavy, in both AP and
   cross-country. Armour must be paid for with mobility.
+
+**One roster per national set, each with its own numbers, is a planned rules change and is not
+designed yet.** Until it is, every side uses the one roster, and the two invariants above will
+hold inside every set.
 
 Squad-level units are **one asset per tile** — one mesh, one draw call, one tile footprint. That
 mesh may sculpt three or four figures sharing a base, and it should.
@@ -228,12 +254,24 @@ at all times, offsetting off-road penalty. Roads are never affected — that is 
   hit. **Any visible unit, including an enemy's**, because with retaliation "is it safe to shoot
   this" is the central question of a turn.
 - An enemy's marks ignore its AP and are computed from **that unit alone**, never from its owner's
-  vision network — the network is hidden, and drawing from it would reveal unseen spotters. The
-  forecast is therefore **a floor, not a ceiling**, and the UI must say so.
+  vision network — the network is hidden, and drawing from it would reveal unseen spotters.
+- **Its gun marks cover the whole weapon range circle, with no vision check**, because return fire
+  needs no vision (§3.3.1): outside the circle there is never an answer, inside it there is one
+  whenever the unit has the AP for it. A gun-only ring carries no floor caption. Its **drone
+  marks** are measured with the squad's own vision diamond, since the drone strikes only on its
+  owner's turn and only on `seen` ground; they are **a floor, not a ceiling**, and the UI must say
+  so whenever a drone ring is shown.
 - **The drone strike gets its own ring and its own marks**, and an enemy squad's remaining drones
   count towards the threat it is shown to pose. The count is public by rule (§3.9), so reading it
   reveals nothing; omitting it would under-report the most dangerous action in the game.
 - Both computations live in `core/`. **Neither may be re-derived in the view.**
+
+### 3.14 Wrecks → [details](docs/rules/movement-and-terrain.md#wrecks)
+
+A destroyed vehicle leaves a wreck on its tile; infantry and a unit lost with a bridge leave none.
+**A wreck blocks vehicles only** — infantry stands on it, and fire, vision and victory ignore it.
+It burns out after 3 full rounds, a demolished bridge takes it along, and a player knows it only
+on `seen` ground (§3.5): planning routes a vehicle around the wrecks its side knows of.
 
 ---
 
@@ -259,7 +297,7 @@ and every finding recovered so far: **[docs/reference/blitzkrieg.md](docs/refere
 | --- | --- |
 | Engine | Godot **4.7.2 stable** |
 | Language | GDScript, statically typed |
-| Renderer | Mobile (Vulkan); `gl_compatibility` fallback for old devices |
+| Renderer | Mobile (Vulkan; Metal on Apple). Visuals are tuned for current devices. The `gl_compatibility` fallback for old devices must run and stay playable; small visual differences there are accepted |
 | Targets | Android and iOS, **landscape** |
 | Tests | GUT, run headless |
 | 3D assets | GLB, generated with `asset-manager`, edited with `3d-modelling` |
@@ -316,6 +354,9 @@ results, making decisions, integrating outputs and validating the final state.
 - Give every child agent a discrete subtask with clear inputs, outputs and acceptance criteria.
 - **Every implementation gets a review pass by a separate agent**, rotated across reviewers. An
   implementer's own report of its work is not a review, however detailed.
+- **A visual implementer judges its own frames first.** After every render it opens the frames
+  at full size, checks each claim against them at both zooms, and fixes what is plainly wrong
+  before anything goes to `visual-critic`.
 - Use separate worktrees/branches when several child agents modify the repo in parallel, and
   **never commit in a tree where a child agent is working.**
 - Ask child agents to report concise findings, changed files, validation commands and blockers.
@@ -336,8 +377,11 @@ movement number, and visual water stays ≥ 0.3 tile from any land-cell centre, 
 texture and effect from real metres.
 
 Budget on a mid-range phone at 60 fps: **under ~100 draw calls and ~150k triangles on screen.**
-Bake static terrain lighting; one directional light with shadows for units only. No SSAO, no SSR,
-no volumetric fog. **Persistent battle scars** — wrecks, lingering smoke, craters, ruts — are the
+Bake static terrain lighting. One directional light: it casts real shadows from units on every
+map and from the board's buildings on sunny maps, where units also add a contact shadow; forest
+shadows are baked, and under River's overcast the light's shadows are faint and blurred
+([details](docs/art-direction.md#rendering-and-mobile-budget)). No SSAO, no SSR, no volumetric
+fog. **Persistent battle scars** — wrecks, the scorch under them, lingering smoke, ruts — are the
 cheapest atmosphere in the game and double as information.
 
 Turn-based means the screen is usually static: enable low-processor mode and drop the frame rate

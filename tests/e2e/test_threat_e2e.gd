@@ -73,8 +73,7 @@ func test_long_press_on_enemy_tank_shows_a_circle_and_marks_my_unit_in_range() -
 	assert_eq(Vector2(ring.position.x, ring.position.z), Vector2(6.0, 1.0), "центр — середина тайла танка")
 	assert_true(_view(CAR_POS).is_threatened(), "броньовик на 3 — у дальності 4")
 	assert_false(_view(SQUAD).is_threatened(), "загін на 6 — поза дальністю")
-	assert_true(_floor().is_visible_in_tree())
-	assert_eq(_floor().text, tr("hud_threat_floor"))
+	assert_false(_floor().is_visible_in_tree(), "§3.13: лише кільце гармати — напису «нижня межа» немає")
 
 	_e2e.release(TANK)
 	await _e2e.settle()
@@ -136,6 +135,7 @@ func test_enemy_squad_with_drones_threatens_at_5() -> void:
 	assert_true(_view(CAR_POS).is_drone_threatened(), "броньовик на 5 — дрон")
 	assert_false(_view(CAR_POS).is_threatened(), "гармата загону дістає лише на 3")
 	assert_eq(_last["drone_marked"], [_state().unit_at(CAR_POS).id])
+	assert_true(_floor().is_visible_in_tree())
 	assert_eq(_floor().text, tr("hud_threat_floor_drone"))
 	_e2e.release(ENEMY_SQUAD)
 
@@ -147,7 +147,7 @@ func test_enemy_squad_without_drones_does_not_threaten_at_5() -> void:
 	assert_eq(_rings().size(), 1, "лише коло гармати")
 	assert_false(_view(CAR_POS).is_threatened())
 	assert_false(_view(CAR_POS).is_drone_threatened())
-	assert_eq(_floor().text, tr("hud_threat_floor"))
+	assert_false(_floor().is_visible_in_tree(), "без дронів — без дронового кільця, отже й без напису")
 	_e2e.release(ENEMY_SQUAD)
 
 

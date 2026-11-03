@@ -42,8 +42,8 @@ an event that only the acting player may see should be recognisable as such.
 **Facing is a second leak, and a per-observer event filter will not close it.** An attack now turns
 a unit whose owner is not playing, and the turn is still on the board afterwards — the leak is in
 the state, not in the event. Three-player case: A fires on B's tank from ground C has never scouted;
-B's tank turns to answer, and on C's turn that bearing points straight at a unit of A's that C
-cannot see. Accepted for hot-seat v1. Online must filter facing as **state**, and not in the view —
+B's tank turns onto its attacker (it always does, §3.4), and A's tile is revealed to B only; on
+C's turn that bearing points straight at a unit of A's that C cannot see. Accepted for hot-seat v1. Online must filter facing as **state**, and not in the view —
 the view cannot know whose turn a given facing came from.
 
 **Determinism.** One `RandomNumberGenerator`, seeded per match and stored in `BattleState`. Every
@@ -69,10 +69,10 @@ core/                    # pure rules — no Node, no scene tree, no rendering
   commands/
   events.gd
 game/                    # Godot scenes and nodes
-  battle/                # board view, unit views, selection, zone overlay
+  battle/                # board view, unit views, selection, zone overlay, effects (fire,
+                         # smoke, explosions, scar map); look/ holds weather and light
   ui/                    # HUD, unit inspector, handover gate
   camera/                # fixed-angle rig: pan, clamped zoom
-  fx/                    # weather, smoke, wrecks, impacts
   audio/
 maps/
 assets/

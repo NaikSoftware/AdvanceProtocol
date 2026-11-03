@@ -36,8 +36,8 @@ vec2 border_weights(vec2 f) {
 }
 
 // Кола від крапель дощу. Масштаб світу: клітинка = 8 м. Комірка — 0.08 клітинки
-// (0.64 м), у кожній одна крапля; коло росте до радіуса 0.019 клітинки (0.15 м,
-// тобто 0.3 м у діаметрі) за пів секунди, гребінь — 0.0064 клітинки (5 см).
+// (0.64 м), у ній щопівсекунди крапля — не завжди; гребінь кола відходить до 0.06–0.24 комірки
+// (4–15 см) за пів секунди, півширина гребеня 0.02–0.08 комірки (1.3–5 см).
 // Два зсунуті шари комірок.
 // Повертає нахил нормалі в площині xz; коло не виходить за свою комірку.
 const float RIPPLE_CELLS_PER_TILE = 12.5;
@@ -48,14 +48,23 @@ vec2 rain_ripples(vec2 p, float t) {
 		vec2 q = p * RIPPLE_CELLS_PER_TILE + float(l) * vec2(0.37, 0.71);
 		vec2 c = floor(q);
 		float h = hash12(c + float(l) * 19.0);
-		vec2 d = q - (c + 0.25 + 0.5 * vec2(h, hash12(c + 7.3)));
+		// Кожна крапля — нове місце, розмір (×0.5–2), сила; половина циклів без краплі. Інакше
+		// крапля падала в ту саму точку комірки, і кола стояли рівною сіткою однакових цяток.
+		float ph = t * 2.0 + h;
+		vec2 cc = c + floor(ph) * vec2(1.7, 3.1) + float(l) * 5.0;
+		float k = mix(0.5, 2.0, hash12(cc + 11.0));
+		float on = step(0.5, hash12(cc + 2.0)) * mix(0.4, 1.0, hash12(cc + 23.0));
+		// Центр — не ближче за повний радіус кола (0.16·k комірки) до краю, тож коло не обрізається.
+		float rmax = 0.16 * k;
+		vec2 d = q - (c + rmax + (1.0 - 2.0 * rmax) * vec2(hash12(cc), hash12(cc + 7.3)));
 		float r = length(d);
-		float age = fract(t * 2.0 + h);
-		float x = (r - age * 0.24) / 0.08;
+		float age = fract(ph);
+		float x = (r - age * 0.12 * k) / (0.04 * k);
 		float s = abs(x) < 1.0 ? sin(x * PI) : 0.0;
-		n += d / max(r, 1e-4) * s * (1.0 - age) * (1.0 - age);
+		n += d / max(r, 1e-4) * s * on * (1.0 - age) * (1.0 - age);
 	}
-	return n;
+	// Кола менші й рідші, тож нахил ×1.5 — інакше на воді їх майже не видно.
+	return n * 1.5;
 }
 
 // Скільки рябі видно: 1 — кола розрізнені (близько), 0 — гребінь тонший за
@@ -67,11 +76,14 @@ float ripple_visibility(vec2 p) {
 
 #include "res://game/battle/shaders/overcast_sky.gdshaderinc"
 
+// Наскільки ясне небо (`WeatherRig`): вода й калюжі відбивають те саме небо, що й купол.
+global uniform float sky_clear;
+
 // Відбиття похмурого неба з френелем Шліка; n і v — світові й нормалізовані,
 // t — секунди (дрейф хмар).
 vec3 overcast_reflection(vec3 n, vec3 v, float f0, float power, float t) {
 	float f = f0 + (1.0 - f0) * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), power);
-	return overcast_sky_at(reflect(-v, n), t) * f;
+	return overcast_sky_at(reflect(-v, n), t, sky_clear) * f;
 }
 
 // Нахил нормалі у світовому xz -> NORMAL_MAP площини (дотична +X, бінормаль −Z).

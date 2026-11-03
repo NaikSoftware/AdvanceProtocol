@@ -1,6 +1,7 @@
 # Movement and terrain
 
-The detail behind §3.1, §3.2 and §3.12 of CLAUDE.md — the grid, action points and ground state.
+The detail behind §3.1, §3.2, §3.12 and §3.14 of CLAUDE.md — the grid, action points, ground state
+and wrecks.
 
 [back to CLAUDE.md](../../CLAUDE.md)
 
@@ -87,6 +88,40 @@ every hedgerow. Engineers are the worst off-road (−5) and live on roads.
 
 Impassable tiles are modelled as an infinite penalty, not as a special case in the mover.
 
+**Tanks break forest.** A `TANK`-class unit — every tank, the tank destroyer included — that
+enters a forest tile pays the ordinary forest cost and fells it permanently: the trees go down and
+only branches stay on the ground. Other vehicles can follow only where a tank has been:
+
+| class | standing forest | broken forest |
+| --- | --- | --- |
+| `TANK` | enters at forest cost (penalty 20), breaks it | penalty 10 |
+| `LIGHT_VEHICLE`, `ARTILLERY`, `ENGINEER` | cannot enter | penalty 10 |
+| `INFANTRY` | walks through, never breaks it | floor of 10, as everywhere |
+
+A broken tile takes 10 from the existing ladder — ordinary ground — and ground state offsets it
+like any other off-road tile. The ladder has no bucket strictly between ordinary ground (10) and
+forest (20), so this is the lower neighbour, not a new value.
+
+"Cannot enter" is the same infinite cost the mover already skips, not a special case in it. It
+cannot be one number per tile: the wheels have **more** AP than the tanks, so any forest penalty a
+heavy tank can pay (cross-country 9, 40 AP: `p <= 39`) the armoured car can pay too
+(cross-country 5, 68 AP: walled only above 63). The gate is therefore a single class check in
+`Rules.entry_cost_at()` — one boolean against one terrain kind, not a unit×terrain matrix — and
+the tile still carries one penalty, which is 20 standing and 10 broken.
+
+The tree falls on **entry**, after the tank has paid for standing forest and after vision is
+recomputed for that step, and before any mine on the tile goes off: a mine that stops the tank
+there does not put the trees back. A move that stops on the tile before (an unseen unit, a mine an
+engineer has just found) breaks nothing.
+
+**Broken forest is known through `seen`** ([§3.5](vision-and-fog.md)). A player knows a tile is
+broken only once that tile is in their `seen` grid; breaking and scouting are both permanent, so
+the player's knowledge can lag the truth but never contradict it, and needs no grid of its own —
+it is the truth filtered by `seen`. Planning and the zones read that knowledge, never the truth:
+a route that opened through forest an unseen tank had felled would say exactly where that tank
+went. A vehicle that plans through a tile it knows is broken is always right, and a tank charged
+for a tile it believed standing pays less on the walk, never more.
+
 **Firing** requires `fire_cost` AP available, and **sets the unit's AP to 0**. A unit fires at most
 once per turn, and firing ends its activity. This is the central tension of a turn: how far can I
 go and still shoot?
@@ -104,13 +139,15 @@ occupancies and conflating them is a bug in either direction:
 
 - **Planning** — the zones, the path, and whether a destination is reachable at all — uses the full
   terrain, which is public (§3.5), the player's own units, enemy **units** standing on ground the
-  player has scouted (`seen`, §3.5), and the enemy mines the player already knows of, which are
-  obstacles (§3.11). Ground that looks empty is planned through. Terrain never surprises a move;
-  only an enemy can.
+  player has scouted (`seen`, §3.5), the enemy mines the player already knows of, which are
+  obstacles (§3.11), for a vehicle the wrecks on scouted ground (§3.14), and the broken forest
+  the player knows of. Ground that looks empty is planned through. Terrain never surprises a
+  move; only an enemy or its wreck can.
 - **Walking** uses the truth. Before entering each tile the mover checks what is really there; if
-  a unit it could not see is standing in the way, or an engineer has just found a mine there, the
-  move **stops on the tile before it** and ends. Vision is recomputed at every step, so whatever
-  emerged is visible from that moment on.
+  a unit it could not see is standing in the way, a vehicle meets a wreck on ground its side had
+  not scouted, or an engineer has just found a mine there, the move **stops on the tile before
+  it** and ends. Vision is recomputed at every step, so whatever emerged is visible from that
+  moment on.
 
 This is the same shape as the mine rule (§3.11), and deliberately so: the unit stops where reality
 contradicted the plan. **AP is charged only for tiles actually entered** — a move cut short is
@@ -139,6 +176,36 @@ by a unit you cannot see is therefore a legal order**, not an error; you give it
 
 Both zones are computed by a flood fill over the grid (Dijkstra on entry cost) and must be
 recomputed after every action that changes AP or occupancy.
+
+## Wrecks
+
+A destroyed vehicle leaves a wreck on its tile — whatever killed it: a shot, a retaliation, a
+drone strike, a mine (the wreck lies on the mine tile), or a concede. Every class except
+infantry counts as a vehicle (`UnitTypes.is_vehicle()`), engineers and artillery included. A
+destroyed squad leaves none.
+
+- **A wreck blocks vehicles only.** A vehicle can never enter it, end on it, or pass through it.
+  Infantry walks onto it, stands on it, and walks on.
+- **It blocks nothing else** — not fire, vision, retaliation, or targeting. Victory (§3.10)
+  counts only live units, so a wreck keeps no player in the match.
+- **It burns out after `WRECK_ROUNDS` = 3 full rounds**, counted from the point in the round where
+  it appeared: it is removed at the start of the turn that falls at the same place in the round,
+  three rounds later. Every live player, including the one on whose turn it appeared, therefore
+  gets exactly three turns with it on the board. Counting from the start of a round instead would
+  give the players who move before the killer one turn fewer. The rules forget it once it burns
+  out; the scorch mark that remains is the view's.
+- **A bridge takes its wreck with it.** Demolishing a bridge removes any wreck on the span, and a
+  unit lost with the bridge leaves none — it fell into the river. A wreck does not forbid the
+  demolition: no vehicle can be standing on it.
+- **A player knows a wreck only on ground they have scouted** (`seen`, §3.5). Planning routes a
+  vehicle around known wrecks, and their tiles are not legal vehicle destinations; an unknown wreck
+  is planned through, and the walk stops on the tile before it, exactly as for an unseen unit.
+
+`core/` reports wrecks as events, so the view never decides whether one was left:
+`WreckLeft(pos, type_id, facing)` comes straight after the `UnitDestroyed` it belongs to, and
+`WreckRemoved(pos, reason)` carries `Wrecks.Reason.BURNED_OUT` or `BRIDGE_DEMOLISHED`. A wreck
+keeps the facing its unit had at the moment it died — a vehicle killed on a mine faces along the
+step that set it off — and that facing is saved with it.
 
 ## Weather, time of day, and ground state
 

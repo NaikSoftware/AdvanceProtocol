@@ -184,7 +184,7 @@ or paused frame rate never changes how they look, only how smooth.
     runtime (engineer verbs) must swap the segment.
   - HILL → rocks and scrub; roadsides → a few poles/fences/low stone walls as dressing.
 - MultiMesh per model to hold the draw-call budget.
-- **Occlusion:** a tree or roof between the camera and a unit fades (dither) so the unit stays
+- **Occlusion:** a tree or roof between the camera and a unit turns smoothly semi-transparent (alpha, never dither) so the unit stays
   readable. Applies to the selected unit and any visible unit.
 - Rough Tripo volume: ~8–12 generations (3 trees, 3 houses, 1 ruin, 2 bridge pieces, rocks, a
   fence/wall set) plus **at most 3 re-rolls per asset**. The main context accepts each asset from

@@ -15,6 +15,12 @@ func before_each() -> void:
 	add_child_autofree(view)
 
 
+func after_each() -> void:
+	# Статичне поле на весь процес: тест, що впав посередині, не сміє лишити рельєф решті набору.
+	TerrainHeight.active = null
+	WeatherRig.unit_contact = 0.0
+
+
 func _unit(type_id: int, owner: int = 0, pos: Vector2i = Vector2i(2, 3), facing: int = 0) -> Unit:
 	return Unit.create(1, type_id, owner, pos, facing)
 
@@ -34,9 +40,83 @@ func test_bind_picks_a_distinct_silhouette_per_class() -> void:
 	for type_id in type_ids:
 		view.bind(_unit(type_id))
 		var hull: MeshInstance3D = view.get_node("Silhouette/Hull")
-		var size: Vector3 = (hull.mesh as BoxMesh).size
-		seen_sizes[size] = true
+		assert_eq(hull.mesh.get_surface_count(), 1, "тіло — одна сітка")
+		seen_sizes[UnitSilhouettes.spec(type_id).hull] = true
 	assert_eq(seen_sizes.size(), type_ids.size(), "кожен клас мусить мати власний, ні на який інший не схожий силует")
+
+
+## Тінь-контакт: плаский квад під корпусом, ширший за його слід; сам тіні від сонця не кидає. Усі
+## плями одного екрана — один MultiMesh (`UnitContacts`), а не вузол і виклик малювання на юніт.
+func _with_contacts() -> UnitContacts:
+	var contacts := UnitContacts.new()
+	add_child_autofree(contacts)
+	view.contacts = contacts
+	return contacts
+
+
+func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
+	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
+	for type_id: int in [0, 5, 11]:
+		view.bind(_unit(type_id))
+		assert_eq(contacts.count(), 1, "одна пляма на юніта, не більше")
+		var hull: Vector3 = UnitSilhouettes.spec(type_id).hull
+		var xf: Transform3D = contacts.transform_of(0)
+		assert_almost_eq(xf.basis.x.length(), hull.x * UnitView.CONTACT_SPREAD, 0.0001, "ширша за слід по x")
+		assert_almost_eq(xf.basis.z.length(), hull.z * UnitView.CONTACT_SPREAD, 0.0001, "і по z")
+		assert_almost_eq(xf.origin.y - view.position.y, 0.01, 0.0001, "на ґрунті, під корпусом")
+		assert_almost_eq(xf.origin.x, view.position.x, 0.0001)
+		assert_almost_eq(xf.origin.z, view.position.z, 0.0001)
+		assert_eq(contacts.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+## Пляма реєструється вже після повороту: перша синхронізація бачить facing юніта.
+func test_contact_shadow_starts_in_the_units_facing() -> void:
+	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
+	view.bind(_unit(5, 0, Vector2i(2, 2), 2))
+	assert_eq(contacts.transform_of(0), view.contact_transform())
+	assert_almost_eq(contacts.transform_of(0).basis.x.normalized().dot(view.global_transform.basis.x.normalized()), 1.0, 0.0001, "пляма повернута разом з юнітом")
+
+
+## Без тіні-контакту у вигляді карти пляму не будують зовсім: прозорий квад під кожним юнітом —
+## зайвий виклик малювання.
+func test_no_contact_shadow_when_the_look_has_none() -> void:
+	WeatherRig.unit_contact = 0.0
+	var contacts := _with_contacts()
+	for type_id: int in [0, 5]:
+		view.bind(_unit(type_id))
+		assert_eq(contacts.count(), 0)
+
+
+## Загиблі фігури лежать на ґрунті, тож пляма під відділенням зникає разом зі стоячими.
+func test_squad_contact_shadow_goes_with_the_squad() -> void:
+	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
+	view.bind(_unit(0))
+	assert_true(contacts.is_shown(0))
+	view.play_destroyed()
+	contacts.sync()
+	assert_false(contacts.is_shown(0))
+
+
+## Пляма їде за юнітом: позицію вузла твін міняє щокадру, а пляма — спільна, тож її сітка
+## синхронізується окремо (UnitContacts._process).
+func test_contact_shadow_follows_the_unit_and_dies_with_its_node() -> void:
+	WeatherRig.unit_contact = 0.6
+	var contacts := _with_contacts()
+	view.bind(_unit(5, 0, Vector2i(2, 2)))
+	var path: Array[Vector2i] = [Vector2i(3, 2)]
+	(view.move_along(path, 0.05).get_object() as Tween).custom_step(10.0)
+	contacts.sync()
+	assert_almost_eq(contacts.transform_of(0).origin.x, view.position.x, 0.0001)
+	var other: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(other)
+	other.contacts = contacts
+	other.bind(_unit(5, 1, Vector2i(6, 6)))
+	assert_eq(contacts.count(), 2)
+	other.free()
+	assert_eq(contacts.count(), 1, "звільнений юніт плями не лишає")
 
 
 ## R14: face() твінується (не клацає миттєво), тож перевіряємо ціль твіна
@@ -325,6 +405,11 @@ func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
 	assert_true(opaque < total / 2, "і не мусить бути залитим квадратом")
 
 
+## Кольори вершин сітки тіла: колір власника живе в них, а не в спільному матеріалі.
+func _hull_colors() -> PackedColorArray:
+	return (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+
+
 ## Корпус фарбує ВЛАСНИК і більше ніщо. Раніше bind() ще й приглушував
 ## корпус юніта, який уже стріляв, — власник цього не замовляв і прибрав
 ## («прибери приглушення взагалі»). Тест тримає саме це: жоден стан юніта,
@@ -332,14 +417,14 @@ func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
 func test_hull_colour_comes_from_owner_and_nothing_else() -> void:
 	var fresh := _unit(5)
 	view.bind(fresh)
-	var base_color: Color = view._hull_material.albedo_color
+	var base_colors: PackedColorArray = _hull_colors()
 
 	var fired := _unit(5)
 	fired.exhaust()
 	fired.hp = fired.max_hp() / 2
 	view.bind(fired)
-	assert_eq(view._hull_material.albedo_color, base_color,
-		"постріл і поранення не мусять міняти колір корпусу")
+	assert_false(base_colors.is_empty(), "передумова: у сітці є кольори")
+	assert_eq(_hull_colors(), base_colors, "постріл і поранення не мусять міняти колір корпусу")
 
 
 ## Await на tween.finished крихкий у headless-тестах — прокручуємо твін
@@ -357,7 +442,7 @@ func test_move_along_tweens_position_to_final_cell() -> void:
 ## Виправлення 3: юніт довертається НА МІСЦІ ПЕРЕД кожним кроком шляху, що
 ## справді міняє напрямок (Board.facing_towards, чиста функція core/), а не
 ## паралельно з рухом. Крок 1 — на схід (facing=2), крок 2 — на південь
-## (facing=4); обидва — доворот (_FACE_TURN_DURATION=0.15) стартовий з
+## (facing=4); обидва — доворот (FACE_TURN_DURATION=0.15) стартовий з
 ## facing=0, тож кожен крок шляху займає 0.15+0.1=0.25с сумарно.
 func test_move_along_turns_the_unit_at_each_step() -> void:
 	view.bind(_unit(5, 0, Vector2i(0, 0), 0))  # дивиться на північ (facing=0)
@@ -453,12 +538,83 @@ func test_move_along_with_empty_path_still_finishes_without_moving() -> void:
 	assert_eq(view.position, start_pos, "порожній шлях не мусить зрушити юніт")
 
 
-func test_play_destroyed_returns_a_finishing_tween() -> void:
-	view.bind(_unit(5))
+func test_destroyed_squad_lays_all_figures_down_instead_of_shrinking() -> void:
+	view.bind(_unit(0))
 	var finished: Signal = view.play_destroyed()
-	var tween: Tween = finished.get_object()
-	tween.custom_step(10.0)
-	assert_eq(view.scale, Vector3.ZERO, "знищення — твін масштабу до нуля")
+	(finished.get_object() as Tween).custom_step(10.0)
+	assert_eq(view.standing_figures(), 0)
+	assert_eq(view.scale, Vector3.ONE, "відділення не стискається в точку — фігури падають")
+	assert_false(view._hp_bar.visible)
+
+
+## Лежачі фігури — вершини кольору загиблих у сітці тіла (кожна фігура — коробка в 24 вершини).
+func _fallen_figures() -> int:
+	var colors: PackedColorArray = (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	return colors.count(UnitSilhouettes.FALLEN_COLOR) / 24
+
+
+## Відділення — чотири фігури в одній сітці з основою; стоїть одна на кожну чверть HP, що
+## лишилась (`ceil(4 · hp / max_hp)`), решта лежить на тій самій основі.
+func test_squad_shows_one_standing_figure_per_quarter_of_hp() -> void:
+	view.bind(_unit(0))
+	assert_eq(UnitView.SQUAD_FIGURES, 4)
+	assert_eq(view.get_node("Silhouette").get_child_count(), 1, "тіло — одна сітка")
+	var cases: Dictionary = {100: 4, 76: 4, 75: 3, 74: 3, 50: 2, 26: 2, 25: 1, 1: 1, 0: 0}
+	for hp: int in cases:
+		view.set_hp(hp, 100)
+		assert_eq(view.standing_figures(), cases[hp], "hp %d" % hp)
+		assert_eq(_fallen_figures(), UnitView.SQUAD_FIGURES - cases[hp], "hp %d: лежачих у сітці" % hp)
+
+
+func test_fallen_figure_lies_flat_and_low() -> void:
+	var standing: Transform3D = UnitSilhouettes.figure_transform(0, true)
+	var fallen: Transform3D = UnitSilhouettes.figure_transform(3, false)
+	assert_eq(roundi(standing.basis.y.normalized().y), 1, "жива фігура стоїть")
+	assert_eq(roundi(fallen.basis.y.normalized().y), 0, "загибла лежить")
+	assert_true(fallen.origin.y < standing.origin.y)
+
+
+func test_vehicles_have_no_figures() -> void:
+	view.bind(_unit(5))
+	assert_null(view.get_node_or_null("Silhouette/Figures"))
+	assert_eq(view.standing_figures(), 0)
+
+
+func _explosions() -> Array[Node]:
+	return view.get_parent().find_children("Explosion*", "", false, false)
+
+
+## Техніка не стискається в точку: спалах і вогняна куля над тайлом, а сам юніт
+## зникає під ними — уламки на тому самому тайлі ставить WreckLeft, а не цей вузол.
+func test_vehicle_destruction_flashes_and_hides_the_unit_under_the_fireball() -> void:
+	view.bind(_unit(5, 1, Vector2i(4, 2)))
+	var finished: Signal = view.play_destroyed()
+	assert_false(view._hp_bar.visible, "HP-бар зникає в мить загибелі, а не з кулею")
+	assert_false(view._hp_label.visible)
+	var boom: Array[Node] = _explosions()
+	assert_eq(boom.size(), 1, "рівно одна вогняна куля")
+	assert_eq((boom[0] as Node3D).position, view.position)
+	var ended: Array[bool] = [false]
+	finished.connect(func() -> void: ended[0] = true)
+	(finished.get_object() as Tween).custom_step(UnitView.KILL_HIDE_DELAY + 0.001)
+	assert_false(view._silhouette.visible, "під кулею юніта вже нема")
+	# Анімація закінчується тим самим кроком, яким ховає юніт: наступна подія, WreckLeft,
+	# ставить уламки в тому самому кадрі — порожнього тайла між ними не видно.
+	assert_true(ended[0])
+	assert_eq(view.scale, Vector3.ONE, "техніку не стискає")
+
+
+## Вибух — одноразовий: чекати його повністю не треба (уламки мусять з'явитися ще
+## під кулею), а його дим, розвіявшись за 3–6 с, звільняє себе сам.
+func test_explosion_is_one_shot_and_frees_itself() -> void:
+	view.bind(_unit(5))
+	view.play_destroyed()
+	var boom: Node = _explosions()[0]
+	for t in Engine.get_main_loop().get_processed_tweens():
+		if t.is_valid():
+			t.custom_step(BattleFx.EXPLOSION_SEC + 0.01)
+	assert_true(boom.is_queued_for_deletion())
+	assert_true(BattleFx.EXPLOSION_SEC <= 6.0, "куля знищення разом із димом — до 6 с")
 
 
 ## §3.5: невидимий ворог не має вузла взагалі — рішення контейнера
@@ -494,9 +650,9 @@ func test_views_of_same_owner_share_textures_and_materials() -> void:
 	assert_same(view._crosshair.texture, other._crosshair.texture)
 	assert_same(view._hp_bar.texture, other._hp_bar.texture)
 	assert_same(view._hull_material, other._hull_material)
-	assert_same(view.get_node("Silhouette/Barrel").material_override, other.get_node("Silhouette/Barrel").material_override)
+	assert_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "той самий власник — та сама сітка")
 	other.bind(_unit(5, 1))
-	assert_not_same(view._hull_material, other._hull_material, "інший власник — інший колір")
+	assert_not_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "інший власник — інший колір")
 
 
 func test_no_debug_facing_arrow_in_shipped_build() -> void:
@@ -537,8 +693,20 @@ func test_silhouette_fits_one_tile() -> void:
 		var root := UnitSilhouettes.build(id, Color.RED)
 		var lo := Vector3(INF, INF, INF)
 		var hi := Vector3(-INF, -INF, -INF)
-		for m: MeshInstance3D in root.get_children():
-			var box: AABB = m.mesh.get_aabb()
+		for m: Node3D in root.get_children():
+			if m is MultiMeshInstance3D:
+				# Фігури відділення: і стоячі, і лежачі мусять лишатись у тайлі.
+				for i in UnitView.SQUAD_FIGURES:
+					for up: bool in [true, false]:
+						var fb: AABB = UnitSilhouettes.figure_transform(i, up) * AABB(-UnitSilhouettes.FIGURE_SIZE * 0.5, UnitSilhouettes.FIGURE_SIZE)
+						lo = lo.min(fb.position)
+						hi = hi.max(fb.end)
+				continue
+			var box: AABB = (m as MeshInstance3D).mesh.get_aabb()
+			if m.name == "Barrel":
+				# Ствол реальної довжини (5–6 м від центру башти) смій виступати за тайл.
+				assert_gte(m.position.z + box.position.z, -0.75, "ствол типу %d" % id)
+				continue
 			lo = lo.min(m.position + box.position)
 			hi = hi.max(m.position + box.end)
 		assert_lte(hi.x - lo.x, 1.0, "x типу %d" % id)
@@ -592,3 +760,237 @@ func test_unit_meshes_are_on_the_unit_layer_only() -> void:
 			found += 1
 			assert_eq((n as VisualInstance3D).layers, expected, "%s мусить бути лише на шарі юнітів" % n.name)
 	assert_gt(found, 4, "передумова: силует і позначки справді знайдено")
+
+
+# --- Юніт на рельєфі ----------------------------------------------------
+
+const _CM: float = TerrainHeight.M * 0.01
+static var _river: TerrainHeight = null
+static var _river_board: Board = null
+
+
+func _relief() -> TerrainHeight:
+	if _river == null:
+		var m: MapData = load("res://maps/river.tres")
+		_river_board = m.to_board()
+		_river = TerrainHeight.bake(_river_board, 0, m.name_key.hash())
+	return _river
+
+
+## Кути основи корпусу у світі: низ Hull, ±половина його розміру.
+func _base_corners(v: UnitView) -> Array[Vector3]:
+	var sil: Node3D = v.get_node("Silhouette")
+	var size: Vector3 = UnitSilhouettes.spec(v._type_id).hull
+	var out: Array[Vector3] = []
+	for sx: float in [-0.5, 0.5]:
+		for sz: float in [-0.5, 0.5]:
+			out.append(sil.global_transform * Vector3(size.x * sx, 0.0, size.z * sz))
+	return out
+
+
+## Перепад висот під кутами тайла: скільки схилу під юнітом.
+func _spread(t: TerrainHeight, c: Vector2i) -> float:
+	var lo := INF
+	var hi := -INF
+	for d: Vector2 in [Vector2(-0.4, -0.4), Vector2(0.4, -0.4), Vector2(-0.4, 0.4), Vector2(0.4, 0.4)]:
+		var h: float = t.at(c.x + d.x, c.y + d.y)
+		lo = minf(lo, h)
+		hi = maxf(hi, h)
+	return hi - lo
+
+
+func _land_cells(t: TerrainHeight) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for y in _river_board.height:
+		for x in _river_board.width:
+			var k: int = _river_board.kind_at(Vector2i(x, y))
+			if k != Terrain.Kind.WATER and k != Terrain.Kind.BRIDGE and k != Terrain.Kind.BRIDGE_DESTROYED:
+				out.append(Vector2i(x, y))
+	return out
+
+
+## Наскільки земля під основою юніта відходить від площини: скрут (діагоналі на різній
+## висоті) і горб чи западина під центром. Жорстка основа на такій землі неминуче висить
+## частиною країв — 10 см там недосяжні за будь-якого нахилу.
+func _off_plane(t: TerrainHeight, v: UnitView) -> float:
+	var g: Array[float] = []
+	for p in _base_corners(v):
+		g.append(t.at(p.x, p.z))
+	var mean: float = (g[0] + g[1] + g[2] + g[3]) / 4.0
+	var twist: float = absf(g[0] + g[3] - g[1] - g[2]) / 4.0
+	return maxf(twist, absf(t.at(v.position.x, v.position.z) - mean))
+
+
+## Схил не крутіший за межу нахилу, від рівнини до помірного. Де земля під основою рівна,
+## основа лежить на ній усіма кутами: не глибше 2 см у ґрунті й не вище 10 см над ним. На
+## скруті чи горбі жорстка основа неминуче висить частиною країв — там межа ширша на
+## подвійний відступ землі від площини, але кути однаково не входять у ґрунт. Діагональний
+## facing, щоб кути справді крутились разом із юнітом.
+func test_vehicle_base_lies_on_the_ground_up_to_the_tilt_limit() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var planar := 0
+	for c in _land_cells(t):
+		if _spread(t, c) > tan(deg_to_rad(UnitView.MAX_TILT_DEG)) * 0.6:
+			continue
+		view.bind(_unit(5, 0, c, 1))
+		var off: float = _off_plane(t, view)
+		var bound: float = 10.0 * _CM if off <= 4.0 * _CM else 10.0 * _CM + 2.0 * off
+		if off <= 4.0 * _CM:
+			planar += 1
+		for p in _base_corners(view):
+			var g: float = t.at(p.x, p.z)
+			assert_gte(p.y - g, -2.0 * _CM, "кут у ґрунті на %s: %.1f см" % [c, (p.y - g) / _CM])
+			assert_lte(p.y - g, bound, "кут висить на %s: %.1f см (межа %.1f)" % [c, (p.y - g) / _CM, bound / _CM])
+	gut.p("рівних клітинок під основою перевірено: %d" % planar)
+	assert_gte(planar, 15, "передумова: на Річці досить рівних клітинок")
+
+
+## Відділення стоїть на одній основі з кількома фігурами: нахил перекидав би їх разом із
+## підставкою. Тому воно лишається рівним (лише поворот) і трохи втоплене в ґрунт, щоб
+## край основи на схилі не висів.
+func test_infantry_squad_stays_level_and_sunk_on_a_slope() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	for id in UnitTypes.count():
+		if UnitTypes.is_vehicle(UnitTypes.get_type(id)["unit_class"]):
+			continue
+		view.bind(_unit(id, 0, steepest, 1))
+		var sil: Node3D = view.get_node("Silhouette")
+		assert_eq(sil.rotation, Vector3.ZERO, "тип %d рівний" % id)
+		assert_almost_eq(view.position.y, t.at(steepest.x, steepest.y) - UnitView.SQUAD_SINK, 0.0001, "тип %d втоплений" % id)
+		assert_almost_eq(view.rotation_degrees.y, -45.0, 0.0001, "поворот лишається")
+
+
+## Найкрутіший берег: нахил обмежено, і жоден кут однаково не входить у ґрунт.
+func test_tilt_is_clamped_and_nothing_sinks_on_the_steepest_bank() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	assert_gt(_spread(t, steepest), tan(deg_to_rad(UnitView.MAX_TILT_DEG)) * 0.8, "передумова: схил крутіший за межу")
+	view.bind(_unit(8, 0, steepest, 3))
+	var sil: Node3D = view.get_node("Silhouette")
+	var up: Vector3 = sil.global_basis.y.normalized()
+	assert_gt(up.angle_to(Vector3.UP), deg_to_rad(1.0), "на схилі юніт нахилений")
+	assert_lte(absf(sil.rotation.x), deg_to_rad(UnitView.MAX_TILT_DEG) + 0.0001, "тангаж у межі")
+	assert_lte(absf(sil.rotation.z), deg_to_rad(UnitView.MAX_TILT_DEG) + 0.0001, "крен у межі")
+	for p in _base_corners(view):
+		assert_gte(p.y - t.at(p.x, p.z), -2.0 * _CM, "кут у ґрунті: %.1f см" % ((p.y - t.at(p.x, p.z)) / _CM))
+
+
+## §3.4: нахил не повертає юніт. Напрям, кут корпусу навколо осі й те, куди дивиться
+## ніс у плані, — ті самі, що й на рівній землі.
+func test_tilt_does_not_change_facing() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	for f in 8:
+		view.bind(_unit(5, 0, steepest, f))
+		var sil: Node3D = view.get_node("Silhouette")
+		var nose: Vector3 = -sil.global_basis.z
+		var flat_nose: Vector3 = -view.global_basis.z
+		assert_eq(view.facing, f)
+		assert_almost_eq(view.rotation_degrees.y, -45.0 * f, 0.0001, "кут вузла — лише напрям")
+		assert_almost_eq(Vector2(nose.x, nose.z).normalized().dot(Vector2(flat_nose.x, flat_nose.z)), 1.0, 0.0001,
+				"ніс у плані дивиться туди ж, facing %d" % f)
+
+
+func test_flat_ground_keeps_the_unit_level() -> void:
+	view.bind(_unit(8, 0, Vector2i(4, 4), 1))
+	var sil: Node3D = view.get_node("Silhouette")
+	assert_eq(sil.rotation, Vector3.ZERO)
+	assert_eq(view.position, Vector3(4, 0, 4))
+
+
+## Кожен кадр ходу юніт лежить на схилі, а не лише на кінцевій клітинці.
+func test_unit_keeps_the_pose_while_moving() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	var start := steepest + Vector2i(-1, 0)
+	view.bind(_unit(5, 0, start, 2))
+	var path: Array[Vector2i] = [steepest]
+	var tween: Tween = view.move_along(path, 1.0).get_object()
+	var sil: Node3D = view.get_node("Silhouette")
+	var tilted := 0
+	for i in 10:
+		tween.custom_step(0.1)
+		for p in _base_corners(view):
+			assert_gte(p.y - t.at(p.x, p.z), -2.0 * _CM, "кут у ґрунті на кроці %d" % i)
+		if sil.rotation.length() > deg_to_rad(1.0):
+			tilted += 1
+	assert_gt(tilted, 0, "дорогою юніт нахиляється за схилом")
+
+
+## Поворот на місці: твін крутить вузол, нахил іде слідом кожен кадр.
+func test_turn_in_place_keeps_the_base_on_the_slope() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var steepest := Vector2i.ZERO
+	for c in _land_cells(t):
+		if _spread(t, c) > _spread(t, steepest):
+			steepest = c
+	view.bind(_unit(8, 0, steepest, 0))
+	view.face(2)
+	for i in 5:
+		view._face_tween.custom_step(0.04)
+		view._process(0.04)
+		for p in _base_corners(view):
+			assert_gte(p.y - t.at(p.x, p.z), -2.0 * _CM, "кут у ґрунті посеред повороту, крок %d" % i)
+
+
+## Міст: юніт стоїть рівно на настилі, а не на руслі під ним.
+func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var bridge := Vector2i(-1, -1)
+	for y in _river_board.height:
+		for x in _river_board.width:
+			if _river_board.kind_at(Vector2i(x, y)) == Terrain.Kind.BRIDGE:
+				bridge = Vector2i(x, y)
+	assert_ne(bridge, Vector2i(-1, -1), "передумова: на Річці є міст")
+	view.bind(_unit(5, 0, bridge, 1))
+	assert_almost_eq(view.position.y, t.deck_y(bridge), 0.0001)
+	assert_eq(view.get_node("Silhouette").rotation, Vector3.ZERO)
+
+
+## Кадр юніта працює лише поки живий твін повороту чи ходу: у спокої десятки юнітів не
+## роблять нічого щокадру (§8).
+func test_unit_processes_only_while_turning() -> void:
+	view.bind(_unit(5, 0, Vector2i(2, 2), 0))
+	assert_false(view.is_processing(), "після bind кадр вимкнено")
+	view.face(2)
+	assert_true(view.is_processing(), "поворот вмикає кадр")
+	view._face_tween.custom_step(10.0)
+	view._process(0.0)
+	assert_false(view.is_processing(), "твін скінчився — кадр вимкнено")
+	var path: Array[Vector2i] = [Vector2i(3, 2)]
+	var tween: Tween = view.move_along(path, 0.1).get_object()
+	assert_true(view.is_processing(), "хід вмикає кадр")
+	tween.custom_step(10.0)
+	view._process(0.0)
+	assert_false(view.is_processing())
+
+
+
+## HP-бар і підпис — поверх усіх ефектів, завжди однаково: полум'я уламків не сміє
+## перекривати один підпис і лишати інший зверху.
+func test_hp_bar_and_label_draw_over_every_effect() -> void:
+	view.bind(_unit(5))
+	for n: GeometryInstance3D in [view._hp_bar, view._hp_label]:
+		assert_true(n.get("no_depth_test"), n.name)
+		assert_eq(n.get("render_priority"), UnitView.OVERLAY_PRIORITY, n.name)
+	assert_true(UnitView.OVERLAY_PRIORITY > BoardView.CONTOUR_PRIORITY, "вище за контури зон, вогонь і дощ")

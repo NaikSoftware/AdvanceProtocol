@@ -1,0 +1,144 @@
+{
+ "atlas": "forest_conifer",
+ "size": 2048,
+ "cell": 256,
+ "alpha_cutoff": 0.45,
+ "sprite_sets": {
+  "pine": [
+   {
+    "src": "pine_tufts",
+    "grade": {
+     "lab": {
+      "L": 32,
+      "C": 8,
+      "h": 140,
+      "contrast_l": 0.6
+     }
+    }
+   }
+  ],
+  "spruce": [
+   {
+    "src": "spruce_tufts",
+    "grade": {
+     "lab": {
+      "L": 29,
+      "C": 8,
+      "h": 142,
+      "contrast_l": 0.6
+     }
+    }
+   }
+  ]
+ },
+ "items": [
+  {
+   "node": "Pine_A",
+   "src": "pine_a",
+   "sprites": "pine",
+   "trunk_radius": 0.15,
+   "trunk_grade": {
+    "tint": [
+     1.25,
+     0.95,
+     0.75
+    ],
+    "target_y": 0.24
+   },
+   "scale": 0.713,
+   "card_scale": 2.3,
+   "card_keep": 0.85,
+   "crown_low": 0.45,
+   "card_budget": 36
+  },
+  {
+   "node": "Pine_B",
+   "src": "pine_b",
+   "sprites": "pine",
+   "trunk_radius": 0.15,
+   "trunk_grade": {
+    "tint": [
+     1.25,
+     0.95,
+     0.75
+    ],
+    "target_y": 0.24
+   },
+   "scale": 0.95,
+   "card_scale": 2.3,
+   "card_keep": 0.85,
+   "crown_low": 0.45,
+   "card_budget": 36
+  },
+  {
+   "node": "Pine_C",
+   "src": "pine_c",
+   "sprites": "pine",
+   "trunk_radius": 0.15,
+   "trunk_grade": {
+    "tint": [
+     1.25,
+     0.95,
+     0.75
+    ],
+    "target_y": 0.24
+   },
+   "scale": 0.77,
+   "card_scale": 2.3,
+   "card_keep": 0.85,
+   "crown_low": 0.45,
+   "card_budget": 36
+  },
+  {
+   "node": "Spruce_A",
+   "src": "spruce_a",
+   "sprites": "spruce",
+   "trunk_radius": 0.15,
+   "trunk_into_crown": 0.5,
+   "trunk_grade": {
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.2
+   },
+   "scale": 0.71,
+   "card_scale": 2.3,
+   "card_keep": 0.65,
+   "crown_low": 0.8,
+   "tiers": 3,
+   "card_budget": 24
+  },
+  {
+   "node": "Spruce_B",
+   "src": "spruce_b",
+   "sprites": "spruce",
+   "trunk_radius": 0.15,
+   "trunk_into_crown": 0.5,
+   "trunk_grade": {
+    "tint": [
+     1.15,
+     1.0,
+     0.82
+    ],
+    "target_y": 0.2
+   },
+   "scale": 0.86,
+   "card_scale": 2.3,
+   "card_keep": 0.65,
+   "crown_low": 0.8,
+   "tiers": 3,
+   "card_budget": 24
+  },
+  {
+   "node": "Hedge_Spruce",
+   "src": "hedge_spruce",
+   "sprites": "spruce",
+   "trunk": false,
+   "card_keep": 0.75,
+   "card_scale": 1.12,
+   "card_budget": 24
+  }
+ ]
+}

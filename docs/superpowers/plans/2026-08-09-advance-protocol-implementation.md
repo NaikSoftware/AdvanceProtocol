@@ -129,7 +129,7 @@ docs/superpowers/plans/
 - Consumes: нічого
 - Produces: `./run_tests.sh` — команда запуску всіх тестів, якою користуються всі подальші завдання
 
-- [ ] **Step 1: Створити `project.godot`**
+- [x] **Step 1: Створити `project.godot`**
 
 ```ini
 config_version=5
@@ -158,7 +158,7 @@ run/low_processor_mode=true
 
 Тимчасово прибрати `run/main_scene` (сцени ще немає) — рядок додається у Task 3.1. Поки що залишити файл без нього.
 
-- [ ] **Step 2: Вендорити GUT**
+- [x] **Step 2: Вендорити GUT**
 
 ```bash
 export GODOT=/home/naik/Downloads/Godot_v4.7.1-stable_linux.x86_64
@@ -171,7 +171,7 @@ rm -rf /tmp/gut
 
 Якщо версія не 9.x — узяти тег `v9.4.0`: `git clone --depth 1 --branch v9.4.0 ...`. GUT 7.x/8.x не працює на Godot 4.
 
-- [ ] **Step 3: Написати падаючий смоук-тест**
+- [x] **Step 3: Написати падаючий смоук-тест**
 
 `tests/test_smoke.gd`:
 
@@ -185,7 +185,7 @@ func test_core_dir_exists() -> void:
 	assert_true(DirAccess.dir_exists_absolute("res://core"), "каталог core/ має існувати")
 ```
 
-- [ ] **Step 4: Створити раннер і запустити — другий тест має впасти**
+- [x] **Step 4: Створити раннер і запустити — другий тест має впасти**
 
 `run_tests.sh`:
 
@@ -203,7 +203,7 @@ chmod +x run_tests.sh && ./run_tests.sh
 
 Очікується: `test_gut_runs` PASS, `test_core_dir_exists` FAIL.
 
-- [ ] **Step 5: Створити `core/` і повторити**
+- [x] **Step 5: Створити `core/` і повторити**
 
 ```bash
 mkdir -p core/commands game/ui maps assets/i18n tools
@@ -218,7 +218,7 @@ Godot не зберігає порожні каталоги в git — ство�
 
 Очікується: обидва тести PASS.
 
-- [ ] **Step 6: Доповнити `.gitignore`**
+- [x] **Step 6: Доповнити `.gitignore`**
 
 Додати до наявного файлу:
 
@@ -229,7 +229,7 @@ build/
 export_presets.cfg
 ```
 
-- [ ] **Step 7: Коміт**
+- [x] **Step 7: Коміт**
 
 ```bash
 git add project.godot run_tests.sh .gitignore addons/gut core/README.md core/commands/README.md tests/test_smoke.gd
@@ -255,7 +255,7 @@ git commit -m "chore: Godot project scaffold with GUT headless test runner"
 
 Ключ називається `attack_range`, а не `range`, бо `range` — вбудована функція GDScript і читається як помилка при кожному погляді на код.
 
-- [ ] **Step 1: Написати падаючий структурний тест**
+- [x] **Step 1: Написати падаючий структурний тест**
 
 `tests/core/test_unit_types.gd`:
 
@@ -307,7 +307,7 @@ func test_every_name_key_is_unique_and_neutral() -> void:
 		assert_true(key.begins_with("UNIT_"), "ключ перекладу має починатися з UNIT_")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_unit_types.gd
@@ -315,7 +315,7 @@ func test_every_name_key_is_unique_and_neutral() -> void:
 
 Очікується: FAIL, `Identifier "UnitTypes" not declared`.
 
-- [ ] **Step 3: Реалізувати `core/unit_types.gd`**
+- [x] **Step 3: Реалізувати `core/unit_types.gd`**
 
 ```gdscript
 class_name UnitTypes
@@ -379,7 +379,7 @@ static func is_vehicle(unit_class: int) -> bool:
 	return unit_class != UnitClass.INFANTRY
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти**
+- [x] **Step 4: Запустити — усе має пройти**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_unit_types.gd
@@ -387,7 +387,7 @@ static func is_vehicle(unit_class: int) -> bool:
 
 Очікується: 7 тестів PASS.
 
-- [ ] **Step 5: Коміт**
+- [x] **Step 5: Коміт**
 
 ```bash
 git add core/unit_types.gd tests/core/test_unit_types.gd
@@ -414,7 +414,7 @@ git commit -m "feat(core): unit stat table with roster invariant tests"
 
 Стан ґрунту зсуває штраф самого тайлу, а не вводить множник на юніта. Це достатньо: піхота має `cross_country` 80, тож формула `max(10, 10 + penalty - cross_country)` однаково впирається в підлогу 10 — «піхоти багнюка не стосується» випадає з математики безкоштовно, без спеціального випадку в мувері.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_terrain.gd`:
 
@@ -460,13 +460,13 @@ func test_penalty_never_negative() -> void:
 			assert_true(p >= 0, "штраф не може бути відʼємним")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_terrain.gd
 ```
 
-- [ ] **Step 3: Реалізувати `core/terrain.gd`**
+- [x] **Step 3: Реалізувати `core/terrain.gd`**
 
 ```gdscript
 class_name Terrain
@@ -521,7 +521,7 @@ static func is_passable(kind: int, ground_state: int) -> bool:
 	return penalty(kind, ground_state) < IMPASSABLE
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_terrain.gd
@@ -557,7 +557,7 @@ git commit -m "feat(core): terrain kinds, entry penalties and ground state"
 
 `DIRS_8` фіксує порядок індексів фейсингу раз і назавжди; усе, що торкається броні, покладається на нього.
 
-- [ ] **Step 1: Написати падаючі тести**
+- [x] **Step 1: Написати падаючі тести**
 
 `tests/core/test_unit.gd`:
 
@@ -649,13 +649,13 @@ func test_neighbours_are_clipped_to_board() -> void:
 	assert_eq(_board().neighbours4(Vector2i(3, 3)).size(), 4)
 ```
 
-- [ ] **Step 2: Запустити — мають упасти**
+- [x] **Step 2: Запустити — мають упасти**
 
 ```bash
 ./run_tests.sh -gdir=res://tests/core
 ```
 
-- [ ] **Step 3: Реалізувати `core/unit.gd`**
+- [x] **Step 3: Реалізувати `core/unit.gd`**
 
 ```gdscript
 class_name Unit
@@ -731,7 +731,7 @@ func exhaust() -> void:
 	has_fired = true
 ```
 
-- [ ] **Step 4: Реалізувати `core/board.gd`**
+- [x] **Step 4: Реалізувати `core/board.gd`**
 
 ```gdscript
 class_name Board
@@ -811,7 +811,7 @@ static func facing_towards(from: Vector2i, to: Vector2i) -> int:
 	return best
 ```
 
-- [ ] **Step 5: Запустити — усе має пройти, коміт**
+- [x] **Step 5: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gdir=res://tests/core
@@ -836,7 +836,7 @@ git commit -m "feat(core): unit instance and board grid with fixed facing order"
 
 Кидок приймає `rng` явним параметром, а не лізе в `BattleState`. Так функція лишається чистою і тестується без стану.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_rules_movement.gd`:
 
@@ -898,13 +898,13 @@ func test_impassable_stays_impassable_for_everyone() -> void:
 		"непрохідність — це нескінченний штраф, а не спецвипадок у мувері")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_rules_movement.gd
 ```
 
-- [ ] **Step 3: Реалізувати перший шматок `core/rules.gd`**
+- [x] **Step 3: Реалізувати перший шматок `core/rules.gd`**
 
 ```gdscript
 class_name Rules
@@ -927,7 +927,7 @@ static func entry_cost_at(unit: Unit, board: Board, p: Vector2i) -> int:
 	return entry_cost(unit, board.penalty_at(p))
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_rules_movement.gd
@@ -949,7 +949,7 @@ git commit -m "feat(core): deterministic roll and terrain entry cost"
 
 Цілочислова арифметика, без тригонометрії — точна формула з §3.4.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_rules_armour.gd`:
 
@@ -1000,9 +1000,9 @@ func test_every_facing_has_a_front_a_side_and_a_rear() -> void:
 		assert_eq(seen.size(), 3, "фейсинг %d має давати всі три сектори" % facing)
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Дописати в `core/rules.gd`**
+- [x] **Step 3: Дописати в `core/rules.gd`**
 
 ```gdscript
 static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos: Vector2i) -> int:
@@ -1024,7 +1024,7 @@ static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos
 	return UnitTypes.ArmourSector.REAR if dot < 0 else UnitTypes.ArmourSector.FRONT
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_rules_armour.gd
@@ -1051,7 +1051,7 @@ git commit -m "feat(core): integer armour sector resolution"
 
 Це найважливіша функція в проєкті. Тести тут перевіряють **межі, а не одне число**: кидок робить результат діапазоном, тож золоті тести фіксують мінімум і максимум формули та кожен множник окремо.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_rules_damage.gd`:
 
@@ -1171,9 +1171,9 @@ func test_damage_is_deterministic_per_seed() -> void:
 	assert_eq(a, b)
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Дописати в `core/rules.gd`**
+- [x] **Step 3: Дописати в `core/rules.gd`**
 
 Порядок операцій — рівно як у §3.3. Не переставляти: множники некомутативні через цілочислове ділення.
 
@@ -1244,11 +1244,11 @@ static func in_vision_diamond(a: Vector2i, b: Vector2i, r: int) -> bool:
 в §3.1 `CLAUDE.md` задає це прямо. Ромб — вужчий на діагоналях, тож на нерозвіданій землі,
 де юніт світить сам собі, обвідною вогню є саме він.
 
-- [ ] **Step 4: Запустити — усе має пройти**
+- [x] **Step 4: Запустити — усе має пройти**
 
 Якщо `test_infantry_base_range_band` не сходиться на одиницю — це округлення `int()` (обрізання до нуля), а не помилка формули. Підправити межі в тесті під фактичну поведінку `int()`, але **не міняти формулу**.
 
-- [ ] **Step 5: Коміт**
+- [x] **Step 5: Коміт**
 
 ```bash
 git add core/rules.gd tests/core/test_rules_damage.gd
@@ -1274,7 +1274,7 @@ git commit -m "feat(core): damage model with golden tests"
 
 `occupied` — це `Vector2i -> int` (id юніта). Зайняті тайли не можна кінцевими; проїзд крізь чужі юніти заборонено, крізь свої — теж (спрощення: жодного просочування, це читабельніше на телефоні).
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_pathing.gd`:
 
@@ -1383,9 +1383,9 @@ func test_exhausted_unit_can_reach_only_itself() -> void:
 	assert_eq(z.move_and_fire.size(), 0, "з нулем AP стріляти вже нічим")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/pathing.gd`**
+- [x] **Step 3: Реалізувати `core/pathing.gd`**
 
 ```gdscript
 class_name Pathing
@@ -1461,7 +1461,7 @@ static func path_to(zones: Zones, target: Vector2i) -> Array[Vector2i]:
 	return out
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_pathing.gd
@@ -1487,7 +1487,7 @@ git commit -m "feat(core): Dijkstra flood fill for the two movement zones"
 
 `visible` завжди перебудовується з нуля — накопичувати його між ходами означає протікання чужої інформації, а це найдорожчий баг у хот-ситі.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_vision.gd`:
 
@@ -1559,9 +1559,9 @@ func test_newly_revealed_tiles_are_reported_once() -> void:
 	assert_eq(second.size(), 0, "той самий огляд другого разу нічого не відкриває")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/vision.gd`**
+- [x] **Step 3: Реалізувати `core/vision.gd`**
 
 ```gdscript
 class_name Vision
@@ -1620,7 +1620,7 @@ func recompute(board: Board, units: Array[Unit], player: int) -> Array[Vector2i]
 	return revealed
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_vision.gd
@@ -1660,7 +1660,7 @@ git commit -m "feat(core): per-player fog of war with sticky seen grid"
 
 Кожен клас має `func describe() -> String` для читабельних падінь тестів і логів.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_events.gd`:
 
@@ -1693,9 +1693,9 @@ func test_every_event_describes_itself() -> void:
 проїхали б мовчки. Виклики конструкторів виписуються дослівно, не генеруються рефлексією:
 сам виклик і є перевіркою.
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/events.gd`**
+- [x] **Step 3: Реалізувати `core/events.gd`**
 
 Шаблон — далі так само для кожного типу зі списку вище:
 
@@ -1760,7 +1760,7 @@ class MatchEnded extends BattleEvent:
 
 Решта класів зі списку в **Interfaces** пишуться за цим самим шаблоном: типізовані поля, `_init` з усіма полями, `describe()`.
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_events.gd
@@ -1791,7 +1791,7 @@ git commit -m "feat(core): battle event vocabulary"
     - `state.advance_player() -> int` — наступний неусунутий гравець
     - `state.check_elimination() -> Array[Events.BattleEvent]`
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_battle_state.gd`:
 
@@ -1888,9 +1888,9 @@ func test_each_player_gets_its_own_vision() -> void:
 	assert_ne(s.vision[0], s.vision[1], "жодного спільного об'єкта туману")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/battle_state.gd`**
+- [x] **Step 3: Реалізувати `core/battle_state.gd`**
 
 ```gdscript
 class_name BattleState
@@ -2024,7 +2024,7 @@ func check_elimination() -> Array[Events.BattleEvent]:
 	return out
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_battle_state.gd
@@ -2051,7 +2051,7 @@ git commit -m "feat(core): battle state, turn order and elimination"
 
 `facing` у `MoveCommand` — це напрямок, у якому юніт лишається стояти після руху; гравець задає його явно, бо це прямо годує модель броні. Якщо передано `-1`, береться напрямок останнього кроку.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_move_command.gd`:
 
@@ -2127,9 +2127,9 @@ func test_end_turn_switches_player_and_bumps_turn_number() -> void:
 	assert_eq(state.turn_number, 2, "номер ходу росте, коли черга повертається до першого гравця")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати базу і `MoveCommand`**
+- [x] **Step 3: Реалізувати базу і `MoveCommand`**
 
 ```gdscript
 # core/commands/command.gd
@@ -2251,7 +2251,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	return out
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_move_command.gd
@@ -2280,7 +2280,7 @@ git commit -m "feat(core): move and end-turn commands"
 
 **Законність пострілу живе в одній статичній `check_shot(state, a, t)`, а `validate()` — тонка обгортка над нею** (те саме для удару: `DroneCommand.check_strike()`). Це не стиль: `core/targeting.gd` (§3.13) будує оверлеї «по кому я можу вистрілити» і «куди можу вдарити дроном», перебираючи живих юнітів рівно через ці функції, а не через власну копію умов — розійтися підсвітка й валідація тоді не можуть структурно. Два інші запити того ж файлу — прогноз загрози від оглянутого ворога (звичайної і дронової) — навмисно рахуються **інакше**: AP і `has_fired` не перевіряються, а видимість береться власним ромбом цього одного юніта, ніколи не мережею `state.vision[e.owner]`, бо мережа — прихована інформація. Тому прогноз — підлога, а не стеля.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_fire_command.gd`:
 
@@ -2411,9 +2411,9 @@ func test_preview_does_not_disturb_the_rng() -> void:
 	assert_eq(after, Rules.roll(state.rng, 1000), "прев'ю не має споживати кидки")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/commands/fire_command.gd`**
+- [x] **Step 3: Реалізувати `core/commands/fire_command.gd`**
 
 ```gdscript
 class_name FireCommand
@@ -2530,7 +2530,7 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 	return {"sector": sector, "min": bounds.x, "max": bounds.y}
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_fire_command.gd
@@ -2602,10 +2602,10 @@ git commit -m "feat(core): fire command with armour sector preview"
 	return out
 ```
 
-- [ ] **Step 1: Написати падаючий тест** — `tests/core/test_retaliation.gd`
-- [ ] **Step 2: Додати `ShotRetaliated` у `core/events.gd`** (і у вичерпний тест конструкторів)
-- [ ] **Step 3: Реалізувати `_retaliate` і підключити до обох команд**
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 1: Написати падаючий тест** — `tests/core/test_retaliation.gd`
+- [x] **Step 2: Додати `ShotRetaliated` у `core/events.gd`** (і у вичерпний тест конструкторів)
+- [x] **Step 3: Реалізувати `_retaliate` і підключити до обох команд**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 git commit -m "feat(core): retaliation fire from a surviving target"
@@ -2623,7 +2623,7 @@ git commit -m "feat(core): retaliation fire from a surviving target"
 - Consumes: `FireCommand._resolve_damage`, `FireCommand._turn_towards`, `Rules.drone_damage`
 - Produces: `DroneCommand.create(unit_id: int, target_id: int) -> DroneCommand`, `DroneCommand.RANGE: int = 5`
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_drone_command.gd`:
 
@@ -2718,9 +2718,9 @@ func test_invisible_target_is_rejected() -> void:
 		"§3.9: ціль має бути видима гравцеві просто зараз")
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/commands/drone_command.gd`**
+- [x] **Step 3: Реалізувати `core/commands/drone_command.gd`**
 
 ```gdscript
 class_name DroneCommand
@@ -2790,7 +2790,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	return out
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_drone_command.gd
@@ -2819,7 +2819,7 @@ git commit -m "feat(core): drone strike with ammo and infantry immunity"
   - `Mines.DAMAGE_BASE: int = 90` і `Mines.DAMAGE_ROLL: int = 90` — шкода `90 + rand(0, 90)`
   - `Mines.is_known(state, pos: Vector2i, player: int) -> bool`
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_mines.gd`:
 
@@ -2883,9 +2883,9 @@ func test_mine_can_kill_and_end_the_match() -> void:
 	assert_true(ended)
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/mines.gd`**
+- [x] **Step 3: Реалізувати `core/mines.gd`**
 
 ```gdscript
 class_name Mines
@@ -2958,7 +2958,7 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 	return out
 ```
 
-- [ ] **Step 4: Підключити до `MoveCommand.apply`**
+- [x] **Step 4: Підключити до `MoveCommand.apply`**
 
 **Міна спрацьовує одразу, на першому ж пройденому тайлі, а не лише в кінцевій клітинці.**
 Інакше мінне поле можна було б безкарно перетинати, зупиняючись одразу за ним, і міни
@@ -3016,7 +3016,7 @@ func test_a_minefield_cannot_be_crossed_by_stopping_past_it() -> void:
 	assert_true(state.mines.is_empty(), "міна витрачена")
 ```
 
-- [ ] **Step 5: Запустити — усе має пройти, коміт**
+- [x] **Step 5: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gdir=res://tests/core
@@ -3041,7 +3041,7 @@ git commit -m "feat(core): mines with per-player reveal and detonation on entry"
 
 Усі дії інженера — на **ортогонально сусідньому** тайлі й коштують `fire_cost` AP. Ремонт — єдине місце в грі, де невитрачені AP щось означають; тому він рахується **до** списання вартості.
 
-- [ ] **Step 1: Написати падаючі тести**
+- [x] **Step 1: Написати падаючі тести**
 
 `tests/core/test_engineer_command.gd`:
 
@@ -3120,9 +3120,9 @@ func test_action_without_enough_ap_is_rejected() -> void:
 	assert_ne(EngineerCommand.create(e.id, EngineerCommand.Action.LAY_MINE, Vector2i(4, 3)).validate(state), "")
 ```
 
-- [ ] **Step 2: Запустити — мають упасти**
+- [x] **Step 2: Запустити — мають упасти**
 
-- [ ] **Step 3: Реалізувати `core/commands/engineer_command.gd`**
+- [x] **Step 3: Реалізувати `core/commands/engineer_command.gd`**
 
 ```gdscript
 class_name EngineerCommand
@@ -3214,7 +3214,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	return out
 ```
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gdir=res://tests/core
@@ -3241,7 +3241,7 @@ git commit -m "feat(core): engineer verbs"
 
 Стан RNG зберігається як `rng.state`, не як сід: інакше після завантаження гра «перекидає» ті самі числа заново.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 `tests/core/test_battle_serializer.gd`:
 
@@ -3318,9 +3318,9 @@ func test_save_and_load_a_file() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 ```
 
-- [ ] **Step 2: Запустити — має впасти**
+- [x] **Step 2: Запустити — має впасти**
 
-- [ ] **Step 3: Реалізувати `core/battle_serializer.gd`**
+- [x] **Step 3: Реалізувати `core/battle_serializer.gd`**
 
 Структура словника (кожне поле — явно, жодного `inst_to_dict`):
 
@@ -3367,7 +3367,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 
 `from_dict` дзеркально відновлює кожне поле; `rng.state` присвоюється через `int(data["rng_state"])`. `save_to`/`load_from` — `FileAccess` + `JSON.stringify`/`JSON.parse_string`, з поверненням `null` на невідомій `version`.
 
-- [ ] **Step 4: Запустити — усе має пройти, коміт**
+- [x] **Step 4: Запустити — усе має пройти, коміт**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/core/test_battle_serializer.gd
@@ -3386,7 +3386,7 @@ git commit -m "feat(core): battle state serialization with RNG continuity"
 - Consumes: увесь `core/`
 - Produces: нічого — це страховка, яка ловить регресії на стиках
 
-- [ ] **Step 1: Написати тест**
+- [x] **Step 1: Написати тест**
 
 ```gdscript
 extends GutTest
@@ -3465,7 +3465,7 @@ func test_state_survives_a_save_load_mid_match() -> void:
 	assert_eq(EndTurnCommand.create().validate(restored), "")
 ```
 
-- [ ] **Step 2: Запустити повний набір**
+- [x] **Step 2: Запустити повний набір**
 
 ```bash
 ./run_tests.sh
@@ -3473,7 +3473,7 @@ func test_state_survives_a_save_load_mid_match() -> void:
 
 Очікується: усі тести PASS. Якщо `test_a_whole_match_runs_through_commands_only` впирається в `guard` — розібратися **чому** танк не добиває легку машину, а не піднімати ліміт.
 
-- [ ] **Step 3: Коміт**
+- [x] **Step 3: Коміт**
 
 ```bash
 git add tests/core/test_full_match.gd
@@ -3517,7 +3517,7 @@ grep -rnE "\b(Node|Node3D|Node2D|Control|Sprite|get_node|_process|_ready|signal)
 
 `MatchService` — єдине місце, де вигляд торкається `core/`. Жоден вузол не тримає власного посилання на `BattleState`, окрім читання через сервіс.
 
-- [ ] **Step 1: Написати падаючий тест**
+- [x] **Step 1: Написати падаючий тест**
 
 ```gdscript
 extends GutTest
@@ -3542,7 +3542,7 @@ func test_accepted_command_queues_events() -> void:
 	assert_eq(service.take_events().size(), 0, "черга спорожняється після забору")
 ```
 
-- [ ] **Step 2: Запустити, реалізувати, запустити знову**
+- [x] **Step 2: Запустити, реалізувати, запустити знову**
 
 ```gdscript
 # game/autoload/match_service.gd
@@ -3572,7 +3572,7 @@ func take_events() -> Array[Events.BattleEvent]:
 	return out
 ```
 
-- [ ] **Step 3: Зареєструвати автолоади в `project.godot`**
+- [x] **Step 3: Зареєструвати автолоади в `project.godot`**
 
 ```ini
 [autoload]
@@ -3583,7 +3583,7 @@ SceneRouter="*res://game/autoload/scene_router.gd"
 
 `settings_service.gd` поки що — порожній `Node`; наповнюється в Task 3.4.
 
-- [ ] **Step 4: Коміт**
+- [x] **Step 4: Коміт**
 
 ```bash
 git add game/autoload project.godot tests/game/test_match_service.gd
@@ -3607,7 +3607,7 @@ git commit -m "feat(game): match service and scene router autoloads"
 
 Камера — `Camera3D` у режимі `PROJECTION_ORTHOGONAL`, батьківський `Node3D` повернутий на 45° по Y, камера нахилена на 52° по X. Зум міняє `size` камери в межах `[6, 20]`. Панорама обмежена межами дошки з полем в 2 тайли.
 
-- [ ] **Step 1: Тест на чисті функції рига**
+- [x] **Step 1: Тест на чисті функції рига**
 
 ```gdscript
 extends GutTest
@@ -3645,7 +3645,7 @@ func test_center_on_moves_focus() -> void:
 	assert_almost_eq(rig.global_position.z, 10.0, 0.01)
 ```
 
-- [ ] **Step 2: Реалізувати сцену і скрипт, прогнати тест, закомітити**
+- [x] **Step 2: Реалізувати сцену і скрипт, прогнати тест, закомітити**
 
 ```bash
 ./run_tests.sh -gtest=res://tests/game/test_iso_camera_rig.gd
@@ -3677,9 +3677,9 @@ git commit -m "feat(game): fixed isometric camera rig with clamped pan and zoom"
 контур, що огинає нерозвідану перешкоду, видає її не гірше за сам тайл. Ховати з карти —
 робота Task 2.4 і Task 2.10, і стосується вона юнітів, а не землі.
 
-- [ ] **Step 1: Побудувати сцену з `MultiMeshInstance3D` на вид тайлу**
-- [ ] **Step 2: Реалізувати `highlight_tiles` через колір екземпляра мультимешу (`INSTANCE_CUSTOM`)**
-- [ ] **Step 3: Ручна перевірка**
+- [x] **Step 1: Побудувати сцену з `MultiMeshInstance3D` на вид тайлу**
+- [x] **Step 2: Реалізувати `highlight_tiles` через колір екземпляра мультимешу (`INSTANCE_CUSTOM`)**
+- [x] **Step 3: Ручна перевірка**
 
 ```bash
 $GODOT --path . game/battle/battle_screen.tscn
@@ -3688,7 +3688,7 @@ $GODOT --path . game/battle/battle_screen.tscn
 Очікується: дошка 16×12, дорога читається, усю місцевість намальовано на повну — нерозвіданої
 ділянки на карті немає в жодному стані гри.
 
-- [ ] **Step 4: Коміт**
+- [x] **Step 4: Коміт**
 
 ---
 
@@ -3721,10 +3721,10 @@ $GODOT --path . game/battle/battle_screen.tscn
 - невидимий ворог **не має вузла взагалі** — не тьмяніє, не лишає силуету, не займає місця
   в жодному шарі. Приглушений «останній відомий» юніт — це витік, а не зручність.
 
-- [ ] **Step 1: Сцена з примітивами на кожен клас**
-- [ ] **Step 2: Твіни руху й повороту**
-- [ ] **Step 3: HP-бар і значок дронів як `Sprite3D` з `billboard = enabled`**
-- [ ] **Step 4: Коміт**
+- [x] **Step 1: Сцена з примітивами на кожен клас**
+- [x] **Step 2: Твіни руху й повороту**
+- [x] **Step 3: HP-бар і значок дронів як `Sprite3D` з `billboard = enabled`**
+- [x] **Step 4: Коміт**
 
 ---
 
@@ -3739,9 +3739,9 @@ $GODOT --path . game/battle/battle_screen.tscn
 
 Золотий — `move_and_fire`, червоний — `move_only` (§3.2). Це головний UI гри; він перемальовується після **кожної** дії, що змінює AP або зайнятість.
 
-- [ ] **Step 1: Реалізувати**
-- [ ] **Step 2: Перевірити вручну, що після пострілу обидві зони зникають**
-- [ ] **Step 3: Коміт**
+- [x] **Step 1: Реалізувати**
+- [x] **Step 2: Перевірити вручну, що після пострілу обидві зони зникають**
+- [x] **Step 3: Коміт**
 
 ---
 
@@ -3760,7 +3760,7 @@ $GODOT --path . game/battle/battle_screen.tscn
 
 Правило: у момент програвання ввід заблокований. Порядок подій зберігається строго. Снаряд летить 400 мс, але шкода вже вирішена — вигляд лише показує число.
 
-- [ ] **Step 1: Тест на те, що кожен тип події має обробник**
+- [x] **Step 1: Тест на те, що кожен тип події має обробник**
 
 ```gdscript
 func test_every_event_type_has_a_handler() -> void:
@@ -3770,8 +3770,8 @@ func test_every_event_type_has_a_handler() -> void:
 			"подія %s не має обробника — вона мовчки зникне з екрана" % name)
 ```
 
-- [ ] **Step 2: Реалізувати таблицю `HANDLERS: Dictionary` (назва класу події → назва методу)**
-- [ ] **Step 3: Прогнати тест, коміт**
+- [x] **Step 2: Реалізувати таблицю `HANDLERS: Dictionary` (назва класу події → назва методу)**
+- [x] **Step 3: Прогнати тест, коміт**
 
 ---
 
@@ -3795,10 +3795,10 @@ func test_every_event_type_has_a_handler() -> void:
 
 Тап поза дошкою або по вже вибраному юніту знімає вибір.
 
-- [ ] **Step 1: Реалізувати вибір і рейкаст тапу в тайл**
-- [ ] **Step 2: Підключити прев'ю пострілу до HUD**
-- [ ] **Step 3: Ручна перевірка циклу «вибрав → пішов → вистрілив»**
-- [ ] **Step 4: Коміт**
+- [x] **Step 1: Реалізувати вибір і рейкаст тапу в тайл**
+- [x] **Step 2: Підключити прев'ю пострілу до HUD**
+- [x] **Step 3: Ручна перевірка циклу «вибрав → пішов → вистрілив»**
+- [x] **Step 4: Коміт**
 
 ---
 
@@ -3815,9 +3815,9 @@ HUD показує постійно: номер ходу, активного г�
 
 Кожне правило, що впливає на кидок, має бути видиме як число або іконка (§1.5). Прев'ю пострілу показує сектор і діапазон шкоди **до** підтвердження (§3.4).
 
-- [ ] **Step 1: Розмітка з `SafeArea`-полями, тапабельні цілі ≥ 48 dp**
-- [ ] **Step 2: Прив'язка до подій `MatchService`**
-- [ ] **Step 3: Коміт**
+- [x] **Step 1: Розмітка з `SafeArea`-полями, тапабельні цілі ≥ 48 dp**
+- [x] **Step 2: Прив'язка до подій `MatchService`**
+- [x] **Step 3: Коміт**
 
 ---
 
@@ -3838,10 +3838,10 @@ HUD показує постійно: номер ходу, активного г�
 - вузли ворожих юнітів перебудовуються під знання гравця, що заходить, теж **до** зняття панелі: місцевість нікуди не дівається (§3.5), тож єдине, що взагалі є на дошці таємного, — це юніти, і перший кадр нового ходу не сміє показати їх за чужим `seen`;
 - кнопки «пропустити» не існує.
 
-- [ ] **Step 1: Тест: після `show_for` панель непрозора і `visible`, події вводу дошки заблоковані**
-- [ ] **Step 2: Тест: `confirmed` не надсилається без явного натискання**
-- [ ] **Step 3: Реалізувати, підключити до `Events.TurnStarted`**
-- [ ] **Step 4: Коміт**
+- [x] **Step 1: Тест: після `show_for` панель непрозора і `visible`, події вводу дошки заблоковані**
+- [x] **Step 2: Тест: `confirmed` не надсилається без явного натискання**
+- [x] **Step 3: Реалізувати, підключити до `Events.TurnStarted`**
+- [x] **Step 4: Коміт**
 
 ---
 
@@ -3856,10 +3856,10 @@ HUD показує постійно: номер ходу, активного г�
   - `MapData.to_board() -> Board`
   - `MapData.populate(state: BattleState) -> void`
 
-- [ ] **Step 1: Створити `core/map_data.gd` і тест на `to_board()`**
-- [ ] **Step 2: Зібрати `battle_screen.tscn`: ріг камери, `BoardView`, контейнер юнітів, HUD, гейт**
-- [ ] **Step 3: Прописати ручну карту `skirmish_bridge` — 16×12, річка з мостом, по 3 юніти на гравця**
-- [ ] **Step 4: Зіграти повний матч на пристрої або в вікні**
+- [x] **Step 1: Створити `core/map_data.gd` і тест на `to_board()`**
+- [x] **Step 2: Зібрати `battle_screen.tscn`: ріг камери, `BoardView`, контейнер юнітів, HUD, гейт**
+- [x] **Step 3: Прописати ручну карту `skirmish_bridge` — 16×12, річка з мостом, по 3 юніти на гравця**
+- [x] **Step 4: Зіграти повний матч на пристрої або в вікні**
 
 ```bash
 $GODOT --path .
@@ -3873,7 +3873,7 @@ $GODOT --path .
 - між ходами з'являється гейт, і після нього на екрані немає нічого з попереднього гравця;
 - знищення юніта прибирає його з дошки, а матч завершується екраном результату.
 
-- [ ] **Step 5: Коміт**
+- [x] **Step 5: Коміт**
 
 ```bash
 git add game maps core/map_data.gd tests/game
@@ -3932,7 +3932,7 @@ git commit -m "feat(game): playable vertical slice with fog, zones and handover 
 **Interfaces:**
 - Produces: CSV із колонками `keys,uk,en`; усі ключі юнітів (`UNIT_*`), помилок (`ERR_*`), UI (`UI_*`), класів (`CLASS_*`), станів ґрунту (`GROUND_*`)
 
-- [ ] **Step 1: Тест, що кожен ключ із core має переклад в обох мовах**
+- [x] **Step 1: Тест, що кожен ключ із core має переклад в обох мовах**
 
 ```gdscript
 func test_every_unit_name_key_is_translated() -> void:
@@ -3958,7 +3958,7 @@ func test_every_error_key_is_translated() -> void:
 			assert_ne(tr(key), key, "немає перекладу %s для %s" % [key, locale])
 ```
 
-- [ ] **Step 2: Заповнити CSV, прогнати тест, коміт**
+- [x] **Step 2: Заповнити CSV, прогнати тест, коміт**
 
 Цей тест — механізм, що не дає новому ключу помилки просочитися на екран у вигляді `ERR_SOMETHING`.
 
@@ -3973,10 +3973,10 @@ func test_every_error_key_is_translated() -> void:
 
 Пункти: **Продовжити** (активний лише за наявності збереження), **Новий матч**, **Налаштування**, **Про гру**, **Вийти** (тільки на Android/десктопі). Тло — статичний рендер бойової сцени, без анімації: батарея коштує дорожче, ніж вигляд.
 
-- [ ] **Step 1: Тема `ap_theme.tres`: шрифти, кольори, мінімальний розмір кнопки 48 dp**
-- [ ] **Step 2: Сцена й навігація через `SceneRouter`**
-- [ ] **Step 3: `run/main_scene="res://game/ui/main_menu.tscn"`**
-- [ ] **Step 4: Коміт**
+- [x] **Step 1: Тема `ap_theme.tres`: шрифти, кольори, мінімальний розмір кнопки 48 dp**
+- [x] **Step 2: Сцена й навігація через `SceneRouter`**
+- [x] **Step 3: `run/main_scene="res://game/ui/main_menu.tscn"`**
+- [x] **Step 4: Коміт**
 
 ---
 
@@ -3989,9 +3989,9 @@ func test_every_error_key_is_translated() -> void:
 
 Кнопка «Почати» викликає `MatchService.start_match(map.to_board(), players, seed)` і `SceneRouter.goto_battle()`.
 
-- [ ] **Step 1: Сцена й прив'язка до `MapData`**
-- [ ] **Step 2: Тест: обраний сід потрапляє в `state.seed_value`**
-- [ ] **Step 3: Коміт**
+- [x] **Step 1: Сцена й прив'язка до `MapData`**
+- [x] **Step 2: Тест: обраний сід потрапляє в `state.seed_value`**
+- [x] **Step 3: Коміт**
 
 ---
 
@@ -4006,8 +4006,8 @@ func test_every_error_key_is_translated() -> void:
 
 Мова застосовується миттєво через `TranslationServer.set_locale`. Якість — три пресети (низька/середня/висока), які керують тінями, частинками й роздільністю рендера; використовуються у Фазі 5.
 
-- [ ] **Step 1: Реалізувати сервіс + тест на круговий обіг збереження**
-- [ ] **Step 2: Екран, коміт**
+- [x] **Step 1: Реалізувати сервіс + тест на круговий обіг збереження**
+- [x] **Step 2: Екран, коміт**
 
 ---
 
@@ -4023,9 +4023,9 @@ func test_every_error_key_is_translated() -> void:
 
 Важливо: пауза не має показувати нічого, що належить неактивному гравцеві. Це той самий інваріант, що й гейт передачі.
 
-- [ ] **Step 1: Пауза й збереження, тест на круговий обіг «зберегти → в меню → продовжити»**
-- [ ] **Step 2: Екран результату, прив'язка до `Events.MatchEnded`**
-- [ ] **Step 3: Коміт**
+- [x] **Step 1: Пауза й збереження, тест на круговий обіг «зберегти → в меню → продовжити»**
+- [x] **Step 2: Екран результату, прив'язка до `Events.MatchEnded`**
+- [x] **Step 3: Коміт**
 
 **Критерій завершення Фази 3:** гру можна запустити з нуля, налаштувати матч, зіграти, вийти в меню, повернутись і продовжити з того самого місця — жодного разу не торкнувшись коду.
 
@@ -4064,9 +4064,9 @@ func test_every_error_key_is_translated() -> void:
 | 5.5 | Запікання світла карт | статичне освітлення запечене, одне спрямоване джерело з тінями лише для юнітів |
 | 5.6 | Час доби як пресет карти | 4 пресети, жоден **не торкається жодного числа** — це тільки світло |
 | 5.7 | Погода | дощ, туман, сніг, хмарність: частинки + екранний оверлей + вітер у шейдері листя + звуковий шар |
-| 5.8 | Сліди бою | уламки лишаються; стовп диму стоїть кілька ходів; вирви й колії накопичуються |
+| 5.8 | Сліди бою | уламки лишаються, під ними — обпалена земля; стовп диму стоїть кілька ходів; колії накопичуються; вирв нема — стріляють лише по юнітах |
 | 5.9 | Пост-обробка | LUT, легка віньєтка, мінімальне зерно. **Без SSAO і SSR** |
-| 5.10 | Звук | шар оточення на карту, звуки пострілів на клас, UI, музика меню |
+| 5.10 | Звук | шар оточення на карту, звуки пострілів на клас, UI, музика меню: тема головного меню генерується в Suno за стильовим бріфом (жанр, темп, інструменти, енергія за обраним референс-треком, мелодія власна; комерційна ліцензія — платний план) |
 | 5.11 | Бюджет кадру | < 100 draw calls і < 150k трикутників на екрані на середньому телефоні; перевірено профайлером, число записано в `docs/` |
 
 Погода й час доби **не змінюють жодного правила** (§3.12). Якщо в цій фазі з'явився патч, що зменшує радіус огляду в тумані, — він відхиляється; таке правило в хот-ситі читається як шахрайство, бо гравець його не бачить.

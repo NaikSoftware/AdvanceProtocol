@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="BattleLook" format=3]
+
+[ext_resource type="Script" path="res://game/battle/look/battle_look.gd" id="1_look"]
+
+[resource]
+script = ExtResource("1_look")
+season = &"early"
+light_color = Color(1, 0.97, 0.92, 1)
+light_energy = 1.5
+light_pitch_deg = 48.0
+light_yaw_deg = 315.0
+shadow_opacity = 0.3
+shadow_blur = 1.0
+sun_angular_deg = 2.0
+ambient_color = Color(0.55, 0.65, 0.85, 1)
+ambient_energy = 0.75
+sky_clear = 0.85
+haze_color = Color(0.26, 0.32, 0.4, 1)
+foliage_tint = Color(1.08, 1.04, 0.76, 1)
+path_earth_dry = Vector3(1.6, 1, 0.3)
+path_trod_dry = Vector3(1.45, 1, 0.3)
+path_dry_k = Vector3(1.55, 1.45, 1.6)
+water_murk = 0.8
+water_wind = 0.5
+unit_contact_shadow = 0.6
+rain = false
+rain_amount = 0
+wetness = 0.0
+cloud_shadow_strength = 0.3
+wind = 0.12

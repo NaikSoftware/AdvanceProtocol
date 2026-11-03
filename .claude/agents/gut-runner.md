@@ -1,7 +1,7 @@
 ---
 name: gut-runner
 description: "Runs the headless test suite and reports what actually happened, with the real output pasted. Use when you need the current test state — before a commit, after a change you did not make yourself, to confirm another agent's report, or to reproduce a failure. Do NOT use it to fix anything: it never edits code or tests (send failures to core-engineer or view-engineer), and do not use it for review judgement (code-reviewer) or for balance questions (balance-analyst)."
-tools: [Bash, Read, Grep, Skill]
+tools: [Bash, Read, Grep, Skill, mcp__memroot__memory_retrieve, mcp__memroot__memory_create]
 model: sonnet
 ---
 

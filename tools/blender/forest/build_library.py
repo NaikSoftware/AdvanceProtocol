@@ -1,0 +1,387 @@
+"""Збирає GLB бібліотеки крон: на кожен вузол — оболонка крони плюс стовбур, один матеріал.
+
+Запуск:
+  blender -b --factory-startup -P build_library.py -- <spec.json> <тека_джерел> <тека_атласу> <вихід.glb>
+Вузол = окремий меш = окремий MultiMesh на дошці (один виклик малювання на варіант).
+Масштаб гри: 1 тайл = 8 м = 1,0; земля на y = 0; початок координат — вісь стовбура.
+
+Збирання з нуля (джерела, атласи, усі GLB) — build_all.sh поруч, там і порядок кроків.
+"""
+import json
+import math
+import os
+import random
+import shutil
+import struct
+import sys
+
+import bmesh
+import bpy
+from mathutils import Vector
+
+argv = sys.argv[sys.argv.index("--") + 1:]
+SPEC, SRC, ATLAS_DIR, OUT = argv[:4]
+TILE_M = 8.0
+
+
+def to_atlas(rect, u, v):
+    x, y, w, h = rect
+    return (x + u * w, 1.0 - (y + (1.0 - v) * h))
+
+
+def trunk(bm, uvl, rect, base_r, top_r, height, uv_top, sides, lean=(0.0, 0.0)):
+    """Стовбур-призма; кожна грань показує всю смугу кори, вісь трохи нахилена."""
+    ring0, ring1 = [], []
+    for i in range(sides):
+        a = 2 * math.pi * i / sides
+        ring0.append(bm.verts.new((base_r * math.cos(a), base_r * math.sin(a), 0.0)))
+        ring1.append(bm.verts.new((lean[0] + top_r * math.cos(a), lean[1] + top_r * math.sin(a), height)))
+    normals = {}
+    for i in range(sides):
+        j = (i + 1) % sides
+        f = bm.faces.new((ring0[i], ring0[j], ring1[j], ring1[i]))
+        for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, uv_top), (0, uv_top))):
+            loop[uvl].uv = to_atlas(rect, u, v)
+    for i, vt in enumerate(ring0 + ring1):
+        a = 2 * math.pi * (i % sides) / sides
+        normals[vt] = Vector((math.cos(a), math.sin(a), 0.0))
+    return normals
+
+
+def card(bm, uvl, uv2l, col, c, roll, size, rect, normal_of, shade):
+    """Пучок: чотири вершини в центрі c, зсув кута — в UV2 (одиниці гри, після 1/8).
+
+    Шейдер forest_crown розгортає картку до камери; roll крутить пучок у площині екрана,
+    щоб однакові спрайти не стояли однаково.
+    """
+    h = size / 2
+    c = Vector(c)
+    c.z = max(c.z, h * 0.8)  # нижній край пучка не йде під землю
+    cr, sr = math.cos(roll), math.sin(roll)
+    tone = (shade, shade, shade, 1.0)
+    vs = [bm.verts.new(c) for _ in range(4)]
+    f = bm.faces.new(vs)
+    for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        x, y = (u * 2 - 1) * h, (v * 2 - 1) * h
+        loop[uvl].uv = to_atlas(rect, u, v)
+        loop[uv2l].uv = ((x * cr - y * sr) / TILE_M, (x * sr + y * cr) / TILE_M)
+        loop[col] = tone
+    return {v: normal_of(c, None) for v in vs}
+
+
+def flat(bm, uvl, col, c, roll, size, rect, shade):
+    """Картка, що лежить на землі (гілля поваленого лісу): звичайна геометрія, UV2 = 0, тож
+    шейдер її не розгортає до камери."""
+    h = size / 2
+    cr, sr = math.cos(roll), math.sin(roll)
+    co = [Vector(c) + Vector((x * cr - y * sr, x * sr + y * cr, 0.0)) * h for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    vs = [bm.verts.new(p) for p in co]
+    f = bm.faces.new(vs)
+    for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        loop[uvl].uv = to_atlas(rect, u, v)
+        loop[col] = (shade, shade, shade, 1.0)
+    return {v: Vector((0, 0, 1)) for v in vs}
+
+
+def tier_card(bm, uvl, uv2l, col, c, roll, size, rect, shade):
+    """Горизонтальна картка ярусу ялини: лежить у площині, як гілка, і не розгортається
+    до камери; крихітний UV2 лише позначає її як хвою для шейдера (тон, світло)."""
+    h = size / 2
+    cr, sr = math.cos(roll), math.sin(roll)
+    co = [Vector(c) + Vector((x * cr - y * sr, x * sr + y * cr, 0.0)) * h for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    vs = [bm.verts.new(p) for p in co]
+    f = bm.faces.new(vs)
+    for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        loop[uvl].uv = to_atlas(rect, u, v)
+        loop[uv2l].uv = (1e-4, 0.0)
+        loop[col] = (shade, shade, shade, 1.0)
+    # Нормаль — назовні від стовбура й лише трохи вгору: ярус, що дивиться в небо, під
+    # похмурим небом світився світлішим за саму крону.
+    n = Vector((cr, sr, 0.5)).normalized()
+    return {v: n for v in vs}
+
+
+def limb(bm, uvl, rect, pts, radii, sides=3):
+    """Гілка-трубка з кількох відрізків; смуга кори вздовж, як у стовбура."""
+    rings = []
+    total = sum((Vector(pts[i + 1]) - Vector(pts[i])).length for i in range(len(pts) - 1))
+    acc = 0.0
+    normals = {}
+    for i, (p, r) in enumerate(zip(pts, radii)):
+        p = Vector(p)
+        d = (Vector(pts[min(i + 1, len(pts) - 1)]) - Vector(pts[max(i - 1, 0)])).normalized()
+        ref = Vector((0, 0, 1)) if abs(d.z) < 0.9 else Vector((1, 0, 0))
+        t = ref.cross(d).normalized()
+        b = d.cross(t)
+        if i:
+            acc += (p - Vector(pts[i - 1])).length
+        ring = []
+        for k in range(sides):
+            a = 2 * math.pi * k / sides
+            off = t * math.cos(a) + b * math.sin(a)
+            v = bm.verts.new(p + off * r)
+            normals[v] = off
+            ring.append((v, acc / max(total, 1e-6)))
+        rings.append(ring)
+    for r0, r1 in zip(rings, rings[1:]):
+        for k in range(sides):
+            j = (k + 1) % sides
+            f = bm.faces.new((r0[k][0], r0[j][0], r1[j][0], r1[k][0]))
+            for loop, (u, v) in zip(f.loops, ((0, r0[k][1]), (1, r0[j][1]), (1, r1[j][1]), (0, r1[k][1]))):
+                loop[uvl].uv = to_atlas(rect, u, v)
+    return normals
+
+
+
+def build_node(item, rects):
+    d = os.path.join(SRC, item["src"])
+    meta = json.load(open(os.path.join(d, "cards.json")))
+    rng = random.Random(item["node"])
+    # Масштаб усього дерева: джерела мають 14–25 м, а для читання з камери гри дерева
+    # нижчі (сосна 12–14 м, листяні 10–12 м); пропорції крони й стовбура лишаються.
+    fs = item.get("scale", 1.0)
+    bm = bmesh.new()
+    uvl = bm.loops.layers.uv.new("UVMap")
+    uv2l = bm.loops.layers.uv.new("UV2")
+    col = bm.loops.layers.float_color.new("Col")
+    vnorm = {}
+    cards = meta["cards"]
+    keep = item.get("card_keep", 1.0)
+    fs_card = 1.0
+    # Зерно — від вузла дерева, а не його проксі: тінь мусить узяти ті самі пучки, що й колір.
+    seed = item["node"].removesuffix("_Shadow")
+    reach = item.get("card_reach")
+    if reach and meta.get("limbs") and cards:
+        # Голе дерево: пучок гілочок далі за reach від гілки чи стовбура висить у повітрі.
+        # reach — у метрах джерела, до масштабу `scale` (0,56–0,63): 1,0 — це ~0,6 м у грі.
+        tt = meta["crown_base"] + item.get("trunk_into_crown", 0.3) * (meta["top"] - meta["crown_base"])
+        support = [Vector((0.0, 0.0, z * 0.5)) for z in range(int(tt * 2) + 1)]
+        for lm in meta["limbs"]:
+            ps = [Vector(p) for p in lm["pts"]]
+            support += [a.lerp(b, t / 4) for a, b in zip(ps, ps[1:]) for t in range(4)] + ps[-1:]
+        cards = [cd for cd in cards if min((Vector(cd["c"]) - q).length for q in support) <= reach]
+    if keep < 1.0 and cards:
+        # Голе дерево: та сама будова, але менше пучків — крізь крону видно землю.
+        cards = random.Random(seed + "keep").sample(cards, max(1, round(len(cards) * keep)))
+    if item.get("card_budget") and len(cards) > item["card_budget"]:
+        # Бюджет бою: менше пучків, більших (площа крони та сама, ×0,9 на перекриття). Обрис
+        # і будова лишаються, бо пучки беруться з тих самих місць крони.
+        n = item["card_budget"]
+        fs_card = 0.9 * math.sqrt(len(cards) / n)
+        cards = random.Random(seed + "budget").sample(cards, n)
+    if item.get("max_cards") and len(cards) > item["max_cards"]:
+        # Проксі тіні: менше пучків, але більших — сумарна площа та сама (×0,85 на
+        # перекриття), тож пляма тіні тієї ж величини й так само дірява. Пучки — з уже
+        # відібраних: голе дерево не кидає тіні повної листяної крони.
+        n = item["max_cards"]
+        fs_card *= 0.85 * math.sqrt(len(cards) / n)
+        cards = random.Random(seed + "proxy").sample(cards, n)
+    cb, top = meta["crown_base"], meta["top"]
+    low = item.get("crown_low", 1.0)
+    if low < 1.0 and cards:
+        # Крона нижче: низ крони опускається до cb·low, верх лишається. З камери гри голий
+        # стовбур під кроною читався паличкою під кроною, що висить у повітрі.
+        k = (top - cb * low) / max(top - cb, 1e-3)
+        cards = [dict(cd, c=[cd["c"][0], cd["c"][1], top - (top - cd["c"][2]) * k]) for cd in cards]
+        meta = dict(meta, crown_base=cb * low, centre=None, radii=None)
+        meta = {k2: v for k2, v in meta.items() if v is not None}
+        cb = cb * low
+    if not item.get("trunk", True) and not item.get("limbs", True) and not item.get("max_cards") and cards:
+        # Меш лише з пучків (кущ без стебел): найнижча картка мусить сягати землі, інакше кущ
+        # висить над нею, бо раніше до землі діставали стебла.
+        lift = min(cd["c"][2] - cd["size"] * item.get("card_scale", 1.0) * fs_card * 0.45 for cd in cards)
+        if lift > 0:
+            cards = [dict(cd, c=[cd["c"][0], cd["c"][1], cd["c"][2] - lift]) for cd in cards]
+    R = max([math.hypot(cd["c"][0], cd["c"][1]) for cd in cards] + [0.5])
+    ctr = Vector(meta.get("centre", (0, 0, (cb + top) / 2)))
+    rad = Vector(meta.get("radii", (R, R, max((top - cb) / 2, 0.5))))
+
+    def normal_of(p, n):
+        s = Vector(((p.x - ctr.x) / rad.x, (p.y - ctr.y) / rad.y, (p.z - ctr.z) / rad.z))
+        s = s.normalized() if s.length > 1e-6 else Vector((0, 0, 1))
+        return s
+
+    sprites = rects["sprites"].get(item.get("sprites"), [])
+    scale = item.get("card_scale", 1.0) * fs_card
+    for cd in cards:
+        # Тон пучка — від його місця в кроні: верх і зовнішній край світлі, низ і глибина
+        # темні, тож крона читається одним об'ємом зі світлим і тіньовим боком. Випадковий
+        # тон на кожну картку (два пучки поруч — світлий і темний) робив з крони рябий шум.
+        hfrac = min(max((cd["c"][2] - cb) / max(top - cb, 0.5), 0.0), 1.0)
+        rfrac = min(math.hypot(cd["c"][0] - ctr.x, cd["c"][1] - ctr.y) / max(rad.x, 0.5), 1.0)
+        # Край крони темніший за середину (там крони сусідів перекриваються й затіняють одна
+        # одну): без цього крона — пласка лопать одного тону.
+        shade = min(max(0.55 + 0.45 * (0.8 * hfrac + 0.35 * (1.0 - rfrac * rfrac) - 0.1)
+                        + 0.03 * math.sin(cd["roll"] * 7.31), 0.55), 1.0)
+        vnorm.update(card(bm, uvl, uv2l, col, cd["c"], cd["roll"], cd["size"] * scale,
+                          rng.choice(sprites), normal_of, shade))
+    tiers = item.get("tiers", 0)
+    if tiers and cards:
+        # Яруси ялини: згори крона — зірка з гострих гілок, що звужується до верхівки, з
+        # темними просвітами між променями. Самі білборди згори давали круглу пляму.
+        rr = random.Random(item["node"] + "tiers")
+        for k in range(tiers):
+            f = (k + 0.5) / tiers
+            z = cb + (top - cb) * f * 0.9
+            rad = R * (1.0 - f) * 1.15 + 0.2
+            for j in range(5):
+                a = 2 * math.pi * j / 5 + k * 0.63 + rr.uniform(-0.2, 0.2)
+                c = (math.cos(a) * rad * 0.5, math.sin(a) * rad * 0.5, z)
+                shade = 0.55 + 0.25 * f  # горизонтальні яруси ловлять усе небо: темніші, верхівка світліша
+                vnorm.update(tier_card(bm, uvl, uv2l, col, c, a, rad * 1.05, rr.choice(sprites), shade))
+    flat_sprites = rects["sprites"].get(item.get("flat_sprites", "litter"), [])
+    for fl in meta.get("flats", []):
+        vnorm.update(flat(bm, uvl, col, fl["c"], fl["roll"], fl["size"], rng.choice(flat_sprites), fl["shade"]))
+    n_cards = len(bm.faces)
+    trect = rects["trunks"].get(item.get("trunk_of", item["node"]))
+    if item.get("trunk", True):
+        tt = cb + item.get("trunk_into_crown", 0.3) * (top - cb)
+        # trunk_radius — у метрах готового дерева, після масштабу `scale`.
+        r = item.get("trunk_radius", meta["trunk_width"] * 0.3 * fs) / fs * item.get("trunk_r_mul", 1.0)
+        th = meta["trunk_render_height"]
+        vnorm.update(trunk(bm, uvl, trect, r, r * item.get("trunk_top", 0.45), tt, min(1.0, tt / th),
+                           item.get("trunk_sides", 5), tuple(item.get("lean", (0.0, 0.0)))))
+    # Гілки під листям не видно: у листяному сезоні їх не будують (`limbs`: False) — пів трикутників
+    # дерева. Гілки голого дерева пізньої осені і є його обрис.
+    for lm in ([] if item.get("max_cards") or not item.get("limbs", True) else meta.get("limbs", [])):
+        vnorm.update(limb(bm, uvl, trect, lm["pts"], lm["r"], lm.get("sides", 3)))
+    bm.faces.ensure_lookup_table()
+    for f in bm.faces[n_cards:]:  # кора без затінення пучків
+        for loop in f.loops:
+            loop[col] = (1.0, 1.0, 1.0, 1.0)
+    for f in bm.faces:
+        for loop in f.loops:
+            if loop.vert not in vnorm:
+                vnorm[loop.vert] = f.normal
+    if fs != 1.0:
+        for v in bm.verts:
+            v.co *= fs
+        for face in bm.faces:
+            for loop in face.loops:
+                loop[uv2l].uv = (loop[uv2l].uv[0] * fs, loop[uv2l].uv[1] * fs)
+    # Експортер glTF перевертає V кожної UV-карти (v → 1 − v), тож UV2 пишеться вже
+    # перевернутим: шейдер мусить отримати саме зсув кута, а кора, колоди й підстилка — нуль.
+    for face in bm.faces:
+        for loop in face.loops:
+            loop[uv2l].uv = (loop[uv2l].uv[0], 1.0 - loop[uv2l].uv[1])
+    me = bpy.data.meshes.new(item["node"])
+    bm.verts.index_update()
+    order = list(bm.verts)
+    bm.to_mesh(me)
+    bm.free()
+    me.normals_split_custom_set_from_vertices([tuple(vnorm[v]) for v in order])
+    # Тон пучка мусить піти в COLOR_0: Godot читає лише його. Без активного атрибута
+    # експортер писав білий COLOR_0, а тон — у COLOR_1, і шейдер крони його не бачив.
+    me.color_attributes.active_color = me.color_attributes["Col"]
+    me.color_attributes.render_color_index = me.color_attributes.active_color_index
+    ob = bpy.data.objects.new(item["node"], me)
+    bpy.context.scene.collection.objects.link(ob)
+    s = 1.0 / TILE_M
+    ob.scale = (s, s, s)
+    return ob
+
+
+def material(png, name):
+    img = bpy.data.images.load(png)
+    img.alpha_mode = "STRAIGHT"
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Roughness"].default_value = 1.0
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    nt.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+    nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+    return m
+
+
+def patch_glb(path, cutoff):
+    """Alpha-cut і двобічність у матеріалі (експортер не завжди їх виставляє). Атлас лишається
+    зовнішнім файлом (uri); його копію, яку експортер із keep_originals ще й кладе в бінарний
+    блок, вирізаємо — інакше атлас лежав би в репозиторії двічі."""
+    data = open(path, "rb").read()
+    jl, jt = struct.unpack("<II", data[12:20])
+    js = json.loads(data[20:20 + jl])
+    bl = struct.unpack("<I", data[20 + jl:24 + jl])[0]
+    bin_ = data[28 + jl:28 + jl + bl]
+    for m in js["materials"]:
+        m["alphaMode"] = "MASK"
+        m["alphaCutoff"] = cutoff
+        # Двобічно: картки з дальнього боку крони видно крізь просвіти ближніх.
+        m["doubleSided"] = True
+        pbr = m.setdefault("pbrMetallicRoughness", {})
+        pbr["metallicFactor"] = 0.0
+        pbr["roughnessFactor"] = 1.0
+        m.pop("extensions", None)
+    drop = set()
+    for im in js.get("images", []):
+        assert "uri" in im, "%s: атлас без uri" % path
+        if "bufferView" in im:
+            drop.add(im.pop("bufferView"))
+    keep = [i for i in range(len(js["bufferViews"])) if i not in drop]
+    remap = {old: new for new, old in enumerate(keep)}
+    out_bin = bytearray()
+    views = []
+    for old in keep:
+        bv = js["bufferViews"][old]
+        chunk = bin_[bv.get("byteOffset", 0):bv.get("byteOffset", 0) + bv["byteLength"]]
+        out_bin += b"\0" * (-len(out_bin) % 4)
+        bv["byteOffset"] = len(out_bin)
+        out_bin += chunk
+        views.append(bv)
+    out_bin += b"\0" * (-len(out_bin) % 4)
+    js["bufferViews"] = views
+    js["buffers"][0]["byteLength"] = len(out_bin)
+    for acc in js.get("accessors", []):
+        acc["bufferView"] = remap[acc["bufferView"]]
+    nj = json.dumps(js, separators=(",", ":")).encode()
+    nj += b" " * (-len(nj) % 4)
+    out = struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(nj) + 8 + len(out_bin)) + struct.pack("<II", len(nj), jt) + nj
+    out += struct.pack("<II", len(out_bin), 0x004E4942) + bytes(out_bin)
+    open(path, "wb").write(out)
+
+
+PROXY_FOR = ("Pine", "Spruce", "Birch", "Oak", "Hero", "Shrub")
+PROXY_CARDS = 8
+PROXY_CARDS_SHRUB = 6  # підлісок здебільшого стоїть у тіні крон
+
+
+def main():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    spec = json.load(open(SPEC))
+    rects = json.load(open(os.path.join(ATLAS_DIR, spec["atlas"] + ".json")))
+    # Атлас — один файл поруч із GLB (uri), імпорт Godot стискає його у VRAM.
+    png = os.path.join(os.path.dirname(OUT), spec["atlas"] + ".png")
+    shutil.copyfile(os.path.join(ATLAS_DIR, spec["atlas"] + ".png"), png)
+    mat = material(png, spec["atlas"])
+    obs = []
+    for item in spec["items"]:
+        if "card_keep" in spec and "card_keep" not in item:
+            item["card_keep"] = spec["card_keep"]
+        ob = build_node(item, rects)
+        ob.data.materials.append(mat)
+        obs.append(ob)
+        if item["node"].startswith(PROXY_FOR):
+            # Проксі: той самий атлас, ~8 більших пучків без стовбура (~16 трикутників). Тінь
+            # стенду і дальній ліс бою (кільце, підріст), де пучків і стовбура не розрізнити.
+            px = dict(item, node=item["node"] + "_Shadow", trunk_of=item["node"], tiers=0, max_cards=PROXY_CARDS_SHRUB if item["node"].startswith("Shrub") else PROXY_CARDS, trunk=False)
+            ob = build_node(px, rects)
+            ob.data.materials.append(mat)
+            obs.append(ob)
+    for o in bpy.context.scene.objects:
+        o.select_set(o in obs)
+    bpy.context.view_layer.objects.active = obs[0]
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", use_selection=True, export_yup=True,
+                              export_apply=True, export_image_format="AUTO", export_keep_originals=True, export_texcoords=True,
+                              export_normals=True, export_vertex_color="ACTIVE", export_all_vertex_colors=False, export_cameras=False, export_lights=False)
+    patch_glb(OUT, spec.get("alpha_cutoff", 0.5))
+    for o in obs:
+        print("NODE", o.name, "tris", sum(len(p.vertices) - 2 for p in o.data.polygons))
+
+
+main()

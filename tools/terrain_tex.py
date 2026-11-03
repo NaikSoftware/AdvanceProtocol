@@ -163,12 +163,14 @@ def delines(a, size=21, thr=2.0, flatten=0.0, every=False):
 # Метри повтору дублює GroundSurface.MACRO_M (game/battle/ground_surface.gd) — міняти обидва разом.
 # CC0-скани Poly Haven (ground-texture-research.md): шар → (папка, метри повтору, L*, (a*, b*),
 # лінії: 0 — не чіпати, 1 — прибрати знайдені лінії, 2 — смугозагороджувальний фільтр усюди
-# (асфальт)[, контраст L]. Бруківка: контраст 1.6 — шви темніші, інакше камінь 0.2 м (3 px за найбільшого
-# наближення) не відрізнити від гравію; скан 4 м, але повтор 3 м (камінь ~15 см, як справжня
-# кладка) — так у GroundSurface.MACRO_M.
+# (асфальт)[, контраст L[, зняти плями ширші за sigma px]]. Бруківка: контраст 1.6 — шви темніші,
+# інакше камінь 0.2 м (3 px за найбільшого наближення) не відрізнити від гравію; скан 4 м, але повтор
+# 3 м (камінь ~15 см, як справжня кладка) — так у GroundSurface.MACRO_M. Багно: скан майже гладкий,
+# тож без контрасту 2.6 воно лягає рівною сірою плямою; світлі плями 1–3 м перед тим знято (16 px),
+# інакше з таким контрастом вони складаються в решітку.
 CC0 = {
     "dirt": ("aerial_ground_rock", 20.0, 35.0, (0.8, 3.0), 0),
-    "mud": ("dirt_aerial_03", 25.0, 30.0, (1.5, 4.5), 1),
+    "mud": ("dirt_aerial_03", 25.0, 26.0, (3.0, 9.0), 1, 2.6, 16.0),
     "hill": ("coast_land_rocks_01", 20.0, 33.0, (0.5, 6.0), 0),
     "bank": ("coast_sand_05", 25.0, 28.0, (1.0, 3.8), 0),
     "road": ("aerial_asphalt_01", 30.0, 28.0, (0.0, 1.0), 2),
@@ -255,7 +257,7 @@ def main(argv):
             contrast = spec[5] if len(spec) > 5 else 1.0
             a = np.asarray(Image.open(f"{argv[1]}/{src}/diff_2k.jpg").convert("RGB").resize((512, 512), Image.LANCZOS), np.float32)
             if lines:
-                a = delines(a, every=lines == 2)
+                a = delines(a, every=lines == 2, flatten=spec[6] if len(spec) > 6 else 0.0)
             a = tone(a, L, ab, contrast=contrast)
             lr, tb = edge_diffs(tie(a.copy()))
             if lr > LIMIT or tb > LIMIT:

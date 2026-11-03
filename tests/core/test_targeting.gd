@@ -38,18 +38,20 @@ func test_target_in_the_range_circle_but_outside_the_vision_diamond_is_not_a_tar
 	assert_does_not_have(ids, diagonal.id, "§3.1: у дальності, але поза оглядом — не ціль")
 
 
-func test_threat_forecast_stops_at_the_vision_diamond_too() -> void:
-	# Дзеркало попереднього тесту для другої функції: та сама діагональ, той самий
-	# перетин двох форм, тільки очима оглянутого ворога.
+func test_threat_forecast_covers_the_whole_range_circle() -> void:
+	# §3.13 + §3.3.1: відповідь не потребує зору — влучання відкриває стрільця, — тож
+	# ворог відповість кожному в колі своєї дальності. Позначки, обрізані ромбом огляду,
+	# були б м'якшими за саме правило. Та сама діагональ: у колі 4, поза ромбом 4.
 	var enemy: Unit = state.add_unit(5, 1, Vector2i(4, 4), 2)
 	var spotter: Unit = state.add_unit(0, 0, Vector2i(4, 7), 2)    # огляд 5 — бачить ворога
 	var diagonal: Unit = state.add_unit(5, 0, Vector2i(7, 6), 2)   # зсув (3, 2) від ворога
 	state.start()
 	state.begin_turn()
 
+	assert_false(Rules.in_vision_diamond(enemy.pos, diagonal.pos, enemy.vision()), "передумова: поза ромбом огляду")
 	var ids: Array[int] = _ids(Targeting.threatened_units(state, enemy.id, 0))
-	assert_has(ids, spotter.id, "зсув (0, 3): у колі 4 і в ромбі 4 — під загрозою")
-	assert_does_not_have(ids, diagonal.id, "§3.1: у колі дальності, поза ромбом огляду — не позначається")
+	assert_has(ids, spotter.id, "зсув (0, 3): у колі 4 — під загрозою")
+	assert_has(ids, diagonal.id, "§3.13: у колі дальності, хоч і поза ромбом огляду — позначається")
 
 
 # --- §3.13: AP перевіряється у своєму юніті й НЕ перевіряється у ворожому -------
@@ -98,26 +100,33 @@ func test_enemy_threat_ignores_the_enemys_ap_and_fired_flag() -> void:
 
 # --- §3.13: прогноз рахується ОДНИМ юнітом, а не мережею його власника ----------
 
-func test_threat_does_not_widen_when_the_enemy_has_a_spotter() -> void:
-	# Антивитік, найважливіший тест файлу. Гармата (дальність 5, огляд 3) дістає
-	# мій танк за 5 тайлів, але сама його не бачить. Її власник бачить — його
-	# піхота стоїть поруч із моїм танком. Якби прогноз брав state.vision[owner],
-	# позначка на танку видала б існування розвідника, якого я не знайшов.
+func _gun_marks(with_spotter: bool) -> Array[int]:
+	# Гармата (дальність 5, огляд 3) у (2,2), мій танк у (7,2): у колі, поза її ромбом.
+	# Ворожий коригувальник (огляд 5) — за бажанням; моя піхота бачить гармату.
+	state = BattleState.create(Board.create(12, 12, Terrain.GroundState.DRY), 2, 7)
+	state.active_player = 0
 	var gun: Unit = state.add_unit(9, 1, Vector2i(2, 2), 2)
-	state.add_unit(0, 1, Vector2i(7, 4), 2)                     # ворожий коригувальник, огляд 5
-	var my_eyes: Unit = state.add_unit(0, 0, Vector2i(2, 5), 2) # моя піхота бачить гармату
+	state.add_unit(0, 0, Vector2i(2, 5), 2)
 	var far_tank: Unit = state.add_unit(5, 0, Vector2i(7, 2), 2)
+	if with_spotter:
+		state.add_unit(0, 1, Vector2i(7, 4), 2)
 	state.start()
 	state.begin_turn()
-
 	assert_true(Rules.in_radius(gun.pos, far_tank.pos, gun.attack_range()), "передумова: танк у дальності гармати")
-	assert_false(Rules.in_vision_diamond(gun.pos, far_tank.pos, gun.vision()), "передумова: гармата його не бачить")
-	assert_true(state.vision[1].is_visible(far_tank.pos), "передумова: МЕРЕЖА супротивника танк бачить")
-
+	assert_eq(state.vision[1].is_seen(far_tank.pos), with_spotter,
+		"передумова: мережа супротивника бачить танк лише з коригувальником")
 	var ids: Array[int] = _ids(Targeting.threatened_units(state, gun.id, 0))
-	assert_has(ids, my_eyes.id, "у дальності та у власному ромбі гармати — під загрозою")
-	assert_does_not_have(ids, far_tank.id,
-		"§3.13: прогноз рахується власним оглядом гармати; мережа власника — прихована інформація")
+	assert_has(ids, far_tank.id, "§3.13: у колі дальності — під загрозою відповіді (spotter=%s)" % with_spotter)
+	return ids
+
+
+func test_threat_does_not_depend_on_the_enemys_spotters() -> void:
+	# Антивитік, найважливіший тест файлу. Без коригувальника тайл танка для власника
+	# гармати не розвіданий, з ним — розвіданий. Прогноз, що читав би мережу власника
+	# (state.vision[owner]), дав би в цих двох станах різні позначки і видав би
+	# розвідника, якого я не знайшов. Позначки мусять збігатися.
+	assert_eq(_gun_marks(false), _gun_marks(true),
+		"§3.13: прогноз рахується одним юнітом; мережа власника — прихована інформація")
 
 
 func test_invisible_enemy_cannot_be_inspected() -> void:
@@ -762,10 +771,28 @@ func test_inspection_matches_overlay_table() -> void:
 	assert_eq(tank["drone_radius"], 0, "у танка дронів немає")
 	assert_eq(tank["marked"], _ids(Targeting.threatened_units(state, enemy_tank.id, 0)))
 	assert_eq(tank["drone_marked"], [])
-	assert_true(tank["is_floor"])
+	assert_false(tank["is_floor"], "лише кільце гармати — позначки покривають усе коло, підписувати нічого")
 
 	var es: Dictionary = Targeting.inspection(state, enemy_squad.id, 0)
 	assert_eq(es["drone_radius"], DroneCommand.RANGE)
 	assert_eq(es["drone_marked"], _ids(Targeting.drone_threatened_units(state, enemy_squad.id, 0)))
 	assert_has(es["drone_marked"], car.id, "передумова: броньовик під дроном")
 	assert_true(es["is_floor"])
+
+
+func test_only_a_drone_ring_makes_the_forecast_a_floor() -> void:
+	# §3.13: позначки гармати — усе коло дальності, без жодного зору, тож напис «це
+	# нижня межа» під ними був би зайвим. Підлога — лише дронові позначки, міряні
+	# ромбом самого загону.
+	var gun: Unit = state.add_unit(9, 1, Vector2i(2, 2), 2)
+	var squad: Unit = state.add_unit(1, 1, Vector2i(8, 8), 2)
+	var dry: Unit = state.add_unit(1, 1, Vector2i(2, 8), 2)
+	state.add_unit(5, 0, Vector2i(5, 5), 2)
+	dry.drones_left = 0
+	state.start()
+	state.begin_turn()
+	_all_seen(0)
+
+	assert_false(Targeting.inspection(state, gun.id, 0)["is_floor"], "гармата — лише коло гармати")
+	assert_true(Targeting.inspection(state, squad.id, 0)["is_floor"], "загін з дронами — є дронове кільце")
+	assert_false(Targeting.inspection(state, dry.id, 0)["is_floor"], "загін без дронів — дронового кільця немає")

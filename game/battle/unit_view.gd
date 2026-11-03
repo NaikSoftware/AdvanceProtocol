@@ -13,6 +13,11 @@ const _DEGREES_PER_FACING: float = 45.0
 ## Фаза 5a: усе видиме в юніті — лише на цьому шарі рендеру, щоб відбиття й
 ## тіні могли відсікти юнітів маскою (відбиття не сміють показати прихований юніт).
 const UNIT_LAYER: int = 2
+## Найбільший нахил корпусу за схилом, окремо вздовж і впоперек. Крутіший берег
+## перекинув би модель на бік; там юніт лягає під цим кутом, а нижній край висить.
+const MAX_TILT_DEG: float = 20.0
+## Відділення стоїть рівно й на стільки нижче землі під центром: на схилі край основи не висить.
+const SQUAD_SINK: float = 0.05
 
 ## Board.DIRS_8 іде ЗА годинниковою стрілкою (0 N, 2 E, 4 S, 6 W), а поворот
 ## навколо Y у Godot — ПРОТИ. Тому знак обов'язковий: `facing * 45` збігається
@@ -34,6 +39,8 @@ const _MAX_DRONES: int = 2
 ## ширину тайла, як у референсі (там смуга рівно `tile_width - 1` завширшки
 ## і 3 px заввишки).
 const _HP_BAR_SIZE: Vector2i = Vector2i(48, 6)
+## Розмір пікселя смуги у світі (тайли): той самий у спрайті-носії стану й у спільного MultiMesh.
+const HP_BAR_PIXEL_SIZE: float = 0.02
 
 ## Рамка й порожнє тло — всередині ТІЄЇ САМОЇ текстури, що й заливка.
 ## Три накладені білборд-спрайти на одній висоті дали б z-fighting і три
@@ -42,6 +49,16 @@ const _HP_BAR_FRAME_COLOR: Color = Color("14120f")
 const _HP_BAR_BACK_COLOR: Color = Color("3b3833")
 
 const _DESTROY_DURATION: float = 0.6
+## HP-бар і підпис — поверх усіх ефектів (вогонь уламків має пріоритет 1) і без перевірки
+## глибини: інакше полум'я перекривало б одні підписи, а інші лишались зверху.
+const OVERLAY_PRIORITY: int = 10
+## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась.
+const SQUAD_FIGURES: int = 4
+const _FALL_SEC: float = 0.5
+## Знищена техніка зникає під спалахом, і саме тим кроком анімація закінчується:
+## програвач одразу грає WreckLeft, тож уламки стають на тайл у тому самому кадрі, ще
+## під кулею, а не після того, як дим розійшовся.
+const KILL_HIDE_DELAY: float = 0.06
 
 ## Постріл і відповідь (§3.3.1): короткий поштовх силуету. Скарга власника —
 ## «атака у відповідь не відбувається»: вона відбувалась, але на дошці її було
@@ -54,7 +71,7 @@ const _SHOT_PUNCH_DOWN: float = 0.13
 
 ## R14: хід чекає на гравця, не навпаки — поворот твінується, але лишається
 ## коротким, щоб не виглядав як затримка вводу.
-const _FACE_TURN_DURATION: float = 0.15
+const FACE_TURN_DURATION: float = 0.15
 
 ## Абстрактні кольори гравців-плейсхолдерів (§2 — жодного реального прапора
 ## чи армії). Індекс — Unit.owner. Колір іде лише на корпус (Hull), не на
@@ -86,7 +103,7 @@ const _DEBUG_SHOW_FACING_ARROW: bool = false
 const _DEBUG_ARROW_COLOR: Color = Color("ff26d6")
 
 ## Трохи вище даху корпусу (уникнути z-fighting граней), і однозначно нижче
-## HpBar (y=1.1) / HpLabel (y=1.3) / DroneIcon (y=1.6) з unit_view.tscn —
+## HpBar (y=0.55) / HpLabel (y=0.65) / DroneIcon (y=0.8) з unit_view.tscn —
 ## стрілка не має перекривати жоден із них.
 const _DEBUG_ARROW_Y_OFFSET: float = 0.02
 ## --- ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2), кінець блоку констант -------------------
@@ -108,6 +125,8 @@ const _DRONE_THREAT_COLOR: Color = TargetOverlay.DRONE_RING_COLOR
 
 ## Поточний факінг (0..7, порядок Board.DIRS_8). Читається ззовні для UI цілей.
 var facing: int = 0
+## Юніт гине (play_destroyed): дим довкола вже не береже його як сусіда (BattleFx).
+var destroyed: bool = false
 
 @onready var _silhouette: Node3D = $Silhouette
 @onready var _crosshair: Sprite3D = $Crosshair
@@ -119,6 +138,9 @@ var facing: int = 0
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
 var _hull_material: StandardMaterial3D
+var _type_id: int = 0
+var _owner_color: Color = Color.WHITE
+var _standing: int = 0
 var _drones_left: int = 0
 ## Останнє показане співвідношення HP. Джерело правди замість колишнього
 ## _hp_bar.scale.x — заливка тепер намальована ВСЕРЕДИНІ текстури, тож
@@ -127,14 +149,30 @@ var _hp_ratio: float = 1.0
 ## Живий твін останнього face(); тримаємо посилання, щоб наступний виклик
 ## міг убити цей замість того, щоб два твіни змагались за rotation_degrees.y.
 var _face_tween: Tween
+## Половини основи корпусу (x — ширина, y — довжина): по її кутах юніт ставиться на схил.
+var _half_base: Vector2 = Vector2.ZERO
+## Кут повороту, для якого востаннє рахувався нахил; NAN — ще не ставився.
+var _posed_yaw: float = NAN
+## Техніка нахиляється за схилом; відділення на одній основі лишається рівним.
+var _tilts: bool = true
 
 
 func _ready() -> void:
+	# Кадр потрібен лише поки твін крутить юніт (див. _process).
+	set_process(false)
 	# Заступники текстур: суцільний колір замість реального арту, той самий
 	# підхід, що й нейтральні кольори-плейсхолдери мін (MineLayer). HP-смуга сюди не
 	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
 	# з кожного bind().
+	_hp_bar.pixel_size = HP_BAR_PIXEL_SIZE
 	_drone_icon.texture = _flat_texture(Color("d9b23a"))
+	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
+	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
+		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for n: Node in [_hp_bar, _hp_label]:
+		n.set("no_depth_test", true)
+		n.set("render_priority", OVERLAY_PRIORITY)
+	_hp_label.outline_render_priority = OVERLAY_PRIORITY - 1
 	# Форма — біла, колір дає modulate (той самий прийом, що й у HP-барі вище):
 	# одне місце, де живе _CROSSHAIR_COLOR, і його видно в інспекторі.
 	_crosshair.texture = _crosshair_texture()
@@ -149,12 +187,15 @@ func _ready() -> void:
 
 func bind(unit: Unit) -> void:
 	position = IsoCameraRig.cell_to_world(unit.pos)
+	_type_id = unit.type_id
 	_build_silhouette(unit.type_id, unit.owner)
+	_tilts = UnitTypes.is_vehicle(UnitTypes.get_type(unit.type_id)["unit_class"])
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
 	# не має попередньої орієнтації, з якої мало б сенс анімувати «доведення» —
 	# твінований face() тут дав би видиме crank-довертання щоразу, коли дошка
 	# перебудовується. Миттєве виставлення, не face().
 	_set_facing_instant(unit.facing)
+	_pose(position)
 	set_hp(unit.hp, unit.max_hp())
 	set_drones(unit.drones_left)
 	# Свіжий (чи перебудований) вузол не є ціллю жодного прев'ю: прев'ю живе в
@@ -163,6 +204,16 @@ func bind(unit: Unit) -> void:
 	set_targeted(false)
 	set_forbidden(false)
 	_put_on_unit_layer(self)
+	# Плями стежать за вже виставленим поворотом і позою, тож реєструються наприкінці bind().
+	if contacts != null:
+		if _contact_on:
+			contacts.track(self)
+		else:
+			contacts.untrack(self)
+	if hp_bars != null:
+		# Спрайт лишається вузлом стану (текстура, видимість), а малює смугу спільний MultiMesh.
+		_hp_bar.layers = 0
+		hp_bars.track(self)
 
 
 ## Силует перебудовується на кожен bind(), тож шар ставиться після нього.
@@ -212,6 +263,7 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		_face_tween.kill()
 	var tween: Tween = create_tween()
 	_face_tween = tween
+	set_process(true)
 	if path.is_empty():
 		# Твін без жодного кроку міг би ніколи не подати finished — гарантований
 		# нульовий інтервал забезпечує, що сигнал таки настане.
@@ -241,11 +293,11 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 			# Доворот НА МІСЦІ, перш ніж юніт зрушить у новий тайл — це і є
 			# виправлення бага: раніше цей tween_property йшов паралельно з
 			# рухом нижче (set_parallel(true)) і юніт в'їжджав носом у стару
-			# сторону. _FACE_TURN_DURATION, не duration_per_step: той самий
+			# сторону. FACE_TURN_DURATION, не duration_per_step: той самий
 			# короткий поворот, що й у face(), — крок лишається читабельним, а
 			# хід не починає відчуватись повільним.
 			tween.set_parallel(false)
-			tween.tween_property(self, "rotation_degrees:y", predicted_degrees + delta, _FACE_TURN_DURATION)
+			tween.tween_property(self, "rotation_degrees:y", predicted_degrees + delta, FACE_TURN_DURATION)
 		predicted_degrees += delta
 
 		tween.set_parallel(false)
@@ -258,13 +310,71 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 	return tween.finished
 
 
-## Крок руху між клітинками: XZ — лінійно, висота — з рельєфу під юнітом (а не пряма між
-## центрами клітинок, що протикала б горб). Без рельєфу — лінійно, як і було.
+## Крок руху між клітинками: XZ — лінійно, висота й нахил — з рельєфу під юнітом (а не пряма
+## між центрами клітинок, що протикала б горб).
 func _walk(t: float, from: Vector3, to: Vector3) -> void:
-	var p: Vector3 = from.lerp(to, t)
-	if TerrainHeight.active != null:
-		p.y = TerrainHeight.active.at(p.x, p.z)
-	position = p
+	_pose(from.lerp(to, t))
+
+
+## Твін повороту крутить лише кут вузла; нахил залежить від нього, тож іде слідом. Кадр
+## вмикають face() і move_along() і вимикає перший кадр після кінця твіна.
+func _process(_delta: float) -> void:
+	if rotation.y != _posed_yaw:
+		_pose(position)
+	if _face_tween == null or not _face_tween.is_running():
+		set_process(false)
+
+
+## Ставить юніт у точці `at` на рельєф усією основою. Нахил — лише в силуеті, тангаж і
+## крен у його власних осях: кут вузла навколо Y лишається напрямом (§3.4), а ніс у плані
+## дивиться туди ж, куди й без нахилу. Висота — найменша, за якої жоден кут основи і
+## центр не входять у ґрунт; на схилі, крутішому за MAX_TILT_DEG, нижній край висить.
+## Відділення не нахиляється: фігури на одній основі завалювались би разом із нею.
+func _pose(at: Vector3) -> void:
+	_posed_yaw = rotation.y
+	var th: TerrainHeight = TerrainHeight.active
+	if th == null:
+		position = Vector3(at.x, 0.0, at.z)
+		_silhouette.rotation = Vector3.ZERO
+		return
+	var cell: Vector2i = IsoCameraRig.world_to_cell(at)
+	var deck: float = th.deck_y(cell)
+	if deck > th.at(float(cell.x), float(cell.y)) + 0.001:
+		# Міст: настил рівний, а рельєф під ним — русло.
+		position = Vector3(at.x, deck, at.z)
+		_silhouette.rotation = Vector3.ZERO
+		return
+	if not _tilts:
+		position = Vector3(at.x, th.at(at.x, at.z) - SQUAD_SINK, at.z)
+		_silhouette.rotation = Vector3.ZERO
+		return
+	var yaw := Basis(Vector3.UP, rotation.y)
+	var corners: Array[Vector3] = []
+	var h: Array[float] = []
+	for sx: float in [-1.0, 1.0]:
+		for sz: float in [-1.0, 1.0]:
+			var c := Vector3(_half_base.x * sx, 0.0, _half_base.y * sz)
+			var w: Vector3 = at + yaw * c
+			corners.append(c)
+			h.append(th.at(w.x, w.z))
+	# Порядок кутів: (-x,-z), (-x,+z), (+x,-z), (+x,+z); ніс — це -Z.
+	var limit: float = deg_to_rad(MAX_TILT_DEG)
+	var pitch: float = 0.0
+	var roll: float = 0.0
+	if _half_base.y > 0.0:
+		pitch = atan(((h[0] + h[2]) - (h[1] + h[3])) / (4.0 * _half_base.y))
+	if _half_base.x > 0.0:
+		roll = atan(((h[2] + h[3]) - (h[0] + h[1])) / (4.0 * _half_base.x))
+	_silhouette.rotation = Vector3(clampf(pitch, -limit, limit), 0.0, clampf(roll, -limit, limit))
+	var tilt: Basis = _silhouette.basis
+	var y: float = th.at(at.x, at.z)
+	for c: Vector3 in corners:
+		# Нахилений кут зсувається в плані (cos < 1), тож ґрунт беремо під ним, а не під
+		# рівним: на крутому березі різниця — кілька сантиметрів, і кут інакше тоне.
+		var tc: Vector3 = tilt * c
+		var w: Vector3 = at + yaw * tc
+		y = maxf(y, th.at(w.x, w.z) - tc.y)
+	position = Vector3(at.x, y, at.z)
 
 
 ## R14: поворот твінується, а не клацає миттєво — «Твіни руху й повороту»
@@ -285,7 +395,8 @@ func face(direction: int) -> void:
 	if _face_tween != null and _face_tween.is_valid():
 		_face_tween.kill()
 	_face_tween = create_tween()
-	_face_tween.tween_property(self, "rotation_degrees:y", current + delta, _FACE_TURN_DURATION)
+	_face_tween.tween_property(self, "rotation_degrees:y", current + delta, FACE_TURN_DURATION)
+	set_process(true)
 
 
 ## Виправлення 1: bind() кличе це замість face() — щойно створений (чи
@@ -313,6 +424,7 @@ func set_hp(hp: int, max_hp: int) -> void:
 	# кожен свій), і modulate поверх нього перефарбував би й рамку теж.
 	_hp_bar.modulate = Color.WHITE
 	_hp_label.text = "%d/%d" % [hp, max_hp]
+	_set_standing(_figures_for(hp, max_hp))
 
 
 ## Єдине джерело правди про показане HP — для UI й тестів. Колишнє
@@ -325,12 +437,22 @@ func hp_ratio() -> float:
 ## завширшки ratio — одна текстура, один спрайт. Заливка росте зліва
 ## направо, як у референсі; старий scale.x стискав смугу до центру.
 static func _hp_bar_texture(ratio: float) -> ImageTexture:
-	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
-	var fill_width: int = roundi(float(inner.size.x) * ratio)
+	var fill_width: int = _hp_fill(ratio)
 	# Ключ — ціла ширина заливки: різних текстур не більше, ніж пікселів смуги.
 	var key: Array = ["hp", fill_width]
-	if _texture_cache.has(key):
-		return _texture_cache[key]
+	if not _texture_cache.has(key):
+		_texture_cache[key] = ImageTexture.create_from_image(hp_bar_image(fill_width))
+	return _texture_cache[key]
+
+
+## Ширина заливки в пікселях для співвідношення HP.
+static func _hp_fill(ratio: float) -> int:
+	return roundi(float(_HP_BAR_SIZE.x - 2) * ratio)
+
+
+## Малюнок смуги з заливкою завширшки `fill_width` пікселів: рамка, тло й заливка.
+static func hp_bar_image(fill_width: int) -> Image:
+	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
 	var image := Image.create(_HP_BAR_SIZE.x, _HP_BAR_SIZE.y, false, Image.FORMAT_RGBA8)
 	image.fill(_HP_BAR_FRAME_COLOR)
 	image.fill_rect(inner, _HP_BAR_BACK_COLOR)
@@ -338,8 +460,7 @@ static func _hp_bar_texture(ratio: float) -> ImageTexture:
 		# Колір з показаної ширини, а не з ratio: одна ширина — один вигляд.
 		var shown: float = float(fill_width) / float(inner.size.x)
 		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), Color.RED.lerp(Color.GREEN, shown))
-	_texture_cache[key] = ImageTexture.create_from_image(image)
-	return _texture_cache[key]
+	return image
 
 
 ## §3.9: залишок дронів публічний — показується на будь-якому видимому
@@ -384,7 +505,26 @@ func is_drone_threatened() -> bool:
 	return _drone_threatened.visible
 
 
-## Твінує _silhouette, а не self: self.scale належить play_destroyed(), і два
+func standing_figures() -> int:
+	return _standing
+
+
+## `ceil(SQUAD_FIGURES · hp / max_hp)` цілими: фігура падає, щойно втрачено її чверть.
+static func _figures_for(hp: int, max_hp: int) -> int:
+	if max_hp <= 0 or hp <= 0:
+		return 0
+	return mini(SQUAD_FIGURES, (SQUAD_FIGURES * hp + max_hp - 1) / max_hp)
+
+
+func _set_standing(count: int) -> void:
+	if not (UnitSilhouettes.spec(_type_id).extras as Array).has(&"figures"):
+		_standing = 0
+		return
+	_standing = count
+	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, _owner_color, count)
+
+
+## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
 ## твіни на одну властивість змагались би на пострілі, який убиває.
 func play_shot() -> Signal:
 	var tween: Tween = create_tween()
@@ -394,8 +534,24 @@ func play_shot() -> Signal:
 
 
 func play_destroyed() -> Signal:
+	destroyed = true
 	var tween: Tween = create_tween()
-	tween.tween_property(self, "scale", Vector3.ZERO, _DESTROY_DURATION)
+	var cls: int = UnitTypes.get_type(_type_id)["unit_class"]
+	if not UnitTypes.is_vehicle(cls):
+		# Відділення падає, а не стискається: лежачі фігури далі малює шар загиблих зі стану.
+		for n: Node3D in [_hp_bar, _hp_label, _drone_icon]:
+			n.visible = false
+		_set_standing(0)
+		_contact_on = false
+		tween.tween_interval(_FALL_SEC)
+		return tween.finished
+	# Куля — у контейнері, не в цьому вузлі: вузол юніта звільнить перебудова дошки,
+	# а куля мусить догоріти над уламками.
+	BattleFx.spawn_explosion(get_parent(), position, BattleFx.fireball_size(cls))
+	for n: Node3D in [_hp_bar, _hp_label, _drone_icon]:
+		n.visible = false
+	tween.tween_interval(KILL_HIDE_DELAY)
+	tween.tween_callback(func() -> void: _silhouette.visible = false)
 	return tween.finished
 
 
@@ -405,20 +561,67 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 	for child in _silhouette.get_children():
 		child.free()
 
-	var built := UnitSilhouettes.build(type_id, PLAYER_COLORS[owner % PLAYER_COLORS.size()])
+	_owner_color = PLAYER_COLORS[owner % PLAYER_COLORS.size()]
+	var built := UnitSilhouettes.build_merged(type_id, _owner_color)
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)
 	built.free()
 	var hull := _silhouette.get_node("Hull") as MeshInstance3D
-	var hull_size: Vector3 = (hull.mesh as BoxMesh).size
+	var hull_size: Vector3 = UnitSilhouettes.spec(type_id).hull
+	_half_base = Vector2(hull_size.x, hull_size.z) * 0.5
 	_hull_material = hull.material_override as StandardMaterial3D
+	_hull_size = hull_size
+	_contact_on = contacts != null and WeatherRig.unit_contact > 0.0
 
 	# ЧАСОВИЙ ІНСТРУМЕНТ РОЗРОБНИКА (Task 2) — єдиний виклик, єдине місце, де стрілку
 	# додають на дошку. Прибрати стрілку — це прибрати рівно ці два рядки
 	# (або поставити _DEBUG_SHOW_FACING_ARROW у false), а не шукати по файлу.
 	if _DEBUG_SHOW_FACING_ARROW:
 		_silhouette.add_child(_build_facing_arrow(hull_size))
+
+
+## Пляма тіні-контакту ширша за слід корпусу: край гасне вже за корпусом.
+const CONTACT_SPREAD: float = 2.0
+## Спільний MultiMesh плям екрана (`UnitContacts`); без нього — без плям. Ставить власник
+## вигляду до bind().
+var contacts: UnitContacts = null
+## Спільний MultiMesh смуг HP екрана (`UnitHpBars`); без нього смугу малює сам спрайт HpBar.
+var hp_bars: UnitHpBars = null
+## Нема, коли вигляд карти тіні-контакту не має: інакше кожен юніт платить прозорий виклик малювання.
+var _contact_on: bool = false
+var _hull_size: Vector3 = Vector3.ZERO
+
+
+## Тінь-контакт: квад під корпусом у системі силуету, тож нахиляється разом із ним на схилі й
+## ховається разом із юнітом; де ґрунт вищий за квад, шейдер кладе вершини на рельєф. Сонця не
+## чекає — силу ставить вигляд карти глобальним uniform. Світове перетворення для `UnitContacts`.
+func contact_transform() -> Transform3D:
+	if not _contact_on or not is_visible_in_tree() or not _silhouette.visible:
+		return UnitContacts.HIDDEN
+	var size := Basis.from_scale(Vector3(_hull_size.x * CONTACT_SPREAD, 1.0, _hull_size.z * CONTACT_SPREAD))
+	return _silhouette.global_transform * Transform3D(size, Vector3(0.0, 0.01, 0.0))
+
+
+func _exit_tree() -> void:
+	if contacts != null and is_instance_valid(contacts):
+		contacts.untrack(self)
+	if hp_bars != null and is_instance_valid(hp_bars):
+		hp_bars.untrack(self)
+
+
+## Стан смуги HP для `UnitHpBars`: шар — ширина заливки (текстура спрайта — той самий малюнок),
+## точка — там, де стоїть спрайт, показ — як у спрайта.
+func hp_bar_layer() -> int:
+	return _hp_fill(_hp_ratio)
+
+
+func hp_bar_world() -> Vector3:
+	return global_position + Vector3(0.0, _hp_bar.position.y, 0.0)
+
+
+func hp_bar_shown() -> bool:
+	return _hp_bar.visible and is_visible_in_tree()
 
 
 ## Перебудова юнітів після кожної дії створює десяток вузлів: матеріал і

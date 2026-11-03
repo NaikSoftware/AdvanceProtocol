@@ -70,9 +70,9 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	# ПОРЯДОК КРОКІВ 1–3 — головне в цій функції, і саме його ламатимуть.
 	#
 	# КРОК 2 (лічиться першим, застосовується другим): сектор вхідного пострілу
-	# береться від СТАРОЇ орієнтації цілі. Ціль не повертається передом до удару —
-	# інакше флангування, найвиразніший хід у грі (§3.4), знецінилось би до нуля:
-	# будь-який удар у корму сам себе перетворював би на лобовий.
+	# береться від СТАРОЇ орієнтації цілі. Ціль повертається до стрільця лише ПІСЛЯ
+	# удару (_answer()) — інакше флангування, найвиразніший хід у грі (§3.4),
+	# знецінилось би до нуля: будь-який удар у корму сам себе перетворював би на лобовий.
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
 	var dmg: int = Rules.compute_damage(state.rng, a, t, sector, dist_sq)
@@ -90,10 +90,35 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 
 	a.exhaust()
 	out.append(Events.ShotFired.new(unit_id, target_id, sector))
+	out.append_array(_reveal_shooter(state, a, t))
 	out.append_array(_resolve_damage(state, a, t, dmg))
 	out.append(Events.ApChanged.new(unit_id, 0))
-	if t.is_alive():
-		out.append_array(_retaliate(state, a, t))
+	out.append_array(_answer(state, a, t))
+	return out
+
+static func _reveal_shooter(state: BattleState, shooter: Unit, target: Unit) -> Array[Events.BattleEvent]:
+	## §3.3.1/§3.5: влучання відкриває стрільця — тайл атакувальника назавжди стає
+	## `seen` для боку цілі ще до того, як ляже шкода (як в оригіналі). Тому відповідь
+	## не має окремої умови зору: стрілець, щойно вистрілив, уже видимий, і стріляти
+	## безкарно з-за туману неможливо. Через це ж розворот цілі (_answer()) її боку
+	## нічого не видає: напрямок вказує на тайл, який той бік уже знає. Третьому
+	## гравцеві — видає (docs/architecture.md, витік орієнтації).
+	var out: Array[Events.BattleEvent] = []
+	if state.vision[target.owner].reveal(shooter.pos):
+		out.append(Events.TileRevealed.new(target.owner, [shooter.pos] as Array[Vector2i]))
+	return out
+
+static func _answer(state: BattleState, original_attacker: Unit, target: Unit) -> Array[Events.BattleEvent]:
+	## §3.4: ціль, що вижила, ЗАВЖДИ розвертається до атакувальника — і тоді, коли
+	## відповісти не може (немає AP, не дістає, інженер). Розворот іде після шкоди,
+	## тож сектор першого пострілу вже порахований від старої орієнтації; а другий
+	## стрілець із того самого флангу влучить уже в лоб. Якщо ціль відповідає, то
+	## стріляє вже з нової орієнтації. Спільне для пострілу і для дрона.
+	var out: Array[Events.BattleEvent] = []
+	if not target.is_alive() or not original_attacker.is_alive():
+		return out
+	out.append_array(_turn_towards(target, original_attacker.pos))
+	out.append_array(_retaliate(state, original_attacker, target))
 	return out
 
 static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit) -> Array[Events.BattleEvent]:
@@ -104,38 +129,17 @@ static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit
 	## немає шляху назад до _retaliate() — рекурсія неможлива структурно, а не лише
 	## відсутня випадково через AP чи дальність.
 	##
-	## Порядок перевірок навмисно дзеркалить validate(): живість/клас, AP, дальність,
-	## зір — так обидва читаються однаково.
+	## Умова відповіді — рівно та, що в оригіналі, і нічого понад неї: не інженер,
+	## AP не менше fire_cost, атакувальник у колі дальності. Перевірки зору немає,
+	## бо влучання вже відкрило стрільця (_reveal_shooter()); перевірки сектора чи
+	## орієнтації немає, бо ціль до цього моменту вже розвернулась (_answer()).
 	var out: Array[Events.BattleEvent] = []
-	if not target.is_alive() or not original_attacker.is_alive():
-		return out
 	if target.unit_class() == UnitTypes.UnitClass.ENGINEER:
 		return out  # §3.6/§3.3.1: у інженера немає зброї — він ніколи не відповідає
 	if target.has_fired or target.ap < target.fire_cost():
 		return out
 	if not Rules.in_radius(target.pos, original_attacker.pos, target.attack_range()):
 		return out
-	if not state.vision[target.owner].is_seen(original_attacker.pos):
-		# §3.3.1 (переглянуто): відповідач мусить бачити атакувальника — той самий
-		# закон видимості, що й для будь-якого пострілу, але власним знанням цілі
-		# (target.owner), а не зором того, хто стріляв першим. Це навмисний відхід
-		# від референсу, який перевіряє вогонь у відповідь лише за AP, дальністю і класом —
-		# зафіксовано в CLAUDE.md §3.3.1/§4, не "виправляти" назад до референсу.
-		#
-		# «Не бачить» тут означає seen (§3.5): тайл, якого власник цілі не розвідував
-		# ЖОДНОГО разу. Безкарність від цього не зникає, але стає зброєю дебюту —
-		# з ходами розвідана земля росте, і стріляти без відповіді стає нізвідки.
-		return out
-
-	# КРОК 3, і його місце тут — не деталь. _retaliate() викликається вже ПІСЛЯ
-	# _resolve_damage(), тобто після застосування шкоди, а всі перевірки вище вже
-	# пройдено — отже відповідач розвертається рівно тоді, коли відповідь СПРАВДІ
-	# відбувається. Пересунути розворот вище (до перевірок) означало б крутити ціль
-	# від самого факту отриманої шкоди, а це витік: орієнтація цілі показала б,
-	# звідки прилетіло, навіть коли її власник стрільця ніколи не розвідував.
-	# Безкарність невидимої атаки (§3.3.1) пішла б каналом, якого туман не
-	# фільтрує взагалі (§6, «known debt» про нефільтровані події).
-	out.append_array(_turn_towards(target, original_attacker.pos))
 
 	var sector: int = Rules.armour_sector(original_attacker.facing, original_attacker.pos, target.pos)
 	var dist_sq: int = Rules.distance_sq(target.pos, original_attacker.pos)
@@ -159,6 +163,7 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 
 	if not target.is_alive():
 		out.append(Events.UnitDestroyed.new(target.id, target.pos))
+		out.append_array(Wrecks.leave(state, target))
 		out.append_array(state.check_elimination())
 		# Смерть цілі може відкрити/закрити огляд будь-кому — усі гравці.
 		# Інакше, як MoveCommand.apply(), оновлюємо лише огляд атакуючого.

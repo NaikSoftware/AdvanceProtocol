@@ -4,6 +4,9 @@ extends GutTest
 ## пікінг по піднятій клітинці. 1 м = 0.125 світу.
 
 const M: float = TerrainHeight.M
+## Сума висот _flat_checksum(3), записана з коду, де хвиля рівнини на полі FIELD уже майже знята
+## (`_flatness`), а опора центру пагорба гуляє за висотою: дошка без пагорбів від опори не залежить.
+const FLAT_CHECKSUM_SEED3: float = -17.680515
 
 
 ## 14x14 поле: пагорб 3x3 у (3..5, 3..5), дорога вздовж X на y = 10, річка (2 клітинки) на y = 7..8
@@ -276,7 +279,8 @@ func test_bend_has_a_steep_cut_bank_outside_and_a_gentle_point_bar_inside() -> v
 		nrm = -nrm
 	var outer: float = _bank_run_m(t, mid, nrm)
 	var inner: float = _bank_run_m(t, mid, -nrm)
-	assert_true(outer > 0.0 and outer <= 2.6 and outer < 0.6 * inner, "підмитий берег: падіння 1 м на ≤ 2.6 м і вдвічі різкіший за косу, є %.2f м (коса %.2f)" % [outer, inner])
+	# Верх берега — рівне поле на y = 0, тож 1 м над водою лежить у м'якій верхній частині схилу.
+	assert_true(outer > 0.0 and outer <= 2.7 and outer < 0.6 * inner, "підмитий берег: падіння 1 м на ≤ 2.7 м і вдвічі різкіший за косу, є %.2f м (коса %.2f)" % [outer, inner])
 	assert_true(inner >= 4.0 and inner <= 8.0, "піщана коса: схил на 4-8 м, є %.2f м" % inner)
 
 
@@ -659,3 +663,150 @@ func test_one_cell_hill_stays_on_its_cell() -> void:
 					continue
 				# Допуск 8 мм (1e-3 клітинки): інтерполяція відліків дає зсув ~1 мм.
 				assert_almost_eq(b.at(float(x), float(z)), a.at(float(x), float(z)), 1e-3, "сід %d: поле (%d, %d) підняте" % [seed_value, x, z])
+
+
+## Сума висот рівної дошки (без пагорбів) у сітці 0.25 клітинки.
+static func _flat_checksum(seed_value: int) -> float:
+	var b := Board.create(12, 10, Terrain.GroundState.DRY)
+	b.set_kind(Vector2i(2, 7), Terrain.Kind.MARSH)
+	var t := TerrainHeight.bake(b, 0, seed_value)
+	var s := 0.0
+	for zi in 40:
+		for xi in 48:
+			s += t.at(xi * 0.25, zi * 0.25)
+	return s
+
+
+## Опора центру клітинки пагорба не чіпає рівну землю: поле висот дошки без пагорбів — те саме,
+## що й до того, як опора стала різної висоти (сума висот записана з того коду).
+func test_flat_board_relief_is_unchanged_by_hill_support() -> void:
+	var got: float = _flat_checksum(3)
+	gut.p("сума висот рівної дошки: %.6f" % got)
+	assert_almost_eq(got, FLAT_CHECKSUM_SEED3, 1e-4)
+
+
+## Центр пагорба в 1 клітинку тримає опору: не нижче _HILL_KEEP від найменшої висоти пагорба й не
+## вище 1.4 · _HILL_KEEP від найбільшої (+0..40 % — розкид висоти опори; згладжений стик додає
+## щонайбільше чверть ширини згладжування, 2.5 см).
+func test_hill_centre_support_stays_in_its_range() -> void:
+	for seed_value in [3, 17, 41, 77, 123]:
+		var flat := Board.create(11, 11, Terrain.GroundState.DRY)
+		var with_hill := Board.create(11, 11, Terrain.GroundState.DRY)
+		with_hill.set_kind(Vector2i(5, 5), Terrain.Kind.HILL)
+		var rise: float = TerrainHeight.bake(with_hill, 0, seed_value).at(5.0, 5.0) - TerrainHeight.bake(flat, 0, seed_value).at(5.0, 5.0)
+		var lo: float = TerrainHeight._HILL_KEEP * TerrainHeight._HILL_MIN
+		var hi: float = 1.4 * TerrainHeight._HILL_KEEP * (TerrainHeight._HILL_MIN + TerrainHeight._HILL_VAR) + 0.25 * 0.8 * TerrainHeight.M
+		assert_between(rise, lo, hi, "сід %d: центр пагорба %.3f" % [seed_value, rise])
+
+
+## Поле майже рівне: на кожній карті всередині кожної клітинки FIELD — на дошці й у кільці — (відліки
+## ±0.4 клітинки з кроком 0.1) висота гуляє менше ніж на 0.25 м. Поле біля пагорба (до 3 клітинок:
+## розмиття пагорба) чи біля води має схил і не рахується. Пагорби лишаються пагорбами: середня
+## висота центрів клітинок HILL дошки — понад 3 м, кільця — понад 2 м (біля краю дошки їх опускає
+## улоговина краю).
+func test_field_cells_are_nearly_level_and_hills_keep_their_height() -> void:
+	for path in _MAPS:
+		var m: MapData = load(path)
+		var board: Board = m.to_board()
+		var ring: int = Surroundings.ring_of(m)
+		var world: Board = Surroundings.world_board(board, m) if ring > 0 else board
+		var ws: PackedByteArray = Surroundings.world_surface(m) if ring > 0 else m.surface
+		var t := TerrainHeight.bake(world, 0, m.name_key.hash(), ws, ring)
+		# [0] дошка, [1] кільце: найбільший розмах, де, скільки клітинок поля, сума й кількість пагорбів.
+		var worst: Array[float] = [0.0, 0.0]
+		var worst_at: Array[Vector2i] = [Vector2i(-1, -1), Vector2i(-1, -1)]
+		var fields: Array[int] = [0, 0]
+		var hill_sum: Array[float] = [0.0, 0.0]
+		var hills: Array[int] = [0, 0]
+		for wy in world.height:
+			for wx in world.width:
+				var c := Vector2i(wx - ring, wy - ring)
+				var r: int = 0 if board.in_bounds(c) else 1
+				var kind: int = world.kind_at(Vector2i(wx, wy))
+				if kind == Terrain.Kind.HILL:
+					hill_sum[r] += t.at(c.x, c.y)
+					hills[r] += 1
+				if kind != Terrain.Kind.FIELD or _near_slope(world, Vector2i(wx, wy)):
+					continue
+				fields[r] += 1
+				var lo := 1e9
+				var hi := -1e9
+				for j in 9:
+					for i in 9:
+						var v: float = t.at(c.x - 0.4 + i * 0.1, c.y - 0.4 + j * 0.1)
+						lo = minf(lo, v)
+						hi = maxf(hi, v)
+				if hi - lo > worst[r]:
+					worst[r] = hi - lo
+					worst_at[r] = c
+		for r in 2:
+			var where: String = ["дошка", "кільце"][r]
+			if r == 1 and ring == 0:
+				continue
+			gut.p("%s, %s: %d клітинок поля, найбільший розмах %.3f м у %s; пагорб у середньому %.2f м (%d)" % [path, where, fields[r], worst[r] / M, worst_at[r], hill_sum[r] / maxi(hills[r], 1) / M, hills[r]])
+			assert_true(fields[r] > 20, "%s, %s: є що міряти (%d)" % [path, where, fields[r]])
+			assert_lt(worst[r] / M, 0.25, "%s, %s: поле рівне, розмах %.3f м у %s" % [path, where, worst[r] / M, worst_at[r]])
+			if hills[r] > 0:
+				assert_gt(hill_sum[r] / hills[r] / M, 3.0 if r == 0 else 2.0, "%s, %s: пагорби стоять" % [path, where])
+
+
+static func _near_slope(world: Board, c: Vector2i) -> bool:
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			var n: Vector2i = c + Vector2i(dx, dy)
+			if not world.in_bounds(n):
+				continue
+			var k: int = world.kind_at(n)
+			if k == Terrain.Kind.HILL:
+				return true
+			if absi(dx) <= 1 and absi(dy) <= 1 and (k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED):
+				return true
+	return false
+
+
+## Майданчик будівлі на схилі пагорба: ґрунт під слідом рівний і на висоті майданчика, текстура
+## висот (її беруть шейдери землі й води) перезалита з тими самими висотами, що й at(), підніжжя
+## зрізу з горішнього боку темніше (кривизна менша), а ті самі майданчики вдруге текстуру не
+## перезаливають.
+func test_building_pad_levels_the_slope_and_updates_the_height_texture_once() -> void:
+	var b := Board.create(12, 12, Terrain.GroundState.DRY)
+	for y in range(4, 7):
+		for x in range(4, 7):
+			b.set_kind(Vector2i(x, y), Terrain.Kind.HILL)
+	var t := TerrainHeight.bake(b, 0, 3)
+	t.texture()
+	var foot := Vector2i(roundi((6.3 + 0.5) * t.samples), roundi((5.0 + 0.5) * t.samples))
+	var curv_before: float = t.image().get_pixelv(foot).b
+	var pad := Rect2(6.6, 4.6, 0.8, 0.8)
+	var slope: float = t.at(6.6, 5.0) - t.at(7.4, 5.0)
+	assert_gt(slope / M, 0.5, "передумова: майданчик на схилі (%.2f м)" % (slope / M))
+	t.clear_pads()
+	var id: int = t.add_pad(pad)
+	t.finish_pads()
+	var level: float = t.pad_level(id)
+	for v: Vector2 in [pad.position, pad.end, Vector2(pad.position.x, pad.end.y), Vector2(pad.end.x, pad.position.y), pad.get_center()]:
+		assert_almost_eq(t.at(v.x, v.y), level, 1e-5, "ґрунт під слідом у %s" % v)
+	assert_eq(t.texture_updates, 1, "текстура перезалита")
+	var img: Image = t.image()
+	var centre := Vector2i(roundi((7.0 + 0.5) * t.samples), roundi((5.0 + 0.5) * t.samples))
+	assert_almost_eq(img.get_pixelv(centre).r, t.at(7.0, 5.0), 2e-3, "R текстури — висота at()")
+	assert_lt(img.get_pixelv(foot).b, curv_before - 0.1, "підніжжя зрізу темніше")
+	t.clear_pads()
+	t.add_pad(pad)
+	t.finish_pads()
+	assert_eq(t.texture_updates, 1, "ті самі майданчики — без перезаливання")
+	assert_almost_eq(t.at(7.0, 5.0), level, 1e-5, "рельєф той самий")
+
+
+## Похил для шейдера землі: R, G — (h(x - e) - h(x + e)) / 2e й те саме по Z у відліку (e — один відлік).
+func test_gradient_image_holds_the_central_difference_of_the_field() -> void:
+	var t := TerrainHeight.bake(_board(), 0, 5)
+	var img: Image = t.gradient_image()
+	assert_eq(Vector2i(img.get_width(), img.get_height()), Vector2i(t.cols, t.rows))
+	var e: float = 1.0 / float(t.samples)
+	for ij: Vector2i in [Vector2i(9, 7), Vector2i(14, 12), Vector2i(20, 5)]:
+		var x: float = -0.5 - t.margin + ij.x * e
+		var z: float = -0.5 - t.margin + ij.y * e
+		var c: Color = img.get_pixel(ij.x, ij.y)
+		assert_almost_eq(c.r, (t.at(x - e, z) - t.at(x + e, z)) / (2.0 * e), 2e-3, "R у %s" % ij)
+		assert_almost_eq(c.g, (t.at(x, z - e) - t.at(x, z + e)) / (2.0 * e), 2e-3, "G у %s" % ij)

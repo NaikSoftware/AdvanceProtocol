@@ -11,10 +11,13 @@ Five classes drive all the matchup rules above:
 | class | role |
 | --- | --- |
 | `INFANTRY` | spots, holds ground, ignores armour; kills armour in close assault, or at range with drones (§3.9) |
-| `LIGHT_VEHICLE` | fast, thin, takes and screens ground |
-| `TANK` | the main line; slow, armoured, hits hard |
-| `ARTILLERY` | longest reach, biggest hit, helpless up close and very slow |
-| `ENGINEER` | no weapon; mines, demining, bridges, repair |
+| `LIGHT_VEHICLE` | fast, thin, takes and screens ground; enters forest only where a tank has broken it |
+| `TANK` | the main line; slow, armoured, hits hard; breaks the forest it drives into |
+| `ARTILLERY` | longest reach, biggest hit, helpless up close and very slow; enters forest only where a tank has broken it |
+| `ENGINEER` | no weapon; mines, demining, bridges, repair; enters forest only where a tank has broken it |
+
+Infantry walks through forest and never breaks it. The rule and its fog behaviour are in
+[movement-and-terrain.md](movement-and-terrain.md#action-points).
 
 Balance table. **`core/unit_types.gd` is the source of truth**; this table is documentation only.
 
@@ -77,6 +80,9 @@ The engineer is the only unit with a verb list instead of a gun. All actions are
     with the same events as a lethal hit, and its remaining HP is credited to the engineer's owner
     as damage dealt. Elimination is checked at once.
   - **A friendly unit on the bridge forbids the demolition** (`ERR_TILE_OCCUPIED`).
+  - **A wreck on the span goes into the river** with the bridge, and does not forbid the
+    demolition; a unit lost with the bridge leaves no wreck
+    ([§3.14](movement-and-terrain.md#wrecks)).
 - **Repair a damaged friendly unit** — heals `(40 + rand(0, ap_left - fire_cost)) / 2`, so an
   engineer that drove all turn repairs badly. This is the one place where unspent AP matters.
 

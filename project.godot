@@ -25,7 +25,6 @@ SceneRouter="*res://game/autoload/scene_router.gd"
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
-window/size/no_focus.editor=true
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation="landscape"
@@ -40,8 +39,13 @@ locale/translations=PackedStringArray("res://assets/i18n/strings.uk.translation"
 
 [rendering]
 
+driver/depth_prepass/enable=false
+
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
+anti_aliasing/quality/msaa_3d=1
+anti_aliasing/quality/msaa_3d.mobile=1
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile=2
 textures/vram_compression/import_etc2_astc=true
 
 [shader_globals]
@@ -61,4 +65,44 @@ sky_reflection_gain={
 fog_time={
 "type": "float",
 "value": 0.0
+}
+sun_dir={
+"type": "vec3",
+"value": Vector3(0.5, 0.7071, 0.5)
+}
+sky_clear={
+"type": "float",
+"value": 0.0
+}
+foliage_tint={
+"type": "vec3",
+"value": Vector3(1, 1, 1)
+}
+path_earth_dry={
+"type": "vec3",
+"value": Vector3(1.5, 1, 0.4)
+}
+path_trod_dry={
+"type": "vec3",
+"value": Vector3(1.3, 1, 0.45)
+}
+path_dry_k={
+"type": "vec3",
+"value": Vector3(1.4, 1.2, 1.45)
+}
+water_murk={
+"type": "float",
+"value": 0.0
+}
+water_wind={
+"type": "float",
+"value": 1.0
+}
+unit_contact_shadow={
+"type": "float",
+"value": 0.0
+}
+haze_color={
+"type": "vec3",
+"value": Vector3(0.1, 0.135, 0.155)
 }

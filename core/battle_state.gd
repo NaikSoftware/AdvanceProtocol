@@ -20,6 +20,12 @@ var damage_dealt: Array[int] = []
 var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
 var mines: Array[Mines.Mine] = []
+var wrecks: Array[Wrecks.Wreck] = []
+## Просіки (§3.2): Vector2i -> true, ПРАВДА про те, де танк повалив ліс. Живе тут, а не
+## на Board, навмисно: дошку читають і вигляд, і зони в InputController, і кожен з них
+## без жодного зусилля отримав би всезнання. Звідси правду бере лише сам хід
+## (MoveCommand.apply()); планування — з known_broken_map().
+var broken_forest: Dictionary = {}
 var _next_unit_id: int = 1
 
 static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleState:
@@ -38,19 +44,21 @@ static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleSt
 func start() -> void:
 	## Праймить видимість КОЖНОГО гравця рівно один раз, до першого begin_turn().
 	## Без цього vision[p] лишається порожньою сіткою нулів аж до першого ходу
-	## гравця p — а FireCommand._retaliate() дозволяє відповідь лише за умови
-	## state.vision[target.owner].is_seen(...), тож юніти гравців, чий хід
-	## ще не наставав, не можуть відповісти на постріл узагалі. У грі на 2
-	## гравці це робить увесь відкривний хід гравця 0 безкарним; у грі на 3 —
-	## гравець 2 не може відповісти цілий перший раунд.
+	## гравця p. Відповідь (§3.3.1) від неї вже не залежить — влучання саме відкриває
+	## стрільця, — але знання кожного гравця мусить бути чесним з першого ходу:
+	## його зберігає battle_serializer, а вигляд засіює з нього туман (див. нижче).
 	##
 	## Не можна викликати з create(): юніти додаються ПІСЛЯ create(), тож
 	## приймінг там прайм би порожню дошку. Викликати рівно один раз, після
 	## того як усі юніти вже додані, і до першого begin_turn().
 	##
 	## Повернені події тут навмисно ВІДКИДАЮТЬСЯ: повернути їх означало б випустити
-	## TileRevealed кожного гравця в один спільний потік подій, призначений для
-	## показу того, що бачить лише активний. Це витік — і саме тому їх не видно.
+	## увесь початковий огляд кожного гравця в один спільний потік подій. Це витік —
+	## і саме тому їх не видно. Чужий TileRevealed у потоці все ж буває, і рівно
+	## один: FireCommand._reveal_shooter() на кожному влучанні шле TileRevealed для
+	## боку цілі з єдиним тайлом — тайлом самого стрільця. Він публічний за правилом
+	## (§3.3.1: влучання відкриває стрільця), але вигляд мусить фільтрувати за
+	## event.player і не малювати його в туман активного гравця (§6, known debt).
 	##
 	## Наслідок, який треба знати, а не відкривати наново: після start() поле seen
 	## уже виставлене всім гравцям, тож Vision.recompute() у ПЕРШОМУ begin_turn()
@@ -136,15 +144,41 @@ func known_occupied_map(player: int) -> Dictionary:
 
 func known_blocked_map(player: int) -> Dictionary:
 	## Те, з чого ПЛАНУЄТЬСЯ хід (§3.2): known_occupied_map() плюс відомі гравцеві
-	## ворожі міни. Рішення власника (§3.11): знайдена міна — перешкода, її об'їжджають,
+	## ворожі міни й уламки (§3.14). §3.11: знайдена міна — перешкода, її об'їжджають,
 	## як зайнятий тайл, а не наступають на неї наосліп після того, як інженер її вже
 	## показав. Окремий метод, а не домішка в known_occupied_map(): ту читають види
-	## юнітів і чекають там лише id юнітів. Значення для міни — −1, бо юніта там немає.
+	## юнітів і чекають там лише id юнітів. Значення для міни — −1, бо юніта там немає;
+	## для уламків — Wrecks.BLOCKED.
 	## Своя міна сюди не входить — під власником вона не вибухає (Mines.step_on()).
 	var out: Dictionary = known_occupied_map(player)
 	for m in mines:
 		if m.owner != player and m.known_to[player] and not out.has(m.pos):
 			out[m.pos] = -1
+	# Уламки знані так само, як ворог на тайлі (§3.5): лише над розвіданим. Перекривають
+	# вони тільки техніку — Pathing.compute_zones() пропускає піхоту крізь Wrecks.BLOCKED.
+	for w in wrecks:
+		if vision[player].is_seen(w.pos) and not out.has(w.pos):
+			out[w.pos] = Wrecks.BLOCKED
+	return out
+
+func turn_clock() -> int:
+	## Ходи матчу одним числом, що лише зростає: коло — turn_number, місце в колі —
+	## active_player. Догоряння уламків (Wrecks.burn_out()) порівнює саме його.
+	return turn_number * player_count + active_player
+
+func known_broken_map(player: int) -> Dictionary:
+	## Просіки такими, якими їх ЗНАЄ гравець: правда, обрізана його seen (§3.5). Окремої
+	## сітки знання немає і не треба: і повалений ліс, і розвідка незворотні, тож
+	## «знає» = «повалено» і «розвідано», і знання лише відстає від правди, але ніколи
+	## їй не суперечить. Техніка, що планує крізь відому просіку, завжди має рацію.
+	##
+	## Читає seen, а не visible, з тієї ж причини, що й known_occupied_map(): ворог на
+	## давно розвіданому тайлі гравцеві видимий, тож і ліс, який той ворог валить на
+	## цьому тайлі, видно падаючим. Нового про невидимий танк це не каже нічого.
+	var out: Dictionary = {}
+	for p: Vector2i in broken_forest:
+		if vision[player].is_seen(p):
+			out[p] = true
 	return out
 
 func is_over() -> bool:
@@ -153,6 +187,7 @@ func is_over() -> bool:
 func begin_turn() -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []
 	out.append(Events.TurnStarted.new(active_player, turn_number))
+	out.append_array(Wrecks.burn_out(self))
 	for u in units_of(active_player):
 		u.refill_ap()
 	out.append_array(refresh_vision(active_player))
@@ -190,8 +225,10 @@ func refresh_vision_all() -> Array[Events.BattleEvent]:
 	## нешкідливо, бо на смерть ніхто не рухається — у нерухомого гравця revealed
 	## порожній, і подія просто не створюється. Небезпечним стане тоді, коли хтось
 	## пропустить start(): перше ж убивство висипле початковий туман УСІХ гравців
-	## у потік діючого. Правильна відповідь — фільтр подій по спостерігачу (§6),
-	## і він має з'явитися в core/, а не у вигляді.
+	## у потік діючого. Інший чужий TileRevealed у потоці — навмисний: тайл стрільця
+	## для боку цілі з FireCommand._reveal_shooter() (див. start()); вигляд фільтрує
+	## його за event.player. Правильна відповідь обом — фільтр подій по спостерігачу
+	## (§6, known debt), і він має з'явитися в core/, а не у вигляді.
 	var out: Array[Events.BattleEvent] = []
 	for p in player_count:
 		out.append_array(refresh_vision(p))

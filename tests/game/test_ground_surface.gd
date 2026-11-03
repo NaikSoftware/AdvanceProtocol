@@ -321,3 +321,191 @@ func test_every_cell_shows_its_own_class_over_a_quarter_of_its_area() -> void:
 					bad.append("(%d, %d) %s %.0f %%" % [x, y, Terrain.Kind.keys()[board.kind_at(Vector2i(x, y))], share * 100.0])
 		gut.p("%s: найменша частка власного класу %.0f %%" % [file, worst * 100.0])
 		assert_eq(bad.size(), 0, "%s: клітинки без свого виду: %s" % [file, bad.slice(0, 10)])
+
+
+# Пора року: сезонний файл, де він є; інакше — звичайний. Шар без сезонних файлів (берег,
+# асфальт) і невідома пора лишаються як є, тож пора не ламає жодної карти.
+func test_macro_path_takes_the_season_file_and_falls_back_to_the_plain_one() -> void:
+	var dir := "res://assets/terrain/macro/"
+	assert_eq(GroundSurface.macro_path("field", 0, &"summer"), dir + "field_albedo_0.summer.png")
+	assert_eq(GroundSurface.macro_path("field", 1, &"early"), dir + "field_albedo_1.early.png")
+	assert_eq(GroundSurface.macro_path("bank", 0, &"summer"), dir + "bank_albedo_0.png")
+	assert_eq(GroundSurface.macro_path("road", 1, &"early"), dir + "road_albedo_0.png")
+	assert_eq(GroundSurface.macro_path("field", 0, &"winter"), dir + "field_albedo_0.png")
+	assert_eq(GroundSurface.macro_path("field", 1), dir + "field_albedo_1.png")
+
+
+# Бракуючий варіант бере варіант 0 тієї ж пори, а не звичайний файл: інакше в літній ріллі
+# лягли б осінні латки.
+func test_missing_season_variant_takes_variant_zero_of_the_same_season() -> void:
+	var dir := "res://assets/terrain/macro/"
+	assert_eq(GroundSurface.macro_path("ploughed", 1, &"summer"), dir + "ploughed_albedo_0.summer.png")
+	assert_eq(GroundSurface.macro_path("marsh", 1), dir + "marsh_albedo_0.png")
+
+
+# Рілля — прямокутні поля: зв'язні групи клітинок дають номер у кожній клітинці й прямокутник.
+func test_plough_fields_gives_one_rectangle_per_connected_group() -> void:
+	var P := 9
+	# 5×4: поле 3×2 угорі ліворуч, поле 1×3 праворуч, решта — 1.
+	var cells := PackedInt32Array([
+		P, P, P, 1, P,
+		P, P, P, 1, P,
+		1, 1, 1, 1, P,
+		1, 1, 1, 1, 1,
+	])
+	var res: Array = GroundSurface.plough_fields(cells, 5, P)
+	var ids: PackedByteArray = res[0]
+	var rects: Array[Rect2i] = res[1]
+	assert_eq(rects.size(), 2)
+	assert_eq(rects[0], Rect2i(0, 0, 3, 2))
+	assert_eq(rects[1], Rect2i(4, 0, 1, 3))
+	assert_eq(ids[0], 1)
+	assert_eq(ids[4], 2)
+	assert_eq(ids[3], 0)
+	assert_eq(GroundSurface.plough_fields(cells, 5, -1)[1].size(), 0, "без шару ріллі полів нема")
+
+
+# Понад MAX_PLOUGH_FIELDS поля мовчки лишились би лукою: жодна карта не має їх стільки.
+# Рахується світ разом із кільцем — те, що build() справді отримує від BoardView.
+func test_every_map_fits_its_plough_fields_into_the_shader() -> void:
+	var names: Array[String] = GroundSurface._macro_layer_names()
+	var table: PackedInt32Array = GroundSurface._surface_table(names)
+	var plough: int = names.find("ploughed")
+	assert_gt(plough, -1)
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var world: Board = Surroundings.world_board(board, m) if Surroundings.ring_of(m) > 0 else board
+		var surface: PackedByteArray = Surroundings.world_surface(m) if Surroundings.ring_of(m) > 0 else m.surface
+		var cells: PackedInt32Array = GroundSurface.plough_cells(world, 0, surface, table, true)
+		var n: int = (GroundSurface.plough_fields(cells, world.width, plough)[1] as Array).size()
+		gut.p("%s: полів ріллі у світі %d" % [file, n])
+		assert_between(n, 1, GroundSurface.MAX_PLOUGH_FIELDS - 1, file)
+
+
+# Дорога між двома полями лишається дорогою: голосування сусідів не робить її ріллею й не
+# зливає поля в одне через неї.
+func test_road_between_ploughed_cells_splits_the_fields() -> void:
+	var names: Array[String] = GroundSurface._macro_layer_names()
+	var table: PackedInt32Array = GroundSurface._surface_table(names)
+	var plough: int = names.find("ploughed")
+	var board := Board.create(5, 1, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(2, 0), Terrain.Kind.ROAD)
+	var surface := PackedByteArray([1, 1, 0, 1, 1])
+	var cells: PackedInt32Array = GroundSurface.plough_cells(board, 0, surface, table, true)
+	assert_eq(cells[2], -1, "дорога не бере шар ріллі від сусідів")
+	assert_eq((GroundSurface.plough_fields(cells, 5, plough)[1] as Array).size(), 2)
+
+
+# Біля річки стоячої води нема: кожна клітинка води й кожна сусідня з нею має в bank_mask 255
+# (шейдер гасить там вікна болота), а клітинка далі за одну від води — 0.
+func test_bank_mask_covers_every_cell_next_to_water() -> void:
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var mask: PackedByteArray = GroundSurface.bank_mask(board, 0)
+		var bad: Array[Vector2i] = []
+		for y in board.height:
+			for x in board.width:
+				var near := false
+				var far := true
+				for dy in range(-2, 3):
+					for dx in range(-2, 3):
+						var q := Vector2i(x + dx, y + dy)
+						if q.x < 0 or q.y < 0 or q.x >= board.width or q.y >= board.height:
+							continue
+						var k: int = board.kind_at(q)
+						if k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE or k == Terrain.Kind.BRIDGE_DESTROYED:
+							far = false
+							if absi(dx) <= 1 and absi(dy) <= 1:
+								near = true
+				var v: int = mask[y * board.width + x]
+				if (near and v != 255) or (far and v != 0):
+					bad.append(Vector2i(x, y))
+		assert_eq(bad.size(), 0, "%s: %s" % [file, bad.slice(0, 8)])
+
+
+func test_build_passes_the_bank_map_to_the_shader() -> void:
+	var board := Board.create(3, 1, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(0, 0), Terrain.Kind.WATER)
+	ground.build(board, 0)
+	var tex: Texture2D = (ground.material_override as ShaderMaterial).get_shader_parameter("bank_map")
+	assert_not_null(tex)
+	var img: Image = tex.get_image()
+	assert_eq(img.get_pixel(1, 0).r8, 255, "сусід води — без стоячої води")
+	assert_eq(img.get_pixel(2, 0).r8, 0)
+
+
+## Нормаль і похил шейдер бере з карти похилу в пікселі, а не з вершин: без неї меш землі мусив би
+## тримати рельєф густотою вершин.
+func test_build_passes_the_gradient_map_to_the_shader() -> void:
+	var board := Board.create(4, 3, Terrain.GroundState.DRY)
+	var th := TerrainHeight.bake(board, 0, 3)
+	ground.build(board, 0, PackedByteArray(), th)
+	var mat := ground.material_override as ShaderMaterial
+	assert_same(mat.get_shader_parameter("gradient_map"), th.gradient_texture())
+	assert_same(mat.get_shader_parameter("height_map"), th.texture())
+
+
+# Калюжі лише на рівному й у низинах: пагорб, схил понад ~7.5° і гребінь — без стоячої води.
+func test_puddle_gate_keeps_hills_slopes_and_crests_dry() -> void:
+	assert_almost_eq(GroundSurface.puddle_gate(0.0, 0.0, 0.0), 1.0, 1e-4, "рівне — калюжа можлива")
+	assert_almost_eq(GroundSurface.puddle_gate(0.0, -0.2, 0.0), 1.0, 1e-4, "низина — калюжа можлива")
+	assert_eq(GroundSurface.puddle_gate(0.0, 0.0, 1.0), 0.0, "клітинка пагорба")
+	assert_eq(GroundSurface.puddle_gate(tan(deg_to_rad(7.5)), 0.0, 0.0), 0.0, "схил 7.5°")
+	assert_eq(GroundSurface.puddle_gate(tan(deg_to_rad(20.0)), -0.2, 0.0), 0.0, "крутий схил і в низині")
+	assert_eq(GroundSurface.puddle_gate(0.0, 0.1, 0.0), 0.0, "гребінь")
+	assert_lt(GroundSurface.puddle_gate(tan(deg_to_rad(6.0)), 0.0, 0.0), 1.0, "між 5° і 7.5° калюжа вже слабне")
+
+
+# Кожна клітинка пагорба на картах позначена в hill_mask: шейдер не кладе туди калюж.
+func test_hill_mask_marks_every_hill_cell() -> void:
+	for file in ["crossroads", "ridge", "river"]:
+		var m: MapData = load("res://maps/%s.tres" % file) as MapData
+		var board: Board = m.to_board()
+		var mask: PackedByteArray = GroundSurface.hill_mask(board, 0)
+		var bad := 0
+		for y in board.height:
+			for x in board.width:
+				var hill: bool = board.kind_at(Vector2i(x, y)) == Terrain.Kind.HILL
+				if (mask[y * board.width + x] == 255) != hill:
+					bad += 1
+				if hill:
+					assert_eq(GroundSurface.puddle_gate(0.0, 0.0, mask[y * board.width + x] / 255.0), 0.0)
+		assert_eq(bad, 0, file)
+
+
+## Дорога біля будинку не бере покриття двору, інакше заокруглення розвилки лягає сірим ґрунтом двору.
+func test_road_cell_beside_a_building_takes_the_other_neighbour_not_the_yard() -> void:
+	var board := Board.create(3, 3, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(1, 1), Terrain.Kind.ROAD)
+	board.set_kind(Vector2i(0, 1), Terrain.Kind.BUILDING)
+	board.set_kind(Vector2i(1, 0), Terrain.Kind.BUILDING)
+	board.set_kind(Vector2i(1, 2), Terrain.Kind.BUILDING)
+	# Двори в більшості (3 проти 1): без правила голосування перемагав би двір.
+	board.set_kind(Vector2i(2, 1), Terrain.Kind.FOREST)
+	ground.build(board, 0)
+	var mat := ground.material_override as ShaderMaterial
+	var slots: PackedInt32Array = mat.get_shader_parameter("class_layer")
+	var maps: Array[Image] = [(mat.get_shader_parameter("class_map0") as ImageTexture).get_image(), (mat.get_shader_parameter("class_map1") as ImageTexture).get_image()]
+	var found: Array[String] = []
+	for sl in GroundSurface.CLASS_SLOTS:
+		if maps[sl / 4].get_pixel(1, 1)[sl % 4] > 0.5:
+			found.append(GroundSurface.TEX_LAYERS[slots[sl]])
+	assert_eq(found, ["forest"] as Array[String])
+
+
+## Шейдер малює кришіння асфальту лише біля кінців, які дає RoadCourse: вони мусять дійти до матеріалу.
+func test_relief_build_passes_the_asphalt_ends_to_the_shader() -> void:
+	var m: MapData = load("res://maps/crossroads.tres")
+	var board: Board = m.to_board()
+	var height := TerrainHeight.bake(board, 0, m.name_key.hash(), m.surface)
+	ground.build(board, 0, m.surface, height)
+	var mat := ground.material_override as ShaderMaterial
+	var ends: PackedVector2Array = height.roads.asphalt_ends()
+	assert_gt(ends.size(), 0)
+	assert_eq(mat.get_shader_parameter("asphalt_end_count"), ends.size())
+	var sent: PackedVector4Array = mat.get_shader_parameter("asphalt_ends")
+	assert_eq(sent.size(), GroundSurface.ASPHALT_ENDS_MAX)
+	for i in ends.size():
+		assert_eq(Vector2(sent[i].x, sent[i].y), ends[i])
