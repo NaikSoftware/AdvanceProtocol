@@ -1332,16 +1332,22 @@ void fragment() {
 		float shore = 0.0;
 		if (use_height) {
 			float above_m = (world_pos.y - water_level) / 0.125;
-			// Смуга — за горизонталлю (висота / тангенс схилу): 0.2-0.5 м упоперек і на косі, і на
-			// обриві; у каламутного ставка — 0.08–0.2 м, бо ширша лягала темним розмитим ореолом.
+			// Смуга — за горизонталлю (висота / тангенс схилу). Мокрий мул має чітку межу з сухим, що
+			// гуляє 0.2–0.9 м від урізу з хвилею ~1–3 м; плавне затемнення читалось розмитою тінню.
+			// У каламутного ставка — вужча, 0.1–0.3 м.
 			float run_m = above_m / max(slope_tan, 0.05);
-			shore = (1.0 - smoothstep(mix(0.2, 0.08, clamp(water_murk, 0.0, 1.0)), mix(0.5, 0.2, clamp(water_murk, 0.0, 1.0)), run_m)) * smoothstep(0.03, 0.12, shore_mask);
-		}
-		alb *= mix(1.0, 0.6, shore);
-		// Темна мокра лінія просто в урізі (2-4 px на близькому зумі), а не лише розмита смуга.
-		if (use_height) {
-			float edge_m = (world_pos.y - water_level) / 0.125 / max(slope_tan, 0.05);
-			alb *= mix(1.0, 0.65, (1.0 - smoothstep(0.04, 0.14, edge_m)) * smoothstep(0.03, 0.12, shore_mask));
+			float murk_s = clamp(water_murk, 0.0, 1.0);
+			float wet_w = mix(mix(0.2, 0.9, fbm(p * 4.0 + 47.0)), mix(0.1, 0.3, fbm(p * 6.0 + 47.0)), murk_s);
+			// Межа ~0.1 м, але не вужча за піксель: інакше на дальньому зумі рветься.
+			float px_mw = max(length(dpx), length(dpy)) * METRES_PER_TILE;
+			float edge_w = max(0.1, px_mw);
+			shore = (1.0 - smoothstep(wet_w - edge_w, wet_w + edge_w, run_m)) * smoothstep(0.03, 0.12, shore_mask);
+			// Мокрий ґрунт темніший і насиченіший, а не просто сіріший.
+			vec3 wet_soil = alb * 0.55;
+			wet_soil = max(mix(vec3(dot(wet_soil, vec3(0.299, 0.587, 0.114))), wet_soil, 1.2), vec3(0.0));
+			alb = mix(alb, wet_soil, shore);
+			// Тонка темна лінія просто в урізі — плівка води на мулі (~0.1 м).
+			alb *= mix(1.0, 0.75, (1.0 - smoothstep(0.0, max(0.12, px_mw), run_m)) * smoothstep(0.03, 0.12, shore_mask));
 		}
 		// Мокрий берег не дзеркало: шорсткість лише до 0.5.
 		// На сухій карті смуга урізу не блищить: відблиск сонця там читався мокрим.
