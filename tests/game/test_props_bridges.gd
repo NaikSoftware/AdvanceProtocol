@@ -138,3 +138,25 @@ func test_truss_end_posts_stand_on_concrete() -> void:
 				if sgn * v.z > 0.9 and sx * v.x > 0.2 and sx * v.x < 0.3:
 					crest = maxf(crest, v.y)
 			assert_gt(crest, top + TerrainHeight.SEAT_TOP, "стійка на кінці %+d, бік %+d стоїть на ґрунті" % [sgn, sx])
+
+
+## Борти понтона не обриваються коробкою на березі: за стіною опори вони заходять у насип і там не
+## вищі за нього.
+func test_pontoon_girders_end_in_the_embankment() -> void:
+	var by_mat: Dictionary = _verts_by_material("bridge_river_east")
+	var top: float = float(PropLayer.spec_of(&"bridge_river_east")["deck_top"])
+	var wall: float = 1.0 - TerrainHeight.SEAT_END
+	for sgn: float in [-1.0, 1.0]:
+		for sx: float in [-1.0, 1.0]:
+			var tip := -INF
+			for v: Vector3 in by_mat["bridge_steel_grey"]:
+				if sgn * v.z > wall + 0.03 and sx * v.x > 0.42:
+					tip = maxf(tip, v.y)
+			assert_gt(tip, top - 0.05, "борт на кінці %+d, бік %+d не заходить у насип" % [sgn, sx])
+			assert_lt(tip, top + TerrainHeight.SEAT_TOP, "борт на кінці %+d, бік %+d стирчить над насипом" % [sgn, sx])
+
+
+## У руїні панельного мосту нема окремої плити настилу у воді: плоский уламок у руслі читався
+## темним трикутником, що плаває на поверхні.
+func test_broken_truss_has_no_loose_deck_slab() -> void:
+	assert_false(_verts_by_material("bridge_river_west_broken").has("bridge_asphalt_wet"), "плита настилу у воді")

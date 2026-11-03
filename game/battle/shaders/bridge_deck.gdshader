@@ -19,15 +19,21 @@ uniform vec3 end_hi = vec3(1.0);
 uniform float half_len = 1.0;
 uniform float joint = 0.16;
 uniform float fade = 0.06;
+// Половина ширини цього покриття: до бортів перехід згасає, тож світлий кінець не лягає прямокутником
+// із прямими боками вздовж бортів.
+uniform float edge_x = 0.35;
 
 varying float local_z;
+varying float local_x;
 
 void vertex() {
 	local_z = VERTEX.z;
+	local_x = VERTEX.x;
 }
 
 void fragment() {
-	float t = smoothstep(half_len - joint - fade, half_len - joint, abs(local_z));
+	float t = smoothstep(half_len - joint - fade, half_len - joint, abs(local_z))
+			* (1.0 - smoothstep(0.45 * edge_x, edge_x, abs(local_x)));
 	vec3 tint = mix(vec3(1.0), local_z < 0.0 ? end_lo : end_hi, t);
 	ALBEDO = albedo.rgb * texture(albedo_tex, UV).rgb * tint;
 	ROUGHNESS = use_rough_tex ? texture(rough_tex, UV).g * roughness : roughness;

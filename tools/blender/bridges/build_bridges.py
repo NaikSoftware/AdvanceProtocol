@@ -54,7 +54,10 @@ DECK_TOP = {"centre": 0.30, "west": 0.30, "east": 0.21}
 ROAD_TOP = 0.008
 SEAT_END = 0.28
 SEAT_TOP = 0.010  # TerrainHeight.SEAT_TOP: верх насипу над DECK_TOP
+GIRDER_TAIL = 0.07  # хвіст борта понтона за кінцем відсіку, у насипі (0.56 м)
 WING = 0.15  # крила центрального мосту за краєм клітинки (1.2 м); модель довша за переправу на 2 * WING
+SEAT_HALF = 0.36  # TerrainHeight.SEAT_HALF: до неї насип у клітинці мосту рівний
+WING_DROP = 0.12  # на скільки верх крайньої частини стіни нижчий біля краю (~1 м, як укіс до берега)
 WALL_HALF = 0.49  # стіна опори майже на всю ширину клітинки: насип у ній не ширший (TerrainHeight.SEAT_SIDE)
 
 
@@ -200,7 +203,20 @@ def seat(half_l, top):
     настилом, на SEAT_END углиб від краю клітинки. Позаду її верх під насипом, спереду видно лише
     лицьову стіну до води й полицю, на якій лежить настил: обрізи до рівня насипу обабіч настилу
     стирчали над укосом окремими коробками."""
-    return [Box("abutment", (0, sy * (half_l - SEAT_END / 2), top / 2), (2 * WALL_HALF, SEAT_END, top)) for sy in (-1, 1)]
+    out = []
+    for sy in (-1, 1):
+        y = sy * (half_l - SEAT_END / 2)
+        out.append(Box("abutment", (0, y, top / 2), (2 * SEAT_HALF, SEAT_END, top)))
+        # Обабіч насипу (за SEAT_HALF) ґрунт сходить до берега, і рівний верх стіни там стирчав темною
+        # коробкою: крайні частини стіни сходять верхом разом з укосом (на WING_DROP до краю).
+        for sx in (-1, 1):
+            c, sz = (sx * (SEAT_HALF + WALL_HALF) / 2, y, top / 2), (WALL_HALF - SEAT_HALF, SEAT_END, top)
+            w = Box("abutment", c, sz)
+            for i in ((5, 6) if sx > 0 else (4, 7)):
+                w.v[i].z = top - WING_DROP
+            w.uv = w._uv(c, sz)
+            out.append(w)
+    return out
 
 
 # ---------------------------------------------------------------- центр: бетонна балка, 3 клітинки
@@ -332,12 +348,11 @@ def bailey(broken):
     xf(west, about((0, y0, DT - 0.05), rz(-8)))
     east = panels[3] + panels[4] + [end[1], end[3]] + chord_stubs(y0 + 3 * PL, -1, xt, tw, DT + 0.015, DT + PH - 0.015)
     xf(east, about((0, L / 2 - 0.06, DT), rx(10)))
-    # Уламки у воді, кожен від 0.3 тайла: настил, балка й дві діагоналі лежать у розриві.
-    junk = [Box("asphalt_wet", (0.44, 0.1, 0.116), (0.3, 0.26, 0.04), rx(10) @ rz(40)),
-            Box("steel_gal", (-0.4, 0.0, 0.13), (0.04, 0.5, 0.04), rz(25) @ rx(10)),
+    # Уламки у воді, кожен від 0.3 тайла: балка й дві діагоналі лежать у розриві. Плоска плита настилу
+    # над водою читалась темним трикутником, що плаває, — її нема.
+    junk = [Box("steel_gal", (-0.4, 0.0, 0.13), (0.04, 0.5, 0.04), rz(25) @ rx(10)),
             Box("steel_gal", (0.5, -0.12, 0.122), (0.03, 0.4, 0.03), rz(-35) @ rx(-4)),
             Box("steel_gal", (-0.5, 0.15, 0.122), (0.03, 0.38, 0.03), rz(30) @ rx(4))]
-    junk.append(wet((0.44, 0.1, 0.1), (0.31, 0.27, 0.06)))
     return {"abut": abut, "west": west, "east": east, "junk": junk}
 
 
@@ -367,6 +382,10 @@ def pontoon(broken):
         for sx in (-1, 1):
             g.append(Box("steel_grey", (sx * 0.44, yc, (hh * 0.3 + hh + 0.068) / 2), (0.02, n, hh + 0.068 - hh * 0.3)))
             g.append(Box("steel_grey", (sx * 0.395, yc, hh + 0.03 + dz), (0.09, n, 0.02)))
+            # На березі борт не обривається коробкою: 0.4 м за стіною опори він сходить клинцем під насип.
+            for yb, sg in bows:
+                g.append(wedge("steel_grey", (sx * 0.44, yb + sg * GIRDER_TAIL / 2, (hh * 0.3 + hh + 0.068) / 2),
+                               (0.02, GIRDER_TAIL, hh + 0.068 - hh * 0.3), sg, DECK_TOP["east"] - 0.01))
         for yb, sg in bows:  # аппарель: від настилу відсіку до краю клітинки, лежить на бетонній опорі
             ln = 1.0 - abs(yb)
             ramp = Box("deckplate", (0, yb + sg * ln / 2, hh + 0.04 + ROAD_TOP - 0.015), (rwid, ln, 0.03))

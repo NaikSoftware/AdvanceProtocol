@@ -1021,7 +1021,7 @@ func test_wet_map_darkens_bridges() -> void:
 func test_wet_map_keeps_decks_in_the_road_tone() -> void:
 	var expect: Dictionary = {
 		&"bridge_river_west": ["bridge_asphalt1", "bridge_deckplate"],
-		&"bridge_river_west_broken": ["bridge_asphalt1", "bridge_asphalt_wet", "bridge_deckplate"],
+		&"bridge_river_west_broken": ["bridge_asphalt1", "bridge_deckplate"],
 		&"bridge_river_east": ["bridge_deckplate"],
 		&"bridge_river_east_broken": ["bridge_deckplate"],
 		&"bridge_river_centre": ["bridge_asphalt"],
@@ -1049,6 +1049,8 @@ func test_wet_map_keeps_decks_in_the_road_tone() -> void:
 			assert_almost_eq(alb.b, a.b, 1e-3, "%s: %s" % [m, name])
 			assert_eq(got.get_shader_parameter("end_lo"), Vector3(tint[0].r, tint[0].g, tint[0].b), "%s: %s кінець -Z" % [m, name])
 			assert_eq(got.get_shader_parameter("end_hi"), Vector3(tint[1].r, tint[1].g, tint[1].b), "%s: %s кінець +Z" % [m, name])
+			# Перехід згасає до бортів: півширина покриття — з його ж вершин.
+			assert_between(float(got.get_shader_parameter("edge_x")), 0.15, 0.5, "%s: %s півширина покриття" % [m, name])
 			if name != "bridge_asphalt":
 				assert_gte(float(got.get_shader_parameter("roughness")), PropLayer.DIRT_DECK_ROUGH - 1e-4, "%s: %s блищить" % [m, name])
 		found.sort()

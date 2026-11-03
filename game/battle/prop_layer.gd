@@ -473,7 +473,7 @@ const DIRT_DECKS: PackedStringArray = ["bridge_asphalt1", "bridge_asphalt_wet", 
 const DECK_END_TINT: Dictionary = {
 	&"bridge_river_west": [Color(1.43, 1.45, 1.57), Color(1.75, 1.69, 1.63)],
 	&"bridge_river_centre": [Color(0.698, 0.696, 0.797), Color(0.713, 0.686, 0.778)],
-	&"bridge_river_east": [Color(0.816, 0.893, 0.970), Color(2.27, 2.22, 2.50)],
+	&"bridge_river_east": [Color(0.816, 0.893, 0.970), Color(1.75, 1.72, 1.90)],
 }
 const _DECK_SHADER: Shader = preload("res://game/battle/shaders/bridge_deck.gdshader")
 const DIRT_DECK_ROUGH: float = 0.9
@@ -1790,7 +1790,13 @@ static func _bridge_mesh(m: StringName, mesh: Mesh, wet_look: bool) -> Mesh:
 		var ends: Array = DECK_END_TINT.get(StringName(String(m).get_slice("#", 0).trim_suffix("_broken")), [])
 		if wet_look and not ends.is_empty() and (src.resource_name in DIRT_DECKS or src.resource_name == "bridge_asphalt"):
 			# Довжина переправи в клітинках: крила устоїв можуть виходити за кінці моделі.
-			copy.surface_set_material(i, _deck_material(w, ends, float(roundi(mesh.get_aabb().size.z)) * 0.5))
+			# Півширина покриття на кінцях (там, де перехід): уламки руїни посередині її не розширюють.
+			var edge := 0.0
+			var half: float = float(roundi(mesh.get_aabb().size.z)) * 0.5
+			for v: Vector3 in copy.surface_get_arrays(i)[Mesh.ARRAY_VERTEX]:
+				if absf(v.z) > half - 0.3:
+					edge = maxf(edge, absf(v.x))
+			copy.surface_set_material(i, _deck_material(w, ends, half, edge))
 			continue
 		copy.surface_set_material(i, w)
 	_wet_meshes[key] = copy
@@ -1799,7 +1805,7 @@ static func _bridge_mesh(m: StringName, mesh: Mesh, wet_look: bool) -> Mesh:
 
 ## Покриття настилу шейдером bridge_deck: ті самі текстури й тон, що й `w`, плюс перехід кінців до тону
 ## дороги на в'їздах. Стик — там, де насип сходить під настил (TerrainHeight.SEAT_REACH).
-static func _deck_material(w: BaseMaterial3D, ends: Array, half_len: float) -> ShaderMaterial:
+static func _deck_material(w: BaseMaterial3D, ends: Array, half_len: float, edge_x: float) -> ShaderMaterial:
 	var s := ShaderMaterial.new()
 	s.shader = _DECK_SHADER
 	s.resource_name = w.resource_name
@@ -1813,6 +1819,7 @@ static func _deck_material(w: BaseMaterial3D, ends: Array, half_len: float) -> S
 	s.set_shader_parameter("end_lo", Vector3(ends[0].r, ends[0].g, ends[0].b))
 	s.set_shader_parameter("end_hi", Vector3(ends[1].r, ends[1].g, ends[1].b))
 	s.set_shader_parameter("half_len", half_len)
+	s.set_shader_parameter("edge_x", edge_x)
 	s.set_shader_parameter("joint", TerrainHeight.SEAT_REACH + 0.04)
 	return s
 
