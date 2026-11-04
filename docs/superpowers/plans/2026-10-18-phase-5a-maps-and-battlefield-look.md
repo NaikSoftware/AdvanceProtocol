@@ -572,6 +572,6 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 ### Task 25: River banks and bridges
 
 - [x] River shoreline is a crisp waterline with a ragged wet-mud band, not a blurred dark halo
-- [ ] Bridge abutments read as textured concrete, not plain grey boxes
-- [ ] Ground rises smoothly to every bridge end: no pit before a bridge, no step at the deck
-- [ ] Reeds in the water have a dark wet base, contact shading and a reflection; they don't float
+- [x] Bridge abutments read as textured concrete, not plain grey boxes
+- [x] Ground rises smoothly to every bridge end: no pit before a bridge, no step at the deck
+- [x] Reeds in the water have a dark wet base, contact shading and a reflection; they don't float
