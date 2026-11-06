@@ -38,7 +38,11 @@ const CONTOUR_PRIORITY: int = 4
 ## тому самому фізичному ребрі, збіглися б і z-fighting'нули — з відступом
 ## між ними лишається вузька смужка місцевості, і вони читаються як дві окремі
 ## риски, а не одна змішана.
-const _CONTOUR_WIDTH: float = 0.12
+## Риска зони тонка й напівпрозора: підказка шляху на ґрунті, а не головний акцент кадру.
+const _CONTOUR_WIDTH: float = 0.045
+const _CONTOUR_ALPHA: float = 0.6
+## Кільця дальності лишаються ширшими: їх видно лише поки гравець тримає палець на юніті.
+const _RING_WIDTH: float = 0.12
 const _CONTOUR_INSET: float = 0.06
 const _CONTOUR_PIECES: int = 4
 ## 0.95 клітинки: риска коротша за клітинку, тож кути сусідніх рисок не сходяться.
@@ -47,6 +51,9 @@ const _CONTOUR_LENGTH: float = 0.95
 ## z-fight'ити ні з тим, ні з іншим.
 const _CONTOUR_Y: float = 0.04
 const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
+## На мосту риска ближче до осі: настил вужчий за клітинку (півширина 0.36, SEAT_HALF у
+## tools/blender/bridges/build_bridges.py), і біля краю її ховали б бордюр і поручні.
+const _CONTOUR_OFFSET_BRIDGE: float = 0.30
 
 ## Косметичний підтип клітинок (MapData.surface); лише вигляд землі, тримається між перебудовами.
 var surface: PackedByteArray = PackedByteArray()
@@ -298,15 +305,22 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		var dir: Vector2i = seg["dir"]
 		var along := Vector3(1.0, 0.0, 0.0) if dir.x == 0 else Vector3(0.0, 0.0, 1.0)
 		var side := Vector3(0.0, 0.0, 1.0) if dir.x == 0 else Vector3(1.0, 0.0, 0.0)
-		var mid := Vector3(cell.x + dir.x * _CONTOUR_OFFSET, 0.0, cell.y + dir.y * _CONTOUR_OFFSET)
+		# На мосту риска лежить на настилі, а не в руслі під ним: з тестом глибини настил її сховав би.
+		var on_bridge: bool = _kind_by_cell[cell] == Terrain.Kind.BRIDGE and TerrainHeight.active != null
+		var deck: float = TerrainHeight.active.deck_y(cell) if on_bridge else NAN
+		var offset: float = _CONTOUR_OFFSET_BRIDGE if on_bridge else _CONTOUR_OFFSET
+		var mid := Vector3(cell.x + dir.x * offset, 0.0, cell.y + dir.y * offset)
 		var half: float = _CONTOUR_LENGTH * 0.5
 		var base: int = verts.size()
+		var color: Color = seg["color"]
+		color.a *= _CONTOUR_ALPHA
 		for k in _CONTOUR_PIECES + 1:
 			var c: Vector3 = mid + along * lerpf(-half, half, float(k) / _CONTOUR_PIECES)
 			for sgn: float in [-1.0, 1.0]:
 				var p: Vector3 = c + side * (sgn * _CONTOUR_WIDTH * 0.5)
-				verts.append(Vector3(p.x, TerrainHeight.ground_y(p.x, p.z) + _CONTOUR_Y, p.z))
-				colors.append(seg["color"])
+				var y: float = deck if not is_nan(deck) else maxf(TerrainHeight.ground_y(p.x, p.z), TerrainHeight.WATER_LEVEL)
+				verts.append(Vector3(p.x, y + _CONTOUR_Y, p.z))
+				colors.append(color)
 			if k > 0:
 				var i: int = base + k * 2
 				indices.append_array([i - 2, i - 1, i, i - 1, i + 1, i])
@@ -380,7 +394,7 @@ func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 	_circle_nodes[layer] = nodes
 
 
-## Кільце-стрічка шириною _CONTOUR_WIDTH, що лягає на ґрунт: кожна вершина бере висоту з
+## Кільце-стрічка шириною _RING_WIDTH, що лягає на ґрунт: кожна вершина бере висоту з
 ## карти висот (тор лишився б площиною й тонув у схилі). Вершини — відносно центру в XZ.
 func _ring_mesh(centre: Vector3, radius: float) -> ArrayMesh:
 	var segments: int = clampi(int(TAU * radius * 8.0), 64, 512)
@@ -389,7 +403,7 @@ func _ring_mesh(centre: Vector3, radius: float) -> ArrayMesh:
 	for k in segments + 1:
 		var a: float = TAU * float(k) / float(segments)
 		var dir := Vector2(cos(a), sin(a))
-		for r: float in [radius - _CONTOUR_WIDTH * 0.5, radius + _CONTOUR_WIDTH * 0.5]:
+		for r: float in [radius - _RING_WIDTH * 0.5, radius + _RING_WIDTH * 0.5]:
 			var p := Vector2(centre.x, centre.z) + dir * r
 			verts.append(Vector3(dir.x * r, TerrainHeight.ground_y(p.x, p.y) + _CONTOUR_Y, dir.y * r))
 		if k > 0:
@@ -434,9 +448,9 @@ func _contour_material() -> StandardMaterial3D:
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	# Стрічка без нормалей: освітлення дало б чорні ділянки; контур — позначка, не матеріал.
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	# Зони руху — головний інтерфейс гри (§3.2): підніжжя огорожі чи стіна, що стоїть на межі
-	# клітинки, не сміє сховати риску.
-	mat.no_depth_test = true
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# Риска лежить лише на ґрунті: будівлі, дерева, огорожі й юніти її закривають, як закрили б
+	# фарбу на землі. Пріоритет лишається — серед прозорих ефектів (дим, дощ) риска зверху.
 	mat.render_priority = CONTOUR_PRIORITY
 	return mat
 

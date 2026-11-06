@@ -12,6 +12,10 @@ the battle scars underneath, and those are both the atmosphere budget ([§8](../
 the map is supposed to tell you where the fighting has been. Contours are also cheaper on a phone
 screen and do not fight the fog, which is itself a darkening of tiles.
 
+The contour is a thin, half-transparent line painted **on the ground only**: buildings, trees,
+fences and units in front of it hide it, as they would hide paint on the ground. It is a path hint,
+not the loudest thing in the frame. On a bridge it lies on the deck, not on the riverbed under it.
+
 The reference draws these zones the same way, as contours, and splits them on exactly the same
 test (`remaining_ap >= fire_cost`). It colours them green and red; this project keeps gold and red
 from §3.2, because red/green is the most common colour-vision deficiency and the two zones are the
