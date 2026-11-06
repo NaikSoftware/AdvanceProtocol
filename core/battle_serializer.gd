@@ -22,7 +22,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 			"id": u.id, "type_id": u.type_id, "owner": u.owner,
 			"x": u.pos.x, "y": u.pos.y, "facing": u.facing,
 			"hp": u.hp, "ap": u.ap, "drones_left": u.drones_left, "has_fired": u.has_fired,
-			"ap_before_retaliation": u.ap_before_retaliation,
+			"ap_before_retaliation": u.ap_before_retaliation, "found_by": u.found_by,
 		})
 	var mines: Array = []
 	for m in state.mines:
@@ -106,6 +106,8 @@ static func from_dict(data: Dictionary) -> BattleState:
 		u.has_fired = bool(u_data["has_fired"])
 		# Старі збереження поля не мають — там ніхто й не чекає повернення AP.
 		u.ap_before_retaliation = int(u_data.get("ap_before_retaliation", -1))
+		# Старі збереження укриття не знали — там ніхто нікого в будинку ще не знайшов.
+		u.found_by = int(u_data.get("found_by", 0))
 		state.units[u.id] = u
 
 	state.mines.clear()
@@ -195,6 +197,8 @@ static func _is_valid(data: Dictionary) -> bool:
 				and _num(u, "drones_left") and _bool(u, "has_fired")):
 			return false
 		if u.has("ap_before_retaliation") and not _num(u, "ap_before_retaliation"):
+			return false
+		if u.has("found_by") and not _num(u, "found_by"):
 			return false
 		var id: int = int(u["id"])
 		if ids.has(id) or id >= int(data["next_unit_id"]):

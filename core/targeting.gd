@@ -83,9 +83,8 @@ static func drone_marks(state: BattleState, unit_id: int) -> Dictionary:
 		return out
 	if int(a.type()["drones"]) <= 0:
 		return out
-	var seen: Vision = state.vision[state.active_player]
 	for t in state.alive_units():
-		if t.owner == a.owner or not seen.is_seen(t.pos):
+		if t.owner == a.owner or not state.can_see_unit(state.active_player, t):
 			continue
 		if not Rules.in_radius(a.pos, t.pos, DroneCommand.RANGE):
 			continue
@@ -143,7 +142,7 @@ static func threatened_units(state: BattleState, unit_id: int, observer: int) ->
 	if e.unit_class() == UnitTypes.UnitClass.ENGINEER:
 		return out  # §3.6: у інженера немає зброї, отже й загрози від нього немає
 	# §3.5: оглянути можна юніт на розвіданій землі — та сама перевірка, що й у пострілу.
-	if not state.vision[observer].is_seen(e.pos):
+	if not state.can_see_unit(observer, e):
 		return out
 
 	var reach: int = e.attack_range()
@@ -191,7 +190,7 @@ static func drone_threatened_units(state: BattleState, unit_id: int, observer: i
 	if e.drones_left <= 0:
 		return out  # §3.9: боєкомплект скінчився назавжди — дронової загрози немає
 	# §3.5: та сама перевірка огляду, що й у threatened_units(), — розвідана земля.
-	if not state.vision[observer].is_seen(e.pos):
+	if not state.can_see_unit(observer, e):
 		return out
 
 	var eyes: int = e.vision()
@@ -232,7 +231,7 @@ static func inspection(state: BattleState, unit_id: int, observer: int) -> Dicti
 	var u: Unit = state.get_unit(unit_id)
 	var own: bool = u != null and u.owner == observer
 	if u != null and u.is_alive():
-		if state.vision[state.active_player].is_seen(u.pos):
+		if state.can_see_unit(state.active_player, u):
 			# §3.6: у інженера немає гармати — ні кільця, ні загрози (див. threatened_units()).
 			if u.unit_class() != UnitTypes.UnitClass.ENGINEER:
 				radius = u.attack_range()

@@ -57,8 +57,31 @@ of them: retaliation reads no vision at all, because the hit has already reveale
 None of that is a defect; it is what "scouted stays open" means. It is written down so nobody
 later reads §3.3.1 and concludes vision is doing more work than it is.
 
+### Cover in buildings
+
+Infantry on a `BUILDING` tile (not `RUBBLE`, never a vehicle) is **hidden from every enemy side
+even on `seen` ground**, until that side *finds* it. While hidden it is not visible, cannot be fired
+on or struck by a drone, cannot be inspected, and is left out of that side's planning occupancy —
+a route that bent around the house would tell the player who is inside. A move walked into it
+stops on the tile before, exactly as it does for an unseen enemy.
+
+A side finds a unit in cover when:
+
+- **any living unit of that side stands in one of the eight cells around it** (`dx*dx + dy*dy <= 2`).
+  This is checked for every side after every move step of any unit — the walker passing a house,
+  and the squad itself entering a house next to an enemy — and at turn start; or
+- **it hits a unit of that side** — a shot, a retaliation or a drone strike, at the same moment the
+  hit reveals the shooter's tile (§3.3.1), before the damage lands.
+
+**Found stays found until the unit leaves that tile.** The finders may walk away; the squad stays
+visible to them. Any move off the tile clears every side's finding, and entering a building again
+hides it from everyone until it is found anew. Off a building, the normal `seen` rule applies.
+
+The one query for "does this player know about this unit" is `BattleState.can_see_unit()`; every
+rule that asks it goes through there.
+
 **`ERR_TARGET_NOT_VISIBLE` no longer describes its own condition.** It now means "the target stands
-on ground you have never scouted". The identifier is kept because localisation may key on it, but
+on ground you have never scouted", or an enemy in cover that side has not found. The identifier is kept because localisation may key on it, but
 the UA and EN strings must be written against the *meaning*, not the name — "you have not scouted
 that ground" rather than "you cannot see that". A player who has watched an enemy walk into the
 open and is then told they cannot see it will read the game as broken.

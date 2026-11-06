@@ -24,6 +24,9 @@ if attacker.class == ARTILLERY:
 if target.class == INFANTRY and attacker.class in (TANK, ARTILLERY):
     dmg /= 4                                # armour-piercing rounds against dug-in infantry
 
+if target.class == INFANTRY and tile(target) == BUILDING:
+    dmg /= 2                                # cover — always the last multiplier
+
 dmg = max(10, dmg)
 ```
 
@@ -39,6 +42,19 @@ with its own damage roll and no armour term. See [§3.9](units.md).
 Keep it that way unless a playtest says otherwise — it keeps the two-zone UI honest.
 
 **Minimum damage is 10.** Nothing is ever fully immune.
+
+### Cover in buildings
+
+Infantry standing on a `BUILDING` tile is **in cover**. Every shot against it — any attacker,
+retaliation included — is halved, as the last multiplier and before the floor of 10, so the floor
+still holds. `RUBBLE` gives no cover, and a vehicle on a building tile is never in cover. The drone
+strike cannot target infantry at all, so cover never meets it. The preview applies the same
+halving, because it is the same formula (`Rules.damage_bounds()`).
+
+Cover also hides the squad from the enemy until that side finds it — see
+[vision-and-fog.md](vision-and-fog.md#cover-in-buildings). Cover changes nothing about
+retaliation: a squad in cover that is shot answers as usual, and one that fires from cover is
+answered as usual.
 
 ## Retaliation
 

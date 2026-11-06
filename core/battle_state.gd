@@ -72,6 +72,7 @@ func start() -> void:
 	## спостерігача в core/ (§6), а не цей метод.
 	for p in player_count:
 		refresh_vision(p)
+	discover_cover()
 
 func add_unit(type_id: int, owner: int, pos: Vector2i, facing: int) -> Unit:
 	var u: Unit = Unit.create(_next_unit_id, type_id, owner, pos, facing)
@@ -119,6 +120,31 @@ func occupied_map() -> Dictionary:
 		out[u.pos] = u.id
 	return out
 
+func can_see_unit(player: int, u: Unit) -> bool:
+	## Єдине питання «чи знає гравець про цей юніт» для всіх правил: постріл, дрон,
+	## огляд, планування ходу. Свій — завжди; чужий — на розвіданій землі (§3.5), крім
+	## піхоти в будівлі, яку цей бік ще не знайшов: розвідати вулицю не означає
+	## зазирнути в кожне вікно. Відповідь (§3.3.1) сюди не дивиться і дивитись не мусить.
+	if u.owner == player:
+		return true
+	if not vision[player].is_seen(u.pos):
+		return false
+	return not Rules.in_cover(board, u) or (u.found_by >> player) & 1 == 1
+
+func discover_cover() -> void:
+	## Знахідка сусідством: живий юніт боку p в одній із восьми клітинок довкола
+	## знаходить для p піхоту в будівлі. Прохід за ВСІМА боками, а не лише за активним:
+	## юніт, що сам зайшов у будинок поруч із ворогом, знайдений тим ворогом одразу, хоч
+	## той і не ходить. Біти лише додаються — знайдене лишається знайденим, доки юніт не
+	## зійде з тайла (MoveCommand обнуляє found_by).
+	var alive: Array[Unit] = alive_units()
+	for c in alive:
+		if not Rules.in_cover(board, c):
+			continue
+		for f in alive:
+			if f.owner != c.owner and Rules.distance_sq(c.pos, f.pos) <= 2:
+				c.found_by |= 1 << f.owner
+
 func known_occupied_map(player: int) -> Dictionary:
 	## Прохідність такою, якою її ЗНАЄ один гравець: свої юніти — завжди, чужі — ті,
 	## що стоять на розвіданій землі (seen, §3.5), а не лише ті, за якими хтось
@@ -138,7 +164,9 @@ func known_occupied_map(player: int) -> Dictionary:
 	## залежить, тому воно й записане прямо, а не виведене з нього.
 	var out: Dictionary = {}
 	for u in alive_units():
-		if u.owner == player or vision[player].is_seen(u.pos):
+		# Прихований в укритті сюди не входить так само, як ворог у тумані: маршрут, що
+		# обходить будинок, доніс би, хто в ньому сидить. Хід спиниться перед ним сам.
+		if can_see_unit(player, u):
 			out[u.pos] = u.id
 	return out
 
@@ -191,6 +219,7 @@ func begin_turn() -> Array[Events.BattleEvent]:
 	for u in units_of(active_player):
 		u.refill_ap()
 	out.append_array(refresh_vision(active_player))
+	discover_cover()
 	## §3.11: пошук мін — властивість присутності, а не руху. Доти єдиним
 	## викликачем Mines.reveal_near() був MoveCommand, тож інженер, який нікуди не
 	## пішов, не знаходив нічого: ворожа міна за крок від нього лишалася б

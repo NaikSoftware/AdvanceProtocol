@@ -41,7 +41,7 @@ static func check_shot(state: BattleState, a: Unit, t: Unit) -> String:
 	# коло дальності, перетнуте з РОЗВІДАНОЮ землею, а не з чиїмось ромбом огляду
 	# просто зараз. Ромб вирішує, як швидко та земля відкривається, і обмежує
 	# постріл лише над тайлами, куди не ступала жодна нога цього гравця.
-	if not state.vision[a.owner].is_seen(t.pos):
+	if not state.can_see_unit(a.owner, t):
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 
@@ -75,7 +75,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	# знецінилось би до нуля: будь-який удар у корму сам себе перетворював би на лобовий.
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var dmg: int = Rules.compute_damage(state.rng, a, t, sector, dist_sq)
+	var dmg: int = Rules.compute_damage(state.rng, a, t, sector, dist_sq, Rules.in_cover(state.board, t))
 
 	# КРОК 1: атакувальник розвертається на ціль ПЕРЕД своїм пострілом. Наслідок
 	# навмисний — відповідь (§3.3.1) прилетить йому вже в НОВИЙ сектор, і
@@ -104,6 +104,10 @@ static func _reveal_shooter(state: BattleState, shooter: Unit, target: Unit) -> 
 	## нічого не видає: напрямок вказує на тайл, який той бік уже знає. Третьому
 	## гравцеві — видає (docs/architecture.md, витік орієнтації).
 	var out: Array[Events.BattleEvent] = []
+	# Те саме для укриття: хто влучив із будинку, той знайдений боком цілі. Інакше
+	# сусідня до укриття земля стріляла б «нізвідки» вічно.
+	if Rules.in_cover(state.board, shooter):
+		shooter.found_by |= 1 << target.owner
 	if state.vision[target.owner].reveal(shooter.pos):
 		out.append(Events.TileRevealed.new(target.owner, [shooter.pos] as Array[Vector2i]))
 	return out
@@ -143,8 +147,12 @@ static func _retaliate(state: BattleState, original_attacker: Unit, target: Unit
 
 	var sector: int = Rules.armour_sector(original_attacker.facing, original_attacker.pos, target.pos)
 	var dist_sq: int = Rules.distance_sq(target.pos, original_attacker.pos)
-	var dmg: int = Rules.compute_damage(state.rng, target, original_attacker, sector, dist_sq)
+	var dmg: int = Rules.compute_damage(state.rng, target, original_attacker, sector, dist_sq,
+			Rules.in_cover(state.board, original_attacker))
 
+	# Відповідь — теж влучання, і теж відкриває того, хто відповів. Сьогодні це нічого
+	# не змінює: ціль, по якій законно вистрілили, атакувальникові вже відома.
+	out.append_array(_reveal_shooter(state, target, original_attacker))
 	target.ap_before_retaliation = target.ap  # повертається в BattleState.pass_turn()
 	target.exhaust()
 	out.append(Events.ShotRetaliated.new(target.id, original_attacker.id, sector))
@@ -178,5 +186,5 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 	var t: Unit = state.get_unit(target_id)
 	var sector: int = Rules.armour_sector(t.facing, t.pos, a.pos)
 	var dist_sq: int = Rules.distance_sq(a.pos, t.pos)
-	var bounds: Vector2i = Rules.damage_bounds(a, t, sector, dist_sq)
+	var bounds: Vector2i = Rules.damage_bounds(a, t, sector, dist_sq, Rules.in_cover(state.board, t))
 	return {"sector": sector, "min": bounds.x, "max": bounds.y}

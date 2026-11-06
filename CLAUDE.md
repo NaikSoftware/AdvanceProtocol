@@ -124,6 +124,8 @@ them. The shape it produces, which is the intended one:
 - Artillery hits hardest, must stay back, and is helpless against anything that reaches it.
 - Tanks dominate the middle band.
 - **Minimum damage is 10.** Nothing is ever fully immune.
+- **Infantry in a building is in cover:** every shot at it is halved, the last multiplier, before
+  the floor of 10. Rubble gives no cover; vehicles never take it.
 - **A shot never depends on how much AP the unit has left.** Movement does not degrade accuracy —
   this is what keeps the two-zone UI honest.
 
@@ -179,6 +181,10 @@ product against the target's facing. No trigonometry, no division.
 - **Scouting is permanent and one-way** — a scout that dies on turn two has still bought you
   everything it saw. Scouting is not the only way in: a hit reveals the shooter's tile to the side
   it hit (§3.3.1), so being unscouted protects a unit only until it fires. See the linked document.
+- **Infantry in a building stays hidden on `seen` ground** from each enemy side until that side
+  finds it: a living unit of that side in one of the eight cells around it, or a hit on that side.
+  Found stays found until the squad leaves the tile. Every rule asks `BattleState.can_see_unit()`.
+  See the [linked document](docs/rules/vision-and-fog.md#cover-in-buildings).
 - Recomputed for the active player from scratch at turn start and after every move step.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not
