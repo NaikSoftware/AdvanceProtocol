@@ -580,3 +580,4 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 - [ ] A yard fence encloses a plain yard: no odd pockets or notches cut into it
 - [ ] Every yard's gate faces the road side, never the field
+- [ ] The house stands wholly inside its yard: the fence runs past the house, never stops at a wall halfway
