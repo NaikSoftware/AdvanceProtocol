@@ -28,6 +28,13 @@ const MAX_FIRE_LIGHTS: int = 4
 const FLIPBOOK_FPS: float = 30.0
 ## Шлейф: клуба живе стільки секунд від верхівки полум'я до верху.
 const PLUME_LIFE_SEC: float = 9.0
+## Годинники ефектів згорнуто, щоб шейдер не бачив великих чисел (за добу гри fx_time ~ 9·10⁴ с, і
+## вогонь розпадався на смуги): стовп диму — період COLUMN_CLOCK_SEC, за який кожна його кутова
+## швидкість (кратна COLUMN_RATE_STEP рад/с) робить цілу кількість обертів; вогонь — FIRE_LOOP_SEC,
+## за який кожен темп атласу (кратний 1/16) проходить цілу кількість циклів по FIRE_FRAMES кадрів.
+const COLUMN_RATE_STEP: float = 0.01
+const COLUMN_CLOCK_SEC: float = TAU / COLUMN_RATE_STEP
+const FIRE_TEMPO_STEPS: float = 16.0
 ## Розігріву досить кількох кадрів.
 const WARM_UP_SEC: float = 0.1
 
@@ -182,6 +189,7 @@ func _init() -> void:
 	_column_mat.set_shader_parameter("top_w", COLUMN_TOP_W * SMOKE_CELL_PER_CLOUD)
 	_column_mat.set_shader_parameter("rise", 1.0 / PLUME_LIFE_SEC)
 	_column_mat.set_shader_parameter("grow", COLUMN_GROW)
+	_column_mat.set_shader_parameter("rate_step", COLUMN_RATE_STEP)
 	_fire_mat = ShaderMaterial.new()
 	_fire_mat.shader = fire_shader()
 	# Вогонь — поверх диму власного стовпа, а не за ним.
@@ -198,6 +206,8 @@ func _init() -> void:
 	_fire_mat.set_shader_parameter("fade_in_at", FIRE_FADE_IN_AT)
 	_fire_mat.set_shader_parameter("fade_in_sec", FIRE_FADE_IN_SEC)
 	_fire_mat.set_shader_parameter("max_h", FLAME_MAX_H)
+	_fire_mat.set_shader_parameter("loop_sec", fire_loop_sec())
+	_fire_mat.set_shader_parameter("tempo_steps", FIRE_TEMPO_STEPS)
 	_columns = _multimesh("Columns", _column_mat, MAX_COLUMNS * PUFFS_PER_COLUMN)
 	_shadow_mat = ShaderMaterial.new()
 	_shadow_mat.shader = _shadow_shader()
@@ -402,6 +412,25 @@ static func plume_layer_scroll(t: float) -> Vector4:
 	for k in 4:
 		out[k] = fposmod(d * plume_layer_rate(k), PLUME_NOISE_PERIOD)
 	return out
+
+
+## Годинник бічного дрейфу й обертання клуб стовпа: секунди матчу за модулем COLUMN_CLOCK_SEC.
+static func column_clock(t: float) -> float:
+	return fposmod(t, COLUMN_CLOCK_SEC)
+
+
+## Шлях клуб стовпа вгору (частка підйому): за модулем 1, як і fract у шейдері.
+static func column_phase(t: float) -> float:
+	return fposmod(t / PLUME_LIFE_SEC, 1.0)
+
+
+## Період атласу вогню: кожен темп k/FIRE_TEMPO_STEPS проходить за нього рівно k циклів.
+static func fire_loop_sec() -> float:
+	return FIRE_FRAMES * FIRE_TEMPO_STEPS / FLIPBOOK_FPS
+
+
+static func fire_loop_time(t: float) -> float:
+	return fposmod(t, fire_loop_sec())
 
 
 ## Густота шлейфу для шейдера (0–1): руїна тліє слабше за димар.
@@ -706,10 +735,13 @@ func _step() -> void:
 	_frame += 1
 	var t: float = float(_frame) / FLIPBOOK_FPS
 	_column_mat.set_shader_parameter("fx_time", t)
+	_column_mat.set_shader_parameter("clock", column_clock(t))
+	_column_mat.set_shader_parameter("phase", column_phase(t))
 	_hearth_mat.set_shader_parameter("scroll", plume_scroll(t))
 	_hearth_mat.set_shader_parameter("layer_scroll", plume_layer_scroll(t))
 	_shadow_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("fx_time", t)
+	_fire_mat.set_shader_parameter("loop_time", fire_loop_time(t))
 	_fire_mat.set_shader_parameter("viewport_h", float(get_viewport().get_visible_rect().size.y))
 	# Світло дихає повільно (гладкий шум, нижче ~2 Гц): швидке мерехтіння на землі й даху виглядало б стробом.
 	for i in _lights.size():
@@ -1068,7 +1100,13 @@ uniform sampler2D puff_tex : source_color, filter_linear_mipmap;
 uniform sampler2D thin_tex : source_color, filter_linear_mipmap;
 uniform float grid = 8.0;
 // Час крокує таймером WreckLayer, 30 разів на секунду: вбудований час рушія тримав би кадр щокадрово.
+// fx_time — лише для віку стовпа (різниця з народженням); рух — зі згорнутих годинників нижче.
 uniform float fx_time = 0.0;
+// Секунди за модулем періоду, кратного обертам усіх кутових швидкостей (WreckLayer.COLUMN_CLOCK_SEC).
+uniform float clock = 0.0;
+// fx_time · rise за модулем 1 (WreckLayer.column_phase).
+uniform float phase = 0.0;
+uniform float rate_step = 0.01;
 uniform float height = 3.0;
 uniform float base_w = 0.8;
 uniform float top_w = 1.3;
@@ -1094,7 +1132,7 @@ varying float v_sd;
 void vertex() {
 	// INSTANCE_CUSTOM: x — фаза клуби в шлейфі, y — її випадковість, z — густота стадії
 	// (від'ємна — тонкий атлас), w — народження стовпа.
-	float t = fract(INSTANCE_CUSTOM.x + fx_time * rise);
+	float t = fract(INSTANCE_CUSTOM.x + phase);
 	float sd = INSTANCE_CUSTOM.y;
 	vec3 root = MODEL_MATRIX[3].xyz;
 	vec3 right = INV_VIEW_MATRIX[0].xyz;
@@ -1105,9 +1143,10 @@ void vertex() {
 	float birth = 1.0 - smoothstep(0.0, 0.08, t);
 	float w = mix(base_w, top_w, sqrt(t)) * (1.0 + 0.6 * birth);
 	// Хаотичний бічний дрейф росте з висотою й повільно змінюється в часі.
-	vec3 wander = (right * sin(sd * 37.0 + fx_time * 0.35) + vec3(0.0, 0.0, 1.0) * cos(sd * 23.0 + fx_time * 0.27)) * w * 0.3 * t;
+	vec3 wander = (right * sin(sd * 37.0 + clock * 0.35) + vec3(0.0, 0.0, 1.0) * cos(sd * 23.0 + clock * 0.27)) * w * 0.3 * t;
 	vec3 c = root + vec3(0.0, h, 0.0) + lean * h + wander;
-	float roll = sd * 6.2832 + (sd - 0.5) * fx_time * 0.4;
+	// Швидкість обертання клуби — кратна rate_step: тоді згортка годинника не дає стрибка.
+	float roll = sd * 6.2832 + round((sd - 0.5) * 0.4 / rate_step) * rate_step * clock;
 	vec2 v = vec2(cos(roll) * VERTEX.x - sin(roll) * VERTEX.y, sin(roll) * VERTEX.x + cos(roll) * VERTEX.y);
 	vec3 world = c + (right * v.x + up * v.y) * w * (0.85 + 0.3 * sd);
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
@@ -1137,7 +1176,7 @@ vec4 frame_at(sampler2D atlas, float f, vec2 uv) {
 
 void fragment() {
 	// Край клуби кипить: UV зміщене повільним хвилястим шумом, свій для кожної клуби.
-	vec2 uv = UV + 0.035 * vec2(sin(UV.y * 11.0 + fx_time * 1.7 + v_sd * 20.0), cos(UV.x * 9.0 - fx_time * 1.3 + v_sd * 13.0));
+	vec2 uv = UV + 0.035 * vec2(sin(UV.y * 11.0 + clock * 1.7 + v_sd * 20.0), cos(UV.x * 9.0 - clock * 1.3 + v_sd * 13.0));
 	vec4 a0;
 	vec4 a1;
 	if (v_thin > 0.5) {

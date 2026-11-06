@@ -473,3 +473,35 @@ func test_zone_contour_is_drawn_after_smoke_fire_and_rain() -> void:
 	assert_gt(contour, rain.render_priority, "дощ")
 	assert_gt(contour, PropLayer.WIRE_RENDER_PRIORITY, "дроти")
 	assert_gt(contour, BattleFx.PRIORITY_CORE + 1, "найгарячіший спалах BattleFx")
+
+
+## Рух стовпа й вогню читає лише згорнуті годинники: за великого fx_time (доба гри) кадр атласу
+## вогню губив точність і полум'я йшло смугами. Згортка без стрибка — коли кожна швидкість робить за
+## період цілу кількість обертів чи циклів атласу.
+func test_column_and_fire_clocks_stay_bounded_and_wrap_without_a_jump() -> void:
+	for t: float in [0.0, 3600.0, 10800.0, 86400.0, 864000.0]:
+		assert_true(WreckLayer.column_clock(t) >= 0.0 and WreckLayer.column_clock(t) < WreckLayer.COLUMN_CLOCK_SEC)
+		assert_true(WreckLayer.column_phase(t) >= 0.0 and WreckLayer.column_phase(t) < 1.0)
+		assert_true(WreckLayer.fire_loop_time(t) >= 0.0 and WreckLayer.fire_loop_time(t) < WreckLayer.fire_loop_sec())
+	# Шлях клуби той самий, що й fx_time · rise за модулем 1.
+	assert_almost_eq(WreckLayer.column_phase(100.0), fposmod(100.0 / WreckLayer.PLUME_LIFE_SEC, 1.0), 1e-9)
+	# Кожен темп k/FIRE_TEMPO_STEPS проходить за період цілу кількість циклів атласу.
+	var cycles: float = WreckLayer.fire_loop_sec() * WreckLayer.FLIPBOOK_FPS / WreckLayer.FIRE_FRAMES / WreckLayer.FIRE_TEMPO_STEPS
+	assert_almost_eq(cycles, roundf(cycles), 1e-6, "період вогню кратний циклу атласу для темпу 1/16")
+	var column: String = WreckLayer.column_shader().code
+	var fire: String = WreckLayer.FIRE_SHADER.code
+	# Кутові швидкості стовпа кратні COLUMN_RATE_STEP: за COLUMN_CLOCK_SEC — ціла кількість обертів.
+	var re := RegEx.new()
+	re.compile("clock \\* ([0-9.]+)")
+	var rates: Array[RegExMatch] = re.search_all(column)
+	assert_eq(rates.size(), 4, "дрейф уздовж двох осей і кипіння краю вздовж двох")
+	for m: RegExMatch in rates:
+		var steps: float = float(m.get_string(1)) / WreckLayer.COLUMN_RATE_STEP
+		assert_almost_eq(steps, roundf(steps), 1e-6, "швидкість %s кратна кроку" % m.get_string(1))
+	assert_true(column.contains("round((sd - 0.5) * 0.4 / rate_step) * rate_step * clock"), "обертання клуби кратне кроку")
+	# fx_time лишається лише для віку (різниця з народженням), ні на що не множиться.
+	for code: String in [column, fire]:
+		assert_false(code.contains("fx_time *"), "час матчу не множиться на швидкість")
+	assert_true(fire.contains("mod(i, n)") and fire.contains("tempo_steps"), "шум тремтіння й темп атласу періодичні")
+	assert_eq(layer.get("_fire_mat").get_shader_parameter("loop_sec"), WreckLayer.fire_loop_sec())
+	assert_eq(layer.get("_column_mat").get_shader_parameter("rate_step"), WreckLayer.COLUMN_RATE_STEP)
