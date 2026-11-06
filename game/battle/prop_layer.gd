@@ -4171,7 +4171,8 @@ class _Placer:
 	## сусідньою садибою ставить одна з них, рівно по межі. Повертає сторони з їхніми відступами.
 	func _fence_ring(i: int, home: Dictionary, owner_of: Dictionary, sheds: Array[Rect2]) -> Array:
 		var lot: Dictionary = {}
-		for c: Vector2i in home["cells"]:
+		# fenced — клітинки поза двором (не BUILDING), які паркан обгороджує разом із ним: лише обрис кільця.
+		for c: Vector2i in home["cells"] + home.get("fenced", []):
 			lot[c] = true
 		var hc: Vector2i = home["house"]
 		_ring_i = i
