@@ -559,6 +559,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Chimney smoke: one narrow column from the opening, fading before it reaches buildings behind
 - [x] Movement-zone contours draw above every effect, smoke and rain
 - [x] Smoke and fences draw in depth order: a fence behind the smoke never covers it
+- [ ] Chimney and ruin smoke soft and cloudy, not a bundle of thin needle-like streaks
 
 ### Task 24: New props in villages
 
