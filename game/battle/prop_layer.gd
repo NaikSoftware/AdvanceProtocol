@@ -3863,7 +3863,11 @@ class _Placer:
 						if shore != Vector2.INF and _on_board(shore):
 							landings.append([shore, _slope(shore)])
 		var starts: Array = []
+		var homes: Array = layout.get("homes", [])
 		for i: int in gates:
+			# Двір з bank_path = false стежку до води не починає: стежки карти до берега задані іншими дворами чи дорогою.
+			if i < homes.size() and not bool((homes[i] as Dictionary).get("bank_path", true)):
+				continue
 			var g: Vector2 = gates[i][0] + (gates[i][1] as Vector2) * 0.15
 			# Ворота в щілині між сусідніми парканами (не ширшій за двічі FENCE_MARGIN) — глухий кут для стежки:
 			# повна сітка A* там нічого не знайде, а коштує десятки мілісекунд.
@@ -4278,12 +4282,13 @@ class _Placer:
 					break
 			if not moved:
 				break
-		# Хата на розі двору при вулиці (street): між фасадом і дорогою паркану нема місця, а кільце на відступі перед
-		# стіною, розрізане нею, лишало вухо — секцію повз ріг хати й гачок назад до неї, на екрані — кишеню. Сторони
-		# кільця по зовнішніх межах клітинки хати — врівень з її стінами: паркан продовжує площини стін від рогів хати.
+		# Хата на розі двору при вулиці (street): між фасадом і дорогою паркану нема місця. Кільце на відступі перед
+		# стіною стіна розрізала б, і від нього лишилися б вухо повз ріг хати й гачок назад до неї — на екрані кишеня.
+		# Тож сторони кільця по зовнішніх межах клітинки хати — врівень з її стінами: паркан продовжує площини стін від
+		# рогів хати. Межа з сусідом лишається рівно на межі.
 		if bool(home.get("street", false)):
 			for k in n:
-				if not (sides[k]["edges"] as Array).any(func(e: Array) -> bool: return e[0] == hc):
+				if int(sides[k]["nb"]) >= 0 or not (sides[k]["edges"] as Array).any(func(e: Array) -> bool: return e[0] == hc):
 					continue
 				var d: Vector2i = sides[k]["d"]
 				for r: Rect2 in _wall_rects:

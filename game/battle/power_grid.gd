@@ -954,16 +954,17 @@ func _drop_spots(rect: Rect2) -> Array[Vector2]:
 				break
 	keyed.sort_custom(func(a: Array, b: Array) -> bool:
 		return a[0] < b[0] or (a[0] == b[0] and (a[1].x < b[1].x or (a[1].x == b[1].x and a[1].y < b[1].y))))
-	for kq: Array in keyed:
-		var q: Vector2 = kq[1]
-		if out.all(func(o: Vector2) -> bool: return o.distance_to(q) >= POLE_GAP) and _p.drop_ok(rect, q):
-			out.append(q)
-			if out.size() >= DROP_SPOTS:
-				break
 	# Опора через вулицю від хати — лише коли з її боку місця нема: інакше гілка, що мала б іти своїм боком вулиці,
 	# найкоротшим шляхом перескакує її заради відводу.
-	var own_side: Array[Vector2] = out.filter(func(q: Vector2) -> bool: return not _across_road(q, rect))
-	return own_side if not own_side.is_empty() else out
+	var across: Array[Vector2] = []
+	for kq: Array in keyed:
+		var q: Vector2 = kq[1]
+		var list: Array[Vector2] = across if _across_road(q, rect) else out
+		if list.size() < DROP_SPOTS and list.all(func(o: Vector2) -> bool: return o.distance_to(q) >= POLE_GAP) and _p.drop_ok(rect, q):
+			list.append(q)
+			if out.size() >= DROP_SPOTS:
+				break
+	return out if not out.is_empty() else across
 
 
 ## Пряма від опори q до хати rect (поза обрисом хати) перетинає покриття дороги.
