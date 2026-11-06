@@ -511,6 +511,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] One transformer per settlement, including the north Ridge ring hamlet
 - [x] Wires stay visible against the river from every camera angle
 - [x] Generator takes every rule constant from the game
+- [ ] Poles and wires sink into the haze at the map edge like everything else, never drawn over it
 - [x] In `feat/battlefield-dressing`
 
 ### Task 20: Footpaths
