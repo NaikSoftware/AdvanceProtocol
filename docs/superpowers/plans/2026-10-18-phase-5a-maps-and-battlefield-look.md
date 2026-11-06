@@ -584,6 +584,6 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 ### Task 26: Yard fences
 
-- [ ] River, yard by the west truss bridge: no pocket in the fence, gate on the road side
-- [ ] River, yard by the asphalt road at the bridge: no pocket, the house wholly inside the yard
-- [ ] Every other yard stays as it is
+- [x] River, yard by the west truss bridge: no pocket in the fence, gate on the road side
+- [x] River, yard by the asphalt road at the bridge: no pocket, the house wholly inside the yard
+- [x] Every other yard stays as it is
