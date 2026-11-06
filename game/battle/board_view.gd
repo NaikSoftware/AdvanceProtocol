@@ -48,9 +48,6 @@ const _CONTOUR_PIECES: int = 4
 ## z-fight'ити ні з тим, ні з іншим.
 const _CONTOUR_Y: float = 0.04
 const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
-## На мосту риска ближче до осі: настил вужчий за клітинку (півширина 0.36, SEAT_HALF у
-## tools/blender/bridges/build_bridges.py), і біля краю її ховали б бордюр і поручні.
-const _CONTOUR_OFFSET_BRIDGE: float = 0.30
 ## Покриття настилу на 6.4 см над deck_y (TerrainHeight, коментар SEAT_TOP): риска трохи вище за нього.
 const _CONTOUR_Y_BRIDGE: float = 0.09
 
@@ -299,23 +296,26 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	var edges: Dictionary = {}
 	for seg in kept:
 		edges[_edge_key(seg["cell"], seg["dir"], seg["color"])] = true
-	var verts := PackedVector3Array()
-	var colors := PackedColorArray()
-	var indices := PackedInt32Array()
+	# Дві поверхні: [0] на ґрунті — з тестом глибини, будівлі й дерева її закривають; [1] на мосту —
+	# поверх поручнів і бордюрів, тим самим квадратом клітинки, що й на ґрунті, навіть де він
+	# ширший за настил.
+	var verts: Array[PackedVector3Array] = [PackedVector3Array(), PackedVector3Array()]
+	var colors: Array[PackedColorArray] = [PackedColorArray(), PackedColorArray()]
+	var indices: Array[PackedInt32Array] = [PackedInt32Array(), PackedInt32Array()]
 	for seg in kept:
 		var cell: Vector2i = seg["cell"]
 		var dir: Vector2i = seg["dir"]
 		var along := Vector3(1.0, 0.0, 0.0) if dir.x == 0 else Vector3(0.0, 0.0, 1.0)
 		var side := Vector3(0.0, 0.0, 1.0) if dir.x == 0 else Vector3(1.0, 0.0, 0.0)
-		# На мосту риска лежить на настилі, а не в руслі під ним: з тестом глибини настил її сховав би.
+		# На мосту лінія лежить на висоті настилу, а не в руслі під ним.
 		var on_bridge: bool = _kind_by_cell[cell] == Terrain.Kind.BRIDGE and TerrainHeight.active != null
 		var deck: float = TerrainHeight.active.deck_y(cell) if on_bridge else 0.0
-		var offset: float = _CONTOUR_OFFSET_BRIDGE if on_bridge else _CONTOUR_OFFSET
-		var mid := Vector3(cell.x + dir.x * offset, 0.0, cell.y + dir.y * offset)
+		var surf: int = 1 if on_bridge else 0
+		var mid := Vector3(cell.x + dir.x * _CONTOUR_OFFSET, 0.0, cell.y + dir.y * _CONTOUR_OFFSET)
 		var along_i := Vector2i(int(along.x), int(along.z))
-		var from: float = _stroke_end(edges, seg, -along_i, offset, on_bridge)
-		var to: float = _stroke_end(edges, seg, along_i, offset, on_bridge)
-		var base: int = verts.size()
+		var from: float = _stroke_end(edges, seg, -along_i)
+		var to: float = _stroke_end(edges, seg, along_i)
+		var base: int = verts[surf].size()
 		var color: Color = seg["color"]
 		color.a *= _CONTOUR_ALPHA
 		for k in _CONTOUR_PIECES + 1:
@@ -323,18 +323,22 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 			for sgn: float in [-1.0, 1.0]:
 				var p: Vector3 = c + side * (sgn * _CONTOUR_WIDTH * 0.5)
 				var y: float = deck + _CONTOUR_Y_BRIDGE if on_bridge else maxf(TerrainHeight.ground_y(p.x, p.z), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
-				verts.append(Vector3(p.x, y, p.z))
-				colors.append(color)
+				verts[surf].append(Vector3(p.x, y, p.z))
+				colors[surf].append(color)
 			if k > 0:
 				var i: int = base + k * 2
-				indices.append_array([i - 2, i - 1, i, i - 1, i + 1, i])
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_COLOR] = colors
-	arrays[Mesh.ARRAY_INDEX] = indices
+				indices[surf].append_array([i - 2, i - 1, i, i - 1, i + 1, i])
 	var ribbon := ArrayMesh.new()
-	ribbon.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	for surf in 2:
+		if verts[surf].is_empty():
+			continue
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts[surf]
+		arrays[Mesh.ARRAY_COLOR] = colors[surf]
+		arrays[Mesh.ARRAY_INDEX] = indices[surf]
+		ribbon.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		ribbon.surface_set_material(ribbon.get_surface_count() - 1, _contour_material(surf == 1))
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = ribbon
@@ -344,7 +348,6 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "Contour%d" % layer
 	mmi.multimesh = mm
-	mmi.material_override = _contour_material()
 	mmi.layers = 1 << (OVERLAY_LAYER - 1)
 	add_child(mmi)
 	_contour_nodes[layer] = mmi
@@ -358,17 +361,16 @@ static func _edge_key(cell: Vector2i, dir: Vector2i, color: Color) -> String:
 ## Далі по прямій той самий контур — до межі клітинки, впритул до сусіда. Внутрішній кут (за
 ## рогом контур повертає до нас) — до лінії сусіда, із запасом на півширини, щоб кут був
 ## суцільний. Зовнішній кут — рівно там, де стоїть перпендикулярна лінія цієї ж клітинки.
-## На мосту лінія ближче до осі, ніж на землі, тож з немостовим сусідом вона просто обривається.
-func _stroke_end(edges: Dictionary, seg: Dictionary, toward: Vector2i, offset: float, on_bridge: bool) -> float:
+func _stroke_end(edges: Dictionary, seg: Dictionary, toward: Vector2i) -> float:
 	var cell: Vector2i = seg["cell"]
 	var dir: Vector2i = seg["dir"]
 	var n: Vector2i = cell + toward
 	var sgn: float = float(toward.x + toward.y)
-	var same_kind: bool = (_kind_by_cell.get(n, -1) == Terrain.Kind.BRIDGE) == on_bridge
-	if same_kind and edges.has(_edge_key(n, dir, seg["color"])):
+	var offset: float = _CONTOUR_OFFSET
+	if edges.has(_edge_key(n, dir, seg["color"])):
 		return sgn * 0.5
 	# Сусід n у зоні (ребра до нього немає) — інакше це лише дотик по діагоналі, і лінії перехрестились би.
-	if same_kind and not edges.has(_edge_key(cell, toward, seg["color"])) \
+	if not edges.has(_edge_key(cell, toward, seg["color"])) \
 			and edges.has(_edge_key(n + dir, -toward, seg["color"])):
 		return sgn * (1.0 - offset + _CONTOUR_WIDTH * 0.5)
 	return sgn * (offset + _CONTOUR_WIDTH * 0.5)
@@ -468,7 +470,7 @@ func contour_segments(layer: int) -> Array:
 	return _contour_segments.get(layer, [])
 
 
-func _contour_material() -> StandardMaterial3D:
+func _contour_material(over_bridge: bool = false) -> StandardMaterial3D:
 	# Колір іде з екземпляра мультимешу (use_colors), матеріал лише вмикає його
 	# читання — сам він лишається білим, щоб не домішувати власний тон.
 	var mat := StandardMaterial3D.new()
@@ -479,6 +481,8 @@ func _contour_material() -> StandardMaterial3D:
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	# Риска лежить лише на ґрунті: будівлі, дерева, огорожі й юніти її закривають, як закрили б
 	# фарбу на землі. Пріоритет лишається — серед прозорих ефектів (дим, дощ) риска зверху.
+	# На мосту поручні й бордюри не ховають лінію: вона читається поверх мосту.
+	mat.no_depth_test = over_bridge
 	mat.render_priority = CONTOUR_PRIORITY
 	return mat
 

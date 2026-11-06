@@ -234,13 +234,13 @@ func test_contour_stroke_ends_join_without_crossings() -> void:
 	var off: float = BoardView._CONTOUR_OFFSET
 	var w: float = BoardView._CONTOUR_WIDTH
 	var top_left := _edge(Vector2i(0, 0), Vector2i(0, -1), Color.YELLOW)
-	assert_almost_eq(view._stroke_end(edges, top_left, Vector2i(1, 0), off, false), 0.5, 1e-6, "пряма — до межі клітинки")
-	assert_almost_eq(view._stroke_end(edges, top_left, Vector2i(-1, 0), off, false), -(off + w * 0.5), 1e-6, "зовнішній кут")
+	assert_almost_eq(view._stroke_end(edges, top_left, Vector2i(1, 0)), 0.5, 1e-6, "пряма — до межі клітинки")
+	assert_almost_eq(view._stroke_end(edges, top_left, Vector2i(-1, 0)), -(off + w * 0.5), 1e-6, "зовнішній кут")
 	var bottom_left := _edge(Vector2i(0, 0), Vector2i(0, 1), Color.YELLOW)
-	assert_almost_eq(view._stroke_end(edges, bottom_left, Vector2i(1, 0), off, false), 1.0 - off + w * 0.5, 1e-6, "внутрішній кут")
+	assert_almost_eq(view._stroke_end(edges, bottom_left, Vector2i(1, 0)), 1.0 - off + w * 0.5, 1e-6, "внутрішній кут")
 	# Діагональ: (0,0) і (1,1) без (1,0) — лише зовнішні кути.
 	var diag: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 1)]
 	edges.clear()
 	for s in ZoneOverlay._edges(diag, Color.YELLOW):
 		edges[BoardView._edge_key(s["cell"], s["dir"], s["color"])] = true
-	assert_almost_eq(view._stroke_end(edges, bottom_left, Vector2i(1, 0), off, false), off + w * 0.5, 1e-6, "дотик по діагоналі")
+	assert_almost_eq(view._stroke_end(edges, bottom_left, Vector2i(1, 0)), off + w * 0.5, 1e-6, "дотик по діагоналі")
