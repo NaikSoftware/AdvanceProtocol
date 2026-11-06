@@ -54,6 +54,8 @@ const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
 ## На мосту риска ближче до осі: настил вужчий за клітинку (півширина 0.36, SEAT_HALF у
 ## tools/blender/bridges/build_bridges.py), і біля краю її ховали б бордюр і поручні.
 const _CONTOUR_OFFSET_BRIDGE: float = 0.30
+## Покриття настилу на 6.4 см над deck_y (TerrainHeight, коментар SEAT_TOP): риска трохи вище за нього.
+const _CONTOUR_Y_BRIDGE: float = 0.09
 
 ## Косметичний підтип клітинок (MapData.surface); лише вигляд землі, тримається між перебудовами.
 var surface: PackedByteArray = PackedByteArray()
@@ -307,10 +309,11 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		var side := Vector3(0.0, 0.0, 1.0) if dir.x == 0 else Vector3(1.0, 0.0, 0.0)
 		# На мосту риска лежить на настилі, а не в руслі під ним: з тестом глибини настил її сховав би.
 		var on_bridge: bool = _kind_by_cell[cell] == Terrain.Kind.BRIDGE and TerrainHeight.active != null
-		var deck: float = TerrainHeight.active.deck_y(cell) if on_bridge else NAN
+		var deck: float = TerrainHeight.active.deck_y(cell) if on_bridge else 0.0
 		var offset: float = _CONTOUR_OFFSET_BRIDGE if on_bridge else _CONTOUR_OFFSET
 		var mid := Vector3(cell.x + dir.x * offset, 0.0, cell.y + dir.y * offset)
-		var half: float = _CONTOUR_LENGTH * 0.5
+		# На мосту кути рисок сходяться на 0.30 від осі, і риска не звисає з настилу над воду.
+		var half: float = _CONTOUR_OFFSET_BRIDGE if on_bridge else _CONTOUR_LENGTH * 0.5
 		var base: int = verts.size()
 		var color: Color = seg["color"]
 		color.a *= _CONTOUR_ALPHA
@@ -318,8 +321,8 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 			var c: Vector3 = mid + along * lerpf(-half, half, float(k) / _CONTOUR_PIECES)
 			for sgn: float in [-1.0, 1.0]:
 				var p: Vector3 = c + side * (sgn * _CONTOUR_WIDTH * 0.5)
-				var y: float = deck if not is_nan(deck) else maxf(TerrainHeight.ground_y(p.x, p.z), TerrainHeight.WATER_LEVEL)
-				verts.append(Vector3(p.x, y + _CONTOUR_Y, p.z))
+				var y: float = deck + _CONTOUR_Y_BRIDGE if on_bridge else maxf(TerrainHeight.ground_y(p.x, p.z), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
+				verts.append(Vector3(p.x, y, p.z))
 				colors.append(color)
 			if k > 0:
 				var i: int = base + k * 2
