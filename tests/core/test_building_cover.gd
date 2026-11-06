@@ -203,8 +203,23 @@ func test_cover_unit_still_answers_fire() -> void:
 	var c: Unit = _cover(1, Vector2i(4, 5))
 	var a: Unit = state.add_unit(0, 0, Vector2i(4, 6), 0)
 	_begin()
+	var b: Vector2i = Rules.damage_bounds(a, c, 0, 1, true)
 	FireCommand.create(a.id, c.id).apply(state)
+	assert_between(100 - c.hp, b.x, b.y, "прямий постріл по укриттю — навпіл")
 	assert_lt(a.hp, 100)
+
+
+func test_found_by_one_side_stays_hidden_from_another() -> void:
+	state = BattleState.create(Board.create(12, 12, Terrain.GroundState.DRY), 3, 7)
+	state.active_player = 0
+	var c: Unit = _cover(1, Vector2i(4, 5))
+	state.add_unit(0, 0, Vector2i(5, 6), 0)
+	state.add_unit(0, 2, Vector2i(4, 7), 0)
+	_begin()
+	state.vision[2].recompute(state.board, state.alive_units(), 2)
+	assert_true(state.vision[2].is_seen(c.pos))
+	assert_true(state.can_see_unit(0, c), "сусід по діагоналі знайшов")
+	assert_false(state.can_see_unit(2, c), "третій бік за дві клітинки — ні")
 
 
 # --- планування -------------------------------------------------------------------
@@ -235,6 +250,17 @@ func test_found_by_round_trips() -> void:
 	c.found_by = 5
 	var b: BattleState = BattleSerializer.from_dict(BattleSerializer.to_dict(state))
 	assert_eq(b.get_unit(c.id).found_by, 5)
+
+
+func test_a_save_without_found_by_finds_adjacent_on_load() -> void:
+	var c: Unit = _cover(1, Vector2i(4, 5))
+	state.add_unit(0, 0, Vector2i(4, 4), 0)
+	_begin()
+	var d: Dictionary = BattleSerializer.to_dict(state)
+	for u: Dictionary in d["units"]:
+		u.erase("found_by")
+	var b: BattleState = BattleSerializer.from_dict(d)
+	assert_true(b.can_see_unit(0, b.get_unit(c.id)), "сусід знаходить одразу після завантаження")
 
 
 func test_a_save_without_found_by_loads_as_unfound() -> void:

@@ -142,6 +142,9 @@ static func from_dict(data: Dictionary) -> BattleState:
 	for p in state.player_count:
 		state.damage_dealt.append(int(dealt[p]) if p < dealt.size() else 0)
 
+	# Старе збереження found_by не має, а сусідство перевіряється лише на кроці чи на
+	# початку ходу: без цього загін поруч із ворогом після завантаження лишився б прихованим.
+	state.discover_cover()
 	return state
 
 static func _is_valid(data: Dictionary) -> bool:
