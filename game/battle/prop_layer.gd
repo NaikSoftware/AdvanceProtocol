@@ -440,6 +440,8 @@ const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.
 const _GARDEN_SHADER: Shader = preload("res://game/battle/shaders/prop_garden.gdshader")
 const _GRIME_SHADER: Shader = preload("res://game/battle/shaders/prop_grime.gdshader")
 const _RUBBLE_SHADER: Shader = preload("res://game/battle/shaders/prop_rubble.gdshader")
+const _POLE_SHADER: Shader = preload("res://game/battle/shaders/prop_pole.gdshader")
+const _WIRE_SHADER: Shader = preload("res://game/battle/shaders/prop_wire.gdshader")
 ## Пояс бруду довкола хати, клітинки (~0.5 м).
 const GRIME_M: float = 0.0625
 ## Запас від краю дорожнього покриття для парканів і дрібних пропсів, клітинки (~0.4 м).
@@ -555,6 +557,8 @@ var _fade_level: Dictionary = {}
 var _fade_target: Dictionary = {}
 var _crushed: Dictionary = {}
 var _board_size: Vector2i = Vector2i.ZERO
+## Карта має кільце з імлою: лінія ЛЕП (стовпи, дроти, шафи) тоне в ній, як будинки.
+var _haze: bool = false
 ## Клітинки дошки з лісом: тут стоятимуть дерева, коли їхній вигляд буде готовий.
 var forest_cells: Array[Vector2i] = []
 ## Пропси (крім мостів) кидають тінь сонця. Без неї на сонячній карті дім, тюк чи опора висять
@@ -1221,6 +1225,7 @@ func _add(model_name: StringName, xform: Transform3D, cells: Array[Vector2i], ya
 ## Будівлі кільця — окремий вузол на модель, без тіні: MultiMesh відсікається камерою й тінню
 ## цілим, тож спільний із дошкою вузол малював би кільце (і його тінь) навіть на близькому зумі.
 func _build_nodes(haze: bool) -> void:
+	_haze = haze
 	var by_node: Dictionary = {}
 	for i in _instances.size():
 		var m: StringName = _instances[i]["model"]
@@ -1251,6 +1256,8 @@ func _build_nodes(haze: bool) -> void:
 			mm.mesh = _alpha_fence_mesh(info["mesh"]) if FENCE_ALPHA_FORMS.has(m) else _opaque_fence_mesh(info["mesh"])
 		if kind == Kind.HAY and wet:
 			mm.mesh = _dimmed(info["mesh"], HAY_WET)
+		if kind == Kind.POLE and haze:
+			mm.mesh = _hazed_mesh(info["mesh"])
 		mm.instance_count = (by_node[key] as Array).size()
 		var mmi := MultiMeshInstance3D.new()
 		# Godot міняє «@» в імені вузла на «_», тож вузол кільця — «модель_ring».
@@ -1287,11 +1294,11 @@ func _build_nodes(haze: bool) -> void:
 		_wires = MeshInstance3D.new()
 		_wires.name = "Wires"
 		_wires.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = WIRE_COLOR_WET if wet else WIRE_COLOR
-		mat.vertex_color_use_as_albedo = true
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		var mat := ShaderMaterial.new()
+		mat.shader = _WIRE_SHADER
+		mat.set_shader_parameter("albedo_color", WIRE_COLOR_WET if wet else WIRE_COLOR)
+		if haze:
+			Surroundings.apply(mat, _board_size)
 		# Дріт — лінія в один піксель, що не гасне з відстанню: на дальньому зумі над світлою водою згасання
 		# прибрало б його зовсім. Малюється після води (вода — прозорий прохід з пріоритетом 0), щоб порядок
 		# не залежав від ракурсу.
@@ -1762,6 +1769,32 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 		depth.next_pass = mat
 		mat = depth
 	_fade_materials[key] = mat
+	return mat
+
+
+## Копія сітки з матеріалами prop_pole: той самий вигляд, що й стандартний матеріал, плюс імла кільця
+## цієї дошки. Копія — на кожну побудову: сітка моделі кешується на весь процес, а розмір дошки свій.
+func _hazed_mesh(mesh: Mesh) -> Mesh:
+	var copy: Mesh = mesh.duplicate()
+	for i in copy.get_surface_count():
+		var src := copy.surface_get_material(i) as BaseMaterial3D
+		if src != null:
+			copy.surface_set_material(i, _hazed(src))
+	return copy
+
+
+func _hazed(src: BaseMaterial3D) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = _POLE_SHADER
+	mat.set_shader_parameter("albedo_tex", src.albedo_texture)
+	mat.set_shader_parameter("albedo_color", src.albedo_color)
+	mat.set_shader_parameter("use_normal_tex", src.normal_enabled and src.normal_texture != null)
+	mat.set_shader_parameter("normal_tex", src.normal_texture)
+	mat.set_shader_parameter("normal_scale", src.normal_scale)
+	mat.set_shader_parameter("roughness", src.roughness)
+	mat.set_shader_parameter("metallic", src.metallic)
+	mat.set_shader_parameter("specular", src.metallic_specular)
+	Surroundings.apply(mat, _board_size)
 	return mat
 
 
@@ -2424,7 +2457,7 @@ func _rebuild_transformers() -> void:
 		mat.albedo_color = TRANSFORMER_COLOR
 		mat.roughness = 0.75
 		mat.metallic = 0.3
-		box.material = mat
+		box.material = _hazed(mat) if _haze else mat
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.mesh = box

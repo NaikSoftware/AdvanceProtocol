@@ -433,6 +433,31 @@ func test_ring_structures_take_the_haze() -> void:
 	assert_true(mat.get_shader_parameter("surround"))
 
 
+## Стовпи, дроти й шафи ЛЕП тонуть в імлі кільця, як будинки поруч: кожен їхній матеріал несе ті самі
+## параметри кільця (`Surroundings.apply`), інакше лінія в кільці малюється темною поверх імли.
+func test_power_line_takes_the_haze(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var props: PropLayer = _cached(p).props()
+	var board := Vector2(m.width, m.height)
+	var mats: Array = []
+	for n: Node in props.get_children():
+		if n is MultiMeshInstance3D and _kind(StringName(n.name)) == PropLayer.Kind.POLE:
+			var mesh: Mesh = (n as MultiMeshInstance3D).multimesh.mesh
+			for s in mesh.get_surface_count():
+				mats.append([String(n.name), mesh.surface_get_material(s)])
+	assert_gt(mats.size(), 0, "%s: стовпи є" % p)
+	assert_not_null(props._wires, "%s: дроти є" % p)
+	mats.append(["Wires", props._wires.material_override])
+	if props._transformer_node != null:
+		mats.append(["Transformers", (props._transformer_node.multimesh.mesh as PrimitiveMesh).material])
+	for e: Array in mats:
+		var mat := e[1] as ShaderMaterial
+		assert_not_null(mat, "%s: %s — матеріал з імлою кільця" % [p, e[0]])
+		if mat != null:
+			assert_true(mat.get_shader_parameter("surround"), "%s: %s" % [p, e[0]])
+			assert_eq(mat.get_shader_parameter("board_size"), board, "%s: %s" % [p, e[0]])
+
+
 func _length(inst: Dictionary) -> float:
 	var b: Basis = (inst["transform"] as Transform3D).basis
 	return b.x.length()
