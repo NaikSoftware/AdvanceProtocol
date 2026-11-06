@@ -2495,7 +2495,8 @@ func test_editor_routes_give_only_legal_trunk_spans() -> void:
 		{"kind": &"10kv", "axis": [Vector2(-13, 5), Vector2(38, 5)], "side": 1.0},
 		{"kind": &"10kv", "axis": [Vector2(11, -13), Vector2(11, 34)], "side": -1.0},
 		{"kind": &"10kv", "axis": [Vector2(-13, -13), Vector2(38, 34)], "side": 1.0},
-		{"kind": &"10kv", "axis": [Vector2(-13, 15), Vector2(13, 15), Vector2(13, 6), Vector2(38, 6)], "side": 1.0},
+		# Праворуч від ходу: ліворуч уздовж x = 13 — двір хати (12,6) впритул до асфальту.
+		{"kind": &"10kv", "axis": [Vector2(-13, 15), Vector2(13, 15), Vector2(13, 6), Vector2(38, 6)], "side": -1.0},
 	]}
 	var grid := PowerGrid.new()
 	grid.plan(placer)

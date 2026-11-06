@@ -960,7 +960,21 @@ func _drop_spots(rect: Rect2) -> Array[Vector2]:
 			out.append(q)
 			if out.size() >= DROP_SPOTS:
 				break
-	return out
+	# Опора через вулицю від хати — лише коли з її боку місця нема: інакше гілка, що мала б іти своїм боком вулиці,
+	# найкоротшим шляхом перескакує її заради відводу.
+	var own_side: Array[Vector2] = out.filter(func(q: Vector2) -> bool: return not _across_road(q, rect))
+	return own_side if not own_side.is_empty() else out
+
+
+## Пряма від опори q до хати rect (поза обрисом хати) перетинає покриття дороги.
+func _across_road(q: Vector2, rect: Rect2) -> bool:
+	var c: Vector2 = rect.get_center()
+	var n: int = maxi(2, ceili(q.distance_to(c) / 0.1))
+	for j in n + 1:
+		var p: Vector2 = q.lerp(c, float(j) / n)
+		if not rect.has_point(p) and _p.road_edge_m(p) < 0.0:
+			return true
+	return false
 
 
 ## Прольоти магістралі, з ТП у точці p: проліт, у який ТП вставляється, ділиться нею (як _insert_pole).
