@@ -575,3 +575,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Bridge abutments read as textured concrete, not plain grey boxes
 - [x] Ground rises smoothly to every bridge end: no pit before a bridge, no step at the deck
 - [x] Reeds in the water have a dark wet base, contact shading and a reflection; they don't float
+
+### Task 26: Yard fences
+
+- [ ] A yard fence encloses a plain yard: no odd pockets or notches cut into it
+- [ ] Every yard's gate faces the road side, never the field
