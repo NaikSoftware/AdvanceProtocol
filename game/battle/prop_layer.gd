@@ -1706,6 +1706,8 @@ func _build_contacts() -> void:
 	mat.shader = _CONTACT_SHADER
 	mat.set_shader_parameter("strength", CONTACT_ALPHA)
 	mat.set_shader_parameter("cast", 1.0 if structure_shadows else 0.0)
+	if _haze:
+		Surroundings.apply(mat, _board_size)
 	quad.material = mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D

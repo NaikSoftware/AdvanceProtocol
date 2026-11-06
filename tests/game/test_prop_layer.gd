@@ -458,6 +458,29 @@ func test_power_line_takes_the_haze(p = use_parameters(MAPS)) -> void:
 			assert_eq(mat.get_shader_parameter("board_size"), board, "%s: %s" % [p, e[0]])
 
 
+## Пляма дотику лягає й під руїни кільця (Хребет): без імли вона чорніє поверх пелени, у якій тонуть самі руїни.
+func test_contact_shadows_take_the_haze(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var props: PropLayer = _cached(p).props()
+	assert_not_null(props._contacts, "%s: плями дотику є" % p)
+	var mat := (props._contacts.multimesh.mesh as PrimitiveMesh).material as ShaderMaterial
+	assert_true(mat.get_shader_parameter("surround"), p)
+	assert_eq(mat.get_shader_parameter("board_size"), Vector2(m.width, m.height), p)
+
+
+## Огорожі, тюки, брили, бетонні блоки й причепи стоять лише на дошці: їхні матеріали імли кільця не знають.
+## Карта, що поставить такий пропс у кільце, мусить спершу дати йому імлу, як стовпам.
+func test_small_props_stay_off_the_ring(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var small: Array = [PropLayer.Kind.FIELD_FENCE, PropLayer.Kind.GARDEN_FENCE, PropLayer.Kind.HAY,
+			PropLayer.Kind.BOULDER, PropLayer.Kind.BLOCK, PropLayer.Kind.TRAILER]
+	for inst in _cached(p).props().all_instances():
+		if _kind(inst["model"]) in small:
+			var o: Vector3 = (inst["transform"] as Transform3D).origin
+			assert_true(o.x >= -0.5 and o.z >= -0.5 and o.x <= m.width - 0.5 and o.z <= m.height - 0.5,
+					"%s: %s у кільці (%.1f, %.1f)" % [p, inst["model"], o.x, o.z])
+
+
 func _length(inst: Dictionary) -> float:
 	var b: Basis = (inst["transform"] as Transform3D).basis
 	return b.x.length()
