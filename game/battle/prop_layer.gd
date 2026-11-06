@@ -6216,8 +6216,26 @@ class _Placer:
 						var a: float = float(h(c, 40 + k * 5 + attempt) % 628) / 100.0
 						var r: float = 0.34 + float(h(c, 60 + k) % 10) / 100.0
 						var scale: float = float(PropLayer.spec_of(m).get("scale", 1.0)) * (0.85 + float(h(c, 80 + k) % 30) / 100.0)
+						# Брила в обгородженому дворі (паркан садиби заходить і на пагорб) читає двір пасовиськом.
+						if _near_yard_ring(Vector2(c) + Vector2(cos(a), sin(a)) * r, BOULDER_YARD_CLEAR):
+							continue
 						if put_small(m, c, Vector2(cos(a), sin(a)) * r, float(h(c, 70 + k) % 628) / 100.0, scale):
 							break
+
+	## Брила не ближче за стільки (клітинки) до обрису двору садиби.
+	const BOULDER_YARD_CLEAR: float = 0.3
+
+	## Точка p усередині обрису двору садиби (yard_polys) чи ближче clear до нього.
+	func _near_yard_ring(p: Vector2, clear: float) -> bool:
+		for poly: PackedVector2Array in yard_polys:
+			if poly.size() < 3:
+				continue
+			if Geometry2D.is_point_in_polygon(p, poly):
+				return true
+			for k in poly.size():
+				if Geometry2D.get_closest_point_to_segment(p, poly[k], poly[(k + 1) % poly.size()]).distance_to(p) < clear:
+					return true
+		return false
 
 	## Опори вздовж доріг: асфальт і ґрунтівка — 10 кВ з прольотом ~7.5 клітинки, вулиці (бруківка)
 	## — 0.4 кВ з ~4.5. Опора стоїть за узбіччям на прохідній клітинці біля її краю; сусідні
