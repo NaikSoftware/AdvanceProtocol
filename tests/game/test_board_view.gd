@@ -218,3 +218,40 @@ func test_rebuild_tiles_keeps_circles() -> void:
 
 	assert_eq(view.circles(BoardView.LAYER_INSPECT), circles)
 	assert_eq(_circle_nodes().size(), 1)
+
+
+# Лінія зони суцільна й лежить на межі клітинок: на прямій ребро доходить рівно до кута, на куті
+# ребро вздовж X накриває кут, а ребро вздовж Z не доходить до нього на півширини — без
+# перехрещень і подвійної прозорості. Спільне ребро двох клітинок — один ключ.
+func test_contour_stroke_ends_join_without_crossings() -> void:
+	assert_eq(BoardView._edge_key(Vector2i(0, 0), Vector2i(1, 0)), BoardView._edge_key(Vector2i(1, 0), Vector2i(-1, 0)), "спільне ребро")
+	var zone: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0)]
+	var edges: Dictionary = {}
+	for s in ZoneOverlay._edges(zone, Color.YELLOW):
+		edges[BoardView._edge_key(s["cell"], s["dir"])] = true
+	var w: float = BoardView._CONTOUR_WIDTH
+	var top_left := _edge(Vector2i(0, 0), Vector2i(0, -1), Color.YELLOW)
+	assert_almost_eq(BoardView._stroke_end(edges, top_left, Vector2i(1, 0)), 0.5, 1e-6, "пряма — до кута")
+	assert_almost_eq(BoardView._stroke_end(edges, top_left, Vector2i(-1, 0)), -(0.5 + w * 0.5), 1e-6, "ребро вздовж X накриває кут")
+	var left := _edge(Vector2i(0, 0), Vector2i(-1, 0), Color.YELLOW)
+	assert_almost_eq(BoardView._stroke_end(edges, left, Vector2i(0, -1)), -(0.5 - w * 0.5), 1e-6, "ребро вздовж Z не доходить")
+
+
+# Межа золотої й червоної зон і спільне ребро двох клітинок шляху — одна лінія, а не дві поруч.
+func test_shared_edge_is_drawn_once() -> void:
+	view.build(Board.create(4, 4, Terrain.GroundState.DRY))
+	var gold: Array[Vector2i] = [Vector2i(1, 1)]
+	var red: Array[Vector2i] = [Vector2i(2, 1)]
+	var segs: Array[Dictionary] = []
+	segs.append_array(ZoneOverlay._edges(red, Color.RED))
+	segs.append_array(ZoneOverlay._edges(gold, Color.YELLOW))
+	view.draw_contour(segs, view.LAYER_ZONES)
+	var mesh: Mesh = (view.get_node("Contour%d" % view.LAYER_ZONES) as MultiMeshInstance3D).multimesh.mesh
+	var verts_per_line: int = (BoardView._CONTOUR_PIECES + 1) * 2
+	assert_eq(mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size(), 7 * verts_per_line, "8 ребер, спільне — один раз")
+	var cols: PackedColorArray = mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var golds: int = 0
+	for c in cols:
+		if c.g > 0.5:  # жовтий, а не червоний
+			golds += 1
+	assert_eq(golds, 4 * verts_per_line, "спільне ребро — золоте")

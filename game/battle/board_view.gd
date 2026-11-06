@@ -31,22 +31,20 @@ const FOG_TICK: float = 0.1
 ## Нижче за UnitView.OVERLAY_PRIORITY, щоб смужки здоров'я лишались зверху.
 const CONTOUR_PRIORITY: int = 4
 
-## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
-## задумом — вона мусить читатись як лінія на межі тайла, а не як ще один
-## пофарбований тайл. _CONTOUR_INSET відсуває риску від самого краю тайла:
-## без цього риска золотої зони й риска сусідньої червоної, що лежать на
-## тому самому фізичному ребрі, збіглися б і z-fighting'нули — з відступом
-## між ними лишається вузька смужка місцевості, і вони читаються як дві окремі
-## риски, а не одна змішана.
-const _CONTOUR_WIDTH: float = 0.12
-const _CONTOUR_INSET: float = 0.06
+## Геометрія лінії контуру (§3.13, draw_contour нижче): тонка суцільна лінія точно по межі
+## клітинок, а не ще один пофарбований тайл. Спільне ребро двох клітинок малюється один раз.
+## Лінія зони тонка й напівпрозора: підказка шляху на ґрунті, а не головний акцент кадру.
+const _CONTOUR_WIDTH: float = 0.02
+const _CONTOUR_ALPHA: float = 0.7
+## Кільця дальності лишаються ширшими: їх видно лише поки гравець тримає палець на юніті.
+const _RING_WIDTH: float = 0.12
 const _CONTOUR_PIECES: int = 4
-## 0.95 клітинки: риска коротша за клітинку, тож кути сусідніх рисок не сходяться.
-const _CONTOUR_LENGTH: float = 0.95
 ## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y = 0.06), щоб не
 ## z-fight'ити ні з тим, ні з іншим.
 const _CONTOUR_Y: float = 0.04
-const _CONTOUR_OFFSET: float = 0.5 - _CONTOUR_WIDTH * 0.5 - _CONTOUR_INSET
+## Покриття настилу на 6.4 см над deck_y (TerrainHeight, коментар SEAT_TOP): риска трохи вище за нього.
+const _CONTOUR_Y_BRIDGE: float = 0.09
+const _CONTOUR_BRIDGE_SHADER: Shader = preload("res://game/battle/shaders/contour_bridge.gdshader")
 
 ## Косметичний підтип клітинок (MapData.surface); лише вигляд землі, тримається між перебудовами.
 var surface: PackedByteArray = PackedByteArray()
@@ -287,36 +285,61 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	if kept.is_empty():
 		return
 
-	# Усі риски шару — один стрічковий меш, накладений на ґрунт (кожна вершина бере висоту з
-	# карти висот), у MultiMesh з одним екземпляром. Кінці стрічок заходять один за одного
-	# (довжина 0.95 > відстань до перпендикулярного ребра), тож кути зімкнуті на будь-якому схилі.
-	var verts := PackedVector3Array()
-	var colors := PackedColorArray()
-	var indices := PackedInt32Array()
-	for seg in kept:
+	# Усі відрізки шару — один стрічковий меш, накладений на ґрунт (кожна вершина бере висоту з
+	# карти висот), у MultiMesh з одним екземпляром. Відрізки клітинок складаються в суцільну
+	# лінію: кінці стикуються з сусідом на прямій і сходяться на кутах без хрестиків (_stroke_end).
+	# Кожне фізичне ребро — одна лінія: спільне ребро двох клітинок шляху, межа золотої й червоної
+	# зон. Перемагає пізніший сегмент (ZoneOverlay кладе золото після червоного).
+	var edges: Dictionary = {}
+	var lines: Array[Dictionary] = []
+	for i in range(kept.size() - 1, -1, -1):
+		var key: String = _edge_key(kept[i]["cell"], kept[i]["dir"])
+		if not edges.has(key):
+			edges[key] = true
+			lines.append(kept[i])
+	# Дві поверхні: [0] на ґрунті — з тестом глибини, будівлі й дерева її закривають; [1] на мосту —
+	# поверх поручнів і бордюрів, але під юнітами (contour_bridge.gdshader), тим самим квадратом
+	# клітинки, що й на ґрунті, навіть де він ширший за настил.
+	var verts: Array[PackedVector3Array] = [PackedVector3Array(), PackedVector3Array()]
+	var colors: Array[PackedColorArray] = [PackedColorArray(), PackedColorArray()]
+	var indices: Array[PackedInt32Array] = [PackedInt32Array(), PackedInt32Array()]
+	for seg in lines:
 		var cell: Vector2i = seg["cell"]
 		var dir: Vector2i = seg["dir"]
 		var along := Vector3(1.0, 0.0, 0.0) if dir.x == 0 else Vector3(0.0, 0.0, 1.0)
 		var side := Vector3(0.0, 0.0, 1.0) if dir.x == 0 else Vector3(1.0, 0.0, 0.0)
-		var mid := Vector3(cell.x + dir.x * _CONTOUR_OFFSET, 0.0, cell.y + dir.y * _CONTOUR_OFFSET)
-		var half: float = _CONTOUR_LENGTH * 0.5
-		var base: int = verts.size()
+		# На мосту лінія лежить на висоті настилу, а не в руслі під ним.
+		var on_bridge: bool = _kind_by_cell[cell] == Terrain.Kind.BRIDGE and TerrainHeight.active != null
+		var deck: float = TerrainHeight.active.deck_y(cell) if on_bridge else 0.0
+		var surf: int = 1 if on_bridge else 0
+		var mid := Vector3(cell.x + dir.x * 0.5, 0.0, cell.y + dir.y * 0.5)
+		var along_i := Vector2i(int(along.x), int(along.z))
+		var from: float = _stroke_end(edges, seg, -along_i)
+		var to: float = _stroke_end(edges, seg, along_i)
+		var base: int = verts[surf].size()
+		var color: Color = seg["color"]
+		color.a *= _CONTOUR_ALPHA
 		for k in _CONTOUR_PIECES + 1:
-			var c: Vector3 = mid + along * lerpf(-half, half, float(k) / _CONTOUR_PIECES)
+			var c: Vector3 = mid + along * lerpf(from, to, float(k) / _CONTOUR_PIECES)
 			for sgn: float in [-1.0, 1.0]:
 				var p: Vector3 = c + side * (sgn * _CONTOUR_WIDTH * 0.5)
-				verts.append(Vector3(p.x, TerrainHeight.ground_y(p.x, p.z) + _CONTOUR_Y, p.z))
-				colors.append(seg["color"])
+				var y: float = deck + _CONTOUR_Y_BRIDGE if on_bridge else maxf(TerrainHeight.ground_y(p.x, p.z), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
+				verts[surf].append(Vector3(p.x, y, p.z))
+				colors[surf].append(color)
 			if k > 0:
 				var i: int = base + k * 2
-				indices.append_array([i - 2, i - 1, i, i - 1, i + 1, i])
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_COLOR] = colors
-	arrays[Mesh.ARRAY_INDEX] = indices
+				indices[surf].append_array([i - 2, i - 1, i, i - 1, i + 1, i])
 	var ribbon := ArrayMesh.new()
-	ribbon.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	for surf in 2:
+		if verts[surf].is_empty():
+			continue
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts[surf]
+		arrays[Mesh.ARRAY_COLOR] = colors[surf]
+		arrays[Mesh.ARRAY_INDEX] = indices[surf]
+		ribbon.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		ribbon.surface_set_material(ribbon.get_surface_count() - 1, _contour_material(surf == 1))
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = ribbon
@@ -326,10 +349,32 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "Contour%d" % layer
 	mmi.multimesh = mm
-	mmi.material_override = _contour_material()
 	mmi.layers = 1 << (OVERLAY_LAYER - 1)
+	# Лінії різних шарів можуть лягти на те саме ребро (шлях по межі зони): пізніший шар завжди
+	# зверху, а не за відстанню до камери, що міняла б колір лінії при прокручуванні.
+	mmi.sorting_offset = float(layer) * 0.01
 	add_child(mmi)
 	_contour_nodes[layer] = mmi
+
+
+## Ключ фізичного ребра: те саме ребро з боку будь-якої з двох клітинок дає той самий ключ.
+static func _edge_key(cell: Vector2i, dir: Vector2i) -> String:
+	if dir.x < 0 or dir.y < 0:
+		cell += dir
+		dir = -dir
+	return "%d,%d,%d,%d" % [cell.x, cell.y, dir.x, dir.y]
+
+
+## Де кінчається лінія ребра в бік `toward` (у частках клітинки від середини ребра). Далі по
+## прямій є ребро — рівно до кута, впритул до нього. Інакше це кут: ребро вздовж X заходить на
+## півширини за кут і накриває його, ребро вздовж Z не доходить на півширини — кут зафарбований
+## рівно один раз, без хрестика й без темної плями від подвійної прозорості.
+static func _stroke_end(edges: Dictionary, seg: Dictionary, toward: Vector2i) -> float:
+	var sgn: float = float(toward.x + toward.y)
+	if edges.has(_edge_key(seg["cell"] + toward, seg["dir"])):
+		return sgn * 0.5
+	var along_x: bool = toward.x != 0
+	return sgn * (0.5 + (_CONTOUR_WIDTH * 0.5 if along_x else -_CONTOUR_WIDTH * 0.5))
 
 
 ## Перебудова тайлів після зміни виду (міст підірвано чи відновлено, BridgeChanged).
@@ -380,7 +425,7 @@ func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 	_circle_nodes[layer] = nodes
 
 
-## Кільце-стрічка шириною _CONTOUR_WIDTH, що лягає на ґрунт: кожна вершина бере висоту з
+## Кільце-стрічка шириною _RING_WIDTH, що лягає на ґрунт: кожна вершина бере висоту з
 ## карти висот (тор лишився б площиною й тонув у схилі). Вершини — відносно центру в XZ.
 func _ring_mesh(centre: Vector3, radius: float) -> ArrayMesh:
 	var segments: int = clampi(int(TAU * radius * 8.0), 64, 512)
@@ -389,7 +434,7 @@ func _ring_mesh(centre: Vector3, radius: float) -> ArrayMesh:
 	for k in segments + 1:
 		var a: float = TAU * float(k) / float(segments)
 		var dir := Vector2(cos(a), sin(a))
-		for r: float in [radius - _CONTOUR_WIDTH * 0.5, radius + _CONTOUR_WIDTH * 0.5]:
+		for r: float in [radius - _RING_WIDTH * 0.5, radius + _RING_WIDTH * 0.5]:
 			var p := Vector2(centre.x, centre.z) + dir * r
 			verts.append(Vector3(dir.x * r, TerrainHeight.ground_y(p.x, p.y) + _CONTOUR_Y, dir.y * r))
 		if k > 0:
@@ -426,7 +471,12 @@ func contour_segments(layer: int) -> Array:
 	return _contour_segments.get(layer, [])
 
 
-func _contour_material() -> StandardMaterial3D:
+func _contour_material(over_bridge: bool = false) -> Material:
+	if over_bridge:
+		var sm := ShaderMaterial.new()
+		sm.shader = _CONTOUR_BRIDGE_SHADER
+		sm.render_priority = CONTOUR_PRIORITY
+		return sm
 	# Колір іде з екземпляра мультимешу (use_colors), матеріал лише вмикає його
 	# читання — сам він лишається білим, щоб не домішувати власний тон.
 	var mat := StandardMaterial3D.new()
@@ -434,9 +484,9 @@ func _contour_material() -> StandardMaterial3D:
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	# Стрічка без нормалей: освітлення дало б чорні ділянки; контур — позначка, не матеріал.
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	# Зони руху — головний інтерфейс гри (§3.2): підніжжя огорожі чи стіна, що стоїть на межі
-	# клітинки, не сміє сховати риску.
-	mat.no_depth_test = true
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# Риска лежить лише на ґрунті: будівлі, дерева, огорожі й юніти її закривають, як закрили б
+	# фарбу на землі. Пріоритет лишається — серед прозорих ефектів (дим, дощ) риска зверху.
 	mat.render_priority = CONTOUR_PRIORITY
 	return mat
 
