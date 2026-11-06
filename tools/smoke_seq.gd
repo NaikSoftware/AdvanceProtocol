@@ -2,7 +2,7 @@ extends Node
 ## Знімає потік мирного диму справжнім екраном бою в реальному часі: обрізка навколо шлейфу, кадри
 ## тримаються в пам'яті й пишуться в кінці (save_png блокує ~1 с). Не входить у гру.
 ## Запуск (вікно, не --headless):
-##   $GODOT --path . --position 6000,0 res://tools/smoke_seq.tscn -- <out_dir> <map> <zoom> <hearth> <секунд> <кадрів/с> [off]
+##   $GODOT --path . --position 6000,0 res://tools/smoke_seq.tscn -- <out_dir> <map> <zoom> <hearth> <секунд> <кадрів/с> [off|on] [секунд матчу]
 ## Друкує SMOKE-рядок із числом кадрів і справжнім fps рендера.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -31,6 +31,9 @@ func _ready() -> void:
 	# off — той самий кадр без мирного диму: різниця з ним дає яскравість диму над ґрунтом.
 	if a.size() > 6 and a[6] == "off":
 		(layer.get("_hearths") as Node3D).visible = false
+	# Восьмий аргумент — скільки секунд матчу вже минуло: дим після годин гри, а не з першого кадру.
+	if a.size() > 7:
+		layer.set("_frame", int(float(a[7]) * WreckLayer.FLIPBOOK_FPS))
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	# Екран спершу сам наводить камеру на перший юніт; наводимо вдруге, коли він затих.
 	for f in SETTLE_FRAMES:
@@ -40,6 +43,7 @@ func _ready() -> void:
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	var cam: Camera3D = get_viewport().get_camera_3d()
+	var fx_t0: float = layer.fx_time()
 	var frames: Array[Image] = []
 	var dt: float = 1.0 / float(a[5])
 	var t0: int = Time.get_ticks_usec()
@@ -62,7 +66,7 @@ func _ready() -> void:
 			next += dt
 		if el >= secs:
 			break
-	print("SMOKE %s z%s h%s frames=%d render_fps=%.1f img=%s" % [a[1], a[2], a[3], frames.size(), rendered / secs, get_viewport().get_texture().get_size()])
+	print("SMOKE %s z%s h%s frames=%d render_fps=%.1f img=%s fx_t=%.1f..%.1f" % [a[1], a[2], a[3], frames.size(), rendered / secs, get_viewport().get_texture().get_size(), fx_t0, layer.fx_time()])
 	for i in frames.size():
 		frames[i].save_png("%s/f_%04d.png" % [a[0], i])
 	get_tree().quit()

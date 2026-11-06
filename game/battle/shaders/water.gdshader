@@ -10,6 +10,8 @@
 shader_type spatial;
 // specular_disabled: під похмурим небом сонячного відблиску немає, а на дрібній
 // брижі він давав окремі яскраві пікселі. Відбиття (зонд і небо) лишаються.
+// Вода — перша з прозорих (WaterSurface.WATER_PRIORITY), глибини не пише: усе прозоре лягає на неї
+// зверху, і плями затінення очерету, що стоїть у воді, лишаються видно, як і були.
 render_mode blend_mix, cull_back, depth_draw_never, specular_disabled;
 
 global uniform float weather_wetness;

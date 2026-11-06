@@ -5,7 +5,12 @@ uniform sampler2D flame_tex : source_color, filter_linear_mipmap;
 uniform vec2 grid = vec2(16.0, 4.0);
 uniform float frames = 64.0;
 // Той самий крок таймера, що й у диму. Цикл 64 кадри; кожен екземпляр — свій темп ±20 % і свій стартовий кадр, тож двох у такт нема.
+// fx_time — лише для віку (поява полум'я); кадри й тремтіння — з loop_time, згорнутого за loop_sec
+// (WreckLayer.fire_loop_sec): за великого fx_time кадр атласу губив точність, і вогонь ішов смугами.
 uniform float fx_time = 0.0;
+uniform float loop_time = 0.0;
+uniform float loop_sec = 34.133333;
+uniform float tempo_steps = 16.0;
 uniform float play_fps = 30.0;
 // Понад 1: ядро світиться майже білим, краї й верх — помаранчеві з атласу.
 uniform float gain = 1.6;
@@ -32,8 +37,8 @@ varying float v_in;
 
 // Хеш без sin: sin великого аргументу у float32 губить точність, а fx_time росте весь матч.
 float h1(float x) { float p = fract(x * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
-// Шум значень: гладкий, але неперіодичний.
-float vnoise(float x) { float i = floor(x); float f = fract(x); return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f)); }
+// Шум значень із періодом n: на стику згортки годинника без стрибка.
+float vnoise(float x, float n) { float i = floor(x); float f = x - i; return mix(h1(mod(i, n)), h1(mod(i + 1.0, n)), f * f * (3.0 - 2.0 * f)); }
 
 void vertex() {
 	// INSTANCE_CUSTOM: x — ширина полум'я (одиниці світу), y — випадковість, z — народження.
@@ -46,7 +51,9 @@ void vertex() {
 	vec4 p1 = PROJECTION_MATRIX * VIEW_MATRIX * vec4(root + right * w, 1.0);
 	float px = length(p1.xy / p1.w - p0.xy / p0.w) * viewport_h * 0.5;
 	w *= clamp(min_px / max(px, 0.001), 1.0, 8.0);
-	w *= 0.9 + 0.2 * vnoise(fx_time * (4.1 + 2.7 * sd) + sd * 61.0);
+	// Темп тремтіння — ціле число клітинок шуму за період годинника.
+	float wob = max(round((4.1 + 2.7 * sd) * loop_sec), 1.0);
+	w *= 0.9 + 0.2 * vnoise(mod(loop_time / loop_sec * wob + sd * 61.0, wob), wob);
 	float qw = w / fill;
 	float qh = qw * cell_aspect;
 	// Основа полум'я (v = base_v) — у точці отвору, на 1 см у металі.
@@ -54,7 +61,9 @@ void vertex() {
 	v_h = (VERTEX.y - base_y) * qh;
 	vec3 world = root + right * VERTEX.x * qw + vec3(0.0, v_h - 0.01, 0.0);
 	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
-	v_frame = fx_time * play_fps * (0.8 + 0.4 * h1(sd * 17.0)) + sd * frames;
+	// Темп кратний 1/tempo_steps: за loop_sec кожен проходить цілу кількість циклів атласу.
+	float tempo = round((0.8 + 0.4 * h1(sd * 17.0)) * tempo_steps) / tempo_steps;
+	v_frame = mod(loop_time * play_fps * tempo + sd * frames, frames);
 	v_in = clamp((fx_time - INSTANCE_CUSTOM.z - fade_in_at) / fade_in_sec, 0.0, 1.0);
 }
 

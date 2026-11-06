@@ -12,6 +12,11 @@ extends MeshInstance3D
 const WATER_Y: float = TerrainHeight.WATER_LEVEL
 
 const _SHADER: Shader = preload("res://game/battle/shaders/water.gdshader")
+## Пріоритет прозорого проходу: найраніший (раніше за ліс, FOREST_PRIORITY −2). Прозорі об'єкти Godot
+## сортує за центром: велика площина річки проти квада диму — хто ближчий до камери, той і зверху, тож
+## дим уламків на березі зникав над водою. Вода перша, тож усе прозоре — над нею. Глибини вона не пише:
+## тоді пляма затінення очерету на дні під водою зникала, і основа куртин у воді світлішала.
+const WATER_PRIORITY: int = -3
 ## Дві карти нормалей брижі (tools/water_normals.py), стиснені з міпмапами.
 const _WAVE_A: Texture2D = preload("res://assets/water/water_normal_a.png")
 const _WAVE_B: Texture2D = preload("res://assets/water/water_normal_b.png")
@@ -55,6 +60,7 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 
 	var mat := ShaderMaterial.new()
 	mat.shader = _SHADER
+	mat.render_priority = WATER_PRIORITY
 	mat.set_shader_parameter("kind_map", kind_map)
 	mat.set_shader_parameter("map_origin", Vector2(-margin - ring, -margin - ring))
 	if ring > 0:

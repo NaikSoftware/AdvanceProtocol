@@ -392,7 +392,39 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 		assert_eq(shapes[i], Vector2(WreckLayer.RUIN_HEIGHT_SCALE, WreckLayer.RUIN_BASE_SCALE) if ruin else Vector2.ONE)
 	assert_true(WreckLayer.RUIN_HEIGHT_SCALE < 1.0 and WreckLayer.RUIN_BASE_SCALE < 1.0 and WreckLayer.RUIN_DENSITY <= WreckLayer.CHIMNEY_DENSITY)
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
-	assert_eq(layer.hearth_material().get_shader_parameter("rise"), WreckLayer.HEARTH_RISE, "шум густоти пливе вгору зі швидкістю диму")
+	# Шум пливе вгору зі швидкістю диму: за секунду зсув — підйом на тайл, помножений на кратність шуму.
+	var step: Vector3 = WreckLayer.plume_scroll(11.0) - WreckLayer.plume_scroll(10.0)
+	assert_almost_eq(step.z, WreckLayer.HEARTH_RISE * WreckLayer.PLUME_SCROLL_RATES.z, 1e-6, "край пливе вгору зі швидкістю диму")
+	var lstep: Vector4 = WreckLayer.plume_layer_scroll(11.0) - WreckLayer.plume_layer_scroll(10.0)
+	for k in 4:
+		# Шар k: клуб висотою sc²/ref метрів, тож за секунду підйому на 0,8 м — 8·ref/sc² клітинок на тайл.
+		var sc_k: float = WreckLayer.PLUME_LAYER_SC[k]
+		assert_almost_eq(WreckLayer.plume_layer_rate(k), 8.0 * WreckLayer.PLUME_LAYER_REF / (sc_k * sc_k), 1e-9)
+		assert_almost_eq(lstep[k], WreckLayer.HEARTH_RISE * WreckLayer.plume_layer_rate(k), 1e-6, "кожен шар клубів пливе рівно зі швидкістю диму")
+		if k > 0:
+			assert_gt(sc_k, WreckLayer.PLUME_LAYER_SC[k - 1], "шари клубів ростуть від труби вгору")
+	# Шари обрамляють розмір клубів по всій висоті: від труби (0,8–0,9 м) до верху (2,4 м).
+	assert_true(WreckLayer.PLUME_LAYER_SC.x <= 0.9 and is_equal_approx(WreckLayer.PLUME_LAYER_SC.w, 2.4))
+	# Через години гри зсуви лишаються в межах періоду шуму: великі числа в шейдері розсипали шлейф на голки.
+	for t: float in [0.0, 3600.0, 10800.0, 86400.0]:
+		var sc: Vector3 = WreckLayer.plume_scroll(t)
+		var ls: Vector4 = WreckLayer.plume_layer_scroll(t)
+		for k in 3:
+			assert_true(sc[k] >= 0.0 and sc[k] < WreckLayer.PLUME_NOISE_PERIOD, "зсув шуму згорнуто за періодом (t=%s)" % t)
+		for k in 4:
+			assert_true(ls[k] >= 0.0 and ls[k] < WreckLayer.PLUME_NOISE_PERIOD, "зсув шару згорнуто за періодом (t=%s)" % t)
+	var code: String = layer.hearth_material().shader.code
+	assert_true(code.contains("const float PERIOD = %.1f;" % WreckLayer.PLUME_NOISE_PERIOD), "період шуму в шейдері той самий, що й у згортці")
+	assert_true(code.contains("p = mod(p, PERIOD);") and code.contains("i = mod(i, PERIOD);"), "шум згорнуто за періодом, і клітинка теж — mod у float інколи дає рівно PERIOD")
+	assert_false(code.contains("fx_time"), "шлейф не бачить часу матчу напряму — лише згорнуті зсуви")
+	# Октави шуму мусять мати цілу кратність, інакше згортка зсуву розірве їх на стику періоду.
+	var re := RegEx.new()
+	re.compile("vn\\(p \\* ([0-9.]+)")
+	var octaves: Array[RegExMatch] = re.search_all(code)
+	assert_eq(octaves.size(), 2, "дві вищі октави клубів")
+	for m: RegExMatch in octaves:
+		var ratio: float = float(m.get_string(1))
+		assert_eq(ratio, roundf(ratio), "кратність октави %s ціла" % m.get_string(1))
 	assert_false(layer.hearth_material().shader.code.contains("sin("), "хеш без sin: час росте весь матч")
 	# Освітлення, об'єм і мокра гілка живуть у шейдері; headless його не малює, тож їхній вигляд
 	# (яскравість над ґрунтом, відсутність пульсації) перевіряє tools/smoke_seq.gd у вікні. Тут —
@@ -400,7 +432,7 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	var uniforms: Array[String] = []
 	for u: Dictionary in layer.hearth_material().shader.get_shader_uniform_list():
 		uniforms.append(String(u["name"]))
-	for name: String in ["fx_time", "height", "base_w", "top_w", "rise", "lean"]:
+	for name: String in ["scroll", "layer_scroll", "layer_sc", "layer_ref", "height", "base_w", "top_w", "lean"]:
 		assert_true(uniforms.has(name), "шейдер диму має uniform %s" % name)
 	layer.set_wind(Vector3(0.25, 0, 0))
 	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")
@@ -441,3 +473,41 @@ func test_zone_contour_is_drawn_after_smoke_fire_and_rain() -> void:
 	assert_gt(contour, rain.render_priority, "дощ")
 	assert_gt(contour, PropLayer.WIRE_RENDER_PRIORITY, "дроти")
 	assert_gt(contour, BattleFx.PRIORITY_CORE + 1, "найгарячіший спалах BattleFx")
+
+
+## Рух стовпа й вогню читає лише згорнуті годинники: за великого fx_time (доба гри) кадр атласу
+## вогню губив точність і полум'я йшло смугами. Згортка без стрибка — коли кожна швидкість робить за
+## період цілу кількість обертів чи циклів атласу.
+func test_column_and_fire_clocks_stay_bounded_and_wrap_without_a_jump() -> void:
+	for t: float in [0.0, 3600.0, 10800.0, 86400.0, 864000.0]:
+		assert_true(WreckLayer.column_clock(t) >= 0.0 and WreckLayer.column_clock(t) < WreckLayer.COLUMN_CLOCK_SEC)
+		assert_true(WreckLayer.column_phase(t) >= 0.0 and WreckLayer.column_phase(t) < 1.0)
+		assert_true(WreckLayer.fire_loop_time(t) >= 0.0 and WreckLayer.fire_loop_time(t) < WreckLayer.fire_loop_sec())
+	# Шлях клуби той самий, що й fx_time · rise за модулем 1.
+	assert_almost_eq(WreckLayer.column_phase(100.0), fposmod(100.0 / WreckLayer.PLUME_LIFE_SEC, 1.0), 1e-9)
+	# Атлас крокує з темпом таймера, і за період темп k/FIRE_TEMPO_STEPS проходить рівно k циклів атласу —
+	# але лише якщо шейдер справді округлює темп до кроку 1/FIRE_TEMPO_STEPS (перевірка нижче).
+	assert_eq(layer.get("_fire_mat").get_shader_parameter("play_fps"), WreckLayer.FLIPBOOK_FPS)
+	var column: String = WreckLayer.column_shader().code
+	var fire: String = WreckLayer.FIRE_SHADER.code
+	# Кутові швидкості стовпа кратні COLUMN_RATE_STEP: за COLUMN_CLOCK_SEC — ціла кількість обертів.
+	var re := RegEx.new()
+	re.compile("clock \\* ([0-9.]+)")
+	var rates: Array[RegExMatch] = re.search_all(column)
+	assert_eq(rates.size(), 4, "дрейф уздовж двох осей і кипіння краю вздовж двох")
+	for m: RegExMatch in rates:
+		var steps: float = float(m.get_string(1)) / WreckLayer.COLUMN_RATE_STEP
+		assert_almost_eq(steps, roundf(steps), 1e-6, "швидкість %s кратна кроку" % m.get_string(1))
+	assert_true(column.contains("round((sd - 0.5) * 0.4 / rate_step) * rate_step * clock"), "обертання клуби кратне кроку")
+	# fx_time лишається лише для віку (різниця з народженням), ні на що не множиться.
+	for code: String in [column, fire]:
+		assert_false(code.contains("fx_time *"), "час матчу не множиться на швидкість")
+	assert_true(fire.contains("mod(i, n)"), "шум тремтіння періодичний")
+	assert_true(fire.contains("round((0.8 + 0.4 * h1(sd * 17.0)) * tempo_steps) / tempo_steps"), "темп атласу кратний 1/tempo_steps")
+	assert_true(fire.contains("v_frame = mod(loop_time * play_fps * tempo"), "кадр атласу — від згорнутого годинника й округленого темпу")
+	assert_false(column.contains("uniform float rise"), "шлях клуб — лише зі згорнутої фази")
+	# Процедурний вогонь (поки вимкнений прапорцем) теж не бачить сирого часу матчу й не хешує через sin.
+	assert_true(WreckLayer._FIRE_CODE.contains("float t = proc_time"))
+	assert_false(WreckLayer._FIRE_CODE.contains("fx_time +") or WreckLayer._FIRE_CODE.contains("sin("))
+	assert_eq(layer.get("_fire_mat").get_shader_parameter("loop_sec"), WreckLayer.fire_loop_sec())
+	assert_eq(layer.get("_column_mat").get_shader_parameter("rate_step"), WreckLayer.COLUMN_RATE_STEP)
