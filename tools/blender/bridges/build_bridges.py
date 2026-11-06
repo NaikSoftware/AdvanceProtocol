@@ -27,8 +27,9 @@ os.makedirs(TEX_DIR, exist_ok=True)
 # --- матеріали: (колір sRGB, шорсткість, металічність). Колір береться з текстури 512 px, що лягає
 # на клітинку (8 м), тобто ~1.6 см на піксель; тут лише середній тон для довідки.
 MATS = {
-    "concrete": ((0.50, 0.49, 0.47), 0.95, 0.0),
+    "concrete": ((0.46, 0.435, 0.39), 0.95, 0.0),  # тепло-сірий: холодний сірий під небом River читався синюватим
     "concrete_dust": ((0.68, 0.66, 0.62), 1.0, 0.0),
+    "abutment": ((0.44, 0.42, 0.37), 0.95, 0.0),
     "rubble": ((0.34, 0.33, 0.31), 1.0, 0.0),
     "asphalt1": ((0.16, 0.16, 0.165), 0.95, 0.0),
     "asphalt_wet": ((0.22, 0.22, 0.225), 0.9, 0.0),
@@ -46,6 +47,18 @@ MAT_ORDER = list(MATS)
 # Верх настилу над нулем Z (низом моделі). Бетон і панельний міст стоять на дні, понтон плаває:
 # дно русла на 2.2-2.7 м під верхом берега, вода на 1.25 м.
 DECK_TOP = {"centre": 0.30, "west": 0.30, "east": 0.21}
+# Кінці мостів лягають на насип (TerrainHeight.SEAT_*): покриття настилу на кінці — на ROAD_TOP над
+# DECK_TOP, на 1.6 см нижче за насип, тож торець плити схований під дорогою. Бетонна опора — від
+# краю клітинки на SEAT_END углиб: насип сходить до берега всередині її тіла, а видно лише стіну
+# до води.
+ROAD_TOP = 0.008
+SEAT_END = 0.28
+SEAT_TOP = 0.010  # TerrainHeight.SEAT_TOP: верх насипу над DECK_TOP
+GIRDER_TAIL = 0.07  # хвіст борта понтона за кінцем відсіку, у насипі (0.56 м)
+WING = 0.15  # крила центрального мосту за краєм клітинки (1.2 м); модель довша за переправу на 2 * WING
+SEAT_HALF = 0.36  # TerrainHeight.SEAT_HALF: до неї насип у клітинці мосту рівний
+WING_DROP = 0.12  # на скільки верх крайньої частини стіни нижчий біля краю (~1 м, як укіс до берега)
+WALL_HALF = 0.49  # стіна опори майже на всю ширину клітинки: насип у ній не ширший (TerrainHeight.SEAT_SIDE)
 
 
 TILE_M = 1.0  # одна текстура = клітинка (одиниця світу)
@@ -77,6 +90,9 @@ class Box:
             ax = max(range(3), key=lambda k: abs(n[k]))
             if f == FACES[4] and self.mat in ("asphalt", "asphalt1", "asphalt_wet"):
                 out.append([((p.x - c[0]) / s[0] + 0.5, p.y / TILE_M) for p in q])
+            elif ax == 2 and self.mat == "abutment":
+                # у текстури устою низ (v < 0.3) — мокра й брудна смуга стіни; верх бере чисту середину
+                out.append([(p.x / TILE_M, 0.5 + (p.y - c[1]) / TILE_M) for p in q])
             elif ax == 2:
                 out.append([(p.x / TILE_M, p.y / TILE_M) for p in q])
             elif ax == 1:
@@ -173,6 +189,36 @@ def wet(c, s):
     return Box("wet", c, s)
 
 
+def wedge(mat, c, s, end, ground):
+    """Коробка, чий верх на кінці `end` (-1/+1 уздовж Y) сходить до `ground`: кінець парапету в насипі."""
+    b = Box(mat, c, s)
+    for i in ((4, 5) if end < 0 else (6, 7)):
+        b.v[i].z = ground
+    b.uv = b._uv(c, s)
+    return b
+
+
+def seat(half_l, top):
+    """Береговий устій на обох кінцях: стіна майже на всю ширину клітинки від дна до `top` під
+    настилом, на SEAT_END углиб від краю клітинки. Позаду її верх під насипом, спереду видно лише
+    лицьову стіну до води й полицю, на якій лежить настил: обрізи до рівня насипу обабіч настилу
+    стирчали над укосом окремими коробками."""
+    out = []
+    for sy in (-1, 1):
+        y = sy * (half_l - SEAT_END / 2)
+        out.append(Box("abutment", (0, y, top / 2), (2 * SEAT_HALF, SEAT_END, top)))
+        # Обабіч насипу (за SEAT_HALF) ґрунт сходить до берега, і рівний верх стіни там стирчав темною
+        # коробкою: крайні частини стіни сходять верхом разом з укосом (на WING_DROP до краю).
+        for sx in (-1, 1):
+            c, sz = (sx * (SEAT_HALF + WALL_HALF) / 2, y, top / 2), (WALL_HALF - SEAT_HALF, SEAT_END, top)
+            w = Box("abutment", c, sz)
+            for i in ((5, 6) if sx > 0 else (4, 7)):
+                w.v[i].z = top - WING_DROP
+            w.uv = w._uv(c, sz)
+            out.append(w)
+    return out
+
+
 # ---------------------------------------------------------------- центр: бетонна балка, 3 клітинки
 def concrete(broken):
     L, W = 3.0, 0.88
@@ -188,8 +234,15 @@ def concrete(broken):
         g = [Box("concrete", (0, yc, bot + th / 2), (W, n, th)),
              Box("asphalt", (0, yc, DT + 0.004), (W - 0.2, n, 0.008))]
         for sx in (-1, 1):
-            g.append(Box("concrete", (sx * (W / 2 - 0.03), yc, DT + 0.055), (0.06, n, 0.11)))
-            g.append(Box("steel_grey", (sx * (W / 2 - 0.03), yc, DT + 0.15), (0.035, n, 0.035)))  # поручень
+            x = sx * (W / 2 - 0.03)
+            g.append(Box("concrete", (x, yc, DT + 0.055), (0.06, n, 0.11)))
+            g.append(Box("steel_grey", (x, yc, DT + 0.15), (0.035, n, 0.035)))  # поручень
+            # Крило устою: за краєм клітинки парапет переходить у стінку, що сходить клинцем у насип і
+            # сидить у ньому до низу плити, — кінець парапету не висить над берегом.
+            for e, sg in ((y0, -1), (y1, 1)):
+                if abs(abs(e) - L / 2) < 1e-6:
+                    g.append(wedge("concrete", (x, e + sg * WING / 2, (bot + DT + 0.11) / 2), (0.06, WING, DT + 0.11 - bot),
+                                   sg, DT + 0.010))
         for face, sign, on in ((y0, -1, lo), (y1, 1, hi)):
             if on:
                 g += jag(face, sign, W, bot, DT + 0.11, seed=seed + sign + 3)
@@ -198,11 +251,10 @@ def concrete(broken):
 
     # Бетон: два прольоти по 12 м на стінчастій опорі в усю ширину настилу; береги тримають упори.
     py = -0.0625 if broken else 0.0  # у руїні опора закінчується там, де обламано проліт
-    pier = [Box("concrete", (0, py, bot / 2), (W - 0.02, 0.125, bot)),
-            Box("concrete", (0, py, bot - 0.015), (W + 0.02, 0.125 if broken else 0.16, 0.03)),
+    pier = [Box("abutment", (0, py, bot / 2), (W - 0.02, 0.125, bot)),
+            Box("abutment", (0, py, bot - 0.015), (W + 0.02, 0.125 if broken else 0.16, 0.03)),
             wet((0, py, WL), (W - 0.016, 0.133, 0.06))]
-    abut = [Box("concrete", (0, sy * (L / 2 - 0.09), bot / 2), (W + 0.02, 0.18, bot)) for sy in (-1, 1)]
-    abut += [wet((0, sy * (L / 2 - 0.09), WL), (W + 0.028, 0.188, 0.06)) for sy in (-1, 1)]
+    abut = seat(L / 2, bot)
     if not broken:
         return {"pier": pier, "abut": abut, "span1": span(-L / 2, 0), "span2": span(0, L / 2)}
 
@@ -265,11 +317,16 @@ def bailey(broken):
     panels = [panel(i) for i in range(N)]
     end = [Box("steel_gal", (sx * xt, sy * (N * PL / 2), DT + PH / 2), (tw, 0.02, PH))
            for sx in (-1, 1) for sy in (-1, 1)]
-    # Опори: бетонні лежні на кінцях переправи; їхня довжина не виходить за 2 клітинки.
-    abut = [Box("concrete", (0, sy * (L / 2 - 0.08), (DT - 0.045) / 2), (0.7, 0.16, DT - 0.045))
-            for sy in (-1, 1)]
-    abut += [Box("concrete", (0, sy * (L / 2 - 0.08), DT - 0.045 + 0.0), (0.74, 0.16, 0.02)) for sy in (-1, 1)]
-    abut += [wet((0, sy * (L / 2 - 0.08), WL), (0.708, 0.168, 0.05)) for sy in (-1, 1)]
+    # Опори — бетонні стіни берега під кінцями ферми, верх під поперечними балками; між кінцем ферми
+    # й краєм клітинки — перехідна плита з тим самим покриттям, що й настил.
+    seat_top = DT - 0.0625
+    abut = seat(L / 2, seat_top)
+    gap = L / 2 - N * PL / 2
+    abut += [Box("asphalt1", (0, sy * (L / 2 - gap / 2), DT + ROAD_TOP - 0.014), (rw - 0.04, gap, 0.028)) for sy in (-1, 1)]
+    # Опорні подушки під кінцями ферм: бетон на 2.4 см над насипом, тож кінцеві стійки стоять на устої, а не на ґрунті.
+    pad_top = DT + SEAT_TOP + 0.003
+    abut += [Box("abutment", (sx * xt, sy * (L / 2 - 0.07), (seat_top + pad_top) / 2), (tw + 0.06, 0.14, pad_top - seat_top))
+             for sx in (-1, 1) for sy in (-1, 1)]
     if not broken:
         return {"abut": abut, "end": end, **{f"p{i}": p for i, p in enumerate(panels)}}
 
@@ -291,12 +348,11 @@ def bailey(broken):
     xf(west, about((0, y0, DT - 0.05), rz(-8)))
     east = panels[3] + panels[4] + [end[1], end[3]] + chord_stubs(y0 + 3 * PL, -1, xt, tw, DT + 0.015, DT + PH - 0.015)
     xf(east, about((0, L / 2 - 0.06, DT), rx(10)))
-    # Уламки у воді, кожен від 0.3 тайла: настил, балка й дві діагоналі лежать у розриві.
-    junk = [Box("asphalt_wet", (0.44, 0.1, 0.116), (0.3, 0.26, 0.04), rx(10) @ rz(40)),
-            Box("steel_gal", (-0.4, 0.0, 0.13), (0.04, 0.5, 0.04), rz(25) @ rx(10)),
+    # Уламки у воді, кожен від 0.3 тайла: балка й дві діагоналі лежать у розриві. Без плоскої плити настилу:
+    # згори вона читалась би темним трикутником, що плаває.
+    junk = [Box("steel_gal", (-0.4, 0.0, 0.13), (0.04, 0.5, 0.04), rz(25) @ rx(10)),
             Box("steel_gal", (0.5, -0.12, 0.122), (0.03, 0.4, 0.03), rz(-35) @ rx(-4)),
             Box("steel_gal", (-0.5, 0.15, 0.122), (0.03, 0.38, 0.03), rz(30) @ rx(4))]
-    junk.append(wet((0.44, 0.1, 0.1), (0.31, 0.27, 0.06)))
     return {"abut": abut, "west": west, "east": east, "junk": junk}
 
 
@@ -307,11 +363,11 @@ def pontoon(broken):
     wl = DECK_TOP["east"] - 0.01 - 0.156  # ватерлінія над дном
     floats = (-0.33, 0.0, 0.33)  # три окремі поплавки, між ними ~1 м темної води
 
-    def bay(y0, y1, ramp=False, bows=()):
+    def bay(y0, y1, bows=()):
         n = y1 - y0
         yc = (y0 + y1) / 2
-        dz = -0.03 if ramp else 0.0  # аппарель сидить нижче й піднімається до берега
-        g = [Box("deckplate", (0, yc, hh + 0.02 + dz), (rwid, n - 0.006, 0.04))]   # стик секцій ~5 см
+        dz = ROAD_TOP  # покриття на рівні покриття інших мостів: аппарель лежить урівень із насипом
+        g = [Box("deckplate", (0, yc, hh + 0.02 + dz), (rwid, n, 0.04))]   # секції впритул: 5-см щілина читалась пунктиром
         # одна безперервна розгортка на весь настил (16 м на повтор): візерунок не починається наново на кожній секції
         g[0].uv = [[(u, v * 0.5) for (u, v) in face] for face in g[0].uv]
         lo = y0 + (0.06 if any(sg < 0 for _, sg in bows) else 0.0)
@@ -321,17 +377,28 @@ def pontoon(broken):
             g.append(wet((fx, (lo + hi) / 2, wl), (0.204, hi - lo - 0.008, 0.05)))
             for yb, sg in bows:  # скошений форштевень: плита від кіля на кінці до верху корпусу
                 g.append(Box("steel_grey", (fx, yb - sg * 0.03, hh / 2), (0.2, 0.012, 0.18), rx(sg * 19)))
+        # Борти однакові з обох боків: суцільна сталева балка вздовж секції від води до бортика над настилом
+        # і сталевий хідник між настилом і нею — поплавки з боку не видно окремими брилами.
         for sx in (-1, 1):
-            g.append(Box("steel_grey", (sx * 0.455, yc, hh * 0.55), (0.03, n - 0.012, 0.045)))  # стрейк
-            g.append(Box("steel_grey", (sx * (rwid / 2 + 0.012), yc, hh + 0.052 + dz), (0.024, n - 0.012, 0.032)))
-        for yb, sg in bows:  # похилий з'їзд ~0.3 тайла до берега
-            g.append(Box("deckplate", (0, yb - sg * 0.15, hh + 0.04), (rwid, 0.3, 0.03), rx(sg * 6)))
+            g.append(Box("steel_grey", (sx * 0.44, yc, (hh * 0.3 + hh + 0.068) / 2), (0.02, n, hh + 0.068 - hh * 0.3)))
+            g.append(Box("steel_grey", (sx * 0.395, yc, hh + 0.03 + dz), (0.09, n, 0.02)))
+            # На березі борт не обривається коробкою: 0.4 м за стіною опори він сходить клинцем під насип.
+            for yb, sg in bows:
+                g.append(wedge("steel_grey", (sx * 0.44, yb + sg * GIRDER_TAIL / 2, (hh * 0.3 + hh + 0.068) / 2),
+                               (0.02, GIRDER_TAIL, hh + 0.068 - hh * 0.3), sg, DECK_TOP["east"] - 0.01))
+        for yb, sg in bows:  # аппарель: від настилу відсіку до краю клітинки, лежить на бетонній опорі
+            ln = 1.0 - abs(yb)
+            ramp = Box("deckplate", (0, yb + sg * ln / 2, hh + 0.04 + ROAD_TOP - 0.015), (rwid, ln, 0.03))
+            ramp.uv = [[(u, v * 0.5) for (u, v) in face] for face in ramp.uv]
+            g.append(ramp)
         return g
 
-    # 2 клітинки замало для відсіків по 6.7 м з аппарелями: чотири відсіки довжини 0.45-0.55.
-    bays = {"r0": bay(-1.0, -0.55, True, ((-1.0, -1),)), "b1": bay(-0.55, 0.0), "b2": bay(0.0, 0.55),
-            "r1": bay(0.55, 1.0, True, ((1.0, 1),))}
-    plates = []
+    # Плавуча частина між опорами: чотири відсіки по ~2.8 м; від стіни опори до краю клітинки — аппарелі.
+    E = 1.0 - SEAT_END - 0.02
+    bays = {"r0": bay(-E, -E / 2, ((-E, -1),)), "b1": bay(-E / 2, 0.0), "b2": bay(0.0, E / 2),
+            "r1": bay(E / 2, E, ((E, 1),))}
+    # Опора-причал під аппареллю: бетонна стіна берега, верх під аппареллю.
+    plates = seat(1.0, hh + 0.025)
     if not broken:
         return {**bays, "plates": plates}
 
@@ -339,9 +406,9 @@ def pontoon(broken):
     # течією; середній відсік знесло, від нього лишився обрубок збоку, зануреного до ватерлінії й
     # нахиленого. У розриві по обидва боки чиста вода (>0.5 тайла).
     b1 = bays["b1"] + jag(0.0, 1, 0.8, 0.0, hh * 0.7, "steel_grey", 21, 8) + torn_plate(0.0, 1, 0.8, 0.05, hh, 4)
-    xf(b1, about((0, -0.55, 0.03), rx(-9)))
-    xf(b1, about((0, -0.55, 0), rz(-9)))
-    r1 = bays["r1"] + jag(0.55, -1, 0.8, 0.0, hh * 0.7, "steel_grey", 23, 8) + torn_plate(0.55, -1, 0.8, 0.05, hh, 6)
+    xf(b1, about((0, -E / 2, 0.03), rx(-9)))
+    xf(b1, about((0, -E / 2, 0), rz(-9)))
+    r1 = bays["r1"] + jag(E / 2, -1, 0.8, 0.0, hh * 0.7, "steel_grey", 23, 8) + torn_plate(E / 2, -1, 0.8, 0.05, hh, 6)
     frag = [Box("steel_grey", (0.0, 0.0, hh / 2), (0.2, 0.3, hh)), wet((0, 0, wl), (0.204, 0.304, 0.05)),
             Box("deckplate", (-0.04, 0.0, hh + 0.02), (0.3, 0.3, 0.04))]
     frag += jag(0.15, 1, 0.26, 0.0, hh * 0.45, "steel_dark", 31, 5) + jag(-0.15, -1, 0.26, 0.0, hh * 0.45, "steel_dark", 32, 5)
@@ -430,12 +497,32 @@ def make_texture(name):
         pores = _noise(rng, 0.6) > 2.4
         lum -= 0.04 * pores
         board = mod(yy, 6) < 0.02  # шви опалубки щитами по 1,3 м
-        h = 0.006 * _noise(rng, 2.0) + 0.003 * _noise(rng, 0.7) - 0.004 * pores - 0.008 * board
+        h = 0.003 * _noise(rng, 2.0) + 0.002 * _noise(rng, 0.7) - 0.004 * pores - 0.008 * board
         lum -= 0.015 * board
         if name == "concrete":
-            joint = mod(yy, 2) < 0.01  # шов плит кожні 4 м
+            # Деформаційні шви кожні 4 м — поперек парапету й плити (u бокових граней — уздовж мосту) і
+            # шов плит у v; без них парапет читався суцільною плямистою стрічкою.
+            joint = (mod(yy, 2) < 0.01) | (mod(xx, 2) < 0.008)
             h -= 0.012 * joint
-            lum -= 0.02 * joint
+            lum -= 0.05 * joint
+    elif name == "abutment":
+        # Стіни опор і бики: старий литий бетон. Плями 0.5-1.5 м і патьоки від настилу видно й з
+        # камери (піксель екрана ~25 см); низ до ~1.3 м від дна (v < 0.17, вода на ~1.1 м) мокрий і
+        # зеленкуватий, над ним до ~2 м — брудна смуга бризок і ґрунту з нерівним краєм.
+        lum = 0.05 * _noise(rng, 2.5) + 0.03 * _noise(rng, 0.9) + 0.012 * _noise(rng, 0.3)
+        streak = np.clip(_noise(rng, 0.45, 9) - 0.2, 0, None)
+        lum -= 0.06 * streak * (0.4 + 0.6 * np.clip((yy - 0.2) / 0.12, 0, 1))
+        pores = _noise(rng, 0.6) > 2.2
+        board = mod(yy, 6) < 0.012  # шви опалубки щитами по 1,3 м
+        ties = (np.abs(mod(xx, 8) - 0.5) < 0.006) & (np.abs(mod(yy, 12) - 0.5) < 0.012)  # отвори стяжок
+        lum -= 0.05 * pores + 0.025 * board + 0.08 * ties
+        edge = yy + 0.02 * _noise(rng, 0.6, 0.2) + 0.012 * _noise(rng, 0.25, 0.1)
+        wet_k = 1 - np.clip((edge - 0.14) / 0.03, 0, 1)
+        dirt_k = (1 - np.clip((edge - 0.2) / 0.06, 0, 1)) * (1 - wet_k)
+        img = img * (1 - wet_k[..., None] * (1 - np.array([0.50, 0.55, 0.46])))
+        img = img * (1 - dirt_k[..., None] * (1 - np.array([0.78, 0.74, 0.66])))
+        h = 0.004 * _noise(rng, 2.0) + 0.002 * _noise(rng, 0.6) - 0.004 * pores - 0.006 * board - 0.01 * ties
+        rough = np.clip(0.95 - 0.15 * wet_k + 0.03 * _noise(rng, 1.0), 0.78, 1.0)
     elif name in ("asphalt", "asphalt_wet"):
         # Асфальт мосту — продовження асфальту дороги: той самий знімок, той самий множник сухого покриття
         # (PAVED_DRY_K = 0.75 у ground.gdshader), без розмітки й без колій (сухий асфальт їх не має).
@@ -449,7 +536,7 @@ def make_texture(name):
         # (як на дорозі, |v| ≈ 0.83 м), без розмітки. u — упоперек смуги 3.38 м.
         img = road_texture("dirt", 3.38, 8.0, 5)
         rut = sum(np.exp(-((xx - cu) / 0.05) ** 2) for cu in (0.5 - 0.246, 0.5 + 0.246))
-        lum = -0.05 * rut * (0.8 + 0.2 * _noise(rng, 0.8, 6)) + 0.006 * _noise(rng, 0.5)
+        lum = -0.13 * rut * (0.8 + 0.2 * _noise(rng, 0.8, 6)) + 0.006 * _noise(rng, 0.5)
         h = -0.02 * rut + 0.002 * _noise(rng, 0.5)
         step = (3.38 / TEX, 8.0 / TEX)
         rough = np.clip(0.95 - 0.05 * rut + 0.03 * _noise(rng, 1.0), 0.85, 1.0)
@@ -458,7 +545,7 @@ def make_texture(name):
         # Світла оцинкована сталь з темними патьоками від води, без дрібних плям.
         streak = np.clip(_noise(rng, 0.8, 10) - 0.6, 0, None)
         lum -= 0.06 * streak
-        h = 0.0008 * _noise(rng, 0.6) - 0.004 * (mod(yy, 4) < 0.008) - 0.001 * streak
+        h = 0.0008 * _noise(rng, 0.6) - 0.001 * streak
     elif name == "wet":
         lum = 0.01 * _noise(rng, 4)
     elif name == "rust":
@@ -468,8 +555,9 @@ def make_texture(name):
         lum = 0.04 * _noise(rng, 3) + 0.04 * _noise(rng, 0.8, 10) + 0.02 * _noise(rng, 0.5)
         seam = (mod(yy, 4) < 0.01) | (mod(xx, 4) < 0.01)  # стики листів 2 м
         rib = (mod(xx, 16) < 0.016) | (mod(yy, 16) < 0.016)  # ребра жорсткості через 0,5 м
-        h = 0.0012 * _noise(rng, 0.6) - 0.005 * seam + 0.012 * rib
-        lum += -0.06 * seam + 0.05 * rib
+        # Стики й ребра ледь помітні: різкі смуги з камери читались кам'яною кладкою.
+        h = 0.0012 * _noise(rng, 0.6) - 0.002 * seam + 0.003 * rib
+        lum += -0.02 * seam + 0.012 * rib
     elif name == "deckplate":
         # Сталевий настил понтона під ґрунтом, що його наносять колеса з ґрунтівки: бруд майже суцільний,
         # густіший у коліях (колія 1.66 м, x = ±0.83 м від осі = u 0.104 / 0.896), сталь проглядає плямами
@@ -479,11 +567,11 @@ def make_texture(name):
         fx = np.minimum(mod(xx, 4), 1 - mod(xx, 4))
         seam = fx < 0.0075
         track = sum(np.exp(-((np.minimum(np.abs(xx - cu), 1 - np.abs(xx - cu))) / 0.03) ** 2) for cu in (0.104, 0.896))
-        cover = np.clip(0.62 + 0.11 * _noise(rng, 1.5) + 0.4 * track, 0, 1)  # і на пандусах: хмаркові плями ще на 40 % слабші
+        cover = np.clip(0.85 + 0.11 * _noise(rng, 1.5) + 0.4 * track, 0, 1)  # ґрунтівка заїжджає на настил: сталь проглядає лише плямами
         img = img * (1 - cover[..., None]) + dirt * cover[..., None]
         grit = _noise(rng, 0.12)                                               # дрібний пісок і камінці ~1-2 см
         tread = track * (np.sin(yy * TEX * 2 * np.pi / 6.0) > 0.4) * (0.6 + 0.4 * _noise(rng, 0.5))   # слід протектора ~10 см упоперек колії
-        lum = -0.04 * track * (0.8 + 0.2 * _noise(rng, 0.8, 6)) - 0.02 * seam * (1 - cover) + 0.025 * grit - 0.03 * tread
+        lum = -0.11 * track * (0.8 + 0.2 * _noise(rng, 0.8, 6)) - 0.02 * seam * (1 - cover) + 0.025 * grit - 0.03 * tread
         h = -0.012 * track + 0.0012 * _noise(rng, 0.7) - 0.002 * seam * (1 - cover) + 0.002 * cover
         rough = np.clip(0.8 + 0.15 * cover + 0.03 * _noise(rng, 1.0), 0.75, 1.0)
     img = np.clip(img + lum[..., None], 0, 1)

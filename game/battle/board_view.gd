@@ -218,6 +218,8 @@ func build(board: Board) -> void:
 	_vegetation.cast_shadows = structure_shadows
 	add_child(_vegetation)
 	_vegetation.build(board, _height, fields, relief_seed, season, _props, VillageLayout.for_map(_map_key()).get("homes", []))
+	_water.set_reeds(VegetationLayer.reed_mask(_vegetation.placements, Vector2i(board.width, board.height)),
+			Vector2i(board.width, board.height))
 	if _forest == null:
 		_forest = ForestLayer.new()
 		_forest.name = "Forest"

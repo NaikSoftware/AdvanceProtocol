@@ -14,10 +14,14 @@ def concrete(name="road_concrete", seed=61, top_z=0.8, **kw):
 def jersey():
     def rel(n):   # нерегулярні виколупини замість рівних смуг; дорожній бруд знизу 20 см
         return 0.55 + 0.45 * fbm(n, 9, 5, 3)
-    mat = concrete(top_z=None, relief=rel, shade=0.12, val=0.8, ground=False, band=(0.0, 0.2, 0.5), tint=(1.05, 1.0, 0.9), moss=0.5, rust_runs=2, chips=True)   # теплий бетон, мох, іржа від петель
+    # Старий бетон, як устої мосту поруч: темніший, патьоки з-під верху, брудна смуга від дороги внизу,
+    # мох і іржа від петель. Світлий рівний сірий читався пластиковою деталькою.
+    mat = concrete(top_z=0.8, relief=rel, shade=0.12, val=0.66, ground=True, band=(0.0, 0.18, 0.7), streak_k=0.8,
+                   streak_len=0.45, tint=(1.07, 1.0, 0.86), moss=0.7, rust_runs=3, chips=True, size=256)  # 256 px на 1.5 м: ~0.6 см на піксель, не розмите поруч із ґрунтом
     b = B(); bm = b.bm
     # профіль «нью-джерсі» зі сколотими скосами й фасками: вертикальний низ, скіс, крутіший верх
-    prof = [(-.30, 0), (.30, 0), (.30, .17), (.20, .50), (.12, .74), (.07, .80),
+    # низ на 8 см у ґрунті (floor=0): блок осів, а не лежить зверху
+    prof = [(-.30, -.08), (.30, -.08), (.30, .17), (.20, .50), (.12, .74), (.07, .80),
             (-.07, .80), (-.12, .74), (-.20, .50), (-.30, .17)]
     rng = np.random.default_rng(7)
     rings = []
@@ -35,7 +39,7 @@ def jersey():
     bm.faces.new(rings[0][::-1]); bm.faces.new(rings[1])
     for f in bm.faces:
         f.material_index = b.mi(mat)
-    finish(b, "infra_jersey_block")
+    finish(b, "infra_jersey_block", floor=0.0)
 
 
 def tube(b, mat, c, ro, ri, L, n=20, inner=None):

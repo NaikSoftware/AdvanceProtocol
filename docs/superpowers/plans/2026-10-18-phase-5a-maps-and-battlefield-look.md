@@ -474,6 +474,7 @@ the current player can see; scars respect the viewer's `seen`. Reference brief:
 - [x] Crumbled edge only at a real asphalt end, never where a dirt road meets the side of the asphalt
 - [x] Ridge asphalt runs straight with smooth bends, no chain of S-wiggles; clean edges, steady width
 - [x] Dirt roads read on wet ground: darker continuous ruts, no light border
+- [ ] Ploughed field texture holds still with a still camera: no flicker
 
 ### Task 17: House models and roofs
 
@@ -511,6 +512,8 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] One transformer per settlement, including the north Ridge ring hamlet
 - [x] Wires stay visible against the river from every camera angle
 - [x] Generator takes every rule constant from the game
+- [x] Poles and wires sink into the haze at the map edge like everything else, never drawn over it
+- [x] Fences, hay, boulders and trailers beyond the map edge sink into the haze too
 - [x] In `feat/battlefield-dressing`
 
 ### Task 20: Footpaths
@@ -558,6 +561,9 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Chimney smoke: one narrow column from the opening, fading before it reaches buildings behind
 - [x] Movement-zone contours draw above every effect, smoke and rain
 - [x] Smoke and fences draw in depth order: a fence behind the smoke never covers it
+- [x] Chimney and ruin smoke soft and cloudy, not a bundle of thin needle-like streaks
+- [x] Wreck fire and smoke look the same late in a long match as at its start
+- [x] Wreck smoke stays visible over the river, not lost against the water
 
 ### Task 24: New props in villages
 
@@ -568,3 +574,16 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Gates in their fence's tone under every light; a gate stands between real fence on both sides
 - [x] Draw calls under 100 at every zoom on every map
 - [x] Battle board builds noticeably faster, with identical pixels
+
+### Task 25: River banks and bridges
+
+- [x] River shoreline is a crisp waterline with a ragged wet-mud band, not a blurred dark halo
+- [x] Bridge abutments read as textured concrete, not plain grey boxes
+- [x] Ground rises smoothly to every bridge end: no pit before a bridge, no step at the deck
+- [x] Reeds in the water have a dark wet base, contact shading and a reflection; they don't float
+
+### Task 26: Yard fences
+
+- [x] River, yard by the west truss bridge: no pocket in the fence, gate on the road side
+- [x] River, yard by the asphalt road at the bridge: no pocket, the house wholly inside the yard
+- [x] Every other yard stays as it is

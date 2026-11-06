@@ -12,6 +12,11 @@ extends MeshInstance3D
 const WATER_Y: float = TerrainHeight.WATER_LEVEL
 
 const _SHADER: Shader = preload("res://game/battle/shaders/water.gdshader")
+## Пріоритет прозорого проходу: найраніший (раніше за ліс, FOREST_PRIORITY −2). Прозорі об'єкти Godot
+## сортує за центром: велика площина річки проти квада диму — хто ближчий до камери, той і зверху, тож
+## дим уламків на березі зникав над водою. Вода перша, тож усе прозоре — над нею. Глибини вона не пише:
+## тоді пляма затінення очерету на дні під водою зникала, і основа куртин у воді світлішала.
+const WATER_PRIORITY: int = -3
 ## Дві карти нормалей брижі (tools/water_normals.py), стиснені з міпмапами.
 const _WAVE_A: Texture2D = preload("res://assets/water/water_normal_a.png")
 const _WAVE_B: Texture2D = preload("res://assets/water/water_normal_b.png")
@@ -37,6 +42,8 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 				along_y += 1 if _is_water(board, Vector2i(x, y + 1)) else 0
 	visible = has_water
 	if not has_water:
+		# Матеріал попередньої дошки (з її маскою очерету) не має пережити перебудову.
+		material_override = null
 		return
 
 	# Площина — лише над клітинками води з запасом у клітинку (берег, виступи русла), у межах
@@ -53,6 +60,7 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 
 	var mat := ShaderMaterial.new()
 	mat.shader = _SHADER
+	mat.render_priority = WATER_PRIORITY
 	mat.set_shader_parameter("kind_map", kind_map)
 	mat.set_shader_parameter("map_origin", Vector2(-margin - ring, -margin - ring))
 	if ring > 0:
@@ -72,6 +80,18 @@ func build(board: Board, margin: int, kind_map: ImageTexture, height: TerrainHei
 		mat.set_shader_parameter("water_level", WATER_Y)
 	mat.set_shader_parameter("flow_dir", Vector2(1, 0) if along_x >= along_y else Vector2(0, 1))
 	material_override = mat
+
+
+## Маска очерету (VegetationLayer.reed_mask) над клітинками дошки size: біля куртин вода відбиває темні
+## стебла. Порожня маска вимикає це.
+func set_reeds(mask: Image, size: Vector2i) -> void:
+	var mat := material_override as ShaderMaterial
+	if mat == null:
+		return
+	mat.set_shader_parameter("use_reeds", not mask.is_empty())
+	if not mask.is_empty():
+		mat.set_shader_parameter("reed_mask", ImageTexture.create_from_image(mask))
+		mat.set_shader_parameter("reed_size", Vector2(size))
 
 
 static func _is_water(board: Board, cell: Vector2i) -> bool:

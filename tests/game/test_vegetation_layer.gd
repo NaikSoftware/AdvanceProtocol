@@ -396,3 +396,48 @@ func test_reed_shade_only_on_sunny_maps() -> void:
 	assert_false(VegetationLayer.has_shade(&"bank_reed_01", false))
 	assert_false(VegetationLayer.has_shade(&"bank_cattail_02", false))
 	assert_true(VegetationLayer.has_shade(&"bank_bush_01", false))
+
+
+func test_reed_mask_dark_under_reeds_only() -> void:
+	var view: BoardView = _view("river")
+	var board: Board = _board("river")
+	var img: Image = VegetationLayer.reed_mask(view.vegetation().placements, Vector2i(board.width, board.height))
+	var px: int = VegetationLayer.REED_MASK_PX
+	assert_eq(img.get_size(), Vector2i(board.width, board.height) * px)
+	var reeds: int = 0
+	for pl: Dictionary in view.vegetation().placements:
+		var at := Vector2i(floori((pl["pos"].x + 0.5) * px), floori((pl["pos"].z + 0.5) * px))
+		if pl["kind"] == "reed":
+			reeds += 1
+			assert_gt(img.get_pixelv(at).r, 0.5, "під куртиною %s маска світла" % pl["node"])
+		elif pl["kind"] == "tree" and not _near_reed(view.vegetation().placements, pl["pos"]):
+			assert_eq(img.get_pixelv(at).r, 0.0, "під деревом %s маски нема" % pl["node"])
+	assert_gt(reeds, 0)
+	var mat := (view.get("_water") as WaterSurface).material_override as ShaderMaterial
+	assert_true(mat.get_shader_parameter("use_reeds"), "вода бере маску очерету")
+
+
+## Чи стоїть поруч куртина очерету, чий диск маски може сягнути точки.
+func _near_reed(plants: Array[Dictionary], at: Vector3) -> bool:
+	for r: Dictionary in plants:
+		if r["kind"] == "reed" and Vector2(r["pos"].x - at.x, r["pos"].z - at.z).length() \
+				< VegetationLayer.crown_of(r["node"]) * float(r.get("scale", 1.0)) * VegetationLayer.REED_MASK_CORE + 0.1:
+			return true
+	return false
+
+
+func test_reed_mask_empty_without_reeds() -> void:
+	var none: Array[Dictionary] = []
+	assert_true(VegetationLayer.reed_mask(none, Vector2i(10, 10)).is_empty(), "без рослин маска порожня")
+	var trees: Array[Dictionary] = [{"node": &"meadow_oak_01", "pos": Vector3(2, 0, 2), "kind": "tree", "scale": 1.0}]
+	assert_true(VegetationLayer.reed_mask(trees, Vector2i(10, 10)).is_empty(), "без очерету маска порожня")
+	var view: BoardView = _view("river")
+	var plants: Array[Dictionary] = view.vegetation().placements
+	assert_true(VegetationLayer.reed_mask(plants, Vector2i.ZERO).is_empty(), "дошка нульового розміру")
+	var water: WaterSurface = view.get("_water")
+	var mat := water.material_override as ShaderMaterial
+	water.set_reeds(Image.new(), Vector2i.ZERO)
+	assert_false(mat.get_shader_parameter("use_reeds"), "порожня маска вимикає очерет у воді")
+	var board: Board = _board("river")
+	water.set_reeds(VegetationLayer.reed_mask(plants, Vector2i(board.width, board.height)), Vector2i(board.width, board.height))
+	assert_true(mat.get_shader_parameter("use_reeds"))

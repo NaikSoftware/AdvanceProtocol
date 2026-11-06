@@ -433,6 +433,54 @@ func test_ring_structures_take_the_haze() -> void:
 	assert_true(mat.get_shader_parameter("surround"))
 
 
+## Стовпи, дроти й шафи ЛЕП тонуть в імлі кільця, як будинки поруч: кожен їхній матеріал несе ті самі
+## параметри кільця (`Surroundings.apply`), інакше лінія в кільці малюється темною поверх імли.
+func test_power_line_takes_the_haze(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var props: PropLayer = _cached(p).props()
+	var board := Vector2(m.width, m.height)
+	var mats: Array = []
+	for n: Node in props.get_children():
+		if n is MultiMeshInstance3D and _kind(StringName(n.name)) == PropLayer.Kind.POLE:
+			var mesh: Mesh = (n as MultiMeshInstance3D).multimesh.mesh
+			for s in mesh.get_surface_count():
+				mats.append([String(n.name), mesh.surface_get_material(s)])
+	assert_gt(mats.size(), 0, "%s: стовпи є" % p)
+	assert_not_null(props._wires, "%s: дроти є" % p)
+	mats.append(["Wires", props._wires.material_override])
+	if props._transformer_node != null:
+		mats.append(["Transformers", (props._transformer_node.multimesh.mesh as PrimitiveMesh).material])
+	for e: Array in mats:
+		var mat := e[1] as ShaderMaterial
+		assert_not_null(mat, "%s: %s — матеріал з імлою кільця" % [p, e[0]])
+		if mat != null:
+			assert_true(mat.get_shader_parameter("surround"), "%s: %s" % [p, e[0]])
+			assert_eq(mat.get_shader_parameter("board_size"), board, "%s: %s" % [p, e[0]])
+
+
+## Пляма дотику лягає й під руїни кільця (Хребет): без імли вона чорніє поверх пелени, у якій тонуть самі руїни.
+func test_contact_shadows_take_the_haze(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var props: PropLayer = _cached(p).props()
+	assert_not_null(props._contacts, "%s: плями дотику є" % p)
+	var mat := (props._contacts.multimesh.mesh as PrimitiveMesh).material as ShaderMaterial
+	assert_true(mat.get_shader_parameter("surround"), p)
+	assert_eq(mat.get_shader_parameter("board_size"), Vector2(m.width, m.height), p)
+
+
+## Огорожі, тюки, брили, бетонні блоки й причепи стоять лише на дошці: їхні матеріали імли кільця не знають.
+## Карта, що поставить такий пропс у кільце, мусить спершу дати йому імлу, як стовпам.
+func test_small_props_stay_off_the_ring(p = use_parameters(MAPS)) -> void:
+	var m: MapData = _map(p)
+	var small: Array = [PropLayer.Kind.FIELD_FENCE, PropLayer.Kind.GARDEN_FENCE, PropLayer.Kind.HAY,
+			PropLayer.Kind.BOULDER, PropLayer.Kind.BLOCK, PropLayer.Kind.TRAILER]
+	for inst in _cached(p).props().all_instances():
+		if _kind(inst["model"]) in small:
+			var o: Vector3 = (inst["transform"] as Transform3D).origin
+			assert_true(o.x >= -0.5 and o.z >= -0.5 and o.x <= m.width - 0.5 and o.z <= m.height - 0.5,
+					"%s: %s у кільці (%.1f, %.1f)" % [p, inst["model"], o.x, o.z])
+
+
 func _length(inst: Dictionary) -> float:
 	var b: Basis = (inst["transform"] as Transform3D).basis
 	return b.x.length()
@@ -615,6 +663,10 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	# Забудована — клітинка BUILDING із будинком, двірським вбранням чи городом, або двір садиби.
 	var built: Dictionary = _layout_yards(p, false)
+	# Клітинки fenced паркан садиби обгороджує разом із її двором: вони теж при будинку.
+	for home: Dictionary in VillageLayout.for_map(StringName(p)).get("homes", []):
+		for c: Vector2i in home.get("fenced", []):
+			built[c] = true
 	for y in board.height:
 		for x in board.width:
 			var c := Vector2i(x, y)
@@ -1013,6 +1065,52 @@ func test_wet_map_darkens_bridges() -> void:
 			assert_gte(got.roughness, PropLayer.BRIDGE_ROUGH - 1e-4)
 
 
+## Покриття настилу на мокрій карті йде за дорогою: ґрунтове (панельний і понтонний мости, також
+## зруйновані) — тоном ґрунтівки DIRT_DECK_WET і матове, як ґрунтова дорога в шейдері землі (з 0.55
+## воно відбивало небо холодною сірою плитою); асфальт центрального — ASPHALT_DECK_WET. Обидва кінці
+## настилу переходять до тону дороги свого в'їзду (DECK_END_TINT): один тон на весь настил не
+## збігався з обома в'їздами, і на стику лишалась сходинка яскравості.
+func test_wet_map_keeps_decks_in_the_road_tone() -> void:
+	var expect: Dictionary = {
+		&"bridge_river_west": ["bridge_asphalt1", "bridge_deckplate"],
+		&"bridge_river_west_broken": ["bridge_asphalt1", "bridge_deckplate"],
+		&"bridge_river_east": ["bridge_deckplate"],
+		&"bridge_river_east_broken": ["bridge_deckplate"],
+		&"bridge_river_centre": ["bridge_asphalt"],
+		&"bridge_river_centre_broken": ["bridge_asphalt"],
+	}
+	for m: StringName in expect:
+		var src: Mesh = PropLayer.model(m)["mesh"]
+		var mesh: Mesh = PropLayer._bridge_mesh(m, src, true)
+		var tint: Array = PropLayer.DECK_END_TINT[StringName(String(m).trim_suffix("_broken"))]
+		var found: Array = []
+		for i in mesh.get_surface_count():
+			var name: String = src.surface_get_material(i).resource_name
+			if name not in expect[m]:
+				continue
+			found.append(name)
+			var got := mesh.surface_get_material(i) as ShaderMaterial
+			assert_not_null(got, "%s: %s без переходу до дороги" % [m, name])
+			if got == null:
+				continue
+			var k: Color = Color(PropLayer.ASPHALT_DECK_WET, PropLayer.ASPHALT_DECK_WET, PropLayer.ASPHALT_DECK_WET) \
+					if name == "bridge_asphalt" else PropLayer.DIRT_DECK_WET
+			var a: Color = (src.surface_get_material(i) as BaseMaterial3D).albedo_color * k
+			var alb: Color = got.get_shader_parameter("albedo")
+			assert_almost_eq(alb.r, a.r, 1e-3, "%s: %s" % [m, name])
+			assert_almost_eq(alb.b, a.b, 1e-3, "%s: %s" % [m, name])
+			assert_eq(got.get_shader_parameter("end_lo"), Vector3(tint[0].r, tint[0].g, tint[0].b), "%s: %s кінець -Z" % [m, name])
+			assert_eq(got.get_shader_parameter("end_hi"), Vector3(tint[1].r, tint[1].g, tint[1].b), "%s: %s кінець +Z" % [m, name])
+			# Перехід згасає до бортів: півширина покриття — з його ж вершин.
+			assert_between(float(got.get_shader_parameter("edge_x")), 0.15, 0.5, "%s: %s півширина покриття" % [m, name])
+			if name != "bridge_asphalt":
+				assert_gte(float(got.get_shader_parameter("roughness")), PropLayer.DIRT_DECK_ROUGH - 1e-4, "%s: %s блищить" % [m, name])
+		found.sort()
+		var want: Array = (expect[m] as Array).duplicate()
+		want.sort()
+		assert_eq(found, want, "%s: покриття настилу" % m)
+
+
 ## Руїна з глухим фронтоном стоїть пошкодженим фасадом (−Z) до камери (+x чи +z). Карта, де такої
 ## руїни нема (на Річці вона не випадає), перевіряти нічого: тест це й каже.
 func test_blank_gable_ruins_face_away_from_the_camera(p = use_parameters(MAPS)) -> void:
@@ -1233,6 +1331,38 @@ func test_bridge_ends_meet_the_bank() -> void:
 					continue
 				# Настил на кінці — на висоті дороги на березі (центр клітинки дороги).
 				assert_almost_eq(h.deck_y(c), h.at(float(n.x), float(n.y)), 0.05, "кінець мосту %s до %s" % [c, n])
+
+
+## В'їзд на міст — насип: від центру клітинки дороги до опори ґрунт лише піднімається (ні ями
+## перед мостом, ні горба), а від краю клітинки мосту на 0.1 клітинки (там кінці настилів усіх трьох
+## моделей; SEAT_REACH далі — лише до відліку меша) лежить урівень із покриттям
+## настилу (deck_y + SEAT_TOP), тож дорога заходить на настил без сходинки.
+func test_bridge_approach_rises_to_the_deck_without_a_dip() -> void:
+	var view: BoardView = _cached("river")
+	var h: TerrainHeight = view._height
+	var ends := 0
+	for g in h.bridge_groups():
+		var cells: Array = g["cells"]
+		var a := Vector2i(g["axis"])
+		for c: Vector2i in cells:
+			for d: Vector2i in [a, -a]:
+				var n: Vector2i = c + d
+				if cells.has(n) or n.x < 0 or n.y < 0 or n.x >= 26 or n.y >= 22:
+					continue
+				ends += 1
+				var seat: float = h.deck_y(c) + TerrainHeight.SEAT_TOP
+				for off: float in [-0.3, 0.0, 0.3]:
+					var side := Vector2(-d.y, d.x) * off
+					var top := -INF
+					for k in 57:
+						var t: float = float(k) / 56.0 * 0.6
+						var p: Vector2 = Vector2(n) - Vector2(d) * t + side
+						var y: float = h.at(p.x, p.y)
+						assert_gt(y, top - 0.002, "%s->%s бік %.1f: яма перед мостом на %.2f клітинки, %.2f м нижче" % [n, c, off, t, (top - y) / TerrainHeight.M])
+						top = maxf(top, y)
+						if t >= 0.5:
+							assert_almost_eq(y, seat, 0.004, "%s->%s бік %.1f: на %.2f клітинки ґрунт на %.2f м від настилу" % [n, c, off, t, (y - seat) / TerrainHeight.M])
+	assert_eq(ends, 6, "відкритих кінців переправ на дошці")
 
 
 ## Масштаб у метрах (клітинка — 8 м): стовп 0.4 кВ — 8.6–9.0 м, 10 кВ — 10–11 м; одноповерхова хата
@@ -1703,6 +1833,76 @@ func test_gates_face_the_road(p = use_parameters(MAPS)) -> void:
 		var out: Vector2 = placer.gates[i][1]
 		var sees: bool = placer.road_ahead_of(at, out) <= PropLayer.GATE_SIGHT
 		assert_true(sees or placer.gate_blind.has(i), "%s: ворота %s не до дороги і двір не «сліпий»" % [p, at])
+
+
+## Хати «Річки», двори яких стоять на краю своїх клітинок (кільце впритул до стін): (12,6) біля мосту й (5,7) на
+## березі. Решту дворів ці перевірки не чіпають.
+const PLAIN_YARDS: Array[Vector2i] = [Vector2i(12, 6), Vector2i(5, 7)]
+
+
+func _home_index(p: String, house: Vector2i) -> int:
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	for i in homes.size():
+		if homes[i]["house"] == house:
+			return i
+	return -1
+
+
+## Двір — простий прямокутник довкола хати: кільце з чотирьох сторін (без кишені чи сходинки), і за кожною стіною хати
+## стоїть паркан чи ворота, або стіна врівень зі стороною кільця — паркан не впирається в стіну посередині.
+func test_plain_yard_encloses_the_house() -> void:
+	var props: PropLayer = _cached("river").props()
+	var placer: RefCounted = props._placer
+	var segs: Array = _yard_segments(props)
+	for g: Dictionary in props._gates:
+		segs.append([g["a"], g["b"]])
+	for house: Vector2i in PLAIN_YARDS:
+		var i: int = _home_index("river", house)
+		var sides: Array = placer.ring_sides[i]
+		assert_eq(sides.size(), 4, "двір хати %s — не прямокутник" % house)
+		var hr: Rect2 = placer.doors[i][2]
+		# Кишеня: сторона кільця вздовж стіни хати ближче FENCE_WALL, але не врівень з нею — таку сторону стіна розрізає,
+		# і від неї лишаються вухо повз ріг хати й гачок до стіни. Сторона або врівень зі стіною, або далі FENCE_WALL.
+		for sd: Dictionary in sides:
+			var d: Vector2i = sd["d"]
+			var ax: int = 0 if d.x != 0 else 1
+			var a: Vector2 = sd["a"]
+			var b: Vector2 = sd["b"]
+			if minf(a[1 - ax], b[1 - ax]) >= hr.end[1 - ax] or maxf(a[1 - ax], b[1 - ax]) <= hr.position[1 - ax]:
+				continue
+			var wall: float = hr.end[ax] if d[ax] > 0 else hr.position[ax]
+			var gap: float = (a[ax] - wall) * float(d[ax])
+			assert_true(absf(gap) <= 0.03 or gap >= PropLayer.FENCE_WALL,
+					"хата %s: сторона %s за %.2f від стіни — кишеня" % [house, d, gap])
+		for d: Vector2 in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+			var from: Vector2 = hr.get_center()
+			# Промінь — до краю кільця з запасом: далі вже паркан сусіда.
+			var ext := Rect2(sides[0]["a"], Vector2.ZERO)
+			for sd: Dictionary in sides:
+				ext = ext.expand(sd["a"]).expand(sd["b"])
+			var ax: int = 0 if d.x != 0.0 else 1
+			var reach: float = ext.end[ax] - from[ax] if d[ax] > 0.0 else from[ax] - ext.position[ax]
+			var hit := false
+			for sg: Array in segs:
+				var x: Variant = Geometry2D.segment_intersects_segment(from, from + d * (reach + 0.05), sg[0], sg[1])
+				hit = hit or (x != null and not hr.has_point(x))
+			# Стіна на межі двору — лише врівень зі стороною кільця (хата на розі двору при вулиці): паркан тоді продовжує
+			# її площину від рогу, а не впирається в неї посередині.
+			var wall: float = hr.end[ax] if d[ax] > 0.0 else hr.position[ax]
+			for sd: Dictionary in sides:
+				hit = hit or (Vector2(sd["d"] as Vector2i) == d and absf((sd["a"] as Vector2)[ax] - wall) <= 0.03)
+			assert_true(hit, "хата %s: за стіною %s паркану нема — хата на межі двору" % [house, d])
+
+
+## Ворота цих дворів — на боці фасаду, до дороги, з якої до хати підходять: промінь назовні впирається в покриття.
+func test_plain_yard_gate_faces_the_road() -> void:
+	var placer: RefCounted = _cached("river").props()._placer
+	for house: Vector2i in PLAIN_YARDS:
+		var i: int = _home_index("river", house)
+		var face := Vector2(VillageLayout.for_map(&"river")["homes"][i]["face"])
+		var out: Vector2 = placer.gates[i][1]
+		assert_eq(out, face, "хата %s: ворота дивляться не на дорогу" % house)
+		assert_lte(placer.road_ahead_of(placer.gates[i][0], out), PropLayer.GATE_SIGHT, "хата %s: дороги перед воротами нема" % house)
 
 
 ## Ворота не лізуть на фасад: увесь отвір (від стовпа до стовпа) далі свого запасу (GATE_CLEAR 0.35 клітинки,
@@ -2347,7 +2547,8 @@ func test_editor_routes_give_only_legal_trunk_spans() -> void:
 		{"kind": &"10kv", "axis": [Vector2(-13, 5), Vector2(38, 5)], "side": 1.0},
 		{"kind": &"10kv", "axis": [Vector2(11, -13), Vector2(11, 34)], "side": -1.0},
 		{"kind": &"10kv", "axis": [Vector2(-13, -13), Vector2(38, 34)], "side": 1.0},
-		{"kind": &"10kv", "axis": [Vector2(-13, 15), Vector2(13, 15), Vector2(13, 6), Vector2(38, 6)], "side": 1.0},
+		# Праворуч від ходу: ліворуч уздовж x = 13 — двір хати (12,6) впритул до асфальту.
+		{"kind": &"10kv", "axis": [Vector2(-13, 15), Vector2(13, 15), Vector2(13, 6), Vector2(38, 6)], "side": -1.0},
 	]}
 	var grid := PowerGrid.new()
 	grid.plan(placer)

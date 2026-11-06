@@ -440,6 +440,8 @@ const _CONTACT_SHADER: Shader = preload("res://game/battle/shaders/prop_contact.
 const _GARDEN_SHADER: Shader = preload("res://game/battle/shaders/prop_garden.gdshader")
 const _GRIME_SHADER: Shader = preload("res://game/battle/shaders/prop_grime.gdshader")
 const _RUBBLE_SHADER: Shader = preload("res://game/battle/shaders/prop_rubble.gdshader")
+const _POLE_SHADER: Shader = preload("res://game/battle/shaders/prop_pole.gdshader")
+const _WIRE_SHADER: Shader = preload("res://game/battle/shaders/prop_wire.gdshader")
 ## Пояс бруду довкола хати, клітинки (~0.5 м).
 const GRIME_M: float = 0.0625
 ## Запас від краю дорожнього покриття для парканів і дрібних пропсів, клітинки (~0.4 м).
@@ -464,6 +466,23 @@ static var _wet_meshes: Dictionary = {}
 const WET_DARK: float = 0.75
 const WET_ROUGHNESS: float = 0.55
 const BRIDGE_ROUGH: float = 0.85
+## Ґрунтове покриття настилу (матеріали build_bridges.py) на мокрій карті йде за ґрунтівкою, а не за
+## мокрою сталлю: шейдер землі лишає ґрунтову дорогу під дощем матовою (0.85) і теплою, а з
+## WET_ROUGHNESS настил відбивав сіре небо й читався холодною плитою. Тон підібрано за кадром River.
+const DIRT_DECKS: PackedStringArray = ["bridge_asphalt1", "bridge_asphalt_wet", "bridge_deckplate"]
+## Множники лінійного альбедо покриття на кінцях −Z і +Z моделі (шейдер bridge_deck): дорога на кожному
+## в'їзді своя, і кінець настилу переходить до її тону (за кадром River, різниця на стику ≤ ~5 %).
+const DECK_END_TINT: Dictionary = {
+	&"bridge_river_west": [Color(1.43, 1.45, 1.57), Color(1.75, 1.69, 1.63)],
+	&"bridge_river_centre": [Color(0.698, 0.696, 0.797), Color(0.713, 0.686, 0.778)],
+	&"bridge_river_east": [Color(0.816, 0.893, 0.970), Color(1.75, 1.72, 1.90)],
+}
+const _DECK_SHADER: Shader = preload("res://game/battle/shaders/bridge_deck.gdshader")
+const DIRT_DECK_ROUGH: float = 0.9
+const DIRT_DECK_WET := Color(0.80, 0.70, 0.56, 1.0)
+## Асфальт центрального мосту на мокрій карті: трохи світліший за WET_DARK — між асфальтом південного
+## (темнішого) і північного в'їздів, тож на жодному кінці настил не різниться з дорогою більш ніж на 10 %.
+const ASPHALT_DECK_WET: float = 0.78
 ## Тюки: загорнутий у плівку мав шорсткість 0.35 і блищав, як метал.
 const HAY_ROUGH: float = 0.8
 ## Спекуляр будівель: мінеральні поверхні (тиньк, цегла, шифер) ≤ 0.3, якщо GLB не каже менше.
@@ -538,6 +557,8 @@ var _fade_level: Dictionary = {}
 var _fade_target: Dictionary = {}
 var _crushed: Dictionary = {}
 var _board_size: Vector2i = Vector2i.ZERO
+## Карта має кільце з імлою: лінія ЛЕП (стовпи, дроти, шафи) тоне в ній, як будинки.
+var _haze: bool = false
 ## Клітинки дошки з лісом: тут стоятимуть дерева, коли їхній вигляд буде готовий.
 var forest_cells: Array[Vector2i] = []
 ## Пропси (крім мостів) кидають тінь сонця. Без неї на сонячній карті дім, тюк чи опора висять
@@ -1204,6 +1225,7 @@ func _add(model_name: StringName, xform: Transform3D, cells: Array[Vector2i], ya
 ## Будівлі кільця — окремий вузол на модель, без тіні: MultiMesh відсікається камерою й тінню
 ## цілим, тож спільний із дошкою вузол малював би кільце (і його тінь) навіть на близькому зумі.
 func _build_nodes(haze: bool) -> void:
+	_haze = haze
 	var by_node: Dictionary = {}
 	for i in _instances.size():
 		var m: StringName = _instances[i]["model"]
@@ -1234,6 +1256,8 @@ func _build_nodes(haze: bool) -> void:
 			mm.mesh = _alpha_fence_mesh(info["mesh"]) if FENCE_ALPHA_FORMS.has(m) else _opaque_fence_mesh(info["mesh"])
 		if kind == Kind.HAY and wet:
 			mm.mesh = _dimmed(info["mesh"], HAY_WET)
+		if kind == Kind.POLE and haze:
+			mm.mesh = _hazed_mesh(info["mesh"])
 		mm.instance_count = (by_node[key] as Array).size()
 		var mmi := MultiMeshInstance3D.new()
 		# Godot міняє «@» в імені вузла на «_», тож вузол кільця — «модель_ring».
@@ -1270,11 +1294,11 @@ func _build_nodes(haze: bool) -> void:
 		_wires = MeshInstance3D.new()
 		_wires.name = "Wires"
 		_wires.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = WIRE_COLOR_WET if wet else WIRE_COLOR
-		mat.vertex_color_use_as_albedo = true
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		var mat := ShaderMaterial.new()
+		mat.shader = _WIRE_SHADER
+		mat.set_shader_parameter("albedo_color", WIRE_COLOR_WET if wet else WIRE_COLOR)
+		if haze:
+			Surroundings.apply(mat, _board_size)
 		# Дріт — лінія в один піксель, що не гасне з відстанню: на дальньому зумі над світлою водою згасання
 		# прибрало б його зовсім. Малюється після води (вода — прозорий прохід з пріоритетом 0), щоб порядок
 		# не залежав від ракурсу.
@@ -1682,6 +1706,8 @@ func _build_contacts() -> void:
 	mat.shader = _CONTACT_SHADER
 	mat.set_shader_parameter("strength", CONTACT_ALPHA)
 	mat.set_shader_parameter("cast", 1.0 if structure_shadows else 0.0)
+	if _haze:
+		Surroundings.apply(mat, _board_size)
 	quad.material = mat
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -1748,6 +1774,32 @@ func _fade_material(m: StringName, info: Dictionary, haze: bool, solid: bool) ->
 	return mat
 
 
+## Копія сітки з матеріалами prop_pole: той самий вигляд, що й стандартний матеріал, плюс імла кільця
+## цієї дошки. Копія — на кожну побудову: сітка моделі кешується на весь процес, а розмір дошки свій.
+func _hazed_mesh(mesh: Mesh) -> Mesh:
+	var copy: Mesh = mesh.duplicate()
+	for i in copy.get_surface_count():
+		var src := copy.surface_get_material(i) as BaseMaterial3D
+		if src != null:
+			copy.surface_set_material(i, _hazed(src))
+	return copy
+
+
+func _hazed(src: BaseMaterial3D) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = _POLE_SHADER
+	mat.set_shader_parameter("albedo_tex", src.albedo_texture)
+	mat.set_shader_parameter("albedo_color", src.albedo_color)
+	mat.set_shader_parameter("use_normal_tex", src.normal_enabled and src.normal_texture != null)
+	mat.set_shader_parameter("normal_tex", src.normal_texture)
+	mat.set_shader_parameter("normal_scale", src.normal_scale)
+	mat.set_shader_parameter("roughness", src.roughness)
+	mat.set_shader_parameter("metallic", src.metallic)
+	mat.set_shader_parameter("specular", src.metallic_specular)
+	Surroundings.apply(mat, _board_size)
+	return mat
+
+
 ## Копія сітки мосту під погоду карти. Ассет має «мокрі» поверхні з шорсткістю 0.15 і сталь 0.5 —
 ## у кадрі міст блищав, як скло. Шорсткість тепер не нижча за BRIDGE_ROUGH (суха карта) чи
 ## WET_ROUGHNESS (мокра; там ще й темніше).
@@ -1764,10 +1816,47 @@ static func _bridge_mesh(m: StringName, mesh: Mesh, wet_look: bool) -> Mesh:
 		var dark: float = WET_DARK if wet_look else 1.0
 		w.albedo_color = src.albedo_color * Color(dark, dark, dark, 1.0)
 		w.roughness = maxf(src.roughness, WET_ROUGHNESS if wet_look else BRIDGE_ROUGH)
+		if wet_look and src.resource_name in DIRT_DECKS:
+			w.albedo_color = src.albedo_color * DIRT_DECK_WET
+			w.roughness = maxf(src.roughness, DIRT_DECK_ROUGH)
+		elif wet_look and src.resource_name == "bridge_asphalt":
+			w.albedo_color = src.albedo_color * Color(ASPHALT_DECK_WET, ASPHALT_DECK_WET, ASPHALT_DECK_WET, 1.0)
 		w.metallic = minf(src.metallic, 0.1)
+		var ends: Array = DECK_END_TINT.get(StringName(String(m).get_slice("#", 0).trim_suffix("_broken")), [])
+		if wet_look and not ends.is_empty() and (src.resource_name in DIRT_DECKS or src.resource_name == "bridge_asphalt"):
+			# Довжина переправи в клітинках: крила устоїв можуть виходити за кінці моделі.
+			# Півширина покриття на кінцях (там, де перехід): уламки руїни посередині її не розширюють.
+			var edge := 0.0
+			var half: float = float(roundi(mesh.get_aabb().size.z)) * 0.5
+			for v: Vector3 in copy.surface_get_arrays(i)[Mesh.ARRAY_VERTEX]:
+				if absf(v.z) > half - 0.3:
+					edge = maxf(edge, absf(v.x))
+			copy.surface_set_material(i, _deck_material(w, ends, half, edge))
+			continue
 		copy.surface_set_material(i, w)
 	_wet_meshes[key] = copy
 	return copy
+
+
+## Покриття настилу шейдером bridge_deck: ті самі текстури й тон, що й `w`, плюс перехід кінців до тону
+## дороги на в'їздах. Стик — там, де насип сходить під настил (TerrainHeight.SEAT_REACH).
+static func _deck_material(w: BaseMaterial3D, ends: Array, half_len: float, edge_x: float) -> ShaderMaterial:
+	var s := ShaderMaterial.new()
+	s.shader = _DECK_SHADER
+	s.resource_name = w.resource_name
+	s.set_shader_parameter("albedo_tex", w.albedo_texture)
+	s.set_shader_parameter("normal_tex", w.normal_texture)
+	s.set_shader_parameter("rough_tex", w.roughness_texture)
+	s.set_shader_parameter("use_rough_tex", w.roughness_texture != null)
+	s.set_shader_parameter("albedo", w.albedo_color)
+	s.set_shader_parameter("roughness", w.roughness)
+	s.set_shader_parameter("specular", w.metallic_specular)
+	s.set_shader_parameter("end_lo", Vector3(ends[0].r, ends[0].g, ends[0].b))
+	s.set_shader_parameter("end_hi", Vector3(ends[1].r, ends[1].g, ends[1].b))
+	s.set_shader_parameter("half_len", half_len)
+	s.set_shader_parameter("edge_x", edge_x)
+	s.set_shader_parameter("joint", TerrainHeight.SEAT_REACH + 0.04)
+	return s
 
 
 ## Шейдер суцільного паркану в справжньому непрозорому проході: той самий prop_thin, лише без запису ALPHA і без
@@ -2370,7 +2459,7 @@ func _rebuild_transformers() -> void:
 		mat.albedo_color = TRANSFORMER_COLOR
 		mat.roughness = 0.75
 		mat.metallic = 0.3
-		box.material = mat
+		box.material = _hazed(mat) if _haze else mat
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.mesh = box
@@ -3809,7 +3898,11 @@ class _Placer:
 						if shore != Vector2.INF and _on_board(shore):
 							landings.append([shore, _slope(shore)])
 		var starts: Array = []
+		var homes: Array = layout.get("homes", [])
 		for i: int in gates:
+			# Двір з bank_path = false стежку до води не починає: стежки карти до берега задані іншими дворами чи дорогою.
+			if i < homes.size() and not bool((homes[i] as Dictionary).get("bank_path", true)):
+				continue
 			var g: Vector2 = gates[i][0] + (gates[i][1] as Vector2) * 0.15
 			# Ворота в щілині між сусідніми парканами (не ширшій за двічі FENCE_MARGIN) — глухий кут для стежки:
 			# повна сітка A* там нічого не знайде, а коштує десятки мілісекунд.
@@ -4117,7 +4210,8 @@ class _Placer:
 	## сусідньою садибою ставить одна з них, рівно по межі. Повертає сторони з їхніми відступами.
 	func _fence_ring(i: int, home: Dictionary, owner_of: Dictionary, sheds: Array[Rect2]) -> Array:
 		var lot: Dictionary = {}
-		for c: Vector2i in home["cells"]:
+		# fenced — клітинки поза двором (не BUILDING), які паркан обгороджує разом із ним: лише обрис кільця.
+		for c: Vector2i in home["cells"] + home.get("fenced", []):
 			lot[c] = true
 		var hc: Vector2i = home["house"]
 		_ring_i = i
@@ -4223,6 +4317,22 @@ class _Placer:
 					break
 			if not moved:
 				break
+		# Хата на розі двору при вулиці (street): між фасадом і дорогою паркану нема місця. Кільце на відступі перед
+		# стіною стіна розрізала б, і від нього лишилися б вухо повз ріг хати й гачок назад до неї — на екрані кишеня.
+		# Тож сторони кільця по зовнішніх межах клітинки хати — врівень з її стінами: паркан продовжує площини стін від
+		# рогів хати. Межа з сусідом лишається рівно на межі.
+		if bool(home.get("street", false)):
+			for k in n:
+				if int(sides[k]["nb"]) >= 0 or not (sides[k]["edges"] as Array).any(func(e: Array) -> bool: return e[0] == hc):
+					continue
+				var d: Vector2i = sides[k]["d"]
+				for r: Rect2 in _wall_rects:
+					if r.has_point(Vector2(hc)):
+						var ax: int = 0 if d.x != 0 else 1
+						var wall: float = r.end[ax] if d[ax] > 0 else r.position[ax]
+						sides[k]["o"] = (wall - float(sides[k]["line"])) * float(d[ax])
+						sides[k]["oi"] = RING_OFFSETS.size()
+						break
 		var starts: Array[Vector2] = []
 		var ends: Array[Vector2] = []
 		for k in n:
@@ -5026,6 +5136,9 @@ class _Placer:
 				if bool(cl[1]) or kept.has(segs) or segs.any(func(sg: Array) -> bool: return keep.has(sg)):
 					continue
 				var rest: Array = out.filter(func(pc: Array) -> bool: return not segs.has(pc))
+				# Купка лише з чужих парканів (others) цього кільця не зменшує: без цього цикл не скінчився б.
+				if rest.size() == out.size():
+					continue
 				var pruned: Array = _prune_dangling(rest, known, walls)
 				# Купка, без якої повис би довгий хід (за довжиною всього прямого ходу, а не шматка), — частина замкненого
 				# кільця, а не уламок: лишається.
@@ -6143,8 +6256,26 @@ class _Placer:
 						var a: float = float(h(c, 40 + k * 5 + attempt) % 628) / 100.0
 						var r: float = 0.34 + float(h(c, 60 + k) % 10) / 100.0
 						var scale: float = float(PropLayer.spec_of(m).get("scale", 1.0)) * (0.85 + float(h(c, 80 + k) % 30) / 100.0)
+						# Брила в обгородженому дворі (паркан садиби заходить і на пагорб) читає двір пасовиськом.
+						if _near_yard_ring(Vector2(c) + Vector2(cos(a), sin(a)) * r, BOULDER_YARD_CLEAR):
+							continue
 						if put_small(m, c, Vector2(cos(a), sin(a)) * r, float(h(c, 70 + k) % 628) / 100.0, scale):
 							break
+
+	## Брила не ближче за стільки (клітинки) до обрису двору садиби.
+	const BOULDER_YARD_CLEAR: float = 0.3
+
+	## Точка p усередині обрису двору садиби (yard_polys) чи ближче clear до нього.
+	func _near_yard_ring(p: Vector2, clear: float) -> bool:
+		for poly: PackedVector2Array in yard_polys:
+			if poly.size() < 3:
+				continue
+			if Geometry2D.is_point_in_polygon(p, poly):
+				return true
+			for k in poly.size():
+				if Geometry2D.get_closest_point_to_segment(p, poly[k], poly[(k + 1) % poly.size()]).distance_to(p) < clear:
+					return true
+		return false
 
 	## Опори вздовж доріг: асфальт і ґрунтівка — 10 кВ з прольотом ~7.5 клітинки, вулиці (бруківка)
 	## — 0.4 кВ з ~4.5. Опора стоїть за узбіччям на прохідній клітинці біля її краю; сусідні
