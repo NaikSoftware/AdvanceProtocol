@@ -578,6 +578,6 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 
 ### Task 26: Yard fences
 
-- [ ] A yard fence encloses a plain yard: no odd pockets or notches cut into it
-- [ ] Every yard's gate faces the road side, never the field
-- [ ] The house stands wholly inside its yard: the fence runs past the house, never stops at a wall halfway
+- [ ] River, yard by the west truss bridge: no pocket in the fence, gate on the road side
+- [ ] River, yard by the asphalt road at the bridge: no pocket, the house wholly inside the yard
+- [ ] Every other yard stays as it is
