@@ -4277,6 +4277,21 @@ class _Placer:
 					break
 			if not moved:
 				break
+		# Хата на розі двору при вулиці (street): між фасадом і дорогою паркану нема місця, а кільце на відступі перед
+		# стіною, розрізане нею, лишало вухо — секцію повз ріг хати й гачок назад до неї, на екрані — кишеню. Сторони
+		# кільця по зовнішніх межах клітинки хати — врівень з її стінами: паркан продовжує площини стін від рогів хати.
+		if bool(home.get("street", false)):
+			for k in n:
+				if not (sides[k]["edges"] as Array).any(func(e: Array) -> bool: return e[0] == hc):
+					continue
+				var d: Vector2i = sides[k]["d"]
+				for r: Rect2 in _wall_rects:
+					if r.has_point(Vector2(hc)):
+						var ax: int = 0 if d.x != 0 else 1
+						var wall: float = r.end[ax] if d[ax] > 0 else r.position[ax]
+						sides[k]["o"] = (wall - float(sides[k]["line"])) * float(d[ax])
+						sides[k]["oi"] = RING_OFFSETS.size()
+						break
 		var starts: Array[Vector2] = []
 		var ends: Array[Vector2] = []
 		for k in n:
@@ -5080,6 +5095,9 @@ class _Placer:
 				if bool(cl[1]) or kept.has(segs) or segs.any(func(sg: Array) -> bool: return keep.has(sg)):
 					continue
 				var rest: Array = out.filter(func(pc: Array) -> bool: return not segs.has(pc))
+				# Купка лише з чужих парканів (others) цього кільця не зменшує: без цього цикл не скінчився б.
+				if rest.size() == out.size():
+					continue
 				var pruned: Array = _prune_dangling(rest, known, walls)
 				# Купка, без якої повис би довгий хід (за довжиною всього прямого ходу, а не шматка), — частина замкненого
 				# кільця, а не уламок: лишається.
