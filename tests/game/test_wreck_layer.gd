@@ -483,7 +483,7 @@ func test_column_and_fire_clocks_stay_bounded_and_wrap_without_a_jump() -> void:
 		assert_true(WreckLayer.column_clock(t) >= 0.0 and WreckLayer.column_clock(t) < WreckLayer.COLUMN_CLOCK_SEC)
 		assert_true(WreckLayer.column_phase(t) >= 0.0 and WreckLayer.column_phase(t) < 1.0)
 		assert_true(WreckLayer.fire_loop_time(t) >= 0.0 and WreckLayer.fire_loop_time(t) < WreckLayer.fire_loop_sec())
-	# Шлях клуби той самий, що й fx_time · rise за модулем 1.
+	# Фаза клуби — час у частках життя клуби, за модулем 1.
 	assert_almost_eq(WreckLayer.column_phase(100.0), fposmod(100.0 / WreckLayer.PLUME_LIFE_SEC, 1.0), 1e-9)
 	# Атлас крокує з темпом таймера, і за період темп k/FIRE_TEMPO_STEPS проходить рівно k циклів атласу —
 	# але лише якщо шейдер справді округлює темп до кроку 1/FIRE_TEMPO_STEPS (перевірка нижче).
