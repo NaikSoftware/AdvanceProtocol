@@ -3,7 +3,7 @@ extends Node
 ## матчу: так видно, чи вогонь і дим не псуються, коли годинник ефектів виріс. Кадри тримаються в
 ## пам'яті й пишуться в кінці (save_png блокує ~1 с). Не входить у гру.
 ## Запуск (вікно, не --headless):
-##   $GODOT --path . --position 6000,0 res://tools/wreck_seq.tscn -- <out_dir> <map> <zoom> <life> <секунд> <кадрів/с> <секунд матчу>
+##   $GODOT --path . --position 6000,0 res://tools/wreck_seq.tscn -- <out_dir> <map> <zoom> <life> <секунд> <кадрів/с> <секунд матчу> [nodepth|-] [x,y]
 ## life — частка горіння (1 — горить, 0,5 — вщухає, 0,25 — лише дим). Уламки — на полі біля центру карти.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -24,12 +24,21 @@ func _ready() -> void:
 	add_child(screen)
 	var map := load("res://maps/%s.tres" % a[1]) as MapData
 	screen.setup(map, 2, 1)
+	# Дев'ятий аргумент x,y — клітинка уламків (напр. берег ставка); інакше поле біля центру.
 	var cell := _field_near_centre(map)
+	if a.size() > 8 and a[8].contains(","):
+		cell = Vector2i(int(a[8].get_slice(",", 0)), int(a[8].get_slice(",", 1)))
 	var layer: WreckLayer = screen.get("_wreck_layer")
 	layer.set("_frame", int(float(a[6]) * WreckLayer.FLIPBOOK_FPS))
 	# Народився давно: стовп уже повний, як у перебудованих зі стану уламків.
 	layer.call("_add_node", cell, MEDIUM_TANK, float(a[3]), 0, WreckLayer.LONG_AGO)
 	layer.call("_refresh_effects")
+	# nodepth — стовп диму без перевірки глибини й м'якого краю: чи ховає його щось непрозоре геометрично, а не порядком.
+	if a.size() > 7 and a[7] == "nodepth":
+		var sh := Shader.new()
+		sh.code = WreckLayer.column_shader().code.replace("depth_draw_never,", "depth_draw_never, depth_test_disabled,").replace(
+				"ALPHA *= clamp((VERTEX.z - sv.z / sv.w) / soft_fade, 0.0, 1.0);", "")
+		(layer.get("_column_mat") as ShaderMaterial).shader = sh
 	var p: Vector3 = layer.to_global(layer.fire_centre(cell)) if layer.flame_size(cell).x > 0.0 else layer.to_global(IsoCameraRig.cell_to_world(cell))
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
@@ -40,6 +49,7 @@ func _ready() -> void:
 		await get_tree().process_frame
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	var fx_t0: float = layer.fx_time()
+	print("WRECK geometry: lean=%s cam_fwd=%s root=%s" % [(layer.get("_column_mat") as ShaderMaterial).get_shader_parameter("lean"), -cam.global_transform.basis.z, layer.to_global(layer.fire_centre(cell)) if layer.flame_size(cell).x > 0.0 else Vector3.ZERO])
 	var frames: Array[Image] = []
 	var dt: float = 1.0 / float(a[5])
 	var t0: int = Time.get_ticks_usec()
