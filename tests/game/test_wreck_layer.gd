@@ -392,15 +392,39 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 		assert_eq(shapes[i], Vector2(WreckLayer.RUIN_HEIGHT_SCALE, WreckLayer.RUIN_BASE_SCALE) if ruin else Vector2.ONE)
 	assert_true(WreckLayer.RUIN_HEIGHT_SCALE < 1.0 and WreckLayer.RUIN_BASE_SCALE < 1.0 and WreckLayer.RUIN_DENSITY <= WreckLayer.CHIMNEY_DENSITY)
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
-	# Шум пливе вгору зі швидкістю диму: за секунду зсув клубів — підйом на тайл, помножений на кратність.
-	var step: Vector4 = WreckLayer.plume_scroll(11.0) - WreckLayer.plume_scroll(10.0)
-	assert_almost_eq(step.w, WreckLayer.HEARTH_RISE * WreckLayer.PLUME_SCROLL_RATES.w, 1e-6, "шум густоти пливе вгору зі швидкістю диму")
-	# Через години гри зсув лишається в межах періоду шуму: великі числа в шейдері розсипали шлейф на голки.
+	# Шум пливе вгору зі швидкістю диму: за секунду зсув — підйом на тайл, помножений на кратність шуму.
+	var step: Vector3 = WreckLayer.plume_scroll(11.0) - WreckLayer.plume_scroll(10.0)
+	assert_almost_eq(step.z, WreckLayer.HEARTH_RISE * WreckLayer.PLUME_SCROLL_RATES.z, 1e-6, "край пливе вгору зі швидкістю диму")
+	var lstep: Vector4 = WreckLayer.plume_layer_scroll(11.0) - WreckLayer.plume_layer_scroll(10.0)
+	for k in 4:
+		# Шар k: клуб висотою sc²/ref метрів, тож за секунду підйому на 0,8 м — 8·ref/sc² клітинок на тайл.
+		var sc_k: float = WreckLayer.PLUME_LAYER_SC[k]
+		assert_almost_eq(WreckLayer.plume_layer_rate(k), 8.0 * WreckLayer.PLUME_LAYER_REF / (sc_k * sc_k), 1e-9)
+		assert_almost_eq(lstep[k], WreckLayer.HEARTH_RISE * WreckLayer.plume_layer_rate(k), 1e-6, "кожен шар клубів пливе рівно зі швидкістю диму")
+		if k > 0:
+			assert_gt(sc_k, WreckLayer.PLUME_LAYER_SC[k - 1], "шари клубів ростуть від труби вгору")
+	# Шари обрамляють розмір клубів по всій висоті: від труби (0,8–0,9 м) до верху (2,4 м).
+	assert_true(WreckLayer.PLUME_LAYER_SC.x <= 0.9 and is_equal_approx(WreckLayer.PLUME_LAYER_SC.w, 2.4))
+	# Через години гри зсуви лишаються в межах періоду шуму: великі числа в шейдері розсипали шлейф на голки.
 	for t: float in [0.0, 3600.0, 10800.0, 86400.0]:
-		var sc: Vector4 = WreckLayer.plume_scroll(t)
-		for k in 4:
+		var sc: Vector3 = WreckLayer.plume_scroll(t)
+		var ls: Vector4 = WreckLayer.plume_layer_scroll(t)
+		for k in 3:
 			assert_true(sc[k] >= 0.0 and sc[k] < WreckLayer.PLUME_NOISE_PERIOD, "зсув шуму згорнуто за періодом (t=%s)" % t)
-	assert_true(layer.hearth_material().shader.code.contains("const float PERIOD = %.1f;" % WreckLayer.PLUME_NOISE_PERIOD), "період шуму в шейдері той самий, що й у згортці")
+		for k in 4:
+			assert_true(ls[k] >= 0.0 and ls[k] < WreckLayer.PLUME_NOISE_PERIOD, "зсув шару згорнуто за періодом (t=%s)" % t)
+	var code: String = layer.hearth_material().shader.code
+	assert_true(code.contains("const float PERIOD = %.1f;" % WreckLayer.PLUME_NOISE_PERIOD), "період шуму в шейдері той самий, що й у згортці")
+	assert_true(code.contains("p = mod(p, PERIOD);") and code.contains("i = mod(i, PERIOD);"), "шум згорнуто за періодом, і клітинка теж — mod у float інколи дає рівно PERIOD")
+	assert_false(code.contains("fx_time"), "шлейф не бачить часу матчу напряму — лише згорнуті зсуви")
+	# Октави шуму мусять мати цілу кратність, інакше згортка зсуву розірве їх на стику періоду.
+	var re := RegEx.new()
+	re.compile("vn\\(p \\* ([0-9.]+)")
+	var octaves: Array[RegExMatch] = re.search_all(code)
+	assert_eq(octaves.size(), 2, "дві вищі октави клубів")
+	for m: RegExMatch in octaves:
+		var ratio: float = float(m.get_string(1))
+		assert_eq(ratio, roundf(ratio), "кратність октави %s ціла" % m.get_string(1))
 	assert_false(layer.hearth_material().shader.code.contains("sin("), "хеш без sin: час росте весь матч")
 	# Освітлення, об'єм і мокра гілка живуть у шейдері; headless його не малює, тож їхній вигляд
 	# (яскравість над ґрунтом, відсутність пульсації) перевіряє tools/smoke_seq.gd у вікні. Тут —
@@ -408,7 +432,7 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	var uniforms: Array[String] = []
 	for u: Dictionary in layer.hearth_material().shader.get_shader_uniform_list():
 		uniforms.append(String(u["name"]))
-	for name: String in ["scroll", "height", "base_w", "top_w", "lean"]:
+	for name: String in ["scroll", "layer_scroll", "layer_sc", "layer_ref", "height", "base_w", "top_w", "lean"]:
 		assert_true(uniforms.has(name), "шейдер диму має uniform %s" % name)
 	layer.set_wind(Vector3(0.25, 0, 0))
 	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")

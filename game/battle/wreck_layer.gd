@@ -56,9 +56,17 @@ const RUIN_BASE_SCALE: float = 0.8
 ## Дим здіймається 0,8 м/с: з цією швидкістю пливе вгору шум густоти.
 const HEARTH_RISE: float = 0.8 / 8.0
 ## Шум шлейфу пливе вгору з такими кратностями швидкості диму, у клітинках шуму на тайл підйому
-## (x, y — звивання, z — виїдений край, w — клуби в 0,85 м); період шуму — у шейдері _PLUME_CODE.
-const PLUME_SCROLL_RATES: Vector4 = Vector4(1.2, 0.9, 8.0 / 3.5, 8.0 / 0.85)
+## (x, y — звивання, z — виїдений край); період шуму — у шейдері _PLUME_CODE.
+const PLUME_SCROLL_RATES: Vector3 = Vector3(1.2, 0.9, 8.0 / 3.5)
 const PLUME_NOISE_PERIOD: float = 256.0
+## Клуби — чотири шари шуму з кроком √2 за розміром: поперек клуб шару k має PLUME_LAYER_SC[k] метрів,
+## уздовж — PLUME_LAYER_SC[k]² / PLUME_LAYER_REF: біля труби трохи пласкі (0,6 м), угорі витягнуті
+## вгору (4,4 м). Шар не міняє масштабу з висотою, тож пливе вгору рівно зі швидкістю диму; на кожній
+## висоті змішано два сусідні шари, чий розмір її обрамляє, — клуби ростуть угору, а візерунок не
+## стискається з часом. При REF 0,85 (круглі клуби біля труби) великі витягнуті клуби вгорі
+## перемикали яскравість усього шлейфу втричі сильніше — шлейф «дихав».
+const PLUME_LAYER_SC: Vector4 = Vector4(0.85, 0.85 * sqrt(2.0), 1.7, 2.4)
+const PLUME_LAYER_REF: float = 1.3
 ## Вертикальних сегментів смуги: шлейф гнеться плавно.
 const HEARTH_SEGMENTS: int = 24
 
@@ -201,6 +209,8 @@ func _init() -> void:
 	_hearth_mat.set_shader_parameter("height", HEARTH_HEIGHT)
 	_hearth_mat.set_shader_parameter("base_w", HEARTH_BASE_W)
 	_hearth_mat.set_shader_parameter("top_w", HEARTH_TOP_W)
+	_hearth_mat.set_shader_parameter("layer_sc", PLUME_LAYER_SC)
+	_hearth_mat.set_shader_parameter("layer_ref", PLUME_LAYER_REF)
 	_hearths = _multimesh("Hearths", _hearth_mat, HEARTH_MAX)
 	var strip := QuadMesh.new()
 	strip.size = Vector2.ONE
@@ -374,10 +384,24 @@ static func hearth_reach() -> float:
 
 ## Зсуви шуму шлейфу на секунді матчу `t`: рахуються в подвійній точності й згортаються за періодом
 ## шуму, тож шейдер бачить малі числа й через години гри.
-static func plume_scroll(t: float) -> Vector4:
+static func plume_scroll(t: float) -> Vector3:
 	var d: float = t * HEARTH_RISE
-	return Vector4(fposmod(d * PLUME_SCROLL_RATES.x, PLUME_NOISE_PERIOD), fposmod(d * PLUME_SCROLL_RATES.y, PLUME_NOISE_PERIOD),
-			fposmod(d * PLUME_SCROLL_RATES.z, PLUME_NOISE_PERIOD), fposmod(d * PLUME_SCROLL_RATES.w, PLUME_NOISE_PERIOD))
+	return Vector3(fposmod(d * PLUME_SCROLL_RATES.x, PLUME_NOISE_PERIOD), fposmod(d * PLUME_SCROLL_RATES.y, PLUME_NOISE_PERIOD),
+			fposmod(d * PLUME_SCROLL_RATES.z, PLUME_NOISE_PERIOD))
+
+
+## Клітинок шуму шару k на тайл підйому: 8 м, поділені на висоту його клуба.
+static func plume_layer_rate(k: int) -> float:
+	return 8.0 * PLUME_LAYER_REF / (PLUME_LAYER_SC[k] * PLUME_LAYER_SC[k])
+
+
+## Зсуви чотирьох шарів клубів на секунді `t`, згорнуті за періодом шуму.
+static func plume_layer_scroll(t: float) -> Vector4:
+	var d: float = t * HEARTH_RISE
+	var out := Vector4()
+	for k in 4:
+		out[k] = fposmod(d * plume_layer_rate(k), PLUME_NOISE_PERIOD)
+	return out
 
 
 ## Густота шлейфу для шейдера (0–1): руїна тліє слабше за димар.
@@ -683,6 +707,7 @@ func _step() -> void:
 	var t: float = float(_frame) / FLIPBOOK_FPS
 	_column_mat.set_shader_parameter("fx_time", t)
 	_hearth_mat.set_shader_parameter("scroll", plume_scroll(t))
+	_hearth_mat.set_shader_parameter("layer_scroll", plume_layer_scroll(t))
 	_shadow_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("viewport_h", float(get_viewport().get_visible_rect().size.y))
@@ -882,8 +907,12 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabl
 uniform float height = 1.75;
 uniform float base_w = 0.1;
 uniform float top_w = 1.0;
-// Зсуви шуму вгору (у клітинках шуму, за модулем періоду): x, y — звивання, z — край, w — клуби.
-uniform vec4 scroll = vec4(0.0);
+// Зсуви шуму вгору (у клітинках шуму, за модулем періоду): x, y — звивання, z — край.
+uniform vec3 scroll = vec3(0.0);
+// Шари клубів (PLUME_LAYER_SC): розмір поперек у метрах і зсув кожного.
+uniform vec4 layer_sc = vec4(0.85, 1.2, 1.7, 2.4);
+uniform float layer_ref = 0.85;
+uniform vec4 layer_scroll = vec4(0.0);
 const float PERIOD = 256.0;
 uniform vec3 lean = vec3(0.0);
 global uniform vec3 sun_dir;
@@ -892,7 +921,6 @@ uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
 
 varying float v_h01;
 varying float v_hh;
-varying float v_H;
 varying float v_w;
 varying float v_sd;
 varying float v_dens;
@@ -908,6 +936,8 @@ float vn(vec2 p) {
 	p = mod(p, PERIOD);
 	vec2 i = floor(p);
 	vec2 f = p - i;
+	// mod у float інколи дає рівно PERIOD: клітинку згортаємо ще раз, щоб хеш не вийшов за період.
+	i = mod(i, PERIOD);
 	f = f * f * (3.0 - 2.0 * f);
 	vec2 j = mod(i + 1.0, PERIOD);
 	return mix(mix(hash(i), hash(vec2(j.x, i.y)), f.x), mix(hash(vec2(i.x, j.y)), hash(j), f.x), f.y);
@@ -928,6 +958,16 @@ vec3 billow(vec2 p) {
 	float e = 0.12;
 	float h0 = puff_h(p);
 	return vec3((puff_h(p + vec2(e, 0.0)) - h0) / e, (puff_h(p + vec2(0.0, e)) - h0) / e, h0);
+}
+
+float pick(vec4 v, int k) {
+	return k == 0 ? v.x : (k == 1 ? v.y : (k == 2 ? v.z : v.w));
+}
+// Клуби шару k: розмір сталий по висоті, тож шар пливе вгору рівно з димом і не стискається.
+vec3 layer_billow(int k, float xm, float hm, float sd) {
+	float sc = pick(layer_sc, k);
+	float sv = sc * sc / layer_ref;
+	return billow(vec2(xm * 8.0 / sc, hm * 8.0 / sv - pick(layer_scroll, k)) + sd + float(k) * 17.3);
 }
 
 void vertex() {
@@ -952,7 +992,6 @@ void vertex() {
 	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	v_h01 = h01;
 	v_hh = h;
-	v_H = H;
 	v_w = w;
 	v_sd = sd;
 	v_dens = INSTANCE_CUSTOM.x * (1.0 + 0.5 * heavy * (1.0 - smoothstep(0.0, 0.5, h01)));
@@ -963,17 +1002,24 @@ void vertex() {
 void fragment() {
 	float x = (UV.x * 2.0 - 1.0) * 1.35;
 	// Клуби в метрах поперек і вздовж частинки диму: біля труби дрібні, угорі крупніші.
-	float sc0 = mix(0.8, 0.9, 1.0 - sky_clear);
-	float sc = mix(sc0, 2.4, v_h01);
-	// Уздовж шлейфу — не (h − t·rise)/sc: там час множився на масштаб, що змінюється з висотою, і за
-	// годину гри шум стискався по вертикалі в сотні разів — шлейф розсипався на горизонтальні голки.
-	// Тут висота переходить у координату шуму інтегралом 8/sc (крок клубів той самий), а зсув часу
-	// від висоти не залежить: візерунок лише пливе вгору й не стискається ніколи.
-	float qy = 8.0 * v_H * log(sc / sc0) / (2.4 - sc0) - scroll.w;
-	vec2 q = vec2(x * v_w * 8.0 / sc, qy) + v_sd;
-	vec3 a = billow(q);
+	float sc = mix(mix(0.8, 0.9, 1.0 - sky_clear), 2.4, v_h01);
+	// Не шум у (h − t·rise)/sc: там час множився на масштаб, що змінюється з висотою, і за годину гри
+	// шум стискався по вертикалі в сотні разів — шлейф розсипався на горизонтальні голки. Тут — два
+	// сусідні шари сталого розміру, що обрамляють sc на цій висоті; змішування залежить лише від висоти.
+	float u = clamp(log(sc / layer_sc.x) / log(layer_sc.w / layer_sc.x) * 3.0, 0.0, 3.0);
+	int k = min(int(u), 2);
+	float f = u - float(k);
+	vec3 a = mix(layer_billow(k, x * v_w, v_hh, v_sd), layer_billow(k + 1, x * v_w, v_hh, v_sd), f);
+	// Суміш двох незалежних шумів пласкіша за кожен: повертаємо розкид, щоб між шарами клуби не блякли.
+	float g = inversesqrt(f * f + (1.0 - f) * (1.0 - f));
+	a = vec3(a.xy * g, 0.5 + (a.z - 0.5) * g);
 	// Висота 0..1 з контрастом: клуби проступають із розмитої маси.
 	float lump = smoothstep(0.25, 0.75, a.z);
+	// Біля отвору клуби ще не сформувались: рівна густота й світло по всій ширині, інакше яскравий клуб
+	// з одного боку зсуває видимий стовп над дах поруч із трубою.
+	float born = smoothstep(0.04, 0.2, v_h01);
+	lump = mix(0.7, lump, born);
+	a.xy *= born;
 	// Серцевина шлейфу рівна: клуби там дають темні западини, що на тлі землі читаються як розрив і розкладають стовп на дві цівки.
 	float core = 1.0 - smoothstep(0.15, 0.65, abs(x));
 	lump = mix(lump, 0.7, 0.8 * core);
@@ -984,9 +1030,11 @@ void fragment() {
 	float side_sd = v_sd + (x < 0.0 ? 0.0 : 31.0);
 	float bite = (vn(vec2(v_hh * 8.0 / 3.5 - scroll.z + side_sd, side_sd * 0.37)) - 0.35) * 0.7 * smoothstep(0.05, 0.25, v_h01) * smoothstep(0.3, 0.9, abs(x));
 	// Запас до краю: клуби відкушують його, угорі дим розривається на клапті. М'яка рампа — пух, а не контур.
-	float e = 1.0 - abs(x) + (lump - 0.5) * mix(0.45, 0.3, 1.0 - sky_clear) * smoothstep(0.2, 0.7, abs(x)) - bite - 0.25 * smoothstep(0.4, 1.0, v_h01);
+	// Перші ~0,1 тайла край не рваний: інакше густіший бік зсуває видимий стовп убік від отвору, і дим ніби йде з даху поруч.
+	float e = 1.0 - abs(x) + (lump - 0.5) * mix(0.45, 0.3, 1.0 - sky_clear) * smoothstep(0.2, 0.7, abs(x)) * smoothstep(0.03, 0.12, v_h01) - bite - 0.25 * smoothstep(0.4, 1.0, v_h01);
 	float dens = smoothstep(0.0, 0.6, e) * mix(0.6 + 0.4 * lump, 0.7 + 0.3 * lump, 1.0 - sky_clear);
-	float fade = smoothstep(0.03, 0.08, v_h01) * (1.0 - smoothstep(0.15, 0.8, v_h01));
+	// Тане раніше за верх смуги: шлейф не доходить до хат позаду.
+	float fade = smoothstep(0.03, 0.08, v_h01) * (1.0 - smoothstep(0.12, 0.68, v_h01));
 	// Нормаль: клуби поверх округлого шлейфу в цілому.
 	// Висота росте вгору (a.y — за q.y), а базис нормалі має y вниз: знак y перевернуто.
 	vec3 n = normalize(vec3(vec2(-a.x, a.y) * mix(2.6, 1.1, sky_clear), 1.0) + vec3(x * 0.8, 0.0, 0.4 * sqrt(max(1.0 - x * x, 0.0))));
