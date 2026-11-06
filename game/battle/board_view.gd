@@ -31,22 +31,19 @@ const FOG_TICK: float = 0.1
 ## Нижче за UnitView.OVERLAY_PRIORITY, щоб смужки здоров'я лишались зверху.
 const CONTOUR_PRIORITY: int = 4
 
-## Геометрія риски контуру (§3.13, draw_contour нижче): тонка й коротка за
-## задумом — вона мусить читатись як лінія на межі тайла, а не як ще один
-## пофарбований тайл. _CONTOUR_INSET відсуває риску від самого краю тайла:
+## Геометрія лінії контуру (§3.13, draw_contour нижче): тонка суцільна лінія вздовж межі
+## зони, а не ще один пофарбований тайл. _CONTOUR_INSET відсуває риску від самого краю тайла:
 ## без цього риска золотої зони й риска сусідньої червоної, що лежать на
 ## тому самому фізичному ребрі, збіглися б і z-fighting'нули — з відступом
 ## між ними лишається вузька смужка місцевості, і вони читаються як дві окремі
 ## риски, а не одна змішана.
-## Риска зони тонка й напівпрозора: підказка шляху на ґрунті, а не головний акцент кадру.
-const _CONTOUR_WIDTH: float = 0.045
-const _CONTOUR_ALPHA: float = 0.6
+## Лінія зони тонка й напівпрозора: підказка шляху на ґрунті, а не головний акцент кадру.
+const _CONTOUR_WIDTH: float = 0.02
+const _CONTOUR_ALPHA: float = 0.7
 ## Кільця дальності лишаються ширшими: їх видно лише поки гравець тримає палець на юніті.
 const _RING_WIDTH: float = 0.12
 const _CONTOUR_INSET: float = 0.06
 const _CONTOUR_PIECES: int = 4
-## 0.95 клітинки: риска коротша за клітинку, тож кути сусідніх рисок не сходяться.
-const _CONTOUR_LENGTH: float = 0.95
 ## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y = 0.06), щоб не
 ## z-fight'ити ні з тим, ні з іншим.
 const _CONTOUR_Y: float = 0.04
@@ -296,9 +293,12 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	if kept.is_empty():
 		return
 
-	# Усі риски шару — один стрічковий меш, накладений на ґрунт (кожна вершина бере висоту з
-	# карти висот), у MultiMesh з одним екземпляром. Кінці стрічок заходять один за одного
-	# (довжина 0.95 > відстань до перпендикулярного ребра), тож кути зімкнуті на будь-якому схилі.
+	# Усі відрізки шару — один стрічковий меш, накладений на ґрунт (кожна вершина бере висоту з
+	# карти висот), у MultiMesh з одним екземпляром. Відрізки клітинок складаються в суцільну
+	# лінію: кінці стикуються з сусідом на прямій і сходяться на кутах без хрестиків (_stroke_end).
+	var edges: Dictionary = {}
+	for seg in kept:
+		edges[_edge_key(seg["cell"], seg["dir"], seg["color"])] = true
 	var verts := PackedVector3Array()
 	var colors := PackedColorArray()
 	var indices := PackedInt32Array()
@@ -312,13 +312,14 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		var deck: float = TerrainHeight.active.deck_y(cell) if on_bridge else 0.0
 		var offset: float = _CONTOUR_OFFSET_BRIDGE if on_bridge else _CONTOUR_OFFSET
 		var mid := Vector3(cell.x + dir.x * offset, 0.0, cell.y + dir.y * offset)
-		# На мосту кути рисок сходяться на 0.30 від осі, і риска не звисає з настилу над воду.
-		var half: float = _CONTOUR_OFFSET_BRIDGE if on_bridge else _CONTOUR_LENGTH * 0.5
+		var along_i := Vector2i(int(along.x), int(along.z))
+		var from: float = _stroke_end(edges, seg, -along_i, offset, on_bridge)
+		var to: float = _stroke_end(edges, seg, along_i, offset, on_bridge)
 		var base: int = verts.size()
 		var color: Color = seg["color"]
 		color.a *= _CONTOUR_ALPHA
 		for k in _CONTOUR_PIECES + 1:
-			var c: Vector3 = mid + along * lerpf(-half, half, float(k) / _CONTOUR_PIECES)
+			var c: Vector3 = mid + along * lerpf(from, to, float(k) / _CONTOUR_PIECES)
 			for sgn: float in [-1.0, 1.0]:
 				var p: Vector3 = c + side * (sgn * _CONTOUR_WIDTH * 0.5)
 				var y: float = deck + _CONTOUR_Y_BRIDGE if on_bridge else maxf(TerrainHeight.ground_y(p.x, p.z), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
@@ -347,6 +348,30 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 	mmi.layers = 1 << (OVERLAY_LAYER - 1)
 	add_child(mmi)
 	_contour_nodes[layer] = mmi
+
+
+static func _edge_key(cell: Vector2i, dir: Vector2i, color: Color) -> String:
+	return "%d,%d,%d,%d,%s" % [cell.x, cell.y, dir.x, dir.y, color.to_html()]
+
+
+## Де кінчається відрізок клітинки в бік `toward` (у частках клітинки від її центру вздовж ребра).
+## Далі по прямій той самий контур — до межі клітинки, впритул до сусіда. Внутрішній кут (за
+## рогом контур повертає до нас) — до лінії сусіда, із запасом на півширини, щоб кут був
+## суцільний. Зовнішній кут — рівно там, де стоїть перпендикулярна лінія цієї ж клітинки.
+## На мосту лінія ближче до осі, ніж на землі, тож з немостовим сусідом вона просто обривається.
+func _stroke_end(edges: Dictionary, seg: Dictionary, toward: Vector2i, offset: float, on_bridge: bool) -> float:
+	var cell: Vector2i = seg["cell"]
+	var dir: Vector2i = seg["dir"]
+	var n: Vector2i = cell + toward
+	var sgn: float = float(toward.x + toward.y)
+	var same_kind: bool = (_kind_by_cell.get(n, -1) == Terrain.Kind.BRIDGE) == on_bridge
+	if same_kind and edges.has(_edge_key(n, dir, seg["color"])):
+		return sgn * 0.5
+	# Сусід n у зоні (ребра до нього немає) — інакше це лише дотик по діагоналі, і лінії перехрестились би.
+	if same_kind and not edges.has(_edge_key(cell, toward, seg["color"])) \
+			and edges.has(_edge_key(n + dir, -toward, seg["color"])):
+		return sgn * (1.0 - offset + _CONTOUR_WIDTH * 0.5)
+	return sgn * (offset + _CONTOUR_WIDTH * 0.5)
 
 
 ## Перебудова тайлів після зміни виду (міст підірвано чи відновлено, BridgeChanged).

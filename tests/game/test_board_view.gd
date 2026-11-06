@@ -218,3 +218,29 @@ func test_rebuild_tiles_keeps_circles() -> void:
 
 	assert_eq(view.circles(BoardView.LAYER_INSPECT), circles)
 	assert_eq(_circle_nodes().size(), 1)
+
+
+# Лінія зони суцільна: на прямій відрізок клітинки доходить до її межі, на зовнішньому куті
+# обривається на лінії сусіднього ребра, на внутрішньому заходить до лінії сусіда, а дотик
+# по діагоналі не дає перехрещення.
+func test_contour_stroke_ends_join_without_crossings() -> void:
+	view.build(Board.create(4, 4, Terrain.GroundState.DRY))
+	# L-подібна зона: (0,0) (1,0) (1,1); (1,0)–(0,0) пряма, (1,1) дає внутрішній кут біля (0,0).
+	var zone: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1)]
+	var segs: Array[Dictionary] = ZoneOverlay._edges(zone, Color.YELLOW)
+	var edges: Dictionary = {}
+	for s in segs:
+		edges[BoardView._edge_key(s["cell"], s["dir"], s["color"])] = true
+	var off: float = BoardView._CONTOUR_OFFSET
+	var w: float = BoardView._CONTOUR_WIDTH
+	var top_left := _edge(Vector2i(0, 0), Vector2i(0, -1), Color.YELLOW)
+	assert_almost_eq(view._stroke_end(edges, top_left, Vector2i(1, 0), off, false), 0.5, 1e-6, "пряма — до межі клітинки")
+	assert_almost_eq(view._stroke_end(edges, top_left, Vector2i(-1, 0), off, false), -(off + w * 0.5), 1e-6, "зовнішній кут")
+	var bottom_left := _edge(Vector2i(0, 0), Vector2i(0, 1), Color.YELLOW)
+	assert_almost_eq(view._stroke_end(edges, bottom_left, Vector2i(1, 0), off, false), 1.0 - off + w * 0.5, 1e-6, "внутрішній кут")
+	# Діагональ: (0,0) і (1,1) без (1,0) — лише зовнішні кути.
+	var diag: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 1)]
+	edges.clear()
+	for s in ZoneOverlay._edges(diag, Color.YELLOW):
+		edges[BoardView._edge_key(s["cell"], s["dir"], s["color"])] = true
+	assert_almost_eq(view._stroke_end(edges, bottom_left, Vector2i(1, 0), off, false), off + w * 0.5, 1e-6, "дотик по діагоналі")
