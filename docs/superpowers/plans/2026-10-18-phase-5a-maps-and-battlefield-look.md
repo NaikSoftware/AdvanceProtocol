@@ -513,6 +513,7 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] Wires stay visible against the river from every camera angle
 - [x] Generator takes every rule constant from the game
 - [x] Poles and wires sink into the haze at the map edge like everything else, never drawn over it
+- [ ] Fences, hay, boulders and trailers beyond the map edge sink into the haze too
 - [x] In `feat/battlefield-dressing`
 
 ### Task 20: Footpaths
