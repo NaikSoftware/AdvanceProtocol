@@ -615,6 +615,10 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	# Забудована — клітинка BUILDING із будинком, двірським вбранням чи городом, або двір садиби.
 	var built: Dictionary = _layout_yards(p, false)
+	# Клітинки fenced паркан садиби обгороджує разом із її двором: вони теж при будинку.
+	for home: Dictionary in VillageLayout.for_map(StringName(p)).get("homes", []):
+		for c: Vector2i in home.get("fenced", []):
+			built[c] = true
 	for y in board.height:
 		for x in board.width:
 			var c := Vector2i(x, y)
