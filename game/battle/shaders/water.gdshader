@@ -10,9 +10,9 @@
 shader_type spatial;
 // specular_disabled: під похмурим небом сонячного відблиску немає, а на дрібній
 // брижі він давав окремі яскраві пікселі. Відбиття (зонд і небо) лишаються.
-// depth_draw_always: вода малюється першою з прозорих (WaterSurface.WATER_PRIORITY) і пише глибину —
-// дим, дроти й іскри над нею лягають зверху за будь-якої камери, а прозоре під її рівнем вона ховає.
-render_mode blend_mix, cull_back, depth_draw_always, specular_disabled;
+// Вода — перша з прозорих (WaterSurface.WATER_PRIORITY), глибини не пише: усе прозоре лягає на неї
+// зверху, і плями затінення очерету, що стоїть у воді, лишаються видно, як і були.
+render_mode blend_mix, cull_back, depth_draw_never, specular_disabled;
 
 global uniform float weather_wetness;
 // Сила власного відбиття неба. Вбудоване відбиття Godot для діелектрика не

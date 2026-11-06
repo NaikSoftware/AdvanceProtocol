@@ -35,6 +35,10 @@ const PLUME_LIFE_SEC: float = 9.0
 const COLUMN_RATE_STEP: float = 0.01
 const COLUMN_CLOCK_SEC: float = TAU / COLUMN_RATE_STEP
 const FIRE_TEMPO_STEPS: float = 16.0
+## Годинник процедурного вогню (_FIRE_CODE, поки USE_FLAME02 = false), згорнутий за цей період.
+## shortcut: його швидкості не кратні періоду, тож раз на ~17 хв візерунок стрибає; узгодити швидкості,
+## якщо процедурний вогонь повернеться в гру.
+const PROC_FIRE_WRAP_SEC: float = 1024.0
 ## Розігріву досить кількох кадрів.
 const WARM_UP_SEC: float = 0.1
 
@@ -187,7 +191,6 @@ func _init() -> void:
 	_column_mat.set_shader_parameter("height", COLUMN_HEIGHT)
 	_column_mat.set_shader_parameter("base_w", COLUMN_BASE_W * SMOKE_CELL_PER_CLOUD)
 	_column_mat.set_shader_parameter("top_w", COLUMN_TOP_W * SMOKE_CELL_PER_CLOUD)
-	_column_mat.set_shader_parameter("rise", 1.0 / PLUME_LIFE_SEC)
 	_column_mat.set_shader_parameter("grow", COLUMN_GROW)
 	_column_mat.set_shader_parameter("rate_step", COLUMN_RATE_STEP)
 	_fire_mat = ShaderMaterial.new()
@@ -742,6 +745,8 @@ func _step() -> void:
 	_shadow_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("loop_time", fire_loop_time(t))
+	if not USE_FLAME02:
+		_fire_mat.set_shader_parameter("proc_time", fposmod(t, PROC_FIRE_WRAP_SEC))
 	_fire_mat.set_shader_parameter("viewport_h", float(get_viewport().get_visible_rect().size.y))
 	# Світло дихає повільно (гладкий шум, нижче ~2 Гц): швидке мерехтіння на землі й даху виглядало б стробом.
 	for i in _lights.size():
@@ -1104,15 +1109,13 @@ uniform float grid = 8.0;
 uniform float fx_time = 0.0;
 // Секунди за модулем періоду, кратного обертам усіх кутових швидкостей (WreckLayer.COLUMN_CLOCK_SEC).
 uniform float clock = 0.0;
-// fx_time · rise за модулем 1 (WreckLayer.column_phase).
+// fx_time / PLUME_LIFE_SEC за модулем 1 (WreckLayer.column_phase).
 uniform float phase = 0.0;
 uniform float rate_step = 0.01;
 uniform float height = 3.0;
 uniform float base_w = 0.8;
 uniform float top_w = 1.3;
 uniform vec3 lean = vec3(0.0);
-// Частка шляху клуби за секунду = 1 / PLUME_LIFE_SEC: кадр атласу й висота йдуть разом.
-uniform float rise = 0.0625;
 // Ріст свіжого стовпа, одиниць світу за секунду від народження (INSTANCE_CUSTOM.w).
 uniform float grow = 0.75;
 // Сонце (WeatherRig): освітлений бік клуби світліший на ясних мапах; у похмурі — нічого.
@@ -1207,7 +1210,9 @@ render_mode unshaded, blend_premul_alpha, depth_draw_never, cull_disabled, shado
 // Язики — окремі клапті, що відриваються від верху в випадкові миті, летять угору й
 // гаснуть у дим. Дрібний шум лише їде вгору разом з полум'ям, на місці не «кипить».
 // Жодного періодичного руху; у кожного білборда свій зсув і свій час.
+// fx_time — лише для віку (поява полум'я); рух — з proc_time.
 uniform float fx_time = 0.0;
+uniform float proc_time = 0.0;
 // Понад 1: біле серце світиться; верхня половина — вдвічі тьмяніша.
 uniform float gain = 1.6;
 // Квад ширший і вищий за полум'я, щоб м'який край і клапті не різались рамкою.
@@ -1245,7 +1250,8 @@ float vn(vec2 p) {
 	return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0)), f.x), f.y);
 }
 float fbm(vec2 p) { return 0.6 * vn(p) + 0.4 * vn(p * 2.07 + 17.0); }
-float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+// Хеш без sin: sin великого аргументу у float32 губить точність.
+float h1(float x) { float p = fract(x * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
 float vnoise(float x) { float i = floor(x); float f = fract(x); return mix(h1(i), h1(i + 1.0), f * f * (3.0 - 2.0 * f)); }
 
 void vertex() {
@@ -1278,7 +1284,8 @@ void fragment() {
 	// x — частка ширини полум'я від осі (±0,5 — край); y — висота над коренем у висотах полум'я.
 	float x = (UV.x - 0.5) * pad;
 	float y = (1.0 - UV.y) * (tall + sink) - sink;
-	float t = fx_time + v_sd * 37.0;
+	// Згорнутий годинник (PROC_FIRE_WRAP_SEC), не fx_time: за години гри шум губив точність і вогонь ішов смугами.
+	float t = proc_time + v_sd * 37.0;
 	vec2 seed = vec2(v_sd * 7.1, v_sd * 2.3);
 	float hh = y;
 	// Вага руху: нуль на корені й у нижніх ~40 %, повна вгорі.

@@ -258,12 +258,18 @@ func test_water_height_map_follows_the_smooth_course() -> void:
 
 
 ## Прозорі об'єкти сортуються за центром: площина річки проти квада диму — хто ближче, той зверху, і дим
-## уламків на березі зникав над водою. Вода — перша з прозорих і пише глибину, тож порядок вирішує глибина.
-func test_water_is_drawn_first_of_the_transparent_and_writes_depth() -> void:
+## уламків на березі зникав над водою. Вода — перша з прозорих, тож усе прозоре лягає на неї зверху.
+## Глибини вона не пише: тоді пляма затінення очерету, що стоїть у воді, зникала б під нею.
+func test_water_is_drawn_first_of_the_transparent_and_writes_no_depth() -> void:
 	view.build(_river())
 	var mat: ShaderMaterial = _waters()[0].material_override
 	assert_eq(mat.render_priority, WaterSurface.WATER_PRIORITY)
 	assert_lt(WaterSurface.WATER_PRIORITY, ForestLayer.FOREST_PRIORITY, "раніше за тінь і глибинний прохід лісу")
 	assert_lt(WaterSurface.WATER_PRIORITY, PropLayer.FENCE_ALPHA_PRIORITY, "раніше за прозорий паркан")
 	assert_lt(WaterSurface.WATER_PRIORITY, 0, "раніше за дим (0)")
-	assert_true(mat.shader.code.contains("depth_draw_always"), "вода пише глибину: прозоре під її рівнем вона ховає")
+	# Сам рядок render_mode, а не коментар над ним.
+	var re := RegEx.new()
+	re.compile("(?m)^render_mode[^;]*;")
+	var mode: RegExMatch = re.search(mat.shader.code)
+	assert_not_null(mode)
+	assert_true(mode.get_string().contains("depth_draw_never"), "вода не пише глибину")

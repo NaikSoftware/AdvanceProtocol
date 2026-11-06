@@ -485,9 +485,9 @@ func test_column_and_fire_clocks_stay_bounded_and_wrap_without_a_jump() -> void:
 		assert_true(WreckLayer.fire_loop_time(t) >= 0.0 and WreckLayer.fire_loop_time(t) < WreckLayer.fire_loop_sec())
 	# Шлях клуби той самий, що й fx_time · rise за модулем 1.
 	assert_almost_eq(WreckLayer.column_phase(100.0), fposmod(100.0 / WreckLayer.PLUME_LIFE_SEC, 1.0), 1e-9)
-	# Кожен темп k/FIRE_TEMPO_STEPS проходить за період цілу кількість циклів атласу.
-	var cycles: float = WreckLayer.fire_loop_sec() * WreckLayer.FLIPBOOK_FPS / WreckLayer.FIRE_FRAMES / WreckLayer.FIRE_TEMPO_STEPS
-	assert_almost_eq(cycles, roundf(cycles), 1e-6, "період вогню кратний циклу атласу для темпу 1/16")
+	# Атлас крокує з темпом таймера, і за період темп k/FIRE_TEMPO_STEPS проходить рівно k циклів атласу —
+	# але лише якщо шейдер справді округлює темп до кроку 1/FIRE_TEMPO_STEPS (перевірка нижче).
+	assert_eq(layer.get("_fire_mat").get_shader_parameter("play_fps"), WreckLayer.FLIPBOOK_FPS)
 	var column: String = WreckLayer.column_shader().code
 	var fire: String = WreckLayer.FIRE_SHADER.code
 	# Кутові швидкості стовпа кратні COLUMN_RATE_STEP: за COLUMN_CLOCK_SEC — ціла кількість обертів.
@@ -502,6 +502,12 @@ func test_column_and_fire_clocks_stay_bounded_and_wrap_without_a_jump() -> void:
 	# fx_time лишається лише для віку (різниця з народженням), ні на що не множиться.
 	for code: String in [column, fire]:
 		assert_false(code.contains("fx_time *"), "час матчу не множиться на швидкість")
-	assert_true(fire.contains("mod(i, n)") and fire.contains("tempo_steps"), "шум тремтіння й темп атласу періодичні")
+	assert_true(fire.contains("mod(i, n)"), "шум тремтіння періодичний")
+	assert_true(fire.contains("round((0.8 + 0.4 * h1(sd * 17.0)) * tempo_steps) / tempo_steps"), "темп атласу кратний 1/tempo_steps")
+	assert_true(fire.contains("v_frame = mod(loop_time * play_fps * tempo"), "кадр атласу — від згорнутого годинника й округленого темпу")
+	assert_false(column.contains("uniform float rise"), "шлях клуб — лише зі згорнутої фази")
+	# Процедурний вогонь (поки вимкнений прапорцем) теж не бачить сирого часу матчу й не хешує через sin.
+	assert_true(WreckLayer._FIRE_CODE.contains("float t = proc_time"))
+	assert_false(WreckLayer._FIRE_CODE.contains("fx_time +") or WreckLayer._FIRE_CODE.contains("sin("))
 	assert_eq(layer.get("_fire_mat").get_shader_parameter("loop_sec"), WreckLayer.fire_loop_sec())
 	assert_eq(layer.get("_column_mat").get_shader_parameter("rate_step"), WreckLayer.COLUMN_RATE_STEP)
