@@ -392,7 +392,15 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 		assert_eq(shapes[i], Vector2(WreckLayer.RUIN_HEIGHT_SCALE, WreckLayer.RUIN_BASE_SCALE) if ruin else Vector2.ONE)
 	assert_true(WreckLayer.RUIN_HEIGHT_SCALE < 1.0 and WreckLayer.RUIN_BASE_SCALE < 1.0 and WreckLayer.RUIN_DENSITY <= WreckLayer.CHIMNEY_DENSITY)
 	assert_true(layer.is_animating(), "дим рухається й без уламків")
-	assert_eq(layer.hearth_material().get_shader_parameter("rise"), WreckLayer.HEARTH_RISE, "шум густоти пливе вгору зі швидкістю диму")
+	# Шум пливе вгору зі швидкістю диму: за секунду зсув клубів — підйом на тайл, помножений на кратність.
+	var step: Vector4 = WreckLayer.plume_scroll(11.0) - WreckLayer.plume_scroll(10.0)
+	assert_almost_eq(step.w, WreckLayer.HEARTH_RISE * WreckLayer.PLUME_SCROLL_RATES.w, 1e-6, "шум густоти пливе вгору зі швидкістю диму")
+	# Через години гри зсув лишається в межах періоду шуму: великі числа в шейдері розсипали шлейф на голки.
+	for t: float in [0.0, 3600.0, 10800.0, 86400.0]:
+		var sc: Vector4 = WreckLayer.plume_scroll(t)
+		for k in 4:
+			assert_true(sc[k] >= 0.0 and sc[k] < WreckLayer.PLUME_NOISE_PERIOD, "зсув шуму згорнуто за періодом (t=%s)" % t)
+	assert_true(layer.hearth_material().shader.code.contains("const float PERIOD = %.1f;" % WreckLayer.PLUME_NOISE_PERIOD), "період шуму в шейдері той самий, що й у згортці")
 	assert_false(layer.hearth_material().shader.code.contains("sin("), "хеш без sin: час росте весь матч")
 	# Освітлення, об'єм і мокра гілка живуть у шейдері; headless його не малює, тож їхній вигляд
 	# (яскравість над ґрунтом, відсутність пульсації) перевіряє tools/smoke_seq.gd у вікні. Тут —
@@ -400,7 +408,7 @@ func test_hearth_smoke_picks_a_few_faint_columns() -> void:
 	var uniforms: Array[String] = []
 	for u: Dictionary in layer.hearth_material().shader.get_shader_uniform_list():
 		uniforms.append(String(u["name"]))
-	for name: String in ["fx_time", "height", "base_w", "top_w", "rise", "lean"]:
+	for name: String in ["scroll", "height", "base_w", "top_w", "lean"]:
 		assert_true(uniforms.has(name), "шейдер диму має uniform %s" % name)
 	layer.set_wind(Vector3(0.25, 0, 0))
 	assert_eq(layer.hearth_material().get_shader_parameter("lean"), Vector3(0.25, 0, 0) * WreckLayer.SMOKE_LEAN_PER_WIND, "хилиться з вітром, як стовпи уламків")

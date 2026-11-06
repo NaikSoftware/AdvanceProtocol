@@ -55,6 +55,10 @@ const RUIN_HEIGHT_SCALE: float = 0.55
 const RUIN_BASE_SCALE: float = 0.8
 ## Дим здіймається 0,8 м/с: з цією швидкістю пливе вгору шум густоти.
 const HEARTH_RISE: float = 0.8 / 8.0
+## Шум шлейфу пливе вгору з такими кратностями швидкості диму, у клітинках шуму на тайл підйому
+## (x, y — звивання, z — виїдений край, w — клуби в 0,85 м); період шуму — у шейдері _PLUME_CODE.
+const PLUME_SCROLL_RATES: Vector4 = Vector4(1.2, 0.9, 8.0 / 3.5, 8.0 / 0.85)
+const PLUME_NOISE_PERIOD: float = 256.0
 ## Вертикальних сегментів смуги: шлейф гнеться плавно.
 const HEARTH_SEGMENTS: int = 24
 
@@ -197,7 +201,6 @@ func _init() -> void:
 	_hearth_mat.set_shader_parameter("height", HEARTH_HEIGHT)
 	_hearth_mat.set_shader_parameter("base_w", HEARTH_BASE_W)
 	_hearth_mat.set_shader_parameter("top_w", HEARTH_TOP_W)
-	_hearth_mat.set_shader_parameter("rise", HEARTH_RISE)
 	_hearths = _multimesh("Hearths", _hearth_mat, HEARTH_MAX)
 	var strip := QuadMesh.new()
 	strip.size = Vector2.ONE
@@ -367,6 +370,14 @@ func _hearth_bounds() -> AABB:
 ## висоту й половина звивання.
 static func hearth_reach() -> float:
 	return HEARTH_TOP_W * 1.35 + HEARTH_MAX_LEAN * HEARTH_HEIGHT + HEARTH_WANDER * HEARTH_HEIGHT * 0.5
+
+
+## Зсуви шуму шлейфу на секунді матчу `t`: рахуються в подвійній точності й згортаються за періодом
+## шуму, тож шейдер бачить малі числа й через години гри.
+static func plume_scroll(t: float) -> Vector4:
+	var d: float = t * HEARTH_RISE
+	return Vector4(fposmod(d * PLUME_SCROLL_RATES.x, PLUME_NOISE_PERIOD), fposmod(d * PLUME_SCROLL_RATES.y, PLUME_NOISE_PERIOD),
+			fposmod(d * PLUME_SCROLL_RATES.z, PLUME_NOISE_PERIOD), fposmod(d * PLUME_SCROLL_RATES.w, PLUME_NOISE_PERIOD))
 
 
 ## Густота шлейфу для шейдера (0–1): руїна тліє слабше за димар.
@@ -671,7 +682,7 @@ func _step() -> void:
 	_frame += 1
 	var t: float = float(_frame) / FLIPBOOK_FPS
 	_column_mat.set_shader_parameter("fx_time", t)
-	_hearth_mat.set_shader_parameter("fx_time", t)
+	_hearth_mat.set_shader_parameter("scroll", plume_scroll(t))
 	_shadow_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("fx_time", t)
 	_fire_mat.set_shader_parameter("viewport_h", float(get_viewport().get_visible_rect().size.y))
@@ -859,25 +870,29 @@ void fragment() {
 """
 
 ## Суцільний шлейф мирного диму: смуга до камери (поворот лише довкола вертикалі), висота й
-## нахил вітру — як у стовпа уламків. Звивання й густота — шум у координаті «частинки диму»
-## s = h − t·rise: візерунок пливе вгору разом із димом і ніде не повторюється. Хеш без sin:
-## fx_time росте весь матч.
+## нахил вітру — як у стовпа уламків. Звивання й густота — шум у координаті «частинки диму»:
+## висота мінус зсув `scroll` (plume_scroll), тож візерунок пливе вгору разом із димом.
+## Зсув рахує процесор і тримає в [0, PLUME_NOISE_PERIOD): шум має той самий період, тож згортка
+## не дає стрибка, а координати шуму не ростуть із часом матчу — на великих числах GPU втрачає
+## точність, і шлейф після години гри розсипався на голки й темні риски.
 const _PLUME_CODE: String = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled, skip_vertex_transform;
 
-uniform float fx_time = 0.0;
 uniform float height = 1.75;
 uniform float base_w = 0.1;
 uniform float top_w = 1.0;
-uniform float rise = 0.1;
+// Зсуви шуму вгору (у клітинках шуму, за модулем періоду): x, y — звивання, z — край, w — клуби.
+uniform vec4 scroll = vec4(0.0);
+const float PERIOD = 256.0;
 uniform vec3 lean = vec3(0.0);
 global uniform vec3 sun_dir;
 global uniform float sky_clear;
 uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
 
 varying float v_h01;
-varying float v_s;
+varying float v_hh;
+varying float v_H;
 varying float v_w;
 varying float v_sd;
 varying float v_dens;
@@ -888,11 +903,14 @@ float hash(vec2 p) {
 	p3 += dot(p3, p3.yzx + 33.33);
 	return fract((p3.x + p3.y) * p3.z);
 }
+// Шум із періодом PERIOD по обох осях: координату згортаємо до запуску, тож числа малі завжди.
 float vn(vec2 p) {
+	p = mod(p, PERIOD);
 	vec2 i = floor(p);
-	vec2 f = fract(p);
+	vec2 f = p - i;
 	f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+	vec2 j = mod(i + 1.0, PERIOD);
+	return mix(mix(hash(i), hash(vec2(j.x, i.y)), f.x), mix(hash(vec2(i.x, j.y)), hash(j), f.x), f.y);
 }
 // Висота клуба: гладкий шум із трьох октав, піднесений, щоб випуклини були округлі, а не кашаті.
 float puff_h(vec2 p) {
@@ -900,7 +918,8 @@ float puff_h(vec2 p) {
 	float heavy = 1.0 - sky_clear;
 	float w2 = mix(0.45, 0.22, heavy);
 	float w3 = mix(0.18, 0.06, heavy);
-	float a = vn(p) + w2 * vn(p * 2.1 + 3.7) + w3 * vn(p * 4.3 + 9.1);
+	// Кратність октав ціла: інакше згортка зсуву розірвала б шум на стику періоду.
+	float a = vn(p) + w2 * vn(p * 2.0 + 3.7) + w3 * vn(p * 4.0 + 9.1);
 	return a / (1.0 + w2 + w3);
 }
 // xy — нахил поверхні клуба (звідси нормаль і світло), z — сама висота. Скінченні різниці:
@@ -917,12 +936,11 @@ void vertex() {
 	float h01 = VERTEX.y + 0.5;
 	float h = h01 * H;
 	float sd = INSTANCE_CUSTOM.y * 97.0;
-	float s = h - fx_time * rise;
 	vec3 root = MODEL_MATRIX[3].xyz;
 	vec3 right = normalize(vec3(INV_VIEW_MATRIX[0].x, 0.0, INV_VIEW_MATRIX[0].z));
 	vec3 side = vec3(-right.z, 0.0, right.x);
 	// Звивання росте з висотою й пливе вгору з димом: повільний шум у координаті частинки.
-	vec3 wander = (right * (vn(vec2(s * 1.2 + sd, 3.1)) - 0.5) + side * (vn(vec2(s * 0.9 + sd, 7.7)) - 0.5)) * 0.4 * H * h01 * h01;
+	vec3 wander = (right * (vn(vec2(h * 1.2 - scroll.x + sd, 3.1)) - 0.5) + side * (vn(vec2(h * 0.9 - scroll.y + sd, 7.7)) - 0.5)) * 0.4 * H * h01 * h01;
 	// Мокра погода: дим важчий — ширший біля труби й не лягає на землю (нахил обмежено).
 	float heavy = 1.0 - sky_clear;
 	float w = mix(base_w * INSTANCE_CUSTOM.w * (1.0 + 1.2 * heavy), top_w, pow(h01, 0.85));
@@ -933,7 +951,8 @@ void vertex() {
 	vec3 world = root + vec3(0.0, h - 0.5 / 8.0, 0.0) + lean_c * h + wander + right * VERTEX.x * w * 1.35;
 	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	v_h01 = h01;
-	v_s = s;
+	v_hh = h;
+	v_H = H;
 	v_w = w;
 	v_sd = sd;
 	v_dens = INSTANCE_CUSTOM.x * (1.0 + 0.5 * heavy * (1.0 - smoothstep(0.0, 0.5, h01)));
@@ -944,8 +963,14 @@ void vertex() {
 void fragment() {
 	float x = (UV.x * 2.0 - 1.0) * 1.35;
 	// Клуби в метрах поперек і вздовж частинки диму: біля труби дрібні, угорі крупніші.
-	float sc = mix(mix(0.8, 0.9, 1.0 - sky_clear), 2.4, v_h01);
-	vec2 q = vec2(x * v_w, v_s) * 8.0 / sc + v_sd;
+	float sc0 = mix(0.8, 0.9, 1.0 - sky_clear);
+	float sc = mix(sc0, 2.4, v_h01);
+	// Уздовж шлейфу — не (h − t·rise)/sc: там час множився на масштаб, що змінюється з висотою, і за
+	// годину гри шум стискався по вертикалі в сотні разів — шлейф розсипався на горизонтальні голки.
+	// Тут висота переходить у координату шуму інтегралом 8/sc (крок клубів той самий), а зсув часу
+	// від висоти не залежить: візерунок лише пливе вгору й не стискається ніколи.
+	float qy = 8.0 * v_H * log(sc / sc0) / (2.4 - sc0) - scroll.w;
+	vec2 q = vec2(x * v_w * 8.0 / sc, qy) + v_sd;
 	vec3 a = billow(q);
 	// Висота 0..1 з контрастом: клуби проступають із розмитої маси.
 	float lump = smoothstep(0.25, 0.75, a.z);
@@ -957,7 +982,7 @@ void fragment() {
 	// виїдається вглиб, і обрис — не конус. Лише на краях: біля осі шум двох боків різний, і без цього на осі виходив
 	// шов-розрив, що розколював шлейф надвоє; з тієї ж причини клуби (`lump`) зсувають лише край, а серцевина шлейфу суцільна.
 	float side_sd = v_sd + (x < 0.0 ? 0.0 : 31.0);
-	float bite = (vn(vec2(v_s * 8.0 / 3.5 + side_sd, side_sd * 0.37)) - 0.35) * 0.7 * smoothstep(0.05, 0.25, v_h01) * smoothstep(0.3, 0.9, abs(x));
+	float bite = (vn(vec2(v_hh * 8.0 / 3.5 - scroll.z + side_sd, side_sd * 0.37)) - 0.35) * 0.7 * smoothstep(0.05, 0.25, v_h01) * smoothstep(0.3, 0.9, abs(x));
 	// Запас до краю: клуби відкушують його, угорі дим розривається на клапті. М'яка рампа — пух, а не контур.
 	float e = 1.0 - abs(x) + (lump - 0.5) * mix(0.45, 0.3, 1.0 - sky_clear) * smoothstep(0.2, 0.7, abs(x)) - bite - 0.25 * smoothstep(0.4, 1.0, v_h01);
 	float dens = smoothstep(0.0, 0.6, e) * mix(0.6 + 0.4 * lump, 0.7 + 0.3 * lump, 1.0 - sky_clear);
