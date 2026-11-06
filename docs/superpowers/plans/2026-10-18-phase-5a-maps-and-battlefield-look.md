@@ -474,6 +474,7 @@ the current player can see; scars respect the viewer's `seen`. Reference brief:
 - [x] Crumbled edge only at a real asphalt end, never where a dirt road meets the side of the asphalt
 - [x] Ridge asphalt runs straight with smooth bends, no chain of S-wiggles; clean edges, steady width
 - [x] Dirt roads read on wet ground: darker continuous ruts, no light border
+- [ ] Ploughed field texture holds still with a still camera: no flicker
 
 ### Task 17: House models and roofs
 
