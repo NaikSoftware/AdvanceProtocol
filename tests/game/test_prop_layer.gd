@@ -663,6 +663,10 @@ func test_only_built_yards_are_fenced(p = use_parameters(MAPS)) -> void:
 	var view: BoardView = _cached(p)
 	# Забудована — клітинка BUILDING із будинком, двірським вбранням чи городом, або двір садиби.
 	var built: Dictionary = _layout_yards(p, false)
+	# Клітинки fenced паркан садиби обгороджує разом із її двором: вони теж при будинку.
+	for home: Dictionary in VillageLayout.for_map(StringName(p)).get("homes", []):
+		for c: Vector2i in home.get("fenced", []):
+			built[c] = true
 	for y in board.height:
 		for x in board.width:
 			var c := Vector2i(x, y)
@@ -1831,6 +1835,76 @@ func test_gates_face_the_road(p = use_parameters(MAPS)) -> void:
 		assert_true(sees or placer.gate_blind.has(i), "%s: ворота %s не до дороги і двір не «сліпий»" % [p, at])
 
 
+## Хати «Річки», двори яких стоять на краю своїх клітинок (кільце впритул до стін): (12,6) біля мосту й (5,7) на
+## березі. Решту дворів ці перевірки не чіпають.
+const PLAIN_YARDS: Array[Vector2i] = [Vector2i(12, 6), Vector2i(5, 7)]
+
+
+func _home_index(p: String, house: Vector2i) -> int:
+	var homes: Array = VillageLayout.for_map(StringName(p)).get("homes", [])
+	for i in homes.size():
+		if homes[i]["house"] == house:
+			return i
+	return -1
+
+
+## Двір — простий прямокутник довкола хати: кільце з чотирьох сторін (без кишені чи сходинки), і за кожною стіною хати
+## стоїть паркан чи ворота, або стіна врівень зі стороною кільця — паркан не впирається в стіну посередині.
+func test_plain_yard_encloses_the_house() -> void:
+	var props: PropLayer = _cached("river").props()
+	var placer: RefCounted = props._placer
+	var segs: Array = _yard_segments(props)
+	for g: Dictionary in props._gates:
+		segs.append([g["a"], g["b"]])
+	for house: Vector2i in PLAIN_YARDS:
+		var i: int = _home_index("river", house)
+		var sides: Array = placer.ring_sides[i]
+		assert_eq(sides.size(), 4, "двір хати %s — не прямокутник" % house)
+		var hr: Rect2 = placer.doors[i][2]
+		# Кишеня: сторона кільця вздовж стіни хати ближче FENCE_WALL, але не врівень з нею — таку сторону стіна розрізає,
+		# і від неї лишаються вухо повз ріг хати й гачок до стіни. Сторона або врівень зі стіною, або далі FENCE_WALL.
+		for sd: Dictionary in sides:
+			var d: Vector2i = sd["d"]
+			var ax: int = 0 if d.x != 0 else 1
+			var a: Vector2 = sd["a"]
+			var b: Vector2 = sd["b"]
+			if minf(a[1 - ax], b[1 - ax]) >= hr.end[1 - ax] or maxf(a[1 - ax], b[1 - ax]) <= hr.position[1 - ax]:
+				continue
+			var wall: float = hr.end[ax] if d[ax] > 0 else hr.position[ax]
+			var gap: float = (a[ax] - wall) * float(d[ax])
+			assert_true(absf(gap) <= 0.03 or gap >= PropLayer.FENCE_WALL,
+					"хата %s: сторона %s за %.2f від стіни — кишеня" % [house, d, gap])
+		for d: Vector2 in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+			var from: Vector2 = hr.get_center()
+			# Промінь — до краю кільця з запасом: далі вже паркан сусіда.
+			var ext := Rect2(sides[0]["a"], Vector2.ZERO)
+			for sd: Dictionary in sides:
+				ext = ext.expand(sd["a"]).expand(sd["b"])
+			var ax: int = 0 if d.x != 0.0 else 1
+			var reach: float = ext.end[ax] - from[ax] if d[ax] > 0.0 else from[ax] - ext.position[ax]
+			var hit := false
+			for sg: Array in segs:
+				var x: Variant = Geometry2D.segment_intersects_segment(from, from + d * (reach + 0.05), sg[0], sg[1])
+				hit = hit or (x != null and not hr.has_point(x))
+			# Стіна на межі двору — лише врівень зі стороною кільця (хата на розі двору при вулиці): паркан тоді продовжує
+			# її площину від рогу, а не впирається в неї посередині.
+			var wall: float = hr.end[ax] if d[ax] > 0.0 else hr.position[ax]
+			for sd: Dictionary in sides:
+				hit = hit or (Vector2(sd["d"] as Vector2i) == d and absf((sd["a"] as Vector2)[ax] - wall) <= 0.03)
+			assert_true(hit, "хата %s: за стіною %s паркану нема — хата на межі двору" % [house, d])
+
+
+## Ворота цих дворів — на боці фасаду, до дороги, з якої до хати підходять: промінь назовні впирається в покриття.
+func test_plain_yard_gate_faces_the_road() -> void:
+	var placer: RefCounted = _cached("river").props()._placer
+	for house: Vector2i in PLAIN_YARDS:
+		var i: int = _home_index("river", house)
+		var face := Vector2(VillageLayout.for_map(&"river")["homes"][i]["face"])
+		var out: Vector2 = placer.gates[i][1]
+		assert_eq(out, face, "хата %s: ворота дивляться не на дорогу" % house)
+		assert_lte(placer.road_ahead_of(placer.gates[i][0], out), PropLayer.GATE_SIGHT, "хата %s: дороги перед воротами нема" % house)
+
+
 ## Ворота не лізуть на фасад: увесь отвір (від стовпа до стовпа) далі свого запасу (GATE_CLEAR 0.35 клітинки,
 ## а коли з ним воріт нема ніде — наступний з GATE_CLEARS, не менший за 0.25) від кожної будівлі, руїни й сараю. Не залежить від того, котра стіна хати фасад: міряється від усього обрису.
 func test_gates_keep_clear_of_buildings(p = use_parameters(MAPS)) -> void:
@@ -2473,7 +2547,8 @@ func test_editor_routes_give_only_legal_trunk_spans() -> void:
 		{"kind": &"10kv", "axis": [Vector2(-13, 5), Vector2(38, 5)], "side": 1.0},
 		{"kind": &"10kv", "axis": [Vector2(11, -13), Vector2(11, 34)], "side": -1.0},
 		{"kind": &"10kv", "axis": [Vector2(-13, -13), Vector2(38, 34)], "side": 1.0},
-		{"kind": &"10kv", "axis": [Vector2(-13, 15), Vector2(13, 15), Vector2(13, 6), Vector2(38, 6)], "side": 1.0},
+		# Праворуч від ходу: ліворуч уздовж x = 13 — двір хати (12,6) впритул до асфальту.
+		{"kind": &"10kv", "axis": [Vector2(-13, 15), Vector2(13, 15), Vector2(13, 6), Vector2(38, 6)], "side": -1.0},
 	]}
 	var grid := PowerGrid.new()
 	grid.plan(placer)

@@ -3898,7 +3898,11 @@ class _Placer:
 						if shore != Vector2.INF and _on_board(shore):
 							landings.append([shore, _slope(shore)])
 		var starts: Array = []
+		var homes: Array = layout.get("homes", [])
 		for i: int in gates:
+			# Двір з bank_path = false стежку до води не починає: стежки карти до берега задані іншими дворами чи дорогою.
+			if i < homes.size() and not bool((homes[i] as Dictionary).get("bank_path", true)):
+				continue
 			var g: Vector2 = gates[i][0] + (gates[i][1] as Vector2) * 0.15
 			# Ворота в щілині між сусідніми парканами (не ширшій за двічі FENCE_MARGIN) — глухий кут для стежки:
 			# повна сітка A* там нічого не знайде, а коштує десятки мілісекунд.
@@ -4206,7 +4210,8 @@ class _Placer:
 	## сусідньою садибою ставить одна з них, рівно по межі. Повертає сторони з їхніми відступами.
 	func _fence_ring(i: int, home: Dictionary, owner_of: Dictionary, sheds: Array[Rect2]) -> Array:
 		var lot: Dictionary = {}
-		for c: Vector2i in home["cells"]:
+		# fenced — клітинки поза двором (не BUILDING), які паркан обгороджує разом із ним: лише обрис кільця.
+		for c: Vector2i in home["cells"] + home.get("fenced", []):
 			lot[c] = true
 		var hc: Vector2i = home["house"]
 		_ring_i = i
@@ -4312,6 +4317,22 @@ class _Placer:
 					break
 			if not moved:
 				break
+		# Хата на розі двору при вулиці (street): між фасадом і дорогою паркану нема місця. Кільце на відступі перед
+		# стіною стіна розрізала б, і від нього лишилися б вухо повз ріг хати й гачок назад до неї — на екрані кишеня.
+		# Тож сторони кільця по зовнішніх межах клітинки хати — врівень з її стінами: паркан продовжує площини стін від
+		# рогів хати. Межа з сусідом лишається рівно на межі.
+		if bool(home.get("street", false)):
+			for k in n:
+				if int(sides[k]["nb"]) >= 0 or not (sides[k]["edges"] as Array).any(func(e: Array) -> bool: return e[0] == hc):
+					continue
+				var d: Vector2i = sides[k]["d"]
+				for r: Rect2 in _wall_rects:
+					if r.has_point(Vector2(hc)):
+						var ax: int = 0 if d.x != 0 else 1
+						var wall: float = r.end[ax] if d[ax] > 0 else r.position[ax]
+						sides[k]["o"] = (wall - float(sides[k]["line"])) * float(d[ax])
+						sides[k]["oi"] = RING_OFFSETS.size()
+						break
 		var starts: Array[Vector2] = []
 		var ends: Array[Vector2] = []
 		for k in n:
@@ -5115,6 +5136,9 @@ class _Placer:
 				if bool(cl[1]) or kept.has(segs) or segs.any(func(sg: Array) -> bool: return keep.has(sg)):
 					continue
 				var rest: Array = out.filter(func(pc: Array) -> bool: return not segs.has(pc))
+				# Купка лише з чужих парканів (others) цього кільця не зменшує: без цього цикл не скінчився б.
+				if rest.size() == out.size():
+					continue
 				var pruned: Array = _prune_dangling(rest, known, walls)
 				# Купка, без якої повис би довгий хід (за довжиною всього прямого ходу, а не шматка), — частина замкненого
 				# кільця, а не уламок: лишається.
@@ -6232,8 +6256,26 @@ class _Placer:
 						var a: float = float(h(c, 40 + k * 5 + attempt) % 628) / 100.0
 						var r: float = 0.34 + float(h(c, 60 + k) % 10) / 100.0
 						var scale: float = float(PropLayer.spec_of(m).get("scale", 1.0)) * (0.85 + float(h(c, 80 + k) % 30) / 100.0)
+						# Брила в обгородженому дворі (паркан садиби заходить і на пагорб) читає двір пасовиськом.
+						if _near_yard_ring(Vector2(c) + Vector2(cos(a), sin(a)) * r, BOULDER_YARD_CLEAR):
+							continue
 						if put_small(m, c, Vector2(cos(a), sin(a)) * r, float(h(c, 70 + k) % 628) / 100.0, scale):
 							break
+
+	## Брила не ближче за стільки (клітинки) до обрису двору садиби.
+	const BOULDER_YARD_CLEAR: float = 0.3
+
+	## Точка p усередині обрису двору садиби (yard_polys) чи ближче clear до нього.
+	func _near_yard_ring(p: Vector2, clear: float) -> bool:
+		for poly: PackedVector2Array in yard_polys:
+			if poly.size() < 3:
+				continue
+			if Geometry2D.is_point_in_polygon(p, poly):
+				return true
+			for k in poly.size():
+				if Geometry2D.get_closest_point_to_segment(p, poly[k], poly[(k + 1) % poly.size()]).distance_to(p) < clear:
+					return true
+		return false
 
 	## Опори вздовж доріг: асфальт і ґрунтівка — 10 кВ з прольотом ~7.5 клітинки, вулиці (бруківка)
 	## — 0.4 кВ з ~4.5. Опора стоїть за узбіччям на прохідній клітинці біля її краю; сусідні
