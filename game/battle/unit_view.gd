@@ -137,7 +137,11 @@ var destroyed: bool = false
 @onready var _hp_label: Label3D = $HpLabel
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
-var _hull_material: StandardMaterial3D
+var _hull_material: Material
+## Тіло — модель GLB (а не коробки): лише її шейдер крутить колеса й траки за пройденим шляхом.
+var _has_model: bool = false
+## Пройдений шлях в одиницях світу: від нього колеса й траки моделі крутяться в такт руху.
+var _travel: float = 0.0
 var _type_id: int = 0
 var _owner_color: Color = Color.WHITE
 var _standing: int = 0
@@ -320,7 +324,12 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 ## Крок руху між клітинками: XZ — лінійно, висота й нахил — з рельєфу під юнітом (а не пряма
 ## між центрами клітинок, що протикала б горб).
 func _walk(t: float, from: Vector3, to: Vector3) -> void:
-	_pose(from.lerp(to, t))
+	var at: Vector3 = from.lerp(to, t)
+	if _has_model:
+		# Лише в плані: висота рельєфу під юнітом не є шляхом коліс.
+		_travel += Vector2(at.x - position.x, at.z - position.z).length()
+		(_silhouette.get_node("Hull") as GeometryInstance3D).set_instance_shader_parameter("travel", _travel)
+	_pose(at)
 
 
 ## Твін повороту крутить лише кут вузла; нахил залежить від нього, тож іде слідом. Кадр
@@ -577,7 +586,10 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 	var hull := _silhouette.get_node("Hull") as MeshInstance3D
 	var hull_size: Vector3 = UnitSilhouettes.spec(type_id).hull
 	_half_base = Vector2(hull_size.x, hull_size.z) * 0.5
-	_hull_material = hull.material_override as StandardMaterial3D
+	_hull_material = hull.material_override
+	_has_model = UnitSilhouettes.has_model(type_id)
+	if _has_model:
+		hull.set_instance_shader_parameter("travel", _travel)
 	_hull_size = hull_size
 	_contact_on = contacts != null and WeatherRig.unit_contact > 0.0
 

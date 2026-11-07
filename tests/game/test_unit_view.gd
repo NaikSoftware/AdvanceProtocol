@@ -5,12 +5,16 @@ extends GutTest
 ## тумана: UnitView не читає Vision і не приховує ворога сам (§3.5) —
 ## існування вузла для чужого юніта вирішує контейнер (Task 2.10).
 
+const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
+
 const UnitViewScene := preload("res://game/battle/unit_view.tscn")
 
 var view: Node3D
 
 
 func before_each() -> void:
+	# Коробки, хай що лежить в assets/units: тести моделей підставляють свою сітку самі.
+	UnitSilhouettes.use_models({})
 	view = UnitViewScene.instantiate()
 	add_child_autofree(view)
 
@@ -19,6 +23,7 @@ func after_each() -> void:
 	# Статичне поле на весь процес: тест, що впав посередині, не сміє лишити рельєф решті набору.
 	TerrainHeight.active = null
 	WeatherRig.unit_contact = 0.0
+	UnitSilhouettes.reset_models()
 
 
 func _unit(type_id: int, owner: int = 0, pos: Vector2i = Vector2i(2, 3), facing: int = 0) -> Unit:
@@ -994,3 +999,30 @@ func test_hp_bar_and_label_draw_over_every_effect() -> void:
 		assert_true(n.get("no_depth_test"), n.name)
 		assert_eq(n.get("render_priority"), UnitView.OVERLAY_PRIORITY, n.name)
 	assert_true(UnitView.OVERLAY_PRIORITY > BoardView.CONTOUR_PRIORITY, "вище за контури зон, вогонь і дощ")
+
+
+## Колеса й траки моделі крутяться за пройденим шляхом: крок на сусідню клітинку — тайл шляху.
+func test_walking_advances_travel_on_a_model_body() -> void:
+	UnitSilhouettes.use_models({5: UnitModelFixture.vehicle(5)})
+	view.bind(_unit(5, 0, Vector2i(2, 2)))
+	var hull := view.get_node("Silhouette/Hull") as GeometryInstance3D
+	assert_eq(hull.get_instance_shader_parameter("travel"), 0.0)
+	var path: Array[Vector2i] = [Vector2i(3, 2), Vector2i(4, 2)]
+	(view.move_along(path, 0.05).get_object() as Tween).custom_step(10.0)
+	assert_almost_eq(float(hull.get_instance_shader_parameter("travel")), 2.0, 0.001)
+	assert_eq(hull.get_instance_shader_parameter("owner_color"), UnitView.PLAYER_COLORS[0])
+
+
+## Моделі одного типу в різних власників — та сама сітка й той самий матеріал: колір лежить на
+## вузлі, тож юніт лишається одним викликом малювання.
+func test_model_bodies_share_mesh_and_material_across_owners() -> void:
+	UnitSilhouettes.use_models({5: UnitModelFixture.vehicle(5)})
+	var other: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(other)
+	view.bind(_unit(5, 0))
+	other.bind(_unit(5, 1))
+	var a := view.get_node("Silhouette/Hull") as MeshInstance3D
+	var b := other.get_node("Silhouette/Hull") as MeshInstance3D
+	assert_same(a.mesh, b.mesh)
+	assert_same(a.material_override, b.material_override)
+	assert_ne(a.get_instance_shader_parameter("owner_color"), b.get_instance_shader_parameter("owner_color"))

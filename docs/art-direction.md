@@ -105,6 +105,52 @@ Techniques that buy atmosphere cheaply here:
 Turn-based means the screen is usually static — enable low-processor mode and drop the frame rate
 hard when nothing is animating. Battery life is a feature for a game passed between people.
 
+## Unit models
+
+The contract between the asset side and `game/battle/unit_silhouettes.gd`. A type with no file
+falls back to the box placeholder, so a model may land one type at a time.
+
+- **Path** `res://assets/units/<slug>.glb`, by type id: 0 `rifle_soldier`, 1 `assault_soldier`,
+  2 `armoured_car`, 3 `troop_carrier`, 4 `scout_car`, 5 `medium_tank`, 6 `tank_destroyer`,
+  7 `light_tank`, 8 `heavy_tank`, 9 `field_gun`, 10 `howitzer`, 11 `engineer_vehicle`. A soldier
+  type is **one figure**: the game places four copies on the squad's slots and lays the fallen
+  ones down.
+- **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
+  baked in on load, but a rotation off the X axis would misplace the wheel axles). Base colour
+  texture, optional normal and glTF metallicRoughness (roughness in G, metallic in B), ≤ 1024 px.
+- **Scale and axes:** 1 tile = 1.0 unit = 8 m. Origin bottom-centre, lowest vertex at y = 0, front
+  along −Z. A vehicle's hull footprint matches `_SPECS.hull` X/Z and its barrel tip lands at
+  `UnitSilhouettes.muzzle()`, because muzzle flashes, wrecks and contact shadows read those
+  numbers, not the mesh. A soldier is 1.8 m = 0.225 units tall, feet at y = 0.
+- **COLOR_0** (RGB, black elsewhere): **R** = owner marking — the roof recognition panel, the
+  helmet band. Paint those faces neutral grey around sRGB 160 (linear 0.35): the shader multiplies
+  the owner colour by the texture's luminance over that value, so dirt and scratches stay visible
+  in the owner colour. **G** = track tread faces. **B** = wheel faces that rotate.
+- **UV2** (TEXCOORD_1 as Godot reads it): on track faces u = arc length along the track loop in
+  model units, v = 0..1 across the track; on wheel faces (centre_y, centre_z) of that wheel's
+  axle in model units; (0, 0) elsewhere.
+- **Tread strip:** the base colour atlas (and the normal and ORM maps, if any) reserves its top
+  1/16 — Godot UV v in [0, 0.0625], full width — for exactly one tread period of 0.25 model units
+  (2 m of track), tiling horizontally. Track faces ignore UV0 and sample
+  `vec2(fract((UV2.x + travel) / 0.25), UV2.y * 0.0625)` (`TREAD_PERIOD`, `TREAD_STRIP` in
+  `unit_model.gdshader`), so as the vehicle moves the pattern slides towards decreasing u: run u
+  from front to rear along the top of the loop for the top run to move forwards.
+- **Wheels:** driving forwards turns a wheel about X through its axle by travel / radius, top
+  moving towards −Z. The radius is `_SPECS.wheel` per type — default 0.06 (0.5 m), heavy tank
+  0.0475 (0.38 m road wheels).
+- **Import settings** (`<slug>.glb.import`, checked by `test_unit_silhouettes.gd`):
+  `meshes/force_disable_compression=true` (compression quantises UV2), `meshes/generate_lods=false`,
+  `meshes/create_shadow_meshes=false` (the game merges the mesh and drops both anyway),
+  `meshes/light_baking=1` (2 regenerates UV2 and erases tracks and wheels),
+  `meshes/ensure_tangents=true` for the normal map, `gltf/embedded_image_handling=1` (textures
+  extracted next to the file) and `import_script/path="res://tools/prop_import.gd"`, which sets
+  specular 0.3 like the props; the unit shader copies the imported material's specular, roughness,
+  metallic and textures.
+- **Drawing:** one mesh and one material per type, shared by every owner; the owner colour and the
+  distance travelled are per-node `instance uniform`s, so a unit stays one draw call. They work on
+  both the Mobile renderer and `gl_compatibility`. A wreck is the same mesh under the burnt
+  material, sunk by `HULL_SAG`; its barrel does not droop, since the mesh is one piece.
+
 ## Props
 
 - **Realistic, never cartoon or toy-like:** real proportions and materials, weathering. Flat
