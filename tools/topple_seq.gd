@@ -4,7 +4,8 @@ extends Node
 ## як стрижень, що обертається навколо основи, і ховається тієї миті, коли ляже. Спершу всі миті
 ## програються раз без запису (розігрів шейдерів), потім кожен випадок — із записом. Кадри
 ## лежать у пам'яті й пишуться в кінці (збереження блокує). Не входить у гру. Запуск (вікно):
-##   $GODOT --path . --position 6000,0 res://tools/topple_seq.tscn -- <out_dir> <map> <zoom> <кадрів/с> <poles|fences|все> [x,y]
+##   $GODOT --path . --position 6000,0 res://tools/topple_seq.tscn -- <out_dir> <map> <zoom> <кадрів/с> <poles|fences|all|ім'я випадку> [x,y|-] [unit]
+## unit — перший юніт дошки стає на сусідню клітинку, куди падає опора: чи не ховає його пил.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 120
@@ -35,8 +36,10 @@ func _ready() -> void:
 	add_child(screen)
 	var map := load("res://maps/%s.tres" % a[1]) as MapData
 	screen.setup(map, 2, 1)
+	# Те, що екран бою ставить сам із вигляду мапи: мокра земля бризкає грязю, а не куриться.
+	BattleFx.wetness = BattleLook.for_map_path("res://maps/%s.tres" % a[1]).wetness
 	var cell := Vector2i(map.width / 2, map.height / 2)
-	if a.size() > 5:
+	if a.size() > 5 and a[5] != "-":
 		var xy: PackedStringArray = a[5].split(",")
 		cell = Vector2i(int(xy[0]), int(xy[1]))
 	var base: Vector3 = IsoCameraRig.cell_to_world(cell) + Vector3(-0.3, 0, 0.2)
@@ -49,9 +52,16 @@ func _ready() -> void:
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	var units: Node = screen.get("_units")
+	if a.size() > 6 and a[6] == "unit":
+		for u: Node in units.get_children():
+			if u is UnitView and (u as UnitView).visible:
+				var spot: Vector3 = base + Vector3(0.93, 0, 0.37).normalized() * 0.75 + Vector3(0.0, 0, 0.45)
+				spot.y = TerrainHeight.ground_y(spot.x, spot.z)
+				(u as UnitView).position = spot
+				break
 	var pick: Array = []
 	for c: Array in CASES:
-		if a[4] == "all" or (a[4] == "poles") == bool(c[2]):
+		if a[4] == "all" or a[4] == c[0] or (a[4] in ["poles", "fences"] and (a[4] == "poles") == bool(c[2])):
 			pick.append(c)
 	# Розігрів: кожна мить раз, нікуди не записана.
 	for c: Array in pick:
@@ -115,7 +125,9 @@ func _play(screen: Node, units: Node, base: Vector3, c: Array, fps: float) -> Ar
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	var focus: Vector3 = (base + land) * 0.5
 	var frames: Array[Image] = []
-	BattleFx.spawn_topple_hit(units, base + Vector3(0, 0.02, 0), top, c[1], c[3])
+	# Паркан: півпрольоту полотна 1,25 м уздовж огорожі (поперек напряму падіння).
+	var span: Vector3 = Vector3.ZERO if pole else axis * 1.25 / 8.0
+	BattleFx.spawn_topple_hit(units, base + Vector3(0, 0.02, 0), top, c[1], c[3], pole, span)
 	var t0: int = Time.get_ticks_usec()
 	var next: float = 0.0
 	var landed: bool = false
@@ -130,7 +142,7 @@ func _play(screen: Node, units: Node, base: Vector3, c: Array, fps: float) -> Ar
 			if el >= t_fall:
 				landed = true
 				pivot.visible = false
-				BattleFx.spawn_topple_land(units, base, land, c[1], c[3])
+				BattleFx.spawn_topple_land(units, base, land, c[1], c[3], pole)
 		if el >= next:
 			var img: Image = get_viewport().get_texture().get_image()
 			var k: float = float(img.get_width()) / get_viewport().get_visible_rect().size.x

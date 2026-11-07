@@ -7,6 +7,7 @@ var parent: Node3D
 
 
 func before_each() -> void:
+	BattleFx.wetness = 0.0
 	parent = Node3D.new()
 	add_child_autofree(parent)
 
@@ -22,11 +23,14 @@ func _moments() -> Array[Node3D]:
 	var at := Vector3(3, 0, 4)
 	for d: int in BattleFx.Debris.values():
 		for live: bool in [false, true]:
+			# Мокра мапа дає більше грудок — бюджет мусить триматись і там.
+			BattleFx.wetness = 1.0 if live else 0.0
 			# Опора (верх на 10 м) і паркан (верх на 1,8 м).
 			out.append(BattleFx.spawn_topple_hit(parent, at, at + Vector3(0, 10.0 / 8.0, 0), d, live))
 			out.append(BattleFx.spawn_topple_hit(parent, at, at + Vector3(0, 1.8 / 8.0, 0), d, live))
 			out.append(BattleFx.spawn_topple_land(parent, at, at + Vector3(10.0 / 8.0, 0, 0.3), d, live))
 			out.append(BattleFx.spawn_topple_land(parent, at, at + Vector3(2.0 / 8.0, 0, 0), d, live))
+			out.append(BattleFx.spawn_topple_hit(parent, at, at + Vector3(0, 1.8 / 8.0, 0), d, live, false, Vector3(0.2, 0, 0.1)))
 	return out
 
 
@@ -70,8 +74,8 @@ func test_scatter_comes_from_the_position() -> void:
 	var at := Vector3(5, 0, 2)
 	var a: Node3D = BattleFx.spawn_topple_land(parent, at, at + Vector3(1, 0, 0), BattleFx.Debris.WOOD, false)
 	var b: Node3D = BattleFx.spawn_topple_land(parent, at, at + Vector3(1, 0, 0), BattleFx.Debris.WOOD, false)
-	assert_eq((a.get_node("Splinters") as GPUParticles3D).seed, (b.get_node("Splinters") as GPUParticles3D).seed)
-	assert_true((a.get_node("Splinters") as GPUParticles3D).use_fixed_seed)
+	assert_eq((a.get_node("Fine") as GPUParticles3D).seed, (b.get_node("Fine") as GPUParticles3D).seed)
+	assert_true((a.get_node("Fine") as GPUParticles3D).use_fixed_seed)
 
 
 func test_warm_up_covers_topple_and_stays_invisible() -> void:
@@ -84,3 +88,26 @@ func test_warm_up_covers_topple_and_stays_invisible() -> void:
 			for l: Node in n.find_children("*", "OmniLight3D", true, false):
 				assert_false((l as OmniLight3D).visible)
 	assert_eq(found, 2, "розігрів — удар і падіння")
+
+
+## Той, хто кличе, знає, що це опора: низька опора все одно кришиться біля основи, а не
+## розлітається парканом; без підказки — за висотою.
+func test_pole_flag_overrides_the_height_guess() -> void:
+	var at := Vector3(4, 0, 4)
+	var guessed: Node3D = BattleFx.spawn_topple_hit(parent, at, at + Vector3(0, 2.0 / 8.0, 0), BattleFx.Debris.WOOD, false)
+	var told: Node3D = BattleFx.spawn_topple_hit(parent, at, at + Vector3(0, 2.0 / 8.0, 0), BattleFx.Debris.WOOD, false, true)
+	assert_eq((guessed.get_node("Fine") as GPUParticles3D).amount, 10, "2 м без підказки — паркан")
+	assert_eq((told.get_node("Fine") as GPUParticles3D).amount, 6, "сказано «опора» — опора")
+
+
+## Мокра мапа: пил стає бурою грязю, грудок більше.
+func test_wet_ground_sprays_mud_instead_of_dust() -> void:
+	var at := Vector3(6, 0, 1)
+	var dry: Node3D = BattleFx.spawn_topple_land(parent, at, at + Vector3(1.25, 0, 0), BattleFx.Debris.CONCRETE, false)
+	BattleFx.wetness = 1.0
+	var wet: Node3D = BattleFx.spawn_topple_land(parent, at, at + Vector3(1.25, 0, 0), BattleFx.Debris.CONCRETE, false)
+	assert_true((wet.get_node("Clods") as GPUParticles3D).amount > (dry.get_node("Clods") as GPUParticles3D).amount)
+	var tone := func(n: Node3D) -> float:
+		var g: Gradient = (((n.get_node("Settle") as GPUParticles3D).process_material as ParticleProcessMaterial).color_initial_ramp as GradientTexture1D).gradient
+		return g.colors[0].get_luminance()
+	assert_true(tone.call(wet) < tone.call(dry) * 0.5, "мокрий пил — темна грязь")
