@@ -121,6 +121,9 @@ const FADE_DEPTH_PRIORITY: int = 5
 const FADE_TIME: float = 0.2
 ## Розчиняється лише будівля, вища за це (клітинки, ~4 м): нижча юніта не закриває.
 const FADE_MIN_H: float = 0.5
+## Коробка юніта для перевірки затулення (півсторона й висота, клітинки): промені до камери йдуть з її кутів.
+const OCCLUDE_HALF: float = 0.22
+const OCCLUDE_H: float = 0.3
 ## Сусіди, що розчиняються разом із клітинкою юніта: камера стоїть на +x, +z від фокуса (yaw 45°),
 ## тож саме ці клітинки лежать між юнітом і камерою.
 const REVEAL_OFFSETS: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]
@@ -550,6 +553,9 @@ var _wires: MeshInstance3D
 var _reveal: Dictionary = {}
 ## Клітинки юнітів останнього set_reveal_cells: будівля розчиняється, лише коли на екрані закриває юніта.
 var _reveal_units: Array[Vector2i] = []
+## Око камери в просторі шару (set_eye); INF — камери нема, промінь паралельний _view_back.
+var eye_local: Vector3 = Vector3.INF
+var _view_back: Vector3 = Basis(Vector3.UP, deg_to_rad(IsoCameraRig.YAW_DEGREES)) * Vector3(0.0, sin(deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG)), cos(deg_to_rad(IsoCameraRig.PITCH_NEAR_DEG)))
 ## Вузол → MultiMesh напівпрозорих екземплярів тієї ж моделі.
 var _fade_nodes: Dictionary = {}
 ## Екземпляр → рівень розчинення 0..1 (0 — суцільний) і куди він іде.
@@ -2087,17 +2093,38 @@ func _is_faded(inst: Dictionary) -> bool:
 		return false
 	if not (inst["cells"] as Array).any(func(c: Vector2i) -> bool: return _reveal.has(c)):
 		return false
-	# Лише коли будівля на екрані перекриває юніта (сусід збоку його не ховає) і стоїть ближче до
-	# камери: ближній край будівлі вглиб — перед юнітом. Будівля за юнітом нічого не закриває.
-	var box: AABB = (inst["transform"] as Transform3D) * ((model(inst["model"]) as Dictionary)["aabb"] as AABB)
-	var proj: Array = _Placer._screen_of(Rect2(box.position.x, box.position.z, box.size.x, box.size.z), box.size.y)
-	var scr: Rect2 = proj[0]
-	var near_depth: float = (proj[1] as Vector2).x
+	# Лише коли промінь від юніта до справжньої камери проходить крізь коробку будівлі у її власних
+	# осях. Світова AABB повернутого дому й прямокутник її проєкції під сталим кутом були набагато
+	# ширші за силует, тож дім лишався прозорим і тоді, коли юніта вже було видно повністю.
+	var inv: Transform3D = (inst["transform"] as Transform3D).affine_inverse()
+	var box: AABB = (model(inst["model"]) as Dictionary)["aabb"]
 	for u in _reveal_units:
-		var us: Array = _Placer._screen_of(Rect2(Vector2(u) - Vector2(0.2, 0.2), Vector2(0.4, 0.4)), 0.25)
-		if near_depth < (us[1] as Vector2).x and scr.intersects(us[0]):
-			return true
+		for p: Vector3 in _unit_points(u):
+			var eye: Vector3 = p + _view_back * 100.0 if eye_local == Vector3.INF else eye_local
+			if box.intersects_segment(inv * p, inv * eye) != null:
+				return true
 	return false
+
+
+## Кути коробки юніта на клітинці u (простір шару) — звідси йдуть промені до камери.
+func _unit_points(u: Vector2i) -> Array[Vector3]:
+	var c := Vector3(u.x, TerrainHeight.ground_y(u.x, u.y), u.y)
+	var pts: Array[Vector3] = [c + Vector3(0.0, OCCLUDE_H * 0.5, 0.0)]
+	for sx: float in [-OCCLUDE_HALF, OCCLUDE_HALF]:
+		for sz: float in [-OCCLUDE_HALF, OCCLUDE_HALF]:
+			for y: float in [0.05, OCCLUDE_H]:
+				pts.append(c + Vector3(sx, y, sz))
+	return pts
+
+
+## Позиція камери (глобальна): розчинення перераховується, бо з панорамою й зумом змінюється кут погляду.
+## Без камери (безголові тести) промінь паралельний — під найнижчим нахилом рига.
+func set_eye(global_eye: Vector3) -> void:
+	var local: Vector3 = to_local(global_eye) if is_inside_tree() else global_eye
+	if local.is_equal_approx(eye_local):
+		return
+	eye_local = local
+	_update_fade()
 
 
 func _is_crushed(inst: Dictionary) -> bool:
@@ -2125,15 +2152,24 @@ func _final_transform(inst: Dictionary) -> Transform3D:
 
 func _apply() -> void:
 	_apply_queued = false
-	var moving := false
-	for key: StringName in _fade_nodes:
-		for i in _slots[key]:
-			_fade_target[i] = 1.0 if _is_faded(_instances[i]) else 0.0
-			moving = moving or not is_equal_approx(float(_fade_level.get(i, 0.0)), _fade_target[i])
-	_write_nodes()
-	set_process(moving)
+	_update_fade(true)
 	_rebuild_wires()
 	_rebuild_transformers()
+
+
+## Цілі розчинення будівель; вузли переписуються, лише коли якась ціль змінилась (або force).
+func _update_fade(force: bool = false) -> void:
+	var moving := false
+	var changed := force
+	for key: StringName in _fade_nodes:
+		for i in _slots[key]:
+			var target: float = 1.0 if _is_faded(_instances[i]) else 0.0
+			changed = changed or target != float(_fade_target.get(i, 0.0))
+			_fade_target[i] = target
+			moving = moving or not is_equal_approx(float(_fade_level.get(i, 0.0)), target)
+	if changed:
+		_write_nodes()
+		set_process(moving)
 
 
 ## Розчинення плавне: рівень іде до цілі за FADE_TIME (кадр показу, не правила).

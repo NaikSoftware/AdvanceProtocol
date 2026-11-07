@@ -1127,6 +1127,9 @@ func _apply_forest_sun(look: BattleLook) -> void:
 ## Зум камери для лісу: підлісок лише до ForestLayer.DETAIL_ZOOM.
 func _follow_forest() -> void:
 	_board_view.set_forest_zoom(_camera_rig.zoom_level)
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null:
+		_board_view.set_view_eye(cam.global_position)
 
 
 ## Гачок вигляду лісу: його перемальовують з known_broken_map(активного) — ніколи з
