@@ -250,9 +250,10 @@ static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: De
 		# Не далі ~3 м: віяло 70° від вертикалі на 4,5 м/с.
 		_shards(root, "Fine", rng, fine[0], 10, low, basis, box, fine[1], fine[2], 2.0, 4.5, 70.0, 2.4)
 		_shards(root, "Clods", rng, Shard.CLOD, clods + 2, low, basis, box, 0.12, 0.26, 2.0, 4.5, 70.0, 2.4)
-		# Полотно, що впало, виштовхує з-під себе повітря: 4 низькі клуби вздовж прольоту підскакують
-		# і далі ще здіймаються сталою тягою — 0,6–1 м за секунду — та зносяться на ~0,5 м.
-		_dust_puffs(root, rng, 4, Vector3.ZERO, basis, box, 0.8, 1.8, 1.8, colours, 0.4, 0.7, 30.0, 0.6, 0.32, 0.9, wet)
+		# Полотно, що впало, виштовхує з-під себе повітря: 7 рідких клуб уздовж прольоту (щільніше за
+		# пів діаметра — одна маса, а не намисто) підскакують і далі ще здіймаються сталою тягою —
+		# 0,6–1 м за секунду — та зносяться на ~0,5 м.
+		_dust_puffs(root, rng, 7, Vector3.ZERO, basis, box, 0.8, 1.8, 1.8, colours, 0.4, 0.7, 30.0, 0.6, 0.28, 0.9, wet)
 	if live_wire:
 		var up: Vector3 = top - at
 		_arc(root, rng, up, 3, 1.1)
@@ -286,12 +287,12 @@ static func spawn_topple_land(parent: Node, a: Vector3, b: Vector3, debris: Debr
 	var fine: Array = FINE[debris]
 	var clods: int = roundi(CLODS[debris] * (1.0 + 0.6 * wet))
 	if is_pole:
-		_shards(root, "Fine", rng, fine[0], clampi(roundi(len_m * 1.2), 6, 14), low, basis, line, fine[1], fine[2], 2.0, 5.0, 70.0, 2.6)
-		_shards(root, "Clods", rng, Shard.CLOD, clampi(roundi(len_m * 0.25) + clods, 3, 10), low, basis, line, 0.12, 0.26, 2.0, 5.0, 70.0, 2.6)
+		_shards(root, "Fine", rng, fine[0], clampi(roundi(len_m * 1.2), 6, 14), low, basis, line, fine[1], fine[2], 2.0, 5.0, 70.0, 2.4)
+		_shards(root, "Clods", rng, Shard.CLOD, clampi(roundi(len_m * 0.25) + clods, 3, 10), low, basis, line, 0.12, 0.26, 2.0, 5.0, 70.0, 2.4)
 		_dust_puffs(root, rng, clampi(roundi(len_m * 1.6), 12, 16), mid, basis, line, 1.4, 3.4, 2.6, colours, 1.2, 1.8, 25.0, 1.0, 0.25 + 0.05 * powder, 0.2, wet)
 	else:
 		_shards(root, "Clods", rng, Shard.CLOD, clods, low, basis, line, 0.12, 0.22, 1.0, 3.0, 60.0, 2.2)
-		_dust_puffs(root, rng, 4, mid, basis, line, 0.7, 1.5, 1.8, colours, 0.5, 0.8, 35.0, 0.8, 0.22, 0.3, wet)
+		_dust_puffs(root, rng, 6, mid, basis, line, 0.7, 1.5, 1.8, colours, 0.5, 0.8, 35.0, 0.8, 0.2, 0.3, wet)
 	# Уламки падають на площину землі посередині відрізка (на схилі — компроміс двох кінців).
 	var floor_box := GPUParticlesCollisionBox3D.new()
 	floor_box.name = "Ground"
@@ -350,9 +351,9 @@ static func _shards(root: Node3D, node_name: String, rng: RandomNumberGenerator,
 	pm.angular_velocity_curve = spin_t
 	# Кожен шматок трохи світліший чи темніший: однакові уламки читаються штампом.
 	var shade := Gradient.new()
-	# Під хмарами мокрої мапи затемнені уламки тонули в чорне (36 проти землі 79): там вони трохи
-	# світліші за сухі, щоб лишатися бурими.
-	var damp_k: float = 1.0 + 0.15 * clampf(wetness, 0.0, 1.0)
+	# Під хмарами мокрої мапи затемнені грудки тонули в чорне (36 проти землі 79): там вони трохи
+	# світліші за сухі, щоб лишатися бурими; решта уламків — змокла й темніша, а не блищить.
+	var damp_k: float = 1.0 + (0.15 if shape == Shard.CLOD else -0.2) * clampf(wetness, 0.0, 1.0)
 	shade.colors = PackedColorArray([Color.WHITE * 0.8 * damp_k, Color.WHITE * damp_k])
 	var shade_t := GradientTexture1D.new()
 	shade_t.gradient = shade
@@ -448,7 +449,8 @@ static func _dust_puffs(root: Node3D, rng: RandomNumberGenerator, amount: int, a
 	pm.directional_velocity_curve = drift_c
 	pm.directional_velocity_min = push_ms * 0.8 / 8.0
 	pm.directional_velocity_max = push_ms * 1.2 / 8.0
-	pm.lifetime_randomness = 0.25
+	# Клуби кінчаються в різний час: хмара рідшає ~0,8 с, а не гасне вся разом.
+	pm.lifetime_randomness = 0.45
 	var k: float = DIRT_CELL_M / DIRT_CLOUD_M / 8.0
 	pm.scale_min = d_min * k
 	pm.scale_max = d_max * k
@@ -541,10 +543,10 @@ static func _shard_mesh(shape: Shard) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	# Дерево лишає колір кори й потемнілої деревини, не світліє на зламі.
-	var wood := Color(0.22, 0.165, 0.11)
+	var wood := Color(0.25, 0.165, 0.09)
 	match shape:
 		Shard.CHIP:
-			_bar(st, 2, 1.0, 0.4, 0.33, 0.0, 0.0, Color(0.48, 0.47, 0.45), 0.25, 1)
+			_bar(st, 2, 1.0, 0.4, 0.33, 0.0, 0.0, Color(0.5, 0.45, 0.38), 0.25, 1)
 		Shard.SPLINTER:
 			_bar(st, 4, 1.0, 0.07, 0.035, 0.03, 1.0, wood, 0.1, 3)
 		Shard.SHEET:
@@ -1398,8 +1400,8 @@ void fragment() {
 	float keep = smoothstep(thr - 0.25, thr, t.a * (0.6 + 0.4 * n));
 	// Корінь прозорості атласу: середина клуби пласкіша, ніж в атласі, але край ще м'який —
 	// без кореня клуба була б пласким диском.
-	// Корінь множника — довгий хвіст: остання третина хмари рідшає ~0,8 с, а не зникає за 0,3 с.
-	float a = sqrt(t.a) * smoothstep(0.0, 0.7, t.a) * keep * COLOR.a * pow(1.0 - erode, 0.6);
+	// Ступінь < 1 — довгий хвіст: остання третина хмари рідшає ~0,8 с, а не зникає за 0,3 с.
+	float a = sqrt(t.a) * smoothstep(0.0, 0.7, t.a) * keep * COLOR.a * pow(1.0 - erode, 0.45);
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, край там жорсткіший.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA = a * clamp((VERTEX.z - sv.z / sv.w) / v_depth, 0.0, 1.0);
