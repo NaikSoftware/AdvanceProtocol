@@ -1,11 +1,12 @@
 {
-  "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle.",
+  "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `ends_bottom_h` [rear, front] is the bottom edge of the rear plate and the bow (0 = no bow beyond the track), which verify_glb.py keeps every body vertex above. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle.",
   "heavy_tank": {
-    "source": "~/.cache/ap-scratch/units/tripo-out/heavy_tank_v1/tripo-out/heavy-tank-v1-78bebd8d/model.glb",
+    "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
     "type_id": 8,
     "fwd": "x",
     "hull_long": [-0.4987, 0.3238],
     "hull_lat": 0.2166,
+    "ends_bottom_h": [0.099, 0.123],
     "body_tris": 2800,
     "cut": {
       "lat": [0.104, 0.2015],
@@ -32,16 +33,17 @@
     },
     "_panels": "at = [x, y] centre in MODEL units (x right, y forward), size_m = [across, along] the hull; pick with panel_spots.py",
     "panels": [
-      {"name": "turret", "at": [-0.058, -0.01], "size_m": [1.8, 1.0]},
+      {"name": "turret", "at": [-0.062, -0.013], "size_m": [1.8, 1.0]},
       {"name": "deck", "at": [-0.137, -0.34], "size_m": [1.25, 1.0]}
     ]
   },
   "medium_tank": {
-    "source": "~/.cache/ap-scratch/units/tripo-out/medium_tank_v1/tripo-out/medium-tank-v1-428150d7/model.glb",
+    "source": "~/.local/share/advance-protocol/unit-sources/medium_tank.glb",
     "type_id": 5,
     "fwd": "x",
     "hull_long": [-0.4998, 0.3147],
     "hull_lat": 0.2057,
+    "ends_bottom_h": [0.124, 0.133],
     "body_tris": 2800,
     "cut": {"lat": [0.115, 0.195], "below_skirt_h": 0.09, "behind_skirt_lat": 0.193, "gear_top_h": 0.155, "open_ends_long": [-0.37, 0.21]},
     "gun": {
@@ -58,13 +60,16 @@
     "panels": [{"name": "turret", "at": [-0.003, -0.145], "size_m": [1.8, 1.0]}]
   },
   "tank_destroyer": {
-    "source": "~/.cache/ap-scratch/units/tripo-out/tank_destroyer_v1/tripo-out/tank-destroyer-v1-6f18f04f/model.glb",
+    "source": "~/.local/share/advance-protocol/unit-sources/tank_destroyer.glb",
     "type_id": 6,
     "fwd": "x",
     "hull_long": [-0.4973, 0.2314],
     "hull_lat": 0.1939,
+    "ends_bottom_h": [0.119, 0.0],
     "body_tris": 2800,
     "cut": {"lat": [0.105, 0.186], "below_skirt_h": 0.08, "behind_skirt_lat": 0.185, "gear_top_h": 0.14, "open_ends_long": [-0.38, 0.15]},
+    "_turret": "shrunk to read small and low from above: box in SOURCE units, base_h = top of the ring",
+    "turret": {"long": [-0.30, 0.035], "lat": 0.125, "base_h": 0.18, "scale_long": 0.86, "scale_h": 0.55, "barrel_r": 0.026},
     "gun": {
       "axis_h": 0.2104, "start_long": 0.168, "clear_r": 0.024, "sides": 10,
       "profile": [[0.168, 0.0181], [0.195, 0.0182], [0.2, 0.0172], [0.215, 0.0172], [0.22, 0.0144], [0.465, 0.0144], [0.47, 0.015], [0.485, 0.015], [0.5, 0.0125]]
@@ -79,11 +84,12 @@
     "panels": [{"name": "deck", "at": [0.0, -0.338], "size_m": [1.8, 1.0]}]
   },
   "light_tank": {
-    "source": "~/.cache/ap-scratch/units/tripo-out/light_tank_v1/tripo-out/light-tank-v1-40cc3f69/model.glb",
+    "source": "~/.local/share/advance-protocol/unit-sources/light_tank.glb",
     "type_id": 7,
     "fwd": "x",
     "hull_long": [-0.4988, 0.4688],
     "hull_lat": 0.2571,
+    "ends_bottom_h": [0.175, 0.181],
     "body_tris": 2800,
     "cut": {"lat": [0.148, 0.245], "below_skirt_h": 0.105, "behind_skirt_lat": 0.243, "gear_top_h": 0.18, "open_ends_long": [-0.40, 0.40]},
     "gun": {

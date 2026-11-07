@@ -2,7 +2,8 @@
 
     blender --background --factory-startup --python assemble.py -- <unit>
 
-COLOR_0: R recognition panel, G track faces, B rotating wheel faces, black elsewhere.
+COLOR_0: R recognition panel, G track faces, B rotating wheel faces (alpha = half the spin rate
+relative to the road wheels), black elsewhere.
 UV2 (TEXCOORD_1 as Godot reads it): track = (arc length in model units, 0 inner .. 1 outer edge);
 wheel = (axle y, axle z) in Godot axes; (0, 0) elsewhere. The glTF exporter writes v as 1 - v,
 so every UV2 is stored pre-flipped here.
@@ -141,6 +142,9 @@ wheels = [(c, "wheel") for c in circ[:-2]] + [(circ[-2], "sprocket"), (circ[-1],
 for side in (1, -1):
     for (cy, cz, r), cname in wheels:
         ax = (cz, -cy)                               # Godot (y, z) of the axle
+        # alpha = half the spin rate relative to the road wheels (_SPECS.wheel): the shader turns a
+        # wheel by travel / wheel * 2 * alpha, so a smaller sprocket or idler keeps pace with the track
+        blue = (0.0, 0.0, 1.0, 0.5 * L(G["road"]["r"]) / r)
         outer = [bm.verts.new((side * w1, cy + r * math.cos(2 * math.pi * i / n), cz + r * math.sin(2 * math.pi * i / n))) for i in range(n)]
         inner = [bm.verts.new((side * w0, cy + r * math.cos(2 * math.pi * i / n), cz + r * math.sin(2 * math.pi * i / n))) for i in range(n)]
         uvs = [cell_map(cname, math.cos(2 * math.pi * i / n) * side, math.sin(2 * math.pi * i / n)) for i in range(n)]
@@ -153,55 +157,36 @@ for side in (1, -1):
 bmesh.ops.triangulate(bm, faces=bm.faces)
 parts.append(finish(bm, "wheels"))
 
-# ---- recognition panels, strapped to the surface beneath ---------------------------------------
-# Cloth on a roof: every vertex rests on what is under it, and over a bump the cloth falls back
-# at `panel_slope` (rise per run) instead of tenting flat across. The panel must lie wholly on one
-# roof, flat or sloped: a sample more than `panel_dip` below the footprint's best-fit plane is
-# hanging off an edge, and
-# the build fails rather than ship a flap. Pick `at` with panel_spots.py.
+# ---- recognition panels: flat rectangles strapped to the roof ---------------------------------
+# A panel stays one crisp rectangle from above: a single plane fitted to the roof under it (level
+# or sloped) and lifted onto its highest point, so nothing pokes through and it never creases.
+# Kit under it may leave a gap up to `panel_flat_tol`; more than that (kit too tall, or the
+# footprint running off an edge) fails the build. Pick `at` and the size with panel_spots.py.
 dg = bpy.context.evaluated_depsgraph_get()
 bvh = BVHTree.FromObject(lo, dg)
 bm, uvl, uv2l, cl = new_part("panels")
 red = (1.0, 0.0, 0.0, 1.0)
-cell_sz = cfg.get("panel_cell", 0.025)
 for p in cfg["panels"]:
     cx, cy = p["at"]
     sx, sy = p["size_m"][0] / lib.TILE_M, p["size_m"][1] / lib.TILE_M
-    NX, NY = max(2, math.ceil(sx / cell_sz)), max(2, math.ceil(sy / cell_sz))
-    gx = cx + (np.arange(NX + 1) / NX - 0.5) * sx
-    gy = cy + (np.arange(NY + 1) / NY - 0.5) * sy
-    # each vertex rests on the highest point within half a cell of it, so no rim pokes through
-    # between vertices; sampled 4x finer than the cloth grid
-    F = 4
-    fx = cx + (np.arange(NX * F + 1) / (NX * F) - 0.5) * sx
-    fy = cy + (np.arange(NY * F + 1) / (NY * F) - 0.5) * sy
-    zf = np.zeros((len(fy), len(fx)))
-    for j, yy in enumerate(fy):
-        for i, xx in enumerate(fx):
-            hit = bvh.ray_cast(Vector((xx, yy, 2.0)), Vector((0, 0, -1)))[0]
-            zf[j, i] = hit.z if hit else 0.0
-    zp = np.pad(zf, F // 2, mode="edge")
-    z = np.max([zp[a:a + len(fy):F, b:b + len(fx):F] for a in range(F + 1) for b in range(F + 1)], 0)
-    jj, ii = np.mgrid[0:zf.shape[0], 0:zf.shape[1]]
-    A = np.c_[ii.ravel(), jj.ravel(), np.ones(zf.size)]
-    res = zf.ravel() - A @ np.linalg.lstsq(A, zf.ravel(), rcond=None)[0]
-    print(f"ASM panel {p['name']}: at x {cx:+.3f} y {cy:+.3f}, {NX}x{NY} cells, surface {zf.min():.3f}..{zf.max():.3f}, "
-          f"off its plane {res.min():+.3f}..{res.max():+.3f}")
-    if -res.min() > cfg.get("panel_dip", 0.02):
-        sys.exit(f"ASM panel {p['name']} hangs off an edge ({-res.min():.3f} below its plane); move it with panel_spots.py")
-    rest = z + cfg.get("panel_lift", 0.003)
-    cz_ = rest.copy()
-    fall = cfg.get("panel_slope", 1.0) * min(sx / NX, sy / NY)
-    for _ in range(NX + NY):
-        pad = np.pad(cz_, 1, mode="edge")
-        nb = np.maximum.reduce([pad[:-2, 1:-1], pad[2:, 1:-1], pad[1:-1, :-2], pad[1:-1, 2:]])
-        cz_ = np.maximum(rest, nb - fall)
-    V = [[bm.verts.new((gx[i], gy[j], cz_[j, i])) for i in range(NX + 1)] for j in range(NY + 1)]
-    for j in range(NY):
-        for i in range(NX):
-            vs = [V[j][i], V[j][i + 1], V[j + 1][i + 1], V[j + 1][i]]
-            uvs = [cell_map("panel", (ii / NX) * 2 - 1, (jj / NY) * 2 - 1) for ii, jj in ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))]
-            face(bm, uvl, uv2l, cl, vs, uvs, [(0, 0)] * 4, red, Vector((0, 0, 1)))
+    fx = cx + (np.linspace(0, 1, 33) - 0.5) * sx
+    fy = cy + (np.linspace(0, 1, 33) - 0.5) * sy
+    X, Y = np.meshgrid(fx, fy)
+    zf = np.array([[(lambda h: h.z if h else 0.0)(bvh.ray_cast(Vector((x, y, 2.0)), Vector((0, 0, -1)))[0])
+                    for x in fx] for y in fy])
+    A = np.c_[X.ravel(), Y.ravel(), np.ones(X.size)]
+    c = np.linalg.lstsq(A, zf.ravel(), rcond=None)[0]
+    res = zf.ravel() - A @ c
+    spread = res.max() - res.min()
+    print(f"ASM panel {p['name']}: at x {cx:+.3f} y {cy:+.3f}, surface {zf.min():.3f}..{zf.max():.3f}, "
+          f"off its plane {res.min():+.4f}..{res.max():+.4f}")
+    if spread > cfg.get("panel_flat_tol", 0.025):
+        sys.exit(f"ASM panel {p['name']}: roof under it spreads {spread:.3f} off one plane; pick another spot or size with panel_spots.py")
+    lift = res.max() + cfg.get("panel_lift", 0.003)
+    corners = [(cx - sx / 2, cy - sy / 2), (cx + sx / 2, cy - sy / 2), (cx + sx / 2, cy + sy / 2), (cx - sx / 2, cy + sy / 2)]
+    vs = [bm.verts.new((x, y, c[0] * x + c[1] * y + c[2] + lift)) for x, y in corners]
+    face(bm, uvl, uv2l, cl, vs, [cell_map("panel", u, v) for u, v in ((-1, -1), (1, -1), (1, 1), (-1, 1))],
+         [(0, 0)] * 4, red, Vector((0, 0, 1)))
 bmesh.ops.triangulate(bm, faces=bm.faces)
 parts.append(finish(bm, "panels"))
 

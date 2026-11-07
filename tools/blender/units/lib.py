@@ -37,6 +37,18 @@ def load(name):
     # Uniform fit: the tighter of hull width and hull length governs.
     cfg["k"] = min(sx / (2.0 * cfg["hull_lat"]), sz / (hi - lo))
     cfg["long_c"] = 0.5 * (lo + hi)
+    t = cfg.get("turret")
+    if t:
+        # prep.py shrinks the turret about its centre and lowers it onto its ring, and moves the
+        # gun with it; every stage reads the moved gun from here
+        g = cfg["gun"]
+        t["axis_h0"] = g["axis_h"]
+        tc = 0.5 * (t["long"][0] + t["long"][1])
+        t["dlong"] = tc + (t["long"][1] - tc) * t["scale_long"] - t["long"][1]
+        t["drop"] = (g["axis_h"] - t["base_h"]) * (1.0 - t["scale_h"])
+        g["start_long"] += t["dlong"]
+        g["axis_h"] -= t["drop"]
+        g["profile"] = [[L + t["dlong"], r] for L, r in g["profile"]]
     cfg["work"] = os.path.join(SCRATCH, name)
     os.makedirs(cfg["work"], exist_ok=True)
     return cfg

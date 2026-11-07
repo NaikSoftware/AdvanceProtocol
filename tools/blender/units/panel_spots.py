@@ -5,8 +5,8 @@
 
 The map is the top height of `lo` in MODEL units (front at the top of the PNG, grid every 0.05,
 alternate 1 cm height bands shaded). The search lists panel centres `at` [x, y] whose footprint
-sits on one roof: nothing more than `dip` below the median (no overhang off an edge), nothing more
-than `bump` above it (no kit under the cloth). Put the chosen centre in units.json `panels[].at`.
+lies flat on one roof plane, level or sloped: the spread of heights off the best-fit plane is at
+most `panel_flat_tol` (no overhang off an edge, no kit under the cloth). Put the chosen centre in units.json `panels[].at`.
 """
 import sys, os
 import numpy as np
@@ -55,20 +55,24 @@ if len(sys.argv) < 6:
     raise SystemExit
 sx, sy = float(sys.argv[2]) / lib.TILE_M, float(sys.argv[3]) / lib.TILE_M
 ylo, yhi = float(sys.argv[4]), float(sys.argv[5])
-dip, bump = cfg.get("panel_dip", 0.02) / 2, 0.012
+tol = cfg.get("panel_flat_tol", 0.025)
 nx, ny = int(round(sx / G)), int(round(sy / G))
+jj, ii = np.mgrid[0:ny + 1:2, 0:nx + 1:2]
+A = np.c_[ii.ravel(), jj.ravel(), np.ones(jj.size)]
+pinv = np.linalg.pinv(A)
 ok = []
 for j in range(0, H.shape[0] - ny, 2):
     cy = Y0 + (j + ny / 2) * G
     if not ylo <= cy <= yhi:
         continue
     for i in range(0, H.shape[1] - nx, 2):
-        f = H[j:j + ny + 1, i:i + nx + 1]
-        med = np.median(f)
-        if med > 0.02:
-            ok.append((X0 + (i + nx / 2) * G, cy, med, med - f.min(), f.max() - med))
-good = [r for r in ok if r[3] <= dip and r[4] <= bump]
-print(f"{len(good)} spots for {sx * 8:.2f} x {sy * 8:.2f} m in y {ylo}..{yhi}")
-# none level enough: show the least uneven, so a smaller panel or a drape can be judged
-for x, y, m, dn, up in (sorted(good, key=lambda r: (-r[2], abs(r[0]))) or sorted(ok, key=lambda r: r[3] + r[4]))[:12]:
-    print(f"  at [{x:+.3f}, {y:+.3f}]  level {m:.3f}  dip {dn:.4f}  bump {up:.4f}")
+        f = H[j:j + ny + 1:2, i:i + nx + 1:2].ravel()
+        if f.min() < 0.02:
+            continue
+        r = f - A @ (pinv @ f)                  # off the best-fit plane: flat or sloped roofs alike
+        ok.append((X0 + (i + nx / 2) * G, cy, float(np.median(f)), float(r.max() - r.min())))
+good = [q for q in ok if q[3] <= tol]
+print(f"{len(good)} spots for {sx * 8:.2f} x {sy * 8:.2f} m in y {ylo}..{yhi} (off-plane spread <= {tol})")
+# none flat enough: show the least uneven, so a smaller panel can be judged
+for x, y, m, sp in (sorted(good, key=lambda q: (-q[2], abs(q[0]))) or sorted(ok, key=lambda q: q[3]))[:12]:
+    print(f"  at [{x:+.3f}, {y:+.3f}]  level {m:.3f}  off-plane spread {sp:.4f}")

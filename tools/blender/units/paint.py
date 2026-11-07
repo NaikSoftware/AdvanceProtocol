@@ -69,7 +69,8 @@ pt = d["point"]
 # instead of nesting in rings.
 C = cfg.get("camo", {})
 block = C.get("block_m", 0.16)
-olive, khaki = lin(86, 90, 64), lin(140, 132, 102)
+# khaki stays a mid-tone: brighter blocks plus dust read as pale glyphs on the hull sides
+olive, khaki = lin(86, 90, 64), lin(*C.get("khaki", (124, 117, 90)))
 brown, black = lin(94, 79, 61), lin(44, 44, 40)
 Q = (np.floor(P / block) + 0.5) * block
 jit = (hash3(np.floor(P[..., 0] / block), np.floor(P[..., 1] / block), np.floor(P[..., 2] / block), 5) - 0.5) * 0.18
@@ -78,7 +79,10 @@ n2 = fbm(Q, [(1.5, 0.6), (0.6, 0.4)], 23) + jit
 n3 = fbm(Q, [(1.2, 0.6), (0.5, 0.4)], 37) + jit
 col = np.where((n1 > np.quantile(n1, C.get("khaki_q", 0.68)))[..., None], khaki, olive)
 col = np.where((n2 > np.quantile(n2, 0.72))[..., None], brown, col)
-col = np.where((n3 > np.quantile(n3, 0.88))[..., None], black, col)
+# from above the black patches read as soot at the far zoom: up-facing ones lose some contrast
+roof = smooth(0.35, 0.8, nz)[..., None]
+black_c = black + (olive - black) * C.get("roof_black_lift", 0.3) * roof
+col = np.where((n3 > np.quantile(n3, 0.88))[..., None], black_c, col)
 col = col * (1.0 + (hash3(*np.floor(P / block).transpose(2, 0, 1), 9)[..., None] - 0.5) * 0.06)
 
 rough = np.full((N, N), 0.70, np.float32)
@@ -126,6 +130,10 @@ rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 # ---- muzzle soot ----------------------------------------------------------------------------
 soot = smooth(tip - 0.45, tip - 0.05, P[..., 1]) * (rad < 0.4)
 col = col * (1 - 0.85 * soot[..., None])
+
+# Roofs darker and a little cooler than the grass they sit on, so the turret outline holds at
+# 22 cm/px (0.32 in linear is ~17 % in screen value); the sides keep their value.
+col = col * (1 - C.get("roof_dark", 0.32) * roof) * (1 + roof * np.array(C.get("roof_cool", (-0.06, 0.0, 0.08)), np.float32))
 
 normal = d["normal"].copy()
 occl = ao.copy()

@@ -53,7 +53,7 @@ at = prims[0]["attributes"]
 check(sorted(k for k in at if k.startswith("COLOR")) == ["COLOR_0"], f"only COLOR_0 ({sorted(at)})")
 for need in ("NORMAL", "TANGENT", "TEXCOORD_0", "TEXCOORD_1"):
     check(need in at, f"has {need}")
-pos = acc(at["POSITION"]); col = acc(at["COLOR_0"])[:, :3]; uv2 = acc(at["TEXCOORD_1"])
+pos = acc(at["POSITION"]); col4 = acc(at["COLOR_0"]); col = col4[:, :3]; uv2 = acc(at["TEXCOORD_1"])
 tris = g["accessors"][prims[0]["indices"]]["count"] // 3
 check(3000 <= tris <= 4500, f"triangles {tris} in 3000..4500")
 check(abs(pos[:, 1].min()) < 1e-4, f"y_min {pos[:, 1].min():.6f} == 0")
@@ -73,6 +73,20 @@ check(abs(tip[0]) < 0.03 and abs(tip[2] + spec["barrel"]) < 0.01, "front is -Z, 
 
 trk = col[:, 1] > 0.5; whl = col[:, 2] > 0.5; pan = col[:, 0] > 0.5
 other = ~(trk | whl | pan)
+
+# Beyond the ends of the track loop the body is the bow and the rear plate. Nothing there may
+# hang below the hull bottom: the skirts over the loop, and at each end the bottom edge measured
+# on the source (units.json ends_bottom_h, [rear, front], SOURCE heights) — a post, hitch or
+# mud flap reaching down past it fails.
+z0, z1 = pos[trk, 2].min(), pos[trk, 2].max()
+body = other & ~gun
+floor = pos[body & (pos[:, 2] >= z0) & (pos[:, 2] <= z1), 1].min()
+ends = cfg.get("ends_bottom_h")
+check(ends is not None, "units.json has ends_bottom_h")
+for name, end, h in (("rear", body & (pos[:, 2] > z1), (ends or [0, 0])[0]), ("bow", body & (pos[:, 2] < z0), (ends or [0, 0])[1])):
+    if end.any():
+        lim = max(floor, h * cfg["k"]) - 0.004
+        check(pos[end, 1].min() >= lim, f"{name}: nothing below the hull bottom ({pos[end, 1].min():.4f} >= {lim:.4f})")
 print(f"     verts: track {trk.sum()} wheel {whl.sum()} panel {pan.sum()} other {other.sum()}")
 check(trk.any() and whl.any() and pan.any(), "all three masks present")
 u, v = uv2[trk, 0], uv2[trk, 1]
@@ -86,9 +100,17 @@ check(np.corrcoef(lz, lu)[0, 1] < -0.9, f"bottom run u grows towards the front (
 d = np.hypot(pos[whl, 1] - uv2[whl, 0], pos[whl, 2] - uv2[whl, 1])
 print(f"     wheel vertex distance from axle {d.min():.4f}..{d.max():.4f}; axle heights {np.unique(uv2[whl, 0].round(4)).tolist()}")
 check(d.max() < 0.06, "wheel UV2 is the axle centre (every wheel vertex within a radius of it)")
+# every wheel turns at travel / its own radius: alpha carries the rate relative to the road wheels
+rr = np.hypot(pos[whl, 1] - uv2[whl, 0], pos[whl, 2] - uv2[whl, 1])
+check(col4.shape[1] == 4, "COLOR_0 has alpha")
+if col4.shape[1] == 4:
+    rate = 2.0 * col4[whl, 3]
+    road_r = cfg["gear"]["road"]["r"] * cfg["k"]
+    err = np.abs(rate * rr - road_r).max()        # every wheel vertex sits on its rim
+    check(err < 0.002, f"wheel spin rate x wheel radius == road wheel radius (worst {err:.4f})")
 # the game turns wheels by travel / _SPECS.wheel, so that number must be the road wheels' radius
 road = cfg["gear"]["road"]["r"] * cfg["k"]
-check(abs(road - spec["wheel"]) <= 0.1 * road, f"_SPECS wheel {spec['wheel']} matches road wheel radius {road:.4f} (10 %)")
+check(abs(road - spec["wheel"]) <= 0.002, f"_SPECS wheel {spec['wheel']} matches road wheel radius {road:.4f} (±0.002)")
 check(np.abs(uv2[other | pan]).max() < 1e-5, "UV2 is (0, 0) off tracks and wheels")
 img = {i["name"] if "name" in i else i.get("uri") for i in g.get("images", [])}
 check(len(g.get("images", [])) == 3, f"three textures embedded ({img})")

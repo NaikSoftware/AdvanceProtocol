@@ -43,6 +43,25 @@ def verts(m):
 
 co = verts(me)
 zmin = co[:, 2].min()
+t = cfg.get("turret")
+if t:
+    # Source frame: long, lat, h above the lowest vertex. Turret: everything above its ring
+    # inside its box, scaled about the box centre lengthwise and onto the ring in height. Gun:
+    # moved rigidly with the turret front, so it stays round.
+    L, A = (co[:, 0], co[:, 1]) if cfg["fwd"] == "x" else (co[:, 1], -co[:, 0])
+    H = co[:, 2] - zmin
+    lo_, hi_ = t["long"]; tc = 0.5 * (lo_ + hi_)
+    box = (L >= lo_) & (L <= hi_) & (np.abs(A) < t["lat"]) & (H > t["base_h"])
+    gun_v = (L > hi_) & (np.hypot(A, H - t["axis_h0"]) < t["barrel_r"])
+    newL = np.where(box, tc + (L - tc) * t["scale_long"], np.where(gun_v, L + t["dlong"], L))
+    newH = np.where(box, t["base_h"] + (H - t["base_h"]) * t["scale_h"], np.where(gun_v, H - t["drop"], H))
+    if cfg["fwd"] == "x":
+        co[:, 0] = newL
+    else:
+        co[:, 1] = newL
+    co[:, 2] = newH + zmin
+    me.vertices.foreach_set("co", co.ravel()); me.update()
+    print(f"PREP turret: {box.sum()} verts scaled, gun {gun_v.sum()} verts moved {t['dlong']:+.4f} long, {-t['drop']:+.4f} h")
 lc = cfg["long_c"]
 if cfg["fwd"] == "x":   # long = x, lat = y; turn +X onto +Y
     M = Matrix(((0, -k, 0, 0), (k, 0, 0, -lc * k), (0, 0, k, -zmin * k), (0, 0, 0, 1)))
@@ -128,10 +147,33 @@ def window(a, r, fill):
 # a 5x5 median does the same on top of it. Both act below ~5 cm, which is texture-scale here.
 R = cfg.get("median_cells", 2)
 O = cfg.get("open_cells", 1)
+# closing first fills slots a few cells wide (between rear lights, mud flaps): their walls would
+# drop to whatever lies deep under the slot and read as posts
+Cl = cfg.get("close_cells", 2)
+hit = window(window(hit, Cl, False).any(0), Cl, True).all(0)
 hit = window(window(hit, O, False).all(0), O, False).any(0)
-top = np.where(hit, np.median(window(np.where(hit, top, -1.0), R, -1.0), 0), np.nan)
-bot = np.where(hit, np.median(window(np.where(hit, np.nan_to_num(bot, nan=0.0), 0.0), R, 0.0), 0), np.nan)
-hit &= top > 0.0
+# medians over the footprint only: padding with a fill value dragged edge and corner cells down
+# into spikes hanging off the outline
+top = np.where(hit, np.nanmedian(window(np.where(hit, top, np.nan), R, np.nan), 0), np.nan)
+bot = np.where(hit, np.nanmedian(window(np.where(hit, bot, np.nan), R, np.nan), 0), np.nan)
+hit &= np.nan_to_num(top, nan=-1.0) > 0.0
+# Underside: drop thin parts hanging below the hull (posts, hitches, mud flaps), which the walls
+# would otherwise follow down. Only edge columns use it, so each wall is closed (max, then min)
+# along its own run: a side wall along the hull keeps its skirt, a front or rear wall across it
+# keeps its plate, and a post a few cells wide in the wall's run is gone.
+C2 = cfg.get("bot_close_cells", 10)
+
+
+def close1d(a, ax):
+    sh = lambda v, k: np.roll(np.pad(v, [(C2, C2) if i == ax else (0, 0) for i in range(2)], mode="edge"), k, ax)[
+        tuple(slice(C2, -C2) if i == ax else slice(None) for i in range(2))]
+    mx = np.max([sh(a, k) for k in range(-C2, C2 + 1)], 0)
+    return np.min([sh(mx, k) for k in range(-C2, C2 + 1)], 0)
+
+
+b = np.where(hit, bot, -1.0)
+bot_side = np.where(hit, np.minimum(close1d(b, 0), top), np.nan)
+bot_end = np.where(hit, np.minimum(close1d(b, 1), top), np.nan)
 bm = bmesh.new()
 vid = {}
 for j, i in zip(*np.nonzero(hit)):
@@ -150,7 +192,8 @@ for v in ret["geom"]:
     if isinstance(v, bmesh.types.BMVert):
         # the new vertex sits where its source was; find the cell and drop it to that column's underside
         jj, ii = int(round((v.co.y - ys[0]) / g)), int(round((v.co.x - xs[0]) / g))
-        v.co.z = min(bot[jj, ii], v.co.z)
+        end = not (hit[max(jj - 1, 0), ii] and hit[min(jj + 1, hit.shape[0] - 1), ii])
+        v.co.z = min((bot_end if end else bot_side)[jj, ii], v.co.z)
 bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
 lo_me = bpy.data.meshes.new("lo"); bm.to_mesh(lo_me); bm.free()
 lo = bpy.data.objects.new("lo", lo_me); bpy.context.collection.objects.link(lo)

@@ -4,7 +4,8 @@ extends Node
 ## їде на тайл уперед (гусениці й колеса мають крутитися). Кадри тримаються в пам'яті й пишуться
 ## в кінці (save_png блокує ~1 с). Не входить у гру.
 ## Запуск (вікно, не --headless):
-##   $GODOT --path . res://tools/unit_shot.tscn -- <out_dir> <map> <type_id> [tag]
+##   $GODOT --path . res://tools/unit_shot.tscn -- <out_dir> <map> <type_id> [tag] [owner_a,owner_b]
+## owner_a,owner_b — індекси PLAYER_COLORS для двох моделей (типово 0,1), щоб зняти й третій колір.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 60
@@ -29,8 +30,9 @@ func _ready() -> void:
 	var map := load("res://maps/%s.tres" % a[1]) as MapData
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
-	var c0: Color = UnitView.PLAYER_COLORS[0]
-	var c1: Color = UnitView.PLAYER_COLORS[1]
+	var owners: PackedStringArray = (a[4] if a.size() > 4 else "0,1").split(",")
+	var c0: Color = UnitView.PLAYER_COLORS[int(owners[0])]
+	var c1: Color = UnitView.PLAYER_COLORS[int(owners[1])]
 	# Власник 1 дивиться на північ, власник 2 — на південний схід, коробка-заступник — ліворуч.
 	_place(UnitSilhouettes.build_merged(type_id, c0), cell, 0)
 	_place(UnitSilhouettes.build_merged(type_id, c1), cell + Vector2i(1, 0), 3)

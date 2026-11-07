@@ -122,10 +122,12 @@ falls back to the box placeholder, so a model may land one type at a time.
   along −Z. A vehicle's hull footprint matches `_SPECS.hull` X/Z and its barrel tip lands at
   `UnitSilhouettes.muzzle()`, because muzzle flashes, wrecks and contact shadows read those
   numbers, not the mesh. A soldier is 1.8 m = 0.225 units tall, feet at y = 0.
-- **COLOR_0** (RGB, black elsewhere): **R** = owner marking — the roof recognition panel, the
+- **COLOR_0** (RGBA, black elsewhere): **R** = owner marking — the roof recognition panel, the
   helmet band. Paint those faces neutral grey around sRGB 160 (linear 0.35): the shader multiplies
   the owner colour by the texture's luminance over that value, so dirt and scratches stay visible
-  in the owner colour. **G** = track tread faces. **B** = wheel faces that rotate.
+  in the owner colour. **G** = track tread faces. **B** = wheel faces that rotate; their alpha is
+  half the wheel's spin rate relative to the road wheels, `_SPECS.wheel` / (2 × its own radius):
+  0.5 on road wheels, more on a smaller sprocket or idler, so every wheel keeps pace with the track.
 - **UV2** (TEXCOORD_1 as Godot reads it): on track faces u = arc length along the track loop in
   model units, v = 0..1 across the track; on wheel faces (centre_y, centre_z) of that wheel's
   axle in model units; (0, 0) elsewhere.
@@ -139,7 +141,9 @@ falls back to the box placeholder, so a model may land one type at a time.
 - **Wheels:** driving forwards turns a wheel about X through its axle by travel / radius, top
   moving towards −Z. The radius is `_SPECS.wheel` per type, the model's road-wheel radius —
   default 0.06 (0.5 m); tanks: medium 0.043, tank destroyer 0.041, light 0.038, heavy 0.039.
-- **Import settings** (`<slug>.glb.import`, checked by `test_unit_silhouettes.gd`):
+- **Import settings** (`<slug>.glb.import`; `test_unit_silhouettes.gd` checks only the first four —
+  `force_disable_compression` true, `generate_lods` false, `create_shadow_meshes` false,
+  `light_baking` not 2 — the rest are set by hand):
   `meshes/force_disable_compression=true` (compression quantises UV2), `meshes/generate_lods=false`,
   `meshes/create_shadow_meshes=false` (the game merges the mesh and drops both anyway),
   `meshes/light_baking=1` (2 regenerates UV2 and erases tracks and wheels),
