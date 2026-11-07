@@ -143,7 +143,8 @@ func _play(screen: Node, units: Node, base: Vector3, c: Array, fps: float) -> Ar
 		if not landed:
 			# Кут стрижня на el с: інтегруємо ту саму криву, що й fall_sec.
 			var th: float = _angle_at(h_m, el * squeeze)
-			pivot.basis = Basis(axis, -th) * Basis(dir, Vector3.UP, dir.cross(Vector3.UP))
+			# Вісь UP×dir: додатний кут кладе верх у бік +dir — туди, де ляже пил падіння.
+			pivot.basis = Basis(axis, th) * Basis(dir, Vector3.UP, dir.cross(Vector3.UP))
 			if el >= t_fall:
 				landed = true
 				pivot.visible = false
