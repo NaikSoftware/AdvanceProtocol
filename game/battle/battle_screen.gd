@@ -108,7 +108,7 @@ var _fx_warmed: bool = false
 ## в BattleState і серіалізатор (як broken_forest), коли розчавлене стане помітним між сесіями.
 var _crushed_truth: Dictionary[Vector2i, bool] = {}
 ## Рухи техніки пакета, що грається (UnitMoved -> true): крок такого руху валить опори й паркани.
-var _vehicle_moves: Dictionary = {}
+var _vehicle_moves: Dictionary[Events.UnitMoved, bool] = {}
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -928,6 +928,9 @@ func _on_events_ready() -> void:
 		# Дим влучань висить кілька секунд: над тайлом, якого наступний гравець не розвідав, він
 		# показав би, де стояла ціль (§3.5).
 		BattleFx.clear_all(get_tree())
+		# Те, що ламається, обривається разом з миттями: інакше падіння, що доходить під гейтом, показало б
+		# наступному гравцеві пил над клітинкою, яку він не розвідав.
+		_cancel_falls()
 		_gate.show_for(_match_service.state.active_player)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
 		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
@@ -955,6 +958,8 @@ func _on_events_ready() -> void:
 ## після confirmed, без жодного кроку кадру; якби тут стояв fly_to(), він
 ## ловив би позицію ще НЕ на цілі й падав.
 func _on_gate_confirmed() -> void:
+	BattleFx.clear_all(get_tree())
+	_cancel_falls()
 	# Дахи — одразу в стан нового гравця, без переходу (§3.5): див. PropLayer.set_reveal_cells.
 	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
@@ -1179,12 +1184,17 @@ func _units_point(p: Vector3) -> Vector3:
 	return _units.to_local(_board_view.props().to_global(p))
 
 
-func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool) -> void:
+func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, _is_pole: bool) -> void:
 	BattleFx.spawn_topple_hit(_units, _units_point(at), _units_point(top), debris as BattleFx.Debris, live_wire)
 
 
-func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool) -> void:
+func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, _is_pole: bool) -> void:
 	BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire)
+
+
+func _cancel_falls() -> void:
+	if _board_view.props() != null:
+		_board_view.props().cancel_falls()
 
 
 func _first_unit_cell(player: int) -> Vector2i:
