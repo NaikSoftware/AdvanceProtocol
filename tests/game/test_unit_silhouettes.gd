@@ -134,7 +134,7 @@ func test_model_owners_share_mesh_and_material() -> void:
 	var mat := red.material_override as ShaderMaterial
 	assert_almost_eq(float(mat.get_shader_parameter("specular")), UnitModelFixture.SPECULAR, 0.0001)
 	assert_not_null(mat.get_shader_parameter("albedo_tex"))
-	assert_almost_eq(float(mat.get_shader_parameter("wheel_radius")), 0.06, 0.0001)
+	assert_almost_eq(float(mat.get_shader_parameter("wheel_radius")), float(UnitSilhouettes.spec(5).wheel), 0.0001)
 	red.get_parent().free()
 	blue.get_parent().free()
 

@@ -1,0 +1,103 @@
+{
+  "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle.",
+  "heavy_tank": {
+    "source": "~/.cache/ap-scratch/units/tripo-out/heavy_tank_v1/tripo-out/heavy-tank-v1-78bebd8d/model.glb",
+    "type_id": 8,
+    "fwd": "x",
+    "hull_long": [-0.4987, 0.3238],
+    "hull_lat": 0.2166,
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.104, 0.2015],
+      "below_skirt_h": 0.085,
+      "behind_skirt_lat": 0.19,
+      "gear_top_h": 0.15,
+      "open_ends_long": [-0.39, 0.30]
+    },
+    "gun": {
+      "axis_h": 0.2295,
+      "start_long": 0.165,
+      "clear_r": 0.032,
+      "sides": 10,
+      "profile": [[0.165, 0.0245], [0.205, 0.0245], [0.21, 0.0273], [0.255, 0.0273], [0.262, 0.0238], [0.276, 0.0203], [0.46, 0.0205], [0.468, 0.0195], [0.5, 0.0182]]
+    },
+    "gear": {
+      "track_lat": [0.11, 0.20],
+      "track_t": 0.012,
+      "wheel_lat": [0.153, 0.188],
+      "road": {"r": 0.036, "h": 0.048, "long": [-0.3385, -0.2406, -0.1435, -0.0456, 0.0545, 0.1586]},
+      "sprocket": {"r": 0.040, "h": 0.090, "long": -0.413},
+      "idler": {"r": 0.037, "h": 0.096, "long": 0.254},
+      "sides": 12
+    },
+    "_panels": "at = [x, y] centre in MODEL units (x right, y forward), size_m = [across, along] the hull; pick with panel_spots.py",
+    "panels": [
+      {"name": "turret", "at": [-0.058, -0.01], "size_m": [1.8, 1.0]},
+      {"name": "deck", "at": [-0.137, -0.34], "size_m": [1.25, 1.0]}
+    ]
+  },
+  "medium_tank": {
+    "source": "~/.cache/ap-scratch/units/tripo-out/medium_tank_v1/tripo-out/medium-tank-v1-428150d7/model.glb",
+    "type_id": 5,
+    "fwd": "x",
+    "hull_long": [-0.4998, 0.3147],
+    "hull_lat": 0.2057,
+    "body_tris": 2800,
+    "cut": {"lat": [0.115, 0.195], "below_skirt_h": 0.09, "behind_skirt_lat": 0.193, "gear_top_h": 0.155, "open_ends_long": [-0.37, 0.21]},
+    "gun": {
+      "axis_h": 0.2411, "start_long": 0.175, "clear_r": 0.026, "sides": 10,
+      "profile": [[0.175, 0.019], [0.215, 0.019], [0.218, 0.0204], [0.275, 0.0204], [0.285, 0.0153], [0.415, 0.0153], [0.418, 0.0215], [0.438, 0.0215], [0.442, 0.0152], [0.485, 0.0152], [0.5, 0.0135]]
+    },
+    "gear": {
+      "track_lat": [0.1225, 0.19], "track_t": 0.012, "wheel_lat": [0.135, 0.18],
+      "road": {"r": 0.040, "h": 0.052, "long": [-0.3303, -0.2306, -0.1317, -0.0355, 0.0618, 0.1658]},
+      "sprocket": {"r": 0.040, "h": 0.092, "long": -0.4148},
+      "idler": {"r": 0.037, "h": 0.099, "long": 0.2485},
+      "sides": 12
+    },
+    "panels": [{"name": "turret", "at": [-0.003, -0.145], "size_m": [1.8, 1.0]}]
+  },
+  "tank_destroyer": {
+    "source": "~/.cache/ap-scratch/units/tripo-out/tank_destroyer_v1/tripo-out/tank-destroyer-v1-6f18f04f/model.glb",
+    "type_id": 6,
+    "fwd": "x",
+    "hull_long": [-0.4973, 0.2314],
+    "hull_lat": 0.1939,
+    "body_tris": 2800,
+    "cut": {"lat": [0.105, 0.186], "below_skirt_h": 0.08, "behind_skirt_lat": 0.185, "gear_top_h": 0.14, "open_ends_long": [-0.38, 0.15]},
+    "gun": {
+      "axis_h": 0.2104, "start_long": 0.168, "clear_r": 0.024, "sides": 10,
+      "profile": [[0.168, 0.0181], [0.195, 0.0182], [0.2, 0.0172], [0.215, 0.0172], [0.22, 0.0144], [0.465, 0.0144], [0.47, 0.015], [0.485, 0.015], [0.5, 0.0125]]
+    },
+    "gear": {
+      "track_lat": [0.11, 0.18], "track_t": 0.012, "wheel_lat": [0.1225, 0.166],
+      "road": {"r": 0.036, "h": 0.048, "long": [-0.346, -0.2575, -0.169, -0.0805, 0.008, 0.0965]},
+      "sprocket": {"r": 0.036, "h": 0.085, "long": -0.419},
+      "idler": {"r": 0.035, "h": 0.087, "long": 0.19},
+      "sides": 12
+    },
+    "panels": [{"name": "deck", "at": [0.0, -0.338], "size_m": [1.8, 1.0]}]
+  },
+  "light_tank": {
+    "source": "~/.cache/ap-scratch/units/tripo-out/light_tank_v1/tripo-out/light-tank-v1-40cc3f69/model.glb",
+    "type_id": 7,
+    "fwd": "x",
+    "hull_long": [-0.4988, 0.4688],
+    "hull_lat": 0.2571,
+    "body_tris": 2800,
+    "cut": {"lat": [0.148, 0.245], "below_skirt_h": 0.105, "behind_skirt_lat": 0.243, "gear_top_h": 0.18, "open_ends_long": [-0.40, 0.40]},
+    "gun": {
+      "axis_h": 0.3512, "start_long": 0.165, "clear_r": 0.024, "sides": 10,
+      "profile": [[0.165, 0.0165], [0.18, 0.0197], [0.245, 0.0197], [0.255, 0.016], [0.265, 0.013], [0.465, 0.0125], [0.47, 0.0123], [0.5, 0.0112]]
+    },
+    "gear": {
+      "track_lat": [0.155, 0.24], "track_t": 0.012, "wheel_lat": [0.17, 0.2225],
+      "road": {"r": 0.047, "h": 0.059, "long": [-0.273, -0.1649, -0.0581, 0.0638, 0.169, 0.2784]},
+      "_sprocket": "front drive: the toothed wheel is at the bow on this hull",
+      "sprocket": {"r": 0.041, "h": 0.1195, "long": 0.3945},
+      "idler": {"r": 0.041, "h": 0.1204, "long": -0.3877},
+      "sides": 12
+    },
+    "panels": [{"name": "bow deck", "at": [0.103, 0.25], "size_m": [1.0, 1.8]}]
+  }
+}

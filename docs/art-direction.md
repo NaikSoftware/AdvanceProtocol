@@ -137,8 +137,8 @@ falls back to the box placeholder, so a model may land one type at a time.
   from front to rear along the top of the loop for the top run to move forwards. One tile is
   exactly four periods, so the pattern always rests at the same phase after a move.
 - **Wheels:** driving forwards turns a wheel about X through its axle by travel / radius, top
-  moving towards −Z. The radius is `_SPECS.wheel` per type — default 0.06 (0.5 m), heavy tank
-  0.0475 (0.38 m road wheels).
+  moving towards −Z. The radius is `_SPECS.wheel` per type, the model's road-wheel radius —
+  default 0.06 (0.5 m); tanks: medium 0.043, tank destroyer 0.041, light 0.038, heavy 0.039.
 - **Import settings** (`<slug>.glb.import`, checked by `test_unit_silhouettes.gd`):
   `meshes/force_disable_compression=true` (compression quantises UV2), `meshes/generate_lods=false`,
   `meshes/create_shadow_meshes=false` (the game merges the mesh and drops both anyway),
