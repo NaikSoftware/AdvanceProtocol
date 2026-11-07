@@ -439,24 +439,65 @@ func test_move_along_tweens_position_to_final_cell() -> void:
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "після прокрутки твіна юніт стоїть на останній клітинці шляху")
 
 
-## Виправлення 3: юніт довертається НА МІСЦІ ПЕРЕД кожним кроком шляху, що
-## справді міняє напрямок (Board.facing_towards, чиста функція core/), а не
-## паралельно з рухом. Крок 1 — на схід (facing=2), крок 2 — на південь
-## (facing=4); обидва — доворот (FACE_TURN_DURATION=0.15) стартовий з
-## facing=0, тож кожен крок шляху займає 0.15+0.1=0.25с сумарно.
-func test_move_along_turns_the_unit_at_each_step() -> void:
-	view.bind(_unit(5, 0, Vector2i(0, 0), 0))  # дивиться на північ (facing=0)
+## Поворот маршруту — дуга радіуса TURN_RADIUS, як заокруглення дороги, а не зупинка й
+## доворот на місці: юніт не проходить через центр кутової клітинки, посередині дуги
+## дивиться навскіс, а час кроку — довжина дуги, без паузи на поворот.
+func test_move_along_rounds_a_route_turn_with_an_arc() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 2))  # дивиться на схід — старт без довороту
+	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 2)]
+	var tween: Tween = view.move_along(path, 0.1).get_object()
+
+	tween.custom_step(0.1)
+	assert_almost_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), Vector3.ONE * 1e-4, "пряма ділянка до початку дуги")
+
+	tween.custom_step(0.1 * PI / 4.0)  # пів дуги радіуса 1
+	var corner: Vector3 = IsoCameraRig.cell_to_world(Vector2i(2, 0))
+	assert_almost_eq(view.position.distance_to(corner), sqrt(2.0) - 1.0, 5e-3, "середина дуги — на радіусі від її центру, а не в центрі кута")
+	_assert_faces(view, 3, "посередині повороту ніс дивиться навскіс")
+
+	tween.custom_step(0.1 * PI / 4.0)
+	assert_almost_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(2, 1)), Vector3.ONE * 5e-3, "дуга виходить у центр наступної клітинки")
+	_assert_faces(view, 4, "після дуги юніт їде на південь")
+
+	tween.custom_step(0.1)
+	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(2, 2)), "кінець шляху — точно в центрі останньої клітинки")
+	assert_false(tween.is_running(), "поворот не додав часу понад довжину кривої")
+
+
+## Дуга, що починається в стартовій клітинці й кінчається в останній: юніт, який уже
+## дивиться вздовж першого кроку, рушає одразу, а в кінці стоїть точно за своїм facing.
+func test_move_along_l_turn_starts_without_a_pause_and_ends_on_facing() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 2))
 	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1)]
-	var finished: Signal = view.move_along(path, 0.1)
-	var tween: Tween = finished.get_object()
+	var tween: Tween = view.move_along(path, 0.1).get_object()
+	tween.custom_step(0.01)
+	assert_ne(view.position, IsoCameraRig.cell_to_world(Vector2i(0, 0)), "жодного довороту на місці перед стартом")
+	tween.custom_step(10.0)
+	assert_eq(view.facing, 4)
+	assert_almost_eq(fposmod(view.rotation_degrees.y, 360.0), fposmod(UnitView._degrees_for_facing(4), 360.0), 0.1, "ніс точно на південь, а не на хорду дуги")
 
-	tween.custom_step(0.25)  # рівно перший крок: доворот + рух
-	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "перший крок довозить до першої клітинки")
-	_assert_faces(view, 2, "після кроку на схід юніт дивиться на схід (facing=2)")
 
-	tween.custom_step(0.25)  # рівно другий крок: доворот + рух
-	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "другий крок довозить до другої клітинки")
-	_assert_faces(view, 4, "після кроку на південь юніт дивиться на південь (facing=4)")
+## Крива руху не зачіпає клітинок поза маршрутом — ні на одиночному повороті, ні на
+## сходинці, де дуги ділять одиничні відрізки навпіл; а ніс ніколи не скаче.
+func test_move_along_curve_stays_on_route_cells() -> void:
+	var routes: Array = [
+		[Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 2)],
+		[Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(2, 2), Vector2i(3, 2)],
+	]
+	for route: Array in routes:
+		var path: Array[Vector2i] = []
+		path.assign(route)
+		view.bind(_unit(5, 0, Vector2i(0, 0), 2))
+		var allowed: Array[Vector2i] = [Vector2i(0, 0)]
+		allowed.append_array(path)
+		var tween: Tween = view.move_along(path, 0.1).get_object()
+		var yaw: float = view.rotation_degrees.y
+		while tween.is_running():
+			tween.custom_step(0.005)
+			assert_has(allowed, IsoCameraRig.world_to_cell(view.position), "%s: юніт у клітинці поза маршрутом" % [route])
+			assert_lt(absf(view.rotation_degrees.y - yaw), 10.0, "%s: ніс повертає плавно" % [route])
+			yaw = view.rotation_degrees.y
+		assert_eq(view.position, IsoCameraRig.cell_to_world(path[path.size() - 1]))
 
 
 ## Баг-звіт: «на старті вибираю танк, вказую їхати вперед — він їде спиною».
@@ -491,25 +532,6 @@ func test_move_along_adds_no_time_when_direction_does_not_change() -> void:
 	var tween: Tween = finished.get_object()
 	tween.custom_step(0.2)  # рівно path.size() * duration_per_step, без жодного довороту
 	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(2, 0)), "без жодного повороту сумарний час лишається path.size() * duration_per_step")
-
-
-## Поворот маршруту (не старт) теж мусить довертати ПЕРЕД рухом у тайл,
-## де напрямок міняється — не лише перший крок шляху.
-func test_move_along_turns_in_place_at_a_route_turn_not_only_at_the_start() -> void:
-	view.bind(_unit(5, 0, Vector2i(0, 0), 2))  # дивиться на схід (facing=2) — перший крок не потребує довороту
-	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1)]  # схід, потім поворот на південь
-	var finished: Signal = view.move_along(path, 0.1)
-	var tween: Tween = finished.get_object()
-
-	tween.custom_step(0.1)  # перший крок — без довороту, рівно duration_per_step
-	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "перший крок співпадає з поточним факінгом — жодної паузи")
-
-	tween.custom_step(0.15)  # доворот на другому кроці (схід -> південь), позиція ще на першому тайлі
-	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 0)), "доворот на повороті маршруту теж іде ДО руху в нову клітинку")
-	_assert_faces(view, 4, "доворот на повороті маршруту завершується перед в'їздом у клітинку")
-
-	tween.custom_step(0.1)
-	assert_eq(view.position, IsoCameraRig.cell_to_world(Vector2i(1, 1)), "після довороту юніт доїжджає до другої клітинки")
 
 
 ## MoveCommand.facing (core/commands/move_command.gd) — явний параметр, і
