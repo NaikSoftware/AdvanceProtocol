@@ -477,6 +477,23 @@ func test_move_along_l_turn_starts_without_a_pause_and_ends_on_facing() -> void:
 	assert_almost_eq(fposmod(view.rotation_degrees.y, 360.0), fposmod(UnitView._degrees_for_facing(4), 360.0), 0.1, "ніс точно на південь, а не на хорду дуги")
 
 
+## Сходинку з одиничних кроків юніт проходить навскіс: посередині ніс тримає діагональ, а
+## не хитається ±45° щопівтайла, як змійка з малих дуг.
+func test_move_along_takes_a_staircase_as_one_diagonal() -> void:
+	view.bind(_unit(5, 0, Vector2i(0, 0), 2))
+	var path: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(2, 2), Vector2i(3, 2), Vector2i(3, 3), Vector2i(4, 3)]
+	var tween: Tween = view.move_along(path, 0.1).get_object()
+	var checked: int = 0
+	while tween.is_running():
+		tween.custom_step(0.005)
+		var c: Vector2i = IsoCameraRig.world_to_cell(view.position)
+		if c == Vector2i(2, 1) or c == Vector2i(2, 2):
+			checked += 1
+			assert_almost_eq(fposmod(view.rotation_degrees.y, 360.0), fposmod(UnitView._degrees_for_facing(3), 360.0), 1.0, "посередині сходинки ніс — на південний схід")
+			assert_almost_eq(view.position.z - view.position.x, -0.5, 1e-3, "центр іде однією прямою через середини ребер")
+	assert_gt(checked, 0)
+
+
 ## Крива руху не зачіпає клітинок поза маршрутом — ні на одиночному повороті, ні на
 ## сходинці, де дуги ділять одиничні відрізки навпіл; а ніс ніколи не скаче.
 func test_move_along_curve_stays_on_route_cells() -> void:

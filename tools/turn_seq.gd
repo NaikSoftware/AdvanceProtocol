@@ -3,7 +3,8 @@ extends Node
 ## дуга повороту лягає на заокруглення дороги, чи не смикається ніс. Кадри тримаються в
 ## пам'яті й пишуться в кінці (save_png блокує ~1 с). Не входить у гру.
 ## Запуск (вікно, не --headless):
-##   $GODOT --path . --position 6000,0 res://tools/turn_seq.tscn -- <out_dir> <map> <zoom> <road|stair> <кадрів/с>
+##   $GODOT --path . --position 6000,0 res://tools/turn_seq.tscn -- <out_dir> <map> <zoom> <road|stair> <кадрів/с> [turn]
+## turn — юніт стоїть боком до першого кроку: видно доворот на місці перед стартом.
 ## road — перший кут дороги з трьома прямими клітинками з кожного боку; stair — сходинка
 ## по полю біля центру карти.
 
@@ -34,7 +35,7 @@ func _ready() -> void:
 		return
 	var start: Vector2i = cells[0]
 	var path: Array[Vector2i] = cells.slice(1)
-	var unit := Unit.create(999, MEDIUM_TANK, 0, start, Board.facing_towards(start, path[0]))
+	var unit := Unit.create(999, MEDIUM_TANK, 0, start, (Board.facing_towards(start, path[0]) + (2 if a.size() > 5 and a[5] == "turn" else 0)) % 8)
 	screen.call("_add_unit_view", unit)
 	var view: UnitView = (screen.get("_unit_views") as Dictionary)[999]
 	var mid: Vector2i = cells[cells.size() / 2]
@@ -47,8 +48,12 @@ func _ready() -> void:
 		await get_tree().process_frame
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	var p: Vector3 = IsoCameraRig.cell_to_world(mid)
-	var tween: Tween = view.move_along(path, EventPlayer._MOVE_STEP_DURATION).get_object()
 	var frames: Array[Image] = []
+	# Кілька кадрів нерухомого старту: видно позу до руху.
+	for f in 5:
+		await RenderingServer.frame_post_draw
+		frames.append(_crop(cam, p))
+	var tween: Tween = view.move_along(path, EventPlayer._MOVE_STEP_DURATION).get_object()
 	var dt: float = 1.0 / float(a[4])
 	var t0: int = Time.get_ticks_usec()
 	var next: float = 0.0
@@ -57,12 +62,7 @@ func _ready() -> void:
 		await RenderingServer.frame_post_draw
 		var el: float = float(Time.get_ticks_usec() - t0) / 1e6
 		if el >= next:
-			var img: Image = get_viewport().get_texture().get_image()
-			var k: float = float(img.get_width()) / get_viewport().get_visible_rect().size.x
-			var base: Vector2 = cam.unproject_position(p)
-			var pos := Vector2i(int(base.x * k) - CROP.x / 2, int(base.y * k) - CROP.y / 2)
-			pos = pos.clamp(Vector2i.ZERO, img.get_size() - CROP)
-			frames.append(img.get_region(Rect2i(pos, CROP)))
+			frames.append(_crop(cam, p))
 			next += dt
 			if not tween.is_running():
 				tail += 1
@@ -70,6 +70,14 @@ func _ready() -> void:
 	for i in frames.size():
 		frames[i].save_png("%s/f_%04d.png" % [a[0], i])
 	get_tree().quit()
+
+
+func _crop(cam: Camera3D, p: Vector3) -> Image:
+	var img: Image = get_viewport().get_texture().get_image()
+	var k: float = float(img.get_width()) / get_viewport().get_visible_rect().size.x
+	var base: Vector2 = cam.unproject_position(p)
+	var pos := Vector2i(int(base.x * k) - CROP.x / 2, int(base.y * k) - CROP.y / 2)
+	return img.get_region(Rect2i(pos.clamp(Vector2i.ZERO, img.get_size() - CROP), CROP))
 
 
 func _kind(map: MapData, c: Vector2i) -> int:

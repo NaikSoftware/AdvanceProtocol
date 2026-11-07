@@ -237,6 +237,7 @@ static func _put_on_unit_layer(node: Node) -> void:
 ## на дорозі повторює її заокруглення, а не стає й не крутиться на перехресті. Ніс
 ## дивиться вздовж дотичної. Дуга лишається в клітинках маршруту: вона огинає центр
 ## діагональної клітинки на відстані радіуса, тож у сусідню клітинку не заходить.
+## Сходинку з одиничних кроків юніт проходить навскіс, однією прямою.
 ##
 ## На місці юніт довертається лише перед стартом, коли перший крок іде не туди, куди він
 ## дивиться: розворот на 180° дугою — це задній хід або петля по чужих клітинках.
@@ -245,7 +246,7 @@ static func _put_on_unit_layer(node: Node) -> void:
 ## Якщо він інший, ніж напрямок останнього кроку, юніт довертається на місці в кінці.
 ## -1 (типово) — орієнтація лишається такою, якою її поставив останній крок.
 ##
-## on_step(i) — у мить, коли юніт доїхав до path[i] (на повороті — до середини дуги,
+## on_step(i) — у мить, коли юніт доїхав до path[i] (на повороті — до точки кривої,
 ## найближчої до центру клітинки): те, що core/ вирішило на цьому кроці (знахідка
 ## укриття), показується тут, а не після всього шляху. Колбек живе в цьому ж твіні.
 func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: int = -1,
@@ -268,48 +269,74 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		var w: Vector3 = IsoCameraRig.cell_to_world(cell)
 		pts.append(Vector2(w.x, w.z))
 	var n: int = pts.size()
-	# Відступ дуги від вершини; для 90° він дорівнює радіусу. Дві дуги на одному
-	# відрізку ділять його навпіл — сходинка маршруту стає змійкою з менших дуг.
-	# Розвороту на 180° посеред шляху тут не буває: шлях — найкоротший (Pathing.path_to).
-	var cut := PackedFloat32Array()
-	cut.resize(n)
+	# Опорна ламана. Самотній кут маршруту лишається вершиною. Кут, сусідній крок якого —
+	# теж кут (сходинка, зсув на одну смугу), зрізаний між серединами ребер: сходинка
+	# стає однією діагоналлю, а не змійкою дуг, що смикала б ніс щопівтайла. Діагональ
+	# через середини ребер не торкається кутів клітинок, тож лишається в маршруті.
+	# Розвороту на 180° посеред шляху не буває: шлях — найкоротший (Pathing.path_to).
+	var corner := PackedByteArray()
+	corner.resize(n + 1)
 	for k in range(1, n - 1):
 		if absf((pts[k] - pts[k - 1]).normalized().dot((pts[k + 1] - pts[k]).normalized())) < 0.01:
-			cut[k] = TURN_RADIUS
-	for k in range(1, n - 1):
-		if cut[k] > 0.0:
-			cut[k] = minf(cut[k], pts[k].distance_to(pts[k - 1]) * (0.5 if cut[k - 1] > 0.0 else 1.0))
-			cut[k] = minf(cut[k], pts[k].distance_to(pts[k + 1]) * (0.5 if cut[k + 1] > 0.0 else 1.0))
-
-	var line := PackedVector2Array([pts[0]])
-	var acc := PackedFloat32Array([0.0])
-	var stations := PackedFloat32Array()
+			corner[k] = 1
+	var q := PackedVector2Array([pts[0]])
 	for k in range(1, n):
-		var r: float = cut[k]
-		var d_in: Vector2 = (pts[k] - pts[k - 1]).normalized()
-		_extend(line, acc, pts[k] - d_in * r)
-		if r <= 0.0:
-			stations.append(acc[acc.size() - 1])
+		if corner[k] == 1 and (corner[k - 1] == 1 or corner[k + 1] == 1):
+			_push(q, pts[k].lerp(pts[k - 1], 0.5))
+			_push(q, pts[k].lerp(pts[k + 1], 0.5))
+		else:
+			_push(q, pts[k])
+
+	# Кожен злам ламаної — дуга радіуса TURN_RADIUS, дотична до обох відрізків; відрізок
+	# між двома дугами ділиться навпіл, і на тісному місці радіус менший.
+	var m: int = q.size()
+	var turn := PackedFloat32Array()
+	turn.resize(m)
+	var tl := PackedFloat32Array()
+	tl.resize(m)
+	for k in range(1, m - 1):
+		turn[k] = (q[k] - q[k - 1]).angle_to(q[k + 1] - q[k])
+		var t: float = TURN_RADIUS * tan(absf(turn[k]) * 0.5)
+		t = minf(t, q[k].distance_to(q[k - 1]) * (0.5 if k > 1 else 1.0))
+		tl[k] = minf(t, q[k].distance_to(q[k + 1]) * (0.5 if k < m - 2 else 1.0))
+
+	# Дотична в кожній вершині — точна: на прямій це її напрям, на дузі — дотична кола.
+	# Ніс між вершинами інтерполюється, тож не скаче сходинками по хордах.
+	var line := PackedVector2Array([q[0]])
+	var acc := PackedFloat32Array([0.0])
+	var tangents := PackedVector2Array([(q[1] - q[0]).normalized()])
+	for k in range(1, m):
+		var d_in: Vector2 = (q[k] - q[k - 1]).normalized()
+		var entry: Vector2 = q[k] - d_in * tl[k]
+		_extend(line, acc, tangents, entry, d_in)
+		if tl[k] <= 0.0:
 			continue
-		var d_out: Vector2 = (pts[k + 1] - pts[k]).normalized()
-		var centre: Vector2 = pts[k] - d_in * r + d_out * r
-		for j in range(1, _ARC_SEGMENTS + 1):
-			var a: float = float(j) / _ARC_SEGMENTS * PI * 0.5
-			_extend(line, acc, centre - d_out * (r * cos(a)) + d_in * (r * sin(a)))
-			if j * 2 == _ARC_SEGMENTS:
-				stations.append(acc[acc.size() - 1])
-	# Дотична у вершині — сума сусідніх одиничних хорд: на дузі це точна дотична кола, і
-	# ніс між вершинами повертає плавно, а не сходинками по хордах.
-	var tangents := PackedVector2Array()
-	tangents.resize(line.size())
-	for j in line.size():
-		var back: Vector2 = (line[j] - line[j - 1]).normalized() if j > 0 else Vector2.ZERO
-		var fwd: Vector2 = (line[j + 1] - line[j]).normalized() if j < line.size() - 1 else Vector2.ZERO
-		tangents[j] = back + fwd
-	# На кінцях хорда дуги відхилена від осі на пів кроку кута: юніт, що вже дивиться
-	# вздовж першого кроку, смикнувся б на місці, а в кінці стояв би не за своїм facing.
-	tangents[0] = (pts[1] - pts[0]).normalized()
-	tangents[tangents.size() - 1] = (pts[n - 1] - pts[n - 2]).normalized()
+		var r: float = tl[k] / tan(absf(turn[k]) * 0.5)
+		var centre: Vector2 = entry + d_in.rotated(signf(turn[k]) * PI * 0.5) * r
+		var segs: int = maxi(1, ceili(_ARC_SEGMENTS * absf(turn[k]) / (PI * 0.5)))
+		for j in range(1, segs + 1):
+			var a: float = turn[k] * float(j) / segs
+			_extend(line, acc, tangents, centre + (entry - centre).rotated(a), d_in.rotated(a))
+
+	# Клітинка шляху «досягнута» в найближчій до її центру точці кривої.
+	var stations := PackedFloat32Array()
+	var seg: int = 1
+	for i in path.size():
+		var c: Vector2 = pts[i + 1]
+		var best: float = INF
+		var best_s: float = 0.0
+		var best_seg: int = seg
+		for j in range(seg, line.size()):
+			var ab: Vector2 = line[j] - line[j - 1]
+			var u: float = clampf((c - line[j - 1]).dot(ab) / ab.length_squared(), 0.0, 1.0)
+			var dist: float = c.distance_squared_to(line[j - 1] + ab * u)
+			if dist < best - 1e-9:
+				best = dist
+				best_s = acc[j - 1] + (acc[j] - acc[j - 1]) * u
+				best_seg = j
+		seg = best_seg
+		stations.append(maxf(best_s, stations[i - 1] if i > 0 else 0.0))
+	stations[stations.size() - 1] = acc[acc.size() - 1]
 
 	# Твін ще не виконався в момент побудови графа — кут доводиться передбачати, а не
 	# перечитувати властивість (той самий прийом найкоротшої дельти, що й у face()).
@@ -339,14 +366,34 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 	return tween.finished
 
 
-## Додає вершину до кривої руху разом із довжиною шляху до неї; нульові відрізки
-## пропускає, бо в них немає напрямку.
-static func _extend(line: PackedVector2Array, acc: PackedFloat32Array, p: Vector2) -> void:
-	var d: float = line[line.size() - 1].distance_to(p)
-	if d < 1e-4:
+## Додає вершину до опорної ламаної: збіг із попередньою відкидає, а продовження того
+## самого відрізка зливає з ним, щоб дуги ставали лише на справжніх зламах.
+static func _push(q: PackedVector2Array, p: Vector2) -> void:
+	var last: int = q.size() - 1
+	if q[last].distance_to(p) < 1e-4:
+		return
+	if last > 0 and absf((q[last] - q[last - 1]).normalized().cross((p - q[last]).normalized())) < 1e-4 \
+			and (q[last] - q[last - 1]).dot(p - q[last]) > 0.0:
+		q[last] = p
+		return
+	q.append(p)
+
+
+## Додає вершину до кривої руху разом із довжиною шляху до неї й дотичною в ній. Вершина,
+## що майже збігається з попередньою, заміняє її: кінець дуги лягає точно в центр клітинки,
+## а не за похибку обертання від нього, і нульових відрізків без напрямку не буває.
+static func _extend(line: PackedVector2Array, acc: PackedFloat32Array, tangents: PackedVector2Array,
+		p: Vector2, tangent: Vector2) -> void:
+	var last: int = line.size() - 1
+	if line[last].distance_to(p) < 1e-4:
+		if last > 0:
+			line[last] = p
+			acc[last] = acc[last - 1] + line[last - 1].distance_to(p)
+			tangents[last] = tangent
 		return
 	line.append(p)
-	acc.append(acc[acc.size() - 1] + d)
+	acc.append(acc[last] + line[last].distance_to(p))
+	tangents.append(tangent)
 
 
 ## Кут вузла для напрямку в площині XZ (x, z): ніс — це -Z, північ — кут 0.
