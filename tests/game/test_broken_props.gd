@@ -103,3 +103,42 @@ func test_every_broken_model_matches_contract() -> void:
 			tris += _tris(mi)
 		var limit: int = maxi(int(src_tris * 1.5), TRI_FLOOR)
 		assert_true(tris <= limit, "%s: %d трикутників при ліміті %d" % [model, tris, limit])
+
+
+func _opaque_luma(img: Image, y0: int, y1: int) -> float:
+	var sum: float = 0.0
+	var n: int = 0
+	for y in range(y0, y1):
+		for x in img.get_width():
+			var c: Color = img.get_pixel(x, y)
+			if c.a > 0.5:
+				sum += 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+				n += 1
+	return sum / maxf(n, 1)
+
+
+## Обрізана смуга атласу парканів двору не темніша й не світліша за свою смугу вихідного атласу: sRGB-кодування
+## при обрізанні не має подвоюватись чи губитись.
+func test_yard_strip_keeps_source_luma() -> void:
+	var src_scene: PackedScene = load(DIR + "infra_fence_yard.glb")
+	var src: Node3D = src_scene.instantiate()
+	add_child_autofree(src)
+	var sm := _collect(src)[0].mesh.surface_get_material(0) as BaseMaterial3D
+	var atlas: Image = sm.albedo_texture.get_image()
+	if atlas.is_compressed():
+		atlas.decompress()
+	var kinds: Array = YARD_TOP.keys()
+	var bh: int = atlas.get_height() / kinds.size()
+	for k in kinds.size():
+		var kind: String = kinds[k]
+		var scene: PackedScene = load(BROKEN + "infra_fence_yard_%s_broken.glb" % kind)
+		var broken: Node3D = scene.instantiate()
+		add_child_autofree(broken)
+		var bm := _collect(broken)[0].mesh.surface_get_material(0) as BaseMaterial3D
+		var strip: Image = bm.albedo_texture.get_image()
+		if strip.is_compressed():
+			strip.decompress()
+		var want: float = _opaque_luma(atlas, k * bh, (k + 1) * bh)
+		var got: float = _opaque_luma(strip, 0, strip.get_height())
+		gut.p("%s: luma intact %.3f piece %.3f" % [kind, want, got])
+		assert_true(absf(got - want) <= 0.1 * want, "%s: яскравість смуги %.3f проти %.3f вихідної" % [kind, got, want])
