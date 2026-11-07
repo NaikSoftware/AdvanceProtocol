@@ -147,7 +147,8 @@ static func spawn_explosion(parent: Node, at: Vector3, size: float) -> Node3D:
 ## невидимо мале, світло вимкнене; звільняє себе сама.
 static func warm_up(parent: Node, at: Vector3) -> Node3D:
 	var boom: Node3D = spawn_explosion(parent, at, 0.0001)
-	var all: Array[Node3D] = [boom, spawn_hit(parent, at, Weapon.TANK_GUN, true), spawn_hit(parent, at, Weapon.SHELL, false), spawn_muzzle(parent, Transform3D(Basis(), at), Weapon.TANK_GUN)]
+	var all: Array[Node3D] = [boom, spawn_hit(parent, at, Weapon.TANK_GUN, true), spawn_hit(parent, at, Weapon.SHELL, false), spawn_muzzle(parent, Transform3D(Basis(), at), Weapon.TANK_GUN),
+			spawn_topple_hit(parent, at, at + Vector3.UP, Debris.CONCRETE, true), spawn_topple_land(parent, at, at + Vector3.RIGHT, Debris.WOOD, true)]
 	for hit: Node3D in all:
 		hit.scale = Vector3.ONE * 0.0001
 		for l: Node in hit.find_children("*", "OmniLight3D", true, false):
@@ -169,21 +170,345 @@ static func warm_up(parent: Node, at: Vector3) -> Node3D:
 enum Debris { CONCRETE, WOOD, SHEET, MESH }
 
 
+## Мить удару звільняється не пізніше цього: найдовше живуть краплі розплаву з дроту (до 1,5 с)
+## і крихти, що лягли й осіли.
+const TOPPLE_HIT_SEC: float = 2.4
+## Мить падіння: уламки лежать ~2,5 с і осідають, пил осідає за 2–3 с.
+const TOPPLE_LAND_SEC: float = 3.6
+## Кадри атласу ґрунту для пилу повалення: з 26-го клуба вже розпласталась, а не б'є вгору
+## стовпом, як у вибуху; до 44-го — розсіюється (як хвиля пилу, `_wave`).
+const SETTLE_FRAMES := Vector2(26.0, 44.0)
+## Кольори пилу (лінійні): ґрунт — той самий, що в хвилі пилу (`_wave`), бо він уже сидить на всіх
+## трьох мапах; бетонний пил світліший і сірий.
+const SOIL_DUST := Color(0.27, 0.24, 0.19)
+const SOIL_DUST_DARK := Color(0.21, 0.185, 0.15)
+const CONCRETE_DUST := Color(0.36, 0.34, 0.30)
+const RUST_DUST := Color(0.31, 0.26, 0.21)
+
+## Форми уламків повалення (`_shard_mesh`).
+enum Shard { CHIP, SPLINTER, SHEET, ROD }
+
+static var _shard_meshes: Dictionary = {}
+static var _shard_mat: StandardMaterial3D
+static var _settle_mesh: QuadMesh
+
+
 ## Мить, коли техніка б'є в опору чи паркан (той, хто кличе, далі сам валить модель).
 ## at — точка удару біля основи, top — верх (для опори під напругою там іскрить дріт).
+## Удар — біля землі: бетон кришиться сірою пилюкою й крихтами, дерево — трісками, метал лише
+## шкрябає й здіймає пил. Дріт під напругою на верху дає 2–3 синьо-білі дуги через нерівні проміжки
+## й сиплеться розплавом — лише в першу третину секунди, поки верх опори ще на місці (вона падає
+## 1,2–1,8 с після цього виклику).
 static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: Debris, live_wire: bool) -> Node3D:
 	var root := _root("ToppleHit", parent, at)
-	_expire(root, 0.1)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(at)
+	var low := Vector3(0, 0.3 / 8.0, 0)
+	# Опора (верх вище 3,5 м) лише кришиться біля основи; паркан розлітається від удару цілим
+	# полотном, тож тут його головний сплеск, а падіння — лише пил, що осідає.
+	var pole: bool = (top.y - at.y) * 8.0 > 3.5
+	var k: float = 1.0 if pole else 2.2
+	var spot := Vector3(0.15, 0.1, 0.15) / 8.0 * (1.0 if pole else 3.0)
+	match debris:
+		Debris.CONCRETE:
+			_shards(root, "Chips", rng, Shard.CHIP, roundi(10 * k), low, Basis(), spot, 0.03, 0.12, 2.0, 5.0, 70.0, 1.6)
+			_settle(root, rng, roundi(3 * k), Vector3.ZERO, Basis(), spot, 1.0 * k, 1.6 * k, 1.8, [CONCRETE_DUST, CONCRETE_DUST * 0.9], 1.2)
+		Debris.WOOD:
+			_shards(root, "Splinters", rng, Shard.SPLINTER, roundi(10 * k), low, Basis(), spot, 0.08, 0.35, 2.0, 5.0, 65.0, 1.6)
+			_settle(root, rng, roundi(2 * k), Vector3.ZERO, Basis(), spot, 0.8 * k, 1.2 * k, 1.6, [SOIL_DUST, SOIL_DUST_DARK], 1.0)
+		Debris.SHEET:
+			_shards(root, "Bits", rng, Shard.SHEET, roundi(5 * k), low, Basis(), spot, 0.08, 0.25, 1.0, 3.0, 60.0, 1.4)
+			_settle(root, rng, roundi(3 * k), Vector3.ZERO, Basis(), spot, 1.0 * k, 1.5 * k, 1.8, [RUST_DUST, SOIL_DUST], 1.0)
+		Debris.MESH:
+			_shards(root, "Bits", rng, Shard.ROD, roundi(4 * k), low, Basis(), spot, 0.15, 0.35, 1.0, 2.5, 60.0, 1.4)
+			_settle(root, rng, roundi(2 * k), Vector3.ZERO, Basis(), spot, 0.9 * k, 1.3 * k, 1.6, [SOIL_DUST, SOIL_DUST_DARK], 0.8)
+	if live_wire:
+		var up: Vector3 = top - at
+		_arc(root, rng, up, 3, 1.6)
+		# Іскри дуги й краплі розплаву: віялом на всі боки й одразу вниз під вагою, 0,4 с емісії.
+		var drip := _sparks(root, "ArcSparks", 18, up, Vector3.DOWN, 180.0, 0.5, 4.0, 0.2, 0.5, 0.6, 1.5, 0.0)
+		drip.explosiveness = 0.7
+	_expire(root, TOPPLE_HIT_SEC)
 	return root
 
 
 ## Мить, коли повалене вдаряється об землю й розсипається: модель той, хто кличе, ховає
 ## одразу після виклику. a→b — відрізок на землі, який повалене накрило (опора: основа→верхівка;
 ## паркан: середня лінія полотна).
+## Великі куски дає сама розколота модель; тут дрібна фракція вздовж усього відрізка: сколи
+## бетону, тріски, гнуті клапті профлисту, обривки прутів рабиці. Низька хмара пилу (ґрунт, у
+## бетону — ще й сірий) біжить уздовж відрізка на 1–1,5 м обабіч, не вище 2 м, і осідає за 2–3 с.
+## Дріт під напругою іскрить там, де ліг кінець.
 static func spawn_topple_land(parent: Node, a: Vector3, b: Vector3, debris: Debris, live_wire: bool) -> Node3D:
 	var root := _root("ToppleLand", parent, a)
-	_expire(root, 0.1)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(a + b * 3.1)
+	var flat := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	var len_m: float = maxf(flat.length() * 8.0, 0.5)
+	var dir: Vector3 = flat.normalized() if flat.length() > 1e-4 else Vector3.RIGHT
+	# Локальна X — уздовж відрізка: коробки емісії лежать уздовж поваленого.
+	var basis := Basis(dir, Vector3.UP, dir.cross(Vector3.UP))
+	var mid: Vector3 = (b - a) * 0.5
+	var line := Vector3(len_m * 0.5, 0.1, 0.6) / 8.0
+	var low: Vector3 = mid + Vector3(0, 0.15 / 8.0, 0)
+	# Великі куски — це вже розколоті частини моделі (PropLayer); тут лише дрібна фракція й пил.
+	# Паркан розлетівся ще на ударі, тож його падіння — менша хмара й жменя крихт.
+	var k: float = 1.0 if len_m > 5.0 or live_wire else 0.5
+	match debris:
+		Debris.CONCRETE:
+			_shards(root, "Chips", rng, Shard.CHIP, roundi(k * clampi(roundi(len_m * 1.8), 8, 22)), low, basis, line, 0.06, 0.25, 1.0, 3.5, 55.0, 2.6)
+			_settle(root, rng, roundi(k * clampi(roundi(len_m / 0.8), 6, 12)), mid, basis, line, 1.8, 3.0, 2.6, [CONCRETE_DUST, SOIL_DUST, SOIL_DUST], 1.5)
+		Debris.WOOD:
+			_shards(root, "Splinters", rng, Shard.SPLINTER, roundi(k * clampi(roundi(len_m * 1.6), 8, 20)), low, basis, line, 0.1, 0.4, 1.5, 4.0, 60.0, 2.6)
+			_settle(root, rng, roundi(k * clampi(roundi(len_m / 0.9), 5, 11)), mid, basis, line, 1.6, 2.8, 2.4, [SOIL_DUST, SOIL_DUST_DARK], 1.3)
+		Debris.SHEET:
+			_shards(root, "Bits", rng, Shard.SHEET, roundi(k * clampi(roundi(len_m * 1.2), 6, 14)), low, basis, line, 0.1, 0.3, 0.8, 2.5, 55.0, 2.6)
+			_settle(root, rng, roundi(k * clampi(roundi(len_m / 1.4), 4, 8)), mid, basis, line, 1.4, 2.2, 2.2, [SOIL_DUST, RUST_DUST], 1.2)
+		Debris.MESH:
+			_shards(root, "Rods", rng, Shard.ROD, roundi(k * clampi(roundi(len_m), 5, 10)), low, basis, line, 0.15, 0.4, 0.6, 2.0, 50.0, 2.8)
+			_settle(root, rng, roundi(k * clampi(roundi(len_m / 1.6), 3, 7)), mid, basis, line, 1.3, 2.0, 2.0, [SOIL_DUST, SOIL_DUST_DARK], 1.1)
+	# Уламки падають на площину землі посередині відрізка (на схилі — компроміс двох кінців).
+	var floor_box := GPUParticlesCollisionBox3D.new()
+	floor_box.name = "Ground"
+	floor_box.size = Vector3(len_m / 8.0 + 1.5, 0.5, 1.5)
+	floor_box.transform = Transform3D(basis, mid - Vector3(0, 0.25, 0))
+	root.add_child(floor_box)
+	if live_wire:
+		var tip: Vector3 = b - a + Vector3(0, 0.05 / 8.0, 0)
+		_arc(root, rng, tip, 2, 1.2)
+		_sparks(root, "Sparks", 16, tip, Vector3.UP, 75.0, 2.0, 6.0, 0.15, 0.4, 0.2, 0.5, 0.0)
+	_expire(root, TOPPLE_LAND_SEC)
 	return root
+
+
+## Уламки повалення: `amount` шматків форми `shape` (`s_min`–`s_max` м уздовж найдовшої сторони)
+## народжуються в коробці `extents` (тайли, локально до `basis`) і летять угору віялом `spread`° на
+## `v_min`–`v_max` м/с. Обертання стихає до приземлення: інакше шматок дзиґою крутився б на землі.
+static func _shards(root: Node3D, node_name: String, rng: RandomNumberGenerator, shape: Shard, amount: int, at: Vector3, basis: Basis, extents: Vector3, s_min: float, s_max: float, v_min: float, v_max: float, spread: float, life: float) -> GPUParticles3D:
+	var em := _debris_emitter(root, node_name, amount, v_max / 8.0, _shard_mesh(shape), s_min / 8.0, s_max / 8.0, life)
+	em.transform = Transform3D(basis, at)
+	em.use_fixed_seed = true
+	em.seed = rng.randi()
+	# Сфера зіткнення частинки — завтовшки зі шматок (товщина ~0,15 довжини), а не з його довжину:
+	# інакше довгі куски висіли б над землею.
+	em.collision_base_size = 0.15
+	var pm := em.process_material as ParticleProcessMaterial
+	pm.initial_velocity_min = v_min / 8.0
+	pm.spread = spread
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = extents
+	pm.lifetime_randomness = 0.2
+	var flight: float = clampf(debris_flight_sec(v_max) / life, 0.05, 0.9)
+	var spin := Curve.new()
+	spin.add_point(Vector2(0.0, 1.0))
+	spin.add_point(Vector2(flight, 0.0))
+	var spin_t := CurveTexture.new()
+	spin_t.curve = spin
+	pm.angular_velocity_curve = spin_t
+	# Кожен шматок трохи світліший чи темніший: однакові уламки читаються штампом.
+	var shade := Gradient.new()
+	shade.colors = PackedColorArray([Color(0.8, 0.8, 0.8), Color(1.0, 1.0, 1.0)])
+	var shade_t := GradientTexture1D.new()
+	shade_t.gradient = shade
+	pm.color_initial_ramp = shade_t
+	return em
+
+
+## Пил, що осідає: `amount` клуб атласу ґрунту (`SETTLE_FRAMES`) `d_min`–`d_max` м в одній системі
+## частинок — один виклик малювання на всю хмару вздовж відрізка. Клуби народжуються в коробці
+## `extents` упродовж перших 15 % життя, розлітаються на ≤ `v_max` м/с і гальмують, здіймаються
+## не вище ~1 м, ширшають і розчиняються ерозією за шумом за `life` с. Колір кожної — випадкова
+## суміш `colours` (лінійні).
+static func _settle(root: Node3D, rng: RandomNumberGenerator, amount: int, at: Vector3, basis: Basis, extents: Vector3, d_min: float, d_max: float, life: float, colours: Array[Color], v_max: float) -> GPUParticles3D:
+	if _settle_mesh == null:
+		_settle_mesh = QuadMesh.new()
+		_settle_mesh.size = Vector2.ONE
+		var mat := ShaderMaterial.new()
+		mat.shader = Shader.new()
+		mat.shader.code = _SETTLE_CODE
+		mat.set_shader_parameter("tex", DIRT_TEX)
+		mat.set_shader_parameter("frames", SETTLE_FRAMES)
+		mat.set_shader_parameter("anchor", anchor_of(DIRT_TEX))
+		_settle_mesh.material = mat
+	var em := GPUParticles3D.new()
+	em.name = "Settle"
+	em.amount = amount
+	em.lifetime = life
+	em.one_shot = true
+	em.explosiveness = 0.85
+	em.randomness = 0.4
+	em.local_coords = false
+	em.use_fixed_seed = true
+	em.seed = rng.randi()
+	# Ближчі клуби поверх дальших: у порядку народження вони перескакували б одна через одну.
+	em.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
+	em.transform = Transform3D(basis, at)
+	var pm := ParticleProcessMaterial.new()
+	# Клуби рівномірно вздовж відрізка (з тремтінням), а не навмання: випадкові збивались у
+	# грона з дірками між ними, і пил читався намистом.
+	var pts := Image.create(amount, 1, false, Image.FORMAT_RGBF)
+	for i in amount:
+		var u: float = (float(i) + rng.randf_range(0.2, 0.8)) / float(amount) * 2.0 - 1.0
+		pts.set_pixel(i, 0, Color(u * extents.x, rng.randf_range(-1.0, 1.0) * extents.y, rng.randf_range(-1.0, 1.0) * extents.z))
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_POINTS
+	pm.emission_point_texture = ImageTexture.create_from_image(pts)
+	pm.emission_point_count = amount
+	pm.direction = Vector3.UP
+	pm.spread = 80.0
+	pm.initial_velocity_min = 0.3 / 8.0
+	pm.initial_velocity_max = v_max / 8.0
+	# Повітря гальмує пил за ~1 с: далі він лише висить і осідає.
+	pm.damping_min = 1.0 / 8.0
+	pm.damping_max = 1.6 / 8.0
+	pm.gravity = Vector3.ZERO
+	var k: float = DIRT_CELL_M / DIRT_CLOUD_M / 8.0
+	pm.scale_min = d_min * k
+	pm.scale_max = d_max * k
+	var sc := Curve.new()
+	sc.add_point(Vector2(0.0, 0.55))
+	sc.add_point(Vector2(0.3, 1.0))
+	sc.add_point(Vector2(1.0, 1.3))
+	var sct := CurveTexture.new()
+	sct.curve = sc
+	pm.scale_curve = sct
+	pm.angle_min = -20.0
+	pm.angle_max = 20.0
+	var mix := Gradient.new()
+	mix.colors = PackedColorArray(colours)
+	var mix_t := GradientTexture1D.new()
+	mix_t.gradient = mix
+	pm.color_initial_ramp = mix_t
+	# Проступає за перші 6 % життя; далі гасить ерозія в шейдері.
+	var fade := Gradient.new()
+	fade.offsets = PackedFloat32Array([0.0, 0.06, 1.0])
+	fade.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0.6), Color(1, 1, 1, 0.45)])
+	var fade_t := GradientTexture1D.new()
+	fade_t.gradient = fade
+	pm.color_ramp = fade_t
+	em.process_material = pm
+	em.draw_pass_1 = _settle_mesh
+	em.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	em.layers = 1 << (UnitView.UNIT_LAYER - 1)
+	em.visibility_aabb = AABB(Vector3(-3, -0.5, -3), Vector3(6, 3, 6))
+	root.add_child(em, true)
+	em.emitting = true
+	return em
+
+
+## Дуга дроту під напругою: одне синьо-біле ядро `d_m` м і одне блакитне світло спалахують
+## `flashes` разів по 30–60 мс через нерівні проміжки (з хешу місця) — не в такт і не мерехтінням
+## на місці; світло потім звільняється.
+static func _arc(root: Node3D, rng: RandomNumberGenerator, offset: Vector3, flashes: int, d_m: float) -> void:
+	if _hot_shader == null:
+		_hot_shader = Shader.new()
+		_hot_shader.code = _HOT_CODE
+	var mat := ShaderMaterial.new()
+	mat.shader = _hot_shader
+	mat.render_priority = PRIORITY_CORE + 1
+	mat.set_shader_parameter("size", d_m / 8.0)
+	mat.set_shader_parameter("seed", float(hash(root.position + offset) % 97))
+	mat.set_shader_parameter("pull", 0.0)
+	mat.set_shader_parameter("arc", 1.0)
+	var q := _quad_instance(root, "Arc", mat)
+	q.position = offset
+	q.visible = false
+	var light := OmniLight3D.new()
+	light.name = "ArcLight"
+	light.light_color = Color(0.72, 0.84, 1.0)
+	light.light_energy = 0.0
+	light.omni_range = 7.0 / 8.0
+	light.position = offset
+	light.layers = 1 << (UnitView.UNIT_LAYER - 1)
+	root.add_child(light)
+	var tw: Tween = root.create_tween()
+	var gap: float = rng.randf_range(0.0, 0.03)
+	for i in flashes:
+		var sec: float = rng.randf_range(0.03, 0.06)
+		var energy: float = rng.randf_range(2.5, 4.5)
+		tw.tween_interval(gap)
+		tw.tween_callback(func() -> void:
+			q.visible = true
+			light.light_energy = energy)
+		tw.tween_method(func(f: float) -> void: mat.set_shader_parameter("heat", f), 0.0, 1.0, sec)
+		tw.tween_callback(func() -> void:
+			q.visible = false
+			light.light_energy = 0.0)
+		gap = rng.randf_range(0.08, 0.25) if i == 0 else rng.randf_range(0.15, 0.45)
+	tw.tween_callback(light.queue_free)
+
+
+## Форма дрібного уламка повалення, довжина 1 уздовж X: скол бетону, тріска, гнутий клапоть
+## профлисту, гнутий прут. Колір — у вершинах:
+## усі уламки ділять один матеріал (один шейдер на розігріві).
+static func _shard_mesh(shape: Shard) -> ArrayMesh:
+	if _shard_meshes.has(shape):
+		return _shard_meshes[shape]
+	if _shard_mat == null:
+		_shard_mat = StandardMaterial3D.new()
+		_shard_mat.vertex_color_use_as_albedo = true
+		_shard_mat.vertex_color_is_srgb = true
+		_shard_mat.roughness = 0.95
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Дерево лишає колір кори й потемнілої деревини, не світліє на зламі.
+	var wood := Color(0.34, 0.27, 0.2)
+	match shape:
+		Shard.CHIP:
+			_bar(st, 2, 1.0, 0.4, 0.33, 0.0, 0.0, Color(0.48, 0.47, 0.45), 0.25, 1)
+		Shard.SPLINTER:
+			_bar(st, 4, 1.0, 0.07, 0.035, 0.03, 1.0, wood, 0.1, 3)
+		Shard.SHEET:
+			_bar(st, 5, 1.0, 0.35, 0.008, 0.12, 0.0, Color(0.3, 0.3, 0.27), 0.08, 5)
+		Shard.ROD:
+			_bar(st, 5, 1.0, 0.012, 0.012, 0.18, 0.0, Color(0.24, 0.24, 0.23), 0.0, 6)
+	st.generate_normals()
+	var mesh: ArrayMesh = st.commit()
+	mesh.surface_set_material(0, _shard_mat)
+	_shard_meshes[shape] = mesh
+	return mesh
+
+
+## Брус уздовж X: `stations` перерізів на довжині `length`, півширина `w` (Z), півтовщина `h` (Y),
+## прогин `bend` (зсув кінців угору, частка довжини), `taper` 1 — гострі кінці (тріска). Вершини
+## перерізів зсунуті шумом на `jag` (рваний злам, а не різ); `salt` — свій шум кожній формі.
+static func _bar(st: SurfaceTool, stations: int, length: float, w: float, h: float, bend: float, taper: float, col: Color, jag: float, salt: int) -> void:
+	var rings: Array[PackedVector3Array] = []
+	for i in stations:
+		var u: float = float(i) / float(stations - 1)
+		var c: float = 2.0 * u - 1.0
+		var k: float = 1.0 - taper * 0.9 * pow(absf(c), 1.5)
+		var x: float = c * length * 0.5
+		var y0: float = bend * length * c * c
+		var ring := PackedVector3Array()
+		for corner in 4:
+			var sy: float = 1.0 if corner < 2 else -1.0
+			var sz: float = 1.0 if corner == 0 or corner == 3 else -1.0
+			var p := Vector3(x, y0 + sy * h * k, sz * w * k)
+			var n := Vector3(_hash01(salt, i, corner, 0), _hash01(salt, i, corner, 1), _hash01(salt, i, corner, 2)) * 2.0 - Vector3.ONE
+			# Рваними роблять кінці; середина бруса лишається рівною.
+			var end: float = 1.0 if i == 0 or i == stations - 1 else 0.3
+			p += n * jag * end * Vector3(length, maxf(w, h) * 2.0, maxf(w, h) * 2.0)
+			ring.append(p)
+		rings.append(ring)
+	st.set_color(col)
+	for i in stations - 1:
+		for s in 4:
+			var t: int = (s + 1) % 4
+			_quad_tri(st, rings[i][s], rings[i + 1][s], rings[i + 1][t], rings[i][t])
+	var a: PackedVector3Array = rings[0]
+	var z: PackedVector3Array = rings[stations - 1]
+	_quad_tri(st, a[0], a[1], a[2], a[3])
+	_quad_tri(st, z[3], z[2], z[1], z[0])
+
+
+static func _quad_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+	for p: Vector3 in [a, b, c, a, c, d]:
+		st.add_vertex(p)
+
+
+## Детермінований шум 0–1 для вершин уламків: без `sin` великих аргументів і без глобального rand.
+static func _hash01(a: int, b: int, c: int, d: int) -> float:
+	return float(hash([a, b, c, d]) % 10007) / 10006.0
 
 
 ## Прибрати всі миті з дерева (передача ходу, §3.5).
@@ -924,6 +1249,66 @@ float vnoise(vec2 p) {
 """
 
 
+## Клуба пилу, що осідає, — частинка, а не окремий квад: квад у камеру з точкою вибуху атласу
+## ґрунту на місці частинки, кадр — з фази її життя (INSTANCE_CUSTOM.y) з плавним переходом між
+## кадрами, свій початковий кадр і шум кожній клубі. Колір — перефарбування з частинки (COLOR),
+## розчинення — шумовим порогом, як у `_SPRITE_CODE`, м'який край там, де клуба врізається в землю.
+const _SETTLE_CODE: String = """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, skip_vertex_transform;
+
+uniform sampler2D tex : source_color, filter_linear_mipmap;
+uniform vec2 grid = vec2(8.0);
+uniform vec2 frames = vec2(26.0, 44.0);
+uniform vec2 anchor = vec2(0.0);
+// Пил стелиться, а не стоїть стовпом: клуба атласу ширша й нижча за вибухову.
+uniform vec2 squash = vec2(1.3, 0.85);
+uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
+global uniform float sky_clear;
+varying float v_frame;
+varying float v_life;
+varying float v_seed;
+varying float v_depth;
+""" + _NOISE_CODE + """
+void vertex() {
+	float s = length(MODEL_MATRIX[0].xyz);
+	float r = INSTANCE_CUSTOM.x;
+	vec2 v = (vec2(cos(r) * VERTEX.x - sin(r) * VERTEX.y, sin(r) * VERTEX.x + cos(r) * VERTEX.y) + anchor) * squash;
+	vec3 world = MODEL_MATRIX[3].xyz + (INV_VIEW_MATRIX[0].xyz * v.x + INV_VIEW_MATRIX[1].xyz * v.y) * s;
+	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
+	v_seed = fract(float(INSTANCE_ID) * 0.618034 + fract(MODEL_MATRIX[3].x * 3.7));
+	v_life = INSTANCE_CUSTOM.y;
+	v_frame = mix(frames.x + floor(v_seed * 5.0), frames.y, pow(v_life, 0.75));
+	// М'який край — на п'яту клуби: мала клуба, що цілком у смузі згасання, не зникла б.
+	v_depth = s * 0.1;
+}
+
+vec4 frame_at(float f, vec2 uv) {
+	float n = clamp(f, 0.0, 63.0);
+	return texture(tex, (clamp(uv, vec2(0.002), vec2(0.998)) + vec2(mod(n, grid.x), floor(n / grid.x))) / grid);
+}
+
+void fragment() {
+	vec4 t = mix(frame_at(floor(v_frame), UV), frame_at(floor(v_frame) + 1.0, UV), fract(v_frame));
+	float luma = dot(t.rgb, vec3(0.2126, 0.7152, 0.0722));
+	// Перефарбування тримає світлотінь атласу: без неї клуба лягала плоскою сірою плямою.
+	ALBEDO = COLOR.rgb * (0.45 + 0.6 * smoothstep(0.02, 0.35, luma)) * (1.0 + 0.15 * sky_clear);
+	// Перші 40 % життя клуба тримає форму, далі шум з'їдає спершу рідкі краї, наостанок ядро.
+	float erode = smoothstep(0.4, 1.0, v_life);
+	float n = vnoise(UV * 7.0 + v_seed * 31.0) * 0.6 + vnoise(UV * 17.0 + v_seed * 13.0) * 0.4;
+	float thr = erode * 1.05;
+	float keep = smoothstep(thr - 0.25, thr, t.a * (0.6 + 0.4 * n));
+	// Край клуби розмитий і від атласу, і від середини кваду: пил не має чіткого обрису.
+	float rim = 1.0 - smoothstep(0.2, 0.5, length((UV - vec2(0.5, 0.6)) * vec2(1.0, 1.3)));
+	// Мокра земля під хмарами (River) куриться слабше за суху під сонцем.
+	float a = t.a * smoothstep(0.0, 0.9, t.a) * rim * keep * COLOR.a * (1.0 - erode) * (0.6 + 0.4 * sky_clear);
+	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, край там жорсткіший.
+	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
+	ALPHA = a * clamp((VERTEX.z - sv.z / sv.w) / v_depth, 0.0, 1.0);
+}
+"""
+
+
 ## Гаряче ядро спалаху: м'який радіальний градієнт біле → жовте → помаранчеве, прозорість
 ## спадає до краю; `heat` 0 → 1 за два кадри. Звичайне змішування, кольори не вище 1: без
 ## білого багатокутника й без рожевої облямівки.
@@ -937,6 +1322,8 @@ uniform float seed = 0.0;
 uniform float pull = 0.0;
 // Дульний спалах: середина жовта, а не біла.
 uniform float yellow = 0.0;
+// Дуга дроту під напругою: біле ядро, синьо-блакитний край.
+uniform float arc = 0.0;
 """ + _NOISE_CODE + """
 void vertex() {
 	float s = size * length(MODEL_MATRIX[0].xyz);
@@ -950,6 +1337,8 @@ void fragment() {
 	float re = r * (0.92 + 0.16 * vnoise(UV * 5.0 + seed));
 	vec3 col = mix(mix(vec3(1.0, 0.97, 0.9), vec3(1.0, 0.86, 0.45), yellow), vec3(1.0, 0.82, 0.4), smoothstep(0.0, 0.35, re));
 	col = mix(col, vec3(0.95, 0.45, 0.12), smoothstep(0.35, 0.75, re));
+	vec3 blue = mix(vec3(1.0), vec3(0.62, 0.78, 1.0), smoothstep(0.0, 0.3, re));
+	col = mix(col, mix(blue, vec3(0.25, 0.45, 1.0), smoothstep(0.3, 0.75, re)), arc);
 	ALBEDO = col;
 	ALPHA = pow(clamp(1.0 - re, 0.0, 1.0), 1.5) * (1.0 - 0.6 * heat);
 }
