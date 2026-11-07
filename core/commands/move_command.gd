@@ -104,7 +104,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 		walked.append(step)
 		# Знахідка укриття — на кожному кроці й в обидва боки: і цей юніт міг пройти повз
 		# будинок із ворогом, і сам він міг увійти в будинок поруч із ворогом.
-		state.discover_cover()
+		trail.append_array(state.discover_cover(walked.size() - 1))
 
 		# §3.5/§6: туман оновлюється ЩОЙНО юніт став на новий тайл — до всього, що
 		# на тому тайлі станеться, і на КОЖНОМУ кроці, а не лише на останньому.

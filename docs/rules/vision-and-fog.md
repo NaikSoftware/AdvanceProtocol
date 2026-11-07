@@ -77,6 +77,10 @@ A side finds a unit in cover when:
 visible to them. Any move off the tile clears every side's finding, and entering a building again
 hides it from everyone until it is found anew. Off a building, the normal `seen` rule applies.
 
+Each new finding is a `UnitFound(unit_id, player, at_step)` event in the move's trail, for every
+finding side; `at_step` indexes the move's path, so the view shows the squad at the step that found
+it, not after the whole walk.
+
 The one query for "does this player know about this unit" is `BattleState.can_see_unit()`; every
 rule that asks it goes through there.
 

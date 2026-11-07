@@ -46,9 +46,22 @@ var _board_rebuild: Callable
 var _wreck_left: Callable
 var _wreck_removed: Callable
 
+## Показ знайденого в укритті загону (unit_id). Кличеться лише для знахідки боку viewer
+## і не більше раза на юніт за пакет; що саме ставити на дошку, вирішує екран.
+var _unit_found: Callable
+## Гравець, чий світ на екрані. Події не фільтровані за спостерігачем (§6): знахідка
+## іншого боку — це те, що бачить він, а не той, хто зараз дивиться.
+var viewer: int = 0
+## Пакет, що грається, і позиція в ньому: UnitMoved мусить заздалегідь знати, що
+## знайдено дорогою, бо вся анімація шляху — один await.
+var _batch: Array[Events.BattleEvent] = []
+var _batch_index: int = 0
+var _found_shown: Dictionary = {}
+
 
 func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable(), board_rebuild: Callable = Callable(),
-		wreck_left: Callable = Callable(), wreck_removed: Callable = Callable()) -> void:
+		wreck_left: Callable = Callable(), wreck_removed: Callable = Callable(), unit_found: Callable = Callable()) -> void:
+	_unit_found = unit_found
 	_board_rebuild = board_rebuild
 	_wreck_left = wreck_left
 	_wreck_removed = wreck_removed
@@ -79,7 +92,10 @@ func play(events: Array[Events.BattleEvent]) -> void:
 	for i in events.size():
 		if events[i] is Events.ShotFired or events[i] is Events.ShotRetaliated or events[i] is Events.DroneLaunched:
 			last_shot = i
+	_batch = events
+	_found_shown.clear()
 	for i in events.size():
+		_batch_index = i
 		var awaitable: Variant = _dispatch(events[i])
 		if events[i] is Events.UnitTurned and i > last_shot:
 			awaitable = null
@@ -165,6 +181,10 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_wreck_removed(event)
 	elif event is Events.TileRevealed:
 		return _handle_tile_revealed(event)
+	elif event is Events.UnitFound:
+		# Зазвичай уже показано кроком руху; тут — знахідка, для якої анімації шляху не було.
+		_show_found(event)
+		return null
 	elif event is Events.MinePlaced:
 		return _handle_mine_placed(event)
 	elif event is Events.MineCleared:
@@ -202,9 +222,30 @@ func _handle_unit_moved(event: Events.UnitMoved) -> Variant:
 	var view: UnitView = _resolve_unit_view(event.unit_id)
 	if view == null:
 		return null
+	# Знахідки цього ходу — у хвості пакета, до наступного заголовка руху.
+	var found: Array[Events.UnitFound] = []
+	for j in range(_batch_index + 1, _batch.size()):
+		var e: Events.BattleEvent = _batch[j]
+		if e is Events.UnitMoved or e is Events.UnitTurned:
+			break
+		if e is Events.UnitFound and (e as Events.UnitFound).at_step >= 0:
+			found.append(e)
+	var on_step: Callable = Callable()
+	if not found.is_empty():
+		on_step = func(i: int) -> void:
+			for f: Events.UnitFound in found:
+				if f.at_step == i:
+					_show_found(f)
 	# event.facing має останнє слово: це фейсинг, який вирішив core/ (зараз —
 	# напрямок останнього пройденого кроку), тож прокидається окремо від path.
-	return view.move_along(event.path, _MOVE_STEP_DURATION, event.facing)
+	return view.move_along(event.path, _MOVE_STEP_DURATION, event.facing, on_step)
+
+
+func _show_found(event: Events.UnitFound) -> void:
+	if event.player != viewer or _found_shown.has(event.unit_id) or not _unit_found.is_valid():
+		return
+	_found_shown[event.unit_id] = true
+	_unit_found.call(event.unit_id)
 
 
 func _handle_unit_turned(event: Events.UnitTurned) -> Variant:

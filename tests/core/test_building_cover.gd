@@ -137,6 +137,49 @@ func test_found_when_the_cover_unit_walks_in_next_to_an_enemy() -> void:
 	assert_true(state.can_see_unit(0, c))
 
 
+# --- подія UnitFound ----------------------------------------------------------------
+
+func _found_events(events: Array[Events.BattleEvent]) -> Array:
+	return events.filter(func(e: Events.BattleEvent) -> bool: return e is Events.UnitFound)
+
+
+func test_walk_emits_unit_found_at_the_step_that_found_it() -> void:
+	var c: Unit = _cover(1, Vector2i(4, 5))
+	var a: Unit = state.add_unit(0, 0, Vector2i(1, 4), 0)
+	_begin()
+	var events: Array[Events.BattleEvent] = MoveCommand.create(a.id, Vector2i(3, 4)).apply(state)
+	assert_true(events[0] is Events.UnitMoved, "заголовок — рух")
+	assert_eq((events[0] as Events.UnitMoved).path, [Vector2i(2, 4), Vector2i(3, 4)] as Array[Vector2i])
+	var found: Array = _found_events(events)
+	assert_eq(found.size(), 1)
+	var f: Events.UnitFound = found[0]
+	assert_eq([f.unit_id, f.player, f.at_step], [c.id, 0, 1], "знайдено на другому кроці, (3,4) — діагональ від (4,5)")
+	assert_gt(events.find(f), 0, "у хвості, після UnitMoved")
+
+
+func test_squad_entering_a_building_next_to_an_enemy_emits_found_for_that_enemy() -> void:
+	state.board.set_kind(Vector2i(6, 5), Terrain.Kind.BUILDING)
+	var c: Unit = state.add_unit(0, 1, Vector2i(5, 5), 0)
+	state.add_unit(0, 0, Vector2i(7, 6), 0)
+	_begin()
+	state.active_player = 1
+	state.begin_turn()
+	var found: Array = _found_events(MoveCommand.create(c.id, Vector2i(6, 5)).apply(state))
+	assert_eq(found.size(), 1)
+	var f: Events.UnitFound = found[0]
+	assert_eq([f.unit_id, f.player, f.at_step], [c.id, 0, 0], "знайшов бік, що не ходить")
+
+
+func test_walking_past_an_already_found_squad_emits_nothing() -> void:
+	var c: Unit = _cover(1, Vector2i(4, 5))
+	var a: Unit = state.add_unit(0, 0, Vector2i(3, 4), 0)
+	_begin()
+	assert_eq(c.found_by, 1, "передумова: знайдено на старті")
+	var events: Array[Events.BattleEvent] = MoveCommand.create(a.id, Vector2i(3, 6)).apply(state)
+	assert_eq(a.pos, Vector2i(3, 6), "передумова: пройшов повз")
+	assert_eq(_found_events(events).size(), 0)
+
+
 func test_entering_a_building_hides_from_everyone() -> void:
 	state.board.set_kind(Vector2i(6, 5), Terrain.Kind.BUILDING)
 	var c: Unit = state.add_unit(0, 1, Vector2i(5, 5), 0)

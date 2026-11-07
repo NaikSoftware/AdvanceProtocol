@@ -31,6 +31,7 @@ func test_every_event_type_constructs_and_describes() -> void:
 		Events.WreckLeft.new(Vector2i(3, 3), 5, 2),
 		Events.WreckRemoved.new(Vector2i(3, 3), Wrecks.Reason.BURNED_OUT),
 		Events.TileRevealed.new(0, [Vector2i(1, 1), Vector2i(1, 2)]),
+		Events.UnitFound.new(3, 0, 1),
 		Events.MinePlaced.new(Vector2i(4, 4), 0),
 		Events.MineCleared.new(Vector2i(4, 4)),
 		Events.MineTriggered.new(Vector2i(5, 5), 3),

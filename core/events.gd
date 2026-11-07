@@ -139,6 +139,22 @@ class TileRevealed extends BattleEvent:
 	func describe() -> String:
 		return "TileRevealed(player=%d, tiles=%d)" % [player, tiles.size()]
 
+class UnitFound extends BattleEvent:
+	## Бік player щойно знайшов юніт в укритті (піхота в будівлі). Окрема подія, а не
+	## висновок вигляду з кінцевого стану: стан після ходу каже лише, ЩО знайдено, а
+	## вигляд мусить показати загін на тому кроці, де його знайшли, а не після всього
+	## шляху. at_step — індекс у UnitMoved.path того ж пакета; −1 — знахідка поза ходом.
+	## Як і TileRevealed, іде для кожного боку: фільтрує вигляд (§6).
+	var unit_id: int
+	var player: int
+	var at_step: int
+	func _init(p_unit_id: int, p_player: int, p_at_step: int) -> void:
+		unit_id = p_unit_id
+		player = p_player
+		at_step = p_at_step
+	func describe() -> String:
+		return "UnitFound(unit=%d, player=%d, step=%d)" % [unit_id, player, at_step]
+
 class MinePlaced extends BattleEvent:
 	var pos: Vector2i
 	var owner: int

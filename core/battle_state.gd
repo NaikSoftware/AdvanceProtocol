@@ -131,19 +131,23 @@ func can_see_unit(player: int, u: Unit) -> bool:
 		return false
 	return not Rules.in_cover(board, u) or (u.found_by >> player) & 1 == 1
 
-func discover_cover() -> void:
+func discover_cover(at_step: int = -1) -> Array[Events.BattleEvent]:
 	## Знахідка сусідством: живий юніт боку p в одній із восьми клітинок довкола
 	## знаходить для p піхоту в будівлі. Прохід за ВСІМА боками, а не лише за активним:
 	## юніт, що сам зайшов у будинок поруч із ворогом, знайдений тим ворогом одразу, хоч
 	## той і не ходить. Біти лише додаються — знайдене лишається знайденим, доки юніт не
 	## зійде з тайла (MoveCommand обнуляє found_by).
+	## Подія — лише на новий біт: уже знайдений загін вигляд показує й так.
+	var out: Array[Events.BattleEvent] = []
 	var alive: Array[Unit] = alive_units()
 	for c in alive:
 		if not Rules.in_cover(board, c):
 			continue
 		for f in alive:
-			if f.owner != c.owner and Rules.distance_sq(c.pos, f.pos) <= 2:
+			if f.owner != c.owner and Rules.distance_sq(c.pos, f.pos) <= 2 and (c.found_by >> f.owner) & 1 == 0:
 				c.found_by |= 1 << f.owner
+				out.append(Events.UnitFound.new(c.id, f.owner, at_step))
+	return out
 
 func known_occupied_map(player: int) -> Dictionary:
 	## Прохідність такою, якою її ЗНАЄ один гравець: свої юніти — завжди, чужі — ті,

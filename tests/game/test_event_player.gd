@@ -65,7 +65,7 @@ func _event_class_names_from_source() -> Array[String]:
 
 ## Розгалуження в _dispatch — вручну веденний if/elif (Godot не дає рефлексії
 ## імені для анонімних вкладених класів core/events.gd). Ця перевірка ловить
-## пропущену гілку: по одному екземпляру кожного з 23 конкретних класів
+## пропущену гілку: по одному екземпляру кожного з 24 конкретних класів
 ## (той самий набір, що й tests/core/test_events.gd) мусить пройти через
 ## play() без застрягання на "необроблений тип" — жодна подія тут не
 ## посилається на існуючий юніт, тож усі обробники відпрацюють як no-op,
@@ -75,7 +75,7 @@ func _event_class_names_from_source() -> Array[String]:
 ## сконструювати анонімний вкладений клас за рядком з назвою — та сама
 ## причина, чому в event_player.gd є if/elif), але його ПОКРИТТЯ перевіряємо
 ## не рахунком, а звіркою зі списком імен, добутим з самого events.gd (R6) —
-## інакше 24-й клас міг би непомітно пройти повз розмір цього масиву,
+## інакше 25-й клас міг би непомітно пройти повз розмір цього масиву,
 ## лишивши _dispatch без гілки.
 func test_dispatch_handles_every_concrete_event_instance_without_falling_through() -> void:
 	var all_events: Array[Events.BattleEvent] = [
@@ -90,6 +90,7 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.WreckLeft.new(Vector2i(3, 3), 5, 2),
 		Events.WreckRemoved.new(Vector2i(3, 3), Wrecks.Reason.BURNED_OUT),
 		Events.TileRevealed.new(0, [Vector2i(1, 1), Vector2i(1, 2)]),
+		Events.UnitFound.new(3, 0, 1),
 		Events.MinePlaced.new(Vector2i(4, 4), 0),
 		Events.MineCleared.new(Vector2i(4, 4)),
 		Events.MineTriggered.new(Vector2i(5, 5), 3),
@@ -379,6 +380,50 @@ func test_hp_event_without_unit_lookup_leaves_the_bar_untouched() -> void:
 ## самому event_player.gd пояснює чому), а не легітимна черга. Тут
 ## перевіряємо релізну (без assert) поведінку: другий виклик тихо
 ## ігнорується, перше програвання не переривається і завершується штатно.
+# --- Знахідка укриття посеред ходу ------------------------------------------------
+
+## Загін, знайдений на кроці at_step, з'являється тоді, коли ходок доїхав до цього кроку,
+## а не після всього шляху; знахідка іншого боку не показується; пізніша UnitFound у хвості
+## пакета вдруге нічого не кличе.
+func test_unit_found_is_shown_at_its_step_for_the_viewer_only() -> void:
+	var view: UnitView = _spawn_view(1, 5, 0, Vector2i(0, 0))
+	var calls: Array[int] = []
+	player = EventPlayer.new(func(unit_id: int) -> UnitView: return view if unit_id == 1 else null,
+		Callable(), Callable(), Callable(), Callable(), func(unit_id: int) -> void: calls.append(unit_id))
+	player.viewer = 0
+	var events: Array[Events.BattleEvent] = [
+		Events.UnitMoved.new(1, [Vector2i(1, 0), Vector2i(2, 0)], 2),
+		Events.ApChanged.new(1, 10),
+		Events.UnitFound.new(9, 0, 1),
+		Events.UnitFound.new(8, 1, 0),
+	]
+	player.play(events)
+	var move: Tween = view._face_tween
+	# Поворот на схід (0,15 с) і перший крок (0,12 с): ходок на path[0], знахідка — на path[1].
+	move.custom_step(UnitView.FACE_TURN_DURATION + 0.12 + 0.005)
+	assert_eq(calls, [] as Array[int], "на першому кроці ще нічого не знайдено")
+	move.custom_step(0.12)
+	assert_eq(calls, [9] as Array[int], "з'являється на кроці знахідки, ще до кінця пакета")
+	_finish_all_processed_tweens()
+	assert_false(player.is_playing())
+	assert_eq(calls, [9] as Array[int], "знахідка боку 1 не для глядача 0, а повтор у хвості — no-op")
+
+
+## Ходок без вузла (анімації шляху немає) — загін показується самою подією в хвості.
+func test_unit_found_without_a_move_animation_is_shown_by_the_event_itself() -> void:
+	var calls: Array[int] = []
+	player = EventPlayer.new(Callable(), Callable(), Callable(), Callable(), Callable(),
+		func(unit_id: int) -> void: calls.append(unit_id))
+	player.viewer = 1
+	var events: Array[Events.BattleEvent] = [
+		Events.UnitMoved.new(1, [Vector2i(1, 0)], 2),
+		Events.UnitFound.new(9, 0, 0),
+		Events.UnitFound.new(7, 1, 0),
+	]
+	await player.play(events)
+	assert_eq(calls, [7] as Array[int])
+
+
 func test_reentrant_play_call_is_ignored_and_first_playback_completes() -> void:
 	var view: UnitView = _spawn_view(1)
 	player = EventPlayer.new(func(unit_id: int) -> UnitView:
