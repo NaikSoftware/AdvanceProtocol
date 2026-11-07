@@ -9,10 +9,10 @@ enum ArmourSector { FRONT, SIDE, REAR }
 const TYPES: Array[Dictionary] = [
 	{"id": 0, "name_key": "UNIT_RIFLE_SQUAD", "unit_class": UnitClass.INFANTRY,
 	 "attack": 15, "max_ap": 30, "max_hp": 100, "attack_range": 3, "fire_cost": 10,
-	 "armour": [0, 0, 0], "cross_country": 80, "vision": 5, "drones": 0},
+	 "armour": [0, 0, 0], "cross_country": 110, "vision": 5, "drones": 0},
 	{"id": 1, "name_key": "UNIT_ASSAULT_SQUAD", "unit_class": UnitClass.INFANTRY,
 	 "attack": 15, "max_ap": 30, "max_hp": 100, "attack_range": 3, "fire_cost": 10,
-	 "armour": [0, 0, 0], "cross_country": 80, "vision": 5, "drones": 2},
+	 "armour": [0, 0, 0], "cross_country": 110, "vision": 5, "drones": 2},
 	{"id": 2, "name_key": "UNIT_ARMOURED_CAR", "unit_class": UnitClass.LIGHT_VEHICLE,
 	 "attack": 60, "max_ap": 68, "max_hp": 250, "attack_range": 3, "fire_cost": 18,
 	 "armour": [27, 18, 10], "cross_country": 5, "vision": 3, "drones": 0},
