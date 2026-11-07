@@ -10,7 +10,7 @@ const M: float = 8.0
 const AABB_TOL: float = 0.02 / M
 ## Вихідні опори мають 72-120 трикутників, а кожен різ додає ~15-35: пропорція 1.5 x не вміщує й пеньок із
 ## сегментами. Стеля для таких мікромоделей; див. tools/blender/infra/broken_props.py.
-const TRI_FLOOR: int = 520
+const TRI_FLOOR: int = 700
 const MIN_PIECES: int = 6
 ## Менші за це шматки — справа частинок, а не моделі.
 const MIN_PIECE_M: float = 0.1

@@ -13,7 +13,7 @@
 (свіжий бетон, мідно-бурий волокнистий дротик дерева, голий метал). Злам косий, а не рівний, і від кутів відколюються
 дрібні уламки — рівний зріз із верху читається як різ пилкою. Усе детерміноване (зерно з імені моделі).
 
-Ліміт трикутників — max(1.5 x вихідник, FLOOR): вихідні стовпи мають по 72-108 трикутників, а кожен різ додає ~15-35,
+Ліміт трикутників — max(1.5 x вихідник, FLOOR=700): вихідні стовпи мають по 72-108 трикутників, а кожен різ додає ~15-35,
 тож пропорція 1.5 x не вміщує навіть пеньок із трьома сегментами. FLOOR — стеля для таких мікромоделей; на екрані
 в сотні разів більший бюджет.
 """
@@ -26,7 +26,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 SRC = os.environ.get("BROKEN_SRC", os.path.join(ROOT, "assets", "props"))
 OUT = os.environ.get("BROKEN_OUT", os.path.join(SRC, "broken"))
 M = 0.125                       # метр у одиницях сцени: один тайл = 8 м
-FLOOR = 520                     # див. докстрінг
+FLOOR = 700                     # див. докстрінг
 YARD_KINDS = ("picket", "sheet", "chainlink", "brickbars", "slat")
 ATLAS_N, ATLAS_HB = 5, 192 + 24     # блоків в атласі парканів дворів і висота блоку з полями (yard_fences.py)
 
@@ -131,25 +131,28 @@ def _blur(a, k=2):
 
 
 def fracture_material(kind):
-    """Свіжий злам: бетон — світліший за вивітрену поверхню, зі щебенем; дерево — середньо-бура розщеплена деревина (не біла);
-    метал — темна сталь із рудими плямами."""
-    rng = np.random.default_rng({"concrete": 11, "wood": 12, "metal": 13}[kind])
+    """Свіжий злам: бетон — світліший за вивітрену поверхню (~1.2 x), зі щебенем; дерево — темніша за вал сіро-бура
+    розщеплена деревина (не біла); метал — яскрава свіжа оцинковка; арматура — темна іржава сталь."""
+    rng = np.random.default_rng({"concrete": 11, "wood": 12, "metal": 13, "rebar": 14}[kind])
     n = 64
     if kind == "concrete":
         g = _blur(rng.random((n, n)), 1)
         stones = (_blur(rng.random((n, n)), 2) > 0.56).astype(float)
-        a = np.array([0.50, 0.49, 0.46]) * (0.82 + 0.3 * g)[..., None]
-        a = np.where(stones[..., None] > 0, np.array([0.36, 0.35, 0.33]) * (0.8 + 0.4 * g)[..., None], a)
+        a = np.array([0.64, 0.63, 0.60]) * (0.86 + 0.28 * g)[..., None]
+        a = np.where(stones[..., None] > 0, np.array([0.48, 0.47, 0.45]) * (0.85 + 0.3 * g)[..., None], a)
         return _material("fracture_concrete", a, 0.95)
     if kind == "wood":
         fibre = np.repeat(_blur(rng.random((1, n)), 1), n, 0) * 0.6 + _blur(rng.random((n, n)), 1) * 0.4
-        a = np.array([0.30, 0.21, 0.14]) * (0.72 + 0.5 * fibre)[..., None]
+        a = np.array([0.27, 0.22, 0.17]) * (0.75 + 0.45 * fibre)[..., None]
         return _material("fracture_wood", a, 0.95)
     g = _blur(rng.random((n, n)), 1)
-    rust = (_blur(rng.random((n, n)), 3) > 0.52).astype(float)
-    a = np.array([0.26, 0.27, 0.28]) * (0.8 + 0.4 * g)[..., None]
-    a = np.where(rust[..., None] > 0, np.array([0.40, 0.22, 0.12]) * (0.8 + 0.4 * g)[..., None], a)
-    return _material("fracture_metal", a, 0.7)
+    if kind == "metal":
+        a = np.array([0.62, 0.64, 0.66]) * (0.85 + 0.3 * g)[..., None]
+        return _material("fracture_metal", a, 0.45)
+    rust = (_blur(rng.random((n, n)), 3) > 0.5).astype(float)
+    a = np.array([0.22, 0.16, 0.12]) * (0.8 + 0.4 * g)[..., None]
+    a = np.where(rust[..., None] > 0, np.array([0.38, 0.20, 0.10]) * (0.8 + 0.4 * g)[..., None], a)
+    return _material("fracture_rebar", a, 0.7)
 
 
 # ---------- різ ----------
@@ -214,6 +217,71 @@ def rebar(bm, face, rng, mat_idx, n=2, length_m=0.10, r_m=0.014):
                                   depth=length_m * M, matrix=mx)
         fs = {f for v_ in r["verts"] for f in v_.link_faces}
         style_faces(bm, fs, mat_idx, nrm)
+
+
+def _bar(bm, p0, p1, r, mat_idx, nrm):
+    d = p1 - p0
+    mx = Matrix.Translation((p0 + p1) / 2) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4()
+    res = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=3, radius1=r, radius2=r, depth=d.length, matrix=mx)
+    style_faces(bm, {f for v in res["verts"] for f in v.link_faces}, mat_idx, nrm)
+
+
+def rebar_cage(bm, face, rng, mat_idx, up):
+    """Оголена арматура з грані зламу: 3-4 прути r~3 см, 0.4-0.7 м, кожен з одним зігином 15-40° до осі. Прути йдуть
+    уздовж осі в сусідній шматок (зігин — до осі, довжина після нього коротка), тож у складеному вигляді лишаються
+    всередині нього."""
+    c = face.calc_center_median()
+    nrm = face.normal.normalized()
+    n = rng.choice((3, 4))
+    a0 = rng.uniform(0, 2 * math.pi)
+    for i in range(n):
+        a = a0 + 2 * math.pi * i / n + rng.uniform(-0.3, 0.3)
+        off = Vector((math.cos(a), math.sin(a), 0)) * (0.035 * M)
+        p0 = c + off
+        p0.z = c.z - (off.x * nrm.x + off.y * nrm.y) / nrm.z          # точка лежить у площині зламу
+        L1, L2 = rng.uniform(0.28, 0.45) * M, rng.uniform(0.12, 0.18) * M
+        k = math.radians(rng.uniform(15, 40))
+        d2 = (up * math.cos(k) + (-off).normalized() * math.sin(k)).normalized()
+        p1 = p0 + up * L1
+        _bar(bm, p0 - up * 0.01 * M, p1, 0.03 * M, mat_idx, nrm)
+        _bar(bm, p1, p1 + d2 * L2, 0.03 * M, mat_idx, nrm)
+
+
+def apply(ps, co, no, cap_idx=None, only=None):
+    """Площина різу для всіх шматків зі списку, які вона перетинає (і чий тег у only, якщо задано)."""
+    out = []
+    for p in ps:
+        r = cut(p[0], co, no, cap_idx) if (only is None or p[1] in only) else None
+        if r is None:
+            out.append(p)
+        else:
+            p[0].free()
+            out += [[r[0], p[1]], [r[1], p[1]]]
+    return out
+
+
+def snap(p, rng, cap_idx=None, z_m=None):
+    """Стовп ламається біля землі косим різом: (пеньок, верхівка) або None. Площина йде через вісь самого стовпа."""
+    lo, hi = bbox(p[0])
+    z = lo.z + (z_m if z_m is not None else rng.uniform(0.2, 0.4)) * M
+    co = ((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, z)
+    return cut(p[0], co, (rng.choice((-1, 1)) * rng.uniform(0.3, 0.5), rng.uniform(-0.3, 0.3), 1), cap_idx)
+
+
+def snap_some(ps, tags, idxs, rng, cap_idx=None):
+    """Ламає стовпи з тегом post під номерами idxs (за порядком зліва направо); пеньок отримує тег stump."""
+    posts = sorted([p for p in ps if p[1] in tags], key=lambda p: com(p[0]).x)
+    for i in idxs:
+        if i >= len(posts):
+            continue
+        p = posts[i]
+        r = snap(p, rng, cap_idx)
+        if r is None:
+            continue
+        p[0].free()
+        ps.remove(p)
+        ps += [[r[0], "stump"], [r[1], p[1]]]
+    return ps
 
 
 def com(bm):
@@ -333,13 +401,24 @@ def sort_key_x(bm):
 
 
 # ---------- стовпи ----------
+# Межі зламів — частки висоти; сегменти навмисно різної довжини (>= 1.5 x між найдовшим і найкоротшим).
+BREAKS = {"infra_pole_concrete_10kv": (0.095, 0.30, 0.74), "infra_pole_concrete_04kv": (0.10, 0.68),
+          "infra_pole_wood": (0.22, 0.68)}
+
+
+def tilt_normal(rng, lo_deg, hi_deg):
+    t = math.radians(rng.uniform(lo_deg, hi_deg))
+    phi = rng.uniform(0, 2 * math.pi)
+    return Vector((math.sin(t) * math.cos(phi), math.sin(t) * math.sin(phi), math.cos(t)))
+
+
 def pole(name, concrete):
-    """Пеньок над землею, сегменти валу з косими зламами, відколи від кутів зламу (бетон) чи довгі скалки (дерево)."""
+    """Пеньок над землею, сегменти валу з косими зламами. Бетон: від кутів зламу відколюються крупні уламки, з грані стирчить
+    арматура. Дерево: злам східцями (проміжна колода між двома косими різами) і довгі скалки."""
     rng = rng_for(name)
     bm, mats, _ = load(name)
     src_tris = tris(bm)
     src_bb = bbox(bm)
-    # вал — найвища деталь; його вісь — вісь зламів
     comps = components(bm)
     shaft = max(comps, key=lambda c: bbox(c)[1].z - bbox(c)[0].z)
     sb = bbox(shaft)
@@ -351,59 +430,50 @@ def pole(name, concrete):
     fm = len(mats)
     mats.append(fracture_material("concrete" if concrete else "wood"))
     rb = len(mats)
-    mats.append(fracture_material("metal"))
-    # межі зламів, м від землі: пеньок ~0.8-1 м, далі рівні сегменти; кількість залежить від висоти
-    frac = (0.09, 0.40, 0.70) if H > 9 or not concrete else (0.10, 0.50)
-    if not concrete:
-        frac = (0.11, 0.42, 0.72)
-    zs = [H * f * (1 + rng.uniform(-0.06, 0.06)) for f in frac]
-    if not concrete:
-        zs[0] = max(zs[0], 1.75)         # дерев'яний стовп ламається над бетонною приставкою (0-1.6 м), а не крізь неї
-    pieces, rest = [], bm
-    for z in zs:
-        t = math.radians(rng.uniform(9, 24))
-        phi = rng.uniform(0, 2 * math.pi)
-        n = Vector((math.sin(t) * math.cos(phi), math.sin(t) * math.sin(phi), math.cos(t)))
-        lo, hi = cut(rest, ax + Vector((0, 0, z * M)), n, fm)
+    mats.append(fracture_material("rebar"))
+    pieces, chunks, rest = [], [], bm
+    for f in BREAKS[name]:
+        z = H * f
+        lo, hi = cut(rest, ax + Vector((0, 0, z * M)), tilt_normal(rng, 9, 24), fm)
         rest.free()
         pieces.append([lo, "stump" if not pieces else "segment"])
+        if not concrete:
+            r = cut(hi, ax + Vector((0, 0, (z + rng.uniform(0.2, 0.4)) * M)), tilt_normal(rng, 6, 14), fm)
+            if r:
+                hi.free()
+                chunks.append([r[0], "chunk"])
+                hi = r[1]
         rest = hi
     pieces.append([rest, "segment"])
     ends = [(i, 1) for i in range(len(pieces) - 1)] + [(i + 1, -1) for i in range(len(pieces) - 1)]
-    rng.shuffle(ends)
-    n_chunks = 5 if concrete else 4
-    chunks = []
-    for i, e in ends[:n_chunks]:
+    for i, e in ends:
         b = pieces[i][0]
-        caps = cap_faces(b, fm)
-        f = max(caps, key=lambda f: e * f.calc_center_median().z)
+        caps = [f for f in cap_faces(b, fm) if f.normal.z * e > 0.5]
+        if not caps:
+            continue
+        f = max(caps, key=lambda f: f.calc_area())
         v = rng.choice(f.verts).co.copy()
         a = Vector((0, 0, e))
+        l = Vector((v.x - ax.x, v.y - ax.y, 0)).normalized()
         if concrete:
-            l = Vector((v.x - ax.x, v.y - ax.y, 0)).normalized()
-            nrm = (l * 0.75 + a * 0.65).normalized()
-            co = v - nrm * (rng.uniform(0.09, 0.14) * M)
+            nrm = (l * 0.55 + a * 0.83).normalized()
+            co = v - nrm * (rng.uniform(0.22, 0.34) * M)
         else:
-            # скалка: площина майже вздовж валу, що виходить на бік за ~0.7-1.1 м від зламу
-            l = Vector((v.x - ax.x, v.y - ax.y, 0)).normalized()
-            s = 0.054 / rng.uniform(0.7, 1.1)
-            nrm = (l + a * s).normalized()
-            co = ax + l * (0.5 * 0.119 * M) + Vector((0, 0, f.calc_center_median().z))
+            # скалка: площина майже вздовж валу, що виходить на бік за 0.4-0.8 м від зламу; товщина ~4 см
+            nrm = (l + a * (0.04 / rng.uniform(0.4, 0.8))).normalized()
+            co = ax + l * (0.65 * 0.119 * M) + Vector((0, 0, f.calc_center_median().z))
         r = cut(b, co, nrm, fm)
         if r is None:
             continue
         b.free()
         pieces[i][0] = r[0]
         chunks.append([r[1], "chunk"])
-    pieces += chunks
     if concrete:
-        lim = limit(src_tris)
-        for p in pieces:
-            if p[1] == "chunk":
-                continue
-            for f in sorted(cap_faces(p[0], fm), key=lambda f: -f.calc_area())[:1]:
-                if sum(tris(q[0]) for q in pieces) + 16 <= lim:
-                    rebar(p[0], f, rng, rb)
+        for p in pieces[:-1]:
+            ups = [f for f in cap_faces(p[0], fm) if f.normal.z > 0.5]
+            if ups:
+                rebar_cage(p[0], max(ups, key=lambda f: f.calc_area()), rng, rb, Vector((0, 0, 1)))
+    pieces += chunks
     path, total, bb = export(name, name, [(b, part) for b, part in pieces], mats)
     report(name, path, total, bb, src_bb, src_tris, len(pieces))
 
@@ -442,6 +512,7 @@ def slice_x(pieces, xs, rng, tilt, cap_idx=None, only=None):
 
 
 def picket(name):
+    """Штахет: картки секцій рвуться на косі смуги, два стовпи ламаються біля землі."""
     rng = rng_for(name)
     comps, mats, st, sbb, mn = fence_parts(name)
     fm = len(mats)
@@ -452,35 +523,40 @@ def picket(name):
             pieces.append([c, "post"])
         else:
             lo, hi = bbox(c)
-            xs = [lo.x / M + (hi.x - lo.x) / M * (k / 5 + tilted(rng, 0.04)) for k in range(1, 5)]
-            pieces += slice_x([[c, "board"]], xs, rng, 0.45)
+            xs = [lo.x / M + (hi.x - lo.x) / M * (k / 5 + tilted(rng, 0.05)) for k in range(1, 5)]
+            pieces += slice_x([[c, "board"]], xs, rng, 0.25)
+    pieces = snap_some(pieces, {"post"}, (1, 3), rng, fm)
     pieces = order(pieces)
     path, total, bb = export(name, name, pieces, mats)
     report(name, path, total, bb, sbb, st, len(pieces))
 
 
 def sheet(name):
-    """Профнастил: листи рвуться навпіл (один — упоперек, інші — по висоті), стовпи-труби лишаються цілими."""
+    """Профнастил: кожен лист рветься двома нерівними розривами (косий упоперек і косий по висоті в більшій частині),
+    два стовпи-труби ламаються біля землі. Згин листа в спокої не передати: складена модель мусить збігатися з вихідною,
+    тож згин — це розрив по лінії згину на окремі шматки, а гнути їх буде анімація."""
     rng = rng_for(name)
     comps, mats, st, sbb, mn = fence_parts(name)
     fm = len(mats)
     mats.append(fracture_material("metal"))
     pieces = []
-    k = 0
     for c, m in zip(comps, mn):
         if m.endswith("post"):
             pieces.append([c, "post"])
             continue
         lo, hi = bbox(c)
-        if k % 2 == 0:
-            x = lo.x + rng.uniform(0.3, 0.7) * (hi.x - lo.x)
-            r = cut(c, (x, 0, 0.5 * (lo.z + hi.z)), (1, 0, tilted(rng, 0.35)), fm)
-        else:
-            z = lo.z + rng.uniform(0.4, 0.6) * (hi.z - lo.z)
-            r = cut(c, (0.5 * (lo.x + hi.x), 0, z), (tilted(rng, 0.3), 0, 1), fm)
-        k += 1
+        x = lo.x + rng.uniform(0.25, 0.7) * (hi.x - lo.x)
+        r = cut(c, (x, 0, 0.5 * (lo.z + hi.z)), (1, 0, tilted(rng, 0.7)), fm)
         c.free()
-        pieces += [[r[0], "sheet"], [r[1], "sheet"]]
+        halves = [[r[0], "sheet"], [r[1], "sheet"]]
+        big = max(halves, key=lambda p: bbox(p[0])[1].x - bbox(p[0])[0].x)
+        b0, b1 = bbox(big[0])
+        z = b0.z + rng.uniform(0.35, 0.65) * (b1.z - b0.z)
+        r = cut(big[0], ((b0.x + b1.x) / 2, 0, z), (tilted(rng, 0.5), 0, 1), fm)
+        halves.remove(big)
+        big[0].free()
+        pieces += halves + [[r[0], "sheet"], [r[1], "sheet"]]
+    pieces = snap_some(pieces, {"post"}, (1, 2), rng, fm)
     pieces = order(pieces)
     path, total, bb = export(name, name, pieces, mats)
     report(name, path, total, bb, sbb, st, len(pieces))
@@ -493,7 +569,7 @@ def euro(name):
     fm = len(mats)
     mats.append(fracture_material("concrete"))
     rb = len(mats)
-    mats.append(fracture_material("metal"))
+    mats.append(fracture_material("rebar"))
     pieces = []
     slabs = []
     for c, m in zip(comps, mn):
@@ -529,6 +605,7 @@ def euro(name):
                 nxt += [[r[0], "slab"], [r[1], "slab"]]
             parts = nxt
         pieces += parts
+    pieces = snap_some(pieces, {"post"}, (1, 3), rng, fm)
     # арматура на гранях зламу, скільки вміщує ліміт трикутників
     lim = limit(st)
     for p in pieces[::2]:
@@ -560,6 +637,88 @@ def crop_atlas(mat, k):
             node.image = new
 
 
+# Стовпи-колони в текстурі картки: (центр першого, ширина), м; крок 2.5 м (yard_fences.py).
+YARD_POSTS = {"picket": (0.05, 0.10), "chainlink": (0.04, 0.08), "brickbars": (0.19, 0.38), "slat": (0.05, 0.10)}
+YARD_PITCH = 2.5
+
+
+def card_pieces(card, kind, rng):
+    """Шматки картки виду. Стовпи (колони текстури) виділяються першими цілими — жоден розріз не ділить їх уздовж, лишаються
+    не ближче 0.15 м до стовпа; кожен стовп ламається раз біля землі косим різом. Цоколь цегляного паркану лишається
+    пеньками на місці (плоска картка на землі читалась би смугою фарби)."""
+    ps = [[card, kind]]
+    posts = []
+    if kind in YARD_POSTS:
+        x0, w = YARD_POSTS[kind]
+        centres = [-4 + x0 + YARD_PITCH * k for k in range(4)]
+        for cx in centres:
+            for ex in (cx - w / 2, cx + w / 2):
+                if -3.999 < ex < 3.999:
+                    ps = apply(ps, (ex * M, 0, 0.7 * M), (1, 0, 0))
+        for p in ps:
+            x = com(p[0]).x / M
+            if any(abs(x - cx) < w / 2 for cx in centres):
+                p[1] = "post"
+        posts = [p for p in ps if p[1] == "post"]
+
+    def panels():
+        return [p for p in ps if p[1] != "post" and p[1] != "stump"]
+
+    def wide(p):
+        b0, b1 = bbox(p[0])
+        return (b1.x - b0.x) / M
+
+    def split_vertical(p, tilt, lo_m=0.3):
+        b0, b1 = bbox(p[0])
+        if wide(p) < 2 * lo_m + 0.4:
+            return [p]
+        x = rng.uniform(b0.x / M + lo_m, b1.x / M - lo_m)
+        return apply([p], (x * M, 0, 0.7 * M), (1, 0, tilted(rng, tilt)))
+    if kind == "picket":
+        for p in panels():
+            ps.remove(p)
+            ps += split_vertical(p, 0.6)
+    elif kind == "chainlink":
+        for p in panels():
+            ps.remove(p)
+            ps += split_vertical(p, 0.7, 0.5)
+    elif kind == "slat":
+        for p in panels():
+            ps.remove(p)
+            ps += apply([p], (0, 0, 0.65 * M), (tilted(rng, 0.1), 0, 1))
+    elif kind == "brickbars":
+        for p in panels():
+            ps.remove(p)
+            ps += apply([p], (0, 0, 0.53 * M), (0, 0, 1))
+        for p in ps:
+            p[1] = "plinth" if p[1] != "post" and com(p[0]).z < 0.53 * M else p[1]
+        plinth = [p for p in ps if p[1] == "plinth"]
+        for j, p in enumerate(plinth):
+            ps.remove(p)
+            if j % 2 == 0:                                   # ступінчастий різ: нижній ряд і верхній — різні x
+                for q in apply([p], (0, 0, 0.27 * M), (0, 0, 1)):
+                    q[1] = "plinth"
+                    ps += [q]
+            else:
+                ps.append(p)
+        for p in [q for q in ps if q[1] == kind]:
+            ps.remove(p)
+            ps += split_vertical(p, 0.4, 0.4)
+    else:                                                    # профнастил: 3-4 розриви через 1.2-2.4 м, більші шматки рвуться ще й упоперек
+        x = -4.0
+        while True:
+            x += rng.uniform(1.2, 2.4)
+            if x > 3.0:
+                break
+            ps = apply(ps, (x * M, 0, 0.7 * M), (1, 0, tilted(rng, 0.7)))
+        for p in sorted(ps, key=wide, reverse=True)[:2]:
+            ps.remove(p)
+            ps += apply([p], (0, 0, rng.uniform(0.6, 1.2) * M), (tilted(rng, 0.5), 0, 1))
+    if posts:
+        ps = snap_some(ps, {"post"}, range(4), rng)
+    return ps
+
+
 def yard(name):
     bm, mats, ob = load(name)
     src_tris = tris(bm)
@@ -588,46 +747,7 @@ def yard(name):
         mat = src.copy()
         mat.name = src.name
         crop_atlas(mat, k)
-        def vx(ps, xs, tilt=0.4, only=None):
-            return slice_x(ps, xs, rng, tilt, None, only)
-
-        def hz(ps, zs, tilt=0.0, idx=None):
-            out = []
-            for j, p in enumerate(ps):
-                r = None
-                if idx is None or j in idx:
-                    for zc in zs:
-                        r = cut(p[0], (0, 0, zc * M), (tilted(rng, tilt), 0, 1))
-                        if r:
-                            break
-                if r is None:
-                    out.append(p)
-                else:
-                    p[0].free()
-                    out += [[r[0], p[1]], [r[1], p[1]]]
-            return out
-        ps = [[c, kind]]
-        if kind == "picket":
-            ps = vx(ps, [-4 + 8 * (i / 12) + rng.uniform(-0.1, 0.1) for i in range(1, 12)])
-        elif kind == "sheet":
-            ps = vx(ps, [-4 + 8 * (i / 10) + rng.uniform(-0.08, 0.08) for i in range(1, 10)], 0.12)
-            ps = hz(ps, [0.9], 0.3, idx={0, 4, 8})
-        elif kind == "chainlink":
-            ps = vx(ps, [-1.46, 1.04, 3.54], 0.05)
-            ps = vx(ps, [-2.7, -0.2, 2.3], 0.7)
-            ps = hz(ps, [0.8], 0.3, idx={3, 4})
-        elif kind == "brickbars":
-            ps = hz(ps, [0.53], 0.0)
-            for p_ in ps:                                    # цоколь і прути рвуться окремо: різні шматки, різні розрізи
-                p_[1] = "plinth" if com(p_[0]).z < 0.53 * M else "bars"
-            ps = slice_x(ps, [-2.5, -0.9, 0.8, 2.6], rng, 0.35, None, {"plinth"})
-            ps = slice_x(ps, [-3.0, -1.5, 0.0, 1.6, 3.0], rng, 0.3, None, {"bars"})
-        else:
-            ps = hz(ps, [0.35], 0.0)
-            ps = hz(ps, [0.65], 0.0)
-            ps = hz(ps, [0.95], 0.0)
-            ps = hz(ps, [1.25], 0.0)
-            ps = vx(ps, [rng.uniform(-1.5, 1.5)], 0.5)
+        ps = card_pieces(c, kind, rng)
         ps = order(ps)
         path, total, bb = export(f"{name}_{kind}", name, ps, [mat])
         report(f"{name}_{kind}", path, total, bb, bbox(bykind[kind][1]), 2, len(ps))
