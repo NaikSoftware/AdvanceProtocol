@@ -107,6 +107,8 @@ var _fx_warmed: bool = false
 ## shortcut: збереження цю правду не пише, тож «Продовжити» показує пропси цілими; перенести її
 ## в BattleState і серіалізатор (як broken_forest), коли розчавлене стане помітним між сесіями.
 var _crushed_truth: Dictionary[Vector2i, bool] = {}
+## Рухи техніки пакета, що грається (UnitMoved -> true): крок такого руху валить опори й паркани.
+var _vehicle_moves: Dictionary = {}
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -347,6 +349,10 @@ func _wire_view(board: Board) -> void:
 	_board_view.build(board)
 	# Мирний дим 1–3 димарів і 1–2 руїн: мапа та сама — і вибір той самий.
 	if _board_view.props() != null:
+		var props: PropLayer = _board_view.props()
+		if not props.topple_hit.is_connected(_on_topple_hit):
+			props.topple_hit.connect(_on_topple_hit)
+			props.topple_landed.connect(_on_topple_landed)
 		_wreck_layer.set_hearths(_board_view.props().chimney_tops(), _board_view.props().ruin_centres(), board.width * 73 + board.height * 31,
 				_board_view.props().ruin_smoke_point_at)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
@@ -358,7 +364,7 @@ func _wire_view(board: Board) -> void:
 	_target_overlay = TargetOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
 		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
-		_on_wreck_left, _on_wreck_removed, _on_unit_found)
+		_on_wreck_left, _on_wreck_removed, _on_unit_found, _on_cell_entered)
 	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
@@ -994,7 +1000,7 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	for pos: Vector2i in _crushed_truth:
 		if state.vision[state.active_player].is_seen(pos):
 			crushed.append(pos)
-	_board_view.set_crushed_cells(crushed)
+	_board_view.set_crushed_cells(crushed, instant)
 	forest_changed()
 	_apply_threat_marks()
 
@@ -1141,6 +1147,7 @@ func forest_changed() -> void:
 ## UnitMoved — лише тайли, у які юніт справді ввійшов. Юніт, що загинув на міні, зі стану вже
 ## може зникнути: техніка лишає остов (WreckLeft) на останньому тайлі, піхота — ні.
 func _record_crushes(events: Array[Events.BattleEvent]) -> void:
+	_vehicle_moves.clear()
 	var wrecks: Dictionary = {}
 	for e in events:
 		if e is Events.WreckLeft:
@@ -1153,8 +1160,31 @@ func _record_crushes(events: Array[Events.BattleEvent]) -> void:
 		var vehicle: bool = unit.unit_class() != UnitTypes.UnitClass.INFANTRY if unit != null \
 				else wrecks.has(moved.path.back())
 		if vehicle:
+			_vehicle_moves[moved] = true
 			for pos in moved.path:
 				_crushed_truth[pos] = true
+
+
+## Початок кроку техніки: опори й паркани клітинки падають, але лише на розвіданому (§3.5) — інакше
+## падіння вказало б, де їде невидимий ворог. Нерозвідане лишається в _crushed_truth і постане вже
+## повалене, коли його розвідають.
+func _on_cell_entered(moved: Events.UnitMoved, from: Vector2i, to: Vector2i) -> void:
+	var state: BattleState = _match_service.state
+	if _vehicle_moves.has(moved) and state.vision[state.active_player].is_seen(to):
+		_board_view.props().topple_cell(to, from)
+
+
+## Точки падіння — у координатах шару пропсів; мить живе в _units, тож її в'язка — до нього.
+func _units_point(p: Vector3) -> Vector3:
+	return _units.to_local(_board_view.props().to_global(p))
+
+
+func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool) -> void:
+	BattleFx.spawn_topple_hit(_units, _units_point(at), _units_point(top), debris as BattleFx.Debris, live_wire)
+
+
+func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool) -> void:
+	BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire)
 
 
 func _first_unit_cell(player: int) -> Vector2i:

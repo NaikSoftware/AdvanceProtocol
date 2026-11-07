@@ -49,6 +49,9 @@ var _wreck_removed: Callable
 ## Показ знайденого в укритті загону (unit_id). Кличеться лише для знахідки боку viewer
 ## і не більше раза на юніт за пакет; що саме ставити на дошку, вирішує екран.
 var _unit_found: Callable
+## Техніка ввійшла в клітинку (moved, з якої, в яку): початок кроку руху. Те, чи це техніка і чи
+## показувати, вирішує екран.
+var _cell_entered: Callable
 ## Гравець, чий світ на екрані. Події не фільтровані за спостерігачем (§6): знахідка
 ## іншого боку — це те, що бачить він, а не той, хто зараз дивиться.
 var viewer: int = 0
@@ -60,8 +63,10 @@ var _found_shown: Dictionary = {}
 
 
 func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable(), board_rebuild: Callable = Callable(),
-		wreck_left: Callable = Callable(), wreck_removed: Callable = Callable(), unit_found: Callable = Callable()) -> void:
+		wreck_left: Callable = Callable(), wreck_removed: Callable = Callable(), unit_found: Callable = Callable(),
+		cell_entered: Callable = Callable()) -> void:
 	_unit_found = unit_found
+	_cell_entered = cell_entered
 	_board_rebuild = board_rebuild
 	_wreck_left = wreck_left
 	_wreck_removed = wreck_removed
@@ -238,7 +243,10 @@ func _handle_unit_moved(event: Events.UnitMoved) -> Variant:
 					_show_found(f)
 	# event.facing має останнє слово: це фейсинг, який вирішив core/ (зараз —
 	# напрямок останнього пройденого кроку), тож прокидається окремо від path.
-	return view.move_along(event.path, _MOVE_STEP_DURATION, event.facing, on_step)
+	var on_enter: Callable = Callable()
+	if _cell_entered.is_valid():
+		on_enter = func(from: Vector2i, to: Vector2i) -> void: _cell_entered.call(event, from, to)
+	return view.move_along(event.path, _MOVE_STEP_DURATION, event.facing, on_step, on_enter)
 
 
 func _show_found(event: Events.UnitFound) -> void:

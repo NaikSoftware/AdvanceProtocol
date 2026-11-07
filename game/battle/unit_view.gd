@@ -255,7 +255,7 @@ static func _put_on_unit_layer(node: Node) -> void:
 ## кроці (знахідка укриття), показується тут, а не після всього шляху. Колбек живе в
 ## цьому ж твіні, тож точний з поворотами й гине разом із вузлом.
 func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: int = -1,
-		on_step: Callable = Callable()) -> Signal:
+		on_step: Callable = Callable(), on_enter: Callable = Callable()) -> Signal:
 	# Той самий власник rotation_degrees.y, що й face()/_set_facing_instant()
 	# (_face_tween): цей твін теж крутить її (послідовно з рухом, нижче), тож
 	# перш ніж почати свій, він убиває будь-який живий твін від попереднього
@@ -307,6 +307,9 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 
 		tween.set_parallel(false)
 		var to_pos: Vector3 = IsoCameraRig.cell_to_world(cell)
+		# Корпус доходить до опор на краях клітинки раніше, ніж центр: падіння стартує з початком кроку.
+		if on_enter.is_valid():
+			tween.tween_callback(on_enter.bind(current_cell, cell))
 		tween.tween_method(_walk.bind(from_pos, to_pos), 0.0, 1.0, duration_per_step)
 		if on_step.is_valid():
 			tween.tween_callback(on_step.bind(i))

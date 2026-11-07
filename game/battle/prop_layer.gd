@@ -12,6 +12,21 @@ enum Kind { STRUCTURE, RUIN, BRIDGE, FIELD_FENCE, GARDEN_FENCE, HAY, POLE, TRAIL
 ## Як виглядає розчавлене: LAY — повалене набік, SQUASH — сплющене, SINK — втиснуте в землю.
 enum Crush { NONE, LAY, SQUASH, SINK }
 
+## Ці види не лягають шрамом, а падають і зникають; решта розчавлюваного чавиться статично.
+const TOPPLE_KINDS: Array[int] = [Kind.POLE, Kind.FIELD_FENCE, Kind.GARDEN_FENCE]
+## Прискорення вільного падіння в тайлах/с² (1 тайл ≈ 8 м).
+const TOPPLE_G: float = 9.81 / 8.0
+## Крок інтеграції падіння, с.
+const TOPPLE_DT: float = 1.0 / 120.0
+## Початковий кут і кутова швидкість від удару, рад і рад/с: з нуля тіло висіло б угорі. Підібрані так, що
+## опора 10 м падає ~1,7 с, а панель — ~0,5 с.
+const TOPPLE_PHI0: float = 0.03
+const TOPPLE_OMEGA_POLE: float = 0.5
+const TOPPLE_OMEGA_FENCE: float = 3.0
+## Розкид напряму падіння опори навколо напряму руху, рад (з cell_hash).
+const TOPPLE_YAW_JITTER: float = 0.24
+const TOPPLE_LAND_EPS: float = 0.01
+
 const MODEL_DIR: String = "res://assets/props/"
 ## Модель -> {kind, weight, …}. Слід будівлі в тайлах — з метаданих GLB (`footprint_tiles`), тож
 ## нова модель того самого виду стає в слот за самим ім'ям. Модель без файлу пропускається.
@@ -54,30 +69,30 @@ const MODELS: Dictionary = {
 	&"bridge_river_west": {"kind": Kind.BRIDGE, "map": &"river", "order": 0, "deck_top": 0.30},
 	&"bridge_river_centre": {"kind": Kind.BRIDGE, "map": &"river", "order": 1, "deck_top": 0.30},
 	&"bridge_river_east": {"kind": Kind.BRIDGE, "map": &"river", "order": 2, "deck_top": 0.21},
-	&"infra_fence_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY},
+	&"infra_fence_picket": {"kind": Kind.GARDEN_FENCE, "debris": BattleFx.Debris.WOOD, "crush": Crush.LAY},
 	# Паркани дворів: п'ять видів однієї моделі (infra_fence_yard) і одного атласу — один вузол «batch» на всі двори.
 	# Ім'я — «модель_вид»; номер виду (fence_kind_of) і верх кожного беруться з extras самої моделі
 	# (tools/blender/infra/yard_fences.py), і номер іде в INSTANCE_CUSTOM (prop_thin лишає з картки лише його смугу).
 	# gate — форма воріт цього паркану.
-	&"infra_fence_yard_picket": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+	&"infra_fence_yard_picket": {"kind": Kind.GARDEN_FENCE, "debris": BattleFx.Debris.WOOD, "crush": Crush.LAY, "glb": &"infra_fence_yard",
 			"batch": &"infra_fence_yard", "gate": &"wood"},
-	&"infra_fence_yard_sheet": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+	&"infra_fence_yard_sheet": {"kind": Kind.GARDEN_FENCE, "debris": BattleFx.Debris.SHEET, "crush": Crush.LAY, "glb": &"infra_fence_yard",
 			"batch": &"infra_fence_yard", "gate": &"sheet"},
-	&"infra_fence_yard_chainlink": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+	&"infra_fence_yard_chainlink": {"kind": Kind.GARDEN_FENCE, "debris": BattleFx.Debris.MESH, "crush": Crush.LAY, "glb": &"infra_fence_yard",
 			"batch": &"infra_fence_yard", "gate": &"lattice"},
-	&"infra_fence_yard_brickbars": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+	&"infra_fence_yard_brickbars": {"kind": Kind.GARDEN_FENCE, "debris": BattleFx.Debris.MESH, "crush": Crush.LAY, "glb": &"infra_fence_yard",
 			"batch": &"infra_fence_yard", "gate": &"metal"},
-	&"infra_fence_yard_slat": {"kind": Kind.GARDEN_FENCE, "crush": Crush.LAY, "glb": &"infra_fence_yard",
+	&"infra_fence_yard_slat": {"kind": Kind.GARDEN_FENCE, "debris": BattleFx.Debris.WOOD, "crush": Crush.LAY, "glb": &"infra_fence_yard",
 			"batch": &"infra_fence_yard", "gate": &"slat"},
 	# Паркани ферм і полів (FIELD_FENCE): профлист і єврозабір; двори обгороджує infra_fence_yard.
-	&"infra_fence_sheet_green": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
-	&"infra_fence_sheet_brown": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY, "height": 0.7},
-	&"infra_fence_euro": {"kind": Kind.FIELD_FENCE, "crush": Crush.LAY},
+	&"infra_fence_sheet_green": {"kind": Kind.FIELD_FENCE, "debris": BattleFx.Debris.SHEET, "crush": Crush.LAY, "height": 0.7},
+	&"infra_fence_sheet_brown": {"kind": Kind.FIELD_FENCE, "debris": BattleFx.Debris.SHEET, "crush": Crush.LAY, "height": 0.7},
+	&"infra_fence_euro": {"kind": Kind.FIELD_FENCE, "debris": BattleFx.Debris.CONCRETE, "crush": Crush.LAY},
 	&"infra_hay_round": {"kind": Kind.HAY, "crush": Crush.SQUASH},
 	&"infra_hay_wrapped": {"kind": Kind.HAY, "crush": Crush.SQUASH},
-	&"infra_pole_concrete_10kv": {"kind": Kind.POLE, "line": &"10kv", "crush": Crush.LAY},
-	&"infra_pole_concrete_04kv": {"kind": Kind.POLE, "line": &"04kv", "crush": Crush.LAY},
-	&"infra_pole_wood": {"kind": Kind.POLE, "line": &"04kv", "crush": Crush.LAY},
+	&"infra_pole_concrete_10kv": {"kind": Kind.POLE, "debris": BattleFx.Debris.CONCRETE, "line": &"10kv", "crush": Crush.LAY},
+	&"infra_pole_concrete_04kv": {"kind": Kind.POLE, "debris": BattleFx.Debris.CONCRETE, "line": &"04kv", "crush": Crush.LAY},
+	&"infra_pole_wood": {"kind": Kind.POLE, "debris": BattleFx.Debris.WOOD, "line": &"04kv", "crush": Crush.LAY},
 	&"infra_trailer_green": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
 	&"infra_trailer_rust": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
 	&"infra_trailer_flatbed": {"kind": Kind.TRAILER, "crush": Crush.SQUASH},
@@ -555,12 +570,26 @@ var _fade_nodes: Dictionary = {}
 ## Екземпляр → рівень розчинення 0..1 (0 — суцільний) і куди він іде.
 var _fade_level: Dictionary = {}
 var _fade_target: Dictionary = {}
+var _fading: bool = false
 var _crushed: Dictionary = {}
+## Опори, паркани й ворота, що ламаються зараз (розліт, падіння, уламки до зникнення): лише їх обходить
+## _process. Екземпляр тримає burst, а поки опора ще падає шарніром — і fall (з нього дроти беруть кріплення).
+var _falls: Array[Dictionary] = []
+## Екземпляр -> [MultiMesh, слот, local]: щоб падіння писало лише свої слоти, не всі вузли.
+var _slot_of: Dictionary = {}
+var _small_node: MultiMeshInstance3D = null
+var _gate_mesh_node: MultiMeshInstance3D = null
+var _gate_mesh_base: Array[Transform3D] = []
 var _board_size: Vector2i = Vector2i.ZERO
 ## Карта має кільце з імлою: лінія ЛЕП (стовпи, дроти, шафи) тоне в ній, як будинки.
 var _haze: bool = false
 ## Клітинки дошки з лісом: тут стоятимуть дерева, коли їхній вигляд буде готовий.
 var forest_cells: Array[Vector2i] = []
+## Техніка вдарила в опору, паркан чи ворота: at — точка удару біля основи, top — верх (світ).
+signal topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool)
+## Повалене вдарилося об землю й зникло: a→b — відрізок на землі, який воно накрило.
+signal topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool)
+
 ## Пропси (крім мостів) кидають тінь сонця. Без неї на сонячній карті дім, тюк чи опора висять
 ## над землею; ставити до build().
 var structure_shadows: bool = false
@@ -935,6 +964,11 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_small_gate.clear()
 	_gate_meshes.clear()
 	_gates.clear()
+	_falls.clear()
+	_slot_of.clear()
+	_gate_mesh_base.clear()
+	_small_node = null
+	_gate_mesh_node = null
 	_wires = null
 	_contacts = null
 	_garden_node = null
@@ -988,17 +1022,451 @@ func set_reveal_cells(cells: Array[Vector2i], instant: bool = false) -> void:
 	_apply()
 	for i in _fade_target:
 		_fade_level[i] = _fade_target[i]
+	_fading = false
 	_write_nodes()
-	set_process(false)
+	set_process(not _falls.is_empty())
 
 
 ## Клітинки, де розчавлено дрібні пропси, — уже обрізані розвіданим глядача (§3.5): шар не
 ## знає ні про гравців, ні про туман і малює рівно те, що дали.
-func set_crushed(cells: Array[Vector2i]) -> void:
+## instant — передача ходу (§3.5): падіння, що йдуть, обриваються без слідів, бо новий глядач їх не бачив.
+func set_crushed(cells: Array[Vector2i], instant: bool = false) -> void:
+	if instant:
+		for b: Dictionary in _falls.duplicate():
+			_end_burst(b, true)
 	_crushed.clear()
 	for c in cells:
 		_crushed[c] = true
+	# Падіння, що триває, не скасовується й не починається знову: його клітинка лишається розчавленою.
+	for b: Dictionary in _falls:
+		_crushed[b["cell"]] = true
 	_queue_apply()
+	set_process(not _falls.is_empty() or _fading)
+
+
+## Техніка ввійшла в клітинку cell з клітинки from: опори, паркани й ворота, що в ній, починають
+## падати від неї (на видимому глядачеві; що розвідане — вирішує той, хто кличе, §3.5).
+## Решта розчавлюваного в клітинці ляже статично, як завжди.
+func topple_cell(cell: Vector2i, from: Vector2i) -> void:
+	var travel := Vector3(float(cell.x - from.x), 0.0, float(cell.y - from.y))
+	var statics := false
+	var starts: Array[int] = []
+	for i in _instances.size():
+		var inst: Dictionary = _instances[i]
+		if int(inst["crush"]) == Crush.NONE or not (inst["cells"] as Array).has(cell) or _is_crushed(inst):
+			continue
+		if inst["topples"]:
+			starts.append(i)
+		else:
+			statics = true
+	for gi in _gates.size():
+		var g: Dictionary = _gates[gi]
+		if _gate_cells(g).has(cell) and not _gate_down(g):
+			_start_gate_fall(gi, travel, cell)
+	# Розчавленим клітинку позначаємо після обходу: інакше перший екземпляр сховав би від решти.
+	for i in starts:
+		_start_fall(i, travel, cell)
+		_crushed[(_instances[i]["cells"] as Array)[0]] = true
+	_crushed[cell] = true
+	if statics:
+		_queue_apply()
+	if not _falls.is_empty():
+		set_process(true)
+
+
+## Опора чи паркан ще падає, розлітається чи лежить уламками (до зникнення).
+func is_falling(inst_idx: int) -> bool:
+	return (_instances[inst_idx] as Dictionary).has("burst")
+
+
+func falling_count() -> int:
+	return _falls.size()
+
+
+func _gate_cells(g: Dictionary) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for k: String in ["a", "mid", "b"]:
+		var p: Vector2 = g[k]
+		out.append(Vector2i(roundi(p.x), roundi(p.y)))
+	return out
+
+
+## Ворота лежать (зникли) або падають: будь-яка їхня клітинка розчавлена.
+func _gate_down(g: Dictionary) -> bool:
+	for c in _gate_cells(g):
+		if _crushed.has(c):
+			return true
+	return false
+
+
+func _fall_state(pivot: Vector3, up: Vector3, dir: Vector3, h: float, omega: float, extent: float) -> Dictionary:
+	h = maxf(h, 0.05)
+	return {"pivot": pivot, "up": up, "dir": dir, "axis": up.cross(dir).normalized(), "h": h,
+			"k": 1.5 * TOPPLE_G / h, "phi": TOPPLE_PHI0, "omega": omega, "acc": 0.0, "extent": extent}
+
+
+func _fall_xform(f: Dictionary) -> Transform3D:
+	var r := Basis(f["axis"] as Vector3, float(f["phi"]))
+	var p: Vector3 = f["pivot"]
+	return Transform3D(r, p - r * p)
+
+
+func _fall_top(f: Dictionary) -> Vector3:
+	return (f["pivot"] as Vector3) + Basis(f["axis"] as Vector3, float(f["phi"])) * ((f["up"] as Vector3) * float(f["h"]))
+
+
+## Жорстке тіло на шарнірі в основі: phi'' = 3g/(2h)·sin phi, інтеграція з фіксованим кроком, тож
+## хід не залежить від частоти кадрів. true — верх торкнувся землі.
+func _step_fall(f: Dictionary, delta: float) -> bool:
+	f["acc"] = float(f["acc"]) + minf(delta, 0.1)
+	while float(f["acc"]) >= TOPPLE_DT:
+		f["acc"] = float(f["acc"]) - TOPPLE_DT
+		f["omega"] = float(f["omega"]) + float(f["k"]) * sin(float(f["phi"])) * TOPPLE_DT
+		f["phi"] = float(f["phi"]) + float(f["omega"]) * TOPPLE_DT
+		var top: Vector3 = _fall_top(f)
+		if float(f["phi"]) >= PI * 0.5 or top.y <= TerrainHeight.ground_y(top.x, top.z) + TOPPLE_LAND_EPS:
+			return true
+	return false
+
+
+## Відрізок на землі, який накрило повалене: опора — від основи до верхівки, панель — середня лінія.
+func _fall_footprint(f: Dictionary) -> Array[Vector3]:
+	var p: Vector3 = f["pivot"]
+	var dir: Vector3 = f["dir"]
+	var h: float = f["h"]
+	var a: Vector3
+	var b: Vector3
+	if float(f["extent"]) > 0.0:
+		var along: Vector3 = (f["axis"] as Vector3) * float(f["extent"]) * 0.5
+		var mid: Vector3 = p + dir * h * 0.5
+		a = mid - along
+		b = mid + along
+	else:
+		a = p
+		b = p + dir * h
+	a.y = TerrainHeight.ground_y(a.x, a.z)
+	b.y = TerrainHeight.ground_y(b.x, b.z)
+	return [a, b]
+
+
+## Складові модельки: у assets/props/broken/<модель>_broken.glb прямі діти piece_00, piece_01, … — сітки з
+## початком у центрі мас, зібрані в позі спокою моделі. Нема файлу — одна «складова» з усієї сітки.
+const BROKEN_DIR: String = "res://assets/props/broken/"
+## Скільки тримаються уламки опори після удару об землю й паркану після розльоту, с; останні BREAK_SHRINK
+## секунд вони зникають (стискаються до нуля).
+const BREAK_POLE_LIFE: float = 2.4
+const BREAK_FENCE_LIFE: float = 2.2
+const BREAK_SHRINK: float = 0.7
+static var _pieces_cache: Dictionary = {}
+
+
+## Складові зі сцени: [{name, mesh, xf}] за іменем piece_*. Сцену звільняє.
+static func pieces_of_scene(root: Node) -> Array:
+	var out: Array = []
+	for ch: Node in root.get_children():
+		if ch is MeshInstance3D and String(ch.name).begins_with("piece_"):
+			out.append({"name": String(ch.name), "mesh": (ch as MeshInstance3D).mesh, "xf": (ch as Node3D).transform})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["name"] < b["name"])
+	root.free()
+	return out
+
+
+static func broken_pieces(m: StringName) -> Array:
+	if _pieces_cache.has(m):
+		return _pieces_cache[m]
+	var out: Array = []
+	var path: String = BROKEN_DIR + String(m) + "_broken.glb"
+	if ResourceLoader.exists(path):
+		out = pieces_of_scene((load(path) as PackedScene).instantiate())
+	if out.is_empty():
+		var info: Dictionary = model(m)
+		out = [{"name": "piece_00", "mesh": info["mesh"], "xf": info["local"]}]
+	_pieces_cache[m] = out
+	return out
+
+
+## Детермінований «випадковий» 0..1 з хешу клітинки: обидва гравці бачать однакові уламки.
+static func _rnd(h: int, salt: int) -> float:
+	return float(absi(hash(Vector2i(h, salt))) % 1000) / 999.0
+
+
+func _new_piece(w0: Transform3D, size: Vector3, node: MeshInstance3D, mm: MultiMesh, k: int) -> Dictionary:
+	var sc: Vector3 = (size * w0.basis.get_scale()).abs()
+	return {"node": node, "mm": mm, "k": k, "w0": w0, "pos": w0.origin, "rot": Basis(), "vel": Vector3.ZERO,
+			"ang": Vector3.ZERO, "r": minf(minf(sc.x, sc.y), sc.z) * 0.5, "shaft": true, "stump": false}
+
+
+func _piece_write(p: Dictionary, shrink: float) -> void:
+	var b: Basis = (p["rot"] as Basis) * (p["w0"] as Transform3D).basis
+	if shrink < 1.0:
+		b = b.scaled(Vector3.ONE * shrink)
+	var xf := Transform3D(b, p["pos"])
+	if p["node"] != null:
+		(p["node"] as Node3D).transform = xf
+	else:
+		(p["mm"] as MultiMesh).set_instance_transform(int(p["k"]), xf)
+
+
+## Куля з відскоком і тертям: гравітація, обертання, земля — висота рельєфу плюс радіус складової.
+## true — приземлилась цього кроку.
+func _step_piece(p: Dictionary, dt: float) -> bool:
+	var v: Vector3 = p["vel"]
+	var ang: Vector3 = p["ang"]
+	v.y -= TOPPLE_G * dt
+	var pos: Vector3 = (p["pos"] as Vector3) + v * dt
+	if ang.length_squared() > 1e-8:
+		p["rot"] = (Basis(ang.normalized(), ang.length() * dt) * (p["rot"] as Basis)).orthonormalized()
+	var touched: bool = pos.y <= TerrainHeight.ground_y(pos.x, pos.z) + float(p["r"])
+	if touched:
+		pos.y = TerrainHeight.ground_y(pos.x, pos.z) + float(p["r"])
+		if v.y < -0.2:
+			v.y = -v.y * 0.3
+			v.x *= 0.6
+			v.z *= 0.6
+		else:
+			v.y = 0.0
+		v.x *= 1.0 - 4.0 * dt
+		v.z *= 1.0 - 4.0 * dt
+		ang *= 1.0 - 6.0 * dt
+	p["vel"] = v
+	p["pos"] = pos
+	p["ang"] = ang
+	# Приземлення — торкнулась землі після польоту: складова, що стартує на землі, ще нікуди не падала.
+	var landed: bool = touched and bool(p.get("air", false))
+	if not touched:
+		p["air"] = true
+	return landed
+
+
+func _hide_slot(idx: int) -> void:
+	if _slot_of.has(idx):
+		var slot: Array = _slot_of[idx]
+		(slot[0] as MultiMesh).set_instance_transform(int(slot[1]), Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO))
+
+
+func _new_burst(cell: Vector2i, f: Dictionary, debris: int, live: bool, life: float) -> Dictionary:
+	return {"idx": -1, "gate": -1, "cell": cell, "f": f, "debris": debris, "live": live, "life": life, "pieces": [],
+			"root": null, "hinge": false, "landed": false, "clock": 0.0, "acc": 0.0}
+
+
+## Кидає складові вперед за напрямом руху: швидкість, підкид і обертання з хешу клітинки.
+func _throw(b: Dictionary, dir: Vector3) -> void:
+	var side: Vector3 = dir.cross(Vector3.UP)
+	var pieces: Array = b["pieces"]
+	for k in pieces.size():
+		var p: Dictionary = pieces[k]
+		var hh: int = cell_hash(b["cell"], 6000 + k)
+		p["vel"] = dir * (0.3 + 0.6 * _rnd(hh, 1)) + Vector3.UP * (0.3 + 0.4 * _rnd(hh, 2)) + side * (_rnd(hh, 3) - 0.5) * 0.6
+		var ax := Vector3(_rnd(hh, 4) - 0.5, _rnd(hh, 5) - 0.5, _rnd(hh, 6) - 0.5)
+		p["ang"] = ax.normalized() * (3.0 + 5.0 * _rnd(hh, 7))
+		p["shaft"] = false
+
+
+func _start_fall(idx: int, travel: Vector3, cell: Vector2i) -> void:
+	var inst: Dictionary = _instances[idx]
+	var t: Transform3D = inst["transform"]
+	var bb: AABB = (model(inst["model"]) as Dictionary)["aabb"]
+	var spec: Dictionary = spec_of(inst["model"])
+	var pole: bool = int(spec["kind"]) == Kind.POLE
+	var up: Vector3 = t.basis.y.normalized()
+	var dir: Vector3 = (travel if travel.length_squared() > 0.0 else Vector3.FORWARD).normalized()
+	var extent: float = 0.0
+	var h: float = bb.size.y * t.basis.y.length()
+	var pivot: Vector3 = t * Vector3(bb.get_center().x, bb.position.y, bb.get_center().z)
+	if pole:
+		dir = dir.rotated(Vector3.UP, (float(absi(cell_hash(cell, 4201)) % 1000) / 999.0 - 0.5) * TOPPLE_YAW_JITTER)
+	else:
+		extent = bb.size.x * t.basis.x.length()
+	var f: Dictionary = _fall_state(pivot, up, dir, h, TOPPLE_OMEGA_POLE, extent)
+	if not pole:
+		f["axis"] = t.basis.x.normalized()
+	var b: Dictionary = _new_burst(cell, f, int(spec.get("debris", BattleFx.Debris.WOOD)), pole and _has_wire(idx),
+			BREAK_POLE_LIFE if pole else BREAK_FENCE_LIFE)
+	b["idx"] = idx
+	var root := Node3D.new()
+	root.name = "Break"
+	add_child(root)
+	b["root"] = root
+	var pieces: Array = b["pieces"]
+	for src: Dictionary in broken_pieces(inst["model"]):
+		var mi := MeshInstance3D.new()
+		mi.mesh = src["mesh"]
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(mi)
+		pieces.append(_new_piece(t * (src["xf"] as Transform3D), (src["mesh"] as Mesh).get_aabb().size, mi, null, 0))
+	if pole:
+		# Опора ламається біля землі: найнижча складова лишається пеньком, решта падає шарнірним тілом.
+		b["hinge"] = true
+		inst["fall"] = f
+		if pieces.size() > 1:
+			var low: Dictionary = pieces[0]
+			for p: Dictionary in pieces:
+				if (p["w0"] as Transform3D).origin.y < (low["w0"] as Transform3D).origin.y:
+					low = p
+			low["stump"] = true
+			low["shaft"] = false
+		_hinge_pose(b)
+	else:
+		_throw(b, dir)
+	for p: Dictionary in pieces:
+		_piece_write(p, 1.0)
+	inst["burst"] = b
+	_hide_slot(idx)
+	_falls.append(b)
+	topple_hit.emit(pivot + Vector3.UP * 0.06 - dir * 0.05, pivot + up * h, b["debris"], b["live"])
+
+
+func _start_gate_fall(gi: int, travel: Vector3, cell: Vector2i) -> void:
+	var g: Dictionary = _gates[gi]
+	var mid: Vector2 = g["mid"]
+	var a: Vector2 = g["a"]
+	var c: Vector2 = g["b"]
+	var dir: Vector3 = (travel if travel.length_squared() > 0.0 else Vector3.FORWARD).normalized()
+	var pivot := Vector3(mid.x, TerrainHeight.ground_y(mid.x, mid.y), mid.y)
+	var f: Dictionary = _fall_state(pivot, Vector3.UP, dir, float(g["height"]), TOPPLE_OMEGA_FENCE, a.distance_to(c))
+	f["axis"] = Vector3(c.x - a.x, 0.0, c.y - a.y).normalized()
+	var debris: int = {&"sheet": BattleFx.Debris.SHEET, &"lattice": BattleFx.Debris.MESH, &"metal": BattleFx.Debris.MESH}.get(
+			g["kind"], BattleFx.Debris.WOOD)
+	var b: Dictionary = _new_burst(cell, f, debris, false, BREAK_FENCE_LIFE)
+	b["gate"] = gi
+	var pieces: Array = b["pieces"]
+	# Коробки воріт — самі й є складовими: пишемо в їхні слоти спільних вузлів, нових вузлів нема.
+	if _small_node != null and g.has("small"):
+		for k in range((g["small"] as Vector2i).x, (g["small"] as Vector2i).y):
+			pieces.append(_new_piece(_small_base[k], Vector3.ONE, null, _small_node.multimesh, k))
+	if _gate_mesh_node != null and g.has("mesh"):
+		for k in range((g["mesh"] as Vector2i).x, (g["mesh"] as Vector2i).y):
+			pieces.append(_new_piece(_gate_mesh_base[k], Vector3.ONE * 0.04, null, _gate_mesh_node.multimesh, k))
+	_throw(b, dir)
+	g["burst"] = b
+	_falls.append(b)
+	topple_hit.emit(pivot + Vector3.UP * 0.06 - dir * 0.05, pivot + Vector3.UP * float(g["height"]), b["debris"], false)
+
+
+func _has_wire(idx: int) -> bool:
+	for s: Array in _spans:
+		if s[0] == idx or s[1] == idx:
+			return true
+	for d: Array in _drops:
+		if d[0] == idx:
+			return true
+	return false
+
+
+## Складові-вал йдуть за шарніром у основі.
+func _hinge_pose(b: Dictionary) -> void:
+	var xf: Transform3D = _fall_xform(b["f"])
+	for p: Dictionary in b["pieces"]:
+		if p["shaft"]:
+			p["pos"] = xf * (p["w0"] as Transform3D).origin
+			p["rot"] = xf.basis
+
+
+## Опора вдарилась об землю: вал розсипається на складові з рухом, що лишився, і з хешу; дроти зникають.
+func _land_pole(b: Dictionary) -> void:
+	var f: Dictionary = b["f"]
+	b["hinge"] = false
+	var w: Vector3 = (f["axis"] as Vector3) * float(f["omega"])
+	var pieces: Array = b["pieces"]
+	for k in pieces.size():
+		var p: Dictionary = pieces[k]
+		if not p["shaft"]:
+			continue
+		var hh: int = cell_hash(b["cell"], 7000 + k)
+		var v: Vector3 = w.cross((p["pos"] as Vector3) - (f["pivot"] as Vector3)) * 0.4
+		v.y = maxf(v.y, 0.0)
+		p["vel"] = v + (f["dir"] as Vector3) * 0.15 * _rnd(hh, 1)
+		p["ang"] = w * 0.3 + Vector3.UP * (_rnd(hh, 2) - 0.5) * 4.0
+	var inst: Dictionary = _instances[int(b["idx"])]
+	inst.erase("fall")
+	var fp: Array[Vector3] = _fall_footprint(f)
+	topple_landed.emit(fp[0], fp[1], b["debris"], b["live"])
+
+
+## Кінець показу: прибрати вузол уламків. cancel — передача ходу: усе повертається, як було (далі _apply).
+func _end_burst(b: Dictionary, cancel: bool) -> void:
+	_falls.erase(b)
+	if b["root"] != null:
+		(b["root"] as Node).free()
+	if int(b["idx"]) >= 0:
+		(_instances[int(b["idx"])] as Dictionary).erase("burst")
+		(_instances[int(b["idx"])] as Dictionary).erase("fall")
+	if int(b["gate"]) >= 0:
+		var g: Dictionary = _gates[int(b["gate"])]
+		g.erase("burst")
+		g["hidden"] = not cancel
+		_write_gate(g, Transform3D() if cancel else null)
+
+
+## Падіння на кожен кадр: лише складові, що рухаються; дроти тягнуться за верхівкою валу.
+func _tick_falls(delta: float) -> void:
+	var wires := false
+	for b: Dictionary in _falls.duplicate():
+		var was_hinge: bool = b["hinge"]
+		b["acc"] = float(b["acc"]) + minf(delta, 0.1)
+		while float(b["acc"]) >= TOPPLE_DT:
+			b["acc"] = float(b["acc"]) - TOPPLE_DT
+			_step_burst(b)
+		var left: float = float(b["life"]) - float(b["clock"])
+		var shrink: float = 1.0 if left >= BREAK_SHRINK else clampf(left / BREAK_SHRINK, 0.0, 1.0)
+		for p: Dictionary in b["pieces"]:
+			_piece_write(p, shrink)
+		wires = wires or was_hinge or b["hinge"]
+		if left <= 0.0:
+			_end_burst(b, false)
+	if wires:
+		_rebuild_wires()
+		_rebuild_transformers()
+
+
+func _step_burst(b: Dictionary) -> void:
+	if b["hinge"]:
+		if _step_fall(b["f"], TOPPLE_DT):
+			_land_pole(b)
+		else:
+			_hinge_pose(b)
+		return
+	b["clock"] = float(b["clock"]) + TOPPLE_DT
+	var touched := false
+	for p: Dictionary in b["pieces"]:
+		if not p["stump"]:
+			touched = _step_piece(p, TOPPLE_DT) or touched
+	# Паркан і ворота «приземляються», коли перша складова торкнулась землі.
+	if touched and not b["landed"] and not _is_pole_burst(b):
+		b["landed"] = true
+		var fp: Array[Vector3] = _fall_footprint(b["f"])
+		topple_landed.emit(fp[0], fp[1], b["debris"], false)
+
+
+func _is_pole_burst(b: Dictionary) -> bool:
+	return int(b["idx"]) >= 0 and int(spec_of(_instances[int(b["idx"])]["model"])["kind"]) == Kind.POLE
+
+
+## Записати коробки воріт: xf — поза; null — сховані.
+func _write_gate(g: Dictionary, xf: Variant) -> void:
+	if _small_node != null and g.has("small"):
+		var r: Vector2i = g["small"]
+		var mm: MultiMesh = _small_node.multimesh
+		for k in range(r.x, r.y):
+			mm.set_instance_transform(k, (xf as Transform3D) * _small_base[k] if xf != null
+					else Transform3D(Basis.from_scale(Vector3.ZERO), _small_base[k].origin))
+	if _gate_mesh_node != null and g.has("mesh"):
+		var r2: Vector2i = g["mesh"]
+		var mm2: MultiMesh = _gate_mesh_node.multimesh
+		for k in range(r2.x, r2.y):
+			mm2.set_instance_transform(k, (xf as Transform3D) * _gate_mesh_base[k] if xf != null
+					else Transform3D(Basis.from_scale(Vector3.ZERO), _gate_mesh_base[k].origin))
+
+
+## Ворота: повалені — сховані, цілі — на місці; падаючі веде _tick_falls.
+func _sync_gates() -> void:
+	for g: Dictionary in _gates:
+		if g.has("burst"):
+			continue
+		var down: bool = _gate_down(g)
+		if down != bool(g.get("hidden", false)):
+			g["hidden"] = down
+			_write_gate(g, null if down else Transform3D())
 
 
 ## Світові точки верху димарів хат дошки (вузол chimney_top моделі) — для диму з димарів.
@@ -1195,7 +1663,7 @@ func span_lines() -> Array:
 func wire_spans() -> int:
 	var n: int = 0
 	for s: Array in _spans:
-		if not _is_crushed(_instances[s[0]]) and not _is_crushed(_instances[s[1]]):
+		if not _wire_gone(_instances[s[0]]) and not _wire_gone(_instances[s[1]]):
 			n += 1
 	return n
 
@@ -1218,7 +1686,8 @@ func _flush() -> void:
 ## відстані між будинками його не стосуються.
 func _add(model_name: StringName, xform: Transform3D, cells: Array[Vector2i], yard: bool = false) -> int:
 	_instances.append({"model": model_name, "transform": xform, "cells": cells,
-			"crush": int(spec_of(model_name).get("crush", Crush.NONE)), "yard": yard})
+			"crush": int(spec_of(model_name).get("crush", Crush.NONE)), "yard": yard,
+			"topples": int(spec_of(model_name).get("kind", -1)) in TOPPLE_KINDS})
 	return _instances.size() - 1
 
 
@@ -1290,6 +1759,10 @@ func _build_nodes(haze: bool) -> void:
 		add_child(mmi)
 		_nodes[key] = mmi
 		_slots[key] = by_node[key]
+		for k in (by_node[key] as Array).size():
+			var ii: int = (by_node[key] as Array)[k]
+			if _instances[ii]["topples"]:
+				_slot_of[ii] = [mm, k, info["local"]]
 	if not _spans.is_empty() or not _drops.is_empty():
 		_wires = MeshInstance3D.new()
 		_wires.name = "Wires"
@@ -1404,6 +1877,8 @@ func _build_garden_plots() -> void:
 ## вузлі SmallBoxes — нового виклику малювання вони не додають. Вигляд полотна — за kind.
 func _build_gates() -> void:
 	for g: Dictionary in _gates:
+		g["small"] = Vector2i(_small_base.size(), 0)
+		g["mesh"] = Vector2i(_gate_meshes.size(), 0)
 		var a: Vector2 = g["a"]
 		var mid: Vector2 = g["mid"]
 		var b: Vector2 = g["b"]
@@ -1438,6 +1913,8 @@ func _build_gates() -> void:
 			var halves: Array = [[p0, p0.lerp(p1, 0.5) - u * 0.002], [p0.lerp(p1, 0.5) + u * 0.002, p1]] if sp[2] else [[p0, p1]]
 			for lf: Array in halves:
 				_gate_leaf(lf[0], lf[1], u, g["out"], base, float(g["height"]) - 0.012, kind_id, tone, sd)
+		g["small"] = Vector2i((g["small"] as Vector2i).x, _small_base.size())
+		g["mesh"] = Vector2i((g["mesh"] as Vector2i).x, _gate_meshes.size())
 
 
 ## Одна стулка від p0 до p1 (вздовж u), нижній край на висоті base, висота h; out — бік до дороги.
@@ -1531,6 +2008,7 @@ func _build_small_boxes() -> void:
 	node.multimesh = mm
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
+	_small_node = node
 
 
 ## Полотно воріт з рабиці: екземпляри моделі паркану (вид «рабиця») на стулках — той самий прозорий матеріал і крок сітки.
@@ -1554,13 +2032,16 @@ func _build_gate_mesh() -> void:
 		var basis := Basis(Vector3.UP, atan2(-along.y, along.x))
 		basis = basis.scaled_local(Vector3(along.length() / model_len, float(g[3]) / model_h, 1.0))
 		var mid: Vector2 = (a + b) * 0.5
-		mm.set_instance_transform(i, Transform3D(basis, Vector3(mid.x, float(g[2]), mid.y)) * (info["local"] as Transform3D))
+		var base_xf := Transform3D(basis, Vector3(mid.x, float(g[2]), mid.y)) * (info["local"] as Transform3D)
+		_gate_mesh_base.append(base_xf)
+		mm.set_instance_transform(i, base_xf)
 		mm.set_instance_custom_data(i, Color(float(fence_kind_of(m)), 0.0, 0.0, 0.0))
 	var node := MultiMeshInstance3D.new()
 	node.name = "GateMesh"
 	node.multimesh = mm
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
+	_gate_mesh_node = node
 
 
 ## Жадібне покриття клітинок городу прямокутниками: рядок за рядком, вшир, потім углиб.
@@ -2100,6 +2581,20 @@ func _is_faded(inst: Dictionary) -> bool:
 	return false
 
 
+## Дроти й шафа зникають, коли опора лягла; поки падає, дроти тягнуться за нею.
+func _wire_gone(inst: Dictionary) -> bool:
+	return _is_crushed(inst) and not inst.has("fall")
+
+
+## Екземпляр у позі падіння, якщо падає: кінці дротів беруться з поточних кріплень.
+func _live(inst: Dictionary) -> Dictionary:
+	if not inst.has("fall"):
+		return inst
+	var out: Dictionary = inst.duplicate()
+	out["transform"] = _fall_xform(inst["fall"]) * (inst["transform"] as Transform3D)
+	return out
+
+
 func _is_crushed(inst: Dictionary) -> bool:
 	return int(inst["crush"]) != Crush.NONE and _crushed.has((inst["cells"] as Array)[0])
 
@@ -2109,6 +2604,9 @@ func _final_transform(inst: Dictionary) -> Transform3D:
 	var t: Transform3D = inst["transform"]
 	if not _is_crushed(inst):
 		return t
+	if inst["topples"]:
+		# Повалене вже розсипалося: лишається шрам на землі, а не модель.
+		return Transform3D(Basis.from_scale(Vector3.ZERO), t.origin)
 	var h: int = cell_hash((inst["cells"] as Array)[0], int(t.origin.x * 1000.0))
 	match int(inst["crush"]):
 		Crush.LAY:
@@ -2130,21 +2628,26 @@ func _apply() -> void:
 		for i in _slots[key]:
 			_fade_target[i] = 1.0 if _is_faded(_instances[i]) else 0.0
 			moving = moving or not is_equal_approx(float(_fade_level.get(i, 0.0)), _fade_target[i])
+	_fading = moving
 	_write_nodes()
-	set_process(moving)
+	_sync_gates()
+	set_process(moving or not _falls.is_empty())
 	_rebuild_wires()
 	_rebuild_transformers()
 
 
 ## Розчинення плавне: рівень іде до цілі за FADE_TIME (кадр показу, не правила).
 func _process(delta: float) -> void:
-	var moving := false
-	for i in _fade_target:
-		var lv: float = move_toward(float(_fade_level.get(i, 0.0)), _fade_target[i], delta / FADE_TIME)
-		_fade_level[i] = lv
-		moving = moving or not is_equal_approx(lv, _fade_target[i])
-	_write_nodes()
-	set_process(moving)
+	_tick_falls(delta)
+	if _fading:
+		var moving := false
+		for i in _fade_target:
+			var lv: float = move_toward(float(_fade_level.get(i, 0.0)), _fade_target[i], delta / FADE_TIME)
+			_fade_level[i] = lv
+			moving = moving or not is_equal_approx(lv, _fade_target[i])
+		_write_nodes()
+		_fading = moving
+	set_process(_fading or not _falls.is_empty())
 
 
 ## Екземпляри у вузлах: розчинюваний (рівень > 0) — у вузлі «_fade» з альфою 1 − рівень·(1 − FADE_ALPHA),
@@ -2194,8 +2697,10 @@ func _rebuild_wires() -> void:
 	for s: Array in _spans:
 		var a: Dictionary = _instances[s[0]]
 		var b: Dictionary = _instances[s[1]]
-		if _is_crushed(a) or _is_crushed(b):
+		if _wire_gone(a) or _wire_gone(b):
 			continue
+		a = _live(a)
+		b = _live(b)
 		# Три голі дроти 10 кВ поруч читались найтемнішою лінією кадру: кожен прозоріший, щоб трійка важила як кабель СІП.
 		var col := Color(1.0, 1.0, 1.0, WIRE_10KV_ALPHA if _is_10kv_inst(a) and _is_10kv_inst(b) else 1.0)
 		for pr: Array in span_wire_pairs(a, b):
@@ -2203,9 +2708,9 @@ func _rebuild_wires() -> void:
 	# Відвід до хати: два дроти від траверси стовпа до стіни під звісом даху, з невеликим провисом.
 	for dr: Array in _drops:
 		var pole: Dictionary = _instances[dr[0]]
-		if _is_crushed(pole):
+		if _wire_gone(pole):
 			continue
-		for pr: Array in drop_wire_pairs(pole, dr[1]):
+		for pr: Array in drop_wire_pairs(_live(pole), dr[1]):
 			_append_wire(verts, cols, pr[0], pr[1], Color.WHITE)
 	for g: Array in _guy_lines():
 		_append_wire(verts, cols, g[1], g[2], Color.WHITE)
@@ -2441,7 +2946,7 @@ func transformers_shown() -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	for i: int in _transformers:
 		var pole: Dictionary = _instances[i]
-		if not _is_crushed(pole):
+		if not _wire_gone(pole):
 			out.append(_cabinet_at(pole))
 	return out
 
@@ -2475,7 +2980,7 @@ func _rebuild_transformers() -> void:
 		var pole: Dictionary = _instances[i]
 		var at: Vector3 = _cabinet_at(pole)
 		var basis: Basis = (pole["transform"] as Transform3D).basis.orthonormalized()
-		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ZERO), at) if _is_crushed(pole)
+		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ZERO), at) if _wire_gone(pole)
 				else Transform3D(basis, at))
 		k += 1
 
