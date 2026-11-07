@@ -133,6 +133,10 @@ func _play(screen: Node, units: Node, base: Vector3, c: Array, fps: float) -> Ar
 	# Паркан: півпрольоту полотна 1,25 м уздовж огорожі (поперек напряму падіння).
 	var span: Vector3 = Vector3.ZERO if pole else axis * 1.25 / 8.0
 	BattleFx.spawn_topple_hit(units, base + Vector3(0, 0.02, 0), top, c[1], c[3], pole, span)
+	# Паркан у грі розлітається на шматки вже на ударі (PropLayer): цілий брусок-замінник закривав би
+	# собою пил удару, тож він зникає одразу; падіння (spawn_topple_land) — як і раніше, за 0,5 с.
+	if not pole:
+		pivot.visible = false
 	var t0: int = Time.get_ticks_usec()
 	var next: float = 0.0
 	var landed: bool = false

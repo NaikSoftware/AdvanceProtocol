@@ -212,7 +212,7 @@ const POLE_MIN_M: float = 3.5
 static var wetness: float = 0.0
 static var _shard_meshes: Dictionary = {}
 static var _shard_mat: StandardMaterial3D
-static var _settle_mesh: QuadMesh
+static var _settle_shader: Shader
 
 
 ## Мить, коли техніка б'є в опору чи паркан (той, хто кличе, далі сам валить чи розколює модель).
@@ -244,7 +244,7 @@ static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: De
 		_shards(root, "Fine", rng, fine[0], 7, low, Basis(), spot, fine[1], fine[2], 2.0, 5.0, 70.0, 2.4)
 		_shards(root, "Clods", rng, Shard.CLOD, clods, low, Basis(), spot, 0.12, 0.26, 2.0, 5.0, 70.0, 2.4)
 		# 3–5 малих низьких клуб біля основи підскакують і висять, поки опора падає (до 1,8 с).
-		_dust_puffs(root, rng, 7, Vector3.ZERO, Basis(), spot * 2.0, 0.7, 1.6, 2.8, colours, 0.9, 1.3, 30.0, 1.0, 0.2, 0.3, wet)
+		_dust_puffs(root, rng, 5, Vector3.ZERO, Basis(), spot * 3.0, 0.7, 1.6, 2.8, colours, 0.9, 1.3, 1.0, 0.12, 0.3, wet)
 	else:
 		var box := Vector3(half_m, 0.1, 0.3) / 8.0
 		# Не далі ~3 м: віяло 70° від вертикалі на 4,5 м/с.
@@ -253,7 +253,7 @@ static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: De
 		# Полотно, що впало, виштовхує з-під себе повітря: 14 малих рідких клуб уздовж прольоту
 		# (щільніше за пів діаметра — одна маса, а не дві-три кулі) підскакують і далі ще здіймаються
 		# сталою тягою — 0,6–1 м за секунду — та зносяться на ~0,5 м.
-		_dust_puffs(root, rng, 14, Vector3.ZERO, basis, box * Vector3(1.3, 1.0, 1.0), 0.7, 1.0, 1.8, colours, 0.4, 0.7, 30.0, 0.6, 0.18, 0.9, wet)
+		_dust_puffs(root, rng, 14, Vector3.ZERO, basis, box * Vector3(1.3, 1.0, 1.0), 0.7, 1.0, 1.8, colours, 0.4, 0.7, 0.6, 0.18, 0.9, wet)
 	if live_wire:
 		var up: Vector3 = top - at
 		_arc(root, rng, up, 3, 1.1)
@@ -289,10 +289,10 @@ static func spawn_topple_land(parent: Node, a: Vector3, b: Vector3, debris: Debr
 	if is_pole:
 		_shards(root, "Fine", rng, fine[0], clampi(roundi(len_m * 1.2), 6, 14), low, basis, line, fine[1], fine[2], 2.0, 5.0, 70.0, 2.4)
 		_shards(root, "Clods", rng, Shard.CLOD, clampi(roundi(len_m * 0.25) + clods, 3, 10), low, basis, line, 0.12, 0.26, 2.0, 5.0, 70.0, 2.4)
-		_dust_puffs(root, rng, clampi(roundi(len_m * 2.0), 14, 20), mid, basis, line, 1.4, 3.4, 2.6, colours, 1.2, 1.8, 25.0, 1.0, 0.2 + 0.04 * powder, 0.2, wet)
+		_dust_puffs(root, rng, clampi(roundi(len_m * 1.8), 12, 18), mid, basis, line, 1.0, 2.2, 2.6, colours, 0.8, 1.2, 1.0, 0.13 + 0.03 * powder, 0.15, wet, 0.15)
 	else:
 		_shards(root, "Clods", rng, Shard.CLOD, clods, low, basis, line, 0.12, 0.22, 1.0, 3.0, 60.0, 2.2)
-		_dust_puffs(root, rng, 10, mid, basis, line, 0.7, 1.5, 1.8, colours, 0.5, 0.8, 35.0, 0.8, 0.14, 0.3, wet)
+		_dust_puffs(root, rng, 10, mid, basis, line, 0.7, 1.5, 1.8, colours, 0.5, 0.8, 0.8, 0.14, 0.3, wet)
 	# Уламки падають на площину землі посередині відрізка (на схилі — компроміс двох кінців).
 	var floor_box := GPUParticlesCollisionBox3D.new()
 	floor_box.name = "Ground"
@@ -361,17 +361,34 @@ static func _shards(root: Node3D, node_name: String, rng: RandomNumberGenerator,
 	return em
 
 
-## Пил повалення: `amount` клуб атласу ґрунту `d_min`–`d_max` м в одній системі частинок — один
-## виклик малювання на всю хмару — з тим самим виглядом, що клуба ґрунту влучання (`_SETTLE_CODE`).
-## Клуби стоять уздовж `extents` (тайли, локально до `basis`) щільніше за пів діаметра й кожна
-## рідка (`peak` ~0,15–0,25): перекриваючись, вони складаються в одну масу, а не в намисто. Усі
-## народжуються разом, летять угору віялом `spread`° на `v_min`–`v_max` м/с і гальмують на `damp` м/с²,
-## а ще здіймаються сталою тягою `lift` м/с і зносяться вбік на ~0,4 м/с (за вітром, у штиль — у свій
-## бік з хешу місця); ростуть удвічі й розчиняються до нуля на кінці життя `life`. Відстані між
-## клубами гуляють на ±40 %, розміри — від `d_min` до `d_max`: однакові сусіди читалися б грудками.
-## Колір — випадкова суміш `colours` (лінійні). Мокра земля (`wet` > 0,5) у дощ не куриться: низька
-## темно-бура бризка грязі, що підскакує й за 0,7 с падає назад.
-static func _dust_puffs(root: Node3D, rng: RandomNumberGenerator, amount: int, at: Vector3, basis: Basis, extents: Vector3, d_min: float, d_max: float, life: float, colours: Array[Color], v_min: float, v_max: float, spread: float, damp: float, peak: float, lift: float, wet: float) -> GPUParticles3D:
+## Пил повалення: `amount` клуб атласу ґрунту `d_min`–`d_max` м — один MultiMeshInstance3D (один
+## виклик малювання на всю хмару) з тим самим виглядом, що клуба ґрунту влучання (`_SETTLE_CODE`).
+## Не частинки: GPU-частинка бере точку емісії навмання, і клуби збивались у кулі з дірками між
+## ними. Тут кожна клуба стоїть рівно там, де її поставили: рівномірно вздовж `extents` (тайли,
+## локально до `basis`) з малим тремтінням, щільніше за пів діаметра, кожна рідка (`peak`), тож
+## разом вони — одна маса. Старт клуб біжить від початку відрізка до кінця за `sweep` с (опора б'є
+## об землю від основи до верхівки), життя кожної — 0,7–1 від `life` (хвіст згасання ~0,8 с).
+## Рух рахує шейдер від віку миті: зліт на `v_min`–`v_max` м/с з гальмуванням `damp` м/с², стала тяга
+## вгору `lift` м/с і знесення ~0,4 м/с (за вітром, у штиль — у свій бік з хешу місця); клуба росте
+## удвічі й розчиняється до нуля. Колір — випадкова суміш `colours` (лінійні). Мокра земля (`wet` >
+## 0,5) у дощ не куриться: низька темно-бура бризка грязі, що підскакує й за 0,7 с падає назад.
+## Розклад клуб пилу (`_dust_puffs`): для кожної — [місце (тайли, відносно кореня), бік кваду
+## (тайли), Color(затримка старту с, життя с, поворот рад, зерно), Color(колір, густота)].
+## Рівномірно вздовж відрізка з тремтінням ±15 % кроку — сусіди не збігаються, дірок нема; старт
+## біжить від початку відрізка до кінця за `sweep` с; життя — 0,7–1 від `life`.
+static func puff_layout(rng: RandomNumberGenerator, amount: int, at: Vector3, basis: Basis, extents: Vector3, d_min: float, d_max: float, life: float, colours: Array[Color], peak: float, sweep: float) -> Array[Array]:
+	var k: float = DIRT_CELL_M / DIRT_CLOUD_M / 8.0
+	var out: Array[Array] = []
+	for i in amount:
+		var u: float = (float(i) + 0.5 + rng.randf_range(-0.15, 0.15)) / float(amount) * 2.0 - 1.0
+		var p: Vector3 = at + basis * Vector3(u * extents.x, rng.randf_range(-1.0, 1.0) * extents.y, rng.randf_range(-1.0, 1.0) * extents.z)
+		var delay: float = sweep * (u + 1.0) * 0.5 + rng.randf_range(0.0, 0.03)
+		var c: Color = colours[0].lerp(colours[colours.size() - 1], rng.randf())
+		out.append([p, rng.randf_range(d_min, d_max) * k, Color(delay, life * rng.randf_range(0.7, 1.0), deg_to_rad(rng.randf_range(-50.0, 50.0)), rng.randf()), Color(c.r, c.g, c.b, peak)])
+	return out
+
+
+static func _dust_puffs(root: Node3D, rng: RandomNumberGenerator, amount: int, at: Vector3, basis: Basis, extents: Vector3, d_min: float, d_max: float, life: float, colours: Array[Color], v_min: float, v_max: float, damp: float, peak: float, lift: float, wet: float, sweep: float = 0.0) -> MultiMeshInstance3D:
 	var splash: bool = wet > 0.5
 	if splash:
 		d_min = 0.7
@@ -382,109 +399,59 @@ static func _dust_puffs(root: Node3D, rng: RandomNumberGenerator, amount: int, a
 		damp = 0.0
 		lift = 0.0
 		peak = 0.85
-	if _settle_mesh == null:
-		_settle_mesh = QuadMesh.new()
-		_settle_mesh.size = Vector2.ONE
-		var mat := ShaderMaterial.new()
-		mat.shader = Shader.new()
-		mat.shader.code = _SETTLE_CODE
-		mat.set_shader_parameter("tex", DIRT_TEX)
-		mat.set_shader_parameter("frames", SETTLE_FRAMES)
-		mat.set_shader_parameter("full", SETTLE_FULL)
-		mat.set_shader_parameter("anchor", anchor_of(DIRT_TEX))
-		_settle_mesh.material = mat
-	var em := GPUParticles3D.new()
-	em.name = "Settle"
-	em.amount = amount
-	em.lifetime = life
-	em.one_shot = true
-	# Усі разом: пізні клуби одноразова система обрізала б на кінці циклу — пів хмари зникало б
-	# за кадр.
-	em.explosiveness = 1.0
-	em.local_coords = false
-	em.use_fixed_seed = true
-	em.seed = rng.randi()
-	# Ближчі клуби поверх дальших: у порядку народження вони перескакували б одна через одну.
-	em.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
-	em.transform = Transform3D(basis, at)
-	var pm := ParticleProcessMaterial.new()
-	# Точки рівномірно вздовж відрізка (з тремтінням), але кожна частинка бере точку навмання
-	# (так працює EMISSION_SHAPE_POINTS), тож дві-три можуть сісти поряд, а між ними лишиться дірка.
-	# Рівну масу дає кількість: багато рідких клуб, а не кілька густих — інакше вони збиваються в кулі.
-	var pts := Image.create(amount, 1, false, Image.FORMAT_RGBF)
-	for i in amount:
-		var u: float = (float(i) + 0.5 + rng.randf_range(-0.4, 0.4)) / float(amount) * 2.0 - 1.0
-		pts.set_pixel(i, 0, Color(u * extents.x, rng.randf_range(-1.0, 1.0) * extents.y, rng.randf_range(-1.0, 1.0) * extents.z))
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_POINTS
-	pm.emission_point_texture = ImageTexture.create_from_image(pts)
-	pm.emission_point_count = amount
-	pm.direction = Vector3.UP
-	pm.spread = spread
-	pm.initial_velocity_min = v_min / 8.0
-	pm.initial_velocity_max = v_max / 8.0
-	pm.damping_min = damp * 0.8 / 8.0
-	pm.damping_max = damp * 1.2 / 8.0
+	if _settle_shader == null:
+		_settle_shader = Shader.new()
+		_settle_shader.code = _SETTLE_CODE
+	if _quad == null:
+		_quad = QuadMesh.new()
+		_quad.size = Vector2.ONE
+	var mat := ShaderMaterial.new()
+	mat.shader = _settle_shader
+	mat.set_shader_parameter("tex", DIRT_TEX)
+	mat.set_shader_parameter("frames", SETTLE_FRAMES)
+	mat.set_shader_parameter("full", SETTLE_FULL)
+	mat.set_shader_parameter("anchor", anchor_of(DIRT_TEX))
+	mat.set_shader_parameter("launch", Vector2(v_min, v_max) / 8.0)
+	mat.set_shader_parameter("damp", damp / 8.0)
 	# Бризка грязі важка: падає назад за ~0,6 с.
-	pm.gravity = Vector3(0.0, -7.0 / 8.0, 0.0) if splash else Vector3.ZERO
-	# Знесення й тяга вгору — окрема стала швидкість (directional velocity), яку гальмування не
-	# з'їдає: інакше пил зупинявся б на місці за секунду.
+	mat.set_shader_parameter("fall", 7.0 / 8.0 if splash else 0.0)
+	mat.set_shader_parameter("lift", lift / 8.0)
+	mat.set_shader_parameter("grow", 1.3 if splash else 1.7)
 	var side: Vector3 = Vector3(wind.x, 0.0, wind.z)
 	if side.length() < 0.05:
 		var ang: float = rng.randf_range(0.0, TAU)
 		side = Vector3(cos(ang), 0.0, sin(ang))
-	var push: Vector3 = side.normalized() * (0.0 if splash else 0.4) + Vector3.UP * lift
-	var push_ms: float = maxf(push.length(), 1e-3)
-	side = basis.inverse() * (push / push_ms)
-	var drift_c := CurveXYZTexture.new()
-	for c in 3:
-		var cv := Curve.new()
-		cv.min_value = -1.0
-		cv.add_point(Vector2(0.0, side[c]))
-		cv.add_point(Vector2(1.0, side[c]))
-		if c == 0:
-			drift_c.curve_x = cv
-		elif c == 1:
-			drift_c.curve_y = cv
-		else:
-			drift_c.curve_z = cv
-	pm.directional_velocity_curve = drift_c
-	pm.directional_velocity_min = push_ms * 0.8 / 8.0
-	pm.directional_velocity_max = push_ms * 1.2 / 8.0
-	# Клуби кінчаються в різний час: хмара рідшає ~0,8 с, а не гасне вся разом.
-	pm.lifetime_randomness = 0.45
-	var k: float = DIRT_CELL_M / DIRT_CLOUD_M / 8.0
-	pm.scale_min = d_min * k
-	pm.scale_max = d_max * k
-	var sc := Curve.new()
-	sc.add_point(Vector2(0.0, 1.0))
-	sc.add_point(Vector2(1.0, 1.3 if splash else 2.1))
-	var sct := CurveTexture.new()
-	sct.curve = sc
-	pm.scale_curve = sct
-	# Кожна клуба повернута по-своєму (до ±50°): однаковий «вінець» атласу в усіх клуб складався в
-	# дві однакові кулі над полотном.
-	pm.angle_min = -50.0
-	pm.angle_max = 50.0
-	var mix := Gradient.new()
-	mix.colors = PackedColorArray(colours)
-	var mix_t := GradientTexture1D.new()
-	mix_t.gradient = mix
-	pm.color_initial_ramp = mix_t
-	# Проступає за 4 % життя; до нуля на кінці її доводить ерозія шейдера.
-	var fade := Gradient.new()
-	fade.offsets = PackedFloat32Array([0.0, 0.04, 1.0])
-	fade.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, peak), Color(1, 1, 1, peak * 0.8)])
-	var fade_t := GradientTexture1D.new()
-	fade_t.gradient = fade
-	pm.color_ramp = fade_t
-	em.process_material = pm
-	em.draw_pass_1 = _settle_mesh
-	em.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	em.layers = 1 << (UnitView.UNIT_LAYER - 1)
-	em.visibility_aabb = AABB(Vector3(-3, -0.5, -3), Vector3(6, 3, 6))
-	root.add_child(em, true)
-	em.emitting = true
-	return em
+	mat.set_shader_parameter("drift", side.normalized() * (0.0 if splash else 0.4 / 8.0))
+	var puffs: Array[Array] = puff_layout(rng, amount, at, basis, extents, d_min, d_max, life, colours, peak, sweep)
+	var end: float = 0.0
+	for d: Array in puffs:
+		end = maxf(end, (d[2] as Color).r + (d[2] as Color).g)
+	# Від дальньої до ближньої: однакові за кольором клуби змішуються в правильному порядку.
+	var cam: Camera3D = root.get_viewport().get_camera_3d() if root.is_inside_tree() else null
+	if cam != null:
+		var eye: Vector3 = cam.global_position - root.global_position
+		puffs.sort_custom(func(x: Array, y: Array) -> bool: return (x[0] as Vector3).distance_squared_to(eye) > (y[0] as Vector3).distance_squared_to(eye))
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.use_custom_data = true
+	mm.mesh = _quad
+	mm.instance_count = amount
+	for i in amount:
+		var d: Array = puffs[i]
+		mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * float(d[1])), d[0]))
+		mm.set_instance_custom_data(i, d[2])
+		mm.set_instance_color(i, d[3])
+	var mi := MultiMeshInstance3D.new()
+	mi.name = "Settle"
+	mi.multimesh = mm
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
+	mi.custom_aabb = AABB(Vector3(-3, -0.5, -3), Vector3(6, 3, 6))
+	root.add_child(mi, true)
+	root.create_tween().tween_method(func(t: float) -> void: mat.set_shader_parameter("age", t), 0.0, end, end)
+	return mi
 
 
 ## Дуга дроту під напругою: одне рване синьо-біле ядро `d_m` м (зубчасті розряди, свій узор на
@@ -1347,12 +1314,13 @@ float vnoise(vec2 p) {
 """
 
 
-## Клуба пилу повалення — частинка, а не окремий квад, але той самий вигляд, що в клуби ґрунту
-## влучання (`_dirt`, `_SPRITE_CODE`): квад у камеру з точкою вибуху атласу на місці частинки, атлас
-## грає від раннього кадру до повного об'єму за `full` частку життя і далі повзе до кінця, тож
-## клуба сама здіймається й має об'єм. Перефарбування (COLOR) тримає світлотінь атласу, розмитий
-## край, розчинення шумовим порогом від 35 % життя до нуля на кінці; м'який край лише там, де квад
-## врізається в землю.
+## Клуба пилу повалення — екземпляр MultiMesh, але той самий вигляд, що в клуби ґрунту влучання
+## (`_dirt`, `_SPRITE_CODE`): квад у камеру з точкою вибуху атласу на місці клуби. Дані клуби —
+## INSTANCE_CUSTOM (затримка старту, життя, поворот, зерно), колір і густота — COLOR; рух рахується
+## тут від віку миті `age`: зліт із гальмуванням (чи падіння назад для бризки грязі), стала тяга
+## вгору, знесення, ріст. Атлас грає від раннього кадру до повного об'єму за `full` частку життя й
+## повзе далі; контраст атласу приглушено; край рве шум, до нуля клубу доводить множник з пологим
+## кінцем; м'який край лише там, де квад врізається в землю.
 const _SETTLE_CODE: String = """
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, skip_vertex_transform;
@@ -1362,6 +1330,14 @@ uniform vec2 grid = vec2(8.0);
 uniform vec2 frames = vec2(4.0, 40.0);
 uniform float full = 0.1;
 uniform vec2 anchor = vec2(0.0);
+uniform float age = 0.0;
+// Швидкості — тайли за секунду: зліт (від–до), гальмування, падіння назад, стала тяга, знесення.
+uniform vec2 launch = vec2(0.1, 0.2);
+uniform float damp = 0.1;
+uniform float fall = 0.0;
+uniform float lift = 0.0;
+uniform vec3 drift = vec3(0.0);
+uniform float grow = 2.1;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 global uniform float sky_clear;
 varying float v_frame;
@@ -1370,18 +1346,33 @@ varying float v_seed;
 varying float v_depth;
 """ + _NOISE_CODE + """
 void vertex() {
-	float s = length(MODEL_MATRIX[0].xyz);
-	float r = INSTANCE_CUSTOM.x;
+	float t = age - INSTANCE_CUSTOM.r;
+	float life = max(INSTANCE_CUSTOM.g, 1e-3);
+	v_life = clamp(t / life, 0.0, 1.0);
+	// До старту й після кінця клуба вироджена в точку: нічого не малює.
+	float alive = step(0.0, t) * step(t, life);
+	v_seed = INSTANCE_CUSTOM.a;
+	float v0 = mix(launch.x, launch.y, fract(v_seed * 7.31));
+	float tt = max(t, 0.0);
+	float rise;
+	if (damp > 0.0) {
+		float ts = min(tt, v0 / damp);
+		rise = v0 * ts - 0.5 * damp * ts * ts;
+	} else {
+		rise = max(v0 * tt - 0.5 * fall * tt * tt, 0.0);
+	}
+	rise += lift * tt;
+	vec3 base = MODEL_MATRIX[3].xyz + vec3(0.0, rise, 0.0) + drift * tt;
+	float s = length(MODEL_MATRIX[0].xyz) * mix(1.0, grow, v_life) * alive;
+	float r = INSTANCE_CUSTOM.b;
 	vec2 v = vec2(cos(r) * VERTEX.x - sin(r) * VERTEX.y, sin(r) * VERTEX.x + cos(r) * VERTEX.y) + anchor;
-	vec3 world = MODEL_MATRIX[3].xyz + (INV_VIEW_MATRIX[0].xyz * v.x + INV_VIEW_MATRIX[1].xyz * v.y) * s;
+	vec3 world = base + (INV_VIEW_MATRIX[0].xyz * v.x + INV_VIEW_MATRIX[1].xyz * v.y) * s;
 	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
-	v_seed = fract(float(INSTANCE_ID) * 0.618034 + fract(MODEL_MATRIX[3].x * 3.7));
-	v_life = INSTANCE_CUSTOM.y;
 	// Як BattleFx.smoke_frame: різко до повного об'єму (кадр 16), далі повільніше до кінця.
 	float f0 = frames.x + floor(v_seed * 9.0);
 	float u = clamp(v_life / full, 0.0, 1.0);
 	v_frame = v_life < full ? mix(f0, 16.0, 1.0 - (1.0 - u) * (1.0 - u)) : mix(16.0, frames.y, pow((v_life - full) / (1.0 - full), 0.75));
-	v_depth = min(s * 0.2, 1.5 / 8.0);
+	v_depth = max(min(s * 0.2, 1.5 / 8.0), 1e-4);
 }
 
 vec4 frame_at(float f, vec2 uv) {
@@ -1395,16 +1386,13 @@ void fragment() {
 	// Контраст атласу (темна середина, світлий обідок) приглушено до середнього: у дрібних клубах
 	// він читався ватяними кульками з обідком.
 	ALBEDO = mix(t.rgb, COLOR.rgb * (0.94 + 0.12 * smoothstep(0.0, 0.3, luma)), 0.92) * (1.0 + 0.3 * sky_clear);
-	// Згасання з пологим кінцем (smoothstep): поріг шуму рве край, а до нуля клубу доводить множник —
-	// інакше остання третина хмари зникала за 0,4 с.
+	// Поріг шуму лише рве край; до нуля клубу доводить множник з пологим кінцем (ступінь < 1 —
+	// довгий хвіст).
 	float erode = smoothstep(0.3, 1.0, v_life);
 	float n = vnoise(UV * 7.0 + v_seed * 31.0) * 0.6 + vnoise(UV * 17.0 + v_seed * 13.0) * 0.4;
 	float thr = erode * 0.45;
 	float keep = smoothstep(thr - 0.25, thr, t.a * (0.6 + 0.4 * n));
-	// Корінь прозорості атласу: середина клуби пласкіша, ніж в атласі, але край ще м'який —
-	// без кореня клуба була б пласким диском.
-	// Ступінь < 1 — довгий хвіст: остання третина хмари рідшає ~0,8 с, а не зникає за 0,3 с.
-	float a = sqrt(t.a) * smoothstep(0.0, 0.7, t.a) * keep * COLOR.a * pow(1.0 - erode, 0.45);
+	float a = sqrt(t.a) * smoothstep(0.0, 0.7, t.a) * keep * COLOR.a * smoothstep(0.0, 0.04, v_life) * pow(1.0 - erode, 0.45);
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, край там жорсткіший.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA = a * clamp((VERTEX.z - sv.z / sv.w) / v_depth, 0.0, 1.0);

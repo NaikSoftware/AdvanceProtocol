@@ -107,11 +107,33 @@ func test_wet_ground_sprays_mud_instead_of_dust() -> void:
 	BattleFx.wetness = 1.0
 	var wet: Node3D = BattleFx.spawn_topple_land(parent, at, at + Vector3(1.25, 0, 0), BattleFx.Debris.CONCRETE, false)
 	assert_true((wet.get_node("Clods") as GPUParticles3D).amount > (dry.get_node("Clods") as GPUParticles3D).amount)
-	var tone := func(n: Node3D) -> float:
-		var g: Gradient = (((n.get_node("Settle") as GPUParticles3D).process_material as ParticleProcessMaterial).color_initial_ramp as GradientTexture1D).gradient
-		return g.colors[0].get_luminance()
-	assert_true(tone.call(wet) < tone.call(dry) * 0.5, "мокрий пил — темна грязь")
-	assert_true(((wet.get_node("Settle") as GPUParticles3D).lifetime) <= 0.75, "грязь — коротка бризка, а не хмара")
+	var dust: Array[Color] = BattleFx._dust_colours(BattleFx.Debris.CONCRETE, 0.0)
+	var mud: Array[Color] = BattleFx._dust_colours(BattleFx.Debris.CONCRETE, 1.0)
+	assert_true(mud[0].get_luminance() < dust[0].get_luminance() * 0.5, "мокрий пил — темна грязь")
+	var mat := (wet.get_node("Settle") as MultiMeshInstance3D).material_override as ShaderMaterial
+	assert_gt(float(mat.get_shader_parameter("fall")), 0.0, "бризка падає назад")
+	assert_eq(float((dry.get_node("Settle") as MultiMeshInstance3D).material_override.get_shader_parameter("fall")), 0.0, "сухий пил не падає")
+
+
+## Клуби пилу стоять рівно вздовж опори (без дірок і груп), старт біжить від основи до верхівки
+## за ~0,15 с, а життя різне — хмара рідшає поступово, а не гасне вся разом.
+func test_pole_dust_is_even_swept_and_staggered() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var n: int = 16
+	var half: float = 5.0 / 8.0
+	var puffs: Array[Array] = BattleFx.puff_layout(rng, n, Vector3.ZERO, Basis(), Vector3(half, 0.0, 0.0), 1.4, 3.4, 2.6, [Color.WHITE], 0.25, 0.15)
+	puffs.sort_custom(func(x: Array, y: Array) -> bool: return (x[0] as Vector3).x < (y[0] as Vector3).x)
+	var step: float = 2.0 * half / float(n)
+	var lives: Array[float] = []
+	for i in n:
+		lives.append((puffs[i][2] as Color).g)
+		if i > 0:
+			assert_between((puffs[i][0] as Vector3).x - (puffs[i - 1][0] as Vector3).x, step * 0.6, step * 1.4, "рівний крок, без груп і дірок")
+	assert_true((puffs[0][2] as Color).r < 0.04 and (puffs[n - 1][2] as Color).r > 0.12, "старт від основи до верхівки за ~0,15 с")
+	assert_true(lives.max() - lives.min() > 0.4, "життя клуб різне: хвіст згасання")
+	var land: Node3D = BattleFx.spawn_topple_land(parent, Vector3(2, 0, 2), Vector3(2 + 10.0 / 8.0, 0, 2), BattleFx.Debris.CONCRETE, false, true)
+	assert_between((land.get_node("Settle") as MultiMeshInstance3D).multimesh.instance_count, 14, 20)
 
 
 ## Слід на мокрій землі: темна смуга вздовж відрізка, слабша за пляму під уламками, і лише біля нього.
