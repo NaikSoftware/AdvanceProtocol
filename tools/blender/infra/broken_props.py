@@ -524,7 +524,7 @@ def picket(name):
         else:
             lo, hi = bbox(c)
             xs = [lo.x / M + (hi.x - lo.x) / M * (k / 5 + tilted(rng, 0.05)) for k in range(1, 5)]
-            pieces += slice_x([[c, "board"]], xs, rng, 0.6)
+            pieces += slice_x([[c, "board"]], xs, rng, 0.25)
     pieces = snap_some(pieces, {"post"}, (1, 3), rng, fm)
     pieces = order(pieces)
     path, total, bb = export(name, name, pieces, mats)
