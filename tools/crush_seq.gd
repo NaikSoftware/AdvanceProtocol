@@ -36,6 +36,7 @@ func _ready() -> void:
 	var cell := Vector2i(-1, -1)
 	var at := Vector3.ZERO
 	var best: float = INF
+	var pick: int = -1
 	for i in props._instances.size():
 		var inst: Dictionary = props._instances[i]
 		var c: Vector2i = (inst["cells"] as Array)[0]
@@ -47,15 +48,14 @@ func _ready() -> void:
 			"fence":
 				ok = kind == PropLayer.Kind.FIELD_FENCE or kind == PropLayer.Kind.GARDEN_FENCE
 			"yard":
-				ok = kind == PropLayer.Kind.GARDEN_FENCE and PropLayer.fence_kind_of(inst["model"]) == int(a[6])
-			"yard":
-				# Двір: паркан двору заданого виду (1..4); техніка в клітинку двору не в'їде, тож валимо напряму.
-				ok = kind == PropLayer.Kind.GARDEN_FENCE and PropLayer.fence_kind_of(inst["model"]) == int(a[7])
+				# Двір: паркан двору заданого виду (-1 — будь-якого); крок техніки добирається за смугою корпусу.
+				ok = kind == PropLayer.Kind.GARDEN_FENCE and (int(a[6]) < 0 or PropLayer.fence_kind_of(inst["model"]) == int(a[6]))
 		if ok and c.x >= 0 and c.y >= 0 and c.x < map.width and c.y < map.height:
 			var d: float = Vector2(c).distance_to(centre)
 			if d < best:
 				best = d
 				cell = c
+				pick = i
 				at = (inst["transform"] as Transform3D).origin
 	if a[3] == "gate" and not props._gates.is_empty():
 		var g: Dictionary = props._gates[0]
@@ -81,7 +81,11 @@ func _ready() -> void:
 		var el: float = float(Time.get_ticks_usec() - t0) / 1e6
 		if not fired and el >= 0.4:
 			fired = true
-			props.topple_cell(cell, cell - travel)
+			var step: Array[Vector2i] = _step_for(props, pick, at)
+			if step.is_empty():
+				props.topple_cell(cell, cell - travel)
+			else:
+				props.topple_cell(step[1], step[0])
 		if el >= next:
 			var img: Image = get_viewport().get_texture().get_image()
 			var k: float = float(img.get_width()) / get_viewport().get_visible_rect().size.x
@@ -96,3 +100,15 @@ func _ready() -> void:
 	for i in frames.size():
 		frames[i].save_png("%s/f_%04d.png" % [a[0], i])
 	get_tree().quit()
+
+
+## Крок техніки (з, в), смуга корпусу якого зачіпає екземпляр inst; порожньо, коли такого нема.
+func _step_for(props: PropLayer, inst: int, at: Vector3) -> Array[Vector2i]:
+	if inst < 0:
+		return []
+	var base := Vector2i(roundi(at.x), roundi(at.z))
+	for off: Vector2i in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if (props.band_hits(base + off + d, base + off)["inst"] as Array).has(inst):
+				return [base + off + d, base + off]
+	return []

@@ -42,6 +42,7 @@ func _ready() -> void:
 		if u.unit_class() in [UnitTypes.UnitClass.TANK, UnitTypes.UnitClass.LIGHT_VEHICLE] and (unit == null or u.ap > unit.ap):
 			unit = u
 	var spawn: Vector2i = unit.pos
+	var dbg_ok: int = 0
 	for i in props._instances.size():
 		var inst: Dictionary = props._instances[i]
 		var kind: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
@@ -54,6 +55,7 @@ func _ready() -> void:
 			ok = kind == PropLayer.Kind.GARDEN_FENCE and (PropLayer.fence_kind_of(inst["model"]) == want_kind or (want_kind < 0 and PropLayer.fence_kind_of(inst["model"]) >= 1))
 		if not ok:
 			continue
+		dbg_ok += 1
 		# Опора — клітинка екземпляра; паркан — будь-яка клітинка навколо нього, смуга корпусу якої його зачепить.
 		var cands: Array[Vector2i] = []
 		if true:
@@ -67,7 +69,7 @@ func _ready() -> void:
 			# Машина стартує за дві клітинки з одного з чотирьох боків; ціль мусить бути досяжною.
 			for d: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
 				var st: Vector2i = c + d * 2
-				if not board.in_bounds(st) or board.kind_at(st) != Terrain.Kind.FIELD or board.kind_at(c + d) != Terrain.Kind.FIELD or board.kind_at(c) != Terrain.Kind.FIELD:
+				if not board.in_bounds(st) or Rules.entry_cost_at(unit, board, st) >= 100 or Rules.entry_cost_at(unit, board, c) >= 100:
 					continue
 				if not (props.band_hits(c + d, c)["inst"] as Array).has(i):
 					continue
@@ -79,6 +81,7 @@ func _ready() -> void:
 					at = (inst["transform"] as Transform3D).origin
 					break
 	unit.pos = spawn
+	print("CRUSHMOVE candidates=%d" % dbg_ok)
 	print("CRUSHMOVE target=%s start=%s unit=%s ap=%s" % [target, start, unit.id if unit != null else -1, unit.ap if unit != null else -1])
 	if unit == null or target.x < 0:
 		get_tree().quit(1)

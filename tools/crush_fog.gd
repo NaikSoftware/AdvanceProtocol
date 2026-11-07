@@ -36,6 +36,7 @@ func _ready() -> void:
 		if u.unit_class() in [UnitTypes.UnitClass.TANK, UnitTypes.UnitClass.LIGHT_VEHICLE] and (enemy == null or u.ap > enemy.ap):
 			enemy = u
 	var spawn: Vector2i = enemy.pos
+	var ap0: int = enemy.ap
 	# Дві цілі: опора з дротом і паркан двору; обидві — на землі, якої гравець 0 не бачив.
 	var plans: Array = []
 	for want in ["pole", "fence"]:
@@ -85,6 +86,7 @@ func _ready() -> void:
 	for k in 2:
 		var plan: Array = plans[k]
 		enemy.pos = plan[1]
+		enemy.ap = ap0
 		state.refresh_vision(1)
 		screen.call("_rebuild_units_for_active_player", true)
 		_focus = plan[2]
