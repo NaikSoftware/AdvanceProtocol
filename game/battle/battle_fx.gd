@@ -187,7 +187,7 @@ enum Shard { CHIP, SPLINTER, SHEET, ROD, CLOD }
 const SOIL_DUST := Color(0.27, 0.24, 0.19)
 const SOIL_DUST_DARK := Color(0.21, 0.185, 0.15)
 const DUST: Dictionary = {
-	Debris.CONCRETE: [Color(0.40, 0.39, 0.36), Color(0.32, 0.30, 0.27)],
+	Debris.CONCRETE: [Color(0.36, 0.345, 0.31), Color(0.27, 0.24, 0.19)],
 	Debris.WOOD: [Color(0.25, 0.205, 0.15), Color(0.21, 0.17, 0.125)],
 	Debris.SHEET: [SOIL_DUST, SOIL_DUST_DARK],
 	Debris.MESH: [SOIL_DUST, SOIL_DUST_DARK],
@@ -244,7 +244,7 @@ static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: De
 		_shards(root, "Fine", rng, fine[0], 7, low, Basis(), spot, fine[1], fine[2], 2.0, 5.0, 70.0, 2.4)
 		_shards(root, "Clods", rng, Shard.CLOD, clods, low, Basis(), spot, 0.12, 0.26, 2.0, 5.0, 70.0, 2.4)
 		# 3–5 малих низьких клуб біля основи підскакують і висять, поки опора падає (до 1,8 с).
-		_dust_puffs(root, rng, clampi(roundi(5 * powder), 3, 5), Vector3.ZERO, Basis(), spot, 0.8, 1.3, 2.8, colours, 0.4, 0.9, 40.0, 0.6, 0.5, wet)
+		_dust_puffs(root, rng, clampi(roundi(5 * powder), 3, 5), Vector3.ZERO, Basis(), spot, 0.7, 1.2, 2.8, colours, 0.5, 1.0, 40.0, 0.6, 0.4, wet)
 	else:
 		var box := Vector3(half_m, 0.1, 0.3) / 8.0
 		# Не далі ~3 м: віяло 70° від вертикалі на 4,5 м/с.
@@ -287,7 +287,7 @@ static func spawn_topple_land(parent: Node, a: Vector3, b: Vector3, debris: Debr
 	if is_pole:
 		_shards(root, "Fine", rng, fine[0], clampi(roundi(len_m * 1.2), 6, 14), low, basis, line, fine[1], fine[2], 2.0, 5.0, 70.0, 2.6)
 		_shards(root, "Clods", rng, Shard.CLOD, clampi(roundi(len_m * 0.25) + clods, 3, 10), low, basis, line, 0.12, 0.26, 2.0, 5.0, 70.0, 2.6)
-		_dust_puffs(root, rng, clampi(roundi(len_m * powder * 0.9), 4, 10), mid, basis, line, 1.4, 2.2, 2.6, colours, 0.5, 1.0, 45.0, 0.8, 0.55, wet)
+		_dust_puffs(root, rng, clampi(roundi(len_m * powder * 0.9), 4, 10), mid, basis, line, 1.3, 2.7, 2.6, colours, 0.8, 1.6, 35.0, 1.0, 0.45, wet)
 	else:
 		_shards(root, "Clods", rng, Shard.CLOD, clods, low, basis, line, 0.12, 0.22, 1.0, 3.0, 60.0, 2.2)
 		_dust_puffs(root, rng, 2 if powder < 0.6 else 3, mid, basis, line, 0.8, 1.2, 1.8, colours, 0.2, 0.5, 45.0, 0.5, 0.35, wet)
