@@ -59,7 +59,7 @@ func _ready() -> void:
 				at = (inst["transform"] as Transform3D).origin
 	if a[3] == "gate" and not props._gates.is_empty():
 		var g: Dictionary = props._gates[0]
-		cell = props._gate_cells(g)[1]
+		cell = PropLayer._gate_home(g)
 		at = Vector3((g["mid"] as Vector2).x, 0.0, (g["mid"] as Vector2).y)
 	print("CRUSH cell=%s at=%s travel=%s" % [cell, at, travel])
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")

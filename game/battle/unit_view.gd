@@ -75,8 +75,6 @@ const FACE_TURN_DURATION: float = 0.15
 ## Радіус дуги, якою юніт проходить поворот маршруту, у тайлах. 1 тайл = 8 м — у межах
 ## заокруглень доріг (RoadCourse, 6–14 м), тож техніка на дорозі йде її вигином.
 const TURN_RADIUS: float = 1.0
-## Скільки носа корпусу виступає перед центром машини, тайли: опори біля краю клітинки він зачіпає раніше за центр.
-const HULL_NOSE: float = 0.35
 ## Хорд на чверть кола: ніс інтерполюється між ними, хорди лише тримають позицію на дузі.
 const _ARC_SEGMENTS: int = 8
 
@@ -353,9 +351,9 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 	var follow: Callable = _follow.bind(line, acc, tangents)
 	var from_s: float = 0.0
 	for i in path.size():
-		# Корпус торкається опор клітинки, щойно ніс входить у неї: на кривій — за HULL_NOSE до першої точки
+		# Корпус торкається опор клітинки, щойно ніс входить у неї: на кривій — за PropLayer.BAND_NOSE (ніс корпусу) до першої точки
 		# всередині квадрата клітинки, а не в рівномірний момент кроку.
-		var enter_s: float = clampf(_enter_station(line, acc, pts[i + 1]) - HULL_NOSE, from_s, stations[i])
+		var enter_s: float = clampf(_enter_station(line, acc, pts[i + 1]) - PropLayer.BAND_NOSE, from_s, stations[i])
 		if on_enter.is_valid():
 			if enter_s > from_s:
 				tween.tween_method(follow, from_s, enter_s, duration_per_step * (enter_s - from_s))

@@ -28,6 +28,7 @@ const SCUFF_DARK: float = 0.35
 var _size: Vector2i
 var _img: Image
 var _tex: ImageTexture
+var _dirty: bool = false
 var _mask: Image
 var _mask_tex: ImageTexture
 ## Тайли, під якими пляма вже стоїть: перебудова на гейті не малює її вдруге.
@@ -104,6 +105,19 @@ func stamp_scuff(a: Vector3, b: Vector3) -> void:
 				continue
 			var old: Color = _img.get_pixel(x, y)
 			_img.set_pixel(x, y, Color(maxf(old.r, v), old.g, old.b, old.a))
+	_mark_dirty()
+
+
+## Кілька відбитків за кадр (падіння кількох парканів разом) вантажать текстуру дошки на відеокарту один раз.
+func _mark_dirty() -> void:
+	if _dirty:
+		return
+	_dirty = true
+	_flush_upload.call_deferred()
+
+
+func _flush_upload() -> void:
+	_dirty = false
 	_tex.update(_img)
 
 
@@ -137,4 +151,4 @@ func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:
 			var ash: float = smoothstep(0.72, 0.85, f) * v
 			var old: Color = _img.get_pixelv(p)
 			_img.set_pixelv(p, Color(maxf(old.r, v), old.g, old.b, maxf(old.a, ash)))
-	_tex.update(_img)
+	_mark_dirty()

@@ -112,6 +112,8 @@ var _vehicle_moves: Dictionary[Events.UnitMoved, bool] = {}
 ## Кроки техніки за матч (Vector4i: з клітинки x,y у z,w): паркани й ворота ламаються лише там, де пройшов корпус.
 ## Видно їх глядачеві лише на розвіданому (_rebuild_units_for_active_player).
 var _crush_edges: Array[Vector4i] = []
+## Початки парканів, які зламав вал упалої опори (PropLayer.secondary_broke): правда для перебудов і гейта.
+var _crush_marks: Array[Vector3] = []
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -302,6 +304,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# бачить це, як і решту шрамів, лише на розвіданому (§3.5, _rebuild_units_for_active_player).
 	_crushed_truth.clear()
 	_crush_edges.clear()
+	_crush_marks.clear()
 	for p in _match_service.state.player_count:
 		for u: Unit in _match_service.state.units_of(p):
 			if u.unit_class() != UnitTypes.UnitClass.INFANTRY:
@@ -360,6 +363,7 @@ func _wire_view(board: Board) -> void:
 		if not props.topple_hit.is_connected(_on_topple_hit):
 			props.topple_hit.connect(_on_topple_hit)
 			props.topple_landed.connect(_on_topple_landed)
+			props.secondary_broke.connect(_on_secondary_broke)
 		_wreck_layer.set_hearths(_board_view.props().chimney_tops(), _board_view.props().ruin_centres(), board.width * 73 + board.height * 31,
 				_board_view.props().ruin_smoke_point_at)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
@@ -1012,11 +1016,8 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	for pos: Vector2i in _crushed_truth:
 		if state.vision[state.active_player].is_seen(pos):
 			crushed.append(pos)
-	var edges: Array[Vector4i] = []
-	for e: Vector4i in _crush_edges:
-		if state.vision[state.active_player].is_seen(Vector2i(e.z, e.w)):
-			edges.append(e)
-	_board_view.set_crushed_cells(crushed, instant, edges)
+	# Злам показується, лише коли власна клітинка пропса розвідана глядачем (PropLayer.set_crushed), як шрами й ліс.
+	_board_view.set_crushed_cells(crushed, instant, _crush_edges, state.vision[state.active_player].is_seen, _crush_marks)
 	forest_changed()
 	_apply_threat_marks()
 
@@ -1191,8 +1192,7 @@ func _on_cell_entered(moved: Events.UnitMoved, from: Vector2i, to: Vector2i) -> 
 	var edge := Vector4i(from.x, from.y, to.x, to.y)
 	if not _crush_edges.has(edge):
 		_crush_edges.append(edge)
-	if state.vision[state.active_player].is_seen(to):
-		_board_view.props().topple_cell(to, from)
+	_board_view.props().topple_cell(to, from, _known_unit_cells(), state.vision[state.active_player].is_seen)
 
 
 ## Точки падіння — у координатах шару пропсів; мить живе в _units, тож її в'язка — до нього.
@@ -1205,11 +1205,23 @@ func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_
 	BattleFx.spawn_topple_hit(_units, base, _units_point(top), debris as BattleFx.Debris, live_wire, is_pole, _units_point(at + span) - base)
 
 
+func _on_secondary_broke(origin: Vector3) -> void:
+	if not _crush_marks.has(origin):
+		_crush_marks.append(origin)
+
+
 func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:
 	# Падіння бачимо лише на розвіданому (_on_cell_entered), тож слід на мокрій землі — теж лише там.
 	if _board_view.wet and _scars != null:
 		_scars.stamp_scuff(a, b)
 	BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire, is_pole)
+
+
+## Клітинки юнітів, які глядач вправі знати (§3.5): повалений стовп лягає повз їхні корпуси. Усіх юнітів сюди не
+## дають — напрям падіння видав би невидимого ворога.
+func _known_unit_cells() -> Array:
+	var state: BattleState = _match_service.state
+	return state.known_occupied_map(state.active_player).keys()
 
 
 func _cancel_falls() -> void:
