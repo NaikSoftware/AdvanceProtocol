@@ -1011,6 +1011,12 @@ func test_walking_advances_travel_on_a_model_body() -> void:
 	(view.move_along(path, 0.05).get_object() as Tween).custom_step(10.0)
 	assert_almost_eq(float(hull.get_instance_shader_parameter("travel")), 2.0, 0.001)
 	assert_eq(hull.get_instance_shader_parameter("owner_color"), UnitView.PLAYER_COLORS[0])
+	# Перебудова дошки після дії дає новий вузол: колеса лишаються, де зупинились.
+	var rebuilt: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(rebuilt)
+	rebuilt.bind(_unit(5, 0, Vector2i(4, 2)))
+	assert_almost_eq(float((rebuilt.get_node("Silhouette/Hull") as GeometryInstance3D).get_instance_shader_parameter("travel")), 2.0, 0.001)
+	UnitView._travel_by_unit.clear()
 
 
 ## Моделі одного типу в різних власників — та сама сітка й той самий матеріал: колір лежить на

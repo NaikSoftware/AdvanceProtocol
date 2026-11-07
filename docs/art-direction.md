@@ -134,7 +134,8 @@ falls back to the box placeholder, so a model may land one type at a time.
   (2 m of track), tiling horizontally. Track faces ignore UV0 and sample
   `vec2(fract((UV2.x + travel) / 0.25), UV2.y * 0.0625)` (`TREAD_PERIOD`, `TREAD_STRIP` in
   `unit_model.gdshader`), so as the vehicle moves the pattern slides towards decreasing u: run u
-  from front to rear along the top of the loop for the top run to move forwards.
+  from front to rear along the top of the loop for the top run to move forwards. One tile is
+  exactly four periods, so the pattern always rests at the same phase after a move.
 - **Wheels:** driving forwards turns a wheel about X through its axle by travel / radius, top
   moving towards −Z. The radius is `_SPECS.wheel` per type — default 0.06 (0.5 m), heavy tank
   0.0475 (0.38 m road wheels).

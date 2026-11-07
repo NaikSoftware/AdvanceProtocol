@@ -142,6 +142,10 @@ var _hull_material: Material
 var _has_model: bool = false
 ## Пройдений шлях в одиницях світу: від нього колеса й траки моделі крутяться в такт руху.
 var _travel: float = 0.0
+## Шлях за id юніта: дошка перебудовує вузли після кожної дії, і новий вузол інакше повертав би
+## колеса в нульове положення одразу після руху.
+static var _travel_by_unit: Dictionary = {}
+var _unit_id: int = -1
 var _type_id: int = 0
 var _owner_color: Color = Color.WHITE
 var _standing: int = 0
@@ -192,6 +196,8 @@ func _ready() -> void:
 func bind(unit: Unit) -> void:
 	position = IsoCameraRig.cell_to_world(unit.pos)
 	_type_id = unit.type_id
+	_unit_id = unit.id
+	_travel = _travel_by_unit.get(unit.id, 0.0)
 	_build_silhouette(unit.type_id, unit.owner)
 	_tilts = UnitTypes.is_vehicle(UnitTypes.get_type(unit.type_id)["unit_class"])
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
@@ -328,6 +334,7 @@ func _walk(t: float, from: Vector3, to: Vector3) -> void:
 	if _has_model:
 		# Лише в плані: висота рельєфу під юнітом не є шляхом коліс.
 		_travel += Vector2(at.x - position.x, at.z - position.z).length()
+		_travel_by_unit[_unit_id] = _travel
 		(_silhouette.get_node("Hull") as GeometryInstance3D).set_instance_shader_parameter("travel", _travel)
 	_pose(at)
 
