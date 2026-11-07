@@ -23,8 +23,8 @@ Balance table. **`core/unit_types.gd` is the source of truth**; this table is do
 
 | # | unit | class | atk | ap | hp | range | fire | armour F/S/R | x-country | vision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0 | rifle squad | INF | 15 | 30 | 100 | 3 | 10 | 0/0/0 | 80 | 5 |
-| 1 | assault squad | INF | 15 | 30 | 100 | 3 | 10 | 0/0/0 | 80 | 5 |
+| 0 | rifle squad | INF | 15 | 30 | 100 | 3 | 10 | 0/0/0 | 110 | 5 |
+| 1 | assault squad | INF | 15 | 30 | 100 | 3 | 10 | 0/0/0 | 110 | 5 |
 | 2 | armoured car | LIGHT | 60 | 68 | 250 | 3 | 18 | 27/18/10 | 5 | 3 |
 | 3 | troop carrier | LIGHT | 70 | 68 | 250 | 3 | 18 | 36/31/7 | 7 | 3 |
 | 4 | scout car | LIGHT | 55 | 48 | 200 | 3 | 18 | 35/15/7 | 8 | 3 |
