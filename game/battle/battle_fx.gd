@@ -163,6 +163,29 @@ static func warm_up(parent: Node, at: Vector3) -> Node3D:
 	return boom
 
 
+## З чого зроблене те, що техніка валить: від цього залежать уламки й пил.
+## CONCRETE — бетонна опора, єврозабір; WOOD — дерев'яна опора, штахетник, планки;
+## SHEET — профлист; MESH — рабиця, ґрати.
+enum Debris { CONCRETE, WOOD, SHEET, MESH }
+
+
+## Мить, коли техніка б'є в опору чи паркан (той, хто кличе, далі сам валить модель).
+## at — точка удару біля основи, top — верх (для опори під напругою там іскрить дріт).
+static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: Debris, live_wire: bool) -> Node3D:
+	var root := _root("ToppleHit", parent, at)
+	_expire(root, 0.1)
+	return root
+
+
+## Мить, коли повалене вдаряється об землю й розсипається: модель той, хто кличе, ховає
+## одразу після виклику. a→b — відрізок на землі, який повалене накрило (опора: основа→верхівка;
+## паркан: середня лінія полотна).
+static func spawn_topple_land(parent: Node, a: Vector3, b: Vector3, debris: Debris, live_wire: bool) -> Node3D:
+	var root := _root("ToppleLand", parent, a)
+	_expire(root, 0.1)
+	return root
+
+
 ## Прибрати всі миті з дерева (передача ходу, §3.5).
 static func clear_all(tree: SceneTree) -> void:
 	for n: Node in tree.get_nodes_in_group(GROUP):
