@@ -1099,6 +1099,13 @@ func test_owners_differ_by_hp_fill_colour_not_by_body_colour() -> void:
 	assert_eq(_hp_bar_image(view).get_pixel(1, mid_y), _as_rgba8(UnitView.hp_fill_color(0)))
 	assert_eq(_hp_bar_image(other).get_pixel(1, mid_y), _as_rgba8(UnitView.hp_fill_color(1)))
 	assert_ne(UnitView.hp_fill_color(0), UnitView.hp_fill_color(1))
+	# Золоті значення, не через сам hp_fill_color: блок власника 1 починається з 47, повна смуга — 46.
+	assert_eq(view.hp_bar_layer(), 46)
+	assert_eq(other.hp_bar_layer(), 93)
+	assert_eq(_hp_bar_image(other).get_pixel(1, mid_y), _as_rgba8(Color("#a54a3a").lerp(Color.WHITE, 0.3)))
+	var decoded: Image = UnitHpBars.layer_image(93)
+	assert_eq(decoded.get_pixel(46, mid_y), _as_rgba8(Color("#a54a3a").lerp(Color.WHITE, 0.3)), "шар 93 — власник 1, заливка на всю ширину")
+	assert_eq(decoded.get_pixel(47, mid_y), _as_rgba8(UnitView._HP_BAR_FRAME_COLOR), "після заливки — рамка")
 	assert_ne(view.hp_bar_layer(), other.hp_bar_layer(), "у спільному MultiMesh шари різних власників різні")
 	for o in UnitView.PLAYER_COLORS.size():
 		assert_eq(UnitHpBars.layer_image(o * UnitHpBars.fills_per_owner() + 20).get_pixel(1, mid_y), _as_rgba8(UnitView.hp_fill_color(o)), "власник %d" % o)
