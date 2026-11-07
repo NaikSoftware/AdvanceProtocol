@@ -1,8 +1,8 @@
 class_name UnitHpBars
 extends MultiMeshInstance3D
 ## Смуги HP усіх юнітів екрана одним MultiMesh: окремий спрайт із прозорою текстурою на юніта
-## коштував виклик малювання на кожного (§8). Юніт (`UnitView`) віддає лише стан смуги — шар за
-## шириною заливки, точку над собою й чи показувати; тут ці стани збираються й оновлюються, щойно
+## коштував виклик малювання на кожного (§8). Юніт (`UnitView`) віддає лише стан смуги — шар (блок власника + ширина
+## заливки), точку над собою й чи показувати; тут ці стани збираються й оновлюються, щойно
 ## хтось змінився. Спрайт `HpBar` лишається в юніті вузлом стану, але сам не малюється.
 
 const _SHADER: Shader = preload("res://game/battle/shaders/unit_hp_bar.gdshader")
@@ -38,13 +38,18 @@ func _init() -> void:
 	set_process(false)
 
 
-## Шарів у масиві: по одному на ширину заливки 0…внутрішня ширина смуги.
-static func layer_count() -> int:
+## Шарів на власника: по одному на ширину заливки 0…внутрішня ширина смуги.
+static func fills_per_owner() -> int:
 	return UnitView._HP_BAR_SIZE.x - 2 + 1
 
 
-static func layer_image(fill_width: int) -> Image:
-	return UnitView.hp_bar_image(fill_width)
+## Шари йдуть блоками по власниках: колір заливки — його, а шар обирається без гілок у шейдері.
+static func layer_count() -> int:
+	return fills_per_owner() * UnitView.PLAYER_COLORS.size()
+
+
+static func layer_image(layer: int) -> Image:
+	return UnitView.hp_bar_image(layer % fills_per_owner(), layer / fills_per_owner())
 
 
 static func _layer_array() -> Texture2DArray:

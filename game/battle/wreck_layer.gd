@@ -623,7 +623,7 @@ static func burnt_material() -> ShaderMaterial:
 ## `Rules.roll()`: косметика не сміє зсувати кидки правил, і хеш дає всім ті самі уламки.
 static func build_wreck(pos: Vector2i, type_id: int, facing: int) -> Node3D:
 	var model: ArrayMesh = UnitSilhouettes.model_mesh(type_id)
-	var root := Node3D.new() if model != null else UnitSilhouettes.build(type_id, Color.BLACK)
+	var root := Node3D.new() if model != null else UnitSilhouettes.build(type_id)
 	root.name = "Wreck_%d_%d" % [pos.x, pos.y]
 	var merged := MeshInstance3D.new()
 	merged.name = "Body"

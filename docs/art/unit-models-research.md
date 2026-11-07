@@ -123,27 +123,7 @@ file and no `meta.json`). Commands, from `~/.cache/ap-scratch/units/research/too
 
 ## 4. Owner marking
 
-Both players field the same models; the owner colour (#3a6ea5, #a54a3a, #5a8a4a) is a tint mask
-on one marking. Contemporary practice with no national meaning: a **cloth air-recognition panel
-strapped to the roof** (the VS-17 type is 1.83 × 0.61 m). Make it 1.8 × 1.0 m so it holds at
-the far zoom.
-
-| zoom | 1.8 × 1.0 m panel | 0.6 m strip |
-| --- | --- | --- |
-| 7 cm/px | 26 × 14 px | 9 px |
-| 22 cm/px | 8 × 5 px | 3 px |
-
-| class | where | size |
-| --- | --- | --- |
-| tanks 5–8 | turret roof, rear half, flat; a second on the engine deck for the heavy | 1.8 × 1.0 m |
-| wheeled 2–4 | roof behind the turret / RWS; on the scout car across the rear cargo bed | 1.8 × 1.0 m; scout 1.4 × 0.9 m |
-| towed 9–10 | draped across the trail legs just behind the carriage | 1.2 × 0.8 m |
-| engineer 11 | rear engine deck | 1.8 × 1.0 m |
-
-The panel is a separate UV island (or vertex-colour mask) so one shared material tints it per
-owner; the rest of the vehicle stays in camouflage.
-
-**Soldiers:** no single part is big enough. Tint together the helmet cover top (~0.25 m) and the
-upper surface of the plate carrier and pack (~0.45 × 0.35 m): ~6 × 5 px per figure at the closest
-zoom, 2 px at the farthest, where it reads as the figure's colour rather than a mark. Coloured
-tape bands on helmet and upper arms are the real-world equivalent and may share the mask.
+Units carry no team colour: every owner fields the same models in the same paint, and the side
+is shown by the colour of the HP bar fill (#3a6ea5, #a54a3a, #5a8a4a, lightened for contrast on
+the bar's dark back). Identity at the far zoom comes from silhouette alone, so no panel, band or
+tape is modelled.

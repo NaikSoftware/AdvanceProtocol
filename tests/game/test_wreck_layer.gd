@@ -109,7 +109,7 @@ func test_wreck_is_neutral_burnt_and_carries_no_hp_bar() -> void:
 	# Одна сітка на уламки: один виклик малювання і одна тінь замість трьох-чотирьох (бюджет §8).
 	assert_eq(meshes.size(), 1)
 	assert_eq(meshes[0].material_override, WreckLayer.burnt_material(), "один спільний обгорілий матеріал")
-	var live: Node3D = UnitSilhouettes.build(5, Color.WHITE)
+	var live: Node3D = UnitSilhouettes.build(5)
 	var verts: int = 0
 	for part: Node in live.get_children():
 		verts += ((part as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
