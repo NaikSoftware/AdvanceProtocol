@@ -134,12 +134,24 @@ col = col * (1 - 0.85 * soot[..., None])
 # Roofs darker and a little cooler than the grass they sit on, so the turret outline holds at
 # 22 cm/px (0.42 in linear is ~22 % in screen value); the sides keep their value.
 col = col * (1 - C.get("roof_dark", 0.42) * roof) * (1 + roof * np.array(C.get("roof_cool", (-0.06, 0.0, 0.08)), np.float32))
+# Engine-deck louvres (units.json `louvres`, MODEL metres): rows of dark slots across the hull on
+# the up-facing deck, two grilles either side of a solid centre strip. Texture only: from above
+# they mark the deck as an engine deck without a triangle.
+lv = cfg.get("louvres")
+if lv:
+    ax = np.abs(P[..., 0])
+    on = (P[..., 1] > lv["y"][0]) & (P[..., 1] < lv["y"][1]) & (ax < lv["x"]) & (ax > lv.get("centre", 0.12)) \
+        & (roof[..., 0] > 0.5) & (P[..., 2] < lv.get("below_m", 9.0))
+    slot = ((P[..., 1] - lv["y"][0]) / lv.get("period", 0.14)) % 1.0 < lv.get("slot", 0.45)
+    col = col * (1 - 0.5 * (on & slot)[..., None]) * (1 - 0.12 * on[..., None])
+    rough = np.where(on & slot, 0.9, rough)
+
 # A shrunk turret (units.json turret) is darker again than the deck around it: small and low, it
 # would otherwise dissolve into the hull at the far zoom.
 t = cfg.get("turret")
 if t:
     tc = t["tc"]
-    ty = [lib.m_long(cfg, tc + (L - tc) * t["scale_long"]) * lib.TILE_M for L in t["long"]]
+    ty = [lib.m_long(cfg, tc + (L - tc) * t["scale_long"] + t.get("shift_long", 0.0)) * lib.TILE_M for L in t["long"]]
     on_t = (P[..., 1] > ty[0]) & (P[..., 1] < ty[1]) & (np.abs(P[..., 0]) < lib.m_len(cfg, t["lat"] * t.get("scale_lat", 1.0)) * lib.TILE_M) \
         & (P[..., 2] > lib.m_len(cfg, t["base_h"]) * lib.TILE_M + 0.05) & ~on_gun
     col = col * (1 - t.get("dark", 0.25) * on_t[..., None])

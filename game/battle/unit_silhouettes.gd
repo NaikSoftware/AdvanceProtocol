@@ -15,7 +15,7 @@ const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.325, 0.30, 0.75), "barrel": 0.50, "wheel": 0.06, "extras": [&"wheels"]},  # 2 бронеавто 2,6×2,4×6,0 м
 	{"hull": Vector3(0.375, 0.325, 0.875), "barrel": 0.0, "wheel": 0.06, "extras": [&"wheels"]},  # 3 транспортер 3,0×2,6×7,0 м
 	{"hull": Vector3(0.30, 0.25, 0.625), "barrel": 0.0, "wheel": 0.06, "extras": [&"wheels"]},  # 4 розвідувальне 2,4×2,0×5,0 м
-	{"hull": Vector3(0.43, 0.20, 0.84), "barrel": 0.62, "wheel": 0.036, "extras": [&"turret"]},  # 5 середній танк 3,4×2,4×6,7 м
+	{"hull": Vector3(0.43, 0.20, 0.84), "barrel": 0.585, "wheel": 0.036, "extras": [&"turret"]},  # 5 середній танк 3,4×2,4×6,7 м
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.4125, 0.1875, 0.785), "barrel": 0.52, "wheel": 0.038, "extras": [&"turret"]},  # 7 легкий танк 3,3×2,3×6,3 м
 	{"hull": Vector3(0.475, 0.25, 0.90), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},  # 8 важкий танк 3,8×2,8×(корпус 7,2) м

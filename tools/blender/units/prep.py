@@ -54,7 +54,7 @@ if t:
     lo_, hi_ = t["long"]; tc = t["tc"]
     box = (L >= lo_) & (L <= hi_) & (np.abs(A) < t["lat"]) & (H > t["base_h"])
     gun_v = (L > hi_) & (np.hypot(A, H - t["axis_h0"]) < t["barrel_r"])
-    newL = np.where(box, tc + (L - tc) * t["scale_long"], np.where(gun_v, L + t["dlong"], L))
+    newL = np.where(box, tc + (L - tc) * t["scale_long"] + t.get("shift_long", 0.0), np.where(gun_v, L + t["dlong"], L))
     newH = np.where(box, t["base_h"] + (H - t["base_h"]) * t["scale_h"], np.where(gun_v, H - t["drop"], H))
     sl = np.where(box, t.get("scale_lat", 1.0), 1.0)
     if cfg["fwd"] == "x":
@@ -63,7 +63,63 @@ if t:
         co[:, 1] = newL; co[:, 0] *= sl
     co[:, 2] = newH + zmin
     me.vertices.foreach_set("co", co.ravel()); me.update()
+    if t.get("shift_long"):
+        # a turret moved along the hull drags the faces that join it to the hull into long ramps:
+        # drop them; the vacated ring is closed by an add_boxes deck plate
+        fv = np.zeros(len(me.loops), np.int64); me.loops.foreach_get("vertex_index", fv)
+        mv = (box | gun_v)[fv]
+        ls = np.zeros(len(me.polygons), np.int64); me.polygons.foreach_get("loop_start", ls)
+        lt = np.zeros(len(me.polygons), np.int64); me.polygons.foreach_get("loop_total", lt)
+        anym = np.add.reduceat(mv.astype(int), ls); mixed = (anym > 0) & (anym < lt)
+        bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.nonzero(mixed)[0]], context='FACES')
+        bm.to_mesh(me); bm.free(); me.update()
+        print(f"PREP turret: {mixed.sum()} faces joining moved and fixed parts dropped")
     print(f"PREP turret: {box.sum()} verts scaled, gun {gun_v.sum()} verts moved {t['dlong']:+.4f} long, {-t['drop']:+.4f} h")
+
+# Source edits that change what reads from above, in SOURCE units (long, |lat| half-width, h):
+# `flatten` presses everything in a box down to a height (deck stowage, masts left behind by a
+# moved turret); `add_boxes` adds closed cuboids (a plate closing an open bay, roof kit). Both go
+# into hi, so the heightfield and the bake see them alike.
+def src_edit():
+    co = verts(me)
+    L, A = (co[:, 0], co[:, 1]) if cfg["fwd"] == "x" else (co[:, 1], -co[:, 0])
+    H = co[:, 2] - zmin
+    for l0, l1, la, h in cfg.get("flatten", []):
+        m = (L >= l0) & (L <= l1) & (np.abs(A) <= la) & (H > h)
+        co[m, 2] = h + zmin
+        print(f"PREP flatten {m.sum()} verts in long {l0}..{l1} to h {h}")
+    me.vertices.foreach_set("co", co.ravel()); me.update()
+    if not cfg.get("add_boxes"):
+        return
+    from mathutils.kdtree import KDTree
+    kd = KDTree(len(co))
+    for i, p in enumerate(co):
+        kd.insert(p, i)
+    kd.balance()
+    # new faces take the UV of the nearest source vertex, so the baked source colour stays plausible
+    vuv = np.zeros((len(co), 2))
+    uvl = me.uv_layers.active.data
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            vuv[me.loops[li].vertex_index] = uvl[li].uv
+    bm = bmesh.new(); bm.from_mesh(me)
+    uvb = bm.loops.layers.uv.active
+    new = []
+    for l0, l1, a0, a1, h0, h1 in cfg["add_boxes"]:
+        def P(l, a, h):
+            return (l, a, h + zmin) if cfg["fwd"] == "x" else (-a, l, h + zmin)
+        c = [bm.verts.new(P(l, a, h)) for l in (l0, l1) for a in (a0, a1) for h in (h0, h1)]
+        for q in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
+            f = bm.faces.new([c[i] for i in q]); new.append(f)
+            for lp in f.loops:
+                lp[uvb].uv = vuv[kd.find(lp.vert.co)[1]]
+        print(f"PREP box long {l0}..{l1} lat {a0}..{a1} h {h0}..{h1}")
+    bmesh.ops.recalc_face_normals(bm, faces=new)
+    bm.to_mesh(me); bm.free(); me.update()
+
+
+src_edit()
 lc = cfg["long_c"]
 if cfg["fwd"] == "x":   # long = x, lat = y; turn +X onto +Y
     M = Matrix(((0, -k, 0, 0), (k, 0, 0, -lc * k), (0, 0, k, -zmin * k), (0, 0, 0, 1)))

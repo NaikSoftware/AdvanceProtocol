@@ -96,8 +96,13 @@
       "scale_long": 0.75,
       "scale_lat": 0.85,
       "scale_h": 0.7,
-      "barrel_r": 0.032
-    }
+      "barrel_r": 0.032,
+      "shift_long": 0.04
+    },
+    "_flatten": "the rear deck stays one flat engine deck: stowage box and mast pressed down",
+    "flatten": [[-0.51, -0.29, 0.2, 0.205]],
+    "add_boxes": [[-0.33, -0.15, -0.185, 0.185, 0.1, 0.205]],
+    "louvres": {"y": [-3.0, -1.0], "x": 1.25, "centre": 0.15, "period": 0.14, "slot": 0.45, "below_m": 1.75}
   },
   "tank_destroyer": {
     "source": "~/.local/share/advance-protocol/unit-sources/tank_destroyer.glb",
@@ -106,7 +111,9 @@
     "_layout": "no turret: low front hull, a tall fixed armoured box on the rear 57 %, the gun from its front face",
     "hull_long": [-0.5, 0.251],
     "hull_lat": 0.195,
-    "ends_bottom_h": [0.116, 0.107],
+    "ends_bottom_h": [0.099, 0.107],
+    "_add_boxes": "a flat rear plate closing the bay under the box overhang, flush with the hull rear, down to the fenders; two low roof boxes (sight, vent) so the box reads as armour",
+    "add_boxes": [[-0.4985, -0.44, -0.151, 0.151, 0.1, 0.334], [-0.3, -0.24, 0.05, 0.11, 0.33, 0.388], [-0.43, -0.36, -0.12, -0.05, 0.33, 0.375]],
     "body_tris": 2800,
     "cut": {
       "lat": [0.108, 0.19],

@@ -23,7 +23,7 @@ Real names are private reference only — they never appear in code, data, UI or
 | 2 | armoured car | K806 6×6 hull (real) **+ 30 mm unmanned turret (invented fit**, of the kind offered on Korean export 6×6s) | Kite | 6.6 × ~2.7 × 2.7 (hull) | 3 axles, flat-roofed boat hull, small offset turret with short 30 mm barrel |
 | 3 | troop carrier | K808 8×8 | Drover | 7.2 × ~2.7 × 2.7 | 4 axles, long flat roof with hatches, RWS cupola, rear ramp |
 | 4 | scout car | K153 (armoured K151 4×4 with RWS) | Wren | 4.9 × 2.2 × 2.0 | bonnet + cab, roof ring with RWS, 4 wheels clear of body |
-| 5 | medium tank | **derived:** the heavy tank's hull and running gear, scaled down, with a compact turret | Basalt | ~6.5 hull × 3.3 × ~2.7 | the heavy's hull read smaller; a compact flat turret with no long bustle; a gun shorter than the heavy's |
+| 5 | medium tank | **derived:** the heavy tank's hull and running gear, scaled down, with a compact turret | Basalt | ~6.5 hull × 3.3 × ~2.7 | the turret set forward (centre ~38 % of the hull from the bow), a flat louvred engine deck over the rear half, a gun shorter than the heavy's |
 | 6 | tank destroyer | **invented:** turretless gun carriage on a tracked MBT-class chassis, a tall fixed armoured box aft (the self-propelled-howitzer layout) | Obsidian | ~6.8 hull × 3.5 × ~3.2 | no turret: low empty front hull, a big box over the rear 55–60 %, the longest gun of the set (overhang ~0.5 × hull) with a muzzle brake |
 | 7 | light tank | **derived:** the K1-type hull with a small low turret (the previous tank-destroyer model) and a short 105 mm gun | Flint | ~6.3 hull × 3.3 × ~2.1 | the smallest and lowest; a small low turret; the shortest gun (overhang ~0.17 × hull) |
 | 8 | heavy tank | K2 | Monolith | 7.5 hull (10.8 gun fwd) × 3.6 × 2.4 | boxy wedge-front turret with long bustle, sight block on roof, side skirts |
@@ -39,10 +39,10 @@ scale.
 
 **Tanks from above, by shape alone** (the owner colour is on the HP bar, never on the model).
 Light (Flint): the smallest and lowest, a small low turret, the shortest gun. Medium (Basalt):
-the heavy's hull read smaller, a compact flat turret without a bustle, a medium gun. Tank
-destroyer (Obsidian): no turret, a big box at the rear, an empty front deck, the longest gun.
-Heavy (Monolith): the largest, a broad turret with a long bustle and roof sights. Pillar 5
-depends on these four staying separable at 34 px.
+the heavy's hull smaller, the turret set forward, a flat engine deck over the rear half, a
+medium gun. Tank destroyer (Obsidian): no turret, a big box at the rear closed by a flat rear
+plate, an empty front deck, the longest gun. Heavy (Monolith): the largest, a broad turret with
+a long bustle and roof sights. Pillar 5 depends on these four staying separable at 34 px.
 
 **Second best:** USA — Stryker ICV, Stryker 30 mm / LAV-25, JLTV, M1A2 SEPv3, M10 Booker,
 M1150 ABV, M119A3, M777A2; gaps at medium tank and tank destroyer; all DoD photos are public

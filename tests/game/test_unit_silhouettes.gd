@@ -30,7 +30,7 @@ func test_tank_is_hull_plus_08m_turret_and_gun_overhangs() -> void:
 	assert_almost_eq((turret.mesh as BoxMesh).size.y * 8.0, 0.8, 0.0001)
 	assert_almost_eq(turret.position.y + (turret.mesh as BoxMesh).size.y * 0.5, 0.3, 0.0001)  # 2,4 м
 	var barrel := root.get_node("Barrel") as MeshInstance3D
-	assert_almost_eq(barrel.position.z - (barrel.mesh as BoxMesh).size.z * 0.5, -0.62, 0.0001)  # 5,0 м від центру тайла
+	assert_almost_eq(barrel.position.z - (barrel.mesh as BoxMesh).size.z * 0.5, -0.585, 0.0001)  # 4,7 м від центру тайла
 	root.free()
 
 

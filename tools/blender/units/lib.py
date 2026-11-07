@@ -46,7 +46,8 @@ def load(name):
         # scaled about the box centre, or about its front ("anchor": "front") to cut a bustle
         tc = t["long"][1] if t.get("anchor") == "front" else 0.5 * (t["long"][0] + t["long"][1])
         t["tc"] = tc
-        t["dlong"] = tc + (t["long"][1] - tc) * t["scale_long"] - t["long"][1]
+        # shift_long moves the whole turret (and its gun) along the hull, + towards the bow
+        t["dlong"] = tc + (t["long"][1] - tc) * t["scale_long"] - t["long"][1] + t.get("shift_long", 0.0)
         t["drop"] = (g["axis_h"] - t["base_h"]) * (1.0 - t["scale_h"])
         g["start_long"] += t["dlong"]
         g["axis_h"] -= t["drop"]
