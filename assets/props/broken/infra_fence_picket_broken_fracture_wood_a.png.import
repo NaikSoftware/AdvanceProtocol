@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bxbr1eytkpikx"
-path="res://.godot/imported/infra_pole_concrete_10kv_broken_fracture_metal_a.png-93c9edbe51700342fffb42b7fdf789f2.ctex"
+uid="uid://ijksmctic83w"
+path="res://.godot/imported/infra_fence_picket_broken_fracture_wood_a.png-94a62b8d00d0c8713c565db3c5e2c22d.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "3eb79fde848f03e610062932d06574b4"
+"md5": "b99a9c8172d29c2338f510a39d86c548"
 }
 
 [deps]
 
-source_file="res://assets/props/broken/infra_pole_concrete_10kv_broken_fracture_metal_a.png"
-dest_files=["res://.godot/imported/infra_pole_concrete_10kv_broken_fracture_metal_a.png-93c9edbe51700342fffb42b7fdf789f2.ctex"]
+source_file="res://assets/props/broken/infra_fence_picket_broken_fracture_wood_a.png"
+dest_files=["res://.godot/imported/infra_fence_picket_broken_fracture_wood_a.png-94a62b8d00d0c8713c565db3c5e2c22d.ctex"]
 
 [params]
 

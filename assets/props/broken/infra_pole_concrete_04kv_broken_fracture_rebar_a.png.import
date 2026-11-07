@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cl4aftcwg2jx2"
-path="res://.godot/imported/infra_pole_concrete_04kv_broken_fracture_metal_a.png-87e9acf5c794f6c81fe01ce549ac54aa.ctex"
+uid="uid://c8g2ihwomss3a"
+path="res://.godot/imported/infra_pole_concrete_04kv_broken_fracture_rebar_a.png-967c4bd3bd95ee746f53d2f00c27caa7.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "3eb79fde848f03e610062932d06574b4"
+"md5": "0a39aecea531bcb919bc001caa537ede"
 }
 
 [deps]
 
-source_file="res://assets/props/broken/infra_pole_concrete_04kv_broken_fracture_metal_a.png"
-dest_files=["res://.godot/imported/infra_pole_concrete_04kv_broken_fracture_metal_a.png-87e9acf5c794f6c81fe01ce549ac54aa.ctex"]
+source_file="res://assets/props/broken/infra_pole_concrete_04kv_broken_fracture_rebar_a.png"
+dest_files=["res://.godot/imported/infra_pole_concrete_04kv_broken_fracture_rebar_a.png-967c4bd3bd95ee746f53d2f00c27caa7.ctex"]
 
 [params]
 
