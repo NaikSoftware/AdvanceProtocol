@@ -244,16 +244,16 @@ static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: De
 		_shards(root, "Fine", rng, fine[0], 7, low, Basis(), spot, fine[1], fine[2], 2.0, 5.0, 70.0, 2.4)
 		_shards(root, "Clods", rng, Shard.CLOD, clods, low, Basis(), spot, 0.12, 0.26, 2.0, 5.0, 70.0, 2.4)
 		# 3–5 малих низьких клуб біля основи підскакують і висять, поки опора падає (до 1,8 с).
-		_dust_puffs(root, rng, 5, Vector3.ZERO, Basis(), spot * 2.0, 0.7, 1.6, 2.8, colours, 0.9, 1.3, 30.0, 1.0, 0.25, 0.3, wet)
+		_dust_puffs(root, rng, 7, Vector3.ZERO, Basis(), spot * 2.0, 0.7, 1.6, 2.8, colours, 0.9, 1.3, 30.0, 1.0, 0.2, 0.3, wet)
 	else:
 		var box := Vector3(half_m, 0.1, 0.3) / 8.0
 		# Не далі ~3 м: віяло 70° від вертикалі на 4,5 м/с.
 		_shards(root, "Fine", rng, fine[0], 10, low, basis, box, fine[1], fine[2], 2.0, 4.5, 70.0, 2.4)
 		_shards(root, "Clods", rng, Shard.CLOD, clods + 2, low, basis, box, 0.12, 0.26, 2.0, 4.5, 70.0, 2.4)
-		# Полотно, що впало, виштовхує з-під себе повітря: 7 рідких клуб уздовж прольоту (щільніше за
-		# пів діаметра — одна маса, а не намисто) підскакують і далі ще здіймаються сталою тягою —
-		# 0,6–1 м за секунду — та зносяться на ~0,5 м.
-		_dust_puffs(root, rng, 7, Vector3.ZERO, basis, box, 0.8, 1.8, 1.8, colours, 0.4, 0.7, 30.0, 0.6, 0.28, 0.9, wet)
+		# Полотно, що впало, виштовхує з-під себе повітря: 14 малих рідких клуб уздовж прольоту
+		# (щільніше за пів діаметра — одна маса, а не дві-три кулі) підскакують і далі ще здіймаються
+		# сталою тягою — 0,6–1 м за секунду — та зносяться на ~0,5 м.
+		_dust_puffs(root, rng, 14, Vector3.ZERO, basis, box * Vector3(1.3, 1.0, 1.0), 0.7, 1.0, 1.8, colours, 0.4, 0.7, 30.0, 0.6, 0.18, 0.9, wet)
 	if live_wire:
 		var up: Vector3 = top - at
 		_arc(root, rng, up, 3, 1.1)
@@ -289,10 +289,10 @@ static func spawn_topple_land(parent: Node, a: Vector3, b: Vector3, debris: Debr
 	if is_pole:
 		_shards(root, "Fine", rng, fine[0], clampi(roundi(len_m * 1.2), 6, 14), low, basis, line, fine[1], fine[2], 2.0, 5.0, 70.0, 2.4)
 		_shards(root, "Clods", rng, Shard.CLOD, clampi(roundi(len_m * 0.25) + clods, 3, 10), low, basis, line, 0.12, 0.26, 2.0, 5.0, 70.0, 2.4)
-		_dust_puffs(root, rng, clampi(roundi(len_m * 1.6), 12, 16), mid, basis, line, 1.4, 3.4, 2.6, colours, 1.2, 1.8, 25.0, 1.0, 0.25 + 0.05 * powder, 0.2, wet)
+		_dust_puffs(root, rng, clampi(roundi(len_m * 2.0), 14, 20), mid, basis, line, 1.4, 3.4, 2.6, colours, 1.2, 1.8, 25.0, 1.0, 0.2 + 0.04 * powder, 0.2, wet)
 	else:
 		_shards(root, "Clods", rng, Shard.CLOD, clods, low, basis, line, 0.12, 0.22, 1.0, 3.0, 60.0, 2.2)
-		_dust_puffs(root, rng, 6, mid, basis, line, 0.7, 1.5, 1.8, colours, 0.5, 0.8, 35.0, 0.8, 0.2, 0.3, wet)
+		_dust_puffs(root, rng, 10, mid, basis, line, 0.7, 1.5, 1.8, colours, 0.5, 0.8, 35.0, 0.8, 0.14, 0.3, wet)
 	# Уламки падають на площину землі посередині відрізка (на схилі — компроміс двох кінців).
 	var floor_box := GPUParticlesCollisionBox3D.new()
 	floor_box.name = "Ground"
@@ -363,8 +363,8 @@ static func _shards(root: Node3D, node_name: String, rng: RandomNumberGenerator,
 
 ## Пил повалення: `amount` клуб атласу ґрунту `d_min`–`d_max` м в одній системі частинок — один
 ## виклик малювання на всю хмару — з тим самим виглядом, що клуба ґрунту влучання (`_SETTLE_CODE`).
-## Клуби стоять рівномірно вздовж `extents` (тайли, локально до `basis`) щільніше за пів діаметра й
-## кожна рідка (`peak` ~0,25): перекриваючись, вони складаються в одну масу, а не в намисто. Усі
+## Клуби стоять уздовж `extents` (тайли, локально до `basis`) щільніше за пів діаметра й кожна
+## рідка (`peak` ~0,15–0,25): перекриваючись, вони складаються в одну масу, а не в намисто. Усі
 ## народжуються разом, летять угору віялом `spread`° на `v_min`–`v_max` м/с і гальмують на `damp` м/с²,
 ## а ще здіймаються сталою тягою `lift` м/с і зносяться вбік на ~0,4 м/с (за вітром, у штиль — у свій
 ## бік з хешу місця); ростуть удвічі й розчиняються до нуля на кінці життя `life`. Відстані між
@@ -408,8 +408,9 @@ static func _dust_puffs(root: Node3D, rng: RandomNumberGenerator, amount: int, a
 	em.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
 	em.transform = Transform3D(basis, at)
 	var pm := ParticleProcessMaterial.new()
-	# Клуби рівномірно вздовж відрізка (з тремтінням), а не навмання: випадкові збивались у
-	# грона з дірками між ними, і пил читався намистом.
+	# Точки рівномірно вздовж відрізка (з тремтінням), але кожна частинка бере точку навмання
+	# (так працює EMISSION_SHAPE_POINTS), тож дві-три можуть сісти поряд, а між ними лишиться дірка.
+	# Рівну масу дає кількість: багато рідких клуб, а не кілька густих — інакше вони збиваються в кулі.
 	var pts := Image.create(amount, 1, false, Image.FORMAT_RGBF)
 	for i in amount:
 		var u: float = (float(i) + 0.5 + rng.randf_range(-0.4, 0.4)) / float(amount) * 2.0 - 1.0
@@ -460,8 +461,10 @@ static func _dust_puffs(root: Node3D, rng: RandomNumberGenerator, amount: int, a
 	var sct := CurveTexture.new()
 	sct.curve = sc
 	pm.scale_curve = sct
-	pm.angle_min = -20.0
-	pm.angle_max = 20.0
+	# Кожна клуба повернута по-своєму (до ±50°): однаковий «вінець» атласу в усіх клуб складався в
+	# дві однакові кулі над полотном.
+	pm.angle_min = -50.0
+	pm.angle_max = 50.0
 	var mix := Gradient.new()
 	mix.colors = PackedColorArray(colours)
 	var mix_t := GradientTexture1D.new()
@@ -1375,7 +1378,7 @@ void vertex() {
 	v_seed = fract(float(INSTANCE_ID) * 0.618034 + fract(MODEL_MATRIX[3].x * 3.7));
 	v_life = INSTANCE_CUSTOM.y;
 	// Як BattleFx.smoke_frame: різко до повного об'єму (кадр 16), далі повільніше до кінця.
-	float f0 = frames.x + floor(v_seed * 4.0);
+	float f0 = frames.x + floor(v_seed * 9.0);
 	float u = clamp(v_life / full, 0.0, 1.0);
 	v_frame = v_life < full ? mix(f0, 16.0, 1.0 - (1.0 - u) * (1.0 - u)) : mix(16.0, frames.y, pow((v_life - full) / (1.0 - full), 0.75));
 	v_depth = min(s * 0.2, 1.5 / 8.0);
