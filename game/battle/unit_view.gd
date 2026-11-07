@@ -72,6 +72,11 @@ const _SHOT_PUNCH_DOWN: float = 0.13
 ## R14: хід чекає на гравця, не навпаки — поворот твінується, але лишається
 ## коротким, щоб не виглядав як затримка вводу.
 const FACE_TURN_DURATION: float = 0.15
+## Радіус дуги, якою юніт проходить поворот маршруту, у тайлах. 1 тайл = 8 м — у межах
+## заокруглень доріг (RoadCourse, 6–14 м), тож техніка на дорозі йде її вигином.
+const TURN_RADIUS: float = 1.0
+## Хорд на чверть кола: ніс інтерполюється між ними, хорди лише тримають позицію на дузі.
+const _ARC_SEGMENTS: int = 8
 
 ## Абстрактні кольори гравців-плейсхолдерів (§2 — жодного реального прапора
 ## чи армії). Індекс — Unit.owner. Колір іде лише на корпус (Hull), не на
@@ -234,109 +239,193 @@ static func _put_on_unit_layer(node: Node) -> void:
 		_put_on_unit_layer(child)
 
 
-## Баг-звіт (виправлення 3): «вибираю танк, вказую їхати вперед — він їде
-## спиною». Причина була саме тут — попередня версія тягнула поворот і рух
-## ПАРАЛЕЛЬНО в тому самому кроці tween'а: юніт в'їжджав носом у СТАРУ
-## сторону в новий тайл і лише дорогою довертався в потрібну. На 90° це
-## майже непомітно, на 180° виглядає рівно як задній хід — звідси й «іноді
-## розвертається, іноді ні» в скарзі. Реальна машина так не їздить: вона
-## довертається НА МІСЦІ, і лише тоді рушає. Тому нижче поворот і рух —
-## окремі, ПОСЛІДОВНІ сходинки tween'а (set_parallel(false) між ними), а не
-## паралельна група.
-##
 ## Твін по шляху, повертає tween.finished. AP і туман сюди не заглядають —
 ## контролер вирішує, коли рухати, view лише показує вже прийняте рішення.
 ##
-## Юніт довертається на кожному кроці, де кут справді змінюється (рішення
-## продукту, §бриф): напрямок кроку йде з Board.facing_towards (чиста
-## функція core/) від тайла, з якого юніт справді стартує цей крок, а не з
-## event.path[0] — walked у події не несе стартовий тайл (лише пройдені),
-## тож єдине надійне джерело — власна поточна position вузла. Коли delta
-## кута точно нульова (пряма ділянка маршруту — попередній крок уже дивився
-## туди ж), сходинка повороту взагалі не додається: жодної паузи там, де
-## гравець і так їде прямо.
+## Юніт їде кривою, а не ламаною через центри клітинок: прямі ділянки, а на кожному
+## повороті маршруту — дуга радіуса TURN_RADIUS, дотична до обох відрізків. Так машина
+## на дорозі повторює її заокруглення, а не стає й не крутиться на перехресті. Ніс
+## дивиться вздовж дотичної. Дуга лишається в клітинках маршруту: вона огинає центр
+## діагональної клітинки на відстані радіуса, тож у сусідню клітинку не заходить.
+## Сходинку з одиничних кроків юніт проходить навскіс, однією прямою.
 ##
-## final_facing — останнє слово: фейсинг, який вирішив core/ (напрямок
-## останнього пройденого кроку), а не здогад вигляду з path. -1 (типово)
-## означає «немає окремого фінального facing» — орієнтація лишається такою,
-## якою її поставив останній крок шляху.
+## На місці юніт довертається лише перед стартом, коли перший крок іде не туди, куди він
+## дивиться: розворот на 180° дугою — це задній хід або петля по чужих клітинках.
 ##
-## on_step(i) — у мить, коли юніт доїхав до path[i]: те, що core/ вирішило на цьому
-## кроці (знахідка укриття), показується тут, а не після всього шляху. Колбек живе в
-## цьому ж твіні, тож точний з поворотами й гине разом із вузлом.
+## final_facing — останнє слово: фейсинг, який вирішив core/, а не здогад вигляду з path.
+## Якщо він інший, ніж напрямок останнього кроку, юніт довертається на місці в кінці.
+## -1 (типово) — орієнтація лишається такою, якою її поставив останній крок.
+##
+## on_step(i) — у мить, коли юніт доїхав до path[i] (на повороті — до точки кривої,
+## найближчої до центру клітинки): те, що core/ вирішило на цьому кроці (знахідка
+## укриття), показується тут, а не після всього шляху. Колбек живе в цьому ж твіні.
 func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: int = -1,
 		on_step: Callable = Callable()) -> Signal:
-	# Той самий власник rotation_degrees.y, що й face()/_set_facing_instant()
-	# (_face_tween): цей твін теж крутить її (послідовно з рухом, нижче), тож
-	# перш ніж почати свій, він убиває будь-який живий твін від попереднього
-	# face() — інакше «доворот на місці, і одразу рух» лишає два твіни на
-	# тій самій властивості. І сам зберігається в _face_tween ПІСЛЯ створення,
-	# щоб наступний face()/_set_facing_instant() міг убити вже ЙОГО, а не
-	# лишити рух і новий поворот змагатись за той самий кут (рев'ю, дрібний
-	# блокер — раніше цей твін ніде не зберігався взагалі).
+	# Той самий власник rotation_degrees.y, що й face(): живий твін повороту вбиваємо, а
+	# цей зберігаємо, щоб наступний face() убив уже його.
 	if _face_tween != null and _face_tween.is_valid():
 		_face_tween.kill()
 	var tween: Tween = create_tween()
 	_face_tween = tween
 	set_process(true)
 	if path.is_empty():
-		# Твін без жодного кроку міг би ніколи не подати finished — гарантований
-		# нульовий інтервал забезпечує, що сигнал таки настане.
+		# Твін без жодного кроку міг би ніколи не подати finished.
 		tween.tween_interval(0.0)
 		return tween.finished
 
-	var current_cell: Vector2i = IsoCameraRig.world_to_cell(position)
-	var from_pos: Vector3 = position
-	# Твін ще не виконався в момент побудови графа нижче — rotation_degrees.y
-	# лишиться незмінним аж до реального програвання, тож цю величину
-	# доводиться передбачати самим, а не перечитувати властивість між кроками
-	# (той самий прийом найкоротшої дельти, що й у face()).
-	var predicted_degrees: float = rotation_degrees.y
+	var start_cell: Vector2i = IsoCameraRig.world_to_cell(position)
+	var pts: Array[Vector2] = [Vector2(position.x, position.z)]
+	for cell: Vector2i in path:
+		var w: Vector3 = IsoCameraRig.cell_to_world(cell)
+		pts.append(Vector2(w.x, w.z))
+	var n: int = pts.size()
+	# Опорна ламана. Самотній кут маршруту лишається вершиною. Кут, сусідній крок якого —
+	# теж кут (сходинка, зсув на одну смугу), зрізаний між серединами ребер: сходинка
+	# стає однією діагоналлю, а не змійкою дуг, що смикала б ніс щопівтайла. Діагональ
+	# через середини ребер не торкається кутів клітинок, тож лишається в маршруті.
+	# Розвороту на 180° посеред шляху не буває: шлях — найкоротший (Pathing.path_to).
+	var corner := PackedByteArray()
+	corner.resize(n + 1)
+	for k in range(1, n - 1):
+		if absf((pts[k] - pts[k - 1]).normalized().dot((pts[k + 1] - pts[k]).normalized())) < 0.01:
+			corner[k] = 1
+	var q := PackedVector2Array([pts[0]])
+	for k in range(1, n):
+		if corner[k] == 1 and (corner[k - 1] == 1 or corner[k + 1] == 1):
+			_push(q, pts[k].lerp(pts[k - 1], 0.5))
+			_push(q, pts[k].lerp(pts[k + 1], 0.5))
+		else:
+			_push(q, pts[k])
+
+	# Кожен злам ламаної — дуга радіуса TURN_RADIUS, дотична до обох відрізків; відрізок
+	# між двома дугами ділиться навпіл, і на тісному місці радіус менший.
+	var m: int = q.size()
+	var turn := PackedFloat32Array()
+	turn.resize(m)
+	var tl := PackedFloat32Array()
+	tl.resize(m)
+	for k in range(1, m - 1):
+		turn[k] = (q[k] - q[k - 1]).angle_to(q[k + 1] - q[k])
+		var t: float = TURN_RADIUS * tan(absf(turn[k]) * 0.5)
+		t = minf(t, q[k].distance_to(q[k - 1]) * (0.5 if k > 1 else 1.0))
+		tl[k] = minf(t, q[k].distance_to(q[k + 1]) * (0.5 if k < m - 2 else 1.0))
+
+	# Дотична в кожній вершині — точна: на прямій це її напрям, на дузі — дотична кола.
+	# Ніс між вершинами інтерполюється, тож не скаче сходинками по хордах.
+	var line := PackedVector2Array([q[0]])
+	var acc := PackedFloat32Array([0.0])
+	var tangents := PackedVector2Array([(q[1] - q[0]).normalized()])
+	for k in range(1, m):
+		var d_in: Vector2 = (q[k] - q[k - 1]).normalized()
+		var entry: Vector2 = q[k] - d_in * tl[k]
+		_extend(line, acc, tangents, entry, d_in)
+		if tl[k] <= 0.0:
+			continue
+		var r: float = tl[k] / tan(absf(turn[k]) * 0.5)
+		var centre: Vector2 = entry + d_in.rotated(signf(turn[k]) * PI * 0.5) * r
+		var segs: int = maxi(1, ceili(_ARC_SEGMENTS * absf(turn[k]) / (PI * 0.5)))
+		for j in range(1, segs + 1):
+			var a: float = turn[k] * float(j) / segs
+			_extend(line, acc, tangents, centre + (entry - centre).rotated(a), d_in.rotated(a))
+
+	# Клітинка шляху «досягнута» в найближчій до її центру точці кривої.
+	var stations := PackedFloat32Array()
+	var seg: int = 1
 	for i in path.size():
-		var cell: Vector2i = path[i]
-		var is_last_step: bool = i == path.size() - 1
-		var step_facing: int = Board.facing_towards(current_cell, cell)
-		var target_facing: int = final_facing if (is_last_step and final_facing >= 0) else step_facing
-		var target_degrees: float = _degrees_for_facing(target_facing)
-		var delta: float = fposmod(target_degrees - predicted_degrees + 180.0, 360.0) - 180.0
+		var c: Vector2 = pts[i + 1]
+		var best: float = INF
+		var best_s: float = 0.0
+		var best_seg: int = seg
+		for j in range(seg, line.size()):
+			var ab: Vector2 = line[j] - line[j - 1]
+			var u: float = clampf((c - line[j - 1]).dot(ab) / ab.length_squared(), 0.0, 1.0)
+			var dist: float = c.distance_squared_to(line[j - 1] + ab * u)
+			if dist < best - 1e-9:
+				best = dist
+				best_s = acc[j - 1] + (acc[j] - acc[j - 1]) * u
+				best_seg = j
+		seg = best_seg
+		stations.append(maxf(best_s, stations[i - 1] if i > 0 else 0.0))
+	stations[stations.size() - 1] = acc[acc.size() - 1]
 
-		# set_parallel(false) перед КОЖНИМ tween_property нижче — кожен виклик
-		# сам ставить кордон нової послідовної сходинки (а не лише перший після
-		# parallel(true)), тож поворот і рух ніколи не потрапляють в одну й ту
-		# саму паралельну групу, навіть коли якийсь крок пропускає поворот.
-		if delta != 0.0:
-			# Доворот НА МІСЦІ, перш ніж юніт зрушить у новий тайл — це і є
-			# виправлення бага: раніше цей tween_property йшов паралельно з
-			# рухом нижче (set_parallel(true)) і юніт в'їжджав носом у стару
-			# сторону. FACE_TURN_DURATION, не duration_per_step: той самий
-			# короткий поворот, що й у face(), — крок лишається читабельним, а
-			# хід не починає відчуватись повільним.
-			tween.set_parallel(false)
-			tween.tween_property(self, "rotation_degrees:y", predicted_degrees + delta, FACE_TURN_DURATION)
-		predicted_degrees += delta
+	# Твін ще не виконався в момент побудови графа — кут доводиться передбачати, а не
+	# перечитувати властивість (той самий прийом найкоротшої дельти, що й у face()).
+	var predicted: float = rotation_degrees.y
+	var start_delta: float = wrapf(_yaw_of(tangents[0]) - predicted, -180.0, 180.0)
+	if absf(start_delta) > 0.01:
+		tween.tween_property(self, "rotation_degrees:y", predicted + start_delta, FACE_TURN_DURATION)
+	predicted += start_delta
+	for t: Vector2 in tangents:
+		predicted += wrapf(_yaw_of(t) - predicted, -180.0, 180.0)
 
-		tween.set_parallel(false)
-		var to_pos: Vector3 = IsoCameraRig.cell_to_world(cell)
-		tween.tween_method(_walk.bind(from_pos, to_pos), 0.0, 1.0, duration_per_step)
+	var follow: Callable = _follow.bind(line, acc, tangents)
+	var from_s: float = 0.0
+	for i in path.size():
+		# Швидкість — тайл за duration_per_step: дуга коротша за ламану, і крок через неї теж.
+		tween.tween_method(follow, from_s, stations[i], duration_per_step * (stations[i] - from_s))
 		if on_step.is_valid():
 			tween.tween_callback(on_step.bind(i))
-		from_pos = to_pos
+		from_s = stations[i]
 
-		current_cell = cell
-		facing = target_facing
+	var before_last: Vector2i = path[path.size() - 2] if path.size() > 1 else start_cell
+	facing = Board.facing_towards(before_last, path[path.size() - 1])
+	if final_facing >= 0 and final_facing != facing:
+		var end_delta: float = wrapf(_degrees_for_facing(final_facing) - predicted, -180.0, 180.0)
+		tween.tween_property(self, "rotation_degrees:y", predicted + end_delta, FACE_TURN_DURATION)
+		facing = final_facing
 	return tween.finished
 
 
-## Крок руху між клітинками: XZ — лінійно, висота й нахил — з рельєфу під юнітом (а не пряма
-## між центрами клітинок, що протикала б горб).
-func _walk(t: float, from: Vector3, to: Vector3) -> void:
-	var at: Vector3 = from.lerp(to, t)
+## Додає вершину до опорної ламаної: збіг із попередньою відкидає, а продовження того
+## самого відрізка зливає з ним, щоб дуги ставали лише на справжніх зламах.
+static func _push(q: PackedVector2Array, p: Vector2) -> void:
+	var last: int = q.size() - 1
+	if q[last].distance_to(p) < 1e-4:
+		return
+	if last > 0 and absf((q[last] - q[last - 1]).normalized().cross((p - q[last]).normalized())) < 1e-4 \
+			and (q[last] - q[last - 1]).dot(p - q[last]) > 0.0:
+		q[last] = p
+		return
+	q.append(p)
+
+
+## Додає вершину до кривої руху разом із довжиною шляху до неї й дотичною в ній. Вершина,
+## що майже збігається з попередньою, заміняє її: кінець дуги лягає точно в центр клітинки,
+## а не за похибку обертання від нього, і нульових відрізків без напрямку не буває.
+static func _extend(line: PackedVector2Array, acc: PackedFloat32Array, tangents: PackedVector2Array,
+		p: Vector2, tangent: Vector2) -> void:
+	var last: int = line.size() - 1
+	if line[last].distance_to(p) < 1e-4:
+		if last > 0:
+			line[last] = p
+			acc[last] = acc[last - 1] + line[last - 1].distance_to(p)
+			tangents[last] = tangent
+		return
+	line.append(p)
+	acc.append(acc[last] + line[last].distance_to(p))
+	tangents.append(tangent)
+
+
+## Кут вузла для напрямку в площині XZ (x, z): ніс — це -Z, північ — кут 0.
+static func _yaw_of(d: Vector2) -> float:
+	return rad_to_deg(atan2(-d.x, -d.y))
+
+
+## Точка кривої на відстані s від старту: XZ — з кривої, висота й нахил — з рельєфу під
+## юнітом (а не пряма між центрами клітинок, що протикала б горб).
+func _follow(s: float, line: PackedVector2Array, acc: PackedFloat32Array, tangents: PackedVector2Array) -> void:
+	var last: int = line.size() - 1
+	var i: int = clampi(acc.bsearch(s), 1, last)
+	var t: float = clampf((s - acc[i - 1]) / (acc[i] - acc[i - 1]), 0.0, 1.0)
+	var p: Vector2 = line[last] if s >= acc[last] else line[i - 1].lerp(line[i], t)
+	var d: Vector2 = tangents[i - 1].lerp(tangents[i], t)
+	rotation_degrees.y += wrapf(_yaw_of(d) - rotation_degrees.y, -180.0, 180.0)
 	if _has_model:
 		# Лише в плані: висота рельєфу під юнітом не є шляхом коліс.
-		_travel += Vector2(at.x - position.x, at.z - position.z).length()
+		_travel += Vector2(p.x - position.x, p.y - position.z).length()
 		_travel_by_unit[_unit_id] = _travel
 		(_silhouette.get_node("Hull") as GeometryInstance3D).set_instance_shader_parameter("travel", _travel)
-	_pose(at)
+	_pose(Vector3(p.x, 0.0, p.y))
 
 
 ## Твін повороту крутить лише кут вузла; нахил залежить від нього, тож іде слідом. Кадр
