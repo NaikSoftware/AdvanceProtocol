@@ -7,6 +7,8 @@ extends Node
 ##   $GODOT --path . res://tools/unit_shot.tscn -- <out_dir> <map> <type_id> [tag]
 ## Шостий аргумент pair=<type_b>:<facing> ставить type_id і type_b на сусідні тайли носом до носа
 ## (facing 0 — уздовж осі, 1 — по діагоналі) і знімає лише два зуми: чи не залазить ствол у сусіда.
+## Шостий аргумент lineup ставить чотири танки справжніми юнітами трьох гравців (смуги HP у кольорі
+## власника) і знімає один кадр на найближчому зумі; type_id тоді ігнорується.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 60
@@ -29,6 +31,9 @@ func _ready() -> void:
 	var screen: BattleScreen = (load("res://game/battle/battle_screen.tscn") as PackedScene).instantiate()
 	add_child(screen)
 	var map := load("res://maps/%s.tres" % a[1]) as MapData
+	if a.size() > 5 and a[5] == "lineup":
+		await _lineup(screen, map, out, tag)
+		return
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
 	if a.size() > 5 and a[5].begins_with("pair="):
@@ -133,3 +138,29 @@ func _field_near_centre(map: MapData) -> Vector2i:
 				best_d = dd
 				best = Vector2i(x, y)
 	return best
+
+
+## Важкий і легкий — гравець 1, середній — 2, винищувач — 3; гравець 1 активний і бачить усіх поруч.
+func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	# копія без шляху взяла б типовий вигляд бою, а не погоду й сезон цієї карти
+	m.take_over_path(map.resource_path)
+	var c := _field_near_centre(m)
+	m.spawns = [
+		{"type_id": 8, "owner": 0, "pos": c + Vector2i(-1, 0), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": c, "facing": 0},
+		{"type_id": 6, "owner": 2, "pos": c + Vector2i(1, 0), "facing": 0},
+		{"type_id": 7, "owner": 0, "pos": c + Vector2i(1, 1), "facing": 0},
+	]
+	screen.setup(m, 3, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c + Vector2i(0, 0))
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	for f in SETTLE_FRAMES * 2:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
+	print("UNIT lineup at %s" % c)
+	get_tree().quit()

@@ -5,7 +5,7 @@ const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
 
 const _METRES := {
 	2: Vector3(2.6, 2.4, 6.0), 3: Vector3(3.0, 2.6, 7.0), 4: Vector3(2.4, 2.0, 5.0),
-	5: Vector3(3.44, 1.6, 6.72), 6: Vector3(3.5, 1.5, 7.5), 7: Vector3(3.3, 1.5, 6.28),
+	5: Vector3(3.44, 1.6, 6.72), 6: Vector3(3.5, 1.5, 7.5), 7: Vector3(2.94, 1.5, 5.6),
 	8: Vector3(3.8, 2.0, 7.2), 11: Vector3(3.4, 2.8, 7.0),
 }
 
@@ -30,7 +30,7 @@ func test_tank_is_hull_plus_08m_turret_and_gun_overhangs() -> void:
 	assert_almost_eq((turret.mesh as BoxMesh).size.y * 8.0, 0.8, 0.0001)
 	assert_almost_eq(turret.position.y + (turret.mesh as BoxMesh).size.y * 0.5, 0.3, 0.0001)  # 2,4 м
 	var barrel := root.get_node("Barrel") as MeshInstance3D
-	assert_almost_eq(barrel.position.z - (barrel.mesh as BoxMesh).size.z * 0.5, -0.585, 0.0001)  # 4,7 м від центру тайла
+	assert_almost_eq(barrel.position.z - (barrel.mesh as BoxMesh).size.z * 0.5, -0.625, 0.0001)  # 5,0 м від центру тайла
 	root.free()
 
 
