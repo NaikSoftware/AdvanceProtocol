@@ -41,10 +41,11 @@ const TONE_FREQ: float = 1.0 / 2.5
 const TONE_VAR: float = 0.03
 ## У скільки разів крона ширша за масштаб висоти: зімкнений ліс, ≥85 % закрито згори.
 const WIDE: float = 1.45
-## Біля просіки: крони тоншають до неї поступово (`LANE_THIN`) і не заходять ближче за
-## `LANE_MARGIN`; обабіч — `LANE_SHRUBS` кущів на тайл (0,3–1,2 тайла від проламу).
+## Біля просіки: крони тоншають до неї поступово (`LANE_THIN`) і не нависають над нею; обабіч —
+## `LANE_SHRUBS` кущів на тайл (0,3–1,2 тайла від проламу). Танк трощить лише свою клітинку: поле
+## в 0,45 тайла за краєм крони вирубувало й сусідні клітинки, і просіка в одну клітинку ставала
+## галявиною в три. Крона, що нависала б над проламом, з камери накривала танк у ньому.
 const LANE_THIN: float = 0.15
-const LANE_MARGIN: float = 0.45
 const LANE_SHRUBS: float = 4.0
 ## Ближче за `LANE_NEAR` тайла до проламу крона вужча й нижча (×0,7): широка з полем до
 ## просіки не вміщалась у сусідню клітинку, і та лишалась порожньою.
@@ -303,7 +304,7 @@ func _pick(weights: Dictionary, p: Vector2, rng: RandomNumberGenerator) -> Strin
 
 
 ## Масштаб s (по висоті); дерева ширші за свою висоту в WIDE разів, щоб ліс зімкнувся.
-## Крона з полем LANE_MARGIN не заходить на пролам.
+## Крона не нависає над проламом.
 func _place(name: String, p: Vector2, s: float, rng: RandomNumberGenerator, fixed: bool = false) -> void:
 	# Ліс стоїть лише на клітинках лісу: край рваний (шум глибини), але не заходить у поле, де
 	# дерево стояло б на чужій клітинці й плутало б, де ліс за правилами.
@@ -323,7 +324,7 @@ func _place(name: String, p: Vector2, s: float, rng: RandomNumberGenerator, fixe
 	# AABB меша — центри карток; пучки виходять за нього ще на ~1,2 м угору й до 2 м убік.
 	var r: float = float(_lib[name]["half"]) * s * w + 0.25
 	# Нічого в коридорі просіки; далі дерева рідшають поступово, а не обриваються по межі клітинки.
-	var gap: float = bd - (r + LANE_MARGIN)
+	var gap: float = bd - r
 	if gap < 0.0 or rng.randf() > smoothstep(0.0, LANE_THIN, gap):
 		return
 	var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s * w, s, s * w)), Vector3(p.x, 0.0, p.y))
