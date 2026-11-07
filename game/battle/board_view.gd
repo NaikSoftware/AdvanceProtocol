@@ -529,6 +529,12 @@ func set_forest_zoom(zoom: float) -> void:
 		_forest.set_zoom(zoom)
 
 
+## Позиція камери: будівлі розчиняються, лише коли справді стоять між нею та юнітом.
+func set_view_eye(eye: Vector3) -> void:
+	if _props != null:
+		_props.set_eye(eye)
+
+
 ## Клітинки з розчавленими пропсами, уже обрізані розвіданим глядача (§3.5).
 func set_crushed_cells(cells: Array[Vector2i]) -> void:
 	_props.set_crushed(cells)
