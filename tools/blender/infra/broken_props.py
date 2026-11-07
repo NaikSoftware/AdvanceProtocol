@@ -685,18 +685,29 @@ def card_pieces(card, kind, rng):
     elif kind == "slat":
         for p in panels():
             ps.remove(p)
-            ps += apply([p], (0, 0, 0.65 * M), (tilted(rng, 0.1), 0, 1))
+            b0, b1 = bbox(p[0])
+            cx = (b0.x + b1.x) / 2
+            t = rng.choice((-1, 1)) * rng.uniform(0.4, 0.7)       # косий розрив дощок на випадковій висоті, не ряд клавіш
+            parts = apply([p], (cx, 0, rng.uniform(0.3, 1.2) * M), (t, 0, 1))
+            for q in parts:
+                if wide(q) > 1.2 and rng.random() < 0.5:
+                    ps_split = split_vertical(q, 0.5, 0.5)
+                    ps += ps_split
+                else:
+                    ps.append(q)
     elif kind == "brickbars":
         for p in panels():
             ps.remove(p)
-            ps += apply([p], (0, 0, 0.53 * M), (0, 0, 1))
+            b0, b1 = bbox(p[0])
+            ps += apply([p], ((b0.x + b1.x) / 2, 0, 0.53 * M), (rng.choice((-1, 1)) * 0.15, 0, 1))
         for p in ps:
             p[1] = "plinth" if p[1] != "post" and com(p[0]).z < 0.53 * M else p[1]
         plinth = [p for p in ps if p[1] == "plinth"]
         for j, p in enumerate(plinth):
             ps.remove(p)
             if j % 2 == 0:                                   # ступінчастий різ: нижній ряд і верхній — різні x
-                for q in apply([p], (0, 0, 0.27 * M), (0, 0, 1)):
+                b0, b1 = bbox(p[0])
+                for q in apply([p], ((b0.x + b1.x) / 2, 0, 0.27 * M), (rng.choice((-1, 1)) * 0.15, 0, 1)):
                     q[1] = "plinth"
                     ps += [q]
             else:
