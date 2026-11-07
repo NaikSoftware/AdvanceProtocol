@@ -631,6 +631,11 @@ def crop_atlas(mat, k):
             px = px.reshape(h, w, 4)
             blk = px[(ATLAS_N - 1 - k) * ATLAS_HB:(ATLAS_N - k) * ATLAS_HB]
             new = bpy.data.images.new(img.name + f"_{YARD_KINDS[k]}", w, ATLAS_HB, alpha=True)
+            # pixels читаються лінійними (Blender розкодовує sRGB), а в нове зображення sRGB пишуться як є: без зворотного
+            # кодування смуга темніла вдруге
+            blk = blk.copy()
+            c = blk[..., :3]
+            blk[..., :3] = np.where(c <= 0.0031308, c * 12.92, 1.055 * np.power(np.clip(c, 0, None), 1 / 2.4) - 0.055)
             new.pixels.foreach_set(blk.ravel())
             new.alpha_mode = img.alpha_mode
             new.pack()
