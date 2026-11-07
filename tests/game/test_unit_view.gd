@@ -495,11 +495,14 @@ func test_move_along_takes_a_staircase_as_one_diagonal() -> void:
 
 
 ## Крива руху не зачіпає клітинок поза маршрутом — ні на одиночному повороті, ні на
-## сходинці, де дуги ділять одиничні відрізки навпіл; а ніс ніколи не скаче.
+## сходинці, ні на зсуві на одну смугу, ні на повороті одразу після сходинки; ніс ніколи
+## не скаче, а on_step(i) приходить, коли юніт саме в клітинці path[i], і по порядку.
 func test_move_along_curve_stays_on_route_cells() -> void:
 	var routes: Array = [
 		[Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 2)],
 		[Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(2, 2), Vector2i(3, 2)],
+		[Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1), Vector2i(3, 1), Vector2i(4, 1)],
+		[Vector2i(1, 0), Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1), Vector2i(3, 2), Vector2i(3, 3)],
 	]
 	for route: Array in routes:
 		var path: Array[Vector2i] = []
@@ -507,7 +510,9 @@ func test_move_along_curve_stays_on_route_cells() -> void:
 		view.bind(_unit(5, 0, Vector2i(0, 0), 2))
 		var allowed: Array[Vector2i] = [Vector2i(0, 0)]
 		allowed.append_array(path)
-		var tween: Tween = view.move_along(path, 0.1).get_object()
+		var reached: Array[Vector2i] = []
+		var record := func(_i: int) -> void: reached.append(IsoCameraRig.world_to_cell(view.position))
+		var tween: Tween = view.move_along(path, 0.1, -1, record).get_object()
 		var yaw: float = view.rotation_degrees.y
 		while tween.is_running():
 			tween.custom_step(0.005)
@@ -515,6 +520,7 @@ func test_move_along_curve_stays_on_route_cells() -> void:
 			assert_lt(absf(view.rotation_degrees.y - yaw), 10.0, "%s: ніс повертає плавно" % [route])
 			yaw = view.rotation_degrees.y
 		assert_eq(view.position, IsoCameraRig.cell_to_world(path[path.size() - 1]))
+		assert_eq(reached, path, "%s: on_step(i) — у клітинці path[i], по порядку" % [route])
 
 
 ## Баг-звіт: «на старті вибираю танк, вказую їхати вперед — він їде спиною».
