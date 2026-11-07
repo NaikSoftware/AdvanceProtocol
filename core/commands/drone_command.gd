@@ -39,7 +39,7 @@ static func check_strike(state: BattleState, a: Unit, t: Unit) -> String:
 	# землею ця перевірка інертна (§3.9 у docs/rules/vision-and-fog.md) і кусає лише
 	# там, де ніхто з цього боку ще не був. Лишається саме тому: дрон не має бити
 	# в тайл, про який власник не знає нічого.
-	if not state.vision[a.owner].is_seen(t.pos):
+	if not state.can_see_unit(a.owner, t):
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 

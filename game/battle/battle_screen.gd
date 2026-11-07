@@ -94,6 +94,8 @@ var _event_player: EventPlayer = null
 ## `state.active_player` уже наступний: уламки з пакета передачі ходу звіряються з
 ## розвіданим того, хто дивиться, а не того, хто от-от сяде.
 var _viewer: int = 0
+## Клітинки, над якими зараз розчинено дахи (юніти на дошці).
+var _shown_cells: Array[Vector2i] = []
 ## Шрами бою на землі; маска — розвідане того, хто дивиться.
 var _scars: ScarMap = null
 ## Шейдери ефектів уже розігріто: на старті нового бою, а в бою зі збереження — на першому
@@ -356,7 +358,7 @@ func _wire_view(board: Board) -> void:
 	_target_overlay = TargetOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
 		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
-		_on_wreck_left, _on_wreck_removed)
+		_on_wreck_left, _on_wreck_removed, _on_unit_found)
 	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
@@ -980,21 +982,14 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 
 	var known: Dictionary = state.known_occupied_map(state.active_player)
 	for pos in known:
-		var uid: int = known[pos]
-		var unit: Unit = state.get_unit(uid)
+		var unit: Unit = state.get_unit(known[pos])
 		if unit == null:
 			continue
-		var view: UnitView = _UnitViewScene.instantiate()
-		view.contacts = _contacts
-		view.hp_bars = _hp_bars
-		_units.add_child(view)
-		view.bind(unit)
-		_unit_views[uid] = view
+		_add_unit_view(unit)
 	# Дах над показаним юнітом розчиняється — і лише над показаним: невидимий ворог під будинком
 	# прозорим дахом себе не видає.
-	var shown: Array[Vector2i] = []
-	shown.assign(known.keys())
-	_board_view.set_reveal_cells(shown, instant)
+	_shown_cells.assign(known.keys())
+	_board_view.set_reveal_cells(_shown_cells, instant)
 	var crushed: Array[Vector2i] = []
 	for pos: Vector2i in _crushed_truth:
 		if state.vision[state.active_player].is_seen(pos):
@@ -1004,11 +999,35 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	_apply_threat_marks()
 
 
+func _add_unit_view(unit: Unit) -> void:
+	var view: UnitView = _UnitViewScene.instantiate()
+	view.contacts = _contacts
+	view.hp_bars = _hp_bars
+	_units.add_child(view)
+	view.bind(unit)
+	_unit_views[unit.id] = view
+
+
+## Загін в укритті знайдено посеред ходу — він з'являється на тому кроці, а не після всього
+## шляху. Дах над ним розчиняється тієї ж миті: фігура під суцільним дахом не видна. Решту
+## клітинок не перераховуємо зі стану: той уже кінцевий, і дахи над ворогом, якого хід
+## відкриє лише далі, розчинилися б раніше, ніж він з'явиться.
+func _on_unit_found(unit_id: int) -> void:
+	var state: BattleState = _match_service.state
+	var unit: Unit = state.get_unit(unit_id)
+	if unit == null or not unit.is_alive() or _unit_views.has(unit_id) or not state.can_see_unit(_viewer, unit):
+		return
+	_add_unit_view(unit)
+	_shown_cells.append(unit.pos)
+	_board_view.set_reveal_cells(_shown_cells)
+
+
 ## §3.5: уламки, вогонь і дим — лише над розвіданим (`seen`) гравцем, що сідає.
 ## Не в _rebuild_units_for_active_player(): та йде після кожного пакета подій і
 ## щоразу народжувала б щойно поставлені уламки наново, з новою фазою диму.
 func _rebuild_wrecks() -> void:
 	_viewer = _match_service.state.active_player
+	_event_player.viewer = _viewer
 	_wreck_layer.rebuild(_match_service.state, _viewer)
 	for w in _match_service.state.wrecks:
 		_scars.stamp_scorch(w.pos)

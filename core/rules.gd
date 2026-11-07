@@ -53,7 +53,7 @@ static func armour_sector(target_facing: int, target_pos: Vector2i, attacker_pos
 const MIN_DAMAGE: int = 10
 
 static func _damage_from_rolls(attacker: Unit, target: Unit, sector: int,
-		dist_sq: int, r_attack: int, r_armour: int, r_arty: int) -> int:
+		dist_sq: int, r_attack: int, r_armour: int, r_arty: int, in_cover: bool) -> int:
 	## §3.3. Порядок множників критичний — не переставляти. Спільне тіло для
 	## compute_damage() (справжні кидки) і damage_bounds() (підставлені межі
 	## кидків) — щоб формула жила рівно в одному місці.
@@ -82,10 +82,16 @@ static func _damage_from_rolls(attacker: Unit, target: Unit, sector: int,
 	if tc == UnitTypes.UnitClass.INFANTRY and (ac == UnitTypes.UnitClass.TANK or ac == UnitTypes.UnitClass.ARTILLERY):
 		dmg /= 4.0
 
+	# Укриття — останній множник і стоїть ДО підлоги: навіть по піхоті в будинку постріл
+	# завдає щонайменше MIN_DAMAGE, бо невразливих немає (§3.3). Формула монотонна в
+	# кожному кидку й лишається такою, тож damage_bounds() далі дає точні межі.
+	if in_cover:
+		dmg /= 2.0
+
 	return maxi(MIN_DAMAGE, int(dmg))
 
 static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: Unit,
-		sector: int, dist_sq: int) -> int:
+		sector: int, dist_sq: int, in_cover: bool = false) -> int:
 	## §3.3. Порядок кидків критичний — не переставляти: атака завжди, броня —
 	## лише не для піхоти-атакера, артбонус — лише артилерія по танку.
 	var a: int = attacker.attack()
@@ -100,10 +106,10 @@ static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: U
 	if ac == UnitTypes.UnitClass.ARTILLERY and tc == UnitTypes.UnitClass.TANK:
 		r_arty = roll(rng, a / 2)
 
-	return _damage_from_rolls(attacker, target, sector, dist_sq, r_attack, r_armour, r_arty)
+	return _damage_from_rolls(attacker, target, sector, dist_sq, r_attack, r_armour, r_arty, in_cover)
 
 static func damage_bounds(attacker: Unit, target: Unit, sector: int,
-		dist_sq: int) -> Vector2i:
+		dist_sq: int, in_cover: bool = false) -> Vector2i:
 	## Прев'ю (§3.4): точні межі формули без жодного кидка. compute_damage()
 	## монотонне за кожним окремим кидком і зрізає (int()) лише один раз
 	## наприкінці, тож підстановка 0 і максимуму кожного кидка на його місці
@@ -124,10 +130,15 @@ static func damage_bounds(attacker: Unit, target: Unit, sector: int,
 		arty_roll_max = maxi(a / 2, 0)
 
 	var lo: int = _damage_from_rolls(attacker, target, sector, dist_sq,
-			0, armour_roll_max, 0)
+			0, armour_roll_max, 0, in_cover)
 	var hi: int = _damage_from_rolls(attacker, target, sector, dist_sq,
-			attack_roll_max, 0, arty_roll_max)
+			attack_roll_max, 0, arty_roll_max, in_cover)
 	return Vector2i(lo, hi)
+
+static func in_cover(board: Board, u: Unit) -> bool:
+	## Укриття — піхота в цілій будівлі. Руїни не рахуються: від будинку там лишилась
+	## купа уламків, за якою не сховаєшся. Техніка в будинок не ховається, лише стоїть.
+	return u.unit_class() == UnitTypes.UnitClass.INFANTRY and board.kind_at(u.pos) == Terrain.Kind.BUILDING
 
 const DRONE_BASE: int = 120
 const DRONE_SPREAD: int = 60

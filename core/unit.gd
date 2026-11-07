@@ -16,6 +16,10 @@ var has_fired: bool = false
 ## ходить ще один суперник. has_fired окремо не зберігається — відповідає лише юніт
 ## з has_fired == false, тож після повернення AP він знову false.
 var ap_before_retaliation: int = -1
+## Укриття: біт p — бік p знайшов цей юніт у будівлі (BattleState.can_see_unit()). Має
+## сенс лише в укритті й обнуляється на кожному кроці, бо знахідка прив'язана до будинку:
+## вийшов — і наступна будівля ховає його від усіх наново.
+var found_by: int = 0
 
 static func create(p_id: int, p_type_id: int, p_owner: int, p_pos: Vector2i, p_facing: int) -> Unit:
 	var u := Unit.new()
