@@ -200,7 +200,7 @@ def cap_faces(bm, cap_idx):
     return [f for f in bm.faces if f.material_index == cap_idx]
 
 
-def rebar(bm, face, rng, mat_idx, n=2, length_m=0.16, r_m=0.014):
+def rebar(bm, face, rng, mat_idx, n=2, length_m=0.10, r_m=0.014):
     """Кілька стирчачих прутів арматури з грані зламу: торчать у сусідній шматок, тож у складеному вигляді не видно."""
     c = face.calc_center_median()
     nrm = face.normal.normalized()
@@ -208,7 +208,7 @@ def rebar(bm, face, rng, mat_idx, n=2, length_m=0.16, r_m=0.014):
     rng.shuffle(verts)
     mats = Matrix.Identity(4)
     for v in verts[:n]:
-        p = c + (v - c) * 0.4
+        p = c + (v - c) * 0.12
         mx = Matrix.Translation(p + nrm * (length_m * M / 2 - 0.01 * M)) @ nrm.to_track_quat("Z", "Y").to_matrix().to_4x4()
         r = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=3, radius1=r_m * M, radius2=r_m * 0.6 * M,
                                   depth=length_m * M, matrix=mx)
@@ -357,6 +357,8 @@ def pole(name, concrete):
     if not concrete:
         frac = (0.11, 0.42, 0.72)
     zs = [H * f * (1 + rng.uniform(-0.06, 0.06)) for f in frac]
+    if not concrete:
+        zs[0] = max(zs[0], 1.75)         # дерев'яний стовп ламається над бетонною приставкою (0-1.6 м), а не крізь неї
     pieces, rest = [], bm
     for z in zs:
         t = math.radians(rng.uniform(9, 24))
@@ -380,7 +382,7 @@ def pole(name, concrete):
         if concrete:
             l = Vector((v.x - ax.x, v.y - ax.y, 0)).normalized()
             nrm = (l * 0.75 + a * 0.65).normalized()
-            co = v - nrm * (rng.uniform(0.06, 0.10) * M)
+            co = v - nrm * (rng.uniform(0.09, 0.14) * M)
         else:
             # скалка: площина майже вздовж валу, що виходить на бік за ~0.7-1.1 м від зламу
             l = Vector((v.x - ax.x, v.y - ax.y, 0)).normalized()

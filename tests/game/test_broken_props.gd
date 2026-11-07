@@ -12,6 +12,8 @@ const AABB_TOL: float = 0.02 / M
 ## сегментами. Стеля для таких мікромоделей; див. tools/blender/infra/broken_props.py.
 const TRI_FLOOR: int = 520
 const MIN_PIECES: int = 6
+## Менші за це шматки — справа частинок, а не моделі.
+const MIN_PIECE_M: float = 0.1
 ## Верх кожного виду парканів двору, м (tools/blender/infra/yard_fences.py, HEIGHT).
 const YARD_TOP: Dictionary = {"picket": 1.3, "sheet": 1.8, "chainlink": 1.52, "brickbars": 1.66, "slat": 1.5}
 const YARD_SRC_TRIS: int = 2   # одна картка виду
@@ -76,6 +78,9 @@ func test_every_broken_model_matches_contract() -> void:
 			assert_eq(String(c.name), "piece_%02d" % idx, model + ": нумерація шматків")
 			idx += 1
 			pieces.append(c as MeshInstance3D)
+		for mi in pieces:
+			var sz: Vector3 = mi.get_aabb().size
+			assert_true(maxf(maxf(sz.x, sz.y), sz.z) >= MIN_PIECE_M / M - 1e-4, "%s: %s завбільшки %s замалий" % [model, mi.name, sz])
 		assert_true(pieces.size() >= MIN_PIECES, "%s: лише %d шматків" % [model, pieces.size()])
 
 		var src_scene: PackedScene = load(DIR + _source_name(model) + ".glb")
