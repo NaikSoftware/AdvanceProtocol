@@ -250,8 +250,9 @@ static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: De
 		# Не далі ~3 м: віяло 70° від вертикалі на 4,5 м/с.
 		_shards(root, "Fine", rng, fine[0], 10, low, basis, box, fine[1], fine[2], 2.0, 4.5, 70.0, 2.4)
 		_shards(root, "Clods", rng, Shard.CLOD, clods + 2, low, basis, box, 0.12, 0.26, 2.0, 4.5, 70.0, 2.4)
-		# Полотно, що впало, виштовхує з-під себе повітря: клуби підскакують на 1–1,4 м/с і гальмують.
-		_dust_puffs(root, rng, 5, Vector3.ZERO, basis, box, 1.0, 1.6, 2.2, colours, 1.0, 1.4, 30.0, 0.6, 0.3, wet)
+		# Полотно, що впало, виштовхує з-під себе повітря: клуби підскакують на 0,8–1,1 м/с і повільно
+		# гальмують — здіймаються всі 2 с, а не лише в першу мить.
+		_dust_puffs(root, rng, 5, Vector3.ZERO, basis, box, 1.0, 1.6, 2.2, colours, 0.8, 1.1, 30.0, 0.3, 0.3, wet)
 	if live_wire:
 		var up: Vector3 = top - at
 		_arc(root, rng, up, 3, 1.1)
@@ -348,8 +349,9 @@ static func _shards(root: Node3D, node_name: String, rng: RandomNumberGenerator,
 	pm.angular_velocity_curve = spin_t
 	# Кожен шматок трохи світліший чи темніший: однакові уламки читаються штампом.
 	var shade := Gradient.new()
-	# Мокре темніше: грязь і змоклі уламки.
-	var damp_k: float = 1.0 - 0.2 * clampf(wetness, 0.0, 1.0)
+	# Під хмарами мокрої мапи затемнені уламки тонули в чорне (36 проти землі 79): там вони трохи
+	# світліші за сухі, щоб лишатися бурими.
+	var damp_k: float = 1.0 + 0.15 * clampf(wetness, 0.0, 1.0)
 	shade.colors = PackedColorArray([Color.WHITE * 0.8 * damp_k, Color.WHITE * damp_k])
 	var shade_t := GradientTexture1D.new()
 	shade_t.gradient = shade
