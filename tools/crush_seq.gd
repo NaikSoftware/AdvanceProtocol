@@ -50,6 +50,8 @@ func _ready() -> void:
 			"yard":
 				# Двір: паркан двору заданого виду (-1 — будь-якого); крок техніки добирається за смугою корпусу.
 				ok = kind == PropLayer.Kind.GARDEN_FENCE and (int(a[6]) < 0 or PropLayer.fence_kind_of(inst["model"]) == int(a[6]))
+		if ok and OS.get_environment("MODEL") != "" and String(inst["model"]) != OS.get_environment("MODEL"):
+			ok = false
 		if ok and c.x >= 0 and c.y >= 0 and c.x < map.width and c.y < map.height:
 			var d: float = Vector2(c).distance_to(centre)
 			if d < best:

@@ -43,6 +43,7 @@ func _ready() -> void:
 			unit = u
 	var spawn: Vector2i = unit.pos
 	var dbg_ok: int = 0
+	var dbg := [0, 0, 0, 0]
 	for i in props._instances.size():
 		var inst: Dictionary = props._instances[i]
 		var kind: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
@@ -69,10 +70,13 @@ func _ready() -> void:
 			# Машина стартує за дві клітинки з одного з чотирьох боків; ціль мусить бути досяжною.
 			for d: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
 				var st: Vector2i = c + d * 2
+				dbg[0] += 1
 				if not board.in_bounds(st) or Rules.entry_cost_at(unit, board, st) >= 100 or Rules.entry_cost_at(unit, board, c) >= 100:
 					continue
+				dbg[1] += 1
 				if not (props.band_hits(c + d, c)["inst"] as Array).has(i):
 					continue
+				dbg[2] += 1
 				unit.pos = st
 				if (Pathing.compute_zones(board, unit, {}, {}) as Pathing.Zones).can_reach(c):
 					best = Vector2(c).distance_to(centre)
@@ -81,7 +85,7 @@ func _ready() -> void:
 					at = (inst["transform"] as Transform3D).origin
 					break
 	unit.pos = spawn
-	print("CRUSHMOVE candidates=%d" % dbg_ok)
+	print("CRUSHMOVE candidates=%d cells/cost/hit=%s" % [dbg_ok, dbg])
 	print("CRUSHMOVE target=%s start=%s unit=%s ap=%s" % [target, start, unit.id if unit != null else -1, unit.ap if unit != null else -1])
 	if unit == null or target.x < 0:
 		get_tree().quit(1)

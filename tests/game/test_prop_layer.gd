@@ -3967,3 +3967,33 @@ func test_secondary_breaks_survive_rebuilds() -> void:
 	view.rebuild_tiles(_yard_board())
 	assert_true(props._is_crushed(props._instances[fence]), "перебудова дошки повертає зламане одразу")
 	props.set_crushed([] as Array[Vector2i], true)
+
+
+## Секції паркану, зламані одним кроком, дають один момент удару (§8).
+func test_one_step_breaking_many_fence_sections_spawns_one_hit_moment() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: BattleScreen = BattleScreenScene.instantiate()
+	add_child_autofree(screen)
+	screen.setup(_yard_map(), 2, 1, service)
+	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	var best: Array[Vector2i] = []
+	var most: int = 0
+	for x in 14:
+		for y in 8:
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var hits: Array = props.band_hits(Vector2i(x, y) + d, Vector2i(x, y))["inst"].filter(
+						func(i: int) -> bool: return int(PropLayer.spec_of(props._instances[i]["model"])["kind"]) != PropLayer.Kind.POLE)
+				if hits.size() > most:
+					most = hits.size()
+					best = [Vector2i(x, y) + d, Vector2i(x, y)]
+	assert_gte(most, 2, "передумова: крок, що ламає кілька секцій")
+	var count_hits := func() -> int:
+		return get_tree().get_nodes_in_group(BattleFx.GROUP).filter(func(n: Node) -> bool: return n.name.begins_with("ToppleHit")).size()
+	await wait_process_frames(2)
+	var before: int = count_hits.call()
+	props.topple_cell(best[1], best[0])
+	assert_gte(props.falling_count(), 2)
+	await wait_process_frames(2)
+	assert_eq(int(count_hits.call()) - before, 1, "один момент удару на крок")
+	props.cancel_falls()

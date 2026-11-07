@@ -1200,9 +1200,68 @@ func _units_point(p: Vector3) -> Vector3:
 	return _units.to_local(_board_view.props().to_global(p))
 
 
+## Секції паркану, зламані одним кроком, дають один момент удару, а не по моменту на секцію (§8): збираємо їх до кінця
+## кадру й зливаємо в один виклик. Опори — кожна своя.
+var _hit_batch: Array = []
+var _land_batch: Array = []
+
+
 func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_pole: bool, span: Vector3) -> void:
+	if is_pole:
+		var base: Vector3 = _units_point(at)
+		BattleFx.spawn_topple_hit(_units, base, _units_point(top), debris as BattleFx.Debris, live_wire, true, _units_point(at + span) - base)
+		return
+	_hit_batch.append({"at": at, "top": top, "debris": debris, "live": live_wire, "span": span})
+	if _hit_batch.size() == 1:
+		_flush_hits.call_deferred()
+
+
+func _flush_hits() -> void:
+	if _hit_batch.is_empty():
+		return
+	var u: Dictionary = _union_line(_hit_batch, "at", "span")
+	var at: Vector3 = u["at"]
+	var top: Vector3 = at
+	var live := false
+	for e: Dictionary in _hit_batch:
+		top += ((e["top"] as Vector3) - (e["at"] as Vector3)) / float(_hit_batch.size())
+		live = live or bool(e["live"])
 	var base: Vector3 = _units_point(at)
-	BattleFx.spawn_topple_hit(_units, base, _units_point(top), debris as BattleFx.Debris, live_wire, is_pole, _units_point(at + span) - base)
+	BattleFx.spawn_topple_hit(_units, base, _units_point(top), _majority(_hit_batch) as BattleFx.Debris, live, false,
+			_units_point(at + (u["span"] as Vector3)) - base)
+	_hit_batch.clear()
+
+
+## Спільна лінія кількох відрізків: центр і піввідрізок уздовж найдовшого з них, що вкриває всі кінці. Кожен запис —
+## центр (ключ at) і півдовжина-вектор (ключ span).
+func _union_line(list: Array, at_key: String, span_key: String) -> Dictionary:
+	var dir := Vector3.RIGHT
+	var longest: float = 0.0
+	var mean := Vector3.ZERO
+	for e: Dictionary in list:
+		mean += (e[at_key] as Vector3) / float(list.size())
+		if (e[span_key] as Vector3).length() > longest:
+			longest = (e[span_key] as Vector3).length()
+			dir = (e[span_key] as Vector3).normalized()
+	var lo: float = INF
+	var hi: float = -INF
+	for e: Dictionary in list:
+		for sgn: float in [-1.0, 1.0]:
+			var q: float = ((e[at_key] as Vector3) + (e[span_key] as Vector3) * sgn).dot(dir)
+			lo = minf(lo, q)
+			hi = maxf(hi, q)
+	var centre: Vector3 = mean + dir * ((lo + hi) * 0.5 - mean.dot(dir))
+	return {"at": centre, "span": dir * ((hi - lo) * 0.5)}
+
+
+func _majority(list: Array) -> int:
+	var count: Dictionary = {}
+	var best: int = int(list[0]["debris"])
+	for e: Dictionary in list:
+		count[int(e["debris"])] = int(count.get(int(e["debris"]), 0)) + 1
+		if int(count[int(e["debris"])]) > int(count.get(best, 0)):
+			best = int(e["debris"])
+	return best
 
 
 func _on_secondary_broke(origin: Vector3) -> void:
@@ -1214,7 +1273,22 @@ func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_
 	# Падіння бачимо лише на розвіданому (_on_cell_entered), тож слід на мокрій землі — теж лише там.
 	if _board_view.wet and _scars != null:
 		_scars.stamp_scuff(a, b)
-	BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire, is_pole)
+	if is_pole:
+		BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire, true)
+		return
+	_land_batch.append({"at": (a + b) * 0.5, "span": (b - a) * 0.5, "debris": debris})
+	if _land_batch.size() == 1:
+		_flush_lands.call_deferred()
+
+
+func _flush_lands() -> void:
+	if _land_batch.is_empty():
+		return
+	var u: Dictionary = _union_line(_land_batch, "at", "span")
+	var c: Vector3 = u["at"]
+	var half: Vector3 = u["span"]
+	BattleFx.spawn_topple_land(_units, _units_point(c - half), _units_point(c + half), _majority(_land_batch) as BattleFx.Debris, false, false)
+	_land_batch.clear()
 
 
 ## Клітинки юнітів, які глядач вправі знати (§3.5): повалений стовп лягає повз їхні корпуси. Усіх юнітів сюди не
@@ -1225,6 +1299,8 @@ func _known_unit_cells() -> Array:
 
 
 func _cancel_falls() -> void:
+	_hit_batch.clear()
+	_land_batch.clear()
 	if _board_view.props() != null:
 		_board_view.props().cancel_falls()
 
