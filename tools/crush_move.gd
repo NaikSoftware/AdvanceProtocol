@@ -22,6 +22,12 @@ func _ready() -> void:
 	var map := load("res://maps/%s.tres" % a[1]) as MapData
 	screen.setup(map, 2, 1)
 	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	# NOFX=1 — без мить ефектів: видно самі складові.
+	if OS.get_environment("NOFX") == "1":
+		for c in props.topple_hit.get_connections():
+			props.topple_hit.disconnect(c["callable"])
+		for c in props.topple_landed.get_connections():
+			props.topple_landed.disconnect(c["callable"])
 	var service: Node = screen.get("_match_service")
 	var state: BattleState = service.state
 	var want_kind: int = int(a[6]) if a.size() > 6 else 1
@@ -46,21 +52,33 @@ func _ready() -> void:
 			ok = kind == PropLayer.Kind.FIELD_FENCE
 		else:
 			ok = kind == PropLayer.Kind.GARDEN_FENCE and (PropLayer.fence_kind_of(inst["model"]) == want_kind or (want_kind < 0 and PropLayer.fence_kind_of(inst["model"]) >= 1))
-		var c: Vector2i = (inst["cells"] as Array)[0]
-		if not ok or not board.in_bounds(c) or Vector2(c).distance_to(centre) >= best:
+		if not ok:
 			continue
-		# Машина стартує за дві клітинки з одного з чотирьох боків; ціль мусить бути досяжною.
-		for d: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
-			var st: Vector2i = c + d * 2
-			if not board.in_bounds(st) or board.kind_at(st) != Terrain.Kind.FIELD or board.kind_at(c + d) != Terrain.Kind.FIELD:
+		# Опора — клітинка екземпляра; паркан — будь-яка клітинка навколо нього, смуга корпусу якої його зачепить.
+		var cands: Array[Vector2i] = [(inst["cells"] as Array)[0]]
+		if a[3] != "pole":
+			cands.clear()
+			var o := Vector2i(roundi((inst["transform"] as Transform3D).origin.x), roundi((inst["transform"] as Transform3D).origin.z))
+			for dx in range(-1, 2):
+				for dz in range(-1, 2):
+					cands.append(o + Vector2i(dx, dz))
+		for c: Vector2i in cands:
+			if not board.in_bounds(c) or Vector2(c).distance_to(centre) >= best:
 				continue
-			unit.pos = st
-			if (Pathing.compute_zones(board, unit, {}, {}) as Pathing.Zones).can_reach(c):
-				best = Vector2(c).distance_to(centre)
-				target = c
-				start = st
-				at = (inst["transform"] as Transform3D).origin
-				break
+			# Машина стартує за дві клітинки з одного з чотирьох боків; ціль мусить бути досяжною.
+			for d: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+				var st: Vector2i = c + d * 2
+				if not board.in_bounds(st) or board.kind_at(st) != Terrain.Kind.FIELD or board.kind_at(c + d) != Terrain.Kind.FIELD or board.kind_at(c) != Terrain.Kind.FIELD:
+					continue
+				if a[3] != "pole" and not (props.band_hits(c + d, c)["inst"] as Array).has(i):
+					continue
+				unit.pos = st
+				if (Pathing.compute_zones(board, unit, {}, {}) as Pathing.Zones).can_reach(c):
+					best = Vector2(c).distance_to(centre)
+					target = c
+					start = st
+					at = (inst["transform"] as Transform3D).origin
+					break
 	unit.pos = spawn
 	print("CRUSHMOVE target=%s start=%s unit=%s ap=%s" % [target, start, unit.id if unit != null else -1, unit.ap if unit != null else -1])
 	if unit == null or target.x < 0:
@@ -98,7 +116,7 @@ func _ready() -> void:
 			next += dt
 		if el >= float(a[4]):
 			break
-	print("CRUSHMOVE %s z%s frames=%d falls=%d" % [a[1], a[2], frames.size(), props.falling_count()])
+	print("CRUSHMOVE %s z%s frames=%d falls=%d broken=%d edges=%s" % [a[1], a[2], frames.size(), props.falling_count(), props._broken.size(), screen.get("_crush_edges")])
 	for i in frames.size():
 		frames[i].save_png("%s/f_%04d.png" % [a[0], i])
 	get_tree().quit()

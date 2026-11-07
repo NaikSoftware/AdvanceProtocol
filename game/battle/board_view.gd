@@ -531,8 +531,8 @@ func set_forest_zoom(zoom: float) -> void:
 
 ## Клітинки з розчавленими пропсами, уже обрізані розвіданим глядача (§3.5).
 ## instant — передача ходу: падіння, що йдуть, обриваються (PropLayer.set_crushed).
-func set_crushed_cells(cells: Array[Vector2i], instant: bool = false) -> void:
-	_props.set_crushed(cells, instant)
+func set_crushed_cells(cells: Array[Vector2i], instant: bool = false, edges: Array = []) -> void:
+	_props.set_crushed(cells, instant, edges)
 	if _vegetation != null:
 		_vegetation.set_crushed(cells)
 

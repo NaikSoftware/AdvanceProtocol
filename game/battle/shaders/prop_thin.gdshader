@@ -18,6 +18,9 @@ uniform float top_local = 1000.0;
 // Картка з кількома видами паркану (смуги атласу згори вниз, вид — floor(UV.y · kinds)): лишається вид екземпляра
 // (INSTANCE_CUSTOM.r), решта вершин стягується в точку. 0 — звичайна модель.
 uniform int kinds = 0;
+// Складова зламаного паркану двору: вид задано напряму (UV файлу зламаного виду вже обрізані до своєї смуги), без
+// вибору смуги й без стягування решти; верх секції — top_local у координатах складової. −1 — звичайний паркан.
+uniform int piece_kind = -1;
 // Крок повтору текстури вздовж секції, м (клітинка — 8 м): від початку секції, хоч би яка вона завдовжки.
 uniform float tile_m = 2.5;
 uniform float kind_top[8];
@@ -63,12 +66,16 @@ varying float kind_v;
 void vertex() {
 	float top = top_local;
 	if (kinds > 0) {
-		int kind = int(floor(UV.y * float(kinds)));
-		kind_v = float(kind);
-		top = kind_top[clamp(kind, 0, 7)];
-		UV.x = (VERTEX.x + 0.5) * length(MODEL_MATRIX[0].xyz) * 8.0 / tile_m;
-		if (abs(float(kind) - INSTANCE_CUSTOM.r) > 0.5) {
-			VERTEX = vec3(0.0);
+		if (piece_kind >= 0) {
+			kind_v = float(piece_kind);
+		} else {
+			int kind = int(floor(UV.y * float(kinds)));
+			kind_v = float(kind);
+			top = kind_top[clamp(kind, 0, 7)];
+			UV.x = (VERTEX.x + 0.5) * length(MODEL_MATRIX[0].xyz) * 8.0 / tile_m;
+			if (abs(float(kind) - INSTANCE_CUSTOM.r) > 0.5) {
+				VERTEX = vec3(0.0);
+			}
 		}
 	}
 	base_h = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y - MODEL_MATRIX[3].y;
@@ -131,6 +138,12 @@ void fragment() {
 	// Шапка секції матова: мокрий полиск горішніх граней блищав білими цятками вздовж огорожі.
 	ROUGHNESS = mix(mix(roughness, WET_ROUGHNESS, wet), 1.0, cap);
 	METALLIC = metallic;
+	// Складова, що лягла плиском, дзеркалить небо (мокра бляха — майже білою), хоч стояча секція дзеркалила темну землю:
+	// без глянцю складова лишається в тоні цілої секції.
+	if (piece_kind >= 0) {
+		METALLIC = 0.0;
+		ROUGHNESS = max(ROUGHNESS, 0.9);
+	}
 	vec3 up = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
 	// Тильний бік рушій сам перевертає (cull_disabled); нахил до неба вирівнює обидва.
 	NORMAL = normalize(mix(NORMAL, up, sky_bend));

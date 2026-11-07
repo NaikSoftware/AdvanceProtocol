@@ -109,6 +109,9 @@ var _fx_warmed: bool = false
 var _crushed_truth: Dictionary[Vector2i, bool] = {}
 ## Рухи техніки пакета, що грається (UnitMoved -> true): крок такого руху валить опори й паркани.
 var _vehicle_moves: Dictionary[Events.UnitMoved, bool] = {}
+## Кроки техніки за матч (Vector4i: з клітинки x,y у z,w): паркани й ворота ламаються лише там, де пройшов корпус.
+## Видно їх глядачеві лише на розвіданому (_rebuild_units_for_active_player).
+var _crush_edges: Array[Vector4i] = []
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -298,10 +301,12 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# Техніка, що стоїть на клітинці від старту матчу, теж розчавила дрібні пропси під собою; глядач
 	# бачить це, як і решту шрамів, лише на розвіданому (§3.5, _rebuild_units_for_active_player).
 	_crushed_truth.clear()
+	_crush_edges.clear()
 	for p in _match_service.state.player_count:
 		for u: Unit in _match_service.state.units_of(p):
 			if u.unit_class() != UnitTypes.UnitClass.INFANTRY:
 				_crushed_truth[u.pos] = true
+				_crush_edges.append(Vector4i(u.pos.x, u.pos.y, u.pos.x, u.pos.y))
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
 	_rebuild_units_for_active_player(true)
@@ -1007,7 +1012,11 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	for pos: Vector2i in _crushed_truth:
 		if state.vision[state.active_player].is_seen(pos):
 			crushed.append(pos)
-	_board_view.set_crushed_cells(crushed, instant)
+	var edges: Array[Vector4i] = []
+	for e: Vector4i in _crush_edges:
+		if state.vision[state.active_player].is_seen(Vector2i(e.z, e.w)):
+			edges.append(e)
+	_board_view.set_crushed_cells(crushed, instant, edges)
 	forest_changed()
 	_apply_threat_marks()
 
@@ -1177,7 +1186,12 @@ func _record_crushes(events: Array[Events.BattleEvent]) -> void:
 ## повалене, коли його розвідають.
 func _on_cell_entered(moved: Events.UnitMoved, from: Vector2i, to: Vector2i) -> void:
 	var state: BattleState = _match_service.state
-	if _vehicle_moves.has(moved) and state.vision[state.active_player].is_seen(to):
+	if not _vehicle_moves.has(moved):
+		return
+	var edge := Vector4i(from.x, from.y, to.x, to.y)
+	if not _crush_edges.has(edge):
+		_crush_edges.append(edge)
+	if state.vision[state.active_player].is_seen(to):
 		_board_view.props().topple_cell(to, from)
 
 
@@ -1192,6 +1206,9 @@ func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_
 
 
 func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:
+	# Падіння бачимо лише на розвіданому (_on_cell_entered), тож слід на мокрій землі — теж лише там.
+	if _board_view.wet and _scars != null:
+		_scars.stamp_scuff(a, b)
 	BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire, is_pole)
 
 

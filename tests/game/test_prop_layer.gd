@@ -329,13 +329,38 @@ func test_crush_flattens_small_props_on_the_given_cells_only() -> void:
 		return
 	assert_false(on[0]["crushed"])
 	var before: Transform3D = on[0]["transform"]
-	view.set_crushed_cells([fence_cell, Vector2i(3, 3)] as Array[Vector2i])
+	var step: Array[Vector2i] = _hit_step(view.props(), (view.props()._instances[_fence_index(view, fence_cell)]["transform"] as Transform3D).origin,
+			_fence_index(view, fence_cell))
+	assert_eq(step.size(), 2, "передумова: смуга корпусу зачіпає секцію")
+	var edge := Vector4i(step[0].x, step[0].y, step[1].x, step[1].y)
+	view.set_crushed_cells([fence_cell, Vector2i(3, 3)] as Array[Vector2i], false, [edge])
 	var after: Dictionary = _fences_on(view, fence_cell)[0]
 	assert_true(after["crushed"])
 	assert_ne(after["transform"], before, "повалена огорожа лежить інакше")
 	for inst in view.props().instances_on(Vector2i(3, 3)):
 		assert_false(inst["crushed"], "будинок не чавиться")
-	assert_false(_fences_on(view, other)[0]["crushed"], "огорожа поруч ціла")
+	var hit: Array = view.props().band_hits(step[0], step[1])["inst"]
+	assert_eq(_fences_on(view, other)[0]["crushed"], hit.has(_fence_index(view, other)), "огорожа поруч ламається лише в смузі")
+	assert_lt(view.props()._broken.size(), view.props().all_instances().filter(func(i: Dictionary) -> bool: return i["band"]).size(),
+			"решта парканів стоїть")
+
+
+## Крок техніки (from, to), смуга якого зачіпає екземпляр inst: to — клітинка під екземпляром, from — сусідня.
+func _hit_step(props: PropLayer, origin: Vector3, inst: int = -1, gate: int = -1) -> Array[Vector2i]:
+	var to := Vector2i(roundi(origin.x), roundi(origin.z))
+	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var hits: Dictionary = props.band_hits(to + d, to)
+		if (inst >= 0 and (hits["inst"] as Array).has(inst)) or (gate >= 0 and (hits["gates"] as Array).has(gate)):
+			return [to + d, to]
+	return []
+
+
+func _fence_index(view: BoardView, cell: Vector2i) -> int:
+	for i in view.props()._instances.size():
+		var inst: Dictionary = view.props()._instances[i]
+		if inst["band"] and (inst["cells"] as Array).has(cell):
+			return i
+	return -1
 
 
 func _fences_on(view: BoardView, cell: Vector2i) -> Array[Dictionary]:
@@ -3458,8 +3483,10 @@ func test_fence_bursts_forward_into_pieces_then_vanishes() -> void:
 	var m: StringName = props._instances[idx]["model"]
 	PropLayer._pieces_cache[m] = PropLayer.pieces_of_scene(_synthetic_scene(3))
 	var log := _fall_log(props)
-	var travel := Vector2i(1, 0)
-	props.topple_cell(cell, cell - travel)
+	var step: Array[Vector2i] = _hit_step(props, (props._instances[idx]["transform"] as Transform3D).origin, idx)
+	assert_eq(step.size(), 2, "передумова: смуга корпусу зачіпає секцію")
+	var travel: Vector2i = step[1] - step[0]
+	props.topple_cell(step[1], step[0])
 	var b: Dictionary = props._instances[idx]["burst"]
 	assert_eq((b["pieces"] as Array).size(), 3)
 	assert_false(log.hits[0][3], "паркан без напруги")
@@ -3469,10 +3496,10 @@ func test_fence_bursts_forward_into_pieces_then_vanishes() -> void:
 	assert_between(t, 0.1, 1.2, "перша складова торкається землі")
 	var drift: float = 0.0
 	for p: Dictionary in b["pieces"]:
-		drift += ((p["pos"] as Vector3) - (p["w0"] as Transform3D).origin).dot(Vector3.RIGHT)
+		drift += ((p["pos"] as Vector3) - (p["w0"] as Transform3D).origin).dot(Vector3(travel.x, 0.0, travel.y))
 	assert_gt(drift, 0.0, "складові летять за напрямом руху")
 	_run_falls(props)
-	assert_eq(log.lands.size(), 1)
+	assert_gte(log.lands.size(), 1, "кожна поламана секція приземлилась")
 	assert_false(props.is_falling(idx))
 	assert_null(props.find_child("Break", false, false))
 	assert_true(_hidden(props, idx))
@@ -3536,12 +3563,14 @@ func test_gate_falls_and_vanishes() -> void:
 			break
 	assert_gte(gi, 0, "на Crossroads є ворота")
 	var g: Dictionary = props._gates[gi]
-	var cell: Vector2i = props._gate_cells(g)[1]
-	props.topple_cell(cell, cell + Vector2i(1, 0))
+	var mid: Vector2 = g["mid"]
+	var gstep: Array[Vector2i] = _hit_step(props, Vector3(mid.x, 0.0, mid.y), -1, gi)
+	assert_eq(gstep.size(), 2, "передумова: смуга корпусу зачіпає ворота")
+	props.topple_cell(gstep[1], gstep[0])
 	assert_true(g.has("burst"))
 	_run_falls(props)
 	assert_false(g.has("burst"))
-	assert_true(props._gate_down(g))
+	assert_true(props._gate_down(gi))
 	assert_true(bool(g["hidden"]))
 	props.set_crushed([] as Array[Vector2i], true)
 	props._flush()
@@ -3563,28 +3592,29 @@ func test_step_hook_topples_for_vehicles_only_and_only_on_seen_ground() -> void:
 	await wait_until(func() -> bool: return props.falling_count() == 0, 5.0)
 	# Той самий виклик: на розвіданій клітинці валить, на нерозвіданій — ні.
 	var state: BattleState = service.state
-	var target := Vector2i(-1, -1)
-	for inst: Dictionary in props._instances:
-		var c: Vector2i = (inst["cells"] as Array)[0]
-		if inst["topples"] and not props._is_crushed(inst) and c.x >= 0 and c.y >= 0 and c.x < 14 and c.y < 8:
-			target = c
-			break
-	assert_ne(target, Vector2i(-1, -1), "передумова: лишився цілий паркан чи опора")
-	var moved := Events.UnitMoved.new(0, [target] as Array[Vector2i], 0)
+	var step: Array[Vector2i] = []
+	for i in props._instances.size():
+		var inst: Dictionary = props._instances[i]
+		if inst["band"] and not props._is_crushed(inst):
+			step = _hit_step(props, (inst["transform"] as Transform3D).origin, i)
+			if not step.is_empty():
+				break
+	assert_eq(step.size(), 2, "передумова: лишився цілий паркан на шляху корпусу")
+	var moved := Events.UnitMoved.new(0, [step[1]] as Array[Vector2i], 0)
 	screen._vehicle_moves[moved] = true
 	var vision: Vision = state.vision[state.active_player]
 	var saved: PackedByteArray = vision.seen.duplicate()
 	vision.seen.fill(0)
 	var before: int = log.hits.size()
-	screen._on_cell_entered(moved, target - Vector2i(1, 0), target)
+	screen._on_cell_entered(moved, step[0], step[1])
 	assert_eq(log.hits.size(), before, "§3.5: на нерозвіданому падіння не показується")
 	assert_eq(props.falling_count(), 0)
 	vision.seen.fill(1)
-	screen._on_cell_entered(moved, target - Vector2i(1, 0), target)
+	screen._on_cell_entered(moved, step[0], step[1])
 	assert_gt(log.hits.size(), before, "на розвіданому — падає")
-	var other := Events.UnitMoved.new(1, [target] as Array[Vector2i], 0)
+	var other := Events.UnitMoved.new(1, [step[1]] as Array[Vector2i], 0)
 	var after: int = log.hits.size()
-	screen._on_cell_entered(other, target - Vector2i(1, 0), target)
+	screen._on_cell_entered(other, step[0], step[1])
 	assert_eq(log.hits.size(), after, "не рух техніки з пакета — не валить")
 	vision.seen = saved
 
@@ -3717,3 +3747,23 @@ func test_real_fence_cards_settle_tilted() -> void:
 		var tilt: float = rad_to_deg(acos(clampf(absf(n.dot(Vector3.UP)), 0.0, 1.0)))
 		assert_between(tilt, 4.5, 15.5, "картка лежить із нахилом 5–15°")
 	assert_gt(cards, 0, "у профлисту є тонкі картки")
+
+
+## Крок техніки ламає лише секції в смузі, яку змів корпус; решта двору стоїть.
+func test_a_step_breaks_only_the_fences_in_the_swept_band() -> void:
+	var view: BoardView = _view(null, _yard_board())
+	var props: PropLayer = view.props()
+	var total: int = props._instances.filter(func(i: Dictionary) -> bool: return i["band"]).size()
+	var step: Array[Vector2i] = []
+	for i in props._instances.size():
+		if props._instances[i]["band"]:
+			step = _hit_step(props, (props._instances[i]["transform"] as Transform3D).origin, i)
+			if not step.is_empty():
+				break
+	assert_eq(step.size(), 2)
+	props.topple_cell(step[1], step[0])
+	var hits: Array = props.band_hits(step[0], step[1])["inst"]
+	assert_gt(hits.size(), 0)
+	assert_eq(props._broken.size(), hits.size(), "зламано рівно смугу")
+	assert_lt(props._broken.size(), total, "решта парканів стоїть")
+	props.cancel_falls()
