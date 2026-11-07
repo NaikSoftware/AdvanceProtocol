@@ -1203,7 +1203,7 @@ static func broken_pieces(m: StringName) -> Array:
 		# Картка паркану двору показує вид з INSTANCE_CUSTOM — сітка з матеріалами того ж вузла, що й ціла модель.
 		if spec_of(m).has("batch"):
 			mesh = _alpha_fence_mesh(mesh) if FENCE_ALPHA_FORMS.has(m) else _opaque_fence_mesh(mesh)
-		out = [{"name": "piece_00", "mesh": mesh, "xf": info["local"]}]
+		out = [{"name": "piece_00", "mesh": mesh, "xf": info["local"], "whole": true}]
 	_pieces_cache[m] = out
 	return out
 
@@ -1228,7 +1228,8 @@ func _burst_pieces(root: Node3D, model_name: StringName, t0: Transform3D) -> Arr
 		var list: Array = groups[mesh]
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_custom_data = true
+		# Вид паркану в INSTANCE_CUSTOM читає лише шейдер картки (запасна ціла сітка); власні матеріали складових його не мають.
+		mm.use_custom_data = bool((list[0] as Dictionary).get("whole", false))
 		mm.mesh = mesh
 		mm.instance_count = list.size()
 		var node := MultiMeshInstance3D.new()
@@ -1236,7 +1237,8 @@ func _burst_pieces(root: Node3D, model_name: StringName, t0: Transform3D) -> Arr
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(node)
 		for k in list.size():
-			mm.set_instance_custom_data(k, Color(kind_id, 0.0, 0.0, 0.0))
+			if mm.use_custom_data:
+				mm.set_instance_custom_data(k, Color(kind_id, 0.0, 0.0, 0.0))
 			out.append(_new_piece(t0 * ((list[k] as Dictionary)["xf"] as Transform3D), mesh.get_aabb().size, null, mm, k,
 					String((list[k] as Dictionary).get("part", ""))))
 	return out
@@ -1308,14 +1310,9 @@ func _throw(b: Dictionary, dir: Vector3) -> void:
 	for k in pieces.size():
 		var p: Dictionary = pieces[k]
 		var hh: int = cell_hash(b["cell"], 6000 + k)
-		# Земляний валик єврозабору не летить, цегляний цоколь осипається на місці; решта розлітається.
-		if p["part"] == "berm":
+		# Земляний валик єврозабору й цегляний цоколь лишаються на місці; решта розлітається.
+		if p["part"] == "berm" or p["part"] == "plinth":
 			p["stump"] = true
-			p["shaft"] = false
-			continue
-		if p["part"] == "plinth":
-			p["vel"] = dir * 0.1 * _rnd(hh, 1) + Vector3.UP * 0.1
-			p["ang"] = Vector3(_rnd(hh, 4) - 0.5, 0.0, _rnd(hh, 5) - 0.5) * 1.5
 			p["shaft"] = false
 			continue
 		p["vel"] = dir * (0.3 + 0.6 * _rnd(hh, 1)) + Vector3.UP * (0.3 + 0.4 * _rnd(hh, 2)) + side * (_rnd(hh, 3) - 0.5) * 0.6

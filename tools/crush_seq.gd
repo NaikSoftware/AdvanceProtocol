@@ -2,7 +2,7 @@ extends Node
 ## Знімає падіння опори чи паркану справжнім екраном бою в реальному часі: кадри тримаються в пам'яті й
 ## пишуться в кінці (save_png блокує ~1 с). Не входить у гру.
 ## Запуск (вікно, не --headless):
-##   $GODOT --path . res://tools/crush_seq.tscn -- <out_dir> <map> <zoom> <pole|fence|gate> <секунд> <кадрів/с> [напрям x,y]
+##   $GODOT --path . res://tools/crush_seq.tscn -- <out_dir> <map> <zoom> <pole|fence|yard|gate> <секунд> <кадрів/с> [напрям x,y | вид двору для yard]
 ## Валить ближчу до центру опору з дротом, паркан чи ворота: клітинка, з якої «в'їжджає» техніка, — сусідня проти напряму.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -13,7 +13,7 @@ const CROP: Vector2i = Vector2i(640, 560)
 func _ready() -> void:
 	var a: PackedStringArray = OS.get_cmdline_user_args()
 	if a.size() < 6:
-		push_error("crush_seq: <out_dir> <map> <zoom> <pole|fence|gate> <sec> <fps> [x,y]")
+		push_error("crush_seq: <out_dir> <map> <zoom> <pole|fence|yard|gate> <sec> <fps> [x,y]")
 		get_tree().quit(1)
 		return
 	DirAccess.make_dir_recursive_absolute(a[0])
@@ -23,8 +23,14 @@ func _ready() -> void:
 	var map := load("res://maps/%s.tres" % a[1]) as MapData
 	screen.setup(map, 2, 1)
 	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	# NOFX=1 — без мить ефектів: видно самі складові.
+	if OS.get_environment("NOFX") == "1":
+		for c in props.topple_hit.get_connections():
+			props.topple_hit.disconnect(c["callable"])
+		for c in props.topple_landed.get_connections():
+			props.topple_landed.disconnect(c["callable"])
 	var travel := Vector2i(1, 0)
-	if a.size() > 6:
+	if a.size() > 6 and a[3] != "yard":
 		travel = Vector2i(int(a[6].get_slice(",", 0)), int(a[6].get_slice(",", 1)))
 	var centre := Vector2(map.width, map.height) * 0.5
 	var cell := Vector2i(-1, -1)
@@ -40,6 +46,8 @@ func _ready() -> void:
 				ok = kind == PropLayer.Kind.POLE and props._has_wire(i)
 			"fence":
 				ok = kind == PropLayer.Kind.FIELD_FENCE or kind == PropLayer.Kind.GARDEN_FENCE
+			"yard":
+				ok = kind == PropLayer.Kind.GARDEN_FENCE and PropLayer.fence_kind_of(inst["model"]) == int(a[6])
 			"yard":
 				# Двір: паркан двору заданого виду (1..4); техніка в клітинку двору не в'їде, тож валимо напряму.
 				ok = kind == PropLayer.Kind.GARDEN_FENCE and PropLayer.fence_kind_of(inst["model"]) == int(a[7])

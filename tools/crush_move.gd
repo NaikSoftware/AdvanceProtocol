@@ -31,6 +31,11 @@ func _ready() -> void:
 	var start := Vector2i.ZERO
 	var at := Vector3.ZERO
 	var best: float = INF
+	var unit: Unit = null
+	for u: Unit in state.units_of(0):
+		if u.unit_class() in [UnitTypes.UnitClass.TANK, UnitTypes.UnitClass.LIGHT_VEHICLE] and (unit == null or u.ap > unit.ap):
+			unit = u
+	var spawn: Vector2i = unit.pos
 	for i in props._instances.size():
 		var inst: Dictionary = props._instances[i]
 		var kind: int = int(PropLayer.spec_of(inst["model"]).get("kind", -1))
@@ -38,32 +43,30 @@ func _ready() -> void:
 		if a[3] == "pole":
 			ok = kind == PropLayer.Kind.POLE and props._has_wire(i)
 		else:
-			ok = kind == PropLayer.Kind.GARDEN_FENCE and PropLayer.fence_kind_of(inst["model"]) == want_kind
+			ok = kind == PropLayer.Kind.GARDEN_FENCE and (PropLayer.fence_kind_of(inst["model"]) == want_kind or (want_kind < 0 and PropLayer.fence_kind_of(inst["model"]) >= 1))
 		var c: Vector2i = (inst["cells"] as Array)[0]
-		if not ok or c.x < 4 or c.y < 1 or c.x >= map.width - 2 or c.y >= map.height - 1:
+		if ok:
+			print("CRUSHMOVE cand %s kind=%s tile=%s" % [c, PropLayer.fence_kind_of(inst["model"]), board.kind_at(c) if board.in_bounds(c) else -1])
+		if not ok or not board.in_bounds(c) or Vector2(c).distance_to(centre) >= best:
 			continue
-		var run: bool = true
-		for k in range(-3, 2):
-			run = run and board.in_bounds(c + Vector2i(k, 0)) and board.kind_at(c + Vector2i(k, 0)) == Terrain.Kind.FIELD
-		if run and Vector2(c).distance_to(centre) < best:
-			best = Vector2(c).distance_to(centre)
-			target = c
-			at = (inst["transform"] as Transform3D).origin
-	start = target - Vector2i(2, 0)
-	var unit: Unit = null
-	for u: Unit in state.units_of(0):
-		if u.unit_class() in [UnitTypes.UnitClass.TANK, UnitTypes.UnitClass.LIGHT_VEHICLE] and (unit == null or u.ap > unit.ap):
-			unit = u
+		# Машина стартує за дві клітинки з одного з чотирьох боків; ціль мусить бути досяжною.
+		for d: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+			var st: Vector2i = c + d * 2
+			if not board.in_bounds(st) or board.kind_at(st) != Terrain.Kind.FIELD or board.kind_at(c + d) != Terrain.Kind.FIELD:
+				continue
+			unit.pos = st
+			if (Pathing.compute_zones(board, unit, {}, {}) as Pathing.Zones).can_reach(c):
+				best = Vector2(c).distance_to(centre)
+				target = c
+				start = st
+				at = (inst["transform"] as Transform3D).origin
+				break
+	unit.pos = spawn
 	print("CRUSHMOVE target=%s start=%s unit=%s ap=%s" % [target, start, unit.id if unit != null else -1, unit.ap if unit != null else -1])
 	if unit == null or target.x < 0:
 		get_tree().quit(1)
 		return
 	unit.pos = start
-	print("CRUSHMOVE active=%s owner=%s class=%s" % [state.active_player, unit.owner, unit.unit_class()])
-	print("CRUSHMOVE blocked=%s" % [state.known_blocked_map(0).keys().slice(0, 8)])
-	var zz: Pathing.Zones = Pathing.compute_zones(board, unit, {}, {})
-	for k in range(-1, 3):
-		print("CRUSHMOVE reach %s=%s kind=%s" % [start + Vector2i(k, 0), zz.can_reach(start + Vector2i(k, 0)), board.kind_at(start + Vector2i(k, 0))])
 	state.refresh_vision(0)
 	screen.call("_rebuild_units_for_active_player", true)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")

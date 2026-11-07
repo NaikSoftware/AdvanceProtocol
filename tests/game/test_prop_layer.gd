@@ -3667,6 +3667,6 @@ func test_real_pieces_follow_their_part_tags() -> void:
 	props._throw(b, Vector3.RIGHT)
 	for p: Dictionary in bricks:
 		if p["part"] == "plinth":
-			assert_lt((p["vel"] as Vector3).length(), 0.25, "цоколь осипається на місці")
+			assert_true(p["stump"], "цоколь лишається на місці")
 	var pole: Array = props._burst_pieces(root, &"infra_pole_wood", Transform3D())
 	assert_eq(pole.filter(func(p: Dictionary) -> bool: return p["part"] == "stump").size(), 1, "один пеньок")
