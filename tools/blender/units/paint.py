@@ -5,7 +5,7 @@
 Writes <work>/albedo.png (sRGB), normal.png and orm.png (R occlusion, G roughness, B metallic).
 Everything on the body is a function of the baked object-space position, so camouflage blocks
 keep their real size across UV islands. Lengths here are metres (model units x 8).
-The tread strip, the wheel, sprocket and panel cells are authored, not baked (lib.py layout).
+The tread strip, the wheel and sprocket cells are authored, not baked (lib.py layout).
 """
 import sys, os
 import numpy as np
@@ -138,9 +138,9 @@ col = col * (1 - C.get("roof_dark", 0.42) * roof) * (1 + roof * np.array(C.get("
 # would otherwise dissolve into the hull at the far zoom.
 t = cfg.get("turret")
 if t:
-    tc = 0.5 * (t["long"][0] + t["long"][1])
+    tc = t["tc"]
     ty = [lib.m_long(cfg, tc + (L - tc) * t["scale_long"]) * lib.TILE_M for L in t["long"]]
-    on_t = (P[..., 1] > ty[0]) & (P[..., 1] < ty[1]) & (np.abs(P[..., 0]) < lib.m_len(cfg, t["lat"]) * lib.TILE_M) \
+    on_t = (P[..., 1] > ty[0]) & (P[..., 1] < ty[1]) & (np.abs(P[..., 0]) < lib.m_len(cfg, t["lat"] * t.get("scale_lat", 1.0)) * lib.TILE_M) \
         & (P[..., 2] > lib.m_len(cfg, t["base_h"]) * lib.TILE_M + 0.05) & ~on_gun
     col = col * (1 - t.get("dark", 0.25) * on_t[..., None])
 
@@ -197,7 +197,7 @@ def height_normal(hm, strength, wrap):
 blur = lambda a: (a + np.roll(a, 1, 1) + np.roll(a, -1, 1) + np.roll(a, 1, 0) + np.roll(a, -1, 0)) / 5
 normal[:S] = height_normal(blur(blur(height)), 3.0, True)
 
-# ---- right column: wheel, sprocket, panel ----------------------------------------------------
+# ---- right column: wheel, sprocket ----------------------------------------------------------
 c0 = int(lib.COL_U * N)
 col[S:, c0:] = olive * 0.6
 rough[S:, c0:] = 0.8; metal[S:, c0:] = 0.0; occl[S:, c0:] = 1.0
@@ -248,24 +248,6 @@ col[ys, xs] = sc * C.get("wheel_mud", 0.62)
 normal[ys, xs] = height_normal(blur(sh), 4.0, False)
 rough[ys, xs] = np.where(ring, 0.55, 0.78); metal[ys, xs] = np.where(ring, 0.5, 0.0)
 
-# Recognition panel cloth: neutral grey near linear 0.35 (the shader multiplies the owner colour
-# by luminance over that value), weave, folds, two tie-down straps, dust at the edges.
-py, px = np.mgrid[0:64, 0:128] + 0.5
-weave = 0.03 * np.sign(np.sin(px * np.pi * 0.9) * np.sin(py * np.pi * 0.9))
-folds = 0.07 * np.sin(px / 128 * np.pi * 5.0 + 1.3 * np.sin(py / 64 * np.pi * 2)) + 0.04 * np.sin(py / 64 * np.pi * 3 + px / 40)
-pl = 0.35 * (1 + weave + folds)
-strap = (np.abs(px - 32) < 3) | (np.abs(px - 96) < 3)
-pl = np.where(strap, 0.06, pl)
-edge_d = np.minimum.reduce([px, 128 - px, py * 2, (64 - py) * 2]) / 10
-pdust = np.clip(1 - edge_d, 0, 1) * 0.35
-pc = pl[..., None] * np.ones(3) * (1 - pdust[..., None]) + dust_c * pdust[..., None]
-ys, xs = cell("panel")
-col[ys, xs] = pc
-normal[ys, xs] = height_normal(folds * 6 + np.where(strap, 0.3, 0.0), 2.0, False)
-rough[ys, xs] = 0.95; metal[ys, xs] = 0.0
-
-
-
 def push_pull(img, known):
     """Fill unknown texels with the average of known ones nearby, coarse to fine, so mip levels
     never mix the gap colour into island edges."""
@@ -292,5 +274,4 @@ out = cfg["work"]
 Image.fromarray((srgb(col) * 255 + 0.5).astype(np.uint8)).save(os.path.join(out, "albedo.png"))
 Image.fromarray((np.clip(normal, 0, 1) * 255 + 0.5).astype(np.uint8)).save(os.path.join(out, "normal.png"))
 Image.fromarray((orm * 255 + 0.5).astype(np.uint8)).save(os.path.join(out, "orm.png"))
-pm = pc @ np.array([0.2126, 0.7152, 0.0722])
-print(f"PAINT done; panel mean linear luminance {pm[~strap].mean():.3f}")
+print("PAINT done")

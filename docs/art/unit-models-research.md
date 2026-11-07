@@ -23,9 +23,9 @@ Real names are private reference only — they never appear in code, data, UI or
 | 2 | armoured car | K806 6×6 hull (real) **+ 30 mm unmanned turret (invented fit**, of the kind offered on Korean export 6×6s) | Kite | 6.6 × ~2.7 × 2.7 (hull) | 3 axles, flat-roofed boat hull, small offset turret with short 30 mm barrel |
 | 3 | troop carrier | K808 8×8 | Drover | 7.2 × ~2.7 × 2.7 | 4 axles, long flat roof with hatches, RWS cupola, rear ramp |
 | 4 | scout car | K153 (armoured K151 4×4 with RWS) | Wren | 4.9 × 2.2 × 2.0 | bonnet + cab, roof ring with RWS, 4 wheels clear of body |
-| 5 | medium tank | K1A2 | Basalt | ~7.5 hull (unverified; 9.67 gun fwd) × 3.60 × 2.25 | flat angular turret, mesh bustle basket, 120 mm with thermal sleeve |
-| 6 | tank destroyer | **invented variant:** K1-type hull (real) with a low unmanned turret and a long 120 mm L/55 (invented combination) | Obsidian | ~7.5 hull × 3.6 × ~2.0 | gun overhang ~0.55 × hull, the longest of the set; turret ≤ 40 % hull length; lowest roof |
-| 7 | light tank | K21-105 (K21 hull, CT-CV 105 turret) | Flint | 6.9 × 3.4 × 2.6 | slab-sided IFV hull, engine grille front-left, compact turret aft of centre |
+| 5 | medium tank | **derived:** the heavy tank's hull and running gear, scaled down, with a compact turret | Basalt | ~6.5 hull × 3.3 × ~2.7 | the heavy's hull read smaller; a compact flat turret with no long bustle; a gun shorter than the heavy's |
+| 6 | tank destroyer | **invented:** turretless gun carriage on a tracked MBT-class chassis, a tall fixed armoured box aft (the self-propelled-howitzer layout) | Obsidian | ~6.8 hull × 3.5 × ~3.2 | no turret: low empty front hull, a big box over the rear 55–60 %, the longest gun of the set (overhang ~0.5 × hull) with a muzzle brake |
+| 7 | light tank | **derived:** the K1-type hull with a small low turret (the previous tank-destroyer model) and a short 105 mm gun | Flint | ~6.3 hull × 3.3 × ~2.1 | the smallest and lowest; a small low turret; the shortest gun (overhang ~0.17 × hull) |
 | 8 | heavy tank | K2 | Monolith | 7.5 hull (10.8 gun fwd) × 3.6 × 2.4 | boxy wedge-front turret with long bustle, sight block on roof, side skirts |
 | 9 | field gun | KH178 105 mm towed | Squall | 4.48 (Wikipedia, verify) × 2.1 × 2.8 | split trail open in a V, shield, short barrel, two road wheels |
 | 10 | howitzer | KH179 155 mm towed | Gale | 10.39 travel × 2.44 × 2.36 | long 155 mm barrel (~6 m), split trail in a wide V, two road wheels, firing base under carriage |
@@ -37,11 +37,12 @@ is listed as 2.1 m on Wikipedia, not plausible for an 8×8 — use ~2.7 m from t
 silhouettes in `game/battle/unit_silhouettes.gd` are hull sizes and stay the source for in-game
 scale.
 
-**Tanks from above.** Light (Flint): smallest, IFV hull with the turret aft and a ribbed
-engine grille forward. Medium (Basalt): flat angular turret, gun ~0.3 × hull past the bow. Tank
-destroyer (Obsidian): small low turret, the longest gun, nothing on the roof. Heavy (Monolith):
-the largest turret footprint, long bustle, boxy, roof sights. Pillar 5 depends on these four
-staying separable at 34 px.
+**Tanks from above, by shape alone** (the owner colour is on the HP bar, never on the model).
+Light (Flint): the smallest and lowest, a small low turret, the shortest gun. Medium (Basalt):
+the heavy's hull read smaller, a compact flat turret without a bustle, a medium gun. Tank
+destroyer (Obsidian): no turret, a big box at the rear, an empty front deck, the longest gun.
+Heavy (Monolith): the largest, a broad turret with a long bustle and roof sights. Pillar 5
+depends on these four staying separable at 34 px.
 
 **Second best:** USA — Stryker ICV, Stryker 30 mm / LAV-25, JLTV, M1A2 SEPv3, M10 Booker,
 M1150 ABV, M119A3, M777A2; gaps at medium tank and tank destroyer; all DoD photos are public
@@ -73,9 +74,9 @@ banded scheme, desaturated.
 | 2 | Six-wheeled armoured car, boat-shaped flat-roofed hull, proportions L : W : H 2.5 : 1 : 1 (hull), three evenly spaced axles with large off-road tyres, small unmanned turret set back of centre with a short 30 mm cannon (barrel 0.3 × hull length), smoke grenade dischargers, periscopes, rear door | eight wheels; a tank-sized turret; a long gun; dual rear wheels; truck cab |
 | 3 | Eight-wheeled armoured personnel carrier, long boxy hull with sloped glacis, L : W : H 2.7 : 1 : 1, four evenly spaced axles, flat roof with two square troop hatches and a remote weapon station with a heavy machine gun forward-right, rear ramp, stowage boxes on the sides | a turret with a cannon; six wheels; tracks; open-top body |
 | 4 | Armoured 4×4 light tactical vehicle, L : W : H 2.2 : 1 : 0.9, short bonnet, four-door armoured cab with thick small windows, roof ring with a remote weapon station with a machine gun, short cargo bed behind the cab, spare wheel on the rear | civilian SUV look; chrome; light bars; road-car wheels |
-| 5 | Main battle tank, low hull L : W 2.1 : 1, hull height 0.3 × length; angular flat-faced turret 0.55 × hull length with a mesh stowage basket at the rear; 120 mm smoothbore gun with thermal sleeve and fume extractor reaching 0.3 × hull length past the bow; six road wheels, rubber-padded tracks, side skirts; commander sight and machine gun on the roof | wedge turret front; slat cage; riveted plate; extra road wheels |
-| 6 | Low tank destroyer on a main-battle-tank hull, hull L : W 2.1 : 1, small low unmanned turret only 0.4 × hull length and very flat, long 120 mm gun overhanging the bow by 0.55 × hull length, the longest gun of all the tanks; six road wheels, rubber-padded tracks, thick appliqué armour on the glacis; clean flat engine deck | crewed turret with hatches; short gun; tall roof; casemate box (it keeps a turret) |
-| 7 | Light tank on an infantry-fighting-vehicle hull, slab-sided box hull L : W 2 : 1, engine grille at the front left, compact 105 mm turret set back of centre, turret 0.45 × hull length, gun reaching 0.25 × hull length past the bow; six road wheels, rubber-padded tracks, bolted side panels | rear-engine MBT layout; long 120 mm gun; large bustle |
+| 5 | Not generated: built from the heavy tank's source (see §1); the pipeline shortens the turret from the back, flattens and narrows it and fits a thinner, shorter gun | — |
+| 6 | Tracked armoured self-propelled gun with NO rotating turret: a low sloped front hull on the front 40 % with only a flat engine deck and driver hatch; a large tall slab-sided armoured box fixed on the rear 55 %, its flat roof the highest point, two small low hatches; one very long large-calibre gun projecting straight forward and level from the centre of the box's front face, with a muzzle brake, about as long as the hull; side skirts, seven road wheels | a turret ring or rotating turret; a gun on the roof; tall kit on the front deck |
+| 7 | Not generated: built from the K1-type source with the small low turret (§1); the pipeline fits a short 105 mm gun (a thin barrel with a fume extractor and a small muzzle brake) | — |
 | 8 | Heavy main battle tank, hull L : W 2.1 : 1, broad turret 0.6 × hull length with wedge-shaped front armour and a long ammunition bustle, panoramic sight block on the roof, 120 mm long smoothbore gun with thermal sleeve reaching 0.45 × hull length past the bow, six road wheels, rubber-padded tracks, full side skirts with armour modules | rounded cast turret; short gun; slat cage covering the turret |
 | 9 | Towed 105 mm field gun in firing position, split trail opened to a 50° V with spades, small flat gun shield, barrel 0.65 × trail length, two road wheels with off-road tyres, sight on the left | self-propelled chassis; three trail legs; wheels lifted off the ground |
 | 10 | Towed 155 mm howitzer in firing position, long barrel with muzzle brake 1.1 × trail length, recuperator cylinders above the barrel, two long box-section trail legs opened in a wide V, firing platform lowered under the carriage, two large road wheels, auxiliary power unit on the trail | single box trail; barrel shorter than the trail; tracks |

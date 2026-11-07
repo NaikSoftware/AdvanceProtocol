@@ -4,8 +4,7 @@
 # Generated sources (Tripo GLBs, ~45 MB each, kept out of the repo) live in
 # ~/.local/share/advance-protocol/unit-sources/<unit>.glb, as units.json `source` says.
 #   tools/blender/units/build.sh heavy_tank [--from bake|paint|assemble]
-# A new unit is a units.json entry: measure the source with measure_source.py, run prep, pick the
-# recognition panel spots with panel_spots.py (needs prep's work.blend), then build.
+# A new unit is a units.json entry: measure the source with measure_source.py, then build.
 set -euo pipefail
 unit="$1"; from="${3:-prep}"
 here="$(cd "$(dirname "$0")" && pwd)"

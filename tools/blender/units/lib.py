@@ -7,7 +7,7 @@ horizontal axis, `h` the height above its lowest vertex. MODEL is Blender after 
 
 Atlas (1024², one material). PNG row 0 is the top, which is Godot v = 0 and Blender v = 1:
   rows    0..63   tread strip, full width: one 0.25-unit (2 m) tread period, tiles in u
-  column  u >= COL_U, below the strip: road-wheel face, sprocket face, panel cloth cells
+  column  u >= COL_U, below the strip: road-wheel face, sprocket face
   the rest: baked body islands
 """
 import json, os, re
@@ -20,10 +20,10 @@ TILE_M = 8.0
 ATLAS = 1024
 STRIP = 1.0 / 16.0        # tread strip height, fraction of the atlas
 TREAD_PERIOD = 0.25       # model units per tread repeat (2 m)
-COL_U = 0.875             # body islands live left of this; gear and panel cells right of it
+COL_U = 0.875             # body islands live left of this; gear cells right of it
 CELL = 128                # px per gear cell
 # Cells in the right column, as (row0, rows) in PNG pixels.
-CELLS = {"wheel": (64, 128), "sprocket": (192, 128), "panel": (320, 64)}
+CELLS = {"wheel": (64, 128), "sprocket": (192, 128)}
 
 
 def load(name):
@@ -43,7 +43,9 @@ def load(name):
         # gun with it; every stage reads the moved gun from here
         g = cfg["gun"]
         t["axis_h0"] = g["axis_h"]
-        tc = 0.5 * (t["long"][0] + t["long"][1])
+        # scaled about the box centre, or about its front ("anchor": "front") to cut a bustle
+        tc = t["long"][1] if t.get("anchor") == "front" else 0.5 * (t["long"][0] + t["long"][1])
+        t["tc"] = tc
         t["dlong"] = tc + (t["long"][1] - tc) * t["scale_long"] - t["long"][1]
         t["drop"] = (g["axis_h"] - t["base_h"]) * (1.0 - t["scale_h"])
         g["start_long"] += t["dlong"]

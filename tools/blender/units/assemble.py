@@ -1,8 +1,8 @@
-"""Stage 4: lo + procedural running gear + recognition panels -> assets/units/<unit>.glb.
+"""Stage 4: lo + procedural running gear -> assets/units/<unit>.glb.
 
     blender --background --factory-startup --python assemble.py -- <unit>
 
-COLOR_0: R recognition panel, G track faces, B rotating wheel faces (alpha = half the spin rate
+COLOR_0: G track faces, B rotating wheel faces (alpha = half the spin rate
 relative to the road wheels), black elsewhere.
 UV2 (TEXCOORD_1 as Godot reads it): track = (arc length in model units, 0 inner .. 1 outer edge);
 wheel = (axle y, axle z) in Godot axes; (0, 0) elsewhere. The glTF exporter writes v as 1 - v,
@@ -157,39 +157,6 @@ for side in (1, -1):
             face(bm, uvl, uv2l, cl, [outer[i], outer[j], inner[j], inner[i]], [tyre] * 4, [ax] * 4, blue, mid)
 bmesh.ops.triangulate(bm, faces=bm.faces)
 parts.append(finish(bm, "wheels"))
-
-# ---- recognition panels: flat rectangles strapped to the roof ---------------------------------
-# A panel stays one crisp rectangle from above: a single plane fitted to the roof under it (level
-# or sloped) and lifted onto its highest point, so nothing pokes through and it never creases.
-# Kit under it may leave a gap up to `panel_flat_tol`; more than that (kit too tall, or the
-# footprint running off an edge) fails the build. Pick `at` and the size with panel_spots.py.
-dg = bpy.context.evaluated_depsgraph_get()
-bvh = BVHTree.FromObject(lo, dg)
-bm, uvl, uv2l, cl = new_part("panels")
-red = (1.0, 0.0, 0.0, 1.0)
-for p in cfg["panels"]:
-    cx, cy = p["at"]
-    sx, sy = p["size_m"][0] / lib.TILE_M, p["size_m"][1] / lib.TILE_M
-    fx = cx + (np.linspace(0, 1, 33) - 0.5) * sx
-    fy = cy + (np.linspace(0, 1, 33) - 0.5) * sy
-    X, Y = np.meshgrid(fx, fy)
-    zf = np.array([[(lambda h: h.z if h else 0.0)(bvh.ray_cast(Vector((x, y, 2.0)), Vector((0, 0, -1)))[0])
-                    for x in fx] for y in fy])
-    A = np.c_[X.ravel(), Y.ravel(), np.ones(X.size)]
-    c = np.linalg.lstsq(A, zf.ravel(), rcond=None)[0]
-    res = zf.ravel() - A @ c
-    spread = res.max() - res.min()
-    print(f"ASM panel {p['name']}: at x {cx:+.3f} y {cy:+.3f}, surface {zf.min():.3f}..{zf.max():.3f}, "
-          f"off its plane {res.min():+.4f}..{res.max():+.4f}")
-    if spread > cfg.get("panel_flat_tol", 0.025):
-        sys.exit(f"ASM panel {p['name']}: roof under it spreads {spread:.3f} off one plane; pick another spot or size with panel_spots.py")
-    lift = res.max() + cfg.get("panel_lift", 0.003)
-    corners = [(cx - sx / 2, cy - sy / 2), (cx + sx / 2, cy - sy / 2), (cx + sx / 2, cy + sy / 2), (cx - sx / 2, cy + sy / 2)]
-    vs = [bm.verts.new((x, y, c[0] * x + c[1] * y + c[2] + lift)) for x, y in corners]
-    face(bm, uvl, uv2l, cl, vs, [cell_map("panel", u, v) for u, v in ((-1, -1), (1, -1), (1, 1), (-1, 1))],
-         [(0, 0)] * 4, red, Vector((0, 0, 1)))
-bmesh.ops.triangulate(bm, faces=bm.faces)
-parts.append(finish(bm, "panels"))
 
 # ---- lo: black mask, UV2 (0, 0) ----------------------------------------------------------------
 me = lo.data

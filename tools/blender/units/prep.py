@@ -5,7 +5,7 @@
 hi: the source oriented, scaled and grounded, running gear cut away, barrel stretched so the
 muzzle lands on the spec. lo: hi minus gear, barrel, belly and loose detail islands, decimated to
 cfg body_tris, a lathe barrel built from the measured profile, unwrapped into the body region of
-the atlas. Gear and panels are added later (assemble.py) because they are not baked.
+the atlas. The running gear is added later (assemble.py) because it is not baked.
 """
 import bpy, bmesh, sys, os, math
 import numpy as np
@@ -46,19 +46,21 @@ zmin = co[:, 2].min()
 t = cfg.get("turret")
 if t:
     # Source frame: long, lat, h above the lowest vertex. Turret: everything above its ring
-    # inside its box, scaled about the box centre lengthwise and onto the ring in height. Gun:
+    # inside its box, scaled lengthwise about lib's pivot, across about the centreline and onto
+    # the ring in height. Gun:
     # moved rigidly with the turret front, so it stays round.
     L, A = (co[:, 0], co[:, 1]) if cfg["fwd"] == "x" else (co[:, 1], -co[:, 0])
     H = co[:, 2] - zmin
-    lo_, hi_ = t["long"]; tc = 0.5 * (lo_ + hi_)
+    lo_, hi_ = t["long"]; tc = t["tc"]
     box = (L >= lo_) & (L <= hi_) & (np.abs(A) < t["lat"]) & (H > t["base_h"])
     gun_v = (L > hi_) & (np.hypot(A, H - t["axis_h0"]) < t["barrel_r"])
     newL = np.where(box, tc + (L - tc) * t["scale_long"], np.where(gun_v, L + t["dlong"], L))
     newH = np.where(box, t["base_h"] + (H - t["base_h"]) * t["scale_h"], np.where(gun_v, H - t["drop"], H))
+    sl = np.where(box, t.get("scale_lat", 1.0), 1.0)
     if cfg["fwd"] == "x":
-        co[:, 0] = newL
+        co[:, 0] = newL; co[:, 1] *= sl
     else:
-        co[:, 1] = newL
+        co[:, 1] = newL; co[:, 0] *= sl
     co[:, 2] = newH + zmin
     me.vertices.foreach_set("co", co.ravel()); me.update()
     print(f"PREP turret: {box.sum()} verts scaled, gun {gun_v.sum()} verts moved {t['dlong']:+.4f} long, {-t['drop']:+.4f} h")
