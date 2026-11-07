@@ -1398,7 +1398,8 @@ void fragment() {
 	float keep = smoothstep(thr - 0.25, thr, t.a * (0.6 + 0.4 * n));
 	// Корінь прозорості атласу: середина клуби пласкіша, ніж в атласі, але край ще м'який —
 	// без кореня клуба була б пласким диском.
-	float a = sqrt(t.a) * smoothstep(0.0, 0.7, t.a) * keep * COLOR.a * (1.0 - erode);
+	// Корінь множника — довгий хвіст: остання третина хмари рідшає ~0,8 с, а не зникає за 0,3 с.
+	float a = sqrt(t.a) * smoothstep(0.0, 0.7, t.a) * keep * COLOR.a * pow(1.0 - erode, 0.6);
 	// shortcut: глибина в NDC як у Vulkan (Forward+/Mobile); Compatibility дає z*2-1, край там жорсткіший.
 	vec4 sv = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, texture(depth_tex, SCREEN_UV).r, 1.0);
 	ALPHA = a * clamp((VERTEX.z - sv.z / sv.w) / v_depth, 0.0, 1.0);
