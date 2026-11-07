@@ -97,7 +97,7 @@ func test_pole_flag_overrides_the_height_guess() -> void:
 	var guessed: Node3D = BattleFx.spawn_topple_hit(parent, at, at + Vector3(0, 2.0 / 8.0, 0), BattleFx.Debris.WOOD, false)
 	var told: Node3D = BattleFx.spawn_topple_hit(parent, at, at + Vector3(0, 2.0 / 8.0, 0), BattleFx.Debris.WOOD, false, true)
 	assert_eq((guessed.get_node("Fine") as GPUParticles3D).amount, 10, "2 м без підказки — паркан")
-	assert_eq((told.get_node("Fine") as GPUParticles3D).amount, 6, "сказано «опора» — опора")
+	assert_eq((told.get_node("Fine") as GPUParticles3D).amount, 7, "сказано «опора» — опора")
 
 
 ## Мокра мапа: пил стає бурою грязю, грудок більше.
@@ -111,3 +111,14 @@ func test_wet_ground_sprays_mud_instead_of_dust() -> void:
 		var g: Gradient = (((n.get_node("Settle") as GPUParticles3D).process_material as ParticleProcessMaterial).color_initial_ramp as GradientTexture1D).gradient
 		return g.colors[0].get_luminance()
 	assert_true(tone.call(wet) < tone.call(dry) * 0.5, "мокрий пил — темна грязь")
+	assert_true(((wet.get_node("Settle") as GPUParticles3D).lifetime) <= 0.6, "грязь — коротка бризка, а не хмара")
+
+
+## Слід на мокрій землі: темна смуга вздовж відрізка, слабша за пляму під уламками, і лише біля нього.
+func test_scuff_darkens_a_band_along_the_line() -> void:
+	var scars := ScarMap.new(Vector2i(6, 6))
+	scars.stamp_scuff(Vector3(1, 0, 2), Vector3(3, 0, 2))
+	var img: Image = scars.image()
+	var on: float = img.get_pixel(2 * ScarMap.PX_PER_TILE + 16, 2 * ScarMap.PX_PER_TILE + 16).r
+	assert_between(on, 0.2, ScarMap.SCUFF_DARK + 0.01, "на лінії — помітно темніше, але не згарище")
+	assert_eq(img.get_pixel(2 * ScarMap.PX_PER_TILE + 16, 4 * ScarMap.PX_PER_TILE).r, 0.0, "за 1,5 тайла — чисто")

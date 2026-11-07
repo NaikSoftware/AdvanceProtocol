@@ -21,6 +21,9 @@ const PX_PER_TILE: int = 32
 ## Пляма уламків 10–14 м: темне ядро ~10 м, м'який край до 7 м від центру.
 const SCORCH_RADIUS_M: float = 7.0
 const SCORCH_CORE_M: float = 5.0
+## Слід поваленого на мокрій землі (`stamp_scuff`): півширина смуги й найбільша темрява.
+const SCUFF_HALF_M: float = 0.5
+const SCUFF_DARK: float = 0.35
 
 var _size: Vector2i
 var _img: Image
@@ -76,6 +79,32 @@ func stamp_scorch(cell: Vector2i) -> void:
 		return
 	_stamped[cell] = true
 	_stamp(cell, SCORCH_RADIUS_M, SCORCH_CORE_M)
+
+
+## Слід, який повалена опора чи паркан лишає на розмоклій землі: темна смуга ~1 м завширшки вздовж
+## a→b (світові точки, тайли) з рваним краєм; та сама темрява R, що в плями, але слабка (до SCUFF_DARK),
+## щоб читалась як мокра прим'ята земля, а не як згарище. Той самий туман `seen`, що в плями.
+func stamp_scuff(a: Vector3, b: Vector3) -> void:
+	var noise := FastNoiseLite.new()
+	noise.seed = hash(Vector4(a.x, a.z, b.x, b.z))
+	noise.frequency = 0.3
+	var pa := (Vector2(a.x, a.z) + Vector2(0.5, 0.5)) * PX_PER_TILE
+	var pb := (Vector2(b.x, b.z) + Vector2(0.5, 0.5)) * PX_PER_TILE
+	var half_px: float = SCUFF_HALF_M * PX_PER_TILE / 8.0
+	var lo := Vector2i(floori(minf(pa.x, pb.x) - half_px * 2.0), floori(minf(pa.y, pb.y) - half_px * 2.0))
+	var hi := Vector2i(ceili(maxf(pa.x, pb.x) + half_px * 2.0), ceili(maxf(pa.y, pb.y) + half_px * 2.0))
+	for y in range(maxi(lo.y, 0), mini(hi.y, _img.get_height())):
+		for x in range(maxi(lo.x, 0), mini(hi.x, _img.get_width())):
+			var p := Vector2(x, y)
+			var d: float = p.distance_to(Geometry2D.get_closest_point_to_segment(p, pa, pb))
+			# Край гуляє на ±40 % півширини: смуга не рівна, як від лінійки.
+			var w: float = half_px * (1.0 + 0.4 * noise.get_noise_2d(p.x, p.y))
+			var v: float = (1.0 - smoothstep(w * 0.4, w, d)) * SCUFF_DARK
+			if v <= 0.0:
+				continue
+			var old: Color = _img.get_pixel(x, y)
+			_img.set_pixel(x, y, Color(maxf(old.r, v), old.g, old.b, old.a))
+	_tex.update(_img)
 
 
 func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:
