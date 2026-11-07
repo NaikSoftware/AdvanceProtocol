@@ -122,10 +122,8 @@ falls back to the box placeholder, so a model may land one type at a time.
   along −Z. A vehicle's hull footprint matches `_SPECS.hull` X/Z and its barrel tip lands at
   `UnitSilhouettes.muzzle()`, because muzzle flashes, wrecks and contact shadows read those
   numbers, not the mesh. A soldier is 1.8 m = 0.225 units tall, feet at y = 0.
-- **COLOR_0** (RGBA, black elsewhere): **R** = owner marking — the roof recognition panel, the
-  helmet band. Paint those faces neutral grey around sRGB 160 (linear 0.35): the shader multiplies
-  the owner colour by the texture's luminance over that value, so dirt and scratches stay visible
-  in the owner colour. **G** = track tread faces. **B** = wheel faces that rotate; their alpha is
+- **COLOR_0** (RGBA, black elsewhere): **R** is unused — units carry no team colour; the side is
+  shown by the HP bar fill. **G** = track tread faces. **B** = wheel faces that rotate; their alpha is
   half the wheel's spin rate relative to the road wheels: the model's road-wheel radius / (2 × its
   own radius), the road-wheel radius being what `_SPECS.wheel` matches within 0.002. 0.5 on road
   wheels, above 0.5 on a smaller sprocket or idler and below it on a larger one (the heavy tank's
@@ -153,8 +151,8 @@ falls back to the box placeholder, so a model may land one type at a time.
   extracted next to the file) and `import_script/path="res://tools/prop_import.gd"`, which sets
   specular 0.3 like the props; the unit shader copies the imported material's specular, roughness,
   metallic and textures.
-- **Drawing:** one mesh and one material per type, shared by every owner; the owner colour and the
-  distance travelled are per-node `instance uniform`s, so a unit stays one draw call. They work on
+- **Drawing:** one mesh and one material per type, shared by every owner and painted the same for
+  all of them; the distance travelled is a per-node `instance uniform`, so a unit stays one draw call. They work on
   both the Mobile renderer and `gl_compatibility`. A wreck is the same mesh under the burnt
   material, sunk by `HULL_SAG`; its barrel does not droop, since the mesh is one piece.
 

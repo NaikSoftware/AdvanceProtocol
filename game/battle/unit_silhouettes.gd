@@ -3,7 +3,9 @@ extends RefCounted
 ## Тимчасові примітиви-заступники до асетів Фази 5.2: мінімум, що відрізняє 12 типів
 ## з фіксованого ізо-ракурсу. Ціна — кількість мешів (§8: <= 4 на юніт). Перед — -Z.
 
-const _BARREL_COLOR := Color("2e2b27")  # нейтральний метал: колір гравця лише на корпусі
+## Єдиний колір тіла для всіх власників: сторону показує смуга HP, не фарба юніта.
+const BODY_COLOR := Color("4f5240")
+const _BARREL_COLOR := Color("2e2b27")  # нейтральний метал
 const _STRIPE_COLOR := Color("d9b23a")
 
 ## hull — розмір корпусу (1 тайл = 8 м, тож 3,6 м = 0,45); barrel — довжина ствола від центру
@@ -83,21 +85,21 @@ static func shared_material(color: Color) -> StandardMaterial3D:
 	return _materials[color]
 
 
-static func build(type_id: int, owner_color: Color) -> Node3D:
+static func build(type_id: int) -> Node3D:
 	var s: Dictionary = spec(type_id)
 	var hull_size: Vector3 = s.hull
 	var extras: Array = s.extras
 	var root := Node3D.new()
-	var hull := _box(root, "Hull", hull_size, Vector3(0, hull_size.y * 0.5, 0), owner_color)
+	var hull := _box(root, "Hull", hull_size, Vector3(0, hull_size.y * 0.5, 0), BODY_COLOR)
 
 	var top := hull_size.y
 	if extras.has(&"turret"):
-		_box(root, "Turret", Vector3(hull_size.x * 0.6, TURRET_HEIGHT, hull_size.z * 0.5), Vector3(0, top + TURRET_HEIGHT * 0.5, 0), owner_color)
+		_box(root, "Turret", Vector3(hull_size.x * 0.6, TURRET_HEIGHT, hull_size.z * 0.5), Vector3(0, top + TURRET_HEIGHT * 0.5, 0), BODY_COLOR)
 		top += TURRET_HEIGHT
 	if extras.has(&"stripe"):
 		_box(root, "Stripe", Vector3(hull_size.x + 0.01, 0.02, hull_size.z * 0.3), Vector3(0, hull_size.y + 0.01, 0), _STRIPE_COLOR)
 	if extras.has(&"figures"):
-		root.add_child(figures(4, owner_color))
+		root.add_child(figures(4, BODY_COLOR))
 	if extras.has(&"drone_rack"):
 		_box(root, "DroneRack", Vector3(0.30, 0.10, 0.12), Vector3(0, hull_size.y + 0.05, hull_size.z * 0.5 - 0.06), _BARREL_COLOR)
 	if extras.has(&"wheels"):
@@ -117,17 +119,15 @@ static func build(type_id: int, owner_color: Color) -> Node3D:
 
 
 ## Той самий силует, але корпус, башта, ствол, ходова й фігури відділення — одна сітка `Hull` з
-## кольорами у вершинах (колір власника — на корпусі, башті й живих фігурах, решта нейтральна):
+## кольорами у вершинах (однаковими для всіх власників):
 ## один виклик малювання й один у тіні замість трьох-п'яти на юніт (§8). `standing` — скільки
 ## фігур стоїть, решта лежить.
-static func build_merged(type_id: int, owner_color: Color, standing: int = -1) -> Node3D:
+static func build_merged(type_id: int, standing: int = -1) -> Node3D:
 	var hull := MeshInstance3D.new()
 	hull.name = "Hull"
-	hull.mesh = merged_mesh(type_id, owner_color, standing)
+	hull.mesh = merged_mesh(type_id, standing)
 	if has_model(type_id):
-		# Сітка й матеріал — спільні для всіх власників: колір дає сам вузол.
 		hull.material_override = model_material(type_id)
-		hull.set_instance_shader_parameter("owner_color", owner_color)
 	else:
 		hull.material_override = _merged_mat()
 	var out := Node3D.new()
@@ -143,29 +143,26 @@ static func _merged_mat() -> StandardMaterial3D:
 	return _merged_material
 
 
-## Сітка тіла на тип, колір власника й кількість стоячих фігур; спільна для всіх юнітів того
+## Сітка тіла на тип і кількість стоячих фігур; спільна для всіх юнітів того
 ## самого вигляду, тож падіння фігури — підміна сітки, а не нова.
-static func merged_mesh(type_id: int, owner_color: Color, standing: int = -1) -> ArrayMesh:
+static func merged_mesh(type_id: int, standing: int = -1) -> ArrayMesh:
 	var has_figures: bool = (spec(type_id).extras as Array).has(&"figures")
 	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
 	var model: ArrayMesh = model_mesh(type_id)
 	if model != null and not has_figures:
 		return model
-	var key := "%d:%s:%d" % [type_id, "model" if model != null else owner_color.to_html(), up if has_figures else 0]
+	var key := "%d:%s:%d" % [type_id, "model" if model != null else "box", up if has_figures else 0]
 	if _merged_meshes.has(key):
 		return _merged_meshes[key]
 	if model != null:
-		# Четверо бійців на місцях коробок-фігур: ступні там, де був низ коробки. Загиблий
-		# лежить, як і коробка, і втрачає знак власника.
+		# Четверо бійців на місцях коробок-фігур: ступні там, де був низ коробки.
 		var feet := Transform3D(Basis(), Vector3(0.0, -FIGURE_SIZE.y * 0.5, 0.0))
 		var xfs: Array[Transform3D] = []
-		var marked: Array[bool] = []
 		for i in _FIGURE_SLOTS.size():
 			xfs.append(figure_transform(i, i < up) * feet)
-			marked.append(i < up)
-		_merged_meshes[key] = _merge_model(model, xfs, marked)
+		_merged_meshes[key] = _merge_model(model, xfs)
 		return _merged_meshes[key]
-	var root := build(type_id, owner_color)
+	var root := build(type_id)
 	var pieces: Array[Array] = []  ## [масиви сітки, перетворення, колір]
 	for part: Node in root.get_children():
 		if part is MeshInstance3D:
@@ -173,7 +170,7 @@ static func merged_mesh(type_id: int, owner_color: Color, standing: int = -1) ->
 			pieces.append([mi.mesh.surface_get_arrays(0), Transform3D(Basis(), mi.position), (mi.material_override as StandardMaterial3D).albedo_color])
 		elif part is MultiMeshInstance3D:
 			for i in _FIGURE_SLOTS.size():
-				pieces.append([_figure_mesh.surface_get_arrays(0), figure_transform(i, i < up), owner_color if i < up else FALLEN_COLOR])
+				pieces.append([_figure_mesh.surface_get_arrays(0), figure_transform(i, i < up), BODY_COLOR if i < up else FALLEN_COLOR])
 	root.free()
 	var v := PackedVector3Array()
 	var n := PackedVector3Array()
@@ -204,7 +201,7 @@ static func merged_mesh(type_id: int, owner_color: Color, standing: int = -1) ->
 
 
 ## Четвірка фігур одним MultiMesh: стоять перші `standing`, решта лежить на тих самих місцях.
-static func figures(standing: int, owner_color: Color) -> MultiMeshInstance3D:
+static func figures(standing: int, stand_color: Color) -> MultiMeshInstance3D:
 	if _figure_mesh == null:
 		_figure_mesh = BoxMesh.new()
 		_figure_mesh.size = FIGURE_SIZE
@@ -220,17 +217,17 @@ static func figures(standing: int, owner_color: Color) -> MultiMeshInstance3D:
 	mi.name = "Figures"
 	mi.multimesh = mm
 	mi.material_override = _figure_material
-	set_standing(mi, standing, owner_color)
+	set_standing(mi, standing, stand_color)
 	return mi
 
 
 ## Загибла фігура лежить уздовж землі на своєму місці, ледь зсунута вбік: не стоїть і не
 ## здіймається над основою — загиблі не перешкода.
-static func set_standing(mi: MultiMeshInstance3D, standing: int, owner_color: Color) -> void:
+static func set_standing(mi: MultiMeshInstance3D, standing: int, stand_color: Color) -> void:
 	var mm: MultiMesh = mi.multimesh
 	for i in mm.instance_count:
 		mm.set_instance_transform(i, figure_transform(i, i < standing))
-		mm.set_instance_color(i, owner_color if i < standing else FALLEN_COLOR)
+		mm.set_instance_color(i, stand_color if i < standing else FALLEN_COLOR)
 
 
 static func figure_transform(i: int, standing: bool) -> Transform3D:
@@ -299,16 +296,15 @@ static func _load_model(path: String) -> ArrayMesh:
 				xf = (n as Node3D).transform * xf
 			n = n.get_parent()
 		var xfs: Array[Transform3D] = [xf]
-		var marked: Array[bool] = [true]
-		out = _merge_model(mi.mesh, xfs, marked)
+		out = _merge_model(mi.mesh, xfs)
 		out.surface_set_material(0, mi.get_active_material(0))
 	root.free()
 	return out
 
 
 ## Копії поверхні 0 сітки `src` за перетвореннями в одну поверхню з усіма атрибутами: дотичні й
-## UV2 потрібні карті нормалей, гусеницям і колесам. `marked[i] = false` знімає знак власника.
-static func _merge_model(src: Mesh, xfs: Array[Transform3D], marked: Array[bool]) -> ArrayMesh:
+## UV2 потрібні карті нормалей, гусеницям і колесам.
+static func _merge_model(src: Mesh, xfs: Array[Transform3D]) -> ArrayMesh:
 	var a: Array = src.surface_get_arrays(0)
 	var sv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 	var count: int = sv.size()
@@ -335,8 +331,6 @@ static func _merge_model(src: Mesh, xfs: Array[Transform3D], marked: Array[bool]
 				var tg: Vector3 = (xf.basis * Vector3(st[i * 4], st[i * 4 + 1], st[i * 4 + 2])).normalized()
 				t.append_array([tg.x, tg.y, tg.z, st[i * 4 + 3]])
 			var col: Color = sc[i] if sc.size() == count else Color.BLACK
-			if not marked[k]:
-				col.r = 0.0
 			c.append(col)
 			uv.append(su[i] if su.size() == count else Vector2.ZERO)
 			var u2: Vector2 = su2[i] if su2.size() == count else Vector2.ZERO

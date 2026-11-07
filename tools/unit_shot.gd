@@ -1,11 +1,10 @@
 extends Node
-## Знімає модель юніта на справжньому екрані бою: обидва власники й коробка-заступник поруч для
+## Знімає модель юніта на справжньому екрані бою: дві моделі й коробка-заступник поруч для
 ## масштабу, на найближчому й найдальшому зумі, і два кадри з інтервалом 0,5 с, поки один танк
 ## їде на тайл уперед (гусениці й колеса мають крутитися). Кадри тримаються в пам'яті й пишуться
 ## в кінці (save_png блокує ~1 с). Не входить у гру.
 ## Запуск (вікно, не --headless):
-##   $GODOT --path . res://tools/unit_shot.tscn -- <out_dir> <map> <type_id> [tag] [owner_a,owner_b]
-## owner_a,owner_b — індекси PLAYER_COLORS для двох моделей (типово 0,1), щоб зняти й третій колір.
+##   $GODOT --path . res://tools/unit_shot.tscn -- <out_dir> <map> <type_id> [tag]
 ## Шостий аргумент pair=<type_b>:<facing> ставить type_id і type_b на сусідні тайли носом до носа
 ## (facing 0 — уздовж осі, 1 — по діагоналі) і знімає лише два зуми: чи не залазить ствол у сусіда.
 
@@ -32,15 +31,12 @@ func _ready() -> void:
 	var map := load("res://maps/%s.tres" % a[1]) as MapData
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
-	var owners: PackedStringArray = (a[4] if a.size() > 4 else "0,1").split(",")
-	var c0: Color = UnitView.PLAYER_COLORS[int(owners[0])]
-	var c1: Color = UnitView.PLAYER_COLORS[int(owners[1])]
 	if a.size() > 5 and a[5].begins_with("pair="):
 		var pv: PackedStringArray = a[5].substr(5).split(":")
 		var f: int = int(pv[1])
 		var ahead: Vector2i = Vector2i(0, -1) if f == 0 else Vector2i(1, -1)
-		_place(UnitSilhouettes.build_merged(type_id, c0), cell, f)
-		_place(UnitSilhouettes.build_merged(int(pv[0]), c1), cell + ahead, f + 4)
+		_place(UnitSilhouettes.build_merged(type_id), cell, f)
+		_place(UnitSilhouettes.build_merged(int(pv[0])), cell + ahead, f + 4)
 		var prig: IsoCameraRig = screen.get_node("%CameraRig")
 		for fr in SETTLE_FRAMES:
 			await get_tree().process_frame
@@ -57,11 +53,11 @@ func _ready() -> void:
 		print("UNIT pair %s at %s: %d frames" % [a[5], cell, pshots.size()])
 		get_tree().quit()
 		return
-	# Власник 1 дивиться на північ, власник 2 — на південний схід, коробка-заступник — ліворуч.
-	_place(UnitSilhouettes.build_merged(type_id, c0), cell, 0)
-	_place(UnitSilhouettes.build_merged(type_id, c1), cell + Vector2i(1, 0), 3)
-	_place(UnitSilhouettes.build(type_id, c0), cell + Vector2i(-1, 0), 0)
-	var mover: Node3D = UnitSilhouettes.build_merged(type_id, c1)
+	# Перша модель дивиться на північ, друга — на південний схід, коробка-заступник — ліворуч.
+	_place(UnitSilhouettes.build_merged(type_id), cell, 0)
+	_place(UnitSilhouettes.build_merged(type_id), cell + Vector2i(1, 0), 3)
+	_place(UnitSilhouettes.build(type_id), cell + Vector2i(-1, 0), 0)
+	var mover: Node3D = UnitSilhouettes.build_merged(type_id)
 	_place(mover, cell + Vector2i(0, 2), 0)
 	print("UNIT placed at %s" % cell)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")

@@ -36,7 +36,7 @@ func test_layer_is_the_fill_width_of_the_hp_ratio() -> void:
 		view.set_hp(case[0], case[1])
 		bars.sync()
 		assert_eq(bars.layer_of(0), case[2], "hp %d/%d" % [case[0], case[1]])
-	assert_eq(UnitHpBars.layer_count(), inner + 1, "по шару на ширину заливки")
+	assert_eq(UnitHpBars.layer_count(), (inner + 1) * UnitView.PLAYER_COLORS.size(), "по шару на ширину заливки й власника")
 	assert_eq(UnitHpBars.layer_image(23).get_pixel(1, 3), UnitView._hp_bar_texture(0.5).get_image().get_pixel(1, 3), "той самий малюнок, що й у спрайта")
 
 

@@ -19,9 +19,6 @@ uniform float roughness = 1.0;
 uniform float metallic = 0.0;
 // Типові 0,5 власного шейдера світлішають модель проти імпортованого матеріалу: беремо його.
 uniform float specular = 0.5;
-// Лінійна яскравість сірої фарби панелі в атласі: на ній колір власника виходить як є, бруд і
-// подряпини темніші за неї — і темнішають у кольорі власника, тож панель читається фарбою.
-uniform float marking_lum = 0.35;
 uniform float wheel_radius = 0.06;
 // Смуга траку в атласі: верхня 1/16 текстури на всю ширину, рівно один період малюнка — 0,25
 // одиниці моделі (2 м гусениці). Трак бере текстуру звідти за UV2, а не за UV, тож малюнок
@@ -29,7 +26,6 @@ uniform float wheel_radius = 0.06;
 const float TREAD_PERIOD = 0.25;
 const float TREAD_STRIP = 0.0625;
 
-instance uniform vec4 owner_color : source_color = vec4(1.0);
 instance uniform float travel = 0.0;
 
 void vertex() {
@@ -56,8 +52,6 @@ void fragment() {
 		ddy = dFdy(t);
 	}
 	vec3 col = (textureGrad(albedo_tex, uv, ddx, ddy) * albedo_color).rgb;
-	float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-	col = mix(col, owner_color.rgb * clamp(lum / marking_lum, 0.0, 1.5), COLOR.r);
 	ALBEDO = col;
 	vec4 orm = textureGrad(orm_tex, uv, ddx, ddy);
 	ROUGHNESS = roughness * dot(orm, roughness_channel);

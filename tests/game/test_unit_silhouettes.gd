@@ -25,7 +25,7 @@ func test_hull_sizes_are_real_world_metres() -> void:
 
 
 func test_tank_is_hull_plus_08m_turret_and_gun_overhangs() -> void:
-	var root: Node3D = UnitSilhouettes.build(5, Color.WHITE)
+	var root: Node3D = UnitSilhouettes.build(5)
 	var turret := root.get_node("Turret") as MeshInstance3D
 	assert_almost_eq((turret.mesh as BoxMesh).size.y * 8.0, 0.8, 0.0001)
 	assert_almost_eq(turret.position.y + (turret.mesh as BoxMesh).size.y * 0.5, 0.3, 0.0001)  # 2,4 м
@@ -38,8 +38,8 @@ func test_tank_is_hull_plus_08m_turret_and_gun_overhangs() -> void:
 ## по одному на корпус, башту, ствол, ходову й фігури відділення.
 func test_merged_body_is_one_mesh_with_the_same_geometry() -> void:
 	for id in UnitTypes.count():
-		var parts: Node3D = UnitSilhouettes.build(id, Color.RED)
-		var body: Node3D = UnitSilhouettes.build_merged(id, Color.RED)
+		var parts: Node3D = UnitSilhouettes.build(id)
+		var body: Node3D = UnitSilhouettes.build_merged(id)
 		assert_eq(body.get_child_count(), 1, "тип %d: одна сітка тіла, без фігур окремо" % id)
 		var hull := body.get_node("Hull") as MeshInstance3D
 		assert_eq(hull.mesh.get_surface_count(), 1, "тип %d: одна поверхня" % id)
@@ -70,38 +70,36 @@ func test_merged_body_is_one_mesh_with_the_same_geometry() -> void:
 		body.free()
 
 
-## Колір власника лежить у вершинах: нейтральні ствол і ходова лишаються нейтральними, а один
-## спільний матеріал не мусить знати власника.
-func test_merged_body_keeps_owner_colour_on_hull_and_neutral_barrel() -> void:
-	var red: Node3D = UnitSilhouettes.build_merged(5, Color.RED)
-	var blue: Node3D = UnitSilhouettes.build_merged(5, Color.BLUE)
-	var a := (red.get_node("Hull") as MeshInstance3D).mesh
-	var b := (blue.get_node("Hull") as MeshInstance3D).mesh
+## Тіло не несе кольору гравця: корпус один нейтральний колір, ствол інший нейтральний, а сітка
+## й матеріал — ті самі для всіх юнітів типу.
+func test_merged_body_is_one_neutral_colour_for_everyone() -> void:
+	var a_body: Node3D = UnitSilhouettes.build_merged(5)
+	var b_body: Node3D = UnitSilhouettes.build_merged(5)
+	var a := (a_body.get_node("Hull") as MeshInstance3D).mesh
 	var ca: PackedColorArray = a.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
-	var cb: PackedColorArray = b.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
-	assert_true(ca.has(Color.RED), "корпус — кольором власника")
-	assert_false(ca.has(Color.BLUE))
-	assert_true(cb.has(Color.BLUE))
+	assert_true(ca.has(UnitSilhouettes.BODY_COLOR), "корпус — нейтральний колір")
 	assert_true(ca.has(UnitSilhouettes._BARREL_COLOR), "ствол — нейтральний")
-	assert_same(UnitSilhouettes.build_merged(5, Color.RED).get_node("Hull").mesh, a, "та сама сітка для того самого власника")
-	assert_same((red.get_node("Hull") as MeshInstance3D).material_override, (blue.get_node("Hull") as MeshInstance3D).material_override, "матеріал спільний")
-	red.free()
-	blue.free()
+	for c: Color in UnitView.PLAYER_COLORS:
+		assert_false(ca.has(c), "жодного кольору гравця у вершинах")
+	assert_same((b_body.get_node("Hull") as MeshInstance3D).mesh, a)
+	assert_same((a_body.get_node("Hull") as MeshInstance3D).material_override, (b_body.get_node("Hull") as MeshInstance3D).material_override, "матеріал спільний")
+	a_body.free()
+	b_body.free()
 
 
-## Фігури відділення — у тій самій сітці: стоячі в кольорі власника, загиблі темні. Сітка на
+## Фігури відділення — у тій самій сітці: стоячі в нейтральному кольорі тіла, загиблі темні. Сітка на
 ## кількість стоячих окрема й кешується, тож падіння фігури — підміна сітки, а не нова.
 func test_squad_figures_live_in_the_merged_mesh_by_standing_count() -> void:
 	for standing in range(0, UnitView.SQUAD_FIGURES + 1):
-		var body: Node3D = UnitSilhouettes.build_merged(0, Color.RED, standing)
+		var body: Node3D = UnitSilhouettes.build_merged(0, standing)
 		var colors: PackedColorArray = (body.get_node("Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 		var box_verts: int = 24
 		var fallen: int = colors.count(UnitSilhouettes.FALLEN_COLOR)
 		assert_eq(fallen, (UnitView.SQUAD_FIGURES - standing) * box_verts, "лежачих при %d стоячих" % standing)
-		# Корпус (плита) — теж Color.RED, тож стоячі + плита.
-		assert_eq(colors.count(Color.RED), (standing + 1) * box_verts, "стоячих при %d" % standing)
+		# Корпус (плита) — теж BODY_COLOR, тож стоячі + плита.
+		assert_eq(colors.count(UnitSilhouettes.BODY_COLOR), (standing + 1) * box_verts, "стоячих при %d" % standing)
 		body.free()
-	assert_same(UnitSilhouettes.build_merged(0, Color.RED, 2).get_node("Hull").mesh, UnitSilhouettes.build_merged(0, Color.RED, 2).get_node("Hull").mesh)
+	assert_same(UnitSilhouettes.build_merged(0, 2).get_node("Hull").mesh, UnitSilhouettes.build_merged(0, 2).get_node("Hull").mesh)
 
 
 ## Модель береться, коли файл є, і коробки — коли нема: без асету гра не ламається.
@@ -112,25 +110,25 @@ func test_model_is_used_only_when_its_file_exists() -> void:
 	assert_eq(UnitSilhouettes.model_path(5), "res://assets/units/medium_tank.glb")
 	var model: ArrayMesh = UnitModelFixture.vehicle(5)
 	UnitSilhouettes.use_models({5: model})
-	var tank := UnitSilhouettes.build_merged(5, Color.RED).get_node("Hull") as MeshInstance3D
+	var tank := UnitSilhouettes.build_merged(5).get_node("Hull") as MeshInstance3D
 	assert_same(tank.mesh, model, "тіло — сітка моделі")
 	assert_true(tank.material_override is ShaderMaterial)
-	var car := UnitSilhouettes.build_merged(2, Color.RED).get_node("Hull") as MeshInstance3D
+	var car := UnitSilhouettes.build_merged(2).get_node("Hull") as MeshInstance3D
 	assert_true(car.material_override is StandardMaterial3D, "без моделі — коробки")
 	tank.get_parent().free()
 	car.get_parent().free()
 
 
-## Один матеріал на тип для всіх власників: колір — instance uniform вузла, а specular —
+## Один матеріал на тип для всіх юнітів, без кольору власника, а specular — з
 ## імпортованого матеріалу (типові 0,5 власного шейдера світлішали б модель).
-func test_model_owners_share_mesh_and_material() -> void:
+func test_model_bodies_share_mesh_and_material_and_carry_no_owner_colour() -> void:
 	UnitSilhouettes.use_models({5: UnitModelFixture.vehicle(5)})
-	var red := UnitSilhouettes.build_merged(5, Color.RED).get_node("Hull") as MeshInstance3D
-	var blue := UnitSilhouettes.build_merged(5, Color.BLUE).get_node("Hull") as MeshInstance3D
+	var red := UnitSilhouettes.build_merged(5).get_node("Hull") as MeshInstance3D
+	var blue := UnitSilhouettes.build_merged(5).get_node("Hull") as MeshInstance3D
 	assert_same(red.mesh, blue.mesh)
 	assert_same(red.material_override, blue.material_override)
-	assert_eq(red.get_instance_shader_parameter("owner_color"), Color.RED)
-	assert_eq(blue.get_instance_shader_parameter("owner_color"), Color.BLUE)
+	for u: Dictionary in (red.material_override as ShaderMaterial).shader.get_shader_uniform_list():
+		assert_ne(u.name, "owner_color", "шейдер моделі не має кольору власника")
 	var mat := red.material_override as ShaderMaterial
 	assert_almost_eq(float(mat.get_shader_parameter("specular")), UnitModelFixture.SPECULAR, 0.0001)
 	assert_not_null(mat.get_shader_parameter("albedo_tex"))
@@ -140,20 +138,18 @@ func test_model_owners_share_mesh_and_material() -> void:
 
 
 ## Відділення — четверо бійців в одній сітці; стоять перші `standing` ступнями на основі,
-## загиблі лежать і не несуть знаку власника. Сітка на кількість стоячих кешується.
+## загиблі лежать. Сітка на кількість стоячих кешується.
 func test_model_squad_is_four_soldiers_by_standing_count() -> void:
 	var soldier: ArrayMesh = UnitModelFixture.soldier()
 	UnitSilhouettes.use_models({0: soldier})
 	var verts: int = soldier.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size()
-	var marks: int = UnitModelFixture.marked_vertices(soldier)
 	var meshes: Array[Mesh] = []
 	for standing in range(0, UnitView.SQUAD_FIGURES + 1):
-		var m: Mesh = UnitSilhouettes.merged_mesh(0, Color.RED, standing)
+		var m: Mesh = UnitSilhouettes.merged_mesh(0, standing)
 		assert_eq(m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size(), 4 * verts, "4 бійці при %d" % standing)
-		assert_eq(UnitModelFixture.marked_vertices(m), standing * marks, "знак лише на стоячих при %d" % standing)
 		assert_false(meshes.has(m), "інша сітка при %d" % standing)
 		meshes.append(m)
-	assert_same(UnitSilhouettes.merged_mesh(0, Color.BLUE, 2), meshes[2], "сітка не залежить від власника")
+	assert_same(UnitSilhouettes.merged_mesh(0, 2), meshes[2], "сітка кешується")
 	var full: AABB = meshes[4].get_aabb()
 	assert_almost_eq(full.position.y, 0.05, 0.0001, "ступні на основі")
 	assert_almost_eq(full.end.y, 0.05 + UnitSilhouettes.FIGURE_SIZE.y, 0.0001, "1,8 м заввишки")
@@ -164,8 +160,7 @@ func test_model_squad_is_four_soldiers_by_standing_count() -> void:
 func test_model_merge_bakes_node_transform_into_vertices_and_axles() -> void:
 	var src: ArrayMesh = UnitModelFixture.vehicle(5)
 	var xfs: Array[Transform3D] = [Transform3D(Basis(), Vector3(0.0, 0.1, 0.2))]
-	var marked: Array[bool] = [true]
-	var out: ArrayMesh = UnitSilhouettes._merge_model(src, xfs, marked)
+	var out: ArrayMesh = UnitSilhouettes._merge_model(src, xfs)
 	assert_almost_eq(out.get_aabb().position, src.get_aabb().position + Vector3(0.0, 0.1, 0.2), Vector3.ONE * 0.0001)
 	var c: PackedColorArray = out.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 	var uv2: PackedVector2Array = out.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV2]

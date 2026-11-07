@@ -13,6 +13,7 @@ var view: Node3D
 
 
 func before_each() -> void:
+	UnitView._travel_by_unit.clear()
 	# Коробки, хай що лежить в assets/units: тести моделей підставляють свою сітку самі.
 	UnitSilhouettes.use_models({})
 	view = UnitViewScene.instantiate()
@@ -20,6 +21,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	UnitView._travel_by_unit.clear()
 	# Статичне поле на весь процес: тест, що впав посередині, не сміє лишити рельєф решті набору.
 	TerrainHeight.active = null
 	WeatherRig.unit_contact = 0.0
@@ -250,8 +252,8 @@ func test_hp_bar_texture_is_framed_and_long_not_square() -> void:
 	assert_eq(image.get_pixel(0, 0), _as_rgba8(UnitView._HP_BAR_FRAME_COLOR), "лівий верхній кут — рамка")
 	assert_eq(image.get_pixel(image.get_width() - 1, image.get_height() - 1), _as_rgba8(UnitView._HP_BAR_FRAME_COLOR),
 		"правий нижній кут — рамка")
-	assert_eq(image.get_pixel(1, image.get_height() / 2), _as_rgba8(Color.RED.lerp(Color.GREEN, 0.5)),
-		"всередині, від лівого краю — заливка кольору поточного співвідношення")
+	assert_eq(image.get_pixel(1, image.get_height() / 2), _as_rgba8(UnitView.hp_fill_color(0)),
+		"всередині, від лівого краю — заливка кольору власника")
 
 
 ## Смуга витрачається ЗЛІВА НАПРАВО (як у референсі), а не стискається до
@@ -262,11 +264,11 @@ func test_hp_bar_fill_runs_from_the_left_edge_and_shrinks_rightwards() -> void:
 	var width: int = _hp_bar_image(view).get_width()
 
 	view.set_hp(400, 400)
-	assert_eq(_hp_bar_image(view).get_pixel(width - 2, mid_y), _as_rgba8(Color.GREEN),
+	assert_eq(_hp_bar_image(view).get_pixel(width - 2, mid_y), _as_rgba8(UnitView.hp_fill_color(0)),
 		"повне HP — заливка доходить до внутрішнього правого краю")
 
 	view.set_hp(200, 400)
-	assert_eq(_hp_bar_image(view).get_pixel(1, mid_y), _as_rgba8(Color.RED.lerp(Color.GREEN, 0.5)),
+	assert_eq(_hp_bar_image(view).get_pixel(1, mid_y), _as_rgba8(UnitView.hp_fill_color(0)),
 		"половина HP — лівий внутрішній піксель усе ще залитий")
 	assert_eq(_hp_bar_image(view).get_pixel(width - 2, mid_y), _as_rgba8(UnitView._HP_BAR_BACK_COLOR),
 		"половина HP — правий внутрішній піксель порожній")
@@ -702,7 +704,10 @@ func test_views_of_same_owner_share_textures_and_materials() -> void:
 	assert_same(view._hull_material, other._hull_material)
 	assert_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "той самий власник — та сама сітка")
 	other.bind(_unit(5, 1))
-	assert_not_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "інший власник — інший колір")
+	assert_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "інший власник — те саме тіло")
+	other.set_hp(400, 400)
+	view.set_hp(400, 400)
+	assert_not_same(view._hp_bar.texture, other._hp_bar.texture, "інший власник — інша смуга")
 
 
 func test_no_debug_facing_arrow_in_shipped_build() -> void:
@@ -733,14 +738,14 @@ func test_heavier_tank_has_larger_hull_footprint() -> void:
 
 func test_silhouette_stays_within_four_meshes() -> void:
 	for id in UnitTypes.count():
-		var root := UnitSilhouettes.build(id, Color.RED)
+		var root := UnitSilhouettes.build(id)
 		assert_between(root.get_child_count(), 1, 4, "тип %d" % id)
 		root.free()
 
 
 func test_silhouette_fits_one_tile() -> void:
 	for id in UnitTypes.count():
-		var root := UnitSilhouettes.build(id, Color.RED)
+		var root := UnitSilhouettes.build(id)
 		var lo := Vector3(INF, INF, INF)
 		var hi := Vector3(-INF, -INF, -INF)
 		for m: Node3D in root.get_children():
@@ -1056,7 +1061,6 @@ func test_walking_advances_travel_on_a_model_body() -> void:
 	var path: Array[Vector2i] = [Vector2i(3, 2), Vector2i(4, 2)]
 	(view.move_along(path, 0.05).get_object() as Tween).custom_step(10.0)
 	assert_almost_eq(float(hull.get_instance_shader_parameter("travel")), 2.0, 0.001)
-	assert_eq(hull.get_instance_shader_parameter("owner_color"), UnitView.PLAYER_COLORS[0])
 	# Перебудова дошки після дії дає новий вузол: колеса лишаються, де зупинились.
 	var rebuilt: UnitView = UnitViewScene.instantiate()
 	add_child_autofree(rebuilt)
@@ -1065,8 +1069,8 @@ func test_walking_advances_travel_on_a_model_body() -> void:
 	UnitView._travel_by_unit.clear()
 
 
-## Моделі одного типу в різних власників — та сама сітка й той самий матеріал: колір лежить на
-## вузлі, тож юніт лишається одним викликом малювання.
+## Моделі одного типу в різних власників — та сама сітка й той самий матеріал: юніт лишається
+## одним викликом малювання, а власника видно лише по смузі HP.
 func test_model_bodies_share_mesh_and_material_across_owners() -> void:
 	UnitSilhouettes.use_models({5: UnitModelFixture.vehicle(5)})
 	var other: UnitView = UnitViewScene.instantiate()
@@ -1077,4 +1081,31 @@ func test_model_bodies_share_mesh_and_material_across_owners() -> void:
 	var b := other.get_node("Silhouette/Hull") as MeshInstance3D
 	assert_same(a.mesh, b.mesh)
 	assert_same(a.material_override, b.material_override)
-	assert_ne(a.get_instance_shader_parameter("owner_color"), b.get_instance_shader_parameter("owner_color"))
+
+
+## Сторону юніта показує лише заливка смуги HP: тіла двох власників однакові, заливки різні, і
+## кожна заливка читається на темному тлі смуги.
+func test_owners_differ_by_hp_fill_colour_not_by_body_colour() -> void:
+	var other: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(other)
+	view.bind(_unit(5, 0))
+	other.bind(_unit(5, 1))
+	view.set_hp(400, 400)
+	other.set_hp(400, 400)
+	var body_a: PackedColorArray = (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var body_b: PackedColorArray = (other.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	assert_eq(body_a, body_b, "тіла однакові")
+	var mid_y: int = _hp_bar_image(view).get_height() / 2
+	assert_eq(_hp_bar_image(view).get_pixel(1, mid_y), _as_rgba8(UnitView.hp_fill_color(0)))
+	assert_eq(_hp_bar_image(other).get_pixel(1, mid_y), _as_rgba8(UnitView.hp_fill_color(1)))
+	assert_ne(UnitView.hp_fill_color(0), UnitView.hp_fill_color(1))
+	assert_ne(view.hp_bar_layer(), other.hp_bar_layer(), "у спільному MultiMesh шари різних власників різні")
+	for o in UnitView.PLAYER_COLORS.size():
+		assert_eq(UnitHpBars.layer_image(o * UnitHpBars.fills_per_owner() + 20).get_pixel(1, mid_y), _as_rgba8(UnitView.hp_fill_color(o)), "власник %d" % o)
+		var f: Color = UnitView.hp_fill_color(o)
+		assert_gt((_lum(f) + 0.05) / (_lum(UnitView._HP_BAR_BACK_COLOR) + 0.05), 3.0, "заливка власника %d відрізняється від тла" % o)
+
+
+static func _lum(c: Color) -> float:
+	var l := c.srgb_to_linear()
+	return 0.2126 * l.r + 0.7152 * l.g + 0.0722 * l.b

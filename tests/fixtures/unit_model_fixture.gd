@@ -52,11 +52,3 @@ static func vehicle(type_id: int) -> ArrayMesh:
 static func soldier() -> ArrayMesh:
 	return mesh(UnitSilhouettes.FIGURE_SIZE)
 
-
-## Скільки вершин сітки несуть знак власника (COLOR.r).
-static func marked_vertices(m: Mesh) -> int:
-	var count: int = 0
-	for col: Color in m.surface_get_arrays(0)[Mesh.ARRAY_COLOR]:
-		if col.r > 0.5:
-			count += 1
-	return count
