@@ -55,9 +55,8 @@ func _ready() -> void:
 		if not ok:
 			continue
 		# Опора — клітинка екземпляра; паркан — будь-яка клітинка навколо нього, смуга корпусу якої його зачепить.
-		var cands: Array[Vector2i] = [(inst["cells"] as Array)[0]]
-		if a[3] != "pole":
-			cands.clear()
+		var cands: Array[Vector2i] = []
+		if true:
 			var o := Vector2i(roundi((inst["transform"] as Transform3D).origin.x), roundi((inst["transform"] as Transform3D).origin.z))
 			for dx in range(-1, 2):
 				for dz in range(-1, 2):
@@ -70,7 +69,7 @@ func _ready() -> void:
 				var st: Vector2i = c + d * 2
 				if not board.in_bounds(st) or board.kind_at(st) != Terrain.Kind.FIELD or board.kind_at(c + d) != Terrain.Kind.FIELD or board.kind_at(c) != Terrain.Kind.FIELD:
 					continue
-				if a[3] != "pole" and not (props.band_hits(c + d, c)["inst"] as Array).has(i):
+				if not (props.band_hits(c + d, c)["inst"] as Array).has(i):
 					continue
 				unit.pos = st
 				if (Pathing.compute_zones(board, unit, {}, {}) as Pathing.Zones).can_reach(c):

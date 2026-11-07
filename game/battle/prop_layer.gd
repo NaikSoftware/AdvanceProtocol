@@ -28,6 +28,7 @@ const TOPPLE_LAND_EPS: float = 0.01
 ## Смуга, яку змітає корпус: півширини (тайли; гусениці ~3,5 м) і виступ носа за центр останньої клітинки.
 const BAND_HALF: float = 0.225
 const BAND_NOSE: float = 0.35
+const POLE_BAND_HALF: float = 0.5
 
 const MODEL_DIR: String = "res://assets/props/"
 ## Модель -> {kind, weight, …}. Слід будівлі в тайлах — з метаданих GLB (`footprint_tiles`), тож
@@ -1117,6 +1118,17 @@ func topple_cell(cell: Vector2i, from: Vector2i) -> void:
 		set_process(true)
 
 
+## Точка q у смузі від a до tip завширшки 2·reach (прямі торці: перпендикулярна секція, що лише кінцем заходить
+## за початок смуги, не ламається). Нульова смуга — круг.
+static func _in_strip(q: Vector2, a: Vector2, tip: Vector2, reach: float) -> bool:
+	var len: float = a.distance_to(tip)
+	if len < 1e-4:
+		return q.distance_to(a) <= reach
+	var dir: Vector2 = (tip - a) / len
+	var t: float = (q - a).dot(dir)
+	return t >= -0.01 and t <= len + 0.01 and absf((q - a).cross(dir)) <= reach
+
+
 ## Паркани (індекси екземплярів) і ворота (індекси), які зачепила смуга корпусу на кроці з from у to: капсула
 ## завширшки з гусениці вздовж відрізка від центру from до центру to й носа за ним. Кеш — на побудову.
 func band_hits(from: Vector2i, to: Vector2i) -> Dictionary:
@@ -1127,6 +1139,9 @@ func band_hits(from: Vector2i, to: Vector2i) -> Dictionary:
 	var b := Vector2(to)
 	var d: Vector2 = b - a
 	var tip: Vector2 = b + (d.normalized() * BAND_NOSE if d.length() > 0.0 else Vector2.ZERO)
+	# Початок смуги — там, де закінчився ніс попереднього кроку: клітинку from перебрано, коли в неї в'їхали.
+	if d.length() > 0.0:
+		a += d.normalized() * BAND_NOSE
 	var reach: float = BAND_HALF + 0.03
 	var inst: Array[int] = []
 	for i in _instances.size():
@@ -1137,11 +1152,13 @@ func band_hits(from: Vector2i, to: Vector2i) -> Dictionary:
 		var half: float = ((model(it["model"]) as Dictionary)["aabb"] as AABB).size.x * t.basis.x.length() * 0.5
 		var along := Vector2(t.basis.x.x, t.basis.x.z).normalized() * half
 		var o := Vector2(t.origin.x, t.origin.z)
-		if o.distance_to(Geometry2D.get_closest_point_to_segment(o, a, tip)) > reach + half + 0.1:
+		# Опори стоять не ближче 0,45 від осі смуги (правило розстановки), тож смуга завширшки з корпус їх не дістала б
+		# ніколи: для опор — півширина тайла, але зі стійкими прямими торцями (опора за носом не зачіпається).
+		var r: float = POLE_BAND_HALF if int(spec_of(it["model"])["kind"]) == Kind.POLE else reach
+		if o.distance_to(Geometry2D.get_closest_point_to_segment(o, a, tip)) > r + half + 0.1:
 			continue
 		for k in 5:
-			var q: Vector2 = o + along * (float(k) / 2.0 - 1.0)
-			if q.distance_to(Geometry2D.get_closest_point_to_segment(q, a, tip)) <= reach:
+			if _in_strip(o + along * (float(k) / 2.0 - 1.0), a, tip, r):
 				inst.append(i)
 				break
 	var gates: Array[int] = []
@@ -1149,8 +1166,7 @@ func band_hits(from: Vector2i, to: Vector2i) -> Dictionary:
 		var pa: Vector2 = _gates[gi]["a"]
 		var pb: Vector2 = _gates[gi]["b"]
 		for k in 5:
-			var q: Vector2 = pa.lerp(pb, float(k) / 4.0)
-			if q.distance_to(Geometry2D.get_closest_point_to_segment(q, a, tip)) <= reach:
+			if _in_strip(pa.lerp(pb, float(k) / 4.0), a, tip, reach):
 				gates.append(gi)
 				break
 	var out := {"inst": inst, "gates": gates}
@@ -1312,9 +1328,56 @@ func _piece_mesh(m: StringName, mesh: Mesh, whole: bool, top_local: float = 0.0)
 				sm.set_shader_parameter("top_local", top_local)
 				if yard:
 					sm.set_shader_parameter("piece_kind", maxi(fence_kind_of(m), 0))
+					sm.set_shader_parameter("albedo_tex", _linear_fixed(m, sm.get_shader_parameter("albedo_tex") as Texture2D))
 		if int(spec_of(m)["kind"]) == Kind.POLE and _haze:
 			out = _hazed_mesh(out)
 	_piece_meshes[mesh] = out
+	return out
+
+
+## Атлас-смуга зламаного виду паркану двору у файлі зберігається в лінійному просторі, а шейдер читає sRGB: складова
+## виходила в 5-8 разів темнішою за цілий паркан. Порівнюємо середню яскравість зі смугою виду в цілій моделі й,
+## якщо вона темніша вдвічі, переводимо текстуру назад (кеш на текстуру). Виправний файл умову не спрацює.
+static var _linear_cache: Dictionary = {}
+
+
+static func _luma_mean(img: Image, r: Rect2i) -> float:
+	var sum := 0.0
+	var n := 0
+	for y in range(r.position.y, r.end.y, 2):
+		for x in range(r.position.x, r.end.x, 2):
+			var c: Color = img.get_pixel(x, y)
+			if c.a > 0.5:
+				sum += c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722
+				n += 1
+	return sum / maxf(float(n), 1.0)
+
+
+static func _linear_fixed(m: StringName, tex: Texture2D) -> Texture2D:
+	if tex == null:
+		return tex
+	if _linear_cache.has(tex):
+		return _linear_cache[tex]
+	var out: Texture2D = tex
+	var info: Dictionary = model(m)
+	var whole_mat := (info["mesh"] as Mesh).surface_get_material(0) as ShaderMaterial
+	var kinds: int = (info["fence_tops"] as Array).size()
+	if whole_mat != null and kinds > 0 and whole_mat.get_shader_parameter("albedo_tex") != null:
+		var ref: Image = (whole_mat.get_shader_parameter("albedo_tex") as Texture2D).get_image()
+		var img: Image = tex.get_image()
+		if ref != null and img != null:
+			if ref.is_compressed():
+				ref.decompress()
+			if img.is_compressed():
+				img.decompress()
+			var k: int = maxi(fence_kind_of(m), 0)
+			var strip := Rect2i(0, ref.get_height() * k / kinds, ref.get_width(), ref.get_height() / kinds)
+			if _luma_mean(img, Rect2i(Vector2i.ZERO, img.get_size())) < 0.5 * _luma_mean(ref, strip):
+				img.convert(Image.FORMAT_RGBA8)
+				img.linear_to_srgb()
+				img.generate_mipmaps()
+				out = ImageTexture.create_from_image(img)
+	_linear_cache[tex] = out
 	return out
 
 
@@ -1467,8 +1530,12 @@ func _start_fall(idx: int, travel: Vector3, cell: Vector2i) -> void:
 	var extent: float = 0.0
 	var h: float = bb.size.y * t.basis.y.length()
 	var pivot: Vector3 = t * Vector3(bb.get_center().x, bb.position.y, bb.get_center().z)
+	var lands_on: Array[int] = []
 	if pole:
 		dir = dir.rotated(Vector3.UP, (float(absi(cell_hash(cell, 4201)) % 1000) / 999.0 - 0.5) * TOPPLE_YAW_JITTER)
+		var pick: Array = _clear_direction(idx, pivot, dir, h)
+		dir = pick[0]
+		lands_on.assign(pick[1])
 	else:
 		extent = bb.size.x * t.basis.x.length()
 	var f: Dictionary = _fall_state(pivot, up, dir, h, TOPPLE_OMEGA_POLE, extent)
@@ -1478,6 +1545,7 @@ func _start_fall(idx: int, travel: Vector3, cell: Vector2i) -> void:
 			BREAK_POLE_LIFE if pole else BREAK_FENCE_LIFE)
 	b["idx"] = idx
 	b["pole"] = pole
+	b["lands_on"] = lands_on
 	var sp: Array[int] = []
 	for si in _spans.size():
 		if _spans[si][0] == idx or _spans[si][1] == idx:
@@ -1559,6 +1627,59 @@ func _has_wire(idx: int) -> bool:
 	return false
 
 
+## Напрям падіння опори: від напряму руху в межах ±40°, перший, де вал не ляже на стоячі опори, паркани чи будівлі.
+## Нема чистого — той, де лягає лише на паркани (їх вал зламає при ударі об землю); нема й такого — напрям руху.
+## Повертає [напрям, індекси парканів, на які ляже].
+func _clear_direction(self_idx: int, pivot: Vector3, dir: Vector3, h: float) -> Array:
+	var fallback: Array = []
+	for deg: float in [0.0, 10.0, -10.0, 20.0, -20.0, 30.0, -30.0, 40.0, -40.0]:
+		var d: Vector3 = dir.rotated(Vector3.UP, deg_to_rad(deg))
+		var hit: Dictionary = _shaft_conflicts(self_idx, pivot, d, h)
+		if not hit["blocked"] and (hit["fences"] as Array).is_empty():
+			return [d, []]
+		if not hit["blocked"] and fallback.is_empty():
+			fallback = [d, hit["fences"]]
+	if not fallback.is_empty():
+		return fallback
+	return [dir, (_shaft_conflicts(self_idx, pivot, dir, h)["fences"] as Array)]
+
+
+## Що лежить під валом, що впав у напрямі d: стоячі паркани (їх можна зламати) і те, що ні (опори, будівлі).
+func _shaft_conflicts(self_idx: int, pivot: Vector3, d: Vector3, h: float) -> Dictionary:
+	var a := Vector2(pivot.x, pivot.z)
+	var b: Vector2 = a + Vector2(d.x, d.z) * h
+	var fences: Array[int] = []
+	var blocked := false
+	for i in _instances.size():
+		if i == self_idx:
+			continue
+		var it: Dictionary = _instances[i]
+		var o := Vector2((it["transform"] as Transform3D).origin.x, (it["transform"] as Transform3D).origin.z)
+		if o.distance_to(Geometry2D.get_closest_point_to_segment(o, a, b)) > 1.6:
+			continue
+		var kind: int = int(spec_of(it["model"])["kind"])
+		if it["band"]:
+			if _is_crushed(it) or it.has("burst"):
+				continue
+			var t: Transform3D = it["transform"]
+			var half: float = ((model(it["model"]) as Dictionary)["aabb"] as AABB).size.x * t.basis.x.length() * 0.5
+			var along := Vector2(t.basis.x.x, t.basis.x.z).normalized() * half
+			var near := false
+			for k in 5:
+				var q: Vector2 = o + along * (float(k) / 2.0 - 1.0)
+				near = near or q.distance_to(Geometry2D.get_closest_point_to_segment(q, a, b)) <= 0.12
+			if near:
+				if kind == Kind.POLE:
+					blocked = true
+				else:
+					fences.append(i)
+		elif kind == Kind.STRUCTURE or kind == Kind.RUIN:
+			var rect: Rect2 = wall_rect(it).grow(0.05)
+			for k in 9:
+				blocked = blocked or rect.has_point(a.lerp(b, float(k) / 8.0))
+	return {"fences": fences, "blocked": blocked}
+
+
 ## Складові-вал йдуть за шарніром у основі.
 func _hinge_pose(b: Dictionary) -> void:
 	var xf: Transform3D = _fall_xform(b["f"])
@@ -1583,10 +1704,15 @@ func _land_pole(b: Dictionary) -> void:
 		var v: Vector3 = w.cross(rel) * 0.4
 		v.y = maxf(v.y, 0.0)
 		# Чим далі від основи, тим сильніше відкидає: сусідні сегменти розходяться, а не лежать стосом.
-		p["vel"] = v + (f["dir"] as Vector3) * (0.2 + 3.0 * rel.length() / float(f["h"]) + 0.3 * _rnd(hh, 1))
+		p["vel"] = v + (f["dir"] as Vector3) * (0.3 + 4.0 * rel.length() / float(f["h"]) + 0.3 * _rnd(hh, 1))
 		p["ang"] = w * 0.3 + Vector3.UP * (_rnd(hh, 2) - 0.5) * 4.0
 	var inst: Dictionary = _instances[int(b["idx"])]
 	inst.erase("fall")
+	# Вал ліг на паркан, обійти якого не вдалось: паркан ламається, як від справжнього удару.
+	for fi: int in b["lands_on"]:
+		if not _is_crushed(_instances[fi]):
+			_broken[fi] = true
+			_start_fall(fi, f["dir"], b["cell"])
 	var fp: Array[Vector3] = _fall_footprint(f)
 	_guy_valid = false
 	topple_landed.emit(fp[0], fp[1], b["debris"], b["live"], true)
@@ -1902,7 +2028,7 @@ func _add(model_name: StringName, xform: Transform3D, cells: Array[Vector2i], ya
 	_instances.append({"model": model_name, "transform": xform, "cells": cells,
 			"crush": int(spec_of(model_name).get("crush", Crush.NONE)), "yard": yard,
 			"topples": int(spec_of(model_name).get("kind", -1)) in TOPPLE_KINDS, "idx": _instances.size(),
-			"band": int(spec_of(model_name).get("kind", -1)) in [Kind.FIELD_FENCE, Kind.GARDEN_FENCE]})
+			"band": int(spec_of(model_name).get("kind", -1)) in TOPPLE_KINDS})
 	return _instances.size() - 1
 
 
@@ -2816,6 +2942,8 @@ func _live(inst: Dictionary) -> Dictionary:
 
 
 func _is_crushed(inst: Dictionary) -> bool:
+	if inst["band"]:
+		return _broken.has(inst["idx"])
 	return int(inst["crush"]) != Crush.NONE and _crushed.has((inst["cells"] as Array)[0])
 
 

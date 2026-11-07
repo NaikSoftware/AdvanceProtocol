@@ -347,11 +347,13 @@ func test_crush_flattens_small_props_on_the_given_cells_only() -> void:
 
 ## Крок техніки (from, to), смуга якого зачіпає екземпляр inst: to — клітинка під екземпляром, from — сусідня.
 func _hit_step(props: PropLayer, origin: Vector3, inst: int = -1, gate: int = -1) -> Array[Vector2i]:
-	var to := Vector2i(roundi(origin.x), roundi(origin.z))
-	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-		var hits: Dictionary = props.band_hits(to + d, to)
-		if (inst >= 0 and (hits["inst"] as Array).has(inst)) or (gate >= 0 and (hits["gates"] as Array).has(gate)):
-			return [to + d, to]
+	var base := Vector2i(roundi(origin.x), roundi(origin.z))
+	for off: Vector2i in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var to: Vector2i = base + off
+		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var hits: Dictionary = props.band_hits(to + d, to)
+			if (inst >= 0 and (hits["inst"] as Array).has(inst)) or (gate >= 0 and (hits["gates"] as Array).has(gate)):
+				return [to + d, to]
 	return []
 
 
@@ -361,6 +363,14 @@ func _fence_index(view: BoardView, cell: Vector2i) -> int:
 		if inst["band"] and (inst["cells"] as Array).has(cell):
 			return i
 	return -1
+
+
+## Валить опору кроком, смуга корпусу якого її зачіпає; повертає [from, to].
+func _topple_pole(props: PropLayer, idx: int) -> Array[Vector2i]:
+	var step: Array[Vector2i] = _hit_step(props, (props._instances[idx]["transform"] as Transform3D).origin, idx)
+	assert_eq(step.size(), 2, "передумова: смуга корпусу зачіпає опору")
+	props.topple_cell(step[1], step[0])
+	return step
 
 
 func _fences_on(view: BoardView, cell: Vector2i) -> Array[Dictionary]:
@@ -374,12 +384,10 @@ func test_crushed_pole_drops_its_wires() -> void:
 	var p: PropLayer = view.props()
 	var spans: int = p.wire_spans()
 	assert_gt(spans, 0, "на River є лінія")
-	var pole_cell := Vector2i(-1, -1)
-	for inst in p.all_instances():
-		if _kind(inst["model"]) == PropLayer.Kind.POLE:
-			pole_cell = (inst["cells"] as Array)[0]
-			break
-	view.set_crushed_cells([pole_cell] as Array[Vector2i])
+	var wi: int = _wired_pole(p)
+	var pole_cell: Vector2i = (p._instances[wi]["cells"] as Array)[0]
+	var pstep: Array[Vector2i] = _hit_step(p, (p._instances[wi]["transform"] as Transform3D).origin, wi)
+	view.set_crushed_cells([pole_cell] as Array[Vector2i], false, [Vector4i(pstep[0].x, pstep[0].y, pstep[1].x, pstep[1].y)])
 	assert_lt(p.wire_spans(), spans)
 	# Вид спільний з іншими тестами: повалене повертаємо.
 	view.set_crushed_cells([] as Array[Vector2i])
@@ -1816,7 +1824,8 @@ func test_crushed_pole_drops_its_transformer() -> void:
 	assert_gt(props.transformers_shown().size(), 0, "передумова")
 	var i: int = props._transformers.keys()[0]
 	var cells: Array[Vector2i] = [(props._instances[i]["cells"] as Array)[0]]
-	props.set_crushed(cells)
+	var tstep: Array[Vector2i] = _hit_step(props, (props._instances[i]["transform"] as Transform3D).origin, i)
+	props.set_crushed(cells, false, [Vector4i(tstep[0].x, tstep[0].y, tstep[1].x, tstep[1].y)])
 	props._flush()
 	assert_eq(props.transformers_shown().size(), props._transformers.size() - 1)
 	# Вид спільний з іншими тестами: повалене повертаємо.
@@ -3422,7 +3431,7 @@ func test_pole_snaps_falls_along_travel_breaks_into_pieces_and_vanishes_with_its
 	var cell: Vector2i = (props._instances[idx]["cells"] as Array)[0]
 	var spans: int = props.wire_spans()
 	var log := _fall_log(props)
-	props.topple_cell(cell, cell + Vector2i(-1, 0))
+	var travel_step: Array[Vector2i] = _topple_pole(props, idx)
 	assert_true(props.is_falling(idx))
 	assert_eq(log.hits.size(), 1, "удар — одна мить")
 	assert_true(log.hits[0][3], "опора з дротом — під напругою")
@@ -3439,7 +3448,7 @@ func test_pole_snaps_falls_along_travel_breaks_into_pieces_and_vanishes_with_its
 	assert_almost_eq((stumps[0]["w0"] as Transform3D).origin.y, (props._instances[idx]["transform"] as Transform3D).origin.y + 0.1, 0.0001, "пеньок — найнижча")
 	assert_eq(props.wire_spans(), spans, "дроти тягнуться за падаючим валом")
 	var f: Dictionary = props._instances[idx]["fall"]
-	assert_gt((f["dir"] as Vector3).dot(Vector3.RIGHT), 0.99, "падає за напрямом руху")
+	assert_gt((f["dir"] as Vector3).dot(Vector3(travel_step[1].x - travel_step[0].x, 0.0, travel_step[1].y - travel_step[0].y)), 0.74, "падає за напрямом руху в межах 40°")
 	assert_eq(f["phi"], PropLayer.TOPPLE_PHI0, "стартує з малого кута")
 	props._tick_falls(0.05)
 	assert_gt(float(f["phi"]), PropLayer.TOPPLE_PHI0)
@@ -3511,7 +3520,8 @@ func test_instant_crush_hides_without_a_fall() -> void:
 	var idx: int = _wired_pole(props)
 	var cell: Vector2i = (props._instances[idx]["cells"] as Array)[0]
 	var log := _fall_log(props)
-	props.set_crushed([cell] as Array[Vector2i], true)
+	var step: Array[Vector2i] = _hit_step(props, (props._instances[idx]["transform"] as Transform3D).origin, idx)
+	props.set_crushed([cell] as Array[Vector2i], true, [Vector4i(step[0].x, step[0].y, step[1].x, step[1].y)])
 	assert_eq(props.falling_count(), 0)
 	assert_true(_hidden(props, idx))
 	assert_eq(log.hits.size() + log.lands.size(), 0, "без жодної миті")
@@ -3523,11 +3533,11 @@ func test_set_crushed_mid_fall_neither_restarts_nor_cancels() -> void:
 	var idx: int = _wired_pole(props)
 	var cell: Vector2i = (props._instances[idx]["cells"] as Array)[0]
 	var log := _fall_log(props)
-	props.topple_cell(cell, cell + Vector2i(0, 1))
+	_topple_pole(props, idx)
 	props._tick_falls(0.2)
 	var phi: float = props._instances[idx]["fall"]["phi"]
 	props.set_crushed([] as Array[Vector2i])
-	assert_true(props._crushed.has(cell), "клітинка падіння лишається розчавленою, хоч набір її не мав")
+	assert_true(props._broken.has(idx), "падіння лишається поламаним, хоч набір ребер його не мав")
 	assert_true(props.is_falling(idx), "не скасовано")
 	assert_eq(props._instances[idx]["fall"]["phi"], phi, "не почато знову")
 	assert_eq(log.hits.size(), 1)
@@ -3541,7 +3551,7 @@ func test_instant_rebuild_finishes_a_running_fall_for_the_next_viewer() -> void:
 	var idx: int = _wired_pole(props)
 	var cell: Vector2i = (props._instances[idx]["cells"] as Array)[0]
 	var spans: int = props.wire_spans()
-	props.topple_cell(cell, cell + Vector2i(0, 1))
+	_topple_pole(props, idx)
 	props._tick_falls(0.2)
 	assert_not_null(props._wires_live.mesh)
 	props.set_crushed([] as Array[Vector2i], true)
@@ -3629,7 +3639,7 @@ func test_guy_of_a_falling_pole_goes_at_landing() -> void:
 	assert_gte(idx, 0, "на River є відтяжка")
 	var cell: Vector2i = (props._instances[idx]["cells"] as Array)[0]
 	var log := _fall_log(props)
-	props.topple_cell(cell, cell + Vector2i(0, 1))
+	_topple_pole(props, idx)
 	var has_guy := func() -> bool:
 		return props._guys().any(func(g: Array) -> bool: return g[0] == idx)
 	assert_true(has_guy.call(), "відтяжка на місці під час падіння")
@@ -3708,7 +3718,7 @@ func test_real_pole_segments_separate_after_landing() -> void:
 	var idx: int = _wired_pole(props)
 	var cell: Vector2i = (props._instances[idx]["cells"] as Array)[0]
 	var log := _fall_log(props)
-	props.topple_cell(cell, cell + Vector2i(-1, 0))
+	_topple_pole(props, idx)
 	var b: Dictionary = props._instances[idx]["burst"]
 	var segs: Array = (b["pieces"] as Array).filter(func(p: Dictionary) -> bool: return p["part"] == "segment")
 	assert_gt(segs.size(), 1, "у опори кілька сегментів")
@@ -3722,7 +3732,7 @@ func test_real_pole_segments_separate_after_landing() -> void:
 	for i in segs.size():
 		for j in range(i + 1, segs.size()):
 			spread = maxf(spread, ((segs[i]["pos"] as Vector3).distance_to(segs[j]["pos"] as Vector3)) - rest[i].distance_to(rest[j]))
-	assert_gte(spread, 0.15, "сегменти розійшлись щонайменше на 0,15 тайла")
+	assert_gte(spread, 0.2, "сегменти розійшлись щонайменше на 0,2 тайла")
 	props.set_crushed([] as Array[Vector2i], true)
 
 
@@ -3767,3 +3777,56 @@ func test_a_step_breaks_only_the_fences_in_the_swept_band() -> void:
 	assert_eq(props._broken.size(), hits.size(), "зламано рівно смугу")
 	assert_lt(props._broken.size(), total, "решта парканів стоїть")
 	props.cancel_falls()
+
+
+## Поламаний смугою паркан лишається схованим після будь-якого переписування вузлів (дах розчиняється, перебудова).
+func test_band_broken_fence_stays_hidden_after_a_node_rewrite() -> void:
+	var view: BoardView = _view(null, _yard_board())
+	var props: PropLayer = view.props()
+	var idx: int = -1
+	var step: Array[Vector2i] = []
+	for i in props._instances.size():
+		if props._instances[i]["band"] and int(PropLayer.spec_of(props._instances[i]["model"])["kind"]) != PropLayer.Kind.POLE:
+			step = _hit_step(props, (props._instances[i]["transform"] as Transform3D).origin, i)
+			if not step.is_empty():
+				idx = i
+				break
+	assert_gte(idx, 0)
+	props.topple_cell(step[1], step[0])
+	_run_falls(props)
+	assert_true(_hidden(props, idx))
+	props._apply()
+	props._write_nodes()
+	assert_true(_hidden(props, idx), "переписування вузлів не повертає секцію")
+	var edge := Vector4i(step[0].x, step[0].y, step[1].x, step[1].y)
+	props.set_crushed([] as Array[Vector2i], true, [edge])
+	props._apply()
+	assert_true(_hidden(props, idx), "правда з ребер ховає секцію після перебудови чи гейта")
+	props.set_crushed([] as Array[Vector2i], true)
+	props._apply()
+	assert_false(_hidden(props, idx), "без ребер (нерозвіданий глядач) секція стоїть")
+
+
+func test_strip_has_flat_ends_and_the_start_is_cut_off() -> void:
+	var a := Vector2(0.35, 0.0)
+	var tip := Vector2(1.35, 0.0)
+	assert_true(PropLayer._in_strip(Vector2(1.0, 0.2), a, tip, 0.255))
+	assert_false(PropLayer._in_strip(Vector2(1.5, 0.0), a, tip, 0.255), "опора за носом не зачіпається")
+	assert_false(PropLayer._in_strip(Vector2(0.1, 0.0), a, tip, 0.255), "початок смуги відрізано: клітинку from перебрано раніше")
+	assert_false(PropLayer._in_strip(Vector2(0.9, 0.3), a, tip, 0.255), "збоку — поза смугою")
+	assert_true(PropLayer._in_strip(Vector2(0.9, 0.45), a, tip, PropLayer.POLE_BAND_HALF), "опора збоку в межах півтайла")
+
+
+## Опора падає в межах 40° від напряму руху і не лягає на стоячі паркани, якщо є чистий напрям.
+func test_pole_fall_direction_stays_within_forty_degrees() -> void:
+	var props: PropLayer = _cached("river").props()
+	var idx: int = _wired_pole(props)
+	var t: Transform3D = props._instances[idx]["transform"]
+	var h: float = ((PropLayer.model(props._instances[idx]["model"]) as Dictionary)["aabb"] as AABB).size.y
+	for ang in [0.0, 90.0, 180.0, 270.0]:
+		var want := Vector3.RIGHT.rotated(Vector3.UP, deg_to_rad(ang))
+		var pick: Array = props._clear_direction(idx, t.origin, want, h)
+		assert_gte((pick[0] as Vector3).dot(want), cos(deg_to_rad(40.0)) - 0.001, "напрям у межах 40° від руху")
+		if (pick[1] as Array).is_empty():
+			var hit: Dictionary = props._shaft_conflicts(idx, t.origin, pick[0], h)
+			assert_false(hit["blocked"])
