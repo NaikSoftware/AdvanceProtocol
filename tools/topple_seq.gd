@@ -6,6 +6,8 @@ extends Node
 ## лежать у пам'яті й пишуться в кінці (збереження блокує). Не входить у гру. Запуск (вікно):
 ##   $GODOT --path . --position 6000,0 res://tools/topple_seq.tscn -- <out_dir> <map> <zoom> <кадрів/с> <poles|fences|all|ім'я випадку> [x,y|-] [unit]
 ## unit — перший юніт дошки стає на сусідню клітинку, куди падає опора: чи не ховає його пил.
+## slow — гра в 10 разів повільніша (Engine.time_scale), кадри/с і секунди — у часі гри: спалах дуги
+## (30–60 мс) інакше падає між знятими кадрами.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 120
@@ -52,6 +54,7 @@ func _ready() -> void:
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	var units: Node = screen.get("_units")
+	var slow: bool = "slow" in a
 	if a.size() > 6 and a[6] == "unit":
 		for u: Node in units.get_children():
 			if u is UnitView and (u as UnitView).visible:
@@ -71,6 +74,8 @@ func _ready() -> void:
 		await get_tree().process_frame
 	BattleFx.clear_all(get_tree())
 	var out: Dictionary = {}
+	if slow:
+		Engine.time_scale = 0.1
 	for c: Array in pick:
 		out[c[0]] = await _play(screen, units, base, c, float(a[3]))
 	for k: String in out:
@@ -134,7 +139,7 @@ func _play(screen: Node, units: Node, base: Vector3, c: Array, fps: float) -> Ar
 	var total: float = t_fall + AFTER_SEC
 	while true:
 		await RenderingServer.frame_post_draw
-		var el: float = float(Time.get_ticks_usec() - t0) / 1e6
+		var el: float = float(Time.get_ticks_usec() - t0) / 1e6 * Engine.time_scale
 		if not landed:
 			# Кут стрижня на el с: інтегруємо ту саму криву, що й fall_sec.
 			var th: float = _angle_at(h_m, el * squeeze)
