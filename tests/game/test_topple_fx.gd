@@ -111,7 +111,7 @@ func test_wet_ground_sprays_mud_instead_of_dust() -> void:
 		var g: Gradient = (((n.get_node("Settle") as GPUParticles3D).process_material as ParticleProcessMaterial).color_initial_ramp as GradientTexture1D).gradient
 		return g.colors[0].get_luminance()
 	assert_true(tone.call(wet) < tone.call(dry) * 0.5, "мокрий пил — темна грязь")
-	assert_true(((wet.get_node("Settle") as GPUParticles3D).lifetime) <= 0.6, "грязь — коротка бризка, а не хмара")
+	assert_true(((wet.get_node("Settle") as GPUParticles3D).lifetime) <= 0.75, "грязь — коротка бризка, а не хмара")
 
 
 ## Слід на мокрій землі: темна смуга вздовж відрізка, слабша за пляму під уламками, і лише біля нього.
