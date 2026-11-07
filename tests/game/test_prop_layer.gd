@@ -3610,12 +3610,13 @@ func test_guy_of_a_falling_pole_goes_at_landing() -> void:
 	assert_true(has_guy.call(), "повернуто")
 
 
-func test_fallback_piece_of_a_yard_fence_keeps_its_kind_shader() -> void:
-	_cached("river")
-	var sheet: Mesh = PropLayer.broken_pieces(&"infra_fence_yard_sheet")[0]["mesh"]
-	assert_eq((sheet.surface_get_material(0) as ShaderMaterial).shader, PropLayer._thin_opaque(), "суцільний вид — непрозорий прохід")
-	var chain: Mesh = PropLayer.broken_pieces(&"infra_fence_yard_chainlink")[0]["mesh"]
-	assert_eq((chain.surface_get_material(0) as ShaderMaterial).render_priority, PropLayer.FENCE_ALPHA_PRIORITY, "рабиця — прозорий прохід")
+func test_every_yard_kind_breaks_from_its_own_file() -> void:
+	for k: String in ["picket", "sheet", "chainlink", "brickbars", "slat"]:
+		var pieces: Array = PropLayer.broken_pieces(StringName("infra_fence_yard_" + k))
+		assert_gt(pieces.size(), 1, "%s: розколота, не вся сітка" % k)
+		assert_gte(PropLayer.fence_kind_of(StringName("infra_fence_yard_" + k)), 0, "%s: вид паркану двору" % k)
+		for src: Dictionary in pieces:
+			assert_not_null((src["mesh"] as Mesh).surface_get_material(0), "%s: шматок має власний матеріал" % k)
 
 
 ## Падіння, що ще йдуть під час передачі ходу, не лишають ні мить ефектів, ні уламків, ні нових мить потім.
@@ -3641,3 +3642,31 @@ func test_handover_gate_cancels_running_falls_and_fx() -> void:
 	(screen.get_node("%HandoverGate").get_node("%ConfirmButton") as Button).pressed.emit()
 	assert_eq(get_tree().get_nodes_in_group(BattleFx.GROUP).size(), 0)
 	assert_null(props.find_child("Break", false, false))
+
+
+## Справжні зламані моделі: земляні валики єврозабору не летять, цегляний цоколь не летить далеко,
+## а пеньок опори — частина з тегом stump.
+func test_real_pieces_follow_their_part_tags() -> void:
+	var props: PropLayer = _cached("river").props()
+	var root := Node3D.new()
+	add_child_autofree(root)
+	var euro: Array = props._burst_pieces(root, &"infra_fence_euro", Transform3D())
+	var b := {"pieces": euro, "cell": Vector2i(2, 3)}
+	props._throw(b, Vector3.RIGHT)
+	var berms: Array = euro.filter(func(p: Dictionary) -> bool: return p["part"] == "berm")
+	var thrown: Array = euro.filter(func(p: Dictionary) -> bool: return p["part"] != "berm")
+	assert_gt(berms.size(), 0, "у єврозабору є земляні валики")
+	assert_gt(thrown.size(), 0)
+	for p: Dictionary in berms:
+		assert_true(p["stump"], "валик лишається на місці")
+		assert_eq(p["vel"], Vector3.ZERO)
+	for p: Dictionary in thrown:
+		assert_gt((p["vel"] as Vector3).x, -0.01, "решта летить за напрямом")
+	var bricks: Array = props._burst_pieces(root, &"infra_fence_yard_brickbars", Transform3D())
+	b["pieces"] = bricks
+	props._throw(b, Vector3.RIGHT)
+	for p: Dictionary in bricks:
+		if p["part"] == "plinth":
+			assert_lt((p["vel"] as Vector3).length(), 0.25, "цоколь осипається на місці")
+	var pole: Array = props._burst_pieces(root, &"infra_pole_wood", Transform3D())
+	assert_eq(pole.filter(func(p: Dictionary) -> bool: return p["part"] == "stump").size(), 1, "один пеньок")

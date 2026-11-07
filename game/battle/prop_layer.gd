@@ -1182,7 +1182,9 @@ static func pieces_of_scene(root: Node) -> Array:
 	var out: Array = []
 	for ch: Node in root.get_children():
 		if ch is MeshInstance3D and String(ch.name).begins_with("piece_"):
-			out.append({"name": String(ch.name), "mesh": (ch as MeshInstance3D).mesh, "xf": (ch as Node3D).transform})
+			var ex: Variant = ch.get_meta("extras") if ch.has_meta("extras") else null
+			out.append({"name": String(ch.name), "mesh": (ch as MeshInstance3D).mesh, "xf": (ch as Node3D).transform,
+					"part": String((ex as Dictionary).get("part", "")) if ex is Dictionary else ""})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["name"] < b["name"])
 	root.free()
 	return out
@@ -1235,14 +1237,15 @@ func _burst_pieces(root: Node3D, model_name: StringName, t0: Transform3D) -> Arr
 		root.add_child(node)
 		for k in list.size():
 			mm.set_instance_custom_data(k, Color(kind_id, 0.0, 0.0, 0.0))
-			out.append(_new_piece(t0 * ((list[k] as Dictionary)["xf"] as Transform3D), mesh.get_aabb().size, null, mm, k))
+			out.append(_new_piece(t0 * ((list[k] as Dictionary)["xf"] as Transform3D), mesh.get_aabb().size, null, mm, k,
+					String((list[k] as Dictionary).get("part", ""))))
 	return out
 
 
-func _new_piece(w0: Transform3D, size: Vector3, node: MeshInstance3D, mm: MultiMesh, k: int) -> Dictionary:
+func _new_piece(w0: Transform3D, size: Vector3, node: MeshInstance3D, mm: MultiMesh, k: int, part: String = "") -> Dictionary:
 	var sc: Vector3 = (size * w0.basis.get_scale()).abs()
 	return {"node": node, "mm": mm, "k": k, "w0": w0, "pos": w0.origin, "rot": Basis(), "vel": Vector3.ZERO,
-			"ang": Vector3.ZERO, "r": minf(minf(sc.x, sc.y), sc.z) * 0.5, "shaft": true, "stump": false}
+			"ang": Vector3.ZERO, "r": minf(minf(sc.x, sc.y), sc.z) * 0.5, "shaft": true, "stump": false, "part": part}
 
 
 func _piece_write(p: Dictionary, shrink: float) -> void:
@@ -1305,6 +1308,16 @@ func _throw(b: Dictionary, dir: Vector3) -> void:
 	for k in pieces.size():
 		var p: Dictionary = pieces[k]
 		var hh: int = cell_hash(b["cell"], 6000 + k)
+		# Земляний валик єврозабору не летить, цегляний цоколь осипається на місці; решта розлітається.
+		if p["part"] == "berm":
+			p["stump"] = true
+			p["shaft"] = false
+			continue
+		if p["part"] == "plinth":
+			p["vel"] = dir * 0.1 * _rnd(hh, 1) + Vector3.UP * 0.1
+			p["ang"] = Vector3(_rnd(hh, 4) - 0.5, 0.0, _rnd(hh, 5) - 0.5) * 1.5
+			p["shaft"] = false
+			continue
 		p["vel"] = dir * (0.3 + 0.6 * _rnd(hh, 1)) + Vector3.UP * (0.3 + 0.4 * _rnd(hh, 2)) + side * (_rnd(hh, 3) - 0.5) * 0.6
 		var ax := Vector3(_rnd(hh, 4) - 0.5, _rnd(hh, 5) - 0.5, _rnd(hh, 6) - 0.5)
 		p["ang"] = ax.normalized() * (3.0 + 5.0 * _rnd(hh, 7))
@@ -1356,7 +1369,7 @@ func _start_fall(idx: int, travel: Vector3, cell: Vector2i) -> void:
 		if pieces.size() > 1:
 			var low: Dictionary = pieces[0]
 			for p: Dictionary in pieces:
-				if (p["w0"] as Transform3D).origin.y < (low["w0"] as Transform3D).origin.y:
+				if p["part"] == "stump" or (low["part"] != "stump" and (p["w0"] as Transform3D).origin.y < (low["w0"] as Transform3D).origin.y):
 					low = p
 			low["stump"] = true
 			low["shaft"] = false

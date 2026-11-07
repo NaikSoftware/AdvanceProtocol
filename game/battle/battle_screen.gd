@@ -1184,12 +1184,12 @@ func _units_point(p: Vector3) -> Vector3:
 	return _units.to_local(_board_view.props().to_global(p))
 
 
-func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, _is_pole: bool) -> void:
-	BattleFx.spawn_topple_hit(_units, _units_point(at), _units_point(top), debris as BattleFx.Debris, live_wire)
+func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:
+	BattleFx.spawn_topple_hit(_units, _units_point(at), _units_point(top), debris as BattleFx.Debris, live_wire, is_pole)
 
 
-func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, _is_pole: bool) -> void:
-	BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire)
+func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:
+	BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire, is_pole)
 
 
 func _cancel_falls() -> void:

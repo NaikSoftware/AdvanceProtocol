@@ -40,6 +40,9 @@ func _ready() -> void:
 				ok = kind == PropLayer.Kind.POLE and props._has_wire(i)
 			"fence":
 				ok = kind == PropLayer.Kind.FIELD_FENCE or kind == PropLayer.Kind.GARDEN_FENCE
+			"yard":
+				# Двір: паркан двору заданого виду (1..4); техніка в клітинку двору не в'їде, тож валимо напряму.
+				ok = kind == PropLayer.Kind.GARDEN_FENCE and PropLayer.fence_kind_of(inst["model"]) == int(a[7])
 		if ok and c.x >= 0 and c.y >= 0 and c.x < map.width and c.y < map.height:
 			var d: float = Vector2(c).distance_to(centre)
 			if d < best:
