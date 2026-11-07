@@ -252,7 +252,7 @@ static func spawn_topple_hit(parent: Node, at: Vector3, top: Vector3, debris: De
 		_shards(root, "Clods", rng, Shard.CLOD, clods + 2, low, basis, box, 0.12, 0.26, 2.0, 4.5, 70.0, 2.4)
 		# Полотно, що впало, виштовхує з-під себе повітря: 4 низькі клуби вздовж прольоту підскакують
 		# і далі ще здіймаються сталою тягою — 0,6–1 м за секунду — та зносяться на ~0,5 м.
-		_dust_puffs(root, rng, 4, Vector3.ZERO, basis, box, 0.8, 1.8, 1.8, colours, 0.4, 0.7, 30.0, 0.6, 0.32, 0.5, wet)
+		_dust_puffs(root, rng, 4, Vector3.ZERO, basis, box, 0.8, 1.8, 1.8, colours, 0.4, 0.7, 30.0, 0.6, 0.32, 0.9, wet)
 	if live_wire:
 		var up: Vector3 = top - at
 		_arc(root, rng, up, 3, 1.1)
@@ -1394,7 +1394,7 @@ void fragment() {
 	// інакше остання третина хмари зникала за 0,4 с.
 	float erode = smoothstep(0.3, 1.0, v_life);
 	float n = vnoise(UV * 7.0 + v_seed * 31.0) * 0.6 + vnoise(UV * 17.0 + v_seed * 13.0) * 0.4;
-	float thr = erode * 0.75;
+	float thr = erode * 0.45;
 	float keep = smoothstep(thr - 0.25, thr, t.a * (0.6 + 0.4 * n));
 	// Корінь прозорості атласу: середина клуби пласкіша, ніж в атласі, але край ще м'який —
 	// без кореня клуба була б пласким диском.
