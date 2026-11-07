@@ -1,19 +1,29 @@
 extends Node
-## Зламані моделі, розкидані по справжньому ґрунту карти (екран бою: рельєф, ґрунт, світло й небо карти), камерою гри.
-## Знімає лежачі шматки поруч із тими, що лишаються на місці (пеньки, стовпи, цоколь), на заданому зумі.
+## Зламані моделі на справжньому ґрунті карти (екран бою: рельєф, ґрунт, світло й небо карти), камерою гри, з тими самими
+## матеріалами, що й цілі пропси в бою (PropLayer._tuned_mesh: притемнені опори, prop_thin для парканів). Поруч із розкиданими
+## шматками стоїть цілий примірник тієї ж моделі, щоб порівняти яскравість.
 ## Запуск (потрібне вікно, не --headless):
-##   tools/godot_run.sh --path . res://tools/broken_board_shot.tscn -- <out_dir> <map> <zoom> <model,model,...> [x,y] [--bank]
+##   tools/godot_run.sh --path . res://tools/broken_board_shot.tscn -- <out_dir> <map> <zoom> <model,model,...|all> [x,y] [--bank]
 ## --bank: клітинка поля біля води (мул на River); без x,y — клітинка поля найближча до центру дошки.
-## Кадр: <out_dir>/<map>_z<zoom>_<тег>.png, де тег — перша модель; усі моделі стоять рядком уздовж Z.
+## Кожна модель — свій кадр <out_dir>/<map>_z<zoom>_<model>.png і вирізка 1:1 _crop.png; у лог іде
+## LUM <model> intact=<середня>/<верхні 10 %> pieces=<середня>/<верхні 10 %>: яскравість пікселів, що відрізняються від
+## порожнього кадру, окремо для цілого примірника (ліворуч) і шматків (праворуч).
+## Цілий примірник паркану двору — зібрані шматки, а не справжній батч-вузол (той вибирає вид через INSTANCE_CUSTOM).
 
-const SETTLE_FRAMES: int = 120
+const SETTLE_FRAMES: int = 90
 const STAY: Array[String] = ["stump", "berm", "plinth"]
+const ALL: Array[String] = ["infra_pole_concrete_10kv", "infra_pole_concrete_04kv", "infra_pole_wood", "infra_fence_picket",
+		"infra_fence_sheet_green", "infra_fence_sheet_brown", "infra_fence_euro", "infra_fence_yard_picket",
+		"infra_fence_yard_sheet", "infra_fence_yard_chainlink", "infra_fence_yard_brickbars", "infra_fence_yard_slat"]
+const SIDE: float = 0.55   # зсув цілого й розкиданого від клітинки вздовж Z, тайлів
+
+var _cam: Camera3D
 
 
 func _ready() -> void:
 	var a: PackedStringArray = OS.get_cmdline_user_args()
 	if a.size() < 4:
-		push_error("broken_board_shot: <out_dir> <map> <zoom> <models> [x,y] [--bank]")
+		push_error("broken_board_shot: <out_dir> <map> <zoom> <models|all> [x,y] [--bank]")
 		get_tree().quit(1)
 		return
 	DirAccess.make_dir_recursive_absolute(a[0])
@@ -26,43 +36,101 @@ func _ready() -> void:
 	for s in a.slice(4):
 		if s.contains(","):
 			cell = Vector2i(int(s.get_slice(",", 0)), int(s.get_slice(",", 1)))
-	var root := Node3D.new()
-	(screen.get_node("%BoardView") as Node3D).add_child(root)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	var models: PackedStringArray = a[3].split(",")
-	for i in models.size():
-		var origin := Vector3(float(cell.x), 0.0, float(cell.y) + (float(i) - float(models.size() - 1) * 0.5) * 0.9)
-		_place(root, "res://assets/props/broken/%s_broken.glb" % models[i], origin, rng)
-	print("BROKENBOARD %s cell %s models %s" % [a[1], cell, a[3]])
+	var models: Array[String] = ALL.duplicate() if a[3] == "all" else Array(a[3].split(","), TYPE_STRING, "", null)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	rig.center_on(cell)
 	rig.zoom_by(float(a[2]) / rig.zoom_level)
-	for f in SETTLE_FRAMES:
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-	var img: Image = get_viewport().get_texture().get_image()
-	var tag: String = "%s/%s_z%s_%s" % [a[0], a[1], a[2], models[0]]
-	img.save_png(tag + ".png")
-	# вирізка 1:1 навколо моделей: на зумі 8 шматок — кілька пікселів, у кадрі повного вікна його не видно
-	var at: Vector2 = get_viewport().get_camera_3d().unproject_position(root.to_global(Vector3(cell.x, 0.0, cell.y)))
-	var k: float = float(img.get_width()) / get_viewport().get_visible_rect().size.x
-	var size := Vector2i(560, 360)
-	var pos := (Vector2i(int(at.x * k), int(at.y * k)) - size / 2).clamp(Vector2i.ZERO, img.get_size() - size)
-	img.get_region(Rect2i(pos, size)).save_png(tag + "_crop.png")
+	_cam = get_viewport().get_camera_3d()
+	var root := Node3D.new()
+	(screen.get_node("%BoardView") as Node3D).add_child(root)
+	await _settle()
+	var empty: Image = get_viewport().get_texture().get_image()
+	var rng := RandomNumberGenerator.new()
+	for m in models:
+		for c in root.get_children():
+			c.free()
+		rng.seed = 7
+		var o := Vector3(float(cell.x), 0.0, float(cell.y))
+		_place(root, m, o + Vector3(0, 0, -SIDE), rng, false)
+		_place(root, m, o + Vector3(0, 0, SIDE), rng, true)
+		await _settle()
+		var img: Image = get_viewport().get_texture().get_image()
+		var tag: String = "%s/%s_z%s_%s" % [a[0], a[1], a[2], m]
+		img.save_png(tag + ".png")
+		var k: float = float(img.get_width()) / get_viewport().get_visible_rect().size.x
+		var p_i: Vector2 = _cam.unproject_position(root.to_global(o + Vector3(0, 0.05, -SIDE))) * k
+		var p_p: Vector2 = _cam.unproject_position(root.to_global(o + Vector3(0, 0.05, SIDE))) * k
+		var size := Vector2i(560, 360)
+		var mid := Vector2i(((p_i + p_p) * 0.5).round())
+		var pos := (mid - size / 2).clamp(Vector2i.ZERO, img.get_size() - size)
+		img.get_region(Rect2i(pos, size)).save_png(tag + "_crop.png")
+		var li: Vector2 = _lum(img, empty, p_i, 90.0 * k)
+		var lp: Vector2 = _lum(img, empty, p_p, 90.0 * k)
+		print("LUM %s intact=%.1f/%.1f pieces=%.1f/%.1f" % [m, li.x, li.y, lp.x, lp.y])
 	get_tree().quit()
 
 
-func _place(root: Node3D, path: String, origin: Vector3, rng: RandomNumberGenerator) -> void:
-	var scene: Node3D = (load(path) as PackedScene).instantiate()
+func _settle() -> void:
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+
+
+## Середня й верхні-10-% яскравість (0..255) пікселів у квадраті навколо точки, що помітно відрізняються від порожнього кадру.
+func _lum(img: Image, empty: Image, at: Vector2, r: float) -> Vector2:
+	var vals: Array[float] = []
+	var x0: int = maxi(0, int(at.x - r))
+	var x1: int = mini(img.get_width() - 1, int(at.x + r))
+	var y0: int = maxi(0, int(at.y - r))
+	var y1: int = mini(img.get_height() - 1, int(at.y + r))
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			var c: Color = img.get_pixel(x, y)
+			var e: Color = empty.get_pixel(x, y)
+			if absf(c.r - e.r) + absf(c.g - e.g) + absf(c.b - e.b) > 0.06:
+				vals.append((0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) * 255.0)
+	if vals.is_empty():
+		return Vector2.ZERO
+	vals.sort()
+	var sum: float = 0.0
+	for v in vals:
+		sum += v
+	var top: int = maxi(1, vals.size() / 10)
+	var tsum: float = 0.0
+	for i in range(vals.size() - top, vals.size()):
+		tsum += vals[i]
+	return Vector2(sum / vals.size(), tsum / top)
+
+
+## Модель, за чиїм описом (spec) ставляться матеріали: паркани двору — вид штахету, бо їхні шматки мають власні UV
+## (обрізаний атлас), а не батч-шейдер із вибором виду.
+func _spec_name(model: String) -> StringName:
+	return &"infra_fence_picket" if model.begins_with("infra_fence_yard_") else StringName(model)
+
+
+func _tuned(model: String, mi: MeshInstance3D, top: float) -> Mesh:
+	var mesh: Mesh = PropLayer._tuned_mesh(_spec_name(model), mi.mesh, [])
+	for s in mesh.get_surface_count():
+		var sm := mesh.surface_get_material(s) as ShaderMaterial
+		if sm != null and sm.get_shader_parameter("top_local") != null:
+			# верх секції в координатах шматка (його початок — у центрі мас), як у цілої моделі
+			sm.set_shader_parameter("top_local", top - mi.position.y)
+	return mesh
+
+
+func _place(root: Node3D, model: String, origin: Vector3, rng: RandomNumberGenerator, scatter: bool) -> void:
+	var scene: Node3D = (load("res://assets/props/broken/%s_broken.glb" % model) as PackedScene).instantiate()
+	var top: float = 0.0
+	for mi: MeshInstance3D in scene.find_children("*", "MeshInstance3D", true, false):
+		top = maxf(top, mi.position.y + mi.get_aabb().end.y)
 	for mi: MeshInstance3D in scene.find_children("*", "MeshInstance3D", true, false):
 		var part: String = String((mi.get_meta("extras", {}) as Dictionary).get("part", ""))
 		var c: Vector3 = mi.position
 		var sz: Vector3 = mi.get_aabb().size
 		var out := MeshInstance3D.new()
-		out.mesh = mi.mesh
+		out.mesh = _tuned(model, mi, top)
 		root.add_child(out)
-		if STAY.has(part):
+		if not scatter or STAY.has(part):
 			out.position = Vector3(origin.x + c.x, TerrainHeight.ground_y(origin.x + c.x, origin.z + c.z) + c.y, origin.z + c.z)
 			continue
 		var x: float = origin.x + c.x * 1.25 + rng.randf_range(-0.1, 0.1)
