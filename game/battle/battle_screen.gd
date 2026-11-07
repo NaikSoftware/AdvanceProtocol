@@ -1192,7 +1192,12 @@ func _on_cell_entered(moved: Events.UnitMoved, from: Vector2i, to: Vector2i) -> 
 	var edge := Vector4i(from.x, from.y, to.x, to.y)
 	if not _crush_edges.has(edge):
 		_crush_edges.append(edge)
-	_board_view.props().topple_cell(to, from, _known_unit_cells(), state.vision[state.active_player].is_seen)
+	_step_key = edge
+	# Корпус під час падіння ще перетинає клітинку from: вал не лягає й на неї.
+	var avoid: Array[Vector2i] = _known_unit_cells()
+	if not avoid.has(from):
+		avoid.append(from)
+	_board_view.props().topple_cell(to, from, avoid, state.vision[state.active_player].is_seen)
 
 
 ## Точки падіння — у координатах шару пропсів; мить живе в _units, тож її в'язка — до нього.
@@ -1202,39 +1207,45 @@ func _units_point(p: Vector3) -> Vector3:
 
 ## Секції паркану, зламані одним кроком, дають один момент удару, а не по моменту на секцію (§8): збираємо їх до кінця
 ## кадру й зливаємо в один виклик. Опори — кожна своя.
-var _hit_batch: Array = []
-var _land_batch: Array = []
-
+var _hit_batch: Array[Dictionary] = []
+var _land_batch: Array[Dictionary] = []
+## Крок техніки (з клітинки x,y у z,w), що зараз ламає: ключ злиття ударів, а не кадр (затримка не зливає різні кроки).
+var _step_key: Vector4i = Vector4i.ZERO
 
 func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_pole: bool, span: Vector3) -> void:
 	if is_pole:
 		var base: Vector3 = _units_point(at)
 		BattleFx.spawn_topple_hit(_units, base, _units_point(top), debris as BattleFx.Debris, live_wire, true, _units_point(at + span) - base)
 		return
-	_hit_batch.append({"at": at, "top": top, "debris": debris, "live": live_wire, "span": span})
+	_hit_batch.append({"at": at, "top": top, "debris": debris, "live": live_wire, "span": span, "step": _step_key})
 	if _hit_batch.size() == 1:
 		_flush_hits.call_deferred()
 
 
 func _flush_hits() -> void:
-	if _hit_batch.is_empty():
-		return
-	var u: Dictionary = _union_line(_hit_batch, "at", "span")
-	var at: Vector3 = u["at"]
-	var top: Vector3 = at
-	var live := false
+	var by_step: Dictionary = {}
 	for e: Dictionary in _hit_batch:
-		top += ((e["top"] as Vector3) - (e["at"] as Vector3)) / float(_hit_batch.size())
-		live = live or bool(e["live"])
-	var base: Vector3 = _units_point(at)
-	BattleFx.spawn_topple_hit(_units, base, _units_point(top), _majority(_hit_batch) as BattleFx.Debris, live, false,
-			_units_point(at + (u["span"] as Vector3)) - base)
+		if not by_step.has(e["step"]):
+			by_step[e["step"]] = [] as Array[Dictionary]
+		(by_step[e["step"]] as Array[Dictionary]).append(e)
 	_hit_batch.clear()
+	for step: Vector4i in by_step:
+		var group: Array[Dictionary] = by_step[step]
+		var u: Dictionary = _union_line(group, "at", "span")
+		var at: Vector3 = u["at"]
+		var top: Vector3 = at
+		var live := false
+		for e: Dictionary in group:
+			top += ((e["top"] as Vector3) - (e["at"] as Vector3)) / float(group.size())
+			live = live or bool(e["live"])
+		var base: Vector3 = _units_point(at)
+		BattleFx.spawn_topple_hit(_units, base, _units_point(top), _majority(group) as BattleFx.Debris, live, false,
+				_units_point(at + (u["span"] as Vector3)) - base)
 
 
 ## Спільна лінія кількох відрізків: центр і піввідрізок уздовж найдовшого з них, що вкриває всі кінці. Кожен запис —
 ## центр (ключ at) і півдовжина-вектор (ключ span).
-func _union_line(list: Array, at_key: String, span_key: String) -> Dictionary:
+func _union_line(list: Array[Dictionary], at_key: String, span_key: String) -> Dictionary:
 	var dir := Vector3.RIGHT
 	var longest: float = 0.0
 	var mean := Vector3.ZERO
@@ -1254,7 +1265,7 @@ func _union_line(list: Array, at_key: String, span_key: String) -> Dictionary:
 	return {"at": centre, "span": dir * ((hi - lo) * 0.5)}
 
 
-func _majority(list: Array) -> int:
+func _majority(list: Array[Dictionary]) -> int:
 	var count: Dictionary = {}
 	var best: int = int(list[0]["debris"])
 	for e: Dictionary in list:
@@ -1293,9 +1304,11 @@ func _flush_lands() -> void:
 
 ## Клітинки юнітів, які глядач вправі знати (§3.5): повалений стовп лягає повз їхні корпуси. Усіх юнітів сюди не
 ## дають — напрям падіння видав би невидимого ворога.
-func _known_unit_cells() -> Array:
+func _known_unit_cells() -> Array[Vector2i]:
 	var state: BattleState = _match_service.state
-	return state.known_occupied_map(state.active_player).keys()
+	var out: Array[Vector2i] = []
+	out.assign(state.known_occupied_map(state.active_player).keys())
+	return out
 
 
 func _cancel_falls() -> void:

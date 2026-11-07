@@ -30,7 +30,9 @@ const BAND_HALF: float = 0.225
 const BAND_NOSE: float = 0.35
 const POLE_BAND_HALF: float = 0.5
 ## Радіус корпусу юніта в плані, тайли: вал опори не проходить ближче.
-const UNIT_HULL_R: float = 0.4
+const UNIT_HULL_R: float = 0.6
+## Півширина траверси опори, тайли: вал падає смугою такої ширини.
+const CROSSARM_HALF: float = 0.1
 
 const MODEL_DIR: String = "res://assets/props/"
 ## Модель -> {kind, weight, …}. Слід будівлі в тайлах — з метаданих GLB (`footprint_tiles`), тож
@@ -600,7 +602,8 @@ var _broken: Dictionary = {}
 var _broken_gates: Dictionary = {}
 var _band_cache: Dictionary = {}
 ## Клітинки відомих глядачеві юнітів на час одного topple_cell: їхні корпуси вал опори обминає.
-var _avoid: Array = []
+var _avoid: Array[Vector2i] = []
+var _cur_seen: Callable = Callable()
 ## Останні аргументи set_crushed: перебудова дошки (build) повертає з них поламане одразу, а не після пакета.
 var _truth: Dictionary = {}
 var _board_size: Vector2i = Vector2i.ZERO
@@ -1126,8 +1129,9 @@ static func _gate_home(g: Dictionary) -> Vector2i:
 ## Техніка ввійшла в клітинку cell з клітинки from: опори, паркани й ворота в смузі корпусу починають падати (на
 ## розвіданому — seen). Решта розчавлюваного в клітинці ляже статично, як завжди.
 ## avoid — клітинки юнітів, відомих глядачеві (вал опори не лягає на їхні корпуси); невідомих сюди не дають (§3.5).
-func topple_cell(cell: Vector2i, from: Vector2i, avoid: Array = [], seen: Callable = Callable()) -> void:
+func topple_cell(cell: Vector2i, from: Vector2i, avoid: Array[Vector2i] = [], seen: Callable = Callable()) -> void:
 	_avoid = avoid
+	_cur_seen = seen
 	var travel := Vector3(float(cell.x - from.x), 0.0, float(cell.y - from.y))
 	var hits: Dictionary = band_hits(from, cell)
 	var statics := false
@@ -1153,6 +1157,7 @@ func topple_cell(cell: Vector2i, from: Vector2i, avoid: Array = [], seen: Callab
 	if statics:
 		_queue_apply()
 	_avoid = []
+	_cur_seen = Callable()
 	if not _falls.is_empty():
 		set_process(true)
 
@@ -1323,12 +1328,8 @@ static func broken_pieces(m: StringName) -> Array:
 	for src: Dictionary in out:
 		src["top"] = top
 	if out.is_empty():
-		var info: Dictionary = model(m)
-		var mesh: Mesh = info["mesh"]
-		# Картка паркану двору показує вид з INSTANCE_CUSTOM — сітка з матеріалами того ж вузла, що й ціла модель.
-		if spec_of(m).has("batch"):
-			mesh = _alpha_fence_mesh(mesh) if FENCE_ALPHA_FORMS.has(m) else _opaque_fence_mesh(mesh)
-		out = [{"name": "piece_00", "mesh": mesh, "xf": info["local"], "whole": true}]
+		# Кожна модель опори чи паркану мусить мати свій _broken.glb (тест це стереже); без нього складових нема.
+		push_error("PropLayer: нема зламаної моделі для %s" % m)
 	_pieces_cache[m] = out
 	return out
 
@@ -1341,39 +1342,41 @@ static func _rnd(h: int, salt: int) -> float:
 ## Сітка складової тим самим шляхом матеріалів, що й ціла модель (_tuned_mesh, прозорий чи непрозорий прохід
 ## паркану, імла опор): інакше складова при ударі яскравішала б за ціле. Картка двору без вибору виду —
 ## у файлі зламаного виду лише його смуга атласу.
-func _piece_mesh(m: StringName, mesh: Mesh, whole: bool, top_local: float = 0.0) -> Mesh:
+func _piece_mesh(m: StringName, mesh: Mesh, top_local: float = 0.0) -> Mesh:
 	if _piece_meshes.has(mesh):
 		return _piece_meshes[mesh]
-	var out: Mesh = mesh
-	if not whole:
-		var yard: bool = spec_of(m).has("batch")
-		# Паркан двору — з тими ж kinds і kind_top, що й ціла модель: тон, межа яскравості й мокрий підйом виду ті самі.
-		out = _tuned_mesh(m, mesh, (model(m) as Dictionary)["fence_tops"] if yard else [], yard)
-		if yard:
-			out = _alpha_fence_mesh(out) if FENCE_ALPHA_FORMS.has(m) else _opaque_fence_mesh(out)
-		# Темніший верх секції рахується від верху цілої моделі в координатах шматка (початок — у центрі мас),
-		# а не від верху самого шматка: інакше весь шматок читався б «верхом» і чорнів.
-		for si in out.get_surface_count():
-			var sm := out.surface_get_material(si) as ShaderMaterial
-			if sm != null and sm.get_shader_parameter("top_local") != null:
-				sm.set_shader_parameter("top_local", top_local)
-				sm.set_shader_parameter("piece", true)
-				if yard:
-					sm.set_shader_parameter("piece_kind", maxi(fence_kind_of(m), 0))
-		if int(spec_of(m)["kind"]) == Kind.POLE and _haze:
-			out = _hazed_mesh(out)
+	var yard: bool = spec_of(m).has("batch")
+	# Паркан двору — з тими ж kinds і kind_top, що й ціла модель: тон, межа яскравості й мокрий підйом виду ті самі.
+	var out: Mesh = _tuned_mesh(m, mesh, (model(m) as Dictionary)["fence_tops"] if yard else [], yard)
+	if yard:
+		out = _alpha_fence_mesh(out) if FENCE_ALPHA_FORMS.has(m) else _opaque_fence_mesh(out)
+	# Темніший верх секції рахується від верху цілої моделі в координатах шматка (початок — у центрі мас),
+	# а не від верху самого шматка: інакше весь шматок читався б «верхом» і чорнів.
+	for si in out.get_surface_count():
+		var sm := out.surface_get_material(si) as ShaderMaterial
+		if sm != null and sm.get_shader_parameter("top_local") != null:
+			sm.set_shader_parameter("top_local", top_local)
+			sm.set_shader_parameter("piece", true)
+			if yard:
+				sm.set_shader_parameter("piece_kind", maxi(fence_kind_of(m), 0))
+	if int(spec_of(m)["kind"]) == Kind.POLE and _haze:
+		out = _hazed_mesh(out)
 	_piece_meshes[mesh] = out
 	return out
 
 
 ## Матеріал складових: той самий шлях, що й у цілої моделі (_piece_mesh), один на вихідний матеріал файлу.
-func _piece_material(m: StringName, mesh: Mesh, si: int, whole: bool, top_local: float) -> Material:
+func _piece_material(m: StringName, mesh: Mesh, si: int, top_local: float) -> Material:
 	var src: Material = mesh.surface_get_material(si)
 	if _piece_mats.has(src):
 		return _piece_mats[src]
-	var mat: Material = _piece_mesh(m, mesh, whole, top_local).surface_get_material(si)
+	var mat: Material = _piece_mesh(m, mesh, top_local).surface_get_material(si)
 	_piece_mats[src] = mat
 	return mat
+
+
+static func _uses_normal_map(mat: Material) -> bool:
+	return mat is BaseMaterial3D and (mat as BaseMaterial3D).normal_enabled and (mat as BaseMaterial3D).normal_texture != null
 
 
 ## Геометрія складових моделі, згрупована за матеріалом (кеш на модель): на вибух — один вузол і один виклик малювання
@@ -1389,7 +1392,7 @@ func _piece_groups(m: StringName) -> Array:
 			var arrays: Array = mesh.surface_get_arrays(si)
 			if arrays[Mesh.ARRAY_INDEX] == null or arrays[Mesh.ARRAY_NORMAL] == null:
 				continue
-			var mat: Material = _piece_material(m, mesh, si, bool(srcs[i].get("whole", false)),
+			var mat: Material = _piece_material(m, mesh, si,
 					float(srcs[i].get("top", 0.0)) - (srcs[i]["xf"] as Transform3D).origin.y)
 			if not by_mat.has(mat):
 				by_mat[mat] = {"mat": mat, "entries": [], "idx_all": PackedInt32Array(), "uv_all": PackedVector2Array()}
@@ -1406,7 +1409,19 @@ func _piece_groups(m: StringName) -> Array:
 				idx_all.append(ii + offset)
 			g["uv_all"] = uv_all
 			g["idx_all"] = idx_all
-			(g["entries"] as Array).append({"src": i, "v": arrays[Mesh.ARRAY_VERTEX], "n": arrays[Mesh.ARRAY_NORMAL]})
+			var entry := {"src": i, "v": arrays[Mesh.ARRAY_VERTEX], "n": arrays[Mesh.ARRAY_NORMAL]}
+			# Нормаль-мапа читає дотичні: копіюємо їх (xyz повертаються з поточною позою, w лишається).
+			if arrays[Mesh.ARRAY_TANGENT] != null and _uses_normal_map(mat):
+				var tan: PackedFloat32Array = arrays[Mesh.ARRAY_TANGENT]
+				var tv := PackedVector3Array()
+				var tw := PackedFloat32Array()
+				for k in verts_n:
+					tv.append(Vector3(tan[k * 4], tan[k * 4 + 1], tan[k * 4 + 2]))
+					tw.append(tan[k * 4 + 3])
+				entry["tv"] = tv
+				entry["tw"] = tw
+				g["tangents"] = true
+			(g["entries"] as Array).append(entry)
 	_piece_geo[m] = by_mat.values()
 	return _piece_geo[m]
 
@@ -1438,14 +1453,36 @@ func _rebuild_burst_meshes(b: Dictionary) -> void:
 		var g: Dictionary = gr["g"]
 		var verts := PackedVector3Array()
 		var normals := PackedVector3Array()
+		var tans := PackedVector3Array()
+		var tws := PackedFloat32Array()
+		var with_tangents: bool = g.has("tangents")
 		for e: Dictionary in g["entries"]:
 			var xf: Transform3D = (pieces[int(e["src"])] as Dictionary)["xf_now"]
 			verts.append_array(xf * (e["v"] as PackedVector3Array))
 			normals.append_array(Transform3D(xf.basis.inverse().transposed(), Vector3.ZERO) * (e["n"] as PackedVector3Array))
+			if with_tangents:
+				if e.has("tv"):
+					tans.append_array(Transform3D(xf.basis.orthonormalized(), Vector3.ZERO) * (e["tv"] as PackedVector3Array))
+					tws.append_array(e["tw"] as PackedFloat32Array)
+				else:
+					tans.resize(tans.size() + (e["v"] as PackedVector3Array).size())
+					var pad := PackedFloat32Array()
+					pad.resize((e["v"] as PackedVector3Array).size())
+					pad.fill(1.0)
+					tws.append_array(pad)
 		var arrays: Array = []
 		arrays.resize(Mesh.ARRAY_MAX)
 		arrays[Mesh.ARRAY_VERTEX] = verts
 		arrays[Mesh.ARRAY_NORMAL] = normals
+		if with_tangents:
+			var tarr := PackedFloat32Array()
+			tarr.resize(tans.size() * 4)
+			for k in tans.size():
+				tarr[k * 4] = tans[k].x
+				tarr[k * 4 + 1] = tans[k].y
+				tarr[k * 4 + 2] = tans[k].z
+				tarr[k * 4 + 3] = tws[k]
+			arrays[Mesh.ARRAY_TANGENT] = tarr
 		arrays[Mesh.ARRAY_TEX_UV] = g["uv_all"]
 		arrays[Mesh.ARRAY_INDEX] = g["idx_all"]
 		var mesh: ArrayMesh = (gr["node"] as MeshInstance3D).mesh
@@ -1584,6 +1621,7 @@ func _start_fall(idx: int, travel: Vector3, cell: Vector2i) -> void:
 			BREAK_POLE_LIFE if pole else BREAK_FENCE_LIFE)
 	b["idx"] = idx
 	b["pole"] = pole
+	b["seen"] = _cur_seen
 	b["lands_on"] = lands_on
 	var sp: Array[int] = []
 	for si in _spans.size():
@@ -1673,25 +1711,38 @@ func _has_wire(idx: int) -> bool:
 ## при ударі об землю); нема й такого — напрям руху.
 ## Повертає [напрям, індекси парканів, на які ляже].
 func _clear_direction(self_idx: int, pivot: Vector3, dir: Vector3, h: float) -> Array:
-	var fallback: Array = []
+	var cands: Array = []
 	for deg: float in [0.0, 10.0, -10.0, 20.0, -20.0, 30.0, -30.0, 40.0, -40.0, 60.0, -60.0, 80.0, -80.0, 100.0, -100.0, 120.0, -120.0, 135.0, -135.0]:
 		var d: Vector3 = dir.rotated(Vector3.UP, deg_to_rad(deg))
-		var hit: Dictionary = _shaft_conflicts(self_idx, pivot, d, h)
-		if not hit["blocked"] and (hit["fences"] as Array).is_empty():
-			return [d, []]
-		if not hit["blocked"] and fallback.is_empty():
-			fallback = [d, hit["fences"]]
-	if not fallback.is_empty():
-		return fallback
-	return [dir, (_shaft_conflicts(self_idx, pivot, dir, h)["fences"] as Array)]
+		cands.append([d, _shaft_conflicts(self_idx, pivot, d, h)])
+	# Юніти (їхні клітинки знає лише глядач) обирають лише серед напрямів, уже чистих від пропсів; що зламається, а що
+	# ні, вирішують самі пропси — це публічне знання, і воно лишається в правді екрана.
+	var best: Array = []
+	for c: Array in cands:
+		var hit: Dictionary = c[1]
+		if not hit["blocked"] and (hit["fences"] as Array).is_empty() and (best.is_empty() or int(hit["unit_hits"]) < int((best[1] as Dictionary)["unit_hits"])):
+			best = c
+	if not best.is_empty():
+		return [best[0], []]
+	for c: Array in cands:
+		if not (c[1] as Dictionary)["blocked"]:
+			return [c[0], (c[1] as Dictionary)["fences"]]
+	best = cands[0]
+	for c: Array in cands:
+		if int((c[1] as Dictionary)["blocks"]) < int((best[1] as Dictionary)["blocks"]):
+			best = c
+	return [best[0], (best[1] as Dictionary)["fences"]]
 
 
-## Що лежить під валом, що впав у напрямі d: стоячі паркани (їх можна зламати) і те, що ні (опори, будівлі).
+## Що лежить під валом, що впав у напрямі d: стоячі паркани (їх можна зламати), те, що ні (опори, будівлі, тюки,
+## причепи), скільки вибірок вала в них потрапило (blocks) і скільки — у корпуси відомих юнітів (unit_hits). Вал
+## перевіряється смугою завширшки з траверсу (±CROSSARM_HALF).
 func _shaft_conflicts(self_idx: int, pivot: Vector3, d: Vector3, h: float) -> Dictionary:
 	var a := Vector2(pivot.x, pivot.z)
 	var b: Vector2 = a + Vector2(d.x, d.z) * h
+	var perp: Vector2 = Vector2(-(b - a).y, (b - a).x).normalized()
 	var fences: Array[int] = []
-	var blocked := false
+	var blocks: int = 0
 	for i in _instances.size():
 		if i == self_idx:
 			continue
@@ -1711,20 +1762,24 @@ func _shaft_conflicts(self_idx: int, pivot: Vector3, d: Vector3, h: float) -> Di
 			var near := false
 			for k in 5:
 				var q: Vector2 = o + along * (float(k) / 2.0 - 1.0)
-				near = near or q.distance_to(Geometry2D.get_closest_point_to_segment(q, a, b)) <= 0.12
+				near = near or q.distance_to(Geometry2D.get_closest_point_to_segment(q, a, b)) <= 0.12 + CROSSARM_HALF
 			if near:
 				if kind == Kind.POLE:
-					blocked = true
+					blocks += 3
 				else:
 					fences.append(i)
 		else:
-			var rect: Rect2 = wall_rect(it).grow(0.05)
+			var rect: Rect2 = wall_rect(it).grow(0.2)
 			for k in 9:
-				blocked = blocked or rect.has_point(a.lerp(b, float(k) / 8.0))
+				for off: float in [-CROSSARM_HALF, 0.0, CROSSARM_HALF]:
+					if rect.has_point(a.lerp(b, float(k) / 8.0) + perp * off):
+						blocks += 1
+	var unit_hits: int = 0
 	for c: Vector2i in _avoid:
 		for k in 9:
-			blocked = blocked or a.lerp(b, float(k) / 8.0).distance_to(Vector2(c)) <= UNIT_HULL_R
-	return {"fences": fences, "blocked": blocked}
+			if a.lerp(b, float(k) / 8.0).distance_to(Vector2(c)) <= UNIT_HULL_R:
+				unit_hits += 1
+	return {"fences": fences, "blocked": blocks > 0, "blocks": blocks, "unit_hits": unit_hits}
 
 
 ## Складові-вал йдуть за шарніром у основі.
@@ -1757,7 +1812,7 @@ func _land_pole(b: Dictionary) -> void:
 	inst.erase("fall")
 	# Вал ліг на паркан, обійти якого не вдалось: паркан ламається, як від справжнього удару.
 	for fi: int in b["lands_on"]:
-		if not _is_crushed(_instances[fi]):
+		if not _is_crushed(_instances[fi]) and _home_seen(_home_of(_instances[fi]), b.get("seen", Callable())):
 			_broken[fi] = true
 			secondary_broke.emit((_instances[fi]["transform"] as Transform3D).origin)
 			_start_fall(fi, f["dir"], b["cell"])

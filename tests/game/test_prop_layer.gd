@@ -342,12 +342,20 @@ func test_crush_flattens_small_props_on_the_given_cells_only() -> void:
 	# Секції далі за тайл від смуги кроку лишаються цілими.
 	var strip_a := Vector2(step[0])
 	var strip_b := Vector2(step[1])
+	var hit: Array = view.props().band_hits(step[0], step[1])["inst"]
+	var dir: Vector2 = (strip_b - strip_a).normalized()
+	var strip_from: Vector2 = strip_a + dir * PropLayer.BAND_NOSE
+	var strip_to: Vector2 = strip_b + dir * PropLayer.BAND_NOSE
+	var near_checked := 0
 	for i in view.props()._instances.size():
 		var inst: Dictionary = view.props()._instances[i]
 		if inst["band"]:
 			var o := Vector2((inst["transform"] as Transform3D).origin.x, (inst["transform"] as Transform3D).origin.z)
-			if o.distance_to(Geometry2D.get_closest_point_to_segment(o, strip_a, strip_b)) > 1.5:
-				assert_false(view.props()._is_crushed(inst), "далека секція ціла")
+			var dist: float = o.distance_to(Geometry2D.get_closest_point_to_segment(o, strip_from, strip_to))
+			if dist > 0.45 and dist < 1.5 and not hit.has(i):
+				near_checked += 1
+				assert_false(view.props()._is_crushed(inst), "секція за 0,45–1,5 тайла від смуги ціла")
+	assert_gt(near_checked, 0, "є конкретна сусідня секція для перевірки")
 	assert_lt(view.props()._broken.size(), view.props().all_instances().filter(func(i: Dictionary) -> bool: return i["band"]).size(),
 			"решта парканів стоїть")
 
@@ -3829,8 +3837,8 @@ func test_strip_has_flat_ends_and_the_start_is_cut_off() -> void:
 	assert_true(PropLayer._in_strip(Vector2(0.9, 0.45), a, tip, PropLayer.POLE_BAND_HALF), "опора збоку в межах півтайла")
 
 
-## Опора падає в межах 40° від напряму руху і не лягає на стоячі паркани, якщо є чистий напрям.
-func test_pole_fall_direction_stays_within_forty_degrees() -> void:
+## Напрям падіння опори: у межах ±135° від руху; коли він «чистий», вал не лягає на опори, будівлі й тюки, а коли ні — лише на паркани.
+func test_pole_fall_direction_follows_the_search_rule() -> void:
 	var props: PropLayer = _cached("river").props()
 	var idx: int = _wired_pole(props)
 	var t: Transform3D = props._instances[idx]["transform"]
@@ -3838,13 +3846,14 @@ func test_pole_fall_direction_stays_within_forty_degrees() -> void:
 	for ang in [0.0, 90.0, 180.0, 270.0]:
 		var want := Vector3.RIGHT.rotated(Vector3.UP, deg_to_rad(ang))
 		var pick: Array = props._clear_direction(idx, t.origin, want, h)
-		assert_gte((pick[0] as Vector3).dot(want), cos(deg_to_rad(40.0)) - 0.001, "напрям у межах 40° від руху")
-		if (pick[1] as Array).is_empty():
-			var hit: Dictionary = props._shaft_conflicts(idx, t.origin, pick[0], h)
-			assert_false(hit["blocked"])
+		assert_gte((pick[0] as Vector3).dot(want), cos(deg_to_rad(135.0)) - 0.001, "напрям у межах 135° від руху")
+		var hit: Dictionary = props._shaft_conflicts(idx, t.origin, pick[0], h)
+		if (pick[1] as Array).is_empty() and not hit["blocked"]:
+			assert_true((hit["fences"] as Array).is_empty(), "чистий напрям без парканів")
+		elif not hit["blocked"]:
+			assert_eq((pick[1] as Array).size(), (hit["fences"] as Array).size(), "лягає лише на паркани, які й зламає")
 
 
-## Вал опори не лягає на корпус машини, що зупинилась (і на будь-який відомий юніт); без списку — як було.
 func test_pole_shaft_avoids_known_unit_hulls() -> void:
 	var props: PropLayer = _cached("river").props()
 	var idx: int = _wired_pole(props)
@@ -3855,9 +3864,9 @@ func test_pole_shaft_avoids_known_unit_hulls() -> void:
 	var hull := Vector2i(roundi(a.x + 1.0), roundi(a.y))
 	var want := Vector3(float(hull.x) - a.x, 0.0, float(hull.y) - a.y).normalized()
 	var open: Array = props._clear_direction(idx, t.origin, want, h)
-	props._avoid = [hull]
+	props._avoid.assign([hull])
 	var pick: Array = props._clear_direction(idx, t.origin, want, h)
-	props._avoid = []
+	props._avoid.clear()
 	var shaft := func(d: Vector3) -> float:
 		var best := INF
 		for k in 9:
@@ -3997,3 +4006,57 @@ func test_one_step_breaking_many_fence_sections_spawns_one_hit_moment() -> void:
 	await wait_process_frames(2)
 	assert_eq(int(count_hits.call()) - before, 1, "один момент удару на крок")
 	props.cancel_falls()
+
+
+## Кожна модель опори, паркану чи воріт, що ламається, має свій _broken.glb (без нього складових нема).
+func test_every_breakable_model_ships_a_broken_scene() -> void:
+	for m: StringName in PropLayer.MODELS:
+		if int(PropLayer.MODELS[m]["kind"]) in PropLayer.TOPPLE_KINDS and PropLayer.model(m) != null:
+			assert_true(ResourceLoader.exists(PropLayer.BROKEN_DIR + String(m) + "_broken.glb"), "%s: нема _broken.glb" % m)
+
+
+## Ворота: злам видно лише коли розвідана клітинка воріт (їхній mid).
+func test_gate_break_is_shown_only_where_its_cell_is_seen() -> void:
+	var props: PropLayer = _cached("crossroads").props()
+	var gi: int = -1
+	var step: Array[Vector2i] = []
+	for i in props._gates.size():
+		var mid: Vector2 = props._gates[i]["mid"]
+		step = _hit_step(props, Vector3(mid.x, 0.0, mid.y), -1, i)
+		if not step.is_empty():
+			gi = i
+			break
+	assert_gte(gi, 0, "є ворота, яких торкається смуга")
+	var home: Vector2i = PropLayer._gate_home(props._gates[gi])
+	var edge := Vector4i(step[0].x, step[0].y, step[1].x, step[1].y)
+	var not_home := func(c: Vector2i) -> bool: return c != home
+	var only_home := func(c: Vector2i) -> bool: return c == home
+	props.set_crushed([] as Array[Vector2i], true, [edge], not_home)
+	assert_false(props._gate_down(gi), "клітинка воріт не розвідана — не ламаються")
+	props.set_crushed([] as Array[Vector2i], true, [edge], only_home)
+	assert_true(props._gate_down(gi), "клітинка воріт розвідана — зламано")
+	props.set_crushed([] as Array[Vector2i], true)
+
+
+## Ланцюг: вал опори зламав паркан → сигнал → правда екрана (_crush_marks) → перебудова показує зламане.
+func test_secondary_break_reaches_the_screen_truth_and_the_rebuild() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: BattleScreen = BattleScreenScene.instantiate()
+	add_child_autofree(screen)
+	screen.setup(_yard_map(), 2, 1, service)
+	var props: PropLayer = (screen.get_node("%BoardView") as BoardView).props()
+	var fence: int = -1
+	for i in props._instances.size():
+		var inst: Dictionary = props._instances[i]
+		if inst["band"] and int(PropLayer.spec_of(inst["model"])["kind"]) != PropLayer.Kind.POLE \
+				and service.state.vision[service.state.active_player].is_seen(PropLayer._home_of(inst)):
+			fence = i
+			break
+	assert_gte(fence, 0, "є паркан на розвіданому")
+	var origin: Vector3 = (props._instances[fence]["transform"] as Transform3D).origin
+	assert_false(props._is_crushed(props._instances[fence]))
+	props.secondary_broke.emit(origin)
+	assert_true(screen._crush_marks.has(origin), "екран записав вторинний злам")
+	screen._rebuild_units_for_active_player()
+	assert_true(props._is_crushed(props._instances[fence]), "перебудова показує вторинний злам")
