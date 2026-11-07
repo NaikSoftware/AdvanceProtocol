@@ -241,6 +241,15 @@ CC0), one baked atlas per prop, no generator.
 
 All fences come in straight 8 m segments with a corner piece, snapped to plot lines, not to tiles. The rules grid is not drawn (§8).
 
+**Broken versions** (`assets/props/broken/<model>_broken.glb`, one per yard-fence kind) are cut from the shipped
+GLBs, not rebuilt: `tools/blender/infra/broken_props.py` imports the source model, slices it with oblique planes and
+exports pieces `piece_00…` (origin at each piece's centre of mass, node extra `part`). Materials, atlas and UVs stay
+those of the source; fracture faces get `fracture_concrete` / `fracture_wood` / `fracture_metal`. Run:
+`blender -b --factory-startup --python-exit-code 1 -P tools/blender/infra/broken_props.py -- [model …]`, then
+re-import. Contract test: `tests/game/test_broken_props.gd`; frames: `tools/broken_preview.tscn` (assembled copy on
+the left, exploded on the right). The triangle limit is `max(1.5 x source, 520)` because the source poles are only
+72–120 triangles.
+
 ### Hay bales
 
 Round bales Ø 1.2–1.5 m, width 1.2 m (k_bales3/9). Wet late-autumn colour: grey-ochre to dark khaki,
