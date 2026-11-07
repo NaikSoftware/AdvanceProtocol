@@ -293,6 +293,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.wet = look.wetness >= WET_MIN
 	_apply_forest_sun(look)
 	_weather.apply(look)
+	BattleFx.wetness = look.wetness
 	_wire_view(board)
 	# Техніка, що стоїть на клітинці від старту матчу, теж розчавила дрібні пропси під собою; глядач
 	# бачить це, як і решту шрамів, лише на розвіданому (§3.5, _rebuild_units_for_active_player).
@@ -334,6 +335,7 @@ func resume(match_service: Node = null) -> void:
 	_board_view.wet = look.wetness >= WET_MIN
 	_apply_forest_sun(look)
 	_weather.apply(look)
+	BattleFx.wetness = look.wetness
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
 	_warm_board()
@@ -1184,8 +1186,9 @@ func _units_point(p: Vector3) -> Vector3:
 	return _units.to_local(_board_view.props().to_global(p))
 
 
-func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:
-	BattleFx.spawn_topple_hit(_units, _units_point(at), _units_point(top), debris as BattleFx.Debris, live_wire, is_pole)
+func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_pole: bool, span: Vector3) -> void:
+	var base: Vector3 = _units_point(at)
+	BattleFx.spawn_topple_hit(_units, base, _units_point(top), debris as BattleFx.Debris, live_wire, is_pole, _units_point(at + span) - base)
 
 
 func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:

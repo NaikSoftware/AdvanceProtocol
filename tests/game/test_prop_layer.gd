@@ -3329,8 +3329,8 @@ class FallLog:
 	var hits: Array = []
 	var lands: Array = []
 
-	func on_hit(at: Vector3, top: Vector3, debris: int, live: bool, pole: bool) -> void:
-		hits.append([at, top, debris, live, pole])
+	func on_hit(at: Vector3, top: Vector3, debris: int, live: bool, pole: bool, span: Vector3) -> void:
+		hits.append([at, top, debris, live, pole, span])
 
 	func on_land(a: Vector3, b: Vector3, debris: int, live: bool, pole: bool) -> void:
 		lands.append([a, b, debris, live, pole])
@@ -3670,3 +3670,50 @@ func test_real_pieces_follow_their_part_tags() -> void:
 			assert_true(p["stump"], "цоколь лишається на місці")
 	var pole: Array = props._burst_pieces(root, &"infra_pole_wood", Transform3D())
 	assert_eq(pole.filter(func(p: Dictionary) -> bool: return p["part"] == "stump").size(), 1, "один пеньок")
+
+
+## Справжні складові опори після удару об землю розходяться: сегменти лежать не стосом, а поодинці.
+func test_real_pole_segments_separate_after_landing() -> void:
+	var props: PropLayer = _cached("river").props()
+	var idx: int = _wired_pole(props)
+	var cell: Vector2i = (props._instances[idx]["cells"] as Array)[0]
+	var log := _fall_log(props)
+	props.topple_cell(cell, cell + Vector2i(-1, 0))
+	var b: Dictionary = props._instances[idx]["burst"]
+	var segs: Array = (b["pieces"] as Array).filter(func(p: Dictionary) -> bool: return p["part"] == "segment")
+	assert_gt(segs.size(), 1, "у опори кілька сегментів")
+	var rest: Array[Vector3] = []
+	for p: Dictionary in segs:
+		rest.append((p["w0"] as Transform3D).origin)
+	_run_falls(props, func() -> bool: return log.lands.size() > 0)
+	for i in 30:
+		props._tick_falls(0.05)
+	var spread: float = 0.0
+	for i in segs.size():
+		for j in range(i + 1, segs.size()):
+			spread = maxf(spread, ((segs[i]["pos"] as Vector3).distance_to(segs[j]["pos"] as Vector3)) - rest[i].distance_to(rest[j]))
+	assert_gte(spread, 0.15, "сегменти розійшлись щонайменше на 0,15 тайла")
+	props.set_crushed([] as Array[Vector2i], true)
+
+
+## Тонкі картки паркану лягають із нахилом 5–15°: не рівно й не на ребрі.
+func test_real_fence_cards_settle_tilted() -> void:
+	var props: PropLayer = _cached("river").props()
+	var root := Node3D.new()
+	add_child_autofree(root)
+	var pieces: Array = props._burst_pieces(root, &"infra_fence_yard_sheet", Transform3D(Basis(), Vector3(5.0, 0.0, 5.0)))
+	var b := {"pieces": pieces, "cell": Vector2i(2, 3)}
+	props._throw(b, Vector3.RIGHT)
+	for i in 600:
+		for p: Dictionary in pieces:
+			if not p["stump"]:
+				props._step_piece(p, PropLayer.TOPPLE_DT)
+	var cards := 0
+	for p: Dictionary in pieces:
+		if p["thin"] == Vector3.ZERO or p["stump"]:
+			continue
+		cards += 1
+		var n: Vector3 = ((p["rot"] as Basis) * ((p["w0"] as Transform3D).basis * (p["thin"] as Vector3))).normalized()
+		var tilt: float = rad_to_deg(acos(clampf(absf(n.dot(Vector3.UP)), 0.0, 1.0)))
+		assert_between(tilt, 4.5, 15.5, "картка лежить із нахилом 5–15°")
+	assert_gt(cards, 0, "у профлисту є тонкі картки")

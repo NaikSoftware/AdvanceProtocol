@@ -585,13 +585,14 @@ var _wires_live: MeshInstance3D = null
 var _guy_cache: Array = []
 var _guy_valid: bool = false
 var _cabinet_cache: Dictionary = {}
+var _piece_meshes: Dictionary = {}
 var _board_size: Vector2i = Vector2i.ZERO
 ## Карта має кільце з імлою: лінія ЛЕП (стовпи, дроти, шафи) тоне в ній, як будинки.
 var _haze: bool = false
 ## Клітинки дошки з лісом: тут стоятимуть дерева, коли їхній вигляд буде готовий.
 var forest_cells: Array[Vector2i] = []
 ## Техніка вдарила в опору, паркан чи ворота: at — точка удару біля основи, top — верх (світ).
-signal topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_pole: bool)
+signal topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_pole: bool, span: Vector3)
 ## Повалене вдарилося об землю й зникло: a→b — відрізок на землі, який воно накрило.
 signal topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool)
 
@@ -782,7 +783,7 @@ static func _dimmed(mesh: Mesh, tint: Color) -> Mesh:
 
 ## Копія сітки з власними матеріалами для огорож (двобічне світло) і каміння (темніше). Сам GLB
 ## не чіпаємо: load() ділить його сітку з усіма, хто його вантажить.
-static func _tuned_mesh(name: StringName, mesh: Mesh, fence_tops: Array = []) -> Mesh:
+static func _tuned_mesh(name: StringName, mesh: Mesh, fence_tops: Array = [], batched: bool = true) -> Mesh:
 	var kind: int = int(spec_of(name).get("kind", -1))
 	if kind not in [Kind.FIELD_FENCE, Kind.GARDEN_FENCE, Kind.BOULDER, Kind.BLOCK, Kind.POLE, Kind.HAY]:
 		return mesh
@@ -815,7 +816,7 @@ static func _tuned_mesh(name: StringName, mesh: Mesh, fence_tops: Array = []) ->
 		thin.set_shader_parameter("metallic", src.metallic)
 		# Верх секції темніший: світлі шапки стовпчиків читались білим пунктиром уздовж огорожі.
 		thin.set_shader_parameter("top_local", mesh.get_aabb().end.y)
-		if spec_of(name).has("batch"):
+		if batched and spec_of(name).has("batch"):
 			# Картка з усіма видами: шейдер лишає смугу виду екземпляра й тягне текстуру кроком стовпів від початку
 			# секції, а не розтягує її з масштабом секції.
 			thin.set_shader_parameter("kinds", fence_tops.size())
@@ -972,6 +973,7 @@ func build(world: Board, ring: int, board_size: Vector2i, height: TerrainHeight,
 	_falls.clear()
 	_guy_valid = false
 	_cabinet_cache.clear()
+	_piece_meshes.clear()
 	_wires_live = null
 	_slot_of.clear()
 	_gate_mesh_base.clear()
@@ -1213,6 +1215,23 @@ static func _rnd(h: int, salt: int) -> float:
 	return float(absi(hash(Vector2i(h, salt))) % 1000) / 999.0
 
 
+## Сітка складової тим самим шляхом матеріалів, що й ціла модель (_tuned_mesh, прозорий чи непрозорий прохід
+## паркану, імла опор): інакше складова при ударі яскравішала б за ціле. Картка двору без вибору виду —
+## у файлі зламаного виду лише його смуга атласу.
+func _piece_mesh(m: StringName, mesh: Mesh, whole: bool) -> Mesh:
+	if _piece_meshes.has(mesh):
+		return _piece_meshes[mesh]
+	var out: Mesh = mesh
+	if not whole:
+		out = _tuned_mesh(m, mesh, [], false)
+		if spec_of(m).has("batch"):
+			out = _alpha_fence_mesh(out) if FENCE_ALPHA_FORMS.has(m) else _opaque_fence_mesh(out)
+		if int(spec_of(m)["kind"]) == Kind.POLE and _haze:
+			out = _hazed_mesh(out)
+	_piece_meshes[mesh] = out
+	return out
+
+
 ## Складові моделі одним вузлом MultiMesh на кожну сітку (§8: паркан із десятків складових — не десятки
 ## викликів малювання). У INSTANCE_CUSTOM.r — вид паркану двору, як у вузлі цілої моделі (prop_thin).
 func _burst_pieces(root: Node3D, model_name: StringName, t0: Transform3D) -> Array:
@@ -1230,7 +1249,7 @@ func _burst_pieces(root: Node3D, model_name: StringName, t0: Transform3D) -> Arr
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		# Вид паркану в INSTANCE_CUSTOM читає лише шейдер картки (запасна ціла сітка); власні матеріали складових його не мають.
 		mm.use_custom_data = bool((list[0] as Dictionary).get("whole", false))
-		mm.mesh = mesh
+		mm.mesh = _piece_mesh(model_name, mesh, bool((list[0] as Dictionary).get("whole", false)))
 		mm.instance_count = list.size()
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = mm
@@ -1246,8 +1265,15 @@ func _burst_pieces(root: Node3D, model_name: StringName, t0: Transform3D) -> Arr
 
 func _new_piece(w0: Transform3D, size: Vector3, node: MeshInstance3D, mm: MultiMesh, k: int, part: String = "") -> Dictionary:
 	var sc: Vector3 = (size * w0.basis.get_scale()).abs()
+	var lo: float = minf(minf(sc.x, sc.y), sc.z)
+	var hi: float = maxf(maxf(sc.x, sc.y), sc.z)
+	var mid: float = sc.x + sc.y + sc.z - lo - hi
+	# Тонка картка (профлист, штахетина, дошка): найтонша вісь, за якою вона ляже на землю з нахилом.
+	var thin := Vector3.ZERO
+	if lo < 0.35 * mid:
+		thin = Vector3.RIGHT if sc.x == lo else (Vector3.UP if sc.y == lo else Vector3.BACK)
 	return {"node": node, "mm": mm, "k": k, "w0": w0, "pos": w0.origin, "rot": Basis(), "vel": Vector3.ZERO,
-			"ang": Vector3.ZERO, "r": minf(minf(sc.x, sc.y), sc.z) * 0.5, "shaft": true, "stump": false, "part": part}
+			"ang": Vector3.ZERO, "r": lo * 0.5, "shaft": true, "stump": false, "part": part, "thin": thin, "reach": hi * 0.5}
 
 
 func _piece_write(p: Dictionary, shrink: float) -> void:
@@ -1282,6 +1308,8 @@ func _step_piece(p: Dictionary, dt: float) -> bool:
 		v.x *= 1.0 - 4.0 * dt
 		v.z *= 1.0 - 4.0 * dt
 		ang *= 1.0 - 6.0 * dt
+		if p["thin"] != Vector3.ZERO:
+			_settle_card(p, dt)
 	p["vel"] = v
 	p["pos"] = pos
 	p["ang"] = ang
@@ -1290,6 +1318,22 @@ func _step_piece(p: Dictionary, dt: float) -> bool:
 	if not touched:
 		p["air"] = true
 	return landed
+
+
+## Тонка картка на землі: кладеться плиском із нахилом 5–15° у бік, що визначає її положення (не рівно й не на ребрі).
+func _settle_card(p: Dictionary, dt: float) -> void:
+	if not p.has("goal"):
+		var hv: int = hash(Vector2i(roundi((p["pos"] as Vector3).x * 1000.0), roundi((p["pos"] as Vector3).z * 1000.0)))
+		var tilt: float = deg_to_rad(5.0 + 10.0 * _rnd(hv, 1))
+		var yaw: float = _rnd(hv, 2) * TAU
+		var n: Vector3 = ((p["rot"] as Basis) * ((p["w0"] as Transform3D).basis * (p["thin"] as Vector3))).normalized()
+		var target: Vector3 = Vector3.UP.rotated(Vector3(cos(yaw), 0.0, sin(yaw)), tilt)
+		if n.dot(Vector3.UP) < 0.0:
+			target = -target
+		p["goal"] = Basis(Quaternion(n, target)) * (p["rot"] as Basis)
+		# Нахилений край не врізається в землю.
+		p["r"] = float(p["r"]) + sin(tilt) * float(p["reach"])
+	p["rot"] = (p["rot"] as Basis).slerp(p["goal"] as Basis, minf(1.0, 8.0 * dt))
 
 
 func _hide_slot(idx: int) -> void:
@@ -1382,7 +1426,8 @@ func _start_fall(idx: int, travel: Vector3, cell: Vector2i) -> void:
 		# Падаюча опора виходить зі статичних дротів у живий меш.
 		_guy_valid = false
 		_rebuild_wires()
-	topple_hit.emit(pivot + Vector3.UP * 0.06 - dir * 0.05, pivot + up * h, b["debris"], b["live"], pole)
+	topple_hit.emit(pivot + Vector3.UP * 0.06 - dir * 0.05, pivot + up * h, b["debris"], b["live"], pole,
+			Vector3.ZERO if pole else (f["axis"] as Vector3) * extent * 0.5)
 
 
 func _start_gate_fall(gi: int, travel: Vector3, cell: Vector2i) -> void:
@@ -1409,7 +1454,8 @@ func _start_gate_fall(gi: int, travel: Vector3, cell: Vector2i) -> void:
 	_throw(b, dir)
 	g["burst"] = b
 	_falls.append(b)
-	topple_hit.emit(pivot + Vector3.UP * 0.06 - dir * 0.05, pivot + Vector3.UP * float(g["height"]), b["debris"], false, false)
+	topple_hit.emit(pivot + Vector3.UP * 0.06 - dir * 0.05, pivot + Vector3.UP * float(g["height"]), b["debris"], false, false,
+			(f["axis"] as Vector3) * a.distance_to(c) * 0.5)
 
 
 func _has_wire(idx: int) -> bool:
@@ -1442,9 +1488,11 @@ func _land_pole(b: Dictionary) -> void:
 		if not p["shaft"]:
 			continue
 		var hh: int = cell_hash(b["cell"], 7000 + k)
-		var v: Vector3 = w.cross((p["pos"] as Vector3) - (f["pivot"] as Vector3)) * 0.4
+		var rel: Vector3 = (p["pos"] as Vector3) - (f["pivot"] as Vector3)
+		var v: Vector3 = w.cross(rel) * 0.4
 		v.y = maxf(v.y, 0.0)
-		p["vel"] = v + (f["dir"] as Vector3) * 0.15 * _rnd(hh, 1)
+		# Чим далі від основи, тим сильніше відкидає: сусідні сегменти розходяться, а не лежать стосом.
+		p["vel"] = v + (f["dir"] as Vector3) * (0.2 + 3.0 * rel.length() / float(f["h"]) + 0.3 * _rnd(hh, 1))
 		p["ang"] = w * 0.3 + Vector3.UP * (_rnd(hh, 2) - 0.5) * 4.0
 	var inst: Dictionary = _instances[int(b["idx"])]
 	inst.erase("fall")
