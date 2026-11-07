@@ -101,12 +101,11 @@ d = np.hypot(pos[whl, 1] - uv2[whl, 0], pos[whl, 2] - uv2[whl, 1])
 print(f"     wheel vertex distance from axle {d.min():.4f}..{d.max():.4f}; axle heights {np.unique(uv2[whl, 0].round(4)).tolist()}")
 check(d.max() < 0.06, "wheel UV2 is the axle centre (every wheel vertex within a radius of it)")
 # every wheel turns at travel / its own radius: alpha carries the rate relative to the road wheels
-rr = np.hypot(pos[whl, 1] - uv2[whl, 0], pos[whl, 2] - uv2[whl, 1])
 check(col4.shape[1] == 4, "COLOR_0 has alpha")
 if col4.shape[1] == 4:
     rate = 2.0 * col4[whl, 3]
     road_r = cfg["gear"]["road"]["r"] * cfg["k"]
-    err = np.abs(rate * rr - road_r).max()        # every wheel vertex sits on its rim
+    err = np.abs(rate * d - road_r).max()        # every wheel vertex sits on its rim
     check(err < 0.002, f"wheel spin rate x wheel radius == road wheel radius (worst {err:.4f})")
 # the game turns wheels by travel / _SPECS.wheel, so that number must be the road wheels' radius
 road = cfg["gear"]["road"]["r"] * cfg["k"]

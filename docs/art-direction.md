@@ -126,8 +126,10 @@ falls back to the box placeholder, so a model may land one type at a time.
   helmet band. Paint those faces neutral grey around sRGB 160 (linear 0.35): the shader multiplies
   the owner colour by the texture's luminance over that value, so dirt and scratches stay visible
   in the owner colour. **G** = track tread faces. **B** = wheel faces that rotate; their alpha is
-  half the wheel's spin rate relative to the road wheels, `_SPECS.wheel` / (2 × its own radius):
-  0.5 on road wheels, more on a smaller sprocket or idler, so every wheel keeps pace with the track.
+  half the wheel's spin rate relative to the road wheels: the model's road-wheel radius / (2 × its
+  own radius), the road-wheel radius being what `_SPECS.wheel` matches within 0.002. 0.5 on road
+  wheels, above 0.5 on a smaller sprocket or idler and below it on a larger one (the heavy tank's
+  sprocket), so every wheel keeps pace with the track.
 - **UV2** (TEXCOORD_1 as Godot reads it): on track faces u = arc length along the track loop in
   model units, v = 0..1 across the track; on wheel faces (centre_y, centre_z) of that wheel's
   axle in model units; (0, 0) elsewhere.

@@ -132,8 +132,17 @@ soot = smooth(tip - 0.45, tip - 0.05, P[..., 1]) * (rad < 0.4)
 col = col * (1 - 0.85 * soot[..., None])
 
 # Roofs darker and a little cooler than the grass they sit on, so the turret outline holds at
-# 22 cm/px (0.32 in linear is ~17 % in screen value); the sides keep their value.
-col = col * (1 - C.get("roof_dark", 0.32) * roof) * (1 + roof * np.array(C.get("roof_cool", (-0.06, 0.0, 0.08)), np.float32))
+# 22 cm/px (0.42 in linear is ~22 % in screen value); the sides keep their value.
+col = col * (1 - C.get("roof_dark", 0.42) * roof) * (1 + roof * np.array(C.get("roof_cool", (-0.06, 0.0, 0.08)), np.float32))
+# A shrunk turret (units.json turret) is darker again than the deck around it: small and low, it
+# would otherwise dissolve into the hull at the far zoom.
+t = cfg.get("turret")
+if t:
+    tc = 0.5 * (t["long"][0] + t["long"][1])
+    ty = [lib.m_long(cfg, tc + (L - tc) * t["scale_long"]) * lib.TILE_M for L in t["long"]]
+    on_t = (P[..., 1] > ty[0]) & (P[..., 1] < ty[1]) & (np.abs(P[..., 0]) < lib.m_len(cfg, t["lat"]) * lib.TILE_M) \
+        & (P[..., 2] > lib.m_len(cfg, t["base_h"]) * lib.TILE_M + 0.05) & ~on_gun
+    col = col * (1 - t.get("dark", 0.25) * on_t[..., None])
 
 normal = d["normal"].copy()
 occl = ao.copy()
@@ -220,7 +229,7 @@ wn = np.random.default_rng(4).standard_normal((128, 128))
 wd = np.clip(0.55 + 0.15 * wn - 0.3 * (R < 0.3), 0, 0.85)      # wheels are the dustiest part
 wc = wc * (1 - wd[..., None] * 0.6) + dust_c * wd[..., None] * 0.6
 ys, xs = cell("wheel")
-col[ys, xs] = wc
+col[ys, xs] = wc * C.get("wheel_mud", 0.62)   # mud-dark: beige dust read near-white at the close zoom
 normal[ys, xs] = height_normal(blur(wh), 4.0, False)
 rough[ys, xs] = np.where(tyre, 0.9, 0.75)
 occl[ys, xs] = 1 - 0.4 * (R > 0.98)
@@ -235,7 +244,7 @@ hubs = R <= 0.26; sc[hubs] = lin(62, 62, 58); sh[hubs] = 0.5
 sd = np.clip(0.5 + 0.15 * np.random.default_rng(6).standard_normal((128, 128)), 0, 0.8)
 sc = sc * (1 - sd[..., None] * 0.5) + dust_c * sd[..., None] * 0.5
 ys, xs = cell("sprocket")
-col[ys, xs] = sc
+col[ys, xs] = sc * C.get("wheel_mud", 0.62)
 normal[ys, xs] = height_normal(blur(sh), 4.0, False)
 rough[ys, xs] = np.where(ring, 0.55, 0.78); metal[ys, xs] = np.where(ring, 0.5, 0.0)
 

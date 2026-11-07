@@ -6,6 +6,8 @@ extends Node
 ## Запуск (вікно, не --headless):
 ##   $GODOT --path . res://tools/unit_shot.tscn -- <out_dir> <map> <type_id> [tag] [owner_a,owner_b]
 ## owner_a,owner_b — індекси PLAYER_COLORS для двох моделей (типово 0,1), щоб зняти й третій колір.
+## Шостий аргумент pair=<type_b>:<facing> ставить type_id і type_b на сусідні тайли носом до носа
+## (facing 0 — уздовж осі, 1 — по діагоналі) і знімає лише два зуми: чи не залазить ствол у сусіда.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 60
@@ -33,6 +35,28 @@ func _ready() -> void:
 	var owners: PackedStringArray = (a[4] if a.size() > 4 else "0,1").split(",")
 	var c0: Color = UnitView.PLAYER_COLORS[int(owners[0])]
 	var c1: Color = UnitView.PLAYER_COLORS[int(owners[1])]
+	if a.size() > 5 and a[5].begins_with("pair="):
+		var pv: PackedStringArray = a[5].substr(5).split(":")
+		var f: int = int(pv[1])
+		var ahead: Vector2i = Vector2i(0, -1) if f == 0 else Vector2i(1, -1)
+		_place(UnitSilhouettes.build_merged(type_id, c0), cell, f)
+		_place(UnitSilhouettes.build_merged(int(pv[0]), c1), cell + ahead, f + 4)
+		var prig: IsoCameraRig = screen.get_node("%CameraRig")
+		for fr in SETTLE_FRAMES:
+			await get_tree().process_frame
+		prig.center_on(cell)
+		var pshots: Array = []
+		for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+			prig.zoom_by(z / prig.zoom_level)
+			for fr in SETTLE_FRAMES:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			pshots.append(["%s/%s_z%d.png" % [out, tag, int(z)], get_viewport().get_texture().get_image()])
+		for ps: Array in pshots:
+			(ps[1] as Image).save_png(ps[0])
+		print("UNIT pair %s at %s: %d frames" % [a[5], cell, pshots.size()])
+		get_tree().quit()
+		return
 	# Власник 1 дивиться на північ, власник 2 — на південний схід, коробка-заступник — ліворуч.
 	_place(UnitSilhouettes.build_merged(type_id, c0), cell, 0)
 	_place(UnitSilhouettes.build_merged(type_id, c1), cell + Vector2i(1, 0), 3)

@@ -142,8 +142,9 @@ wheels = [(c, "wheel") for c in circ[:-2]] + [(circ[-2], "sprocket"), (circ[-1],
 for side in (1, -1):
     for (cy, cz, r), cname in wheels:
         ax = (cz, -cy)                               # Godot (y, z) of the axle
-        # alpha = half the spin rate relative to the road wheels (_SPECS.wheel): the shader turns a
-        # wheel by travel / wheel * 2 * alpha, so a smaller sprocket or idler keeps pace with the track
+        # alpha = road-wheel radius / (2 * this radius), half the spin rate relative to the road wheels
+        # (< 0.5 on a larger wheel): the shader turns a wheel by travel / _SPECS.wheel * 2 * alpha, and
+        # _SPECS.wheel matches the road-wheel radius, so every wheel keeps pace with the track
         blue = (0.0, 0.0, 1.0, 0.5 * L(G["road"]["r"]) / r)
         outer = [bm.verts.new((side * w1, cy + r * math.cos(2 * math.pi * i / n), cz + r * math.sin(2 * math.pi * i / n))) for i in range(n)]
         inner = [bm.verts.new((side * w0, cy + r * math.cos(2 * math.pi * i / n), cz + r * math.sin(2 * math.pi * i / n))) for i in range(n)]

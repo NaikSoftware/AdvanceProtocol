@@ -754,7 +754,7 @@ func test_silhouette_fits_one_tile() -> void:
 				continue
 			var box: AABB = (m as MeshInstance3D).mesh.get_aabb()
 			if m.name == "Barrel":
-				# Ствол реальної довжини (5–7 м від центру башти) смій виступати за тайл: найдовший —
+				# Ствол реальної довжини (5–7 м від центру тайла) смій виступати за тайл: найдовший —
 				# у винищувача танків, бо зверху його впізнають саме за стволом.
 				assert_gte(m.position.z + box.position.z, -0.875, "ствол типу %d" % id)
 				continue
