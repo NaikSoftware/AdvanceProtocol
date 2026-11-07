@@ -2,7 +2,7 @@ extends Node
 ## Знімає справжній хід техніки крізь лінію опор чи двір паркану: машину ставимо за три клітинки до цілі й
 ## віддаємо MoveCommand, далі все робить гра. Кадри — в пам'яті, PNG пишуться в кінці. Не входить у гру.
 ## Запуск (вікно, не --headless):
-##   $GODOT --path . res://tools/crush_move.tscn -- <out_dir> <map> <zoom> <pole|yard> <секунд> <кадрів/с> [вид паркану двору 1..4]
+##   $GODOT --path . res://tools/crush_move.tscn -- <out_dir> <map> <zoom> <pole|field|yard> <секунд> <кадрів/с> [вид паркану двору 1..4]
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 120
@@ -12,7 +12,7 @@ const CROP: Vector2i = Vector2i(720, 600)
 func _ready() -> void:
 	var a: PackedStringArray = OS.get_cmdline_user_args()
 	if a.size() < 6:
-		push_error("crush_move: <out_dir> <map> <zoom> <pole|yard> <sec> <fps> [kind]")
+		push_error("crush_move: <out_dir> <map> <zoom> <pole|field|yard> <sec> <fps> [kind]")
 		get_tree().quit(1)
 		return
 	DirAccess.make_dir_recursive_absolute(a[0])
@@ -42,11 +42,11 @@ func _ready() -> void:
 		var ok: bool = false
 		if a[3] == "pole":
 			ok = kind == PropLayer.Kind.POLE and props._has_wire(i)
+		elif a[3] == "field":
+			ok = kind == PropLayer.Kind.FIELD_FENCE
 		else:
 			ok = kind == PropLayer.Kind.GARDEN_FENCE and (PropLayer.fence_kind_of(inst["model"]) == want_kind or (want_kind < 0 and PropLayer.fence_kind_of(inst["model"]) >= 1))
 		var c: Vector2i = (inst["cells"] as Array)[0]
-		if ok:
-			print("CRUSHMOVE cand %s kind=%s tile=%s" % [c, PropLayer.fence_kind_of(inst["model"]), board.kind_at(c) if board.in_bounds(c) else -1])
 		if not ok or not board.in_bounds(c) or Vector2(c).distance_to(centre) >= best:
 			continue
 		# Машина стартує за дві клітинки з одного з чотирьох боків; ціль мусить бути досяжною.
