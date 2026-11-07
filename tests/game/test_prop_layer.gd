@@ -4060,3 +4060,28 @@ func test_secondary_break_reaches_the_screen_truth_and_the_rebuild() -> void:
 	assert_true(screen._crush_marks.has(origin), "екран записав вторинний злам")
 	screen._rebuild_units_for_active_player()
 	assert_true(props._is_crushed(props._instances[fence]), "перебудова показує вторинний злам")
+
+
+## Після удару об землю складові опори лишаються в огинаючій, яку перевірив вибір напряму, і швидко спиняються.
+func test_pole_pieces_rest_inside_the_checked_envelope() -> void:
+	var props: PropLayer = _cached("river").props()
+	var idx: int = _wired_pole(props)
+	var fx := _fall_log(props)
+	_topple_pole(props, idx)
+	var b: Dictionary = props._instances[idx]["burst"]
+	var f: Dictionary = b["f"]
+	var dir: Vector3 = f["dir"]
+	var pivot: Vector3 = f["pivot"]
+	var h: float = f["h"]
+	_run_falls(props, func() -> bool: return fx.lands.size() > 0)
+	for i in 40:
+		props._tick_falls(0.05)
+	var perp := Vector3(-dir.z, 0.0, dir.x)
+	for p: Dictionary in b["pieces"]:
+		if p["stump"]:
+			continue
+		var rel: Vector3 = (p["pos"] as Vector3) - pivot
+		assert_between(rel.dot(dir), -PropLayer.POLE_ENVELOPE - 0.01, h + PropLayer.POLE_ENVELOPE + 0.01, "уздовж: не далі за верхівку на огинаючу")
+		assert_lte(absf(rel.dot(perp)), PropLayer.POLE_ENVELOPE + 0.01, "убік: у межах огинаючої")
+		assert_lt(Vector2((p["vel"] as Vector3).x, (p["vel"] as Vector3).z).length(), 0.05, "складова спинилась")
+	props.set_crushed([] as Array[Vector2i], true)

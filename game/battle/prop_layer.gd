@@ -33,6 +33,8 @@ const POLE_BAND_HALF: float = 0.5
 const UNIT_HULL_R: float = 0.6
 ## Півширина траверси опори, тайли: вал падає смугою такої ширини.
 const CROSSARM_HALF: float = 0.1
+## Огинаюча уламків опори навколо лежачого вала, тайли: за верхівку й убік; вибір напряму перевіряє її всю.
+const POLE_ENVELOPE: float = 0.3
 
 const MODEL_DIR: String = "res://assets/props/"
 ## Модель -> {kind, weight, …}. Слід будівлі в тайлах — з метаданих GLB (`footprint_tiles`), тож
@@ -1528,15 +1530,22 @@ func _step_piece(p: Dictionary, dt: float) -> bool:
 		pos.y = TerrainHeight.ground_y(pos.x, pos.z) + float(p["r"])
 		if v.y < -0.2:
 			v.y = -v.y * 0.3
-			v.x *= 0.6
-			v.z *= 0.6
+			v.x *= float(p.get("hfac", 0.6))
+			v.z *= float(p.get("hfac", 0.6))
 		else:
 			v.y = 0.0
-		v.x *= 1.0 - 4.0 * dt
-		v.z *= 1.0 - 4.0 * dt
+		v.x *= 1.0 - float(p.get("fric", 4.0)) * dt
+		v.z *= 1.0 - float(p.get("fric", 4.0)) * dt
 		ang *= 1.0 - 6.0 * dt
 		if p["thin"] != Vector3.ZERO:
 			_settle_card(p, dt)
+	if p.has("env"):
+		# Складова опори не виходить за огинаючу, яку перевірив вибір напряму (_shaft_conflicts).
+		var e: Dictionary = p["env"]
+		var rel: Vector3 = pos - (e["pivot"] as Vector3)
+		var along: float = clampf(rel.dot(e["dir"] as Vector3), -POLE_ENVELOPE, float(e["h"]) + POLE_ENVELOPE)
+		var side: float = clampf(rel.dot(e["perp"] as Vector3), -POLE_ENVELOPE, POLE_ENVELOPE)
+		pos = (e["pivot"] as Vector3) + (e["dir"] as Vector3) * along + (e["perp"] as Vector3) * side + Vector3.UP * rel.y
 	p["vel"] = v
 	p["pos"] = pos
 	p["ang"] = ang
@@ -1739,7 +1748,7 @@ func _clear_direction(self_idx: int, pivot: Vector3, dir: Vector3, h: float) -> 
 ## перевіряється смугою завширшки з траверсу (±CROSSARM_HALF).
 func _shaft_conflicts(self_idx: int, pivot: Vector3, d: Vector3, h: float) -> Dictionary:
 	var a := Vector2(pivot.x, pivot.z)
-	var b: Vector2 = a + Vector2(d.x, d.z) * h
+	var b: Vector2 = a + Vector2(d.x, d.z) * (h + POLE_ENVELOPE)
 	var perp: Vector2 = Vector2(-(b - a).y, (b - a).x).normalized()
 	var fences: Array[int] = []
 	var blocks: int = 0
@@ -1762,7 +1771,7 @@ func _shaft_conflicts(self_idx: int, pivot: Vector3, d: Vector3, h: float) -> Di
 			var near := false
 			for k in 5:
 				var q: Vector2 = o + along * (float(k) / 2.0 - 1.0)
-				near = near or q.distance_to(Geometry2D.get_closest_point_to_segment(q, a, b)) <= 0.12 + CROSSARM_HALF
+				near = near or q.distance_to(Geometry2D.get_closest_point_to_segment(q, a, b)) <= 0.12 + POLE_ENVELOPE
 			if near:
 				if kind == Kind.POLE:
 					blocks += 3
@@ -1771,7 +1780,7 @@ func _shaft_conflicts(self_idx: int, pivot: Vector3, d: Vector3, h: float) -> Di
 		else:
 			var rect: Rect2 = wall_rect(it).grow(0.2)
 			for k in 9:
-				for off: float in [-CROSSARM_HALF, 0.0, CROSSARM_HALF]:
+				for off: float in [-POLE_ENVELOPE, -CROSSARM_HALF, 0.0, CROSSARM_HALF, POLE_ENVELOPE]:
 					if rect.has_point(a.lerp(b, float(k) / 8.0) + perp * off):
 						blocks += 1
 	var unit_hits: int = 0
@@ -1804,9 +1813,13 @@ func _land_pole(b: Dictionary) -> void:
 		var hh: int = cell_hash(b["cell"], 7000 + k)
 		var rel: Vector3 = (p["pos"] as Vector3) - (f["pivot"] as Vector3)
 		var v: Vector3 = w.cross(rel) * 0.4
-		v.y = maxf(v.y, 0.0)
-		# Чим далі від основи, тим сильніше відкидає: сусідні сегменти розходяться, а не лежать стосом.
-		p["vel"] = v + (f["dir"] as Vector3) * (0.3 + 4.0 * rel.length() / float(f["h"]) + 0.3 * _rnd(hh, 1))
+		v = Vector3(0.0, maxf(v.y, 0.0), 0.0)
+		# Чим далі від основи, тим сильніше відкидає (до ~0,3 тайла за верхівку): сусідні сегменти розходяться, а не лежать
+		# стосом; тертя велике, тож складова спиняється одразу, а огинаюча (POLE_ENVELOPE) не пускає далі.
+		p["vel"] = v + (f["dir"] as Vector3) * (0.5 + 5.4 * rel.length() / float(f["h"]) + 0.5 * _rnd(hh, 1))
+		p["fric"] = 18.0
+		p["hfac"] = 0.3
+		p["env"] = {"pivot": f["pivot"], "dir": f["dir"], "perp": Vector3(-(f["dir"] as Vector3).z, 0.0, (f["dir"] as Vector3).x), "h": f["h"]}
 		p["ang"] = w * 0.3 + Vector3.UP * (_rnd(hh, 2) - 0.5) * 4.0
 	var inst: Dictionary = _instances[int(b["idx"])]
 	inst.erase("fall")
