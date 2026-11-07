@@ -10,7 +10,7 @@ const _STRIPE_COLOR := Color("d9b23a")
 
 ## hull — розмір корпусу (1 тайл = 8 м, тож 3,6 м = 0,45); barrel — довжина ствола від центру
 ## корпусу/башти вперед (0 — без); extras — деталі. Ствол може виступати за корпус: у танка
-## він 5–6 м від центру башти. Висота танка = корпус + башта (TURRET_HEIGHT = 0,8 м).
+## він 3,5–7 м від центру тайла. Висота танка = корпус + башта (TURRET_HEIGHT = 0,8 м).
 const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures"]},  # 0 стрілецький загін
 	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures", &"drone_rack"]},  # 1 штурмовий
@@ -19,7 +19,7 @@ const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.30, 0.25, 0.625), "barrel": 0.0, "wheel": 0.06, "extras": [&"wheels"]},  # 4 розвідувальне 2,4×2,0×5,0 м
 	{"hull": Vector3(0.43, 0.20, 0.84), "barrel": 0.625, "wheel": 0.036, "extras": [&"turret"]},  # 5 середній танк 3,4×2,4×6,7 м
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
-	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,1×5,6 м
+	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
 	{"hull": Vector3(0.475, 0.25, 0.90), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},  # 8 важкий танк 3,8×2,8×(корпус 7,2) м
 	{"hull": Vector3(0.30, 0.225, 0.30), "barrel": 0.45, "wheel": 0.06, "extras": [&"trail"]},  # 9 польова гармата 2,4×1,8×5 м з лафетом
 	{"hull": Vector3(0.325, 0.30, 0.35), "barrel": 0.45, "wheel": 0.06, "extras": [&"tall_barrel", &"trail"]},  # 10 гаубиця 2,6×2,4×6 м з лафетом
