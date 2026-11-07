@@ -102,3 +102,29 @@ func test_species_follow_weights() -> void:
 				broad += 1
 	assert_gt(all, 300, "дерев досить для частки")
 	assert_almost_eq(float(broad) / all, 0.7, 0.1, "частка листяних у верхньому ярусі пізньої осені")
+
+
+func test_break_clears_only_its_own_cells() -> void:
+	# Танк трощить лише свої клітинки: крона не нависає над проламом, а сусідні клітинки
+	# обабіч просіки лишаються лісом. Окрема клітинка буває порожньою (ліс рідшає до просіки
+	# поступово), тож з шести сусідніх дерева мусять стояти щонайменше в чотирьох.
+	var cells := _cells(12, 9)
+	var broken: Dictionary = {Vector2i(4, 4): true, Vector2i(5, 4): true, Vector2i(6, 4): true}
+	for season: String in ["late", "summer", "early"]:
+		for seed in [3, 7, 11]:
+			var near: Dictionary = {}
+			for x in range(4, 7):
+				near[Vector2i(x, 3)] = 0
+				near[Vector2i(x, 5)] = 0
+			for e: Dictionary in _plan(cells, broken, season, seed):
+				var node: String = e["node"]
+				if e["ground"] or not node.get_slice("_", 0) in ["Pine", "Spruce", "Birch", "Oak", "Hero"]:
+					continue
+				var p: Vector2 = e["pos"]
+				assert_true(ForestScatter.broken_distance(broken, p) >= float(e["r"]) - 1e-4,
+						"%s/%d: крона %s у %s нависає над проламом" % [season, seed, node, p])
+				var c := Vector2i(roundi(p.x), roundi(p.y))
+				if near.has(c):
+					near[c] += 1
+			var wooded: int = near.values().filter(func(n: int) -> bool: return n > 0).size()
+			assert_gte(wooded, 4, "%s/%d: клітинок з деревами обабіч просіки %s" % [season, seed, near])
