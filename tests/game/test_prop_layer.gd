@@ -294,6 +294,20 @@ func test_reveal_fades_the_cell_and_its_camera_side_neighbours_only() -> void:
 	assert_true(_faded(view, h), "юніт на клітинці будинку")
 
 
+## Затулення рахується від справжньої камери: глянули на юніта згори — сусідній дім його вже не
+## ховає й стає суцільним; камера знову низько з боку дому — розчиняється.
+func test_fade_follows_the_real_camera() -> void:
+	var view: BoardView = _view(null, _house_board())
+	var h: Vector2i = _house_cell(view)
+	var u: Vector2i = h - Vector2i(1, 1)
+	view.set_reveal_cells([u] as Array[Vector2i])
+	assert_true(_faded(view, h), "передумова: дім між юнітом і камерою")
+	view.set_view_eye(Vector3(u.x, 30.0, u.y))
+	assert_false(_faded(view, h), "камера над юнітом — дім його не ховає")
+	view.set_view_eye(Vector3(u.x + 10.0, 8.0, u.y + 10.0))
+	assert_true(_faded(view, h), "камера низько за домом — розчиняється")
+
+
 func test_reveal_replaces_the_previous_set() -> void:
 	var view: BoardView = _view(null, _house_board())
 	var h: Vector2i = _house_cell(view)
