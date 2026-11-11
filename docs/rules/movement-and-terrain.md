@@ -82,8 +82,10 @@ cost(unit, tile) = max(10, 10 + tile.penalty - unit.cross_country)
 ```
 
 One number per unit (`cross_country`) against one number per tile (`penalty`) — deliberately not
-a unit×terrain matrix. Infantry has a huge `cross_country` (80), so it effectively pays the floor
-of 10 everywhere and terrain simply does not bother it. Vehicles sit in the 5–13 range and feel
+a unit×terrain matrix. Infantry has a huge `cross_country` (110), so it pays the floor of 10
+everywhere, built-up ground in mud included (`100 + 10`), and terrain simply does not bother it.
+Anything lower breaks the building cover: at 80 a building costs a squad its whole 30 AP on dry
+ground and is out of reach in mud. Vehicles sit in the 5–13 range and feel
 every hedgerow. Engineers are the worst off-road (−5) and live on roads.
 
 Impassable tiles are modelled as an infinite penalty, not as a special case in the mover.
