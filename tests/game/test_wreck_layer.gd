@@ -3,14 +3,21 @@ extends GutTest
 ## над його розвіданими тайлами, з одним спільним стовпом диму на всі уламки й без
 ## жодної ознаки власника.
 
+const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
+
 var layer: WreckLayer
 var state: BattleState
 
 
 func before_each() -> void:
+	UnitSilhouettes.use_models({})
 	layer = WreckLayer.new()
 	add_child_autofree(layer)
 	state = BattleState.create(Board.create(8, 8, Terrain.GroundState.DRY), 2, 7)
+
+
+func after_each() -> void:
+	UnitSilhouettes.reset_models()
 
 
 func _seen(player: int, p: Vector2i) -> void:
@@ -102,7 +109,7 @@ func test_wreck_is_neutral_burnt_and_carries_no_hp_bar() -> void:
 	# Одна сітка на уламки: один виклик малювання і одна тінь замість трьох-чотирьох (бюджет §8).
 	assert_eq(meshes.size(), 1)
 	assert_eq(meshes[0].material_override, WreckLayer.burnt_material(), "один спільний обгорілий матеріал")
-	var live: Node3D = UnitSilhouettes.build(5, Color.WHITE)
+	var live: Node3D = UnitSilhouettes.build(5)
 	var verts: int = 0
 	for part: Node in live.get_children():
 		verts += ((part as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
@@ -511,3 +518,16 @@ func test_column_and_fire_clocks_stay_bounded_and_wrap_without_a_jump() -> void:
 	assert_false(WreckLayer._FIRE_CODE.contains("fx_time +") or WreckLayer._FIRE_CODE.contains("sin("))
 	assert_eq(layer.get("_fire_mat").get_shader_parameter("loop_sec"), WreckLayer.fire_loop_sec())
 	assert_eq(layer.get("_column_mat").get_shader_parameter("rate_step"), WreckLayer.COLUMN_RATE_STEP)
+
+
+## Уламок моделі — та сама сітка під обгорілим матеріалом, осіла на HULL_SAG.
+func test_model_wreck_reuses_the_model_mesh_under_burnt_material() -> void:
+	var model: ArrayMesh = UnitModelFixture.vehicle(5)
+	UnitSilhouettes.use_models({5: model})
+	var root: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), 5, 0)
+	var body := root.get_node("Body") as MeshInstance3D
+	assert_same(body.mesh, model)
+	assert_same(body.material_override, WreckLayer.burnt_material())
+	assert_almost_eq(body.position.y, -WreckLayer.HULL_SAG, 0.0001)
+	assert_eq(root.get_child_count(), 1)
+	root.free()

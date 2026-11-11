@@ -1,0 +1,207 @@
+{
+  "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `ends_bottom_h` [rear, front] is the bottom edge of the rear plate and the bow (0 = no bow beyond the track), which verify_glb.py keeps every body vertex above. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle.",
+  "heavy_tank": {
+    "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
+    "type_id": 8,
+    "fwd": "x",
+    "hull_long": [-0.4987, 0.3238],
+    "hull_lat": 0.2166,
+    "ends_bottom_h": [0.099, 0.123],
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.104, 0.2015],
+      "below_skirt_h": 0.085,
+      "behind_skirt_lat": 0.19,
+      "gear_top_h": 0.15,
+      "open_ends_long": [-0.39, 0.3]
+    },
+    "gun": {
+      "axis_h": 0.2295,
+      "start_long": 0.165,
+      "clear_r": 0.032,
+      "sides": 10,
+      "profile": [[0.165, 0.0245], [0.205, 0.0245], [0.21, 0.0273], [0.255, 0.0273], [0.262, 0.0238], [0.276, 0.0203], [0.46, 0.0205], [0.468, 0.0195], [0.5, 0.0182]]
+    },
+    "gear": {
+      "track_lat": [0.11, 0.2],
+      "track_t": 0.012,
+      "wheel_lat": [0.153, 0.188],
+      "road": {
+        "r": 0.036,
+        "h": 0.048,
+        "long": [-0.3385, -0.2406, -0.1435, -0.0456, 0.0545, 0.1586]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.09,
+        "long": -0.413
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.096,
+        "long": 0.254
+      },
+      "sides": 12
+    }
+  },
+  "medium_tank": {
+    "source": "~/.local/share/advance-protocol/unit-sources/medium_tank.glb",
+    "type_id": 5,
+    "fwd": "x",
+    "hull_long": [-0.4987, 0.3238],
+    "hull_lat": 0.2166,
+    "ends_bottom_h": [0.099, 0.123],
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.104, 0.2015],
+      "below_skirt_h": 0.085,
+      "behind_skirt_lat": 0.19,
+      "gear_top_h": 0.15,
+      "open_ends_long": [-0.39, 0.3]
+    },
+    "gun": {
+      "axis_h": 0.2295,
+      "start_long": 0.165,
+      "clear_r": 0.032,
+      "sides": 10,
+      "profile": [[0.165, 0.0208], [0.205, 0.0208], [0.21, 0.0232], [0.255, 0.0232], [0.262, 0.0202], [0.276, 0.0173], [0.46, 0.0174], [0.468, 0.0166], [0.5, 0.0155]]
+    },
+    "gear": {
+      "track_lat": [0.11, 0.2],
+      "track_t": 0.012,
+      "wheel_lat": [0.153, 0.188],
+      "road": {
+        "r": 0.036,
+        "h": 0.048,
+        "long": [-0.3385, -0.2406, -0.1435, -0.0456, 0.0545, 0.1586]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.09,
+        "long": -0.413
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.096,
+        "long": 0.254
+      },
+      "sides": 12
+    },
+    "_turret": "the heavy's turret made compact: scaled toward its front (the long bustle shrinks), flatter and narrower",
+    "turret": {
+      "long": [-0.32, 0.15],
+      "lat": 0.155,
+      "base_h": 0.205,
+      "anchor": "front",
+      "scale_long": 0.75,
+      "scale_lat": 0.85,
+      "scale_h": 0.7,
+      "barrel_r": 0.032,
+      "shift_long": 0.04
+    },
+    "_flatten": "the rear deck stays one flat engine deck: stowage box and mast pressed down",
+    "flatten": [[-0.51, -0.29, 0.2, 0.205]],
+    "add_boxes": [[-0.33, -0.15, -0.185, 0.185, 0.1, 0.205]],
+    "louvres": {"y": [-3.0, -1.0], "x": 1.25, "centre": 0.15, "period": 0.14, "slot": 0.45, "below_m": 1.75}
+  },
+  "tank_destroyer": {
+    "source": "~/.local/share/advance-protocol/unit-sources/tank_destroyer.glb",
+    "type_id": 6,
+    "fwd": "x",
+    "_layout": "no turret: low front hull, a tall fixed armoured box on the rear 57 %, the gun from its front face",
+    "hull_long": [-0.5, 0.251],
+    "hull_lat": 0.195,
+    "ends_bottom_h": [0.099, 0.107],
+    "_add_boxes": "a flat rear plate closing the bay under the box overhang, flush with the hull rear, down to the fenders; two low roof boxes (sight, vent) so the box reads as armour",
+    "add_boxes": [[-0.4985, -0.44, -0.151, 0.151, 0.1, 0.334], [-0.3, -0.24, 0.05, 0.11, 0.33, 0.388], [-0.43, -0.36, -0.12, -0.05, 0.33, 0.375]],
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.108, 0.19],
+      "below_skirt_h": 0.088,
+      "behind_skirt_lat": 0.188,
+      "gear_top_h": 0.1,
+      "open_ends_long": [-0.37, 0.15]
+    },
+    "gun": {
+      "axis_h": 0.2729,
+      "start_long": -0.012,
+      "clear_r": 0.031,
+      "sides": 10,
+      "profile": [[-0.012, 0.0205], [0.1, 0.019], [0.105, 0.0157], [0.39, 0.0133], [0.395, 0.016], [0.43, 0.0185], [0.44, 0.026], [0.495, 0.026], [0.5, 0.02]]
+    },
+    "gear": {
+      "track_lat": [0.1125, 0.18],
+      "track_t": 0.011,
+      "wheel_lat": [0.12, 0.172],
+      "road": {
+        "r": 0.04,
+        "h": 0.051,
+        "long": [-0.3589, -0.2531, -0.1573, -0.0768, 0.0183, 0.1279]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.0833,
+        "long": -0.421
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.0958,
+        "long": 0.1972
+      },
+      "sides": 12
+    }
+  },
+  "light_tank": {
+    "source": "~/.local/share/advance-protocol/unit-sources/light_tank.glb",
+    "type_id": 7,
+    "fwd": "x",
+    "hull_long": [-0.4973, 0.2314],
+    "hull_lat": 0.1939,
+    "ends_bottom_h": [0.119, 0.0],
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.105, 0.186],
+      "below_skirt_h": 0.08,
+      "behind_skirt_lat": 0.185,
+      "gear_top_h": 0.14,
+      "open_ends_long": [-0.38, 0.15]
+    },
+    "_turret": "shrunk to read small and low from above: box in SOURCE units, base_h = top of the ring",
+    "turret": {
+      "long": [-0.3, 0.035],
+      "lat": 0.125,
+      "base_h": 0.18,
+      "scale_long": 0.86,
+      "scale_h": 0.55,
+      "barrel_r": 0.026
+    },
+    "gun": {
+      "axis_h": 0.2104,
+      "start_long": 0.168,
+      "clear_r": 0.024,
+      "sides": 10,
+      "profile": [[0.168, 0.016], [0.2, 0.016], [0.205, 0.0115], [0.33, 0.0115], [0.335, 0.0145], [0.36, 0.0145], [0.365, 0.0115], [0.48, 0.0115], [0.485, 0.0148], [0.5, 0.0148]]
+    },
+    "gear": {
+      "track_lat": [0.11, 0.18],
+      "track_t": 0.012,
+      "wheel_lat": [0.1225, 0.166],
+      "road": {
+        "r": 0.036,
+        "h": 0.048,
+        "long": [-0.346, -0.2575, -0.169, -0.0805, 0.008, 0.0965]
+      },
+      "sprocket": {
+        "r": 0.036,
+        "h": 0.085,
+        "long": -0.419
+      },
+      "idler": {
+        "r": 0.035,
+        "h": 0.087,
+        "long": 0.19
+      },
+      "sides": 12
+    }
+  }
+}
