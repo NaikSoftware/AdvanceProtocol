@@ -303,7 +303,7 @@ func _play_shot(shooter_id: int, target_id: int, weapon: int = -1) -> Variant:
 	var awaitable: Variant = null
 	if shooter_view != null:
 		awaitable = shooter_view.play_shot()
-		BattleFx.spawn_muzzle(shooter_view.get_parent(), shooter_view.transform, weapon, shooter.type_id if shooter != null else -1)
+		BattleFx.spawn_muzzle(shooter_view.get_parent(), shooter_view.transform, weapon, shooter.type_id if shooter != null else -1, UnitSilhouettes.set_of(shooter.owner) if shooter != null else 0)
 	var target: Unit = _resolve_unit(target_id)
 	var armoured: bool = target != null and UnitTypes.is_vehicle(target.unit_class())
 	if target_view != null:

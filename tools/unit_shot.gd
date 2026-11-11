@@ -9,6 +9,8 @@ extends Node
 ## (facing 0 — уздовж осі, 1 — по діагоналі) і знімає лише два зуми: чи не залазить ствол у сусіда.
 ## Шостий аргумент lineup ставить чотири танки справжніми юнітами трьох гравців (смуги HP у кольорі
 ## власника) і знімає один кадр на найближчому зумі; type_id тоді ігнорується.
+## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
+## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); один кадр, type_id ігнорується.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 60
@@ -33,6 +35,9 @@ func _ready() -> void:
 	var map := load("res://maps/%s.tres" % a[1]) as MapData
 	if a.size() > 5 and a[5] == "lineup":
 		await _lineup(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "sets":
+		await _sets(screen, map, out, tag)
 		return
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
@@ -163,4 +168,28 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
 	print("UNIT lineup at %s" % c)
+	get_tree().quit()
+
+
+## Рядок на набір, стовпець на роль: так видно, що ролі читаються однаково в кожному наборі.
+func _sets(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := _field_near_centre(m)
+	var roles: Array[int] = [8, 5, 6, 7]
+	m.spawns = []
+	for owner in 3:
+		for col in roles.size():
+			m.spawns.append({"type_id": roles[col], "owner": owner, "pos": c + Vector2i(col - 1, owner * 2 - 2), "facing": 0})
+	screen.setup(m, 3, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c)
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	for f in SETTLE_FRAMES * 2:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
+	print("UNIT sets at %s" % c)
 	get_tree().quit()

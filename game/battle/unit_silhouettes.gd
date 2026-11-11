@@ -32,12 +32,16 @@ const TURRET_HEIGHT: float = 0.10
 ## Справжні моделі (docs/art-direction.md, «Unit models»): є файл — тіло з нього, нема — коробки.
 ## `_SPECS` лишаються метаданими для спалахів, уламків і плям тіні. `wheel` — радіус коліс моделі.
 const MODEL_DIR: String = "res://assets/units/"
+## Три набори техніки; набір 0 — моделі й `_SPECS` вище, набори 1 і 2 — у підкаталогах set1/, set2/.
+const SET_COUNT: int = 3
+## Рядки набору поверх `_SPECS`: набір → {тип → рядок}. Типу нема — діє рядок набору 0.
+static var _set_specs: Dictionary = {}
 const MODEL_SLUGS: Array[String] = [
 	"rifle_soldier", "assault_soldier", "armoured_car", "troop_carrier", "scout_car", "medium_tank",
 	"tank_destroyer", "light_tank", "heavy_tank", "field_gun", "howitzer", "engineer_vehicle",
 ]
 const _MODEL_SHADER: Shader = preload("res://game/battle/shaders/unit_model.gdshader")
-## Сітка моделі за типом у системі юніта (null — файлу нема); у відділення — одна фігура.
+## Сітка моделі за (набір, тип) у системі юніта (null — файлу нема); у відділення — одна фігура.
 static var _models: Dictionary = {}
 ## Тести підставляють сітки самі: тоді типи поза словником — без моделі, диск не читається.
 static var _models_pinned: bool = false
@@ -58,13 +62,13 @@ const _FIGURE_SLOTS: Array[Vector2] = [Vector2(-0.1, -0.09), Vector2(0.1, -0.1),
 
 
 ## Кінчик ствола в локальних координатах юніта: звідси вилітає спалах.
-static func muzzle(type_id: int) -> Vector3:
-	return Vector3(0.0, barrel_y(type_id), -float(spec(type_id).barrel))
+static func muzzle(type_id: int, set_id: int = 0) -> Vector3:
+	return Vector3(0.0, barrel_y(type_id, set_id), -float(spec(type_id, set_id).barrel))
 
 
 ## Висота осі ствола: у башті — посередині неї, у гаубиці — над станиною, інакше — з корпусу.
-static func barrel_y(type_id: int) -> float:
-	var s: Dictionary = spec(type_id)
+static func barrel_y(type_id: int, set_id: int = 0) -> float:
+	var s: Dictionary = spec(type_id, set_id)
 	var h: float = (s.hull as Vector3).y
 	var extras: Array = s.extras
 	if extras.has(&"turret"):
@@ -72,8 +76,17 @@ static func barrel_y(type_id: int) -> float:
 	return h + 0.04 if extras.has(&"tall_barrel") else h * 0.5
 
 
-static func spec(type_id: int) -> Dictionary:
+## Рядок набору діє лише разом з його моделлю: без неї тип — це модель і рядок набору 0.
+static func spec(type_id: int, set_id: int = 0) -> Dictionary:
+	var resolved: int = _resolved_set(type_id, set_id)
+	if resolved != 0 and (_set_specs.get(resolved, {}) as Dictionary).has(type_id):
+		return (_set_specs[resolved] as Dictionary)[type_id]
 	return _SPECS[type_id]
+
+
+## Набір — це місце гравця: власник 4 носить набір 1.
+static func set_of(owner: int) -> int:
+	return owner % SET_COUNT
 
 
 ## Матеріали спільні між усіма юнітами одного кольору (батчинг).
@@ -85,8 +98,8 @@ static func shared_material(color: Color) -> StandardMaterial3D:
 	return _materials[color]
 
 
-static func build(type_id: int) -> Node3D:
-	var s: Dictionary = spec(type_id)
+static func build(type_id: int, set_id: int = 0) -> Node3D:
+	var s: Dictionary = spec(type_id, set_id)
 	var hull_size: Vector3 = s.hull
 	var extras: Array = s.extras
 	var root := Node3D.new()
@@ -114,7 +127,7 @@ static func build(type_id: int) -> Node3D:
 	if barrel_len > 0.0:
 		var tall: bool = extras.has(&"tall_barrel")
 		var thick := 0.07 if tall else 0.05
-		_box(root, "Barrel", Vector3(thick, thick, barrel_len), Vector3(0, barrel_y(type_id), -barrel_len * 0.5), _BARREL_COLOR)
+		_box(root, "Barrel", Vector3(thick, thick, barrel_len), Vector3(0, barrel_y(type_id, set_id), -barrel_len * 0.5), _BARREL_COLOR)
 	return root
 
 
@@ -122,12 +135,12 @@ static func build(type_id: int) -> Node3D:
 ## кольорами у вершинах (однаковими для всіх власників):
 ## один виклик малювання й один у тіні замість трьох-п'яти на юніт (§8). `standing` — скільки
 ## фігур стоїть, решта лежить.
-static func build_merged(type_id: int, standing: int = -1) -> Node3D:
+static func build_merged(type_id: int, standing: int = -1, set_id: int = 0) -> Node3D:
 	var hull := MeshInstance3D.new()
 	hull.name = "Hull"
-	hull.mesh = merged_mesh(type_id, standing)
-	if has_model(type_id):
-		hull.material_override = model_material(type_id)
+	hull.mesh = merged_mesh(type_id, standing, set_id)
+	if has_model(type_id, set_id):
+		hull.material_override = model_material(type_id, set_id)
 	else:
 		hull.material_override = _merged_mat()
 	var out := Node3D.new()
@@ -145,13 +158,13 @@ static func _merged_mat() -> StandardMaterial3D:
 
 ## Сітка тіла на тип і кількість стоячих фігур; спільна для всіх юнітів того
 ## самого вигляду, тож падіння фігури — підміна сітки, а не нова.
-static func merged_mesh(type_id: int, standing: int = -1) -> ArrayMesh:
-	var has_figures: bool = (spec(type_id).extras as Array).has(&"figures")
+static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0) -> ArrayMesh:
+	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
 	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
-	var model: ArrayMesh = model_mesh(type_id)
+	var model: ArrayMesh = model_mesh(type_id, set_id)
 	if model != null and not has_figures:
 		return model
-	var key := "%d:%s:%d" % [type_id, "model" if model != null else "box", up if has_figures else 0]
+	var key := "%d:%d:%s:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0]
 	if _merged_meshes.has(key):
 		return _merged_meshes[key]
 	if model != null:
@@ -162,7 +175,7 @@ static func merged_mesh(type_id: int, standing: int = -1) -> ArrayMesh:
 			xfs.append(figure_transform(i, i < up) * feet)
 		_merged_meshes[key] = _merge_model(model, xfs)
 		return _merged_meshes[key]
-	var root := build(type_id)
+	var root := build(type_id, set_id)
 	var pieces: Array[Array] = []  ## [масиви сітки, перетворення, колір]
 	for part: Node in root.get_children():
 		if part is MeshInstance3D:
@@ -250,27 +263,43 @@ static func _box(parent: Node3D, node_name: String, size: Vector3, pos: Vector3,
 	return m
 
 
-static func model_path(type_id: int) -> String:
-	return MODEL_DIR + MODEL_SLUGS[type_id] + ".glb"
+static func model_dir(set_id: int) -> String:
+	return MODEL_DIR if set_id == 0 else "%sset%d/" % [MODEL_DIR, set_id]
 
 
-static func has_model(type_id: int) -> bool:
-	return model_mesh(type_id) != null
+static func model_path(type_id: int, set_id: int = 0) -> String:
+	return model_dir(set_id) + MODEL_SLUGS[type_id] + ".glb"
+
+
+static func has_model(type_id: int, set_id: int = 0) -> bool:
+	return model_mesh(type_id, set_id) != null
+
+
+## Набір, чия модель і чий рядок справді діють: свій, коли має модель типу, інакше набір 0.
+static func _resolved_set(type_id: int, set_id: int) -> int:
+	return set_id if set_id != 0 and _own_model(type_id, set_id) != null else 0
 
 
 ## Сітка моделі в системі юніта (перетворення вузлів GLB уже впечені), або null, коли файлу нема.
 ## Матеріал поверхні — імпортований: з нього `model_material()` бере текстури.
-static func model_mesh(type_id: int) -> ArrayMesh:
-	if not _models.has(type_id):
-		var path: String = model_path(type_id)
-		_models[type_id] = _load_model(path) if not _models_pinned and ResourceLoader.exists(path) else null
-	return _models[type_id]
+static func model_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
+	return _own_model(type_id, _resolved_set(type_id, set_id))
 
 
-## Для тестів: лише ці сітки (тип → ArrayMesh), решта типів — коробки, хай що лежить на диску.
+static func _own_model(type_id: int, set_id: int) -> ArrayMesh:
+	var key := Vector2i(set_id, type_id)
+	if not _models.has(key):
+		var path: String = model_path(type_id, set_id)
+		_models[key] = _load_model(path) if not _models_pinned and ResourceLoader.exists(path) else null
+	return _models[key]
+
+
+## Для тестів: лише ці сітки, решта — коробки, хай що лежить на диску. Ключ — тип (набір 0)
+## або Vector2i(набір, тип).
 static func use_models(models: Dictionary) -> void:
 	reset_models()
-	_models = models.duplicate()
+	for k: Variant in models:
+		_models[k if k is Vector2i else Vector2i(0, k as int)] = models[k]
 	_models_pinned = true
 
 
@@ -358,13 +387,14 @@ static func _merge_model(src: Mesh, xfs: Array[Transform3D]) -> ArrayMesh:
 
 
 ## Один матеріал на тип: текстури, шорсткість і specular — з імпортованого матеріалу моделі.
-static func model_material(type_id: int) -> ShaderMaterial:
-	if _model_materials.has(type_id):
-		return _model_materials[type_id]
+static func model_material(type_id: int, set_id: int = 0) -> ShaderMaterial:
+	var key := Vector2i(_resolved_set(type_id, set_id), type_id)
+	if _model_materials.has(key):
+		return _model_materials[key]
 	var m := ShaderMaterial.new()
 	m.shader = _MODEL_SHADER
-	m.set_shader_parameter("wheel_radius", float(spec(type_id).get("wheel", 0.06)))
-	var src := model_mesh(type_id).surface_get_material(0) as BaseMaterial3D
+	m.set_shader_parameter("wheel_radius", float(spec(type_id, set_id).get("wheel", 0.06)))
+	var src := model_mesh(type_id, set_id).surface_get_material(0) as BaseMaterial3D
 	if src != null:
 		m.set_shader_parameter("albedo_tex", src.albedo_texture)
 		m.set_shader_parameter("albedo_color", src.albedo_color)
@@ -377,7 +407,7 @@ static func model_material(type_id: int) -> ShaderMaterial:
 		m.set_shader_parameter("roughness", src.roughness)
 		m.set_shader_parameter("metallic", src.metallic)
 		m.set_shader_parameter("specular", src.metallic_specular)
-	_model_materials[type_id] = m
+	_model_materials[key] = m
 	return m
 
 

@@ -655,11 +655,11 @@ static func _figures_for(hp: int, max_hp: int) -> int:
 
 
 func _set_standing(count: int) -> void:
-	if not (UnitSilhouettes.spec(_type_id).extras as Array).has(&"figures"):
+	if not (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures"):
 		_standing = 0
 		return
 	_standing = count
-	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count)
+	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id())
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
@@ -693,6 +693,10 @@ func play_destroyed() -> Signal:
 	return tween.finished
 
 
+func _set_id() -> int:
+	return UnitSilhouettes.set_of(_owner)
+
+
 func _build_silhouette(type_id: int, owner: int) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, і headless-тести це фіксують.
@@ -700,16 +704,16 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 		child.free()
 
 	_owner = owner
-	var built := UnitSilhouettes.build_merged(type_id)
+	var built := UnitSilhouettes.build_merged(type_id, -1, UnitSilhouettes.set_of(owner))
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)
 	built.free()
 	var hull := _silhouette.get_node("Hull") as MeshInstance3D
-	var hull_size: Vector3 = UnitSilhouettes.spec(type_id).hull
+	var hull_size: Vector3 = UnitSilhouettes.spec(type_id, _set_id()).hull
 	_half_base = Vector2(hull_size.x, hull_size.z) * 0.5
 	_hull_material = hull.material_override
-	_has_model = UnitSilhouettes.has_model(type_id)
+	_has_model = UnitSilhouettes.has_model(type_id, _set_id())
 	if _has_model:
 		hull.set_instance_shader_parameter("travel", _travel)
 	_hull_size = hull_size
