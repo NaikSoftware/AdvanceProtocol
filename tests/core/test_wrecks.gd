@@ -58,6 +58,26 @@ func test_a_vehicle_killed_by_a_shot_leaves_a_wreck() -> void:
 	s.start()
 	var events: Array = FireCommand.create(tank.id, car.id).apply(s)
 	_assert_wreck_left(events, Vector2i(3, 5), 4, 6)
+
+func test_a_wreck_carries_its_dead_vehicles_owner() -> void:
+	# Вигляд малює уламки національним набором власника; власник 1, а не 0, щоб
+	# значення за замовчуванням не пройшло тест випадково.
+	var s: BattleState = _two_lane_state()
+	var tank: Unit = s.add_unit(5, 0, Vector2i(0, 5), 2)
+	var car: Unit = s.add_unit(4, 1, Vector2i(3, 5), 6)
+	s.add_unit(0, 1, Vector2i(9, 9), 0)
+	car.hp = 1
+	s.start()
+	var events: Array = FireCommand.create(tank.id, car.id).apply(s)
+	var left: int = _index_of(events, Events.WreckLeft)
+	assert_true(left >= 0, "передумова: уламки лишились")
+	if left >= 0:
+		var e: Events.WreckLeft = events[left]
+		assert_eq(e.owner, 1, "подія несе власника загиблої машини")
+	var w: Wrecks.Wreck = Wrecks.wreck_at(s, Vector2i(3, 5))
+	assert_not_null(w)
+	if w != null:
+		assert_eq(w.owner, 1, "стан несе власника загиблої машини")
 	assert_not_null(Wrecks.wreck_at(s, Vector2i(3, 5)))
 
 func test_infantry_leaves_no_wreck() -> void:
