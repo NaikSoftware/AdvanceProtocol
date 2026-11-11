@@ -10,7 +10,7 @@ extends Node
 ## Шостий аргумент lineup ставить чотири танки справжніми юнітами трьох гравців (смуги HP у кольорі
 ## власника) і знімає один кадр на найближчому зумі; type_id тоді ігнорується.
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
-## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); один кадр, type_id ігнорується.
+## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); кадри на найближчому й найдальшому зумі, type_id ігнорується.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 60
@@ -191,5 +191,10 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 		await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
+	rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
+	for f in SETTLE_FRAMES * 2:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MAX_ZOOM)])
 	print("UNIT sets at %s" % c)
 	get_tree().quit()

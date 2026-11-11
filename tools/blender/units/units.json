@@ -203,5 +203,58 @@
       },
       "sides": 12
     }
+  },
+  "set1/heavy_tank": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_heavy_tank.glb",
+    "type_id": 8,
+    "fwd": "x",
+    "_layout": "set 1 heavy: broad flat-roofed turret over the middle of the hull (26-75 % from the bow) with a long box bustle, short flat deck behind it",
+    "hull_long": [-0.4995, 0.27],
+    "hull_lat": 0.2113,
+    "ends_bottom_h": [0.1, 0.074],
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.105, 0.205],
+      "below_skirt_h": 0.11,
+      "behind_skirt_lat": 0.19,
+      "gear_top_h": 0.15,
+      "open_ends_long": [-0.39, 0.25]
+    },
+    "gun": {
+      "axis_h": 0.211,
+      "start_long": 0.1,
+      "clear_r": 0.025,
+      "sides": 10,
+      "profile": [[ 0.1, 0.024],
+        [0.12, 0.0175],
+        [0.3, 0.0175],
+        [0.31, 0.02],
+        [0.37, 0.02],
+        [0.38, 0.016],
+        [0.48, 0.0155],
+        [0.5, 0.014]
+      ]
+    },
+    "gear": {
+      "track_lat": [0.115, 0.195],
+      "track_t": 0.012,
+      "wheel_lat": [0.145, 0.185],
+      "road": {
+        "r": 0.0347,
+        "h": 0.0467,
+        "long": [-0.2822, -0.1958, -0.1031, -0.0174, 0.0693, 0.1619]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.087,
+        "long": -0.375
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.09,
+        "long": 0.245
+      },
+      "sides": 12
+    }
   }
 }
