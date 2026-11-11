@@ -587,3 +587,11 @@ Judged only on `tools/battle_budget.tscn` frames of River and Crossroads at zoom
 - [x] River, yard by the west truss bridge: no pocket in the fence, gate on the road side
 - [x] River, yard by the asphalt road at the bridge: no pocket, the house wholly inside the yard
 - [x] Every other yard stays as it is
+
+### Task 27: Vehicles knock down poles and fences
+
+- [x] A vehicle that reaches a power pole knocks it over: it falls away from the vehicle, clear of units and buildings
+- [x] A falling pole breaks into pieces on the ground with dust and debris, then is gone; its wires go with it
+- [x] Fences and gates the vehicle crosses fall apart the same way; the rest of the fence stays standing
+- [x] Wet ground throws mud instead of dust
+- [x] Nothing falls or breaks on ground the player has not scouted

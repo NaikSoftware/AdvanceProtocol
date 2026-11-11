@@ -118,6 +118,10 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   half-destroyed: a standing wall or two reads as a ruin from above, a flat heap reads as noise.
   Small props (fences, bales, poles, trailers, blocks) sit near cell edges on passable cells; a
   vehicle that enters the cell crushes them and the debris stays as a scar, infantry passes them by.
+  Power poles, fences and gates are the exception: the vehicle's hull knocks them over, they fall
+  away from it (never across a unit or a building), break into real pieces with dust and debris
+  of their material, and then disappear — a pole takes its wires with it. Only what the hull
+  actually reaches breaks; the rest of a fence run stays standing.
 - **Props never hide a rule.** Fences and other low props draw under the movement-zone contours,
   which always read on top (§3.13).
 - **Wet maps wet the props too:** on River walls darken and roofs take on a wet sheen, or the
@@ -172,7 +176,8 @@ hard when nothing is animating. Battery life is a feature for a game passed betw
   blending. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
 - **Scars respect the fog:** crushed props, wrecks and their scorch show only where the viewer's
   `seen` covers the tile, or they report enemy movement. A prop is crushed only on a cell the
-  viewer has seen.
+  viewer has seen, judged by the prop's own cell; a falling pole picks its direction from what the
+  viewer may know, never from hidden units.
 - **Roads are asphalt or dirt, never cobble.** A town street is clearly narrower than the houses
   beside it: about 5 m of asphalt, with gravel or dirt verges filling the rest of a two-cell band.
   A dirt road that branches off an asphalt one is dirt from the asphalt's edge: no asphalt tongue

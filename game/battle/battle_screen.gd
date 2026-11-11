@@ -107,6 +107,13 @@ var _fx_warmed: bool = false
 ## shortcut: збереження цю правду не пише, тож «Продовжити» показує пропси цілими; перенести її
 ## в BattleState і серіалізатор (як broken_forest), коли розчавлене стане помітним між сесіями.
 var _crushed_truth: Dictionary[Vector2i, bool] = {}
+## Рухи техніки пакета, що грається (UnitMoved -> true): крок такого руху валить опори й паркани.
+var _vehicle_moves: Dictionary[Events.UnitMoved, bool] = {}
+## Кроки техніки за матч (Vector4i: з клітинки x,y у z,w): паркани й ворота ламаються лише там, де пройшов корпус.
+## Видно їх глядачеві лише на розвіданому (_rebuild_units_for_active_player).
+var _crush_edges: Array[Vector4i] = []
+## Початки парканів, які зламав вал упалої опори (PropLayer.secondary_broke): правда для перебудов і гейта.
+var _crush_marks: Array[Vector3] = []
 
 ## unit_id -> UnitView. Єдине джерело істини про те, які вузли юнітів зараз
 ## на дошці — саме з нього InputController і EventPlayer резолвлять id.
@@ -291,14 +298,18 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.wet = look.wetness >= WET_MIN
 	_apply_forest_sun(look)
 	_weather.apply(look)
+	BattleFx.wetness = look.wetness
 	_wire_view(board)
 	# Техніка, що стоїть на клітинці від старту матчу, теж розчавила дрібні пропси під собою; глядач
 	# бачить це, як і решту шрамів, лише на розвіданому (§3.5, _rebuild_units_for_active_player).
 	_crushed_truth.clear()
+	_crush_edges.clear()
+	_crush_marks.clear()
 	for p in _match_service.state.player_count:
 		for u: Unit in _match_service.state.units_of(p):
 			if u.unit_class() != UnitTypes.UnitClass.INFANTRY:
 				_crushed_truth[u.pos] = true
+				_crush_edges.append(Vector4i(u.pos.x, u.pos.y, u.pos.x, u.pos.y))
 	# R9: перший показ юнітів — зі стану (known_occupied_map -> vision.seen),
 	# не з потоку подій, який щойно злитий вище.
 	_rebuild_units_for_active_player(true)
@@ -332,6 +343,7 @@ func resume(match_service: Node = null) -> void:
 	_board_view.wet = look.wetness >= WET_MIN
 	_apply_forest_sun(look)
 	_weather.apply(look)
+	BattleFx.wetness = look.wetness
 	_wire_view(_match_service.state.board)
 	_gate.show_for(_match_service.state.active_player)
 	_warm_board()
@@ -347,6 +359,11 @@ func _wire_view(board: Board) -> void:
 	_board_view.build(board)
 	# Мирний дим 1–3 димарів і 1–2 руїн: мапа та сама — і вибір той самий.
 	if _board_view.props() != null:
+		var props: PropLayer = _board_view.props()
+		if not props.topple_hit.is_connected(_on_topple_hit):
+			props.topple_hit.connect(_on_topple_hit)
+			props.topple_landed.connect(_on_topple_landed)
+			props.secondary_broke.connect(_on_secondary_broke)
 		_wreck_layer.set_hearths(_board_view.props().chimney_tops(), _board_view.props().ruin_centres(), board.width * 73 + board.height * 31,
 				_board_view.props().ruin_smoke_point_at)
 	_camera_rig.set_bounds(Vector2i(board.width, board.height))
@@ -358,7 +375,7 @@ func _wire_view(board: Board) -> void:
 	_target_overlay = TargetOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
 		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
-		_on_wreck_left, _on_wreck_removed, _on_unit_found)
+		_on_wreck_left, _on_wreck_removed, _on_unit_found, _on_cell_entered)
 	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
@@ -922,6 +939,9 @@ func _on_events_ready() -> void:
 		# Дим влучань висить кілька секунд: над тайлом, якого наступний гравець не розвідав, він
 		# показав би, де стояла ціль (§3.5).
 		BattleFx.clear_all(get_tree())
+		# Те, що ламається, обривається разом з миттями: інакше падіння, що доходить під гейтом, показало б
+		# наступному гравцеві пил над клітинкою, яку він не розвідав.
+		_cancel_falls()
 		_gate.show_for(_match_service.state.active_player)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
 		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
@@ -949,6 +969,8 @@ func _on_events_ready() -> void:
 ## після confirmed, без жодного кроку кадру; якби тут стояв fly_to(), він
 ## ловив би позицію ще НЕ на цілі й падав.
 func _on_gate_confirmed() -> void:
+	BattleFx.clear_all(get_tree())
+	_cancel_falls()
 	# Дахи — одразу в стан нового гравця, без переходу (§3.5): див. PropLayer.set_reveal_cells.
 	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
@@ -994,7 +1016,8 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	for pos: Vector2i in _crushed_truth:
 		if state.vision[state.active_player].is_seen(pos):
 			crushed.append(pos)
-	_board_view.set_crushed_cells(crushed)
+	# Злам показується, лише коли власна клітинка пропса розвідана глядачем (PropLayer.set_crushed), як шрами й ліс.
+	_board_view.set_crushed_cells(crushed, instant, _crush_edges, state.vision[state.active_player].is_seen, _crush_marks)
 	forest_changed()
 	_apply_threat_marks()
 
@@ -1144,6 +1167,7 @@ func forest_changed() -> void:
 ## UnitMoved — лише тайли, у які юніт справді ввійшов. Юніт, що загинув на міні, зі стану вже
 ## може зникнути: техніка лишає остов (WreckLeft) на останньому тайлі, піхота — ні.
 func _record_crushes(events: Array[Events.BattleEvent]) -> void:
+	_vehicle_moves.clear()
 	var wrecks: Dictionary = {}
 	for e in events:
 		if e is Events.WreckLeft:
@@ -1156,8 +1180,145 @@ func _record_crushes(events: Array[Events.BattleEvent]) -> void:
 		var vehicle: bool = unit.unit_class() != UnitTypes.UnitClass.INFANTRY if unit != null \
 				else wrecks.has(moved.path.back())
 		if vehicle:
+			_vehicle_moves[moved] = true
 			for pos in moved.path:
 				_crushed_truth[pos] = true
+
+
+## Початок кроку техніки: опори й паркани клітинки падають, але лише на розвіданому (§3.5) — інакше
+## падіння вказало б, де їде невидимий ворог. Нерозвідане лишається в _crushed_truth і постане вже
+## повалене, коли його розвідають.
+func _on_cell_entered(moved: Events.UnitMoved, from: Vector2i, to: Vector2i) -> void:
+	var state: BattleState = _match_service.state
+	if not _vehicle_moves.has(moved):
+		return
+	var edge := Vector4i(from.x, from.y, to.x, to.y)
+	if not _crush_edges.has(edge):
+		_crush_edges.append(edge)
+	_step_key = edge
+	# Корпус під час падіння ще перетинає клітинку from: вал не лягає й на неї.
+	var avoid: Array[Vector2i] = _known_unit_cells()
+	if not avoid.has(from):
+		avoid.append(from)
+	_board_view.props().topple_cell(to, from, avoid, state.vision[state.active_player].is_seen)
+
+
+## Точки падіння — у координатах шару пропсів; мить живе в _units, тож її в'язка — до нього.
+func _units_point(p: Vector3) -> Vector3:
+	return _units.to_local(_board_view.props().to_global(p))
+
+
+## Секції паркану, зламані одним кроком, дають один момент удару, а не по моменту на секцію (§8): збираємо їх до кінця
+## кадру й зливаємо в один виклик. Опори — кожна своя.
+var _hit_batch: Array[Dictionary] = []
+var _land_batch: Array[Dictionary] = []
+## Крок техніки (з клітинки x,y у z,w), що зараз ламає: ключ злиття ударів, а не кадр (затримка не зливає різні кроки).
+var _step_key: Vector4i = Vector4i.ZERO
+
+func _on_topple_hit(at: Vector3, top: Vector3, debris: int, live_wire: bool, is_pole: bool, span: Vector3) -> void:
+	if is_pole:
+		var base: Vector3 = _units_point(at)
+		BattleFx.spawn_topple_hit(_units, base, _units_point(top), debris as BattleFx.Debris, live_wire, true, _units_point(at + span) - base)
+		return
+	_hit_batch.append({"at": at, "top": top, "debris": debris, "live": live_wire, "span": span, "step": _step_key})
+	if _hit_batch.size() == 1:
+		_flush_hits.call_deferred()
+
+
+func _flush_hits() -> void:
+	var by_step: Dictionary = {}
+	for e: Dictionary in _hit_batch:
+		if not by_step.has(e["step"]):
+			by_step[e["step"]] = [] as Array[Dictionary]
+		(by_step[e["step"]] as Array[Dictionary]).append(e)
+	_hit_batch.clear()
+	for step: Vector4i in by_step:
+		var group: Array[Dictionary] = by_step[step]
+		var u: Dictionary = _union_line(group, "at", "span")
+		var at: Vector3 = u["at"]
+		var top: Vector3 = at
+		var live := false
+		for e: Dictionary in group:
+			top += ((e["top"] as Vector3) - (e["at"] as Vector3)) / float(group.size())
+			live = live or bool(e["live"])
+		var base: Vector3 = _units_point(at)
+		BattleFx.spawn_topple_hit(_units, base, _units_point(top), _majority(group) as BattleFx.Debris, live, false,
+				_units_point(at + (u["span"] as Vector3)) - base)
+
+
+## Спільна лінія кількох відрізків: центр і піввідрізок уздовж найдовшого з них, що вкриває всі кінці. Кожен запис —
+## центр (ключ at) і півдовжина-вектор (ключ span).
+func _union_line(list: Array[Dictionary], at_key: String, span_key: String) -> Dictionary:
+	var dir := Vector3.RIGHT
+	var longest: float = 0.0
+	var mean := Vector3.ZERO
+	for e: Dictionary in list:
+		mean += (e[at_key] as Vector3) / float(list.size())
+		if (e[span_key] as Vector3).length() > longest:
+			longest = (e[span_key] as Vector3).length()
+			dir = (e[span_key] as Vector3).normalized()
+	var lo: float = INF
+	var hi: float = -INF
+	for e: Dictionary in list:
+		for sgn: float in [-1.0, 1.0]:
+			var q: float = ((e[at_key] as Vector3) + (e[span_key] as Vector3) * sgn).dot(dir)
+			lo = minf(lo, q)
+			hi = maxf(hi, q)
+	var centre: Vector3 = mean + dir * ((lo + hi) * 0.5 - mean.dot(dir))
+	return {"at": centre, "span": dir * ((hi - lo) * 0.5)}
+
+
+func _majority(list: Array[Dictionary]) -> int:
+	var count: Dictionary = {}
+	var best: int = int(list[0]["debris"])
+	for e: Dictionary in list:
+		count[int(e["debris"])] = int(count.get(int(e["debris"]), 0)) + 1
+		if int(count[int(e["debris"])]) > int(count.get(best, 0)):
+			best = int(e["debris"])
+	return best
+
+
+func _on_secondary_broke(origin: Vector3) -> void:
+	if not _crush_marks.has(origin):
+		_crush_marks.append(origin)
+
+
+func _on_topple_landed(a: Vector3, b: Vector3, debris: int, live_wire: bool, is_pole: bool) -> void:
+	# Падіння бачимо лише на розвіданому (_on_cell_entered), тож слід на мокрій землі — теж лише там.
+	if _board_view.wet and _scars != null:
+		_scars.stamp_scuff(a, b)
+	if is_pole:
+		BattleFx.spawn_topple_land(_units, _units_point(a), _units_point(b), debris as BattleFx.Debris, live_wire, true)
+		return
+	_land_batch.append({"at": (a + b) * 0.5, "span": (b - a) * 0.5, "debris": debris})
+	if _land_batch.size() == 1:
+		_flush_lands.call_deferred()
+
+
+func _flush_lands() -> void:
+	if _land_batch.is_empty():
+		return
+	var u: Dictionary = _union_line(_land_batch, "at", "span")
+	var c: Vector3 = u["at"]
+	var half: Vector3 = u["span"]
+	BattleFx.spawn_topple_land(_units, _units_point(c - half), _units_point(c + half), _majority(_land_batch) as BattleFx.Debris, false, false)
+	_land_batch.clear()
+
+
+## Клітинки юнітів, які глядач вправі знати (§3.5): повалений стовп лягає повз їхні корпуси. Усіх юнітів сюди не
+## дають — напрям падіння видав би невидимого ворога.
+func _known_unit_cells() -> Array[Vector2i]:
+	var state: BattleState = _match_service.state
+	var out: Array[Vector2i] = []
+	out.assign(state.known_occupied_map(state.active_player).keys())
+	return out
+
+
+func _cancel_falls() -> void:
+	_hit_batch.clear()
+	_land_batch.clear()
+	if _board_view.props() != null:
+		_board_view.props().cancel_falls()
 
 
 func _first_unit_cell(player: int) -> Vector2i:

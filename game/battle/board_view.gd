@@ -536,8 +536,10 @@ func set_view_eye(eye: Vector3) -> void:
 
 
 ## Клітинки з розчавленими пропсами, уже обрізані розвіданим глядача (§3.5).
-func set_crushed_cells(cells: Array[Vector2i]) -> void:
-	_props.set_crushed(cells)
+## instant — передача ходу: падіння, що йдуть, обриваються (PropLayer.set_crushed).
+func set_crushed_cells(cells: Array[Vector2i], instant: bool = false, edges: Array[Vector4i] = [], seen: Callable = Callable(),
+		marks: Array[Vector3] = []) -> void:
+	_props.set_crushed(cells, instant, edges, seen, marks)
 	if _vegetation != null:
 		_vegetation.set_crushed(cells)
 

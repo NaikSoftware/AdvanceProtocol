@@ -250,7 +250,7 @@ static func _put_on_unit_layer(node: Node) -> void:
 ## найближчої до центру клітинки): те, що core/ вирішило на цьому кроці (знахідка
 ## укриття), показується тут, а не після всього шляху. Колбек живе в цьому ж твіні.
 func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: int = -1,
-		on_step: Callable = Callable()) -> Signal:
+		on_step: Callable = Callable(), on_enter: Callable = Callable()) -> Signal:
 	# Той самий власник rotation_degrees.y, що й face(): живий твін повороту вбиваємо, а
 	# цей зберігаємо, щоб наступний face() убив уже його.
 	if _face_tween != null and _face_tween.is_valid():
@@ -351,6 +351,14 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 	var follow: Callable = _follow.bind(line, acc, tangents)
 	var from_s: float = 0.0
 	for i in path.size():
+		# Корпус торкається опор клітинки, щойно ніс входить у неї: на кривій — за PropLayer.BAND_NOSE (ніс корпусу) до першої точки
+		# всередині квадрата клітинки, а не в рівномірний момент кроку.
+		var enter_s: float = clampf(_enter_station(line, acc, pts[i + 1]) - PropLayer.BAND_NOSE, from_s, stations[i])
+		if on_enter.is_valid():
+			if enter_s > from_s:
+				tween.tween_method(follow, from_s, enter_s, duration_per_step * (enter_s - from_s))
+			tween.tween_callback(on_enter.bind(path[i - 1] if i > 0 else start_cell, path[i]))
+			from_s = enter_s
 		# Швидкість — тайл за duration_per_step: дуга коротша за ламану, і крок через неї теж.
 		tween.tween_method(follow, from_s, stations[i], duration_per_step * (stations[i] - from_s))
 		if on_step.is_valid():
@@ -364,6 +372,18 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 		tween.tween_property(self, "rotation_degrees:y", predicted + end_delta, FACE_TURN_DURATION)
 		facing = final_facing
 	return tween.finished
+
+
+## Довжина шляху до першої точки кривої всередині квадрата клітинки з центром c (1 × 1 тайл).
+static func _enter_station(line: PackedVector2Array, acc: PackedFloat32Array, c: Vector2) -> float:
+	for j in range(1, line.size()):
+		var ab: Vector2 = line[j] - line[j - 1]
+		var steps: int = maxi(1, ceili(ab.length() / 0.05))
+		for k in range(steps + 1):
+			var p: Vector2 = line[j - 1] + ab * (float(k) / steps)
+			if absf(p.x - c.x) <= 0.5 and absf(p.y - c.y) <= 0.5:
+				return acc[j - 1] + ab.length() * (float(k) / steps)
+	return acc[acc.size() - 1]
 
 
 ## Додає вершину до опорної ламаної: збіг із попередньою відкидає, а продовження того

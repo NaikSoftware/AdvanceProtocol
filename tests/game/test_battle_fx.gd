@@ -179,7 +179,7 @@ func test_clear_all_frees_every_moment() -> void:
 func test_warm_up_is_invisible() -> void:
 	BattleFx.warm_up(parent, Vector3.ZERO)
 	var roots: Array[Node] = parent.get_children()
-	assert_eq(roots.size(), 4)
+	assert_eq(roots.size(), 6)
 	for r: Node in roots:
 		assert_eq((r as Node3D).scale, Vector3.ONE * 0.0001)
 		for l: Node in r.find_children("*", "OmniLight3D", true, false):
