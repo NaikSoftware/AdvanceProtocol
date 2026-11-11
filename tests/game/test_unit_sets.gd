@@ -12,7 +12,6 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	UnitSilhouettes._set_specs = {}
 	UnitSilhouettes.reset_models()
 
 
@@ -32,7 +31,7 @@ func test_model_paths_per_set() -> void:
 func test_set_without_model_falls_back_to_set_zero_model_and_spec() -> void:
 	var m0: ArrayMesh = UnitModelFixture.vehicle(5)
 	UnitSilhouettes.use_models({5: m0})
-	UnitSilhouettes._set_specs = {1: {5: _row}}
+	UnitSilhouettes.use_set_specs({1: {5: _row}})
 	assert_same(UnitSilhouettes.model_mesh(5, 1), m0)
 	assert_same(UnitSilhouettes.merged_mesh(5, -1, 1), m0)
 	assert_eq(UnitSilhouettes.spec(5, 1), UnitSilhouettes.spec(5, 0), "рядок набору без моделі не діє")
@@ -40,11 +39,29 @@ func test_set_without_model_falls_back_to_set_zero_model_and_spec() -> void:
 	assert_same(UnitSilhouettes.model_material(5, 1), UnitSilhouettes.model_material(5, 0))
 
 
+## Модель набору без виміру не діє: тип повністю береться з набору 0 (і модель, і рядок).
+func test_set_model_without_a_spec_row_falls_back_fully() -> void:
+	var m0: ArrayMesh = UnitModelFixture.vehicle(5)
+	UnitSilhouettes.use_models({5: m0, Vector2i(1, 5): UnitModelFixture.mesh(_row.hull)})
+	assert_same(UnitSilhouettes.model_mesh(5, 1), m0)
+	assert_eq(UnitSilhouettes.spec(5, 1), UnitSilhouettes.spec(5, 0))
+	assert_same(UnitSilhouettes.model_material(5, 1), UnitSilhouettes.model_material(5, 0))
+
+
+## Модель, що лягла без вимірів, — помилка гучно, а не тихий відкат на набір 0.
+func test_every_set_model_file_has_a_spec_row() -> void:
+	for set_id in range(1, UnitSilhouettes.SET_COUNT):
+		for id in UnitTypes.count():
+			if ResourceLoader.exists(UnitSilhouettes.model_path(id, set_id)):
+				assert_true((UnitSilhouettes._SET_SPECS.get(set_id, {}) as Dictionary).has(id), "набір %d тип %d: є модель, нема рядка в _SET_SPECS" % [set_id, id])
+	pass_test("перевірено")
+
+
 func test_owner_four_gets_set_one_model_and_spec() -> void:
 	var m0: ArrayMesh = UnitModelFixture.vehicle(5)
 	var m1: ArrayMesh = UnitModelFixture.mesh(_row.hull)
 	UnitSilhouettes.use_models({5: m0, Vector2i(1, 5): m1})
-	UnitSilhouettes._set_specs = {1: {5: _row}}
+	UnitSilhouettes.use_set_specs({1: {5: _row}})
 	var owner_set: int = UnitSilhouettes.set_of(4)
 	assert_eq(owner_set, 1)
 	var body := UnitSilhouettes.build_merged(5, -1, owner_set)
@@ -63,7 +80,7 @@ func test_owner_four_gets_set_one_model_and_spec() -> void:
 func test_unit_view_uses_its_owners_set() -> void:
 	var m1: ArrayMesh = UnitModelFixture.mesh(_row.hull)
 	UnitSilhouettes.use_models({5: UnitModelFixture.vehicle(5), Vector2i(1, 5): m1})
-	UnitSilhouettes._set_specs = {1: {5: _row}}
+	UnitSilhouettes.use_set_specs({1: {5: _row}})
 	var view: UnitView = UnitViewScene.instantiate()
 	add_child_autofree(view)
 	view.bind(Unit.create(1, 5, 4, Vector2i(1, 1), 0))

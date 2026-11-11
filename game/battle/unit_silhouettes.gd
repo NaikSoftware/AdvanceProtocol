@@ -34,8 +34,11 @@ const TURRET_HEIGHT: float = 0.10
 const MODEL_DIR: String = "res://assets/units/"
 ## Три набори техніки; набір 0 — моделі й `_SPECS` вище, набори 1 і 2 — у підкаталогах set1/, set2/.
 const SET_COUNT: int = 3
-## Рядки набору поверх `_SPECS`: набір → {тип → рядок}. Типу нема — діє рядок набору 0.
-static var _set_specs: Dictionary = {}
+## Виміри наборів: набір → {тип → рядок як у `_SPECS`}. Модель набору діє лише разом із рядком —
+## без нього тип повністю береться з набору 0; тож рядок додають у тому самому коміті, що й GLB.
+const _SET_SPECS: Dictionary = {1: {}, 2: {}}
+## Чинні рядки: таблиця вище, а тести підміняють їх через `use_set_specs()`.
+static var _set_specs: Dictionary = _SET_SPECS.duplicate(true)
 const MODEL_SLUGS: Array[String] = [
 	"rifle_soldier", "assault_soldier", "armoured_car", "troop_carrier", "scout_car", "medium_tank",
 	"tank_destroyer", "light_tank", "heavy_tank", "field_gun", "howitzer", "engineer_vehicle",
@@ -79,9 +82,7 @@ static func barrel_y(type_id: int, set_id: int = 0) -> float:
 ## Рядок набору діє лише разом з його моделлю: без неї тип — це модель і рядок набору 0.
 static func spec(type_id: int, set_id: int = 0) -> Dictionary:
 	var resolved: int = _resolved_set(type_id, set_id)
-	if resolved != 0 and (_set_specs.get(resolved, {}) as Dictionary).has(type_id):
-		return (_set_specs[resolved] as Dictionary)[type_id]
-	return _SPECS[type_id]
+	return _SPECS[type_id] if resolved == 0 else (_set_specs[resolved] as Dictionary)[type_id]
 
 
 ## Набір — це місце гравця: власник 4 носить набір 1.
@@ -275,9 +276,11 @@ static func has_model(type_id: int, set_id: int = 0) -> bool:
 	return model_mesh(type_id, set_id) != null
 
 
-## Набір, чия модель і чий рядок справді діють: свій, коли має модель типу, інакше набір 0.
+## Набір, чия модель і чий рядок справді діють: свій, коли має і модель, і рядок типу, інакше 0.
 static func _resolved_set(type_id: int, set_id: int) -> int:
-	return set_id if set_id != 0 and _own_model(type_id, set_id) != null else 0
+	if set_id == 0 or not (_set_specs.get(set_id, {}) as Dictionary).has(type_id):
+		return 0
+	return set_id if _own_model(type_id, set_id) != null else 0
 
 
 ## Сітка моделі в системі юніта (перетворення вузлів GLB уже впечені), або null, коли файлу нема.
@@ -303,7 +306,15 @@ static func use_models(models: Dictionary) -> void:
 	_models_pinned = true
 
 
+## Для тестів: рядки наборів замість таблиці; `reset_models()` повертає таблицю.
+static func use_set_specs(rows: Dictionary) -> void:
+	_set_specs = rows.duplicate(true)
+	_merged_meshes.clear()
+	_model_materials.clear()
+
+
 static func reset_models() -> void:
+	_set_specs = _SET_SPECS.duplicate(true)
 	_models.clear()
 	_models_pinned = false
 	_model_materials.clear()

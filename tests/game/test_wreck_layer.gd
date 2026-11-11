@@ -17,7 +17,6 @@ func before_each() -> void:
 
 
 func after_each() -> void:
-	UnitSilhouettes._set_specs = {}
 	UnitSilhouettes.reset_models()
 
 
@@ -539,7 +538,7 @@ func test_wreck_of_owner_four_uses_set_one_model_and_spec() -> void:
 	var row: Dictionary = {"hull": Vector3(0.5, 0.2, 0.9), "barrel": 0.7, "wheel": 0.05, "extras": [&"turret"]}
 	var m1: ArrayMesh = UnitModelFixture.mesh(row.hull)
 	UnitSilhouettes.use_models({5: UnitModelFixture.vehicle(5), Vector2i(1, 5): m1})
-	UnitSilhouettes._set_specs = {1: {5: row}}
+	UnitSilhouettes.use_set_specs({1: {5: row}})
 	var set_id: int = UnitSilhouettes.set_of(4)
 	var root: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), 5, 0, set_id)
 	assert_same((root.get_node("Body") as MeshInstance3D).mesh, m1)
