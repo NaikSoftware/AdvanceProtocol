@@ -123,7 +123,20 @@ file and no `meta.json`). Commands, from `~/.cache/ap-scratch/units/research/too
 
 ## 4. Owner marking
 
-Units carry no team colour: every owner fields the same models in the same paint, and the side
+Units carry no team colour: every set uses the same paint, and the side
 is shown by the colour of the HP bar fill (#3a6ea5, #a54a3a, #5a8a4a, lightened for contrast on
 the bar's dark back). Identity at the far zoom comes from silhouette alone, so no panel, band or
 tape is modelled.
+
+## 5. National sets
+
+Three sets, one per player slot: slot 0 fields the Korean family above, slot 1 a Russian family,
+slot 2 an American one. The set follows the slot; there is no choice screen. The tanks come
+first; until a set has its own model for a role, that role falls back to the slot 0 model.
+
+All three sets keep the same role cues in the same order, so a role reads the same whichever
+side fields it: the light is the smallest and lowest with the shortest gun, the medium has its
+turret set forward over a flat engine deck, the tank destroyer has no turret and a box at the
+rear with the longest gun, the heavy is the largest. A set differs from the others in what does
+not carry the role: the turret's plan and bustle, the deck furniture, the skirts, the hull front.
+The stats are the same for every set until per-set rosters are designed.
