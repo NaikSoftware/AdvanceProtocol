@@ -17,6 +17,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	UnitSilhouettes._set_specs = {}
 	UnitSilhouettes.reset_models()
 
 
@@ -531,3 +532,23 @@ func test_model_wreck_reuses_the_model_mesh_under_burnt_material() -> void:
 	assert_almost_eq(body.position.y, -WreckLayer.HULL_SAG, 0.0001)
 	assert_eq(root.get_child_count(), 1)
 	root.free()
+
+
+## Уламок несе набір власника: модель і рядок набору, не набору 0 (власник 4 — набір 1).
+func test_wreck_of_owner_four_uses_set_one_model_and_spec() -> void:
+	var row: Dictionary = {"hull": Vector3(0.5, 0.2, 0.9), "barrel": 0.7, "wheel": 0.05, "extras": [&"turret"]}
+	var m1: ArrayMesh = UnitModelFixture.mesh(row.hull)
+	UnitSilhouettes.use_models({5: UnitModelFixture.vehicle(5), Vector2i(1, 5): m1})
+	UnitSilhouettes._set_specs = {1: {5: row}}
+	var set_id: int = UnitSilhouettes.set_of(4)
+	var root: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), 5, 0, set_id)
+	assert_same((root.get_node("Body") as MeshInstance3D).mesh, m1)
+	root.free()
+	layer.add(Vector2i(3, 3), 5, 1.0, 0, set_id)
+	assert_eq(layer.flame_size(Vector2i(3, 3)), Vector2(WreckLayer.flame_width(5, 1), WreckLayer.flame_height(5, 1)))
+	assert_eq(WreckLayer.flame_width(5, 1), row.hull.x * 0.88)
+	_wreck(Vector2i(4, 4))
+	state.wrecks[-1].owner = 4
+	_seen(0, Vector2i(4, 4))
+	layer.rebuild(state, 0)
+	assert_almost_eq(layer.flame_size(Vector2i(4, 4)).x, WreckLayer.flame_width(5, 1), 0.00001, "перебудова зі стану бере набір власника")

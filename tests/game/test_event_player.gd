@@ -461,13 +461,13 @@ func test_wreck_events_reach_the_injected_callables_unchanged() -> void:
 	var left: Array = []
 	var removed: Array = []
 	player = EventPlayer.new(Callable(), Callable(), Callable(),
-		func(pos: Vector2i, type_id: int, facing: int) -> void: left.append([pos, type_id, facing]),
+		func(pos: Vector2i, type_id: int, facing: int, owner: int) -> void: left.append([pos, type_id, facing, owner]),
 		func(pos: Vector2i, reason: int) -> void: removed.append([pos, reason]))
 	await player.play([
-		Events.WreckLeft.new(Vector2i(3, 4), 8, 6),
+		Events.WreckLeft.new(Vector2i(3, 4), 8, 6, 4),
 		Events.WreckRemoved.new(Vector2i(5, 1), Wrecks.Reason.BRIDGE_DEMOLISHED),
 	] as Array[Events.BattleEvent])
-	assert_eq(left, [[Vector2i(3, 4), 8, 6]])
+	assert_eq(left, [[Vector2i(3, 4), 8, 6, 4]])
 	assert_eq(removed, [[Vector2i(5, 1), Wrecks.Reason.BRIDGE_DEMOLISHED]])
 
 

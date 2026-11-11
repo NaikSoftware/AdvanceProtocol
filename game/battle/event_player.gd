@@ -353,7 +353,7 @@ func _handle_unit_destroyed(event: Events.UnitDestroyed) -> Variant:
 
 func _handle_wreck_left(event: Events.WreckLeft) -> Variant:
 	if _wreck_left.is_valid():
-		_wreck_left.call(event.pos, event.type_id, event.facing)
+		_wreck_left.call(event.pos, event.type_id, event.facing, event.owner)
 	return null
 
 

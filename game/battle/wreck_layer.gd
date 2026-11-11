@@ -154,6 +154,7 @@ static var _fire_shader: Shader
 class _Entry:
 	var node: Node3D
 	var type_id: int
+	var set_id: int = 0
 	var life: float
 	## `fx_time()` у мить появи уламків; LONG_AGO — для перебудованих зі стану.
 	var birth: float
@@ -250,7 +251,7 @@ func rebuild(state: BattleState, observer: int) -> void:
 	_clear()
 	for w in state.wrecks:
 		if state.vision[observer].is_seen(w.pos):
-			_add_node(w.pos, w.type_id, life_of(state, w), w.facing, LONG_AGO)
+			_add_node(w.pos, w.type_id, life_of(state, w), w.facing, LONG_AGO, UnitSilhouettes.set_of(w.owner))
 	_refresh_effects()
 
 
@@ -283,12 +284,12 @@ static func flame_scale_for(life: float) -> float:
 	return 0.0
 
 
-static func flame_width(type_id: int) -> float:
-	return (UnitSilhouettes.spec(type_id).hull as Vector3).x * FLAME_WIDTH_PER_HULL
+static func flame_width(type_id: int, set_id: int = 0) -> float:
+	return (UnitSilhouettes.spec(type_id, set_id).hull as Vector3).x * FLAME_WIDTH_PER_HULL
 
 
-static func flame_height(type_id: int) -> float:
-	return (UnitSilhouettes.spec(type_id).hull as Vector3).x * FLAME_HEIGHT_PER_HULL
+static func flame_height(type_id: int, set_id: int = 0) -> float:
+	return (UnitSilhouettes.spec(type_id, set_id).hull as Vector3).x * FLAME_HEIGHT_PER_HULL
 
 
 func ember_emitter(pos: Vector2i) -> GPUParticles3D:
@@ -300,7 +301,7 @@ func flame_spots(pos: Vector2i) -> Array[Vector3]:
 	if not _entries.has(pos):
 		return out
 	var e: _Entry = _entries[pos]
-	var spec: Dictionary = UnitSilhouettes.spec(e.type_id)
+	var spec: Dictionary = UnitSilhouettes.spec(e.type_id, e.set_id)
 	var hull: Vector3 = spec.hull
 	# Корені — на даху башти: обидва в межах її сліду, тож нижче башта ховала б їх з усіх боків.
 	var top: float = hull.y - HULL_SAG + (UnitSilhouettes.TURRET_HEIGHT if (spec.extras as Array).has(&"turret") else 0.0)
@@ -317,7 +318,7 @@ func flame_size(pos: Vector2i) -> Vector2:
 	if not _entries.has(pos):
 		return Vector2.ZERO
 	var e: _Entry = _entries[pos]
-	return Vector2(flame_width(e.type_id), flame_height(e.type_id)) * flame_scale_for(e.life)
+	return Vector2(flame_width(e.type_id, e.set_id), flame_height(e.type_id, e.set_id)) * flame_scale_for(e.life)
 
 
 func fire_centre(pos: Vector2i) -> Vector3:
@@ -329,10 +330,10 @@ static func flames_for(life: float) -> int:
 	return 1 if flame_scale_for(life) > 0.0 else 0
 
 
-func add(pos: Vector2i, type_id: int, life: float, facing: int = 0) -> void:
+func add(pos: Vector2i, type_id: int, life: float, facing: int = 0, set_id: int = 0) -> void:
 	if _entries.has(pos):
 		return
-	_add_node(pos, type_id, life, facing, fx_time())
+	_add_node(pos, type_id, life, facing, fx_time(), set_id)
 	_refresh_effects()
 
 
@@ -621,9 +622,9 @@ static func burnt_material() -> ShaderMaterial:
 ## опущений ствол, осілий і ледь перекошений корпус. Напрям — юніта в мить загибелі
 ## (`Wreck.facing`). Перекіс — з хешу тайла, а не з
 ## `Rules.roll()`: косметика не сміє зсувати кидки правил, і хеш дає всім ті самі уламки.
-static func build_wreck(pos: Vector2i, type_id: int, facing: int) -> Node3D:
-	var model: ArrayMesh = UnitSilhouettes.model_mesh(type_id)
-	var root := Node3D.new() if model != null else UnitSilhouettes.build(type_id)
+static func build_wreck(pos: Vector2i, type_id: int, facing: int, set_id: int = 0) -> Node3D:
+	var model: ArrayMesh = UnitSilhouettes.model_mesh(type_id, set_id)
+	var root := Node3D.new() if model != null else UnitSilhouettes.build(type_id, set_id)
 	root.name = "Wreck_%d_%d" % [pos.x, pos.y]
 	var merged := MeshInstance3D.new()
 	merged.name = "Body"
@@ -653,10 +654,11 @@ static func build_wreck(pos: Vector2i, type_id: int, facing: int) -> Node3D:
 	return root
 
 
-func _add_node(pos: Vector2i, type_id: int, life: float, facing: int, birth: float) -> void:
+func _add_node(pos: Vector2i, type_id: int, life: float, facing: int, birth: float, set_id: int = 0) -> void:
 	var e := _Entry.new()
-	e.node = build_wreck(pos, type_id, facing)
+	e.node = build_wreck(pos, type_id, facing, set_id)
 	e.type_id = type_id
+	e.set_id = set_id
 	e.life = life
 	e.birth = birth
 	add_child(e.node)
