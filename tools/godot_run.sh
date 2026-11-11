@@ -4,6 +4,12 @@
 # Виклик: tools/godot_run.sh [--solo] <аргументи godot...>
 # --solo займає обидва слоти: замір бюджету кадру без сусіда.
 GODOT_BIN="${GODOT:-$HOME/.local/bin/godot}"
+# Вікна знімків — у правій третині екрана, щоб не перекривати роботу власника.
+# Позицію вікна виконує лише x11 (XWayland); нативний Wayland її ігнорує.
+case " $* " in
+	*" --headless "*|*" --position "*) ;;
+	*) set -- --display-driver x11 --position "${AP_GODOT_POS:-3460,40}" "$@" ;;
+esac
 LOCKS="${XDG_CACHE_HOME:-$HOME/.cache}/advance-protocol"
 mkdir -p "$LOCKS" || exit 1
 L1="$LOCKS/godot-slot1.lock"
