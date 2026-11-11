@@ -9,6 +9,7 @@ extends Node
 ## (facing 0 — уздовж осі, 1 — по діагоналі) і знімає лише два зуми: чи не залазить ствол у сусіда.
 ## Шостий аргумент lineup ставить чотири танки справжніми юнітами трьох гравців (смуги HP у кольорі
 ## власника) і знімає один кадр на найближчому зумі; type_id тоді ігнорується.
+## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
 ## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); один кадр, type_id ігнорується.
 
@@ -63,11 +64,12 @@ func _ready() -> void:
 		print("UNIT pair %s at %s: %d frames" % [a[5], cell, pshots.size()])
 		get_tree().quit()
 		return
+	var set_id: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 	# Перша модель дивиться на північ, друга — на південний схід, коробка-заступник — ліворуч.
-	_place(UnitSilhouettes.build_merged(type_id), cell, 0)
-	_place(UnitSilhouettes.build_merged(type_id), cell + Vector2i(1, 0), 3)
+	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell, 0)
+	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell + Vector2i(1, 0), 3)
 	_place(UnitSilhouettes.build(type_id), cell + Vector2i(-1, 0), 0)
-	var mover: Node3D = UnitSilhouettes.build_merged(type_id)
+	var mover: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
 	_place(mover, cell + Vector2i(0, 2), 0)
 	print("UNIT placed at %s" % cell)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
@@ -191,5 +193,10 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 		await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
+	rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
+	for f in SETTLE_FRAMES * 2:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MAX_ZOOM)])
 	print("UNIT sets at %s" % c)
 	get_tree().quit()

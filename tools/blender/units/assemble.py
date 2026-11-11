@@ -208,7 +208,7 @@ ob.data.materials.append(mat)
 
 tris = sum(len(p.vertices) - 2 for p in me.polygons)
 print(f"ASM tris {tris}")
-out = os.path.join(lib.REPO, "assets", "units", cfg["name"] + ".glb")
+out = os.path.join(lib.REPO, "assets", "units", cfg["out"] + ".glb")
 os.makedirs(os.path.dirname(out), exist_ok=True)
 bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True)
 bpy.ops.export_scene.gltf(filepath=out, use_selection=True, export_apply=True, export_tangents=True,

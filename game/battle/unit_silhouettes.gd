@@ -36,7 +36,12 @@ const MODEL_DIR: String = "res://assets/units/"
 const SET_COUNT: int = 3
 ## Виміри наборів: набір → {тип → рядок як у `_SPECS`}. Модель набору діє лише разом із рядком —
 ## без нього тип повністю береться з набору 0; тож рядок додають у тому самому коміті, що й GLB.
-const _SET_SPECS: Dictionary = {1: {}, 2: {}}
+const _SET_SPECS: Dictionary = {
+	1: {},
+	2: {
+		8: {"hull": Vector3(0.4231, 0.175, 0.903), "barrel": 0.75, "wheel": 0.0391, "extras": [&"turret"]},  # важкий (набір 2) 3,4×7,2 м
+	},
+}
 ## Чинні рядки: таблиця вище, а тести підміняють їх через `use_set_specs()`.
 static var _set_specs: Dictionary = _SET_SPECS.duplicate(true)
 const MODEL_SLUGS: Array[String] = [
