@@ -340,5 +340,73 @@
       "roof_cool": [0, 0, 0],
       "dust": 0.25
     }
+  },
+  "set1/tank_destroyer": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_tank_destroyer.glb",
+    "type_id": 6,
+    "fwd": "x",
+    "_layout": "set 1 tank destroyer: no turret; low bare front deck, a fixed armoured box over the rear 57 % that starts 43 % from the bow and is carried back by one box (add_boxes) so its rear face is flush with the lengthened hull; the gun leaves its front face",
+    "hull_long": [-0.58, 0.2212],
+    "hull_lat": 0.1965,
+    "ends_bottom_h": [0.11, 0.1],
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.108, 0.19],
+      "below_skirt_h": 0.088,
+      "behind_skirt_lat": 0.188,
+      "gear_top_h": 0.1,
+      "open_ends_long": [-0.37, 0.12]
+    },
+    "flatten": [[ -0.134, 0.06, 0.2, 0.17]
+    ],
+    "no_glass_in_boxes": true,
+    "add_boxes": [[ -0.58, -0.455, -0.154, 0.154, 0.12, 0.345],
+      [-0.58, -0.5, -0.19, 0.19, 0.12, 0.17]
+    ],
+    "gun": {
+      "axis_h": 0.246,
+      "start_long": -0.134,
+      "clear_r": 0.03,
+      "sides": 10,
+      "profile": [[ -0.134, 0.03],
+        [-0.1, 0.0225],
+        [0.2, 0.0165],
+        [0.205, 0.0205],
+        [0.3, 0.0205],
+        [0.31, 0.016],
+        [0.4, 0.016],
+        [0.405, 0.0255],
+        [0.495, 0.0255],
+        [0.5, 0.02]
+      ]
+    },
+    "gear": {
+      "track_lat": [0.1125, 0.18],
+      "track_t": 0.012,
+      "wheel_lat": [0.12, 0.172],
+      "road": {
+        "r": 0.0404,
+        "h": 0.0524,
+        "long": [-0.3411, -0.256, -0.1713, -0.0849, 0.0002, 0.0838]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.083,
+        "long": -0.42
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.088,
+        "long": 0.176
+      },
+      "sides": 12
+    },
+    "paint": {
+      "scheme": "plain",
+      "base": [70, 100, 96],
+      "mottle": 0.1,
+      "roof_cool": [0, 0, 0],
+      "dust": 0.25
+    }
   }
 }
