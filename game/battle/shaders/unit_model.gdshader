@@ -56,7 +56,9 @@ void fragment() {
 	vec4 orm = textureGrad(orm_tex, uv, ddx, ddy);
 	ROUGHNESS = roughness * dot(orm, roughness_channel);
 	METALLIC = metallic * dot(orm, metallic_channel);
-	SPECULAR = specular;
+	// R атласу — запечене затінення: у швах і западинах небо не відбивається, тож шов лишається
+	// темним, а не вкривається тим самим молочним полиском, що й панель довкола.
+	SPECULAR = specular * orm.r;
 	NORMAL_MAP = textureGrad(normal_tex, uv, ddx, ddy).rgb;
 	NORMAL_MAP_DEPTH = normal_scale;
 }
