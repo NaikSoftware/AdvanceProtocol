@@ -10,11 +10,14 @@ Atlas (1024², one material). PNG row 0 is the top, which is Godot v = 0 and Ble
   column  u >= COL_U, below the strip: road-wheel face, sprocket face
   the rest: baked body islands
 """
-import json, os, re
+import json, os, re, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-SCRATCH = os.path.expanduser("~/.cache/ap-scratch/units/pipe")
+# Stage outputs live per worktree (or under $AP_UNIT_SCRATCH): one shared directory let parallel
+# worktrees building the same unit overwrite each other's paint between paint and assemble.
+SHARED = os.path.expanduser("~/.cache/ap-scratch/units/pipe")
+SCRATCH = os.environ.get("AP_UNIT_SCRATCH") or os.path.join(SHARED, "wt", os.path.basename(REPO))
 
 TILE_M = 8.0
 ATLAS = 1024
@@ -53,6 +56,9 @@ def load(name):
         g["axis_h"] -= t["drop"]
         g["profile"] = [[L + t["dlong"], r] for L, r in g["profile"]]
     cfg["work"] = os.path.join(SCRATCH, name)
+    old = os.path.join(SHARED, name)
+    if not os.path.isdir(cfg["work"]) and os.path.isfile(os.path.join(old, "maps.npz")):
+        shutil.copytree(old, cfg["work"])   # a fresh worktree starts from the old shared bake, not from prep
     os.makedirs(cfg["work"], exist_ok=True)
     return cfg
 
