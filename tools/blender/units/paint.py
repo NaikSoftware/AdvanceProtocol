@@ -105,7 +105,7 @@ if not plain:
     # darker than the faded olive, so the pattern still reads.
     fade = C.get("roof_fade", 1.0) * roof
     col = col * (1 - fade) + (col @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None] * fade
-    C = {"roof_dark": -0.1, "roof_cool": (-0.04, 0.0, 0.36), "dust": 0.1, **C}
+    C = {"roof_dark": -0.1, "roof_cool": (-0.08, 0.02, 0.28), "dust": 0.1, **C}
 if plain:
     # one tone: sand etc. Blocks are gone, a soft mottle (metres-scale noise, no block edges) stays
     olive = lin(*PN["base"])
