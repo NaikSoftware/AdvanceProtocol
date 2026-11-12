@@ -134,6 +134,15 @@ if plain and "src" in d:
     # texture value" for a pale or a dark source alike (0.035 / 0.012 of an olive texture of ~0.17)
     src_l = src_l / max(float(np.median(src_l[d["cov"] > 0.5])), 1e-4) * 0.17
 glass = smooth(0.035, 0.012, src_l) * (d["cov"] > 0.5) * (P[..., 2] > cfg.get("glass_above_m", 2.35)) * ~on_gun
+if cfg.get("no_glass_in_boxes"):
+    # added boxes take the UV of the nearest source vertex, so their texels are arbitrary: a dark one
+    # would paint scribbles of "glass" on a plain wall. Off unless the unit asks (set 0 stays as it was).
+    for l0, l1, a0, a1, h0, h1 in list(cfg.get("add_boxes", [])) + [[l - r, l + r, a0, a1, h - r, h + r] for l, a0, a1, h, r in cfg.get("add_cyls", [])]:
+        x0, x1 = sorted((-a0 * cfg["k"] * lib.TILE_M, -a1 * cfg["k"] * lib.TILE_M))
+        y0, y1 = (lib.m_long(cfg, v) * lib.TILE_M for v in (l0, l1))
+        z0, z1 = h0 * cfg["k"] * lib.TILE_M, h1 * cfg["k"] * lib.TILE_M
+        pad = 0.15
+        glass = glass * ~((P[..., 0] > x0 - pad) & (P[..., 0] < x1 + pad) & (P[..., 1] > y0 - pad) & (P[..., 1] < y1 + pad) & (P[..., 2] > z0 - pad) & (P[..., 2] < z1 + pad))
 col = col * (1 - glass[..., None]) + lin(20, 22, 24) * glass[..., None]
 rough = rough * (1 - glass) + 0.25 * glass
 
@@ -179,6 +188,27 @@ if plain:
     blot = fbm(P, [(2.5, 0.6), (1.0, 0.4)], 131) - 0.5
     col = col * (1 + C.get("blotch", 0.06) * 2 * blot[..., None] * (0.4 + 0.6 * roof))
 
+# `panel_boxes` (units.json): indices of add_boxes whose bare faces get panel seams, stowage bins and
+# vertical grime, so a big plain crate does not read as cardboard. Albedo and occlusion only.
+for bi in cfg.get("panel_boxes", []):
+    l0, l1, a0, a1, h0, h1 = cfg["add_boxes"][bi]
+    x0, x1 = sorted((-a0 * cfg["k"] * lib.TILE_M, -a1 * cfg["k"] * lib.TILE_M))
+    y0, y1 = (lib.m_long(cfg, v) * lib.TILE_M for v in (l0, l1))
+    z0, z1 = h0 * cfg["k"] * lib.TILE_M, h1 * cfg["k"] * lib.TILE_M
+    inb = (P[..., 0] > x0 - 0.1) & (P[..., 0] < x1 + 0.1) & (P[..., 1] > y0 - 0.1) & (P[..., 1] < y1 + 0.1) & (P[..., 2] > z0 - 0.1) & (P[..., 2] < z1 + 0.1)
+    fy = (P[..., 1] - y0) / max(y1 - y0, 1e-3); fz = (P[..., 2] - z0) / max(z1 - z0, 1e-3)
+    seam = ((np.abs(((P[..., 1] - y0) / 1.1) % 1.0 - 0.5) > 0.485) | (np.abs(fz - 0.55) < 0.012)) & inb
+    bins = np.zeros(inb.shape, bool); edge_b = np.zeros(inb.shape, bool)
+    for b0, b1 in ((0.10, 0.34), (0.40, 0.62), (0.70, 0.92)):
+        inside = (fy > b0) & (fy < b1) & (fz > 0.12) & (fz < 0.48)
+        rim = inside & ((fy < b0 + 0.012) | (fy > b1 - 0.012) | (fz < 0.135) | (fz > 0.465))
+        bins |= inside; edge_b |= rim
+    streak_v = fbm(P * np.array([2.5, 2.5, 0.25]), [(0.6, 0.6), (0.2, 0.4)], 141) - 0.5
+    col = col * (1 - 0.5 * seam[..., None]) * (1 - 0.3 * (edge_b & inb)[..., None]) * (1 - 0.1 * (bins & inb)[..., None])
+    col = col * (1 + 0.35 * (streak_v * inb)[..., None])
+    ao = np.where(seam | (edge_b & inb), ao * 0.6, ao)
+    ao = np.where(bins & inb, ao * 0.9, ao)
+
 # ---- streaks, dust, mud ---------------------------------------------------------------------
 side = smooth(0.6, 0.2, np.abs(nz))
 streak = fbm(P * np.array([1.0, 1.0, 0.08]), [(0.12, 0.7), (0.05, 0.3)], 61) - 0.5
@@ -215,6 +245,9 @@ col = col * (1 - 0.85 * soot[..., None])
 # Roofs darker and a little cooler than the grass they sit on, so the turret outline holds at
 # 22 cm/px (0.42 in linear is ~22 % in screen value); the sides keep their value.
 col = col * (1 - C.get("roof_dark", 0.42) * roof) * (1 + roof * np.array(C.get("roof_cool", (-0.06, 0.0, 0.08)), np.float32))
+if plain and C.get("roof_rough"):
+    # up-facing faces rougher: less sky blue picked up from above under an overcast sky
+    rough = np.clip(rough + C["roof_rough"] * roof[..., 0], 0, 1)
 if plain:
     # texels the occlusion map leaves open must not fall below a fraction of the base tone: the
     # baked point/cavity term turns scan noise on flat tops into dark flecks. Sight glass and the barrel are exempt.
@@ -278,6 +311,8 @@ tn = periodic_noise((S, N), 6, 3)
 tcol = np.where(pad[..., None], lin(40, 39, 37), lin(70, 68, 64))
 tcol = np.where(((~pad) & (~conn) & (~horn))[..., None], lin(22, 20, 18), tcol)
 tdust = np.clip(0.45 + 0.25 * tn, 0, 0.8)
+if C.get("dark_gear"):
+    tdust = tdust * 0.55
 tcol = tcol * (1 - tdust[..., None] * 0.6) + dust_c * tdust[..., None] * 0.6 * np.where(pad | conn | horn, 1.0, 0.5)[..., None]
 col[:S] = tcol
 # pins, end connectors and guide horns are steel polished by the sprocket and the wheels
@@ -331,9 +366,15 @@ bolts = (np.abs(R - 0.36) < 0.035) & (np.cos(A * 8) > 0.93); wc[bolts] = lin(60,
 hub = R <= 0.30; wc[hub] = lin(66, 66, 60); wh[hub] = 0.5 - 0.3 * (R[hub] < 0.12)
 wn = np.random.default_rng(4).standard_normal((128, 128))
 wd = np.clip(0.55 + 0.15 * wn - 0.3 * (R < 0.3), 0, 0.85)      # wheels are the dustiest part
+if C.get("dark_gear"):
+    wd = np.where(tyre, wd * 0.15, wd * 0.5)      # rubber stays rubber, the disc is dirty not beige
 wc = wc * (1 - wd[..., None] * 0.6) + dust_c * wd[..., None] * 0.6
+if C.get("dark_gear"):
+    mudc = lin(78, 66, 50)
+    wc = np.where(tyre[..., None], wc, wc * 0.7 + mudc * 0.3) * 0.75
+    wc[tyre] = lin(26, 25, 23)
 ys, xs = cell("wheel")
-col[ys, xs] = wc * C.get("wheel_mud", 0.62)   # mud-dark: beige dust read near-white at the close zoom
+col[ys, xs] = wc * (1.0 if C.get("dark_gear") else C.get("wheel_mud", 0.62))   # mud-dark: beige dust read near-white at the close zoom
 normal[ys, xs] = height_normal(blur(wh), 4.0, False)
 rough[ys, xs] = np.where(tyre, 0.9, 0.75)
 occl[ys, xs] = 1 - 0.4 * (R > 0.98)
@@ -347,8 +388,10 @@ holes = (R > 0.38) & (R < 0.64) & (np.cos(A * 6) > 0.55); sc[holes] = lin(16, 15
 hubs = R <= 0.26; sc[hubs] = lin(62, 62, 58); sh[hubs] = 0.5
 sd = np.clip(0.5 + 0.15 * np.random.default_rng(6).standard_normal((128, 128)), 0, 0.8)
 sc = sc * (1 - sd[..., None] * 0.5) + dust_c * sd[..., None] * 0.5
+if C.get("dark_gear"):
+    sc = (sc * 0.7 + lin(78, 66, 50) * 0.3) * 0.75
 ys, xs = cell("sprocket")
-col[ys, xs] = sc * C.get("wheel_mud", 0.62)
+col[ys, xs] = sc * (1.0 if C.get("dark_gear") else C.get("wheel_mud", 0.62))
 normal[ys, xs] = height_normal(blur(sh), 4.0, False)
 rough[ys, xs] = np.where(ring, 0.42, 0.78); metal[ys, xs] = np.where(ring, C.get("pin_metal", 0.8), 0.0)
 

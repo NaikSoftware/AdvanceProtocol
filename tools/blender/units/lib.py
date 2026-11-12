@@ -36,6 +36,8 @@ def load(name):
     cfg.setdefault("out", name)  # path under assets/units/ without .glb; sets write set2/<slug>
     cfg["source"] = os.path.expanduser(cfg["source"])
     cfg["spec"] = spec(cfg["type_id"])
+    if "barrel" in cfg:   # a set whose gun is shorter or longer than the role's _SPECS muzzle
+        cfg["spec"]["barrel"] = cfg["barrel"]
     lo, hi = cfg["hull_long"]
     sx, sz = cfg["spec"]["hull"][0], cfg["spec"]["hull"][2]
     # Uniform fit: the tighter of hull width and hull length governs.

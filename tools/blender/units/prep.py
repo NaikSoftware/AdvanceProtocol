@@ -94,6 +94,23 @@ if t:
 # moved turret); `add_boxes` adds closed cuboids (a plate closing an open bay, roof kit). Both go
 # into hi, so the heightfield and the bake see them alike.
 def src_edit():
+    # `crop` [l0, l1] drops faces whose centre lies outside the range (a thin bow sheet); `drop_low`
+    # [l0, l1, lat, h] drops faces inside |lat| < lat and below h (struts hanging under the hull belly)
+    if cfg.get("crop") or cfg.get("drop_low"):
+        n = len(me.polygons)
+        c = np.empty(n * 3); me.polygons.foreach_get("center", c); c = c.reshape(-1, 3)
+        cl, ca = (c[:, 0], c[:, 1]) if cfg["fwd"] == "x" else (c[:, 1], -c[:, 0])
+        ch = c[:, 2] - zmin
+        kill = np.zeros(n, bool)
+        if cfg.get("crop"):
+            # the gun (central and high) is not cropped: a short barrel may reach past the cut
+            kill |= ((cl < cfg["crop"][0]) | (cl > cfg["crop"][1])) & ((np.abs(ca) > 0.06) | (ch < 0.2))
+        for l0, l1, la, h in cfg.get("drop_low", []):
+            kill |= (cl >= l0) & (cl <= l1) & (np.abs(ca) < la) & (ch < h)
+        bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.nonzero(kill)[0]], context='FACES')
+        bm.to_mesh(me); bm.free(); me.update()
+        print(f"PREP crop/drop_low: {kill.sum()} faces dropped")
     co = verts(me)
     L, A = (co[:, 0], co[:, 1]) if cfg["fwd"] == "x" else (co[:, 1], -co[:, 0])
     H = co[:, 2] - zmin
@@ -120,7 +137,7 @@ def src_edit():
         bm.to_mesh(me); bm.free(); me.update()
         print(f"PREP delete_boxes: {int(kill.sum())} faces dropped")
         co = verts(me)
-    if not cfg.get("add_boxes"):
+    if not cfg.get("add_boxes") and not cfg.get("add_cyls"):
         return
     from mathutils.kdtree import KDTree
     kd = KDTree(len(co))
@@ -148,6 +165,21 @@ def src_edit():
             for lp in f.loops:
                 lp[uvb].uv = vuv[kd.find(lp.vert.co)[1]]
         print(f"PREP box long {l0}..{l1} lat {a0}..{a1} h {h0}..{h1}")
+    # `add_cyls` [long, lat0, lat1, h, r]: a cylinder lying across the hull (fuel drums), 12 sides
+    for l, a0, a1, h, r in cfg.get("add_cyls", []):
+        def Q(l_, a, h_):
+            return (l_, a, h_ + zmin) if cfg["fwd"] == "x" else (-a, l_, h_ + zmin)
+        n = 12
+        rings = [[bm.verts.new(Q(l + r * math.cos(2 * math.pi * i / n), a, h + r * math.sin(2 * math.pi * i / n))) for i in range(n)] for a in (a0, a1)]
+        for ring in rings:
+            for v in ring:
+                v[addl] = 1.0
+        quads = [[rings[0][i], rings[0][(i + 1) % n], rings[1][(i + 1) % n], rings[1][i]] for i in range(n)]
+        for vs in quads + [rings[0], rings[1][::-1]]:
+            f = bm.faces.new(vs); new.append(f)
+            for lp in f.loops:
+                lp[uvb].uv = vuv[kd.find(lp.vert.co)[1]]
+        print(f"PREP cyl long {l} lat {a0}..{a1} h {h} r {r}")
     bmesh.ops.recalc_face_normals(bm, faces=new)
     bm.to_mesh(me); bm.free(); me.update()
 
