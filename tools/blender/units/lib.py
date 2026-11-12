@@ -75,6 +75,23 @@ def spec(type_id):
     return {"hull": hull, "barrel": float(rows[type_id][1]), "wheel": float(rows[type_id][2] or 0)}
 
 
+def set_row(cfg):
+    """The _SET_SPECS row (hull, barrel, wheel) of a set unit (`out` = setN/<slug>), or None for set 0 and for a missing row.
+    The pipeline still fits the model into the set-0 box (cfg["spec"]); the row is what the game reads for it."""
+    import re
+    m = re.match(r"set(\d+)/", cfg.get("out", ""))
+    if not m:
+        return None
+    src = open(os.path.join(REPO, "game", "battle", "unit_silhouettes.gd")).read()
+    block = re.search(r"const _SET_SPECS.*?\n\t%s: \{(.*?)\n\t\}," % m.group(1), src, re.S)
+    if not block:
+        return None
+    row = re.search(r'\t\t%d: \{"hull": Vector3\(([^)]*)\), "barrel": ([0-9.]+), "wheel": ([0-9.]+)' % cfg["type_id"], block.group(1))
+    if not row:
+        return None
+    return {"hull": [float(v) for v in row.group(1).split(",")], "barrel": float(row.group(2)), "wheel": float(row.group(3))}
+
+
 def m_long(cfg, v):
     """Source long coordinate -> model Y."""
     return (v - cfg["long_c"]) * cfg["k"]

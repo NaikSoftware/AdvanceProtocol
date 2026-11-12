@@ -297,7 +297,7 @@
       [-0.385, 0.285, 0.1994, 0.2085, 0.058, 0.14],
       [-0.385, 0.285, -0.2085, -0.1994, 0.058, 0.14]
     ],
-    "louvres": {"y": [-3.1, -1.2], "x": 1.25, "centre": 0.15, "period": 0.14, "slot": 0.45, "below_m": 1.75},
+    "louvres": {"y": [-3.1, -1.2], "x": 1.25, "centre": 0.15, "period": 0.14, "slot": 0.45, "below_m": 1.75, "dark": 0.1, "tint": 0.0},
     "cut": {
       "lat": [0.111, 0.2095],
       "below_skirt_h": 0.055,
@@ -349,7 +349,7 @@
     "delete_boxes": [[-0.51, -0.4895, 0, 0.25, 0, 0.4], [-0.5, 0.2, 0.172, 0.3, 0.0, 0.4]],
     "body_tris": 2800,
     "glass_above_m": 3.4,
-    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78, "rear_panels": {"y_max": -3.5, "pitch": 0.9}, "mud_h": 0.9},
     "_flatten": "the whole box roof pressed 0.02 tile lower so the destroyer stays smaller in plan mass than the heavy; the cupola is rebuilt as a low block on the right",
     "flatten": [[-0.46, -0.14, 0.17, 0.296], [-0.51, -0.455, 0.17, 0.296]],
     "_add_boxes": "flat rear plate closing the bay under the rear basket with a stowage ledge and two tow-hook blocks; cupola block; full-length side skirts whose bottom covers the top third of the road wheels",

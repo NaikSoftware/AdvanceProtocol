@@ -1,6 +1,6 @@
 extends Node
 ## Знімає модель юніта на справжньому екрані бою: дві моделі й коробка-заступник поруч для
-## масштабу, на найближчому й найдальшому зумі, і два кадри з інтервалом 0,5 с, поки один танк
+## масштабу, на зумі 6 (найближчий), 8 і 20 (найдальший), і чотири кадри руху на зумі 8, поки один танк
 ## їде на тайл уперед (гусениці й колеса мають крутитися). Кадри тримаються в пам'яті й пишуться
 ## в кінці (save_png блокує ~1 с). Не входить у гру.
 ## Запуск (вікно, не --headless):
@@ -9,18 +9,15 @@ extends Node
 ## (facing 0 — уздовж осі, 1 — по діагоналі) і знімає лише два зуми: чи не залазить ствол у сусіда.
 ## Шостий аргумент lineup ставить чотири танки справжніми юнітами трьох гравців (смуги HP у кольорі
 ## власника) і знімає один кадр на найближчому зумі; type_id тоді ігнорується.
-## Шостий аргумент contrast=<набір> ставить модель типу type_id цього набору по черзі на лузі, на ріллі й
-## край лісу найдальшого зуму й для кожного місця знімає три кадри: _A як у грі, _C — модель суцільним
-## пурпуровим (маска), _B — без моделі (ґрунт навколо); різницю кольору рахує tools/unit_contrast.py.
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
-## Шостий аргумент gate [set=N] (запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
+## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m) і без (_e): різниця кадрів дає маску моделі для ΔE.
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
 ## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); кадри на найближчому й найдальшому зумі, type_id ігнорується.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 60
-## Скільки триває проїзд на один тайл і коли знімати два кадри руху.
+## Скільки триває проїзд на один тайл і коли знімати кадри руху (чотири, у справжній швидкості).
 const MOVE_SEC: float = 1.2
 const MOVE_SHOTS: Array[float] = [0.2, 0.5, 0.8, 1.1]
 
@@ -45,10 +42,6 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
-	if a.size() > 5 and a[5].begins_with("contrast="):
-		# contrast=<набір>[:місце,місце] — необов'язковий перелік місць
-		var cv: PackedStringArray = a[5].substr(9).split(":")
-		await _contrast(screen, map, out, tag, type_id, int(cv[0]), cv[1].split(",") if cv.size() > 1 else PackedStringArray())
 	if a.size() > 5 and a[5] == "gate":
 		var gset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 		await _gate(screen, map, out, tag, type_id, gset)
@@ -224,116 +217,9 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_fo
 	get_tree().quit()
 
 
-## Місця для виміру контрасту: тайл, де стоїть модель, за видом місця; з кількох — найближчі до центру
-## дошки (біля краю камера впирається в межу). Рілля — лише 3×3 однієї рілля-поверхні; біля лісу —
-## поле за k = 2..3 клітинки від лісу з кожного з чотирьох боків (тінь крони, а не сама крона).
-func _contrast_cells(map: MapData) -> Dictionary:
-	var out: Dictionary = {}
-	var best: Dictionary = {}
-	var c := Vector2i(map.width / 2, map.height / 2)
-	var plough: Array[Vector2i] = []
-	var dirs: Dictionary = {Vector2i(1, 0): "E", Vector2i(-1, 0): "W", Vector2i(0, 1): "S", Vector2i(0, -1): "N"}
-	for y in range(4, map.height - 4):
-		for x in range(4, map.width - 4):
-			var p := Vector2i(x, y)
-			if map.tiles[y * map.width + x] != Terrain.Kind.FIELD:
-				continue
-			var found: Array[String] = []
-			var same: bool = true
-			var sv: int = map.surface_at(p)
-			for dy in range(-1, 2):
-				for dx in range(-1, 2):
-					var q := Vector2i(x + dx, y + dy)
-					if map.tiles[q.y * map.width + q.x] != Terrain.Kind.FIELD or map.surface_at(q) != sv:
-						same = false
-			if same and sv == MapData.FieldSurface.PLOUGHED:
-				plough.append(p)
-			elif same:
-				found.append("meadow")
-			for d: Vector2i in dirs:
-				for kk in range(2, 4):
-					var fk: Vector2i = p + d * kk
-					if fk.x < 0 or fk.y < 0 or fk.x >= map.width or fk.y >= map.height:
-						continue
-					var clear: bool = true
-					for j in range(0, kk):
-						var q2: Vector2i = p + d * j
-						if map.tiles[q2.y * map.width + q2.x] != Terrain.Kind.FIELD:
-							clear = false
-					if clear and map.tiles[fk.y * map.width + fk.x] == Terrain.Kind.FOREST:
-						found.append("forest%s%d" % [dirs[d], kk])
-			for kind: String in found:
-				var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
-				if not best.has(kind) or dd < best[kind]:
-					best[kind] = dd
-					out[kind] = p
-	# рілля: до трьох клітинок, рознесених, — ґрунт малюється природними формами, тож придатні лише з огляду
-	plough.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared())
-	var chosen: Array[Vector2i] = []
-	for cand: Vector2i in plough:
-		var far: bool = true
-		for o in chosen:
-			if (o - cand).length_squared() < 36:
-				far = false
-		if far and chosen.size() < 3:
-			chosen.append(cand)
-	for i in chosen.size():
-		out["plough_%s" % "abc"[i]] = chosen[i]
-	return out
-
-
-func _contrast(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int, only: PackedStringArray = PackedStringArray()) -> void:
-	screen.setup(map, 2, 1)
-	var rig: IsoCameraRig = screen.get_node("%CameraRig")
-	var cells: Dictionary = _contrast_cells(map)
-	if not only.is_empty():
-		for k: String in cells.keys():
-			if not only.has(k):
-				cells.erase(k)
-	for f in SETTLE_FRAMES:
-		await get_tree().process_frame
-	for kind: String in cells:
-		var cell: Vector2i = cells[kind]
-		var u: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
-		_place(u, cell, 0)
-		rig.center_on(cell)
-		rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
-		for f in SETTLE_FRAMES:
-			await get_tree().process_frame
-		await RenderingServer.frame_post_draw
-		var fa: Image = get_viewport().get_texture().get_image()
-		rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
-		for f in SETTLE_FRAMES:
-			await get_tree().process_frame
-		await RenderingServer.frame_post_draw
-		get_viewport().get_texture().get_image().save_png("%s/%s_%s_z6.png" % [out, tag, kind])
-		rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
-		for f in SETTLE_FRAMES:
-			await get_tree().process_frame
-		var hull := u.get_node("Hull") as MeshInstance3D
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(1, 0, 1)
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		var keep: Material = hull.material_override
-		hull.material_override = mat
-		for f in 4:
-			await get_tree().process_frame
-		await RenderingServer.frame_post_draw
-		var fc: Image = get_viewport().get_texture().get_image()
-		u.visible = false
-		for f in 4:
-			await get_tree().process_frame
-		await RenderingServer.frame_post_draw
-		var fb: Image = get_viewport().get_texture().get_image()
-		fa.save_png("%s/%s_%s_A.png" % [out, tag, kind])
-		fc.save_png("%s/%s_%s_C.png" % [out, tag, kind])
-		fb.save_png("%s/%s_%s_B.png" % [out, tag, kind])
-		hull.material_override = keep
-		u.queue_free()
-		print("UNIT contrast %s at %s" % [kind, cell])
-	get_tree().quit()
-## Місця для виміру контрасту: по одній клітинці кожного виду поверхні поля (усі дев'ять сусідів того
-## самого виду) і одна клітинка поля біля лісу. Модель дивиться на північ; камера однакова в обох кадрах.
+## Місця для виміру контрасту (їх читає tools/unit_contrast_gate.py): до чотирьох клітинок на вид поверхні поля
+## (дев'ять сусідів того самого виду; назви field0a.. — луг, field1a.. — рілля) і клітинки поля за два-три кроки від лісу
+## з кожного боку (forestE2, forestN3 ...). Модель дивиться на північ; камера однакова в обох кадрах, хмарні тіні вимкнені.
 func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int) -> void:
 	screen.setup(map, 2, 1)
 	var c := Vector2i(map.width / 2, map.height / 2)
@@ -369,8 +255,8 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 				if not relaxed.has(sv):
 					relaxed[sv] = []
 				relaxed[sv].append(p)
-			# a field cell k = 1..3 cells from a forest in direction d (field in between and behind): k = 1 can sit under the
-			# crown, k = 2..3 on the cast shadow strip; the report keeps the places whose ground is darkened but open
+			# a field cell k = 2..3 cells from a forest in direction d (field in between and behind): k = 1 would sit under
+			# the crown; the report decides which of these places really have darker ground
 			for d in dirs:
 				for kk in range(2, 4):
 					var fk: Vector2i = p + d * kk
@@ -397,12 +283,12 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		for cand: Vector2i in list:
 			var far: bool = true
 			for o in chosen:
-				if (o - cand).length_squared() < 36:
+				if (o - cand).length_squared() < 25:
 					far = false
-			if far and chosen.size() < 3:
+			if far and chosen.size() < 4:
 				chosen.append(cand)
 		for i in chosen.size():
-			cells.append(["field%d%s" % [sv, "abc"[i]], chosen[i]])
+			cells.append(["field%d%s" % [sv, "abcd"[i]], chosen[i]])
 	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
 	for key: Vector3i in sides:
 		cells.append(["%s%d" % [names[Vector2i(key.x, key.y)], key.z], sides[key]])
