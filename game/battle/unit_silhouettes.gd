@@ -39,6 +39,7 @@ const SET_COUNT: int = 3
 const _SET_SPECS: Dictionary = {
 	1: {},
 	2: {
+		5: {"hull": Vector3(0.4261, 0.159, 0.8433), "barrel": 0.625, "wheel": 0.036, "extras": [&"turret"]},  # середній (набір 2) 3,4×6,7 м
 		8: {"hull": Vector3(0.4712, 0.175, 0.9031), "barrel": 0.75, "wheel": 0.0391, "extras": [&"turret"]},  # важкий (набір 2) 3,8×7,2 м
 	},
 }
