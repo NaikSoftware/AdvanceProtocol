@@ -12,6 +12,9 @@ extends Node
 ## Шостий аргумент contrast=<набір> ставить модель типу type_id цього набору по черзі на лузі, на ріллі й
 ## край лісу найдальшого зуму й для кожного місця знімає три кадри: _A як у грі, _C — модель суцільним
 ## пурпуровим (маска), _B — без моделі (ґрунт навколо); різницю кольору рахує tools/unit_contrast.py.
+## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
+## Шостий аргумент gate [set=N] знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
+## лісу, кожне місце двома кадрами — з моделлю (_m) і без (_e): різниця кадрів дає маску моделі для ΔE.
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
 ## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); кадри на найближчому й найдальшому зумі, type_id ігнорується.
 
@@ -19,7 +22,7 @@ const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 60
 ## Скільки триває проїзд на один тайл і коли знімати два кадри руху.
 const MOVE_SEC: float = 1.2
-const MOVE_SHOTS: Array[float] = [0.35, 0.85]
+const MOVE_SHOTS: Array[float] = [0.2, 0.5, 0.8, 1.1]
 
 
 func _ready() -> void:
@@ -43,7 +46,12 @@ func _ready() -> void:
 		await _sets(screen, map, out, tag)
 		return
 	if a.size() > 5 and a[5].begins_with("contrast="):
-		await _contrast(screen, map, out, tag, type_id, int(a[5].substr(9)))
+		# contrast=<набір>[:місце,місце] — необов'язковий перелік місць
+		var cv: PackedStringArray = a[5].substr(9).split(":")
+		await _contrast(screen, map, out, tag, type_id, int(cv[0]), cv[1].split(",") if cv.size() > 1 else PackedStringArray())
+	if a.size() > 5 and a[5] == "gate":
+		var gset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
+		await _gate(screen, map, out, tag, type_id, gset)
 		return
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
@@ -69,12 +77,11 @@ func _ready() -> void:
 		print("UNIT pair %s at %s: %d frames" % [a[5], cell, pshots.size()])
 		get_tree().quit()
 		return
+	var set_id: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 	# Перша модель дивиться на північ, друга — на південний схід, коробка-заступник — ліворуч.
-	# Четвертий аргумент (необов'язковий) — номер набору.
-	var set_id: int = int(a[4]) if a.size() > 4 and a[4].is_valid_int() else 0
 	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell, 0)
 	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell + Vector2i(1, 0), 3)
-	_place(UnitSilhouettes.build(type_id, set_id), cell + Vector2i(-1, 0), 0)
+	_place(UnitSilhouettes.build(type_id), cell + Vector2i(-1, 0), 0)
 	var mover: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
 	_place(mover, cell + Vector2i(0, 2), 0)
 	print("UNIT placed at %s" % cell)
@@ -227,9 +234,17 @@ func _contrast_cells(map: MapData) -> Dictionary:
 				if all_field:
 					found.append("plough" if (map.surface[i] if i < map.surface.size() else 0) == MapData.FieldSurface.PLOUGHED else "meadow")
 				if t[i + 1] == Terrain.Kind.FIELD and t[i + 2] == Terrain.Kind.FOREST and t[i + 3] == Terrain.Kind.FOREST:
-					found.append("forest_edge_r")
+					found.append("forest_gap_r")
 				if t[i - 1] == Terrain.Kind.FIELD and t[i - 2] == Terrain.Kind.FOREST and t[i - 3] == Terrain.Kind.FOREST:
-					found.append("forest_edge_l")
+					found.append("forest_gap_l")
+				if t[i + 1] == Terrain.Kind.FOREST and t[i + 2] == Terrain.Kind.FOREST:
+					found.append("forest_adj_r")
+				if t[i - 1] == Terrain.Kind.FOREST and t[i - 2] == Terrain.Kind.FOREST:
+					found.append("forest_adj_l")
+				if t[i + map.width] == Terrain.Kind.FOREST and t[i + 2 * map.width] == Terrain.Kind.FOREST:
+					found.append("forest_adj_s")
+				if t[i - map.width] == Terrain.Kind.FOREST and t[i - 2 * map.width] == Terrain.Kind.FOREST:
+					found.append("forest_adj_n")
 			for kind: String in found:
 				var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
 				if not best.has(kind) or dd < best[kind]:
@@ -238,10 +253,14 @@ func _contrast_cells(map: MapData) -> Dictionary:
 	return out
 
 
-func _contrast(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int) -> void:
+func _contrast(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int, only: PackedStringArray = PackedStringArray()) -> void:
 	screen.setup(map, 2, 1)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	var cells: Dictionary = _contrast_cells(map)
+	if not only.is_empty():
+		for k: String in cells.keys():
+			if not only.has(k):
+				cells.erase(k)
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	for kind: String in cells:
@@ -284,3 +303,64 @@ func _contrast(screen: BattleScreen, map: MapData, out: String, tag: String, typ
 		u.queue_free()
 		print("UNIT contrast %s at %s" % [kind, cell])
 	get_tree().quit()
+## Місця для виміру контрасту: по одній клітинці кожного виду поверхні поля (усі дев'ять сусідів того
+## самого виду) і одна клітинка поля біля лісу. Модель дивиться на північ; камера однакова в обох кадрах.
+func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int) -> void:
+	screen.setup(map, 2, 1)
+	var c := Vector2i(map.width / 2, map.height / 2)
+	var picks: Dictionary = {}
+	var edge: Vector2i = Vector2i(-1, -1)
+	for y in range(4, map.height - 4):
+		for x in range(4, map.width - 4):
+			var p := Vector2i(x, y)
+			if map.tiles[y * map.width + x] != Terrain.Kind.FIELD:
+				continue
+			var sv: int = map.surface_at(p)
+			var same: bool = true
+			var forest: bool = false
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					var q := Vector2i(x + dx, y + dy)
+					var k: int = map.tiles[q.y * map.width + q.x]
+					if k == Terrain.Kind.FOREST:
+						forest = true
+					elif k != Terrain.Kind.FIELD:
+						same = false
+			if same and (not picks.has(sv) or (p - c).length_squared() < (picks[sv] - c).length_squared()):
+				picks[sv] = p
+			if forest and k_ok(map, p) and (edge.x < 0 or (p - c).length_squared() < (edge - c).length_squared()):
+				edge = p
+	var cells: Array = []
+	for sv in picks:
+		cells.append(["field%d" % sv, picks[sv]])
+	if edge.x >= 0:
+		cells.append(["forest", edge])
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
+	for f in SETTLE_FRAMES * 3:
+		await get_tree().process_frame
+	print("UNIT gate zoom %.2f" % rig.zoom_level)
+	for cl: Array in cells:
+		var cell: Vector2i = cl[1]
+		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
+		_place(m, cell, 0)
+		rig.center_on(cell)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var with_m: Image = get_viewport().get_texture().get_image()
+		m.queue_free()
+		for f in 10:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var empty: Image = get_viewport().get_texture().get_image()
+		with_m.save_png("%s/%s_%s_m.png" % [out, tag, cl[0]])
+		empty.save_png("%s/%s_%s_e.png" % [out, tag, cl[0]])
+		print("UNIT gate %s cell %s" % [cl[0], cell])
+	get_tree().quit()
+
+
+func k_ok(map: MapData, p: Vector2i) -> bool:
+	return map.tiles[p.y * map.width + p.x] == Terrain.Kind.FIELD

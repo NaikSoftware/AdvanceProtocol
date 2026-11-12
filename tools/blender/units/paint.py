@@ -100,7 +100,7 @@ if plain:
     mot = fbm(P, [(1.6, 0.6), (0.5, 0.4)], 101) - 0.5
     col = olive * (1.0 + mot[..., None] * 2.0 * C.get("mottle", 0.05)) * np.ones_like(col)
 
-rough = np.full((N, N), 0.70, np.float32)
+rough = np.full((N, N), C.get("rough", 0.78) if plain else 0.70, np.float32)
 metal = np.zeros((N, N), np.float32)
 
 # Generated colour: keep only what it says is near-black on the roof items (sight glass). It
@@ -118,7 +118,7 @@ glass = smooth(0.035, 0.012, src_l) * (d["cov"] > 0.5) * (P[..., 2] > cfg.get("g
 if cfg.get("no_glass_in_boxes"):
     # added boxes take the UV of the nearest source vertex, so their texels are arbitrary: a dark one
     # would paint scribbles of "glass" on a plain wall. Off unless the unit asks (set 0 stays as it was).
-    for l0, l1, a0, a1, h0, h1 in cfg.get("add_boxes", []):
+    for l0, l1, a0, a1, h0, h1 in list(cfg.get("add_boxes", [])) + [[l - r, l + r, a0, a1, h - r, h + r] for l, a0, a1, h, r in cfg.get("add_cyls", [])]:
         x0, x1 = sorted((-a0 * cfg["k"] * lib.TILE_M, -a1 * cfg["k"] * lib.TILE_M))
         y0, y1 = (lib.m_long(cfg, v) * lib.TILE_M for v in (l0, l1))
         z0, z1 = h0 * cfg["k"] * lib.TILE_M, h1 * cfg["k"] * lib.TILE_M
@@ -138,6 +138,13 @@ bare = chip * smooth(0.62, 0.75, wear_n)
 col = col * (1 - bare[..., None]) + lin(78, 76, 72) * bare[..., None]
 rough = rough - 0.25 * chip; metal = metal + 0.6 * bare
 col = col * (0.5 + 0.5 * ao[..., None])
+if plain:
+    # a single tone would read as resin: grime in recesses and panel joins, and large soft fade
+    # blotches that mostly show on the up-facing tops
+    rec = smooth(0.0, 0.4, 1 - ao)
+    col = col * (1 - C.get("grime", 0.2) * rec[..., None])
+    blot = fbm(P, [(2.5, 0.6), (1.0, 0.4)], 131) - 0.5
+    col = col * (1 + C.get("blotch", 0.06) * 2 * blot[..., None] * (0.4 + 0.6 * roof))
 
 # ---- streaks, dust, mud ---------------------------------------------------------------------
 side = smooth(0.6, 0.2, np.abs(nz))
@@ -162,6 +169,12 @@ col = col * (1 - 0.85 * soot[..., None])
 # Roofs darker and a little cooler than the grass they sit on, so the turret outline holds at
 # 22 cm/px (0.42 in linear is ~22 % in screen value); the sides keep their value.
 col = col * (1 - C.get("roof_dark", 0.42) * roof) * (1 + roof * np.array(C.get("roof_cool", (-0.06, 0.0, 0.08)), np.float32))
+if plain:
+    # texels the occlusion map leaves open must not fall below a fraction of the base tone: the
+    # baked point/cavity term turns scan noise on flat tops into dark flecks. Sight glass and the barrel are exempt.
+    free = (ao > 0.85) & (glass < 0.5) & ~on_gun
+    col = np.where(free[..., None], np.maximum(col, olive * C.get("floor", 0.75)), col)
+    col = np.where(on_gun[..., None], col * C.get("gun_dark", 0.8), col)
 # Engine-deck louvres (units.json `louvres`, MODEL metres): rows of dark slots across the hull on
 # the up-facing deck, two grilles either side of a solid centre strip. Texture only: from above
 # they mark the deck as an engine deck without a triangle.
