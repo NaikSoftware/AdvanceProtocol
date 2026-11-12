@@ -33,6 +33,7 @@ def load(name):
     with open(os.path.join(HERE, "units.json")) as f:
         cfg = json.load(f)[name]
     cfg["name"] = name
+    cfg.setdefault("out", name)  # path under assets/units/ without .glb; sets write set2/<slug>
     cfg["source"] = os.path.expanduser(cfg["source"])
     cfg["spec"] = spec(cfg["type_id"])
     lo, hi = cfg["hull_long"]

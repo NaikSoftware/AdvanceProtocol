@@ -203,5 +203,271 @@
       },
       "sides": 12
     }
+  },
+  "heavy_tank_us": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_heavy_tank.glb",
+    "out": "set2/heavy_tank",
+    "type_id": 8,
+    "fwd": "x",
+    "_layout": "set 2 heavy: wide flat slab turret with a solid full-width bustle, centre at 54 % of the hull from the bow",
+    "_scale_lat": "the source is 11 % narrower than the heavy's role box: lateral axis scaled before anything else, so every lat value below is in scaled source units",
+    "scale_lat": 1.1,
+    "hull_long": [-0.4996, 0.3179],
+    "hull_lat": 0.2144,
+    "ends_bottom_h": [0.095, 0.105],
+    "body_tris": 2800,
+    "glass_above_m": 2.55,
+    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "_flatten": "the bustle rack's posts and the antennas pressed down to the turret roof height",
+    "flatten": [[-0.405, -0.275, 0.209, 0.256], [0.03, 0.11, 0.21, 0.27]],
+    "_add_boxes": "solid bustle across the turret rear; full-length side skirts whose bottom covers the top third of the road wheels",
+    "add_boxes": [
+      [-0.385, -0.285, -0.187, 0.187, 0.198, 0.256],
+      [-0.385, 0.285, 0.205, 0.2144, 0.058, 0.14],
+      [-0.385, 0.285, -0.2144, -0.205, 0.058, 0.14]
+    ],
+    "cut": {
+      "lat": [0.114, 0.2155],
+      "below_skirt_h": 0.055,
+      "behind_skirt_lat": 0.2035,
+      "gear_top_h": 0.14,
+      "open_ends_long": [-0.39, 0.295]
+    },
+    "gun": {
+      "axis_h": 0.2041,
+      "start_long": 0.13,
+      "clear_r": 0.029,
+      "sides": 10,
+      "profile": [[0.13, 0.0235], [0.2, 0.0235], [0.206, 0.0205], [0.33, 0.0205], [0.338, 0.0185], [0.37, 0.0185], [0.375, 0.0225], [0.415, 0.0225], [0.42, 0.0185], [0.49, 0.0178], [0.495, 0.0198], [0.5, 0.0198]]
+    },
+    "gear": {
+      "track_lat": [0.121, 0.2035],
+      "track_t": 0.012,
+      "wheel_lat": [0.154, 0.1957],
+      "road": {
+        "r": 0.0355,
+        "h": 0.0475,
+        "long": [-0.3268, -0.2472, -0.1699, -0.0944, -0.0163, 0.0624, 0.1576]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.094,
+        "long": -0.40
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.088,
+        "long": 0.245
+      },
+      "sides": 12
+    }
+  },
+  "medium_tank_us": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_heavy_tank.glb",
+    "out": "set2/medium_tank",
+    "type_id": 5,
+    "fwd": "x",
+    "_layout": "set 2 medium, derived from the heavy source: the slab alone (rack left out) shortened to 0.42 of the hull, its centre 38 % from the bow, a flat engine deck behind it, no bustle",
+    "scale_lat": 1.07,
+    "hull_long": [-0.4996, 0.3179],
+    "hull_lat": 0.2085,
+    "ends_bottom_h": [0.095, 0.105],
+    "body_tris": 2800,
+    "glass_above_m": 2.3,
+    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "turret": {
+      "long": [-0.274, 0.15],
+      "lat": 0.19,
+      "base_h": 0.2,
+      "anchor": "front",
+      "scale_long": 0.809,
+      "scale_lat": 0.82,
+      "scale_h": 0.75,
+      "barrel_r": 0.03,
+      "shift_long": 0.029,
+      "dark": 0.0
+    },
+    "_flatten": "the bustle rack and its antennas pressed down to the rear deck",
+    "flatten": [[-0.405, -0.274, 0.209, 0.19], [-0.17, 0.18, 0.2, 0.235, 0.1]],
+    "_add_boxes": "deck plate over the vacated turret ring; full-length side skirts whose bottom covers the top third of the road wheels",
+    "add_boxes": [
+      [-0.40, -0.14, -0.19, 0.19, 0.1, 0.19],
+      [-0.165, 0.18, 0.1, 0.158, 0.2, 0.235],
+      [-0.165, 0.18, -0.158, -0.1, 0.2, 0.235],
+      [-0.385, 0.285, 0.1994, 0.2085, 0.058, 0.14],
+      [-0.385, 0.285, -0.2085, -0.1994, 0.058, 0.14]
+    ],
+    "louvres": {"y": [-3.1, -1.2], "x": 1.25, "centre": 0.15, "period": 0.14, "slot": 0.45, "below_m": 1.75},
+    "cut": {
+      "lat": [0.111, 0.2095],
+      "below_skirt_h": 0.055,
+      "behind_skirt_lat": 0.198,
+      "gear_top_h": 0.14,
+      "open_ends_long": [-0.39, 0.295]
+    },
+    "gun": {
+      "axis_h": 0.2041,
+      "start_long": 0.13,
+      "clear_r": 0.026,
+      "sides": 10,
+      "profile": [[0.13, 0.0207], [0.2, 0.0207], [0.206, 0.0181], [0.33, 0.0181], [0.338, 0.0163], [0.37, 0.0163], [0.375, 0.0198], [0.415, 0.0198], [0.42, 0.0163], [0.49, 0.0157], [0.495, 0.0174], [0.5, 0.0174]]
+    },
+    "gear": {
+      "track_lat": [0.1177, 0.198],
+      "track_t": 0.012,
+      "wheel_lat": [0.1498, 0.1904],
+      "road": {
+        "r": 0.0350,
+        "h": 0.047,
+        "long": [-0.3268, -0.2472, -0.1699, -0.0944, -0.0163, 0.0624, 0.1576]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.094,
+        "long": -0.40
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.088,
+        "long": 0.245
+      },
+      "sides": 12
+    }
+  },
+  "tank_destroyer_us": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_tank_destroyer.glb",
+    "out": "set2/tank_destroyer",
+    "type_id": 6,
+    "fwd": "y",
+    "_layout": "set 2 tank destroyer: no turret, a slab-sided box over the rear half with a cupola ring on the right, the gun from its front face; the source faces -Y and was turned 180 degrees about Z",
+    "_scale_lat": "the source's hull is 13 % too wide for the role box once its length fills it: lateral axis squeezed first, so every lat value below is in scaled source units",
+    "scale_lat": 0.87,
+    "hull_long": [-0.491, 0.2227],
+    "hull_lat": 0.1663,
+    "ends_bottom_h": [0.055, 0.115],
+    "_delete_boxes": "rear overhang beyond the plate and anything standing out past the hull width (fins, corner posts)",
+    "delete_boxes": [[-0.51, -0.4895, 0, 0.25, 0, 0.4], [-0.5, 0.2, 0.172, 0.3, 0.0, 0.4]],
+    "body_tris": 2800,
+    "glass_above_m": 3.4,
+    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "_flatten": "the whole box roof pressed 0.02 tile lower so the destroyer stays smaller in plan mass than the heavy; the cupola is rebuilt as a low block on the right",
+    "flatten": [[-0.46, -0.14, 0.17, 0.296], [-0.51, -0.455, 0.17, 0.296]],
+    "_add_boxes": "flat rear plate closing the bay under the rear basket with a stowage ledge and two tow-hook blocks; cupola block; full-length side skirts whose bottom covers the top third of the road wheels",
+    "add_boxes": [
+      [-0.4805, -0.40, -0.1663, 0.1663, 0.07, 0.311],
+      [-0.4895, -0.4805, -0.16, 0.16, 0.15, 0.17],
+      [-0.4895, -0.4805, 0.12, 0.15, 0.07, 0.1],
+      [-0.4895, -0.4805, -0.15, -0.12, 0.07, 0.1],
+      [-0.32, -0.22, -0.105, -0.04, 0.296, 0.327],
+      [-0.48, 0.17, 0.1566, 0.1663, 0.056, 0.125],
+      [-0.48, 0.17, -0.1663, -0.1566, 0.056, 0.125]
+    ],
+    "cut": {
+      "lat": [0.094, 0.168],
+      "below_skirt_h": 0.052,
+      "behind_skirt_lat": 0.1555,
+      "gear_top_h": 0.1,
+      "open_ends_long": [-0.43, 0.19]
+    },
+    "gun": {
+      "axis_h": 0.2456,
+      "start_long": -0.1,
+      "clear_r": 0.031,
+      "sides": 10,
+      "profile": [[-0.1, 0.0235], [0.05, 0.0215], [0.055, 0.017], [0.38, 0.015], [0.385, 0.0175], [0.42, 0.0175], [0.425, 0.015], [0.445, 0.015], [0.45, 0.026], [0.465, 0.026], [0.47, 0.015], [0.48, 0.015], [0.485, 0.026], [0.497, 0.026], [0.5, 0.02]]
+    },
+    "gear": {
+      "track_lat": [0.098, 0.157],
+      "track_t": 0.011,
+      "wheel_lat": [0.106, 0.15],
+      "road": {
+        "r": 0.0343,
+        "h": 0.0453,
+        "long": [-0.335, -0.2612, -0.1874, -0.1136, -0.0398, 0.034, 0.108]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.0845,
+        "long": -0.405
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.088,
+        "long": 0.185
+      },
+      "sides": 12
+    }
+  },
+  "light_tank_us": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_light_tank.glb",
+    "out": "set2/light_tank",
+    "type_id": 7,
+    "fwd": "x",
+    "_layout": "set 2 light: slab-sided low hull, grille deck at the front, a small faceted turret moved to mid-hull (the source has it aft), shortest gun",
+    "_squash": "the source is 30 % too tall for the role: everything above the running gear pressed down so the turret roof sits near 2.0 m",
+    "squash": {"above_h": 0.14, "scale": 0.7},
+    "hull_long": [-0.5, 0.4088],
+    "hull_lat": 0.233,
+    "ends_bottom_h": [0.12, 0.11],
+    "body_tris": 2800,
+    "glass_above_m": 2.5,
+    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "turret": {
+      "long": [-0.37, 0.03],
+      "lat": 0.17,
+      "base_h": 0.236,
+      "anchor": "front",
+      "scale_long": 0.87,
+      "scale_h": 1.0,
+      "barrel_r": 0.03,
+      "shift_long": 0.098,
+      "dark": 0.0
+    },
+    "_flatten": "antennas and sights pressed down to the roof; stowage on the vacated ring pressed to the deck",
+    "flatten": [[-0.34, 0.15, 0.2, 0.335], [-0.42, -0.2, 0.22, 0.234], [-0.27, -0.2, 0.2, 0.245]],
+    "_delete_boxes": "the crumpled cage remains on the turret rear edge (measured on the built mesh, model L -0.12..-0.09)",
+    "delete_boxes": [[-0.235, -0.19, 0, 0.2, 0.2, 0.5]],
+    "_add_boxes": "deck plate over the vacated turret ring, a small box bustle on the turret rear; side skirts whose bottom covers the top third of the road wheels",
+    "add_boxes": [
+      [-0.42, -0.17, -0.2, 0.2, 0.12, 0.234],
+      [-0.235, -0.19, -0.14, 0.14, 0.234, 0.29],
+      [-0.4, 0.3, 0.2245, 0.233, 0.06, 0.14],
+      [-0.4, 0.3, -0.233, -0.2245, 0.06, 0.14]
+    ],
+    "cut": {
+      "lat": [0.135, 0.236],
+      "below_skirt_h": 0.052,
+      "behind_skirt_lat": 0.215,
+      "gear_top_h": 0.14,
+      "open_ends_long": [-0.38, 0.33]
+    },
+    "gun": {
+      "axis_h": 0.2638,
+      "start_long": -0.02,
+      "clear_r": 0.027,
+      "sides": 10,
+      "profile": [[-0.02, 0.0215], [0.1, 0.0215], [0.105, 0.0175], [0.26, 0.0175], [0.265, 0.0215], [0.31, 0.0215], [0.315, 0.0175], [0.49, 0.0165], [0.495, 0.0185], [0.5, 0.0185]]
+    },
+    "gear": {
+      "track_lat": [0.14, 0.225],
+      "track_t": 0.012,
+      "wheel_lat": [0.152, 0.2],
+      "road": {
+        "r": 0.0442,
+        "h": 0.0562,
+        "long": [-0.3075, -0.1975, -0.09, 0.0175, 0.125, 0.2325]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.102,
+        "long": -0.4125
+      },
+      "idler": {
+        "r": 0.04,
+        "h": 0.112,
+        "long": 0.335
+      },
+      "sides": 12
+    }
   }
 }

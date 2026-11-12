@@ -33,11 +33,11 @@ sc.render.resolution_x = sc.render.resolution_y = size
 sc.render.film_transparent = False
 sc.world = bpy.data.worlds.new("w"); sc.world.use_nodes = True
 sc.world.node_tree.nodes["Background"].inputs[0].default_value = (0.55, 0.58, 0.62, 1)
-sc.world.node_tree.nodes["Background"].inputs[1].default_value = 0.6
+sc.world.node_tree.nodes["Background"].inputs[1].default_value = 2.2 if "--bright" in argv else 0.6
 sc.view_settings.view_transform = 'Standard'
 
 sun = bpy.data.objects.new("sun", bpy.data.lights.new("sun", 'SUN'))
-sun.data.energy = 3.5; sun.data.angle = math.radians(3)
+sun.data.energy = 10.0 if "--bright" in argv else 3.5; sun.data.angle = math.radians(3)
 sun.rotation_euler = (math.radians(40), 0, math.radians(yaw0 + 150))
 sc.collection.objects.link(sun)
 bpy.ops.mesh.primitive_plane_add(size=ext * 6, location=(ctr.x, ctr.y, lo[2]))

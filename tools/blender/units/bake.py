@@ -89,6 +89,12 @@ hit = out["cov"][..., None] > 0.5
 hi_emit(geo.outputs["Position"]); out["pos"] = np.where(hit, bake('EMIT')[..., :3], lo_pos[..., :3])
 hi_emit(geo.outputs["Normal"]); out["nrm"] = np.where(hit, bake('EMIT')[..., :3], lo_nrm[..., :3])
 hi_emit(geo.outputs["Pointiness"]); out["point"] = np.where(hit[..., 0], bake('EMIT')[..., 0], 0.5)
+if (cfg.get("paint") or {}).get("scheme") == "plain" and "added" in hi.data.attributes:
+    # cuboids added by prep have a few vertices, so their pointiness is an interpolated gradient across big
+    # flat faces and paints dirt blotches: texels on them get the neutral cavity value
+    at = ht.nodes.new("ShaderNodeAttribute"); at.attribute_name = "added"
+    hi_emit(at.outputs["Fac"]); added = bake('EMIT')[..., 0]
+    out["point"] = np.where(hit[..., 0] & (added > 0.5), 0.5, out["point"])
 if src_img is not None:
     ht.links.new(stex.outputs[0], emit.inputs[0]); out["src"] = bake('EMIT')[..., :3]
 nm = bake('NORMAL', normal_space='TANGENT')[..., :3]

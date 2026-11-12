@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
 
 cfg = lib.load(sys.argv[1])
-path = os.path.join(lib.REPO, "assets", "units", cfg["name"] + ".glb")
+path = os.path.join(lib.REPO, "assets", "units", cfg["out"] + ".glb")
 data = open(path, "rb").read()
 off, g, binc = 12, None, None
 while off < len(data):

@@ -169,6 +169,13 @@ rough = rough - C.get("edge_polish", 0.24) * np.maximum(rub, chip * line)
 rough = rough * (1 - bare) + C.get("bare_rough", 0.45) * bare
 metal = metal + C.get("bare_metal", 1.0) * bare
 col = col * (0.5 + 0.5 * ao[..., None])
+if plain:
+    # a single tone would read as resin: grime in recesses and panel joins, and large soft fade
+    # blotches that mostly show on the up-facing tops
+    rec = smooth(0.0, 0.4, 1 - ao)
+    col = col * (1 - C.get("grime", 0.2) * rec[..., None])
+    blot = fbm(P, [(2.5, 0.6), (1.0, 0.4)], 131) - 0.5
+    col = col * (1 + C.get("blotch", 0.06) * 2 * blot[..., None] * (0.4 + 0.6 * roof))
 
 # ---- streaks, dust, mud ---------------------------------------------------------------------
 side = smooth(0.6, 0.2, np.abs(nz))
@@ -181,9 +188,16 @@ dust = np.clip(smooth(1.5, 0.3, h) * 0.8 + up * 0.35 * dust_n + up * (1 - ao) * 
 dust = dust * smooth(0.25, 0.65, dust_n + 0.15)
 dust_c = lin(152, 140, 116)
 dmix = C.get("dust", 0.42)              # from above the roof is most of the tank: heavy dust reads washed out
-col = col * (1 - dmix * dust[..., None]) + dust_c * dmix * dust[..., None]
+dust_body = olive if plain else dust_c      # low dust must not lighten a sand body
+col = col * (1 - dmix * dust[..., None]) + dust_body * dmix * dust[..., None]
 mud = smooth(0.8, 0.25, h) * smooth(0.5, 0.7, fbm(P, [(0.3, 0.6), (0.08, 0.4)], 81))
 col = col * (1 - 0.7 * mud[..., None]) + lin(74, 62, 48) * 0.7 * mud[..., None]
+if plain:
+    # splashed mud: a brown-grey ramp, 0 at `mud_h` m above the ground to `mud_max` darker at the bottom of skirts and sides
+    mf = C.get("mud_from", cfg["cut"]["below_skirt_h"] * cfg["k"] * lib.TILE_M)   # skirt hem, metres
+    ramp = np.clip(1 - (h - mf) / C.get("mud_h", 0.6), 0, 1)
+    mx = C.get("mud_max", 0.85)
+    col = col * (1 - mx * ramp[..., None]) + lin(92, 76, 56) * (mx * ramp)[..., None]
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 # Oil and fuel on the rear deck: darker, half-gloss patches, the one smooth area on a matte tank.
 # Deck level only (hull height): a casemate roof at the rear is not an engine deck.
@@ -199,6 +213,12 @@ col = col * (1 - 0.85 * soot[..., None])
 # Roofs darker and a little cooler than the grass they sit on, so the turret outline holds at
 # 22 cm/px (0.42 in linear is ~22 % in screen value); the sides keep their value.
 col = col * (1 - C.get("roof_dark", 0.42) * roof) * (1 + roof * np.array(C.get("roof_cool", (-0.06, 0.0, 0.08)), np.float32))
+if plain:
+    # texels the occlusion map leaves open must not fall below a fraction of the base tone: the
+    # baked point/cavity term turns scan noise on flat tops into dark flecks. Sight glass and the barrel are exempt.
+    free = (ao > 0.85) & (glass < 0.5) & ~on_gun
+    col = np.where(free[..., None], np.maximum(col, olive * C.get("floor", 0.75) * (1 - 0.6 * ramp)[..., None]), col)   # mud lowers the floor
+    col = np.where(on_gun[..., None], col * C.get("gun_dark", 0.8), col)
 # Engine-deck louvres (units.json `louvres`, MODEL metres): rows of dark slots across the hull on
 # the up-facing deck, two grilles either side of a solid centre strip. Texture only: from above
 # they mark the deck as an engine deck without a triangle.

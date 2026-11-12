@@ -43,6 +43,18 @@ def verts(m):
 
 co = verts(me)
 zmin = co[:, 2].min()
+if cfg.get("scale_lat"):
+    # a source narrower or wider than its role box: stretch the lateral axis first, so every
+    # other lateral number in the config is in scaled source units
+    co[:, 1 if cfg["fwd"] == "x" else 0] *= cfg["scale_lat"]
+    me.vertices.foreach_set("co", co.ravel()); me.update()
+if cfg.get("squash"):
+    # a source taller than its role allows: everything above the running gear is pressed toward
+    # `above_h` (source units above the lowest vertex); wheels are procedural and keep their size
+    sq = cfg["squash"]
+    hh = co[:, 2] - zmin
+    co[:, 2] = zmin + np.where(hh > sq["above_h"], sq["above_h"] + (hh - sq["above_h"]) * sq["scale"], hh)
+    me.vertices.foreach_set("co", co.ravel()); me.update()
 t = cfg.get("turret")
 if t:
     # Source frame: long, lat, h above the lowest vertex. Turret: everything above its ring
@@ -85,11 +97,29 @@ def src_edit():
     co = verts(me)
     L, A = (co[:, 0], co[:, 1]) if cfg["fwd"] == "x" else (co[:, 1], -co[:, 0])
     H = co[:, 2] - zmin
-    for l0, l1, la, h in cfg.get("flatten", []):
+    for fl in cfg.get("flatten", []):
+        l0, l1, la, h = fl[:4]
         m = (L >= l0) & (L <= l1) & (np.abs(A) <= la) & (H > h)
+        if len(fl) > 4:      # optional |lat| floor: only the outer band (turret side kit)
+            m &= np.abs(A) >= fl[4]
         co[m, 2] = h + zmin
         print(f"PREP flatten {m.sum()} verts in long {l0}..{l1} to h {h}")
     me.vertices.foreach_set("co", co.ravel()); me.update()
+    if cfg.get("delete_boxes"):
+        # faces whose centre lies in a box (long, |lat|, h): hanging fins, corner posts and rear
+        # overhang that would show as thin plates or open gaps from the game camera
+        n = len(me.polygons)
+        c = np.empty(n * 3); me.polygons.foreach_get("center", c); c = c.reshape(-1, 3)
+        Lc, Ac = (c[:, 0], c[:, 1]) if cfg["fwd"] == "x" else (c[:, 1], -c[:, 0])
+        Hc = c[:, 2] - zmin
+        kill = np.zeros(n, bool)
+        for l0, l1, a0, a1, h0, h1 in cfg["delete_boxes"]:
+            kill |= (Lc >= l0) & (Lc <= l1) & (np.abs(Ac) >= a0) & (np.abs(Ac) <= a1) & (Hc >= h0) & (Hc <= h1)
+        bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.nonzero(kill)[0]], context='FACES')
+        bm.to_mesh(me); bm.free(); me.update()
+        print(f"PREP delete_boxes: {int(kill.sum())} faces dropped")
+        co = verts(me)
     if not cfg.get("add_boxes"):
         return
     from mathutils.kdtree import KDTree
@@ -105,11 +135,14 @@ def src_edit():
             vuv[me.loops[li].vertex_index] = uvl[li].uv
     bm = bmesh.new(); bm.from_mesh(me)
     uvb = bm.loops.layers.uv.active
+    addl = bm.verts.layers.float.new("added")   # 1 on added cuboids: bake.py can give them neutral inputs
     new = []
     for l0, l1, a0, a1, h0, h1 in cfg["add_boxes"]:
         def P(l, a, h):
             return (l, a, h + zmin) if cfg["fwd"] == "x" else (-a, l, h + zmin)
         c = [bm.verts.new(P(l, a, h)) for l in (l0, l1) for a in (a0, a1) for h in (h0, h1)]
+        for v in c:
+            v[addl] = 1.0
         for q in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
             f = bm.faces.new([c[i] for i in q]); new.append(f)
             for lp in f.loops:
