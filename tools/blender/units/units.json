@@ -497,9 +497,9 @@
       "scheme": "plain",
       "base": [90, 114, 86],
       "mottle": 0.1,
-      "roof_cool": [-0.028, -0.04, 0.155],
+      "roof_cool": [-0.028, -0.04, 0.19],
       "dark_gear": true,
-      "roof_dark": 0.05,
+      "roof_dark": -0.02,
       "roof_rough": 0.15,
       "dust": 0.25
     },
@@ -624,9 +624,9 @@
       "scheme": "plain",
       "base": [90, 114, 86],
       "mottle": 0.1,
-      "roof_cool": [-0.028, -0.04, 0.155],
+      "roof_cool": [-0.028, -0.04, 0.25],
       "dark_gear": true,
-      "roof_dark": 0.05,
+      "roof_dark": -0.10,
       "roof_rough": 0.15,
       "dust": 0.25
     },
