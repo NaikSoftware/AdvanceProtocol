@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c22mwdtcv8cy0"
-path="res://.godot/imported/light_tank_albedo.png-a5b6b94a2e8e8735cfd766e9a7d296d5.ctex"
+path.s3tc="res://.godot/imported/light_tank_albedo.png-a5b6b94a2e8e8735cfd766e9a7d296d5.s3tc.ctex"
+path.etc2="res://.godot/imported/light_tank_albedo.png-a5b6b94a2e8e8735cfd766e9a7d296d5.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e4e8c5a5eb07440ba5ee51b5064e76f5"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/units/light_tank_albedo.png"
-dest_files=["res://.godot/imported/light_tank_albedo.png-a5b6b94a2e8e8735cfd766e9a7d296d5.ctex"]
+dest_files=["res://.godot/imported/light_tank_albedo.png-a5b6b94a2e8e8735cfd766e9a7d296d5.s3tc.ctex", "res://.godot/imported/light_tank_albedo.png-a5b6b94a2e8e8735cfd766e9a7d296d5.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

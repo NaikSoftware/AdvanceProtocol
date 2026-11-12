@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b2qt7uq22vkco"
-path="res://.godot/imported/medium_tank_orm.png-7600a28820bba4d617af76cd76b1222f.ctex"
+path.s3tc="res://.godot/imported/medium_tank_orm.png-7600a28820bba4d617af76cd76b1222f.s3tc.ctex"
+path.etc2="res://.godot/imported/medium_tank_orm.png-7600a28820bba4d617af76cd76b1222f.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7be4177cf0e63ed2c8c18a78f4111c84"
@@ -14,17 +16,17 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/units/medium_tank_orm.png"
-dest_files=["res://.godot/imported/medium_tank_orm.png-7600a28820bba4d617af76cd76b1222f.ctex"]
+dest_files=["res://.godot/imported/medium_tank_orm.png-7600a28820bba4d617af76cd76b1222f.s3tc.ctex", "res://.godot/imported/medium_tank_orm.png-7600a28820bba4d617af76cd76b1222f.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=0
+compress/normal_map=2
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1
