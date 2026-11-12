@@ -114,11 +114,29 @@ def src_edit():
     co = verts(me)
     L, A = (co[:, 0], co[:, 1]) if cfg["fwd"] == "x" else (co[:, 1], -co[:, 0])
     H = co[:, 2] - zmin
-    for l0, l1, la, h in cfg.get("flatten", []):
+    for fl in cfg.get("flatten", []):
+        l0, l1, la, h = fl[:4]
         m = (L >= l0) & (L <= l1) & (np.abs(A) <= la) & (H > h)
+        if len(fl) > 4:      # optional |lat| floor: only the outer band (turret side kit)
+            m &= np.abs(A) >= fl[4]
         co[m, 2] = h + zmin
         print(f"PREP flatten {m.sum()} verts in long {l0}..{l1} to h {h}")
     me.vertices.foreach_set("co", co.ravel()); me.update()
+    if cfg.get("delete_boxes"):
+        # faces whose centre lies in a box (long, |lat|, h): hanging fins, corner posts and rear
+        # overhang that would show as thin plates or open gaps from the game camera
+        n = len(me.polygons)
+        c = np.empty(n * 3); me.polygons.foreach_get("center", c); c = c.reshape(-1, 3)
+        Lc, Ac = (c[:, 0], c[:, 1]) if cfg["fwd"] == "x" else (c[:, 1], -c[:, 0])
+        Hc = c[:, 2] - zmin
+        kill = np.zeros(n, bool)
+        for l0, l1, a0, a1, h0, h1 in cfg["delete_boxes"]:
+            kill |= (Lc >= l0) & (Lc <= l1) & (np.abs(Ac) >= a0) & (np.abs(Ac) <= a1) & (Hc >= h0) & (Hc <= h1)
+        bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.nonzero(kill)[0]], context='FACES')
+        bm.to_mesh(me); bm.free(); me.update()
+        print(f"PREP delete_boxes: {int(kill.sum())} faces dropped")
+        co = verts(me)
     if not cfg.get("add_boxes") and not cfg.get("add_cyls"):
         return
     from mathutils.kdtree import KDTree
@@ -134,11 +152,14 @@ def src_edit():
             vuv[me.loops[li].vertex_index] = uvl[li].uv
     bm = bmesh.new(); bm.from_mesh(me)
     uvb = bm.loops.layers.uv.active
+    addl = bm.verts.layers.float.new("added")   # 1 on added cuboids: bake.py can give them neutral inputs
     new = []
     for l0, l1, a0, a1, h0, h1 in cfg["add_boxes"]:
         def P(l, a, h):
             return (l, a, h + zmin) if cfg["fwd"] == "x" else (-a, l, h + zmin)
         c = [bm.verts.new(P(l, a, h)) for l in (l0, l1) for a in (a0, a1) for h in (h0, h1)]
+        for v in c:
+            v[addl] = 1.0
         for q in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
             f = bm.faces.new([c[i] for i in q]); new.append(f)
             for lp in f.loops:
@@ -150,6 +171,9 @@ def src_edit():
             return (l_, a, h_ + zmin) if cfg["fwd"] == "x" else (-a, l_, h_ + zmin)
         n = 12
         rings = [[bm.verts.new(Q(l + r * math.cos(2 * math.pi * i / n), a, h + r * math.sin(2 * math.pi * i / n))) for i in range(n)] for a in (a0, a1)]
+        for ring in rings:
+            for v in ring:
+                v[addl] = 1.0
         quads = [[rings[0][i], rings[0][(i + 1) % n], rings[1][(i + 1) % n], rings[1][i]] for i in range(n)]
         for vs in quads + [rings[0], rings[1][::-1]]:
             f = bm.faces.new(vs); new.append(f)

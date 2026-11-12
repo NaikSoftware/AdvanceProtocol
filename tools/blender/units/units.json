@@ -219,7 +219,7 @@
     "glass_above_m": 2.55,
     "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
     "_flatten": "the bustle rack's posts and the antennas pressed down to the turret roof height",
-    "flatten": [[-0.405, -0.275, 0.209, 0.256]],
+    "flatten": [[-0.405, -0.275, 0.209, 0.256], [0.03, 0.11, 0.21, 0.27]],
     "_add_boxes": "solid bustle across the turret rear; full-length side skirts whose bottom covers the top third of the road wheels",
     "add_boxes": [
       [-0.385, -0.285, -0.187, 0.187, 0.198, 0.256],
@@ -288,10 +288,12 @@
       "dark": 0.0
     },
     "_flatten": "the bustle rack and its antennas pressed down to the rear deck",
-    "flatten": [[-0.405, -0.274, 0.209, 0.19]],
+    "flatten": [[-0.405, -0.274, 0.209, 0.19], [-0.17, 0.18, 0.2, 0.235, 0.1]],
     "_add_boxes": "deck plate over the vacated turret ring; full-length side skirts whose bottom covers the top third of the road wheels",
     "add_boxes": [
       [-0.40, -0.14, -0.19, 0.19, 0.1, 0.19],
+      [-0.165, 0.18, 0.1, 0.158, 0.2, 0.235],
+      [-0.165, 0.18, -0.158, -0.1, 0.2, 0.235],
       [-0.385, 0.285, 0.1994, 0.2085, 0.058, 0.14],
       [-0.385, 0.285, -0.2085, -0.1994, 0.058, 0.14]
     ],
@@ -342,24 +344,30 @@
     "scale_lat": 0.87,
     "hull_long": [-0.491, 0.2227],
     "hull_lat": 0.1663,
-    "ends_bottom_h": [0.1, 0.115],
+    "ends_bottom_h": [0.055, 0.115],
+    "_delete_boxes": "rear overhang beyond the plate and anything standing out past the hull width (fins, corner posts)",
+    "delete_boxes": [[-0.51, -0.4895, 0, 0.25, 0, 0.4], [-0.5, 0.2, 0.172, 0.3, 0.0, 0.4]],
     "body_tris": 2800,
     "glass_above_m": 3.4,
     "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
-    "_flatten": "the cupola gun pressed down so the roof stays the highest point at about 3.6 m",
-    "flatten": [[-0.46, -0.14, 0.17, 0.345], [-0.51, -0.455, 0.17, 0.311]],
-    "_add_boxes": "flat rear plate closing the bay under the rear basket; full-length side skirts whose bottom covers the top third of the road wheels",
+    "_flatten": "the whole box roof pressed 0.02 tile lower so the destroyer stays smaller in plan mass than the heavy; the cupola is rebuilt as a low block on the right",
+    "flatten": [[-0.46, -0.14, 0.17, 0.296], [-0.51, -0.455, 0.17, 0.296]],
+    "_add_boxes": "flat rear plate closing the bay under the rear basket with a stowage ledge and two tow-hook blocks; cupola block; full-length side skirts whose bottom covers the top third of the road wheels",
     "add_boxes": [
-      [-0.4895, -0.40, -0.1663, 0.1663, 0.1, 0.30],
-      [-0.385, 0.17, 0.1566, 0.1663, 0.056, 0.125],
-      [-0.385, 0.17, -0.1663, -0.1566, 0.056, 0.125]
+      [-0.4805, -0.40, -0.1663, 0.1663, 0.07, 0.311],
+      [-0.4895, -0.4805, -0.16, 0.16, 0.15, 0.17],
+      [-0.4895, -0.4805, 0.12, 0.15, 0.07, 0.1],
+      [-0.4895, -0.4805, -0.15, -0.12, 0.07, 0.1],
+      [-0.32, -0.22, -0.105, -0.04, 0.296, 0.327],
+      [-0.48, 0.17, 0.1566, 0.1663, 0.056, 0.125],
+      [-0.48, 0.17, -0.1663, -0.1566, 0.056, 0.125]
     ],
     "cut": {
       "lat": [0.094, 0.168],
       "below_skirt_h": 0.052,
       "behind_skirt_lat": 0.1555,
-      "gear_top_h": 0.125,
-      "open_ends_long": [-0.37, 0.19]
+      "gear_top_h": 0.1,
+      "open_ends_long": [-0.43, 0.19]
     },
     "gun": {
       "axis_h": 0.2456,
@@ -416,10 +424,13 @@
       "dark": 0.0
     },
     "_flatten": "antennas and sights pressed down to the roof; stowage on the vacated ring pressed to the deck",
-    "flatten": [[-0.34, 0.15, 0.2, 0.335], [-0.42, -0.2, 0.22, 0.234]],
-    "_add_boxes": "deck plate over the vacated turret ring; side skirts whose bottom covers the top third of the road wheels",
+    "flatten": [[-0.34, 0.15, 0.2, 0.335], [-0.42, -0.2, 0.22, 0.234], [-0.27, -0.2, 0.2, 0.245]],
+    "_delete_boxes": "the crumpled cage remains on the turret rear edge (measured on the built mesh, model L -0.12..-0.09)",
+    "delete_boxes": [[-0.235, -0.19, 0, 0.2, 0.2, 0.5]],
+    "_add_boxes": "deck plate over the vacated turret ring, a small box bustle on the turret rear; side skirts whose bottom covers the top third of the road wheels",
     "add_boxes": [
-      [-0.42, -0.2, -0.2, 0.2, 0.12, 0.234],
+      [-0.42, -0.17, -0.2, 0.2, 0.12, 0.234],
+      [-0.235, -0.19, -0.14, 0.14, 0.234, 0.29],
       [-0.4, 0.3, 0.2245, 0.233, 0.06, 0.14],
       [-0.4, 0.3, -0.233, -0.2245, 0.06, 0.14]
     ],

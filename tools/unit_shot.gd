@@ -318,32 +318,74 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	screen.setup(map, 2, 1)
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var picks: Dictionary = {}
-	var edge: Vector2i = Vector2i(-1, -1)
+	var relaxed: Dictionary = {}
+	var sides: Dictionary = {}
+	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for y in range(4, map.height - 4):
 		for x in range(4, map.width - 4):
 			var p := Vector2i(x, y)
 			if map.tiles[y * map.width + x] != Terrain.Kind.FIELD:
 				continue
 			var sv: int = map.surface_at(p)
+			# 3x3 of one field surface; the visible ground is drawn in natural shapes, so up to three
+			# well separated cells per surface are shot and the report keeps the ones that really are plough
 			var same: bool = true
-			var forest: bool = false
 			for dy in range(-1, 2):
 				for dx in range(-1, 2):
 					var q := Vector2i(x + dx, y + dy)
-					var k: int = map.tiles[q.y * map.width + q.x]
-					if k == Terrain.Kind.FOREST:
-						forest = true
-					elif k != Terrain.Kind.FIELD:
+					if map.tiles[q.y * map.width + q.x] != Terrain.Kind.FIELD or map.surface_at(q) != sv:
 						same = false
-			if same and (not picks.has(sv) or (p - c).length_squared() < (picks[sv] - c).length_squared()):
-				picks[sv] = p
-			if forest and k_ok(map, p) and (edge.x < 0 or (p - c).length_squared() < (edge - c).length_squared()):
-				edge = p
+			if same:
+				if not picks.has(sv):
+					picks[sv] = []
+				picks[sv].append(p)
+			# fallback when a surface has no uniform 3x3 anywhere: the cell's own surface, neighbours any field
+			var all_field: bool = true
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					if map.tiles[(y + dy) * map.width + x + dx] != Terrain.Kind.FIELD:
+						all_field = false
+			if all_field:
+				if not relaxed.has(sv):
+					relaxed[sv] = []
+				relaxed[sv].append(p)
+			# a field cell k = 1..3 cells from a forest in direction d (field in between and behind): k = 1 can sit under the
+			# crown, k = 2..3 on the cast shadow strip; the report keeps the places whose ground is darkened but open
+			for d in dirs:
+				for kk in range(2, 4):
+					var fk: Vector2i = p + d * kk
+					if fk.x < 0 or fk.y < 0 or fk.x >= map.width or fk.y >= map.height:
+						continue
+					var clear: bool = true
+					for j in range(0, kk):
+						var q2: Vector2i = p + d * j
+						if map.tiles[q2.y * map.width + q2.x] != Terrain.Kind.FIELD:
+							clear = false
+					var b0: Vector2i = p - d
+					if clear and map.tiles[fk.y * map.width + fk.x] == Terrain.Kind.FOREST and map.tiles[b0.y * map.width + b0.x] == Terrain.Kind.FIELD:
+						var key := Vector3i(d.x, d.y, kk)
+						if not sides.has(key) or (p - c).length_squared() < (sides[key] - c).length_squared():
+							sides[key] = p
 	var cells: Array = []
+	for sv in [0, 1]:
+		if not picks.has(sv) and relaxed.has(sv):
+			picks[sv] = relaxed[sv]
 	for sv in picks:
-		cells.append(["field%d" % sv, picks[sv]])
-	if edge.x >= 0:
-		cells.append(["forest", edge])
+		var list: Array = picks[sv]
+		list.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared())
+		var chosen: Array[Vector2i] = []
+		for cand: Vector2i in list:
+			var far: bool = true
+			for o in chosen:
+				if (o - cand).length_squared() < 36:
+					far = false
+			if far and chosen.size() < 3:
+				chosen.append(cand)
+		for i in chosen.size():
+			cells.append(["field%d%s" % [sv, "abc"[i]], chosen[i]])
+	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
+	for key: Vector3i in sides:
+		cells.append(["%s%d" % [names[Vector2i(key.x, key.y)], key.z], sides[key]])
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
@@ -370,6 +412,3 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		print("UNIT gate %s cell %s" % [cl[0], cell])
 	get_tree().quit()
 
-
-func k_ok(map: MapData, p: Vector2i) -> bool:
-	return map.tiles[p.y * map.width + p.x] == Terrain.Kind.FIELD
