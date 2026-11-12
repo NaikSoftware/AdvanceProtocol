@@ -219,7 +219,7 @@
     "glass_above_m": 2.55,
     "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
     "_flatten": "the bustle rack's posts and the antennas pressed down to the turret roof height",
-    "flatten": [[-0.405, -0.275, 0.209, 0.256]],
+    "flatten": [[-0.405, -0.275, 0.209, 0.256], [0.03, 0.11, 0.21, 0.27]],
     "_add_boxes": "solid bustle across the turret rear; full-length side skirts whose bottom covers the top third of the road wheels",
     "add_boxes": [
       [-0.385, -0.285, -0.187, 0.187, 0.198, 0.256],
