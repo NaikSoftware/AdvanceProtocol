@@ -17,6 +17,8 @@ pale or dark Tripo texture cannot shift what counts as glass.
 
 Painted metal (same dict, defaults fit every set): `paint_rough`, `rough_var`, `edge_polish`,
 `bare_rough`, `bare_metal`, `bare_c`, `oil_dark`, `oil_gloss`, `normal_gain`, `pin_metal`.
+Camo scheme only: `roof_fade` (up-facing faces faded to grey of the same value, for the contrast
+gate), with its own defaults for `roof_dark`, `roof_cool` and `dust`.
 """
 import sys, os
 import numpy as np

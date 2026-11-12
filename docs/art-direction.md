@@ -162,8 +162,9 @@ falls back to the box placeholder, so a model may land one type at a time.
   specular 0.3 like the props; the unit shader copies the imported material's specular, roughness,
   metallic and textures. The extracted textures import VRAM-compressed (`compress/mode=2`; the
   normal map with `compress/normal_map=1`, the ORM with `2`): 2.7 MiB a tank against 16 lossless,
-  no visible change at the closest zoom. Godot keeps a changed `compress/mode` without
-  reimporting until the cached `.godot/imported/<texture>*` files are deleted.
+  no visible change at the closest zoom. After editing `compress/mode` in an `.import` by hand,
+  check that the `[remap]` section shows `vram_texture: true`; the albedo once kept its old
+  import until its `.godot/imported/<texture>*` files were deleted.
 - **Drawing:** one mesh and one material per type, shared by every owner and painted the same for
   all of them; the distance travelled is a per-node `instance uniform`, so a unit stays one draw call. They work on
   both the Mobile renderer and `gl_compatibility`. A wreck is the same mesh under the burnt
