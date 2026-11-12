@@ -208,25 +208,33 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 	get_tree().quit()
 
 
-## Місця для виміру контрасту: тайл, де стоїть модель, за видом місця.
+## Місця для виміру контрасту: тайл, де стоїть модель, за видом місця; з кількох — найближчий до центру
+## дошки (біля краю камера впирається в межу й кадр не показує те, що має).
 func _contrast_cells(map: MapData) -> Dictionary:
 	var out: Dictionary = {}
-	for y in range(2, map.height - 3):
-		for x in range(2, map.width - 2):
+	var best: Dictionary = {}
+	var c := Vector2i(map.width / 2, map.height / 2)
+	for y in range(4, map.height - 4):
+		for x in range(4, map.width - 4):
 			var i: int = y * map.width + x
-			var k: int = map.tiles[i]
-			var surf: int = map.surface[i] if i < map.surface.size() else 0
-			if k == Terrain.Kind.FIELD:
+			var t: PackedInt32Array = map.tiles
+			var found: Array[String] = []
+			if t[i] == Terrain.Kind.FIELD:
 				var all_field: bool = true
 				for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1)]:
-					if map.tiles[(y + d.y) * map.width + x + d.x] != Terrain.Kind.FIELD:
+					if t[(y + d.y) * map.width + x + d.x] != Terrain.Kind.FIELD:
 						all_field = false
 				if all_field:
-					var name: String = "plough" if surf == MapData.FieldSurface.PLOUGHED else "meadow"
-					if not out.has(name):
-						out[name] = Vector2i(x, y)
-			if k == Terrain.Kind.FIELD and map.tiles[i + 1] == Terrain.Kind.FIELD and map.tiles[i + 2] == Terrain.Kind.FOREST and map.tiles[i + 3] == Terrain.Kind.FOREST and not out.has("forest_edge"):
-				out["forest_edge"] = Vector2i(x, y)
+					found.append("plough" if (map.surface[i] if i < map.surface.size() else 0) == MapData.FieldSurface.PLOUGHED else "meadow")
+				if t[i + 1] == Terrain.Kind.FIELD and t[i + 2] == Terrain.Kind.FOREST and t[i + 3] == Terrain.Kind.FOREST:
+					found.append("forest_edge_r")
+				if t[i - 1] == Terrain.Kind.FIELD and t[i - 2] == Terrain.Kind.FOREST and t[i - 3] == Terrain.Kind.FOREST:
+					found.append("forest_edge_l")
+			for kind: String in found:
+				var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
+				if not best.has(kind) or dd < best[kind]:
+					best[kind] = dd
+					out[kind] = Vector2i(x, y)
 	return out
 
 
@@ -246,6 +254,14 @@ func _contrast(screen: BattleScreen, map: MapData, out: String, tag: String, typ
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		var fa: Image = get_viewport().get_texture().get_image()
+		rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_%s_z6.png" % [out, tag, kind])
+		rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
 		var hull := u.get_node("Hull") as MeshInstance3D
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = Color(1, 0, 1)

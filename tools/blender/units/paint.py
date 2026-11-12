@@ -115,6 +115,15 @@ if plain and "src" in d:
     # texture value" for a pale or a dark source alike (0.035 / 0.012 of an olive texture of ~0.17)
     src_l = src_l / max(float(np.median(src_l[d["cov"] > 0.5])), 1e-4) * 0.17
 glass = smooth(0.035, 0.012, src_l) * (d["cov"] > 0.5) * (P[..., 2] > cfg.get("glass_above_m", 2.35)) * ~on_gun
+if cfg.get("no_glass_in_boxes"):
+    # added boxes take the UV of the nearest source vertex, so their texels are arbitrary: a dark one
+    # would paint scribbles of "glass" on a plain wall. Off unless the unit asks (set 0 stays as it was).
+    for l0, l1, a0, a1, h0, h1 in cfg.get("add_boxes", []):
+        x0, x1 = sorted((-a0 * cfg["k"] * lib.TILE_M, -a1 * cfg["k"] * lib.TILE_M))
+        y0, y1 = (lib.m_long(cfg, v) * lib.TILE_M for v in (l0, l1))
+        z0, z1 = h0 * cfg["k"] * lib.TILE_M, h1 * cfg["k"] * lib.TILE_M
+        pad = 0.15
+        glass = glass * ~((P[..., 0] > x0 - pad) & (P[..., 0] < x1 + pad) & (P[..., 1] > y0 - pad) & (P[..., 1] < y1 + pad) & (P[..., 2] > z0 - pad) & (P[..., 2] < z1 + pad))
 col = col * (1 - glass[..., None]) + lin(20, 22, 24) * glass[..., None]
 rough = rough * (1 - glass) + 0.25 * glass
 

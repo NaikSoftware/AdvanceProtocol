@@ -30,7 +30,7 @@ def dilate(m, r):
 
 
 out_dir = sys.argv[1]
-print(f"{'frame':28s} {'px':>6s} {'model L*':>8s} {'ground L*':>9s} {'dE median':>9s} {'dE top':>7s}")
+print(f"{'frame':28s} {'px':>6s} {'model L*':>8s} {'ground L*':>9s} {'dE median':>9s} {'dE top':>7s} {'top L a b':>20s}")
 for tag in sys.argv[2:]:
     for fa in sorted(glob.glob(f"{out_dir}/{tag}_*_A.png")):
         base = fa[:-6]
@@ -49,4 +49,4 @@ for tag in sys.argv[2:]:
         lg = lab(gnd)
         d_med = float(np.linalg.norm(lab(np.median(px, 0)) - lg))
         d_top = float(np.linalg.norm(lab(np.median(top, 0)) - lg))
-        print(f"{os.path.basename(base):28s} {mask.sum():6d} {lab(np.median(px, 0))[0]:8.1f} {lg[0]:9.1f} {d_med:9.1f} {d_top:7.1f}")
+        print(f"{os.path.basename(base):28s} {mask.sum():6d} {lab(np.median(px, 0))[0]:8.1f} {lg[0]:9.1f} {d_med:9.1f} {d_top:7.1f} {np.array2string(lab(np.median(top, 0)).round(1))}")
