@@ -495,9 +495,10 @@
     "median_cells": 3,
     "paint": {
       "scheme": "plain",
-      "base": [96, 107, 93],
+      "base": [98, 107, 84],
       "mottle": 0.1,
-      "roof_cool": [-0.02, -0.04, 0.12],
+      "roof_cool": [-0.028, -0.04, 0.155],
+      "dark_gear": true,
       "roof_dark": 0.05,
       "roof_rough": 0.15,
       "dust": 0.25
@@ -621,9 +622,10 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [96, 107, 93],
+      "base": [98, 107, 84],
       "mottle": 0.1,
-      "roof_cool": [-0.02, -0.04, 0.12],
+      "roof_cool": [-0.028, -0.04, 0.155],
+      "dark_gear": true,
       "roof_dark": 0.05,
       "roof_rough": 0.15,
       "dust": 0.25
@@ -652,6 +654,7 @@
     },
     "flatten": [[ -0.15, 0.06, 0.2, 0.17]
     ],
+    "panel_boxes": [0],
     "no_glass_in_boxes": true,
     "add_boxes": [[-0.58, -0.4, -0.154, 0.154, 0.12, 0.315],
       [-0.58, -0.5, -0.19, 0.19, 0.12, 0.17]
@@ -696,9 +699,10 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [96, 107, 93],
+      "base": [98, 107, 84],
       "mottle": 0.1,
-      "roof_cool": [-0.02, -0.04, 0.12],
+      "roof_cool": [-0.028, -0.04, 0.155],
+      "dark_gear": true,
       "roof_dark": 0.05,
       "roof_rough": 0.15,
       "dust": 0.25
@@ -768,9 +772,10 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [96, 107, 93],
+      "base": [98, 107, 84],
       "mottle": 0.1,
-      "roof_cool": [-0.02, -0.04, 0.12],
+      "roof_cool": [-0.028, -0.04, 0.155],
+      "dark_gear": true,
       "roof_dark": 0.05,
       "roof_rough": 0.15,
       "dust": 0.25
