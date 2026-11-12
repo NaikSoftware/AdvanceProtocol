@@ -138,7 +138,8 @@ func apply(look: BattleLook) -> void:
 	_set_global(&"water_wind", look.water_wind)
 	_set_global(&"unit_contact_shadow", look.unit_contact_shadow)
 	unit_contact = look.unit_contact_shadow
-	sun_ground = Vector2(-sun.basis.z.x, -sun.basis.z.z).normalized()
+	# Похмура карта (sky_clear 0) має розсіяне світло без напряму: зсуву плями немає.
+	sun_ground = Vector2(-sun.basis.z.x, -sun.basis.z.z).normalized() if look.sky_clear >= 0.5 else Vector2.ZERO
 	# Світло падає вздовж -Z сонця, тож напрям НА сонце — його +Z.
 	_set_global(&"sun_dir", sun.basis.z)
 	_set_global(&"haze_color", _rgb(look.haze_color))

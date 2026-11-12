@@ -108,8 +108,17 @@ func sync() -> void:
 			multimesh.set_instance_custom_data(i, Color(road, 0.0, 0.0, 0.0))
 
 
+## 1.0, коли юніт стоїть на асфальті (дорога чи міст), інакше 0.0; поставлене останньою синхронізацією.
+func road_of(slot: int) -> float:
+	return _road[slot]
+
+
+## Рішення за клітинкою під юнітом: на узбіччі тієї ж клітинки пляма теж слабшає.
 func _on_road(view: UnitView) -> bool:
-	return map != null and map.outer_kind_at(IsoCameraRig.world_to_cell(view.position)) == Terrain.Kind.ROAD
+	if map == null:
+		return false
+	var kind: int = map.outer_kind_at(IsoCameraRig.world_to_cell(view.position))
+	return kind == Terrain.Kind.ROAD or kind == Terrain.Kind.BRIDGE
 
 
 func _process(_delta: float) -> void:
