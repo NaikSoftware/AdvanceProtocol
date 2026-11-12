@@ -117,6 +117,17 @@ falls back to the box placeholder, so a model may land one type at a time.
 - **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
   baked in on load, but a rotation off the X axis would misplace the wheel axles). Base colour
   texture, optional normal and glTF metallicRoughness (roughness in G, metallic in B), ≤ 1024 px.
+  The same texture carries baked occlusion in R (white if none): the unit shader scales the
+  specular by it, so seams and recesses do not catch the sky.
+- **Painted metal, not plastic:** matte paint (roughness ~0.74 with ±0.06 over metres), a satin
+  band 10–12 cm wide (~0.5) on rubbed convex edges that face up, half-gloss oil patches at deck
+  level at the rear; bare steel (metallic 1) only where paint is worn through on edge lines,
+  never on whole patches (where the edge mask fills a patch, set 0 paints a dark camo block), and
+  polished steel (0.8) on track pins and sprocket teeth. Chips under ~7 cm vanish in the
+  mips even at the closest zoom (the atlas is ~1 cm per texel), so wear is sized in bands, not
+  specks. No gloss on large flat faces: under River's back light it reads as a tin can.
+  `tools/blender/units/paint.py` knobs: `paint_rough`, `rough_var`, `edge_polish`, `bare_rough`,
+  `bare_metal`, `bare_c`, `oil_dark`, `oil_gloss`, `normal_gain`, `pin_metal`.
 - **Scale and axes:** 1 tile = 1.0 unit = 8 m. Origin bottom-centre, lowest vertex at y = 0, front
   along −Z. A vehicle's hull footprint matches `_SPECS.hull` X/Z and its barrel tip lands at
   `UnitSilhouettes.muzzle()`, because muzzle flashes, wrecks and contact shadows read those
@@ -149,7 +160,11 @@ falls back to the box placeholder, so a model may land one type at a time.
   `meshes/ensure_tangents=true` for the normal map, `gltf/embedded_image_handling=1` (textures
   extracted next to the file) and `import_script/path="res://tools/prop_import.gd"`, which sets
   specular 0.3 like the props; the unit shader copies the imported material's specular, roughness,
-  metallic and textures.
+  metallic and textures. The extracted textures import VRAM-compressed (`compress/mode=2`; the
+  normal map with `compress/normal_map=1`, the ORM with `2`): 2.7 MiB a tank against 16 lossless,
+  no visible change at the closest zoom. After editing `compress/mode` in an `.import` by hand,
+  check that the `[remap]` section shows `vram_texture: true`; the albedo once kept its old
+  import until its `.godot/imported/<texture>*` files were deleted.
 - **Drawing:** one mesh and one material per type, shared by every owner and painted the same for
   all of them; the distance travelled is a per-node `instance uniform`, so a unit stays one draw call. They work on
   both the Mobile renderer and `gl_compatibility`. A wreck is the same mesh under the burnt

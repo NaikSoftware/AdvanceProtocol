@@ -14,6 +14,11 @@ same occlusion, edge wear, streaks, dust, mud and roof darkening, plus a faint l
 (`roof_dark`, `roof_cool`, `dust`, `wheel_mud`) to tune one palette. The generated texture never
 colours the body; its luminance only finds sight glass and is normalised per model (plain scheme), so a
 pale or dark Tripo texture cannot shift what counts as glass.
+
+Painted metal (same dict, defaults fit every set): `paint_rough`, `rough_var`, `edge_polish`,
+`bare_rough`, `bare_metal`, `bare_c`, `oil_dark`, `oil_gloss`, `normal_gain`, `pin_metal`.
+Camo scheme only: `roof_fade` (up-facing faces faded to grey of the same value, for the contrast
+gate), with its own defaults for `roof_dark`, `roof_cool` and `dust`.
 """
 import sys, os
 import numpy as np
@@ -94,6 +99,15 @@ roof = smooth(0.35, 0.8, nz)[..., None]
 black_c = black + (olive - black) * C.get("roof_black_lift", 0.3) * roof
 col = np.where((n3 > np.quantile(n3, 0.88))[..., None], black_c, col)
 col = col * (1.0 + (hash3(*np.floor(P / block).transpose(2, 0, 1), 9)[..., None] - 0.5) * 0.06)
+if not plain:
+    # Contrast gate (docs/art/unit-models-research.md §5): from above the tops are most of the
+    # tank, and an olive top sits at the grass's hue (b* +12 against +16..+22 on the sunny maps).
+    # Tops are sun-faded towards a neutral grey of the same value (`roof_fade`), lighter than
+    # before (no roof darkening) and less dusty; the sides keep the olive, and the blocks stay
+    # darker than the faded olive, so the pattern still reads.
+    fade = C.get("roof_fade", 1.0) * roof
+    col = col * (1 - fade) + (col @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None] * fade
+    C = {"roof_dark": -0.1, "roof_cool": (-0.08, 0.02, 0.28), "dust": 0.1, **C}
 if plain:
     # one tone: sand etc. Blocks are gone, a soft mottle (metres-scale noise, no block edges) stays
     olive = lin(*PN["base"])
@@ -102,6 +116,11 @@ if plain:
 
 rough = np.full((N, N), C.get("rough", 0.78) if plain else 0.70, np.float32)
 metal = np.zeros((N, N), np.float32)
+# Painted armour, not plastic: matte paint (`paint_rough` on the camo scheme) whose sheen varies
+# over metres — chalky faded patches and fresher ones (`rough_var`) — so no face carries one even highlight.
+if not plain:
+    rough[:] = C.get("paint_rough", 0.74)
+rough = rough + C.get("rough_var", 0.06) * 2 * (fbm(P, [(2.5, 0.6), (0.8, 0.4)], 91) - 0.5)
 
 # Generated colour: keep only what it says is near-black on the roof items (sight glass). It
 # also paints whole parts dark (the gun), so the barrel and anything low are excluded.
@@ -125,9 +144,32 @@ wear_n = fbm(P, [(0.25, 0.6), (0.08, 0.4)], 51)
 chip = edge * smooth(0.45, 0.65, wear_n)
 col = col * (1 - 0.55 * cav[..., None])
 col = col * (1 - 0.45 * chip[..., None]) + (col * 1.7 + lin(70, 68, 62) * 0.3) * 0.45 * chip[..., None]
-bare = chip * smooth(0.62, 0.75, wear_n)
-col = col * (1 - bare[..., None]) + lin(78, 76, 72) * bare[..., None]
-rough = rough - 0.25 * chip; metal = metal + 0.6 * bare
+# Wear sits on edge lines. On small fragmented islands the baked edge mask covers whole patches;
+# bare steel and polish there would read as bright blobs, so they keep to texels whose 15 cm
+# neighbourhood is mostly not edge.
+def box(a, k):
+    """Mean over a (2k+1)^2 texel square."""
+    ii = np.pad(a.astype(np.float32), k + 1, mode="edge").cumsum(0).cumsum(1)
+    return ((ii[2 * k + 1:, 2 * k + 1:] - ii[:-2 * k - 1, 2 * k + 1:] - ii[2 * k + 1:, :-2 * k - 1]
+             + ii[:-2 * k - 1, :-2 * k - 1]) / (2 * k + 1) ** 2)[:N, :N]
+
+
+dens = box(edge > 0.3, 7)
+line = smooth(0.5, 0.3, dens)
+bare = chip * smooth(0.62, 0.75, wear_n) * line
+col = col * (1 - bare[..., None]) + lin(*C.get("bare_c", (100, 98, 94))) * bare[..., None]
+if not plain:
+    # those edge-filled patches carry a dark camo block instead, matte: grey speckled metal there
+    # read as blotches, plain olive as a hole in the pattern
+    dark = smooth(0.45, 0.6, dens) * smooth(0.58, 0.72, wear_n)
+    col = col * (1 - dark[..., None]) + black * dark[..., None]
+# Rubbed edges: a satin band ~10-12 cm wide (2 px at 7 cm/px) along convex edges that face up,
+# where crews, boots and rain rub the paint smooth; flat faces and side edges stay matte. Only
+# where worn through is it bare steel.
+rub = np.clip(box((edge * line) > 0.3, 5) * 6, 0, 1) * smooth(0.4, 0.6, nz) * smooth(0.3, 0.5, wear_n)
+rough = rough - C.get("edge_polish", 0.24) * np.maximum(rub, chip * line)
+rough = rough * (1 - bare) + C.get("bare_rough", 0.45) * bare
+metal = metal + C.get("bare_metal", 1.0) * bare
 col = col * (0.5 + 0.5 * ao[..., None])
 if plain:
     # a single tone would read as resin: grime in recesses and panel joins, and large soft fade
@@ -159,6 +201,12 @@ if plain:
     mx = C.get("mud_max", 0.85)
     col = col * (1 - mx * ramp[..., None]) + lin(92, 76, 56) * (mx * ramp)[..., None]
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
+# Oil and fuel on the rear deck: darker, half-gloss patches, the one smooth area on a matte tank.
+# Deck level only (hull height): a casemate roof at the rear is not an engine deck.
+oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < cfg["spec"]["hull"][1] * lib.TILE_M + 0.15) \
+    * smooth(0.58, 0.7, fbm(P, [(0.6, 0.6), (0.2, 0.4)], 95))
+col = col * (1 - C.get("oil_dark", 0.15) * oil[..., None])
+rough = rough - C.get("oil_gloss", 0.15) * oil
 
 # ---- muzzle soot ----------------------------------------------------------------------------
 soot = smooth(tip - 0.45, tip - 0.05, P[..., 1]) * (rad < 0.4)
@@ -195,7 +243,11 @@ if t:
         & (P[..., 2] > lib.m_len(cfg, t["base_h"]) * lib.TILE_M + 0.05) & ~on_gun
     col = col * (1 - t.get("dark", 0.25) * on_t[..., None])
 
-normal = d["normal"].copy()
+# Baked relief a little deeper (`normal_gain`): bolts, panel joints and bevels catch the light at
+# 7 cm/px, where a 1:1 bake reads as a moulded surface.
+normal = d["normal"] * 2 - 1
+normal[..., :2] *= C.get("normal_gain", 1.6)
+normal = normal / np.linalg.norm(normal, axis=-1, keepdims=True) * 0.5 + 0.5
 occl = ao.copy()
 
 # ---- tread strip: one 2 m period, 12 links ----------------------------------------------------
@@ -228,8 +280,9 @@ tcol = np.where(((~pad) & (~conn) & (~horn))[..., None], lin(22, 20, 18), tcol)
 tdust = np.clip(0.45 + 0.25 * tn, 0, 0.8)
 tcol = tcol * (1 - tdust[..., None] * 0.6) + dust_c * tdust[..., None] * 0.6 * np.where(pad | conn | horn, 1.0, 0.5)[..., None]
 col[:S] = tcol
-rough[:S] = np.where(pad, 0.88, 0.62) + 0.08 * tdust
-metal[:S] = np.where(pad, 0.0, 0.35)
+# pins, end connectors and guide horns are steel polished by the sprocket and the wheels
+rough[:S] = np.where(pad, 0.88, np.where(conn | horn, 0.42, 0.62)) + 0.08 * tdust
+metal[:S] = np.where(pad, 0.0, np.where(conn | horn, C.get("pin_metal", 0.8), 0.35))
 occl[:S] = np.where(pad | conn | horn, 1.0, 0.55)
 
 
@@ -297,7 +350,7 @@ sc = sc * (1 - sd[..., None] * 0.5) + dust_c * sd[..., None] * 0.5
 ys, xs = cell("sprocket")
 col[ys, xs] = sc * C.get("wheel_mud", 0.62)
 normal[ys, xs] = height_normal(blur(sh), 4.0, False)
-rough[ys, xs] = np.where(ring, 0.55, 0.78); metal[ys, xs] = np.where(ring, 0.5, 0.0)
+rough[ys, xs] = np.where(ring, 0.42, 0.78); metal[ys, xs] = np.where(ring, C.get("pin_metal", 0.8), 0.0)
 
 def push_pull(img, known):
     """Fill unknown texels with the average of known ones nearby, coarse to fine, so mip levels

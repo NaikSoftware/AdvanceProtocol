@@ -3,28 +3,30 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dntybxslia87c"
-path="res://.godot/imported/light_tank_normal.png-851c5c5e89b2d51c817a8be4df909165.ctex"
+path.s3tc="res://.godot/imported/light_tank_normal.png-851c5c5e89b2d51c817a8be4df909165.s3tc.ctex"
+path.etc2="res://.godot/imported/light_tank_normal.png-851c5c5e89b2d51c817a8be4df909165.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "55b063d617bb58cd38f25e37bc328d6c"
+"md5": "72aeb76ead99850b4e741694d1e69b6d"
 }
 
 [deps]
 
 source_file="res://assets/units/light_tank_normal.png"
-dest_files=["res://.godot/imported/light_tank_normal.png-851c5c5e89b2d51c817a8be4df909165.ctex"]
+dest_files=["res://.godot/imported/light_tank_normal.png-851c5c5e89b2d51c817a8be4df909165.s3tc.ctex", "res://.godot/imported/light_tank_normal.png-851c5c5e89b2d51c817a8be4df909165.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=0
+compress/normal_map=1
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1
