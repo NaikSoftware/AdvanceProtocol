@@ -172,6 +172,27 @@ func test_model_merge_bakes_node_transform_into_vertices_and_axles() -> void:
 	fail_test("у сітці нема коліс")
 
 
+## Текстури юнітів усіх наборів: VRAM-стиснення (режим 2), карти нормалей позначені як нормалі.
+func test_unit_texture_imports_are_vram_compressed() -> void:
+	var seen: int = 0
+	for set_id in UnitSilhouettes.SET_COUNT:
+		var dir := DirAccess.open(UnitSilhouettes.model_dir(set_id))
+		if dir == null:
+			fail_test("немає каталогу моделей набору %d" % set_id)
+			continue
+		for f: String in dir.get_files():
+			if not f.ends_with(".png.import"):
+				continue
+			var path: String = UnitSilhouettes.model_dir(set_id) + f
+			var cfg := ConfigFile.new()
+			assert_eq(cfg.load(path), OK, path)
+			assert_eq(cfg.get_value("params", "compress/mode"), 2, path)
+			if f.ends_with("_normal.png.import"):
+				assert_eq(cfg.get_value("params", "compress/normal_map"), 1, path)
+			seen += 1
+	assert_gt(seen, 0, "жодної текстури юнітів")
+
+
 ## Імпорт моделей усіх наборів: без стиснення (точність UV2), без LOD і тіньових сіток (злиття їх однаково
 ## губить), UV2 не перегенеровується під lightmap (light_baking 2 стер би траки й колеса).
 func test_unit_model_imports_keep_uv2_exact() -> void:
@@ -179,6 +200,7 @@ func test_unit_model_imports_keep_uv2_exact() -> void:
 	for set_id in UnitSilhouettes.SET_COUNT:
 		var dir := DirAccess.open(UnitSilhouettes.model_dir(set_id))
 		if dir == null:
+			fail_test("немає каталогу моделей набору %d: %s" % [set_id, UnitSilhouettes.model_dir(set_id)])
 			continue
 		for f: String in dir.get_files():
 			if not f.ends_with(".glb.import"):

@@ -39,8 +39,9 @@ def load(name, seed=True):
     cfg["spec"] = spec(cfg["type_id"])
     row = set_row(cfg)
     if row:
-        # the model is still fitted into the role's box (hull x, z); the set's own row gives the gun length, the axis
-        # height (hull y) and the road-wheel radius the game reads, so each number lives in one place
+        # the model is still fitted into the role's box (hull x, z); cfg["spec"] then takes the gun length, the hull
+        # height (the game derives the bore height from it) and the wheel radius from the set's own row. The row stays
+        # the one place the game reads; verify_glb.py checks the built model against it
         cfg["spec"] = {"hull": [cfg["spec"]["hull"][0], row["hull"][1], cfg["spec"]["hull"][2]],
                        "barrel": row["barrel"], "wheel": row["wheel"]}
     lo, hi = cfg["hull_long"]
@@ -72,7 +73,8 @@ def load(name, seed=True):
         os.makedirs(os.path.dirname(cfg["work"]), exist_ok=True)
         shutil.copytree(old, tmp)
         os.rename(tmp, cfg["work"])
-    os.makedirs(cfg["work"], exist_ok=True)
+    if seed:   # a read-only caller (verify_glb.py) must not leave an empty directory that blocks seeding later
+        os.makedirs(cfg["work"], exist_ok=True)
     return cfg
 
 

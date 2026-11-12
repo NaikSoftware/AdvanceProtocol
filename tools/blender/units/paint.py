@@ -236,7 +236,14 @@ if plain:
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 # Oil and fuel on the rear deck: darker, half-gloss patches, the one smooth area on a matte tank.
 # Deck level only (hull height): a casemate roof at the rear is not an engine deck.
-oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < cfg["spec"]["hull"][1] * lib.TILE_M + 0.15) \
+# The hull top comes from the geometry (median height of the up-facing front quarter, where every role has bare hull deck);
+# a set unit's row hull y is the bore-height basis, not the deck height, so it cannot serve as the gate there.
+hull_top = cfg["spec"]["hull"][1] * lib.TILE_M
+if lib.set_row(cfg):
+    front = (roof[..., 0] > 0.5) & (d["cov"] > 0.5) & ~on_gun & (P[..., 1] > 0.25 * cfg["spec"]["hull"][2] * lib.TILE_M)
+    if front.any():
+        hull_top = float(np.median(h[front]))
+oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < hull_top + 0.15) \
     * smooth(0.58, 0.7, fbm(P, [(0.6, 0.6), (0.2, 0.4)], 95))
 col = col * (1 - C.get("oil_dark", 0.15) * oil[..., None])
 rough = rough - C.get("oil_gloss", 0.15) * oil
