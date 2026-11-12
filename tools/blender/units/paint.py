@@ -11,7 +11,11 @@ Paint. No `paint` key in units.json: the digital camouflage below (national set 
 `"paint": {"scheme": "plain", "base": [r, g, b]}` the body is one tone (sRGB 0..255), still run through the
 same occlusion, edge wear, streaks, dust, mud and roof darkening, plus a faint low-frequency mottle
 (`mottle`, default 0.05) so it does not read as flat plastic. The same dict may carry the camo knobs
-(`roof_dark`, `roof_cool`, `dust`, `wheel_mud`) to tune one palette. The generated texture never
+(`roof_dark`, `roof_cool`, `dust`, `wheel_mud`) to tune one palette. Plain-only knobs: `rough` (body roughness,
+default 0.78), `grime` (recess darkening, 0.2), `blotch` (large soft fade on tops, 0.06), `floor` (least body tone
+outside occlusion as a fraction of the base, 0.75), `gun_dark` (barrel, 0.8), `mud_from` (hem height in m, default
+the skirt cut), `mud_h` (fade length in m, 0.6), `mud_max` (mud mix at the hem, 0.85), `rear_panels`
+{y_max, pitch} (seams and bolts on the flat rear face behind y_max, metres). The generated texture never
 colours the body; its luminance only finds sight glass and is normalised per model (plain scheme), so a
 pale or dark Tripo texture cannot shift what counts as glass.
 """
@@ -72,7 +76,7 @@ ao = d["ao"]
 pt = d["point"]
 
 # ---- digital camouflage ----------------------------------------------------------------------
-# Four Korean colours, desaturated. Pixel blocks of `block` m; patches from noise at block
+# Four colours (olive, brown, sand, black), desaturated. Pixel blocks of `block` m; patches from noise at block
 # centres, so every edge is a block edge. Three independent layers so colours touch in any order
 # instead of nesting in rings.
 PN = cfg.get("paint")
@@ -154,7 +158,7 @@ mud = smooth(0.8, 0.25, h) * smooth(0.5, 0.7, fbm(P, [(0.3, 0.6), (0.08, 0.4)], 
 col = col * (1 - 0.7 * mud[..., None]) + lin(74, 62, 48) * 0.7 * mud[..., None]
 if plain:
     # splashed mud: a brown-grey ramp, 0 at `mud_h` m above the ground to `mud_max` darker at the bottom of skirts and sides
-    mf = C.get("mud_from", cfg["cut"]["below_skirt_h"] * cfg["k"] * lib.TILE_M)   # skirt hem, metres
+    mf = C["mud_from"] if "mud_from" in C else cfg["cut"]["below_skirt_h"] * cfg["k"] * lib.TILE_M   # skirt hem, metres
     ramp = np.clip(1 - (h - mf) / C.get("mud_h", 0.6), 0, 1)
     mx = C.get("mud_max", 0.85)
     col = col * (1 - mx * ramp[..., None]) + lin(92, 76, 56) * (mx * ramp)[..., None]
@@ -182,8 +186,21 @@ if lv:
     on = (P[..., 1] > lv["y"][0]) & (P[..., 1] < lv["y"][1]) & (ax < lv["x"]) & (ax > lv.get("centre", 0.12)) \
         & (roof[..., 0] > 0.5) & (P[..., 2] < lv.get("below_m", 9.0))
     slot = ((P[..., 1] - lv["y"][0]) / lv.get("period", 0.14)) % 1.0 < lv.get("slot", 0.45)
-    col = col * (1 - 0.5 * (on & slot)[..., None]) * (1 - 0.12 * on[..., None])
+    col = col * (1 - lv.get("dark", 0.5) * (on & slot)[..., None]) * (1 - lv.get("tint", 0.12) * on[..., None])
     rough = np.where(on & slot, 0.9, rough)
+
+# Flat rear plate (plain scheme, `rear_panels`): seam lines every `pitch` m and bolts along them, in the albedo,
+# so a 2 x 3 m flat face does not read as one slab. Only faces turned backwards (object-space normal -Y) behind `y_max`.
+rp = (PN or {}).get("rear_panels") if plain else None
+if rp:
+    pitch = rp.get("pitch", 0.9)
+    back = (d["nrm"][..., 1] < -0.8) & (P[..., 1] < rp["y_max"]) & (d["cov"] > 0.5)
+    fx, fz = (P[..., 0] / pitch + 0.5) % 1.0, (P[..., 2] / pitch) % 1.0
+    seam = (np.minimum(fx, 1 - fx) * pitch < 0.03) | (np.minimum(fz, 1 - fz) * pitch < 0.03)
+    bx, bz = (P[..., 0] / (pitch / 3) + 0.5) % 1.0, (P[..., 2] / (pitch / 3) + 0.5) % 1.0
+    bolt = ((np.hypot((bx - 0.5) * pitch / 3, (bz - 0.5) * pitch / 3) < 0.035)
+            & ((np.minimum(fx, 1 - fx) * pitch < 0.09) | (np.minimum(fz, 1 - fz) * pitch < 0.09)))
+    col = col * (1 - 0.35 * (back & seam)[..., None]) * (1 - 0.3 * (back & bolt)[..., None])
 
 # A shrunk turret (units.json turret) is darker again than the deck around it: small and low, it
 # would otherwise dissolve into the hull at the far zoom.
