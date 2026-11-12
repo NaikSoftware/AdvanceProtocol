@@ -118,6 +118,15 @@ falls back to the box placeholder, so a model may land one type at a time.
 - **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
   baked in on load, but a rotation off the X axis would misplace the wheel axles). Base colour
   texture, optional normal and glTF metallicRoughness (roughness in G, metallic in B), ≤ 1024 px.
+  The same texture carries baked occlusion in R (white if none): the unit shader scales the
+  specular by it, so seams and recesses do not catch the sky.
+- **Painted metal, not plastic:** matte paint (roughness ~0.74 with ±0.06 over metres), a satin
+  band on rubbed convex edges and half-gloss oil patches on the rear deck; metallic 1 only where
+  paint is worn through and on track pins and sprocket teeth. Chips under ~7 cm vanish in the
+  mips even at the closest zoom (the atlas is ~1 cm per texel), so wear is sized in bands, not
+  specks. No gloss on large flat faces: under River's back light it reads as a tin can.
+  `tools/blender/units/paint.py` knobs: `paint_rough`, `rough_var`, `edge_polish`, `bare_rough`,
+  `bare_metal`, `bare_c`, `oil_dark`, `oil_gloss`, `normal_gain`, `pin_metal`.
 - **Scale and axes:** 1 tile = 1.0 unit = 8 m. Origin bottom-centre, lowest vertex at y = 0, front
   along −Z. A vehicle's hull footprint matches `_SPECS.hull` X/Z and its barrel tip lands at
   `UnitSilhouettes.muzzle()`, because muzzle flashes, wrecks and contact shadows read those
