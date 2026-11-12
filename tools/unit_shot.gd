@@ -90,13 +90,13 @@ func _ready() -> void:
 		await get_tree().process_frame
 	rig.center_on(cell + Vector2i(0, 1))
 	var shots: Array = []
-	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
 		rig.zoom_by(z / rig.zoom_level)
 		for f in SETTLE_FRAMES:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		shots.append(["%s/%s_z%d.png" % [out, tag, int(z)], get_viewport().get_texture().get_image()])
-	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	rig.zoom_by(8.0 / rig.zoom_level)
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	# Проїзд: вузол рухається на тайл до -Z, `travel` — пройдений шлях, як у UnitView.
@@ -224,41 +224,61 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_fo
 	get_tree().quit()
 
 
-## Місця для виміру контрасту: тайл, де стоїть модель, за видом місця; з кількох — найближчий до центру
-## дошки (біля краю камера впирається в межу й кадр не показує те, що має).
+## Місця для виміру контрасту: тайл, де стоїть модель, за видом місця; з кількох — найближчі до центру
+## дошки (біля краю камера впирається в межу). Рілля — лише 3×3 однієї рілля-поверхні; біля лісу —
+## поле за k = 2..3 клітинки від лісу з кожного з чотирьох боків (тінь крони, а не сама крона).
 func _contrast_cells(map: MapData) -> Dictionary:
 	var out: Dictionary = {}
 	var best: Dictionary = {}
 	var c := Vector2i(map.width / 2, map.height / 2)
+	var plough: Array[Vector2i] = []
+	var dirs: Dictionary = {Vector2i(1, 0): "E", Vector2i(-1, 0): "W", Vector2i(0, 1): "S", Vector2i(0, -1): "N"}
 	for y in range(4, map.height - 4):
 		for x in range(4, map.width - 4):
-			var i: int = y * map.width + x
-			var t: PackedInt32Array = map.tiles
+			var p := Vector2i(x, y)
+			if map.tiles[y * map.width + x] != Terrain.Kind.FIELD:
+				continue
 			var found: Array[String] = []
-			if t[i] == Terrain.Kind.FIELD:
-				var all_field: bool = true
-				for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1)]:
-					if t[(y + d.y) * map.width + x + d.x] != Terrain.Kind.FIELD:
-						all_field = false
-				if all_field:
-					found.append("plough" if (map.surface[i] if i < map.surface.size() else 0) == MapData.FieldSurface.PLOUGHED else "meadow")
-				if t[i + 1] == Terrain.Kind.FIELD and t[i + 2] == Terrain.Kind.FOREST and t[i + 3] == Terrain.Kind.FOREST:
-					found.append("forest_gap_r")
-				if t[i - 1] == Terrain.Kind.FIELD and t[i - 2] == Terrain.Kind.FOREST and t[i - 3] == Terrain.Kind.FOREST:
-					found.append("forest_gap_l")
-				if t[i + 1] == Terrain.Kind.FOREST and t[i + 2] == Terrain.Kind.FOREST:
-					found.append("forest_adj_r")
-				if t[i - 1] == Terrain.Kind.FOREST and t[i - 2] == Terrain.Kind.FOREST:
-					found.append("forest_adj_l")
-				if t[i + map.width] == Terrain.Kind.FOREST and t[i + 2 * map.width] == Terrain.Kind.FOREST:
-					found.append("forest_adj_s")
-				if t[i - map.width] == Terrain.Kind.FOREST and t[i - 2 * map.width] == Terrain.Kind.FOREST:
-					found.append("forest_adj_n")
+			var same: bool = true
+			var sv: int = map.surface_at(p)
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					var q := Vector2i(x + dx, y + dy)
+					if map.tiles[q.y * map.width + q.x] != Terrain.Kind.FIELD or map.surface_at(q) != sv:
+						same = false
+			if same and sv == MapData.FieldSurface.PLOUGHED:
+				plough.append(p)
+			elif same:
+				found.append("meadow")
+			for d: Vector2i in dirs:
+				for kk in range(2, 4):
+					var fk: Vector2i = p + d * kk
+					if fk.x < 0 or fk.y < 0 or fk.x >= map.width or fk.y >= map.height:
+						continue
+					var clear: bool = true
+					for j in range(0, kk):
+						var q2: Vector2i = p + d * j
+						if map.tiles[q2.y * map.width + q2.x] != Terrain.Kind.FIELD:
+							clear = false
+					if clear and map.tiles[fk.y * map.width + fk.x] == Terrain.Kind.FOREST:
+						found.append("forest%s%d" % [dirs[d], kk])
 			for kind: String in found:
 				var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
 				if not best.has(kind) or dd < best[kind]:
 					best[kind] = dd
-					out[kind] = Vector2i(x, y)
+					out[kind] = p
+	# рілля: до трьох клітинок, рознесених, — ґрунт малюється природними формами, тож придатні лише з огляду
+	plough.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared())
+	var chosen: Array[Vector2i] = []
+	for cand: Vector2i in plough:
+		var far: bool = true
+		for o in chosen:
+			if (o - cand).length_squared() < 36:
+				far = false
+		if far and chosen.size() < 3:
+			chosen.append(cand)
+	for i in chosen.size():
+		out["plough_%s" % "abc"[i]] = chosen[i]
 	return out
 
 

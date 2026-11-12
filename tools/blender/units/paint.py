@@ -176,6 +176,9 @@ col = col * (1 - 0.85 * soot[..., None])
 # Roofs darker and a little cooler than the grass they sit on, so the turret outline holds at
 # 22 cm/px (0.42 in linear is ~22 % in screen value); the sides keep their value.
 col = col * (1 - C.get("roof_dark", 0.42) * roof) * (1 + roof * np.array(C.get("roof_cool", (-0.06, 0.0, 0.08)), np.float32))
+if plain and C.get("roof_rough"):
+    # up-facing faces rougher: less sky blue picked up from above under an overcast sky
+    rough = np.clip(rough + C["roof_rough"] * roof[..., 0], 0, 1)
 if plain:
     # texels the occlusion map leaves open must not fall below a fraction of the base tone: the
     # baked point/cavity term turns scan noise on flat tops into dark flecks. Sight glass and the barrel are exempt.
