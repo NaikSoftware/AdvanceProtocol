@@ -43,6 +43,7 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Engine.max_fps = _fps_before
+	WeatherRig.sun_ground = Vector2.ZERO
 	UnitSilhouettes.reset_models()
 
 
@@ -207,6 +208,7 @@ func test_handover_batches_track_exactly_the_incoming_players_known_units() -> v
 	assert_gt(known, 0, "передумова: гравець, що заходить, знає юнітів")
 	assert_eq(screen._hp_bars.count(), known, "смуги HP — рівно відомі юніти")
 	assert_eq(screen._contacts.count(), known, "плями-контакт — рівно відомі юніти")
+	assert_not_null(screen._contacts.map, "плями-контакт знають карту: дорога слабшає пляму")
 	assert_eq(screen._unit_views.size(), known)
 	WeatherRig.unit_contact = 0.0
 

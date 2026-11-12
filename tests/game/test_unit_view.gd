@@ -25,6 +25,7 @@ func after_each() -> void:
 	# Статичне поле на весь процес: тест, що впав посередині, не сміє лишити рельєф решті набору.
 	TerrainHeight.active = null
 	WeatherRig.unit_contact = 0.0
+	WeatherRig.sun_ground = Vector2.ZERO
 	UnitSilhouettes.reset_models()
 
 
@@ -75,6 +76,50 @@ func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 		assert_almost_eq(xf.origin.x, view.position.x, 0.0001)
 		assert_almost_eq(xf.origin.z, view.position.z, 0.0001)
 		assert_eq(contacts.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+func test_contact_shadow_shifts_along_the_sun_ground_direction() -> void:
+	WeatherRig.unit_contact = 0.6
+	WeatherRig.sun_ground = Vector2(1.0, 0.0)
+	var contacts := _with_contacts()
+	view.bind(_unit(5))
+	var hull: Vector3 = UnitSilhouettes.spec(5).hull
+	var xf: Transform3D = contacts.transform_of(0)
+	assert_almost_eq(xf.origin.x - view.position.x, UnitView.CONTACT_SUN_SHIFT * maxf(hull.x, hull.z), 0.0001)
+	assert_almost_eq(xf.origin.z, view.position.z, 0.0001)
+
+
+## Зсув іде у світових осях: поворот юніта його не крутить.
+func test_contact_shadow_shift_is_world_space_for_a_turned_unit() -> void:
+	WeatherRig.unit_contact = 0.6
+	WeatherRig.sun_ground = Vector2(0.6, 0.8)
+	var contacts := _with_contacts()
+	view.bind(_unit(5, 0, Vector2i(2, 3), 2))
+	var hull: Vector3 = UnitSilhouettes.spec(5).hull
+	var xf: Transform3D = contacts.transform_of(0)
+	var k: float = UnitView.CONTACT_SUN_SHIFT * maxf(hull.x, hull.z)
+	assert_almost_eq(xf.origin.x - view.position.x, 0.6 * k, 0.0001)
+	assert_almost_eq(xf.origin.z - view.position.z, 0.8 * k, 0.0001)
+
+
+func test_contact_road_factor_follows_the_tile_under_the_unit() -> void:
+	WeatherRig.unit_contact = 0.6
+	var map := MapData.new()
+	map.width = 4
+	map.height = 4
+	map.tiles = PackedInt32Array()
+	map.tiles.resize(16)
+	map.tiles.fill(Terrain.Kind.FIELD)
+	map.tiles[3 * 4 + 2] = Terrain.Kind.ROAD
+	map.tiles[1 * 4 + 1] = Terrain.Kind.BRIDGE
+	var contacts := _with_contacts()
+	contacts.map = map
+	view.bind(_unit(5, 0, Vector2i(2, 3)))
+	assert_eq(contacts.road_of(0), 1.0, "дорога")
+	view.bind(_unit(5, 0, Vector2i(1, 1)))
+	assert_eq(contacts.road_of(0), 1.0, "міст")
+	view.bind(_unit(5, 0, Vector2i(0, 0)))
+	assert_eq(contacts.road_of(0), 0.0, "поле")
 
 
 ## Пляма реєструється вже після повороту: перша синхронізація бачить facing юніта.
