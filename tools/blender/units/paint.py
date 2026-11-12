@@ -151,6 +151,10 @@ dmix = C.get("dust", 0.42)              # from above the roof is most of the tan
 col = col * (1 - dmix * dust[..., None]) + dust_c * dmix * dust[..., None]
 mud = smooth(0.8, 0.25, h) * smooth(0.5, 0.7, fbm(P, [(0.3, 0.6), (0.08, 0.4)], 81))
 col = col * (1 - 0.7 * mud[..., None]) + lin(74, 62, 48) * 0.7 * mud[..., None]
+if plain:
+    # splashed mud: a brown-grey ramp, 0 at `mud_h` m above the ground to `mud_max` darker at the bottom of skirts and sides
+    ramp = np.clip(1 - h / C.get("mud_h", 0.6), 0, 1)
+    col = col * (1 - C.get("mud_max", 0.25) * ramp[..., None]) + lin(70, 62, 52) * (0.35 * C.get("mud_max", 0.25) * ramp)[..., None]
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 
 # ---- muzzle soot ----------------------------------------------------------------------------

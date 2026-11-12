@@ -214,32 +214,50 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	screen.setup(map, 2, 1)
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var picks: Dictionary = {}
-	var edge: Vector2i = Vector2i(-1, -1)
+	var sides: Dictionary = {}
+	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for y in range(4, map.height - 4):
 		for x in range(4, map.width - 4):
 			var p := Vector2i(x, y)
 			if map.tiles[y * map.width + x] != Terrain.Kind.FIELD:
 				continue
 			var sv: int = map.surface_at(p)
+			# 3x3 of one field surface; the visible ground is drawn in natural shapes, so up to three
+			# well separated cells per surface are shot and the report keeps the ones that really are plough
 			var same: bool = true
-			var forest: bool = false
 			for dy in range(-1, 2):
 				for dx in range(-1, 2):
 					var q := Vector2i(x + dx, y + dy)
-					var k: int = map.tiles[q.y * map.width + q.x]
-					if k == Terrain.Kind.FOREST:
-						forest = true
-					elif k != Terrain.Kind.FIELD:
+					if map.tiles[q.y * map.width + q.x] != Terrain.Kind.FIELD or map.surface_at(q) != sv:
 						same = false
-			if same and (not picks.has(sv) or (p - c).length_squared() < (picks[sv] - c).length_squared()):
-				picks[sv] = p
-			if forest and k_ok(map, p) and (edge.x < 0 or (p - c).length_squared() < (edge - c).length_squared()):
-				edge = p
+			if same:
+				if not picks.has(sv):
+					picks[sv] = []
+				picks[sv].append(p)
+			# a field cell with forest on one side and field on the other: the canopy shades it from one of the four
+			for d in dirs:
+				var f1: Vector2i = p + d
+				var f0: Vector2i = p - d
+				if map.tiles[f1.y * map.width + f1.x] == Terrain.Kind.FOREST and map.tiles[f0.y * map.width + f0.x] == Terrain.Kind.FIELD:
+					if not sides.has(d) or (p - c).length_squared() < (sides[d] - c).length_squared():
+						sides[d] = p
 	var cells: Array = []
 	for sv in picks:
-		cells.append(["field%d" % sv, picks[sv]])
-	if edge.x >= 0:
-		cells.append(["forest", edge])
+		var list: Array = picks[sv]
+		list.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared())
+		var chosen: Array[Vector2i] = []
+		for cand: Vector2i in list:
+			var far: bool = true
+			for o in chosen:
+				if (o - cand).length_squared() < 36:
+					far = false
+			if far and chosen.size() < 3:
+				chosen.append(cand)
+		for i in chosen.size():
+			cells.append(["field%d%s" % [sv, "abc"[i]], chosen[i]])
+	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
+	for d in sides:
+		cells.append([names[d], sides[d]])
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
@@ -266,6 +284,3 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		print("UNIT gate %s cell %s" % [cl[0], cell])
 	get_tree().quit()
 
-
-func k_ok(map: MapData, p: Vector2i) -> bool:
-	return map.tiles[p.y * map.width + p.x] == Terrain.Kind.FIELD

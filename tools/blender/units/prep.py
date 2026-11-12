@@ -97,11 +97,29 @@ def src_edit():
     co = verts(me)
     L, A = (co[:, 0], co[:, 1]) if cfg["fwd"] == "x" else (co[:, 1], -co[:, 0])
     H = co[:, 2] - zmin
-    for l0, l1, la, h in cfg.get("flatten", []):
+    for fl in cfg.get("flatten", []):
+        l0, l1, la, h = fl[:4]
         m = (L >= l0) & (L <= l1) & (np.abs(A) <= la) & (H > h)
+        if len(fl) > 4:      # optional |lat| floor: only the outer band (turret side kit)
+            m &= np.abs(A) >= fl[4]
         co[m, 2] = h + zmin
         print(f"PREP flatten {m.sum()} verts in long {l0}..{l1} to h {h}")
     me.vertices.foreach_set("co", co.ravel()); me.update()
+    if cfg.get("delete_boxes"):
+        # faces whose centre lies in a box (long, |lat|, h): hanging fins, corner posts and rear
+        # overhang that would show as thin plates or open gaps from the game camera
+        n = len(me.polygons)
+        c = np.empty(n * 3); me.polygons.foreach_get("center", c); c = c.reshape(-1, 3)
+        Lc, Ac = (c[:, 0], c[:, 1]) if cfg["fwd"] == "x" else (c[:, 1], -c[:, 0])
+        Hc = c[:, 2] - zmin
+        kill = np.zeros(n, bool)
+        for l0, l1, a0, a1, h0, h1 in cfg["delete_boxes"]:
+            kill |= (Lc >= l0) & (Lc <= l1) & (np.abs(Ac) >= a0) & (np.abs(Ac) <= a1) & (Hc >= h0) & (Hc <= h1)
+        bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.nonzero(kill)[0]], context='FACES')
+        bm.to_mesh(me); bm.free(); me.update()
+        print(f"PREP delete_boxes: {int(kill.sum())} faces dropped")
+        co = verts(me)
     if not cfg.get("add_boxes"):
         return
     from mathutils.kdtree import KDTree
