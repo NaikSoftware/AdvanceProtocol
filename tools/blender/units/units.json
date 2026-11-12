@@ -418,10 +418,10 @@
       "dark": 0.0
     },
     "_flatten": "antennas and sights pressed down to the roof; stowage on the vacated ring pressed to the deck",
-    "flatten": [[-0.34, 0.15, 0.2, 0.335], [-0.42, -0.2, 0.22, 0.234]],
+    "flatten": [[-0.34, 0.15, 0.2, 0.335], [-0.42, -0.2, 0.22, 0.234], [-0.27, -0.2, 0.2, 0.245]],
     "_add_boxes": "deck plate over the vacated turret ring; side skirts whose bottom covers the top third of the road wheels",
     "add_boxes": [
-      [-0.42, -0.2, -0.2, 0.2, 0.12, 0.234],
+      [-0.42, -0.17, -0.2, 0.2, 0.12, 0.234],
       [-0.4, 0.3, 0.2245, 0.233, 0.06, 0.14],
       [-0.4, 0.3, -0.233, -0.2245, 0.06, 0.14]
     ],
