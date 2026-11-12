@@ -149,4 +149,8 @@ both grass and ploughed soil at the far zoom, by value or by hue.
 (sunny), River (overcast rain) and Ridge (early autumn) — on grass, on ploughed soil and against
 a forest edge. Measured at the farthest zoom on in-game frames: the median colour of the model's
 up-facing top differs from the ground right around it by ΔE (CIELAB) ≥ 15. A model that passes
-on one map and fails on another fails.
+on one map and fails on another fails. The top is the up-facing surface without the cast shadow;
+on each sunny map one sample stands in a canopy's cast shadow, measured against the shaded
+ground. A unit under the canopy itself is not a contrast sample: the canopy fades over units.
+Set 1's green is a low-chroma grey-green of middle value: dark enough to read as protective
+green, light enough to separate from River's dark ground.
