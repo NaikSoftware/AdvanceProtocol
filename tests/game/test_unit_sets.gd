@@ -43,6 +43,8 @@ func test_set_without_model_falls_back_to_set_zero_model_and_spec() -> void:
 func test_set_model_without_a_spec_row_falls_back_fully() -> void:
 	var m0: ArrayMesh = UnitModelFixture.vehicle(5)
 	UnitSilhouettes.use_models({5: m0, Vector2i(1, 5): UnitModelFixture.mesh(_row.hull)})
+	# справжній рядок набору 1 для типу 5 тут заважав би: тест перевіряє саме його відсутність
+	UnitSilhouettes.use_set_specs({1: {}, 2: {}})
 	assert_same(UnitSilhouettes.model_mesh(5, 1), m0)
 	assert_eq(UnitSilhouettes.spec(5, 1), UnitSilhouettes.spec(5, 0))
 	assert_same(UnitSilhouettes.model_material(5, 1), UnitSilhouettes.model_material(5, 0))

@@ -262,5 +262,83 @@
       },
       "sides": 12
     }
+  },
+  "set1/medium_tank": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_medium_tank.glb",
+    "type_id": 5,
+    "fwd": "x",
+    "_layout": "set 1 medium: low dome turret centred 36 % from the bow, no bustle, flat engine deck over the rear half; the hull is stretched at the rear by a plate (add_boxes) because the source hull is stubbier than the box",
+    "hull_long": [-0.56, 0.2587],
+    "hull_lat": 0.2193,
+    "ends_bottom_h": [0.11, 0.111],
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.105, 0.2085],
+      "below_skirt_h": 0.11,
+      "behind_skirt_lat": 0.2,
+      "gear_top_h": 0.15,
+      "open_ends_long": [-0.39, 0.25]
+    },
+    "turret": {
+      "long": [-0.22, 0.09],
+      "lat": 0.19,
+      "base_h": 0.2,
+      "scale_long": 1.0,
+      "scale_lat": 0.9,
+      "scale_h": 0.8,
+      "barrel_r": 0.03,
+      "shift_long": 0.045
+    },
+    "flatten": [[ -0.51, -0.22, 0.22, 0.195]
+    ],
+    "no_glass_in_boxes": true,
+    "add_boxes": [[ -0.215, -0.17, -0.17, 0.17, 0.12, 0.2],
+      [-0.56, -0.44, -0.19, 0.19, 0.12, 0.19],
+      [-0.555, -0.505, -0.115, -0.01, 0.19, 0.22],
+      [-0.555, -0.505, 0.01, 0.115, 0.19, 0.22]
+    ],
+    "gun": {
+      "axis_h": 0.2184,
+      "start_long": 0.08,
+      "clear_r": 0.026,
+      "sides": 10,
+      "profile": [[ 0.08, 0.02],
+        [0.1, 0.0145],
+        [0.28, 0.0145],
+        [0.29, 0.017],
+        [0.35, 0.017],
+        [0.36, 0.0135],
+        [0.48, 0.013],
+        [0.5, 0.012]
+      ]
+    },
+    "gear": {
+      "track_lat": [0.115, 0.195],
+      "track_t": 0.012,
+      "wheel_lat": [0.145, 0.185],
+      "road": {
+        "r": 0.0367,
+        "h": 0.0487,
+        "long": [-0.2786, -0.192, -0.1016, -0.015, 0.0714, 0.157]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.082,
+        "long": -0.355
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.087,
+        "long": 0.225
+      },
+      "sides": 12
+    },
+    "paint": {
+      "scheme": "plain",
+      "base": [70, 100, 96],
+      "mottle": 0.1,
+      "roof_cool": [0, 0, 0],
+      "dust": 0.25
+    }
   }
 }
