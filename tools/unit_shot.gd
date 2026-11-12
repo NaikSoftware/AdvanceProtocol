@@ -244,12 +244,15 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
+	for f in SETTLE_FRAMES * 3:
+		await get_tree().process_frame
+	print("UNIT gate zoom %.2f" % rig.zoom_level)
 	for cl: Array in cells:
 		var cell: Vector2i = cl[1]
 		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
 		_place(m, cell, 0)
 		rig.center_on(cell)
-		for f in SETTLE_FRAMES:
+		for f in SETTLE_FRAMES * 2:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		var with_m: Image = get_viewport().get_texture().get_image()

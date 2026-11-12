@@ -211,25 +211,25 @@
     "fwd": "x",
     "_layout": "set 2 heavy: wide flat slab turret with a solid full-width bustle, centre at 54 % of the hull from the bow",
     "_scale_lat": "the source is 11 % narrower than the heavy's role box: lateral axis scaled before anything else, so every lat value below is in scaled source units",
-    "scale_lat": 1.107,
+    "scale_lat": 1.1,
     "hull_long": [-0.4996, 0.3179],
-    "hull_lat": 0.2157,
+    "hull_lat": 0.2144,
     "ends_bottom_h": [0.095, 0.105],
     "body_tris": 2800,
     "glass_above_m": 2.55,
-    "paint": {"scheme": "plain", "base": [172, 156, 120], "roof_dark": 0.12, "dust": 0.25, "wheel_mud": 0.6, "mottle": 0.05},
+    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
     "_flatten": "the bustle rack's posts and the antennas pressed down to the turret roof height",
-    "flatten": [[-0.405, -0.275, 0.21, 0.256]],
+    "flatten": [[-0.405, -0.275, 0.209, 0.256]],
     "_add_boxes": "solid bustle across the turret rear; full-length side skirts whose bottom covers the top third of the road wheels",
     "add_boxes": [
-      [-0.385, -0.285, -0.188, 0.188, 0.198, 0.256],
-      [-0.385, 0.285, 0.206, 0.2157, 0.058, 0.14],
-      [-0.385, 0.285, -0.2157, -0.206, 0.058, 0.14]
+      [-0.385, -0.285, -0.187, 0.187, 0.198, 0.256],
+      [-0.385, 0.285, 0.205, 0.2144, 0.058, 0.14],
+      [-0.385, 0.285, -0.2144, -0.205, 0.058, 0.14]
     ],
     "cut": {
-      "lat": [0.115, 0.217],
+      "lat": [0.114, 0.2155],
       "below_skirt_h": 0.055,
-      "behind_skirt_lat": 0.205,
+      "behind_skirt_lat": 0.2035,
       "gear_top_h": 0.14,
       "open_ends_long": [-0.39, 0.295]
     },
@@ -241,9 +241,9 @@
       "profile": [[0.13, 0.0235], [0.2, 0.0235], [0.206, 0.0205], [0.33, 0.0205], [0.338, 0.0185], [0.37, 0.0185], [0.375, 0.0225], [0.415, 0.0225], [0.42, 0.0185], [0.49, 0.0178], [0.495, 0.0198], [0.5, 0.0198]]
     },
     "gear": {
-      "track_lat": [0.122, 0.205],
+      "track_lat": [0.121, 0.2035],
       "track_t": 0.012,
-      "wheel_lat": [0.155, 0.197],
+      "wheel_lat": [0.154, 0.1957],
       "road": {
         "r": 0.0355,
         "h": 0.0475,

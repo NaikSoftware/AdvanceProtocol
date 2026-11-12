@@ -39,7 +39,7 @@ const SET_COUNT: int = 3
 const _SET_SPECS: Dictionary = {
 	1: {},
 	2: {
-		8: {"hull": Vector3(0.4711, 0.175, 0.9039), "barrel": 0.75, "wheel": 0.0391, "extras": [&"turret"]},  # важкий (набір 2) 3,8×7,2 м
+		8: {"hull": Vector3(0.4712, 0.175, 0.9031), "barrel": 0.75, "wheel": 0.0391, "extras": [&"turret"]},  # важкий (набір 2) 3,8×7,2 м
 	},
 }
 ## Чинні рядки: таблиця вище, а тести підміняють їх через `use_set_specs()`.
