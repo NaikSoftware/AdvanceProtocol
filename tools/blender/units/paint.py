@@ -97,6 +97,15 @@ roof = smooth(0.35, 0.8, nz)[..., None]
 black_c = black + (olive - black) * C.get("roof_black_lift", 0.3) * roof
 col = np.where((n3 > np.quantile(n3, 0.88))[..., None], black_c, col)
 col = col * (1.0 + (hash3(*np.floor(P / block).transpose(2, 0, 1), 9)[..., None] - 0.5) * 0.06)
+if not plain:
+    # Contrast gate (docs/art/unit-models-research.md §5): from above the tops are most of the
+    # tank, and an olive top sits at the grass's hue (b* +12 against +16..+22 on the sunny maps).
+    # Tops are sun-faded towards a neutral grey of the same value (`roof_fade`), lighter than
+    # before (no roof darkening) and less dusty; the sides keep the olive, and the blocks stay
+    # darker than the faded olive, so the pattern still reads.
+    fade = C.get("roof_fade", 1.0) * roof
+    col = col * (1 - fade) + (col @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None] * fade
+    C = {"roof_dark": -0.1, "roof_cool": (-0.04, 0.0, 0.36), "dust": 0.1, **C}
 if plain:
     # one tone: sand etc. Blocks are gone, a soft mottle (metres-scale noise, no block edges) stays
     olive = lin(*PN["base"])

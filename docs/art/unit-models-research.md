@@ -141,9 +141,11 @@ not carry the role: the turret's plan and bustle, the deck furniture, the skirts
 The stats are the same for every set until per-set rosters are designed.
 
 Each set has its own paint, one tone across the whole set: slot 0 keeps the olive with small
-brown-black blocks, slot 1 is a plain dark bluish green, slot 2 a plain muted sand. Paint marks
-the nation, not the player — the HP bar still marks the player. Every paint must stand apart from
-both grass and ploughed soil at the far zoom, by value or by hue.
+brown-black blocks on the sides, its up-facing tops sun-faded to a cool neutral grey of the same
+value (an olive top sits at the grass's hue and fails the gate below on every map), slot 1 is a
+plain dark bluish green, slot 2 a plain muted sand. Paint marks the nation, not the player — the
+HP bar still marks the player. Every paint must stand apart from both grass and ploughed soil at
+the far zoom, by value or by hue.
 
 **Contrast gate for every vehicle model.** A unit must stand out on every map — Crossroads
 (sunny), River (overcast rain) and Ridge (early autumn) — on grass, on ploughed soil and against
