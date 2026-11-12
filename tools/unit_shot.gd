@@ -37,7 +37,7 @@ func _ready() -> void:
 		await _lineup(screen, map, out, tag)
 		return
 	if a.size() > 5 and a[5] == "sets":
-		await _sets(screen, map, out, tag)
+		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
@@ -128,7 +128,7 @@ func _ground(p: Vector3) -> float:
 
 
 ## Найближча до центру клітинка поля, у якої поле й три сусіди праворуч, ліворуч і нижче.
-func _field_near_centre(map: MapData) -> Vector2i:
+func _field_near_centre(map: MapData, near_forest: bool = false) -> Vector2i:
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var best := c
 	var best_d: int = 1 << 30
@@ -138,6 +138,13 @@ func _field_near_centre(map: MapData) -> Vector2i:
 			for d: Vector2i in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(1, 1)]:
 				if map.tiles[(y + d.y) * map.width + x + d.x] != Terrain.Kind.FIELD:
 					ok = false
+			if ok and near_forest:
+				# Поле з лісом за 3-4 клітинки: край лісу в кадрі разом із юнітами.
+				ok = false
+				for fy in range(maxi(0, y - 4), mini(map.height, y + 5)):
+					for fx in range(maxi(0, x - 4), mini(map.width, x + 5)):
+						if map.tiles[fy * map.width + fx] == Terrain.Kind.FOREST and maxi(absi(fx - x), absi(fy - y)) >= 3:
+							ok = true
 			var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
 			if ok and dd < best_d:
 				best_d = dd
@@ -172,24 +179,31 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 
 ## Рядок на набір, стовпець на роль: так видно, що ролі читаються однаково в кожному наборі.
-func _sets(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_forest: bool = false, select: bool = false) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
-	var c := _field_near_centre(m)
+	var c := _field_near_centre(m, near_forest)
 	var roles: Array[int] = [8, 5, 6, 7]
 	m.spawns = []
 	for owner in 3:
 		for col in roles.size():
-			m.spawns.append({"type_id": roles[col], "owner": owner, "pos": c + Vector2i(col - 1, owner * 2 - 2), "facing": 0})
+			m.spawns.append({"type_id": roles[col], "owner": owner, "pos": c + Vector2i(col - 1, owner * 2 - 2), "facing": (col * 3 + owner * 2) % 8})
 	screen.setup(m, 3, 1)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	rig.center_on(c)
-	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
-	for f in SETTLE_FRAMES * 2:
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
+	if select:
+		# Виділений юніт гравця 1: контури зон лягають поверх плям-контактів.
+		screen._controller.tap_cell(c + Vector2i(1, -2))
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+	# Найближчий, середній (8) і найдальший зум: тінь юніта на сонячних картах міняється з відстанню.
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
 	print("UNIT sets at %s" % c)
 	get_tree().quit()

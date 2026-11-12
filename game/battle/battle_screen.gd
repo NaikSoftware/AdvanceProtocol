@@ -291,6 +291,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
 	_board_view.ring_map = map_data
+	_contacts.map = map_data
 	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
 	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
 	_board_view.season = look.season
