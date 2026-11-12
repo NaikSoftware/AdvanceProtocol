@@ -123,8 +123,7 @@ file and no `meta.json`). Commands, from `~/.cache/ap-scratch/units/research/too
 
 ## 4. Owner marking
 
-Units carry no team colour: every set uses the same paint, and the side
-is shown by the colour of the HP bar fill (#3a6ea5, #a54a3a, #5a8a4a, lightened for contrast on
+Units carry no team colour: the side is shown by the colour of the HP bar fill (#3a6ea5, #a54a3a, #5a8a4a, lightened for contrast on
 the bar's dark back). Identity at the far zoom comes from silhouette alone, so no panel, band or
 tape is modelled.
 
@@ -140,3 +139,8 @@ turret set forward over a flat engine deck, the tank destroyer has no turret and
 rear with the longest gun, the heavy is the largest. A set differs from the others in what does
 not carry the role: the turret's plan and bustle, the deck furniture, the skirts, the hull front.
 The stats are the same for every set until per-set rosters are designed.
+
+Each set has its own paint, one tone across the whole set: slot 0 keeps the olive with small
+brown-black blocks, slot 1 is a plain dark bluish green, slot 2 a plain muted sand. Paint marks
+the nation, not the player — the HP bar still marks the player. Every paint must stand apart from
+both grass and ploughed soil at the far zoom, by value or by hue.
