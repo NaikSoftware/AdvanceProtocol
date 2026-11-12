@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build one unit model end to end: prep -> bake -> paint -> assemble (exports and verifies
-# assets/units/<unit>.glb). Scratch goes to ~/.cache/ap-scratch/units/pipe/wt/<worktree>/<unit>
-# ($AP_UNIT_SCRATCH/<unit> if set), seeded from the old shared pipe/<unit> on first use.
+# assets/units/<unit>.glb). Scratch goes to ~/.cache/ap-scratch/units/pipe/wt/<worktree>-<hash>/<unit>
+# ($AP_UNIT_SCRATCH/<unit> if set; <worktree>-<path hash> keeps worktrees apart).
 # Generated sources (Tripo GLBs, ~45 MB each, kept out of the repo) live in
 # ~/.local/share/advance-protocol/unit-sources/<unit>.glb, as units.json `source` says.
 #   tools/blender/units/build.sh heavy_tank [--from bake|paint|assemble]

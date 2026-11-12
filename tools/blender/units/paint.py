@@ -104,11 +104,10 @@ black_c = black + (olive - black) * C.get("roof_black_lift", 0.3) * roof
 col = np.where((n3 > np.quantile(n3, 0.88))[..., None], black_c, col)
 col = col * (1.0 + (hash3(*np.floor(P / block).transpose(2, 0, 1), 9)[..., None] - 0.5) * 0.06)
 if not plain:
-    # Contrast gate (docs/art/unit-models-research.md §5): from above the tops are most of the
-    # tank, and an olive top sits at the grass's hue (b* +12 against +16..+22 on the sunny maps).
-    # Tops are sun-faded towards a neutral grey of the same value (`roof_fade`), lighter than
-    # before (no roof darkening) and less dusty; the sides keep the olive, and the blocks stay
-    # darker than the faded olive, so the pattern still reads.
+    # From above the tops are most of the tank, and an olive top sits at the grass's hue (b* +12
+    # against +16..+22 on the sunny maps). Tops are sun-faded towards a neutral grey of the same
+    # value (`roof_fade`) and carry less dust; the sides keep the olive, and the blocks stay darker
+    # than the faded olive, so the pattern still reads.
     fade = C.get("roof_fade", 1.0) * roof
     col = col * (1 - fade) + (col @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None] * fade
     C = {"roof_dark": -0.1, "roof_cool": (-0.08, 0.02, 0.28), "dust": 0.1, **C}
@@ -140,7 +139,7 @@ if plain and "src" in d:
 glass = smooth(0.035, 0.012, src_l) * (d["cov"] > 0.5) * (P[..., 2] > cfg.get("glass_above_m", 2.35)) * ~on_gun
 if cfg.get("no_glass_in_boxes"):
     # added boxes take the UV of the nearest source vertex, so their texels are arbitrary: a dark one
-    # would paint scribbles of "glass" on a plain wall. Off unless the unit asks (set 0 stays as it was).
+    # would paint scribbles of "glass" on a plain wall. Off unless the unit asks.
     for l0, l1, a0, a1, h0, h1 in list(cfg.get("add_boxes", [])) + [[l - r, l + r, a0, a1, h - r, h + r] for l, a0, a1, h, r in cfg.get("add_cyls", [])]:
         x0, x1 = sorted((-a0 * cfg["k"] * lib.TILE_M, -a1 * cfg["k"] * lib.TILE_M))
         y0, y1 = (lib.m_long(cfg, v) * lib.TILE_M for v in (l0, l1))

@@ -204,7 +204,7 @@
       "sides": 12
     }
   },
-  "heavy_tank_us": {
+  "set2_heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set2_heavy_tank.glb",
     "out": "set2/heavy_tank",
     "type_id": 8,
@@ -262,7 +262,7 @@
       "sides": 12
     }
   },
-  "medium_tank_us": {
+  "set2_medium_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set2_heavy_tank.glb",
     "out": "set2/medium_tank",
     "type_id": 5,
@@ -334,7 +334,7 @@
       "sides": 12
     }
   },
-  "tank_destroyer_us": {
+  "set2_tank_destroyer": {
     "source": "~/.local/share/advance-protocol/unit-sources/set2_tank_destroyer.glb",
     "out": "set2/tank_destroyer",
     "type_id": 6,
@@ -398,7 +398,7 @@
       "sides": 12
     }
   },
-  "light_tank_us": {
+  "set2_light_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set2_light_tank.glb",
     "out": "set2/light_tank",
     "type_id": 7,
@@ -470,7 +470,7 @@
       "sides": 12
     }
   },
-  "heavy_tank_ru": {
+  "set1_heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set1_heavy_tank.glb",
     "out": "set1/heavy_tank",
     "type_id": 8,
@@ -484,7 +484,7 @@
       [-0.51, -0.446, 0.21, 0.185]
     ],
     "no_glass_in_boxes": true,
-    "_add_boxes": "bustle flush with the roof; two flat ERA plates per turret cheek; the rear plate carried to the old drum position with two drums on it",
+    "_add_boxes": "bustle flush with the roof; two flat ERA plates per turret cheek; a rear plate with two drums on it",
     "add_boxes": [[ -0.31, -0.2, -0.16, 0.16, 0.18, 0.26],
       [-0.05, 0.05, 0.04, 0.105, 0.2, 0.255],
       [-0.05, 0.05, 0.11, 0.175, 0.2, 0.255],
@@ -550,7 +550,7 @@
       [-0.425, -0.12, -0.01, 0.209, 0.028]
     ]
   },
-  "medium_tank_ru": {
+  "set1_medium_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set1_medium_tank.glb",
     "out": "set1/medium_tank",
     "type_id": 5,
@@ -632,10 +632,9 @@
     },
     "add_cyls": [[-0.5, 0.01, 0.11, 0.22, 0.03],
       [-0.5, -0.11, -0.01, 0.22, 0.03]
-    ],
-    "barrel": 0.61
+    ]
   },
-  "tank_destroyer_ru": {
+  "set1_tank_destroyer": {
     "source": "~/.local/share/advance-protocol/unit-sources/set1_tank_destroyer.glb",
     "out": "set1/tank_destroyer",
     "type_id": 6,
@@ -708,7 +707,7 @@
       "dust": 0.25
     }
   },
-  "light_tank_ru": {
+  "set1_light_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set1_light_tank.glb",
     "out": "set1/light_tank",
     "type_id": 7,
