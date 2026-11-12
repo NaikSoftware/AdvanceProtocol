@@ -135,11 +135,14 @@ def src_edit():
             vuv[me.loops[li].vertex_index] = uvl[li].uv
     bm = bmesh.new(); bm.from_mesh(me)
     uvb = bm.loops.layers.uv.active
+    addl = bm.verts.layers.float.new("added")   # 1 on added cuboids: bake.py can give them neutral inputs
     new = []
     for l0, l1, a0, a1, h0, h1 in cfg["add_boxes"]:
         def P(l, a, h):
             return (l, a, h + zmin) if cfg["fwd"] == "x" else (-a, l, h + zmin)
         c = [bm.verts.new(P(l, a, h)) for l in (l0, l1) for a in (a0, a1) for h in (h0, h1)]
+        for v in c:
+            v[addl] = 1.0
         for q in ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)):
             f = bm.faces.new([c[i] for i in q]); new.append(f)
             for lp in f.loops:

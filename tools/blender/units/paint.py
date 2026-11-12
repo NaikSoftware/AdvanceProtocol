@@ -148,13 +148,16 @@ dust = np.clip(smooth(1.5, 0.3, h) * 0.8 + up * 0.35 * dust_n + up * (1 - ao) * 
 dust = dust * smooth(0.25, 0.65, dust_n + 0.15)
 dust_c = lin(152, 140, 116)
 dmix = C.get("dust", 0.42)              # from above the roof is most of the tank: heavy dust reads washed out
-col = col * (1 - dmix * dust[..., None]) + dust_c * dmix * dust[..., None]
+dust_body = olive if plain else dust_c      # low dust must not lighten a sand body
+col = col * (1 - dmix * dust[..., None]) + dust_body * dmix * dust[..., None]
 mud = smooth(0.8, 0.25, h) * smooth(0.5, 0.7, fbm(P, [(0.3, 0.6), (0.08, 0.4)], 81))
 col = col * (1 - 0.7 * mud[..., None]) + lin(74, 62, 48) * 0.7 * mud[..., None]
 if plain:
     # splashed mud: a brown-grey ramp, 0 at `mud_h` m above the ground to `mud_max` darker at the bottom of skirts and sides
-    ramp = np.clip(1 - h / C.get("mud_h", 0.6), 0, 1)
-    col = col * (1 - C.get("mud_max", 0.25) * ramp[..., None]) + lin(70, 62, 52) * (0.35 * C.get("mud_max", 0.25) * ramp)[..., None]
+    mf = C.get("mud_from", cfg["cut"]["below_skirt_h"] * cfg["k"] * lib.TILE_M)   # skirt hem, metres
+    ramp = np.clip(1 - (h - mf) / C.get("mud_h", 0.6), 0, 1)
+    mx = C.get("mud_max", 0.85)
+    col = col * (1 - mx * ramp[..., None]) + lin(92, 76, 56) * (mx * ramp)[..., None]
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 
 # ---- muzzle soot ----------------------------------------------------------------------------
@@ -168,7 +171,7 @@ if plain:
     # texels the occlusion map leaves open must not fall below a fraction of the base tone: the
     # baked point/cavity term turns scan noise on flat tops into dark flecks. Sight glass and the barrel are exempt.
     free = (ao > 0.85) & (glass < 0.5) & ~on_gun
-    col = np.where(free[..., None], np.maximum(col, olive * C.get("floor", 0.75)), col)
+    col = np.where(free[..., None], np.maximum(col, olive * C.get("floor", 0.75) * (1 - 0.6 * ramp)[..., None]), col)   # mud lowers the floor
     col = np.where(on_gun[..., None], col * C.get("gun_dark", 0.8), col)
 # Engine-deck louvres (units.json `louvres`, MODEL metres): rows of dark slots across the hull on
 # the up-facing deck, two grilles either side of a solid centre strip. Texture only: from above

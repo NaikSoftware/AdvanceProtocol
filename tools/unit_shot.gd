@@ -214,6 +214,7 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	screen.setup(map, 2, 1)
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var picks: Dictionary = {}
+	var relaxed: Dictionary = {}
 	var sides: Dictionary = {}
 	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for y in range(4, map.height - 4):
@@ -234,14 +235,37 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 				if not picks.has(sv):
 					picks[sv] = []
 				picks[sv].append(p)
-			# a field cell with forest on one side and field on the other: the canopy shades it from one of the four
+			# fallback when a surface has no uniform 3x3 anywhere: the cell's own surface, neighbours any field
+			var all_field: bool = true
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					if map.tiles[(y + dy) * map.width + x + dx] != Terrain.Kind.FIELD:
+						all_field = false
+			if all_field:
+				if not relaxed.has(sv):
+					relaxed[sv] = []
+				relaxed[sv].append(p)
+			# a field cell k = 1..3 cells from a forest in direction d (field in between and behind): k = 1 can sit under the
+			# crown, k = 2..3 on the cast shadow strip; the report keeps the places whose ground is darkened but open
 			for d in dirs:
-				var f1: Vector2i = p + d
-				var f0: Vector2i = p - d
-				if map.tiles[f1.y * map.width + f1.x] == Terrain.Kind.FOREST and map.tiles[f0.y * map.width + f0.x] == Terrain.Kind.FIELD:
-					if not sides.has(d) or (p - c).length_squared() < (sides[d] - c).length_squared():
-						sides[d] = p
+				for kk in range(2, 4):
+					var fk: Vector2i = p + d * kk
+					if fk.x < 0 or fk.y < 0 or fk.x >= map.width or fk.y >= map.height:
+						continue
+					var clear: bool = true
+					for j in range(0, kk):
+						var q2: Vector2i = p + d * j
+						if map.tiles[q2.y * map.width + q2.x] != Terrain.Kind.FIELD:
+							clear = false
+					var b0: Vector2i = p - d
+					if clear and map.tiles[fk.y * map.width + fk.x] == Terrain.Kind.FOREST and map.tiles[b0.y * map.width + b0.x] == Terrain.Kind.FIELD:
+						var key := Vector3i(d.x, d.y, kk)
+						if not sides.has(key) or (p - c).length_squared() < (sides[key] - c).length_squared():
+							sides[key] = p
 	var cells: Array = []
+	for sv in [0, 1]:
+		if not picks.has(sv) and relaxed.has(sv):
+			picks[sv] = relaxed[sv]
 	for sv in picks:
 		var list: Array = picks[sv]
 		list.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared())
@@ -256,8 +280,8 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		for i in chosen.size():
 			cells.append(["field%d%s" % [sv, "abc"[i]], chosen[i]])
 	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
-	for d in sides:
-		cells.append([names[d], sides[d]])
+	for key: Vector3i in sides:
+		cells.append(["%s%d" % [names[Vector2i(key.x, key.y)], key.z], sides[key]])
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
