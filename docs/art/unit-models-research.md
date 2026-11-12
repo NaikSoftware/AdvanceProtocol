@@ -144,3 +144,9 @@ Each set has its own paint, one tone across the whole set: slot 0 keeps the oliv
 brown-black blocks, slot 1 is a plain dark bluish green, slot 2 a plain muted sand. Paint marks
 the nation, not the player — the HP bar still marks the player. Every paint must stand apart from
 both grass and ploughed soil at the far zoom, by value or by hue.
+
+**Contrast gate for every vehicle model.** A unit must stand out on every map — Crossroads
+(sunny), River (overcast rain) and Ridge (early autumn) — on grass, on ploughed soil and against
+a forest edge. Measured at the farthest zoom on in-game frames: the median colour of the model's
+up-facing top differs from the ground right around it by ΔE (CIELAB) ≥ 15. A model that passes
+on one map and fails on another fails.
