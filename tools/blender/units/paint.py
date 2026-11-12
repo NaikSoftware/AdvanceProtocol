@@ -103,11 +103,13 @@ if plain:
     mot = fbm(P, [(1.6, 0.6), (0.5, 0.4)], 101) - 0.5
     col = olive * (1.0 + mot[..., None] * 2.0 * C.get("mottle", 0.05)) * np.ones_like(col)
 
-# Painted armour, not plastic: matte paint (`paint_rough`) whose sheen varies over metres —
-# chalky faded patches and fresher ones (`rough_var`) — so no face carries one even highlight.
-rough = np.full((N, N), C.get("paint_rough", 0.74), np.float32)
-rough = rough + C.get("rough_var", 0.06) * 2 * (fbm(P, [(2.5, 0.6), (0.8, 0.4)], 91) - 0.5)
+rough = np.full((N, N), C.get("rough", 0.78) if plain else 0.70, np.float32)
 metal = np.zeros((N, N), np.float32)
+# Painted armour, not plastic: matte paint (`paint_rough` on the camo scheme) whose sheen varies
+# over metres — chalky faded patches and fresher ones (`rough_var`) — so no face carries one even highlight.
+if not plain:
+    rough[:] = C.get("paint_rough", 0.74)
+rough = rough + C.get("rough_var", 0.06) * 2 * (fbm(P, [(2.5, 0.6), (0.8, 0.4)], 91) - 0.5)
 
 # Generated colour: keep only what it says is near-black on the roof items (sight glass). It
 # also paints whole parts dark (the gun), so the barrel and anything low are excluded.
