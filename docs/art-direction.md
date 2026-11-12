@@ -77,7 +77,7 @@ Techniques that buy atmosphere cheaply here:
 - **Bake** static terrain lighting. One directional light casts every real shadow, set per map in
   `game/battle/look/*.tres`:
   - **Sunny maps** (Crossroads, Ridge): a 2° sun disc, so a shadow's edge softens with distance
-    from its caster. Crossroads keeps full shadow opacity; Ridge's shadows are light (opacity 0.3),
+    from its caster. Crossroads keeps full shadow opacity; Ridge's shadows are light (opacity 0.3); its sun stands at yaw 225, so a unit's shadow falls beside the hull, not behind it where the body hides it from the camera,
     so the ground in shadow stays readable. Units and the board's buildings cast through the light;
     ruins, boulders and blocks lay a contact patch stretched along the sun, and fences, poles and
     other small props cast nothing. Units also get a contact shadow (0.6) under the hull, or they

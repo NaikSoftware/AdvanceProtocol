@@ -186,10 +186,12 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	rig.center_on(c)
-	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
-	for f in SETTLE_FRAMES * 2:
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
+	# Найближчий, середній (8) і найдальший зум: тінь юніта на сонячних картах міняється з відстанню.
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
 	print("UNIT sets at %s" % c)
 	get_tree().quit()
