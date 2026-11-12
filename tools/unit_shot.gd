@@ -9,6 +9,9 @@ extends Node
 ## (facing 0 — уздовж осі, 1 — по діагоналі) і знімає лише два зуми: чи не залазить ствол у сусіда.
 ## Шостий аргумент lineup ставить чотири танки справжніми юнітами трьох гравців (смуги HP у кольорі
 ## власника) і знімає один кадр на найближчому зумі; type_id тоді ігнорується.
+## Шостий аргумент contrast=<набір> ставить модель типу type_id цього набору по черзі на лузі, на ріллі й
+## край лісу найдальшого зуму й для кожного місця знімає три кадри: _A як у грі, _C — модель суцільним
+## пурпуровим (маска), _B — без моделі (ґрунт навколо); різницю кольору рахує tools/unit_contrast.py.
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
 ## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); кадри на найближчому й найдальшому зумі, type_id ігнорується.
 
@@ -39,6 +42,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5].begins_with("contrast="):
+		await _contrast(screen, map, out, tag, type_id, int(a[5].substr(9)))
+		return
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
 	if a.size() > 5 and a[5].begins_with("pair="):
@@ -64,10 +70,12 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 	# Перша модель дивиться на північ, друга — на південний схід, коробка-заступник — ліворуч.
-	_place(UnitSilhouettes.build_merged(type_id), cell, 0)
-	_place(UnitSilhouettes.build_merged(type_id), cell + Vector2i(1, 0), 3)
-	_place(UnitSilhouettes.build(type_id), cell + Vector2i(-1, 0), 0)
-	var mover: Node3D = UnitSilhouettes.build_merged(type_id)
+	# Четвертий аргумент (необов'язковий) — номер набору.
+	var set_id: int = int(a[4]) if a.size() > 4 and a[4].is_valid_int() else 0
+	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell, 0)
+	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell + Vector2i(1, 0), 3)
+	_place(UnitSilhouettes.build(type_id, set_id), cell + Vector2i(-1, 0), 0)
+	var mover: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
 	_place(mover, cell + Vector2i(0, 2), 0)
 	print("UNIT placed at %s" % cell)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
@@ -197,4 +205,66 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MAX_ZOOM)])
 	print("UNIT sets at %s" % c)
+	get_tree().quit()
+
+
+## Місця для виміру контрасту: тайл, де стоїть модель, за видом місця.
+func _contrast_cells(map: MapData) -> Dictionary:
+	var out: Dictionary = {}
+	for y in range(2, map.height - 3):
+		for x in range(2, map.width - 2):
+			var i: int = y * map.width + x
+			var k: int = map.tiles[i]
+			var surf: int = map.surface[i] if i < map.surface.size() else 0
+			if k == Terrain.Kind.FIELD:
+				var all_field: bool = true
+				for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1)]:
+					if map.tiles[(y + d.y) * map.width + x + d.x] != Terrain.Kind.FIELD:
+						all_field = false
+				if all_field:
+					var name: String = "plough" if surf == MapData.FieldSurface.PLOUGHED else "meadow"
+					if not out.has(name):
+						out[name] = Vector2i(x, y)
+			if k == Terrain.Kind.FIELD and map.tiles[i + 1] == Terrain.Kind.FIELD and map.tiles[i + 2] == Terrain.Kind.FOREST and map.tiles[i + 3] == Terrain.Kind.FOREST and not out.has("forest_edge"):
+				out["forest_edge"] = Vector2i(x, y)
+	return out
+
+
+func _contrast(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int) -> void:
+	screen.setup(map, 2, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	var cells: Dictionary = _contrast_cells(map)
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	for kind: String in cells:
+		var cell: Vector2i = cells[kind]
+		var u: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
+		_place(u, cell, 0)
+		rig.center_on(cell)
+		rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var fa: Image = get_viewport().get_texture().get_image()
+		var hull := u.get_node("Hull") as MeshInstance3D
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(1, 0, 1)
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		var keep: Material = hull.material_override
+		hull.material_override = mat
+		for f in 4:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var fc: Image = get_viewport().get_texture().get_image()
+		u.visible = false
+		for f in 4:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var fb: Image = get_viewport().get_texture().get_image()
+		fa.save_png("%s/%s_%s_A.png" % [out, tag, kind])
+		fc.save_png("%s/%s_%s_C.png" % [out, tag, kind])
+		fb.save_png("%s/%s_%s_B.png" % [out, tag, kind])
+		hull.material_override = keep
+		u.queue_free()
+		print("UNIT contrast %s at %s" % [kind, cell])
 	get_tree().quit()

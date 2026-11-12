@@ -39,7 +39,7 @@ const SET_COUNT: int = 3
 const _SET_SPECS: Dictionary = {
 	1: {
 		# важкий танк набору 1: корпус і висота осі ствола виміряні з моделі, дуло й колесо — як у _SPECS
-		8: {"hull": Vector3(0.4725, 0.187, 0.8738), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},
+		8: {"hull": Vector3(0.4793, 0.187, 0.8877), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},
 	},
 	2: {},
 }
