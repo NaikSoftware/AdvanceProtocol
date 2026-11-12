@@ -131,11 +131,18 @@ wear_n = fbm(P, [(0.25, 0.6), (0.08, 0.4)], 51)
 chip = edge * smooth(0.45, 0.65, wear_n)
 col = col * (1 - 0.55 * cav[..., None])
 col = col * (1 - 0.45 * chip[..., None]) + (col * 1.7 + lin(70, 68, 62) * 0.3) * 0.45 * chip[..., None]
-bare = chip * smooth(0.62, 0.75, wear_n)
+# Wear sits on edge lines. On small fragmented islands the baked edge mask covers whole patches;
+# bare steel and polish there would read as bright blobs, so they keep to texels whose 15 cm
+# neighbourhood is mostly not edge.
+k = 7
+ii = np.pad((edge > 0.3).astype(np.float32), k + 1, mode="edge").cumsum(0).cumsum(1)
+dens = (ii[2 * k + 1:, 2 * k + 1:] - ii[:-2 * k - 1, 2 * k + 1:] - ii[2 * k + 1:, :-2 * k - 1] + ii[:-2 * k - 1, :-2 * k - 1]) / (2 * k + 1) ** 2
+line = smooth(0.5, 0.3, dens[:N, :N])
+bare = chip * smooth(0.62, 0.75, wear_n) * line
 col = col * (1 - bare[..., None]) + lin(*C.get("bare_c", (100, 98, 94))) * bare[..., None]
 # Rubbed edges: a band ~5 cm either side of a convex edge (the 1 cm chips vanish in the mips at
 # 7 cm/px) wears to a satin sheen, and only where worn through is it bare steel.
-rub = edge
+rub = edge * line
 for _ in range(4):
     rub = (rub + np.roll(rub, 1, 1) + np.roll(rub, -1, 1) + np.roll(rub, 1, 0) + np.roll(rub, -1, 0)) / 5
 rub = np.clip(rub * 3, 0, 1) * smooth(0.4, 0.6, wear_n)
@@ -160,7 +167,9 @@ mud = smooth(0.8, 0.25, h) * smooth(0.5, 0.7, fbm(P, [(0.3, 0.6), (0.08, 0.4)], 
 col = col * (1 - 0.7 * mud[..., None]) + lin(74, 62, 48) * 0.7 * mud[..., None]
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 # Oil and fuel on the rear deck: darker, half-gloss patches, the one smooth area on a matte tank.
-oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * smooth(0.58, 0.7, fbm(P, [(0.6, 0.6), (0.2, 0.4)], 95))
+# Deck level only (hull height): a casemate roof at the rear is not an engine deck.
+oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < cfg["spec"]["hull"][1] * lib.TILE_M + 0.15) \
+    * smooth(0.58, 0.7, fbm(P, [(0.6, 0.6), (0.2, 0.4)], 95))
 col = col * (1 - C.get("oil_dark", 0.15) * oil[..., None])
 rough = rough - C.get("oil_gloss", 0.15) * oil
 

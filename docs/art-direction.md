@@ -121,8 +121,9 @@ falls back to the box placeholder, so a model may land one type at a time.
   The same texture carries baked occlusion in R (white if none): the unit shader scales the
   specular by it, so seams and recesses do not catch the sky.
 - **Painted metal, not plastic:** matte paint (roughness ~0.74 with ±0.06 over metres), a satin
-  band on rubbed convex edges and half-gloss oil patches on the rear deck; metallic 1 only where
-  paint is worn through and on track pins and sprocket teeth. Chips under ~7 cm vanish in the
+  band on rubbed convex edges and half-gloss oil patches at deck level at the rear; bare steel
+  (metallic 1) only where paint is worn through on edge lines, never on whole patches, and
+  polished steel (0.8) on track pins and sprocket teeth. Chips under ~7 cm vanish in the
   mips even at the closest zoom (the atlas is ~1 cm per texel), so wear is sized in bands, not
   specks. No gloss on large flat faces: under River's back light it reads as a tin can.
   `tools/blender/units/paint.py` knobs: `paint_rough`, `rough_var`, `edge_polish`, `bare_rough`,
