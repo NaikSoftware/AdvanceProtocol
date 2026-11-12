@@ -6,6 +6,14 @@ Writes <work>/albedo.png (sRGB), normal.png and orm.png (R occlusion, G roughnes
 Everything on the body is a function of the baked object-space position, so camouflage blocks
 keep their real size across UV islands. Lengths here are metres (model units x 8).
 The tread strip, the wheel and sprocket cells are authored, not baked (lib.py layout).
+
+Paint. No `paint` key in units.json: the digital camouflage below (national set 0). With
+`"paint": {"scheme": "plain", "base": [r, g, b]}` the body is one tone (sRGB 0..255), still run through the
+same occlusion, edge wear, streaks, dust, mud and roof darkening, plus a faint low-frequency mottle
+(`mottle`, default 0.05) so it does not read as flat plastic. The same dict may carry the camo knobs
+(`roof_dark`, `roof_cool`, `dust`, `wheel_mud`) to tune one palette. The generated texture never
+colours the body; its luminance only finds sight glass and is normalised per model (plain scheme), so a
+pale or dark Tripo texture cannot shift what counts as glass.
 """
 import sys, os
 import numpy as np
@@ -67,7 +75,9 @@ pt = d["point"]
 # Four Korean colours, desaturated. Pixel blocks of `block` m; patches from noise at block
 # centres, so every edge is a block edge. Three independent layers so colours touch in any order
 # instead of nesting in rings.
-C = cfg.get("camo", {})
+PN = cfg.get("paint")
+plain = bool(PN) and PN.get("scheme") == "plain"
+C = {**cfg.get("camo", {}), **(PN or {})}
 block = C.get("block_m", 0.16)
 # khaki stays a mid-tone: brighter blocks plus dust read as pale glyphs on the hull sides
 olive, khaki = lin(86, 90, 64), lin(*C.get("khaki", (124, 117, 90)))
@@ -84,6 +94,11 @@ roof = smooth(0.35, 0.8, nz)[..., None]
 black_c = black + (olive - black) * C.get("roof_black_lift", 0.3) * roof
 col = np.where((n3 > np.quantile(n3, 0.88))[..., None], black_c, col)
 col = col * (1.0 + (hash3(*np.floor(P / block).transpose(2, 0, 1), 9)[..., None] - 0.5) * 0.06)
+if plain:
+    # one tone: sand etc. Blocks are gone, a soft mottle (metres-scale noise, no block edges) stays
+    olive = lin(*PN["base"])
+    mot = fbm(P, [(1.6, 0.6), (0.5, 0.4)], 101) - 0.5
+    col = olive * (1.0 + mot[..., None] * 2.0 * C.get("mottle", 0.05)) * np.ones_like(col)
 
 rough = np.full((N, N), 0.70, np.float32)
 metal = np.zeros((N, N), np.float32)
@@ -95,6 +110,10 @@ az = lib.m_len(cfg, cfg["gun"]["axis_h"]) * lib.TILE_M
 rad = np.hypot(P[..., 0], P[..., 2] - az)
 on_gun = (rad < 0.4) & (P[..., 1] > lib.m_long(cfg, cfg["gun"]["start_long"]) * lib.TILE_M)
 src_l = (d["src"] @ np.array([0.2126, 0.7152, 0.0722], np.float32)) if "src" in d else np.ones((N, N))
+if plain and "src" in d:
+    # per-model: relative to the body's own median, so the threshold means "a third of the typical
+    # texture value" for a pale or a dark source alike (0.035 / 0.012 of an olive texture of ~0.17)
+    src_l = src_l / max(float(np.median(src_l[d["cov"] > 0.5])), 1e-4) * 0.17
 glass = smooth(0.035, 0.012, src_l) * (d["cov"] > 0.5) * (P[..., 2] > cfg.get("glass_above_m", 2.35)) * ~on_gun
 col = col * (1 - glass[..., None]) + lin(20, 22, 24) * glass[..., None]
 rough = rough * (1 - glass) + 0.25 * glass
