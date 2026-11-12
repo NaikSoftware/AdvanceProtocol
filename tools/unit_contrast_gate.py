@@ -21,7 +21,7 @@ place; a place where the model cannot be found (under 30 body pixels); a map wit
 
 Places (per map): meadow field0a..d, ploughed field1a..d, and forest sides forest{E,W,N,S}{2,3}: a field cell 2 or 3 cells from
 a forest in that direction. A place is ruled out of the gate, and printed with its reason, when
-  * the model is more than a quarter hidden (a crown over it: below 0.75 of the median model size), or
+  * the model is more than a quarter hidden (a crown over it: below 0.75 of the median model size on that map), or
   * the ground ring is busy (more than 8 % of it 10 L* off its median: roofs, props) or the model body is 2 L* darker than the
     map's typical body (a pole or wire over it).
 Those are the only exclusions. The ploughed places must read at least 1.5 b* away from the meadow of the same map or the run
@@ -150,8 +150,9 @@ def report(out, label, maps):
     for mp in maps:
         if not any(m == mp for _, m, _, _ in results):
             fails.append("%s: no places measured" % mp)
-    sizes = [r["px"] for *_, r in results if r]
-    typical = float(np.median(sizes)) if sizes else 0.0
+    # the mask size depends on the map's light (a low-contrast model gives fewer mask pixels in rain), so "hidden" is
+    # judged against the median size on the same map
+    typical = {mp: float(np.median([x["px"] for _, m2, _, x in results if x and m2 == mp] or [0])) for mp in maps}
     usable = {}
     for name, mp, place, r in results:
         if r is None:
@@ -160,7 +161,7 @@ def report(out, label, maps):
             continue
         same_map = [x["body"][0] for _, m2, _, x in results if x and m2 == mp]
         why = ""
-        if r["px"] < 0.75 * typical:
+        if r["px"] < 0.75 * typical.get(mp, 0.0):
             why = "ruled out: model partly hidden (crown over it)"
         elif r["busy"] > 0.08:
             why = "ruled out: busy ground (prop or roof in the ring)"
