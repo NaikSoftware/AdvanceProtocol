@@ -10,14 +10,14 @@ extends Node
 ## Шостий аргумент lineup ставить чотири танки справжніми юнітами трьох гравців (смуги HP у кольорі
 ## власника) і знімає один кадр на найближчому зумі; type_id тоді ігнорується.
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
-## Шостий аргумент gate [set=N] (запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
+## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m) і без (_e): різниця кадрів дає маску моделі для ΔE.
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
 ## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); один кадр, type_id ігнорується.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 60
-## Скільки триває проїзд на один тайл і коли знімати два кадри руху.
+## Скільки триває проїзд на один тайл і коли знімати кадри руху (чотири, у справжній швидкості).
 const MOVE_SEC: float = 1.2
 const MOVE_SHOTS: Array[float] = [0.2, 0.5, 0.8, 1.1]
 
@@ -89,7 +89,8 @@ func _ready() -> void:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		shots.append(["%s/%s_z%d.png" % [out, tag, int(z)], get_viewport().get_texture().get_image()])
-	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	# `move8` у аргументах: проїзд знімається на зумі 8, а не на найближчому
+	rig.zoom_by((8.0 if a.has("move8") else IsoCameraRig.MIN_ZOOM) / rig.zoom_level)
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	# Проїзд: вузол рухається на тайл до -Z, `travel` — пройдений шлях, як у UnitView.
@@ -217,8 +218,9 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_fo
 	get_tree().quit()
 
 
-## Місця для виміру контрасту: по одній клітинці кожного виду поверхні поля (усі дев'ять сусідів того
-## самого виду) і одна клітинка поля біля лісу. Модель дивиться на північ; камера однакова в обох кадрах.
+## Місця для виміру контрасту (їх читає tools/unit_contrast_gate.py): до чотирьох клітинок на вид поверхні поля
+## (дев'ять сусідів того самого виду; назви field0a.. — луг, field1a.. — рілля) і клітинки поля за два-три кроки від лісу
+## з кожного боку (forestE2, forestN3 ...). Модель дивиться на північ; камера однакова в обох кадрах, хмарні тіні вимкнені.
 func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int) -> void:
 	screen.setup(map, 2, 1)
 	var c := Vector2i(map.width / 2, map.height / 2)
@@ -254,8 +256,8 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 				if not relaxed.has(sv):
 					relaxed[sv] = []
 				relaxed[sv].append(p)
-			# a field cell k = 1..3 cells from a forest in direction d (field in between and behind): k = 1 can sit under the
-			# crown, k = 2..3 on the cast shadow strip; the report keeps the places whose ground is darkened but open
+			# a field cell k = 2..3 cells from a forest in direction d (field in between and behind): k = 1 would sit under
+			# the crown; the report decides which of these places really have darker ground
 			for d in dirs:
 				for kk in range(2, 4):
 					var fk: Vector2i = p + d * kk
@@ -282,12 +284,12 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		for cand: Vector2i in list:
 			var far: bool = true
 			for o in chosen:
-				if (o - cand).length_squared() < 36:
+				if (o - cand).length_squared() < 25:
 					far = false
-			if far and chosen.size() < 3:
+			if far and chosen.size() < 4:
 				chosen.append(cand)
 		for i in chosen.size():
-			cells.append(["field%d%s" % [sv, "abc"[i]], chosen[i]])
+			cells.append(["field%d%s" % [sv, "abcd"[i]], chosen[i]])
 	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
 	for key: Vector3i in sides:
 		cells.append(["%s%d" % [names[Vector2i(key.x, key.y)], key.z], sides[key]])
