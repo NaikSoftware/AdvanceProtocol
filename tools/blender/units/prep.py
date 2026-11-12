@@ -43,6 +43,11 @@ def verts(m):
 
 co = verts(me)
 zmin = co[:, 2].min()
+if cfg.get("scale_lat"):
+    # a source narrower or wider than its role box: stretch the lateral axis first, so every
+    # other lateral number in the config is in scaled source units
+    co[:, 1 if cfg["fwd"] == "x" else 0] *= cfg["scale_lat"]
+    me.vertices.foreach_set("co", co.ravel()); me.update()
 t = cfg.get("turret")
 if t:
     # Source frame: long, lat, h above the lowest vertex. Turret: everything above its ring
