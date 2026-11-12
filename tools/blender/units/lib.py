@@ -10,14 +10,15 @@ Atlas (1024², one material). PNG row 0 is the top, which is Godot v = 0 and Ble
   column  u >= COL_U, below the strip: road-wheel face, sprocket face
   the rest: baked body islands
 """
-import json, os, re, shutil
+import hashlib, json, os, re, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 # Stage outputs live per worktree (or under $AP_UNIT_SCRATCH): one shared directory let parallel
 # worktrees building the same unit overwrite each other's paint between paint and assemble.
 SHARED = os.path.expanduser("~/.cache/ap-scratch/units/pipe")
-SCRATCH = os.environ.get("AP_UNIT_SCRATCH") or os.path.join(SHARED, "wt", os.path.basename(REPO))
+SCRATCH = os.environ.get("AP_UNIT_SCRATCH") or os.path.join(
+    SHARED, "wt", "%s-%s" % (os.path.basename(REPO), hashlib.sha1(REPO.encode()).hexdigest()[:8]))
 
 TILE_M = 8.0
 ATLAS = 1024
@@ -29,15 +30,19 @@ CELL = 128                # px per gear cell
 CELLS = {"wheel": (64, 128), "sprocket": (192, 128)}
 
 
-def load(name):
+def load(name, seed=True):
     with open(os.path.join(HERE, "units.json")) as f:
         cfg = json.load(f)[name]
     cfg["name"] = name
     cfg.setdefault("out", name)  # path under assets/units/ without .glb; sets write set2/<slug>
     cfg["source"] = os.path.expanduser(cfg["source"])
     cfg["spec"] = spec(cfg["type_id"])
-    if "barrel" in cfg:   # a set whose gun is shorter or longer than the role's _SPECS muzzle
-        cfg["spec"]["barrel"] = cfg["barrel"]
+    row = set_row(cfg)
+    if row:
+        # the model is still fitted into the role's box (hull x, z); the set's own row gives the gun length, the axis
+        # height (hull y) and the road-wheel radius the game reads, so each number lives in one place
+        cfg["spec"] = {"hull": [cfg["spec"]["hull"][0], row["hull"][1], cfg["spec"]["hull"][2]],
+                       "barrel": row["barrel"], "wheel": row["wheel"]}
     lo, hi = cfg["hull_long"]
     sx, sz = cfg["spec"]["hull"][0], cfg["spec"]["hull"][2]
     # Uniform fit: the tighter of hull width and hull length governs.
@@ -60,8 +65,13 @@ def load(name):
         g["profile"] = [[L + t["dlong"], r] for L, r in g["profile"]]
     cfg["work"] = os.path.join(SCRATCH, name)
     old = os.path.join(SHARED, name)
-    if not os.path.isdir(cfg["work"]) and os.path.isfile(os.path.join(old, "maps.npz")):
-        shutil.copytree(old, cfg["work"])   # a fresh worktree starts from the old shared bake, not from prep
+    if seed and not os.path.isdir(cfg["work"]) and os.path.isfile(os.path.join(old, "maps.npz")):
+        # a fresh worktree starts from the old shared bake, not from prep; copied beside the target and renamed,
+        # so a stopped copy never leaves a half-seeded directory behind
+        tmp = "%s.tmp%d" % (cfg["work"], os.getpid())
+        os.makedirs(os.path.dirname(cfg["work"]), exist_ok=True)
+        shutil.copytree(old, tmp)
+        os.rename(tmp, cfg["work"])
     os.makedirs(cfg["work"], exist_ok=True)
     return cfg
 
