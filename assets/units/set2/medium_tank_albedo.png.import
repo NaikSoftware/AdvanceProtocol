@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/medium_tank_albedo.png-c026b641295c0ed1e7bc77
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -18,7 +18,7 @@ dest_files=["res://.godot/imported/tank_destroyer_albedo.png-292ef5b5c5d3217b979
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
