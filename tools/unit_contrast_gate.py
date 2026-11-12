@@ -12,7 +12,7 @@ One command, any set and type (set = national set 0/1/2, type = unit type id: 5 
 
 Needs $GODOT (default ~/.local/bin/godot) and a window; every Godot launch goes through tools/godot_run.sh. Frames land in a
 fresh directory per run (--out DIR, default ~/.cache/ap-scratch/units/gate/<timestamp>/set<N>_t<ID>/; an existing non-empty
---out is refused unless --analyse-only), a pair per place: <map>_<place>_m.png (with the model) and _e.png (without). The
+--out is refused unless --analyse-only), a triple per place: <map>_<place>_m.png (with the model), _e.png (without) and _k.png (the model flat magenta, the footprint). The
 Godot side is `unit_shot.tscn ... gate set=N` (tools/unit_shot.gd `_gate`): it places the model on cells picked from the map
 data, SWITCHES OFF the cloud shadows (global cloud_shadow_strength 0; they are not paused, so numbers are those of a cloud-free
 map), zooms to the farthest zoom and shoots both frames. The run fails on: a set with no model file or no _SET_SPECS row; a
@@ -32,8 +32,8 @@ Also writes <out>/sheet.png, a contact sheet of every place for a look by eye.
 Measures (8-bit sRGB frames -> CIELAB D65), per place:
   ground = median of the ring 8..18 px (Manhattan distance, diamond dilation) outside the model plus its cast shadow, in the
            empty frame;
-  body   = median of the model's pixels with the cast shadow removed (pixels darker than the empty frame with the same
-           chromaticity are shadow); top = median of the brighter half of the body (a stand-in for the up-facing top, as
+  body   = median of the model's pixels inside its footprint (the flat-magenta frame, so the cast shadow and the model's own
+           colour play no part); top = median of the brighter half of the body (a stand-in for the up-facing top, as
            the frames carry no normal buffer).
 Exit code 1 on any failure, 2 on a bad request.
 """
@@ -70,14 +70,18 @@ def measure(path_m):
     """None when the model is not in the frame (under MIN_BODY_PX body pixels)."""
     m = np.asarray(Image.open(path_m).convert("RGB")).astype(float)
     e = np.asarray(Image.open(path_m[:-6] + "_e.png").convert("RGB")).astype(float)
+    k = np.asarray(Image.open(path_m[:-6] + "_k.png").convert("RGB")).astype(float)
     h, w = m.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w]
     # the model sits at the screen centre; the window also keeps rain and clouds elsewhere out of the mask
-    diff = (np.abs(m - e).sum(-1) > 40) & (np.abs(xx - w / 2) < 60) & (np.abs(yy - h / 2) < 50)
+    window = (np.abs(xx - w / 2) < 60) & (np.abs(yy - h / 2) < 50)
+    # the footprint is the model drawn flat magenta (frame _k): it does not depend on the model's own colour, which
+    # the with/without difference does (a low-contrast model would lose mask pixels)
+    body = (np.abs(k - np.array([255.0, 0.0, 255.0])).sum(-1) < 90) & window
     lm, le = m @ LUMA + 1e-3, e @ LUMA + 1e-3
     chroma = np.abs(m / lm[..., None] - e / le[..., None]).sum(-1)
-    shadow = diff & (lm < le * 0.97) & (chroma < 0.10)
-    body = diff & ~shadow
+    shadow = window & ~body & (np.abs(m - e).sum(-1) > 40) & (lm < le * 0.97) & (chroma < 0.10)
+    diff = body | shadow
     if body.sum() < MIN_BODY_PX:
         return None
     px = m[body]
@@ -133,7 +137,7 @@ def shoot(set_id, type_id, maps, out):
         if not announced:
             fails.append("%s: the run found no place to shoot" % mp)
         for place in announced:
-            for suffix in ("m", "e"):
+            for suffix in ("m", "e", "k"):
                 f = os.path.join(out, "%s_%s_%s.png" % (mp, place, suffix))
                 if not os.path.exists(f) or os.path.getmtime(f) < t0 - 1:
                     fails.append("%s %s: frame %s_%s.png missing or stale" % (mp, place, place, suffix))

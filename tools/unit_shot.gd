@@ -11,7 +11,7 @@ extends Node
 ## власника) і знімає один кадр на найближчому зумі; type_id тоді ігнорується.
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
-## лісу, кожне місце двома кадрами — з моделлю (_m) і без (_e): різниця кадрів дає маску моделі для ΔE.
+## лісу, кожне місце двома кадрами — з моделлю (_m), без (_e) і з моделлю суцільним пурпуром (_k, маска контуру) для ΔE.
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
 ## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); кадри на найближчому й найдальшому зумі, type_id ігнорується.
 
@@ -274,8 +274,14 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 							sides[key] = p
 	var cells: Array = []
 	for sv in [0, 1]:
-		if not picks.has(sv) and relaxed.has(sv):
-			picks[sv] = relaxed[sv]
+		# a surface with fewer than three uniform 3x3 cells (Crossroads meadow) is topped up with cells of that
+		# surface whose neighbours are any field, so one ruled-out place cannot leave the map without a sample
+		if relaxed.has(sv) and (not picks.has(sv) or picks[sv].size() < 3):
+			var merged: Array = picks[sv].duplicate() if picks.has(sv) else []
+			for q in relaxed[sv]:
+				if not merged.has(q):
+					merged.append(q)
+			picks[sv] = merged
 	for sv in picks:
 		var list: Array = picks[sv]
 		list.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared())
@@ -310,6 +316,17 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		var with_m: Image = get_viewport().get_texture().get_image()
+		# Третій кадр: та сама модель суцільним пурпуром без освітлення. Це маска контуру, яка не залежить від кольору
+		# моделі (контраст зображення зі «з моделлю / без» губить пікселі в низькоконтрастної моделі).
+		var flat := StandardMaterial3D.new()
+		flat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		flat.albedo_color = Color(1.0, 0.0, 1.0)
+		for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
+			mi.material_override = flat
+		for f in 4:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var mask: Image = get_viewport().get_texture().get_image()
 		m.queue_free()
 		for f in 10:
 			await get_tree().process_frame
@@ -317,6 +334,7 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		var empty: Image = get_viewport().get_texture().get_image()
 		with_m.save_png("%s/%s_%s_m.png" % [out, tag, cl[0]])
 		empty.save_png("%s/%s_%s_e.png" % [out, tag, cl[0]])
+		mask.save_png("%s/%s_%s_k.png" % [out, tag, cl[0]])
 		print("UNIT gate %s cell %s" % [cl[0], cell])
 	get_tree().quit()
 
