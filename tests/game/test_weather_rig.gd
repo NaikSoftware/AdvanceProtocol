@@ -145,7 +145,7 @@ func test_sunny_maps_give_units_a_contact_shadow() -> void:
 	assert_eq(river.unit_contact_shadow, 0.0)
 	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres"]:
 		var look: BattleLook = BattleLook.for_map_path(path)
-		assert_almost_eq(look.unit_contact_shadow, 0.9 if path.ends_with("ridge.tres") else 0.6, 1e-5, path)
+		assert_almost_eq(look.unit_contact_shadow, 0.78 if path.ends_with("ridge.tres") else 0.6, 1e-5, path)
 		# Перехрестя — сильне сонце пізнього літа: чітка темна тінь; Хребет лишається м'яким.
 		assert_almost_eq(look.shadow_opacity, 1.0 if path.ends_with("crossroads.tres") else 0.3, 1e-5, path)
 		if path.ends_with("ridge.tres"):

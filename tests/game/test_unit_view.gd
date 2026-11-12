@@ -25,6 +25,7 @@ func after_each() -> void:
 	# Статичне поле на весь процес: тест, що впав посередині, не сміє лишити рельєф решті набору.
 	TerrainHeight.active = null
 	WeatherRig.unit_contact = 0.0
+	WeatherRig.sun_ground = Vector2.ZERO
 	UnitSilhouettes.reset_models()
 
 
@@ -78,6 +79,17 @@ func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 
 
 ## Пляма реєструється вже після повороту: перша синхронізація бачить facing юніта.
+func test_contact_shadow_shifts_along_the_sun_ground_direction() -> void:
+	WeatherRig.unit_contact = 0.6
+	WeatherRig.sun_ground = Vector2(1.0, 0.0)
+	var contacts := _with_contacts()
+	view.bind(_unit(5))
+	var hull: Vector3 = UnitSilhouettes.spec(5).hull
+	var xf: Transform3D = contacts.transform_of(0)
+	assert_almost_eq(xf.origin.x - view.position.x, UnitView.CONTACT_SUN_SHIFT * maxf(hull.x, hull.z), 0.0001)
+	assert_almost_eq(xf.origin.z, view.position.z, 0.0001)
+
+
 func test_contact_shadow_starts_in_the_units_facing() -> void:
 	WeatherRig.unit_contact = 0.6
 	var contacts := _with_contacts()

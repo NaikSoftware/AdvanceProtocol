@@ -62,6 +62,8 @@ var _zoom: float = IsoCameraRig.MAX_ZOOM
 static var _drops_cache: Dictionary = {}
 ## Сила тіні-контакту з останнього apply(): `UnitView` не будує плями, коли її нема.
 static var unit_contact: float = 0.0
+## Напрям, куди сонце кладе тінь на землі (одиничний XZ): тінь-контакт юніта зсувається туди, як пляма props.
+static var sun_ground: Vector2 = Vector2.ZERO
 
 
 func _init() -> void:
@@ -136,6 +138,7 @@ func apply(look: BattleLook) -> void:
 	_set_global(&"water_wind", look.water_wind)
 	_set_global(&"unit_contact_shadow", look.unit_contact_shadow)
 	unit_contact = look.unit_contact_shadow
+	sun_ground = Vector2(-sun.basis.z.x, -sun.basis.z.z).normalized()
 	# Світло падає вздовж -Z сонця, тож напрям НА сонце — його +Z.
 	_set_global(&"sun_dir", sun.basis.z)
 	_set_global(&"haze_color", _rgb(look.haze_color))

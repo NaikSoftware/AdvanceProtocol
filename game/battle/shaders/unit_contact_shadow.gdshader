@@ -12,8 +12,13 @@ uniform float height_samples = 4.0;
 uniform float height_origin = -0.5;
 // Над ґрунтом, щоб не мерехтіти з ним в одній глибині.
 const float LIFT = 0.015;
+// Частка сили плями на асфальті.
+const float ROAD_K = 0.5;
+
+varying float road;
 
 void vertex() {
+	road = INSTANCE_CUSTOM.r;
 	// Квад рівний, а пагорб під ним — ні: вершина, що пішла б у ґрунт, лягає на нього. Над ґрунтом
 	// (настил мосту, нахилений корпус над западиною) лишається площина юніта.
 	if (use_height) {
@@ -27,5 +32,5 @@ void fragment() {
 	// Еліпс по сліду корпусу: найтемніше під серединою, до краю квада гасне до нуля.
 	float r = length((UV - 0.5) * 2.0);
 	ALBEDO = vec3(0.0);
-	ALPHA = clamp(unit_contact_shadow, 0.0, 1.0) * (1.0 - smoothstep(0.3, 1.0, r));
+	ALPHA = clamp(unit_contact_shadow, 0.0, 1.0) * mix(1.0, ROAD_K, road) * (1.0 - smoothstep(0.3, 1.0, r));
 }

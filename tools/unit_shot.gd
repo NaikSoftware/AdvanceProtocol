@@ -37,7 +37,7 @@ func _ready() -> void:
 		await _lineup(screen, map, out, tag)
 		return
 	if a.size() > 5 and a[5] == "sets":
-		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest")
+		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
@@ -179,7 +179,7 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 
 ## Рядок на набір, стовпець на роль: так видно, що ролі читаються однаково в кожному наборі.
-func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_forest: bool = false) -> void:
+func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_forest: bool = false, select: bool = false) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
 	var c := _field_near_centre(m, near_forest)
@@ -193,6 +193,11 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_fo
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
 	rig.center_on(c)
+	if select:
+		# Виділений юніт гравця 1: контури зон лягають поверх плям-контактів.
+		screen._controller.tap_cell(c + Vector2i(1, -2))
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
 	# Найближчий, середній (8) і найдальший зум: тінь юніта на сонячних картах міняється з відстанню.
 	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
 		rig.zoom_by(z / rig.zoom_level)

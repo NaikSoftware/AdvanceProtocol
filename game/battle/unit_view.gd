@@ -727,7 +727,9 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 
 
 ## Пляма тіні-контакту ширша за слід корпусу: край гасне вже за корпусом.
-const CONTACT_SPREAD: float = 2.0
+const CONTACT_SPREAD: float = 1.6
+## Зсув плями за сонцем, у частках корпусу: пляма показує, звідки світить, і сусідні не зливаються.
+const CONTACT_SUN_SHIFT: float = 0.18
 ## Спільний MultiMesh плям екрана (`UnitContacts`); без нього — без плям. Ставить власник
 ## вигляду до bind().
 var contacts: UnitContacts = null
@@ -745,7 +747,10 @@ func contact_transform() -> Transform3D:
 	if not _contact_on or not is_visible_in_tree() or not _silhouette.visible:
 		return UnitContacts.HIDDEN
 	var size := Basis.from_scale(Vector3(_hull_size.x * CONTACT_SPREAD, 1.0, _hull_size.z * CONTACT_SPREAD))
-	return _silhouette.global_transform * Transform3D(size, Vector3(0.0, 0.01, 0.0))
+	var xf: Transform3D = _silhouette.global_transform * Transform3D(size, Vector3(0.0, 0.01, 0.0))
+	var shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * maxf(_hull_size.x, _hull_size.z)
+	xf.origin += Vector3(shift.x, 0.0, shift.y)
+	return xf
 
 
 func _exit_tree() -> void:
