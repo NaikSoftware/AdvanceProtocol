@@ -13,7 +13,7 @@ extends Node
 ## край лісу найдальшого зуму й для кожного місця знімає три кадри: _A як у грі, _C — модель суцільним
 ## пурпуровим (маска), _B — без моделі (ґрунт навколо); різницю кольору рахує tools/unit_contrast.py.
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
-## Шостий аргумент gate [set=N] знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
+## Шостий аргумент gate [set=N] (запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m) і без (_e): різниця кадрів дає маску моделі для ΔE.
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
 ## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); кадри на найближчому й найдальшому зумі, type_id ігнорується.
@@ -409,6 +409,8 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
+	# Хмарні тіні рухаються з часом: без заморозки кадри пари «з моделлю / без» різняться, а числа не повторюються.
+	RenderingServer.global_shader_parameter_set(&"cloud_shadow_strength", 0.0)
 	rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
 	for f in SETTLE_FRAMES * 3:
 		await get_tree().process_frame
