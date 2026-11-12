@@ -342,7 +342,9 @@
     "scale_lat": 0.87,
     "hull_long": [-0.491, 0.2227],
     "hull_lat": 0.1663,
-    "ends_bottom_h": [0.1, 0.115],
+    "ends_bottom_h": [0.055, 0.115],
+    "_delete_boxes": "rear overhang beyond the plate and anything standing out past the hull width (fins, corner posts)",
+    "delete_boxes": [[-0.51, -0.4895, 0, 0.25, 0, 0.4], [-0.5, 0.2, 0.172, 0.3, 0.0, 0.4]],
     "body_tris": 2800,
     "glass_above_m": 3.4,
     "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
@@ -350,16 +352,16 @@
     "flatten": [[-0.46, -0.14, 0.17, 0.345], [-0.51, -0.455, 0.17, 0.311]],
     "_add_boxes": "flat rear plate closing the bay under the rear basket; full-length side skirts whose bottom covers the top third of the road wheels",
     "add_boxes": [
-      [-0.4895, -0.40, -0.1663, 0.1663, 0.1, 0.30],
-      [-0.385, 0.17, 0.1566, 0.1663, 0.056, 0.125],
-      [-0.385, 0.17, -0.1663, -0.1566, 0.056, 0.125]
+      [-0.4895, -0.40, -0.1663, 0.1663, 0.07, 0.311],
+      [-0.48, 0.17, 0.1566, 0.1663, 0.056, 0.125],
+      [-0.48, 0.17, -0.1663, -0.1566, 0.056, 0.125]
     ],
     "cut": {
       "lat": [0.094, 0.168],
       "below_skirt_h": 0.052,
       "behind_skirt_lat": 0.1555,
-      "gear_top_h": 0.125,
-      "open_ends_long": [-0.37, 0.19]
+      "gear_top_h": 0.1,
+      "open_ends_long": [-0.43, 0.19]
     },
     "gun": {
       "axis_h": 0.2456,
