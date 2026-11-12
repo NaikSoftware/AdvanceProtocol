@@ -495,7 +495,7 @@
     "median_cells": 3,
     "paint": {
       "scheme": "plain",
-      "base": [98, 107, 84],
+      "base": [90, 114, 86],
       "mottle": 0.1,
       "roof_cool": [-0.028, -0.04, 0.155],
       "dark_gear": true,
@@ -622,7 +622,7 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [98, 107, 84],
+      "base": [90, 114, 86],
       "mottle": 0.1,
       "roof_cool": [-0.028, -0.04, 0.155],
       "dark_gear": true,
@@ -699,7 +699,7 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [98, 107, 84],
+      "base": [90, 114, 86],
       "mottle": 0.1,
       "roof_cool": [-0.028, -0.04, 0.155],
       "dark_gear": true,
@@ -772,7 +772,7 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [98, 107, 84],
+      "base": [90, 114, 86],
       "mottle": 0.1,
       "roof_cool": [-0.028, -0.04, 0.155],
       "dark_gear": true,
