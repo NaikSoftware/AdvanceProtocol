@@ -44,6 +44,8 @@ const _SET_SPECS: Dictionary = {
 		5: {"hull": Vector3(0.4270, 0.1605, 0.8040), "barrel": 0.625, "wheel": 0.036, "extras": [&"turret"]},
 		# винищувач: без башти, але extras як у _SPECS
 		6: {"hull": Vector3(0.4299, 0.2238, 0.8971), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},
+		# легкий: корпус вужчий за коробку, бо джерело довше за свою ширину; вісь ствола виміряна
+		7: {"hull": Vector3(0.3150, 0.1587, 0.7050), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},
 	},
 	2: {},
 }

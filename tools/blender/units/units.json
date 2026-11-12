@@ -408,5 +408,74 @@
       "roof_cool": [0, 0, 0],
       "dust": 0.25
     }
+  },
+  "set1/light_tank": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set1_light_tank.glb",
+    "type_id": 7,
+    "fwd": "x",
+    "_layout": "set 1 light: long low slab hull with a shallow glacis, a small low dome turret moved forward to mid-hull (about 49 % from the bow) and flattened to keep the top under 2 m; the barrel is stretched to the spec length",
+    "hull_long": [-0.5, 0.4996],
+    "hull_lat": 0.2306,
+    "ends_bottom_h": [0.06, 0.08],
+    "body_tris": 2800,
+    "cut": {
+      "lat": [0.15, 0.2306],
+      "below_skirt_h": 0.1,
+      "behind_skirt_lat": 0.2,
+      "gear_top_h": 0.165,
+      "open_ends_long": [-0.42, 0.3]
+    },
+    "turret": {
+      "long": [-0.24, 0.12],
+      "lat": 0.2,
+      "base_h": 0.268,
+      "scale_long": 1.0,
+      "scale_lat": 1.0,
+      "scale_h": 0.6,
+      "barrel_r": 0.03,
+      "shift_long": 0.06
+    },
+    "no_glass_in_boxes": true,
+    "add_boxes": [[ -0.235, -0.14, -0.19, 0.19, 0.2, 0.272]
+    ],
+    "gun": {
+      "axis_h": 0.318,
+      "start_long": 0.1,
+      "clear_r": 0.034,
+      "sides": 10,
+      "profile": [[ 0.1, 0.026],
+        [0.18, 0.025],
+        [0.19, 0.016],
+        [0.385, 0.0145]
+      ]
+    },
+    "gear": {
+      "track_lat": [0.155, 0.225],
+      "track_t": 0.012,
+      "wheel_lat": [0.17, 0.215],
+      "road": {
+        "r": 0.0486,
+        "h": 0.0606,
+        "long": [-0.2812, -0.1798, -0.0741, 0.027, 0.1332, 0.2428]
+      },
+      "sprocket": {
+        "r": 0.045,
+        "h": 0.1,
+        "long": 0.35
+      },
+      "idler": {
+        "r": 0.045,
+        "h": 0.1,
+        "long": -0.39
+      },
+      "sides": 12
+    },
+    "paint": {
+      "scheme": "plain",
+      "base": [70, 100, 96],
+      "mottle": 0.1,
+      "roof_cool": [0, 0, 0],
+      "dust": 0.25
+    }
   }
 }
