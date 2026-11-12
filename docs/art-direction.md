@@ -120,8 +120,9 @@ falls back to the box placeholder, so a model may land one type at a time.
   The same texture carries baked occlusion in R (white if none): the unit shader scales the
   specular by it, so seams and recesses do not catch the sky.
 - **Painted metal, not plastic:** matte paint (roughness ~0.74 with ±0.06 over metres), a satin
-  band on rubbed convex edges and half-gloss oil patches at deck level at the rear; bare steel
-  (metallic 1) only where paint is worn through on edge lines, never on whole patches, and
+  band 10–12 cm wide (~0.5) on rubbed convex edges that face up, half-gloss oil patches at deck
+  level at the rear; bare steel (metallic 1) only where paint is worn through on edge lines,
+  never on whole patches (where the edge mask fills a patch, set 0 paints a dark camo block), and
   polished steel (0.8) on track pins and sprocket teeth. Chips under ~7 cm vanish in the
   mips even at the closest zoom (the atlas is ~1 cm per texel), so wear is sized in bands, not
   specks. No gloss on large flat faces: under River's back light it reads as a tin can.

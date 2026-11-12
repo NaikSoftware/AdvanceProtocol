@@ -145,19 +145,27 @@ col = col * (1 - 0.45 * chip[..., None]) + (col * 1.7 + lin(70, 68, 62) * 0.3) *
 # Wear sits on edge lines. On small fragmented islands the baked edge mask covers whole patches;
 # bare steel and polish there would read as bright blobs, so they keep to texels whose 15 cm
 # neighbourhood is mostly not edge.
-k = 7
-ii = np.pad((edge > 0.3).astype(np.float32), k + 1, mode="edge").cumsum(0).cumsum(1)
-dens = (ii[2 * k + 1:, 2 * k + 1:] - ii[:-2 * k - 1, 2 * k + 1:] - ii[2 * k + 1:, :-2 * k - 1] + ii[:-2 * k - 1, :-2 * k - 1]) / (2 * k + 1) ** 2
-line = smooth(0.5, 0.3, dens[:N, :N])
+def box(a, k):
+    """Mean over a (2k+1)^2 texel square."""
+    ii = np.pad(a.astype(np.float32), k + 1, mode="edge").cumsum(0).cumsum(1)
+    return ((ii[2 * k + 1:, 2 * k + 1:] - ii[:-2 * k - 1, 2 * k + 1:] - ii[2 * k + 1:, :-2 * k - 1]
+             + ii[:-2 * k - 1, :-2 * k - 1]) / (2 * k + 1) ** 2)[:N, :N]
+
+
+dens = box(edge > 0.3, 7)
+line = smooth(0.5, 0.3, dens)
 bare = chip * smooth(0.62, 0.75, wear_n) * line
 col = col * (1 - bare[..., None]) + lin(*C.get("bare_c", (100, 98, 94))) * bare[..., None]
-# Rubbed edges: a band ~5 cm either side of a convex edge (the 1 cm chips vanish in the mips at
-# 7 cm/px) wears to a satin sheen, and only where worn through is it bare steel.
-rub = edge * line
-for _ in range(4):
-    rub = (rub + np.roll(rub, 1, 1) + np.roll(rub, -1, 1) + np.roll(rub, 1, 0) + np.roll(rub, -1, 0)) / 5
-rub = np.clip(rub * 3, 0, 1) * smooth(0.4, 0.6, wear_n)
-rough = rough - C.get("edge_polish", 0.18) * np.maximum(rub, chip)
+if not plain:
+    # those edge-filled patches carry a dark camo block instead, matte: grey speckled metal there
+    # read as blotches, plain olive as a hole in the pattern
+    dark = smooth(0.45, 0.6, dens) * smooth(0.58, 0.72, wear_n)
+    col = col * (1 - dark[..., None]) + black * dark[..., None]
+# Rubbed edges: a satin band ~10-12 cm wide (2 px at 7 cm/px) along convex edges that face up,
+# where crews, boots and rain rub the paint smooth; flat faces and side edges stay matte. Only
+# where worn through is it bare steel.
+rub = np.clip(box((edge * line) > 0.3, 5) * 6, 0, 1) * smooth(0.4, 0.6, nz) * smooth(0.3, 0.5, wear_n)
+rough = rough - C.get("edge_polish", 0.24) * np.maximum(rub, chip * line)
 rough = rough * (1 - bare) + C.get("bare_rough", 0.45) * bare
 metal = metal + C.get("bare_metal", 1.0) * bare
 col = col * (0.5 + 0.5 * ao[..., None])
