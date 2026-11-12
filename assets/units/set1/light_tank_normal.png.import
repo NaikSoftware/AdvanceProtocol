@@ -3,18 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dstad7ngboama"
-path="res://.godot/imported/light_tank_normal.png-91e9541f0fbb651906d1ba44931596c1.ctex"
+path.s3tc="res://.godot/imported/light_tank_normal.png-91e9541f0fbb651906d1ba44931596c1.s3tc.ctex"
+path.etc2="res://.godot/imported/light_tank_normal.png-91e9541f0fbb651906d1ba44931596c1.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "f4108c9d8e0e605a9f273f7dbe878ad9"
+"md5": "adb8c4f9c976b6b3b94d941fe70e57f7"
 }
 
 [deps]
 
 source_file="res://assets/units/set1/light_tank_normal.png"
-dest_files=["res://.godot/imported/light_tank_normal.png-91e9541f0fbb651906d1ba44931596c1.ctex"]
+dest_files=["res://.godot/imported/light_tank_normal.png-91e9541f0fbb651906d1ba44931596c1.s3tc.ctex", "res://.godot/imported/light_tank_normal.png-91e9541f0fbb651906d1ba44931596c1.etc2.ctex"]
 
 [params]
 

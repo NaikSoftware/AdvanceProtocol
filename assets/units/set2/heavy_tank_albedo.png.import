@@ -3,18 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bemwpo8j7dx7"
-path="res://.godot/imported/heavy_tank_albedo.png-6da47f79b4d073ef4e7eff50b92fa544.ctex"
+path.s3tc="res://.godot/imported/heavy_tank_albedo.png-6da47f79b4d073ef4e7eff50b92fa544.s3tc.ctex"
+path.etc2="res://.godot/imported/heavy_tank_albedo.png-6da47f79b4d073ef4e7eff50b92fa544.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "dbee78c5027eb4fe95bd2024612dce82"
+"md5": "30a16e455e9e15e50fc486e9d13383ee"
 }
 
 [deps]
 
 source_file="res://assets/units/set2/heavy_tank_albedo.png"
-dest_files=["res://.godot/imported/heavy_tank_albedo.png-6da47f79b4d073ef4e7eff50b92fa544.ctex"]
+dest_files=["res://.godot/imported/heavy_tank_albedo.png-6da47f79b4d073ef4e7eff50b92fa544.s3tc.ctex", "res://.godot/imported/heavy_tank_albedo.png-6da47f79b4d073ef4e7eff50b92fa544.etc2.ctex"]
 
 [params]
 

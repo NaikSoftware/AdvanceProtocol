@@ -3,18 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://quphj1hvtye3"
-path="res://.godot/imported/medium_tank_normal.png-74977fa97a342fcbc00cd2ebc01a18aa.ctex"
+path.s3tc="res://.godot/imported/medium_tank_normal.png-74977fa97a342fcbc00cd2ebc01a18aa.s3tc.ctex"
+path.etc2="res://.godot/imported/medium_tank_normal.png-74977fa97a342fcbc00cd2ebc01a18aa.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "87b9b4b76d698b6d417a15d675de2bf3"
+"md5": "5369bbbc635b4af09fadf7be69473ce1"
 }
 
 [deps]
 
 source_file="res://assets/units/set1/medium_tank_normal.png"
-dest_files=["res://.godot/imported/medium_tank_normal.png-74977fa97a342fcbc00cd2ebc01a18aa.ctex"]
+dest_files=["res://.godot/imported/medium_tank_normal.png-74977fa97a342fcbc00cd2ebc01a18aa.s3tc.ctex", "res://.godot/imported/medium_tank_normal.png-74977fa97a342fcbc00cd2ebc01a18aa.etc2.ctex"]
 
 [params]
 

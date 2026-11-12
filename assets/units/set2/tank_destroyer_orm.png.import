@@ -3,18 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://vdxklkvc4gbp"
-path="res://.godot/imported/tank_destroyer_orm.png-0b8f84f6f7a6eda80435a133e2ad7b83.ctex"
+path.s3tc="res://.godot/imported/tank_destroyer_orm.png-0b8f84f6f7a6eda80435a133e2ad7b83.s3tc.ctex"
+path.etc2="res://.godot/imported/tank_destroyer_orm.png-0b8f84f6f7a6eda80435a133e2ad7b83.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "1ee41b7dd1ed1f6d745daab5bcfc0e98"
+"md5": "773b90e4666160283503f978c42d1f7f"
 }
 
 [deps]
 
 source_file="res://assets/units/set2/tank_destroyer_orm.png"
-dest_files=["res://.godot/imported/tank_destroyer_orm.png-0b8f84f6f7a6eda80435a133e2ad7b83.ctex"]
+dest_files=["res://.godot/imported/tank_destroyer_orm.png-0b8f84f6f7a6eda80435a133e2ad7b83.s3tc.ctex", "res://.godot/imported/tank_destroyer_orm.png-0b8f84f6f7a6eda80435a133e2ad7b83.etc2.ctex"]
 
 [params]
 

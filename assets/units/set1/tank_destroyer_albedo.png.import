@@ -3,18 +3,20 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bwhvq1pvpniug"
-path="res://.godot/imported/tank_destroyer_albedo.png-9c4a2dabacc4ef22d5100face80e5ae1.ctex"
+path.s3tc="res://.godot/imported/tank_destroyer_albedo.png-9c4a2dabacc4ef22d5100face80e5ae1.s3tc.ctex"
+path.etc2="res://.godot/imported/tank_destroyer_albedo.png-9c4a2dabacc4ef22d5100face80e5ae1.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "7f11b77ecec75704531ac9d091a2818b"
+"md5": "4b10e253db6a03405f98d1838328d3a5"
 }
 
 [deps]
 
 source_file="res://assets/units/set1/tank_destroyer_albedo.png"
-dest_files=["res://.godot/imported/tank_destroyer_albedo.png-9c4a2dabacc4ef22d5100face80e5ae1.ctex"]
+dest_files=["res://.godot/imported/tank_destroyer_albedo.png-9c4a2dabacc4ef22d5100face80e5ae1.s3tc.ctex", "res://.godot/imported/tank_destroyer_albedo.png-9c4a2dabacc4ef22d5100face80e5ae1.etc2.ctex"]
 
 [params]
 
