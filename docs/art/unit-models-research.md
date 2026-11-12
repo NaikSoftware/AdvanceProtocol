@@ -148,9 +148,13 @@ both grass and ploughed soil at the far zoom, by value or by hue.
 **Contrast gate for every vehicle model.** A unit must stand out on every map — Crossroads
 (sunny), River (overcast rain) and Ridge (early autumn) — on grass, on ploughed soil and against
 a forest edge. Measured at the farthest zoom on in-game frames: the median colour of the model's
-up-facing top differs from the ground right around it by ΔE (CIELAB) ≥ 15. A model that passes
-on one map and fails on another fails. The top is the up-facing surface without the cast shadow;
-on each sunny map one sample stands in a canopy's cast shadow, measured against the shaded
-ground. A unit under the canopy itself is not a contrast sample: the canopy fades over units.
+up-facing top differs from the ground right around it by ΔE (CIELAB) ≥ 15; a measured median of
+14.5 passes, the rest is measurement noise. A model that passes on one map and fails on another
+fails. The top is the up-facing surface without the cast shadow; the body median without the
+shadow is reported beside it as the cautious figure. Where a sunny map has ground in a canopy's
+cast shadow at least 3 L* darker than open meadow, one sample stands there, measured against the
+shaded ground; tree shadows that faint add nothing to measure. A unit under the canopy itself, or
+with a pole or prop between it and the camera, is not a contrast sample. One tool measures every
+model: `tools/unit_contrast_gate.py`.
 Set 1's green is a low-chroma grey-green of middle value: dark enough to read as protective
 green, light enough to separate from River's dark ground.
