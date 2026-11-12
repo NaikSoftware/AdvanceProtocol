@@ -331,5 +331,63 @@
       },
       "sides": 12
     }
+  },
+  "tank_destroyer_us": {
+    "source": "~/.local/share/advance-protocol/unit-sources/set2_tank_destroyer.glb",
+    "out": "set2/tank_destroyer",
+    "type_id": 6,
+    "fwd": "y",
+    "_layout": "set 2 tank destroyer: no turret, a slab-sided box over the rear half with a cupola ring on the right, the gun from its front face; the source faces -Y and was turned 180 degrees about Z",
+    "_scale_lat": "the source's hull is 13 % too wide for the role box once its length fills it: lateral axis squeezed first, so every lat value below is in scaled source units",
+    "scale_lat": 0.87,
+    "hull_long": [-0.491, 0.2227],
+    "hull_lat": 0.1663,
+    "ends_bottom_h": [0.1, 0.115],
+    "body_tris": 2800,
+    "glass_above_m": 3.4,
+    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "_flatten": "the cupola gun pressed down so the roof stays the highest point at about 3.6 m",
+    "flatten": [[-0.46, -0.14, 0.17, 0.345], [-0.51, -0.455, 0.17, 0.311]],
+    "_add_boxes": "flat rear plate closing the bay under the rear basket; full-length side skirts whose bottom covers the top third of the road wheels",
+    "add_boxes": [
+      [-0.4895, -0.40, -0.1663, 0.1663, 0.1, 0.30],
+      [-0.385, 0.17, 0.1566, 0.1663, 0.056, 0.125],
+      [-0.385, 0.17, -0.1663, -0.1566, 0.056, 0.125]
+    ],
+    "cut": {
+      "lat": [0.094, 0.168],
+      "below_skirt_h": 0.052,
+      "behind_skirt_lat": 0.1555,
+      "gear_top_h": 0.125,
+      "open_ends_long": [-0.37, 0.19]
+    },
+    "gun": {
+      "axis_h": 0.2456,
+      "start_long": -0.1,
+      "clear_r": 0.031,
+      "sides": 10,
+      "profile": [[-0.1, 0.0235], [0.05, 0.0215], [0.055, 0.017], [0.38, 0.015], [0.385, 0.0175], [0.42, 0.0175], [0.425, 0.015], [0.445, 0.015], [0.45, 0.026], [0.465, 0.026], [0.47, 0.015], [0.48, 0.015], [0.485, 0.026], [0.497, 0.026], [0.5, 0.02]]
+    },
+    "gear": {
+      "track_lat": [0.098, 0.157],
+      "track_t": 0.011,
+      "wheel_lat": [0.106, 0.15],
+      "road": {
+        "r": 0.0343,
+        "h": 0.0453,
+        "long": [-0.335, -0.2612, -0.1874, -0.1136, -0.0398, 0.034, 0.108]
+      },
+      "sprocket": {
+        "r": 0.04,
+        "h": 0.0845,
+        "long": -0.405
+      },
+      "idler": {
+        "r": 0.037,
+        "h": 0.088,
+        "long": 0.185
+      },
+      "sides": 12
+    }
   }
 }
