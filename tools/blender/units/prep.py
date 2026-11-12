@@ -48,6 +48,13 @@ if cfg.get("scale_lat"):
     # other lateral number in the config is in scaled source units
     co[:, 1 if cfg["fwd"] == "x" else 0] *= cfg["scale_lat"]
     me.vertices.foreach_set("co", co.ravel()); me.update()
+if cfg.get("squash"):
+    # a source taller than its role allows: everything above the running gear is pressed toward
+    # `above_h` (source units above the lowest vertex); wheels are procedural and keep their size
+    sq = cfg["squash"]
+    hh = co[:, 2] - zmin
+    co[:, 2] = zmin + np.where(hh > sq["above_h"], sq["above_h"] + (hh - sq["above_h"]) * sq["scale"], hh)
+    me.vertices.foreach_set("co", co.ravel()); me.update()
 t = cfg.get("turret")
 if t:
     # Source frame: long, lat, h above the lowest vertex. Turret: everything above its ring
