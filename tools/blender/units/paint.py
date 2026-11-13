@@ -224,6 +224,26 @@ for bi in cfg.get("panel_boxes", []):
     ao = np.where(seam | (edge_b & inb), ao * 0.6, ao)
     ao = np.where(bins & inb, ao * 0.9, ao)
 
+# `rear_door` (units.json): index of the add_boxes box whose rear face gets an access door (seam,
+# hinges, handle) and a vent grille beside it. Albedo and occlusion only: at this size they are texture.
+if "rear_door" in cfg:
+    l0, l1, a0, a1, h0, h1 = cfg["add_boxes"][cfg["rear_door"]]
+    y0 = lib.m_long(cfg, l0) * lib.TILE_M
+    z0, z1 = h0 * cfg["k"] * lib.TILE_M, h1 * cfg["k"] * lib.TILE_M
+    xa = np.abs(P[..., 0]); zz = P[..., 2] - z0
+    face = (np.abs(P[..., 1] - y0) < 0.08) & (zz > 0.0) & (P[..., 2] < z1 + 0.02) & (xa < abs(a0) * cfg["k"] * lib.TILE_M + 0.02)
+    dw, dz0, dz1 = 0.5, 0.12, (z1 - z0) - 0.35
+    in_door = (xa < dw) & (zz > dz0) & (zz < dz1)
+    seam = in_door & ((xa > dw - 0.03) | (zz < dz0 + 0.03) | (zz > dz1 - 0.03))
+    hinge = ((np.abs(xa - dw) < 0.06) & ((np.abs(zz - dz0 - 0.2) < 0.07) | (np.abs(zz - dz1 + 0.2) < 0.07)) & (xa > dw - 0.06))
+    handle = (np.abs(P[..., 0] - 0.3) < 0.1) & (np.abs(zz - (dz0 + dz1) * 0.5) < 0.025)
+    vent = (xa > 0.7) & (xa < 1.25) & (zz > dz0 + 0.1) & (zz < dz1 - 0.1) & (((zz / 0.09) % 1.0) < 0.5)
+    for m, c, a in ((seam, 0.45, 0.6), (hinge, 0.4, 0.5), (handle, 0.5, 0.6), (vent, 0.5, 0.7)):
+        m = m & face
+        col = col * (1 - c * m[..., None])
+        ao = np.where(m, ao * a, ao)
+    rough = np.where(vent & face, 0.9, rough)
+
 # ---- streaks, dust, mud ---------------------------------------------------------------------
 side = smooth(0.6, 0.2, np.abs(nz))
 streak = fbm(P * np.array([1.0, 1.0, 0.08]), [(0.12, 0.7), (0.05, 0.3)], 61) - 0.5
