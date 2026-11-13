@@ -21,3 +21,4 @@ rain = true
 rain_amount = 6272
 wetness = 0.55
 cloud_shadow_strength = 0.35
+unit_contact_shadow = 0.78

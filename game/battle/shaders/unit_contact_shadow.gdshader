@@ -16,7 +16,14 @@ const float LIFT = 0.015;
 // Частка сили плями на асфальті (дорога, міст): на темному покритті повна сила йшла б майже в чорне.
 const float ROAD_K = 0.7;
 
+// Рівень води (`TerrainHeight.WATER_LEVEL`, -1.25 * M) і ширина переходу берега: ґрунт нижче — під водою.
+const float WATER_LEVEL = -0.15625;
+const float WATER_EDGE = 0.04;
+// Частка сили плями над водою: широка темна пляма на сріблястій воді ріже око, а тонка смуга під звисом корпусу — ні.
+const float WATER_K = 0.5;
+
 varying float road;
+varying float water;
 
 void vertex() {
 	road = INSTANCE_CUSTOM.r;
@@ -25,7 +32,11 @@ void vertex() {
 	if (use_height) {
 		vec2 hs = vec2(textureSize(height_map, 0));
 		vec2 uv = ((VERTEX.xz - height_origin) * height_samples + 0.5) / hs;
-		VERTEX.y = max(VERTEX.y, textureLod(height_map, uv, 0.0).r + LIFT);
+		float ground = textureLod(height_map, uv, 0.0).r;
+		VERTEX.y = max(VERTEX.y, ground + LIFT);
+		water = 1.0 - smoothstep(WATER_LEVEL - WATER_EDGE, WATER_LEVEL + WATER_EDGE, ground);
+	} else {
+		water = 0.0;
 	}
 }
 
@@ -33,5 +44,5 @@ void fragment() {
 	// Еліпс по сліду корпусу: найтемніше під серединою, до краю квада гасне до нуля.
 	float r = length((UV - 0.5) * 2.0);
 	ALBEDO = vec3(0.0);
-	ALPHA = clamp(unit_contact_shadow, 0.0, 1.0) * mix(1.0, ROAD_K, road) * (1.0 - smoothstep(0.45, 1.0, r));
+	ALPHA = clamp(unit_contact_shadow, 0.0, 1.0) * mix(1.0, ROAD_K, road) * mix(1.0, WATER_K, water * (1.0 - road)) * (1.0 - smoothstep(0.45, 1.0, r));
 }

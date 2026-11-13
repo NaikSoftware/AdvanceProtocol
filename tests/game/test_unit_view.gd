@@ -1161,3 +1161,9 @@ func test_owners_differ_by_hp_fill_colour_not_by_body_colour() -> void:
 static func _lum(c: Color) -> float:
 	var l := c.srgb_to_linear()
 	return 0.2126 * l.r + 0.7152 * l.g + 0.0722 * l.b
+
+
+## Рівень води в шейдері плями — копія `TerrainHeight.WATER_LEVEL`: розбіжність тихо вимкне послаблення над водою.
+func test_contact_shadow_shader_water_level_matches_terrain() -> void:
+	var src: String = FileAccess.get_file_as_string("res://game/battle/shaders/unit_contact_shadow.gdshader")
+	assert_true(src.contains("const float WATER_LEVEL = %s;" % str(TerrainHeight.WATER_LEVEL)), "WATER_LEVEL у шейдері")

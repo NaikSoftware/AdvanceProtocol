@@ -44,6 +44,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
+	if a.size() > 5 and a[5] == "spots":
+		await _spots(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "rear":
 		var rset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 		await _rear(screen, map, out, tag, rset)
@@ -241,6 +244,52 @@ func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_fo
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
 	print("UNIT sets at %s" % c)
+	get_tree().quit()
+
+
+## Танк на асфальті, на настилі мосту й на березі біля води: так видно, як пляма-контакт лягає на мокре
+## покриття і воду. Кадри `<tag>_<road|bridge|shore>_z<зум>.png`.
+func _spots(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var mid := Vector2i(m.width / 2, m.height / 2)
+	var best: Dictionary = {}
+	for y in range(1, m.height - 1):
+		for x in range(1, m.width - 1):
+			var p := Vector2i(x, y)
+			var k: int = m.outer_kind_at(p)
+			var want: String = ""
+			if k == Terrain.Kind.ROAD:
+				want = "road"
+			elif k == Terrain.Kind.BRIDGE:
+				want = "bridge"
+			elif k == Terrain.Kind.FIELD:
+				for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					if m.outer_kind_at(p + d) == Terrain.Kind.WATER:
+						want = "shore"
+			if want != "" and (not best.has(want) or (p - mid).length_squared() < (best[want] - mid).length_squared()):
+				best[want] = p
+	var names: Array = ["road", "bridge", "shore"]
+	m.spawns = []
+	for i in names.size():
+		if best.has(names[i]):
+			m.spawns.append({"type_id": 5, "owner": i, "pos": best[names[i]], "facing": 2})
+	screen.setup(m, 3, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	var shots: Array = []
+	for n: String in best:
+		rig.center_on(best[n])
+		for z: float in [IsoCameraRig.MIN_ZOOM, 8.0]:
+			rig.zoom_by(z / rig.zoom_level)
+			for f in SETTLE_FRAMES * 2:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			shots.append(["%s/%s_%s_z%d.png" % [out, tag, n, int(z)], get_viewport().get_texture().get_image()])
+	for sh: Array in shots:
+		(sh[1] as Image).save_png(sh[0])
+	print("UNIT spots %s" % str(best))
 	get_tree().quit()
 
 
