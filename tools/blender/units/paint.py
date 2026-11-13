@@ -13,7 +13,7 @@ same occlusion, edge wear, streaks, dust, mud and roof darkening, plus a faint l
 (`mottle`, default 0.05) so it does not read as flat plastic. The same dict may carry the camo knobs
 (`roof_dark`, `roof_cool`, `dust`, `wheel_mud`) to tune one palette. Plain-only knobs: `rough` (body roughness,
 default 0.78), `grime` (recess darkening, 0.2), `blotch` (large soft fade on tops, 0.06), `floor` (least body tone
-outside occlusion as a fraction of the base, 0.75), `gun_dark` (barrel, 0.8), `mud_from` (hem height in m, default
+outside occlusion as a fraction of the base, 0.75), `gun_dark` (barrel, 0.8), `dust_c` (dust colour, default the body tone), `mud_from` (hem height in m, default
 the skirt cut), `mud_h` (fade length in m, 0.6), `mud_max` (mud mix at the hem, 0.85), `rear_panels`
 {y_max, pitch} (seams and bolts on the flat rear face behind y_max, metres). The generated texture never
 colours the body; its luminance only finds sight glass and is normalised per model (plain scheme), so a
@@ -223,7 +223,8 @@ dust = np.clip(smooth(1.5, 0.3, h) * 0.8 + up * 0.35 * dust_n + up * (1 - ao) * 
 dust = dust * smooth(0.25, 0.65, dust_n + 0.15)
 dust_c = lin(152, 140, 116)
 dmix = C.get("dust", 0.42)              # from above the roof is most of the tank: heavy dust reads washed out
-dust_body = olive if plain else dust_c      # low dust must not lighten a sand body
+# plain scheme: dust takes the body tone unless the unit names a dust colour (`dust_c`, sRGB)
+dust_body = (lin(*C["dust_c"]) if "dust_c" in C else olive) if plain else dust_c
 col = col * (1 - dmix * dust[..., None]) + dust_body * dmix * dust[..., None]
 mud = smooth(0.8, 0.25, h) * smooth(0.5, 0.7, fbm(P, [(0.3, 0.6), (0.08, 0.4)], 81))
 col = col * (1 - 0.7 * mud[..., None]) + lin(74, 62, 48) * 0.7 * mud[..., None]

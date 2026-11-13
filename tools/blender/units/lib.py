@@ -45,7 +45,7 @@ def load(name, seed=True):
         cfg["spec"] = {"hull": [cfg["spec"]["hull"][0], row["hull"][1], cfg["spec"]["hull"][2]],
                        "barrel": row["barrel"], "wheel": row["wheel"]}
     lo, hi = cfg["hull_long"]
-    sx, sz = cfg["spec"]["hull"][0], cfg["spec"]["hull"][2]
+    sx, sz = cfg["spec"]["hull"][0], cfg.get("fit_z", cfg["spec"]["hull"][2])   # fit_z: a shorter hull than the role's box
     # Uniform fit: the tighter of hull width and hull length governs.
     cfg["k"] = min(sx / (2.0 * cfg["hull_lat"]), sz / (hi - lo))
     cfg["long_c"] = 0.5 * (lo + hi)

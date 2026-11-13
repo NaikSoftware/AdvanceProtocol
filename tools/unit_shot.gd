@@ -12,6 +12,8 @@ extends Node
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m), без (_e) і з моделлю суцільним пурпуром (_k, маска контуру) для ΔE.
+## Шостий аргумент rear [set=N] ставить чотири танки набору N (важкий, середній, винищувач, легкий) у ряд через тайл,
+## самими моделями без смуг HP (смуга ховає ствол сусіда), і знімає на зумі 6 два кадри: тилом до камери (_f4) і носом від неї (_f0).
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
 ## (власники 0, 1, 2), стовпці — ролі (важкий, середній, винищувач, легкий); кадри на найближчому й найдальшому зумі, type_id ігнорується.
 
@@ -41,6 +43,10 @@ func _ready() -> void:
 		return
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
+		return
+	if a.size() > 5 and a[5] == "rear":
+		var rset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
+		await _rear(screen, map, out, tag, rset)
 		return
 	if a.size() > 5 and a[5] == "gate":
 		var gset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
@@ -338,3 +344,31 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		print("UNIT gate %s cell %s" % [cl[0], cell])
 	get_tree().quit()
 
+
+
+## Ряд із чотирьох танків набору: кадр _f4 — розвернуті на 180°, видно корму й задню частину корпусу; _f0 — ствол вгору.
+func _rear(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int) -> void:
+	screen.setup(map, 2, 1)
+	var c := _field_near_centre(map)
+	var roles: Array[int] = [8, 5, 6, 7]
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c)
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	for facing: int in [4, 0]:
+		var nodes: Array[Node3D] = []
+		for i in roles.size():
+			var m: Node3D = UnitSilhouettes.build_merged(roles[i], -1, set_id)
+			_place(m, c + Vector2i(i * 2 - 3, 0), facing)
+			nodes.append(m)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_f%d_z6.png" % [out, tag, facing])
+		for n in nodes:
+			n.queue_free()
+		for f in 6:
+			await get_tree().process_frame
+	print("UNIT rear set %d at %s" % [set_id, c])
+	get_tree().quit()
