@@ -182,6 +182,8 @@ func _field_row_near_centre(map: MapData, width: int) -> Vector2i:
 			if ok and dd < best_d:
 				best_d = dd
 				best = Vector2i(x, y)
+	if best_d == 1 << 30:
+		push_error("unit_shot: на мапі немає рядка з %d клітинок поля, танки стануть у центрі на будь-якій місцевості" % width)
 	return best
 
 
@@ -368,7 +370,7 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 
 
 
-## Ряд із чотирьох танків набору: кадр _f4 — розвернуті на 180°, видно корму й задню частину корпусу; _f0 — ствол вгору.
+## Ряд із чотирьох танків набору: кадр _f0 — тилом до камери, видно корму й моторну палубу; _f4 — носом до камери.
 func _rear(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int) -> void:
 	screen.setup(map, 2, 1)
 	var c := _field_row_near_centre(map, 7)

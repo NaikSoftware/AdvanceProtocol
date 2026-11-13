@@ -256,10 +256,13 @@ hull_top = cfg["spec"]["hull"][1] * lib.TILE_M
 deck_lo = -9.0
 if lib.set_row(cfg):
     deck = (roof[..., 0] > 0.5) & (d["cov"] > 0.5) & ~on_gun & (P[..., 1] < -1.5) & (h < az)
-    if deck.sum() > 500:
-        cnt, edges = np.histogram(h[deck], bins=np.arange(0.0, az + 0.05, 0.05))
-        hull_top = float(edges[cnt.argmax()] + 0.025)
-        deck_lo = hull_top - 0.15       # fenders and track guards below the deck get none
+    if deck.sum() <= 500:
+        # the row's hull y is the bore-height basis, so falling back to it would put the oil back on the fenders
+        sys.exit("%s: no engine deck found behind the turret below the gun axis (%d texels); oil height unknown"
+                 % (sys.argv[1], deck.sum()))
+    cnt, edges = np.histogram(h[deck], bins=np.arange(0.0, az + 0.05, 0.05))
+    hull_top = float(edges[cnt.argmax()] + 0.025)
+    deck_lo = hull_top - 0.15       # fenders and track guards below the deck get none
 oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < hull_top + 0.15) * (h > deck_lo) \
     * smooth(0.58, 0.7, fbm(P, [(0.6, 0.6), (0.2, 0.4)], 95))
 col = col * (1 - C.get("oil_dark", 0.15) * oil[..., None])
