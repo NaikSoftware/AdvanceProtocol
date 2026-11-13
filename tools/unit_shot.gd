@@ -166,6 +166,25 @@ func _field_near_centre(map: MapData, near_forest: bool = false) -> Vector2i:
 	return best
 
 
+## Найближча до центру клітинка поля, праворуч і ліворуч від якої є ще по `half` клітинок поля (рядок завширшки 2*half + 1).
+func _field_row_near_centre(map: MapData, width: int) -> Vector2i:
+	var half: int = width / 2
+	var c := Vector2i(map.width / 2, map.height / 2)
+	var best := c
+	var best_d: int = 1 << 30
+	for y in range(1, map.height - 1):
+		for x in range(half, map.width - half):
+			var ok: bool = true
+			for dx in range(-half, half + 1):
+				if map.tiles[y * map.width + x + dx] != Terrain.Kind.FIELD:
+					ok = false
+			var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
+			if ok and dd < best_d:
+				best_d = dd
+				best = Vector2i(x, y)
+	return best
+
+
 ## Важкий і легкий — гравець 1, середній — 2, винищувач — 3; гравець 1 активний і бачить усіх поруч.
 func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
@@ -251,12 +270,11 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 				if not picks.has(sv):
 					picks[sv] = []
 				picks[sv].append(p)
-			# fallback when a surface has no uniform 3x3 anywhere: the cell's own surface, neighbours any field
+			# fallback when a surface has no uniform 3x3 anywhere: the cell's own surface, four orthogonal neighbours field
 			var all_field: bool = true
-			for dy in range(-1, 2):
-				for dx in range(-1, 2):
-					if map.tiles[(y + dy) * map.width + x + dx] != Terrain.Kind.FIELD:
-						all_field = false
+			for d in dirs:
+				if map.tiles[(y + d.y) * map.width + x + d.x] != Terrain.Kind.FIELD:
+					all_field = false
 			if all_field:
 				if not relaxed.has(sv):
 					relaxed[sv] = []
@@ -279,18 +297,10 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 						if not sides.has(key) or (p - c).length_squared() < (sides[key] - c).length_squared():
 							sides[key] = p
 	var cells: Array = []
+	var by_dist := func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared()
 	for sv in [0, 1]:
-		# a surface with fewer than three uniform 3x3 cells (Crossroads meadow) is topped up with cells of that
-		# surface whose neighbours are any field, so one ruled-out place cannot leave the map without a sample
-		if relaxed.has(sv) and (not picks.has(sv) or picks[sv].size() < 3):
-			var merged: Array = picks[sv].duplicate() if picks.has(sv) else []
-			for q in relaxed[sv]:
-				if not merged.has(q):
-					merged.append(q)
-			picks[sv] = merged
-	for sv in picks:
-		var list: Array = picks[sv]
-		list.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return (a - c).length_squared() < (b - c).length_squared())
+		var list: Array = picks.get(sv, [])
+		list.sort_custom(by_dist)
 		var chosen: Array[Vector2i] = []
 		for cand: Vector2i in list:
 			var far: bool = true
@@ -299,6 +309,18 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 					far = false
 			if far and chosen.size() < 4:
 				chosen.append(cand)
+		# a surface with fewer than three uniform 3x3 cells (Crossroads meadow) is topped up, after the uniform ones,
+		# with cells of that surface whose four neighbours are field
+		if chosen.size() < 3 and relaxed.has(sv):
+			var rl: Array = relaxed[sv]
+			rl.sort_custom(by_dist)
+			for cand: Vector2i in rl:
+				var far: bool = true
+				for o in chosen:
+					if (o - cand).length_squared() < 25:
+						far = false
+				if far and chosen.size() < 3:
+					chosen.append(cand)
 		for i in chosen.size():
 			cells.append(["field%d%s" % [sv, "abcd"[i]], chosen[i]])
 	var names: Dictionary = {Vector2i(1, 0): "forestE", Vector2i(-1, 0): "forestW", Vector2i(0, 1): "forestS", Vector2i(0, -1): "forestN"}
@@ -349,7 +371,7 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 ## Ряд із чотирьох танків набору: кадр _f4 — розвернуті на 180°, видно корму й задню частину корпусу; _f0 — ствол вгору.
 func _rear(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int) -> void:
 	screen.setup(map, 2, 1)
-	var c := _field_near_centre(map)
+	var c := _field_row_near_centre(map, 7)
 	var roles: Array[int] = [8, 5, 6, 7]
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
