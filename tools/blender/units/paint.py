@@ -97,13 +97,22 @@ n1 = fbm(Q, [(1.8, 0.65), (0.7, 0.35)], 11) + jit
 n2 = fbm(Q, [(1.5, 0.6), (0.6, 0.4)], 23) + jit
 n3 = fbm(Q, [(1.2, 0.6), (0.5, 0.4)], 37) + jit
 col = np.where((n1 > np.quantile(n1, C.get("khaki_q", 0.68)))[..., None], khaki, olive)
-col = np.where((n2 > np.quantile(n2, 0.72))[..., None], brown, col)
+if C.get("fade_to") is None:
+    col = np.where((n2 > np.quantile(n2, 0.72))[..., None], brown, col)
 # from above the black patches read as soot at the far zoom: up-facing ones lose some contrast
 roof = smooth(0.35, 0.8, nz)[..., None]
 black_c = black + (olive - black) * C.get("roof_black_lift", 0.3) * roof
+fade_to = C.get("fade_to")
+if fade_to is not None and not plain:
+    # Lighter grey-olive tops for the contrast gate: only the olive/khaki/brown base is faded towards `fade_to`
+    # (sRGB), the black blocks are applied after and stay dark, so the mottling still carries the camo read.
+    ft = lin(*fade_to) * np.ones_like(col)
+    col = col * (1 - C.get("roof_fade", 1.0) * roof) + ft * C.get("roof_fade", 1.0) * roof
+if fade_to is not None:
+    col = np.where((n2 > np.quantile(n2, 0.72))[..., None], brown, col)
 col = np.where((n3 > np.quantile(n3, 0.88))[..., None], black_c, col)
 col = col * (1.0 + (hash3(*np.floor(P / block).transpose(2, 0, 1), 9)[..., None] - 0.5) * 0.06)
-if not plain:
+if not plain and fade_to is None:
     # From above the tops are most of the tank, and an olive top sits at the grass's hue (b* +12
     # against +16..+22 on the sunny maps). Tops are sun-faded towards a neutral grey of the same
     # value (`roof_fade`) and carry less dust; the sides keep the olive, and the blocks stay darker
