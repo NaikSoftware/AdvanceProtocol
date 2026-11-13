@@ -13,7 +13,7 @@ same occlusion, edge wear, streaks, dust, mud and roof darkening, plus a faint l
 (`mottle`, default 0.05) so it does not read as flat plastic. The same dict may carry the camo knobs
 (`roof_dark`, `roof_cool`, `dust`, `wheel_mud`) to tune one palette. Plain-only knobs: `rough` (body roughness,
 default 0.78), `grime` (recess darkening, 0.2), `blotch` (large soft fade on tops, 0.06), `floor` (least body tone
-outside occlusion as a fraction of the base, 0.75), `gun_dark` (barrel, 0.8), `dust_c` (dust colour, default the body tone), `mud_from` (hem height in m, default
+outside occlusion as a fraction of the base, 0.75), `gun_dark` (barrel, 0.8), `dust_c` (dust colour, default the body tone), `streak` (vertical streaks on the sides, 0.22), `mud_from` (hem height in m, default
 the skirt cut), `mud_h` (fade length in m, 0.6), `mud_max` (mud mix at the hem, 0.85), `rear_panels`
 {y_max, pitch} (seams and bolts on the flat rear face behind y_max, metres). The generated texture never
 colours the body; its luminance only finds sight glass and is normalised per model (plain scheme), so a
@@ -224,7 +224,7 @@ for bi in cfg.get("panel_boxes", []):
 # ---- streaks, dust, mud ---------------------------------------------------------------------
 side = smooth(0.6, 0.2, np.abs(nz))
 streak = fbm(P * np.array([1.0, 1.0, 0.08]), [(0.12, 0.7), (0.05, 0.3)], 61) - 0.5
-col = col * (1 + side[..., None] * streak[..., None] * 0.22)
+col = col * (1 + side[..., None] * streak[..., None] * C.get("streak", 0.22))
 h = P[..., 2]
 dust_n = fbm(P, [(0.9, 0.5), (0.25, 0.3), (0.06, 0.2)], 71)
 up = np.clip(nz, 0, 1) ** 2
