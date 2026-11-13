@@ -140,12 +140,18 @@ rear with the longest gun, the heavy is the largest. A set differs from the othe
 not carry the role: the turret's plan and bustle, the deck furniture, the skirts, the hull front.
 The stats are the same for every set until per-set rosters are designed.
 
-Each set has its own paint, one tone across the whole set: slot 0 keeps the olive with small
-brown-black blocks on the sides, its up-facing tops sun-faded to a cool neutral grey of the same
-value (an olive top sits at the grass's hue and fails the gate below on every map), slot 1 is a
-plain dark bluish green, slot 2 a plain muted sand. Paint marks the nation, not the player — the
-HP bar still marks the player. Every paint must stand apart from both grass and ploughed soil at
-the far zoom, by value or by hue.
+Each set has its own paint, one tone across the whole set: slot 0 is olive camo with small
+brown-black blocks, slot 1 a plain low-chroma grey-green, slot 2 a plain muted sand. Paint marks
+the nation, not the player — the HP bar still marks the player. Every paint must stand apart from
+both grass and ploughed soil at the far zoom, by value or by hue, and every set carries the same
+wear: edge wear, metre-scale roughness spread, vertical streaks, dirt on the lower hull — painted
+metal, never plastic and never a polished can.
+
+Slot 0's up-facing tops fade the olive base to a light olive (L* about 55, hue about 97–113°
+depending on the map's grade) while the brown-black blocks stay dark: a dark olive top sits at
+the grass's value and fails the gate below, a neutral grey or cream fade loses the olive read.
+Slots 0 and 2 then share lightness and b* and are told apart by a* alone, so their tops must keep
+a ΔE of at least about 9.5 on every map; re-measure it whenever either paint moves.
 
 **Contrast gate for every vehicle model.** A unit must stand out on every map — Crossroads
 (sunny), River (overcast rain) and Ridge (early autumn) — on grass, on ploughed soil and against
