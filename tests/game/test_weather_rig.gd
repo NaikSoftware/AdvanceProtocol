@@ -138,11 +138,11 @@ func test_water_waves_follow_the_weather() -> void:
 	assert_true(ProjectSettings.has_setting("shader_globals/water_wind"))
 
 
-## На сонячних картах поряд із тінню сонця юніта на землі тримає тінь-контакт;
-## на похмурій Річці її нема — там вигляд затверджений як є.
-func test_sunny_maps_give_units_a_contact_shadow() -> void:
+## Юніта на землі тримає тінь-контакт на кожній карті; на похмурій Річці вона без напряму,
+## рівно під корпусом, бо розсіяне світло не дає тіні сонця.
+func test_every_map_gives_units_a_contact_shadow() -> void:
 	var river: BattleLook = BattleLook.for_map_path("res://maps/river.tres")
-	assert_eq(river.unit_contact_shadow, 0.0)
+	assert_almost_eq(river.unit_contact_shadow, 0.78, 1e-5)
 	for path: String in ["res://maps/crossroads.tres", "res://maps/ridge.tres"]:
 		var look: BattleLook = BattleLook.for_map_path(path)
 		assert_almost_eq(look.unit_contact_shadow, 0.78 if path.ends_with("ridge.tres") else 0.6, 1e-5, path)
@@ -159,6 +159,9 @@ func test_sunny_maps_give_units_a_contact_shadow() -> void:
 	assert_almost_eq(rig.sun.light_angular_distance, look.sun_angular_deg, 1e-5)
 	assert_true(ProjectSettings.has_setting("shader_globals/unit_contact_shadow"))
 	rig.apply(river)
+	assert_almost_eq(WeatherRig.unit_contact, 0.78, 1e-5)
+	assert_eq(WeatherRig.sun_ground, Vector2.ZERO, "під хмарами пляма без зсуву")
+	rig.apply(BattleLook.new())
 	assert_eq(WeatherRig.unit_contact, 0.0, "наступна карта без плями не успадковує її")
 
 

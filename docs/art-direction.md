@@ -80,9 +80,9 @@ Techniques that buy atmosphere cheaply here:
     from its caster. Crossroads keeps full shadow opacity; Ridge's shadows are light (opacity 0.3),
     so the ground in shadow stays readable. Units and the board's buildings cast through the light;
     ruins, boulders and blocks lay a contact patch stretched along the sun, and fences, poles and
-    other small props cast nothing. Units also get a contact shadow under the hull (0.6; 0.78 on Ridge, whose sun shadow is lighter), shifted along the sun like the props' patches and weaker on asphalt, or they float.
+    other small props cast nothing. Units also get a contact shadow under the hull on every map (0.6; 0.78 on Ridge, whose sun shadow is lighter), shifted along the sun like the props' patches and weaker on asphalt, or they float.
   - **River** (overcast): shadow opacity 0.35 with a wide blur — a faint smudge, as under cloud.
-    Only units cast through the light.
+    Only units cast through the light, and each also gets a contact shadow of 0.78, centred under the hull because overcast light has no direction: it reads as ambient occlusion and keeps the hull from floating.
   - Trees never cast through the light: the forest's shadow is baked onto the ground in the map's
     sun direction, and lone trees and bushes lay a shade patch under them, stretched along the sun on
     sunny maps.
