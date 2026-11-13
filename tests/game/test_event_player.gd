@@ -12,6 +12,8 @@ extends GutTest
 ## й tests/game/test_unit_view.gd) — await на реальному сигналі тут не
 ## використовується, щоб тест не міг зависнути.
 
+const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
+
 var player: EventPlayer
 
 
@@ -461,13 +463,13 @@ func test_wreck_events_reach_the_injected_callables_unchanged() -> void:
 	var left: Array = []
 	var removed: Array = []
 	player = EventPlayer.new(Callable(), Callable(), Callable(),
-		func(pos: Vector2i, type_id: int, facing: int) -> void: left.append([pos, type_id, facing]),
+		func(pos: Vector2i, type_id: int, facing: int, owner: int) -> void: left.append([pos, type_id, facing, owner]),
 		func(pos: Vector2i, reason: int) -> void: removed.append([pos, reason]))
 	await player.play([
-		Events.WreckLeft.new(Vector2i(3, 4), 8, 6),
+		Events.WreckLeft.new(Vector2i(3, 4), 8, 6, 4),
 		Events.WreckRemoved.new(Vector2i(5, 1), Wrecks.Reason.BRIDGE_DEMOLISHED),
 	] as Array[Events.BattleEvent])
-	assert_eq(left, [[Vector2i(3, 4), 8, 6]])
+	assert_eq(left, [[Vector2i(3, 4), 8, 6, 4]])
 	assert_eq(removed, [[Vector2i(5, 1), Wrecks.Reason.BRIDGE_DEMOLISHED]])
 
 
@@ -601,4 +603,22 @@ func test_shots_leave_no_crater() -> void:
 		func(id: int) -> Unit: return gun if id == 1 else (target_unit if id == 2 else null))
 	player.play([Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
 	assert_eq(target.get_parent().find_children("Hit*", "", false, false).size(), 1, "розрив видно")
+	_finish_all_processed_tweens()
+
+
+## Спалах стрільця береться з виміру набору власника (4 — набір 1), не набору 0.
+func test_muzzle_flash_uses_the_shooters_set() -> void:
+	var row: Dictionary = {"hull": Vector3(0.5, 0.2, 0.9), "barrel": 0.7, "wheel": 0.05, "extras": [&"turret"]}
+	UnitSilhouettes.use_models({Vector2i(1, 5): UnitModelFixture.mesh(row.hull)})
+	UnitSilhouettes.use_set_specs({1: {5: row}})
+	var shooter: UnitView = _spawn_view(1, 5, 4, Vector2i(2, 2))
+	var shooter_unit := _unit(1, 5, 4, Vector2i(2, 2))
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return shooter if id == 1 else null,
+		func(id: int) -> Unit: return shooter_unit if id == 1 else null)
+	player.play([Events.ShotFired.new(1, 2, UnitTypes.ArmourSector.FRONT)] as Array[Events.BattleEvent])
+	var flashes: Array[Node] = _fx_named("Muzzle")
+	assert_eq(flashes.size(), 1)
+	assert_ne(UnitSilhouettes.muzzle(5, 1), UnitSilhouettes.muzzle(5, 0), "передумова: набори різняться")
+	assert_eq((flashes[0] as Node3D).position, shooter.transform * UnitSilhouettes.muzzle(5, 1))
 	_finish_all_processed_tweens()

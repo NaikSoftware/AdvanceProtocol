@@ -30,7 +30,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var wrecks: Array = []
 	for w in state.wrecks:
 		wrecks.append({"x": w.pos.x, "y": w.pos.y, "type_id": w.type_id, "facing": w.facing,
-			"burns_out_at": w.burns_out_at})
+			"burns_out_at": w.burns_out_at, "owner": w.owner})
 	var broken_forest: Array = []
 	for p: Vector2i in state.broken_forest:
 		broken_forest.append({"x": p.x, "y": p.y})
@@ -123,7 +123,8 @@ static func from_dict(data: Dictionary) -> BattleState:
 	state.wrecks.clear()
 	for w_data in (data.get("wrecks", []) as Array):
 		state.wrecks.append(Wrecks.Wreck.new(Vector2i(int(w_data["x"]), int(w_data["y"])),
-			int(w_data["type_id"]), int(w_data.get("facing", 0)), int(w_data["burns_out_at"])))
+			int(w_data["type_id"]), int(w_data.get("facing", 0)), int(w_data["burns_out_at"]),
+			int(w_data.get("owner", 0))))
 	# Збереження до появи просік поля не мають — лісу там ніхто не валив.
 	state.broken_forest.clear()
 	for f_data in (data.get("broken_forest", []) as Array):
@@ -231,6 +232,9 @@ static func _is_valid(data: Dictionary) -> bool:
 			return false
 		# Без напряму уламки з ранніх збережень дивляться на північ (0); з ним — лише 0..7.
 		if wr.has("facing") and not _in(wr, "facing", 0, 7):
+			return false
+		# Без власника уламки з ранніх збережень належать гравцю 0; з ним — лише наявні гравці.
+		if wr.has("owner") and not _in(wr, "owner", 0, pc - 1):
 			return false
 		var pos := Vector2i(int(wr["x"]), int(wr["y"]))
 		if wreck_at.has(pos) or not _is_vehicle_type(int(wr["type_id"])):

@@ -6,6 +6,7 @@ extends GutTest
 ## передачі ходу (R7) — рекон і перебудова ДО того, як гейт закриється.
 
 const BattleScreenScene := preload("res://game/battle/battle_screen.tscn")
+const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
 const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 
 ## Шпигун лише над submit(): рахує, скільки разів і якою командою сцена
@@ -42,6 +43,8 @@ func before_each() -> void:
 
 func after_each() -> void:
 	Engine.max_fps = _fps_before
+	WeatherRig.sun_ground = Vector2.ZERO
+	UnitSilhouettes.reset_models()
 
 
 func _screen() -> Node3D:
@@ -205,6 +208,7 @@ func test_handover_batches_track_exactly_the_incoming_players_known_units() -> v
 	assert_gt(known, 0, "передумова: гравець, що заходить, знає юнітів")
 	assert_eq(screen._hp_bars.count(), known, "смуги HP — рівно відомі юніти")
 	assert_eq(screen._contacts.count(), known, "плями-контакт — рівно відомі юніти")
+	assert_not_null(screen._contacts.map, "плями-контакт знають карту: дорога слабшає пляму")
 	assert_eq(screen._unit_views.size(), known)
 	WeatherRig.unit_contact = 0.0
 
@@ -1492,3 +1496,18 @@ func test_handover_forest_shows_only_what_incoming_player_knows() -> void:
 	assert_eq(forest._reveal.size(), shown.size(), "розчинення — лише над юнітами, яких знає гравець 1")
 	for c: Vector2i in forest._reveal:
 		assert_true(shown.has(c), "розчинення над %s, якого гравець 1 не знає" % c)
+
+
+## WreckLeft несе власника: нове згарище малюється набором власника (4 — набір 1), а не набору 0.
+func test_wreck_left_draws_the_wreck_in_its_owners_set() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _two_tanks_in_corners(service)
+	var row: Dictionary = {"hull": Vector3(0.5, 0.2, 0.9), "barrel": 0.7, "wheel": 0.05, "extras": [&"turret"]}
+	UnitSilhouettes.use_models({Vector2i(1, 5): UnitModelFixture.mesh(row.hull)})
+	UnitSilhouettes.use_set_specs({1: {5: row}})
+	var pos: Vector2i = _first_tile(service.state, 0, 1)
+	screen._on_wreck_left(pos, 5, 0, 4)
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	assert_eq(layer.flame_size(pos), Vector2(WreckLayer.flame_width(5, 1), WreckLayer.flame_height(5, 1)))
+	assert_ne(WreckLayer.flame_width(5, 1), WreckLayer.flame_width(5, 0), "передумова: набори різняться")

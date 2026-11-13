@@ -715,10 +715,10 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 ## ним; автогармата — три малі ядра й клубок диму. Розміри, крок і життя клубів — свої для кожного
 ## пострілу. Стрілецька зброя спалаху не має: на екрані він субпіксельний.
 ## Стрільця, якого глядач не бачить, сюди не передають зовсім.
-static func spawn_muzzle(parent: Node, shooter: Transform3D, weapon: Weapon, type_id: int = -1) -> Node3D:
+static func spawn_muzzle(parent: Node, shooter: Transform3D, weapon: Weapon, type_id: int = -1, set_id: int = 0) -> Node3D:
 	if weapon == Weapon.RIFLE or weapon == Weapon.DRONE:
 		return null
-	var tip: Vector3 = shooter * (UnitSilhouettes.muzzle(type_id) if type_id >= 0 else Vector3(0, 0.2, -0.6))
+	var tip: Vector3 = shooter * (UnitSilhouettes.muzzle(type_id, set_id) if type_id >= 0 else Vector3(0, 0.2, -0.6))
 	var root := _root("Muzzle", parent, tip)
 	var axis: Vector3 = Vector3(-shooter.basis.z.x, 0.0, -shooter.basis.z.z).normalized()
 	var rng := RandomNumberGenerator.new()
