@@ -3,7 +3,7 @@
   "heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
     "type_id": 8,
-    "paint": {"fade_to": [146, 154, 104], "roof_fade": 0.9, "roof_dark": -0.05, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
+    "paint": {"fade_to": [158, 150, 104], "roof_fade": 0.9, "roof_dark": -0.05, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
     "fwd": "x",
     "hull_long": [-0.4987, 0.3238],
     "hull_lat": 0.2166,
@@ -48,7 +48,7 @@
   "medium_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/medium_tank.glb",
     "type_id": 5,
-    "paint": {"fade_to": [168, 178, 120], "roof_fade": 0.95, "roof_dark": -0.1, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
+    "paint": {"fade_to": [181, 174, 120], "roof_fade": 0.95, "roof_dark": -0.1, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
     "fwd": "x",
     "hull_long": [-0.4987, 0.3238],
     "hull_lat": 0.2166,
@@ -109,7 +109,7 @@
   "tank_destroyer": {
     "source": "~/.local/share/advance-protocol/unit-sources/tank_destroyer.glb",
     "type_id": 6,
-    "paint": {"fade_to": [160, 168, 114], "roof_fade": 0.92, "roof_dark": -0.08, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
+    "paint": {"fade_to": [172, 164, 114], "roof_fade": 0.92, "roof_dark": -0.08, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
     "fwd": "x",
     "_layout": "no turret: low front hull, a tall fixed armoured box on the rear 57 %, the gun from its front face",
     "hull_long": [-0.5, 0.251],
@@ -157,7 +157,7 @@
   "light_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/light_tank.glb",
     "type_id": 7,
-    "paint": {"fade_to": [152, 160, 108], "roof_fade": 0.9, "roof_dark": -0.05, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
+    "paint": {"fade_to": [164, 156, 108], "roof_fade": 0.9, "roof_dark": -0.05, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
     "fwd": "x",
     "hull_long": [-0.4973, 0.2314],
     "hull_lat": 0.1939,
@@ -221,7 +221,7 @@
     "ends_bottom_h": [0.095, 0.105],
     "body_tris": 2800,
     "glass_above_m": 2.55,
-    "paint": {"scheme": "plain", "base": [152, 128, 88], "roof_dark": 0.12, "dust": 0.3, "dust_c": [168, 146, 108], "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.74, "floor": 0.68},
+    "paint": {"scheme": "plain", "base": [156, 127, 82], "roof_dark": 0.12, "dust": 0.3, "dust_c": [172, 145, 103], "mottle": 0.05, "rough": 0.74, "floor": 0.68, "mud_h": 1.2, "streak": 0.7, "grime": 0.4, "blotch": 0.1, "rough_var": 0.14, "oil_dark": 0.3, "mud_max": 0.7, "wheel_mud": 0.5},
     "_flatten": "the bustle rack's posts and the antennas pressed down to the turret roof height",
     "flatten": [[-0.405, -0.275, 0.209, 0.256], [0.03, 0.11, 0.21, 0.27]],
     "_add_boxes": "solid bustle across the turret rear; full-length side skirts whose bottom covers the top third of the road wheels",
@@ -279,7 +279,7 @@
     "ends_bottom_h": [0.095, 0.105],
     "body_tris": 2800,
     "glass_above_m": 2.3,
-    "paint": {"scheme": "plain", "base": [152, 128, 88], "roof_dark": 0.12, "dust": 0.3, "dust_c": [168, 146, 108], "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.74, "floor": 0.68},
+    "paint": {"scheme": "plain", "base": [156, 127, 82], "roof_dark": 0.12, "dust": 0.3, "dust_c": [172, 145, 103], "mottle": 0.05, "rough": 0.74, "floor": 0.68, "mud_h": 1.2, "streak": 0.7, "grime": 0.4, "blotch": 0.1, "rough_var": 0.14, "oil_dark": 0.3, "mud_max": 0.7, "wheel_mud": 0.5},
     "turret": {
       "long": [-0.274, 0.15],
       "lat": 0.19,
@@ -354,7 +354,7 @@
     "delete_boxes": [[-0.51, -0.4895, 0, 0.25, 0, 0.4], [-0.5, 0.2, 0.172, 0.3, 0.0, 0.4]],
     "body_tris": 2800,
     "glass_above_m": 3.4,
-    "paint": {"scheme": "plain", "base": [152, 128, 88], "roof_dark": 0.12, "dust": 0.3, "dust_c": [168, 146, 108], "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.74, "floor": 0.68, "rear_panels": {"y_max": -3.5, "pitch": 0.9}, "mud_h": 0.9},
+    "paint": {"scheme": "plain", "base": [156, 127, 82], "roof_dark": 0.12, "dust": 0.3, "dust_c": [172, 145, 103], "mottle": 0.05, "rough": 0.74, "floor": 0.68, "streak": 0.7, "grime": 0.4, "blotch": 0.1, "rough_var": 0.14, "oil_dark": 0.3, "mud_max": 0.7, "wheel_mud": 0.5, "rear_panels": {"y_max": -3.5, "pitch": 0.9}, "mud_h": 1.3},
     "_flatten": "the whole box roof pressed 0.02 tile lower so the destroyer stays smaller in plan mass than the heavy; the cupola is rebuilt as a low block on the right",
     "flatten": [[-0.46, -0.14, 0.17, 0.296], [-0.51, -0.455, 0.17, 0.296]],
     "_add_boxes": "flat rear plate closing the bay under the rear basket with a stowage ledge and two tow-hook blocks; cupola block; full-length side skirts whose bottom covers the top third of the road wheels",
@@ -416,7 +416,7 @@
     "ends_bottom_h": [0.12, 0.11],
     "body_tris": 2800,
     "glass_above_m": 2.5,
-    "paint": {"scheme": "plain", "base": [152, 128, 88], "roof_dark": 0.12, "dust": 0.3, "dust_c": [168, 146, 108], "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.74, "floor": 0.68},
+    "paint": {"scheme": "plain", "base": [156, 127, 82], "roof_dark": 0.12, "dust": 0.3, "dust_c": [172, 145, 103], "mottle": 0.05, "rough": 0.74, "floor": 0.68, "mud_h": 1.2, "streak": 0.7, "grime": 0.4, "blotch": 0.1, "rough_var": 0.14, "oil_dark": 0.3, "mud_max": 0.7, "wheel_mud": 0.5},
     "turret": {
       "long": [-0.37, 0.03],
       "lat": 0.17,
