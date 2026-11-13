@@ -249,16 +249,22 @@ if plain:
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 # Oil and fuel on the rear deck: darker, half-gloss patches, the one smooth area on a matte tank.
 # Deck level only (hull height): a casemate roof at the rear is not an engine deck.
-# The hull top comes from the geometry (median height of the up-facing front quarter, where every role has bare hull deck);
-# a set unit's row hull y is the bore-height basis, not the deck height, so it cannot serve as the gate there.
+# The hull top comes from the geometry: the fullest 5 cm level of up-facing texels behind the turret (y < -1.5 m) and
+# below the gun axis, which is the engine deck itself. The front quarter is mostly glacis and low front deck, and a
+# casemate or turret roof stands above the gun axis; a set unit's row hull y is the bore-height basis, not the deck height.
 hull_top = cfg["spec"]["hull"][1] * lib.TILE_M
+deck_lo = -9.0
 if lib.set_row(cfg):
-    front = (roof[..., 0] > 0.5) & (d["cov"] > 0.5) & ~on_gun & (P[..., 1] > 0.25 * cfg["spec"]["hull"][2] * lib.TILE_M)
-    if front.any():
-        hull_top = float(np.median(h[front]))
-oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < hull_top + 0.15) \
+    deck = (roof[..., 0] > 0.5) & (d["cov"] > 0.5) & ~on_gun & (P[..., 1] < -1.5) & (h < az)
+    if deck.sum() > 500:
+        cnt, edges = np.histogram(h[deck], bins=np.arange(0.0, az + 0.05, 0.05))
+        hull_top = float(edges[cnt.argmax()] + 0.025)
+        deck_lo = hull_top - 0.15       # fenders and track guards below the deck get none
+oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < hull_top + 0.15) * (h > deck_lo) \
     * smooth(0.58, 0.7, fbm(P, [(0.6, 0.6), (0.2, 0.4)], 95))
 col = col * (1 - C.get("oil_dark", 0.15) * oil[..., None])
+_om = oil > 0.5
+print("oil: hull_top %.2f m, %d texels, h median %.2f max %.2f" % (hull_top, _om.sum(), np.median(h[_om]) if _om.any() else 0, h[_om].max() if _om.any() else 0))
 rough = rough - C.get("oil_gloss", 0.15) * oil
 
 # ---- muzzle soot ----------------------------------------------------------------------------
