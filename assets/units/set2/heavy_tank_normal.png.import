@@ -3,28 +3,30 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bck41nyfnpmul"
-path="res://.godot/imported/heavy_tank_normal.png-348b37c00f3d840c2d1589f7be6f0a20.ctex"
+path.s3tc="res://.godot/imported/heavy_tank_normal.png-348b37c00f3d840c2d1589f7be6f0a20.s3tc.ctex"
+path.etc2="res://.godot/imported/heavy_tank_normal.png-348b37c00f3d840c2d1589f7be6f0a20.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "929fa0ff899d346d8a7cdd537294056d"
+"md5": "29ed57893064608d1f0f82145df4aaeb"
 }
 
 [deps]
 
 source_file="res://assets/units/set2/heavy_tank_normal.png"
-dest_files=["res://.godot/imported/heavy_tank_normal.png-348b37c00f3d840c2d1589f7be6f0a20.ctex"]
+dest_files=["res://.godot/imported/heavy_tank_normal.png-348b37c00f3d840c2d1589f7be6f0a20.s3tc.ctex", "res://.godot/imported/heavy_tank_normal.png-348b37c00f3d840c2d1589f7be6f0a20.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=0
+compress/normal_map=1
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1

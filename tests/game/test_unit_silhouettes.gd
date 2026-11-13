@@ -172,20 +172,49 @@ func test_model_merge_bakes_node_transform_into_vertices_and_axles() -> void:
 	fail_test("у сітці нема коліс")
 
 
-## Імпорт моделей: без стиснення (точність UV2), без LOD і тіньових сіток (злиття їх однаково
+## Текстури юнітів усіх наборів: VRAM-стиснення (режим 2), карти нормалей позначені як нормалі.
+func test_unit_texture_imports_are_vram_compressed() -> void:
+	var seen: int = 0
+	for set_id in UnitSilhouettes.SET_COUNT:
+		var dir := DirAccess.open(UnitSilhouettes.model_dir(set_id))
+		if dir == null:
+			fail_test("немає каталогу моделей набору %d" % set_id)
+			continue
+		for f: String in dir.get_files():
+			if not f.ends_with(".png.import"):
+				continue
+			var path: String = UnitSilhouettes.model_dir(set_id) + f
+			var cfg := ConfigFile.new()
+			assert_eq(cfg.load(path), OK, path)
+			assert_eq(cfg.get_value("params", "compress/mode"), 2, path)
+			if f.ends_with("_normal.png.import"):
+				assert_eq(cfg.get_value("params", "compress/normal_map"), 1, path)
+			seen += 1
+	assert_gt(seen, 0, "жодної текстури юнітів")
+
+
+## Імпорт моделей усіх наборів: без стиснення (точність UV2), без LOD і тіньових сіток (злиття їх однаково
 ## губить), UV2 не перегенеровується під lightmap (light_baking 2 стер би траки й колеса).
 func test_unit_model_imports_keep_uv2_exact() -> void:
-	var dir := DirAccess.open(UnitSilhouettes.MODEL_DIR)
-	if dir == null:
+	var seen: int = 0
+	for set_id in UnitSilhouettes.SET_COUNT:
+		var dir := DirAccess.open(UnitSilhouettes.model_dir(set_id))
+		if dir == null:
+			fail_test("немає каталогу моделей набору %d: %s" % [set_id, UnitSilhouettes.model_dir(set_id)])
+			continue
+		for f: String in dir.get_files():
+			if not f.ends_with(".glb.import"):
+				continue
+			var path: String = UnitSilhouettes.model_dir(set_id) + f
+			var cfg := ConfigFile.new()
+			assert_eq(cfg.load(path), OK, path)
+			assert_eq(cfg.get_value("params", "meshes/force_disable_compression"), true, path)
+			assert_eq(cfg.get_value("params", "meshes/generate_lods"), false, path)
+			assert_eq(cfg.get_value("params", "meshes/create_shadow_meshes"), false, path)
+			assert_ne(cfg.get_value("params", "meshes/light_baking"), 2, path)
+			assert_eq(cfg.get_value("params", "import_script/path"), "res://tools/prop_import.gd", path)
+			seen += 1
+	if seen == 0:
 		pass_test("моделей ще нема")
 		return
-	for f: String in dir.get_files():
-		if not f.ends_with(".glb.import"):
-			continue
-		var cfg := ConfigFile.new()
-		assert_eq(cfg.load(UnitSilhouettes.MODEL_DIR + f), OK, f)
-		assert_eq(cfg.get_value("params", "meshes/force_disable_compression"), true, f)
-		assert_eq(cfg.get_value("params", "meshes/generate_lods"), false, f)
-		assert_eq(cfg.get_value("params", "meshes/create_shadow_meshes"), false, f)
-		assert_ne(cfg.get_value("params", "meshes/light_baking"), 2, f)
 	pass_test("перевірено")

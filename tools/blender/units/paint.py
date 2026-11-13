@@ -11,7 +11,11 @@ Paint. No `paint` key in units.json: the digital camouflage below (national set 
 `"paint": {"scheme": "plain", "base": [r, g, b]}` the body is one tone (sRGB 0..255), still run through the
 same occlusion, edge wear, streaks, dust, mud and roof darkening, plus a faint low-frequency mottle
 (`mottle`, default 0.05) so it does not read as flat plastic. The same dict may carry the camo knobs
-(`roof_dark`, `roof_cool`, `dust`, `wheel_mud`) to tune one palette. The generated texture never
+(`roof_dark`, `roof_cool`, `dust`, `wheel_mud`) to tune one palette. Plain-only knobs: `rough` (body roughness,
+default 0.78), `grime` (recess darkening, 0.2), `blotch` (large soft fade on tops, 0.06), `floor` (least body tone
+outside occlusion as a fraction of the base, 0.75), `gun_dark` (barrel, 0.8), `dust_c` (dust colour, default the body tone), `mud_from` (hem height in m, default
+the skirt cut), `mud_h` (fade length in m, 0.6), `mud_max` (mud mix at the hem, 0.85), `rear_panels`
+{y_max, pitch} (seams and bolts on the flat rear face behind y_max, metres). The generated texture never
 colours the body; its luminance only finds sight glass and is normalised per model (plain scheme), so a
 pale or dark Tripo texture cannot shift what counts as glass.
 
@@ -77,7 +81,7 @@ ao = d["ao"]
 pt = d["point"]
 
 # ---- digital camouflage ----------------------------------------------------------------------
-# Four Korean colours, desaturated. Pixel blocks of `block` m; patches from noise at block
+# Four colours (olive, brown, sand, black), desaturated. Pixel blocks of `block` m; patches from noise at block
 # centres, so every edge is a block edge. Three independent layers so colours touch in any order
 # instead of nesting in rings.
 PN = cfg.get("paint")
@@ -100,11 +104,10 @@ black_c = black + (olive - black) * C.get("roof_black_lift", 0.3) * roof
 col = np.where((n3 > np.quantile(n3, 0.88))[..., None], black_c, col)
 col = col * (1.0 + (hash3(*np.floor(P / block).transpose(2, 0, 1), 9)[..., None] - 0.5) * 0.06)
 if not plain:
-    # Contrast gate (docs/art/unit-models-research.md §5): from above the tops are most of the
-    # tank, and an olive top sits at the grass's hue (b* +12 against +16..+22 on the sunny maps).
-    # Tops are sun-faded towards a neutral grey of the same value (`roof_fade`), lighter than
-    # before (no roof darkening) and less dusty; the sides keep the olive, and the blocks stay
-    # darker than the faded olive, so the pattern still reads.
+    # From above the tops are most of the tank, and an olive top sits at the grass's hue (b* +12
+    # against +16..+22 on the sunny maps). Tops are sun-faded towards a neutral grey of the same
+    # value (`roof_fade`) and carry less dust; the sides keep the olive, and the blocks stay darker
+    # than the faded olive, so the pattern still reads.
     fade = C.get("roof_fade", 1.0) * roof
     col = col * (1 - fade) + (col @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None] * fade
     C = {"roof_dark": -0.1, "roof_cool": (-0.08, 0.02, 0.28), "dust": 0.1, **C}
@@ -136,7 +139,7 @@ if plain and "src" in d:
 glass = smooth(0.035, 0.012, src_l) * (d["cov"] > 0.5) * (P[..., 2] > cfg.get("glass_above_m", 2.35)) * ~on_gun
 if cfg.get("no_glass_in_boxes"):
     # added boxes take the UV of the nearest source vertex, so their texels are arbitrary: a dark one
-    # would paint scribbles of "glass" on a plain wall. Off unless the unit asks (set 0 stays as it was).
+    # would paint scribbles of "glass" on a plain wall. Off unless the unit asks.
     for l0, l1, a0, a1, h0, h1 in list(cfg.get("add_boxes", [])) + [[l - r, l + r, a0, a1, h - r, h + r] for l, a0, a1, h, r in cfg.get("add_cyls", [])]:
         x0, x1 = sorted((-a0 * cfg["k"] * lib.TILE_M, -a1 * cfg["k"] * lib.TILE_M))
         y0, y1 = (lib.m_long(cfg, v) * lib.TILE_M for v in (l0, l1))
@@ -220,20 +223,28 @@ dust = np.clip(smooth(1.5, 0.3, h) * 0.8 + up * 0.35 * dust_n + up * (1 - ao) * 
 dust = dust * smooth(0.25, 0.65, dust_n + 0.15)
 dust_c = lin(152, 140, 116)
 dmix = C.get("dust", 0.42)              # from above the roof is most of the tank: heavy dust reads washed out
-dust_body = olive if plain else dust_c      # low dust must not lighten a sand body
+# plain scheme: dust takes the body tone unless the unit names a dust colour (`dust_c`, sRGB)
+dust_body = (lin(*C["dust_c"]) if "dust_c" in C else olive) if plain else dust_c
 col = col * (1 - dmix * dust[..., None]) + dust_body * dmix * dust[..., None]
 mud = smooth(0.8, 0.25, h) * smooth(0.5, 0.7, fbm(P, [(0.3, 0.6), (0.08, 0.4)], 81))
 col = col * (1 - 0.7 * mud[..., None]) + lin(74, 62, 48) * 0.7 * mud[..., None]
 if plain:
     # splashed mud: a brown-grey ramp, 0 at `mud_h` m above the ground to `mud_max` darker at the bottom of skirts and sides
-    mf = C.get("mud_from", cfg["cut"]["below_skirt_h"] * cfg["k"] * lib.TILE_M)   # skirt hem, metres
+    mf = C["mud_from"] if "mud_from" in C else cfg["cut"]["below_skirt_h"] * cfg["k"] * lib.TILE_M   # skirt hem, metres
     ramp = np.clip(1 - (h - mf) / C.get("mud_h", 0.6), 0, 1)
     mx = C.get("mud_max", 0.85)
     col = col * (1 - mx * ramp[..., None]) + lin(92, 76, 56) * (mx * ramp)[..., None]
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 # Oil and fuel on the rear deck: darker, half-gloss patches, the one smooth area on a matte tank.
 # Deck level only (hull height): a casemate roof at the rear is not an engine deck.
-oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < cfg["spec"]["hull"][1] * lib.TILE_M + 0.15) \
+# The hull top comes from the geometry (median height of the up-facing front quarter, where every role has bare hull deck);
+# a set unit's row hull y is the bore-height basis, not the deck height, so it cannot serve as the gate there.
+hull_top = cfg["spec"]["hull"][1] * lib.TILE_M
+if lib.set_row(cfg):
+    front = (roof[..., 0] > 0.5) & (d["cov"] > 0.5) & ~on_gun & (P[..., 1] > 0.25 * cfg["spec"]["hull"][2] * lib.TILE_M)
+    if front.any():
+        hull_top = float(np.median(h[front]))
+oil = roof[..., 0] * smooth(0.5, -1.5, P[..., 1]) * (h < hull_top + 0.15) \
     * smooth(0.58, 0.7, fbm(P, [(0.6, 0.6), (0.2, 0.4)], 95))
 col = col * (1 - C.get("oil_dark", 0.15) * oil[..., None])
 rough = rough - C.get("oil_gloss", 0.15) * oil
@@ -263,8 +274,21 @@ if lv:
     on = (P[..., 1] > lv["y"][0]) & (P[..., 1] < lv["y"][1]) & (ax < lv["x"]) & (ax > lv.get("centre", 0.12)) \
         & (roof[..., 0] > 0.5) & (P[..., 2] < lv.get("below_m", 9.0))
     slot = ((P[..., 1] - lv["y"][0]) / lv.get("period", 0.14)) % 1.0 < lv.get("slot", 0.45)
-    col = col * (1 - 0.5 * (on & slot)[..., None]) * (1 - 0.12 * on[..., None])
+    col = col * (1 - lv.get("dark", 0.5) * (on & slot)[..., None]) * (1 - lv.get("tint", 0.12) * on[..., None])
     rough = np.where(on & slot, 0.9, rough)
+
+# Flat rear plate (plain scheme, `rear_panels`): seam lines every `pitch` m and bolts along them, in the albedo,
+# so a 2 x 3 m flat face does not read as one slab. Only faces turned backwards (object-space normal -Y) behind `y_max`.
+rp = (PN or {}).get("rear_panels") if plain else None
+if rp:
+    pitch = rp.get("pitch", 0.9)
+    back = (d["nrm"][..., 1] < -0.8) & (P[..., 1] < rp["y_max"]) & (d["cov"] > 0.5)
+    fx, fz = (P[..., 0] / pitch + 0.5) % 1.0, (P[..., 2] / pitch) % 1.0
+    seam = (np.minimum(fx, 1 - fx) * pitch < 0.03) | (np.minimum(fz, 1 - fz) * pitch < 0.03)
+    bx, bz = (P[..., 0] / (pitch / 3) + 0.5) % 1.0, (P[..., 2] / (pitch / 3) + 0.5) % 1.0
+    bolt = ((np.hypot((bx - 0.5) * pitch / 3, (bz - 0.5) * pitch / 3) < 0.035)
+            & ((np.minimum(fx, 1 - fx) * pitch < 0.09) | (np.minimum(fz, 1 - fz) * pitch < 0.09)))
+    col = col * (1 - 0.35 * (back & seam)[..., None]) * (1 - 0.3 * (back & bolt)[..., None])
 
 # A shrunk turret (units.json turret) is darker again than the deck around it: small and low, it
 # would otherwise dissolve into the hull at the far zoom.

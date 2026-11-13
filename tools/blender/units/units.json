@@ -204,7 +204,7 @@
       "sides": 12
     }
   },
-  "heavy_tank_us": {
+  "set2_heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set2_heavy_tank.glb",
     "out": "set2/heavy_tank",
     "type_id": 8,
@@ -217,7 +217,7 @@
     "ends_bottom_h": [0.095, 0.105],
     "body_tris": 2800,
     "glass_above_m": 2.55,
-    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "paint": {"scheme": "plain", "base": [152, 128, 88], "roof_dark": 0.12, "dust": 0.3, "dust_c": [168, 146, 108], "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.74, "floor": 0.68},
     "_flatten": "the bustle rack's posts and the antennas pressed down to the turret roof height",
     "flatten": [[-0.405, -0.275, 0.209, 0.256], [0.03, 0.11, 0.21, 0.27]],
     "_add_boxes": "solid bustle across the turret rear; full-length side skirts whose bottom covers the top third of the road wheels",
@@ -262,10 +262,11 @@
       "sides": 12
     }
   },
-  "medium_tank_us": {
+  "set2_medium_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set2_heavy_tank.glb",
     "out": "set2/medium_tank",
     "type_id": 5,
+    "fit_z": 0.8,
     "fwd": "x",
     "_layout": "set 2 medium, derived from the heavy source: the slab alone (rack left out) shortened to 0.42 of the hull, its centre 38 % from the bow, a flat engine deck behind it, no bustle",
     "scale_lat": 1.07,
@@ -274,7 +275,7 @@
     "ends_bottom_h": [0.095, 0.105],
     "body_tris": 2800,
     "glass_above_m": 2.3,
-    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "paint": {"scheme": "plain", "base": [152, 128, 88], "roof_dark": 0.12, "dust": 0.3, "dust_c": [168, 146, 108], "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.74, "floor": 0.68},
     "turret": {
       "long": [-0.274, 0.15],
       "lat": 0.19,
@@ -297,7 +298,7 @@
       [-0.385, 0.285, 0.1994, 0.2085, 0.058, 0.14],
       [-0.385, 0.285, -0.2085, -0.1994, 0.058, 0.14]
     ],
-    "louvres": {"y": [-3.1, -1.2], "x": 1.25, "centre": 0.15, "period": 0.14, "slot": 0.45, "below_m": 1.75},
+    "louvres": {"y": [-3.1, -1.2], "x": 1.25, "centre": 0.15, "period": 0.14, "slot": 0.45, "below_m": 1.75, "dark": 0.1, "tint": 0.0},
     "cut": {
       "lat": [0.111, 0.2095],
       "below_skirt_h": 0.055,
@@ -317,8 +318,8 @@
       "track_t": 0.012,
       "wheel_lat": [0.1498, 0.1904],
       "road": {
-        "r": 0.0350,
-        "h": 0.047,
+        "r": 0.0368,
+        "h": 0.0488,
         "long": [-0.3268, -0.2472, -0.1699, -0.0944, -0.0163, 0.0624, 0.1576]
       },
       "sprocket": {
@@ -334,7 +335,7 @@
       "sides": 12
     }
   },
-  "tank_destroyer_us": {
+  "set2_tank_destroyer": {
     "source": "~/.local/share/advance-protocol/unit-sources/set2_tank_destroyer.glb",
     "out": "set2/tank_destroyer",
     "type_id": 6,
@@ -349,7 +350,7 @@
     "delete_boxes": [[-0.51, -0.4895, 0, 0.25, 0, 0.4], [-0.5, 0.2, 0.172, 0.3, 0.0, 0.4]],
     "body_tris": 2800,
     "glass_above_m": 3.4,
-    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "paint": {"scheme": "plain", "base": [152, 128, 88], "roof_dark": 0.12, "dust": 0.3, "dust_c": [168, 146, 108], "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.74, "floor": 0.68, "rear_panels": {"y_max": -3.5, "pitch": 0.9}, "mud_h": 0.9},
     "_flatten": "the whole box roof pressed 0.02 tile lower so the destroyer stays smaller in plan mass than the heavy; the cupola is rebuilt as a low block on the right",
     "flatten": [[-0.46, -0.14, 0.17, 0.296], [-0.51, -0.455, 0.17, 0.296]],
     "_add_boxes": "flat rear plate closing the bay under the rear basket with a stowage ledge and two tow-hook blocks; cupola block; full-length side skirts whose bottom covers the top third of the road wheels",
@@ -398,7 +399,7 @@
       "sides": 12
     }
   },
-  "light_tank_us": {
+  "set2_light_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set2_light_tank.glb",
     "out": "set2/light_tank",
     "type_id": 7,
@@ -411,7 +412,7 @@
     "ends_bottom_h": [0.12, 0.11],
     "body_tris": 2800,
     "glass_above_m": 2.5,
-    "paint": {"scheme": "plain", "base": [156, 134, 96], "roof_dark": 0.12, "dust": 0.2, "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.78},
+    "paint": {"scheme": "plain", "base": [152, 128, 88], "roof_dark": 0.12, "dust": 0.3, "dust_c": [168, 146, 108], "wheel_mud": 0.6, "mottle": 0.05, "rough": 0.74, "floor": 0.68},
     "turret": {
       "long": [-0.37, 0.03],
       "lat": 0.17,
@@ -470,7 +471,7 @@
       "sides": 12
     }
   },
-  "heavy_tank_ru": {
+  "set1_heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set1_heavy_tank.glb",
     "out": "set1/heavy_tank",
     "type_id": 8,
@@ -484,7 +485,7 @@
       [-0.51, -0.446, 0.21, 0.185]
     ],
     "no_glass_in_boxes": true,
-    "_add_boxes": "bustle flush with the roof; two flat ERA plates per turret cheek; the rear plate carried to the old drum position with two drums on it",
+    "_add_boxes": "bustle flush with the roof; two flat ERA plates per turret cheek; a rear plate with two drums on it",
     "add_boxes": [[ -0.31, -0.2, -0.16, 0.16, 0.18, 0.26],
       [-0.05, 0.05, 0.04, 0.105, 0.2, 0.255],
       [-0.05, 0.05, 0.11, 0.175, 0.2, 0.255],
@@ -495,13 +496,16 @@
     "median_cells": 3,
     "paint": {
       "scheme": "plain",
-      "base": [90, 114, 86],
+      "base": [107, 113, 91],
       "mottle": 0.1,
-      "roof_cool": [-0.028, -0.04, 0.155],
+      "roof_cool": [-0.028, -0.04, 0.0],
       "dark_gear": true,
-      "roof_dark": 0.05,
+      "roof_dark": -0.18,
       "roof_rough": 0.15,
-      "dust": 0.25
+      "dust": 0.3,
+      "dust_c": [146, 138, 110],
+      "rough": 0.74,
+      "floor": 0.68
     },
     "cut": {
       "lat": [0.105, 0.205],
@@ -550,7 +554,7 @@
       [-0.425, -0.12, -0.01, 0.209, 0.028]
     ]
   },
-  "medium_tank_ru": {
+  "set1_medium_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set1_medium_tank.glb",
     "out": "set1/medium_tank",
     "type_id": 5,
@@ -622,20 +626,22 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [90, 114, 86],
+      "base": [107, 113, 91],
       "mottle": 0.1,
-      "roof_cool": [-0.028, -0.04, 0.155],
+      "roof_cool": [-0.028, -0.04, 0.0],
       "dark_gear": true,
-      "roof_dark": 0.05,
+      "roof_dark": -0.30,
       "roof_rough": 0.15,
-      "dust": 0.25
+      "dust": 0.3,
+      "dust_c": [146, 138, 110],
+      "rough": 0.74,
+      "floor": 0.68
     },
     "add_cyls": [[-0.5, 0.01, 0.11, 0.22, 0.03],
       [-0.5, -0.11, -0.01, 0.22, 0.03]
-    ],
-    "barrel": 0.61
+    ]
   },
-  "tank_destroyer_ru": {
+  "set1_tank_destroyer": {
     "source": "~/.local/share/advance-protocol/unit-sources/set1_tank_destroyer.glb",
     "out": "set1/tank_destroyer",
     "type_id": 6,
@@ -699,16 +705,19 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [90, 114, 86],
+      "base": [107, 113, 91],
       "mottle": 0.1,
-      "roof_cool": [-0.028, -0.04, 0.155],
+      "roof_cool": [-0.028, -0.04, 0.0],
       "dark_gear": true,
-      "roof_dark": 0.05,
+      "roof_dark": -0.10,
       "roof_rough": 0.15,
-      "dust": 0.25
+      "dust": 0.3,
+      "dust_c": [146, 138, 110],
+      "rough": 0.74,
+      "floor": 0.68
     }
   },
-  "light_tank_ru": {
+  "set1_light_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/set1_light_tank.glb",
     "out": "set1/light_tank",
     "type_id": 7,
@@ -772,13 +781,16 @@
     },
     "paint": {
       "scheme": "plain",
-      "base": [90, 114, 86],
+      "base": [107, 113, 91],
       "mottle": 0.1,
-      "roof_cool": [-0.028, -0.04, 0.155],
+      "roof_cool": [-0.028, -0.04, 0.0],
       "dark_gear": true,
-      "roof_dark": 0.05,
+      "roof_dark": -0.10,
       "roof_rough": 0.15,
-      "dust": 0.25
+      "dust": 0.3,
+      "dust_c": [146, 138, 110],
+      "rough": 0.74,
+      "floor": 0.68
     },
     "crop": [-0.5, 0.43],
     "drop_low": [[-0.5, 0.43, 0.17, 0.075], [0.3, 0.43, 0.25, 0.14]]

@@ -154,7 +154,7 @@ def src_edit():
     uvb = bm.loops.layers.uv.active
     addl = bm.verts.layers.float.new("added")   # 1 on added cuboids: bake.py can give them neutral inputs
     new = []
-    for l0, l1, a0, a1, h0, h1 in cfg["add_boxes"]:
+    for l0, l1, a0, a1, h0, h1 in cfg.get("add_boxes", []):
         def P(l, a, h):
             return (l, a, h + zmin) if cfg["fwd"] == "x" else (-a, l, h + zmin)
         c = [bm.verts.new(P(l, a, h)) for l in (l0, l1) for a in (a0, a1) for h in (h0, h1)]

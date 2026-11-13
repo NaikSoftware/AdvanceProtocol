@@ -3,22 +3,24 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cfjgnb1hf7ndu"
-path="res://.godot/imported/medium_tank_albedo.png-c026b641295c0ed1e7bc77f1f9e6a445.ctex"
+path.s3tc="res://.godot/imported/medium_tank_albedo.png-c026b641295c0ed1e7bc77f1f9e6a445.s3tc.ctex"
+path.etc2="res://.godot/imported/medium_tank_albedo.png-c026b641295c0ed1e7bc77f1f9e6a445.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "ea8f1a6485afaeee6f9b2238f7d1c189"
+"md5": "c499c0fd256089d51be47e24e8a736b1"
 }
 
 [deps]
 
 source_file="res://assets/units/set2/medium_tank_albedo.png"
-dest_files=["res://.godot/imported/medium_tank_albedo.png-c026b641295c0ed1e7bc77f1f9e6a445.ctex"]
+dest_files=["res://.godot/imported/medium_tank_albedo.png-c026b641295c0ed1e7bc77f1f9e6a445.s3tc.ctex", "res://.godot/imported/medium_tank_albedo.png-c026b641295c0ed1e7bc77f1f9e6a445.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

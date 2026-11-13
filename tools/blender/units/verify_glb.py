@@ -9,7 +9,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib
 
-cfg = lib.load(sys.argv[1])
+cfg = lib.load(sys.argv[1], seed=False)
 path = os.path.join(lib.REPO, "assets", "units", cfg["out"] + ".glb")
 data = open(path, "rb").read()
 off, g, binc = 12, None, None
@@ -70,6 +70,14 @@ check(hx <= spec["hull"][0] + 0.01 and hz <= spec["hull"][2] + 0.01, "hull insid
 tip = pos[np.argmin(pos[:, 2])]
 print(f"     muzzle vertex {tip.round(4).tolist()} (spec z {-spec['barrel']}, y {spec['hull'][1] + 0.05:.3f})")
 check(abs(tip[0]) < 0.03 and abs(tip[2] + spec["barrel"]) < 0.01, "front is -Z, muzzle at the spec length")
+row = lib.set_row(cfg)
+if cfg.get("out", "").startswith("set"):
+    check(row is not None, "a set model has its _SET_SPECS row")
+if row:
+    # the game reads the set's row for this model: it must describe the model as built
+    check(abs(hx - row["hull"][0]) <= 0.002 and abs(hz - row["hull"][2]) <= 0.002, f"_SET_SPECS hull {row['hull'][0]} x {row['hull'][2]} matches the model ({hx:.4f} x {hz:.4f})")
+    check(abs(tip[2] + row["barrel"]) < 0.01 and abs(tip[1] - (row["hull"][1] + 0.05)) < 0.005,
+          f"_SET_SPECS barrel {row['barrel']} and bore height {row['hull'][1] + 0.05:.3f} match the muzzle vertex {tip.round(4).tolist()}")
 
 trk = col[:, 1] > 0.5; whl = col[:, 2] > 0.5
 other = ~(trk | whl)
@@ -111,7 +119,7 @@ if col4.shape[1] == 4:
     check(err < 0.002, f"wheel spin rate x wheel radius == road wheel radius (worst {err:.4f})")
 # the game turns wheels by travel / _SPECS.wheel, so that number must be the road wheels' radius
 road = cfg["gear"]["road"]["r"] * cfg["k"]
-check(abs(road - spec["wheel"]) <= 0.002, f"_SPECS wheel {spec['wheel']} matches road wheel radius {road:.4f} (±0.002)")
+check(abs(road - (row["wheel"] if row else spec["wheel"])) <= 0.002, f"{'_SET_SPECS' if row else '_SPECS'} wheel {row['wheel'] if row else spec['wheel']} matches road wheel radius {road:.4f} (±0.002)")
 check(np.abs(uv2[other]).max() < 1e-5, "UV2 is (0, 0) off tracks and wheels")
 img = {i["name"] if "name" in i else i.get("uri") for i in g.get("images", [])}
 check(len(g.get("images", [])) == 3, f"three textures embedded ({img})")

@@ -105,6 +105,40 @@ func test_wheel_radius_matches_every_existing_model() -> void:
 	assert_gt(checked, 0)
 
 
+## Рядок набору описує модель, яку показує: довжина ствола — за найнижчою за Z вершиною (дуло), висота осі — за
+## середнім колом вершин дула. Рядки набору 0 — заступники ролі (його висоту осі задає _SPECS, а не модель), тож
+## для нього перевіряється лише довжина.
+func test_spec_row_matches_every_model_muzzle() -> void:
+	UnitSilhouettes.reset_models()
+	var checked: int = 0
+	for set_id in UnitSilhouettes.SET_COUNT:
+		for id in UnitTypes.count():
+			if not ResourceLoader.exists(UnitSilhouettes.model_path(id, set_id)):
+				continue
+			var mesh: ArrayMesh = UnitSilhouettes._own_model(id, set_id)
+			var v: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			if v.is_empty():
+				continue
+			var zmin: float = v[0].z
+			for p in v:
+				zmin = minf(zmin, p.z)
+			var ring_y: float = 0.0
+			var n: int = 0
+			for p in v:
+				if p.z < zmin + 0.001:
+					ring_y += p.y
+					n += 1
+			var row: Dictionary = UnitSilhouettes.spec(id, set_id)
+			if not (row.extras as Array).has(&"turret"):
+				continue
+			checked += 1
+			var where: String = "набір %d тип %d" % [set_id, id]
+			assert_almost_eq(-zmin, float(row.barrel), 0.01, "довжина ствола, " + where)
+			if set_id > 0:
+				assert_almost_eq(ring_y / float(n), UnitSilhouettes.barrel_y(id, set_id), 0.005, "висота осі ствола, " + where)
+	assert_gt(checked, 0)
+
+
 ## Радіус опорного котка: найдальша від осі (UV2) вершина з маскою колеса й швидкістю 0,5 (ведуче й напрямне крутяться інакше); -1 — коліс нема.
 func _road_wheel_radius(mesh: ArrayMesh) -> float:
 	var a: Array = mesh.surface_get_arrays(0)
