@@ -70,6 +70,8 @@ def measure(path_m):
     """None when the model is not in the frame (under MIN_BODY_PX body pixels)."""
     m = np.asarray(Image.open(path_m).convert("RGB")).astype(float)
     e = np.asarray(Image.open(path_m[:-6] + "_e.png").convert("RGB")).astype(float)
+    if not os.path.exists(path_m[:-6] + "_k.png"):
+        sys.exit("%s: no _k.png mask frame, the run predates the flat-colour mask; shoot it again" % path_m)
     k = np.asarray(Image.open(path_m[:-6] + "_k.png").convert("RGB")).astype(float)
     h, w = m.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w]
@@ -154,8 +156,8 @@ def report(out, label, maps):
     for mp in maps:
         if not any(m == mp for _, m, _, _ in results):
             fails.append("%s: no places measured" % mp)
-    # the mask size depends on the map's light (a low-contrast model gives fewer mask pixels in rain), so "hidden" is
-    # judged against the median size on the same map
+    # the footprint still changes with the map's camera framing, so "hidden" is judged against the median size on
+    # the same map
     typical = {mp: float(np.median([x["px"] for _, m2, _, x in results if x and m2 == mp] or [0])) for mp in maps}
     usable = {}
     for name, mp, place, r in results:

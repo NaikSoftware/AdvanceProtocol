@@ -7,7 +7,7 @@ Everything on the body is a function of the baked object-space position, so camo
 keep their real size across UV islands. Lengths here are metres (model units x 8).
 The tread strip, the wheel and sprocket cells are authored, not baked (lib.py layout).
 
-Paint. No `paint` key in units.json: the digital camouflage below (national set 0). With
+Paint. No `paint` key in units.json, or one without `scheme`: the digital camouflage below. With
 `"paint": {"scheme": "plain", "base": [r, g, b]}` the body is one tone (sRGB 0..255), still run through the
 same occlusion, edge wear, streaks, dust, mud and roof darkening, plus a faint low-frequency mottle
 (`mottle`, default 0.05) so it does not read as flat plastic. The same dict may carry the camo knobs
@@ -22,7 +22,10 @@ pale or dark Tripo texture cannot shift what counts as glass.
 Painted metal (same dict, defaults fit every set): `paint_rough`, `rough_var`, `edge_polish`,
 `bare_rough`, `bare_metal`, `bare_c`, `oil_dark`, `oil_gloss`, `normal_gain`, `pin_metal`.
 Camo scheme only: `roof_fade` (up-facing faces faded to grey of the same value, for the contrast
-gate), with its own defaults for `roof_dark`, `roof_cool` and `dust`.
+gate), with its own defaults for `roof_dark`, `roof_cool` and `dust`; with `fade_to` (sRGB) the olive base
+of the tops fades towards that colour instead while the brown and black blocks stay dark. The camo
+defaults for `roof_dark`, `roof_cool` and `dust` do not apply under `fade_to`: set them in the dict.
+`streak` applies to both schemes.
 """
 import sys, os
 import numpy as np
@@ -104,8 +107,8 @@ roof = smooth(0.35, 0.8, nz)[..., None]
 black_c = black + (olive - black) * C.get("roof_black_lift", 0.3) * roof
 fade_to = C.get("fade_to")
 if fade_to is not None and not plain:
-    # Lighter grey-olive tops for the contrast gate: only the olive/khaki/brown base is faded towards `fade_to`
-    # (sRGB), the black blocks are applied after and stay dark, so the mottling still carries the camo read.
+    # Lighter olive tops for the contrast gate: only the olive/khaki base is faded towards `fade_to` (sRGB); the
+    # brown and black blocks are applied after and stay dark, so the mottling still carries the camo read.
     ft = lin(*fade_to) * np.ones_like(col)
     col = col * (1 - C.get("roof_fade", 1.0) * roof) + ft * C.get("roof_fade", 1.0) * roof
 if fade_to is not None:
