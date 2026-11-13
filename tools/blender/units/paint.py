@@ -231,13 +231,15 @@ if "rear_door" in cfg:
     y0 = lib.m_long(cfg, l0) * lib.TILE_M
     z0, z1 = h0 * cfg["k"] * lib.TILE_M, h1 * cfg["k"] * lib.TILE_M
     xa = np.abs(P[..., 0]); zz = P[..., 2] - z0
-    face = (np.abs(P[..., 1] - y0) < 0.08) & (zz > 0.0) & (P[..., 2] < z1 + 0.02) & (xa < abs(a0) * cfg["k"] * lib.TILE_M + 0.02)
-    dw, dz0, dz1 = 0.5, 0.12, (z1 - z0) - 0.35
+    face = (d["nrm"][..., 1] < -0.8) & (d["cov"] > 0.5) & (np.abs(P[..., 1] - y0) < 0.2) & (zz > 0.0) & (P[..., 2] < z1 + 0.02) & (xa < abs(a0) * cfg["k"] * lib.TILE_M + 0.02)
+    dw, dz0, dz1 = 0.5, 0.45, 1.5
     in_door = (xa < dw) & (zz > dz0) & (zz < dz1)
     seam = in_door & ((xa > dw - 0.03) | (zz < dz0 + 0.03) | (zz > dz1 - 0.03))
     hinge = ((np.abs(xa - dw) < 0.06) & ((np.abs(zz - dz0 - 0.2) < 0.07) | (np.abs(zz - dz1 + 0.2) < 0.07)) & (xa > dw - 0.06))
     handle = (np.abs(P[..., 0] - 0.3) < 0.1) & (np.abs(zz - (dz0 + dz1) * 0.5) < 0.025)
-    vent = (xa > 0.7) & (xa < 1.25) & (zz > dz0 + 0.1) & (zz < dz1 - 0.1) & (((zz / 0.09) % 1.0) < 0.5)
+    vent = np.zeros_like(seam)
+    if not face.any():
+        print("WARNING %s: rear_door face mask is empty" % sys.argv[1])
     for m, c, a in ((seam, 0.45, 0.6), (hinge, 0.4, 0.5), (handle, 0.5, 0.6), (vent, 0.5, 0.7)):
         m = m & face
         col = col * (1 - c * m[..., None])
