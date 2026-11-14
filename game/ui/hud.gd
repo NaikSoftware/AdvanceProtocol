@@ -38,7 +38,6 @@ const _EDGE: float = 24.0
 const _BOTTOM: float = 12.0
 const _TOAST_GAP: float = 8.0
 const _VERB_ICONS: Dictionary = {
-	EngineerCommand.Action.LAY_MINE: preload("res://assets/ui/icons/btn_mine_lay.svg"),
 	EngineerCommand.Action.CLEAR_MINE: preload("res://assets/ui/icons/btn_mine_clear.svg"),
 	EngineerCommand.Action.REPAIR_BRIDGE: preload("res://assets/ui/icons/btn_bridge_repair.svg"),
 	EngineerCommand.Action.DEMOLISH_BRIDGE: preload("res://assets/ui/icons/btn_bridge_demolish.svg"),

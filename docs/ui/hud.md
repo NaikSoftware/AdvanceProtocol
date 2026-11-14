@@ -115,8 +115,10 @@ preview fields; the glyph's geometry never decides a sector.
   **One icon family:** every `btn_*.svg` is cropped so its ink is ~17.5 dp on its longest side inside
   one 18 dp box at ~1.5 dp stroke, so the button uses a single size with no per-action sizes. The
   plain `fire/drone/…svg` stay for the engineer tile and the Дрон button. **One gap:** ~10 dp from the
-  ink edge to the word (a 9 dp box gap plus glyph side bearings); only the labels that would not fit at 800 dp (repair and demolish bridge) drop to
-  7 dp, leaving ≥ 7 dp from the button's inner border to the ink on both sides (8 / 8 dp at 800 dp). The label is a localisation key in an auto-translating Label. The 147 dp width holds
+  ink edge to the word (a 9 dp box gap plus glyph side bearings); only repair and demolish bridge,
+  which would leave under 7 dp inside the border at 800 dp, drop to 7 dp, leaving ≥ 7 dp from the
+  button's inner border to the ink on both sides (8 / 8 dp at 800 dp). The label is a localisation
+  key in an auto-translating Label. The 147 dp width holds
   the longest label untruncated at all four probe sizes in both locales
   (`tests/game/test_hud_action_labels.gd`).
 - **End turn is fixed bottom-left, and Confirm never docks there.** Confirm is tapped many times a

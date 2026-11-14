@@ -709,7 +709,7 @@ func test_verb_plate_goes_bottom_left_of_end_turn_when_bottom_right_is_busy() ->
 
 
 func test_strip_docks_bottom_right_then_top_right_then_top_left() -> void:
-	var size := Vector2(289, 52)
+	var size := Vector2(ArmedStrip.MIN_WIDTH, ArmedStrip.HEIGHT)
 	var none: Array[Rect2] = []
 	assert_eq(HudDocking.choose_strip(SCREEN, size, none, none)["name"], "br")
 	var busy_bottom: Array[Rect2] = [Rect2(700, 390, 40, 30)]
@@ -887,7 +887,7 @@ func test_releasing_the_hold_restores_a_covered_row_to_full_alpha() -> void:
 	hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	hud.size = SCREEN
 	row.visible = true
-	row.position = Vector2(676.0, 382.0)
+	row.position = Vector2(672.0, 382.0)
 	row.size = Vector2(289.0, 48.0)
 	# Картка на пів екрана гарантовано перетинає ряд, де б той не стояв.
 	hud.hold_card().custom_minimum_size = Vector2(900.0, 400.0)
