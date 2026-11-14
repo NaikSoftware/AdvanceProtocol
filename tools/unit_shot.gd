@@ -475,9 +475,10 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 func _fleet(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int = 0) -> void:
 	screen.setup(map, 2, 1)
 	var c := _field_row_near_centre(map, 7)
-	var roles: Array[int] = [8, 5, 6, 7, 2, 3, 4]
+	# усі дванадцять типів у двох рядах: гармати довші за тайл, тож ряди розставлені через клітинку: гармати довші за тайл і не мають налягати на сусідів
+	var roles: Array[int] = [8, 5, 6, 7, 2, 3, 4, 9, 10, 11, 0, 1]
 	for i in roles.size():
-		_place(UnitSilhouettes.build_merged(roles[i], -1, set_id), c + Vector2i(i - 3, 0), 0)
+		_place(UnitSilhouettes.build_merged(roles[i], -1, set_id), c + Vector2i(i % 6 - 3, (i / 6) * 2 - 1), 0)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame

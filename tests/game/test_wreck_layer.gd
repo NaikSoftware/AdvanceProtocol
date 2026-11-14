@@ -551,3 +551,13 @@ func test_wreck_of_owner_four_uses_set_one_model_and_spec() -> void:
 	_seen(0, Vector2i(4, 4))
 	layer.rebuild(state, 0)
 	assert_almost_eq(layer.flame_size(Vector2i(4, 4)).x, WreckLayer.flame_width(5, 1), 0.00001, "перебудова зі стану бере набір власника")
+
+
+## Гармати й інженерна машина лишають уламок із власної моделі, а не з коробок: тип без вежі й дула теж будується.
+func test_shipped_gun_and_engineer_models_make_wrecks() -> void:
+	UnitSilhouettes.reset_models()
+	for id: int in [9, 10, 11]:
+		var root: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), id, 0)
+		assert_not_null(UnitSilhouettes.model_mesh(id, 0), "модель типу %d" % id)
+		assert_not_null((root.get_node("Body") as MeshInstance3D).mesh, "уламок типу %d" % id)
+		root.free()

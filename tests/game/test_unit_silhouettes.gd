@@ -6,7 +6,7 @@ const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
 const _METRES := {
 	2: Vector3(2.7, 2.4, 6.6), 3: Vector3(2.7, 2.6, 7.6), 4: Vector3(2.2, 2.0, 4.9),
 	5: Vector3(3.44, 1.6, 6.72), 6: Vector3(3.5, 1.5, 7.5), 7: Vector3(2.94, 1.5, 5.6),
-	8: Vector3(3.8, 2.0, 7.2), 11: Vector3(3.4, 2.8, 7.0),
+	8: Vector3(3.8, 2.0, 7.2), 9: Vector3(3.52, 2.72, 6.0), 10: Vector3(6.52, 4.16, 10.4), 11: Vector3(4.24, 2.88, 9.6),
 }
 
 
@@ -61,6 +61,12 @@ func test_merged_body_is_one_mesh_with_the_same_geometry() -> void:
 					var box: AABB = UnitSilhouettes.figure_transform(i, true) * mm.mesh.get_aabb()
 					lo = lo.min(box.position)
 					hi = hi.max(box.end)
+		# розрахунок гармати — дві коробки-фігури в тій самій сітці
+		for c: Vector3 in UnitSilhouettes.spec(id).get("crew", []):
+			verts += 24
+			var cb: AABB = UnitSilhouettes._crew_transform(c, UnitSilhouettes.FIGURE_SIZE.y * 0.5) * AABB(-UnitSilhouettes.FIGURE_SIZE * 0.5, UnitSilhouettes.FIGURE_SIZE)
+			lo = lo.min(cb.position)
+			hi = hi.max(cb.end)
 		assert_eq(hull.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size(), verts, "тип %d: ті самі вершини" % id)
 		var merged: AABB = hull.mesh.get_aabb()
 		assert_almost_eq(merged.position, lo, Vector3.ONE * 0.0001, "тип %d: низ" % id)
@@ -218,3 +224,25 @@ func test_unit_model_imports_keep_uv2_exact() -> void:
 		pass_test("моделей ще нема")
 		return
 	pass_test("перевірено")
+
+
+## Гармата несе двох розрахунків у власній сітці (один виклик малювання): вершини гармати плюс дві фігури, 1,8 м, ступні на землі.
+func test_gun_merged_mesh_carries_its_two_crew() -> void:
+	var gun: ArrayMesh = UnitModelFixture.mesh(Vector3(0.4, 0.3, 0.7))
+	var man: ArrayMesh = UnitModelFixture.soldier()
+	var per_man: int = (man.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var gun_n: int = (gun.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	assert_eq((UnitSilhouettes.spec(9).crew as Array).size(), 2)
+	assert_eq((UnitSilhouettes.spec(10).crew as Array).size(), 2)
+	for with_soldier_model: bool in [true, false]:
+		UnitSilhouettes.use_models({9: gun, 0: man} if with_soldier_model else {9: gun})
+		var mesh: ArrayMesh = UnitSilhouettes.merged_mesh(9)
+		var v: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		assert_eq(v.size(), gun_n + 2 * per_man, "гармата + 2 фігури, модель бійця: %s" % with_soldier_model)
+		var top: float = 0.0
+		for i in range(gun_n, v.size()):
+			top = maxf(top, v[i].y)
+		assert_almost_eq(top, UnitSilhouettes.FIGURE_SIZE.y, 0.0001, "ріст 1,8 м, ступні на землі")
+		assert_same(mesh.surface_get_material(0), gun.surface_get_material(0))
+	UnitSilhouettes.use_models({9: gun})
+	assert_same(UnitSilhouettes.merged_mesh(11), UnitSilhouettes.merged_mesh(11), "тип без розрахунку — без змін")

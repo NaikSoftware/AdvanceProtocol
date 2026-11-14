@@ -13,6 +13,8 @@ const _STRIPE_COLOR := Color("d9b23a")
 ## він 3,5–7 м від центру тайла. Висота танка = корпус + башта (TURRET_HEIGHT = 0,8 м).
 ## `roof_gun` — гармата чи кулемет на даху колісної машини: вісь ствола на висоті башти, а коробки-башти немає, бо модель тримає
 ## ствол у межах корпусу; корінь полум'я на уламках стоїть на висоті башти, як у башти.
+## `crew` (лише гармати): де стоять двоє розрахунків у системі юніта — (x, z) і поворот у градусах; ноги на землі,
+## 1,8 м, без масштабування. Вони не входять до корпусу: уламки, тінь і дуло рахуються без них.
 const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures"]},  # 0 стрілецький загін
 	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures", &"drone_rack"]},  # 1 штурмовий
@@ -23,9 +25,9 @@ const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
 	{"hull": Vector3(0.475, 0.25, 0.90), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},  # 8 важкий танк 3,8×2,8×(корпус 7,2) м
-	{"hull": Vector3(0.30, 0.225, 0.30), "barrel": 0.45, "wheel": 0.06, "extras": [&"trail"]},  # 9 польова гармата 2,4×1,8×5 м з лафетом
-	{"hull": Vector3(0.325, 0.30, 0.35), "barrel": 0.45, "wheel": 0.06, "extras": [&"tall_barrel", &"trail"]},  # 10 гаубиця 2,6×2,4×6 м з лафетом
-	{"hull": Vector3(0.425, 0.35, 0.875), "barrel": 0.0, "wheel": 0.06, "extras": [&"stripe"]},  # 11 інженерна машина 3,4×2,8×7,0 м
+	{"hull": Vector3(0.44, 0.34, 0.75), "barrel": 0.375, "wheel": 0.067, "extras": [&"tall_barrel", &"trail"], "crew": [Vector3(-0.06, 0.12, -90.0), Vector3(0.21, 0.25, 90.0)]},  # 9 польова гармата 3,5×2,7×6,0 м з лафетом
+	{"hull": Vector3(0.815, 0.52, 1.30), "barrel": 0.65, "wheel": 0.1235, "extras": [&"tall_barrel", &"trail"], "crew": [Vector3(-0.12, 0.26, -90.0), Vector3(0.37, 0.45, 90.0)]},  # 10 гаубиця 6,5×4,2×10,4 м з лафетом
+	{"hull": Vector3(0.53, 0.36, 1.20), "barrel": 0.0, "wheel": 0.044, "extras": [&"stripe"]},  # 11 інженерна машина 4,2×2,9×9,6 м з плугом
 ]
 
 ## Башта: 0,8 м заввишки.
@@ -87,6 +89,8 @@ static var _figure_material: StandardMaterial3D
 ## Фігура відділення: 1,8 × 0,5 м (1 тайл = 8 м). Колір дає екземпляр MultiMesh — живі в
 ## кольорі власника, загиблі темні (L* 20–28), тож уся четвірка — один виклик малювання.
 const FIGURE_SIZE: Vector3 = Vector3(0.0625, 0.225, 0.05)
+## Рівна оливкова ділянка атласу моделі (правий стовпець під клітинками коліс): сюди дивляться бійці розрахунку.
+const _FLAT_TEXEL: Vector2 = Vector2(0.94, 0.7)
 const FALLEN_COLOR: Color = Color("3a342c")
 const _FIGURE_SLOTS: Array[Vector2] = [Vector2(-0.1, -0.09), Vector2(0.1, -0.1), Vector2(-0.09, 0.1), Vector2(0.11, 0.09)]
 
@@ -188,12 +192,17 @@ static func _merged_mat() -> StandardMaterial3D:
 ## самого вигляду, тож падіння фігури — підміна сітки, а не нова.
 static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0) -> ArrayMesh:
 	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
+	var crew: Array = spec(type_id, set_id).get("crew", [])
 	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
 	var model: ArrayMesh = model_mesh(type_id, set_id)
-	if model != null and not has_figures:
+	if model != null and not has_figures and crew.is_empty():
 		return model
-	var key := "%d:%d:%s:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0]
+	var key := "%d:%d:%s:%d:%s" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0,
+			model_mesh(0, set_id) != null]
 	if _merged_meshes.has(key):
+		return _merged_meshes[key]
+	if model != null and not has_figures:
+		_merged_meshes[key] = _with_crew(model, crew, set_id)
 		return _merged_meshes[key]
 	if model != null:
 		# Четверо бійців на місцях коробок-фігур: ступні там, де був низ коробки.
@@ -213,6 +222,8 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0) -> Ar
 			for i in _FIGURE_SLOTS.size():
 				pieces.append([_figure_mesh.surface_get_arrays(0), figure_transform(i, i < up), BODY_COLOR if i < up else FALLEN_COLOR])
 	root.free()
+	for cm: Vector3 in crew:
+		pieces.append([_crew_box().surface_get_arrays(0), _crew_transform(cm, FIGURE_SIZE.y * 0.5), BODY_COLOR])
 	var v := PackedVector3Array()
 	var n := PackedVector3Array()
 	var c := PackedColorArray()
@@ -238,6 +249,63 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0) -> Ar
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	_merged_meshes[key] = mesh
+	return mesh
+
+
+## Розрахунок гармати: стоїть на землі в точці (x, z), обличчям у бік `yaw` (градуси довкола Y), `lift` — висота центру сітки.
+static func _crew_transform(c: Vector3, lift: float) -> Transform3D:
+	return Transform3D(Basis(Vector3.UP, deg_to_rad(c.z)), Vector3(c.x, lift, c.y))
+
+
+static func _crew_box() -> BoxMesh:
+	var b := BoxMesh.new()
+	b.size = FIGURE_SIZE
+	return b
+
+
+## Сітка гармати плюс двоє розрахунків у ту саму поверхню (один виклик малювання): справжній боєць набору, поки є
+## його модель, інакше коробка-фігура. Текстурні координати бійців — на рівний оливковий клаптик атласу гармати,
+## бо власний атлас бійця в цьому матеріалі недоступний.
+## shortcut: боєць одного кольору без своєї текстури; повноцінний — коли атласи гармати й бійця зведуть в один.
+static func _with_crew(gun: ArrayMesh, crew: Array, set_id: int) -> ArrayMesh:
+	var soldier: ArrayMesh = model_mesh(0, set_id)
+	var src: Mesh = soldier if soldier != null else _crew_box()
+	var xfs: Array[Transform3D] = []
+	for c: Vector3 in crew:
+		xfs.append(_crew_transform(c, 0.0 if soldier != null else FIGURE_SIZE.y * 0.5))
+	var fig: Array = _merge_model(src, xfs).surface_get_arrays(0)
+	var g: Array = gun.surface_get_arrays(0)
+	var gv: PackedVector3Array = g[Mesh.ARRAY_VERTEX]
+	var fv: PackedVector3Array = fig[Mesh.ARRAY_VERTEX]
+	var n: int = fv.size()
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = gv + fv
+	out[Mesh.ARRAY_NORMAL] = (g[Mesh.ARRAY_NORMAL] as PackedVector3Array) + (fig[Mesh.ARRAY_NORMAL] as PackedVector3Array)
+	var gt: PackedFloat32Array = g[Mesh.ARRAY_TANGENT] if g[Mesh.ARRAY_TANGENT] != null else PackedFloat32Array()
+	if gt.size() == gv.size() * 4:
+		var ft := PackedFloat32Array()
+		for i in n:
+			ft.append_array([1.0, 0.0, 0.0, 1.0])
+		out[Mesh.ARRAY_TANGENT] = gt + ft
+	var black := PackedColorArray()
+	var flat := PackedVector2Array()
+	var zero := PackedVector2Array()
+	black.resize(n)
+	black.fill(Color.BLACK)
+	flat.resize(n)
+	flat.fill(_FLAT_TEXEL)
+	zero.resize(n)
+	out[Mesh.ARRAY_COLOR] = (g[Mesh.ARRAY_COLOR] as PackedColorArray) + black
+	out[Mesh.ARRAY_TEX_UV] = (g[Mesh.ARRAY_TEX_UV] as PackedVector2Array) + flat
+	out[Mesh.ARRAY_TEX_UV2] = (g[Mesh.ARRAY_TEX_UV2] as PackedVector2Array) + zero
+	var idx := PackedInt32Array(g[Mesh.ARRAY_INDEX])
+	for i: int in fig[Mesh.ARRAY_INDEX]:
+		idx.append(gv.size() + i)
+	out[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	mesh.surface_set_material(0, gun.surface_get_material(0))
 	return mesh
 
 
