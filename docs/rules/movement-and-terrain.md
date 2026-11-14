@@ -220,7 +220,9 @@ silently shrinks your vision radius feels like cheating when you cannot see it. 
 the whole visual budget and none of the rules budget.
 
 **Ground state is a rule, and it is explicit.** Each map has `ground_state ∈ {dry, mud, frozen}`,
-shown as a labelled icon in the HUD at all times. It offsets off-road terrain penalty:
+shown as a labelled icon on the handover gate before every turn and in the pause menu. It is not
+on the battle HUD: it is fixed for the whole match, and every movement zone and move preview already
+includes it. It offsets off-road terrain penalty:
 
 | state | off-road penalty | notes |
 | --- | --- | --- |
