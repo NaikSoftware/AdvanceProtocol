@@ -75,3 +75,34 @@ static func ignore_input(root: Control) -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for n in root.find_children("*", "Control", true, false):
 		(n as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
+## Значок і підпис кнопки — одна група по центру. Рідний Button при центрованому тексті притискає
+## значок до краю, а при центрованому значку малює його поверх тексту, тож групу будує сама кнопка:
+## значок + 8 dp + підпис. Колір підпису й значка веде стан кнопки (вимкнена — приглушена).
+static func group_content(button: Button, icon_px: float) -> void:
+	var tex: Texture2D = button.icon
+	var key: String = button.text
+	button.icon = null
+	button.text = ""
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(center)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", int(button.get_theme_constant(&"h_separation")))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(row)
+	var mark := icon(tex, Vector2(icon_px, icon_px), false)
+	row.add_child(mark)
+	var word := Label.new()
+	word.text = key
+	word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	word.add_theme_font_override("font", button.get_theme_font(&"font"))
+	word.add_theme_font_size_override("font_size", button.get_theme_font_size(&"font_size"))
+	row.add_child(word)
+	var tint := func() -> void:
+		word.add_theme_color_override("font_color", button.get_theme_color(&"font_disabled_color" if button.disabled else &"font_color"))
+		mark.modulate = button.get_theme_color(&"icon_disabled_color" if button.disabled else &"icon_normal_color")
+	tint.call()
+	button.draw.connect(tint)

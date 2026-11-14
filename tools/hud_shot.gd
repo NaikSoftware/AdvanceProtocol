@@ -170,10 +170,12 @@ func _enter_state(st: String) -> bool:
 			if st == "drone_preview":
 				_ctrl.tap_cell(enemy.pos)
 		"hold_enemy":
+			_press(enemy.pos)
 			_ctrl.peek_cell(enemy.pos)
 		"squad":
 			_ctrl.select_unit(_state.get_unit(_ids["assault"]))
 		"hold_enemy_squad":
+			_press(_state.get_unit(_ids["enemy_squad"]).pos)
 			_ctrl.peek_cell(_state.get_unit(_ids["enemy_squad"]).pos)
 		"engineer_pending":
 			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
@@ -243,6 +245,11 @@ func _reset_cast(st: String) -> void:
 		_rig.center_on(_site + Vector2i(1, 0))
 		_rig.zoom_by(ZOOM / _rig.zoom_level)
 	(_screen.get_node("%Hud") as Hud).refresh()
+
+
+## Палець лежить на клітинці юніта, як у грі: картка утримання обходить точку натиску.
+func _press(cell: Vector2i) -> void:
+	(_screen.get_node("%Hud") as Hud).note_press(_rig.unproject(IsoCameraRig.cell_to_world(cell)))
 
 
 ## Тап міг запустити поворот на місці: вводу не буде, доки гра не дограє подію.

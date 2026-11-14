@@ -123,9 +123,9 @@ theme_type_variation = &"HudPlateSolid"
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/margin_left = 4
-theme_override_constants/margin_top = 4
+theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 4
-theme_override_constants/margin_bottom = 4
+theme_override_constants/margin_bottom = 10
 
 [node name="Keyline" type="Panel" parent="Body/NameRow/NameCenter/NameSlide/Nameplate/KeylineMargin"]
 layout_mode = 2

@@ -109,3 +109,37 @@ func test_hold_card_takes_the_corner_away_from_the_finger() -> void:
 	assert_eq(rect, Rect2(735, 64, 226, 161), "палець у лівій чверті — картка праворуч")
 	var left: Rect2 = HudDocking.choose_card(Vector2(985, 442), card, Rect2(800, 100, 40, 50), [] as Array[Rect2], Vector2(820, 125))
 	assert_eq(left, Rect2(24, 58, 226, 161), "палець праворуч — картка ліворуч")
+
+
+func test_relaxed_placement_lets_the_leader_cross_the_action_cells() -> void:
+	# Клітинки верби щільно довкола юніта: лідер мусив би їх перетнути, тож суворо місця немає.
+	var ring: Array[PackedVector2Array] = [PackedVector2Array([Vector2(440, 170), Vector2(560, 170), Vector2(560, 280), Vector2(440, 280)])]
+	var p := TagPlacement.new(_scene({"polys": ring}))
+	assert_false(p.best()["found"], "суворо: лідер перетинав би клітинки")
+	var pick: Dictionary = p.best_relaxed()
+	assert_true(pick["found"], "тег не зникає мовчки")
+	assert_eq(pick["relax"], 1, "послаблено рівно лише шлях лідера")
+	assert_true(p.is_legal(pick["rect"], 1))
+	assert_true(p.needs_leader(pick["rect"]))
+
+
+func test_leader_ends_on_the_silhouette_polygon_not_the_box_corner() -> void:
+	# Силует — трикутник: кут охопної коробки порожній, лідер мусить лягти на скіс.
+	var tri := PackedVector2Array([Vector2(480, 250), Vector2(520, 250), Vector2(520, 220)])
+	var p := TagPlacement.new(_scene({"core_poly": tri}))
+	var left: PackedVector2Array = p.leader_points(Rect2(200, 120, 209, 30))
+	assert_eq(left[0], Vector2(409, 150))
+	assert_almost_eq(left[1], Vector2(482.56, 248.08), Vector2(0.01, 0.01), "основа перпендикуляра на скіс силуету, а не кут коробки (480, 220)")
+
+
+func test_hold_card_tie_takes_the_corner_farther_from_the_press_and_avoids_ring_arcs() -> void:
+	var card := Vector2(226.0, 161.0)
+	var screen := Vector2(985, 442)
+	var held := Rect2(600, 300, 40, 50)
+	var none: Array[PackedVector2Array] = []
+	var tie: Rect2 = HudDocking.choose_card(screen, card, held, [] as Array[Rect2], Vector2(620, 325), none)
+	assert_eq(tie, Rect2(24, 58, 226, 161), "обидва кутки чисті: дальший від пальця — лівий")
+	# Дуга кільця проходить крізь лівий верхній куток: тепер ціна кутка вища, і картка йде праворуч.
+	var arc: Array[PackedVector2Array] = [PackedVector2Array([Vector2(24, 120), Vector2(250, 120)])]
+	var moved: Rect2 = HudDocking.choose_card(screen, card, held, [] as Array[Rect2], Vector2(620, 325), arc)
+	assert_eq(moved, Rect2(735, 64, 226, 161))

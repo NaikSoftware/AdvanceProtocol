@@ -11,7 +11,7 @@
 ;   Label, підписи: HudCaption (600/11 dim; текст ВЕЛИКИМИ літерами задає код), HudCaptionStats (те саме
 ;                   без розрядки), HudName (600/14), HudLabel (600/15), HudHoldName (600/16),
 ;                   HudHint (500/13), HudDim (500/13 dim), HudToast (500/14), HudFloorCaption (500/12
-;                   dim, міжряддя 15), HudSector (600/18), HudTitle (700/22), HudGateCaption (600/14
+;                   dim, рядок 15), HudSector (600/18), HudTitle (700/22), HudGateCaption (600/14
 ;                   розрядка 3 px, кістка 85 %), HudGatePlayer (700/40)
 ;   Label, числа (tnum, kern 0): HudNumberTag (600/13), HudNumber (600/15), HudNumberStat (600/17),
 ;                   HudNumberMove (600/26), HudNumberBig (600/32), і приглушені знаменники
@@ -261,7 +261,7 @@ HudFloorCaption/base_type = &"Label"
 HudFloorCaption/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
 HudFloorCaption/font_sizes/font_size = 12
 HudFloorCaption/fonts/font = ExtResource("f_med")
-HudFloorCaption/constants/line_spacing = 3
+HudFloorCaption/constants/line_spacing = -1
 HudSector/base_type = &"Label"
 HudSector/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudSector/font_sizes/font_size = 18

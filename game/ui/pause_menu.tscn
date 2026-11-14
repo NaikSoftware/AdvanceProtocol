@@ -214,7 +214,7 @@ text = "pause_surrender_cancel"
 [node name="InfoLine" type="HBoxContainer" parent="Scroll/Center/Card/Pad/Body"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 4
 
 [node name="GroundIcon" type="TextureRect" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
 unique_name_in_owner = true
@@ -226,6 +226,11 @@ mouse_filter = 2
 modulate = Color(0.5608, 0.5686, 0.5412, 1)
 expand_mode = 1
 stretch_mode = 5
+
+[node name="IconGap" type="Control" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
+custom_minimum_size = Vector2(2, 0)
+layout_mode = 2
+mouse_filter = 2
 
 [node name="TurnCaption" type="Label" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
 unique_name_in_owner = true

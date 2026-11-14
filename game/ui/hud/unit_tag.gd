@@ -48,12 +48,13 @@ func _init() -> void:
 	_ap_box.add_child(_sep())
 	_ap_box.add_child(HudKit.icon(_ICON_AP, Vector2(13.0, 13.0)))
 	_ap_box.add_child(HudKit.gap(4.0))
+	var nums := BaselineRow.new()
+	nums.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_ap_box.add_child(nums)
 	ap_value = HudKit.label(&"HudNumberTag")
-	ap_value.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_ap_box.add_child(ap_value)
+	nums.add_child(ap_value)
 	ap_max = HudKit.label(&"HudNumberDim13")
-	ap_max.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_ap_box.add_child(ap_max)
+	nums.add_child(ap_max)
 
 	_pip_box = HBoxContainer.new()
 	_pip_box.add_theme_constant_override("separation", 0)

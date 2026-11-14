@@ -112,9 +112,9 @@ func _build_head(body: VBoxContainer) -> void:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(col)
 	name_label = HudKit.label(&"HudHoldName")
-	col.add_child(name_label)
+	TightLine.wrap(name_label, col, 16.0)
 	class_label = HudKit.label(&"HudCaption")
-	col.add_child(class_label)
+	TightLine.wrap(class_label, col, 11.0)
 	_sil = HudKit.icon(HudKit.SILHOUETTES[UnitTypes.UnitClass.TANK], Vector2(40.0, 20.0))
 	_sil.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	row.add_child(_sil)
@@ -127,24 +127,32 @@ func _build_stats(body: VBoxContainer) -> void:
 	row.add_theme_constant_override("separation", 0)
 	m.add_child(row)
 	attack_value = _stat(row, "hud_attack")
+	row.add_child(_spring())
 	range_value = _stat(row, "hud_range")
+	row.add_child(_spring())
 	vision_value = _stat(row, "hud_vision")
 
 
-## Колонка: підпис над числом, обидва праворуч (одна система вирівнювання на картці).
+## Колонка завширшки з вмісту: підпис над числом, обидва праворуч (одна система вирівнювання на
+## картці); вільне місце ділять пружини між колонками, а не порожнє поле зліва.
 func _stat(row: HBoxContainer, key: String) -> Label:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 5)
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(col)
 	var cap := HudKit.label(&"HudCaptionStats")
 	_words.append([cap, key, true])
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	col.add_child(cap)
+	TightLine.wrap(cap, col, 11.0)
 	var value := HudKit.label(&"HudNumberStat")
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	col.add_child(value)
+	TightLine.wrap(value, col, 17.0)
 	return value
+
+
+func _spring() -> Control:
+	var c := Control.new()
+	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return c
 
 
 func _build_armour(body: VBoxContainer) -> void:
@@ -168,10 +176,10 @@ func _build_armour(body: VBoxContainer) -> void:
 		var word := HudKit.label(&"HudDim")
 		_words.append([word, HudKit.SECTOR_KEYS[sector], false])
 		word.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		line.add_child(word)
+		TightLine.wrap(word, line, 17.0)
 		var value := HudKit.label(&"HudNumber")
 		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		line.add_child(value)
+		TightLine.wrap(value, line, 17.0)
 		armour_rows.append(value)
 	armour_none_row = _margin(18, 0, 12, 0)
 	armour_none_row.custom_minimum_size = Vector2(0.0, 34.0)

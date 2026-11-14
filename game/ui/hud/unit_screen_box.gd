@@ -71,6 +71,24 @@ static func core(view: Node3D, rig: IsoCameraRig) -> Rect2:
 	return box
 
 
+## Силует смуги HP + моделі як опукла оболонка екранних точок: кінець лідера лягає на справжній
+## контур, а не на кут охопного прямокутника, де юніта немає.
+static func core_poly(view: Node3D, rig: IsoCameraRig) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var sil: Node = view.get_node_or_null("Silhouette")
+	if sil != null:
+		for n in sil.find_children("*", "MeshInstance3D", true, false):
+			var mi := n as MeshInstance3D
+			if mi.visible and mi.mesh != null:
+				for p: Vector3 in _hull_points(mi.mesh):
+					pts.append(rig.unproject(mi.global_transform * p))
+	var bar := view.get_node_or_null("HpBar") as VisualInstance3D
+	if bar != null and bar.visible:
+		var r: Rect2 = part_rect(bar, rig)
+		pts.append_array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+	return Geometry2D.convex_hull(pts)
+
+
 ## Клітинка на екрані: охопний прямокутник чотирьох її кутів на площині землі.
 static func cell_rect(cell: Vector2i, rig: IsoCameraRig) -> Rect2:
 	var c: Vector3 = IsoCameraRig.cell_to_world(cell)
@@ -98,7 +116,7 @@ static func part_rect(vi: VisualInstance3D, rig: IsoCameraRig) -> Rect2:
 	var billboard: bool = (vi is Sprite3D or vi is Label3D) and camera != null \
 			and int(vi.get("billboard")) != BaseMaterial3D.BILLBOARD_DISABLED
 	if not billboard:
-		return _project_aabb(vi, rig)
+		return _project_mesh(vi, rig) if vi is MeshInstance3D and (vi as MeshInstance3D).mesh != null else _project_aabb(vi, rig)
 	var xf: Transform3D = vi.global_transform
 	var scale: Vector3 = xf.basis.get_scale()
 	var size: Vector2 = _billboard_size(vi)
@@ -120,7 +138,36 @@ static func _billboard_size(vi: VisualInstance3D) -> Vector2:
 	var label := vi as Label3D
 	var font: Font = label.font if label.font != null else ThemeDB.fallback_font
 	var text_size: Vector2 = font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, label.font_size)
-	return (text_size + Vector2.ONE * float(label.outline_size) * 2.0) * label.pixel_size
+	# Видно лише цифри: висота рядка й обводка — порожнє поле, від якого тег «відсувався» на око.
+	return Vector2(text_size.x, float(label.font_size) * DIGIT_HEIGHT) * label.pixel_size
+
+
+## Висота цифр відносно кегля: рядок шрифту вищий за видимі цифри.
+const DIGIT_HEIGHT: float = 0.72
+
+## Опуклі оболонки сіток: рахуються раз на сітку, бо кадр не мусить обходити всі її вершини.
+static var _hulls: Dictionary = {}
+
+
+static func _hull_points(mesh: Mesh) -> PackedVector3Array:
+	var key: int = mesh.get_instance_id()
+	if not _hulls.has(key):
+		var shape: ConvexPolygonShape3D = mesh.create_convex_shape(true, true)
+		_hulls[key] = shape.points if shape != null else PackedVector3Array()
+	return _hulls[key]
+
+
+## Силует моделі: екранні межі точок її опуклої оболонки, а не восьми кутів AABB, що завищує
+## габарит куточками, де моделі немає. Порожня оболонка — повернення до AABB.
+static func _project_mesh(vi: MeshInstance3D, rig: IsoCameraRig) -> Rect2:
+	var pts: PackedVector3Array = _hull_points(vi.mesh)
+	if pts.is_empty():
+		return _project_aabb(vi, rig)
+	var xf: Transform3D = vi.global_transform
+	var box := Rect2(rig.unproject(xf * pts[0]), Vector2.ZERO)
+	for i in range(1, pts.size()):
+		box = box.expand(rig.unproject(xf * pts[i]))
+	return box
 
 
 static func _project_aabb(vi: VisualInstance3D, rig: IsoCameraRig) -> Rect2:

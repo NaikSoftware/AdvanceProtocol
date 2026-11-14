@@ -31,6 +31,7 @@ const _SAMPLES: int = 12
 var _tag: Vector2
 var _unit: Rect2
 var _core: Rect2
+var _core_poly: PackedVector2Array
 var _others: Array[Rect2]
 var _blocked: Array[Rect2] = []
 var _fire: PackedVector2Array
@@ -50,6 +51,7 @@ func _init(scene: Dictionary) -> void:
 	_tag = scene["tag_size"]
 	_unit = scene["unit"]
 	_core = scene.get("core", _unit)
+	_core_poly = scene.get("core_poly", PackedVector2Array())
 	_others.assign(scene.get("others", []))
 	_fire = scene.get("fire", PackedVector2Array())
 	_safe = Rect2(scene["screen"]).grow_individual(-24.0, -8.0, -24.0, -8.0)
@@ -65,7 +67,9 @@ func _init(scene: Dictionary) -> void:
 	_rasterise_marks(scene.get("marks", []))
 
 
-func is_legal(r: Rect2) -> bool:
+## relax: 0 — усі правила; 1 — лідер може перетинати клітинки верби/шляху (сам тег — ні);
+## 2 — полігони не заважають зовсім. Чужі юніти, хром, лінія вогню й межі екрана — завжди тверді.
+func is_legal(r: Rect2, relax: int = 0) -> bool:
 	var d: float = _dist(r, _unit)
 	if d < MIN_GAP or _dist(r, _core) > MAX_LEAD:
 		return false
@@ -76,7 +80,7 @@ func is_legal(r: Rect2) -> bool:
 			return false
 	if _fire.size() == 2 and _segment_hits(_fire[0], _fire[1], r.grow(FIRE_GROW)):
 		return false
-	if _sat_sum_i(_hard_sat, r) > 0:
+	if relax < 2 and _sat_sum_i(_hard_sat, r) > 0:
 		return false
 	if d > LEAD_AT:
 		var ends: PackedVector2Array = leader_points(r)
@@ -85,7 +89,7 @@ func is_legal(r: Rect2) -> bool:
 			for o: Rect2 in _others:
 				if o.grow(LEADER_CLEAR).has_point(p):
 					return false
-			if _hard_at(p):
+			if relax < 1 and _hard_at(p):
 				return false
 	else:
 		# Тег без лідера мусить читатися як цього юніта: на 8 dp ближче за будь-якого іншого.
@@ -104,6 +108,13 @@ func leader_points(r: Rect2) -> PackedVector2Array:
 	var c: Vector2 = _core.get_center()
 	var t := Vector2(clampf(c.x, r.position.x, r.end.x), clampf(c.y, r.position.y, r.end.y))
 	var u := Vector2(clampf(t.x, _core.position.x, _core.end.x), clampf(t.y, _core.position.y, _core.end.y))
+	if _core_poly.size() >= 3:
+		var best: float = INF
+		for i in _core_poly.size():
+			var q: Vector2 = Geometry2D.get_closest_point_to_segment(t, _core_poly[i], _core_poly[(i + 1) % _core_poly.size()])
+			if t.distance_squared_to(q) < best:
+				best = t.distance_squared_to(q)
+				u = q
 	return PackedVector2Array([t, u])
 
 
@@ -124,17 +135,28 @@ func score(r: Rect2) -> float:
 
 
 ## Найкращий законний прямокутник або Rect2() із found=false (місця нема — тег ховається).
-func best() -> Dictionary:
+func best(relax: int = 0) -> Dictionary:
 	var best_rect := Rect2()
 	var best_score: float = INF
 	for r: Rect2 in _candidates():
-		if not is_legal(r):
+		if not is_legal(r, relax):
 			continue
 		var s: float = score(r)
 		if s < best_score:
 			best_score = s
 			best_rect = r
 	return {"found": best_score < INF, "rect": best_rect, "leader": best_score < INF and needs_leader(best_rect)}
+
+
+## Найкращий законний прямокутник, послаблюючи лише полігони: тег не зникає мовчки, поки поряд є
+## вільне місце хоч з лідером, що перетинає клітинки дії.
+func best_relaxed() -> Dictionary:
+	for relax in 3:
+		var pick: Dictionary = best(relax)
+		if pick["found"]:
+			pick["relax"] = relax
+			return pick
+	return {"found": false, "rect": Rect2(), "leader": false, "relax": 3}
 
 
 func _candidates() -> Array[Rect2]:

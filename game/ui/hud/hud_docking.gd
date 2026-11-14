@@ -79,7 +79,8 @@ static func choose_strip(screen: Vector2, strip_size: Vector2, units: Array[Rect
 ## Куток картки утримання: угорі ліворуч або праворуч. Ціна — перекриття картки (+8 dp) із
 ## утримуваним юнітом і його позначками плюс 4 × перекриття з пальцем (точка натиску ± 60 dp);
 ## найменша виграє, за рівності — куток, дальший від пальця.
-static func choose_card(screen: Vector2, card_size: Vector2, held: Rect2, marks: Array[Rect2], press: Vector2) -> Rect2:
+static func choose_card(screen: Vector2, card_size: Vector2, held: Rect2, marks: Array[Rect2], press: Vector2,
+		arcs: Array[PackedVector2Array] = []) -> Rect2:
 	var corners: Array[Rect2] = [
 		Rect2(Vector2(SAFE_X, TOP_LEFT_Y + 2.0), card_size),
 		Rect2(Vector2(screen.x - SAFE_X - card_size.x, TOP_RIGHT_Y), card_size),
@@ -93,12 +94,26 @@ static func choose_card(screen: Vector2, card_size: Vector2, held: Rect2, marks:
 		var cost: float = _area(grown.intersection(held)) + 4.0 * _area(r.intersection(finger))
 		for m: Rect2 in marks:
 			cost += _area(grown.intersection(m))
+		# Дуги кілець: довжина дуги під карткою × 4 dp ширини лінії — теж закрита загроза.
+		cost += 4.0 * _arc_length_inside(arcs, r)
 		var far: float = r.get_center().distance_to(press)
 		if cost < best_cost or (cost == best_cost and far > best_far):
 			best = r
 			best_cost = cost
 			best_far = far
 	return best
+
+
+static func _arc_length_inside(arcs: Array[PackedVector2Array], r: Rect2) -> float:
+	var total: float = 0.0
+	for line in arcs:
+		for i in range(line.size() - 1):
+			# Крок 2 dp: точність до половини кроку, як і в растрі тега.
+			var steps: int = maxi(1, int(ceil(line[i].distance_to(line[i + 1]) / 2.0)))
+			for k in steps:
+				if r.has_point(line[i].lerp(line[i + 1], (k + 0.5) / steps)):
+					total += line[i].distance_to(line[i + 1]) / steps
+	return total
 
 
 static func _area(r: Rect2) -> float:

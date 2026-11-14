@@ -93,6 +93,7 @@ var _cluster_name: String = ""
 
 
 func _ready() -> void:
+	HudKit.group_content(_confirm_button, 20.0)
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	_cancel_button.pressed.connect(_on_cancel_pressed)
 	_end_turn_button.pressed.connect(_on_end_turn_pressed)
@@ -604,7 +605,7 @@ func _update_tag() -> void:
 		_tag_unit_id = _selected_unit.id
 		_tag_has_offset = false
 	_tag.show_unit(_selected_unit, _own_selected())
-	var tag_size: Vector2 = _tag.get_combined_minimum_size()
+	var tag_size: Vector2 = _tag.get_combined_minimum_size().ceil()
 	var scene: Dictionary = _tag_scene(view, tag_size)
 	var placement := TagPlacement.new(scene)
 	var unit_box: Rect2 = scene["unit"]
@@ -614,7 +615,7 @@ func _update_tag() -> void:
 		if placement.is_legal(kept):
 			rect = kept
 	if rect.size == Vector2.ZERO:
-		var pick: Dictionary = placement.best()
+		var pick: Dictionary = placement.best_relaxed()
 		if not pick["found"]:
 			# Місця немає: тег ховається, а не лягає на юніта чи плиту.
 			_tag.visible = false
@@ -623,7 +624,7 @@ func _update_tag() -> void:
 		rect = pick["rect"]
 	_tag_offset = rect.position - unit_box.position
 	_tag_has_offset = true
-	_tag.position = rect.position
+	_tag.position = rect.position.round()
 	_tag.size = rect.size
 	if placement.needs_leader(rect):
 		var ends: PackedVector2Array = placement.leader_points(rect)
@@ -676,7 +677,7 @@ func _tag_scene(view: UnitView, tag_size: Vector2) -> Dictionary:
 				if target != null:
 					fire = PackedVector2Array([unit_box.get_center(), UnitScreenBox.of(target, _camera_rig).get_center()])
 	return {
-		"tag_size": tag_size, "unit": unit_box, "core": UnitScreenBox.core(view, _camera_rig),
+		"tag_size": tag_size, "unit": unit_box, "core": UnitScreenBox.core(view, _camera_rig), "core_poly": UnitScreenBox.core_poly(view, _camera_rig),
 		"others": others, "chrome": chrome, "polys": polys, "fire": fire, "marks": _board_marks(),
 		"screen": Rect2(Vector2.ZERO, size),
 	}
@@ -738,7 +739,11 @@ func _on_inspected(inspection: Dictionary) -> void:
 			if marked != null:
 				marks.append(UnitScreenBox.with_marks(marked, _camera_rig))
 	var held: Rect2 = UnitScreenBox.with_marks(views[unit.id], _camera_rig)
-	var rect: Rect2 = HudDocking.choose_card(size, _card.get_combined_minimum_size(), held, marks, _press_point)
+	var arcs: Array[PackedVector2Array] = []
+	for key: String in ["radius", "drone_radius"]:
+		if int(inspection.get(key, 0)) > 0:
+			arcs.append(_ring(inspection["center"], int(inspection[key])))
+	var rect: Rect2 = HudDocking.choose_card(size, _card.get_combined_minimum_size(), held, marks, _press_point, arcs)
 	_card.position = rect.position
 	_card.size = rect.size
 	# Поки палець униз, плита дій, що лежить під карткою, не потрібна: вона її закрила б.

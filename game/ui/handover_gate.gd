@@ -103,6 +103,7 @@ var _ground_state: int = Terrain.GroundState.DRY
 
 
 func _ready() -> void:
+	HudKit.group_content(_confirm_button, 22.0)
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	for w in _wipes:
 		w.pivot_offset_ratio = Vector2(0.5, 0.5)

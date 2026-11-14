@@ -73,3 +73,56 @@ func test_armed_strip_grows_leftwards_not_rightwards_for_long_text() -> void:
 	await get_tree().process_frame
 	assert_gt(s.size.x, 285.0, "довший вміст розширює смужку (HUD приторкає її правим краєм)")
 	assert_eq(s.cancel_button.global_position.x - s.global_position.x, 1.0, "«Скасувати» лишається першою коміркою зліва, за краєм 1 dp")
+
+
+func _row_with(texts: Array[String], variations: Array[StringName]) -> BaselineRow:
+	var holder := Control.new()
+	holder.theme = THEME
+	add_child_autofree(holder)
+	var row := BaselineRow.new()
+	holder.add_child(row)
+	for i in texts.size():
+		var l := Label.new()
+		l.theme_type_variation = variations[i]
+		l.text = texts[i]
+		row.add_child(l)
+	return row
+
+
+func test_baseline_row_puts_value_and_max_on_one_baseline_without_a_gap() -> void:
+	var row: BaselineRow = _row_with(["28", "/48"], [&"HudNumberMove", &"HudNumberDim15"])
+	await get_tree().process_frame
+	var big := row.get_child(0) as Label
+	var small := row.get_child(1) as Label
+	var big_base: float = big.position.y + big.get_theme_font(&"font").get_ascent(big.get_theme_font_size(&"font_size"))
+	var small_base: float = small.position.y + small.get_theme_font(&"font").get_ascent(small.get_theme_font_size(&"font_size"))
+	assert_eq(small_base, big_base, "базові лінії збігаються")
+	assert_eq(small.position.x, big.size.x - BaselineRow.TUCK, "знаменник одразу за числом, з підтяжкою")
+	assert_eq(row.get_combined_minimum_size().x, big.size.x + small.size.x - BaselineRow.TUCK)
+
+
+func test_hold_card_tank_is_161_dp_and_squad_is_205() -> void:
+	var holder := Control.new()
+	holder.theme = THEME
+	add_child_autofree(holder)
+	var card := HoldCard.new()
+	holder.add_child(card)
+	card.show_unit(Unit.create(1, 5, 1, Vector2i.ZERO, 0), false)
+	await get_tree().process_frame
+	assert_eq(card.get_combined_minimum_size().y, 161.0, "картка танка — 161 dp")
+	card.show_unit(Unit.create(2, 1, 1, Vector2i.ZERO, 0), true)
+	await get_tree().process_frame
+	assert_eq(card.get_combined_minimum_size().y, 205.0, "сума секцій спеку: 2 + 48 + 48 + 34 + 29 + 44")
+
+
+func test_unit_tag_name_label_is_as_wide_as_its_text() -> void:
+	var holder := Control.new()
+	holder.theme = THEME
+	add_child_autofree(holder)
+	var tag := UnitTag.new()
+	holder.add_child(tag)
+	tag.show_unit(Unit.create(1, 11, 0, Vector2i.ZERO, 0), true)
+	await get_tree().process_frame
+	var font: Font = tag.name_label.get_theme_font(&"font")
+	var text_w: float = font.get_string_size(tag.name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, tag.name_label.get_theme_font_size(&"font_size")).x
+	assert_true(tag.name_label.get_combined_minimum_size().x >= text_w, "назва не обрізається")

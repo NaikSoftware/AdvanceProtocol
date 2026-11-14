@@ -96,9 +96,9 @@ func _ready() -> void:
 	mrow.add_child(_icon(_ICON_AP, 20.0))
 	_move_caption = _label("", &"HudLabel", mrow)
 	_expander(mrow)
-	_ap_value = _label("PreviewApValue", &"HudNumberMove", mrow)
-	_ap_max = _label("PreviewApMax", &"HudNumberDim15", mrow)
-	_ap_max.size_flags_vertical = Control.SIZE_SHRINK_END
+	var apx := _baseline_row(mrow)
+	_ap_value = _label("PreviewApValue", &"HudNumberMove", apx)
+	_ap_max = _label("PreviewApMax", &"HudNumberDim15", apx)
 
 	# Постріл: глиф / силует піхоти · сектор · роздільник · шкода.
 	shot_box = _box("PreviewShotBox", body, Vector4(12, 8, 14, 9), 0.0)
@@ -173,13 +173,9 @@ func _ready() -> void:
 	var rv := _column(rrow)
 	rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hp_caption = _label("", &"HudCaption", rv)
-	var hrow := HBoxContainer.new()
-	hrow.add_theme_constant_override("separation", 2)
-	hrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	rv.add_child(hrow)
+	var hrow := _baseline_row(rv)
 	_hp_value = _label("PreviewHpValue", &"HudSector", hrow)
 	_hp_max = _label("PreviewHpMax", &"HudNumberDim15", hrow)
-	_hp_max.size_flags_vertical = Control.SIZE_SHRINK_END
 	rrow.add_child(_divider(46.0))
 	var hv := _column(rrow)
 	_heal_caption = _label("", &"HudCaption", hv)
@@ -297,6 +293,14 @@ func _row(parent: Control, separation: int) -> HBoxContainer:
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(h)
 	return h
+
+
+func _baseline_row(parent: Control) -> BaselineRow:
+	var r := BaselineRow.new()
+	r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(r)
+	return r
 
 
 func _column(parent: Control) -> VBoxContainer:
