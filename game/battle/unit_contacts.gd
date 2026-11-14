@@ -12,8 +12,12 @@ const HIDDEN := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vec
 
 static var _material: ShaderMaterial
 
+## Карта: на асфальті (ROAD) пляма слабшає — на темному покритті вона йшла б майже в чорне.
+var map: MapData = null
+
 var _views: Array[UnitView] = []
 var _placed: Array[Transform3D] = []
+var _road: Array[float] = []
 
 
 func _init() -> void:
@@ -27,6 +31,7 @@ func _init() -> void:
 	plane.subdivide_depth = SUBDIVIDE
 	multimesh = MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_custom_data = true
 	multimesh.mesh = plane
 	# AABB з екземплярів MultiMesh не відсікає пляму на краю кадру помилково.
 	custom_aabb = AABB(Vector3(-200.0, -20.0, -200.0), Vector3(400.0, 40.0, 400.0))
@@ -83,6 +88,9 @@ func _resize() -> void:
 	_placed.clear()
 	_placed.resize(_views.size())
 	_placed.fill(HIDDEN)
+	_road.clear()
+	_road.resize(_views.size())
+	_road.fill(0.0)
 	for i in _views.size():
 		multimesh.set_instance_transform(i, HIDDEN)
 	sync()
@@ -92,9 +100,25 @@ func _resize() -> void:
 func sync() -> void:
 	for i in _views.size():
 		var xf: Transform3D = _views[i].contact_transform()
-		if xf != _placed[i]:
+		var road: float = 1.0 if _on_road(_views[i]) else 0.0
+		if xf != _placed[i] or road != _road[i]:
 			_placed[i] = xf
+			_road[i] = road
 			multimesh.set_instance_transform(i, xf)
+			multimesh.set_instance_custom_data(i, Color(road, 0.0, 0.0, 0.0))
+
+
+## 1.0, коли юніт стоїть на асфальті (дорога чи міст), інакше 0.0; поставлене останньою синхронізацією.
+func road_of(slot: int) -> float:
+	return _road[slot]
+
+
+## Рішення за клітинкою під юнітом: на узбіччі тієї ж клітинки пляма теж слабшає.
+func _on_road(view: UnitView) -> bool:
+	if map == null:
+		return false
+	var kind: int = map.outer_kind_at(IsoCameraRig.world_to_cell(view.position))
+	return kind == Terrain.Kind.ROAD or kind == Terrain.Kind.BRIDGE
 
 
 func _process(_delta: float) -> void:
