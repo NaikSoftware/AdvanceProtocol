@@ -48,7 +48,11 @@ if cfg.get("yaw"):
     a, px, py = cfg["yaw"]
     c_, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
     dx, dy = co[:, 0] - px, co[:, 1] - py
-    co[:, 0], co[:, 1] = px + dx * c_ - dy * s_, dx * s_ + dy * c_   # the pivot lands on the centreline (y = 0)
+    if cfg["fwd"] == "y":
+        # nose along +Y: the lateral axis is X, so the pivot lands on x = 0 and keeps its y
+        co[:, 0], co[:, 1] = dx * c_ - dy * s_, py + dx * s_ + dy * c_
+    else:
+        co[:, 0], co[:, 1] = px + dx * c_ - dy * s_, dx * s_ + dy * c_   # the pivot lands on the centreline (y = 0)
     me.vertices.foreach_set("co", co.ravel()); me.update()
 if cfg.get("rot180"):
     # nose towards -Y in the source: a half turn about Z keeps the winding and puts it on +Y

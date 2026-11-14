@@ -95,9 +95,12 @@ if cfg.get("out", "").startswith("set"):
     check(row is not None, "a set model has its _SET_SPECS row")
 if row:
     # the game reads the set's row for this model: it must describe the model as built
-    check(abs(hx - row["hull"][0]) <= 0.002 and abs(hz - row["hull"][2]) <= 0.002, f"_SET_SPECS hull {row['hull'][0]} x {row['hull'][2]} matches the model ({hx:.4f} x {hz:.4f})")
-    check(abs(tip[2] + row["barrel"]) < 0.01 and abs(tip[1] - (row["hull"][1] + 0.05)) < 0.005,
-          f"_SET_SPECS barrel {row['barrel']} and bore height {row['hull'][1] + 0.05:.3f} match the muzzle vertex {tip.round(4).tolist()}")
+    if not cfg.get("whole_model"):   # a whole-model row is the carriage or hull alone: tests/game/test_unit_sets.gd compares it with the wheels and tracks
+        check(abs(hx - row["hull"][0]) <= 0.002 and abs(hz - row["hull"][2]) <= 0.002, f"_SET_SPECS hull {row['hull'][0]} x {row['hull'][2]} matches the model ({hx:.4f} x {hz:.4f})")
+    bore = row["bore"] if row.get("bore") else row["hull"][1] + 0.05     # a raised barrel carries its measured bore height
+    if row["barrel"]:    # no gun (engineer vehicle): nothing to measure
+        check(abs(tip[2] + row["barrel"]) < 0.01 and abs(tip[1] - bore) < 0.005,
+              f"_SET_SPECS barrel {row['barrel']} and bore height {bore:.3f} match the muzzle vertex {tip.round(4).tolist()}")
 
 trk = col[:, 1] > 0.5; whl = col[:, 2] > 0.5
 other = ~(trk | whl)

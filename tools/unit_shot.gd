@@ -12,6 +12,8 @@ extends Node
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m), без (_e) і з моделлю суцільним пурпуром (_k, маска контуру) для ΔE.
+## Шостий аргумент real [set=N] ставить справжніми юнітами з полосами HP польову гармату, гаубицю, інженерну машину й важкий танк на найближчому й найдальшому зумі;
+## з set=N усі чотири належать гравцеві з набором N (без нього — власники 0, 1, 2).
 ## Шостий аргумент spin [set=N] ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
 ## з однаковим `travel` (контроль), третій — на пів радіуса колеса далі; між ними мають змінитися лише колеса.
 ## Шостий аргумент rear [set=N] ставить чотири танки набору N (важкий, середній, винищувач, легкий) у ряд через тайл,
@@ -44,7 +46,7 @@ func _ready() -> void:
 		await _lineup(screen, map, out, tag)
 		return
 	if a.size() > 5 and a[5] == "real":
-		await _real(screen, map, out, tag)
+		await _real(screen, map, out, tag, int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else -1)
 		return
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
@@ -238,15 +240,17 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 ## Справжні юніти двох гармат, інженерної машини й танка (смуги HP, крони, ґрунт карти) на найближчому й найдальшому зумі:
 ## остаточна перевірка впізнаваності гармат — разом із розрахунком, не окрема модель.
-func _real(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int = -1) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
 	var c := _field_near_centre(m)
+	# set=N: усі чотири юніти належать гравцеві з набором N, тож гармати й інженерна машина — з цього набору
+	var o: Array[int] = [0, 1, 2, 0] if set_id < 0 else [set_id, set_id, set_id, set_id]
 	m.spawns = [
-		{"type_id": 9, "owner": 0, "pos": c + Vector2i(-2, 0), "facing": 0},
-		{"type_id": 10, "owner": 1, "pos": c, "facing": 0},
-		{"type_id": 11, "owner": 2, "pos": c + Vector2i(2, 0), "facing": 0},
-		{"type_id": 8, "owner": 0, "pos": c + Vector2i(0, 2), "facing": 0},
+		{"type_id": 9, "owner": o[0], "pos": c + Vector2i(-2, 0), "facing": 0},
+		{"type_id": 10, "owner": o[1], "pos": c, "facing": 0},
+		{"type_id": 11, "owner": o[2], "pos": c + Vector2i(2, 0), "facing": 0},
+		{"type_id": 8, "owner": o[3], "pos": c + Vector2i(0, 2), "facing": 0},
 	]
 	screen.setup(m, 3, 1)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")

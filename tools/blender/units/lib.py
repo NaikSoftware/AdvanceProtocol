@@ -46,7 +46,7 @@ def load(name, seed=True):
         # height (the game derives the bore height from it) and the wheel radius from the set's own row. The row stays
         # the one place the game reads; verify_glb.py checks the built model against it
         cfg["spec"] = {"hull": [cfg["spec"]["hull"][0], row["hull"][1], cfg["spec"]["hull"][2]],
-                       "barrel": row["barrel"], "wheel": row["wheel"]}
+                       "barrel": row["barrel"], "wheel": row["wheel"], "bore": row["bore"]}
     lo, hi = cfg["hull_long"]
     sx, sz = cfg["spec"]["hull"][0], cfg.get("fit_z", cfg["spec"]["hull"][2])   # fit_z: a shorter hull than the role's box
     # Uniform fit: the tighter of hull width and hull length governs.
@@ -104,10 +104,11 @@ def set_row(cfg):
     block = re.search(r"const _SET_SPECS.*?\n\t%s: \{(.*?)\n\t\}," % m.group(1), src, re.S)
     if not block:
         return None
-    row = re.search(r'\t\t%d: \{"hull": Vector3\(([^)]*)\), "barrel": ([0-9.]+), "wheel": ([0-9.]+)' % cfg["type_id"], block.group(1))
+    row = re.search(r'\t\t%d: \{"hull": Vector3\(([^)]*)\), "barrel": ([0-9.]+), "wheel": ([0-9.]+)(?:, "bore": ([0-9.]+))?' % cfg["type_id"], block.group(1))
     if not row:
         return None
-    return {"hull": [float(v) for v in row.group(1).split(",")], "barrel": float(row.group(2)), "wheel": float(row.group(3))}
+    return {"hull": [float(v) for v in row.group(1).split(",")], "barrel": float(row.group(2)), "wheel": float(row.group(3)),
+            "bore": float(row.group(4)) if row.group(4) else None}
 
 
 def gun_axis(cfg):
