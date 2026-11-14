@@ -68,7 +68,7 @@ func _init() -> void:
 	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	armed_cell.add_child(text)
 	var title_row := HBoxContainer.new()
-	title_row.add_theme_constant_override("separation", 9)
+	title_row.add_theme_constant_override("separation", 7)
 	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text.add_child(title_row)
 	title_label = Label.new()

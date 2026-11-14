@@ -36,6 +36,22 @@ func _ready() -> void:
 	%ConfirmYesButton.pressed.connect(surrender_requested.emit)
 	# Повторне відкриття паузи завжди починається зі звичайних кнопок.
 	visibility_changed.connect(_set_confirming.bind(false))
+	_align_title_baseline()
+
+
+## «Пауза», «КАРТА» й назва карти — на одній базовій лінії: HBox вирівнює по краю, а кеглі різні,
+## тож кожному підпису додається верхній відступ на різницю підйому шрифту.
+func _align_title_baseline() -> void:
+	var labels: Array[Label] = [%Title, %MapCaption, %MapValue]
+	var top: float = 0.0
+	for l in labels:
+		top = maxf(top, l.get_theme_font(&"font").get_ascent(l.get_theme_font_size(&"font_size")))
+	for l in labels:
+		l.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		var pad := StyleBoxEmpty.new()
+		pad.content_margin_top = top - l.get_theme_font(&"font").get_ascent(l.get_theme_font_size(&"font_size"))
+		l.add_theme_stylebox_override(&"normal", pad)
+	(%MapBox as Control).size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 
 
 ## Карта і ґрунт незмінні протягом матчу: сцена бою задає їх раз.

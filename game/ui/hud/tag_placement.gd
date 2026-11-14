@@ -17,7 +17,7 @@ const LEAD_AT: float = 12.0
 const MAX_LEAD: float = 60.0
 const MIN_GAP: float = 8.0
 const OBSTACLE_GROW: float = 8.0
-const POLY_GROW: float = 4.0
+const POLY_GROW: float = 5.0
 const FIRE_GROW: float = 10.0
 const LEADER_CLEAR: float = 4.0
 const LABEL_CLEAR: float = 2.0
@@ -36,7 +36,7 @@ const NEAR_OTHER_PER_DP: float = 60.0
 const CELL: float = 4.0
 const LINE_WIDTH: float = 2.0
 const _SAMPLES: int = 12
-const END_CLEAR: float = 2.0
+const END_CLEAR: float = 4.0
 ## Лінія лідера, що перетинає клітинку, дорожча за будь-яку чисту; кінець у клітинці — ще дорожчий.
 const CROSS_COST: float = 400.0
 const END_IN_CELL_COST: float = 2000.0

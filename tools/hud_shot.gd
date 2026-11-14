@@ -335,6 +335,7 @@ func _enter_state(st: String) -> bool:
 func _reset_cast(st: String) -> void:
 	_ctrl.select_unit(null)
 	_ctrl.end_peek()
+	(_screen.get_node("%Hud") as Hud).call("_hide_toast")
 	(_screen.get_node("%PauseMenu") as Control).visible = false
 	(_screen.get_node("%HandoverGate") as Control).visible = false
 	_state.units.clear()

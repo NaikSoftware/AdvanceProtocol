@@ -187,6 +187,8 @@ func set_active_player(player: int) -> void:
 ## Ворожий юніт сюди теж може прийти, але тег покаже тільки публічне: залишок дронів (§3.9).
 func show_selection(unit: Unit) -> void:
 	_selected_unit = unit
+	# Відмова іншого юніта не мусить висіти над прев'ю нової дії.
+	_hide_toast()
 	# Новий вибір скидає pending у контролері, тож прев'ю на екрані стосувалося б дії, якої вже нема.
 	_clear_preview()
 	_render_selection()
@@ -202,6 +204,7 @@ func show_preview(preview: Dictionary) -> void:
 	_last_preview = preview
 	if preview.is_empty():
 		return
+	_hide_toast()
 	match int(preview["type"]):
 		InputController.ActionType.MOVE:
 			var mover: Unit = _unit(int(preview["unit_id"]))
@@ -360,6 +363,8 @@ func toast_tween() -> Tween:
 
 
 func _hide_toast() -> void:
+	if _toast_tween != null:
+		_toast_tween.kill()
 	_toast.visible = false
 	_toast_key = ""
 
@@ -608,6 +613,7 @@ func _on_confirm_pressed() -> void:
 
 
 func _on_cancel_pressed() -> void:
+	_hide_toast()
 	if _controller != null:
 		_controller.cancel_pending()
 	_clear_preview()

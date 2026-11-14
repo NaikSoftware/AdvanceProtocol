@@ -819,6 +819,13 @@ func test_toast_shows_the_err_text_for_two_seconds_and_fades_in_150_ms() -> void
 	assert_false(toast.visible, "через 2,0 с тост пішов")
 
 
+func test_toast_is_dropped_when_the_selection_changes() -> void:
+	hud.bind(_state())
+	hud.show_toast("ERR_NOT_ADJACENT")
+	hud.show_selection(null)
+	assert_false((hud.get_node("%Toast") as Control).visible, "відмова одного юніта не висить над іншим")
+
+
 func test_toast_sits_8_dp_above_the_button_that_was_refused() -> void:
 	var state: BattleState = _state()
 	var squad: Unit = state.add_unit(1, 0, Vector2i(3, 3), 0)
