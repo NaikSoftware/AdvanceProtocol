@@ -224,9 +224,10 @@ func test_muzzle_flash_sits_at_the_barrel_tip() -> void:
 	assert_almost_eq(tank.position, Vector3(2.0, 0.3 - 0.05, 3.0 - 0.625), Vector3.ONE * 0.05)
 	# гармати — за справжньою моделлю: найпередніше коло її вершин, а не за формулою з рядка
 	UnitSilhouettes.reset_models()
-	for id: int in [9, 10]:
-		var fx: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.SHELL, id)
-		var v: PackedVector3Array = UnitSilhouettes.model_mesh(id).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	for case: Vector2i in [Vector2i(9, 0), Vector2i(10, 0), Vector2i(9, 1), Vector2i(10, 1), Vector2i(9, 2), Vector2i(10, 2)]:
+		var id: int = case.x
+		var fx: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.SHELL, id, case.y)
+		var v: PackedVector3Array = UnitSilhouettes.model_mesh(id, case.y).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 		var zmin: float = 0.0
 		for p in v:
 			zmin = minf(zmin, p.z)
@@ -236,7 +237,7 @@ func test_muzzle_flash_sits_at_the_barrel_tip() -> void:
 			if p.z < zmin + 0.004:
 				ring_y += p.y
 				n += 1
-		assert_almost_eq(fx.position, Vector3(0.0, ring_y / float(n), zmin), Vector3(0.03, 0.02, 0.02), "спалах на дулі гармати типу %d" % id)
+		assert_almost_eq(fx.position, Vector3(0.0, ring_y / float(n), zmin), Vector3(0.03, 0.02, 0.02), "спалах на дулі гармати типу %d набору %d" % [id, case.y])
 
 
 ## Постріл гармати: гаряче ядро на два кадри, 3–4 клуби сіро-бежевого порохового диму вздовж

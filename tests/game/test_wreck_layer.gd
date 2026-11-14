@@ -556,24 +556,27 @@ func test_wreck_of_owner_four_uses_set_one_model_and_spec() -> void:
 ## Гармати й інженерна машина лишають уламок із власної моделі, а не з коробок: тип без вежі й дула теж будується.
 func test_shipped_gun_and_engineer_models_make_wrecks() -> void:
 	UnitSilhouettes.reset_models()
-	for id: int in [9, 10, 11]:
-		var root: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), id, 0)
-		assert_not_null(UnitSilhouettes.model_mesh(id, 0), "модель типу %d" % id)
-		assert_same((root.get_node("Body") as MeshInstance3D).mesh, UnitSilhouettes.model_mesh(id, 0), "уламок — сама модель типу %d" % id)
-		root.free()
+	for set_id in UnitSilhouettes.SET_COUNT:
+		for id: int in [9, 10, 11]:
+			var root: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), id, 0, set_id)
+			assert_not_null(UnitSilhouettes.model_mesh(id, set_id), "модель типу %d набору %d" % [id, set_id])
+			assert_same((root.get_node("Body") as MeshInstance3D).mesh, UnitSilhouettes.model_mesh(id, set_id), "уламок — сама модель типу %d набору %d" % [id, set_id])
+			root.free()
 
 
 ## Корінь полум'я лежить на металі моделі: поряд (по землі й по висоті) є вершина сітки, а не повітря над порожньою землею.
 func test_flame_roots_of_guns_and_engineer_sit_on_model_metal() -> void:
 	UnitSilhouettes.reset_models()
-	for id: int in [9, 10, 11]:
-		layer.add(Vector2i(3 + id, 3), id, 1.0, 0)
-		var node: Node3D = layer.wreck_at(Vector2i(3 + id, 3))
-		var verts: PackedVector3Array = UnitSilhouettes.model_mesh(id).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-		for spot: Vector3 in layer.flame_spots(Vector2i(3 + id, 3)):
+	for case: Vector2i in [Vector2i(9, 0), Vector2i(10, 0), Vector2i(11, 0), Vector2i(9, 1), Vector2i(10, 1), Vector2i(11, 1), Vector2i(9, 2), Vector2i(10, 2), Vector2i(11, 2)]:
+		var id: int = case.x
+		var cell := Vector2i(3 + id, 3 + case.y * 2)
+		layer.add(cell, id, 1.0, 0, case.y)
+		var node: Node3D = layer.wreck_at(cell)
+		var verts: PackedVector3Array = UnitSilhouettes.model_mesh(id, case.y).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		for spot: Vector3 in layer.flame_spots(cell):
 			var local: Vector3 = node.transform.affine_inverse() * spot
 			# промінь униз від кореня: найвища поверхня моделі під ним не далі як 0,15 м від кореня
-			var idx: PackedInt32Array = UnitSilhouettes.model_mesh(id).surface_get_arrays(0)[Mesh.ARRAY_INDEX]
+			var idx: PackedInt32Array = UnitSilhouettes.model_mesh(id, case.y).surface_get_arrays(0)[Mesh.ARRAY_INDEX]
 			var lift: float = node.get_child(0).position.y
 			var from := Vector3(local.x, local.y + 1.0, local.z)
 			var hit_y: float = -INF
@@ -582,5 +585,5 @@ func test_flame_roots_of_guns_and_engineer_sit_on_model_metal() -> void:
 						verts[idx[t + 1]] + Vector3(0, lift, 0), verts[idx[t + 2]] + Vector3(0, lift, 0))
 				if q != null:
 					hit_y = maxf(hit_y, (q as Vector3).y)
-			assert_gt(hit_y, -INF, "під коренем полум'я типу %d є модель" % id)
-			assert_lte(absf(local.y - hit_y), 0.019, "корінь полум'я типу %d лежить на металі (0,15 м)" % id)
+			assert_gt(hit_y, -INF, "під коренем полум'я типу %d набору %d є модель" % [id, case.y])
+			assert_lte(absf(local.y - hit_y), 0.019, "корінь полум'я типу %d набору %d лежить на металі (0,15 м)" % [id, case.y])

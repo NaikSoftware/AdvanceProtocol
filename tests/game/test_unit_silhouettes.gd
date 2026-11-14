@@ -262,27 +262,30 @@ func test_gun_merged_mesh_carries_its_two_crew() -> void:
 func test_crew_stands_clear_of_the_shipped_gun_models() -> void:
 	UnitSilhouettes.reset_models()
 	var margin: float = 0.025
-	for id: int in [9, 10]:
-		var mesh: ArrayMesh = UnitSilhouettes.model_mesh(id)
-		assert_not_null(mesh, "модель типу %d" % id)
-		var a: Array = mesh.surface_get_arrays(0)
-		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
-		for c: Vector3 in UnitSilhouettes.spec(id).crew:
-			var half := Vector2(UnitSilhouettes.FIGURE_SIZE.x, UnitSilhouettes.FIGURE_SIZE.z) * 0.5 + Vector2.ONE * margin
-			var rot := Transform2D(-deg_to_rad(c.z), Vector2(c.x, c.y))
-			var corners: Array[Vector2] = []
-			for sx: float in [-1.0, 1.0]:
-				for sz: float in [-1.0, 1.0]:
-					corners.append(rot * Vector2(sx * half.x, sz * half.y))
-			var hits: int = 0
-			for t in range(0, idx.size(), 3):
-				var tri: Array[Vector3] = [v[idx[t]], v[idx[t + 1]], v[idx[t + 2]]]
-				if minf(tri[0].y, minf(tri[1].y, tri[2].y)) >= UnitSilhouettes.FIGURE_SIZE.y:
-					continue
-				if _tri_overlaps_rect(tri, corners):
-					hits += 1
-			assert_eq(hits, 0, "розрахунок типу %d у точці %s вільний від моделі" % [id, c])
+	for set_id in UnitSilhouettes.SET_COUNT:
+		for id: int in [9, 10]:
+			if not ResourceLoader.exists(UnitSilhouettes.model_path(id, set_id)):
+				continue
+			var mesh: ArrayMesh = UnitSilhouettes._own_model(id, set_id)
+			assert_not_null(mesh, "модель типу %d набору %d" % [id, set_id])
+			var a: Array = mesh.surface_get_arrays(0)
+			var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+			var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+			for c: Vector3 in UnitSilhouettes.spec(id, set_id).crew:
+				var half := Vector2(UnitSilhouettes.FIGURE_SIZE.x, UnitSilhouettes.FIGURE_SIZE.z) * 0.5 + Vector2.ONE * margin
+				var rot := Transform2D(-deg_to_rad(c.z), Vector2(c.x, c.y))
+				var corners: Array[Vector2] = []
+				for sx: float in [-1.0, 1.0]:
+					for sz: float in [-1.0, 1.0]:
+						corners.append(rot * Vector2(sx * half.x, sz * half.y))
+				var hits: int = 0
+				for t in range(0, idx.size(), 3):
+					var tri: Array[Vector3] = [v[idx[t]], v[idx[t + 1]], v[idx[t + 2]]]
+					if minf(tri[0].y, minf(tri[1].y, tri[2].y)) >= UnitSilhouettes.FIGURE_SIZE.y:
+						continue
+					if _tri_overlaps_rect(tri, corners):
+						hits += 1
+				assert_eq(hits, 0, "розрахунок типу %d набору %d у точці %s вільний від моделі" % [id, set_id, c])
 
 
 ## Перетин трикутника (проєкція на XZ) з опуклим чотирикутником: розділова вісь серед нормалей сторін обох.
@@ -315,12 +318,35 @@ func _tri_overlaps_rect(tri: Array[Vector3], rect: Array[Vector2]) -> bool:
 
 ## Кожен розрахунок гармати стоїть у своєму тайлі: слід фігури (з поворотом) не виходить за ±0,5.
 func test_crew_footprints_stay_inside_their_tile() -> void:
-	for id: int in [9, 10]:
-		for c: Vector3 in UnitSilhouettes.spec(id).crew:
-			var half := Vector2(UnitSilhouettes.FIGURE_SIZE.x, UnitSilhouettes.FIGURE_SIZE.z) * 0.5
-			var rot := Transform2D(-deg_to_rad(c.z), Vector2(c.x, c.y))
-			for sx: float in [-1.0, 1.0]:
-				for sz: float in [-1.0, 1.0]:
-					var p: Vector2 = rot * Vector2(sx * half.x, sz * half.y)
-					assert_lte(absf(p.x), 0.5, "x розрахунку типу %d у тайлі" % id)
-					assert_lte(absf(p.y), 0.5, "z розрахунку типу %d у тайлі" % id)
+	for set_id in UnitSilhouettes.SET_COUNT:
+		for id: int in [9, 10]:
+			if UnitSilhouettes._resolved_set(id, set_id) != set_id:
+				continue
+			assert_eq((UnitSilhouettes.spec(id, set_id).crew as Array).size(), 2, "двоє розрахунків, набір %d тип %d" % [set_id, id])
+			for c: Vector3 in UnitSilhouettes.spec(id, set_id).crew:
+				var half := Vector2(UnitSilhouettes.FIGURE_SIZE.x, UnitSilhouettes.FIGURE_SIZE.z) * 0.5
+				var rot := Transform2D(-deg_to_rad(c.z), Vector2(c.x, c.y))
+				for sx: float in [-1.0, 1.0]:
+					for sz: float in [-1.0, 1.0]:
+						var p: Vector2 = rot * Vector2(sx * half.x, sz * half.y)
+						assert_lte(absf(p.x), 0.5, "x розрахунку типу %d набору %d у тайлі" % [id, set_id])
+						assert_lte(absf(p.y), 0.5, "z розрахунку типу %d набору %d у тайлі" % [id, set_id])
+
+
+## Гармати й інженерна машина наборів 1 і 2 мають справжні розміри (довжина слідом моделі разом зі стволом і станинами, м): модель не
+## збільшена понад справжню техніку, а рядок _SET_SPECS описує лише лафет чи корпус. Відвал-плуг набору 2 коротший за справжній
+## (джерело має його короткий), тож допуск там ширший.
+func test_set_towed_and_engineer_models_keep_real_lengths() -> void:
+	UnitSilhouettes.reset_models()
+	var real: Dictionary = {
+		Vector2i(1, 9): [5.7, 0.12], Vector2i(1, 10): [10.4, 0.12], Vector2i(1, 11): [9.32, 0.12],
+		Vector2i(2, 9): [6.32, 0.12], Vector2i(2, 10): [10.7, 0.12], Vector2i(2, 11): [12.2, 0.2],
+	}
+	for key: Vector2i in real:
+		var mesh: ArrayMesh = UnitSilhouettes._own_model(key.y, key.x)
+		assert_not_null(mesh, "модель набору %d типу %d" % [key.x, key.y])
+		if mesh == null:
+			continue
+		var box: AABB = mesh.get_aabb()
+		var want: float = real[key][0]
+		assert_almost_eq(box.size.z * 8.0, want, want * float(real[key][1]), "довжина набору %d типу %d" % [key.x, key.y])

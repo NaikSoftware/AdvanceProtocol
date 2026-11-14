@@ -172,35 +172,45 @@ func _road_wheel_radius(mesh: ArrayMesh) -> float:
 	return r
 
 
-## Рядок набору 0 для гармат і інженерної машини описує суцільний лафет чи корпус, а не всю модель: ширина — за колесами
+## Рядок гармат і інженерної машини (в усіх наборах) описує суцільний лафет чи корпус, а не всю модель: ширина — за колесами
 ## (гармати) чи траками (машина), довжина й висота — за самою сіткою всередині сліду рядка.
-func test_set0_rows_match_carriage_and_running_gear() -> void:
+func test_rows_match_carriage_and_running_gear_in_every_set() -> void:
 	UnitSilhouettes.reset_models()
-	for id: int in [9, 10, 11]:
-		var mesh: ArrayMesh = UnitSilhouettes.model_mesh(id)
-		assert_not_null(mesh, "модель типу %d" % id)
-		var a: Array = mesh.surface_get_arrays(0)
-		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-		var col: PackedColorArray = a[Mesh.ARRAY_COLOR]
-		var hull: Vector3 = UnitSilhouettes.spec(id).hull
-		var wx := Vector2(INF, -INF)
-		var wz := Vector2(INF, -INF)
-		var tx := Vector2(INF, -INF)
-		var top: float = 0.0
-		var rear: float = -INF
-		for i in v.size():
-			if col[i].b > 0.5:
-				wx = Vector2(minf(wx.x, v[i].x), maxf(wx.y, v[i].x))
-				wz = Vector2(minf(wz.x, v[i].z), maxf(wz.y, v[i].z))
-			elif col[i].g > 0.5:
-				tx = Vector2(minf(tx.x, v[i].x), maxf(tx.y, v[i].x))
-			if absf(v[i].x) < hull.x * 0.5 and absf(v[i].z) < hull.z * 0.5:
-				top = maxf(top, v[i].y)
-			rear = maxf(rear, v[i].z)
-		var gear_x: Vector2 = tx if id == 11 else wx
-		assert_almost_eq(gear_x.y - gear_x.x, hull.x, 0.03, "ширина рядка типу %d за колесами чи траками" % id)
-		assert_gte(wz.x, -hull.z * 0.5 - 0.02, "колеса типу %d в межах довжини лафета" % id)
-		assert_lte(wz.y, hull.z * 0.5 + 0.02, "колеса типу %d в межах довжини лафета" % id)
-		assert_almost_eq(top, hull.y, 0.06, "висота рядка типу %d — верх лафета чи корпусу" % id)
-		if id == 11:
-			assert_almost_eq(rear, hull.z * 0.5, 0.02, "корма машини — край рядка")
+	var checked: int = 0
+	for set_id in UnitSilhouettes.SET_COUNT:
+		for id: int in [9, 10, 11]:
+			if not ResourceLoader.exists(UnitSilhouettes.model_path(id, set_id)):
+				continue
+			var where: String = "набір %d тип %d" % [set_id, id]
+			var mesh: ArrayMesh = UnitSilhouettes._own_model(id, set_id)
+			assert_not_null(mesh, "модель, " + where)
+			var a: Array = mesh.surface_get_arrays(0)
+			var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+			var col: PackedColorArray = a[Mesh.ARRAY_COLOR]
+			var hull: Vector3 = UnitSilhouettes.spec(id, set_id).hull
+			var wx := Vector2(INF, -INF)
+			var wz := Vector2(INF, -INF)
+			var tx := Vector2(INF, -INF)
+			var top: float = 0.0
+			var rear: float = -INF
+			for i in v.size():
+				if col[i].b > 0.5:
+					wx = Vector2(minf(wx.x, v[i].x), maxf(wx.y, v[i].x))
+					wz = Vector2(minf(wz.x, v[i].z), maxf(wz.y, v[i].z))
+				elif col[i].g > 0.5:
+					tx = Vector2(minf(tx.x, v[i].x), maxf(tx.y, v[i].x))
+				if absf(v[i].x) < hull.x * 0.5 and absf(v[i].z) < hull.z * 0.5:
+					top = maxf(top, v[i].y)
+				rear = maxf(rear, v[i].z)
+			var gear_x: Vector2 = tx if id == 11 else wx
+			assert_almost_eq(gear_x.y - gear_x.x, hull.x, 0.03, "ширина рядка за колесами чи траками, " + where)
+			assert_gte(wz.x, -hull.z * 0.5 - 0.02, "колеса в межах довжини лафета, " + where)
+			assert_lte(wz.y, hull.z * 0.5 + 0.02, "колеса в межах довжини лафета, " + where)
+			assert_almost_eq(top, hull.y, 0.06, "висота рядка — верх лафета чи корпусу, " + where)
+			if id == 11:
+				# корма корпусу — край рядка; стріла чи маркери дороги можуть виступати за неї, але не вкорочувати
+				assert_gte(rear, hull.z * 0.5 - 0.02, "корма машини не коротша за рядок, " + where)
+				if set_id == 0:
+					assert_almost_eq(rear, hull.z * 0.5, 0.02, "корма машини — край рядка, " + where)
+			checked += 1
+	assert_gte(checked, 3, "моделі набору 0 перевірено")
