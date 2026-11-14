@@ -177,7 +177,9 @@ func tap_cell(cell: Vector2i) -> void:
 		return
 
 	if _selected_unit == null:
-		_caption_mine(state, cell)
+		# Юніт на тайлі важливіший за міну під ним.
+		if tapped == null:
+			_caption_mine(state, cell)
 		return
 
 	_maybe_turn(state, cell)
@@ -189,8 +191,8 @@ func tap_cell(cell: Vector2i) -> void:
 	if _zones != null and _zones.can_reach(cell):
 		_set_pending_move(cell)
 	else:
-		# Тайл поза зоною — раніше no-op, тепер тут підпис міни: рух і постріл мають пріоритет,
-		# а відома ворожа міна ціллю руху не буває (вона перешкода в плануванні, §3.11).
+		# Підпис міни — лише коли тап не дає руху чи пострілу; відома ворожа міна ціллю руху не
+		# буває (вона перешкода в плануванні, §3.11).
 		_caption_mine(state, cell)
 
 

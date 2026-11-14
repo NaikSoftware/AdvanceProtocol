@@ -7,6 +7,7 @@ var state: BattleState
 
 
 func before_each() -> void:
+	TerrainHeight.active = null
 	layer = MineLayer.new()
 	add_child_autofree(layer)
 	state = BattleState.create(Board.create(8, 8, Terrain.GroundState.DRY), 2, 7)
@@ -52,9 +53,9 @@ func test_rebuild_replaces_not_accumulates() -> void:
 	assert_eq(layer.get_child_count(), 0)
 
 
-## Бюджет викликів (§8): скільки б не було мін, шар малює їх одним MultiMesh на вигляд плюс один
-## на кільця всіх власників.
-func test_many_mines_are_one_multimesh_per_style_plus_rings() -> void:
+## Бюджет викликів (§8): скільки б не було мін, шар малює їх одним MultiMesh на вигляд плюс
+## одна сітка кілець усіх власників.
+func test_many_mines_are_one_multimesh_per_style_plus_one_ring_mesh() -> void:
 	for i in 10:
 		Mines.place(state, Vector2i(i % 8, i / 8), 0)
 	Mines.place(state, Vector2i(5, 5), 1)
@@ -62,33 +63,68 @@ func test_many_mines_are_one_multimesh_per_style_plus_rings() -> void:
 	layer.rebuild(state, 0)
 	assert_eq(layer.marker_count(), 11)
 	var mmis: Array[Node] = layer.find_children("*", "MultiMeshInstance3D", false, false)
-	assert_eq(mmis.size(), 3)
+	assert_eq(mmis.size(), 2)
 	var total: int = 0
 	for m: MultiMeshInstance3D in mmis:
 		total += m.multimesh.instance_count
 		assert_eq(m.layers, 1 << (MineLayer.MARKER_LAYER - 1), "шар 3, не шар світу")
-	assert_eq(total, 22, "11 моделей і 11 кілець")
+	assert_eq(total, 11)
+	var rings: MeshInstance3D = layer.get_node("Rings")
+	assert_eq(rings.layers, 1 << (MineLayer.MARKER_LAYER - 1))
+	assert_eq(rings.mesh.surface_get_array_len(0), 11 * 64)
 
 
-## Чия міна — кільце кольору HP-смуги власника, а не колір моделі; свою й знайдену ворожу
-## відрізняє ще й форма: закопана врівень проти відкопаної.
-func test_rings_carry_the_owners_hp_colour() -> void:
+## Чия міна — кільце кольору HP-смуги власника, а не колір моделі. Колір читається з масиву
+## вершин сітки (під dummy-рендерером кольори MultiMesh не читаються назад), і кільце sRGB.
+func test_rings_carry_the_owners_hp_colour_in_srgb() -> void:
 	Mines.place(state, Vector2i(1, 1), 0)
 	Mines.place(state, Vector2i(2, 2), 1)
 	state.mines[1].known_to[0] = true
 	layer.rebuild(state, 0)
-	assert_eq(layer.marker_at(Vector2i(1, 1)).get_meta("ring_color"), UnitView.hp_fill_color(0))
-	assert_eq(layer.marker_at(Vector2i(2, 2)).get_meta("ring_color"), UnitView.hp_fill_color(1))
+	var rings: MeshInstance3D = layer.get_node("Rings")
+	var colors: PackedColorArray = rings.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	# Кольори сітки стискаються до 8 біт на канал.
+	for pair in [[colors[0], UnitView.hp_fill_color(0)], [colors[64], UnitView.hp_fill_color(1)]]:
+		for ch in 3:
+			assert_almost_eq(pair[0][ch], pair[1][ch], 0.01)
 	assert_ne(UnitView.hp_fill_color(0), UnitView.hp_fill_color(1))
-	assert_eq((layer.get_node("Rings") as MultiMeshInstance3D).multimesh.instance_count, 2)
+	assert_true((rings.material_override as StandardMaterial3D).vertex_color_is_srgb)
 
 
+## Закопана врівень проти відкопаної: відкопана вища; ґрунтова пляма виходить за контактний пояс
+## міни, тож закопану видно саме як міну в розритому ґрунті.
 func test_enemy_mine_lies_exposed_and_own_is_flush() -> void:
 	var own: AABB = MineLayer.mesh_of(MineLayer.Style.OWN).get_aabb()
 	var enemy: AABB = MineLayer.mesh_of(MineLayer.Style.ENEMY_REVEALED).get_aabb()
-	assert_eq(own.position.y, 0.0, "міна стоїть на землі")
 	assert_gt(enemy.size.y, own.size.y)
-	assert_gt(own.size.x, enemy.size.x * 0.8, "своя лежить у ширшій плямі розритого ґрунту")
+	var contact_diameter: float = 2.0 * 0.15 * 1.15 * MineLayer.MINE_FACTOR / 8.0
+	assert_gt(own.size.x, contact_diameter * 1.3, "пляма ґрунту ширша за міну")
+	assert_gt(enemy.size.x, contact_diameter * 1.3)
+
+
+## На дорозі ґрунту нема: окрема модель, і та сама на карті з дорогою.
+func test_a_mine_on_a_road_uses_the_asphalt_model() -> void:
+	state.board.set_kind(Vector2i(3, 3), Terrain.Kind.ROAD)
+	Mines.place(state, Vector2i(3, 3), 0)
+	Mines.place(state, Vector2i(4, 3), 0)
+	layer.rebuild(state, 0)
+	assert_eq(layer.find_children("*", "MultiMeshInstance3D", false, false).size(), 2)
+	assert_ne(MineLayer.mesh_of(MineLayer.Style.OWN, true), MineLayer.mesh_of(MineLayer.Style.OWN, false))
+
+
+## На мосту міна стоїть на настилі, а не на руслі під ним (так само, як юніт і контури).
+func test_a_mine_on_a_bridge_sits_on_the_deck() -> void:
+	var view: BoardView = preload("res://game/battle/board_view.tscn").instantiate()
+	add_child_autofree(view)
+	view.build((load("res://maps/river.tres") as MapData).to_board())
+	var th: TerrainHeight = TerrainHeight.active
+	var cell: Vector2i = th.bridge_groups()[0]["cells"][0]
+	var bed: float = th.at(float(cell.x), float(cell.y))
+	assert_gt(th.deck_y(cell), bed + 0.1, "передумова: настил над руслом")
+	var st: BattleState = BattleState.create((load("res://maps/river.tres") as MapData).to_board(), 2, 7)
+	Mines.place(st, cell, 0)
+	layer.rebuild(st, 0)
+	assert_almost_eq(layer.marker_at(cell).position.y, th.deck_y(cell) + MineLayer.MARKER_Y, 1e-4)
 
 
 func test_marker_sits_below_zone_contours() -> void:

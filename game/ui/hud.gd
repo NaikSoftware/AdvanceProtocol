@@ -309,6 +309,8 @@ func _on_mine_caption(owner: int, cell: Vector2i) -> void:
 
 
 func _render_selection() -> void:
+	# Панель перемальовується заново: підпис міни, що в ній стояв, уже знято.
+	_mine_caption_shown = false
 	# Юніт міг загинути від відповіді (§3.3.1) між вибором і перемальовуванням —
 	# показувати AP мерця гірше, ніж не показувати нічого.
 	if _selected_unit != null and not _selected_unit.is_alive():

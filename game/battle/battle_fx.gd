@@ -154,24 +154,52 @@ const DRONE_APEX: float = 1.5
 const DRONE_LAUNCH_LIFT: float = 0.25
 
 
-static func spawn_drone(parent: Node, from: Vector3, to: Vector3) -> Node3D:
+static var _drone_material: StandardMaterial3D
+
+
+## GLB-матеріал дрона ігнорує COLOR_0 і дає чисто білий силует; той самий матеріал, що в мін.
+static func _drone_mat() -> StandardMaterial3D:
+	if _drone_material == null:
+		_drone_material = StandardMaterial3D.new()
+		_drone_material.vertex_color_use_as_albedo = true
+		_drone_material.roughness = 0.7
+	return _drone_material
+
+
+## `warm` — безлюдний прогрів шейдерів: без диму старту, модель у масштабі 0,0001.
+static func spawn_drone(parent: Node, from: Vector3, to: Vector3, warm: bool = false) -> Node3D:
 	var root := _root("Drone", parent, from)
 	var model: Node3D = DRONE_MODEL.instantiate()
+	for mi: Node in model.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).material_override = _drone_mat()
 	root.add_child(model)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(from)
-	_powder(root, rng, 1.4, Vector3(0, DRONE_LAUNCH_LIFT * 0.5, 0), 0.0)
+	var scale: float = 0.0001 if warm else 1.0
 	var a: Vector3 = from + Vector3(0, DRONE_LAUNCH_LIFT, 0)
 	var c: Vector3 = (from + to) * 0.5 + Vector3(0, DRONE_APEX, 0)
 	var b: Vector3 = to + Vector3(0, DRONE_LAUNCH_LIFT, 0)
+	if not warm:
+		_launch_puff(parent, from, (c - a).normalized())
 	var tw: Tween = root.create_tween()
 	tw.tween_method(func(t: float) -> void:
 		var pos: Vector3 = a.lerp(c, t).lerp(c.lerp(b, t), t)
 		var tangent: Vector3 = 2.0 * ((1.0 - t) * (c - a) + t * (b - c))
-		model.global_transform = Transform3D(Basis.looking_at(tangent.normalized(), Vector3.UP), pos),
+		model.global_transform = Transform3D(Basis.looking_at(tangent.normalized(), Vector3.UP).scaled(Vector3.ONE * scale), pos),
 		0.0, 1.0, DRONE_FLIGHT_SEC)
 	tw.tween_callback(root.queue_free)
 	return root
+
+
+## Дим старту — короткий струмінь уздовж труби (вгору й до цілі) і клуба, що здіймається. Окремий
+## вузол контейнера, а не дитина дрона: дрон зникає на 0,9 с, а дим живе довше.
+static func _launch_puff(parent: Node, from: Vector3, axis: Vector3) -> void:
+	var puff := _root("LaunchPuff", parent, from)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(from)
+	for k in 3:
+		var along: float = 0.05 + 0.07 * k
+		_powder(puff, rng, 0.8 + 0.5 * k, axis * along, 0.03 * k)
+	_powder(puff, rng, 1.6, Vector3(0, 0.03, 0), 0.0)
+	_expire(puff, 3.0)
 
 
 ## Розігрів на старті бою: перша куля, іскри, грудки, ядро й кільце пилу інакше чекають на
@@ -181,6 +209,7 @@ static func warm_up(parent: Node, at: Vector3) -> Node3D:
 	var boom: Node3D = spawn_explosion(parent, at, 0.0001)
 	var all: Array[Node3D] = [boom, spawn_hit(parent, at, Weapon.TANK_GUN, true), spawn_hit(parent, at, Weapon.SHELL, false), spawn_muzzle(parent, Transform3D(Basis(), at), Weapon.TANK_GUN),
 			spawn_topple_hit(parent, at, at + Vector3.UP, Debris.CONCRETE, true), spawn_topple_land(parent, at, at + Vector3.RIGHT, Debris.WOOD, true)]
+	spawn_drone(parent, at, at + Vector3.RIGHT, true)
 	for hit: Node3D in all:
 		hit.scale = Vector3.ONE * 0.0001
 		for l: Node in hit.find_children("*", "OmniLight3D", true, false):
