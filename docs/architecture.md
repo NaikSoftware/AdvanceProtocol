@@ -71,7 +71,7 @@ core/                    # pure rules — no Node, no scene tree, no rendering
 game/                    # Godot scenes and nodes
   battle/                # board view, unit views, selection, zone overlay, effects (fire,
                          # smoke, explosions, scar map); look/ holds weather and light
-  ui/                    # HUD, unit inspector, handover gate
+  ui/                    # HUD (tag, hold card, previews, docking), handover gate, pause menu
   camera/                # fixed-angle rig: pan, clamped zoom
   audio/
 maps/
