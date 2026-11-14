@@ -53,9 +53,10 @@ const _ICON_MOVE: Texture2D = preload("res://assets/ui/icons/btn_move.svg")
 ## «Дрон» лишаються як були.
 const _CONFIRM_ICON_PX: float = 18.0
 ## Проміжок між боксом значка й словом; з боковими відступами гліфа це ~10 dp від краю чорнила.
-## Довгі підписи, що інакше не вміщаються при 800 dp, тісніші.
+## Довгі підписи (ремонт і підрив мосту) тісніші: з 9 dp «Demolish bridge» лишає менш ніж 7 dp повітря від
+## внутрішнього краю рамки до чорнила.
 const _CONFIRM_GAP: int = 9
-const _CONFIRM_GAP_TIGHT: int = 8
+const _CONFIRM_GAP_TIGHT: int = 7
 const _CONFIRM_GAP_TIGHT_KEYS: Array[String] = ["eng_repair_bridge", "eng_demolish_bridge"]
 const _ICON_CONFIRM: Texture2D = preload("res://assets/ui/icons/confirm.svg")
 

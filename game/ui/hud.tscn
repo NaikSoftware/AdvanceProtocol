@@ -135,7 +135,7 @@ icon = ExtResource("8_end")
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
-offset_right = 285.0
+offset_right = 289.0
 mouse_filter = 0
 script = ExtResource("5_plate")
 
@@ -143,7 +143,7 @@ script = ExtResource("5_plate")
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
-offset_right = 285.0
+offset_right = 289.0
 offset_bottom = 48.0
 mouse_filter = 2
 theme_override_constants/separation = 16
@@ -162,7 +162,7 @@ icon = ExtResource("9_cancel")
 [node name="ConfirmButton" type="Button" parent="ActionRow"]
 unique_name_in_owner = true
 texture_filter = 2
-custom_minimum_size = Vector2(143, 48)
+custom_minimum_size = Vector2(147, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 disabled = true

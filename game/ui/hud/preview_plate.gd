@@ -7,7 +7,7 @@ extends HudBake
 ## Вузли дітей отримують унікальні імена в сцені власника (HUD): тести й сцена бою читають
 ## %PreviewDamageValue тощо так само, як і раніше.
 
-const WIDTH: float = 285.0
+const WIDTH: float = 289.0
 const BONE: Color = Color("e3dfd3")
 const DIM: Color = Color("8f918a")
 const HAIR: Color = Color("3a4043")
@@ -109,7 +109,7 @@ func _ready() -> void:
 	_sector_caption = _label("", &"HudCaption", sv)
 	_sector_value = _label("PreviewSectorValue", &"HudSector", sv)
 	_note = _label("PreviewArmourNote", &"HudFloorCaption", sv)
-	# Плита фіксована, 285 dp: довші англійські підписи переносяться, а не розпирають її.
+	# Плита фіксована, 289 dp: довші англійські підписи переносяться, а не розпирають її.
 	for l: Label in [_sector_caption, _note]:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size.x = 60.0

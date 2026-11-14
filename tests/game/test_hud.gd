@@ -653,12 +653,12 @@ func test_docking_takes_a_when_nothing_is_in_the_way() -> void:
 	var rects: Array[Rect2] = pick["rects"]
 	assert_eq(pick["name"], "a")
 	assert_true(pick["clear"])
-	assert_eq(rects[1], Rect2(676, 382, 285, 48), "ряд: право 24, низ 12")
-	assert_eq(rects[0], Rect2(676, 274, 285, 100), "плита над рядом з проміжком 8")
+	assert_eq(rects[1], Rect2(672, 382, 289, 48), "ряд: право 24, низ 12")
+	assert_eq(rects[0], Rect2(672, 274, 289, 100), "плита над рядом з проміжком 8")
 
 
 func test_docking_falls_to_a4_when_the_target_ends_between_four_and_eight_dp_from_the_plate() -> void:
-	var targets: Array[Rect2] = [Rect2(600, 300, 70.0, 40)]  # правий край 670, плита з 676: проміжок 6
+	var targets: Array[Rect2] = [Rect2(600, 300, 66.0, 40)]  # правий край 666, плита з 672: проміжок 6
 	var pick: Dictionary = HudDocking.choose_cluster(SCREEN, 100.0, [] as Array[Rect2], targets)
 	assert_eq(pick["name"], "a4")
 
@@ -668,8 +668,8 @@ func test_docking_moves_the_plate_up_when_a_unit_would_be_covered() -> void:
 	var pick: Dictionary = HudDocking.choose_cluster(SCREEN, 100.0, units, [] as Array[Rect2])
 	var rects: Array[Rect2] = pick["rects"]
 	assert_eq(pick["name"], "c", "b лишає ряд унизу, де той самий юніт; c кладе обох угору")
-	assert_eq(rects[0].position, Vector2(676, 64))
-	assert_eq(rects[1].position, Vector2(676, 172), "ряд на 8 під плитою")
+	assert_eq(rects[0].position, Vector2(672, 64))
+	assert_eq(rects[1].position, Vector2(672, 172), "ряд на 8 під плитою")
 
 
 func test_docking_picks_b_when_only_the_plate_area_is_busy() -> void:
@@ -709,7 +709,7 @@ func test_verb_plate_goes_bottom_left_of_end_turn_when_bottom_right_is_busy() ->
 
 
 func test_strip_docks_bottom_right_then_top_right_then_top_left() -> void:
-	var size := Vector2(285, 52)
+	var size := Vector2(289, 52)
 	var none: Array[Rect2] = []
 	assert_eq(HudDocking.choose_strip(SCREEN, size, none, none)["name"], "br")
 	var busy_bottom: Array[Rect2] = [Rect2(700, 390, 40, 30)]
@@ -888,7 +888,7 @@ func test_releasing_the_hold_restores_a_covered_row_to_full_alpha() -> void:
 	hud.size = SCREEN
 	row.visible = true
 	row.position = Vector2(676.0, 382.0)
-	row.size = Vector2(285.0, 48.0)
+	row.size = Vector2(289.0, 48.0)
 	# Картка на пів екрана гарантовано перетинає ряд, де б той не стояв.
 	hud.hold_card().custom_minimum_size = Vector2(900.0, 400.0)
 	hud._on_inspected({"unit_id": u.id, "center": u.pos, "radius": 0, "drone_radius": 0, "marked": [], "drone_marked": [], "is_floor": false})

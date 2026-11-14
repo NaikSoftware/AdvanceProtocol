@@ -79,7 +79,7 @@ A tap selects; a press-and-hold inspects. They show different things on purpose.
 
 ## Action previews
 
-A shot, drone or unit-repair preview opens the cluster: the **preview plate** (285 wide, `plate_solid`) over the **action row**. A pending move and the clear-mine and bridge verbs have **no plate**: only the action row (Cancel, Confirm) shows, docked the same way with a zero-height plate.
+A shot, drone or unit-repair preview opens the cluster: the **preview plate** (289 wide, `plate_solid`) over the **action row**. A pending move and the clear-mine and bridge verbs have **no plate**: only the action row (Cancel, Confirm) shows, docked the same way with a zero-height plate.
 Every value comes from `core/`:
 
 | action | plate content | source |
@@ -106,7 +106,7 @@ preview fields; the glyph's geometry never decides a sector.
 
 ## Cancel, Confirm and End turn
 
-- **The action row** is [Cancel 126][16][Confirm 143] = 285, bottom-right by default. Confirm is the
+- **The action row** is [Cancel 126][16][Confirm 147] = 289, bottom-right by default. Confirm is the
   only element with a bone frame.
 - **Confirm names the pending action**, word and icon together, set by `Hud.show_preview()` from the
   preview type: shot «Вогонь» / Fire (`btn_fire.svg`), drone «Удар» / Strike (`btn_drone.svg`), move
@@ -116,7 +116,7 @@ preview fields; the glyph's geometry never decides a sector.
   one 18 dp box at ~1.5 dp stroke, so the button uses a single size with no per-action sizes. The
   plain `fire/drone/…svg` stay for the engineer tile and the Дрон button. **One gap:** ~10 dp from the
   ink edge to the word (a 9 dp box gap plus glyph side bearings); only the labels that would not fit at 800 dp (repair and demolish bridge) drop to
-  8 dp, leaving ≥ 7 dp from the button's outer edge to the ink. The label is a localisation key in an auto-translating Label. The 143 dp width holds
+  7 dp, leaving ≥ 7 dp from the button's inner border to the ink on both sides (8 / 8 dp at 800 dp). The label is a localisation key in an auto-translating Label. The 147 dp width holds
   the longest label untruncated at all four probe sizes in both locales
   (`tests/game/test_hud_action_labels.gd`).
 - **End turn is fixed bottom-left, and Confirm never docks there.** Confirm is tapped many times a
@@ -126,7 +126,7 @@ preview fields; the glyph's geometry never decides a sector.
   (`InputController.has_cancelable()`); the armed strip's while armed with nothing pending
   (`is_armed_waiting()`); none for a plain selection.
 - **Armed strips** (drone or engineer verb armed) are [Cancel | armed cell], right-anchored,
-  `ArmedStrip.MIN_WIDTH` 285 or wider, growing leftwards, **48 dp tall like the row**. **Cancel sits
+  `ArmedStrip.MIN_WIDTH` 289 or wider, growing leftwards, **48 dp tall like the row**. **Cancel sits
   on the row's Cancel slot** with the same centred icon-and-word group, so it does not move between
   arming and the pending row,
   and the inert armed cell sits where Confirm appears one tap later. With Cancel on the right, a

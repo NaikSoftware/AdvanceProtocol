@@ -12,7 +12,7 @@ const TOP_RIGHT_Y: float = 64.0
 const TOP_LEFT_Y: float = 56.0
 const GAP: float = 8.0
 const ROW_H: float = 48.0
-const CLUSTER_W: float = 285.0
+const CLUSTER_W: float = 289.0
 const END_TURN_W: float = 161.0
 ## Запас навколо юніта: вище 2 dp плита вже «торкається» напису HP.
 const UNIT_MARGIN: float = 2.0

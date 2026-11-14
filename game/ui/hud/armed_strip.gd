@@ -8,7 +8,7 @@ extends PanelContainer
 
 signal cancel_pressed
 
-const MIN_WIDTH: float = 285.0
+const MIN_WIDTH: float = 289.0
 ## Комірка «Скасувати» разом із лівим краєм смужки (1 dp) — рівно 126 dp, як «Скасувати» ряду.
 const CANCEL_WIDTH: float = 125.0
 ## Висота ряду дій: смужка підміняє ряд, тож «Скасувати» не стрибає між озброєнням і очікуванням.
