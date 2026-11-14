@@ -338,8 +338,24 @@ func _handle_drone_launched(event: Events.DroneLaunched) -> Variant:
 	var view: UnitView = _resolve_unit_view(event.attacker_id)
 	if view != null:
 		view.set_drones(event.drones_left)
-	# Влучання — і від загону, якого глядач не бачить, як і від гармати невидимого стрільця.
-	return _play_shot(event.attacker_id, event.target_id, BattleFx.Weapon.DRONE)
+	var target_view: UnitView = _resolve_unit_view(event.target_id)
+	# Влучання — і від загону, якого глядач не бачить, як і від гармати невидимого стрільця:
+	# політ з тайла, що не розвіданий, показав би, звідки вдарили (§3.3.1). Без цілі польоту
+	# теж нема куди летіти.
+	if view == null or target_view == null:
+		return _play_shot(event.attacker_id, event.target_id, BattleFx.Weapon.DRONE)
+	view.play_shot()
+	BattleFx.spawn_drone(view.get_parent(), view.position, target_view.position)
+	var target: Unit = _resolve_unit(event.target_id)
+	var armoured: bool = target != null and UnitTypes.is_vehicle(target.unit_class())
+	# Влучання — мить прильоту; решту (шкоду, поворот цілі) програвач чекає вже після нього.
+	var t: Tween = Engine.get_main_loop().create_tween()
+	t.tween_interval(BattleFx.DRONE_FLIGHT_SEC)
+	t.tween_callback(func() -> void:
+		if is_instance_valid(target_view):
+			BattleFx.spawn_hit(target_view.get_parent(), target_view.position, BattleFx.Weapon.DRONE, armoured))
+	t.tween_interval(BattleFx.HIT_HOLD_SEC)
+	return t.finished
 
 
 func _handle_damage_dealt(event: Events.DamageDealt) -> Variant:

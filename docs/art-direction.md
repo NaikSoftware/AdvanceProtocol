@@ -287,6 +287,55 @@ falls back to the box placeholder, so a model may land one type at a time.
   trodden patch, even in rain or on marsh. Public: the fog never touches it, and it changes no rule.
 - Briefs, sizes and routes per prop (Blender, Tripo or CC0): [`art/props-research.md`](art/props-research.md).
 
+## Ordnance — mines and the drone
+
+Built procedurally in Blender (`tools/blender/ordnance/`), exported to `assets/props/ordnance/`,
+one vertex-coloured mesh each (no textures, no team colour).
+
+**Mine.** A round anti-tank mine: dark disc body with a dark contact ring about 15 % wider, a light
+top plate, fuze and carry handle. It is drawn **×5 the real 0.3 m, so 1.5 m across**: a deliberate
+readability exception, one fixed factor (`F` in `mine.py`, mirrored by `MineLayer.MINE_FACTOR`, and a test
+measures the exported model against it; no zoom-dependent scaling), because at
+the true size it is under two pixels at the closest zoom (7 cm/px) and invisible at the farthest
+(22 cm/px). Compared at ×4, ×5 and ×6 on all three maps at both zoom ends on road, grass and plough;
+×4 loses the plate and handle at the farthest zoom, ×6 starts to dwarf a rifle squad, so ×5. Nothing
+else on the board is upscaled. The two states differ in shape, not only colour:
+
+- **Own mine** (always shown to its owner): buried flush, only the top plate, fuze and handle show,
+  in a patch of disturbed soil about 1.5× the width of the contact ring, with a ragged edge of
+  10–20 cm lobes and a few clods. On hard ground, which cannot be buried in, it lies on the surface
+  in a patch of broken asphalt in three greys, with a lower body.
+- **Found enemy mine** (only once core marks it known to the viewer): dug out and lying on the
+  surface with its whole body, on a spoil patch of the same width with a raised lip of earth around
+  the mine (broken asphalt on hard ground).
+- **Hard ground** is chosen from the surface the ground renderer actually draws, not the tile kind:
+  an asphalt (or cobble) road cell and a bridge deck are hard; a dirt track is soil, like a field.
+- **Whose it is:** a thin flat ring on the ground around the mine, in that player's HP-bar colour
+  (`UnitView.hp_fill_color`, sRGB), 0.05 tile wide (the zone contour's 0.02 is under a pixel at the
+  farthest zoom), draped on the ground per vertex. An overlay, not an object. There are no stakes,
+  flags or tape and no national marking.
+
+An unfound enemy mine leaves **no trace at all** for a viewer who has not found it: no node, no soil
+patch, nothing in the ground, scar map or reflections ([§3.11](../CLAUDE.md)). The patch and ring
+exist only inside the marker layer, which is rebuilt per observer, on render layer 3 (the
+reflection probe shoots layer 1) and below the zone contours. Laying a mine draws nothing for
+anyone else. A mine on a bridge sits on the deck. All mines of one model are one `MultiMesh`, and
+all rings one mesh, so the worst case (own and enemy on soil and on hard ground: four models plus the
+rings) is five draw calls, however many mines there are. A found mine also fades roofs and crowns
+above it, like a unit. Tapping a visible mine shows a
+caption (“Your mine” / “Enemy mine”) in the unit inspector panel; a tap on an unfound mine behaves
+exactly as on empty ground.
+
+**Drone.** A tube-launched loitering munition at **real size: 1.2 m long, 0.1 m body diameter,
+0.7 m wingspan** (folded-out wings, tail fin, pusher propeller). It is not upscaled; it reads
+through motion: a short flat spread of dust on the ground at the squad (at most 0.5 s and 0.4 tile,
+about 30 % opaque; kept in the units container so it outlives the drone), a climb, an arc and a dive
+onto the target in 0.9 s, then the usual drone hit, with a ~3 m fireball (a drone warhead against a
+2.5–3 m target; the shell burst is unchanged). The flight is spawned in the units container (unit views are
+rebuilt after every event batch). If the viewer cannot see the launching squad, or the target,
+there is no flight and no launch puff: only the hit plays, as before, because a launch from an
+unscouted tile would reveal where the squad stands ([§3.3.1](../CLAUDE.md)).
+
 ## Effects — fire, explosions, smoke
 
 **What a hit shows.** A vehicle that survives a hit shows only the hit itself — sparks and

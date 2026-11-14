@@ -66,15 +66,22 @@ static func reveal_near(state: BattleState, player: int) -> Array[Events.BattleE
 
 static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]:
 	var out: Array[Events.BattleEvent] = []
+	## §3.11: міна рве того, хто на неї в'їхав, хоч би чия вона була, — так і в
+	## референсі (`class_1.method_105` дивиться в таблиці мін обох гравців). Тому
+	## стояти на міні не може ніхто, а свої міни для планування — перешкода, як і
+	## знайдені чужі (BattleState.known_blocked_map()).
 	var m: Mine = mine_at(state, unit.pos)
-	if m == null or m.owner == unit.owner:
+	if m == null:
 		return out
 	state.mines.erase(m)
 	out.append(Events.MineTriggered.new(m.pos, unit.id))
+	# Міна на мосту валить прогін, і юніт іде в річку разом із ним — тим самим шляхом,
+	# що й від підриву інженером, щоб вигляд програв ту саму низку подій.
+	if state.board.kind_at(unit.pos) == Terrain.Kind.BRIDGE:
+		out.append_array(EngineerCommand.demolish_bridge(state, unit.pos))
+		return out
 	var applied: int = mini(DAMAGE_BASE + Rules.roll(state.rng, DAMAGE_ROLL), unit.hp)
 	unit.hp -= applied
-	# Шкода міни зараховується власнику міни.
-	state.damage_dealt[m.owner] += applied
 	out.append(Events.DamageDealt.new(unit.id, applied, unit.hp))
 	out.append_array(Casualties.record(state, unit))
 	if not unit.is_alive():

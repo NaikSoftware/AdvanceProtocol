@@ -289,6 +289,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_match_service.take_events()
 
 	_board_view.surface = map_data.surface
+	_mine_layer.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
 	_board_view.ring_map = map_data
 	_contacts.map = map_data
@@ -336,6 +337,7 @@ func resume(match_service: Node = null) -> void:
 	if mp != "" and ResourceLoader.exists(mp):
 		var saved_map: MapData = load(mp) as MapData
 		_board_view.surface = saved_map.surface
+		_mine_layer.surface = saved_map.surface
 		_board_view.relief_seed = saved_map.name_key.hash()
 		_board_view.ring_map = saved_map
 	var look: BattleLook = BattleLook.for_map_path(mp)
@@ -1013,6 +1015,8 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	# Дах над показаним юнітом розчиняється — і лише над показаним: невидимий ворог під будинком
 	# прозорим дахом себе не видає.
 	_shown_cells.assign(known.keys())
+	# Міна під дахом чи кроною теж мусить бути видна, як юніт.
+	_shown_cells.append_array(_mine_layer.cells())
 	_board_view.set_reveal_cells(_shown_cells, instant)
 	var crushed: Array[Vector2i] = []
 	for pos: Vector2i in _crushed_truth:

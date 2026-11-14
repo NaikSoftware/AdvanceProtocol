@@ -130,8 +130,6 @@ This reshapes the economics of shooting, and that is the point:
 - Flanking costs more than it did: closing to a side or rear arc usually puts you inside the
   target's own range.
 
-Retaliation damage is credited to the retaliator's owner tally like any other damage.
-
 ## Facing in an exchange
 
 Firing turns the shooter. Surviving a shot turns the target. The order is the rule:
