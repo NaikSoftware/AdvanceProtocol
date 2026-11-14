@@ -64,6 +64,10 @@ uniform bool use_height = false;
 uniform sampler2D height_map : filter_linear, repeat_disable;
 uniform float height_samples = 4.0;
 uniform float height_origin = -0.5;
+// Маска шару накладок (BoardView.OVERLAY_LAYER): лінія — лише для камери, що бачить накладки.
+// Зонд відбиттів знімає крони (шар 1), але не накладки: у його знімку лінії активного гравця
+// лишились би для наступного.
+uniform int overlay_layers = 0;
 
 #include "res://game/battle/shaders/surroundings.gdshaderinc"
 
@@ -175,16 +179,17 @@ void fragment() {
 	}
 	// Промінь камери крізь піксель до площини лінії (земля під деревом) — точка землі, яку піксель
 	// закриває; лінія там — і тут той самий колір і ширина, неосвітлені, як стрічка на землі.
-	if (!shadow_pass && (contour_on || ring_count > 0)) {
+	if (!shadow_pass && (contour_on || ring_count > 0) && (CAMERA_VISIBLE_LAYERS & uint(overlay_layers)) != 0u) {
 		vec3 eye = CAMERA_POSITION_WORLD;
 		float k_ray = 1.0 / max(eye.y - world_pos.y, 1e-4);
-		vec2 g = mix(eye.xz, world_pos.xz, (eye.y - base_y - contour_lift) * k_ray);
+		float gy = base_y;
+		vec2 g = mix(eye.xz, world_pos.xz, (eye.y - gy - contour_lift) * k_ray);
 		if (use_height) {
 			// Дві ітерації: на пологому схилі похибка падає в (схил / tg нахилу камери)² раза за крок.
 			vec2 hs = vec2(textureSize(height_map, 0));
 			for (int it = 0; it < 2; it++) {
-				float y = textureLod(height_map, ((g - height_origin) * height_samples + 0.5) / hs, 0.0).r;
-				g = mix(eye.xz, world_pos.xz, (eye.y - y - contour_lift) * k_ray);
+				gy = textureLod(height_map, ((g - height_origin) * height_samples + 0.5) / hs, 0.0).r;
+				g = mix(eye.xz, world_pos.xz, (eye.y - gy - contour_lift) * k_ray);
 			}
 		}
 		vec2 gw = max(fwidth(g), vec2(1e-5));
@@ -215,9 +220,11 @@ void fragment() {
 			pre = mix(pre, e.rgb, e.a);
 			cov = e.a + cov * (1.0 - e.a);
 		}
-		ALBEDO *= 1.0 - cov;
-		SPECULAR *= 1.0 - cov;
-		EMISSION = pre;
+		// Колода чи хмиз нижче за стрічку її не ховають: лінія на них лягла б удруге, темніша.
+		float above = step(gy + contour_lift, world_pos.y);
+		ALBEDO *= 1.0 - cov * above;
+		SPECULAR *= 1.0 - cov * above;
+		EMISSION = pre * above;
 	}
 	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без
 	// окремого прозорого проходу. Без MSAA це звичайний alpha-cut за тим самим порогом.

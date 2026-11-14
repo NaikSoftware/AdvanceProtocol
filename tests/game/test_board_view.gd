@@ -343,3 +343,18 @@ func test_draw_circles_publishes_rings_for_the_canopy() -> void:
 
 	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
 	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(1, 1, 5, 0)]), "зняте кільце зникає й під кронами")
+
+
+# build() знімає контури й кола, а ліс переживає його: крони не мусять тримати старих ліній.
+func test_build_clears_the_canopy_copy() -> void:
+	var board := Board.create(4, 3, Terrain.GroundState.DRY)
+	view.build(board)
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	view.draw_circles([{"center": Vector2i(1, 1), "radius": 2, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_not_null(view.forest()._contour_edges, "контур є — крони його шукають")
+
+	view.build(board)
+
+	assert_eq(_texel(4, 1), [0, 0, 0, 0])
+	assert_null(view.forest()._contour_edges, "без контуру крона лінію не шукає")
+	assert_eq(view.forest().contour_rings.size(), 0)

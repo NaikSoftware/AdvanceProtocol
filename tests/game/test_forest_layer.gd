@@ -278,6 +278,7 @@ func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
 		assert_same(mat.get_shader_parameter("contour_edges"), tex, "%s: картка ребер" % n.name)
 		assert_eq(mat.get_shader_parameter("contour_on"), true, "%s: лінія увімкнена" % n.name)
 		assert_eq(mat.get_shader_parameter("ring_count"), 1, "%s: одне кільце" % n.name)
+		assert_eq(mat.get_shader_parameter("overlay_layers"), 1 << (BoardView.OVERLAY_LAYER - 1), "%s: лише камера накладок, не зонд" % n.name)
 		assert_eq(mat.get_shader_parameter("rings"), rings, "%s: центр і радіус кільця" % n.name)
 	var fades: int = 0
 	for n: Node in f.get_children():
