@@ -18,7 +18,15 @@ Three rules hold everywhere below:
   camera coming to rest (`Hud.VIEW_SETTLE_SECONDS`), an event batch, a resize.
 
 1 dp is one logical pixel after `UiScale`. Sizes are fixed; the layout adapts from 800 × 360 to
-1280 × 800 dp by anchoring to corners, never by scaling.
+1280 × 800 dp by anchoring to corners, never by scaling. Sizes are judged at 360 dp tall, the common
+Android phone (about 780 × 360 dp).
+
+**Every control has a 48-dp hit area around a 40-dp visual** (CLAUDE.md §9). The extra 8 dp lies toward
+the screen edge: downward into the 12-dp bottom margin for the bottom row, End turn and Дрон, up and
+right for pause. The `Button` node is the hit area; its style draws the 40-dp plate with a negative
+`expand_margin` and centres the content with a matching content margin (`HudKit.visual_inset`).
+**Docking and tag placement use the 48-dp hit rect**, so an invisible strip of a button never sits
+on a unit and swallows a tap.
 
 ## Files
 
@@ -39,9 +47,9 @@ Three rules hold everywhere below:
 
 | element | place | size (dp) | notes |
 | --- | --- | --- | --- |
-| player chip | top-left (24, 12) | 151 × 36 | player-colour bar, «Гравець N», «Хід N» |
-| pause | top-right (right 24, top 8) | 48 × 48 | icon only |
-| End turn | bottom-left (24, bottom 12) | 161 × 48 | fixed; nothing else docks there |
+| player chip | top-left (24, 12) | ≈ 132 × 32 | player-colour bar, «Гравець N», «Хід N»; not a button |
+| pause | top-right: visual (right 24, top 8), hit area in the corner (right 16, top 0) | 40 × 40, hit 48 × 48 | icon only, no background |
+| End turn | bottom-left: visual (24, bottom 12), hit area to bottom 4 | 136 × 40, hit 136 × 48 | fixed; nothing else docks there |
 
 Idle chrome is about 4 % of a 985 × 442 screen. **Ground state is shown nowhere in the UI**: not on
 the HUD, the gate or the pause menu. It is fixed per map
@@ -59,7 +67,8 @@ A tap selects; a press-and-hold inspects. They show different things on purpose.
 | content | class silhouette · name · drone pips (squads) | owner-colour tab · name, class, silhouette · АТАКА / ДАЛЬНІСТЬ / ОГЛЯД · armour glyph + Лоб/Борт/Корма table, or «Броня немає» for infantry · drones row · floor caption |
 | AP | never, own or enemy: the movement zones show the reach | never |
 | HP | never: the board label is the HP number | never |
-| place | beside the unit, by [tag placement](#unit-tag-placement) | top-left (24, 58) or top-right (right 24, top 64) |
+| size | ≈ 118 × 26: silhouette 22 × 11, name 13 | 212 wide: name 15, stats 15, silhouette 34 × 17, ≈ 142 tall for a tank |
+| place | beside the unit, by [tag placement](#unit-tag-placement) | top-left (24, 54) or top-right (right 24, top 56) |
 | input | `MOUSE_FILTER_IGNORE` on the tag, its children and leader: a tap lands on the tile below | ignores input |
 
 - **Drone pips are public** (§3.9): the tag and the hold card show them for any visible squad. The
@@ -79,7 +88,7 @@ A tap selects; a press-and-hold inspects. They show different things on purpose.
 
 ## Action previews
 
-A shot, drone or unit-repair preview opens the cluster: the **preview plate** (285 wide, `plate_solid`) over the **action row**. A pending move and the clear-mine and bridge verbs have **no plate**: only the action row (Cancel, Confirm) shows, docked the same way with a zero-height plate.
+A shot, drone or unit-repair preview opens the cluster: the **preview plate** (252 × ≈ 84, `plate_solid`: target row 24, glyph 26 × 40, sector word 16, damage 26) over the **action row**. A pending move and the clear-mine and bridge verbs have **no plate**: only the action row (Cancel, Confirm) shows, docked the same way with a zero-height plate.
 Every value comes from `core/`:
 
 | action | plate content | source |
@@ -106,21 +115,24 @@ preview fields; the glyph's geometry never decides a sector.
 
 ## Cancel, Confirm and End turn
 
-- **The action row** is [Cancel 122][16][Confirm 147] = 285, bottom-right by default. Confirm is the
-  only element with a bone frame.
+- **The action row** is [Cancel 104][12][Confirm 136] = 252, bottom-right by default, 40 dp drawn in a
+  48-dp hit area. Confirm is the only element with a bone frame.
+- **One shared width.** The preview plate, the action row and the armed strip are all
+  `HudDocking.CLUSTER_W` (252); `PreviewPlate.WIDTH` and `ArmedStrip.WIDTH` are that constant. No
+  element widens it to fit a label: the plate and row stack, so a wider row moves the plate's dock and
+  its clearance from the target. A longer label wraps (plate notes) or must fit (buttons, strip).
 - **Confirm names the pending action**, word and icon together, set by `Hud.show_preview()` from the
   preview type: shot «Вогонь» / Fire (`btn_fire.svg`), drone «Удар» / Strike (`btn_drone.svg`), move
   «Рухатися» / Move (`btn_move.svg`), unit repair «Ремонтувати» / Repair (`btn_repair_unit.svg`), and
   the engineer verbs with their own name and icon (clear mine, repair bridge, demolish bridge).
-  **One icon family:** every `btn_*.svg` is cropped so its ink is ~17.5 dp on its longest side inside
-  one 18 dp box at ~1.5 dp stroke, so the button uses a single size with no per-action sizes. The
-  plain `fire/drone/…svg` stay for the engineer tile and the Дрон button. **One gap:** a single 7 dp
-  box-to-word gap for every action, no exceptions. At 8 dp the icon side of en «Demolish bridge»
-  measures exactly 7.0 dp at 800, so 7 dp is used: 8.0 and 8.5 dp from the inner border to the ink
-  at 800, 8.6 on both sides at 985. The label is a
-  localisation key in an auto-translating Label. The 147 dp width holds
-  the longest label untruncated at all four probe sizes in both locales
-  (`tests/game/test_hud_action_labels.gd`).
+  **One icon family for every button:** every `btn_*.svg` (Confirm, Cancel, End turn, pause, Дрон,
+  the verb grid, the armed strip) is cropped so its ink is ~15.5 dp on its longest side inside one
+  16-dp box (`HudKit.ICON_PX`) at a stroke of box ÷ 12 (≈ 1.33 dp). The pause texture is 20 dp because
+  its shadow takes 2 dp a side; its ink is the same 16. The plain `drone.svg` and `repair_unit.svg` stay for the
+  preview plate and the hold card. **One gap:** 6 dp from icon box to word (`HudKit.ICON_GAP`) for every
+  action, no exceptions. The label is a localisation key in an auto-translating Label. The 136-dp
+  width holds the longest label (en «Demolish bridge») untruncated with ≥ 7 dp from the inner border on
+  both sides at all four probe sizes in both locales (`tests/game/test_hud_action_labels.gd`).
 - **End turn is fixed bottom-left, and Confirm never docks there.** Confirm is tapped many times a
   turn and End turn once; the turn hand-off cannot be taken back, so a thumb aiming at Confirm must
   never land on it. No docking option puts the row bottom-left.
@@ -128,14 +140,21 @@ preview fields; the glyph's geometry never decides a sector.
   (`InputController.has_cancelable()`); the armed strip's while armed with nothing pending
   (`is_armed_waiting()`); none for a plain selection.
 - **Armed strips** (drone or engineer verb armed) are [Cancel | armed cell], right-anchored,
-  `ArmedStrip.MIN_WIDTH` 285 or wider, growing leftwards, **48 dp tall like the row**. **Cancel sits
-  on the row's Cancel slot** with the same rect (122 × 48, no plate margin on its side, the divider
+  `ArmedStrip.WIDTH` (the shared 252), **a 48-dp hit area with a 40-dp plate like the row**. Every real
+  title and hint fits in the armed cell in both locales, so the strip never widens. **Cancel sits
+  on the row's Cancel slot** with the same rect (104 × 48, no plate margin on its side, the divider
   drawn outside it) and the same centred icon-and-word group, so × and the word land on the same
   pixels between arming and the pending row,
   and the inert armed cell sits where Confirm appears one tap later. With Cancel on the right, a
   player backing out with a second tap would fire a drone or demolish a bridge. The armed cell stops
   the tap and does nothing; it does not fall through to the board.
-- **The Дрон button** (own squad selected, nothing armed) takes the bottom-right slot, 133 × 48.
+- **The Дрон button** (own squad selected, nothing armed) takes the bottom-right slot, 116 × 40 in a
+  116 × 48 hit area.
+- **The engineer verb plate** is a 2 × 3 grid of 133 × 48 cells, 269 × 148 with 1-dp dividers: lay and
+  clear mine, repair and demolish bridge, repair unit, and one empty cell. Each cell is icon (16) + 6 +
+  verb name (14), left-aligned, ≥ 7 dp from both cell edges in both locales. Five stacked 48-dp rows
+  took two thirds of a 360-dp screen, and a shorter row would break the 48-dp hit area. An unavailable
+  verb stays dimmed (`HudCellButtonMuted`) and tappable, so the tap can show the reason.
 - **The toast** (an `ERR_*` refusal) sits right-aligned 8 dp above whatever occupies the
   bottom-right slot, or in the slot itself when it is empty. One at a time, 2.0 s, 150 ms fade.
 
@@ -150,7 +169,7 @@ the verb's target tile, or the move's path and destination.
 
 | plate | order (`HudDocking`) |
 | --- | --- |
-| cluster (preview + row) | **a** plate over row, bottom-right → **a@4** same, targets grown only 4 → **b** row bottom-right, plate top-right (right 24, top 64) → **c** whole cluster top-right → **d** whole cluster top-left (24, 56) |
+| cluster (preview + row) | **a** plate over row, bottom-right → **a@4** same, targets grown only 4 → **b** row bottom-right, plate top-right (right 24, top 56) → **c** whole cluster top-right → **d** whole cluster top-left (24, 52) |
 | engineer verb plate | bottom-right → bottom-left, 16 right of End turn |
 | armed strip | bottom-right → top-right → top-left |
 
@@ -214,21 +233,35 @@ Colour tokens (Godot `Color` hex):
 
 | token | value | use |
 | --- | --- | --- |
-| `plate` | `121516e6` (90 %) | chip, pause, End turn, Cancel, Дрон |
-| `plate_solid` | `121516` | every plate that carries rule numbers or verbs |
-| edges | top `575e61`, bottom `040505`, side `2f3537` | 1 dp each, the plate's hardware edge |
+| `plate` | `121516e6` (90 %) | the player chip |
+| `button_fill` | `121516a6` (65 %) | End turn, Cancel, Дрон, the verb grid, the armed strip (`q_btn`, `q_panel`) |
+| `primary_fill` | `121516b8` (72 %) | Confirm (`q_prim`) |
+| `button_edge` | `575e61` at 55 %, 1 dp, radius 3 | the soft edge of every quiet button |
+| `plate_solid` | `121516` | every plate that carries rule numbers: preview plate, unit tag, hold card, toast |
+| edges | top `575e61`, bottom `040505`, side `2f3537` | 1 dp each, the solid plates' hardware edge |
 | `hair` | `3a4043` | dividers inside a plate |
 | `press` | `1e2325` | pressed fill |
-| `text` (bone) | `e3dfd3` | labels, numbers, lit armour wedge, primary frame |
+| `text` (bone) | `e3dfd3` | labels, numbers, lit armour wedge, primary frame (1 dp at 85 %), pause icon |
 | `dim` | `8f918a` | captions, `/48`, muted verbs, silhouettes |
 | `p1` / `p2` / `p3` | `3a6ea5` / `a54a3a` / `5a8a4a` | `UnitView.PLAYER_COLORS`: chip bar, target and card tabs, gate rules |
 | gate scrim | `0d1013` | under the gate plate |
+
+**Quiet buttons.** Buttons are a semi-transparent fill with a soft 1-dp edge, so they stop reading as
+hard slabs over the board; labels and icons stay fully opaque. Measured on Crossroads against the
+brightest board pixel behind each button (`hud=off` frames), bone on the 65 % fill stays ≥ 5.1:1. The
+worst case is the cluster docked top-left over the village's pale house walls; at the bottom docks it
+is ≥ 8.3:1. Dim text and icons (hint, muted verbs, the Cancel ×) fall to about 2.1:1 over those
+walls. Raise the fill alpha if a map puts a brighter surface under a button and bone falls below
+4.5:1. The pause bars keep ≥ 5.8:1 against their own shadow on every captured frame. Plates that carry rule numbers stay solid. **Pause has no background in any state**,
+focus included: only its bone icon with a soft dark shadow baked into `btn_pause.svg`, dimmed to 70 %
+while pressed (`HudIconButton`). No blur shader and no `BackBufferCopy`: both cost draw calls the
+budget does not have.
 
 **Hue is reserved for rules.** The chrome is neutral grey and bone. Gold and red belong to the
 movement zones on the board and never appear in the chrome. Player colours mark ownership only and
 are **never a text colour**.
 
-**Plates** are 8 × 8 9-slice textures (`game/ui/theme/plate*.png`, `StyleBoxTexture`, margins 3):
+**Solid plates** are 8 × 8 9-slice textures (`game/ui/theme/plate*.png`, `StyleBoxTexture`, margins 3):
 `texture_filter = NEAREST` on each plate `Control`, `LINEAR` on icons and labels. A plate button
 (`HudKit.group_content`) keeps its icon and label in `LINEAR` children, since a button draws its native icon with its own filter. A linear-filtered plate shows
 a 2–3 px gradient at its edge instead of a crisp 1-dp line.
@@ -239,6 +272,20 @@ armour table do not jitter. `kern = 0` is required too: Fira kerns pairs of tabu
 variations (`HudCaption`, `HudNumber*`, `HudPrimaryButton`, …) and their weights and sizes are
 listed in the header of `hud_theme.tres`. The theme is HUD-scoped; `ap_theme.tres` (menus) is
 separate.
+
+| type | dp | variations |
+| --- | --- | --- |
+| captions | 11 | `HudCaption`, `HudCaptionStats`, `HudFloorCaption` |
+| small, dim | 12 | `HudHint`, `HudDim`, `HudNumberTag`, `HudNumberDim13` |
+| names | 13 | `HudName`, `HudToast` |
+| buttons, labels | 14 | `HudLabel`, `HudPlateButton(Muted)`, `HudCellButton(Muted)`, `HudPrimaryButton`, `HudNumber`, `HudNumberDim15` |
+| hold-card name, stats | 15 | `HudHoldName`, `HudNumberStat` |
+| sector word | 16 | `HudSector` |
+| damage | 26 | `HudNumberBig` |
+
+No text is below 11 dp. **The gate and pause menu keep their own sizes:** they use the frozen
+`HudMenu*` copies (`HudMenuButton`, `HudMenuPrimaryButton`, `HudMenuLabel`, …) of the larger set and
+the solid plates, so shrinking the battle HUD does not touch them.
 
 **Strings** live in `assets/i18n/strings.csv` (`hud_*`, `handover_*`, `pause_*`, `eng_*`, `ERR_*`).
 HUD uk strings use `ʼ` (U+02BC) as the apostrophe.
