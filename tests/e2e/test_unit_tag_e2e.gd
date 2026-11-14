@@ -246,7 +246,7 @@ func test_tag_placed_before_camera_settles_equals_a_fresh_placement_and_avoids_c
 	var placement := TagPlacement.new(hud._tag_scene(hud._tag_view(), _tag().size))
 	var clean: Dictionary = placement.best()
 	assert_true(clean["found"])
-	assert_eq(placement.mark_cover(fresh), placement.mark_cover(clean["rect"]), "тег накриває контури не більше, ніж найкраще місце")
+	assert_eq(placement.mark_cover(first), placement.mark_cover(clean["rect"]), "тег після спокою камери накриває контури не більше, ніж найкраще місце")
 
 
 func test_engineer_tag_avoids_its_four_target_cells() -> void:
@@ -282,6 +282,20 @@ func test_engineer_tag_keeps_its_spot_when_a_verb_is_armed() -> void:
 	var ms: float = (Time.get_ticks_usec() - t0) / 1000.0
 	print("engineer tag full placement: %.1f ms" % ms)
 	assert_lt(ms, 150.0, "повний перерахунок тега інженера (бюджет обробника подій)")
+
+
+## Озброєння дрона додає дуги кільця під тегом, але зміна режиму тег не зсуває: пошук за накриттям
+## іде лише після спокою камери.
+func test_squad_tag_keeps_its_spot_when_the_drone_is_armed() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
+	await _tap(SQUAD)
+	await _e2e.wait_until(func() -> bool: return not _e2e.hud().get("_settle_timer").time_left > 0.0, "рух камери стих")
+	await _e2e.settle()
+	var before := Rect2(_tag().position, _tag().size)
+	_e2e.press(_e2e.hud().get_node("%DroneButton") as Control)
+	await _e2e.settle()
+	assert_true(_tag().visible)
+	assert_eq(Rect2(_tag().position, _tag().size), before, "озброєння дрона не зсуває тег")
 
 
 ## Вибір танка → тап по ворогові (прев'ю пострілу): місце тега лишається, поки воно законне; лінія вогню його не зачіпає.

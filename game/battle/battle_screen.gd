@@ -455,7 +455,7 @@ func _notification(what: int) -> void:
 				_match_service.save_current(save_path)
 
 
-## Гейт і пауза показують карту й ґрунт; вони незмінні протягом матчу.
+## Гейт і пауза показують карту; вона незмінні протягом матчу.
 func _set_overlay_context(map_data: MapData) -> void:
 	_gate.set_context(map_data.resource_path, map_data.name_key)
 	_pause.set_context(map_data.resource_path, map_data.name_key)

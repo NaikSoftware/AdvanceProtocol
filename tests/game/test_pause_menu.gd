@@ -38,16 +38,15 @@ func test_empty_map_shows_a_dash() -> void:
 	assert_eq((menu.get_node("%MapValue") as Label).text, "-")
 
 
-func test_pause_shows_no_ground_state_for_any_ground() -> void:
+func test_pause_shows_no_ground_state() -> void:
 	for lang in ["uk", "en"]:
 		TranslationServer.set_locale(lang)
-		for ground in [Terrain.GroundState.DRY, Terrain.GroundState.MUD, Terrain.GroundState.FROZEN]:
-			var menu: PauseMenu = PauseScene.instantiate()
-			add_child_autofree(menu)
-			menu.set_context("", "map_river")
-			menu.open(2)
-			assert_eq(_ground_text_or_icon(menu), [] as Array[String], "пауза, ґрунт %d" % ground)
-			assert_eq((menu.get_node("%TurnValue") as Label).text, "2")
+		var menu: PauseMenu = PauseScene.instantiate()
+		add_child_autofree(menu)
+		menu.set_context("", "map_river")
+		menu.open(2)
+		assert_eq(_ground_text_or_icon(menu), [] as Array[String], "пауза, мова %s" % lang)
+		assert_eq((menu.get_node("%TurnValue") as Label).text, "2")
 
 
 ## Стан ґрунту не показується ніде в інтерфейсі: ні вузла, ні підпису, ні значка.

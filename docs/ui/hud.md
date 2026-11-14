@@ -43,10 +43,11 @@ Three rules hold everywhere below:
 | pause | top-right (right 24, top 8) | 48 × 48 | icon only |
 | End turn | bottom-left (24, bottom 12) | 161 × 48 | fixed; nothing else docks there |
 
-Idle chrome is about 4 % of a 985 × 442 screen. **Ground state is shown nowhere in the UI, and neither is action points** (own or enemy): the gold and red movement zones already show how far a unit can go — not
-here, not on the gate, not in the pause menu. It is fixed per map
-([§3.12](../rules/movement-and-terrain.md)) and every movement zone and move preview already
-includes it.
+Idle chrome is about 4 % of a 985 × 442 screen. **Ground state is shown nowhere in the UI**: not on
+the HUD, the gate or the pause menu. It is fixed per map
+([§3.12](../rules/movement-and-terrain.md)), and every movement zone and move preview already
+includes it. **Action points are shown nowhere either**, own or enemy: the gold and red
+movement zones already show how far a unit can go.
 
 ## Tap and press-and-hold
 
@@ -169,7 +170,10 @@ and event batches. The tag follows its unit on pan; it is hidden while an event 
    it was found at, and moves when it becomes illegal or when a spot kept under relaxed rules has a
    stricter level that now finds one, or when it covers zone contours or ring arcs and a fresh
    search finds a spot covering less (a first selection made while the camera was still easing
-   must end where a later identical selection does). Because an engineer's target cells are
+   must end where a later identical selection does). That cover-based re-search runs only after a
+   camera pan or zoom settles, never on a mode change (drone, verb, preview), so arming the drone
+   does not move the tag. This departs from the design spec's rule 5, which recomputes only when
+   the rect becomes illegal. Because an engineer's target cells are
    obstacles from selection on, arming a verb never moves its tag.
 
 With no legal spot at any level the tag hides rather than covering a unit or a plate.

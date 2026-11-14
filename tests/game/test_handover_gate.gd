@@ -11,11 +11,17 @@ extends GutTest
 const GateScene := preload("res://game/ui/handover_gate.tscn")
 
 var gate: HandoverGate
+var _orig_locale: String
 
 
 func before_each() -> void:
+	_orig_locale = TranslationServer.get_locale()
 	gate = GateScene.instantiate()
 	add_child_autofree(gate)
+
+
+func after_each() -> void:
+	TranslationServer.set_locale(_orig_locale)
 
 
 ## Твін входу (350 мс) докручуємо вручну: реального часу тест не чекає.
@@ -302,12 +308,11 @@ static func _ground_text_or_icon(root: Node) -> Array[String]:
 	return found
 
 
-func test_gate_shows_no_ground_state_for_any_ground() -> void:
+func test_gate_shows_no_ground_state() -> void:
 	for lang in ["uk", "en"]:
 		TranslationServer.set_locale(lang)
-		for ground in [Terrain.GroundState.DRY, Terrain.GroundState.MUD, Terrain.GroundState.FROZEN]:
-			gate.set_context("res://maps/river.tres", "map_river")
-			gate.show_for(0, 3)
-			assert_eq(_ground_text_or_icon(gate), [] as Array[String], "гейт, ґрунт %d" % ground)
+		gate.set_context("res://maps/river.tres", "map_river")
+		gate.show_for(0, 3)
+		assert_eq(_ground_text_or_icon(gate), [] as Array[String], "гейт, мова %s" % lang)
 	var cells: Node = gate.get_node("%InfoPlate/Pad/Cells")
 	assert_eq(cells.get_child_count(), 3, "[ХІД] | [КАРТА] без порожньої клітинки")
