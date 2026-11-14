@@ -12,6 +12,8 @@ extends Node
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m), без (_e) і з моделлю суцільним пурпуром (_k, маска контуру) для ΔE.
+## Шостий аргумент spin [set=N] ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
+## з однаковим `travel` (контроль), третій — на пів радіуса колеса далі; між ними мають змінитися лише колеса.
 ## Шостий аргумент rear [set=N] ставить чотири танки набору N (важкий, середній, винищувач, легкий) у ряд через тайл,
 ## самими моделями без смуг HP (смуга ховає ствол сусіда), і знімає на зумі 6 два кадри: тилом до камери (_f0) і носом до неї (_f4).
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
@@ -47,9 +49,15 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "spots":
 		await _spots(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "fleet":
+		await _fleet(screen, map, out, tag, int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0)
+		return
 	if a.size() > 5 and a[5] == "rear":
 		var rset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 		await _rear(screen, map, out, tag, rset)
+		return
+	if a.size() > 5 and a[5] == "spin":
+		await _spin(screen, map, out, tag, type_id, int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0)
 		return
 	if a.size() > 5 and a[5] == "gate":
 		var gset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
@@ -434,6 +442,54 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		print("UNIT gate %s cell %s" % [cl[0], cell])
 	get_tree().quit()
 
+
+
+func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int = 0) -> void:
+	screen.setup(map, 2, 1)
+	var cell := _field_near_centre(map)
+	var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
+	_place(m, cell, 0)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(cell)
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	var hull := m.get_node("Hull") as GeometryInstance3D
+	var shots: Array = []
+	# s0 і s1 — той самий travel (контроль: кадри мають збігтися), s2 — пів радіуса колеса (пів радіана)
+	var r: float = float(UnitSilhouettes.spec(type_id, set_id).get("wheel", 0.06))
+	for i in 3:
+		hull.set_instance_shader_parameter("travel", 0.5 * r if i == 2 else 0.0)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots.append(["%s/%s_s%d.png" % [out, tag, i], get_viewport().get_texture().get_image()])
+	for s: Array in shots:
+		(s[1] as Image).save_png(s[0])
+	print("UNIT spin %s type %d at %s: %d frames" % [tag, type_id, cell, shots.size()])
+	get_tree().quit()
+
+
+## Шостий аргумент fleet [set=N] ставить в один ряд чотири танки (важкий, середній, винищувач, легкий) і три колісні машини набору 0
+## (бронеавто, транспортер, розвідувальна) і знімає кадри _z6 і _z20: чи ділять вони одну фарбу.
+func _fleet(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int = 0) -> void:
+	screen.setup(map, 2, 1)
+	var c := _field_row_near_centre(map, 7)
+	var roles: Array[int] = [8, 5, 6, 7, 2, 3, 4]
+	for i in roles.size():
+		_place(UnitSilhouettes.build_merged(roles[i], -1, set_id), c + Vector2i(i - 3, 0), 0)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c)
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
+	print("UNIT fleet at %s" % c)
+	get_tree().quit()
 
 
 ## Ряд із чотирьох танків набору: кадр _f0 — тилом до камери, видно корму й моторну палубу; _f4 — носом до камери.
