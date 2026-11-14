@@ -43,17 +43,11 @@ const _VERB_ICONS: Dictionary = {
 	EngineerCommand.Action.DEMOLISH_BRIDGE: preload("res://assets/ui/icons/btn_bridge_demolish.svg"),
 	EngineerCommand.Action.REPAIR_UNIT: preload("res://assets/ui/icons/btn_repair_unit.svg"),
 }
-const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/drone.svg")
 const _BTN_DRONE: Texture2D = preload("res://assets/ui/icons/btn_drone.svg")
 const _ICON_FIRE: Texture2D = preload("res://assets/ui/icons/btn_fire.svg")
 const _ICON_MOVE: Texture2D = preload("res://assets/ui/icons/btn_move.svg")
-## Значки основної кнопки — окремі варіанти btn_*.svg: чорнило в усіх однакове (~17,5 dp при боксі 18 dp)
-## й однієї товщини лінії (1,5 dp), тож один розмір на всі дії. Спільні значки плитки інженера й кнопки
-## «Дрон» лишаються як були.
-const _CONFIRM_ICON_PX: float = 18.0
-## Один проміжок між боксом значка й словом для всіх дій, без винятків: його підібрано так, щоб найдовший
-## підпис («Demolish bridge») лишав ≥ 7 dp повітря від внутрішнього краю рамки до чорнила з обох боків.
-const _CONFIRM_GAP: int = 7
+## Значок паузи несе запечену тінь по 2 dp з кожного боку: бокс текстури 20 dp, чорнило — ті самі 16.
+const _PAUSE_ICON_PX: float = 20.0
 const _ICON_CONFIRM: Texture2D = preload("res://assets/ui/icons/confirm.svg")
 
 var _state: BattleState = null
@@ -114,7 +108,7 @@ var _cluster_name: String = ""
 
 
 func _ready() -> void:
-	HudKit.group_content(_confirm_button, 20.0)
+	HudKit.group_content(_confirm_button, HudKit.ICON_PX)
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	_cancel_button.pressed.connect(_on_cancel_pressed)
 	_end_turn_button.pressed.connect(_on_end_turn_pressed)
@@ -125,12 +119,11 @@ func _ready() -> void:
 	_engineer_panel.cancel_pressed.connect(_on_cancel_pressed)
 	_engineer_panel.refused.connect(show_toast)
 	_toast.custom_minimum_size.y = 34.0
-	_square_pause_button()
 	# Плита 9-slice малюється фільтром кнопки: NEAREST лишає край у 1 dp чітким, а значок і підпис живуть
 	# у LINEAR-дітях групи, інакше стрілка значка сходинкується.
-	HudKit.group_content(_end_turn_button, 20.0)
-	HudKit.group_content(_pause_button, 22.0)
-	HudKit.group_content(_cancel_button, 20.0)
+	HudKit.group_content(_end_turn_button, HudKit.ICON_PX)
+	HudKit.group_content(_pause_button, _PAUSE_ICON_PX)
+	HudKit.group_content(_cancel_button, HudKit.ICON_PX)
 	for b: Button in [_end_turn_button, _pause_button, _cancel_button]:
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_tag = UnitTag.new()
@@ -143,18 +136,6 @@ func _ready() -> void:
 	resized.connect(_relayout)
 	_clear_preview()
 	_render_selection()
-
-
-## Кнопка паузи — квадрат 48 × 48 лише зі значком: поля кнопки з теми (13 + 16) зробили б її шириною 51.
-func _square_pause_button() -> void:
-	for state: String in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var box: StyleBox = _pause_button.get_theme_stylebox(state, "HudPlateButton")
-		if box == null:
-			continue
-		box = box.duplicate()
-		box.content_margin_left = 13.0
-		box.content_margin_right = 13.0
-		_pause_button.add_theme_stylebox_override(state, box)
 
 
 ## Підписи, зібрані через tr() у коді (гравець, сектор, тост), не перекладаються самі.
@@ -286,7 +267,7 @@ func _retitle_confirm(preview: Dictionary) -> void:
 			var action: int = int(preview["action"])
 			key = "hud_repair" if action == EngineerCommand.Action.REPAIR_UNIT else EngineerPanel.LABEL_KEYS[action]
 			tex = _VERB_ICONS[action]
-	HudKit.retitle_group(_confirm_button, key, tex, _CONFIRM_ICON_PX, _CONFIRM_GAP)
+	HudKit.retitle_group(_confirm_button, key, tex)
 
 
 func _show_engineer_preview(preview: Dictionary) -> void:
@@ -516,7 +497,7 @@ func _own_selected() -> bool:
 func _retitle_drone_strip() -> void:
 	if _selected_unit == null:
 		return
-	_drone_strip.configure(_ICON_DRONE, tr("hud_drone_strike"), tr("drone_hint_tap_target"),
+	_drone_strip.configure(_BTN_DRONE, tr("hud_drone_strike"), tr("drone_hint_tap_target"),
 		Vector2i(_selected_unit.drones_left, int(_selected_unit.type()["drones"])))
 
 
@@ -569,9 +550,9 @@ func _view_boxes(ids: Array, with_crosshair: bool) -> Array[Rect2]:
 func _relayout() -> void:
 	if not is_node_ready():
 		return
-	# Фіксовані місця: кнопка «Дрон» стоїть у слоті внизу праворуч.
-	_drone_button.position = Vector2(size.x - _EDGE - DroneButton.WIDTH, size.y - _BOTTOM - 48.0)
-	_drone_button.size = Vector2(DroneButton.WIDTH, 48.0)
+	# Фіксовані місця: кнопка «Дрон» стоїть у слоті внизу праворуч, тап-ціль — на місці ряду дій.
+	_drone_button.position = Vector2(size.x - _EDGE - DroneButton.WIDTH, HudDocking.row_y(size))
+	_drone_button.size = Vector2(DroneButton.WIDTH, HudDocking.ROW_H)
 	if _row.visible:
 		_dock_cluster()
 	if _engineer_panel.visible:

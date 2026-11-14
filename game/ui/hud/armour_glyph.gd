@@ -9,7 +9,10 @@ const NO_SECTOR: int = -1
 
 const BONE: Color = Color("e3dfd3")
 const PLATE: Color = Color("121516")
-const SIZE: Vector2 = Vector2(30.0, 46.0)
+const SIZE: Vector2 = Vector2(26.0, 40.0)
+## Геометрія нижче — у кресленні 30 × 46; _draw масштабує її до SIZE, тож пропорції корпуса й клинів не
+## залежать від розміру глифа.
+const _DRAWN: Vector2 = Vector2(30.0, 46.0)
 ## Контур корпуса із зрізаним носом.
 const _HULL: PackedVector2Array = [
 	Vector2(8, 7), Vector2(22, 7), Vector2(26, 11), Vector2(26, 44), Vector2(4, 44), Vector2(4, 11),
@@ -66,6 +69,7 @@ func _lit_polygons() -> Array[PackedVector2Array]:
 
 
 func _draw() -> void:
+	draw_set_transform(Vector2.ZERO, 0.0, SIZE / _DRAWN)
 	var dim_fill := Color(BONE, 0.10)
 	var dim_line := Color(BONE, 0.26)
 	draw_colored_polygon(_HULL, dim_fill)

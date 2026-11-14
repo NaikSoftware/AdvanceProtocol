@@ -60,7 +60,35 @@ func test_five_buttons_without_ap_cost_in_one_plate() -> void:
 		if b is Button:
 			order.append((b as Button).text)
 	assert_eq(order, EN_LABELS, "рівно п'ять кнопок, у порядку Action")
-	assert_eq(p.active_size(), Vector2(206, 246), "5 × 48 + 4 роздільники + 2 краю")
+	assert_eq(p.active_size(), Vector2(269, 148), "сітка 2 × 3: 2 × 133 + 3 × 48, роздільники й краї по 1 dp")
+	assert_eq((p.plate().get_node("Box") as GridContainer).columns, 2, "дві колонки, а не стовпчик із п'яти рядків")
+	for a: int in VERBS:
+		assert_eq(p.button_for(a).size, Vector2(133, 48), "клітинка 133 × 48: %s" % EN_LABELS[a])
+
+
+## Кожна верба в клітинці: значок, проміжок 6 і назва без обрізання, ≥ 7 dp повітря від краю клітинки
+## з обох боків — обома мовами, приглушені теж (вони такі самі за шириною, але іншим шрифтом).
+func test_every_verb_fits_its_cell_with_air_on_both_sides() -> void:
+	var e: Unit = _engineer()
+	var p: EngineerPanel = _panel()
+	for locale: String in ["uk", "en"]:
+		TranslationServer.set_locale(locale)
+		p.show_for(_service.state, e)
+		for a: int in VERBS:
+			for variation: StringName in [EngineerPanel.AVAILABLE_VARIATION, EngineerPanel.UNAVAILABLE_VARIATION]:
+				var b: Button = p.button_for(a)
+				b.theme_type_variation = variation
+				var box: StyleBox = b.get_theme_stylebox(&"normal")
+				var font: Font = b.get_theme_font(&"font")
+				var text_w: float = font.get_string_size(b.text, HORIZONTAL_ALIGNMENT_LEFT, -1, b.get_theme_font_size(&"font_size")).x
+				var icon_w: float = float(b.get_theme_constant(&"icon_max_width"))
+				var gap: float = float(b.get_theme_constant(&"h_separation"))
+				var where: String = "%s %s %s" % [locale, b.text, variation]
+				assert_eq(icon_w, 16.0, "значок 16 dp: " + where)
+				assert_eq(gap, 6.0, "один проміжок 6 dp: " + where)
+				assert_gte(box.content_margin_left, 7.0, "значок → край клітинки: " + where)
+				assert_gte(133.0 - box.content_margin_left - icon_w - gap - text_w, 7.0, "назва → край клітинки: " + where)
+				assert_gte(b.get_theme_font_size(&"font_size"), 11, where)
 
 
 func test_unavailable_button_reports_the_reason_on_press() -> void:
@@ -118,7 +146,7 @@ func test_panel_fits_phone_without_overlapping_chrome(p = use_parameters(_hud_ca
 	var panel: EngineerPanel = hud.get_node("%EngineerPanel")
 	var where: String = "%s %s" % p
 	assert_true(panel.is_visible_in_tree(), where)
-	assert_eq(panel.size, Vector2(206, 246), where)
+	assert_eq(panel.size, Vector2(269, 148), where)
 	assert_eq(LayoutProbe.overflowing(hud, size), [] as Array[String], where)
 	assert_eq(LayoutProbe.small_targets(hud), [] as Array[String], where)
 	var rect := Rect2(panel.position, panel.size)
@@ -126,7 +154,7 @@ func test_panel_fits_phone_without_overlapping_chrome(p = use_parameters(_hud_ca
 	for n: String in ["%Chip", "%PauseButton", "%EndTurnButton"]:
 		assert_false(rect.intersects((hud.get_node(n) as Control).get_global_rect()), "%s: %s" % [where, n])
 	if size == LayoutProbe.PHONE_SMALL:
-		assert_eq(rect.position.y, 102.0, "800 × 360: верх плити 102, під паузою (вона закінчується на 56)")
+		assert_eq(rect.position.y, 200.0, "800 × 360: верх плити 200, сітка займає 148 із 360")
 
 
 func test_armed_panel_collapses_to_strip_with_cancel() -> void:
@@ -157,7 +185,8 @@ func test_armed_verb_shows_the_same_hint_and_its_own_name() -> void:
 		p.set_armed(true)
 		assert_eq(p.strip().title_label.text, EN_LABELS[i])
 		assert_eq(p.strip().hint_label.text, "Tap a tile", "одна підказка на всі верби")
-		assert_eq(p.active_size().x, 285.0, "смужка 285 dp")
+		assert_eq(p.active_size().x, HudDocking.CLUSTER_W, "смужка спільної ширини")
+		assert_eq(p.active_size().x, 252.0, "спільна ширина — 252 dp")
 		p.set_armed(false)
 
 

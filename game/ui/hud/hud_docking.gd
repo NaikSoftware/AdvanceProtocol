@@ -6,14 +6,21 @@ extends RefCounted
 ## лише «де на екрані не закрити те, що гравцю треба бачити».
 
 const SAFE_X: float = 24.0
+## Нижнє поле до малюнка плит. Тап-ціль кнопок ряду на HIT_EXTRA глибша за малюнок і заходить у це поле:
+## запас тапу йде до краю екрана, а не на дошку.
 const SAFE_BOTTOM: float = 12.0
-## Під кнопкою паузи (вона закінчується на 56) і під чипом.
-const TOP_RIGHT_Y: float = 64.0
-const TOP_LEFT_Y: float = 56.0
+const HIT_EXTRA: float = 8.0
+## Під тап-ціллю паузи (вона закінчується на 48) і під чипом (на 44), з проміжком GAP.
+const TOP_RIGHT_Y: float = 56.0
+const TOP_LEFT_Y: float = 52.0
 const GAP: float = 8.0
+## Тап-ціль ряду дій і смужки озброєння; малюнок — VISUAL_H.
 const ROW_H: float = 48.0
-const CLUSTER_W: float = 285.0
-const END_TURN_W: float = 161.0
+const VISUAL_H: float = 40.0
+## Спільна ширина плити прев'ю, ряду дій і смужки озброєння — єдина стала для всіх трьох. Ширшою під
+## підпис вона не стає: плита й ряд стоять один над одним, і будь-яка зміна ширини зсуває стикування.
+const CLUSTER_W: float = 252.0
+const END_TURN_W: float = 136.0
 ## Запас навколо юніта: вище 2 dp плита вже «торкається» напису HP.
 const UNIT_MARGIN: float = 2.0
 const TARGET_GROW: float = 8.0
@@ -23,10 +30,16 @@ const TARGET_GROW_TIGHT: float = 4.0
 const CLUSTER_ORDER: Array[String] = ["a", "a4", "b", "c", "d"]
 
 
+## Верх тап-цілі нижнього ряду (ряд дій, смужка, «Дрон», «Завершити хід»): малюнок 40 dp закінчується
+## на SAFE_BOTTOM від низу, а тап-ціль — на HIT_EXTRA нижче.
+static func row_y(screen: Vector2) -> float:
+	return screen.y - SAFE_BOTTOM - VISUAL_H
+
+
 ## Усі варіанти кластера «плита прев'ю + ряд дій». Ключ — назва з CLUSTER_ORDER.
 static func cluster_rects(screen: Vector2, plate_h: float) -> Dictionary:
 	var right_x: float = screen.x - SAFE_X - CLUSTER_W
-	var row_br := Rect2(right_x, screen.y - SAFE_BOTTOM - ROW_H, CLUSTER_W, ROW_H)
+	var row_br := Rect2(right_x, row_y(screen), CLUSTER_W, ROW_H)
 	var plate_a := Rect2(right_x, row_br.position.y - GAP - plate_h, CLUSTER_W, plate_h)
 	var plate_tr := Rect2(right_x, TOP_RIGHT_Y, CLUSTER_W, plate_h)
 	var plate_tl := Rect2(SAFE_X, TOP_LEFT_Y, CLUSTER_W, plate_h)
@@ -65,7 +78,7 @@ static func choose_verb_plate(screen: Vector2, plate_size: Vector2, units: Array
 ## фіксована — вона росте ліворуч, тож її «Скасувати» лишається на місці «Скасувати» ряду.
 static func choose_strip(screen: Vector2, strip_size: Vector2, units: Array[Rect2], targets: Array[Rect2]) -> Dictionary:
 	var right_x: float = screen.x - SAFE_X - strip_size.x
-	var br: Array[Rect2] = [Rect2(right_x, screen.y - SAFE_BOTTOM - strip_size.y, strip_size.x, strip_size.y)]
+	var br: Array[Rect2] = [Rect2(right_x, row_y(screen), strip_size.x, strip_size.y)]
 	var tr: Array[Rect2] = [Rect2(right_x, TOP_RIGHT_Y, strip_size.x, strip_size.y)]
 	var tl: Array[Rect2] = [Rect2(SAFE_X, TOP_LEFT_Y, strip_size.x, strip_size.y)]
 	var candidates: Array = [

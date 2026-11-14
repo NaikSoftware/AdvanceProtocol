@@ -5,9 +5,9 @@ extends Button
 ## дронами. Без дронів кнопка лишається натискною: тап — єдиний спосіб на телефоні дізнатися
 ## причину відмови (та сама логіка, що й приглушені верби інженера).
 
-const WIDTH: float = 133.0
-const _PAD_RIGHT: float = 16.0
-const _DIVIDER_GAP: float = 10.0
+const WIDTH: float = 116.0
+const _PAD_RIGHT: float = 10.0
+const _DIVIDER_GAP: float = 9.0
 
 var _unit: Unit = null
 var _pips: DronePips
@@ -16,10 +16,10 @@ var _divider: ColorRect
 
 func _init() -> void:
 	theme_type_variation = &"HudPlateButton"
-	icon = preload("res://assets/ui/icons/drone.svg")
+	icon = preload("res://assets/ui/icons/btn_drone.svg")
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	alignment = HORIZONTAL_ALIGNMENT_LEFT
-	custom_minimum_size = Vector2(WIDTH, 48.0)
+	custom_minimum_size = Vector2(WIDTH, HudDocking.ROW_H)
 	_divider = ColorRect.new()
 	_divider.color = Color("3a4043")
 	_divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -42,16 +42,19 @@ func show_for(unit: Unit) -> void:
 		_pips.set_counts(_unit.drones_left, int(_unit.type()["drones"]))
 		var w: float = _pips.custom_minimum_size.x
 		var h: float = _pips.custom_minimum_size.y
+		# Ромбики й роздільник — по центру малюнка 40 dp, а не всієї тап-цілі 48.
+		var inset: Vector4 = HudKit.visual_inset(self)
+		var mid: float = (inset.y - inset.w) * 0.5
 		_pips.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
 		_pips.offset_right = -_PAD_RIGHT
 		_pips.offset_left = -_PAD_RIGHT - w
-		_pips.offset_top = -h * 0.5
-		_pips.offset_bottom = h * 0.5
+		_pips.offset_top = mid - h * 0.5
+		_pips.offset_bottom = mid + h * 0.5
 		_divider.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
 		_divider.offset_right = -_PAD_RIGHT - w - _DIVIDER_GAP
 		_divider.offset_left = _divider.offset_right - 1.0
-		_divider.offset_top = -8.0
-		_divider.offset_bottom = 8.0
+		_divider.offset_top = mid - 7.0
+		_divider.offset_bottom = mid + 7.0
 
 
 ## Лічильник ромбиків (лишилось, усього) — для тестів, бо Control не віддає намальоване.

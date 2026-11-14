@@ -200,7 +200,7 @@ text = "hud_turn"
 [node name="TurnValue" type="Label" parent="Body/InfoPlate/Pad/Cells/TurnCell"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"HudNumber"
+theme_type_variation = &"HudMenuNumber"
 vertical_alignment = 1
 text = "1"
 
@@ -228,7 +228,7 @@ text = "hud_map"
 [node name="MapValue" type="Label" parent="Body/InfoPlate/Pad/Cells/MapCell"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"HudLabel"
+theme_type_variation = &"HudMenuLabel"
 vertical_alignment = 1
 
 [node name="Gap3" type="Control" parent="Body"]

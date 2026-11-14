@@ -6,6 +6,9 @@ extends RefCounted
 const BONE: Color = Color("e3dfd3")
 const DIM: Color = Color("8f918a")
 const HAIR: Color = Color("3a4043")
+## Значок кожної кнопки HUD: один бокс чорнила й один проміжок до слова для всіх дій.
+const ICON_PX: float = 16.0
+const ICON_GAP: int = 6
 
 ## Сектор у прев'ю й рядок таблиці броні картки мусять називати той самий сектор тим самим словом.
 const SECTOR_KEYS: Dictionary = {
@@ -87,6 +90,13 @@ static func group_content(button: Button, icon_px: float) -> void:
 	button.text = ""
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Група стоїть по центру малюнка кнопки, а не всієї тап-цілі: запас тап-цілі (8 dp до краю екрана)
+	# плити не має, і по центру 48 dp значок зсунувся б на 4 dp від центру плити.
+	var inset: Vector4 = visual_inset(button)
+	center.offset_left = inset.x
+	center.offset_top = inset.y
+	center.offset_right = -inset.z
+	center.offset_bottom = -inset.w
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(center)
 	var row := HBoxContainer.new()
@@ -106,9 +116,14 @@ static func group_content(button: Button, icon_px: float) -> void:
 		word.add_theme_font_size_override("font_size", button.get_theme_font_size(&"font_size"))
 		row.add_child(word)
 	var tint := func() -> void:
+		var state: String = "normal"
+		if button.disabled:
+			state = "disabled"
+		elif button.get_draw_mode() in [BaseButton.DRAW_PRESSED, BaseButton.DRAW_HOVER_PRESSED]:
+			state = "pressed"
 		if word != null:
-			word.add_theme_color_override("font_color", button.get_theme_color(&"font_disabled_color" if button.disabled else &"font_color"))
-		mark.modulate = button.get_theme_color(&"icon_disabled_color" if button.disabled else &"icon_normal_color")
+			word.add_theme_color_override("font_color", button.get_theme_color(&"font_color" if state == "normal" else StringName("font_%s_color" % state)))
+		mark.modulate = button.get_theme_color(StringName("icon_%s_color" % state))
 	tint.call()
 	button.draw.connect(tint)
 	button.set_meta(&"group_mark", mark)
@@ -117,7 +132,7 @@ static func group_content(button: Button, icon_px: float) -> void:
 
 ## Міняє підпис і значок кнопки, зібраної group_content(): група лишається однією, по центру.
 ## text — ключ локалізації, як і в group_content(): Label сам перекладає його й при зміні мови.
-static func retitle_group(button: Button, text: String, tex: Texture2D, icon_px: float = 20.0, gap: int = 8) -> void:
+static func retitle_group(button: Button, text: String, tex: Texture2D, icon_px: float = ICON_PX, gap: int = ICON_GAP) -> void:
 	var word: Label = button.get_meta(&"group_word")
 	if word != null:
 		word.text = text
@@ -125,3 +140,20 @@ static func retitle_group(button: Button, text: String, tex: Texture2D, icon_px:
 	mark.texture = tex
 	mark.custom_minimum_size = Vector2(icon_px, icon_px)
 	(mark.get_parent() as HBoxContainer).add_theme_constant_override("separation", gap)
+
+
+## Відступи малюнка кнопки від її тап-цілі (ліво, верх, право, низ). Плита малюється всередині тап-цілі
+## через від'ємні поля розширення стилю; порожній стиль (пауза, лише значок) полів розширення не має,
+## і там малюнок задають поля вмісту.
+static func visual_inset(button: Button) -> Vector4:
+	var box: StyleBox = button.get_theme_stylebox(&"normal")
+	if box is StyleBoxEmpty:
+		return Vector4(box.content_margin_left, box.content_margin_top, box.content_margin_right, box.content_margin_bottom)
+	var grow := Vector4.ZERO
+	if box is StyleBoxFlat:
+		var f := box as StyleBoxFlat
+		grow = Vector4(f.expand_margin_left, f.expand_margin_top, f.expand_margin_right, f.expand_margin_bottom)
+	elif box is StyleBoxTexture:
+		var t := box as StyleBoxTexture
+		grow = Vector4(t.expand_margin_left, t.expand_margin_top, t.expand_margin_right, t.expand_margin_bottom)
+	return Vector4(maxf(0.0, -grow.x), maxf(0.0, -grow.y), maxf(0.0, -grow.z), maxf(0.0, -grow.w))

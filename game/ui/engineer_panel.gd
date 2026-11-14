@@ -1,8 +1,9 @@
 class_name EngineerPanel
 extends Control
-## П'ять верб інженера (§3.8), завжди всі, у порядку EngineerCommand.Action: одна плита
-## 206 × 246 з п'ятьма рядками по 48 dp (spec §2). Ціни немає: кожна верба коштує той самий
-## fire_cost. Доступність і причина відмови — лише з EngineerCommand.action_status() (§3.13),
+## П'ять верб інженера (§3.8), завжди всі, у порядку EngineerCommand.Action: одна плита-сітка 2 × 3
+## клітинок по 48 dp, 269 × 148 (шоста клітинка порожня). Стовпчик із п'яти рядків по 48 зайняв би
+## дві третини висоти телефона 360 dp, а нижчий рядок порушив би тап-ціль 48 (§9). Ціни немає: кожна
+## верба коштує той самий fire_cost. Доступність і причина відмови — лише з EngineerCommand.action_status() (§3.13),
 ## панель нічого не виводить сама. Недоступна верба приглушена, але НЕ disabled: на телефоні
 ## немає наведення, тож тап по ній — єдиний спосіб дізнатися причину (§1.5); причина йде сигналом
 ## refused() у тост HUD.
@@ -16,10 +17,11 @@ signal cancel_pressed
 ## Ключ ERR_* відмови верби — HUD показує його тостом.
 signal refused(reason: String)
 
-const AVAILABLE_VARIATION := &"HudPlateButton"
-const UNAVAILABLE_VARIATION := &"HudPlateButtonMuted"
-const PLATE_WIDTH: float = 206.0
+const AVAILABLE_VARIATION := &"HudCellButton"
+const UNAVAILABLE_VARIATION := &"HudCellButtonMuted"
+const CELL_WIDTH: float = 133.0
 const ROW_HEIGHT: float = 48.0
+const COLUMNS: int = 2
 const LABEL_KEYS: Dictionary = {
 	EngineerCommand.Action.LAY_MINE: "eng_lay_mine",
 	EngineerCommand.Action.CLEAR_MINE: "eng_clear_mine",
@@ -27,12 +29,13 @@ const LABEL_KEYS: Dictionary = {
 	EngineerCommand.Action.DEMOLISH_BRIDGE: "eng_demolish_bridge",
 	EngineerCommand.Action.REPAIR_UNIT: "eng_repair_unit",
 }
+## Та сама родина btn_*, що й на основній кнопці: один бокс чорнила й одна товщина лінії.
 const ICONS: Dictionary = {
-	EngineerCommand.Action.LAY_MINE: preload("res://assets/ui/icons/mine_lay.svg"),
-	EngineerCommand.Action.CLEAR_MINE: preload("res://assets/ui/icons/mine_clear.svg"),
-	EngineerCommand.Action.REPAIR_BRIDGE: preload("res://assets/ui/icons/bridge_repair.svg"),
-	EngineerCommand.Action.DEMOLISH_BRIDGE: preload("res://assets/ui/icons/bridge_demolish.svg"),
-	EngineerCommand.Action.REPAIR_UNIT: preload("res://assets/ui/icons/repair_unit.svg"),
+	EngineerCommand.Action.LAY_MINE: preload("res://assets/ui/icons/btn_mine_lay.svg"),
+	EngineerCommand.Action.CLEAR_MINE: preload("res://assets/ui/icons/btn_mine_clear.svg"),
+	EngineerCommand.Action.REPAIR_BRIDGE: preload("res://assets/ui/icons/btn_bridge_repair.svg"),
+	EngineerCommand.Action.DEMOLISH_BRIDGE: preload("res://assets/ui/icons/btn_bridge_demolish.svg"),
+	EngineerCommand.Action.REPAIR_UNIT: preload("res://assets/ui/icons/btn_repair_unit.svg"),
 }
 const _HAIR: Color = Color("3a4043")
 
@@ -50,23 +53,18 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_plate = PanelContainer.new()
 	_plate.name = "Plate"
-	_plate.theme_type_variation = &"HudPlateSolid"
-	_plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_plate.custom_minimum_size = Vector2(PLATE_WIDTH, 0.0)
+	# Плита верб — не число правил, тож тиха, як кнопки, а не суцільна, як плита прев'ю.
+	_plate.theme_type_variation = &"HudPlateQuiet"
 	add_child(_plate)
-	var box := VBoxContainer.new()
+	var box := GridContainer.new()
 	box.name = "Box"
-	box.add_theme_constant_override("separation", 0)
+	box.columns = COLUMNS
+	# Проміжок 1 dp між клітинками — місце для роздільників, які малює _draw_hairs.
+	box.add_theme_constant_override("h_separation", 1)
+	box.add_theme_constant_override("v_separation", 1)
+	box.draw.connect(_draw_hairs.bind(box))
 	_plate.add_child(box)
-	var first: bool = true
 	for action: int in LABEL_KEYS:
-		if not first:
-			var hair := ColorRect.new()
-			hair.color = _HAIR
-			hair.custom_minimum_size = Vector2(0.0, 1.0)
-			hair.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			box.add_child(hair)
-		first = false
 		var b := Button.new()
 		b.name = "Verb%d" % action
 		b.flat = true
@@ -74,11 +72,16 @@ func _init() -> void:
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		b.theme_type_variation = AVAILABLE_VARIATION
 		b.icon = ICONS[action]
-		b.custom_minimum_size = Vector2(PLATE_WIDTH - 2.0, ROW_HEIGHT)
+		b.custom_minimum_size = Vector2(CELL_WIDTH, ROW_HEIGHT)
 		b.text = LABEL_KEYS[action]
 		b.pressed.connect(_on_pressed.bind(action))
 		box.add_child(b)
 		_buttons[action] = b
+	# Шоста клітинка порожня: сітка лишається прямокутною, і роздільники не обриваються.
+	var empty := Control.new()
+	empty.custom_minimum_size = Vector2(CELL_WIDTH, ROW_HEIGHT)
+	empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(empty)
 	_strip = ArmedStrip.new()
 	_strip.name = "Strip"
 	_strip.visible = false
@@ -140,6 +143,17 @@ func _relabel() -> void:
 		_strip.configure(ICONS[_chosen], tr(LABEL_KEYS[_chosen]), tr("eng_hint_tap_tile"))
 	else:
 		_strip.configure(null, "", tr("eng_hint_tap_tile"))
+
+
+## Роздільники 1 dp у проміжках сітки: GridContainer сам ліній не малює.
+func _draw_hairs(grid: GridContainer) -> void:
+	var rows: int = ceili(float(grid.get_child_count()) / COLUMNS)
+	for c in range(1, COLUMNS):
+		var x: float = c * (CELL_WIDTH + 1.0) - 1.0
+		grid.draw_rect(Rect2(x, 0.0, 1.0, grid.size.y), _HAIR)
+	for r in range(1, rows):
+		var y: float = r * (ROW_HEIGHT + 1.0) - 1.0
+		grid.draw_rect(Rect2(0.0, y, grid.size.x, 1.0), _HAIR)
 
 
 func _on_pressed(action: int) -> void:

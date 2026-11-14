@@ -105,21 +105,24 @@ func test_screens_fit_phone_pc_tablet(p = use_parameters(_cases())) -> void:
 	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
 
 
-## Крайні плити (чип, пауза, «Завершити хід») стоять по кутах і не налазять одна на одну.
+## Крайні плити (чип, пауза, «Завершити хід») стоять по кутах і не налазять одна на одну. Тап-ціль
+## 48 dp, малюнок 40: запас іде до краю екрана (униз для «Завершити хід», угору й праворуч для паузи).
 func test_hud_corner_chrome_does_not_overlap_at_any_size(p = use_parameters(LayoutProbe.SIZES)) -> void:
 	var size: Vector2i = p
 	var root: Control = await _mount("res://game/ui/hud.tscn", size)
 	var chrome: Array[Control] = [root.get_node("%Chip"), root.get_node("%PauseButton"), root.get_node("%EndTurnButton")]
 	assert_eq(LayoutProbe.overlapping(chrome), [] as Array[String], str(p))
-	assert_eq((root.get_node("%Chip") as Control).get_global_rect().position, Vector2(24, 12), "чип: (24, 12)")
+	var chip: Rect2 = (root.get_node("%Chip") as Control).get_global_rect()
+	assert_eq(chip.position, Vector2(24, 12), "чип: (24, 12)")
+	assert_eq(chip.size.y, 32.0, "чип 32 dp заввишки")
 	assert_eq((root.get_node("%PauseButton") as Control).get_global_rect(),
-		Rect2(size.x - 72.0, 8.0, 48.0, 48.0), "пауза: право 24, верх 8, 48 × 48")
+		Rect2(size.x - 64.0, 0.0, 48.0, 48.0), "пауза: тап-ціль 48 × 48 у куті, малюнок 40 × 40 на (право 24, верх 8)")
 	assert_eq((root.get_node("%EndTurnButton") as Control).get_global_rect(),
-		Rect2(24.0, size.y - 60.0, 161.0, 48.0), "кінець ходу: (24, низ 12), 161 × 48")
+		Rect2(24.0, size.y - 52.0, 136.0, 48.0), "кінець ходу: тап-ціль 136 × 48, малюнок 136 × 40 над нижнім полем 12")
 
 
-## Кластер «плита прев'ю + ряд» на кожному розмірі: ряд 285 × 48 унизу праворуч, плита над ним на
-## 8 dp, «Скасувати» 122 і «Підтвердити» 147 із проміжком 16, ніщо не налазить на кутові плити.
+## Кластер «плита прев'ю + ряд» на кожному розмірі: ряд спільної ширини (252) унизу праворуч, плита над
+## ним на 8 dp, «Скасувати» 104 і основна 136 із проміжком 12, ніщо не налазить на кутові плити.
 func test_hud_cluster_docks_bottom_right_and_fits(p = use_parameters(_repair_cases())) -> void:
 	TranslationServer.set_locale(p[1])
 	var size: Vector2i = p[0]
@@ -134,12 +137,12 @@ func test_hud_cluster_docks_bottom_right_and_fits(p = use_parameters(_repair_cas
 	var cancel: Control = root.get_node("%CancelButton")
 	var confirm: Control = root.get_node("%ConfirmButton")
 	assert_eq(hud.cluster_name(), "a", where)
-	assert_eq(row.get_global_rect(), Rect2(size.x - 24.0 - 285.0, size.y - 60.0, 285.0, 48.0), where)
+	assert_eq(row.get_global_rect(), Rect2(size.x - 24.0 - 252.0, size.y - 52.0, 252.0, 48.0), where)
 	assert_eq(plate.get_global_rect().end.y + 8.0, row.get_global_rect().position.y, "плита над рядом на 8 dp: " + where)
-	assert_eq(plate.size.x, 285.0, where)
-	assert_eq(cancel.size.x, 122.0, where)
-	assert_eq(confirm.size.x, 147.0, where)
-	assert_eq(confirm.position.x - cancel.get_rect().end.x, 16.0, "Cancel ↔ Confirm 16: " + where)
+	assert_eq(plate.size.x, 252.0, where)
+	assert_eq(cancel.size, Vector2(104.0, 48.0), where)
+	assert_eq(confirm.size, Vector2(136.0, 48.0), where)
+	assert_eq(confirm.position.x - cancel.get_rect().end.x, 12.0, "Cancel ↔ Confirm 12: " + where)
 	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
 	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
 	for n: String in ["%Chip", "%PauseButton", "%EndTurnButton"]:
@@ -148,8 +151,8 @@ func test_hud_cluster_docks_bottom_right_and_fits(p = use_parameters(_repair_cas
 		assert_false(row.get_global_rect().intersects(corner), "%s %s" % [n, where])
 
 
-## Усі види плити прев'ю влазять у 285 dp обома мовами й не роздувають плиту.
-func test_hud_preview_plate_content_fits_285_for_every_type(p = use_parameters(_repair_cases())) -> void:
+## Усі види плити прев'ю влазять у спільну ширину обома мовами й не роздувають плиту.
+func test_hud_preview_plate_content_fits_the_shared_width_for_every_type(p = use_parameters(_repair_cases())) -> void:
 	TranslationServer.set_locale(p[1])
 	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
 	var hud := root as Hud
@@ -178,12 +181,12 @@ func test_hud_preview_plate_content_fits_285_for_every_type(p = use_parameters(_
 			assert_true((root.get_node("%ConfirmButton") as Control).is_visible_in_tree(), "лише ряд дій: " + where)
 			continue
 		assert_true(plate.is_visible_in_tree(), where)
-		assert_eq(plate.size.x, 285.0, "ширина плити не росте від вмісту: " + where)
+		assert_eq(plate.size.x, 252.0, "ширина плити не росте від вмісту: " + where)
 		assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
-		assert_lte(plate.get_combined_minimum_size().x, 285.0, "вміст не ширший за плиту: " + where)
+		assert_lte(plate.get_combined_minimum_size().x, 252.0, "вміст не ширший за плиту: " + where)
 
 
-## Озброєний дрон: смужка [Скасувати | озброєно] 285 × 48 унизу праворуч — на місці ряду дій, без накладання.
+## Озброєний дрон: смужка [Скасувати | озброєно] 252 × 48 унизу праворуч — на місці ряду дій, без накладання.
 func test_hud_drone_strip_fits(p = use_parameters(_repair_cases())) -> void:
 	TranslationServer.set_locale(p[1])
 	var size: Vector2i = p[0]
@@ -202,7 +205,7 @@ func test_hud_drone_strip_fits(p = use_parameters(_repair_cases())) -> void:
 	var where: String = "%s %s" % p
 	var strip: ArmedStrip = root.get_node("%DroneStrip")
 	assert_true(strip.is_visible_in_tree(), where)
-	assert_eq(strip.get_global_rect(), Rect2(size.x - 24.0 - 285.0, size.y - 12.0 - 48.0, 285.0, 48.0), where)
+	assert_eq(strip.get_global_rect(), Rect2(size.x - 24.0 - 252.0, size.y - 52.0, 252.0, 48.0), where)
 	assert_eq(LayoutProbe.overflowing(root, size), [] as Array[String], where)
 	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
 	assert_false(strip.get_global_rect().intersects((root.get_node("%EndTurnButton") as Control).get_global_rect()), where)

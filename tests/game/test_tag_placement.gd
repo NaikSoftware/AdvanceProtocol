@@ -111,12 +111,12 @@ func test_leader_runs_from_the_tag_edge_to_the_bar_and_model_box() -> void:
 
 
 func test_hold_card_takes_the_corner_away_from_the_finger() -> void:
-	var card := Vector2(226.0, 161.0)
+	var card := Vector2(212.0, 142.0)
 	var held := Rect2(100, 100, 40, 50)
 	var rect: Rect2 = HudDocking.choose_card(Vector2(985, 442), card, held, [] as Array[Rect2], Vector2(120, 125))
-	assert_eq(rect, Rect2(735, 64, 226, 161), "палець у лівій чверті — картка праворуч")
+	assert_eq(rect, Rect2(749, 56, 212, 142), "палець у лівій чверті — картка праворуч, під тап-ціллю паузи")
 	var left: Rect2 = HudDocking.choose_card(Vector2(985, 442), card, Rect2(800, 100, 40, 50), [] as Array[Rect2], Vector2(820, 125))
-	assert_eq(left, Rect2(24, 58, 226, 161), "палець праворуч — картка ліворуч")
+	assert_eq(left, Rect2(24, 54, 212, 142), "палець праворуч — картка ліворуч, під чипом")
 
 
 func test_ring_of_cells_lets_the_leader_cross_them_before_the_tag_is_hidden() -> void:
@@ -187,9 +187,10 @@ func _engineer_scene() -> Dictionary:
 		PackedVector2Array([Vector2(270.26288, 145.47229), Vector2(291.73328, 161.96832), Vector2(258.5657, 179.95166), Vector2(237.59991, 161.96834)]),
 		PackedVector2Array([Vector2(315.12955, 179.89021), Vector2(340.7483, 199.57097), Vector2(306.71823, 221.20224), Vector2(281.4966, 199.57097)]),
 	]
-	var chrome: Array[Rect2] = [Rect2(24, 12, 151, 36), Rect2(728, 8, 48, 48), Rect2(24, 300, 161, 48), Rect2(491, 300, 285, 48)]
+	# Тап-цілі кутових кнопок і ряду дій, а не їхні 40-dp малюнки: тег не лягає на невидиму смугу тапу.
+	var chrome: Array[Rect2] = [Rect2(24, 12, 132, 32), Rect2(736, 0, 48, 48), Rect2(24, 308, 136, 48), Rect2(524, 308, 252, 48)]
 	return _scene({
-		"tag_size": Vector2(234.0, 30.0), "screen": Rect2(0, 0, 800, 360), "polys": cells, "chrome": chrome,
+		"tag_size": Vector2(148.0, 26.0), "screen": Rect2(0, 0, 800, 360), "polys": cells, "chrome": chrome,
 		"unit": Rect2(263.382, 157.3435, 40.4502, 34.91266), "core": Rect2(263.382, 157.9101, 40.4502, 34.34608),
 		"label": Rect2(269.8468, 157.3435, 25.33765, 4.785034),
 		"core_poly": PackedVector2Array([Vector2(263.382, 160.46288), Vector2(282.0581, 157.91008), Vector2(303.02417, 160.46288),
@@ -232,16 +233,16 @@ func test_leader_ends_on_the_silhouette_polygon_not_the_box_corner() -> void:
 
 
 func test_hold_card_tie_takes_the_corner_farther_from_the_press_and_avoids_ring_arcs() -> void:
-	var card := Vector2(226.0, 161.0)
+	var card := Vector2(212.0, 142.0)
 	var screen := Vector2(985, 442)
 	var held := Rect2(600, 300, 40, 50)
 	var none: Array[PackedVector2Array] = []
 	var tie: Rect2 = HudDocking.choose_card(screen, card, held, [] as Array[Rect2], Vector2(620, 325), none)
-	assert_eq(tie, Rect2(24, 58, 226, 161), "обидва кутки чисті: дальший від пальця — лівий")
+	assert_eq(tie, Rect2(24, 54, 212, 142), "обидва кутки чисті: дальший від пальця — лівий")
 	# Дуга кільця проходить крізь лівий верхній куток: тепер ціна кутка вища, і картка йде праворуч.
 	var arc: Array[PackedVector2Array] = [PackedVector2Array([Vector2(24, 120), Vector2(250, 120)])]
 	var moved: Rect2 = HudDocking.choose_card(screen, card, held, [] as Array[Rect2], Vector2(620, 325), arc)
-	assert_eq(moved, Rect2(735, 64, 226, 161))
+	assert_eq(moved, Rect2(749, 56, 212, 142))
 
 
 func test_leader_end_square_stays_off_the_hp_label() -> void:

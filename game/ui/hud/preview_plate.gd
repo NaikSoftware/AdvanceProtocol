@@ -7,13 +7,17 @@ extends HudBake
 ## Вузли дітей отримують унікальні імена в сцені власника (HUD): тести й сцена бою читають
 ## %PreviewDamageValue тощо так само, як і раніше.
 
-const WIDTH: float = 285.0
+## Спільна ширина з рядом дій і смужкою озброєння: одна стала на всі три.
+const WIDTH: float = HudDocking.CLUSTER_W
 const BONE: Color = Color("e3dfd3")
 const DIM: Color = Color("8f918a")
 const HAIR: Color = Color("3a4043")
 const _SIL_INFANTRY: Texture2D = preload("res://assets/ui/icons/sil_infantry.svg")
 const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/drone.svg")
 const _ICON_REPAIR: Texture2D = preload("res://assets/ui/icons/repair_unit.svg")
+## Поля вмісту (ліво, верх, право, низ) і проміжок між колонками — однакові в пострілі, дроні й ремонті.
+const _BOX_MARGINS: Vector4 = Vector4(12, 6, 12, 7)
+const _ROW_SEP: int = 10
 
 var target_row: Control
 var shot_box: Control
@@ -58,15 +62,15 @@ func _ready() -> void:
 
 	target_row = HBoxContainer.new()
 	target_row.name = "PreviewTargetRow"
-	target_row.custom_minimum_size = Vector2(0.0, 28.0)
+	target_row.custom_minimum_size = Vector2(0.0, 24.0)
 	target_row.add_theme_constant_override("separation", 0)
 	body.add_child(target_row)
 	_own(target_row)
 	_tab = ColorRect.new()
-	_tab.custom_minimum_size = Vector2(4.0, 28.0)
+	_tab.custom_minimum_size = Vector2(4.0, 24.0)
 	_tab.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	target_row.add_child(_tab)
-	target_row.add_child(_gap(10.0))
+	target_row.add_child(_gap(8.0))
 	_target_name = _label("PreviewTargetName", &"HudName", target_row)
 	_target_name.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var grow := Control.new()
@@ -75,7 +79,7 @@ func _ready() -> void:
 	target_row.add_child(grow)
 	_target_caption = _label("", &"HudCaption", target_row)
 	_target_caption.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	target_row.add_child(_gap(12.0))
+	target_row.add_child(_gap(10.0))
 	_target_hair = ColorRect.new()
 	_target_hair.color = HAIR
 	_target_hair.custom_minimum_size = Vector2(0.0, 1.0)
@@ -83,8 +87,8 @@ func _ready() -> void:
 	body.add_child(_target_hair)
 
 	# Постріл: глиф / силует піхоти · сектор · роздільник · шкода.
-	shot_box = _box("PreviewShotBox", body, Vector4(12, 8, 14, 9), 0.0)
-	var srow := _row(shot_box, 12)
+	shot_box = _box("PreviewShotBox", body, _BOX_MARGINS, 0.0)
+	var srow := _row(shot_box, _ROW_SEP)
 	var holder := Control.new()
 	holder.custom_minimum_size = ArmourGlyph.SIZE
 	holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -93,10 +97,10 @@ func _ready() -> void:
 	armour_glyph = ArmourGlyph.new()
 	armour_glyph.name = "ArmourGlyph"
 	holder.add_child(armour_glyph)
-	_sil = _icon(_SIL_INFANTRY, 30.0)
-	_sil.custom_minimum_size = Vector2(30.0, 15.0)
-	_sil.position = Vector2(0.0, 15.5)
-	_sil.size = Vector2(30.0, 15.0)
+	_sil = _icon(_SIL_INFANTRY, ArmourGlyph.SIZE.x)
+	_sil.custom_minimum_size = Vector2(ArmourGlyph.SIZE.x, ArmourGlyph.SIZE.x * 0.5)
+	_sil.position = Vector2(0.0, (ArmourGlyph.SIZE.y - ArmourGlyph.SIZE.x * 0.5) * 0.5)
+	_sil.size = _sil.custom_minimum_size
 	_sil.modulate = DIM
 	_sil.visible = false
 	holder.add_child(_sil)
@@ -109,7 +113,7 @@ func _ready() -> void:
 	_sector_caption = _label("", &"HudCaption", sv)
 	_sector_value = _label("PreviewSectorValue", &"HudSector", sv)
 	_note = _label("PreviewArmourNote", &"HudFloorCaption", sv)
-	# Плита фіксована, 285 dp: довші англійські підписи переносяться, а не розпирають її.
+	# Плита фіксованої спільної ширини: довші англійські підписи переносяться, а не розпирають її.
 	for l: Label in [_sector_caption, _note]:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size.x = 60.0
@@ -119,47 +123,47 @@ func _ready() -> void:
 	outline.bg_color = Color(0, 0, 0, 0)
 	outline.set_border_width_all(1)
 	outline.border_color = BONE
-	outline.content_margin_left = 6.0
-	outline.content_margin_right = 6.0
+	outline.content_margin_left = 5.0
+	outline.content_margin_right = 5.0
 	_cover.add_theme_stylebox_override("panel", outline)
-	_cover.custom_minimum_size = Vector2(0.0, 18.0)
+	_cover.custom_minimum_size = Vector2(0.0, 16.0)
 	_cover.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	_cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sv.add_child(_cover)
 	_own(_cover)
 	_cover_label = _label("", &"HudCaption", _cover)
 	_cover_label.add_theme_color_override("font_color", BONE)
-	srow.add_child(_divider(46.0))
+	srow.add_child(_divider(ArmourGlyph.SIZE.y))
 	var dv := _column(srow)
 	_damage_caption = _label("", &"HudCaption", dv)
 	_damage_value = _label("PreviewDamageValue", &"HudNumberBig", dv)
 
 	# Дрон: значок · «броня не діє» · роздільник · шкода.
-	drone_box = _box("PreviewDroneBox", body, Vector4(12, 8, 14, 9), 0.0)
-	var drow := _row(drone_box, 12)
-	drow.add_child(_icon(_ICON_DRONE, 30.0))
+	drone_box = _box("PreviewDroneBox", body, _BOX_MARGINS, 0.0)
+	var drow := _row(drone_box, _ROW_SEP)
+	drow.add_child(_icon(_ICON_DRONE, ArmourGlyph.SIZE.x))
 	var dav := _column(drow)
 	dav.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_drone_armour_caption = _label("", &"HudCaption", dav)
 	_drone_armour_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_drone_armour_caption.custom_minimum_size.x = 60.0
 	_drone_armour_value = _label("PreviewDroneArmour", &"HudSector", dav)
-	drow.add_child(_divider(46.0))
+	drow.add_child(_divider(ArmourGlyph.SIZE.y))
 	var ddv := _column(drow)
 	_drone_damage_caption = _label("", &"HudCaption", ddv)
 	_drone_damage_value = _label("PreviewDroneDamageValue", &"HudNumberBig", ddv)
 
 	# Ремонт: значок · міцність цілі · роздільник · межі ремонту.
-	repair_box = _box("PreviewRepairBox", body, Vector4(12, 8, 14, 9), 0.0)
-	var rrow := _row(repair_box, 12)
-	rrow.add_child(_icon(_ICON_REPAIR, 30.0))
+	repair_box = _box("PreviewRepairBox", body, _BOX_MARGINS, 0.0)
+	var rrow := _row(repair_box, _ROW_SEP)
+	rrow.add_child(_icon(_ICON_REPAIR, ArmourGlyph.SIZE.x))
 	var rv := _column(rrow)
 	rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hp_caption = _label("", &"HudCaption", rv)
 	var hrow := _baseline_row(rv)
 	_hp_value = _label("PreviewHpValue", &"HudSector", hrow)
 	_hp_max = _label("PreviewHpMax", &"HudNumberDim15", hrow)
-	rrow.add_child(_divider(46.0))
+	rrow.add_child(_divider(ArmourGlyph.SIZE.y))
 	var hv := _column(rrow)
 	_heal_caption = _label("", &"HudCaption", hv)
 	_heal_value = _label("PreviewHealValue", &"HudNumberBig", hv)

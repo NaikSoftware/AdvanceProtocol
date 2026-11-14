@@ -117,7 +117,7 @@ text = "hud_map"
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 8
-theme_type_variation = &"HudLabel"
+theme_type_variation = &"HudMenuLabel"
 
 [node name="Rows" type="VBoxContainer" parent="Scroll/Center/Card/Pad/Body"]
 layout_mode = 2
@@ -127,7 +127,7 @@ theme_override_constants/separation = 8
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-theme_type_variation = &"HudPrimaryButton"
+theme_type_variation = &"HudMenuPrimaryButton"
 text = "pause_resume"
 icon = ExtResource("3_resume")
 alignment = 0
@@ -136,7 +136,7 @@ alignment = 0
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-theme_type_variation = &"HudPlateButton"
+theme_type_variation = &"HudMenuButton"
 text = "pause_settings"
 icon = ExtResource("4_settings")
 alignment = 0
@@ -145,7 +145,7 @@ alignment = 0
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-theme_type_variation = &"HudPlateButton"
+theme_type_variation = &"HudMenuButton"
 text = "pause_save_quit"
 icon = ExtResource("5_save")
 alignment = 0
@@ -164,7 +164,7 @@ color = Color(0.2275, 0.2510, 0.2627, 1)
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-theme_type_variation = &"HudPlateButtonMuted"
+theme_type_variation = &"HudMenuButtonMuted"
 theme_override_styles/normal = SubResource("hair_outline")
 theme_override_styles/hover = SubResource("hair_outline")
 theme_override_styles/pressed = SubResource("hair_outline_pressed")
@@ -190,7 +190,7 @@ theme_override_constants/separation = 8
 [node name="ConfirmLabel" type="Label" parent="Scroll/Center/Card/Pad/Body/ConfirmBox"]
 custom_minimum_size = Vector2(264, 0)
 layout_mode = 2
-theme_type_variation = &"HudLabel"
+theme_type_variation = &"HudMenuLabel"
 horizontal_alignment = 1
 autowrap_mode = 3
 text = "pause_surrender_confirm"
@@ -199,7 +199,7 @@ text = "pause_surrender_confirm"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-theme_type_variation = &"HudPlateButtonMuted"
+theme_type_variation = &"HudMenuButtonMuted"
 theme_override_styles/normal = SubResource("hair_outline")
 theme_override_styles/hover = SubResource("hair_outline")
 theme_override_styles/pressed = SubResource("hair_outline_pressed")
@@ -210,7 +210,7 @@ text = "pause_surrender_yes"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-theme_type_variation = &"HudPrimaryButton"
+theme_type_variation = &"HudMenuPrimaryButton"
 text = "pause_surrender_cancel"
 
 [node name="InfoLine" type="HBoxContainer" parent="Scroll/Center/Card/Pad/Body"]
@@ -221,11 +221,11 @@ theme_override_constants/separation = 4
 [node name="TurnCaption" type="Label" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"HudDim"
+theme_type_variation = &"HudMenuDim"
 text = "hud_turn"
 
 [node name="TurnValue" type="Label" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"HudNumberTag"
+theme_type_variation = &"HudMenuNumberTag"
 

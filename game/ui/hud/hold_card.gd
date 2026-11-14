@@ -11,7 +11,7 @@ extends PanelContainer
 ##
 ## Ввід: уся картка ігнорує вказівник — вона з'являється під натиском і не має його перехоплювати.
 
-const WIDTH: float = 226.0
+const WIDTH: float = 212.0
 const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/drone.svg")
 const _DASH: String = "—"
 
@@ -102,30 +102,30 @@ func hide_card() -> void:
 
 
 func _build_head(body: VBoxContainer) -> void:
-	var m := _margin(12, 8, 12, 7)
+	var m := _margin(12, 7, 12, 6)
 	body.add_child(m)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
 	m.add_child(row)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 5)
+	col.add_theme_constant_override("separation", 4)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(col)
 	name_label = HudKit.label(&"HudHoldName")
-	# Лівий відступ 12 + вкладка 4 = 16 dp від краю картки: назві лишається 226 − 2 (рамка) − 16 − 12 − 40 − 6 = 150 dp,
+	# Лівий відступ 12 + вкладка 4 = 16 dp від краю картки: назві лишається 212 − 2 (рамка) − 16 − 12 − 34 − 6 = 142 dp,
 	# і назва «Штурмове відділення» стоїть в одному рядку; довша переноситься, а не обрізається.
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	TightLine.wrap(name_label, col, 16.0)
+	TightLine.wrap(name_label, col, 15.0)
 	class_label = HudKit.label(&"HudCaption")
 	TightLine.wrap(class_label, col, 11.0)
 	row.add_child(HudKit.gap(6.0))
-	_sil = HudKit.icon(HudKit.SILHOUETTES[UnitTypes.UnitClass.TANK], Vector2(40.0, 20.0))
+	_sil = HudKit.icon(HudKit.SILHOUETTES[UnitTypes.UnitClass.TANK], Vector2(34.0, 17.0))
 	_sil.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	row.add_child(_sil)
 
 
 func _build_stats(body: VBoxContainer) -> void:
-	var m := _margin(12, 7, 12, 7)
+	var m := _margin(12, 6, 12, 6)
 	body.add_child(m)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
@@ -139,7 +139,7 @@ func _build_stats(body: VBoxContainer) -> void:
 ## таблицею броні); права колонка закінчується на правому полі картки.
 func _stat(row: HBoxContainer, key: String, ratio: float) -> Label:
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 5)
+	col.add_theme_constant_override("separation", 4)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.size_flags_stretch_ratio = ratio
 	row.add_child(col)
@@ -151,12 +151,12 @@ func _stat(row: HBoxContainer, key: String, ratio: float) -> Label:
 	var value := HudKit.label(&"HudNumberStat")
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	TightLine.wrap(value, col, 17.0)
+	TightLine.wrap(value, col, 15.0)
 	return value
 
 
 func _build_armour(body: VBoxContainer) -> void:
-	armour_table_row = _margin(14, 6, 12, 6)
+	armour_table_row = _margin(14, 4, 12, 4)
 	body.add_child(armour_table_row)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
@@ -171,18 +171,18 @@ func _build_armour(body: VBoxContainer) -> void:
 	row.add_child(table)
 	for sector: int in [UnitTypes.ArmourSector.FRONT, UnitTypes.ArmourSector.SIDE, UnitTypes.ArmourSector.REAR]:
 		var line := HBoxContainer.new()
-		line.custom_minimum_size = Vector2(0.0, 17.0)
+		line.custom_minimum_size = Vector2(0.0, 15.0)
 		table.add_child(line)
 		var word := HudKit.label(&"HudDim")
 		_words.append([word, HudKit.SECTOR_KEYS[sector], false])
 		word.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		TightLine.wrap(word, line, 17.0)
+		TightLine.wrap(word, line, 15.0)
 		var value := HudKit.label(&"HudNumber")
 		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		TightLine.wrap(value, line, 17.0)
+		TightLine.wrap(value, line, 15.0)
 		armour_rows.append(value)
 	armour_none_row = _margin(14, 0, 12, 0)
-	armour_none_row.custom_minimum_size = Vector2(0.0, 34.0)
+	armour_none_row.custom_minimum_size = Vector2(0.0, 30.0)
 	body.add_child(armour_none_row)
 	var line := HBoxContainer.new()
 	line.add_theme_constant_override("separation", 0)
@@ -204,12 +204,12 @@ func _build_drones(body: VBoxContainer) -> void:
 	body.add_child(drones_row)
 	drones_row.add_child(_hair())
 	var m := _margin(12, 0, 12, 0)
-	m.custom_minimum_size = Vector2(0.0, 28.0)
+	m.custom_minimum_size = Vector2(0.0, 24.0)
 	drones_row.add_child(m)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 7)
+	row.add_theme_constant_override("separation", 6)
 	m.add_child(row)
-	row.add_child(HudKit.icon(_ICON_DRONE, Vector2(16.0, 16.0)))
+	row.add_child(HudKit.icon(_ICON_DRONE, Vector2(14.0, 14.0)))
 	var word := HudKit.label(&"HudDim")
 	_words.append([word, "hud_drones", false])
 	word.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -231,7 +231,7 @@ func _build_floor(body: VBoxContainer) -> void:
 	body.add_child(box)
 	_floor_box = box
 	box.add_child(_hair())
-	var m := _margin(12, 6, 12, 6)
+	var m := _margin(12, 5, 12, 5)
 	box.add_child(m)
 	floor_label = HudKit.label(&"HudFloorCaption")
 	floor_label.name = "ThreatFloorLabel"

@@ -1,21 +1,32 @@
-[gd_resource type="Theme" load_steps=30 format=3]
+[gd_resource type="Theme" load_steps=27 format=3]
 
 ; Тема HUD бою («Field Tablet»). Лише HUD: ap_theme.tres (меню, налаштування) не чіпаємо.
 ;
+;
+; Розміри бою — для телефона 360 dp заввишки. Кнопки тихі: напівпрозора заливка (q_btn 65 %, основна
+; q_prim 72 %) і м'який край 1 dp; плита малюється на 40 dp у тап-цілі 48 (expand_margin_bottom −8,
+; content_margin_bottom 8), запас тапу — у нижньому полі екрана.
+;
 ; Варіації типів (theme_type_variation):
-;   Button:         HudPlateButton (End turn, Cancel, Дрон; 600/15), HudPlateButtonMuted (приглушене
-;                   дієслово, 500/15 dim), HudPrimaryButton (Confirm, Продовжити; 700/15, кістяна
-;                   рамка 2 dp), HudPrimaryButtonLarge (Готово на екрані передачі; 700/20)
-;   PanelContainer: HudPlate (плита 90 %: чип, пауза, End turn, Cancel), HudPlateSolid (плита, що
-;                   несе числа правил: тег, превʼю, картка, меню; поле вмісту 1 dp — товщина краю)
+;   Button:         HudPlateButton (End turn, Cancel, Дрон; 600/14), HudPlateButtonMuted (500/14 dim),
+;                   HudPrimaryButton (основна кнопка; 700/14, кістяна рамка 1 dp), HudIconButton (пауза:
+;                   лише значок, жодного фону в жодному стані), HudCellButton / HudCellButtonMuted
+;                   (клітинки сітки верб, пласкі; 600/14 і 500/14 dim), HudPrimaryButtonLarge (Готово на
+;                   екрані передачі; 700/20). Значок кнопки — 16 dp, проміжок до слова — 6.
+;   PanelContainer: HudPlate (плита 90 %: чип), HudPlateQuiet (тиха плита: сітка верб, смужка
+;                   озброєння), HudPlateSolid (плита, що несе числа правил: тег, превʼю, картка, тост,
+;                   меню; поле вмісту 1 dp — товщина краю)
 ;   Label, підписи: HudCaption (600/11 dim; текст ВЕЛИКИМИ літерами задає код), HudCaptionStats (те саме
-;                   без розрядки), HudName (600/14), HudLabel (600/15), HudHoldName (600/16),
-;                   HudHint (500/13), HudDim (500/13 dim), HudToast (500/14), HudFloorCaption (500/12
-;                   dim, рядок 15), HudSector (600/18), HudTitle (700/22), HudGateCaption (600/14
+;                   без розрядки), HudName (600/13), HudLabel (600/14), HudHoldName (600/15),
+;                   HudHint (500/12), HudDim (500/12 dim), HudToast (500/13), HudFloorCaption (500/11
+;                   dim), HudSector (600/16), HudTitle (700/22), HudGateCaption (600/14
 ;                   розрядка 3 px, кістка 85 %), HudGatePlayer (700/40)
-;   Label, числа (tnum, kern 0): HudNumberTag (600/13), HudNumber (600/15), HudNumberStat (600/17),
-;                   HudNumberMove (600/26), HudNumberBig (600/32), і приглушені знаменники
-;                   HudNumberDim13 / HudNumberDim15 (500, dim; «/48», «/400»)
+;   Label, числа (tnum, kern 0): HudNumberTag (600/12), HudNumber (600/14), HudNumberStat (600/15),
+;                   HudNumberMove (600/26), HudNumberBig (600/26), і приглушені знаменники
+;                   HudNumberDim13 / HudNumberDim15 (500, dim, 12 і 14; «/48», «/400»)
+;   Пауза й гейт:   HudMenuButton, HudMenuButtonMuted, HudMenuPrimaryButton, HudMenuLabel, HudMenuDim,
+;                   HudMenuNumber, HudMenuNumberTag — копії більшого набору (600/15, 500/13, суцільні
+;                   плити): компактний HUD бою цих екранів не змінює.
 ; Плити — 9-slice без фільтра: на кожному Control з плитою ставте texture_filter = NEAREST, а на іконках
 ; повертайте LINEAR (CanvasLayer не має texture_filter).
 
@@ -138,6 +149,104 @@ corner_radius_top_right = 2
 corner_radius_bottom_right = 2
 corner_radius_bottom_left = 2
 
+[sub_resource type="StyleBoxFlat" id="q_btn"]
+content_margin_left = 10.0
+content_margin_top = 0.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.0706, 0.0824, 0.0863, 0.65)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3412, 0.3686, 0.3804, 0.55)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+expand_margin_bottom = -8.0
+
+[sub_resource type="StyleBoxFlat" id="q_btn_p"]
+content_margin_left = 10.0
+content_margin_top = 0.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.1176, 0.1373, 0.1451, 0.85)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3412, 0.3686, 0.3804, 0.55)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+expand_margin_bottom = -8.0
+
+[sub_resource type="StyleBoxFlat" id="q_prim"]
+content_margin_left = 10.0
+content_margin_top = 0.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.0706, 0.0824, 0.0863, 0.72)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.8902, 0.8745, 0.8275, 0.85)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+expand_margin_bottom = -8.0
+
+[sub_resource type="StyleBoxFlat" id="q_prim_p"]
+content_margin_left = 10.0
+content_margin_top = 0.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.1176, 0.1373, 0.1451, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.8902, 0.8745, 0.8275, 0.85)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+expand_margin_bottom = -8.0
+
+[sub_resource type="StyleBoxFlat" id="q_panel"]
+content_margin_left = 1.0
+content_margin_top = 1.0
+content_margin_right = 1.0
+content_margin_bottom = 1.0
+bg_color = Color(0.0706, 0.0824, 0.0863, 0.65)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3412, 0.3686, 0.3804, 0.55)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxEmpty" id="q_none"]
+
+[sub_resource type="StyleBoxEmpty" id="q_cell"]
+content_margin_left = 8.0
+content_margin_top = 0.0
+content_margin_right = 7.0
+content_margin_bottom = 0.0
+
+[sub_resource type="StyleBoxEmpty" id="q_icon"]
+content_margin_left = 0.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 0.0
+
 [resource]
 default_font = ExtResource("f_med")
 default_font_size = 14
@@ -152,15 +261,16 @@ HudPlateButton/colors/icon_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudPlateButton/colors/icon_pressed_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudPlateButton/colors/icon_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudPlateButton/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
-HudPlateButton/constants/h_separation = 8
-HudPlateButton/constants/icon_max_width = 20
-HudPlateButton/font_sizes/font_size = 15
+HudPlateButton/constants/h_separation = 6
+HudPlateButton/constants/icon_max_width = 16
+HudPlateButton/font_sizes/font_size = 14
 HudPlateButton/fonts/font = ExtResource("f_semi")
-HudPlateButton/styles/normal = SubResource("b_plate")
-HudPlateButton/styles/hover = SubResource("b_plate")
-HudPlateButton/styles/pressed = SubResource("b_plate_p")
-HudPlateButton/styles/focus = SubResource("b_plate")
-HudPlateButton/styles/disabled = SubResource("b_plate")
+HudPlateButton/styles/normal = SubResource("q_btn")
+HudPlateButton/styles/hover = SubResource("q_btn")
+HudPlateButton/styles/pressed = SubResource("q_btn_p")
+HudPlateButton/styles/focus = SubResource("q_none")
+HudPlateButton/styles/disabled = SubResource("q_btn")
+HudPlateButton/styles/hover_pressed = SubResource("q_btn_p")
 HudPlateButtonMuted/base_type = &"Button"
 HudPlateButtonMuted/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
 HudPlateButtonMuted/colors/font_hover_color = Color(0.5608, 0.5686, 0.5412, 1)
@@ -172,15 +282,16 @@ HudPlateButtonMuted/colors/icon_hover_color = Color(0.5608, 0.5686, 0.5412, 1)
 HudPlateButtonMuted/colors/icon_pressed_color = Color(0.5608, 0.5686, 0.5412, 1)
 HudPlateButtonMuted/colors/icon_focus_color = Color(0.5608, 0.5686, 0.5412, 1)
 HudPlateButtonMuted/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
-HudPlateButtonMuted/constants/h_separation = 8
-HudPlateButtonMuted/constants/icon_max_width = 20
-HudPlateButtonMuted/font_sizes/font_size = 15
+HudPlateButtonMuted/constants/h_separation = 6
+HudPlateButtonMuted/constants/icon_max_width = 16
+HudPlateButtonMuted/font_sizes/font_size = 14
 HudPlateButtonMuted/fonts/font = ExtResource("f_med")
-HudPlateButtonMuted/styles/normal = SubResource("b_plate")
-HudPlateButtonMuted/styles/hover = SubResource("b_plate")
-HudPlateButtonMuted/styles/pressed = SubResource("b_plate_p")
-HudPlateButtonMuted/styles/focus = SubResource("b_plate")
-HudPlateButtonMuted/styles/disabled = SubResource("b_plate")
+HudPlateButtonMuted/styles/normal = SubResource("q_btn")
+HudPlateButtonMuted/styles/hover = SubResource("q_btn")
+HudPlateButtonMuted/styles/pressed = SubResource("q_btn_p")
+HudPlateButtonMuted/styles/focus = SubResource("q_none")
+HudPlateButtonMuted/styles/disabled = SubResource("q_btn")
+HudPlateButtonMuted/styles/hover_pressed = SubResource("q_btn_p")
 HudPrimaryButton/base_type = &"Button"
 HudPrimaryButton/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudPrimaryButton/colors/font_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
@@ -192,15 +303,16 @@ HudPrimaryButton/colors/icon_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudPrimaryButton/colors/icon_pressed_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudPrimaryButton/colors/icon_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudPrimaryButton/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
-HudPrimaryButton/constants/h_separation = 8
-HudPrimaryButton/constants/icon_max_width = 20
-HudPrimaryButton/font_sizes/font_size = 15
+HudPrimaryButton/constants/h_separation = 6
+HudPrimaryButton/constants/icon_max_width = 16
+HudPrimaryButton/font_sizes/font_size = 14
 HudPrimaryButton/fonts/font = ExtResource("f_bold")
-HudPrimaryButton/styles/normal = SubResource("b_prim")
-HudPrimaryButton/styles/hover = SubResource("b_prim")
-HudPrimaryButton/styles/pressed = SubResource("b_prim_p")
-HudPrimaryButton/styles/focus = SubResource("b_prim")
-HudPrimaryButton/styles/disabled = SubResource("b_prim")
+HudPrimaryButton/styles/normal = SubResource("q_prim")
+HudPrimaryButton/styles/hover = SubResource("q_prim")
+HudPrimaryButton/styles/pressed = SubResource("q_prim_p")
+HudPrimaryButton/styles/focus = SubResource("q_none")
+HudPrimaryButton/styles/disabled = SubResource("q_prim")
+HudPrimaryButton/styles/hover_pressed = SubResource("q_prim_p")
 HudPrimaryButtonLarge/base_type = &"Button"
 HudPrimaryButtonLarge/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
 HudPrimaryButtonLarge/colors/font_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
@@ -235,36 +347,36 @@ HudCaptionStats/font_sizes/font_size = 11
 HudCaptionStats/fonts/font = ExtResource("f_semi")
 HudName/base_type = &"Label"
 HudName/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudName/font_sizes/font_size = 14
+HudName/font_sizes/font_size = 13
 HudName/fonts/font = ExtResource("f_semi")
 HudLabel/base_type = &"Label"
 HudLabel/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudLabel/font_sizes/font_size = 15
+HudLabel/font_sizes/font_size = 14
 HudLabel/fonts/font = ExtResource("f_semi")
 HudHoldName/base_type = &"Label"
 HudHoldName/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudHoldName/font_sizes/font_size = 16
+HudHoldName/font_sizes/font_size = 15
 HudHoldName/fonts/font = ExtResource("f_semi")
 HudHint/base_type = &"Label"
 HudHint/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudHint/font_sizes/font_size = 13
+HudHint/font_sizes/font_size = 12
 HudHint/fonts/font = ExtResource("f_med")
 HudDim/base_type = &"Label"
 HudDim/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
-HudDim/font_sizes/font_size = 13
+HudDim/font_sizes/font_size = 12
 HudDim/fonts/font = ExtResource("f_med")
 HudToast/base_type = &"Label"
 HudToast/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudToast/font_sizes/font_size = 14
+HudToast/font_sizes/font_size = 13
 HudToast/fonts/font = ExtResource("f_med")
 HudFloorCaption/base_type = &"Label"
 HudFloorCaption/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
-HudFloorCaption/font_sizes/font_size = 12
+HudFloorCaption/font_sizes/font_size = 11
 HudFloorCaption/fonts/font = ExtResource("f_med")
 HudFloorCaption/constants/line_spacing = -1
 HudSector/base_type = &"Label"
 HudSector/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudSector/font_sizes/font_size = 18
+HudSector/font_sizes/font_size = 16
 HudSector/fonts/font = ExtResource("f_semi")
 HudTitle/base_type = &"Label"
 HudTitle/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
@@ -280,15 +392,15 @@ HudGatePlayer/font_sizes/font_size = 40
 HudGatePlayer/fonts/font = SubResource("fv_gate_name")
 HudNumberTag/base_type = &"Label"
 HudNumberTag/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudNumberTag/font_sizes/font_size = 13
+HudNumberTag/font_sizes/font_size = 12
 HudNumberTag/fonts/font = SubResource("fv_num")
 HudNumber/base_type = &"Label"
 HudNumber/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudNumber/font_sizes/font_size = 15
+HudNumber/font_sizes/font_size = 14
 HudNumber/fonts/font = SubResource("fv_num")
 HudNumberStat/base_type = &"Label"
 HudNumberStat/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudNumberStat/font_sizes/font_size = 17
+HudNumberStat/font_sizes/font_size = 15
 HudNumberStat/fonts/font = SubResource("fv_num")
 HudNumberMove/base_type = &"Label"
 HudNumberMove/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
@@ -296,13 +408,151 @@ HudNumberMove/font_sizes/font_size = 26
 HudNumberMove/fonts/font = SubResource("fv_num")
 HudNumberBig/base_type = &"Label"
 HudNumberBig/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
-HudNumberBig/font_sizes/font_size = 32
+HudNumberBig/font_sizes/font_size = 26
 HudNumberBig/fonts/font = SubResource("fv_num")
 HudNumberDim13/base_type = &"Label"
 HudNumberDim13/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
-HudNumberDim13/font_sizes/font_size = 13
+HudNumberDim13/font_sizes/font_size = 12
 HudNumberDim13/fonts/font = SubResource("fv_num_dim")
 HudNumberDim15/base_type = &"Label"
 HudNumberDim15/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
-HudNumberDim15/font_sizes/font_size = 15
+HudNumberDim15/font_sizes/font_size = 14
 HudNumberDim15/fonts/font = SubResource("fv_num_dim")
+HudMenuButton/base_type = &"Button"
+HudMenuButton/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuButton/colors/font_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuButton/colors/font_pressed_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuButton/colors/font_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuButton/colors/font_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButton/colors/icon_normal_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuButton/colors/icon_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuButton/colors/icon_pressed_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuButton/colors/icon_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuButton/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButton/constants/h_separation = 8
+HudMenuButton/constants/icon_max_width = 20
+HudMenuButton/font_sizes/font_size = 15
+HudMenuButton/fonts/font = ExtResource("f_semi")
+HudMenuButton/styles/normal = SubResource("b_plate")
+HudMenuButton/styles/hover = SubResource("b_plate")
+HudMenuButton/styles/pressed = SubResource("b_plate_p")
+HudMenuButton/styles/focus = SubResource("b_plate")
+HudMenuButton/styles/disabled = SubResource("b_plate")
+HudMenuButtonMuted/base_type = &"Button"
+HudMenuButtonMuted/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/font_hover_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/font_pressed_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/font_focus_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/font_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/icon_normal_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/icon_hover_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/icon_pressed_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/icon_focus_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuButtonMuted/constants/h_separation = 8
+HudMenuButtonMuted/constants/icon_max_width = 20
+HudMenuButtonMuted/font_sizes/font_size = 15
+HudMenuButtonMuted/fonts/font = ExtResource("f_med")
+HudMenuButtonMuted/styles/normal = SubResource("b_plate")
+HudMenuButtonMuted/styles/hover = SubResource("b_plate")
+HudMenuButtonMuted/styles/pressed = SubResource("b_plate_p")
+HudMenuButtonMuted/styles/focus = SubResource("b_plate")
+HudMenuButtonMuted/styles/disabled = SubResource("b_plate")
+HudMenuPrimaryButton/base_type = &"Button"
+HudMenuPrimaryButton/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuPrimaryButton/colors/font_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuPrimaryButton/colors/font_pressed_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuPrimaryButton/colors/font_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuPrimaryButton/colors/font_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuPrimaryButton/colors/icon_normal_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuPrimaryButton/colors/icon_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuPrimaryButton/colors/icon_pressed_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuPrimaryButton/colors/icon_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuPrimaryButton/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuPrimaryButton/constants/h_separation = 8
+HudMenuPrimaryButton/constants/icon_max_width = 20
+HudMenuPrimaryButton/font_sizes/font_size = 15
+HudMenuPrimaryButton/fonts/font = ExtResource("f_bold")
+HudMenuPrimaryButton/styles/normal = SubResource("b_prim")
+HudMenuPrimaryButton/styles/hover = SubResource("b_prim")
+HudMenuPrimaryButton/styles/pressed = SubResource("b_prim_p")
+HudMenuPrimaryButton/styles/focus = SubResource("b_prim")
+HudMenuPrimaryButton/styles/disabled = SubResource("b_prim")
+HudMenuLabel/base_type = &"Label"
+HudMenuLabel/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuLabel/font_sizes/font_size = 15
+HudMenuLabel/fonts/font = ExtResource("f_semi")
+HudMenuDim/base_type = &"Label"
+HudMenuDim/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudMenuDim/font_sizes/font_size = 13
+HudMenuDim/fonts/font = ExtResource("f_med")
+HudMenuNumberTag/base_type = &"Label"
+HudMenuNumberTag/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuNumberTag/font_sizes/font_size = 13
+HudMenuNumberTag/fonts/font = SubResource("fv_num")
+HudMenuNumber/base_type = &"Label"
+HudMenuNumber/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudMenuNumber/font_sizes/font_size = 15
+HudMenuNumber/fonts/font = SubResource("fv_num")
+HudIconButton/base_type = &"Button"
+HudIconButton/colors/icon_normal_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudIconButton/colors/icon_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudIconButton/colors/icon_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudIconButton/colors/icon_pressed_color = Color(0.8902, 0.8745, 0.8275, 0.7)
+HudIconButton/colors/icon_hover_pressed_color = Color(0.8902, 0.8745, 0.8275, 0.7)
+HudIconButton/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudIconButton/styles/normal = SubResource("q_icon")
+HudIconButton/styles/hover = SubResource("q_none")
+HudIconButton/styles/pressed = SubResource("q_none")
+HudIconButton/styles/hover_pressed = SubResource("q_none")
+HudIconButton/styles/focus = SubResource("q_none")
+HudIconButton/styles/disabled = SubResource("q_none")
+HudIconButton/styles/normal_mirrored = SubResource("q_none")
+HudIconButton/styles/hover_mirrored = SubResource("q_none")
+HudIconButton/styles/pressed_mirrored = SubResource("q_none")
+HudIconButton/styles/hover_pressed_mirrored = SubResource("q_none")
+HudIconButton/styles/disabled_mirrored = SubResource("q_none")
+HudCellButton/base_type = &"Button"
+HudCellButton/colors/font_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudCellButton/colors/font_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudCellButton/colors/font_pressed_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudCellButton/colors/font_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudCellButton/colors/font_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButton/colors/icon_normal_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudCellButton/colors/icon_hover_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudCellButton/colors/icon_pressed_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudCellButton/colors/icon_focus_color = Color(0.8902, 0.8745, 0.8275, 1)
+HudCellButton/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButton/constants/h_separation = 6
+HudCellButton/constants/icon_max_width = 16
+HudCellButton/font_sizes/font_size = 14
+HudCellButton/fonts/font = ExtResource("f_semi")
+HudCellButton/styles/normal = SubResource("q_cell")
+HudCellButton/styles/hover = SubResource("q_cell")
+HudCellButton/styles/pressed = SubResource("q_cell")
+HudCellButton/styles/hover_pressed = SubResource("q_cell")
+HudCellButton/styles/focus = SubResource("q_cell")
+HudCellButton/styles/disabled = SubResource("q_cell")
+HudCellButtonMuted/base_type = &"Button"
+HudCellButtonMuted/colors/font_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/font_hover_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/font_pressed_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/font_focus_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/font_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/icon_normal_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/icon_hover_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/icon_pressed_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/icon_focus_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/colors/icon_disabled_color = Color(0.5608, 0.5686, 0.5412, 1)
+HudCellButtonMuted/constants/h_separation = 6
+HudCellButtonMuted/constants/icon_max_width = 16
+HudCellButtonMuted/font_sizes/font_size = 14
+HudCellButtonMuted/fonts/font = ExtResource("f_med")
+HudCellButtonMuted/styles/normal = SubResource("q_cell")
+HudCellButtonMuted/styles/hover = SubResource("q_cell")
+HudCellButtonMuted/styles/pressed = SubResource("q_cell")
+HudCellButtonMuted/styles/hover_pressed = SubResource("q_cell")
+HudCellButtonMuted/styles/focus = SubResource("q_cell")
+HudCellButtonMuted/styles/disabled = SubResource("q_cell")
+HudPlateQuiet/base_type = &"PanelContainer"
+HudPlateQuiet/styles/panel = SubResource("q_panel")

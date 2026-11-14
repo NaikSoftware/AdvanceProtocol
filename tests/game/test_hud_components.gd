@@ -8,7 +8,7 @@ func test_armour_glyph_holds_the_sector_core_gave_it() -> void:
 	var g := ArmourGlyph.new()
 	add_child_autofree(g)
 	assert_eq(g.sector(), ArmourGlyph.NO_SECTOR, "типово нічого не світиться (картка утримання)")
-	assert_eq(g.custom_minimum_size, Vector2(30, 46))
+	assert_eq(g.custom_minimum_size, Vector2(26, 40), "глиф 26 × 40")
 	for s: int in [UnitTypes.ArmourSector.FRONT, UnitTypes.ArmourSector.SIDE, UnitTypes.ArmourSector.REAR]:
 		g.set_sector(s)
 		assert_eq(g.sector(), s)
@@ -56,8 +56,11 @@ func test_armed_strip_geometry_and_input() -> void:
 	add_child_autofree(s)
 	s.configure(null, "Test", "Hint")
 	await get_tree().process_frame
-	assert_eq(s.size, Vector2(285, 48), "285 × 48, як ряд дій")
-	assert_eq(s.cancel_button.global_position.x - s.global_position.x + s.cancel_button.size.x, 122.0, "«Скасувати» — 122 dp, як у ряду")
+	assert_eq(s.size, Vector2(HudDocking.CLUSTER_W, 48), "спільна ширина × 48 тап-цілі, як ряд дій")
+	assert_eq(s.size.x, 252.0, "спільна ширина — 252 dp")
+	assert_eq(s.cancel_button.global_position.x - s.global_position.x + s.cancel_button.size.x, 104.0, "«Скасувати» — 104 dp, як у ряду")
+	var face := s.get_theme_stylebox(&"panel")
+	assert_eq(face.get_expand_margin(SIDE_BOTTOM), -8.0, "малюнок смужки — 40 dp, нижні 8 dp тап-цілі без плити")
 	assert_eq(s.armed_cell.mouse_filter, Control.MOUSE_FILTER_STOP)
 	var presses: Array[int] = [0]
 	s.cancel_pressed.connect(func() -> void: presses[0] += 1)
@@ -65,14 +68,28 @@ func test_armed_strip_geometry_and_input() -> void:
 	assert_eq(presses[0], 1)
 
 
-func test_armed_strip_grows_leftwards_not_rightwards_for_long_text() -> void:
+## Смужка не розширюється під підпис: вона ділить ширину з плитою прев'ю й рядом. Кожна справжня назва
+## й підказка (дрон і п'ять верб, обома мовами) влазить у клітинку «озброєно» без обрізання.
+func test_armed_strip_keeps_the_shared_width_for_every_real_title() -> void:
 	var s := ArmedStrip.new()
 	s.theme = THEME
 	add_child_autofree(s)
-	s.configure(null, "Test", "Дуже довга підказка, що не влізає у 285 dp ніяк і навіть близько")
-	await get_tree().process_frame
-	assert_gt(s.size.x, 285.0, "довший вміст розширює смужку (HUD приторкає її правим краєм)")
-	assert_eq(s.cancel_button.global_position.x - s.global_position.x, 0.0, "«Скасувати» лишається першою коміркою зліва")
+	var locale: String = TranslationServer.get_locale()
+	var titles: Array[Array] = [["hud_drone_strike", "drone_hint_tap_target", Vector2i(2, 2)]]
+	for key: String in EngineerPanel.LABEL_KEYS.values():
+		titles.append([key, "eng_hint_tap_tile", Vector2i(-1, -1)])
+	for loc: String in ["uk", "en"]:
+		TranslationServer.set_locale(loc)
+		for t: Array in titles:
+			s.configure(preload("res://assets/ui/icons/btn_drone.svg"), tr(t[0]), tr(t[1]), t[2])
+			await get_tree().process_frame
+			var where: String = "%s %s" % [loc, t[0]]
+			assert_eq(s.get_combined_minimum_size().x, HudDocking.CLUSTER_W, "смужка не ширшає: " + where)
+			for l: Label in [s.title_label, s.hint_label]:
+				var w: float = l.get_theme_font(&"font").get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, l.get_theme_font_size(&"font_size")).x
+				assert_lte(w, l.size.x, "підпис цілий: %s «%s»" % [where, l.text])
+				assert_lte(l.get_global_rect().end.x, s.get_global_rect().end.x - 7.0, "≥ 7 dp до краю смужки: %s «%s»" % [where, l.text])
+	TranslationServer.set_locale(locale)
 
 
 func _row_with(texts: Array[String], variations: Array[StringName]) -> BaselineRow:
@@ -101,7 +118,7 @@ func test_baseline_row_puts_value_and_max_on_one_baseline_without_a_gap() -> voi
 	assert_eq(row.get_combined_minimum_size().x, big.size.x + small.size.x - BaselineRow.TUCK)
 
 
-func test_hold_card_tank_is_161_dp_and_squad_is_205() -> void:
+func test_hold_card_tank_is_142_dp_and_squad_adds_its_rows() -> void:
 	var holder := Control.new()
 	holder.theme = THEME
 	add_child_autofree(holder)
@@ -109,10 +126,14 @@ func test_hold_card_tank_is_161_dp_and_squad_is_205() -> void:
 	holder.add_child(card)
 	card.show_unit(Unit.create(1, 5, 1, Vector2i.ZERO, 0), false)
 	await get_tree().process_frame
-	assert_eq(card.get_combined_minimum_size().y, 161.0, "картка танка — 161 dp")
+	assert_eq(card.get_combined_minimum_size().y, 142.0, "картка танка: 2 краї + 44 голова + 43 характеристики + 53 броня")
 	card.show_unit(Unit.create(2, 1, 1, Vector2i.ZERO, 0), true)
 	await get_tree().process_frame
-	assert_eq(card.get_combined_minimum_size().y, 205.0, "сума секцій спеку: 2 + 48 + 48 + 34 + 29 + 44")
+	await get_tree().process_frame
+	# Рядок «Броня немає» 30, ряд дронів 1 + 24, підпис «щонайменше» 1 + 5 + текст + 5.
+	var floor_h: float = card.floor_label.get_combined_minimum_size().y
+	assert_eq(card.get_combined_minimum_size().y, 2.0 + 44.0 + 43.0 + 30.0 + 25.0 + 11.0 + floor_h, "сума секцій")
+	assert_eq(card.floor_label.get_line_count(), 2, "підпис «щонайменше» — два рядки")
 
 
 func test_hold_card_width_is_one_constant_for_every_unit_and_caption() -> void:
@@ -121,6 +142,7 @@ func test_hold_card_width_is_one_constant_for_every_unit_and_caption() -> void:
 	add_child_autofree(holder)
 	var card := HoldCard.new()
 	holder.add_child(card)
+	assert_eq(HoldCard.WIDTH, 212.0, "картка 212 dp")
 	var locale: String = TranslationServer.get_locale()
 	for loc: String in ["uk", "en"]:
 		TranslationServer.set_locale(loc)
@@ -134,7 +156,7 @@ func test_hold_card_width_is_one_constant_for_every_unit_and_caption() -> void:
 	TranslationServer.set_locale(locale)
 
 
-## Назва ділить рядок із силуетом 40 dp і проміжком 6: 226 − 2 (рамка) − 16 (відступ із вкладкою) − 12 − 40 − 6 = 150 dp.
+## Назва ділить рядок із силуетом 34 dp і проміжком 6: 212 − 2 (рамка) − 16 (відступ із вкладкою) − 12 − 34 − 6 = 142 dp.
 ## «Штурмове відділення» (найдовша назва зі спеку) вміщується цілою в обох мовах.
 func test_hold_card_shows_the_assault_squad_name_in_full() -> void:
 	var holder := Control.new()
@@ -166,3 +188,6 @@ func test_unit_tag_name_label_is_as_wide_as_its_text() -> void:
 	var font: Font = tag.name_label.get_theme_font(&"font")
 	var text_w: float = font.get_string_size(tag.name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, tag.name_label.get_theme_font_size(&"font_size")).x
 	assert_true(tag.name_label.get_combined_minimum_size().x >= text_w, "назва не обрізається")
+	var t := tag.get_combined_minimum_size()
+	assert_eq(t.y, 26.0, "тег 26 dp заввишки")
+	assert_eq(t.x, 2.0 + 6.0 + 22.0 + 5.0 + tag.name_label.get_combined_minimum_size().x + 7.0, "краї 1 + 1, поле 6, силует 22, проміжок 5, назва, поле 7")

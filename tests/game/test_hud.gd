@@ -236,7 +236,7 @@ func test_drone_button_shows_pips_not_a_count_and_follows_the_unit() -> void:
 	assert_true(button.visible, "§3.9: кнопка дрона у загону з дронами")
 	assert_eq(button.text, tr("hud_drone_strike"), "у тексті лише «Дрон»")
 	assert_eq(button.pips(), Vector2i(2, 2))
-	assert_eq(button.size, Vector2(133, 48))
+	assert_eq(button.size, Vector2(116, 48), "тап-ціль 116 × 48, малюнок 116 × 40")
 
 	squad.drones_left = 1
 	hud.show_selection(squad)
@@ -391,6 +391,65 @@ func test_every_button_is_at_least_48_dp_tall() -> void:
 	for b in buttons:
 		assert_true(b.custom_minimum_size.y >= 48.0 and b.custom_minimum_size.x >= 48.0,
 			"%s менша за 48 dp — палець у неї не влучить (§9)" % b.name)
+
+
+## Тап-ціль 48 dp, малюнок 40: плита кнопки ряду, «Завершити хід» і «Дрон» не займає нижніх 8 dp
+## тап-цілі (вони лягають у нижнє поле екрана), а значок і підпис стоять по центру малюнка.
+func test_bottom_buttons_draw_a_40_dp_plate_inside_a_48_dp_hit_area() -> void:
+	for n: String in ["%EndTurnButton", "%CancelButton", "%ConfirmButton", "%DroneButton"]:
+		var b: Button = hud.get_node(n)
+		assert_eq(b.custom_minimum_size.y, 48.0, n)
+		for st: StringName in [&"normal", &"pressed", &"disabled", &"hover"]:
+			var box: StyleBox = b.get_theme_stylebox(st)
+			assert_eq(box.get_expand_margin(SIDE_BOTTOM), -8.0, "%s %s: малюнок 40 dp" % [n, st])
+			assert_eq(box.content_margin_bottom, 8.0, "%s %s: вміст по центру малюнка" % [n, st])
+			assert_eq(box.get_expand_margin(SIDE_TOP), 0.0, "%s %s" % [n, st])
+
+
+## Пауза — лише значок: жодного фону в жодному стані, зокрема у фокусі після тапу.
+func test_pause_button_has_no_background_in_any_state() -> void:
+	var b: Button = hud.get_node("%PauseButton")
+	for st: StringName in [&"normal", &"hover", &"pressed", &"focus", &"disabled", &"hover_pressed", &"normal_mirrored"]:
+		assert_true(b.get_theme_stylebox(st) is StyleBoxEmpty, "пауза без плити: %s" % st)
+	assert_eq(b.size, Vector2(48, 48), "тап-ціль 48 × 48")
+	var mark := b.get_meta(&"group_mark") as TextureRect
+	assert_eq(mark.texture.resource_path, "res://assets/ui/icons/btn_pause.svg", "значок із запеченою тінню")
+	await get_tree().process_frame
+	var visual := Rect2(Vector2(0, 8), Vector2(40, 40))
+	assert_eq(mark.get_rect().get_center() + (mark.get_parent() as Control).position + ((mark.get_parent() as Control).get_parent() as Control).position, visual.get_center(),
+		"значок по центру малюнка 40 × 40, зсунутого від кута екрана на 8 dp")
+
+
+## «Дрон» / "Drone": значок 16, проміжок 6 і слово лишають ≥ 7 dp до роздільника перед ромбиками, обома мовами.
+func test_drone_button_label_clears_the_divider_in_both_locales() -> void:
+	var state: BattleState = _state()
+	var squad: Unit = state.add_unit(1, 0, Vector2i(3, 3), 0)
+	hud.bind(state)
+	var locale: String = TranslationServer.get_locale()
+	for loc: String in ["uk", "en"]:
+		TranslationServer.set_locale(loc)
+		hud.show_selection(squad)
+		var b: DroneButton = hud.get_node("%DroneButton")
+		var box: StyleBox = b.get_theme_stylebox(&"normal")
+		var text_w: float = b.get_theme_font(&"font").get_string_size(b.text, HORIZONTAL_ALIGNMENT_LEFT, -1, b.get_theme_font_size(&"font_size")).x
+		var word_end: float = box.content_margin_left + float(b.get_theme_constant(&"icon_max_width")) + float(b.get_theme_constant(&"h_separation")) + text_w
+		var divider_x: float = DroneButton.WIDTH + b._divider.offset_left
+		assert_gte(divider_x - word_end, 7.0, "%s «%s»: слово → роздільник" % [loc, b.text])
+		assert_gte(box.content_margin_left, 7.0, "%s: значок → край" % loc)
+	TranslationServer.set_locale(locale)
+
+
+## Спільна ширина — одна стала: ряд, плита прев'ю й смужка озброєння.
+func test_row_plate_and_strip_share_one_width_constant() -> void:
+	assert_eq(HudDocking.CLUSTER_W, 252.0)
+	assert_eq(PreviewPlate.WIDTH, HudDocking.CLUSTER_W)
+	assert_eq(ArmedStrip.WIDTH, HudDocking.CLUSTER_W)
+	var row: Control = hud.get_node("%ActionRow")
+	assert_eq(row.size.x, HudDocking.CLUSTER_W, "ряд у сцені")
+	var cancel: Control = hud.get_node("%CancelButton")
+	var confirm: Control = hud.get_node("%ConfirmButton")
+	assert_eq(cancel.custom_minimum_size.x + float((row as HBoxContainer).get_theme_constant(&"separation")) + confirm.custom_minimum_size.x,
+		HudDocking.CLUSTER_W, "104 + 12 + 136")
 
 
 func _collect_buttons(node: Node, out: Array[Button]) -> void:
@@ -652,12 +711,12 @@ func test_docking_takes_a_when_nothing_is_in_the_way() -> void:
 	var rects: Array[Rect2] = pick["rects"]
 	assert_eq(pick["name"], "a")
 	assert_true(pick["clear"])
-	assert_eq(rects[1], Rect2(676, 382, 285, 48), "ряд: право 24, низ 12")
-	assert_eq(rects[0], Rect2(676, 274, 285, 100), "плита над рядом з проміжком 8")
+	assert_eq(rects[1], Rect2(709, 390, 252, 48), "ряд: право 24; малюнок 40 над нижнім полем 12, тап-ціль заходить у поле на 8")
+	assert_eq(rects[0], Rect2(709, 282, 252, 100), "плита над рядом з проміжком 8")
 
 
 func test_docking_falls_to_a4_when_the_target_ends_between_four_and_eight_dp_from_the_plate() -> void:
-	var targets: Array[Rect2] = [Rect2(600, 300, 70.0, 40)]  # правий край 670, плита з 676: проміжок 6
+	var targets: Array[Rect2] = [Rect2(600, 300, 103.0, 40)]  # правий край 703, плита з 709: проміжок 6
 	var pick: Dictionary = HudDocking.choose_cluster(SCREEN, 100.0, [] as Array[Rect2], targets)
 	assert_eq(pick["name"], "a4")
 
@@ -667,8 +726,8 @@ func test_docking_moves_the_plate_up_when_a_unit_would_be_covered() -> void:
 	var pick: Dictionary = HudDocking.choose_cluster(SCREEN, 100.0, units, [] as Array[Rect2])
 	var rects: Array[Rect2] = pick["rects"]
 	assert_eq(pick["name"], "c", "b лишає ряд унизу, де той самий юніт; c кладе обох угору")
-	assert_eq(rects[0].position, Vector2(676, 64))
-	assert_eq(rects[1].position, Vector2(676, 172), "ряд на 8 під плитою")
+	assert_eq(rects[0].position, Vector2(709, 56), "під тап-ціллю паузи (вона закінчується на 48) з проміжком 8")
+	assert_eq(rects[1].position, Vector2(709, 164), "ряд на 8 під плитою")
 
 
 func test_docking_picks_b_when_only_the_plate_area_is_busy() -> void:
@@ -682,7 +741,7 @@ func test_docking_goes_top_left_when_the_right_side_is_covered() -> void:
 	var pick: Dictionary = HudDocking.choose_cluster(SCREEN, 100.0, units, [] as Array[Rect2])
 	var rects: Array[Rect2] = pick["rects"]
 	assert_eq(pick["name"], "d")
-	assert_eq(rects[0].position, Vector2(24, 56), "під чипом")
+	assert_eq(rects[0].position, Vector2(24, 52), "під чипом (він закінчується на 44) з проміжком 8")
 
 
 func test_docking_with_nothing_clear_takes_the_least_overlap_then_order() -> void:
@@ -697,20 +756,22 @@ func test_docking_with_nothing_clear_takes_the_least_overlap_then_order() -> voi
 
 
 func test_verb_plate_goes_bottom_left_of_end_turn_when_bottom_right_is_busy() -> void:
-	var size := Vector2(206, 246)
+	var size := Vector2(269, 148)
 	var free: Dictionary = HudDocking.choose_verb_plate(SCREEN, size, [] as Array[Rect2], [] as Array[Rect2])
 	assert_eq(free["name"], "br")
 	var targets: Array[Rect2] = [Rect2(800, 250, 60, 60)]
 	var pick: Dictionary = HudDocking.choose_verb_plate(SCREEN, size, [] as Array[Rect2], targets)
 	var rects: Array[Rect2] = pick["rects"]
 	assert_eq(pick["name"], "bl")
-	assert_eq(rects[0].position.x, 24.0 + 161.0 + 16.0, "праворуч від «Завершити хід» з проміжком 16")
+	assert_eq(rects[0].position.x, 24.0 + 136.0 + 16.0, "праворуч від «Завершити хід» з проміжком 16")
 
 
 func test_strip_docks_bottom_right_then_top_right_then_top_left() -> void:
-	var size := Vector2(ArmedStrip.MIN_WIDTH, ArmedStrip.HEIGHT)
+	var size := Vector2(ArmedStrip.WIDTH, ArmedStrip.HEIGHT)
 	var none: Array[Rect2] = []
-	assert_eq(HudDocking.choose_strip(SCREEN, size, none, none)["name"], "br")
+	var br: Dictionary = HudDocking.choose_strip(SCREEN, size, none, none)
+	assert_eq(br["name"], "br")
+	assert_eq((br["rects"] as Array)[0], Rect2(709, 390, 252, 48), "на місці ряду дій")
 	var busy_bottom: Array[Rect2] = [Rect2(700, 390, 40, 30)]
 	assert_eq(HudDocking.choose_strip(SCREEN, size, none, busy_bottom)["name"], "tr")
 	var busy_both: Array[Rect2] = [Rect2(700, 390, 40, 30), Rect2(700, 64, 40, 30)]
@@ -886,8 +947,8 @@ func test_releasing_the_hold_restores_a_covered_row_to_full_alpha() -> void:
 	hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	hud.size = SCREEN
 	row.visible = true
-	row.position = Vector2(672.0, 382.0)
-	row.size = Vector2(285.0, 48.0)
+	row.position = Vector2(709.0, 390.0)
+	row.size = Vector2(252.0, 48.0)
 	# Картка на пів екрана гарантовано перетинає ряд, де б той не стояв.
 	hud.hold_card().custom_minimum_size = Vector2(900.0, 400.0)
 	hud._on_inspected({"unit_id": u.id, "center": u.pos, "radius": 0, "drone_radius": 0, "marked": [], "drone_marked": [], "is_floor": false})

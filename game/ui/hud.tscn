@@ -6,9 +6,9 @@
 [ext_resource type="Script" path="res://game/ui/drone_button.gd" id="4_drone"]
 [ext_resource type="Script" path="res://game/ui/hud/preview_plate.gd" id="5_plate"]
 [ext_resource type="Script" path="res://game/ui/hud/armed_strip.gd" id="6_strip"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/pause.svg" id="7_pause"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/end_turn.svg" id="8_end"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/cancel.svg" id="9_cancel"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/btn_pause.svg" id="7_pause"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/btn_end_turn.svg" id="8_end"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/btn_cancel.svg" id="9_cancel"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/confirm.svg" id="10_confirm"]
 
 [node name="Hud" type="Control"]
@@ -28,8 +28,8 @@ texture_filter = 1
 layout_mode = 0
 offset_left = 24.0
 offset_top = 12.0
-offset_right = 175.0
-offset_bottom = 48.0
+offset_right = 156.0
+offset_bottom = 44.0
 mouse_filter = 2
 theme_type_variation = &"HudPlate"
 
@@ -40,12 +40,12 @@ theme_override_constants/separation = 0
 
 [node name="PlayerBar" type="ColorRect" parent="Chip/Row"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(4, 36)
+custom_minimum_size = Vector2(4, 32)
 layout_mode = 2
 mouse_filter = 2
 
 [node name="Gap" type="Control" parent="Chip/Row"]
-custom_minimum_size = Vector2(10, 0)
+custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 mouse_filter = 2
 
@@ -56,19 +56,19 @@ size_flags_vertical = 4
 theme_type_variation = &"HudLabel"
 
 [node name="GapA" type="Control" parent="Chip/Row"]
-custom_minimum_size = Vector2(10, 0)
+custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 mouse_filter = 2
 
 [node name="Divider" type="ColorRect" parent="Chip/Row"]
-custom_minimum_size = Vector2(1, 16)
+custom_minimum_size = Vector2(1, 14)
 layout_mode = 2
 size_flags_vertical = 4
 mouse_filter = 2
 color = Color(0.2275, 0.251, 0.2627, 1)
 
 [node name="GapB" type="Control" parent="Chip/Row"]
-custom_minimum_size = Vector2(10, 0)
+custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 mouse_filter = 2
 
@@ -79,7 +79,7 @@ theme_type_variation = &"HudDim"
 text = "hud_turn"
 
 [node name="GapC" type="Control" parent="Chip/Row"]
-custom_minimum_size = Vector2(5, 0)
+custom_minimum_size = Vector2(4, 0)
 layout_mode = 2
 mouse_filter = 2
 
@@ -90,7 +90,7 @@ size_flags_vertical = 4
 theme_type_variation = &"HudNumber"
 
 [node name="GapD" type="Control" parent="Chip/Row"]
-custom_minimum_size = Vector2(14, 0)
+custom_minimum_size = Vector2(12, 0)
 layout_mode = 2
 mouse_filter = 2
 
@@ -102,29 +102,28 @@ layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -72.0
-offset_top = 8.0
-offset_right = -24.0
-offset_bottom = 56.0
+offset_left = -64.0
+offset_right = -16.0
+offset_bottom = 48.0
 grow_horizontal = 0
 tooltip_text = "hud_pause"
-theme_type_variation = &"HudPlateButton"
-theme_override_constants/icon_max_width = 22
+theme_type_variation = &"HudIconButton"
+theme_override_constants/icon_max_width = 20
 icon = ExtResource("7_pause")
 icon_alignment = 1
 
 [node name="EndTurnButton" type="Button" parent="."]
 unique_name_in_owner = true
 texture_filter = 2
-custom_minimum_size = Vector2(161, 48)
+custom_minimum_size = Vector2(136, 48)
 layout_mode = 1
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = -60.0
-offset_right = 185.0
-offset_bottom = -12.0
+offset_top = -52.0
+offset_right = 160.0
+offset_bottom = -4.0
 grow_vertical = 0
 theme_type_variation = &"HudPlateButton"
 text = "hud_end_turn"
@@ -135,7 +134,7 @@ icon = ExtResource("8_end")
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
-offset_right = 285.0
+offset_right = 252.0
 mouse_filter = 0
 script = ExtResource("5_plate")
 
@@ -143,15 +142,15 @@ script = ExtResource("5_plate")
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
-offset_right = 285.0
+offset_right = 252.0
 offset_bottom = 48.0
 mouse_filter = 2
-theme_override_constants/separation = 16
+theme_override_constants/separation = 12
 
 [node name="CancelButton" type="Button" parent="ActionRow"]
 unique_name_in_owner = true
 texture_filter = 2
-custom_minimum_size = Vector2(122, 48)
+custom_minimum_size = Vector2(104, 48)
 layout_mode = 2
 theme_type_variation = &"HudPlateButton"
 theme_override_colors/icon_normal_color = Color(0.5608, 0.5686, 0.5412, 1)
@@ -162,7 +161,7 @@ icon = ExtResource("9_cancel")
 [node name="ConfirmButton" type="Button" parent="ActionRow"]
 unique_name_in_owner = true
 texture_filter = 2
-custom_minimum_size = Vector2(147, 48)
+custom_minimum_size = Vector2(136, 48)
 layout_mode = 2
 size_flags_horizontal = 3
 disabled = true
@@ -174,7 +173,7 @@ icon = ExtResource("10_confirm")
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
-offset_right = 133.0
+offset_right = 116.0
 offset_bottom = 48.0
 script = ExtResource("4_drone")
 

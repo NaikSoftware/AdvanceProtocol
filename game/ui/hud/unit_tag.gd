@@ -7,7 +7,7 @@ extends HudBake
 ## Ввід: тег, усі діти й лідер — MOUSE_FILTER_IGNORE. Тег стоїть усередині зони руху власного
 ## юніта, тож тап по ньому мусить лягти на клітинку дошки під ним, а не зникнути в панелі.
 
-const HEIGHT: float = 30.0
+const HEIGHT: float = 26.0
 const LEADER_COLOR: Color = Color(0.8902, 0.8745, 0.8275, 0.8)
 
 var name_label: Label
@@ -34,15 +34,15 @@ func _init() -> void:
 	_tab.custom_minimum_size = Vector2(4.0, 0.0)
 	shell.add_child(_tab)
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 8)
-	margin.add_theme_constant_override("margin_right", 10)
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_right", 7)
 	shell.add_child(margin)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
 	margin.add_child(row)
-	_sil = HudKit.icon(HudKit.SILHOUETTES[UnitTypes.UnitClass.TANK], Vector2(26.0, 13.0))
+	_sil = HudKit.icon(HudKit.SILHOUETTES[UnitTypes.UnitClass.TANK], Vector2(22.0, 11.0))
 	row.add_child(_sil)
-	row.add_child(HudKit.gap(6.0))
+	row.add_child(HudKit.gap(5.0))
 	name_label = HudKit.label(&"HudName")
 	name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(name_label)
@@ -105,7 +105,7 @@ func _draw() -> void:
 func _sep() -> Control:
 	var box := HBoxContainer.new()
 	box.add_theme_constant_override("separation", 0)
-	box.add_child(HudKit.gap(8.0))
-	box.add_child(HudKit.divider(14.0))
-	box.add_child(HudKit.gap(8.0))
+	box.add_child(HudKit.gap(7.0))
+	box.add_child(HudKit.divider(12.0))
+	box.add_child(HudKit.gap(7.0))
 	return box
