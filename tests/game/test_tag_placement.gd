@@ -111,16 +111,21 @@ func test_hold_card_takes_the_corner_away_from_the_finger() -> void:
 	assert_eq(left, Rect2(24, 58, 226, 161), "палець праворуч — картка ліворуч")
 
 
-func test_relaxed_placement_lets_the_leader_cross_the_action_cells() -> void:
-	# Клітинки верби щільно довкола юніта: лідер мусив би їх перетнути, тож суворо місця немає.
+func test_leader_never_crosses_action_cells_so_a_ring_of_cells_leaves_no_spot() -> void:
+	# Клітинки верби щільно довкола юніта: будь-який лідер їх перетнув би, а без лідера місця нема.
 	var ring: Array[PackedVector2Array] = [PackedVector2Array([Vector2(440, 170), Vector2(560, 170), Vector2(560, 280), Vector2(440, 280)])]
 	var p := TagPlacement.new(_scene({"polys": ring}))
-	assert_false(p.best()["found"], "суворо: лідер перетинав би клітинки")
-	var pick: Dictionary = p.best_relaxed()
-	assert_true(pick["found"], "тег не зникає мовчки")
-	assert_eq(pick["relax"], 1, "послаблено рівно лише шлях лідера")
-	assert_true(p.is_legal(pick["rect"], 1))
-	assert_true(p.needs_leader(pick["rect"]))
+	assert_false(p.best()["found"], "лідер не перетинає клітинки, тег не лягає на них")
+
+
+func test_leader_never_exceeds_the_cap() -> void:
+	var p := TagPlacement.new(_scene())
+	var near := Rect2(480.0 - TAG.x - 40.0, 220.0, TAG.x, TAG.y)
+	assert_true(p.is_legal(near))
+	assert_true(p.needs_leader(near))
+	var ends: PackedVector2Array = p.leader_points(near)
+	assert_true(ends[0].distance_to(ends[1]) <= TagPlacement.MAX_LEAD)
+	assert_false(p.is_legal(Rect2(480.0 - TAG.x - 100.0, 220.0, TAG.x, TAG.y)), "далі за 60 dp тег не стає")
 
 
 func test_leader_ends_on_the_silhouette_polygon_not_the_box_corner() -> void:

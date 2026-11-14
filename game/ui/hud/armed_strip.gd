@@ -59,6 +59,7 @@ func _init() -> void:
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_icon.modulate = HudKit.BONE
 	armed_cell.add_child(_icon)
 	var text := VBoxContainer.new()
 	text.add_theme_constant_override("separation", 0)

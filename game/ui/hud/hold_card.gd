@@ -112,9 +112,13 @@ func _build_head(body: VBoxContainer) -> void:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(col)
 	name_label = HudKit.label(&"HudHoldName")
+	# Назва не підходить до силуету ближче за 8 dp: 226 − 16 − 12 − 4 (вкладка) − 40 − 8.
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_label.clip_text = true
 	TightLine.wrap(name_label, col, 16.0)
 	class_label = HudKit.label(&"HudCaption")
 	TightLine.wrap(class_label, col, 11.0)
+	row.add_child(HudKit.gap(8.0))
 	_sil = HudKit.icon(HudKit.SILHOUETTES[UnitTypes.UnitClass.TANK], Vector2(40.0, 20.0))
 	_sil.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	row.add_child(_sil)

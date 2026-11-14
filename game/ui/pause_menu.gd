@@ -49,6 +49,7 @@ func open(turn: int) -> void:
 	%MapCaption.text = tr("hud_map").to_upper()
 	%MapValue.text = tr(_map_name_key) if _map_name_key != "" else "-"
 	%GroundIcon.texture = HandoverGate.ground_icon(_ground_state)
+	%GroundIcon.modulate = HudKit.BONE
 	%TurnCaption.text = tr("hud_turn")
 	%TurnValue.text = str(turn)
 	# «Ґрунт: %s» — значення виділене окремим підписом, тож беремо лише початок рядка.

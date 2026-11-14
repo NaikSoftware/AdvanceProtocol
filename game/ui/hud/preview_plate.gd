@@ -115,6 +115,7 @@ func _ready() -> void:
 	_sil.custom_minimum_size = Vector2(30.0, 15.0)
 	_sil.position = Vector2(0.0, 15.5)
 	_sil.size = Vector2(30.0, 15.0)
+	_sil.modulate = DIM
 	_sil.visible = false
 	holder.add_child(_sil)
 	var sv := VBoxContainer.new()
@@ -340,6 +341,8 @@ func _icon(tex: Texture2D, side: float) -> TextureRect:
 	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	t.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# SVG білий сам по собі: колір задає токен, як у макеті.
+	t.modulate = HudKit.BONE
 	return t
 
 

@@ -147,6 +147,7 @@ func show_for(player: int, turn: int = 1) -> void:
 	%MapCaption.text = tr("hud_map").to_upper()
 	%MapValue.text = tr(_map_name_key) if _map_name_key != "" else "-"
 	%GroundIcon.texture = ground_icon(_ground_state)
+	%GroundIcon.modulate = HudKit.BONE
 	%GroundLabel.text = tr(_GROUND_KEYS[_ground_state])
 	_fit_width()
 	_confirm_button.disabled = false

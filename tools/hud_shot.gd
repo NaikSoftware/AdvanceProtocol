@@ -278,7 +278,7 @@ func _reset_cast(st: String) -> void:
 	var back: int = Board.facing_towards(_site + OFF_ENEMY_TANK, _site)
 	_ids["enemy_tank"] = _state.add_unit(MEDIUM_TANK, 1, _site + OFF_ENEMY_TANK, back).id
 	_ids["enemy_car"] = _state.add_unit(ARMOURED_CAR, 1, _site + OFF_ENEMY_CAR, back).id
-	var squad_type: int = ASSAULT_SQUAD if st == "hold_enemy_squad" else RIFLE_SQUAD
+	var squad_type: int = ASSAULT_SQUAD if st in ["hold_enemy_squad", "hold_enemy_squad_spent"] else RIFLE_SQUAD
 	_ids["enemy_squad"] = _state.add_unit(squad_type, 1, _site + OFF_ENEMY_SQUAD, back).id
 	if st == "mood":
 		_state.units.clear()

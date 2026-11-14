@@ -590,7 +590,12 @@ func _request_tag() -> void:
 	if _tag_queued or not is_node_ready():
 		return
 	_tag_queued = true
-	_update_tag.call_deferred()
+	if _selected_unit == null:
+		_update_tag.call_deferred()
+		return
+	# Контейнери стискаються наприкінці кадру: тег читає розміри плит уже після цього, інакше висота
+	# щойно показаної плити ще при вузькій ширині виганяла б його з законного місця.
+	get_tree().process_frame.connect(_update_tag, CONNECT_ONE_SHOT)
 
 
 func _update_tag() -> void:
@@ -615,7 +620,7 @@ func _update_tag() -> void:
 		if placement.is_legal(kept):
 			rect = kept
 	if rect.size == Vector2.ZERO:
-		var pick: Dictionary = placement.best_relaxed()
+		var pick: Dictionary = placement.best()
 		if not pick["found"]:
 			# Місця немає: тег ховається, а не лягає на юніта чи плиту.
 			_tag.visible = false
@@ -659,7 +664,11 @@ func _tag_scene(view: UnitView, tag_size: Vector2) -> Dictionary:
 		parts.append(_engineer_panel.strip() if _engineer_panel.strip().visible else _engineer_panel.plate())
 	for c in parts:
 		if c.is_visible_in_tree():
-			chrome.append(_local_rect(c))
+			var cr: Rect2 = _local_rect(c)
+			# Плита щойно показана ще не стиснута до свого розміру: застарілий розмір вигнав би тег зі свого місця.
+			if c == _plate:
+				cr.size.y = minf(cr.size.y, c.get_combined_minimum_size().y)
+			chrome.append(cr)
 	var polys: Array[PackedVector2Array] = []
 	if _own_selected() and _selected_unit.unit_class() == UnitTypes.UnitClass.ENGINEER:
 		# Клітинки, на які діють верби, — перешкода від вибору, тож озброєння верби тег не зрушує.
@@ -757,5 +766,5 @@ func _on_inspected(inspection: Dictionary) -> void:
 
 func _restore_covered() -> void:
 	for c in _covered:
-		c.modulate.a = 1.0
+		c.visible = true
 	_covered.clear()
