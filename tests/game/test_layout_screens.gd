@@ -200,21 +200,6 @@ func test_hud_drone_strip_fits(p = use_parameters(_repair_cases())) -> void:
 	assert_false(strip.get_global_rect().intersects((root.get_node("%EndTurnButton") as Control).get_global_rect()), where)
 
 
-## Підпис «нижня межа» стоїть під чипом і не налазить на кутові плити.
-func test_hud_threat_floor_fits(p = use_parameters(_repair_cases())) -> void:
-	TranslationServer.set_locale(p[1])
-	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
-	var hud := root as Hud
-	hud._show_threat_floor(true)
-	await LayoutProbe.settle(self)
-	var where: String = "%s %s" % [p[0], p[1]]
-	assert_true((root.get_node("%ThreatFloorLabel") as Control).is_visible_in_tree(), where)
-	assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
-	var plate: Control = root.get_node("%ThreatFloorPlate")
-	for n: String in ["%Chip", "%PauseButton", "%EndTurnButton"]:
-		assert_false(plate.get_global_rect().intersects((root.get_node(n) as Control).get_global_rect()), "%s %s" % [n, where])
-
-
 func _repair_cases() -> Array:
 	var out: Array = []
 	for size: Vector2i in LayoutProbe.SIZES:

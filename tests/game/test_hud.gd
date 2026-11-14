@@ -432,7 +432,7 @@ func test_shot_preview_from_the_real_controller_shows_its_sector_and_bounds() ->
 	controller.select_unit(u)
 	controller.tap_cell(enemy.pos)
 
-	assert_eq(_label("PreviewSectorValue").text, tr(UnitInspector.SECTOR_KEYS[int(expected["sector"])]),
+	assert_eq(_label("PreviewSectorValue").text, tr(HudKit.SECTOR_KEYS[int(expected["sector"])]),
 		"сектор на екрані — той, що порахував FireCommand.preview()")
 	assert_eq(_label("PreviewDamageValue").text, "%d–%d" % [int(expected["min"]), int(expected["max"])])
 	assert_eq(hud.get_node("%PreviewPlate").armour_glyph.sector(), int(expected["sector"]))
@@ -830,20 +830,3 @@ func test_a_controller_refusal_becomes_a_toast() -> void:
 	assert_true(hud.get_node("%Toast").visible, "відмова дрона — тост, а не окремий рядок")
 
 
-# --- Гачки тега й картки -----------------------------------------------------------------
-
-func test_inspection_reaches_the_hold_card_hook_and_the_floor_caption() -> void:
-	var state: BattleState = _state()
-	state.add_unit(5, 0, Vector2i(3, 3), 0)
-	var controller: InputController = _ctl(state)
-	watch_signals(hud)
-	var floor_label: Label = hud.get_node("%ThreatFloorLabel")
-
-	controller.inspected.emit({"is_floor": true, "marked": []})
-
-	assert_signal_emitted(hud, "hold_card_changed")
-	assert_true(floor_label.is_visible_in_tree(), "кільце дрона — підпис нижньої межі")
-	assert_eq(floor_label.text, tr("hud_threat_floor_drone"))
-
-	controller.inspected.emit({})
-	assert_false(floor_label.is_visible_in_tree(), "палець відпущено — підпису нема")

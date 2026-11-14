@@ -14,9 +14,9 @@ extends Control
 ## юніта, що видно гравцеві. Перерахунок — на подію (прев'ю, вибір, режим, рух камери, нові
 ## юніти), а не щокадру (§8).
 ##
-## Що тут навмисно НЕМАЄ. Тег вибраного юніта й картка утримання — окремі компоненти; HUD лише
-## повідомляє, коли їх показати: selection_tag_changed і hold_card_changed. Стан ґрунту — на
-## екрані передачі й у паузі, не в бою.
+## Тег вибраного юніта (UnitTag + TagPlacement) і картка утримання (HoldCard) стають від тих самих
+## екранних прямокутників; тег перераховується на вибір, рух камери й пакет подій, а не щокадру.
+## Стану ґрунту в бою немає — він на екрані передачі й у паузі.
 
 ## Натиснуто «завершити хід». Саме рішення — не тут: подавати EndTurnCommand самому означало б
 ## завести другий шлях до core/ повз контролер. Сцена бою вирішує, що з цим робити (зокрема —
@@ -24,12 +24,10 @@ extends Control
 signal end_turn_pressed
 ## Пауза — оверлей сцени бою; HUD лише просить її відкрити.
 signal pause_pressed
-## Гачок для тега юніта: показати (unit != null) чи сховати його. show_ap — чи можна показати AP:
-## AP ворога — прихований залишок його дій (overlays.md), тож для чужого юніта завжди false.
-## Лічильник дронів публічний (§3.9) і показується й для чужого.
+## Вибір змінився (unit != null — тег показано). show_ap — чи можна показати AP: AP ворога —
+## прихований залишок його дій (overlays.md), тож для чужого юніта завжди false. Лічильник
+## дронів публічний (§3.9) і показується й для чужого.
 signal selection_tag_changed(unit: Unit, show_ap: bool)
-## Гачок для картки утримання: словник Targeting.inspection() довгого натиску, {} — відпущено.
-signal hold_card_changed(inspection: Dictionary)
 
 const TOAST_SECONDS: float = 2.0
 const TOAST_FADE: float = 0.15
@@ -61,6 +59,19 @@ var _drone_mark_ids: Array[int] = []
 var _unit_views: Callable = Callable()
 var _toast_key: String = ""
 var _toast_tween: Tween = null
+## Тег: де стояв щодо юніта (зсув від лівого верхнього кута його коробки) — гістерезис: тримається,
+## поки законний, тож тег їде за юнітом при русі камери й не стрибає при кожному перерахунку.
+var _tag: UnitTag = null
+var _card: HoldCard = null
+var _tag_offset: Vector2 = Vector2.ZERO
+var _tag_has_offset: bool = false
+var _tag_unit_id: int = -1
+var _tag_queued: bool = false
+## Кільце армованого дрона й огляд довгого натиску: дуги кілець — «позначки дошки» для тега.
+var _drone_ring: Dictionary = {}
+var _hold: Dictionary = {}
+var _press_point: Vector2 = Vector2.ZERO
+var _covered: Array[Control] = []
 ## Назва останнього обраного варіанта кластера — для тестів і діагностики.
 var _cluster_name: String = ""
 
@@ -77,8 +88,6 @@ var _cluster_name: String = ""
 @onready var _engineer_panel: EngineerPanel = %EngineerPanel
 @onready var _drone_button: DroneButton = %DroneButton
 @onready var _drone_strip: ArmedStrip = %DroneStrip
-@onready var _threat_floor_plate: PanelContainer = %ThreatFloorPlate
-@onready var _threat_floor_label: Label = %ThreatFloorLabel
 @onready var _toast: PanelContainer = %Toast
 @onready var _toast_label: Label = %ToastLabel
 
@@ -95,6 +104,13 @@ func _ready() -> void:
 	_engineer_panel.refused.connect(show_toast)
 	_toast.custom_minimum_size.y = 34.0
 	_square_pause_button()
+	_tag = UnitTag.new()
+	add_child(_tag)
+	_card = HoldCard.new()
+	add_child(_card)
+	# Підпис «щонайменше» живе в картці, але тести й сцена читають його за %ThreatFloorLabel.
+	_card.floor_label.owner = self
+	_card.floor_label.unique_name_in_owner = true
 	resized.connect(_relayout)
 	_clear_preview()
 	_render_selection()
@@ -201,7 +217,7 @@ func _show_shot_preview(preview: Dictionary) -> void:
 	var infantry: bool = target != null and target.unit_class() == UnitTypes.UnitClass.INFANTRY
 	var turret: bool = target != null and target.unit_class() == UnitTypes.UnitClass.TANK
 	# Обидві межі як є — гравець мусить бачити розкид, а не одне «приблизно стільки» (§3.3, §1.5).
-	_plate.show_shot(sector, tr(UnitInspector.SECTOR_KEYS[sector]), "%d–%d" % [int(preview["min"]), int(preview["max"])],
+	_plate.show_shot(sector, tr(HudKit.SECTOR_KEYS[sector]), "%d–%d" % [int(preview["min"]), int(preview["max"])],
 		infantry, turret, bool(preview.get("armour_ignored", false)), bool(preview.get("in_cover", false)))
 
 
@@ -242,9 +258,7 @@ func attach_controller(controller: InputController) -> void:
 	# Відмова з причиною — тост біля слота, де гравець щойно тапнув (§1.5: «чому ні»).
 	controller.action_refused.connect(show_toast)
 	# §3.13: огляд ворога — позначки лише нижня межа, і UI мусить сказати це вголос.
-	controller.inspected.connect(func(i: Dictionary) -> void:
-		_show_threat_floor(i.get("is_floor", false))
-		hold_card_changed.emit(i))
+	controller.inspected.connect(_on_inspected)
 	_sync_modes()
 
 
@@ -253,6 +267,7 @@ func attach_controller(controller: InputController) -> void:
 func attach_camera(rig: IsoCameraRig) -> void:
 	_camera_rig = rig
 	rig.view_changed.connect(_relayout)
+	rig.view_changed.connect(_request_tag)
 	_relayout()
 
 
@@ -266,6 +281,7 @@ func attach_unit_views(provider: Callable) -> void:
 ## Юніти перебудовано (після пакета подій чи передачі ходу) — плити мусять стати наново.
 func units_changed() -> void:
 	_relayout()
+	_request_tag()
 
 
 ## MatchService навмисно без class_name, тож тип тут Node, а виклик динамічний. Слухається лише
@@ -347,10 +363,12 @@ func _on_targets_changed(tiles: Array[Vector2i]) -> void:
 	_armed_tiles = tiles
 	if tiles.is_empty():
 		_drone_mark_ids = []
+		_drone_ring = {}
 	_sync_modes()
 
 
-func _on_drone_armed(_center: Vector2i, _radius: int, marks: Dictionary) -> void:
+func _on_drone_armed(center: Vector2i, radius: int, marks: Dictionary) -> void:
+	_drone_ring = {"center": center, "radius": radius}
 	_drone_mark_ids = []
 	for id: Variant in marks:
 		_drone_mark_ids.append(int(id))
@@ -454,6 +472,7 @@ func _relayout() -> void:
 		_dock_drone_strip()
 	if _toast.visible:
 		_place_toast()
+	_request_tag()
 
 
 func _dock_cluster() -> void:
@@ -521,6 +540,7 @@ func _render_selection() -> void:
 	_drone_button.show_for(_selected_unit if own else null)
 	_sync_modes()
 	selection_tag_changed.emit(_selected_unit, own)
+	_request_tag()
 
 
 func _clear_preview() -> void:
@@ -550,12 +570,186 @@ func _on_end_turn_pressed() -> void:
 	end_turn_pressed.emit()
 
 
-## Підпис видно лише разом із кільцем дрона ворога (is_floor), тож текст один.
-func _show_threat_floor(on: bool) -> void:
-	_threat_floor_label.text = tr("hud_threat_floor_drone")
-	_threat_floor_label.visible = on
-	_threat_floor_plate.visible = on
-
-
 func _unit(id: int) -> Unit:
 	return _state.get_unit(id) if _state != null else null
+
+
+# --- Тег вибраного юніта ---------------------------------------------------------
+
+func unit_tag() -> UnitTag:
+	return _tag
+
+
+func hold_card() -> HoldCard:
+	return _card
+
+
+## Перерахунок тега — раз на кадр, відкладено: вибір, режими й рух камери часто приходять пачкою.
+func _request_tag() -> void:
+	if _tag_queued or not is_node_ready():
+		return
+	_tag_queued = true
+	_update_tag.call_deferred()
+
+
+func _update_tag() -> void:
+	_tag_queued = false
+	var view: UnitView = _tag_view()
+	if view == null:
+		_tag.visible = false
+		_tag_has_offset = false
+		_tag_unit_id = -1
+		return
+	if _selected_unit.id != _tag_unit_id:
+		_tag_unit_id = _selected_unit.id
+		_tag_has_offset = false
+	_tag.show_unit(_selected_unit, _own_selected())
+	var tag_size: Vector2 = _tag.get_combined_minimum_size()
+	var scene: Dictionary = _tag_scene(view, tag_size)
+	var placement := TagPlacement.new(scene)
+	var unit_box: Rect2 = scene["unit"]
+	var rect := Rect2()
+	if _tag_has_offset:
+		var kept := Rect2(unit_box.position + _tag_offset, tag_size)
+		if placement.is_legal(kept):
+			rect = kept
+	if rect.size == Vector2.ZERO:
+		var pick: Dictionary = placement.best()
+		if not pick["found"]:
+			# Місця немає: тег ховається, а не лягає на юніта чи плиту.
+			_tag.visible = false
+			_tag_has_offset = false
+			return
+		rect = pick["rect"]
+	_tag_offset = rect.position - unit_box.position
+	_tag_has_offset = true
+	_tag.position = rect.position
+	_tag.size = rect.size
+	if placement.needs_leader(rect):
+		var ends: PackedVector2Array = placement.leader_points(rect)
+		_tag.set_leader(ends[0], ends[1])
+	else:
+		_tag.clear_leader()
+	_tag.visible = not (_card.visible and _card.get_rect().intersects(rect))
+
+
+func _tag_view() -> UnitView:
+	if _selected_unit == null or not _selected_unit.is_alive() or _camera_rig == null or not _unit_views.is_valid():
+		return null
+	return (_unit_views.call() as Dictionary).get(_selected_unit.id, null) as UnitView
+
+
+## Усе, що тег обходить, з реальних екранних даних видимих UnitView. Невидимий ворог тут не
+## з'являється ніде: стоїть лише те, що має вузол (§3.5).
+func _tag_scene(view: UnitView, tag_size: Vector2) -> Dictionary:
+	var others: Array[Rect2] = []
+	var views: Dictionary = _unit_views.call()
+	for id: Variant in views:
+		var other := views[id] as UnitView
+		if other == null or not is_instance_valid(other) or int(id) == _selected_unit.id:
+			continue
+		var r: Rect2 = UnitScreenBox.with_marks(other, _camera_rig)
+		if r.size != Vector2.ZERO:
+			others.append(r)
+	var unit_box: Rect2 = UnitScreenBox.of(view, _camera_rig)
+	var chrome: Array[Rect2] = []
+	var parts: Array[Control] = [_chip, _pause_button, _end_turn_button, _plate, _row, _drone_button, _drone_strip]
+	if _engineer_panel.visible:
+		parts.append(_engineer_panel.strip() if _engineer_panel.strip().visible else _engineer_panel.plate())
+	for c in parts:
+		if c.is_visible_in_tree():
+			chrome.append(_local_rect(c))
+	var polys: Array[PackedVector2Array] = []
+	if _own_selected() and _selected_unit.unit_class() == UnitTypes.UnitClass.ENGINEER:
+		# Клітинки, на які діють верби, — перешкода від вибору, тож озброєння верби тег не зрушує.
+		for d: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+			polys.append(UnitScreenBox.cell_poly(_selected_unit.pos + d, _camera_rig))
+	var fire := PackedVector2Array()
+	if not _last_preview.is_empty():
+		match int(_last_preview["type"]):
+			InputController.ActionType.MOVE:
+				for cell: Vector2i in _last_preview["path"]:
+					polys.append(UnitScreenBox.cell_poly(cell, _camera_rig))
+				polys.append(UnitScreenBox.cell_poly(_last_preview["target"], _camera_rig))
+			InputController.ActionType.SHOT, InputController.ActionType.DRONE:
+				var target := views.get(int(_last_preview["target_id"]), null) as UnitView
+				if target != null:
+					fire = PackedVector2Array([unit_box.get_center(), UnitScreenBox.of(target, _camera_rig).get_center()])
+	return {
+		"tag_size": tag_size, "unit": unit_box, "core": UnitScreenBox.core(view, _camera_rig),
+		"others": others, "chrome": chrome, "polys": polys, "fire": fire, "marks": _board_marks(),
+		"screen": Rect2(Vector2.ZERO, size),
+	}
+
+
+## Ламані контурів зон і дуг кілець на екрані. shortcut: контур береться з ребер зон (ZoneOverlay),
+## а не з пікселів дошки, тож тінь від рельєфу чи перекриття дахом не враховується.
+func _board_marks() -> Array[PackedVector2Array]:
+	var out: Array[PackedVector2Array] = []
+	var zones: Pathing.Zones = _controller.zones() if _controller != null and _own_selected() else null
+	if zones != null:
+		for zone: Array[Vector2i] in [zones.move_only, zones.move_and_fire]:
+			for e: Dictionary in ZoneOverlay._edges(zone, Color.WHITE):
+				var c: Vector3 = IsoCameraRig.cell_to_world(e["cell"])
+				var d: Vector2i = e["dir"]
+				var mid: Vector3 = c + Vector3(d.x * 0.5, 0.0, d.y * 0.5)
+				var along := Vector3(absf(d.y) * 0.5, 0.0, absf(d.x) * 0.5)
+				out.append(PackedVector2Array([_camera_rig.unproject(mid - along), _camera_rig.unproject(mid + along)]))
+	if not _drone_ring.is_empty():
+		out.append(_ring(_drone_ring["center"], int(_drone_ring["radius"])))
+	for key: String in ["radius", "drone_radius"]:
+		if int(_hold.get(key, 0)) > 0:
+			out.append(_ring(_hold["center"], int(_hold[key])))
+	return out
+
+
+func _ring(center: Vector2i, radius: int) -> PackedVector2Array:
+	var c: Vector3 = IsoCameraRig.cell_to_world(center)
+	var out := PackedVector2Array()
+	for i in 49:
+		var a: float = TAU * i / 48.0
+		out.append(_camera_rig.unproject(c + Vector3(cos(a), 0.0, sin(a)) * radius))
+	return out
+
+
+# --- Картка утримання ----------------------------------------------------------------
+
+## Точка натиску на екрані: картка обходить палець (spec §2).
+func note_press(point: Vector2) -> void:
+	_press_point = point
+
+
+## Огляд довгого натиску від контролера: словник Targeting.inspection() + unit_id; {} — відпущено.
+## Картка лише для юніта, на якого є UnitView, тобто якого гравець бачить (§3.5).
+func _on_inspected(inspection: Dictionary) -> void:
+	_hold = inspection
+	_restore_covered()
+	var unit: Unit = _unit(int(inspection.get("unit_id", -1))) if not inspection.is_empty() else null
+	var views: Dictionary = _unit_views.call() if _unit_views.is_valid() else {}
+	if unit == null or not views.has(unit.id) or _camera_rig == null:
+		_card.hide_card()
+		_request_tag()
+		return
+	_card.show_unit(unit, bool(inspection.get("is_floor", false)))
+	var marks: Array[Rect2] = []
+	for key: String in ["marked", "drone_marked"]:
+		for id: Variant in inspection.get(key, []):
+			var marked := views.get(int(id), null) as UnitView
+			if marked != null:
+				marks.append(UnitScreenBox.with_marks(marked, _camera_rig))
+	var held: Rect2 = UnitScreenBox.with_marks(views[unit.id], _camera_rig)
+	var rect: Rect2 = HudDocking.choose_card(size, _card.get_combined_minimum_size(), held, marks, _press_point)
+	_card.position = rect.position
+	_card.size = rect.size
+	# Поки палець униз, плита дій, що лежить під карткою, не потрібна: вона її закрила б.
+	for c: Control in [_plate, _row, _engineer_panel, _drone_strip, _drone_button]:
+		if c.is_visible_in_tree() and _local_rect(c).intersects(rect):
+			c.modulate.a = 0.0
+			_covered.append(c)
+	_request_tag()
+
+
+func _restore_covered() -> void:
+	for c in _covered:
+		c.modulate.a = 1.0
+	_covered.clear()

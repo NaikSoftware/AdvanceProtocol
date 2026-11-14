@@ -1,0 +1,77 @@
+class_name HudKit
+extends RefCounted
+## Спільне для тега юніта й картки утримання: ключі підписів, силуети класів і дрібні фабрики
+## вузлів. Клас називається словом і значком тут, а не в core/: core/ не знає, що існує екран (§6).
+
+const BONE: Color = Color("e3dfd3")
+const DIM: Color = Color("8f918a")
+const HAIR: Color = Color("3a4043")
+
+## Сектор у прев'ю й рядок таблиці броні картки мусять називати той самий сектор тим самим словом.
+const SECTOR_KEYS: Dictionary = {
+	UnitTypes.ArmourSector.FRONT: "hud_sector_front",
+	UnitTypes.ArmourSector.SIDE: "hud_sector_side",
+	UnitTypes.ArmourSector.REAR: "hud_sector_rear",
+}
+
+const CLASS_KEYS: Dictionary = {
+	UnitTypes.UnitClass.INFANTRY: "unit_class_infantry",
+	UnitTypes.UnitClass.LIGHT_VEHICLE: "unit_class_light_vehicle",
+	UnitTypes.UnitClass.TANK: "unit_class_tank",
+	UnitTypes.UnitClass.ARTILLERY: "unit_class_artillery",
+	UnitTypes.UnitClass.ENGINEER: "unit_class_engineer",
+}
+
+const SILHOUETTES: Dictionary = {
+	UnitTypes.UnitClass.INFANTRY: preload("res://assets/ui/icons/sil_infantry.svg"),
+	UnitTypes.UnitClass.LIGHT_VEHICLE: preload("res://assets/ui/icons/sil_light_vehicle.svg"),
+	UnitTypes.UnitClass.TANK: preload("res://assets/ui/icons/sil_tank.svg"),
+	UnitTypes.UnitClass.ARTILLERY: preload("res://assets/ui/icons/sil_artillery.svg"),
+	UnitTypes.UnitClass.ENGINEER: preload("res://assets/ui/icons/sil_engineer.svg"),
+}
+
+
+static func label(variation: StringName, text: String = "") -> Label:
+	var l := Label.new()
+	l.theme_type_variation = variation
+	l.text = text
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+
+## Іконка у квадраті side × side; dim — приглушений колір, як у решти HUD.
+static func icon(tex: Texture2D, size: Vector2, dim: bool = true) -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = tex
+	t.custom_minimum_size = size
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if dim:
+		t.modulate = DIM
+	return t
+
+
+static func gap(width: float) -> Control:
+	var c := Control.new()
+	c.custom_minimum_size = Vector2(width, 0.0)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c
+
+
+static func divider(height: float) -> ColorRect:
+	var d := ColorRect.new()
+	d.color = HAIR
+	d.custom_minimum_size = Vector2(1.0, height)
+	d.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return d
+
+
+## Усе піддерево ігнорує вказівник: тап по тегу чи картці лягає на клітинку дошки під ними.
+static func ignore_input(root: Control) -> void:
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for n in root.find_children("*", "Control", true, false):
+		(n as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -37,6 +37,40 @@ static func with_crosshair(view: Node3D, rig: IsoCameraRig) -> Rect2:
 	return box
 
 
+## Юніт разом з усіма позначками на ньому (приціл, хрест, загроза, загроза дрона): тег обходить їх
+## як перешкоду. Лише видимі — сховані на екрані нічого не закривають.
+static func with_marks(view: Node3D, rig: IsoCameraRig) -> Rect2:
+	var box: Rect2 = of(view, rig)
+	for mark_name: String in ["Crosshair", "Forbidden", "Threatened", "DroneThreatened"]:
+		var mark := view.get_node_or_null(mark_name) as VisualInstance3D
+		if mark != null and mark.visible:
+			box = box.merge(part_rect(mark, rig))
+	return box
+
+
+## Смуга HP + модель без напису й значка дрона: сюди дістає лідер тега (повітря навколо напису
+## читалося б як належне сусідові).
+static func core(view: Node3D, rig: IsoCameraRig) -> Rect2:
+	var box := Rect2()
+	var has: bool = false
+	var parts: Array[Node] = []
+	var sil: Node = view.get_node_or_null("Silhouette")
+	if sil != null:
+		for n in sil.find_children("*", "VisualInstance3D", true, false):
+			parts.append(n)
+	var bar: Node = view.get_node_or_null("HpBar")
+	if bar != null:
+		parts.append(bar)
+	for n in parts:
+		var vi := n as VisualInstance3D
+		if vi == null or not vi.visible:
+			continue
+		var r: Rect2 = part_rect(vi, rig)
+		box = r if not has else box.merge(r)
+		has = true
+	return box
+
+
 ## Клітинка на екрані: охопний прямокутник чотирьох її кутів на площині землі.
 static func cell_rect(cell: Vector2i, rig: IsoCameraRig) -> Rect2:
 	var c: Vector3 = IsoCameraRig.cell_to_world(cell)
@@ -44,6 +78,15 @@ static func cell_rect(cell: Vector2i, rig: IsoCameraRig) -> Rect2:
 	for corner: Vector3 in [Vector3(0.5, 0.0, -0.5), Vector3(0.5, 0.0, 0.5), Vector3(-0.5, 0.0, 0.5)]:
 		box = box.expand(rig.unproject(c + corner))
 	return box
+
+
+## Чотири кути клітинки на екрані (за годинниковою) — полігон для перешкод тега.
+static func cell_poly(cell: Vector2i, rig: IsoCameraRig) -> PackedVector2Array:
+	var c: Vector3 = IsoCameraRig.cell_to_world(cell)
+	var out := PackedVector2Array()
+	for corner: Vector3 in [Vector3(-0.5, 0.0, -0.5), Vector3(0.5, 0.0, -0.5), Vector3(0.5, 0.0, 0.5), Vector3(-0.5, 0.0, 0.5)]:
+		out.append(rig.unproject(c + corner))
+	return out
 
 
 ## Екранний прямокутник однієї частини юніта. Смуга HP, напис, значок дрона й приціл — білборди:

@@ -143,7 +143,7 @@ func _sector_case(attacker_cell: Vector2i, attacker_facing_after: int, sector: i
 	_e2e.tap(target_cell)
 	# прев'ю до підтвердження: сектор і межі, жодних змін стану
 	assert_eq((_e2e.hud().get_node("%PreviewSectorValue") as Label).text,
-		tr(UnitInspector.SECTOR_KEYS[sector]))
+		tr(HudKit.SECTOR_KEYS[sector]))
 	assert_eq((_e2e.hud().get_node("%PreviewDamageValue") as Label).text, "%d–%d" % [lo, hi])
 	assert_eq(target.hp, 400)
 	# Власник 2026-10-18: тап по цілі вже повертає стрільця до неї; сектор у прев'ю

@@ -848,6 +848,8 @@ func _process(delta: float) -> void:
 	if _press_held_sec >= LONG_PRESS_SEC:
 		_long_pressed = true
 		set_process(false)
+		# Картка утримання обходить палець: їй потрібна точка натиску, а не лише клітинка.
+		_hud.note_press(_press_screen_pos)
 		_controller.peek_cell(_camera_rig.screen_point_to_cell(_press_screen_pos))
 
 

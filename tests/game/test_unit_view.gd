@@ -379,13 +379,10 @@ func test_crosshair_sits_below_hp_bar_and_drone_icon() -> void:
 	assert_true(view._crosshair.position.y < view._drone_icon.position.y, "приціл мусить лишатись нижче лічильника дронів")
 
 
-## Колір прицілу — рівно той самий, яким UnitInspector.MODULATE_HIT підсвічує
-## сектор влучання (game/ui/unit_inspector.gd:40): один сигнал «сюди
-## прилетить» на панелі й на дошці, а не два різні кольори про одне влучання.
-func test_crosshair_uses_the_same_hit_colour_as_the_inspector_sector() -> void:
+## Приціл несе колір влучання: гравець читає його як «сюди прилетить».
+func test_crosshair_uses_the_hit_colour() -> void:
 	view.bind(_unit(5))
-	assert_eq(view._crosshair.modulate, Color("ff7a4a"), "приціл мусить нести рівно колір влучання UnitInspector.MODULATE_HIT")
-	assert_eq(view._crosshair.modulate, UnitInspector.MODULATE_HIT, "і саме той самий, а не схожий")
+	assert_eq(view._crosshair.modulate, Color("ff7a4a"), "приціл мусить нести колір влучання")
 
 
 ## Форма, а не пляма: процедурна текстура мусить лишати центр порожнім (крізь

@@ -76,6 +76,35 @@ static func choose_strip(screen: Vector2, strip_size: Vector2, units: Array[Rect
 	return _pick(candidates, units, targets)
 
 
+## Куток картки утримання: угорі ліворуч або праворуч. Ціна — перекриття картки (+8 dp) із
+## утримуваним юнітом і його позначками плюс 4 × перекриття з пальцем (точка натиску ± 60 dp);
+## найменша виграє, за рівності — куток, дальший від пальця.
+static func choose_card(screen: Vector2, card_size: Vector2, held: Rect2, marks: Array[Rect2], press: Vector2) -> Rect2:
+	var corners: Array[Rect2] = [
+		Rect2(Vector2(SAFE_X, TOP_LEFT_Y + 2.0), card_size),
+		Rect2(Vector2(screen.x - SAFE_X - card_size.x, TOP_RIGHT_Y), card_size),
+	]
+	var finger := Rect2(press - Vector2(60.0, 60.0), Vector2(120.0, 120.0))
+	var best: Rect2 = corners[0]
+	var best_cost: float = INF
+	var best_far: float = -INF
+	for r: Rect2 in corners:
+		var grown: Rect2 = r.grow(8.0)
+		var cost: float = _area(grown.intersection(held)) + 4.0 * _area(r.intersection(finger))
+		for m: Rect2 in marks:
+			cost += _area(grown.intersection(m))
+		var far: float = r.get_center().distance_to(press)
+		if cost < best_cost or (cost == best_cost and far > best_far):
+			best = r
+			best_cost = cost
+			best_far = far
+	return best
+
+
+static func _area(r: Rect2) -> float:
+	return maxf(0.0, r.size.x) * maxf(0.0, r.size.y)
+
+
 static func _pick(candidates: Array, units: Array[Rect2], targets: Array[Rect2]) -> Dictionary:
 	for c: Dictionary in candidates:
 		if _overlap(c["rects"], units, UNIT_MARGIN) == 0.0 and _overlap(c["rects"], targets, c["grow"]) == 0.0:

@@ -189,33 +189,6 @@ visible = false
 layout_mode = 0
 script = ExtResource("6_strip")
 
-[node name="ThreatFloorPlate" type="PanelContainer" parent="."]
-unique_name_in_owner = true
-visible = false
-texture_filter = 1
-layout_mode = 0
-offset_left = 24.0
-offset_top = 56.0
-offset_right = 284.0
-offset_bottom = 100.0
-mouse_filter = 2
-theme_type_variation = &"HudPlateSolid"
-
-[node name="Margin" type="MarginContainer" parent="ThreatFloorPlate"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 6
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 6
-
-[node name="ThreatFloorLabel" type="Label" parent="ThreatFloorPlate/Margin"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(236, 0)
-layout_mode = 2
-theme_type_variation = &"HudFloorCaption"
-autowrap_mode = 3
-
 [node name="Toast" type="PanelContainer" parent="."]
 unique_name_in_owner = true
 visible = false

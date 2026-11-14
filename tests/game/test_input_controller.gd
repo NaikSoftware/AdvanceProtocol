@@ -804,7 +804,7 @@ func test_peek_on_enemy_shows_its_inspection_and_end_clears() -> void:
 
 	assert_eq(_inspections.size(), 1)
 	var i: Dictionary = _inspections[0]
-	assert_eq(i, Targeting.inspection(service.state, tank.id, 0))
+	assert_eq(i, _expected_inspection(tank.id))
 	assert_eq(i["center"], Vector2i(10, 10))
 	assert_eq(i["radius"], 4)
 	assert_eq(i["drone_radius"], 0)
@@ -828,7 +828,7 @@ func test_peek_on_empty_ground_shows_selected_unit_ring() -> void:
 
 	controller.peek_cell(Vector2i(3, 3))
 
-	assert_eq(_inspections, [Targeting.inspection(service.state, car.id, 0)] as Array[Dictionary])
+	assert_eq(_inspections, [_expected_inspection(car.id)] as Array[Dictionary])
 	assert_eq(_inspections[0]["radius"], 3)
 
 
@@ -898,7 +898,7 @@ func test_peek_on_unseen_enemy_is_empty_ground() -> void:
 
 	controller.peek_cell(enemy.pos)
 
-	assert_eq(_inspections, [Targeting.inspection(service.state, car.id, 0)] as Array[Dictionary],
+	assert_eq(_inspections, [_expected_inspection(car.id)] as Array[Dictionary],
 		"невидимий ворог — як порожня земля: кільце вибраного")
 
 
@@ -1052,3 +1052,10 @@ func test_pending_move_survives_the_turn_and_second_tap_confirms() -> void:
 	controller.tap_cell(target)
 
 	assert_eq(u.pos, target, "другий тап підтверджує")
+
+
+## Огляд — рівно те, що вирішив core/, плюс id юніта для картки утримання.
+func _expected_inspection(unit_id: int) -> Dictionary:
+	var out: Dictionary = Targeting.inspection(service.state, unit_id, 0)
+	out["unit_id"] = unit_id
+	return out

@@ -257,7 +257,10 @@ func peek_cell(cell: Vector2i) -> void:
 	if unit == null:
 		return
 	_peeking = true
-	inspected.emit(Targeting.inspection(state, unit.id, state.active_player))
+	var inspection: Dictionary = Targeting.inspection(state, unit.id, state.active_player)
+	# Картці утримання треба знати, чий це огляд; решту (кільця, позначки, is_floor) вирішив core/.
+	inspection["unit_id"] = unit.id
+	inspected.emit(inspection)
 
 
 ## Палець відпущено (чи хід передано) — огляд знято. Без показаного огляду — тиша.
@@ -266,6 +269,11 @@ func end_peek() -> void:
 		return
 	_peeking = false
 	inspected.emit({})
+
+
+## Зони вибраного юніта (null — вибору немає): контури зон теж «позначки на дошці», які тег обходить.
+func zones() -> Pathing.Zones:
+	return _zones
 
 
 func cancel_pending() -> void:
