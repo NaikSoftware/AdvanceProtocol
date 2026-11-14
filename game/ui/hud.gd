@@ -682,6 +682,12 @@ func _update_tag() -> void:
 				var strict: Dictionary = placement.best()
 				if strict["found"] and placement.relax_used < _tag_relax:
 					rect = Rect2()
+			# Камера могла доїжджати, коли місце вибирали: збережене, що накриває контури, коли свіжий пошук
+			# знаходить менш накрите, не тримається — інакше перший вибір відрізняється від наступного.
+			elif placement.mark_cover(kept) > 0.0:
+				var fresh: Dictionary = placement.best()
+				if fresh["found"] and placement.mark_cover(fresh["rect"]) < placement.mark_cover(kept):
+					rect = Rect2()
 	if rect.size == Vector2.ZERO:
 		var pick: Dictionary = placement.best()
 		if not pick["found"]:

@@ -195,6 +195,29 @@ func test_tag_keeps_its_spot_when_the_unit_is_reselected_after_an_action() -> vo
 	assert_eq(_tag().position, before, "гістерезис: ті самі обставини — те саме місце")
 
 
+## Перший вибір міг стати, поки камера ще доїжджала; той самий вибір пізніше мусить дати те саме місце,
+## і, поки чисте місце на дошці є, тег не накриває жодного контуру зони.
+func test_tag_placed_before_camera_settles_equals_a_fresh_placement_and_avoids_contours() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(MEDIUM_TANK, 0, TANK), _spawn(ENGINEER, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
+	var rig: IsoCameraRig = _e2e.screen.get_node("%CameraRig")
+	await _tap(TANK)
+	# Камера їде далі після вибору: тег лише зсувається з юнітом, а розкладка йде після того, як рух стих.
+	rig.zoom_by(0.85)
+	await _e2e.wait_until(func() -> bool: return is_equal_approx(rig.zoom_level, rig.get("_zoom_target")), "зум доїхав")
+	await _e2e.wait_until(func() -> bool: return not _e2e.hud().get("_settle_timer").time_left > 0.0, "рух камери стих")
+	await _e2e.settle()
+	var first := Rect2(_tag().position, _tag().size)
+	await _tap(SQUAD)
+	await _tap(TANK)
+	var fresh := Rect2(_tag().position, _tag().size)
+	assert_eq(first, fresh, "той самий вибір дає те саме місце, що б не було до того")
+	var hud: Hud = _e2e.hud()
+	var placement := TagPlacement.new(hud._tag_scene(hud._tag_view(), _tag().size))
+	var clean: Dictionary = placement.best()
+	assert_true(clean["found"])
+	assert_eq(placement.mark_cover(fresh), placement.mark_cover(clean["rect"]), "тег накриває контури не більше, ніж найкраще місце")
+
+
 func test_engineer_tag_avoids_its_four_target_cells() -> void:
 	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(ENGINEER, 0, Vector2i(4, 2)), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
 	await _tap(Vector2i(4, 2))

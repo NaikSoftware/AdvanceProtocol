@@ -166,7 +166,9 @@ and event batches. The tag follows its unit on pan; it is hidden while an event 
    nearer another unit than its own. The weights are the constants at the top of `TagPlacement`.
 5. **Hysteresis.** The tag keeps its offset from its unit while that rect stays legal at the level
    it was found at, and moves when it becomes illegal or when a spot kept under relaxed rules has a
-   stricter level that now finds one. Because an engineer's target cells are
+   stricter level that now finds one, or when it covers zone contours or ring arcs and a fresh
+   search finds a spot covering less (a first selection made while the camera was still easing
+   must end where a later identical selection does). Because an engineer's target cells are
    obstacles from selection on, arming a verb never moves its tag.
 
 With no legal spot at any level the tag hides rather than covering a unit or a plate.

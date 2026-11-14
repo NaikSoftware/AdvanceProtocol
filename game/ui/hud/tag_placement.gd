@@ -12,6 +12,10 @@ extends RefCounted
 ## shortcut: сітка позначок і полігонів — растр із кроком 4 dp (довжина контуру × 2 dp, а не
 ## точна геометрія перетину), бо точний перетин на тисячі кандидатів не вкладається в кадр;
 ## шукати точніше, якщо тег помітно сідає на 1–2 dp повз ребро контуру.
+## shortcut: повний пошук best() займає ~85 ms на десктопі (інженер, 985 dp), на телефоні більше. Він
+## іде лише при вибору й коли збережене місце накриває позначки (гістерезис інакше тримає місце,
+## зайняте до того, як камера доїхала); якщо чистого місця на дошці нема, кожен кадр руху камери
+## платить цю ціну — кешувати за ключем сцени, коли це стане помітно.
 
 const LEAD_AT: float = 12.0
 const MAX_LEAD: float = 60.0
@@ -306,9 +310,15 @@ func _clearance(p: Vector2) -> float:
 	return best
 
 
+## Частка прямокутника під контурами зон і дугами кілець (0..1): за нею гістерезис відрізняє збережене
+## місце, що накриває позначки, від чистого.
+func mark_cover(r: Rect2) -> float:
+	return minf(1.0, _sat_sum_f(_mark_sat, r) / maxf(1.0, r.size.x * r.size.y))
+
+
 func score(r: Rect2) -> float:
 	var d: float = _dist(r, _unit)
-	var s: float = MARK_WEIGHT * minf(1.0, _sat_sum_f(_mark_sat, r) / maxf(1.0, r.size.x * r.size.y)) \
+	var s: float = MARK_WEIGHT * mark_cover(r) \
 		+ DISTANCE_WEIGHT * d + (LEADER_COST if d > _lead_at else 0.0)
 	for o: Rect2 in _others:
 		if _dist(r, o) < 12.0:
