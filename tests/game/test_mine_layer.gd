@@ -50,3 +50,33 @@ func test_rebuild_replaces_not_accumulates() -> void:
 	layer.rebuild(state, 1)
 	assert_eq(layer.marker_count(), 0)
 	assert_eq(layer.get_child_count(), 0)
+
+
+## Бюджет викликів (§8): скільки б не було мін, шар малює їх по одному MultiMesh на вигляд.
+func test_many_mines_are_one_multimesh_per_style() -> void:
+	for i in 10:
+		Mines.place(state, Vector2i(i % 8, i / 8), 0)
+	Mines.place(state, Vector2i(5, 5), 1)
+	state.mines[10].known_to[0] = true
+	layer.rebuild(state, 0)
+	assert_eq(layer.marker_count(), 11)
+	var mmis: Array[Node] = layer.find_children("*", "MultiMeshInstance3D", false, false)
+	assert_eq(mmis.size(), 2)
+	var total: int = 0
+	for m: MultiMeshInstance3D in mmis:
+		total += m.multimesh.instance_count
+		assert_eq(m.layers, 1 << (MineLayer.MARKER_LAYER - 1), "шар 3, не шар світу")
+	assert_eq(total, 11)
+
+
+## Свою й розкриту ворожу відрізняє форма, а не лише колір: у ворожої є огорожа з кілків вище за міну.
+func test_enemy_marker_is_taller_and_wider_than_own() -> void:
+	var own: Mesh = MineLayer.mesh_of(MineLayer.Style.OWN)
+	var enemy: Mesh = MineLayer.mesh_of(MineLayer.Style.ENEMY_REVEALED)
+	assert_gt(enemy.get_aabb().size.y, own.get_aabb().size.y * 2.0)
+	assert_eq(own.get_aabb().position.y, 0.0, "міна стоїть на землі")
+	assert_lt(MineLayer.MARKER_Y + enemy.get_aabb().size.y, 0.5)
+
+
+func test_marker_sits_below_zone_contours() -> void:
+	assert_lt(MineLayer.MARKER_Y, BoardView._CONTOUR_Y)

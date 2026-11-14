@@ -142,6 +142,38 @@ static func spawn_explosion(parent: Node, at: Vector3, size: float) -> Node3D:
 	return root
 
 
+## Політ дрона від загону до цілі (§3.9): виліт із тихим поп-звуком диму, підйом, дуга й
+## пікірування на ціль. Результат удару вже вирішено в core/ — тут лише показ, тож політ
+## короткий і фіксований (ходи читають, а не женуть). Вузол живе в контейнері юнітів, а не в
+## UnitView: види перебудовуються після кожного пакета подій, і стан на них гине.
+## Модель збільшена ×5 проти реального ~1 м (docs/art-direction.md, «Drone»).
+const DRONE_FLIGHT_SEC: float = 0.9
+const DRONE_MODEL: PackedScene = preload("res://assets/props/ordnance/drone.glb")
+## Висота дуги над серединою шляху й над точками старту/удару, у тайлах.
+const DRONE_APEX: float = 1.5
+const DRONE_LAUNCH_LIFT: float = 0.25
+
+
+static func spawn_drone(parent: Node, from: Vector3, to: Vector3) -> Node3D:
+	var root := _root("Drone", parent, from)
+	var model: Node3D = DRONE_MODEL.instantiate()
+	root.add_child(model)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(from)
+	_powder(root, rng, 1.4, Vector3(0, DRONE_LAUNCH_LIFT * 0.5, 0), 0.0)
+	var a: Vector3 = from + Vector3(0, DRONE_LAUNCH_LIFT, 0)
+	var c: Vector3 = (from + to) * 0.5 + Vector3(0, DRONE_APEX, 0)
+	var b: Vector3 = to + Vector3(0, DRONE_LAUNCH_LIFT, 0)
+	var tw: Tween = root.create_tween()
+	tw.tween_method(func(t: float) -> void:
+		var pos: Vector3 = a.lerp(c, t).lerp(c.lerp(b, t), t)
+		var tangent: Vector3 = 2.0 * ((1.0 - t) * (c - a) + t * (b - c))
+		model.global_transform = Transform3D(Basis.looking_at(tangent.normalized(), Vector3.UP), pos),
+		0.0, 1.0, DRONE_FLIGHT_SEC)
+	tw.tween_callback(root.queue_free)
+	return root
+
+
 ## Розігрів на старті бою: перша куля, іскри, грудки, ядро й кільце пилу інакше чекають на
 ## компіляцію шейдерів 0,2–1 с, і кадр застигає саме на першому вбивстві чи влучанні. Усе
 ## невидимо мале, світло вимкнене; звільняє себе сама.

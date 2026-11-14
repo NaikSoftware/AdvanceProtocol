@@ -473,6 +473,11 @@ func test_wreck_events_reach_the_injected_callables_unchanged() -> void:
 	assert_eq(removed, [[Vector2i(5, 1), Wrecks.Reason.BRIDGE_DEMOLISHED]])
 
 
+## Вузол польоту, а не значок залишку дронів на UnitView: той теж зветься Drone*.
+func _drone_fx() -> Array[Node]:
+	return _fx_named("Drone").filter(func(n: Node) -> bool: return n.is_in_group(BattleFx.GROUP))
+
+
 func _fx_named(prefix: String) -> Array[Node]:
 	return get_tree().root.find_children(prefix + "*", "", true, false).filter(func(n: Node) -> bool: return not n.is_queued_for_deletion())
 
@@ -567,6 +572,39 @@ func test_drone_from_an_unseen_squad_still_shows_the_hit() -> void:
 	player.play([Events.DroneLaunched.new(1, 2, 1)] as Array[Events.BattleEvent])
 	assert_eq(_fx_named("Hit").size(), 1)
 	assert_eq(_fx_named("Muzzle").size(), 0)
+	_finish_all_processed_tweens()
+
+
+## Видимий загін: дрон летить від нього до цілі (вузол у контейнері юнітів), а влучання
+## грається лише по прильоті; по завершенні вузол польоту звільняється.
+func test_drone_from_a_visible_squad_flies_then_hits_and_frees_itself() -> void:
+	var shooter: UnitView = _spawn_view(1, 9, 0, Vector2i(1, 1))
+	var target: UnitView = _spawn_view(2, 5, 1, Vector2i(4, 3))
+	var shooter_unit := _unit(1, 9, 0, Vector2i(1, 1))
+	var target_unit := _unit(2, 5, 1, Vector2i(4, 3))
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return shooter if id == 1 else (target if id == 2 else null),
+		func(id: int) -> Unit: return shooter_unit if id == 1 else (target_unit if id == 2 else null))
+	player.play([Events.DroneLaunched.new(1, 2, 1)] as Array[Events.BattleEvent])
+	assert_eq(_drone_fx().size(), 1)
+	assert_eq(_fx_named("Hit").size(), 0, "поки дрон летить, влучання нема")
+	assert_lt(BattleFx.DRONE_FLIGHT_SEC, 1.2, "політ короткий: хід читають, а не женуть")
+	_finish_all_processed_tweens()
+	assert_eq(_fx_named("Hit").size(), 1)
+	await get_tree().process_frame
+	assert_eq(_drone_fx().size(), 0)
+	_finish_all_processed_tweens()
+
+
+## Політ не стартує з тайла, якого глядач не бачить (§3.3.1): вузла польоту нема зовсім.
+func test_drone_from_an_unseen_squad_has_no_flight_node() -> void:
+	var target: UnitView = _spawn_view(2, 5, 0, Vector2i(3, 3))
+	var target_unit := _unit(2, 5, 0, Vector2i(3, 3))
+	player = EventPlayer.new(
+		func(id: int) -> UnitView: return target if id == 2 else null,
+		func(id: int) -> Unit: return target_unit if id == 2 else null)
+	player.play([Events.DroneLaunched.new(1, 2, 1)] as Array[Events.BattleEvent])
+	assert_eq(_drone_fx().size(), 0)
 	_finish_all_processed_tweens()
 
 

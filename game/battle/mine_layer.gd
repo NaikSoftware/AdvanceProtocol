@@ -9,35 +9,42 @@ extends Node3D
 
 enum Style { OWN, ENEMY_REVEALED }
 
-## Трохи над тайлом і під контурами зон (BoardView._CONTOUR_Y = 0.07), щоб
-## маркер не z-fight'ив ні з тайлом, ні з ризками.
-const MARKER_Y: float = 0.06
+## Майже на ґрунті і під контурами зон (BoardView._CONTOUR_Y), щоб ризки не ховались у моделі.
+const MARKER_Y: float = 0.02
 
 ## Не шар світу (1): зонд відбиттів BoardView знімає шар 1, і маркер власника у
 ## знімку показав би його міну суперникові у воді чи калюжі (§3.11).
 const MARKER_LAYER: int = 3
 
-## Нейтральні плейсхолдери (§2): своя — тьмяний пісочний диск, ворожа — червоний
-## ромб. Відрізняються і кольором, і формою, щоб не покладатися на один колір.
-const _COLORS: Dictionary = {
-	Style.OWN: Color("c9b46a"),
-	Style.ENEMY_REVEALED: Color("c0392b"),
+## Моделі зі збільшенням ~×9 (docs/art-direction.md, «Mines»): справжня міна 0,3 м на дошці
+## тайл = 8 м — це 3 px. Своя — лише міна на розритому ґрунті; розкрита ворожа — ще квадратна
+## огорожа з червоно-білої стрічки на кілках (позначка сапера): відрізняються формою й кольором.
+const _MODELS: Dictionary = {
+	Style.OWN: "res://assets/props/ordnance/mine_own.glb",
+	Style.ENEMY_REVEALED: "res://assets/props/ordnance/mine_enemy.glb",
 }
 
+static var _meshes: Dictionary = {}
+static var _material: StandardMaterial3D
+
 var _markers: Dictionary[Vector2i, Node3D] = {}
-var _meshes: Dictionary = {}
-var _materials: Dictionary = {}
 
 
+## Усі міни одного вигляду — один MultiMesh: десять мін це два виклики малювання, а не десять.
 func rebuild(state: BattleState, observer: int) -> void:
-	for n: Node3D in _markers.values():
+	for n: Node in get_children():
 		n.free()
 	_markers.clear()
+	var cells: Dictionary = {Style.OWN: [], Style.ENEMY_REVEALED: []}
 	for m in state.mines:
 		if m.owner == observer:
-			_add(m.pos, Style.OWN)
+			cells[Style.OWN].append(m.pos)
 		elif Mines.is_known(state, m.pos, observer):
-			_add(m.pos, Style.ENEMY_REVEALED)
+			cells[Style.ENEMY_REVEALED].append(m.pos)
+	for style: int in cells:
+		var list: Array = cells[style]
+		if not list.is_empty():
+			_add_style(style, list)
 
 
 func marker_count() -> int:
@@ -48,38 +55,44 @@ func marker_at(p: Vector2i) -> Node3D:
 	return _markers.get(p, null)
 
 
-func _add(p: Vector2i, style: int) -> void:
-	var mi := MeshInstance3D.new()
-	mi.name = "Mine_%d_%d" % [p.x, p.y]
-	mi.mesh = _mesh(style)
-	mi.material_override = _material(style)
-	mi.position = IsoCameraRig.cell_to_world(p) + Vector3(0.0, MARKER_Y, 0.0)
-	if style == Style.ENEMY_REVEALED:
-		mi.rotation.y = PI * 0.25
-	mi.layers = 1 << (MARKER_LAYER - 1)
-	mi.set_meta("style", style)
-	add_child(mi)
-	_markers[p] = mi
-
-
-func _mesh(style: int) -> Mesh:
+static func mesh_of(style: int) -> Mesh:
 	if not _meshes.has(style):
-		if style == Style.OWN:
-			var c := CylinderMesh.new()
-			c.top_radius = 0.2
-			c.bottom_radius = 0.2
-			c.height = 0.04
-			_meshes[style] = c
-		else:
-			var b := BoxMesh.new()
-			b.size = Vector3(0.32, 0.04, 0.32)
-			_meshes[style] = b
+		var root: Node = (load(_MODELS[style]) as PackedScene).instantiate()
+		var mi: MeshInstance3D = root.find_children("*", "MeshInstance3D", true, false)[0]
+		_meshes[style] = mi.mesh
+		root.free()
 	return _meshes[style]
 
 
-func _material(style: int) -> StandardMaterial3D:
-	if not _materials.has(style):
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = _COLORS[style]
-		_materials[style] = mat
-	return _materials[style]
+static func _shared_material() -> StandardMaterial3D:
+	if _material == null:
+		_material = StandardMaterial3D.new()
+		_material.vertex_color_use_as_albedo = true
+		_material.roughness = 1.0
+	return _material
+
+
+func _add_style(style: int, list: Array) -> void:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh_of(style)
+	mm.instance_count = list.size()
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "Mines_%d" % style
+	mmi.multimesh = mm
+	mmi.material_override = _shared_material()
+	mmi.layers = 1 << (MARKER_LAYER - 1)
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+	for i in list.size():
+		var p: Vector2i = list[i]
+		var w: Vector3 = IsoCameraRig.cell_to_world(p)
+		w.y = TerrainHeight.ground_y(w.x, w.z) + MARKER_Y
+		# Поворот лише косметичний (хеш клітинки): ряд мін не виглядає штампом.
+		mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, float(hash(p) % 628) / 100.0 if style == Style.OWN else 0.0), w))
+		var n := Node3D.new()
+		n.name = "Mine_%d_%d" % [p.x, p.y]
+		n.position = w
+		n.set_meta("style", style)
+		mmi.add_child(n)
+		_markers[p] = n
