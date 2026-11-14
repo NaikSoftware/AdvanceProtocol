@@ -57,15 +57,14 @@ Blender, then splits wheels / tracks / turret / barrel into separate nodes so th
 Every prompt ends with the shared suffix:
 
 > Shared suffix: *realistic contemporary military vehicle, hard-surface, game-ready, clean
-> quads, PBR, plain unmarked painted surfaces, low-saturation digital-block camouflage in muted
-> olive green, brown, khaki and near-black, light dust on the lower hull and running gear, matte
-> paint, single object on a neutral background, three-quarter view from above.*
+> quads, PBR, plain unmarked painted surfaces in one muted olive tone, no camouflage pattern,
+> light dust on the lower hull and running gear, matte paint, single object on a neutral
+> background, three-quarter view from above.*
 
-**Camouflage — open question.** Korean vehicles carry a four-tone disruptive scheme (olive,
-brown, sand, black in large soft bands; parade vehicles add thin white outlines). The art
-direction asks for digital-pattern, low-saturation camouflage. Recommendation: the four Korean
-colours in pixel blocks, no white outlines (the suffix above). The alternative is the real
-banded scheme, desaturated.
+**No camouflage pattern.** Korean vehicles carry a four-tone disruptive scheme (olive, brown,
+sand, black in large soft bands). The game paints every set in one plain tone instead (section
+5): from the camera height a contrasting pattern reads as blotches of dirt, not as camouflage.
+The generated texture does not colour the body anyway; `paint.py` paints it.
 
 | # | prompt (before the shared suffix) | must not |
 | --- | --- | --- |
@@ -140,18 +139,23 @@ rear with the longest gun, the heavy is the largest. A set differs from the othe
 not carry the role: the turret's plan and bustle, the deck furniture, the skirts, the hull front.
 The stats are the same for every set until per-set rosters are designed.
 
-Each set has its own paint, one tone across the whole set: slot 0 is olive camo with small
-brown-black blocks, slot 1 a plain low-chroma grey-green, slot 2 a plain muted sand. Paint marks
-the nation, not the player — the HP bar still marks the player. Every paint must stand apart from
+Each set has its own paint, one plain tone across the whole set and no camouflage pattern: slot 0
+is olive, slot 1 a low-chroma grey-green, slot 2 a muted sand. Contrasting blotches on the hull
+read as spilt filth from the camera height, not as camouflage. Paint marks the nation, not the
+player — the HP bar still marks the player. Every paint must stand apart from
 both grass and ploughed soil at the far zoom, by value or by hue, and every set carries the same
 wear: edge wear, metre-scale roughness spread, vertical streaks, dirt on the lower hull — painted
 metal, never plastic and never a polished can.
 
-Slot 0's up-facing tops fade the olive base to a light olive (L* about 55, hue about 97–113°
-depending on the map's grade) while the brown-black blocks stay dark: a dark olive top sits at
+Slot 0's up-facing tops are a sun-faded light olive (in game about L* 54, hue about 100° on
+Crossroads, 110° on Ridge, 118° on River), lighter than the olive sides: a dark olive top sits at
 the grass's value and fails the gate below, a neutral grey or cream fade loses the olive read.
-Slots 0 and 2 then share lightness and b* and are told apart by a* alone, so their tops must keep
-a ΔE of at least about 9.5 on every map; re-measure it whenever either paint moves.
+Its dust and dirt are even ramps low on the hull and running gear, with no noise-gated dust on
+the tops (`roof_dust` 0 in `paint.py`): patches of another hue on an olive roof read as the
+blotches the plain paint exists to avoid. The olive needs its chroma: slots 0 and 2 share
+lightness and b* and are told apart by a*, and a paler, greyer olive (b* under about 20 in the
+albedo) runs into slot 1's grey-green. Every pair of sets keeps a top ΔE of at least about 9.5
+on every map; re-measure it whenever a paint moves.
 
 **Contrast gate for every vehicle model.** A unit must stand out on every map — Crossroads
 (sunny), River (overcast rain) and Ridge (early autumn) — on grass, on ploughed soil and against
