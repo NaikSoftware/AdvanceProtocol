@@ -1590,3 +1590,9 @@ func test_a_falling_body_shows_only_if_the_viewer_has_been_shown_it() -> void:
 	var seen: Casualties.Body = (Casualties.record(state, near, 100)[0] as Events.FiguresFell).body
 	screen._on_figures_fell(seen)
 	assert_eq(layer.fallen_count(), seen.count, "на розвіданому — лягає одразу")
+	assert_false(screen._scars.has_squad_scorch(near.pos), "живе відділення плями не лишає")
+	# Ніхто не лишився стояти — відділення знищене: стримана пляма на його тайлі.
+	var before: int = near.hp
+	near.hp = 0
+	screen._on_figures_fell((Casualties.record(state, near, before)[0] as Events.FiguresFell).body)
+	assert_true(screen._scars.has_squad_scorch(near.pos), "знищене відділення лишає стриману пляму")

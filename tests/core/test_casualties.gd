@@ -67,6 +67,8 @@ func test_every_lost_figure_leaves_a_body_also_after_repair() -> void:
 	assert_eq(_lying(sq.id), 2, "та сама втрата після лікування — нове тіло")
 	_hit(sq, 0)
 	assert_eq(_lying(sq.id), 5, "тіл понад чотири — їх лишило лікування")
+	var seqs: Array = state.bodies.map(func(b: Casualties.Body) -> int: return b.seq)
+	assert_eq(seqs, [0, 1, 2], "записи одного юніта розрізняються номером — тіла не лягають одне на одне")
 
 
 func test_vehicles_and_engineers_leave_no_bodies() -> void:
@@ -176,8 +178,8 @@ func test_bodies_round_trip_through_a_save() -> void:
 		return
 	assert_eq(b.bodies.size(), 1)
 	var body: Casualties.Body = b.bodies[0]
-	assert_eq([body.unit_id, body.pos, body.owner, body.type_id, body.facing, body.first, body.count, body.revealed_to],
-		[sq.id, Vector2i(3, 4), 0, 1, 5, 2, 2, state.bodies[0].revealed_to])
+	assert_eq([body.unit_id, body.pos, body.owner, body.type_id, body.facing, body.first, body.count, body.revealed_to, body.seq],
+		[sq.id, Vector2i(3, 4), 0, 1, 5, 2, 2, state.bodies[0].revealed_to, 0])
 	assert_true(body.shown_to(0))
 
 
@@ -200,7 +202,7 @@ func test_a_bad_body_is_rejected() -> void:
 	state.board.set_kind(Vector2i(7, 6), Terrain.Kind.BRIDGE_DESTROYED)
 	var good: Dictionary = _saved()
 	for bad: Array in [["type_id", 5], ["type_id", 1], ["owner", 1], ["unit_id", 99], ["count", 3], ["first", 4],
-			["x", 12], ["owner", 2], ["facing", 8], ["revealed_to", 4]]:
+			["x", 12], ["owner", 2], ["facing", 8], ["revealed_to", 4], ["seq", -1]]:
 		var d: Dictionary = good.duplicate(true)
 		d["bodies"][0][bad[0]] = bad[1]
 		assert_null(BattleSerializer.from_dict(d), "%s = %s" % bad)

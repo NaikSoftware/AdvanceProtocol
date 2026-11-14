@@ -123,7 +123,7 @@ const YARD_BUSH_WALL: float = 0.55
 ## Крок сітки точок двору (тайли).
 const YARD_STEP: float = 0.05
 ## Розчинення над юнітом (як у PropLayer) і нижня межа альфи голої крони пізньої пори.
-const FADE_ALPHA: float = 0.35
+const FADE_ALPHA: float = 0.12
 const FADE_FLOOR: float = 0.6
 
 ## Розставлення: {node, pos (Vector3, світ), yaw, scale, cell, kind ("reed" | "bush" | "tree"), group}.

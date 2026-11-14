@@ -29,14 +29,20 @@ const _DIR: String = "res://assets/props/forest/"
 const DETAIL_ZOOM: float = 15.0
 ## Розчинення над юнітом — лише крони, що на екрані справді його перекривають: центр крони в
 ## циліндрі вздовж променя «юніт → камера» радіусом у півсилует юніта (`UNIT_HALF`) плюс
-## `FADE_MARGIN`, і лише на тій відстані вздовж променя, де він проходить крізь висоту крони (від
-## `CROWN_LOW` висоти дерева до верху; нижня частина крони — рідкі гілочки): 1–4 дерева на юніта. Ширший вибір (радіус крони й поле
-## довкола клітинки) розчиняв шмат лісу 6 × 4 клітинки — пляму-«привид» довкола юніта.
+## `FADE_MARGIN` і пів радіуса самої крони (`CROWN_REACH`), і лише на тій відстані вздовж променя, де
+## він проходить крізь крону (від `CROWN_LOW` висоти дерева до верху): кілька дерев на юніта. Повний
+## радіус крони й поле довкола клітинки розчиняли шмат лісу 6 × 4 клітинки — пляму-«привид».
 const UNIT_HALF: float = 0.25
 const FADE_MARGIN: float = 0.1
-const CROWN_LOW: float = 0.5
+## Широка крона закриває юніта краєм, а не центром: до охоплення додається частка її радіуса. Уся крона
+## (радіус) розчиняла б шмат лісу; половина ще ловить крону, що звисає над відділенням.
+const CROWN_REACH: float = 0.5
+## Нижня чверть дерева — стовбур і рідкі гілки; вище промінь до юніта вже йде крізь листя.
+const CROWN_LOW: float = 0.25
 const FADE_SOFT: float = 0.08
-const FADE_ALPHA: float = 0.35
+## Розчинена крона майже прозора: кількість стоячих бійців — це HP відділення (§1.5), і напівпрозорий
+## шар листя робив двох із чотирьох привидами.
+const FADE_ALPHA: float = 0.12
 ## Розчинення перераховується, коли зум змінився більше ніж на стільки.
 const FADE_ZOOM_STEP: float = 0.5
 ## Склад лісу клітинки за MapData.ForestSurface (MIXED, PINE, DECIDUOUS).
@@ -738,7 +744,7 @@ func _cover(entry: Dictionary, back: Vector3) -> float:
 	var slope: float = back.y / flat.length() if flat.length() > 0.05 else -1.0
 	var p: Vector2 = entry["pos"]
 	var top: float = entry["top"]
-	var reach: float = FADE_MARGIN + UNIT_HALF
+	var reach: float = FADE_MARGIN + UNIT_HALF + float(entry.get("r", 0.0)) * CROWN_REACH
 	for c in _reveal:
 		var u := Vector2(c)
 		var t: float = 0.0

@@ -136,13 +136,14 @@ func test_squads_take_seeded_layouts_that_keep_standing_figures_apart_on_screen(
 	var picked: Dictionary = {}
 	for facing in 8:
 		var yaw: float = deg_to_rad(UnitView._degrees_for_facing(facing))
-		for up in range(2, UnitView.SQUAD_FIGURES + 1):
-			for unit_id in 12:
-				var k: int = UnitSilhouettes.pick_layout(unit_id, yaw, up)
-				assert_between(k, 1, UnitSilhouettes.LAYOUT_COUNT - 1)
+		for unit_id in 12:
+			# одна розкладка на юніт і напрям — для будь-якої кількості стоячих: коли фігура падає, решта не скаче
+			var k: int = UnitSilhouettes.pick_layout(unit_id, yaw)
+			assert_between(k, 1, UnitSilhouettes.LAYOUT_COUNT - 1)
+			for up in range(2, UnitView.SQUAD_FIGURES + 1):
 				assert_gte(UnitSilhouettes.screen_gap(k, yaw, up), UnitSilhouettes.MIN_SCREEN_GAP,
 					"напрям %d, стоїть %d: двоє не стоять один за одним" % [facing, up])
-				picked[k] = true
+			picked[k] = true
 	assert_gt(picked.size(), 3, "різні відділення — різні розкладки")
 	UnitSilhouettes.use_models({0: UnitModelFixture.soldier()})
 	assert_ne(UnitSilhouettes.merged_mesh(0, 4, 0, 0, 1), UnitSilhouettes.merged_mesh(0, 4, 0, 0, 2), "сітка на розкладку")
@@ -178,6 +179,30 @@ func test_assault_squad_carries_one_tube_per_drone_left() -> void:
 	assert_same((body.get_node("Hull") as MeshInstance3D).material_override, UnitSilhouettes.model_material(1))
 	body.free()
 	assert_almost_eq(UnitSilhouettes.merged_mesh(0, 4, 0, 2).get_aabb().end.y, top_plain, 0.0001, "стрілецьке труб не несе")
+
+
+## Друга поза: прості бійці на непарних місцях пригнулись (своя сітка того самого атласу), труби дрона
+## несуть стоячі; без файлу пози всі стоять.
+func test_odd_plain_slots_crouch_and_tube_carriers_stand() -> void:
+	var plain: ArrayMesh = UnitModelFixture.soldier()
+	var crouch: ArrayMesh = UnitModelFixture.mesh(Vector3(0.0625, 0.18, 0.05))
+	UnitSilhouettes.use_models({0: plain, 1: UnitModelFixture.tube_soldier(), UnitSilhouettes.CROUCH_KEY: crouch})
+	var v: int = plain.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size()
+	var heights := func(m: ArrayMesh) -> Array:
+		var p: PackedVector3Array = m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var out: Array = []
+		for i in range(0, p.size(), v):
+			var hi: float = -INF
+			for k in v:
+				hi = maxf(hi, p[i + k].y)
+			out.append(snappedf(hi - 0.05, 0.001))
+		out.sort()
+		return out
+	assert_eq(heights.call(UnitSilhouettes.merged_mesh(0, 4)), [0.18, 0.18, 0.225, 0.225], "двоє пригнулись, двоє стоять")
+	assert_eq(heights.call(UnitSilhouettes.merged_mesh(1, 4, 0, 2)), [0.18, 0.225, 0.3, 0.3], "труби — на стоячих")
+	assert_eq(heights.call(UnitSilhouettes.merged_mesh(0, 1)), [0.225], "останній — стоячий перший")
+	UnitSilhouettes.use_models({0: plain})
+	assert_eq(heights.call(UnitSilhouettes.merged_mesh(0, 4)), [0.225, 0.225, 0.225, 0.225], "без пози — усі стоять")
 
 
 ## Загиблий — своя сітка й матеріал простого бійця з `fallen`, один на набір; без моделі — коробка плазом

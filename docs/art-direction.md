@@ -116,29 +116,38 @@ falls back to the box placeholder, so a model may land one type at a time.
 - **Soldiers.** A squad is four figures on a square of 1.6 m sides turned 22.5° from the squad's
   axes, so from any of the 8 facings no two stand one behind another along the camera's view.
   Each squad takes one of 8 fixed layouts (each slot shifted up to 0.2 m and turned up to 20°),
-  picked from the unit's id among those that keep the standing figures at least 0.4 m apart across
-  the view, so squads are not all the same diamond. `rifle_soldier` is the plain soldier;
-  `assault_soldier` is the same figure with the drone launch tube (1.52 × 0.19 m, dark olive with
-  dark end caps, upright on the back, bottom at hip height, top 0.6 m above the helmet);
-  `rifle_soldier_body` is the fallen one, a separate mesh lying on his side with knees bent, an arm
-  under the torso and the rifle on the ground beside him. All three come out of one run of
-  `tools/blender/units/figure.py` (units.json `rifle_soldier.figure`) on the same atlas layout:
-  an assault squad mixes the first two under the assault model's material in one draw call, and
-  the fallen of a national set are one `MultiMesh` under a copy of the plain soldier's material
-  with the shader uniform `fallen`, which darkens them. An assault squad carries as many tubes as
-  it has drones left (0–2, public by §3.9), on its first standing slots, which fall last; the rest
-  are plain figures, so at 0 drones it looks like a rifle squad, which by then it is. Each body
-  lies on a ring around the tile's centre, clear of the standing slots, with a fixed seeded shift
-  of up to 0.3 m and turn, its long axis at least 35° off the camera's view (along it, a body
-  foreshortens into a standing shape). Each standing soldier has its own contact shadow, a
-  0.9 m quad (about 0.6 m of visible core) under his feet at 0.65 of the map's vehicle strength:
-  the ground under him drops 5–10 L*, never to black; the fallen have none. Slot 0's cloth is
-  plain olive, uniform and helmet (140, 148, 108), plate carrier (108, 114, 82), up-facing cloth
-  lifted ×1.3 and faded 40 % to grey, gloves, boots and rifle dark: a middle-value olive sits on
-  the maps' ground, and the contrast gate passes at this lightness (`unit_contrast_gate.py`,
-  whole squad; `--zoom 6` for the closest zoom). A set's soldiers drop in through the same path
-  (`set<N>/rifle_soldier.glb`, `set<N>/assault_soldier.glb` and `set<N>/rifle_soldier_body.glb`
-  with their `_SET_SPECS` rows).
+  picked once per unit and facing among those that keep all four at least 0.4 m apart across the
+  view, so survivors do not jump when a figure falls and squads are not all the same diamond.
+  `rifle_soldier` is the plain soldier; `rifle_soldier_crouch` is the same man crouched (1.42 m),
+  on slots 1 and 3, so a squad does not stand in one pose; `assault_soldier` is the plain soldier
+  with the drone launch tube (1.52 × 0.19 m, dark olive with dark end caps, upright on the back,
+  bottom at hip height, top 0.6 m above the helmet); `rifle_soldier_body` is the fallen one, a
+  separate mesh lying on his side with knees bent, an arm under the torso and the rifle on the
+  ground beside him. All four come out of one run of `tools/blender/units/figure.py` (units.json
+  `rifle_soldier.figure`) on the same atlas layout: a squad mixes the standing poses and the tube
+  under one material in one draw call, and the fallen of a national set are one `MultiMesh` under
+  a copy of the plain soldier's material with the shader uniform `fallen`. An assault squad carries
+  as many tubes as it has drones left (0–2, public by §3.9), on its first standing slots, which
+  fall last; the rest are plain figures, so at 0 drones it looks like a rifle squad, which by then
+  it is. The remaining count also shows above the squad as a small munition pictogram with one pip
+  per drone, at the same size on screen at every zoom.
+- **The fallen** only darken: the cloth keeps its hue and chroma (about L* 32–36, chroma 18–20,
+  hue 105–110 in game) with a little mud brown, never ash grey, and a faint elongated contact patch
+  lies under each torso. Each body lies on a ring around the tile's centre, clear of the standing
+  slots, with a fixed seeded shift of up to 0.3 m and turn, its long axis at least 35° off the
+  camera's view (along it, a body foreshortens into a standing shape). Next to water the ring
+  tightens so no body reaches the water, which comes to 0.3 tile from a land cell's centre; on a
+  bridge the bodies lie along the deck within 0.18 of its axis, at deck height.
+- **Contact under soldiers.** Each standing soldier has his own contact shadow, a 0.9 m quad
+  (about 0.6 m of visible core) under his feet at a fixed opacity of 0.39 on every map: the ground
+  under him drops 5–10 L*, never to black.
+- **Soldier tones.** Slot 0's cloth is plain olive, uniform and helmet (140, 148, 108), plate
+  carrier (108, 114, 82), up-facing cloth lifted ×1.3 and faded 40 % to grey, gloves, boots and
+  rifle dark: a middle-value olive sits on the maps' ground, and the contrast gate passes at this
+  lightness (`unit_contrast_gate.py`, whole squad; `--zoom 6` for the closest zoom, where the
+  assault squad is measured on its plain figures). A set's soldiers drop in through the same path
+  (`set<N>/rifle_soldier.glb`, `set<N>/rifle_soldier_crouch.glb`, `set<N>/assault_soldier.glb` and
+  `set<N>/rifle_soldier_body.glb` with their `_SET_SPECS` rows).
 - **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
   baked in on load, but a rotation off the X axis would misplace the wheel axles). Base colour
   texture, optional normal and glTF metallicRoughness (roughness in G, metallic in B), ≤ 1024 px.
@@ -269,8 +278,10 @@ falls back to the box placeholder, so a model may land one type at a time.
   broken wood keeps its bark colour: no pale fresh breaks or splintered ends anywhere, they only
   litter the picture.
 - **Whatever hides a visible unit turns semi-transparent** — crowns, roofs and walls between the
-  camera and a unit the current player can see fade smoothly to about 30–40 % opacity with alpha
-  blending. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
+  camera and a unit the current player can see fade smoothly with alpha blending: crowns and
+  garden trees to about 12 % opacity, since a squad's standing figures are its HP and half-hidden
+  figures misread it, and roofs and walls to about 30–40 %. A crown counts when its canopy, not only
+  its centre, reaches the unit's footprint on screen. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
 - **Scars respect the fog:** crushed props, wrecks and their scorch show only where the viewer's
   `seen` covers the tile, or they report enemy movement. A prop is crushed only on a cell the
   viewer has seen, judged by the prop's own cell; a falling pole picks its direction from what the

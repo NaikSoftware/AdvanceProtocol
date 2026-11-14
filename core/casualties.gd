@@ -25,6 +25,9 @@ class Body extends RefCounted:
 	## Бітова маска гравців, яким тіло вже показане: показане лишається показаним. Без неї тіло
 	## зникало б, щойно відділення повернулося б у свій незнайдений будинок, — і цим його виказало б.
 	var revealed_to: int = 0
+	## Номер запису серед тіл свого юніта: два записи на тому самому тайлі й місці (влучання, лікування,
+	## знову влучання) інакше лягли б один на одного — вигляд бере його в сід розкладу тіл.
+	var seq: int = 0
 	func _init(p_unit_id: int, p_pos: Vector2i, p_owner: int, p_type_id: int, p_facing: int, p_first: int, p_count: int) -> void:
 		unit_id = p_unit_id
 		pos = p_pos
@@ -55,6 +58,9 @@ static func record(state: BattleState, unit: Unit, hp_before: int) -> Array[Even
 	if now >= before:
 		return []
 	var body := Body.new(unit.id, unit.pos, unit.owner, unit.type_id, unit.facing, now, before - now)
+	for b in state.bodies:
+		if b.unit_id == unit.id:
+			body.seq += 1
 	state.bodies.append(body)
 	for p in state.player_count:
 		_reveal(state, p, body)

@@ -25,11 +25,14 @@ uniform float wheel_radius = 0.06;
 // біжить по контуру разом із пройденим шляхом.
 const float TREAD_PERIOD = 0.25;
 const float TREAD_STRIP = 0.0625;
-// Загиблий темніший і бурий за живого: стоячі фігури — це HP відділення, тож лежачі не сміють
-// із ними зливатися. Тон — FALLEN_COLOR коробок-заступників (unit_silhouettes.gd), лінійний. Лежачий
-// звернений спиною до неба й освітлений сильніше за стоячого, тож тон майже повний, а не половинний.
-const vec3 FALLEN_TONE = vec3(0.041, 0.034, 0.025);
-const float FALLEN_MIX = 0.85;
+// Загиблий лише темніший і брудніший за живого, а не сірий: стоячі фігури — це HP відділення, тож лежачі
+// не сміють із ними зливатися, але й не мають читатися попелом. Тканина тьмяніє (FALLEN_DARK, лінійний
+// множник), насиченість лишається (FALLEN_SAT: темніший той самий колір у Lab втрачає хрому) і лягає
+// трохи грязюки (FALLEN_MUD, бурий множник). Лежачий звернений спиною до неба й освітлений сильніше за
+// стоячого, тож темнити треба більше, ніж здається з альбедо.
+const float FALLEN_DARK = 0.40;
+const float FALLEN_SAT = 1.45;
+const vec3 FALLEN_MUD = vec3(0.97, 0.85, 0.62);
 // Матеріал загиблих (UnitSilhouettes.fallen_material()): один на набір, тож шар тіл — один виклик.
 uniform bool fallen = false;
 
@@ -60,7 +63,8 @@ void fragment() {
 	}
 	vec3 col = (textureGrad(albedo_tex, uv, ddx, ddy) * albedo_color).rgb;
 	if (fallen) {
-		col = mix(col, FALLEN_TONE, FALLEN_MIX);
+		float y = dot(col, vec3(0.2126, 0.7152, 0.0722));
+		col = max(mix(vec3(y), col, FALLEN_SAT), vec3(0.0)) * FALLEN_MUD * FALLEN_DARK;
 	}
 	ALBEDO = col;
 	vec4 orm = textureGrad(orm_tex, uv, ddx, ddy);

@@ -52,6 +52,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "squads_forest":
 		await _squads_forest(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "squad_bridge":
+		await _squad_bridge(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "spots":
 		await _spots(screen, map, out, tag)
 		return
@@ -421,7 +424,9 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	print("UNIT gate zoom %.2f" % rig.zoom_level)
 	for cl: Array in cells:
 		var cell: Vector2i = cl[1]
-		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id, int(UnitTypes.get_type(type_id)["drones"]))
+		# Штурмове міряється на простих бійцях, без труб дрона: гейт — про тон бійця, а темна труба над
+		# головою тягнула б світлішу половину пікселів униз і міряла б трубу, а не людину.
+		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id, 0)
 		_place(m, cell, 0)
 		if (UnitSilhouettes.spec(type_id, set_id).extras as Array).has(&"figures"):
 			# Відділення стоїть ступнями на основі 0,05 над своїм початком, а гра опускає його на `SQUAD_SINK`.
@@ -525,6 +530,7 @@ func _squads(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 					u.pos += Vector2i(1, 0)
 	state.refresh_vision_all()
 	screen._rebuild_units_for_active_player(true)
+	screen._rebuild_wrecks()
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
@@ -609,6 +615,55 @@ func _squads_forest(screen: BattleScreen, map: MapData, out: String, tag: String
 	for path: String in shots:
 		(shots[path] as Image).save_png(path)
 	print("UNIT squads_forest at %s, shade side %s" % [forest, shade])
+	get_tree().quit()
+
+
+## Шостий аргумент squad_bridge: стрілецьке відділення, знищене на мосту (тіла лежать уздовж настилу), і
+## живе поруч на березі. Кадри _bridge_z6 і _bridge_z20.
+func _squad_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var bridge := Vector2i(-1, -1)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	for y in m.height:
+		for x in m.width:
+			var p := Vector2i(x, y)
+			if m.tiles[y * m.width + x] == Terrain.Kind.BRIDGE and (bridge.x < 0 or (p - c).length_squared() < (bridge - c).length_squared()):
+				bridge = p
+	# живе відділення — на найближчому до мосту полі, не на ньому самому
+	var bank := Vector2i(-1, -1)
+	for y in m.height:
+		for x in m.width:
+			var q := Vector2i(x, y)
+			if m.tiles[y * m.width + x] == Terrain.Kind.FIELD and (bank.x < 0 or (q - bridge).length_squared() < (bank - bridge).length_squared()):
+				bank = q
+	m.spawns = [
+		{"type_id": 0, "owner": 0, "pos": bridge, "facing": 0},
+		{"type_id": 1, "owner": 0, "pos": bank, "facing": 2},
+	]
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	var dead: Unit = state.unit_at(bridge)
+	var before: int = dead.hp
+	dead.hp = 0
+	Casualties.record(state, dead, before)
+	state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	screen._rebuild_wrecks()
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(bridge)
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_bridge_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT squad_bridge at %s" % bridge)
 	get_tree().quit()
 
 

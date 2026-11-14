@@ -157,7 +157,8 @@ func test_fade_reaches_every_foliage_group() -> void:
 			assert_false(alphas.is_empty(), "%s/%s: є сітка розчинення" % [season, node.name])
 			if alphas.is_empty():
 				continue
-			assert_between(alphas.min(), 0.3, 0.4, "%s/%s: альфа над юнітом" % [season, node.name])
+			# майже прозора: число стоячих бійців — це HP, і напівпрозоре листя робило б їх привидами
+			assert_between(alphas.min(), 0.0, 0.15, "%s/%s: альфа над юнітом" % [season, node.name])
 			for n: Node in f.get_children():
 				if String(n.name).begins_with("Fade_"):
 					var depth := (n as GeometryInstance3D).material_override as ShaderMaterial
@@ -168,7 +169,7 @@ func test_fade_reaches_every_foliage_group() -> void:
 
 
 func test_fade_only_crowns_on_the_view_axis() -> void:
-	# Над юнітом розчиняються лише крони, що на екрані його перекривають: 1–4 дерева, а не шмат
+	# Над юнітом розчиняються лише крони, що на екрані його перекривають: кілька дерев (до 8), а не шмат
 	# лісу довкола. Крони за ~1 клітинку вбік від осі погляду лишаються цілими.
 	for season: StringName in [&"summer", &"late"]:
 		var f := _layer(season)
@@ -193,7 +194,7 @@ func test_fade_only_crowns_on_the_view_axis() -> void:
 				var lateral: float = absf(rel.x * dir.y - rel.y * dir.x)
 				if lateral > 1.0:
 					assert_eq(alpha[i], 1.0, "%s: крона за %.1f клітинки вбік від осі погляду лишається цілою" % [season, lateral])
-		assert_between(faded, 1, 4, "%s: розчинено крон над юнітом" % season)
+		assert_between(faded, 1, 8, "%s: розчинено крон над юнітом" % season)
 		cam.free()
 
 
@@ -253,7 +254,8 @@ func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:
 			assert_eq(alive, alpha[i] >= 1.0, "таблиця батча збігається з альфою")
 			if not alive:
 				gone += 1
-	assert_between(gone, 1, 4, "над юнітом зникли 1–4 крони")
+	# охоплення — слід відділення й пів радіуса крони, що звисає над ним: кілька дерев, не шмат лісу
+	assert_between(gone, 1, 8, "над юнітом зникли 1–8 крон")
 	f.set_reveal_cells([] as Array[Vector2i])
 	for g: Dictionary in f._fadable + f._ring_fadable:
 		for i in (g["list"] as Array).size():

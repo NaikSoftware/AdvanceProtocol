@@ -69,7 +69,7 @@ func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 		view.bind(_unit(type_id))
 		assert_eq(contacts.count(), 1, "одна пляма на юніта, не більше")
 		assert_eq(view.contact_slots(), 1)
-		assert_eq(contacts.strength_of(0), 1.0, "у даних екземпляра техніки — повна сила карти")
+		assert_eq(contacts.custom_of(0).g, 1.0, "у даних екземпляра техніки — повна сила карти")
 		var hull: Vector3 = UnitSilhouettes.spec(type_id).hull
 		var xf: Transform3D = contacts.transform_of(0)
 		assert_almost_eq(xf.basis.x.length(), hull.x * UnitView.CONTACT_SPREAD, 0.0001, "ширша за слід по x")
@@ -90,8 +90,11 @@ func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> v
 	assert_eq(contacts.count(), 1, "один юніт")
 	assert_eq(view.contact_slots(), UnitView.SQUAD_FIGURES)
 	for i in UnitView.SQUAD_FIGURES:
-		assert_eq(contacts.strength_of(i), UnitView.FIGURE_CONTACT_STRENGTH, "сила бійця в даних екземпляра")
-	assert_eq(UnitView.FIGURE_CONTACT_STRENGTH, 0.65)
+		assert_almost_eq(contacts.custom_of(i).g, view.contact_strength(), 0.0001, "сила бійця в даних екземпляра")
+	assert_almost_eq(view.contact_strength() * WeatherRig.unit_contact, UnitView.FIGURE_CONTACT_ALPHA, 0.0001, "стала непрозорість бійця")
+	WeatherRig.unit_contact = 0.78
+	assert_almost_eq(view.contact_strength() * 0.78, UnitView.FIGURE_CONTACT_ALPHA, 0.0001, "і на карті з густішою тінню техніки")
+	WeatherRig.unit_contact = 0.6
 	for i in UnitView.SQUAD_FIGURES:
 		var xf: Transform3D = contacts.transform_of(i)
 		assert_true(contacts.is_shown(i))
@@ -106,7 +109,7 @@ func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> v
 	assert_false(contacts.is_shown(3))
 	view.bind(_unit(5))
 	assert_eq(view.contact_slots(), 1, "перев'язаний на техніку — знову одна пляма")
-	assert_eq(contacts.strength_of(0), 1.0)
+	assert_eq(contacts.custom_of(0).g, 1.0)
 	assert_almost_eq(contacts.transform_of(0).basis.x.length(), UnitSilhouettes.spec(5).hull.x * UnitView.CONTACT_SPREAD, 0.0001)
 
 
@@ -419,7 +422,22 @@ func test_set_drones_shows_count_regardless_of_owner() -> void:
 	view_b.set_drones(2)
 	assert_true(view_a._drone_icon.visible, "власник 0 бачить лічильник")
 	assert_true(view_b._drone_icon.visible, "власник 1 бачить той самий лічильник")
-	assert_eq(view_a._drone_icon.scale, view_b._drone_icon.scale, "лічильник не має гілки на власника")
+	assert_same(view_a._drone_icon.texture, view_b._drone_icon.texture, "лічильник не має гілки на власника")
+	assert_true(view_a._drone_icon.fixed_size, "сталий розмір на екрані на кожному зумі")
+	# Число — цятками під силуетом: у 2 дронів жовтого більше, ніж в 1, а розмір значка той самий.
+	var lit := func(t: Texture2D) -> int:
+		var img: Image = t.get_image()
+		var n: int = 0
+		for y in img.get_height():
+			for x in range(38, img.get_width()):
+				if img.get_pixel(x, y).r > 0.6:
+					n += 1
+		return n
+	assert_gt(lit.call(UnitView.drone_texture(2)), lit.call(UnitView.drone_texture(1)) + 10, "дві цятки — не одна")
+	assert_gt(lit.call(UnitView.drone_texture(1)), 10, "одна цятка")
+	assert_eq(UnitView.drone_texture(1).get_size(), UnitView.drone_texture(2).get_size())
+	view_a.set_drones(1)
+	assert_same(view_a._drone_icon.texture, UnitView.drone_texture(1))
 
 	view_a.set_drones(0)
 	assert_false(view_a._drone_icon.visible, "нуль дронів — лічильник ховається")
@@ -1119,6 +1137,75 @@ func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
 	# Відділення: ступні бійців на 0,05 над початком, тож початок — на `SQUAD_SINK` під настилом, як і на ґрунті.
 	view.bind(_unit(0, 0, bridge, 1))
 	assert_almost_eq(view.position.y, t.deck_y(bridge) - UnitView.SQUAD_SINK, 0.0001)
+
+
+## Тіло на мосту лежить уздовж настилу на його висоті й не звисає над річкою: від осі мосту не далі за
+## 0,18 тайла (найвужча проїжджа частина — 0,46).
+func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var bridge := Vector2i(-1, -1)
+	for y in _river_board.height:
+		for x in _river_board.width:
+			if _river_board.kind_at(Vector2i(x, y)) == Terrain.Kind.BRIDGE:
+				bridge = Vector2i(x, y)
+	assert_ne(bridge, Vector2i(-1, -1), "передумова: на Річці є міст")
+	var water_x: bool = WreckLayer._is_water(_river_board, bridge + Vector2i(1, 0)) or WreckLayer._is_water(_river_board, bridge + Vector2i(-1, 0))
+	var along := Vector2(0.0, 1.0) if water_x else Vector2(1.0, 0.0)
+	for facing in 8:
+		for seq in 3:
+			var b := Casualties.Body.new(7, bridge, 0, 0, facing, 0, 4)
+			b.seq = seq
+			for slot in 4:
+				var xf: Transform3D = WreckLayer.body_transform(b, slot, _river_board)
+				assert_almost_eq(xf.origin.y, t.deck_y(bridge), 0.0001, "на настилі, не під ним і не над ним")
+				var rel := Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y)
+				var across: float = absf(rel.x * along.y - rel.y * along.x)
+				var axis := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
+				var off: float = absf(axis.x * along.y - axis.y * along.x)  # синус кута до осі мосту
+				assert_lte(across + 0.1125 * off + 0.03, 0.18, "тіло в межах настилу (поперек %.3f)" % across)
+
+
+## Тіло лягає на ґрунт під собою — і на схилі; біля води воно в межах 0,3 тайла від середини клітинки, куди
+## видима вода не заходить.
+func test_bodies_sit_on_sloped_ground_and_stay_out_of_the_water() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	var shore := Vector2i(-1, -1)
+	var dry := Vector2i(-1, -1)
+	for y in range(1, _river_board.height - 1):
+		for x in range(1, _river_board.width - 1):
+			var p := Vector2i(x, y)
+			if _river_board.kind_at(p) != Terrain.Kind.FIELD:
+				continue
+			var wet: bool = false
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				wet = wet or _river_board.kind_at(p + d) == Terrain.Kind.WATER
+			if wet and shore.x < 0:
+				shore = p
+			if not wet and dry.x < 0 and absf(t.at(x - 0.3, y) - t.at(x + 0.3, y)) > 0.005:
+				dry = p
+	assert_ne(shore, Vector2i(-1, -1), "передумова: поле над водою")
+	assert_ne(dry, Vector2i(-1, -1), "передумова: поле на схилі")
+	for facing in 8:
+		for slot in 4:
+			var on_slope: Transform3D = WreckLayer.body_transform(Casualties.Body.new(3, dry, 0, 0, facing, 0, 4), slot, _river_board)
+			assert_almost_eq(on_slope.origin.y, t.at(on_slope.origin.x, on_slope.origin.z), 0.0001, "на ґрунті під тілом")
+			var xf: Transform3D = WreckLayer.body_transform(Casualties.Body.new(3, shore, 0, 0, facing, 0, 4), slot, _river_board)
+			var half: Vector3 = xf.basis.z.normalized() * 0.1125
+			for end: Vector3 in [xf.origin + half, xf.origin - half]:
+				var r: float = Vector2(end.x - shore.x, end.z - shore.y).length()
+				assert_lte(r, 0.3 + 0.01, "біля води тіло не заходить у воду (кінець за %.3f)" % r)
+
+
+## Два записи на тому самому тайлі й місці (влучання, лікування, знову влучання) лягають не одне на одному.
+func test_two_records_on_one_tile_and_slot_lie_apart() -> void:
+	var a := Casualties.Body.new(4, Vector2i(3, 3), 0, 0, 2, 3, 1)
+	var b := Casualties.Body.new(4, Vector2i(3, 3), 0, 0, 2, 3, 1)
+	b.seq = 1
+	var pa: Vector3 = WreckLayer.body_transform(a, 3).origin
+	var pb: Vector3 = WreckLayer.body_transform(b, 3).origin
+	assert_gt(pa.distance_to(pb), 0.03, "друге тіло не на першому")
 
 
 ## Кадр юніта працює лише поки живий твін повороту чи ходу: у спокої десятки юнітів не

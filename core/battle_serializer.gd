@@ -34,7 +34,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var bodies: Array = []
 	for b in state.bodies:
 		bodies.append({"unit_id": b.unit_id, "x": b.pos.x, "y": b.pos.y, "owner": b.owner, "type_id": b.type_id,
-			"facing": b.facing, "first": b.first, "count": b.count, "revealed_to": b.revealed_to})
+			"facing": b.facing, "first": b.first, "count": b.count, "revealed_to": b.revealed_to, "seq": b.seq})
 	var broken_forest: Array = []
 	for p: Vector2i in state.broken_forest:
 		broken_forest.append({"x": p.x, "y": p.y})
@@ -137,6 +137,7 @@ static func from_dict(data: Dictionary) -> BattleState:
 		state.bodies.append(Casualties.Body.new(int(b_data["unit_id"]), Vector2i(int(b_data["x"]), int(b_data["y"])),
 			int(b_data["owner"]), int(b_data["type_id"]), int(b_data["facing"]), int(b_data["first"]), int(b_data["count"])))
 		state.bodies[-1].revealed_to = int(b_data.get("revealed_to", 0))
+		state.bodies[-1].seq = int(b_data.get("seq", 0))
 	# Збереження до появи просік поля не мають — лісу там ніхто не валив.
 	state.broken_forest.clear()
 	for f_data in (data.get("broken_forest", []) as Array):
@@ -270,6 +271,8 @@ static func _is_valid(data: Dictionary) -> bool:
 			if kind == Terrain.Kind.WATER or kind == Terrain.Kind.BRIDGE_DESTROYED:
 				return false
 			if b.has("revealed_to") and not _in(b, "revealed_to", 0, (1 << pc) - 1):
+				return false
+			if b.has("seq") and not _in(b, "seq", 0, 1 << 20):
 				return false
 	if data.has("broken_forest"):
 		if not _arr(data, "broken_forest"):

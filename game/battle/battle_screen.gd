@@ -1060,6 +1060,9 @@ func _rebuild_wrecks() -> void:
 	_wreck_layer.rebuild(_match_service.state, _viewer)
 	for w in _match_service.state.wrecks:
 		_scars.stamp_scorch(w.pos)
+	for u: Unit in _match_service.state.units.values():
+		if not u.is_alive() and u.unit_class() == UnitTypes.UnitClass.INFANTRY and not _drowned(u.pos):
+			_scars.stamp_squad_scorch(u.pos)
 	_scars.show_for(_match_service.state.vision[_viewer])
 
 
@@ -1078,6 +1081,15 @@ func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> voi
 func _on_figures_fell(body: Casualties.Body) -> void:
 	if body.shown_to(_viewer):
 		_wreck_layer.add_body(body)
+	# Ніхто не лишився стояти — відділення знищене: стримана пляма (на нерозвіданому її ховає маска).
+	if body.first == 0 and _scars != null and not _drowned(body.pos):
+		_scars.stamp_squad_scorch(body.pos)
+
+
+## Тайл, де загиблі в річці: вода чи підірваний міст — там ні тіл, ні плями.
+func _drowned(pos: Vector2i) -> bool:
+	var k: int = _match_service.state.board.kind_at(pos)
+	return k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE_DESTROYED
 
 
 ## Прибрати показане — нічого не розкриває. Решту на гейті перемалює _rebuild_wrecks().

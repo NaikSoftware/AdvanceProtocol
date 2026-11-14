@@ -197,7 +197,7 @@ static func _merged_mat() -> StandardMaterial3D:
 
 ## Сітка тіла на тип і кількість стоячих фігур; спільна для всіх юнітів того
 ## самого вигляду, тож падіння фігури — підміна сітки, а не нова. Відділення несе лише
-## стоячих: загиблі лежать там, де впали (шар тіл, `bodies_mesh()`), а не йдуть із ним.
+## стоячих: загиблі лежать там, де впали (шар тіл WreckLayer), а не йдуть із ним.
 ## Труб дрона на відділенні стільки, скільки дронів лишилось (§3.9, число публічне), і несуть їх
 ## перші стоячі місця — вони падають останніми; решта — простий боєць (`PLAIN_FIGURE`). Модель із
 ## трубою має той самий атлас, що й простий боєць, тож обидва малює її матеріал одним викликом.
@@ -213,12 +213,21 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drone
 	if _merged_meshes.has(key):
 		return _merged_meshes[key]
 	if model != null:
+		var bare_mesh: ArrayMesh = plain if plain != null else model
+		var crouch: ArrayMesh = crouch_mesh(set_id)
 		var with_tube: Array[Transform3D] = []
 		var bare: Array[Transform3D] = []
+		var crouched: Array[Transform3D] = []
 		for i in up:
-			(with_tube if i < tubes else bare).append(model_figure_transform(i, layout))
+			var xf: Transform3D = model_figure_transform(i, layout)
+			if i < tubes:
+				with_tube.append(xf)
+			elif crouch != null and CROUCH_SLOTS.has(i):
+				crouched.append(xf)
+			else:
+				bare.append(xf)
 		# Без жодного стоячого — порожня сітка: вузол знищеного відділення нічого не малює.
-		_merged_meshes[key] = _merge_parts([[model, with_tube], [plain if plain != null else model, bare]]) if up > 0 else ArrayMesh.new()
+		_merged_meshes[key] = _merge_parts([[model, with_tube], [bare_mesh, bare], [crouch, crouched]]) if up > 0 else ArrayMesh.new()
 		return _merged_meshes[key]
 	var root := build(type_id, set_id)
 	var pieces: Array[Array] = []  ## [масиви сітки, перетворення, колір]
@@ -354,9 +363,11 @@ static func screen_gap(layout: int, yaw: float, up: int) -> float:
 	return gap
 
 
-## Розкладка відділення `seed` (id юніта) з `up` стоячими, поверненого на `yaw`: перша, починаючи від сіда,
-## де стоячі не стоять один за одним уздовж погляду; коли такої нема — найкраща.
-static func pick_layout(seed: int, yaw: float, up: int) -> int:
+## Розкладка відділення `seed` (id юніта), поверненого на `yaw`: перша, починаючи від сіда, де жодні два з
+## чотирьох не стоять один за одним уздовж погляду; коли такої нема — найкраща. Обирається за всіма чотирма,
+## тож годиться для будь-якої кількості стоячих: коли фігура падає, решта не перескакує.
+static func pick_layout(seed: int, yaw: float) -> int:
+	var up: int = _FIGURE_SLOTS.size()
 	var best: int = 1
 	var best_gap: float = -1.0
 	for n in LAYOUT_COUNT - 1:
@@ -376,14 +387,32 @@ static func pick_layout(seed: int, yaw: float, up: int) -> int:
 const BODY_SLUG: String = "rifle_soldier_body"
 ## Ключ сітки тіла в `use_models()` для тестів (тип такого номера не існує).
 const BODY_KEY: int = 100
+## Місця, де простий боєць пригнувся (друга поза); решта стоїть.
+const CROUCH_SLOTS: Array[int] = [1, 3]
 
 
 ## Сітка загиблого набору (null — файлу нема): найнижча точка на y = 0, середина тіла на початку.
 static func body_mesh(set_id: int) -> ArrayMesh:
+	return _figure_variant(set_id, BODY_KEY, BODY_SLUG)
+
+
+## Друга поза простого бійця — пригнувся (`rifle_soldier_crouch.glb`): та сама модель і атлас, лише ноги
+## зігнуті, тож відділення з обома позами — один матеріал і один виклик. Її беруть непарні місця без труби
+## дрона (`CROUCH_SLOTS`), щоб четверо не стояли в одній позі. Null — файлу нема: усі стоять.
+const CROUCH_SLUG: String = "rifle_soldier_crouch"
+const CROUCH_KEY: int = 101
+
+
+static func crouch_mesh(set_id: int) -> ArrayMesh:
+	return _figure_variant(set_id, CROUCH_KEY, CROUCH_SLUG)
+
+
+## Окрема модель бійця набору (загиблий, друга поза) — поруч із простим бійцем і з його набору.
+static func _figure_variant(set_id: int, key_id: int, slug: String) -> ArrayMesh:
 	var resolved: int = _resolved_set(PLAIN_FIGURE, set_id)
-	var key := Vector2i(resolved, BODY_KEY)
+	var key := Vector2i(resolved, key_id)
 	if not _models.has(key):
-		var path: String = model_dir(resolved) + BODY_SLUG + ".glb"
+		var path: String = model_dir(resolved) + slug + ".glb"
 		_models[key] = _load_model(path) if not _models_pinned and ResourceLoader.exists(path) else null
 	return _models[key]
 
@@ -529,6 +558,8 @@ static func _merge_parts(parts: Array) -> ArrayMesh:
 	var idx := PackedInt32Array()
 	var tangents: bool = true
 	for part: Array in parts:
+		if part[0] == null or (part[1] as Array).is_empty():
+			continue
 		var a: Array = (part[0] as Mesh).surface_get_arrays(0)
 		var sv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 		var count: int = sv.size()

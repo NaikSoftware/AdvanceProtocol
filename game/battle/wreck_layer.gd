@@ -176,6 +176,8 @@ var _warm: MeshInstance3D = null
 var _bodies: Array[Casualties.Body] = []
 var _body_mm: Dictionary[int, MultiMeshInstance3D] = {}
 var _body_placed: Array[Transform3D] = []
+## Дошка стану: тіло на мосту лягає вздовж настилу, а біля води не заходить у воду.
+var _board: Board = null
 var _column_cells: Array[Vector2i] = []
 var _hearths: MultiMeshInstance3D
 var _hearth_mat: ShaderMaterial
@@ -528,9 +530,10 @@ func rebuild_fallen(state: BattleState, observer: int) -> void:
 		if b.shown_to(observer):
 			shown.append(b)
 	# Перебудова дошки йде після кожного пакета: без змін тіла не перекладаються.
-	if shown == _bodies:
+	if shown == _bodies and _board == state.board:
 		return
 	_bodies = shown
+	_board = state.board
 	_rebuild_body_meshes()
 
 
@@ -564,15 +567,21 @@ func _rebuild_body_meshes() -> void:
 		mi.free()
 	_body_mm.clear()
 	_body_placed.clear()
+	if _body_contacts != null:
+		_body_contacts.free()
+		_body_contacts = null
 	var per_set: Dictionary = {}  ## набір -> Array[Transform3D]
+	var spots: Array[Transform3D] = []
 	for b in _bodies:
 		var set_id: int = UnitSilhouettes.set_of(b.owner)
 		if not per_set.has(set_id):
 			per_set[set_id] = [] as Array[Transform3D]
 		for slot in range(b.first, b.first + b.count):
-			var xf: Transform3D = body_transform(b, slot) * UnitSilhouettes.body_pose(set_id)
+			var at: Transform3D = body_transform(b, slot, _board)
+			var xf: Transform3D = at * UnitSilhouettes.body_pose(set_id)
 			(per_set[set_id] as Array[Transform3D]).append(xf)
 			_body_placed.append(xf)
+			spots.append(at)
 	for set_id: int in per_set:
 		var list: Array[Transform3D] = per_set[set_id]
 		var mm := MultiMesh.new()
@@ -590,28 +599,106 @@ func _rebuild_body_meshes() -> void:
 		mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
 		add_child(mi)
 		_body_mm[set_id] = mi
+	if not spots.is_empty() and WeatherRig.unit_contact > 0.0:
+		_body_contacts = _contact_patches(spots)
+		add_child(_body_contacts)
+
+
+## Затінок під тулубом лежачого: без нього тіло читається наліпкою на ґрунті. Той самий шейдер, що й тінь
+## під стоячими (`UnitContacts`), видовжений уздовж тіла й слабший; усі тіла — один `MultiMesh`.
+const BODY_CONTACT_ALPHA: float = 0.3
+const BODY_CONTACT_SIZE: Vector2 = Vector2(0.09, 0.26)
+static var _body_contact_mat: ShaderMaterial
+var _body_contacts: MultiMeshInstance3D = null
+
+
+func _contact_patches(spots: Array[Transform3D]) -> MultiMeshInstance3D:
+	if _body_contact_mat == null:
+		_body_contact_mat = ShaderMaterial.new()
+		_body_contact_mat.shader = preload("res://game/battle/shaders/unit_contact_shadow.gdshader")
+	var th: TerrainHeight = TerrainHeight.active
+	_body_contact_mat.set_shader_parameter("use_height", th != null)
+	if th != null:
+		_body_contact_mat.set_shader_parameter("height_map", th.texture())
+		_body_contact_mat.set_shader_parameter("height_samples", float(th.samples))
+		_body_contact_mat.set_shader_parameter("height_origin", -0.5 - th.margin)
+	var plane := PlaneMesh.new()
+	plane.size = Vector2.ONE
+	plane.subdivide_width = 2
+	plane.subdivide_depth = 2
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = plane
+	mm.instance_count = spots.size()
+	var k: float = clampf(BODY_CONTACT_ALPHA / WeatherRig.unit_contact, 0.0, 1.0)
+	for i in spots.size():
+		var size := Basis.from_scale(Vector3(BODY_CONTACT_SIZE.x, 1.0, BODY_CONTACT_SIZE.y))
+		mm.set_instance_transform(i, Transform3D(spots[i].basis * size, spots[i].origin + Vector3(0.0, 0.01, 0.0)))
+		mm.set_instance_custom_data(i, Color(0.0, k, 0.0, 0.0))
+	var mi := MultiMeshInstance3D.new()
+	mi.name = "BodyContacts"
+	mi.multimesh = mm
+	mi.material_override = _body_contact_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
+	# AABB з екземплярів не відсікає затінок на краю кадру помилково.
+	mi.custom_aabb = AABB(Vector3(-200.0, -20.0, -200.0), Vector3(400.0, 40.0, 400.0))
+	return mi
+
+
+func body_contacts() -> MultiMeshInstance3D:
+	return _body_contacts
 
 
 ## Кільце, на якому лежать тіла довкола середини тайла: стоячі місця ближче (до ~0,17), тож тіла на тайлі,
 ## де відділення досі стоїть, його не накривають.
 const BODY_RING: float = 0.3
+## Біля води кільце тісніше: видима вода підходить до 0,3 тайла від середини клітинки суші, і тіло (0,225
+## завдовжки) не сміє в неї зайти — ціле тіло лишається в межах 0,3.
+const BODY_RING_WATER: float = 0.16
 ## Сталий за сідом зсув тіла до ±0,3 м і поворот до ±45° від дотичної до кільця.
 const BODY_JITTER: float = 0.0375
 const BODY_TURN: float = 0.8
 ## Довга вісь тіла — не ближче за 35° до погляду камери: уздовж погляду тіло скорочується в стоячу фігуру.
 const BODY_VIEW_MIN: float = 0.6109
+## На мосту тіло лежить уздовж настилу, не далі за стільки від його осі: найвужча проїжджа частина
+## (понтонний міст, 0,70 завширшки; мостовий проліт — 0,46) інакше лишила б його звислим над річкою.
+const BODY_DECK_ACROSS: float = 0.06
+const BODY_DECK_ALONG: float = 0.3
+const BODY_DECK_TURN: float = 0.17
 
 
-## Де й як лежить тіло місця `slot` запису `b` (без пози сітки): сід — юніт, тайл, місце, тож те саме тіло
-## лягає однаково щоразу. Висота — ґрунт під ним, на мосту — настил.
-static func body_transform(b: Casualties.Body, slot: int) -> Transform3D:
+## Де й як лежить тіло місця `slot` запису `b` (без пози сітки). Сід — юніт, тайл, номер запису й місце,
+## тож те саме тіло лягає однаково щоразу, а два записи на одному тайлі — не одне на одному. Висота — ґрунт
+## під ним, на мосту — настил. `board` (як у стані) — щоб на мосту лягти вздовж настилу, а біля води
+## не зайти у воду; без нього — як на полі.
+static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -> Transform3D:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([b.unit_id, b.pos, b.first, slot])
+	rng.seed = hash([b.unit_id, b.pos, b.seq, b.first, slot])
+	var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
+	if board != null and board.kind_at(b.pos) == Terrain.Kind.BRIDGE:
+		# Міст іде між двома берегами: уздовж нього — та вісь, з боків якої нема води.
+		var along_z: bool = _is_water(board, b.pos + Vector2i(1, 0)) or _is_water(board, b.pos + Vector2i(-1, 0))
+		var along := Vector3(0.0, 0.0, 1.0) if along_z else Vector3(1.0, 0.0, 0.0)
+		var across := Vector3(along.z, 0.0, along.x)
+		var at: Vector3 = centre + along * rng.randf_range(-BODY_DECK_ALONG, BODY_DECK_ALONG) \
+			+ across * rng.randf_range(-BODY_DECK_ACROSS, BODY_DECK_ACROSS)
+		var heading: float = (0.0 if along_z else PI * 0.5) + rng.randf_range(-BODY_DECK_TURN, BODY_DECK_TURN)
+		at.y = _body_ground(b.pos, at)
+		return Transform3D(Basis(Vector3.UP, heading), at)
+	var near_water: bool = false
+	if board != null:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				near_water = near_water or _is_water(board, b.pos + Vector2i(dx, dy))
+	var ring: float = BODY_RING_WATER if near_water else BODY_RING
+	var jitter: float = BODY_JITTER * (0.5 if near_water else 1.0)
 	var squad_yaw: float = deg_to_rad(UnitView._degrees_for_facing(b.facing))
 	var s: Vector3 = UnitSilhouettes.figure_transform(slot, true).origin
 	var ang: float = atan2(s.z, s.x) + rng.randf_range(-0.35, 0.35)
-	var local := Vector3(cos(ang), 0.0, sin(ang)) * BODY_RING
-	local += Vector3(rng.randf_range(-BODY_JITTER, BODY_JITTER), 0.0, rng.randf_range(-BODY_JITTER, BODY_JITTER))
+	var local := Vector3(cos(ang), 0.0, sin(ang)) * ring
+	local += Vector3(rng.randf_range(-jitter, jitter), 0.0, rng.randf_range(-jitter, jitter))
 	var turn := Basis(Vector3.UP, squad_yaw)
 	var tangent: Vector3 = turn * Vector3(-sin(ang), 0.0, cos(ang))
 	var heading: float = atan2(tangent.x, tangent.z) + rng.randf_range(-BODY_TURN, BODY_TURN)
@@ -619,9 +706,17 @@ static func body_transform(b: Casualties.Body, slot: int) -> Transform3D:
 	var off: float = wrapf(heading - cam, -PI * 0.5, PI * 0.5)
 	if absf(off) < BODY_VIEW_MIN:
 		heading = cam + (BODY_VIEW_MIN if off >= 0.0 else -BODY_VIEW_MIN)
-	var at: Vector3 = IsoCameraRig.cell_to_world(b.pos) + turn * local
+	var at: Vector3 = centre + turn * local
 	at.y = _body_ground(b.pos, at)
 	return Transform3D(Basis(Vector3.UP, heading), at)
+
+
+## Вода, у яку тіло не сміє зайти: річка й підірваний міст (за межами дошки — ні).
+static func _is_water(board: Board, p: Vector2i) -> bool:
+	if p.x < 0 or p.y < 0 or p.x >= board.width or p.y >= board.height:
+		return false
+	var k: int = board.kind_at(p)
+	return k == Terrain.Kind.WATER or k == Terrain.Kind.BRIDGE_DESTROYED
 
 
 ## Ґрунт під тілом; на мосту — настил (рельєф під ним — русло). Тіло лежить на землі, а не на основі

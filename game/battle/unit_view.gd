@@ -181,7 +181,12 @@ func _ready() -> void:
 	# входить — її текстуру повністю володіє set_hp(), який і так кличеться
 	# з кожного bind().
 	_hp_bar.pixel_size = HP_BAR_PIXEL_SIZE
-	_drone_icon.texture = _flat_texture(Color("d9b23a"))
+	_drone_icon.texture = drone_texture(_MAX_DRONES)
+	# Сталий розмір на екрані: на найближчому зумі значок не накриває відділення, на найдальшому —
+	# лишається читким (`DRONE_ICON_PIXEL` на піксель текстури).
+	_drone_icon.fixed_size = true
+	_drone_icon.pixel_size = DRONE_ICON_PIXEL
+	_drone_icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
 	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
 		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -610,7 +615,8 @@ static func hp_bar_image(fill_width: int, owner: int = 0) -> Image:
 func set_drones(count: int) -> void:
 	_drones_left = clampi(count, 0, _MAX_DRONES)
 	_drone_icon.visible = _drones_left > 0
-	_drone_icon.scale = Vector3.ONE * (0.5 + 0.25 * float(_drones_left))
+	# Число читається цятками під силуетом, а не розміром значка: розмір на екрані сталий на кожному зумі.
+	_drone_icon.texture = drone_texture(_drones_left)
 	# Скільки дронів, стільки труб на спинах: пущений дрон знімає трубу з відділення.
 	_set_standing(_standing)
 
@@ -663,7 +669,7 @@ func _set_standing(count: int) -> void:
 		return
 	_standing = count
 	# Розкладка — за id юніта й нинішнім напрямом: стоячі не стають один за одним уздовж погляду камери.
-	_layout = UnitSilhouettes.pick_layout(_unit_id, rotation.y, count)
+	_layout = UnitSilhouettes.pick_layout(_unit_id, rotation.y)
 	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left, _layout)
 
 
@@ -761,9 +767,11 @@ func contact_transform() -> Transform3D:
 
 ## Під людиною — не пляма на весь слід відділення (на 5 м вона читалась чорною), а маленька м'яка тінь
 ## під ногами кожного стоячого бійця, ~0,6 м видимого ядра, слабша за тінь техніки
-## (FIGURE_CONTACT_STRENGTH). Лежачий плаский — без тіні. Скільки квадів дає юніт — `contact_slots()`.
+## (`FIGURE_CONTACT_ALPHA`). Лежачий плаский — без тіні. Скільки квадів дає юніт — `contact_slots()`.
 const FIGURE_CONTACT_SIZE: float = 0.11
-const FIGURE_CONTACT_STRENGTH: float = 0.65
+## Непрозорість тіні бійця на будь-якій карті: сила карти для техніки різна (0,6–0,78), а під людиною
+## ґрунт має темніти на 5–10 L*, не більше, тож ця — стала, а не частка карти.
+const FIGURE_CONTACT_ALPHA: float = 0.39
 
 
 func contact_slots() -> int:
@@ -772,7 +780,9 @@ func contact_slots() -> int:
 
 ## Сила плями відносно тіні техніки (множник у шейдері через дані екземпляра).
 func contact_strength() -> float:
-	return FIGURE_CONTACT_STRENGTH if _has_figures() else 1.0
+	if not _has_figures():
+		return 1.0
+	return clampf(FIGURE_CONTACT_ALPHA / WeatherRig.unit_contact, 0.0, 1.0) if WeatherRig.unit_contact > 0.0 else 0.0
 
 
 func contact_transforms() -> Array[Transform3D]:
@@ -933,6 +943,53 @@ static func _diamond_texture(size: int = 32) -> ImageTexture:
 			if absf(d - radius) <= thickness:
 				image.set_pixel(x, y, Color.WHITE)
 	_texture_cache[key] = ImageTexture.create_from_image(image)
+	return _texture_cache[key]
+
+
+## Розмір піктограми дронів на екрані (`fixed_size`): частка висоти вікна на піксель текстури.
+const DRONE_ICON_PIXEL: float = 0.0011
+## Колір силуету й цяток — той самий жовтий, що й позначка дрона (DroneThreatened), обведений темним.
+const _DRONE_FILL: Color = Color("e2bd45")
+const _DRONE_INK: Color = Color("1d1a14")
+
+
+## Піктограма залишку дронів (§3.9, число публічне): силует барражуючого боєприпасу (фюзеляж, хрестоподібні
+## крила, хвостове оперення) з темним обведенням і під ним по цятці на кожен дрон, що лишився.
+static func drone_texture(count: int) -> ImageTexture:
+	var key: Array = ["drone", count]
+	if _texture_cache.has(key):
+		return _texture_cache[key]
+	var w: int = 56
+	var h: int = 22
+	var fill := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	fill.fill(Color(0, 0, 0, 0))
+	# фюзеляж і носовий обтічник
+	fill.fill_rect(Rect2i(6, 9, 26, 4), _DRONE_FILL)
+	fill.fill_rect(Rect2i(32, 10, 3, 2), _DRONE_FILL)
+	# крила посередині, хвостове оперення ззаду
+	fill.fill_rect(Rect2i(18, 2, 4, 18), _DRONE_FILL)
+	fill.fill_rect(Rect2i(7, 5, 3, 12), _DRONE_FILL)
+	# цятки праворуч від силуету, по одній на дрон: під значком лежить підпис HP і накрив би їх
+	for i in clampi(count, 0, _MAX_DRONES):
+		var cx: int = 42 + i * 8
+		for y in range(7, 15):
+			for x in range(cx - 3, cx + 3):
+				if Vector2(x - cx + 0.5, y - 10.5).length() <= 3.2:
+					fill.set_pixel(x, y, _DRONE_FILL)
+	# темне обведення на 1 піксель довкола всього, що залите: читається на будь-якому ґрунті
+	var out := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	out.fill(Color(0, 0, 0, 0))
+	for y in h:
+		for x in w:
+			if fill.get_pixel(x, y).a > 0.5:
+				out.set_pixel(x, y, _DRONE_FILL)
+				continue
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1)]:
+				var q: Vector2i = Vector2i(x, y) + d
+				if q.x >= 0 and q.y >= 0 and q.x < w and q.y < h and fill.get_pixelv(q).a > 0.5:
+					out.set_pixel(x, y, _DRONE_INK)
+					break
+	_texture_cache[key] = ImageTexture.create_from_image(out)
 	return _texture_cache[key]
 
 

@@ -5,6 +5,7 @@
     "figure": {"yaw": 90, "tris": 800, "tex": 512,
                "paint": {"uniform": [140, 148, 108], "helmet": [140, 148, 108], "kit": [108, 114, 82], "gun": [30, 31, 31], "boots": [48, 46, 40], "skin": [146, 110, 88], "top_lift": 1.3, "top_fade": 0.4},
                "variants": {"assault_soldier": {"tube": {"length_m": 1.52, "diameter_m": 0.19, "bottom_m": 0.88, "colour": [74, 78, 56], "cap": [28, 28, 26]}},
+                            "rifle_soldier_crouch": {"crouch": {"hip_m": 0.95, "knee_m": 0.5, "thigh_deg": 72, "shin_deg": 125}},
                             "rifle_soldier_body": {"body": {"knee_m": 0.5, "knee_deg": 50, "roll_deg": 75, "rifle_r_m": 0.2, "rifle_at_m": [0.45, 0.2], "rifle_yaw_deg": 10}}}}
   },
   "heavy_tank": {

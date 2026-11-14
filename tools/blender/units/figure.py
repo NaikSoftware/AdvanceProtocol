@@ -14,7 +14,8 @@ entry's `figure` block:
             fractions of the figure; `top_lift` multiplies (linear) the cloth tones of up-facing texels,
             `top_fade` (0..1) turns them towards grey
   variants  {<unit>: {tube: {length_m, diameter_m, bottom_m, colour, cap}}}: a cylinder strapped upright on the back,
-            real size, its side `colour`, its end caps `cap`
+            real size, its side `colour`, its end caps `cap`; {<unit>: {body: {...}}}: the fallen soldier lying on his
+            side; {<unit>: {crouch: {hip_m, knee_m, thigh_deg, shin_deg}}}: the second pose, crouched
 `--crude` skips the bake and paints the whole figure the uniform tone: the farthest-zoom shape test.
 
 Steps: import, yaw, scale to 1.8 m = 0.225 units with the body (not the rifle) centred on the origin and the soles on
@@ -419,10 +420,43 @@ def make_body(b, base, unit):
     return ob
 
 
+def make_crouch(c, base, unit):
+    """The same soldier crouched: thighs forward about the hip, shins back about the knee, feet back on the
+    ground. Only vertices move, so the UVs and the atlas stay the plain figure's and one material covers both."""
+    bm = bmesh.new(); bm.from_mesh(base.data)
+    hip, knee, band = c.get("hip_m", 0.95) * M, c.get("knee_m", 0.5) * M, 0.03
+    near_k = [v.co.y for v in bm.verts if abs(v.co.z - knee) < 0.01]
+    near_h = [v.co.y for v in bm.verts if abs(v.co.z - hip) < 0.01]
+    ky, hy = sum(near_k) / max(1, len(near_k)), sum(near_h) / max(1, len(near_h))
+    shin, thigh = -math.radians(c.get("shin_deg", 95)), math.radians(c.get("thigh_deg", 55))
+
+    def turn(co, py, pz, a):
+        y, z = co.y - py, co.z - pz
+        return py + y * math.cos(a) - z * math.sin(a), pz + y * math.sin(a) + z * math.cos(a)
+
+    for v in bm.verts:
+        z0 = v.co.z
+        ws = smoothstep(knee + band, knee - band, z0)  # below the knee: the shin turns back
+        if ws > 0.0:
+            v.co.y, v.co.z = turn(v.co, ky, knee, shin * ws)
+        wt = smoothstep(hip + band, hip - band, z0)  # below the hip: the whole leg turns forward
+        if wt > 0.0:
+            v.co.y, v.co.z = turn(v.co, hy, hip, thigh * wt)
+    zmin = min(v.co.z for v in bm.verts)
+    bmesh.ops.translate(bm, vec=Vector((0.0, 0.0, -zmin)), verts=bm.verts)
+    me = bpy.data.meshes.new(unit); bm.to_mesh(me); bm.free()
+    ob = bpy.data.objects.new(unit, me); bpy.context.collection.objects.link(ob)
+    print("FIG crouch", unit, "top %.3f" % max(v.co.z for v in me.vertices))
+    return ob
+
+
 outs = {name: finish(lo, name)}
 for unit, v in fig.get("variants", {}).items():
     if "body" in v:
         outs[unit] = finish(make_body(v["body"], lo, unit), unit)
+        continue
+    if "crouch" in v:
+        outs[unit] = finish(make_crouch(v["crouch"], lo, unit), unit)
         continue
     body = bpy.data.objects.new(unit, lo.data.copy()); bpy.context.collection.objects.link(body)
     t = tube(v["tube"], body)
@@ -460,6 +494,8 @@ for unit, path in outs.items():
     top = max(HEIGHT, (t["bottom_m"] + t["length_m"]) * M) if t else HEIGHT
     if "body" in fig.get("variants", {}).get(unit, {}):
         check(pa["max"][1] < 0.11, "%s lies low (top %.4f = %.2f m)" % (unit, pa["max"][1], pa["max"][1] / M))
+    elif "crouch" in fig.get("variants", {}).get(unit, {}):
+        check(0.6 * HEIGHT < pa["max"][1] < 0.92 * HEIGHT, "%s crouches (top %.2f m)" % (unit, pa["max"][1] / M))
     else:
         check(abs(pa["max"][1] - top) < 0.002, "%s top %.4f (figure 1.8 m, tube top %.3f)" % (unit, pa["max"][1], top))
     ntri = g["accessors"][prims[0]["indices"]]["count"] // 3

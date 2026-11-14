@@ -21,6 +21,11 @@ const PX_PER_TILE: int = 32
 ## Пляма уламків 10–14 м: темне ядро ~10 м, м'який край до 7 м від центру.
 const SCORCH_RADIUS_M: float = 7.0
 const SCORCH_CORE_M: float = 5.0
+## Знищене відділення: стримана пляма, ~5 м, ядро ~2 м і лише половина темряви уламків — ні вогню, ні
+## палива там не було.
+const SQUAD_SCORCH_RADIUS_M: float = 2.6
+const SQUAD_SCORCH_CORE_M: float = 1.0
+const SQUAD_SCORCH_DARK: float = 0.5
 ## Слід поваленого на мокрій землі (`stamp_scuff`): півширина смуги й найбільша темрява.
 const SCUFF_HALF_M: float = 0.5
 const SCUFF_DARK: float = 0.35
@@ -33,6 +38,7 @@ var _mask: Image
 var _mask_tex: ImageTexture
 ## Тайли, під якими пляма вже стоїть: перебудова на гейті не малює її вдруге.
 var _stamped: Dictionary[Vector2i, bool] = {}
+var _squad_stamped: Dictionary[Vector2i, bool] = {}
 
 
 func _init(board_size: Vector2i) -> void:
@@ -82,6 +88,19 @@ func stamp_scorch(cell: Vector2i) -> void:
 	_stamp(cell, SCORCH_RADIUS_M, SCORCH_CORE_M)
 
 
+## Слід знищеного відділення (art-direction, «a scorch, restrained»): менший і світліший за пляму уламків.
+## Ставиться раз на тайл; уламки на тому самому тайлі однаково накривають його своєю.
+func stamp_squad_scorch(cell: Vector2i) -> void:
+	if _squad_stamped.has(cell):
+		return
+	_squad_stamped[cell] = true
+	_stamp(cell, SQUAD_SCORCH_RADIUS_M, SQUAD_SCORCH_CORE_M, SQUAD_SCORCH_DARK)
+
+
+func has_squad_scorch(cell: Vector2i) -> bool:
+	return _squad_stamped.has(cell)
+
+
 ## Слід, який повалена опора чи паркан лишає на розмоклій землі: темна смуга ~1 м завширшки вздовж
 ## a→b (світові точки, тайли) з рваним краєм; та сама темрява R, що в плями, але слабка (до SCUFF_DARK),
 ## щоб читалась як мокра прим'ята земля, а не як згарище. Той самий туман `seen`, що в плями.
@@ -121,7 +140,7 @@ func _flush_upload() -> void:
 	_tex.update(_img)
 
 
-func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:
+func _stamp(cell: Vector2i, radius_m: float, core_m: float, dark: float = 1.0) -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = hash(cell)
 	noise.frequency = 1.0
@@ -148,6 +167,7 @@ func _stamp(cell: Vector2i, radius_m: float, core_m: float) -> void:
 			var v: float = 1.0 - smoothstep(core_px, r_px, d_eff)
 			var f: float = 0.5 + 0.5 * fine.get_noise_2d(float(p.x), float(p.y))
 			v = clampf(v * (0.85 + 0.3 * f), 0.0, 1.0) if dist > 1.5 else v
+			v *= dark
 			var ash: float = smoothstep(0.72, 0.85, f) * v
 			var old: Color = _img.get_pixelv(p)
 			_img.set_pixelv(p, Color(maxf(old.r, v), old.g, old.b, maxf(old.a, ash)))
