@@ -1,0 +1,39 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/ui/replay_overlay.gd" id="1_overlay"]
+
+[node name="ReplayOverlay" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+visible = false
+script = ExtResource("1_overlay")
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 56
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 56
+theme_override_constants/margin_bottom = 24
+
+[node name="Layout" type="VBoxContainer" parent="SafeArea"]
+mouse_filter = 2
+
+[node name="TurnLabel" type="Label" parent="SafeArea/Layout"]
+unique_name_in_owner = true
+
+[node name="Spacer" type="Control" parent="SafeArea/Layout"]
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="SkipButton" type="Button" parent="SafeArea/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 56)
+size_flags_horizontal = 8
+text = "replay_skip"

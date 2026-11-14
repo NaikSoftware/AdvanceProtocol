@@ -57,6 +57,7 @@ var _hp_bars := UnitHpBars.new()
 @onready var _hud: Hud = %Hud
 @onready var _gate: HandoverGate = %HandoverGate
 @onready var _pause: PauseMenu = %PauseMenu
+@onready var _replay_overlay: ReplayOverlay = %ReplayOverlay
 @onready var _ui: CanvasLayer = $UI
 @onready var _weather: WeatherRig = $WeatherRig
 
@@ -98,6 +99,13 @@ var _shown_viewer: int = 0
 ## null, екран читає живий матч і активного гравця.
 var _replay_state: BattleState = null
 var _replay_viewer: int = -1
+## Стан перед командою такту, що грається: з нього береться HP юніта, який щойно вийшов на екран.
+var _replay_before: BattleState = null
+## Номер повтору: кінець (сам, пропуском чи виходом екрана) його міняє, і такт, що прокинеться
+## після цього, нічого вже не робить.
+var _replay_run: int = 0
+## Вид клітинок, з якого зараз намальована дошка (BoardView.rebuild_tiles).
+var _drawn_tiles: PackedInt32Array = PackedInt32Array()
 ## Клітинки, над якими зараз розчинено дахи (юніти на дошці).
 var _shown_cells: Array[Vector2i] = []
 ## Шрами бою на землі; маска — розвідане того, хто дивиться.
@@ -143,6 +151,10 @@ const LONG_PRESS_SEC: float = 0.5
 ## IDLE_AFTER_S без натисків, руху камери й анімації подій кадр обмежено до IDLE_FPS.
 const IDLE_FPS: int = 30
 const IDLE_AFTER_S: float = 1.0
+## Повтор ходів противників грає сам, прискорено (Engine.time_scale), а тап прискорює поточний такт ще
+## дужче. Ніщо в ньому не залежить від швидкості гравця (§1.1): це показ, а не правило.
+const REPLAY_SPEED: float = 2.5
+const REPLAY_FAST_FORWARD: float = 20.0
 
 ## Крок зуму коліщатка/пінчу за одну подію. zoom_by() сам клемпить
 ## (IsoCameraRig.MIN_ZOOM..MAX_ZOOM) — тут лише симетричний множник туди й
@@ -219,6 +231,7 @@ func _ready() -> void:
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
+	_replay_overlay.skip_pressed.connect(_on_replay_skip)
 	_camera_rig.view_changed.connect(_follow_weather)
 	_camera_rig.view_changed.connect(_follow_forest)
 	_follow_forest()
@@ -362,6 +375,7 @@ func _wire_view(board: Board) -> void:
 	_scars = ScarMap.new(Vector2i(board.width, board.height))
 	_board_view.scar_map = _scars
 	_board_view.build(board)
+	_drawn_tiles = board.tiles.duplicate()
 	# Мирний дим 1–3 димарів і 1–2 руїн: мапа та сама — і вибір той самий.
 	if _board_view.props() != null:
 		var props: PropLayer = _board_view.props()
@@ -379,8 +393,8 @@ func _wire_view(board: Board) -> void:
 	_path_overlay = PathOverlay.new(_board_view)
 	_target_overlay = TargetOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
-		func() -> void: _board_view.rebuild_tiles(_state().board),
-		_on_wreck_left, _on_wreck_removed, _on_unit_found, _on_cell_entered)
+		func() -> void: _show_tiles(_state().board),
+		_on_wreck_left, _on_wreck_removed, _on_unit_found, _on_cell_entered, _on_unit_appeared, _on_unit_vanished)
 	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
@@ -425,6 +439,10 @@ func _follow_weather() -> void:
 func _exit_tree() -> void:
 	if _event_player != null:
 		_event_player.stop()
+	if _replay_state != null:
+		# Екран пішов посеред повтору (пауза -> зберегти й вийти): прискорення — стан усього процесу.
+		_replay_run += 1
+		Engine.time_scale = 1.0
 	Engine.max_fps = _prev_max_fps
 	if get_tree() != null:
 		get_tree().quit_on_go_back = _prev_quit_on_go_back
@@ -463,8 +481,9 @@ func _open_settings() -> void:
 ## Здача йде тим самим шляхом, що й кінець ходу: команда → події → програвач.
 ## 2 гравці — MatchEnded → результат; 3 — TurnStarted → гейт наступного гравця.
 func _on_surrender() -> void:
-	# Заблоковано — пауза лишається відкритою, натискання не зникає мовчки.
-	if _event_player.is_playing() or _match_service.state.is_over():
+	# Заблоковано — пауза лишається відкритою, натискання не зникає мовчки. На повторі теж: між
+	# тактами програвач вільний, а на дошці ще копія.
+	if _event_player.is_playing() or _replay_state != null or _match_service.state.is_over():
 		return
 	_pause.hide()
 	var err: String = _match_service.submit(ConcedeCommand.create())
@@ -574,6 +593,9 @@ func _clear_all_crosshairs() -> void:
 ## жест — він теж потребує такої ж явної перевірки, Control-дерево його не
 ## прикриє.
 func _unhandled_input(event: InputEvent) -> void:
+	if _replay_state != null:
+		_replay_input(event)
+		return
 	if event is InputEventMouseButton:
 		_on_mouse_button(event as InputEventMouseButton)
 	elif event is InputEventMouseMotion:
@@ -890,7 +912,142 @@ func _state() -> BattleState:
 
 ## Чиє знання зараз на дошці. Дії (хід, гейт, команди) читають active_player зі справжнього стану.
 func _viewer() -> int:
-	return _replay_viewer if _replay_state != null else _state().active_player
+	if _replay_state != null:
+		# −1 як індекс мовчки читав би туман останнього гравця — витік, а не помилка.
+		assert(_replay_viewer >= 0, "повтор без глядача")
+		return _replay_viewer
+	return _state().active_player
+
+
+## Копія повтору й глядач ставляться й знімаються лише разом.
+func _set_replay(state: BattleState, viewer: int) -> void:
+	assert(state == null or viewer >= 0, "повтор без глядача")
+	_replay_state = state
+	_replay_viewer = viewer if state != null else -1
+
+
+## Перший кадр повтору — світ глядача на початку відрізка: юніти з набору фільтра на тих клітинках,
+## де вони тоді стояли, уламки, міни, мости й ліс зі знімка. Усе це й камера на першій видимій дії —
+## ДО зняття гейта (контракт game/ui/handover_gate.gd): камера попереднього гравця не показується ні
+## кадру. Шрами, розчавлені пропси й дахи будинків тримає екран, а не знімок, тож вони лишаються як є.
+func _begin_replay(replay: ReplayFilter.Result) -> void:
+	_set_replay(replay.start, _match_service.state.active_player)
+	_replay_before = replay.start
+	# Повторена техніка не валить нічого нового: усе, що вона повалила, вже лежить.
+	_vehicle_moves.clear()
+	_rebuild_wrecks()
+	_show_tiles(replay.start.board)
+	_rebuild_units_for_active_player(true, replay.on_screen_start)
+	var focus: Vector2i = replay.beats[0].focus
+	if not _fx_warmed:
+		_warm_up_fx(focus)
+	_hud.visible = false
+	_replay_overlay.begin(replay.beats.size())
+	_camera_rig.center_on(focus)
+	_gate.visible = false
+	_play_replay(replay)
+
+
+## Такти грають самі, прискорено. Стан на екрані — уже після команди такту, як і в живій грі, поки
+## грають її події; юнітів між тактами не перебудовують.
+func _play_replay(replay: ReplayFilter.Result) -> void:
+	var run: int = _replay_run
+	for i in replay.beats.size():
+		var beat: ReplayFilter.Beat = replay.beats[i]
+		Engine.time_scale = REPLAY_SPEED
+		_set_replay(beat.after, _replay_viewer)
+		_replay_overlay.show_beat(i, beat.actor, beat.turn)
+		# Твін, убитий пропуском, finished не подає: такт тоді просто лишається спати.
+		await _camera_rig.fly_to(beat.focus).finished
+		if run != _replay_run:
+			return
+		_event_player.play(beat.events)
+		if _event_player.is_playing():
+			await _event_player.playback_finished
+		if run != _replay_run:
+			return
+		_sync_replay_views(beat.on_screen)
+		_replay_before = beat.after
+	_end_replay()
+
+
+## Кінець повтору, сам чи пропуском, — рівно раз: справжній стан, HUD і камера на першому юніті, як
+## після гейта без повтору.
+func _end_replay() -> void:
+	if _replay_state == null:
+		return
+	_replay_run += 1
+	Engine.time_scale = 1.0
+	_set_replay(null, -1)
+	_replay_before = null
+	_replay_overlay.finish()
+	BattleFx.clear_all(get_tree())
+	_cancel_falls()
+	_show_tiles(_state().board)
+	_rebuild_units_for_active_player(true)
+	_rebuild_wrecks()
+	_hud.visible = true
+	_hud.bind(_state())
+	_camera_rig.center_on(_first_unit_cell(_viewer()))
+
+
+func _on_replay_skip() -> void:
+	if _replay_state == null:
+		return
+	_event_player.cancel()
+	_end_replay()
+
+
+## Повтор: дошка не приймає нічого, крім тапу, що прискорює поточний такт. Ні вибору, ні огляду, ні
+## руху камери: камеру веде повтор, і перетягування билося б із його польотом.
+func _replay_input(event: InputEvent) -> void:
+	var mb := event as InputEventMouseButton
+	var st := event as InputEventScreenTouch
+	if (mb != null and mb.button_index == MOUSE_BUTTON_LEFT and not mb.pressed) \
+			or (st != null and not st.pressed and not st.canceled):
+		Engine.time_scale = REPLAY_FAST_FORWARD
+
+
+## Повтор: юніт виходить на екран лише так — набір фільтра, не видимість на копії. Вузол стає на
+## клітинку появи з HP до команди такту: стан на екрані вже після неї, і шкода показалась би раніше
+## пострілу.
+func _on_unit_appeared(unit_id: int, pos: Vector2i, facing: int) -> void:
+	var was: Unit = _replay_before.get_unit(unit_id)
+	var shown := Unit.create(unit_id, was.type_id, was.owner, pos, facing)
+	shown.hp = was.hp
+	shown.drones_left = was.drones_left
+	_on_unit_vanished(unit_id)
+	_add_unit_view(shown)
+	_shown_cells.append(pos)
+	_board_view.set_reveal_cells(_shown_cells)
+
+
+func _on_unit_vanished(unit_id: int) -> void:
+	var view: UnitView = unit_view_for(unit_id)
+	if view == null:
+		return
+	view.free()
+	_unit_views.erase(unit_id)
+
+
+## Після такту на дошці рівно набір фільтра: загиблий у такті юніт сходить (перебудови між тактами
+## нема), а дахи розчинені над тими, хто намальований.
+func _sync_replay_views(on_screen: Dictionary) -> void:
+	for id: int in _unit_views.keys():
+		if not on_screen.has(id):
+			_on_unit_vanished(id)
+	_shown_cells.clear()
+	for id: int in _unit_views:
+		_shown_cells.append(_state().get_unit(id).pos)
+	_board_view.set_reveal_cells(_shown_cells)
+
+
+## Перебудова дошки повна й дорога (§8): лише коли вид клітинок інший, ніж намальований.
+func _show_tiles(board: Board) -> void:
+	if board.tiles == _drawn_tiles:
+		return
+	_drawn_tiles = board.tiles.duplicate()
+	_board_view.rebuild_tiles(board)
 
 
 func _unit_for(unit_id: int) -> Unit:
@@ -905,7 +1062,7 @@ func _unit_for(unit_id: int) -> Unit:
 ## вирішили правила (EndTurnCommand.validate() → ERR_MATCH_OVER). assert нижче
 ## не пом'якшено навмисно: він стереже розбіжність вигляду з правилами.
 func _on_end_turn_pressed() -> void:
-	if _event_player.is_playing() or _match_service.state.is_over():
+	if _event_player.is_playing() or _replay_state != null or _match_service.state.is_over():
 		return
 	var err: String = _match_service.submit(EndTurnCommand.create())
 	assert(err == "", "HUD дозволив кінець ходу, який core/ відхилив: %s" % err)
@@ -986,6 +1143,10 @@ func _on_events_ready() -> void:
 func _on_gate_confirmed() -> void:
 	BattleFx.clear_all(get_tree())
 	_cancel_falls()
+	var replay: ReplayFilter.Result = _match_service.replay_for(_match_service.state.active_player)
+	if replay != null:
+		_begin_replay(replay)
+		return
 	# Дахи — одразу в стан нового гравця, без переходу (§3.5): див. PropLayer.set_reveal_cells.
 	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
@@ -1005,8 +1166,9 @@ func _clear_unit_views() -> void:
 ## рівно ті вузли, які known_occupied_map(активного) дозволяє знати. Юніт, що
 ## щойно рухався, устигає доанімуватись (play() уже дочекався його твіна) до
 ## виклику цієї функції, тож перебудова не рве рух на середині кроку.
-## instant — розчинення дахів без переходу (гейт передачі й перший показ).
-func _rebuild_units_for_active_player(instant: bool = false) -> void:
+## instant — розчинення дахів без переходу (гейт передачі й перший показ). drawn — лише на повторі:
+## id юнітів, яких дав фільтр (ReplayFilter.Result.on_screen_start).
+func _rebuild_units_for_active_player(instant: bool = false, drawn: Dictionary = {}) -> void:
 	var state: BattleState = _state()
 	_clear_unit_views()
 	# §3.11: міни — той самий знімок знання активного гравця, що й юніти, і в ті
@@ -1017,15 +1179,17 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	if _scars != null:
 		_scars.show_for(state.vision[_viewer()])
 
-	var known: Dictionary = state.known_occupied_map(_viewer())
-	for pos in known:
-		var unit: Unit = state.get_unit(known[pos])
+	# Повтор малює набір фільтра: посеред схованого маршруту загону копія його бачить (ReplayFilter.Beat).
+	var ids: Array = drawn.keys() if _replay_state != null else state.known_occupied_map(_viewer()).values()
+	# Дах над показаним юнітом розчиняється — і лише над показаним: невидимий ворог під будинком
+	# прозорим дахом себе не видає.
+	_shown_cells.clear()
+	for id: int in ids:
+		var unit: Unit = state.get_unit(id)
 		if unit == null:
 			continue
 		_add_unit_view(unit)
-	# Дах над показаним юнітом розчиняється — і лише над показаним: невидимий ворог під будинком
-	# прозорим дахом себе не видає.
-	_shown_cells.assign(known.keys())
+		_shown_cells.append(unit.pos)
 	_board_view.set_reveal_cells(_shown_cells, instant)
 	var crushed: Array[Vector2i] = []
 	for pos: Vector2i in _crushed_truth:
@@ -1053,7 +1217,9 @@ func _add_unit_view(unit: Unit) -> void:
 func _on_unit_found(unit_id: int) -> void:
 	var state: BattleState = _state()
 	var unit: Unit = state.get_unit(unit_id)
-	if unit == null or not unit.is_alive() or _unit_views.has(unit_id) or not state.can_see_unit(_shown_viewer, unit):
+	# На повторі на екран виводить лише Appeared: видимість на копії бреше посеред схованого маршруту.
+	if _replay_state != null or unit == null or not unit.is_alive() or _unit_views.has(unit_id) \
+			or not state.can_see_unit(_shown_viewer, unit):
 		return
 	_add_unit_view(unit)
 	_shown_cells.append(unit.pos)
