@@ -134,6 +134,7 @@ func test_show_preview_shot_displays_the_payload_sector_and_both_damage_bounds()
 
 	assert_eq(_label("PreviewSectorValue").text, tr("hud_sector_rear"))
 	assert_true(_label("PreviewSectorValue").is_visible_in_tree())
+	assert_true((hud.get_node("%PreviewPlate") as Control).is_visible_in_tree(), "плита-хост показана: діти під SubViewport самі цього не доводять")
 	assert_eq(_label("PreviewDamageValue").text, "37–91", "обидві межі як є")
 	var glyph: ArmourGlyph = (hud.get_node("%PreviewPlate") as PreviewPlate).armour_glyph
 	assert_eq(glyph.sector(), UnitTypes.ArmourSector.REAR, "§3.4: на глифі горить саме той сектор, у який піде постріл")
@@ -181,12 +182,14 @@ func test_show_preview_move_shows_ap_left_and_leaves_no_shot_fields_behind() -> 
 	hud.bind(state)
 	hud.show_preview(_shot_preview(UnitTypes.ArmourSector.REAR, 37, 91))
 	assert_true(_label("PreviewSectorValue").is_visible_in_tree(), "передумова: прев'ю пострілу показане")
+	assert_true((hud.get_node("%PreviewPlate") as Control).is_visible_in_tree(), "плита-хост показана: діти під SubViewport самі цього не доводять")
 
 	hud.show_preview(_move_preview(18))
 
 	assert_eq(_label("PreviewApValue").text, "18", "залишок AP — числом")
 	assert_eq(_label("PreviewApMax").text, "/%d" % int(UnitTypes.get_type(5)["max_ap"]), "знаменник — запас ходу типу")
 	assert_true(_label("PreviewApValue").is_visible_in_tree())
+	assert_true((hud.get_node("%PreviewPlate") as Control).is_visible_in_tree(), "плита-хост показана: діти під SubViewport самі цього не доводять")
 	assert_false(_label("PreviewSectorValue").is_visible_in_tree(), "сектор попереднього прев'ю не лишається")
 	assert_false(_label("PreviewDamageValue").is_visible_in_tree())
 	assert_false(hud.get_node("%PreviewTargetRow").visible, "рух не має ряду цілі")
@@ -408,6 +411,7 @@ func test_controller_drives_the_hud_and_the_confirm_button_is_the_only_way_to_ac
 	controller.select_unit(u)
 	controller.tap_cell(Vector2i(4, 3))
 	assert_true(_label("PreviewApValue").is_visible_in_tree(), "action_preview від справжнього контролера читається HUD'ом")
+	assert_true((hud.get_node("%PreviewPlate") as Control).is_visible_in_tree(), "плита-хост показана: діти під SubViewport самі цього не доводять")
 	assert_true((hud.get_node("%ConfirmButton") as Button).disabled, "поки плита не запеклася, підтвердити нічого")
 	await get_tree().process_frame
 	await get_tree().process_frame

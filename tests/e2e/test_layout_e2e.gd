@@ -126,6 +126,7 @@ func test_full_hud_fits_every_size(p = use_parameters(_sizes_by_locale())) -> vo
 	await _tap_button(repair)
 	await _tap(HURT)
 	assert_true(_node("%PreviewRepairBox").is_visible_in_tree(), "прев'ю ремонту: %s" % size)
+	assert_true((_node("%PreviewPlate") as Control).is_visible_in_tree(), "плита-хост показана: діти під SubViewport самі цього не доводять")
 	# Golden T9: повний AP інженера — межі [20, 43].
 	assert_eq((_node("%PreviewHealValue") as Label).text, "20–43")
 	_assert_fits(size, "ремонт %s" % size)
@@ -171,6 +172,7 @@ func test_drone_and_threat_floor_fit_every_size(p = use_parameters(_sizes_by_loc
 	assert_true(_node("%ThreatFloorLabel").is_visible_in_tree(), "нижня межа з вибором: %s" % size)
 	assert_eq((_node("%ThreatFloorLabel") as Label).text, tr("hud_threat_floor_drone"))
 	assert_true(_node("%PreviewShotBox").is_visible_in_tree(), "прев'ю пострілу: %s" % size)
+	assert_true((_node("%PreviewPlate") as Control).is_visible_in_tree(), "плита-хост показана: діти під SubViewport самі цього не доводять")
 	_assert_fits(size, "огляд ворога + постріл %s" % size)
 	_e2e.release(ENEMY_INF)
 

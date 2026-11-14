@@ -6,7 +6,7 @@ extends RefCounted
 ## невидимого юніта.
 ##
 ## Тверді перешкоди: чужі юніти (з їхніми позначками), хром HUD — кожне +8 dp; лінія вогню;
-## полігони (клітинки цілей верби, призначення й шлях руху) +4 dp — для тега й для лідера.
+## полігони (клітинки цілей верби, призначення й шлях руху) +5 dp — для тега й для лідера.
 ## М'яка ціна: контури зон і дуги кілець під тегом (вага 1500), лідер, тіснота до чужих юнітів.
 ##
 ## shortcut: сітка позначок і полігонів — растр із кроком 4 dp (довжина контуру × 2 dp, а не
@@ -36,7 +36,7 @@ const NEAR_OTHER_PER_DP: float = 60.0
 const CELL: float = 4.0
 const LINE_WIDTH: float = 2.0
 const _SAMPLES: int = 12
-const END_CLEAR: float = 4.0
+const END_CLEAR: float = 2.0
 ## Лінія лідера, що перетинає клітинку, дорожча за будь-яку чисту; кінець у клітинці — ще дорожчий.
 const CROSS_COST: float = 400.0
 const END_IN_CELL_COST: float = 2000.0
@@ -63,12 +63,15 @@ var _gw: int = 0
 var _gh: int = 0
 var _hard: PackedByteArray = PackedByteArray()
 var _hard_sat: PackedInt32Array = PackedInt32Array()
-## Ті самі полігони точно (без растру): лінія лідера — на 4 dp плюс пів-ширини лінії від клітинки, квадрат кінця — на
-## півдіагоналі квадрата й ще 2 dp запасу. Растр із кроком 4 dp для лінії завгрубий: він закривав щілини між клітинками.
+## Ті самі полігони точно (без растру): лінія лідера — на 5 dp плюс пів-ширини лінії від клітинки, квадрат кінця — на
+## півдіагоналі квадрата й ще END_CLEAR (2 dp) запасу. Растр із кроком 4 dp для лінії завгрубий: він закривав щілини між клітинками.
 var _cells_raw: Array[PackedVector2Array] = []
-## Полігони + 4 dp точно: растр із кроком 4 dp пропускає гострий кут клітинки, і тег міг сісти на нього.
+## Полігони + POLY_GROW точно: растр із кроком 4 dp пропускає гострий кут клітинки, і тег міг сісти на нього.
 var _cells_grown: Array[PackedVector2Array] = []
 var _cells_line: Array[PackedVector2Array] = []
+## Охопні коробки _cells_grown і _cells_line: точний перетин полігонів дорогий, а переважна більшість кандидатів далеко.
+var _grown_boxes: Array[Rect2] = []
+var _line_boxes: Array[Rect2] = []
 var _cells_end: Array[PackedVector2Array] = []
 ## Лідер залежить лише від точки t на краю тега, а різних t на сітці кандидатів у рази менше, ніж прямокутників.
 var _leaders: Dictionary = {}
@@ -105,6 +108,10 @@ func _init(scene: Dictionary) -> void:
 		_cells_grown.append_array(Geometry2D.offset_polygon(poly, POLY_GROW, Geometry2D.JOIN_MITER))
 		_cells_line.append_array(Geometry2D.offset_polygon(poly, POLY_GROW + LINE_WIDTH / 2.0, Geometry2D.JOIN_MITER))
 		_cells_end.append_array(Geometry2D.offset_polygon(poly, sqrt(2.0) * END_HALF + END_CLEAR, Geometry2D.JOIN_MITER))
+	for g in _cells_grown:
+		_grown_boxes.append(_bounds(g))
+	for g in _cells_line:
+		_line_boxes.append(_bounds(g))
 	_rasterise_polys(scene.get("polys", []))
 	_rasterise_marks(scene.get("marks", []))
 
@@ -152,10 +159,19 @@ func is_legal(r: Rect2, relax: int = 0) -> bool:
 
 func _hits_grown(r: Rect2) -> bool:
 	var box := PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
-	for g in _cells_grown:
-		if not Geometry2D.intersect_polygons(box, g).is_empty():
+	for i in _cells_grown.size():
+		if _grown_boxes[i].intersects(r) and not Geometry2D.intersect_polygons(box, _cells_grown[i]).is_empty():
 			return true
 	return false
+
+
+static func _bounds(g: PackedVector2Array) -> Rect2:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for v in g:
+		lo = lo.min(v)
+		hi = hi.max(v)
+	return Rect2(lo, hi - lo)
 
 
 func needs_leader(r: Rect2) -> bool:
@@ -191,13 +207,18 @@ func _leader_from(t: Vector2) -> PackedVector2Array:
 		for i in _ends.size():
 			_ends_static[i] = _static_cost(_ends[i])
 	var best_cost: float = INF
+	# Нижня межа ціни — відстань плюс статична частина: беремо кінці за її зростанням і зупиняємось, щойно
+	# межа не менша за найкращу ціну, тож дорогі перевірки перетину виконуються для кількох кінців, а не для всіх.
+	var bounds: Array[float] = []
 	for i in _ends.size():
+		bounds.append(t.distance_to(_ends[i]) + _ends_static[i])
+	while not bounds.is_empty():
+		var i: int = bounds.find(bounds.min())
+		if bounds[i] >= best_cost:
+			break
+		bounds[i] = INF
 		var q: Vector2 = _ends[i]
-		var d: float = t.distance_to(q)
-		# Ціна не менша за відстань і статичну частину: далі шукати нема сенсу.
-		if d + _ends_static[i] >= best_cost:
-			continue
-		var cost: float = d + _end_cost(t, q, _ends_static[i])
+		var cost: float = t.distance_to(q) + _end_cost(t, q, _ends_static[i])
 		if cost < best_cost:
 			best_cost = cost
 			u = q
@@ -266,7 +287,11 @@ func _in_any(p: Vector2, polys: Array[PackedVector2Array]) -> bool:
 
 func _crosses_cells(a: Vector2, b: Vector2) -> bool:
 	var line := PackedVector2Array([a, b])
-	for g in _cells_line:
+	var seg: Rect2 = Rect2(a, Vector2.ZERO).expand(b).grow(0.01)
+	for i in _cells_line.size():
+		if not _line_boxes[i].intersects(seg):
+			continue
+		var g: PackedVector2Array = _cells_line[i]
 		if Geometry2D.is_point_in_polygon(a, g) or Geometry2D.is_point_in_polygon(b, g) \
 				or not Geometry2D.intersect_polyline_with_polygon(line, g).is_empty():
 			return true

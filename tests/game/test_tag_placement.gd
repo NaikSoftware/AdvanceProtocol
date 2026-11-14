@@ -121,9 +121,9 @@ func test_hold_card_takes_the_corner_away_from_the_finger() -> void:
 
 func test_ring_of_cells_lets_the_leader_cross_them_before_the_tag_is_hidden() -> void:
 	# Чотири клітинки щільно довкола юніта без щілини: лідер, що не перетинає жодної, неможливий, але тег
-	# не зникає — AP інженера потрібен саме тут. Тег лишається поза клітинками, лідер їх перетинає, а
-	# квадрат його кінця стоїть у порожній середині, не ближче 2 dp до клітинки.
-	var cells: Array[Rect2] = [Rect2(440, 170, 120, 40), Rect2(440, 260, 120, 40), Rect2(440, 210, 30, 50), Rect2(530, 210, 30, 50)]
+	# не зникає — AP інженера потрібен саме тут. Усі кінці лежать ближче 7,5 dp до клітинки (півдіагональ
+	# квадрата плюс запас 4 dp), проте чистих від неї на 2 dp квадрата вистачає: рівень 1 приймає такий кінець.
+	var cells: Array[Rect2] = [Rect2(440, 170, 120, 43.5), Rect2(440, 256.5, 120, 43.5), Rect2(440, 213.5, 33.5, 43), Rect2(526.5, 213.5, 33.5, 43)]
 	var ring: Array[PackedVector2Array] = []
 	for c: Rect2 in cells:
 		ring.append(PackedVector2Array([c.position, Vector2(c.end.x, c.position.y), c.end, Vector2(c.position.x, c.end.y)]))
@@ -139,6 +139,43 @@ func test_ring_of_cells_lets_the_leader_cross_them_before_the_tag_is_hidden() ->
 	for c: Rect2 in cells:
 		assert_false(square.intersects(c.grow(2.0)), "кінець лідера не в клітинці %s і не на її краю" % c)
 	assert_false(p.is_legal(pick["rect"]), "суворі правила цього місця не дають")
+
+
+## Ті самі клітинки інженера, стиснуті довкола юніта (менший зум); напис HP лишається того ж розміру.
+func _shrunk_engineer_scene(k: float) -> Dictionary:
+	var s: Dictionary = _engineer_scene()
+	var c: Vector2 = (s["unit"] as Rect2).get_center()
+	var sc := func(v: Vector2) -> Vector2: return c + (v - c) * k
+	var polys: Array[PackedVector2Array] = []
+	for poly: PackedVector2Array in s["polys"]:
+		var q := PackedVector2Array()
+		for v in poly:
+			q.append(sc.call(v))
+		polys.append(q)
+	s["polys"] = polys
+	var core_poly := PackedVector2Array()
+	for v in s["core_poly"]:
+		core_poly.append(sc.call(v))
+	s["core_poly"] = core_poly
+	for key: String in ["unit", "core"]:
+		var r: Rect2 = s[key]
+		s[key] = Rect2(sc.call(r.position), r.size * k)
+	var label: Rect2 = s["label"]
+	s["label"] = Rect2(sc.call(label.position), label.size)
+	return s
+
+
+func test_shrunk_engineer_cells_never_put_the_tag_on_them() -> void:
+	for k: float in [0.6, 0.7, 0.8]:
+		var scene: Dictionary = _shrunk_engineer_scene(k)
+		var p := TagPlacement.new(scene)
+		var pick: Dictionary = p.best()
+		assert_true(pick["found"], "k=%s" % k)
+		assert_lte(p.relax_used, 1, "k=%s: кінець, чистий на 2 dp, є — рівень 2 не потрібен" % k)
+		for cell: PackedVector2Array in scene["polys"]:
+			var box := PackedVector2Array([(pick["rect"] as Rect2).position, Vector2((pick["rect"] as Rect2).end.x, (pick["rect"] as Rect2).position.y),
+				(pick["rect"] as Rect2).end, Vector2((pick["rect"] as Rect2).position.x, (pick["rect"] as Rect2).end.y)])
+			assert_true(Geometry2D.intersect_polygons(box, cell).is_empty(), "k=%s: тег поза клітинкою" % k)
 
 
 ## Клітинки справжнього інженера (знято з кадра): чотири ромби довкола моделі, що сходяться в кутах.

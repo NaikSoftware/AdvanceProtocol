@@ -227,7 +227,7 @@ func test_engineer_tag_keeps_its_spot_when_a_verb_is_armed() -> void:
 	hud._update_tag()
 	var ms: float = (Time.get_ticks_usec() - t0) / 1000.0
 	print("engineer tag full placement: %.1f ms" % ms)
-	assert_lt(ms, 250.0, "повний перерахунок тега інженера")
+	assert_lt(ms, 150.0, "повний перерахунок тега інженера (бюджет обробника подій)")
 
 
 ## Вибір танка → тап по ворогові (прев'ю пострілу): місце тега лишається, поки воно законне; лінія вогню його не зачіпає.

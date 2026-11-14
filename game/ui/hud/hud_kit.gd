@@ -95,14 +95,19 @@ static func group_content(button: Button, icon_px: float) -> void:
 	center.add_child(row)
 	var mark := icon(tex, Vector2(icon_px, icon_px), false)
 	row.add_child(mark)
-	var word := Label.new()
-	word.text = key
-	word.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	word.add_theme_font_override("font", button.get_theme_font(&"font"))
-	word.add_theme_font_size_override("font_size", button.get_theme_font_size(&"font_size"))
-	row.add_child(word)
+	# Кнопка без підпису (пауза) — лише значок: порожній підпис із проміжком зсунув би його з центру.
+	var word: Label = null
+	if not key.is_empty():
+		word = Label.new()
+		word.text = key
+		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		word.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		word.add_theme_font_override("font", button.get_theme_font(&"font"))
+		word.add_theme_font_size_override("font_size", button.get_theme_font_size(&"font_size"))
+		row.add_child(word)
 	var tint := func() -> void:
-		word.add_theme_color_override("font_color", button.get_theme_color(&"font_disabled_color" if button.disabled else &"font_color"))
+		if word != null:
+			word.add_theme_color_override("font_color", button.get_theme_color(&"font_disabled_color" if button.disabled else &"font_color"))
 		mark.modulate = button.get_theme_color(&"icon_disabled_color" if button.disabled else &"icon_normal_color")
 	tint.call()
 	button.draw.connect(tint)

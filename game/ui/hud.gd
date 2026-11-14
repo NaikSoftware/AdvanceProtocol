@@ -114,7 +114,11 @@ func _ready() -> void:
 	_engineer_panel.refused.connect(show_toast)
 	_toast.custom_minimum_size.y = 34.0
 	_square_pause_button()
-	# 90 % плити з 9-slice: лінійний фільтр розмиває край у 3 px, а решта плит має чітку смужку.
+	# Плита 9-slice малюється фільтром кнопки: NEAREST лишає край у 1 dp чітким, а значок і підпис живуть
+	# у LINEAR-дітях групи, інакше стрілка значка сходинкується.
+	HudKit.group_content(_end_turn_button, 20.0)
+	HudKit.group_content(_pause_button, 22.0)
+	HudKit.group_content(_cancel_button, 20.0)
 	for b: Button in [_end_turn_button, _pause_button, _cancel_button]:
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_tag = UnitTag.new()

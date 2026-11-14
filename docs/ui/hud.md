@@ -149,22 +149,24 @@ and event batches. The tag follows its unit on pan; it is hidden while an event 
 
 1. **Hard obstacles.** Every other visible unit's box with its marks, all HUD chrome at its docked
    place (each grown `OBSTACLE_GROW` 8), the line of fire to a previewed target (grown 10), the safe
-   area, and polygons grown `POLY_GROW` 4: an engineer's four target cells from selection on, and a
+   area, and polygons grown `POLY_GROW` 5: an engineer's four target cells from selection on, and a
    pending move's path and destination. The tag stays ≥ `MIN_GAP` 8 from its own unit.
 2. **Beside, no leader.** Each side of the unit box at 8 and 12 dp, slid in 11 steps, plus the
    corners. A leaderless tag must be ≥ 8 dp nearer its own unit than any other.
 3. **With a leader.** Any 4-dp grid position more than `LEAD_AT` 12 dp from the unit box, with a
    leader ≤ `MAX_LEAD` 60 dp. The leader is a 1-dp bone line ending in a 5 × 5 square on the unit's
-   HP bar + model outline (`UnitScreenBox.core_poly`), never on the engine's HP label. It stays 4 dp
+   HP bar + model outline (`UnitScreenBox.core_poly`), or on a row of points just above the engine's
+   HP label (the gap the engineer's cells leave open), never on the label itself. It stays 4 dp
    off other units and **does not cross a polygon from rule 1**, so its end never reads as a
    waypoint. Only when no spot exists at that level may the leader cross an engineer's target cell;
-   its end square then still stays out of every target cell (cells grown 2 dp) and lands on the
+   its end square then still stays out of every target cell (square's half-diagonal plus `END_CLEAR` 2 dp from the cell) and lands on the
    unit-box edge farthest from them. The last resort ignores the polygons for the tag.
 4. **Score, lowest wins.** Contour and ring overlap under the tag weighs most (`MARK_WEIGHT`), then
    contour corners under it, distance, a leader, crowding another unit or the chrome, and reading
    nearer another unit than its own. The weights are the constants at the top of `TagPlacement`.
 5. **Hysteresis.** The tag keeps its offset from its unit while that rect stays legal at the level
-   it was found at, and moves only when it becomes illegal. Because an engineer's target cells are
+   it was found at, and moves when it becomes illegal or when a spot kept under relaxed rules has a
+   stricter level that now finds one. Because an engineer's target cells are
    obstacles from selection on, arming a verb never moves its tag.
 
 With no legal spot at any level the tag hides rather than covering a unit or a plate.
@@ -202,7 +204,8 @@ movement zones on the board and never appear in the chrome. Player colours mark 
 are **never a text colour**.
 
 **Plates** are 8 × 8 9-slice textures (`game/ui/theme/plate*.png`, `StyleBoxTexture`, margins 3):
-`texture_filter = NEAREST` on each plate `Control`, `LINEAR` on icons. A linear-filtered plate shows
+`texture_filter = NEAREST` on each plate `Control`, `LINEAR` on icons and labels. A plate button
+(`HudKit.group_content`) keeps its icon and label in `LINEAR` children, since a button draws its native icon with its own filter. A linear-filtered plate shows
 a 2–3 px gradient at its edge instead of a crisp 1-dp line.
 
 **One family: Fira Sans Condensed** 500 / 600 / 700. Every number uses a `FontVariation` with
@@ -216,7 +219,7 @@ separate.
 HUD uk strings use `ʼ` (U+02BC) as the apostrophe.
 
 **Draw calls are a hard budget:** selecting a unit may add at most 4 and a shot preview at most 8
-over the same scene without the HUD. The tag and the preview plate are `HudBake` plates for this
+over the same scene on the old HUD (the commit before the rebuild, `922fa30e`; the measured baseline is in the header of `tools/hud_budget.gd`). The tag and the preview plate are `HudBake` plates for this
 reason. Measure one run at a time with `tools/godot_run.sh --solo --path . res://tools/hud_budget.tscn
 -- <map>`; its header holds the baseline.
 
