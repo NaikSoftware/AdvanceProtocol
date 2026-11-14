@@ -168,6 +168,11 @@ cast shadow at least 3 L* darker than open meadow, one sample stands there, meas
 shaded ground; tree shadows that faint add nothing to measure. A unit under the canopy itself, or
 with a pole or prop between it and the camera, is not a contrast sample. One tool measures every
 model: `tools/unit_contrast_gate.py`.
+The towed guns (field gun and howitzer) are measured on their solid parts only: their trail legs
+and barrels are one or two pixels wide at the farthest zoom, all edge, mixed with the ground, so
+the gate samples the footprint eroded by one pixel (shield, carriage, wheels, firing base). Every
+other type is measured on its whole footprint. A gun is painted in the set's own olive like the
+tanks, never lighter to pass the gate.
 Set 1's green is a low-chroma grey-green of middle value: dark enough to read as protective
 green, light enough to separate from River's dark ground.
 

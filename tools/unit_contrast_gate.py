@@ -66,8 +66,17 @@ def dilate(mask, n):
     return mask
 
 
-def measure(path_m):
-    """None when the model is not in the frame (under MIN_BODY_PX body pixels)."""
+SOLID_TYPES = (9, 10)   # towed guns: thin trail legs and barrels are one or two pixels wide at the farthest zoom
+
+
+def erode(mask, n):
+    return ~dilate(~mask, n)
+
+
+def measure(path_m, solid=False):
+    """None when the model is not in the frame (under MIN_BODY_PX body pixels). `solid`: the body and top samples are taken on the
+    footprint eroded by one pixel, i.e. on the solid parts only (shield, carriage, wheels, firing base): a beam one or two pixels
+    wide is all edge, mixed with the ground, and says nothing about the paint."""
     m = np.asarray(Image.open(path_m).convert("RGB")).astype(float)
     e = np.asarray(Image.open(path_m[:-6] + "_e.png").convert("RGB")).astype(float)
     if not os.path.exists(path_m[:-6] + "_k.png"):
@@ -86,8 +95,11 @@ def measure(path_m):
     diff = body | shadow
     if body.sum() < MIN_BODY_PX:
         return None
-    px = m[body]
-    top = px[lm[body] >= np.median(lm[body])]
+    sample = body
+    if solid and erode(body, 1).sum() >= 8:
+        sample = erode(body, 1)
+    px = m[sample]
+    top = px[lm[sample] >= np.median(lm[sample])]
     ring = dilate(diff, 18) & ~dilate(diff, 7)
     g, b, t = (np.median(lab(x), 0) for x in (e[ring], px, top))
     ring_l = lab(e[ring])[:, 0]
@@ -146,13 +158,13 @@ def shoot(set_id, type_id, maps, out):
     return fails
 
 
-def report(out, label, maps):
+def report(out, label, maps, solid=False):
     fails = []
     results = []
     for f in sorted(glob.glob(os.path.join(out, "*_m.png"))):
         name = os.path.basename(f)[:-6]
         mp, place = name.split("_", 1)
-        results.append((name, mp, place, measure(f)))
+        results.append((name, mp, place, measure(f, solid)))
     for mp in maps:
         if not any(m == mp for _, m, _, _ in results):
             fails.append("%s: no places measured" % mp)
@@ -250,7 +262,7 @@ def main():
         fails = [] if a.analyse_only else shoot(a.set, t, a.maps, out)
         for fl in fails:
             print("  FAIL", fl)
-        ok = (report(out, "set %d type %d" % (a.set, t), a.maps) and not fails) and ok
+        ok = (report(out, "set %d type %d" % (a.set, t), a.maps, t in SOLID_TYPES) and not fails) and ok
     sys.exit(0 if ok else 1)
 
 

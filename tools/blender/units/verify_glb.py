@@ -66,8 +66,14 @@ hx = hull[:, 0].max() - hull[:, 0].min(); hz = hull[:, 2].max() - hull[:, 2].min
 cxz = (hull[:, 0].max() + hull[:, 0].min()) / 2, (hull[:, 2].max() + hull[:, 2].min()) / 2
 print(f"     hull X {hx:.4f} (spec {spec['hull'][0]}), Z {hz:.4f} (spec {spec['hull'][2]}), "
       f"height {pos[:, 1].max():.4f}, centre x {cxz[0]:+.4f} z {cxz[1]:+.4f}")
-check(abs(cxz[0]) < 0.012 and abs(cxz[1]) < 0.012, "hull footprint centred on the origin")
-check(hx <= spec["hull"][0] + 0.01 and hz <= spec["hull"][2] + 0.01, "hull inside the spec box")
+if cfg.get("whole_model"):
+    # the row describes the solid carriage or hull, not the whole model (trails, barrel, plough): the box is then
+    # compared with the model by tests/game/test_unit_sets.gd, and the muzzle and wheels below still hold
+    whole = pos[:, 0].max() - pos[:, 0].min(), pos[:, 2].max() - pos[:, 2].min()
+    print(f"     whole model X {whole[0]:.4f} Z {whole[1]:.4f} (z {pos[:, 2].min():+.4f}..{pos[:, 2].max():+.4f}); row hull {spec['hull'][0]} x {spec['hull'][2]}")
+else:
+    check(abs(cxz[0]) < 0.012 and abs(cxz[1]) < 0.012, "hull footprint centred on the origin")
+    check(hx <= spec["hull"][0] + 0.01 and hz <= spec["hull"][2] + 0.01, "hull inside the spec box")
 if wheeled and not cfg.get("towed"):
     # the gun sits inside the hull outline (a short barrel on a roof mount), so the muzzle is the front-most vertex at bore
     # height beside the centreline, not the model's front-most vertex
@@ -78,6 +84,9 @@ else:
 print(f"     muzzle vertex {tip.round(4).tolist()} (spec z {-spec['barrel']}, y {spec['hull'][1] + 0.05:.3f})")
 if spec["barrel"]:      # no gun (engineer vehicle): nothing to measure
     check(abs(tip[0]) < 0.03 and abs(tip[2] + spec["barrel"]) < 0.01, "front is -Z, muzzle at the spec length")
+if cfg.get("towed") and spec.get("bore"):
+    # a raised barrel: the row carries the measured bore height, and UnitSilhouettes.muzzle() returns it
+    check(abs(tip[1] - spec["bore"]) < 0.02, f"muzzle at the row's bore height {spec['bore']} (vertex y {tip[1]:.4f})")
 if wheeled and not cfg.get("towed"):
     check(abs(tip[1] - (spec["hull"][1] + 0.05)) < 0.02, f"muzzle at bore height {spec['hull'][1] + 0.05:.3f} (UnitSilhouettes.muzzle)")
 row = lib.set_row(cfg)

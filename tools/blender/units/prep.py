@@ -196,6 +196,15 @@ def src_edit():
     bm.to_mesh(me); bm.free(); me.update()
 
 
+if cfg.get("plough"):
+    # a plough wider than the hull (units.json plough [from_long, lateral factor]): what stands ahead of `from_long` is
+    # stretched across about the centreline, so it overhangs the tracks as the real blade does
+    pl0, plk = cfg["plough"]
+    co = verts(me)
+    Lp = co[:, 0] if cfg["fwd"] == "x" else co[:, 1]
+    m = Lp > pl0
+    co[m, 1 if cfg["fwd"] == "x" else 0] *= plk
+    me.vertices.foreach_set("co", co.ravel()); me.update()
 src_edit()
 lc = cfg["long_c"]
 if cfg["fwd"] == "x":   # long = x, lat = y; turn +X onto +Y
@@ -233,7 +242,8 @@ if G.get("kind") == "wheels":
     rd = G["road"]
     gear = np.zeros(len(lng), bool)
     for cl in rd["long"]:
-        gear |= (lat >= G["cut_lat"]) & (np.hypot(lng - cl, h - rd["h"]) <= rd["r"] * G.get("cut_r", 1.05))
+        # `src_r`/`src_h`: the source tyre when the procedural wheel (`r`, `h`) is drawn smaller than it
+        gear |= (lat >= G["cut_lat"]) & (np.hypot(lng - cl, h - rd.get("src_h", rd["h"])) <= rd.get("src_r", rd["r"]) * G.get("cut_r", 1.05))
 else:
     cut = cfg["cut"]
     zone = (lat >= cut["lat"][0]) & (lat < cut["lat"][1])
@@ -280,7 +290,7 @@ from mathutils.bvhtree import BVHTree
 from mathutils import Vector
 bvh = BVHTree.FromObject(src, bpy.context.evaluated_depsgraph_get())
 g = cfg.get("grid", 0.003)
-hx = cfg["spec"]["hull"][0] / 2 + 0.01
+hx = cfg.get("grid_half") or cfg["spec"]["hull"][0] / 2 + 0.01   # grid_half: model units, for a model wider than its row
 co = verts(src.data)
 ys = np.arange(co[:, 1].min() - g, co[:, 1].max() + g, g)
 xs = np.arange(-hx, hx + g / 2, g)

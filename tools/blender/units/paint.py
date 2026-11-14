@@ -390,6 +390,13 @@ if C.get("ground_ao"):
     col = col * (1 - C["ground_ao"] * smooth(hi_h, lo_h, h))[..., None]
     col = col * (1 - 0.35 * smooth(0.6, 0.3, ao) * smooth(1.6, 0.8, h))[..., None]
 
+# Worn blade (units.json paint `blade`: y_min in metres from the model centre, sRGB colour): a mine plough is bare steel and dirt
+# up to its edge, darker than the body paint, like the running gear: wear on the same paint, not a second scheme.
+bl = C.get("blade")
+if bl:
+    bm = ((P[..., 1] > bl["y_min"]) & (d["cov"] > 0.5)).astype(np.float32)[..., None]
+    col = col * (1 - 0.9 * bm) + lin(*bl["colour"]) * (0.7 + 0.3 * ao[..., None]) * 0.9 * bm
+
 # Baked relief a little deeper (`normal_gain`): bolts, panel joints and bevels catch the light at
 # 7 cm/px, where a 1:1 bake reads as a moulded surface.
 normal = d["normal"] * 2 - 1
