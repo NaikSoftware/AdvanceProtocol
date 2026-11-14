@@ -425,10 +425,17 @@ def disc_coords(rows):
 R, A = disc_coords(128)
 wc = np.broadcast_to(olive * 0.95, (128, 128, 3)).copy()
 wh = np.zeros((128, 128))
-tyre = R > 0.80
+t0 = C.get("tyre_r", 0.80)       # radius fraction where rubber starts; a wheeled unit's sidewall is wider than a road wheel's rim lip
+tyre = R > t0
 wc[tyre] = lin(38, 37, 35); wh[tyre] = 0.6
-lip = (R > 0.74) & (R <= 0.80); wc[lip] = lin(80, 80, 74); wh[lip] = 0.8
-dish = (R > 0.30) & (R <= 0.74); wh[dish] = 0.3 + 0.4 * (R[dish] - 0.30) / 0.44
+lip = (R > round(t0 - 0.06, 6)) & (R <= t0); wc[lip] = lin(80, 80, 74); wh[lip] = 0.8
+dish = (R > 0.30) & (R <= round(t0 - 0.06, 6)); wh[dish] = 0.3 + 0.4 * (R[dish] - 0.30) / round(t0 - 0.36, 6)
+if C.get("holes"):
+    # lightening holes in the disc: big dark openings that turn with the wheel and are the one hub feature a few pixels wide can show
+    hole = (R > 0.36) & (R < round(t0 - 0.1, 6)) & (np.cos(A * C["holes"]) > 0.5); wc[hole] = lin(16, 16, 15); wh[hole] = -0.6
+if C.get("lugs"):
+    # sidewall serration: what shows a tyre turning at 100 px, where a plain dark ring would not
+    lug = tyre & (np.cos(A * C["lugs"]) > 0.15); wh[lug] = 1.0
 bolts = (np.abs(R - 0.36) < 0.035) & (np.cos(A * 8) > 0.93); wc[bolts] = lin(60, 60, 56); wh[bolts] = 0.6
 hub = R <= 0.30; wc[hub] = lin(66, 66, 60); wh[hub] = 0.5 - 0.3 * (R[hub] < 0.12)
 wn = np.random.default_rng(4).standard_normal((128, 128))
@@ -440,6 +447,8 @@ if C.get("dark_gear"):
     mudc = lin(78, 66, 50)
     wc = np.where(tyre[..., None], wc, wc * 0.7 + mudc * 0.3) * 0.75
     wc[tyre] = lin(26, 25, 23)
+if C.get("lugs"):
+    wc[lug] = lin(50, 48, 44)           # after the rubber is set dark: the ribs are the lighter, worn part
 ys, xs = cell("wheel")
 col[ys, xs] = wc * (1.0 if C.get("dark_gear") else C.get("wheel_mud", 0.62))   # mud-dark: beige dust read near-white at the close zoom
 normal[ys, xs] = height_normal(blur(wh), 4.0, False)

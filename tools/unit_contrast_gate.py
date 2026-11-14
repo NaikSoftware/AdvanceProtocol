@@ -4,7 +4,7 @@ colour of the model's up-facing top differs from the ground around it by CIELAB 
 Crossroads, River and Ridge, on meadow, ploughed soil and next to a forest edge. The body median (cast shadow removed) is
 printed beside it as the cautious figure; a body below 15 is a warning, not a failure.
 
-One command, any set and type (set = national set 0/1/2, type = unit type id: 5 medium, 6 tank destroyer, 7 light, 8 heavy):
+One command, any set and type (set = national set 0/1/2, type = unit type id: 2 armoured car, 3 troop carrier, 4 scout car, 5 medium, 6 tank destroyer, 7 light, 8 heavy):
 
     python3 tools/unit_contrast_gate.py --set 2 --type 8                       # shoot all three maps, print the table
     python3 tools/unit_contrast_gate.py --set 1 --type 5 6 7 8 --maps river    # several types, one map
@@ -228,7 +228,7 @@ def report(out, label, maps):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--set", type=int, required=True, help="national set 0, 1 or 2")
-    ap.add_argument("--type", type=int, nargs="+", required=True, help="unit type ids (5 medium, 6 tank destroyer, 7 light, 8 heavy)")
+    ap.add_argument("--type", type=int, nargs="+", required=True, help="unit type ids (2 armoured car, 3 troop carrier, 4 scout car, 5 medium, 6 tank destroyer, 7 light, 8 heavy)")
     ap.add_argument("--maps", nargs="+", default=["crossroads", "river", "ridge"])
     ap.add_argument("--out", help="output directory; with several types a set<N>_t<ID> subdirectory is added")
     ap.add_argument("--analyse-only", action="store_true", help="do not shoot, read the frames already in --out")
