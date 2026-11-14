@@ -70,6 +70,9 @@ var _card: HoldCard = null
 var _tag_offset: Vector2 = Vector2.ZERO
 var _tag_has_offset: bool = false
 var _tag_relax: int = 0
+## Свіжий пошук замість збереженого місця дозволений лише на виборі й спокої камери, не на зміні режиму
+## (дрон, верба): інакше озброєння зсувало б тег убік.
+var _tag_resettle: bool = false
 var _tag_unit_id: int = -1
 var _tag_queued: bool = false
 var _tag_unit_pos: Vector2 = Vector2.ZERO
@@ -317,9 +320,14 @@ func _on_view_changed() -> void:
 		_settle_timer = Timer.new()
 		_settle_timer.one_shot = true
 		_settle_timer.wait_time = VIEW_SETTLE_SECONDS
-		_settle_timer.timeout.connect(_relayout)
+		_settle_timer.timeout.connect(_on_view_settled)
 		add_child(_settle_timer)
 	_settle_timer.start()
+
+
+func _on_view_settled() -> void:
+	_tag_resettle = true
+	_relayout()
 
 
 ## Сцена бою вмикає на час програвання пакета подій і знімає після: тег стоїть лише при юніті,
@@ -672,6 +680,8 @@ func _update_tag() -> void:
 	var unit_box: Rect2 = scene["unit"]
 	_tag_unit_pos = unit_box.position
 	var rect := Rect2()
+	var resettle: bool = _tag_resettle or not _tag_has_offset
+	_tag_resettle = false
 	if _tag_has_offset:
 		var kept := Rect2(unit_box.position + _tag_offset, tag_size)
 		if placement.is_legal(kept, _tag_relax):
@@ -681,13 +691,15 @@ func _update_tag() -> void:
 			if _tag_relax > 0:
 				var strict: Dictionary = placement.best()
 				if strict["found"] and placement.relax_used < _tag_relax:
-					rect = Rect2()
+					rect = strict["rect"]
+					_tag_relax = placement.relax_used
 			# Камера могла доїжджати, коли місце вибирали: збережене, що накриває контури, коли свіжий пошук
-			# знаходить менш накрите, не тримається — інакше перший вибір відрізняється від наступного.
-			elif placement.mark_cover(kept) > 0.0:
+			# знаходить менш накрите, не тримається. Лише на спокої камери, не на зміні режиму.
+			elif resettle and placement.mark_cover(kept) > 0.0:
 				var fresh: Dictionary = placement.best()
 				if fresh["found"] and placement.mark_cover(fresh["rect"]) < placement.mark_cover(kept):
-					rect = Rect2()
+					rect = fresh["rect"]
+					_tag_relax = placement.relax_used
 	if rect.size == Vector2.ZERO:
 		var pick: Dictionary = placement.best()
 		if not pick["found"]:

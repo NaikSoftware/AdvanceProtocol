@@ -184,8 +184,10 @@ theme_override_constants/separation = 9
 
 [node name="TurnCell" type="HBoxContainer" parent="Body/InfoPlate/Pad/Cells"]
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 2
 theme_override_constants/separation = 6
+alignment = 1
 
 [node name="TurnCaption" type="Label" parent="Body/InfoPlate/Pad/Cells/TurnCell"]
 unique_name_in_owner = true
@@ -210,8 +212,10 @@ color = Color(0.2275, 0.2510, 0.2627, 1)
 
 [node name="MapCell" type="HBoxContainer" parent="Body/InfoPlate/Pad/Cells"]
 layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 2
 theme_override_constants/separation = 6
+alignment = 1
 
 [node name="MapCaption" type="Label" parent="Body/InfoPlate/Pad/Cells/MapCell"]
 unique_name_in_owner = true
