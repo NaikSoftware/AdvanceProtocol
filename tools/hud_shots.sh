@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Повний набір кадрів HUD для перегляду: карти по черзі (два слоти Godot на всю машину).
-# Виклик: tools/hud_shots_r2.sh <out_dir>
+# Виклик: tools/hud_shots.sh <out_dir>
 OUT="${1:?out_dir}"
 # Дві половини: один прогон Godot обмежений 180 с.
 A1="idle,own_tank,move_preview,shot_preview,squad,drone,drone_preview"

@@ -301,7 +301,7 @@ tools/godot_run.sh --path . res://tools/hud_shot.tscn -- <out_dir> <map> <WxH> <
 States are listed in `STATES` at the top of `tools/hud_shot.gd` (`idle`, `own_tank`, `move_preview`,
 `shot_preview`, `engineer`, `engineer_armed`, `engineer_pending`, `squad`, `drone`,
 `drone_preview`, `hold_enemy`, `hold_enemy_squad`, `pause`, `handover`, `mood`, toasts and more).
-Files land as `<out_dir>/<map>_<WxH>_<state>[_nohud][_<locale>].png`. `tools/hud_shots_r2.sh
+Files land as `<out_dir>/<map>_<WxH>_<state>[_nohud][_<locale>].png`. `tools/hud_shots.sh
 <out_dir>` captures the full set for River and Crossroads and a subset for Ridge, at both sizes, plus an
 English pass.
 
