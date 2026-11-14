@@ -45,6 +45,10 @@ const CROWD_COST: float = 25.0
 ## де чужий лише трохи ближче, програє місцю без нього, але перемагає те, де тег читається підписом ворога.
 const NEAR_OTHER_COST: float = 200.0
 const NEAR_OTHER_PER_DP: float = 60.0
+## Тег, що і впритул до чужого юніта (< CROWD_AIR), і ближче до нього, ніж до свого, читається його підписом:
+## дорожчий за будь-яке накриття контурів і кутів, тож лишається лише тоді, коли інакше місця нема.
+const NEAR_OTHER_CROWDED_COST: float = 6000.0
+const CROWD_AIR: float = 12.0
 const CELL: float = 4.0
 const LINE_WIDTH: float = 2.0
 const _SAMPLES: int = 12
@@ -365,7 +369,11 @@ func score(r: Rect2) -> float:
 	# Тег ближче до чужого юніта, ніж до свого, читається як його підпис.
 	var worst: float = 0.0
 	for o: Rect2 in _others:
-		worst = maxf(worst, d - _dist(r, o))
+		var od: float = _dist(r, o)
+		worst = maxf(worst, d - od)
+		if od < CROWD_AIR and od < d:
+			s += NEAR_OTHER_CROWDED_COST
+			break
 	if worst > 0.0:
 		s += NEAR_OTHER_COST + NEAR_OTHER_PER_DP * worst
 	return s

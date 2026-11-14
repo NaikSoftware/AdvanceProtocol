@@ -18,7 +18,7 @@ const STATES: Array[String] = [
 	"hold_enemy_squad_spent", "handover_p1", "handover_p3",
 	"squad_to_drone", "hold_cluster", "engineer_to_armed", "shot_cover", "shot_infantry_armour_ignored",
 	"engineer_clear", "engineer_repair_bridge", "engineer_demolish_bridge", "hold_engineer",
-	"handover_2p_hurt", "handover_3p", "handover_3p_eliminated",
+	"handover_2p_hurt", "handover_3p", "handover_3p_eliminated", "handover_3p_even",
 	"handover_default",
 ]
 const SETTLE_FRAMES: int = 90
@@ -127,6 +127,15 @@ func _set_team_share(player: int, share: float) -> void:
 	for u: Unit in _state.units.values():
 		if u.owner == player:
 			u.hp = int(round(u.max_hp() * share))
+
+
+## Лише для знімка гейта: команда з рівно total здоровʼя сумарно (пропорційно max HP юнітів).
+func _set_team_total(player: int, total: int) -> void:
+	var max_sum: int = 0
+	for u: Unit in _state.units.values():
+		if u.owner == player:
+			max_sum += u.max_hp()
+	_set_team_share(player, float(total) / float(max_sum))
 
 
 func _add_third_player() -> void:
@@ -311,6 +320,12 @@ func _enter_state(st: String) -> bool:
 			_set_team_share(0, 0.7)
 			_set_team_share(1, 0.45)
 			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1, _state.turn_number, _state)
+		"handover_3p_even":
+			# Три рівні команди — звичайний стан першого ходу: обидві межі сегментів на третинах смуги.
+			_add_third_player()
+			for p in 3:
+				_set_team_total(p, 450)
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(2, _state.turn_number, _state)
 		"handover_3p", "handover_3p_eliminated":
 			_add_third_player()
 			_set_team_share(0, 0.8)

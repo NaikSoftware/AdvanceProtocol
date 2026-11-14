@@ -310,3 +310,16 @@ func test_leader_end_square_stays_two_dp_off_the_drone_icon() -> void:
 		var ends: PackedVector2Array = p.leader_points(r)
 		var square := Rect2(ends[1] - Vector2(2.5, 2.5), Vector2(5.0, 5.0))
 		assert_false(square.intersects(icon.grow(2.0)), "квадрат кінця ≥ 2 dp від значка: %s" % [ends])
+
+
+func test_a_leadered_tag_hugging_another_unit_pays_the_crowded_cost() -> void:
+	# Тег на 30 dp від свого юніта й на 11 dp від чужого: читається підписом чужого.
+	var unit := Rect2(300, 300, 40, 50)
+	var r := Rect2(340, 240, 209, 30)
+	var with := TagPlacement.new(_scene({"unit": unit, "core": unit, "others": [Rect2(560, 210, 60, 30)] as Array[Rect2]}))
+	var far := TagPlacement.new(_scene({"unit": unit, "core": unit, "others": [Rect2(900, 400, 20, 20)] as Array[Rect2]}))
+	assert_eq(TagPlacement._dist(r, unit), 30.0)
+	assert_eq(TagPlacement._dist(r, Rect2(560, 210, 60, 30)), 11.0)
+	# Два крауди (< 12 dp; ближче за d + 8), тісний чужий, основа й 19 dp різниці відстаней.
+	assert_eq(with.score(r) - far.score(r), 2.0 * TagPlacement.CROWD_COST + TagPlacement.NEAR_OTHER_CROWDED_COST \
+		+ TagPlacement.NEAR_OTHER_COST + TagPlacement.NEAR_OTHER_PER_DP * 19.0)

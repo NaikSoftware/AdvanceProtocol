@@ -165,7 +165,9 @@ and event batches. The tag follows its unit on pan; it is hidden while an event 
    unit-box edge farthest from them. The last resort ignores the polygons for the tag.
 4. **Score, lowest wins.** Contour and ring overlap under the tag weighs most (`MARK_WEIGHT`), then
    contour corners under it, distance, a leader, crowding another unit or the chrome, and reading
-   nearer another unit than its own. The weights are the constants at the top of `TagPlacement`.
+   nearer another unit than its own. A tag both within `CROWD_AIR` 12 dp of another unit and nearer
+   to it than to its own pays `NEAR_OTHER_CROWDED_COST` 6000, more than any contour or corner cover,
+   so it reads as that unit's label only when no other spot exists. The weights are the constants at the top of `TagPlacement`.
 5. **Hysteresis.** The tag keeps its offset from its unit while that rect stays legal at the level
    it was found at, and moves when it becomes illegal or when a spot kept under relaxed rules has a
    stricter level that now finds one, or when it covers zone contours or ring arcs and a fresh
@@ -247,12 +249,14 @@ ordering contract in the header of `handover_gate.gd`, §3.5).
   units over the max HP of every unit they started with; the view only maps ints to widths.
   - **Two players (A):** the horizon line is replaced by two 2-dp lines out from the nameplate,
     left = Player 1, right = Player 2, each in its player colour. Solid for the remaining share, the
-    rest a dotted `#3a4043` line, an 8 × 8 player-colour square at the outer end. They open with the
+    rest a dotted `#3a4043` line (dots on whole device pixels, one gap's width left before the solid
+    end and before the square), an 8 × 8 player-colour square at the outer end. They open with the
     entrance tween like the horizon did.
   - **Three players (C):** the horizon stays (incoming player's colour). A 4-dp bar runs along the
     bottom edge of the info plate, exactly its width: one segment per living player in turn order,
     each as wide as its share of all teams' remaining HP, 2-dp dark gaps, 1-dp bone ticks at the
-    thirds. An eliminated player has no segment. It shows the balance only: two crippled teams read
+    thirds, both always drawn (a tick within 2 dp of a gap snaps onto the gap), snapped to whole
+    device pixels at one width. An eliminated player has no segment. It shows the balance only: two crippled teams read
     alike.
   - It uses every team's true HP, so it reveals aggregate losses the viewer did not witness.
     Accepted.

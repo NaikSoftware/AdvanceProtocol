@@ -135,12 +135,9 @@ func test_strength_has_no_text_or_icons_and_the_pause_menu_has_none() -> void:
 	assert_eq(pause.find_children("*", "GateStrength", true, false).size(), 0)
 
 
-func test_tick_next_to_a_segment_gap_is_hidden() -> void:
-	var s := GateStrength.new()
-	add_child_autofree(s)
-	s.set_geometry(Rect2(0, 0, 300, 30), Rect2(100, 0, 100, 20), Rect2(0, 0, 300, 20))
-	s.set_three([0, 1, 2], [1, 1, 1], [Color.RED, Color.GREEN, Color.BLUE])
-	# Рівні сегменти: проміжки на 1/3 і 2/3 ширини, тож обидві риски в проміжках.
-	assert_true(s._near_gap(100.0))
-	assert_true(s._near_gap(200.0))
-	assert_false(s._near_gap(50.0))
+func test_tick_within_two_dp_of_a_gap_snaps_onto_it_and_is_never_dropped() -> void:
+	var segments: Array[Rect2] = [Rect2(0, 0, 99, 4), Rect2(101, 0, 98, 4), Rect2(201, 0, 99, 4)]
+	assert_eq(GateStrength.snap_tick(100.0, segments), 100.0, "на проміжку")
+	assert_eq(GateStrength.snap_tick(101.5, segments), 100.0, "за 1.5 dp від центру проміжку")
+	assert_eq(GateStrength.snap_tick(102.5, segments), 102.5, "далі за 2 dp лишається на місці третини")
+	assert_eq(GateStrength.snap_tick(200.0, segments), 200.0)

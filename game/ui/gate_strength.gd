@@ -14,7 +14,7 @@ const SQUARE := 8.0
 const BAR_H := 4.0
 const BAR_GAP := 2.0
 const TICK_W := 1.0
-const TICK_CLEAR := 6.0
+const TICK_SNAP := 2.0
 const DOT_ON := 2.0
 const DOT_OFF := 3.0
 const DOT_COLOR := Color("3a4043")
@@ -104,22 +104,29 @@ func _relayout() -> void:
 
 
 func _draw() -> void:
+	# Усе в цілих пікселях пристрою: stretch і content_scale_factor стоять у трансформі вікна, а не вузла,
+	# тож шкала береться з нього, інакше 1 dp на дробовому масштабі дає то 1, то 2 px.
+	var to_screen: Transform2D = get_viewport().get_final_transform() * get_global_transform_with_canvas()
+	var scale: float = maxf(to_screen.get_scale().x, 0.001)
 	if mode == Mode.TWO:
+		var on: float = maxf(1.0, roundf(DOT_ON * scale))
+		var off: float = maxf(1.0, roundf(DOT_OFF * scale))
 		for i in 2:
 			var color: Color = _colors[i]
-			var sign_out: float = -1.0 if i == 0 else 1.0
+			var left: bool = i == 0
 			var solid: Rect2 = solid_rects[i]
-			draw_rect(solid, color)
-			# Пунктир від кінця суцільного до зовнішнього краю ряду.
-			var outer_x: float = _row.position.x if i == 0 else _row.end.x
-			var start_x: float = solid.position.x if i == 0 else solid.end.x
-			var dist: float = absf(outer_x - start_x)
-			var d: float = 0.0
-			while d < dist:
-				var w: float = minf(DOT_ON, dist - d)
-				var px: float = start_x + sign_out * d
-				draw_rect(Rect2(px - w if i == 0 else px, solid.position.y, w, LINE_H), DOT_COLOR)
-				d += DOT_ON + DOT_OFF
+			var y: float = solid.position.y
+			# Суцільна й пунктир ідуть від нікнейм-плити назовні; a — край суцільного, b — внутрішній край квадрата.
+			var near: float = roundf(_dev_x(to_screen, solid.end.x if not left else solid.position.x))
+			var far: float = roundf(_dev_x(to_screen, _name_rect.position.x if left else _name_rect.end.x))
+			_dev_rect(to_screen, minf(near, far), maxf(near, far), y, LINE_H, color)
+			var sgn: float = -1.0 if left else 1.0
+			var inner: float = roundf(_dev_x(to_screen, _row.position.x + SQUARE if left else _row.end.x - SQUARE))
+			var d: float = near + sgn * off
+			# Крапка цілком у межах і з проміжком до квадрата: на обох кінцях дорожки лишається по одному проміжку.
+			while (d + sgn * on - inner) * sgn <= -off:
+				_dev_rect(to_screen, minf(d, d + sgn * on), maxf(d, d + sgn * on), y, LINE_H, DOT_COLOR)
+				d += sgn * (on + off)
 			draw_rect(square_rects[i], color)
 	elif mode == Mode.THREE:
 		if segment_rects.is_empty():
@@ -127,21 +134,30 @@ func _draw() -> void:
 		draw_rect(Rect2(_plate.position.x, _plate.end.y - BAR_H, _plate.size.x, BAR_H), GAP_COLOR)
 		for i in segment_rects.size():
 			draw_rect(segment_rects[i], _colors[segment_players[i]])
-		# Риски — цілі пікселі (інакше 1 dp на дробовому масштабі дає то 1, то 2 px) і не ближче
-		# TICK_CLEAR до проміжку між сегментами, де вони читаються зайвою межею.
-		var scale: float = maxf(get_global_transform_with_canvas().get_scale().x, 0.001)
+		var tw: float = maxf(1.0, roundf(TICK_W * scale))
 		for t in [1, 2]:
-			var tx: float = _plate.position.x + _plate.size.x * t / 3.0
-			if _near_gap(tx):
-				continue
-			var tw: float = maxf(1.0, roundf(TICK_W * scale)) / scale
-			var px: float = floorf((tx - tw * 0.5) * scale) / scale
-			draw_rect(Rect2(px, _plate.end.y - BAR_H, tw, BAR_H), TICK_COLOR)
+			var cx: float = _dev_x(to_screen, snap_tick(_plate.position.x + _plate.size.x * t / 3.0, segment_rects))
+			var x0: float = roundf(cx - tw * 0.5)
+			_dev_rect(to_screen, x0, x0 + tw, _plate.end.y - BAR_H, BAR_H, TICK_COLOR)
 
 
-func _near_gap(x: float) -> bool:
-	for i in segment_rects.size() - 1:
-		var gap_from: float = segment_rects[i].end.x
-		if x > gap_from - TICK_CLEAR and x < gap_from + BAR_GAP + TICK_CLEAR:
-			return true
-	return false
+static func _dev_x(to_screen: Transform2D, x: float) -> float:
+	return (to_screen * Vector2(x, 0.0)).x
+
+
+## Відрізок [x0, x1] у пікселях пристрою → прямокутник у координатах вузла.
+func _dev_rect(to_screen: Transform2D, x0: float, x1: float, y: float, h: float, color: Color) -> void:
+	var inv: Transform2D = to_screen.affine_inverse()
+	var l0: float = (inv * Vector2(x0, 0.0)).x
+	var l1: float = (inv * Vector2(x1, 0.0)).x
+	draw_rect(Rect2(l0, y, l1 - l0, h), color)
+
+
+## Риска, що випала на проміжок між сегментами або за 2 dp від нього, стає рівно в проміжок: вона
+## лишається видимою на обох третинах і не зсувається до зеленого чи червоного краю.
+static func snap_tick(x: float, segments: Array[Rect2]) -> float:
+	for i in segments.size() - 1:
+		var gap_mid: float = segments[i].end.x + BAR_GAP * 0.5
+		if absf(x - gap_mid) <= TICK_SNAP:
+			return gap_mid
+	return x
