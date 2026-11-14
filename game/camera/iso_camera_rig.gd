@@ -321,6 +321,13 @@ func fly_to(cell: Vector2i) -> Tween:
 	set_process(true)
 	return _recenter_tween
 
+## Зум одразу, без доїзду: ціль зуму стає ним самим, тож наступний center_on() його не скасує.
+func set_zoom(zoom: float) -> void:
+	zoom_level = clampf(zoom, MIN_ZOOM, MAX_ZOOM)
+	_zoom_target = zoom_level
+	_place_camera()
+	_notify_view_changed()
+
 ## factor > 1 — звужуємось (зум ін), factor < 1 — розширюємось (зум аут);
 ## те саме позначення, що вже було в zoom_by(), лишене без змін, аби не
 ## перевертати сенс на боці кожного викликача. anchor_screen — точка, що

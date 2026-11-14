@@ -123,3 +123,6 @@ eng_hint_repair_bridge,"Тапни сусідній зруйнований мі�
 eng_hint_demolish_bridge,"Тапни сусідній міст, щоб підірвати його",Tap an adjacent bridge to demolish it
 eng_hint_repair_unit,"Тапни сусідній свій юніт, щоб відремонтувати його",Tap an adjacent friendly unit to repair it
 ERR_NO_ADJACENT_TARGET,Поруч немає придатної цілі,No valid target adjacent
+replay_turn,Хід %d · Гравець %d,Turn %d · Player %d
+replay_skip,Пропустити,Skip
+replay_rec,ЗАПИС,REC

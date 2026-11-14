@@ -155,14 +155,20 @@ func boot(width: int, height: int, spawns: Array, opts: Dictionary = {}) -> void
 		var st: BattleState = service.state
 		st.refresh_vision(st.active_player)
 		Mines.reveal_near(st, st.active_player)
+		# І знімки повтору — заново, як у begin(): інакше повторний прогін розійдеться з правленим станом.
+		for p in st.player_count:
+			if p != st.active_player:
+				service.replay_log.mark(p, st)
 		screen._rebuild_units_for_active_player()
 	ignore_runner_gui([screen])
 	await settle()
 
 
-## Твіни камери й подій гасимо вручну, доки програвач не скаже, що закінчив.
+## Твіни камери й подій гасимо вручну, доки програвач не скаже, що закінчив, а повтор ходів
+## противників після гейта не дограє: між його тактами програвач вільний, а дошка ще чужа.
 func settle() -> void:
-	await wait_until(func() -> bool: return not screen._event_player.is_playing(), "програвання подій")
+	await wait_until(func() -> bool: return not screen._event_player.is_playing() and screen._replay_state == null,
+		"програвання подій")
 
 
 func hud() -> Hud:
