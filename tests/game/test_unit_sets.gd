@@ -111,6 +111,7 @@ func test_wheel_radius_matches_every_existing_model() -> void:
 func test_spec_row_matches_every_model_muzzle() -> void:
 	UnitSilhouettes.reset_models()
 	var checked: int = 0
+	var wheeled_checked: int = 0
 	for set_id in UnitSilhouettes.SET_COUNT:
 		for id in UnitTypes.count():
 			if not ResourceLoader.exists(UnitSilhouettes.model_path(id, set_id)):
@@ -119,24 +120,40 @@ func test_spec_row_matches_every_model_muzzle() -> void:
 			var v: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 			if v.is_empty():
 				continue
-			var zmin: float = v[0].z
+			var row: Dictionary = UnitSilhouettes.spec(id, set_id)
+			# Колісна машина носить гармату на даху в межах корпусу, тож дуло — найпередніша вершина на висоті осі біля осі,
+			# а не передок корпусу.
+			var wheeled: bool = (row.extras as Array).has(&"wheels")
+			var bore: float = UnitSilhouettes.barrel_y(id, set_id)
+			var cand := PackedVector3Array()
 			for p in v:
+				if not wheeled or (absf(p.x) < 0.06 and absf(p.y - bore) < 0.02):
+					cand.append(p)
+			if cand.is_empty():
+				fail_test("немає вершин дула: набір %d тип %d" % [set_id, id])
+				continue
+			var zmin: float = cand[0].z
+			for p in cand:
 				zmin = minf(zmin, p.z)
 			var ring_y: float = 0.0
 			var n: int = 0
-			for p in v:
+			for p in cand:
 				if p.z < zmin + 0.001:
 					ring_y += p.y
 					n += 1
-			var row: Dictionary = UnitSilhouettes.spec(id, set_id)
-			if not (row.extras as Array).has(&"turret"):
+			if not ((row.extras as Array).has(&"turret") or (row.extras as Array).has(&"roof_gun")):
 				continue
 			checked += 1
+			wheeled_checked += int(wheeled and set_id == 0)
 			var where: String = "набір %d тип %d" % [set_id, id]
 			assert_almost_eq(-zmin, float(row.barrel), 0.01, "довжина ствола, " + where)
 			if set_id > 0:
 				assert_almost_eq(ring_y / float(n), UnitSilhouettes.barrel_y(id, set_id), 0.005, "висота осі ствола, " + where)
+			elif wheeled:
+				# рядок набору 0 дає висоту осі як корпус + пів башти; модель тримає гармату в межах 1,5 см (0,12 м) від неї
+				assert_almost_eq(ring_y / float(n), UnitSilhouettes.barrel_y(id, set_id), 0.015, "висота осі ствола, " + where)
 	assert_gt(checked, 0)
+	assert_eq(wheeled_checked, 3, "бронеавто, транспортер і розвідувальна машина набору 0 перевірено")
 
 
 ## Радіус опорного котка: найдальша від осі (UV2) вершина з маскою колеса й швидкістю 0,5 (ведуче й напрямне крутяться інакше); -1 — коліс нема.

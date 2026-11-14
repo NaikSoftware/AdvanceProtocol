@@ -160,7 +160,19 @@ if cfg.get("no_glass_in_boxes"):
         z0, z1 = h0 * cfg["k"] * lib.TILE_M, h1 * cfg["k"] * lib.TILE_M
         pad = 0.15
         glass = glass * ~((P[..., 0] > x0 - pad) & (P[..., 0] < x1 + pad) & (P[..., 1] > y0 - pad) & (P[..., 1] < y1 + pad) & (P[..., 2] > z0 - pad) & (P[..., 2] < z1 + pad))
-col = col * (1 - glass[..., None]) + lin(20, 22, 24) * glass[..., None]
+if C.get("glass_hue"):
+    # a generated window is teal, not dark: take texels whose green and blue both clearly exceed red, on the cab (above `glass_hue` m)
+    sr = d["src"]
+    teal = (np.minimum(sr[..., 1], sr[..., 2]) > sr[..., 0] * 1.35 + 0.01) * (d["cov"] > 0.5) * (P[..., 2] > C["glass_hue"]) * ~on_gun
+    glass = np.maximum(glass, teal.astype(np.float32))
+if C.get("glass_boxes"):
+    # cab windows by position (the generated texture loses them on the baked walls): side faces and a forward-leaning screen
+    # inside [y0, y1, z0, z1] model metres are glass
+    facing = (np.abs(d["nrm"][..., 0]) > 0.5) | (d["nrm"][..., 1] > 0.3)
+    for gy0, gy1, gz0, gz1 in C["glass_boxes"]:
+        gb = facing & (d["cov"] > 0.5) & (P[..., 1] > gy0) & (P[..., 1] < gy1) & (P[..., 2] > gz0) & (P[..., 2] < gz1) & ~on_gun
+        glass = np.maximum(glass, gb.astype(np.float32))
+col = col * (1 - glass[..., None]) + lin(*C.get("glass_c", (20, 22, 24))) * glass[..., None]
 rough = rough * (1 - glass) + 0.25 * glass
 
 # ---- panel lines, edges, occlusion ----------------------------------------------------------
@@ -362,6 +374,12 @@ if plain and C.get("dark_floor"):
     opening = (on & slot) if lv else np.zeros((N, N), bool)
     lift = (d["cov"] > 0.5) & ~on_gun & ~opening & (glass < 0.5)
     col = np.where(lift[..., None], np.maximum(col, olive * C["dark_floor"]), col)
+if C.get("ground_ao"):
+    # the vehicle sits on the ground: the lower hull and the wheel wells take contact shade (`ground_ao` = darkest share, bottom ~0.4 m)
+    # after the plain-scheme floors, which would otherwise lift it back: the visible side wall starts at the sill, not at the ground: `ground_ao_band` [sill, fade-out] metres, darkest at the sill; wheel wells (occluded texels) darker still
+    lo_h, hi_h = C.get("ground_ao_band", (0.45, 1.3))
+    col = col * (1 - C["ground_ao"] * smooth(hi_h, lo_h, h))[..., None]
+    col = col * (1 - 0.35 * smooth(0.6, 0.3, ao) * smooth(1.6, 0.8, h))[..., None]
 
 # Baked relief a little deeper (`normal_gain`): bolts, panel joints and bevels catch the light at
 # 7 cm/px, where a 1:1 bake reads as a moulded surface.
@@ -445,10 +463,17 @@ def disc_coords(rows):
 R, A = disc_coords(128)
 wc = np.broadcast_to(olive * 0.95, (128, 128, 3)).copy()
 wh = np.zeros((128, 128))
-tyre = R > 0.80
+t0 = C.get("tyre_r", 0.80)       # radius fraction where rubber starts; a wheeled unit's sidewall is wider than a road wheel's rim lip
+tyre = R > t0
 wc[tyre] = lin(38, 37, 35); wh[tyre] = 0.6
-lip = (R > 0.74) & (R <= 0.80); wc[lip] = lin(80, 80, 74); wh[lip] = 0.8
-dish = (R > 0.30) & (R <= 0.74); wh[dish] = 0.3 + 0.4 * (R[dish] - 0.30) / 0.44
+lip = (R > round(t0 - 0.06, 6)) & (R <= t0); wc[lip] = lin(80, 80, 74); wh[lip] = 0.8
+dish = (R > 0.30) & (R <= round(t0 - 0.06, 6)); wh[dish] = 0.3 + 0.4 * (R[dish] - 0.30) / round(t0 - 0.36, 6)
+if C.get("holes"):
+    # lightening holes in the disc: big dark openings that turn with the wheel and are the one hub feature a few pixels wide can show
+    hole = (R > 0.36) & (R < round(t0 - 0.1, 6)) & (np.cos(A * C["holes"]) > 0.5); wc[hole] = lin(16, 16, 15); wh[hole] = -0.6
+if C.get("lugs"):
+    # sidewall serration: what shows a tyre turning at 100 px, where a plain dark ring would not
+    lug = tyre & (np.cos(A * C["lugs"]) > 0.15); wh[lug] = 1.0
 bolts = (np.abs(R - 0.36) < 0.035) & (np.cos(A * 8) > 0.93); wc[bolts] = lin(60, 60, 56); wh[bolts] = 0.6
 hub = R <= 0.30; wc[hub] = lin(66, 66, 60); wh[hub] = 0.5 - 0.3 * (R[hub] < 0.12)
 wn = np.random.default_rng(4).standard_normal((128, 128))
@@ -460,6 +485,8 @@ if C.get("dark_gear"):
     mudc = lin(78, 66, 50)
     wc = np.where(tyre[..., None], wc, wc * 0.7 + mudc * 0.3) * 0.75
     wc[tyre] = lin(26, 25, 23)
+if C.get("lugs"):
+    wc[lug] = lin(50, 48, 44)           # after the rubber is set dark: the ribs are the lighter, worn part
 ys, xs = cell("wheel")
 col[ys, xs] = wc * (1.0 if C.get("dark_gear") else C.get("wheel_mud", 0.62))   # mud-dark: beige dust read near-white at the close zoom
 normal[ys, xs] = height_normal(blur(wh), 4.0, False)

@@ -1,7 +1,7 @@
 """Measure a generated source mesh before writing its unit config (plain Python, numpy + PIL).
 
     blender -b --factory-startup --python measure_source.py -- src.glb out_dir     # dump verts.npy
-    python3 -I measure_source.py out_dir/verts.npy out_dir [fwd_axis] [[lat=a:b] wheel guesses x:z ...]
+    python3 -I measure_source.py out_dir/verts.npy out_dir [fwd_axis x|y|-y] [[lat=a:b] wheel guesses x:z ...]
 
 The first form (inside Blender) dumps the vertex cloud. The second prints the lateral profile by
 height (track zone, skirt line), the hull length without the gun, and writes side slabs as PNGs
@@ -30,7 +30,7 @@ from PIL import Image
 
 co = np.load(sys.argv[1]); out = sys.argv[2]
 fwd = sys.argv[3] if len(sys.argv) > 3 else "x"
-x, y, z = (co[:, 0], co[:, 1], co[:, 2]) if fwd == "x" else (co[:, 1], -co[:, 0], co[:, 2])
+x, y, z = {"x": (co[:, 0], co[:, 1]), "y": (co[:, 1], -co[:, 0]), "-y": (-co[:, 1], co[:, 0])}[fwd] + (co[:, 2],)
 g = z.min(); h = z - g
 print(f"ground z {g:.4f}  height {h.max():.4f}  long {x.min():.4f}..{x.max():.4f}  lat ±{np.abs(y).max():.4f}")
 for z0 in np.arange(0, 0.2, 0.03):

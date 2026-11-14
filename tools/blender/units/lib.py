@@ -7,7 +7,7 @@ horizontal axis, `h` the height above its lowest vertex. MODEL is Blender after 
 
 Atlas (1024², one material). PNG row 0 is the top, which is Godot v = 0 and Blender v = 1:
   rows    0..63   tread strip, full width: one 0.25-unit (2 m) tread period, tiles in u
-  column  u >= COL_U, below the strip: road-wheel face, sprocket face
+  column  u >= COL_U, below the strip: road-wheel face, sprocket face (a wheeled unit uses the wheel cell for tyre and hub)
   the rest: baked body islands
 """
 import hashlib, json, os, re, shutil
@@ -36,6 +36,9 @@ def load(name, seed=True):
     cfg["name"] = name
     cfg.setdefault("out", name)  # path under assets/units/ without .glb; sets write set2/<slug>
     cfg["source"] = os.path.expanduser(cfg["source"])
+    if cfg["fwd"] == "-y":
+        # a source whose nose points to -Y is turned half a turn about Z by prep.py, after which every number is in "y"
+        cfg["fwd"], cfg["rot180"] = "y", True
     cfg["spec"] = spec(cfg["type_id"])
     row = set_row(cfg)
     if row:

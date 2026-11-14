@@ -59,6 +59,7 @@ check(3000 <= tris <= 4500, f"triangles {tris} in 3000..4500")
 check(abs(pos[:, 1].min()) < 1e-4, f"y_min {pos[:, 1].min():.6f} == 0")
 
 spec = cfg["spec"]
+wheeled = cfg["gear"].get("kind") == "wheels"
 gun = (np.abs(pos[:, 0]) < 0.06) & (pos[:, 2] < -spec["hull"][2] / 2 - 0.005)
 hull = pos[~gun & (col[:, 1] < 0.5) & (col[:, 2] < 0.5)]
 hx = hull[:, 0].max() - hull[:, 0].min(); hz = hull[:, 2].max() - hull[:, 2].min()
@@ -67,9 +68,17 @@ print(f"     hull X {hx:.4f} (spec {spec['hull'][0]}), Z {hz:.4f} (spec {spec['h
       f"height {pos[:, 1].max():.4f}, centre x {cxz[0]:+.4f} z {cxz[1]:+.4f}")
 check(abs(cxz[0]) < 0.012 and abs(cxz[1]) < 0.012, "hull footprint centred on the origin")
 check(hx <= spec["hull"][0] + 0.01 and hz <= spec["hull"][2] + 0.01, "hull inside the spec box")
-tip = pos[np.argmin(pos[:, 2])]
+if wheeled:
+    # the gun sits inside the hull outline (a short barrel on a roof mount), so the muzzle is the front-most vertex at bore
+    # height beside the centreline, not the model's front-most vertex
+    sel = (np.abs(pos[:, 0]) < 0.06) & (np.abs(pos[:, 1] - (spec["hull"][1] + 0.05)) < 0.02)
+    tip = pos[sel][np.argmin(pos[sel, 2])]
+else:
+    tip = pos[np.argmin(pos[:, 2])]
 print(f"     muzzle vertex {tip.round(4).tolist()} (spec z {-spec['barrel']}, y {spec['hull'][1] + 0.05:.3f})")
 check(abs(tip[0]) < 0.03 and abs(tip[2] + spec["barrel"]) < 0.01, "front is -Z, muzzle at the spec length")
+if wheeled:
+    check(abs(tip[1] - (spec["hull"][1] + 0.05)) < 0.02, f"muzzle at bore height {spec['hull'][1] + 0.05:.3f} (UnitSilhouettes.muzzle)")
 row = lib.set_row(cfg)
 if cfg.get("out", "").startswith("set"):
     check(row is not None, "a set model has its _SET_SPECS row")
@@ -82,40 +91,45 @@ if row:
 trk = col[:, 1] > 0.5; whl = col[:, 2] > 0.5
 other = ~(trk | whl)
 
-# Beyond the ends of the track loop the body is the bow and the rear plate. Nothing there may
-# hang below the hull bottom: the skirts over the loop, and at each end the bottom edge measured
-# on the source (units.json ends_bottom_h, [rear, front], SOURCE heights) — a post, hitch or
-# mud flap reaching down past it fails.
-z0, z1 = pos[trk, 2].min(), pos[trk, 2].max()
-body = other & ~gun
-floor = pos[body & (pos[:, 2] >= z0) & (pos[:, 2] <= z1), 1].min()
-ends = cfg.get("ends_bottom_h")
-check(ends is not None, "units.json has ends_bottom_h")
-for name, end, h in (("rear", body & (pos[:, 2] > z1), (ends or [0, 0])[0]), ("bow", body & (pos[:, 2] < z0), (ends or [0, 0])[1])):
-    if end.any():
-        lim = max(floor, h * cfg["k"]) - 0.004
-        check(pos[end, 1].min() >= lim, f"{name}: nothing below the hull bottom ({pos[end, 1].min():.4f} >= {lim:.4f})")
+if not wheeled:
+    # Beyond the ends of the track loop the body is the bow and the rear plate. Nothing there may
+    # hang below the hull bottom: the skirts over the loop, and at each end the bottom edge measured
+    # on the source (units.json ends_bottom_h, [rear, front], SOURCE heights) — a post, hitch or
+    # mud flap reaching down past it fails.
+    z0, z1 = pos[trk, 2].min(), pos[trk, 2].max()
+    body = other & ~gun
+    floor = pos[body & (pos[:, 2] >= z0) & (pos[:, 2] <= z1), 1].min()
+    ends = cfg.get("ends_bottom_h")
+    check(ends is not None, "units.json has ends_bottom_h")
+    for name, end, h in (("rear", body & (pos[:, 2] > z1), (ends or [0, 0])[0]), ("bow", body & (pos[:, 2] < z0), (ends or [0, 0])[1])):
+        if end.any():
+            lim = max(floor, h * cfg["k"]) - 0.004
+            check(pos[end, 1].min() >= lim, f"{name}: nothing below the hull bottom ({pos[end, 1].min():.4f} >= {lim:.4f})")
 print(f"     verts: track {trk.sum()} wheel {whl.sum()} other {other.sum()}")
-check(trk.any() and whl.any(), "track and wheel masks present")
+check(whl.any() and (wheeled or trk.any()), "track and wheel masks present" if not wheeled else "wheel mask present, no track")
+if wheeled:
+    check(not trk.any(), "a wheeled unit has no track faces")
 # owners are told apart by the HP bar, not the model: no owner-colour mask anywhere
 check(col[:, 0].max() < 0.5, "no owner marking (COLOR_0 R is 0)")
-u, v = uv2[trk, 0], uv2[trk, 1]
-print(f"     track UV2 u {u.min():.4f}..{u.max():.4f}  v {v.min():.4f}..{v.max():.4f}")
-check(u.min() > -1e-4 and v.min() > -1e-4 and v.max() < 1 + 1e-4, "track UV2 v in 0..1, u from 0")
-check(abs((u.max() / lib.TREAD_PERIOD) - round(u.max() / lib.TREAD_PERIOD)) < 1e-3, "track loop is whole tread periods")
-# bottom run (lowest track verts): u must grow towards the front (-Z) so travel moves it rearwards
-low = trk & (pos[:, 1] < 0.003)
-lz, lu = pos[low, 2], uv2[low, 0]
-check(np.corrcoef(lz, lu)[0, 1] < -0.9, f"bottom run u grows towards the front (corr {np.corrcoef(lz, lu)[0, 1]:.3f})")
+if not wheeled:
+    u, v = uv2[trk, 0], uv2[trk, 1]
+    print(f"     track UV2 u {u.min():.4f}..{u.max():.4f}  v {v.min():.4f}..{v.max():.4f}")
+    check(u.min() > -1e-4 and v.min() > -1e-4 and v.max() < 1 + 1e-4, "track UV2 v in 0..1, u from 0")
+    check(abs((u.max() / lib.TREAD_PERIOD) - round(u.max() / lib.TREAD_PERIOD)) < 1e-3, "track loop is whole tread periods")
+    # bottom run (lowest track verts): u must grow towards the front (-Z) so travel moves it rearwards
+    low = trk & (pos[:, 1] < 0.003)
+    lz, lu = pos[low, 2], uv2[low, 0]
+    check(np.corrcoef(lz, lu)[0, 1] < -0.9, f"bottom run u grows towards the front (corr {np.corrcoef(lz, lu)[0, 1]:.3f})")
 d = np.hypot(pos[whl, 1] - uv2[whl, 0], pos[whl, 2] - uv2[whl, 1])
 print(f"     wheel vertex distance from axle {d.min():.4f}..{d.max():.4f}; axle heights {np.unique(uv2[whl, 0].round(4)).tolist()}")
-check(d.max() < 0.06, "wheel UV2 is the axle centre (every wheel vertex within a radius of it)")
+check(d.max() < (0.12 if wheeled else 0.06), "wheel UV2 is the axle centre (every wheel vertex within a radius of it)")
 # every wheel turns at travel / its own radius: alpha carries the rate relative to the road wheels
 check(col4.shape[1] == 4, "COLOR_0 has alpha")
 if col4.shape[1] == 4:
     rate = 2.0 * col4[whl, 3]
     road_r = cfg["gear"]["road"]["r"] * cfg["k"]
-    err = np.abs(rate * d - road_r).max()        # every wheel vertex sits on its rim
+    # every wheel vertex sits on its rim; a tyre's hub face lies inside it, so only the rim is held there
+    err = abs((rate * d).max() - road_r) if wheeled else np.abs(rate * d - road_r).max()
     check(err < 0.002, f"wheel spin rate x wheel radius == road wheel radius (worst {err:.4f})")
 # the game turns wheels by travel / _SPECS.wheel, so that number must be the road wheels' radius
 road = cfg["gear"]["road"]["r"] * cfg["k"]

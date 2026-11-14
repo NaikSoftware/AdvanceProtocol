@@ -11,12 +11,14 @@ const _STRIPE_COLOR := Color("d9b23a")
 ## hull — розмір корпусу (1 тайл = 8 м, тож 3,6 м = 0,45); barrel — довжина ствола від центру
 ## корпусу/башти вперед (0 — без); extras — деталі. Ствол може виступати за корпус: у танка
 ## він 3,5–7 м від центру тайла. Висота танка = корпус + башта (TURRET_HEIGHT = 0,8 м).
+## `roof_gun` — гармата чи кулемет на даху колісної машини: вісь ствола на висоті башти, а коробки-башти немає, бо модель тримає
+## ствол у межах корпусу; корінь полум'я на уламках стоїть на висоті башти, як у башти.
 const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures"]},  # 0 стрілецький загін
 	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures", &"drone_rack"]},  # 1 штурмовий
-	{"hull": Vector3(0.325, 0.30, 0.75), "barrel": 0.50, "wheel": 0.06, "extras": [&"wheels"]},  # 2 бронеавто 2,6×2,4×6,0 м
-	{"hull": Vector3(0.375, 0.325, 0.875), "barrel": 0.0, "wheel": 0.06, "extras": [&"wheels"]},  # 3 транспортер 3,0×2,6×7,0 м
-	{"hull": Vector3(0.30, 0.25, 0.625), "barrel": 0.0, "wheel": 0.06, "extras": [&"wheels"]},  # 4 розвідувальне 2,4×2,0×5,0 м
+	{"hull": Vector3(0.3375, 0.30, 0.825), "barrel": 0.33, "wheel": 0.0828, "extras": [&"wheels", &"roof_gun"]},  # 2 бронеавто 2,7×2,4×6,6 м
+	{"hull": Vector3(0.3375, 0.325, 0.95), "barrel": 0.10, "wheel": 0.0796, "extras": [&"wheels", &"roof_gun"]},  # 3 транспортер 2,7×2,6×7,6 м
+	{"hull": Vector3(0.275, 0.25, 0.6125), "barrel": 0.15, "wheel": 0.0606, "extras": [&"wheels", &"roof_gun"]},  # 4 розвідувальне 2,2×2,0×4,9 м
 	{"hull": Vector3(0.43, 0.20, 0.84), "barrel": 0.625, "wheel": 0.036, "extras": [&"turret"]},  # 5 середній танк 3,4×2,4×6,7 м
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
@@ -46,12 +48,20 @@ const _SET_SPECS: Dictionary = {
 		6: {"hull": Vector3(0.4299, 0.2238, 0.8971), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},
 		# легкий: корпус вужчий за коробку, бо джерело довше за свою ширину; вісь ствола виміряна
 		7: {"hull": Vector3(0.3390, 0.1705, 0.7020), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},
+		# бронеавто, транспортер і розвідувальна машина набору 1: корпус виміряний з моделі, висота осі ствола — з осі гармати, колесо — радіус осей
+		2: {"hull": Vector3(0.3273, 0.2519, 0.8280), "barrel": 0.30, "wheel": 0.0808, "extras": [&"wheels", &"roof_gun"]},
+		3: {"hull": Vector3(0.3331, 0.3276, 0.9540), "barrel": 0.12, "wheel": 0.0753, "extras": [&"wheels", &"roof_gun"]},
+		4: {"hull": Vector3(0.2385, 0.2163, 0.6180), "barrel": 0.12, "wheel": 0.0624, "extras": [&"wheels", &"roof_gun"]},
 	},
 	2: {
 		5: {"hull": Vector3(0.4083, 0.1487, 0.8040), "barrel": 0.625, "wheel": 0.036, "extras": [&"turret"]},  # середній (набір 2) 3,4×6,7 м
 		6: {"hull": Vector3(0.4350, 0.2726, 0.9423), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # винищувач (набір 2) 3,5×7,6 м
 		7: {"hull": Vector3(0.3585, 0.153, 0.705), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # легкий (набір 2) 2,9×5,6 м
 		8: {"hull": Vector3(0.4712, 0.175, 0.9031), "barrel": 0.75, "wheel": 0.0391, "extras": [&"turret"]},  # важкий (набір 2) 3,8×7,2 м
+		# бронеавто, транспортер і розвідувальна машина набору 2: так само виміряні з моделей
+		2: {"hull": Vector3(0.3271, 0.2734, 0.8280), "barrel": 0.30, "wheel": 0.0833, "extras": [&"wheels", &"roof_gun"]},
+		3: {"hull": Vector3(0.3348, 0.3633, 0.9450), "barrel": 0.12, "wheel": 0.0813, "extras": [&"wheels", &"roof_gun"]},
+		4: {"hull": Vector3(0.2530, 0.2315, 0.6192), "barrel": 0.12, "wheel": 0.0642, "extras": [&"wheels", &"roof_gun"]},
 	},
 }
 ## Чинні рядки: таблиця вище, а тести підміняють їх через `use_set_specs()`.
@@ -91,7 +101,7 @@ static func barrel_y(type_id: int, set_id: int = 0) -> float:
 	var s: Dictionary = spec(type_id, set_id)
 	var h: float = (s.hull as Vector3).y
 	var extras: Array = s.extras
-	if extras.has(&"turret"):
+	if extras.has(&"turret") or extras.has(&"roof_gun"):
 		return h + TURRET_HEIGHT * 0.5
 	return h + 0.04 if extras.has(&"tall_barrel") else h * 0.5
 

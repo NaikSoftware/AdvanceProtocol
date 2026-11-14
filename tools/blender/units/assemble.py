@@ -62,83 +62,88 @@ def cell_map(name, du, dv):
 
 
 # ---- track loop -------------------------------------------------------------------------------
-t = L(G["track_t"])
+wheeled = G.get("kind") == "wheels"       # tyres on axles instead of a track loop
 circ = [(lib.m_long(cfg, x), L(G["road"]["h"]), L(G["road"]["r"])) for x in G["road"]["long"]]
-circ += [(lib.m_long(cfg, G[w]["long"]), L(G[w]["h"]), L(G[w]["r"])) for w in ("sprocket", "idler")]
-pts = []
-for cy, cz, r in circ:
-    for i in range(48):
-        a = 2 * math.pi * i / 48
-        pts.append((cy + (r + t / 2) * math.cos(a), cz + (r + t / 2) * math.sin(a)))
-pts = sorted(set(pts))
+parts = []
+if not wheeled:
+    t = L(G["track_t"])
+    circ += [(lib.m_long(cfg, G[w]["long"]), L(G[w]["h"]), L(G[w]["r"])) for w in ("sprocket", "idler")]
+    pts = []
+    for cy, cz, r in circ:
+        for i in range(48):
+            a = 2 * math.pi * i / 48
+            pts.append((cy + (r + t / 2) * math.cos(a), cz + (r + t / 2) * math.sin(a)))
+    pts = sorted(set(pts))
 
 
-def cross(o, a, b):
-    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
 
-lower, upper = [], []
-for p in pts:                                        # monotone chain: counter-clockwise hull
-    while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 1e-12:
-        lower.pop()
-    lower.append(p)
-for p in reversed(pts):
-    while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 1e-12:
-        upper.pop()
-    upper.append(p)
-hull = lower[:-1] + upper[:-1]
-# keep every 2nd arc point: 15 degree steps are plenty at 2-6 px per wheel
-keep = [hull[0]]
-for p in hull[1:]:
-    if math.dist(p, keep[-1]) > L(0.007):
-        keep.append(p)
-hull = np.array(keep)
-# start the loop at the middle of the top run, where the skirt hides the seam
-top = np.argmax(hull[:, 1] - 0.01 * np.abs(hull[:, 0] - hull[:, 0].mean()))
-hull = np.roll(hull, -top, 0)
-seg = np.linalg.norm(np.diff(np.vstack([hull, hull[:1]]), axis=0), axis=1)
-total = seg.sum()
-snap = max(1, round(total / lib.TREAD_PERIOD)) * lib.TREAD_PERIOD
-arc = np.concatenate([[0], np.cumsum(seg)]) * (snap / total)
-centre = hull.mean(0)
-lat0, lat1 = L(G["track_lat"][0]), L(G["track_lat"][1])
-print(f"ASM track loop {len(hull)} pts, length {total:.4f} -> u total {snap:.4f}")
+    lower, upper = [], []
+    for p in pts:                                        # monotone chain: counter-clockwise hull
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 1e-12:
+            lower.pop()
+        lower.append(p)
+    for p in reversed(pts):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 1e-12:
+            upper.pop()
+        upper.append(p)
+    hull = lower[:-1] + upper[:-1]
+    # keep every 2nd arc point: 15 degree steps are plenty at 2-6 px per wheel
+    keep = [hull[0]]
+    for p in hull[1:]:
+        if math.dist(p, keep[-1]) > L(0.007):
+            keep.append(p)
+    hull = np.array(keep)
+    # start the loop at the middle of the top run, where the skirt hides the seam
+    top = np.argmax(hull[:, 1] - 0.01 * np.abs(hull[:, 0] - hull[:, 0].mean()))
+    hull = np.roll(hull, -top, 0)
+    seg = np.linalg.norm(np.diff(np.vstack([hull, hull[:1]]), axis=0), axis=1)
+    total = seg.sum()
+    snap = max(1, round(total / lib.TREAD_PERIOD)) * lib.TREAD_PERIOD
+    arc = np.concatenate([[0], np.cumsum(seg)]) * (snap / total)
+    centre = hull.mean(0)
+    lat0, lat1 = L(G["track_lat"][0]), L(G["track_lat"][1])
+    print(f"ASM track loop {len(hull)} pts, length {total:.4f} -> u total {snap:.4f}")
 
-bm, uvl, uv2l, cl = new_part("track")
-green = (0.0, 1.0, 0.0, 1.0)
-for side in (1, -1):
-    ring = np.vstack([hull, hull[:1]])
-    nrm = []
-    for i, p in enumerate(ring):                     # outward normal in the YZ plane per vertex
-        a, b = ring[i - 1] if i else ring[-2], ring[i + 1] if i + 1 < len(ring) else ring[1]
-        tg = (b - a) / (np.linalg.norm(b - a) + 1e-12)
-        nrm.append(np.array([tg[1], -tg[0]]))
-    V = {}
-    for i, (p, n) in enumerate(zip(ring, nrm)):
-        for key, off in (("o", t / 2), ("i", -t / 2)):
-            q = p + n * off
-            V[key, i, 0] = bm.verts.new((side * lat0, q[0], q[1]))
-            V[key, i, 1] = bm.verts.new((side * lat1, q[0], q[1]))
-    for i in range(len(ring) - 1):
-        s0, s1 = arc[i], arc[i + 1]
-        mid = (ring[i] + ring[i + 1]) / 2
-        out_dir = Vector((0, *(mid - centre)))
-        uv0 = lambda s, vv: (s / lib.TREAD_PERIOD, 1.0 - vv * lib.STRIP)
-        for key, sign in (("o", 1), ("i", -1)):      # outer tread and inner surface
-            vs = [V[key, i, 0], V[key, i + 1, 0], V[key, i + 1, 1], V[key, i, 1]]
-            st = [(s0, 0), (s1, 0), (s1, 1), (s0, 1)]
-            face(bm, uvl, uv2l, cl, vs, [uv0(*x) for x in st], st, green, out_dir * sign)
-        vs = [V["o", i, 1], V["o", i + 1, 1], V["i", i + 1, 1], V["i", i, 1]]   # outer rim
-        st = [(s0, 1), (s1, 1), (s1, 1), (s0, 1)]
-        face(bm, uvl, uv2l, cl, vs, [uv0(*x) for x in st], st, green, Vector((side, 0, 0)))
-parts = [finish(bm, "track")]
+    bm, uvl, uv2l, cl = new_part("track")
+    green = (0.0, 1.0, 0.0, 1.0)
+    for side in (1, -1):
+        ring = np.vstack([hull, hull[:1]])
+        nrm = []
+        for i, p in enumerate(ring):                     # outward normal in the YZ plane per vertex
+            a, b = ring[i - 1] if i else ring[-2], ring[i + 1] if i + 1 < len(ring) else ring[1]
+            tg = (b - a) / (np.linalg.norm(b - a) + 1e-12)
+            nrm.append(np.array([tg[1], -tg[0]]))
+        V = {}
+        for i, (p, n) in enumerate(zip(ring, nrm)):
+            for key, off in (("o", t / 2), ("i", -t / 2)):
+                q = p + n * off
+                V[key, i, 0] = bm.verts.new((side * lat0, q[0], q[1]))
+                V[key, i, 1] = bm.verts.new((side * lat1, q[0], q[1]))
+        for i in range(len(ring) - 1):
+            s0, s1 = arc[i], arc[i + 1]
+            mid = (ring[i] + ring[i + 1]) / 2
+            out_dir = Vector((0, *(mid - centre)))
+            uv0 = lambda s, vv: (s / lib.TREAD_PERIOD, 1.0 - vv * lib.STRIP)
+            for key, sign in (("o", 1), ("i", -1)):      # outer tread and inner surface
+                vs = [V[key, i, 0], V[key, i + 1, 0], V[key, i + 1, 1], V[key, i, 1]]
+                st = [(s0, 0), (s1, 0), (s1, 1), (s0, 1)]
+                face(bm, uvl, uv2l, cl, vs, [uv0(*x) for x in st], st, green, out_dir * sign)
+            vs = [V["o", i, 1], V["o", i + 1, 1], V["i", i + 1, 1], V["i", i, 1]]   # outer rim
+            st = [(s0, 1), (s1, 1), (s1, 1), (s0, 1)]
+            face(bm, uvl, uv2l, cl, vs, [uv0(*x) for x in st], st, green, Vector((side, 0, 0)))
+    parts = [finish(bm, "track")]
 
 # ---- wheels -----------------------------------------------------------------------------------
 bm, uvl, uv2l, cl = new_part("wheels")
 blue = (0.0, 0.0, 1.0, 1.0)
 n = G["sides"]
 w0, w1 = L(G["wheel_lat"][0]), L(G["wheel_lat"][1])
-wheels = [(c, "wheel") for c in circ[:-2]] + [(circ[-2], "sprocket"), (circ[-1], "wheel")]
+wheels = [(c, "wheel") for c in circ] if wheeled else \
+    [(c, "wheel") for c in circ[:-2]] + [(circ[-2], "sprocket"), (circ[-1], "wheel")]
+hub_f = G.get("hub", 0.62)       # wheeled: the painted hub's share of the tyre radius (the rest of the face is sidewall)
 for side in (1, -1):
     for (cy, cz, r), cname in wheels:
         ax = (cz, -cy)                               # Godot (y, z) of the axle
@@ -146,6 +151,22 @@ for side in (1, -1):
         # (< 0.5 on a larger wheel): the shader turns a wheel by travel / _SPECS.wheel * 2 * alpha, and
         # _SPECS.wheel matches the road-wheel radius, so every wheel keeps pace with the track
         blue = (0.0, 0.0, 1.0, 0.5 * L(G["road"]["r"]) / r)
+        if wheeled:
+            # a tyre: a barrel of full radius, a sloping sidewall in to the hub, a flat hub face. The cell maps by true
+            # radius (hub 0..hub_f, sidewall hub_f..1), so paint.py puts rubber and lugs where the sidewall is.
+            bev = G.get("bevel", 0.3) * (w1 - w0)
+            ring = lambda rr, x: [bm.verts.new((side * x, cy + rr * math.cos(2 * math.pi * i / n), cz + rr * math.sin(2 * math.pi * i / n))) for i in range(n)]
+            hubv, rimv, backv = ring(r * hub_f, w1), ring(r, w1 - bev), ring(r, w0)
+            cu = lambda f, i: cell_map(cname, f * math.cos(2 * math.pi * i / n) * side, f * math.sin(2 * math.pi * i / n))
+            face(bm, uvl, uv2l, cl, hubv, [cu(hub_f, i) for i in range(n)], [ax] * n, blue, Vector((side, 0, 0)))
+            tyre = cell_map("wheel", 0.9, 0.0)
+            for i in range(n):
+                j = (i + 1) % n
+                mid = Vector((0, math.cos(2 * math.pi * (i + 0.5) / n), math.sin(2 * math.pi * (i + 0.5) / n)))
+                face(bm, uvl, uv2l, cl, [hubv[i], hubv[j], rimv[j], rimv[i]], [cu(hub_f, i), cu(hub_f, j), cu(1, j), cu(1, i)],
+                     [ax] * 4, blue, Vector((side * 0.7, mid.y * 0.7, mid.z * 0.7)))
+                face(bm, uvl, uv2l, cl, [rimv[i], rimv[j], backv[j], backv[i]], [tyre] * 4, [ax] * 4, blue, mid)
+            continue
         outer = [bm.verts.new((side * w1, cy + r * math.cos(2 * math.pi * i / n), cz + r * math.sin(2 * math.pi * i / n))) for i in range(n)]
         inner = [bm.verts.new((side * w0, cy + r * math.cos(2 * math.pi * i / n), cz + r * math.sin(2 * math.pi * i / n))) for i in range(n)]
         uvs = [cell_map(cname, math.cos(2 * math.pi * i / n) * side, math.sin(2 * math.pi * i / n)) for i in range(n)]

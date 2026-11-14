@@ -4,7 +4,7 @@ extends GutTest
 const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
 
 const _METRES := {
-	2: Vector3(2.6, 2.4, 6.0), 3: Vector3(3.0, 2.6, 7.0), 4: Vector3(2.4, 2.0, 5.0),
+	2: Vector3(2.7, 2.4, 6.6), 3: Vector3(2.7, 2.6, 7.6), 4: Vector3(2.2, 2.0, 4.9),
 	5: Vector3(3.44, 1.6, 6.72), 6: Vector3(3.5, 1.5, 7.5), 7: Vector3(2.94, 1.5, 5.6),
 	8: Vector3(3.8, 2.0, 7.2), 11: Vector3(3.4, 2.8, 7.0),
 }
