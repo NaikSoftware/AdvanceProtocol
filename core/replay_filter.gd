@@ -52,7 +52,11 @@ static func build(log: ReplayLog, viewer: int) -> Result:
 	var start: BattleState = log.start_state(viewer)
 	if start == null:
 		return null
+	var commands: Array[Command] = log.span(viewer)
 	var entries: Array[Dictionary] = log.rerun(viewer)
+	# Прогін, що розійшовся з журналом (команда більше не проходить), — це не повтор.
+	if entries.size() != commands.size():
+		return null
 	for en in entries:
 		for e in en["events"]:
 			if e is Events.MatchEnded:
@@ -60,7 +64,7 @@ static func build(log: ReplayLog, viewer: int) -> Result:
 	var last: BattleState = entries[entries.size() - 1]["after"] if not entries.is_empty() else start
 	if last.eliminated[viewer]:
 		return null
-	var p := _Pass.new(viewer, start, entries, log.span(viewer))
+	var p := _Pass.new(viewer, start, entries, commands)
 	var r := Result.new()
 	r.start = start
 	r.beats = p.run()
@@ -275,7 +279,7 @@ class _Pass extends RefCounted:
 					shown.erase(id)
 					running = false
 			for e: Events.BattleEvent in by_step.get(s, []):
-				var k: Events.BattleEvent = _move_event(e, id, running, s - base, wreck_kept, bridge_kept)
+				var k: Events.BattleEvent = _move_event(e, id, running, s - base, wreck_kept)
 				if k == null:
 					continue
 				if running and s >= base:
@@ -309,8 +313,7 @@ class _Pass extends RefCounted:
 			out[-1].push_front(events[0])
 		return out
 
-	func _move_event(e: Events.BattleEvent, id: int, v: bool, rel: int, wreck_kept: Array[bool],
-			bridge_kept: Array[bool]) -> Events.BattleEvent:
+	func _move_event(e: Events.BattleEvent, id: int, v: bool, rel: int, wreck_kept: Array[bool]) -> Events.BattleEvent:
 		if e is Events.UnitTurned:
 			return e if v else null
 		if e is Events.MoveBlocked:
@@ -335,13 +338,6 @@ class _Pass extends RefCounted:
 			return e if v else null
 		if e is Events.WreckLeft:
 			return e if wreck_kept[0] else null
-		# Міна на мосту валить прогін разом із ходовим: обвал іде за вибухом своєї міни глядача
-		# або за видимим ходовим, а уламки з прогону — за обвалом.
-		if e is Events.BridgeChanged:
-			bridge_kept[0] = _mine_owner(e.pos) == viewer or v
-			return e if bridge_kept[0] else null
-		if e is Events.WreckRemoved:
-			return e if bridge_kept[0] else null
 		if e is Events.TileRevealed:
 			return e if e.player == viewer else null
 		return null

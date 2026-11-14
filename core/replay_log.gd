@@ -13,6 +13,11 @@ var _snapshots: Dictionary = {}  # player -> {"state": Dictionary, "index": int}
 
 func mark(player: int, state: BattleState) -> void:
 	_snapshots[player] = {"state": BattleSerializer.to_dict(state), "index": _base + _commands.size()}
+	# Хто вибув чи здався, більше не ходить і знімка не оновить: його старий знімок тримав би
+	# журнал до кінця матчу, а повтор йому не потрібен.
+	for p in _snapshots.keys():
+		if state.eliminated[p]:
+			_snapshots.erase(p)
 	# Команди глибше за найстаріший знімок ніхто вже не програє.
 	var oldest: int = _base + _commands.size()
 	for p in _snapshots:

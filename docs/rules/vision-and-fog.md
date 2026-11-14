@@ -135,8 +135,7 @@ the event itself would point at something hidden, or because the board shows it 
   mine only when the moving side has found it, so the block would tell the viewer what
   `MineRevealed` does, and that is never shown.
 - **A bridge collapse shows whenever the engineer, or a unit that falls with the bridge, is visible
-  to the viewer or is the viewer's own.** A collapse set off by the viewer's own mine on a bridge
-  shows with its blast. Bridges are public terrain and the end state shows the collapse anyway.
+  to the viewer or is the viewer's own.** Bridges are public terrain and the end state shows the collapse anyway.
   The engineer still appears only if the viewer can see it.
 - **A wreck that falls with a demolished bridge follows the bridge.** Showing it vanish from an
   intact-looking bridge would show a demolition the viewer cannot see.

@@ -733,6 +733,12 @@ func test_forest_broken_shows_only_on_seen_ground() -> void:
 	_open(s, _cols(0, 11))
 	_play(s, MoveCommand.create(tank.id, Vector2i(10, 3)))
 	_end(s)
+	var raw_broken: int = 0
+	for en in journal.rerun(0):
+		for e in en["events"]:
+			if e is Events.ForestBroken:
+				raw_broken += 1
+	assert_eq(raw_broken, 2, "без фільтра падають обидва тайли лісу")
 	var r: ReplayFilter.Result = _build()
 	assert_not_null(r)
 	var ev: Array[Events.BattleEvent] = r.beats[0].events
@@ -753,6 +759,13 @@ func test_turn_in_place_shows_only_a_visible_unit() -> void:
 	_play(s, TurnCommand.create(unseen.id, Vector2i(15, 4)))
 	_play(s, TurnCommand.create(seen.id, Vector2i(4, 4)))
 	_end(s)
+	var raw_turned: Array[int] = []
+	for en in journal.rerun(0):
+		for e in en["events"]:
+			if e is Events.UnitTurned:
+				raw_turned.append(e.unit_id)
+	assert_true(raw_turned.has(unseen.id), "без фільтра повертаються обидва")
+	assert_true(raw_turned.has(seen.id))
 	var r: ReplayFilter.Result = _build()
 	assert_not_null(r)
 	assert_eq(r.beats.size(), 1)
@@ -760,6 +773,18 @@ func test_turn_in_place_shows_only_a_visible_unit() -> void:
 	assert_true(r.beats[0].events[0] is Events.UnitTurned)
 	assert_eq(r.beats[0].events[0].unit_id, seen.id)
 	assert_eq(r.beats[0].focus, Vector2i(4, 3))
+
+
+func test_build_is_null_when_the_rerun_diverges_from_the_log() -> void:
+	var s: BattleState = _state()
+	var a: Unit = _anchor(s)
+	s.start()
+	s.active_player = 0
+	s.begin_turn()
+	journal.mark(0, s)
+	journal.record(MoveCommand.create(a.id, Vector2i(20, 0)))  # далеко за межами AP: не проходить
+	assert_ne(MoveCommand.create(a.id, Vector2i(20, 0)).validate(s), "")
+	assert_null(ReplayFilter.build(journal, 0))
 
 
 func test_visible_enemy_on_viewer_mine_shows_move_and_blast() -> void:

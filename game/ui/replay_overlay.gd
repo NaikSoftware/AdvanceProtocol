@@ -41,7 +41,7 @@ const BRACKET_COLOR := Color(0.92, 0.95, 0.92, 0.85)
 ## Рамки стоять рівно на полях безпеки (ті самі 56/24, що в hud.tscn).
 const BRACKET_INSET := Vector2(56.0, 24.0)
 ## Підкладка під написами: смуга HP юніта позаду не змішується з цифрами.
-const PLATE_COLOR := Color(0.0, 0.0, 0.0, 0.35)
+const PLATE_COLOR := Color(0.0, 0.0, 0.0, 0.58)
 const PLATE_PAD: float = 6.0
 const DOT_COLOR := Color(0.86, 0.16, 0.12)
 const TRACK_COLOR := Color(0.92, 0.95, 0.92, 0.2)
