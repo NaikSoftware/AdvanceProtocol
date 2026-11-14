@@ -106,3 +106,15 @@ haze_color={
 "type": "vec3",
 "value": Vector3(0.1, 0.135, 0.155)
 }
+replay_grade_bcs={
+"type": "vec3",
+"value": Vector3(1, 1, 1)
+}
+replay_grade_lo={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+replay_grade_hi={
+"type": "vec3",
+"value": Vector3(1, 1, 1)
+}

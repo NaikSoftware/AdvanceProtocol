@@ -4,6 +4,8 @@
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, depth_test_disabled, cull_disabled, shadows_disabled;
 
+#include "replay_ungrade.gdshaderinc"
+
 uniform sampler2DArray bars : source_color, filter_linear, repeat_disable;
 // Розмір смуги у світі: ширина × висота квада (ставить UnitHpBars з розміру текстури).
 uniform vec2 bar_size;
@@ -23,6 +25,6 @@ void vertex() {
 
 void fragment() {
 	vec4 c = texture(bars, vec3(UV, layer));
-	ALBEDO = c.rgb;
+	ALBEDO = replay_ungrade(c.rgb);
 	ALPHA = c.a;
 }

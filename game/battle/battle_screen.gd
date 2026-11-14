@@ -239,6 +239,7 @@ func _ready() -> void:
 	_pause.surrender_requested.connect(_on_surrender)
 	_hud.pause_pressed.connect(_pause.show)
 	_replay_overlay.skip_pressed.connect(_on_replay_skip)
+	_replay_overlay.environment = _weather.environment
 	_camera_rig.view_changed.connect(_follow_weather)
 	_camera_rig.view_changed.connect(_follow_forest)
 	_follow_forest()
