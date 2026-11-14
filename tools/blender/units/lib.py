@@ -43,7 +43,7 @@ def load(name, seed=True):
     row = set_row(cfg)
     if row:
         # the model is still fitted into the role's box (hull x, z); cfg["spec"] then takes the gun length, the hull
-        # height (the game derives the bore height from it) and the wheel radius from the set's own row. The row stays
+        # height and bore height (a row `bore` wins over the hull-derived one) and the wheel radius from the set's own row. The row stays
         # the one place the game reads; verify_glb.py checks the built model against it
         cfg["spec"] = {"hull": [cfg["spec"]["hull"][0], row["hull"][1], cfg["spec"]["hull"][2]],
                        "barrel": row["barrel"], "wheel": row["wheel"], "bore": row["bore"]}

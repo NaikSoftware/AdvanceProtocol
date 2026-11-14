@@ -44,7 +44,8 @@ def verts(m):
 co = verts(me)
 if cfg.get("yaw"):
     # a generated gun is seldom square to the grid: turn the whole source about a vertical axis, in the source's own frame
-    # (before rot180), by [degrees, pivot x, pivot y]; the pivot ends on y = 0. Everything else in the config is measured after this turn.
+    # (before rot180), by [degrees, pivot x, pivot y]; the pivot lands on the centreline: y = 0, or x = 0 for `fwd` "y".
+    # Everything else in the config is measured after this turn.
     a, px, py = cfg["yaw"]
     c_, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
     dx, dy = co[:, 0] - px, co[:, 1] - py
@@ -228,6 +229,15 @@ if cfg.get("plough"):
     Lp = co[:, 0] if cfg["fwd"] == "x" else co[:, 1]
     m = Lp > pl0
     co[m, 1 if cfg["fwd"] == "x" else 0] *= plk
+    me.vertices.foreach_set("co", co.ravel()); me.update()
+if cfg.get("reach"):
+    # `reach` [from_long, to_long, shift]: the stretch of the source between the two long coordinates is pulled out by `shift`
+    # and everything ahead of it moves with it rigidly, so push arms get their real length and the plough keeps its shape
+    r0, r1, rs = cfg["reach"]
+    co = verts(me)
+    Lr = co[:, 0] if cfg["fwd"] == "x" else co[:, 1]
+    new_l = np.where(Lr > r1, Lr + rs, np.where(Lr > r0, r0 + (Lr - r0) * (r1 - r0 + rs) / (r1 - r0), Lr))
+    co[:, 0 if cfg["fwd"] == "x" else 1] = new_l
     me.vertices.foreach_set("co", co.ravel()); me.update()
 src_edit()
 lc = cfg["long_c"]
