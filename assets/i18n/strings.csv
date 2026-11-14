@@ -55,6 +55,10 @@ hud_threat_floor_drone,Щонайменше: дрон показано лише 
 hud_class,Клас,Class
 hud_confirm,Підтвердити,Confirm
 hud_cancel,Скасувати,Cancel
+hud_fire,Вогонь,Fire
+hud_strike,Удар,Strike
+hud_move,Рухатися,Move
+hud_repair,Ремонтувати,Repair
 hud_end_turn,Завершити хід,End turn
 handover_pass_device,Передайте пристрій,Pass the device
 handover_incoming_player,Наступний гравець,Incoming player

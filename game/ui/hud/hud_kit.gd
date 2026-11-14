@@ -111,3 +111,13 @@ static func group_content(button: Button, icon_px: float) -> void:
 		mark.modulate = button.get_theme_color(&"icon_disabled_color" if button.disabled else &"icon_normal_color")
 	tint.call()
 	button.draw.connect(tint)
+	button.set_meta(&"group_mark", mark)
+	button.set_meta(&"group_word", word)
+
+
+## Міняє підпис і значок кнопки, зібраної group_content(): група лишається однією, по центру.
+static func retitle_group(button: Button, text: String, tex: Texture2D) -> void:
+	var word: Label = button.get_meta(&"group_word")
+	if word != null:
+		word.text = text
+	(button.get_meta(&"group_mark") as TextureRect).texture = tex

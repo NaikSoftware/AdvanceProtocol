@@ -108,6 +108,12 @@ preview fields; the glyph's geometry never decides a sector.
 
 - **The action row** is [Cancel 126][16][Confirm 143] = 285, bottom-right by default. Confirm is the
   only element with a bone frame.
+- **Confirm names the pending action**, word and icon together, set by `Hud.show_preview()` from the
+  preview type: shot «Вогонь» / Fire (`fire.svg`), drone «Удар» / Strike (`drone.svg`), move «Рухатися»
+  / Move (`move.svg`), unit repair «Ремонтувати» / Repair (`repair_unit.svg`), and the engineer verbs
+  with their own name and icon (clear mine, repair bridge, demolish bridge). The 143 dp width holds
+  the longest label untruncated at all four probe sizes in both locales
+  (`tests/game/test_hud_action_labels.gd`).
 - **End turn is fixed bottom-left, and Confirm never docks there.** Confirm is tapped many times a
   turn and End turn once; the turn hand-off cannot be taken back, so a thumb aiming at Confirm must
   never land on it. No docking option puts the row bottom-left.

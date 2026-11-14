@@ -45,6 +45,9 @@ const _VERB_ICONS: Dictionary = {
 	EngineerCommand.Action.REPAIR_UNIT: preload("res://assets/ui/icons/repair_unit.svg"),
 }
 const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/drone.svg")
+const _ICON_FIRE: Texture2D = preload("res://assets/ui/icons/fire.svg")
+const _ICON_MOVE: Texture2D = preload("res://assets/ui/icons/move.svg")
+const _ICON_CONFIRM: Texture2D = preload("res://assets/ui/icons/confirm.svg")
 
 var _state: BattleState = null
 var _controller: InputController = null
@@ -211,6 +214,7 @@ func show_preview(preview: Dictionary) -> void:
 	if preview.is_empty():
 		return
 	_hide_toast()
+	_retitle_confirm(preview)
 	match int(preview["type"]):
 		InputController.ActionType.MOVE:
 			# Рух без плити: зони руху вже показують, куди можна дійти, а AP не пишемо ніде.
@@ -251,6 +255,27 @@ func _show_shot_preview(preview: Dictionary) -> void:
 	# Обидві межі як є — гравець мусить бачити розкид, а не одне «приблизно стільки» (§3.3, §1.5).
 	_plate.show_shot(sector, tr(HudKit.SECTOR_KEYS[sector]), "%d–%d" % [int(preview["min"]), int(preview["max"])],
 		infantry, turret, bool(preview.get("armour_ignored", false)), bool(preview.get("in_cover", false)))
+
+
+## Основна кнопка називає дію, що чекає підтвердження: слово й значок слідують за прев'ю.
+func _retitle_confirm(preview: Dictionary) -> void:
+	var key: String = "hud_confirm"
+	var tex: Texture2D = _ICON_CONFIRM
+	match int(preview["type"]):
+		InputController.ActionType.MOVE:
+			key = "hud_move"
+			tex = _ICON_MOVE
+		InputController.ActionType.SHOT:
+			key = "hud_fire"
+			tex = _ICON_FIRE
+		InputController.ActionType.DRONE:
+			key = "hud_strike"
+			tex = _ICON_DRONE
+		InputController.ActionType.ENGINEER:
+			var action: int = int(preview["action"])
+			key = "hud_repair" if action == EngineerCommand.Action.REPAIR_UNIT else EngineerPanel.LABEL_KEYS[action]
+			tex = _VERB_ICONS[action]
+	HudKit.retitle_group(_confirm_button, tr(key), tex)
 
 
 func _show_engineer_preview(preview: Dictionary) -> void:
