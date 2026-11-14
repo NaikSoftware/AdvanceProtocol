@@ -56,7 +56,6 @@ static func to_dict(state: BattleState) -> Dictionary:
 		# (BattleState.known_broken_map()), а seen і так зберігається нижче.
 		"broken_forest": broken_forest,
 		"vision": vision,
-		"damage_dealt": state.damage_dealt.duplicate(),
 	}
 
 static func from_dict(data: Dictionary) -> BattleState:
@@ -137,12 +136,6 @@ static func from_dict(data: Dictionary) -> BattleState:
 		v.seen = PackedByteArray(v_data["seen"])
 		state.vision.append(v)
 
-	# Збереження до появи лічильника поля не мають — рахуємо з нуля, а не відмовляємо.
-	state.damage_dealt.clear()
-	var dealt: Array = data.get("damage_dealt", [])
-	for p in state.player_count:
-		state.damage_dealt.append(int(dealt[p]) if p < dealt.size() else 0)
-
 	# Старе збереження found_by не має, а сусідство перевіряється лише на кроці чи на
 	# початку ходу: без цього загін поруч із ворогом після завантаження лишився б прихованим.
 	state.discover_cover()
@@ -176,9 +169,6 @@ static func _is_valid(data: Dictionary) -> bool:
 
 	if not _bools(data, "eliminated", pc):
 		return false
-	if data.has("damage_dealt") and not _nums(data, "damage_dealt", pc):
-		return false  # відсутність допустима (старі збереження), неправильний розмір — ні
-
 	if not _arr(data, "vision", pc):
 		return false
 	for v in (data["vision"] as Array):

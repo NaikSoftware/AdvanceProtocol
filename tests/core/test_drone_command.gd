@@ -129,14 +129,6 @@ func test_a_spotter_unlocks_the_diagonal_the_squad_cannot_see() -> void:
 	assert_eq(DroneCommand.create(a.id, t.id).validate(state), "",
 		"§3.9: з коригувальником той самий удар дозволено")
 
-func test_drone_damage_adds_to_the_squad_owners_tally() -> void:
-	var a: Unit = _assault(Vector2i(2, 2))
-	var t: Unit = state.add_unit(8, 1, Vector2i(6, 2), 2)
-	state.begin_turn()
-	var before: int = t.hp
-	DroneCommand.create(a.id, t.id).apply(state)
-	assert_eq(state.damage_dealt[0], before - t.hp)
-
 ## Task 10: причина відмови на рівні загону (без цілі) — для кнопки дрона.
 func test_check_launch_reports_unit_level_reasons() -> void:
 	var a: Unit = _assault(Vector2i(2, 2))

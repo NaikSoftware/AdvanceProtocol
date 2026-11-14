@@ -78,14 +78,10 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 	# Міна на мосту валить прогін, і юніт іде в річку разом із ним — тим самим шляхом,
 	# що й від підриву інженером, щоб вигляд програв ту саму низку подій.
 	if state.board.kind_at(unit.pos) == Terrain.Kind.BRIDGE:
-		out.append_array(EngineerCommand.demolish_bridge(state, unit.pos, m.owner))
+		out.append_array(EngineerCommand.demolish_bridge(state, unit.pos))
 		return out
 	var applied: int = mini(DAMAGE_BASE + Rules.roll(state.rng, DAMAGE_ROLL), unit.hp)
 	unit.hp -= applied
-	# Шкода міни — власникові міни, але не за власний юніт: свої втрати — не шкода,
-	# завдана ворогу, і підсумок матчу їх не рахує.
-	if unit.owner != m.owner:
-		state.damage_dealt[m.owner] += applied
 	out.append(Events.DamageDealt.new(unit.id, applied, unit.hp))
 	if not unit.is_alive():
 		out.append(Events.UnitDestroyed.new(unit.id, unit.pos))

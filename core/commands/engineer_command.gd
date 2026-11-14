@@ -24,7 +24,7 @@ static func repair_bounds(engineer: Unit, target: Unit) -> Vector2i:
 	var missing: int = target.max_hp() - target.hp
 	return Vector2i(mini(20, missing), mini((40 + maxi(0, engineer.ap - engineer.fire_cost())) / 2, missing))
 
-static func demolish_bridge(state: BattleState, pos: Vector2i, credit_player: int) -> Array[Events.BattleEvent]:
+static func demolish_bridge(state: BattleState, pos: Vector2i) -> Array[Events.BattleEvent]:
 	## Один шлях підриву мосту для інженера й для міни на мосту (§3.8, §3.11): вигляд
 	## програє ту саму низку подій, хоч би що міст підірвало.
 	var out: Array[Events.BattleEvent] = []
@@ -35,12 +35,9 @@ static func demolish_bridge(state: BattleState, pos: Vector2i, credit_player: in
 	out.append_array(Wrecks.remove(state, pos, Wrecks.Reason.BRIDGE_DEMOLISHED))
 	# Юніт на мосту падає разом із ним: та сама низка подій, що й від смертельного
 	# влучання, крім уламків — техніка в річці їх не лишає, тож Wrecks.leave() тут
-	# немає. Шкода — тому, хто підірвав, але не за власний юніт: свої втрати —
-	# не шкода, завдана ворогу.
+	# немає.
 	var victim: Unit = state.unit_at(pos)
 	if victim != null:
-		if victim.owner != credit_player:
-			state.damage_dealt[credit_player] += victim.hp
 		out.append(Events.DamageDealt.new(victim.id, victim.hp, 0))
 		victim.hp = 0
 		out.append(Events.UnitDestroyed.new(victim.id, victim.pos))
@@ -141,7 +138,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 			# охороною: BridgeChanged для мосту, що не змінився, змусила б вигляд
 			# анімувати брехню.
 			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE:
-				out.append_array(demolish_bridge(state, target_pos, e.owner))
+				out.append_array(demolish_bridge(state, target_pos))
 		Action.REPAIR_BRIDGE:
 			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE_DESTROYED:
 				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE)

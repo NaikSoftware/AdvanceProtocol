@@ -195,18 +195,6 @@ func test_retaliators_ap_is_zeroed_and_marked_fired() -> void:
 	assert_true(t.has_fired)
 
 # ---------------------------------------------------------------------------
-# 7. Retaliation damage is credited to the retaliator's owner.
-func test_retaliation_damage_is_credited_to_the_retaliators_owner() -> void:
-	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
-	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 6)
-	state.begin_turn()
-	state.refresh_vision(t.owner)
-	assert_eq(state.damage_dealt[1], 0)
-	FireCommand.create(a.id, t.id).apply(state)
-	assert_true(state.damage_dealt[1] > 0,
-		"шкода від відповіді йде на рахунок власника-відповідача (гравець 1), а не стрільця")
-
-# ---------------------------------------------------------------------------
 # 8. A drone strike also provokes retaliation when the target can reach.
 #
 # Assault squad (#1) drone-strikes a heavy tank (#8: atk 121, hp 350,
@@ -280,18 +268,6 @@ func test_artillery_at_max_range_is_answered_by_a_gun_that_never_saw_it() -> voi
 	assert_true(t.is_alive(), "188 макс. шкоди < 200 hp")
 	assert_not_null(_shot_retaliated(events), "§3.3.1: влучання відкрило гармату — відповідь є")
 	assert_true(a.hp < attacker_hp_before)
-
-func test_retaliation_adds_to_the_retaliators_tally() -> void:
-	var a: Unit = state.add_unit(5, 0, Vector2i(4, 4), 2)
-	var t: Unit = state.add_unit(5, 1, Vector2i(6, 4), 6)
-	state.begin_turn()
-	state.refresh_vision(t.owner)
-	var a_before: int = a.hp
-	var t_before: int = t.hp
-	FireCommand.create(a.id, t.id).apply(state)
-	assert_true(a.hp < a_before, "передумова: відповідь була")
-	assert_eq(state.damage_dealt[1], a_before - a.hp, "шкода відповіді — гравцю-відповідачу")
-	assert_eq(state.damage_dealt[0], t_before - t.hp)
 
 # ---------------------------------------------------------------------------
 # §3.3.1: відповідь коштує AP лише до кінця ходу АТАКУВАЛЬНИКА. У грі на трьох
