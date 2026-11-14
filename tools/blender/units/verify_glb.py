@@ -129,7 +129,7 @@ if col4.shape[1] == 4:
     rate = 2.0 * col4[whl, 3]
     road_r = cfg["gear"]["road"]["r"] * cfg["k"]
     # every wheel vertex sits on its rim; a tyre's hub face lies inside it, so only the rim is held there
-    err = (rate * d - road_r).max() if wheeled else np.abs(rate * d - road_r).max()
+    err = abs((rate * d).max() - road_r) if wheeled else np.abs(rate * d - road_r).max()
     check(err < 0.002, f"wheel spin rate x wheel radius == road wheel radius (worst {err:.4f})")
 # the game turns wheels by travel / _SPECS.wheel, so that number must be the road wheels' radius
 road = cfg["gear"]["road"]["r"] * cfg["k"]

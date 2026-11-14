@@ -424,7 +424,6 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 
 
 
-## Ряд із чотирьох танків набору: кадр _f0 — тилом до камери, видно корму й моторну палубу; _f4 — носом до камери.
 func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int) -> void:
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
@@ -437,7 +436,7 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
 	var hull := m.get_node("Hull") as GeometryInstance3D
 	var shots: Array = []
-	# s0 и s1 — той самий travel (контроль: кадри мають збігтися), s2 — пів радіуса колеса (пів радіана)
+	# s0 і s1 — той самий travel (контроль: кадри мають збігтися), s2 — пів радіуса колеса (пів радіана)
 	var r: float = float(UnitSilhouettes.spec(type_id).get("wheel", 0.06))
 	for i in 3:
 		hull.set_instance_shader_parameter("travel", 0.5 * r if i == 2 else 0.0)
@@ -451,6 +450,7 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	get_tree().quit()
 
 
+## Ряд із чотирьох танків набору: кадр _f0 — тилом до камери, видно корму й моторну палубу; _f4 — носом до камери.
 func _rear(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int) -> void:
 	screen.setup(map, 2, 1)
 	var c := _field_row_near_centre(map, 7)

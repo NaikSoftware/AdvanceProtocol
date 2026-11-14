@@ -842,7 +842,12 @@
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
-      "holes": 6
+      "holes": 6,
+      "ground_ao": 0.33,
+      "gun_dark": 0.4,
+      "streak": 0.08,
+      "grime": 0.12,
+      "blotch": 0.03
     },
     "fwd": "-y",
     "hull_long": [
@@ -853,7 +858,7 @@
     "scale_lat": 0.852,
     "body_tris": 3000,
     "side_reach": 8,
-    "wall_floor": 0.14,
+    "wall_floor": 0.15,
     "squash": {
       "above_h": 0.36,
       "scale": 0.85
@@ -898,23 +903,23 @@
       "profile": [
         [
           0.1,
-          0.012
+          0.016
         ],
         [
           0.125,
-          0.0085
+          0.0135
         ],
         [
           0.235,
-          0.0085
+          0.0135
         ],
         [
           0.24,
-          0.0105
+          0.0155
         ],
         [
           0.29,
-          0.0105
+          0.0155
         ]
       ]
     },
@@ -937,7 +942,7 @@
       ],
       "sides": 16
     },
-    "end_floor": 0.15,
+    "end_floor": 0.2,
     "turret": {
       "long": [
         -0.22,
@@ -948,7 +953,7 @@
       "scale_long": 1.0,
       "scale_h": 1.0,
       "barrel_r": 0.026,
-      "dark": 0.3
+      "dark": 0.6
     }
   },
   "troop_carrier": {
@@ -982,20 +987,21 @@
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
-      "holes": 6
+      "holes": 6,
+      "ground_ao": 0.33
     },
     "fwd": "-y",
     "hull_long": [
       -0.5,
       0.5
     ],
-    "hull_lat": 0.1875,
-    "scale_lat": 0.85,
+    "hull_lat": 0.1775,
+    "scale_lat": 0.8,
     "side_reach": 8,
     "wall_floor": 0.18,
     "body_tris": 2600,
     "gun": {
-      "axis_h": 0.425,
+      "axis_h": 0.3953,
       "start_long": -0.03,
       "clear_r": 0.015,
       "sides": 8,
@@ -1029,12 +1035,16 @@
       "cut_lat": 0.08,
       "cut_r": 1.04,
       "wheel_lat": [
-        0.115,
-        0.168
+        0.108,
+        0.16
       ],
       "sides": 16
     },
-    "end_floor": 0.2
+    "end_floor": 0.2,
+    "squash": {
+      "above_h": 0.335,
+      "scale": 0.67
+    }
   },
   "scout_car": {
     "source": "~/.local/share/advance-protocol/unit-sources/scout_car.glb",
@@ -1067,7 +1077,14 @@
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
-      "holes": 6
+      "holes": 6,
+      "ground_ao": 0.33,
+      "glass_hue": 1.0,
+      "glass_c": [
+        44,
+        48,
+        52
+      ]
     },
     "fwd": "-y",
     "hull_long": [

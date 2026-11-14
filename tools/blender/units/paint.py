@@ -158,7 +158,12 @@ if cfg.get("no_glass_in_boxes"):
         z0, z1 = h0 * cfg["k"] * lib.TILE_M, h1 * cfg["k"] * lib.TILE_M
         pad = 0.15
         glass = glass * ~((P[..., 0] > x0 - pad) & (P[..., 0] < x1 + pad) & (P[..., 1] > y0 - pad) & (P[..., 1] < y1 + pad) & (P[..., 2] > z0 - pad) & (P[..., 2] < z1 + pad))
-col = col * (1 - glass[..., None]) + lin(20, 22, 24) * glass[..., None]
+if C.get("glass_hue"):
+    # a generated window is teal, not dark: take texels whose green and blue both clearly exceed red, on the cab (above `glass_hue` m)
+    sr = d["src"]
+    teal = (np.minimum(sr[..., 1], sr[..., 2]) > sr[..., 0] * 1.35 + 0.01) * (d["cov"] > 0.5) * (P[..., 2] > C["glass_hue"]) * ~on_gun
+    glass = np.maximum(glass, teal.astype(np.float32))
+col = col * (1 - glass[..., None]) + lin(*C.get("glass_c", (20, 22, 24))) * glass[..., None]
 rough = rough * (1 - glass) + 0.25 * glass
 
 # ---- panel lines, edges, occlusion ----------------------------------------------------------
@@ -268,6 +273,9 @@ if plain:
     ramp = np.clip(1 - (h - mf) / C.get("mud_h", 0.6), 0, 1)
     mx = C.get("mud_max", 0.85)
     col = col * (1 - mx * ramp[..., None]) + lin(92, 76, 56) * (mx * ramp)[..., None]
+if C.get("ground_ao"):
+    # the vehicle sits on the ground: the lower hull and the wheel wells take contact shade (`ground_ao` = darkest share, bottom ~0.4 m)
+    col = col * (1 - C["ground_ao"] * smooth(0.55, 0.1, h))[..., None]
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 # Oil and fuel on the rear deck: darker, half-gloss patches, the one smooth area on a matte tank.
 # Deck level only (hull height): a casemate roof at the rear is not an engine deck.
