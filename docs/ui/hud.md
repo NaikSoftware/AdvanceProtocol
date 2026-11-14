@@ -88,7 +88,7 @@ Every value comes from `core/`:
 | shot | target row (owner-colour tab, name, «ЦІЛЬ») · glyph · «СЕКТОР БРОНІ» + sector word · «ШКОДА» `min–max` | `FireCommand.preview()`: `sector`, `min`, `max`, `armour_ignored`, `in_cover` |
 | drone strike | target row · drone icon · «БРОНЯ» «не діє» · «ШКОДА» `120–180` | `Rules.drone_damage_bounds()` |
 | repair unit | target row (own colour) · «МІЦНІСТЬ» `hp/max` · «РЕМОНТ» `min–max` | `EngineerCommand.repair_bounds()` |
-| clear mine, repair or demolish bridge | verb icon · verb name | no numbers: these verbs have none |
+| clear mine, repair or demolish bridge | no plate: the row alone, and Confirm carries the verb name and icon | no numbers: these verbs have none |
 | lay mine | no preview: it executes on the tap | |
 
 **Every shot shows its sector before Confirm** (§3.4), whoever shoots: a target that survives

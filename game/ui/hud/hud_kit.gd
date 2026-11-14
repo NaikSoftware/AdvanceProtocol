@@ -116,8 +116,11 @@ static func group_content(button: Button, icon_px: float) -> void:
 
 
 ## Міняє підпис і значок кнопки, зібраної group_content(): група лишається однією, по центру.
-static func retitle_group(button: Button, text: String, tex: Texture2D) -> void:
+static func retitle_group(button: Button, text: String, tex: Texture2D, icon_px: float = 20.0, gap: int = 8) -> void:
 	var word: Label = button.get_meta(&"group_word")
 	if word != null:
 		word.text = text
-	(button.get_meta(&"group_mark") as TextureRect).texture = tex
+	var mark := button.get_meta(&"group_mark") as TextureRect
+	mark.texture = tex
+	mark.custom_minimum_size = Vector2(icon_px, icon_px)
+	(mark.get_parent() as HBoxContainer).add_theme_constant_override("separation", gap)

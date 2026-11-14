@@ -19,7 +19,6 @@ var target_row: Control
 var shot_box: Control
 var drone_box: Control
 var repair_box: Control
-var verb_box: Control
 var armour_glyph: ArmourGlyph
 
 var _tab: ColorRect
@@ -42,8 +41,6 @@ var _hp_value: Label
 var _hp_max: Label
 var _heal_caption: Label
 var _heal_value: Label
-var _verb_icon: TextureRect
-var _verb_name: Label
 var _target_hair: ColorRect
 
 
@@ -167,13 +164,6 @@ func _ready() -> void:
 	_heal_caption = _label("", &"HudCaption", hv)
 	_heal_value = _label("PreviewHealValue", &"HudNumberBig", hv)
 
-	# Верби без чисел: значок і назва.
-	verb_box = _box("PreviewVerbBox", body, Vector4(12, 0, 14, 0), 48.0)
-	var vrow := _row(verb_box, 8)
-	_verb_icon = _icon(null, 20.0)
-	vrow.add_child(_verb_icon)
-	_verb_name = _label("PreviewVerbName", &"HudLabel", vrow)
-
 	_retranslate()
 	clear()
 
@@ -199,7 +189,7 @@ func _retranslate() -> void:
 
 func clear() -> void:
 	visible = false
-	for c: Control in [target_row, _target_hair, shot_box, drone_box, repair_box, verb_box]:
+	for c: Control in [target_row, _target_hair, shot_box, drone_box, repair_box]:
 		c.visible = false
 	_changed()
 
@@ -243,14 +233,6 @@ func show_repair(hp: int, max_hp: int, heal: String) -> void:
 	_hp_max.text = "/%d" % max_hp
 	_heal_value.text = heal
 	repair_box.visible = true
-	visible = true
-	_changed()
-
-
-func show_verb(icon: Texture2D, verb_name: String) -> void:
-	_verb_icon.texture = icon
-	_verb_name.text = verb_name
-	verb_box.visible = true
 	visible = true
 	_changed()
 

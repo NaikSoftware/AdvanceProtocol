@@ -47,6 +47,13 @@ const _VERB_ICONS: Dictionary = {
 const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/drone.svg")
 const _ICON_FIRE: Texture2D = preload("res://assets/ui/icons/fire.svg")
 const _ICON_MOVE: Texture2D = preload("res://assets/ui/icons/move.svg")
+## Значки основної кнопки мають різний вміст у полі 24×24, тож їхній бокс підібрано так, щоб чорнило було
+## в усіх близько 14–15 dp. Для довгих підписів проміжок між значком і словом тісніший.
+const _CONFIRM_ICON_PX: Dictionary = {
+	"hud_fire": 24.0, "hud_move": 26.0, "hud_repair": 22.0, "eng_clear_mine": 19.0,
+	"eng_repair_bridge": 17.0, "eng_demolish_bridge": 17.0, "hud_strike": 16.5,
+}
+const _CONFIRM_GAP_TIGHT: Array[String] = ["eng_repair_bridge", "eng_demolish_bridge"]
 const _ICON_CONFIRM: Texture2D = preload("res://assets/ui/icons/confirm.svg")
 
 var _state: BattleState = null
@@ -224,6 +231,10 @@ func show_preview(preview: Dictionary) -> void:
 			return
 		InputController.ActionType.ENGINEER:
 			_show_engineer_preview(preview)
+			if int(preview["action"]) != EngineerCommand.Action.REPAIR_UNIT:
+				_confirm_button.disabled = false
+				_sync_modes()
+				return
 		InputController.ActionType.DRONE:
 			# Броня ігнорується (§3.9) — сектора немає, лише межі з Rules.drone_damage_bounds().
 			_show_target_row(_unit(int(preview["target_id"])))
@@ -275,7 +286,8 @@ func _retitle_confirm(preview: Dictionary) -> void:
 			var action: int = int(preview["action"])
 			key = "hud_repair" if action == EngineerCommand.Action.REPAIR_UNIT else EngineerPanel.LABEL_KEYS[action]
 			tex = _VERB_ICONS[action]
-	HudKit.retitle_group(_confirm_button, tr(key), tex)
+	HudKit.retitle_group(_confirm_button, tr(key), tex, float(_CONFIRM_ICON_PX.get(key, 20.0)),
+		6 if key in _CONFIRM_GAP_TIGHT else 8)
 
 
 func _show_engineer_preview(preview: Dictionary) -> void:
@@ -286,8 +298,7 @@ func _show_engineer_preview(preview: Dictionary) -> void:
 		var hp: int = patient.hp if patient != null else 0
 		var max_hp: int = int(patient.type()["max_hp"]) if patient != null else 0
 		_plate.show_repair(hp, max_hp, "%d–%d" % [int(preview["heal_min"]), int(preview["heal_max"])])
-	else:
-		_plate.show_verb(_VERB_ICONS[action], tr(EngineerPanel.LABEL_KEYS[action]))
+	# Решта верб без чисел: їхнє слово вже стоїть на основній кнопці, плита його б лише повторила.
 
 
 func _show_target_row(target: Unit) -> void:
@@ -473,7 +484,7 @@ func _sync_modes() -> void:
 	var own: bool = _own_selected()
 	var engineer: bool = own and _selected_unit.unit_class() == UnitTypes.UnitClass.ENGINEER
 	_row.visible = pending
-	_plate.visible = pending and _last_preview.size() > 0 and int(_last_preview["type"]) != InputController.ActionType.MOVE
+	_plate.visible = pending and _last_preview.size() > 0 and _plate_has_content(_last_preview)
 	_cancel_button.visible = pending
 	_engineer_panel.visible = engineer and not pending
 	if _engineer_panel.visible:
@@ -483,6 +494,16 @@ func _sync_modes() -> void:
 	if _drone_strip.visible:
 		_retitle_drone_strip()
 	_relayout()
+
+
+## Плита потрібна там, де є числа: рух і верби без чисел її не мають.
+func _plate_has_content(preview: Dictionary) -> bool:
+	match int(preview["type"]):
+		InputController.ActionType.MOVE:
+			return false
+		InputController.ActionType.ENGINEER:
+			return int(preview["action"]) == EngineerCommand.Action.REPAIR_UNIT
+	return true
 
 
 func _drone_button_applicable() -> bool:

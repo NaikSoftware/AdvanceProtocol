@@ -525,15 +525,15 @@ func test_repair_preview_shows_target_hp_and_both_heal_bounds_verbatim() -> void
 	assert_false((hud.get_node("%PreviewRepairBox") as Control).visible, "прев'ю руху гасить ремонт")
 
 
-func test_verb_preview_is_one_row_with_the_verb_name() -> void:
+func test_verb_preview_has_no_plate_the_button_names_the_verb() -> void:
 	hud.bind(_state())
 	hud.show_preview({"type": InputController.ActionType.ENGINEER, "unit_id": 1,
 		"action": EngineerCommand.Action.DEMOLISH_BRIDGE, "target": Vector2i(4, 3)})
 
 	assert_false((hud.get_node("%PreviewRepairBox") as Control).visible)
-	assert_true((hud.get_node("%PreviewVerbBox") as Control).visible)
-	assert_eq(_label("PreviewVerbName").text, tr("eng_demolish_bridge"))
+	assert_false(hud.get_node("%PreviewPlate").visible, "слово верби стоїть на кнопці, плити нема")
 	assert_false(hud.get_node("%PreviewTargetRow").visible, "верби-тайли — без ряду цілі й чисел")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "плити нема — чекати запікання нічого")
 
 
 func test_drone_preview_shows_armour_ignored_and_bounds() -> void:
