@@ -34,7 +34,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 	var bodies: Array = []
 	for b in state.bodies:
 		bodies.append({"unit_id": b.unit_id, "x": b.pos.x, "y": b.pos.y, "owner": b.owner, "type_id": b.type_id,
-			"facing": b.facing, "first": b.first, "count": b.count})
+			"facing": b.facing, "first": b.first, "count": b.count, "revealed_to": b.revealed_to})
 	var broken_forest: Array = []
 	for p: Vector2i in state.broken_forest:
 		broken_forest.append({"x": p.x, "y": p.y})
@@ -136,6 +136,7 @@ static func from_dict(data: Dictionary) -> BattleState:
 	for b_data in (data.get("bodies", []) as Array):
 		state.bodies.append(Casualties.Body.new(int(b_data["unit_id"]), Vector2i(int(b_data["x"]), int(b_data["y"])),
 			int(b_data["owner"]), int(b_data["type_id"]), int(b_data["facing"]), int(b_data["first"]), int(b_data["count"])))
+		state.bodies[-1].revealed_to = int(b_data.get("revealed_to", 0))
 	# Збереження до появи просік поля не мають — лісу там ніхто не валив.
 	state.broken_forest.clear()
 	for f_data in (data.get("broken_forest", []) as Array):
@@ -246,10 +247,15 @@ static func _is_valid(data: Dictionary) -> bool:
 		if int((board["tiles"] as Array)[pos.y * w + pos.x]) == Terrain.Kind.BRIDGE_DESTROYED:
 			return false
 		wreck_at[pos] = true
-	# Тіла — лише піхоти, на дошці, наявного власника, і місця в межах четвірки відділення.
+	# Тіла — лише піхоти, свого юніта (той самий власник і тип), на дошці й не у воді (з підірваним
+	# мостом вони йдуть у річку), і місця в межах четвірки відділення. Тіл у юніта буває й понад
+	# чотири: лікування фігуру ставить, а тіла лишає.
 	if data.has("bodies"):
 		if not _arr(data, "bodies"):
 			return false
+		var unit_of: Dictionary = {}
+		for u in (data["units"] as Array):
+			unit_of[int(u["id"])] = Vector2i(int(u["owner"]), int(u["type_id"]))
 		for b in (data["bodies"] as Array):
 			if typeof(b) != TYPE_DICTIONARY or not (_num(b, "unit_id") and _in(b, "x", 0, w - 1) and _in(b, "y", 0, h - 1)
 					and _in(b, "owner", 0, pc - 1) and _in(b, "type_id", 0, UnitTypes.TYPES.size() - 1)
@@ -257,6 +263,13 @@ static func _is_valid(data: Dictionary) -> bool:
 					and _in(b, "count", 1, Casualties.SQUAD_FIGURES - int(b["first"]))):
 				return false
 			if _is_vehicle_type(int(b["type_id"])):
+				return false
+			if unit_of.get(int(b["unit_id"]), Vector2i(-1, -1)) != Vector2i(int(b["owner"]), int(b["type_id"])):
+				return false
+			var kind: int = int((board["tiles"] as Array)[int(b["y"]) * w + int(b["x"])])
+			if kind == Terrain.Kind.WATER or kind == Terrain.Kind.BRIDGE_DESTROYED:
+				return false
+			if b.has("revealed_to") and not _in(b, "revealed_to", 0, (1 << pc) - 1):
 				return false
 	if data.has("broken_forest"):
 		if not _arr(data, "broken_forest"):

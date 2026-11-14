@@ -37,6 +37,8 @@ static func demolish_bridge(state: BattleState, pos: Vector2i) -> Array[Events.B
 	# Уламки на прогоні падають у річку разом із ним (§3.14). Підрив вони не
 	# забороняють: техніки на них немає, а піхоту на мосту й так можна скинути.
 	out.append_array(Wrecks.remove(state, pos, Wrecks.Reason.BRIDGE_DEMOLISHED))
+	# Тіла бійців на прогоні (Casualties) теж ідуть у річку: лежати їм більше нема на чому.
+	Casualties.remove_at(state, pos)
 	# Юніт на мосту падає разом із ним: та сама низка подій, що й від смертельного
 	# влучання, крім уламків — техніка в річці їх не лишає, тож Wrecks.leave() тут
 	# немає. Тіл піхоти (Casualties) теж немає: вона в річці.

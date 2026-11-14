@@ -241,6 +241,7 @@ func begin_turn() -> Array[Events.BattleEvent]:
 func refresh_vision(player: int) -> Array[Events.BattleEvent]:
 	## §3.5: перерахунок з нуля, ніколи не переносити чужу видимість у рендерер.
 	var revealed: Array[Vector2i] = vision[player].recompute(board, alive_units(), player)
+	Casualties.reveal(self, player)
 	if revealed.is_empty():
 		return []
 	return [Events.TileRevealed.new(player, revealed)] as Array[Events.BattleEvent]
