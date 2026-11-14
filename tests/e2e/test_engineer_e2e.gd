@@ -347,3 +347,18 @@ func test_every_armed_verb_has_its_hint() -> void:
 		_e2e.press(panel.strip().cancel_button)
 		await _e2e.settle()
 		assert_false(hint.is_visible_in_tree())
+
+
+## Відмова — лише тост: тег не перевибирає місця й не зсувається.
+func test_a_refusal_toast_does_not_move_the_unit_tag() -> void:
+	await _boot()
+	var panel: EngineerPanel = _e2e.engineer_panel()
+	_e2e.tap(ENG)
+	_e2e.press(panel.button_for(A.LAY_MINE))
+	await _e2e.settle()
+	var tag: UnitTag = _e2e.hud().unit_tag()
+	var before: Vector2 = tag.position
+	_e2e.tap(Vector2i(7, 1))
+	assert_eq(_toast_text(), tr("ERR_NOT_ADJACENT"))
+	await _e2e.settle()
+	assert_eq(tag.position, before)

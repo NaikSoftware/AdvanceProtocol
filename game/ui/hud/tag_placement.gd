@@ -26,7 +26,14 @@ const FIRE_GROW: float = 10.0
 const LEADER_CLEAR: float = 4.0
 const LABEL_CLEAR: float = 2.0
 const CHROME_AIR: float = 16.0
-const CORNER_COST: float = 400.0
+const CORNER_COST: float = 1200.0
+const CORNER_AIR: float = 4.0
+## Будь-який дотик до контуру дорожчий за кілька десятків dp відстані: частка площі сама по собі
+## ледь важить, а сегмент контуру під тегом ховає межу зони.
+const TOUCH_COST: float = 120.0
+## Лідер довший за 40 dp росте круто: чистий закуток поруч кращий за дальній.
+const LONG_LEAD_FROM: float = 40.0
+const LONG_LEAD_PER_DP: float = 12.0
 const END_HALF: float = 2.5
 const _STEP: float = 3.0
 const MARK_WEIGHT: float = 1500.0
@@ -56,6 +63,8 @@ var _unit: Rect2
 var _core: Rect2
 var _core_poly: PackedVector2Array
 var _label: Rect2 = Rect2()
+## Значок дрона: так само не місце для кінця лідера (запас END_CLEAR від квадрата).
+var _icon: Rect2 = Rect2()
 var _chrome: Array[Rect2] = []
 var _corners: PackedVector2Array = PackedVector2Array()
 var _others: Array[Rect2]
@@ -95,6 +104,8 @@ func _init(scene: Dictionary) -> void:
 	_core_poly = scene.get("core_poly", PackedVector2Array())
 	# Напис HP рушій малює поверх верхнього краю смуги: кінець лідера мусить його обійти.
 	_label = scene.get("label", Rect2()).grow(LABEL_CLEAR) if scene.get("label", Rect2()).size != Vector2.ZERO else Rect2()
+	var icon: Rect2 = scene.get("icon", Rect2())
+	_icon = icon.grow(LABEL_CLEAR) if icon.size != Vector2.ZERO else Rect2()
 	_others.assign(scene.get("others", []))
 	_fire = scene.get("fire", PackedVector2Array())
 	_safe = Rect2(scene["screen"]).grow_individual(-24.0, -8.0, -24.0, -8.0)
@@ -125,7 +136,8 @@ func _init(scene: Dictionary) -> void:
 ## 2 — полігони не заважають зовсім. Чужі юніти, хром, лінія вогню й межі екрана — тверді завжди.
 func is_legal(r: Rect2, relax: int = 0) -> bool:
 	var d: float = _dist(r, _unit)
-	if d < MIN_GAP or _dist(r, _core) > MAX_LEAD:
+	var dc: float = _dist(r, _core)
+	if d < MIN_GAP or dc > MAX_LEAD:
 		return false
 	if not _safe.encloses(r):
 		return false
@@ -136,7 +148,7 @@ func is_legal(r: Rect2, relax: int = 0) -> bool:
 		return false
 	if relax < 2 and (_sat_sum_i(_hard_sat, r) > 0 or _hits_grown(r)):
 		return false
-	if d > _lead_at:
+	if dc > _lead_at:
 		var ends: PackedVector2Array = leader_points(r)
 		if ends[0].distance_to(ends[1]) > MAX_LEAD:
 			return false
@@ -178,8 +190,10 @@ static func _bounds(g: PackedVector2Array) -> Rect2:
 	return Rect2(lo, hi - lo)
 
 
+## Відстань міряється до моделі зі смугою (куди дістає лідер), а не до напису й значка: інакше тег
+## на 13 dp від моделі лишався б без лідера й читався б відірваним.
 func needs_leader(r: Rect2) -> bool:
-	return _dist(r, _unit) > _lead_at
+	return _dist(r, _core) > _lead_at
 
 
 ## [від краю тега, до смуги+моделі юніта] — лідер: найдешевша точка контуру силуету (відстань + штрафи) або
@@ -265,10 +279,13 @@ func _static_cost(u: Vector2) -> float:
 ## static_cost < INF — уже пораховану статичну частину (кінці з кешу); INF — порахувати тут.
 func _end_cost(t: Vector2, u: Vector2, static_cost: float = INF) -> float:
 	var cost: float = 0.0
-	if _label.size != Vector2.ZERO:
-		if _label.intersects(Rect2(u - Vector2(END_HALF, END_HALF), Vector2(END_HALF, END_HALF) * 2.0)):
+	var square := Rect2(u - Vector2(END_HALF, END_HALF), Vector2(END_HALF, END_HALF) * 2.0)
+	for avoid: Rect2 in [_label, _icon]:
+		if avoid.size == Vector2.ZERO:
+			continue
+		if avoid.intersects(square):
 			cost += 1000.0
-		elif _segment_hits(t, u, _label):
+		elif _segment_hits(t, u, avoid):
 			cost += 500.0
 	if _cells_raw.is_empty():
 		return cost
@@ -318,8 +335,13 @@ func mark_cover(r: Rect2) -> float:
 
 func score(r: Rect2) -> float:
 	var d: float = _dist(r, _unit)
-	var s: float = MARK_WEIGHT * mark_cover(r) \
-		+ DISTANCE_WEIGHT * d + (LEADER_COST if d > _lead_at else 0.0)
+	var lead: bool = needs_leader(r)
+	var cover: float = mark_cover(r)
+	var s: float = MARK_WEIGHT * cover + (TOUCH_COST if cover > 0.0 else 0.0) \
+		+ DISTANCE_WEIGHT * d + (LEADER_COST if lead else 0.0)
+	if lead:
+		var ends: PackedVector2Array = leader_points(r)
+		s += LONG_LEAD_PER_DP * maxf(0.0, ends[0].distance_to(ends[1]) - LONG_LEAD_FROM)
 	for o: Rect2 in _others:
 		if _dist(r, o) < 12.0:
 			s += CROWD_COST
@@ -330,11 +352,11 @@ func score(r: Rect2) -> float:
 			s += CROWD_COST
 			break
 	# Кут контуру під тегом ховає, де зона повертає.
-	var grown: Rect2 = r.grow(2.0)
+	var grown: Rect2 = r.grow(CORNER_AIR)
 	for v in _corners:
 		if grown.has_point(v):
 			s += CORNER_COST
-	if d > _lead_at:
+	if lead:
 		for o: Rect2 in _others:
 			if _dist(r, o) < d + 8.0:
 				s += CROWD_COST
@@ -399,7 +421,7 @@ func _candidates() -> Array[Rect2]:
 		for y in range(y0, y1, 4):
 			var r := Rect2(x, y, w, h)
 			# Дешевий відсів ще до повних перевірок: усередині 13 dp — це вже «збоку».
-			if _dist(r, u) > _lead_at:
+			if _dist(r, _core) > _lead_at:
 				out.append(r)
 	return out
 

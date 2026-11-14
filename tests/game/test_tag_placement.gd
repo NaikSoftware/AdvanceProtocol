@@ -46,8 +46,8 @@ func test_contour_under_the_tag_costs_exactly_the_mark_fraction() -> void:
 	var unit := Rect2(300, 200, 40, 50)
 	var with := TagPlacement.new(_scene({"unit": unit, "core": unit, "marks": marks}))
 	var without := TagPlacement.new(_scene({"unit": unit, "core": unit}))
-	assert_almost_eq(with.score(r) - without.score(r), TagPlacement.MARK_WEIGHT * 200.0 / (209.0 * 30.0), 0.001,
-		"ціна — вага × площа лінії / площа тега")
+	assert_almost_eq(with.score(r) - without.score(r), TagPlacement.MARK_WEIGHT * 200.0 / (209.0 * 30.0) + TagPlacement.TOUCH_COST, 0.001,
+		"ціна — вага × площа лінії / площа тега плюс ціна дотику")
 
 
 func test_a_contour_pushes_the_tag_to_the_clear_side() -> void:
@@ -261,3 +261,52 @@ func test_contour_corner_is_found_only_where_the_line_turns() -> void:
 		PackedVector2Array([Vector2(10, 10), Vector2(10, 20)]),
 	]
 	assert_eq(TagPlacement._find_corners(marks), PackedVector2Array([Vector2(10, 0)]), "прямий стик (10,10) — не кут")
+
+
+func test_a_contour_corner_under_the_tag_loses_to_a_clean_spot_beside_the_unit() -> void:
+	# Зона огортає юніта знизу й справа: кут контуру якраз під нижнім місцем, ліворуч чисто.
+	var unit := Rect2(480, 200, 40, 50)
+	var marks: Array[PackedVector2Array] = [
+		PackedVector2Array([Vector2(440, 270), Vector2(560, 270)]),
+		PackedVector2Array([Vector2(560, 270), Vector2(560, 200)]),
+	]
+	var p := TagPlacement.new(_scene({"unit": unit, "core": unit, "marks": marks}))
+	var below := Rect2(350, 258, 209, 30)
+	var clean := Rect2(263, 210, 209, 30)
+	assert_true(p.score(below) - p.score(clean) >= TagPlacement.CORNER_COST, "кут під тегом коштує щонайменше ціну кута")
+	var pick: Dictionary = p.best()
+	assert_eq(p.mark_cover(pick["rect"]), 0.0, "обране місце без контурів")
+
+
+func test_leader_cost_is_exact_and_steep_past_forty_dp() -> void:
+	var unit := Rect2(480, 200, 40, 50)
+	var p := TagPlacement.new(_scene({"unit": unit, "core": unit}))
+	var r := Rect2(400, 120, 209, 30)
+	var ends: PackedVector2Array = p.leader_points(r)
+	var len: float = ends[0].distance_to(ends[1])
+	var d: float = TagPlacement._dist(r, unit)
+	var expected: float = TagPlacement.DISTANCE_WEIGHT * d + TagPlacement.LEADER_COST \
+		+ TagPlacement.LONG_LEAD_PER_DP * maxf(0.0, len - TagPlacement.LONG_LEAD_FROM)
+	assert_eq(len, 50.0)
+	assert_almost_eq(p.score(r), expected, 0.001)
+	var near := Rect2(400, 150, 209, 30)
+	assert_true(p.score(near) < p.score(r), "ближчий закуток дешевший за дальній")
+
+
+func test_leader_is_needed_past_twelve_dp_from_the_model_not_from_the_label() -> void:
+	# Напис над смугою розширює «unit», але лідер міряється від моделі зі смугою (core).
+	var p := TagPlacement.new(_scene())
+	assert_false(p.needs_leader(Rect2(263, 220, 209, 30)), "8 dp збоку від моделі — без лідера")
+	assert_true(p.needs_leader(Rect2(480 + 40 + 13.5, 220, 209, 30)), "13,5 dp від моделі — лідер")
+	assert_true(p.needs_leader(Rect2(480, 250 + 13.5, 209, 30)), "13,5 dp під моделлю — лідер")
+	assert_false(p.needs_leader(Rect2(480, 250 + 12.0, 209, 30)), "рівно 12 dp — ще без лідера")
+	assert_true(p.needs_leader(Rect2(480, 200 - 8.0 - 30.0, 209, 30)), "над написом: від моделі далі 12 dp — лідер")
+
+
+func test_leader_end_square_stays_two_dp_off_the_drone_icon() -> void:
+	var icon := Rect2(522, 224, 10, 10)
+	var p := TagPlacement.new(_scene({"icon": icon}))
+	for r: Rect2 in [Rect2(560, 150, 209, 30), Rect2(560, 230, 209, 30), Rect2(560, 300, 209, 30), Rect2(300, 120, 209, 30)]:
+		var ends: PackedVector2Array = p.leader_points(r)
+		var square := Rect2(ends[1] - Vector2(2.5, 2.5), Vector2(5.0, 5.0))
+		assert_false(square.intersects(icon.grow(2.0)), "квадрат кінця ≥ 2 dp від значка: %s" % [ends])

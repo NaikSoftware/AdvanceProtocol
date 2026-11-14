@@ -769,7 +769,12 @@ func _tag_scene(view: UnitView, tag_size: Vector2) -> Dictionary:
 				var target := views.get(int(_last_preview["target_id"]), null) as UnitView
 				if target != null:
 					fire = PackedVector2Array([unit_box.get_center(), UnitScreenBox.of(target, _camera_rig).get_center()])
+	var icon := Rect2()
+	var icon_node := view.get_node_or_null("DroneIcon") as VisualInstance3D
+	if icon_node != null and icon_node.visible:
+		icon = UnitScreenBox.part_rect(icon_node, _camera_rig)
 	return {
+		"icon": icon,
 		"tag_size": tag_size, "unit": unit_box, "core": UnitScreenBox.core(view, _camera_rig), "core_poly": UnitScreenBox.core_poly(view, _camera_rig),
 		"label": UnitScreenBox.label_rect(view, _camera_rig),
 		"others": others, "chrome": chrome, "polys": polys, "fire": fire, "marks": _board_marks(),
