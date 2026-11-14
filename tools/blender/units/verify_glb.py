@@ -68,7 +68,7 @@ print(f"     hull X {hx:.4f} (spec {spec['hull'][0]}), Z {hz:.4f} (spec {spec['h
       f"height {pos[:, 1].max():.4f}, centre x {cxz[0]:+.4f} z {cxz[1]:+.4f}")
 if cfg.get("whole_model"):
     # the row describes the solid carriage or hull, not the whole model (trails, barrel, plough): the box is then
-    # compared with the model's wheels, tracks and carriage by test_set0_rows_match_carriage_and_running_gear in
+    # compared with the model's wheels, tracks and carriage by test_rows_match_carriage_and_running_gear_in_every_set in
     # tests/game/test_unit_sets.gd, and the muzzle and wheels below still hold
     whole = pos[:, 0].max() - pos[:, 0].min(), pos[:, 2].max() - pos[:, 2].min()
     print(f"     whole model X {whole[0]:.4f} Z {whole[1]:.4f} (z {pos[:, 2].min():+.4f}..{pos[:, 2].max():+.4f}); row hull {spec['hull'][0]} x {spec['hull'][2]}")
