@@ -16,7 +16,8 @@ const STATES: Array[String] = [
 	"squad", "hold_enemy_squad", "engineer_pending", "mood",
 	"toast_drone", "toast_engineer", "own_tank_to_shot", "squad_shot", "shot_infantry",
 	"hold_enemy_squad_spent", "handover_p1", "handover_p3", "handover_default",
-	"squad_to_drone", "hold_cluster",
+	"squad_to_drone", "hold_cluster", "engineer_to_armed", "shot_cover", "shot_infantry_armour_ignored",
+	"engineer_clear", "engineer_repair_bridge", "engineer_demolish_bridge", "hold_engineer",
 ]
 const SETTLE_FRAMES: int = 90
 const STATE_FRAMES: int = 20
@@ -45,6 +46,13 @@ var _ctrl: InputController = null
 var _rig: IsoCameraRig = null
 var _site: Vector2i = Vector2i.ZERO
 var _ids: Dictionary = {}
+## Проміжні кадри станів-переходів («до» дії): [{img, name}]. Цикл знімання дописує їх до основних.
+var _mid: Array[Dictionary] = []
+## Клітинки, куди розкладка ставить юнітів станів з особливим місцем (укриття, мости).
+var _spot: Dictionary = {}
+## Клітинка, чий вид змінено для кадра моста, і її справжній вид: наступний стан повертає його.
+var _broken: Vector2i = Vector2i(-1, -1)
+var _broken_kind: int = Terrain.Kind.FIELD
 
 
 func _ready() -> void:
@@ -93,20 +101,34 @@ func _ready() -> void:
 		for with_hud: bool in [true, false]:
 			if (with_hud and hud_mode == "off") or (not with_hud and hud_mode == "on"):
 				continue
+			(_screen.get_node("%Hud") as Control).visible = with_hud
+			_mid.clear()
 			if not await _enter_state(st):
 				failed.append(st)
 				break
-			(_screen.get_node("%Hud") as Control).visible = with_hud
+			for m: Dictionary in _mid:
+				shots.append({"img": m["img"], "path": _shot_path(out_dir, map_name, size, m["name"], with_hud, a[3])})
 			for f in STATE_FRAMES:
 				await get_tree().process_frame
 			var img: Image = get_viewport().get_texture().get_image()
-			shots.append({"img": img, "path": "%s/%s_%dx%d_%s%s%s.png" % [out_dir, map_name, size.x, size.y, st, "" if with_hud else "_nohud", "" if a[3] == "uk" else "_" + a[3]]})
+			shots.append({"img": img, "path": _shot_path(out_dir, map_name, size, st, with_hud, a[3])})
 	for s: Dictionary in shots:
 		(s["img"] as Image).save_png(s["path"])
 		print("HUD_SHOT ", s["path"], " ", (s["img"] as Image).get_size())
 	if not failed.is_empty():
 		print("HUD_SHOT FAILED states: ", failed)
 	get_tree().quit(1 if not failed.is_empty() else 0)
+
+
+func _shot_path(out_dir: String, map_name: String, size: Vector2i, st: String, with_hud: bool, locale: String) -> String:
+	return "%s/%s_%dx%d_%s%s%s.png" % [out_dir, map_name, size.x, size.y, st, "" if with_hud else "_nohud", "" if locale == "uk" else "_" + locale]
+
+
+## Кадр посеред стану: перехід знімається до дії, а тоді після неї.
+func _capture_mid(st_name: String) -> void:
+	for f in STATE_FRAMES:
+		await get_tree().process_frame
+	_mid.append({"img": get_viewport().get_texture().get_image(), "name": st_name})
 
 
 ## Майданчик, де кожна клітинка розкладки й широкого поля навколо — дорога чи поле: інакше танк
@@ -200,10 +222,20 @@ func _enter_state(st: String) -> bool:
 			# Одна сесія: вибір → тап по ворогові. Тег не мусить стрибнути, поки його місце законне.
 			_ctrl.select_unit(tank)
 			await _wait_idle()
+			await _capture_mid("own_tank_pre_shot")
 			var before: Rect2 = _tag_rect()
 			_ctrl.tap_cell(enemy.pos)
 			await _wait_idle()
 			print("HUD_SHOT tag_rect own_tank=", before, " shot_preview=", _tag_rect())
+		"engineer_to_armed":
+			# Вибір → озброєння верби з кнопки панелі: тег мусить лишитися на місці.
+			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
+			await _wait_idle()
+			await _capture_mid("engineer_pre_armed")
+			var eng_before: Rect2 = _tag_rect()
+			_press_verb(EngineerCommand.Action.LAY_MINE)
+			await _wait_idle()
+			print("HUD_SHOT tag_rect engineer=", eng_before, " armed=", _tag_rect())
 		"squad_to_drone":
 			# Той самий юніт без кільця й із ним: тег не мусить стрибнути, поки його місце законне.
 			_ctrl.select_unit(_state.get_unit(_ids["assault"]))
@@ -219,7 +251,22 @@ func _enter_state(st: String) -> bool:
 			await _wait_idle()
 			_press(tank.pos)
 			_ctrl.peek_cell(tank.pos)
-		"squad_shot":
+		"shot_cover":
+			# Танк проти піхоти в будівлі: на плиті «УКРИТТЯ ½».
+			_ctrl.select_unit(tank)
+			_ctrl.tap_cell(_state.get_unit(_ids["enemy_squad"]).pos)
+		"engineer_clear":
+			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
+			_press_verb(EngineerCommand.Action.CLEAR_MINE)
+			_ctrl.tap_cell(_spot["target"])
+		"engineer_repair_bridge", "engineer_demolish_bridge":
+			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
+			_press_verb(EngineerCommand.Action.REPAIR_BRIDGE if st == "engineer_repair_bridge" else EngineerCommand.Action.DEMOLISH_BRIDGE)
+			_ctrl.tap_cell(_spot["target"])
+		"hold_engineer":
+			_press(_state.get_unit(_ids["engineer"]).pos)
+			_ctrl.peek_cell(_state.get_unit(_ids["engineer"]).pos)
+		"shot_infantry_armour_ignored", "squad_shot":
 			# Стрілецький загін поруч із ворожим танком: піхота по техніці, «броня не діє».
 			_state.get_unit(_ids["rifle"]).pos = enemy.pos + Vector2i(-1, 0)
 			_state.refresh_vision_all()
@@ -258,11 +305,19 @@ func _enter_state(st: String) -> bool:
 	match st:
 		"move_preview", "shot_preview", "drone_preview", "own_tank_to_shot", "squad_shot", "shot_infantry":
 			ok = ctrl_state["pending"]
+		"shot_cover":
+			ok = ctrl_state["pending"] and bool(_preview().get("in_cover", false))
+		"shot_infantry_armour_ignored":
+			ok = ctrl_state["pending"] and bool(_preview().get("armour_ignored", false))
+		"engineer_clear", "engineer_repair_bridge", "engineer_demolish_bridge":
+			ok = ctrl_state["pending"] and int(_preview().get("type", -1)) == InputController.ActionType.ENGINEER
+		"hold_engineer", "hold_enemy_squad", "hold_enemy_squad_spent":
+			ok = ((_screen.get_node("%Hud") as Hud).hold_card() as Control).visible
 		"own_tank", "enemy", "engineer", "squad":
 			ok = ctrl_state["sel"]
 		"engineer_pending":
 			ok = ctrl_state["pending"] and ctrl_state["armed"]
-		"engineer_armed", "drone":
+		"engineer_armed", "drone", "engineer_to_armed":
 			ok = ctrl_state["armed"]
 		"hold_cluster":
 			ok = ((_screen.get_node("%Hud") as Hud).hold_card() as Control).visible
@@ -285,6 +340,14 @@ func _reset_cast(st: String) -> void:
 	_state.units.clear()
 	_state.wrecks.clear()
 	_state.mines.clear()
+	# Розвідка попереднього стану не мусить просочитися в наступний: ворожа машина, що колись була в огляді, лишалась би видимою.
+	for v: Vision in _state.vision:
+		v.seen.fill(0)
+		v.visible.fill(0)
+	_spot.clear()
+	if _broken != Vector2i(-1, -1):
+		_state.board.set_kind(_broken, _broken_kind)
+		_broken = Vector2i(-1, -1)
 	var toward_enemy: int = Board.facing_towards(_site, _site + OFF_ENEMY_TANK)
 	_ids["tank"] = _state.add_unit(MEDIUM_TANK, 0, _site + OFF_TANK, toward_enemy).id
 	var eng_off: Vector2i = Vector2i(0, 1) if st == "engineer_pending" else OFF_ENGINEER
@@ -300,6 +363,16 @@ func _reset_cast(st: String) -> void:
 	_ids["enemy_squad"] = _state.add_unit(squad_type, 1, _site + OFF_ENEMY_SQUAD, back).id
 	if st == "mood":
 		_state.units.clear()
+	var focus: Vector2i = _site + Vector2i(1, 0)
+	match st:
+		"shot_cover":
+			focus = _place_cover_case()
+		"engineer_clear":
+			var mine_cell: Vector2i = _state.get_unit(_ids["engineer"]).pos + Vector2i(1, 0)
+			Mines.place(_state, mine_cell, 0)
+			_spot["target"] = mine_cell
+		"engineer_repair_bridge", "engineer_demolish_bridge":
+			focus = _place_bridge_case(st == "engineer_repair_bridge")
 	_state.active_player = 0
 	_state.refresh_vision_all()
 	_screen.call("_rebuild_units_for_active_player", true)
@@ -307,9 +380,83 @@ func _reset_cast(st: String) -> void:
 		_rig.center_on(Vector2i(_state.board.width / 2, _state.board.height / 2))
 		_rig.zoom_by(16.0 / _rig.zoom_level)
 	else:
-		_rig.center_on(_site + Vector2i(1, 0))
+		_rig.center_on(focus)
 		_rig.zoom_by(ZOOM / _rig.zoom_level)
 	(_screen.get_node("%Hud") as Hud).refresh()
+
+
+## Піхота ворога в будівлі, наш танк за 2–3 клітинки від неї на дорозі чи полі, найближче до майданчика.
+## Загін у будівлі видно, лише коли знайдено: позначаємо знайденим для гравця 0, як після сусідства.
+func _place_cover_case() -> Vector2i:
+	var board: Board = _state.board
+	var best: Array[Vector2i] = []
+	var best_cost: int = 1 << 30
+	for y in board.height:
+		for x in board.width:
+			var b := Vector2i(x, y)
+			if board.kind_at(b) != Terrain.Kind.BUILDING or _state.unit_at(b) != null:
+				continue
+			for dy in range(-3, 4):
+				for dx in range(-3, 4):
+					var t: Vector2i = b + Vector2i(dx, dy)
+					var d2: int = dx * dx + dy * dy
+					if d2 < 4 or d2 > 9 or not board.in_bounds(t) or _state.unit_at(t) != null \
+							or not board.kind_at(t) in [Terrain.Kind.ROAD, Terrain.Kind.FIELD]:
+						continue
+					var cost: int = (t - _site).length_squared()
+					if cost < best_cost:
+						best_cost = cost
+						best = [t, b]
+	if best.is_empty():
+		push_error("hud_shot: на карті немає будівлі поруч із відкритим місцем для танка")
+		return _site
+	var tank: Unit = _state.get_unit(_ids["tank"])
+	tank.pos = best[0]
+	tank.facing = Board.facing_towards(best[0], best[1])
+	var squad: Unit = _state.get_unit(_ids["enemy_squad"])
+	squad.pos = best[1]
+	squad.found_by |= 1
+	return (best[0] + best[1]) / 2
+
+
+## Інженер стоїть поруч із мостом: для «ремонту» міст у стані зламано (картинка дошки лишається цілою,
+## кадр потрібен заради плити дії), для «підриву» — цілий.
+func _place_bridge_case(broken: bool) -> Vector2i:
+	var board: Board = _state.board
+	var best_cost: int = 1 << 30
+	var found: Array[Vector2i] = []
+	for y in board.height:
+		for x in board.width:
+			var br := Vector2i(x, y)
+			if board.kind_at(br) != Terrain.Kind.BRIDGE:
+				continue
+			for d: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+				var e: Vector2i = br + d
+				if board.in_bounds(e) and _state.unit_at(e) == null and board.kind_at(e) in [Terrain.Kind.ROAD, Terrain.Kind.FIELD]:
+					var cost: int = (e - _site).length_squared()
+					if cost < best_cost:
+						best_cost = cost
+						found = [e, br]
+	var eng: Unit = _state.get_unit(_ids["engineer"])
+	if found.is_empty():
+		# Карта без мосту (Перехрестя): клітинка поруч з інженером стає мостом лише в стані — плиті дії цього досить.
+		found = [eng.pos, eng.pos + Vector2i(1, 0)]
+		_broken = found[1]
+		_broken_kind = board.kind_at(found[1])
+		board.set_kind(found[1], Terrain.Kind.BRIDGE)
+	eng.pos = found[0]
+	eng.facing = Board.facing_towards(found[0], found[1])
+	_spot["target"] = found[1]
+	if broken:
+		if _broken == Vector2i(-1, -1):
+			_broken = found[1]
+			_broken_kind = Terrain.Kind.BRIDGE
+		board.set_kind(found[1], Terrain.Kind.BRIDGE_DESTROYED)
+	return found[0]
+
+
+func _preview() -> Dictionary:
+	return (_screen.get_node("%Hud") as Hud).get("_last_preview")
 
 
 func _tag_rect() -> Rect2:
@@ -336,3 +483,6 @@ func _wait_idle() -> void:
 func _press_verb(action: int) -> void:
 	var panel := (_screen.get_node("%Hud") as Hud).get_node("%EngineerPanel") as EngineerPanel
 	panel.button_for(action).pressed.emit()
+	# Знімок тапає по клітинці в той самий кадр: захист від подвійного тапу по плиті верб тут зайвий
+	# (плита ставить його сама, тож скидати треба після натискання).
+	_ctrl.tap_guard_ms = 0

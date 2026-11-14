@@ -673,7 +673,8 @@ func _update_tag() -> void:
 		_tag.set_leader(ends[0], ends[1])
 	else:
 		_tag.clear_leader()
-	_tag.visible = not (_card.visible and _card.get_rect().intersects(rect))
+	# Поки картка утримання на екрані, тег не показується зовсім (на дошці лишаються лише контури й кільця).
+	_tag.visible = not _card.visible
 
 
 func _tag_view() -> UnitView:

@@ -209,6 +209,58 @@ func test_engineer_tag_avoids_its_four_target_cells() -> void:
 		assert_false(rect.has_point(cell_box.get_center()), "тег не лежить на центрі клітинки %s" % (Vector2i(4, 2) + d))
 
 
+## Перехід, а не окремі кадри: вибір → озброєння верби. Клітинки верби — перешкода вже від вибору, тож
+## озброєння тег не зрушує.
+func test_engineer_tag_keeps_its_spot_when_a_verb_is_armed() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(ENGINEER, 0, Vector2i(4, 2)), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
+	await _tap(Vector2i(4, 2))
+	var before := Rect2(_tag().position, _tag().size)
+	assert_true(_tag().visible)
+	_e2e.engineer_panel().button_for(EngineerCommand.Action.LAY_MINE).pressed.emit()
+	await _e2e.settle()
+	assert_true(_tag().visible)
+	assert_eq(Rect2(_tag().position, _tag().size), before, "гістерезис: озброєння верби не зсуває тег")
+	# Повний перерахунок із клітинками верби — найдорожчий випадок: лідер шукає щілину між ромбами.
+	var hud: Hud = _e2e.hud()
+	var t0: int = Time.get_ticks_usec()
+	hud._tag_has_offset = false
+	hud._update_tag()
+	var ms: float = (Time.get_ticks_usec() - t0) / 1000.0
+	print("engineer tag full placement: %.1f ms" % ms)
+	assert_lt(ms, 250.0, "повний перерахунок тега інженера")
+
+
+## Вибір танка → тап по ворогові (прев'ю пострілу): місце тега лишається, поки воно законне; лінія вогню його не зачіпає.
+func test_tank_tag_keeps_its_spot_when_a_shot_is_previewed() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(MEDIUM_TANK, 0, TANK), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
+	await _tap(TANK)
+	var before := Rect2(_tag().position, _tag().size)
+	await _tap(ENEMY_TANK)
+	assert_false(_e2e.hud().get("_last_preview").is_empty(), "прев'ю пострілу показано")
+	var after := Rect2(_tag().position, _tag().size)
+	var scene: Dictionary = _e2e.hud()._tag_scene(_e2e.hud()._tag_view(), _tag().size)
+	var legal: bool = TagPlacement.new(scene).is_legal(after, _e2e.hud().get("_tag_relax"))
+	assert_true(legal, "тег стоїть на законному місці")
+	assert_eq(after, before, "прев'ю не зсуває тег, поки його місце законне")
+
+
+## Картка утримання на екрані — тега вибраного юніта нема; після відпускання він на тому самому місці.
+func test_hold_card_hides_the_selected_tag_and_it_returns_to_the_same_spot() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(MEDIUM_TANK, 0, TANK), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
+	await _tap(TANK)
+	var before := Rect2(_tag().position, _tag().size)
+	assert_true(_tag().visible)
+	_e2e.long_press(ENEMY_TANK)
+	await _e2e.settle()
+	assert_true(_card().visible)
+	assert_false(_tag().visible, "поки картка на екрані, тег прихований")
+	_e2e.release(ENEMY_TANK)
+	await _e2e.settle()
+	assert_false(_card().visible)
+	assert_true(_tag().visible)
+	assert_eq(Rect2(_tag().position, _tag().size), before, "після відпускання — те саме місце")
+
+
 func test_placement_is_fast_enough_for_an_event_handler() -> void:
 	await _boot(LayoutProbe.PHONE_SMALL, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 0, TANK),
 		_spawn(MEDIUM_TANK, 1, ENEMY_TANK), _spawn(RIFLE, 1, ENEMY_SQUAD)])

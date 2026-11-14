@@ -112,16 +112,59 @@ func test_hold_card_takes_the_corner_away_from_the_finger() -> void:
 
 
 func test_ring_of_cells_lets_the_leader_cross_them_before_the_tag_is_hidden() -> void:
-	# Клітинки верби щільно довкола юніта: лідер, що не перетинає жодної, неможливий, але тег не
-	# зникає — AP інженера потрібен саме тут. Тег лишається поза клітинками, лідер їх перетинає.
-	var ring: Array[PackedVector2Array] = [PackedVector2Array([Vector2(440, 170), Vector2(560, 170), Vector2(560, 280), Vector2(440, 280)])]
+	# Чотири клітинки щільно довкола юніта без щілини: лідер, що не перетинає жодної, неможливий, але тег
+	# не зникає — AP інженера потрібен саме тут. Тег лишається поза клітинками, лідер їх перетинає, а
+	# квадрат його кінця стоїть у порожній середині, не ближче 2 dp до клітинки.
+	var cells: Array[Rect2] = [Rect2(440, 170, 120, 40), Rect2(440, 260, 120, 40), Rect2(440, 210, 30, 50), Rect2(530, 210, 30, 50)]
+	var ring: Array[PackedVector2Array] = []
+	for c: Rect2 in cells:
+		ring.append(PackedVector2Array([c.position, Vector2(c.end.x, c.position.y), c.end, Vector2(c.position.x, c.end.y)]))
 	var p := TagPlacement.new(_scene({"polys": ring}))
 	var pick: Dictionary = p.best()
 	assert_true(pick["found"])
 	assert_eq(p.relax_used, 1, "рівень 1: лише лідер перетинає клітинки")
 	assert_true(pick["leader"], "тег далі за 12 dp від юніта має лідера")
-	assert_false((pick["rect"] as Rect2).intersects(Rect2(440, 170, 120, 110).grow(TagPlacement.POLY_GROW)))
+	for c: Rect2 in cells:
+		assert_false((pick["rect"] as Rect2).intersects(c.grow(TagPlacement.POLY_GROW)), "тег поза клітинкою %s" % c)
+	var ends: PackedVector2Array = p.leader_points(pick["rect"])
+	var square := Rect2(ends[1] - Vector2(2.5, 2.5), Vector2(5.0, 5.0))
+	for c: Rect2 in cells:
+		assert_false(square.intersects(c.grow(2.0)), "кінець лідера не в клітинці %s і не на її краю" % c)
 	assert_false(p.is_legal(pick["rect"]), "суворі правила цього місця не дають")
+
+
+## Клітинки справжнього інженера (знято з кадра): чотири ромби довкола моделі, що сходяться в кутах.
+## Щілина лишається над написом HP, між двома верхніми ромбами, — лідер входить у неї зверху.
+func _engineer_scene() -> Dictionary:
+	var cells: Array[PackedVector2Array] = [
+		PackedVector2Array([Vector2(322.1627, 145.50818), Vector2(345.87024, 162.00468), Vector2(315.14536, 179.9884), Vector2(291.74048, 162.00468)]),
+		PackedVector2Array([Vector2(258.53354, 179.83173), Vector2(281.48285, 199.51202), Vector2(244.51149, 221.143), Vector2(222.22429, 199.51201)]),
+		PackedVector2Array([Vector2(270.26288, 145.47229), Vector2(291.73328, 161.96832), Vector2(258.5657, 179.95166), Vector2(237.59991, 161.96834)]),
+		PackedVector2Array([Vector2(315.12955, 179.89021), Vector2(340.7483, 199.57097), Vector2(306.71823, 221.20224), Vector2(281.4966, 199.57097)]),
+	]
+	var chrome: Array[Rect2] = [Rect2(24, 12, 151, 36), Rect2(728, 8, 48, 48), Rect2(24, 300, 161, 48), Rect2(491, 296, 285, 52)]
+	return _scene({
+		"tag_size": Vector2(234.0, 30.0), "screen": Rect2(0, 0, 800, 360), "polys": cells, "chrome": chrome,
+		"unit": Rect2(263.382, 157.3435, 40.4502, 34.91266), "core": Rect2(263.382, 157.9101, 40.4502, 34.34608),
+		"label": Rect2(269.8468, 157.3435, 25.33765, 4.785034),
+		"core_poly": PackedVector2Array([Vector2(263.382, 160.46288), Vector2(282.0581, 157.91008), Vector2(303.02417, 160.46288),
+			Vector2(303.83218, 183.7564), Vector2(289.7757, 192.25616), Vector2(269.99643, 175.88872), Vector2(263.382, 165.41815)]),
+	})
+
+
+func test_engineer_leader_stays_out_of_every_target_cell_when_a_gap_exists() -> void:
+	var scene: Dictionary = _engineer_scene()
+	var p := TagPlacement.new(scene)
+	var pick: Dictionary = p.best()
+	assert_true(pick["found"])
+	assert_eq(p.relax_used, 0, "щілина над написом дає законне місце без пом'якшень")
+	assert_true(pick["leader"])
+	var ends: PackedVector2Array = p.leader_points(pick["rect"])
+	for cell: PackedVector2Array in scene["polys"]:
+		assert_true(Geometry2D.intersect_polyline_with_polygon(ends, cell).is_empty(), "лінія лідера поза клітинкою")
+		assert_false(Geometry2D.is_point_in_polygon(ends[1], cell), "кінець лідера поза клітинкою")
+		for g in Geometry2D.offset_polygon(cell, 2.0, Geometry2D.JOIN_MITER):
+			assert_false(Geometry2D.is_point_in_polygon(ends[1], g), "кінець лідера не ближче 2 dp до клітинки")
 
 
 func test_leader_never_exceeds_the_cap() -> void:

@@ -236,7 +236,8 @@ func _build_floor(body: VBoxContainer) -> void:
 	floor_label = HudKit.label(&"HudFloorCaption")
 	floor_label.name = "ThreatFloorLabel"
 	floor_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	floor_label.custom_minimum_size = Vector2(WIDTH - 12.0 - 12.0 - 4.0, 0.0)
+	# Ширина картки — єдина стала: підпис вужчий за неї на вкладку (4), відступи (12 + 12) і рамку (2).
+	floor_label.custom_minimum_size = Vector2(WIDTH - 4.0 - 12.0 - 12.0 - 2.0, 0.0)
 	m.add_child(floor_label)
 
 

@@ -36,6 +36,12 @@ const NEAR_OTHER_PER_DP: float = 60.0
 const CELL: float = 4.0
 const LINE_WIDTH: float = 2.0
 const _SAMPLES: int = 12
+const END_CLEAR: float = 2.0
+## Лінія лідера, що перетинає клітинку, дорожча за будь-яку чисту; кінець у клітинці — ще дорожчий.
+const CROSS_COST: float = 400.0
+const END_IN_CELL_COST: float = 2000.0
+const CLEARANCE_CAP: float = 20.0
+const CLEARANCE_WEIGHT: float = 10.0
 
 var _lead_at: float = LEAD_AT
 var _gaps: Array[float] = [8.0, 12.0]
@@ -57,6 +63,16 @@ var _gw: int = 0
 var _gh: int = 0
 var _hard: PackedByteArray = PackedByteArray()
 var _hard_sat: PackedInt32Array = PackedInt32Array()
+## Ті самі полігони точно (без растру): лінія лідера — на пів-ширини лінії від клітинки, квадрат кінця — на
+## півдіагоналі квадрата й ще 2 dp запасу. Растр із кроком 4 dp для лінії завгрубий: він закривав щілини між клітинками.
+var _cells_raw: Array[PackedVector2Array] = []
+var _cells_line: Array[PackedVector2Array] = []
+var _cells_end: Array[PackedVector2Array] = []
+## Лідер залежить лише від точки t на краю тега, а різних t на сітці кандидатів у рази менше, ніж прямокутників.
+var _leaders: Dictionary = {}
+## Кінці лідера й їхня ціна, що не залежить від t (кінець у клітинці, запас від клітинок): рахуються раз.
+var _ends: PackedVector2Array = PackedVector2Array()
+var _ends_static: PackedFloat32Array = PackedFloat32Array()
 var _mark_sat: PackedFloat32Array = PackedFloat32Array()
 
 
@@ -82,6 +98,10 @@ func _init(scene: Dictionary) -> void:
 	_origin = (window.position / CELL).floor() * CELL
 	_gw = int(ceil(window.size.x / CELL)) + 1
 	_gh = int(ceil(window.size.y / CELL)) + 1
+	for poly: PackedVector2Array in scene.get("polys", []):
+		_cells_raw.append(poly)
+		_cells_line.append_array(Geometry2D.offset_polygon(poly, LINE_WIDTH / 2.0, Geometry2D.JOIN_MITER))
+		_cells_end.append_array(Geometry2D.offset_polygon(poly, sqrt(2.0) * END_HALF + END_CLEAR, Geometry2D.JOIN_MITER))
 	_rasterise_polys(scene.get("polys", []))
 	_rasterise_marks(scene.get("marks", []))
 
@@ -111,11 +131,14 @@ func is_legal(r: Rect2, relax: int = 0) -> bool:
 			for o: Rect2 in _others:
 				if o.grow(LEADER_CLEAR).has_point(p):
 					return false
-			if relax < 1 and _hard_at(p):
-				return false
 			# Лінія не проходить крізь власну смугу HP і модель: вона лише торкається їх краєм.
 			if i < _SAMPLES - 1 and _core_poly.size() >= 3 and Geometry2D.is_point_in_polygon(p, _core_poly):
 				return false
+		# Кінець лідера не лежить у клітинці й не торкається її ніколи; лінія не перетинає її на рівні 0.
+		if relax < 2 and _in_any(ends[1], _cells_end):
+			return false
+		if relax < 1 and _crosses_cells(ends[0], ends[1]):
+			return false
 	else:
 		# Тег без лідера мусить читатися як цього юніта: на 8 dp ближче за будь-якого іншого.
 		for o: Rect2 in _others:
@@ -128,14 +151,20 @@ func needs_leader(r: Rect2) -> bool:
 	return _dist(r, _unit) > _lead_at
 
 
-## [від краю тега, до смуги+моделі юніта] — лідер: найближча точка силуету, але квадрат кінця 5×5
-## не лягає на напис HP (і не на клітинку дії, якщо є вибір), а лінія не січе напис.
+## [від краю тега, до смуги+моделі юніта] — лідер: найдешевша точка контуру силуету (відстань + штрафи) або
+## точка просто над написом HP. Штрафи: квадрат кінця на написі HP, лінія крізь напис, лінія крізь клітинку
+## дії, кінець у клітинці. Найближча точка береться першою — вона чиста майже завжди.
 func leader_points(r: Rect2) -> PackedVector2Array:
 	var c: Vector2 = _core.get_center()
 	var t := Vector2(clampf(c.x, r.position.x, r.end.x), clampf(c.y, r.position.y, r.end.y))
+	if not _leaders.has(t):
+		_leaders[t] = _leader_from(t)
+	return _leaders[t]
+
+
+func _leader_from(t: Vector2) -> PackedVector2Array:
 	var u := Vector2(clampf(t.x, _core.position.x, _core.end.x), clampf(t.y, _core.position.y, _core.end.y))
-	var ring: PackedVector2Array = _core_poly if _core_poly.size() >= 3 else PackedVector2Array(
-		[_core.position, Vector2(_core.end.x, _core.position.y), _core.end, Vector2(_core.position.x, _core.end.y)])
+	var ring: PackedVector2Array = _ring()
 	if _core_poly.size() >= 3:
 		var best: float = INF
 		for i in ring.size():
@@ -145,32 +174,100 @@ func leader_points(r: Rect2) -> PackedVector2Array:
 				u = q
 	if _end_cost(t, u) == 0.0:
 		return PackedVector2Array([t, u])
-	# Найближча точка погана: перебір точок контуру з кроком _STEP за ціною «відстань + штрафи».
+	if _ends.is_empty():
+		_ends = _end_candidates(ring)
+		_ends_static.resize(_ends.size())
+		for i in _ends.size():
+			_ends_static[i] = _static_cost(_ends[i])
 	var best_cost: float = INF
+	for i in _ends.size():
+		var q: Vector2 = _ends[i]
+		var d: float = t.distance_to(q)
+		# Ціна не менша за відстань і статичну частину: далі шукати нема сенсу.
+		if d + _ends_static[i] >= best_cost:
+			continue
+		var cost: float = d + _end_cost(t, q, _ends_static[i])
+		if cost < best_cost:
+			best_cost = cost
+			u = q
+	return PackedVector2Array([t, u])
+
+
+func _ring() -> PackedVector2Array:
+	if _core_poly.size() >= 3:
+		return _core_poly
+	return PackedVector2Array([_core.position, Vector2(_core.end.x, _core.position.y), _core.end, Vector2(_core.position.x, _core.end.y)])
+
+
+## Точки контуру з кроком _STEP і ряд точок над написом HP: напис лежить на верхньому краї смуги,
+## а клітинки верби закривають весь контур, окрім щілини саме над ним.
+func _end_candidates(ring: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
 	for i in ring.size():
 		var a: Vector2 = ring[i]
 		var b: Vector2 = ring[(i + 1) % ring.size()]
 		var n: int = maxi(1, int(ceil(a.distance_to(b) / _STEP)))
 		for k in n:
-			var q: Vector2 = a.lerp(b, float(k) / n)
-			var cost: float = t.distance_to(q) + _end_cost(t, q)
-			if cost < best_cost:
-				best_cost = cost
-				u = q
-	return PackedVector2Array([t, u])
+			out.append(a.lerp(b, float(k) / n))
+	if _label.size != Vector2.ZERO:
+		var y: float = _label.position.y - END_HALF - 1.0
+		var x: float = _label.position.x
+		while x <= _label.end.x:
+			out.append(Vector2(x, y))
+			x += _STEP
+	return out
+
+
+## Частина штрафу, що від тега не залежить: кінець у клітинці — найтяжчий — й відсутність запасу від клітинок.
+func _static_cost(u: Vector2) -> float:
+	if _cells_raw.is_empty():
+		return 0.0
+	return (END_IN_CELL_COST if _in_any(u, _cells_end) else 0.0) - CLEARANCE_WEIGHT * minf(_clearance(u), CLEARANCE_CAP)
 
 
 ## Штраф кінця лідера: квадрат на написі HP — найтяжчий, лінія крізь напис, клітинка дії — легші.
-func _end_cost(t: Vector2, u: Vector2) -> float:
+## static_cost < INF — уже пораховану статичну частину (кінці з кешу); INF — порахувати тут.
+func _end_cost(t: Vector2, u: Vector2, static_cost: float = INF) -> float:
 	var cost: float = 0.0
 	if _label.size != Vector2.ZERO:
 		if _label.intersects(Rect2(u - Vector2(END_HALF, END_HALF), Vector2(END_HALF, END_HALF) * 2.0)):
 			cost += 1000.0
 		elif _segment_hits(t, u, _label):
 			cost += 500.0
-	if _hard_at(u):
-		cost += 400.0
+	if _cells_raw.is_empty():
+		return cost
+	var st: float = _static_cost(u) if static_cost == INF else static_cost
+	var in_cell: bool = st >= END_IN_CELL_COST - CLEARANCE_WEIGHT * CLEARANCE_CAP
+	if in_cell:
+		cost += END_IN_CELL_COST
+	if _crosses_cells(t, u):
+		# Лінія все одно крізь клітинку: хай кінець стоїть там, де від клітинок найдалі.
+		cost += CROSS_COST + (st - (END_IN_CELL_COST if in_cell else 0.0))
 	return cost
+
+
+func _in_any(p: Vector2, polys: Array[PackedVector2Array]) -> bool:
+	for g in polys:
+		if Geometry2D.is_point_in_polygon(p, g):
+			return true
+	return false
+
+
+func _crosses_cells(a: Vector2, b: Vector2) -> bool:
+	var line := PackedVector2Array([a, b])
+	for g in _cells_line:
+		if Geometry2D.is_point_in_polygon(a, g) or Geometry2D.is_point_in_polygon(b, g) \
+				or not Geometry2D.intersect_polyline_with_polygon(line, g).is_empty():
+			return true
+	return false
+
+
+func _clearance(p: Vector2) -> float:
+	var best: float = INF
+	for g in _cells_raw:
+		for i in g.size():
+			best = minf(best, p.distance_to(Geometry2D.get_closest_point_to_segment(p, g[i], g[(i + 1) % g.size()])))
+	return best
 
 
 func score(r: Rect2) -> float:
@@ -357,12 +454,6 @@ func _sat_sum_f(sat: PackedFloat32Array, r: Rect2) -> float:
 	var c: Vector4i = _cells(r)
 	var s: int = _gw + 1
 	return sat[c.w * s + c.z] - sat[c.y * s + c.z] - sat[c.w * s + c.x] + sat[c.y * s + c.x]
-
-
-func _hard_at(p: Vector2) -> bool:
-	var cx: int = int(floor((p.x - _origin.x) / CELL))
-	var cy: int = int(floor((p.y - _origin.y) / CELL))
-	return cx >= 0 and cx < _gw and cy >= 0 and cy < _gh and _hard[cy * _gw + cx] != 0
 
 
 # --- Геометрія -------------------------------------------------------------------

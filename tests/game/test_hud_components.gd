@@ -115,6 +115,25 @@ func test_hold_card_tank_is_161_dp_and_squad_is_205() -> void:
 	assert_eq(card.get_combined_minimum_size().y, 205.0, "сума секцій спеку: 2 + 48 + 48 + 34 + 29 + 44")
 
 
+func test_hold_card_width_is_one_constant_for_every_unit_and_caption() -> void:
+	var holder := Control.new()
+	holder.theme = THEME
+	add_child_autofree(holder)
+	var card := HoldCard.new()
+	holder.add_child(card)
+	var locale: String = TranslationServer.get_locale()
+	for loc: String in ["uk", "en"]:
+		TranslationServer.set_locale(loc)
+		for type_id in UnitTypes.TYPES.size():
+			for floor_on: bool in [false, true]:
+				card.show_unit(Unit.create(1, type_id, 1, Vector2i.ZERO, 0), floor_on)
+				await get_tree().process_frame
+				await get_tree().process_frame
+				assert_eq(card.get_combined_minimum_size().x, HoldCard.WIDTH, "%s/тип %d/підпис %s: мінімальна ширина" % [loc, type_id, floor_on])
+				assert_eq(card.size.x, HoldCard.WIDTH, "%s/тип %d/підпис %s: справжня ширина" % [loc, type_id, floor_on])
+	TranslationServer.set_locale(locale)
+
+
 ## Назва ділить рядок із силуетом 40 dp і проміжком 6: 226 − 2 (рамка) − 16 (відступ із вкладкою) − 12 − 40 − 6 = 150 dp.
 ## «Штурмове відділення» (найдовша назва зі спеку) вміщується цілою в обох мовах.
 func test_hold_card_shows_the_assault_squad_name_in_full() -> void:
