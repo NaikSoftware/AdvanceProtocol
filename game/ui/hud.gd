@@ -38,22 +38,25 @@ const _EDGE: float = 24.0
 const _BOTTOM: float = 12.0
 const _TOAST_GAP: float = 8.0
 const _VERB_ICONS: Dictionary = {
-	EngineerCommand.Action.LAY_MINE: preload("res://assets/ui/icons/mine_lay.svg"),
-	EngineerCommand.Action.CLEAR_MINE: preload("res://assets/ui/icons/mine_clear.svg"),
-	EngineerCommand.Action.REPAIR_BRIDGE: preload("res://assets/ui/icons/bridge_repair.svg"),
-	EngineerCommand.Action.DEMOLISH_BRIDGE: preload("res://assets/ui/icons/bridge_demolish.svg"),
-	EngineerCommand.Action.REPAIR_UNIT: preload("res://assets/ui/icons/repair_unit.svg"),
+	EngineerCommand.Action.LAY_MINE: preload("res://assets/ui/icons/btn_mine_lay.svg"),
+	EngineerCommand.Action.CLEAR_MINE: preload("res://assets/ui/icons/btn_mine_clear.svg"),
+	EngineerCommand.Action.REPAIR_BRIDGE: preload("res://assets/ui/icons/btn_bridge_repair.svg"),
+	EngineerCommand.Action.DEMOLISH_BRIDGE: preload("res://assets/ui/icons/btn_bridge_demolish.svg"),
+	EngineerCommand.Action.REPAIR_UNIT: preload("res://assets/ui/icons/btn_repair_unit.svg"),
 }
 const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/drone.svg")
-const _ICON_FIRE: Texture2D = preload("res://assets/ui/icons/fire.svg")
-const _ICON_MOVE: Texture2D = preload("res://assets/ui/icons/move.svg")
-## Значки основної кнопки мають різний вміст у полі 24×24, тож їхній бокс підібрано так, щоб чорнило було
-## в усіх близько 14–15 dp. Для довгих підписів проміжок між значком і словом тісніший.
-const _CONFIRM_ICON_PX: Dictionary = {
-	"hud_fire": 24.0, "hud_move": 26.0, "hud_repair": 22.0, "eng_clear_mine": 19.0,
-	"eng_repair_bridge": 17.0, "eng_demolish_bridge": 17.0, "hud_strike": 16.5,
-}
-const _CONFIRM_GAP_TIGHT: Array[String] = ["eng_repair_bridge", "eng_demolish_bridge"]
+const _BTN_DRONE: Texture2D = preload("res://assets/ui/icons/btn_drone.svg")
+const _ICON_FIRE: Texture2D = preload("res://assets/ui/icons/btn_fire.svg")
+const _ICON_MOVE: Texture2D = preload("res://assets/ui/icons/btn_move.svg")
+## Значки основної кнопки — окремі варіанти btn_*.svg: чорнило в усіх однакове (~17,5 dp при боксі 18 dp)
+## й однієї товщини лінії (1,5 dp), тож один розмір на всі дії. Спільні значки плитки інженера й кнопки
+## «Дрон» лишаються як були.
+const _CONFIRM_ICON_PX: float = 18.0
+## Проміжок між боксом значка й словом; з боковими відступами гліфа це ~10 dp від краю чорнила.
+## Довгі підписи, що інакше не вміщаються при 800 dp, тісніші.
+const _CONFIRM_GAP: int = 9
+const _CONFIRM_GAP_TIGHT: int = 8
+const _CONFIRM_GAP_TIGHT_KEYS: Array[String] = ["eng_repair_bridge", "eng_demolish_bridge"]
 const _ICON_CONFIRM: Texture2D = preload("res://assets/ui/icons/confirm.svg")
 
 var _state: BattleState = null
@@ -225,7 +228,7 @@ func show_preview(preview: Dictionary) -> void:
 	match int(preview["type"]):
 		InputController.ActionType.MOVE:
 			# Рух без плити: зони руху вже показують, куди можна дійти, а AP не пишемо ніде.
-			# Плити нема, тож і чекати її запікання перед «Підтвердити» нема чого.
+			# Плити нема, тож і чекати її запікання перед основною кнопкою нема чого.
 			_confirm_button.disabled = false
 			_sync_modes()
 			return
@@ -281,13 +284,13 @@ func _retitle_confirm(preview: Dictionary) -> void:
 			tex = _ICON_FIRE
 		InputController.ActionType.DRONE:
 			key = "hud_strike"
-			tex = _ICON_DRONE
+			tex = _BTN_DRONE
 		InputController.ActionType.ENGINEER:
 			var action: int = int(preview["action"])
 			key = "hud_repair" if action == EngineerCommand.Action.REPAIR_UNIT else EngineerPanel.LABEL_KEYS[action]
 			tex = _VERB_ICONS[action]
-	HudKit.retitle_group(_confirm_button, tr(key), tex, float(_CONFIRM_ICON_PX.get(key, 20.0)),
-		6 if key in _CONFIRM_GAP_TIGHT else 8)
+	HudKit.retitle_group(_confirm_button, key, tex, _CONFIRM_ICON_PX,
+		_CONFIRM_GAP_TIGHT if key in _CONFIRM_GAP_TIGHT_KEYS else _CONFIRM_GAP)
 
 
 func _show_engineer_preview(preview: Dictionary) -> void:
@@ -474,7 +477,7 @@ func _on_drone_armed(center: Vector2i, radius: int, marks: Dictionary) -> void:
 	_sync_modes()
 
 
-## Що є на екрані зараз: ряд дій + плита — коли є прев'ю; смужка озброєння — коли озброєно й
+## Що є на екрані зараз: ряд дій — коли є прев'ю, а плита при ньому лише коли прев'ю має числа; смужка озброєння — коли озброєно й
 ## цілі ще нема; кнопка «Дрон» чи плита верб — коли нічого не озброєно. Рівно одне «Скасувати».
 func _sync_modes() -> void:
 	if not is_node_ready():

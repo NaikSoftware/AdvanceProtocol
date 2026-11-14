@@ -7,6 +7,15 @@ const ICONS := "res://assets/ui/icons/"
 const LOCALES: Array[String] = ["uk", "en"]
 
 var hud: Hud
+var _orig_locale: String
+
+
+func before_all() -> void:
+	_orig_locale = TranslationServer.get_locale()
+
+
+func after_each() -> void:
+	TranslationServer.set_locale(_orig_locale)
 
 
 func before_each() -> void:
@@ -53,13 +62,13 @@ func _mark(root: Node) -> Texture2D:
 
 func _cases() -> Array:
 	return [
-		[_shot(), "hud_fire", "fire.svg"],
-		[_drone(), "hud_strike", "drone.svg"],
-		[_move(), "hud_move", "move.svg"],
-		[_engineer(EngineerCommand.Action.REPAIR_UNIT), "hud_repair", "repair_unit.svg"],
-		[_engineer(EngineerCommand.Action.CLEAR_MINE), "eng_clear_mine", "mine_clear.svg"],
-		[_engineer(EngineerCommand.Action.REPAIR_BRIDGE), "eng_repair_bridge", "bridge_repair.svg"],
-		[_engineer(EngineerCommand.Action.DEMOLISH_BRIDGE), "eng_demolish_bridge", "bridge_demolish.svg"],
+		[_shot(), "hud_fire", "btn_fire.svg"],
+		[_drone(), "hud_strike", "btn_drone.svg"],
+		[_move(), "hud_move", "btn_move.svg"],
+		[_engineer(EngineerCommand.Action.REPAIR_UNIT), "hud_repair", "btn_repair_unit.svg"],
+		[_engineer(EngineerCommand.Action.CLEAR_MINE), "eng_clear_mine", "btn_mine_clear.svg"],
+		[_engineer(EngineerCommand.Action.REPAIR_BRIDGE), "eng_repair_bridge", "btn_bridge_repair.svg"],
+		[_engineer(EngineerCommand.Action.DEMOLISH_BRIDGE), "eng_demolish_bridge", "btn_bridge_demolish.svg"],
 	]
 
 
@@ -68,11 +77,12 @@ func test_confirm_names_the_pending_action_in_both_locales() -> void:
 		TranslationServer.set_locale(locale)
 		for c: Array in _cases():
 			hud.show_preview(c[0])
-			assert_eq(_word(hud).text, tr(c[1]), "%s %s" % [locale, c[1]])
+			assert_eq(_word(hud).text, c[1], "ключ у Label: %s %s" % [locale, c[1]])
 			assert_eq(_mark(hud).resource_path, ICONS + c[2], "%s %s" % [locale, c[1]])
+			assert_eq(((hud.get_node("%ConfirmButton") as Button).get_meta(&"group_mark") as TextureRect).custom_minimum_size, Vector2(18, 18), "один бокс значка: " + c[1])
 	TranslationServer.set_locale("uk")
 	hud.show_preview(_shot())
-	assert_eq(_word(hud).text, "Вогонь")
+	assert_eq(tr(_word(hud).text), "Вогонь")
 	TranslationServer.set_locale("en")
 	assert_eq(tr("hud_strike"), "Strike")
 
@@ -81,7 +91,7 @@ func test_confirm_label_follows_a_locale_change() -> void:
 	hud.show_preview(_shot())
 	TranslationServer.set_locale("en")
 	hud.notification(Node.NOTIFICATION_TRANSLATION_CHANGED)
-	assert_eq(_word(hud).text, "Fire")
+	assert_eq(tr(_word(hud).text), "Fire")
 
 
 func test_long_labels_fit_the_primary_button_at_every_size(p = use_parameters(_fit_cases())) -> void:
@@ -94,9 +104,14 @@ func test_long_labels_fit_the_primary_button_at_every_size(p = use_parameters(_f
 		var button := root.get_node("%ConfirmButton") as Button
 		var word: Label = _word(root)
 		var where: String = "%s %s %s" % [p[0], p[1], c[1]]
-		assert_eq(word.text, tr(c[1]), where)
+		assert_eq(word.text, c[1], where)
 		assert_true(button.get_global_rect().grow(-6.0).encloses(word.get_global_rect()), "підпис не виходить за кнопку: " + where)
-		assert_lte(word.get_minimum_size().x, word.size.x, "підпис не стиснуто: " + where)
+		var font: Font = word.get_theme_font(&"font")
+		var text_w: float = font.get_string_size(tr(word.text), HORIZONTAL_ALIGNMENT_LEFT, -1, word.get_theme_font_size(&"font_size")).x
+		assert_lte(text_w, word.size.x, "підпис не обрізано: " + where)
+		var inset: float = minf(word.get_global_rect().position.x - button.get_global_rect().position.x,
+			button.get_global_rect().end.x - word.get_global_rect().end.x)
+		assert_gte(inset, 7.0, "від підпису до рамки ≥ 7 dp: " + where)
 		assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
 
 

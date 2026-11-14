@@ -116,6 +116,7 @@ static func group_content(button: Button, icon_px: float) -> void:
 
 
 ## Міняє підпис і значок кнопки, зібраної group_content(): група лишається однією, по центру.
+## text — ключ локалізації, як і в group_content(): Label сам перекладає його й при зміні мови.
 static func retitle_group(button: Button, text: String, tex: Texture2D, icon_px: float = 20.0, gap: int = 8) -> void:
 	var word: Label = button.get_meta(&"group_word")
 	if word != null:

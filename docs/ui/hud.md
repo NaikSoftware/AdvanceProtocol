@@ -109,9 +109,14 @@ preview fields; the glyph's geometry never decides a sector.
 - **The action row** is [Cancel 126][16][Confirm 143] = 285, bottom-right by default. Confirm is the
   only element with a bone frame.
 - **Confirm names the pending action**, word and icon together, set by `Hud.show_preview()` from the
-  preview type: shot «Вогонь» / Fire (`fire.svg`), drone «Удар» / Strike (`drone.svg`), move «Рухатися»
-  / Move (`move.svg`), unit repair «Ремонтувати» / Repair (`repair_unit.svg`), and the engineer verbs
-  with their own name and icon (clear mine, repair bridge, demolish bridge). The 143 dp width holds
+  preview type: shot «Вогонь» / Fire (`btn_fire.svg`), drone «Удар» / Strike (`btn_drone.svg`), move
+  «Рухатися» / Move (`btn_move.svg`), unit repair «Ремонтувати» / Repair (`btn_repair_unit.svg`), and
+  the engineer verbs with their own name and icon (clear mine, repair bridge, demolish bridge).
+  **One icon family:** every `btn_*.svg` is cropped so its ink is ~17.5 dp on its longest side inside
+  one 18 dp box at ~1.5 dp stroke, so the button uses a single size with no per-action sizes. The
+  plain `fire/drone/…svg` stay for the engineer tile and the Дрон button. **One gap:** ~10 dp from the
+  ink edge to the word (a 9 dp box gap plus glyph side bearings); only the labels that would not fit at 800 dp (repair and demolish bridge) drop to
+  8 dp, leaving ≥ 7 dp from the button's outer edge to the ink. The label is a localisation key in an auto-translating Label. The 143 dp width holds
   the longest label untruncated at all four probe sizes in both locales
   (`tests/game/test_hud_action_labels.gd`).
 - **End turn is fixed bottom-left, and Confirm never docks there.** Confirm is tapped many times a
@@ -121,7 +126,9 @@ preview fields; the glyph's geometry never decides a sector.
   (`InputController.has_cancelable()`); the armed strip's while armed with nothing pending
   (`is_armed_waiting()`); none for a plain selection.
 - **Armed strips** (drone or engineer verb armed) are [Cancel | armed cell], right-anchored,
-  `ArmedStrip.MIN_WIDTH` 285 or wider, growing leftwards. **Cancel sits on the row's Cancel slot**,
+  `ArmedStrip.MIN_WIDTH` 285 or wider, growing leftwards, **48 dp tall like the row**. **Cancel sits
+  on the row's Cancel slot** with the same centred icon-and-word group, so it does not move between
+  arming and the pending row,
   and the inert armed cell sits where Confirm appears one tap later. With Cancel on the right, a
   player backing out with a second tap would fire a drone or demolish a bridge. The armed cell stops
   the tap and does nothing; it does not fall through to the board.

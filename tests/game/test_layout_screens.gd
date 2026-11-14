@@ -169,8 +169,12 @@ func test_hud_preview_plate_content_fits_285_for_every_type(p = use_parameters(_
 		hud.show_preview(previews[i])
 		await LayoutProbe.settle(self)
 		var where: String = "%s %s #%d" % [p[0], p[1], i]
-		if int(previews[i]["type"]) == InputController.ActionType.MOVE:
-			assert_false(plate.visible, "рух — без плити: " + where)
+		# Рух і верби без чисел (розмінувати, ремонт/підрив мосту) показують лише ряд дій, без плити.
+		var plateless: bool = int(previews[i]["type"]) == InputController.ActionType.MOVE \
+			or (int(previews[i]["type"]) == InputController.ActionType.ENGINEER \
+			and int(previews[i]["action"]) != EngineerCommand.Action.REPAIR_UNIT)
+		if plateless:
+			assert_false(plate.visible, "без чисел — без плити: " + where)
 			assert_true((root.get_node("%ConfirmButton") as Control).is_visible_in_tree(), "лише ряд дій: " + where)
 			continue
 		assert_true(plate.is_visible_in_tree(), where)
@@ -179,7 +183,7 @@ func test_hud_preview_plate_content_fits_285_for_every_type(p = use_parameters(_
 		assert_lte(plate.get_combined_minimum_size().x, 285.0, "вміст не ширший за плиту: " + where)
 
 
-## Озброєний дрон: смужка [Скасувати | озброєно] 285 × 52 унизу праворуч, ≥ 48, без накладання.
+## Озброєний дрон: смужка [Скасувати | озброєно] 285 × 48 унизу праворуч — на місці ряду дій, без накладання.
 func test_hud_drone_strip_fits(p = use_parameters(_repair_cases())) -> void:
 	TranslationServer.set_locale(p[1])
 	var size: Vector2i = p[0]
@@ -198,7 +202,7 @@ func test_hud_drone_strip_fits(p = use_parameters(_repair_cases())) -> void:
 	var where: String = "%s %s" % p
 	var strip: ArmedStrip = root.get_node("%DroneStrip")
 	assert_true(strip.is_visible_in_tree(), where)
-	assert_eq(strip.get_global_rect(), Rect2(size.x - 24.0 - 285.0, size.y - 12.0 - 52.0, 285.0, 52.0), where)
+	assert_eq(strip.get_global_rect(), Rect2(size.x - 24.0 - 285.0, size.y - 12.0 - 48.0, 285.0, 48.0), where)
 	assert_eq(LayoutProbe.overflowing(root, size), [] as Array[String], where)
 	assert_eq(LayoutProbe.small_targets(root), [] as Array[String], where)
 	assert_false(strip.get_global_rect().intersects((root.get_node("%EndTurnButton") as Control).get_global_rect()), where)

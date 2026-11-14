@@ -56,7 +56,7 @@ func test_armed_strip_geometry_and_input() -> void:
 	add_child_autofree(s)
 	s.configure(null, "Test", "Hint")
 	await get_tree().process_frame
-	assert_eq(s.size, Vector2(285, 52), "285 × 52")
+	assert_eq(s.size, Vector2(285, 48), "285 × 48, як ряд дій")
 	assert_eq(s.cancel_button.global_position.x - s.global_position.x + s.cancel_button.size.x, 126.0, "«Скасувати» з лівим краєм — 126 dp")
 	assert_eq(s.armed_cell.mouse_filter, Control.MOUSE_FILTER_STOP)
 	var presses: Array[int] = [0]

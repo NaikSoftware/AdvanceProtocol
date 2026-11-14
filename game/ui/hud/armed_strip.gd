@@ -11,7 +11,8 @@ signal cancel_pressed
 const MIN_WIDTH: float = 285.0
 ## Комірка «Скасувати» разом із лівим краєм смужки (1 dp) — рівно 126 dp, як «Скасувати» ряду.
 const CANCEL_WIDTH: float = 125.0
-const HEIGHT: float = 52.0
+## Висота ряду дій: смужка підміняє ряд, тож «Скасувати» не стрибає між озброєнням і очікуванням.
+const HEIGHT: float = 48.0
 const _ICON_CANCEL: Texture2D = preload("res://assets/ui/icons/cancel.svg")
 
 var cancel_button: Button
@@ -35,8 +36,8 @@ func _init() -> void:
 	cancel_button.flat = true
 	cancel_button.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	cancel_button.icon = _ICON_CANCEL
-	cancel_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	cancel_button.custom_minimum_size = Vector2(CANCEL_WIDTH, HEIGHT - 2.0)
+	cancel_button.text = "hud_cancel"
+	cancel_button.custom_minimum_size = Vector2(CANCEL_WIDTH, HEIGHT)
 	cancel_button.add_theme_color_override("icon_normal_color", Color("8f918a"))
 	cancel_button.pressed.connect(cancel_pressed.emit)
 	row.add_child(cancel_button)
@@ -85,7 +86,18 @@ func _init() -> void:
 	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text.add_child(hint_label)
 	armed_cell.add_child(_spacer(2.0))
-	_retitle()
+
+
+func _ready() -> void:
+	# Та сама група «значок + слово» по центру, що й у «Скасувати» ряду дій. Збирається тут, а не в
+	# _init: шрифт кнопки береться з теми, яка до входу в дерево ще не діє.
+	HudKit.group_content(cancel_button, 20.0)
+	# Без верхнього й нижнього поля плити «Скасувати» займає всі 48 dp ряду: край плити 1 dp лягає під
+	# кнопку, тап-ціль лишається ≥ 48, а висота смужки дорівнює висоті ряду дій.
+	var face := get_theme_stylebox(&"panel").duplicate() as StyleBox
+	face.content_margin_top = 0.0
+	face.content_margin_bottom = 0.0
+	add_theme_stylebox_override(&"panel", face)
 
 
 ## icon — значок дії; pips — (лишилось, усього) для дрона, Vector2i(-1, -1) — без ромбиків.
@@ -96,16 +108,6 @@ func configure(icon: Texture2D, title: String, hint: String, pips: Vector2i = Ve
 	_pips.visible = pips.y >= 0
 	if pips.y >= 0:
 		_pips.set_counts(pips.x, pips.y)
-	_retitle()
-
-
-func _retitle() -> void:
-	cancel_button.text = tr("hud_cancel")
-
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_TRANSLATION_CHANGED and cancel_button != null:
-		_retitle()
 
 
 func _spacer(width: float) -> Control:
