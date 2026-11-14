@@ -1,5 +1,11 @@
 {
   "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `ends_bottom_h` [rear, front] is the bottom edge of the rear plate and the bow (0 = no bow beyond the track), which verify_glb.py keeps every body vertex above. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle. `fwd` \"-y\" is a source whose nose points to -Y (prep.py turns it half a turn about Z). `gear.kind` \"wheels\" replaces the track loop with tyres: `road` {r, h, long[]} is the axle discs in SOURCE units, `cut_lat`/`cut_r` what prep removes around them, `wheel_lat` the procedural tyre's lateral span, `hub` and `bevel` its shape; no `cut`, `track_*`, `sprocket`, `idler` or `ends_bottom_h`.",
+  "rifle_soldier": {
+    "source": "~/.local/share/advance-protocol/unit-sources/rifle_soldier.glb",
+    "figure": {"yaw": 90, "tris": 800, "tex": 512,
+               "paint": {"uniform": [110, 109, 70], "helmet": [110, 109, 70], "kit": [88, 88, 58], "gun": [30, 31, 31], "boots": [48, 46, 40], "skin": [146, 110, 88]},
+               "variants": {"assault_soldier": {"tube": {"length_m": 1.52, "diameter_m": 0.19, "bottom_m": 0.88, "colour": [160, 146, 108], "cap": [28, 28, 26]}}}}
+  },
   "heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
     "type_id": 8,

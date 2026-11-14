@@ -211,30 +211,75 @@ func test_column_leans_along_the_wind_it_is_given() -> void:
 	assert_eq(layer.column_lean(), Vector3.ZERO, "у безвітря стовп стоїть прямо")
 
 
-func _dead_squad(p: Vector2i, type_id: int = 0) -> Unit:
-	var u: Unit = state.add_unit(type_id, 1, p, 2)
+## Відділення втрачає фігури на трьох тайлах, бо між влучаннями йде далі; повертає юніт.
+func _squad_hit_on_the_move(type_id: int = 0, owner: int = 1) -> Unit:
+	var u: Unit = state.add_unit(type_id, owner, Vector2i(2, 2), 2)
+	u.hp = 60
+	Casualties.record(state, u)
+	u.pos = Vector2i(3, 2)
+	u.hp = 40
+	Casualties.record(state, u)
+	u.pos = Vector2i(4, 2)
 	u.hp = 0
+	Casualties.record(state, u)
 	return u
 
 
-## Загиблі відділення лежать до кінця матчу — зі стану, тож переживають і перебудову, і
-## збереження; видно їх лише над розвіданим (§3.5).
-func test_fallen_squads_lie_where_they_died_on_seen_ground_only() -> void:
-	_dead_squad(Vector2i(2, 2))
-	_dead_squad(Vector2i(6, 6))
-	var tank: Unit = state.add_unit(5, 1, Vector2i(3, 3), 0)
+## Тіла лежать до кінця матчу там, де кожен упав, — зі стану, тож переживають і перебудову, і
+## збереження; видно їх лише над розвіданим (§3.5). Техніка тіл не лишає: її лишки — уламки.
+func test_bodies_lie_where_each_fell_on_seen_ground_only() -> void:
+	_squad_hit_on_the_move()
+	var tank: Unit = state.add_unit(5, 1, Vector2i(6, 6), 0)
 	tank.hp = 0
-	state.add_unit(0, 1, Vector2i(4, 4), 0)
-	for p: Vector2i in [Vector2i(2, 2), Vector2i(3, 3), Vector2i(4, 4)]:
+	Casualties.record(state, tank)
+	for p: Vector2i in [Vector2i(2, 2), Vector2i(4, 2), Vector2i(6, 6)]:
 		_seen(0, p)
 	layer.rebuild_fallen(state, 0)
-	assert_eq(layer.fallen_count(), 1, "лише загиблі відділення над розвіданим; техніка — уламки")
-	var f: MultiMeshInstance3D = layer.fallen_at(Vector2i(2, 2))
-	assert_not_null(f)
-	assert_eq(f.multimesh.instance_count, UnitView.SQUAD_FIGURES)
-	assert_eq(Vector2(f.position.x, f.position.z), Vector2(2.0, 2.0))
+	# 1 + 0 (тайл 3,2 не розвіданий) + 2: тіло з нерозвіданого — донос про бій
+	assert_eq(layer.fallen_count(), 3)
+	_seen(0, Vector2i(3, 2))
 	layer.rebuild_fallen(state, 0)
-	assert_eq(layer.fallen_count(), 1, "перебудова не множить")
+	assert_eq(layer.fallen_count(), UnitView.SQUAD_FIGURES, "чотири тіла на трьох тайлах")
+	assert_eq(layer.fallen_meshes().size(), 1, "один вигляд — одна сітка, один виклик малювання")
+	var mi: MeshInstance3D = layer.fallen_meshes()[0]
+	assert_eq(mi.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+	assert_eq(mi.layers, 1 << (UnitView.UNIT_LAYER - 1))
+	# Без моделі — темні коробки: по одній на тіло, по сліду на тайл, де воно впало.
+	var v: PackedVector3Array = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	assert_eq(v.size(), 24 * UnitView.SQUAD_FIGURES)
+	var cells: Dictionary = {}
+	for i in range(0, v.size(), 24):
+		var c := Vector3.ZERO
+		for k in 24:
+			c += v[i + k] / 24.0
+		cells[Vector2i(roundi(c.x), roundi(c.z))] = true
+	assert_eq(cells.keys().size(), 3, "тіла на трьох тайлах")
+	layer.rebuild_fallen(state, 0)
+	assert_eq(layer.fallen_count(), UnitView.SQUAD_FIGURES, "перебудова не множить")
+	assert_eq(layer.get_children().filter(func(n: Node) -> bool: return n is MeshInstance3D).size(), 1)
+
+
+## Щойно впалі лягають одразу (подія FiguresFell), а моделі — простим бійцем, позначеним загиблим:
+## один виклик на набір, хай скільки тіл і з яких відділень.
+func test_model_bodies_are_one_mesh_per_look_and_new_ones_join_it() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	_squad_hit_on_the_move(0)
+	for p: Vector2i in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(4, 2)]:
+		_seen(0, p)
+	layer.rebuild_fallen(state, 0)
+	assert_eq(layer.fallen_meshes().size(), 1)
+	assert_same(layer.fallen_meshes()[0].material_override, UnitSilhouettes.model_material(0))
+	var other: Unit = state.add_unit(1, 1, Vector2i(5, 5), 0)
+	other.hp = 0
+	var ev: Array[Events.BattleEvent] = Casualties.record(state, other)
+	layer.add_body((ev[0] as Events.FiguresFell).body)
+	assert_eq(layer.fallen_count(), 2 * UnitView.SQUAD_FIGURES)
+	assert_eq(layer.fallen_meshes().size(), 1, "штурмовики лягають простим бійцем: та сама сітка")
+	var p: PackedVector3Array = layer.fallen_meshes()[0].mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	assert_eq(p.size(), 2 * UnitView.SQUAD_FIGURES * 24, "без труби: кожне тіло — сітка простого бійця")
+	for mi: MeshInstance3D in layer.fallen_meshes():
+		for col: Color in mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR] as PackedColorArray:
+			assert_eq(col.r, 1.0, "позначено загиблим")
 
 
 

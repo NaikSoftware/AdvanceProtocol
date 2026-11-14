@@ -645,13 +645,14 @@ func test_destroyed_squad_lays_all_figures_down_instead_of_shrinking() -> void:
 
 
 ## Лежачі фігури — вершини кольору загиблих у сітці тіла (кожна фігура — коробка в 24 вершини).
-func _fallen_figures() -> int:
+## Скільки коробок-фігур у сітці відділення, без плити-основи.
+func _figures_in_mesh() -> int:
 	var colors: PackedColorArray = (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
-	return colors.count(UnitSilhouettes.FALLEN_COLOR) / 24
+	return colors.size() / 24 - 1
 
 
-## Відділення — чотири фігури в одній сітці з основою; стоїть одна на кожну чверть HP, що
-## лишилась (`ceil(4 · hp / max_hp)`), решта лежить на тій самій основі.
+## Відділення — плита й стоячі фігури в одній сітці; стоїть одна на кожну чверть HP, що
+## лишилась (`ceil(4 · hp / max_hp)`). Загиблих відділення з собою не несе: вони лежать у шарі тіл.
 func test_squad_shows_one_standing_figure_per_quarter_of_hp() -> void:
 	view.bind(_unit(0))
 	assert_eq(UnitView.SQUAD_FIGURES, 4)
@@ -660,7 +661,24 @@ func test_squad_shows_one_standing_figure_per_quarter_of_hp() -> void:
 	for hp: int in cases:
 		view.set_hp(hp, 100)
 		assert_eq(view.standing_figures(), cases[hp], "hp %d" % hp)
-		assert_eq(_fallen_figures(), UnitView.SQUAD_FIGURES - cases[hp], "hp %d: лежачих у сітці" % hp)
+		assert_eq(_figures_in_mesh(), cases[hp], "hp %d: у сітці лише стоячі" % hp)
+		assert_eq(view.standing_figures(), Casualties.figures(hp, 100), "вигляд і core рахують однаково")
+
+
+## Пущений дрон знімає трубу зі спини (§3.9: число публічне); значок залишку лишається.
+func test_a_used_drone_takes_a_tube_off_the_squad() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	view.bind(_unit(1))
+	var hull := view.get_node("Silhouette/Hull") as MeshInstance3D
+	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 4, 0, 2), "дві труби з початку матчу")
+	view.set_drones(1)
+	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 4, 0, 1))
+	assert_true(view.get_node("DroneIcon").visible)
+	view.set_hp(30, 100)
+	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 2, 0, 1), "трубу несе стоячий")
+	view.set_drones(0)
+	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 2, 0, 0))
+	assert_false(view.get_node("DroneIcon").visible)
 
 
 func test_fallen_figure_lies_flat_and_low() -> void:

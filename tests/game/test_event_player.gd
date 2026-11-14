@@ -90,6 +90,7 @@ func test_dispatch_handles_every_concrete_event_instance_without_falling_through
 		Events.DamageDealt.new(2, 40, 60),
 		Events.UnitDestroyed.new(2, Vector2i(3, 3)),
 		Events.WreckLeft.new(Vector2i(3, 3), 5, 2),
+		Events.FiguresFell.new(Casualties.Body.new(1, Vector2i(3, 3), 0, 0, 2, 3, 1)),
 		Events.WreckRemoved.new(Vector2i(3, 3), Wrecks.Reason.BURNED_OUT),
 		Events.TileRevealed.new(0, [Vector2i(1, 1), Vector2i(1, 2)]),
 		Events.UnitFound.new(3, 0, 1),
@@ -554,6 +555,17 @@ func test_forest_broken_emits_forest_changed_without_payload() -> void:
 	player.forest_changed.connect(func() -> void: seen[0] += 1)
 	await player.play([Events.ForestBroken.new(Vector2i(1, 1))] as Array[Events.BattleEvent])
 	assert_eq(seen[0], 1)
+
+
+## Бійці лягають у мить влучання, а не на перебудові після пакета: програвач віддає тіло з
+## події далі, а чи бачить його глядач, вирішує екран.
+func test_figures_fell_hands_the_body_on() -> void:
+	var got: Array[Casualties.Body] = []
+	player.figures_fell.connect(func(b: Casualties.Body) -> void: got.append(b))
+	var body := Casualties.Body.new(3, Vector2i(2, 4), 1, 0, 6, 3, 1)
+	await player.play([Events.FiguresFell.new(body)] as Array[Events.BattleEvent])
+	assert_eq(got.size(), 1)
+	assert_same(got[0], body)
 
 
 ## Удар дрона з загону, якого глядач не бачить, однаково показує влучання — як і гармата з

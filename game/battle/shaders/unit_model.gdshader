@@ -1,6 +1,6 @@
 // Модель юніта з GLB: одна сітка й один матеріал на тип, спільні для всіх власників, тож колір
 // власника і пройдений шлях — instance uniform, а не окремий матеріал (один виклик малювання).
-// COLOR: R — розпізнавальна панель власника, G — траки, B — колеса, що крутяться; альфа коліс —
+// COLOR: R — загиблий боєць (у файлі 0, ставить шар тіл), G — траки, B — колеса, що крутяться; альфа коліс —
 // половина швидкості обертання відносно опорних котків: менші ведуче й напрямне колеса крутяться
 // швидше, інакше їхні зуби ковзали б відносно гусениці.
 // UV2: на траках x — довжина по контуру гусениці в одиницях моделі, y — 0..1 поперек; на
@@ -25,6 +25,10 @@ uniform float wheel_radius = 0.06;
 // біжить по контуру разом із пройденим шляхом.
 const float TREAD_PERIOD = 0.25;
 const float TREAD_STRIP = 0.0625;
+// Загиблий темніший і бурий за живого: стоячі фігури — це HP відділення, тож лежачі не сміють
+// із ними зливатися. Тон — FALLEN_COLOR коробок-заступників (unit_silhouettes.gd), лінійний.
+const vec3 FALLEN_TONE = vec3(0.041, 0.034, 0.025);
+const float FALLEN_MIX = 0.6;
 
 instance uniform float travel = 0.0;
 
@@ -52,6 +56,9 @@ void fragment() {
 		ddy = dFdy(t);
 	}
 	vec3 col = (textureGrad(albedo_tex, uv, ddx, ddy) * albedo_color).rgb;
+	if (COLOR.r > 0.5) {
+		col = mix(col, FALLEN_TONE, FALLEN_MIX);
+	}
 	ALBEDO = col;
 	vec4 orm = textureGrad(orm_tex, uv, ddx, ddy);
 	ROUGHNESS = roughness * dot(orm, roughness_channel);

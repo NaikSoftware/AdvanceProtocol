@@ -23,6 +23,9 @@ signal playback_finished
 ## малювати, вигляд бере з BattleState.known_broken_map(глядача), а не з події.
 signal forest_changed
 
+## Бійці впали й лягли на тайлі (Casualties.Body). Чи бачить їх той, хто перед екраном, вирішує екран.
+signal figures_fell(body: Casualties.Body)
+
 ## Крок руху юніта тайл за тайлом (§1.4 — атмосфера читається, не
 ## пролітає повз). Той самий порядок величини, що й FACE_TURN_DURATION у
 ## UnitView.
@@ -178,6 +181,9 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_drone_launched(event)
 	elif event is Events.DamageDealt:
 		return _handle_damage_dealt(event)
+	elif event is Events.FiguresFell:
+		figures_fell.emit((event as Events.FiguresFell).body)
+		return null
 	elif event is Events.UnitDestroyed:
 		return _handle_unit_destroyed(event)
 	elif event is Events.WreckLeft:

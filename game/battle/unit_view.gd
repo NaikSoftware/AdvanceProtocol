@@ -53,8 +53,8 @@ const _DESTROY_DURATION: float = 0.6
 ## HP-бар і підпис — поверх усіх ефектів (вогонь уламків має пріоритет 1) і без перевірки
 ## глибини: інакше полум'я перекривало б одні підписи, а інші лишались зверху.
 const OVERLAY_PRIORITY: int = 10
-## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась.
-const SQUAD_FIGURES: int = 4
+## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась (правило — Casualties у core).
+const SQUAD_FIGURES: int = Casualties.SQUAD_FIGURES
 const _FALL_SEC: float = 0.5
 ## Знищена техніка зникає під спалахом, і саме тим кроком анімація закінчується:
 ## програвач одразу грає WreckLeft, тож уламки стають на тайл у тому самому кадрі, ще
@@ -557,7 +557,7 @@ func set_hp(hp: int, max_hp: int) -> void:
 	# кожен свій), і modulate поверх нього перефарбував би й рамку теж.
 	_hp_bar.modulate = Color.WHITE
 	_hp_label.text = "%d/%d" % [hp, max_hp]
-	_set_standing(_figures_for(hp, max_hp))
+	_set_standing(Casualties.figures(hp, max_hp))
 
 
 ## Єдине джерело правди про показане HP — для UI й тестів. Колишнє
@@ -608,6 +608,8 @@ func set_drones(count: int) -> void:
 	_drones_left = clampi(count, 0, _MAX_DRONES)
 	_drone_icon.visible = _drones_left > 0
 	_drone_icon.scale = Vector3.ONE * (0.5 + 0.25 * float(_drones_left))
+	# Скільки дронів, стільки труб на спинах: пущений дрон знімає трубу з відділення.
+	_set_standing(_standing)
 
 
 ## Ціль прев'ю пострілу, яке гравець ще не підтвердив (§3.13): вузол лише
@@ -647,19 +649,13 @@ func standing_figures() -> int:
 	return _standing
 
 
-## `ceil(SQUAD_FIGURES · hp / max_hp)` цілими: фігура падає, щойно втрачено її чверть.
-static func _figures_for(hp: int, max_hp: int) -> int:
-	if max_hp <= 0 or hp <= 0:
-		return 0
-	return mini(SQUAD_FIGURES, (SQUAD_FIGURES * hp + max_hp - 1) / max_hp)
-
-
+## Відділення несе лише стоячих: хто впав, лежить у шарі тіл (WreckLayer) там, де впав.
 func _set_standing(count: int) -> void:
 	if not (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures"):
 		_standing = 0
 		return
 	_standing = count
-	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id())
+	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left)
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два

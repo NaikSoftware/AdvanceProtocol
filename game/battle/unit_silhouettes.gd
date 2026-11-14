@@ -89,6 +89,14 @@ static var _figure_material: StandardMaterial3D
 const FIGURE_SIZE: Vector3 = Vector3(0.0625, 0.225, 0.05)
 const FALLEN_COLOR: Color = Color("3a342c")
 const _FIGURE_SLOTS: Array[Vector2] = [Vector2(-0.1, -0.09), Vector2(0.1, -0.1), Vector2(-0.09, 0.1), Vector2(0.11, 0.09)]
+## Сталий поворот кожного місця, рад: четверо однаково повернутих бійців читаються як клони. Середнє
+## близьке до нуля, тож відділення далі дивиться туди, куди його напрям.
+const _FIGURE_YAW: Array[float] = [-0.24, 0.12, 0.3, -0.12]
+## Куди лежить кожен загиблий (рад від напряму відділення): різні напрями читаються як «упали», а не «лягли строєм».
+const _LIE_YAW: Array[float] = [0.35, -1.9, 2.6, -0.6]
+## Тип, чия модель — простий боєць кожного відділення: у штурмовому без труби дрона стоїть він. Тіла
+## лягають теж ним — трубу загиблий лишає.
+const PLAIN_FIGURE: int = 0
 
 
 ## Кінчик ствола в локальних координатах юніта: звідси вилітає спалах.
@@ -162,11 +170,11 @@ static func build(type_id: int, set_id: int = 0) -> Node3D:
 ## Той самий силует, але корпус, башта, ствол, ходова й фігури відділення — одна сітка `Hull` з
 ## кольорами у вершинах (однаковими для всіх власників):
 ## один виклик малювання й один у тіні замість трьох-п'яти на юніт (§8). `standing` — скільки
-## фігур стоїть, решта лежить.
-static func build_merged(type_id: int, standing: int = -1, set_id: int = 0) -> Node3D:
+## фігур стоїть; `drones` — скільки з них несе трубу дрона.
+static func build_merged(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0) -> Node3D:
 	var hull := MeshInstance3D.new()
 	hull.name = "Hull"
-	hull.mesh = merged_mesh(type_id, standing, set_id)
+	hull.mesh = merged_mesh(type_id, standing, set_id, drones)
 	if has_model(type_id, set_id):
 		hull.material_override = model_material(type_id, set_id)
 	else:
@@ -185,23 +193,29 @@ static func _merged_mat() -> StandardMaterial3D:
 
 
 ## Сітка тіла на тип і кількість стоячих фігур; спільна для всіх юнітів того
-## самого вигляду, тож падіння фігури — підміна сітки, а не нова.
-static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0) -> ArrayMesh:
+## самого вигляду, тож падіння фігури — підміна сітки, а не нова. Відділення несе лише
+## стоячих: загиблі лежать там, де впали (шар тіл, `bodies_mesh()`), а не йдуть із ним.
+## Труб дрона на відділенні стільки, скільки дронів лишилось (§3.9, число публічне), і несуть їх
+## перші стоячі місця — вони падають останніми; решта — простий боєць (PLAIN_FIGURE). Модель із
+## трубою має той самий атлас, що й простий боєць, тож обидва малює її матеріал одним викликом.
+static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0) -> ArrayMesh:
 	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
 	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
 	var model: ArrayMesh = model_mesh(type_id, set_id)
 	if model != null and not has_figures:
 		return model
-	var key := "%d:%d:%s:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0]
+	var plain: ArrayMesh = model_mesh(PLAIN_FIGURE, set_id) if model != null else null
+	var tubes: int = clampi(drones, 0, up) if plain != null and plain != model else 0
+	var key := "%d:%d:%s:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0, tubes]
 	if _merged_meshes.has(key):
 		return _merged_meshes[key]
 	if model != null:
-		# Четверо бійців на місцях коробок-фігур: ступні там, де був низ коробки.
-		var feet := Transform3D(Basis(), Vector3(0.0, -FIGURE_SIZE.y * 0.5, 0.0))
-		var xfs: Array[Transform3D] = []
-		for i in _FIGURE_SLOTS.size():
-			xfs.append(figure_transform(i, i < up) * feet)
-		_merged_meshes[key] = _merge_model(model, xfs)
+		var with_tube: Array[Transform3D] = []
+		var bare: Array[Transform3D] = []
+		for i in up:
+			(with_tube if i < tubes else bare).append(model_figure_transform(model, i, true))
+		# Без жодного стоячого — порожня сітка: вузол знищеного відділення нічого не малює.
+		_merged_meshes[key] = _merge_parts([[model, with_tube], [plain if plain != null else model, bare]]) if up > 0 else ArrayMesh.new()
 		return _merged_meshes[key]
 	var root := build(type_id, set_id)
 	var pieces: Array[Array] = []  ## [масиви сітки, перетворення, колір]
@@ -210,8 +224,8 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0) -> Ar
 			var mi := part as MeshInstance3D
 			pieces.append([mi.mesh.surface_get_arrays(0), Transform3D(Basis(), mi.position), (mi.material_override as StandardMaterial3D).albedo_color])
 		elif part is MultiMeshInstance3D:
-			for i in _FIGURE_SLOTS.size():
-				pieces.append([_figure_mesh.surface_get_arrays(0), figure_transform(i, i < up), BODY_COLOR if i < up else FALLEN_COLOR])
+			for i in up:
+				pieces.append([_figure_mesh.surface_get_arrays(0), figure_transform(i, true), BODY_COLOR])
 	root.free()
 	var v := PackedVector3Array()
 	var n := PackedVector3Array()
@@ -243,16 +257,10 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0) -> Ar
 
 ## Четвірка фігур одним MultiMesh: стоять перші `standing`, решта лежить на тих самих місцях.
 static func figures(standing: int, stand_color: Color) -> MultiMeshInstance3D:
-	if _figure_mesh == null:
-		_figure_mesh = BoxMesh.new()
-		_figure_mesh.size = FIGURE_SIZE
-		_figure_material = StandardMaterial3D.new()
-		_figure_material.vertex_color_use_as_albedo = true
-		_figure_material.vertex_color_is_srgb = true
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
-	mm.mesh = _figure_mesh
+	mm.mesh = _figure_box()
 	mm.instance_count = _FIGURE_SLOTS.size()
 	var mi := MultiMeshInstance3D.new()
 	mi.name = "Figures"
@@ -260,6 +268,16 @@ static func figures(standing: int, stand_color: Color) -> MultiMeshInstance3D:
 	mi.material_override = _figure_material
 	set_standing(mi, standing, stand_color)
 	return mi
+
+
+static func _figure_box() -> BoxMesh:
+	if _figure_mesh == null:
+		_figure_mesh = BoxMesh.new()
+		_figure_mesh.size = FIGURE_SIZE
+		_figure_material = StandardMaterial3D.new()
+		_figure_material.vertex_color_use_as_albedo = true
+		_figure_material.vertex_color_is_srgb = true
+	return _figure_mesh
 
 
 ## Загибла фігура лежить уздовж землі на своєму місці, ледь зсунута вбік: не стоїть і не
@@ -271,12 +289,69 @@ static func set_standing(mi: MultiMeshInstance3D, standing: int, stand_color: Co
 		mm.set_instance_color(i, stand_color if i < standing else FALLEN_COLOR)
 
 
+## Коробка-заступник на місці `i` (центр коробки) у системі відділення, чия основа на 0,05 над його початком.
 static func figure_transform(i: int, standing: bool) -> Transform3D:
 	var slot: Vector2 = _FIGURE_SLOTS[i]
 	if standing:
-		return Transform3D(Basis(), Vector3(slot.x, 0.05 + FIGURE_SIZE.y * 0.5, slot.y))
-	var b := Basis(Vector3.UP, float(i) * 1.3) * Basis(Vector3.RIGHT, PI * 0.5)
+		return Transform3D(Basis(Vector3.UP, _FIGURE_YAW[i]), Vector3(slot.x, 0.05 + FIGURE_SIZE.y * 0.5, slot.y))
+	var b := Basis(Vector3.UP, _LIE_YAW[i]) * Basis(Vector3.RIGHT, PI * 0.5)
 	return Transform3D(b, Vector3(slot.x * 1.2, 0.05 + FIGURE_SIZE.z * 0.5, slot.y * 1.2))
+
+
+## Боєць-модель на місці `i` (ступні моделі на y = 0) у тій самій системі. Загиблий лежить
+## ниць — спиною догори, як його бачить камера згори, — серединою тіла на місці, а
+## груди (не ствол, що виступає вперед) лежать на землі: ствол іде в ґрунт, тіло не висить.
+static func model_figure_transform(model: Mesh, i: int, standing: bool) -> Transform3D:
+	var slot: Vector2 = _FIGURE_SLOTS[i]
+	if standing:
+		return Transform3D(Basis(Vector3.UP, _FIGURE_YAW[i]), Vector3(slot.x, 0.05, slot.y))
+	var yaw := Basis(Vector3.UP, _LIE_YAW[i])
+	var at: Vector3 = Vector3(slot.x * 1.2, 0.05 + _chest_depth(model), slot.y * 1.2) + yaw * Vector3(0.0, 0.0, FIGURE_SIZE.y * 0.5)
+	return Transform3D(yaw * Basis(Vector3.RIGHT, -PI * 0.5), at)
+
+
+static var _chest_depths: Dictionary = {}
+
+
+## Наскільки груди виступають уперед від ступнів (−Z моделі), у висоті торса: на них лежить ниць
+## тіло. Нижній квартиль, а не крайня точка, бо ствол і руки попереду — кілька вершин.
+static func _chest_depth(model: Mesh) -> float:
+	if _chest_depths.has(model):
+		return _chest_depths[model]
+	var zs: Array[float] = []
+	for p: Vector3 in model.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
+		if p.y > FIGURE_SIZE.y * 0.45 and p.y < FIGURE_SIZE.y * 0.75:
+			zs.append(-p.z)
+	zs.sort()
+	var d: float = zs[int(zs.size() * 0.75)] if not zs.is_empty() else FIGURE_SIZE.z * 0.5
+	_chest_depths[model] = d
+	return d
+
+
+## Тіла одного вигляду (тип, набір) однією сіткою, тож увесь шар тіл — виклик малювання на вигляд.
+## `places` — перетворення відділення на місці загибелі, `slots` — місце кожної фігури в ньому.
+## Загиблі моделі позначені R = 1 у COLOR: шейдер моделі темнить їх, коробки — темні вершинами.
+static func bodies_mesh(type_id: int, set_id: int, places: Array[Transform3D], slots: Array[int]) -> ArrayMesh:
+	var model: ArrayMesh = model_mesh(type_id, set_id)
+	var xfs: Array[Transform3D] = []
+	for k in slots.size():
+		var local: Transform3D = model_figure_transform(model, slots[k], false) if model != null else figure_transform(slots[k], false)
+		xfs.append(places[k] * local)
+	if model != null:
+		return _merge_model(model, xfs, true)
+	var out: ArrayMesh = _merge_model(_figure_box(), xfs)
+	var a: Array = out.surface_get_arrays(0)
+	var c := PackedColorArray()
+	c.resize((a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size())
+	c.fill(FALLEN_COLOR)
+	a[Mesh.ARRAY_COLOR] = c
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	return mesh
+
+
+static func bodies_material(type_id: int, set_id: int) -> Material:
+	return model_material(type_id, set_id) if has_model(type_id, set_id) else _merged_mat()
 
 
 static func _box(parent: Node3D, node_name: String, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
@@ -370,17 +445,15 @@ static func _load_model(path: String) -> ArrayMesh:
 
 
 ## Копії поверхні 0 сітки `src` за перетвореннями в одну поверхню з усіма атрибутами: дотичні й
-## UV2 потрібні карті нормалей, гусеницям і колесам.
-static func _merge_model(src: Mesh, xfs: Array[Transform3D]) -> ArrayMesh:
-	var a: Array = src.surface_get_arrays(0)
-	var sv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-	var count: int = sv.size()
-	var sn: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
-	var st: PackedFloat32Array = a[Mesh.ARRAY_TANGENT] if a[Mesh.ARRAY_TANGENT] != null else PackedFloat32Array()
-	var sc: PackedColorArray = a[Mesh.ARRAY_COLOR] if a[Mesh.ARRAY_COLOR] != null else PackedColorArray()
-	var su: PackedVector2Array = a[Mesh.ARRAY_TEX_UV] if a[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
-	var su2: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2] if a[Mesh.ARRAY_TEX_UV2] != null else PackedVector2Array()
-	var si: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array(range(count))
+## UV2 потрібні карті нормалей, гусеницям і колесам. `fallen` ставить R = 1 у COLOR: шейдер моделі
+## малює таку копію загиблим.
+static func _merge_model(src: Mesh, xfs: Array[Transform3D], fallen: bool = false) -> ArrayMesh:
+	return _merge_parts([[src, xfs]], fallen)
+
+
+## Те саме для кількох сіток: `parts` — пари [сітка, Array[Transform3D]]. Так відділення збирає в одну
+## поверхню бійців із трубою й без неї (їхні GLB мають один атлас, тож і матеріал один).
+static func _merge_parts(parts: Array, fallen: bool = false) -> ArrayMesh:
 	var v := PackedVector3Array()
 	var n := PackedVector3Array()
 	var t := PackedFloat32Array()
@@ -388,32 +461,45 @@ static func _merge_model(src: Mesh, xfs: Array[Transform3D]) -> ArrayMesh:
 	var uv := PackedVector2Array()
 	var uv2 := PackedVector2Array()
 	var idx := PackedInt32Array()
-	for k in xfs.size():
-		var xf: Transform3D = xfs[k]
-		var base: int = v.size()
-		for i in count:
-			v.append(xf * sv[i])
-			n.append((xf.basis * sn[i]).normalized())
-			if st.size() == count * 4:
-				var tg: Vector3 = (xf.basis * Vector3(st[i * 4], st[i * 4 + 1], st[i * 4 + 2])).normalized()
-				t.append_array([tg.x, tg.y, tg.z, st[i * 4 + 3]])
-			var col: Color = sc[i] if sc.size() == count else Color.BLACK
-			c.append(col)
-			uv.append(su[i] if su.size() == count else Vector2.ZERO)
-			var u2: Vector2 = su2[i] if su2.size() == count else Vector2.ZERO
-			if col.b > 0.5:
-				# Вісь колеса їде разом із вершинами. shortcut: вісь лишається паралельною X лише
-				# без повороту довкола Y/Z; у GLB вузли без такого повороту, тож поки досить.
-				var axle: Vector3 = xf * Vector3(0.0, u2.x, u2.y)
-				u2 = Vector2(axle.y, axle.z)
-			uv2.append(u2)
-		for i: int in si:
-			idx.append(base + i)
+	var tangents: bool = true
+	for part: Array in parts:
+		var a: Array = (part[0] as Mesh).surface_get_arrays(0)
+		var sv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var count: int = sv.size()
+		var sn: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+		var st: PackedFloat32Array = a[Mesh.ARRAY_TANGENT] if a[Mesh.ARRAY_TANGENT] != null else PackedFloat32Array()
+		var sc: PackedColorArray = a[Mesh.ARRAY_COLOR] if a[Mesh.ARRAY_COLOR] != null else PackedColorArray()
+		var su: PackedVector2Array = a[Mesh.ARRAY_TEX_UV] if a[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+		var su2: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2] if a[Mesh.ARRAY_TEX_UV2] != null else PackedVector2Array()
+		var si: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array(range(count))
+		tangents = tangents and st.size() == count * 4
+		for xf: Transform3D in part[1] as Array[Transform3D]:
+			var base: int = v.size()
+			for i in count:
+				v.append(xf * sv[i])
+				n.append((xf.basis * sn[i]).normalized())
+				if st.size() == count * 4:
+					var tg: Vector3 = (xf.basis * Vector3(st[i * 4], st[i * 4 + 1], st[i * 4 + 2])).normalized()
+					t.append_array([tg.x, tg.y, tg.z, st[i * 4 + 3]])
+				var col: Color = sc[i] if sc.size() == count else Color.BLACK
+				if fallen:
+					col.r = 1.0
+				c.append(col)
+				uv.append(su[i] if su.size() == count else Vector2.ZERO)
+				var u2: Vector2 = su2[i] if su2.size() == count else Vector2.ZERO
+				if col.b > 0.5:
+					# Вісь колеса їде разом із вершинами. shortcut: вісь лишається паралельною X лише
+					# без повороту довкола Y/Z; у GLB вузли без такого повороту, тож поки досить.
+					var axle: Vector3 = xf * Vector3(0.0, u2.x, u2.y)
+					u2 = Vector2(axle.y, axle.z)
+				uv2.append(u2)
+			for i: int in si:
+				idx.append(base + i)
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = v
 	arrays[Mesh.ARRAY_NORMAL] = n
-	if t.size() == v.size() * 4:
+	if tangents and t.size() == v.size() * 4:
 		arrays[Mesh.ARRAY_TANGENT] = t
 	arrays[Mesh.ARRAY_COLOR] = c
 	arrays[Mesh.ARRAY_TEX_UV] = uv

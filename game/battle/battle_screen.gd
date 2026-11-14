@@ -378,6 +378,7 @@ func _wire_view(board: Board) -> void:
 		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
 		_on_wreck_left, _on_wreck_removed, _on_unit_found, _on_cell_entered)
 	_event_player.forest_changed.connect(forest_changed)
+	_event_player.figures_fell.connect(_on_figures_fell)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
 	# Шлях — та сама система контурів, що й зони (game/battle/path_overlay.gd),
 	# але власний шар і власний сигнал: action_preview малює його для прев'ю
@@ -1066,6 +1067,13 @@ func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> voi
 	_scars.stamp_scorch(pos)
 	if _match_service.state.vision[_viewer].is_seen(pos):
 		_wreck_layer.add(pos, type_id, 1.0, facing, UnitSilhouettes.set_of(owner))
+
+
+## Бійці лягають там, де відділення стояло, у мить влучання; події не фільтровані за гравцем (§6),
+## тож тіла на нерозвіданому глядача не показуються.
+func _on_figures_fell(body: Casualties.Body) -> void:
+	if _match_service.state.vision[_viewer].is_seen(body.pos):
+		_wreck_layer.add_body(body)
 
 
 ## Прибрати показане — нічого не розкриває. Решту на гейті перемалює _rebuild_wrecks().

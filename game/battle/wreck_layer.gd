@@ -172,8 +172,9 @@ var _fire_mat: ShaderMaterial
 var _timer: Timer
 var _frame: int = 0
 var _warm: MeshInstance3D = null
-## Загиблі відділення: чотири лежачі фігури на тайлі, де відділення полягло.
-var _fallen: Dictionary[Vector2i, MultiMeshInstance3D] = {}
+## Тіла бійців (Casualties), показані глядачу, і їхні сітки: одна на вигляд (набір, тип).
+var _bodies: Array[Casualties.Body] = []
+var _body_meshes: Dictionary[Vector2i, MeshInstance3D] = {}
 var _column_cells: Array[Vector2i] = []
 var _hearths: MultiMeshInstance3D
 var _hearth_mat: ShaderMaterial
@@ -516,34 +517,76 @@ func _end_warm_up() -> void:
 	_refresh_effects()
 
 
-## Загиблі відділення — зі стану (мертві юніти лишаються в `state.units`), тож вони
-## переживають і перебудову, і збереження. Лише над розвіданим глядача (§3.5): тіла на
-## нерозвіданому — донос про бій. Техніка тут не малюється: її лишки — уламки.
+## Тіла бійців — зі стану (`state.bodies`), тож переживають і перебудову, і збереження, і
+## лежать там, де кожен упав, хай куди відділення пішло далі. Лише над розвіданим глядача
+## (§3.5): тіла на нерозвіданому — донос про бій. Техніка тут не малюється: її лишки — уламки.
 func rebuild_fallen(state: BattleState, observer: int) -> void:
-	for f: MultiMeshInstance3D in _fallen.values():
-		f.free()
-	_fallen.clear()
-	for id: int in state.units:
-		var u: Unit = state.units[id]
-		if u.is_alive() or u.unit_class() != UnitTypes.UnitClass.INFANTRY or _fallen.has(u.pos):
-			continue
-		if not state.vision[observer].is_seen(u.pos):
-			continue
-		var f: MultiMeshInstance3D = UnitSilhouettes.figures(0, UnitSilhouettes.FALLEN_COLOR)
-		f.name = "Fallen_%d_%d" % [u.pos.x, u.pos.y]
-		f.position = IsoCameraRig.cell_to_world(u.pos)
-		f.rotation.y = deg_to_rad(UnitView._degrees_for_facing(u.facing))
-		f.layers = 1 << (UnitView.UNIT_LAYER - 1)
-		add_child(f)
-		_fallen[u.pos] = f
+	_bodies.clear()
+	for b in state.bodies:
+		if state.vision[observer].is_seen(b.pos):
+			_bodies.append(b)
+	_rebuild_body_meshes()
 
 
+## Щойно впалі (подія FiguresFell) — одразу, а не на перебудові після пакета: інакше фігура
+## зникала б із відділення й лягала б аж по всьому. Чи бачить їх глядач, вирішує той, хто кличе.
+func add_body(body: Casualties.Body) -> void:
+	_bodies.append(body)
+	_rebuild_body_meshes()
+
+
+## Скільки фігур лежить на показаних тілах.
 func fallen_count() -> int:
-	return _fallen.size()
+	var n: int = 0
+	for b in _bodies:
+		n += b.count
+	return n
 
 
-func fallen_at(pos: Vector2i) -> MultiMeshInstance3D:
-	return _fallen.get(pos, null)
+## Сітки тіл: одна на вигляд (набір, тип) — шар тіл коштує виклик малювання на вигляд, а не на тіло.
+func fallen_meshes() -> Array[MeshInstance3D]:
+	return _body_meshes.values()
+
+
+func _rebuild_body_meshes() -> void:
+	for mi: MeshInstance3D in _body_meshes.values():
+		mi.free()
+	_body_meshes.clear()
+	var places: Dictionary = {}  ## Vector2i(набір, тип) -> [перетворення, місця]
+	for b in _bodies:
+		# Тіла лишає лише піхота (Casualties), і лягає вона простим бійцем — трубу дрона загиблий лишає;
+		# тож тіла стрілецьких і штурмових відділень набору — одна сітка.
+		var key := Vector2i(UnitSilhouettes.set_of(b.owner), UnitSilhouettes.PLAIN_FIGURE)
+		if not places.has(key):
+			places[key] = [[] as Array[Transform3D], [] as Array[int]]
+		var squad := Transform3D(Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(b.facing))), IsoCameraRig.cell_to_world(b.pos))
+		for slot in range(b.first, b.first + b.count):
+			var at: Transform3D = squad
+			at.origin.y = _body_ground(b.pos, squad * UnitSilhouettes.figure_transform(slot, false).origin)
+			(places[key][0] as Array[Transform3D]).append(at)
+			(places[key][1] as Array[int]).append(slot)
+	for key: Vector2i in places:
+		var mi := MeshInstance3D.new()
+		mi.name = "Bodies_%d_%d" % [key.x, key.y]
+		mi.mesh = UnitSilhouettes.bodies_mesh(key.y, key.x, places[key][0], places[key][1])
+		mi.material_override = UnitSilhouettes.bodies_material(key.y, key.x)
+		# Тіло завтовшки в долоню тіні не дає, а прохід тіней коштував би ще виклик на вигляд.
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
+		add_child(mi)
+		_body_meshes[key] = mi
+
+
+## Висота основи відділення під лежачою фігурою, як ставить живе відділення UnitView._pose():
+## рельєф мінус SQUAD_SINK, на мосту — настил. Береться під самою фігурою, тож на схилі тіло не висить.
+func _body_ground(cell: Vector2i, at: Vector3) -> float:
+	var th: TerrainHeight = TerrainHeight.active
+	if th == null:
+		return 0.0
+	var deck: float = th.deck_y(cell)
+	if deck > th.at(float(cell.x), float(cell.y)) + 0.001:
+		return deck
+	return th.at(at.x, at.z) - UnitView.SQUAD_SINK
 
 
 ## Час ефектів, секунд: крок таймера, а не годинник рушія (див. _step()).
