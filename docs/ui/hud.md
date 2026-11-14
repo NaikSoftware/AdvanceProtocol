@@ -43,9 +43,10 @@ Three rules hold everywhere below:
 | pause | top-right (right 24, top 8) | 48 × 48 | icon only |
 | End turn | bottom-left (24, bottom 12) | 161 × 48 | fixed; nothing else docks there |
 
-Idle chrome is about 4 % of a 985 × 442 screen. **Ground state is not on the battle HUD.** It is
-fixed per map ([§3.12](../rules/movement-and-terrain.md)), so it lives on the handover gate and the
-pause menu, where it is read once per turn instead of costing board space every frame.
+Idle chrome is about 4 % of a 985 × 442 screen. **Ground state is shown nowhere in the UI** — not
+here, not on the gate, not in the pause menu. It is fixed per map
+([§3.12](../rules/movement-and-terrain.md)) and every movement zone and move preview already
+includes it.
 
 ## Tap and press-and-hold
 
@@ -235,14 +236,13 @@ ordering contract in the header of `handover_gate.gd`, §3.5).
   resource (`maps/river.tres` → `river.webp`). A map without one (the map editor makes new maps)
   falls back to `default.webp`, a generic dark plate. **Never a runtime render of the board.**
 - **Stack:** «ПЕРЕДАЙТЕ ПРИСТРІЙ» · nameplate (6-dp player-colour rules, «Гравець N» 700/40, a
-  player-colour horizon line behind it) · info plate [ХІД][КАРТА][ground icon + «Ґрунт: багно —
-  бездоріжжя важче»] · «Готово». Nameplate and info plate share one width, at least
+  player-colour horizon line behind it) · info plate [ХІД][КАРТА] · «Готово». Nameplate and info plate share one width, at least
   `HandoverGate.MIN_WIDTH` 400 on every map.
 - **Entrance:** one 350-ms tween moves the accents only; «Готово» ignores input until it ends, so the
   outgoing player's double tap on End turn cannot also lift the gate.
 - **Pause:** opaque, over the same map plate; «Пауза» + map name, Продовжити (primary),
   Налаштування, Зберегти й вийти, and a muted, unfilled Здатися with its own confirmation. The info
-  line «Хід 3 · Ґрунт: багно» uses the turn label's style, ground icon `dim`.
+  line shows only «Хід 3».
 
 ### Baking a plate for a new map
 

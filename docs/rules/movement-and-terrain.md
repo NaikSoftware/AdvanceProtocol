@@ -219,10 +219,11 @@ any number**. This is a deliberate call: in a hot-seat game with hidden informat
 silently shrinks your vision radius feels like cheating when you cannot see it. Atmosphere gets
 the whole visual budget and none of the rules budget.
 
-**Ground state is a rule, and it is explicit.** Each map has `ground_state ∈ {dry, mud, frozen}`,
-shown as a labelled icon on the handover gate before every turn and in the pause menu. It is not
-on the battle HUD: it is fixed for the whole match, and every movement zone and move preview already
-includes it. It offsets off-road terrain penalty:
+**Ground state is a rule, and it lives in the numbers.** Each map has
+`ground_state ∈ {dry, mud, frozen}`, fixed for the whole match. No label or icon shows it anywhere
+in the UI — not on the battle HUD, the handover gate or the pause menu — because every movement zone
+and move preview already includes it; naming it on screen adds reading and no decision. It offsets
+off-road terrain penalty:
 
 | state | off-road penalty | notes |
 | --- | --- | --- |

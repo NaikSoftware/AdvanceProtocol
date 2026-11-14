@@ -248,8 +248,9 @@ a blocker standing on a mine keeps it from going off.
 **Weather and time of day are cosmetic and touch no number.** In a hot-seat game with hidden
 information, a rule that silently shrinks your vision feels like cheating when you cannot see it.
 
-**Ground state is a rule and it is explicit.** `dry / mud / frozen`, fixed per map, shown as a
-labelled icon on the handover gate and in the pause menu, offsetting off-road penalty. Roads are never affected — that is the point of a road.
+**Ground state is a rule that lives in the numbers, not on screen.** `dry / mud / frozen`, fixed
+per map, offsetting off-road penalty. Roads are never affected — that is the point of a road. No
+label or icon shows it anywhere in the UI: every movement zone and move preview already includes it.
 
 ### 3.13 What the board shows, and when → [details](docs/ui/overlays.md)
 
