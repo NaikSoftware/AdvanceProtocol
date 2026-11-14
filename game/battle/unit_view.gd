@@ -186,6 +186,7 @@ func _ready() -> void:
 	# лишається читким (`DRONE_ICON_PIXEL` на піксель текстури).
 	_drone_icon.fixed_size = true
 	_drone_icon.pixel_size = DRONE_ICON_PIXEL
+	_drone_icon.position.y = DRONE_ICON_Y
 	_drone_icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
 	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
@@ -947,7 +948,10 @@ static func _diamond_texture(size: int = 32) -> ImageTexture:
 
 
 ## Розмір піктограми дронів на екрані (`fixed_size`): частка висоти вікна на піксель текстури.
-const DRONE_ICON_PIXEL: float = 0.0011
+const DRONE_ICON_PIXEL: float = 0.0008
+## Висота значка над юнітом: смуга HP і підпис зменшуються з зумом, а значок — ні, тож він стоїть вище за
+## них настільки, щоб і на найдальшому зумі їх не накривати.
+const DRONE_ICON_Y: float = 1.0
 ## Колір силуету й цяток — той самий жовтий, що й позначка дрона (DroneThreatened), обведений темним.
 const _DRONE_FILL: Color = Color("e2bd45")
 const _DRONE_INK: Color = Color("1d1a14")
