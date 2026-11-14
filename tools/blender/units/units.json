@@ -3,7 +3,7 @@
   "heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
     "type_id": 8,
-    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.9, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
+    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.9, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "chip_lines": true, "dark_floor": 0.5, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
     "fwd": "x",
     "hull_long": [-0.4987, 0.3238],
     "hull_lat": 0.2166,
@@ -48,7 +48,7 @@
   "medium_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/medium_tank.glb",
     "type_id": 5,
-    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -1.1, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
+    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -1.1, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "chip_lines": true, "dark_floor": 0.5, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
     "fwd": "x",
     "hull_long": [-0.4987, 0.3238],
     "hull_lat": 0.2166,
@@ -109,7 +109,7 @@
   "tank_destroyer": {
     "source": "~/.local/share/advance-protocol/unit-sources/tank_destroyer.glb",
     "type_id": 6,
-    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.75, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
+    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.75, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "chip_lines": true, "dark_floor": 0.5, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
     "fwd": "x",
     "_layout": "no turret: low front hull, a tall fixed armoured box on the rear 57 %, the gun from its front face",
     "hull_long": [-0.5, 0.251],
@@ -157,7 +157,7 @@
   "light_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/light_tank.glb",
     "type_id": 7,
-    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.75, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
+    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.75, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "chip_lines": true, "dark_floor": 0.5, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
     "fwd": "x",
     "hull_long": [-0.4973, 0.2314],
     "hull_lat": 0.1939,
