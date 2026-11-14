@@ -47,6 +47,7 @@ const HP_BAR_PIXEL_SIZE: float = 0.02
 ## різні центри обертання, а §8 тримає бюджет ~100 draw call'ів на екран.
 const _HP_BAR_FRAME_COLOR: Color = Color("14120f")
 const _HP_BAR_BACK_COLOR: Color = Color("3b3833")
+const _HP_FILL_LIFT: float = 0.3
 
 const _DESTROY_DURATION: float = 0.6
 ## HP-бар і підпис — поверх усіх ефектів (вогонь уламків має пріоритет 1) і без перевірки
@@ -79,8 +80,8 @@ const TURN_RADIUS: float = 1.0
 const _ARC_SEGMENTS: int = 8
 
 ## Абстрактні кольори гравців-плейсхолдерів (§2 — жодного реального прапора
-## чи армії). Індекс — Unit.owner. Колір іде лише на корпус (Hull), не на
-## ствол чи смугу — вони нейтральні для будь-якого власника.
+## чи армії). Індекс — Unit.owner. Колір несе лише заливка смуги HP: юніти
+## різняться власником за нею, корпус однаковий для всіх.
 const PLAYER_COLORS: Array[Color] = [
 	Color("3a6ea5"),
 	Color("a54a3a"),
@@ -101,7 +102,7 @@ const PLAYER_COLORS: Array[Color] = [
 const _DEBUG_SHOW_FACING_ARROW: bool = false
 
 ## Яскравий, ненатуральний магента — свідомо поза палітрою решти юніта
-## (гравці — приглушені сині/червоні/зелені, інженер — жовтий, ствол —
+## (кольори гравців лише на смузі HP, інженер — жовтий, ствол —
 ## темний метал), щоб стрілка ніколи не «зливалась із корпусом» і не
 ## читалась як щось ігрове. Той самий дух, що й «текстура відсутня» магента
 ## в інших рушіях — колір, який кричить «це заступник».
@@ -142,9 +143,17 @@ var destroyed: bool = false
 @onready var _hp_label: Label3D = $HpLabel
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
-var _hull_material: StandardMaterial3D
+var _hull_material: Material
+## Тіло — модель GLB (а не коробки): лише її шейдер крутить колеса й траки за пройденим шляхом.
+var _has_model: bool = false
+## Пройдений шлях в одиницях світу: від нього колеса й траки моделі крутяться в такт руху.
+var _travel: float = 0.0
+## Шлях за id юніта: дошка перебудовує вузли після кожної дії, і новий вузол інакше повертав би
+## колеса в нульове положення одразу після руху.
+static var _travel_by_unit: Dictionary = {}
+var _unit_id: int = -1
 var _type_id: int = 0
-var _owner_color: Color = Color.WHITE
+var _owner: int = 0
 var _standing: int = 0
 var _drones_left: int = 0
 ## Останнє показане співвідношення HP. Джерело правди замість колишнього
@@ -193,6 +202,8 @@ func _ready() -> void:
 func bind(unit: Unit) -> void:
 	position = IsoCameraRig.cell_to_world(unit.pos)
 	_type_id = unit.type_id
+	_unit_id = unit.id
+	_travel = _travel_by_unit.get(unit.id, 0.0)
 	_build_silhouette(unit.type_id, unit.owner)
 	_tilts = UnitTypes.is_vehicle(UnitTypes.get_type(unit.type_id)["unit_class"])
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
@@ -430,6 +441,11 @@ func _follow(s: float, line: PackedVector2Array, acc: PackedFloat32Array, tangen
 	var p: Vector2 = line[last] if s >= acc[last] else line[i - 1].lerp(line[i], t)
 	var d: Vector2 = tangents[i - 1].lerp(tangents[i], t)
 	rotation_degrees.y += wrapf(_yaw_of(d) - rotation_degrees.y, -180.0, 180.0)
+	if _has_model:
+		# Лише в плані: висота рельєфу під юнітом не є шляхом коліс.
+		_travel += Vector2(p.x - position.x, p.y - position.z).length()
+		_travel_by_unit[_unit_id] = _travel
+		(_silhouette.get_node("Hull") as GeometryInstance3D).set_instance_shader_parameter("travel", _travel)
 	_pose(Vector3(p.x, 0.0, p.y))
 
 
@@ -535,8 +551,8 @@ func set_hp(hp: int, max_hp: int) -> void:
 	if max_hp > 0:
 		ratio = clampf(float(hp) / float(max_hp), 0.0, 1.0)
 	_hp_ratio = ratio
-	# Текстура кешована за співвідношенням (скінченна множина hp/max_hp).
-	_hp_bar.texture = _hp_bar_texture(ratio)
+	# Текстура кешована за шириною заливки й власником (скінченна множина).
+	_hp_bar.texture = _hp_bar_texture(ratio, _owner)
 	# Білий: колір тепер живе всередині текстури (рамка, тло й заливка мають
 	# кожен свій), і modulate поверх нього перефарбував би й рамку теж.
 	_hp_bar.modulate = Color.WHITE
@@ -553,12 +569,13 @@ func hp_ratio() -> float:
 ## Рамка (1 px по периметру), темне тло всередині й заливка від ЛІВОГО краю
 ## завширшки ratio — одна текстура, один спрайт. Заливка росте зліва
 ## направо, як у референсі; старий scale.x стискав смугу до центру.
-static func _hp_bar_texture(ratio: float) -> ImageTexture:
+static func _hp_bar_texture(ratio: float, owner: int = 0) -> ImageTexture:
 	var fill_width: int = _hp_fill(ratio)
-	# Ключ — ціла ширина заливки: різних текстур не більше, ніж пікселів смуги.
-	var key: Array = ["hp", fill_width]
+	# Ключ — ширина заливки й власник: колір заливки — його, тож без власника в ключі
+	# юніти двох гравців ділили б одну текстуру.
+	var key: Array = ["hp", fill_width, owner % PLAYER_COLORS.size()]
 	if not _texture_cache.has(key):
-		_texture_cache[key] = ImageTexture.create_from_image(hp_bar_image(fill_width))
+		_texture_cache[key] = ImageTexture.create_from_image(hp_bar_image(fill_width, owner))
 	return _texture_cache[key]
 
 
@@ -567,16 +584,20 @@ static func _hp_fill(ratio: float) -> int:
 	return roundi(float(_HP_BAR_SIZE.x - 2) * ratio)
 
 
-## Малюнок смуги з заливкою завширшки `fill_width` пікселів: рамка, тло й заливка.
-static func hp_bar_image(fill_width: int) -> Image:
+## Колір заливки смуги власника. Світліший за колір гравця: на темному тлі смуги синій і
+## червоний давали контраст ~2:1 і тонули на мокрій землі та асфальті.
+static func hp_fill_color(owner: int) -> Color:
+	return PLAYER_COLORS[owner % PLAYER_COLORS.size()].lerp(Color.WHITE, _HP_FILL_LIFT)
+
+
+## Малюнок смуги з заливкою завширшки `fill_width` пікселів: рамка, тло й заливка кольору власника.
+static func hp_bar_image(fill_width: int, owner: int = 0) -> Image:
 	var inner := Rect2i(Vector2i.ONE, _HP_BAR_SIZE - Vector2i(2, 2))
 	var image := Image.create(_HP_BAR_SIZE.x, _HP_BAR_SIZE.y, false, Image.FORMAT_RGBA8)
 	image.fill(_HP_BAR_FRAME_COLOR)
 	image.fill_rect(inner, _HP_BAR_BACK_COLOR)
 	if fill_width > 0:
-		# Колір з показаної ширини, а не з ratio: одна ширина — один вигляд.
-		var shown: float = float(fill_width) / float(inner.size.x)
-		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), Color.RED.lerp(Color.GREEN, shown))
+		image.fill_rect(Rect2i(inner.position, Vector2i(fill_width, inner.size.y)), hp_fill_color(owner))
 	return image
 
 
@@ -634,11 +655,11 @@ static func _figures_for(hp: int, max_hp: int) -> int:
 
 
 func _set_standing(count: int) -> void:
-	if not (UnitSilhouettes.spec(_type_id).extras as Array).has(&"figures"):
+	if not (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures"):
 		_standing = 0
 		return
 	_standing = count
-	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, _owner_color, count)
+	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id())
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
@@ -672,22 +693,29 @@ func play_destroyed() -> Signal:
 	return tween.finished
 
 
+func _set_id() -> int:
+	return UnitSilhouettes.set_of(_owner)
+
+
 func _build_silhouette(type_id: int, owner: int) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, і headless-тести це фіксують.
 	for child in _silhouette.get_children():
 		child.free()
 
-	_owner_color = PLAYER_COLORS[owner % PLAYER_COLORS.size()]
-	var built := UnitSilhouettes.build_merged(type_id, _owner_color)
+	_owner = owner
+	var built := UnitSilhouettes.build_merged(type_id, -1, UnitSilhouettes.set_of(owner))
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)
 	built.free()
 	var hull := _silhouette.get_node("Hull") as MeshInstance3D
-	var hull_size: Vector3 = UnitSilhouettes.spec(type_id).hull
+	var hull_size: Vector3 = UnitSilhouettes.spec(type_id, _set_id()).hull
 	_half_base = Vector2(hull_size.x, hull_size.z) * 0.5
-	_hull_material = hull.material_override as StandardMaterial3D
+	_hull_material = hull.material_override
+	_has_model = UnitSilhouettes.has_model(type_id, _set_id())
+	if _has_model:
+		hull.set_instance_shader_parameter("travel", _travel)
 	_hull_size = hull_size
 	_contact_on = contacts != null and WeatherRig.unit_contact > 0.0
 
@@ -699,7 +727,9 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 
 
 ## Пляма тіні-контакту ширша за слід корпусу: край гасне вже за корпусом.
-const CONTACT_SPREAD: float = 2.0
+const CONTACT_SPREAD: float = 1.6
+## Зсув плями за сонцем, у частках корпусу: пляма показує, звідки світить, і сусідні не зливаються.
+const CONTACT_SUN_SHIFT: float = 0.18
 ## Спільний MultiMesh плям екрана (`UnitContacts`); без нього — без плям. Ставить власник
 ## вигляду до bind().
 var contacts: UnitContacts = null
@@ -711,13 +741,17 @@ var _hull_size: Vector3 = Vector3.ZERO
 
 
 ## Тінь-контакт: квад під корпусом у системі силуету, тож нахиляється разом із ним на схилі й
-## ховається разом із юнітом; де ґрунт вищий за квад, шейдер кладе вершини на рельєф. Сонця не
-## чекає — силу ставить вигляд карти глобальним uniform. Світове перетворення для `UnitContacts`.
+## ховається разом із юнітом; де ґрунт вищий за квад, шейдер кладе вершини на рельєф. Центр
+## зсунуто за сонцем уже у світових осях (не в системі силуету), тож поворот юніта тінь не крутить.
+## Силу ставить вигляд карти глобальним uniform. Світове перетворення для `UnitContacts`.
 func contact_transform() -> Transform3D:
 	if not _contact_on or not is_visible_in_tree() or not _silhouette.visible:
 		return UnitContacts.HIDDEN
 	var size := Basis.from_scale(Vector3(_hull_size.x * CONTACT_SPREAD, 1.0, _hull_size.z * CONTACT_SPREAD))
-	return _silhouette.global_transform * Transform3D(size, Vector3(0.0, 0.01, 0.0))
+	var xf: Transform3D = _silhouette.global_transform * Transform3D(size, Vector3(0.0, 0.01, 0.0))
+	var shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * maxf(_hull_size.x, _hull_size.z)
+	xf.origin += Vector3(shift.x, 0.0, shift.y)
+	return xf
 
 
 func _exit_tree() -> void:
@@ -727,10 +761,10 @@ func _exit_tree() -> void:
 		hp_bars.untrack(self)
 
 
-## Стан смуги HP для `UnitHpBars`: шар — ширина заливки (текстура спрайта — той самий малюнок),
+## Стан смуги HP для `UnitHpBars`: шар — власник і ширина заливки (текстура спрайта — той самий малюнок),
 ## точка — там, де стоїть спрайт, показ — як у спрайта.
 func hp_bar_layer() -> int:
-	return _hp_fill(_hp_ratio)
+	return (_owner % PLAYER_COLORS.size()) * UnitHpBars.fills_per_owner() + _hp_fill(_hp_ratio)
 
 
 func hp_bar_world() -> Vector3:

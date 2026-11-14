@@ -204,10 +204,10 @@ destroyed squad leaves none.
   is planned through, and the walk stops on the tile before it, exactly as for an unseen unit.
 
 `core/` reports wrecks as events, so the view never decides whether one was left:
-`WreckLeft(pos, type_id, facing)` comes straight after the `UnitDestroyed` it belongs to, and
+`WreckLeft(pos, type_id, facing, owner)` comes straight after the `UnitDestroyed` it belongs to, and
 `WreckRemoved(pos, reason)` carries `Wrecks.Reason.BURNED_OUT` or `BRIDGE_DEMOLISHED`. A wreck
 keeps the facing its unit had at the moment it died — a vehicle killed on a mine faces along the
-step that set it off — and that facing is saved with it.
+step that set it off — and that facing is saved with it. The owner only picks the wreck's look (its national vehicle set); no rule reads it.
 
 ## Weather, time of day, and ground state
 

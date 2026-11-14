@@ -291,6 +291,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
 	_board_view.ring_map = map_data
+	_contacts.map = map_data
 	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
 	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
 	_board_view.season = look.season
@@ -1060,11 +1061,11 @@ func _rebuild_wrecks() -> void:
 ## Щойно знищена техніка: її вузол існував, отже тайл розвіданий тим, хто дивиться.
 ## Перевірка все одно потрібна — події не фільтруються за гравцем (§6), і на здачі
 ## WreckLeft приходить для всієї техніки того, хто здався.
-func _on_wreck_left(pos: Vector2i, type_id: int, facing: int) -> void:
+func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> void:
 	# Пляма ставиться завжди: на нерозвіданому її ховає маска, а розвідка згодом покаже.
 	_scars.stamp_scorch(pos)
 	if _match_service.state.vision[_viewer].is_seen(pos):
-		_wreck_layer.add(pos, type_id, 1.0, facing)
+		_wreck_layer.add(pos, type_id, 1.0, facing, UnitSilhouettes.set_of(owner))
 
 
 ## Прибрати показане — нічого не розкриває. Решту на гейті перемалює _rebuild_wrecks().
