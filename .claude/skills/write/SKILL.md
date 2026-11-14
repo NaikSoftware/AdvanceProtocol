@@ -40,7 +40,7 @@ When editing a file, keep the language it is already in — a mixed-language fil
   "simplifies" this.*
 - **Name the rejected alternative** when it is the obvious one — that stops it coming back.
 - **Cite the rule** as a bare `§3.4` (330 uses in the repo; `CLAUDE.md §3.4` only when outside the
-  repo's own text). Point at code with `path:line` or a symbol (`BattleState.known_blocked_map`), never
+  repo's own text). Point at code with `path:line` or a symbol (`BattleState.damage_dealt`), never
   "see above".
 - **Active voice, present tense** for how things behave: `повертає`, `returns`. Future only for
   what really happens later.

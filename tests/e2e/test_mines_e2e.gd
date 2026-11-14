@@ -117,3 +117,26 @@ func test_engineer_reveals_enemy_mine_in_its_diamond() -> void:
 	assert_not_null(m)
 	assert_eq(m.get_meta("style"), MineLayer.Style.ENEMY_REVEALED)
 	assert_eq(_layer().marker_count(), 1)
+
+
+## Міна на мосту: вхід валить прогін, і броньовик іде в річку без уламків. Вигляд
+## програє ту саму низку подій, що й підрив мосту інженером. Інженер P1 на (7,1)
+## тримає P1 у грі й міни не бачить: |7-3| = 4 > 3.
+func test_driving_onto_a_mined_bridge_drops_the_bridge_and_the_unit() -> void:
+	var tiles: Dictionary = _corridor()
+	tiles[MINE_POS] = Terrain.Kind.BRIDGE
+	await _e2e.boot(8, 3, [_spawn(ENGINEER, 0, ENG_POS), _spawn(ARMOURED_CAR, 1, Vector2i(6, 1), W),
+		_spawn(ENGINEER, 1, Vector2i(7, 1), W)], {"tiles": tiles, "seed": 7})
+	await _e2e.engineer_act(ENG_POS, EngineerCommand.Action.LAY_MINE, MINE_POS)
+	await _e2e.end_turn()
+	await _e2e.confirm_gate()
+	var car: Unit = _state().unit_at(Vector2i(6, 1))
+	await _e2e.act(Vector2i(6, 1), Vector2i(3, 2))
+	assert_false(car.is_alive())
+	assert_eq(_state().board.kind_at(MINE_POS), Terrain.Kind.BRIDGE_DESTROYED)
+	var board_view: BoardView = _e2e.screen.get_node("%BoardView")
+	assert_eq(board_view.kind_at(MINE_POS), Terrain.Kind.BRIDGE_DESTROYED, "дошку перебудовано на BridgeChanged")
+	assert_eq(_e2e.events_of(Events.MineTriggered).size(), 1)
+	assert_eq(_e2e.events_of(Events.BridgeChanged).size(), 1)
+	assert_eq(_e2e.events_of(Events.WreckLeft).size(), 0, "техніка в річці уламків не лишає")
+	assert_eq(_layer().marker_count(), 0)

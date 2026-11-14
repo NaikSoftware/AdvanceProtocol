@@ -649,6 +649,20 @@ func test_an_own_mine_stays_unknown_to_the_enemy_planner() -> void:
 	assert_false(s.known_blocked_map(1).has(Vector2i(2, 5)),
 		"§3.5: чужу нерозкриту міну форма маршруту не виказує")
 
+## Відома міна на єдиному мосту закриває переправу так само, як на звичайному тайлі:
+## дальній берег недосяжний, і зона туди не тягнеться.
+func test_a_known_mine_on_the_only_bridge_closes_the_crossing() -> void:
+	for owner in [0, 1]:
+		var s: BattleState = _two_lane_state_with_mine(owner, true)
+		s.board.set_kind(Vector2i(2, 5), Terrain.Kind.BRIDGE)
+		for y in 10:
+			if y != 5:
+				s.board.set_kind(Vector2i(2, y), Terrain.Kind.WATER)
+		var u: Unit = s.add_unit(3, 0, Vector2i(0, 5), 2)
+		s.start()
+		assert_eq(MoveCommand.create(u.id, Vector2i(4, 5)).validate(s), "ERR_OUT_OF_RANGE",
+			"міна гравця %d на мосту" % owner)
+
 ## Міст із міною, якої гравець не знає: маршрут іде через міст, бо план бачить
 ## звичайну дорогу, а вхід підриває і міст, і техніку.
 func test_driving_onto_an_unknown_mined_bridge_drops_the_unit_into_the_river() -> void:
