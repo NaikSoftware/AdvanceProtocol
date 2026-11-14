@@ -1200,7 +1200,7 @@
         -0.04,
         0.0
       ],
-      "roof_dark": -0.3,
+      "roof_dark": -0.45,
       "roof_rough": 0.15,
       "dust": 0.3,
       "dust_c": [
@@ -1245,7 +1245,7 @@
       "scale_long": 1.0,
       "scale_h": 1.0,
       "barrel_r": 0.026,
-      "dark": 0.7
+      "dark": 0.85
     },
     "gun": {
       "axis_h": 0.366,
