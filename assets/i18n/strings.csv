@@ -22,7 +22,7 @@ ERR_NO_WEAPON,Юніт без зброї,Unit has no weapon
 ERR_NOT_ENOUGH_AP,Недостатньо запасу ходу,Not enough action points
 ERR_TARGET_NOT_VISIBLE,Ціль не видно,Target is not visible
 ERR_NO_DRONES_LEFT,Дронів не лишилось,No drones left
-ERR_DRONE_CANNOT_TARGET_INFANTRY,Дрон не б'є піхоту,Drone cannot target infantry
+ERR_DRONE_CANNOT_TARGET_INFANTRY,Дрон не бʼє піхоту,Drone cannot target infantry
 ERR_NOT_AN_ENGINEER,Це не інженер,Unit is not an engineer
 ERR_NOT_ADJACENT,Ціль не на сусідній клітинці,Target is not on an adjacent tile
 ERR_MINE_ALREADY_THERE,Тут уже є міна,A mine is already here

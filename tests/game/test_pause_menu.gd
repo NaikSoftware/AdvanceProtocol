@@ -36,3 +36,15 @@ func test_empty_map_shows_a_dash() -> void:
 	menu.set_context("", "", Terrain.GroundState.DRY)
 	menu.open(1)
 	assert_eq((menu.get_node("%MapValue") as Label).text, "-")
+
+
+func test_ground_icon_is_dim_and_ground_caption_shares_the_turn_caption_look() -> void:
+	TranslationServer.set_locale("uk")
+	var menu: PauseMenu = PauseScene.instantiate()
+	add_child_autofree(menu)
+	menu.set_context("", "map_river", Terrain.GroundState.MUD)
+	menu.open(2)
+
+	assert_eq((menu.get_node("%GroundIcon") as TextureRect).modulate, HudKit.DIM)
+	assert_eq((menu.get_node("%GroundCaption") as Label).text, "Ґрунт:")
+	assert_eq((menu.get_node("%GroundCaption") as Label).theme_type_variation, (menu.get_node("%TurnCaption") as Label).theme_type_variation)

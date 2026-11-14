@@ -62,7 +62,7 @@ func _relabel() -> void:
 	%MapCaption.text = tr("hud_map").to_upper()
 	%MapValue.text = tr(_map_name_key) if _map_name_key != "" else "-"
 	%GroundIcon.texture = HandoverGate.ground_icon(_ground_state)
-	%GroundIcon.modulate = HudKit.BONE
+	%GroundIcon.modulate = HudKit.DIM
 	%TurnCaption.text = tr("hud_turn")
 	%TurnValue.text = str(_turn)
 	# «Ґрунт: %s» — значення виділене окремим підписом, тож беремо лише початок рядка.

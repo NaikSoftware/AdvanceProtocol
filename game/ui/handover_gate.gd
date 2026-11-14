@@ -70,7 +70,7 @@ signal confirmed
 const _PLATE_PATH := "res://assets/ui/gate/%s.webp"
 const _DEFAULT_PLATE := "res://assets/ui/gate/default.webp"
 ## Ширина нікнейм-плити й інфо-плити одна: ширина інфо-плити, не менша за це.
-const MIN_WIDTH := 340.0
+const MIN_WIDTH := 400.0
 const ENTRANCE_S := 0.35
 const SLIDE_DP := 12.0
 const _HORIZON_ALPHA := 0.7

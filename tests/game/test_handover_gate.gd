@@ -280,4 +280,5 @@ func test_info_plate_shows_turn_map_and_ground_and_shares_its_width_with_the_nam
 	assert_eq((gate.get_node("%GroundIcon") as TextureRect).texture, HandoverGate.ground_icon(Terrain.GroundState.MUD))
 	var info: Control = gate.get_node("%InfoPlate") as Control
 	assert_eq((gate.get_node("%NameSlide") as Control).custom_minimum_size.x, info.custom_minimum_size.x)
-	assert_gte(info.custom_minimum_size.x, HandoverGate.MIN_WIDTH)
+	assert_eq(HandoverGate.MIN_WIDTH, 400.0)
+	assert_gte(info.custom_minimum_size.x, 400.0)
