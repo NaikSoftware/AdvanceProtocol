@@ -12,7 +12,7 @@ extends Node
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m), без (_e) і з моделлю суцільним пурпуром (_k, маска контуру) для ΔE.
-## Шостий аргумент spin ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
+## Шостий аргумент spin [set=N] ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
 ## з однаковим `travel` (контроль), третій — на пів радіуса колеса далі; між ними мають змінитися лише колеса.
 ## Шостий аргумент rear [set=N] ставить чотири танки набору N (важкий, середній, винищувач, легкий) у ряд через тайл,
 ## самими моделями без смуг HP (смуга ховає ствол сусіда), і знімає на зумі 6 два кадри: тилом до камери (_f0) і носом до неї (_f4).
@@ -57,7 +57,7 @@ func _ready() -> void:
 		await _rear(screen, map, out, tag, rset)
 		return
 	if a.size() > 5 and a[5] == "spin":
-		await _spin(screen, map, out, tag, type_id)
+		await _spin(screen, map, out, tag, type_id, int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0)
 		return
 	if a.size() > 5 and a[5] == "gate":
 		var gset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
@@ -444,10 +444,10 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 
 
 
-func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int) -> void:
+func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int = 0) -> void:
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
-	var m: Node3D = UnitSilhouettes.build_merged(type_id)
+	var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
 	_place(m, cell, 0)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
@@ -457,7 +457,7 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	var hull := m.get_node("Hull") as GeometryInstance3D
 	var shots: Array = []
 	# s0 і s1 — той самий travel (контроль: кадри мають збігтися), s2 — пів радіуса колеса (пів радіана)
-	var r: float = float(UnitSilhouettes.spec(type_id).get("wheel", 0.06))
+	var r: float = float(UnitSilhouettes.spec(type_id, set_id).get("wheel", 0.06))
 	for i in 3:
 		hull.set_instance_shader_parameter("travel", 0.5 * r if i == 2 else 0.0)
 		for f in SETTLE_FRAMES:
