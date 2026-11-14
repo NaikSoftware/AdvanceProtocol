@@ -42,6 +42,10 @@ def verts(m):
 
 
 co = verts(me)
+if cfg.get("rot180"):
+    # nose towards -Y in the source: a half turn about Z keeps the winding and puts it on +Y
+    co[:, :2] *= -1
+    me.vertices.foreach_set("co", co.ravel()); me.update()
 zmin = co[:, 2].min()
 if cfg.get("scale_lat"):
     # a source narrower or wider than its role box: stretch the lateral axis first, so every
@@ -212,12 +216,22 @@ def face_src(obj):
 
 # Running gear: everything in the track zone below the skirt, what hides behind the skirt, and
 # the open ends (sprocket, idler) where no skirt covers it.
-cut = cfg["cut"]
+G = cfg["gear"]
 lng, lat, h, _, _ = face_src(hi)
-zone = (lat >= cut["lat"][0]) & (lat < cut["lat"][1])
-gear = (zone & (h < cut["below_skirt_h"])) \
-    | ((lat >= cut["lat"][0]) & (lat < cut["behind_skirt_lat"]) & (h < cut["gear_top_h"])) \
-    | (zone & (h < cut["gear_top_h"]) & ((lng < cut["open_ends_long"][0]) | (lng > cut["open_ends_long"][1])))
+if G.get("kind") == "wheels":
+    # Tyres, hubs and the suspension arms they hang on go; the procedural wheels (assemble.py) replace them. A face
+    # belongs to an axle when its centre lies in the disc around the axle (`cut_r` x the source tyre radius) and outboard of
+    # `cut_lat`; the hull's own wheel arch is wider than the tyre, so it stays.
+    rd = G["road"]
+    gear = np.zeros(len(lng), bool)
+    for cl in rd["long"]:
+        gear |= (lat >= G["cut_lat"]) & (np.hypot(lng - cl, h - rd["h"]) <= rd["r"] * G.get("cut_r", 1.05))
+else:
+    cut = cfg["cut"]
+    zone = (lat >= cut["lat"][0]) & (lat < cut["lat"][1])
+    gear = (zone & (h < cut["below_skirt_h"])) \
+        | ((lat >= cut["lat"][0]) & (lat < cut["behind_skirt_lat"]) & (h < cut["gear_top_h"])) \
+        | (zone & (h < cut["gear_top_h"]) & ((lng < cut["open_ends_long"][0]) | (lng > cut["open_ends_long"][1])))
 print(f"PREP gear faces cut: {gear.sum()} of {len(gear)}")
 delete_faces(hi, gear)
 
@@ -297,6 +311,19 @@ def close1d(a, ax):
 b = np.where(hit, bot, -1.0)
 bot_side = np.where(hit, np.minimum(close1d(b, 0), top), np.nan)
 bot_end = np.where(hit, np.minimum(close1d(b, 1), top), np.nan)
+if cfg.get("end_floor"):
+    # the bow and tail walls end at the plate's lower edge; tow shackles and hooks below it show as teeth along the bottom
+    bot_end = np.where(hit, np.minimum(np.maximum(bot_end, lib.m_len(cfg, cfg["end_floor"])), top), np.nan)
+SR = cfg.get("side_reach", 0)
+if SR:
+    # a flared hull is widest above its lower sides, so the outermost column's underside is the flare's: the wall would stop
+    # there and leave the lower side open. Take the lowest underside within `side_reach` cells across, so the wall runs down to
+    # the sill (wheel arches stay: the arch ceiling is the lowest thing across them too).
+    pb = np.pad(np.where(hit, bot_side, np.inf), [(0, 0), (SR, SR)], constant_values=np.inf)
+    low = np.min([pb[:, SR + k:SR + k + hit.shape[1]] for k in range(-SR, SR + 1)], 0)
+    low = close1d(np.where(hit, low, -1.0), 0)           # the lowest-across profile is ragged where the sill steps: close it along the wall
+    low = np.maximum(low, lib.m_len(cfg, cfg.get("wall_floor", 0.0)))   # nothing hangs below the sill (a bow plate, a hitch)
+    bot_side = np.where(hit, np.minimum(low, top), np.nan)
 bm = bmesh.new()
 vid = {}
 for j, i in zip(*np.nonzero(hit)):

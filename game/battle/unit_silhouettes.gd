@@ -11,12 +11,14 @@ const _STRIPE_COLOR := Color("d9b23a")
 ## hull — розмір корпусу (1 тайл = 8 м, тож 3,6 м = 0,45); barrel — довжина ствола від центру
 ## корпусу/башти вперед (0 — без); extras — деталі. Ствол може виступати за корпус: у танка
 ## він 3,5–7 м від центру тайла. Висота танка = корпус + башта (TURRET_HEIGHT = 0,8 м).
+## `roof_gun` — гармата чи кулемет на даху колісної машини: вісь ствола на висоті башти, а коробки-башти немає, бо модель тримає
+## ствол у межах корпусу; корінь полум'я на уламках стоїть на висоті башти, як у башти.
 const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures"]},  # 0 стрілецький загін
 	{"hull": Vector3(0.40, 0.05, 0.40), "barrel": 0.0, "extras": [&"figures", &"drone_rack"]},  # 1 штурмовий
-	{"hull": Vector3(0.325, 0.30, 0.75), "barrel": 0.50, "wheel": 0.06, "extras": [&"wheels"]},  # 2 бронеавто 2,6×2,4×6,0 м
-	{"hull": Vector3(0.375, 0.325, 0.875), "barrel": 0.0, "wheel": 0.06, "extras": [&"wheels"]},  # 3 транспортер 3,0×2,6×7,0 м
-	{"hull": Vector3(0.30, 0.25, 0.625), "barrel": 0.0, "wheel": 0.06, "extras": [&"wheels"]},  # 4 розвідувальне 2,4×2,0×5,0 м
+	{"hull": Vector3(0.3375, 0.30, 0.825), "barrel": 0.33, "wheel": 0.0828, "extras": [&"wheels", &"roof_gun"]},  # 2 бронеавто 2,7×2,4×6,6 м
+	{"hull": Vector3(0.3375, 0.325, 0.95), "barrel": 0.10, "wheel": 0.0796, "extras": [&"wheels", &"roof_gun"]},  # 3 транспортер 2,7×2,6×7,6 м
+	{"hull": Vector3(0.275, 0.25, 0.6125), "barrel": 0.15, "wheel": 0.0606, "extras": [&"wheels", &"roof_gun"]},  # 4 розвідувальне 2,2×2,0×4,9 м
 	{"hull": Vector3(0.43, 0.20, 0.84), "barrel": 0.625, "wheel": 0.036, "extras": [&"turret"]},  # 5 середній танк 3,4×2,4×6,7 м
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
@@ -91,7 +93,7 @@ static func barrel_y(type_id: int, set_id: int = 0) -> float:
 	var s: Dictionary = spec(type_id, set_id)
 	var h: float = (s.hull as Vector3).y
 	var extras: Array = s.extras
-	if extras.has(&"turret"):
+	if extras.has(&"turret") or extras.has(&"roof_gun"):
 		return h + TURRET_HEIGHT * 0.5
 	return h + 0.04 if extras.has(&"tall_barrel") else h * 0.5
 

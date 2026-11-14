@@ -304,7 +304,7 @@ func flame_spots(pos: Vector2i) -> Array[Vector3]:
 	var spec: Dictionary = UnitSilhouettes.spec(e.type_id, e.set_id)
 	var hull: Vector3 = spec.hull
 	# Корені — на даху башти: обидва в межах її сліду, тож нижче башта ховала б їх з усіх боків.
-	var top: float = hull.y - HULL_SAG + (UnitSilhouettes.TURRET_HEIGHT if (spec.extras as Array).has(&"turret") else 0.0)
+	var top: float = hull.y - HULL_SAG + (UnitSilhouettes.TURRET_HEIGHT if ((spec.extras as Array).has(&"turret") or (spec.extras as Array).has(&"roof_gun")) else 0.0)
 	# Вогонь виходить з погона в центрі даху: башта стоїть у вогні, корінь видно з будь-якого
 	# боку. Два екземпляри обабіч центру — широка маса, а не один язик.
 	for local: Vector3 in [Vector3(-hull.x * 0.15, top, -hull.z * 0.1), Vector3(hull.x * 0.15, top, hull.z * 0.1)]:
