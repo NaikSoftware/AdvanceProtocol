@@ -213,7 +213,9 @@ the game can reach (longest range is 5), so this changes no shot that can actual
 cross-multiplied form is kept because it is exact, has no division, and cannot drift.
 
 Flanking is the main skill expression in the game. The UI must always show which sector a shot
-will land in **before** the player commits.
+will land in **before** the player commits. An infantry shot ignores armour, but the preview
+still shows its sector, marked as having no effect on damage: a target that survives turns onto
+the shooter, so the flank is spent either way.
 
 ## Victory
 

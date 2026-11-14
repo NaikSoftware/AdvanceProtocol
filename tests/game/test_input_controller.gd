@@ -974,6 +974,8 @@ func test_tap_on_enemy_turns_and_previews_shot_with_unchanged_numbers() -> void:
 	assert_eq(_previews[0]["sector"], want["sector"])
 	assert_eq(_previews[0]["min"], want["min"])
 	assert_eq(_previews[0]["max"], want["max"])
+	assert_eq(_previews[0].get("armour_ignored"), want["armour_ignored"])
+	assert_eq(_previews[0].get("in_cover"), want["in_cover"])
 
 
 func test_tap_on_own_tile_or_other_own_unit_does_not_turn() -> void:

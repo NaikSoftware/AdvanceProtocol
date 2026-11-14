@@ -63,7 +63,7 @@ static func _damage_from_rolls(attacker: Unit, target: Unit, sector: int,
 
 	var dmg: float = 0.75 * float(a) + float(r_attack)
 
-	if ac == UnitTypes.UnitClass.INFANTRY:
+	if ignores_armour(attacker):
 		if dist_sq <= 2:
 			dmg *= 4.0
 		# броня не віднімається взагалі
@@ -100,7 +100,7 @@ static func compute_damage(rng: RandomNumberGenerator, attacker: Unit, target: U
 
 	var r_attack: int = roll(rng, a / 4)
 	var r_armour: int = 0
-	if ac != UnitTypes.UnitClass.INFANTRY:
+	if not ignores_armour(attacker):
 		r_armour = roll(rng, target.armour(sector) / 4)
 	var r_arty: int = 0
 	if ac == UnitTypes.UnitClass.ARTILLERY and tc == UnitTypes.UnitClass.TANK:
@@ -123,7 +123,7 @@ static func damage_bounds(attacker: Unit, target: Unit, sector: int,
 	# охорона тут, без rng.
 	var attack_roll_max: int = maxi(a / 4, 0)
 	var armour_roll_max: int = 0
-	if ac != UnitTypes.UnitClass.INFANTRY:
+	if not ignores_armour(attacker):
 		armour_roll_max = maxi(target.armour(sector) / 4, 0)
 	var arty_roll_max: int = 0
 	if ac == UnitTypes.UnitClass.ARTILLERY and tc == UnitTypes.UnitClass.TANK:
@@ -134,6 +134,12 @@ static func damage_bounds(attacker: Unit, target: Unit, sector: int,
 	var hi: int = _damage_from_rolls(attacker, target, sector, dist_sq,
 			attack_roll_max, 0, arty_roll_max, in_cover)
 	return Vector2i(lo, hi)
+
+static func ignores_armour(attacker: Unit) -> bool:
+	## Піхота б'є повз броню (§3.3): формула не віднімає ні плиту, ні кидок броні.
+	## Один предикат і для формули, і для прев'ю, щоб позначка «броня не діє»
+	## ніколи не розійшлася з тим, що справді рахується.
+	return attacker.unit_class() == UnitTypes.UnitClass.INFANTRY
 
 static func in_cover(board: Board, u: Unit) -> bool:
 	## Укриття — піхота в цілій будівлі. Руїни не рахуються: від будинку там лишилась

@@ -431,6 +431,8 @@ func _maybe_set_pending_shot(state: BattleState, target: Unit) -> void:
 		"sector": preview["sector"],
 		"min": preview["min"],
 		"max": preview["max"],
+		"armour_ignored": preview["armour_ignored"],
+		"in_cover": preview["in_cover"],
 	}
 	action_preview.emit(_pending)
 
