@@ -213,6 +213,34 @@ func known_broken_map(player: int) -> Dictionary:
 			out[p] = true
 	return out
 
+func team_hp(player: int) -> int:
+	## Залишок сили команди: поточні HP її живих юнітів. Гейт передачі ходу показує його
+	## з цього стану, щоб вигляд не рахував нічого сам. Вибулий гравець живих не має — 0.
+	var total: int = 0
+	for u in units_of(player):
+		total += u.hp
+	return total
+
+func team_hp_start(player: int) -> int:
+	## Сила команди на старті матчу: max HP усіх юнітів, з якими гравець почав. Окремого
+	## поля немає, бо загиблі лишаються в units (hp 0) і разом із ними йдуть у збереження,
+	## тож сума виводиться з них і переживає завантаження без нового ключа.
+	# shortcut: вірно, доки юніти ніколи не видаляються з units і не додаються після старту
+	# матчу (add_unit() кличе лише MapData); з'явиться підкріплення чи видалення трупів —
+	# записувати суму в start() і зберігати її.
+	var total: int = 0
+	for id in units:
+		var u: Unit = units[id]
+		if u.owner == player:
+			total += u.max_hp()
+	return total
+
+func team_hp_share_of_start(player: int) -> float:
+	## Частка сили, що лишилася від стартової, 0..1. Гравець без жодного юніта — 0, а не
+	## ділення на нуль.
+	var start_total: int = team_hp_start(player)
+	return float(team_hp(player)) / float(start_total) if start_total > 0 else 0.0
+
 func is_over() -> bool:
 	return winner != NO_WINNER
 
