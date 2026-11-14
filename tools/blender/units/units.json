@@ -815,19 +815,30 @@
     "source": "~/.local/share/advance-protocol/unit-sources/armoured_car.glb",
     "type_id": 2,
     "paint": {
-      "fade_to": [
-        158,
-        158,
-        108
+      "scheme": "plain",
+      "base": [
+        118,
+        122,
+        84
       ],
-      "roof_fade": 0.9,
-      "roof_dark": -0.05,
+      "mottle": 0.05,
       "roof_cool": [
-        0.05,
-        0.02,
-        -0.12
+        0.0,
+        0.0,
+        -0.06
       ],
-      "dust": 0.05,
+      "roof_dark": -0.35,
+      "dust": 0.2,
+      "dust_c": [
+        150,
+        142,
+        112
+      ],
+      "rough": 0.74,
+      "floor": 0.68,
+      "mud_from": 0.5,
+      "mud_h": 0.8,
+      "mud_max": 0.5,
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
@@ -944,19 +955,30 @@
     "source": "~/.local/share/advance-protocol/unit-sources/troop_carrier.glb",
     "type_id": 3,
     "paint": {
-      "fade_to": [
-        158,
-        158,
-        108
+      "scheme": "plain",
+      "base": [
+        118,
+        122,
+        84
       ],
-      "roof_fade": 0.9,
-      "roof_dark": -0.05,
+      "mottle": 0.05,
       "roof_cool": [
-        0.05,
-        0.02,
-        -0.12
+        0.0,
+        0.0,
+        -0.06
       ],
-      "dust": 0.05,
+      "roof_dark": -0.35,
+      "dust": 0.2,
+      "dust_c": [
+        150,
+        142,
+        112
+      ],
+      "rough": 0.74,
+      "floor": 0.68,
+      "mud_from": 0.5,
+      "mud_h": 0.8,
+      "mud_max": 0.5,
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
@@ -1018,19 +1040,30 @@
     "source": "~/.local/share/advance-protocol/unit-sources/scout_car.glb",
     "type_id": 4,
     "paint": {
-      "fade_to": [
-        158,
-        158,
-        108
+      "scheme": "plain",
+      "base": [
+        118,
+        122,
+        84
       ],
-      "roof_fade": 0.9,
-      "roof_dark": -0.05,
+      "mottle": 0.05,
       "roof_cool": [
-        0.05,
-        0.02,
-        -0.12
+        0.0,
+        0.0,
+        -0.06
       ],
-      "dust": 0.05,
+      "roof_dark": -0.35,
+      "dust": 0.2,
+      "dust_c": [
+        150,
+        142,
+        112
+      ],
+      "rough": 0.74,
+      "floor": 0.68,
+      "mud_from": 0.5,
+      "mud_h": 0.8,
+      "mud_max": 0.5,
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
