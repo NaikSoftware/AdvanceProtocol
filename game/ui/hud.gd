@@ -24,10 +24,9 @@ extends Control
 signal end_turn_pressed
 ## Пауза — оверлей сцени бою; HUD лише просить її відкрити.
 signal pause_pressed
-## Вибір змінився (unit != null — тег показано). show_ap — чи можна показати AP: AP ворога —
-## прихований залишок його дій (overlays.md), тож для чужого юніта завжди false. Лічильник
-## дронів публічний (§3.9) і показується й для чужого.
-signal selection_tag_changed(unit: Unit, show_ap: bool)
+## Вибір змінився (unit != null — тег показано). own — вибрано свій юніт активного гравця.
+## AP не показуємо ніде, ні свій, ні чужий. Лічильник дронів публічний (§3.9) і показується й для чужого.
+signal selection_tag_changed(unit: Unit, own: bool)
 
 const TOAST_SECONDS: float = 2.0
 ## Захист від другого тапу по плиті верб, що не змогла стати поза клітинками дошки.
@@ -214,9 +213,11 @@ func show_preview(preview: Dictionary) -> void:
 	_hide_toast()
 	match int(preview["type"]):
 		InputController.ActionType.MOVE:
-			var mover: Unit = _unit(int(preview["unit_id"]))
-			var ap_max: int = int(mover.type()["max_ap"]) if mover != null else int(preview["ap_left"])
-			_plate.show_move(int(preview["ap_left"]), ap_max)
+			# Рух без плити: зони руху вже показують, куди можна дійти, а AP не пишемо ніде.
+			# Плити нема, тож і чекати її запікання перед «Підтвердити» нема чого.
+			_confirm_button.disabled = false
+			_sync_modes()
+			return
 		InputController.ActionType.ENGINEER:
 			_show_engineer_preview(preview)
 		InputController.ActionType.DRONE:
@@ -447,7 +448,7 @@ func _sync_modes() -> void:
 	var own: bool = _own_selected()
 	var engineer: bool = own and _selected_unit.unit_class() == UnitTypes.UnitClass.ENGINEER
 	_row.visible = pending
-	_plate.visible = pending and _last_preview.size() > 0
+	_plate.visible = pending and _last_preview.size() > 0 and int(_last_preview["type"]) != InputController.ActionType.MOVE
 	_cancel_button.visible = pending
 	_engineer_panel.visible = engineer and not pending
 	if _engineer_panel.visible:

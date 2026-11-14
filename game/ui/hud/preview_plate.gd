@@ -1,6 +1,6 @@
 class_name PreviewPlate
 extends HudBake
-## Плита прев'ю над рядом дій (spec §2): ряд цілі + один із вмістів — рух, постріл, дрон, ремонт
+## Плита прев'ю над рядом дій (spec §2): ряд цілі + один із вмістів — постріл, дрон, ремонт
 ## чи назва верби. Лише показує готові значення, які дає HUD із core/-прев'ю; сама нічого не
 ## рахує й не знає про правила.
 ##
@@ -12,12 +12,10 @@ const BONE: Color = Color("e3dfd3")
 const DIM: Color = Color("8f918a")
 const HAIR: Color = Color("3a4043")
 const _SIL_INFANTRY: Texture2D = preload("res://assets/ui/icons/sil_infantry.svg")
-const _ICON_AP: Texture2D = preload("res://assets/ui/icons/ap.svg")
 const _ICON_DRONE: Texture2D = preload("res://assets/ui/icons/drone.svg")
 const _ICON_REPAIR: Texture2D = preload("res://assets/ui/icons/repair_unit.svg")
 
 var target_row: Control
-var move_box: Control
 var shot_box: Control
 var drone_box: Control
 var repair_box: Control
@@ -27,8 +25,6 @@ var armour_glyph: ArmourGlyph
 var _tab: ColorRect
 var _target_name: Label
 var _target_caption: Label
-var _ap_value: Label
-var _ap_max: Label
 var _sil: TextureRect
 var _sector_caption: Label
 var _sector_value: Label
@@ -49,7 +45,6 @@ var _heal_value: Label
 var _verb_icon: TextureRect
 var _verb_name: Label
 var _target_hair: ColorRect
-var _move_caption: Label
 
 
 func _init() -> void:
@@ -89,16 +84,6 @@ func _ready() -> void:
 	_target_hair.custom_minimum_size = Vector2(0.0, 1.0)
 	_target_hair.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(_target_hair)
-
-	# Рух: один ряд, 48 dp.
-	move_box = _box("PreviewMoveBox", body, Vector4(12, 0, 14, 0), 48.0)
-	var mrow := _row(move_box, 8)
-	mrow.add_child(_icon(_ICON_AP, 20.0))
-	_move_caption = _label("", &"HudLabel", mrow)
-	_expander(mrow)
-	var apx := _baseline_row(mrow)
-	_ap_value = _label("PreviewApValue", &"HudNumberMove", apx)
-	_ap_max = _label("PreviewApMax", &"HudNumberDim15", apx)
 
 	# Постріл: глиф / силует піхоти · сектор · роздільник · шкода.
 	shot_box = _box("PreviewShotBox", body, Vector4(12, 8, 14, 9), 0.0)
@@ -200,7 +185,6 @@ func _notification(what: int) -> void:
 
 func _retranslate() -> void:
 	_target_caption.text = tr("hud_target").to_upper()
-	_move_caption.text = tr("hud_ap_left")
 	_sector_caption.text = tr("hud_armour_sector").to_upper()
 	_note.text = tr("hud_armour_ignored_note")
 	_cover_label.text = tr("hud_cover_half").to_upper()
@@ -215,7 +199,7 @@ func _retranslate() -> void:
 
 func clear() -> void:
 	visible = false
-	for c: Control in [target_row, _target_hair, move_box, shot_box, drone_box, repair_box, verb_box]:
+	for c: Control in [target_row, _target_hair, shot_box, drone_box, repair_box, verb_box]:
 		c.visible = false
 	_changed()
 
@@ -226,14 +210,6 @@ func show_target(target_name: String, color: Color) -> void:
 	_target_name.text = target_name
 	target_row.visible = true
 	_target_hair.visible = true
-	_changed()
-
-
-func show_move(ap_left: int, ap_max: int) -> void:
-	_ap_value.text = str(ap_left)
-	_ap_max.text = "/%d" % ap_max
-	move_box.visible = true
-	visible = true
 	_changed()
 
 

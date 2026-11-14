@@ -87,15 +87,14 @@ func test_tag_never_covers_a_visible_unit(size = use_parameters(_sizes())) -> vo
 	assert_true(Rect2(Vector2.ZERO, Vector2(size)).encloses(rect), "тег у межах екрана: %s" % size)
 
 
-func test_tag_shows_name_ap_and_drone_pips_of_a_squad() -> void:
+func test_tag_shows_name_and_drone_pips_of_a_squad_and_no_ap() -> void:
 	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
 	await _tap(SQUAD)
 	var tag: UnitTag = _tag()
-	var u: Unit = _e2e.service.state.unit_at(SQUAD)
 	assert_eq(tag.name_label.text, tr("UNIT_ASSAULT_SQUAD"))
-	assert_eq(tag.ap_value.text, str(u.ap))
-	assert_eq(tag.ap_max.text, "/%d" % u.max_ap())
 	assert_eq(tag.pips.counts(), Vector2i(2, 2))
+	assert_eq(tag.find_children("*", "Label", true, false).map(func(l: Label) -> String: return l.text), [tr("UNIT_ASSAULT_SQUAD")],
+		"у тезі лише назва: AP числом нема")
 
 
 func test_tag_and_all_its_children_ignore_input() -> void:
@@ -134,7 +133,39 @@ func test_tag_hides_when_nothing_is_selected() -> void:
 	assert_false(_tag().visible, "вибору нема — тегу нема")
 
 
-## AP ворога — прихований залишок його дій: тег ворога видно, а числа ніде в ньому нема, і в прихованих Label теж.
+## AP ніде: ні чужий, ні свій, ні в прихованих Label — у спокої, при виборі, русі, пострілі й верб інженера.
+func test_no_label_under_the_hud_shows_ap_in_any_state() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(MEDIUM_TANK, 0, TANK), _spawn(ENGINEER, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
+	var own: Unit = _e2e.service.state.unit_at(TANK)
+	var eng: Unit = _e2e.service.state.unit_at(SQUAD)
+	var enemy: Unit = _e2e.service.state.unit_at(ENEMY_TANK)
+	own.ap = 31
+	eng.ap = 33
+	enemy.ap = 37
+	_assert_no_ap("спокій")
+	await _tap(TANK)
+	_assert_no_ap("свій вибраний")
+	await _tap(Vector2i(4, 2))
+	_assert_no_ap("прев'ю руху")
+	assert_false(_e2e.hud().get_node("%PreviewPlate").visible, "рух — без плити")
+	_e2e.hud().show_selection(enemy)
+	await _e2e.settle()
+	_assert_no_ap("ворог вибраний")
+	await _tap(SQUAD)
+	_assert_no_ap("інженер вибраний")
+	_e2e.press(_e2e.engineer_panel().button_for(EngineerCommand.Action.LAY_MINE))
+	await _e2e.settle()
+	_assert_no_ap("верба озброєна")
+
+
+func _assert_no_ap(state_name: String) -> void:
+	for l: Label in _e2e.hud().find_children("*", "Label", true, false):
+		for ap: String in ["31", "33", "37"]:
+			assert_false(l.text.contains(ap), "%s: AP %s у Label «%s»" % [state_name, ap, l.name])
+		assert_false(l.text.begins_with("/"), "%s: знаменник AP у Label «%s»" % [state_name, l.name])
+
+
+## Тег ворога видно, а числа ніде в ньому нема, і в прихованих Label теж.
 func test_enemy_tag_is_shown_but_never_carries_its_ap() -> void:
 	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
 	var enemy: Unit = _e2e.service.state.unit_at(ENEMY_TANK)

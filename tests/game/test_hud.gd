@@ -176,7 +176,7 @@ func test_shot_note_and_cover_marker_follow_the_core_preview_fields() -> void:
 	assert_eq(_label("PreviewSectorValue").text, tr("hud_sector_front"), "сектор показується завжди (§3.4)")
 
 
-func test_show_preview_move_shows_ap_left_and_leaves_no_shot_fields_behind() -> void:
+func test_show_preview_move_has_no_plate_and_leaves_no_shot_fields_behind() -> void:
 	var state: BattleState = _state()
 	state.add_unit(5, 0, Vector2i(3, 3), 0)
 	hud.bind(state)
@@ -186,10 +186,12 @@ func test_show_preview_move_shows_ap_left_and_leaves_no_shot_fields_behind() -> 
 
 	hud.show_preview(_move_preview(18))
 
-	assert_eq(_label("PreviewApValue").text, "18", "залишок AP — числом")
-	assert_eq(_label("PreviewApMax").text, "/%d" % int(UnitTypes.get_type(5)["max_ap"]), "знаменник — запас ходу типу")
-	assert_true(_label("PreviewApValue").is_visible_in_tree())
-	assert_true((hud.get_node("%PreviewPlate") as Control).is_visible_in_tree(), "плита-хост показана: діти під SubViewport самі цього не доводять")
+	assert_false((hud.get_node("%PreviewPlate") as Control).visible, "рух без плити: хост прихований (діти під SubViewport самі цього не доводять)")
+	assert_true((hud.get_node("%ConfirmButton") as Button).visible, "ряд [Скасувати Підтвердити] лишається")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "плити нема, чекати запікання нічого")
+	var texts: Array[String] = []
+	_collect_texts(hud, texts)
+	assert_false(texts.has("18"), "залишок AP числом не показується")
 	assert_false(_label("PreviewSectorValue").is_visible_in_tree(), "сектор попереднього прев'ю не лишається")
 	assert_false(_label("PreviewDamageValue").is_visible_in_tree())
 	assert_false(hud.get_node("%PreviewTargetRow").visible, "рух не має ряду цілі")
@@ -257,22 +259,25 @@ func test_drone_count_is_public_and_reaches_the_tag_hook_for_an_enemy_squad() ->
 	assert_false(hud.get_node("%DroneButton").visible, "дрон — дія лише свого загону")
 
 
-## overlays.md: AP ворога — залишок дій, яких гравець міг не бачити, тож ніде в HUD його нема.
-func test_enemy_selection_never_shows_its_ap_anywhere() -> void:
+## AP не показується ніде: ні чужий (прихований залишок дій), ні свій (його показують зони руху).
+func test_selection_never_shows_ap_anywhere() -> void:
 	var state: BattleState = _state()
 	state.active_player = 0
+	var own: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
 	var enemy: Unit = state.add_unit(5, 1, Vector2i(8, 8), 0)
-	enemy.ap = 37
+	own.ap = 37
+	enemy.ap = 29
 	hud.bind(state)
 	watch_signals(hud)
 
-	hud.show_selection(enemy)
-
+	for u: Unit in [own, enemy]:
+		hud.show_selection(u)
+		var texts: Array[String] = []
+		_collect_texts(hud, texts)
+		for t in texts:
+			assert_false(t.contains("37") or t.contains("29"), "«%s»: AP юніта в HUD" % t)
+			assert_false(t.contains("/%d" % int(UnitTypes.get_type(5)["max_ap"])), "«%s»: знаменник AP в HUD" % t)
 	assert_signal_emitted_with_parameters(hud, "selection_tag_changed", [enemy, false])
-	var texts: Array[String] = []
-	_collect_texts(hud, texts)
-	for t in texts:
-		assert_false(t.contains("37"), "«%s»: AP ворога в HUD — витік" % t)
 
 
 func test_unit_without_drones_has_no_drone_button() -> void:
@@ -410,9 +415,9 @@ func test_controller_drives_the_hud_and_the_confirm_button_is_the_only_way_to_ac
 
 	controller.select_unit(u)
 	controller.tap_cell(Vector2i(4, 3))
-	assert_true(_label("PreviewApValue").is_visible_in_tree(), "action_preview від справжнього контролера читається HUD'ом")
-	assert_true((hud.get_node("%PreviewPlate") as Control).is_visible_in_tree(), "плита-хост показана: діти під SubViewport самі цього не доводять")
-	assert_true((hud.get_node("%ConfirmButton") as Button).disabled, "поки плита не запеклася, підтвердити нічого")
+	assert_false((hud.get_node("%PreviewPlate") as Control).visible, "рух: плити нема, лише ряд дій")
+	assert_true((hud.get_node("%ConfirmButton") as Button).visible, "action_preview від справжнього контролера читається HUD'ом")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "плити нема — підтвердження живе одразу")
 	await get_tree().process_frame
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -485,7 +490,7 @@ func test_events_ready_refreshes_the_tag_hook_after_a_command() -> void:
 	hud.attach_match_service(_service)
 	hud.show_selection(u)
 	var seen: Array = []
-	hud.selection_tag_changed.connect(func(unit: Unit, show_ap: bool) -> void: seen.append([unit, show_ap]))
+	hud.selection_tag_changed.connect(func(unit: Unit, own: bool) -> void: seen.append([unit, own]))
 
 	_service.submit(MoveCommand.create(u.id, Vector2i(4, 3)))
 
@@ -553,9 +558,8 @@ func test_arming_a_verb_over_a_pending_move_clears_the_hud_preview() -> void:
 	var controller: InputController = _ctl(state)
 	controller.select_unit(eng)
 	controller.tap_cell(Vector2i(3, 5))
-	assert_true((hud.get_node("%PreviewMoveBox") as Control).visible, "передумова: прев'ю руху")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "передумова: прев'ю руху")
 	controller.arm_engineer(EngineerCommand.Action.LAY_MINE)
-	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
 	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)
 
 

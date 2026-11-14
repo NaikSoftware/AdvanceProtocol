@@ -169,6 +169,10 @@ func test_hud_preview_plate_content_fits_285_for_every_type(p = use_parameters(_
 		hud.show_preview(previews[i])
 		await LayoutProbe.settle(self)
 		var where: String = "%s %s #%d" % [p[0], p[1], i]
+		if int(previews[i]["type"]) == InputController.ActionType.MOVE:
+			assert_false(plate.visible, "рух — без плити: " + where)
+			assert_true((root.get_node("%ConfirmButton") as Control).is_visible_in_tree(), "лише ряд дій: " + where)
+			continue
 		assert_true(plate.is_visible_in_tree(), where)
 		assert_eq(plate.size.x, 285.0, "ширина плити не росте від вмісту: " + where)
 		assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)

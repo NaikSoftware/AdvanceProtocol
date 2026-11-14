@@ -268,10 +268,9 @@ func test_arming_a_verb_clears_a_pending_move_preview() -> void:
 	_e2e.tap(Vector2i(1, 1))
 	await _e2e.settle()
 	var hud: Hud = _e2e.hud()
-	assert_true((hud.get_node("%PreviewMoveBox") as Control).visible, "передумова: прев'ю руху")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "передумова: прев'ю руху")
 	_e2e.press(_e2e.engineer_panel().button_for(A.LAY_MINE))
 	await _e2e.settle()
-	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
 	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)
 
 
@@ -322,7 +321,9 @@ func test_lay_mine_on_tap_without_confirm() -> void:
 	assert_true(panel.plate().visible, "панель розгорнулась")
 	assert_eq(panel.button_for(A.CLEAR_MINE).theme_type_variation, EngineerPanel.UNAVAILABLE_VARIATION,
 		"доступність верб перечитано: AP 0")
-	assert_eq(hud.unit_tag().ap_value.text, "0", "HUD перечитав AP: тег показує інженера з нулем")
+	assert_true(hud.unit_tag().visible, "HUD перечитав вибір: тег інженера на місці")
+	for l: Label in hud.unit_tag().find_children("*", "Label", true, false):
+		assert_ne(l.text, "0", "AP не показується навіть нульовий")
 
 
 ## Кожна верба має свою підказку, що тапнути.

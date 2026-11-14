@@ -141,10 +141,9 @@ func test_arming_drone_clears_a_pending_move_preview() -> void:
 	_e2e.tap(Vector2i(0, 0))
 	await _e2e.settle()
 	var hud: Hud = _e2e.hud()
-	assert_true((hud.get_node("%PreviewMoveBox") as Control).visible, "передумова: прев'ю руху")
+	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "передумова: прев'ю руху")
 	_e2e.press(_button())
 	await _e2e.settle()
-	assert_false((hud.get_node("%PreviewMoveBox") as Control).visible)
 	assert_true((hud.get_node("%ConfirmButton") as Button).disabled)
 
 

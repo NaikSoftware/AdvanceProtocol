@@ -9,7 +9,7 @@ cells, HP bars and labels over units) is [overlays.md](overlays.md), not this fi
 
 Three rules hold everywhere below:
 
-- **The HUD computes no outcome.** Every number it shows (AP left, sector, damage bounds, heal,
+- **The HUD computes no outcome.** Every number it shows (sector, damage bounds, heal,
   `armour_ignored`, `in_cover`, verb availability) arrives ready from `core/` through
   `InputController`. The only path to an action is Confirm → `InputController.confirm_pending()`.
 - **It never covers a unit the player can see**, and it never dodges one the player cannot (see
@@ -43,7 +43,7 @@ Three rules hold everywhere below:
 | pause | top-right (right 24, top 8) | 48 × 48 | icon only |
 | End turn | bottom-left (24, bottom 12) | 161 × 48 | fixed; nothing else docks there |
 
-Idle chrome is about 4 % of a 985 × 442 screen. **Ground state is shown nowhere in the UI** — not
+Idle chrome is about 4 % of a 985 × 442 screen. **Ground state is shown nowhere in the UI, and neither is action points** (own or enemy): the gold and red movement zones already show how far a unit can go — not
 here, not on the gate, not in the pause menu. It is fixed per map
 ([§3.12](../rules/movement-and-terrain.md)) and every movement zone and move preview already
 includes it.
@@ -55,8 +55,8 @@ A tap selects; a press-and-hold inspects. They show different things on purpose.
 | | tap: **unit tag** | press-and-hold: **hold card** |
 | --- | --- | --- |
 | who | the selected unit | any visible unit, own or enemy |
-| content | class silhouette · name · AP `n/max` · drone pips (squads) | owner-colour tab · name, class, silhouette · АТАКА / ДАЛЬНІСТЬ / ОГЛЯД · armour glyph + Лоб/Борт/Корма table, or «Броня немає» for infantry · drones row · floor caption |
-| AP | **own unit of the active player only**; an enemy tag shows no AP | never |
+| content | class silhouette · name · drone pips (squads) | owner-colour tab · name, class, silhouette · АТАКА / ДАЛЬНІСТЬ / ОГЛЯД · armour glyph + Лоб/Борт/Корма table, or «Броня немає» for infantry · drones row · floor caption |
+| AP | never, own or enemy: the movement zones show the reach | never |
 | HP | never: the board label is the HP number | never |
 | place | beside the unit, by [tag placement](#unit-tag-placement) | top-left (24, 58) or top-right (right 24, top 64) |
 | input | `MOUSE_FILTER_IGNORE` on the tag, its children and leader: a tap lands on the tile below | ignores input |
@@ -78,12 +78,12 @@ A tap selects; a press-and-hold inspects. They show different things on purpose.
 
 ## Action previews
 
-A preview opens the cluster: the **preview plate** (285 wide, `plate_solid`) over the **action row**.
+A shot, drone or engineer preview opens the cluster: the **preview plate** (285 wide, `plate_solid`) over the **action row**. A pending move has **no plate**: only the action row (Cancel, Confirm) shows, docked the same way with a zero-height plate.
 Every value comes from `core/`:
 
 | action | plate content | source |
 | --- | --- | --- |
-| move | `ap` icon · «Залишок AP» · `28/48` | `ap_left` from the move preview |
+| move | no plate: the row alone | the zones already show the reach |
 | shot | target row (owner-colour tab, name, «ЦІЛЬ») · glyph · «СЕКТОР БРОНІ» + sector word · «ШКОДА» `min–max` | `FireCommand.preview()`: `sector`, `min`, `max`, `armour_ignored`, `in_cover` |
 | drone strike | target row · drone icon · «БРОНЯ» «не діє» · «ШКОДА» `120–180` | `Rules.drone_damage_bounds()` |
 | repair unit | target row (own colour) · «МІЦНІСТЬ» `hp/max` · «РЕМОНТ» `min–max` | `EngineerCommand.repair_bounds()` |
@@ -181,7 +181,7 @@ player** (`BattleScreen` creates one only when `state.can_see_unit(viewer, unit)
 obstacles, protected boxes or "nearest other unit" from `state.units`: a tag or plate that dodges an
 invisible enemy shows where it stands, the same leak §3.2 forbids for routes.
 
-- An enemy's AP is never shown, in the tag or the card.
+- AP is never shown for anyone, in the tag, the card or any plate; a test scans every Label under the HUD.
 - `Hud.set_active_player` clears the selection and preview when the player changes, so nothing of
   the previous player survives a hand-off for even a frame.
 - Engineer verbs and the Дрон button appear only for the active player's own unit.
@@ -212,7 +212,7 @@ are **never a text colour**.
 a 2–3 px gradient at its edge instead of a crisp 1-dp line.
 
 **One family: Fira Sans Condensed** 500 / 600 / 700. Every number uses a `FontVariation` with
-OpenType `tnum = 1` and `kern = 0`, so «1111» is as wide as «0000» and AP counters, stats and the
+OpenType `tnum = 1` and `kern = 0`, so «1111» is as wide as «0000» and stats and the
 armour table do not jitter. `kern = 0` is required too: Fira kerns pairs of tabular ones. The type
 variations (`HudCaption`, `HudNumber*`, `HudPrimaryButton`, …) and their weights and sizes are
 listed in the header of `hud_theme.tres`. The theme is HUD-scoped; `ap_theme.tres` (menus) is

@@ -1,7 +1,7 @@
 class_name UnitTag
 extends HudBake
-## Компактний тег вибраного юніта (spec §2): силует класу · назва · AP n/max (лише свій) · для
-## загону пипси дронів. Без класу словом, HP і характеристик. Лише показує готове: усе з Unit і
+## Компактний тег вибраного юніта (spec §2): силует класу · назва · для загону пипси дронів. AP
+## не пишемо ніде: запас ходу показують зони руху. Без класу словом, HP і характеристик. Лише показує готове: усе з Unit і
 ## UnitTypes. Де стати — вирішує TagPlacement; тут тільки вузли й лідер.
 ##
 ## Ввід: тег, усі діти й лідер — MOUSE_FILTER_IGNORE. Тег стоїть усередині зони руху власного
@@ -9,16 +9,12 @@ extends HudBake
 
 const HEIGHT: float = 30.0
 const LEADER_COLOR: Color = Color(0.8902, 0.8745, 0.8275, 0.8)
-const _ICON_AP: Texture2D = preload("res://assets/ui/icons/ap.svg")
 
 var name_label: Label
-var ap_value: Label
-var ap_max: Label
 var pips: DronePips
 
 var _sil: TextureRect
 var _tab: ColorRect
-var _ap_box: HBoxContainer
 var _pip_box: HBoxContainer
 var _leader: PackedVector2Array = PackedVector2Array()
 var _shown: String = ""
@@ -51,20 +47,6 @@ func _init() -> void:
 	name_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(name_label)
 
-	_ap_box = HBoxContainer.new()
-	_ap_box.add_theme_constant_override("separation", 0)
-	row.add_child(_ap_box)
-	_ap_box.add_child(_sep())
-	_ap_box.add_child(HudKit.icon(_ICON_AP, Vector2(13.0, 13.0)))
-	_ap_box.add_child(HudKit.gap(4.0))
-	var nums := BaselineRow.new()
-	nums.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_ap_box.add_child(nums)
-	ap_value = HudKit.label(&"HudNumberTag")
-	nums.add_child(ap_value)
-	ap_max = HudKit.label(&"HudNumberDim13")
-	nums.add_child(ap_max)
-
 	_pip_box = HBoxContainer.new()
 	_pip_box.add_theme_constant_override("separation", 0)
 	row.add_child(_pip_box)
@@ -75,24 +57,20 @@ func _init() -> void:
 	HudKit.ignore_input(self)
 
 
-## show_ap — лише свій юніт активного гравця: AP ворога — прихований залишок його дій.
+## own — свій юніт активного гравця: чужий тег натомість має смужку кольору власника.
 ## Лічильник дронів публічний (§3.9), тож показується завжди, поки в типу є дрони.
-func show_unit(unit: Unit, show_ap: bool) -> void:
+func show_unit(unit: Unit, own: bool) -> void:
 	name_label.text = tr(String(unit.type()["name_key"]))
 	_sil.texture = HudKit.SILHOUETTES[unit.unit_class()]
-	_ap_box.visible = show_ap
-	_tab.visible = not show_ap
+	_tab.visible = not own
 	_tab.color = UnitView.PLAYER_COLORS[unit.owner % UnitView.PLAYER_COLORS.size()]
-	# AP ворога не пишемо навіть у прихований Label: це прихований залишок його дій.
-	ap_value.text = str(unit.ap) if show_ap else ""
-	ap_max.text = "/%d" % unit.max_ap() if show_ap else ""
 	var drones: int = int(unit.type()["drones"])
 	_pip_box.visible = drones > 0
 	pips.set_counts(unit.drones_left, drones)
 	update_minimum_size()
 	reset_size()
 	# Запікаємо лише коли змінилося те, що видно: тег оновлюється й від руху камери.
-	var shown: String = "%s|%s|%d|%d|%d|%s|%d" % [name_label.text, ap_value.text, drones, unit.drones_left, unit.unit_class(), show_ap, unit.owner]
+	var shown: String = "%s|%d|%d|%d|%s|%d" % [name_label.text, drones, unit.drones_left, unit.unit_class(), own, unit.owner]
 	if shown != _shown:
 		_shown = shown
 		request_bake()

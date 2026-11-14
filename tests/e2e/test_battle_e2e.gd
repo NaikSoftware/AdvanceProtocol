@@ -255,7 +255,7 @@ func test_walk_stops_before_enemy_the_planner_could_not_see() -> void:
 
 	_e2e.tap(Vector2i(0, 1))
 	_e2e.tap(Vector2i(6, 1))
-	assert_eq((_e2e.hud().get_node("%PreviewApValue") as Label).text, "8", "план: 6 доріг по 10, лишається 8")
+	assert_false((_e2e.hud().get_node("%PreviewPlate") as Control).visible, "прев'ю руху — без плити")
 	await _e2e.confirm()
 
 	var car: Unit = _unit(1)

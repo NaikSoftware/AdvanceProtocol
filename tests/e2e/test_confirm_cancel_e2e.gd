@@ -13,6 +13,7 @@ const TANK := Vector2i(1, 1)
 const SQUAD := Vector2i(1, 3)
 const ENEMY := Vector2i(4, 1)  # 3 від танка — у дальності пострілу
 const DEST := Vector2i(2, 1)
+const AP_AFTER_ONE_STEP: int = 38  # середній танк: 48 - 10 за клітинку поля
 
 var _e2e: E2E
 
@@ -52,12 +53,13 @@ func test_second_tap_on_move_target_confirms_the_move() -> void:
 	var tank: Unit = _e2e.service.state.unit_at(TANK)
 	await _tap(TANK)
 	await _tap(DEST)
-	var ap_left: String = (_e2e.hud().get_node("%PreviewApValue") as Label).text
+	assert_false((_e2e.hud().get_node("%PreviewPlate") as Control).visible, "прев'ю руху — без плити")
 	assert_eq(tank.pos, TANK, "перший тап лише показує шлях")
 	await _tap(DEST)
 	assert_eq(tank.pos, DEST)
-	assert_eq(str(tank.ap), ap_left, "AP — рівно той, що показало прев'ю")
-	assert_eq(_e2e.hud().unit_tag().ap_value.text, ap_left, "HUD перечитав AP: тег показує нинішній запас ходу")
+	assert_eq(tank.ap, AP_AFTER_ONE_STEP, "крок витратив AP")
+	for l: Label in _e2e.hud().find_children("*", "Label", true, false):
+		assert_false(l.text.contains(str(tank.ap)), "AP не показується ніде: «%s»" % l.text)
 	assert_true((_e2e.hud().get_node("%ConfirmButton") as Button).disabled)
 	assert_eq(_e2e.screen.input_controller()._selected_unit, tank, "танк лишається вибраним")
 
@@ -79,7 +81,7 @@ func test_cancel_visible_only_while_it_does_something() -> void:
 	_e2e.press(_cancel())
 	await _e2e.settle()
 	assert_false(_cancel().is_visible_in_tree(), "скасовано")
-	assert_false(_e2e.hud().get_node("%PreviewMoveBox").is_visible_in_tree())
+	assert_false((_e2e.hud().get_node("%PreviewPlate") as Control).visible)
 	await _tap(ENEMY)
 	assert_true(_cancel().is_visible_in_tree(), "прев'ю пострілу")
 	_e2e.press(_cancel())

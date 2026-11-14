@@ -38,8 +38,6 @@ ERR_OWN_TILE,Юніт уже стоїть на цій клітинці,The unit 
 ERR_ALREADY_FACING,Юніт уже дивиться туди,The unit is already facing that way
 hud_turn,Хід,Turn
 hud_player,Гравець,Player
-hud_ap,Запас ходу,AP
-hud_ap_left,Залишок AP,AP left
 hud_hp,Міцність,HP
 hud_armour,Броня,Armour
 hud_armour_sector,Сектор броні,Armour sector
