@@ -170,3 +170,34 @@ with a pole or prop between it and the camera, is not a contrast sample. One too
 model: `tools/unit_contrast_gate.py`.
 Set 1's green is a low-chroma grey-green of middle value: dark enough to read as protective
 green, light enough to separate from River's dark ground.
+
+### Wheeled roles in sets 1 and 2
+
+The wheeled roles keep slot 0's cues: the armoured car is a 6×6 with a small turret and a 30 mm
+gun, the troop carrier an 8×8 with a flat roof, a remote weapon station and a rear ramp, the
+scout car a 4×4 with a bonnet, a cab and a roof weapon station. Real names, as in §1, are
+private reference only.
+
+| set | role | real reference (private) | in-game name | invented fit |
+| --- | --- | --- | --- | --- |
+| 1 | armoured car | BTR-82A hull and turret | Hornbeam | cut to three axles; turret behind the centre |
+| 1 | troop carrier | Bumerang, APC version | Spruce | small roof weapon station and rear ramp |
+| 1 | scout car | Tigr-M with a roof weapon station | Elm | none |
+| 2 | armoured car | Textron ARV-30, a 6×6 prototype | Cuesta | turret shrunk to 0.25 L × 0.5 W |
+| 2 | troop carrier | Stryker infantry carrier | Moraine | weapon station forward-left, not forward-right like slot 0's |
+| 2 | scout car | JLTV with a roof weapon station | Drumlin | none |
+
+At the farthest zoom a 30 mm barrel is under 1 px wide and a wheel about 6 px, seen on one flank,
+so neither axle count nor the gun separates the roles there. What does, and what every wheeled
+model must keep:
+
+- the armoured car's turret is one compact block, about 9 × 6 px at the farthest zoom, painted
+  at least 25 L* darker than the deck and left out of the light top fade, with a dark gun about
+  2 m long and 0.18 m thick inside the hull outline;
+- the troop carrier is at least 12 % longer than its set's armoured car and reads as a plain slab;
+- the scout car is the shortest, with dark glass (albedo L* 15 or less) split into panes by
+  body-colour pillars — one unbroken black band reads as tape;
+- the visible lower side, from the sill up about 0.7 m, is darkened by 30–40 % so the hull does
+  not float on overcast River, where there is no contact shadow; a band measured from the ground
+  lands under the belly and is never seen;
+- the roof sits within about 5 L* of the same set's tanks, or the set stops reading as one paint.
