@@ -18,8 +18,8 @@ Real names are private reference only — they never appear in code, data, UI or
 
 | # | role | real reference (private) | in-game name | real L × W × H, m | must read from above at 100 px |
 | --- | --- | --- | --- | --- | --- |
-| 0 | rifle squad | ROK infantry, digital "granite" uniform, rifle with optic | Line Section | 1.8 m figure | 4 helmets, rifles held low, plate-carrier backs |
-| 1 | assault squad | same, one figure with backpack drone launcher/case | Strike Section | 1.8 m figure | the drone case: a 0.6 × 0.4 × 0.3 m box on one back |
+| 0 | rifle squad | ROK infantry, digital uniform, rifle with optic | Line Section | 1.8 m figure | 4 helmets, rifles held low, plate-carrier backs, one plain olive tone |
+| 1 | assault squad | same, with a drone launch tube on the back | Strike Section | 1.8 m figure; tube 1.52 × 0.19 | the light tube end standing above a helmet, one per drone left |
 | 2 | armoured car | K806 6×6 hull (real) **+ 30 mm unmanned turret (invented fit**, of the kind offered on Korean export 6×6s) | Kite | 6.6 × ~2.7 × 2.7 (hull) | 3 axles, flat-roofed boat hull, small offset turret with short 30 mm barrel |
 | 3 | troop carrier | K808 8×8 | Drover | 7.2 × ~2.7 × 2.7 | 4 axles, long flat roof with hatches, RWS cupola, rear ramp |
 | 4 | scout car | K153 (armoured K151 4×4 with RWS) | Wren | 4.9 × 2.2 × 2.0 | bonnet + cab, roof ring with RWS, 4 wheels clear of body |
@@ -68,8 +68,8 @@ The generated texture does not colour the body anyway; `paint.py` paints it.
 
 | # | prompt (before the shared suffix) | must not |
 | --- | --- | --- |
-| 0 | One adult soldier standing naturally, weight on one leg, rifle with a compact optic held low across the body, muzzle down; ballistic helmet with a cloth cover, plate carrier with magazine pouches, small assault pack; digital-pattern uniform in muted green-grey; boots; height 1.8 m, shoulders 0.5 m | A-pose or T-pose; patches, flags, name tapes, rank; bright face paint; oversized hands or gun |
-| 1 | Same soldier, plus a rigid rectangular drone case on the back (ratio 3 : 2 : 1.5, 0.6 m long), lid seams and two carry handles, a folded quad-rotor clipped on top; tablet controller on the chest | the drone flying; propellers larger than the case; case hidden by the body from above |
+| 0 | One adult soldier standing naturally, weight on one leg, rifle with a compact optic held low across the body, muzzle down; rounded ballistic helmet with a fabric cover, plate carrier with magazine pouches, small assault pack; mid olive uniform in one plain colour, darker olive plate carrier; dark boots; height 1.8 m, shoulders 0.5 m | A-pose or T-pose; a camouflage pattern; patches, flags, name tapes, rank; bright face paint; oversized hands or gun |
+| 1 | Same soldier, plus a light tan cylindrical launch tube 1.5 m long and 0.19 m across with black end caps, strapped upright on the back over a small pack, its bottom at hip height and its top a third of its length above the helmet; tablet controller on the chest | a box case; a quad-rotor; the drone flying; a tube thicker or longer than stated; the tube hidden by the body from above |
 | 2 | Six-wheeled armoured car, boat-shaped flat-roofed hull, proportions L : W : H 2.5 : 1 : 1 (hull), three evenly spaced axles with large off-road tyres, small unmanned turret set back of centre with a short 30 mm cannon (barrel 0.3 × hull length), smoke grenade dischargers, periscopes, rear door | eight wheels; a tank-sized turret; a long gun; dual rear wheels; truck cab |
 | 3 | Eight-wheeled armoured personnel carrier, long boxy hull with sloped glacis, L : W : H 2.7 : 1 : 1, four evenly spaced axles, flat roof with two square troop hatches and a remote weapon station with a heavy machine gun forward-right, rear ramp, stowage boxes on the sides | a turret with a cannon; six wheels; tracks; open-top body |
 | 4 | Armoured 4×4 light tactical vehicle, L : W : H 2.2 : 1 : 0.9, short bonnet, four-door armoured cab with thick small windows, roof ring with a remote weapon station with a machine gun, short cargo bed behind the cab, spare wheel on the rear | civilian SUV look; chrome; light bars; road-car wheels |
@@ -201,3 +201,94 @@ model must keep:
   not float on overcast River, where there is no contact shadow; a band measured from the ground
   lands under the belly and is never seen;
 - the roof sits within about 5 L* of the same set's tanks, or the set stops reading as one paint.
+
+### Towed guns and engineer vehicles in sets 1 and 2
+
+The towed and engineer roles keep slot 0's cues. The field gun is the smallest: a short barrel,
+two trail legs open in a V, a shield and two road wheels. The howitzer has a long barrel, two long
+trail legs in a wide V and two road wheels, and is about twice the field gun's length. The
+engineer vehicle is a turretless tracked hull with no gun, a front implement at least as wide as
+the tracks, and an arm or launchers on the deck. Every gun is modelled in firing position, at true scale, with
+both road wheels on the ground. Real names, as in §1, are private reference only.
+
+| set | role | real reference (private) | in-game name | invented fit |
+| --- | --- | --- | --- | --- |
+| 1 | field gun | 2B16 Nona-K, 120 mm gun-mortar | Hawthorn | road wheels on the ground (the real gun sits on a baseplate) |
+| 1 | howitzer | 2A65 Msta-B, 152 mm | Maple | road wheels on the ground (the real gun sits on a firing jack) |
+| 1 | engineer vehicle | IMR-3M on the T-90 hull | Sycamore | none; the front is a full-width two-piece dozer blade without tines |
+| 2 | field gun | M119A3, 105 mm | Kame | a split trail of two straight legs in a V instead of the single bow trail; a small flat shield, its size invented |
+| 2 | howitzer | M777A2, 155 mm | Scarp | road wheels on the ground (raised in the real firing position) |
+| 2 | engineer vehicle | M1150 Assault Breacher Vehicle | Coulee | none |
+
+Real sizes, L × W × H in metres:
+
+- Nona-K: about 5.7 × 1.8 × 1.7, barrel 2.9.
+- Msta-B: 12.7 × 2.5 × 2.95 in travel, barrel 8.1 with the muzzle brake.
+- IMR-3M: 9.32 × 3.5 (hull) × 3.43.
+- M119A3: 6.32 long in firing position, 1.78 wide, barrel 3.2.
+- M777A2: 10.7 long in firing position, barrel 5.1.
+- M1150: 12.2 with the plough, plough 4.57 wide, hull 7.9 × 3.6.
+
+Nona-K's width, Msta-B's height and the M777A2 and M1150 hull figures come from secondary sources.
+Every model is built at its real size, scaled uniformly, like every other unit.
+
+At the farthest zoom a trail leg is under 1 px wide and a gun shield's side plates vanish, so the
+guns separate by footprint and barrel. What every model must keep:
+
+- **Barrel against one trail leg.** The field gun's barrel is shorter than one trail leg: about
+  0.9 on Hawthorn and 0.8 on Kame, against slot 0's 0.65. The howitzer's is longer: about 1.35 on
+  Maple and 1.2 on Scarp, against slot 0's 1.1.
+- **Footprint.** A howitzer's footprint is at least 1.8 times its own set's field gun.
+- **Set features.** Maple keeps its large sloped shield over both wheels. Scarp keeps its four
+  legs: two rear trail legs and two front stabilisers. These separate the sets, not the roles.
+- **Hawthorn's shield** is two thin vertical plates beside the cradle, the left one taller, and
+  does not read from above. The role rests on its size and short barrel.
+- **The engineer vehicles carry no barrel.**
+  - Sycamore's crane boom lies backwards along the centreline on its support frame. It is about
+    0.5 m thick, so it reads as a beam and not as a gun.
+  - Coulee's plough stands about 0.5 m beyond each track, and its launcher superstructure stays
+    low and flat-topped.
+- **Nothing is enlarged**: every part keeps its real size.
+
+### Infantry figures
+
+A squad shows four figures on its slots (art direction, "Unit models"). The figure is 1.8 m tall:
+26 px at the closest zoom and 8 px at the farthest, and less on screen, because a standing figure
+is foreshortened at the camera's pitch. A helmet is 3.6 px close and 1.1 px far; a rifle is 0.3 px
+thick far. Outlines therefore carry no nation. The nation reads from three tone blocks: helmet,
+uniform and plate carrier. Camouflage patterns are noise at 1–3 px per blob, so every figure
+carries plain tones and no pattern. There are no patches, flags, insignia, name tapes or rank.
+
+| slot | real reference (private) | helmet | plate carrier | rifle | uniform and helmet, sRGB | carrier, sRGB |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | ROK infantry, digital uniform | rounded mid-cut, fabric cover | front magazine pouches, small pack; darker than the uniform | rifle with a compact optic | 110, 109, 70 | 88, 88, 58 |
+| 1 | Russian infantry, digital uniform | rounded, fabric cover, goggles on the front | bulky, with a collar, dark olive | assault rifle with a curved magazine and a suppressor | 107, 113, 91 | 70, 74, 60 |
+| 2 | US infantry, OCP uniform | high-cut, fabric cover, night-vision mount at the front, pouch at the back | coyote, close to the uniform | carbine with an optic and a suppressor | 140, 122, 88 | 124, 106, 80 |
+
+Real uniforms are camouflage. Their mean tones sit close to the maps' meadow and ploughed ground
+(about L* 38 on Crossroads), so the figures do not take them. Each nation takes its vehicle set's
+paint family at a middle value:
+
+- slot 0: mid olive, L* about 45;
+- slot 1: the set's grey-green, L* about 47, on a dark torso (L* about 31);
+- slot 2: light warm khaki, L* about 52.
+
+The uniform tones differ by ΔE 10.5 or more between nations. Every figure passes the same contrast
+gate as the vehicles, on every map, measured at the closest zoom. Where a figure fails, its
+up-facing tones are lifted as the vehicle tops are. Gloves and boots are dark (L* about 20), and
+skin shows on the face only.
+
+**Assault squad.** One standing figure carries a drone launch tube on its back for every drone
+the squad has left, so the public count (§3.9 of CLAUDE.md) also reads on the squad itself: two
+tubes at the start, none once both are spent, when the squad looks like a rifle squad, as it
+fights like one. The tube is a light tan
+cylinder, 1.52 m long and 0.19 m across, with black end caps, the size of the largest man-portable
+tube-launched loitering munitions. It is strapped upright over a small pack, its bottom at hip
+height and its top about 0.6 m above the helmet. A tablet controller sits on the chest. Every slot
+carries the same tube, because the drone marks the role.
+
+From any facing the camera sees the end of the tube above the head: about 6 px of it at the
+closest zoom, and at the farthest about 2 px long and under 1 px wide. It reads by tone against
+the uniform: ΔE about 18 for slot 0, 20 for slot 1 and 8 for slot 2, where the black cap carries
+the difference. The tube keeps its real size. At the farthest zoom this cue is weak, and nothing
+larger is fitted to fix it.
