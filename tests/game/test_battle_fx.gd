@@ -174,12 +174,12 @@ func test_clear_all_frees_every_moment() -> void:
 		assert_true(n.is_queued_for_deletion())
 
 
-## Розігрів малює кулю, влучання в броню, снаряд у ґрунт і постріл гармати — невидимо мало, без
+## Розігрів малює кулю, влучання в броню, снаряд у ґрунт, постріл гармати й дрон — невидимо мало, без
 ## світла, частинки нульові й нерухомі.
 func test_warm_up_is_invisible() -> void:
 	BattleFx.warm_up(parent, Vector3.ZERO)
 	var roots: Array[Node] = parent.get_children()
-	assert_eq(roots.size(), 6)
+	assert_eq(roots.size(), 7)
 	for r: Node in roots:
 		assert_eq((r as Node3D).scale, Vector3.ONE * 0.0001)
 		for l: Node in r.find_children("*", "OmniLight3D", true, false):

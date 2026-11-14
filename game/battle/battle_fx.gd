@@ -209,7 +209,7 @@ static func warm_up(parent: Node, at: Vector3) -> Node3D:
 	var boom: Node3D = spawn_explosion(parent, at, 0.0001)
 	var all: Array[Node3D] = [boom, spawn_hit(parent, at, Weapon.TANK_GUN, true), spawn_hit(parent, at, Weapon.SHELL, false), spawn_muzzle(parent, Transform3D(Basis(), at), Weapon.TANK_GUN),
 			spawn_topple_hit(parent, at, at + Vector3.UP, Debris.CONCRETE, true), spawn_topple_land(parent, at, at + Vector3.RIGHT, Debris.WOOD, true)]
-	spawn_drone(parent, at, at + Vector3.RIGHT, true)
+	all.append(spawn_drone(parent, at, at + Vector3.RIGHT, true))
 	for hit: Node3D in all:
 		hit.scale = Vector3.ONE * 0.0001
 		for l: Node in hit.find_children("*", "OmniLight3D", true, false):
