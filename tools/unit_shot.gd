@@ -46,6 +46,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
+	if a.size() > 5 and a[5] == "squads":
+		await _squads(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "spots":
 		await _spots(screen, map, out, tag)
 		return
@@ -61,7 +64,14 @@ func _ready() -> void:
 		return
 	if a.size() > 5 and a[5] == "gate":
 		var gset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
-		await _gate(screen, map, out, tag, type_id, gset)
+		# zoom=<z>: відділення міряються на найближчому, бо на найдальшому боєць — 2 × 6 пікселів
+		var gzoom: float = float(a[7].substr(5)) if a.size() > 7 and a[7].begins_with("zoom=") else IsoCameraRig.MAX_ZOOM
+		var gtints: Array = []
+		if a.size() > 8 and a[8].begins_with("tints="):
+			for t: String in a[8].substr(6).split(";"):
+				var k: PackedFloat64Array = t.split_floats(",")
+				gtints.append(Color(k[0], k[1], k[2]))
+		await _gate(screen, map, out, tag, type_id, gset, gzoom, gtints)
 		return
 	screen.setup(map, 2, 1)
 	var cell := _field_near_centre(map)
@@ -321,7 +331,7 @@ func _spots(screen: BattleScreen, map: MapData, out: String, tag: String) -> voi
 ## Місця для виміру контрасту (їх читає tools/unit_contrast_gate.py): до чотирьох клітинок на вид поверхні поля
 ## (дев'ять сусідів того самого виду; назви field0a.. — луг, field1a.. — рілля) і клітинки поля за два-три кроки від лісу
 ## з кожного боку (forestE2, forestN3 ...). Модель дивиться на північ; камера однакова в обох кадрах, хмарні тіні вимкнені.
-func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int) -> void:
+func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id: int, set_id: int, zoom: float = IsoCameraRig.MAX_ZOOM, tints: Array = []) -> void:
 	screen.setup(map, 2, 1)
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var picks: Dictionary = {}
@@ -407,39 +417,49 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 		await get_tree().process_frame
 	# Хмарні тіні рухаються з часом: без заморозки кадри пари «з моделлю / без» різняться, а числа не повторюються.
 	RenderingServer.global_shader_parameter_set(&"cloud_shadow_strength", 0.0)
-	rig.zoom_by(IsoCameraRig.MAX_ZOOM / rig.zoom_level)
+	rig.zoom_by(zoom / rig.zoom_level)
 	for f in SETTLE_FRAMES * 3:
 		await get_tree().process_frame
 	print("UNIT gate zoom %.2f" % rig.zoom_level)
-	for cl: Array in cells:
-		var cell: Vector2i = cl[1]
-		var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
-		_place(m, cell, 0)
-		rig.center_on(cell)
-		for f in SETTLE_FRAMES * 2:
-			await get_tree().process_frame
-		await RenderingServer.frame_post_draw
-		var with_m: Image = get_viewport().get_texture().get_image()
-		# Третій кадр: та сама модель суцільним пурпуром без освітлення. Це маска контуру, яка не залежить від кольору
-		# моделі (контраст зображення зі «з моделлю / без» губить пікселі в низькоконтрастної моделі).
-		var flat := StandardMaterial3D.new()
-		flat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		flat.albedo_color = Color(1.0, 0.0, 1.0)
-		for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
-			mi.material_override = flat
-		for f in 4:
-			await get_tree().process_frame
-		await RenderingServer.frame_post_draw
-		var mask: Image = get_viewport().get_texture().get_image()
-		m.queue_free()
-		for f in 10:
-			await get_tree().process_frame
-		await RenderingServer.frame_post_draw
-		var empty: Image = get_viewport().get_texture().get_image()
-		with_m.save_png("%s/%s_%s_m.png" % [out, tag, cl[0]])
-		empty.save_png("%s/%s_%s_e.png" % [out, tag, cl[0]])
-		mask.save_png("%s/%s_%s_k.png" % [out, tag, cl[0]])
-		print("UNIT gate %s cell %s" % [cl[0], cell])
+	# tints: проба кольору без перебудови моделі — множник albedo_color спільного матеріалу, кадри в <out>/k<i>/.
+	var sweep: Array = tints if not tints.is_empty() else [null]
+	for ti in sweep.size():
+		var dir: String = out if sweep[ti] == null else "%s/k%d" % [out, ti]
+		DirAccess.make_dir_recursive_absolute(dir)
+		if sweep[ti] != null:
+			UnitSilhouettes.model_material(type_id, set_id).set_shader_parameter("albedo_color", sweep[ti])
+		for cl: Array in cells:
+			var cell: Vector2i = cl[1]
+			var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id, int(UnitTypes.get_type(type_id)["drones"]))
+			_place(m, cell, 0)
+			if (UnitSilhouettes.spec(type_id, set_id).extras as Array).has(&"figures"):
+				# Відділення стоїть ступнями на основі 0,05 над своїм початком, а гра опускає його на SQUAD_SINK.
+				m.position.y -= UnitView.SQUAD_SINK
+			rig.center_on(cell)
+			for f in SETTLE_FRAMES * 2:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			var with_m: Image = get_viewport().get_texture().get_image()
+			# Третій кадр: та сама модель суцільним пурпуром без освітлення. Це маска контуру, яка не залежить від кольору
+			# моделі (контраст зображення зі «з моделлю / без» губить пікселі в низькоконтрастної моделі).
+			var flat := StandardMaterial3D.new()
+			flat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			flat.albedo_color = Color(1.0, 0.0, 1.0)
+			for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
+				mi.material_override = flat
+			for f in 4:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			var mask: Image = get_viewport().get_texture().get_image()
+			m.queue_free()
+			for f in 10:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			var empty: Image = get_viewport().get_texture().get_image()
+			with_m.save_png("%s/%s_%s_m.png" % [dir, tag, cl[0]])
+			empty.save_png("%s/%s_%s_e.png" % [dir, tag, cl[0]])
+			mask.save_png("%s/%s_%s_k.png" % [dir, tag, cl[0]])
+			print("UNIT gate %s cell %s" % [cl[0], cell])
 	get_tree().quit()
 
 
@@ -467,6 +487,71 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	for s: Array in shots:
 		(s[1] as Image).save_png(s[0])
 	print("UNIT spin %s type %d at %s: %d frames" % [tag, type_id, cell, shots.size()])
+	get_tree().quit()
+
+
+## Шостий аргумент squads: справжні відділення. Верхній ряд — стрілецьке, штурмове з двома дронами, стрілецьке й штурмове
+## з одним (чи розрізняються формою на найдальшому зумі); середній — стрілецьке з 3, 2 і 1 стоячою фігурою та знищене;
+## нижній — відділення, у яке влучили тричі, поки воно двічі йшло на тайл праворуч: тіла на трьох тайлах. Кадри _z6, _z8, _z20.
+func _squads(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var cells: Array[Vector2i] = []
+	var around: Array[Vector2i] = []
+	for col in 4:
+		for row in 3:
+			cells.append(Vector2i(col - 1, row * 2))
+	for dx in range(-2, 4):
+		for dy in range(-2, 6):
+			around.append(Vector2i(dx, dy))
+	var c := _field_near_centre(m, false, cells, around)
+	m.spawns = []
+	for col in 4:
+		m.spawns.append({"type_id": col % 2, "owner": 0, "pos": c + Vector2i(col - 1, 0), "facing": [0, 0, 6, 6][col]})
+	for col in 4:
+		m.spawns.append({"type_id": 0, "owner": 0, "pos": c + Vector2i(col - 1, 2), "facing": 1})
+	m.spawns.append({"type_id": 1, "owner": 0, "pos": c + Vector2i(-1, 4), "facing": 2})
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	for u: Unit in state.alive_units():
+		var col: int = u.pos.x - c.x + 1
+		if u.pos.y == c.y and col == 3:
+			u.drones_left = 1
+		elif u.pos.y == c.y + 2:
+			# 3, 2, 1 стоячі й знищене: HP на межі чверті, як рахує правило фігур
+			u.hp = [u.max_hp() * 3 / 4, u.max_hp() / 2, u.max_hp() / 4, 0][col]
+			Casualties.record(state, u)
+		elif u.pos.y == c.y + 4:
+			# той самий шлях, що й у грі: влучання записує тіла на тайлі, де відділення стоїть у цю мить
+			for step in 3:
+				u.hp = u.max_hp() * (3 - step) / 4
+				Casualties.record(state, u)
+				if step < 2:
+					u.pos += Vector2i(1, 0)
+	state.refresh_vision_all()
+	screen._rebuild_units_for_active_player(true)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c + Vector2i(0, 1))
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	# Слід відділення окремо: тіла на трьох тайлах нижнього ряду.
+	rig.center_on(c + Vector2i(0, 4))
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_trail_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT squads at %s" % c)
 	get_tree().quit()
 
 

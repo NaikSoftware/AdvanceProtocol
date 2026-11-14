@@ -259,6 +259,25 @@ func test_bodies_lie_where_each_fell_on_seen_ground_only() -> void:
 	assert_eq(layer.get_children().filter(func(n: Node) -> bool: return n is MeshInstance3D).size(), 1)
 
 
+## Тіло на тайлі, де його відділення досі ховається в будинку незнайденим, глядачеві не показується:
+## воно виказало б укриття (§3.5). Знайдене чи пішле далі відділення тіло вже не ховає.
+func test_a_body_does_not_give_away_a_squad_hidden_in_a_building() -> void:
+	state = BattleState.create(Board.create(8, 8, Terrain.GroundState.DRY), 3, 7)
+	state.board.set_kind(Vector2i(2, 2), Terrain.Kind.BUILDING)
+	var sq: Unit = state.add_unit(0, 1, Vector2i(2, 2), 0)
+	sq.hp = 60
+	var body: Casualties.Body = (Casualties.record(state, sq)[0] as Events.FiguresFell).body
+	_seen(2, Vector2i(2, 2))
+	assert_false(state.can_see_unit(2, sq), "передумова: гравець 2 відділення не знайшов")
+	assert_false(WreckLayer.shows_body(state, 2, body))
+	layer.rebuild_fallen(state, 2)
+	assert_eq(layer.fallen_count(), 0)
+	sq.pos = Vector2i(3, 2)
+	assert_true(WreckLayer.shows_body(state, 2, body), "відділення пішло — тіло лишилось і видне")
+	layer.rebuild_fallen(state, 2)
+	assert_eq(layer.fallen_count(), 1)
+
+
 ## Щойно впалі лягають одразу (подія FiguresFell), а моделі — простим бійцем, позначеним загиблим:
 ## один виклик на набір, хай скільки тіл і з яких відділень.
 func test_model_bodies_are_one_mesh_per_look_and_new_ones_join_it() -> void:

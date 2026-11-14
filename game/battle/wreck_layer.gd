@@ -521,11 +521,24 @@ func _end_warm_up() -> void:
 ## лежать там, де кожен упав, хай куди відділення пішло далі. Лише над розвіданим глядача
 ## (§3.5): тіла на нерозвіданому — донос про бій. Техніка тут не малюється: її лишки — уламки.
 func rebuild_fallen(state: BattleState, observer: int) -> void:
-	_bodies.clear()
+	var shown: Array[Casualties.Body] = []
 	for b in state.bodies:
-		if state.vision[observer].is_seen(b.pos):
-			_bodies.append(b)
+		if shows_body(state, observer, b):
+			shown.append(b)
+	# Тіла лише додаються, а перебудова дошки йде після кожного пакета: без змін сітки не перезбираються.
+	if shown == _bodies:
+		return
+	_bodies = shown
 	_rebuild_body_meshes()
+
+
+## Тіло видно над розвіданим глядача (§3.5) — крім того, чиє відділення досі стоїть на тому самому тайлі
+## й глядачеві не знайдене (укриття в будинку): тіло виказало б, що там хтось є.
+static func shows_body(state: BattleState, observer: int, b: Casualties.Body) -> bool:
+	if not state.vision[observer].is_seen(b.pos):
+		return false
+	var u: Unit = state.get_unit(b.unit_id)
+	return u == null or not u.is_alive() or u.pos != b.pos or state.can_see_unit(observer, u)
 
 
 ## Щойно впалі (подія FiguresFell) — одразу, а не на перебудові після пакета: інакше фігура

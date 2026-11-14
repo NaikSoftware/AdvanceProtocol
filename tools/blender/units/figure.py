@@ -11,7 +11,8 @@ entry's `figure` block:
   tex       atlas size, px; the right 1/16 is kept for flat kit colours (the tube)
   paint     flat tones (sRGB 0..255): uniform, helmet, kit (plate carrier, pouches, pack), gun, boots, skin;
             `kit_hue`, `kit_sat` pick the carrier out of the source colour; `head_h`, `boots_h` are heights as
-            fractions of the figure
+            fractions of the figure; `top_lift` multiplies (linear) the cloth tones of up-facing texels,
+            `top_fade` (0..1) turns them towards grey
   variants  {<unit>: {tube: {length_m, diameter_m, bottom_m, colour, cap}}}: a cylinder strapped upright on the back,
             real size, its side `colour`, its end caps `cap`
 `--crude` skips the bake and paints the whole figure the uniform tone: the farthest-zoom shape test.
@@ -186,6 +187,7 @@ else:
 
     ht.links.new(st.outputs[0], emit.inputs[0]); src = bake('EMIT')
     ht.links.new(geo.outputs["Position"], emit.inputs[0]); pos = bake('EMIT')
+    ht.links.new(geo.outputs["Normal"], emit.inputs[0]); nrm = bake('EMIT')
     sc.cycles.samples = 64
     ao = bake('AO', to_lo=False)[..., 0]
     used = src[..., 3] > 0.5
@@ -222,6 +224,16 @@ else:
     tones = [p.get(kname, dflt) for kname, dflt in (("uniform", UNIFORM), ("kit", [88, 88, 58]), ("helmet", UNIFORM),
                                                      ("gun", [30, 31, 31]), ("boots", [48, 46, 40]), ("skin", [146, 110, 88]))]
     flat = lin(srgb(tones))[cls]
+    # What the camera sees of a figure is its up-facing tops (helmet crown, shoulders, pack top), and in the uniform's
+    # middle value they sit on the ground's own tone: they are lifted, as the vehicle tops are, until the contrast gate
+    # passes. Cloth only; the rifle, boots and face keep theirs.
+    up = np.clip((nrm[..., 2] - 0.25) / 0.5, 0.0, 1.0)
+    top = up * (cls <= 2)
+    flat = flat * (1.0 + (p.get("top_lift", 1.0) - 1.0) * top)[..., None]
+    # olive tops share the grass's hue: the vehicles' tops passed only near-neutral, so they fade towards grey of the
+    # same luminance (`top_fade`); sides keep the uniform's olive
+    grey = (flat @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None]
+    flat = flat + (grey - flat) * (p.get("top_fade", 0.0) * top)[..., None]
     # occlusion only darkens: open faces keep the tone, folds and armpits go to ~60 %
     shade = 1.0 - p.get("ao_gain", 0.45) * (1.0 - np.clip(ao, 0.0, 1.0) ** p.get("ao_gamma", 0.7))
     alb = enc(flat * shade[..., None])

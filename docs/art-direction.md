@@ -112,9 +112,18 @@ falls back to the box placeholder, so a model may land one type at a time.
 
 - **Path** `res://assets/units/<slug>.glb`, by type id: 0 `rifle_soldier`, 1 `assault_soldier`,
   2 `armoured_car`, 3 `troop_carrier`, 4 `scout_car`, 5 `medium_tank`, 6 `tank_destroyer`,
-  7 `light_tank`, 8 `heavy_tank`, 9 `field_gun`, 10 `howitzer`, 11 `engineer_vehicle`. A soldier
-  type is **one figure**: the game places four copies on the squad's slots and lays the fallen
-  ones down.
+  7 `light_tank`, 8 `heavy_tank`, 9 `field_gun`, 10 `howitzer`, 11 `engineer_vehicle`.
+- **Soldiers.** A squad is four figures on fixed slots, each turned by its own small fixed yaw so
+  they do not read as clones. `rifle_soldier` is the plain soldier; `assault_soldier` is the same
+  figure with the drone launch tube (1.52 × 0.19 m, light tan with dark end caps, upright on the
+  back, bottom at hip height, top 0.6 m above the helmet). Both come out of one run of
+  `tools/blender/units/figure.py` (units.json `rifle_soldier.figure`) on the same atlas layout,
+  because an assault squad mixes them under the assault model's material in one draw call. An
+  assault squad carries as many tubes as it has drones left (0–2, public by §3.9), on its first
+  standing slots, which fall last; the rest are plain figures, so at 0 drones it looks like a rifle
+  squad, which by then it is. The fallen lie face down as the plain figure, darkened by the unit
+  shader. A set's soldiers drop in through the same path (`set<N>/rifle_soldier.glb` and
+  `set<N>/assault_soldier.glb` with their `_SET_SPECS` rows).
 - **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
   baked in on load, but a rotation off the X axis would misplace the wheel axles). Base colour
   texture, optional normal and glTF metallicRoughness (roughness in G, metallic in B), ≤ 1024 px.
@@ -134,7 +143,8 @@ falls back to the box placeholder, so a model may land one type at a time.
   `UnitSilhouettes.muzzle()`, because muzzle flashes, wrecks and contact shadows read those
   numbers, not the mesh. A soldier is 1.8 m = 0.225 units tall, feet at y = 0.
 - **COLOR_0** (RGBA, black elsewhere): **R** = 0 everywhere — units carry no team colour; the side is
-  shown by the HP bar fill, and units are told apart by shape. **G** = track tread faces. **B** = wheel faces that rotate; their alpha is
+  shown by the HP bar fill, and units are told apart by shape. The game sets R = 1 on a fallen
+  soldier's copy, which the unit shader darkens. **G** = track tread faces. **B** = wheel faces that rotate; their alpha is
   half the wheel's spin rate relative to the road wheels: the model's road-wheel radius / (2 × its
   own radius), the road-wheel radius being what `_SPECS.wheel` matches within 0.002. 0.5 on road
   wheels, above 0.5 on a smaller sprocket or idler and below it on a larger one (the heavy tank's
@@ -278,8 +288,12 @@ falls back to the box placeholder, so a model may land one type at a time.
 ricochets for small arms, a flash with a dust and debris burst for shells and drones — and no
 lasting damage. A destroyed vehicle burns, then smokes, and leaves a burnt-out wreck that blocks
 vehicles for a few turns ([§3.14](../CLAUDE.md)). A squad loses figures as its HP drops — one of
-four per quarter lost — and the fallen lie beside it; a destroyed squad leaves them and a scorch,
-restrained, and no obstacle. Effects attach only to units the current player can see, the attacker's muzzle flash included.
+four per quarter lost. A soldier who falls stays on the tile where his squad stood when it was hit
+and does not move when the squad moves on in later turns; a destroyed squad's last figures lie on
+its last tile, so every destroyed squad leaves exactly four bodies across the tiles it crossed (a
+squad lost with a demolished bridge leaves none). Bodies stay for the whole match, show only on
+ground the viewer has seen, are never an obstacle and touch no rule; a destroyed squad also leaves
+a restrained scorch. Effects attach only to units the current player can see, the attacker's muzzle flash included.
 Sizes, durations, colours and sources: [`art/damage-fx-research.md`](art/damage-fx-research.md).
 
 

@@ -26,9 +26,10 @@ uniform float wheel_radius = 0.06;
 const float TREAD_PERIOD = 0.25;
 const float TREAD_STRIP = 0.0625;
 // Загиблий темніший і бурий за живого: стоячі фігури — це HP відділення, тож лежачі не сміють
-// із ними зливатися. Тон — FALLEN_COLOR коробок-заступників (unit_silhouettes.gd), лінійний.
+// із ними зливатися. Тон — FALLEN_COLOR коробок-заступників (unit_silhouettes.gd), лінійний. Лежачий
+// звернений спиною до неба й освітлений сильніше за стоячого, тож тон майже повний, а не половинний.
 const vec3 FALLEN_TONE = vec3(0.041, 0.034, 0.025);
-const float FALLEN_MIX = 0.6;
+const float FALLEN_MIX = 0.85;
 
 instance uniform float travel = 0.0;
 
