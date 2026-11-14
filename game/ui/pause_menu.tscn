@@ -1,7 +1,32 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://game/ui/pause_menu.gd" id="1_pause"]
-[ext_resource type="Theme" path="res://game/ui/theme/ap_theme.tres" id="2_theme"]
+[ext_resource type="Theme" path="res://game/ui/theme/hud_theme.tres" id="2_theme"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/resume.svg" id="3_resume"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/settings.svg" id="4_settings"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/save_exit.svg" id="5_save"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/surrender.svg" id="6_surrender"]
+
+[sub_resource type="StyleBoxFlat" id="hair_outline"]
+bg_color = Color(0, 0, 0, 0)
+draw_center = false
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2275, 0.2510, 0.2627, 1)
+content_margin_left = 13.0
+content_margin_right = 16.0
+
+[sub_resource type="StyleBoxFlat" id="hair_outline_pressed"]
+bg_color = Color(1, 1, 1, 0.06)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2275, 0.2510, 0.2627, 1)
+content_margin_left = 13.0
+content_margin_right = 16.0
 
 [node name="PauseMenu" type="Control"]
 layout_mode = 3
@@ -15,14 +40,28 @@ script = ExtResource("1_pause")
 
 [node name="Scrim" type="ColorRect" parent="."]
 layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.04, 0.05, 0.06, 1)
+color = Color(0.050980393, 0.0627451, 0.07450981, 1)
+
+[node name="Plate" type="TextureRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
 
 [node name="Scroll" type="ScrollContainer" parent="."]
 layout_mode = 1
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
@@ -35,53 +74,104 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 
 [node name="Card" type="PanelContainer" parent="Scroll/Center"]
-custom_minimum_size = Vector2(380, 0)
+texture_filter = 1
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
+theme_type_variation = &"HudPlateSolid"
 
-[node name="Body" type="VBoxContainer" parent="Scroll/Center/Card"]
+[node name="Pad" type="MarginContainer" parent="Scroll/Center/Card"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 14
+
+[node name="Body" type="VBoxContainer" parent="Scroll/Center/Card/Pad"]
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="Title" type="Label" parent="Scroll/Center/Card/Body"]
+[node name="TitleRow" type="HBoxContainer" parent="Scroll/Center/Card/Pad/Body"]
 layout_mode = 2
-horizontal_alignment = 1
-theme_override_colors/font_color = Color(0.95, 0.9, 0.74, 1)
-theme_override_font_sizes/font_size = 30
+
+[node name="Title" type="Label" parent="Scroll/Center/Card/Pad/Body/TitleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"HudTitle"
 text = "pause_title"
 
-[node name="Sep" type="HSeparator" parent="Scroll/Center/Card/Body"]
+[node name="MapBox" type="HBoxContainer" parent="Scroll/Center/Card/Pad/Body/TitleRow"]
 layout_mode = 2
+size_flags_vertical = 8
+theme_override_constants/separation = 6
 
-[node name="ResumeButton" type="Button" parent="Scroll/Center/Card/Body"]
+[node name="MapCaption" type="Label" parent="Scroll/Center/Card/Pad/Body/TitleRow/MapBox"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
-size_flags_horizontal = 3
+size_flags_vertical = 8
+theme_type_variation = &"HudCaption"
+text = "hud_map"
+
+[node name="MapValue" type="Label" parent="Scroll/Center/Card/Pad/Body/TitleRow/MapBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 8
+theme_type_variation = &"HudLabel"
+
+[node name="Rows" type="VBoxContainer" parent="Scroll/Center/Card/Pad/Body"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ResumeButton" type="Button" parent="Scroll/Center/Card/Pad/Body/Rows"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_type_variation = &"HudPrimaryButton"
 text = "pause_resume"
+icon = ExtResource("3_resume")
+alignment = 0
 
-[node name="SettingsButton" type="Button" parent="Scroll/Center/Card/Body"]
+[node name="SettingsButton" type="Button" parent="Scroll/Center/Card/Pad/Body/Rows"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-size_flags_horizontal = 3
+theme_type_variation = &"HudPlateButton"
 text = "pause_settings"
+icon = ExtResource("4_settings")
+alignment = 0
 
-[node name="SaveQuitButton" type="Button" parent="Scroll/Center/Card/Body"]
+[node name="SaveQuitButton" type="Button" parent="Scroll/Center/Card/Pad/Body/Rows"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-size_flags_horizontal = 3
+theme_type_variation = &"HudPlateButton"
 text = "pause_save_quit"
+icon = ExtResource("5_save")
+alignment = 0
 
-[node name="SurrenderButton" type="Button" parent="Scroll/Center/Card/Body"]
+[node name="Divider" type="MarginContainer" parent="Scroll/Center/Card/Pad/Body/Rows"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
-size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0.85, 0.5, 0.42, 1)
-text = "pause_surrender"
+theme_override_constants/margin_top = 4
 
-[node name="ErrorLabel" type="Label" parent="Scroll/Center/Card/Body"]
+[node name="Hair" type="ColorRect" parent="Scroll/Center/Card/Pad/Body/Rows/Divider"]
+custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
+color = Color(0.2275, 0.2510, 0.2627, 1)
+
+[node name="SurrenderButton" type="Button" parent="Scroll/Center/Card/Pad/Body/Rows"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_type_variation = &"HudPlateButtonMuted"
+theme_override_styles/normal = SubResource("hair_outline")
+theme_override_styles/hover = SubResource("hair_outline")
+theme_override_styles/pressed = SubResource("hair_outline_pressed")
+theme_override_styles/focus = SubResource("hair_outline")
+text = "pause_surrender"
+icon = ExtResource("6_surrender")
+alignment = 0
+
+[node name="ErrorLabel" type="Label" parent="Scroll/Center/Card/Pad/Body"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -89,30 +179,78 @@ horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.85, 0.5, 0.42, 1)
 text = "pause_save_failed"
 
-[node name="ConfirmBox" type="VBoxContainer" parent="Scroll/Center/Card/Body"]
+[node name="ConfirmBox" type="VBoxContainer" parent="Scroll/Center/Card/Pad/Body"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 8
 
-[node name="ConfirmLabel" type="Label" parent="Scroll/Center/Card/Body/ConfirmBox"]
-custom_minimum_size = Vector2(340, 0)
+[node name="ConfirmLabel" type="Label" parent="Scroll/Center/Card/Pad/Body/ConfirmBox"]
+custom_minimum_size = Vector2(264, 0)
 layout_mode = 2
+theme_type_variation = &"HudLabel"
 horizontal_alignment = 1
 autowrap_mode = 3
 text = "pause_surrender_confirm"
 
-[node name="ConfirmYesButton" type="Button" parent="Scroll/Center/Card/Body/ConfirmBox"]
+[node name="ConfirmYesButton" type="Button" parent="Scroll/Center/Card/Pad/Body/ConfirmBox"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-size_flags_horizontal = 3
-theme_override_colors/font_color = Color(0.85, 0.5, 0.42, 1)
+theme_type_variation = &"HudPlateButtonMuted"
+theme_override_styles/normal = SubResource("hair_outline")
+theme_override_styles/hover = SubResource("hair_outline")
+theme_override_styles/pressed = SubResource("hair_outline_pressed")
+theme_override_styles/focus = SubResource("hair_outline")
 text = "pause_surrender_yes"
 
-[node name="ConfirmCancelButton" type="Button" parent="Scroll/Center/Card/Body/ConfirmBox"]
+[node name="ConfirmCancelButton" type="Button" parent="Scroll/Center/Card/Pad/Body/ConfirmBox"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-size_flags_horizontal = 3
+theme_type_variation = &"HudPrimaryButton"
 text = "pause_surrender_cancel"
+
+[node name="InfoLine" type="HBoxContainer" parent="Scroll/Center/Card/Pad/Body"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="GroundIcon" type="TextureRect" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
+unique_name_in_owner = true
+texture_filter = 2
+custom_minimum_size = Vector2(18, 18)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+modulate = Color(0.5608, 0.5686, 0.5412, 1)
+expand_mode = 1
+stretch_mode = 5
+
+[node name="TurnCaption" type="Label" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudDim"
+text = "hud_turn"
+
+[node name="TurnValue" type="Label" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudNumberTag"
+
+[node name="Dot" type="Label" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
+layout_mode = 2
+theme_type_variation = &"HudDim"
+text = "·"
+
+[node name="GroundCaption" type="Label" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudDim"
+text = "hud_ground_line"
+
+[node name="GroundValue" type="Label" parent="Scroll/Center/Card/Pad/Body/InfoLine"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudName"
+theme_override_font_sizes/font_size = 13

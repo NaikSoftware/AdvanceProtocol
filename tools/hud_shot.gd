@@ -181,9 +181,9 @@ func _enter_state(st: String) -> bool:
 		"mood":
 			pass
 		"handover":
-			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1)
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1, 3)
 		"pause":
-			(_screen.get_node("%PauseMenu") as Control).show()
+			(_screen.get_node("%PauseMenu") as PauseMenu).open(3)
 		_:
 			push_error("hud_shot: невідомий стан %s" % st)
 			return false

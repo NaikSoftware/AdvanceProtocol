@@ -214,7 +214,7 @@ func _ready() -> void:
 	_pause.settings_requested.connect(_open_settings)
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
-	_hud.pause_pressed.connect(_pause.show)
+	_hud.pause_pressed.connect(_open_pause)
 	_camera_rig.view_changed.connect(_follow_weather)
 	_camera_rig.view_changed.connect(_follow_forest)
 	_follow_forest()
@@ -263,7 +263,7 @@ func launch(match_service: Node) -> void:
 	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
 	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
 	_clear_unit_views()
-	_gate.show_for(_match_service.state.active_player)
+	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number)
 	_warm_board()
 
 
@@ -291,6 +291,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
 	_board_view.ring_map = map_data
+	_set_overlay_context(map_data)
 	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
 	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
 	_board_view.season = look.season
@@ -337,6 +338,7 @@ func resume(match_service: Node = null) -> void:
 		_board_view.surface = saved_map.surface
 		_board_view.relief_seed = saved_map.name_key.hash()
 		_board_view.ring_map = saved_map
+	_set_overlay_context(load(mp) as MapData if mp != "" and ResourceLoader.exists(mp) else _FallbackMap)
 	var look: BattleLook = BattleLook.for_map_path(mp)
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
@@ -345,7 +347,7 @@ func resume(match_service: Node = null) -> void:
 	_weather.apply(look)
 	BattleFx.wetness = look.wetness
 	_wire_view(_match_service.state.board)
-	_gate.show_for(_match_service.state.active_player)
+	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number)
 	_warm_board()
 	_match_service.events_ready.connect(_on_events_ready)
 	_match_service.launch_mode = MatchService.Launch.NONE
@@ -440,10 +442,21 @@ func _notification(what: int) -> void:
 			elif _pause.visible:
 				_pause.hide()
 			else:
-				_pause.show()
+				_open_pause()
 		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST:
 			if _match_service != null and _match_service.state != null:
 				_match_service.save_current(save_path)
+
+
+## Гейт і пауза показують карту й ґрунт; вони незмінні протягом матчу.
+func _set_overlay_context(map_data: MapData) -> void:
+	var ground: int = _match_service.state.board.ground_state
+	_gate.set_context(map_data.resource_path, map_data.name_key, ground)
+	_pause.set_context(map_data.resource_path, map_data.name_key, ground)
+
+
+func _open_pause() -> void:
+	_pause.open(_match_service.state.turn_number)
 
 
 ## Налаштування з паузи відкриваються поверх бою, а не заміною сцени: бій
@@ -942,7 +955,7 @@ func _on_events_ready() -> void:
 		# Те, що ламається, обривається разом з миттями: інакше падіння, що доходить під гейтом, показало б
 		# наступному гравцеві пил над клітинкою, яку він не розвідав.
 		_cancel_falls()
-		_gate.show_for(_match_service.state.active_player)
+		_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
 		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
 		# перебудова поставила б вузли миттєво й з'їла б анімацію повороту.

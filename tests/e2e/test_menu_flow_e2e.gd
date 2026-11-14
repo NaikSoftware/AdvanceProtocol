@@ -127,6 +127,7 @@ func _dict() -> String:
 
 
 func _confirm_gate() -> void:
+	_gate().entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
 	await _click(_gate().get_node("%ConfirmButton"))
 	await _e2e.wait_until(func() -> bool: return not _gate().visible, "гейт зник")
 

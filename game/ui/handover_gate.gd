@@ -52,6 +52,11 @@ extends Control
 ##    покаже дошку навколо або поверх себе — суцільна непрозорість стає
 ##    декором, не гейтом.
 ##
+## 6. Вхідна анімація (один твін, 350 мс) рухає лише акценти: фон, підпис, інфо-плита й
+##    кнопка стоять з першого кадру, гейт сам ніколи не з'являється плавно (крок 1).
+##    «Готово» не реагує, доки твін не скінчився: подвійний тап гравця, що виходить,
+##    по «Кінець ходу» не сміє заодно зняти гейт.
+##
 ## Ця сцена свідомо НЕ підписується на Events.TurnStarted сама — контейнера
 ## юнітів і живої battle_screen.tscn ще нема (вони з'являються в Task 2.10),
 ## і саме той файл вирішує, коли викликати show_for() і в якому порядку
@@ -62,26 +67,117 @@ extends Control
 ## взагалі (перевірено тестом), а не лише прихована.
 signal confirmed
 
+const _PLATE_PATH := "res://assets/ui/gate/%s.webp"
+const _DEFAULT_PLATE := "res://assets/ui/gate/default.webp"
+## Ширина нікнейм-плити й інфо-плити одна: ширина інфо-плити, не менша за це.
+const MIN_WIDTH := 400.0
+const ENTRANCE_S := 0.35
+const SLIDE_DP := 12.0
+const _HORIZON_ALPHA := 0.7
+const _GROUND_KEYS: Dictionary = {
+	Terrain.GroundState.DRY: "handover_ground_dry",
+	Terrain.GroundState.MUD: "handover_ground_mud",
+	Terrain.GroundState.FROZEN: "handover_ground_frozen",
+}
+const _GROUND_ICONS: Dictionary = {
+	Terrain.GroundState.DRY: preload("res://assets/ui/icons/ground_dry.svg"),
+	Terrain.GroundState.MUD: preload("res://assets/ui/icons/ground_mud.svg"),
+	Terrain.GroundState.FROZEN: preload("res://assets/ui/icons/ground_frozen.svg"),
+}
+
+## Лишається публічним, щоб тест міг докрутити твін вручну (custom_step), не чекаючи реального часу.
+var entrance_tween: Tween
+
+var _accepting: bool = false
+var _map_name_key: String = ""
+var _ground_state: int = Terrain.GroundState.DRY
+
 @onready var _player_value: Label = %PlayerValue
 @onready var _confirm_button: Button = %ConfirmButton
+@onready var _plate: TextureRect = %Plate
+@onready var _caption: Label = %Caption
+@onready var _info_plate: PanelContainer = %InfoPlate
+@onready var _name_slide: Control = %NameSlide
+@onready var _nameplate: Control = %Nameplate
+@onready var _wipes: Array[Control] = [%RuleTop, %RuleBottom, %Horizon]
 
 
 func _ready() -> void:
 	_confirm_button.pressed.connect(_on_confirm_pressed)
+	for w in _wipes:
+		w.pivot_offset_ratio = Vector2(0.5, 0.5)
+
+
+## Плита-фон за ім'ям ресурсу карти (maps/river.tres -> river.webp); для карти без плити
+## (редактор робить нові) — загальна темна. Плита запечена офлайн: у ній немає юнітів.
+## Пауза бере ту саму плиту.
+static func plate_for(map_path: String) -> Texture2D:
+	var path: String = _PLATE_PATH % map_path.get_file().get_basename()
+	if map_path == "" or not ResourceLoader.exists(path):
+		path = _DEFAULT_PLATE
+	return load(path) as Texture2D
+
+
+static func ground_icon(ground_state: int) -> Texture2D:
+	return _GROUND_ICONS[ground_state]
+
+
+## Карта і ґрунт незмінні протягом матчу: сцена бою задає їх раз, а не на кожному show_for.
+func set_context(map_path: String, name_key: String, ground_state: int) -> void:
+	_plate.texture = plate_for(map_path)
+	_map_name_key = name_key
+	_ground_state = ground_state
 
 
 ## Показує гейт для гравця, що заходить. Синхронно й одразу непрозоро —
 ## жодного проміжного кадру з часткою прозорості (§3.5 «жодної анімації
 ## проїзду»). player — 0-based індекс, як і скрізь у BattleState; на екрані
-## показується 1-based (той самий стиль, що hud.gd:108).
+## показується 1-based. turn — номер кола (BattleState.turn_number).
 ##
 ## Кнопка тут же вмикається заново: попередній show_for міг лишити її
 ## вимкненою (див. _on_confirm_pressed) — новий виклик мусить давати новий
 ## шанс натиснути, а не успадковувати «вже натиснуто» від чужого ходу.
-func show_for(player: int) -> void:
-	_player_value.text = str(player + 1)
+func show_for(player: int, turn: int = 1) -> void:
+	_player_value.text = "%s %d" % [tr("hud_player"), player + 1]
+	# Тема не вміє верхній регістр, тож підписи капсом — з коду.
+	_caption.text = tr("handover_pass_device").to_upper()
+	%TurnCaption.text = tr("hud_turn").to_upper()
+	%TurnValue.text = str(turn)
+	%MapCaption.text = tr("hud_map").to_upper()
+	%MapValue.text = tr(_map_name_key) if _map_name_key != "" else "-"
+	%GroundIcon.texture = ground_icon(_ground_state)
+	%GroundLabel.text = tr(_GROUND_KEYS[_ground_state])
+	_fit_width()
 	_confirm_button.disabled = false
 	visible = true
+	_play_entrance(UnitView.PLAYER_COLORS[player % UnitView.PLAYER_COLORS.size()])
+
+
+## Одна ширина на нікнейм-плиту й інфо-плиту: природна ширина інфо-плити, не менша за MIN_WIDTH.
+func _fit_width() -> void:
+	_info_plate.custom_minimum_size.x = 0.0
+	var width: float = maxf(MIN_WIDTH, _info_plate.get_combined_minimum_size().x)
+	_info_plate.custom_minimum_size.x = width
+	_name_slide.custom_minimum_size.x = width
+
+
+func _play_entrance(player_color: Color) -> void:
+	if entrance_tween != null:
+		entrance_tween.kill()
+	_accepting = false
+	%RuleTop.color = player_color
+	%RuleBottom.color = player_color
+	%Horizon.color = Color(player_color, _HORIZON_ALPHA)
+	for w in _wipes:
+		w.scale.x = 0.0
+	_nameplate.position.y = SLIDE_DP
+	_nameplate.modulate.a = 0.0
+	entrance_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	for w in _wipes:
+		entrance_tween.tween_property(w, "scale:x", 1.0, ENTRANCE_S)
+	entrance_tween.tween_property(_nameplate, "position:y", 0.0, ENTRANCE_S)
+	entrance_tween.tween_property(_nameplate, "modulate:a", 1.0, ENTRANCE_S)
+	entrance_tween.chain().tween_callback(func() -> void: _accepting = true)
 
 
 ## §3.5/крок 3 контракту: поки панель ще на екрані, Task 2.10 виконує
@@ -92,7 +188,7 @@ func show_for(player: int) -> void:
 ## знає про сам факт натискання, тож саме він і мусить це гасити, а не
 ## Task 2.10 здогадуватися про дебаунс ззовні.
 func _on_confirm_pressed() -> void:
-	if _confirm_button.disabled:
+	if not _accepting or _confirm_button.disabled:
 		return
 	_confirm_button.disabled = true
 	confirmed.emit()

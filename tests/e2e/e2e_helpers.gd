@@ -233,6 +233,8 @@ func end_turn() -> void:
 
 
 func confirm_gate() -> void:
+	# «Готово» ігнорує ввід до кінця вхідного твіну гейта; докручуємо його, не чекаючи реального часу.
+	gate().entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
 	press(gate().get_node("%ConfirmButton"))
 	await settle()
 

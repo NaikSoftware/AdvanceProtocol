@@ -18,6 +18,11 @@ func before_each() -> void:
 	add_child_autofree(gate)
 
 
+## Твін входу (350 мс) докручуємо вручну: реального часу тест не чекає.
+func _finish_entrance() -> void:
+	gate.entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
+
+
 # --- Крок 1: непрозора, повна, видима панель, ввід заблокований -----------
 
 func test_show_for_makes_the_gate_visible() -> void:
@@ -93,6 +98,7 @@ func test_confirmed_is_not_emitted_by_time_passing() -> void:
 func test_pressing_confirm_emits_confirmed_exactly_once() -> void:
 	gate.show_for(0)
 	watch_signals(gate)
+	_finish_entrance()
 	var button: Button = gate.get_node("%ConfirmButton") as Button
 
 	button.pressed.emit()
@@ -107,6 +113,7 @@ func test_pressing_confirm_emits_confirmed_exactly_once() -> void:
 func test_second_press_before_show_for_is_called_again_emits_nothing_more() -> void:
 	gate.show_for(0)
 	watch_signals(gate)
+	_finish_entrance()
 	var button: Button = gate.get_node("%ConfirmButton") as Button
 
 	button.pressed.emit()
@@ -120,6 +127,7 @@ func test_second_press_before_show_for_is_called_again_emits_nothing_more() -> v
 
 func test_show_for_re_enables_the_confirm_button_for_the_next_player() -> void:
 	gate.show_for(0)
+	_finish_entrance()
 	var button: Button = gate.get_node("%ConfirmButton") as Button
 	button.pressed.emit()
 	assert_true(button.disabled, "передумова: перше підтвердження вимкнуло кнопку")
@@ -165,23 +173,22 @@ func test_announced_player_is_the_one_passed_in() -> void:
 	gate.show_for(2)
 
 	var player_value: Label = gate.get_node("%PlayerValue") as Label
-	assert_eq(player_value.text, "3", "показаний номер — 1-based, той самий стиль, що й hud.gd:108")
+	assert_eq(player_value.text, "%s 3" % tr("hud_player"), "показаний номер — 1-based")
 
 
 func test_announced_player_updates_on_a_second_call() -> void:
 	gate.show_for(0)
-	assert_eq((gate.get_node("%PlayerValue") as Label).text, "1")
+	assert_eq((gate.get_node("%PlayerValue") as Label).text, "%s 1" % tr("hud_player"))
 
 	gate.show_for(1)
 
-	assert_eq((gate.get_node("%PlayerValue") as Label).text, "2")
+	assert_eq((gate.get_node("%PlayerValue") as Label).text, "%s 2" % tr("hud_player"))
 
 
 # --- R29: жоден підпис не є захардкодженим рядком ---------------------------
 
 func test_no_user_facing_label_is_a_hard_coded_literal() -> void:
-	gate.show_for(0)
-
+	# Підписи, що їх show_for підставляє з tr(), тут не рахуються: перевіряється те, що написане у сцені.
 	var texts: Array[String] = []
 	_collect_texts(gate, texts)
 
@@ -215,3 +222,62 @@ func test_confirm_button_is_at_least_48_dp_tall() -> void:
 func test_gate_does_no_per_frame_work() -> void:
 	assert_false(gate.is_processing(), "правила й показ не живуть у _process (§9)")
 	assert_false(gate.is_physics_processing())
+
+
+# --- «Field Tablet»: вхідний твін, фон, ширина ----------------------------------
+
+func test_confirm_is_ignored_until_the_entrance_tween_ends() -> void:
+	gate.show_for(0)
+	watch_signals(gate)
+	var button: Button = gate.get_node("%ConfirmButton") as Button
+
+	button.pressed.emit()
+	assert_signal_not_emitted(gate, "confirmed", "тап під час твіну не знімає гейт")
+	assert_false(button.disabled, "проігнорований тап не вимикає кнопку")
+
+	_finish_entrance()
+	button.pressed.emit()
+	assert_signal_emit_count(gate, "confirmed", 1)
+
+
+func test_gate_is_opaque_from_the_first_frame_and_only_accents_animate() -> void:
+	gate.show_for(1)
+
+	assert_eq((gate.get_node("%Panel") as ColorRect).color, Color("0d1013"))
+	assert_eq(gate.modulate.a, 1.0, "сам гейт ніколи не з'являється плавно")
+	assert_almost_eq((gate.get_node("%RuleTop") as Control).scale.x, 0.0, 0.0001, "Godot не дає масштабу стати рівно 0")
+	assert_eq((gate.get_node("%Nameplate") as Control).modulate.a, 0.0)
+
+	_finish_entrance()
+	assert_eq((gate.get_node("%RuleTop") as Control).scale.x, 1.0)
+	assert_eq((gate.get_node("%Horizon") as Control).scale.x, 1.0)
+	assert_eq((gate.get_node("%Nameplate") as Control).modulate.a, 1.0)
+	assert_eq((gate.get_node("%Nameplate") as Control).position.y, 0.0)
+
+
+func test_rules_use_the_incoming_players_colour() -> void:
+	gate.show_for(1)
+
+	assert_eq((gate.get_node("%RuleTop") as ColorRect).color, UnitView.PLAYER_COLORS[1])
+	assert_eq((gate.get_node("%Horizon") as ColorRect).color, Color(UnitView.PLAYER_COLORS[1], 0.7))
+
+
+func test_backdrop_plate_follows_the_map_resource_name_with_a_default_fallback() -> void:
+	assert_eq(HandoverGate.plate_for("res://maps/river.tres").resource_path, "res://assets/ui/gate/river.webp")
+	assert_eq(HandoverGate.plate_for("res://maps/ridge.tres").resource_path, "res://assets/ui/gate/ridge.webp")
+	assert_eq(HandoverGate.plate_for("user://maps/new_one.tres").resource_path, "res://assets/ui/gate/default.webp")
+	assert_eq(HandoverGate.plate_for("").resource_path, "res://assets/ui/gate/default.webp")
+
+
+func test_info_plate_shows_turn_map_and_ground_and_shares_its_width_with_the_nameplate() -> void:
+	gate.set_context("res://maps/river.tres", "map_river", Terrain.GroundState.MUD)
+
+	gate.show_for(0, 3)
+
+	assert_eq((gate.get_node("%TurnValue") as Label).text, "3")
+	assert_eq((gate.get_node("%MapValue") as Label).text, tr("map_river"))
+	assert_eq((gate.get_node("%GroundLabel") as Label).text, tr("handover_ground_mud"))
+	assert_eq((gate.get_node("%GroundIcon") as TextureRect).texture, HandoverGate.ground_icon(Terrain.GroundState.MUD))
+	var info: Control = gate.get_node("%InfoPlate") as Control
+	assert_eq((gate.get_node("%NameSlide") as Control).custom_minimum_size.x, info.custom_minimum_size.x)
+	assert_gte(info.custom_minimum_size.x, HandoverGate.MIN_WIDTH)
