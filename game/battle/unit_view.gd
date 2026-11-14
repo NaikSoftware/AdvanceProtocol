@@ -155,6 +155,8 @@ var _unit_id: int = -1
 var _type_id: int = 0
 var _owner: int = 0
 var _standing: int = 0
+## Розкладка місць відділення (`UnitSilhouettes.pick_layout()`); її ж бере тінь-контакт під ногами.
+var _layout: int = 0
 var _drones_left: int = 0
 ## Останнє показане співвідношення HP. Джерело правди замість колишнього
 ## _hp_bar.scale.x — заливка тепер намальована ВСЕРЕДИНІ текстури, тож
@@ -650,13 +652,19 @@ func standing_figures() -> int:
 	return _standing
 
 
+func layout() -> int:
+	return _layout
+
+
 ## Відділення несе лише стоячих: хто впав, лежить у шарі тіл (`WreckLayer`) там, де впав.
 func _set_standing(count: int) -> void:
 	if not (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures"):
 		_standing = 0
 		return
 	_standing = count
-	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left)
+	# Розкладка — за id юніта й нинішнім напрямом: стоячі не стають один за одним уздовж погляду камери.
+	_layout = UnitSilhouettes.pick_layout(_unit_id, rotation.y, count)
+	(_silhouette.get_node("Hull") as MeshInstance3D).mesh = UnitSilhouettes.merged_mesh(_type_id, count, _set_id(), _drones_left, _layout)
 
 
 ## Твінує _silhouette, а не self: self.scale належить play_destroyed() відділення, і два
@@ -777,7 +785,7 @@ func contact_transforms() -> Array[Transform3D]:
 		if not shown or i >= _standing:
 			out.append(UnitContacts.HIDDEN)
 			continue
-		var feet: Vector3 = UnitSilhouettes.figure_transform(i, true).origin
+		var feet: Vector3 = UnitSilhouettes.figure_transform(i, true, _layout).origin
 		var xf: Transform3D = _silhouette.global_transform * Transform3D(Basis.from_scale(Vector3(FIGURE_CONTACT_SIZE, 1.0, FIGURE_CONTACT_SIZE)), Vector3(feet.x, 0.06, feet.z))
 		xf.origin += Vector3(shift.x, 0.0, shift.y)
 		out.append(xf)

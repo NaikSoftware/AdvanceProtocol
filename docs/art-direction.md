@@ -113,22 +113,32 @@ falls back to the box placeholder, so a model may land one type at a time.
 - **Path** `res://assets/units/<slug>.glb`, by type id: 0 `rifle_soldier`, 1 `assault_soldier`,
   2 `armoured_car`, 3 `troop_carrier`, 4 `scout_car`, 5 `medium_tank`, 6 `tank_destroyer`,
   7 `light_tank`, 8 `heavy_tank`, 9 `field_gun`, 10 `howitzer`, 11 `engineer_vehicle`.
-- **Soldiers.** A squad is four figures on fixed slots, each turned by its own small fixed yaw so
-  they do not read as clones. `rifle_soldier` is the plain soldier; `assault_soldier` is the same
-  figure with the drone launch tube (1.52 × 0.19 m, light tan with dark end caps, upright on the
-  back, bottom at hip height, top 0.6 m above the helmet). Both come out of one run of
-  `tools/blender/units/figure.py` (units.json `rifle_soldier.figure`) on the same atlas layout,
-  because an assault squad mixes them under the assault model's material in one draw call. An
-  assault squad carries as many tubes as it has drones left (0–2, public by §3.9), on its first
-  standing slots, which fall last; the rest are plain figures, so at 0 drones it looks like a rifle
-  squad, which by then it is. The fallen lie face down as the plain figure, darkened by the unit
-  shader. Each standing soldier has its own contact shadow, a 0.9 m quad (about 0.6 m of visible
-  core) under his feet at 0.65 of the map's vehicle strength: the ground under him drops 5–10 L*,
-  never to black; the fallen have none. Slot 0's cloth is plain olive, uniform and helmet
-  (149, 147, 95), plate carrier (119, 119, 78), up-facing cloth lifted ×1.3 and faded 40 % to grey,
-  gloves, boots and rifle dark: a middle-value olive sits on the maps' ground, and this is the tone
-  that passes the contrast gate at the closest zoom (`unit_contrast_gate.py --zoom 6`, whole squad). A set's soldiers drop in through the same path (`set<N>/rifle_soldier.glb` and
-  `set<N>/assault_soldier.glb` with their `_SET_SPECS` rows).
+- **Soldiers.** A squad is four figures on a square of 1.6 m sides turned 22.5° from the squad's
+  axes, so from any of the 8 facings no two stand one behind another along the camera's view.
+  Each squad takes one of 8 fixed layouts (each slot shifted up to 0.2 m and turned up to 20°),
+  picked from the unit's id among those that keep the standing figures at least 0.4 m apart across
+  the view, so squads are not all the same diamond. `rifle_soldier` is the plain soldier;
+  `assault_soldier` is the same figure with the drone launch tube (1.52 × 0.19 m, dark olive with
+  dark end caps, upright on the back, bottom at hip height, top 0.6 m above the helmet);
+  `rifle_soldier_body` is the fallen one, a separate mesh lying on his side with knees bent, an arm
+  under the torso and the rifle on the ground beside him. All three come out of one run of
+  `tools/blender/units/figure.py` (units.json `rifle_soldier.figure`) on the same atlas layout:
+  an assault squad mixes the first two under the assault model's material in one draw call, and
+  the fallen of a national set are one `MultiMesh` under a copy of the plain soldier's material
+  with the shader uniform `fallen`, which darkens them. An assault squad carries as many tubes as
+  it has drones left (0–2, public by §3.9), on its first standing slots, which fall last; the rest
+  are plain figures, so at 0 drones it looks like a rifle squad, which by then it is. Each body
+  lies on a ring around the tile's centre, clear of the standing slots, with a fixed seeded shift
+  of up to 0.3 m and turn, its long axis at least 35° off the camera's view (along it, a body
+  foreshortens into a standing shape). Each standing soldier has its own contact shadow, a
+  0.9 m quad (about 0.6 m of visible core) under his feet at 0.65 of the map's vehicle strength:
+  the ground under him drops 5–10 L*, never to black; the fallen have none. Slot 0's cloth is
+  plain olive, uniform and helmet (140, 148, 108), plate carrier (108, 114, 82), up-facing cloth
+  lifted ×1.3 and faded 40 % to grey, gloves, boots and rifle dark: a middle-value olive sits on
+  the maps' ground, and the contrast gate passes at this lightness (`unit_contrast_gate.py`,
+  whole squad; `--zoom 6` for the closest zoom). A set's soldiers drop in through the same path
+  (`set<N>/rifle_soldier.glb`, `set<N>/assault_soldier.glb` and `set<N>/rifle_soldier_body.glb`
+  with their `_SET_SPECS` rows).
 - **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
   baked in on load, but a rotation off the X axis would misplace the wheel axles). Base colour
   texture, optional normal and glTF metallicRoughness (roughness in G, metallic in B), ≤ 1024 px.
@@ -148,8 +158,7 @@ falls back to the box placeholder, so a model may land one type at a time.
   `UnitSilhouettes.muzzle()`, because muzzle flashes, wrecks and contact shadows read those
   numbers, not the mesh. A soldier is 1.8 m = 0.225 units tall, feet at y = 0.
 - **COLOR_0** (RGBA, black elsewhere): **R** = 0 everywhere — units carry no team colour; the side is
-  shown by the HP bar fill, and units are told apart by shape. The game sets R = 1 on a fallen
-  soldier's copy, which the unit shader darkens. **G** = track tread faces. **B** = wheel faces that rotate; their alpha is
+  shown by the HP bar fill, and units are told apart by shape. **G** = track tread faces. **B** = wheel faces that rotate; their alpha is
   half the wheel's spin rate relative to the road wheels: the model's road-wheel radius / (2 × its
   own radius), the road-wheel radius being what `_SPECS.wheel` matches within 0.002. 0.5 on road
   wheels, above 0.5 on a smaller sprocket or idler and below it on a larger one (the heavy tank's
@@ -344,9 +353,12 @@ lasting damage. A destroyed vehicle burns, then smokes, and leaves a burnt-out w
 vehicles for a few turns ([§3.14](../CLAUDE.md)). A squad loses figures as its HP drops — one of
 four per quarter lost. A soldier who falls stays on the tile where his squad stood when it was hit
 and does not move when the squad moves on in later turns; a destroyed squad's last figures lie on
-its last tile, so every destroyed squad leaves exactly four bodies across the tiles it crossed (a
-squad lost with a demolished bridge leaves none). Bodies stay for the whole match, show only on
-ground the viewer has seen, are never an obstacle and touch no rule; a destroyed squad also leaves
+its last tile. Every figure lost leaves a body, also after an engineer's repair, so a repaired
+squad can leave more than four. Bodies on a bridge span go into the river with it, and a squad
+lost with a demolished bridge leaves none. Bodies stay for the whole match and show only to a
+player who has seen their tile; once shown they stay shown, so a squad hiding again in its
+building on that tile is not given away by them vanishing. They are never an obstacle and touch
+no rule; a destroyed squad also leaves
 a restrained scorch. Effects attach only to units the current player can see, the attacker's muzzle flash included.
 Sizes, durations, colours and sources: [`art/damage-fx-research.md`](art/damage-fx-research.md).
 

@@ -1562,3 +1562,31 @@ func test_resume_gives_the_mine_layer_the_drawn_road_surface() -> void:
 	assert_eq(layer.surface, m.surface)
 	assert_true(layer.get_node("Mines_0").has_node("Mine_2_2"))
 	DirAccess.remove_absolute(path)
+
+
+## Бійці падають у мить влучання, але програвач не фільтрує подій за глядачем (§6): тіло на тайлі, якого
+## глядач не розвідав, на екрані не з'являється, а на розвіданому — лягає одразу.
+func test_a_falling_body_shows_only_if_the_viewer_has_been_shown_it() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(20, 6)
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(18, 4), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(2, 1), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var state: BattleState = service.state
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	var far: Unit = state.unit_at(Vector2i(18, 4))
+	var near: Unit = state.unit_at(Vector2i(2, 1))
+	assert_false(state.vision[0].is_seen(far.pos), "передумова: далеке відділення на нерозвіданому")
+	far.hp = 40
+	var hidden: Casualties.Body = (Casualties.record(state, far, 100)[0] as Events.FiguresFell).body
+	screen._on_figures_fell(hidden)
+	assert_eq(layer.fallen_count(), 0, "тіло на нерозвіданому — донос про бій")
+	near.hp = 40
+	var seen: Casualties.Body = (Casualties.record(state, near, 100)[0] as Events.FiguresFell).body
+	screen._on_figures_fell(seen)
+	assert_eq(layer.fallen_count(), seen.count, "на розвіданому — лягає одразу")

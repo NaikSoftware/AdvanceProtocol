@@ -18,6 +18,8 @@ var map: MapData = null
 var _views: Array[UnitView] = []
 var _placed: Array[Transform3D] = []
 var _road: Array[float] = []
+## Сила плями слота, поставлена в дані екземпляра (.g): без неї шейдер мав би 0 і ховав би кожну пляму.
+var _strength: Array[float] = []
 
 
 func _init() -> void:
@@ -102,6 +104,9 @@ func _resize() -> void:
 	_road.clear()
 	_road.resize(n)
 	_road.fill(-1.0)
+	_strength.clear()
+	_strength.resize(n)
+	_strength.fill(0.0)
 	for i in n:
 		multimesh.set_instance_transform(i, HIDDEN)
 	sync()
@@ -117,12 +122,18 @@ func sync() -> void:
 		var road: float = 1.0 if _on_road(view) else 0.0
 		var k: float = view.contact_strength()
 		for xf: Transform3D in view.contact_transforms():
-			if xf != _placed[slot] or road != _road[slot]:
+			if xf != _placed[slot] or road != _road[slot] or k != _strength[slot]:
 				_placed[slot] = xf
 				_road[slot] = road
+				_strength[slot] = k
 				multimesh.set_instance_transform(slot, xf)
 				multimesh.set_instance_custom_data(slot, Color(road, k, 0.0, 0.0))
 			slot += 1
+
+
+## Сила плями слота відносно тіні техніки, як її поставлено в дані екземпляра.
+func strength_of(slot: int) -> float:
+	return _strength[slot]
 
 
 ## 1.0, коли юніт стоїть на асфальті (дорога чи міст), інакше 0.0; поставлене останньою синхронізацією.

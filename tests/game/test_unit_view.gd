@@ -69,7 +69,7 @@ func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 		view.bind(_unit(type_id))
 		assert_eq(contacts.count(), 1, "одна пляма на юніта, не більше")
 		assert_eq(view.contact_slots(), 1)
-		assert_eq(view.contact_strength(), 1.0, "техніка — повна сила карти")
+		assert_eq(contacts.strength_of(0), 1.0, "у даних екземпляра техніки — повна сила карти")
 		var hull: Vector3 = UnitSilhouettes.spec(type_id).hull
 		var xf: Transform3D = contacts.transform_of(0)
 		assert_almost_eq(xf.basis.x.length(), hull.x * UnitView.CONTACT_SPREAD, 0.0001, "ширша за слід по x")
@@ -89,12 +89,14 @@ func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> v
 	view.bind(_unit(0))
 	assert_eq(contacts.count(), 1, "один юніт")
 	assert_eq(view.contact_slots(), UnitView.SQUAD_FIGURES)
-	assert_lt(view.contact_strength(), 1.0, "слабша за тінь техніки")
+	for i in UnitView.SQUAD_FIGURES:
+		assert_eq(contacts.strength_of(i), UnitView.FIGURE_CONTACT_STRENGTH, "сила бійця в даних екземпляра")
+	assert_eq(UnitView.FIGURE_CONTACT_STRENGTH, 0.65)
 	for i in UnitView.SQUAD_FIGURES:
 		var xf: Transform3D = contacts.transform_of(i)
 		assert_true(contacts.is_shown(i))
 		assert_almost_eq(xf.basis.x.length(), UnitView.FIGURE_CONTACT_SIZE, 0.0001, "~0,9 м квад, не 5 м")
-		var feet: Vector3 = view.global_transform * UnitSilhouettes.figure_transform(i, true).origin
+		var feet: Vector3 = view.global_transform * UnitSilhouettes.figure_transform(i, true, view.layout()).origin
 		assert_almost_eq(Vector2(xf.origin.x, xf.origin.z), Vector2(feet.x, feet.z), Vector2.ONE * 0.0001, "під ногами бійця %d" % i)
 	view.set_hp(30, 100)
 	contacts.sync()
@@ -104,6 +106,7 @@ func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> v
 	assert_false(contacts.is_shown(3))
 	view.bind(_unit(5))
 	assert_eq(view.contact_slots(), 1, "перев'язаний на техніку — знову одна пляма")
+	assert_eq(contacts.strength_of(0), 1.0)
 	assert_almost_eq(contacts.transform_of(0).basis.x.length(), UnitSilhouettes.spec(5).hull.x * UnitView.CONTACT_SPREAD, 0.0001)
 
 
@@ -699,14 +702,14 @@ func test_a_used_drone_takes_a_tube_off_the_squad() -> void:
 	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
 	view.bind(_unit(1))
 	var hull := view.get_node("Silhouette/Hull") as MeshInstance3D
-	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 4, 0, 2), "дві труби з початку матчу")
+	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 4, 0, 2, view.layout()), "дві труби з початку матчу")
 	view.set_drones(1)
-	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 4, 0, 1))
+	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 4, 0, 1, view.layout()))
 	assert_true(view.get_node("DroneIcon").visible)
 	view.set_hp(30, 100)
-	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 2, 0, 1), "трубу несе стоячий")
+	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 2, 0, 1, view.layout()), "трубу несе стоячий")
 	view.set_drones(0)
-	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 2, 0, 0))
+	assert_same(hull.mesh, UnitSilhouettes.merged_mesh(1, 2, 0, 0, view.layout()))
 	assert_false(view.get_node("DroneIcon").visible)
 
 

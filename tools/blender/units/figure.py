@@ -139,6 +139,7 @@ lin = lambda c: np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
 enc = lambda c: np.where(c <= 0.0031308, c * 12.92, 1.055 * np.power(np.clip(c, 0, None), 1 / 2.4) - 0.055)
 UNIFORM = p.get("uniform", [110, 109, 70])
 
+cls_map = None  # the paint classes per texel; the fallen body uses them to find the rifle
 if crude:
     alb = np.ones((N, N, 3), np.float32) * srgb(UNIFORM)
 else:
@@ -221,6 +222,7 @@ else:
         votes.append(s[7:, 7:] - s[:-7, 7:] - s[7:, :-7] + s[:-7, :-7])
     cls[cloth] = np.argmax(np.stack(votes, -1), -1)[cloth]
     cls[skin] = 5                                             # 5 face
+    cls_map = cls
     tones = [p.get(kname, dflt) for kname, dflt in (("uniform", UNIFORM), ("kit", [88, 88, 58]), ("helmet", UNIFORM),
                                                      ("gun", [30, 31, 31]), ("boots", [48, 46, 40]), ("skin", [146, 110, 88]))]
     flat = lin(srgb(tones))[cls]
@@ -244,8 +246,8 @@ else:
 # Flat kit colours in the right strip: one block per colour, sampled at its centre (PNG rows from the top).
 kit_cols = []
 for v in fig.get("variants", {}).values():
-    t = v["tube"]
-    kit_cols += [tuple(t["colour"]), tuple(t["cap"])]
+    if "tube" in v:
+        kit_cols += [tuple(v["tube"]["colour"]), tuple(v["tube"]["cap"])]
 kit_cols = list(dict.fromkeys(kit_cols))
 BLOCK = N // 16
 
@@ -327,8 +329,101 @@ def tube(t, base):
     return ob
 
 
+def smoothstep(e0, e1, x):
+    t = min(1.0, max(0.0, (x - e0) / (e1 - e0)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def make_body(b, base, unit):
+    """A fallen soldier, not the standing one rotated flat: knees bent, face down and rolled onto one side so an
+    arm lies under the torso, the rifle cut away and lying flat beside him. Same vertices' UVs, so the same atlas."""
+    # the rifle: dark (gun-class) faces well off the body axis at hand height; gloves on the chest stay with the man
+    bm = bmesh.new(); bm.from_mesh(base.data)
+    uvl = bm.loops.layers.uv.active
+    rifle = set()
+    for f in bm.faces:
+        u = sum(l[uvl].uv.x for l in f.loops) / len(f.loops)
+        v = sum(l[uvl].uv.y for l in f.loops) / len(f.loops)
+        c = f.calc_center_median()
+        dark = cls_map is not None and cls_map[min(N - 1, int((1.0 - v) * N)), min(N - 1, int(u * N))] == 3
+        if dark and math.hypot(c.x, c.y) > b.get("rifle_r_m", 0.3) * M and 0.3 * HEIGHT < c.z < 0.85 * HEIGHT:
+            rifle.add(f.index)
+    # only the largest connected piece is the rifle: dark knee pads and gloves would come away as floating shards
+    bm.faces.ensure_lookup_table()
+    best, seen_f = set(), set()
+    for i in rifle:
+        if i in seen_f:
+            continue
+        piece, stack = set(), [i]
+        seen_f.add(i)
+        while stack:
+            j = stack.pop(); piece.add(j)
+            for e in bm.faces[j].edges:
+                for g in e.link_faces:
+                    if g.index in rifle and g.index not in seen_f:
+                        seen_f.add(g.index); stack.append(g.index)
+        if len(piece) > len(best):
+            best = piece
+    rifle = best
+    bm.free()
+
+    def part(keep_rifle):
+        bm = bmesh.new(); bm.from_mesh(base.data); bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if (f.index in rifle) != keep_rifle], context='FACES')
+        return bm
+
+    man = part(False)
+    knee, band = b.get("knee_m", 0.5) * M, 0.03
+    near = [v.co.y for v in man.verts if abs(v.co.z - knee) < 0.01]
+    py = sum(near) / max(1, len(near))
+    bend = -math.radians(b.get("knee_deg", 45))
+    for v in man.verts:
+        w = smoothstep(knee + band, knee - band, v.co.z)
+        if w > 0.0:
+            a = bend * w
+            y, z = v.co.y - py, v.co.z - knee
+            v.co.y, v.co.z = py + y * math.cos(a) - z * math.sin(a), knee + y * math.sin(a) + z * math.cos(a)
+    # face down (Blender +Y front goes to -Z, head to +Y), then a roll about the long axis
+    lay = Matrix.Rotation(math.radians(b.get("roll_deg", 20)), 4, 'Y') @ Matrix.Rotation(-math.pi / 2, 4, 'X')
+    bmesh.ops.transform(man, matrix=lay, verts=man.verts)
+    xs = [v.co for v in man.verts]
+    lo_v = Vector((min(c.x for c in xs), min(c.y for c in xs), min(c.z for c in xs)))
+    hi_v = Vector((max(c.x for c in xs), max(c.y for c in xs), max(c.z for c in xs)))
+    bmesh.ops.translate(man, vec=Vector((-(lo_v.x + hi_v.x) / 2, -(lo_v.y + hi_v.y) / 2, -lo_v.z)), verts=man.verts)
+    half_x = (hi_v.x - lo_v.x) / 2
+
+    gun = part(True)
+    if gun.verts:
+        pts = np.array([v.co[:] for v in gun.verts])
+        ctr = Vector(pts.mean(0).tolist())
+        axis = Vector(np.linalg.eigh(np.cov((pts - pts.mean(0)).T))[1][:, -1].tolist())
+        flat = Vector((axis.x, axis.y, 0.0))
+        bmesh.ops.translate(gun, vec=-ctr, verts=gun.verts)
+        if flat.length > 1e-6:
+            # the long axis onto the ground, then turned to lie along the body, a little askew
+            tilt = axis.rotation_difference(flat).to_matrix().to_4x4()
+            turn = math.radians(90.0 - b.get("rifle_yaw_deg", 10)) - math.atan2(flat.y, flat.x)
+            bmesh.ops.transform(gun, matrix=Matrix.Rotation(turn, 4, 'Z') @ tilt, verts=gun.verts)
+        zmin = min(v.co.z for v in gun.verts)
+        at = b.get("rifle_at_m", [0.45, 0.2])
+        bmesh.ops.translate(gun, vec=Vector((half_x + at[0] * M, at[1] * M, -zmin)), verts=gun.verts)
+    gun_me = bpy.data.meshes.new(unit + "_rifle"); gun.to_mesh(gun_me); gun.free()
+    man_me = bpy.data.meshes.new(unit)
+    man.to_mesh(man_me); man.free()
+    ob = bpy.data.objects.new(unit, man_me); bpy.context.collection.objects.link(ob)
+    gob = bpy.data.objects.new(unit + "_rifle", gun_me); bpy.context.collection.objects.link(gob)
+    bpy.ops.object.select_all(action='DESELECT')
+    gob.select_set(True); ob.select_set(True); bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.join()
+    print("FIG body", unit, "rifle faces", len(rifle), "tris", sum(len(q.vertices) - 2 for q in ob.data.polygons))
+    return ob
+
+
 outs = {name: finish(lo, name)}
 for unit, v in fig.get("variants", {}).items():
+    if "body" in v:
+        outs[unit] = finish(make_body(v["body"], lo, unit), unit)
+        continue
     body = bpy.data.objects.new(unit, lo.data.copy()); bpy.context.collection.objects.link(body)
     t = tube(v["tube"], body)
     bpy.ops.object.select_all(action='DESELECT')
@@ -363,7 +458,10 @@ for unit, path in outs.items():
     check(abs(pa["min"][1]) < 1e-4, "%s soles on y = 0 (%.5f)" % (unit, pa["min"][1]))
     t = fig.get("variants", {}).get(unit, {}).get("tube")
     top = max(HEIGHT, (t["bottom_m"] + t["length_m"]) * M) if t else HEIGHT
-    check(abs(pa["max"][1] - top) < 0.002, "%s top %.4f (figure 1.8 m, tube top %.3f)" % (unit, pa["max"][1], top))
+    if "body" in fig.get("variants", {}).get(unit, {}):
+        check(pa["max"][1] < 0.11, "%s lies low (top %.4f = %.2f m)" % (unit, pa["max"][1], pa["max"][1] / M))
+    else:
+        check(abs(pa["max"][1] - top) < 0.002, "%s top %.4f (figure 1.8 m, tube top %.3f)" % (unit, pa["max"][1], top))
     ntri = g["accessors"][prims[0]["indices"]]["count"] // 3
     check(ntri <= fig["tris"] + 64, "%s triangles %d <= %d + kit" % (unit, ntri, fig["tris"]))
     check(g["images"] and all(max(bpy.data.images[im["name"]].size) <= 1024 for im in g["images"] if im["name"] in bpy.data.images), "%s texture <= 1024 px" % unit)

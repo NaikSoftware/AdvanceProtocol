@@ -214,92 +214,143 @@ func test_column_leans_along_the_wind_it_is_given() -> void:
 ## Відділення втрачає фігури на трьох тайлах, бо між влучаннями йде далі; повертає юніт.
 func _squad_hit_on_the_move(type_id: int = 0, owner: int = 1) -> Unit:
 	var u: Unit = state.add_unit(type_id, owner, Vector2i(2, 2), 2)
-	u.hp = 60
-	Casualties.record(state, u)
-	u.pos = Vector2i(3, 2)
-	u.hp = 40
-	Casualties.record(state, u)
-	u.pos = Vector2i(4, 2)
-	u.hp = 0
-	Casualties.record(state, u)
+	for step in 3:
+		var before: int = u.hp
+		u.hp = [60, 40, 0][step]
+		Casualties.record(state, u, before)
+		if step < 2:
+			u.pos += Vector2i(1, 0)
 	return u
 
 
 ## Тіла лежать до кінця матчу там, де кожен упав, — зі стану, тож переживають і перебудову, і
-## збереження; видно їх лише над розвіданим (§3.5). Техніка тіл не лишає: її лишки — уламки.
-func test_bodies_lie_where_each_fell_on_seen_ground_only() -> void:
-	_squad_hit_on_the_move()
+## збереження; видно лише ті, що глядачеві вже показані (§3.5). Техніка тіл не лишає: її лишки — уламки.
+func test_bodies_lie_where_each_fell_and_only_shown_ones_are_drawn() -> void:
+	var sq: Unit = _squad_hit_on_the_move()
 	var tank: Unit = state.add_unit(5, 1, Vector2i(6, 6), 0)
 	tank.hp = 0
-	Casualties.record(state, tank)
+	Casualties.record(state, tank, 100)
 	for p: Vector2i in [Vector2i(2, 2), Vector2i(4, 2), Vector2i(6, 6)]:
 		_seen(0, p)
+	Casualties.reveal(state, 0)
 	layer.rebuild_fallen(state, 0)
 	# 1 + 0 (тайл 3,2 не розвіданий) + 2: тіло з нерозвіданого — донос про бій
 	assert_eq(layer.fallen_count(), 3)
 	_seen(0, Vector2i(3, 2))
+	Casualties.reveal(state, 0)
 	layer.rebuild_fallen(state, 0)
 	assert_eq(layer.fallen_count(), UnitView.SQUAD_FIGURES, "чотири тіла на трьох тайлах")
-	assert_eq(layer.fallen_meshes().size(), 1, "один вигляд — одна сітка, один виклик малювання")
-	var mi: MeshInstance3D = layer.fallen_meshes()[0]
+	assert_eq(layer.fallen_meshes().size(), 1, "один набір — один MultiMesh, один виклик малювання")
+	var mi: MultiMeshInstance3D = layer.fallen_meshes()[0]
+	assert_eq(mi.multimesh.instance_count, UnitView.SQUAD_FIGURES)
 	assert_eq(mi.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 	assert_eq(mi.layers, 1 << (UnitView.UNIT_LAYER - 1))
-	# Без моделі — темні коробки: по одній на тіло, по сліду на тайл, де воно впало.
-	var v: PackedVector3Array = mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	assert_eq(v.size(), 24 * UnitView.SQUAD_FIGURES)
 	var cells: Dictionary = {}
-	for i in range(0, v.size(), 24):
-		var c := Vector3.ZERO
-		for k in 24:
-			c += v[i + k] / 24.0
-		cells[Vector2i(roundi(c.x), roundi(c.z))] = true
+	for xf: Transform3D in layer.body_transforms():
+		cells[Vector2i(roundi(xf.origin.x), roundi(xf.origin.z))] = true
 	assert_eq(cells.keys().size(), 3, "тіла на трьох тайлах")
 	layer.rebuild_fallen(state, 0)
 	assert_eq(layer.fallen_count(), UnitView.SQUAD_FIGURES, "перебудова не множить")
-	assert_eq(layer.get_children().filter(func(n: Node) -> bool: return n is MeshInstance3D).size(), 1)
+	assert_eq(layer.get_children().filter(func(n: Node) -> bool: return n.name.begins_with("Bodies_")).size(), 1)
+	assert_eq(sq.hp, 0)
 
 
-## Тіло на тайлі, де його відділення досі ховається в будинку незнайденим, глядачеві не показується:
-## воно виказало б укриття (§3.5). Знайдене чи пішле далі відділення тіло вже не ховає.
-func test_a_body_does_not_give_away_a_squad_hidden_in_a_building() -> void:
-	state = BattleState.create(Board.create(8, 8, Terrain.GroundState.DRY), 3, 7)
-	state.board.set_kind(Vector2i(2, 2), Terrain.Kind.BUILDING)
-	var sq: Unit = state.add_unit(0, 1, Vector2i(2, 2), 0)
-	sq.hp = 60
-	var body: Casualties.Body = (Casualties.record(state, sq)[0] as Events.FiguresFell).body
-	_seen(2, Vector2i(2, 2))
-	assert_false(state.can_see_unit(2, sq), "передумова: гравець 2 відділення не знайшов")
-	assert_false(WreckLayer.shows_body(state, 2, body))
-	layer.rebuild_fallen(state, 2)
-	assert_eq(layer.fallen_count(), 0)
-	sq.pos = Vector2i(3, 2)
-	assert_true(WreckLayer.shows_body(state, 2, body), "відділення пішло — тіло лишилось і видне")
-	layer.rebuild_fallen(state, 2)
-	assert_eq(layer.fallen_count(), 1)
+## Тіло лежить не на місці стоячого: на кільці довкола середини тайла, зі сталим за сідом зсувом і поворотом,
+## довгою віссю щонайменше 35° від погляду камери, а різні тіла — не однаковим строєм.
+func test_bodies_lie_off_the_standing_slots_and_across_the_view() -> void:
+	var cam: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
+	var headings: Dictionary = {}
+	for unit_id in 6:
+		for facing in 8:
+			var b := Casualties.Body.new(unit_id, Vector2i(3, 3), 0, 0, facing, 0, 4)
+			for slot in 4:
+				var xf: Transform3D = WreckLayer.body_transform(b, slot)
+				assert_eq(xf, WreckLayer.body_transform(b, slot), "те саме тіло лягає однаково")
+				var r: float = Vector2(xf.origin.x - 3.0, xf.origin.z - 3.0).length()
+				assert_between(r, 0.2, 0.36, "на кільці, не на стоячих місцях")
+				var axis: Vector3 = xf.basis.z
+				var off: float = absf(wrapf(atan2(axis.x, axis.z) - cam, -PI * 0.5, PI * 0.5))
+				assert_gte(off, WreckLayer.BODY_VIEW_MIN - 0.0001, "довга вісь не вздовж погляду")
+				headings[snappedf(atan2(axis.x, axis.z), 0.05)] = true
+	assert_gt(headings.size(), 20, "тіла лягають по-різному, а не строєм")
 
 
-## Щойно впалі лягають одразу (подія `FiguresFell`), а моделі — простим бійцем, позначеним загиблим:
-## один виклик на набір, хай скільки тіл і з яких відділень.
-func test_model_bodies_are_one_mesh_per_look_and_new_ones_join_it() -> void:
-	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+## Модель загиблого — окрема сітка (лежить на боці) під матеріалом простого бійця з `fallen`: один на набір.
+func test_model_bodies_use_the_body_mesh_and_one_fallen_material_per_set() -> void:
+	var body: ArrayMesh = UnitModelFixture.mesh(Vector3(0.06, 0.05, 0.225))
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier(), UnitSilhouettes.BODY_KEY: body})
 	_squad_hit_on_the_move(0)
-	for p: Vector2i in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(4, 2)]:
-		_seen(0, p)
-	layer.rebuild_fallen(state, 0)
-	assert_eq(layer.fallen_meshes().size(), 1)
-	assert_same(layer.fallen_meshes()[0].material_override, UnitSilhouettes.model_material(0))
 	var other: Unit = state.add_unit(1, 1, Vector2i(5, 5), 0)
 	other.hp = 0
-	var ev: Array[Events.BattleEvent] = Casualties.record(state, other)
+	var ev: Array[Events.BattleEvent] = Casualties.record(state, other, 100)
+	for p: Vector2i in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(4, 2)]:
+		_seen(0, p)
+	Casualties.reveal(state, 0)
+	layer.rebuild_fallen(state, 0)
+	assert_eq(layer.fallen_meshes().size(), 1)
+	var mi: MultiMeshInstance3D = layer.fallen_meshes()[0]
+	assert_same(mi.multimesh.mesh, body, "загиблий — своя сітка, не стоячий боєць плазом")
+	assert_same(mi.material_override, UnitSilhouettes.fallen_material(1))
+	assert_true((mi.material_override as ShaderMaterial).get_shader_parameter("fallen"), "шейдер темнить загиблих")
+	assert_ne(UnitSilhouettes.model_material(0).get_shader_parameter("fallen"), true, "живі — ні")
+	assert_same((mi.material_override as ShaderMaterial).get_shader_parameter("albedo_tex"),
+		UnitSilhouettes.model_material(0).get_shader_parameter("albedo_tex"), "атлас простого бійця")
 	layer.add_body((ev[0] as Events.FiguresFell).body)
 	assert_eq(layer.fallen_count(), 2 * UnitView.SQUAD_FIGURES)
-	assert_eq(layer.fallen_meshes().size(), 1, "штурмовики лягають простим бійцем: та сама сітка")
-	var p: PackedVector3Array = layer.fallen_meshes()[0].mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	assert_eq(p.size(), 2 * UnitView.SQUAD_FIGURES * 24, "без труби: кожне тіло — сітка простого бійця")
-	for mi: MeshInstance3D in layer.fallen_meshes():
-		for col: Color in mi.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR] as PackedColorArray:
-			assert_eq(col.r, 1.0, "позначено загиблим")
+	assert_eq(layer.fallen_meshes().size(), 1, "штурмовики лягають простим бійцем: той самий MultiMesh")
+	assert_eq(layer.fallen_meshes()[0].multimesh.instance_count, 2 * UnitView.SQUAD_FIGURES)
 
+
+## Без моделі загиблі — темні коробки плазом.
+func test_box_bodies_lie_flat_in_the_fallen_colour() -> void:
+	_squad_hit_on_the_move()
+	for p: Vector2i in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(4, 2)]:
+		_seen(0, p)
+	Casualties.reveal(state, 0)
+	layer.rebuild_fallen(state, 0)
+	var mi: MultiMeshInstance3D = layer.fallen_meshes()[0]
+	assert_true(mi.multimesh.mesh is BoxMesh)
+	assert_eq((mi.material_override as StandardMaterial3D).albedo_color, UnitSilhouettes.FALLEN_COLOR)
+	for xf: Transform3D in layer.body_transforms():
+		assert_almost_eq(absf(xf.basis.y.normalized().y), 0.0, 0.0001, "коробка лежить")
+
+
+## Тіло, показане глядачеві, лишається: відділення, що повернулося в незнайдений будинок на тому самому
+## тайлі, його не ховає (§3.5); тіла, ще не показані, шар не малює.
+func test_a_shown_body_stays_when_its_squad_hides_again() -> void:
+	state = BattleState.create(Board.create(8, 8, Terrain.GroundState.DRY), 3, 7)
+	state.board.set_kind(Vector2i(2, 2), Terrain.Kind.BUILDING)
+	_seen(2, Vector2i(2, 2))
+	var sq: Unit = state.add_unit(0, 1, Vector2i(2, 2), 0)
+	sq.hp = 60
+	Casualties.record(state, sq, 100)
+	layer.rebuild_fallen(state, 2)
+	assert_eq(layer.fallen_count(), 0, "відділення ховається на тайлі — тіло його виказало б")
+	sq.pos = Vector2i(3, 2)
+	Casualties.reveal(state, 2)
+	layer.rebuild_fallen(state, 2)
+	assert_eq(layer.fallen_count(), 1)
+	sq.pos = Vector2i(2, 2)
+	Casualties.reveal(state, 2)
+	layer.rebuild_fallen(state, 2)
+	assert_eq(layer.fallen_count(), 1, "повернулося в будинок — показане тіло лишається")
+
+
+## Шар тіл перекладає лише перетворення екземплярів, а не вершини: 40 тіл — швидко.
+func test_forty_bodies_rebuild_fast() -> void:
+	for i in 10:
+		var u: Unit = state.add_unit(i % 2, 1, Vector2i(i % 8, i / 8 + 4), i % 8)
+		u.hp = 0
+		Casualties.record(state, u, 100)
+	for y in 8:
+		for x in 8:
+			_seen(0, Vector2i(x, y))
+	Casualties.reveal(state, 0)
+	var t0: int = Time.get_ticks_usec()
+	layer.rebuild_fallen(state, 0)
+	var ms: float = (Time.get_ticks_usec() - t0) / 1000.0
+	assert_eq(layer.fallen_count(), 40)
+	assert_lt(ms, 15.0, "40 тіл за %.1f мс" % ms)
 
 
 ## Другий розігрів поверх першого не губить його коробку й не вішає шар.

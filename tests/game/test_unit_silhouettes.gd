@@ -109,7 +109,7 @@ func test_each_slot_has_its_own_fixed_yaw_and_the_squad_keeps_its_facing() -> vo
 	var sum: float = 0.0
 	for i in UnitView.SQUAD_FIGURES:
 		var b: Basis = UnitSilhouettes.figure_transform(i, true).basis
-		var m: Basis = UnitSilhouettes.model_figure_transform(UnitModelFixture.soldier(), i, true).basis
+		var m: Basis = UnitSilhouettes.model_figure_transform(i).basis
 		var yaw: float = b.get_euler().y
 		assert_almost_eq(m.get_euler().y, yaw, 0.0001, "коробка й модель на місці %d повернуті однаково" % i)
 		assert_almost_eq(b.y.y, 1.0, 0.0001, "стоїть рівно")
@@ -120,6 +120,32 @@ func test_each_slot_has_its_own_fixed_yaw_and_the_squad_keeps_its_facing() -> vo
 		sum += yaw
 	assert_lt(absf(sum / UnitView.SQUAD_FIGURES), deg_to_rad(5.0), "середній поворот — напрям відділення")
 	assert_eq(UnitSilhouettes.figure_transform(2, true), UnitSilhouettes.figure_transform(2, true))
+
+
+## Розкладки місць — сталі зсуви до ±0,2 м і повороти до ±20° від ромба; відділення бере ту, де стоячі
+## не стоять один за одним уздовж погляду камери, і різні відділення — різні розкладки.
+func test_squads_take_seeded_layouts_that_keep_standing_figures_apart_on_screen() -> void:
+	for k in range(1, UnitSilhouettes.LAYOUT_COUNT):
+		for i in UnitView.SQUAD_FIGURES:
+			var base: Transform3D = UnitSilhouettes.model_figure_transform(i, 0)
+			var lay: Transform3D = UnitSilhouettes.model_figure_transform(i, k)
+			assert_lte(absf(lay.origin.x - base.origin.x), 0.025 + 0.0001, "зсув до 0,2 м")
+			assert_lte(absf(lay.origin.z - base.origin.z), 0.025 + 0.0001)
+			assert_lte(absf(wrapf(lay.basis.get_euler().y - base.basis.get_euler().y, -PI, PI)), 0.35 + 0.0001, "поворот до 20°")
+			assert_eq(lay, UnitSilhouettes.model_figure_transform(i, k), "стала розкладка")
+	var picked: Dictionary = {}
+	for facing in 8:
+		var yaw: float = deg_to_rad(UnitView._degrees_for_facing(facing))
+		for up in range(2, UnitView.SQUAD_FIGURES + 1):
+			for unit_id in 12:
+				var k: int = UnitSilhouettes.pick_layout(unit_id, yaw, up)
+				assert_between(k, 1, UnitSilhouettes.LAYOUT_COUNT - 1)
+				assert_gte(UnitSilhouettes.screen_gap(k, yaw, up), UnitSilhouettes.MIN_SCREEN_GAP,
+					"напрям %d, стоїть %d: двоє не стоять один за одним" % [facing, up])
+				picked[k] = true
+	assert_gt(picked.size(), 3, "різні відділення — різні розкладки")
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier()})
+	assert_ne(UnitSilhouettes.merged_mesh(0, 4, 0, 0, 1), UnitSilhouettes.merged_mesh(0, 4, 0, 0, 2), "сітка на розкладку")
 
 
 ## Труб дрона на штурмовому відділенні стільки, скільки дронів лишилось (§3.9), і несуть їх перші стоячі
@@ -154,35 +180,23 @@ func test_assault_squad_carries_one_tube_per_drone_left() -> void:
 	assert_almost_eq(UnitSilhouettes.merged_mesh(0, 4, 0, 2).get_aabb().end.y, top_plain, 0.0001, "стрілецьке труб не несе")
 
 
-## Тіла одного вигляду — одна сітка: лежать ниць, низько й рівно на основі відділення, позначені R = 1
-## (шейдер темнить), а для коробок — темним кольором загиблих.
-func test_bodies_lie_low_and_flat_and_are_marked_fallen() -> void:
-	var soldier: ArrayMesh = UnitModelFixture.soldier()
-	UnitSilhouettes.use_models({0: soldier})
-	var places: Array[Transform3D] = [Transform3D(), Transform3D(), Transform3D(Basis(), Vector3(3.0, 0.0, 2.0))]
-	var slots: Array[int] = [2, 3, 0]
-	var m: ArrayMesh = UnitSilhouettes.bodies_mesh(0, 0, places, slots)
-	var a: Array = m.surface_get_arrays(0)
-	assert_eq((a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), 3 * soldier.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size())
-	for col: Color in a[Mesh.ARRAY_COLOR] as PackedColorArray:
-		assert_eq(col.r, 1.0)
-	for i in UnitView.SQUAD_FIGURES:
-		var lie: Transform3D = UnitSilhouettes.model_figure_transform(soldier, i, false)
-		assert_almost_eq(absf(lie.basis.y.normalized().y), 0.0, 0.0001, "місце %d лежить" % i)
-		assert_gt(lie.basis.z.normalized().y, 0.99, "ниць: спина моделі (+Z) догори, перед — у землю")
-		var box: AABB = lie * soldier.get_aabb()
-		# Коробка-фігура 0,05 завглибшки: лежить грудьми на основі (0,05), не висить і не тоне.
-		assert_almost_eq(box.position.y, 0.05, 0.002, "місце %d на основі" % i)
-		assert_lt(box.end.y, 0.05 + FIGURE_DEPTH + 0.002)
-		assert_lt(Vector2(box.get_center().x, box.get_center().z).length(), 0.3, "лежить у межах тайла")
+## Загиблий — своя сітка й матеріал простого бійця з `fallen`, один на набір; без моделі — коробка плазом
+## у темному кольорі загиблих.
+func test_fallen_use_the_body_mesh_and_a_fallen_copy_of_the_plain_material() -> void:
+	var body: ArrayMesh = UnitModelFixture.mesh(Vector3(0.06, 0.05, 0.225))
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), UnitSilhouettes.BODY_KEY: body})
+	assert_same(UnitSilhouettes.body_or_box(0), body)
+	assert_eq(UnitSilhouettes.body_pose(0), Transform3D(), "модель лежить як є")
+	var m := UnitSilhouettes.fallen_material(0) as ShaderMaterial
+	assert_true(m.get_shader_parameter("fallen"))
+	assert_ne(m, UnitSilhouettes.model_material(0))
+	assert_same(m, UnitSilhouettes.fallen_material(0), "один на набір")
 	UnitSilhouettes.use_models({})
-	var boxes: ArrayMesh = UnitSilhouettes.bodies_mesh(0, 0, places, slots)
-	var bc: PackedColorArray = boxes.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
-	assert_eq(bc.count(UnitSilhouettes.FALLEN_COLOR), bc.size(), "без моделі — темні коробки")
-	assert_true(UnitSilhouettes.bodies_material(0, 0) is StandardMaterial3D)
-
-
-const FIGURE_DEPTH: float = 0.05
+	assert_true(UnitSilhouettes.body_or_box(0) is BoxMesh)
+	assert_eq((UnitSilhouettes.fallen_material(0) as StandardMaterial3D).albedo_color, UnitSilhouettes.FALLEN_COLOR)
+	var pose: Transform3D = UnitSilhouettes.body_pose(0)
+	assert_almost_eq(absf(pose.basis.y.normalized().y), 0.0, 0.0001, "коробка плазом")
+	assert_almost_eq(pose.origin.y, UnitSilhouettes.FIGURE_SIZE.z * 0.5, 0.0001, "на землі, не в ній")
 
 
 ## Модель береться, коли файл є, і коробки — коли нема: без асету гра не ламається.

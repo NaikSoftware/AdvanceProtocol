@@ -174,7 +174,8 @@ var _frame: int = 0
 var _warm: MeshInstance3D = null
 ## Тіла бійців (Casualties), показані глядачу, і їхні сітки: одна на вигляд (набір, тип).
 var _bodies: Array[Casualties.Body] = []
-var _body_meshes: Dictionary[Vector2i, MeshInstance3D] = {}
+var _body_mm: Dictionary[int, MultiMeshInstance3D] = {}
+var _body_placed: Array[Transform3D] = []
 var _column_cells: Array[Vector2i] = []
 var _hearths: MultiMeshInstance3D
 var _hearth_mat: ShaderMaterial
@@ -518,31 +519,23 @@ func _end_warm_up() -> void:
 
 
 ## Тіла бійців — зі стану (`state.bodies`), тож переживають і перебудову, і збереження, і
-## лежать там, де кожен упав, хай куди відділення пішло далі. Лише над розвіданим глядача
-## (§3.5): тіла на нерозвіданому — донос про бій. Техніка тут не малюється: її лишки — уламки.
+## лежать там, де кожен упав, хай куди відділення пішло далі. Лише ті, що глядачеві вже
+## показані (`Casualties.Body.shown_to()`, §3.5): тіла на нерозвіданому — донос про бій, а показане
+## не зникає. Техніка тут не малюється: її лишки — уламки.
 func rebuild_fallen(state: BattleState, observer: int) -> void:
 	var shown: Array[Casualties.Body] = []
 	for b in state.bodies:
-		if shows_body(state, observer, b):
+		if b.shown_to(observer):
 			shown.append(b)
-	# Тіла лише додаються, а перебудова дошки йде після кожного пакета: без змін сітки не перезбираються.
+	# Перебудова дошки йде після кожного пакета: без змін тіла не перекладаються.
 	if shown == _bodies:
 		return
 	_bodies = shown
 	_rebuild_body_meshes()
 
 
-## Тіло видно над розвіданим глядача (§3.5) — крім того, чиє відділення досі стоїть на тому самому тайлі
-## й глядачеві не знайдене (укриття в будинку): тіло виказало б, що там хтось є.
-static func shows_body(state: BattleState, observer: int, b: Casualties.Body) -> bool:
-	if not state.vision[observer].is_seen(b.pos):
-		return false
-	var u: Unit = state.get_unit(b.unit_id)
-	return u == null or not u.is_alive() or u.pos != b.pos or state.can_see_unit(observer, u)
-
-
 ## Щойно впалі (подія `FiguresFell`) — одразу, а не на перебудові після пакета: інакше фігура
-## зникала б із відділення й лягала б аж по всьому. Чи бачить їх глядач, вирішує той, хто кличе.
+## зникала б із відділення й лягала б аж по всьому. Чи показане тіло глядачеві, вирішує той, хто кличе.
 func add_body(body: Casualties.Body) -> void:
 	_bodies.append(body)
 	_rebuild_body_meshes()
@@ -556,50 +549,91 @@ func fallen_count() -> int:
 	return n
 
 
-## Сітки тіл: одна на вигляд (набір, тип) — шар тіл коштує виклик малювання на вигляд, а не на тіло.
-func fallen_meshes() -> Array[MeshInstance3D]:
-	return _body_meshes.values()
+## Шар тіл: один `MultiMesh` на набір — увесь шар коштує виклик малювання на набір, а не на тіло.
+func fallen_meshes() -> Array[MultiMeshInstance3D]:
+	return _body_mm.values()
+
+
+## Поставлені перетворення всіх тіл: під headless `MultiMesh` назад не читається.
+func body_transforms() -> Array[Transform3D]:
+	return _body_placed
 
 
 func _rebuild_body_meshes() -> void:
-	for mi: MeshInstance3D in _body_meshes.values():
+	for mi: MultiMeshInstance3D in _body_mm.values():
 		mi.free()
-	_body_meshes.clear()
-	var places: Dictionary = {}  ## Vector2i(набір, тип) -> [перетворення, місця]
+	_body_mm.clear()
+	_body_placed.clear()
+	var per_set: Dictionary = {}  ## набір -> Array[Transform3D]
 	for b in _bodies:
-		# Тіла лишає лише піхота (Casualties), і лягає вона простим бійцем — трубу дрона загиблий лишає;
-		# тож тіла стрілецьких і штурмових відділень набору — одна сітка.
-		var key := Vector2i(UnitSilhouettes.set_of(b.owner), UnitSilhouettes.PLAIN_FIGURE)
-		if not places.has(key):
-			places[key] = [[] as Array[Transform3D], [] as Array[int]]
-		var squad := Transform3D(Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(b.facing))), IsoCameraRig.cell_to_world(b.pos))
+		var set_id: int = UnitSilhouettes.set_of(b.owner)
+		if not per_set.has(set_id):
+			per_set[set_id] = [] as Array[Transform3D]
 		for slot in range(b.first, b.first + b.count):
-			var at: Transform3D = squad
-			at.origin.y = _body_ground(b.pos, squad * UnitSilhouettes.figure_transform(slot, false).origin)
-			(places[key][0] as Array[Transform3D]).append(at)
-			(places[key][1] as Array[int]).append(slot)
-	for key: Vector2i in places:
-		var mi := MeshInstance3D.new()
-		mi.name = "Bodies_%d_%d" % [key.x, key.y]
-		mi.mesh = UnitSilhouettes.bodies_mesh(key.y, key.x, places[key][0], places[key][1])
-		mi.material_override = UnitSilhouettes.bodies_material(key.y, key.x)
-		# Тіло завтовшки в долоню тіні не дає, а прохід тіней коштував би ще виклик на вигляд.
+			var xf: Transform3D = body_transform(b, slot) * UnitSilhouettes.body_pose(set_id)
+			(per_set[set_id] as Array[Transform3D]).append(xf)
+			_body_placed.append(xf)
+	for set_id: int in per_set:
+		var list: Array[Transform3D] = per_set[set_id]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = UnitSilhouettes.body_or_box(set_id)
+		mm.instance_count = list.size()
+		for i in list.size():
+			mm.set_instance_transform(i, list[i])
+		var mi := MultiMeshInstance3D.new()
+		mi.name = "Bodies_%d" % set_id
+		mi.multimesh = mm
+		mi.material_override = UnitSilhouettes.fallen_material(set_id)
+		# Тіло завтовшки в долоню тіні не дає, а прохід тіней коштував би ще виклик на набір.
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
 		add_child(mi)
-		_body_meshes[key] = mi
+		_body_mm[set_id] = mi
 
 
-## Висота основи відділення під лежачою фігурою, як ставить живе відділення `UnitView._pose()`:
-## рельєф мінус `SQUAD_SINK`, на мосту — настил. Береться під самою фігурою, тож на схилі тіло не висить.
-func _body_ground(cell: Vector2i, at: Vector3) -> float:
+## Кільце, на якому лежать тіла довкола середини тайла: стоячі місця ближче (до ~0,17), тож тіла на тайлі,
+## де відділення досі стоїть, його не накривають.
+const BODY_RING: float = 0.3
+## Сталий за сідом зсув тіла до ±0,3 м і поворот до ±45° від дотичної до кільця.
+const BODY_JITTER: float = 0.0375
+const BODY_TURN: float = 0.8
+## Довга вісь тіла — не ближче за 35° до погляду камери: уздовж погляду тіло скорочується в стоячу фігуру.
+const BODY_VIEW_MIN: float = 0.6109
+
+
+## Де й як лежить тіло місця `slot` запису `b` (без пози сітки): сід — юніт, тайл, місце, тож те саме тіло
+## лягає однаково щоразу. Висота — ґрунт під ним, на мосту — настил.
+static func body_transform(b: Casualties.Body, slot: int) -> Transform3D:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([b.unit_id, b.pos, b.first, slot])
+	var squad_yaw: float = deg_to_rad(UnitView._degrees_for_facing(b.facing))
+	var s: Vector3 = UnitSilhouettes.figure_transform(slot, true).origin
+	var ang: float = atan2(s.z, s.x) + rng.randf_range(-0.35, 0.35)
+	var local := Vector3(cos(ang), 0.0, sin(ang)) * BODY_RING
+	local += Vector3(rng.randf_range(-BODY_JITTER, BODY_JITTER), 0.0, rng.randf_range(-BODY_JITTER, BODY_JITTER))
+	var turn := Basis(Vector3.UP, squad_yaw)
+	var tangent: Vector3 = turn * Vector3(-sin(ang), 0.0, cos(ang))
+	var heading: float = atan2(tangent.x, tangent.z) + rng.randf_range(-BODY_TURN, BODY_TURN)
+	var cam: float = deg_to_rad(IsoCameraRig.YAW_DEGREES)
+	var off: float = wrapf(heading - cam, -PI * 0.5, PI * 0.5)
+	if absf(off) < BODY_VIEW_MIN:
+		heading = cam + (BODY_VIEW_MIN if off >= 0.0 else -BODY_VIEW_MIN)
+	var at: Vector3 = IsoCameraRig.cell_to_world(b.pos) + turn * local
+	at.y = _body_ground(b.pos, at)
+	return Transform3D(Basis(Vector3.UP, heading), at)
+
+
+## Ґрунт під тілом; на мосту — настил (рельєф під ним — русло). Тіло лежить на землі, а не на основі
+## відділення, тож без `SQUAD_SINK`.
+static func _body_ground(cell: Vector2i, at: Vector3) -> float:
 	var th: TerrainHeight = TerrainHeight.active
 	if th == null:
 		return 0.0
 	var deck: float = th.deck_y(cell)
 	if deck > th.at(float(cell.x), float(cell.y)) + 0.001:
-		return deck - UnitView.SQUAD_SINK
-	return th.at(at.x, at.z) - UnitView.SQUAD_SINK
+		return deck
+	return th.at(at.x, at.z)
 
 
 ## Час ефектів, секунд: крок таймера, а не годинник рушія (див. _step()).

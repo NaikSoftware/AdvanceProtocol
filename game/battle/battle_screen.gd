@@ -1074,9 +1074,9 @@ func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> voi
 
 
 ## Бійці лягають там, де відділення стояло, у мить влучання; події не фільтровані за гравцем (§6),
-## тож що показати глядачеві, вирішує `WreckLayer.shows_body()`.
+## тож показується лише тіло, вже показане глядачеві в `core/` (`Casualties.Body.shown_to()`).
 func _on_figures_fell(body: Casualties.Body) -> void:
-	if WreckLayer.shows_body(_match_service.state, _viewer, body):
+	if body.shown_to(_viewer):
 		_wreck_layer.add_body(body)
 
 
