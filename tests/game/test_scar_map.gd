@@ -65,3 +65,24 @@ func test_wreck_scorch_writes_only_scorch_and_ash() -> void:
 			assert_true(c.g8 == 0 and c.b8 == 0, "G і B вільні (%d, %d)" % [x, y])
 			if c.g8 != 0 or c.b8 != 0:
 				return
+
+
+## Пляма уламків (7 м) заходить на сусідні тайли: на нерозвіданому джерелі її край на розвіданому
+## сусідові видав би бій. Малюється, лише коли розвідане джерело; знову сховане — зникає.
+func test_scorch_shows_only_once_its_source_cell_is_seen() -> void:
+	var state := BattleState.create(Board.create(8, 6, Terrain.GroundState.DRY), 2, 3)
+	var v: Vision = state.vision[0]
+	v.seen.fill(0)
+	v.seen[2 * 8 + 2] = 1
+	scars.show_for(v)
+	scars.stamp_scorch(Vector2i(3, 2))
+	# край плями на сусідньому (2, 2): 4 текселі від межі тайлів у бік (3, 2)
+	var edge := Vector2i(3 * 32 - 4, 2 * 32 + 16)
+	assert_eq(scars.image().get_pixelv(edge).r8, 0, "джерело нерозвідане — краю на сусідові нема")
+	assert_false(scars.is_painted(Vector2i(3, 2)))
+	v.seen[2 * 8 + 3] = 1
+	scars.show_for(v)
+	assert_gt(scars.image().get_pixelv(edge).r8, 0, "джерело розвідане — край на місці")
+	scars.reset_scorches()
+	scars.show_for(v)
+	assert_eq(scars.image().get_pixelv(edge).r8, 0, "перебудова без загиблого — плями нема")

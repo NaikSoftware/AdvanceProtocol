@@ -1284,12 +1284,19 @@ func _rebuild_wrecks() -> void:
 	_shown_viewer = _viewer()
 	_event_player.viewer = _shown_viewer
 	_wreck_layer.rebuild(_state(), _shown_viewer)
+	# Плями — за загиблими показаного стану (на повторі — його початку): відділення, що на повторі ще
+	# стоїть, плями під собою не має, а пляма вигорілих уламків лишається.
+	_scars.reset_scorches()
 	for w in _state().wrecks:
 		if not _no_scorch(w.pos):
 			_scars.stamp_scorch(w.pos)
 	for u: Unit in _state().units.values():
-		if not u.is_alive() and u.unit_class() == UnitTypes.UnitClass.INFANTRY and not _no_scorch(u.pos):
+		if u.is_alive() or _no_scorch(u.pos):
+			continue
+		if u.unit_class() == UnitTypes.UnitClass.INFANTRY:
 			_scars.stamp_squad_scorch(u.pos)
+		else:
+			_scars.stamp_scorch(u.pos)
 	_scars.show_for(_state().vision[_shown_viewer])
 
 

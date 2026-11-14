@@ -10,8 +10,11 @@ extends RefCounted
 ## коли подія вже зіграна; додавання — максимумом, тож пляма, поставлена двічі, не
 ## темнішає.
 ##
-## §3.5: шрам переживає юніт, тож має власний туман — маска `seen` глядача (тексель
-## на тайл, лінійна фільтрація розмиває межу) множить його в шейдері.
+## §3.5: шрам переживає юніт, тож має власний туман — маска `seen` глядача (тексель на тайл,
+## найближчим текселем) множить його в шейдері. Пляма ширша за тайл, тож маска сама не досить: пляма
+## малюється, лише коли розвідане її джерело (тайл уламків чи відділення), інакше її край на розвіданому
+## сусідові видав би бій на нерозвіданому. Тому плями зберігаються як відбитки на тайлах, а текстура
+## складається з них наново на `show_for`.
 ##
 ## shortcut: шрами живуть лише у вигляді — збереження бою їх не пише, і після
 ## завантаження лишаються тільки плями під уламками, що ще горять; коли шрами стануть
@@ -36,15 +39,22 @@ var _tex: ImageTexture
 var _dirty: bool = false
 var _mask: Image
 var _mask_tex: ImageTexture
-## Тайли, під якими пляма вже стоїть: перебудова на гейті не малює її вдруге.
-var _stamped: Dictionary[Vector2i, bool] = {}
-var _squad_stamped: Dictionary[Vector2i, bool] = {}
+## Сліди поваленого — без плям; на них текстура складається наново.
+var _base: Image
+## Плями за тайлом-джерелом: біти WRECK і SQUAD.
+var _scorch: Dictionary[Vector2i, int] = {}
+## Плями, що зараз намальовані (джерело розвідане глядачем).
+var _painted: Dictionary[Vector2i, int] = {}
+var _vision: Vision = null
+const WRECK: int = 1
+const SQUAD: int = 2
 
 
 func _init(board_size: Vector2i) -> void:
 	_size = board_size
 	_img = Image.create(maxi(1, board_size.x * PX_PER_TILE), maxi(1, board_size.y * PX_PER_TILE), false, Image.FORMAT_RGBA8)
 	_tex = ImageTexture.create_from_image(_img)
+	_base = _img.duplicate()
 	_mask = Image.create(maxi(1, board_size.x), maxi(1, board_size.y), false, Image.FORMAT_R8)
 	_mask_tex = ImageTexture.create_from_image(_mask)
 
@@ -77,28 +87,62 @@ func show_for(vision: Vision) -> void:
 		for x in _size.x:
 			_mask.set_pixel(x, y, Color(1, 1, 1) if vision.is_seen(Vector2i(x, y)) else Color(0, 0, 0))
 	_mask_tex.update(_mask)
+	_vision = vision
+	var shown: Dictionary[Vector2i, int] = {}
+	for cell: Vector2i in _scorch:
+		if vision.is_seen(cell):
+			shown[cell] = _scorch[cell]
+	if shown == _painted:
+		return
+	_img.copy_from(_base)
+	_painted.clear()
+	for cell: Vector2i in shown:
+		_paint(cell, shown[cell])
+	_mark_dirty()
+
+
+## Плями з нуля — перебудова на гейті й на повторі ставить їх за станом, який показує.
+func reset_scorches() -> void:
+	_scorch.clear()
 
 
 ## Нерівна пляма з променями різної довжини (не зірка й не коло) і цятками попелу.
 ## Форма — з хешу тайла: усі гравці бачать ту саму, і кидки правил не зсуваються.
 func stamp_scorch(cell: Vector2i) -> void:
-	if _stamped.has(cell):
-		return
-	_stamped[cell] = true
-	_stamp(cell, SCORCH_RADIUS_M, SCORCH_CORE_M)
+	_add(cell, WRECK)
 
 
 ## Слід знищеного відділення (art-direction, «a scorch, restrained»): менший і світліший за пляму уламків.
 ## Ставиться раз на тайл; уламки на тому самому тайлі однаково накривають його своєю.
 func stamp_squad_scorch(cell: Vector2i) -> void:
-	if _squad_stamped.has(cell):
-		return
-	_squad_stamped[cell] = true
-	_stamp(cell, SQUAD_SCORCH_RADIUS_M, SQUAD_SCORCH_CORE_M, SQUAD_SCORCH_DARK, 0.0)
+	_add(cell, SQUAD)
 
 
 func has_squad_scorch(cell: Vector2i) -> bool:
-	return _squad_stamped.has(cell)
+	return _scorch.get(cell, 0) & SQUAD != 0
+
+
+## Чи намальована пляма з цього тайла (джерело розвідане глядачем).
+func is_painted(cell: Vector2i) -> bool:
+	return _painted.has(cell)
+
+
+## Записати відбиток і, якщо джерело вже розвідане (або глядача ще нема), одразу намалювати.
+func _add(cell: Vector2i, kind: int) -> void:
+	_scorch[cell] = _scorch.get(cell, 0) | kind
+	if _vision == null or _vision.is_seen(cell):
+		_paint(cell, kind)
+
+
+func _paint(cell: Vector2i, kinds: int) -> void:
+	var fresh: int = kinds & ~_painted.get(cell, 0)
+	if fresh == 0:
+		return
+	_painted[cell] = _painted.get(cell, 0) | fresh
+	if fresh & WRECK:
+		_stamp(cell, SCORCH_RADIUS_M, SCORCH_CORE_M)
+	if fresh & SQUAD:
+		_stamp(cell, SQUAD_SCORCH_RADIUS_M, SQUAD_SCORCH_CORE_M, SQUAD_SCORCH_DARK, 0.0)
 
 
 ## Слід, який повалена опора чи паркан лишає на розмоклій землі: темна смуга ~1 м завширшки вздовж
@@ -124,6 +168,8 @@ func stamp_scuff(a: Vector3, b: Vector3) -> void:
 				continue
 			var old: Color = _img.get_pixel(x, y)
 			_img.set_pixel(x, y, Color(maxf(old.r, v), old.g, old.b, old.a))
+			var ob: Color = _base.get_pixel(x, y)
+			_base.set_pixel(x, y, Color(maxf(ob.r, v), ob.g, ob.b, ob.a))
 	_mark_dirty()
 
 

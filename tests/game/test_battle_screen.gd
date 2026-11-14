@@ -2079,6 +2079,35 @@ func test_camera_flies_to_each_beat_focus() -> void:
 	assert_null(screen._replay_state)
 
 
+## Повтор малює стан свого початку: відділення, знищене на ході суперника, на початку повтору ще стоїть,
+## тож плями під ним нема (плями — з загиблих показаного стану, не з того, що вже сталося наживо).
+func test_replay_starting_before_a_squad_dies_shows_no_scorch_under_it() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(4, 4), "facing": 2},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(5, 4), "facing": 6},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(0, 0), "facing": 2},  # гравець 1 не вибуває
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var squad: Unit = service.state.unit_at(Vector2i(5, 4))
+	squad.hp = 10
+	_rebase_replay(service)
+	assert_eq(service.submit(FireCommand.create(service.state.unit_at(Vector2i(4, 4)).id, squad.id)), "")
+	_drain(screen)
+	assert_false(squad.is_alive(), "передумова: постріл знищив відділення")
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	_drain(screen)
+	_confirm_gate(screen)
+	assert_true(screen._replay_state != null, "передумова: повтор іде")
+	assert_false(screen._scars.has_squad_scorch(squad.pos), "на початку повтору відділення ще стоїть")
+	assert_false(screen._scars.is_painted(squad.pos))
+	_drain(screen)
+	assert_true(screen._scars.has_squad_scorch(squad.pos), "після повтору — пляма на місці")
+
+
 func test_surrender_and_end_turn_are_ignored_during_replay() -> void:
 	var service := SpyMatchService.new()
 	add_child_autofree(service)

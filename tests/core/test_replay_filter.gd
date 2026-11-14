@@ -429,6 +429,32 @@ func test_three_players_unseen_shooter_on_visible_unit_has_no_shooter_appeared()
 	assert_eq(r.beats[0].focus, Vector2i(9, ROAD_Y), "камера — на цілі, не на стрільці")
 
 
+## Бійці, що впали від влучання на розвіданому глядачем, падають і на повторі; на нерозвіданому — нічого.
+## Видимість — з копії стану після команди: тіла з прогону несуть біти показу кінця проміжку.
+func test_figures_fall_in_replay_only_where_the_viewer_sees_the_tile() -> void:
+	for seen_target: bool in [true, false]:
+		journal = ReplayLog.new()
+		var s: BattleState = _state(3)
+		_anchor(s)
+		var target_x: int = 9 if seen_target else 13
+		var shooter_x: int = 13 if seen_target else 9
+		var a: Unit = s.add_unit(5, 1, Vector2i(shooter_x, ROAD_Y), 2)
+		var b: Unit = s.add_unit(0, 2, Vector2i(target_x, ROAD_Y), 6)
+		b.hp = 30  # дві фігури: будь-яке влучання (щонайменше 10) валить одну
+		_open(s, _cols(0, 10))
+		_play(s, FireCommand.create(a.id, b.id))
+		_end(s)
+		_end(s)
+		var raw: Array[Events.BattleEvent] = []
+		for en in journal.rerun(0):
+			raw.append_array(en["events"])
+		assert_true(_has(raw, Events.FiguresFell), "передумова: прогін повалив бійця")
+		var r: ReplayFilter.Result = _build()
+		var ev: Array[Events.BattleEvent] = _all(r) if r != null else [] as Array[Events.BattleEvent]
+		assert_eq(_has(ev, Events.FiguresFell), seen_target,
+				"падіння на %s тайлі" % ("розвіданому" if seen_target else "нерозвіданому"))
+
+
 func test_ap_changed_never_kept() -> void:
 	var s: BattleState = _state()
 	_anchor(s)
