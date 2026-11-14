@@ -165,6 +165,13 @@ if C.get("glass_hue"):
     sr = d["src"]
     teal = (np.minimum(sr[..., 1], sr[..., 2]) > sr[..., 0] * 1.35 + 0.01) * (d["cov"] > 0.5) * (P[..., 2] > C["glass_hue"]) * ~on_gun
     glass = np.maximum(glass, teal.astype(np.float32))
+if C.get("glass_boxes"):
+    # cab windows by position (the generated texture loses them on the baked walls): side faces and a forward-leaning screen
+    # inside [y0, y1, z0, z1] model metres are glass
+    facing = (np.abs(d["nrm"][..., 0]) > 0.5) | (d["nrm"][..., 1] > 0.3)
+    for gy0, gy1, gz0, gz1 in C["glass_boxes"]:
+        gb = facing & (d["cov"] > 0.5) & (P[..., 1] > gy0) & (P[..., 1] < gy1) & (P[..., 2] > gz0) & (P[..., 2] < gz1) & ~on_gun
+        glass = np.maximum(glass, gb.astype(np.float32))
 col = col * (1 - glass[..., None]) + lin(*C.get("glass_c", (20, 22, 24))) * glass[..., None]
 rough = rough * (1 - glass) + 0.25 * glass
 
