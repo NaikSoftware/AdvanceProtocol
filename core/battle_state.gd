@@ -176,15 +176,16 @@ func known_occupied_map(player: int) -> Dictionary:
 
 func known_blocked_map(player: int) -> Dictionary:
 	## Те, з чого ПЛАНУЄТЬСЯ хід (§3.2): known_occupied_map() плюс відомі гравцеві
-	## ворожі міни й уламки (§3.14). §3.11: знайдена міна — перешкода, її об'їжджають,
+	## міни й уламки (§3.14). §3.11: знайдена міна — перешкода, її об'їжджають,
 	## як зайнятий тайл, а не наступають на неї наосліп після того, як інженер її вже
 	## показав. Окремий метод, а не домішка в known_occupied_map(): ту читають види
 	## юнітів і чекають там лише id юнітів. Значення для міни — −1, бо юніта там немає;
 	## для уламків — Wrecks.BLOCKED.
-	## Своя міна сюди не входить — під власником вона не вибухає (Mines.step_on()).
+	## Свої міни входять так само: вони рвуть і власника (Mines.step_on()), а знає він
+	## їх усі, бо known_to[owner] виставлено від самого встановлення.
 	var out: Dictionary = known_occupied_map(player)
 	for m in mines:
-		if m.owner != player and m.known_to[player] and not out.has(m.pos):
+		if m.known_to[player] and not out.has(m.pos):
 			out[m.pos] = -1
 	# Уламки знані так само, як ворог на тайлі (§3.5): лише над розвіданим. Перекривають
 	# вони тільки техніку — Pathing.compute_zones() пропускає піхоту крізь Wrecks.BLOCKED.

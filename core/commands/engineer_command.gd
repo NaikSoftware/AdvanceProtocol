@@ -24,6 +24,29 @@ static func repair_bounds(engineer: Unit, target: Unit) -> Vector2i:
 	var missing: int = target.max_hp() - target.hp
 	return Vector2i(mini(20, missing), mini((40 + maxi(0, engineer.ap - engineer.fire_cost())) / 2, missing))
 
+static func demolish_bridge(state: BattleState, pos: Vector2i, credit_player: int) -> Array[Events.BattleEvent]:
+	## Один шлях підриву мосту для інженера й для міни на мосту (§3.8, §3.11): вигляд
+	## програє ту саму низку подій, хоч би що міст підірвало.
+	var out: Array[Events.BattleEvent] = []
+	state.board.set_kind(pos, Terrain.Kind.BRIDGE_DESTROYED)
+	out.append(Events.BridgeChanged.new(pos, true))
+	# Уламки на прогоні падають у річку разом із ним (§3.14). Підрив вони не
+	# забороняють: техніки на них немає, а піхоту на мосту й так можна скинути.
+	out.append_array(Wrecks.remove(state, pos, Wrecks.Reason.BRIDGE_DEMOLISHED))
+	# Юніт на мосту падає разом із ним: та сама низка подій, що й від смертельного
+	# влучання, крім уламків — техніка в річці їх не лишає, тож Wrecks.leave() тут
+	# немає. Шкода — тому, хто підірвав, але не за власний юніт: свої втрати —
+	# не шкода, завдана ворогу.
+	var victim: Unit = state.unit_at(pos)
+	if victim != null:
+		if victim.owner != credit_player:
+			state.damage_dealt[credit_player] += victim.hp
+		out.append(Events.DamageDealt.new(victim.id, victim.hp, 0))
+		victim.hp = 0
+		out.append(Events.UnitDestroyed.new(victim.id, victim.pos))
+		out.append_array(state.check_elimination())
+	return out
+
 static func action_status(state: BattleState, unit_id: int, action: int) -> Dictionary:
 	## Допустимі сусідні тайли дії та причина відмови. Лише читає стан — правила
 	## беруться з validate(), не дублюються.
@@ -72,6 +95,10 @@ func validate(state: BattleState) -> String:
 		Action.LAY_MINE:
 			if Mines.mine_at(state, target_pos) != null:
 				return "ERR_MINE_ALREADY_THERE"
+			# На воду ніхто не в'їде, тож міна там нічого не важить; міст — інша річ:
+			# міна на ньому підриває й прогін (Mines.step_on()).
+			if state.board.kind_at(target_pos) == Terrain.Kind.WATER:
+				return "ERR_MINE_ON_WATER"
 			if state.unit_at(target_pos) != null:
 				return "ERR_TILE_OCCUPIED"
 		Action.CLEAR_MINE:
@@ -114,22 +141,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 			# охороною: BridgeChanged для мосту, що не змінився, змусила б вигляд
 			# анімувати брехню.
 			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE:
-				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE_DESTROYED)
-				out.append(Events.BridgeChanged.new(target_pos, true))
-				# Уламки на прогоні падають у річку разом із ним (§3.14). Підрив вони не
-				# забороняють: техніки на них немає, а піхоту на мосту й так можна скинути.
-				out.append_array(Wrecks.remove(state, target_pos, Wrecks.Reason.BRIDGE_DEMOLISHED))
-				# Ворог на мосту падає разом із ним: та сама низка
-				# подій, що й від смертельного влучання, крім уламків — техніка в річці
-				# їх не лишає, тож Wrecks.leave() тут немає. Шкода — власникові
-				# інженера, як від міни.
-				var victim: Unit = state.unit_at(target_pos)
-				if victim != null:
-					state.damage_dealt[e.owner] += victim.hp
-					out.append(Events.DamageDealt.new(victim.id, victim.hp, 0))
-					victim.hp = 0
-					out.append(Events.UnitDestroyed.new(victim.id, victim.pos))
-					out.append_array(state.check_elimination())
+				out.append_array(demolish_bridge(state, target_pos, e.owner))
 		Action.REPAIR_BRIDGE:
 			if state.board.kind_at(target_pos) == Terrain.Kind.BRIDGE_DESTROYED:
 				state.board.set_kind(target_pos, Terrain.Kind.BRIDGE)

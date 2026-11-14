@@ -148,8 +148,8 @@ inside an enemy squad's ring, which are deliberately computed from that squad al
 implementation of either geometry in the renderer is exactly the drift this document exists to
 prevent.
 
-**The movement zones are drawn from the fog-filtered occupancy plus the enemy mines you already
-know of and the broken forest you already know of, which is also what the move is planned
+**The movement zones are drawn from the fog-filtered occupancy plus the mines you know of — your
+own and the enemy mines found so far — and the broken forest you already know of, which is also what the move is planned
 against** ([§3.2](../rules/movement-and-terrain.md),
 [§3.11](../rules/vision-and-fog.md)). The overlay and the order agree by construction: what you
 are shown as reachable is exactly what the game will attempt.

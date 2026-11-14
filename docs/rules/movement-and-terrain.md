@@ -141,8 +141,8 @@ occupancies and conflating them is a bug in either direction:
 
 - **Planning** — the zones, the path, and whether a destination is reachable at all — uses the full
   terrain, which is public (§3.5), the player's own units, enemy **units** standing on ground the
-  player has scouted (`seen`, §3.5), the enemy mines the player already knows of, which are
-  obstacles (§3.11), for a vehicle the wrecks on scouted ground (§3.14), and the broken forest
+  player has scouted (`seen`, §3.5), the mines the player knows of — their own and the enemy mines
+  found so far — which are obstacles (§3.11), for a vehicle the wrecks on scouted ground (§3.14), and the broken forest
   the player knows of. Ground that looks empty is planned through. Terrain never surprises a
   move; only an enemy or its wreck can.
 - **Walking** uses the truth. Before entering each tile the mover checks what is really there; if

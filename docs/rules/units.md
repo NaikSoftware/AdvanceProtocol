@@ -73,7 +73,9 @@ a balance discussion.
 The engineer is the only unit with a verb list instead of a gun. All actions are on an
 **orthogonally adjacent** tile and require `fire_cost` AP:
 
-- **Lay mine** / **clear mine**
+- **Lay mine** / **clear mine** — a mine may be laid on a bridge but never on water
+  (`ERR_MINE_ON_WATER`); a mined bridge goes down under the first unit that drives onto it, exactly
+  as if demolished ([§3.11](vision-and-fog.md#mines)). Your own mines may be cleared too.
 - **Repair or demolish a bridge** — a demolished crossing reshapes the whole map, and this is the
   single highest-impact action in the game
   - **An enemy unit on the bridge goes down with it**: it is destroyed outright,

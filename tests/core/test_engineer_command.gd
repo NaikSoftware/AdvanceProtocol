@@ -308,3 +308,83 @@ func test_enemy_mine_next_to_engineer_is_known_after_begin_turn_and_statuses_mat
 	assert_eq(clear, EngineerCommand.action_status(s2, e2.id, A.CLEAR_MINE))
 	assert_false(lay["tiles"].has(Vector2i(4, 3)))
 	assert_true(clear["tiles"].has(Vector2i(4, 3)))
+
+## Міну на воду не ставлять: на тайл, куди ніхто не в'їде, вона нічого не важить.
+func test_a_mine_cannot_be_laid_on_water() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.WATER)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	assert_eq(EngineerCommand.create(e.id, A.LAY_MINE, Vector2i(4, 3)).validate(state), "ERR_MINE_ON_WATER")
+
+func test_a_mine_can_be_laid_on_a_bridge() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	assert_eq(EngineerCommand.create(e.id, A.LAY_MINE, Vector2i(4, 3)).validate(state), "")
+
+## Відмова верба не має нічого казати про те, чого гравець не бачить. validate() читає
+## правду (unit_at(), mine_at()), тож тест порівнює її відповідь із відповіддю на
+## дошці, з якої прибрано все, чого активний гравець не знає: невидимі чужі юніти й
+## нерозкриті чужі міни. Збіг на кожному вербі й кожному сусідньому тайлі означає, що
+## правда тут нічого не виказує: сусідній тайл лежить у ромбі огляду інженера, піхоту
+## в будинку поруч знаходить сусідство, а міну поруч — пошук на початку ходу.
+func test_no_engineer_verb_refusal_depends_on_what_the_player_cannot_see() -> void:
+	var b: Board = Board.create(10, 10, Terrain.GroundState.DRY)
+	b.set_kind(Vector2i(5, 4), Terrain.Kind.BUILDING)
+	b.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	for x in 10:
+		if x != 4:
+			b.set_kind(Vector2i(x, 3), Terrain.Kind.WATER)
+	state = BattleState.create(b, 3, 21)
+	var e: Unit = state.add_unit(11, 0, Vector2i(4, 4), 0)
+	state.add_unit(5, 0, Vector2i(0, 9), 0)
+	var p1_inf: Unit = state.add_unit(0, 1, Vector2i(7, 4), 0)   # далі від інженера, ніж його огляд
+	var p1_eng: Unit = state.add_unit(11, 1, Vector2i(4, 7), 0)
+	var p2_car: Unit = state.add_unit(2, 2, Vector2i(0, 4), 0)
+	var p2_inf: Unit = state.add_unit(0, 2, Vector2i(4, 0), 0)   # за річкою, на мосту стане поруч
+	state.start()
+	state.active_player = 1
+	state.begin_turn()
+	# Гравець 1 заводить піхоту в будинок поруч з інженером і ставить міну під бік.
+	_do(MoveCommand.create(p1_inf.id, Vector2i(5, 4)))
+	_do(MoveCommand.create(p1_eng.id, Vector2i(4, 6)))
+	_do(EngineerCommand.create(p1_eng.id, A.LAY_MINE, Vector2i(4, 5)))
+	state.pass_turn()
+	# Гравець 2: техніка — впритул збоку, піхота — на міст.
+	_do(MoveCommand.create(p2_car.id, Vector2i(3, 4)))
+	_do(MoveCommand.create(p2_inf.id, Vector2i(4, 3)))
+	state.pass_turn()
+	assert_eq(state.active_player, 0)
+	for d in Board.DIRS_4:
+		var p: Vector2i = e.pos + d
+		var u: Unit = state.unit_at(p)
+		assert_true(u != null or Mines.mine_at(state, p) != null, "передумова: на %s щось є" % p)
+		if u != null:
+			assert_true(state.can_see_unit(0, u), "юніт на %s видно" % p)
+		if Mines.mine_at(state, p) != null:
+			assert_true(Mines.mine_at(state, p).known_to[0], "міна на %s відома" % p)
+		for action: int in A.values():
+			var cmd: EngineerCommand = EngineerCommand.create(e.id, action, p)
+			assert_eq(cmd.validate(state), _validate_blind(cmd, 0),
+				"верб %d на %s відповідає однаково й без невидимого" % [action, p])
+
+func _do(cmd: Command) -> void:
+	assert_eq(cmd.validate(state), "", "передумова: %s" % cmd)
+	cmd.apply(state)
+
+func _validate_blind(cmd: EngineerCommand, player: int) -> String:
+	var hidden_units: Array[Unit] = []
+	for u in state.alive_units():
+		if not state.can_see_unit(player, u):
+			hidden_units.append(u)
+	var hidden_mines: Array[Mines.Mine] = []
+	for m in state.mines:
+		if not m.known_to[player]:
+			hidden_mines.append(m)
+	for u in hidden_units:
+		state.units.erase(u.id)
+	for m in hidden_mines:
+		state.mines.erase(m)
+	var r: String = cmd.validate(state)
+	for u in hidden_units:
+		state.units[u.id] = u
+	state.mines.append_array(hidden_mines)
+	return r
