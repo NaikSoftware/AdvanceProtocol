@@ -12,6 +12,7 @@ extends Node
 const STATES: Array[String] = [
 	"idle", "own_tank", "move_preview", "shot_preview", "enemy", "engineer", "engineer_armed",
 	"drone", "drone_preview", "hold_enemy", "handover", "pause",
+	"squad", "hold_enemy_squad", "engineer_pending", "mood",
 ]
 const SETTLE_FRAMES: int = 90
 const STATE_FRAMES: int = 20
@@ -140,7 +141,7 @@ func _find_site(board: Board) -> Vector2i:
 ## Ставить свіжий склад і доводить екран до стану; false — стан недосяжний (причина в журналі).
 func _enter_state(st: String) -> bool:
 	print("HUD_SHOT state ", st)
-	_reset_cast()
+	_reset_cast(st)
 	for f in 5:
 		await get_tree().process_frame
 	var tank: Unit = _state.get_unit(_ids["tank"])
@@ -169,6 +170,16 @@ func _enter_state(st: String) -> bool:
 				_ctrl.tap_cell(enemy.pos)
 		"hold_enemy":
 			_ctrl.peek_cell(enemy.pos)
+		"squad":
+			_ctrl.select_unit(_state.get_unit(_ids["assault"]))
+		"hold_enemy_squad":
+			_ctrl.peek_cell(_state.get_unit(_ids["enemy_squad"]).pos)
+		"engineer_pending":
+			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
+			_ctrl.arm_engineer(EngineerCommand.Action.REPAIR_UNIT)
+			_ctrl.tap_cell(tank.pos)
+		"mood":
+			pass
 		"handover":
 			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1)
 		"pause":
@@ -183,8 +194,10 @@ func _enter_state(st: String) -> bool:
 	match st:
 		"move_preview", "shot_preview", "drone_preview":
 			ok = ctrl_state["pending"]
-		"own_tank", "enemy", "engineer":
+		"own_tank", "enemy", "engineer", "squad":
 			ok = ctrl_state["sel"]
+		"engineer_pending":
+			ok = ctrl_state["pending"] and ctrl_state["armed"]
 		"engineer_armed", "drone":
 			ok = ctrl_state["armed"]
 	if not ok:
@@ -193,7 +206,10 @@ func _enter_state(st: String) -> bool:
 
 
 ## Склад розкладається заново на кожен стан: попередній міг витратити AP чи повернути танк.
-func _reset_cast() -> void:
+## Відступи від типового складу — лише для станів, що без них недосяжні, аби решта кадрів не
+## зсувалася: ворожий штурмовий загін із дронами (hold_enemy_squad), пошкоджений танк поруч з
+## інженером (engineer_pending), порожня дошка для тла екрана передачі ходу (mood).
+func _reset_cast(st: String) -> void:
 	_ctrl.select_unit(null)
 	_ctrl.end_peek()
 	(_screen.get_node("%PauseMenu") as Control).visible = false
@@ -203,18 +219,28 @@ func _reset_cast() -> void:
 	_state.mines.clear()
 	var toward_enemy: int = Board.facing_towards(_site, _site + OFF_ENEMY_TANK)
 	_ids["tank"] = _state.add_unit(MEDIUM_TANK, 0, _site + OFF_TANK, toward_enemy).id
-	_ids["engineer"] = _state.add_unit(ENGINEER, 0, _site + OFF_ENGINEER, toward_enemy).id
+	var eng_off: Vector2i = Vector2i(1, 0) if st == "engineer_pending" else OFF_ENGINEER
+	_ids["engineer"] = _state.add_unit(ENGINEER, 0, _site + eng_off, toward_enemy).id
+	if st == "engineer_pending":
+		_state.get_unit(_ids["tank"]).hp -= 80
 	_ids["assault"] = _state.add_unit(ASSAULT_SQUAD, 0, _site + OFF_ASSAULT, toward_enemy).id
 	_ids["rifle"] = _state.add_unit(RIFLE_SQUAD, 0, _site + OFF_RIFLE, toward_enemy).id
 	var back: int = Board.facing_towards(_site + OFF_ENEMY_TANK, _site)
 	_ids["enemy_tank"] = _state.add_unit(MEDIUM_TANK, 1, _site + OFF_ENEMY_TANK, back).id
 	_ids["enemy_car"] = _state.add_unit(ARMOURED_CAR, 1, _site + OFF_ENEMY_CAR, back).id
-	_ids["enemy_squad"] = _state.add_unit(RIFLE_SQUAD, 1, _site + OFF_ENEMY_SQUAD, back).id
+	var squad_type: int = ASSAULT_SQUAD if st == "hold_enemy_squad" else RIFLE_SQUAD
+	_ids["enemy_squad"] = _state.add_unit(squad_type, 1, _site + OFF_ENEMY_SQUAD, back).id
+	if st == "mood":
+		_state.units.clear()
 	_state.active_player = 0
 	_state.refresh_vision_all()
 	_screen.call("_rebuild_units_for_active_player", true)
-	_rig.center_on(_site + Vector2i(1, 0))
-	_rig.zoom_by(ZOOM / _rig.zoom_level)
+	if st == "mood":
+		_rig.center_on(Vector2i(_state.board.width / 2, _state.board.height / 2))
+		_rig.zoom_by(16.0 / _rig.zoom_level)
+	else:
+		_rig.center_on(_site + Vector2i(1, 0))
+		_rig.zoom_by(ZOOM / _rig.zoom_level)
 	(_screen.get_node("%Hud") as Hud).refresh()
 
 
