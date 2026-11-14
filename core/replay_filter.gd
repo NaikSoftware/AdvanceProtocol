@@ -263,7 +263,6 @@ class _Pass extends RefCounted:
 		var seg: Array[Vector2i] = []
 		var tail: Array[Events.BattleEvent] = []
 		var wreck_kept: Array[bool] = [false]
-		var bridge_kept: Array[bool] = [false]
 		for s in range(-1, path.size()):
 			if s >= 0:
 				if vis[s] and not running:
