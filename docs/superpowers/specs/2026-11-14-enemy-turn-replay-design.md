@@ -72,7 +72,7 @@ something of the viewer's.** In detail:
 | an enemy unit detonating **the viewer's** mine | the blast on the mine's tile, always: the viewer knows where the mine was and will see that it is gone. The unit only if it is visible there |
 | the viewer's mine cleared by an engineer the viewer cannot see | not shown. The mine is simply gone at the end, as today |
 | a bridge demolished, forest broken, wreck left, by an actor the viewer cannot see | not shown. The end state applies when the replay ends, as today |
-| an exchange between two opponents (three players) | each unit by its own visibility. A visible shooter firing into the fog: the shot leaves, the target is not drawn and no numbers show. An unseen shooter hitting a visible unit: the tracer comes in out of the fog, and the hit, the damage, the turn and any wreck show on the target. The shooter itself is not drawn. The bearing the tracer gives away is accepted: the target turns onto its attacker anyway (§3.4), and hit effects already follow the shooter's weapon class whoever can see it |
+| an exchange between two opponents (three players) | each unit by its own visibility. A visible shooter firing into the fog: the shot leaves, the target is not drawn and no numbers show. An unseen shooter hitting a visible unit: the hit, the damage, the turn and any wreck show on the target, with no tracer and no muzzle flash, so nothing is drawn between the target and the shooter. The hit effect still follows the shooter's weapon class, as in live play |
 | turning in place | by the same actor rule |
 
 **Fogged actions take zero time.** They produce no frame, no camera move and no count.
