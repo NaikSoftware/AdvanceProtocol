@@ -39,7 +39,7 @@ var _stopped: bool = false
 var _run: int = 0
 
 
-## Перебудова BoardView з нинішньої Board (BridgeChanged).
+## Перебудова BoardView після зміни мосту (pos — клітинка мосту з BridgeChanged).
 var _board_rebuild: Callable
 
 
@@ -417,11 +417,11 @@ func _handle_mine_revealed(_event: Events.MineRevealed) -> Variant:
 
 
 ## Зміна виду тайлу (міст цілий/зруйнований): новий вид уже записано в core/,
-## тож вигляд лише перебудовує дошку з нинішньої Board (інжектований Callable,
-## той самий прийом, що й пошуки юнітів — R18).
-func _handle_bridge_changed(_event: Events.BridgeChanged) -> Variant:
+## тож вигляд лише перебудовує дошку (інжектований Callable, той самий прийом, що
+## й пошуки юнітів — R18). Клітинка йде з подією: на повторі змінюється лише вона.
+func _handle_bridge_changed(event: Events.BridgeChanged) -> Variant:
 	if _board_rebuild.is_valid():
-		_board_rebuild.call()
+		_board_rebuild.call(event.pos)
 	return null
 
 

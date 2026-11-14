@@ -104,6 +104,9 @@ var _replay_before: BattleState = null
 ## Номер повтору: кінець (сам, пропуском чи виходом екрана) його міняє, і такт, що прокинеться
 ## після цього, нічого вже не робить.
 var _replay_run: int = 0
+## Дошка на екрані під час повтору: копія початку відрізка, на яку лягають лише показані зміни
+## мостів. Стан такту вже несе й мости, змінені непоміченим інженером раніше.
+var _replay_board: Board = null
 ## Вид клітинок, з якого зараз намальована дошка (BoardView.rebuild_tiles).
 var _drawn_tiles: PackedInt32Array = PackedInt32Array()
 ## Клітинки, над якими зараз розчинено дахи (юніти на дошці).
@@ -155,6 +158,10 @@ const IDLE_AFTER_S: float = 1.0
 ## дужче. Ніщо в ньому не залежить від швидкості гравця (§1.1): це показ, а не правило.
 const REPLAY_SPEED: float = 2.5
 const REPLAY_FAST_FORWARD: float = 20.0
+## Зум повтору: не ближче, ніж уміщає хід на кілька клітинок, і не далі за середину діапазону рига,
+## де юніт ще читається силуетом.
+const REPLAY_ZOOM_MIN: float = IsoCameraRig.MIN_ZOOM + 2.0
+const REPLAY_ZOOM_MAX: float = (IsoCameraRig.MIN_ZOOM + IsoCameraRig.MAX_ZOOM) * 0.5
 
 ## Крок зуму коліщатка/пінчу за одну подію. zoom_by() сам клемпить
 ## (IsoCameraRig.MIN_ZOOM..MAX_ZOOM) — тут лише симетричний множник туди й
@@ -393,7 +400,7 @@ func _wire_view(board: Board) -> void:
 	_path_overlay = PathOverlay.new(_board_view)
 	_target_overlay = TargetOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
-		func() -> void: _show_tiles(_state().board),
+		_on_bridge_changed,
 		_on_wreck_left, _on_wreck_removed, _on_unit_found, _on_cell_entered, _on_unit_appeared, _on_unit_vanished)
 	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
@@ -443,6 +450,7 @@ func _exit_tree() -> void:
 		# Екран пішов посеред повтору (пауза -> зберегти й вийти): прискорення — стан усього процесу.
 		_replay_run += 1
 		Engine.time_scale = 1.0
+		_set_replay(null, -1)
 	Engine.max_fps = _prev_max_fps
 	if get_tree() != null:
 		get_tree().quit_on_go_back = _prev_quit_on_go_back
@@ -936,13 +944,18 @@ func _begin_replay(replay: ReplayFilter.Result) -> void:
 	# Повторена техніка не валить нічого нового: усе, що вона повалила, вже лежить.
 	_vehicle_moves.clear()
 	_rebuild_wrecks()
-	_show_tiles(replay.start.board)
+	var b: Board = replay.start.board
+	_replay_board = Board.create(b.width, b.height, b.ground_state)
+	_replay_board.tiles = b.tiles.duplicate()
+	_show_tiles(_replay_board)
 	_rebuild_units_for_active_player(true, replay.on_screen_start)
 	var focus: Vector2i = replay.beats[0].focus
 	if not _fx_warmed:
 		_warm_up_fx(focus)
 	_hud.visible = false
 	_replay_overlay.begin(replay.beats.size())
+	# Зум попереднього гравця після повтору не повертається: камера вже належить тому, хто сів.
+	_camera_rig.set_zoom(clampf(_camera_rig.zoom_level, REPLAY_ZOOM_MIN, REPLAY_ZOOM_MAX))
 	_camera_rig.center_on(focus)
 	_gate.visible = false
 	_play_replay(replay)
@@ -980,6 +993,7 @@ func _end_replay() -> void:
 	Engine.time_scale = 1.0
 	_set_replay(null, -1)
 	_replay_before = null
+	_replay_board = null
 	_replay_overlay.finish()
 	BattleFx.clear_all(get_tree())
 	_cancel_falls()
@@ -1040,6 +1054,16 @@ func _sync_replay_views(on_screen: Dictionary) -> void:
 	for id: int in _unit_views:
 		_shown_cells.append(_state().get_unit(id).pos)
 	_board_view.set_reveal_cells(_shown_cells)
+
+
+## Міст змінився. На повторі на копію дошки лягає лише ця клітинка (§3.5): стан такту вже несе й
+## мости, які непомічений інженер змінив раніше, і повна перемальовка показала б їх завчасно.
+func _on_bridge_changed(pos: Vector2i) -> void:
+	if _replay_state == null:
+		_show_tiles(_state().board)
+		return
+	_replay_board.set_kind(pos, _state().board.kind_at(pos))
+	_show_tiles(_replay_board)
 
 
 ## Перебудова дошки повна й дорога (§8): лише коли вид клітинок інший, ніж намальований.

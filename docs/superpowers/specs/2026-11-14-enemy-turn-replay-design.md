@@ -168,8 +168,10 @@ Considered and not chosen:
   that can point at the replay copy. Together this is the bulk of the view work. `EventPlayer`
   already has a `viewer` field.
 - **What is rewound to the start of the span:** units, wrecks, mines, bridges and the viewer's
-  known broken forest, the things that carry a rule. Scars, crushed props, fallen soldiers and
-  roofs stay as they are now: they are view-only, not in the snapshot, and rebuilding the whole
+  known broken forest, the things that carry a rule. Fallen soldiers are rewound with the units:
+  they are drawn from the snapshot, so a squad that dies in the span lies down only when the replay
+  ends, which shows less, never more. Scars, crushed props and roofs stay as they are now: they are
+  view-only, not in the snapshot, and rebuilding the whole
   board on a phone costs more than a rut appearing a few seconds early is worth. They are already
   filtered by the viewer's knowledge, so nothing leaks. Effects are cleared before the replay, as
   at the gate.

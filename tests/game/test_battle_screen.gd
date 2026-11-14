@@ -1719,6 +1719,8 @@ func test_time_scale_restored_when_screen_exits_mid_replay() -> void:
 	assert_eq(Engine.time_scale, 2.5, "передумова: повтор іде")
 	remove_child(screen)
 	assert_eq(Engine.time_scale, 1.0, "екран пішов посеред повтору — прискорення знято")
+	assert_null(screen._replay_state, "і поля повтору знято разом")
+	assert_eq(screen._replay_viewer, -1)
 	for _i in 5:
 		_finish_all_processed_tweens()
 	assert_eq(Engine.time_scale, 1.0, "завислий такт не повертає прискорення")
@@ -1856,3 +1858,113 @@ func test_no_replay_keeps_todays_gate_flow() -> void:
 		assert_false(_overlay(screen).visible, "без повтору оверлея нема")
 	var camera: IsoCameraRig = screen.get_node("%CameraRig")
 	assert_eq(camera.global_position, camera._clamp_to_bounds(IsoCameraRig.cell_to_world(service.state.units_of(1)[0].pos)))
+
+
+## Міст, який непомічений інженер підірвав раніше у відрізку, лишається цілим на екрані, поки
+## грається видимий підрив іншого мосту: стан такту несе обидва, а показ — лише свій.
+func test_hidden_bridge_change_is_not_drawn_with_a_later_visible_one() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(10, 3)
+	var hidden := Vector2i(1, 1)
+	var shown := Vector2i(7, 1)
+	for c: Vector2i in [hidden, shown]:
+		m.tiles[c.y * m.width + c.x] = Terrain.Kind.BRIDGE
+	m.spawns = [
+		{"type_id": 11, "owner": 0, "pos": Vector2i(0, 1), "facing": 2},
+		{"type_id": 11, "owner": 0, "pos": Vector2i(6, 1), "facing": 2},
+		{"type_id": 5, "owner": 0, "pos": Vector2i(6, 2), "facing": 2},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(9, 1), "facing": 6},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var st: BattleState = service.state
+	assert_false(st.vision[1].is_seen(Vector2i(0, 1)), "передумова: інженер біля першого мосту в тумані гравця 1")
+	var demolish: int = EngineerCommand.Action.DEMOLISH_BRIDGE
+	assert_eq(service.submit(EngineerCommand.create(st.unit_at(Vector2i(0, 1)).id, demolish, hidden)), "")
+	_drain(screen)
+	assert_eq(service.submit(EngineerCommand.create(st.unit_at(Vector2i(6, 1)).id, demolish, shown)), "")
+	_drain(screen)
+	assert_eq(service.submit(MoveCommand.create(st.unit_at(Vector2i(6, 2)).id, Vector2i(7, 2))), "")
+	_drain(screen)
+	(screen.get_node("%Hud").get_node("%EndTurnButton") as Button).pressed.emit()
+	_drain(screen)
+	var r: ReplayFilter.Result = service.replay_for(1)
+	assert_not_null(r, "передумова: є повтор")
+	if r == null:
+		return
+	assert_eq(r.beats.size(), 2, "передумова: підрив видимого мосту й хід танка; прихований підрив — без такту")
+	var board_view: BoardView = screen.get_node("%BoardView")
+	_confirm_gate(screen)
+	assert_eq(board_view._kind_by_cell[hidden], Terrain.Kind.BRIDGE, "перший кадр — мости початку відрізка")
+	assert_eq(board_view._kind_by_cell[shown], Terrain.Kind.BRIDGE)
+	# Такт підриву дограно, повтор чекає на політ до танка.
+	_finish_all_processed_tweens()
+	assert_true(screen._replay_state != null, "передумова: повтор ще йде")
+	assert_eq(board_view._kind_by_cell[shown], Terrain.Kind.BRIDGE_DESTROYED, "видимий підрив показано")
+	assert_eq(board_view._kind_by_cell[hidden], Terrain.Kind.BRIDGE, "прихований підрив не показано раніше кінця")
+	_drain(screen)
+	assert_null(screen._replay_state)
+	assert_eq(board_view._kind_by_cell[hidden], Terrain.Kind.BRIDGE_DESTROYED, "після повтору — справжня дошка")
+	assert_eq(board_view._kind_by_cell[shown], Terrain.Kind.BRIDGE_DESTROYED)
+
+
+func test_replay_clamps_zoom_into_a_readable_range() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	var camera: IsoCameraRig = screen.get_node("%CameraRig")
+	camera.zoom_level = IsoCameraRig.MAX_ZOOM
+	camera._zoom_target = IsoCameraRig.MAX_ZOOM
+	var upper: float = (IsoCameraRig.MIN_ZOOM + IsoCameraRig.MAX_ZOOM) * 0.5
+	_confirm_gate(screen)
+	assert_true(camera.zoom_level <= upper, "повтор не грає з найбільшого віддалення: %s" % camera.zoom_level)
+	assert_eq(camera._zoom_target, camera.zoom_level, "зум стоїть, а не доїжджає")
+	for _i in 30:
+		if screen._replay_state == null:
+			break
+		_finish_all_processed_tweens()
+		camera._process(1.0)
+		assert_true(camera.zoom_level <= upper, "зум тримається весь повтор")
+	assert_null(screen._replay_state)
+	assert_true(camera.zoom_level <= upper, "після повтору зум попереднього гравця не повертається")
+
+
+func test_camera_flies_to_each_beat_focus() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	var r: ReplayFilter.Result = service.replay_for(1)
+	assert_not_null(r)
+	if r == null:
+		return
+	assert_eq(r.beats.size(), 3, "передумова: три такти")
+	var camera: IsoCameraRig = screen.get_node("%CameraRig")
+	_confirm_gate(screen)
+	for i in r.beats.size():
+		var fly: Tween = camera._recenter_tween
+		assert_true(fly != null and fly.is_valid(), "такт %d: камера летить" % i)
+		if fly == null or not fly.is_valid():
+			return
+		fly.custom_step(10.0)
+		assert_eq(camera.global_position, camera._clamp_to_bounds(IsoCameraRig.cell_to_world(r.beats[i].focus)),
+			"такт %d: камера на його першій дії" % i)
+		for _j in 10:
+			if screen._replay_state == null or (camera._recenter_tween != fly and camera._recenter_tween.is_valid()):
+				break
+			_finish_all_processed_tweens()
+	assert_null(screen._replay_state)
+
+
+func test_surrender_and_end_turn_are_ignored_during_replay() -> void:
+	var service := SpyMatchService.new()
+	add_child_autofree(service)
+	var screen: Node3D = _screen_after_enemy_turn(service)
+	_confirm_gate(screen)
+	assert_true(screen._replay_state != null and not screen._event_player.is_playing(),
+		"передумова: між тактами програвач вільний, повтор іде")
+	var submitted: int = service.submitted.size()
+	screen._on_surrender()
+	screen._on_end_turn_pressed()
+	assert_eq(service.submitted.size(), submitted, "на повторі ні здачі, ні кінця ходу")
+	assert_true(screen._replay_state != null)
