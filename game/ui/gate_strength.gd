@@ -14,6 +14,7 @@ const SQUARE := 8.0
 const BAR_H := 4.0
 const BAR_GAP := 2.0
 const TICK_W := 1.0
+const TICK_CLEAR := 6.0
 const DOT_ON := 2.0
 const DOT_OFF := 3.0
 const DOT_COLOR := Color("3a4043")
@@ -126,5 +127,21 @@ func _draw() -> void:
 		draw_rect(Rect2(_plate.position.x, _plate.end.y - BAR_H, _plate.size.x, BAR_H), GAP_COLOR)
 		for i in segment_rects.size():
 			draw_rect(segment_rects[i], _colors[segment_players[i]])
+		# Риски — цілі пікселі (інакше 1 dp на дробовому масштабі дає то 1, то 2 px) і не ближче
+		# TICK_CLEAR до проміжку між сегментами, де вони читаються зайвою межею.
+		var scale: float = maxf(get_global_transform_with_canvas().get_scale().x, 0.001)
 		for t in [1, 2]:
-			draw_rect(Rect2(_plate.position.x + _plate.size.x * t / 3.0 - TICK_W * 0.5, _plate.end.y - BAR_H, TICK_W, BAR_H), TICK_COLOR)
+			var tx: float = _plate.position.x + _plate.size.x * t / 3.0
+			if _near_gap(tx):
+				continue
+			var tw: float = maxf(1.0, roundf(TICK_W * scale)) / scale
+			var px: float = floorf((tx - tw * 0.5) * scale) / scale
+			draw_rect(Rect2(px, _plate.end.y - BAR_H, tw, BAR_H), TICK_COLOR)
+
+
+func _near_gap(x: float) -> bool:
+	for i in segment_rects.size() - 1:
+		var gap_from: float = segment_rects[i].end.x
+		if x > gap_from - TICK_CLEAR and x < gap_from + BAR_GAP + TICK_CLEAR:
+			return true
+	return false

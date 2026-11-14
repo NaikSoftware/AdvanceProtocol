@@ -29,8 +29,9 @@ const CHROME_AIR: float = 16.0
 const CORNER_COST: float = 1200.0
 const CORNER_AIR: float = 4.0
 ## Будь-який дотик до контуру дорожчий за кілька десятків dp відстані: частка площі сама по собі
-## ледь важить, а сегмент контуру під тегом ховає межу зони.
-const TOUCH_COST: float = 120.0
+## ледь важить, а сегмент контуру під тегом ховає межу зони. Дорожчий за найдовший законний лідер
+## (LONG_LEAD_PER_DP × (MAX_LEAD − LONG_LEAD_FROM) = 240): інакше довгий лідер програє накриттю контуру.
+const TOUCH_COST: float = 300.0
 ## Лідер довший за 40 dp росте круто: чистий закуток поруч кращий за дальній.
 const LONG_LEAD_FROM: float = 40.0
 const LONG_LEAD_PER_DP: float = 12.0

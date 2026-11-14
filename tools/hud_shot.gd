@@ -304,6 +304,8 @@ func _enter_state(st: String) -> bool:
 		"handover_p1":
 			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(0, _state.turn_number, _state)
 		"handover_p3":
+			# У матчі на трьох гравців гейт малює смугу, а не дві лінії.
+			_add_third_player()
 			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(2, _state.turn_number, _state)
 		"handover_2p_hurt":
 			_set_team_share(0, 0.7)
@@ -321,7 +323,7 @@ func _enter_state(st: String) -> bool:
 			# Карта без власної плити: запасна default.webp. Контекст лишається — знімати останнім.
 			var gate := _screen.get_node("%HandoverGate") as HandoverGate
 			gate.set_context("res://maps/_none.tres", gate.get("_map_name_key"))
-			gate.show_for(1, _state.turn_number)
+			gate.show_for(1, _state.turn_number, _state)
 		"pause":
 			(_screen.get_node("%PauseMenu") as PauseMenu).open(_state.turn_number)
 		_:
