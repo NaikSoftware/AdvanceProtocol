@@ -124,7 +124,7 @@ class WreckLeft extends BattleEvent:
 
 class FiguresFell extends BattleEvent:
 	## Фігури відділення впали й лишились лежати на тайлі (Casualties). Окрема подія, а не
-	## висновок вигляду з DamageDealt: скільки фігур лягло й де, вирішує `core/`.
+	## висновок вигляду з `DamageDealt`: скільки фігур лягло й де, вирішує `core/`.
 	var body: Casualties.Body
 	func _init(p_body: Casualties.Body) -> void:
 		body = p_body

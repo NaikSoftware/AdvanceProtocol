@@ -541,7 +541,7 @@ static func shows_body(state: BattleState, observer: int, b: Casualties.Body) ->
 	return u == null or not u.is_alive() or u.pos != b.pos or state.can_see_unit(observer, u)
 
 
-## Щойно впалі (подія FiguresFell) — одразу, а не на перебудові після пакета: інакше фігура
+## Щойно впалі (подія `FiguresFell`) — одразу, а не на перебудові після пакета: інакше фігура
 ## зникала б із відділення й лягала б аж по всьому. Чи бачить їх глядач, вирішує той, хто кличе.
 func add_body(body: Casualties.Body) -> void:
 	_bodies.append(body)
@@ -590,15 +590,15 @@ func _rebuild_body_meshes() -> void:
 		_body_meshes[key] = mi
 
 
-## Висота основи відділення під лежачою фігурою, як ставить живе відділення UnitView._pose():
-## рельєф мінус SQUAD_SINK, на мосту — настил. Береться під самою фігурою, тож на схилі тіло не висить.
+## Висота основи відділення під лежачою фігурою, як ставить живе відділення `UnitView._pose()`:
+## рельєф мінус `SQUAD_SINK`, на мосту — настил. Береться під самою фігурою, тож на схилі тіло не висить.
 func _body_ground(cell: Vector2i, at: Vector3) -> float:
 	var th: TerrainHeight = TerrainHeight.active
 	if th == null:
 		return 0.0
 	var deck: float = th.deck_y(cell)
 	if deck > th.at(float(cell.x), float(cell.y)) + 0.001:
-		return deck
+		return deck - UnitView.SQUAD_SINK
 	return th.at(at.x, at.z) - UnitView.SQUAD_SINK
 
 

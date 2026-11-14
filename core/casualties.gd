@@ -38,10 +38,10 @@ static func figures(hp: int, max_hp: int) -> int:
 	return mini(SQUAD_FIGURES, (SQUAD_FIGURES * hp + max_hp - 1) / max_hp)
 
 
-## Викликати одразу після того, як HP піхоти зменшилось (до DamageDealt чи після — байдуже,
+## Викликати одразу після того, як HP піхоти зменшилось (до `DamageDealt` чи після — байдуже,
 ## подія тіл іде слідом). Лікування фігуру знову ставить, але тіла не забирає: нові тіла
 ## лягають, лише коли втрати перевищать усі, що вже лежать, тож у знищеного відділення
-## тіл рівно SQUAD_FIGURES.
+## тіл рівно `SQUAD_FIGURES`.
 static func record(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]:
 	if unit.unit_class() != UnitTypes.UnitClass.INFANTRY:
 		return []

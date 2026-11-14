@@ -278,7 +278,7 @@ func test_a_body_does_not_give_away_a_squad_hidden_in_a_building() -> void:
 	assert_eq(layer.fallen_count(), 1)
 
 
-## Щойно впалі лягають одразу (подія FiguresFell), а моделі — простим бійцем, позначеним загиблим:
+## Щойно впалі лягають одразу (подія `FiguresFell`), а моделі — простим бійцем, позначеним загиблим:
 ## один виклик на набір, хай скільки тіл і з яких відділень.
 func test_model_bodies_are_one_mesh_per_look_and_new_ones_join_it() -> void:
 	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})

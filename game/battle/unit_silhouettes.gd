@@ -196,7 +196,7 @@ static func _merged_mat() -> StandardMaterial3D:
 ## самого вигляду, тож падіння фігури — підміна сітки, а не нова. Відділення несе лише
 ## стоячих: загиблі лежать там, де впали (шар тіл, `bodies_mesh()`), а не йдуть із ним.
 ## Труб дрона на відділенні стільки, скільки дронів лишилось (§3.9, число публічне), і несуть їх
-## перші стоячі місця — вони падають останніми; решта — простий боєць (PLAIN_FIGURE). Модель із
+## перші стоячі місця — вони падають останніми; решта — простий боєць (`PLAIN_FIGURE`). Модель із
 ## трубою має той самий атлас, що й простий боєць, тож обидва малює її матеріал одним викликом.
 static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drones: int = 0) -> ArrayMesh:
 	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
@@ -330,7 +330,7 @@ static func _chest_depth(model: Mesh) -> float:
 
 ## Тіла одного вигляду (тип, набір) однією сіткою, тож увесь шар тіл — виклик малювання на вигляд.
 ## `places` — перетворення відділення на місці загибелі, `slots` — місце кожної фігури в ньому.
-## Загиблі моделі позначені R = 1 у COLOR: шейдер моделі темнить їх, коробки — темні вершинами.
+## Загиблі моделі позначені R = 1 у `COLOR`: шейдер моделі темнить їх, коробки — темні вершинами.
 static func bodies_mesh(type_id: int, set_id: int, places: Array[Transform3D], slots: Array[int]) -> ArrayMesh:
 	var model: ArrayMesh = model_mesh(type_id, set_id)
 	var xfs: Array[Transform3D] = []
@@ -445,7 +445,7 @@ static func _load_model(path: String) -> ArrayMesh:
 
 
 ## Копії поверхні 0 сітки `src` за перетвореннями в одну поверхню з усіма атрибутами: дотичні й
-## UV2 потрібні карті нормалей, гусеницям і колесам. `fallen` ставить R = 1 у COLOR: шейдер моделі
+## UV2 потрібні карті нормалей, гусеницям і колесам. `fallen` ставить R = 1 у `COLOR`: шейдер моделі
 ## малює таку копію загиблим.
 static func _merge_model(src: Mesh, xfs: Array[Transform3D], fallen: bool = false) -> ArrayMesh:
 	return _merge_parts([[src, xfs]], fallen)

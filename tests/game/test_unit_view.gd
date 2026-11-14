@@ -81,7 +81,7 @@ func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 
 
 ## Під відділенням — не одна пляма на весь слід (вона читалась чорною), а мала слабка тінь під
-## ногами кожного стоячого бійця, усі в тому самому MultiMesh; загиблий тіні не має.
+## ногами кожного стоячого бійця, усі в тому самому `MultiMesh`; загиблий тіні не має.
 func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> void:
 	WeatherRig.unit_contact = 0.6
 	WeatherRig.sun_ground = Vector2.ZERO
@@ -1113,6 +1113,9 @@ func test_unit_on_a_bridge_stands_level_on_the_deck() -> void:
 	view.bind(_unit(5, 0, bridge, 1))
 	assert_almost_eq(view.position.y, t.deck_y(bridge), 0.0001)
 	assert_eq(view.get_node("Silhouette").rotation, Vector3.ZERO)
+	# Відділення: ступні бійців на 0,05 над початком, тож початок — на `SQUAD_SINK` під настилом, як і на ґрунті.
+	view.bind(_unit(0, 0, bridge, 1))
+	assert_almost_eq(view.position.y, t.deck_y(bridge) - UnitView.SQUAD_SINK, 0.0001)
 
 
 ## Кадр юніта працює лише поки живий твін повороту чи ходу: у спокої десятки юнітів не

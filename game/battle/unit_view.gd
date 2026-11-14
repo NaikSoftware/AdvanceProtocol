@@ -473,8 +473,9 @@ func _pose(at: Vector3) -> void:
 	var cell: Vector2i = IsoCameraRig.world_to_cell(at)
 	var deck: float = th.deck_y(cell)
 	if deck > th.at(float(cell.x), float(cell.y)) + 0.001:
-		# Міст: настил рівний, а рельєф під ним — русло.
-		position = Vector3(at.x, deck, at.z)
+		# Міст: настил рівний, а рельєф під ним — русло. Відділення й тут опущене на `SQUAD_SINK`: ступні
+		# бійців — на 0,05 над його початком, інакше вони висіли б над настилом.
+		position = Vector3(at.x, deck - (0.0 if _tilts else SQUAD_SINK), at.z)
 		_silhouette.rotation = Vector3.ZERO
 		return
 	if not _tilts:
@@ -649,7 +650,7 @@ func standing_figures() -> int:
 	return _standing
 
 
-## Відділення несе лише стоячих: хто впав, лежить у шарі тіл (WreckLayer) там, де впав.
+## Відділення несе лише стоячих: хто впав, лежить у шарі тіл (`WreckLayer`) там, де впав.
 func _set_standing(count: int) -> void:
 	if not (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures"):
 		_standing = 0

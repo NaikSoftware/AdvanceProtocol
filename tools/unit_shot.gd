@@ -433,7 +433,7 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 			var m: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id, int(UnitTypes.get_type(type_id)["drones"]))
 			_place(m, cell, 0)
 			if (UnitSilhouettes.spec(type_id, set_id).extras as Array).has(&"figures"):
-				# Відділення стоїть ступнями на основі 0,05 над своїм початком, а гра опускає його на SQUAD_SINK.
+				# Відділення стоїть ступнями на основі 0,05 над своїм початком, а гра опускає його на `SQUAD_SINK`.
 				m.position.y -= UnitView.SQUAD_SINK
 			rig.center_on(cell)
 			for f in SETTLE_FRAMES * 2:
