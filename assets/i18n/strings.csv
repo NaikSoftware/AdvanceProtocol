@@ -125,3 +125,6 @@ eng_hint_repair_unit,"Тапни сусідній свій юніт, щоб ві
 ERR_NO_ADJACENT_TARGET,Поруч немає придатної цілі,No valid target adjacent
 mine_own,Ваша міна,Your mine
 mine_enemy,Ворожа міна,Enemy mine
+replay_turn,Хід %d · Гравець %d,Turn %d · Player %d
+replay_skip,Пропустити,Skip
+replay_rec,ЗАПИС,REC
