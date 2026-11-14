@@ -410,6 +410,7 @@ func _wire_view(board: Board) -> void:
 	# це до того, як HUD узагалі знає стан, означало б рахувати позицію без
 	# вибору й без дошки.
 	_hud.attach_camera(_camera_rig)
+	_hud.attach_unit_views(func() -> Dictionary: return _unit_views)
 	_hud.end_turn_pressed.connect(_on_end_turn_pressed)
 
 	_gate.confirmed.connect(_on_gate_confirmed)
@@ -1021,6 +1022,8 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 		if unit == null:
 			continue
 		_add_unit_view(unit)
+	# HUD ставить плити за екранними прямокутниками саме цих вузлів (§3.5: лише видимі гравцеві).
+	_hud.units_changed()
 	# Дах над показаним юнітом розчиняється — і лише над показаним: невидимий ворог під будинком
 	# прозорим дахом себе не видає.
 	_shown_cells.assign(known.keys())

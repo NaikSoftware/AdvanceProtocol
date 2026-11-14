@@ -53,7 +53,6 @@ hud_damage,Шкода,Damage
 hud_heal,Ремонт,Repair
 hud_drones,Дрони,Drones
 hud_drone_strike,Дрон,Drone
-hud_drone_range,Радіус %d,Range %d
 hud_threat_floor_drone,Щонайменше: дрон показано лише з огляду самого загону,At least: marked from the squad's own sight only
 hud_class,Клас,Class
 hud_confirm,Підтвердити,Confirm
@@ -132,9 +131,4 @@ ground_frozen_lc,мерзлота,frozen
 handover_ground_dry,Ґрунт: сухо,Ground: dry
 handover_ground_mud,Ґрунт: багно — бездоріжжя важче,Ground: mud — off-road is harder
 handover_ground_frozen,Ґрунт: мерзлота — бездоріжжя легше,Ground: frozen — off-road is easier
-eng_hint_lay_mine,"Тапни сусідню клітинку, щоб поставити міну",Tap an adjacent tile to lay a mine
-eng_hint_clear_mine,"Тапни сусідню міну, щоб зняти її",Tap an adjacent mine to clear it
-eng_hint_repair_bridge,"Тапни сусідній зруйнований міст, щоб відновити його",Tap an adjacent broken bridge to repair it
-eng_hint_demolish_bridge,"Тапни сусідній міст, щоб підірвати його",Tap an adjacent bridge to demolish it
-eng_hint_repair_unit,"Тапни сусідній свій юніт, щоб відремонтувати його",Tap an adjacent friendly unit to repair it
 ERR_NO_ADJACENT_TARGET,Поруч немає придатної цілі,No valid target adjacent

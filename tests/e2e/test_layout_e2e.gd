@@ -1,6 +1,6 @@
 extends GutTest
-## Task 13: увесь HUD бою — панель інженера, інспектор, прев'ю ремонту, дрон із
-## прев'ю й причиною, рядок «нижня межа» — влазить у кожен розмір LayoutProbe.SIZES,
+## Увесь HUD бою — плита верб, прев'ю ремонту, дрон із прев'ю й тостом причини, підпис
+## «нижня межа» — влазить у кожен розмір LayoutProbe.SIZES,
 ## і дошка між смугами лишається досить високою й тапабельною. Стани наводяться
 ## справжніми тапами (click_at у SubViewport), а не викликами HUD напряму.
 
@@ -77,16 +77,39 @@ func _tap(cell: Vector2i) -> void:
 	await _e2e.settle()
 
 
+## Усе, що HUD малює на дошці й що ловить тап: плити стають за правилом стикування, тож жодна
+## не накриває юніта, який бачить гравець (екранні прямокутники вузлів UnitView). 
+func _board_plates() -> Array[Control]:
+	var out: Array[Control] = []
+	var panel: EngineerPanel = _e2e.engineer_panel()
+	for c: Control in [_node("%PreviewPlate"), _node("%ActionRow"), _node("%DroneButton"), _node("%DroneStrip"),
+			panel.plate() if panel.visible else null, panel.strip() if panel.visible else null]:
+		if c != null and c.is_visible_in_tree():
+			out.append(c)
+	return out
+
+
 func _assert_fits(size: Vector2i, where: String) -> void:
 	var hud: Hud = _e2e.hud()
 	assert_eq(LayoutProbe.overflowing(hud, size), [] as Array[String], where)
 	assert_eq(LayoutProbe.small_targets(hud), [] as Array[String], where)
-	var top: Control = _node("SafeArea/Layout/TopBar")
-	var bottom: Control = _node("%BottomBar")
-	assert_eq(LayoutProbe.overlapping([top, bottom, _node("%EngineerPanel"), _node("%Inspector")] as Array[Control]),
-		[] as Array[String], where)
-	var strip: float = bottom.get_global_rect().position.y - top.get_global_rect().end.y
-	assert_true(strip >= 0.5 * size.y, "смуга дошки %s < %s: %s" % [strip, 0.5 * size.y, where])
+	var chrome: Array[Control] = [_node("%Chip"), _node("%PauseButton"), _node("%EndTurnButton")]
+	var plates: Array[Control] = _board_plates()
+	assert_eq(LayoutProbe.overlapping(chrome), [] as Array[String], where)
+	for plate in plates:
+		for corner in chrome:
+			assert_false(plate.get_global_rect().intersects(corner.get_global_rect()),
+				"%s налазить на %s: %s" % [plate.name, corner.name, where])
+	# Чистота від юнітів: плита, що закриває видимого юніта, — дефект, а не запасний варіант.
+	var rig: IsoCameraRig = _e2e.screen.get_node("%CameraRig")
+	for id: int in _e2e.service.state.units:
+		var view: UnitView = _e2e.screen.unit_view_for(id)
+		if view == null:
+			continue
+		var box: Rect2 = UnitScreenBox.of(view, rig).grow(HudDocking.UNIT_MARGIN)
+		for plate in plates:
+			assert_false(plate.get_global_rect().intersects(box),
+				"%s перекриває юніта %d (кластер %s): %s" % [plate.name, id, hud.cluster_name(), where])
 
 
 func test_full_hud_fits_every_size(p = use_parameters(_sizes_by_locale())) -> void:
@@ -97,12 +120,8 @@ func test_full_hud_fits_every_size(p = use_parameters(_sizes_by_locale())) -> vo
 	await _tap(ENG)
 	var panel: EngineerPanel = _e2e.engineer_panel()
 	assert_true(panel.is_visible_in_tree(), "панель інженера: %s" % size)
-	assert_true(_node("%Inspector").is_visible_in_tree(), "інспектор: %s" % size)
 	_assert_fits(size, "інженер %s" % size)
-	# Верб більше, ніж влазить на телефоні, — гравець докручує панель (T8), тоді тапає.
 	var repair: Button = panel.button_for(A.REPAIR_UNIT)
-	(panel.get_node("%Scroll") as ScrollContainer).ensure_control_visible(repair)
-	await _e2e.settle()
 	assert_eq(LayoutProbe.clipped(_e2e.hud(), [repair] as Array[Control], size), [] as Array[String], "«Ремонт» видно: %s" % size)
 	await _tap_button(repair)
 	await _tap(HURT)
@@ -123,19 +142,21 @@ func test_drone_and_threat_floor_fit_every_size(p = use_parameters(_sizes_by_loc
 	assert_true(drone.is_visible_in_tree(), "кнопка дрона: %s" % size)
 	_assert_fits(size, "загін %s" % size)
 	await _tap_button(drone)
-	assert_true(_node("%DroneRangeLabel").is_visible_in_tree(), "радіус дрона: %s" % size)
+	assert_true(_node("%DroneStrip").is_visible_in_tree(), "смужка озброєного дрона: %s" % size)
+	_assert_fits(size, "дрон озброєно %s" % size)
 	await _tap(ENEMY_TANK)
 	assert_eq((_node("%PreviewDroneDamageValue") as Label).text, "120–180")
 	_assert_fits(size, "дрон, прев'ю %s" % size)
-	await _tap(ENEMY_INF)
-	assert_true(_node("%DroneReasonLabel").is_visible_in_tree(), "причина: %s" % size)
-	assert_eq((_node("%DroneReasonLabel") as Label).text, tr("ERR_DRONE_CANNOT_TARGET_INFANTRY"))
+	# Без settle(): він гасить усі твіни, а тост живе 2 с.
+	_e2e.tap(ENEMY_INF)
+	assert_true(_node("%Toast").is_visible_in_tree(), "причина: %s" % size)
+	assert_eq((_node("%ToastLabel") as Label).text, tr("ERR_DRONE_CANNOT_TARGET_INFANTRY"))
 	_assert_fits(size, "дрон, причина %s" % size)
 	# Зняти режим і вибір, тоді огляд ворожого танка: лише кільце гармати, тож рядка
 	# «нижня межа» немає (§3.13) — він з'являється тільки з дроновим кільцем, нижче.
 	await _tap_button(_node("%CancelButton"))
 	await _tap(SQUAD)
-	assert_false(_node("%SelectionRow").is_visible_in_tree(), "вибір знято: %s" % size)
+	assert_false(_node("%DroneButton").is_visible_in_tree(), "вибір знято: %s" % size)
 	_e2e.long_press(ENEMY_TANK)
 	await _e2e.settle()
 	assert_false(_node("%ThreatFloorLabel").is_visible_in_tree(), "кільце гармати — без нижньої межі: %s" % size)
@@ -172,17 +193,15 @@ func test_engineer_hint_fits_every_size(p = use_parameters(_sizes_by_locale())) 
 			Mines.place(st, mine, 0)})
 	await _tap(ENG)
 	var panel: EngineerPanel = _e2e.engineer_panel()
-	var hint: Label = panel.get_node("%HintLabel")
+	var hint: Label = panel.strip().hint_label
 	for a: int in EngineerPanel.LABEL_KEYS:
 		var where: String = "верба %d %s %s" % [a, size, p[1]]
 		var b: Button = panel.button_for(a)
-		(panel.get_node("%Scroll") as ScrollContainer).ensure_control_visible(b)
-		await _e2e.settle()
 		await _tap_button(b)
 		assert_true(hint.is_visible_in_tree(), where)
 		assert_eq(LayoutProbe.clipped(_e2e.hud(), [hint] as Array[Control], size), [] as Array[String], where)
 		_assert_fits(size, where)
-		await _tap_button(panel.get_node("%StripCancel"))
+		await _tap_button(panel.strip().cancel_button)
 
 
 ## На PHONE_SMALL, з відкритою панеллю інженера, тап у центр смуги дошки вибирає
@@ -202,10 +221,7 @@ func test_board_still_tappable_on_phone(p = use_parameters(LOCALES)) -> void:
 	await _boot(size, spawns)
 	await _tap(eng_pos)
 	assert_true(_e2e.engineer_panel().is_visible_in_tree(), "панель інженера відкрита")
-	var top: Control = _node("SafeArea/Layout/TopBar")
-	var bottom: Control = _node("%BottomBar")
-	var centre := Vector2(size.x * 0.5,
-		(top.get_global_rect().end.y + bottom.get_global_rect().position.y) * 0.5)
+	var centre := Vector2(size.x * 0.5, size.y * 0.5)
 	var rig: IsoCameraRig = _e2e.screen.get_node("%CameraRig")
 	var cell: Vector2i = rig.screen_point_to_cell(centre)
 	var unit: Unit = _e2e.service.state.unit_at(cell)

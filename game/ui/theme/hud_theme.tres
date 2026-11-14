@@ -7,7 +7,7 @@
 ;                   дієслово, 500/15 dim), HudPrimaryButton (Confirm, Продовжити; 700/15, кістяна
 ;                   рамка 2 dp), HudPrimaryButtonLarge (Готово на екрані передачі; 700/20)
 ;   PanelContainer: HudPlate (плита 90 %: чип, пауза, End turn, Cancel), HudPlateSolid (плита, що
-;                   несе числа правил: тег, превʼю, картка, меню)
+;                   несе числа правил: тег, превʼю, картка, меню; поле вмісту 1 dp — товщина краю)
 ;   Label, підписи: HudCaption (600/11 dim; текст ВЕЛИКИМИ літерами задає код), HudCaptionStats (те саме
 ;                   без розрядки), HudName (600/14), HudLabel (600/15), HudHoldName (600/16),
 ;                   HudHint (500/13), HudDim (500/13 dim), HudToast (500/14), HudFloorCaption (500/12
@@ -88,6 +88,10 @@ texture_margin_right = 3.0
 texture_margin_bottom = 3.0
 axis_stretch_horizontal = 0
 axis_stretch_vertical = 0
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
 
 [sub_resource type="StyleBoxTexture" id="p_solid"]
 texture = ExtResource("t_plate_solid")
@@ -97,6 +101,10 @@ texture_margin_right = 3.0
 texture_margin_bottom = 3.0
 axis_stretch_horizontal = 0
 axis_stretch_vertical = 0
+content_margin_left = 1.0
+content_margin_top = 1.0
+content_margin_right = 1.0
+content_margin_bottom = 1.0
 
 [sub_resource type="StyleBoxFlat" id="b_prim"]
 content_margin_left = 13.0

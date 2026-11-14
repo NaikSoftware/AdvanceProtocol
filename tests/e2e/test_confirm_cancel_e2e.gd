@@ -54,10 +54,12 @@ func test_second_tap_on_move_target_confirms_the_move() -> void:
 	await _tap(DEST)
 	var ap_left: String = (_e2e.hud().get_node("%PreviewApValue") as Label).text
 	assert_eq(tank.pos, TANK, "перший тап лише показує шлях")
+	var seen: Array[int] = []
+	_e2e.hud().selection_tag_changed.connect(func(u: Unit, _ap: bool) -> void: seen.append(u.ap if u != null else -1))
 	await _tap(DEST)
 	assert_eq(tank.pos, DEST)
 	assert_eq(str(tank.ap), ap_left, "AP — рівно той, що показало прев'ю")
-	assert_eq((_e2e.hud().get_node("%ApValue") as Label).text, ap_left, "HUD перечитав AP")
+	assert_eq(str(seen.back()), ap_left, "HUD перечитав AP: тег отримав юніта з нинішнім запасом ходу")
 	assert_true((_e2e.hud().get_node("%ConfirmButton") as Button).disabled)
 	assert_eq(_e2e.screen.input_controller()._selected_unit, tank, "танк лишається вибраним")
 
@@ -88,9 +90,12 @@ func test_cancel_visible_only_while_it_does_something() -> void:
 	await _tap(SQUAD)
 	_e2e.press(_e2e.hud().get_node("%DroneButton"))
 	await _e2e.settle()
-	assert_true(_cancel().is_visible_in_tree(), "озброєний дрон")
+	var strip: Control = _e2e.hud().get_node("%DroneStrip")
+	assert_true(strip.is_visible_in_tree(), "озброєний дрон: смужка зі своїм «Скасувати»")
+	assert_false(_cancel().is_visible_in_tree(), "рівно одне «Скасувати»: ряд мовчить, поки прев'ю нема")
 	await _tap(DEST)  # порожній тайл у режимі дрона знімає режим
-	assert_false(_cancel().is_visible_in_tree(), "режим знято")
+	assert_false(strip.is_visible_in_tree(), "режим знято")
+	assert_false(_cancel().is_visible_in_tree())
 	await _tap(DEST)
 	assert_true(_cancel().is_visible_in_tree(), "прев'ю руху загону")
 	await _e2e.end_turn()

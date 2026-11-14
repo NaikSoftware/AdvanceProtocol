@@ -1,208 +1,238 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://game/ui/hud.gd" id="1_hud"]
-[ext_resource type="PackedScene" path="res://game/ui/unit_inspector.tscn" id="2_inspector"]
+[ext_resource type="Theme" path="res://game/ui/theme/hud_theme.tres" id="2_theme"]
 [ext_resource type="PackedScene" path="res://game/ui/engineer_panel.tscn" id="3_engineer"]
 [ext_resource type="Script" path="res://game/ui/drone_button.gd" id="4_drone"]
+[ext_resource type="Script" path="res://game/ui/hud/preview_plate.gd" id="5_plate"]
+[ext_resource type="Script" path="res://game/ui/hud/armed_strip.gd" id="6_strip"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/pause.svg" id="7_pause"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/end_turn.svg" id="8_end"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/cancel.svg" id="9_cancel"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/confirm.svg" id="10_confirm"]
 
 [node name="Hud" type="Control"]
+layout_mode = 3
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+theme = ExtResource("2_theme")
 script = ExtResource("1_hud")
 
-[node name="SafeArea" type="MarginContainer" parent="."]
+[node name="Chip" type="PanelContainer" parent="."]
 unique_name_in_owner = true
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+texture_filter = 1
+layout_mode = 0
+offset_left = 24.0
+offset_top = 12.0
+offset_right = 175.0
+offset_bottom = 48.0
 mouse_filter = 2
-theme_override_constants/margin_left = 56
-theme_override_constants/margin_top = 24
-theme_override_constants/margin_right = 56
-theme_override_constants/margin_bottom = 24
+theme_type_variation = &"HudPlate"
 
-[node name="Layout" type="VBoxContainer" parent="SafeArea"]
-theme_override_constants/separation = 12
+[node name="Row" type="HBoxContainer" parent="Chip"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="PlayerBar" type="ColorRect" parent="Chip/Row"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(4, 36)
+layout_mode = 2
 mouse_filter = 2
 
-[node name="TopBar" type="HBoxContainer" parent="SafeArea/Layout"]
-theme_override_constants/separation = 16
+[node name="Gap" type="Control" parent="Chip/Row"]
+custom_minimum_size = Vector2(10, 0)
+layout_mode = 2
 mouse_filter = 2
 
-[node name="TurnCaption" type="Label" parent="SafeArea/Layout/TopBar"]
+[node name="PlayerValue" type="Label" parent="Chip/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"HudLabel"
+
+[node name="GapA" type="Control" parent="Chip/Row"]
+custom_minimum_size = Vector2(10, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Divider" type="ColorRect" parent="Chip/Row"]
+custom_minimum_size = Vector2(1, 16)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+color = Color(0.2275, 0.251, 0.2627, 1)
+
+[node name="GapB" type="Control" parent="Chip/Row"]
+custom_minimum_size = Vector2(10, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="TurnCaption" type="Label" parent="Chip/Row"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"HudDim"
 text = "hud_turn"
 
-[node name="TurnValue" type="Label" parent="SafeArea/Layout/TopBar"]
-unique_name_in_owner = true
-
-[node name="PlayerCaption" type="Label" parent="SafeArea/Layout/TopBar"]
-text = "hud_player"
-
-[node name="PlayerValue" type="Label" parent="SafeArea/Layout/TopBar"]
-unique_name_in_owner = true
-
-[node name="TopSpacer" type="Control" parent="SafeArea/Layout/TopBar"]
-size_flags_horizontal = 3
+[node name="GapC" type="Control" parent="Chip/Row"]
+custom_minimum_size = Vector2(5, 0)
+layout_mode = 2
 mouse_filter = 2
 
-[node name="GroundStateIcon" type="ColorRect" parent="SafeArea/Layout/TopBar"]
+[node name="TurnValue" type="Label" parent="Chip/Row"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
 size_flags_vertical = 4
+theme_type_variation = &"HudNumber"
+
+[node name="GapD" type="Control" parent="Chip/Row"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
 mouse_filter = 2
 
-[node name="GroundStateLabel" type="Label" parent="SafeArea/Layout/TopBar"]
+[node name="PauseButton" type="Button" parent="."]
 unique_name_in_owner = true
+texture_filter = 2
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -72.0
+offset_top = 8.0
+offset_right = -24.0
+offset_bottom = 56.0
+grow_horizontal = 0
+tooltip_text = "hud_pause"
+theme_type_variation = &"HudPlateButton"
+theme_override_constants/icon_max_width = 22
+icon = ExtResource("7_pause")
+icon_alignment = 1
 
-[node name="PauseButton" type="Button" parent="SafeArea/Layout/TopBar"]
+[node name="EndTurnButton" type="Button" parent="."]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(64, 48)
-text = "hud_pause"
+texture_filter = 2
+custom_minimum_size = Vector2(161, 48)
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -60.0
+offset_right = 185.0
+offset_bottom = -12.0
+grow_vertical = 0
+theme_type_variation = &"HudPlateButton"
+text = "hud_end_turn"
+icon = ExtResource("8_end")
 
-[node name="Middle" type="HBoxContainer" parent="SafeArea/Layout"]
-size_flags_vertical = 3
-mouse_filter = 2
-
-[node name="EngineerPanel" parent="SafeArea/Layout/Middle" instance=ExtResource("3_engineer")]
+[node name="PreviewPlate" type="PanelContainer" parent="."]
 unique_name_in_owner = true
 visible = false
+layout_mode = 0
+offset_right = 285.0
+mouse_filter = 0
+theme_type_variation = &"HudPlateSolid"
+script = ExtResource("5_plate")
 
-[node name="ThreatFloorLabel" type="Label" parent="SafeArea/Layout/Middle"]
+[node name="ActionRow" type="HBoxContainer" parent="."]
 unique_name_in_owner = true
 visible = false
-size_flags_horizontal = 3
-size_flags_vertical = 8
-autowrap_mode = 3
-
-[node name="BottomBar" type="HFlowContainer" parent="SafeArea/Layout"]
-unique_name_in_owner = true
-theme_override_constants/h_separation = 16
-theme_override_constants/v_separation = 8
+layout_mode = 0
+offset_right = 285.0
+offset_bottom = 48.0
 mouse_filter = 2
-
-[node name="SelectionRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
-unique_name_in_owner = true
-theme_override_constants/separation = 8
-size_flags_vertical = 4
-mouse_filter = 2
-
-[node name="ApCaption" type="Label" parent="SafeArea/Layout/BottomBar/SelectionRow"]
-text = "hud_ap"
-
-[node name="ApValue" type="Label" parent="SafeArea/Layout/BottomBar/SelectionRow"]
-unique_name_in_owner = true
-
-[node name="DronesRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar/SelectionRow"]
-unique_name_in_owner = true
-theme_override_constants/separation = 8
-mouse_filter = 2
-
-[node name="DronesCaption" type="Label" parent="SafeArea/Layout/BottomBar/SelectionRow/DronesRow"]
-text = "hud_drones"
-
-[node name="DronesValue" type="Label" parent="SafeArea/Layout/BottomBar/SelectionRow/DronesRow"]
-unique_name_in_owner = true
-
-[node name="PreviewShotBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
-unique_name_in_owner = true
-visible = false
-theme_override_constants/separation = 8
-size_flags_vertical = 4
-mouse_filter = 2
-
-[node name="PreviewSectorCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewShotBox"]
-text = "hud_armour_sector"
-
-[node name="PreviewSectorValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewShotBox"]
-unique_name_in_owner = true
-
-[node name="PreviewDamageCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewShotBox"]
-text = "hud_damage"
-
-[node name="PreviewDamageValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewShotBox"]
-unique_name_in_owner = true
-
-[node name="PreviewMoveBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
-unique_name_in_owner = true
-visible = false
-theme_override_constants/separation = 8
-size_flags_vertical = 4
-mouse_filter = 2
-
-[node name="PreviewApCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewMoveBox"]
-text = "hud_ap_left"
-
-[node name="PreviewApValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewMoveBox"]
-unique_name_in_owner = true
-
-[node name="PreviewRepairBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
-unique_name_in_owner = true
-visible = false
-theme_override_constants/separation = 8
-size_flags_vertical = 4
-mouse_filter = 2
-
-[node name="PreviewHealCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewRepairBox"]
-text = "hud_heal"
-
-[node name="PreviewHealValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewRepairBox"]
-unique_name_in_owner = true
-
-[node name="PreviewDroneBox" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
-unique_name_in_owner = true
-visible = false
-theme_override_constants/separation = 8
-size_flags_vertical = 4
-mouse_filter = 2
-
-[node name="PreviewDroneDamageCaption" type="Label" parent="SafeArea/Layout/BottomBar/PreviewDroneBox"]
-text = "hud_damage"
-
-[node name="PreviewDroneDamageValue" type="Label" parent="SafeArea/Layout/BottomBar/PreviewDroneBox"]
-unique_name_in_owner = true
-
-[node name="DroneRangeLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
-unique_name_in_owner = true
-visible = false
-size_flags_vertical = 4
-
-[node name="DroneReasonLabel" type="Label" parent="SafeArea/Layout/BottomBar"]
-unique_name_in_owner = true
-visible = false
-size_flags_vertical = 4
-
-[node name="ButtonRow" type="HBoxContainer" parent="SafeArea/Layout/BottomBar"]
-size_flags_horizontal = 10
 theme_override_constants/separation = 16
-mouse_filter = 2
 
-[node name="CancelButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
+[node name="CancelButton" type="Button" parent="ActionRow"]
 unique_name_in_owner = true
-visible = false
-custom_minimum_size = Vector2(48, 48)
+texture_filter = 2
+custom_minimum_size = Vector2(126, 48)
+layout_mode = 2
+theme_type_variation = &"HudPlateButton"
+theme_override_colors/icon_normal_color = Color(0.5608, 0.5686, 0.5412, 1)
 text = "hud_cancel"
+icon = ExtResource("9_cancel")
 
-[node name="DroneButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
+[node name="ConfirmButton" type="Button" parent="ActionRow"]
+unique_name_in_owner = true
+texture_filter = 2
+custom_minimum_size = Vector2(143, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+disabled = true
+theme_type_variation = &"HudPrimaryButton"
+text = "hud_confirm"
+icon = ExtResource("10_confirm")
+
+[node name="DroneButton" type="Button" parent="."]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(48, 48)
+layout_mode = 0
+offset_right = 133.0
+offset_bottom = 48.0
 script = ExtResource("4_drone")
 
-[node name="ConfirmButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
+[node name="EngineerPanel" parent="." instance=ExtResource("3_engineer")]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(48, 48)
-disabled = true
-text = "hud_confirm"
+visible = false
+layout_mode = 3
+anchors_preset = 0
 
-[node name="EndTurnButton" type="Button" parent="SafeArea/Layout/BottomBar/ButtonRow"]
+[node name="DroneStrip" type="PanelContainer" parent="."]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(48, 48)
-text = "hud_end_turn"
+visible = false
+layout_mode = 0
+script = ExtResource("6_strip")
 
-[node name="Inspector" parent="." instance=ExtResource("2_inspector")]
+[node name="ThreatFloorPlate" type="PanelContainer" parent="."]
 unique_name_in_owner = true
+visible = false
+texture_filter = 1
+layout_mode = 0
+offset_left = 24.0
+offset_top = 56.0
+offset_right = 284.0
+offset_bottom = 100.0
 mouse_filter = 2
+theme_type_variation = &"HudPlateSolid"
+
+[node name="Margin" type="MarginContainer" parent="ThreatFloorPlate"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 6
+
+[node name="ThreatFloorLabel" type="Label" parent="ThreatFloorPlate/Margin"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(236, 0)
+layout_mode = 2
+theme_type_variation = &"HudFloorCaption"
+autowrap_mode = 3
+
+[node name="Toast" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+texture_filter = 1
+layout_mode = 0
+mouse_filter = 2
+theme_type_variation = &"HudPlateSolid"
+
+[node name="Margin" type="MarginContainer" parent="Toast"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="ToastLabel" type="Label" parent="Toast/Margin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"HudToast"

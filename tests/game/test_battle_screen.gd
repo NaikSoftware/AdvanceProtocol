@@ -1031,7 +1031,7 @@ func test_move_preview_does_not_mark_anyone() -> void:
 ## юнітом і не накриває ні його, ні кнопки) тримає tests/game/test_hud.gd на
 ## ригу, яким сам і керує; тут лишається рівно те, чого немає більше ніде —
 ## факт, що сцена бою звела ріг із HUD.
-func test_inspector_follows_the_camera_because_setup_wires_it() -> void:
+func test_hud_follows_the_camera_because_setup_wires_it() -> void:
 	var service: Node = MatchServiceScript.new()
 	add_child_autofree(service)
 	var m: MapData = _map(12, 12)

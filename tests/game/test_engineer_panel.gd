@@ -1,6 +1,6 @@
 extends GutTest
-## Task 8: панель верб інженера. Доступність і причина — лише з
-## EngineerCommand.action_status() (§3.13); панель нічого не виводить сама.
+## Панель верб інженера. Доступність і причина — лише з EngineerCommand.action_status() (§3.13);
+## панель нічого не виводить сама. Причина йде сигналом refused() у тост HUD.
 
 const PanelScene := preload("res://game/ui/engineer_panel.tscn")
 const HudScene := preload("res://game/ui/hud.tscn")
@@ -9,16 +9,10 @@ const MatchServiceScript := preload("res://game/autoload/match_service.gd")
 const ENGINEER: int = 11
 const A := EngineerCommand.Action
 
-## Golden: підписи кнопок англійською, у порядку EngineerCommand.Action. Без ціни:
-## кожна верба коштує той самий fire_cost — окремий рядок ціни нічого не додає.
+## Golden: підписи кнопок англійською, у порядку EngineerCommand.Action. Без ціни: кожна верба
+## коштує той самий fire_cost — окремий рядок ціни нічого не додає.
 const EN_LABELS: Array[String] = [
 	"Lay mine", "Clear mine", "Repair bridge", "Demolish bridge", "Repair unit",
-]
-## Підказка озброєної верби — що саме тапнути, у тому ж порядку.
-const EN_HINTS: Array[String] = [
-	"Tap an adjacent tile to lay a mine", "Tap an adjacent mine to clear it",
-	"Tap an adjacent broken bridge to repair it", "Tap an adjacent bridge to demolish it",
-	"Tap an adjacent friendly unit to repair it",
 ]
 const VERBS: Array[int] = [A.LAY_MINE, A.CLEAR_MINE, A.REPAIR_BRIDGE, A.DEMOLISH_BRIDGE, A.REPAIR_UNIT]
 
@@ -47,11 +41,13 @@ func _engineer() -> Unit:
 
 func _panel() -> EngineerPanel:
 	var p: EngineerPanel = PanelScene.instantiate()
+	# Без теми HUD кнопки й шрифти дефолтні, і розміри плити нічого не означають.
+	p.theme = load("res://game/ui/theme/hud_theme.tres")
 	add_child_autofree(p)
 	return p
 
 
-func test_five_buttons_without_ap_cost() -> void:
+func test_five_buttons_without_ap_cost_in_one_plate() -> void:
 	var e: Unit = _engineer()
 	var p: EngineerPanel = _panel()
 	p.show_for(_service.state, e)
@@ -60,46 +56,47 @@ func test_five_buttons_without_ap_cost() -> void:
 		labels.append(p.button_for(a).text)
 	assert_eq(labels, EN_LABELS)
 	var order: Array[String] = []
-	for b in p.get_node("%Grid").get_children():
-		order.append((b as Button).text)
+	for b in p.plate().get_node("Box").get_children():
+		if b is Button:
+			order.append((b as Button).text)
 	assert_eq(order, EN_LABELS, "рівно п'ять кнопок, у порядку Action")
+	assert_eq(p.active_size(), Vector2(206, 246), "5 × 48 + 4 роздільники + 2 краю")
 
 
-func test_unavailable_button_shows_reason_on_press() -> void:
+func test_unavailable_button_reports_the_reason_on_press() -> void:
 	var e: Unit = _engineer()
 	var p: EngineerPanel = _panel()
 	p.show_for(_service.state, e)
 	var chosen: Array[int] = []
 	p.action_chosen.connect(func(a: int) -> void: chosen.append(a))
-	var reason: Label = p.get_node("%ReasonLabel")
+	var reasons: Array[String] = []
+	p.refused.connect(func(r: String) -> void: reasons.append(r))
 
 	var clear: Button = p.button_for(A.CLEAR_MINE)
 	assert_false(clear.disabled, "недоступна кнопка лишається натискною — на телефоні нема наведення")
-	assert_eq(clear.theme_type_variation, EngineerPanel.UNAVAILABLE_VARIATION)
+	assert_eq(clear.theme_type_variation, EngineerPanel.UNAVAILABLE_VARIATION, "приглушена: dim, 500")
 	clear.pressed.emit()
-	assert_eq(reason.text, "There is no mine here")
-	assert_true(reason.visible)
+	assert_eq(reasons, [EngineerCommand.action_status(_service.state, e.id, A.CLEAR_MINE)["reason"]] as Array[String],
+		"причина — ключ із core/, текст покаже тост")
 	assert_eq(chosen, [] as Array[int], "недоступна верба нічого не озброює")
 
 	var lay: Button = p.button_for(A.LAY_MINE)
-	assert_eq(lay.theme_type_variation, &"")
+	assert_eq(lay.theme_type_variation, EngineerPanel.AVAILABLE_VARIATION)
 	lay.pressed.emit()
 	assert_eq(chosen, [A.LAY_MINE] as Array[int])
-	assert_false(reason.visible, "доступна верба знімає причину")
+	assert_eq(reasons.size(), 1, "доступна верба причини не дає")
 
 
 func test_engineer_panel_relabels_on_locale_change() -> void:
 	var e: Unit = _engineer()
 	var p: EngineerPanel = _panel()
+	p.show_for(_service.state, e)
 	TranslationServer.set_locale("uk")
 	await get_tree().process_frame
-	p.show_for(_service.state, e)
-	p.button_for(A.CLEAR_MINE).pressed.emit()
 	assert_eq(p.button_for(A.LAY_MINE).text, "Поставити міну")
 	TranslationServer.set_locale("en")
 	await get_tree().process_frame
 	assert_eq(p.button_for(A.LAY_MINE).text, EN_LABELS[0])
-	assert_eq((p.get_node("%ReasonLabel") as Label).text, "There is no mine here")
 
 
 func _hud_cases() -> Array:
@@ -110,33 +107,26 @@ func _hud_cases() -> Array:
 	return out
 
 
-func test_panel_fits_phone_without_overlapping_bars(p = use_parameters(_hud_cases())) -> void:
+func test_panel_fits_phone_without_overlapping_chrome(p = use_parameters(_hud_cases())) -> void:
 	TranslationServer.set_locale(p[1])
 	var size: Vector2i = p[0]
 	var hud: Hud = await LayoutProbe.mount(self, HudScene, size)
 	var e: Unit = _engineer()
 	hud.bind(_service.state)
 	hud.show_selection(e)
-	# Найдовша причина — у рядку причини теж.
-	hud.get_node("%EngineerPanel").button_for(A.REPAIR_UNIT).pressed.emit()
 	await LayoutProbe.settle(self)
-	var panel: Control = hud.get_node("%EngineerPanel")
+	var panel: EngineerPanel = hud.get_node("%EngineerPanel")
 	var where: String = "%s %s" % p
 	assert_true(panel.is_visible_in_tree(), where)
+	assert_eq(panel.size, Vector2(206, 246), where)
 	assert_eq(LayoutProbe.overflowing(hud, size), [] as Array[String], where)
 	assert_eq(LayoutProbe.small_targets(hud), [] as Array[String], where)
-	var bars: Array[Control] = [hud.get_node("SafeArea/Layout/TopBar"), hud.get_node("%BottomBar"), panel]
-	assert_eq(LayoutProbe.overlapping(bars), [] as Array[String], where)
-	# Ширина — не більше ~40 % екрана: решта дошки лишається тапабельною.
-	assert_true(panel.size.x <= 0.4 * size.x, "%s: ширина %s > 40 %%" % [where, panel.size.x])
-	# Висота — за вмістом, без розтягування на весь Middle.
-	var reason: Label = panel.get_node("%ReasonLabel")
-	var natural: float = (panel.get_node("%Box") as Control).get_combined_minimum_size().y \
-			+ panel.get_theme_stylebox("panel").get_minimum_size().y
-	if reason.visible:
-		natural += reason.get_combined_minimum_size().y + float(panel.get_node("%Root").get_theme_constant("separation"))
-	assert_true(panel.size.y <= natural + 1.0, "%s: висота %s > вмісту %s" % [where, panel.size.y, natural])
-	assert_true((panel.get_node("%Scroll") as Control).size.y >= 48.0, "%s: видно хоча б одну кнопку" % where)
+	var rect := Rect2(panel.position, panel.size)
+	assert_eq(rect.end, Vector2(size.x - 24.0, size.y - 12.0), "%s: плита внизу праворуч" % where)
+	for n: String in ["%Chip", "%PauseButton", "%EndTurnButton"]:
+		assert_false(rect.intersects((hud.get_node(n) as Control).get_global_rect()), "%s: %s" % [where, n])
+	if size == LayoutProbe.PHONE_SMALL:
+		assert_eq(rect.position.y, 102.0, "800 × 360: верх плити 102, під паузою (вона закінчується на 56)")
 
 
 func test_armed_panel_collapses_to_strip_with_cancel() -> void:
@@ -147,29 +137,33 @@ func test_armed_panel_collapses_to_strip_with_cancel() -> void:
 	p.cancel_pressed.connect(func() -> void: cancels[0] += 1)
 	p.button_for(A.LAY_MINE).pressed.emit()
 	p.set_armed(true)
-	assert_false((p.get_node("%Scroll") as Control).visible)
-	assert_true((p.get_node("%Strip") as Control).visible)
-	assert_eq((p.get_node("%ArmedLabel") as Label).text, "Lay mine")
-	var cancel: Button = p.get_node("%StripCancel")
+	assert_false(p.plate().visible)
+	assert_true(p.strip().visible)
+	assert_eq(p.strip().title_label.text, "Lay mine")
+	var cancel: Button = p.strip().cancel_button
 	assert_true(cancel.custom_minimum_size.y >= 48.0 and cancel.custom_minimum_size.x >= 48.0)
-	p.show_reason("ERR_NOT_ADJACENT")
-	assert_true((p.get_node("%ReasonLabel") as Label).is_visible_in_tree(), "причина видна й у згорнутому стані")
 	cancel.pressed.emit()
 	assert_eq(cancels[0], 1)
 	p.set_armed(false)
-	assert_true((p.get_node("%Scroll") as Control).visible)
-	assert_false((p.get_node("%Strip") as Control).visible)
+	assert_true(p.plate().visible)
+	assert_false(p.strip().visible)
 
 
-func test_armed_verb_shows_what_to_tap() -> void:
+func test_armed_verb_shows_the_same_hint_and_its_own_name() -> void:
 	var p: EngineerPanel = _panel()
 	p.show_for(_service.state, _engineer())
-	var hint: Label = p.get_node("%HintLabel")
-	assert_false(hint.visible, "не озброєно — підказки нема")
 	for i in VERBS.size():
 		p._chosen = VERBS[i]  # верба вибрана; доступність тут не важить
 		p.set_armed(true)
-		assert_true(hint.visible, EN_HINTS[i])
-		assert_eq(hint.text, EN_HINTS[i])
+		assert_eq(p.strip().title_label.text, EN_LABELS[i])
+		assert_eq(p.strip().hint_label.text, "Tap a tile", "одна підказка на всі верби")
+		assert_eq(p.active_size().x, 285.0, "смужка 285 dp")
 		p.set_armed(false)
-		assert_false(hint.visible)
+
+
+func test_strip_armed_cell_swallows_taps_and_has_no_action() -> void:
+	var p: EngineerPanel = _panel()
+	p.show_for(_service.state, _engineer())
+	p.set_armed(true)
+	assert_eq(p.strip().armed_cell.mouse_filter, Control.MOUSE_FILTER_STOP, "тап по клітинці не доходить до дошки")
+	assert_eq(p.strip().cancel_button.get_signal_connection_list("pressed").size(), 1, "єдина дія смужки — «Скасувати»")

@@ -162,9 +162,9 @@ func test_tap_on_another_tile_with_pending_move_only_repreviews() -> void:
 	assert_eq(_previews.size(), 2)
 
 
-## «Скасувати» HUD щось робить рівно тоді, коли є прев'ю або озброєно дрон; на час
-## верби інженера скасування одне — у його панелі.
-func test_has_cancelable_follows_pending_and_armed_modes() -> void:
+## Ряд «Скасувати/Підтвердити» — лише з прев'ю; смужка озброєння — лише поки озброєно
+## і прев'ю ще нема. Разом на екрані рівно одне «Скасувати».
+func test_has_cancelable_and_is_armed_waiting_split_pending_from_armed() -> void:
 	_start()
 	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
 	var eng: Unit = service.state.add_unit(ENGINEER_TYPE, 0, Vector2i(10, 10), 0)
@@ -172,22 +172,43 @@ func test_has_cancelable_follows_pending_and_armed_modes() -> void:
 	service.state.add_unit(5, 1, Vector2i(15, 18), 0)
 	_begin_and_drain()
 	assert_false(controller.has_cancelable(), "нічого не вибрано")
+	assert_false(controller.is_armed_waiting())
 	controller.tap_cell(u.pos)
 	assert_false(controller.has_cancelable(), "лише вибір — скасовувати нічого")
+	assert_false(controller.is_armed_waiting())
 	controller.tap_cell(Vector2i(6, 5))
 	assert_true(controller.has_cancelable(), "прев'ю руху")
+	assert_false(controller.is_armed_waiting())
 	controller.cancel_pending()
 	assert_false(controller.has_cancelable())
 	controller.tap_cell(eng.pos)
 	controller.arm_engineer(LAY)
-	assert_false(controller.has_cancelable(), "озброєна верба — у панелі інженера своє «Скасувати»")
+	assert_false(controller.has_cancelable(), "верба озброєна, прев'ю нема")
+	assert_true(controller.is_armed_waiting(), "смужка озброєння зі своїм «Скасувати»")
 	controller.cancel_pending()
-	assert_false(controller.has_cancelable())
+	assert_false(controller.is_armed_waiting())
 	controller.tap_cell(sq.pos)
 	controller.arm_drone()
-	assert_true(controller.has_cancelable(), "озброєний дрон")
+	assert_false(controller.has_cancelable(), "дрон озброєно, цілі ще нема")
+	assert_true(controller.is_armed_waiting())
 	controller.cancel_pending()
-	assert_false(controller.has_cancelable())
+	assert_false(controller.is_armed_waiting())
+
+
+## Верба озброєна І прев'ю вже є: смужку змінює ряд — «Скасувати» одне, ряду.
+func test_engineer_pending_preview_moves_cancel_from_strip_to_row() -> void:
+	_start()
+	var eng: Unit = service.state.add_unit(ENGINEER_TYPE, 0, Vector2i(10, 10), 0)
+	var friend: Unit = service.state.add_unit(5, 0, Vector2i(10, 11), 0)
+	service.state.add_unit(5, 1, Vector2i(15, 18), 0)
+	friend.hp = 100
+	_begin_and_drain()
+	controller.tap_cell(eng.pos)
+	controller.arm_engineer(EngineerCommand.Action.REPAIR_UNIT)
+	assert_true(controller.is_armed_waiting())
+	controller.tap_cell(friend.pos)
+	assert_true(controller.has_cancelable(), "ціль торкнуто — ряд з прев'ю")
+	assert_false(controller.is_armed_waiting(), "смужку замінив ряд")
 
 
 func test_cancel_pending_clears_pending_and_submits_nothing() -> void:
