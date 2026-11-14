@@ -194,10 +194,12 @@ static func spawn_drone(parent: Node, from: Vector3, to: Vector3, warm: bool = f
 ## контейнера, а не дитина дрона: дрон зникає на 0,9 с, а пил ще осідає.
 const LAUNCH_PUFF_SEC: float = 0.5
 static func _launch_puff(parent: Node, from: Vector3) -> void:
-	var puff := _root("LaunchPuff", parent, from)
+	# Загін сидить на SQUAD_SINK нижче землі: пил від його початку ховав би ближню половину під ґрунтом.
+	var puff := _root("LaunchPuff", parent, from + Vector3(0.0, UnitView.SQUAD_SINK + 0.02, 0.0))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(from)
-	_wave(puff, rng, 6.0, LAUNCH_PUFF_SEC, 0.3)
+	# Ранні кадри атласу — суцільне тіло клуби; пізні мають радіальні волокна.
+	_wave(puff, rng, 6.0, LAUNCH_PUFF_SEC, 0.3, Vector2(8.0, 18.0))
 	_expire(puff, LAUNCH_PUFF_SEC + 0.1)
 
 
@@ -1126,7 +1128,7 @@ static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, f
 ## Низька хвиля пилу, що розбігається від розриву: 24 невисокі (~2 м) рідкі бежеві клуби по колу,
 ## кожна ширша за крок між ними, зливаються в суцільний вал без «намиста» і з ease-out за DUST_SPREAD_SEC доходять до `d_m`/2 від центру;
 ## розчиняються за `life` с. Над сусідом вони лише рідшають (WAVE_CAP), а не вирізаються.
-static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: float, alpha: float = 0.7) -> void:
+static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: float, alpha: float = 0.7, frames: Vector2 = Vector2(28.0, LAST_FRAME)) -> void:
 	var n: int = 24
 	for i in n:
 		var ang: float = TAU * (float(i) + rng.randf_range(-0.3, 0.3)) / float(n)
@@ -1138,7 +1140,7 @@ static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: fl
 		mat.set_shader_parameter("tint", Vector4(0.27, 0.24, 0.19, alpha))
 		mat.set_shader_parameter("feather", 1.0)
 		var reach: float = (d_m * 0.5 * rng.randf_range(0.85, 1.0)) / 8.0
-		_play_smoke(root, q, 0.15, life * rng.randf_range(0.7, 1.0), 0.0, 0.2, 0.8, Vector2(28.0 + float(i % 5), LAST_FRAME), Vector2.ZERO, 0.2 * life, 0.5, false, false, RISE_TAU_SEC, 1.0, dir * (reach - 0.25))
+		_play_smoke(root, q, 0.15, life * rng.randf_range(0.7, 1.0), 0.0, 0.2, 0.8, Vector2(frames.x + float(i % 5), frames.y), Vector2.ZERO, 0.2 * life, 0.5, false, false, RISE_TAU_SEC, 1.0, dir * (reach - 0.25))
 
 
 ## Чорне ядро фугасного розриву в ґрунті: 155 мм на +0,1 с — чорна куля, і лише за 1–2 с її

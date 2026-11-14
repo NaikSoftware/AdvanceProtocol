@@ -49,6 +49,8 @@ func _ready() -> void:
 		"dc": await _dc()
 		"diff": await _diff(zoom)
 		"ring3": await _ring3(a[1], zoom)
+		"hidden": await _hidden(a[1], zoom)
+		"roof": await _roof(a[1], zoom)
 	get_tree().quit()
 
 
@@ -141,7 +143,7 @@ func _drone(map_name: String, zoom: float, p: Vector2i) -> void:
 		if el >= next_w and wide.size() < 10:
 			wide.append([el, await _crop(mid)])
 			next_w += 0.25
-		if el >= 0.6 and el <= 1.5 and el - last_t >= 1.0 / 30.0:
+		if (el >= 0.6 and el <= 1.5 and el - last_t >= 1.0 / 30.0) or (el > 1.5 and el <= 3.4 and el - last_t >= 0.25):
 			target.append([el, await _crop(tgt + Vector3(0, 0.1, 0))])
 			last_t = el
 		# Пил старту: кадри на загоні щокадру від його появи, до 0,6 с.
@@ -149,7 +151,7 @@ func _drone(map_name: String, zoom: float, p: Vector2i) -> void:
 			puff_t = el
 		if puff_t >= 0.0 and el - puff_t <= 0.6:
 			burst.append([el - puff_t, await _crop(squad_at + Vector3(0, 0.1, 0))])
-		if el > 2.6:
+		if el > 3.5:
 			break
 	for f: Array in wide:
 		(f[1] as Image).save_png("%s/drone_%s_z%d_wide_%03d.png" % [_out, map_name, int(zoom), int(f[0] * 1000.0)])
@@ -260,3 +262,54 @@ func _ring3(map_name: String, zoom: float) -> void:
 	await _settle(40)
 	(await _crop(IsoCameraRig.cell_to_world(p) + Vector3(1.0, 0, 0))).save_png("%s/ring3_%s_z%d.png" % [_out, map_name, int(zoom)])
 	print("RING3 colours ", [UnitView.hp_fill_color(0), UnitView.hp_fill_color(1), UnitView.hp_fill_color(2)])
+
+
+## Нерозкрита ворожа міна: вигляд власника (міна є) і вигляд супротивника (нічого нема) — одна клітинка.
+func _hidden(map_name: String, zoom: float) -> void:
+	var layer: MineLayer = _screen.get_node("%MineLayer")
+	var p: Vector2i = _pair(Terrain.Kind.FIELD, MapData.FieldSurface.PLOUGHED)
+	var st: BattleState = BattleState.create(_map.to_board(), 2, 7)
+	Mines.place(st, p, 0)
+	_rig.center_on(p)
+	_rig.zoom_by(zoom / _rig.zoom_level)
+	for who in 2:
+		layer.rebuild(st, who)
+		await _settle(30)
+		(await _crop(IsoCameraRig.cell_to_world(p))).save_png("%s/hidden_%s_viewer%d_z%d.png" % [_out, map_name, who, int(zoom)])
+
+
+## Знайдена міна під дахом: справжній екран, міна в стані, шар і набір «показаних» клітинок
+## перебудовує сам екран. Кадр до й після; два місця — щільна забудова й край двору.
+func _roof(map_name: String, zoom: float) -> void:
+	var st: BattleState = MatchService.state
+	var best := Vector2i(-1, -1)
+	var best_n: int = -1
+	var edge := Vector2i(-1, -1)
+	var edge_n: int = 99
+	for y in range(2, _map.height - 2):
+		for x in range(2, _map.width - 2):
+			if st.board.kind_at(Vector2i(x, y)) != Terrain.Kind.BUILDING or st.unit_at(Vector2i(x, y)) != null:
+				continue
+			var n: int = 0
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				if st.board.kind_at(Vector2i(x, y) + d) == Terrain.Kind.BUILDING:
+					n += 1
+			if n > best_n:
+				best_n = n
+				best = Vector2i(x, y)
+			if n >= 1 and n < edge_n:
+				edge_n = n
+				edge = Vector2i(x, y)
+	var k: int = 0
+	for cell: Vector2i in [best, edge]:
+		_rig.center_on(cell)
+		_rig.zoom_by(zoom / _rig.zoom_level)
+		_screen._rebuild_units_for_active_player(true)
+		await _settle(60)
+		(await _crop(IsoCameraRig.cell_to_world(cell))).save_png("%s/roof_%s_%d_before_z%d.png" % [_out, map_name, k, int(zoom)])
+		Mines.place(st, cell, 0)
+		_screen._rebuild_units_for_active_player(false)
+		await _settle(90)
+		(await _crop(IsoCameraRig.cell_to_world(cell))).save_png("%s/roof_%s_%d_after_z%d.png" % [_out, map_name, k, int(zoom)])
+		print("ROOF cell ", cell, " neighbours ", best_n if k == 0 else edge_n)
+		k += 1

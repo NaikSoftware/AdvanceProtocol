@@ -1511,3 +1511,54 @@ func test_wreck_left_draws_the_wreck_in_its_owners_set() -> void:
 	var layer: WreckLayer = screen.get_node("%WreckLayer")
 	assert_eq(layer.flame_size(pos), Vector2(WreckLayer.flame_width(5, 1), WreckLayer.flame_height(5, 1)))
 	assert_ne(WreckLayer.flame_width(5, 1), WreckLayer.flame_width(5, 0), "передумова: набори різняться")
+
+
+# --- Міни: покриття дороги доходить до шару мін ---------------------------
+
+## Карта з ґрунтівкою в (2, 2): вид клітинки ROAD, підтип DIRT.
+func _dirt_road_map() -> MapData:
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(0, 0), "facing": 0},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(5, 5), "facing": 0},
+	] as Array[Dictionary]
+	m.tiles[2 * m.width + 2] = Terrain.Kind.ROAD
+	var surf := PackedByteArray()
+	surf.resize(m.width * m.height)
+	surf[2 * m.width + 2] = MapData.RoadSurface.DIRT
+	m.surface = surf
+	return m
+
+
+func test_setup_gives_the_mine_layer_the_drawn_road_surface() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _dirt_road_map()
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	Mines.place(service.state, Vector2i(2, 2), 0)
+	screen._rebuild_units_for_active_player(true)
+	var layer: MineLayer = screen.get_node("%MineLayer")
+	assert_eq(layer.surface, m.surface)
+	assert_true(layer.get_node("Mines_0").has_node("Mine_2_2"), "ґрунтівка — ґрунтова модель, не асфальтова")
+
+
+## «Продовжити»: підтипи живуть у карті, а не в збереженні, тож шар мін бере їх з карти за шляхом.
+func test_resume_gives_the_mine_layer_the_drawn_road_surface() -> void:
+	var path: String = "user://dirt_road_map.tres"
+	var m: MapData = _dirt_road_map()
+	assert_eq(ResourceSaver.save(m, path), OK)
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	service.map_path = path
+	service.start_match(m.to_board(), 2, 1)
+	m.populate(service.state)
+	service.begin()
+	Mines.place(service.state, Vector2i(2, 2), 0)
+	var screen: Node3D = _screen()
+	screen.resume(service)
+	screen.get_node("%HandoverGate").get_node("%ConfirmButton").pressed.emit()
+	var layer: MineLayer = screen.get_node("%MineLayer")
+	assert_eq(layer.surface, m.surface)
+	assert_true(layer.get_node("Mines_0").has_node("Mine_2_2"))
+	DirAccess.remove_absolute(path)

@@ -28,29 +28,29 @@ CONTACT = (0.06, 0.055, 0.05)      # темний контактний пояс 
 
 
 def soil(b, r, seed, lip=False):
-    """Розритий ґрунт без чистого кола: край із ~10-сантиметрових виступів, окремі грудки; для
-    відкопаної — ще невеликий насип-валик довкола міни."""
+    """Розритий ґрунт без чистого кола: 7–10 нерівних виступів (радіус ±40 %, кути з розкидом),
+    кілька грудок, дві з них поза контуром; для відкопаної — ще невеликий насип-валик довкола міни."""
     rnd = random.Random(seed)
-    b.cone(SOIL, (0, 0, 0), r * 0.82, r * 0.7, 0.05, 12)
-    n = 18
-    for i in range(n):
-        a = TAU * (i + rnd.random() * 0.5) / n
-        d = r * (0.78 + rnd.random() * 0.2)
-        lr = 0.1 + rnd.random() * 0.1                      # виступ 10–20 см
+    b.cone(SOIL, (0, 0, 0), r * 0.8, r * 0.68, 0.05, 10)
+    n = 8 + rnd.randrange(3)
+    angs = sorted(TAU * rnd.random() for _ in range(n))
+    for i, a in enumerate(angs):
+        d = r * (0.62 + rnd.random() * 0.3)
+        lr = r * 0.2 * (0.6 + rnd.random() * 0.8)           # радіус виступу ±40 %
         b.cone(SOIL if i % 3 else SOIL_LIGHT, (math.cos(a) * d, math.sin(a) * d, 0.0), lr, lr * 0.8, 0.04 + rnd.random() * 0.03, 6, rnd.random())
-    for i in range(5):
-        a = i * 1.26 + rnd.random() * 0.4
-        d = r * (0.45 + rnd.random() * 0.3)
-        b.cone(SOIL_LIGHT if i % 2 else SOIL, (math.cos(a) * d, math.sin(a) * d, 0.0), r * (0.25 + rnd.random() * 0.1), r * 0.18, 0.06 + rnd.random() * 0.025, 7, rnd.random())
-    for i in range(4):                                     # грудки: дрібні округлі нерівності
+    for i in range(4):                                     # грудки на плямі
         a = rnd.random() * TAU
-        d = r * (0.5 + rnd.random() * 0.4)
-        b.ball(SOIL_LIGHT if i % 2 else SOIL, (math.cos(a) * d, math.sin(a) * d, 0.06), (0.1 + rnd.random() * 0.06, 0.09 + rnd.random() * 0.05, 0.07), 8, rnd.random())
+        d = r * (0.3 + rnd.random() * 0.4)
+        b.ball(SOIL_LIGHT if i % 2 else SOIL, (math.cos(a) * d, math.sin(a) * d, 0.06), (0.1 + rnd.random() * 0.06, 0.09 + rnd.random() * 0.05, 0.07), 6, rnd.random())
+    for i in range(2):                                     # грудки поза контуром
+        a = rnd.random() * TAU
+        d = r * (1.05 + rnd.random() * 0.15)
+        b.ball(SOIL, (math.cos(a) * d, math.sin(a) * d, 0.04), (0.12, 0.1, 0.07), 6, rnd.random())
     if lip:
         R = 0.15 * F * 1.15 + 0.12
-        for i in range(14):
-            a = TAU * i / 14 + rnd.random() * 0.2
-            b.ball(SOIL_LIGHT, (math.cos(a) * R, math.sin(a) * R, 0.07), (0.17, 0.12, 0.07), 8, a)
+        for i in range(8):
+            a = TAU * i / 8 + rnd.random() * 0.3
+            b.ball(SOIL_LIGHT, (math.cos(a) * R, math.sin(a) * R, 0.06), (0.22, 0.14, 0.06), 6, a)
 
 
 def asphalt(b, r, seed):

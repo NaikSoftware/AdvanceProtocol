@@ -114,9 +114,9 @@ func test_the_model_follows_the_drawn_surface_not_the_tile_kind() -> void:
 	for p: Vector2i in [Vector2i(3, 3), Vector2i(4, 3), Vector2i(5, 3)]:
 		Mines.place(state, p, 0)
 	layer.rebuild(state, 0)
-	assert_eq(layer.get_node("Mines_2").get_node("Mine_3_3").name, &"Mine_3_3", "асфальт: тверда модель")
-	assert_not_null(layer.get_node("Mines_0").get_node("Mine_4_3"), "поле: ґрунт")
-	assert_not_null(layer.get_node("Mines_0").get_node("Mine_5_3"), "ґрунтівка: ґрунт")
+	assert_true(layer.get_node("Mines_2").has_node("Mine_3_3"), "асфальт: тверда модель")
+	assert_true(layer.get_node("Mines_0").has_node("Mine_4_3"), "поле: ґрунт")
+	assert_true(layer.get_node("Mines_0").has_node("Mine_5_3"), "ґрунтівка: ґрунт")
 	assert_false(layer.get_node("Mines_2").has_node("Mine_5_3"))
 	assert_ne(MineLayer.mesh_of(MineLayer.Style.OWN, true), MineLayer.mesh_of(MineLayer.Style.OWN, false))
 
@@ -130,14 +130,22 @@ func test_a_mine_on_a_bridge_deck_uses_the_hard_model() -> void:
 
 
 ## Збільшення міни живе у двох місцях (mine.py і MINE_FACTOR); тест звіряє їх по справжній моделі:
-## верх корпусу відкопаної міни — це 0,3 м × MINE_FACTOR (з поправкою 0,97 на конус корпусу).
+## верх корпусу відкопаної міни — 0,3 м × MINE_FACTOR × BODY_TAPER (верх конуса корпусу в mine.py
+## вужчий за основу в 0,97 раза).
+const BODY_TAPER: float = 0.97
+
+
 func test_the_model_matches_the_mine_factor() -> void:
-	var verts: PackedVector3Array = MineLayer.mesh_of(MineLayer.Style.ENEMY_REVEALED).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var mesh: Mesh = MineLayer.mesh_of(MineLayer.Style.ENEMY_REVEALED)
+	var verts: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	# Корпус сягає найвище, ґрунт, грудки й валик — нижче половини висоти моделі: поріг береться з неї.
+	var cutoff: float = mesh.get_aabb().size.y * 0.5
 	var reach: float = 0.0
 	for v: Vector3 in verts:
-		if v.y > 0.02:  # над ґрунтом і насипом: корпус, плита, запал, ручка
+		if v.y > cutoff:
 			reach = maxf(reach, Vector2(v.x, v.z).length())
-	assert_almost_eq(reach * 2.0 * 8.0, 0.3 * MineLayer.MINE_FACTOR, 0.3 * MineLayer.MINE_FACTOR * 0.06)
+	var expected: float = 0.3 * MineLayer.MINE_FACTOR * BODY_TAPER
+	assert_almost_eq(reach * 2.0 * 8.0, expected, expected * 0.03)
 
 
 ## На мосту міна стоїть на настилі, а не на руслі під ним (так само, як юніт і контури).

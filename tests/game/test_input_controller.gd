@@ -1079,3 +1079,22 @@ func test_out_of_zone_tap_captions_a_known_mine_and_is_silent_on_an_unknown_one(
 	controller.tap_cell(Vector2i(25, 25))
 	controller.tap_cell(Vector2i(26, 26))
 	assert_eq(log, [[-1, Vector2i(25, 25)], [1, Vector2i(25, 25)], [-1, Vector2i(26, 26)]])
+
+
+## Нічого не вибрано: тап по своєму юніту його вибирає (без підпису), а тап по тайлу міни без
+## юніта дає підпис і нічого не вибирає.
+func test_with_nothing_selected_a_unit_tile_selects_and_a_mine_tile_captions() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	Mines.place(service.state, Vector2i(8, 8), 0)
+	var log: Array = _caption_log()
+	controller.tap_cell(u.pos)
+	assert_eq(_selections, [u])
+	assert_eq(log, [[-1, u.pos]], "тайл юніта: лише зняття підпису")
+	controller.tap_cell(u.pos)  # зняти вибір
+	log.clear()
+	_selections.clear()
+	controller.tap_cell(Vector2i(8, 8))
+	assert_eq(log, [[-1, Vector2i(8, 8)], [0, Vector2i(8, 8)]])
+	assert_eq(_selections.size(), 0)
