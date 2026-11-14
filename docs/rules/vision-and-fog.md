@@ -95,21 +95,89 @@ open and is then told they cannot see it will read the game as broken.
   the previous player's turn leak the location of their units — recentre on the incoming player's
   first unit.
 
+## Replay of the opponents' turns
+
+After the handover gate, the incoming player watches a fast replay of what the opponents did since
+that player's last turn. **It shows exactly what their side would have seen watching live, and
+everything that hit their own units or mines, and nothing more.** `ReplayFilter.build()` in `core/`
+decides this from a re-run of the logged commands. The view never re-derives it.
+
+Scouting stays permanent, so an enemy on `seen` ground is visible at every moment of its turn. One
+thing is new knowledge: **an enemy route across scouted ground is now visible**, including where it
+left that ground for the fog. This is intended, because it makes scouting worth more.
+
+**One rule decides each action: it is shown if the viewer can see the actor at that moment
+(`BattleState.can_see_unit()` on the state at that step), or if it hit something of the
+viewer's.** In detail:
+
+| case | shown |
+| --- | --- |
+| enemy move | only the steps on tiles where the viewer can see the unit; it appears out of the fog and vanishes into it at the edge |
+| a squad that **ends any move** hidden in a building | none of its movement in the span up to that move, even over several separate moves (§3.2). It vanishes from the tile it stood on when its first move starts. Showing the earlier moves would name the building it walked up to |
+| a move that passes through a building tile and leaves it | the per-step rule: hidden while in cover and not found, visible again after |
+| a shot or drone strike at the viewer's unit | always. The hit reveals the shooter (§3.3.1) before the damage lands, so it appears on its tile |
+| the viewer's unit retaliating | always, as part of that exchange |
+| a bridge demolished under the viewer's unit, or under any unit the viewer can see | the collapse and the unit's death, always. The engineer only if the viewer can see it: nothing reveals an engineer, because a demolition is not a shot |
+| an enemy unit detonating **the viewer's** mine | the blast on the mine's tile, always. The unit only if it is visible there |
+| the viewer's mine cleared by an engineer the viewer cannot see | not shown. The mine is gone at the end |
+| a bridge demolished, forest broken, or wreck left by an actor the viewer cannot see | not shown. The end state applies when the replay ends |
+| an exchange between two opponents (three players) | each unit by its own visibility. A visible shooter firing into the fog: the shot leaves, and the target, its damage and its turn are not shown. An unseen shooter hitting a visible unit: the hit, the damage, the turn and any wreck show on the target, with no tracer and no muzzle flash, so nothing is drawn between the target and the shooter. The hit effect still follows the shooter's weapon class, as in live play |
+| turning in place | by the same actor rule |
+
+Some events are never shown: `MinePlaced`, `MineRevealed`, `ApChanged`, and another side's
+`TileRevealed` or `UnitFound`. These cases are decided more finely than by the actor rule, because
+the event itself would point at something hidden, or because the board shows it anyway:
+
+- **A blocked move hides the block unless the viewer knows the blocker.** `MoveBlocked` names the
+  tile the unit could not enter. If an unseen unit, a squad in cover or a wreck on unscouted ground
+  stands there, the unit is shown stopping and nothing more.
+- **A move blocked by a mine never shows the block**, whoever owns the mine. A move stops before a
+  mine only when the moving side has found it, so the block would tell the viewer what
+  `MineRevealed` does, and that is never shown.
+- **A bridge collapse shows whenever the engineer, or a unit that falls with the bridge, is visible
+  to the viewer or is the viewer's own.** Bridges are public terrain and the end state shows the collapse anyway.
+  The engineer still appears only if the viewer can see it.
+- **A wreck that falls with a demolished bridge follows the bridge.** Showing it vanish from an
+  intact-looking bridge would show a demolition the viewer cannot see.
+- **A repair shows only if both the engineer and the repaired unit are visible.**
+- **Inside a squad's hidden route** — from its first move in the span to the last move that ends
+  with it hidden in a building — its turns in place and the viewer's own `UnitFound` for it are
+  hidden too. Each would place it on the route.
+
+**Fogged actions take zero time.** They produce no frame, no camera move and no count. A command
+with nothing to show is not a step of the replay at all.
+
+**Scope in time:** everything from the viewer's last end of turn to the start of their new turn.
+With three players that is two opponents' turns, in order. An eliminated opponent's turn counts up
+to its elimination. The first player has no replay on turn 1. **There is no replay if nothing is
+visible, or if the match ended inside the span**: the turn starts, or the results screen comes up,
+as without one.
+
+The live per-observer filter that online play would need is a different thing and does not exist
+([architecture](../architecture.md)). The replay filter sees the whole span at once, which the
+cover rule needs: a squad's earlier moves are hidden by where it ends up later.
+
 ## Mines
 
 - Laid by engineers, invisible to everyone except the owner.
 - **The search runs at the start of the engineer's owner's turn and from every tile the engineer
   passes through** — not only from the tile it stops on. An engineer sweeps as it advances, so a
   mine glimpsed in the middle of a route is found even if the engineer drives on past it.
-- **A tile occupied by a unit is never entered** (§3.2), so a unit standing on a mine keeps it from
-  detonating: whoever is blocked stops in front and takes nothing, and the mine stays buried.
 - **Only an engineer finds an enemy mine**, and it finds one within its own `vision` radius —
   the same diamond as tile fog (§3.1), so a revealed mine is always on a tile you can actually
   see. Visibility is **per player**, tracked on the mine, exactly like tile fog.
-- Driving onto an unrevealed mine detonates it.
-- **A known enemy mine is an obstacle**: planning treats it like an occupied tile,
-  so routes and both movement zones bend around it and its tile is not a legal destination. Your
-  own mines never are.
+- **A mine detonates under whoever drives onto it**, whoever laid it. Your own mines hit your own
+  units, so no unit ever stands on a mine.
+- **A known mine is an obstacle**: planning treats it like an occupied tile, so routes and both
+  movement zones bend around it and its tile is not a legal destination. You know every mine you
+  laid, so your own mines are always obstacles to you; an enemy mine becomes one once an engineer
+  finds it. A mine nobody on your side has found still detonates on entry.
+- **A mine may be laid on a bridge, never where no unit can enter** — water, a destroyed bridge,
+  or marsh outside frozen ground — because it could never go off there. Driving onto a mined
+  bridge brings the span down by the same path as an engineer's demolition ([units](units.md)):
+  the tile becomes a destroyed bridge, the unit on it is lost with the bridge and leaves no wreck,
+  and a wreck already on the span goes into the river. Any demolition takes a mine on the span
+  with it, so a repaired bridge is never mined.
 - **An engineer that finds a mine on its route mid-walk stops in front of it**, with the same halt
   as for an unseen unit, and pays only for the tiles it entered.
 

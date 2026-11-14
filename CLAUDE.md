@@ -106,7 +106,8 @@ rifle squad and the engineer.
   AP left, red = reachable but cannot act. Recomputed after every action that changes AP or
   occupancy.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
-  the zones use fog-filtered occupancy plus known enemy mines and, for a vehicle, known wrecks;
+  the zones use fog-filtered occupancy plus known mines — the player's own and the enemy mines
+  found so far — and, for a vehicle, known wrecks;
   the walk checks the truth and **stops on the tile before** anything it could not see or an
   engineer has just found. AP is charged only for tiles actually entered. Planning against the
   true occupancy would leak — the route would detour around an invisible enemy and give away
@@ -189,6 +190,11 @@ product against the target's facing. No trigonometry, no division.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not
   leak the previous player's positions — recentre on the incoming player's first unit.
+- **After the gate, the incoming player watches a replay of the opponents' turns, filtered to what
+  their side would have seen live** and to everything that hit their own units or mines. A squad
+  that ends a move hidden in a building shows none of its route. Fogged actions take no time and
+  no camera move. `ReplayFilter` in `core/` decides; the view never re-derives it. See the
+  [linked document](docs/rules/vision-and-fog.md#replay-of-the-opponents-turns).
 
 ### 3.6 Unit classes and roster → [roster table and balance notes](docs/rules/units.md)
 
@@ -213,9 +219,9 @@ mesh may sculpt three or four figures sharing a base, and it should.
 ### 3.8 Engineers → [verb list](docs/rules/units.md)
 
 No gun; a verb list instead. All actions are on an **orthogonally adjacent** tile and cost
-`fire_cost` AP: lay/clear mine, repair/demolish bridge (an enemy on it dies; a friendly unit
-on it forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP
-matters.
+`fire_cost` AP: lay/clear mine (never where no unit can enter; a bridge may be mined),
+repair/demolish bridge (an enemy on it dies, a mine on it goes with the span; a friendly unit on it
+forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP matters.
 
 ### 3.9 Drone strike — assault squad only → [details](docs/rules/units.md)
 
@@ -238,10 +244,12 @@ standing wins.
 
 Laid by engineers, invisible to everyone except the owner, **found only by an engineer** within
 its own vision diamond — searched at the start of its owner's turn and from **every tile it passes
-through**, not only the one it stops on. Driving onto an unrevealed mine detonates it — **on entry,
-not at the destination**, so a minefield cannot be crossed by stopping past it. **A known enemy
-mine is an obstacle** that planning routes around. A tile occupied by a unit is never entered, so
-a blocker standing on a mine keeps it from going off.
+through**, not only the one it stops on. **A mine detonates under whoever drives onto it**, its
+owner's units included, so no unit ever stands on a mine. It goes off **on entry, not at the
+destination**, so a minefield cannot be crossed by stopping past it. **A known mine is an
+obstacle** that planning routes around: every mine of the player's own, and every enemy mine an
+engineer has found. A mine on a bridge brings the bridge down, and the unit on it is lost with the
+bridge, as with a demolition (§3.8).
 
 ### 3.12 Weather, time of day, and ground state → [details](docs/rules/movement-and-terrain.md)
 

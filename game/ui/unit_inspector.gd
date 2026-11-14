@@ -64,6 +64,9 @@ func _ready() -> void:
 ## бачити (docs/ui/overlays.md), тож рядок AP ховається цілком.
 func show_unit(unit: Unit, show_ap: bool = true) -> void:
 	var t: Dictionary = unit.type()
+	_name_label.modulate = MODULATE_NEUTRAL
+	$Body/Stats.visible = true
+	$Body/ArmourRow.visible = true
 	_name_label.text = tr(t["name_key"])
 	_class_label.text = tr(CLASS_KEYS[unit.unit_class()])
 	# HP і AP — поточні проти максимуму: без другого числа «210» нічого не
@@ -77,6 +80,15 @@ func show_unit(unit: Unit, show_ap: bool = true) -> void:
 	var armour: Array = t["armour"]
 	for sector in _armour_labels.size():
 		_armour_labels[sector].text = str(int(armour[sector]))
+	visible = true
+
+
+## Підпис міни: назва й чия вона (колір — як HP-смуга власника), без рядків характеристик.
+func show_mine(own: bool, owner: int) -> void:
+	_name_label.text = tr("mine_own" if own else "mine_enemy")
+	_name_label.modulate = UnitView.hp_fill_color(owner)
+	$Body/Stats.visible = false
+	$Body/ArmourRow.visible = false
 	visible = true
 
 
