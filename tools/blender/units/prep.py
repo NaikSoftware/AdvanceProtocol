@@ -311,6 +311,9 @@ def close1d(a, ax):
 b = np.where(hit, bot, -1.0)
 bot_side = np.where(hit, np.minimum(close1d(b, 0), top), np.nan)
 bot_end = np.where(hit, np.minimum(close1d(b, 1), top), np.nan)
+if cfg.get("end_floor"):
+    # the bow and tail walls end at the plate's lower edge; tow shackles and hooks below it show as teeth along the bottom
+    bot_end = np.where(hit, np.minimum(np.maximum(bot_end, lib.m_len(cfg, cfg["end_floor"])), top), np.nan)
 SR = cfg.get("side_reach", 0)
 if SR:
     # a flared hull is widest above its lower sides, so the outermost column's underside is the flare's: the wall would stop

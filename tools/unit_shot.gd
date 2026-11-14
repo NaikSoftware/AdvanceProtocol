@@ -12,8 +12,8 @@ extends Node
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m), без (_e) і з моделлю суцільним пурпуром (_k, маска контуру) для ΔE.
-## Шостий аргумент spin ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри з різним `travel` (_s0, _s1, _s2):
-## між ними колеса мають повернутися, а корпус лишається на місці.
+## Шостий аргумент spin ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
+## з однаковим `travel` (контроль), третій — на пів радіуса колеса далі; між ними мають змінитися лише колеса.
 ## Шостий аргумент rear [set=N] ставить чотири танки набору N (важкий, середній, винищувач, легкий) у ряд через тайл,
 ## самими моделями без смуг HP (смуга ховає ствол сусіда), і знімає на зумі 6 два кадри: тилом до камери (_f0) і носом до неї (_f4).
 ## Шостий аргумент sets ставить ті самі чотири танки для кожного з трьох гравців: рядки — набори
@@ -437,8 +437,10 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
 	var hull := m.get_node("Hull") as GeometryInstance3D
 	var shots: Array = []
+	# s0 и s1 — той самий travel (контроль: кадри мають збігтися), s2 — пів радіуса колеса (пів радіана)
+	var r: float = float(UnitSilhouettes.spec(type_id).get("wheel", 0.06))
 	for i in 3:
-		hull.set_instance_shader_parameter("travel", 0.03 * i)
+		hull.set_instance_shader_parameter("travel", 0.5 * r if i == 2 else 0.0)
 		for f in SETTLE_FRAMES:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
