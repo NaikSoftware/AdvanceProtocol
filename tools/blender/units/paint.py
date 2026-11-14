@@ -273,9 +273,6 @@ if plain:
     ramp = np.clip(1 - (h - mf) / C.get("mud_h", 0.6), 0, 1)
     mx = C.get("mud_max", 0.85)
     col = col * (1 - mx * ramp[..., None]) + lin(92, 76, 56) * (mx * ramp)[..., None]
-if C.get("ground_ao"):
-    # the vehicle sits on the ground: the lower hull and the wheel wells take contact shade (`ground_ao` = darkest share, bottom ~0.4 m)
-    col = col * (1 - C["ground_ao"] * smooth(0.55, 0.1, h))[..., None]
 rough = np.clip(rough + 0.2 * dust + 0.1 * mud, 0, 1)
 # Oil and fuel on the rear deck: darker, half-gloss patches, the one smooth area on a matte tank.
 # Deck level only (hull height): a casemate roof at the rear is not an engine deck.
@@ -316,6 +313,12 @@ if plain:
     free = (ao > 0.85) & (glass < 0.5) & ~on_gun
     col = np.where(free[..., None], np.maximum(col, olive * C.get("floor", 0.75) * (1 - 0.6 * ramp)[..., None]), col)   # mud lowers the floor
     col = np.where(on_gun[..., None], col * C.get("gun_dark", 0.8), col)
+if C.get("ground_ao"):
+    # the vehicle sits on the ground: the lower hull and the wheel wells take contact shade (`ground_ao` = darkest share, bottom ~0.4 m)
+    # after the plain-scheme floor, which would otherwise lift it back: the visible side wall starts at the sill, not at the ground: `ground_ao_band` [sill, fade-out] metres, darkest at the sill; wheel wells (occluded texels) darker still
+    lo_h, hi_h = C.get("ground_ao_band", (0.45, 1.3))
+    col = col * (1 - C["ground_ao"] * smooth(hi_h, lo_h, h))[..., None]
+    col = col * (1 - 0.35 * smooth(0.6, 0.3, ao) * smooth(1.6, 0.8, h))[..., None]
 # Engine-deck louvres (units.json `louvres`, MODEL metres): rows of dark slots across the hull on
 # the up-facing deck, two grilles either side of a solid centre strip. Texture only: from above
 # they mark the deck as an engine deck without a triangle.

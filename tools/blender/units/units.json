@@ -843,11 +843,15 @@
       "tyre_r": 0.64,
       "lugs": 24,
       "holes": 6,
-      "ground_ao": 0.33,
+      "ground_ao": 0.55,
       "gun_dark": 0.4,
       "streak": 0.08,
       "grime": 0.12,
-      "blotch": 0.03
+      "blotch": 0.03,
+      "ground_ao_band": [
+        1.35,
+        2.3
+      ]
     },
     "fwd": "-y",
     "hull_long": [
@@ -858,7 +862,7 @@
     "scale_lat": 0.852,
     "body_tris": 3000,
     "side_reach": 8,
-    "wall_floor": 0.15,
+    "wall_floor": 0.2,
     "squash": {
       "above_h": 0.36,
       "scale": 0.85
@@ -988,7 +992,11 @@
       "tyre_r": 0.64,
       "lugs": 24,
       "holes": 6,
-      "ground_ao": 0.33
+      "ground_ao": 0.55,
+      "ground_ao_band": [
+        1.7,
+        2.4
+      ]
     },
     "fwd": "-y",
     "hull_long": [
@@ -998,7 +1006,7 @@
     "hull_lat": 0.1775,
     "scale_lat": 0.8,
     "side_reach": 8,
-    "wall_floor": 0.18,
+    "wall_floor": 0.22,
     "body_tris": 2600,
     "gun": {
       "axis_h": 0.3953,
@@ -1040,7 +1048,7 @@
       ],
       "sides": 16
     },
-    "end_floor": 0.2,
+    "end_floor": 0.22,
     "squash": {
       "above_h": 0.335,
       "scale": 0.67
@@ -1078,12 +1086,16 @@
       "tyre_r": 0.64,
       "lugs": 24,
       "holes": 6,
-      "ground_ao": 0.33,
+      "ground_ao": 0.55,
       "glass_hue": 1.0,
       "glass_c": [
         44,
         48,
         52
+      ],
+      "ground_ao_band": [
+        0.7,
+        1.8
       ]
     },
     "fwd": "-y",
