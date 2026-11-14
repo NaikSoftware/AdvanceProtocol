@@ -26,7 +26,7 @@ ERR_DRONE_CANNOT_TARGET_INFANTRY,Дрон не б'є піхоту,Drone cannot t
 ERR_NOT_AN_ENGINEER,Це не інженер,Unit is not an engineer
 ERR_NOT_ADJACENT,Ціль не на сусідній клітинці,Target is not on an adjacent tile
 ERR_MINE_ALREADY_THERE,Тут уже є міна,A mine is already here
-ERR_MINE_ON_WATER,На воду міну не поставити,A mine cannot be laid on water
+ERR_MINE_CANNOT_BE_LAID_HERE,Сюди ніхто не в'їде — міна тут марна,No unit can enter here to set off a mine
 ERR_TILE_OCCUPIED,Клітинка зайнята,Tile is occupied
 ERR_NO_MINE_THERE,Тут немає міни,There is no mine here
 ERR_NO_BRIDGE_THERE,Тут немає мосту,There is no bridge here

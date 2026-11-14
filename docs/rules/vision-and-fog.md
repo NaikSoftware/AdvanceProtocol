@@ -110,10 +110,12 @@ open and is then told they cannot see it will read the game as broken.
   movement zones bend around it and its tile is not a legal destination. You know every mine you
   laid, so your own mines are always obstacles to you; an enemy mine becomes one once an engineer
   finds it. A mine nobody on your side has found still detonates on entry.
-- **A mine may be laid on a bridge, never on water.** Driving onto a mined bridge brings the span
-  down by the same path as an engineer's demolition ([units](units.md)): the tile becomes a
-  destroyed bridge, the unit on it is lost with the bridge and leaves no wreck, and a wreck already
-  on the span goes into the river.
+- **A mine may be laid on a bridge, never where no unit can enter** — water, a destroyed bridge,
+  or marsh outside frozen ground — because it could never go off there. Driving onto a mined
+  bridge brings the span down by the same path as an engineer's demolition ([units](units.md)):
+  the tile becomes a destroyed bridge, the unit on it is lost with the bridge and leaves no wreck,
+  and a wreck already on the span goes into the river. Any demolition takes a mine on the span
+  with it, so a repaired bridge is never mined.
 - **An engineer that finds a mine on its route mid-walk stops in front of it**, with the same halt
   as for an unseen unit, and pays only for the tiles it entered.
 

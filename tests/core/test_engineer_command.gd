@@ -308,11 +308,34 @@ func test_enemy_mine_next_to_engineer_is_known_after_begin_turn_and_statuses_mat
 	assert_false(lay["tiles"].has(Vector2i(4, 3)))
 	assert_true(clear["tiles"].has(Vector2i(4, 3)))
 
-## Міну на воду не ставлять: на тайл, куди ніхто не в'їде, вона нічого не важить.
-func test_a_mine_cannot_be_laid_on_water() -> void:
-	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.WATER)
+## Міну не ставлять туди, куди не в'їде жоден клас: там вона ніколи не вибухне.
+func test_a_mine_cannot_be_laid_where_no_unit_can_enter() -> void:
 	var e: Unit = _engineer(Vector2i(4, 4))
-	assert_eq(EngineerCommand.create(e.id, A.LAY_MINE, Vector2i(4, 3)).validate(state), "ERR_MINE_ON_WATER")
+	for kind: int in [Terrain.Kind.WATER, Terrain.Kind.BRIDGE_DESTROYED, Terrain.Kind.MARSH]:
+		state.board.set_kind(Vector2i(4, 3), kind)
+		assert_eq(EngineerCommand.create(e.id, A.LAY_MINE, Vector2i(4, 3)).validate(state),
+			"ERR_MINE_CANNOT_BE_LAID_HERE", "вид тайла %d" % kind)
+
+func test_a_mine_can_be_laid_on_frozen_marsh() -> void:
+	state = BattleState.create(Board.create(10, 10, Terrain.GroundState.FROZEN), 2, 21)
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.MARSH)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	assert_eq(EngineerCommand.create(e.id, A.LAY_MINE, Vector2i(4, 3)).validate(state), "",
+		"мерзле болото прохідне, тож міна там має сенс")
+
+## Прогін іде в річку разом із міною на ньому: відремонтований міст не має
+## повертати міну, про яку інженер, що його ремонтує, і не знає.
+func test_demolishing_a_mined_bridge_takes_the_mine_along() -> void:
+	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)
+	var e: Unit = _engineer(Vector2i(4, 4))
+	Mines.place(state, Vector2i(4, 3), 1)
+	var events: Array = EngineerCommand.create(e.id, A.DEMOLISH_BRIDGE, Vector2i(4, 3)).apply(state)
+	assert_null(Mines.mine_at(state, Vector2i(4, 3)))
+	var cleared: int = 0
+	for ev in events:
+		if ev is Events.MineCleared:
+			cleared += 1
+	assert_eq(cleared, 1)
 
 func test_a_mine_can_be_laid_on_a_bridge() -> void:
 	state.board.set_kind(Vector2i(4, 3), Terrain.Kind.BRIDGE)

@@ -214,9 +214,9 @@ mesh may sculpt three or four figures sharing a base, and it should.
 ### 3.8 Engineers → [verb list](docs/rules/units.md)
 
 No gun; a verb list instead. All actions are on an **orthogonally adjacent** tile and cost
-`fire_cost` AP: lay/clear mine (never on water; a bridge may be mined), repair/demolish bridge
-(an enemy on it dies; a friendly unit on it forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP
-matters.
+`fire_cost` AP: lay/clear mine (never where no unit can enter; a bridge may be mined),
+repair/demolish bridge (an enemy on it dies, a mine on it goes with the span; a friendly unit on it
+forbids the demolition), repair a friendly unit. Repair is the one place where unspent AP matters.
 
 ### 3.9 Drone strike — assault squad only → [details](docs/rules/units.md)
 

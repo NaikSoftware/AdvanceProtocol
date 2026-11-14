@@ -30,6 +30,10 @@ static func demolish_bridge(state: BattleState, pos: Vector2i) -> Array[Events.B
 	var out: Array[Events.BattleEvent] = []
 	state.board.set_kind(pos, Terrain.Kind.BRIDGE_DESTROYED)
 	out.append(Events.BridgeChanged.new(pos, true))
+	# Міна на прогоні йде в річку разом із ним: інакше ремонт мосту повернув би міну,
+	# якої інженер, що ремонтує, може й не знати. Міна, що сама підірвала міст, уже
+	# знята в Mines.step_on(), тож тут їй нема чого чистити.
+	out.append_array(Mines.clear(state, pos))
 	# Уламки на прогоні падають у річку разом із ним (§3.14). Підрив вони не
 	# забороняють: техніки на них немає, а піхоту на мосту й так можна скинути.
 	out.append_array(Wrecks.remove(state, pos, Wrecks.Reason.BRIDGE_DEMOLISHED))
@@ -92,10 +96,12 @@ func validate(state: BattleState) -> String:
 		Action.LAY_MINE:
 			if Mines.mine_at(state, target_pos) != null:
 				return "ERR_MINE_ALREADY_THERE"
-			# На воду ніхто не в'їде, тож міна там нічого не важить; міст — інша річ:
-			# міна на ньому підриває й прогін (Mines.step_on()).
-			if state.board.kind_at(target_pos) == Terrain.Kind.WATER:
-				return "ERR_MINE_ON_WATER"
+			# Туди, куди не в'їде жоден клас (вода, підірваний міст, болото не в мороз),
+			# міна ніколи не вибухне. Непрохідність — нескінченний штраф тайла, а не
+			# перелік видів, тож мерзле болото, прохідне для всіх, мінувати можна.
+			# Цілий міст прохідний: міна на ньому підриває й прогін (Mines.step_on()).
+			if state.board.penalty_at(target_pos) >= Terrain.IMPASSABLE:
+				return "ERR_MINE_CANNOT_BE_LAID_HERE"
 			if state.unit_at(target_pos) != null:
 				return "ERR_TILE_OCCUPIED"
 		Action.CLEAR_MINE:
