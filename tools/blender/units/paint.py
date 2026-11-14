@@ -25,7 +25,8 @@ Camo scheme only: `roof_fade` (up-facing faces faded to grey of the same value, 
 gate), with its own defaults for `roof_dark`, `roof_cool` and `dust`; with `fade_to` (sRGB) the olive base
 of the tops fades towards that colour instead while the brown and black blocks stay dark. The camo
 defaults for `roof_dark`, `roof_cool` and `dust` do not apply under `fade_to`: set them in the dict.
-`streak` applies to both schemes.
+`streak` applies to both schemes, and so does `roof_dust` (the noise-gated dust on up-facing faces, default 1;
+0 leaves only the even dust ramp low on the hull).
 """
 import sys, os
 import numpy as np
@@ -253,7 +254,10 @@ col = col * (1 + side[..., None] * streak[..., None] * C.get("streak", 0.22))
 h = P[..., 2]
 dust_n = fbm(P, [(0.9, 0.5), (0.25, 0.3), (0.06, 0.2)], 71)
 up = np.clip(nz, 0, 1) ** 2
-dust = np.clip(smooth(1.5, 0.3, h) * 0.8 + up * 0.35 * dust_n + up * (1 - ao) * 0.6, 0, 1)
+# `roof_dust` scales the noise-gated dust on up-facing faces; 0 leaves only the even height ramp, since
+# dust patches of another hue on a plain olive roof read as stains
+ru = C.get("roof_dust", 1.0)
+dust = np.clip(smooth(1.5, 0.3, h) * 0.8 + up * (0.35 * ru) * dust_n + up * (1 - ao) * (0.6 * ru), 0, 1)
 dust = dust * smooth(0.25, 0.65, dust_n + 0.15)
 dust_c = lin(152, 140, 116)
 dmix = C.get("dust", 0.42)              # from above the roof is most of the tank: heavy dust reads washed out
