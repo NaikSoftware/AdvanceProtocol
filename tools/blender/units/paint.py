@@ -25,7 +25,9 @@ Camo scheme only: `roof_fade` (up-facing faces faded to grey of the same value, 
 gate), with its own defaults for `roof_dark`, `roof_cool` and `dust`; with `fade_to` (sRGB) the olive base
 of the tops fades towards that colour instead while the brown and black blocks stay dark. The camo
 defaults for `roof_dark`, `roof_cool` and `dust` do not apply under `fade_to`: set them in the dict.
-`streak` applies to both schemes.
+`streak` applies to both schemes, and so does `roof_dust` (the noise-gated dust on up-facing faces, default 1;
+0 leaves only the even dust ramp low on the hull), and `chip_lines` (light chipping only on edge lines, default off).
+Plain only: `dark_floor` (least body tone outside the louvre slots, glass and the gun, a fraction of the base, default off).
 """
 import sys, os
 import numpy as np
@@ -166,8 +168,8 @@ cav = np.clip((0.5 - pt) * 14, 0, 1)
 edge = np.clip((pt - 0.5) * 14, 0, 1)
 wear_n = fbm(P, [(0.25, 0.6), (0.08, 0.4)], 51)
 chip = edge * smooth(0.45, 0.65, wear_n)
-col = col * (1 - 0.55 * cav[..., None])
-col = col * (1 - 0.45 * chip[..., None]) + (col * 1.7 + lin(70, 68, 62) * 0.3) * 0.45 * chip[..., None]
+
+
 # Wear sits on edge lines. On small fragmented islands the baked edge mask covers whole patches;
 # bare steel and polish there would read as bright blobs, so they keep to texels whose 15 cm
 # neighbourhood is mostly not edge.
@@ -180,6 +182,12 @@ def box(a, k):
 
 dens = box(edge > 0.3, 7)
 line = smooth(0.5, 0.3, dens)
+col = col * (1 - 0.55 * cav[..., None])
+# `chip_lines`: the light chipped paint keeps to edge lines too. On an island the edge mask fills
+# whole (a large flat plate whose baked pointiness came out convex) it otherwise follows the 0.25 m
+# wear noise across the face as pale mottling.
+chip_c = chip * line if C.get("chip_lines") else chip
+col = col * (1 - 0.45 * chip_c[..., None]) + (col * 1.7 + lin(70, 68, 62) * 0.3) * 0.45 * chip_c[..., None]
 bare = chip * smooth(0.62, 0.75, wear_n) * line
 col = col * (1 - bare[..., None]) + lin(*C.get("bare_c", (100, 98, 94))) * bare[..., None]
 if not plain:
@@ -253,7 +261,10 @@ col = col * (1 + side[..., None] * streak[..., None] * C.get("streak", 0.22))
 h = P[..., 2]
 dust_n = fbm(P, [(0.9, 0.5), (0.25, 0.3), (0.06, 0.2)], 71)
 up = np.clip(nz, 0, 1) ** 2
-dust = np.clip(smooth(1.5, 0.3, h) * 0.8 + up * 0.35 * dust_n + up * (1 - ao) * 0.6, 0, 1)
+# `roof_dust` scales the noise-gated dust on up-facing faces; 0 leaves only the even height ramp, since
+# dust patches of another hue on a plain olive roof read as stains
+ru = C.get("roof_dust", 1.0)
+dust = np.clip(smooth(1.5, 0.3, h) * 0.8 + up * (0.35 * ru) * dust_n + up * (1 - ao) * (0.6 * ru), 0, 1)
 dust = dust * smooth(0.25, 0.65, dust_n + 0.15)
 dust_c = lin(152, 140, 116)
 dmix = C.get("dust", 0.42)              # from above the roof is most of the tank: heavy dust reads washed out
@@ -342,6 +353,15 @@ if t:
     on_t = (P[..., 1] > ty[0]) & (P[..., 1] < ty[1]) & (np.abs(P[..., 0]) < lib.m_len(cfg, t["lat"] * t.get("scale_lat", 1.0)) * lib.TILE_M) \
         & (P[..., 2] > lib.m_len(cfg, t["base_h"]) * lib.TILE_M + 0.05) & ~on_gun
     col = col * (1 - t.get("dark", 0.25) * on_t[..., None])
+
+# `dark_floor` (plain scheme, fraction of the base tone): no body texel goes darker than it.
+# Cavity, occlusion and grime stack up on hatch recesses and the walls of small roof blocks into
+# near-black 0.3 m squares that read as holes from above; the louvre slots and the glass (sights,
+# cab windows) are really dark and stay so.
+if plain and C.get("dark_floor"):
+    opening = (on & slot) if lv else np.zeros((N, N), bool)
+    lift = (d["cov"] > 0.5) & ~on_gun & ~opening & (glass < 0.5)
+    col = np.where(lift[..., None], np.maximum(col, olive * C["dark_floor"]), col)
 
 # Baked relief a little deeper (`normal_gain`): bolts, panel joints and bevels catch the light at
 # 7 cm/px, where a 1:1 bake reads as a moulded surface.
