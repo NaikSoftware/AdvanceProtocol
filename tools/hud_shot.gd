@@ -6,8 +6,9 @@ extends Node
 ## Кадри пишуться наприкінці (save_png блокує ~1 с і зіпсував би таймінг). Не входить у гру.
 ##
 ## Запуск (вікно, не --headless; через tools/godot_run.sh):
-##   tools/godot_run.sh --path . res://tools/hud_shot.tscn -- <out_dir> <map> <WxH> <locale> <states|all> [hud=on|off|both]
-## states — через кому. Файл: <out_dir>/<map>_<WxH>_<state>[_nohud].png
+##   tools/godot_run.sh --path . res://tools/hud_shot.tscn -- <out_dir> <map> <WxH> <locale> <states|all> [hud=on|off|both] [--ui-dpi=N]
+## states — через кому. Файл: <out_dir>/<map>_<WxH>_<state>[_nohud][_<locale>].png.
+## --ui-dpi емулює телефон: 1496x672 при 243 дає логічні 985x442, 1600x720 при 320 — 800x360.
 
 const STATES: Array[String] = [
 	"idle", "own_tank", "move_preview", "shot_preview", "enemy", "engineer", "engineer_armed",
@@ -96,7 +97,7 @@ func _ready() -> void:
 			for f in STATE_FRAMES:
 				await get_tree().process_frame
 			var img: Image = get_viewport().get_texture().get_image()
-			shots.append({"img": img, "path": "%s/%s_%dx%d_%s%s.png" % [out_dir, map_name, size.x, size.y, st, "" if with_hud else "_nohud"]})
+			shots.append({"img": img, "path": "%s/%s_%dx%d_%s%s%s.png" % [out_dir, map_name, size.x, size.y, st, "" if with_hud else "_nohud", "" if a[3] == "uk" else "_" + a[3]]})
 	for s: Dictionary in shots:
 		(s["img"] as Image).save_png(s["path"])
 		print("HUD_SHOT ", s["path"], " ", (s["img"] as Image).get_size())
@@ -162,7 +163,7 @@ func _enter_state(st: String) -> bool:
 		"engineer", "engineer_armed":
 			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
 			if st == "engineer_armed":
-				_ctrl.arm_engineer(EngineerCommand.Action.LAY_MINE)
+				_press_verb(EngineerCommand.Action.LAY_MINE)
 		"drone", "drone_preview":
 			_ctrl.select_unit(_state.get_unit(_ids["assault"]))
 			_ctrl.arm_drone()
@@ -176,7 +177,7 @@ func _enter_state(st: String) -> bool:
 			_ctrl.peek_cell(_state.get_unit(_ids["enemy_squad"]).pos)
 		"engineer_pending":
 			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
-			_ctrl.arm_engineer(EngineerCommand.Action.REPAIR_UNIT)
+			_press_verb(EngineerCommand.Action.REPAIR_UNIT)
 			_ctrl.tap_cell(tank.pos)
 		"mood":
 			pass
@@ -219,7 +220,7 @@ func _reset_cast(st: String) -> void:
 	_state.mines.clear()
 	var toward_enemy: int = Board.facing_towards(_site, _site + OFF_ENEMY_TANK)
 	_ids["tank"] = _state.add_unit(MEDIUM_TANK, 0, _site + OFF_TANK, toward_enemy).id
-	var eng_off: Vector2i = Vector2i(1, 0) if st == "engineer_pending" else OFF_ENGINEER
+	var eng_off: Vector2i = Vector2i(0, 1) if st == "engineer_pending" else OFF_ENGINEER
 	_ids["engineer"] = _state.add_unit(ENGINEER, 0, _site + eng_off, toward_enemy).id
 	if st == "engineer_pending":
 		_state.get_unit(_ids["tank"]).hp -= 80
@@ -251,3 +252,10 @@ func _wait_idle() -> void:
 		await get_tree().process_frame
 		if f > 2 and not ep.is_playing():
 			return
+
+
+## Верба береться з кнопки панелі, як у грі: лише так панель запам'ятовує вибрану дію, і смужка
+## озброєння отримує назву та значок (прямий arm_engineer лишив би їх порожніми).
+func _press_verb(action: int) -> void:
+	var panel := (_screen.get_node("%Hud") as Hud).get_node("%EngineerPanel") as EngineerPanel
+	panel.button_for(action).pressed.emit()
