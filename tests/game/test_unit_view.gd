@@ -811,8 +811,9 @@ func test_silhouette_fits_one_tile() -> void:
 			lo = lo.min(m.position + box.position)
 			hi = hi.max(m.position + box.end)
 		assert_lte(hi.x - lo.x, 1.0, "x типу %d" % id)
-		# Гармати й інженерна машина мають справжню довжину 6–10 м: коробка-заступник з лафетом довша за тайл, як стволи танків.
-		assert_lte(hi.z - lo.z, 1.0 if id < 9 else 2.7, "z типу %d" % id)
+		# Гаубиця має справжню довжину понад 10 м: її коробка-заступник довша за тайл, як стволи танків.
+		# коробка-заступник гаубиці з лафетом (корпус + станина 1,05 довжини) трохи довша за тайл; решта вміщається
+		assert_lte(hi.z - lo.z, 1.1 if id == 10 else 1.0, "z типу %d" % id)
 		assert_gte(lo.y, 0.0, "низ типу %d" % id)
 		root.free()
 

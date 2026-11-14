@@ -25,9 +25,9 @@ const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
 	{"hull": Vector3(0.475, 0.25, 0.90), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},  # 8 важкий танк 3,8×2,8×(корпус 7,2) м
-	{"hull": Vector3(0.44, 0.34, 0.75), "barrel": 0.375, "wheel": 0.067, "extras": [&"tall_barrel", &"trail"], "crew": [Vector3(-0.06, 0.12, -90.0), Vector3(0.21, 0.25, 90.0)]},  # 9 польова гармата 3,5×2,7×6,0 м з лафетом
-	{"hull": Vector3(0.815, 0.52, 1.30), "barrel": 0.65, "wheel": 0.1235, "extras": [&"tall_barrel", &"trail"], "crew": [Vector3(-0.12, 0.26, -90.0), Vector3(0.37, 0.45, 90.0)]},  # 10 гаубиця 6,5×4,2×10,4 м з лафетом
-	{"hull": Vector3(0.53, 0.36, 1.20), "barrel": 0.0, "wheel": 0.044, "extras": [&"stripe"]},  # 11 інженерна машина 4,2×2,9×9,6 м з плугом
+	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "extras": [&"trail"], "crew": [Vector3(-0.02, 0.30, 0.0), Vector3(-0.235, 0.25, -90.0)]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
+	{"hull": Vector3(0.305, 0.40, 0.52), "barrel": 0.73, "wheel": 0.075, "bore": 0.487, "extras": [&"tall_barrel", &"trail"], "crew": [Vector3(-0.09, 0.33, -45.0), Vector3(0.47, 0.45, 45.0)]},  # 10 гаубиця: лафет з колесами; ствол і станини за його межами
+	{"hull": Vector3(0.45, 0.24, 0.92), "barrel": 0.0, "wheel": 0.04, "extras": [&"stripe"]},  # 11 інженерна машина: корпус без плуга
 ]
 
 ## Башта: 0,8 м заввишки.
@@ -103,6 +103,9 @@ static func muzzle(type_id: int, set_id: int = 0) -> Vector3:
 ## Висота осі ствола: у башті — посередині неї, у гаубиці — над станиною, інакше — з корпусу.
 static func barrel_y(type_id: int, set_id: int = 0) -> float:
 	var s: Dictionary = spec(type_id, set_id)
+	if s.has("bore"):
+		# піднятий ствол: висота дульного зрізу виміряна з моделі, а не виведена з корпусу
+		return float(s.bore)
 	var h: float = (s.hull as Vector3).y
 	var extras: Array = s.extras
 	if extras.has(&"turret") or extras.has(&"roof_gun"):
@@ -197,8 +200,8 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0) -> Ar
 	var model: ArrayMesh = model_mesh(type_id, set_id)
 	if model != null and not has_figures and crew.is_empty():
 		return model
-	var key := "%d:%d:%s:%d:%s" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0,
-			model_mesh(0, set_id) != null]
+	var key := "%d:%d:%s:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0,
+			_resolved_set(0, set_id)]
 	if _merged_meshes.has(key):
 		return _merged_meshes[key]
 	if model != null and not has_figures:
@@ -284,9 +287,12 @@ static func _with_crew(gun: ArrayMesh, crew: Array, set_id: int) -> ArrayMesh:
 	out[Mesh.ARRAY_NORMAL] = (g[Mesh.ARRAY_NORMAL] as PackedVector3Array) + (fig[Mesh.ARRAY_NORMAL] as PackedVector3Array)
 	var gt: PackedFloat32Array = g[Mesh.ARRAY_TANGENT] if g[Mesh.ARRAY_TANGENT] != null else PackedFloat32Array()
 	if gt.size() == gv.size() * 4:
-		var ft := PackedFloat32Array()
-		for i in n:
-			ft.append_array([1.0, 0.0, 0.0, 1.0])
+		# дотичні бійців — ті, що дав _merge_model (повернуті разом із фігурою); константа лише коли джерело їх не мало
+		var ft: PackedFloat32Array = fig[Mesh.ARRAY_TANGENT] if fig[Mesh.ARRAY_TANGENT] != null else PackedFloat32Array()
+		if ft.size() != n * 4:
+			ft.clear()
+			for i in n:
+				ft.append_array([1.0, 0.0, 0.0, 1.0])
 		out[Mesh.ARRAY_TANGENT] = gt + ft
 	var black := PackedColorArray()
 	var flat := PackedVector2Array()

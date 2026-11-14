@@ -559,5 +559,20 @@ func test_shipped_gun_and_engineer_models_make_wrecks() -> void:
 	for id: int in [9, 10, 11]:
 		var root: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), id, 0)
 		assert_not_null(UnitSilhouettes.model_mesh(id, 0), "модель типу %d" % id)
-		assert_not_null((root.get_node("Body") as MeshInstance3D).mesh, "уламок типу %d" % id)
+		assert_same((root.get_node("Body") as MeshInstance3D).mesh, UnitSilhouettes.model_mesh(id, 0), "уламок — сама модель типу %d" % id)
 		root.free()
+
+
+## Корінь полум'я лежить на металі моделі: поряд (по землі й по висоті) є вершина сітки, а не повітря над порожньою землею.
+func test_flame_roots_of_guns_and_engineer_sit_on_model_metal() -> void:
+	UnitSilhouettes.reset_models()
+	for id: int in [9, 10, 11]:
+		layer.add(Vector2i(3, 3), id, 1.0, 0)
+		var node: Node3D = layer.wreck_at(Vector2i(3, 3))
+		var verts: PackedVector3Array = UnitSilhouettes.model_mesh(id).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		for spot: Vector3 in layer.flame_spots(Vector2i(3, 3)):
+			var local: Vector3 = node.transform.affine_inverse() * spot
+			var best: float = INF
+			for p in verts:
+				best = minf(best, Vector3(p.x, p.y + node.get_child(0).position.y, p.z).distance_to(local))
+			assert_lt(best, 0.09, "корінь полум'я типу %d поблизу металу" % id)

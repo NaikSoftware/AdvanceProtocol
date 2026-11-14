@@ -9,6 +9,7 @@ extends Node
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const SETTLE_FRAMES: int = 120
 const CROP: Vector2i = Vector2i(560, 620)
+## Тип уламка за замовчуванням; змінна середовища WRECK_TYPE ставить інший (гармата, інженерна машина).
 const MEDIUM_TANK: int = 5
 
 
@@ -31,7 +32,7 @@ func _ready() -> void:
 	var layer: WreckLayer = screen.get("_wreck_layer")
 	layer.set("_frame", int(float(a[6]) * WreckLayer.FLIPBOOK_FPS))
 	# Народився давно: стовп уже повний, як у перебудованих зі стану уламків.
-	layer.call("_add_node", cell, MEDIUM_TANK, float(a[3]), 0, WreckLayer.LONG_AGO)
+	layer.call("_add_node", cell, int(OS.get_environment("WRECK_TYPE")) if OS.get_environment("WRECK_TYPE") != "" else MEDIUM_TANK, float(a[3]), 0, WreckLayer.LONG_AGO)
 	layer.call("_refresh_effects")
 	# nodepth — стовп диму без перевірки глибини й м'якого краю: чи ховає його щось непрозоре геометрично, а не порядком.
 	if a.size() > 7 and a[7] == "nodepth":

@@ -141,7 +141,7 @@ func test_spec_row_matches_every_model_muzzle() -> void:
 				if p.z < zmin + 0.001:
 					ring_y += p.y
 					n += 1
-			if not ((row.extras as Array).has(&"turret") or (row.extras as Array).has(&"roof_gun")):
+			if not ((row.extras as Array).has(&"turret") or (row.extras as Array).has(&"roof_gun") or row.has("bore")):
 				continue
 			checked += 1
 			wheeled_checked += int(wheeled and set_id == 0)
@@ -149,6 +149,9 @@ func test_spec_row_matches_every_model_muzzle() -> void:
 			assert_almost_eq(-zmin, float(row.barrel), 0.01, "довжина ствола, " + where)
 			if set_id > 0:
 				assert_almost_eq(ring_y / float(n), UnitSilhouettes.barrel_y(id, set_id), 0.005, "висота осі ствола, " + where)
+			elif row.has("bore"):
+				# піднятий ствол: рядок несе виміряну висоту дульного зрізу, модель тримає її в межах 1,5 см
+				assert_almost_eq(ring_y / float(n), UnitSilhouettes.barrel_y(id, set_id), 0.015, "висота осі піднятого ствола, " + where)
 			elif wheeled:
 				# рядок набору 0 дає висоту осі як корпус + пів башти; модель тримає гармату в межах 1,5 см (0,12 м) від неї
 				assert_almost_eq(ring_y / float(n), UnitSilhouettes.barrel_y(id, set_id), 0.015, "висота осі ствола, " + where)

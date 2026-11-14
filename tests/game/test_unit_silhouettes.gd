@@ -6,7 +6,7 @@ const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
 const _METRES := {
 	2: Vector3(2.7, 2.4, 6.6), 3: Vector3(2.7, 2.6, 7.6), 4: Vector3(2.2, 2.0, 4.9),
 	5: Vector3(3.44, 1.6, 6.72), 6: Vector3(3.5, 1.5, 7.5), 7: Vector3(2.94, 1.5, 5.6),
-	8: Vector3(3.8, 2.0, 7.2), 9: Vector3(3.52, 2.72, 6.0), 10: Vector3(6.52, 4.16, 10.4), 11: Vector3(4.24, 2.88, 9.6),
+	8: Vector3(3.8, 2.0, 7.2), 9: Vector3(2.16, 2.24, 2.72), 10: Vector3(2.44, 3.2, 4.16), 11: Vector3(3.6, 1.92, 7.36),
 }
 
 
@@ -244,5 +244,70 @@ func test_gun_merged_mesh_carries_its_two_crew() -> void:
 			top = maxf(top, v[i].y)
 		assert_almost_eq(top, UnitSilhouettes.FIGURE_SIZE.y, 0.0001, "ріст 1,8 м, ступні на землі")
 		assert_same(mesh.surface_get_material(0), gun.surface_get_material(0))
+		# фігури — не колесо й не гусениця: B = 0, UV2 = 0
+		var arr: Array = mesh.surface_get_arrays(0)
+		var cols: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+		var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]
+		for i in range(gun_n, v.size()):
+			assert_eq(cols[i].b, 0.0, "колір фігури не мітить колесо")
+			assert_eq(uv2[i], Vector2.ZERO, "UV2 фігури нульовий")
 	UnitSilhouettes.use_models({9: gun})
-	assert_same(UnitSilhouettes.merged_mesh(11), UnitSilhouettes.merged_mesh(11), "тип без розрахунку — без змін")
+	# тип без розрахунку віддає саму модель, без копії
+	var eng: ArrayMesh = UnitModelFixture.mesh(Vector3(0.45, 0.24, 0.92))
+	UnitSilhouettes.use_models({9: gun, 11: eng})
+	assert_same(UnitSilhouettes.merged_mesh(11), eng, "тип без розрахунку — без змін")
+
+
+## Розрахунок стоїть на вільній землі: під слідом фігури (0,5 × 0,4 м) із запасом 0,2 м нема жодного трикутника моделі гармати нижче 1,8 м.
+func test_crew_stands_clear_of_the_shipped_gun_models() -> void:
+	UnitSilhouettes.reset_models()
+	var margin: float = 0.025
+	for id: int in [9, 10]:
+		var mesh: ArrayMesh = UnitSilhouettes.model_mesh(id)
+		assert_not_null(mesh, "модель типу %d" % id)
+		var a: Array = mesh.surface_get_arrays(0)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+		for c: Vector3 in UnitSilhouettes.spec(id).crew:
+			var half := Vector2(UnitSilhouettes.FIGURE_SIZE.x, UnitSilhouettes.FIGURE_SIZE.z) * 0.5 + Vector2.ONE * margin
+			var rot := Transform2D(-deg_to_rad(c.z), Vector2(c.x, c.y))
+			var corners: Array[Vector2] = []
+			for sx: float in [-1.0, 1.0]:
+				for sz: float in [-1.0, 1.0]:
+					corners.append(rot * Vector2(sx * half.x, sz * half.y))
+			var hits: int = 0
+			for t in range(0, idx.size(), 3):
+				var tri: Array[Vector3] = [v[idx[t]], v[idx[t + 1]], v[idx[t + 2]]]
+				if minf(tri[0].y, minf(tri[1].y, tri[2].y)) >= UnitSilhouettes.FIGURE_SIZE.y:
+					continue
+				if _tri_overlaps_rect(tri, corners):
+					hits += 1
+			assert_eq(hits, 0, "розрахунок типу %d у точці %s вільний від моделі" % [id, c])
+
+
+## Перетин трикутника (проєкція на XZ) з опуклим чотирикутником: розділова вісь серед нормалей сторін обох.
+func _tri_overlaps_rect(tri: Array[Vector3], rect: Array[Vector2]) -> bool:
+	var t: Array[Vector2] = [Vector2(tri[0].x, tri[0].z), Vector2(tri[1].x, tri[1].z), Vector2(tri[2].x, tri[2].z)]
+	var axes: Array[Vector2] = []
+	for i in 3:
+		var e: Vector2 = t[(i + 1) % 3] - t[i]
+		axes.append(Vector2(-e.y, e.x))
+	# кути чотирикутника: (-,-), (-,+), (+,-), (+,+) — його осі це дві сторони від першого кута
+	axes.append(rect[2] - rect[0])
+	axes.append(rect[1] - rect[0])
+	for ax in axes:
+		if ax.length_squared() < 1e-12:
+			continue
+		var tmin: float = INF
+		var tmax: float = -INF
+		for p in t:
+			tmin = minf(tmin, ax.dot(p))
+			tmax = maxf(tmax, ax.dot(p))
+		var rmin: float = INF
+		var rmax: float = -INF
+		for p in rect:
+			rmin = minf(rmin, ax.dot(p))
+			rmax = maxf(rmax, ax.dot(p))
+		if tmax < rmin or rmax < tmin:
+			return false
+	return true
