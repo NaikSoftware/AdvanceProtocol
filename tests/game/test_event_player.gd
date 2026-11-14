@@ -608,6 +608,7 @@ func test_drone_from_an_unseen_squad_has_no_flight_node() -> void:
 		func(id: int) -> Unit: return target_unit if id == 2 else null)
 	player.play([Events.DroneLaunched.new(1, 2, 1)] as Array[Events.BattleEvent])
 	assert_eq(_drone_fx().size(), 0)
+	assert_eq(_fx_named("LaunchPuff").size(), 0, "пил старту теж не показує, звідки пустили")
 	_finish_all_processed_tweens()
 
 

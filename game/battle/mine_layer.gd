@@ -41,6 +41,10 @@ const RING_RADIUS: float = 0.3
 const RING_WIDTH: float = 0.05
 const _RING_SEGMENTS: int = 32
 
+## Підтип покриття (MapData.surface), яким дошку малює ґрунт: на дорозі від нього залежить, асфальт
+## під ногами чи ґрунтівка. Ставить екран бою; порожній — усюди типове покриття (асфальт дороги).
+var surface: PackedByteArray = PackedByteArray()
+
 var _markers: Dictionary[Vector2i, Node3D] = {}
 
 
@@ -58,7 +62,7 @@ func rebuild(state: BattleState, observer: int) -> void:
 		elif Mines.is_known(state, m.pos, observer):
 			style = Style.ENEMY_REVEALED
 		if style >= 0:
-			var model: int = style + (2 if state.board.kind_at(m.pos) == Terrain.Kind.ROAD else 0)
+			var model: int = style + (2 if _hard_ground(state.board, m.pos) else 0)
 			if not cells.has(model):
 				cells[model] = []
 			cells[model].append(m)
@@ -66,6 +70,26 @@ func rebuild(state: BattleState, observer: int) -> void:
 		_add_model(model, cells[model])
 	if not _markers.is_empty():
 		_add_rings(state)
+
+
+## Тверде покриття: асфальт чи бруківка дороги й настил мосту, куди міну не закопаєш. Ґрунтівка
+## (RoadSurface.DIRT) — звичайний ґрунт. Покриття береться з тих самих підтипів, що й малюнок
+## дороги (RoadCourse), а не з виду клітинки.
+func _hard_ground(board: Board, p: Vector2i) -> bool:
+	var kind: int = board.kind_at(p)
+	if kind == Terrain.Kind.BRIDGE:
+		return true
+	if kind != Terrain.Kind.ROAD:
+		return false
+	var i: int = p.y * board.width + p.x
+	return (surface[i] if i < surface.size() else MapData.RoadSurface.ASPHALT) != MapData.RoadSurface.DIRT
+
+
+## Клітинки, де видно міну: дахи й крони над ними розчиняються, як над юнітом.
+func cells() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	out.assign(_markers.keys())
+	return out
 
 
 func marker_count() -> int:

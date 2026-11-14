@@ -389,7 +389,7 @@ func test_hit_sizes_follow_the_weapon_and_the_target() -> void:
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.TANK_GUN, true), 5.0)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.TANK_GUN, false), 6.0)
 	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.SHELL, false), 12.0)
-	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.DRONE, true), 6.0)
+	assert_eq(BattleFx.hit_cloud_m(BattleFx.Weapon.DRONE, true), 3.0)
 
 
 ## Клуби влучання в броню стоять перед корпусом, а не в ньому: інакше корпус їх закриває.
@@ -525,3 +525,13 @@ func test_small_puffs_vary() -> void:
 	for q: Node in hit.find_children("Puff*", "MeshInstance3D", true, false):
 		rolls[_mat(q).get_shader_parameter("roll")] = true
 	assert_gt(rolls.size(), 1)
+
+
+## Пил старту дрона — окремий вузол миті: на передачі ходу його прибирають разом з рештою.
+func test_the_launch_puff_is_a_moment_cleared_with_the_rest() -> void:
+	BattleFx.spawn_drone(parent, Vector3.ZERO, Vector3(3.0, 0.0, 2.0))
+	var puffs: Array[Node] = parent.find_children("LaunchPuff*", "Node3D", false, false)
+	assert_eq(puffs.size(), 1)
+	assert_true(puffs[0].is_in_group(BattleFx.GROUP))
+	BattleFx.clear_all(get_tree())
+	assert_true(puffs[0].is_queued_for_deletion())

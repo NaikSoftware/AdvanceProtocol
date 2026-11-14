@@ -63,6 +63,15 @@ func test_engineer_lays_mine_and_it_shows_for_owner() -> void:
 	assert_eq(_layer().marker_at(MINE_POS).get_meta("style"), MineLayer.Style.OWN)
 
 
+## Видима міна розчиняє дахи й крони над собою, як юніт: її клітинка в наборі «показаних».
+func test_a_visible_mine_joins_the_roof_reveal_set() -> void:
+	await _boot([_spawn(ENGINEER, 0, ENG_POS), _spawn(ARMOURED_CAR, 1, Vector2i(6, 1), W)])
+	assert_true(_e2e.screen._shown_cells.has(MINE_POS))
+	await _e2e.end_turn()
+	await _e2e.confirm_gate()
+	assert_false(_e2e.screen._shown_cells.has(MINE_POS), "чужа нерозкрита міна дахів не відкриває")
+
+
 func test_own_mine_hidden_after_handover() -> void:
 	await _boot([_spawn(ENGINEER, 0, ENG_POS), _spawn(ARMOURED_CAR, 1, Vector2i(6, 1), W)])
 	assert_eq(_layer().marker_count(), 1)

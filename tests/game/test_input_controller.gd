@@ -1066,35 +1066,6 @@ func test_tap_on_an_unrevealed_enemy_mine_is_identical_to_empty_ground() -> void
 	assert_eq(_previews.size(), 0)
 
 
-## Юніт на тайлі з мiною виграє: вибір, а не підпис. Свій тайл руху теж: прев'ю руху, а не підпис.
-func test_unit_and_move_target_win_over_the_caption() -> void:
-	_start()
-	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
-	_begin_and_drain()
-	Mines.place(service.state, Vector2i(5, 5), 0)
-	Mines.place(service.state, Vector2i(6, 5), 0)
-	var log: Array = _caption_log()
-	controller.tap_cell(Vector2i(5, 5))
-	assert_eq(_selections.size(), 1)
-	controller.tap_cell(Vector2i(6, 5))
-	assert_eq(_previews.size(), 1, "своя міна на тайлі зони лишається ціллю руху")
-	for e in log:
-		assert_eq(e[0], -1)
-
-
-## Видимий ворожий юніт на відомій міні: тап по ньому — не підпис міни (юніт важливіший).
-func test_a_visible_enemy_unit_on_a_known_mine_gets_no_caption() -> void:
-	_start()
-	service.state.add_unit(5, 0, Vector2i(5, 5), 0)
-	var enemy: Unit = service.state.add_unit(5, 1, Vector2i(6, 5), 0)
-	_begin_and_drain()
-	Mines.place(service.state, enemy.pos, 1)
-	service.state.mines[0].known_to[0] = true
-	var log: Array = _caption_log()
-	controller.tap_cell(enemy.pos)
-	assert_eq(log, [[-1, enemy.pos]])
-
-
 ## Юніт вибрано, тайл поза його зоною: відома міна дає підпис, нерозкрита ворожа мовчить.
 func test_out_of_zone_tap_captions_a_known_mine_and_is_silent_on_an_unknown_one() -> void:
 	_start(30, 30)

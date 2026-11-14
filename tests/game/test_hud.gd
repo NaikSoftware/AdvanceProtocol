@@ -816,3 +816,12 @@ func test_mine_caption_does_not_survive_the_handover() -> void:
 	hud._on_mine_caption(0, Vector2i(4, 4))
 	hud.set_active_player(1)
 	assert_false(_inspector().is_visible_in_tree(), "підпис своєї міни не лишається наступному гравцеві")
+
+
+func test_clearing_the_panel_resets_the_caption_flag() -> void:
+	var state: BattleState = _state()
+	hud.bind(state)
+	hud._on_mine_caption(0, Vector2i(4, 4))
+	assert_true(hud._mine_caption_shown)
+	hud.show_selection(null)
+	assert_false(hud._mine_caption_shown)

@@ -132,6 +132,9 @@ func _drone(map_name: String, zoom: float, p: Vector2i) -> void:
 	var target: Array = []
 	var next_w: float = 0.0
 	var last_t: float = -1.0
+	var squad_at: Vector3 = IsoCameraRig.cell_to_world(squad.pos)
+	var puff_t: float = -1.0
+	var burst: Array = []
 	while true:
 		await RenderingServer.frame_post_draw
 		var el: float = float(Time.get_ticks_usec() - t0) / 1e6
@@ -141,10 +144,17 @@ func _drone(map_name: String, zoom: float, p: Vector2i) -> void:
 		if el >= 0.6 and el <= 1.5 and el - last_t >= 1.0 / 30.0:
 			target.append([el, await _crop(tgt + Vector3(0, 0.1, 0))])
 			last_t = el
+		# Пил старту: кадри на загоні щокадру від його появи, до 0,6 с.
+		if puff_t < 0.0 and _screen.find_children("LaunchPuff*", "Node3D", true, false).size() > 0:
+			puff_t = el
+		if puff_t >= 0.0 and el - puff_t <= 0.6:
+			burst.append([el - puff_t, await _crop(squad_at + Vector3(0, 0.1, 0))])
 		if el > 2.6:
 			break
 	for f: Array in wide:
 		(f[1] as Image).save_png("%s/drone_%s_z%d_wide_%03d.png" % [_out, map_name, int(zoom), int(f[0] * 1000.0)])
+	for f: Array in burst:
+		(f[1] as Image).save_png("%s/drone_%s_z%d_puff_%03d.png" % [_out, map_name, int(zoom), int(f[0] * 1000.0)])
 	for f: Array in target:
 		(f[1] as Image).save_png("%s/drone_%s_z%d_target_%03d.png" % [_out, map_name, int(zoom), int(f[0] * 1000.0)])
 

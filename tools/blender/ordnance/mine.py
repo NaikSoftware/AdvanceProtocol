@@ -10,6 +10,7 @@
 blender -b --factory-startup -P tools/blender/ordnance/mine.py     (MINE_FACTOR=5 — інше збільшення)
 """
 import sys, os, math, random
+TAU = 2 * math.pi
 sys.path.insert(0, os.path.dirname(__file__))
 from lib import *
 
@@ -26,26 +27,43 @@ FUSE = (0.32, 0.28, 0.16)
 CONTACT = (0.06, 0.055, 0.05)      # темний контактний пояс довкола корпусу
 
 
-def soil(b, r, seed):
-    """Розритий ґрунт: накладені нерівні диски, свіжий (світліший) насип поверх темного."""
+def soil(b, r, seed, lip=False):
+    """Розритий ґрунт без чистого кола: край із ~10-сантиметрових виступів, окремі грудки; для
+    відкопаної — ще невеликий насип-валик довкола міни."""
     rnd = random.Random(seed)
-    b.cone(SOIL, (0, 0, 0), r, r * 0.82, 0.05, 14)
+    b.cone(SOIL, (0, 0, 0), r * 0.82, r * 0.7, 0.05, 12)
+    n = 18
+    for i in range(n):
+        a = TAU * (i + rnd.random() * 0.5) / n
+        d = r * (0.78 + rnd.random() * 0.2)
+        lr = 0.1 + rnd.random() * 0.1                      # виступ 10–20 см
+        b.cone(SOIL if i % 3 else SOIL_LIGHT, (math.cos(a) * d, math.sin(a) * d, 0.0), lr, lr * 0.8, 0.04 + rnd.random() * 0.03, 6, rnd.random())
     for i in range(5):
         a = i * 1.26 + rnd.random() * 0.4
-        d = r * (0.5 + rnd.random() * 0.2)
-        b.cone(SOIL_LIGHT if i % 2 else SOIL, (math.cos(a) * d, math.sin(a) * d, 0.0), r * (0.3 + rnd.random() * 0.1), r * 0.2, 0.06 + rnd.random() * 0.025, 7, rnd.random())
+        d = r * (0.45 + rnd.random() * 0.3)
+        b.cone(SOIL_LIGHT if i % 2 else SOIL, (math.cos(a) * d, math.sin(a) * d, 0.0), r * (0.25 + rnd.random() * 0.1), r * 0.18, 0.06 + rnd.random() * 0.025, 7, rnd.random())
+    for i in range(4):                                     # грудки: дрібні округлі нерівності
+        a = rnd.random() * TAU
+        d = r * (0.5 + rnd.random() * 0.4)
+        b.ball(SOIL_LIGHT if i % 2 else SOIL, (math.cos(a) * d, math.sin(a) * d, 0.06), (0.1 + rnd.random() * 0.06, 0.09 + rnd.random() * 0.05, 0.07), 8, rnd.random())
+    if lip:
+        R = 0.15 * F * 1.15 + 0.12
+        for i in range(14):
+            a = TAU * i / 14 + rnd.random() * 0.2
+            b.ball(SOIL_LIGHT, (math.cos(a) * R, math.sin(a) * R, 0.07), (0.17, 0.12, 0.07), 8, a)
 
 
 def asphalt(b, r, seed):
-    """Биті шматки асфальту: кутасті плити різної висоти, між ними темні крихти."""
+    """Биті шматки асфальту: кутасті плити різної висоти й трьох сірих, між ними темні крихти."""
     rnd = random.Random(seed)
-    b.cone(ASPHALT_DARK, (0, 0, 0), r, r * 0.9, 0.03, 9)
-    for i in range(9):
-        a = i * 0.7 + rnd.random() * 0.4
-        d = r * (0.45 + rnd.random() * 0.45)
-        w = r * (0.2 + rnd.random() * 0.18)
-        b.box(ASPHALT if i % 3 else (0.4, 0.4, 0.41), (math.cos(a) * d, math.sin(a) * d, 0.04 + rnd.random() * 0.04),
-              (w, w * (0.6 + rnd.random() * 0.5), 0.05 + rnd.random() * 0.05), rnd.random() * 3)
+    greys = [ASPHALT_DARK, ASPHALT, (0.38, 0.38, 0.4)]
+    b.cone(ASPHALT_DARK, (0, 0, 0), r * 0.85, r * 0.75, 0.03, 9)
+    for i in range(14):
+        a = i * 0.9 + rnd.random() * 0.5
+        d = r * (0.35 + rnd.random() * 0.55)
+        w = r * (0.1 + rnd.random() * 0.14)
+        b.cone(greys[(i + rnd.randrange(2)) % 3], (math.cos(a) * d, math.sin(a) * d, 0.02 + rnd.random() * 0.03),
+               w, w * (0.5 + rnd.random() * 0.4), 0.04 + rnd.random() * 0.05, rnd.choice((4, 5, 6)), rnd.random() * 3)
 
 
 def device(b, top_z, body_h):
@@ -70,7 +88,7 @@ def own(b):
 
 
 def enemy(b):
-    soil(b, 0.26 * F, 11)
+    soil(b, 0.26 * F, 11, lip=True)
     device(b, 0.05 + 0.07 * F, 0.07 * F)
 
 

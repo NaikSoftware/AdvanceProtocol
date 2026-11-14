@@ -178,7 +178,7 @@ static func spawn_drone(parent: Node, from: Vector3, to: Vector3, warm: bool = f
 	var c: Vector3 = (from + to) * 0.5 + Vector3(0, DRONE_APEX, 0)
 	var b: Vector3 = to + Vector3(0, DRONE_LAUNCH_LIFT, 0)
 	if not warm:
-		_launch_puff(parent, from, (c - a).normalized())
+		_launch_puff(parent, from)
 	var tw: Tween = root.create_tween()
 	tw.tween_method(func(t: float) -> void:
 		var pos: Vector3 = a.lerp(c, t).lerp(c.lerp(b, t), t)
@@ -189,17 +189,16 @@ static func spawn_drone(parent: Node, from: Vector3, to: Vector3, warm: bool = f
 	return root
 
 
-## Дим старту — короткий струмінь уздовж труби (вгору й до цілі) і клуба, що здіймається. Окремий
-## вузол контейнера, а не дитина дрона: дрон зникає на 0,9 с, а дим живе довше.
-static func _launch_puff(parent: Node, from: Vector3, axis: Vector3) -> void:
+## Дим старту — короткий плаский радіальний розліт пилу на землі під загоном (до ~0,4 тайла за
+## 0,5 с, вдвічі прозоріший за звичайну хвилю): не здіймається й не закриває загін. Окремий вузол
+## контейнера, а не дитина дрона: дрон зникає на 0,9 с, а пил ще осідає.
+const LAUNCH_PUFF_SEC: float = 0.5
+static func _launch_puff(parent: Node, from: Vector3) -> void:
 	var puff := _root("LaunchPuff", parent, from)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(from)
-	for k in 3:
-		var along: float = 0.05 + 0.07 * k
-		_powder(puff, rng, 0.8 + 0.5 * k, axis * along, 0.03 * k)
-	_powder(puff, rng, 1.6, Vector3(0, 0.03, 0), 0.0)
-	_expire(puff, 3.0)
+	_wave(puff, rng, 6.0, LAUNCH_PUFF_SEC, 0.3)
+	_expire(puff, LAUNCH_PUFF_SEC + 0.1)
 
 
 ## Розігрів на старті бою: перша куля, іскри, грудки, ядро й кільце пилу інакше чекають на
@@ -667,7 +666,8 @@ static func hit_cloud_m(weapon: Weapon, armoured: bool) -> float:
 		Weapon.SHELL:
 			return 12.0
 		Weapon.DRONE:
-			return 6.0
+			# Боєголовка дрона — ~3 м кулі проти цілі в 2,5–3 м, а не 6 м, як у гармати.
+			return 3.0
 	return 1.2
 
 
@@ -758,7 +758,7 @@ static func spawn_hit(parent: Node, at: Vector3, weapon: Weapon, armoured: bool)
 			_debris(root, cloud)
 		Weapon.DRONE:
 			# Удар згори: гаряче ядро на даху, чорна клуба на корпусі, іскри вниз і вбік, без ґрунту.
-			_hot(root, 3.0, Vector3(0, ROOF + 0.05, 0), 0.0, PRIORITY_CORE + 1)
+			_hot(root, 1.5, Vector3(0, ROOF + 0.05, 0), 0.0, PRIORITY_CORE + 1)
 			_sparks(root, "Sparks", rng.randi_range(5, 9), Vector3(0, ROOF, 0), _ricochet(rng), 45.0, 6.0, 14.0, 0.4, 1.4, 0.15, 0.3, 0.0)
 			_fireball(root, cloud, Vector3(0, ROOF, 0), 0.0, life, 1.0, 0.7)
 	if armoured:
@@ -1126,7 +1126,7 @@ static func _dirt(root: Node3D, cloud_m: float, offset: Vector3, delay: float, f
 ## Низька хвиля пилу, що розбігається від розриву: 24 невисокі (~2 м) рідкі бежеві клуби по колу,
 ## кожна ширша за крок між ними, зливаються в суцільний вал без «намиста» і з ease-out за DUST_SPREAD_SEC доходять до `d_m`/2 від центру;
 ## розчиняються за `life` с. Над сусідом вони лише рідшають (WAVE_CAP), а не вирізаються.
-static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: float) -> void:
+static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: float, alpha: float = 0.7) -> void:
 	var n: int = 24
 	for i in n:
 		var ang: float = TAU * (float(i) + rng.randf_range(-0.3, 0.3)) / float(n)
@@ -1135,7 +1135,7 @@ static func _wave(root: Node3D, rng: RandomNumberGenerator, d_m: float, life: fl
 		# Розбіг від 0,25 клітинки (пляма 0,5 клітинки) до краю хвилі.
 		q.position = dir * 0.25
 		var mat := q.material_override as ShaderMaterial
-		mat.set_shader_parameter("tint", Vector4(0.27, 0.24, 0.19, 0.7))
+		mat.set_shader_parameter("tint", Vector4(0.27, 0.24, 0.19, alpha))
 		mat.set_shader_parameter("feather", 1.0)
 		var reach: float = (d_m * 0.5 * rng.randf_range(0.85, 1.0)) / 8.0
 		_play_smoke(root, q, 0.15, life * rng.randf_range(0.7, 1.0), 0.0, 0.2, 0.8, Vector2(28.0 + float(i % 5), LAST_FRAME), Vector2.ZERO, 0.2 * life, 0.5, false, false, RISE_TAU_SEC, 1.0, dir * (reach - 0.25))
