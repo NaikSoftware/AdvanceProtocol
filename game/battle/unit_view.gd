@@ -750,6 +750,43 @@ func contact_transform() -> Transform3D:
 	return xf
 
 
+## Під людиною — не пляма на весь слід відділення (на 5 м вона читалась чорною), а маленька м'яка тінь
+## під ногами кожного стоячого бійця, ~0,6 м видимого ядра, слабша за тінь техніки
+## (FIGURE_CONTACT_STRENGTH). Лежачий плаский — без тіні. Скільки квадів дає юніт — `contact_slots()`.
+const FIGURE_CONTACT_SIZE: float = 0.11
+const FIGURE_CONTACT_STRENGTH: float = 0.65
+
+
+func contact_slots() -> int:
+	return SQUAD_FIGURES if _has_figures() else 1
+
+
+## Сила плями відносно тіні техніки (множник у шейдері через дані екземпляра).
+func contact_strength() -> float:
+	return FIGURE_CONTACT_STRENGTH if _has_figures() else 1.0
+
+
+func contact_transforms() -> Array[Transform3D]:
+	if not _has_figures():
+		return [contact_transform()]
+	var out: Array[Transform3D] = []
+	var shown: bool = _contact_on and is_visible_in_tree() and _silhouette.visible
+	var shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * FIGURE_CONTACT_SIZE
+	for i in SQUAD_FIGURES:
+		if not shown or i >= _standing:
+			out.append(UnitContacts.HIDDEN)
+			continue
+		var feet: Vector3 = UnitSilhouettes.figure_transform(i, true).origin
+		var xf: Transform3D = _silhouette.global_transform * Transform3D(Basis.from_scale(Vector3(FIGURE_CONTACT_SIZE, 1.0, FIGURE_CONTACT_SIZE)), Vector3(feet.x, 0.06, feet.z))
+		xf.origin += Vector3(shift.x, 0.0, shift.y)
+		out.append(xf)
+	return out
+
+
+func _has_figures() -> bool:
+	return (UnitSilhouettes.spec(_type_id, _set_id()).extras as Array).has(&"figures")
+
+
 func _exit_tree() -> void:
 	if contacts != null and is_instance_valid(contacts):
 		contacts.untrack(self)

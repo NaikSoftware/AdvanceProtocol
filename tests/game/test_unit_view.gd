@@ -65,9 +65,11 @@ func _with_contacts() -> UnitContacts:
 func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 	WeatherRig.unit_contact = 0.6
 	var contacts := _with_contacts()
-	for type_id: int in [0, 5, 11]:
+	for type_id: int in [5, 11]:
 		view.bind(_unit(type_id))
 		assert_eq(contacts.count(), 1, "одна пляма на юніта, не більше")
+		assert_eq(view.contact_slots(), 1)
+		assert_eq(view.contact_strength(), 1.0, "техніка — повна сила карти")
 		var hull: Vector3 = UnitSilhouettes.spec(type_id).hull
 		var xf: Transform3D = contacts.transform_of(0)
 		assert_almost_eq(xf.basis.x.length(), hull.x * UnitView.CONTACT_SPREAD, 0.0001, "ширша за слід по x")
@@ -76,6 +78,33 @@ func test_unit_has_a_flat_contact_shadow_under_its_hull() -> void:
 		assert_almost_eq(xf.origin.x, view.position.x, 0.0001)
 		assert_almost_eq(xf.origin.z, view.position.z, 0.0001)
 		assert_eq(contacts.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
+
+
+## Під відділенням — не одна пляма на весь слід (вона читалась чорною), а мала слабка тінь під
+## ногами кожного стоячого бійця, усі в тому самому MultiMesh; загиблий тіні не має.
+func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> void:
+	WeatherRig.unit_contact = 0.6
+	WeatherRig.sun_ground = Vector2.ZERO
+	var contacts := _with_contacts()
+	view.bind(_unit(0))
+	assert_eq(contacts.count(), 1, "один юніт")
+	assert_eq(view.contact_slots(), UnitView.SQUAD_FIGURES)
+	assert_lt(view.contact_strength(), 1.0, "слабша за тінь техніки")
+	for i in UnitView.SQUAD_FIGURES:
+		var xf: Transform3D = contacts.transform_of(i)
+		assert_true(contacts.is_shown(i))
+		assert_almost_eq(xf.basis.x.length(), UnitView.FIGURE_CONTACT_SIZE, 0.0001, "~0,9 м квад, не 5 м")
+		var feet: Vector3 = view.global_transform * UnitSilhouettes.figure_transform(i, true).origin
+		assert_almost_eq(Vector2(xf.origin.x, xf.origin.z), Vector2(feet.x, feet.z), Vector2.ONE * 0.0001, "під ногами бійця %d" % i)
+	view.set_hp(30, 100)
+	contacts.sync()
+	assert_true(contacts.is_shown(0))
+	assert_true(contacts.is_shown(1))
+	assert_false(contacts.is_shown(2), "загиблий тіні не має")
+	assert_false(contacts.is_shown(3))
+	view.bind(_unit(5))
+	assert_eq(view.contact_slots(), 1, "перев'язаний на техніку — знову одна пляма")
+	assert_almost_eq(contacts.transform_of(0).basis.x.length(), UnitSilhouettes.spec(5).hull.x * UnitView.CONTACT_SPREAD, 0.0001)
 
 
 func test_contact_shadow_shifts_along_the_sun_ground_direction() -> void:

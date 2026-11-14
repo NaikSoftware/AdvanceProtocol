@@ -122,7 +122,12 @@ falls back to the box placeholder, so a model may land one type at a time.
   assault squad carries as many tubes as it has drones left (0–2, public by §3.9), on its first
   standing slots, which fall last; the rest are plain figures, so at 0 drones it looks like a rifle
   squad, which by then it is. The fallen lie face down as the plain figure, darkened by the unit
-  shader. A set's soldiers drop in through the same path (`set<N>/rifle_soldier.glb` and
+  shader. Each standing soldier has its own contact shadow, a 0.9 m quad (about 0.6 m of visible
+  core) under his feet at 0.65 of the map's vehicle strength: the ground under him drops 5–10 L*,
+  never to black; the fallen have none. Slot 0's cloth is plain olive, uniform and helmet
+  (149, 147, 95), plate carrier (119, 119, 78), up-facing cloth lifted ×1.3 and faded 40 % to grey,
+  gloves, boots and rifle dark: a middle-value olive sits on the maps' ground, and this is the tone
+  that passes the contrast gate at the closest zoom (`unit_contrast_gate.py --zoom 6`, whole squad). A set's soldiers drop in through the same path (`set<N>/rifle_soldier.glb` and
   `set<N>/assault_soldier.glb` with their `_SET_SPECS` rows).
 - **One mesh, one primitive, one material**, node transforms applied (a leftover transform is
   baked in on load, but a rotation off the X axis would misplace the wheel axles). Base colour

@@ -541,6 +541,15 @@ func _squads(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		shots["%s/%s_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+		if z == IsoCameraRig.MIN_ZOOM:
+			# Той самий кадр без тіні-контакту: різниця пари — рівно те, на скільки пляма темнить ґрунт.
+			var strength: float = WeatherRig.unit_contact
+			RenderingServer.global_shader_parameter_set(&"unit_contact_shadow", 0.0)
+			for f in 6:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			shots["%s/%s_z%d_nocontact.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+			RenderingServer.global_shader_parameter_set(&"unit_contact_shadow", strength)
 	# Слід відділення окремо: тіла на трьох тайлах нижнього ряду.
 	rig.center_on(c + Vector2i(0, 4))
 	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
