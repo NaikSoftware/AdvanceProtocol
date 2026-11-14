@@ -6,7 +6,7 @@ const UnitModelFixture := preload("res://tests/fixtures/unit_model_fixture.gd")
 const _METRES := {
 	2: Vector3(2.7, 2.4, 6.6), 3: Vector3(2.7, 2.6, 7.6), 4: Vector3(2.2, 2.0, 4.9),
 	5: Vector3(3.44, 1.6, 6.72), 6: Vector3(3.5, 1.5, 7.5), 7: Vector3(2.94, 1.5, 5.6),
-	8: Vector3(3.8, 2.0, 7.2), 9: Vector3(2.16, 2.24, 2.72), 10: Vector3(2.44, 3.2, 4.16), 11: Vector3(3.6, 1.92, 7.36),
+	8: Vector3(3.8, 2.0, 7.2), 9: Vector3(2.16, 2.24, 2.72), 10: Vector3(2.44, 3.2, 4.16), 11: Vector3(3.6, 1.76, 7.36),
 }
 
 
@@ -311,3 +311,16 @@ func _tri_overlaps_rect(tri: Array[Vector3], rect: Array[Vector2]) -> bool:
 		if tmax < rmin or rmax < tmin:
 			return false
 	return true
+
+
+## Кожен розрахунок гармати стоїть у своєму тайлі: слід фігури (з поворотом) не виходить за ±0,5.
+func test_crew_footprints_stay_inside_their_tile() -> void:
+	for id: int in [9, 10]:
+		for c: Vector3 in UnitSilhouettes.spec(id).crew:
+			var half := Vector2(UnitSilhouettes.FIGURE_SIZE.x, UnitSilhouettes.FIGURE_SIZE.z) * 0.5
+			var rot := Transform2D(-deg_to_rad(c.z), Vector2(c.x, c.y))
+			for sx: float in [-1.0, 1.0]:
+				for sz: float in [-1.0, 1.0]:
+					var p: Vector2 = rot * Vector2(sx * half.x, sz * half.y)
+					assert_lte(absf(p.x), 0.5, "x розрахунку типу %d у тайлі" % id)
+					assert_lte(absf(p.y), 0.5, "z розрахунку типу %d у тайлі" % id)

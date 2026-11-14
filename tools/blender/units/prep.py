@@ -133,6 +133,11 @@ def src_edit():
             m &= np.abs(A) >= fl[4]
         co[m, 2] = h + zmin
         print(f"PREP flatten {m.sum()} verts in long {l0}..{l1} to h {h}")
+    for l0, l1, a0, a1, h_ref, f in cfg.get("lower", []):
+        # presses what stands above `h_ref` towards it by the factor `f` inside a box (long, signed lat): a folded arm laid lower
+        m = (L >= l0) & (L <= l1) & (A >= a0) & (A <= a1) & (H > h_ref)
+        co[m, 2] = zmin + h_ref + (H[m] - h_ref) * f
+        print(f"PREP lower {m.sum()} verts above h {h_ref} by {f}")
     me.vertices.foreach_set("co", co.ravel()); me.update()
     if cfg.get("delete_boxes"):
         # faces whose centre lies in a box (long, |lat|, h): hanging fins, corner posts and rear

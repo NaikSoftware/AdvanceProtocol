@@ -303,6 +303,12 @@ func flame_spots(pos: Vector2i) -> Array[Vector3]:
 	var e: _Entry = _entries[pos]
 	var spec: Dictionary = UnitSilhouettes.spec(e.type_id, e.set_id)
 	var hull: Vector3 = spec.hull
+	var roots: Array = spec.get("flame", [])
+	if roots.size() == 2:
+		# корені виміряні з моделі (рядок `flame`): метал лафета, а не точка корпусу над порожнечею
+		for r: Vector3 in roots:
+			out.append(e.node.transform * (r - Vector3(0.0, HULL_SAG, 0.0)))
+		return out
 	# Корені — на даху башти: обидва в межах її сліду, тож нижче башта ховала б їх з усіх боків.
 	var top: float = hull.y - HULL_SAG + (UnitSilhouettes.TURRET_HEIGHT if ((spec.extras as Array).has(&"turret") or (spec.extras as Array).has(&"roof_gun")) else 0.0)
 	# Вогонь виходить з погона в центрі даху: башта стоїть у вогні, корінь видно з будь-якого

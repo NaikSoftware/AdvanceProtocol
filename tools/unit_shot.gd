@@ -43,6 +43,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "lineup":
 		await _lineup(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "real":
+		await _real(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
@@ -89,8 +92,10 @@ func _ready() -> void:
 		return
 	var set_id: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 	# Перша модель дивиться на північ, друга — на південний схід, коробка-заступник — ліворуч.
-	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell, 0)
-	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell + Vector2i(1, 0), 3)
+	# SHOT_FACING (0..7) повертає першу модель, друга лишається на три сектори далі: так знімають і «носом до камери»
+	var f0: int = int(OS.get_environment("SHOT_FACING"))
+	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell, f0)
+	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell + Vector2i(1, 0), (f0 + 3) % 8)
 	_place(UnitSilhouettes.build(type_id), cell + Vector2i(-1, 0), 0)
 	var mover: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
 	_place(mover, cell + Vector2i(0, 2), 0)
@@ -228,6 +233,33 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
 	print("UNIT lineup at %s" % c)
+	get_tree().quit()
+
+
+## Справжні юніти двох гармат, інженерної машини й танка (смуги HP, крони, ґрунт карти) на найближчому й найдальшому зумі:
+## остаточна перевірка впізнаваності гармат — разом із розрахунком, не окрема модель.
+func _real(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := _field_near_centre(m)
+	m.spawns = [
+		{"type_id": 9, "owner": 0, "pos": c + Vector2i(-2, 0), "facing": 0},
+		{"type_id": 10, "owner": 1, "pos": c, "facing": 0},
+		{"type_id": 11, "owner": 2, "pos": c + Vector2i(2, 0), "facing": 0},
+		{"type_id": 8, "owner": 0, "pos": c + Vector2i(0, 2), "facing": 0},
+	]
+	screen.setup(m, 3, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c)
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
+	print("UNIT real at %s" % c)
 	get_tree().quit()
 
 

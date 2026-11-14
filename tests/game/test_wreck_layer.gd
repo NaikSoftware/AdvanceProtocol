@@ -567,12 +567,20 @@ func test_shipped_gun_and_engineer_models_make_wrecks() -> void:
 func test_flame_roots_of_guns_and_engineer_sit_on_model_metal() -> void:
 	UnitSilhouettes.reset_models()
 	for id: int in [9, 10, 11]:
-		layer.add(Vector2i(3, 3), id, 1.0, 0)
-		var node: Node3D = layer.wreck_at(Vector2i(3, 3))
+		layer.add(Vector2i(3 + id, 3), id, 1.0, 0)
+		var node: Node3D = layer.wreck_at(Vector2i(3 + id, 3))
 		var verts: PackedVector3Array = UnitSilhouettes.model_mesh(id).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-		for spot: Vector3 in layer.flame_spots(Vector2i(3, 3)):
+		for spot: Vector3 in layer.flame_spots(Vector2i(3 + id, 3)):
 			var local: Vector3 = node.transform.affine_inverse() * spot
-			var best: float = INF
-			for p in verts:
-				best = minf(best, Vector3(p.x, p.y + node.get_child(0).position.y, p.z).distance_to(local))
-			assert_lt(best, 0.09, "корінь полум'я типу %d поблизу металу" % id)
+			# промінь униз від кореня: найвища поверхня моделі під ним не далі як 0,15 м від кореня
+			var idx: PackedInt32Array = UnitSilhouettes.model_mesh(id).surface_get_arrays(0)[Mesh.ARRAY_INDEX]
+			var lift: float = node.get_child(0).position.y
+			var from := Vector3(local.x, local.y + 1.0, local.z)
+			var hit_y: float = -INF
+			for t in range(0, idx.size(), 3):
+				var q: Variant = Geometry3D.ray_intersects_triangle(from, Vector3.DOWN, verts[idx[t]] + Vector3(0, lift, 0),
+						verts[idx[t + 1]] + Vector3(0, lift, 0), verts[idx[t + 2]] + Vector3(0, lift, 0))
+				if q != null:
+					hit_y = maxf(hit_y, (q as Vector3).y)
+			assert_gt(hit_y, -INF, "під коренем полум'я типу %d є модель" % id)
+			assert_lte(absf(local.y - hit_y), 0.019, "корінь полум'я типу %d лежить на металі (0,15 м)" % id)

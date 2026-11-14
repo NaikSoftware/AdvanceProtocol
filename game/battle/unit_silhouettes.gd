@@ -13,6 +13,8 @@ const _STRIPE_COLOR := Color("d9b23a")
 ## він 3,5–7 м від центру тайла. Висота танка = корпус + башта (TURRET_HEIGHT = 0,8 м).
 ## `roof_gun` — гармата чи кулемет на даху колісної машини: вісь ствола на висоті башти, а коробки-башти немає, бо модель тримає
 ## ствол у межах корпусу; корінь полум'я на уламках стоїть на висоті башти, як у башти.
+## `flame` (лише гармати): два корені полум'я уламка — точки на металі моделі в системі юніта (формула з корпусу
+## потрапила б у порожнечу між циліндром і колесом).
 ## `crew` (лише гармати): де стоять двоє розрахунків у системі юніта — (x, z) і поворот у градусах; ноги на землі,
 ## 1,8 м, без масштабування. Вони не входять до корпусу: уламки, тінь і дуло рахуються без них.
 const _SPECS: Array[Dictionary] = [
@@ -25,9 +27,9 @@ const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
 	{"hull": Vector3(0.475, 0.25, 0.90), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},  # 8 важкий танк 3,8×2,8×(корпус 7,2) м
-	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "extras": [&"trail"], "crew": [Vector3(-0.02, 0.30, 0.0), Vector3(-0.235, 0.25, -90.0)]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
-	{"hull": Vector3(0.305, 0.40, 0.52), "barrel": 0.73, "wheel": 0.075, "bore": 0.487, "extras": [&"tall_barrel", &"trail"], "crew": [Vector3(-0.09, 0.33, -45.0), Vector3(0.47, 0.45, 45.0)]},  # 10 гаубиця: лафет з колесами; ствол і станини за його межами
-	{"hull": Vector3(0.45, 0.24, 0.92), "barrel": 0.0, "wheel": 0.04, "extras": [&"stripe"]},  # 11 інженерна машина: корпус без плуга
+	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "flame": [Vector3(0.0, 0.27, -0.08), Vector3(0.0, 0.24, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.02, 0.30, 0.0), Vector3(-0.235, 0.25, -90.0)]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
+	{"hull": Vector3(0.305, 0.40, 0.52), "barrel": 0.73, "wheel": 0.075, "bore": 0.487, "flame": [Vector3(0.0, 0.37, -0.13), Vector3(0.0, 0.34, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.09, 0.33, -45.0), Vector3(0.13, 0.40, 45.0)]},  # 10 гаубиця: лафет з колесами; ствол і станини за його межами
+	{"hull": Vector3(0.45, 0.22, 0.92), "barrel": 0.0, "wheel": 0.04, "extras": [&"stripe"]},  # 11 інженерна машина: корпус без плуга
 ]
 
 ## Башта: 0,8 м заввишки.
@@ -100,7 +102,7 @@ static func muzzle(type_id: int, set_id: int = 0) -> Vector3:
 	return Vector3(0.0, barrel_y(type_id, set_id), -float(spec(type_id, set_id).barrel))
 
 
-## Висота осі ствола: у башті — посередині неї, у гаубиці — над станиною, інакше — з корпусу.
+## Висота осі ствола: у башті — посередині неї, у піднятого ствола — виміряна `bore` рядка, інакше — з корпусу.
 static func barrel_y(type_id: int, set_id: int = 0) -> float:
 	var s: Dictionary = spec(type_id, set_id)
 	if s.has("bore"):
@@ -110,7 +112,7 @@ static func barrel_y(type_id: int, set_id: int = 0) -> float:
 	var extras: Array = s.extras
 	if extras.has(&"turret") or extras.has(&"roof_gun"):
 		return h + TURRET_HEIGHT * 0.5
-	return h + 0.04 if extras.has(&"tall_barrel") else h * 0.5
+	return h * 0.5
 
 
 ## Рядок набору діє лише разом з його моделлю: без неї тип — це модель і рядок набору 0.
@@ -160,8 +162,7 @@ static func build(type_id: int, set_id: int = 0) -> Node3D:
 
 	var barrel_len: float = s.barrel
 	if barrel_len > 0.0:
-		var tall: bool = extras.has(&"tall_barrel")
-		var thick := 0.07 if tall else 0.05
+		var thick := 0.07 if barrel_len > 0.6 else 0.05
 		_box(root, "Barrel", Vector3(thick, thick, barrel_len), Vector3(0, barrel_y(type_id, set_id), -barrel_len * 0.5), _BARREL_COLOR)
 	return root
 

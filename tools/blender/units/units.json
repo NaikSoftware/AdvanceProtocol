@@ -1,5 +1,5 @@
 {
-  "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `ends_bottom_h` [rear, front] is the bottom edge of the rear plate and the bow (0 = no bow beyond the track), which verify_glb.py keeps every body vertex above. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle. `fwd` \"-y\" is a source whose nose points to -Y (prep.py turns it half a turn about Z). `gear.kind` \"wheels\" replaces the track loop with tyres: `road` {r, h, long[]} is the axle discs in SOURCE units, `cut_lat`/`cut_r` what prep removes around them, `wheel_lat` the procedural tyre's lateral span, `hub` and `bevel` its shape; no `cut`, `track_*`, `sprocket`, `idler` or `ends_bottom_h`. `towed` marks a gun on one axle (wheels, no hull roof gun): verify_glb.py then reads the muzzle as the front-most vertex. `gun.pitch` (degrees) tilts the barrel line about its breech point (`start_long`, `axis_h`); a unit with no `gun` (engineer vehicle) gets no barrel. `yaw` [degrees, pivot x, pivot y] turns a skewed source in its own frame (the pivot lands on the centreline); `fwd` \"-x\" is a source whose nose points to -X. `cut.keep_ahead` keeps a plough ahead of the idler out of the running-gear cut, and `end_floor_rear_only` holds only the tail plate up so the plough may reach the ground.",
+  "_doc": "Per-unit build config, read by tools/blender/units/*.py. Every length is in SOURCE units (the generated GLB as imported), long axis on `fwd`, `h` = height above the source's lowest vertex; measure with measure_source.py. `ends_bottom_h` [rear, front] is the bottom edge of the rear plate and the bow (0 = no bow beyond the track), which verify_glb.py keeps every body vertex above. `type_id` picks the hull box from game/battle/unit_silhouettes.gd _SPECS, which fixes the uniform scale and the muzzle. `fwd` \"-y\" is a source whose nose points to -Y (prep.py turns it half a turn about Z). `gear.kind` \"wheels\" replaces the track loop with tyres: `road` {r, h, long[]} is the axle discs in SOURCE units, `cut_lat`/`cut_r` what prep removes around them, `wheel_lat` the procedural tyre's lateral span, `hub` and `bevel` its shape; no `cut`, `track_*`, `sprocket`, `idler` or `ends_bottom_h`. `towed` marks a gun on one axle (wheels, no hull roof gun): verify_glb.py then reads the muzzle as the front-most vertex. `gun.pitch` (degrees) tilts the barrel line about its breech point (`start_long`, `axis_h`); a unit with no `gun` (engineer vehicle) gets no barrel. `yaw` [degrees, pivot x, pivot y] turns a skewed source in its own frame (the pivot lands on the centreline); `fwd` \"-x\" is a source whose nose points to -X. `cut.keep_ahead` keeps a plough ahead of the idler out of the running-gear cut, and `end_floor_rear_only` holds only the tail plate up so the plough may reach the ground. `k` fixes the uniform scale outright (a towed gun or a plough vehicle is fitted by its real size, while its _SPECS row describes only the solid carriage or hull); `hull_long` then only picks the origin, the centre of that carriage or hull. `whole_model` makes verify_glb.py skip the hull-box checks (the row is smaller than the model). `grid_half` is the half-width of the heightfield grid in model units, for a model wider than its row. `plough` [from_long, lateral factor] stretches what stands ahead of `from_long` across the hull so a plough overhangs the tracks. `lower` [[long0, long1, lat0, lat1, h_ref, factor]] presses what stands above h_ref inside the box towards it (a folded arm laid lower). `add_boxes` also builds ground kit (a firing platform, ammunition crates, plough tines). `paint.blade` {y_min (metres from the model centre), colour} paints everything ahead of y_min worn steel. `gear.road.src_r` / `src_h` are the source tyre that prep cuts away when the procedural wheel (`r`, `h`) is drawn smaller than it.",
   "heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
     "type_id": 8,
@@ -1975,6 +1975,122 @@
     "plough": [
       0.335,
       1.29
+    ],
+    "lower": [
+      [
+        -0.46,
+        0.07,
+        -0.19,
+        -0.07,
+        0.21,
+        0.4
+      ]
+    ],
+    "add_boxes": [
+      [
+        -0.04,
+        0.07,
+        -0.17,
+        -0.085,
+        0.2,
+        0.245
+      ],
+      [
+        0.4742,
+        0.5242,
+        0.011,
+        0.029,
+        0.0,
+        0.05
+      ],
+      [
+        0.4446,
+        0.4946,
+        0.061,
+        0.079,
+        0.0,
+        0.05
+      ],
+      [
+        0.415,
+        0.465,
+        0.111,
+        0.129,
+        0.0,
+        0.05
+      ],
+      [
+        0.3854,
+        0.4354,
+        0.161,
+        0.179,
+        0.0,
+        0.05
+      ],
+      [
+        0.3558,
+        0.4058,
+        0.211,
+        0.229,
+        0.0,
+        0.05
+      ],
+      [
+        0.3291,
+        0.3791,
+        0.256,
+        0.274,
+        0.0,
+        0.05
+      ],
+      [
+        0.4742,
+        0.5242,
+        -0.029,
+        -0.011,
+        0.0,
+        0.05
+      ],
+      [
+        0.4446,
+        0.4946,
+        -0.079,
+        -0.061,
+        0.0,
+        0.05
+      ],
+      [
+        0.415,
+        0.465,
+        -0.129,
+        -0.111,
+        0.0,
+        0.05
+      ],
+      [
+        0.3854,
+        0.4354,
+        -0.179,
+        -0.161,
+        0.0,
+        0.05
+      ],
+      [
+        0.3558,
+        0.4058,
+        -0.229,
+        -0.211,
+        0.0,
+        0.05
+      ],
+      [
+        0.3291,
+        0.3791,
+        -0.274,
+        -0.256,
+        0.0,
+        0.05
+      ]
     ]
   },
   "field_gun": {
@@ -2084,7 +2200,41 @@
     },
     "k": 0.715,
     "whole_model": true,
-    "grid_half": 0.24
+    "grid_half": 0.31,
+    "add_boxes": [
+      [
+        -0.102,
+        0.16,
+        -0.131,
+        0.131,
+        0.0,
+        0.0262
+      ],
+      [
+        -0.52,
+        -0.3976,
+        -0.4,
+        -0.3301,
+        0.0,
+        0.0524
+      ],
+      [
+        -0.38,
+        -0.2576,
+        -0.4,
+        -0.3301,
+        0.0,
+        0.0524
+      ],
+      [
+        -0.51,
+        -0.3876,
+        -0.395,
+        -0.3251,
+        0.0524,
+        0.1048
+      ]
+    ]
   },
   "howitzer": {
     "source": "~/.local/share/advance-protocol/unit-sources/howitzer.glb",
