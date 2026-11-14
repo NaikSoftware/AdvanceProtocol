@@ -23,12 +23,13 @@ func show_tiles(tiles: Array[Vector2i]) -> void:
 
 ## Режим DRONE: досяжність — те саме коло, що й у огляді, на шарі режимів.
 func show_drone_reach(center: Vector2i, radius: int) -> void:
-	_board_view.draw_circles([{"center": center, "radius": radius, "color": DRONE_RING_COLOR}] as Array[Dictionary],
+	_board_view.draw_circles([{"center": center, "radius": radius, "color": DRONE_RING_COLOR, "dashed": true}] as Array[Dictionary],
 		BoardView.LAYER_TARGETS)
 
 
 ## Кільця огляду (§3.13): гармата й дрон — різні дії, тож і різні кольори; жоден не
-## золото/червоне зон руху і не COLOR озброєних режимів.
+## золото/червоне зон руху і не COLOR озброєних режимів. Кільце дрона ще й штрихове
+## (`dashed`): колір сам не розрізнить їх тому, хто погано бачить кольори.
 const GUN_RING_COLOR: Color = Color("eef2f5")
 const DRONE_RING_COLOR: Color = Color("a46be0")
 
@@ -38,9 +39,10 @@ const DRONE_RING_COLOR: Color = Color("a46be0")
 ## кола немає; {} — огляд знято.
 func show_rings(inspection: Dictionary) -> void:
 	var circles: Array[Dictionary] = []
-	for ring: Array in [["radius", GUN_RING_COLOR], ["drone_radius", DRONE_RING_COLOR]]:
-		if int(inspection.get(ring[0], 0)) > 0:
-			circles.append({"center": inspection["center"], "radius": inspection[ring[0]], "color": ring[1]})
+	if int(inspection.get("radius", 0)) > 0:
+		circles.append({"center": inspection["center"], "radius": inspection["radius"], "color": GUN_RING_COLOR})
+	if int(inspection.get("drone_radius", 0)) > 0:
+		circles.append({"center": inspection["center"], "radius": inspection["drone_radius"], "color": DRONE_RING_COLOR, "dashed": true})
 	_board_view.draw_circles(circles, BoardView.LAYER_INSPECT)
 
 

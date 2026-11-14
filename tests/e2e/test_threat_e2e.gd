@@ -131,7 +131,7 @@ func test_enemy_squad_with_drones_threatens_at_5() -> void:
 	await _boot(ASSAULT, ENEMY_SQUAD)
 	_e2e.long_press(ENEMY_SQUAD)
 	assert_eq(_rings(), [{"center": ENEMY_SQUAD, "radius": 3, "color": TargetOverlay.GUN_RING_COLOR},
-		{"center": ENEMY_SQUAD, "radius": DroneCommand.RANGE, "color": TargetOverlay.DRONE_RING_COLOR}])
+		{"center": ENEMY_SQUAD, "radius": DroneCommand.RANGE, "color": TargetOverlay.DRONE_RING_COLOR, "dashed": true}])
 	assert_true(_view(CAR_POS).is_drone_threatened(), "броньовик на 5 — дрон")
 	assert_false(_view(CAR_POS).is_threatened(), "гармата загону дістає лише на 3")
 	assert_eq(_last["drone_marked"], [_state().unit_at(CAR_POS).id])
