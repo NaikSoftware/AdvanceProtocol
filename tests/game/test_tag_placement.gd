@@ -187,7 +187,7 @@ func _engineer_scene() -> Dictionary:
 		PackedVector2Array([Vector2(270.26288, 145.47229), Vector2(291.73328, 161.96832), Vector2(258.5657, 179.95166), Vector2(237.59991, 161.96834)]),
 		PackedVector2Array([Vector2(315.12955, 179.89021), Vector2(340.7483, 199.57097), Vector2(306.71823, 221.20224), Vector2(281.4966, 199.57097)]),
 	]
-	var chrome: Array[Rect2] = [Rect2(24, 12, 151, 36), Rect2(728, 8, 48, 48), Rect2(24, 300, 161, 48), Rect2(491, 296, 285, 52)]
+	var chrome: Array[Rect2] = [Rect2(24, 12, 151, 36), Rect2(728, 8, 48, 48), Rect2(24, 300, 161, 48), Rect2(491, 300, 285, 48)]
 	return _scene({
 		"tag_size": Vector2(234.0, 30.0), "screen": Rect2(0, 0, 800, 360), "polys": cells, "chrome": chrome,
 		"unit": Rect2(263.382, 157.3435, 40.4502, 34.91266), "core": Rect2(263.382, 157.9101, 40.4502, 34.34608),

@@ -122,6 +122,44 @@ func test_long_labels_fit_the_primary_button_at_every_size(p = use_parameters(_f
 		assert_eq(LayoutProbe.overflowing(root, p[0]), [] as Array[String], where)
 
 
+## «Скасувати» вужче за основну на 4 dp: значок × і слово лишають ≥ 7 dp повітря від внутрішнього краю рамки.
+func test_cancel_keeps_clearance_inside_its_border(p = use_parameters(_fit_cases())) -> void:
+	TranslationServer.set_locale(p[1])
+	var root: Control = await LayoutProbe.mount(self, HudScene, p[0])
+	(root as Hud).show_preview(_shot())
+	await LayoutProbe.settle(self)
+	var button := root.get_node("%CancelButton") as Button
+	var edge: float = 1.0  # край плити «Скасувати» — 1 dp
+	var mark := button.get_meta(&"group_mark") as TextureRect
+	var word := button.get_meta(&"group_word") as Label
+	var rect: Rect2 = button.get_global_rect()
+	var where: String = "%s %s" % [p[0], p[1]]
+	assert_eq(button.size.x, 122.0, where)
+	assert_gte(mark.get_global_rect().position.x - rect.position.x - edge, 7.0, "× → рамка: " + where)
+	assert_gte(rect.end.x - word.get_global_rect().end.x - edge, 7.0, "слово → рамка: " + where)
+
+
+## «Скасувати» смужки озброєння стоїть на тих самих пікселях, що й «Скасувати» ряду дій.
+func test_armed_strip_cancel_matches_the_row_cancel(p = use_parameters(_fit_cases())) -> void:
+	TranslationServer.set_locale(p[1])
+	var root: Control = await LayoutProbe.mount(self, HudScene, p[0])
+	var h := root as Hud
+	h.show_preview(_shot())
+	await LayoutProbe.settle(self)
+	var row_btn := root.get_node("%CancelButton") as Button
+	var strip := root.get_node("%DroneStrip") as ArmedStrip
+	strip.visible = true
+	await LayoutProbe.settle(self)
+	var where: String = "%s %s" % [p[0], p[1]]
+	var row_off: Vector2 = row_btn.get_meta(&"group_mark").get_global_rect().position - row_btn.get_global_rect().position
+	var strip_off: Vector2 = strip.cancel_button.get_meta(&"group_mark").get_global_rect().position - strip.cancel_button.get_global_rect().position
+	assert_eq(strip.cancel_button.size, row_btn.size, "той самий прямокутник: " + where)
+	assert_eq(strip_off, row_off, "× на тому самому місці: " + where)
+	var row_w: Vector2 = row_btn.get_meta(&"group_word").get_global_rect().position - row_btn.get_global_rect().position
+	var strip_w: Vector2 = strip.cancel_button.get_meta(&"group_word").get_global_rect().position - strip.cancel_button.get_global_rect().position
+	assert_eq(strip_w, row_w, "слово на тому самому місці: " + where)
+
+
 func _fit_cases() -> Array:
 	var out: Array = []
 	for size: Vector2i in LayoutProbe.SIZES:

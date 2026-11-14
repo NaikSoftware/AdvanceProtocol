@@ -8,9 +8,9 @@ extends PanelContainer
 
 signal cancel_pressed
 
-const MIN_WIDTH: float = 289.0
-## Комірка «Скасувати» разом із лівим краєм смужки (1 dp) — рівно 126 dp, як «Скасувати» ряду.
-const CANCEL_WIDTH: float = 125.0
+const MIN_WIDTH: float = 285.0
+## Комірка «Скасувати» — той самий прямокутник 122 × 48, що й у «Скасувати» ряду дій.
+const CANCEL_WIDTH: float = 122.0
 ## Висота ряду дій: смужка підміняє ряд, тож «Скасувати» не стрибає між озброєнням і очікуванням.
 const HEIGHT: float = 48.0
 const _ICON_CANCEL: Texture2D = preload("res://assets/ui/icons/cancel.svg")
@@ -92,9 +92,10 @@ func _ready() -> void:
 	# Та сама група «значок + слово» по центру, що й у «Скасувати» ряду дій. Збирається тут, а не в
 	# _init: шрифт кнопки береться з теми, яка до входу в дерево ще не діє.
 	HudKit.group_content(cancel_button, 20.0)
-	# Без верхнього й нижнього поля плити «Скасувати» займає всі 48 dp ряду: край плити 1 dp лягає під
-	# кнопку, тап-ціль лишається ≥ 48, а висота смужки дорівнює висоті ряду дій.
+	# Без полів плити «Скасувати» займає той самий прямокутник, що й у ряду дій (край плити 1 dp лягає
+	# під кнопку): центр групи «значок + слово» збігається піксель у піксель, тап-ціль лишається ≥ 48.
 	var face := get_theme_stylebox(&"panel").duplicate() as StyleBox
+	face.content_margin_left = 0.0
 	face.content_margin_top = 0.0
 	face.content_margin_bottom = 0.0
 	add_theme_stylebox_override(&"panel", face)

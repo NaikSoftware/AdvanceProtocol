@@ -51,12 +51,9 @@ const _ICON_MOVE: Texture2D = preload("res://assets/ui/icons/btn_move.svg")
 ## й однієї товщини лінії (1,5 dp), тож один розмір на всі дії. Спільні значки плитки інженера й кнопки
 ## «Дрон» лишаються як були.
 const _CONFIRM_ICON_PX: float = 18.0
-## Проміжок між боксом значка й словом; з боковими відступами гліфа це ~10 dp від краю чорнила.
-## Довгі підписи (ремонт і підрив мосту) тісніші: з 9 dp «Demolish bridge» лишає менш ніж 7 dp повітря від
-## внутрішнього краю рамки до чорнила.
-const _CONFIRM_GAP: int = 9
-const _CONFIRM_GAP_TIGHT: int = 7
-const _CONFIRM_GAP_TIGHT_KEYS: Array[String] = ["eng_repair_bridge", "eng_demolish_bridge"]
+## Один проміжок між боксом значка й словом для всіх дій, без винятків: його підібрано так, щоб найдовший
+## підпис («Demolish bridge») лишав ≥ 7 dp повітря від внутрішнього краю рамки до чорнила з обох боків.
+const _CONFIRM_GAP: int = 7
 const _ICON_CONFIRM: Texture2D = preload("res://assets/ui/icons/confirm.svg")
 
 var _state: BattleState = null
@@ -289,8 +286,7 @@ func _retitle_confirm(preview: Dictionary) -> void:
 			var action: int = int(preview["action"])
 			key = "hud_repair" if action == EngineerCommand.Action.REPAIR_UNIT else EngineerPanel.LABEL_KEYS[action]
 			tex = _VERB_ICONS[action]
-	HudKit.retitle_group(_confirm_button, key, tex, _CONFIRM_ICON_PX,
-		_CONFIRM_GAP_TIGHT if key in _CONFIRM_GAP_TIGHT_KEYS else _CONFIRM_GAP)
+	HudKit.retitle_group(_confirm_button, key, tex, _CONFIRM_ICON_PX, _CONFIRM_GAP)
 
 
 func _show_engineer_preview(preview: Dictionary) -> void:

@@ -56,8 +56,8 @@ func test_armed_strip_geometry_and_input() -> void:
 	add_child_autofree(s)
 	s.configure(null, "Test", "Hint")
 	await get_tree().process_frame
-	assert_eq(s.size, Vector2(289, 48), "289 × 48, як ряд дій")
-	assert_eq(s.cancel_button.global_position.x - s.global_position.x + s.cancel_button.size.x, 126.0, "«Скасувати» з лівим краєм — 126 dp")
+	assert_eq(s.size, Vector2(285, 48), "285 × 48, як ряд дій")
+	assert_eq(s.cancel_button.global_position.x - s.global_position.x + s.cancel_button.size.x, 122.0, "«Скасувати» — 122 dp, як у ряду")
 	assert_eq(s.armed_cell.mouse_filter, Control.MOUSE_FILTER_STOP)
 	var presses: Array[int] = [0]
 	s.cancel_pressed.connect(func() -> void: presses[0] += 1)
@@ -69,10 +69,10 @@ func test_armed_strip_grows_leftwards_not_rightwards_for_long_text() -> void:
 	var s := ArmedStrip.new()
 	s.theme = THEME
 	add_child_autofree(s)
-	s.configure(null, "Test", "Дуже довга підказка, що не влізає у 289 dp ніяк і навіть близько")
+	s.configure(null, "Test", "Дуже довга підказка, що не влізає у 285 dp ніяк і навіть близько")
 	await get_tree().process_frame
-	assert_gt(s.size.x, 289.0, "довший вміст розширює смужку (HUD приторкає її правим краєм)")
-	assert_eq(s.cancel_button.global_position.x - s.global_position.x, 1.0, "«Скасувати» лишається першою коміркою зліва, за краєм 1 dp")
+	assert_gt(s.size.x, 285.0, "довший вміст розширює смужку (HUD приторкає її правим краєм)")
+	assert_eq(s.cancel_button.global_position.x - s.global_position.x, 0.0, "«Скасувати» лишається першою коміркою зліва")
 
 
 func _row_with(texts: Array[String], variations: Array[StringName]) -> BaselineRow:

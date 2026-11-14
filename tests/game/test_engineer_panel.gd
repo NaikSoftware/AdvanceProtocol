@@ -157,7 +157,7 @@ func test_armed_verb_shows_the_same_hint_and_its_own_name() -> void:
 		p.set_armed(true)
 		assert_eq(p.strip().title_label.text, EN_LABELS[i])
 		assert_eq(p.strip().hint_label.text, "Tap a tile", "одна підказка на всі верби")
-		assert_eq(p.active_size().x, 289.0, "смужка 289 dp")
+		assert_eq(p.active_size().x, 285.0, "смужка 285 dp")
 		p.set_armed(false)
 
 
