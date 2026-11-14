@@ -116,7 +116,10 @@ static func from_dict(data: Dictionary) -> BattleState:
 		mine.known_to.clear()
 		for k in (m_data["known_to"] as Array):
 			mine.known_to.append(bool(k))
-		state.mines.append(mine)
+		# §3.11: міна рве кожного, хто на неї в'їхав, тож юніт на міні стояти не може.
+		# Старе збереження може мати юніт на власній міні — така міна мовчки зникає.
+		if state.unit_at(pos) == null:
+			state.mines.append(mine)
 
 	# Збереження до появи уламків поля не мають — уламків там і не було.
 	state.wrecks.clear()

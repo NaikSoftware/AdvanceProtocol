@@ -136,11 +136,11 @@ func test_an_own_mine_detonates_under_its_owner() -> void:
 	assert_null(Mines.mine_at(state, Vector2i(5, 5)), "міна одноразова")
 	assert_true(events.size() > 0 and events[0] is Events.MineTriggered)
 
-func test_in_three_players_a_mine_detonates_under_any_other_player() -> void:
+func test_in_three_players_a_mine_detonates_under_its_owners_unit() -> void:
 	state = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 3, 5)
 	Mines.place(state, Vector2i(5, 5), 2)
 	Mines.place(state, Vector2i(7, 7), 2)
-	var u: Unit = state.add_unit(5, 1, Vector2i(5, 5), 0)
+	var u: Unit = state.add_unit(5, 2, Vector2i(5, 5), 0)
 	var before: int = u.hp
 	Mines.step_on(state, u)
 	assert_true(u.hp < before)

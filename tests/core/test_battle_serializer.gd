@@ -152,6 +152,16 @@ func _save() -> Dictionary:
 	# Через JSON, як із файла: числа приходять float, і перевірки мусять це приймати.
 	return JSON.parse_string(JSON.stringify(BattleSerializer.to_dict(_populated_state())))
 
+## Старі правила дозволяли юніту стояти на власній міні. Тепер міна рве кожного, хто на
+## неї в'їхав, і стояти на ній не може ніхто: завантаження прибирає таку міну мовчки.
+func test_loading_drops_a_mine_under_a_unit() -> void:
+	var s: BattleState = _populated_state()
+	Mines.place(s, Vector2i(1, 1), 0)   # під танком гравця 0
+	var b: BattleState = BattleSerializer.from_dict(BattleSerializer.to_dict(s))
+	assert_null(Mines.mine_at(b, Vector2i(1, 1)), "під юнітом міни не буває")
+	assert_not_null(Mines.mine_at(b, Vector2i(5, 5)), "решта мін лишається")
+	assert_eq(b.mines.size(), 1)
+
 func _assert_rejected(d: Dictionary, why: String) -> void:
 	assert_null(BattleSerializer.from_dict(d), why)
 

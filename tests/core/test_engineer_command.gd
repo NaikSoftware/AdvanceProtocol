@@ -362,6 +362,13 @@ func test_no_engineer_verb_refusal_depends_on_what_the_player_cannot_see() -> vo
 	var p1_eng: Unit = state.add_unit(11, 1, Vector2i(4, 7), 0)
 	var p2_car: Unit = state.add_unit(2, 2, Vector2i(0, 4), 0)
 	var p2_inf: Unit = state.add_unit(0, 2, Vector2i(4, 0), 0)   # за річкою, на мосту стане поруч
+	# Те, чого гравець 0 справді не бачить, просто за сусідніми тайлами: без цього
+	# порівняння нижче звіряло б validate() саму з собою. Загін P2 у будинку на (6,5)
+	# лежить у ромбі огляду інженера (2 + 1 = 3), але не поруч (d² = 5), тож не знайдений;
+	# міна P2 на (7,5) — поза ромбом (3 + 1 = 4 > 3).
+	b.set_kind(Vector2i(6, 5), Terrain.Kind.BUILDING)
+	var hidden_inf: Unit = state.add_unit(0, 2, Vector2i(6, 5), 0)
+	Mines.place(state, Vector2i(7, 5), 2)
 	state.start()
 	state.active_player = 1
 	state.begin_turn()
@@ -375,6 +382,8 @@ func test_no_engineer_verb_refusal_depends_on_what_the_player_cannot_see() -> vo
 	_do(MoveCommand.create(p2_inf.id, Vector2i(4, 3)))
 	state.pass_turn()
 	assert_eq(state.active_player, 0)
+	assert_false(state.can_see_unit(0, hidden_inf), "передумова: загін у будинку прихований")
+	assert_false(Mines.mine_at(state, Vector2i(7, 5)).known_to[0], "передумова: міна P2 невідома")
 	for d in Board.DIRS_4:
 		var p: Vector2i = e.pos + d
 		var u: Unit = state.unit_at(p)
@@ -401,6 +410,9 @@ func _validate_blind(cmd: EngineerCommand, player: int) -> String:
 	for m in state.mines:
 		if not m.known_to[player]:
 			hidden_mines.append(m)
+	# Порожні списки зробили б порівняння викликом самого себе.
+	assert_gt(hidden_units.size(), 0, "є що ховати: юніти")
+	assert_gt(hidden_mines.size(), 0, "є що ховати: міни")
 	for u in hidden_units:
 		state.units.erase(u.id)
 	for m in hidden_mines:
