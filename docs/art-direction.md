@@ -19,7 +19,8 @@ What this fixes, concretely:
 
 - **Materials:** modern composite and appliqué armour, slat cages, rubber-padded tracks, thermal
   optics, antenna clusters. Not riveted plate.
-- **Palette:** contemporary digital-pattern camouflage, low-saturation greys, greens and tans.
+- **Palette:** low-saturation greys, greens and tans; each national set's vehicles in one plain
+  tone, no camouflage pattern.
   Dust, rain and mud are the only things that dirty a vehicle.
 - **Light and audio:** per-map daylight (see below), turbine and diesel notes, radio chatter as
   texture rather than language.
@@ -122,7 +123,7 @@ falls back to the box placeholder, so a model may land one type at a time.
 - **Painted metal, not plastic:** matte paint (roughness ~0.74 with ±0.06 over metres), a satin
   band 10–12 cm wide (~0.5) on rubbed convex edges that face up, half-gloss oil patches at deck
   level at the rear; bare steel (metallic 1) only where paint is worn through on edge lines,
-  never on whole patches (where the edge mask fills a patch, set 0 paints a dark camo block), and
+  never on whole patches, and
   polished steel (0.8) on track pins and sprocket teeth. Chips under ~7 cm vanish in the
   mips even at the closest zoom (the atlas is ~1 cm per texel), so wear is sized in bands, not
   specks. No gloss on large flat faces: under River's back light it reads as a tin can.

@@ -49,6 +49,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "spots":
 		await _spots(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "fleet":
+		await _fleet(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "rear":
 		var rset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 		await _rear(screen, map, out, tag, rset)
@@ -150,15 +153,22 @@ func _ground(p: Vector3) -> float:
 
 
 ## Найближча до центру клітинка поля, у якої поле й три сусіди праворуч, ліворуч і нижче.
-func _field_near_centre(map: MapData, near_forest: bool = false) -> Vector2i:
+func _field_near_centre(map: MapData, near_forest: bool = false, need: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(1, 1)], clear: Array[Vector2i] = []) -> Vector2i:
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var best := c
 	var best_d: int = 1 << 30
 	for y in range(1, map.height - 3):
 		for x in range(1, map.width - 1):
 			var ok: bool = true
-			for d: Vector2i in [Vector2i.ZERO, Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, 2), Vector2i(1, 1)]:
-				if map.tiles[(y + d.y) * map.width + x + d.x] != Terrain.Kind.FIELD:
+			for d: Vector2i in need:
+				var q := Vector2i(x, y) + d
+				if q.x < 0 or q.y < 0 or q.x >= map.width or q.y >= map.height or map.tiles[q.y * map.width + q.x] != Terrain.Kind.FIELD:
+					ok = false
+			# `clear`: клітинки без лісу й забудови (крони й стіни налазять на сусідню клітинку)
+			for d: Vector2i in clear:
+				var q := Vector2i(x, y) + d
+				if q.x >= 0 and q.y >= 0 and q.x < map.width and q.y < map.height \
+						and map.tiles[q.y * map.width + q.x] in [Terrain.Kind.FOREST, Terrain.Kind.BUILDING]:
 					ok = false
 			if ok and near_forest:
 				# Поле з лісом за 3-4 клітинки: край лісу в кадрі разом із юнітами.
@@ -225,7 +235,17 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 func _sets(screen: BattleScreen, map: MapData, out: String, tag: String, near_forest: bool = false, select: bool = false) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
-	var c := _field_near_centre(m, near_forest)
+	# Кожен із дванадцяти танків стоїть на полі, і довкола них немає лісу чи забудови: на дворі
+	# модель залазить у будівлю, а крони з сусідньої клітинки накривають танк.
+	var cells: Array[Vector2i] = []
+	var around: Array[Vector2i] = []
+	for col in 4:
+		for row in 3:
+			cells.append(Vector2i(col - 1, row * 2 - 2))
+	for dx in range(-2, 4):
+		for dy in range(-3, 4):
+			around.append(Vector2i(dx, dy))
+	var c := _field_near_centre(m, near_forest, cells, around)
 	var roles: Array[int] = [8, 5, 6, 7]
 	m.spawns = []
 	for owner in 3:
@@ -447,6 +467,28 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	for s: Array in shots:
 		(s[1] as Image).save_png(s[0])
 	print("UNIT spin %s type %d at %s: %d frames" % [tag, type_id, cell, shots.size()])
+	get_tree().quit()
+
+
+## Шостий аргумент fleet ставить в один ряд чотири танки (важкий, середній, винищувач, легкий) і три колісні машини набору 0
+## (бронеавто, транспортер, розвідувальна) і знімає кадри _z6 і _z20: чи ділять вони одну фарбу.
+func _fleet(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	screen.setup(map, 2, 1)
+	var c := _field_row_near_centre(map, 7)
+	var roles: Array[int] = [8, 5, 6, 7, 2, 3, 4]
+	for i in roles.size():
+		_place(UnitSilhouettes.build_merged(roles[i]), c + Vector2i(i - 3, 0), 0)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c)
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
+	print("UNIT fleet at %s" % c)
 	get_tree().quit()
 
 

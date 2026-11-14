@@ -3,7 +3,7 @@
   "heavy_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/heavy_tank.glb",
     "type_id": 8,
-    "paint": {"fade_to": [152, 152, 104], "roof_fade": 0.9, "roof_dark": -0.05, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
+    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.9, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "chip_lines": true, "dark_floor": 0.5, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
     "fwd": "x",
     "hull_long": [-0.4987, 0.3238],
     "hull_lat": 0.2166,
@@ -48,7 +48,7 @@
   "medium_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/medium_tank.glb",
     "type_id": 5,
-    "paint": {"fade_to": [174, 176, 120], "roof_fade": 0.95, "roof_dark": -0.1, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
+    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -1.1, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "chip_lines": true, "dark_floor": 0.5, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
     "fwd": "x",
     "hull_long": [-0.4987, 0.3238],
     "hull_lat": 0.2166,
@@ -109,7 +109,7 @@
   "tank_destroyer": {
     "source": "~/.local/share/advance-protocol/unit-sources/tank_destroyer.glb",
     "type_id": 6,
-    "paint": {"fade_to": [166, 166, 114], "roof_fade": 0.92, "roof_dark": -0.08, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
+    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.75, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "chip_lines": true, "dark_floor": 0.5, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
     "fwd": "x",
     "_layout": "no turret: low front hull, a tall fixed armoured box on the rear 57 %, the gun from its front face",
     "hull_long": [-0.5, 0.251],
@@ -157,7 +157,7 @@
   "light_tank": {
     "source": "~/.local/share/advance-protocol/unit-sources/light_tank.glb",
     "type_id": 7,
-    "paint": {"fade_to": [158, 158, 108], "roof_fade": 0.9, "roof_dark": -0.05, "roof_cool": [0.05, 0.02, -0.12], "dust": 0.05},
+    "paint": {"scheme": "plain", "base": [95, 97, 62], "roof_dark": -0.75, "roof_cool": [0.0, 0.0, 0.0], "roof_dust": 0.0, "chip_lines": true, "dark_floor": 0.5, "dust": 0.35, "dust_c": [138, 132, 110], "mud_max": 0.6, "rough": 0.74, "floor": 0.68},
     "fwd": "x",
     "hull_long": [-0.4973, 0.2314],
     "hull_lat": 0.1939,
@@ -817,41 +817,43 @@
     "paint": {
       "scheme": "plain",
       "base": [
-        118,
-        122,
-        84
+        95,
+        97,
+        62
       ],
-      "mottle": 0.05,
       "roof_cool": [
-        0.0,
-        0.0,
-        -0.06
+        0,
+        0,
+        0
       ],
-      "roof_dark": -0.35,
-      "dust": 0.2,
+      "roof_dust": 0.0,
+      "dust": 0.35,
       "dust_c": [
-        150,
-        142,
-        112
+        138,
+        132,
+        110
       ],
+      "mud_max": 0.6,
       "rough": 0.74,
       "floor": 0.68,
-      "mud_from": 0.5,
-      "mud_h": 0.8,
-      "mud_max": 0.5,
+      "chip_lines": true,
+      "dark_floor": 0.5,
+      "roof_dark": -1.1,
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
       "holes": 6,
       "ground_ao": 0.55,
+      "ground_ao_band": [
+        1.35,
+        2.3
+      ],
       "gun_dark": 0.4,
       "streak": 0.08,
       "grime": 0.12,
       "blotch": 0.03,
-      "ground_ao_band": [
-        1.35,
-        2.3
-      ]
+      "mud_from": 0.5,
+      "mud_h": 0.8
     },
     "fwd": "-y",
     "hull_long": [
@@ -974,28 +976,28 @@
     "paint": {
       "scheme": "plain",
       "base": [
-        118,
-        122,
-        84
+        95,
+        97,
+        62
       ],
-      "mottle": 0.05,
       "roof_cool": [
-        0.0,
-        0.0,
-        -0.06
+        0,
+        0,
+        0
       ],
-      "roof_dark": -0.35,
-      "dust": 0.2,
+      "roof_dust": 0.0,
+      "dust": 0.35,
       "dust_c": [
-        150,
-        142,
-        112
+        138,
+        132,
+        110
       ],
+      "mud_max": 0.6,
       "rough": 0.74,
       "floor": 0.68,
-      "mud_from": 0.5,
-      "mud_h": 0.8,
-      "mud_max": 0.5,
+      "chip_lines": true,
+      "dark_floor": 0.5,
+      "roof_dark": -0.8,
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
@@ -1004,7 +1006,9 @@
       "ground_ao_band": [
         1.7,
         2.4
-      ]
+      ],
+      "mud_from": 0.5,
+      "mud_h": 0.8
     },
     "fwd": "-y",
     "hull_long": [
@@ -1068,43 +1072,45 @@
     "paint": {
       "scheme": "plain",
       "base": [
-        118,
-        122,
-        84
+        95,
+        97,
+        62
       ],
-      "mottle": 0.05,
       "roof_cool": [
-        0.0,
-        0.0,
-        -0.06
+        0,
+        0,
+        0
       ],
-      "roof_dark": -0.35,
-      "dust": 0.2,
+      "roof_dust": 0.0,
+      "dust": 0.35,
       "dust_c": [
-        150,
-        142,
-        112
+        138,
+        132,
+        110
       ],
+      "mud_max": 0.6,
       "rough": 0.74,
       "floor": 0.68,
-      "mud_from": 0.5,
-      "mud_h": 0.8,
-      "mud_max": 0.5,
+      "chip_lines": true,
+      "dark_floor": 0.5,
+      "roof_dark": -1.1,
       "dark_gear": true,
       "tyre_r": 0.64,
       "lugs": 24,
       "holes": 6,
       "ground_ao": 0.55,
+      "ground_ao_band": [
+        0.7,
+        1.8
+      ],
       "glass_hue": 1.0,
       "glass_c": [
         44,
         48,
         52
       ],
-      "ground_ao_band": [
-        0.7,
-        1.8
-      ]
+      "mud_from": 0.5,
+      "mud_h": 0.8
     },
     "fwd": "-y",
     "hull_long": [
