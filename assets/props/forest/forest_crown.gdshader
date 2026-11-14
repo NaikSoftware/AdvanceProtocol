@@ -43,6 +43,27 @@ uniform float bark_dark = 0.45;
 uniform float rim = 0.15;
 uniform float card_round = 0.7;
 uniform float card_up = 1.2;
+// Контури зон і кільця дальності (BoardView) лежать на землі, і крона їх закрила б: тож крона
+// малює ту саму лінію сама (ForestLayer.set_contour_edges, set_contour_rings). Типово вимкнено:
+// розчинена крона й стенди лісу лінії не малюють.
+// Картка ребер: у (2k, j) — ребро x = k − 0,5 у ряді j, у (2i + 1, k) — ребро z = k − 0,5 у стовпці i.
+// Колір лінійний, як колір вершин стрічки, тож без source_color.
+uniform bool contour_on = false;
+uniform sampler2D contour_edges : filter_nearest, repeat_disable;
+uniform float contour_half = 0.01;
+uniform float contour_lift = 0.04;
+// Кільця: xy — центр, z — радіус (тайли); колір уже лінійний.
+uniform int ring_count = 0;
+uniform vec4 rings[4];
+uniform vec4 ring_colors[4];
+uniform float ring_half = 0.06;
+// Рельєф (`TerrainHeight.texture()`, як у UnitContacts): точка землі під пікселем уточнюється за
+// висотою в ній самій. Площина на висоті стовбура на схилі зсувала лінію на кроні від лінії на
+// землі на кілька пікселів.
+uniform bool use_height = false;
+uniform sampler2D height_map : filter_linear, repeat_disable;
+uniform float height_samples = 4.0;
+uniform float height_origin = -0.5;
 
 #include "res://game/battle/shaders/surroundings.gdshaderinc"
 
@@ -52,6 +73,8 @@ varying float is_card;
 varying flat float card_half;
 varying vec3 inst_tone;
 varying flat float piece_hash;
+// Висота землі під деревом: на ній шукаються лінії під кроною.
+varying flat float base_y;
 
 float hash13(vec3 p) {
 	p = fract(p * 0.1031);
@@ -59,9 +82,28 @@ float hash13(vec3 p) {
 	return fract((p.x + p.y) * p.z);
 }
 
+// Тексель картки ребер; за її межами ребра немає.
+vec4 edge_texel(ivec2 p, ivec2 ts) {
+	return (p.x < 0 || p.y < 0 || p.x >= ts.x || p.y >= ts.y) ? vec4(0.0) : texelFetch(contour_edges, p, 0);
+}
+
+// Вигляд кільця під кроною: колір і покриття точки землі на відстані dist від центру під кутом angle;
+// fw — розмір пікселя на землі (fwidth(dist), рахує fragment). Одна функція, щоб інший вигляд
+// кільця замінив лише її. Поки що — рівна лінія, як стрічка на землі.
+vec4 canopy_ring(float dist, float angle, float radius, float fw, vec4 col) {
+	return vec4(col.rgb, col.a * clamp((ring_half - abs(dist - radius)) / max(fw, 1e-5) + 0.5, 0.0, 1.0));
+}
+
+// З двох текселів одного ребра — той, де лінія є.
+vec4 edge_pick(ivec2 a, ivec2 b, ivec2 ts) {
+	vec4 ea = edge_texel(a, ts);
+	return ea.a > 0.0 ? ea : edge_texel(b, ts);
+}
+
 void vertex() {
 	// Чотири вершини картки лежать в одній точці, тож хеш однаковий для всього пучка.
 	piece_hash = hash13(VERTEX * 97.0 + 0.5);
+	base_y = MODEL_MATRIX[3].y;
 	// Без custom data (поодинокий MeshInstance3D) INSTANCE_CUSTOM — нулі: тон 1.
 	inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);
 	vec3 v = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -130,6 +172,52 @@ void fragment() {
 		vec4 haze = fog_bank(world_pos, CAMERA_POSITION_WORLD, normalize(-INV_VIEW_MATRIX[2].xz));
 		ALBEDO = surround_grade(ALBEDO, haze.a);
 		FOG = surround_fog(haze, 0.0);
+	}
+	// Промінь камери крізь піксель до площини лінії (земля під деревом) — точка землі, яку піксель
+	// закриває; лінія там — і тут той самий колір і ширина, неосвітлені, як стрічка на землі.
+	if (!shadow_pass && (contour_on || ring_count > 0)) {
+		vec3 eye = CAMERA_POSITION_WORLD;
+		float k_ray = 1.0 / max(eye.y - world_pos.y, 1e-4);
+		vec2 g = mix(eye.xz, world_pos.xz, (eye.y - base_y - contour_lift) * k_ray);
+		if (use_height) {
+			// Дві ітерації: на пологому схилі похибка падає в (схил / tg нахилу камери)² раза за крок.
+			vec2 hs = vec2(textureSize(height_map, 0));
+			for (int it = 0; it < 2; it++) {
+				float y = textureLod(height_map, ((g - height_origin) * height_samples + 0.5) / hs, 0.0).r;
+				g = mix(eye.xz, world_pos.xz, (eye.y - y - contour_lift) * k_ray);
+			}
+		}
+		vec2 gw = max(fwidth(g), vec2(1e-5));
+		// Колір із домноженою альфою: кільце під лінією зон, як на землі.
+		vec3 pre = vec3(0.0);
+		float cov = 0.0;
+		// Кільце — лише над дошкою: ліс кільця за краєм лишається без нього.
+		// Множником, а не умовою циклу: fwidth у неоднорідному розгалуженні не визначений.
+		float on_board = all(greaterThanEqual(g, vec2(-0.5))) && all(lessThan(g, board_size - 0.5)) ? 1.0 : 0.0;
+		for (int i = 0; i < ring_count && i < 4; i++) {
+			vec2 d = g - rings[i].xy;
+			float r = length(d);
+			vec4 rc = canopy_ring(r, atan(d.y, d.x), rings[i].z, fwidth(r), ring_colors[i]);
+			float a = on_board * rc.a;
+			pre = mix(pre, rc.rgb, a);
+			cov = a + cov * (1.0 - a);
+		}
+		if (contour_on) {
+			ivec2 ts = textureSize(contour_edges, 0);
+			// Ряд (стовпець) береться з обох боків на півширини: лінія заходить за кут, як і стрічка.
+			int k = int(floor(g.x + 1.0));
+			vec4 ev = edge_pick(ivec2(2 * k, int(floor(g.y + 0.5 - contour_half))), ivec2(2 * k, int(floor(g.y + 0.5 + contour_half))), ts);
+			float av = ev.a * clamp((contour_half - abs(g.x - float(k) + 0.5)) / gw.x + 0.5, 0.0, 1.0);
+			int m = int(floor(g.y + 1.0));
+			vec4 eh = edge_pick(ivec2(2 * int(floor(g.x + 0.5 - contour_half)) + 1, m), ivec2(2 * int(floor(g.x + 0.5 + contour_half)) + 1, m), ts);
+			float ah = eh.a * clamp((contour_half - abs(g.y - float(m) + 0.5)) / gw.y + 0.5, 0.0, 1.0);
+			vec4 e = av >= ah ? vec4(ev.rgb, av) : vec4(eh.rgb, ah);
+			pre = mix(pre, e.rgb, e.a);
+			cov = e.a + cov * (1.0 - e.a);
+		}
+		ALBEDO *= 1.0 - cov;
+		SPECULAR *= 1.0 - cov;
+		EMISSION = pre;
 	}
 	// Край пучка — alpha-to-coverage (MSAA): м'який перехід на 1–2 пікселі без растру й без
 	// окремого прозорого проходу. Без MSAA це звичайний alpha-cut за тим самим порогом.

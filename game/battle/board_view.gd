@@ -115,6 +115,10 @@ var _contour_nodes: Dictionary = {}
 ## (draw_circles) і їхні вузли — той самий прийом, що й у контурів.
 var _circles: Dictionary = {}
 var _circle_nodes: Dictionary = {}
+## Усі шари контурів, зведені в картку ребер для крон лісу (ForestLayer.set_contour_edges): крона
+## закрила б стрічку на землі, тож лінію під собою малює сама. Одна текстура на розмір дошки.
+var _edge_image: Image
+var _edge_tex: ImageTexture
 
 
 func _exit_tree() -> void:
@@ -244,6 +248,9 @@ func build(board: Board) -> void:
 	if _fog_clock != null:
 		# Без кільця імли нема: годинник стоїть і не будить кадр.
 		_fog_clock.paused = ring == 0
+	# Ліс переживає build(), а контури й кола щойно зняті: крони не мусять тримати старі лінії.
+	_publish_contours()
+	_publish_circles()
 
 	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз; перезйомку
 	# після перебудови просить rebuild_tiles явно (_request_probe_capture).
@@ -282,6 +289,7 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		if _kind_by_cell.has(seg["cell"]):
 			kept.append(seg)
 	_contour_segments[layer] = kept
+	_publish_contours()
 	if kept.is_empty():
 		return
 
@@ -297,7 +305,8 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		if not edges.has(key):
 			edges[key] = true
 			lines.append(kept[i])
-	# Дві поверхні: [0] на ґрунті — з тестом глибини, будівлі й дерева її закривають; [1] на мосту —
+	# Дві поверхні: [0] на ґрунті — з тестом глибини: будівлі, огорожі й юніти її закривають, а під
+	# кроною лінію малює сама крона (_publish_contours); [1] на мосту —
 	# поверх поручнів і бордюрів, але під юнітами (contour_bridge.gdshader), тим самим квадратом
 	# клітинки, що й на ґрунті, навіть де він ширший за настил.
 	var verts: Array[PackedVector3Array] = [PackedVector3Array(), PackedVector3Array()]
@@ -423,6 +432,7 @@ func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 		add_child(mi)
 		nodes.append(mi)
 	_circle_nodes[layer] = nodes
+	_publish_circles()
 
 
 ## Кільце-стрічка шириною _RING_WIDTH, що лягає на ґрунт: кожна вершина бере висоту з
@@ -465,10 +475,67 @@ func clear_contour(layer: int) -> void:
 		if is_instance_valid(node):
 			node.free()
 		_contour_nodes.erase(layer)
+	_publish_contours()
 
 
 func contour_segments(layer: int) -> Array:
 	return _contour_segments.get(layer, [])
+
+
+## Картка ребер усіх шарів контуру: (2·(W + 1)) × (H + 1), у (2k, j) — ребро x− клітинки (k, j), у
+## (2i + 1, k) — ребро y− клітинки (i, k); колір із альфою стрічки. Те саме правило, що в стрічки:
+## пізніший сегмент шару й пізніший шар перемагають, тож крона й земля не розходяться в кольорі.
+func contour_edges() -> Image:
+	return _edge_image
+
+
+func _publish_contours() -> void:
+	var size := Vector2i(2 * (_board_size.x + 1), _board_size.y + 1)
+	if _edge_image == null or _edge_image.get_size() != size:
+		_edge_image = Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
+		_edge_tex = null
+	_edge_image.fill(Color(0, 0, 0, 0))
+	var lit: bool = false
+	var layers: Array = _contour_segments.keys()
+	layers.sort()
+	for layer: int in layers:
+		for seg: Dictionary in _contour_segments[layer]:
+			var cell: Vector2i = seg["cell"]
+			var dir: Vector2i = seg["dir"]
+			# Ребро з боку меншої координати сусіда — те саме, що й у _edge_key.
+			if dir.x < 0 or dir.y < 0:
+				cell += dir
+				dir = -dir
+			var color: Color = seg["color"]
+			color.a *= _CONTOUR_ALPHA
+			_edge_image.set_pixelv(Vector2i(2 * cell.x + 2, cell.y) if dir.x > 0 else Vector2i(2 * cell.x + 1, cell.y + 1), color)
+			lit = true
+	if _edge_tex == null:
+		_edge_tex = ImageTexture.create_from_image(_edge_image)
+	else:
+		_edge_tex.update(_edge_image)
+	if _forest != null:
+		_forest.set_contour_edges(_edge_tex if lit else null)
+
+
+## Кола всіх шарів для крон лісу: центр і радіус у світі, колір лінійний — матеріал кільця
+## (StandardMaterial3D) читає albedo як sRGB, а шейдер крони бере колір як є.
+func _publish_circles() -> void:
+	if _forest == null:
+		return
+	var rings := PackedVector4Array()
+	var colors := PackedColorArray()
+	var layers: Array = _circles.keys()
+	layers.sort()
+	for layer: int in layers:
+		for c: Dictionary in _circles[layer]:
+			var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
+			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), 0.0))
+			# Матеріал кільця непрозорий: альфа кольору на ґрунті не діє.
+			var lin: Color = (c["color"] as Color).srgb_to_linear()
+			lin.a = 1.0
+			colors.append(lin)
+	_forest.set_contour_rings(rings, colors)
 
 
 func _contour_material(over_bridge: bool = false) -> Material:
@@ -485,8 +552,9 @@ func _contour_material(over_bridge: bool = false) -> Material:
 	# Стрічка без нормалей: освітлення дало б чорні ділянки; контур — позначка, не матеріал.
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	# Риска лежить лише на ґрунті: будівлі, дерева, огорожі й юніти її закривають, як закрили б
-	# фарбу на землі. Пріоритет лишається — серед прозорих ефектів (дим, дощ) риска зверху.
+	# Риска лежить лише на ґрунті: будівлі, огорожі й юніти її закривають, як закрили б фарбу на
+	# землі; крони — ні, крізь них її домальовує шейдер крони. Пріоритет лишається — серед прозорих
+	# ефектів (дим, дощ) риска зверху.
 	mat.render_priority = CONTOUR_PRIORITY
 	return mat
 

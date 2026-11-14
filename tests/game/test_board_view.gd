@@ -255,3 +255,91 @@ func test_shared_edge_is_drawn_once() -> void:
 		if c.g > 0.5:  # жовтий, а не червоний
 			golds += 1
 	assert_eq(golds, 4 * verts_per_line, "спільне ребро — золоте")
+
+
+# --- Копія контуру для крон лісу ------------------------------------------------
+#
+# Крона малює лінію сама: точку землі під пікселем крони шукає в картці ребер — по два текселі на
+# клітинку (ребро x− у (2x, y), ребро y− у (2x + 1, y)), колір лінії з її альфою. Картка мусить
+# збігатися зі стрічкою: те саме фізичне ребро з будь-якого боку, пізніший шар зверху.
+
+func _texel(x: int, y: int) -> Array:
+	var c: Color = view.contour_edges().get_pixel(x, y)
+	return [c.r8, c.g8, c.b8, c.a8]
+
+
+func test_contour_edges_put_each_physical_edge_in_its_own_texel() -> void:
+	view.build(Board.create(4, 3, Terrain.GroundState.DRY))
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW), _edge(Vector2i(1, 1), Vector2i(-1, 0), Color.YELLOW),
+			_edge(Vector2i(1, 1), Vector2i(0, -1), Color.RED), _edge(Vector2i(1, 1), Vector2i(0, 1), Color.RED)] as Array[Dictionary],
+			BoardView.LAYER_ZONES)
+
+	assert_eq(view.contour_edges().get_size(), Vector2i(10, 4), "(W + 1) ребер x− по два текселі × (H + 1) рядів")
+	# Альфа — альфа стрічки (0,7), у RGBA8 відкинута до 178.
+	assert_eq(_texel(4, 1), [255, 255, 0, 178], "x+ клітинки (1, 1) — це x− клітинки (2, 1)")
+	assert_eq(_texel(2, 1), [255, 255, 0, 178], "x− клітинки (1, 1)")
+	assert_eq(_texel(3, 1), [255, 0, 0, 178], "y− клітинки (1, 1)")
+	assert_eq(_texel(3, 2), [255, 0, 0, 178], "y+ клітинки (1, 1) — це y− клітинки (1, 2)")
+	var lit: int = 0
+	for y in 4:
+		for x in 10:
+			if view.contour_edges().get_pixel(x, y).a8 > 0:
+				lit += 1
+	assert_eq(lit, 4, "лише чотири ребра")
+
+
+func test_contour_edges_later_layer_wins_and_cleared_layer_disappears() -> void:
+	view.build(Board.create(4, 3, Terrain.GroundState.DRY))
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	view.draw_contour([_edge(Vector2i(2, 1), Vector2i(-1, 0), Color.WHITE)] as Array[Dictionary], BoardView.LAYER_PATH)
+	assert_eq(_texel(4, 1), [255, 255, 255, 178], "шлях поверх зони на тому самому ребрі")
+
+	view.clear_contour(BoardView.LAYER_PATH)
+	assert_eq(_texel(4, 1), [255, 255, 0, 178], "без шляху — знову зона")
+
+	view.clear_contour(BoardView.LAYER_ZONES)
+	assert_eq(_texel(4, 1), [0, 0, 0, 0], "без контурів — порожньо")
+
+
+func test_contour_edges_within_a_layer_later_segment_wins_like_the_ribbon() -> void:
+	view.build(Board.create(4, 4, Terrain.GroundState.DRY))
+	var segs: Array[Dictionary] = []
+	segs.append_array(ZoneOverlay._edges([Vector2i(2, 1)] as Array[Vector2i], Color.RED))
+	segs.append_array(ZoneOverlay._edges([Vector2i(1, 1)] as Array[Vector2i], Color.YELLOW))
+	view.draw_contour(segs, BoardView.LAYER_ZONES)
+	assert_eq(_texel(4, 1), [255, 255, 0, 178], "межа золотої й червоної зон — золота, як і стрічка")
+	assert_eq(_texel(6, 1), [255, 0, 0, 178], "дальній бік червоної клітинки")
+
+
+func test_contour_edges_include_bridge_cells_and_skip_cells_off_the_board() -> void:
+	var board := Board.create(4, 3, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(2, 1), Terrain.Kind.BRIDGE)
+	view.build(board)
+	view.draw_contour([_edge(Vector2i(2, 1), Vector2i(0, 1), Color.YELLOW), _edge(Vector2i(7, 7), Vector2i(1, 0), Color.RED)] as Array[Dictionary],
+			BoardView.LAYER_ZONES)
+	assert_eq(_texel(5, 2), [255, 255, 0, 178], "ребро клітинки мосту")
+	var lit: int = 0
+	for y in 4:
+		for x in 10:
+			if view.contour_edges().get_pixel(x, y).a8 > 0:
+				lit += 1
+	assert_eq(lit, 1, "клітинка поза дошкою не малюється, як і стрічка")
+
+
+# Кільця дальності крона малює так само: центр і радіус у світі (клітинка — 1.0) і колір, яким кільце
+# лягло на ґрунт. Матеріал кільця бере колір як sRGB, а шейдер крони — як є, тож колір іде вже лінійним.
+func test_draw_circles_publishes_rings_for_the_canopy() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	view.draw_circles([{"center": Vector2i(1, 1), "radius": 5, "color": Color(0.5, 0.5, 0.5)}] as Array[Dictionary], BoardView.LAYER_TARGETS)
+	view.draw_circles([{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE},
+		{"center": Vector2i(4, 6), "radius": 5, "color": Color.RED}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+
+	var forest: ForestLayer = view.forest()
+	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(1, 1, 5, 0), Vector4(4, 6, 3, 0), Vector4(4, 6, 5, 0)]))
+	assert_eq(forest.contour_ring_colors.size(), 3)
+	assert_almost_eq(forest.contour_ring_colors[0].r, 0.21404114, 1e-6, "sRGB 0,5 — лінійне 0,214")
+	assert_eq(forest.contour_ring_colors[1], Color.WHITE)
+	assert_eq(forest.contour_ring_colors[2], Color.RED)
+
+	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(1, 1, 5, 0)]), "зняте кільце зникає й під кронами")

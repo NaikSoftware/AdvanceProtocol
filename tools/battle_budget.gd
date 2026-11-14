@@ -20,7 +20,8 @@ extends Node
 ## dc=… tris=… surfs=… inst=… vis=… (vis — скільки екземплярів MultiMesh у кадрі). Базу беруть перед кожною групою.
 ## --only=<підрядок> лишає в --diag групи з таким підрядком в імені.
 ## <map>@forest@x,y@zoom — танк гравця 0 проламав ліс на x,y і сусідню клітинку, піхота — у стоячому
-## лісі поруч; камера на танку.
+## лісі поруч; камера на танку. <map>@forest@x,y@zoom@sel — те саме, піхоту вибрано (контури зон під кронами);
+## @peek замість @sel — довгий натиск на танк (кільце дальності). З обома інтерфейс схований.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -235,7 +236,15 @@ func _ready() -> void:
 				state.broken_forest[q] = true
 			state.refresh_vision(0)
 			screen.call("_rebuild_units_for_active_player")
-			views.append([c, float(parts[3])])
+			# @sel: піхоту в лісі вибрано — контури її зон руху лягають під крони; @peek: довгий натиск на
+			# танк — кільце дальності гармати. Інтерфейс схований: панель юніта лягала б на ліс.
+			if parts.size() >= 5 and parts[4] == "sel" and inf.x >= 0:
+				(screen.get("_controller") as InputController).select_unit(state.unit_at(inf))
+			if parts.size() >= 5 and parts[4] == "peek":
+				(screen.get("_controller") as InputController).peek_cell(c)
+			if parts.size() >= 5:
+				(screen.get_node("UI") as CanvasLayer).visible = false
+			views.append([c, float(parts[3]), ("_" + parts[4]) if parts.size() >= 5 else ""])
 		elif parts.size() >= 4 and parts[1] == "yard":
 			# Танк і відділення піхоти гравця 0 у дворі садиби №parts[2] з макету карти: танк — на
 			# клітинці двору без хати й сараю, піхота — на іншій, поруч із хатою; камера — на хаті.
@@ -355,7 +364,7 @@ func _ready() -> void:
 			var dc: int = m.x
 			var tris: int = m.y
 			var zl: String = str(int(v[1])) if is_equal_approx(v[1], roundf(v[1])) else "%.1f" % v[1]
-			var name: String = "%s_%d_%d_z%s" % [map, v[0].x, v[0].y, zl]
+			var name: String = "%s_%d_%d_z%s%s" % [map, v[0].x, v[0].y, zl, v[2] if v.size() > 2 else ""]
 			print("BUDGET %s %s z%d dc=%d tris=%d shadow_dc=%d canvas_dc=%d" % [map, v[0], int(v[1]), dc, tris, shadow_dc, canvas_dc])
 			shots.append([name, get_viewport().get_texture().get_image()])
 			if fence_mask:

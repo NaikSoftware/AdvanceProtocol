@@ -258,3 +258,38 @@ func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:
 	for g: Dictionary in f._fadable + f._ring_fadable:
 		for i in (g["list"] as Array).size():
 			assert_true((g["batch"] as FoliageBatch).is_alive(int(g["first"]) + i), "юніт пішов — усе знову ціле")
+
+
+## Контур зони й кільця дальності під кронами (BoardView.contour_edges, draw_circles): їх отримує кожна
+## крона дошки й кільця, і після перебудови пролому теж; розчинена крона над юнітом лінії не малює — промінь
+## крізь неї до землі проходить через юніта, і лінія лягла б на нього.
+func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
+	var f := _ring_layer()
+	var tex := ImageTexture.create_from_image(Image.create(2, 2, false, Image.FORMAT_RGBA8))
+	f.set_contour_edges(tex)
+	var rings := PackedVector4Array([Vector4(5.0, 3.0, 3.0, 0.0)])
+	f.set_contour_rings(rings, PackedColorArray([Color.WHITE]))
+	f.set_broken({Vector2i(7, 6): true})
+	f.set_reveal_cells([Vector2i(5, 3)] as Array[Vector2i])
+	var drawn := _drawn(f)
+	assert_gt(drawn.size(), 0)
+	for n: Node in drawn:
+		var mat := (n as GeometryInstance3D).material_override as ShaderMaterial
+		assert_same(mat.get_shader_parameter("contour_edges"), tex, "%s: картка ребер" % n.name)
+		assert_eq(mat.get_shader_parameter("contour_on"), true, "%s: лінія увімкнена" % n.name)
+		assert_eq(mat.get_shader_parameter("ring_count"), 1, "%s: одне кільце" % n.name)
+		assert_eq(mat.get_shader_parameter("rings"), rings, "%s: центр і радіус кільця" % n.name)
+	var fades: int = 0
+	for n: Node in f.get_children():
+		if String(n.name).begins_with("Fade_"):
+			fades += 1
+			var depth := (n as GeometryInstance3D).material_override as ShaderMaterial
+			for m: ShaderMaterial in [depth, depth.next_pass as ShaderMaterial]:
+				assert_ne(m.get_shader_parameter("contour_on"), true, "%s: розчинена крона без лінії" % n.name)
+				assert_ne(m.get_shader_parameter("ring_count"), 1, "%s: розчинена крона без кільця" % n.name)
+	assert_gt(fades, 0, "є розчинена крона")
+
+	f.set_contour_edges(null)
+	for n: Node in _drawn(f):
+		assert_eq(((n as GeometryInstance3D).material_override as ShaderMaterial).get_shader_parameter("contour_on"), false,
+				"%s: без контуру крона лінію не шукає" % n.name)

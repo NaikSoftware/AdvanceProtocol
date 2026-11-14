@@ -12,9 +12,11 @@ the battle scars underneath, and those are both the atmosphere budget ([§8](../
 the map is supposed to tell you where the fighting has been. Contours are also cheaper on a phone
 screen and do not fight the fog, which is itself a darkening of tiles.
 
-The contour is a thin, half-transparent line painted **on the ground only**: buildings, trees,
-fences and units in front of it hide it, as they would hide paint on the ground. It is a path hint,
-not the loudest thing in the frame. On a bridge it lies on the deck, not on the riverbed under it.
+The contour is a thin, half-transparent line painted **on the ground only**: buildings, fences and
+units in front of it hide it, as they would hide paint on the ground. Trees do not: where the line
+lies under the forest canopy, the crowns show it through themselves in the same colour and width,
+so a zone inside a forest stays readable. A crown faded over a shown unit does not, since the line
+behind it would land on the unit. It is a path hint, not the loudest thing in the frame. On a bridge it lies on the deck, not on the riverbed under it.
 
 The reference draws these zones the same way, as contours, and splits them on exactly the same
 test (`remaining_ap >= fire_cost`). It colours them green and red; this project keeps gold and red
@@ -32,7 +34,8 @@ looks, and changes nothing: no selection, no move, no turn, no preview.
 radius `range` tiles centred on the middle of the unit's tile. It is the weapon's reach as the
 rule states it (§3.1, Euclidean). Which units can actually be hit inside it is what the **marks**
 say: a crosshair on each marked unit. The circle is cheap to read at a glance and does not compete
-with the two movement contours, which stay tile-shaped.
+with the two movement contours, which stay tile-shaped. Like the contours, it shows through the
+forest canopy over the board.
 
 **Any visible unit can be inspected, including an enemy's.** This is the feature worth porting.
 Holding an enemy shows *its* range and which of **your** units stand inside it. With retaliation
