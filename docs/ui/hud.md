@@ -79,7 +79,7 @@ A tap selects; a press-and-hold inspects. They show different things on purpose.
 
 ## Action previews
 
-A shot, drone or engineer preview opens the cluster: the **preview plate** (285 wide, `plate_solid`) over the **action row**. A pending move has **no plate**: only the action row (Cancel, Confirm) shows, docked the same way with a zero-height plate.
+A shot, drone or unit-repair preview opens the cluster: the **preview plate** (285 wide, `plate_solid`) over the **action row**. A pending move and the clear-mine and bridge verbs have **no plate**: only the action row (Cancel, Confirm) shows, docked the same way with a zero-height plate.
 Every value comes from `core/`:
 
 | action | plate content | source |
