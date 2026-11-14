@@ -324,12 +324,6 @@ if plain:
     free = (ao > 0.85) & (glass < 0.5) & ~on_gun
     col = np.where(free[..., None], np.maximum(col, olive * C.get("floor", 0.75) * (1 - 0.6 * ramp)[..., None]), col)   # mud lowers the floor
     col = np.where(on_gun[..., None], col * C.get("gun_dark", 0.8), col)
-if C.get("ground_ao"):
-    # the vehicle sits on the ground: the lower hull and the wheel wells take contact shade (`ground_ao` = darkest share, bottom ~0.4 m)
-    # after the plain-scheme floor, which would otherwise lift it back: the visible side wall starts at the sill, not at the ground: `ground_ao_band` [sill, fade-out] metres, darkest at the sill; wheel wells (occluded texels) darker still
-    lo_h, hi_h = C.get("ground_ao_band", (0.45, 1.3))
-    col = col * (1 - C["ground_ao"] * smooth(hi_h, lo_h, h))[..., None]
-    col = col * (1 - 0.35 * smooth(0.6, 0.3, ao) * smooth(1.6, 0.8, h))[..., None]
 # Engine-deck louvres (units.json `louvres`, MODEL metres): rows of dark slots across the hull on
 # the up-facing deck, two grilles either side of a solid centre strip. Texture only: from above
 # they mark the deck as an engine deck without a triangle.
@@ -373,6 +367,12 @@ if plain and C.get("dark_floor"):
     opening = (on & slot) if lv else np.zeros((N, N), bool)
     lift = (d["cov"] > 0.5) & ~on_gun & ~opening & (glass < 0.5)
     col = np.where(lift[..., None], np.maximum(col, olive * C["dark_floor"]), col)
+if C.get("ground_ao"):
+    # the vehicle sits on the ground: the lower hull and the wheel wells take contact shade (`ground_ao` = darkest share, bottom ~0.4 m)
+    # after the plain-scheme floors, which would otherwise lift it back: the visible side wall starts at the sill, not at the ground: `ground_ao_band` [sill, fade-out] metres, darkest at the sill; wheel wells (occluded texels) darker still
+    lo_h, hi_h = C.get("ground_ao_band", (0.45, 1.3))
+    col = col * (1 - C["ground_ao"] * smooth(hi_h, lo_h, h))[..., None]
+    col = col * (1 - 0.35 * smooth(0.6, 0.3, ao) * smooth(1.6, 0.8, h))[..., None]
 
 # Baked relief a little deeper (`normal_gain`): bolts, panel joints and bevels catch the light at
 # 7 cm/px, where a 1:1 bake reads as a moulded surface.

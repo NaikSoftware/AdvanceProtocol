@@ -49,6 +49,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "spots":
 		await _spots(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "fleet":
+		await _fleet(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "rear":
 		var rset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 		await _rear(screen, map, out, tag, rset)
@@ -464,6 +467,28 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	for s: Array in shots:
 		(s[1] as Image).save_png(s[0])
 	print("UNIT spin %s type %d at %s: %d frames" % [tag, type_id, cell, shots.size()])
+	get_tree().quit()
+
+
+## Шостий аргумент fleet ставить в один ряд чотири танки (важкий, середній, винищувач, легкий) і три колісні машини набору 0
+## (бронеавто, транспортер, розвідувальна) і знімає кадри _z6 і _z20: чи ділять вони одну фарбу.
+func _fleet(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	screen.setup(map, 2, 1)
+	var c := _field_row_near_centre(map, 7)
+	var roles: Array[int] = [8, 5, 6, 7, 2, 3, 4]
+	for i in roles.size():
+		_place(UnitSilhouettes.build_merged(roles[i]), c + Vector2i(i - 3, 0), 0)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c)
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
+	print("UNIT fleet at %s" % c)
 	get_tree().quit()
 
 
