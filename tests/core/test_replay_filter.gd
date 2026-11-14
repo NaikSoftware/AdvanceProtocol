@@ -556,6 +556,23 @@ func test_burn_out_at_opponents_turn_start_carries_that_turn() -> void:
 	assert_eq(r.beats[0].actor, 1, "мітка — того, чий хід почався, а не глядача")
 
 
+func test_three_players_concede_mid_span_is_labelled_with_the_one_who_conceded() -> void:
+	var s: BattleState = _state(3)
+	_anchor(s)
+	var gone: Unit = s.add_unit(2, 1, Vector2i(12, 3), 6)
+	var b: Unit = s.add_unit(2, 2, Vector2i(12, 11), 6)
+	_open(s, _cols(0, W - 1))
+	_play(s, ConcedeCommand.create())
+	_play(s, MoveCommand.create(b.id, Vector2i(10, 11)))
+	_end(s)
+	var r: ReplayFilter.Result = _build()
+	assert_not_null(r, "вибув суперник, а не матч скінчився")
+	assert_eq(r.beats.size(), 2)
+	assert_true(_of(r.beats[0].events, gone.id).any(func(e: Events.BattleEvent) -> bool: return e is Events.UnitDestroyed))
+	assert_eq(r.beats[0].actor, 1, "загибель від здачі — у ході того, хто здався")
+	assert_eq(r.beats[1].actor, 2)
+
+
 func test_first_player_first_turn_has_no_replay() -> void:
 	var s: BattleState = _state()
 	_anchor(s)

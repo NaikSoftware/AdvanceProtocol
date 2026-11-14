@@ -121,7 +121,7 @@ viewer's.** In detail:
 | an enemy unit detonating **the viewer's** mine | the blast on the mine's tile, always. The unit only if it is visible there |
 | the viewer's mine cleared by an engineer the viewer cannot see | not shown. The mine is gone at the end |
 | a bridge demolished, forest broken, or wreck left by an actor the viewer cannot see | not shown. The end state applies when the replay ends |
-| an exchange between two opponents (three players) | each unit by its own visibility. A visible shooter firing into the fog: the shot leaves, and the target, its damage and its turn are not shown. An unseen shooter hitting a visible unit: the hit, the damage, the turn and any wreck show on the target, and nothing is drawn at the shooter |
+| an exchange between two opponents (three players) | each unit by its own visibility. A visible shooter firing into the fog: the shot leaves, and the target, its damage and its turn are not shown. An unseen shooter hitting a visible unit: the hit, the damage, the turn and any wreck show on the target, with no tracer and no muzzle flash, so nothing is drawn between the target and the shooter. The hit effect still follows the shooter's weapon class, as in live play |
 | turning in place | by the same actor rule |
 
 Some events are never shown: `MinePlaced`, `MineRevealed`, `ApChanged`, and another side's

@@ -87,9 +87,9 @@ class _Pass extends RefCounted:
 			index = i
 			after = entries[i]["after"]
 			var events: Array[Events.BattleEvent] = entries[i]["events"]
-			var actor: int = entries[i]["actor"]
-			var turn: int = entries[i]["turn"]
 			var cut: bool = false
+			var next: Events.TurnStarted = null
+			var next_at: int = events.size()
 			# Усе від початку ходу глядача — уже його живий хід, а не повтор.
 			for j in events.size():
 				var ts: Events.TurnStarted = events[j] as Events.TurnStarted
@@ -99,17 +99,21 @@ class _Pass extends RefCounted:
 					events = events.slice(0, j)
 					cut = true
 					break
-				# Кінець ходу гравця несе й початок наступного: догоряння тоді — вже його хід.
-				actor = ts.player
-				turn = ts.turn_number
+				next = ts
+				next_at = j
 			var kept: Array[Events.BattleEvent] = _move(events, commands[i]) if commands[i] is MoveCommand \
 					else _other(events, commands[i])
 			if not kept.is_empty():
 				var b := Beat.new()
 				b.events = kept
 				b.focus = _focus(kept[0])
-				b.actor = actor
-				b.turn = turn
+				b.actor = entries[i]["actor"]
+				b.turn = entries[i]["turn"]
+				# Кінець ходу гравця несе й початок наступного: догоряння після TurnStarted — уже
+				# хід наступного, а загибель від здачі перед ним — ще того, хто здався.
+				if next != null and events.find(kept[0]) > next_at:
+					b.actor = next.player
+					b.turn = next.turn_number
 				b.after = after
 				out.append(b)
 			if cut:
