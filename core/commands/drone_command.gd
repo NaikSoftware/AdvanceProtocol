@@ -43,13 +43,6 @@ static func check_strike(state: BattleState, a: Unit, t: Unit) -> String:
 		return "ERR_TARGET_NOT_VISIBLE"
 	return ""
 
-static func preview(state: BattleState, _unit_id: int, target_id: int) -> Dictionary:
-	## Межі удару без кидка (броня не рахується) і наслідок для цілі — як FireCommand.preview().
-	var bounds: Vector2i = Rules.drone_damage_bounds()
-	var out: Dictionary = {"min": bounds.x, "max": bounds.y}
-	out.merge(Rules.preview_outcome(bounds, state.get_unit(target_id).hp))
-	return out
-
 static func check_launch(state: BattleState, a: Unit) -> String:
 	## Відмова, що не залежить від цілі (кнопка дрона в UI, §3.13). check_strike()
 	## починає саме з неї — єдине місце перевірок загону.

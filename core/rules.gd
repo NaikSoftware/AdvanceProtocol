@@ -157,17 +157,6 @@ static func drone_damage_bounds() -> Vector2i:
 	## Межі для оверлея (min, max) — ті самі константи, що й у drone_damage().
 	return Vector2i(DRONE_BASE, DRONE_BASE + DRONE_SPREAD)
 
-static func preview_outcome(bounds: Vector2i, hp: int) -> Dictionary:
-	## Що лишає удар з межами bounds цілі з hp: підпис плити лише показує ці поля,
-	## порівнювати межі з HP у вигляді означало б рахувати наслідок поза core/.
-	var kill: String = "none"
-	if bounds.x >= hp:
-		kill = "sure"
-	elif bounds.y >= hp:
-		kill = "maybe"
-	return {"hp": hp, "hp_left_min": maxi(0, hp - bounds.y), "hp_left_max": maxi(0, hp - bounds.x),
-			"kill": kill}
-
 static func distance_sq(a: Vector2i, b: Vector2i) -> int:
 	var d: Vector2i = a - b
 	return d.x * d.x + d.y * d.y

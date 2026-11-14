@@ -189,7 +189,5 @@ static func preview(state: BattleState, unit_id: int, target_id: int) -> Diction
 	var cover: bool = Rules.in_cover(state.board, t)
 	var bounds: Vector2i = Rules.damage_bounds(a, t, sector, dist_sq, cover)
 	# Обидва прапорці — ті самі запити, що їх читає формула: подання лише показує їх.
-	var out: Dictionary = {"sector": sector, "min": bounds.x, "max": bounds.y,
+	return {"sector": sector, "min": bounds.x, "max": bounds.y,
 			"armour_ignored": Rules.ignores_armour(a), "in_cover": cover}
-	out.merge(Rules.preview_outcome(bounds, t.hp))
-	return out
