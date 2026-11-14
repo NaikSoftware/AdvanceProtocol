@@ -748,6 +748,32 @@ func test_unit_screen_box_contains_the_projected_unit_and_its_hp_bar() -> void:
 	assert_true(box.has_point(rig.unproject(bar.global_position)), "смуга HP — частина прямокутника юніта")
 
 
+## Смуга HP — білборд: її екранна ширина не залежить від повороту юніта й дорівнює 48 px × 0,02
+## світової одиниці вздовж осі камери (а не вужчому спроєктованому квадові).
+func test_billboard_parts_have_the_same_screen_rect_at_any_unit_yaw() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	var rig: IsoCameraRig = _rig_for(Vector2i(6, 6))
+	var view: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(view)
+	view.bind(u)
+	view.global_position = IsoCameraRig.cell_to_world(u.pos)
+	var bar: Sprite3D = view.get_node("HpBar")
+	var camera: Camera3D = rig.get_node("Yaw/Camera3D")
+
+	var first: Rect2 = UnitScreenBox.part_rect(bar, rig)
+	view.rotation.y = 1.0
+	var second: Rect2 = UnitScreenBox.part_rect(bar, rig)
+
+	assert_eq(second, first, "поворот юніта не міняє екранний прямокутник білборда")
+	var half: Vector3 = camera.global_transform.basis.x.normalized() * 0.48
+	var centre: Vector3 = bar.global_position
+	var left_x: float = rig.unproject(centre - half).x
+	var right_x: float = rig.unproject(centre + half).x
+	assert_almost_eq(first.position.x, minf(left_x, right_x), 0.01, "ліва межа — центр мінус пів ширини смуги")
+	assert_almost_eq(first.size.x, absf(right_x - left_x), 0.01, "ширина — 48 px × 0,02 вздовж осі камери")
+
+
 # --- Тост -------------------------------------------------------------------------------
 
 func test_toast_shows_the_err_text_for_two_seconds_and_fades_in_150_ms() -> void:

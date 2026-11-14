@@ -200,7 +200,7 @@ func test_hud_drone_strip_fits(p = use_parameters(_repair_cases())) -> void:
 	assert_false(strip.get_global_rect().intersects((root.get_node("%EndTurnButton") as Control).get_global_rect()), where)
 
 
-## Task 14: підпис «нижня межа» стоїть під чипом і не налазить на кутові плити.
+## Підпис «нижня межа» стоїть під чипом і не налазить на кутові плити.
 func test_hud_threat_floor_fits(p = use_parameters(_repair_cases())) -> void:
 	TranslationServer.set_locale(p[1])
 	var root: Control = await _mount("res://game/ui/hud.tscn", p[0])
