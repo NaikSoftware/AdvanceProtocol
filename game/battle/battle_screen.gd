@@ -93,7 +93,11 @@ var _event_player: EventPlayer = null
 ## Гравець, чий світ зараз на екрані. До гейта це ще попередній гравець, хоча
 ## `state.active_player` уже наступний: уламки з пакета передачі ходу звіряються з
 ## розвіданим того, хто дивиться, а не того, хто от-от сяде.
-var _viewer: int = 0
+var _shown_viewer: int = 0
+## Повтор ходів противників: копія матчу й глядач, чий туман на ній показано. Поки
+## null, екран читає живий матч і активного гравця.
+var _replay_state: BattleState = null
+var _replay_viewer: int = -1
 ## Клітинки, над якими зараз розчинено дахи (юніти на дошці).
 var _shown_cells: Array[Vector2i] = []
 ## Шрами бою на землі; маска — розвідане того, хто дивиться.
@@ -306,8 +310,8 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_crushed_truth.clear()
 	_crush_edges.clear()
 	_crush_marks.clear()
-	for p in _match_service.state.player_count:
-		for u: Unit in _match_service.state.units_of(p):
+	for p in _state().player_count:
+		for u: Unit in _state().units_of(p):
 			if u.unit_class() != UnitTypes.UnitClass.INFANTRY:
 				_crushed_truth[u.pos] = true
 				_crush_edges.append(Vector4i(u.pos.x, u.pos.y, u.pos.x, u.pos.y))
@@ -315,11 +319,11 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	# не з потоку подій, який щойно злитий вище.
 	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
-	_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
+	_warm_up_fx(_first_unit_cell(_viewer()))
 	# fly_to(), не center_on(): у самостійному запуску гейта немає, і програмний
 	# рух камери мусить доводитись плавно. Через launch() дошку одразу закриває
 	# гейт, а center_on() на confirmed зупиняє цей твін — витікати нічому.
-	_camera_rig.fly_to(_first_unit_cell(_match_service.state.active_player))
+	_camera_rig.fly_to(_first_unit_cell(_viewer()))
 	_match_service.events_ready.connect(_on_events_ready)
 	return true
 
@@ -345,7 +349,7 @@ func resume(match_service: Node = null) -> void:
 	_apply_forest_sun(look)
 	_weather.apply(look)
 	BattleFx.wetness = look.wetness
-	_wire_view(_match_service.state.board)
+	_wire_view(_state().board)
 	_gate.show_for(_match_service.state.active_player)
 	_warm_board()
 	_match_service.events_ready.connect(_on_events_ready)
@@ -375,7 +379,7 @@ func _wire_view(board: Board) -> void:
 	_path_overlay = PathOverlay.new(_board_view)
 	_target_overlay = TargetOverlay.new(_board_view)
 	_event_player = EventPlayer.new(Callable(self, "unit_view_for"), Callable(self, "_unit_for"),
-		func() -> void: _board_view.rebuild_tiles(_match_service.state.board),
+		func() -> void: _board_view.rebuild_tiles(_state().board),
 		_on_wreck_left, _on_wreck_removed, _on_unit_found, _on_cell_entered)
 	_event_player.forest_changed.connect(forest_changed)
 	_controller = InputController.new(_match_service, _zone_overlay, Callable(_event_player, "is_playing"))
@@ -400,7 +404,7 @@ func _wire_view(board: Board) -> void:
 	# Огляд (Task 14, §3.13): кільця й позначки готові з Targeting крізь контролер.
 	_controller.inspected.connect(_on_inspected)
 
-	_hud.bind(_match_service.state)
+	_hud.bind(_state())
 	_hud.attach_controller(_controller)
 	_hud.attach_match_service(_match_service)
 	# Панель характеристик належить вибраному юніту, а не куту екрана (скарга
@@ -879,10 +883,20 @@ func _handle_tap_at_screen_position(screen_pos: Vector2) -> void:
 	_controller.tap_cell(cell)
 
 
+## Стан, з якого екран малює: копія повтору або живий матч.
+func _state() -> BattleState:
+	return _replay_state if _replay_state != null else _match_service.state
+
+
+## Чиє знання зараз на дошці. Дії (хід, гейт, команди) читають active_player зі справжнього стану.
+func _viewer() -> int:
+	return _replay_viewer if _replay_state != null else _state().active_player
+
+
 func _unit_for(unit_id: int) -> Unit:
-	if _match_service == null or _match_service.state == null:
+	if _match_service == null or _state() == null:
 		return null
-	return _match_service.state.get_unit(unit_id)
+	return _state().get_unit(unit_id)
 
 
 ## HUD вимикає кнопку кінця ходу, щойно матч завершився (hud.gd, refresh()), —
@@ -976,8 +990,8 @@ func _on_gate_confirmed() -> void:
 	_rebuild_units_for_active_player(true)
 	_rebuild_wrecks()
 	if not _fx_warmed:
-		_warm_up_fx(_first_unit_cell(_match_service.state.active_player))
-	_camera_rig.center_on(_first_unit_cell(_match_service.state.active_player))
+		_warm_up_fx(_first_unit_cell(_viewer()))
+	_camera_rig.center_on(_first_unit_cell(_viewer()))
 	_gate.visible = false
 
 
@@ -993,17 +1007,17 @@ func _clear_unit_views() -> void:
 ## виклику цієї функції, тож перебудова не рве рух на середині кроку.
 ## instant — розчинення дахів без переходу (гейт передачі й перший показ).
 func _rebuild_units_for_active_player(instant: bool = false) -> void:
-	var state: BattleState = _match_service.state
+	var state: BattleState = _state()
 	_clear_unit_views()
 	# §3.11: міни — той самий знімок знання активного гравця, що й юніти, і в ті
 	# самі моменти (setup, після пакета подій, на confirmed гейта).
-	_mine_layer.rebuild(state, state.active_player)
-	_wreck_layer.rebuild_fallen(state, state.active_player)
+	_mine_layer.rebuild(state, _viewer())
+	_wreck_layer.rebuild_fallen(state, _viewer())
 	# Розвідане росте з кожним кроком — шрами на щойно розвіданому з'являються одразу.
 	if _scars != null:
-		_scars.show_for(state.vision[state.active_player])
+		_scars.show_for(state.vision[_viewer()])
 
-	var known: Dictionary = state.known_occupied_map(state.active_player)
+	var known: Dictionary = state.known_occupied_map(_viewer())
 	for pos in known:
 		var unit: Unit = state.get_unit(known[pos])
 		if unit == null:
@@ -1015,10 +1029,10 @@ func _rebuild_units_for_active_player(instant: bool = false) -> void:
 	_board_view.set_reveal_cells(_shown_cells, instant)
 	var crushed: Array[Vector2i] = []
 	for pos: Vector2i in _crushed_truth:
-		if state.vision[state.active_player].is_seen(pos):
+		if state.vision[_viewer()].is_seen(pos):
 			crushed.append(pos)
 	# Злам показується, лише коли власна клітинка пропса розвідана глядачем (PropLayer.set_crushed), як шрами й ліс.
-	_board_view.set_crushed_cells(crushed, instant, _crush_edges, state.vision[state.active_player].is_seen, _crush_marks)
+	_board_view.set_crushed_cells(crushed, instant, _crush_edges, state.vision[_viewer()].is_seen, _crush_marks)
 	forest_changed()
 	_apply_threat_marks()
 
@@ -1037,9 +1051,9 @@ func _add_unit_view(unit: Unit) -> void:
 ## клітинок не перераховуємо зі стану: той уже кінцевий, і дахи над ворогом, якого хід
 ## відкриє лише далі, розчинилися б раніше, ніж він з'явиться.
 func _on_unit_found(unit_id: int) -> void:
-	var state: BattleState = _match_service.state
+	var state: BattleState = _state()
 	var unit: Unit = state.get_unit(unit_id)
-	if unit == null or not unit.is_alive() or _unit_views.has(unit_id) or not state.can_see_unit(_viewer, unit):
+	if unit == null or not unit.is_alive() or _unit_views.has(unit_id) or not state.can_see_unit(_shown_viewer, unit):
 		return
 	_add_unit_view(unit)
 	_shown_cells.append(unit.pos)
@@ -1050,12 +1064,12 @@ func _on_unit_found(unit_id: int) -> void:
 ## Не в _rebuild_units_for_active_player(): та йде після кожного пакета подій і
 ## щоразу народжувала б щойно поставлені уламки наново, з новою фазою диму.
 func _rebuild_wrecks() -> void:
-	_viewer = _match_service.state.active_player
-	_event_player.viewer = _viewer
-	_wreck_layer.rebuild(_match_service.state, _viewer)
-	for w in _match_service.state.wrecks:
+	_shown_viewer = _viewer()
+	_event_player.viewer = _shown_viewer
+	_wreck_layer.rebuild(_state(), _shown_viewer)
+	for w in _state().wrecks:
 		_scars.stamp_scorch(w.pos)
-	_scars.show_for(_match_service.state.vision[_viewer])
+	_scars.show_for(_state().vision[_shown_viewer])
 
 
 ## Щойно знищена техніка: її вузол існував, отже тайл розвіданий тим, хто дивиться.
@@ -1064,7 +1078,7 @@ func _rebuild_wrecks() -> void:
 func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> void:
 	# Пляма ставиться завжди: на нерозвіданому її ховає маска, а розвідка згодом покаже.
 	_scars.stamp_scorch(pos)
-	if _match_service.state.vision[_viewer].is_seen(pos):
+	if _state().vision[_shown_viewer].is_seen(pos):
 		_wreck_layer.add(pos, type_id, 1.0, facing, UnitSilhouettes.set_of(owner))
 
 
@@ -1094,7 +1108,7 @@ func _warm_board() -> void:
 	if _board_warmed or (DisplayServer.get_name() == "headless" and not warm_board_in_headless):
 		return
 	_board_warmed = true
-	var board: Board = _match_service.state.board
+	var board: Board = _state().board
 	_warm_stops = BoardWarmUp.stops(Vector2i(board.width, board.height))
 	_warm_units_frames = -1
 	_warm_forest_frames = -1
@@ -1110,7 +1124,7 @@ func _warm_tick() -> void:
 	elif _warm_forest_frames < 0:
 		# Матеріали розчинення лісу (прохід глибини й колір) з'являються, лише коли юніт стоїть під
 		# кроною: розчинена крона кожного атласу біля середини дошки — тут, за гейтом.
-		var board: Board = _match_service.state.board
+		var board: Board = _state().board
 		var cell: Vector2i = _board_view.forest().warm_fade(Vector2i(board.width / 2, board.height / 2))
 		if cell.x >= 0:
 			_camera_rig.center_on(cell)
@@ -1119,7 +1133,7 @@ func _warm_tick() -> void:
 		_warm_forest_frames -= 1
 	elif _warm_veg_frames < 0:
 		# Розчинення рослин (кущ, дерево, очерет над юнітом) — так само за гейтом.
-		var board: Board = _match_service.state.board
+		var board: Board = _state().board
 		var veg: VegetationLayer = _board_view.vegetation()
 		var cell: Vector2i = veg.warm_fade(Vector2i(board.width / 2, board.height / 2)) if veg != null else Vector2i(-1, -1)
 		if cell.x >= 0:
@@ -1131,7 +1145,7 @@ func _warm_tick() -> void:
 		# Юніти з'являються лише на confirmed, тож їхні матеріали й підписи теж уперше малювалися б
 		# у першому кадрі після гейта.
 		_rebuild_units_for_active_player(true)
-		_camera_rig.center_on(_first_unit_cell(_match_service.state.active_player))
+		_camera_rig.center_on(_first_unit_cell(_viewer()))
 		_warm_units_frames = 2
 	elif _warm_units_frames > 0:
 		_warm_units_frames -= 1
@@ -1160,8 +1174,8 @@ func _follow_forest() -> void:
 ## події. Викликається з перебудови після пакета подій і на гейті, тобто і на ForestBroken,
 ## і на передачі ходу.
 func forest_changed() -> void:
-	var state: BattleState = _match_service.state
-	_board_view.set_forest_broken(state.known_broken_map(state.active_player))
+	var state: BattleState = _state()
+	_board_view.set_forest_broken(state.known_broken_map(_viewer()))
 
 
 ## Техніка, що ввійшла в клітинку, розчавлює її дрібні пропси; піхота проходить повз. Шлях
@@ -1177,7 +1191,7 @@ func _record_crushes(events: Array[Events.BattleEvent]) -> void:
 		if not e is Events.UnitMoved:
 			continue
 		var moved := e as Events.UnitMoved
-		var unit: Unit = _match_service.state.get_unit(moved.unit_id)
+		var unit: Unit = _state().get_unit(moved.unit_id)
 		var vehicle: bool = unit.unit_class() != UnitTypes.UnitClass.INFANTRY if unit != null \
 				else wrecks.has(moved.path.back())
 		if vehicle:
@@ -1190,7 +1204,7 @@ func _record_crushes(events: Array[Events.BattleEvent]) -> void:
 ## падіння вказало б, де їде невидимий ворог. Нерозвідане лишається в _crushed_truth і постане вже
 ## повалене, коли його розвідають.
 func _on_cell_entered(moved: Events.UnitMoved, from: Vector2i, to: Vector2i) -> void:
-	var state: BattleState = _match_service.state
+	var state: BattleState = _state()
 	if not _vehicle_moves.has(moved):
 		return
 	var edge := Vector4i(from.x, from.y, to.x, to.y)
@@ -1201,7 +1215,7 @@ func _on_cell_entered(moved: Events.UnitMoved, from: Vector2i, to: Vector2i) -> 
 	var avoid: Array[Vector2i] = _known_unit_cells()
 	if not avoid.has(from):
 		avoid.append(from)
-	_board_view.props().topple_cell(to, from, avoid, state.vision[state.active_player].is_seen)
+	_board_view.props().topple_cell(to, from, avoid, state.vision[_viewer()].is_seen)
 
 
 ## Точки падіння — у координатах шару пропсів; мить живе в _units, тож її в'язка — до нього.
@@ -1309,9 +1323,9 @@ func _flush_lands() -> void:
 ## Клітинки юнітів, які глядач вправі знати (§3.5): повалений стовп лягає повз їхні корпуси. Усіх юнітів сюди не
 ## дають — напрям падіння видав би невидимого ворога.
 func _known_unit_cells() -> Array[Vector2i]:
-	var state: BattleState = _match_service.state
+	var state: BattleState = _state()
 	var out: Array[Vector2i] = []
-	out.assign(state.known_occupied_map(state.active_player).keys())
+	out.assign(state.known_occupied_map(_viewer()).keys())
 	return out
 
 
@@ -1323,7 +1337,7 @@ func _cancel_falls() -> void:
 
 
 func _first_unit_cell(player: int) -> Vector2i:
-	var units: Array[Unit] = _match_service.state.units_of(player)
+	var units: Array[Unit] = _state().units_of(player)
 	if units.is_empty():
 		return Vector2i.ZERO
 	return units[0].pos
