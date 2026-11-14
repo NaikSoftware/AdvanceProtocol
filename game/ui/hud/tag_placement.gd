@@ -14,9 +14,6 @@ extends RefCounted
 ## шукати точніше, якщо тег помітно сідає на 1–2 dp повз ребро контуру.
 
 const LEAD_AT: float = 12.0
-## Запасний поріг «без лідера»: коли довкола юніта нема місця ні для чого суворішого (верба інженера: чотири
-## клітинки охоплюють модель, лідер з жодного боку їх не оминає), тег стає збоку далі, але без лідера.
-const LEAD_AT_WIDE: float = 32.0
 const MAX_LEAD: float = 60.0
 const MIN_GAP: float = 8.0
 const OBSTACLE_GROW: float = 8.0
@@ -32,13 +29,18 @@ const MARK_WEIGHT: float = 1500.0
 const DISTANCE_WEIGHT: float = 0.15
 const LEADER_COST: float = 6.0
 const CROWD_COST: float = 25.0
-const NEAR_OTHER_COST: float = 2000.0
+## Тег ближче до чужого юніта, ніж до свого: основа плюс вага за кожен dp, на який чужий ближче. Місце,
+## де чужий лише трохи ближче, програє місцю без нього, але перемагає те, де тег читається підписом ворога.
+const NEAR_OTHER_COST: float = 200.0
+const NEAR_OTHER_PER_DP: float = 60.0
 const CELL: float = 4.0
 const LINE_WIDTH: float = 2.0
 const _SAMPLES: int = 12
 
 var _lead_at: float = LEAD_AT
 var _gaps: Array[float] = [8.0, 12.0]
+## Який рівень послаблення дав останній best(): гістерезис мусить перевіряти збережений прямокутник тим самим.
+var relax_used: int = 0
 var _tag: Vector2
 var _unit: Rect2
 var _core: Rect2
@@ -84,9 +86,9 @@ func _init(scene: Dictionary) -> void:
 	_rasterise_marks(scene.get("marks", []))
 
 
-## relax: 0 — усі правила; 2 — полігони не заважають зовсім (лише для тестів і діагностики). Лідер
-## ніколи не перетинає клітинок дії і не кінчається в них: квадрат кінця читався б як мітка на клітинці.
-## Чужі юніти, хром, лінія вогню й межі екрана — тверді завжди.
+## relax: 0 — усі правила; 1 — лідер може перетнути клітинки дії (тег їх не накриває): верба інженера
+## оточує модель чотирма клітинками, що сходяться в кутах, і лідер інакше не виходить нікуди;
+## 2 — полігони не заважають зовсім. Чужі юніти, хром, лінія вогню й межі екрана — тверді завжди.
 func is_legal(r: Rect2, relax: int = 0) -> bool:
 	var d: float = _dist(r, _unit)
 	if d < MIN_GAP or _dist(r, _core) > MAX_LEAD:
@@ -109,7 +111,7 @@ func is_legal(r: Rect2, relax: int = 0) -> bool:
 			for o: Rect2 in _others:
 				if o.grow(LEADER_CLEAR).has_point(p):
 					return false
-			if relax < 2 and _hard_at(p):
+			if relax < 1 and _hard_at(p):
 				return false
 			# Лінія не проходить крізь власну смугу HP і модель: вона лише торкається їх краєм.
 			if i < _SAMPLES - 1 and _core_poly.size() >= 3 and Geometry2D.is_point_in_polygon(p, _core_poly):
@@ -195,20 +197,24 @@ func score(r: Rect2) -> float:
 				s += CROWD_COST
 				break
 	# Тег ближче до чужого юніта, ніж до свого, читається як його підпис.
+	var worst: float = 0.0
 	for o: Rect2 in _others:
-		if _dist(r, o) < d:
-			s += NEAR_OTHER_COST
-			break
+		worst = maxf(worst, d - _dist(r, o))
+	if worst > 0.0:
+		s += NEAR_OTHER_COST + NEAR_OTHER_PER_DP * worst
 	return s
 
 
-## Найкращий законний прямокутник або Rect2() із found=false (місця нема — тег ховається).
+## Найкращий законний прямокутник або found=false (місця нема навіть без полігонів — тег ховається).
+## Спершу всі правила, потім лідер крізь клітинки, потім тег без огляду на клітинки: AP юніта на
+## екрані важливіший за чистоту контурів.
 func best(relax: int = 0) -> Dictionary:
-	var pick: Dictionary = _best(relax)
-	if not pick["found"] and _lead_at == LEAD_AT:
-		_lead_at = LEAD_AT_WIDE
-		_gaps = [8.0, 12.0, 16.0, 20.0, 24.0, 28.0, 32.0]
-		pick = _best(relax)
+	var pick: Dictionary = {}
+	for level in range(relax, 3):
+		relax_used = level
+		pick = _best(level)
+		if pick["found"]:
+			break
 	return pick
 
 

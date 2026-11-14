@@ -16,6 +16,7 @@ const STATES: Array[String] = [
 	"squad", "hold_enemy_squad", "engineer_pending", "mood",
 	"toast_drone", "toast_engineer", "own_tank_to_shot", "squad_shot", "shot_infantry",
 	"hold_enemy_squad_spent", "handover_p1", "handover_p3", "handover_default",
+	"squad_to_drone", "hold_cluster",
 ]
 const SETTLE_FRAMES: int = 90
 const STATE_FRAMES: int = 20
@@ -203,6 +204,21 @@ func _enter_state(st: String) -> bool:
 			_ctrl.tap_cell(enemy.pos)
 			await _wait_idle()
 			print("HUD_SHOT tag_rect own_tank=", before, " shot_preview=", _tag_rect())
+		"squad_to_drone":
+			# Той самий юніт без кільця й із ним: тег не мусить стрибнути, поки його місце законне.
+			_ctrl.select_unit(_state.get_unit(_ids["assault"]))
+			await _wait_idle()
+			var squad_before: Rect2 = _tag_rect()
+			_ctrl.arm_drone()
+			await _wait_idle()
+			print("HUD_SHOT tag_rect squad=", squad_before, " drone=", _tag_rect())
+		"hold_cluster":
+			# Утримання власного юніта, поки видно плиту прев'ю: після відпускання плита мусить повернутись.
+			_ctrl.select_unit(tank)
+			_ctrl.tap_cell(_site + OFF_MOVE)
+			await _wait_idle()
+			_press(tank.pos)
+			_ctrl.peek_cell(tank.pos)
 		"squad_shot":
 			# Стрілецький загін поруч із ворожим танком: піхота по техніці, «броня не діє».
 			_state.get_unit(_ids["rifle"]).pos = enemy.pos + Vector2i(-1, 0)
@@ -248,6 +264,8 @@ func _enter_state(st: String) -> bool:
 			ok = ctrl_state["pending"] and ctrl_state["armed"]
 		"engineer_armed", "drone":
 			ok = ctrl_state["armed"]
+		"hold_cluster":
+			ok = ((_screen.get_node("%Hud") as Hud).hold_card() as Control).visible
 		"toast_drone", "toast_engineer":
 			ok = ((_screen.get_node("%Hud") as Hud).get("_toast") as Control).visible
 	if not ok:

@@ -35,6 +35,7 @@ func _init() -> void:
 	cancel_button.flat = true
 	cancel_button.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	cancel_button.icon = _ICON_CANCEL
+	cancel_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	cancel_button.custom_minimum_size = Vector2(CANCEL_WIDTH, HEIGHT - 2.0)
 	cancel_button.add_theme_color_override("icon_normal_color", Color("8f918a"))
 	cancel_button.pressed.connect(cancel_pressed.emit)

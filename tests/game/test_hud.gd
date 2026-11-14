@@ -830,3 +830,33 @@ func test_a_controller_refusal_becomes_a_toast() -> void:
 	assert_true(hud.get_node("%Toast").visible, "відмова дрона — тост, а не окремий рядок")
 
 
+## Картка, що накрила плиту дій, ховає її на час натиску; після відпускання плита знову видима й
+## не прозора — інакше невидимий, але живий «Підтвердити» лишився б на екрані.
+func test_releasing_the_hold_restores_a_covered_row_to_full_alpha() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(6, 6), 0)
+	var rig: IsoCameraRig = _rig_for(Vector2i(6, 6))
+	var view: UnitView = UnitViewScene.instantiate()
+	add_child_autofree(view)
+	view.bind(u)
+	view.global_position = IsoCameraRig.cell_to_world(u.pos)
+	hud.bind(state)
+	hud.attach_camera(rig)
+	hud.attach_unit_views(func() -> Dictionary: return {u.id: view})
+	var row := hud.get_node("%ActionRow") as Control
+	hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	hud.size = SCREEN
+	row.visible = true
+	row.position = Vector2(676.0, 382.0)
+	row.size = Vector2(285.0, 48.0)
+	# Картка на пів екрана гарантовано перетинає ряд, де б той не стояв.
+	hud.hold_card().custom_minimum_size = Vector2(900.0, 400.0)
+	hud._on_inspected({"unit_id": u.id, "center": u.pos, "radius": 0, "drone_radius": 0, "marked": [], "drone_marked": [], "is_floor": false})
+	assert_eq(row.modulate.a, 0.0, "під карткою ряд схований")
+
+	hud._on_inspected({})
+
+	assert_true(row.visible)
+	assert_eq(row.modulate.a, 1.0, "після відпускання ряд знову непрозорий")
+
+

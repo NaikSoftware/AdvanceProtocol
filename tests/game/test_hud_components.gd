@@ -115,6 +115,27 @@ func test_hold_card_tank_is_161_dp_and_squad_is_205() -> void:
 	assert_eq(card.get_combined_minimum_size().y, 205.0, "сума секцій спеку: 2 + 48 + 48 + 34 + 29 + 44")
 
 
+## Назва ділить рядок із силуетом 40 dp і проміжком 6: 226 − 2 (рамка) − 16 (відступ із вкладкою) − 12 − 40 − 6 = 150 dp.
+## «Штурмове відділення» (найдовша назва зі спеку) вміщується цілою в обох мовах.
+func test_hold_card_shows_the_assault_squad_name_in_full() -> void:
+	var holder := Control.new()
+	holder.theme = THEME
+	add_child_autofree(holder)
+	var card := HoldCard.new()
+	holder.add_child(card)
+	var locale: String = TranslationServer.get_locale()
+	for loc: String in ["uk", "en"]:
+		TranslationServer.set_locale(loc)
+		card.show_unit(Unit.create(1, 1, 1, Vector2i.ZERO, 0), false)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var label: Label = card.name_label
+		var font: Font = label.get_theme_font("font")
+		var text_w: float = font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, label.get_theme_font_size("font_size")).x
+		assert_lte(text_w, label.size.x, "%s/%s: назва вміщується без крапок" % [loc, label.text])
+	TranslationServer.set_locale(locale)
+
+
 func test_unit_tag_name_label_is_as_wide_as_its_text() -> void:
 	var holder := Control.new()
 	holder.theme = THEME

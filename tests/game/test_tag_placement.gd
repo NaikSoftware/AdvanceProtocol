@@ -111,11 +111,17 @@ func test_hold_card_takes_the_corner_away_from_the_finger() -> void:
 	assert_eq(left, Rect2(24, 58, 226, 161), "палець праворуч — картка ліворуч")
 
 
-func test_leader_never_crosses_action_cells_so_a_ring_of_cells_leaves_no_spot() -> void:
-	# Клітинки верби щільно довкола юніта: будь-який лідер їх перетнув би, а без лідера місця нема.
+func test_ring_of_cells_lets_the_leader_cross_them_before_the_tag_is_hidden() -> void:
+	# Клітинки верби щільно довкола юніта: лідер, що не перетинає жодної, неможливий, але тег не
+	# зникає — AP інженера потрібен саме тут. Тег лишається поза клітинками, лідер їх перетинає.
 	var ring: Array[PackedVector2Array] = [PackedVector2Array([Vector2(440, 170), Vector2(560, 170), Vector2(560, 280), Vector2(440, 280)])]
 	var p := TagPlacement.new(_scene({"polys": ring}))
-	assert_false(p.best()["found"], "лідер не перетинає клітинки, тег не лягає на них")
+	var pick: Dictionary = p.best()
+	assert_true(pick["found"])
+	assert_eq(p.relax_used, 1, "рівень 1: лише лідер перетинає клітинки")
+	assert_true(pick["leader"], "тег далі за 12 dp від юніта має лідера")
+	assert_false((pick["rect"] as Rect2).intersects(Rect2(440, 170, 120, 110).grow(TagPlacement.POLY_GROW)))
+	assert_false(p.is_legal(pick["rect"]), "суворі правила цього місця не дають")
 
 
 func test_leader_never_exceeds_the_cap() -> void:

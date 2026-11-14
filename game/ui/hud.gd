@@ -65,6 +65,7 @@ var _tag: UnitTag = null
 var _card: HoldCard = null
 var _tag_offset: Vector2 = Vector2.ZERO
 var _tag_has_offset: bool = false
+var _tag_relax: int = 0
 var _tag_unit_id: int = -1
 var _tag_queued: bool = false
 ## Кільце армованого дрона й огляд довгого натиску: дуги кілець — «позначки дошки» для тега.
@@ -617,7 +618,7 @@ func _update_tag() -> void:
 	var rect := Rect2()
 	if _tag_has_offset:
 		var kept := Rect2(unit_box.position + _tag_offset, tag_size)
-		if placement.is_legal(kept):
+		if placement.is_legal(kept, _tag_relax):
 			rect = kept
 	if rect.size == Vector2.ZERO:
 		var pick: Dictionary = placement.best()
@@ -627,6 +628,7 @@ func _update_tag() -> void:
 			_tag_has_offset = false
 			return
 		rect = pick["rect"]
+		_tag_relax = placement.relax_used
 	_tag_offset = rect.position - unit_box.position
 	_tag_has_offset = true
 	_tag.position = rect.position.round()
@@ -766,5 +768,5 @@ func _on_inspected(inspection: Dictionary) -> void:
 
 func _restore_covered() -> void:
 	for c in _covered:
-		c.visible = true
+		c.modulate.a = 1.0
 	_covered.clear()
