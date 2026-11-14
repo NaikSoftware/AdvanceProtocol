@@ -67,6 +67,7 @@ func test_two_player_turn_is_replayed_after_gate() -> void:
 		return
 	assert_true(_overlay().visible)
 	assert_false(_e2e.hud().visible, "HUD сховано на повторі")
+	assert_true(_e2e.screen._weather.environment.adjustment_enabled, "світ під грейдом повтору")
 	assert_null(_e2e.screen.unit_view_for(tank_id), "перший кадр — дошка на початку відрізка: танк ще в тумані")
 	var labels: Dictionary = await _watch_replay()
 	assert_true(labels.has(tr("replay_turn") % [1, 1]), "підпис такту — хід 1, гравець 1: %s" % [labels.keys()])
@@ -76,6 +77,7 @@ func test_two_player_turn_is_replayed_after_gate() -> void:
 	assert_eq(Engine.time_scale, 1.0)
 	assert_true(_e2e.hud().visible)
 	assert_false(_overlay().visible)
+	assert_false(_e2e.screen._weather.environment.adjustment_enabled, "після повтору світ без грейду")
 	var view: UnitView = _e2e.screen.unit_view_for(tank_id)
 	assert_not_null(view, "після повтору танк на розвіданому видно")
 	if view != null:

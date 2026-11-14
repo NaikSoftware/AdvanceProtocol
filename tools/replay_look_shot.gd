@@ -7,17 +7,18 @@ extends Node
 ##   tools/godot_run.sh --path . --rendering-method <mobile|gl_compatibility> --fixed-fps 30 res://tools/replay_look_shot.tscn -- <out_dir> <map> <zoom> [locale]
 ## --fixed-fps 30: кадр — рівно 1/30 с часу гри на будь-якому GPU, тож на повільному gl_compatibility
 ## повтор не проскакує за кілька кадрів, і кадри однаково лягають на такти.
-## Кадри <out_dir>/<map>_<renderer>_z<zoom>_<n>.png посеред повтору (кожен п'ятий кадр, перші чотири) і пара з тим самим кадром (час
+## Кадри <out_dir>/<map>_<renderer>_z<zoom>_: _1 і _2 — на 5-му і 15-му кадрі повтору (такти руху), _3 і _4 — постріл
+## останнього такту, через FIRE_AFTER і SMOKE_AFTER кадрів після початку його подій; пара з тим самим кадром (час
 ## спинено, зерно сховано): _on з грейдом, _off без нього. У лог іде
 ## BAR — середня різниця (0..255) пікселів смуг HP між _on і _off: смуга мусить лишитись у своєму кольорі;
 ## <tag>_live — та сама сутичка в живій грі до ходу, без повтору.
 ## WORLD — середня насиченість кадру без і з грейдом.
 
-const SHOT_EVERY: int = 5
-const MAX_SHOTS: int = 4
+const EARLY_SHOTS: Array[int] = [5, 15]
+const FIRE_AFTER: int = 4
+const SMOKE_AFTER: int = 12
 const PAIR_AT: int = 12
-## Кольори сторін, як смуга HP виходить на екран (палітра unit_view.gd, висвітлена в текстурі смуги).
-const OWNER_COLORS: Array[Color] = [Color8(117, 153, 192), Color8(192, 128, 117), Color8(140, 173, 128)]
+const MAX_FRAMES: int = 120
 const E: int = 2
 const W: int = 6
 
@@ -79,15 +80,22 @@ func _ready() -> void:
 	rig.set_zoom(float(a[2]))
 	((_screen.get_node("%HandoverGate") as Control).get_node("%ConfirmButton") as Button).pressed.emit()
 	print("REPLAY ", _screen._replay_state != null, " zoom ", rig.zoom_level, " beats ", (_screen.get_node("%ReplayOverlay").get_node("%Progress") as Range).max_value)
+	var progress: Range = _screen.get_node("%ReplayOverlay").get_node("%Progress")
 	var frame: int = 0
+	var fire_at: int = -1
 	var t0: int = Time.get_ticks_msec()
-	while _screen._replay_state != null and frame < SHOT_EVERY * MAX_SHOTS:
+	while _screen._replay_state != null and frame < MAX_FRAMES:
 		await RenderingServer.frame_post_draw
 		frame += 1
-		if frame % SHOT_EVERY == 0 and frame / SHOT_EVERY <= MAX_SHOTS:
-			_taken["%s_%d" % [tag, frame / SHOT_EVERY]] = get_viewport().get_texture().get_image()
+		if frame in EARLY_SHOTS:
+			_taken["%s_%d" % [tag, EARLY_SHOTS.find(frame) + 1]] = get_viewport().get_texture().get_image()
+		if fire_at < 0 and progress.value == progress.max_value and _screen._event_player.is_playing():
+			fire_at = frame
+		if fire_at >= 0 and frame - fire_at in [FIRE_AFTER, SMOKE_AFTER]:
+			_taken["%s_%d" % [tag, 3 if frame - fire_at == FIRE_AFTER else 4]] = get_viewport().get_texture().get_image()
 		if frame == PAIR_AT:
 			await _pair(tag)
+	print("LAST BEAT events from frame ", fire_at)
 	print("FRAMES ", frame, " in ", Time.get_ticks_msec() - t0, " ms")
 	for path: String in _taken:
 		(_taken[path] as Image).save_png(path + ".png")
@@ -126,7 +134,8 @@ func _pair(tag: String) -> void:
 			var c: Color = off.get_pixel(x, y)
 			var g: Color = on.get_pixel(x, y)
 			sat += Vector2(c.s, g.s)
-			for o in OWNER_COLORS:
+			for owner in UnitView.PLAYER_COLORS.size():
+				var o: Color = UnitView.hp_fill_color(owner)
 				if absf(c.r - o.r) + absf(c.g - o.g) + absf(c.b - o.b) < 0.06:
 					bar += Vector2(absf(c.r - g.r) + absf(c.g - g.g) + absf(c.b - g.b), 1.0)
 	n = off.get_width() * off.get_height() / 4

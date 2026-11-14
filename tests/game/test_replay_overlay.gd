@@ -44,6 +44,7 @@ func test_labels_come_from_translation_keys() -> void:
 	assert_eq((_overlay.get_node("%RecLabel") as Label).text, "replay_rec")
 	assert_eq(_skip().text, "replay_skip")
 	assert_eq((_overlay.get_node("%TurnLabel") as Label).text, tr("replay_turn") % [3, 1])
+	var prior: String = TranslationServer.get_locale()
 	for locale in ["uk", "en"]:
 		TranslationServer.set_locale(locale)
 		for key in ["replay_rec", "replay_skip", "replay_turn"]:
@@ -52,7 +53,24 @@ func test_labels_come_from_translation_keys() -> void:
 	assert_eq(tr("replay_rec"), "ЗАПИС")
 	TranslationServer.set_locale("en")
 	assert_eq(tr("replay_rec"), "REC")
-	TranslationServer.set_locale("uk")
+	TranslationServer.set_locale(prior)
+
+
+## Сторону юніта показує смуга HP, і шейдер обертає для неї грейд (replay_ungrade.gdshaderinc). Обернений колір
+## заливки кожної сторони мусить лишитись у 0..1: інакше його обріже, і смуга таки пригасне під грейдом.
+## Та сама арифметика, що в шейдері, у sRGB: рампа, насиченість (середнє каналів), контраст, яскравість — навпаки.
+func test_grade_keeps_every_side_colour_invertible() -> void:
+	var bcs: Vector3 = ReplayOverlay.GRADE_BCS
+	var lo: Vector3 = ReplayOverlay.GRADE_LO
+	var hi: Vector3 = ReplayOverlay.GRADE_HI
+	for owner in UnitView.PLAYER_COLORS.size():
+		var f: Color = UnitView.hp_fill_color(owner)
+		var c := (Vector3(f.r, f.g, f.b) - lo) / (hi - lo)
+		var avg: float = (c.x + c.y + c.z) / 3.0
+		c = Vector3.ONE * avg + (c - Vector3.ONE * avg) / bcs.z
+		c = (Vector3.ONE * 0.5 + (c - Vector3.ONE * 0.5) / bcs.y) / bcs.x
+		for ch in 3:
+			assert_between(c[ch], 0.0, 1.0, "сторона %d, канал %d: %s" % [owner, ch, c])
 
 
 ## Поступ — лише такти, тобто видимі дії: ні ходів, ні команд, яких глядач не бачив.
