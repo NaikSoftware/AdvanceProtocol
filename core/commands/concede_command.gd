@@ -16,6 +16,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 	out.append(Events.TurnEnded.new(state.active_player))
 	for u in state.units_of(state.active_player):
 		u.hp = 0
+		out.append_array(Casualties.record(state, u))
 		out.append(Events.UnitDestroyed.new(u.id, u.pos))
 		out.append_array(Wrecks.leave(state, u))
 	out.append_array(state.check_elimination())

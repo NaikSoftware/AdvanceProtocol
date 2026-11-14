@@ -122,6 +122,15 @@ class WreckLeft extends BattleEvent:
 	func describe() -> String:
 		return "WreckLeft(%s, type=%d, facing=%d, owner=%d)" % [pos, type_id, facing, owner]
 
+class FiguresFell extends BattleEvent:
+	## Фігури відділення впали й лишились лежати на тайлі (Casualties). Окрема подія, а не
+	## висновок вигляду з DamageDealt: скільки фігур лягло й де, вирішує `core/`.
+	var body: Casualties.Body
+	func _init(p_body: Casualties.Body) -> void:
+		body = p_body
+	func describe() -> String:
+		return "FiguresFell(unit=%d at %s, slots %d+%d)" % [body.unit_id, body.pos, body.first, body.count]
+
 class WreckRemoved extends BattleEvent:
 	## Уламки зникли з тайла; reason — значення Wrecks.Reason. Після догоряння
 	## вигляд лишає випалену пляму, після підриву мосту — нічого.

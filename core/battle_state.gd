@@ -21,6 +21,8 @@ var eliminated: Array[bool] = []
 var winner: int = NO_WINNER
 var mines: Array[Mines.Mine] = []
 var wrecks: Array[Wrecks.Wreck] = []
+## Тіла бійців (Casualties): лише для вигляду, правила їх не читають.
+var bodies: Array[Casualties.Body] = []
 ## Просіки (§3.2): Vector2i -> true, ПРАВДА про те, де танк повалив ліс. Живе тут, а не
 ## на Board, навмисно: дошку читають і вигляд, і зони в InputController, і кожен з них
 ## без жодного зусилля отримав би всезнання. Звідси правду бере лише сам хід

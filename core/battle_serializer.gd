@@ -31,6 +31,10 @@ static func to_dict(state: BattleState) -> Dictionary:
 	for w in state.wrecks:
 		wrecks.append({"x": w.pos.x, "y": w.pos.y, "type_id": w.type_id, "facing": w.facing,
 			"burns_out_at": w.burns_out_at, "owner": w.owner})
+	var bodies: Array = []
+	for b in state.bodies:
+		bodies.append({"unit_id": b.unit_id, "x": b.pos.x, "y": b.pos.y, "owner": b.owner, "type_id": b.type_id,
+			"facing": b.facing, "first": b.first, "count": b.count})
 	var broken_forest: Array = []
 	for p: Vector2i in state.broken_forest:
 		broken_forest.append({"x": p.x, "y": p.y})
@@ -51,7 +55,7 @@ static func to_dict(state: BattleState) -> Dictionary:
 		"winner": state.winner,
 		"eliminated": state.eliminated.duplicate(),
 		"next_unit_id": state._next_unit_id,
-		"units": units, "mines": mines, "wrecks": wrecks,
+		"units": units, "mines": mines, "wrecks": wrecks, "bodies": bodies,
 		# Лише правда: знання кожного гравця про просіки виводиться з неї та його seen
 		# (BattleState.known_broken_map()), а seen і так зберігається нижче.
 		"broken_forest": broken_forest,
@@ -125,6 +129,11 @@ static func from_dict(data: Dictionary) -> BattleState:
 		state.wrecks.append(Wrecks.Wreck.new(Vector2i(int(w_data["x"]), int(w_data["y"])),
 			int(w_data["type_id"]), int(w_data.get("facing", 0)), int(w_data["burns_out_at"]),
 			int(w_data.get("owner", 0))))
+	# Збереження до появи тіл поля не мають: загиблі там лишаються без тіл, правил це не змінює.
+	state.bodies.clear()
+	for b_data in (data.get("bodies", []) as Array):
+		state.bodies.append(Casualties.Body.new(int(b_data["unit_id"]), Vector2i(int(b_data["x"]), int(b_data["y"])),
+			int(b_data["owner"]), int(b_data["type_id"]), int(b_data["facing"]), int(b_data["first"]), int(b_data["count"])))
 	# Збереження до появи просік поля не мають — лісу там ніхто не валив.
 	state.broken_forest.clear()
 	for f_data in (data.get("broken_forest", []) as Array):
@@ -244,6 +253,18 @@ static func _is_valid(data: Dictionary) -> bool:
 		if int((board["tiles"] as Array)[pos.y * w + pos.x]) == Terrain.Kind.BRIDGE_DESTROYED:
 			return false
 		wreck_at[pos] = true
+	# Тіла — лише піхоти, на дошці, наявного власника, і місця в межах четвірки відділення.
+	if data.has("bodies"):
+		if not _arr(data, "bodies"):
+			return false
+		for b in (data["bodies"] as Array):
+			if typeof(b) != TYPE_DICTIONARY or not (_num(b, "unit_id") and _in(b, "x", 0, w - 1) and _in(b, "y", 0, h - 1)
+					and _in(b, "owner", 0, pc - 1) and _in(b, "type_id", 0, UnitTypes.TYPES.size() - 1)
+					and _in(b, "facing", 0, 7) and _in(b, "first", 0, Casualties.SQUAD_FIGURES - 1)
+					and _in(b, "count", 1, Casualties.SQUAD_FIGURES - int(b["first"]))):
+				return false
+			if _is_vehicle_type(int(b["type_id"])):
+				return false
 	if data.has("broken_forest"):
 		if not _arr(data, "broken_forest"):
 			return false

@@ -167,7 +167,7 @@ static func _resolve_damage(state: BattleState, attacker: Unit, target: Unit, dm
 	target.hp -= applied
 	state.damage_dealt[attacker.owner] += applied
 	out.append(Events.DamageDealt.new(target.id, applied, target.hp))
-
+	out.append_array(Casualties.record(state, target))
 
 	if not target.is_alive():
 		out.append(Events.UnitDestroyed.new(target.id, target.pos))

@@ -76,6 +76,7 @@ static func step_on(state: BattleState, unit: Unit) -> Array[Events.BattleEvent]
 	# Шкода міни зараховується власнику міни.
 	state.damage_dealt[m.owner] += applied
 	out.append(Events.DamageDealt.new(unit.id, applied, unit.hp))
+	out.append_array(Casualties.record(state, unit))
 	if not unit.is_alive():
 		out.append(Events.UnitDestroyed.new(unit.id, unit.pos))
 		out.append_array(Wrecks.leave(state, unit))

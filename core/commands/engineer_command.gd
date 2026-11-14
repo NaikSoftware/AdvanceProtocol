@@ -122,7 +122,7 @@ func apply(state: BattleState) -> Array[Events.BattleEvent]:
 				# Ворог на мосту падає разом із ним: та сама низка
 				# подій, що й від смертельного влучання, крім уламків — техніка в річці
 				# їх не лишає, тож Wrecks.leave() тут немає. Шкода — власникові
-				# інженера, як від міни.
+				# інженера, як від міни. Тіл піхоти (Casualties) теж немає: вона в річці.
 				var victim: Unit = state.unit_at(target_pos)
 				if victim != null:
 					state.damage_dealt[e.owner] += victim.hp
