@@ -190,6 +190,11 @@ product against the target's facing. No trigonometry, no division.
   **Never carry another player's visibility into the renderer.**
 - **The handover gate is mandatory.** Not skippable, not animated through, and the camera must not
   leak the previous player's positions — recentre on the incoming player's first unit.
+- **After the gate, the incoming player watches a replay of the opponents' turns, filtered to what
+  their side would have seen live** and to everything that hit their own units or mines. A squad
+  that ends a move hidden in a building shows none of its route. Fogged actions take no time and
+  no camera move. `ReplayFilter` in `core/` decides; the view never re-derives it. See the
+  [linked document](docs/rules/vision-and-fog.md#replay-of-the-opponents-turns).
 
 ### 3.6 Unit classes and roster → [roster table and balance notes](docs/rules/units.md)
 

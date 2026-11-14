@@ -266,3 +266,13 @@ Two rules about using it:
   class. This project departs on purpose: a tank fells the forest it enters, and light vehicles,
   artillery and the engineer may enter only the tiles a tank has broken
   ([§3.2](../rules/movement-and-terrain.md#action-points)).
+
+- **The original has no replay of the opponent's turn; the replay here is a new feature, and the
+  original's live AI turn is a leak it avoids.** Nothing in the original records actions for later
+  playback. Against the AI, the AI's turn plays live, and the camera pans to each acting unit and
+  follows it with no fog check (`class_2.java:494-498`). That tells the player where unseen enemy
+  units stand, even though they are not drawn. The Skip key makes the rest of that turn instant
+  (`class_2.java:794-796`). In hot-seat the turn switch (`GameCanvas.java:2015-2035`) shows only a
+  black "Player N takes turn" screen, with nothing of the opponent's turn. The replay here shows only
+  what the viewer's side could see, and a fogged action takes no time and moves no camera
+  ([vision and fog](../rules/vision-and-fog.md#replay-of-the-opponents-turns)).

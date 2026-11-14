@@ -144,7 +144,11 @@ static func ignores_armour(attacker: Unit) -> bool:
 static func in_cover(board: Board, u: Unit) -> bool:
 	## Укриття — піхота в цілій будівлі. Руїни не рахуються: від будинку там лишилась
 	## купа уламків, за якою не сховаєшся. Техніка в будинок не ховається, лише стоїть.
-	return u.unit_class() == UnitTypes.UnitClass.INFANTRY and board.kind_at(u.pos) == Terrain.Kind.BUILDING
+	return in_cover_at(board, u, u.pos)
+
+## Те саме правило для тайла, на якому юніт ще не стоїть: повтор питає про кожен крок шляху.
+static func in_cover_at(board: Board, u: Unit, pos: Vector2i) -> bool:
+	return u.unit_class() == UnitTypes.UnitClass.INFANTRY and board.kind_at(pos) == Terrain.Kind.BUILDING
 
 const DRONE_BASE: int = 120
 const DRONE_SPREAD: int = 60

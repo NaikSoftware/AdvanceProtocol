@@ -124,3 +124,6 @@ eng_hint_tap_tile,Торкніться клітинки,Tap a tile
 drone_hint_tap_target,Торкніться цілі,Tap a target
 hud_map,Карта,Map
 ERR_NO_ADJACENT_TARGET,Поруч немає придатної цілі,No valid target adjacent
+replay_turn,Хід %d · Гравець %d,Turn %d · Player %d
+replay_skip,Пропустити,Skip
+replay_rec,ЗАПИС,REC
