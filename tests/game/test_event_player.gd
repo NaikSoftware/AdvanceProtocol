@@ -608,6 +608,13 @@ func test_drone_from_an_unseen_squad_has_no_flight_node() -> void:
 	_finish_all_processed_tweens()
 
 
+## Кладення міни не лишає на дошці жодного сліду для інших гравців (§3.11): подія нічого не малює.
+func test_mine_placed_draws_nothing() -> void:
+	var before: int = get_tree().root.find_children("*", "", true, false).size()
+	await player.play([Events.MinePlaced.new(Vector2i(2, 2), 0)] as Array[Events.BattleEvent])
+	assert_eq(get_tree().root.find_children("*", "", true, false).size(), before)
+
+
 ## «Зберегти й вийти» посеред паузи влучання: екран звільнено, і програвач після паузи не
 ## сміє грати решту подій чи кликати завершення в мертвий екран.
 func test_stop_ends_playback_at_the_next_pause() -> void:

@@ -39,6 +39,11 @@ signal drone_armed(center: Vector2i, radius: int, marks: Dictionary)
 ## та is_floor. {} — огляд знято (палець відпущено).
 signal inspected(inspection: Dictionary)
 
+## Тап по міні, яку активний гравець бачить (своя чи знайдена ворожа), що не збігся з жодною
+## іншою дією: підпис над тайлом, як для юніта. owner -1 — підпис зняти; цей сигнал іде на
+## кожен тап першим, тож нерозкрита міна нічим не відрізняється від порожньої землі.
+signal mine_caption(owner: int, cell: Vector2i)
+
 ## Тип очікуваної на підтвердження дії — ключ "type" у словнику нижче.
 ## Обидва прев'ю несуть лише числа й ідентифікатори, ніколи готовий рядок
 ## для показу (§9/§10 CLAUDE.md, «жодних хардкод-рядків») — текст і кнопку
@@ -145,6 +150,7 @@ func tap_cell(cell: Vector2i) -> void:
 	if _drone_armed:
 		_tap_in_drone_mode(state, cell)
 		return
+	mine_caption.emit(-1, cell)
 	if not state.board.in_bounds(cell):
 		_deselect()
 		return
@@ -171,6 +177,7 @@ func tap_cell(cell: Vector2i) -> void:
 		return
 
 	if _selected_unit == null:
+		_caption_mine(state, cell)
 		return
 
 	_maybe_turn(state, cell)
@@ -181,7 +188,18 @@ func tap_cell(cell: Vector2i) -> void:
 
 	if _zones != null and _zones.can_reach(cell):
 		_set_pending_move(cell)
-	# інакше: тайл поза зоною вибраного юніта — no-op, а не здогад про намір
+	else:
+		# Тайл поза зоною — раніше no-op, тепер тут підпис міни: рух і постріл мають пріоритет,
+		# а відома ворожа міна ціллю руху не буває (вона перешкода в плануванні, §3.11).
+		_caption_mine(state, cell)
+
+
+## Підпис лише для міни, яку гравець знає: своя або ворожа з known_to. Нерозкрита ворожа сюди
+## не доходить зовсім (§3.11): ні підпису, ні іншої реакції.
+func _caption_mine(state: BattleState, cell: Vector2i) -> void:
+	var m: Mines.Mine = Mines.mine_at(state, cell)
+	if m != null and (m.owner == state.active_player or Mines.is_known(state, cell, state.active_player)):
+		mine_caption.emit(m.owner, cell)
 
 
 ## Поворот на місці — побічний ефект тапу, а не окрема дія: подається тим самим

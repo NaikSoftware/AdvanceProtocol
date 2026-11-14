@@ -1,7 +1,7 @@
 """Спільне для мін і дрона: примітиви з вершинним кольором і експорт у GLB.
 
 Запуск: blender -b --factory-startup -P <скрипт>.py
-Будуємо одразу в одиницях гри (тайл = 1,0 = 8 м), +Y = перед, +Z = вгору, низ на z = 0.
+Будуємо в метрах; export(scale=1/8) переводить в одиниці гри (тайл = 1,0 = 8 м), +Y = перед, +Z = вгору, низ на z = 0.
 Кольори задано в sRGB, у атрибут пишуться лінійні (Godot читає COLOR_0 як лінійний).
 """
 import bpy, bmesh, os, math, json, struct
@@ -55,8 +55,9 @@ class B:
         self._place(vs, at, rot)
         self._paint(before, c)
 
-    def export(self, name):
+    def export(self, name, scale=1.0):
         bm = self.bm
+        bmesh.ops.scale(bm, vec=(scale, scale, scale), verts=bm.verts[:])
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
         me = bpy.data.meshes.new(name)
         bm.to_mesh(me)

@@ -146,7 +146,7 @@ static func spawn_explosion(parent: Node, at: Vector3, size: float) -> Node3D:
 ## пікірування на ціль. Результат удару вже вирішено в core/ — тут лише показ, тож політ
 ## короткий і фіксований (ходи читають, а не женуть). Вузол живе в контейнері юнітів, а не в
 ## UnitView: види перебудовуються після кожного пакета подій, і стан на них гине.
-## Модель збільшена ×5 проти реального ~1 м (docs/art-direction.md, «Drone»).
+## Модель справжнього розміру (1,2 м), читається рухом і димом старту (docs/art-direction.md, «Drone»).
 const DRONE_FLIGHT_SEC: float = 0.9
 const DRONE_MODEL: PackedScene = preload("res://assets/props/ordnance/drone.glb")
 ## Висота дуги над серединою шляху й над точками старту/удару, у тайлах.

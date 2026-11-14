@@ -84,6 +84,9 @@ var _shown_player: int = -1
 @onready var _end_turn_button: Button = %EndTurnButton
 @onready var _pause_button: Button = %PauseButton
 @onready var _inspector: UnitInspector = %Inspector
+## Тайл, над яким стоїть панель: вибраний юніт або міна з підписом.
+var _inspector_cell: Vector2i = Vector2i.ZERO
+var _mine_caption_shown: bool = false
 ## Верби інженера (Task 8) — лише для свого інженера активного гравця.
 @onready var _engineer_panel: EngineerPanel = %EngineerPanel
 ## Дроновий удар (Task 10) — окрема кнопка, межі шкоди й радіус з core/.
@@ -232,6 +235,7 @@ func show_preview(preview: Dictionary) -> void:
 func attach_controller(controller: InputController) -> void:
 	_controller = controller
 	controller.selection_changed.connect(show_selection)
+	controller.mine_caption.connect(_on_mine_caption)
 	controller.action_preview.connect(show_preview)
 	# Контролер скинув pending (озброєння верби, новий вибір) — прев'ю й Confirm
 	# не мають пережити дію, якої вже немає.
@@ -289,6 +293,21 @@ func _apply_ground_state(ground_state: int) -> void:
 	_ground_icon.color = GROUND_STATE_COLORS[ground_state]
 
 
+## Підпис міни займає ту саму панель, що й характеристики юніта, і стоїть над тайлом міни. owner -1
+## знімає його: повертається те, що показувала панель (вибраний юніт чи нічого).
+func _on_mine_caption(owner: int, cell: Vector2i) -> void:
+	if owner < 0:
+		if _mine_caption_shown:
+			_mine_caption_shown = false
+			_render_selection()
+		return
+	_mine_caption_shown = true
+	_inspector_cell = cell
+	_inspector.show_mine(_state != null and owner == _state.active_player, owner)
+	_inspector.reset_size()
+	_reposition_inspector()
+
+
 func _render_selection() -> void:
 	# Юніт міг загинути від відповіді (§3.3.1) між вибором і перемальовуванням —
 	# показувати AP мерця гірше, ніж не показувати нічого.
@@ -319,6 +338,7 @@ func _render_selection() -> void:
 	_drones_row.visible = int(_selected_unit.type()["drones"]) > 0
 	_drones_value.text = str(_selected_unit.drones_left)
 	_inspector.show_unit(_selected_unit, own)
+	_inspector_cell = _selected_unit.pos
 	# Рівно тут, а не в _reposition_inspector(): вміст панелі змінюється тільки
 	# на цьому шляху, а позиція перераховується ще й на кожен кадр руху камери
 	# (view_changed). Перерахунок мінімального розміру PanelContainer з усім його
@@ -340,10 +360,10 @@ func _render_selection() -> void:
 ## і бути не може (R13). Викликається рівно на три речі: рух камери
 ## (view_changed), зміну вибору і refresh() — не щокадру.
 func _reposition_inspector() -> void:
-	if _camera_rig == null or _selected_unit == null or not _inspector.visible:
+	if _camera_rig == null or not _inspector.visible:
 		return
 	var anchor: Vector2 = _camera_rig.unproject(
-		IsoCameraRig.cell_to_world(_selected_unit.pos) + Vector3(0.0, INSPECTOR_LIFT, 0.0))
+		IsoCameraRig.cell_to_world(_inspector_cell) + Vector3(0.0, INSPECTOR_LIFT, 0.0))
 	var panel: Vector2 = _inspector.size
 	var left: float = float(_safe_area.get_theme_constant("margin_left"))
 	# Верхня межа — НИЗ верхньої смуги, а не поле безпеки: там ґрунт, який

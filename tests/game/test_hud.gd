@@ -782,3 +782,37 @@ func test_cancel_button_shown_only_when_it_does_something() -> void:
 	assert_false(cancel.visible, "озброєна верба — «Скасувати» лише в панелі інженера")
 	controller.select_unit(null)
 	assert_false(cancel.visible, "вибір знято")
+
+
+# --- Підпис міни -------------------------------------------------------------
+
+func test_mine_caption_reuses_the_inspector_and_names_whose_it_is() -> void:
+	var state: BattleState = _state()
+	hud.bind(state)
+	hud._on_mine_caption(0, Vector2i(4, 4))
+	assert_true(_inspector().is_visible_in_tree())
+	assert_eq((hud.get_node("%Inspector/Body/StatName") as Label).text, tr("mine_own"))
+	assert_false(hud.get_node("%Inspector/Body/Stats").visible, "рядків характеристик у підписі міни нема")
+	hud._on_mine_caption(1, Vector2i(5, 5))
+	assert_eq((hud.get_node("%Inspector/Body/StatName") as Label).text, tr("mine_enemy"))
+	hud._on_mine_caption(-1, Vector2i(5, 5))
+	assert_false(_inspector().is_visible_in_tree(), "наступний тап знімає підпис")
+
+
+func test_mine_caption_gives_the_panel_back_to_the_selected_unit() -> void:
+	var state: BattleState = _state()
+	var u: Unit = state.add_unit(5, 0, Vector2i(3, 3), 0)
+	hud.bind(state)
+	hud.show_selection(u)
+	hud._on_mine_caption(0, Vector2i(4, 4))
+	hud._on_mine_caption(-1, Vector2i(4, 4))
+	assert_true(hud.get_node("%Inspector/Body/Stats").visible)
+	assert_eq((hud.get_node("%Inspector/Body/StatName") as Label).text, tr(u.type()["name_key"]))
+
+
+func test_mine_caption_does_not_survive_the_handover() -> void:
+	var state: BattleState = _state()
+	hud.bind(state)
+	hud._on_mine_caption(0, Vector2i(4, 4))
+	hud.set_active_player(1)
+	assert_false(_inspector().is_visible_in_tree(), "підпис своєї міни не лишається наступному гравцеві")

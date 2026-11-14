@@ -39,7 +39,7 @@ const _CONTOUR_ALPHA: float = 0.7
 ## Кільця дальності лишаються ширшими: їх видно лише поки гравець тримає палець на юніті.
 const _RING_WIDTH: float = 0.12
 const _CONTOUR_PIECES: int = 4
-## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y = 0.06), щоб не
+## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y), щоб не
 ## z-fight'ити ні з тим, ні з іншим.
 const _CONTOUR_Y: float = 0.04
 ## Покриття настилу на 6.4 см над deck_y (TerrainHeight, коментар SEAT_TOP): риска трохи вище за нього.

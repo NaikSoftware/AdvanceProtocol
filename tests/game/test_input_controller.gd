@@ -1029,3 +1029,54 @@ func test_pending_move_survives_the_turn_and_second_tap_confirms() -> void:
 	controller.tap_cell(target)
 
 	assert_eq(u.pos, target, "другий тап підтверджує")
+
+
+# --- Підпис міни -------------------------------------------------------------
+
+func _caption_log() -> Array:
+	var log: Array = []
+	controller.mine_caption.connect(func(o: int, c: Vector2i) -> void: log.append([o, c]))
+	return log
+
+
+## Своя міна без вибраного юніта й відома ворожа дають підпис із власником.
+func test_tap_on_a_visible_mine_captions_it() -> void:
+	_start()
+	service.state.add_unit(5, 0, Vector2i(2, 2), 0)
+	_begin_and_drain()
+	Mines.place(service.state, Vector2i(8, 8), 0)
+	Mines.place(service.state, Vector2i(9, 9), 1)
+	service.state.mines[1].known_to[0] = true
+	var log: Array = _caption_log()
+	controller.tap_cell(Vector2i(8, 8))
+	controller.tap_cell(Vector2i(9, 9))
+	assert_eq(log, [[-1, Vector2i(8, 8)], [0, Vector2i(8, 8)], [-1, Vector2i(9, 9)], [1, Vector2i(9, 9)]])
+
+
+## Нерозкрита ворожа міна: сигнали ті самі, що й на порожній землі, жодного підпису.
+func test_tap_on_an_unrevealed_enemy_mine_is_identical_to_empty_ground() -> void:
+	_start()
+	_begin_and_drain()
+	Mines.place(service.state, Vector2i(9, 9), 1)
+	var log: Array = _caption_log()
+	controller.tap_cell(Vector2i(9, 9))
+	controller.tap_cell(Vector2i(10, 10))
+	assert_eq(log, [[-1, Vector2i(9, 9)], [-1, Vector2i(10, 10)]])
+	assert_eq(_selections.size(), 0)
+	assert_eq(_previews.size(), 0)
+
+
+## Юніт на тайлі з мiною виграє: вибір, а не підпис. Свій тайл руху теж: прев'ю руху, а не підпис.
+func test_unit_and_move_target_win_over_the_caption() -> void:
+	_start()
+	var u: Unit = service.state.add_unit(5, 0, Vector2i(5, 5), 0)
+	_begin_and_drain()
+	Mines.place(service.state, Vector2i(5, 5), 0)
+	Mines.place(service.state, Vector2i(6, 5), 0)
+	var log: Array = _caption_log()
+	controller.tap_cell(Vector2i(5, 5))
+	assert_eq(_selections.size(), 1)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(_previews.size(), 1, "своя міна на тайлі зони лишається ціллю руху")
+	for e in log:
+		assert_eq(e[0], -1)
