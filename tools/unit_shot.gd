@@ -12,8 +12,10 @@ extends Node
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m), без (_e) і з моделлю суцільним пурпуром (_k, маска контуру) для ΔE.
-## Шостий аргумент real [set=N] ставить справжніми юнітами зі смугами HP польову гармату, гаубицю, інженерну машину й важкий танк на найближчому й найдальшому зумі;
-## SHOT_GROUND=meadow|plough ставить їх на однорідний луг чи ріллю; з set=N усі чотири належать гравцеві з набором N (без нього — власники 0, 1, 2), а відділення гравця 0 розвідує для них ґрунт.
+## Шостий аргумент real [set=N] ставить як справжні юніти зі смугами HP польову гармату, гаубицю, інженерну машину й важкий танк
+## на найближчому й найдальшому зумі. З set=N усі чотири належать гравцеві з набором N (без нього — власники 0, 1, 2), а відділення
+## гравця 0 розвідує для них ґрунт. SHOT_GROUND=meadow|plough ставить їх на однорідний луг чи ріллю; SHOT_ENGINEERS=1 замість
+## цього ставить інженерні машини наборів 0, 1, 2 поруч із середнім танком.
 ## Шостий аргумент spin [set=N] ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
 ## з однаковим `travel` (контроль), третій — на пів радіуса колеса далі; між ними мають змінитися лише колеса.
 ## Шостий аргумент rear [set=N] ставить чотири танки набору N (важкий, середній, винищувач, легкий) у ряд через тайл,
@@ -244,10 +246,14 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
 	var c := _field_near_centre(m)
-	# SHOT_GROUND=meadow|plough ставить гармату (c + (-2, 0)) на однорідне поле 3×3 цієї поверхні найближче до центру карти
+	# SHOT_GROUND: гармата (c + (-2, 0)) стає на однорідне поле 3×3 вибраної поверхні найближче до центру карти
 	var ground: String = OS.get_environment("SHOT_GROUND")
 	if ground != "":
-		var sv: int = 1 if ground == "plough" else 0
+		if not ground in ["meadow", "plough"]:
+			push_error("unit_shot: SHOT_GROUND — meadow або plough, а не %s" % ground)
+			get_tree().quit(1)
+			return
+		var sv: int = MapData.FieldSurface.PLOUGHED if ground == "plough" else MapData.FieldSurface.MEADOW
 		var best_d: int = 1 << 30
 		for y in range(4, m.height - 4):
 			for x in range(4, m.width - 4):
@@ -258,7 +264,7 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 						if m.tiles[q.y * m.width + q.x] != Terrain.Kind.FIELD or m.surface_at(q) != sv:
 							uniform = false
 				var d: int = (Vector2i(x, y) - Vector2i(m.width / 2, m.height / 2)).length_squared()
-				if uniform and d < best_d and x + 4 < m.width:
+				if uniform and d < best_d:
 					best_d = d
 					c = Vector2i(x + 2, y)
 	# set=N: усі чотири юніти належать гравцеві з набором N, тож гармати й інженерна машина — з цього набору
@@ -271,7 +277,15 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 		{"type_id": 11, "owner": o[2], "pos": c + Vector2i(2, 0), "facing": 0},
 		{"type_id": 8, "owner": o[3], "pos": c + Vector2i(0, 2), "facing": 0},
 	]
-	if set_id > 0:
+	var engineers: bool = OS.get_environment("SHOT_ENGINEERS") != ""
+	if engineers:
+		m.spawns = [
+			{"type_id": 11, "owner": 0, "pos": c + Vector2i(-2, 0), "facing": 0},
+			{"type_id": 11, "owner": 1, "pos": c, "facing": 0},
+			{"type_id": 11, "owner": 2, "pos": c + Vector2i(2, 0), "facing": 0},
+			{"type_id": 5, "owner": 0, "pos": c + Vector2i(0, 2), "facing": 0},
+		]
+	if set_id > 0 or engineers:
 		# активний гравець 0: чужі юніти ховає туман, тож його відділення стоїть поруч і розвідує ґрунт під ними
 		m.spawns.append({"type_id": 0, "owner": 0, "pos": c + Vector2i(0, 3), "facing": 0})
 	screen.setup(m, 3, 1)
