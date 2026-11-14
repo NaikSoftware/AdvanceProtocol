@@ -294,7 +294,7 @@ func _saved_with_wreck() -> Dictionary:
 	var s: BattleState = BattleState.create(Board.create(10, 10, Terrain.GroundState.DRY), 2, 11)
 	s.add_unit(5, 0, Vector2i(0, 5), 2)
 	s.add_unit(4, 1, Vector2i(9, 9), 2)
-	s.wrecks.append(Wrecks.Wreck.new(Vector2i(3, 5), 7, 5, 17))
+	s.wrecks.append(Wrecks.Wreck.new(Vector2i(3, 5), 7, 5, 17, 1))
 	return JSON.parse_string(JSON.stringify(BattleSerializer.to_dict(s)))
 
 func test_wrecks_round_trip_with_their_expiry() -> void:
@@ -309,6 +309,20 @@ func test_wrecks_round_trip_with_their_expiry() -> void:
 		assert_eq(w.type_id, 7)
 		assert_eq(w.burns_out_at, 17)
 		assert_eq(w.facing, 5)
+		assert_eq(w.owner, 1)
+
+func test_a_wreck_saved_without_owner_loads_owned_by_player_zero() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["wrecks"][0].erase("owner")
+	var b: BattleState = BattleSerializer.from_dict(d)
+	assert_not_null(b, "старі збереження мусять відкриватися")
+	if b != null:
+		assert_eq(Wrecks.wreck_at(b, Vector2i(3, 5)).owner, 0)
+
+func test_a_wreck_owner_out_of_range_is_rejected() -> void:
+	var d: Dictionary = _saved_with_wreck()
+	d["wrecks"][0]["owner"] = 2
+	_assert_rejected(d, "власник поза 0..player_count-1")
 
 func test_a_wreck_saved_without_facing_loads_facing_north() -> void:
 	var d: Dictionary = _saved_with_wreck()

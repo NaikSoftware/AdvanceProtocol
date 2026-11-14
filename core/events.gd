@@ -112,12 +112,15 @@ class WreckLeft extends BattleEvent:
 	var type_id: int
 	## Напрям юніта в мить загибелі — уламки лежать так, як він стояв.
 	var facing: int
-	func _init(p_pos: Vector2i, p_type_id: int, p_facing: int) -> void:
+	## Власник загиблої техніки: уламки малюються його національним набором.
+	var owner: int
+	func _init(p_pos: Vector2i, p_type_id: int, p_facing: int, p_owner: int = 0) -> void:
 		pos = p_pos
 		type_id = p_type_id
 		facing = p_facing
+		owner = p_owner
 	func describe() -> String:
-		return "WreckLeft(%s, type=%d, facing=%d)" % [pos, type_id, facing]
+		return "WreckLeft(%s, type=%d, facing=%d, owner=%d)" % [pos, type_id, facing, owner]
 
 class WreckRemoved extends BattleEvent:
 	## Уламки зникли з тайла; reason — значення Wrecks.Reason. Після догоряння
