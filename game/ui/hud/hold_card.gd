@@ -127,32 +127,27 @@ func _build_stats(body: VBoxContainer) -> void:
 	row.add_theme_constant_override("separation", 0)
 	m.add_child(row)
 	attack_value = _stat(row, "hud_attack")
-	row.add_child(_spring())
 	range_value = _stat(row, "hud_range")
-	row.add_child(_spring())
 	vision_value = _stat(row, "hud_vision")
 
 
-## Колонка завширшки з вмісту: підпис над числом, обидва праворуч (одна система вирівнювання на
-## картці); вільне місце ділять пружини між колонками, а не порожнє поле зліва.
+## Три рівні колонки: підпис і число над ним вирівняні праворуч по краю колонки (одна система з
+## таблицею броні); права колонка закінчується на правому полі картки.
 func _stat(row: HBoxContainer, key: String) -> Label:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 5)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(col)
 	var cap := HudKit.label(&"HudCaptionStats")
 	_words.append([cap, key, true])
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	TightLine.wrap(cap, col, 11.0)
 	var value := HudKit.label(&"HudNumberStat")
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	TightLine.wrap(value, col, 17.0)
 	return value
-
-
-func _spring() -> Control:
-	var c := Control.new()
-	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	return c
 
 
 func _build_armour(body: VBoxContainer) -> void:

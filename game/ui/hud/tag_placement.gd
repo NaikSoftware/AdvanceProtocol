@@ -20,6 +20,11 @@ const OBSTACLE_GROW: float = 8.0
 const POLY_GROW: float = 4.0
 const FIRE_GROW: float = 10.0
 const LEADER_CLEAR: float = 4.0
+const LABEL_CLEAR: float = 2.0
+const CHROME_AIR: float = 16.0
+const CORNER_COST: float = 400.0
+const END_HALF: float = 2.5
+const _STEP: float = 3.0
 const MARK_WEIGHT: float = 1500.0
 const DISTANCE_WEIGHT: float = 0.15
 const LEADER_COST: float = 6.0
@@ -32,6 +37,9 @@ var _tag: Vector2
 var _unit: Rect2
 var _core: Rect2
 var _core_poly: PackedVector2Array
+var _label: Rect2 = Rect2()
+var _chrome: Array[Rect2] = []
+var _corners: PackedVector2Array = PackedVector2Array()
 var _others: Array[Rect2]
 var _blocked: Array[Rect2] = []
 var _fire: PackedVector2Array
@@ -52,6 +60,8 @@ func _init(scene: Dictionary) -> void:
 	_unit = scene["unit"]
 	_core = scene.get("core", _unit)
 	_core_poly = scene.get("core_poly", PackedVector2Array())
+	# Напис HP рушій малює поверх верхнього краю смуги: кінець лідера мусить його обійти.
+	_label = scene.get("label", Rect2()).grow(LABEL_CLEAR) if scene.get("label", Rect2()).size != Vector2.ZERO else Rect2()
 	_others.assign(scene.get("others", []))
 	_fire = scene.get("fire", PackedVector2Array())
 	_safe = Rect2(scene["screen"]).grow_individual(-24.0, -8.0, -24.0, -8.0)
@@ -59,6 +69,7 @@ func _init(scene: Dictionary) -> void:
 		_blocked.append(o.grow(OBSTACLE_GROW))
 	for c: Rect2 in scene.get("chrome", []):
 		_blocked.append(c.grow(OBSTACLE_GROW))
+		_chrome.append(c)
 	var window: Rect2 = _unit.grow_individual(_tag.x + 64.0, _tag.y + 64.0, _tag.x + 64.0, _tag.y + 64.0)
 	_origin = (window.position / CELL).floor() * CELL
 	_gw = int(ceil(window.size.x / CELL)) + 1
@@ -103,19 +114,49 @@ func needs_leader(r: Rect2) -> bool:
 	return _dist(r, _unit) > LEAD_AT
 
 
-## [від краю тега, до смуги+моделі юніта] — лідер (spec: до найближчої точки смуги HP + моделі).
+## [від краю тега, до смуги+моделі юніта] — лідер: найближча точка силуету, але квадрат кінця 5×5
+## не лягає на напис HP (і не на клітинку дії, якщо є вибір), а лінія не січе напис.
 func leader_points(r: Rect2) -> PackedVector2Array:
 	var c: Vector2 = _core.get_center()
 	var t := Vector2(clampf(c.x, r.position.x, r.end.x), clampf(c.y, r.position.y, r.end.y))
 	var u := Vector2(clampf(t.x, _core.position.x, _core.end.x), clampf(t.y, _core.position.y, _core.end.y))
+	var ring: PackedVector2Array = _core_poly if _core_poly.size() >= 3 else PackedVector2Array(
+		[_core.position, Vector2(_core.end.x, _core.position.y), _core.end, Vector2(_core.position.x, _core.end.y)])
 	if _core_poly.size() >= 3:
 		var best: float = INF
-		for i in _core_poly.size():
-			var q: Vector2 = Geometry2D.get_closest_point_to_segment(t, _core_poly[i], _core_poly[(i + 1) % _core_poly.size()])
+		for i in ring.size():
+			var q: Vector2 = Geometry2D.get_closest_point_to_segment(t, ring[i], ring[(i + 1) % ring.size()])
 			if t.distance_squared_to(q) < best:
 				best = t.distance_squared_to(q)
 				u = q
+	if _end_cost(t, u) == 0.0:
+		return PackedVector2Array([t, u])
+	# Найближча точка погана: перебір точок контуру з кроком _STEP за ціною «відстань + штрафи».
+	var best_cost: float = INF
+	for i in ring.size():
+		var a: Vector2 = ring[i]
+		var b: Vector2 = ring[(i + 1) % ring.size()]
+		var n: int = maxi(1, int(ceil(a.distance_to(b) / _STEP)))
+		for k in n:
+			var q: Vector2 = a.lerp(b, float(k) / n)
+			var cost: float = t.distance_to(q) + _end_cost(t, q)
+			if cost < best_cost:
+				best_cost = cost
+				u = q
 	return PackedVector2Array([t, u])
+
+
+## Штраф кінця лідера: квадрат на написі HP — найтяжчий, лінія крізь напис, клітинка дії — легші.
+func _end_cost(t: Vector2, u: Vector2) -> float:
+	var cost: float = 0.0
+	if _label.size != Vector2.ZERO:
+		if _label.intersects(Rect2(u - Vector2(END_HALF, END_HALF), Vector2(END_HALF, END_HALF) * 2.0)):
+			cost += 1000.0
+		elif _segment_hits(t, u, _label):
+			cost += 500.0
+	if _hard_at(u):
+		cost += 100.0
+	return cost
 
 
 func score(r: Rect2) -> float:
@@ -126,6 +167,16 @@ func score(r: Rect2) -> float:
 		if _dist(r, o) < 12.0:
 			s += CROWD_COST
 			break
+	# Тег впритул до хрому читається другим рядом чипа, а не тегом юніта на дошці.
+	for c: Rect2 in _chrome:
+		if _dist(r, c) < CHROME_AIR:
+			s += CROWD_COST
+			break
+	# Кут контуру під тегом ховає, де зона повертає.
+	var grown: Rect2 = r.grow(2.0)
+	for v in _corners:
+		if grown.has_point(v):
+			s += CORNER_COST
 	if d > LEAD_AT:
 		for o: Rect2 in _others:
 			if _dist(r, o) < d + 8.0:
@@ -228,6 +279,7 @@ func _rasterise_marks(marks: Array) -> void:
 				if cx >= 0 and cx < _gw and cy >= 0 and cy < _gh:
 					# Шматок довжиною ≈ 2 dp × ширина лінії.
 					grid[cy * _gw + cx] += 2.0 * LINE_WIDTH
+	_corners = _find_corners(marks)
 	_mark_sat = PackedFloat32Array()
 	_mark_sat.resize((_gw + 1) * (_gh + 1))
 	for y in _gh:
@@ -235,6 +287,24 @@ func _rasterise_marks(marks: Array) -> void:
 		for x in _gw:
 			run += grid[y * _gw + x]
 			_mark_sat[(y + 1) * (_gw + 1) + x + 1] = _mark_sat[y * (_gw + 1) + x + 1] + run
+
+
+## Вершини контурів, де лінія повертає: у спільній точці двох відрізків напрямки не співнапрямлені.
+## Ребра зони йдуть по клітинках, тож кожен відрізок — одне ребро, а не вся сторона.
+static func _find_corners(marks: Array) -> PackedVector2Array:
+	var seen: Dictionary = {}
+	var out := PackedVector2Array()
+	for line: PackedVector2Array in marks:
+		for i in range(line.size() - 1):
+			var d: Vector2 = (line[i + 1] - line[i]).normalized()
+			for p: Vector2 in [line[i], line[i + 1]]:
+				var key := Vector2i(roundi(p.x * 2.0), roundi(p.y * 2.0))
+				if seen.has(key):
+					if absf((seen[key] as Vector2).cross(d)) > 0.3:
+						out.append(p)
+				else:
+					seen[key] = d
+	return out
 
 
 func _build_sat_i() -> PackedInt32Array:

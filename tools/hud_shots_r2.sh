@@ -5,6 +5,7 @@ OUT="${1:?out_dir}"
 # Дві половини: один прогон Godot обмежений 180 с.
 A1="idle,own_tank,move_preview,shot_preview,squad,drone,drone_preview"
 A2="engineer,engineer_armed,engineer_pending,hold_enemy,hold_enemy_squad,pause,handover"
+A3="toast_drone,toast_engineer,own_tank_to_shot,squad_shot,shot_infantry,hold_enemy_squad_spent,handover_p1,handover_p3,handover_default"
 RIDGE="idle,shot_preview,handover,pause"
 EN="shot_preview,engineer,handover"
 cd "$(dirname "$0")/.." || exit 1
@@ -16,6 +17,7 @@ for size in "1496x672 243" "1600x720 320"; do
 	for m in river crossroads; do
 		run $m "$1" "$2" uk "$A1"
 		run $m "$1" "$2" uk "$A2"
+		run $m "$1" "$2" uk "$A3"
 	done
 	run ridge "$1" "$2" uk "$RIDGE"
 done

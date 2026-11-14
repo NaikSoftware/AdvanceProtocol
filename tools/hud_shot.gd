@@ -14,6 +14,8 @@ const STATES: Array[String] = [
 	"idle", "own_tank", "move_preview", "shot_preview", "enemy", "engineer", "engineer_armed",
 	"drone", "drone_preview", "hold_enemy", "handover", "pause",
 	"squad", "hold_enemy_squad", "engineer_pending", "mood",
+	"toast_drone", "toast_engineer", "own_tank_to_shot", "squad_shot", "shot_infantry",
+	"hold_enemy_squad_spent", "handover_p1", "handover_p3", "handover_default",
 ]
 const SETTLE_FRAMES: int = 90
 const STATE_FRAMES: int = 20
@@ -183,10 +185,53 @@ func _enter_state(st: String) -> bool:
 			_ctrl.tap_cell(tank.pos)
 		"mood":
 			pass
+		"toast_drone":
+			# Дрон не б'є піхоту: тап по ворожому піхотному загону в режимі дрона — відмова правил.
+			_ctrl.select_unit(_state.get_unit(_ids["assault"]))
+			_ctrl.arm_drone()
+			_ctrl.tap_cell(_state.get_unit(_ids["enemy_squad"]).pos)
+		"toast_engineer":
+			# Кнопка верби й тап по далекій клітинці: ERR_NOT_ADJACENT.
+			_ctrl.select_unit(_state.get_unit(_ids["engineer"]))
+			_press_verb(EngineerCommand.Action.LAY_MINE)
+			_ctrl.tap_cell(enemy.pos)
+		"own_tank_to_shot":
+			# Одна сесія: вибір → тап по ворогові. Тег не мусить стрибнути, поки його місце законне.
+			_ctrl.select_unit(tank)
+			await _wait_idle()
+			var before: Rect2 = _tag_rect()
+			_ctrl.tap_cell(enemy.pos)
+			await _wait_idle()
+			print("HUD_SHOT tag_rect own_tank=", before, " shot_preview=", _tag_rect())
+		"squad_shot":
+			# Стрілецький загін поруч із ворожим танком: піхота по техніці, «броня не діє».
+			_state.get_unit(_ids["rifle"]).pos = enemy.pos + Vector2i(-1, 0)
+			_state.refresh_vision_all()
+			_screen.call("_rebuild_units_for_active_player", true)
+			(_screen.get_node("%Hud") as Hud).refresh()
+			_ctrl.select_unit(_state.get_unit(_ids["rifle"]))
+			_ctrl.tap_cell(enemy.pos)
+		"shot_infantry":
+			_ctrl.select_unit(tank)
+			_ctrl.tap_cell(_state.get_unit(_ids["enemy_squad"]).pos)
+		"hold_enemy_squad_spent":
+			_state.get_unit(_ids["enemy_squad"]).drones_left = 0
+			(_screen.get_node("%Hud") as Hud).refresh()
+			_press(_state.get_unit(_ids["enemy_squad"]).pos)
+			_ctrl.peek_cell(_state.get_unit(_ids["enemy_squad"]).pos)
 		"handover":
-			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1, 3)
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1, _state.turn_number)
+		"handover_p1":
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(0, _state.turn_number)
+		"handover_p3":
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(2, _state.turn_number)
+		"handover_default":
+			# Карта без власної плити: запасна default.webp. Контекст лишається — знімати останнім.
+			var gate := _screen.get_node("%HandoverGate") as HandoverGate
+			gate.set_context("res://maps/_none.tres", gate.get("_map_name_key"), int(gate.get("_ground_state")))
+			gate.show_for(1, _state.turn_number)
 		"pause":
-			(_screen.get_node("%PauseMenu") as PauseMenu).open(3)
+			(_screen.get_node("%PauseMenu") as PauseMenu).open(_state.turn_number)
 		_:
 			push_error("hud_shot: невідомий стан %s" % st)
 			return false
@@ -195,7 +240,7 @@ func _enter_state(st: String) -> bool:
 		"armed": _ctrl._drone_armed or _ctrl._armed_action >= 0}
 	var ok: bool = true
 	match st:
-		"move_preview", "shot_preview", "drone_preview":
+		"move_preview", "shot_preview", "drone_preview", "own_tank_to_shot", "squad_shot", "shot_infantry":
 			ok = ctrl_state["pending"]
 		"own_tank", "enemy", "engineer", "squad":
 			ok = ctrl_state["sel"]
@@ -203,6 +248,8 @@ func _enter_state(st: String) -> bool:
 			ok = ctrl_state["pending"] and ctrl_state["armed"]
 		"engineer_armed", "drone":
 			ok = ctrl_state["armed"]
+		"toast_drone", "toast_engineer":
+			ok = ((_screen.get_node("%Hud") as Hud).get("_toast") as Control).visible
 	if not ok:
 		push_error("hud_shot: стан %s не досягнуто (%s)" % [st, ctrl_state])
 	return ok
@@ -245,6 +292,11 @@ func _reset_cast(st: String) -> void:
 		_rig.center_on(_site + Vector2i(1, 0))
 		_rig.zoom_by(ZOOM / _rig.zoom_level)
 	(_screen.get_node("%Hud") as Hud).refresh()
+
+
+func _tag_rect() -> Rect2:
+	var tag: Control = (_screen.get_node("%Hud") as Hud).get("_tag")
+	return tag.get_rect() if tag.visible else Rect2()
 
 
 ## Палець лежить на клітинці юніта, як у грі: картка утримання обходить точку натиску.

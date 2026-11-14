@@ -143,3 +143,22 @@ func test_hold_card_tie_takes_the_corner_farther_from_the_press_and_avoids_ring_
 	var arc: Array[PackedVector2Array] = [PackedVector2Array([Vector2(24, 120), Vector2(250, 120)])]
 	var moved: Rect2 = HudDocking.choose_card(screen, card, held, [] as Array[Rect2], Vector2(620, 325), arc)
 	assert_eq(moved, Rect2(735, 64, 226, 161))
+
+
+func test_leader_end_square_stays_off_the_hp_label() -> void:
+	# Напис лежить на верхньому краї смуги, тег зверху: найближча точка була б просто під цифрами.
+	var label := Rect2(482, 214, 36, 9)
+	var p := TagPlacement.new(_scene({"label": label}))
+	for r: Rect2 in [Rect2(471, 120, 209, 30), Rect2(300, 120, 209, 30), Rect2(560, 150, 209, 30)]:
+		var ends: PackedVector2Array = p.leader_points(r)
+		var square := Rect2(ends[1] - Vector2(2.5, 2.5), Vector2(5.0, 5.0))
+		assert_false(square.intersects(label.grow(2.0)), "квадрат кінця поза написом HP: %s" % [ends])
+
+
+func test_contour_corner_is_found_only_where_the_line_turns() -> void:
+	var marks: Array[PackedVector2Array] = [
+		PackedVector2Array([Vector2(0, 0), Vector2(10, 0)]),
+		PackedVector2Array([Vector2(10, 0), Vector2(10, 10)]),
+		PackedVector2Array([Vector2(10, 10), Vector2(10, 20)]),
+	]
+	assert_eq(TagPlacement._find_corners(marks), PackedVector2Array([Vector2(10, 0)]), "прямий стик (10,10) — не кут")

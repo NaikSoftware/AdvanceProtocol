@@ -5,9 +5,9 @@ extends Control
 
 const BONE: Color = Color("e3dfd3")
 const DIM: Color = Color("8f918a")
-## Півдіагональ квадрата 7×7, повернутого на 45°, і крок між центрами (проміжок 5 dp).
+## Півдіагональ квадрата 7×7, повернутого на 45°, і крок між центрами (проміжок між вершинами 2,1 dp).
 const _HALF: float = 4.95
-const _PITCH: float = 15.0
+const _PITCH: float = 12.0
 
 var _left: int = 0
 var _total: int = 0

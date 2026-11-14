@@ -678,6 +678,7 @@ func _tag_scene(view: UnitView, tag_size: Vector2) -> Dictionary:
 					fire = PackedVector2Array([unit_box.get_center(), UnitScreenBox.of(target, _camera_rig).get_center()])
 	return {
 		"tag_size": tag_size, "unit": unit_box, "core": UnitScreenBox.core(view, _camera_rig), "core_poly": UnitScreenBox.core_poly(view, _camera_rig),
+		"label": UnitScreenBox.label_rect(view, _camera_rig),
 		"others": others, "chrome": chrome, "polys": polys, "fire": fire, "marks": _board_marks(),
 		"screen": Rect2(Vector2.ZERO, size),
 	}

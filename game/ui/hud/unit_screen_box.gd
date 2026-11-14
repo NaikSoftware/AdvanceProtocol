@@ -48,6 +48,12 @@ static func with_marks(view: Node3D, rig: IsoCameraRig) -> Rect2:
 	return box
 
 
+## Екранний прямокутник напису HP, як його малює рушій; порожній, якщо напису не видно.
+static func label_rect(view: Node3D, rig: IsoCameraRig) -> Rect2:
+	var n := view.get_node_or_null("HpLabel") as VisualInstance3D
+	return part_rect(n, rig) if n != null and n.visible else Rect2()
+
+
 ## Смуга HP + модель без напису й значка дрона: сюди дістає лідер тега (повітря навколо напису
 ## читалося б як належне сусідові).
 static func core(view: Node3D, rig: IsoCameraRig) -> Rect2:
