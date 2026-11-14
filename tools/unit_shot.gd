@@ -50,7 +50,7 @@ func _ready() -> void:
 		await _spots(screen, map, out, tag)
 		return
 	if a.size() > 5 and a[5] == "fleet":
-		await _fleet(screen, map, out, tag)
+		await _fleet(screen, map, out, tag, int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0)
 		return
 	if a.size() > 5 and a[5] == "rear":
 		var rset: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
@@ -470,14 +470,14 @@ func _spin(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 	get_tree().quit()
 
 
-## Шостий аргумент fleet ставить в один ряд чотири танки (важкий, середній, винищувач, легкий) і три колісні машини набору 0
+## Шостий аргумент fleet [set=N] ставить в один ряд чотири танки (важкий, середній, винищувач, легкий) і три колісні машини набору 0
 ## (бронеавто, транспортер, розвідувальна) і знімає кадри _z6 і _z20: чи ділять вони одну фарбу.
-func _fleet(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+func _fleet(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int = 0) -> void:
 	screen.setup(map, 2, 1)
 	var c := _field_row_near_centre(map, 7)
 	var roles: Array[int] = [8, 5, 6, 7, 2, 3, 4]
 	for i in roles.size():
-		_place(UnitSilhouettes.build_merged(roles[i]), c + Vector2i(i - 3, 0), 0)
+		_place(UnitSilhouettes.build_merged(roles[i], -1, set_id), c + Vector2i(i - 3, 0), 0)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
