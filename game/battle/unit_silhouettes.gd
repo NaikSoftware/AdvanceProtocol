@@ -50,7 +50,7 @@ const _SET_SPECS: Dictionary = {
 		7: {"hull": Vector3(0.3390, 0.1705, 0.7020), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},
 		# бронеавто, транспортер і розвідувальна машина набору 1: корпус виміряний з моделі, висота осі ствола — з осі гармати, колесо — радіус осей
 		2: {"hull": Vector3(0.3273, 0.2519, 0.8280), "barrel": 0.30, "wheel": 0.0808, "extras": [&"wheels", &"roof_gun"]},
-		3: {"hull": Vector3(0.3336, 0.3276, 0.9540), "barrel": 0.12, "wheel": 0.0753, "extras": [&"wheels", &"roof_gun"]},
+		3: {"hull": Vector3(0.3331, 0.3276, 0.9540), "barrel": 0.12, "wheel": 0.0753, "extras": [&"wheels", &"roof_gun"]},
 		4: {"hull": Vector3(0.2385, 0.2163, 0.6180), "barrel": 0.12, "wheel": 0.0624, "extras": [&"wheels", &"roof_gun"]},
 	},
 	2: {
@@ -60,7 +60,7 @@ const _SET_SPECS: Dictionary = {
 		8: {"hull": Vector3(0.4712, 0.175, 0.9031), "barrel": 0.75, "wheel": 0.0391, "extras": [&"turret"]},  # важкий (набір 2) 3,8×7,2 м
 		# бронеавто, транспортер і розвідувальна машина набору 2: так само виміряні з моделей
 		2: {"hull": Vector3(0.3271, 0.2734, 0.8280), "barrel": 0.30, "wheel": 0.0833, "extras": [&"wheels", &"roof_gun"]},
-		3: {"hull": Vector3(0.3291, 0.3386, 0.9541), "barrel": 0.12, "wheel": 0.0765, "extras": [&"wheels", &"roof_gun"]},
+		3: {"hull": Vector3(0.3348, 0.3633, 0.9450), "barrel": 0.12, "wheel": 0.0813, "extras": [&"wheels", &"roof_gun"]},
 		4: {"hull": Vector3(0.2530, 0.2315, 0.6192), "barrel": 0.12, "wheel": 0.0642, "extras": [&"wheels", &"roof_gun"]},
 	},
 }

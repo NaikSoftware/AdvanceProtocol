@@ -1200,7 +1200,7 @@
         -0.04,
         0.0
       ],
-      "roof_dark": -0.3,
+      "roof_dark": -0.6,
       "roof_rough": 0.15,
       "dust": 0.3,
       "dust_c": [
@@ -1245,7 +1245,7 @@
       "scale_long": 1.0,
       "scale_h": 1.0,
       "barrel_r": 0.026,
-      "dark": 0.7
+      "dark": 0.85
     },
     "gun": {
       "axis_h": 0.366,
@@ -1312,7 +1312,7 @@
         -0.04,
         0.0
       ],
-      "roof_dark": -0.3,
+      "roof_dark": -0.6,
       "roof_rough": 0.15,
       "dust": 0.3,
       "dust_c": [
@@ -1346,7 +1346,17 @@
     "body_tris": 2600,
     "side_reach": 8,
     "wall_floor": 0.19,
-    "end_floor": 0.2,
+    "end_floor": 0.27,
+    "delete_boxes": [
+      [
+        -0.52,
+        -0.36,
+        0.0,
+        0.22,
+        0.0,
+        0.25
+      ]
+    ],
     "gun": {
       "axis_h": 0.3975,
       "start_long": -0.07,
@@ -1405,7 +1415,7 @@
         -0.04,
         0.0
       ],
-      "roof_dark": -0.3,
+      "roof_dark": -0.6,
       "roof_rough": 0.15,
       "dust": 0.3,
       "dust_c": [
@@ -1422,17 +1432,25 @@
       "tyre_r": 0.64,
       "lugs": 24,
       "holes": 6,
-      "ground_ao": 0.72,
+      "ground_ao": 0.5,
       "gun_dark": 0.4,
       "glass_hue": 1.0,
       "glass_c": [
-        44,
-        48,
-        52
+        14,
+        16,
+        18
+      ],
+      "glass_boxes": [
+        [
+          -1.7,
+          0.97,
+          1.4,
+          1.75
+        ]
       ],
       "ground_ao_band": [
-        0.6,
-        1.9
+        0.5,
+        1.3
       ]
     },
     "fwd": "-y",
@@ -1445,6 +1463,15 @@
     "body_tris": 3000,
     "side_reach": 8,
     "wall_floor": 0.13,
+    "glass_above_m": 1.1,
+    "flatten": [
+      [
+        0.2,
+        0.5,
+        0.21,
+        0.285
+      ]
+    ],
     "squash": {
       "above_h": 0.15,
       "scale": 0.75
@@ -1631,25 +1658,39 @@
     },
     "fwd": "y",
     "hull_long": [
-      -0.5,
+      -0.43,
       0.5
     ],
-    "hull_lat": 0.1775,
-    "scale_lat": 0.79,
+    "hull_lat": 0.167,
+    "scale_lat": 0.743,
+    "crop": [
+      -0.43,
+      0.5
+    ],
     "body_tris": 2600,
-    "side_reach": 8,
-    "wall_floor": 0.19,
-    "end_floor": 0.2,
     "delete_boxes": [
       [
         -0.52,
-        -0.42,
-        0.12,
-        0.25,
-        0.1,
-        0.36
+        -0.425,
+        0.0,
+        0.26,
+        0.0,
+        0.45
       ]
     ],
+    "add_boxes": [
+      [
+        -0.43,
+        -0.4,
+        -0.16,
+        0.16,
+        0.19,
+        0.3
+      ]
+    ],
+    "side_reach": 8,
+    "wall_floor": 0.19,
+    "end_floor": 0.27,
     "gun": {
       "axis_h": 0.409,
       "start_long": 0.02,
@@ -1685,8 +1726,8 @@
       "cut_lat": 0.08,
       "cut_r": 1.04,
       "wheel_lat": [
-        0.108,
-        0.16
+        0.1,
+        0.15
       ],
       "sides": 16
     }
@@ -1719,17 +1760,25 @@
       "tyre_r": 0.64,
       "lugs": 24,
       "holes": 6,
-      "ground_ao": 0.72,
+      "ground_ao": 0.5,
       "gun_dark": 0.4,
       "glass_hue": 1.0,
       "glass_c": [
-        44,
-        48,
-        52
+        14,
+        16,
+        18
+      ],
+      "glass_boxes": [
+        [
+          -0.95,
+          1.05,
+          1.45,
+          1.8
+        ]
       ],
       "ground_ao_band": [
-        0.6,
-        1.9
+        0.5,
+        1.3
       ]
     },
     "fwd": "-y",
@@ -1742,6 +1791,19 @@
     "body_tris": 3000,
     "side_reach": 8,
     "wall_floor": 0.13,
+    "glass_above_m": 1.1,
+    "turret": {
+      "long": [
+        -0.5,
+        -0.2
+      ],
+      "lat": 0.2,
+      "base_h": 0.2,
+      "scale_long": 1.0,
+      "scale_h": 1.0,
+      "barrel_r": 0.0,
+      "dark": 0.75
+    },
     "squash": {
       "above_h": 0.15,
       "scale": 0.745
