@@ -406,13 +406,18 @@ func test_hp_label_and_drone_icon_are_stacked_above_the_bar_in_order() -> void:
 	view.bind(_unit(1))
 	assert_true(view._hp_bar.position.y < view._hp_label.position.y, "підпис сидить над смугою")
 	assert_false(view._drone_icon.fixed_size, "значок росте й меншає разом зі смугою")
+	assert_true(view._drone_icon.no_depth_test, "значок поверх розчиненої крони, як смуга")
+	assert_eq(view._drone_icon.position.y, view._hp_label.position.y, "значок — у рядку числа HP")
 	var r: Rect2 = _icon_rect(Vector2.ZERO)
-	assert_almost_eq(r.end.x, -0.48, 0.001, "правим краєм — упритул до лівого кінця своєї смуги")
-	assert_almost_eq(r.get_center().y, 0.0, 0.001, "по середині смуги (у площині екрана)")
-	assert_gt(r.size.x * 45.0, 17.5, "на найдальшому зумі (~45 пк на одиницю) значок щонайменше ~18 пк завширшки")
+	assert_almost_eq(r.position.x, -UnitView.HP_BAR_HALF, 0.001, "лівим краєм — на лівому кінці своєї смуги, не далі")
+	assert_lt(r.end.x, UnitView.HP_LABEL_AFTER_ICON, "число HP — праворуч від значка")
+	# цятка 10 текселів, проміжок 7; на найдальшому зумі ~45 пк на одиницю світу
+	var px_per_texel: float = UnitView.DRONE_ICON_PIXEL * 45.0
+	assert_gte(10.0 * px_per_texel, 3.0, "цятка щонайменше 3 × 3 пікселі")
+	assert_gte(7.0 * px_per_texel, 2.0, "між цятками щонайменше 2 пікселі")
 
 
-## Прямокутник значка дронів у площині екрана (одиниці світу), відносно точки смуги HP юніта.
+## Прямокутник значка дронів у площині екрана (одиниці світу) відносно точки його рядка.
 func _icon_rect(anchor: Vector2) -> Rect2:
 	var px: float = UnitView.DRONE_ICON_PIXEL
 	var tex: Vector2 = Vector2(UnitView.drone_texture(2).get_size())
@@ -420,29 +425,44 @@ func _icon_rect(anchor: Vector2) -> Rect2:
 	return Rect2(centre - tex * px * 0.5, tex * px)
 
 
-## Значок дронів — публічне число саме цього відділення (§3.9): у площині екрана він не налазить ні на
-## смугу, ні на підпис HP жодного з восьми сусідів, на будь-якому нахилі камери.
+## Значок дронів — публічне число саме цього відділення (§3.9): у площині екрана він не налазить ні на свій
+## підпис, ні на смугу, підпис чи бійців жодного з восьми сусідів, на обох нахилах камери. Розміри — з
+## констант смуги й справжнього шрифту підпису.
 func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
+	view.bind(_unit(1))
+	var label: Label3D = view._hp_label
+	var font: Font = label.font if label.font != null else ThemeDB.fallback_font
+	var text_w: float = font.get_string_size("100/100", HORIZONTAL_ALIGNMENT_LEFT, -1, label.font_size).x * label.pixel_size
+	var pad: float = label.outline_size * label.pixel_size * 0.5  # обведення — по пів товщини з кожного боку
+	var label_h: float = label.font_size * label.pixel_size + 2.0 * pad
+	var bar_size := Vector2(UnitView.HP_BAR_HALF * 2.0, UnitView._HP_BAR_SIZE.y * UnitView.HP_BAR_PIXEL_SIZE)
 	for pitch_deg: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
 		var yaw := Basis(Vector3.UP, deg_to_rad(IsoCameraRig.YAW_DEGREES))
 		var cam_basis: Basis = yaw * Basis(Vector3.RIGHT, -deg_to_rad(pitch_deg))
 		var right: Vector3 = cam_basis.x
 		var up: Vector3 = cam_basis.y
-		var own: Rect2 = _icon_rect(Vector2.ZERO)
-		var label_half := Vector2(0.32, 0.09)
+		var bar_y: float = view._hp_bar.position.y * up.y
+		var row_y: float = label.position.y * up.y
+		var own: Rect2 = _icon_rect(Vector2(0.0, row_y))
+		# підпис сусіда — посередині (без дронів) або праворуч від його значка: береться весь можливий проміжок
+		var label_rect := func(at: Vector2) -> Rect2:
+			var x0: float = minf(-text_w * 0.5, UnitView.HP_LABEL_AFTER_ICON) - pad
+			var x1: float = maxf(text_w * 0.5, UnitView.HP_LABEL_AFTER_ICON + text_w) + pad
+			return Rect2(at + Vector2(x0, row_y - label_h * 0.5), Vector2(x1 - x0, label_h))
+		assert_false(own.intersects(Rect2(Vector2(UnitView.HP_LABEL_AFTER_ICON - pad, row_y - label_h * 0.5),
+				Vector2(text_w + 2.0 * pad, label_h))), "свій підпис HP значок не накриває")
 		for dz in range(-1, 2):
 			for dx in range(-1, 2):
 				if dx == 0 and dz == 0:
 					continue
 				var w := Vector3(dx, 0.0, dz)
 				var at := Vector2(w.dot(right), w.dot(up))
-				var bar := Rect2(at - Vector2(0.48, 0.06), Vector2(0.96, 0.12))
-				var label_at: Vector2 = at + Vector2(0.0, 0.1 * up.y)
-				var label := Rect2(label_at - label_half, label_half * 2.0)
-				assert_false(own.intersects(bar), "нахил %d°, сусід (%d, %d): значок на його смузі" % [pitch_deg, dx, dz])
-				assert_false(own.intersects(label), "нахил %d°, сусід (%d, %d): значок на його підписі" % [pitch_deg, dx, dz])
-		var own_label := Rect2(Vector2(0.0, 0.1 * up.y) - label_half, label_half * 2.0)
-		assert_false(own.intersects(own_label), "свій підпис HP значок не накриває")
+				var bar := Rect2(at + Vector2(-bar_size.x * 0.5, bar_y - bar_size.y * 0.5), bar_size)
+				var figures := Rect2(at + Vector2(-0.2, 0.0), Vector2(0.4, 0.225 * up.y))
+				var tag: String = "нахил %d°, сусід (%d, %d)" % [pitch_deg, dx, dz]
+				assert_false(own.intersects(bar), tag + ": значок на його смузі")
+				assert_false(own.intersects(label_rect.call(at)), tag + ": значок на його підписі")
+				assert_false(own.intersects(figures), tag + ": значок на його бійцях")
 
 
 ## §3.9: залишок дронів публічний — метод навіть не має доступу до owner,
@@ -466,7 +486,7 @@ func test_set_drones_shows_count_regardless_of_owner() -> void:
 		var img: Image = t.get_image()
 		var n: int = 0
 		for y in img.get_height():
-			for x in range(38, img.get_width()):
+			for x in range(31, img.get_width()):
 				if img.get_pixel(x, y).r > 0.6:
 					n += 1
 		return n
@@ -1193,14 +1213,19 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 		for seq in 3:
 			var b := Casualties.Body.new(7, bridge, 0, 0, facing, 0, 4)
 			b.seq = seq
+			var alongs: Array[float] = []
 			for slot in 4:
 				var xf: Transform3D = WreckLayer.body_transform(b, slot, _river_board)
+				alongs.append(Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y).dot(along))
 				assert_almost_eq(xf.origin.y, t.deck_y(bridge), 0.0001, "на настилі, не під ним і не над ним")
 				var rel := Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y)
 				var across: float = absf(rel.x * along.y - rel.y * along.x)
 				var axis := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
 				var off: float = absf(axis.x * along.y - axis.y * along.x)  # синус кута до осі мосту
 				assert_lte(across + 0.1125 * off + 0.03, 0.18, "тіло в межах настилу (поперек %.3f)" % across)
+			alongs.sort()
+			for i in range(1, alongs.size()):
+				assert_gte(alongs[i] - alongs[i - 1], 0.125, "тіла рядом уздовж настилу, не купою (≥ 1 м)")
 
 
 ## Тіло лягає на ґрунт під собою — і на схилі; біля води воно в межах 0,3 тайла від середини клітинки, куди

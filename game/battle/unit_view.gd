@@ -182,17 +182,18 @@ func _ready() -> void:
 	# з кожного bind().
 	_hp_bar.pixel_size = HP_BAR_PIXEL_SIZE
 	_drone_icon.texture = drone_texture(_MAX_DRONES)
-	# Росте й меншає разом зі смугою HP і впритул до її лівого кінця (`DRONE_ICON_OFFSET`): число дронів
+	# Росте й меншає разом зі смугою HP і стоїть над її лівим кінцем (`DRONE_ICON_OFFSET`): число дронів
 	# читається як число саме цього відділення, а не сусіда.
 	_drone_icon.fixed_size = false
 	_drone_icon.pixel_size = DRONE_ICON_PIXEL
-	_drone_icon.position.y = _hp_bar.position.y
+	_drone_icon.position.y = _hp_label.position.y
 	_drone_icon.offset = DRONE_ICON_OFFSET
 	_drone_icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
 	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
 		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	for n: Node in [_hp_bar, _hp_label]:
+	# Розчинена крона пише глибину (проходить лише найближча поверхня) — значок дронів поверх неї, як смуга.
+	for n: Node in [_hp_bar, _hp_label, _drone_icon]:
 		n.set("no_depth_test", true)
 		n.set("render_priority", OVERLAY_PRIORITY)
 	_hp_label.outline_render_priority = OVERLAY_PRIORITY - 1
@@ -617,8 +618,10 @@ static func hp_bar_image(fill_width: int, owner: int = 0) -> Image:
 func set_drones(count: int) -> void:
 	_drones_left = clampi(count, 0, _MAX_DRONES)
 	_drone_icon.visible = _drones_left > 0
-	# Число читається цятками під силуетом, а не розміром значка: розмір на екрані сталий на кожному зумі.
 	_drone_icon.texture = drone_texture(_drones_left)
+	# Число HP — праворуч від значка, коли він є; без значка — посередині смуги.
+	_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if _drones_left > 0 else HORIZONTAL_ALIGNMENT_CENTER
+	_hp_label.offset.x = HP_LABEL_AFTER_ICON / _hp_label.pixel_size if _drones_left > 0 else 0.0
 	# Скільки дронів, стільки труб на спинах: пущений дрон знімає трубу з відділення.
 	_set_standing(_standing)
 
@@ -948,12 +951,15 @@ static func _diamond_texture(size: int = 32) -> ImageTexture:
 	return _texture_cache[key]
 
 
-## Значок дронів — у світових одиницях, як і смуга HP: 0,40 × 0,16 (на найдальшому зумі ~18 пікселів завширшки).
-const DRONE_ICON_PIXEL: float = 0.40 / 56.0
-## Зсув значка від середини смуги HP, у пікселях текстури (Sprite3D.offset — у площині екрана): упритул до лівого
-## кінця смуги (−0,48) і по її середині — значок читається частиною своєї смуги. Ширший не можна: смуга сусіда по
-## діагоналі стоїть на тій самій висоті екрана за 1,41, тож між смугами лишається 0,45.
-const DRONE_ICON_OFFSET: Vector2 = Vector2(-(0.48 + 0.20) / DRONE_ICON_PIXEL, 0.0)
+## Значок дронів — у світових одиницях, як і смуга HP: 0,42 завширшки (на найдальшому зумі ~19 пікселів,
+## цятка — 3 × 3 пікселі з проміжком 2).
+const DRONE_ICON_WIDTH: float = 0.42
+const DRONE_ICON_PIXEL: float = DRONE_ICON_WIDTH / 61.0
+## Значок — у рядку числа HP, лівим краєм на лівому кінці своєї смуги: за смугу він не виходить і
+## на бійців сусіда не лягає. Число тоді вирівняне ліворуч одразу за значком.
+const HP_BAR_HALF: float = _HP_BAR_SIZE.x * HP_BAR_PIXEL_SIZE * 0.5
+const DRONE_ICON_OFFSET: Vector2 = Vector2((-HP_BAR_HALF + DRONE_ICON_WIDTH * 0.5) / DRONE_ICON_PIXEL, 0.0)
+const HP_LABEL_AFTER_ICON: float = -HP_BAR_HALF + DRONE_ICON_WIDTH + 0.05
 ## Колір силуету й цяток — той самий жовтий, що й позначка дрона (DroneThreatened), обведений темним.
 const _DRONE_FILL: Color = Color("e2bd45")
 const _DRONE_INK: Color = Color("1d1a14")
@@ -965,23 +971,19 @@ static func drone_texture(count: int) -> ImageTexture:
 	var key: Array = ["drone", count]
 	if _texture_cache.has(key):
 		return _texture_cache[key]
-	var w: int = 56
+	var w: int = 61
 	var h: int = 22
 	var fill := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	fill.fill(Color(0, 0, 0, 0))
 	# фюзеляж і носовий обтічник
-	fill.fill_rect(Rect2i(6, 9, 26, 4), _DRONE_FILL)
-	fill.fill_rect(Rect2i(32, 10, 3, 2), _DRONE_FILL)
+	fill.fill_rect(Rect2i(3, 9, 22, 4), _DRONE_FILL)
+	fill.fill_rect(Rect2i(25, 10, 3, 2), _DRONE_FILL)
 	# крила посередині, хвостове оперення ззаду
-	fill.fill_rect(Rect2i(18, 2, 4, 18), _DRONE_FILL)
-	fill.fill_rect(Rect2i(7, 5, 3, 12), _DRONE_FILL)
-	# цятки праворуч від силуету, по одній на дрон: під значком лежить підпис HP і накрив би їх
+	fill.fill_rect(Rect2i(13, 2, 4, 18), _DRONE_FILL)
+	fill.fill_rect(Rect2i(3, 5, 3, 12), _DRONE_FILL)
+	# цятки праворуч, по одній на дрон: 10 текселів (3 пікселі на найдальшому зумі) і 7 між ними
 	for i in clampi(count, 0, _MAX_DRONES):
-		var cx: int = 42 + i * 8
-		for y in range(7, 15):
-			for x in range(cx - 3, cx + 3):
-				if Vector2(x - cx + 0.5, y - 10.5).length() <= 3.2:
-					fill.set_pixel(x, y, _DRONE_FILL)
+		fill.fill_rect(Rect2i(33 + i * 17, 6, 10, 10), _DRONE_FILL)
 	# темне обведення на 1 піксель довкола всього, що залите: читається на будь-якому ґрунті
 	var out := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	out.fill(Color(0, 0, 0, 0))

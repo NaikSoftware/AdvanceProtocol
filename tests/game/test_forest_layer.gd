@@ -168,17 +168,64 @@ func test_fade_reaches_every_foliage_group() -> void:
 		assert_gt(tested, 3, "%s: груп листя перевірено" % season)
 
 
+## Камера гри на нахилі `pitch_deg` (той самий кут повороту, що й у IsoCameraRig), дивиться на `target`.
+func _rig_camera(pitch_deg: float, target: Vector3) -> Camera3D:
+	var cam := Camera3D.new()
+	add_child_autofree(cam)
+	var back: Vector3 = Basis(Vector3.UP, deg_to_rad(IsoCameraRig.YAW_DEGREES)) * Basis(Vector3.RIGHT, -deg_to_rad(pitch_deg)) * Vector3.BACK
+	cam.look_at_from_position(target + back * 14.0, target)
+	cam.make_current()
+	return cam
+
+
+## Розчинені крони одного проходу: [кількість, розчинені записи з відстанню до юніта].
+func _faded_crowns(f: ForestLayer, u: Vector2i, dir: Vector2, season: StringName) -> int:
+	var faded: int = 0
+	for g: Dictionary in f._fadable:
+		var list: Array = g["list"]
+		var alpha: PackedFloat32Array = g["alpha"]
+		for i in list.size():
+			if float(list[i]["top"]) < ForestLayer.UNDER_TOP:
+				continue
+			var rel: Vector2 = (list[i]["pos"] as Vector2) - Vector2(u)
+			var lateral: float = absf(rel.x * dir.y - rel.y * dir.x)
+			if alpha[i] >= 1.0:
+				continue
+			faded += 1
+			assert_lte(lateral, ForestLayer.UNIT_HALF + ForestLayer.FADE_MARGIN + ForestLayer.CROWN_EDGE + ForestLayer.FADE_SOFT,
+					"%s: розчинена крона за %.2f клітинки вбік від осі погляду" % [season, lateral])
+			if rel.dot(dir) < 0.0:
+				assert_lte(rel.length(), float(list[i]["r"]) * ForestLayer.CROWN_BEHIND + 0.001,
+						"%s: позаду юніта — лише крона, під якою він стоїть" % season)
+	return faded
+
+
 func test_fade_only_crowns_on_the_view_axis() -> void:
-	# Над юнітом розчиняються лише крони, що на екрані його перекривають: ті, крізь які йде промінь до
-	# камери (до півтора десятка налеглих крон), а не шмат лісу довкола. Крони за ~1 клітинку вбік від осі погляду лишаються цілими.
+	# Над юнітом розчиняються лише крони на осі погляду (півсилует юніта з запасом), а не шмат лісу
+	# довкола, — на обох нахилах камери.
 	for season: StringName in [&"summer", &"late"]:
-		var f := _layer(season)
-		var cam := Camera3D.new()
-		add_child_autofree(cam)
-		cam.look_at_from_position(Vector3(-4.0, 14.0, -4.0), Vector3(5.0, 0.0, 5.0))
-		cam.make_current()
-		var u := Vector2i(5, 5)
-		f.set_reveal_cells([u] as Array[Vector2i])
+		for pitch: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
+			var f := _layer(season)
+			var u := Vector2i(5, 5)
+			var cam := _rig_camera(pitch, Vector3(u.x, 0.0, u.y))
+			f.set_reveal_cells([u] as Array[Vector2i])
+			var back: Vector3 = cam.global_transform.basis.z
+			var faded: int = _faded_crowns(f, u, Vector2(back.x, back.z).normalized(), season)
+			# На пологому нахилі промінь довше йде крізь листя: щоб відділення на полі за краєм лісу (Ridge,
+			# клітинка forestN2) було видно, гаснуть крони на всю глибину вздовж погляду — до 12 у цьому
+			# густому лісі; на крутому — до 8, як і було.
+			var ceiling: int = 12 if pitch < IsoCameraRig.PITCH_FAR_DEG else 8
+			assert_between(faded, 1, ceiling, "%s, нахил %d°: розчинено крон над юнітом" % [season, pitch])
+			cam.free()
+
+
+## Три юніти поряд: розчинене — сума кількох вузьких смуг, а не суцільна галявина.
+func test_fade_over_adjacent_units_stays_a_few_crowns_each() -> void:
+	for pitch: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
+		var f := _layer(&"summer")
+		var units: Array[Vector2i] = [Vector2i(4, 5), Vector2i(5, 5), Vector2i(5, 6)]
+		var cam := _rig_camera(pitch, Vector3(5.0, 0.0, 5.0))
+		f.set_reveal_cells(units)
 		var back: Vector3 = cam.global_transform.basis.z
 		var dir := Vector2(back.x, back.z).normalized()
 		var faded: int = 0
@@ -186,20 +233,9 @@ func test_fade_only_crowns_on_the_view_axis() -> void:
 			var list: Array = g["list"]
 			var alpha: PackedFloat32Array = g["alpha"]
 			for i in list.size():
-				if float(list[i]["top"]) < ForestLayer.UNDER_TOP:
-					continue
-				var rel: Vector2 = (list[i]["pos"] as Vector2) - Vector2(u)
-				if alpha[i] < 1.0:
+				if float(list[i]["top"]) >= ForestLayer.UNDER_TOP and alpha[i] < 1.0:
 					faded += 1
-					# лише крони біля юніта й з боку камери: позаду — та, під якою він стоїть
-					assert_lt(rel.length(), 2.0, "%s: розчинена крона за %.1f клітинки від юніта" % [season, rel.length()])
-					assert_gt(rel.dot(dir), -float(list[i]["r"]) - ForestLayer.FIGURE_SPREAD, "%s: розчинена крона позаду юніта" % season)
-				var lateral: float = absf(rel.x * dir.y - rel.y * dir.x)
-				if lateral > 1.0:
-					assert_eq(alpha[i], 1.0, "%s: крона за %.1f клітинки вбік від осі погляду лишається цілою" % [season, lateral])
-		# у цьому густому лісі (крони радіусом до 0,83 клітинки налягають одна на одну) промінь перетинає
-		# до півтора десятка крон; стеля — щоб не розчинявся шмат лісу
-		assert_between(faded, 1, 16, "%s: розчинено крон над юнітом" % season)
+		assert_between(faded, 2, 24 if pitch < IsoCameraRig.PITCH_FAR_DEG else 20, "нахил %d°: розчинено крон над трьома юнітами" % pitch)
 		cam.free()
 
 
@@ -259,9 +295,8 @@ func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:
 			assert_eq(alive, alpha[i] >= 1.0, "таблиця батча збігається з альфою")
 			if not alive:
 				gone += 1
-	# лише крони, крізь які проходить промінь до камери: крони тут радіусом 0,45–0,83 клітинки й налягають
-	# одна на одну, тож промінь перетинає до півтора десятка; решта лісу довкола лишається
-	assert_between(gone, 1, 16, "над юнітом зникли 1–16 крон")
+	# охоплення — півсилует юніта вздовж погляду на всю глибину крон (камера тут між двома нахилами гри)
+	assert_between(gone, 1, 12, "над юнітом зникли 1–12 крон")
 	f.set_reveal_cells([] as Array[Vector2i])
 	for g: Dictionary in f._fadable + f._ring_fadable:
 		for i in (g["list"] as Array).size():

@@ -436,6 +436,9 @@ static func _figure_variant(set_id: int, key_id: int, slug: String) -> ArrayMesh
 static var _fallen_materials: Dictionary = {}
 
 
+const FALLEN_SPECULAR: float = 0.1
+
+
 ## Матеріал загиблих набору: матеріал простого бійця з `fallen` (шейдер темнить), один на набір, тож
 ## увесь шар тіл набору — один виклик малювання. Без моделі — темний колір коробок.
 static func fallen_material(set_id: int) -> Material:
@@ -444,6 +447,9 @@ static func fallen_material(set_id: int) -> Material:
 		if body_mesh(set_id) != null and has_model(PLAIN_FIGURE, set_id):
 			var m := model_material(PLAIN_FIGURE, set_id).duplicate() as ShaderMaterial
 			m.set_shader_parameter("fallen", true)
+			# Мокра від багна тканина не блищить: з відблиском бійця тіло під сонцем сіріло.
+			m.set_shader_parameter("specular", FALLEN_SPECULAR)
+			m.set_shader_parameter("roughness", 1.0)
 			_fallen_materials[key] = m
 		else:
 			var box := StandardMaterial3D.new()

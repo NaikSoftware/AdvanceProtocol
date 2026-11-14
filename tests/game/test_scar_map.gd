@@ -86,3 +86,15 @@ func test_scorch_shows_only_once_its_source_cell_is_seen() -> void:
 	scars.reset_scorches()
 	scars.show_for(v)
 	assert_eq(scars.image().get_pixelv(edge).r8, 0, "перебудова без загиблого — плями нема")
+
+
+## Маска розвіданого — тексель на тайл, і читається найближчим текселем: лінійна фільтрація розмазувала б
+## шрам на пів тайла в нерозвідане (§3.5).
+func test_ground_shader_samples_the_seen_mask_nearest() -> void:
+	var code: String = (load("res://game/battle/shaders/ground.gdshader") as Shader).code
+	var decl := RegEx.create_from_string("uniform\\s+sampler2D\\s+scar_seen\\s*:([^;]*);")
+	var m: RegExMatch = decl.search(code)
+	assert_not_null(m, "маска оголошена")
+	if m != null:
+		assert_true(m.get_string(1).contains("filter_nearest"), "найближчим текселем")
+		assert_false(m.get_string(1).contains("filter_linear"))

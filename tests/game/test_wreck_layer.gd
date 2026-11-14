@@ -267,7 +267,7 @@ func test_bodies_lie_off_the_standing_slots_and_across_the_view() -> void:
 				var xf: Transform3D = WreckLayer.body_transform(b, slot)
 				assert_eq(xf, WreckLayer.body_transform(b, slot), "те саме тіло лягає однаково")
 				var r: float = Vector2(xf.origin.x - 3.0, xf.origin.z - 3.0).length()
-				assert_between(r, 0.17, 0.41, "довкола стоячих місць і в межах тайла")
+				assert_between(r, WreckLayer.BODY_RING_MIN - 0.0001, WreckLayer.BODY_RING_MAX + 0.0001, "довкола стоячих місць і в межах тайла")
 				var axis: Vector3 = xf.basis.z
 				var off: float = absf(wrapf(atan2(axis.x, axis.z) - cam, -PI * 0.5, PI * 0.5))
 				assert_gte(off, WreckLayer.BODY_VIEW_MIN - 0.0001, "довга вісь не вздовж погляду")
@@ -292,6 +292,8 @@ func test_model_bodies_use_the_body_mesh_and_one_fallen_material_per_set() -> vo
 	assert_same(mi.multimesh.mesh, body, "загиблий — своя сітка, не стоячий боєць плазом")
 	assert_same(mi.material_override, UnitSilhouettes.fallen_material(1))
 	assert_true((mi.material_override as ShaderMaterial).get_shader_parameter("fallen"), "шейдер темнить загиблих")
+	assert_lte((mi.material_override as ShaderMaterial).get_shader_parameter("specular"), 0.1, "тіло без відблиску")
+	assert_eq((mi.material_override as ShaderMaterial).get_shader_parameter("roughness"), 1.0)
 	assert_ne(UnitSilhouettes.model_material(0).get_shader_parameter("fallen"), true, "живі — ні")
 	assert_same((mi.material_override as ShaderMaterial).get_shader_parameter("albedo_tex"),
 		UnitSilhouettes.model_material(0).get_shader_parameter("albedo_tex"), "атлас простого бійця")

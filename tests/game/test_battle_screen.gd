@@ -1578,33 +1578,37 @@ func test_resume_gives_the_mine_layer_the_drawn_road_surface() -> void:
 
 ## Знищене відділення лишає стриману пляму: перебудова відновлює її для кожного загиблого відділення
 ## (пляма справді намальована), маска розвіданого ховає її там, де глядач не був, а у воді, на мосту й
-## на підірваному мосту плями нема.
+## на підірваному мосту плями нема — ні на перебудові, ні наживо.
 func test_dead_squads_leave_a_masked_restrained_scorch_but_none_on_water_or_bridges() -> void:
 	var service: Node = MatchServiceScript.new()
 	add_child_autofree(service)
 	var m: MapData = _map(20, 6)
 	m.tiles[1 * 20 + 6] = Terrain.Kind.WATER
 	m.tiles[1 * 20 + 7] = Terrain.Kind.BRIDGE
+	m.tiles[1 * 20 + 9] = Terrain.Kind.BRIDGE_DESTROYED
 	m.spawns = [
 		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
 		{"type_id": 0, "owner": 1, "pos": Vector2i(2, 1), "facing": 0},
 		{"type_id": 0, "owner": 1, "pos": Vector2i(18, 4), "facing": 0},
 		{"type_id": 0, "owner": 1, "pos": Vector2i(4, 4), "facing": 0},
 		{"type_id": 0, "owner": 1, "pos": Vector2i(7, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(10, 1), "facing": 0},
 	] as Array[Dictionary]
 	var screen: Node3D = _screen()
 	screen.setup(m, 2, 1, service)
 	var state: BattleState = service.state
 	var scars: ScarMap = screen._scars
-	for p: Vector2i in [Vector2i(2, 1), Vector2i(18, 4), Vector2i(4, 4), Vector2i(7, 1)]:
+	for p: Vector2i in [Vector2i(2, 1), Vector2i(18, 4), Vector2i(4, 4), Vector2i(7, 1), Vector2i(10, 1)]:
 		state.unit_at(p).hp = 0
 	state.units.values().filter(func(u: Unit) -> bool: return u.pos == Vector2i(4, 4))[0].pos = Vector2i(6, 1)  # у воді
+	state.units.values().filter(func(u: Unit) -> bool: return u.pos == Vector2i(10, 1))[0].pos = Vector2i(9, 1)  # з мостом
 	screen._rebuild_wrecks()
 	var px := func(c: Vector2i) -> Color:
 		return scars._img.get_pixel(c.x * ScarMap.PX_PER_TILE + ScarMap.PX_PER_TILE / 2, c.y * ScarMap.PX_PER_TILE + ScarMap.PX_PER_TILE / 2)
 	assert_true(scars.has_squad_scorch(Vector2i(2, 1)))
 	assert_gt(px.call(Vector2i(2, 1)).r, 0.2, "пляма справді намальована")
 	assert_lt(px.call(Vector2i(2, 1)).r, 0.6, "і стримана — половина темряви уламків")
+	assert_true(scars.is_painted(Vector2i(2, 1)))
 	assert_eq(px.call(Vector2i(2, 1)).a, 0.0, "без цяток попелу")
 	assert_true(scars.has_squad_scorch(Vector2i(18, 4)), "пляма ставиться й на нерозвіданому —")
 	assert_false(state.vision[0].is_seen(Vector2i(18, 4)))
@@ -1612,6 +1616,15 @@ func test_dead_squads_leave_a_masked_restrained_scorch_but_none_on_water_or_brid
 	assert_eq(scars._mask.get_pixel(2, 1).r, 1.0)
 	assert_false(scars.has_squad_scorch(Vector2i(6, 1)), "у воді — ні")
 	assert_false(scars.has_squad_scorch(Vector2i(7, 1)), "на мосту — ні: під настилом русло")
+	assert_false(scars.has_squad_scorch(Vector2i(9, 1)), "на підірваному мосту — ні: загиблі в річці")
+	# Наживо — так само: загибель на мосту й уламки на ньому плям не ставлять.
+	var on_bridge := Casualties.Body.new(99, Vector2i(7, 1), 1, 0, 0, 0, 4)
+	screen._on_figures_fell(on_bridge)
+	screen._on_wreck_left(Vector2i(7, 1), 5, 0, 1)
+	screen._on_wreck_left(Vector2i(9, 1), 5, 0, 1)
+	assert_false(scars.has_squad_scorch(Vector2i(7, 1)))
+	assert_false(scars.is_painted(Vector2i(7, 1)), "уламки на мосту — без плями")
+	assert_false(scars.is_painted(Vector2i(9, 1)), "і на підірваному")
 
 
 ## Бійці падають у мить влучання, але програвач не фільтрує подій за глядачем (§6): тіло на тайлі, якого

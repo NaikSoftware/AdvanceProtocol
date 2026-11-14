@@ -655,12 +655,14 @@ func body_contacts() -> MultiMeshInstance3D:
 	return _body_contacts
 
 
-## Кільце, на якому лежать тіла довкола середини тайла: стоячі місця ближче (до ~0,17), тож тіла на тайлі,
-## де відділення досі стоїть, його не накривають.
-const BODY_RING: float = 0.29
-## Розкид відстані від середини: тіла не лежать по колу. Ближче за ~0,2 почалися б стоячі місця, далі за ~0,36
-## тіло вийшло б за тайл.
-const BODY_RING_SPREAD: float = 0.07
+## Відстань тіла від середини тайла (1,6–3,2 м): стоячі місця ближче (до ~0,17), тож тіла на тайлі, де
+## відділення досі стоїть, його не накривають; далі за 0,4 тіло вийшло б за тайл. Різна для кожного тіла —
+## тіла не лежать по колу.
+const BODY_RING_MIN: float = 0.2
+const BODY_RING_MAX: float = 0.4
+## Кут тіла від його стоячого місця — до ±40°: чотири місця симетричні, і без розкиду тіла знищеного
+## відділення лягали хрестом.
+const BODY_ANGLE: float = 0.7
 ## Край плями знищеного відділення (ScarMap.SQUAD_SCORCH_RADIUS_M, 2,6 м): тут лягає одне з тіл.
 const BODY_RING_SCORCH: float = 0.33
 ## Біля води кільце тісніше: видима вода підходить до 0,3 тайла від середини клітинки суші, і тіло (0,225
@@ -671,10 +673,11 @@ const BODY_JITTER: float = 0.0375
 const BODY_TURN: float = 0.8
 ## Довга вісь тіла — не ближче за 35° до погляду камери: уздовж погляду тіло скорочується в стоячу фігуру.
 const BODY_VIEW_MIN: float = 0.6109
-## На мосту тіло лежить уздовж настилу, не далі за стільки від його осі: найвужча проїжджа частина
-## (понтонний міст, 0,70 завширшки; мостовий проліт — 0,46) інакше лишила б його звислим над річкою.
+## На мосту тіла лежать рядом уздовж настилу, місце за місцем через BODY_DECK_STEP (1,2 м; ближче — зливались
+## у купу), не далі за BODY_DECK_ACROSS від осі: найвужча проїжджа частина (понтонний міст, 0,70 завширшки;
+## мостовий проліт — 0,46) інакше лишила б тіло звислим над річкою.
 const BODY_DECK_ACROSS: float = 0.06
-const BODY_DECK_ALONG: float = 0.3
+const BODY_DECK_STEP: float = 0.15
 const BODY_DECK_TURN: float = 0.17
 
 
@@ -691,7 +694,7 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 		var along_z: bool = _is_water(board, b.pos + Vector2i(1, 0)) or _is_water(board, b.pos + Vector2i(-1, 0))
 		var along := Vector3(0.0, 0.0, 1.0) if along_z else Vector3(1.0, 0.0, 0.0)
 		var across := Vector3(along.z, 0.0, along.x)
-		var at: Vector3 = centre + along * rng.randf_range(-BODY_DECK_ALONG, BODY_DECK_ALONG) \
+		var at: Vector3 = centre + along * (float(slot) - 1.5) * BODY_DECK_STEP \
 			+ across * rng.randf_range(-BODY_DECK_ACROSS, BODY_DECK_ACROSS)
 		var heading: float = (0.0 if along_z else PI * 0.5) + rng.randf_range(-BODY_DECK_TURN, BODY_DECK_TURN)
 		at.y = _body_ground(b.pos, at)
@@ -701,16 +704,19 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
 				near_water = near_water or _is_water(board, b.pos + Vector2i(dx, dy))
-	# Відстань від середини теж різна (до ±0,55 м), а одне тіло знищеного відділення — на краю його плями.
-	var ring: float = BODY_RING_WATER if near_water else BODY_RING + rng.randf_range(-BODY_RING_SPREAD, BODY_RING_SPREAD)
+	# Одне тіло знищеного відділення — на краю його плями.
+	var ring: float = BODY_RING_WATER if near_water else rng.randf_range(BODY_RING_MIN, BODY_RING_MAX)
 	if not near_water and b.first == 0 and slot == 0:
 		ring = BODY_RING_SCORCH
 	var jitter: float = BODY_JITTER * (0.5 if near_water else 1.0)
 	var squad_yaw: float = deg_to_rad(UnitView._degrees_for_facing(b.facing))
 	var s: Vector3 = UnitSilhouettes.figure_transform(slot, true).origin
-	var ang: float = atan2(s.z, s.x) + rng.randf_range(-0.35, 0.35)
+	var ang: float = atan2(s.z, s.x) + rng.randf_range(-BODY_ANGLE, BODY_ANGLE)
 	var local := Vector3(cos(ang), 0.0, sin(ang)) * ring
 	local += Vector3(rng.randf_range(-jitter, jitter), 0.0, rng.randf_range(-jitter, jitter))
+	if not near_water:
+		# після зсуву — знову між стоячими місцями й краєм тайла
+		local = local.normalized() * clampf(local.length(), BODY_RING_MIN, BODY_RING_MAX)
 	var turn := Basis(Vector3.UP, squad_yaw)
 	var tangent: Vector3 = turn * Vector3(-sin(ang), 0.0, cos(ang))
 	var heading: float = atan2(tangent.x, tangent.z) + rng.randf_range(-BODY_TURN, BODY_TURN)
