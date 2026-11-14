@@ -104,7 +104,8 @@ rifle squad and the engineer.
   allows. Nothing tracks "has already moved", and nothing may.
 - **The two movement zones are the primary UI of the game:** gold = reachable with `>= fire_cost`
   AP left, red = reachable but cannot act. Recomputed after every action that changes AP or
-  occupancy.
+  occupancy. **They are how a player reads AP: no AP number is shown anywhere in the UI** — not
+  on a unit, not in a preview, not in a card.
 - **A move is planned from what the player can see, and walked one tile at a time.** Planning and
   the zones use fog-filtered occupancy plus known enemy mines and, for a vehicle, known wrecks;
   the walk checks the truth and **stops on the tile before** anything it could not see or an
@@ -409,7 +410,8 @@ must hit (one tile = 1.0 unit, ground at `y = 0`, front along `−Z`).
 - No `get_node("../../Foo")` path strings in gameplay code; wire dependencies explicitly.
 - Rules never run in `_process`. If gameplay logic is in a frame callback, it is in the wrong file.
 - Signals go view-ward only. `core/` returns events; it does not emit Godot signals.
-- UI: tap targets ≥ 48 dp, respect notch/safe areas, every rule-relevant number visible somewhere.
+- UI: tap targets ≥ 48 dp, respect notch/safe areas, every rule-relevant number visible somewhere —
+  except AP and ground state, which the movement zones carry (§3.2, §3.12).
 - Localisation from day one: Ukrainian and English, no hard-coded display strings.
 - Comments explain **why**, not what, and are written in Ukrainian in `core/`.
 - Tests are required for anything in `core/`. The damage table gets golden tests; the roster gets
