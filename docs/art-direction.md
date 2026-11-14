@@ -151,6 +151,13 @@ falls back to the box placeholder, so a model may land one type at a time.
 - **Wheels:** driving forwards turns a wheel about X through its axle by travel / radius, top
   moving towards −Z. The radius is `_SPECS.wheel` per type, the model's road-wheel radius —
   default 0.06 (0.5 m); tanks: medium 0.043, tank destroyer 0.041, light 0.038, heavy 0.039.
+- **Wheeled vehicles** (armoured car, troop carrier, scout car) have no track part. The build cuts the
+  source's fused tyres (`units.json` `gear.kind: "wheels"`, the axle discs) and adds one procedural tyre
+  per axle and side: a barrel of the axle radius, a sloping sidewall, a flat painted hub. Every tyre face
+  is COLOR_0 B = 1 with alpha 0.5 (one tyre radius, which is `_SPECS.wheel`: 0.083, 0.075, 0.061); the
+  tyre is rubber, never body paint, and its sidewall carries lugs so a turning wheel reads at 100 px.
+  The gun is a roof mount inside the hull outline, so `UnitSilhouettes.muzzle()` is a point above the
+  roof, and the hull row (`hull` x, z) is the overall width and length with tyres.
 - **Import settings** (`<slug>.glb.import`; `test_unit_silhouettes.gd` checks only the first four —
   `force_disable_compression` true, `generate_lods` false, `create_shadow_meshes` false,
   `light_baking` not 2 — the rest are set by hand):

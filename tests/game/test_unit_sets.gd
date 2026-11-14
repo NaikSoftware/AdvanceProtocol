@@ -119,17 +119,25 @@ func test_spec_row_matches_every_model_muzzle() -> void:
 			var v: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 			if v.is_empty():
 				continue
-			var zmin: float = v[0].z
+			var row: Dictionary = UnitSilhouettes.spec(id, set_id)
+			# Колісна машина носить гармату на даху в межах корпусу, тож дуло — найпередніша вершина на висоті осі біля осі,
+			# а не передок корпусу.
+			var wheeled: bool = (row.extras as Array).has(&"wheels")
+			var bore: float = UnitSilhouettes.barrel_y(id, set_id)
+			var cand := PackedVector3Array()
 			for p in v:
+				if not wheeled or (absf(p.x) < 0.06 and absf(p.y - bore) < 0.02):
+					cand.append(p)
+			var zmin: float = cand[0].z
+			for p in cand:
 				zmin = minf(zmin, p.z)
 			var ring_y: float = 0.0
 			var n: int = 0
-			for p in v:
+			for p in cand:
 				if p.z < zmin + 0.001:
 					ring_y += p.y
 					n += 1
-			var row: Dictionary = UnitSilhouettes.spec(id, set_id)
-			if not (row.extras as Array).has(&"turret"):
+			if not ((row.extras as Array).has(&"turret") or (row.extras as Array).has(&"roof_gun")):
 				continue
 			checked += 1
 			var where: String = "набір %d тип %d" % [set_id, id]
