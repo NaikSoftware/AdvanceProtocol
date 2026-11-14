@@ -85,6 +85,41 @@ func test_two_player_turn_is_replayed_after_gate() -> void:
 	assert_eq(state.unit_at(Vector2i(4, 5)), state.units_of(1)[0], "після повтору гравець 1 ходить")
 
 
+## Справжній ввід крізь оверлей: тап повз кнопку доходить до дошки й лише прискорює такт, клік по
+## «Пропустити» кінчає повтор.
+func test_real_tap_fast_forwards_and_skip_click_ends_replay() -> void:
+	await _e2e.boot(6, 6, [
+		_spawn(MEDIUM_TANK, 0, Vector2i(1, 2), E),
+		_spawn(MEDIUM_TANK, 0, Vector2i(3, 5), W),
+		_spawn(MEDIUM_TANK, 1, Vector2i(4, 4), W),
+	])
+	var state: BattleState = _e2e.service.state
+	await _e2e.act(Vector2i(1, 2), Vector2i(2, 3))
+	await _e2e.act(Vector2i(3, 5), Vector2i(2, 5))
+	await _e2e.end_turn()
+	_e2e.press(_e2e.gate().get_node("%ConfirmButton"))
+	assert_true(_e2e.screen._replay_state != null, "передумова: повтор іде")
+	assert_not_null(_overlay())
+	if _overlay() == null:
+		return
+	var p1: Unit = state.units_of(1)[0]
+	var taken: int = _e2e.service.events.size()
+	_e2e.tap(p1.pos)
+	_e2e.tap(p1.pos + Vector2i(0, 1))
+	assert_eq(Engine.time_scale, BattleScreen.REPLAY_FAST_FORWARD, "тап крізь оверлей прискорює такт")
+	assert_true(_e2e.screen._replay_state != null, "тап не кінчає повтор")
+	assert_eq(_e2e.service.events.size(), taken, "тап на повторі не дає жодної команди")
+	assert_eq(p1.pos, Vector2i(4, 4))
+	var skip: Button = _overlay().get_node("%SkipButton")
+	_e2e.click_at(skip.get_global_rect().get_center(), _e2e.vp)
+	assert_null(_e2e.screen._replay_state, "клік по «Пропустити» кінчає повтор")
+	assert_eq(Engine.time_scale, 1.0)
+	assert_true(_e2e.hud().visible)
+	await _e2e.settle()
+	await _e2e.act(Vector2i(4, 4), Vector2i(4, 5))
+	assert_eq(state.unit_at(Vector2i(4, 5)), p1, "після пропуску гравець 1 ходить")
+
+
 func test_three_player_replay_shows_both_opponents() -> void:
 	# Гравець 2 у центрі бачить обох: хід гравця 0 і хід гравця 1 ідуть на його повторі по черзі.
 	await _e2e.boot(9, 9, [

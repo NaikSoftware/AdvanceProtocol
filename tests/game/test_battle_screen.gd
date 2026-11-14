@@ -1687,8 +1687,8 @@ func test_tap_during_replay_never_submits() -> void:
 	# Наступний такт знову на звичайній швидкості повтору.
 	_finish_all_processed_tweens()
 	_finish_all_processed_tweens()
-	if screen._replay_state != null:
-		assert_eq(Engine.time_scale, 2.5, "прискорення тапу — лише до кінця такту")
+	assert_true(screen._replay_state != null, "передумова: повтор на наступному такті")
+	assert_eq(Engine.time_scale, 2.5, "прискорення тапу — лише до кінця такту")
 
 
 func test_hold_during_replay_shows_no_rings() -> void:
@@ -1699,9 +1699,11 @@ func test_hold_during_replay_shows_no_rings() -> void:
 	var inspections: Array = []
 	screen.input_controller().inspected.connect(func(i: Dictionary) -> void: inspections.append(i))
 	var cam3d: Camera3D = screen.get_node("%CameraRig").get_node("Yaw/Camera3D")
-	var at: Vector2 = cam3d.unproject_position(IsoCameraRig.cell_to_world(Vector2i(3, 5)))
+	# Власний танк гравця 1 стоїть у справжньому стані: поза повтором огляд тут спрацював би.
+	var at: Vector2 = cam3d.unproject_position(IsoCameraRig.cell_to_world(Vector2i(4, 4)))
 	screen._unhandled_input(_mb(at, true))
 	screen._process(BattleScreen.LONG_PRESS_SEC)
+	assert_false(screen._long_pressed, "натиск на повторі не стає довгим")
 	screen._unhandled_input(_mb(at, false))
 	assert_true(screen._replay_state != null, "передумова: повтор ще йде")
 	assert_eq(inspections.size(), 0, "довгий натиск на повторі не відкриває огляду")
@@ -1798,13 +1800,17 @@ func test_replay_draws_units_from_filter_sets_not_after_visibility() -> void:
 	m.tiles[1 * 8 + 5] = Terrain.Kind.BUILDING
 	m.spawns = [
 		{"type_id": 0, "owner": 0, "pos": Vector2i(3, 1), "facing": 2},
-		{"type_id": 5, "owner": 0, "pos": Vector2i(0, 0), "facing": 2},
+		{"type_id": 5, "owner": 0, "pos": Vector2i(4, 0), "facing": 2},
 		{"type_id": 5, "owner": 1, "pos": Vector2i(7, 1), "facing": 6},
 	] as Array[Dictionary]
 	var screen: Node3D = _screen()
 	screen.setup(m, 2, 1, service)
 	var squad: Unit = service.state.unit_at(Vector2i(3, 1))
+	var tank: Unit = service.state.unit_at(Vector2i(4, 0))
+	# Між двома кроками загону — видимий хід танка: повтор зупиниться на такті, де копія бачить загін.
 	assert_eq(service.submit(MoveCommand.create(squad.id, Vector2i(4, 1))), "")
+	_drain(screen)
+	assert_eq(service.submit(MoveCommand.create(tank.id, Vector2i(5, 0))), "")
 	_drain(screen)
 	assert_eq(service.submit(MoveCommand.create(squad.id, Vector2i(5, 1))), "")
 	_drain(screen)
@@ -1819,14 +1825,17 @@ func test_replay_draws_units_from_filter_sets_not_after_visibility() -> void:
 	assert_false(service.state.can_see_unit(1, squad), "передумова: загін сховався в будинку")
 	_confirm_gate(screen)
 	assert_not_null(screen.unit_view_for(squad.id), "на початку відрізка загін на розвіданому")
-	var views_during: Array[bool] = []
+	assert_eq(r.beats.size(), 2, "передумова: такт зникнення загону й такт танка")
+	var watched: int = 0
 	for _i in 30:
+		_finish_all_processed_tweens()
 		if screen._replay_state == null:
 			break
-		_finish_all_processed_tweens()
-		if screen._replay_state != null:
-			views_during.append(screen.unit_view_for(squad.id) != null)
-	assert_false(views_during.has(true), "загін не з'являється на маршруті до будинку")
+		watched += 1
+		var copy: BattleState = screen._replay_state
+		assert_true(copy.can_see_unit(1, copy.get_unit(squad.id)), "передумова: копія на цьому такті бачить загін")
+		assert_null(screen.unit_view_for(squad.id), "загін не з'являється на маршруті до будинку")
+	assert_gt(watched, 0, "повтор спинявся між тактами, і дошку посеред нього перевірено")
 	assert_null(screen.unit_view_for(squad.id), "і після повтору він схований")
 
 
