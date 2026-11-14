@@ -35,7 +35,7 @@ radius `range` tiles centred on the middle of the unit's tile. It is the weapon'
 rule states it (§3.1, Euclidean). Which units can actually be hit inside it is what the **marks**
 say: a crosshair on each marked unit. The circle is cheap to read at a glance and does not compete
 with the two movement contours, which stay tile-shaped. Like the contours, it shows through the
-forest canopy over the board.
+forest canopy, also past the board edge, where the ring continues on the ground.
 
 **Any visible unit can be inspected, including an enemy's.** This is the feature worth porting.
 Holding an enemy shows *its* range and which of **your** units stand inside it. With retaliation

@@ -196,14 +196,12 @@ void fragment() {
 		// Колір із домноженою альфою: кільце під лінією зон, як на землі.
 		vec3 pre = vec3(0.0);
 		float cov = 0.0;
-		// Кільце — лише над дошкою: ліс кільця за краєм лишається без нього.
-		// Множником, а не умовою циклу: fwidth у неоднорідному розгалуженні не визначений.
-		float on_board = all(greaterThanEqual(g, vec2(-0.5))) && all(lessThan(g, board_size - 0.5)) ? 1.0 : 0.0;
+		// Кільце не обрізане краєм дошки: на землі воно йде й за край, і розрив на кронах кільця читався б помилкою.
 		for (int i = 0; i < ring_count && i < 4; i++) {
 			vec2 d = g - rings[i].xy;
 			float r = length(d);
 			vec4 rc = canopy_ring(r, atan(d.y, d.x), rings[i].z, fwidth(r), ring_colors[i]);
-			float a = on_board * rc.a;
+			float a = rc.a;
 			pre = mix(pre, rc.rgb, a);
 			cov = a + cov * (1.0 - a);
 		}

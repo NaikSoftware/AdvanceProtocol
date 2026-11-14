@@ -229,7 +229,6 @@ func _wire(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter("contour_half", BoardView._CONTOUR_WIDTH * 0.5)
 	mat.set_shader_parameter("contour_lift", BoardView._CONTOUR_Y)
 	mat.set_shader_parameter("ring_half", BoardView._RING_WIDTH * 0.5)
-	mat.set_shader_parameter("board_size", Vector2(_board.size))
 	mat.set_shader_parameter("overlay_layers", 1 << (BoardView.OVERLAY_LAYER - 1))
 	var th: TerrainHeight = TerrainHeight.active
 	mat.set_shader_parameter("use_height", th != null)
