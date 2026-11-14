@@ -258,10 +258,11 @@ func test_gun_merged_mesh_carries_its_two_crew() -> void:
 	assert_same(UnitSilhouettes.merged_mesh(11), eng, "тип без розрахунку — без змін")
 
 
-## Розрахунок стоїть на вільній землі: під слідом фігури (0,5 × 0,4 м) із запасом 0,2 м нема жодного трикутника моделі гармати нижче 1,8 м.
+## Розрахунок стоїть на вільній землі: під слідом фігури (0,5 × 0,4 м) із запасом 0,3 м нема жодного трикутника моделі гармати нижче 1,8 м.
 func test_crew_stands_clear_of_the_shipped_gun_models() -> void:
 	UnitSilhouettes.reset_models()
-	var margin: float = 0.025
+	# 0,3 м від будь-якої балки станини чи ящика: 0,0375 тайла
+	var margin: float = 0.0375
 	for set_id in UnitSilhouettes.SET_COUNT:
 		for id: int in [9, 10]:
 			if not ResourceLoader.exists(UnitSilhouettes.model_path(id, set_id)):
@@ -333,20 +334,22 @@ func test_crew_footprints_stay_inside_their_tile() -> void:
 						assert_lte(absf(p.y), 0.5, "z розрахунку типу %d набору %d у тайлі" % [id, set_id])
 
 
-## Гармати й інженерна машина наборів 1 і 2 мають справжні розміри (довжина слідом моделі разом зі стволом і станинами, м): модель не
-## збільшена понад справжню техніку, а рядок _SET_SPECS описує лише лафет чи корпус. Відвал-плуг набору 2 коротший за справжній
-## (джерело має його короткий), тож допуск там ширший.
+## Довжина моделі (по сліду разом зі стволом, станинами й відвалом) не більша за справжню техніку більш ніж на 3 %:
+## модель не збільшена. Нижня межа ловить занадто маленьку модель. Справжні довжини — з docs/art/unit-models-research.md §5:
+## Nona-K 5,7 м; Msta-B — лише довжина в похідному положенні 12,7 м, тож межі взято від довжини моделі у бойовому
+## положенні (10,0–12,7 м); IMR-3M 9,32 м із розкладеною стрілою, у моделі стріла вкладена в корпус (6,5–9,6 м);
+## M119A3 6,32 м; M777A2 10,7 м; M1150 12,2 м з плугом.
 func test_set_towed_and_engineer_models_keep_real_lengths() -> void:
 	UnitSilhouettes.reset_models()
-	var real: Dictionary = {
-		Vector2i(1, 9): [5.7, 0.12], Vector2i(1, 10): [10.4, 0.12], Vector2i(1, 11): [9.32, 0.12],
-		Vector2i(2, 9): [6.32, 0.12], Vector2i(2, 10): [10.7, 0.12], Vector2i(2, 11): [12.2, 0.2],
+	var bounds: Dictionary = {
+		Vector2i(1, 9): Vector2(5.4, 5.87), Vector2i(1, 10): Vector2(10.0, 13.08), Vector2i(1, 11): Vector2(6.5, 9.6),
+		Vector2i(2, 9): Vector2(6.0, 6.51), Vector2i(2, 10): Vector2(10.2, 11.02), Vector2i(2, 11): Vector2(11.6, 12.57),
 	}
-	for key: Vector2i in real:
+	for key: Vector2i in bounds:
 		var mesh: ArrayMesh = UnitSilhouettes._own_model(key.y, key.x)
 		assert_not_null(mesh, "модель набору %d типу %d" % [key.x, key.y])
 		if mesh == null:
 			continue
-		var box: AABB = mesh.get_aabb()
-		var want: float = real[key][0]
-		assert_almost_eq(box.size.z * 8.0, want, want * float(real[key][1]), "довжина набору %d типу %d" % [key.x, key.y])
+		var length: float = mesh.get_aabb().size.z * 8.0
+		var b: Vector2 = bounds[key]
+		assert_between(length, b.x, b.y, "довжина набору %d типу %d, м" % [key.x, key.y])

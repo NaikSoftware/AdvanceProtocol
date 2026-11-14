@@ -191,26 +191,41 @@ func test_rows_match_carriage_and_running_gear_in_every_set() -> void:
 			var wx := Vector2(INF, -INF)
 			var wz := Vector2(INF, -INF)
 			var tx := Vector2(INF, -INF)
+			var tz := Vector2(INF, -INF)
 			var top: float = 0.0
 			var rear: float = -INF
+			var nrm: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+			var up_ys: Array[float] = []
 			for i in v.size():
 				if col[i].b > 0.5:
 					wx = Vector2(minf(wx.x, v[i].x), maxf(wx.y, v[i].x))
 					wz = Vector2(minf(wz.x, v[i].z), maxf(wz.y, v[i].z))
 				elif col[i].g > 0.5:
 					tx = Vector2(minf(tx.x, v[i].x), maxf(tx.y, v[i].x))
+					tz = Vector2(minf(tz.x, v[i].z), maxf(tz.y, v[i].z))
 				if absf(v[i].x) < hull.x * 0.5 and absf(v[i].z) < hull.z * 0.5:
 					top = maxf(top, v[i].y)
+					if nrm[i].y > 0.9 and col[i].b < 0.5 and col[i].g < 0.5:
+						up_ys.append(v[i].y)
 				rear = maxf(rear, v[i].z)
 			var gear_x: Vector2 = tx if id == 11 else wx
 			assert_almost_eq(gear_x.y - gear_x.x, hull.x, 0.03, "ширина рядка за колесами чи траками, " + where)
 			assert_gte(wz.x, -hull.z * 0.5 - 0.02, "колеса в межах довжини лафета, " + where)
 			assert_lte(wz.y, hull.z * 0.5 + 0.02, "колеса в межах довжини лафета, " + where)
-			assert_almost_eq(top, hull.y, 0.06, "висота рядка — верх лафета чи корпусу, " + where)
+			if id == 11 and set_id > 0:
+				# рядок інженерної машини — палуба корпусу (медіана верхніх поверхонь), а не верх кабіни чи стріли
+				up_ys.sort()
+				assert_almost_eq(up_ys[up_ys.size() / 2], hull.y, 0.06, "висота рядка — палуба корпусу, " + where)
+				assert_gt(top, hull.y, "надбудова вища за палубу, " + where)
+			else:
+				assert_almost_eq(top, hull.y, 0.06, "висота рядка — верх лафета чи корпусу, " + where)
 			if id == 11:
-				# корма корпусу — край рядка; стріла чи маркери дороги можуть виступати за неї, але не вкорочувати
+				# довжина рядка — довжина траків із запасом до 0,12 тайла: ні коротша за них, ні довша за корпус із ними
+				assert_gte(hull.z, tz.y - tz.x - 0.02, "корпус не коротший за траки, " + where)
+				assert_lte(hull.z, tz.y - tz.x + 0.12, "корпус не довший за траки більш ніж на 0,12, " + where)
+				# корма корпусу — край рядка; стріла чи маркери проходу можуть виступати за неї, але не вкорочувати
 				assert_gte(rear, hull.z * 0.5 - 0.02, "корма машини не коротша за рядок, " + where)
 				if set_id == 0:
 					assert_almost_eq(rear, hull.z * 0.5, 0.02, "корма машини — край рядка, " + where)
 			checked += 1
-	assert_gte(checked, 3, "моделі набору 0 перевірено")
+	assert_eq(checked, 9, "три моделі в кожному з трьох наборів")
