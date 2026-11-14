@@ -111,6 +111,8 @@ func save_current(path: String) -> Error:
 		if rf != null:
 			rf.store_string(JSON.stringify(replay_log.to_dict()))
 			rf.close()
+		else:
+			DirAccess.remove_absolute(path + ".replay")
 	return err
 
 
@@ -149,6 +151,7 @@ func _load_replay(sidecar: String) -> ReplayLog:
 		var json := JSON.new()
 		if json.parse(FileAccess.get_file_as_string(sidecar)) == OK and json.data is Dictionary:
 			var log: ReplayLog = ReplayLog.from_dict(json.data)
-			if log != null:
+			# Застарілий сайдкар (збій між двома записами, ручна правка) гірший за відсутній.
+			if log != null and log.matches(state):
 				return log
 	return ReplayLog.new()

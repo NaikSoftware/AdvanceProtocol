@@ -51,7 +51,9 @@ func rerun(viewer: int) -> Array[Dictionary]:
 	for c in span(viewer):
 		var actor: int = state.active_player
 		var turn: int = state.turn_number
-		assert(c.validate(state) == "", "команда з журналу недозволена")
+		# Журнал може прийти з диска застарілим: недозволену команду не застосовуємо в жодній збірці.
+		if c.validate(state) != "":
+			return []
 		var events: Array[Events.BattleEvent] = c.apply(state)
 		out.append({
 			"actor": actor,
@@ -60,6 +62,23 @@ func rerun(viewer: int) -> Array[Dictionary]:
 			"after": BattleSerializer.from_dict(BattleSerializer.to_dict(state)),
 		})
 	return out
+
+
+## Чи журнал закінчується рівно на `state`: відрізок найстаршого знімка йде до кінця журналу.
+## Порожній журнал без знімків збігається завжди — повторювати нічого.
+func matches(state: BattleState) -> bool:
+	var oldest: int = -1
+	for p in _snapshots:
+		if oldest < 0 or int(_snapshots[p]["index"]) < int(_snapshots[oldest]["index"]):
+			oldest = p
+	if oldest < 0:
+		return true
+	var entries: Array[Dictionary] = rerun(oldest)
+	if entries.size() != span(oldest).size():
+		return false
+	var end: BattleState = entries[-1]["after"] if not entries.is_empty() else start_state(oldest)
+	return JSON.stringify(BattleSerializer.to_dict(end), "", true) \
+			== JSON.stringify(BattleSerializer.to_dict(state), "", true)
 
 
 func to_dict() -> Dictionary:

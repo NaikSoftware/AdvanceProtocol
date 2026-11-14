@@ -117,3 +117,26 @@ func test_invalid_dict_is_null() -> void:
 	d = JSON.parse_string(JSON.stringify(log.to_dict()))
 	d["snapshots"]["0"]["state"] = {}
 	assert_null(ReplayLog.from_dict(d), "зіпсований знімок")
+
+func test_rerun_stops_on_command_that_no_longer_validates() -> void:
+	var s: BattleState = _state()
+	var log: ReplayLog = ReplayLog.new()
+	log.mark(0, s)
+	log.record(MoveCommand.create(1, Vector2i(15, 0)))  # далеко за межами AP: не застосовано
+	assert_ne(MoveCommand.create(1, Vector2i(15, 0)).validate(s), "")
+	assert_eq(log.rerun(0).size(), 0)
+
+func test_matches_only_the_state_the_log_ends_on() -> void:
+	var log: ReplayLog = ReplayLog.new()
+	var s: BattleState = _match(log)
+	assert_true(log.matches(s))
+	assert_true(ReplayLog.new().matches(s), "порожній журнал нічого не повторює")
+	var stale: ReplayLog = ReplayLog.new()
+	var early: BattleState = _state()
+	stale.mark(0, early)
+	stale.record(EndTurnCommand.create())
+	assert_false(stale.matches(early), "журнал веде не туди, де стан")
+	var broken: ReplayLog = ReplayLog.new()
+	broken.mark(0, early)
+	broken.record(MoveCommand.create(1, Vector2i(15, 0)))
+	assert_false(broken.matches(early), "команда не проходить перевірку")
