@@ -26,6 +26,10 @@ var wrecks: Array[Wrecks.Wreck] = []
 ## без жодного зусилля отримав би всезнання. Звідси правду бере лише сам хід
 ## (MoveCommand.apply()); планування — з known_broken_map().
 var broken_forest: Dictionary = {}
+## Сила команд на старті матчу (гравець -> сума max HP), записана в start() і збережена.
+## Читати max_hp() із живого реєстру пізніше не можна: після зміни чисел старе
+## збереження дало б частку понад 1.0 без жодної шкоди.
+var start_hp: Dictionary = {}
 var _next_unit_id: int = 1
 
 static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleState:
@@ -73,6 +77,9 @@ func start() -> void:
 	for p in player_count:
 		refresh_vision(p)
 	discover_cover()
+	start_hp.clear()
+	for p in player_count:
+		start_hp[p] = _derived_hp_start(p)
 
 func add_unit(type_id: int, owner: int, pos: Vector2i, facing: int) -> Unit:
 	var u: Unit = Unit.create(_next_unit_id, type_id, owner, pos, facing)
@@ -222,12 +229,12 @@ func team_hp(player: int) -> int:
 	return total
 
 func team_hp_start(player: int) -> int:
-	## Сила команди на старті матчу: max HP усіх юнітів, з якими гравець почав. Окремого
-	## поля немає, бо загиблі лишаються в units (hp 0) і разом із ними йдуть у збереження,
-	## тож сума виводиться з них і переживає завантаження без нового ключа.
-	# shortcut: вірно, доки юніти ніколи не видаляються з units і не додаються після старту
-	# матчу (add_unit() кличе лише MapData); з'явиться підкріплення чи видалення трупів —
-	# записувати суму в start() і зберігати її.
+	## Сила команди на старті матчу: сума, записана в start() і збережена. Без запису
+	## (стан зібрано без start() або старе збереження) — виводиться з max HP юнітів, що
+	## лишаються в units навіть мертвими.
+	return int(start_hp[player]) if start_hp.has(player) else _derived_hp_start(player)
+
+func _derived_hp_start(player: int) -> int:
 	var total: int = 0
 	for id in units:
 		var u: Unit = units[id]

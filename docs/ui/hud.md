@@ -155,16 +155,16 @@ and event batches. The tag follows its unit on pan; it is hidden while an event 
    pending move's path and destination. The tag stays ≥ `MIN_GAP` 8 from its own unit.
 2. **Beside, no leader.** Each side of the unit box at 8 and 12 dp, slid in 11 steps, plus the
    corners. A leaderless tag must be ≥ 8 dp nearer its own unit than any other.
-3. **With a leader.** Any 4-dp grid position more than `LEAD_AT` 12 dp from the unit box, with a
+3. **With a leader.** Any 4-dp grid position more than `LEAD_AT` 12 dp from the model plus HP bar (`UnitScreenBox.core`), not the unit box, with a
    leader ≤ `MAX_LEAD` 60 dp. The leader is a 1-dp bone line ending in a 5 × 5 square on the unit's
-   HP bar + model outline (`UnitScreenBox.core_poly`), or on a row of points just above the engine's
+   HP bar + model outline (`UnitScreenBox.core_poly`), never on the drone icon, or on a row of points just above the engine's
    HP label (the gap the engineer's cells leave open), never on the label itself. It stays 4 dp
    off other units and **does not cross a polygon from rule 1**, so its end never reads as a
    waypoint. Only when no spot exists at that level may the leader cross an engineer's target cell;
    its end square then still stays out of every target cell (square's half-diagonal plus `END_CLEAR` 2 dp from the cell) and lands on the
    unit-box edge farthest from them. The last resort ignores the polygons for the tag.
 4. **Score, lowest wins.** Contour and ring overlap under the tag weighs most (`MARK_WEIGHT`), then
-   contour corners under it, distance, a leader, crowding another unit or the chrome, and reading
+   contour corners under it, distance, a leader (a leader touching a contour adds `TOUCH_COST` 300; past `LONG_LEAD_FROM` 40 dp each dp costs `LONG_LEAD_PER_DP` 12), crowding another unit or the chrome, and reading
    nearer another unit than its own. A tag both within `CROWD_AIR` 12 dp of another unit and nearer
    to it than to its own pays `NEAR_OTHER_CROWDED_COST` 6000, more than any contour or corner cover,
    so it reads as that unit's label only when no other spot exists. The weights are the constants at the top of `TagPlacement`.
@@ -244,7 +244,7 @@ ordering contract in the header of `handover_gate.gd`, §3.5).
 - **Stack:** «ПЕРЕДАЙТЕ ПРИСТРІЙ» · nameplate (6-dp player-colour rules, «Гравець N» 700/40, a
   player-colour horizon line behind it) · info plate [ХІД][КАРТА] · «Готово». Nameplate and info plate share one width, at least
   `HandoverGate.MIN_WIDTH` 400 on every map.
-- **Team strength** (`game/ui/gate_strength.gd`), no numbers, labels or icons, not in the pause menu.
+- **Team strength** (`game/ui/gate_strength.gd`), no numbers, labels or icons, not in the pause menu. The starting total is recorded by `BattleState.start()` (`start_hp`) and saved; a state without it derives the sum from unit max HP.
   The share is core's `BattleState.team_hp(p) / team_hp_start(p)`: current HP of the player's living
   units over the max HP of every unit they started with; the view only maps ints to widths.
   - **Two players (A):** the horizon line is replaced by two 2-dp lines out from the nameplate,

@@ -101,3 +101,12 @@ func test_share_is_zero_for_a_player_who_never_had_units() -> void:
 	s.add_unit(5, 0, Vector2i(1, 1), 2)
 	assert_eq(s.team_hp_start(1), 0)
 	assert_eq(s.team_hp_share_of_start(1), 0.0, "без ділення на нуль")
+
+func test_recorded_start_total_survives_save_and_ignores_later_roster_numbers() -> void:
+	var s: BattleState = _state()
+	s.add_unit(5, 0, Vector2i(4, 4), 2)
+	s.start()
+	s.start_hp[0] = 777
+	var loaded: BattleState = BattleSerializer.from_dict(
+		JSON.parse_string(JSON.stringify(BattleSerializer.to_dict(s))))
+	assert_eq(loaded.team_hp_start(0), 777)
