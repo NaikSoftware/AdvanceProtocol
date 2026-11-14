@@ -27,7 +27,7 @@ of the tops fades towards that colour instead while the brown and black blocks s
 defaults for `roof_dark`, `roof_cool` and `dust` do not apply under `fade_to`: set them in the dict.
 `streak` applies to both schemes, and so does `roof_dust` (the noise-gated dust on up-facing faces, default 1;
 0 leaves only the even dust ramp low on the hull), and `chip_lines` (light chipping only on edge lines, default off).
-Plain only: `dark_floor` (least body tone outside the louvre slots and the gun, a fraction of the base, default off).
+Plain only: `dark_floor` (least body tone outside the louvre slots, glass and the gun, a fraction of the base, default off).
 """
 import sys, os
 import numpy as np
@@ -356,11 +356,11 @@ if t:
 
 # `dark_floor` (plain scheme, fraction of the base tone): no body texel goes darker than it.
 # Cavity, occlusion and grime stack up on hatch recesses and the walls of small roof blocks into
-# near-black 0.3 m squares that read as holes from above; only the louvre slots are real openings
-# and stay dark.
+# near-black 0.3 m squares that read as holes from above; the louvre slots and the glass (sights,
+# cab windows) are really dark and stay so.
 if plain and C.get("dark_floor"):
     opening = (on & slot) if lv else np.zeros((N, N), bool)
-    lift = (d["cov"] > 0.5) & ~on_gun & ~opening
+    lift = (d["cov"] > 0.5) & ~on_gun & ~opening & (glass < 0.5)
     col = np.where(lift[..., None], np.maximum(col, olive * C["dark_floor"]), col)
 
 # Baked relief a little deeper (`normal_gain`): bolts, panel joints and bevels catch the light at
