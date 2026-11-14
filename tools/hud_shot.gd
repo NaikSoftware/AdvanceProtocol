@@ -15,10 +15,11 @@ const STATES: Array[String] = [
 	"drone", "drone_preview", "hold_enemy", "handover", "pause",
 	"squad", "hold_enemy_squad", "engineer_pending", "mood",
 	"toast_drone", "toast_engineer", "own_tank_to_shot", "squad_shot", "shot_infantry",
-	"hold_enemy_squad_spent", "handover_p1", "handover_p3", "handover_default",
+	"hold_enemy_squad_spent", "handover_p1", "handover_p3",
 	"squad_to_drone", "hold_cluster", "engineer_to_armed", "shot_cover", "shot_infantry_armour_ignored",
 	"engineer_clear", "engineer_repair_bridge", "engineer_demolish_bridge", "hold_engineer",
 	"handover_2p_hurt", "handover_3p", "handover_3p_eliminated",
+	"handover_default",
 ]
 const SETTLE_FRAMES: int = 90
 const STATE_FRAMES: int = 20
