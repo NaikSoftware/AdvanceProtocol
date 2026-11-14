@@ -17,6 +17,7 @@ var ap_max: Label
 var pips: DronePips
 
 var _sil: TextureRect
+var _tab: ColorRect
 var _ap_box: HBoxContainer
 var _pip_box: HBoxContainer
 var _leader: PackedVector2Array = PackedVector2Array()
@@ -29,10 +30,17 @@ func _init() -> void:
 	face.theme_type_variation = &"HudPlateSolid"
 	face.custom_minimum_size = Vector2(0.0, HEIGHT)
 	visible = false
+	var shell := HBoxContainer.new()
+	shell.add_theme_constant_override("separation", 0)
+	face.add_child(shell)
+	# Смужка кольору гравця — лише на чужому тезі: свій юніт активного гравця читається без неї.
+	_tab = ColorRect.new()
+	_tab.custom_minimum_size = Vector2(4.0, 0.0)
+	shell.add_child(_tab)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 8)
 	margin.add_theme_constant_override("margin_right", 10)
-	face.add_child(margin)
+	shell.add_child(margin)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
 	margin.add_child(row)
@@ -73,6 +81,8 @@ func show_unit(unit: Unit, show_ap: bool) -> void:
 	name_label.text = tr(String(unit.type()["name_key"]))
 	_sil.texture = HudKit.SILHOUETTES[unit.unit_class()]
 	_ap_box.visible = show_ap
+	_tab.visible = not show_ap
+	_tab.color = UnitView.PLAYER_COLORS[unit.owner % UnitView.PLAYER_COLORS.size()]
 	# AP ворога не пишемо навіть у прихований Label: це прихований залишок його дій.
 	ap_value.text = str(unit.ap) if show_ap else ""
 	ap_max.text = "/%d" % unit.max_ap() if show_ap else ""
@@ -82,7 +92,7 @@ func show_unit(unit: Unit, show_ap: bool) -> void:
 	update_minimum_size()
 	reset_size()
 	# Запікаємо лише коли змінилося те, що видно: тег оновлюється й від руху камери.
-	var shown: String = "%s|%s|%d|%d|%d|%s" % [name_label.text, ap_value.text, drones, unit.drones_left, unit.unit_class(), show_ap]
+	var shown: String = "%s|%s|%d|%d|%d|%s|%d" % [name_label.text, ap_value.text, drones, unit.drones_left, unit.unit_class(), show_ap, unit.owner]
 	if shown != _shown:
 		_shown = shown
 		request_bake()

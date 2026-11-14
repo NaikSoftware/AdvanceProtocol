@@ -114,6 +114,9 @@ func _ready() -> void:
 	_engineer_panel.refused.connect(show_toast)
 	_toast.custom_minimum_size.y = 34.0
 	_square_pause_button()
+	# 90 % плити з 9-slice: лінійний фільтр розмиває край у 3 px, а решта плит має чітку смужку.
+	for b: Button in [_end_turn_button, _pause_button, _cancel_button]:
+		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_tag = UnitTag.new()
 	add_child(_tag)
 	_card = HoldCard.new()
@@ -214,8 +217,16 @@ func show_preview(preview: Dictionary) -> void:
 			_show_shot_preview(preview)
 		_:
 			return
-	_confirm_button.disabled = false
+	# Підтвердження живе лише поки плита показує те, що підтверджується (сектор до кроку, §3.4): поки вона
+	# запікається, тло порожнє.
+	_confirm_button.disabled = not _plate.is_baked()
+	if _confirm_button.disabled and not _plate.baked.is_connected(_enable_confirm):
+		_plate.baked.connect(_enable_confirm, CONNECT_ONE_SHOT)
 	_sync_modes()
+
+
+func _enable_confirm() -> void:
+	_confirm_button.disabled = _last_preview.is_empty()
 
 
 func _show_shot_preview(preview: Dictionary) -> void:
@@ -655,6 +666,12 @@ func _update_tag() -> void:
 		var kept := Rect2(unit_box.position + _tag_offset, tag_size)
 		if placement.is_legal(kept, _tag_relax):
 			rect = kept
+			# Місце, збережене лише з послабленням правил, не тримається, коли суворіше знайшлося: перший
+			# розрахунок міг іти до розкладки дошки, і тег лишався б накриваючи клітинки.
+			if _tag_relax > 0:
+				var strict: Dictionary = placement.best()
+				if strict["found"] and placement.relax_used < _tag_relax:
+					rect = Rect2()
 	if rect.size == Vector2.ZERO:
 		var pick: Dictionary = placement.best()
 		if not pick["found"]:

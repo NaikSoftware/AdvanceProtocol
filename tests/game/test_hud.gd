@@ -408,6 +408,10 @@ func test_controller_drives_the_hud_and_the_confirm_button_is_the_only_way_to_ac
 	controller.select_unit(u)
 	controller.tap_cell(Vector2i(4, 3))
 	assert_true(_label("PreviewApValue").is_visible_in_tree(), "action_preview від справжнього контролера читається HUD'ом")
+	assert_true((hud.get_node("%ConfirmButton") as Button).disabled, "поки плита не запеклася, підтвердити нічого")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
 	assert_false((hud.get_node("%ConfirmButton") as Button).disabled, "є що підтверджувати")
 
 	(hud.get_node("%CancelButton") as Button).pressed.emit()
@@ -504,6 +508,9 @@ func test_repair_preview_shows_target_hp_and_both_heal_bounds_verbatim() -> void
 	assert_eq(_label("PreviewHealValue").text, "20–43")
 	assert_eq(_label("PreviewHpValue").text, "320")
 	assert_eq(_label("PreviewHpMax").text, "/%d" % int(UnitTypes.get_type(5)["max_hp"]))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
 	assert_false((hud.get_node("%ConfirmButton") as Button).disabled)
 	hud.show_preview(_move_preview(10))
 	assert_false((hud.get_node("%PreviewRepairBox") as Control).visible, "прев'ю руху гасить ремонт")
@@ -728,6 +735,24 @@ func test_move_preview_cluster_keeps_the_destination_clear_with_a_real_camera() 
 	var row := Rect2((hud.get_node("%ActionRow") as Control).position, (hud.get_node("%ActionRow") as Control).size)
 	assert_false(cell.intersects(plate), "плита (варіант %s) не накриває ціль" % hud.cluster_name())
 	assert_false(cell.intersects(row))
+
+
+func test_bridge_cell_poly_sits_at_deck_height_not_on_the_river_bed() -> void:
+	var b := Board.create(14, 14, Terrain.GroundState.DRY)
+	for x in 14:
+		b.set_kind(Vector2i(x, 7), Terrain.Kind.WATER)
+		b.set_kind(Vector2i(x, 8), Terrain.Kind.WATER)
+	b.set_kind(Vector2i(11, 7), Terrain.Kind.BRIDGE)
+	b.set_kind(Vector2i(11, 8), Terrain.Kind.BRIDGE)
+	b.set_kind(Vector2i(11, 6), Terrain.Kind.ROAD)
+	b.set_kind(Vector2i(11, 9), Terrain.Kind.ROAD)
+	var previous: TerrainHeight = TerrainHeight.active
+	var t := TerrainHeight.bake(b, 0, 1)
+	TerrainHeight.active = t
+	var rig: IsoCameraRig = _rig_for(Vector2i(11, 7))
+	assert_eq(UnitScreenBox.cell_poly(Vector2i(11, 7), rig)[0], rig.unproject(Vector3(10.5, t.deck_y(Vector2i(11, 7)), 6.5)), "куток мосту — на настилі")
+	assert_ne(UnitScreenBox.cell_poly(Vector2i(11, 7), rig)[0], rig.unproject(Vector3(10.5, TerrainHeight.ground_y(10.5, 6.5), 6.5)))
+	TerrainHeight.active = previous
 
 
 func test_unit_screen_box_contains_the_projected_unit_and_its_hp_bar() -> void:

@@ -223,7 +223,10 @@ func _mouse_button(p: Vector2, pressed: bool) -> void:
 
 
 func confirm() -> void:
-	press(hud().get_node("%ConfirmButton"))
+	# Підтвердження оживає, щойно плита прев'ю запеклася (сектор до кроку, §3.4).
+	var button: Button = hud().get_node("%ConfirmButton")
+	await wait_until(func() -> bool: return not button.disabled, "плита прев'ю запеклася")
+	press(button)
 	await settle()
 
 

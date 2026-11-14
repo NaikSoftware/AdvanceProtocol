@@ -120,7 +120,7 @@ func _ready() -> void:
 	holder.add_child(_sil)
 	var sv := VBoxContainer.new()
 	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sv.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	sv.add_theme_constant_override("separation", 0)
 	sv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	srow.add_child(sv)
@@ -322,7 +322,8 @@ func _baseline_row(parent: Control) -> BaselineRow:
 func _column(parent: Control) -> VBoxContainer:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 0)
-	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# Підписи лівої й правої колонки на одній лінії в кожному стані, тож колонки не центруються по висоті.
+	v.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(v)
 	return v

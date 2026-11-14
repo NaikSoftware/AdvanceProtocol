@@ -72,6 +72,14 @@ func test_move_path_cells_are_hard_obstacles_for_the_tag_and_its_leader() -> voi
 	assert_false(p.is_legal(Rect2(250, 190, 209, 30)))
 
 
+func test_tag_keeps_four_dp_from_a_cell_apex_the_raster_cannot_see() -> void:
+	# Ромб (ізометрична клітинка): гострий верх тонший за крок растру, тож растр його пропускає.
+	var cell := PackedVector2Array([Vector2(400, 190), Vector2(430, 205), Vector2(400, 220), Vector2(370, 205)])
+	var p := TagPlacement.new(_scene({"polys": [cell] as Array[PackedVector2Array]}))
+	assert_false(p.is_legal(Rect2(240, 158, 209, 30)), "2 dp над верхівкою — у запасі 4 dp")
+	assert_true(p.is_legal(Rect2(240, 158, 209, 30), 2), "послаблення 2 полігони не враховує")
+
+
 func test_line_of_fire_is_blocked() -> void:
 	var fire := PackedVector2Array([Vector2(500, 225), Vector2(900, 225)])
 	var p := TagPlacement.new(_scene({"fire": fire}))

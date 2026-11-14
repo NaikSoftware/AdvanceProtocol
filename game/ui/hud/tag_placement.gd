@@ -63,9 +63,11 @@ var _gw: int = 0
 var _gh: int = 0
 var _hard: PackedByteArray = PackedByteArray()
 var _hard_sat: PackedInt32Array = PackedInt32Array()
-## Ті самі полігони точно (без растру): лінія лідера — на пів-ширини лінії від клітинки, квадрат кінця — на
+## Ті самі полігони точно (без растру): лінія лідера — на 4 dp плюс пів-ширини лінії від клітинки, квадрат кінця — на
 ## півдіагоналі квадрата й ще 2 dp запасу. Растр із кроком 4 dp для лінії завгрубий: він закривав щілини між клітинками.
 var _cells_raw: Array[PackedVector2Array] = []
+## Полігони + 4 dp точно: растр із кроком 4 dp пропускає гострий кут клітинки, і тег міг сісти на нього.
+var _cells_grown: Array[PackedVector2Array] = []
 var _cells_line: Array[PackedVector2Array] = []
 var _cells_end: Array[PackedVector2Array] = []
 ## Лідер залежить лише від точки t на краю тега, а різних t на сітці кандидатів у рази менше, ніж прямокутників.
@@ -100,7 +102,8 @@ func _init(scene: Dictionary) -> void:
 	_gh = int(ceil(window.size.y / CELL)) + 1
 	for poly: PackedVector2Array in scene.get("polys", []):
 		_cells_raw.append(poly)
-		_cells_line.append_array(Geometry2D.offset_polygon(poly, LINE_WIDTH / 2.0, Geometry2D.JOIN_MITER))
+		_cells_grown.append_array(Geometry2D.offset_polygon(poly, POLY_GROW, Geometry2D.JOIN_MITER))
+		_cells_line.append_array(Geometry2D.offset_polygon(poly, POLY_GROW + LINE_WIDTH / 2.0, Geometry2D.JOIN_MITER))
 		_cells_end.append_array(Geometry2D.offset_polygon(poly, sqrt(2.0) * END_HALF + END_CLEAR, Geometry2D.JOIN_MITER))
 	_rasterise_polys(scene.get("polys", []))
 	_rasterise_marks(scene.get("marks", []))
@@ -120,7 +123,7 @@ func is_legal(r: Rect2, relax: int = 0) -> bool:
 			return false
 	if _fire.size() == 2 and _segment_hits(_fire[0], _fire[1], r.grow(FIRE_GROW)):
 		return false
-	if relax < 2 and _sat_sum_i(_hard_sat, r) > 0:
+	if relax < 2 and (_sat_sum_i(_hard_sat, r) > 0 or _hits_grown(r)):
 		return false
 	if d > _lead_at:
 		var ends: PackedVector2Array = leader_points(r)
@@ -145,6 +148,14 @@ func is_legal(r: Rect2, relax: int = 0) -> bool:
 			if _dist(r, o) < d + 8.0:
 				return false
 	return true
+
+
+func _hits_grown(r: Rect2) -> bool:
+	var box := PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+	for g in _cells_grown:
+		if not Geometry2D.intersect_polygons(box, g).is_empty():
+			return true
+	return false
 
 
 func needs_leader(r: Rect2) -> bool:

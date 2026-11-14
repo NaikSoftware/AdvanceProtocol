@@ -11,6 +11,9 @@ extends Control
 ## зміни, яку не видно з розміру (текст тієї ж ширини, інший сектор глифа). Мінімальний розмір
 ## хоста — мінімальний розмір `face`, тож розкладка ззовні не відрізняє його від PanelContainer.
 
+## Текстура відповідає нинішньому вмісту: після запікання, до наступної зміни.
+signal baked
+
 var face: PanelContainer
 
 var _vp: SubViewport
@@ -78,6 +81,10 @@ func _on_face_min_changed() -> void:
 	request_bake()
 
 
+func is_baked() -> bool:
+	return not _pending
+
+
 ## Запікає після того, як розкладка вмісту осіла: підпис, що змінив текст, міняє розмір лише
 ## на кінці кадру. Поки запікання не відбулося, хост нічого не малює — краще порожньо, ніж
 ## чужий текст попереднього юніта.
@@ -89,15 +96,17 @@ func request_bake() -> void:
 	_bake_later()
 
 
-func _bake_later() -> void:
-	await get_tree().process_frame
-	await get_tree().process_frame
-	_pending = false
-	if not is_inside_tree():
+## Два кадри чекаємо сигналом із прив'язкою до себе, а не await: знищений хост тихо відписується,
+## а await у знищеного екземпляра — помилка рушія.
+func _bake_later(frames: int = 2) -> void:
+	if frames > 0:
+		get_tree().process_frame.connect(_bake_later.bind(frames - 1), CONNECT_ONE_SHOT)
 		return
+	_pending = false
 	_fit_pixels()
 	_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	queue_redraw()
+	baked.emit()
 
 
 ## Масштаб екрана міг змінитися між запитом і запіканням (поворот, зміна вікна).

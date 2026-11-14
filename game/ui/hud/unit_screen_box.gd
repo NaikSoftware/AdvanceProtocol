@@ -95,21 +95,31 @@ static func core_poly(view: Node3D, rig: IsoCameraRig) -> PackedVector2Array:
 	return Geometry2D.convex_hull(pts)
 
 
-## Клітинка на екрані: охопний прямокутник чотирьох її кутів на площині землі.
+## Кут клітинки у світі там, де його малює дошка: на мосту — на висоті настилу (контур клітинки мосту
+## лежить над руслом), інакше на землі. Площина землі зсунула б позначку клітинки мосту вниз екраном.
+static func corner_world(cell: Vector2i, corner: Vector2) -> Vector3:
+	var x: float = cell.x + corner.x
+	var z: float = cell.y + corner.y
+	var th: TerrainHeight = TerrainHeight.active
+	if th != null and th.is_deck(cell):
+		return Vector3(x, th.deck_y(cell), z)
+	return Vector3(x, TerrainHeight.ground_y(x, z), z)
+
+
+## Клітинка на екрані: охопний прямокутник чотирьох її кутів.
 static func cell_rect(cell: Vector2i, rig: IsoCameraRig) -> Rect2:
-	var c: Vector3 = IsoCameraRig.cell_to_world(cell)
-	var box := Rect2(rig.unproject(c + Vector3(-0.5, 0.0, -0.5)), Vector2.ZERO)
-	for corner: Vector3 in [Vector3(0.5, 0.0, -0.5), Vector3(0.5, 0.0, 0.5), Vector3(-0.5, 0.0, 0.5)]:
-		box = box.expand(rig.unproject(c + corner))
+	var poly: PackedVector2Array = cell_poly(cell, rig)
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for v in poly:
+		box = box.expand(v)
 	return box
 
 
 ## Чотири кути клітинки на екрані (за годинниковою) — полігон для перешкод тега.
 static func cell_poly(cell: Vector2i, rig: IsoCameraRig) -> PackedVector2Array:
-	var c: Vector3 = IsoCameraRig.cell_to_world(cell)
 	var out := PackedVector2Array()
-	for corner: Vector3 in [Vector3(-0.5, 0.0, -0.5), Vector3(0.5, 0.0, -0.5), Vector3(0.5, 0.0, 0.5), Vector3(-0.5, 0.0, 0.5)]:
-		out.append(rig.unproject(c + corner))
+	for corner: Vector2 in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5)]:
+		out.append(rig.unproject(corner_world(cell, corner)))
 	return out
 
 

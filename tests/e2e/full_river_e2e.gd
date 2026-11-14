@@ -129,7 +129,7 @@ func _focus_camera(cell: Vector2i) -> void:
 
 
 func _confirm_action() -> void:
-	_e2e.press(_e2e.hud().get_node("%ConfirmButton"))
+	await _e2e.confirm()
 	await _wait_idle()
 	await _pause(0.25, 0.05)
 
