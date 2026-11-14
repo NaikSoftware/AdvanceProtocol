@@ -77,6 +77,12 @@ var _drone_armed: bool = false
 var _peeking: bool = false
 
 
+## Скільки мс після озброєння верби тапи по дошці ігноруються. HUD ставить його, коли плита верб
+## стала над клітинками дошки: «Поставити міну» діє без підтвердження, тож другий тап по ній
+## ліг би на клітинку-ціль.
+var tap_guard_ms: int = 0
+var _armed_at_ms: int = 0
+
 func _init(match_service: Node, zone_overlay: ZoneOverlay, is_playing_check: Callable = Callable()) -> void:
 	_match_service = match_service
 	_zone_overlay = zone_overlay
@@ -137,6 +143,8 @@ func _recompute_zones_for_selected() -> void:
 func tap_cell(cell: Vector2i) -> void:
 	if _input_blocked():
 		return  # R24: ввід заблокований, доки триває програвання
+	if _armed_action >= 0 and Time.get_ticks_msec() - _armed_at_ms < tap_guard_ms:
+		return  # другий тап подвійного по плиті верб, що стояла над дошкою, — не тап по клітинці
 
 	var state: BattleState = _match_service.state
 	if _armed_action >= 0:
@@ -305,6 +313,7 @@ func arm_engineer(action: int) -> void:
 		return
 	_clear_pending()
 	_armed_action = action
+	_armed_at_ms = Time.get_ticks_msec()
 	_targets = tiles
 	targets_changed.emit(tiles)
 

@@ -587,7 +587,19 @@ func test_arm_engineer_without_tiles_refuses_with_reason() -> void:
 		InputController.ActionType.ENGINEER, "без озброєння тап по сусідньому тайлі — не прев'ю верби")
 
 
-## Власник: міна ставиться одразу на тап по допустимому тайлі — без прев'ю й Confirm.
+## Плита верб стояла над клітинками: другий тап подвійного по «Поставити міну» не ставить міну.
+func test_tap_guard_ignores_the_second_tap_of_a_double_tap_on_lay_mine() -> void:
+	_engineer_at(Vector2i(5, 5))
+	controller.tap_guard_ms = 60000
+	controller.arm_engineer(LAY)
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(service.state.mines.size(), 0, "тап у вікні захисту ігноровано")
+	controller.tap_guard_ms = 0
+	controller.tap_cell(Vector2i(6, 5))
+	assert_eq(service.state.mines.size(), 1, "поза вікном — міна ставиться")
+
+
+## Міна ставиться одразу на тап по допустимому тайлі — без прев'ю й Confirm.
 func test_lay_mine_tap_on_valid_tile_lays_it_at_once() -> void:
 	var e: Unit = _engineer_at(Vector2i(5, 5))
 	controller.arm_engineer(LAY)

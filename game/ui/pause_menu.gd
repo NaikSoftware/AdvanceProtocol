@@ -22,6 +22,7 @@ const _GROUND_LC_KEYS: Dictionary = {
 
 var _map_name_key: String = ""
 var _ground_state: int = Terrain.GroundState.DRY
+var _turn: int = 0
 
 @onready var _resume_button: Button = %ResumeButton
 
@@ -46,16 +47,27 @@ func set_context(map_path: String, name_key: String, ground_state: int) -> void:
 
 ## Відкриває паузу; turn — номер кола (BattleState.turn_number) для інфо-рядка.
 func open(turn: int) -> void:
+	_turn = turn
+	_relabel()
+	show()
+
+
+## Підписи вже перекладені, тож після зміни мови з налаштувань, відкритих поверх паузи, їх пишемо наново.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and visible and is_node_ready():
+		_relabel()
+
+
+func _relabel() -> void:
 	%MapCaption.text = tr("hud_map").to_upper()
 	%MapValue.text = tr(_map_name_key) if _map_name_key != "" else "-"
 	%GroundIcon.texture = HandoverGate.ground_icon(_ground_state)
 	%GroundIcon.modulate = HudKit.BONE
 	%TurnCaption.text = tr("hud_turn")
-	%TurnValue.text = str(turn)
+	%TurnValue.text = str(_turn)
 	# «Ґрунт: %s» — значення виділене окремим підписом, тож беремо лише початок рядка.
 	%GroundCaption.text = tr("hud_ground_line").get_slice(":", 0) + ":"
 	%GroundValue.text = tr(_GROUND_LC_KEYS[_ground_state])
-	show()
 
 
 func _set_confirming(on: bool) -> void:

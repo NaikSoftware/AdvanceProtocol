@@ -125,13 +125,65 @@ func _pick(root: Control, point: Vector2) -> Control:
 	return null
 
 
-func test_tag_hides_when_nothing_is_selected_and_for_another_player() -> void:
+func test_tag_hides_when_nothing_is_selected() -> void:
 	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
 	await _tap(SQUAD)
 	assert_true(_tag().visible)
 	_e2e.hud().show_selection(null)
 	await _e2e.settle()
 	assert_false(_tag().visible, "вибору нема — тегу нема")
+
+
+## AP ворога — прихований залишок його дій: тег ворога видно, а числа ніде в ньому нема, і в прихованих Label теж.
+func test_enemy_tag_is_shown_but_never_carries_its_ap() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
+	var enemy: Unit = _e2e.service.state.unit_at(ENEMY_TANK)
+	enemy.ap = 37
+	_e2e.hud().show_selection(enemy)
+	await _e2e.settle()
+	assert_true(_tag().visible, "тег ворога є")
+	var labels: Array = _tag().find_children("*", "Label", true, false)
+	assert_gt(labels.size(), 0)
+	for l: Label in labels:
+		assert_ne(l.text, "37", "AP ворога у Label «%s»" % l.name)
+		assert_false(l.text.contains("37"), "AP ворога у Label «%s»" % l.name)
+
+
+## Плити й тег читають лише юнітів з вузлом: невидимий ворог не зсуває ні картку дій, ні тег.
+func test_layout_ignores_an_unscouted_enemy() -> void:
+	var with_hidden: Dictionary = await _layout_of([_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, HIDDEN)])
+	assert_null(with_hidden["hidden_view"], "ворог справді невидимий")
+	var without: Dictionary = await _layout_of([_spawn(ASSAULT, 0, SQUAD)])
+	assert_eq(with_hidden["cluster"], without["cluster"])
+	assert_eq(with_hidden["tag"], without["tag"])
+	assert_eq(with_hidden["plate"], without["plate"])
+
+
+func _layout_of(spawns: Array) -> Dictionary:
+	await _boot(LayoutProbe.PHONE_LARGE, spawns, false)
+	await _tap(SQUAD)
+	var hud: Hud = _e2e.hud()
+	var plate: Control = hud._plate
+	var out: Dictionary = {"cluster": hud.cluster_name(), "tag": Rect2(_tag().position, _tag().size),
+		"plate": Rect2(plate.position, plate.size)}
+	var hidden: Unit = _e2e.service.state.unit_at(HIDDEN)
+	out["hidden_view"] = _e2e.screen.unit_view_for(hidden.id) if hidden != null else null
+	return out
+
+
+## Поки грають події, юніт іде, а тег стояв би на старій клітинці: він ховається і стає наново після.
+func test_tag_is_held_during_playback_and_replaced_after() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(ASSAULT, 0, SQUAD), _spawn(MEDIUM_TANK, 1, ENEMY_TANK)])
+	await _tap(SQUAD)
+	assert_true(_tag().visible)
+	_e2e.hud().hold_tag(true)
+	_e2e.hud().units_changed()
+	await _e2e.settle()
+	assert_false(_tag().visible, "програвання триває")
+	_e2e.hud().hold_tag(false)
+	_e2e.hud().units_changed()
+	await _e2e.settle()
+	assert_true(_tag().visible)
 
 
 func test_tag_keeps_its_spot_when_the_unit_is_reselected_after_an_action() -> void:
@@ -167,7 +219,7 @@ func test_placement_is_fast_enough_for_an_event_handler() -> void:
 	hud._update_tag()
 	var ms: float = (Time.get_ticks_usec() - t0) / 1000.0
 	print("tag full placement: %.1f ms" % ms)
-	assert_lt(ms, 250.0, "повний перерахунок тега")
+	assert_lt(ms, 150.0, "повний перерахунок тега")
 
 
 # --- Картка утримання ---------------------------------------------------------------
@@ -190,11 +242,24 @@ func test_hold_card_for_an_enemy_tank_has_no_ap_and_no_drones() -> void:
 	assert_false(card.armour_none_row.visible)
 	assert_false(card.drones_row.visible, "у танка дронів нема")
 	assert_false(card.floor_label.is_visible_in_tree(), "кільце гармати — без «щонайменше»")
-	assert_eq(card.find_children("*", "Label", true, false).filter(func(l: Label) -> bool: return l.text.begins_with(tr("hud_ap"))), [],
+	assert_eq(card.find_children("*", "Label", true, false).filter(func(l: Label) -> bool: return l.text == str(_e2e.service.state.unit_at(ENEMY_TANK).ap)), [],
 		"AP ворога картка не показує")
 	_e2e.release(ENEMY_TANK)
 	await _e2e.settle()
 	assert_false(card.visible, "палець відпущено — картки нема")
+
+
+## Довга назва переноситься на два рядки, і картка підростає, а не лізе на підпис класу.
+func test_hold_card_with_a_wrapping_name_does_not_cover_the_class_caption() -> void:
+	await _boot(LayoutProbe.PHONE_LARGE, [_spawn(RIFLE, 0, SQUAD), _spawn(4, 1, ENEMY_TANK)])
+	_e2e.long_press(ENEMY_TANK)
+	await _e2e.settle()
+	var card: HoldCard = _card()
+	assert_true(card.visible)
+	assert_eq(card.name_label.text, tr("UNIT_SCOUT_CAR"))
+	assert_lte(card.name_label.get_global_rect().end.y, card.class_label.get_global_rect().position.y,
+		"назва не накриває підпис класу")
+	assert_gte(card.name_label.get_global_rect().position.y, card.get_global_rect().position.y, "назва в межах картки")
 
 
 func test_hold_card_for_an_enemy_squad_shows_drones_and_the_floor_caption() -> void:
@@ -251,5 +316,5 @@ func test_hold_card_stays_off_the_finger_and_inside_the_screen() -> void:
 	var card: HoldCard = _card()
 	var press: Vector2 = _e2e.px(ENEMY_SQUAD)
 	var finger := Rect2(press - Vector2(60.0, 60.0), Vector2(120.0, 120.0))
-	assert_false(card.get_rect().intersects(finger), "палець не закритий карткою")
-	assert_true(Rect2(Vector2.ZERO, Vector2(LayoutProbe.PHONE_SMALL)).encloses(card.get_rect()))
+	assert_false(card.get_rect().intersects(finger), "палець не закритий карткою %s %s" % [card.get_rect(), finger])
+	assert_true(Rect2(Vector2.ZERO, Vector2(LayoutProbe.PHONE_SMALL)).encloses(card.get_rect()), "картка %s" % card.get_rect())

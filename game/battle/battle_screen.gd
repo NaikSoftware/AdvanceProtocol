@@ -333,12 +333,19 @@ func resume(match_service: Node = null) -> void:
 	_match_service = match_service if match_service != null else MatchService
 	# Підтипи поверхні живуть у MapData, не в збереженні: беремо їх з карти збереженої гри.
 	var mp: String = _match_service.map_path
+	var saved_map: MapData = null
 	if mp != "" and ResourceLoader.exists(mp):
-		var saved_map: MapData = load(mp) as MapData
+		saved_map = load(mp) as MapData
 		_board_view.surface = saved_map.surface
 		_board_view.relief_seed = saved_map.name_key.hash()
 		_board_view.ring_map = saved_map
-	_set_overlay_context(load(mp) as MapData if mp != "" and ResourceLoader.exists(mp) else _FallbackMap)
+	if saved_map != null:
+		_set_overlay_context(saved_map)
+	else:
+		# Карти немає: гейт і пауза показують типову плиту й «-», а не чужу Річку.
+		var ground: int = _match_service.state.board.ground_state
+		_gate.set_context("", "", ground)
+		_pause.set_context("", "", ground)
 	var look: BattleLook = BattleLook.for_map_path(mp)
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
@@ -925,7 +932,10 @@ func _on_events_ready() -> void:
 	if events.is_empty():
 		return
 	_record_crushes(events)
+	_hud.hold_tag(true)
 	await _event_player.play(events)
+	_hud.hold_tag(false)
+	_hud.units_changed()
 
 	var turn_started: bool = false
 	var match_ended: bool = false

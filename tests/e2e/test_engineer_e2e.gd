@@ -300,8 +300,6 @@ func test_lay_mine_on_tap_without_confirm() -> void:
 	await _boot()
 	var panel: EngineerPanel = _e2e.engineer_panel()
 	var hud: Hud = _e2e.hud()
-	var tag_ap: Array[int] = []
-	hud.selection_tag_changed.connect(func(u: Unit, _ap: bool) -> void: tag_ap.append(u.ap if u != null else -1))
 	_e2e.tap(ENG)
 	_e2e.press(panel.button_for(A.LAY_MINE))
 	await _e2e.settle()
@@ -324,7 +322,7 @@ func test_lay_mine_on_tap_without_confirm() -> void:
 	assert_true(panel.plate().visible, "панель розгорнулась")
 	assert_eq(panel.button_for(A.CLEAR_MINE).theme_type_variation, EngineerPanel.UNAVAILABLE_VARIATION,
 		"доступність верб перечитано: AP 0")
-	assert_eq(tag_ap.back(), 0, "HUD перечитав AP: тег отримав інженера з нулем")
+	assert_eq(hud.unit_tag().ap_value.text, "0", "HUD перечитав AP: тег показує інженера з нулем")
 
 
 ## Кожна верба має свою підказку, що тапнути.

@@ -72,8 +72,9 @@ func show_unit(unit: Unit, show_ap: bool) -> void:
 	name_label.text = tr(String(unit.type()["name_key"]))
 	_sil.texture = HudKit.SILHOUETTES[unit.unit_class()]
 	_ap_box.visible = show_ap
-	ap_value.text = str(unit.ap)
-	ap_max.text = "/%d" % unit.max_ap()
+	# AP ворога не пишемо навіть у прихований Label: це прихований залишок його дій.
+	ap_value.text = str(unit.ap) if show_ap else ""
+	ap_max.text = "/%d" % unit.max_ap() if show_ap else ""
 	var drones: int = int(unit.type()["drones"])
 	_pip_box.visible = drones > 0
 	pips.set_counts(unit.drones_left, drones)

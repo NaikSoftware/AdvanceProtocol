@@ -853,10 +853,12 @@ func test_releasing_the_hold_restores_a_covered_row_to_full_alpha() -> void:
 	hud.hold_card().custom_minimum_size = Vector2(900.0, 400.0)
 	hud._on_inspected({"unit_id": u.id, "center": u.pos, "radius": 0, "drone_radius": 0, "marked": [], "drone_marked": [], "is_floor": false})
 	assert_eq(row.modulate.a, 0.0, "під карткою ряд схований")
+	assert_eq(row.process_mode, Node.PROCESS_MODE_DISABLED, "схований ряд не ловить дотик")
 
 	hud._on_inspected({})
 
 	assert_true(row.visible)
 	assert_eq(row.modulate.a, 1.0, "після відпускання ряд знову непрозорий")
+	assert_eq(row.process_mode, Node.PROCESS_MODE_INHERIT)
 
 

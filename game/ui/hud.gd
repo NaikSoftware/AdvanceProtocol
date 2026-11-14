@@ -30,6 +30,10 @@ signal pause_pressed
 signal selection_tag_changed(unit: Unit, show_ap: bool)
 
 const TOAST_SECONDS: float = 2.0
+## Захист від другого тапу по плиті верб, що не змогла стати поза клітинками дошки.
+const ENGINEER_TAP_GUARD_MS: int = 300
+## Скільки камера мусить стояти, щоб розкладка стала наново.
+const VIEW_SETTLE_SECONDS: float = 0.12
 const TOAST_FADE: float = 0.15
 const _EDGE: float = 24.0
 const _BOTTOM: float = 12.0
@@ -68,6 +72,10 @@ var _tag_has_offset: bool = false
 var _tag_relax: int = 0
 var _tag_unit_id: int = -1
 var _tag_queued: bool = false
+var _tag_unit_pos: Vector2 = Vector2.ZERO
+var _settle_timer: Timer = null
+# Під час програвання подій юніт іде, а тег стояв би на старій клітинці.
+var _tag_held: bool = false
 ## Кільце армованого дрона й огляд довгого натиску: дуги кілець — «позначки дошки» для тега.
 var _drone_ring: Dictionary = {}
 var _hold: Dictionary = {}
@@ -268,8 +276,7 @@ func attach_controller(controller: InputController) -> void:
 ## із дошкою: підписка на view_changed, а не опитування рига щокадру (§8).
 func attach_camera(rig: IsoCameraRig) -> void:
 	_camera_rig = rig
-	rig.view_changed.connect(_relayout)
-	rig.view_changed.connect(_request_tag)
+	rig.view_changed.connect(_on_view_changed)
 	_relayout()
 
 
@@ -278,6 +285,31 @@ func attach_camera(rig: IsoCameraRig) -> void:
 func attach_unit_views(provider: Callable) -> void:
 	_unit_views = provider
 	_relayout()
+
+
+## Рух камери: поки дошка їде, тег лише зсувається разом з юнітом; розкладка й стикування —
+## раз, коли рух стих (інакше кожен крок інерції будував би растр перешкод).
+func _on_view_changed() -> void:
+	var view: UnitView = _tag_view()
+	if _tag.visible and _tag_has_offset and view != null:
+		var pos: Vector2 = UnitScreenBox.of(view, _camera_rig).position
+		_tag.position += (pos - _tag_unit_pos).round()
+		_tag_unit_pos = pos
+	if _settle_timer == null:
+		_settle_timer = Timer.new()
+		_settle_timer.one_shot = true
+		_settle_timer.wait_time = VIEW_SETTLE_SECONDS
+		_settle_timer.timeout.connect(_relayout)
+		add_child(_settle_timer)
+	_settle_timer.start()
+
+
+## Сцена бою вмикає на час програвання пакета подій і знімає після: тег стоїть лише при юніті,
+## що вже дійшов, а units_changed() ставить його наново.
+func hold_tag(on: bool) -> void:
+	_tag_held = on
+	if on:
+		_tag.visible = false
 
 
 ## Юніти перебудовано (після пакета подій чи передачі ходу) — плити мусять стати наново.
@@ -495,6 +527,8 @@ func _dock_engineer() -> void:
 		pick = HudDocking.choose_strip(size, part, _unit_boxes(), _armed_target_boxes())
 	else:
 		pick = HudDocking.choose_verb_plate(size, part, _unit_boxes(), _neighbour_boxes())
+		if _controller != null:
+			_controller.tap_guard_ms = 0 if pick["clear"] else ENGINEER_TAP_GUARD_MS
 	var rects: Array[Rect2] = pick["rects"]
 	_engineer_panel.position = rects[0].position
 	_engineer_panel.size = part
@@ -602,7 +636,7 @@ func _request_tag() -> void:
 func _update_tag() -> void:
 	_tag_queued = false
 	var view: UnitView = _tag_view()
-	if view == null:
+	if view == null or _tag_held:
 		_tag.visible = false
 		_tag_has_offset = false
 		_tag_unit_id = -1
@@ -615,6 +649,7 @@ func _update_tag() -> void:
 	var scene: Dictionary = _tag_scene(view, tag_size)
 	var placement := TagPlacement.new(scene)
 	var unit_box: Rect2 = scene["unit"]
+	_tag_unit_pos = unit_box.position
 	var rect := Rect2()
 	if _tag_has_offset:
 		var kept := Rect2(unit_box.position + _tag_offset, tag_size)
@@ -762,6 +797,9 @@ func _on_inspected(inspection: Dictionary) -> void:
 	for c: Control in [_plate, _row, _engineer_panel, _drone_strip, _drone_button]:
 		if c.is_visible_in_tree() and _local_rect(c).intersects(rect):
 			c.modulate.a = 0.0
+			# Прозорий Button усе ще ловить дотик; картка вводу не бере, тож інший палець по ній
+			# дістався б до прихованого «Підтвердити».
+			c.process_mode = Node.PROCESS_MODE_DISABLED
 			_covered.append(c)
 	_request_tag()
 
@@ -769,4 +807,5 @@ func _on_inspected(inspection: Dictionary) -> void:
 func _restore_covered() -> void:
 	for c in _covered:
 		c.modulate.a = 1.0
+		c.process_mode = Node.PROCESS_MODE_INHERIT
 	_covered.clear()
