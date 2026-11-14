@@ -9,7 +9,6 @@ func _populated_state() -> BattleState:
 	s.add_unit(1, 1, Vector2i(6, 6), 5)
 	s.add_unit(11, 2, Vector2i(2, 6), 0)
 	Mines.place(s, Vector2i(5, 5), 0)
-	s.damage_dealt = [1200, 0, 90] as Array[int]
 	s.turn_number = 4
 	s.active_player = 2
 	return s
@@ -24,13 +23,6 @@ func test_round_trip_preserves_everything() -> void:
 	assert_eq(b.turn_number, 4)
 	assert_eq(b.active_player, 2)
 	assert_eq(b.mines.size(), 1)
-	assert_eq(b.damage_dealt, [1200, 0, 90] as Array[int])
-
-func test_a_save_without_damage_dealt_loads_as_zeros() -> void:
-	var d: Dictionary = BattleSerializer.to_dict(_populated_state())
-	d.erase("damage_dealt")
-	var b: BattleState = BattleSerializer.from_dict(d)
-	assert_eq(b.damage_dealt, [0, 0, 0] as Array[int], "старі збереження мусять відкриватися")
 
 func test_unit_fields_survive() -> void:
 	var a: BattleState = _populated_state()
@@ -160,6 +152,16 @@ func _save() -> Dictionary:
 	# Через JSON, як із файла: числа приходять float, і перевірки мусять це приймати.
 	return JSON.parse_string(JSON.stringify(BattleSerializer.to_dict(_populated_state())))
 
+## Старі правила дозволяли юніту стояти на власній міні. Тепер міна рве кожного, хто на
+## неї в'їхав, і стояти на ній не може ніхто: завантаження прибирає таку міну мовчки.
+func test_loading_drops_a_mine_under_a_unit() -> void:
+	var s: BattleState = _populated_state()
+	Mines.place(s, Vector2i(1, 1), 0)   # під танком гравця 0
+	var b: BattleState = BattleSerializer.from_dict(BattleSerializer.to_dict(s))
+	assert_null(Mines.mine_at(b, Vector2i(1, 1)), "під юнітом міни не буває")
+	assert_not_null(Mines.mine_at(b, Vector2i(5, 5)), "решта мін лишається")
+	assert_eq(b.mines.size(), 1)
+
 func _assert_rejected(d: Dictionary, why: String) -> void:
 	assert_null(BattleSerializer.from_dict(d), why)
 
@@ -182,7 +184,6 @@ func test_old_save_with_experience_still_loads() -> void:
 	d["experience"] = [{"xp": [1200, 0, 0, 0, 0], "level": [3, 0, 0, 0, 0]}]
 	var b: BattleState = BattleSerializer.from_dict(d)
 	assert_not_null(b, "старе збереження з ключем experience відкривається")
-	assert_eq(b.damage_dealt, [1200, 0, 90] as Array[int])
 
 func test_old_save_with_objectives_still_loads() -> void:
 	# Формат до видалення цілей: ключі є, але ігноруються — навіть сміття.
@@ -199,10 +200,14 @@ func test_save_without_experience_loads() -> void:
 	assert_false(d.has("experience"), "новий формат не пише experience")
 	assert_not_null(BattleSerializer.from_dict(d))
 
-func test_damage_dealt_of_the_wrong_size_is_rejected() -> void:
+func test_old_save_with_damage_dealt_still_loads() -> void:
+	# Ключ лишився в старих збереженнях; його значення ігнорується — навіть сміття.
 	var d: Dictionary = _save()
 	d["damage_dealt"] = [1, 2]
-	_assert_rejected(d, "damage_dealt на 2 гравців при player_count 3")
+	assert_not_null(BattleSerializer.from_dict(d), "старе збереження з damage_dealt відкривається")
+
+func test_save_does_not_write_damage_dealt() -> void:
+	assert_false(_save().has("damage_dealt"))
 
 func test_mine_known_to_of_the_wrong_size_is_rejected() -> void:
 	var d: Dictionary = _save()

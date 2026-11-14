@@ -126,6 +126,12 @@ Two rules about using it:
   band is `90..180`, not the flat 120 the plan originally invented; adopted, because a flat number
   would make mines the only damage source in the game that does not roll.
 
+- **A mine detonates under its owner's units too.** `method_105` fires when either the mover's own
+  player's table (`this.method_102`) or the other player's (`method_122().method_102`) holds a
+  mine on the tile, so ownership never spares a unit. Adopted ([§3.11](../rules/vision-and-fog.md)):
+  no unit ever stands on a mine, and since a player knows every mine they laid, their own mines
+  are planning obstacles for them just like the enemy mines they have found.
+
 - **The original has no capturable objectives — the 15-slot `class_1` table is mines only.**
   `field_149` holds positions, `field_150` marks a free slot and `field_151` a slot revealed to the
   opponent; only an engineer sets `field_151` (`class_1:805-815`), and `method_105` detonates on the
