@@ -453,9 +453,13 @@ func test_reentrant_play_call_is_ignored_and_first_playback_completes() -> void:
 ## Task 8: зміна мосту — перебудова дошки крізь інжектований Callable.
 func test_bridge_changed_calls_board_rebuild() -> void:
 	var calls: Array[int] = [0]
-	player = EventPlayer.new(Callable(), Callable(), func() -> void: calls[0] += 1)
+	var at: Array[Vector2i] = []
+	player = EventPlayer.new(Callable(), Callable(), func(pos: Vector2i) -> void:
+		calls[0] += 1
+		at.append(pos))
 	await player.play([Events.BridgeChanged.new(Vector2i(1, 1), true)] as Array[Events.BattleEvent])
 	assert_eq(calls[0], 1)
+	assert_eq(at, [Vector2i(1, 1)] as Array[Vector2i], "клітинка мосту йде з подією")
 
 
 ## Уламки показує контейнер (BattleScreen): лише він знає, чиє розвідане зараз на

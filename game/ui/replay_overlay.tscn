@@ -1,0 +1,119 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://game/ui/replay_overlay.gd" id="1_overlay"]
+[ext_resource type="Shader" path="res://game/battle/shaders/replay_grain.gdshader" id="2_grain"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_grain"]
+shader = ExtResource("2_grain")
+
+[node name="ReplayOverlay" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+visible = false
+script = ExtResource("1_overlay")
+
+[node name="Grain" type="ColorRect" parent="."]
+show_behind_parent = true
+material = SubResource("ShaderMaterial_grain")
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="SafeArea" type="MarginContainer" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 76
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 76
+theme_override_constants/margin_bottom = 36
+
+[node name="Layout" type="VBoxContainer" parent="SafeArea"]
+unique_name_in_owner = true
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="TopRow" type="HBoxContainer" parent="SafeArea/Layout"]
+unique_name_in_owner = true
+mouse_filter = 2
+
+[node name="RecGroup" type="HBoxContainer" parent="SafeArea/Layout/TopRow"]
+unique_name_in_owner = true
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="RecDot" type="Control" parent="SafeArea/Layout/TopRow/RecGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(14, 14)
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="RecLabel" type="Label" parent="SafeArea/Layout/TopRow/RecGroup"]
+unique_name_in_owner = true
+theme_override_colors/font_color = Color(0.92, 0.95, 0.92, 1)
+theme_override_font_sizes/font_size = 22
+text = "replay_rec"
+
+[node name="TopSpacer" type="Control" parent="SafeArea/Layout/TopRow"]
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Timecode" type="Label" parent="SafeArea/Layout/TopRow"]
+unique_name_in_owner = true
+theme_override_colors/font_color = Color(0.92, 0.95, 0.92, 1)
+theme_override_font_sizes/font_size = 22
+text = "00:00:00:00"
+auto_translate_mode = 2
+
+[node name="Spacer" type="Control" parent="SafeArea/Layout"]
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="BottomRow" type="HBoxContainer" parent="SafeArea/Layout"]
+unique_name_in_owner = true
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="BeatInfo" type="VBoxContainer" parent="SafeArea/Layout/BottomRow"]
+size_flags_horizontal = 3
+size_flags_vertical = 8
+mouse_filter = 2
+theme_override_constants/separation = 14
+
+[node name="TurnRow" type="HBoxContainer" parent="SafeArea/Layout/BottomRow/BeatInfo"]
+unique_name_in_owner = true
+size_flags_horizontal = 0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Swatch" type="Control" parent="SafeArea/Layout/BottomRow/BeatInfo/TurnRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(12, 12)
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="TurnLabel" type="Label" parent="SafeArea/Layout/BottomRow/BeatInfo/TurnRow"]
+unique_name_in_owner = true
+theme_override_colors/font_color = Color(0.92, 0.95, 0.92, 1)
+theme_override_font_sizes/font_size = 22
+auto_translate_mode = 2
+
+[node name="Progress" type="Range" parent="SafeArea/Layout/BottomRow/BeatInfo"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 4)
+mouse_filter = 2
+max_value = 1.0
+step = 1.0
+
+[node name="SkipButton" type="Button" parent="SafeArea/Layout/BottomRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 56)
+size_flags_vertical = 8
+text = "replay_skip"

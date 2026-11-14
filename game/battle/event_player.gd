@@ -38,9 +38,11 @@ var _unit_lookup: Callable
 var _is_playing: bool = false
 ## Екран бою пішов посеред паузи (зберегти й вийти): після неї нічого не грається.
 var _stopped: bool = false
+## Номер програвання: cancel() його міняє, і play(), що прокинеться після скасування, тихо виходить.
+var _run: int = 0
 
 
-## Перебудова BoardView з нинішньої Board (BridgeChanged).
+## Перебудова BoardView після зміни мосту (pos — клітинка мосту з BridgeChanged).
 var _board_rebuild: Callable
 
 
@@ -55,6 +57,9 @@ var _unit_found: Callable
 ## Техніка ввійшла в клітинку (moved, з якої, в яку): початок кроку руху. Те, чи це техніка і чи
 ## показувати, вирішує екран.
 var _cell_entered: Callable
+## Повтор: юніт виходить на екран (unit_id, pos, facing) і сходить з нього (unit_id).
+var _unit_appeared: Callable
+var _unit_vanished: Callable
 ## Гравець, чий світ на екрані. Події не фільтровані за спостерігачем (§6): знахідка
 ## іншого боку — це те, що бачить він, а не той, хто зараз дивиться.
 var viewer: int = 0
@@ -67,7 +72,9 @@ var _found_shown: Dictionary = {}
 
 func _init(unit_view_lookup: Callable = Callable(), unit_lookup: Callable = Callable(), board_rebuild: Callable = Callable(),
 		wreck_left: Callable = Callable(), wreck_removed: Callable = Callable(), unit_found: Callable = Callable(),
-		cell_entered: Callable = Callable()) -> void:
+		cell_entered: Callable = Callable(), unit_appeared: Callable = Callable(), unit_vanished: Callable = Callable()) -> void:
+	_unit_appeared = unit_appeared
+	_unit_vanished = unit_vanished
 	_unit_found = unit_found
 	_cell_entered = cell_entered
 	_board_rebuild = board_rebuild
@@ -94,6 +101,7 @@ func play(events: Array[Events.BattleEvent]) -> void:
 		return
 
 	_is_playing = true
+	var run: int = _run
 	# Поворот чекається лише перед пострілом (§3.4: розвернувся — тоді стріляє). Поворот на
 	# місці без бою не блокує ввід: швидкий другий тап гравця інакше губився б.
 	var last_shot: int = -1
@@ -108,11 +116,21 @@ func play(events: Array[Events.BattleEvent]) -> void:
 		if events[i] is Events.UnitTurned and i > last_shot:
 			awaitable = null
 		await awaitable
+		if run != _run:
+			return
 		if _stopped:
 			_is_playing = false
 			return
 	_is_playing = false
 	playback_finished.emit()
+
+
+## Пропуск повтору: поточний play() кінчається одразу, без playback_finished, і програвач придатний
+## для наступного. Чекати кінця анімації не можна: екран звільняє вузол, чий твін вона чекає, а
+## вбитий твін finished не подає.
+func cancel() -> void:
+	_run += 1
+	_is_playing = false
 
 
 ## Паузи — твіни дерева, а не екрана, тож переживають екран; без зупинки програвач після
@@ -221,6 +239,14 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_player_eliminated(event)
 	elif event is Events.MatchEnded:
 		return _handle_match_ended(event)
+	elif event is ReplayFilter.Appeared:
+		if _unit_appeared.is_valid():
+			_unit_appeared.call(event.unit_id, event.pos, event.facing)
+		return null
+	elif event is ReplayFilter.Vanished:
+		if _unit_vanished.is_valid():
+			_unit_vanished.call(event.unit_id)
+		return null
 	else:
 		# Недосяжно, поки ланцюжок вище покриває всі класи events.gd (тест
 		# на повноту диспетчеризації) — це остання лінія оборони, не очікуваний
@@ -413,11 +439,11 @@ func _handle_mine_revealed(_event: Events.MineRevealed) -> Variant:
 
 
 ## Зміна виду тайлу (міст цілий/зруйнований): новий вид уже записано в core/,
-## тож вигляд лише перебудовує дошку з нинішньої Board (інжектований Callable,
-## той самий прийом, що й пошуки юнітів — R18).
-func _handle_bridge_changed(_event: Events.BridgeChanged) -> Variant:
+## тож вигляд лише перебудовує дошку (інжектований Callable, той самий прийом, що
+## й пошуки юнітів — R18). Клітинка йде з подією: на повторі змінюється лише вона.
+func _handle_bridge_changed(event: Events.BridgeChanged) -> Variant:
 	if _board_rebuild.is_valid():
-		_board_rebuild.call()
+		_board_rebuild.call(event.pos)
 	return null
 
 

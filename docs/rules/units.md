@@ -134,7 +134,9 @@ it from breaking the game, and **none of them may be removed without replacing i
   not merely a UI one: the counter-play to a drone squad is to screen it with infantry or to rush
   it, and both are decisions about whether the threat is still live. A hidden counter would also
   be unknowable rather than bluffable in a three-player match, since a drone spent on the third
-  player happens behind the handover gate where nobody else can count it.
+  player happens behind the handover gate, and the others see it in their replay only where their
+  side could see the squad or the target
+  ([§3.5](vision-and-fog.md#replay-of-the-opponents-turns)).
 - **It cannot touch infantry.** A drone squad screened by rifle squads is a hard problem, and that
   is the intended counter-play.
 - **The squad is still infantry.** 100 HP, no armour, 3 tiles of movement, and it is fully exposed
