@@ -1,5 +1,5 @@
 class_name UnitTag
-extends PanelContainer
+extends HudBake
 ## Компактний тег вибраного юніта (spec §2): силует класу · назва · AP n/max (лише свій) · для
 ## загону пипси дронів. Без класу словом, HP і характеристик. Лише показує готове: усе з Unit і
 ## UnitTypes. Де стати — вирішує TagPlacement; тут тільки вузли й лідер.
@@ -20,18 +20,19 @@ var _sil: TextureRect
 var _ap_box: HBoxContainer
 var _pip_box: HBoxContainer
 var _leader: PackedVector2Array = PackedVector2Array()
+var _shown: String = ""
 
 
 func _init() -> void:
+	super()
 	name = "UnitTag"
-	theme_type_variation = &"HudPlateSolid"
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	custom_minimum_size = Vector2(0.0, HEIGHT)
+	face.theme_type_variation = &"HudPlateSolid"
+	face.custom_minimum_size = Vector2(0.0, HEIGHT)
 	visible = false
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 8)
 	margin.add_theme_constant_override("margin_right", 10)
-	add_child(margin)
+	face.add_child(margin)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 0)
 	margin.add_child(row)
@@ -78,7 +79,13 @@ func show_unit(unit: Unit, show_ap: bool) -> void:
 	var drones: int = int(unit.type()["drones"])
 	_pip_box.visible = drones > 0
 	pips.set_counts(unit.drones_left, drones)
+	update_minimum_size()
 	reset_size()
+	# Запікаємо лише коли змінилося те, що видно: тег оновлюється й від руху камери.
+	var shown: String = "%s|%s|%d|%d|%d|%s" % [name_label.text, ap_value.text, drones, unit.drones_left, unit.unit_class(), show_ap]
+	if shown != _shown:
+		_shown = shown
+		request_bake()
 	visible = true
 
 
@@ -99,10 +106,12 @@ func has_leader() -> bool:
 
 
 func _draw() -> void:
+	super._draw()
 	if _leader.is_empty():
 		return
 	draw_line(_leader[0], _leader[1], LEADER_COLOR, 1.0)
-	draw_rect(Rect2(_leader[1] - Vector2(2.5, 2.5), Vector2(5.0, 5.0)), LEADER_COLOR)
+	# Квадрат — теж «лінія» (5 × 5): дві лінії поспіль склеюються в один виклик, лінія з rect — ні.
+	draw_line(_leader[1] - Vector2(2.5, 0.0), _leader[1] + Vector2(2.5, 0.0), LEADER_COLOR, 5.0)
 
 
 func _sep() -> Control:

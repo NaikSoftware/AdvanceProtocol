@@ -131,13 +131,12 @@ text = "hud_end_turn"
 alignment = 0
 icon = ExtResource("8_end")
 
-[node name="PreviewPlate" type="PanelContainer" parent="."]
+[node name="PreviewPlate" type="Control" parent="."]
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
 offset_right = 285.0
 mouse_filter = 0
-theme_type_variation = &"HudPlateSolid"
 script = ExtResource("5_plate")
 
 [node name="ActionRow" type="HBoxContainer" parent="."]

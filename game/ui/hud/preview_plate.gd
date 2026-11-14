@@ -1,5 +1,5 @@
 class_name PreviewPlate
-extends PanelContainer
+extends HudBake
 ## Плита прев'ю над рядом дій (spec §2): ряд цілі + один із вмістів — рух, постріл, дрон, ремонт
 ## чи назва верби. Лише показує готові значення, які дає HUD із core/-прев'ю; сама нічого не
 ## рахує й не знає про правила.
@@ -53,16 +53,16 @@ var _move_caption: Label
 
 
 func _init() -> void:
-	theme_type_variation = &"HudPlateSolid"
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	custom_minimum_size = Vector2(WIDTH, 0.0)
+	super()
+	face.theme_type_variation = &"HudPlateSolid"
+	face.custom_minimum_size = Vector2(WIDTH, 0.0)
 	visible = false
 
 
 func _ready() -> void:
 	var body := VBoxContainer.new()
 	body.add_theme_constant_override("separation", 0)
-	add_child(body)
+	face.add_child(body)
 
 	target_row = HBoxContainer.new()
 	target_row.name = "PreviewTargetRow"
@@ -210,12 +210,14 @@ func _retranslate() -> void:
 	_drone_damage_caption.text = tr("hud_damage").to_upper()
 	_hp_caption.text = tr("hud_hp").to_upper()
 	_heal_caption.text = tr("hud_heal").to_upper()
+	_changed()
 
 
 func clear() -> void:
 	visible = false
 	for c: Control in [target_row, _target_hair, move_box, shot_box, drone_box, repair_box, verb_box]:
 		c.visible = false
+	_changed()
 
 
 ## Ряд цілі: язичок у кольорі власника цілі, назва, підпис «ЦІЛЬ».
@@ -224,6 +226,7 @@ func show_target(target_name: String, color: Color) -> void:
 	_target_name.text = target_name
 	target_row.visible = true
 	_target_hair.visible = true
+	_changed()
 
 
 func show_move(ap_left: int, ap_max: int) -> void:
@@ -231,6 +234,7 @@ func show_move(ap_left: int, ap_max: int) -> void:
 	_ap_max.text = "/%d" % ap_max
 	move_box.visible = true
 	visible = true
+	_changed()
 
 
 ## sector/sector_word — з core-прев'ю; infantry_target: ціль без броні (силует замість корпуса);
@@ -248,12 +252,14 @@ func show_shot(sector: int, sector_word: String, damage: String, infantry_target
 	_cover.visible = in_cover
 	shot_box.visible = true
 	visible = true
+	_changed()
 
 
 func show_drone(damage: String) -> void:
 	_drone_damage_value.text = damage
 	drone_box.visible = true
 	visible = true
+	_changed()
 
 
 func show_repair(hp: int, max_hp: int, heal: String) -> void:
@@ -262,6 +268,7 @@ func show_repair(hp: int, max_hp: int, heal: String) -> void:
 	_heal_value.text = heal
 	repair_box.visible = true
 	visible = true
+	_changed()
 
 
 func show_verb(icon: Texture2D, verb_name: String) -> void:
@@ -269,6 +276,14 @@ func show_verb(icon: Texture2D, verb_name: String) -> void:
 	_verb_name.text = verb_name
 	verb_box.visible = true
 	visible = true
+	_changed()
+
+
+## Мінімальний розмір хоста перераховується одразу (HUD читає його в тому ж кадрі), а запікання
+## чекає, поки розкладка вмісту осяде.
+func _changed() -> void:
+	update_minimum_size()
+	request_bake()
 
 
 # --- будівельні дрібниці -------------------------------------------------------
