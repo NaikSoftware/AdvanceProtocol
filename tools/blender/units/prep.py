@@ -42,6 +42,14 @@ def verts(m):
 
 
 co = verts(me)
+if cfg.get("yaw"):
+    # a generated gun is seldom square to the grid: turn the whole source about a vertical axis, in the source's own frame
+    # (before rot180), by [degrees, pivot x, pivot y]; the pivot ends on y = 0. Everything else in the config is measured after this turn.
+    a, px, py = cfg["yaw"]
+    c_, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
+    dx, dy = co[:, 0] - px, co[:, 1] - py
+    co[:, 0], co[:, 1] = px + dx * c_ - dy * s_, dx * s_ + dy * c_   # the pivot lands on the centreline (y = 0)
+    me.vertices.foreach_set("co", co.ravel()); me.update()
 if cfg.get("rot180"):
     # nose towards -Y in the source: a half turn about Z keeps the winding and puts it on +Y
     co[:, :2] *= -1
@@ -232,21 +240,32 @@ else:
     gear = (zone & (h < cut["below_skirt_h"])) \
         | ((lat >= cut["lat"][0]) & (lat < cut["behind_skirt_lat"]) & (h < cut["gear_top_h"])) \
         | (zone & (h < cut["gear_top_h"]) & ((lng < cut["open_ends_long"][0]) | (lng > cut["open_ends_long"][1])))
+    if cut.get("keep_ahead"):
+        # a mine plough stands ahead of the idler inside the track band: it is not running gear
+        gear &= lng <= cut["keep_ahead"]
 print(f"PREP gear faces cut: {gear.sum()} of {len(gear)}")
 delete_faces(hi, gear)
 
 # Barrel: stretch along +Y from the mantlet so the muzzle sits at the spec length.
-gun = cfg["gun"]
-y0 = lib.m_long(cfg, gun["start_long"])
-az = lib.m_len(cfg, gun["axis_h"])
-co = verts(me)
-r = np.hypot(co[:, 0], co[:, 2] - az)
-sel = (co[:, 1] > y0) & (r < lib.m_len(cfg, gun["clear_r"]))
-tip = co[sel, 1].max()
-f = (cfg["spec"]["barrel"] - y0) / (tip - y0)
-co[sel, 1] = y0 + (co[sel, 1] - y0) * f
-me.vertices.foreach_set("co", co.ravel()); me.update()
-print(f"PREP barrel: source tip {tip:.4f} -> {cfg['spec']['barrel']:.4f} (stretch {f:.3f}), axis height {az:.4f}")
+gun = cfg.get("gun")      # an engineer vehicle has none
+if gun:
+    y0, az, sp, cp = lib.gun_axis(cfg)
+    co = verts(me)
+    # s: distance along the gun axis from the breech point, v: across it in the YZ plane (an untilted axis makes these y - y0 and z - az)
+    s_ = (co[:, 1] - y0) * cp + (co[:, 2] - az) * sp
+    v_ = (co[:, 2] - az) * cp - (co[:, 1] - y0) * sp
+    sel = (s_ > 0) & (np.hypot(co[:, 0], v_) < lib.m_len(cfg, gun["clear_r"]))
+    if sp == 0:
+        tip = co[sel, 1].max()
+        f = (cfg["spec"]["barrel"] - y0) / (tip - y0)
+        co[sel, 1] = y0 + (co[sel, 1] - y0) * f
+    else:
+        tip = s_[sel].max()
+        f = (cfg["spec"]["barrel"] - y0) / (cp * tip)
+        co[sel, 1] += (f - 1) * s_[sel] * cp
+        co[sel, 2] += (f - 1) * s_[sel] * sp
+    me.vertices.foreach_set("co", co.ravel()); me.update()
+    print(f"PREP barrel: source tip {tip:.4f} -> {cfg['spec']['barrel']:.4f} (stretch {f:.3f}), axis height {az:.4f}")
 
 # ---- lo -------------------------------------------------------------------------------------
 # The battle camera sees tops and outward walls only, and a decimated generated mesh warps
@@ -254,7 +273,9 @@ print(f"PREP barrel: source tip {tip:.4f} -> {cfg['spec']['barrel']:.4f} (stretc
 # down to each edge column's underside (skirt bottom, nose), then planar dissolve and collapse.
 src = hi.copy(); src.data = hi.data.copy(); bpy.context.collection.objects.link(src)
 lng, lat, h, c, nr = face_src(src)
-delete_faces(src, (c[:, 1] > y0) & (np.hypot(c[:, 0], c[:, 2] - az) < lib.m_len(cfg, gun["clear_r"])))
+if gun:
+    delete_faces(src, ((c[:, 1] - y0) * cp + (c[:, 2] - az) * sp > 0)
+                 & (np.hypot(c[:, 0], (c[:, 2] - az) * cp - (c[:, 1] - y0) * sp) < lib.m_len(cfg, gun["clear_r"])))
 from mathutils.bvhtree import BVHTree
 from mathutils import Vector
 bvh = BVHTree.FromObject(src, bpy.context.evaluated_depsgraph_get())
@@ -313,7 +334,11 @@ bot_side = np.where(hit, np.minimum(close1d(b, 0), top), np.nan)
 bot_end = np.where(hit, np.minimum(close1d(b, 1), top), np.nan)
 if cfg.get("end_floor"):
     # the bow and tail walls end at the plate's lower edge; tow shackles and hooks below it show as teeth along the bottom
-    bot_end = np.where(hit, np.minimum(np.maximum(bot_end, lib.m_len(cfg, cfg["end_floor"])), top), np.nan)
+    floored = np.minimum(np.maximum(bot_end, lib.m_len(cfg, cfg["end_floor"])), top)
+    if cfg.get("end_floor_rear_only"):
+        # a bow that reaches the ground on purpose (a mine plough): only the tail plate is held up
+        floored = np.where(ys[:, None] < 0, floored, bot_end)
+    bot_end = np.where(hit, floored, np.nan)
 SR = cfg.get("side_reach", 0)
 if SR:
     # a flared hull is widest above its lower sides, so the outermost column's underside is the flare's: the wall would stop
@@ -365,34 +390,42 @@ bpy.ops.object.mode_set(mode='OBJECT')
 print(f"PREP lo body tris {len(lo.data.polygons)} (heightfield {top.shape}, {n0} faces)")
 
 # Lathe barrel from the measured profile, stretched the same way as hi.
-prof = []
-for L, R in gun["profile"]:
-    y = lib.m_long(cfg, L)
-    prof.append((y0 + (y - y0) * f if L > gun["start_long"] else y, lib.m_len(cfg, R)))
-n = gun["sides"]
-bm = bmesh.new()
-rings = []
-for y, rr in prof:
-    rings.append([bm.verts.new((rr * math.cos(2 * math.pi * i / n), y, az + rr * math.sin(2 * math.pi * i / n)))
-                  for i in range(n)])
-# muzzle: a lip, then the bore recessed a few cm so it reads dark
-yt, rt = prof[-1]
-rings.append([bm.verts.new((rt * 0.55 * math.cos(2 * math.pi * i / n), yt, az + rt * 0.55 * math.sin(2 * math.pi * i / n))) for i in range(n)])
-rings.append([bm.verts.new((rt * 0.55 * math.cos(2 * math.pi * i / n), yt - 0.01, az + rt * 0.55 * math.sin(2 * math.pi * i / n))) for i in range(n)])
-for a, b in zip(rings[:-1], rings[1:]):
-    for i in range(n):
-        bm.faces.new((a[i], a[(i + 1) % n], b[(i + 1) % n], b[i]))
-bm.faces.new(list(reversed(rings[-1])))
-bmr = bpy.data.meshes.new("barrel"); bm.to_mesh(bmr); bm.free()
-bo = bpy.data.objects.new("barrel", bmr); bpy.context.collection.objects.link(bo)
-bpy.ops.object.select_all(action='DESELECT')
-bo.select_set(True); bpy.context.view_layer.objects.active = bo
-bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
-bpy.ops.mesh.normals_make_consistent(inside=False)
-bpy.ops.mesh.quads_convert_to_tris()
-bpy.ops.object.mode_set(mode='OBJECT')
-lo.select_set(True); bpy.context.view_layer.objects.active = lo
-bpy.ops.object.join()
+if gun:
+    prof = []
+    for L, R in gun["profile"]:
+        y = lib.m_long(cfg, L)
+        prof.append((y0 + (y - y0) * f if L > gun["start_long"] else y, lib.m_len(cfg, R)))
+    n = gun["sides"]
+    bm = bmesh.new()
+
+    def gring(y, rr):
+        """One barrel ring: y is the position along the untilted axis; a tilted axis carries the ring up its own line."""
+        if sp == 0:
+            return [bm.verts.new((rr * math.cos(2 * math.pi * i / n), y, az + rr * math.sin(2 * math.pi * i / n))) for i in range(n)]
+        s = y - y0
+        return [bm.verts.new((rr * math.cos(2 * math.pi * i / n),
+                              y0 + s * cp - rr * math.sin(2 * math.pi * i / n) * sp,
+                              az + s * sp + rr * math.sin(2 * math.pi * i / n) * cp)) for i in range(n)]
+
+    rings = [gring(y, rr) for y, rr in prof]
+    # muzzle: a lip, then the bore recessed a few cm so it reads dark
+    yt, rt = prof[-1]
+    rings.append(gring(yt, rt * 0.55))
+    rings.append(gring(yt - 0.01, rt * 0.55))
+    for a, b in zip(rings[:-1], rings[1:]):
+        for i in range(n):
+            bm.faces.new((a[i], a[(i + 1) % n], b[(i + 1) % n], b[i]))
+    bm.faces.new(list(reversed(rings[-1])))
+    bmr = bpy.data.meshes.new("barrel"); bm.to_mesh(bmr); bm.free()
+    bo = bpy.data.objects.new("barrel", bmr); bpy.context.collection.objects.link(bo)
+    bpy.ops.object.select_all(action='DESELECT')
+    bo.select_set(True); bpy.context.view_layer.objects.active = bo
+    bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.mesh.quads_convert_to_tris()
+    bpy.ops.object.mode_set(mode='OBJECT')
+    lo.select_set(True); bpy.context.view_layer.objects.active = lo
+    bpy.ops.object.join()
 bpy.ops.object.shade_smooth_by_angle(angle=math.radians(40))
 
 # Unwrap into the body region: left of the gear column, below the tread strip.

@@ -68,7 +68,7 @@ print(f"     hull X {hx:.4f} (spec {spec['hull'][0]}), Z {hz:.4f} (spec {spec['h
       f"height {pos[:, 1].max():.4f}, centre x {cxz[0]:+.4f} z {cxz[1]:+.4f}")
 check(abs(cxz[0]) < 0.012 and abs(cxz[1]) < 0.012, "hull footprint centred on the origin")
 check(hx <= spec["hull"][0] + 0.01 and hz <= spec["hull"][2] + 0.01, "hull inside the spec box")
-if wheeled:
+if wheeled and not cfg.get("towed"):
     # the gun sits inside the hull outline (a short barrel on a roof mount), so the muzzle is the front-most vertex at bore
     # height beside the centreline, not the model's front-most vertex
     sel = (np.abs(pos[:, 0]) < 0.06) & (np.abs(pos[:, 1] - (spec["hull"][1] + 0.05)) < 0.02)
@@ -76,8 +76,9 @@ if wheeled:
 else:
     tip = pos[np.argmin(pos[:, 2])]
 print(f"     muzzle vertex {tip.round(4).tolist()} (spec z {-spec['barrel']}, y {spec['hull'][1] + 0.05:.3f})")
-check(abs(tip[0]) < 0.03 and abs(tip[2] + spec["barrel"]) < 0.01, "front is -Z, muzzle at the spec length")
-if wheeled:
+if spec["barrel"]:      # no gun (engineer vehicle): nothing to measure
+    check(abs(tip[0]) < 0.03 and abs(tip[2] + spec["barrel"]) < 0.01, "front is -Z, muzzle at the spec length")
+if wheeled and not cfg.get("towed"):
     check(abs(tip[1] - (spec["hull"][1] + 0.05)) < 0.02, f"muzzle at bore height {spec['hull'][1] + 0.05:.3f} (UnitSilhouettes.muzzle)")
 row = lib.set_row(cfg)
 if cfg.get("out", "").startswith("set"):
@@ -102,6 +103,8 @@ if not wheeled:
     ends = cfg.get("ends_bottom_h")
     check(ends is not None, "units.json has ends_bottom_h")
     for name, end, h in (("rear", body & (pos[:, 2] > z1), (ends or [0, 0])[0]), ("bow", body & (pos[:, 2] < z0), (ends or [0, 0])[1])):
+        if name == "bow" and cfg.get("end_floor_rear_only"):
+            continue          # the plough reaches the ground
         if end.any():
             lim = max(floor, h * cfg["k"]) - 0.004
             check(pos[end, 1].min() >= lim, f"{name}: nothing below the hull bottom ({pos[end, 1].min():.4f} >= {lim:.4f})")
@@ -122,7 +125,7 @@ if not wheeled:
     check(np.corrcoef(lz, lu)[0, 1] < -0.9, f"bottom run u grows towards the front (corr {np.corrcoef(lz, lu)[0, 1]:.3f})")
 d = np.hypot(pos[whl, 1] - uv2[whl, 0], pos[whl, 2] - uv2[whl, 1])
 print(f"     wheel vertex distance from axle {d.min():.4f}..{d.max():.4f}; axle heights {np.unique(uv2[whl, 0].round(4)).tolist()}")
-check(d.max() < (0.12 if wheeled else 0.06), "wheel UV2 is the axle centre (every wheel vertex within a radius of it)")
+check(d.max() < (max(0.12, 1.1 * cfg["gear"]["road"]["r"] * cfg["k"]) if wheeled else 0.06), "wheel UV2 is the axle centre (every wheel vertex within a radius of it)")
 # every wheel turns at travel / its own radius: alpha carries the rate relative to the road wheels
 check(col4.shape[1] == 4, "COLOR_0 has alpha")
 if col4.shape[1] == 4:

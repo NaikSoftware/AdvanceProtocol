@@ -10,7 +10,7 @@ Atlas (1024², one material). PNG row 0 is the top, which is Godot v = 0 and Ble
   column  u >= COL_U, below the strip: road-wheel face, sprocket face (a wheeled unit uses the wheel cell for tyre and hub)
   the rest: baked body islands
 """
-import hashlib, json, os, re, shutil
+import hashlib, json, math, os, re, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -36,9 +36,9 @@ def load(name, seed=True):
     cfg["name"] = name
     cfg.setdefault("out", name)  # path under assets/units/ without .glb; sets write set2/<slug>
     cfg["source"] = os.path.expanduser(cfg["source"])
-    if cfg["fwd"] == "-y":
-        # a source whose nose points to -Y is turned half a turn about Z by prep.py, after which every number is in "y"
-        cfg["fwd"], cfg["rot180"] = "y", True
+    if cfg["fwd"] in ("-y", "-x"):
+        # a source whose nose points to -Y (-X) is turned half a turn about Z by prep.py, after which every number is in "y" ("x")
+        cfg["fwd"], cfg["rot180"] = cfg["fwd"][1], True
     cfg["spec"] = spec(cfg["type_id"])
     row = set_row(cfg)
     if row:
@@ -105,6 +105,14 @@ def set_row(cfg):
     if not row:
         return None
     return {"hull": [float(v) for v in row.group(1).split(",")], "barrel": float(row.group(2)), "wheel": float(row.group(3))}
+
+
+def gun_axis(cfg):
+    """Gun axis in MODEL units: (y0, az, sin, cos) of the breech point and the pitch (units.json gun.pitch, degrees up towards the muzzle).
+    A towed gun carries its barrel raised, so the lathe barrel, the faces prep clears for it and the paint mask follow the tilted line."""
+    g = cfg["gun"]
+    p = math.radians(g.get("pitch", 0.0))
+    return m_long(cfg, g["start_long"]), m_len(cfg, g["axis_h"]), math.sin(p), math.cos(p)
 
 
 def m_long(cfg, v):

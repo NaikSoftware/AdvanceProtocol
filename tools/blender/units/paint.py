@@ -142,9 +142,18 @@ rough = rough + C.get("rough_var", 0.06) * 2 * (fbm(P, [(2.5, 0.6), (0.8, 0.4)],
 # Generated colour: keep only what it says is near-black on the roof items (sight glass). It
 # also paints whole parts dark (the gun), so the barrel and anything low are excluded.
 tip = cfg["spec"]["barrel"] * lib.TILE_M
-az = lib.m_len(cfg, cfg["gun"]["axis_h"]) * lib.TILE_M
-rad = np.hypot(P[..., 0], P[..., 2] - az)
-on_gun = (rad < 0.4) & (P[..., 1] > lib.m_long(cfg, cfg["gun"]["start_long"]) * lib.TILE_M)
+if cfg.get("gun"):
+    _y0, az, _sp, _cp = (v * lib.TILE_M if i < 2 else v for i, v in enumerate(lib.gun_axis(cfg)))
+    if _sp:
+        # a raised barrel: distance across the tilted axis, and ahead of the breech along it
+        rad = np.hypot(P[..., 0], (P[..., 2] - az) * _cp - (P[..., 1] - _y0) * _sp)
+        on_gun = (rad < 0.4) & ((P[..., 1] - _y0) * _cp + (P[..., 2] - az) * _sp > 0)
+    else:
+        rad = np.hypot(P[..., 0], P[..., 2] - az)
+        on_gun = (rad < 0.4) & (P[..., 1] > _y0)
+else:
+    # no gun (engineer vehicle): nothing is a barrel, so no texel is exempt from the floors and none gets soot
+    az, rad, on_gun = 99.0, np.full(P.shape[:2], 99.0), np.zeros(P.shape[:2], bool)
 src_l = (d["src"] @ np.array([0.2126, 0.7152, 0.0722], np.float32)) if "src" in d else np.ones((N, N))
 if plain and "src" in d:
     # per-model: relative to the body's own median, so the threshold means "a third of the typical
