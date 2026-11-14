@@ -88,6 +88,8 @@ var _map_name_key: String = ""
 @onready var _info_plate: PanelContainer = %InfoPlate
 @onready var _name_slide: Control = %NameSlide
 @onready var _nameplate: Control = %Nameplate
+@onready var _strength: GateStrength = %Strength
+@onready var _name_row: Control = %Horizon.get_parent()
 @onready var _wipes: Array[Control] = [%RuleTop, %RuleBottom, %Horizon]
 
 
@@ -96,6 +98,12 @@ func _ready() -> void:
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	for w in _wipes:
 		w.pivot_offset_ratio = Vector2(0.5, 0.5)
+	_strength.pivot_offset_ratio = Vector2(0.5, 0.5)
+	# Геометрію лінії/смуги знімаємо з розкладки, тож перераховуємо, коли вона зсувається.
+	# sort_children, а не item_rect_changed: центрування плити зсуває лише позицію, а на неї
+	# сигнал розміру не спрацьовує.
+	(_name_row.get_parent() as Container).sort_children.connect(_sync_strength_geometry)
+	(_name_slide.get_parent() as Container).sort_children.connect(_sync_strength_geometry)
 
 
 ## Плита-фон за ім'ям ресурсу карти (maps/river.tres -> river.webp); для карти без плити
@@ -122,7 +130,8 @@ func set_context(map_path: String, name_key: String) -> void:
 ## Кнопка тут же вмикається заново: попередній show_for міг лишити її
 ## вимкненою (див. _on_confirm_pressed) — новий виклик мусить давати новий
 ## шанс натиснути, а не успадковувати «вже натиснуто» від чужого ходу.
-func show_for(player: int, turn: int = 1) -> void:
+## state — лише для ліній сили команд; без нього гейт їх не малює.
+func show_for(player: int, turn: int = 1, state: BattleState = null) -> void:
 	_player_value.text = "%s %d" % [tr("hud_player"), player + 1]
 	# Тема не вміє верхній регістр, тож підписи капсом — з коду.
 	_caption.text = tr("handover_pass_device").to_upper()
@@ -133,6 +142,7 @@ func show_for(player: int, turn: int = 1) -> void:
 	_fit_width()
 	_confirm_button.disabled = false
 	visible = true
+	_set_strength(state)
 	_play_entrance(UnitView.PLAYER_COLORS[player % UnitView.PLAYER_COLORS.size()])
 
 
@@ -144,6 +154,40 @@ func _fit_width() -> void:
 	_name_slide.custom_minimum_size.x = width
 
 
+## Двоє гравців — дві лінії замість горизонту, троє — смуга на інфо-плиті, горизонт лишається.
+## Усі числа дає ядро (team_hp*), тут лише вибір вигляду.
+func _set_strength(state: BattleState) -> void:
+	_strength.clear()
+	%Horizon.visible = true
+	if state == null:
+		return
+	if state.player_count == 2:
+		var shares: Array[float] = [state.team_hp_share_of_start(0), state.team_hp_share_of_start(1)]
+		_strength.set_two(shares, UnitView.PLAYER_COLORS)
+		%Horizon.visible = false
+	elif state.player_count == 3:
+		var players: Array[int] = []
+		var weights: Array[int] = []
+		for p in state.player_count:
+			if not state.eliminated[p]:
+				players.append(p)
+				weights.append(state.team_hp(p))
+		_strength.set_three(players, weights, UnitView.PLAYER_COLORS)
+	_sync_strength_geometry()
+
+
+func _sync_strength_geometry() -> void:
+	if _strength.mode == GateStrength.Mode.NONE:
+		return
+	# Від самого гейта, а не від Strength: під час розкриття Strength масштабований, і його
+	# global_position зсувається разом із півотом.
+	var origin: Vector2 = global_position
+	_strength.set_geometry(
+		Rect2(_name_row.global_position - origin, _name_row.size),
+		Rect2(_name_slide.global_position - origin, _name_slide.size),
+		Rect2(_info_plate.global_position - origin, _info_plate.size))
+
+
 func _play_entrance(player_color: Color) -> void:
 	if entrance_tween != null:
 		entrance_tween.kill()
@@ -153,11 +197,15 @@ func _play_entrance(player_color: Color) -> void:
 	%Horizon.color = Color(player_color, _HORIZON_ALPHA)
 	for w in _wipes:
 		w.scale.x = 0.0
+	# Лінії двох гравців з'являються тим самим розкриттям, що й горизонт; смуга трійки стоїть.
+	_strength.scale.x = 0.0 if _strength.mode == GateStrength.Mode.TWO else 1.0
 	_nameplate.position.y = SLIDE_DP
 	_nameplate.modulate.a = 0.0
 	entrance_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	for w in _wipes:
 		entrance_tween.tween_property(w, "scale:x", 1.0, ENTRANCE_S)
+	if _strength.mode == GateStrength.Mode.TWO:
+		entrance_tween.tween_property(_strength, "scale:x", 1.0, ENTRANCE_S)
 	entrance_tween.tween_property(_nameplate, "position:y", 0.0, ENTRANCE_S)
 	entrance_tween.tween_property(_nameplate, "modulate:a", 1.0, ENTRANCE_S)
 	entrance_tween.chain().tween_callback(func() -> void: _accepting = true)

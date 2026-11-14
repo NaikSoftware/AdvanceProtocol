@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://game/ui/handover_gate.gd" id="1_gate"]
 [ext_resource type="Theme" path="res://game/ui/theme/hud_theme.tres" id="2_theme"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/confirm.svg" id="3_confirm"]
+[ext_resource type="Script" path="res://game/ui/gate_strength.gd" id="4_strength"]
 
 [sub_resource type="StyleBoxFlat" id="keyline"]
 bg_color = Color(0, 0, 0, 0)
@@ -243,3 +244,15 @@ size_flags_horizontal = 4
 theme_type_variation = &"HudPrimaryButtonLarge"
 text = "handover_confirm"
 icon = ExtResource("3_confirm")
+
+[node name="Strength" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_strength")

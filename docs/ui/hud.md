@@ -242,6 +242,20 @@ ordering contract in the header of `handover_gate.gd`, §3.5).
 - **Stack:** «ПЕРЕДАЙТЕ ПРИСТРІЙ» · nameplate (6-dp player-colour rules, «Гравець N» 700/40, a
   player-colour horizon line behind it) · info plate [ХІД][КАРТА] · «Готово». Nameplate and info plate share one width, at least
   `HandoverGate.MIN_WIDTH` 400 on every map.
+- **Team strength** (`game/ui/gate_strength.gd`), no numbers, labels or icons, not in the pause menu.
+  The share is core's `BattleState.team_hp(p) / team_hp_start(p)`: current HP of the player's living
+  units over the max HP of every unit they started with; the view only maps ints to widths.
+  - **Two players (A):** the horizon line is replaced by two 2-dp lines out from the nameplate,
+    left = Player 1, right = Player 2, each in its player colour. Solid for the remaining share, the
+    rest a dotted `#3a4043` line, an 8 × 8 player-colour square at the outer end. They open with the
+    entrance tween like the horizon did.
+  - **Three players (C):** the horizon stays (incoming player's colour). A 4-dp bar runs along the
+    bottom edge of the info plate, exactly its width: one segment per living player in turn order,
+    each as wide as its share of all teams' remaining HP, 2-dp dark gaps, 1-dp bone ticks at the
+    thirds. An eliminated player has no segment. It shows the balance only: two crippled teams read
+    alike.
+  - It uses every team's true HP, so it reveals aggregate losses the viewer did not witness.
+    Accepted.
 - **Entrance:** one 350-ms tween moves the accents only; «Готово» ignores input until it ends, so the
   outgoing player's double tap on End turn cannot also lift the gate.
 - **Pause:** opaque, over the same map plate; «Пауза» + map name, Продовжити (primary),

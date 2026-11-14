@@ -18,6 +18,7 @@ const STATES: Array[String] = [
 	"hold_enemy_squad_spent", "handover_p1", "handover_p3", "handover_default",
 	"squad_to_drone", "hold_cluster", "engineer_to_armed", "shot_cover", "shot_infantry_armour_ignored",
 	"engineer_clear", "engineer_repair_bridge", "engineer_demolish_bridge", "hold_engineer",
+	"handover_2p_hurt", "handover_3p", "handover_3p_eliminated",
 ]
 const SETTLE_FRAMES: int = 90
 const STATE_FRAMES: int = 20
@@ -118,6 +119,21 @@ func _ready() -> void:
 	if not failed.is_empty():
 		print("HUD_SHOT FAILED states: ", failed)
 	get_tree().quit(1 if not failed.is_empty() else 0)
+
+
+## Лише для знімка гейта: команда з часткою share від max HP (0 — усі загинули).
+func _set_team_share(player: int, share: float) -> void:
+	for u: Unit in _state.units.values():
+		if u.owner == player:
+			u.hp = int(round(u.max_hp() * share))
+
+
+func _add_third_player() -> void:
+	_state.player_count = 3
+	_state.eliminated.resize(3)
+	_state.eliminated.fill(false)
+	_state.add_unit(MEDIUM_TANK, 2, _site + Vector2i(5, 5), 0)
+	_state.add_unit(RIFLE_SQUAD, 2, _site + Vector2i(6, 5), 0)
 
 
 func _shot_path(out_dir: String, map_name: String, size: Vector2i, st: String, with_hud: bool, locale: String) -> String:
@@ -283,11 +299,23 @@ func _enter_state(st: String) -> bool:
 			_press(_state.get_unit(_ids["enemy_squad"]).pos)
 			_ctrl.peek_cell(_state.get_unit(_ids["enemy_squad"]).pos)
 		"handover":
-			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1, _state.turn_number)
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1, _state.turn_number, _state)
 		"handover_p1":
-			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(0, _state.turn_number)
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(0, _state.turn_number, _state)
 		"handover_p3":
-			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(2, _state.turn_number)
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(2, _state.turn_number, _state)
+		"handover_2p_hurt":
+			_set_team_share(0, 0.7)
+			_set_team_share(1, 0.45)
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(1, _state.turn_number, _state)
+		"handover_3p", "handover_3p_eliminated":
+			_add_third_player()
+			_set_team_share(0, 0.8)
+			_set_team_share(1, 0.4)
+			if st == "handover_3p_eliminated":
+				_set_team_share(1, 0.0)
+				_state.eliminated[1] = true
+			(_screen.get_node("%HandoverGate") as HandoverGate).show_for(2, _state.turn_number, _state)
 		"handover_default":
 			# Карта без власної плити: запасна default.webp. Контекст лишається — знімати останнім.
 			var gate := _screen.get_node("%HandoverGate") as HandoverGate
@@ -338,6 +366,10 @@ func _reset_cast(st: String) -> void:
 	(_screen.get_node("%Hud") as Hud).call("_hide_toast")
 	(_screen.get_node("%PauseMenu") as Control).visible = false
 	(_screen.get_node("%HandoverGate") as Control).visible = false
+	# Стани гейта на трьох гравців змінюють кількість гравців: повертаємо двох.
+	_state.player_count = 2
+	_state.eliminated.resize(2)
+	_state.eliminated.fill(false)
 	_state.units.clear()
 	_state.wrecks.clear()
 	_state.mines.clear()

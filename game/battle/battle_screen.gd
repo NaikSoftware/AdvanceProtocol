@@ -263,7 +263,7 @@ func launch(match_service: Node) -> void:
 	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
 	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
 	_clear_unit_views()
-	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number)
+	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	_warm_board()
 
 
@@ -353,7 +353,7 @@ func resume(match_service: Node = null) -> void:
 	_weather.apply(look)
 	BattleFx.wetness = look.wetness
 	_wire_view(_match_service.state.board)
-	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number)
+	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	_warm_board()
 	_match_service.events_ready.connect(_on_events_ready)
 	_match_service.launch_mode = MatchService.Launch.NONE
@@ -966,7 +966,7 @@ func _on_events_ready() -> void:
 		# Те, що ламається, обривається разом з миттями: інакше падіння, що доходить під гейтом, показало б
 		# наступному гравцеві пил над клітинкою, яку він не розвідав.
 		_cancel_falls()
-		_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number)
+		_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
 		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
 		# перебудова поставила б вузли миттєво й з'їла б анімацію повороту.
