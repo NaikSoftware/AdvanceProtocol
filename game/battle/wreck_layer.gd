@@ -174,7 +174,7 @@ var _frame: int = 0
 var _warm: MeshInstance3D = null
 ## Тіла бійців (Casualties), показані глядачу, і їхні сітки: одна на вигляд (набір, тип).
 var _bodies: Array[Casualties.Body] = []
-var _body_mm: Dictionary[int, MultiMeshInstance3D] = {}
+var _body_mm: Dictionary[Vector2i, MultiMeshInstance3D] = {}
 var _body_placed: Array[Transform3D] = []
 ## Дошка стану: тіло на мосту лягає вздовж настилу, а біля води не заходить у воду.
 var _board: Board = null
@@ -552,7 +552,7 @@ func fallen_count() -> int:
 	return n
 
 
-## Шар тіл: один `MultiMesh` на набір — увесь шар коштує виклик малювання на набір, а не на тіло.
+## Шар тіл: один `MultiMesh` на набір і позу — шар коштує виклик малювання на позу, а не на тіло.
 func fallen_meshes() -> Array[MultiMeshInstance3D]:
 	return _body_mm.values()
 
@@ -570,35 +570,39 @@ func _rebuild_body_meshes() -> void:
 	if _body_contacts != null:
 		_body_contacts.free()
 		_body_contacts = null
-	var per_set: Dictionary = {}  ## набір -> Array[Transform3D]
+	var per_set: Dictionary = {}  ## Vector2i(набір, поза) -> Array[Transform3D]
 	var spots: Array[Transform3D] = []
 	for b in _bodies:
 		var set_id: int = UnitSilhouettes.set_of(b.owner)
-		if not per_set.has(set_id):
-			per_set[set_id] = [] as Array[Transform3D]
+		var poses: int = UnitSilhouettes.body_pose_count(set_id)
 		for slot in range(b.first, b.first + b.count):
+			var pose: int = body_pose_index(b, slot, poses)
+			var key := Vector2i(set_id, pose)
+			if not per_set.has(key):
+				per_set[key] = [] as Array[Transform3D]
 			var at: Transform3D = body_transform(b, slot, _board)
-			var xf: Transform3D = at * UnitSilhouettes.body_pose(set_id)
-			(per_set[set_id] as Array[Transform3D]).append(xf)
+			var xf: Transform3D = at * UnitSilhouettes.body_pose(set_id, pose)
+			(per_set[key] as Array[Transform3D]).append(xf)
 			_body_placed.append(xf)
 			spots.append(at)
-	for set_id: int in per_set:
-		var list: Array[Transform3D] = per_set[set_id]
+	for key: Vector2i in per_set:
+		var set_id: int = key.x
+		var list: Array[Transform3D] = per_set[key]
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = UnitSilhouettes.body_or_box(set_id)
+		mm.mesh = UnitSilhouettes.body_or_box(set_id, key.y)
 		mm.instance_count = list.size()
 		for i in list.size():
 			mm.set_instance_transform(i, list[i])
 		var mi := MultiMeshInstance3D.new()
-		mi.name = "Bodies_%d" % set_id
+		mi.name = "Bodies_%d_%d" % [set_id, key.y]
 		mi.multimesh = mm
 		mi.material_override = UnitSilhouettes.fallen_material(set_id)
 		# Тіло завтовшки в долоню тіні не дає, а прохід тіней коштував би ще виклик на набір.
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.layers = 1 << (UnitView.UNIT_LAYER - 1)
 		add_child(mi)
-		_body_mm[set_id] = mi
+		_body_mm[key] = mi
 	if not spots.is_empty() and WeatherRig.unit_contact > 0.0:
 		_body_contacts = _contact_patches(spots)
 		add_child(_body_contacts)
@@ -653,7 +657,12 @@ func body_contacts() -> MultiMeshInstance3D:
 
 ## Кільце, на якому лежать тіла довкола середини тайла: стоячі місця ближче (до ~0,17), тож тіла на тайлі,
 ## де відділення досі стоїть, його не накривають.
-const BODY_RING: float = 0.3
+const BODY_RING: float = 0.29
+## Розкид відстані від середини: тіла не лежать по колу. Ближче за ~0,2 почалися б стоячі місця, далі за ~0,36
+## тіло вийшло б за тайл.
+const BODY_RING_SPREAD: float = 0.07
+## Край плями знищеного відділення (ScarMap.SQUAD_SCORCH_RADIUS_M, 2,6 м): тут лягає одне з тіл.
+const BODY_RING_SCORCH: float = 0.33
 ## Біля води кільце тісніше: видима вода підходить до 0,3 тайла від середини клітинки суші, і тіло (0,225
 ## завдовжки) не сміє в неї зайти — ціле тіло лишається в межах 0,3.
 const BODY_RING_WATER: float = 0.16
@@ -692,7 +701,10 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 		for dy in range(-1, 2):
 			for dx in range(-1, 2):
 				near_water = near_water or _is_water(board, b.pos + Vector2i(dx, dy))
-	var ring: float = BODY_RING_WATER if near_water else BODY_RING
+	# Відстань від середини теж різна (до ±0,55 м), а одне тіло знищеного відділення — на краю його плями.
+	var ring: float = BODY_RING_WATER if near_water else BODY_RING + rng.randf_range(-BODY_RING_SPREAD, BODY_RING_SPREAD)
+	if not near_water and b.first == 0 and slot == 0:
+		ring = BODY_RING_SCORCH
 	var jitter: float = BODY_JITTER * (0.5 if near_water else 1.0)
 	var squad_yaw: float = deg_to_rad(UnitView._degrees_for_facing(b.facing))
 	var s: Vector3 = UnitSilhouettes.figure_transform(slot, true).origin
@@ -709,6 +721,11 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 	var at: Vector3 = centre + turn * local
 	at.y = _body_ground(b.pos, at)
 	return Transform3D(Basis(Vector3.UP, heading), at)
+
+
+## Поза тіла (`UnitSilhouettes.BODY_POSES`) за тим самим сідом, що й місце: те саме тіло щоразу в тій самій позі.
+static func body_pose_index(b: Casualties.Body, slot: int, poses: int) -> int:
+	return posmod(hash([b.unit_id, b.pos, b.seq, b.first, slot, "pose"]), maxi(1, poses))
 
 
 ## Вода, у яку тіло не сміє зайти: річка й підірваний міст (за межами дошки — ні).

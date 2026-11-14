@@ -58,9 +58,10 @@ static func record(state: BattleState, unit: Unit, hp_before: int) -> Array[Even
 	if now >= before:
 		return []
 	var body := Body.new(unit.id, unit.pos, unit.owner, unit.type_id, unit.facing, now, before - now)
+	# Найбільший номер + 1, а не кількість записів: підірваний міст забирає записи, і лічба повторила б номер.
 	for b in state.bodies:
 		if b.unit_id == unit.id:
-			body.seq += 1
+			body.seq = maxi(body.seq, b.seq + 1)
 	state.bodies.append(body)
 	for p in state.player_count:
 		_reveal(state, p, body)

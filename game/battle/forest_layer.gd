@@ -27,16 +27,18 @@ const _SHADER: Shader = preload("res://assets/props/forest/forest_crown.gdshader
 const _DIR: String = "res://assets/props/forest/"
 ## Типовий зум гри — 12 (IsoCameraRig.zoom_level); до цього зуму включно ліс повний.
 const DETAIL_ZOOM: float = 15.0
-## Розчинення над юнітом — лише крони, що на екрані справді його перекривають: центр крони в
-## циліндрі вздовж променя «юніт → камера» радіусом у півсилует юніта (`UNIT_HALF`) плюс
-## `FADE_MARGIN` і пів радіуса самої крони (`CROWN_REACH`), і лише на тій відстані вздовж променя, де
-## він проходить крізь крону (від `CROWN_LOW` висоти дерева до верху): кілька дерев на юніта. Повний
-## радіус крони й поле довкола клітинки розчиняли шмат лісу 6 × 4 клітинки — пляму-«привид».
+## Розчинення над юнітом — лише крони, що на екрані справді закривають бійців: крона — стовп радіусом
+## своєї крони (плюс розкид бійців, `FIGURE_SPREAD`) від `CROWN_LOW` висоти до верху, і промінь від
+## бійця (від ступень `FIGURE_LOW` до голови `FIGURE_HIGH`) до камери мусить пройти крізь нього. Позаду
+## юніта крона закриває його, лише коли він стоїть під нею; попереду — доки промінь не вийшов вище за
+## верх. Погляд згори — крона над самим юнітом (`UNIT_HALF` + `FADE_MARGIN`).
 const UNIT_HALF: float = 0.25
 const FADE_MARGIN: float = 0.1
-## Широка крона закриває юніта краєм, а не центром: до охоплення додається частка її радіуса. Уся крона
-## (радіус) розчиняла б шмат лісу; половина ще ловить крону, що звисає над відділенням.
-const CROWN_REACH: float = 0.5
+## Розкид бійців поперек погляду понад радіус крони (у `r` уже є 2 м кінчиків пучків); ступні й голова
+## (0,16 й 1,6 м) — межі променя до камери.
+const FIGURE_SPREAD: float = 0.05
+const FIGURE_LOW: float = 0.02
+const FIGURE_HIGH: float = 0.2
 ## Нижня чверть дерева — стовбур і рідкі гілки; вище промінь до юніта вже йде крізь листя.
 const CROWN_LOW: float = 0.25
 const FADE_SOFT: float = 0.08
@@ -744,17 +746,29 @@ func _cover(entry: Dictionary, back: Vector3) -> float:
 	var slope: float = back.y / flat.length() if flat.length() > 0.05 else -1.0
 	var p: Vector2 = entry["pos"]
 	var top: float = entry["top"]
-	var reach: float = FADE_MARGIN + UNIT_HALF + float(entry.get("r", 0.0)) * CROWN_REACH
+	var reach: float = FADE_MARGIN + UNIT_HALF
+	var r: float = float(entry.get("r", 0.0)) + FIGURE_SPREAD
 	for c in _reveal:
 		var u := Vector2(c)
-		var t: float = 0.0
-		if slope > 0.0:
-			t = (p - u).dot(dir)
-			var y: float = t * slope
-			if t < 0.0 or y < top * CROWN_LOW - 0.1 or y > top:
-				continue  # позаду юніта або промінь іде під кроною чи над нею
-		var d: float = p.distance_to(u + dir * t)
-		a = minf(a, smoothstep(reach, reach + FADE_SOFT, d))
+		if slope <= 0.0:
+			a = minf(a, smoothstep(reach, reach + FADE_SOFT, p.distance_to(u)))
+			continue
+		# Крона — стовп радіусом r від `CROWN_LOW` висоти до верху; промінь від бійця до камери проходить
+		# над її кругом на відрізку s ∈ [t − w, t + w] (s ≥ 0 — лише до камери) і на цьому відрізку піднімається
+		# від ступень (FIGURE_LOW) до голови (FIGURE_HIGH) на slope · s. Перетин висот із [низ, верх] —
+		# крона справді закриває бійця на екрані.
+		var t: float = (p - u).dot(dir)
+		var lat: float = absf((p - u).dot(Vector2(-dir.y, dir.x)))
+		if lat >= r:
+			continue
+		var w: float = sqrt(r * r - lat * lat)
+		var s0: float = maxf(t - w, 0.0)
+		var s1: float = t + w
+		if s1 <= s0:
+			continue
+		if FIGURE_LOW + slope * s0 > top or FIGURE_HIGH + slope * s1 < top * CROWN_LOW:
+			continue
+		return 0.0
 	return a
 
 

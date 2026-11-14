@@ -158,7 +158,7 @@ func test_fade_reaches_every_foliage_group() -> void:
 			if alphas.is_empty():
 				continue
 			# майже прозора: число стоячих бійців — це HP, і напівпрозоре листя робило б їх привидами
-			assert_between(alphas.min(), 0.0, 0.15, "%s/%s: альфа над юнітом" % [season, node.name])
+			assert_almost_eq(alphas.min(), ForestLayer.FADE_ALPHA, 0.001, "%s/%s: альфа над юнітом" % [season, node.name])
 			for n: Node in f.get_children():
 				if String(n.name).begins_with("Fade_"):
 					var depth := (n as GeometryInstance3D).material_override as ShaderMaterial
@@ -169,8 +169,8 @@ func test_fade_reaches_every_foliage_group() -> void:
 
 
 func test_fade_only_crowns_on_the_view_axis() -> void:
-	# Над юнітом розчиняються лише крони, що на екрані його перекривають: кілька дерев (до 8), а не шмат
-	# лісу довкола. Крони за ~1 клітинку вбік від осі погляду лишаються цілими.
+	# Над юнітом розчиняються лише крони, що на екрані його перекривають: ті, крізь які йде промінь до
+	# камери (до півтора десятка налеглих крон), а не шмат лісу довкола. Крони за ~1 клітинку вбік від осі погляду лишаються цілими.
 	for season: StringName in [&"summer", &"late"]:
 		var f := _layer(season)
 		var cam := Camera3D.new()
@@ -188,13 +188,18 @@ func test_fade_only_crowns_on_the_view_axis() -> void:
 			for i in list.size():
 				if float(list[i]["top"]) < ForestLayer.UNDER_TOP:
 					continue
+				var rel: Vector2 = (list[i]["pos"] as Vector2) - Vector2(u)
 				if alpha[i] < 1.0:
 					faded += 1
-				var rel: Vector2 = (list[i]["pos"] as Vector2) - Vector2(u)
+					# лише крони біля юніта й з боку камери: позаду — та, під якою він стоїть
+					assert_lt(rel.length(), 2.0, "%s: розчинена крона за %.1f клітинки від юніта" % [season, rel.length()])
+					assert_gt(rel.dot(dir), -float(list[i]["r"]) - ForestLayer.FIGURE_SPREAD, "%s: розчинена крона позаду юніта" % season)
 				var lateral: float = absf(rel.x * dir.y - rel.y * dir.x)
 				if lateral > 1.0:
 					assert_eq(alpha[i], 1.0, "%s: крона за %.1f клітинки вбік від осі погляду лишається цілою" % [season, lateral])
-		assert_between(faded, 1, 8, "%s: розчинено крон над юнітом" % season)
+		# у цьому густому лісі (крони радіусом до 0,83 клітинки налягають одна на одну) промінь перетинає
+		# до півтора десятка крон; стеля — щоб не розчинявся шмат лісу
+		assert_between(faded, 1, 16, "%s: розчинено крон над юнітом" % season)
 		cam.free()
 
 
@@ -254,8 +259,9 @@ func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:
 			assert_eq(alive, alpha[i] >= 1.0, "таблиця батча збігається з альфою")
 			if not alive:
 				gone += 1
-	# охоплення — слід відділення й пів радіуса крони, що звисає над ним: кілька дерев, не шмат лісу
-	assert_between(gone, 1, 8, "над юнітом зникли 1–8 крон")
+	# лише крони, крізь які проходить промінь до камери: крони тут радіусом 0,45–0,83 клітинки й налягають
+	# одна на одну, тож промінь перетинає до півтора десятка; решта лісу довкола лишається
+	assert_between(gone, 1, 16, "над юнітом зникли 1–16 крон")
 	f.set_reveal_cells([] as Array[Vector2i])
 	for g: Dictionary in f._fadable + f._ring_fadable:
 		for i in (g["list"] as Array).size():

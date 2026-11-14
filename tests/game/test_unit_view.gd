@@ -403,9 +403,46 @@ func test_hp_label_has_an_outline_and_billboards() -> void:
 ## не спіймає (назва раніше обіцяла саме це й уводила в оману). Реальні
 ## габарити Label3D headless не міряються; це лишається на око в живому вікні.
 func test_hp_label_and_drone_icon_are_stacked_above_the_bar_in_order() -> void:
-	view.bind(_unit(5))
+	view.bind(_unit(1))
 	assert_true(view._hp_bar.position.y < view._hp_label.position.y, "підпис сидить над смугою")
-	assert_true(view._hp_label.position.y < view._drone_icon.position.y, "лічильник дронів сидить над підписом")
+	assert_false(view._drone_icon.fixed_size, "значок росте й меншає разом зі смугою")
+	var r: Rect2 = _icon_rect(Vector2.ZERO)
+	assert_almost_eq(r.end.x, -0.48, 0.001, "правим краєм — упритул до лівого кінця своєї смуги")
+	assert_almost_eq(r.get_center().y, 0.0, 0.001, "по середині смуги (у площині екрана)")
+	assert_gt(r.size.x * 45.0, 17.5, "на найдальшому зумі (~45 пк на одиницю) значок щонайменше ~18 пк завширшки")
+
+
+## Прямокутник значка дронів у площині екрана (одиниці світу), відносно точки смуги HP юніта.
+func _icon_rect(anchor: Vector2) -> Rect2:
+	var px: float = UnitView.DRONE_ICON_PIXEL
+	var tex: Vector2 = Vector2(UnitView.drone_texture(2).get_size())
+	var centre: Vector2 = anchor + UnitView.DRONE_ICON_OFFSET * px
+	return Rect2(centre - tex * px * 0.5, tex * px)
+
+
+## Значок дронів — публічне число саме цього відділення (§3.9): у площині екрана він не налазить ні на
+## смугу, ні на підпис HP жодного з восьми сусідів, на будь-якому нахилі камери.
+func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
+	for pitch_deg: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
+		var yaw := Basis(Vector3.UP, deg_to_rad(IsoCameraRig.YAW_DEGREES))
+		var cam_basis: Basis = yaw * Basis(Vector3.RIGHT, -deg_to_rad(pitch_deg))
+		var right: Vector3 = cam_basis.x
+		var up: Vector3 = cam_basis.y
+		var own: Rect2 = _icon_rect(Vector2.ZERO)
+		var label_half := Vector2(0.32, 0.09)
+		for dz in range(-1, 2):
+			for dx in range(-1, 2):
+				if dx == 0 and dz == 0:
+					continue
+				var w := Vector3(dx, 0.0, dz)
+				var at := Vector2(w.dot(right), w.dot(up))
+				var bar := Rect2(at - Vector2(0.48, 0.06), Vector2(0.96, 0.12))
+				var label_at: Vector2 = at + Vector2(0.0, 0.1 * up.y)
+				var label := Rect2(label_at - label_half, label_half * 2.0)
+				assert_false(own.intersects(bar), "нахил %d°, сусід (%d, %d): значок на його смузі" % [pitch_deg, dx, dz])
+				assert_false(own.intersects(label), "нахил %d°, сусід (%d, %d): значок на його підписі" % [pitch_deg, dx, dz])
+		var own_label := Rect2(Vector2(0.0, 0.1 * up.y) - label_half, label_half * 2.0)
+		assert_false(own.intersects(own_label), "свій підпис HP значок не накриває")
 
 
 ## §3.9: залишок дронів публічний — метод навіть не має доступу до owner,
@@ -423,7 +460,7 @@ func test_set_drones_shows_count_regardless_of_owner() -> void:
 	assert_true(view_a._drone_icon.visible, "власник 0 бачить лічильник")
 	assert_true(view_b._drone_icon.visible, "власник 1 бачить той самий лічильник")
 	assert_same(view_a._drone_icon.texture, view_b._drone_icon.texture, "лічильник не має гілки на власника")
-	assert_true(view_a._drone_icon.fixed_size, "сталий розмір на екрані на кожному зумі")
+	assert_false(view_a._drone_icon.fixed_size, "росте й меншає разом зі смугою HP")
 	# Число — цятками під силуетом: у 2 дронів жовтого більше, ніж в 1, а розмір значка той самий.
 	var lit := func(t: Texture2D) -> int:
 		var img: Image = t.get_image()

@@ -103,11 +103,17 @@ void fragment() {
 	// Силует — з різкого рівня: обрис пучка — дрібне листя. Розмитіший mip для порогу
 	// робив із пучка кілька великих лопатей — «листки» по метру на ближньому зумі.
 #if defined(VEG_FADE) || defined(VEG_FADE_DEPTH)
+	const float FADE_CARD_GONE = 0.2;
 	// Напівпрозора крона над юнітом: альфа екземпляра — справжня прозорість, без растру.
 	// Тінь не залежить від альфи: рослина прозоріє над юнітом, але стоїть на місці, тож її тінь та
 	// сама. Зникає тінь лише при розчиненні цілими пучками (veg.gdshader), коли рослину прибрано.
 	float inst_a = max(COLOR.a, fade_floor * (1.0 - no_floor));
 	if (t.a < cut || (!shadow_pass && inst_a < 0.001)) {
+		discard;
+	}
+	// Майже розчинена крона над юнітом — без листя зовсім: картки з альфою 0,1 лишали б розсип дрібних
+	// листків, сіль із перцем довкола відділення. Стовбур і гілля лишаються напівпрозорими.
+	if (!shadow_pass && is_card > 0.5 && inst_a < FADE_CARD_GONE) {
 		discard;
 	}
 #else
@@ -141,7 +147,9 @@ void fragment() {
 	ALPHA = shadow_pass ? 1.0 : 0.0;
 #elif defined(VEG_FADE)
 	// Кора гасне швидше за листя: гілля над юнітом інакше стирчить темними рисками.
-	ALPHA = max(COLOR.a, fade_floor * (1.0 - no_floor)) * mix(0.6, 1.0, is_card);
+	// Листя над юнітом уже відкинуте вище; стовбур лишається видимим (не нижче за 0,45), щоб ліс не мав дірки.
+	float fade_a = max(COLOR.a, fade_floor * (1.0 - no_floor));
+	ALPHA = is_card > 0.5 ? fade_a : max(fade_a * 0.6, 0.45);
 #else
 	ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));
 #endif

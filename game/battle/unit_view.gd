@@ -182,11 +182,12 @@ func _ready() -> void:
 	# з кожного bind().
 	_hp_bar.pixel_size = HP_BAR_PIXEL_SIZE
 	_drone_icon.texture = drone_texture(_MAX_DRONES)
-	# Сталий розмір на екрані: на найближчому зумі значок не накриває відділення, на найдальшому —
-	# лишається читким (`DRONE_ICON_PIXEL` на піксель текстури).
-	_drone_icon.fixed_size = true
+	# Росте й меншає разом зі смугою HP і впритул до її лівого кінця (`DRONE_ICON_OFFSET`): число дронів
+	# читається як число саме цього відділення, а не сусіда.
+	_drone_icon.fixed_size = false
 	_drone_icon.pixel_size = DRONE_ICON_PIXEL
-	_drone_icon.position.y = DRONE_ICON_Y
+	_drone_icon.position.y = _hp_bar.position.y
+	_drone_icon.offset = DRONE_ICON_OFFSET
 	_drone_icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
 	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
@@ -947,11 +948,12 @@ static func _diamond_texture(size: int = 32) -> ImageTexture:
 	return _texture_cache[key]
 
 
-## Розмір піктограми дронів на екрані (`fixed_size`): частка висоти вікна на піксель текстури.
-const DRONE_ICON_PIXEL: float = 0.0008
-## Висота значка над юнітом: смуга HP і підпис зменшуються з зумом, а значок — ні, тож він стоїть вище за
-## них настільки, щоб і на найдальшому зумі їх не накривати.
-const DRONE_ICON_Y: float = 1.0
+## Значок дронів — у світових одиницях, як і смуга HP: 0,40 × 0,16 (на найдальшому зумі ~18 пікселів завширшки).
+const DRONE_ICON_PIXEL: float = 0.40 / 56.0
+## Зсув значка від середини смуги HP, у пікселях текстури (Sprite3D.offset — у площині екрана): упритул до лівого
+## кінця смуги (−0,48) і по її середині — значок читається частиною своєї смуги. Ширший не можна: смуга сусіда по
+## діагоналі стоїть на тій самій висоті екрана за 1,41, тож між смугами лишається 0,45.
+const DRONE_ICON_OFFSET: Vector2 = Vector2(-(0.48 + 0.20) / DRONE_ICON_PIXEL, 0.0)
 ## Колір силуету й цяток — той самий жовтий, що й позначка дрона (DroneThreatened), обведений темним.
 const _DRONE_FILL: Color = Color("e2bd45")
 const _DRONE_INK: Color = Color("1d1a14")

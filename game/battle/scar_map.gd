@@ -94,7 +94,7 @@ func stamp_squad_scorch(cell: Vector2i) -> void:
 	if _squad_stamped.has(cell):
 		return
 	_squad_stamped[cell] = true
-	_stamp(cell, SQUAD_SCORCH_RADIUS_M, SQUAD_SCORCH_CORE_M, SQUAD_SCORCH_DARK)
+	_stamp(cell, SQUAD_SCORCH_RADIUS_M, SQUAD_SCORCH_CORE_M, SQUAD_SCORCH_DARK, 0.0)
 
 
 func has_squad_scorch(cell: Vector2i) -> bool:
@@ -140,7 +140,8 @@ func _flush_upload() -> void:
 	_tex.update(_img)
 
 
-func _stamp(cell: Vector2i, radius_m: float, core_m: float, dark: float = 1.0) -> void:
+## `ash_k` — частка цяток попелу: у плями відділення їх нема (світлі цятки посеред неї читались камінцем).
+func _stamp(cell: Vector2i, radius_m: float, core_m: float, dark: float = 1.0, ash_k: float = 1.0) -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = hash(cell)
 	noise.frequency = 1.0
@@ -168,7 +169,7 @@ func _stamp(cell: Vector2i, radius_m: float, core_m: float, dark: float = 1.0) -
 			var f: float = 0.5 + 0.5 * fine.get_noise_2d(float(p.x), float(p.y))
 			v = clampf(v * (0.85 + 0.3 * f), 0.0, 1.0) if dist > 1.5 else v
 			v *= dark
-			var ash: float = smoothstep(0.72, 0.85, f) * v
+			var ash: float = smoothstep(0.72, 0.85, f) * v * ash_k
 			var old: Color = _img.get_pixelv(p)
 			_img.set_pixelv(p, Color(maxf(old.r, v), old.g, old.b, maxf(old.a, ash)))
 	_mark_dirty()

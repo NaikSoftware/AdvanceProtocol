@@ -25,14 +25,16 @@ uniform float wheel_radius = 0.06;
 // біжить по контуру разом із пройденим шляхом.
 const float TREAD_PERIOD = 0.25;
 const float TREAD_STRIP = 0.0625;
-// Загиблий лише темніший і брудніший за живого, а не сірий: стоячі фігури — це HP відділення, тож лежачі
-// не сміють із ними зливатися, але й не мають читатися попелом. Тканина тьмяніє (FALLEN_DARK, лінійний
-// множник), насиченість лишається (FALLEN_SAT: темніший той самий колір у Lab втрачає хрому) і лягає
-// трохи грязюки (FALLEN_MUD, бурий множник). Лежачий звернений спиною до неба й освітлений сильніше за
-// стоячого, тож темнити треба більше, ніж здається з альбедо.
-const float FALLEN_DARK = 0.40;
-const float FALLEN_SAT = 1.45;
-const vec3 FALLEN_MUD = vec3(0.97, 0.85, 0.62);
+// Загиблий лише темніший за живого й трохи брудніший — та сама тканина, не інша форма й не мох: стоячі
+// фігури — це HP відділення, тож лежачі не сміють із ними зливатися. Тьмяніє (FALLEN_DARK, лінійний
+// множник), хрома трохи нижча за живого (FALLEN_SAT), і лягає ледь тепліший відтінок грязюки
+// (FALLEN_MUD: сильніший зсував тон на 9–10° від живого, і тіла читались іншою формою). Лежачий звернений
+// спиною до неба, тож грані, що дивляться вбік і донизу, ще темнішають (FALLEN_FORM): без цього тіло
+// читалося пласкою плямою.
+const float FALLEN_DARK = 0.38;
+const float FALLEN_SAT = 0.85;
+const vec3 FALLEN_MUD = vec3(1.03, 1.0, 0.96);
+const float FALLEN_FORM = 0.2;
 // Матеріал загиблих (UnitSilhouettes.fallen_material()): один на набір, тож шар тіл — один виклик.
 uniform bool fallen = false;
 
@@ -64,7 +66,8 @@ void fragment() {
 	vec3 col = (textureGrad(albedo_tex, uv, ddx, ddy) * albedo_color).rgb;
 	if (fallen) {
 		float y = dot(col, vec3(0.2126, 0.7152, 0.0722));
-		col = max(mix(vec3(y), col, FALLEN_SAT), vec3(0.0)) * FALLEN_MUD * FALLEN_DARK;
+		float sky = clamp((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).y, 0.0, 1.0);
+		col = max(mix(vec3(y), col, FALLEN_SAT), vec3(0.0)) * FALLEN_MUD * FALLEN_DARK * mix(1.0 - FALLEN_FORM, 1.0, sky);
 	}
 	ALBEDO = col;
 	vec4 orm = textureGrad(orm_tex, uv, ddx, ddy);

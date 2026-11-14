@@ -392,8 +392,24 @@ const CROUCH_SLOTS: Array[int] = [1, 3]
 
 
 ## Сітка загиблого набору (null — файлу нема): найнижча точка на y = 0, середина тіла на початку.
-static func body_mesh(set_id: int) -> ArrayMesh:
-	return _figure_variant(set_id, BODY_KEY, BODY_SLUG)
+static func body_mesh(set_id: int, pose: int = 0) -> ArrayMesh:
+	return _figure_variant(set_id, BODY_KEY + pose * 10, BODY_SLUG + BODY_POSES[pose])
+
+
+## Пози загиблого: на боці, ниць, на спині — різні, щоб тіла знищеного відділення не лежали парадом. Ключ
+## у `use_models()` — `BODY_KEY + 10 · поза`.
+const BODY_POSES: Array[String] = ["", "_prone", "_back"]
+
+
+## Скільки поз загиблого має набір (щонайменше одна: без файлів — коробка).
+static func body_pose_count(set_id: int) -> int:
+	var n: int = 1
+	for pose in range(1, BODY_POSES.size()):
+		if body_mesh(set_id, pose) != null:
+			n = pose + 1
+		else:
+			break
+	return n
 
 
 ## Друга поза простого бійця — пригнувся (`rifle_soldier_crouch.glb`): та сама модель і атлас, лише ноги
@@ -437,14 +453,14 @@ static func fallen_material(set_id: int) -> Material:
 
 
 ## Перетворення сітки загиблого відносно його місця на землі: модель лежить як є, коробку кладемо плазом.
-static func body_pose(set_id: int) -> Transform3D:
-	if body_mesh(set_id) != null:
+static func body_pose(set_id: int, pose: int = 0) -> Transform3D:
+	if body_mesh(set_id, pose) != null:
 		return Transform3D()
 	return Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.0, FIGURE_SIZE.z * 0.5, 0.0))
 
 
-static func body_or_box(set_id: int) -> Mesh:
-	var m: ArrayMesh = body_mesh(set_id)
+static func body_or_box(set_id: int, pose: int = 0) -> Mesh:
+	var m: ArrayMesh = body_mesh(set_id, pose)
 	return m if m != null else _figure_box()
 
 
@@ -605,6 +621,10 @@ static func _merge_parts(parts: Array) -> ArrayMesh:
 	return mesh
 
 
+## Відблиск тканини бійця: зі звичайних 0,5 шолом і плечі під сонцем горіли білими цятками.
+const FIGURE_SPECULAR: float = 0.2
+
+
 ## Один матеріал на тип: текстури, шорсткість і specular — з імпортованого матеріалу моделі.
 static func model_material(type_id: int, set_id: int = 0) -> ShaderMaterial:
 	var key := Vector2i(_resolved_set(type_id, set_id), type_id)
@@ -625,7 +645,8 @@ static func model_material(type_id: int, set_id: int = 0) -> ShaderMaterial:
 		m.set_shader_parameter("metallic_channel", _channel(src.metallic_texture_channel))
 		m.set_shader_parameter("roughness", src.roughness)
 		m.set_shader_parameter("metallic", src.metallic)
-		m.set_shader_parameter("specular", src.metallic_specular)
+		var cloth: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
+		m.set_shader_parameter("specular", minf(src.metallic_specular, FIGURE_SPECULAR) if cloth else src.metallic_specular)
 	_model_materials[key] = m
 	return m
 

@@ -267,7 +267,7 @@ func test_bodies_lie_off_the_standing_slots_and_across_the_view() -> void:
 				var xf: Transform3D = WreckLayer.body_transform(b, slot)
 				assert_eq(xf, WreckLayer.body_transform(b, slot), "те саме тіло лягає однаково")
 				var r: float = Vector2(xf.origin.x - 3.0, xf.origin.z - 3.0).length()
-				assert_between(r, 0.2, 0.36, "на кільці, не на стоячих місцях")
+				assert_between(r, 0.17, 0.41, "довкола стоячих місць і в межах тайла")
 				var axis: Vector3 = xf.basis.z
 				var off: float = absf(wrapf(atan2(axis.x, axis.z) - cam, -PI * 0.5, PI * 0.5))
 				assert_gte(off, WreckLayer.BODY_VIEW_MIN - 0.0001, "довга вісь не вздовж погляду")
@@ -299,6 +299,32 @@ func test_model_bodies_use_the_body_mesh_and_one_fallen_material_per_set() -> vo
 	assert_eq(layer.fallen_count(), 2 * UnitView.SQUAD_FIGURES)
 	assert_eq(layer.fallen_meshes().size(), 1, "штурмовики лягають простим бійцем: той самий MultiMesh")
 	assert_eq(layer.fallen_meshes()[0].multimesh.instance_count, 2 * UnitView.SQUAD_FIGURES)
+
+
+## Тіла знищеного відділення лежать у різних позах (на боці, ниць, на спині), а одне — на краю плями.
+func test_destroyed_squad_bodies_take_several_poses_and_one_lies_at_the_scorch_edge() -> void:
+	var meshes: Dictionary = {0: UnitModelFixture.soldier()}
+	for pose in UnitSilhouettes.BODY_POSES.size():
+		meshes[UnitSilhouettes.BODY_KEY + pose * 10] = UnitModelFixture.mesh(Vector3(0.06, 0.05 + 0.01 * pose, 0.225))
+	UnitSilhouettes.use_models(meshes)
+	assert_eq(UnitSilhouettes.body_pose_count(0), 3)
+	var poses: Dictionary = {}
+	for unit_id in 8:
+		var b := Casualties.Body.new(unit_id, Vector2i(3, 3), 0, 0, unit_id % 8, 0, 4)
+		for slot in 4:
+			poses[WreckLayer.body_pose_index(b, slot, 3)] = true
+		var edge: Vector3 = WreckLayer.body_transform(b, 0).origin
+		assert_almost_eq(Vector2(edge.x - 3.0, edge.z - 3.0).length(), WreckLayer.BODY_RING_SCORCH, WreckLayer.BODY_JITTER * 1.5, "одне тіло — на краю плями")
+	assert_eq(poses.size(), 3, "три пози, не парад")
+	var sq: Unit = state.add_unit(0, 1, Vector2i(2, 2), 2)
+	sq.hp = 0
+	Casualties.record(state, sq, 100)
+	_seen(0, Vector2i(2, 2))
+	Casualties.reveal(state, 0)
+	layer.rebuild_fallen(state, 0)
+	assert_gt(layer.fallen_meshes().size(), 1, "пози — окремі MultiMesh одного матеріалу")
+	for mi: MultiMeshInstance3D in layer.fallen_meshes():
+		assert_same(mi.material_override, UnitSilhouettes.fallen_material(1))
 
 
 ## Без моделі загиблі — темні коробки плазом.
@@ -350,9 +376,9 @@ func test_forty_bodies_rebuild_fast() -> void:
 	layer.rebuild_fallen(state, 0)
 	var ms: float = (Time.get_ticks_usec() - t0) / 1000.0
 	assert_eq(layer.fallen_count(), 40)
-	# перекладання лише перетворень займає ~0,4 мс; межа — з великим запасом на повільну машину, а
-	# перезбирання сітки вершинами (50+ мс) однаково ловить
-	assert_lt(ms, 100.0, "40 тіл за %.1f мс" % ms)
+	# перекладання лише перетворень займає ~0,4 мс; межа — з запасом на повільну машину, але нижча за
+	# 50+ мс перезбирання сітки вершинами, тож повернення до нього ловить
+	assert_lt(ms, 30.0, "40 тіл за %.1f мс" % ms)
 
 
 ## Другий розігрів поверх першого не губить його коробку й не вішає шар.
