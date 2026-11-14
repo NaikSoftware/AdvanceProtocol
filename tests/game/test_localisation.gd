@@ -84,3 +84,19 @@ func test_engineer_panel_keys_are_translated() -> void:
 		TranslationServer.set_locale(locale)
 		for key in ENGINEER_PANEL_KEYS:
 			assert_ne(tr(key), key, "немає перекладу %s для %s" % [key, locale])
+
+
+## Ключі нового HUD: кожен має обидві мови.
+const HUD_FIELD_TABLET_KEYS: Array[String] = [
+	"hud_target", "hud_cover_half", "hud_armour_ignored", "hud_armour_ignored_note", "hud_armour_none",
+	"eng_hint_tap_tile", "drone_hint_tap_target", "hud_map", "hud_ground_line", "ground_dry_lc",
+	"ground_mud_lc", "ground_frozen_lc", "handover_ground_dry", "handover_ground_mud",
+	"handover_ground_frozen",
+]
+
+
+func test_field_tablet_keys_are_translated() -> void:
+	for locale in LOCALES:
+		TranslationServer.set_locale(locale)
+		for key in HUD_FIELD_TABLET_KEYS:
+			assert_ne(tr(key), key, "немає перекладу %s для %s" % [key, locale])

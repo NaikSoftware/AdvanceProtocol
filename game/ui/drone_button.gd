@@ -22,4 +22,4 @@ func show_for(unit: Unit) -> void:
 
 func _relabel() -> void:
 	if _unit != null:
-		text = tr("hud_drone_strike") % _unit.drones_left
+		text = tr("hud_drone_strike")

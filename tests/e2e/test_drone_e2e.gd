@@ -70,7 +70,7 @@ func test_drone_strike_through_button() -> void:
 	_e2e.tap(SQUAD)
 	await _e2e.settle()
 	assert_true(_button().is_visible_in_tree())
-	assert_eq(_button().text, tr("hud_drone_strike") % 2)
+	assert_eq(_button().text, tr("hud_drone_strike"))
 	_e2e.press(_button())
 	await _e2e.settle()
 	assert_eq(_board_view().circles(BoardView.LAYER_TARGETS),
@@ -83,7 +83,7 @@ func test_drone_strike_through_button() -> void:
 	assert_eq((_e2e.hud().get_node("%PreviewDroneDamageValue") as Label).text, "120–180")
 	await _e2e.confirm()
 	assert_eq(squad.drones_left, 1)
-	assert_eq(_button().text, tr("hud_drone_strike") % 1)
+	assert_eq(_button().text, tr("hud_drone_strike"))
 	assert_eq(_e2e.screen.unit_view_for(squad.id)._drones_left, 1, "значок на юніті")
 	# Golden, seed 7: перший кидок матчу — roll(60) = 1 → 120 + 1 = 121; 400 − 121.
 	assert_eq(tank.hp, 279)
