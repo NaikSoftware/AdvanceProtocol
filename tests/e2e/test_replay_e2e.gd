@@ -116,6 +116,9 @@ func test_real_tap_fast_forwards_and_skip_click_ends_replay() -> void:
 	_e2e.click_at(skip.get_global_rect().get_center(), _e2e.vp)
 	assert_null(_e2e.screen._replay_state, "клік по «Пропустити» кінчає повтор")
 	assert_eq(Engine.time_scale, 1.0)
+	assert_false(_e2e.screen._weather.environment.adjustment_enabled, "після пропуску світ без грейду")
+	assert_eq((_overlay() as ReplayOverlay).applied_globals, ReplayOverlay.NEUTRAL_GLOBALS,
+		"після пропуску глобалі шейдерів тотожні")
 	assert_true(_e2e.hud().visible)
 	await _e2e.settle()
 	await _e2e.act(Vector2i(4, 4), Vector2i(4, 5))

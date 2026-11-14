@@ -972,7 +972,7 @@ func _play_replay(replay: ReplayFilter.Result) -> void:
 		_set_replay(beat.after, _replay_viewer)
 		_replay_overlay.show_beat(i, beat.actor, beat.turn)
 		# Твін, убитий пропуском, finished не подає: такт тоді просто лишається спати.
-		await _camera_rig.fly_to(beat.focus).finished
+		await _camera_rig.fly_to(_beat_frame(beat)).finished
 		if run != _replay_run:
 			return
 		_event_player.play(beat.events)
@@ -983,6 +983,26 @@ func _play_replay(replay: ReplayFilter.Result) -> void:
 		_sync_replay_views(beat.on_screen)
 		_replay_before = beat.after
 	_end_replay()
+
+
+## Куди летить камера в такті: фокус, а якщо другий учасник такту тоді ліг би під написи чи кнопку
+## повтору — середина між ними. Другий учасник — ціль чи стрілець першого пострілу або дрона, або кінець
+## маршруту; лише той, кого фільтр малює (§3.5): кадр, підігнаний під юніт у тумані, показав би, де він.
+func _beat_frame(beat: ReplayFilter.Beat) -> Vector2i:
+	var other: Vector2i = beat.focus
+	for e in beat.events:
+		if e is Events.ShotFired or e is Events.DroneLaunched:
+			for id: int in [e.attacker_id, e.target_id]:
+				var u: Unit = beat.after.get_unit(id)
+				if u != null and u.pos != beat.focus and (_unit_views.has(id) or beat.on_screen.has(id)):
+					other = u.pos
+			break
+		if e is Events.UnitMoved and not e.path.is_empty():
+			other = e.path.back()
+			break
+	var offset: Vector2 = _camera_rig.unproject(IsoCameraRig.cell_to_world(other)) \
+		- _camera_rig.unproject(IsoCameraRig.cell_to_world(beat.focus))
+	return _replay_overlay.frame_for(beat.focus, other, offset)
 
 
 ## Кінець повтору, сам чи пропуском, — рівно раз: справжній стан, HUD і камера на першому юніті, як
