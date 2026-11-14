@@ -88,9 +88,7 @@ func test_engineer_panel_keys_are_translated() -> void:
 ## Ключі нового HUD: кожен має обидві мови.
 const HUD_FIELD_TABLET_KEYS: Array[String] = [
 	"hud_target", "hud_cover_half", "hud_armour_ignored", "hud_armour_ignored_note", "hud_armour_none",
-	"eng_hint_tap_tile", "drone_hint_tap_target", "hud_map", "hud_ground_line", "ground_dry_lc",
-	"ground_mud_lc", "ground_frozen_lc", "handover_ground_dry", "handover_ground_mud",
-	"handover_ground_frozen",
+	"eng_hint_tap_tile", "drone_hint_tap_target", "hud_map",
 ]
 
 
@@ -109,3 +107,13 @@ func test_ukrainian_strings_use_the_modifier_apostrophe() -> void:
 		if row.size() > 1 and row[1].contains("'"):
 			bad.append(row[0])
 	assert_eq(bad, [] as Array[String], "uk-рядки з ASCII-апострофом")
+
+
+func test_no_ground_state_display_strings_exist() -> void:
+	var f := FileAccess.open("res://assets/i18n/strings.csv", FileAccess.READ)
+	var found: Array[String] = []
+	while not f.eof_reached():
+		var row: PackedStringArray = f.get_csv_line()
+		if row.size() > 1 and ("ground" in row[0] or "ґрунт" in row[1].to_lower()):
+			found.append(row[0])
+	assert_eq(found, [] as Array[String], "ґрунт не показується в інтерфейсі")

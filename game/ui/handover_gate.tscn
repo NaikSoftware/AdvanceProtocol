@@ -230,36 +230,6 @@ layout_mode = 2
 theme_type_variation = &"HudLabel"
 vertical_alignment = 1
 
-[node name="Div2" type="ColorRect" parent="Body/InfoPlate/Pad/Cells"]
-custom_minimum_size = Vector2(1, 22)
-layout_mode = 2
-size_flags_vertical = 4
-mouse_filter = 2
-color = Color(0.2275, 0.2510, 0.2627, 1)
-
-[node name="GroundCell" type="HBoxContainer" parent="Body/InfoPlate/Pad/Cells"]
-layout_mode = 2
-size_flags_horizontal = 3
-mouse_filter = 2
-theme_override_constants/separation = 8
-alignment = 1
-
-[node name="GroundIcon" type="TextureRect" parent="Body/InfoPlate/Pad/Cells/GroundCell"]
-unique_name_in_owner = true
-texture_filter = 2
-custom_minimum_size = Vector2(20, 20)
-layout_mode = 2
-size_flags_vertical = 4
-mouse_filter = 2
-expand_mode = 1
-stretch_mode = 5
-
-[node name="GroundLabel" type="Label" parent="Body/InfoPlate/Pad/Cells/GroundCell"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"HudLabel"
-vertical_alignment = 1
-
 [node name="Gap3" type="Control" parent="Body"]
 custom_minimum_size = Vector2(0, 24)
 layout_mode = 2

@@ -269,16 +269,45 @@ func test_backdrop_plate_follows_the_map_resource_name_with_a_default_fallback()
 	assert_eq(HandoverGate.plate_for("").resource_path, "res://assets/ui/gate/default.webp")
 
 
-func test_info_plate_shows_turn_map_and_ground_and_shares_its_width_with_the_nameplate() -> void:
-	gate.set_context("res://maps/river.tres", "map_river", Terrain.GroundState.MUD)
+func test_info_plate_shows_turn_and_map_and_shares_its_width_with_the_nameplate() -> void:
+	gate.set_context("res://maps/river.tres", "map_river")
 
 	gate.show_for(0, 3)
 
 	assert_eq((gate.get_node("%TurnValue") as Label).text, "3")
 	assert_eq((gate.get_node("%MapValue") as Label).text, tr("map_river"))
-	assert_eq((gate.get_node("%GroundLabel") as Label).text, tr("handover_ground_mud"))
-	assert_eq((gate.get_node("%GroundIcon") as TextureRect).texture, HandoverGate.ground_icon(Terrain.GroundState.MUD))
 	var info: Control = gate.get_node("%InfoPlate") as Control
 	assert_eq((gate.get_node("%NameSlide") as Control).custom_minimum_size.x, info.custom_minimum_size.x)
 	assert_eq(HandoverGate.MIN_WIDTH, 400.0)
 	assert_gte(info.custom_minimum_size.x, 400.0)
+
+
+## Стан ґрунту не показується ніде в інтерфейсі: ні вузла, ні підпису, ні значка.
+static func _ground_text_or_icon(root: Node) -> Array[String]:
+	var found: Array[String] = []
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		stack.append_array(n.get_children())
+		if "ground" in String(n.name).to_lower():
+			found.append(String(n.name))
+		var text: String = (n as Label).text if n is Label else ""
+		if n is Button:
+			text = (n as Button).text
+		for w in ["ґрунт", "ground", "багно", "мерзлота", "mud", "frozen"]:
+			if w in text.to_lower():
+				found.append("%s: %s" % [n.name, text])
+		if n is TextureRect and (n as TextureRect).texture != null and "ground" in (n as TextureRect).texture.resource_path:
+			found.append("%s: %s" % [n.name, (n as TextureRect).texture.resource_path])
+	return found
+
+
+func test_gate_shows_no_ground_state_for_any_ground() -> void:
+	for lang in ["uk", "en"]:
+		TranslationServer.set_locale(lang)
+		for ground in [Terrain.GroundState.DRY, Terrain.GroundState.MUD, Terrain.GroundState.FROZEN]:
+			gate.set_context("res://maps/river.tres", "map_river")
+			gate.show_for(0, 3)
+			assert_eq(_ground_text_or_icon(gate), [] as Array[String], "гейт, ґрунт %d" % ground)
+	var cells: Node = gate.get_node("%InfoPlate/Pad/Cells")
+	assert_eq(cells.get_child_count(), 3, "[ХІД] | [КАРТА] без порожньої клітинки")

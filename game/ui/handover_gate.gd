@@ -74,23 +74,12 @@ const MIN_WIDTH := 400.0
 const ENTRANCE_S := 0.35
 const SLIDE_DP := 12.0
 const _HORIZON_ALPHA := 0.7
-const _GROUND_KEYS: Dictionary = {
-	Terrain.GroundState.DRY: "handover_ground_dry",
-	Terrain.GroundState.MUD: "handover_ground_mud",
-	Terrain.GroundState.FROZEN: "handover_ground_frozen",
-}
-const _GROUND_ICONS: Dictionary = {
-	Terrain.GroundState.DRY: preload("res://assets/ui/icons/ground_dry.svg"),
-	Terrain.GroundState.MUD: preload("res://assets/ui/icons/ground_mud.svg"),
-	Terrain.GroundState.FROZEN: preload("res://assets/ui/icons/ground_frozen.svg"),
-}
 
 ## Лишається публічним, щоб тест міг докрутити твін вручну (custom_step), не чекаючи реального часу.
 var entrance_tween: Tween
 
 var _accepting: bool = false
 var _map_name_key: String = ""
-var _ground_state: int = Terrain.GroundState.DRY
 
 @onready var _player_value: Label = %PlayerValue
 @onready var _confirm_button: Button = %ConfirmButton
@@ -119,15 +108,10 @@ static func plate_for(map_path: String) -> Texture2D:
 	return load(path) as Texture2D
 
 
-static func ground_icon(ground_state: int) -> Texture2D:
-	return _GROUND_ICONS[ground_state]
-
-
-## Карта і ґрунт незмінні протягом матчу: сцена бою задає їх раз, а не на кожному show_for.
-func set_context(map_path: String, name_key: String, ground_state: int) -> void:
+## Карта незмінна протягом матчу: сцена бою задає їх раз, а не на кожному show_for.
+func set_context(map_path: String, name_key: String) -> void:
 	_plate.texture = plate_for(map_path)
 	_map_name_key = name_key
-	_ground_state = ground_state
 
 
 ## Показує гейт для гравця, що заходить. Синхронно й одразу непрозоро —
@@ -146,9 +130,6 @@ func show_for(player: int, turn: int = 1) -> void:
 	%TurnValue.text = str(turn)
 	%MapCaption.text = tr("hud_map").to_upper()
 	%MapValue.text = tr(_map_name_key) if _map_name_key != "" else "-"
-	%GroundIcon.texture = ground_icon(_ground_state)
-	%GroundIcon.modulate = HudKit.BONE
-	%GroundLabel.text = tr(_GROUND_KEYS[_ground_state])
 	_fit_width()
 	_confirm_button.disabled = false
 	visible = true

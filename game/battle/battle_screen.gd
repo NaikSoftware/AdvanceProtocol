@@ -343,9 +343,8 @@ func resume(match_service: Node = null) -> void:
 		_set_overlay_context(saved_map)
 	else:
 		# Карти немає: гейт і пауза показують типову плиту й «-», а не чужу Річку.
-		var ground: int = _match_service.state.board.ground_state
-		_gate.set_context("", "", ground)
-		_pause.set_context("", "", ground)
+		_gate.set_context("", "")
+		_pause.set_context("", "")
 	var look: BattleLook = BattleLook.for_map_path(mp)
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
@@ -458,9 +457,8 @@ func _notification(what: int) -> void:
 
 ## Гейт і пауза показують карту й ґрунт; вони незмінні протягом матчу.
 func _set_overlay_context(map_data: MapData) -> void:
-	var ground: int = _match_service.state.board.ground_state
-	_gate.set_context(map_data.resource_path, map_data.name_key, ground)
-	_pause.set_context(map_data.resource_path, map_data.name_key, ground)
+	_gate.set_context(map_data.resource_path, map_data.name_key)
+	_pause.set_context(map_data.resource_path, map_data.name_key)
 
 
 func _open_pause() -> void:

@@ -223,7 +223,7 @@ func test_pause_button_opens_overlay_and_resume_closes_it() -> void:
 	assert_false(pause.visible)
 
 
-func test_pause_shows_map_turn_and_ground_from_the_match() -> void:
+func test_pause_shows_map_and_turn_from_the_match() -> void:
 	var service: Node = _service()
 	var screen: BattleScreen = _screen()
 	screen.setup(_map(), 2, 1, service)
@@ -232,8 +232,9 @@ func test_pause_shows_map_turn_and_ground_from_the_match() -> void:
 	(screen.get_node("%Hud").get_node("%PauseButton") as Button).pressed.emit()
 
 	assert_eq((pause.get_node("%TurnValue") as Label).text, str(service.state.turn_number))
-	assert_eq((pause.get_node("%GroundValue") as Label).text, tr("ground_dry_lc"))
-	assert_eq((pause.get_node("%GroundCaption") as Label).text, "Ґрунт:" if TranslationServer.get_locale().begins_with("uk") else "Ground:")
+	assert_null(pause.get_node_or_null("%GroundValue"), "ґрунт не в інтерфейсі")
+	assert_null(pause.get_node_or_null("%GroundCaption"))
+	assert_null(pause.get_node_or_null("%GroundIcon"))
 	assert_not_null((pause.get_node("%Plate") as TextureRect).texture)
 	var gate: HandoverGate = screen.get_node("%HandoverGate")
 	assert_eq((gate.get_node("%TurnValue") as Label).text, str(service.state.turn_number))

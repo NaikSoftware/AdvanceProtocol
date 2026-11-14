@@ -291,7 +291,7 @@ func _enter_state(st: String) -> bool:
 		"handover_default":
 			# Карта без власної плити: запасна default.webp. Контекст лишається — знімати останнім.
 			var gate := _screen.get_node("%HandoverGate") as HandoverGate
-			gate.set_context("res://maps/_none.tres", gate.get("_map_name_key"), int(gate.get("_ground_state")))
+			gate.set_context("res://maps/_none.tres", gate.get("_map_name_key"))
 			gate.show_for(1, _state.turn_number)
 		"pause":
 			(_screen.get_node("%PauseMenu") as PauseMenu).open(_state.turn_number)

@@ -58,9 +58,6 @@ hud_class,Клас,Class
 hud_confirm,Підтвердити,Confirm
 hud_cancel,Скасувати,Cancel
 hud_end_turn,Завершити хід,End turn
-hud_ground_dry,Сухо,Dry
-hud_ground_mud,Багно,Mud
-hud_ground_frozen,Мерзлота,Frozen
 handover_pass_device,Передайте пристрій,Pass the device
 handover_incoming_player,Наступний гравець,Incoming player
 handover_confirm,Готово,Ready
@@ -124,11 +121,4 @@ hud_armour_none,немає,none
 eng_hint_tap_tile,Торкніться клітинки,Tap a tile
 drone_hint_tap_target,Торкніться цілі,Tap a target
 hud_map,Карта,Map
-hud_ground_line,Ґрунт: %s,Ground: %s
-ground_dry_lc,сухо,dry
-ground_mud_lc,багно,mud
-ground_frozen_lc,мерзлота,frozen
-handover_ground_dry,Ґрунт: сухо,Ground: dry
-handover_ground_mud,Ґрунт: багно — бездоріжжя важче,Ground: mud — off-road is harder
-handover_ground_frozen,Ґрунт: мерзлота — бездоріжжя легше,Ground: frozen — off-road is easier
 ERR_NO_ADJACENT_TARGET,Поруч немає придатної цілі,No valid target adjacent
