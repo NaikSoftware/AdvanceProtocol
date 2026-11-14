@@ -158,7 +158,7 @@ def src_edit():
         bm.to_mesh(me); bm.free(); me.update()
         print(f"PREP delete_boxes: {int(kill.sum())} faces dropped")
         co = verts(me)
-    if not cfg.get("add_boxes") and not cfg.get("add_cyls"):
+    if not cfg.get("add_boxes") and not cfg.get("add_cyls") and not cfg.get("add_discs"):
         return
     from mathutils.kdtree import KDTree
     kd = KDTree(len(co))
@@ -201,6 +201,21 @@ def src_edit():
             for lp in f.loops:
                 lp[uvb].uv = vuv[kd.find(lp.vert.co)[1]]
         print(f"PREP cyl long {l} lat {a0}..{a1} h {h} r {r}")
+    # `add_discs` [long, lat, h0, h1, r]: a round platform standing on the ground (a firing base), 16 sides
+    for l, a, h0, h1, r in cfg.get("add_discs", []):
+        def D(l_, a_, h_):
+            return (l_, a_, h_ + zmin) if cfg["fwd"] == "x" else (-a_, l_, h_ + zmin)
+        n = 16
+        rings = [[bm.verts.new(D(l + r * math.cos(2 * math.pi * i / n), a + r * math.sin(2 * math.pi * i / n), h)) for i in range(n)] for h in (h0, h1)]
+        for ring in rings:
+            for v in ring:
+                v[addl] = 1.0
+        quads = [[rings[0][i], rings[0][(i + 1) % n], rings[1][(i + 1) % n], rings[1][i]] for i in range(n)]
+        for vs in quads + [rings[0], rings[1][::-1]]:
+            f = bm.faces.new(vs); new.append(f)
+            for lp in f.loops:
+                lp[uvb].uv = vuv[kd.find(lp.vert.co)[1]]
+        print(f"PREP disc long {l} lat {a} h {h0}..{h1} r {r}")
     bmesh.ops.recalc_face_normals(bm, faces=new)
     bm.to_mesh(me); bm.free(); me.update()
 

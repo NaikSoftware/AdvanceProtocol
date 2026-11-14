@@ -245,7 +245,9 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 	m.take_over_path(map.resource_path)
 	var c := _field_near_centre(m)
 	# set=N: усі чотири юніти належать гравцеві з набором N, тож гармати й інженерна машина — з цього набору
-	var o: Array[int] = [0, 1, 2, 0] if set_id < 0 else [set_id, set_id, set_id, set_id]
+	var o: Array[int] = [0, 1, 2, 0]
+	if set_id >= 0:
+		o = [set_id, set_id, set_id, set_id]
 	m.spawns = [
 		{"type_id": 9, "owner": o[0], "pos": c + Vector2i(-2, 0), "facing": 0},
 		{"type_id": 10, "owner": o[1], "pos": c, "facing": 0},
