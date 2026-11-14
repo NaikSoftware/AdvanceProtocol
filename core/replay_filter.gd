@@ -25,20 +25,29 @@ class Vanished extends Events.BattleEvent:
 	func describe() -> String:
 		return "Vanished(unit=%d)" % unit_id
 
-## Одна видима дія: події однієї команди, кадр камери, чий хід, і стан після команди.
+## Одна видима дія: події однієї команди (до чи після передачі ходу), кадр камери, чий хід, і
+## стан після команди. `after` — ПРАВДА, а не те, що на екрані: посеред схованого маршруту
+## загону він каже, що загін видно. Хто намальований, вигляд бере лише з `on_screen`, ніколи
+## з `can_see_unit()` на `after`.
 class Beat extends RefCounted:
 	var events: Array[Events.BattleEvent] = []
 	var focus: Vector2i = Vector2i.ZERO
 	var actor: int = 0
 	var turn: int = 0
 	var after: BattleState = null
+	## id -> true: кожен юніт, намальований після подій цього такту, і свої, і чужі.
+	var on_screen: Dictionary = {}
 
+## `on_screen_start` — хто намальований на початку відрізка; з ним, а не з `can_see_unit()` на
+## `start`, вигляд будує перший кадр.
 class Result extends RefCounted:
 	var start: BattleState = null
+	var on_screen_start: Dictionary = {}
 	var beats: Array[Beat] = []
 
 
-## null — повтору немає: глядач без знімка, матч скінчився у відрізку, або нічого не видно.
+## null — повтору немає: глядач без знімка, матч скінчився у відрізку, глядач уже вибув (у грі на
+## трьох матч триває, але ходу в нього немає), або нічого не видно.
 static func build(log: ReplayLog, viewer: int) -> Result:
 	var start: BattleState = log.start_state(viewer)
 	if start == null:
@@ -48,9 +57,14 @@ static func build(log: ReplayLog, viewer: int) -> Result:
 		for e in en["events"]:
 			if e is Events.MatchEnded:
 				return null
+	var last: BattleState = entries[entries.size() - 1]["after"] if not entries.is_empty() else start
+	if last.eliminated[viewer]:
+		return null
+	var p := _Pass.new(viewer, start, entries, log.span(viewer))
 	var r := Result.new()
 	r.start = start
-	r.beats = _Pass.new(viewer, start, entries, log.span(viewer)).run()
+	r.beats = p.run()
+	r.on_screen_start = p.on_screen_start
 	return r if not r.beats.is_empty() else null
 
 
@@ -59,9 +73,10 @@ class _Pass extends RefCounted:
 	var start: BattleState
 	var entries: Array[Dictionary]
 	var commands: Array[Command]
-	## Чужі юніти, які зараз на екрані глядача. Не виводиться зі стану: загін, чию дорогу
+	## Юніти, які зараз на екрані глядача, свої й чужі. Не виводиться зі стану: загін, чию дорогу
 	## до укриття сховано, стан бачить посеред маршруту, а екран — ні.
 	var shown: Dictionary = {}
+	var on_screen_start: Dictionary = {}
 	## id загону -> Vector2i(перша його команда ходу, останній хід, що скінчився в укритті).
 	var hidden: Dictionary = {}
 	var index: int = 0
@@ -78,8 +93,9 @@ class _Pass extends RefCounted:
 	func run() -> Array[Beat]:
 		for id in start.units:
 			var u: Unit = start.units[id]
-			if u.owner != viewer and u.is_alive() and start.can_see_unit(viewer, u):
+			if u.is_alive() and start.can_see_unit(viewer, u):
 				shown[id] = true
+		on_screen_start = shown.duplicate()
 		_find_hiding()
 		var out: Array[Beat] = []
 		before = start
@@ -101,25 +117,31 @@ class _Pass extends RefCounted:
 					break
 				next = ts
 				next_at = j
-			var kept: Array[Events.BattleEvent] = _move(events, commands[i]) if commands[i] is MoveCommand \
-					else _other(events, commands[i])
-			if not kept.is_empty():
-				var b := Beat.new()
-				b.events = kept
-				b.focus = _focus(kept[0])
-				b.actor = entries[i]["actor"]
-				b.turn = entries[i]["turn"]
-				# Кінець ходу гравця несе й початок наступного: догоряння після TurnStarted — уже
-				# хід наступного, а загибель від здачі перед ним — ще того, хто здався.
-				if next != null and events.find(kept[0]) > next_at:
-					b.actor = next.player
-					b.turn = next.turn_number
-				b.after = after
-				out.append(b)
+			if commands[i] is MoveCommand:
+				_beat(out, _move(events, commands[i]), entries[i]["actor"], entries[i]["turn"])
+			else:
+				# Кінець ходу несе й початок наступного: загибель від здачі — ще в ході того, хто
+				# здався, догоряння після TurnStarted — уже в ході наступного. Один такт не тягнеться
+				# через два ходи.
+				_beat(out, _other(events.slice(0, next_at), commands[i]), entries[i]["actor"], entries[i]["turn"])
+				if next != null:
+					_beat(out, _other(events.slice(next_at + 1), commands[i]), next.player, next.turn_number)
 			if cut:
 				break
 			before = after
 		return out
+
+	func _beat(out: Array[Beat], kept: Array[Events.BattleEvent], actor: int, turn: int) -> void:
+		if kept.is_empty():
+			return
+		var b := Beat.new()
+		b.events = kept
+		b.focus = _focus(kept[0])
+		b.actor = actor
+		b.turn = turn
+		b.after = after
+		b.on_screen = shown.duplicate()
+		out.append(b)
 
 	## §3.5: загін, що закінчив хід у будинку незнайденим, не показує жодного кроку до нього в
 	## усьому відрізку, навіть за кілька окремих ходів: інакше видно, до якого будинку він ішов.
@@ -190,10 +212,11 @@ class _Pass extends RefCounted:
 			elif e is Events.MineTriggered:
 				keep = _mine_owner(e.pos) == viewer or _visible(e.unit_id)
 			elif e is Events.BridgeChanged:
-				# Обвал під своїм юнітом видно завжди, інженера — лише якщо його видно:
+				# Міст — публічна місцевість, і кінцевий стан однаково покаже обвал, тож обвал видно,
+				# коли видно інженера або загиблого з мостом. Самого інженера — лише якщо його видно:
 				# влучання відкриває стрільця (§3.3.1), а підрив мосту — не постріл.
 				keep = _visible(engineer) or events.any(func(x: Events.BattleEvent) -> bool:
-						return x is Events.UnitDestroyed and after.get_unit(x.unit_id).owner == viewer)
+						return x is Events.UnitDestroyed and _visible(x.unit_id))
 				bridge_kept = keep
 			elif e is Events.WreckRemoved:
 				# Уламки, що зникли з мосту разом із ним, показали б підрив, якого не видно.
@@ -236,6 +259,7 @@ class _Pass extends RefCounted:
 		var seg: Array[Vector2i] = []
 		var tail: Array[Events.BattleEvent] = []
 		var wreck_kept: Array[bool] = [false]
+		var bridge_kept: Array[bool] = [false]
 		for s in range(-1, path.size()):
 			if s >= 0:
 				if vis[s] and not running:
@@ -251,7 +275,7 @@ class _Pass extends RefCounted:
 					shown.erase(id)
 					running = false
 			for e: Events.BattleEvent in by_step.get(s, []):
-				var k: Events.BattleEvent = _move_event(e, id, running, s - base, wreck_kept)
+				var k: Events.BattleEvent = _move_event(e, id, running, s - base, wreck_kept, bridge_kept)
 				if k == null:
 					continue
 				if running and s >= base:
@@ -285,7 +309,8 @@ class _Pass extends RefCounted:
 			out[-1].push_front(events[0])
 		return out
 
-	func _move_event(e: Events.BattleEvent, id: int, v: bool, rel: int, wreck_kept: Array[bool]) -> Events.BattleEvent:
+	func _move_event(e: Events.BattleEvent, id: int, v: bool, rel: int, wreck_kept: Array[bool],
+			bridge_kept: Array[bool]) -> Events.BattleEvent:
 		if e is Events.UnitTurned:
 			return e if v else null
 		if e is Events.MoveBlocked:
@@ -310,6 +335,13 @@ class _Pass extends RefCounted:
 			return e if v else null
 		if e is Events.WreckLeft:
 			return e if wreck_kept[0] else null
+		# Міна на мосту валить прогін разом із ходовим: обвал іде за вибухом своєї міни глядача
+		# або за видимим ходовим, а уламки з прогону — за обвалом.
+		if e is Events.BridgeChanged:
+			bridge_kept[0] = _mine_owner(e.pos) == viewer or v
+			return e if bridge_kept[0] else null
+		if e is Events.WreckRemoved:
+			return e if bridge_kept[0] else null
 		if e is Events.TileRevealed:
 			return e if e.player == viewer else null
 		return null
@@ -320,9 +352,10 @@ class _Pass extends RefCounted:
 		var u: Unit = before.unit_at(pos)
 		if u != null:
 			return before.can_see_unit(viewer, u)
-		var m: Mines.Mine = Mines.mine_at(before, pos)
-		if m != null:
-			return m.known_to[viewer]
+		# Перед міною хід спиняється, лише коли ходовий бік її знайшов: обрив тут — це
+		# MineRevealed, а його глядачеві не показують ніколи, хоч би чия була міна.
+		if Mines.mine_at(before, pos) != null:
+			return false
 		return before.vision[viewer].is_seen(pos)
 
 	func _flush(out: Array[Events.BattleEvent], id: int, from: Vector2i, path: Array[Vector2i], base: int,

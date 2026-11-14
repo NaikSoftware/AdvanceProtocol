@@ -117,7 +117,7 @@ viewer's.** In detail:
 | a move that passes through a building tile and leaves it | the per-step rule: hidden while in cover and not found, visible again after |
 | a shot or drone strike at the viewer's unit | always. The hit reveals the shooter (§3.3.1) before the damage lands, so it appears on its tile |
 | the viewer's unit retaliating | always, as part of that exchange |
-| a bridge demolished under the viewer's unit | the collapse and the unit's death, always. The engineer only if the viewer can see it: nothing reveals an engineer, because a demolition is not a shot |
+| a bridge demolished under the viewer's unit, or under any unit the viewer can see | the collapse and the unit's death, always. The engineer only if the viewer can see it: nothing reveals an engineer, because a demolition is not a shot |
 | an enemy unit detonating **the viewer's** mine | the blast on the mine's tile, always. The unit only if it is visible there |
 | the viewer's mine cleared by an engineer the viewer cannot see | not shown. The mine is gone at the end |
 | a bridge demolished, forest broken, or wreck left by an actor the viewer cannot see | not shown. The end state applies when the replay ends |
@@ -125,14 +125,25 @@ viewer's.** In detail:
 | turning in place | by the same actor rule |
 
 Some events are never shown: `MinePlaced`, `MineRevealed`, `ApChanged`, and another side's
-`TileRevealed` or `UnitFound`. Two cases are stricter than the actor rule, because the event
-itself would point at something hidden:
+`TileRevealed` or `UnitFound`. These cases are decided more finely than by the actor rule, because
+the event itself would point at something hidden, or because the board shows it anyway:
 
 - **A blocked move hides the block unless the viewer knows the blocker.** `MoveBlocked` names the
-  tile the unit could not enter. If an unseen unit, a squad in cover, an unknown mine or a wreck on
-  unscouted ground stands there, the unit is shown stopping and nothing more.
+  tile the unit could not enter. If an unseen unit, a squad in cover or a wreck on unscouted ground
+  stands there, the unit is shown stopping and nothing more.
+- **A move blocked by a mine never shows the block**, whoever owns the mine. A move stops before a
+  mine only when the moving side has found it, so the block would tell the viewer what
+  `MineRevealed` does, and that is never shown.
+- **A bridge collapse shows whenever the engineer, or a unit that falls with the bridge, is visible
+  to the viewer or is the viewer's own.** A collapse set off by the viewer's own mine on a bridge
+  shows with its blast. Bridges are public terrain and the end state shows the collapse anyway.
+  The engineer still appears only if the viewer can see it.
 - **A wreck that falls with a demolished bridge follows the bridge.** Showing it vanish from an
   intact-looking bridge would show a demolition the viewer cannot see.
+- **A repair shows only if both the engineer and the repaired unit are visible.**
+- **Inside a squad's hidden route** — from its first move in the span to the last move that ends
+  with it hidden in a building — its turns in place and the viewer's own `UnitFound` for it are
+  hidden too. Each would place it on the route.
 
 **Fogged actions take zero time.** They produce no frame, no camera move and no count. A command
 with nothing to show is not a step of the replay at all.

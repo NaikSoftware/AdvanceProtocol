@@ -104,6 +104,7 @@ func _check_no_leak(r: ReplayFilter.Result, viewer: int) -> void:
 		var u: Unit = r.start.units[id]
 		if u.is_alive() and r.start.can_see_unit(viewer, u):
 			on[id] = true
+	assert_eq_deep(r.on_screen_start, on)
 	for b in r.beats:
 		assert_false(b.events.is_empty(), "порожній такт")
 		var blast_at: Array[Vector2i] = []
@@ -132,6 +133,7 @@ func _check_no_leak(r: ReplayFilter.Result, viewer: int) -> void:
 					on.erase(e.unit_id)
 		assert_true(b.after.vision[viewer].is_seen(b.focus) or blast_at.has(b.focus),
 				"кадр у тумані: %s" % b.focus)
+		assert_eq_deep(b.on_screen, on)
 
 
 # --- рух ---------------------------------------------------------------------------
@@ -321,6 +323,12 @@ func test_squad_turning_before_it_hides_is_not_shown_mid_route() -> void:
 	assert_not_null(r)
 	assert_eq(r.beats.size(), 1, "поворот посеред прихованого маршруту не показується")
 	assert_true(r.beats[0].events[0] is ReplayFilter.Vanished)
+	assert_true(r.on_screen_start.has(squad.id), "на початку загін намальований")
+	for b in r.beats:
+		assert_false(b.on_screen.has(squad.id), "після зникнення загону на екрані немає")
+	var mid: BattleState = r.beats[0].after
+	assert_true(mid.can_see_unit(0, mid.get_unit(squad.id)),
+			"передумова: стан посеред маршруту загін бачить — малювати з нього не можна")
 
 
 # --- постріли ------------------------------------------------------------------------
@@ -370,19 +378,34 @@ func test_viewer_retaliation_is_shown() -> void:
 func test_three_players_visible_shooter_into_fog_keeps_no_target_events() -> void:
 	var s: BattleState = _state(3)
 	_anchor(s)
-	var a: Unit = s.add_unit(5, 1, Vector2i(9, ROAD_Y), 2)
-	var b: Unit = s.add_unit(5, 2, Vector2i(13, ROAD_Y), 6)
+	# Перший постріл (відділення, слабкий) лишає ціль живою — вона розвертається й відповідає;
+	# другий (танк) добиває. Ціль дивиться геть від обох стрільців, тож поворот справді є.
+	var a1: Unit = s.add_unit(0, 1, Vector2i(10, ROAD_Y), 2)
+	var a2: Unit = s.add_unit(5, 1, Vector2i(9, ROAD_Y), 2)
+	var b: Unit = s.add_unit(5, 2, Vector2i(13, ROAD_Y), 2)
+	# До знімка: повторний прогін стартує зі знімка і мусить мати те саме HP.
+	b.hp = int(FireCommand.preview(s, a1.id, b.id)["max"]) + 1
 	_open(s, _cols(0, 10))
-	_play(s, FireCommand.create(a.id, b.id))
+	_play(s, FireCommand.create(a1.id, b.id))
+	assert_true(b.is_alive(), "передумова: перший постріл не вбиває")
+	assert_lte(b.hp, int(FireCommand.preview(s, a2.id, b.id)["min"]), "передумова: другий добиває")
+	_play(s, FireCommand.create(a2.id, b.id))
 	_end(s)
-	_end(s)
+	var raw: Array[Events.BattleEvent] = []
+	for en in journal.rerun(0):
+		raw.append_array(en["events"])
+	assert_true(_of(raw, b.id).any(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned),
+			"передумова: прогін розвернув ціль")
+	assert_true(_of(raw, b.id).any(func(e: Events.BattleEvent) -> bool: return e is Events.UnitDestroyed),
+			"передумова: прогін знищив ціль")
 	var r: ReplayFilter.Result = _build()
 	assert_not_null(r)
 	var ev: Array[Events.BattleEvent] = _all(r)
 	assert_true(_has(ev, Events.ShotFired), "постріл іде в туман")
 	assert_eq(_of(ev, b.id).size(), 0, "ціль у тумані: ні шкоди, ні повороту, ні загибелі")
+	assert_false(_has(ev, Events.WreckLeft), "уламки в тумані не показуються")
 	assert_true(_has(ev, Events.ShotRetaliated), "відповідь із туману у видимого — видно")
-	assert_eq(r.beats[0].focus, Vector2i(9, ROAD_Y), "камера — на видимому стрільці")
+	assert_eq(r.beats[0].focus, Vector2i(10, ROAD_Y), "камера — на видимому стрільці")
 
 
 func test_three_players_unseen_shooter_on_visible_unit_has_no_shooter_appeared() -> void:
@@ -561,16 +584,21 @@ func test_three_players_concede_mid_span_is_labelled_with_the_one_who_conceded()
 	_anchor(s)
 	var gone: Unit = s.add_unit(2, 1, Vector2i(12, 3), 6)
 	var b: Unit = s.add_unit(2, 2, Vector2i(12, 11), 6)
+	# Догорає на початку ходу 1 гравця 2: годинник 1 * 3 + 2 — у тій самій команді здачі.
+	s.wrecks.append(Wrecks.Wreck.new(Vector2i(5, 5), 2, 0, 5, 0))
 	_open(s, _cols(0, W - 1))
 	_play(s, ConcedeCommand.create())
 	_play(s, MoveCommand.create(b.id, Vector2i(10, 11)))
 	_end(s)
 	var r: ReplayFilter.Result = _build()
 	assert_not_null(r, "вибув суперник, а не матч скінчився")
-	assert_eq(r.beats.size(), 2)
+	assert_eq(r.beats.size(), 3, "здача ділиться на два такти на передачі ходу")
 	assert_true(_of(r.beats[0].events, gone.id).any(func(e: Events.BattleEvent) -> bool: return e is Events.UnitDestroyed))
+	assert_false(_has(r.beats[0].events, Events.WreckRemoved), "такт не тягнеться через два ходи")
 	assert_eq(r.beats[0].actor, 1, "загибель від здачі — у ході того, хто здався")
-	assert_eq(r.beats[1].actor, 2)
+	assert_true(r.beats[1].events[0] is Events.WreckRemoved)
+	assert_eq(r.beats[1].actor, 2, "догоряння — уже в ході наступного")
+	assert_eq(r.beats[2].actor, 2)
 
 
 func test_first_player_first_turn_has_no_replay() -> void:
@@ -621,3 +649,178 @@ func test_events_after_viewers_turn_started_are_cut() -> void:
 	assert_eq(r.beats.size(), 1, "лише хід противника")
 	assert_false(_has(_all(r), Events.WreckRemoved), "догоряння на початку ходу глядача — уже живий хід")
 	assert_eq(_of(_all(r), anchor.id).size(), 0, "свій хід глядача не програється")
+
+
+# --- додаткові рядки таблиці ------------------------------------------------------------
+
+func test_move_blocked_on_a_mine_is_never_shown() -> void:
+	var s: BattleState = _state()
+	_anchor(s)
+	Mines.place(s, Vector2i(8, ROAD_Y), 0)
+	# Інженер знаходить міну дорогою (ромб 3) і спиняється перед нею: обрив тут — знахідка міни.
+	var eng: Unit = s.add_unit(11, 1, Vector2i(12, ROAD_Y), 6)
+	_open(s, _cols(0, W - 1))
+	_play(s, MoveCommand.create(eng.id, Vector2i(7, ROAD_Y)))
+	_end(s)
+	var raw: Array[Events.BattleEvent] = journal.rerun(0)[1]["events"]
+	assert_true(_has(raw, Events.MoveBlocked), "передумова: прогін спинився перед міною")
+	var r: ReplayFilter.Result = _build()
+	assert_not_null(r)
+	var ev: Array[Events.BattleEvent] = r.beats[0].events
+	assert_eq(ev[0].path, [Vector2i(11, 7), Vector2i(10, 7), Vector2i(9, 7)] as Array[Vector2i])
+	assert_false(_has(ev, Events.MoveBlocked), "обрив перед міною доносить, що її знайшли")
+
+
+func test_bridge_collapse_under_visible_third_side_unit_shows_without_engineer() -> void:
+	var s: BattleState = _state(3)
+	_anchor(s)
+	s.add_unit(5, 2, Vector2i(23, 13), 0)
+	s.board.set_kind(Vector2i(8, ROAD_Y), Terrain.Kind.BRIDGE)
+	var car: Unit = s.add_unit(2, 2, Vector2i(8, ROAD_Y), 2)
+	var eng: Unit = s.add_unit(11, 1, Vector2i(9, ROAD_Y), 6)
+	_open(s, _cols(0, 8))
+	_play(s, EngineerCommand.create(eng.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(8, ROAD_Y)))
+	_end(s)
+	_end(s)
+	var r: ReplayFilter.Result = _build()
+	assert_not_null(r)
+	var ev: Array[Events.BattleEvent] = r.beats[0].events
+	assert_true(ev[0] is Events.BridgeChanged, "обвал під видимим чужим юнітом — видно")
+	assert_true(_of(ev, car.id).any(func(e: Events.BattleEvent) -> bool: return e is Events.UnitDestroyed))
+	assert_eq(_of(ev, eng.id).size(), 0)
+	assert_false(_has(ev, ReplayFilter.Appeared))
+
+
+func test_bridge_beat_from_visible_engineer_focuses_the_bridge() -> void:
+	var s: BattleState = _state()
+	_anchor(s)
+	s.board.set_kind(Vector2i(8, ROAD_Y), Terrain.Kind.BRIDGE)
+	var eng: Unit = s.add_unit(11, 1, Vector2i(9, ROAD_Y), 6)
+	_open(s, _cols(0, W - 1))
+	_play(s, EngineerCommand.create(eng.id, EngineerCommand.Action.DEMOLISH_BRIDGE, Vector2i(8, ROAD_Y)))
+	_end(s)
+	var r: ReplayFilter.Result = _build()
+	assert_not_null(r)
+	assert_eq(r.beats[0].events.size(), 1)
+	assert_true(r.beats[0].events[0] is Events.BridgeChanged)
+	assert_eq(r.beats[0].focus, Vector2i(8, ROAD_Y), "кадр — тайл першої показаної події, міст")
+
+
+func test_eliminated_viewer_gets_no_replay() -> void:
+	var s: BattleState = _state(3)
+	var mine: Unit = s.add_unit(2, 0, Vector2i(5, ROAD_Y), 2)
+	mine.hp = 10
+	var shooter: Unit = s.add_unit(5, 1, Vector2i(9, ROAD_Y), 6)
+	s.add_unit(5, 2, Vector2i(23, 13), 0)
+	_open(s, _cols(0, W - 1))
+	_play(s, FireCommand.create(shooter.id, mine.id))
+	assert_false(s.is_over(), "передумова: у грі на трьох матч триває")
+	_end(s)
+	_end(s)
+	assert_null(_build(), "у вибулого гравця ходу немає — і повтору теж")
+
+
+func test_forest_broken_shows_only_on_seen_ground() -> void:
+	var s: BattleState = _state()
+	_anchor(s)
+	# Вода з обох боків лишає танкові один шлях — крізь два тайли лісу.
+	for x in range(8, 15):
+		s.board.set_kind(Vector2i(x, 2), Terrain.Kind.WATER)
+		s.board.set_kind(Vector2i(x, 4), Terrain.Kind.WATER)
+	s.board.set_kind(Vector2i(12, 3), Terrain.Kind.FOREST)
+	s.board.set_kind(Vector2i(11, 3), Terrain.Kind.FOREST)
+	var tank: Unit = s.add_unit(5, 1, Vector2i(13, 3), 6)
+	_open(s, _cols(0, 11))
+	_play(s, MoveCommand.create(tank.id, Vector2i(10, 3)))
+	_end(s)
+	var r: ReplayFilter.Result = _build()
+	assert_not_null(r)
+	var ev: Array[Events.BattleEvent] = r.beats[0].events
+	var broken: Array[Events.BattleEvent] = ev.filter(func(e: Events.BattleEvent) -> bool: return e is Events.ForestBroken)
+	assert_eq(broken.size(), 1, "ліс у тумані падає непомітно")
+	assert_eq(broken[0].pos, Vector2i(11, 3))
+	assert_true(ev[0] is ReplayFilter.Appeared)
+	assert_true(ev[1] is Events.ForestBroken, "ліс падає на тайлі появи, до решти шляху")
+	assert_true(ev[2] is Events.UnitMoved)
+
+
+func test_turn_in_place_shows_only_a_visible_unit() -> void:
+	var s: BattleState = _state()
+	_anchor(s)
+	var seen: Unit = s.add_unit(2, 1, Vector2i(4, 3), 6)
+	var unseen: Unit = s.add_unit(2, 1, Vector2i(15, 3), 6)
+	_open(s, _cols(0, 10))
+	_play(s, TurnCommand.create(unseen.id, Vector2i(15, 4)))
+	_play(s, TurnCommand.create(seen.id, Vector2i(4, 4)))
+	_end(s)
+	var r: ReplayFilter.Result = _build()
+	assert_not_null(r)
+	assert_eq(r.beats.size(), 1)
+	assert_eq(r.beats[0].events.size(), 1)
+	assert_true(r.beats[0].events[0] is Events.UnitTurned)
+	assert_eq(r.beats[0].events[0].unit_id, seen.id)
+	assert_eq(r.beats[0].focus, Vector2i(4, 3))
+
+
+func test_visible_enemy_on_viewer_mine_shows_move_and_blast() -> void:
+	var s: BattleState = _state()
+	_anchor(s)
+	Mines.place(s, Vector2i(8, ROAD_Y), 0)
+	var car: Unit = s.add_unit(2, 1, Vector2i(11, ROAD_Y), 6)
+	_open(s, _cols(0, W - 1))
+	_play(s, MoveCommand.create(car.id, Vector2i(6, ROAD_Y)))
+	_end(s)
+	var r: ReplayFilter.Result = _build()
+	assert_not_null(r)
+	var ev: Array[Events.BattleEvent] = r.beats[0].events
+	assert_eq(ev.size(), 3)
+	assert_true(ev[0] is Events.UnitMoved)
+	assert_eq(ev[0].path, [Vector2i(10, 7), Vector2i(9, 7), Vector2i(8, 7)] as Array[Vector2i])
+	assert_true(ev[1] is Events.MineTriggered, "вибух — після того, як доїхав")
+	assert_true(ev[2] is Events.DamageDealt)
+
+
+func test_drone_at_viewer_vehicle_from_fog_shows_squad_appeared() -> void:
+	var s: BattleState = _state()
+	_anchor(s)
+	var mine: Unit = s.add_unit(2, 0, Vector2i(5, ROAD_Y), 2)
+	var squad: Unit = s.add_unit(1, 1, Vector2i(10, ROAD_Y), 2)
+	_open(s, _cols(0, 8))
+	_play(s, DroneCommand.create(squad.id, mine.id))
+	_end(s)
+	var r: ReplayFilter.Result = _build()
+	assert_not_null(r)
+	var ev: Array[Events.BattleEvent] = r.beats[0].events
+	assert_true(ev[0] is ReplayFilter.Appeared, "удар дрона відкриває загін, як і постріл")
+	assert_eq(ev[0].unit_id, squad.id)
+	assert_true(ev[1] is Events.DroneLaunched)
+	assert_true(_of(ev, mine.id).any(func(e: Events.BattleEvent) -> bool: return e is Events.DamageDealt))
+	assert_eq(r.beats[0].focus, Vector2i(10, ROAD_Y))
+
+
+func test_move_blocked_by_unseen_unit_or_hidden_squad_is_not_shown() -> void:
+	for hidden_squad in [false, true]:
+		before_each()
+		var s: BattleState = _state(3)
+		_anchor(s)
+		var mover: Unit
+		if hidden_squad:
+			s.board.set_kind(Vector2i(8, ROAD_Y), Terrain.Kind.BUILDING)
+			s.add_unit(0, 2, Vector2i(8, ROAD_Y), 0)
+			mover = s.add_unit(0, 1, Vector2i(11, ROAD_Y), 6)
+			_open(s, _cols(0, W - 1))
+			_play(s, MoveCommand.create(mover.id, Vector2i(8, ROAD_Y)))
+		else:
+			s.add_unit(5, 2, Vector2i(8, ROAD_Y), 0)
+			mover = s.add_unit(2, 1, Vector2i(12, ROAD_Y), 6)
+			_open(s, _cols(9, W - 1))
+			_play(s, MoveCommand.create(mover.id, Vector2i(6, ROAD_Y)))
+		_end(s)
+		_end(s)
+		assert_true(_has(journal.rerun(0)[1]["events"], Events.MoveBlocked), "передумова: прогін урвав хід")
+		var r: ReplayFilter.Result = _build()
+		assert_not_null(r)
+		var ev: Array[Events.BattleEvent] = r.beats[0].events
+		assert_true(ev[0] is Events.UnitMoved)
+		assert_eq(ev[0].path[ev[0].path.size() - 1], Vector2i(9, ROAD_Y))
+		assert_false(_has(ev, Events.MoveBlocked), "обрив показав би невидимого, загін у будинку: %s" % hidden_squad)
