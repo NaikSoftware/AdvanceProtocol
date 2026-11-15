@@ -232,6 +232,29 @@ func test_foliage_is_one_mesh_per_atlas_and_layer() -> void:
 		assert_gt(f._ring_fadable.size(), 0, "%s: кільце в злитій сітці" % season)
 
 
+## Юніта під кронами відкриває прохід глибини розчинення (FOREST_PRIORITY): він закриває все, що
+## прозорий прохід малює після нього за найближчою розчиненою кроною. Mobile кладе звичайні крони
+## (поріг альфи з краєм alpha-to-coverage) у прозорий прохід, Compatibility такі крони вважає
+## непрозорими й малює до маски — тож там крона кладе прозорість сама: відкидання за порогом і ALPHA 1.
+func test_ordinary_crowns_draw_after_the_fade_depth_on_every_renderer() -> void:
+	var mobile: String = ForestLayer.batch_code("mobile")
+	var gl: String = ForestLayer.batch_code("gl_compatibility")
+	assert_true(mobile.contains("ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge;"), "Mobile: поріг із краєм a2c, як був")
+	assert_true(mobile.contains("render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform, alpha_to_coverage;"), "Mobile: режими без змін")
+	assert_false(mobile.contains("ALPHA = 1.0;"), "Mobile: без ручної прозорості")
+	assert_false(gl.contains("ALPHA_SCISSOR_THRESHOLD"), "Compatibility: поріг альфи зробив би крону непрозорою")
+	assert_true(gl.contains("if (t.a < cut) { discard; }\n\tALPHA = 1.0;"), "Compatibility: та сама вирізка, прозорий прохід")
+	assert_true(gl.contains("render_mode cull_disabled, depth_draw_always, skip_vertex_transform;"), "Compatibility: прозора крона пише глибину")
+	var f := _ring_layer()
+	var depth_priority: int = (f._fade_mat.values()[0] as ShaderMaterial).render_priority
+	var drawn := _drawn(f)
+	assert_gt(drawn.size(), 0)
+	for n: Node in drawn:
+		var mat := (n as GeometryInstance3D).material_override as ShaderMaterial
+		assert_eq(mat.shader.code, ForestLayer.batch_code(RenderingServer.get_current_rendering_method()), "%s: шейдер свого рендерера" % n.name)
+		assert_gt(mat.render_priority, depth_priority, "%s: після маски розчинення" % n.name)
+
+
 ## Розчинення працює і зі злитою сіткою: розчинений екземпляр гасне в таблиці даних батча (й
 ## вертає, коли юніт іде), а решта лишається.
 func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:

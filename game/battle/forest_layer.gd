@@ -335,14 +335,8 @@ func _load_library() -> void:
 	var depth_code: String = _replace_checked(color_code, [
 			["render_mode cull_disabled, skip_vertex_transform", "render_mode cull_disabled, depth_draw_always, skip_vertex_transform"],
 			["ALPHA = COLOR.a;", "ALPHA = 0.0;"]])
-	# Злита сітка: тон, масштаб картки й видимість екземпляра беруться з таблиці за номером у
-	# CUSTOM0.x (у MultiMesh це були б INSTANCE_CUSTOM і масштаб матриці).
-	var fetch: String = FoliageBatch.glsl_fetch(true) + "\n\tinst_tone = batch_a.rgb;\n\tCOLOR.a *= batch_a.a;\n\tbase_y = batch_origin.y;"
 	_batch_shader = Shader.new()
-	_batch_shader.code = _replace_checked(_SHADER.code, [
-			["varying flat float piece_hash;", "varying flat float piece_hash;\n" + FoliageBatch.glsl_decl()],
-			["inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);", fetch],
-			["float s = length(MODEL_MATRIX[0].xyz);", "float s = batch_scale;"]])
+	_batch_shader.code = batch_code(RenderingServer.get_current_rendering_method())
 	var color_shader := Shader.new()
 	color_shader.code = color_code
 	var depth_shader := Shader.new()
@@ -970,6 +964,29 @@ func _fade_mesh(items: Array) -> ArrayMesh:
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {},
 			Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT)
 	return m
+
+
+## Шейдер злитих крон для рендерера `renderer` (RenderingServer.get_current_rendering_method()).
+static func batch_code(renderer: String) -> String:
+	# Злита сітка: тон, масштаб картки й видимість екземпляра беруться з таблиці за номером у
+	# CUSTOM0.x (у MultiMesh це були б INSTANCE_CUSTOM і масштаб матриці).
+	var fetch: String = FoliageBatch.glsl_fetch(true) + "\n\tinst_tone = batch_a.rgb;\n\tCOLOR.a *= batch_a.a;\n\tbase_y = batch_origin.y;"
+	var code: String = _replace_checked(_SHADER.code, [
+			["varying flat float piece_hash;", "varying flat float piece_hash;\n" + FoliageBatch.glsl_decl()],
+			["inst_tone = dot(INSTANCE_CUSTOM.rgb, INSTANCE_CUSTOM.rgb) > 0.0 ? INSTANCE_CUSTOM.rgb : vec3(1.0);", fetch],
+			["float s = length(MODEL_MATRIX[0].xyz);", "float s = batch_scale;"]])
+	if renderer != "gl_compatibility":
+		return code
+	# Юніта під кронами відкриває прохід глибини розчинення (FOREST_PRIORITY): за найближчою
+	# розчиненою кроною він закриває все, що прозорий прохід малює після нього. Mobile кладе крону з
+	# порогом альфи й краєм alpha-to-coverage у прозорий прохід, а Compatibility — у непрозорий, до
+	# маски, і крони між розчиненою та юнітом лишались цілими. Тут крона прозора сама: та сама
+	# вирізка, ALPHA 1 (змішування нічого не міняє), глибину пише, як і непрозора.
+	return _replace_checked(code, [
+			["render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform, alpha_to_coverage;",
+					"render_mode cull_disabled, depth_draw_always, skip_vertex_transform;"],
+			["ALPHA = t.a; ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge; ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));",
+					"if (t.a < cut) { discard; }\n\tALPHA = 1.0;"]])
 
 
 ## Шейдер розчинення збирається заміною рядків forest_crown.gdshader; заміна, що не знайшла
