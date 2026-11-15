@@ -323,8 +323,8 @@ static func model_figure_transform(i: int, layout: int = 0) -> Transform3D:
 const LAYOUT_COUNT: int = 8
 const _LAYOUT_SHIFT: float = 0.025
 const _LAYOUT_TURN: float = 0.35
-## Щонайменше стільки (одиниць світу поперек погляду камери) між стоячими: ширина бійця з проміжком.
-const MIN_SCREEN_GAP: float = 0.05
+## Щонайменше стільки (одиниць світу поперек погляду камери, 0,6 м) між стоячими: ширина бійця з проміжком.
+const MIN_SCREEN_GAP: float = 0.075
 static var _layouts: Array = []
 
 

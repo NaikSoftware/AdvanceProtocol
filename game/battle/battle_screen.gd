@@ -111,6 +111,8 @@ var _replay_board: Board = null
 var _drawn_tiles: PackedInt32Array = PackedInt32Array()
 ## Клітинки, над якими зараз розчинено дахи (юніти на дошці).
 var _shown_cells: Array[Vector2i] = []
+## Лічильник показів (гейт, початок і кінець повтору): відкладене тіло зі старого показу не лягає.
+var _fall_run: int = 0
 ## Шрами бою на землі; маска — розвідане того, хто дивиться.
 var _scars: ScarMap = null
 ## Шейдери ефектів уже розігріто: на старті нового бою, а в бою зі збереження — на першому
@@ -1281,6 +1283,7 @@ func _on_unit_found(unit_id: int) -> void:
 ## Не в _rebuild_units_for_active_player(): та йде після кожного пакета подій і
 ## щоразу народжувала б щойно поставлені уламки наново, з новою фазою диму.
 func _rebuild_wrecks() -> void:
+	_fall_run += 1
 	_shown_viewer = _viewer()
 	_event_player.viewer = _shown_viewer
 	_wreck_layer.rebuild(_state(), _shown_viewer)
@@ -1316,13 +1319,21 @@ func _on_wreck_left(pos: Vector2i, type_id: int, facing: int, owner: int) -> voi
 ## Тіло береться з показаного стану за (unit_id, seq): об'єкт події на повторі — живий стан перегону, і
 ## його біти показу вже кінця проміжку.
 func _on_figures_fell(body: Casualties.Body) -> void:
-	for b: Casualties.Body in _state().bodies:
-		if b.unit_id == body.unit_id and b.seq == body.seq and b.shown_to(_shown_viewer):
-			# тіло лягає, коли фігура вже перекинулась (UnitView._tip_over)
-			get_tree().create_timer(UnitView.FALL_TIP_SEC).timeout.connect(_wreck_layer.add_body.bind(b))
+	# Тіло лягає, коли фігура вже перекинулась (UnitView._tip_over).
+	get_tree().create_timer(UnitView.FALL_TIP_SEC).timeout.connect(_land_body.bind(body.unit_id, body.seq, _fall_run))
 	# Ніхто не лишився стояти — відділення знищене: стримана пляма (на нерозвіданому її ховає маска).
 	if body.first == 0 and _scars != null and not _no_scorch(body.pos):
 		_scars.stamp_squad_scorch(body.pos)
+
+
+## Відкладене тіло: за цей час міг змінитися гравець за гейтом, початися чи скінчитися повтор
+## (`_fall_run`) — тоді тіло вже не цього показу. Інакше — з показаного стану й лише показане глядачеві.
+func _land_body(unit_id: int, seq: int, run: int) -> void:
+	if run != _fall_run:
+		return
+	for b: Casualties.Body in _state().bodies:
+		if b.unit_id == unit_id and b.seq == seq and b.shown_to(_shown_viewer):
+			_wreck_layer.add_body(b)
 
 
 ## Тайл без плями: вода й підірваний міст (загиблі в річці) і міст — карта шрамів лежить на ґрунті, а

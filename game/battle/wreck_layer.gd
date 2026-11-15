@@ -677,12 +677,15 @@ const BODY_JITTER: float = 0.0375
 const BODY_TURN: float = 0.8
 ## Довга вісь тіла — не ближче за 35° до погляду камери: уздовж погляду тіло скорочується в стоячу фігуру.
 const BODY_VIEW_MIN: float = 0.6109
-## На мосту тіла лежать рядом уздовж настилу, місце за місцем через BODY_DECK_STEP (1,2 м; ближче — зливались
-## у купу), не далі за BODY_DECK_ACROSS від осі: найвужча проїжджа частина (понтонний міст, 0,70 завширшки;
-## мостовий проліт — 0,46) інакше лишила б тіло звислим над річкою.
-const BODY_DECK_ACROSS: float = 0.06
-const BODY_DECK_STEP: float = 0.15
-const BODY_DECK_TURN: float = 0.17
+## На мосту тіла лежать поперек настилу (тіло 0,225 — коротше за найвужчу проїжджу частину 0,46, тож лишається між
+## поручнями), рядом через BODY_DECK_STEP: тіло з гвинтівкою обіч займає вздовж настилу до BODY_WIDTH, і між
+## сусідами лишається щонайменше 0,05 (0,4 м) — уздовж настилу тіла зливались у суцільну смугу.
+const BODY_DECK_ACROSS: float = 0.02
+const BODY_DECK_STEP: float = 0.26
+const BODY_DECK_TURN: float = 0.08
+## Ширина тіла разом із гвинтівкою обіч (поперек його довгої осі) і довжина.
+const BODY_WIDTH: float = 0.19
+const BODY_LENGTH: float = 0.225
 
 
 ## Де й як лежить тіло місця `slot` запису `b` (без пози сітки). Сід — юніт, тайл, номер запису й місце,
@@ -700,7 +703,7 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null) -
 		var across := Vector3(along.z, 0.0, along.x)
 		var at: Vector3 = centre + along * (float(slot) - 1.5) * BODY_DECK_STEP \
 			+ across * rng.randf_range(-BODY_DECK_ACROSS, BODY_DECK_ACROSS)
-		var heading: float = (0.0 if along_z else PI * 0.5) + rng.randf_range(-BODY_DECK_TURN, BODY_DECK_TURN)
+		var heading: float = (PI * 0.5 if along_z else 0.0) + rng.randf_range(-BODY_DECK_TURN, BODY_DECK_TURN)
 		at.y = _body_ground(b.pos, at)
 		return Transform3D(Basis(Vector3.UP, heading), at)
 	var near_water: bool = false

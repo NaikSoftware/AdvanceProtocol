@@ -201,7 +201,9 @@ func _dispatch(event: Events.BattleEvent) -> Variant:
 		return _handle_damage_dealt(event)
 	elif event is Events.FiguresFell:
 		figures_fell.emit((event as Events.FiguresFell).body)
-		return null
+		# Пакет чекає, доки боєць перекинеться (якщо падіння хтось малює): перебудова юнітів
+		# після пакета інакше обриває його на першому кадрі.
+		return _pause(UnitView.FALL_TIP_SEC) if not figures_fell.get_connections().is_empty() else null
 	elif event is Events.UnitDestroyed:
 		return _handle_unit_destroyed(event)
 	elif event is Events.WreckLeft:

@@ -2124,6 +2124,69 @@ func test_replay_starting_before_a_squad_dies_shows_no_scorch_under_it() -> void
 	assert_true(screen._scars.has_squad_scorch(squad.pos), "після повтору — пляма на місці")
 
 
+## Відкладене тіло (лягає після перекидання) не лягає, якщо за цей час змінився показ — гейт, повтор: тіло,
+## показане попередньому гравцеві, не сміє з'явитись на дошці наступного.
+func test_a_pending_body_does_not_land_after_the_show_changed() -> void:
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map(20, 6)
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(1, 1), "facing": 0},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(2, 1), "facing": 0},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var state: BattleState = service.state
+	var layer: WreckLayer = screen.get_node("%WreckLayer")
+	var near: Unit = state.unit_at(Vector2i(2, 1))
+	near.hp = 40
+	var body: Casualties.Body = (Casualties.record(state, near, 100)[0] as Events.FiguresFell).body
+	screen._on_figures_fell(body)
+	screen._rebuild_wrecks()  # показ змінився (гейт чи повтор), поки фігура перекидалась
+	var before: int = layer.fallen_count()
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.05).timeout
+	assert_eq(layer.fallen_count(), before, "тіло зі старого показу не лягає вдруге")
+	# і в тому самому показі — лише показане глядачеві
+	var other: Unit = state.unit_at(Vector2i(1, 1))
+	var hidden := Casualties.Body.new(other.id + 50, Vector2i(5, 1), 1, 0, 0, 0, 2)
+	state.bodies.append(hidden)
+	screen._on_figures_fell(hidden)
+	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.05).timeout
+	assert_eq(layer.fallen_count(), before, "не показане глядачеві — не лягає")
+
+
+## Наживо: постріл без відповіді — пакет кінчається одразу, але перебудова юнітів після нього чекає, доки боєць
+## перекинеться, тож фігура, що падає, ще жива кадр по тому.
+func test_a_falling_figure_survives_the_end_of_the_batch() -> void:
+	UnitSilhouettes.use_models({0: UnitModelFixture.soldier(), 1: UnitModelFixture.tube_soldier()})
+	var service: Node = MatchServiceScript.new()
+	add_child_autofree(service)
+	var m: MapData = _map()
+	m.spawns = [
+		{"type_id": 5, "owner": 0, "pos": Vector2i(2, 2), "facing": 2},
+		{"type_id": 0, "owner": 1, "pos": Vector2i(3, 2), "facing": 6},
+		{"type_id": 5, "owner": 1, "pos": Vector2i(5, 5), "facing": 6},
+	] as Array[Dictionary]
+	var screen: Node3D = _screen()
+	screen.setup(m, 2, 1, service)
+	var squad: Unit = service.state.unit_at(Vector2i(3, 2))
+	squad.hp = 60
+	squad.ap = 0  # без відповіді: пакет кінчається одразу після влучання
+	screen._rebuild_units_for_active_player(true)
+	var view: UnitView = screen._unit_views[squad.id]
+	var base: int = view._silhouette.get_child_count()
+	assert_eq(service.submit(FireCommand.create(service.state.unit_at(Vector2i(2, 2)).id, squad.id)), "")
+	var t0: int = Time.get_ticks_msec()
+	while is_instance_valid(view) and view._silhouette.get_child_count() <= base and Time.get_ticks_msec() - t0 < 3000:
+		await get_tree().process_frame
+	assert_true(is_instance_valid(view), "передумова: вигляд відділення ще є")
+	if is_instance_valid(view):
+		assert_gt(view._silhouette.get_child_count(), base, "передумова: боєць почав перекидатися")
+		await get_tree().process_frame
+		assert_true(is_instance_valid(view) and view._silhouette.get_child_count() > base, "кадр по тому — ще перекидається")
+	UnitSilhouettes.use_models({})
+
+
 func test_surrender_and_end_turn_are_ignored_during_replay() -> void:
 	var service := SpyMatchService.new()
 	add_child_autofree(service)

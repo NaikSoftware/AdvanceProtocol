@@ -308,7 +308,8 @@ def finish(ob, unit):
 
 
 def tube(t, base):
-    """The launch tube: upright behind the pack, real size. Side faces take the tube colour, the ends the cap."""
+    """The launch tube: behind the pack, real size. Side faces and the top end take the tube colour, the bottom end
+    the cap."""
     r = t["diameter_m"] * 0.5 * M
     co = mesh_co(base)
     torso = (co[:, 2] > 0.5 * HEIGHT) & (co[:, 2] < 0.8 * HEIGHT)
@@ -316,13 +317,18 @@ def tube(t, base):
     back = np.percentile(-co[torso, 1], 97)
     z0 = t["bottom_m"] * M
     bm = bmesh.new()
-    bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=r, radius2=r, depth=t["length_m"] * M,
-                          matrix=Matrix.Translation((0.0, -(back + r * 0.6), z0 + t["length_m"] * M * 0.5)))
+    # beside the pack and leaning out (side_m, tilt_deg), pivoting at its bottom: straight up the middle it hid the
+    # helmet from behind, and the camera mostly sees a squad's back
+    side = t.get("side_m", 0.0) * M
+    lean = Matrix.Rotation(math.radians(t.get("tilt_deg", 0.0)), 4, 'Y')
+    at = Matrix.Translation((side, -(back + r * 0.6), z0)) @ lean @ Matrix.Translation((0.0, 0.0, t["length_m"] * M * 0.5))
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=r, radius2=r, depth=t["length_m"] * M, matrix=at)
     me = bpy.data.meshes.new("tube"); bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new("tube", me); bpy.context.collection.objects.link(ob)
     ul = me.uv_layers.new(name=base.data.uv_layers.active.name)
     for poly in me.polygons:
-        at = kit_uv(t["cap"] if abs(poly.normal.z) > 0.5 else t["colour"])
+        # only the bottom end is dark: the top end faces the camera and reads as the tube's colour
+        at = kit_uv(t["cap"] if poly.normal.z < -0.5 else t["colour"])
         for li in poly.loop_indices:
             ul.data[li].uv = at
     for poly in me.polygons:

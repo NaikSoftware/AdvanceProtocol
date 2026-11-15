@@ -625,6 +625,8 @@ func set_drones(count: int) -> void:
 	# Число HP — праворуч від значка, коли він є; без значка — посередині смуги.
 	_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if _drones_left > 0 else HORIZONTAL_ALIGNMENT_CENTER
 	_hp_label.offset.x = HP_LABEL_AFTER_ICON / _hp_label.pixel_size if _drones_left > 0 else 0.0
+	# Поруч зі значком число дрібніше: так воно кінчається в межах смуги, а не на бійцях сусіда.
+	_hp_label.font_size = HP_LABEL_FONT_BY_ICON if _drones_left > 0 else HP_LABEL_FONT
 	# Скільки дронів, стільки труб на спинах: пущений дрон знімає трубу з відділення.
 	_set_standing(_standing)
 
@@ -988,6 +990,9 @@ const DRONE_ICON_PIXEL: float = DRONE_ICON_WIDTH / 61.0
 const HP_BAR_HALF: float = _HP_BAR_SIZE.x * HP_BAR_PIXEL_SIZE * 0.5
 const DRONE_ICON_OFFSET: Vector2 = Vector2((-HP_BAR_HALF + DRONE_ICON_WIDTH * 0.5) / DRONE_ICON_PIXEL, 0.0)
 const HP_LABEL_AFTER_ICON: float = -HP_BAR_HALF + DRONE_ICON_WIDTH + 0.05
+## Розмір числа HP: звичайний і поруч зі значком дронів (тоді між значком і кінцем смуги ~0,49).
+const HP_LABEL_FONT: int = 32
+const HP_LABEL_FONT_BY_ICON: int = 22
 ## Колір силуету й цяток — той самий жовтий, що й позначка дрона (DroneThreatened), обведений темним.
 const _DRONE_FILL: Color = Color("e2bd45")
 const _DRONE_INK: Color = Color("1d1a14")

@@ -974,12 +974,27 @@ func _refade() -> void:
 			var p: Dictionary = list[i]
 			mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, p["yaw"]).scaled(Vector3.ONE * float(p.get("scale", 1.0))), p["pos"]))
 			mm.set_instance_color(i, Color(1, 1, 1, FADE_ALPHA))
-		var mmi := MultiMeshInstance3D.new()
-		mmi.name = "%s_faded" % node
-		mmi.multimesh = mm
-		# §8: сонце кидає тінь лише на юнітів.
-		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mmi)
+		# Глибина й колір — окремими вузлами, не next_pass: next_pass малюється одразу за своїм проходом, і колір
+		# ближчої рослини ліг би поверх кольору дальшої (чи розчиненої крони лісу) — шари нашаровувались би.
+		var depth_mat: ShaderMaterial = (mm.mesh.surface_get_material(0) as ShaderMaterial)
+		for pass_i in 2:
+			var mmi := MultiMeshInstance3D.new()
+			mmi.name = "%s_faded" % node if pass_i == 0 else "%s_c_faded" % node
+			mmi.multimesh = mm
+			mmi.material_override = _depth_only(depth_mat) if pass_i == 0 else depth_mat.next_pass
+			# §8: сонце кидає тінь лише на юнітів.
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(mmi)
+
+
+## Прохід глибини без next_pass (колір — окремим вузлом); один на матеріал.
+static var _depth_only_cache: Dictionary = {}
+static func _depth_only(m: ShaderMaterial) -> ShaderMaterial:
+	if not _depth_only_cache.has(m):
+		var d: ShaderMaterial = m.duplicate()
+		d.next_pass = null
+		_depth_only_cache[m] = d
+	return _depth_only_cache[m]
 
 
 ## Масиви поверхонь вузла бібліотеки (0 — рослина, 1 — пляма): спільні на процес.

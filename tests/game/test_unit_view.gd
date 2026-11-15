@@ -437,14 +437,14 @@ func test_fallen_figures_tip_over_then_go() -> void:
 	view.set_hp(40, 100)
 	var tipping: Array = view._silhouette.get_children().slice(before)
 	assert_eq(tipping.size(), 2, "з чотирьох стоячих лишилось два — два перекидаються")
-	# твін стартує з кадром-другим запізнення під навантаженням: чекаємо нахилу, а не точного часу
-	var tilted: bool = false
+	# кут — посеред твіна, кадр за кадром, доки фігура ще є
+	var deepest: float = 0.0
 	var t0: int = Time.get_ticks_msec()
-	while not tilted and Time.get_ticks_msec() - t0 < 1000 and is_instance_valid(tipping[0]):
-		tilted = (tipping[0] as Node3D).rotation.x < -0.1
+	while is_instance_valid(tipping[0]) and Time.get_ticks_msec() - t0 < 1000:
+		deepest = minf(deepest, (tipping[0] as Node3D).rotation.x)
 		await get_tree().process_frame
-	tilted = tilted or not is_instance_valid(tipping[0])  # звільняється лише після твіна
-	assert_true(tilted, "перекидається")
+	assert_lt(deepest, -0.1, "перекидається")
+	assert_gt(deepest, UnitView.FALL_TIP_ANGLE - 0.01, "не далі за кут перекидання")
 	await get_tree().create_timer(UnitView.FALL_TIP_SEC + 0.2).timeout
 	assert_eq(view._silhouette.get_child_count(), before, "перекинувшись, зникає")
 
@@ -456,9 +456,13 @@ func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
 	view.bind(_unit(1))
 	var label: Label3D = view._hp_label
 	var font: Font = label.font if label.font != null else ThemeDB.fallback_font
-	var text_w: float = font.get_string_size("100/100", HORIZONTAL_ALIGNMENT_LEFT, -1, label.font_size).x * label.pixel_size
+	assert_eq(label.font_size, UnitView.HP_LABEL_FONT_BY_ICON, "поруч зі значком число дрібніше")
+	# ширина числа: посередині (без дронів) і праворуч від значка (з ними)
+	var wide_w: float = font.get_string_size("100/100", HORIZONTAL_ALIGNMENT_LEFT, -1, UnitView.HP_LABEL_FONT).x * label.pixel_size
+	var text_w: float = font.get_string_size("100/100", HORIZONTAL_ALIGNMENT_LEFT, -1, UnitView.HP_LABEL_FONT_BY_ICON).x * label.pixel_size
 	var pad: float = label.outline_size * label.pixel_size * 0.5  # обведення — по пів товщини з кожного боку
-	var label_h: float = label.font_size * label.pixel_size + 2.0 * pad
+	var label_h: float = UnitView.HP_LABEL_FONT * label.pixel_size + 2.0 * pad
+	assert_lte(UnitView.HP_LABEL_AFTER_ICON + text_w + pad, UnitView.HP_BAR_HALF + 0.001, "число зі значком кінчається в межах смуги")
 	var bar_size := Vector2(UnitView.HP_BAR_HALF * 2.0, UnitView._HP_BAR_SIZE.y * UnitView.HP_BAR_PIXEL_SIZE)
 	for pitch_deg: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
 		var yaw := Basis(Vector3.UP, deg_to_rad(IsoCameraRig.YAW_DEGREES))
@@ -470,11 +474,12 @@ func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
 		var own: Rect2 = _icon_rect(Vector2(0.0, row_y))
 		# підпис сусіда — посередині (без дронів) або праворуч від його значка: береться весь можливий проміжок
 		var label_rect := func(at: Vector2) -> Rect2:
-			var x0: float = minf(-text_w * 0.5, UnitView.HP_LABEL_AFTER_ICON) - pad
-			var x1: float = maxf(text_w * 0.5, UnitView.HP_LABEL_AFTER_ICON + text_w) + pad
+			var x0: float = minf(-wide_w * 0.5, UnitView.HP_LABEL_AFTER_ICON) - pad
+			var x1: float = maxf(wide_w * 0.5, UnitView.HP_LABEL_AFTER_ICON + text_w) + pad
 			return Rect2(at + Vector2(x0, row_y - label_h * 0.5), Vector2(x1 - x0, label_h))
-		assert_false(own.intersects(Rect2(Vector2(UnitView.HP_LABEL_AFTER_ICON - pad, row_y - label_h * 0.5),
-				Vector2(text_w + 2.0 * pad, label_h))), "свій підпис HP значок не накриває")
+		# своє число праворуч від значка
+		var own_label := Rect2(Vector2(UnitView.HP_LABEL_AFTER_ICON - pad, row_y - label_h * 0.5), Vector2(text_w + 2.0 * pad, label_h))
+		assert_false(own.intersects(own_label), "свій підпис HP значок не накриває")
 		for dz in range(-1, 2):
 			for dx in range(-1, 2):
 				if dx == 0 and dz == 0:
@@ -487,6 +492,8 @@ func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
 				assert_false(own.intersects(bar), tag + ": значок на його смузі")
 				assert_false(own.intersects(label_rect.call(at)), tag + ": значок на його підписі")
 				assert_false(own.intersects(figures), tag + ": значок на його бійцях")
+				assert_false(own_label.intersects(bar), tag + ": зсунуте число на його смузі")
+				assert_false(own_label.intersects(figures), tag + ": зсунуте число на його бійцях")
 
 
 ## §3.9: залишок дронів публічний — метод навіть не має доступу до owner,
@@ -1246,10 +1253,14 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 				var across: float = absf(rel.x * along.y - rel.y * along.x)
 				var axis := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
 				var off: float = absf(axis.x * along.y - axis.y * along.x)  # синус кута до осі мосту
-				assert_lte(across + 0.1125 * off + 0.03, 0.18, "тіло в межах настилу (поперек %.3f)" % across)
+				# поперек настилу: половина довжини тіла вздовж його осі й половина ширини впоперек — у межах поручнів
+				var half_across: float = 0.5 * (WreckLayer.BODY_LENGTH * off + WreckLayer.BODY_WIDTH * sqrt(maxf(1.0 - off * off, 0.0)))
+				assert_lte(across + half_across, 0.23, "тіло між поручнями (поперек %.3f)" % across)
 			alongs.sort()
+			# тіло поперек настилу з поворотом до BODY_DECK_TURN займає вздовж нього ширину й частку довжини
+			var span: float = WreckLayer.BODY_WIDTH * cos(WreckLayer.BODY_DECK_TURN) + WreckLayer.BODY_LENGTH * sin(WreckLayer.BODY_DECK_TURN)
 			for i in range(1, alongs.size()):
-				assert_gte(alongs[i] - alongs[i - 1], 0.125, "тіла рядом уздовж настилу, не купою (≥ 1 м)")
+				assert_gte(alongs[i] - alongs[i - 1] - span, 0.05, "між тілами на настилі щонайменше 0,4 м")
 
 
 ## Тіло лягає на ґрунт під собою — і на схилі; біля води воно в межах 0,3 тайла від середини клітинки, куди

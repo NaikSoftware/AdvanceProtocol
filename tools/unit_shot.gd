@@ -884,6 +884,20 @@ func _forest_n2(screen: BattleScreen, map: MapData, out: String, tag: String) ->
 				await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			shots["%s/%s_%s_z%d.png" % [out, tag, place[0], int(z)]] = get_viewport().get_texture().get_image()
+			if place[0] == "n2" and z == IsoCameraRig.MIN_ZOOM:
+				# пара для виміру прозорості: крон нема, запечена тінь лісу на ґрунті лишається
+				var fl: ForestLayer = screen._board_view._forest
+				var hidden: Array[Node3D] = []
+				for ch: Node in fl.get_children():
+					if ch is Node3D and (ch as Node3D).visible and ch.name != &"Forest_Shadow":
+						(ch as Node3D).visible = false
+						hidden.append(ch)
+				await RenderingServer.frame_post_draw
+				await RenderingServer.frame_post_draw
+				shots["%s/%s_n2_z6_nocrowns.png" % [out, tag]] = get_viewport().get_texture().get_image()
+				for ch: Node3D in hidden:
+					ch.visible = true
+				await RenderingServer.frame_post_draw
 	for path: String in shots:
 		(shots[path] as Image).save_png(path)
 	print("UNIT forest_n2 at %s, enemy hidden at %s (seen %s), bodies at %s (seen %s, shown %s)" % [n2, hide,
@@ -919,17 +933,20 @@ func _fall(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 	var hp0: int = squad.hp
 	print("UNIT fall submit '%s'" % MatchService.submit(FireCommand.create(tank.id, squad.id)))
 	var t0: int = Time.get_ticks_msec()
+	# кожен кадр першої секунди: перекидання триває 0,2 с, і лише так воно видне на справжній швидкості
 	var frames: Array[Image] = []
-	while frames.size() < 20:
+	var stamps: Array[int] = []
+	while Time.get_ticks_msec() - t0 < 1000:
 		await RenderingServer.frame_post_draw
-		if Time.get_ticks_msec() - t0 >= frames.size() * 100:
-			frames.append(get_viewport().get_texture().get_image())
+		frames.append(get_viewport().get_texture().get_image())
+		stamps.append(Time.get_ticks_msec() - t0)
 	# пил улігся: кадр через 3,5 с після пострілу
 	while Time.get_ticks_msec() - t0 < 3500:
 		await RenderingServer.frame_post_draw
 	var settled: Image = get_viewport().get_texture().get_image()
 	for i in frames.size():
-		frames[i].save_png("%s/%s_fall_%02d.png" % [out, tag, i])
+		frames[i].save_png("%s/%s_fall_%03d.png" % [out, tag, i])
+	print("UNIT fall frame times ms %s" % [stamps])
 	settled.save_png("%s/%s_fall_35.png" % [out, tag])
 	print("UNIT fall at %s: hp %d -> %d, figures %d -> %d" % [c, hp0, squad.hp, Casualties.figures(hp0, squad.max_hp()), Casualties.figures(squad.hp, squad.max_hp())])
 	get_tree().quit()
@@ -968,7 +985,7 @@ func _forest_deep(screen: BattleScreen, map: MapData, out: String, tag: String) 
 		await get_tree().process_frame
 	rig.center_on(deep)
 	var shots: Dictionary = {}
-	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+	for z: float in [IsoCameraRig.MIN_ZOOM, 8.0, IsoCameraRig.MAX_ZOOM]:
 		rig.zoom_by(z / rig.zoom_level)
 		for f in SETTLE_FRAMES * 2:
 			await get_tree().process_frame

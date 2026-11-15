@@ -13,8 +13,8 @@ extends RefCounted
 ## §3.5: шрам переживає юніт, тож має власний туман — маска `seen` глядача (тексель на тайл,
 ## найближчим текселем) множить його в шейдері. Пляма ширша за тайл, тож маска сама не досить: пляма
 ## малюється, лише коли розвідане її джерело (тайл уламків чи відділення), інакше її край на розвіданому
-## сусідові видав би бій на нерозвіданому. Тому плями зберігаються як відбитки на тайлах, а текстура
-## складається з них наново на `show_for`.
+## сусідові видав би бій на нерозвіданому. Тому плями й сліди поваленого зберігаються як відбитки з тайлом-
+## джерелом, а текстура складається з них на `show_for`.
 ##
 ## shortcut: шрами живуть лише у вигляді — збереження бою їх не пише, і після
 ## завантаження лишаються тільки плями під уламками, що ще горять; коли шрами стануть
@@ -39,8 +39,9 @@ var _tex: ImageTexture
 var _dirty: bool = false
 var _mask: Image
 var _mask_tex: ImageTexture
-## Сліди поваленого — без плям; на них текстура складається наново.
-var _base: Image
+## Сліди поваленого: [тайл-джерело, a, b]; як і плями, малюються, лише коли джерело розвідане.
+var _scuffs: Array = []
+var _scuffs_painted: Dictionary[int, bool] = {}
 ## Плями за тайлом-джерелом: біти WRECK і SQUAD.
 var _scorch: Dictionary[Vector2i, int] = {}
 ## Плями, що зараз намальовані (джерело розвідане глядачем).
@@ -54,7 +55,6 @@ func _init(board_size: Vector2i) -> void:
 	_size = board_size
 	_img = Image.create(maxi(1, board_size.x * PX_PER_TILE), maxi(1, board_size.y * PX_PER_TILE), false, Image.FORMAT_RGBA8)
 	_tex = ImageTexture.create_from_image(_img)
-	_base = _img.duplicate()
 	_mask = Image.create(maxi(1, board_size.x), maxi(1, board_size.y), false, Image.FORMAT_R8)
 	_mask_tex = ImageTexture.create_from_image(_mask)
 
@@ -92,12 +92,29 @@ func show_for(vision: Vision) -> void:
 	for cell: Vector2i in _scorch:
 		if vision.is_seen(cell):
 			shown[cell] = _scorch[cell]
-	if shown == _painted:
-		return
-	_img.copy_from(_base)
-	_painted.clear()
+	var scuffs: Dictionary[int, bool] = {}
+	for i in _scuffs.size():
+		if vision.is_seen(_scuffs[i][0]):
+			scuffs[i] = true
+	# Відбитки накладаються максимумом: поки показане лише росте, домальовуємо нове; з нуля — лише коли
+	# щось мусить зникнути (інший глядач, повтор).
+	var grows: bool = true
+	for cell: Vector2i in _painted:
+		if shown.get(cell, 0) & _painted[cell] != _painted[cell]:
+			grows = false
+	for i: int in _scuffs_painted:
+		if not scuffs.has(i):
+			grows = false
+	if not grows:
+		_img.fill(Color(0, 0, 0, 0))
+		_painted.clear()
+		_scuffs_painted.clear()
 	for cell: Vector2i in shown:
 		_paint(cell, shown[cell])
+	for i: int in scuffs:
+		if not _scuffs_painted.has(i):
+			_scuffs_painted[i] = true
+			_paint_scuff(_scuffs[i][1], _scuffs[i][2])
 	_mark_dirty()
 
 
@@ -149,6 +166,14 @@ func _paint(cell: Vector2i, kinds: int) -> void:
 ## a→b (світові точки, тайли) з рваним краєм; та сама темрява R, що в плями, але слабка (до SCUFF_DARK),
 ## щоб читалась як мокра прим'ята земля, а не як згарище. Той самий туман `seen`, що в плями.
 func stamp_scuff(a: Vector3, b: Vector3) -> void:
+	var cell := Vector2i(roundi(a.x), roundi(a.z))
+	_scuffs.append([cell, a, b])
+	if _vision == null or _vision.is_seen(cell):
+		_scuffs_painted[_scuffs.size() - 1] = true
+		_paint_scuff(a, b)
+
+
+func _paint_scuff(a: Vector3, b: Vector3) -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = hash(Vector4(a.x, a.z, b.x, b.z))
 	noise.frequency = 0.3
@@ -168,8 +193,6 @@ func stamp_scuff(a: Vector3, b: Vector3) -> void:
 				continue
 			var old: Color = _img.get_pixel(x, y)
 			_img.set_pixel(x, y, Color(maxf(old.r, v), old.g, old.b, old.a))
-			var ob: Color = _base.get_pixel(x, y)
-			_base.set_pixel(x, y, Color(maxf(ob.r, v), ob.g, ob.b, ob.a))
 	_mark_dirty()
 
 

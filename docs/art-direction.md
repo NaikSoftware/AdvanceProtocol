@@ -294,10 +294,12 @@ falls back to the box placeholder, so a model may land one type at a time.
   camera and a unit the current player can see fade smoothly with alpha blending to about
   30–40 % (crowns and garden trees 35 %), bark a little more. Only the nearest faded surface
   blends, so stacked crowns do not darken one another, and the zone contours and the drone icon
-  stay visible through them. A crown counts when its centre lies within half a unit's width (plus
-  a small margin) of the line of sight towards the camera and that line, from mid-figure height,
-  passes between a quarter of the tree's height and its top somewhere across the crown's depth;
-  behind the unit, only a crown it stands under counts. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays solid.
+  stay visible through them. A crown counts when it really hides a soldier: taken as a column
+  of its own radius from a quarter of the tree's height to its top, the line of sight from some
+  soldier's feet to his head towards the camera passes through it, with the soldiers anywhere
+  within about 0.2 tile of the cell's centre. Behind the unit, only a crown it stands under
+  counts. Never a dither, stipple or hole pattern; low rubble that cannot hide a unit stays
+  solid.
 - **Scars respect the fog:** crushed props, wrecks and their scorch show only where the viewer's
   `seen` covers the tile, cut at the tile's edge with no blur into unseen ground, or they report
   enemy movement. A destroyed squad's scorch is restrained and has no ash flecks; nothing is

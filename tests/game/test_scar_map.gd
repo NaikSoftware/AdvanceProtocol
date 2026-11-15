@@ -98,3 +98,36 @@ func test_ground_shader_samples_the_seen_mask_nearest() -> void:
 	if m != null:
 		assert_true(m.get_string(1).contains("filter_nearest"), "найближчим текселем")
 		assert_false(m.get_string(1).contains("filter_linear"))
+
+
+## Слід поваленого — як пляма: малюється, лише коли розвіданий тайл, звідки він почався, і не перелазить
+## із нерозвіданого на розвіданий сусідній тайл.
+func test_scuff_shows_only_once_its_source_cell_is_seen() -> void:
+	var state := BattleState.create(Board.create(8, 6, Terrain.GroundState.DRY), 2, 3)
+	var v: Vision = state.vision[0]
+	v.seen.fill(0)
+	v.seen[2 * 8 + 2] = 1
+	scars.show_for(v)
+	scars.stamp_scuff(Vector3(3, 0, 2), Vector3(2, 0, 2))  # з нерозвіданого (3, 2) на розвіданий (2, 2)
+	var on_seen := Vector2i(2 * 32 + 16, 2 * 32 + 16)
+	assert_eq(scars.image().get_pixelv(on_seen).r8, 0, "джерело нерозвідане — сліду на сусідові нема")
+	v.seen[2 * 8 + 3] = 1
+	scars.show_for(v)
+	assert_gt(scars.image().get_pixelv(on_seen).r8, 0, "джерело розвідане — слід на місці")
+
+
+## Поки показане лише росте, нові плями домальовуються, а вже намальовані не перемальовуються з нуля.
+func test_growing_seen_set_paints_only_new_stamps() -> void:
+	var state := BattleState.create(Board.create(8, 6, Terrain.GroundState.DRY), 2, 3)
+	var v: Vision = state.vision[0]
+	v.seen.fill(0)
+	v.seen[2 * 8 + 3] = 1
+	scars.show_for(v)
+	scars.stamp_scorch(Vector2i(3, 2))
+	scars.stamp_scorch(Vector2i(6, 4))
+	# позначка поверх намальованої плями: повне перемальовування стерло б її
+	scars.image().set_pixel(3 * 32 + 16, 2 * 32 + 16, Color(1, 1, 1, 1))
+	v.seen[4 * 8 + 6] = 1
+	scars.show_for(v)
+	assert_true(scars.is_painted(Vector2i(6, 4)), "нова пляма домальована")
+	assert_eq(scars.image().get_pixel(3 * 32 + 16, 2 * 32 + 16).g8, 255, "стара не перемальована з нуля")
