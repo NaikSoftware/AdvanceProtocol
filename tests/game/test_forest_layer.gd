@@ -282,6 +282,14 @@ func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
 		assert_eq(mat.get_shader_parameter("overlay_layers"), 1 << (BoardView.OVERLAY_LAYER - 1), "%s: лише камера накладок, не зонд" % n.name)
 		assert_eq(mat.get_shader_parameter("rings"), rings, "%s: центр і радіус кільця" % n.name)
 		assert_eq(mat.get_shader_parameter("line_rect"), Vector4(1.0, 2.0, 8.0, 9.0), "%s: рамка ліній і після перебудови пролому" % n.name)
+		# Лінію за юнітом юніт ховає: крона, чий промінь до землі йде крізь його клітинку, її не малює.
+		assert_eq(mat.get_shader_parameter("units_on"), true, "%s: юніти під кронами" % n.name)
+		var cells: Texture2D = mat.get_shader_parameter("unit_cells")
+		assert_not_null(cells, "%s: картка клітинок юнітів" % n.name)
+		if cells != null:
+			var img: Image = cells.get_image()
+			assert_eq(img.get_pixel(5, 3).r8, 255, "%s: клітинка юніта" % n.name)
+			assert_eq(img.get_pixel(4, 3).r8, 0, "%s: сусідня порожня" % n.name)
 		# Колір — той самий sRGB, що й у матеріалу кільця на землі: юніформа source_color, і кожен рендерер
 		# переводить його так само, як ring_color кільця (лінійним Mobile темнів би, Compatibility — ні).
 		assert_eq(mat.get_shader_parameter("ring_colors"), PackedColorArray([Color(0.25, 0.5, 0.75, 0.5)]), "%s: колір кільця" % n.name)

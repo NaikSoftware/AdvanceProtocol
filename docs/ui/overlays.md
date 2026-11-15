@@ -15,8 +15,10 @@ screen and do not fight the fog, which is itself a darkening of tiles.
 The contour is a thin, half-transparent line painted **on the ground only**: buildings, fences and
 units in front of it hide it, as they would hide paint on the ground. Trees do not: where the line
 lies under the forest canopy, the crowns show it through themselves in the same colour and width,
-so a zone inside a forest stays readable. A crown faded over a shown unit does not, since the line
-behind it would land on the unit. It is a path hint, not the loudest thing in the frame. On a bridge it lies on the deck, not on the riverbed under it.
+so a zone inside a forest stays readable. A crown fading over a shown unit does not, and no crown
+draws the line where a shown unit stands between it and the ground: the unit hides the line there,
+as it hides paint on the ground. It is a path hint, not the loudest thing in the frame. On a bridge
+it lies on the deck, not on the riverbed under it. The ring (below) always lies under the contours.
 
 The reference draws these zones the same way, as contours, and splits them on exactly the same
 test (`remaining_ap >= fire_cost`). It colours them green and red; this project keeps gold and red
@@ -41,7 +43,8 @@ forest canopy, also past the board edge, where the ring continues on the ground.
 travels once from the unit out to the radius; it hints where the reach grows from and is never
 louder than the ground under it. The border appears as the band reaches it and then stays: a
 solid, opaque line exactly at the rule radius — the edge the player decides by. Gun and drone
-rings behave alike; the drone ring stays distinct by its violet colour and its larger radius. The
+rings behave alike, and their fronts travel together at one speed; the drone ring stays distinct by
+its violet colour and its larger radius. The
 pulse runs only once per hold, nothing moves after it, and the crowns over the ring show the same
 pulse and the same border.
 

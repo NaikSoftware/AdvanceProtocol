@@ -144,6 +144,10 @@ var contour_ring_colors := PackedColorArray()
 ## Рамка всіх ліній на землі (xy — мінімум, zw — максимум): крона, чий промінь до землі її не
 ## перетинає, землі під собою не шукає. Порожня — (1, 1, 0, 0).
 var line_rect := Vector4(1.0, 1.0, 0.0, 0.0)
+## Клітинки показаних юнітів (set_reveal_cells) картою дошки: лінію за юнітом юніт ховає, тож крона,
+## чий промінь до землі йде крізь його клітинку, її не малює.
+var _unit_img: Image
+var _unit_tex: ImageTexture
 
 
 ## `world` — дошка разом із кільцем (Surroundings.world_board), `ring` — ширина кільця;
@@ -258,6 +262,7 @@ func _wire(mat: ShaderMaterial) -> void:
 	# Стрічка контуру й сітка кільця над річкою лежать на воді (BoardView), тож і крона шукає землю не нижче за неї.
 	mat.set_shader_parameter("water_level", TerrainHeight.WATER_LEVEL)
 	mat.set_shader_parameter("line_rect", line_rect)
+	_wire_units(mat)
 	_wire_rings(mat)
 
 
@@ -272,6 +277,30 @@ func _wire_rings(mat: ShaderMaterial) -> void:
 func set_reveal_cells(cells: Array[Vector2i]) -> void:
 	_reveal = cells.duplicate()
 	_apply_fade()
+	_publish_unit_cells()
+
+
+func _publish_unit_cells() -> void:
+	if _board.size.x <= 0 or _board.size.y <= 0:
+		return
+	if _unit_img == null or _unit_img.get_size() != _board.size:
+		_unit_img = Image.create(_board.size.x, _board.size.y, false, Image.FORMAT_R8)
+		_unit_tex = null
+	_unit_img.fill(Color(0, 0, 0))
+	for c: Vector2i in _reveal:
+		if _board.has_point(c):
+			_unit_img.set_pixelv(c, Color(1, 0, 0))
+	if _unit_tex == null:
+		_unit_tex = ImageTexture.create_from_image(_unit_img)
+	else:
+		_unit_tex.update(_unit_img)
+	for mat: ShaderMaterial in _wired():
+		_wire_units(mat)
+
+
+func _wire_units(mat: ShaderMaterial) -> void:
+	mat.set_shader_parameter("units_on", _unit_tex != null and not _reveal.is_empty())
+	mat.set_shader_parameter("unit_cells", _unit_tex)
 
 
 ## Зум камери (IsoCameraRig.zoom_level): підлісок лише до DETAIL_ZOOM. Розчинення залежить

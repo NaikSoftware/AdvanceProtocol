@@ -74,6 +74,13 @@ uniform int overlay_layers = 0;
 // Рамка всіх ліній на землі (xy — мінімум, zw — максимум, XZ світу; BoardView.line_rect): крона, чий
 // промінь до землі її не перетинає, лінії не несе й землі під собою не шукає. Типово порожня.
 uniform vec4 line_rect = vec4(1.0, 1.0, 0.0, 0.0);
+// Клітинки показаних юнітів (ForestLayer.set_reveal_cells): лінію за юнітом ховає сам юніт, тож крона,
+// чий промінь до землі проходить крізь юніта, лінії не малює — інакше пучки перед ним несли б її уривки.
+uniform bool units_on = false;
+uniform sampler2D unit_cells : filter_nearest, repeat_disable;
+// Висота юніта, крізь яку промінь не проходить, і радіус його сліду в клітинці, тайли.
+const float UNIT_TOP = 0.3;
+const float UNIT_REACH = 0.45;
 
 #include "res://game/battle/shaders/surroundings.gdshaderinc"
 #include "res://game/battle/shaders/fire_ring.gdshaderinc"
@@ -102,6 +109,16 @@ vec4 edge_texel(ivec2 p, ivec2 ts) {
 float line_ground(vec2 g) {
 	vec2 hs = vec2(textureSize(height_map, 0));
 	return max(textureLod(height_map, ((g - height_origin) * height_samples + 0.5) / hs, 0.0).r, water_level);
+}
+
+// Чи стоїть у точці землі p показаний юніт (у межах його сліду в клітинці).
+bool unit_at(vec2 p) {
+	ivec2 c = ivec2(floor(p + 0.5));
+	ivec2 ts = textureSize(unit_cells, 0);
+	if (c.x < 0 || c.y < 0 || c.x >= ts.x || c.y >= ts.y) {
+		return false;
+	}
+	return texelFetch(unit_cells, c, 0).r > 0.5 && length(p - vec2(c)) < UNIT_REACH;
 }
 
 // Точка землі, яку закриває точка крони p: перший перетин променя камери за p з поверхнею ліній
@@ -245,6 +262,15 @@ void fragment() {
 				g = line_hit(eye, world_pos, contour_lift);
 			}
 			float above = step(here + contour_lift, world_pos.y);
+			if (units_on && above > 0.0) {
+				// Останній відрізок променя, нижчий за юніта: від висоти його верху (чи від самої точки крони,
+				// коли вона нижча) до землі. Юніт на ньому — і лінії тут не видно.
+				float gyh = use_height ? line_ground(g) : max(base_y, water_level);
+				vec2 top = world_pos.y > gyh + UNIT_TOP ? mix(eye.xz, world_pos.xz, (eye.y - gyh - UNIT_TOP) * k_ray) : world_pos.xz;
+				if (unit_at(g) || unit_at(mix(g, top, 0.5)) || unit_at(top)) {
+					above = 0.0;
+				}
+			}
 			// Колір із домноженою альфою: кільце під лінією зон, як на землі.
 			vec3 pre = vec3(0.0);
 			float cov = 0.0;
