@@ -89,6 +89,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "guns_bridge":
 		await _guns_bridge(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "guns_dead":
+		await _guns_dead(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "squad_bridge":
 		await _squad_bridge(screen, map, out, tag, int(a[6].substr(9)) if a.size() > 6 and a[6].begins_with("standing=") else 0)
 		return
@@ -301,7 +304,8 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 
 
 ## Шостий аргумент guns_bridge: польова гармата й гаубиця на двох клітинках мосту, напрям — SHOT_FACING. На мосту
-## гармати стоять у похідному положенні: станини зведені, розрахунок — перед лафетом.
+## гармати стоять у похідному положенні: станини зведені, розрахунок — перед лафетом. SHOT_SET=N — гармати
+## гравця з набором N (без неї набори 0 і 1).
 func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
@@ -313,11 +317,17 @@ func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) 
 				bridge.append(Vector2i(x, y))
 	bridge.sort_custom(func(p: Vector2i, q: Vector2i) -> bool: return (p - c).length_squared() < (q - c).length_squared())
 	var f0: int = int(OS.get_environment("SHOT_FACING"))
+	# SHOT_SET=N — обидві гармати гравця з набором N (гравець 0 бачить їх, бо ґрунт під ними розвіданий)
+	var set_id: int = int(OS.get_environment("SHOT_SET")) if OS.get_environment("SHOT_SET") != "" else -1
 	m.spawns = [
-		{"type_id": 9, "owner": 0, "pos": bridge[0], "facing": f0},
-		{"type_id": 10, "owner": 1, "pos": bridge[1], "facing": f0},
+		{"type_id": 9, "owner": maxi(set_id, 0), "pos": bridge[0], "facing": f0},
+		{"type_id": 10, "owner": maxi(set_id, 0) if set_id >= 0 else 1, "pos": bridge[1], "facing": f0},
 	]
-	screen.setup(m, 2, 1)
+	screen.setup(m, 3 if set_id >= 0 else 2, 1)
+	if set_id > 0:
+		MatchService.state.vision[0].reveal(bridge[0])
+		MatchService.state.vision[0].reveal(bridge[1])
+		screen._rebuild_units_for_active_player(true)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
@@ -333,6 +343,67 @@ func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) 
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
 	print("UNIT guns_bridge at %s %s" % [bridge[0], bridge[1]])
+	get_tree().quit()
+
+
+## Шостий аргумент guns_dead: польова гармата й гаубиця гравця з набором SHOT_SET (1 чи 2) на полі, напрям —
+## SHOT_FACING. По одному танку гравця 0 добиває кожну справжнім пострілом (у гармат лишається 1 HP): уламок і
+## тіла розрахунку лягають, як у грі. Кадри `<tag>_z<зум>.png` з тілами й `<tag>_nobodies_z<зум>.png` без них.
+func _guns_dead(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var set_id: int = int(OS.get_environment("SHOT_SET"))
+	var facing: int = int(OS.get_environment("SHOT_FACING"))
+	var rel: Array[Vector2i] = [Vector2i(-2, 0), Vector2i(0, 0), Vector2i(2, 0), Vector2i(-2, 2), Vector2i(2, 2)]
+	var c: Vector2i = _group_origin(m, rel, -1)
+	if set_id < 1 or c.x < 0:
+		push_error("unit_shot: guns_dead — SHOT_SET 1 чи 2 і місце на полі")
+		get_tree().quit(1)
+		return
+	m.spawns = [
+		{"type_id": 9, "owner": set_id, "pos": c + Vector2i(-1, 0), "facing": facing},
+		{"type_id": 10, "owner": set_id, "pos": c + Vector2i(1, 0), "facing": facing},
+		{"type_id": 5, "owner": 0, "pos": c + Vector2i(-2, 2), "facing": 0},
+		{"type_id": 5, "owner": 0, "pos": c + Vector2i(2, 2), "facing": 0},
+	]
+	screen.setup(m, 3, 1)
+	var state: BattleState = MatchService.state
+	for cell: Vector2i in [c + Vector2i(-1, 0), c + Vector2i(1, 0)]:
+		state.vision[0].reveal(cell)
+	screen._rebuild_units_for_active_player(true)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	rig.center_on(c)
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	var guns: Array[Unit] = [state.unit_at(c + Vector2i(-1, 0)), state.unit_at(c + Vector2i(1, 0))]
+	var tanks: Array[Unit] = [state.unit_at(c + Vector2i(-2, 2)), state.unit_at(c + Vector2i(2, 2))]
+	for i in 2:
+		guns[i].hp = 1
+		print("UNIT guns_dead fire %d: '%s'" % [i, MatchService.submit(FireCommand.create(tanks[i].id, guns[i].id))])
+		# другий постріл — після того, як вигляд дограв події першого: інакше його уламок не з'являється
+		var t1: int = Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t1 < 3000:
+			await get_tree().process_frame
+	var t0: int = Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 4000:
+		await get_tree().process_frame
+	var wreck_layer: WreckLayer = screen._wreck_layer
+	var shots: Dictionary = {}
+	for z: float in [IsoCameraRig.MIN_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+		for mi: MultiMeshInstance3D in wreck_layer.fallen_meshes():
+			mi.visible = false
+		for f in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_nobodies_z%d.png" % [out, tag, int(z)]] = get_viewport().get_texture().get_image()
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT guns_dead at %s: bodies %d, wrecks %d" % [c, state.bodies.size(), state.wrecks.size()])
 	get_tree().quit()
 
 
@@ -407,7 +478,8 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 	var surface: int = -1
 	if ground != "":
 		surface = MapData.FieldSurface.PLOUGHED if ground == "plough" else MapData.FieldSurface.MEADOW
-	# type_id, власник, зсув від `p`: сусіди через клітинку, щоб смуги HP не лягали на відвал чи плуг
+	# type_id, власник, зсув від `p`: сусіди через клітинку,
+	# щоб смуги HP не лягали на відвал чи плуг
 	var plan: Array = []
 	var cam := Vector2i(2, 1)
 	if pair:
@@ -416,7 +488,8 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 	elif engineers:
 		plan = [[11, 0, Vector2i(0, 0)], [11, 1, Vector2i(2, 0)], [11, 2, Vector2i(4, 0)], [5, 0, Vector2i(2, 2)]]
 	else:
-		# set=N: усі чотири юніти гравця з набором N, тож гармати й інженерна машина — з цього набору
+		# set=N: усі чотири юніти гравця з набором N, тож гармати й
+		# інженерна машина — з цього набору
 		var o: Array[int] = [0, 1, 2, 0]
 		if set_id >= 0:
 			o = [set_id, set_id, set_id, set_id]
@@ -467,7 +540,8 @@ func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id:
 		for f in SETTLE_FRAMES * 2:
 			await get_tree().process_frame
 		if no_hp:
-			# смуга — MultiMesh екрана, число — вузол кожного вигляду; вигляди перестворюються, тож ховаємо щоразу
+			# смуга — MultiMesh екрана, число — вузол кожного вигляду;
+			# вигляди перестворюються, тож ховаємо щоразу
 			screen._hp_bars.visible = false
 			for view: Node in screen.find_children("*", "UnitView", true, false):
 				(view as UnitView)._hp_label.visible = false
