@@ -268,7 +268,7 @@ func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
 	var tex := ImageTexture.create_from_image(Image.create(2, 2, false, Image.FORMAT_RGBA8))
 	f.set_contour_edges(tex)
 	var rings := PackedVector4Array([Vector4(5.0, 3.0, 3.0, 0.0)])
-	f.set_contour_rings(rings, PackedColorArray([Color.WHITE]))
+	f.set_contour_rings(rings, PackedColorArray([Color(0.25, 0.5, 0.75, 0.5)]))
 	f.set_broken({Vector2i(7, 6): true})
 	f.set_reveal_cells([Vector2i(5, 3)] as Array[Vector2i])
 	var drawn := _drawn(f)
@@ -280,6 +280,11 @@ func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
 		assert_eq(mat.get_shader_parameter("ring_count"), 1, "%s: одне кільце" % n.name)
 		assert_eq(mat.get_shader_parameter("overlay_layers"), 1 << (BoardView.OVERLAY_LAYER - 1), "%s: лише камера накладок, не зонд" % n.name)
 		assert_eq(mat.get_shader_parameter("rings"), rings, "%s: центр і радіус кільця" % n.name)
+		# Колір — той самий sRGB, що й у матеріалу кільця на землі: юніформа source_color, і кожен рендерер
+		# переводить його так само, як ring_color кільця (лінійним Mobile темнів би, Compatibility — ні).
+		assert_eq(mat.get_shader_parameter("ring_colors"), PackedColorArray([Color(0.25, 0.5, 0.75, 0.5)]), "%s: колір кільця" % n.name)
+		# Стрічка контуру й сітка кільця над річкою лежать на воді, не на дні: крона шукає землю так само.
+		assert_eq(mat.get_shader_parameter("water_level"), TerrainHeight.WATER_LEVEL, "%s: рівень води" % n.name)
 	var fades: int = 0
 	for n: Node in f.get_children():
 		if String(n.name).begins_with("Fade_"):

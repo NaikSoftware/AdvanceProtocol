@@ -74,7 +74,7 @@ func test_drone_strike_through_button() -> void:
 	_e2e.press(_button())
 	await _e2e.settle()
 	assert_eq(_board_view().circles(BoardView.LAYER_TARGETS),
-		[{"center": SQUAD, "radius": DroneCommand.RANGE, "color": TargetOverlay.DRONE_RING_COLOR, "dashed": true}], "коло дрона")
+		[{"center": SQUAD, "radius": DroneCommand.RANGE, "color": TargetOverlay.DRONE_RING_COLOR}], "коло дрона")
 	assert_true(_e2e.screen.unit_view_for(tank.id)._crosshair.visible, "танк — приціл")
 	assert_true(_e2e.screen.unit_view_for(_state().unit_at(INF).id)._forbidden.visible, "піхота — заборонена")
 	assert_false(_e2e.screen.unit_view_for(tank.id)._forbidden.visible)

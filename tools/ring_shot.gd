@@ -1,17 +1,17 @@
 extends Node
-## Кадри кілець дальності в кожному стилі (BoardView.RingStyle) з однієї камери: справжній
-## екран бою, вибраний і оглянутий загін штурмовиків гравця 0 з дронами (обидва кільця), поруч
-## — вигорілий слід і колія, щоб видно було, чи не ховає їх заливка. Не входить у гру.
+## Кадри кілець дальності: справжній екран бою, вибраний і оглянутий загін штурмовиків гравця 0
+## з дронами (обидва кільця), поруч — вигорілий слід і колія, щоб видно було, чи не ховає їх імпульс.
+## Не входить у гру.
 ## Запуск (потрібне вікно):
-##   tools/godot_run.sh --path . res://tools/ring_shot.tscn -- <out_dir> <map>[@x,y] ... [--styles=0,1,2,3,4] [--zooms=12,6,20]
+##   tools/godot_run.sh --path . res://tools/ring_shot.tscn -- <out_dir> <map>[@x,y] ... [--zooms=12,6,20]
 ## @x,y — переставити загін на клітинку (схил, берег, будинок під кільцем); ще @sx,sy — клітинка
 ## вигорілого сліду (колія йде через неї вздовж X на ±2 клітинки), типово — поруч із загоном.
-## Для PULSE ще кадри імпульсу на 0.15 / 0.35 / 0.55 с. Рядок RINGDC <map> z<zoom> <стиль> off=… on=… tris_on=…:
-## медіана 9 кадрів без кілець і з ними в тому ж процесі.
+## Кадри імпульсу на 0.15 / 0.35 / 0.55 с — справжні твіни кілець на паузі, прокручені вручну — і кінцевий.
+## Рядок RINGDC <map> z<zoom> off=… on=… tris_off=… tris_mid=… tris_on=…: медіана 9 кадрів без кілець,
+## посеред імпульсу (0.35 с) і після нього, в тому ж процесі.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
-const STYLE_NAMES: PackedStringArray = ["A_line", "B_glow", "C_bezel", "D_disk", "E_pulse"]
 const PULSE_TIMES: Array[float] = [0.15, 0.35, 0.55]
 
 
@@ -24,13 +24,10 @@ func _ready() -> void:
 	var out: String = args[0]
 	DirAccess.make_dir_recursive_absolute(out)
 	get_window().size = WINDOW
-	var styles: Array[int] = [0, 1, 2, 3, 4]
 	var zooms: Array[float] = [12.0, IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]
 	var maps: Array[String] = []
 	for a in args.slice(1):
-		if a.begins_with("--styles="):
-			styles.assign(Array(a.trim_prefix("--styles=").split(",")).map(func(x: String) -> int: return int(x)))
-		elif a.begins_with("--zooms="):
+		if a.begins_with("--zooms="):
 			zooms.assign(Array(a.trim_prefix("--zooms=").split(",")).map(func(x: String) -> float: return float(x)))
 		else:
 			maps.append(a)
@@ -80,38 +77,41 @@ func _ready() -> void:
 			rig.zoom_by(z / rig.zoom_level)
 			await _settle()
 			var off: Vector2i = await _median_frame()
-			for style: int in styles:
-				BoardView.ring_style = style
-				var t0: int = Time.get_ticks_usec()
-				controller.peek_cell(squad.pos)
-				print("RINGBUILD %s z%d %s %.1f ms" % [map, int(z), STYLE_NAMES[style], (Time.get_ticks_usec() - t0) / 1000.0])
-				var rings: Array = bv.circles(BoardView.LAYER_INSPECT)
-				if rings.size() != 2:
-					push_error("ring_shot: %d кілець замість 2 на %s" % [rings.size(), map])
-				var name: String = "%s_z%d_%s" % [map, int(z), STYLE_NAMES[style]]
-				if style == BoardView.RingStyle.PULSE:
-					# Імпульс — кадри на заданих мітках часу: твін знято, поступ ставимо тим самим
-					# законом, що й твін (лінійно, radius / PULSE_SPEED).
-					for t: Tween in get_tree().get_processed_tweens():
-						t.kill()
-					var nodes: Array = (bv.get("_circle_nodes") as Dictionary)[BoardView.LAYER_INSPECT]
-					for k in PULSE_TIMES.size():
-						for i in nodes.size():
-							var r: float = float(rings[i]["radius"])
-							((nodes[i] as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter(
-								&"pulse", clampf(PULSE_TIMES[k] * BoardView.PULSE_SPEED / r, 0.0, 1.0))
-						for f in 3:
-							await get_tree().process_frame
-						await RenderingServer.frame_post_draw
-						shots.append(["%s_t%03d" % [name, int(PULSE_TIMES[k] * 100.0)], get_viewport().get_texture().get_image()])
-					for node: MeshInstance3D in nodes:
-						(node.material_override as ShaderMaterial).set_shader_parameter(&"pulse", 1.0)
+			var before: Array[Tween] = get_tree().get_processed_tweens()
+			var t0: int = Time.get_ticks_usec()
+			controller.peek_cell(squad.pos)
+			print("RINGBUILD %s z%d %.1f ms" % [map, int(z), (Time.get_ticks_usec() - t0) / 1000.0])
+			var rings: Array = bv.circles(BoardView.LAYER_INSPECT)
+			if rings.size() != 2:
+				push_error("ring_shot: %d кілець замість 2 на %s" % [rings.size(), map])
+			var name: String = "%s_z%d" % [map, int(z)]
+			# Твіни імпульсу — ті, що з'явились з оглядом; на паузі й прокручені на мітки часу тим самим
+			# кодом, що й у грі (і на землі, і під кронами).
+			var pulses: Array[Tween] = []
+			for t: Tween in get_tree().get_processed_tweens():
+				if not before.has(t):
+					t.pause()
+					pulses.append(t)
+			var at: float = 0.0
+			var mid := Vector2i.ZERO
+			for k in PULSE_TIMES.size():
+				for t: Tween in pulses:
+					t.custom_step(PULSE_TIMES[k] - at)
+				at = PULSE_TIMES[k]
 				for f in 3:
 					await get_tree().process_frame
-				var on: Vector2i = await _median_frame()
-				print("RINGDC %s z%d %s off=%d on=%d tris_off=%d tris_on=%d" % [map, int(z), STYLE_NAMES[style], off.x, on.x, off.y, on.y])
-				shots.append([name, get_viewport().get_texture().get_image()])
-				controller.end_peek()
+				if k == 1:
+					mid = await _median_frame()
+				await RenderingServer.frame_post_draw
+				shots.append(["%s_t%03d" % [name, int(PULSE_TIMES[k] * 100.0)], get_viewport().get_texture().get_image()])
+			for t: Tween in pulses:
+				t.custom_step(10.0)
+			for f in 3:
+				await get_tree().process_frame
+			var on: Vector2i = await _median_frame()
+			print("RINGDC %s z%d off=%d on=%d tris_off=%d tris_mid=%d tris_on=%d" % [map, int(z), off.x, on.x, off.y, mid.y, on.y])
+			shots.append([name, get_viewport().get_texture().get_image()])
+			controller.end_peek()
 		screen.free()
 		await get_tree().process_frame
 	for s: Array in shots:

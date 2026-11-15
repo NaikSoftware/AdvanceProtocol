@@ -37,6 +37,14 @@ say: a crosshair on each marked unit. The circle is cheap to read at a glance an
 with the two movement contours, which stay tile-shaped. Like the contours, it shows through the
 forest canopy, also past the board edge, where the ring continues on the ground.
 
+**The ring appears as one pulse and ends on a crisp border.** When the hold begins, a faint band
+travels once from the unit out to the radius; it hints where the reach grows from and is never
+louder than the ground under it. The border appears as the band reaches it and then stays: a
+solid, opaque line exactly at the rule radius — the edge the player decides by. Gun and drone
+rings behave alike; the drone ring stays distinct by its violet colour and its larger radius. The
+pulse runs only once per hold, nothing moves after it, and the crowns over the ring show the same
+pulse and the same border.
+
 **Any visible unit can be inspected, including an enemy's.** This is the feature worth porting.
 Holding an enemy shows *its* range and which of **your** units stand inside it. With retaliation
 ([§3.3.1](../rules/combat.md)) that is not a convenience, it is the information the central decision of a turn rests on:

@@ -275,13 +275,11 @@ func test_water_is_drawn_first_of_the_transparent_and_writes_no_depth() -> void:
 	assert_true(mode.get_string().contains("depth_draw_never"), "вода не пише глибину")
 
 
-## Шейдерне кільце над річкою лежить на воді, як лінії зон, а не на дні: вода глибини не пише,
+## Кільце над річкою лежить на воді, як лінії зон, а не на дні: вода глибини не пише,
 ## тож кільце з дна малювалося б поверх неї, зсунуте на глибину річки.
-func test_shaded_ring_lies_on_the_water_not_the_bed() -> void:
+func test_ring_lies_on_the_water_not_the_bed() -> void:
 	view.build(_river())
-	BoardView.ring_style = BoardView.RingStyle.DISK
 	view.draw_circles([{"center": Vector2i(10, 7), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
-	BoardView.ring_style = BoardView.RingStyle.LINE
 	var ring: MeshInstance3D = view.get_node("Circle%d_0" % BoardView.LAYER_INSPECT)
 	var on_water: int = 0
 	for v in ((ring.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):

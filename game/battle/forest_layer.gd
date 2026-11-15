@@ -136,7 +136,7 @@ var _fade_zoom: float = -100.0  ## зум, з яким розчинення ра
 ## Записи плану дошки після останньої перебудови — для тестів і бюджету.
 var board_plan: Array[Dictionary] = []
 ## Лінії під кронами (BoardView): картка ребер контурів (null — контурів немає) і кільця дальності —
-## центр і радіус у Vector4.xyz, колір лінійний. Розчинена крона над юнітом їх не отримує: промінь
+## центр і радіус у Vector4.xyz, поступ імпульсу у w, колір sRGB. Розчинена крона над юнітом їх не отримує: промінь
 ## крізь неї до землі йде через юніта, і лінія лягла б на нього.
 var _contour_edges: Texture2D
 var contour_rings := PackedVector4Array()
@@ -209,18 +209,28 @@ func set_contour_edges(tex: Texture2D) -> void:
 	_wire_all()
 
 
-## Кільця дальності (BoardView.draw_circles): шейдер крони бере до чотирьох.
+## Кільця дальності (BoardView.draw_circles): шейдер крони бере до чотирьох. Під час імпульсу
+## кільця приходять щокадру, тож тоді оновлюються лише вони.
 func set_contour_rings(rings: PackedVector4Array, colors: PackedColorArray) -> void:
 	contour_rings = rings
 	contour_ring_colors = colors
-	_wire_all()
+	for mat: ShaderMaterial in _wired():
+		_wire_rings(mat)
 
 
 func _wire_all() -> void:
+	for mat: ShaderMaterial in _wired():
+		_wire(mat)
+
+
+## Матеріали крон, що малюють лінії: злиті крони дошки й кільця (розчинені — ні).
+func _wired() -> Array[ShaderMaterial]:
+	var out: Array[ShaderMaterial] = []
 	for n: Node in _ring_nodes + _board_nodes:
 		var mat := (n as GeometryInstance3D).material_override as ShaderMaterial
 		if mat != null and mat.shader == _batch_shader:
-			_wire(mat)
+			out.append(mat)
+	return out
 
 
 func _wire(mat: ShaderMaterial) -> void:
@@ -228,7 +238,6 @@ func _wire(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter("contour_edges", _contour_edges)
 	mat.set_shader_parameter("contour_half", BoardView._CONTOUR_WIDTH * 0.5)
 	mat.set_shader_parameter("contour_lift", BoardView._CONTOUR_Y)
-	mat.set_shader_parameter("ring_half", BoardView._RING_WIDTH * 0.5)
 	mat.set_shader_parameter("overlay_layers", 1 << (BoardView.OVERLAY_LAYER - 1))
 	var th: TerrainHeight = TerrainHeight.active
 	mat.set_shader_parameter("use_height", th != null)
@@ -236,6 +245,12 @@ func _wire(mat: ShaderMaterial) -> void:
 		mat.set_shader_parameter("height_map", th.texture())
 		mat.set_shader_parameter("height_samples", float(th.samples))
 		mat.set_shader_parameter("height_origin", -0.5 - th.margin)
+	# Стрічка контуру й сітка кільця над річкою лежать на воді (BoardView), тож і крона шукає землю не нижче за неї.
+	mat.set_shader_parameter("water_level", TerrainHeight.WATER_LEVEL)
+	_wire_rings(mat)
+
+
+func _wire_rings(mat: ShaderMaterial) -> void:
 	# shortcut: шейдер малює не більше чотирьох кілець (огляд — два, режим дрона — одне).
 	mat.set_shader_parameter("ring_count", mini(contour_rings.size(), 4))
 	mat.set_shader_parameter("rings", contour_rings)

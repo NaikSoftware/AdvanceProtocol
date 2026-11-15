@@ -37,21 +37,16 @@ const CONTOUR_PRIORITY: int = 4
 ## Лінія зони тонка й напівпрозора: підказка шляху на ґрунті, а не головний акцент кадру.
 const _CONTOUR_WIDTH: float = 0.02
 const _CONTOUR_ALPHA: float = 0.7
-## Кільця дальності лишаються ширшими: їх видно лише поки гравець тримає палець на юніті.
-const _RING_WIDTH: float = 0.12
-## Вигляд кільця дальності. LINE — проста стрічка; решту малює fire_ring.gdshader узором із
-## точки ґрунту, тож у кожного стилю кільце гармати й кільце дрона різняться й візерунком.
-enum RingStyle { LINE, GLOW, BEZEL, DISK, PULSE }
-static var ring_style: int = RingStyle.LINE
-## Сітка шейдерного кільця виходить за радіус на стільки: півлінії плюс згладжування.
+## Межа кільця дальності (fire_ring.gdshaderinc, FR_LINE_W = 0.12) ширша за лінію зон: її видно лише,
+## поки гравець тримає палець на юніті. Сітка кільця виходить за радіус на стільки в обидва боки:
+## півлінії плюс згладжування.
 const RING_OUTER: float = 0.1
-## Швидкість одноразового імпульсу PULSE, тайлів за секунду: кільце дрона (5) — за 0.7 с.
+## Швидкість одноразового імпульсу кільця, тайлів за секунду: кільце дрона (5) — за 0.7 с.
 const PULSE_SPEED: float = 7.0
-## Наскільки всередину від радіуса сягає узор стилю (світіння, засічки); -1 — до центру.
-const _RING_INNER: Dictionary = {
-	RingStyle.GLOW: 0.5, RingStyle.BEZEL: 0.3, RingStyle.DISK: -1.0, RingStyle.PULSE: -1.0}
 const _RING_SHADER: Shader = preload("res://game/battle/shaders/fire_ring.gdshader")
-const _CONTOUR_PIECES: int = 4
+## Відрізок клітинки на кожен відлік поля висот: вершини стрічки лягають на ті самі відліки, з яких
+## крона лісу шукає землю під собою, і лінія на вході під крону не ламається.
+const _CONTOUR_PIECES: int = TerrainHeight.SAMPLES_PER_TILE
 ## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y = 0.06), щоб не
 ## z-fight'ити ні з тим, ні з іншим.
 const _CONTOUR_Y: float = 0.04
@@ -128,6 +123,8 @@ var _contour_nodes: Dictionary = {}
 ## (draw_circles) і їхні вузли — той самий прийом, що й у контурів.
 var _circles: Dictionary = {}
 var _circle_nodes: Dictionary = {}
+## шар -> Array[float] поступу імпульсу кожного кола (0..1): його бачить і крона лісу.
+var _circle_pulse: Dictionary = {}
 ## Усі шари контурів, зведені в картку ребер для крон лісу (ForestLayer.set_contour_edges): крона
 ## закрила б стрічку на землі, тож лінію під собою малює сама. Одна текстура на розмір дошки.
 var _edge_image: Image
@@ -172,6 +169,7 @@ func build(board: Board) -> void:
 	_contour_nodes.clear()
 	_circles.clear()
 	_circle_nodes.clear()
+	_circle_pulse.clear()
 
 	for y in board.height:
 		for x in board.width:
@@ -420,65 +418,62 @@ func rebuild_tiles(board: Board) -> void:
 ## Кільце дальності (§3.13, docs/ui/overlays.md): одне геометричне коло, не контур
 ## тайлів — радіус у тайлах (тайл — 1.0 світу), центр у середині тайла. Радіус
 ## приходить готовим із core/ (Targeting.inspection); тут лише геометрія малювання.
-## Один вузол і один draw call на коло (§8). Замінює кола шару. `dashed` у колі — кільце дрона:
-## шейдерні стилі малюють його іншим візерунком. animate = false — ті самі кола наново
-## (rebuild_tiles): імпульс PULSE уже відбіг і вдруге не біжить.
+## Один вузол і один draw call на коло (§8). Замінює кола шару. Кільце з'являється слабким імпульсом
+## від юніта і стає чіткою межею (fire_ring.gdshaderinc). animate = false — ті самі кола наново
+## (rebuild_tiles): імпульс уже відбіг і вдруге не біжить.
 func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) -> void:
 	for node: Node in _circle_nodes.get(layer, []):
 		if is_instance_valid(node):
 			node.free()
 	_circles[layer] = circles
 	var nodes: Array[Node] = []
+	var progress: Array[float] = []
 	for c in circles:
 		var r: float = float(c["radius"])
 		var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
+		var sm := ShaderMaterial.new()
+		sm.shader = _RING_SHADER
+		sm.render_priority = CONTOUR_PRIORITY
+		sm.set_shader_parameter(&"ring_color", c["color"])
+		sm.set_shader_parameter(&"radius", r)
+		sm.set_shader_parameter(&"pulse", 0.0 if animate else 1.0)
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
-		if ring_style == RingStyle.LINE:
-			var mat := StandardMaterial3D.new()
-			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			mat.albedo_color = c["color"]
-			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-			mi.mesh = _ring_mesh(centre, r)
-			mi.material_override = mat
-		else:
-			var sm := ShaderMaterial.new()
-			sm.shader = _RING_SHADER
-			sm.render_priority = CONTOUR_PRIORITY
-			sm.set_shader_parameter(&"ring_color", c["color"])
-			sm.set_shader_parameter(&"radius", r)
-			sm.set_shader_parameter(&"style", ring_style)
-			sm.set_shader_parameter(&"dashed", bool(c.get("dashed", false)))
-			var pulsing: bool = ring_style == RingStyle.PULSE and animate
-			sm.set_shader_parameter(&"pulse", 0.0 if pulsing else 1.0)
-			mi.mesh = _ring_grid_mesh(centre, ring_band(ring_style, r))
-			mi.material_override = sm
-			if pulsing:
-				# Твін живе на вузлі кільця: відпустив палець — вузол звільнено, імпульс зупинився.
-				# Після нього матеріал не міняється, тож екран без руху знову стоїть.
-				var setter := func(v: float) -> void: sm.set_shader_parameter(&"pulse", v)
-				mi.create_tween().tween_method(setter, 0.0, 1.0, r / PULSE_SPEED)
+		# Поки біжить імпульс, сітка — увесь круг; далі лише смуга межі (_set_pulse).
+		mi.mesh = _ring_grid_mesh(centre, Vector2(0.0 if animate else r - RING_OUTER, r + RING_OUTER))
+		mi.material_override = sm
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.layers = 1 << (OVERLAY_LAYER - 1)
 		# Вершини кільця — у світі (висота за ґрунтом), тож вузол стоїть у центрі колом на y = 0.
 		mi.position = Vector3(centre.x, 0.0, centre.z)
+		if animate:
+			# Твін живе на вузлі кільця: відпустив палець — вузол звільнено, імпульс зупинився.
+			# Після нього матеріал не міняється, тож екран без руху знову стоїть.
+			var i: int = nodes.size()
+			var setter := func(v: float) -> void: _set_pulse(layer, i, mi, centre, r, v)
+			mi.create_tween().tween_method(setter, 0.0, 1.0, r / PULSE_SPEED)
 		add_child(mi)
 		nodes.append(mi)
+		progress.append(0.0 if animate else 1.0)
 	_circle_nodes[layer] = nodes
+	_circle_pulse[layer] = progress
 	_publish_circles()
 
 
-## Смуга [внутрішній, зовнішній радіус], яку має накрити сітка шейдерного кільця.
-static func ring_band(style: int, radius: float) -> Vector2:
-	var inner: float = _RING_INNER.get(style, _RING_WIDTH * 0.5)
-	return Vector2(0.0 if inner < 0.0 else maxf(radius - inner, 0.0), radius + RING_OUTER)
+## Крок імпульсу: на ґрунті й під кронами той самий поступ. Добіг — диск змінює смуга межі: увесь
+## круг тримав би тисячі трикутників, поки палець на юніті.
+func _set_pulse(layer: int, i: int, mi: MeshInstance3D, centre: Vector3, r: float, v: float) -> void:
+	(mi.material_override as ShaderMaterial).set_shader_parameter(&"pulse", v)
+	(_circle_pulse[layer] as Array)[i] = v
+	if v >= 1.0:
+		mi.mesh = _ring_grid_mesh(centre, Vector2(r - RING_OUTER, r + RING_OUTER))
+	_publish_circles()
 
 
-## Сітка під шейдерне кільце: клітинки сітки висот (TerrainHeight, SAMPLES_PER_TILE на тайл),
-## що перетинають смугу band = [внутрішній, зовнішній радіус]. Вершини стоять рівно на
-## відліках висот, тож навіть широкий диск лягає на ґрунт, а не протинає схил хордою. Над
-## водою — на її поверхні, як лінії зон: з дна кільце просвічувало б крізь воду зсунутим.
-## Вершини — відносно центру в XZ.
+## Сітка під кільце: клітинки сітки висот (TerrainHeight, SAMPLES_PER_TILE на тайл), що перетинають
+## смугу band = [внутрішній, зовнішній радіус]. Вершини стоять рівно на відліках висот, тож і широкий
+## круг лягає на ґрунт, а не протинає схил хордою. Над водою — на її поверхні, як лінії зон: з дна
+## кільце просвічувало б крізь воду зсунутим. Вершини — відносно центру в XZ.
 func _ring_grid_mesh(centre: Vector3, band: Vector2) -> ArrayMesh:
 	var s: float = float(TerrainHeight.active.samples if TerrainHeight.active != null else TerrainHeight.SAMPLES_PER_TILE)
 	var c := Vector2(centre.x, centre.z)
@@ -515,30 +510,6 @@ func _ring_grid_mesh(centre: Vector3, band: Vector2) -> ArrayMesh:
 	return mesh
 
 
-## Кільце-стрічка шириною _RING_WIDTH, що лягає на ґрунт: кожна вершина бере висоту з
-## карти висот (тор лишився б площиною й тонув у схилі). Вершини — відносно центру в XZ.
-func _ring_mesh(centre: Vector3, radius: float) -> ArrayMesh:
-	var segments: int = clampi(int(TAU * radius * 8.0), 64, 512)
-	var verts := PackedVector3Array()
-	var indices := PackedInt32Array()
-	for k in segments + 1:
-		var a: float = TAU * float(k) / float(segments)
-		var dir := Vector2(cos(a), sin(a))
-		for r: float in [radius - _RING_WIDTH * 0.5, radius + _RING_WIDTH * 0.5]:
-			var p := Vector2(centre.x, centre.z) + dir * r
-			verts.append(Vector3(dir.x * r, TerrainHeight.ground_y(p.x, p.y) + _CONTOUR_Y, dir.y * r))
-		if k > 0:
-			var i: int = k * 2
-			indices.append_array([i - 2, i - 1, i, i - 1, i + 1, i])
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
-
-
 func circles(layer: int) -> Array:
 	return _circles.get(layer, [])
 
@@ -564,7 +535,8 @@ func contour_segments(layer: int) -> Array:
 
 ## Картка ребер усіх шарів контуру: (2·(W + 1)) × (H + 1), у (2k, j) — ребро x− клітинки (k, j), у
 ## (2i + 1, k) — ребро y− клітинки (i, k); колір із альфою стрічки. Те саме правило, що в стрічки:
-## пізніший сегмент шару й пізніший шар перемагають, тож крона й земля не розходяться в кольорі.
+## у шарі пізніший сегмент перемагає, а шари зведені змішуванням, як їхні напівпрозорі стрічки на
+## землі (пізніший шар поверх), тож крона й земля не розходяться в кольорі.
 func contour_edges() -> Image:
 	return _edge_image
 
@@ -575,10 +547,12 @@ func _publish_contours() -> void:
 		_edge_image = Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
 		_edge_tex = null
 	_edge_image.fill(Color(0, 0, 0, 0))
-	var lit: bool = false
+	# Зведення в float, а запис раз у кінці: перечитаний з RGBA8 колір нижнього шару вже округлений.
+	var comp: Dictionary = {}
 	var layers: Array = _contour_segments.keys()
 	layers.sort()
 	for layer: int in layers:
+		var texels: Dictionary = {}
 		for seg: Dictionary in _contour_segments[layer]:
 			var cell: Vector2i = seg["cell"]
 			var dir: Vector2i = seg["dir"]
@@ -588,8 +562,13 @@ func _publish_contours() -> void:
 				dir = -dir
 			var color: Color = seg["color"]
 			color.a *= _CONTOUR_ALPHA
-			_edge_image.set_pixelv(Vector2i(2 * cell.x + 2, cell.y) if dir.x > 0 else Vector2i(2 * cell.x + 1, cell.y + 1), color)
-			lit = true
+			texels[Vector2i(2 * cell.x + 2, cell.y) if dir.x > 0 else Vector2i(2 * cell.x + 1, cell.y + 1)] = color
+		for t: Vector2i in texels:
+			# Color.blend — «поверх» із тією самою альфою, з якою стрічка шару лягає на попередні.
+			comp[t] = (comp.get(t, Color(0, 0, 0, 0)) as Color).blend(texels[t])
+	for t: Vector2i in comp:
+		_edge_image.set_pixelv(t, comp[t])
+	var lit: bool = not comp.is_empty()
 	if _edge_tex == null:
 		_edge_tex = ImageTexture.create_from_image(_edge_image)
 	else:
@@ -598,8 +577,8 @@ func _publish_contours() -> void:
 		_forest.set_contour_edges(_edge_tex if lit else null)
 
 
-## Кола всіх шарів для крон лісу: центр і радіус у світі, колір лінійний — матеріал кільця
-## (StandardMaterial3D) читає albedo як sRGB, а шейдер крони бере колір як є.
+## Кола всіх шарів для крон лісу: центр і радіус у світі, у w — поступ імпульсу; колір — той самий
+## sRGB з альфою, що й ring_color кільця на ґрунті: в обох шейдерах він source_color.
 func _publish_circles() -> void:
 	if _forest == null:
 		return
@@ -608,13 +587,12 @@ func _publish_circles() -> void:
 	var layers: Array = _circles.keys()
 	layers.sort()
 	for layer: int in layers:
-		for c: Dictionary in _circles[layer]:
+		var progress: Array = _circle_pulse.get(layer, [])
+		for i in (_circles[layer] as Array).size():
+			var c: Dictionary = _circles[layer][i]
 			var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
-			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), 0.0))
-			# Матеріал кільця непрозорий: альфа кольору на ґрунті не діє.
-			var lin: Color = (c["color"] as Color).srgb_to_linear()
-			lin.a = 1.0
-			colors.append(lin)
+			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), progress[i] if i < progress.size() else 1.0))
+			colors.append(c["color"])
 	_forest.set_contour_rings(rings, colors)
 
 
