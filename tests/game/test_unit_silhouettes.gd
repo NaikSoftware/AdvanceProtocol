@@ -463,3 +463,27 @@ func test_crew_footprints_stay_inside_their_tile() -> void:
 					var p: Vector2 = rot * Vector2(sx * half.x, sz * half.y)
 					assert_lte(absf(p.x), 0.5, "x розрахунку типу %d у тайлі" % id)
 					assert_lte(absf(p.y), 0.5, "z розрахунку типу %d у тайлі" % id)
+
+
+## Другий боєць розрахунку — у присіді, коли набір має таку модель: перший стоячи, другий заряджає навколішки.
+func test_the_second_crew_figure_is_the_crouch_mesh_when_the_set_has_one() -> void:
+	UnitSilhouettes.reset_models()
+	var stand: ArrayMesh = UnitSilhouettes.model_mesh(UnitSilhouettes.PLAIN_FIGURE)
+	var kneel: ArrayMesh = UnitSilhouettes.crouch_mesh(0)
+	assert_not_null(stand, "передумова: модель бійця набору 0")
+	assert_not_null(kneel, "передумова: модель бійця в присіді")
+	var count_of := func(m: ArrayMesh) -> int:
+		return (m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var crew: ArrayMesh = UnitSilhouettes.crew_mesh(9)
+	assert_eq(count_of.call(crew), count_of.call(stand) + count_of.call(kneel), "стоячий і в присіді")
+	# присід нижчий за стоячого
+	var v: PackedVector3Array = crew.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var first_top: float = 0.0
+	var second_top: float = 0.0
+	var n_first: int = count_of.call(stand)
+	for i in v.size():
+		if i < n_first:
+			first_top = maxf(first_top, v[i].y)
+		else:
+			second_top = maxf(second_top, v[i].y)
+	assert_gt(first_top, second_top + 0.01, "другий нижчий: у присіді")

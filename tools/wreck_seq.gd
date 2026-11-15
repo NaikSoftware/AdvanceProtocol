@@ -44,6 +44,9 @@ func _ready() -> void:
 	if Casualties.has_crew(wtype) and OS.get_environment("WRECK_NOBODIES") == "":
 		# розрахунок знищеної гармати лягає біля уламка
 		layer.add_body(Casualties.Body.new(1, cell, 0, wtype, wfacing, 0, Casualties.CREW_FIGURES))
+	if OS.get_environment("WRECK_SQUAD") != "" and OS.get_environment("WRECK_NOBODIES") == "":
+		# для сравнения тону: тіла відділення на сусідньому тайлі, без вогню поруч
+		layer.add_body(Casualties.Body.new(2, cell + Vector2i(2, 0), 0, 0, 0, 1, 3))
 	layer.call("_refresh_effects")
 	# nodepth — стовп диму без перевірки глибини й м'якого краю: чи ховає його щось непрозоре геометрично, а не порядком.
 	if a.size() > 7 and a[7] == "nodepth":
@@ -86,7 +89,6 @@ func _ready() -> void:
 	get_tree().quit()
 
 
-## Найближча до центру клітинка поля: уламки стоять на землі, не у воді й не в хаті.
 ## Поле з водою поруч (shore) чи міст (bridge) найближче до центру; `fallback`, коли такого нема.
 func _find_cell(map: MapData, what: String, fallback: Vector2i) -> Vector2i:
 	var c := Vector2i(map.width / 2, map.height / 2)
@@ -109,6 +111,7 @@ func _find_cell(map: MapData, what: String, fallback: Vector2i) -> Vector2i:
 	return best
 
 
+## Найближча до центру клітинка поля: уламки стоять на землі, не у воді й не в хаті.
 func _field_near_centre(map: MapData) -> Vector2i:
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var best := c
