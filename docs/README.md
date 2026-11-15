@@ -13,6 +13,7 @@ CLAUDE.md section it expands.
 | [rules/units.md](rules/units.md) | What is in the roster, what are its invariants, and what can an engineer or a drone squad do? (§3.6, §3.8, §3.9) |
 | [rules/vision-and-fog.md](rules/vision-and-fog.md) | What can each player see, what is remembered, and who finds a mine? (§3.5, §3.11) |
 | [ui/overlays.md](ui/overlays.md) | What is drawn on the board, when, and how much does inspecting an enemy tell you? (§3.13) |
+| [ui/hud.md](ui/hud.md) | What does the battle HUD show on a tap and a hold, where do its plates dock, and how are the handover gate and its map plates made? (§1.5, §3.4, §3.5, §3.12) |
 | [reference/blitzkrieg.md](reference/blitzkrieg.md) | What did the original do, where is it in the sources, and where does this project depart from it? (§4) |
 | [architecture.md](architecture.md) | Why is `core/` separate from `game/`, how does an action flow through it, and where does a file go? (§6) |
 | [art-direction.md](art-direction.md) | What does the game look like, and what may it cost to draw on a phone? (§2 setting, §8) |

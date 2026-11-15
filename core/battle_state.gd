@@ -26,6 +26,10 @@ var wrecks: Array[Wrecks.Wreck] = []
 ## без жодного зусилля отримав би всезнання. Звідси правду бере лише сам хід
 ## (MoveCommand.apply()); планування — з known_broken_map().
 var broken_forest: Dictionary = {}
+## Сила команд на старті матчу (гравець -> сума max HP), записана в start() і збережена.
+## Читати max_hp() із живого реєстру пізніше не можна: після зміни чисел старе
+## збереження дало б частку понад 1.0 без жодної шкоди.
+var start_hp: Dictionary = {}
 var _next_unit_id: int = 1
 
 static func create(p_board: Board, p_player_count: int, p_seed: int) -> BattleState:
@@ -73,6 +77,9 @@ func start() -> void:
 	for p in player_count:
 		refresh_vision(p)
 	discover_cover()
+	start_hp.clear()
+	for p in player_count:
+		start_hp[p] = _derived_hp_start(p)
 
 func add_unit(type_id: int, owner: int, pos: Vector2i, facing: int) -> Unit:
 	var u: Unit = Unit.create(_next_unit_id, type_id, owner, pos, facing)
@@ -212,6 +219,34 @@ func known_broken_map(player: int) -> Dictionary:
 		if vision[player].is_seen(p):
 			out[p] = true
 	return out
+
+func team_hp(player: int) -> int:
+	## Залишок сили команди: поточні HP її живих юнітів. Гейт передачі ходу показує його
+	## з цього стану, щоб вигляд не рахував нічого сам. Вибулий гравець живих не має — 0.
+	var total: int = 0
+	for u in units_of(player):
+		total += u.hp
+	return total
+
+func team_hp_start(player: int) -> int:
+	## Сила команди на старті матчу: сума, записана в start() і збережена. Без запису
+	## (стан зібрано без start() або старе збереження) — виводиться з max HP юнітів, що
+	## лишаються в units навіть мертвими.
+	return int(start_hp[player]) if start_hp.has(player) else _derived_hp_start(player)
+
+func _derived_hp_start(player: int) -> int:
+	var total: int = 0
+	for id in units:
+		var u: Unit = units[id]
+		if u.owner == player:
+			total += u.max_hp()
+	return total
+
+func team_hp_share_of_start(player: int) -> float:
+	## Частка сили, що лишилася від стартової, 0..1. Гравець без жодного юніта — 0, а не
+	## ділення на нуль.
+	var start_total: int = team_hp_start(player)
+	return float(team_hp(player)) / float(start_total) if start_total > 0 else 0.0
 
 func is_over() -> bool:
 	return winner != NO_WINNER

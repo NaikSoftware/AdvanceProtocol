@@ -223,6 +223,23 @@ func test_pause_button_opens_overlay_and_resume_closes_it() -> void:
 	assert_false(pause.visible)
 
 
+func test_pause_shows_map_and_turn_from_the_match() -> void:
+	var service: Node = _service()
+	var screen: BattleScreen = _screen()
+	screen.setup(_map(), 2, 1, service)
+	var pause: Control = screen.get_node("%PauseMenu")
+
+	(screen.get_node("%Hud").get_node("%PauseButton") as Button).pressed.emit()
+
+	assert_eq((pause.get_node("%TurnValue") as Label).text, str(service.state.turn_number))
+	assert_null(pause.get_node_or_null("%GroundValue"), "ґрунт не в інтерфейсі")
+	assert_null(pause.get_node_or_null("%GroundCaption"))
+	assert_null(pause.get_node_or_null("%GroundIcon"))
+	assert_not_null((pause.get_node("%Plate") as TextureRect).texture)
+	var gate: HandoverGate = screen.get_node("%HandoverGate")
+	assert_eq((gate.get_node("%TurnValue") as Label).text, str(service.state.turn_number))
+
+
 func test_save_and_quit_writes_the_save_and_leaves_to_menu() -> void:
 	var service: Node = _service()
 	var screen: BattleScreen = _screen()

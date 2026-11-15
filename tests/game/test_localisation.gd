@@ -73,8 +73,7 @@ func test_every_error_key_is_translated() -> void:
 ## Task 8: підписи панелі інженера.
 const ENGINEER_PANEL_KEYS: Array[String] = [
 	"eng_lay_mine", "eng_clear_mine", "eng_repair_bridge", "eng_demolish_bridge",
-	"eng_repair_unit", "eng_hint_lay_mine", "eng_hint_clear_mine", "eng_hint_repair_bridge",
-	"eng_hint_demolish_bridge", "eng_hint_repair_unit", "hud_heal", "hud_drone_strike", "hud_drone_range",
+	"eng_repair_unit", "eng_hint_tap_tile", "drone_hint_tap_target", "hud_heal", "hud_drone_strike",
 	"hud_threat_floor_drone",
 ]
 
@@ -84,3 +83,37 @@ func test_engineer_panel_keys_are_translated() -> void:
 		TranslationServer.set_locale(locale)
 		for key in ENGINEER_PANEL_KEYS:
 			assert_ne(tr(key), key, "немає перекладу %s для %s" % [key, locale])
+
+
+## Ключі нового HUD: кожен має обидві мови.
+const HUD_FIELD_TABLET_KEYS: Array[String] = [
+	"hud_target", "hud_cover_half", "hud_armour_ignored", "hud_armour_ignored_note", "hud_armour_none",
+	"eng_hint_tap_tile", "drone_hint_tap_target", "hud_map",
+]
+
+
+func test_field_tablet_keys_are_translated() -> void:
+	for locale in LOCALES:
+		TranslationServer.set_locale(locale)
+		for key in HUD_FIELD_TABLET_KEYS:
+			assert_ne(tr(key), key, "немає перекладу %s для %s" % [key, locale])
+
+
+func test_ukrainian_strings_use_the_modifier_apostrophe() -> void:
+	var f := FileAccess.open("res://assets/i18n/strings.csv", FileAccess.READ)
+	var bad: Array[String] = []
+	while not f.eof_reached():
+		var row: PackedStringArray = f.get_csv_line()
+		if row.size() > 1 and row[1].contains("'"):
+			bad.append(row[0])
+	assert_eq(bad, [] as Array[String], "uk-рядки з ASCII-апострофом")
+
+
+func test_no_ground_state_display_strings_exist() -> void:
+	var f := FileAccess.open("res://assets/i18n/strings.csv", FileAccess.READ)
+	var found: Array[String] = []
+	while not f.eof_reached():
+		var row: PackedStringArray = f.get_csv_line()
+		if row.size() > 1 and ("ground" in row[0] or "ґрунт" in row[1].to_lower()):
+			found.append(row[0])
+	assert_eq(found, [] as Array[String], "ґрунт не показується в інтерфейсі")

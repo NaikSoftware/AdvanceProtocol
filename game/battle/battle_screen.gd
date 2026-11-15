@@ -237,7 +237,7 @@ func _ready() -> void:
 	_pause.settings_requested.connect(_open_settings)
 	_pause.save_quit_requested.connect(_on_save_quit)
 	_pause.surrender_requested.connect(_on_surrender)
-	_hud.pause_pressed.connect(_pause.show)
+	_hud.pause_pressed.connect(_open_pause)
 	_replay_overlay.skip_pressed.connect(_on_replay_skip)
 	_replay_overlay.environment = _weather.environment
 	_camera_rig.view_changed.connect(_follow_weather)
@@ -288,7 +288,7 @@ func launch(match_service: Node) -> void:
 	# §3.5: «Почати» міг натиснути будь-хто з гравців, тож перший хід — теж за
 	# гейтом, як «Продовжити»; юніти з'являться на confirmed.
 	_clear_unit_views()
-	_gate.show_for(_match_service.state.active_player)
+	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	_warm_board()
 
 
@@ -316,6 +316,7 @@ func setup(map_data: MapData, player_count: int, seed_value: int, match_service:
 	_board_view.surface = map_data.surface
 	_board_view.relief_seed = map_data.name_key.hash()
 	_board_view.ring_map = map_data
+	_set_overlay_context(map_data)
 	_contacts.map = map_data
 	# Шлях самої карти, а не `map_path` сервісу: прямий запуск і резервний матч його не ставлять.
 	var look: BattleLook = BattleLook.for_map_path(map_data.resource_path)
@@ -358,11 +359,18 @@ func resume(match_service: Node = null) -> void:
 	_match_service = match_service if match_service != null else MatchService
 	# Підтипи поверхні живуть у MapData, не в збереженні: беремо їх з карти збереженої гри.
 	var mp: String = _match_service.map_path
+	var saved_map: MapData = null
 	if mp != "" and ResourceLoader.exists(mp):
-		var saved_map: MapData = load(mp) as MapData
+		saved_map = load(mp) as MapData
 		_board_view.surface = saved_map.surface
 		_board_view.relief_seed = saved_map.name_key.hash()
 		_board_view.ring_map = saved_map
+	if saved_map != null:
+		_set_overlay_context(saved_map)
+	else:
+		# Карти немає: гейт і пауза показують типову плиту й «-», а не чужу Річку.
+		_gate.set_context("", "")
+		_pause.set_context("", "")
 	var look: BattleLook = BattleLook.for_map_path(mp)
 	_board_view.season = look.season
 	_board_view.structure_shadows = look.sky_clear >= STRUCTURE_SHADOW_MIN_SKY_CLEAR
@@ -371,7 +379,7 @@ func resume(match_service: Node = null) -> void:
 	_weather.apply(look)
 	BattleFx.wetness = look.wetness
 	_wire_view(_state().board)
-	_gate.show_for(_match_service.state.active_player)
+	_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	_warm_board()
 	_match_service.events_ready.connect(_on_events_ready)
 	_match_service.launch_mode = MatchService.Launch.NONE
@@ -435,6 +443,7 @@ func _wire_view(board: Board) -> void:
 	# це до того, як HUD узагалі знає стан, означало б рахувати позицію без
 	# вибору й без дошки.
 	_hud.attach_camera(_camera_rig)
+	_hud.attach_unit_views(func() -> Dictionary: return _unit_views)
 	_hud.end_turn_pressed.connect(_on_end_turn_pressed)
 
 	_gate.confirmed.connect(_on_gate_confirmed)
@@ -472,10 +481,20 @@ func _notification(what: int) -> void:
 			elif _pause.visible:
 				_pause.hide()
 			else:
-				_pause.show()
+				_open_pause()
 		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_CLOSE_REQUEST:
 			if _match_service != null and _match_service.state != null:
 				_match_service.save_current(save_path)
+
+
+## Гейт і пауза показують карту; вона незмінні протягом матчу.
+func _set_overlay_context(map_data: MapData) -> void:
+	_gate.set_context(map_data.resource_path, map_data.name_key)
+	_pause.set_context(map_data.resource_path, map_data.name_key)
+
+
+func _open_pause() -> void:
+	_pause.open(_match_service.state.turn_number)
 
 
 ## Налаштування з паузи відкриваються поверх бою, а не заміною сцени: бій
@@ -870,6 +889,8 @@ func _process(delta: float) -> void:
 	if _press_held_sec >= LONG_PRESS_SEC:
 		_long_pressed = true
 		set_process(false)
+		# Картка утримання обходить палець: їй потрібна точка натиску, а не лише клітинка.
+		_hud.note_press(_press_screen_pos)
 		_controller.peek_cell(_camera_rig.screen_point_to_cell(_press_screen_pos))
 
 
@@ -1126,7 +1147,10 @@ func _on_events_ready() -> void:
 	if events.is_empty():
 		return
 	_record_crushes(events)
+	_hud.hold_tag(true)
 	await _event_player.play(events)
+	_hud.hold_tag(false)
+	_hud.units_changed()
 
 	var turn_started: bool = false
 	var match_ended: bool = false
@@ -1159,7 +1183,7 @@ func _on_events_ready() -> void:
 		# Те, що ламається, обривається разом з миттями: інакше падіння, що доходить під гейтом, показало б
 		# наступному гравцеві пил над клітинкою, яку він не розвідав.
 		_cancel_falls()
-		_gate.show_for(_match_service.state.active_player)
+		_gate.show_for(_match_service.state.active_player, _match_service.state.turn_number, _match_service.state)
 	elif not events.all(func(e: Events.BattleEvent) -> bool: return e is Events.UnitTurned):
 		# Поворот на місці не міняє ні позицій, ні огляду (ромб без фейсингу), а
 		# перебудова поставила б вузли миттєво й з'їла б анімацію повороту.
@@ -1235,6 +1259,8 @@ func _rebuild_units_for_active_player(instant: bool = false, drawn: Dictionary =
 			continue
 		_add_unit_view(unit)
 		_shown_cells.append(unit.pos)
+	# HUD ставить плити за екранними прямокутниками саме цих вузлів (§3.5: лише видимі гравцеві).
+	_hud.units_changed()
 	_board_view.set_reveal_cells(_shown_cells, instant)
 	var crushed: Array[Vector2i] = []
 	for pos: Vector2i in _crushed_truth:

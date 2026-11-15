@@ -77,6 +77,12 @@ var _drone_armed: bool = false
 var _peeking: bool = false
 
 
+## Скільки мс після озброєння верби тапи по дошці ігноруються. HUD ставить його, коли плита верб
+## стала над клітинками дошки: «Поставити міну» діє без підтвердження, тож другий тап по ній
+## ліг би на клітинку-ціль.
+var tap_guard_ms: int = 0
+var _armed_at_ms: int = 0
+
 func _init(match_service: Node, zone_overlay: ZoneOverlay, is_playing_check: Callable = Callable()) -> void:
 	_match_service = match_service
 	_zone_overlay = zone_overlay
@@ -137,6 +143,8 @@ func _recompute_zones_for_selected() -> void:
 func tap_cell(cell: Vector2i) -> void:
 	if _input_blocked():
 		return  # R24: ввід заблокований, доки триває програвання
+	if _armed_action >= 0 and Time.get_ticks_msec() - _armed_at_ms < tap_guard_ms:
+		return  # другий тап подвійного по плиті верб, що стояла над дошкою, — не тап по клітинці
 
 	var state: BattleState = _match_service.state
 	if _armed_action >= 0:
@@ -257,7 +265,10 @@ func peek_cell(cell: Vector2i) -> void:
 	if unit == null:
 		return
 	_peeking = true
-	inspected.emit(Targeting.inspection(state, unit.id, state.active_player))
+	var inspection: Dictionary = Targeting.inspection(state, unit.id, state.active_player)
+	# Картці утримання треба знати, чий це огляд; решту (кільця, позначки, is_floor) вирішив core/.
+	inspection["unit_id"] = unit.id
+	inspected.emit(inspection)
 
 
 ## Палець відпущено (чи хід передано) — огляд знято. Без показаного огляду — тиша.
@@ -268,15 +279,26 @@ func end_peek() -> void:
 	inspected.emit({})
 
 
+## Зони вибраного юніта (null — вибору немає): контури зон теж «позначки на дошці», які тег обходить.
+func zones() -> Pathing.Zones:
+	return _zones
+
+
 func cancel_pending() -> void:
 	_clear_pending()
 	disarm()
 
 
-## Чи потрібне HUD-«Скасувати»: є прев'ю або озброєно дрон. На час верби інженера —
-## ні: у його панелі власне «Скасувати», і два поруч — зайве.
+## «Скасувати» і «Підтвердити» ряду дій: лише поки прев'ю чекає підтвердження — і для
+## пострілу, і для дрона чи верби. Рівно одне «Скасувати» на екрані: смужка озброєння
+## має своє, тож тут воно не дублюється (див. is_armed_waiting()).
 func has_cancelable() -> bool:
-	return _armed_action < 0 and (not _pending.is_empty() or _drone_armed)
+	return not _pending.is_empty()
+
+
+## Смужка озброєння (власне «Скасувати» = disarm()): дрон чи верба озброєні, прев'ю ще нема.
+func is_armed_waiting() -> bool:
+	return _pending.is_empty() and (_drone_armed or _armed_action >= 0)
 
 
 ## Режим ENGINEER для вибраного свого інженера. Тайли й причина відмови — лише
@@ -291,6 +313,7 @@ func arm_engineer(action: int) -> void:
 		return
 	_clear_pending()
 	_armed_action = action
+	_armed_at_ms = Time.get_ticks_msec()
 	_targets = tiles
 	targets_changed.emit(tiles)
 
@@ -431,6 +454,8 @@ func _maybe_set_pending_shot(state: BattleState, target: Unit) -> void:
 		"sector": preview["sector"],
 		"min": preview["min"],
 		"max": preview["max"],
+		"armour_ignored": preview["armour_ignored"],
+		"in_cover": preview["in_cover"],
 	}
 	action_preview.emit(_pending)
 
