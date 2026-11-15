@@ -70,6 +70,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "squad_bridge":
 		await _squad_bridge(screen, map, out, tag, int(a[6].substr(9)) if a.size() > 6 and a[6].begins_with("standing=") else 0)
 		return
+	if a.size() > 5 and a[5] == "bridge_seq":
+		await _bridge_seq(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "shore":
 		await _shore(screen, map, out, tag)
 		return
@@ -854,7 +857,65 @@ func _squad_bridge(screen: BattleScreen, map: MapData, out: String, tag: String,
 		shots["%s/%s_%s_z%d.png" % [out, tag, name, int(z)]] = get_viewport().get_texture().get_image()
 	for path: String in shots:
 		(shots[path] as Image).save_png(path)
+	_print_deck(screen, m.to_board(), bridge)
 	print("UNIT squad_bridge at %s" % bridge)
+	get_tree().quit()
+
+
+## Видимі середини тіл на мосту `bridge`: убік — частка чистої ширини настилу (0 — один поручень, 1 — другий),
+## уздовж — тайли від середини клітинки.
+func _print_deck(screen: BattleScreen, board: Board, bridge: Vector2i) -> void:
+	var along_z: bool = WreckLayer._is_water(board, bridge + Vector2i(1, 0)) or WreckLayer._is_water(board, bridge + Vector2i(-1, 0))
+	var along := Vector3(0.0, 0.0, 1.0) if along_z else Vector3(1.0, 0.0, 0.0)
+	var across := Vector3(along.z, 0.0, along.x)
+	var half: float = WreckLayer.BODY_DECK_HALF_ROAD
+	var rows: Array = []
+	for xf: Transform3D in screen._wreck_layer.body_transforms():
+		var rel: Vector3 = WreckLayer.body_centre(xf) - Vector3(bridge.x, 0.0, bridge.y)
+		if absf(rel.dot(along)) > 0.5 or absf(rel.dot(across)) > 0.5:
+			continue
+		rows.append([rel.dot(along), (rel.dot(across) + half) / (half * 2.0)])
+	rows.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
+	for r: Array in rows:
+		print("UNIT deck body along %.3f across %.2f of clear width" % [r[0], r[1]])
+
+
+## Шостий аргумент bridge_seq: стрілецьке відділення на мосту падає 100 → 75 → 50 → 25 трьома влучаннями; кадр на
+## зумі 6 після кожного (_seq_75, _seq_50, _seq_25) — раніші тіла мусять лишатися на місці.
+func _bridge_seq(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var bridge := Vector2i(-1, -1)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	for y in m.height:
+		for x in m.width:
+			var p := Vector2i(x, y)
+			if m.tiles[y * m.width + x] == Terrain.Kind.BRIDGE and (bridge.x < 0 or (p - c).length_squared() < (bridge - c).length_squared()):
+				bridge = p
+	m.spawns = [{"type_id": 0, "owner": 0, "pos": bridge, "facing": 0}]
+	screen.setup(m, 2, 1)
+	var state: BattleState = MatchService.state
+	var u: Unit = state.unit_at(bridge)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	rig.center_on(bridge)
+	rig.zoom_by(IsoCameraRig.MIN_ZOOM / rig.zoom_level)
+	var shots: Dictionary = {}
+	for left in [3, 2, 1]:
+		var before: int = u.hp
+		u.hp = u.max_hp() * left / 4
+		Casualties.record(state, u, before)
+		state.refresh_vision_all()
+		screen._rebuild_units_for_active_player(true)
+		screen._rebuild_wrecks()
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		shots["%s/%s_seq_%d.png" % [out, tag, left * 25]] = get_viewport().get_texture().get_image()
+		print("UNIT seq hp %d" % u.hp)
+		_print_deck(screen, m.to_board(), bridge)
+	for path: String in shots:
+		(shots[path] as Image).save_png(path)
+	print("UNIT bridge_seq at %s" % bridge)
 	get_tree().quit()
 
 

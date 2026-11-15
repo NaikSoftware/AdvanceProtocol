@@ -165,12 +165,15 @@ falls back to the box placeholder, so a model may land one type at a time.
   0.46 tile); the gaps between neighbours are 0.16, 0.32 and 0.64 m in a seeded order, so next
   gaps differ at least twofold, and the row stays within its tile. With soldiers still standing
   on the bridge, or bodies already lying on that tile, each new body moves to the nearest spot on
-  the deck that keeps clear of both, on the other side of the deck from the body before it, and
-  still not a file: at least 0.3 m of scatter off the line through them and gaps at least 20 %
-  apart. Earlier bodies never move for later ones; when the deck has no free spot left, the new
-  body takes the one it overlaps least. Anywhere, a body avoids the strip right behind a standing
-  soldier as seen from the camera, where it would read as a lump behind him; next to water that is
-  a preference, not a rule.
+  the deck that keeps clear of both, preferably on the other side of the deck from the body before
+  it, and the bodies of one hit still do not form a file. Measured on each body's visible centre
+  (the mesh sits about 0.27 m off its pivot towards the rifle): two bodies span at least 0.35 of the
+  clear deck width; three span as much with one in each outer third, and the spacings between
+  neighbours along the deck differ by at least 30 %. Earlier bodies never move for later ones;
+  when the deck has no free spot left, the new body takes the one it overlaps least. Anywhere, a
+  body avoids lying where it would read as a smudge behind standing soldiers seen from the
+  camera: its centre right behind one of them, or both its head and feet behind them; next to
+  water that is a preference, not a rule.
 - **Contact under soldiers.** Each standing soldier has his own contact shadow, a 0.9 m quad
   (about 0.6 m of visible core) under his feet at a fixed opacity of 0.39 under overcast and 0.65
   of that under sun, where he also casts a real shadow: the ground under him drops 5–10 L*, never

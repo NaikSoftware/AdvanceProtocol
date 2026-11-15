@@ -177,6 +177,8 @@ var _bodies: Array[Casualties.Body] = []
 ## Усі записи стану в його порядку, показані й ні: раніші записи тайла займають місця на мосту однаково для всіх
 ## глядачів, тож тіло не пересувається, коли глядачеві показують інше.
 var _order: Array = []
+## Розмір і тайли дошки останньої перебудови: новий матч чи підірваний міст — інший вміст, повтор — той самий.
+var _board_sig: int = 0
 var _body_mm: Dictionary[Vector2i, MultiMeshInstance3D] = {}
 var _body_placed: Array[Transform3D] = []
 ## Дошка стану: тіло на мосту лягає вздовж настилу, а біля води не заходить у воду.
@@ -535,7 +537,10 @@ func rebuild_fallen(state: BattleState, observer: int) -> void:
 	# Перебудова дошки йде після кожного пакета: без змін тіла не перекладаються.
 	if shown == _bodies and _board == state.board and _order == state.bodies:
 		return
-	if _board != state.board:
+	# Знімок повтору несе власну копію дошки: кеш скидається лише тоді, коли дошка справді інша за вмістом.
+	var sig: int = hash([state.board.width, state.board.height, state.board.tiles])
+	if sig != _board_sig:
+		_board_sig = sig
 		clear_deck_cache()
 	_order = state.bodies.duplicate()
 	_bodies = shown
@@ -717,12 +722,22 @@ const BODY_DECK_SIDE_COST: float = 0.05
 const BODY_HIDE_WIDE: float = 0.08
 const BODY_HIDE_DEEP: float = 0.27
 const BODY_HIDE_COST: float = 0.05
-## Скільки разів пробувати розклад запису на мосту з іншими сідовими перевагами, і що вважати «не колоною».
 ## Ціна повороту тіла на 90° від сідового (запасний вихід, коли вздовж настилу місця нема).
 const BODY_DECK_ROT_COST: float = 0.03
-const BODY_DECK_ATTEMPTS: int = 8
-const BODY_DECK_SPREAD: float = 0.04
-const BODY_DECK_GAP_RATIO: float = 1.2
+## Скільки разів пробувати розклад запису на мосту з іншими цілями (_deck_targets), доки він не колона.
+const BODY_DECK_ATTEMPTS: int = 12
+## Частка чистої ширини настилу, яку тіла запису мусять займати убік (двоє й більше).
+const BODY_DECK_SPAN: float = 0.35
+## У скільки разів мусять різнитися сусідні проміжки між видимими серединами вздовж настилу (троє й більше).
+const BODY_DECK_GAP_RATIO: float = 1.3
+## Проміжки між видимими серединами тіл запису вздовж настилу (порядок — за спробою): різняться в 1,36 раза.
+const BODY_DECK_PITCH: Array[float] = [0.22, 0.30]
+## Наскільки далеко від осі настилу ставиться видима середина тіла в крайній третині (у межах поручнів).
+const BODY_DECK_OUTER: float = 0.11
+## Вага відхилу вбік від цілі проти відхилу вздовж у ціні місця.
+const BODY_DECK_ACROSS_WEIGHT: float = 2.0
+## Видима середина тіла від півота — у бік гвинтівки (+x тіла), за межами сіток трьох поз (0,029–0,041).
+const BODY_VISIBLE_SHIFT: float = 0.034
 ## Ширина тіла разом із гвинтівкою обіч (поперек його довгої осі) і довжина.
 const BODY_WIDTH: float = 0.19
 const BODY_LENGTH: float = 0.225
@@ -769,7 +784,7 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null, e
 	var rings: Array[float] = [ring]
 	if near_water:
 		# далі й ближче за перше кільце, якщо стоячі займають його: кути відсіює WATER_REACH
-		rings.append_array([(BODY_RING_WATER + BODY_RING_WATER_FAR) * 0.5, BODY_RING_WATER_FAR, 0.205, 0.13, 0.10])
+		rings.append_array([(BODY_RING_WATER + BODY_RING_WATER_FAR) * 0.5, BODY_RING_WATER_FAR, 0.205, 0.145, 0.13, 0.115, 0.10])
 	else:
 		rings.append_array([0.3, BODY_RING_MAX])
 	# (поворот, зсув): сідові, тоді уздовж кільця; біля води — ще й скоса й без сідового зсуву
@@ -783,7 +798,7 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null, e
 	var driest := Transform3D()
 	var driest_reach: float = INF
 	var hidden := Transform3D()
-	var has_hidden: bool = false
+	var hidden_least: int = 99
 	for step in 49:
 		var a_try: float = ang + float((step + 1) / 2) * (1.0 if step % 2 == 1 else -1.0) * PI / 24.0
 		for r_try: float in rings:
@@ -801,16 +816,23 @@ static func body_transform(b: Casualties.Body, slot: int, board: Board = null, e
 					best_clear = clear
 					best = xf
 				if clear >= BODY_SLOT_CLEAR:
-					# не за стоячим від камери — одразу; за ним — лише якщо кращого не знайдеться
-					if not behind_standing(xf.origin, standing):
+					# не за стоячим від камери — одразу; за ним — найменш сховане, якщо кращого не знайдеться
+					var parts: int = hidden_parts(xf, standing)
+					if parts == 0:
 						return xf
-					if not has_hidden:
-						has_hidden = true
+					if parts < hidden_least:
+						hidden_least = parts
 						hidden = xf
-	if has_hidden:
+	if hidden_least < 99:
 		return hidden
 	# біля води жодне місце не тримало кути на суші — найсухіше (на практиці перше кільце завжди вміщається)
 	return best if best_clear > -INF else driest
+
+
+## Видима середина тіла: сітка лежить не на півоті, а зсунута в бік гвинтівки (+x тіла) на BODY_VISIBLE_SHIFT —
+## прямокутник тіла (BODY_LENGTH × BODY_WIDTH) стоїть тут, і відстані між тілами око міряє від неї.
+static func body_centre(xf: Transform3D) -> Vector3:
+	return xf.origin + Vector3(xf.basis.x.x, 0.0, xf.basis.x.z).normalized() * BODY_VISIBLE_SHIFT
 
 
 ## Найдальший від середини тайла кут тіла (прямокутник BODY_LENGTH × BODY_WIDTH) у площині землі.
@@ -818,8 +840,9 @@ static func corner_reach(xf: Transform3D, centre: Vector3) -> float:
 	var long := Vector3(xf.basis.z.x, 0.0, xf.basis.z.z).normalized() * BODY_LENGTH * 0.5
 	var wide := Vector3(xf.basis.x.x, 0.0, xf.basis.x.z).normalized() * BODY_WIDTH * 0.5
 	var far: float = 0.0
+	var mid: Vector3 = body_centre(xf)
 	for c: Vector3 in [long + wide, long - wide, -long + wide, -long - wide]:
-		var q: Vector3 = xf.origin + c - centre
+		var q: Vector3 = mid + c - centre
 		far = maxf(far, Vector2(q.x, q.z).length())
 	return far
 
@@ -844,13 +867,14 @@ static func _field_body(b: Casualties.Body, centre: Vector3, ang: float, ring: f
 
 
 ## Найменша відстань у площині землі від прямокутника тіла (BODY_LENGTH уздовж basis.z, BODY_WIDTH уздовж
-## basis.x) до точок `points` — середин стоячих бійців.
+## basis.x, довкола видимої середини) до точок `points` — середин стоячих бійців.
 static func body_clearance(xf: Transform3D, points: Array[Vector3]) -> float:
 	var long := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
 	var wide := Vector2(-long.y, long.x)
+	var mid: Vector3 = body_centre(xf)
 	var best: float = INF
 	for q: Vector3 in points:
-		var d := Vector2(q.x - xf.origin.x, q.z - xf.origin.z)
+		var d := Vector2(q.x - mid.x, q.z - mid.z)
 		var u: float = maxf(absf(d.dot(long)) - BODY_LENGTH * 0.5, 0.0)
 		var v: float = maxf(absf(d.dot(wide)) - BODY_WIDTH * 0.5, 0.0)
 		best = minf(best, sqrt(u * u + v * v))
@@ -904,7 +928,7 @@ static func _deck_body(b: Casualties.Body, slot: int, along_z: bool, standing: A
 			var e: Casualties.Body = earlier[i]
 			for k in range(e.first, e.first + e.count):
 				var xf: Transform3D = body_transform(e, k, board, earlier.slice(0, i))
-				var rel: Vector3 = xf.origin - centre
+				var rel: Vector3 = body_centre(xf) - centre
 				var t: float = wrapf(atan2(xf.basis.z.x, xf.basis.z.z) - base, -PI * 0.5, PI * 0.5)
 				rects.append([rel.dot(along), rel.dot(across), deck_span(t) * 0.5, deck_half_across(t)])
 		# кілька спроб з різними сідовими перевагами: перша, де тіла запису не колоною й проміжки різні, — і край
@@ -912,7 +936,8 @@ static func _deck_body(b: Casualties.Body, slot: int, along_z: bool, standing: A
 		var placed_score: float = -INF
 		for attempt in BODY_DECK_ATTEMPTS:
 			var tried: Dictionary = _deck_place(b, deck, along_z, standing, rects, attempt)
-			var score: float = deck_spread_score(tried["mine"])
+			# спроба, де якесь тіло лягло під ноги чи на інше, гірша за будь-яку чисту
+			var score: float = deck_spread_score(tried["mine"]) + (0.0 if tried["clean"] else -100.0)
 			if score > placed_score:
 				placed_score = score
 				placed = tried["placed"]
@@ -923,7 +948,8 @@ static func _deck_body(b: Casualties.Body, slot: int, along_z: bool, standing: A
 
 
 ## Одна спроба розкласти справжні тіла запису (місця first..first+count−1) на мосту поміж уже зайнятим (`taken`:
-## [уздовж, убік, пів уздовж, пів убік]). Повертає {placed: {місце: Transform3D}, mine: прямокутники цього запису}.
+## [уздовж, убік, пів уздовж, пів убік]). Повертає {placed: {місце: Transform3D}, mine: прямокутники цього запису,
+## clean: чи кожне тіло знайшло вільне місце з BODY_SLOT_CLEAR до стоячих}.
 static func _deck_place(b: Casualties.Body, deck: Dictionary, along_z: bool, standing: Array[Vector3], taken: Array,
 		attempt: int) -> Dictionary:
 	var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
@@ -932,9 +958,14 @@ static func _deck_place(b: Casualties.Body, deck: Dictionary, along_z: bool, sta
 	var rects: Array = taken.duplicate()
 	var mine: Array = []
 	var placed: Dictionary = {}
+	var targets: Dictionary = _deck_targets(b, deck, along_z, attempt)
+	var clean: bool = true
 	for k in range(b.first, b.first + b.count):
 		var p: Dictionary = _deck_pref(b, k, deck, along_z, attempt)
-		var prev_c: float = float(rects[-1][1]) if not rects.is_empty() else INF
+		if targets.has(k):
+			p["a"] = targets[k].x
+			p["c"] = targets[k].y
+		var prev_c: float = float(rects[-1][1]) if not rects.is_empty() and not targets.has(k) else INF
 		# [уздовж, убік, кут, курс] найкращого місця; поворот на 90° — запасний: тоді тіло займає поперек лише 0,095
 		# і вміщається поруч з іншим, коли вздовж настилу місця нема
 		var best: Array = [p["a"], p["c"], p["turn"], p["heading"]]
@@ -974,17 +1005,19 @@ static func _deck_place(b: Casualties.Body, deck: Dictionary, along_z: bool, sta
 							fallback_clear = clear
 							fallback = [a_try, c_try, turn, heading]
 						continue
-					var cost: float = Vector2(a_try - float(p["a"]), c_try - float(p["c"])).length_squared()
+					# убік — удвічі дорожче: бік настилу тримає запис від колони, а не зсув уздовж
+					var cost: float = pow(a_try - float(p["a"]), 2.0) + BODY_DECK_ACROSS_WEIGHT * pow(c_try - float(p["c"]), 2.0)
 					if rot == 1:
 						cost += BODY_DECK_ROT_COST
 					if prev_c != INF and absf(c_try - prev_c) < BODY_DECK_SIDE_APART:
 						cost += BODY_DECK_SIDE_COST
-					if behind_standing(xf.origin, standing):
+					if body_hidden(xf, standing):
 						cost += BODY_HIDE_COST
 					if cost < best_cost:
 						best_cost = cost
 						best = [a_try, c_try, turn, heading]
 		var spot: Array = best if best_cost < INF else fallback
+		clean = clean and best_cost < INF
 		if best_cost == INF and fallback_clear == -INF:
 			# вільного місця на настилі нема зовсім — найменше накриття, і про це сказано
 			push_warning("тіло на мосту %s: вільного місця нема, накриває інше" % b.pos)
@@ -993,44 +1026,93 @@ static func _deck_place(b: Casualties.Body, deck: Dictionary, along_z: bool, sta
 		rects.append(r_new)
 		mine.append(r_new)
 		placed[k] = _deck_xf(b, centre, along, across, spot[0], spot[1], spot[3])
-	return {"placed": placed, "mine": mine}
+	return {"placed": placed, "mine": mine, "clean": clean}
 
 
-## Наскільки тіла одного запису на мосту не колона (1 і більше — досить): два — розійшлися вбік на
-## BODY_DECK_SPREAD; три й більше — середини відходять від прямої через них щонайменше на BODY_DECK_SPREAD, а
-## сусідні проміжки вздовж настилу різняться щонайменше в BODY_DECK_GAP_RATIO раза. Одне тіло — завжди 1.
+## Спільні цілі тіл запису на мосту, коли їх двоє й більше: {місце: Vector2(уздовж, убік)} видимих середин. Убік —
+## кожне в свою третину чистої ширини настилу (двоє — у протилежні крайні, троє — обидві крайні й середня; порядок за
+## спробою), уздовж — рядом із проміжками між серединами BODY_DECK_PITCH у порядку за спробою (різняться на третину).
+## Місця відділення (сідовий ряд) лише впорядковують тіла вздовж. Одне тіло — без цілей.
+static func _deck_targets(b: Casualties.Body, deck: Dictionary, along_z: bool, attempt: int) -> Dictionary:
+	var out: Dictionary = {}
+	if b.count < 2:
+		return out
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([b.unit_id, b.pos, b.seq, b.first, &"targets", attempt])
+	var slots: Array = []
+	for k in range(b.first, b.first + b.count):
+		slots.append([float(_deck_pref(b, k, deck, along_z)["a"]), k])
+	slots.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
+	var sides: Array = [1.0, -1.0] if b.count == 2 else [1.0, 0.0, -1.0]
+	while sides.size() < b.count:
+		sides.append(-float(sides[-1]) if sides[-1] != 0.0 else 1.0)
+	for i in range(sides.size() - 1, 0, -1):
+		var j: int = rng.randi_range(0, i)
+		var tmp: float = sides[i]
+		sides[i] = sides[j]
+		sides[j] = tmp
+	var pitches: Array = BODY_DECK_PITCH.duplicate()
+	if rng.randf() < 0.5:
+		pitches.reverse()
+	var pos: Array = [0.0]
+	for i in range(1, b.count):
+		pos.append(float(pos[-1]) + float(pitches[(i - 1) % pitches.size()]))
+	var shift: float = -float(pos[-1]) * 0.5 + rng.randf_range(-0.04, 0.04)
+	for i in slots.size():
+		var k: int = slots[i][1]
+		var hc: float = deck_half_across((deck["turns"] as PackedFloat32Array)[k])
+		var reach: float = minf(BODY_DECK_OUTER, BODY_DECK_HALF_ROAD - BODY_DECK_RAIL_GAP - hc)
+		out[k] = Vector2(float(pos[i]) + shift, float(sides[i]) * reach)
+	return out
+
+
+## Наскільки тіла одного запису на мосту не колона (1 і більше — досить), за видимими серединами: убік вони займають
+## щонайменше BODY_DECK_SPAN чистої ширини настилу, троє й більше — ще й обидві крайні третини, а сусідні проміжки між
+## серединами вздовж настилу різняться щонайменше в BODY_DECK_GAP_RATIO раза. Одне тіло — завжди 1.
 static func deck_spread_score(mine: Array) -> float:
 	if mine.size() < 2:
 		return 1.0
-	var rs: Array = mine.duplicate()
-	rs.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
-	if rs.size() == 2:
-		return absf(float(rs[0][1]) - float(rs[1][1])) / BODY_DECK_SPREAD
-	var n: float = rs.size()
-	var sa: float = 0.0
-	var sc: float = 0.0
-	var saa: float = 0.0
-	var sac: float = 0.0
-	for r: Array in rs:
-		sa += float(r[0])
-		sc += float(r[1])
-		saa += float(r[0]) * float(r[0])
-		sac += float(r[0]) * float(r[1])
-	var m: float = (n * sac - sa * sc) / maxf(n * saa - sa * sa, 1e-9)
-	var q: float = (sc - m * sa) / n
+	var width: float = BODY_DECK_HALF_ROAD * 2.0
 	var lo: float = INF
 	var hi: float = -INF
-	for r: Array in rs:
-		var res: float = float(r[1]) - (m * float(r[0]) + q)
-		lo = minf(lo, res)
-		hi = maxf(hi, res)
-	var score: float = (hi - lo) / BODY_DECK_SPREAD
+	for r: Array in mine:
+		lo = minf(lo, float(r[1]))
+		hi = maxf(hi, float(r[1]))
+	var score: float = (hi - lo) / width / BODY_DECK_SPAN
+	if mine.size() < 3:
+		return score
+	var third: float = width / 6.0
+	score = minf(score, minf(-lo / third, hi / third))
+	var rs: Array = mine.duplicate()
+	rs.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
 	for i in range(2, rs.size()):
-		var g1: float = float(rs[i - 1][0]) - float(rs[i - 2][0]) - float(rs[i - 1][2]) - float(rs[i - 2][2])
-		var g2: float = float(rs[i][0]) - float(rs[i - 1][0]) - float(rs[i][2]) - float(rs[i - 1][2])
+		var g1: float = float(rs[i - 1][0]) - float(rs[i - 2][0])
+		var g2: float = float(rs[i][0]) - float(rs[i - 1][0])
 		var ratio: float = maxf(g1, g2) / maxf(minf(g1, g2), 1e-6)
 		score = minf(score, (ratio - 1.0) / (BODY_DECK_GAP_RATIO - 1.0))
 	return score
+
+
+## Наскільки тіло сховане за стоячими від камери: середина в смузі за кимось — 2, кожен кінець — ще по 1 (0 — видно
+## все; найменше — тіло, з якого видно хоч кінець).
+static func hidden_parts(xf: Transform3D, standing: Array[Vector3]) -> int:
+	var mid: Vector3 = body_centre(xf)
+	var half: Vector3 = Vector3(xf.basis.z.x, 0.0, xf.basis.z.z).normalized() * BODY_LENGTH * 0.5
+	var n: int = 2 if behind_standing(mid, standing) else 0
+	for end: Vector3 in [mid + half, mid - half]:
+		if behind_standing(end, standing):
+			n += 1
+	return n
+
+
+## Чи сховане тіло за стоячими від камери: його видима середина в смузі за кимось, або обидва кінці (голова й ноги)
+## — тоді тіло читається плямою за бійцями, а не тілом.
+static func body_hidden(xf: Transform3D, standing: Array[Vector3]) -> bool:
+	var mid: Vector3 = body_centre(xf)
+	if behind_standing(mid, standing):
+		return true
+	var half: Vector3 = Vector3(xf.basis.z.x, 0.0, xf.basis.z.z).normalized() * BODY_LENGTH * 0.5
+	return behind_standing(mid + half, standing) and behind_standing(mid - half, standing)
 
 
 ## Чи лежить середина тіла `at` у смузі за кимось зі стоячих (`standing`) від камери: до BODY_HIDE_WIDE убік і
@@ -1075,11 +1157,14 @@ static func _deck_pref(b: Casualties.Body, slot: int, deck: Dictionary, along_z:
 	return {"a": pos, "c": shift, "turn": turns[slot], "heading": (PI * 0.5 if along_z else 0.0) + turns[slot] + flip}
 
 
+## Тіло на настилі з видимою серединою в (`a` уздовж, `c` убік) від середини тайла: півот — на BODY_VISIBLE_SHIFT
+## назад від неї.
 static func _deck_xf(b: Casualties.Body, centre: Vector3, along: Vector3, across: Vector3, a: float, c: float,
 		heading: float) -> Transform3D:
-	var at: Vector3 = centre + along * a + across * c
+	var basis := Basis(Vector3.UP, heading)
+	var at: Vector3 = centre + along * a + across * c - Vector3(basis.x.x, 0.0, basis.x.z).normalized() * BODY_VISIBLE_SHIFT
 	at.y = _body_ground(b.pos, at)
-	return Transform3D(Basis(Vector3.UP, heading), at)
+	return Transform3D(basis, at)
 
 
 ## Скільки займає поперек настилу (від своєї середини в один бік) тіло під кутом `turn` до поперек.

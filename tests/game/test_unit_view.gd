@@ -1269,9 +1269,10 @@ func test_bodies_on_a_bridge_lie_along_the_deck_at_its_height() -> void:
 			var at_rail: int = 0
 			for slot in 4:
 				var xf: Transform3D = WreckLayer.body_transform(b, slot, _river_board)
-				var mid: float = Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y).dot(along)
+				var seen: Vector3 = WreckLayer.body_centre(xf)
+				var mid: float = Vector2(seen.x - bridge.x, seen.z - bridge.y).dot(along)
 				assert_almost_eq(xf.origin.y, t.deck_y(bridge), 0.0001, "на настилі, не під ним і не над ним")
-				var rel := Vector2(xf.origin.x - bridge.x, xf.origin.z - bridge.y)
+				var rel := Vector2(seen.x - bridge.x, seen.z - bridge.y)
 				var across: float = absf(rel.x * along.y - rel.y * along.x)
 				var axis := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
 				var off: float = absf(axis.x * along.y - axis.y * along.x)  # синус кута до осі мосту
@@ -1339,6 +1340,8 @@ func test_bodies_sit_on_sloped_ground_and_stay_out_of_the_water() -> void:
 ## Біля води жоден кут тіла не далі за 0,3 від середини клітинки — і тоді, коли стоячі виштовхують тіло на
 ## дальші кільця.
 func test_bodies_lie_clear_of_the_standing_figures() -> void:
+	TerrainHeight.active = _relief()
+	WreckLayer.clear_deck_cache()
 	var shore := Vector2i(-1, -1)
 	var field := Vector2i(-1, -1)
 	for y in range(1, _river_board.height - 1):
@@ -1557,6 +1560,10 @@ func test_bind_warms_figure_meshes_for_every_facing() -> void:
 	assert_false(UnitSilhouettes.merged_cached(0, view._standing, view._set_id(), view._drones_left, view._layout, posmod(view._built_face + 4, 8)),
 		"у кадр bind злито лише свій напрям")
 	await get_tree().process_frame
+	var scheduled: int = view._warm_scheduled
+	view.bind(_unit(0))
+	assert_eq(view._warm_scheduled, scheduled, "повторний bind того самого складу нічого не планує")
+	await get_tree().process_frame
 	var cached: int = UnitSilhouettes._merged_meshes.size()
 	for f in 8:
 		UnitSilhouettes.merged_mesh(0, view._standing, view._set_id(), view._drones_left, view._layout, f)
@@ -1577,7 +1584,8 @@ func _deck_rect(xf: Transform3D, bridge: Vector2i) -> Array:
 	var along_z: bool = WreckLayer._is_water(_river_board, bridge + Vector2i(1, 0)) or WreckLayer._is_water(_river_board, bridge + Vector2i(-1, 0))
 	var along := Vector3(0.0, 0.0, 1.0) if along_z else Vector3(1.0, 0.0, 0.0)
 	var across := Vector3(along.z, 0.0, along.x)
-	var rel: Vector3 = xf.origin - Vector3(bridge.x, xf.origin.y, bridge.y)
+	var seen: Vector3 = WreckLayer.body_centre(xf)
+	var rel: Vector3 = seen - Vector3(bridge.x, seen.y, bridge.y)
 	var t: float = wrapf(atan2(xf.basis.z.x, xf.basis.z.z) - (PI * 0.5 if along_z else 0.0), -PI * 0.5, PI * 0.5)
 	return [rel.dot(along), rel.dot(across), WreckLayer.deck_span(t) * 0.5, WreckLayer.deck_half_across(t)]
 
@@ -1586,13 +1594,15 @@ func _overlap(p: Array, q: Array) -> bool:
 	return absf(float(p[0]) - float(q[0])) < float(p[2]) + float(q[2]) and absf(float(p[1]) - float(q[1])) < float(p[3]) + float(q[3])
 
 
-## Коли на мосту ще хтось стоїть, тіла не вишиковуються колоною: середини тіл відходять від прямої через них
-## щонайменше на 0,04 убік (два тіла — різняться убік на 0,04), а сусідні проміжки вздовж настилу різні (від 20 %).
+## Коли на мосту ще хтось стоїть, тіла не вишиковуються колоною — за видимими серединами з справжнього розкладу:
+## троє (стоїть один) займають убік щонайменше 0,35 чистої ширини настилу, по одному в кожній крайній третині, а
+## сусідні проміжки вздовж різняться щонайменше на 30 %; двоє (стоять двоє) — щонайменше 0,35 ширини убік.
 func test_bridge_bodies_with_soldiers_standing_do_not_form_a_file() -> void:
 	var t := _relief()
 	TerrainHeight.active = t
 	WreckLayer.clear_deck_cache()
 	var bridge: Vector2i = _bridge_cell()
+	var width: float = WreckLayer.BODY_DECK_HALF_ROAD * 2.0
 	for unit_id in range(1, 25):
 		for first in range(1, 3):
 			var b := Casualties.Body.new(unit_id, bridge, 0, 0, 0, first, 4 - first)
@@ -1601,35 +1611,19 @@ func test_bridge_bodies_with_soldiers_standing_do_not_form_a_file() -> void:
 				rs.append(_deck_rect(WreckLayer.body_transform(b, slot, _river_board), bridge))
 			rs.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
 			var tag: String = "юніт %d, стоїть %d" % [unit_id, first]
-			if rs.size() == 2:
-				assert_gte(absf(float(rs[0][1]) - float(rs[1][1])), 0.04 - 0.0001, tag + ": двоє не одне за одним")
-				continue
-			# пряма c = m·a + q найменшими квадратами
-			var n: float = rs.size()
-			var sa: float = 0.0
-			var sc: float = 0.0
-			var saa: float = 0.0
-			var sac: float = 0.0
-			for r: Array in rs:
-				sa += float(r[0])
-				sc += float(r[1])
-				saa += float(r[0]) * float(r[0])
-				sac += float(r[0]) * float(r[1])
-			var m: float = (n * sac - sa * sc) / maxf(n * saa - sa * sa, 1e-9)
-			var q: float = (sc - m * sa) / n
 			var lo: float = INF
 			var hi: float = -INF
 			for r: Array in rs:
-				var res: float = float(r[1]) - (m * float(r[0]) + q)
-				lo = minf(lo, res)
-				hi = maxf(hi, res)
-			assert_gte(hi - lo, 0.04 - 0.0001, tag + ": тіла не колоною (розкид %.3f)" % (hi - lo))
-			var gaps: Array[float] = []
-			for i in range(1, rs.size()):
-				gaps.append(float(rs[i][0]) - float(rs[i - 1][0]) - float(rs[i][2]) - float(rs[i - 1][2]))
-			for i in range(1, gaps.size()):
-				var ratio: float = maxf(gaps[i], gaps[i - 1]) / maxf(minf(gaps[i], gaps[i - 1]), 1e-6)
-				assert_gte(ratio, 1.2, tag + ": сусідні проміжки різні (%.3f і %.3f)" % [gaps[i - 1], gaps[i]])
+				lo = minf(lo, float(r[1]))
+				hi = maxf(hi, float(r[1]))
+			assert_gte((hi - lo) / width, 0.35 - 0.0001, tag + ": убік %.2f ширини" % ((hi - lo) / width))
+			if rs.size() < 3:
+				continue
+			assert_lte(lo, -width / 6.0 + 0.0001, tag + ": тіло в лівій крайній третині")
+			assert_gte(hi, width / 6.0 - 0.0001, tag + ": тіло в правій крайній третині")
+			var g1: float = float(rs[1][0]) - float(rs[0][0])
+			var g2: float = float(rs[2][0]) - float(rs[1][0])
+			assert_gte(maxf(g1, g2) / minf(g1, g2), 1.3 - 0.001, tag + ": проміжки %.3f і %.3f" % [g1, g2])
 
 
 ## Два записи на одному тайлі мосту (те саме відділення, що падає 100 → 75 → 50 → 25, чи ще одне відділення): тіла
@@ -1664,6 +1658,34 @@ func test_bridge_records_reserve_each_others_bodies_and_stay_put() -> void:
 		for i in rects.size():
 			for j in range(i + 1, rects.size()):
 				assert_false(_overlap(rects[i], rects[j]), "юніт %d: тіла %d і %d не накривають одне одне" % [unit_id, i, j])
+
+
+## Справжнім шляхом шару тіл (rebuild_fallen, add_body): відділення на мосту падає 100 → 75 → 50 → 25, і поставлені
+## раніше тіла не рухаються з кожним наступним влучанням.
+func test_bridge_bodies_stay_put_through_sequential_hits_in_the_layer() -> void:
+	var t := _relief()
+	TerrainHeight.active = t
+	WreckLayer.clear_deck_cache()
+	var bridge: Vector2i = _bridge_cell()
+	var state := BattleState.create(_river_board, 2, 1)
+	var layer := WreckLayer.new()
+	add_child_autofree(layer)
+	layer.rebuild_fallen(state, 0)
+	var placed: Array[Transform3D] = []
+	for first in [3, 2, 1]:
+		var r := Casualties.Body.new(9, bridge, 0, 0, 0, first, 1)
+		r.seq = 3 - first
+		r.revealed_to = 1
+		state.bodies.append(r)
+		if first == 2:
+			layer.add_body(r)  # тіло, що падає зараз, — подія FiguresFell
+		else:
+			layer.rebuild_fallen(state, 0)  # перебудова після пакета
+		var now: Array[Transform3D] = layer.body_transforms()
+		assert_eq(now.size(), placed.size() + 1, "по тілу на влучання")
+		for i in placed.size():
+			assert_eq(now[i], placed[i], "тіло %d не рухається після влучання до %d стоячих" % [i, first])
+		placed = now.duplicate()
 
 
 ## Тіл на тайлі мосту більше, ніж уміщає настил (знищене відділення й ще двоє з іншого): вільного місця нема, тож
@@ -1704,6 +1726,13 @@ func test_deck_cache_clears_with_a_new_board() -> void:
 	var state := BattleState.create(Board.create(4, 4, Terrain.GroundState.DRY), 2, 1)
 	layer.rebuild_fallen(state, 0)
 	assert_eq(WreckLayer._deck_cache.size(), 0, "нова дошка — порожній кеш")
+	# знімок повтору: інший об'єкт Board з тим самим вмістом — кеш лишається
+	WreckLayer.body_transform(Casualties.Body.new(3, bridge, 0, 0, 0, 2, 2), 2, _river_board)
+	var copy := Board.create(4, 4, Terrain.GroundState.DRY)
+	var replay := BattleState.create(copy, 2, 1)
+	replay.bodies.append(Casualties.Body.new(1, Vector2i(1, 1), 0, 0, 0, 3, 1))
+	layer.rebuild_fallen(replay, 0)
+	assert_gt(WreckLayer._deck_cache.size(), 0, "та сама дошка іншим об'єктом (повтор) — кеш на місці")
 
 
 ## На полі тіло не лягає в смугу за стоячим бійцем від камери (там воно ховається грудкою за ним): місць довкола
@@ -1735,4 +1764,4 @@ func test_field_bodies_do_not_hide_behind_standing_soldiers() -> void:
 					standing.append(Vector3(field.x + v.x, 0.0, field.y + v.y))
 				for slot in range(first, 4):
 					var xf: Transform3D = WreckLayer.body_transform(b, slot, _river_board)
-					assert_false(WreckLayer.behind_standing(xf.origin, standing), "юніт %d напрям %d місце %d: тіло за стоячим" % [unit_id, facing, slot])
+					assert_false(WreckLayer.body_hidden(xf, standing), "юніт %d напрям %d місце %d: тіло за стоячим" % [unit_id, facing, slot])

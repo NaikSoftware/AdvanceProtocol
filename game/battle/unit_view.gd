@@ -167,6 +167,8 @@ var _face_tween: Tween
 var _built_face: int = 0
 ## Фігури, що зараз перекидаються, за місцем: їх веде aim_tips().
 var _tipping: Dictionary = {}
+## Скільки разів bind запланував прогрів сіток напрямів (тести: повторний bind складу, що вже в кеші, — не планує).
+var _warm_scheduled: int = 0
 ## Половини основи корпусу (x — ширина, y — довжина): по її кутах юніт ставиться на схил.
 var _half_base: Vector2 = Vector2.ZERO
 ## Кут повороту, для якого востаннє рахувався нахил; NAN — ще не ставився.
@@ -229,6 +231,7 @@ func bind(unit: Unit) -> void:
 	# Лише коли сітки цього складу (стоячі, труби, розкладка) ще не злиті, і кадром пізніше: перебудова
 	# виглядів іде після кожного пакета, і злиття восьми сіток просто в мить падіння бійця — зайвий ривок.
 	if _has_figures() and not UnitSilhouettes.merged_cached(_type_id, _standing, _set_id(), _drones_left, _layout, posmod(_built_face + 4, 8)):
+		_warm_scheduled += 1
 		_warm_faces.call_deferred()
 	# Свіжий (чи перебудований) вузол не є ціллю жодного прев'ю: прев'ю живе в
 	# InputController і перебудову не переживає — лишити приціл увімкненим
