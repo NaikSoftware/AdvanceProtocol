@@ -1810,3 +1810,75 @@ func test_a_clean_deck_attempt_beats_an_unclean_one() -> void:
 	var clean: Dictionary = {"placed": {}, "mine": file, "clean": true}
 	assert_gt(WreckLayer.deck_spread_score(spread), WreckLayer.deck_spread_score(file), "передумова: розкид кращий у нечистої")
 	assert_gt(WreckLayer._attempt_score(clean), WreckLayer._attempt_score(unclean), "чиста спроба виграє")
+
+
+## Міст із водою з обох боків: гармата пройде (11, 6) → (11, 9) через настил (11, 7) і (11, 8).
+func _bridge_relief() -> TerrainHeight:
+	var b := Board.create(14, 14, Terrain.GroundState.DRY)
+	for x in 14:
+		b.set_kind(Vector2i(x, 7), Terrain.Kind.WATER)
+		b.set_kind(Vector2i(x, 8), Terrain.Kind.WATER)
+	b.set_kind(Vector2i(11, 7), Terrain.Kind.BRIDGE)
+	b.set_kind(Vector2i(11, 8), Terrain.Kind.BRIDGE)
+	b.set_kind(Vector2i(11, 6), Terrain.Kind.ROAD)
+	b.set_kind(Vector2i(11, 9), Terrain.Kind.ROAD)
+	var th := TerrainHeight.bake(b, 0, 1)
+	TerrainHeight.active = th
+	return th
+
+
+func _hull_mesh() -> Mesh:
+	return (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh
+
+
+## Гармата стоїть на мосту зі зведеними станинами, а розрахунок — на місцях `crew_travel`.
+func test_a_gun_bound_on_a_bridge_is_in_the_travel_pose() -> void:
+	UnitSilhouettes.reset_models()
+	var th: TerrainHeight = _bridge_relief()
+	assert_true(th.is_deck(Vector2i(11, 7)), "передумова: настил")
+	for id: int in [9, 10]:
+		view.bind(_unit(id, 0, Vector2i(11, 7)))
+		assert_same(_hull_mesh(), UnitSilhouettes.travel_mesh(id, 0), "на мосту — похідна модель, тип %d" % id)
+		assert_eq(view._crew_feet(), UnitSilhouettes.crew_feet(id, 0, true))
+		view.bind(_unit(id, 0, Vector2i(11, 6)))
+		assert_same(_hull_mesh(), UnitSilhouettes.merged_mesh(id, -1, 0), "на дорозі — розведені станини, тип %d" % id)
+
+
+## Положення міняється на межі тайла посеред руху, а не на кінці шляху чи при наступному `bind()`.
+func test_a_gun_changes_pose_at_the_bridge_boundary_while_moving() -> void:
+	UnitSilhouettes.reset_models()
+	_bridge_relief()
+	view.bind(_unit(9, 0, Vector2i(11, 6)))
+	var path: Array[Vector2i] = [Vector2i(11, 7), Vector2i(11, 8), Vector2i(11, 9)]
+	var tween: Tween = view.move_along(path, 1.0).get_object()
+	tween.custom_step(1.5)
+	assert_true(view._travel_pose, "посеред мосту станини зведені")
+	assert_same(_hull_mesh(), UnitSilhouettes.travel_mesh(9, 0))
+	tween.custom_step(10.0)
+	assert_false(view._travel_pose, "з'їхала з мосту — станини розведені")
+	assert_same(_hull_mesh(), UnitSilhouettes.merged_mesh(9, -1, 0))
+
+
+## Зупинка на мосту: положення вже змінилось на вході, а не стрибком після кінця шляху.
+func test_a_gun_stopping_on_a_bridge_is_already_in_the_travel_pose() -> void:
+	UnitSilhouettes.reset_models()
+	_bridge_relief()
+	view.bind(_unit(10, 0, Vector2i(11, 6)))
+	var path: Array[Vector2i] = [Vector2i(11, 7)]
+	var tween: Tween = view.move_along(path, 1.0).get_object()
+	tween.custom_step(0.9)
+	assert_true(view._travel_pose, "станини зведені ще до зупинки")
+	tween.custom_step(10.0)
+	assert_same(_hull_mesh(), UnitSilhouettes.travel_mesh(10, 0))
+
+
+## Танк і решта на мосту не міняють меш: похідної моделі в них нема.
+func test_a_unit_without_a_travel_model_keeps_its_mesh_on_a_bridge() -> void:
+	UnitSilhouettes.reset_models()
+	_bridge_relief()
+	view.bind(_unit(5, 0, Vector2i(11, 6)))
+	var before: Mesh = _hull_mesh()
+	var tween: Tween = view.move_along([Vector2i(11, 7)] as Array[Vector2i], 1.0).get_object()
+	tween.custom_step(10.0)
+	assert_false(view._travel_pose)
+	assert_same(_hull_mesh(), before)

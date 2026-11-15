@@ -487,3 +487,79 @@ func test_the_second_crew_figure_is_the_crouch_mesh_when_the_set_has_one() -> vo
 		else:
 			second_top = maxf(second_top, v[i].y)
 	assert_gt(first_top, second_top + 0.01, "другий нижчий: у присіді")
+
+
+## Поручні мостів переправи: найближча до осі настилу грань вище за настил (вісь x, міст іде вздовж z); висота настилу — з PropLayer.
+const _BRIDGE_DECK_TOPS: Dictionary = {"west": 0.30, "centre": 0.30, "east": 0.21}
+
+
+func _rail_inner_face(name: String) -> float:
+	var root: Node = (load("res://assets/props/bridge_river_%s.glb" % name) as PackedScene).instantiate()
+	var inner: float = INF
+	var curb: float = INF
+	var stack: Array = [[root, Transform3D()]]
+	while not stack.is_empty():
+		var it: Array = stack.pop_back()
+		var n: Node = it[0]
+		var xf: Transform3D = it[1] * ((n as Node3D).transform if n is Node3D else Transform3D())
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+			var m: Mesh = (n as MeshInstance3D).mesh
+			for s in m.get_surface_count():
+				for v: Vector3 in (m.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+					var p: Vector3 = xf * v
+					if p.y > float(_BRIDGE_DECK_TOPS[name]) + 0.03 and absf(p.x) > 0.05:
+						inner = minf(inner, absf(p.x))
+					if p.y > float(_BRIDGE_DECK_TOPS[name]) + 0.005 and absf(p.x) > 0.05:
+						curb = minf(curb, absf(p.x))
+		for c in n.get_children():
+			stack.append([c, xf])
+	root.free()
+	# Східний міст має лише низький бордюр; решта — ферми вище настилу.
+	return inner if inner < INF else curb
+
+
+## Гармата в похідному положенні й її розрахунок стоять між поручнями кожного з мостів переправи — з кожного боку, а не
+## за шириною габариту, — і в тайлі. Стопа розрахунку не ближче 0,3 м до моделі гармати.
+func test_travel_pose_gun_and_crew_fit_between_the_rails_of_every_bridge() -> void:
+	UnitSilhouettes.reset_models()
+	var margin: float = 0.0375
+	for name: String in _BRIDGE_DECK_TOPS:
+		var inner: float = _rail_inner_face(name)
+		assert_lt(inner, 0.5, "передумова: поручні міста «%s» знайдено" % name)
+		for id: int in [9, 10]:
+			var gun: PackedVector3Array = (UnitSilhouettes.travel_mesh(id).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+			var crew: PackedVector3Array = (UnitSilhouettes.crew_mesh(id, 0, true).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+			var gx_min: float = INF
+			var gx_max: float = -INF
+			for v in gun:
+				gx_min = minf(gx_min, v.x)
+				gx_max = maxf(gx_max, v.x)
+			assert_lt(-gx_min, inner, "лівий бік гармати %d до поручня «%s»" % [id, name])
+			assert_lt(gx_max, inner, "правий бік гармати %d до поручня «%s»" % [id, name])
+			for v in crew:
+				assert_lt(absf(v.x), inner, "розрахунок гармати %d між поручнями «%s»" % [id, name])
+				assert_lte(absf(v.z), 0.5, "розрахунок у тайлі")
+			# Відстань: жодна вершина розрахунку не ближче за запас до низу моделі (нижче зросту бійця).
+			var worst: float = INF
+			var low: Array[Vector2] = []
+			for v in gun:
+				if v.y < UnitSilhouettes.FIGURE_SIZE.y:
+					low.append(Vector2(v.x, v.z))
+			var bucket: Dictionary = {}
+			for p in low:
+				var k := Vector2i(floori(p.x / margin), floori(p.y / margin))
+				if not bucket.has(k):
+					bucket[k] = []
+				(bucket[k] as Array).append(p)
+			for v in crew:
+				var c := Vector2i(floori(v.x / margin), floori(v.z / margin))
+				for dx in range(-1, 2):
+					for dz in range(-1, 2):
+						for p: Vector2 in bucket.get(c + Vector2i(dx, dz), []):
+							worst = minf(worst, p.distance_to(Vector2(v.x, v.z)))
+			assert_gte(worst, margin - 0.0005, "розрахунок гармати %d не ближче 0,3 м до моделі" % id)
+		# розрахунок на землі (розведені станини) — теж у своєму тайлі
+		for id: int in [9, 10]:
+			for v in (UnitSilhouettes.crew_mesh(id, 0, false).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]:
+				assert_lte(absf(v.x), 0.5, "розрахунок на землі в тайлі")
+				assert_lte(absf(v.z), 0.5, "розрахунок на землі в тайлі")

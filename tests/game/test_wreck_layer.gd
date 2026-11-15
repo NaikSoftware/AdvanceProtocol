@@ -920,7 +920,9 @@ func test_a_wreck_on_a_bridge_stands_on_the_deck_and_its_crew_lies_on_the_span()
 		var travel: ArrayMesh = UnitSilhouettes.travel_mesh(id, 0)
 		assert_not_null(travel, "похідна модель типу %d є" % id)
 		var span: float = 2.0 * (WreckLayer.BODY_DECK_HALF_ROAD - WreckLayer.BODY_DECK_RAIL_GAP)
-		assert_lt(travel.get_aabb().size.x, span, "похідна гармата вужча за проїзд, тип %d" % id)
+		var half: float = span * 0.5
+		assert_lt(-travel.get_aabb().position.x, half, "лівий бік похідної гармати до поручня, тип %d" % id)
+		assert_lt(travel.get_aabb().end.x, half, "правий бік похідної гармати до поручня, тип %d" % id)
 		assert_gt(UnitSilhouettes.model_mesh(id, 0).get_aabb().size.x, span - 0.01, "розведені станини не вмістились би, тип %d" % id)
 		var free_side: float = (span - travel.get_aabb().size.x) * 0.5
 		assert_lt(free_side, WreckLayer.BODY_WIDTH, "збоку від гармати тілу місця нема, тип %d" % id)
@@ -947,9 +949,8 @@ func test_every_gun_row_carries_its_body_table_in_every_set() -> void:
 			assert_eq((row.get("crew_travel", []) as Array).size(), Casualties.CREW_FIGURES, "розрахунок у похідному положенні, тип %d, набір %d" % [id, set_id])
 
 
-## Міст підірвано на місці, і дошка та сама за посиланням: тіла, покладені до цього, перераховуються. Шар після
-## перебудови й після пізнішого add_body збігається зі свіжим розрахунком.
-func test_bodies_are_recomputed_after_a_bridge_is_demolished_in_place() -> void:
+## Місця тіл на `state` для тесту підриву: вісім гармат поруч із мостами, що зараз стоять.
+func _guns_beside_bridges() -> void:
 	for y in 8:
 		state.board.set_kind(Vector2i(4, y), Terrain.Kind.BRIDGE)
 		_seen(0, Vector2i(3, y))
@@ -957,23 +958,68 @@ func test_bodies_are_recomputed_after_a_bridge_is_demolished_in_place() -> void:
 		gun.hp = 0
 		Casualties.record(state, gun, 100)
 	Casualties.reveal(state, 0)
-	layer.rebuild_fallen(state, 0)
-	var before: Array = layer.body_transforms().duplicate()
+
+
+func _demolish_bridges() -> void:
 	for y in 8:
 		state.board.set_kind(Vector2i(4, y), Terrain.Kind.BRIDGE_DESTROYED)
+
+
+## Міст підірвано на місці, і дошка та сама за посиланням: тіла, покладені до цього, перераховуються.
+func test_bodies_are_recomputed_after_a_bridge_is_demolished_in_place() -> void:
+	_guns_beside_bridges()
+	layer.rebuild_fallen(state, 0)
+	var before: Array = layer.body_transforms().duplicate()
+	_demolish_bridges()
 	layer.rebuild_fallen(state, 0)
 	var fresh := WreckLayer.new()
 	add_child_autofree(fresh)
 	fresh.rebuild_fallen(state, 0)
 	assert_eq(layer.body_transforms(), fresh.body_transforms(), "після підриву шар збігається зі свіжим розрахунком")
 	assert_ne(before, layer.body_transforms(), "передумова: підрив змінив місця тіл")
+
+
+## Те саме, коли після підриву приходить лише пізнє тіло (`add_body`) без перебудови: шар синхронізує підпис дошки сам.
+func test_add_body_after_a_demolition_agrees_with_a_fresh_layer() -> void:
+	_guns_beside_bridges()
+	layer.rebuild_fallen(state, 0)
+	_demolish_bridges()
 	var late: Unit = state.add_unit(9, 0, Vector2i(1, 1), 2)
 	late.hp = 0
 	_seen(0, Vector2i(1, 1))
 	Casualties.record(state, late, 100)
 	Casualties.reveal(state, 0)
 	layer.add_body(state.bodies.back())
-	var fresh2 := WreckLayer.new()
-	add_child_autofree(fresh2)
-	fresh2.rebuild_fallen(state, 0)
-	assert_eq(layer.body_transforms(), fresh2.body_transforms(), "і після пізнішого add_body")
+	var fresh := WreckLayer.new()
+	add_child_autofree(fresh)
+	fresh.rebuild_fallen(state, 0)
+	assert_eq(layer.body_transforms(), fresh.body_transforms(), "add_body без перебудови: ті самі місця, що й у свіжому розрахунку")
+
+
+## Кидана тінь уламка: тіла розрахунку не лягають на смугу від уламка вздовж `sun_ground`, на похмурій карті смуги нема.
+func test_crew_bodies_avoid_the_cast_shadow_of_the_wreck() -> void:
+	UnitSilhouettes.reset_models()
+	var board := Board.create(8, 8, Terrain.GroundState.DRY)
+	var saved: Vector2 = WeatherRig.sun_ground
+	var saved_len: float = WeatherRig.sun_shadow_per_height
+	WeatherRig.sun_ground = Vector2(-0.707107, 0.707107)
+	WeatherRig.sun_shadow_per_height = 1.48
+	var row: Dictionary = UnitSilhouettes.spec(9)
+	var width: float = maxf(float(row.hull.x), float(row.hull.z)) * WreckLayer.CAST_SHADOW_WIDTH
+	var laid: int = 0
+	for unit_id in [3, 7, 11, 19]:
+		for facing in 8:
+			WreckLayer.clear_deck_cache()
+			var b := Casualties.Body.new(unit_id, Vector2i(3, 3), 0, 9, facing, 0, Casualties.CREW_FIGURES)
+			for slot in Casualties.CREW_FIGURES:
+				var xf: Transform3D = WreckLayer.body_transform(b, slot, board, [])
+				if WreckLayer.body_is_laid(xf):
+					laid += 1
+					var mid: Vector3 = WreckLayer.body_centre(xf) - IsoCameraRig.cell_to_world(b.pos)
+					assert_false(WreckLayer.in_cast_shadow(Vector2(mid.x, mid.z), width, float(row.hull.y)), "тіло поза тінню, напрям %d" % facing)
+	assert_gt(laid, 40, "тіла на сонячній карті лягають")
+	WeatherRig.sun_ground = Vector2.ZERO
+	assert_false(WreckLayer.in_cast_shadow(Vector2(0.1, 0.1), width, 0.28), "похмура карта — без смуги")
+	WeatherRig.sun_ground = saved
+	WeatherRig.sun_shadow_per_height = saved_len
+	WreckLayer.clear_deck_cache()

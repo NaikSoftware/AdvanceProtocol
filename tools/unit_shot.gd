@@ -284,10 +284,8 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 	get_tree().quit()
 
 
-## Справжні юніти двох гармат, інженерної машини й танка (смуги HP, крони, ґрунт карти) на найближчому й найдальшому зумі:
-## остаточна перевірка впізнаваності гармат — разом із розрахунком, не окрема модель.
-## Шостий аргумент guns_bridge: польова гармата й гаубиця на двох клітинках мосту, напрям — SHOT_FACING. Мост
-## несе похідне положення гармат: станини зведені, розрахунок — з боків.
+## Шостий аргумент guns_bridge: польова гармата й гаубиця на двох клітинках мосту, напрям — SHOT_FACING. На мосту
+## гармати стоять у похідному положенні: станини зведені, розрахунок — перед лафетом.
 func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
@@ -318,6 +316,8 @@ func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) 
 	get_tree().quit()
 
 
+## Справжні юніти двох гармат, інженерної машини й танка (смуги HP, крони, ґрунт карти) на найближчому й найдальшому зумі:
+## остаточна перевірка впізнаваності гармат — разом із розрахунком, не окрема модель.
 func _real(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)

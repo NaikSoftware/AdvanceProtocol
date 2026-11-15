@@ -556,8 +556,6 @@ func rebuild_fallen(state: BattleState, observer: int) -> void:
 	_rebuild_body_meshes()
 
 
-## Щойно впалі (подія `FiguresFell`) — одразу, а не на перебудові після пакета: інакше фігура
-## зникала б із відділення й лягала б аж по всьому. Чи показане тіло глядачеві, вирішує той, хто кличе.
 ## Підпис вмісту дошки: ширина, висота, клітинки.
 static func _board_signature(board: Board) -> int:
 	return hash([board.width, board.height, board.tiles])
@@ -571,6 +569,8 @@ func _sync_board_signature(sig: int) -> void:
 		_body_memo.clear()
 
 
+## Щойно впалі (подія `FiguresFell`) — одразу, а не на перебудові після пакета: інакше фігура
+## зникала б із відділення й лягала б аж по всьому. Чи показане тіло глядачеві, вирішує той, хто кличе.
 func add_body(body: Casualties.Body) -> void:
 	if _board != null:
 		_sync_board_signature(_board_signature(_board))
@@ -953,14 +953,16 @@ static func _crew_pair(b: Casualties.Body, board: Board, earlier: Array) -> Dict
 	if board != null and board.kind_at(b.pos) == Terrain.Kind.BRIDGE:
 		deck = 1 if (_is_water(board, b.pos + Vector2i(1, 0)) or _is_water(board, b.pos + Vector2i(-1, 0))) else 0
 	var th: TerrainHeight = TerrainHeight.active
-	var key: Array = [b.unit_id, b.seq, b.pos, b.facing, b.type_id, set_id, dirs, deck, th.get_instance_id() if th != null else 0]
+	var key: Array = [b.unit_id, b.seq, b.pos, b.facing, b.type_id, set_id, dirs, deck, th.get_instance_id() if th != null else 0,
+			WeatherRig.sun_ground, WeatherRig.sun_shadow_per_height]
 	for e: Casualties.Body in earlier:
 		key.append_array([e.unit_id, e.seq])
 	if _crew_cache.has(key):
 		return _crew_cache[key]
 	if deck >= 0 and UnitSilhouettes.travel_mesh(b.type_id, set_id) != null:
-		# Гармата на мосту — у похідному положенні, і настил (0,45 між поручнями) мінус її колія лишає з боку менше
-		# за ширину тіла, а вздовж настил — це весь тайл, зайнятий нею: місця для тіла нема, і не кладемо жодного.
+		# Гармата на мосту — у похідному положенні, на будь-якому мості й за будь-якого напряму рахуємо по найвужчому
+		# проїзду (0,46 між фермами західного): колія гармати лишає з боку менше за ширину тіла, а вздовж настил —
+		# весь тайл, зайнятий нею, тож місця для тіла нема, і жодного не кладемо.
 		_crew_cache[key] = {}
 		return {}
 	var row: Dictionary = UnitSilhouettes.spec(b.type_id, set_id)
@@ -997,7 +999,7 @@ static func _crew_pair(b: Casualties.Body, board: Board, earlier: Array) -> Dict
 		var mid2 := Vector2(mid.x, mid.z)
 		var long := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
 		var wide := Vector2(-long.y, long.x)
-		var fits: bool = true
+		var fits: bool = not in_cast_shadow(mid2, maxf(float(row.hull.x), float(row.hull.z)) * CAST_SHADOW_WIDTH, float(row.hull.y))
 		for sl: float in [-1.0, 1.0]:
 			for sw: float in [-1.0, 1.0]:
 				var corner: Vector2 = mid2 + long * (BODY_LENGTH * 0.5 * sl) + wide * (BODY_WIDTH * 0.5 * sw)
@@ -1033,6 +1035,22 @@ static func _crew_pair(b: Casualties.Body, board: Board, earlier: Array) -> Dict
 		placed[b.first + placed.size()] = xf
 	_crew_cache[key] = placed
 	return placed
+
+
+## Чи лежить тіло в кинутій тіні уламка: смуга від його середини вздовж `sun_ground` завдовжки з тінь його висоти,
+## завширшки з уламок. Карта тіней тіло там не затіняє (шар тіл лежить впритул до землі, а тінь тонка), тож
+## тіло світилось би на темній смузі; на похмурій карті напряму світла нема, і смуги теж.
+static func in_cast_shadow(mid: Vector2, width: float, height: float) -> bool:
+	if WeatherRig.sun_ground == Vector2.ZERO:
+		return false
+	var len: float = height * WeatherRig.sun_shadow_per_height + CAST_SHADOW_PAD
+	var along: float = clampf(mid.dot(WeatherRig.sun_ground), 0.0, len)
+	return mid.distance_to(WeatherRig.sun_ground * along) < width * 0.5 + CAST_SHADOW_PAD
+
+
+const CAST_SHADOW_PAD: float = 0.1
+## Ширина смуги — частка більшого з розмірів корпуса: станини й ствол кидають тінь ширшу за лафет.
+const CAST_SHADOW_WIDTH: float = 1.7
 
 
 ## Видима середина тіла: меш лежить не на півоті, а зсунута в бік гвинтівки (+x тіла) на BODY_VISIBLE_SHIFT —

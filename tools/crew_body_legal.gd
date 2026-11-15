@@ -69,8 +69,7 @@ static func ground_index(tris: PackedVector3Array) -> Dictionary:
 		bb.append_array([x0, z0, x1, z1])
 		for gz in range(_gcell(z0), _gcell(z1) + 1):
 			for gx in range(_gcell(x0), _gcell(x1) + 1):
-				# `(grid[i] as PackedInt32Array).append(n)` додавав у тимчасову копію, а комірка лишалась порожньою:
-				# копію беремо в змінну й кладемо назад.
+				# Packed* у масиві віддається копією: `as` додав би в тимчасову, тож комірку беремо в змінну й кладемо назад.
 				var cell: PackedInt32Array = grid[gz * GROUND_N + gx]
 				cell.append(n)
 				grid[gz * GROUND_N + gx] = cell

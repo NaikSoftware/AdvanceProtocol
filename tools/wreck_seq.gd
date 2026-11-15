@@ -41,13 +41,10 @@ func _ready() -> void:
 	var wfacing: int = int(OS.get_environment("WRECK_FACING"))
 	layer.set("_board", (screen.call("_state") as BattleState).board)
 	layer.call("_add_node", cell, wtype, float(a[3]), wfacing, WreckLayer.LONG_AGO)
-	if Casualties.has_crew(wtype) and OS.get_environment("WRECK_NOBODIES") == "":
-		# розрахунок знищеної гармати лягає біля уламка
-		layer.add_body(Casualties.Body.new(1, cell, 0, wtype, wfacing, 0, Casualties.CREW_FIGURES))
-	if OS.get_environment("WRECK_SQUAD") != "" and OS.get_environment("WRECK_NOBODIES") == "":
-		# для порівняння тону: тіла відділення на сусідньому тайлі, без вогню поруч
-		layer.add_body(Casualties.Body.new(2, cell + Vector2i(2, 0), 0, 0, 0, 1, 3))
 	layer.call("_refresh_effects")
+	# WRECK_NOBLOB — без м'якої тіні стовпа (чи темна смуга під тілом — вона, а не тінь із карти тіней)
+	if OS.get_environment("WRECK_NOBLOB") != "":
+		(layer.get("_shadows") as MultiMeshInstance3D).visible = false
 	# nodepth — стовп диму без перевірки глибини й м'якого краю: чи ховає його щось непрозоре геометрично, а не порядком.
 	if a.size() > 7 and a[7] == "nodepth":
 		var sh := Shader.new()
@@ -58,6 +55,13 @@ func _ready() -> void:
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
+	# Тіла лягають після того, як погода виставила сонце: місця залежать від напряму тіні.
+	if Casualties.has_crew(wtype) and OS.get_environment("WRECK_NOBODIES") == "":
+		# розрахунок знищеної гармати лягає біля уламка
+		layer.add_body(Casualties.Body.new(1, cell, 0, wtype, wfacing, 0, Casualties.CREW_FIGURES))
+	if OS.get_environment("WRECK_SQUAD") != "" and OS.get_environment("WRECK_NOBODIES") == "":
+		# для порівняння тону: тіла відділення на сусідньому тайлі, без вогню поруч
+		layer.add_body(Casualties.Body.new(2, cell + Vector2i(2, 0), 0, 0, 0, 1, 3))
 	rig.center_on(cell)
 	rig.zoom_by(float(a[2]) / rig.zoom_level)
 	for f in SETTLE_FRAMES:
