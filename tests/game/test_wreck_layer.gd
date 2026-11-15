@@ -731,32 +731,102 @@ func test_flame_roots_of_guns_and_engineer_sit_on_model_metal() -> void:
 			assert_lte(absf(local.y - hit_y), 0.019, "корінь полум'я типу %d лежить на металі (0,15 м)" % id)
 
 
-## Розрахунок знищеної гармати лягає біля уламка, а не під ним, у межах свого тайла (`body_transform`, поле й біля води).
-func test_crew_bodies_lie_clear_of_the_wreck_inside_the_tile() -> void:
-	UnitSilhouettes.reset_models()
+## Дошки для перевірки місця тіл розрахунку: суша й вода з одного, двох боків, кутова, оточення, та міст.
+func _crew_boards() -> Dictionary:
+	var out: Dictionary = {}
 	var land: Board = Board.create(8, 8, Terrain.GroundState.DRY)
-	var shore: Board = Board.create(8, 8, Terrain.GroundState.DRY)
-	shore.set_kind(Vector2i(4, 3), Terrain.Kind.WATER)
+	out["поле"] = land
+	for name: String in ["берег зі сходу", "берег з півдня", "кут", "два береги", "оточено"]:
+		var b: Board = Board.create(8, 8, Terrain.GroundState.DRY)
+		var water: Array[Vector2i] = []
+		match name:
+			"берег зі сходу":
+				water = [Vector2i(4, 2), Vector2i(4, 3), Vector2i(4, 4)]
+			"берег з півдня":
+				water = [Vector2i(2, 4), Vector2i(3, 4), Vector2i(4, 4)]
+			"кут":
+				water = [Vector2i(4, 4)]
+			"два береги":
+				water = [Vector2i(4, 3), Vector2i(2, 3)]
+			"оточено":
+				water = [Vector2i(4, 3), Vector2i(2, 3), Vector2i(3, 4), Vector2i(3, 2)]
+		for w: Vector2i in water:
+			b.set_kind(w, Terrain.Kind.WATER)
+		out[name] = b
+	return out
+
+
+## Тіла розрахунку знищеної гармати: у межах тайла, біля води — не за воду з боку, де вона є, і скрізь, де є куди, —
+## не під уламком (модель гармати). Двоє не лежать одне на одному: середини не ближче за CREW_MIN_APART, довгі осі
+## розходяться щонайменше на CREW_MIN_TURN. Різні юніти, усі вісім напрямів, поле й берег.
+func test_crew_bodies_lie_clear_of_the_wreck_and_of_each_other() -> void:
+	UnitSilhouettes.reset_models()
+	WreckLayer._crew_cache.clear()
+	var boards: Dictionary = _crew_boards()
 	for id: int in [9, 10]:
-		var tris: PackedVector2Array = WreckLayer.gun_footprint(id, 0)
-		assert_gt(tris.size(), 0, "модель гармати типу %d" % id)
-		for facing: int in [0, 3, 6]:
-			for board: Board in [land, shore]:
-				var b := Casualties.Body.new(7, Vector2i(3, 3), 0, id, facing, 0, Casualties.CREW_FIGURES)
-				var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
-				var turn := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
-				for slot in Casualties.CREW_FIGURES:
-					var xf: Transform3D = WreckLayer.body_transform(b, slot, board, [])
-					var mid: Vector3 = WreckLayer.body_centre(xf) - centre
-					var long := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
-					var where: String = "тип %d, напрям %d, місце %d, %s" % [id, facing, slot, "берег" if board == shore else "поле"]
-					assert_lte(WreckLayer.corner_reach(xf, centre), 0.5 * sqrt(2.0), "тіло в тайлі, " + where)
-					if board == land:
-						assert_lte(absf(mid.x) + 0.5 * (absf(long.x) * WreckLayer.BODY_LENGTH + absf(long.y) * WreckLayer.BODY_WIDTH), 0.5, "тіло в межах тайла по x, " + where)
-						assert_lte(absf(mid.z) + 0.5 * (absf(long.y) * WreckLayer.BODY_LENGTH + absf(long.x) * WreckLayer.BODY_WIDTH), 0.5, "тіло в межах тайла по z, " + where)
-						var mid_l: Vector3 = turn.inverse() * mid
-						var long_l: Vector3 = turn.inverse() * Vector3(long.x, 0.0, long.y)
-						assert_false(WreckLayer.rect_hits_tris(Vector2(mid_l.x, mid_l.z), Vector2(long_l.x, long_l.z).normalized(),
-								WreckLayer.BODY_LENGTH * 0.5, WreckLayer.BODY_WIDTH * 0.5, tris), "тіло не під уламком, " + where)
-					else:
-						assert_lte(WreckLayer.corner_reach(xf, centre), WreckLayer.WATER_REACH, "біля води тіло не сягає води, " + where)
+		var fp: Dictionary = WreckLayer.gun_footprint(id, 0)
+		assert_gt((fp.tris as PackedVector2Array).size(), 0, "модель гармати типу %d" % id)
+		for bname: String in boards:
+			var board: Board = boards[bname]
+			for unit_id in [3, 7, 11, 19]:
+				for facing in 8:
+					var b := Casualties.Body.new(unit_id, Vector2i(3, 3), 0, id, facing, 0, Casualties.CREW_FIGURES)
+					var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
+					var turn := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
+					var rects: Array = []
+					var where: String = "тип %d, юніт %d, напрям %d, %s" % [id, unit_id, facing, bname]
+					var dirs: Array[Vector2i] = WreckLayer._water_dirs(board, b.pos)
+					for slot in Casualties.CREW_FIGURES:
+						var xf: Transform3D = WreckLayer.body_transform(b, slot, board, [])
+						var mid: Vector3 = WreckLayer.body_centre(xf) - centre
+						var long := Vector2(xf.basis.z.x, xf.basis.z.z).normalized()
+						var wide := Vector2(-long.y, long.x)
+						for sl: float in [-1.0, 1.0]:
+							for sw: float in [-1.0, 1.0]:
+								var corner: Vector2 = Vector2(mid.x, mid.z) + long * (WreckLayer.BODY_LENGTH * 0.5 * sl) + wide * (WreckLayer.BODY_WIDTH * 0.5 * sw)
+								if bname != "оточено":
+									assert_lte(absf(corner.x), 0.5, "кут тіла в тайлі по x, " + where)
+									assert_lte(absf(corner.y), 0.5, "кут тіла в тайлі по z, " + where)
+									assert_true(WreckLayer._water_ok(corner, dirs), "кут тіла не за воду, " + where)
+						if bname != "оточено":
+							assert_false(WreckLayer.body_hits_gun(xf, centre, turn, fp), "тіло не під уламком, " + where)
+						rects.append([Vector2(mid.x, mid.z), long])
+					if bname == "оточено":
+						continue
+					var r0: Array = rects[0]
+					var r1: Array = rects[1]
+					assert_false(WreckLayer.body_rects_overlap(r0[0], r0[1], r1[0], r1[1]), "тіла одне на одному, " + where)
+					# на березі місця може бракувати на обидва кроки: там лишається вимога «не одне на одному»
+					if bname == "поле" or bname == "кут":
+						assert_gte((r0[0] as Vector2).distance_to(r1[0]), WreckLayer.CREW_MIN_APART - 0.0001, "середини тіл розрізняються, " + where)
+						var apart: float = absf(wrapf(atan2(r0[1].x, r0[1].y) - atan2(r1[1].x, r1[1].y), -PI * 0.5, PI * 0.5))
+						assert_gte(apart, WreckLayer.CREW_MIN_TURN - 0.0001, "довгі осі тіл розходяться, " + where)
+
+
+## Гармата, знищена на мосту, лишає уламок на настилі; тіла її розрахунку лишаються на прогоні (не ближче до води, ніж
+## поручні), але не під уламком і не одне на одному.
+func test_crew_bodies_on_a_bridge_stay_on_the_span_clear_of_the_wreck() -> void:
+	UnitSilhouettes.reset_models()
+	WreckLayer._crew_cache.clear()
+	WreckLayer.clear_deck_cache()
+	var board: Board = Board.create(8, 8, Terrain.GroundState.DRY)
+	for x in 8:
+		board.set_kind(Vector2i(x, 3), Terrain.Kind.WATER)
+	board.set_kind(Vector2i(3, 3), Terrain.Kind.BRIDGE)
+	for id: int in [9, 10]:
+		var fp: Dictionary = WreckLayer.gun_footprint(id, 0)
+		for facing: int in [0, 2, 4, 6]:
+			var b := Casualties.Body.new(5, Vector2i(3, 3), 0, id, facing, 0, Casualties.CREW_FIGURES)
+			var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
+			var turn := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
+			var mids: Array[Vector2] = []
+			for slot in Casualties.CREW_FIGURES:
+				var xf: Transform3D = WreckLayer.body_transform(b, slot, board, [])
+				var mid: Vector3 = WreckLayer.body_centre(xf) - centre
+				mids.append(Vector2(mid.x, mid.z))
+				var where: String = "тип %d, напрям %d, місце %d" % [id, facing, slot]
+				# вода зі сходу й заходу: міст іде вздовж z, а від осі настилу (x) тіло не далі за ширину проїзду
+				assert_lte(absf(mid.x), WreckLayer.BODY_DECK_HALF_ROAD + 0.001, "тіло на прогоні, " + where)
+				assert_false(WreckLayer.body_hits_gun(xf, centre, turn, fp), "тіло на мосту не під уламком, " + where)
+			assert_gte(mids[0].distance_to(mids[1]), 0.1, "двоє на мосту не одне на одному, тип %d, напрям %d" % [id, facing])
+	WreckLayer.clear_deck_cache()

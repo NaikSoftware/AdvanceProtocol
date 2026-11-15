@@ -27,8 +27,8 @@ const _SPECS: Array[Dictionary] = [
 	{"hull": Vector3(0.4375, 0.1875, 0.9375), "barrel": 0.86, "wheel": 0.045, "extras": [&"turret"]},  # 6 винищувач танків 3,5×2,3×7,5 м
 	{"hull": Vector3(0.3675, 0.1875, 0.70), "barrel": 0.46, "wheel": 0.034, "extras": [&"turret"]},  # 7 легкий танк 2,9×2,3×5,6 м
 	{"hull": Vector3(0.475, 0.25, 0.90), "barrel": 0.75, "wheel": 0.039, "extras": [&"turret"]},  # 8 важкий танк 3,8×2,8×(корпус 7,2) м
-	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "flame": [Vector3(0.0, 0.27, -0.08), Vector3(0.0, 0.24, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.02, 0.30, 0.0), Vector3(0.05, 0.37, 30.0)]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
-	{"hull": Vector3(0.305, 0.40, 0.52), "barrel": 0.73, "wheel": 0.075, "bore": 0.487, "flame": [Vector3(0.0, 0.37, -0.13), Vector3(0.0, 0.34, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.09, 0.33, -45.0), Vector3(0.13, 0.40, 45.0)]},  # 10 гаубиця: лафет з колесами; ствол і станини за його межами
+	{"hull": Vector3(0.27, 0.28, 0.34), "barrel": 0.36, "wheel": 0.067, "bore": 0.317, "flame": [Vector3(0.0, 0.27, -0.08), Vector3(0.0, 0.24, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.02, 0.30, 0.0), Vector3(0.05, 0.37, 0.0)]},  # 9 польова гармата: лафет з колесами й щитом; ствол і станини за його межами
+	{"hull": Vector3(0.305, 0.40, 0.52), "barrel": 0.73, "wheel": 0.075, "bore": 0.487, "flame": [Vector3(0.0, 0.37, -0.13), Vector3(0.0, 0.34, 0.02)], "extras": [&"trail"], "crew": [Vector3(-0.09, 0.33, 0.0), Vector3(0.13, 0.40, 0.0)]},  # 10 гаубиця: лафет з колесами; ствол і станини за його межами
 	{"hull": Vector3(0.45, 0.22, 0.92), "barrel": 0.0, "wheel": 0.04, "extras": [&"stripe"]},  # 11 інженерна машина: корпус без плуга
 ]
 
@@ -216,15 +216,14 @@ static func _merged_mat() -> StandardMaterial3D:
 ## Труб дрона на відділенні стільки, скільки дронів лишилось (§3.9, число публічне), і несуть їх
 ## перші стоячі місця — вони падають останніми; решта — простий боєць (`PLAIN_FIGURE`). Модель із
 ## трубою має той самий атлас, що й простий боєць, тож обидва малює її матеріал одним викликом.
-## Ключ кешу злитих сіток (merged_mesh): набір, тип, стоячі, труби, розкладка, напрям, набір бійця розрахунку.
+## Ключ кешу злитих мешів (merged_mesh): набір, тип, стоячі, труби, розкладка, напрям.
 static func _merged_key(type_id: int, standing: int, set_id: int, drones: int, layout: int, face: int) -> String:
 	var has_figures: bool = (spec(type_id, set_id).extras as Array).has(&"figures")
 	var up: int = _FIGURE_SLOTS.size() if standing < 0 else clampi(standing, 0, _FIGURE_SLOTS.size())
 	var model: ArrayMesh = model_mesh(type_id, set_id)
 	var plain: ArrayMesh = model_mesh(PLAIN_FIGURE, set_id) if model != null else null
 	var tubes: int = clampi(drones, 0, up) if plain != null and plain != model else 0
-	# Розрахунок гармати бере бійця набору 0 (чи свого): його розв'язаний набір теж у ключі.
-	return "%d:%d:%s:%d:%d:%d:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0, tubes, layout, face if has_figures else 0, _resolved_set(0, set_id)]
+	return "%d:%d:%s:%d:%d:%d:%d" % [_resolved_set(type_id, set_id), type_id, "model" if model != null else "box", up if has_figures else 0, tubes, layout, face if has_figures else 0]
 
 
 ## Чи меш уже злитий (кеш merged_mesh): тоді виклик нічого не будує.
@@ -300,7 +299,7 @@ static func merged_mesh(type_id: int, standing: int = -1, set_id: int = 0, drone
 	return mesh
 
 
-## Розрахунок гармати: стоїть на землі в точці (x, z), обличчям у бік `yaw` (градуси довкола Y), `lift` — висота центру сітки.
+## Боєць розрахунку гармати: стоїть на землі в точці (x, z), обличчям у бік `yaw` (градуси довкола Y), `lift` — висота центру меша.
 static func _crew_transform(c: Vector3, lift: float) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, deg_to_rad(c.z)), Vector3(c.x, lift, c.y))
 
@@ -311,9 +310,10 @@ static func _crew_box() -> BoxMesh:
 	return b
 
 
-## Двоє розрахунків гармати однією сіткою (рядок `crew`): справжній боєць набору (`PLAIN_FIGURE`, ступні на землі, 1,8 м,
-## без масштабування), поки є його модель, інакше коробка-фігура. Сітка має атлас бійця, тож малюється його матеріалом.
-## Кеш — за гарматою й розв'язаним набором бійця: набір без власного бійця бере набір 0.
+## Двоє бійців розрахунку гармати одним мешем (рядок `crew`): справжній боєць набору (`PLAIN_FIGURE`, ступні на землі,
+## 1,8 м, без масштабування), поки є його модель, інакше коробка-фігура. Другий боєць — у присіді (як заряджаючий), коли
+## набір його має: стоячі з гвинтівками разом читались двома стрілками. Меш має атлас бійця, тож малюється його
+## матеріалом. Кеш — за гарматою й розв'язаним набором бійця: набір без власного бійця бере набір 0.
 static func crew_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
 	var crew: Array = spec(type_id, set_id).get("crew", [])
 	if crew.is_empty():
@@ -325,7 +325,15 @@ static func crew_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
 	var xfs: Array[Transform3D] = []
 	for c: Vector3 in crew:
 		xfs.append(_crew_transform(c, 0.0 if soldier != null else FIGURE_SIZE.y * 0.5))
-	var a: Array = _merge_model(soldier if soldier != null else _crew_box(), xfs).surface_get_arrays(0)
+	var parts: Array = []
+	if soldier == null:
+		parts.append([_crew_box(), xfs])
+	else:
+		var kneel: ArrayMesh = crouch_mesh(set_id)
+		for i in xfs.size():
+			var one: Array[Transform3D] = [xfs[i]]
+			parts.append([kneel if i == 1 and kneel != null else soldier, one])
+	var a: Array = _merge_parts(parts).surface_get_arrays(0)
 	# Маски колеса й гусениці та вісь UV2 — для техніки: боєць їх не має й крутитись не мусить.
 	var n: int = (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
 	var colours := PackedColorArray()

@@ -27,15 +27,23 @@ func _ready() -> void:
 	screen.setup(map, 2, 1)
 	# Дев'ятий аргумент x,y — клітинка уламків (напр. берег ставка); інакше поле біля центру.
 	var cell := _field_near_centre(map)
+	# WRECK_AT: shore (поле біля води), bridge (міст), інакше поле біля центру; WRECK_FACING — напрям гармати;
+	# WRECK_NOBODIES — без тіл розрахунку (пара для порівняння)
+	var at: String = OS.get_environment("WRECK_AT")
+	if at != "":
+		cell = _find_cell(map, at, cell)
 	if a.size() > 8 and a[8].contains(","):
 		cell = Vector2i(int(a[8].get_slice(",", 0)), int(a[8].get_slice(",", 1)))
 	var layer: WreckLayer = screen.get("_wreck_layer")
 	layer.set("_frame", int(float(a[6]) * WreckLayer.FLIPBOOK_FPS))
 	# Народився давно: стовп уже повний, як у перебудованих зі стану уламків.
-	layer.call("_add_node", cell, int(OS.get_environment("WRECK_TYPE")) if OS.get_environment("WRECK_TYPE") != "" else MEDIUM_TANK, float(a[3]), 0, WreckLayer.LONG_AGO)
-	if Casualties.has_crew(int(OS.get_environment("WRECK_TYPE")) if OS.get_environment("WRECK_TYPE") != "" else MEDIUM_TANK):
+	var wtype: int = int(OS.get_environment("WRECK_TYPE")) if OS.get_environment("WRECK_TYPE") != "" else MEDIUM_TANK
+	var wfacing: int = int(OS.get_environment("WRECK_FACING"))
+	layer.set("_board", (screen.call("_state") as BattleState).board)
+	layer.call("_add_node", cell, wtype, float(a[3]), wfacing, WreckLayer.LONG_AGO)
+	if Casualties.has_crew(wtype) and OS.get_environment("WRECK_NOBODIES") == "":
 		# розрахунок знищеної гармати лягає біля уламка
-		layer.add_body(Casualties.Body.new(1, cell, 0, int(OS.get_environment("WRECK_TYPE")), 0, 0, Casualties.CREW_FIGURES))
+		layer.add_body(Casualties.Body.new(1, cell, 0, wtype, wfacing, 0, Casualties.CREW_FIGURES))
 	layer.call("_refresh_effects")
 	# nodepth — стовп диму без перевірки глибини й м'якого краю: чи ховає його щось непрозоре геометрично, а не порядком.
 	if a.size() > 7 and a[7] == "nodepth":
@@ -79,6 +87,28 @@ func _ready() -> void:
 
 
 ## Найближча до центру клітинка поля: уламки стоять на землі, не у воді й не в хаті.
+## Поле з водою поруч (shore) чи міст (bridge) найближче до центру; `fallback`, коли такого нема.
+func _find_cell(map: MapData, what: String, fallback: Vector2i) -> Vector2i:
+	var c := Vector2i(map.width / 2, map.height / 2)
+	var best: Vector2i = fallback
+	var best_d: int = 1 << 30
+	for y in range(1, map.height - 1):
+		for x in range(1, map.width - 1):
+			var k: int = map.tiles[y * map.width + x]
+			var ok: bool = false
+			if what == "bridge":
+				ok = k == Terrain.Kind.BRIDGE
+			elif what == "shore" and k == Terrain.Kind.FIELD:
+				for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					ok = ok or map.tiles[(y + d.y) * map.width + x + d.x] == Terrain.Kind.WATER
+			if ok:
+				var dd: int = (x - c.x) * (x - c.x) + (y - c.y) * (y - c.y)
+				if dd < best_d:
+					best_d = dd
+					best = Vector2i(x, y)
+	return best
+
+
 func _field_near_centre(map: MapData) -> Vector2i:
 	var c := Vector2i(map.width / 2, map.height / 2)
 	var best := c

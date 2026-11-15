@@ -269,6 +269,9 @@ static func _is_valid(data: Dictionary) -> bool:
 				return false
 			if _is_vehicle_type(int(b["type_id"])) and not Casualties.has_crew(int(b["type_id"])):
 				return false
+			# розрахунок гармати лягає разом — двоє, з першого місця
+			if Casualties.has_crew(int(b["type_id"])) and (int(b["first"]) != 0 or int(b["count"]) != Casualties.CREW_FIGURES):
+				return false
 			if unit_of.get(int(b["unit_id"]), Vector2i(-1, -1)) != Vector2i(int(b["owner"]), int(b["type_id"])):
 				return false
 			var kind: int = int((board["tiles"] as Array)[int(b["y"]) * w + int(b["x"])])

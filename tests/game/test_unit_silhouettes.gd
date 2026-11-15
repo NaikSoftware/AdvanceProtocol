@@ -369,7 +369,7 @@ func test_gun_crew_is_two_real_figures_with_the_soldier_material() -> void:
 		if with_soldier_model:
 			assert_same(crew.material_override, UnitSilhouettes.model_material(UnitSilhouettes.PLAIN_FIGURE), "матеріал бійця, не гармати")
 		else:
-			assert_ne(crew.material_override, UnitSilhouettes.model_material(9), "коробки без матеріалу гармати")
+			assert_same(crew.material_override, UnitSilhouettes._merged_mat(), "коробки з кольором у вершинах, без матеріалу гармати")
 		# фігури — не колесо й не гусениця: B = 0, UV2 = 0
 		var cols: PackedColorArray = arr[Mesh.ARRAY_COLOR]
 		var uv2: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV2]

@@ -272,3 +272,16 @@ func test_crew_bodies_follow_the_reveal_rules_and_a_save() -> void:
 		assert_eq(b.bodies.size(), 1)
 		assert_eq([b.bodies[0].type_id, b.bodies[0].first, b.bodies[0].count, b.bodies[0].revealed_to],
 				[9, 0, 2, body.revealed_to])
+
+
+## Розрахунок гармати лягає разом: двоє з першого місця, інакше збереження відкидається.
+func test_a_crew_body_must_be_both_figures_from_the_first_slot() -> void:
+	state.add_unit(5, 1, Vector2i(9, 9), 0)
+	var gun: Unit = state.add_unit(9, 0, Vector2i(3, 4), 5)
+	_hit(gun, 0)
+	var good: Dictionary = _saved()
+	assert_not_null(BattleSerializer.from_dict(good), "двоє з першого місця — законно")
+	for bad: Array in [["count", 1], ["count", 3], ["first", 1], ["first", 2]]:
+		var d: Dictionary = good.duplicate(true)
+		d["bodies"][0][bad[0]] = bad[1]
+		assert_null(BattleSerializer.from_dict(d), "%s = %s" % bad)

@@ -117,7 +117,7 @@ func test_squad_contact_is_a_small_weak_shadow_under_each_standing_figure() -> v
 	assert_almost_eq(contacts.transform_of(0).basis.x.length(), UnitSilhouettes.spec(5).hull.x * UnitView.CONTACT_SPREAD, 0.0001)
 
 
-## Гармата: квад під корпусом, як у техніки, і по малій слабкій тіні під ногами кожного з двох розрахунку; вони
+## Гармата: квад під корпусом, як у техніки, і по малій слабкій тіні під ногами кожного з двох бійців розрахунку; вони
 ## повертаються разом із гарматою.
 func test_gun_crew_has_a_small_contact_shadow_each() -> void:
 	WeatherRig.unit_contact = 0.6
