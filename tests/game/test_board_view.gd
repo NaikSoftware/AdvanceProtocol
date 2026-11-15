@@ -703,7 +703,7 @@ func test_draw_circles_publishes_rings_for_the_canopy() -> void:
 func test_line_rect_bounds_every_contour_and_ring_for_the_canopy() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
 	var forest: ForestLayer = view.forest()
-	assert_eq(forest.line_rect, Vector4(INF, INF, -INF, -INF), "без ліній — порожня")
+	assert_eq(forest.line_rect, ForestLayer.EMPTY_RECT, "без ліній — порожня")
 	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
 	_assert_vec4(forest.line_rect, Vector4(0.45, 0.45, 1.55, 1.55))
 	view.draw_circles([{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
@@ -711,7 +711,7 @@ func test_line_rect_bounds_every_contour_and_ring_for_the_canopy() -> void:
 	view.clear_contour(BoardView.LAYER_ZONES)
 	_assert_vec4(forest.line_rect, Vector4(0.85, 2.85, 7.15, 9.15))
 	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
-	assert_eq(forest.line_rect, Vector4(INF, INF, -INF, -INF))
+	assert_eq(forest.line_rect, ForestLayer.EMPTY_RECT)
 
 
 func _assert_vec4(got: Vector4, want: Vector4) -> void:

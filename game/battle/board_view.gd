@@ -463,7 +463,6 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 		sm.set_shader_parameter(&"band", bands[-1])
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
-		# Поки біжить імпульс, сітка — увесь круг; далі лише смуга межі (_set_pulse).
 		# Хвиля біжить від юніта, тож поки вона йде, сітка кола з хвилею — увесь круг; коло без хвилі й
 		# коло після імпульсу — лише смуга межі (_set_pulse).
 		var with_band: bool = animate and bands[-1] > 0.0
@@ -764,8 +763,8 @@ func _publish_line_rect() -> void:
 			var reach: float = float(c["radius"]) + RING_OUTER + 0.05
 			lo = lo.min(centre - Vector2.ONE * reach)
 			hi = hi.max(centre + Vector2.ONE * reach)
-	# Без ліній лишається (INF, INF, -INF, -INF): жоден відрізок променя таку рамку не перетинає.
-	_forest.set_line_rect(Vector4(lo.x, lo.y, hi.x, hi.y))
+	# Без ліній — порожня рамка: жоден відрізок променя її не перетинає.
+	_forest.set_line_rect(ForestLayer.EMPTY_RECT if lo.x > hi.x else Vector4(lo.x, lo.y, hi.x, hi.y))
 
 
 func _contour_material(over_bridge: bool = false) -> Material:
