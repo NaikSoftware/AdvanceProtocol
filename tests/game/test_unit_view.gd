@@ -537,6 +537,15 @@ func test_drone_icon_never_overlaps_a_neighbours_bar_or_label() -> void:
 				assert_false(own.intersects(icon_n), tag + ": значок на його значку")
 
 
+## Позначки юніта (лічильник дронів, прицільні знаки) — інтерфейс, а не фарба на землі: серед прозорих
+## вони після ліній дошки (контури, кільця дальності зі світлою смугою), тож лінії й смуга їх не перефарбовують.
+func test_unit_marks_draw_after_the_board_lines() -> void:
+	for n: SpriteBase3D in [view._drone_icon, view._crosshair, view._forbidden, view._threatened, view._drone_threatened]:
+		assert_eq(n.render_priority, UnitView.MARK_PRIORITY, n.name)
+	assert_gt(UnitView.MARK_PRIORITY, BoardView.CONTOUR_PRIORITY)
+	assert_lt(UnitView.MARK_PRIORITY, UnitView.OVERLAY_PRIORITY, "смужка здоров'я лишається зверху")
+
+
 ## §3.9: залишок дронів публічний — метод навіть не має доступу до owner,
 ## тож ця перевірка доводить «байдуже, чий юніт» буквально, а не за словами.
 func test_set_drones_shows_count_regardless_of_owner() -> void:

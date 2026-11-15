@@ -53,6 +53,10 @@ const _DESTROY_DURATION: float = 0.6
 ## HP-бар і підпис — поверх усіх ефектів (вогонь уламків має пріоритет 1) і без перевірки
 ## глибини: інакше полум'я перекривало б одні підписи, а інші лишались зверху.
 const OVERLAY_PRIORITY: int = 10
+## Позначки юніта (лічильник дронів, приціл, хрест, загрози) — інтерфейс, а не фарба на землі: серед
+## прозорих вони після контурів зон і кілець дальності (BoardView.CONTOUR_PRIORITY), тож ні лінії, ні
+## світла смуга кільця їх не перефарбовують; під смужкою здоров'я.
+const MARK_PRIORITY: int = OVERLAY_PRIORITY - 2
 ## Фігур у відділенні; стоїть одна на кожну чверть HP, що лишилась (правило — Casualties у core).
 const SQUAD_FIGURES: int = Casualties.SQUAD_FIGURES
 const _FALL_SEC: float = 0.5
@@ -198,6 +202,8 @@ func _ready() -> void:
 	# Значки й смуга — інтерфейс, не тіло: у проході тіней кожен з них був би ще одним викликом.
 	for n: GeometryInstance3D in [_crosshair, _forbidden, _threatened, _drone_threatened, _hp_bar, _hp_label, _drone_icon]:
 		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for n: SpriteBase3D in [_crosshair, _forbidden, _threatened, _drone_threatened]:
+		n.render_priority = MARK_PRIORITY
 	# Розчинена крона пише глибину (проходить лише найближча поверхня) — значок дронів поверх неї, як смуга.
 	for n: Node in [_hp_bar, _hp_label, _drone_icon]:
 		n.set("no_depth_test", true)

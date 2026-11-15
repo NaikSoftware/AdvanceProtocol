@@ -12,9 +12,13 @@ the battle scars underneath, and those are both the atmosphere budget ([§8](../
 the map is supposed to tell you where the fighting has been. Contours are also cheaper on a phone
 screen and do not fight the fog, which is itself a darkening of tiles.
 
-The contour is a thin, half-transparent line painted **on the ground only**: buildings, trees,
-fences and units in front of it hide it, as they would hide paint on the ground. It is a path hint,
-not the loudest thing in the frame. On a bridge it lies on the deck, not on the riverbed under it.
+The contour is a thin, half-transparent line painted **on the ground only**: buildings, fences and
+units in front of it hide it, as they would hide paint on the ground. Trees do not: where the line
+lies under the forest canopy, the crowns show it through themselves in the same colour and width,
+so a zone inside a forest stays readable. A crown fading over a shown unit does not, and no crown
+draws the line where a shown unit stands between it and the ground: the unit hides the line there,
+as it hides paint on the ground. It is a path hint, not the loudest thing in the frame. On a bridge
+it lies on the deck, not on the riverbed under it. The ring (below) always lies under the contours.
 
 The reference draws these zones the same way, as contours, and splits them on exactly the same
 test (`remaining_ap >= fire_cost`). It colours them green and red; this project keeps gold and red
@@ -32,7 +36,16 @@ looks, and changes nothing: no selection, no move, no turn, no preview.
 radius `range` tiles centred on the middle of the unit's tile. It is the weapon's reach as the
 rule states it (§3.1, Euclidean). Which units can actually be hit inside it is what the **marks**
 say: a crosshair on each marked unit. The circle is cheap to read at a glance and does not compete
-with the two movement contours, which stay tile-shaped.
+with the two movement contours, which stay tile-shaped. Like the contours, it shows through the
+forest canopy, also past the board edge, where the ring continues on the ground.
+
+**The ring is a thin line with a light gradient just inside it, and it does not move.** The line
+is solid and opaque, thin (never under about 1.5 px on screen), exactly at the rule radius — the
+edge the player decides by. Inside it a light gradient of fixed width (about 0.6 tile, not scaled
+with the radius) fades smoothly to nothing, so the hint of the reach sits at the edge and most of
+the disk, and the ground under it, stays untouched. Nothing is drawn outside the radius, and nothing
+animates. Gun and drone rings look alike; the drone ring stays distinct by its violet colour and
+its larger radius. The crowns over the ring show the same line and gradient.
 
 **Any visible unit can be inspected, including an enemy's.** This is the feature worth porting.
 Holding an enemy shows *its* range and which of **your** units stand inside it. With retaliation

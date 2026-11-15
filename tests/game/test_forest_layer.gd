@@ -373,6 +373,34 @@ func test_foliage_is_one_mesh_per_atlas_and_layer() -> void:
 		assert_gt(f._ring_fadable.size(), 0, "%s: кільце в злитій сітці" % season)
 
 
+## Юніта під кронами відкриває прохід глибини розчинення (FOREST_PRIORITY): він закриває все, що
+## прозорий прохід малює після нього за найближчою розчиненою кроною. Mobile кладе звичайні крони
+## (поріг альфи з краєм alpha-to-coverage) у прозорий прохід, Compatibility такі крони вважає
+## непрозорими й малює до маски — тож там крона кладе прозорість сама: відкидання за порогом і ALPHA 1.
+func test_ordinary_crowns_draw_after_the_fade_depth_on_every_renderer() -> void:
+	var mobile: String = ForestLayer.batch_code("mobile")
+	var gl: String = ForestLayer.batch_code("gl_compatibility")
+	assert_true(mobile.contains("ALPHA_SCISSOR_THRESHOLD = cut; ALPHA_ANTIALIASING_EDGE = a2c_edge;"), "Mobile: поріг із краєм a2c, як був")
+	assert_true(mobile.contains("render_mode cull_disabled, depth_draw_opaque, skip_vertex_transform, alpha_to_coverage;"), "Mobile: режими без змін")
+	assert_false(mobile.contains("ALPHA = 1.0;"), "Mobile: без ручної прозорості")
+	assert_false(gl.contains("ALPHA_SCISSOR_THRESHOLD"), "Compatibility: поріг альфи зробив би крону непрозорою")
+	assert_true(gl.contains("if (t.a < cut) { discard; }\n\tALPHA = 1.0;"), "Compatibility: та сама вирізка, прозорий прохід")
+	assert_true(gl.contains("render_mode cull_disabled, depth_draw_always, skip_vertex_transform;"), "Compatibility: прозора крона пише глибину")
+	# Злита крона — один меш на всю дошку, і за відстанню до його центру дим перед лісом сортувався б
+	# під крони за ним: у Compatibility крона малюється одразу після маски, раніше за дим і наліпки.
+	assert_eq(ForestLayer.batch_priority("mobile"), 0, "Mobile: пріоритет без змін")
+	assert_eq(ForestLayer.batch_priority("gl_compatibility"), ForestLayer.FOREST_PRIORITY + 1, "Compatibility: між маскою й димом")
+	var f := _ring_layer()
+	var depth_priority: int = (f._fade_mat.values()[0] as ShaderMaterial).render_priority
+	var drawn := _drawn(f)
+	assert_gt(drawn.size(), 0)
+	for n: Node in drawn:
+		var mat := (n as GeometryInstance3D).material_override as ShaderMaterial
+		assert_eq(mat.shader.code, ForestLayer.batch_code(RenderingServer.get_current_rendering_method()), "%s: шейдер свого рендерера" % n.name)
+		assert_gt(mat.render_priority, depth_priority, "%s: після маски розчинення" % n.name)
+		assert_eq(mat.render_priority, ForestLayer.batch_priority(RenderingServer.get_current_rendering_method()), "%s: пріоритет свого рендерера" % n.name)
+
+
 ## Розчинення працює і зі злитою сіткою: розчинений екземпляр гасне в таблиці даних батча (й
 ## вертає, коли юніт іде), а решта лишається.
 func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:
@@ -399,3 +427,55 @@ func test_fade_hides_the_instance_inside_the_merged_mesh() -> void:
 	for g: Dictionary in f._fadable + f._ring_fadable:
 		for i in (g["list"] as Array).size():
 			assert_true((g["batch"] as FoliageBatch).is_alive(int(g["first"]) + i), "юніт пішов — усе знову ціле")
+
+
+## Контур зони й кільця дальності під кронами (BoardView.contour_edges, draw_circles): їх отримує кожна
+## крона дошки й кільця, і після перебудови пролому теж; розчинена крона над юнітом лінії не малює — промінь
+## крізь неї до землі проходить через юніта, і лінія лягла б на нього.
+func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
+	var f := _ring_layer()
+	var tex := ImageTexture.create_from_image(Image.create(2, 2, false, Image.FORMAT_RGBA8))
+	f.set_contour_edges(tex)
+	var rings := PackedVector4Array([Vector4(5.0, 3.0, 3.0, 0.0)])
+	f.set_contour_rings(rings, PackedColorArray([Color(0.25, 0.5, 0.75, 0.5)]))
+	f.set_line_rect(Vector4(1.0, 2.0, 8.0, 9.0))
+	# Юніти — до пролому: перебудовані пролом крони мусять отримати і їхні клітинки.
+	f.set_reveal_cells([Vector2i(5, 3)] as Array[Vector2i])
+	f.set_broken({Vector2i(7, 6): true})
+	var drawn := _drawn(f)
+	assert_gt(drawn.size(), 0)
+	for n: Node in drawn:
+		var mat := (n as GeometryInstance3D).material_override as ShaderMaterial
+		assert_same(mat.get_shader_parameter("contour_edges"), tex, "%s: картка ребер" % n.name)
+		assert_eq(mat.get_shader_parameter("contour_on"), true, "%s: лінія увімкнена" % n.name)
+		assert_eq(mat.get_shader_parameter("ring_count"), 1, "%s: одне кільце" % n.name)
+		assert_eq(mat.get_shader_parameter("overlay_layers"), 1 << (BoardView.OVERLAY_LAYER - 1), "%s: лише камера накладок, не зонд" % n.name)
+		assert_eq(mat.get_shader_parameter("rings"), rings, "%s: центр і радіус кільця" % n.name)
+		assert_eq(mat.get_shader_parameter("line_rect"), Vector4(1.0, 2.0, 8.0, 9.0), "%s: рамка ліній і після перебудови пролому" % n.name)
+		# Лінію за юнітом юніт ховає: крона, чий промінь до землі йде крізь його клітинку, її не малює.
+		assert_eq(mat.get_shader_parameter("units_on"), true, "%s: юніти під кронами" % n.name)
+		var cells: Texture2D = mat.get_shader_parameter("unit_cells")
+		assert_not_null(cells, "%s: картка клітинок юнітів" % n.name)
+		if cells != null:
+			var img: Image = cells.get_image()
+			assert_eq(img.get_pixel(5, 3).r8, 255, "%s: клітинка юніта" % n.name)
+			assert_eq(img.get_pixel(4, 3).r8, 0, "%s: сусідня порожня" % n.name)
+		# Колір — той самий sRGB, що й у матеріалу кільця на землі: юніформа source_color, і кожен рендерер
+		# переводить його так само, як ring_color кільця (лінійним Mobile темнів би, Compatibility — ні).
+		assert_eq(mat.get_shader_parameter("ring_colors"), PackedColorArray([Color(0.25, 0.5, 0.75, 0.5)]), "%s: колір кільця" % n.name)
+		# Стрічка контуру й сітка кільця над річкою лежать на воді, не на дні: крона шукає землю так само.
+		assert_eq(mat.get_shader_parameter("water_level"), TerrainHeight.WATER_LEVEL, "%s: рівень води" % n.name)
+	var fades: int = 0
+	for n: Node in f.get_children():
+		if String(n.name).begins_with("Fade_"):
+			fades += 1
+			var depth := (n as GeometryInstance3D).material_override as ShaderMaterial
+			for m: ShaderMaterial in [depth, depth.next_pass as ShaderMaterial]:
+				assert_ne(m.get_shader_parameter("contour_on"), true, "%s: розчинена крона без лінії" % n.name)
+				assert_ne(m.get_shader_parameter("ring_count"), 1, "%s: розчинена крона без кільця" % n.name)
+	assert_gt(fades, 0, "є розчинена крона")
+
+	f.set_contour_edges(null)
+	for n: Node in _drawn(f):
+		assert_eq(((n as GeometryInstance3D).material_override as ShaderMaterial).get_shader_parameter("contour_on"), false,
+				"%s: без контуру крона лінію не шукає" % n.name)

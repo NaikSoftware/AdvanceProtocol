@@ -169,7 +169,8 @@ func _circle_nodes() -> Array[MeshInstance3D]:
 	return out
 
 
-## Радіус у тайлах = радіус у світі (тайл — 1.0), центр — середина тайла юніта.
+## Радіус у тайлах = радіус у світі (тайл — 1.0), центр — середина тайла юніта. Узор рахує шейдер із
+## точки ґрунту, тож у матеріал іде рівно радіус правила.
 func test_draw_circles_makes_one_ring_per_circle_centred_on_the_tile() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
 	var circles: Array[Dictionary] = [{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE}]
@@ -182,14 +183,15 @@ func test_draw_circles_makes_one_ring_per_circle_centred_on_the_tile() -> void:
 	var ring: MeshInstance3D = nodes[0]
 	assert_eq(ring.position.x, 4.0)
 	assert_eq(ring.position.z, 6.0)
-	var arrays: Array = (ring.mesh as ArrayMesh).surface_get_arrays(0)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var radius_sum := 0.0
-	for v in verts:
-		radius_sum += Vector2(v.x, v.z).length()
-	assert_almost_eq(radius_sum / verts.size(), 3.0, 0.0001, "середня лінія — рівно 3 тайли")
-	for v in verts:
-		assert_almost_eq(v.y, TerrainHeight.ground_y(4.0 + v.x, 6.0 + v.z) + 0.04, 0.0001, "кільце лягає на ґрунт")
+	var mat := ring.material_override as ShaderMaterial
+	assert_not_null(mat, "кільце — шейдер fire_ring")
+	if mat == null:
+		return
+	assert_eq(mat.get_shader_parameter("radius"), 3.0)
+	assert_eq(mat.get_shader_parameter("ring_color"), Color.WHITE)
+	assert_eq(mat.render_priority, BoardView.CONTOUR_PRIORITY)
+	assert_eq(ring.layers, 1 << (BoardView.OVERLAY_LAYER - 1))
+	assert_eq(ring.cast_shadow, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 	assert_eq(view.contour_segments(BoardView.LAYER_INSPECT), [], "коло — не контур тайлів")
 
 
@@ -218,6 +220,179 @@ func test_rebuild_tiles_keeps_circles() -> void:
 
 	assert_eq(view.circles(BoardView.LAYER_INSPECT), circles)
 	assert_eq(_circle_nodes().size(), 1)
+
+
+# --- Вигляд кільця: світла смуга всередині й тонка межа ------------------------------
+#
+# Кільце статичне: легка смуга від радіуса всередину й тонка лінія рівно на радіусі. Сітка — смуга
+# ґратки висот [r − смуга − запас, r + запас], без анімації.
+
+const _R: float = 3.0
+
+
+func _draw_ring() -> MeshInstance3D:
+	view.draw_circles([{"center": Vector2i(4, 6), "radius": int(_R), "color": Color.WHITE}] as Array[Dictionary],
+		BoardView.LAYER_INSPECT)
+	return _circle_nodes()[0]
+
+
+func _point_covered(mesh: ArrayMesh, p: Vector2) -> bool:
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	for t in range(0, idx.size(), 3):
+		var a := Vector2(verts[idx[t]].x, verts[idx[t]].z)
+		var b := Vector2(verts[idx[t + 1]].x, verts[idx[t + 1]].z)
+		var c := Vector2(verts[idx[t + 2]].x, verts[idx[t + 2]].z)
+		# Межа трикутника теж накрита: точка в центрі клітинки лежить на діагоналі квадрата.
+		var s1: float = (b - a).cross(p - a)
+		var s2: float = (c - b).cross(p - b)
+		var s3: float = (a - c).cross(p - c)
+		if (s1 >= -1e-6 and s2 >= -1e-6 and s3 >= -1e-6) or (s1 <= 1e-6 and s2 <= 1e-6 and s3 <= 1e-6):
+			return true
+	return false
+
+
+func test_ring_mesh_covers_the_gradient_and_the_line_and_drapes() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	var mesh := _draw_ring().mesh as ArrayMesh
+	var inner: float = _R - BoardView.RING_GRAD_W - BoardView.RING_INNER_MARGIN
+	var outer: float = _R + BoardView.RING_OUTER
+	# Сітка — клітинки поля висот, що зачепили смугу: вершина відходить від смуги не далі діагоналі клітинки.
+	var cell: float = sqrt(2.0) / TerrainHeight.SAMPLES_PER_TILE
+	for v in (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+		var d: float = Vector2(v.x, v.z).length()
+		assert_true(d >= inner - cell - 1e-5 and d <= outer + cell + 1e-5, "вершина на %.3f — у смузі кільця" % d)
+		assert_almost_eq(v.y, maxf(TerrainHeight.ground_y(4.0 + v.x, 6.0 + v.z), TerrainHeight.WATER_LEVEL) + 0.04, 0.0001,
+			"вершина кільця лягає на ґрунт чи воду")
+	for k in 24:
+		var dir := Vector2.from_angle(TAU * k / 24.0)
+		for r: float in [_R - BoardView.RING_GRAD_W, _R - BoardView.RING_GRAD_W * 0.5, _R, outer]:
+			assert_true(_point_covered(mesh, dir * r), "точка %s накрита" % [dir * r])
+	assert_false(_point_covered(mesh, Vector2.ZERO), "усередині смуги — порожньо")
+
+
+## Кільце статичне: жодного твіну, шейдер без TIME, на кронах — так само.
+func test_ring_is_static() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	var before: Array[Tween] = get_tree().get_processed_tweens()
+	_draw_ring()
+	assert_eq(get_tree().get_processed_tweens().filter(func(t: Tween) -> bool: return not before.has(t)).size(), 0, "без твіну")
+	for path: String in ["res://game/battle/shaders/fire_ring.gdshader", "res://game/battle/shaders/fire_ring.gdshaderinc"]:
+		assert_false(FileAccess.get_file_as_string(path).contains("TIME"), path)
+	assert_false(view.has_method("is_pulsing"))
+
+
+## Ширина лінії й смуги — у шейдері (fire_ring.gdshaderinc), сітка кільця — тут: одне число в двох
+## місцях мусить збігатися. Лінія тонка, смуга легка.
+func test_ring_widths_match_the_shader() -> void:
+	var code: String = FileAccess.get_file_as_string("res://game/battle/shaders/fire_ring.gdshaderinc")
+	var re := RegEx.create_from_string("const float (FR_LINE_W|FR_GRAD_W) = ([0-9.]+);")
+	var found: Dictionary = {}
+	for m: RegExMatch in re.search_all(code):
+		found[m.get_string(1)] = float(m.get_string(2))
+	assert_eq(found.get("FR_LINE_W"), BoardView.RING_LINE_W)
+	assert_eq(found.get("FR_GRAD_W"), BoardView.RING_GRAD_W)
+	assert_almost_eq(BoardView.RING_LINE_W, 0.045, 1e-6, "тонка лінія межі")
+	assert_almost_eq(BoardView.RING_GRAD_W, 0.6, 1e-6, "смуга на 0,6 тайла всередину")
+	# Не тонша за півтора пікселя: на найдальшому зумі вона інакше розсипається.
+	assert_true(code.contains("max(FR_LINE_W * 0.5, 1.25 * px)"), "суцільна лінія — щонайменше 1,5 пікселя")
+
+
+# Відбиток fire_ring.gdshaderinc на GDScript: числа беруться з самого шейдера, а вирази, яких він
+# дотримується, тест шукає в коді шейдера — розійдуться, і тест це скаже.
+func _shader_const(code: String, name: String) -> float:
+	var m: RegExMatch = RegEx.create_from_string("const float %s = ([0-9.]+);" % name).search(code)
+	return float(m.get_string(1)) if m != null else NAN
+
+
+func _cov(inside: float, px: float) -> float:
+	return clampf(inside / px + 0.5, 0.0, 1.0)
+
+
+func _fire_ring(code: String, d: float, radius: float, gain: float, px: float) -> float:
+	var hw: float = maxf(_shader_const(code, "FR_LINE_W") * 0.5, 1.25 * px)
+	var line: float = _cov(hw - absf(d - radius), px)
+	var t: float = clampf((radius - d) / _shader_const(code, "FR_GRAD_W"), 0.0, 1.0)
+	var grad: float = (1.0 - t) * (1.0 - t) * _shader_const(code, "FR_GRAD_A") * gain * _cov(radius - d, px)
+	return maxf(line, grad)
+
+
+func test_ring_profile_numbers() -> void:
+	var code: String = FileAccess.get_file_as_string("res://game/battle/shaders/fire_ring.gdshaderinc")
+	for expr: String in ["max(FR_LINE_W * 0.5, 1.25 * px)", "fr_cov(hw - abs(d - radius), px)",
+			"clamp((radius - d) / FR_GRAD_W, 0.0, 1.0)", "(1.0 - t) * (1.0 - t) * FR_GRAD_A * gain * fr_cov(radius - d, px)"]:
+		assert_true(code.contains(expr), "шейдер: %s" % expr)
+	var a: float = _shader_const(code, "FR_GRAD_A")
+	var px: float = 0.01
+	assert_eq(_fire_ring(code, 3.0, 3.0, 1.0, px), 1.0, "на радіусі — суцільна лінія")
+	assert_eq(_fire_ring(code, 3.0 + 0.0225 + px, 3.0, 1.0, px), 0.0, "поза радіусом за згладжуванням — нічого")
+	assert_almost_eq(_fire_ring(code, 3.0 - 0.3, 3.0, 1.0, px), 0.25 * a, 1e-6, "на пів смуги — чверть піку")
+	assert_eq(_fire_ring(code, 3.0 - 0.6, 3.0, 1.0, px), 0.0, "на краю смуги — нуль")
+	assert_eq(_fire_ring(code, 1.0, 3.0, 1.0, px), 0.0, "до юніта смуга не доходить")
+	assert_almost_eq(_fire_ring(code, 3.0 - 0.1, 3.0, 0.7, px), 0.7 * a * pow(1.0 - 0.1 / 0.6, 2.0), 1e-6, "підсилення смуги")
+	# На найдальшому зумі (піксель на ґрунті 0,05 тайла) лінія суцільна щонайменше на 1,5 пікселя.
+	var far_px: float = 0.05
+	var solid: float = 0.0
+	for k in 400:
+		var d: float = 2.8 + k * 0.001
+		if _fire_ring(code, d, 3.0, 1.0, far_px) >= 0.999:
+			solid += 0.001
+	assert_true(solid >= 1.5 * far_px - 0.002, "суцільна лінія %.3f тайла при пікселі %.2f" % [solid, far_px])
+	# Сітка накриває лінію з її згладжуванням і на такому пікселі.
+	assert_true(BoardView.RING_OUTER >= 1.25 * far_px + 0.5 * far_px, "сітка ширша за лінію з краєм")
+
+
+## Біле кільце на темних кронах читалось матовим склом: смугу світлого кольору м'якшає (за яскравістю
+## кольору), фіолетове лишається повним.
+func test_gradient_gain_softens_only_light_rings() -> void:
+	assert_almost_eq(BoardView._grad_gain(Color.WHITE), 0.7, 1e-6)
+	assert_almost_eq(BoardView._grad_gain(TargetOverlay.GUN_RING_COLOR), 0.7, 0.02)
+	assert_eq(BoardView._grad_gain(TargetOverlay.DRONE_RING_COLOR), 1.0)
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	view.draw_circles([{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_almost_eq(float((_circle_nodes()[0].material_override as ShaderMaterial).get_shader_parameter("grad_gain")), 0.7, 1e-6)
+
+
+## Крона малює кільце тією самою функцією, що й ґрунт: смуга й межа під лісом ті самі.
+func test_canopy_and_ground_draw_the_ring_with_one_function() -> void:
+	for path: String in ["res://game/battle/shaders/fire_ring.gdshader", "res://assets/props/forest/forest_crown.gdshader"]:
+		var code: String = FileAccess.get_file_as_string(path)
+		assert_true(code.contains("#include \"res://game/battle/shaders/fire_ring.gdshaderinc\""), path)
+		assert_true(code.contains("fire_ring("), path)
+
+
+## Вершини стрічки контуру — на відліках поля висот: крона шукає землю на тій самій білінійній
+## поверхні, і лінія на вході під крону не ламається.
+func test_contour_ribbon_vertices_sit_on_the_height_lattice() -> void:
+	view.build(Board.create(5, 3, Terrain.GroundState.DRY))
+	var segs: Array[Dictionary] = []
+	for x in 3:
+		segs.append(_edge(Vector2i(x, 1), Vector2i(0, -1), Color.YELLOW))
+	view.draw_contour(segs, BoardView.LAYER_ZONES)
+	var mesh: Mesh = (view.get_node("Contour%d" % BoardView.LAYER_ZONES) as MultiMeshInstance3D).multimesh.mesh
+	var on_middle: int = 0
+	# Середнє ребро має сусідів з обох боків, тож іде рівно від кута до кута: кожна його вершина — на відліку.
+	for v in (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+		if v.x > 0.5 + 1e-4 and v.x < 1.5 - 1e-4:
+			on_middle += 1
+			var k: float = (v.x + 0.5) * TerrainHeight.SAMPLES_PER_TILE
+			assert_almost_eq(k, roundf(k), 1e-4, "x = %f на відліку поля висот" % v.x)
+	assert_eq(on_middle, (TerrainHeight.SAMPLES_PER_TILE - 1) * 2, "внутрішні відліки середнього ребра, по два боки стрічки")
+
+
+## Кільце на землі завжди під контурами зон, хоч куди зсунута камера: порядок прозорих задає зсув
+## сортування, а не відстань до камери.
+func test_ring_draws_under_the_contours() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	view.draw_contour([_edge(Vector2i(4, 3), Vector2i(0, -1), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	var ring: MeshInstance3D = _draw_ring()
+	var contour := view.get_node("Contour%d" % BoardView.LAYER_ZONES) as MultiMeshInstance3D
+	assert_eq((ring.material_override as ShaderMaterial).render_priority, contour.multimesh.mesh.surface_get_material(0).render_priority)
+	# Порядок прозорих — відстань до камери мінус зсув: кільце перше, навіть коли воно на дальньому кінці
+	# дошки, а контур на ближньому.
+	var board_diagonal: float = Vector2(10, 10).length()
+	assert_lt(ring.sorting_offset + board_diagonal, contour.sorting_offset, "зсув кільця більший за дошку")
 
 
 # Лінія зони суцільна й лежить на межі клітинок: на прямій ребро доходить рівно до кута, на куті
@@ -255,3 +430,153 @@ func test_shared_edge_is_drawn_once() -> void:
 		if c.g > 0.5:  # жовтий, а не червоний
 			golds += 1
 	assert_eq(golds, 4 * verts_per_line, "спільне ребро — золоте")
+
+
+# --- Копія контуру для крон лісу ------------------------------------------------
+#
+# Крона малює лінію сама: точку землі під пікселем крони шукає в картці ребер — по два текселі на
+# клітинку (ребро x− у (2x, y), ребро y− у (2x + 1, y)), колір лінії з її альфою. Картка мусить
+# збігатися зі стрічкою: те саме фізичне ребро з будь-якого боку, пізніший шар зверху.
+
+func _texel(x: int, y: int) -> Array:
+	var c: Color = view.contour_edges().get_pixel(x, y)
+	return [c.r8, c.g8, c.b8, c.a8]
+
+
+func test_contour_edges_put_each_physical_edge_in_its_own_texel() -> void:
+	view.build(Board.create(4, 3, Terrain.GroundState.DRY))
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW), _edge(Vector2i(1, 1), Vector2i(-1, 0), Color.YELLOW),
+			_edge(Vector2i(1, 1), Vector2i(0, -1), Color.RED), _edge(Vector2i(1, 1), Vector2i(0, 1), Color.RED)] as Array[Dictionary],
+			BoardView.LAYER_ZONES)
+
+	assert_eq(view.contour_edges().get_size(), Vector2i(10, 4), "(W + 1) ребер x− по два текселі × (H + 1) рядів")
+	# Альфа — альфа стрічки (0,7), у RGBA8 відкинута до 178.
+	assert_eq(_texel(4, 1), [255, 255, 0, 178], "x+ клітинки (1, 1) — це x− клітинки (2, 1)")
+	assert_eq(_texel(2, 1), [255, 255, 0, 178], "x− клітинки (1, 1)")
+	assert_eq(_texel(3, 1), [255, 0, 0, 178], "y− клітинки (1, 1)")
+	assert_eq(_texel(3, 2), [255, 0, 0, 178], "y+ клітинки (1, 1) — це y− клітинки (1, 2)")
+	var lit: int = 0
+	for y in 4:
+		for x in 10:
+			if view.contour_edges().get_pixel(x, y).a8 > 0:
+				lit += 1
+	assert_eq(lit, 4, "лише чотири ребра")
+
+
+## На землі кожен шар — своя напівпрозора стрічка, тож на спільному ребрі видно обидві: пізніший шар
+## поверх (альфа 0,7 над 0,7). Картка зводить шари тим самим змішуванням, щоб крона показала той самий колір.
+func test_contour_edges_composite_later_layer_over_earlier_and_cleared_layer_disappears() -> void:
+	view.build(Board.create(4, 3, Terrain.GroundState.DRY))
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	view.draw_contour([_edge(Vector2i(2, 1), Vector2i(-1, 0), Color.WHITE)] as Array[Dictionary], BoardView.LAYER_PATH)
+	# a = 0,7 + 0,7·0,3 = 0,91; b = (1·0,7 + 0·0,21) / 0,91 = 0,769, у sRGB — 0,891.
+	assert_eq(_texel(4, 1), [255, 255, 227, 232], "шлях поверх зони на тому самому ребрі, зона просвічує")
+
+	view.clear_contour(BoardView.LAYER_PATH)
+	assert_eq(_texel(4, 1), [255, 255, 0, 178], "без шляху — знову зона")
+
+	view.clear_contour(BoardView.LAYER_ZONES)
+	assert_eq(_texel(4, 1), [0, 0, 0, 0], "без контурів — порожньо")
+
+
+## Колір лінії — у sRGB і в картці ребер, і у вершинах стрічки (vertex_color_is_srgb, sampler source_color):
+## кожен рендерер переводить його так само, як колір кільця, і Compatibility не темнить ліній. Колір зони
+## задано як лінійний, тож у sRGB він іде через linear_to_srgb().
+func test_contour_colour_is_srgb_encoded_on_the_ribbon_and_in_the_edge_card() -> void:
+	view.build(Board.create(4, 3, Terrain.GroundState.DRY))
+	var mid := Color(0.5, 0.25, 0.0)
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), mid)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	var want: Color = mid.linear_to_srgb()
+	var texel: Color = view.contour_edges().get_pixel(4, 1)
+	assert_almost_eq(texel.r, want.r, 1.0 / 255.0)
+	assert_almost_eq(texel.g, want.g, 1.0 / 255.0)
+	var mesh: Mesh = (view.get_node("Contour%d" % BoardView.LAYER_ZONES) as MultiMeshInstance3D).multimesh.mesh
+	var c: Color = (mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR] as PackedColorArray)[0]
+	# Масив кольорів сітки рушій зберігає у 8 бітах.
+	assert_almost_eq(c.r, want.r, 1.0 / 255.0)
+	assert_almost_eq(c.g, want.g, 1.0 / 255.0)
+	assert_almost_eq(c.a, 0.7, 1.0 / 255.0)
+	assert_true((mesh.surface_get_material(0) as StandardMaterial3D).vertex_color_is_srgb)
+	var crown: String = FileAccess.get_file_as_string("res://assets/props/forest/forest_crown.gdshader")
+	assert_true(crown.contains("uniform sampler2D contour_edges : source_color"), "крона читає картку як sRGB")
+
+
+func test_contour_edges_within_a_layer_later_segment_wins_like_the_ribbon() -> void:
+	view.build(Board.create(4, 4, Terrain.GroundState.DRY))
+	var segs: Array[Dictionary] = []
+	segs.append_array(ZoneOverlay._edges([Vector2i(2, 1)] as Array[Vector2i], Color.RED))
+	segs.append_array(ZoneOverlay._edges([Vector2i(1, 1)] as Array[Vector2i], Color.YELLOW))
+	view.draw_contour(segs, BoardView.LAYER_ZONES)
+	assert_eq(_texel(4, 1), [255, 255, 0, 178], "межа золотої й червоної зон — золота, як і стрічка")
+	assert_eq(_texel(6, 1), [255, 0, 0, 178], "дальній бік червоної клітинки")
+
+
+func test_contour_edges_include_bridge_cells_and_skip_cells_off_the_board() -> void:
+	var board := Board.create(4, 3, Terrain.GroundState.DRY)
+	board.set_kind(Vector2i(2, 1), Terrain.Kind.BRIDGE)
+	view.build(board)
+	view.draw_contour([_edge(Vector2i(2, 1), Vector2i(0, 1), Color.YELLOW), _edge(Vector2i(7, 7), Vector2i(1, 0), Color.RED)] as Array[Dictionary],
+			BoardView.LAYER_ZONES)
+	assert_eq(_texel(5, 2), [255, 255, 0, 178], "ребро клітинки мосту")
+	var lit: int = 0
+	for y in 4:
+		for x in 10:
+			if view.contour_edges().get_pixel(x, y).a8 > 0:
+				lit += 1
+	assert_eq(lit, 1, "клітинка поза дошкою не малюється, як і стрічка")
+
+
+# Кільця дальності крона малює так само: центр і радіус у світі (клітинка — 1.0) і колір, яким кільце
+# лягло на ґрунт: sRGB з альфою, як ring_color матеріалу кільця.
+func test_draw_circles_publishes_rings_for_the_canopy() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	view.draw_circles([{"center": Vector2i(1, 1), "radius": 5, "color": Color(0.5, 0.5, 0.5, 0.5)}] as Array[Dictionary], BoardView.LAYER_TARGETS)
+	view.draw_circles([{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE},
+		{"center": Vector2i(4, 6), "radius": 5, "color": Color.RED}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+
+	var forest: ForestLayer = view.forest()
+	# w — підсилення смуги кола (_grad_gain): біле кільце м'якше, решта — повна.
+	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(1, 1, 5, 1), Vector4(4, 6, 3, 0.7), Vector4(4, 6, 5, 1)]))
+	assert_eq(forest.contour_ring_colors.size(), 3)
+	assert_eq(forest.contour_ring_colors[0], Color(0.5, 0.5, 0.5, 0.5), "той самий sRGB і альфа, що в кільця на ґрунті")
+	assert_eq(forest.contour_ring_colors[1], Color.WHITE)
+	assert_eq(forest.contour_ring_colors[2], Color.RED)
+
+	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(1, 1, 5, 1)]), "зняте кільце зникає й під кронами")
+
+
+# Крона шукає землю під собою лише, коли її промінь перетинає рамку всіх ліній: контурів (клітинки
+# з запасом на ширину) і кілець (центр ± радіус і смуга межі). Без ліній рамка порожня.
+func test_line_rect_bounds_every_contour_and_ring_for_the_canopy() -> void:
+	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	var forest: ForestLayer = view.forest()
+	assert_eq(forest.line_rect, ForestLayer.EMPTY_RECT, "без ліній — порожня")
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	_assert_vec4(forest.line_rect, Vector4(0.45, 0.45, 1.55, 1.55))
+	view.draw_circles([{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	_assert_vec4(forest.line_rect, Vector4(0.45, 0.45, 7.2, 9.2))
+	view.clear_contour(BoardView.LAYER_ZONES)
+	_assert_vec4(forest.line_rect, Vector4(0.8, 2.8, 7.2, 9.2))
+	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_eq(forest.line_rect, ForestLayer.EMPTY_RECT)
+
+
+func _assert_vec4(got: Vector4, want: Vector4) -> void:
+	for i in 4:
+		assert_almost_eq(got[i], want[i], 1e-5, "%s проти %s" % [got, want])
+
+
+# build() знімає контури й кола, а ліс переживає його: крони не мусять тримати старих ліній.
+func test_build_clears_the_canopy_copy() -> void:
+	var board := Board.create(4, 3, Terrain.GroundState.DRY)
+	view.build(board)
+	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
+	view.draw_circles([{"center": Vector2i(1, 1), "radius": 2, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	assert_not_null(view.forest()._contour_edges, "контур є — крони його шукають")
+
+	view.build(board)
+
+	assert_eq(_texel(4, 1), [0, 0, 0, 0])
+	assert_null(view.forest()._contour_edges, "без контуру крона лінію не шукає")
+	assert_eq(view.forest().contour_rings.size(), 0)
