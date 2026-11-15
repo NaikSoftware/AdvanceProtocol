@@ -1245,6 +1245,17 @@ func test_camera_motion_keeps_the_frame_rate_uncapped() -> void:
 	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS)
 
 
+## Кільце дальності статичне: показане кільце спокою не відкладає, кадр обмежується як завжди.
+func test_shown_ring_does_not_keep_the_frame_rate_uncapped() -> void:
+	var screen: Node3D = _screen()
+	var bv: BoardView = screen.get_node("%BoardView")
+	bv.build(Board.create(10, 10, Terrain.GroundState.DRY))
+	bv.draw_circles([{"center": Vector2i(4, 4), "radius": 5, "color": Color.PURPLE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
+	screen._input(InputEventScreenTouch.new())
+	_idle_for_a_second(screen)
+	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS)
+
+
 func test_leaving_battle_restores_the_previous_cap() -> void:
 	Engine.max_fps = 45
 	var screen: Node3D = BattleScreenScene.instantiate()

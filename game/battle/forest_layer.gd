@@ -135,6 +135,21 @@ var _zoom: float = 12.0
 var _fade_zoom: float = -100.0  ## зум, з яким розчинення рахували востаннє
 ## Записи плану дошки після останньої перебудови — для тестів і бюджету.
 var board_plan: Array[Dictionary] = []
+## Лінії під кронами (BoardView): картка ребер контурів (null — контурів немає) і кільця дальності —
+## центр і радіус у Vector4.xyz, колір sRGB. Розчинена крона над юнітом їх не отримує: промінь
+## крізь неї до землі йде через юніта, і лінія лягла б на нього.
+var _contour_edges: Texture2D
+var contour_rings := PackedVector4Array()
+var contour_ring_colors := PackedColorArray()
+## Рамка всіх ліній на землі (xy — мінімум, zw — максимум): крона, чий промінь до землі її не
+## перетинає, землі під собою не шукає. Порожня — EMPTY_RECT.
+var line_rect := EMPTY_RECT
+## Скінченні межі замість INF: не кожен мобільний драйвер чесно порівнює нескінченність у uniform.
+const EMPTY_RECT := Vector4(1e30, 1e30, -1e30, -1e30)
+## Клітинки показаних юнітів (set_reveal_cells) картою дошки: лінію за юнітом юніт ховає, тож крона,
+## чий промінь до землі йде крізь його клітинку, її не малює.
+var _unit_img: Image
+var _unit_tex: ImageTexture
 
 
 ## `world` — дошка разом із кільцем (Surroundings.world_board), `ring` — ширина кільця;
@@ -196,10 +211,97 @@ func set_broken(known: Dictionary) -> void:
 	_rebuild_board(region.grow(REPLAN_MARGIN))
 
 
+## Картка ребер контурів (BoardView.contour_edges); null — жодного контуру, крона лінію не шукає.
+## Вміст картки BoardView оновлює сам: матеріали тримають ту саму текстуру.
+func set_contour_edges(tex: Texture2D) -> void:
+	_contour_edges = tex
+	_wire_all()
+
+
+## Кільця дальності (BoardView.draw_circles): шейдер крони бере до чотирьох.
+func set_contour_rings(rings: PackedVector4Array, colors: PackedColorArray) -> void:
+	contour_rings = rings
+	contour_ring_colors = colors
+	for mat: ShaderMaterial in _wired():
+		_wire_rings(mat)
+
+
+## Рамка ліній (BoardView._publish_line_rect).
+func set_line_rect(rect: Vector4) -> void:
+	line_rect = rect
+	for mat: ShaderMaterial in _wired():
+		mat.set_shader_parameter("line_rect", rect)
+
+
+func _wire_all() -> void:
+	for mat: ShaderMaterial in _wired():
+		_wire(mat)
+
+
+## Матеріали крон, що малюють лінії: злиті крони дошки й кільця (розчинені — ні).
+func _wired() -> Array[ShaderMaterial]:
+	var out: Array[ShaderMaterial] = []
+	for n: Node in _ring_nodes + _board_nodes:
+		var mat := (n as GeometryInstance3D).material_override as ShaderMaterial
+		if mat != null and mat.shader == _batch_shader:
+			out.append(mat)
+	return out
+
+
+func _wire(mat: ShaderMaterial) -> void:
+	mat.set_shader_parameter("contour_on", _contour_edges != null)
+	mat.set_shader_parameter("contour_edges", _contour_edges)
+	mat.set_shader_parameter("contour_half", BoardView._CONTOUR_WIDTH * 0.5)
+	mat.set_shader_parameter("contour_lift", BoardView._CONTOUR_Y)
+	mat.set_shader_parameter("overlay_layers", 1 << (BoardView.OVERLAY_LAYER - 1))
+	var th: TerrainHeight = TerrainHeight.active
+	mat.set_shader_parameter("use_height", th != null)
+	if th != null:
+		mat.set_shader_parameter("height_map", th.texture())
+		mat.set_shader_parameter("height_samples", float(th.samples))
+		mat.set_shader_parameter("height_origin", -0.5 - th.margin)
+	# Стрічка контуру й сітка кільця над річкою лежать на воді (BoardView), тож і крона шукає землю не нижче за неї.
+	mat.set_shader_parameter("water_level", TerrainHeight.WATER_LEVEL)
+	mat.set_shader_parameter("line_rect", line_rect)
+	_wire_units(mat)
+	_wire_rings(mat)
+
+
+func _wire_rings(mat: ShaderMaterial) -> void:
+	# shortcut: шейдер малює не більше чотирьох кілець (огляд — два, режим дрона — одне).
+	mat.set_shader_parameter("ring_count", mini(contour_rings.size(), 4))
+	mat.set_shader_parameter("rings", contour_rings)
+	mat.set_shader_parameter("ring_colors", contour_ring_colors)
+
+
 ## Клітинки показаних глядачеві юнітів: крони між ними й камерою стають напівпрозорими.
 func set_reveal_cells(cells: Array[Vector2i]) -> void:
 	_reveal = cells.duplicate()
 	_apply_fade()
+	_publish_unit_cells()
+
+
+func _publish_unit_cells() -> void:
+	if _board.size.x <= 0 or _board.size.y <= 0:
+		return
+	if _unit_img == null or _unit_img.get_size() != _board.size:
+		_unit_img = Image.create(_board.size.x, _board.size.y, false, Image.FORMAT_R8)
+		_unit_tex = null
+	_unit_img.fill(Color(0, 0, 0))
+	for c: Vector2i in _reveal:
+		if _board.has_point(c):
+			_unit_img.set_pixelv(c, Color(1, 0, 0))
+	if _unit_tex == null:
+		_unit_tex = ImageTexture.create_from_image(_unit_img)
+	else:
+		_unit_tex.update(_unit_img)
+	for mat: ShaderMaterial in _wired():
+		_wire_units(mat)
+
+
+func _wire_units(mat: ShaderMaterial) -> void:
+	mat.set_shader_parameter("units_on", _unit_tex != null and not _reveal.is_empty())
+	mat.set_shader_parameter("unit_cells", _unit_tex)
 
 
 ## Зум камери (IsoCameraRig.zoom_level): підлісок лише до DETAIL_ZOOM. Розчинення залежить
@@ -235,7 +337,7 @@ func _load_library() -> void:
 			["ALPHA = COLOR.a;", "ALPHA = 0.0;"]])
 	# Злита сітка: тон, масштаб картки й видимість екземпляра беруться з таблиці за номером у
 	# CUSTOM0.x (у MultiMesh це були б INSTANCE_CUSTOM і масштаб матриці).
-	var fetch: String = FoliageBatch.glsl_fetch() + "\n\tinst_tone = batch_a.rgb;\n\tCOLOR.a *= batch_a.a;"
+	var fetch: String = FoliageBatch.glsl_fetch(true) + "\n\tinst_tone = batch_a.rgb;\n\tCOLOR.a *= batch_a.a;\n\tbase_y = batch_origin.y;"
 	_batch_shader = Shader.new()
 	_batch_shader.code = _replace_checked(_SHADER.code, [
 			["varying flat float piece_hash;", "varying flat float piece_hash;\n" + FoliageBatch.glsl_decl()],
@@ -607,6 +709,7 @@ func _batch(label: String, entries: Array[Dictionary], nodes: Array[Node]) -> Ar
 		mat.set_shader_parameter("inst_data", batch.texture)
 		if _ring > 0:
 			Surroundings.apply(mat, _board.size)
+		_wire(mat)
 		var n := MeshInstance3D.new()
 		n.name = "%s_%d" % [label, k]
 		k += 1

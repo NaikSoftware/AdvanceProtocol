@@ -19,8 +19,11 @@ extends Node
 ## інтерфейс, 3D-діти екрана) і друкує, скільки кожна коштує: рядок DIAG <map> <cell> z<zoom> <група>(<вузлів>)
 ## dc=… tris=… surfs=… inst=… vis=… (vis — скільки екземплярів MultiMesh у кадрі). Базу беруть перед кожною групою.
 ## --only=<підрядок> лишає в --diag групи з таким підрядком в імені.
+## --gpu: рядок GPU <кадр> lines=… no_lines=…: медіана часу кадру на GPU з лініями під кронами й без них;
+## ще кадр «_nolines» без ліній під кронами.
 ## <map>@forest@x,y@zoom — танк гравця 0 проламав ліс на x,y і сусідню клітинку, піхота — у стоячому
-## лісі поруч; камера на танку.
+## лісі поруч; камера на танку. <map>@forest@x,y@zoom@sel — те саме, піхоту вибрано (контури зон під кронами);
+## @peek замість @sel — довгий натиск на танк (кільце дальності). З обома інтерфейс схований.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с і з'їв би наступні кадри.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
@@ -50,13 +53,15 @@ func _ready() -> void:
 	var diag: bool = args.has("--diag")
 	# --fencemask: до кожного кадру ще кадр «_nofence» без парканів дворів (маска для виміру їхнього кольору).
 	var fence_mask: bool = args.has("--fencemask")
+	# --gpu: ще й час кадру на GPU — з лініями під кронами і без них (крони не шукають землю під собою).
+	var gpu: bool = args.has("--gpu")
 	for a in args:
 		if a.begins_with("--only="):
 			_only = a.trim_prefix("--only=")
 	for i in range(1, args.size()):
 		if args[i].begins_with("--only="):
 			continue
-		if args[i] in ["--shadows", "--noshadows", "--stdmat", "--diag", "--fencemask"]:
+		if args[i] in ["--shadows", "--noshadows", "--stdmat", "--diag", "--fencemask", "--gpu"]:
 			continue
 		var parts: PackedStringArray = args[i].split("@")
 		var map: String = parts[0]
@@ -235,7 +240,15 @@ func _ready() -> void:
 				state.broken_forest[q] = true
 			state.refresh_vision(0)
 			screen.call("_rebuild_units_for_active_player")
-			views.append([c, float(parts[3])])
+			# @sel: піхоту в лісі вибрано — контури її зон руху лягають під крони; @peek: довгий натиск на
+			# танк — кільце дальності гармати. Інтерфейс схований: панель юніта лягала б на ліс.
+			if parts.size() >= 5 and parts[4] == "sel" and inf.x >= 0:
+				(screen.get("_controller") as InputController).select_unit(state.unit_at(inf))
+			if parts.size() >= 5 and parts[4] == "peek":
+				(screen.get("_controller") as InputController).peek_cell(c)
+			if parts.size() >= 5:
+				(screen.get_node("UI") as CanvasLayer).visible = false
+			views.append([c, float(parts[3]), ("_" + parts[4]) if parts.size() >= 5 else ""])
 		elif parts.size() >= 4 and parts[1] == "yard":
 			# Танк і відділення піхоти гравця 0 у дворі садиби №parts[2] з макету карти: танк — на
 			# клітинці двору без хати й сараю, піхота — на іншій, поруч із хатою; камера — на хаті.
@@ -355,7 +368,7 @@ func _ready() -> void:
 			var dc: int = m.x
 			var tris: int = m.y
 			var zl: String = str(int(v[1])) if is_equal_approx(v[1], roundf(v[1])) else "%.1f" % v[1]
-			var name: String = "%s_%d_%d_z%s" % [map, v[0].x, v[0].y, zl]
+			var name: String = "%s_%d_%d_z%s%s" % [map, v[0].x, v[0].y, zl, v[2] if v.size() > 2 else ""]
 			print("BUDGET %s %s z%d dc=%d tris=%d shadow_dc=%d canvas_dc=%d" % [map, v[0], int(v[1]), dc, tris, shadow_dc, canvas_dc])
 			shots.append([name, get_viewport().get_texture().get_image()])
 			if fence_mask:
@@ -368,6 +381,16 @@ func _ready() -> void:
 					await RenderingServer.frame_post_draw
 					shots.append([name + "_nofence", get_viewport().get_texture().get_image()])
 					fence.visible = true
+			if gpu:
+				var bv: BoardView = screen.get_node("%BoardView")
+				var on: float = await _median_gpu()
+				bv.forest().set_contour_edges(null)
+				bv.forest().set_contour_rings(PackedVector4Array(), PackedColorArray())
+				var off: float = await _median_gpu()
+				shots.append([name + "_nolines", get_viewport().get_texture().get_image()])
+				bv.call("_publish_contours")
+				bv.call("_publish_circles")
+				print("GPU %s lines=%.2f ms no_lines=%.2f ms" % [name, on, off])
 			if diag:
 				await _diag(screen, "%s %s z%d" % [map, v[0], int(v[1])], Vector2i(dc, tris))
 		screen.free()
@@ -375,6 +398,20 @@ func _ready() -> void:
 	for s: Array in shots:
 		(s[1] as Image).save_jpg("%s/%s.jpg" % [out, s[0]], 0.9)
 	get_tree().quit()
+
+
+## Медіана часу кадру на GPU за 31 кадр, мс.
+func _median_gpu() -> float:
+	var vp: RID = get_viewport().get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(vp, true)
+	for f in 5:
+		await RenderingServer.frame_post_draw
+	var t: Array[float] = []
+	for f in 31:
+		await RenderingServer.frame_post_draw
+		t.append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
+	t.sort()
+	return t[15]
 
 
 ## Медіана draw calls і трикутників за 9 кадрів: лічильник окремого кадру стрибає (тіні й зонд

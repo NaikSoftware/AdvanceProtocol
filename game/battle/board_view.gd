@@ -18,7 +18,8 @@ enum { LAYER_ZONES, LAYER_PATH, LAYER_TARGETS, LAYER_INSPECT }
 
 ## Шар рендеру для накладок (контури, кільця). Не шар світу (1): зонд відбиттів
 ## знімає шар 1, і накладки активного гравця в знімку побачив би наступний гравець
-## у річці. Шар 2 — юніти, 3 — міни (MineLayer.MARKER_LAYER).
+## у річці. Шар 2 — юніти, 3 — міни (MineLayer.MARKER_LAYER). Лінії, які домальовують крони лісу
+## (шар 1), шейдер крони малює лише для камери з цим шаром — зонд їх теж не бачить.
 const OVERLAY_LAYER: int = 4
 
 ## Крок часу імли (`fog_time` у surroundings.gdshaderinc), секунд. Кожне оновлення коштує
@@ -36,9 +37,26 @@ const CONTOUR_PRIORITY: int = 4
 ## Лінія зони тонка й напівпрозора: підказка шляху на ґрунті, а не головний акцент кадру.
 const _CONTOUR_WIDTH: float = 0.02
 const _CONTOUR_ALPHA: float = 0.7
-## Кільця дальності лишаються ширшими: їх видно лише поки гравець тримає палець на юніті.
-const _RING_WIDTH: float = 0.12
-const _CONTOUR_PIECES: int = 4
+## Compatibility змішує прозоре в sRGB: тонка лінія з альфою 0,7 там на землі й на кронах ледь
+## відрізнялась від тла. Вища альфа дає той самий контраст, що 0,7 на Mobile.
+const _CONTOUR_ALPHA_COMPAT: float = 0.85
+## Кільце дальності: тонка межа на радіусі й легка смуга від неї всередину, тайлів — ті самі
+## FR_LINE_W і FR_GRAD_W у fire_ring.gdshaderinc (тест звіряє). Смуга сталої ширини, не від радіуса:
+## вона гасне задовго до юніта, і більша частина круга лишається чистою.
+const RING_LINE_W: float = 0.045
+const RING_GRAD_W: float = 0.6
+## Сітка кільця виходить за радіус на стільки: на найдальшому зумі (піксель на ґрунті до ~0,05 тайла)
+## межа суцільна на 1,5 пікселя, тож півширина 1,25 пікселя плюс пів пікселя згладжування.
+const RING_OUTER: float = 0.15
+## Запас сітки всередину за смугою: згладжування її внутрішнього краю.
+const RING_INNER_MARGIN: float = 0.05
+## Зсув сортування кільця: серед прозорих того самого пріоритету воно завжди перше, тобто під
+## контурами зон, хоч як далеко від камери кожне. Більший за будь-яку різницю відстаней на дошці.
+const RING_SORT_OFFSET: float = -100.0
+const _RING_SHADER: Shader = preload("res://game/battle/shaders/fire_ring.gdshader")
+## Відрізок клітинки на кожен відлік поля висот: вершини стрічки лягають на ті самі відліки, з яких
+## крона лісу шукає землю під собою, і лінія на вході під крону не ламається.
+const _CONTOUR_PIECES: int = TerrainHeight.SAMPLES_PER_TILE
 ## Над землею (y = 0) і над маркерами мін (MineLayer.MARKER_Y = 0.06), щоб не
 ## z-fight'ити ні з тим, ні з іншим.
 const _CONTOUR_Y: float = 0.04
@@ -115,6 +133,10 @@ var _contour_nodes: Dictionary = {}
 ## (draw_circles) і їхні вузли — той самий прийом, що й у контурів.
 var _circles: Dictionary = {}
 var _circle_nodes: Dictionary = {}
+## Усі шари контурів, зведені в картку ребер для крон лісу (ForestLayer.set_contour_edges): крона
+## закрила б стрічку на землі, тож лінію під собою малює сама. Одна текстура на розмір дошки.
+var _edge_image: Image
+var _edge_tex: ImageTexture
 
 
 func _exit_tree() -> void:
@@ -244,6 +266,9 @@ func build(board: Board) -> void:
 	if _fog_clock != null:
 		# Без кільця імли нема: годинник стоїть і не будить кадр.
 		_fog_clock.paused = ring == 0
+	# Ліс переживає build(), а контури й кола щойно зняті: крони не мусять тримати старі лінії.
+	_publish_contours()
+	_publish_circles()
 
 	# Розмір дошки сталий у межах партії, тож коробку задаємо лише раз; перезйомку
 	# після перебудови просить rebuild_tiles явно (_request_probe_capture).
@@ -282,6 +307,7 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		if _kind_by_cell.has(seg["cell"]):
 			kept.append(seg)
 	_contour_segments[layer] = kept
+	_publish_contours()
 	if kept.is_empty():
 		return
 
@@ -297,7 +323,8 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		if not edges.has(key):
 			edges[key] = true
 			lines.append(kept[i])
-	# Дві поверхні: [0] на ґрунті — з тестом глибини, будівлі й дерева її закривають; [1] на мосту —
+	# Дві поверхні: [0] на ґрунті — з тестом глибини: будівлі, огорожі й юніти її закривають, а під
+	# кроною лінію малює сама крона (_publish_contours); [1] на мосту —
 	# поверх поручнів і бордюрів, але під юнітами (contour_bridge.gdshader), тим самим квадратом
 	# клітинки, що й на ґрунті, навіть де він ширший за настил.
 	var verts: Array[PackedVector3Array] = [PackedVector3Array(), PackedVector3Array()]
@@ -317,8 +344,10 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		var from: float = _stroke_end(edges, seg, -along_i)
 		var to: float = _stroke_end(edges, seg, along_i)
 		var base: int = verts[surf].size()
-		var color: Color = seg["color"]
-		color.a *= _CONTOUR_ALPHA
+		# Колір зони — лінійний; у вершину він іде в sRGB (vertex_color_is_srgb), бо Compatibility лінійний
+		# колір вершин бере як є й темнить, а sRGB обидва рендерери переводять однаково.
+		var color: Color = (seg["color"] as Color).linear_to_srgb()
+		color.a *= _contour_alpha()
 		for k in _CONTOUR_PIECES + 1:
 			var c: Vector3 = mid + along * lerpf(from, to, float(k) / _CONTOUR_PIECES)
 			for sgn: float in [-1.0, 1.0]:
@@ -398,7 +427,8 @@ func rebuild_tiles(board: Board) -> void:
 ## Кільце дальності (§3.13, docs/ui/overlays.md): одне геометричне коло, не контур
 ## тайлів — радіус у тайлах (тайл — 1.0 світу), центр у середині тайла. Радіус
 ## приходить готовим із core/ (Targeting.inspection); тут лише геометрія малювання.
-## Сплющений тор — один вузол і один draw call на коло (§8). Замінює кола шару.
+## Один вузол і один draw call на коло (§8). Замінює кола шару. Кільце статичне: легка смуга
+## всередині біля радіуса й тонка межа на ньому (fire_ring.gdshaderinc).
 func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 	for node: Node in _circle_nodes.get(layer, []):
 		if is_instance_valid(node):
@@ -407,39 +437,78 @@ func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 	var nodes: Array[Node] = []
 	for c in circles:
 		var r: float = float(c["radius"])
-		var mat := StandardMaterial3D.new()
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.albedo_color = c["color"]
-		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
+		var sm := ShaderMaterial.new()
+		sm.shader = _RING_SHADER
+		sm.render_priority = CONTOUR_PRIORITY
+		sm.set_shader_parameter(&"ring_color", c["color"])
+		sm.set_shader_parameter(&"radius", r)
+		sm.set_shader_parameter(&"grad_gain", _grad_gain(c["color"]))
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
-		mi.mesh = _ring_mesh(IsoCameraRig.cell_to_world(c["center"]), r)
-		mi.material_override = mat
+		mi.mesh = _ring_grid_mesh(centre, Vector2(maxf(r - RING_GRAD_W - RING_INNER_MARGIN, 0.0), r + RING_OUTER))
+		mi.material_override = sm
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.layers = 1 << (OVERLAY_LAYER - 1)
 		# Вершини кільця — у світі (висота за ґрунтом), тож вузол стоїть у центрі колом на y = 0.
-		var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
 		mi.position = Vector3(centre.x, 0.0, centre.z)
+		mi.sorting_offset = RING_SORT_OFFSET
 		add_child(mi)
 		nodes.append(mi)
 	_circle_nodes[layer] = nodes
+	_publish_circles()
+	_publish_line_rect()
 
 
-## Кільце-стрічка шириною _RING_WIDTH, що лягає на ґрунт: кожна вершина бере висоту з
-## карти висот (тор лишився б площиною й тонув у схилі). Вершини — відносно центру в XZ.
-func _ring_mesh(centre: Vector3, radius: float) -> ArrayMesh:
-	var segments: int = clampi(int(TAU * radius * 8.0), 64, 512)
+## Сітка під кільце: клітинки сітки висот (TerrainHeight, SAMPLES_PER_TILE на тайл), що перетинають
+## смугу band = [внутрішній, зовнішній радіус]. Вершини стоять рівно на відліках висот, тож і широка
+## смуга лягає на ґрунт, а не протинає схил хордою. Над водою — на її поверхні, як лінії зон: з дна
+## кільце просвічувало б крізь воду зсунутим. Вершини — відносно центру в XZ.
+func _ring_grid_mesh(centre: Vector3, band: Vector2) -> ArrayMesh:
+	var th: TerrainHeight = TerrainHeight.active
+	var si: int = th.samples if th != null else TerrainHeight.SAMPLES_PER_TILE
+	var s: float = float(si)
+	var c := Vector2(centre.x, centre.z)
+	# Лінії відліків: x = k / s - 0.5 (поле висот починається з краю клітинки, margin цілий).
+	var k0 := Vector2i(floori((c.x - band.y + 0.5) * s), floori((c.y - band.y + 0.5) * s))
+	var k1 := Vector2i(ceili((c.x + band.y + 0.5) * s), ceili((c.y + band.y + 0.5) * s))
+	# Висота вершини — прямо з відліку поля (ground_y у вузлі ґратки дає те саме), а номер вершини — з
+	# плаского масиву: смуга кола дрона — тисячі вершин, і будується вона в мить натиску.
+	var heights: PackedFloat32Array = th.heights() if th != null else PackedFloat32Array()
+	var off: int = th.margin * si if th != null else 0
+	var cols: int = th.cols if th != null else 0
+	var rows: int = th.rows if th != null else 0
+	var nx: int = k1.x - k0.x + 1
+	var index_of := PackedInt32Array()
+	index_of.resize(nx * (k1.y - k0.y + 1))
+	index_of.fill(-1)
 	var verts := PackedVector3Array()
 	var indices := PackedInt32Array()
-	for k in segments + 1:
-		var a: float = TAU * float(k) / float(segments)
-		var dir := Vector2(cos(a), sin(a))
-		for r: float in [radius - _RING_WIDTH * 0.5, radius + _RING_WIDTH * 0.5]:
-			var p := Vector2(centre.x, centre.z) + dir * r
-			verts.append(Vector3(dir.x * r, TerrainHeight.ground_y(p.x, p.y) + _CONTOUR_Y, dir.y * r))
-		if k > 0:
-			var i: int = k * 2
-			indices.append_array([i - 2, i - 1, i, i - 1, i + 1, i])
+	var inv: float = 1.0 / s
+	for kz in range(k0.y, k1.y):
+		var span: Vector2i = _row_span(kz, k0.x, k1.x, c, band.y, s)
+		# Клітинки, що цілком ближчі за band.x, рядок пропускає цілим відрізком.
+		var skip: Vector2i = _row_hole(kz, c, band.x, s)
+		for kx in range(span.x, span.y):
+			if kx >= skip.x and kx < skip.y:
+				continue
+			var lo := Vector2(kx * inv - 0.5, kz * inv - 0.5) - c
+			var hi := lo + Vector2(inv, inv)
+			var near := Vector2(clampf(0.0, lo.x, hi.x), clampf(0.0, lo.y, hi.y)).length()
+			var far := Vector2(maxf(-lo.x, hi.x), maxf(-lo.y, hi.y)).length()
+			if near > band.y or far < band.x:
+				continue
+			var q: Array[int] = [0, 0, 0, 0]
+			for n in 4:
+				var vx: int = kx + (n & 1)
+				var vz: int = kz + (n >> 1)
+				var slot: int = (vz - k0.y) * nx + (vx - k0.x)
+				if index_of[slot] < 0:
+					index_of[slot] = verts.size()
+					var y: float = maxf(_lattice_h(heights, cols, rows, vx + off, vz + off), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
+					verts.append(Vector3(vx * inv - 0.5 - c.x, y, vz * inv - 0.5 - c.y))
+				q[n] = index_of[slot]
+			indices.append_array([q[0], q[1], q[2], q[1], q[3], q[2]])
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -447,6 +516,46 @@ func _ring_mesh(centre: Vector3, radius: float) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+
+## Відрізок [від, до) номерів клітинок рядка kz, що можуть зачепити круг радіуса r.
+static func _row_span(kz: int, kx0: int, kx1: int, c: Vector2, r: float, s: float) -> Vector2i:
+	var lo: float = kz / s - 0.5 - c.y
+	var hi: float = lo + 1.0 / s
+	var minz: float = 0.0 if lo <= 0.0 and hi >= 0.0 else minf(absf(lo), absf(hi))
+	if minz > r:
+		return Vector2i(kx0, kx0)
+	var xo: float = sqrt(r * r - minz * minz)
+	return Vector2i(maxi(kx0, floori((c.x - xo + 0.5) * s) - 1), mini(kx1, ceili((c.x + xo + 0.5) * s) + 1))
+
+
+## Відрізок [від, до) клітинок рядка kz, що цілком лежать у крузі радіуса r (порожній, коли таких немає).
+static func _row_hole(kz: int, c: Vector2, r: float, s: float) -> Vector2i:
+	var lo: float = kz / s - 0.5 - c.y
+	var maxz: float = maxf(absf(lo), absf(lo + 1.0 / s))
+	if r <= maxz:
+		return Vector2i.ZERO
+	var xi: float = sqrt(r * r - maxz * maxz)
+	return Vector2i(ceili((c.x - xi + 0.5) * s), floori((c.x + xi + 0.5) * s) - 1)
+
+
+## Відлік поля висот за індексами з відступом; без карти висот — 0.
+static func _lattice_h(heights: PackedFloat32Array, cols: int, rows: int, ix: int, iz: int) -> float:
+	if cols == 0:
+		return 0.0
+	return heights[clampi(iz, 0, rows - 1) * cols + clampi(ix, 0, cols - 1)]
+
+
+## Множник світлої смуги кільця за яскравістю його кольору: біле кільце на темних кронах читалося
+## матовим склом, тож світлий колір дає 0,7 смуги; фіолетове кільце дрона (яскравість ~0,5) — повну.
+static func _grad_gain(color: Color) -> float:
+	var luma: float = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
+	return lerpf(1.0, 0.7, smoothstep(0.6, 0.95, luma))
+
+
+## Альфа лінії зони: на Compatibility вища (див. _CONTOUR_ALPHA_COMPAT).
+static func _contour_alpha() -> float:
+	return _CONTOUR_ALPHA_COMPAT if RenderingServer.get_current_rendering_method() == "gl_compatibility" else _CONTOUR_ALPHA
 
 
 func circles(layer: int) -> Array:
@@ -465,10 +574,96 @@ func clear_contour(layer: int) -> void:
 		if is_instance_valid(node):
 			node.free()
 		_contour_nodes.erase(layer)
+	_publish_contours()
 
 
 func contour_segments(layer: int) -> Array:
 	return _contour_segments.get(layer, [])
+
+
+## Картка ребер усіх шарів контуру: (2·(W + 1)) × (H + 1), у (2k, j) — ребро x− клітинки (k, j), у
+## (2i + 1, k) — ребро y− клітинки (i, k); колір із альфою стрічки. Те саме правило, що в стрічки:
+## у шарі пізніший сегмент перемагає, а шари зведені змішуванням, як їхні напівпрозорі стрічки на
+## землі (пізніший шар поверх), тож крона й земля не розходяться в кольорі.
+func contour_edges() -> Image:
+	return _edge_image
+
+
+func _publish_contours() -> void:
+	var size := Vector2i(2 * (_board_size.x + 1), _board_size.y + 1)
+	if _edge_image == null or _edge_image.get_size() != size:
+		_edge_image = Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
+		_edge_tex = null
+	_edge_image.fill(Color(0, 0, 0, 0))
+	# Зведення в float, а запис раз у кінці: перечитаний з RGBA8 колір нижнього шару вже округлений.
+	var comp: Dictionary = {}
+	var layers: Array = _contour_segments.keys()
+	layers.sort()
+	for layer: int in layers:
+		var texels: Dictionary = {}
+		for seg: Dictionary in _contour_segments[layer]:
+			var cell: Vector2i = seg["cell"]
+			var dir: Vector2i = seg["dir"]
+			# Ребро з боку меншої координати сусіда — те саме, що й у _edge_key.
+			if dir.x < 0 or dir.y < 0:
+				cell += dir
+				dir = -dir
+			var color: Color = seg["color"]
+			color.a *= _contour_alpha()
+			texels[Vector2i(2 * cell.x + 2, cell.y) if dir.x > 0 else Vector2i(2 * cell.x + 1, cell.y + 1)] = color
+		for t: Vector2i in texels:
+			# Color.blend — «поверх» із тією самою альфою, з якою стрічка шару лягає на попередні.
+			comp[t] = (comp.get(t, Color(0, 0, 0, 0)) as Color).blend(texels[t])
+	# У картку — sRGB, як у вершини стрічки: крона читає її через source_color.
+	for t: Vector2i in comp:
+		_edge_image.set_pixelv(t, (comp[t] as Color).linear_to_srgb())
+	var lit: bool = not comp.is_empty()
+	if _edge_tex == null:
+		_edge_tex = ImageTexture.create_from_image(_edge_image)
+	else:
+		_edge_tex.update(_edge_image)
+	if _forest != null:
+		_forest.set_contour_edges(_edge_tex if lit else null)
+	_publish_line_rect()
+
+
+## Кола всіх шарів для крон лісу: центр і радіус у світі (xyz), у w — множник смуги (_grad_gain); колір — той самий sRGB з альфою, що й
+## ring_color кільця на ґрунті: в обох шейдерах він source_color.
+func _publish_circles() -> void:
+	if _forest == null:
+		return
+	var rings := PackedVector4Array()
+	var colors := PackedColorArray()
+	var layers: Array = _circles.keys()
+	layers.sort()
+	for layer: int in layers:
+		for c: Dictionary in _circles[layer]:
+			var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
+			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), _grad_gain(c["color"])))
+			colors.append(c["color"])
+	_forest.set_contour_rings(rings, colors)
+
+
+## Рамка всіх контурів і кілець у XZ світу для крон лісу: крона, чий промінь до землі її не
+## перетинає, лінії не несе й кроком променя не платить. Запас — на ширину лінії й згладжування.
+func _publish_line_rect() -> void:
+	if _forest == null:
+		return
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for layer: int in _contour_segments:
+		for seg: Dictionary in _contour_segments[layer]:
+			var c := Vector2(seg["cell"])
+			lo = lo.min(c - Vector2.ONE * 0.55)
+			hi = hi.max(c + Vector2.ONE * 0.55)
+	for layer: int in _circles:
+		for c: Dictionary in _circles[layer]:
+			var centre := Vector2(c["center"])
+			var reach: float = float(c["radius"]) + RING_OUTER + 0.05
+			lo = lo.min(centre - Vector2.ONE * reach)
+			hi = hi.max(centre + Vector2.ONE * reach)
+	# Без ліній — порожня рамка: жоден відрізок променя її не перетинає.
+	_forest.set_line_rect(ForestLayer.EMPTY_RECT if lo.x > hi.x else Vector4(lo.x, lo.y, hi.x, hi.y))
 
 
 func _contour_material(over_bridge: bool = false) -> Material:
@@ -481,12 +676,14 @@ func _contour_material(over_bridge: bool = false) -> Material:
 	# читання — сам він лишається білим, щоб не домішувати власний тон.
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	# Стрічка без нормалей: освітлення дало б чорні ділянки; контур — позначка, не матеріал.
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	# Риска лежить лише на ґрунті: будівлі, дерева, огорожі й юніти її закривають, як закрили б
-	# фарбу на землі. Пріоритет лишається — серед прозорих ефектів (дим, дощ) риска зверху.
+	# Риска лежить лише на ґрунті: будівлі, огорожі й юніти її закривають, як закрили б фарбу на
+	# землі; крони — ні, крізь них її домальовує шейдер крони. Пріоритет лишається — серед прозорих
+	# ефектів (дим, дощ) риска зверху.
 	mat.render_priority = CONTOUR_PRIORITY
 	return mat
 
