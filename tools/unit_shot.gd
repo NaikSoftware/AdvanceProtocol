@@ -43,6 +43,9 @@ func _ready() -> void:
 	if a.size() > 5 and a[5] == "lineup":
 		await _lineup(screen, map, out, tag)
 		return
+	if a.size() > 5 and a[5] == "real":
+		await _real(screen, map, out, tag)
+		return
 	if a.size() > 5 and a[5] == "sets":
 		await _sets(screen, map, out, tag, a.size() > 6 and a[6] == "forest", a.size() > 6 and a[6] == "sel")
 		return
@@ -66,6 +69,9 @@ func _ready() -> void:
 		return
 	if a.size() > 5 and a[5] == "fall":
 		await _fall(screen, map, out, tag)
+		return
+	if a.size() > 5 and a[5] == "guns_bridge":
+		await _guns_bridge(screen, map, out, tag)
 		return
 	if a.size() > 5 and a[5] == "squad_bridge":
 		await _squad_bridge(screen, map, out, tag, int(a[6].substr(9)) if a.size() > 6 and a[6].begins_with("standing=") else 0)
@@ -121,8 +127,10 @@ func _ready() -> void:
 		return
 	var set_id: int = int(a[6].substr(4)) if a.size() > 6 and a[6].begins_with("set=") else 0
 	# Перша модель дивиться на північ, друга — на південний схід, коробка-заступник — ліворуч.
-	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell, 0)
-	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell + Vector2i(1, 0), 3)
+	# SHOT_FACING (0..7) повертає першу модель, друга лишається на три сектори далі: так знімають і «носом до камери»
+	var f0: int = int(OS.get_environment("SHOT_FACING"))
+	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell, f0)
+	_place(UnitSilhouettes.build_merged(type_id, -1, set_id), cell + Vector2i(1, 0), (f0 + 3) % 8)
 	_place(UnitSilhouettes.build(type_id), cell + Vector2i(-1, 0), 0)
 	var mover: Node3D = UnitSilhouettes.build_merged(type_id, -1, set_id)
 	_place(mover, cell + Vector2i(0, 2), 0)
@@ -273,6 +281,69 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(IsoCameraRig.MIN_ZOOM)])
 	print("UNIT lineup at %s" % c)
+	get_tree().quit()
+
+
+## Шостий аргумент guns_bridge: польова гармата й гаубиця на двох клітинках мосту, напрям — SHOT_FACING. На мосту
+## гармати стоять у похідному положенні: станини зведені, розрахунок — перед лафетом.
+func _guns_bridge(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := Vector2i(m.width / 2, m.height / 2)
+	var bridge: Array[Vector2i] = []
+	for y in m.height:
+		for x in m.width:
+			if m.tiles[y * m.width + x] == Terrain.Kind.BRIDGE:
+				bridge.append(Vector2i(x, y))
+	bridge.sort_custom(func(p: Vector2i, q: Vector2i) -> bool: return (p - c).length_squared() < (q - c).length_squared())
+	var f0: int = int(OS.get_environment("SHOT_FACING"))
+	m.spawns = [
+		{"type_id": 9, "owner": 0, "pos": bridge[0], "facing": f0},
+		{"type_id": 10, "owner": 1, "pos": bridge[1], "facing": f0},
+	]
+	screen.setup(m, 2, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(bridge[0])
+	# SHOT_NOCREW — без розрахунку (близнюк кадру: за різницею видно, скільки бійців видно)
+	if OS.get_environment("SHOT_NOCREW") != "":
+		for n: Node in screen.find_children("Crew", "MeshInstance3D", true, false):
+			(n as MeshInstance3D).visible = false
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
+	print("UNIT guns_bridge at %s %s" % [bridge[0], bridge[1]])
+	get_tree().quit()
+
+
+## Справжні юніти двох гармат, інженерної машини й танка (смуги HP, крони, ґрунт карти) на найближчому й найдальшому зумі:
+## остаточна перевірка впізнаваності гармат — разом із розрахунком, не окрема модель.
+func _real(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
+	var m: MapData = map.duplicate(true)
+	m.take_over_path(map.resource_path)
+	var c := _field_near_centre(m)
+	m.spawns = [
+		{"type_id": 9, "owner": 0, "pos": c + Vector2i(-2, 0), "facing": 0},
+		{"type_id": 10, "owner": 1, "pos": c, "facing": 0},
+		{"type_id": 11, "owner": 2, "pos": c + Vector2i(2, 0), "facing": 0},
+		{"type_id": 8, "owner": 0, "pos": c + Vector2i(0, 2), "facing": 0},
+	]
+	screen.setup(m, 3, 1)
+	var rig: IsoCameraRig = screen.get_node("%CameraRig")
+	for f in SETTLE_FRAMES:
+		await get_tree().process_frame
+	rig.center_on(c)
+	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+		rig.zoom_by(z / rig.zoom_level)
+		for f in SETTLE_FRAMES * 2:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
+	print("UNIT real at %s" % c)
 	get_tree().quit()
 
 
@@ -1046,9 +1117,10 @@ func _shore(screen: BattleScreen, map: MapData, out: String, tag: String) -> voi
 func _fleet(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int = 0) -> void:
 	screen.setup(map, 2, 1)
 	var c := _field_row_near_centre(map, 7)
-	var roles: Array[int] = [8, 5, 6, 7, 2, 3, 4]
+	# усі дванадцять типів у двох рядах: гармати довші за тайл, тож ряди розставлені через клітинку і сусіди не налягають
+	var roles: Array[int] = [8, 5, 6, 7, 2, 3, 4, 9, 10, 11, 0, 1]
 	for i in roles.size():
-		_place(UnitSilhouettes.build_merged(roles[i], -1, set_id), c + Vector2i(i - 3, 0), 0)
+		_place(UnitSilhouettes.build_merged(roles[i], -1, set_id), c + Vector2i(i % 6 - 3, floori(i / 6.0) * 2 - 1), 0)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame

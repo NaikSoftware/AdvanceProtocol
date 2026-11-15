@@ -142,6 +142,8 @@ var destroyed: bool = false
 @onready var _drone_icon: Sprite3D = $DroneIcon
 
 var _hull_material: Material
+## Юніт стоїть на мосту: гармата — у похідному положенні (UnitSilhouettes.travel_mesh).
+var _travel_pose: bool = false
 ## Тіло — модель GLB (а не коробки): лише її шейдер крутить колеса й траки за пройденим шляхом.
 var _has_model: bool = false
 ## Пройдений шлях в одиницях світу: від нього колеса й траки моделі крутяться в такт руху.
@@ -218,6 +220,8 @@ func bind(unit: Unit) -> void:
 	_type_id = unit.type_id
 	_unit_id = unit.id
 	_travel = _travel_by_unit.get(unit.id, 0.0)
+	_owner = unit.owner
+	_travel_pose = _travel_pose_at(unit.pos)
 	_build_silhouette(unit.type_id, unit.owner)
 	_tilts = UnitTypes.is_vehicle(UnitTypes.get_type(unit.type_id)["unit_class"])
 	# Свіжий вузол (чи перебудований battle_screen._rebuild_units_for_active_player)
@@ -380,14 +384,22 @@ func move_along(path: Array[Vector2i], duration_per_step: float, final_facing: i
 
 	var follow: Callable = _follow.bind(line, acc, tangents)
 	var from_s: float = 0.0
+	var posed: bool = _travel_pose
 	for i in path.size():
 		# Корпус торкається опор клітинки, щойно ніс входить у неї: на кривій — за PropLayer.BAND_NOSE (ніс корпусу) до першої точки
 		# всередині квадрата клітинки, а не в рівномірний момент кроку.
 		var enter_s: float = clampf(_enter_station(line, acc, pts[i + 1]) - PropLayer.BAND_NOSE, from_s, stations[i])
-		if on_enter.is_valid():
+		# Гармата міняє положення на межі тайла: на міст — зі зведеними станинами, з мосту — з розведеними.
+		var deck: bool = _travel_pose_at(path[i])
+		var switch: bool = deck != posed
+		if on_enter.is_valid() or switch:
 			if enter_s > from_s:
 				tween.tween_method(follow, from_s, enter_s, duration_per_step * (enter_s - from_s))
-			tween.tween_callback(on_enter.bind(path[i - 1] if i > 0 else start_cell, path[i]))
+			if switch:
+				tween.tween_callback(_set_travel_pose.bind(deck))
+				posed = deck
+			if on_enter.is_valid():
+				tween.tween_callback(on_enter.bind(path[i - 1] if i > 0 else start_cell, path[i]))
 			from_s = enter_s
 		# Швидкість — тайл за duration_per_step: дуга коротша за ламану, і крок через неї теж.
 		tween.tween_method(follow, from_s, stations[i], duration_per_step * (stations[i] - from_s))
@@ -794,6 +806,24 @@ func _set_id() -> int:
 	return UnitSilhouettes.set_of(_owner)
 
 
+## Гармата на мосту стоїть у похідному положенні (станини зведені): розведені стирчали б за поручні.
+## Лише коли така модель є, і лише на настилі; решта юнітів і тайлів — як є.
+func _travel_pose_at(cell: Vector2i) -> bool:
+	var th: TerrainHeight = TerrainHeight.active
+	return th != null and th.is_deck(cell) and UnitSilhouettes.travel_mesh(_type_id, UnitSilhouettes.set_of(_owner)) != null
+
+
+## Міняє положення гармати (меш і розрахунок) на місці: викликається на межі тайла під час руху.
+func _set_travel_pose(on: bool) -> void:
+	if on == _travel_pose:
+		return
+	_travel_pose = on
+	_build_silhouette(_type_id, _owner)
+	_put_on_unit_layer(_silhouette)
+	if contacts != null and _contact_on:
+		contacts.track(self)
+
+
 func _build_silhouette(type_id: int, owner: int) -> void:
 	# free(), не queue_free(): відкладене звільнення лишає щойно відкріплений
 	# вузол «сиротою» до наступного кадру, і headless-тести це фіксують.
@@ -801,7 +831,7 @@ func _build_silhouette(type_id: int, owner: int) -> void:
 		child.free()
 
 	_owner = owner
-	var built := UnitSilhouettes.build_merged(type_id, -1, UnitSilhouettes.set_of(owner))
+	var built := UnitSilhouettes.build_merged(type_id, -1, UnitSilhouettes.set_of(owner), 0, 0, _travel_pose)
 	for part in built.get_children():
 		built.remove_child(part)
 		_silhouette.add_child(part)
@@ -863,7 +893,22 @@ const FIGURE_CONTACT_SUNNY: float = 0.65
 
 
 func contact_slots() -> int:
-	return SQUAD_FIGURES if _has_figures() else 1
+	return SQUAD_FIGURES if _has_figures() else 1 + _crew_feet().size()
+
+
+## Стопи розрахунку гармати в системі силуету (їх повертає разом із гарматою сам силует); у решти юнітів їх нема.
+func _crew_feet() -> Array[Vector3]:
+	return UnitSilhouettes.crew_feet(_type_id, _set_id(), _travel_pose)
+
+
+## Сила плями слота `i`: квад під гарматою — як у техніки, під розрахунком — як під бійцем відділення.
+func contact_strength_at(i: int) -> float:
+	if _has_figures() or i == 0:
+		return contact_strength()
+	if WeatherRig.unit_contact <= 0.0:
+		return 0.0
+	var alpha: float = FIGURE_CONTACT_ALPHA * (FIGURE_CONTACT_SUNNY if WeatherRig.sun_ground != Vector2.ZERO else 1.0)
+	return clampf(alpha / WeatherRig.unit_contact, 0.0, 1.0)
 
 
 ## Сила плями відносно тіні техніки (множник у шейдері через дані екземпляра).
@@ -878,7 +923,17 @@ func contact_strength() -> float:
 
 func contact_transforms() -> Array[Transform3D]:
 	if not _has_figures():
-		return [contact_transform()]
+		var out_gun: Array[Transform3D] = [contact_transform()]
+		var crew_shown: bool = _contact_on and is_visible_in_tree() and _silhouette.visible
+		var crew_shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * FIGURE_CONTACT_SIZE
+		for feet: Vector3 in _crew_feet():
+			if not crew_shown:
+				out_gun.append(UnitContacts.HIDDEN)
+				continue
+			var cxf: Transform3D = _silhouette.global_transform * Transform3D(Basis.from_scale(Vector3(FIGURE_CONTACT_SIZE, 1.0, FIGURE_CONTACT_SIZE)), Vector3(feet.x, 0.06, feet.z))
+			cxf.origin += Vector3(crew_shift.x, 0.0, crew_shift.y)
+			out_gun.append(cxf)
+		return out_gun
 	var out: Array[Transform3D] = []
 	var shown: bool = _contact_on and is_visible_in_tree() and _silhouette.visible
 	var shift: Vector2 = WeatherRig.sun_ground * CONTACT_SUN_SHIFT * FIGURE_CONTACT_SIZE

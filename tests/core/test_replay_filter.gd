@@ -885,3 +885,28 @@ func test_move_blocked_by_unseen_unit_or_hidden_squad_is_not_shown() -> void:
 		assert_true(ev[0] is Events.UnitMoved)
 		assert_eq(ev[0].path[ev[0].path.size() - 1], Vector2i(9, ROAD_Y))
 		assert_false(_has(ev, Events.MoveBlocked), "обрив показав би невидимого, загін у будинку: %s" % hidden_squad)
+
+
+## Розрахунок знищеної гармати в повторі: падіння є лише там, де глядач бачить тайл гармати.
+func test_gun_crew_falls_in_replay_only_where_the_viewer_sees_the_tile() -> void:
+	for seen_target: bool in [true, false]:
+		journal = ReplayLog.new()
+		var s: BattleState = _state(3)
+		_anchor(s)
+		var target_x: int = 9 if seen_target else 13
+		var shooter_x: int = 13 if seen_target else 9
+		var a: Unit = s.add_unit(5, 1, Vector2i(shooter_x, ROAD_Y), 2)
+		var b: Unit = s.add_unit(9, 2, Vector2i(target_x, ROAD_Y), 6)
+		b.hp = 10
+		_open(s, _cols(0, 10))
+		_play(s, FireCommand.create(a.id, b.id))
+		_end(s)
+		var raw: Array[Events.BattleEvent] = []
+		for en in journal.rerun(0):
+			raw.append_array(en["events"])
+		assert_true(_has(raw, Events.FiguresFell), "передумова: гармата знищена, розрахунок ліг")
+		var r: ReplayFilter.Result = _build()
+		var ev: Array[Events.BattleEvent] = _all(r) if r != null else [] as Array[Events.BattleEvent]
+		var fell: bool = ev.any(func(e: Events.BattleEvent) -> bool:
+				return e is Events.FiguresFell and (e as Events.FiguresFell).body.unit_id == b.id)
+		assert_eq(fell, seen_target, "розрахунок гармати на %s тайлі" % ("розвіданому" if seen_target else "нерозвіданому"))

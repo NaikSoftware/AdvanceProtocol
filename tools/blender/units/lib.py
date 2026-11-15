@@ -10,7 +10,7 @@ Atlas (1024², one material). PNG row 0 is the top, which is Godot v = 0 and Ble
   column  u >= COL_U, below the strip: road-wheel face, sprocket face (a wheeled unit uses the wheel cell for tyre and hub)
   the rest: baked body islands
 """
-import hashlib, json, os, re, shutil
+import hashlib, json, math, os, re, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -36,9 +36,9 @@ def load(name, seed=True):
     cfg["name"] = name
     cfg.setdefault("out", name)  # path under assets/units/ without .glb; sets write set2/<slug>
     cfg["source"] = os.path.expanduser(cfg["source"])
-    if cfg["fwd"] == "-y":
-        # a source whose nose points to -Y is turned half a turn about Z by prep.py, after which every number is in "y"
-        cfg["fwd"], cfg["rot180"] = "y", True
+    if cfg["fwd"] in ("-y", "-x"):
+        # a source whose nose points to -Y (-X) is turned half a turn about Z by prep.py, after which every number is in "y" ("x")
+        cfg["fwd"], cfg["rot180"] = cfg["fwd"][1], True
     cfg["spec"] = spec(cfg["type_id"])
     row = set_row(cfg)
     if row:
@@ -50,7 +50,9 @@ def load(name, seed=True):
     lo, hi = cfg["hull_long"]
     sx, sz = cfg["spec"]["hull"][0], cfg.get("fit_z", cfg["spec"]["hull"][2])   # fit_z: a shorter hull than the role's box
     # Uniform fit: the tighter of hull width and hull length governs.
-    cfg["k"] = min(sx / (2.0 * cfg["hull_lat"]), sz / (hi - lo))
+    # `k` in the config fixes the scale outright: a towed gun or a vehicle with a plough is fitted by its real size, while
+    # its row describes only the solid body (carriage, hull), which is smaller than the model
+    cfg["k"] = cfg.get("k") or min(sx / (2.0 * cfg["hull_lat"]), sz / (hi - lo))
     cfg["long_c"] = 0.5 * (lo + hi)
     t = cfg.get("turret")
     if t:
@@ -85,9 +87,10 @@ def spec(type_id):
     """Hull box, barrel length and wheel radius of a type, parsed from the silhouette table the game uses."""
     src = open(os.path.join(REPO, "game", "battle", "unit_silhouettes.gd")).read()
     block = src[src.index("const _SPECS"):]
-    rows = re.findall(r'\{"hull": Vector3\(([^)]*)\), "barrel": ([0-9.]+)(?:, "wheel": ([0-9.]+))?', block)
+    rows = re.findall(r'\{"hull": Vector3\(([^)]*)\), "barrel": ([0-9.]+)(?:, "wheel": ([0-9.]+))?(?:, "bore": ([0-9.]+))?', block)
     hull = [float(v) for v in rows[type_id][0].split(",")]
-    return {"hull": hull, "barrel": float(rows[type_id][1]), "wheel": float(rows[type_id][2] or 0)}
+    return {"hull": hull, "barrel": float(rows[type_id][1]), "wheel": float(rows[type_id][2] or 0),
+            "bore": float(rows[type_id][3]) if rows[type_id][3] else None}
 
 
 def set_row(cfg):
@@ -105,6 +108,14 @@ def set_row(cfg):
     if not row:
         return None
     return {"hull": [float(v) for v in row.group(1).split(",")], "barrel": float(row.group(2)), "wheel": float(row.group(3))}
+
+
+def gun_axis(cfg):
+    """Gun axis in MODEL units: (y0, az, sin, cos) of the breech point and the pitch (units.json gun.pitch, degrees up towards the muzzle).
+    A towed gun carries its barrel raised, so the lathe barrel, the faces prep clears for it and the paint mask follow the tilted line."""
+    g = cfg["gun"]
+    p = math.radians(g.get("pitch", 0.0))
+    return m_long(cfg, g["start_long"]), m_len(cfg, g["axis_h"]), math.sin(p), math.cos(p)
 
 
 def m_long(cfg, v):

@@ -218,12 +218,25 @@ func test_rifles_have_no_muzzle_flash() -> void:
 	assert_true(m.is_queued_for_deletion())
 
 
-## Спалах — на кінчику ствола: танк (5,0 м попереду, вісь у башті) і гаубиця (над станиною).
+## Спалах — на кінчику ствола: танк (5,0 м попереду, вісь у башті) і гармати (за їхніми моделями).
 func test_muzzle_flash_sits_at_the_barrel_tip() -> void:
 	var tank: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(Basis(), Vector3(2, 0, 3)), BattleFx.Weapon.TANK_GUN, 5)
 	assert_almost_eq(tank.position, Vector3(2.0, 0.3 - 0.05, 3.0 - 0.625), Vector3.ONE * 0.05)
-	var how: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.SHELL, 10)
-	assert_almost_eq(how.position, Vector3(0.0, 0.34, -0.45), Vector3.ONE * 0.05)
+	# гармати — за справжньою моделлю: найпередніше коло її вершин, а не за формулою з рядка
+	UnitSilhouettes.reset_models()
+	for id: int in [9, 10]:
+		var fx: Node3D = BattleFx.spawn_muzzle(parent, Transform3D(), BattleFx.Weapon.SHELL, id)
+		var v: PackedVector3Array = UnitSilhouettes.model_mesh(id).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var zmin: float = 0.0
+		for p in v:
+			zmin = minf(zmin, p.z)
+		var ring_y: float = 0.0
+		var n: int = 0
+		for p in v:
+			if p.z < zmin + 0.004:
+				ring_y += p.y
+				n += 1
+		assert_almost_eq(fx.position, Vector3(0.0, ring_y / float(n), zmin), Vector3(0.03, 0.02, 0.02), "спалах на дулі гармати типу %d" % id)
 
 
 ## Постріл гармати: гаряче ядро на два кадри, 3–4 клуби сіро-бежевого порохового диму вздовж

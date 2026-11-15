@@ -25,32 +25,6 @@ uniform float wheel_radius = 0.06;
 // біжить по контуру разом із пройденим шляхом.
 const float TREAD_PERIOD = 0.25;
 const float TREAD_STRIP = 0.0625;
-// Загиблий лише темніший за живого й трохи брудніший — та сама тканина, не інша форма й не мох: стоячі
-// фігури — це HP відділення, тож лежачі не сміють із ними зливатися. Тьмяніє (FALLEN_DARK, лінійний
-// множник), насиченість — як у живого до потемніння (FALLEN_SAT), і лягає ледь тепліший відтінок грязюки
-// (FALLEN_MUD: сильніший зсував тон на 9–10° від живого, і тіла читались іншою формою). Грані, звернені
-// до неба, приглушені (FALLEN_TOP): під сонцем вони світлішали за ріллю. Слабке власне світло
-// (FALLEN_FILL) підіймає тіньовий бік: без нього затінена половина тіла сідала в чорне.
-// Під похмурим небом (River) світло рівне, а мокра рілля темна й сіра: тіло з тими самими множниками
-// читалось сірою грудкою (насиченість ~4, тон зсунутий у зелень, перепад усередині тіла 7 L*). Там свої
-// значення (`_OVERCAST`, змішуються за sky_clear): насиченість 0,7, тепліший хакі
-// (FALLEN_MUD_OVERCAST), а грані до неба не приглушені, а підняті (FALLEN_TOP_OVERCAST 1,15) — перепад
-// усередині тіла тримають вони. Множник потемніння трохи нижчий за сонячний (0,22), щоб із піднятим верхом
-// середина тіла не світлішала за ріллю.
-const float FALLEN_DARK = 0.25;
-const float FALLEN_DARK_OVERCAST = 0.22;
-const float FALLEN_SAT = 1.0;
-const float FALLEN_SAT_OVERCAST = 0.7;
-const vec3 FALLEN_MUD = vec3(1.03, 1.0, 0.96);
-const vec3 FALLEN_MUD_OVERCAST = vec3(1.07, 1.0, 0.88);
-const float FALLEN_TOP = 0.8;
-const float FALLEN_TOP_OVERCAST = 1.15;
-const float FALLEN_FILL = 0.45;
-// Найтемніше на тілі (гвинтівка) — темно-сіре, не чорна діра: власне світло пропорційне кольору її не підіймає.
-const float FALLEN_FLOOR = 0.004;
-// Матеріал загиблих (UnitSilhouettes.fallen_material()): один на набір, тож шар тіл — один виклик.
-uniform bool fallen = false;
-global uniform float sky_clear;
 
 instance uniform float travel = 0.0;
 
@@ -78,19 +52,6 @@ void fragment() {
 		ddy = dFdy(t);
 	}
 	vec3 col = (textureGrad(albedo_tex, uv, ddx, ddy) * albedo_color).rgb;
-	if (fallen) {
-		float y = dot(col, vec3(0.2126, 0.7152, 0.0722));
-		float sky = clamp((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).y, 0.0, 1.0);
-		float sun = smoothstep(0.3, 0.7, sky_clear);
-		float sat = mix(FALLEN_SAT_OVERCAST, FALLEN_SAT, sun);
-		vec3 mud = mix(FALLEN_MUD_OVERCAST, FALLEN_MUD, sun);
-		float dark = mix(FALLEN_DARK_OVERCAST, FALLEN_DARK, sun);
-		float top = mix(FALLEN_TOP_OVERCAST, FALLEN_TOP, sun);
-		col = max(mix(vec3(y), col, sat), vec3(0.0)) * mud * dark * mix(1.0, top, sky);
-		// Лише під ясним небом: там сонце лишає тіньовий бік у чорному. Під похмурим (River) світло й так
-		// рівне, а ґрунт темний — підсвічене тіло читалось би світлішим за ріллю й зсувало тон.
-		EMISSION = (col * FALLEN_FILL + vec3(FALLEN_FLOOR)) * sun;
-	}
 	ALBEDO = col;
 	vec4 orm = textureGrad(orm_tex, uv, ddx, ddy);
 	ROUGHNESS = roughness * dot(orm, roughness_channel);
