@@ -146,9 +146,9 @@ preview fields; the glyph's geometry never decides a sector.
 - **Armed strips** (drone or engineer verb armed) are [Cancel | armed cell], right-anchored,
   `ArmedStrip.WIDTH` (the shared 252), **a 48-dp hit area with a 40-dp plate like the row**. Every real
   title and hint fits in the armed cell in both locales, so the strip never widens. **Cancel sits
-  on the row's Cancel slot** with the same rect (104 × 48, no plate margin on its side, the divider
-  drawn outside it) and the same centred icon-and-word group, so × and the word land on the same
-  pixels between arming and the pending row. The two text lines sit 2 dp tighter than the font's line
+  on the row's Cancel slot** with the same rect (104 × 48, no plate margin on its side; the 1-dp
+  `hair` divider, like the verb grid's, is drawn outside it) and the same centred icon-and-word
+  group, so × and the word land on the same pixels between arming and the pending row. The two text lines sit 2 dp tighter than the font's line
   height, with an 11-dp hint, so the title caps and the hint descenders keep ≥ 6 dp to the plate edge,
   and the inert armed cell sits where Confirm appears one tap later. With Cancel on the right, a
   player backing out with a second tap would fire a drone or demolish a bridge. The armed cell stops

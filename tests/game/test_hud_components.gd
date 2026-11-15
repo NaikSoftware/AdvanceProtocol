@@ -62,6 +62,9 @@ func test_armed_strip_geometry_and_input() -> void:
 	var face := s.get_theme_stylebox(&"panel")
 	assert_eq(face.get_expand_margin(SIDE_BOTTOM), -8.0, "малюнок смужки — 40 dp, нижні 8 dp тап-цілі без плити")
 	assert_eq(s.armed_cell.mouse_filter, Control.MOUSE_FILTER_STOP)
+	var divider: ColorRect = s.cancel_button.get_parent().get_child(1) as ColorRect
+	assert_eq(divider.color, HudKit.HAIR, "роздільник — тонка лінія сітки, не світлий штрих")
+	assert_eq(divider.size.x, 1.0, "роздільник — 1 dp")
 	var presses: Array[int] = [0]
 	s.cancel_pressed.connect(func() -> void: presses[0] += 1)
 	s.cancel_button.pressed.emit()

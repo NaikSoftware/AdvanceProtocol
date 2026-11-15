@@ -56,11 +56,11 @@ func _init() -> void:
 	cancel_button.pressed.connect(cancel_pressed.emit)
 	row.add_child(cancel_button)
 
-	var bar := ColorRect.new()
-	bar.color = Color("e3dfd3")
-	bar.custom_minimum_size = Vector2(3.0, HudDocking.VISUAL_H)
+	# Роздільник — та сама тонка лінія, що між клітинками сітки дій: кістяна смуга між двома тихими
+	# комірками читалася як сторонній світлий штрих, а не як межа.
+	var bar := HudKit.divider(HudDocking.VISUAL_H)
+	# Вгору, а не по центру: плита малюється на верхніх 40 dp тап-цілі 48.
 	bar.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(bar)
 
 	armed_cell = HBoxContainer.new()
