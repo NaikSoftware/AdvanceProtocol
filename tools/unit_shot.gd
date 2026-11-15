@@ -12,10 +12,17 @@ extends Node
 ## Сьомий аргумент set=N у звичайному режимі бере моделі набору N.
 ## Шостий аргумент gate [set=N] (його запускає tools/unit_contrast_gate.py) знімає модель типу type_id на найдальшому зумі на різних ґрунтах і біля
 ## лісу, кожне місце двома кадрами — з моделлю (_m), без (_e) і з моделлю суцільним пурпуром (_k, маска контуру) для ΔE.
-## Шостий аргумент real [set=N] ставить як справжні юніти зі смугами HP польову гармату, гаубицю, інженерну машину й важкий танк
-## на найближчому й найдальшому зумі. З set=N усі чотири належать гравцеві з набором N (без нього — власники 0, 1, 2), а відділення
-## гравця 0 розвідує для них ґрунт. SHOT_GROUND=meadow|plough ставить їх на однорідний луг чи ріллю; SHOT_ENGINEERS=1 замість
-## цього ставить інженерні машини наборів 0, 1, 2 поруч із середнім танком.
+## Шостий аргумент real [set=N] ставить як справжні юніти зі смугами HP польову гармату, гаубицю,
+## інженерну машину й важкий танк на найближчому й найдальшому зумі. З set=N усі чотири належать
+## гравцеві з набором N (без нього — власники 0, 1, 2), а відділення гравця 0 розвідує для них
+## ґрунт. Змінні середовища:
+##   SHOT_GROUND=meadow|plough — луг чи рілля під гарматою (помилка, якщо такого місця нема);
+##     без неї — будь-яке поле. Група завжди стоїть далі за клітинку від води.
+##   SHOT_ENGINEERS=1 — замість гармат і танка інженерні машини наборів 0, 1, 2 поруч із середнім
+##     танком; несумісна з set=N.
+##   SHOT_PAIR=1 — лише інженерна машина й середній танк набору N (потрібен set=N), клітинки
+##     через дві.
+##   SHOT_ZOOMS=8,20 — зуми кадрів (типово найближчий і найдальший).
 ## Шостий аргумент spin [set=N] ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
 ## з однаковим `travel` (контроль), третій — на пів радіуса колеса далі; між ними мають змінитися лише колеса.
 ## Шостий аргумент rear [set=N] ставить чотири танки набору N (важкий, середній, винищувач, легкий) у ряд через тайл,
@@ -240,66 +247,111 @@ func _lineup(screen: BattleScreen, map: MapData, out: String, tag: String) -> vo
 	get_tree().quit()
 
 
-## Справжні юніти двох гармат, інженерної машини й танка (смуги HP, крони, ґрунт карти) на найближчому й найдальшому зумі:
-## остаточна перевірка впізнаваності гармат — разом із розрахунком, не окрема модель.
+## Найближче до центру карти місце `p`, де кожна клітинка групи (`p + rel`) — поле, дорога чи
+## узвишшя, а в радіусі однієї клітинки довкола неї немає води. З `surface >= 0` клітинка `p` ще
+## й цієї поверхні, а чотири її сусіди — поле. `Vector2i(-1, -1)` — місця нема.
+func _group_origin(m: MapData, rel: Array[Vector2i], surface: int) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var best_d: int = 1 << 30
+	for y in range(4, m.height - 4):
+		for x in range(4, m.width - 4):
+			var p := Vector2i(x, y)
+			var ok: bool = true
+			for off: Vector2i in rel:
+				var q: Vector2i = p + off
+				if q.x < 1 or q.y < 1 or q.x >= m.width - 1 or q.y >= m.height - 1:
+					ok = false
+					break
+				if not m.tiles[q.y * m.width + q.x] in [Terrain.Kind.FIELD, Terrain.Kind.ROAD, Terrain.Kind.HILL]:
+					ok = false
+					break
+				for dy in range(-1, 2):
+					for dx in range(-1, 2):
+						if m.tiles[(q.y + dy) * m.width + q.x + dx] == Terrain.Kind.WATER:
+							ok = false
+			if ok and surface >= 0:
+				# клітинка гармати цієї поверхні, сусіди — поле (на River рілля менша за 3×3)
+				if m.surface_at(p) != surface:
+					ok = false
+				for dir: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					var s: Vector2i = p + dir
+					if m.tiles[s.y * m.width + s.x] != Terrain.Kind.FIELD:
+						ok = false
+			var d: int = (p - Vector2i(m.width / 2, m.height / 2)).length_squared()
+			if ok and d < best_d:
+				best_d = d
+				best = p
+	return best
+
+
+## Справжні юніти (смуги HP, крони, ґрунт карти) на найближчому й найдальшому зумі: остаточна
+## перевірка впізнаваності гармат і інженерних машин — разом із розрахунком, не окрема модель.
+## Режими й змінні середовища описані в заголовку файлу.
 func _real(screen: BattleScreen, map: MapData, out: String, tag: String, set_id: int = -1) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
-	var c := _field_near_centre(m)
-	# SHOT_GROUND: гармата (c + (-2, 0)) стає на однорідне поле 3×3 вибраної поверхні найближче до центру карти
-	var ground: String = OS.get_environment("SHOT_GROUND")
-	if ground != "":
-		if not ground in ["meadow", "plough"]:
-			push_error("unit_shot: SHOT_GROUND — meadow або plough, а не %s" % ground)
-			get_tree().quit(1)
-			return
-		var sv: int = MapData.FieldSurface.PLOUGHED if ground == "plough" else MapData.FieldSurface.MEADOW
-		var best_d: int = 1 << 30
-		for y in range(4, m.height - 4):
-			for x in range(4, m.width - 4):
-				var uniform: bool = true
-				for dy in range(-1, 2):
-					for dx in range(-1, 2):
-						var q := Vector2i(x + dx, y + dy)
-						if m.tiles[q.y * m.width + q.x] != Terrain.Kind.FIELD or m.surface_at(q) != sv:
-							uniform = false
-				var d: int = (Vector2i(x, y) - Vector2i(m.width / 2, m.height / 2)).length_squared()
-				if uniform and d < best_d:
-					best_d = d
-					c = Vector2i(x + 2, y)
-	# set=N: усі чотири юніти належать гравцеві з набором N, тож гармати й інженерна машина — з цього набору
-	var o: Array[int] = [0, 1, 2, 0]
-	if set_id >= 0:
-		o = [set_id, set_id, set_id, set_id]
-	m.spawns = [
-		{"type_id": 9, "owner": o[0], "pos": c + Vector2i(-2, 0), "facing": 0},
-		{"type_id": 10, "owner": o[1], "pos": c, "facing": 0},
-		{"type_id": 11, "owner": o[2], "pos": c + Vector2i(2, 0), "facing": 0},
-		{"type_id": 8, "owner": o[3], "pos": c + Vector2i(0, 2), "facing": 0},
-	]
 	var engineers: bool = OS.get_environment("SHOT_ENGINEERS") != ""
-	if engineers:
-		m.spawns = [
-			{"type_id": 11, "owner": 0, "pos": c + Vector2i(-2, 0), "facing": 0},
-			{"type_id": 11, "owner": 1, "pos": c, "facing": 0},
-			{"type_id": 11, "owner": 2, "pos": c + Vector2i(2, 0), "facing": 0},
-			{"type_id": 5, "owner": 0, "pos": c + Vector2i(0, 2), "facing": 0},
-		]
-	if set_id > 0 or engineers:
-		# активний гравець 0: чужі юніти ховає туман, тож його відділення стоїть поруч і розвідує ґрунт під ними
-		m.spawns.append({"type_id": 0, "owner": 0, "pos": c + Vector2i(0, 3), "facing": 0})
+	var pair: bool = OS.get_environment("SHOT_PAIR") != ""
+	if (engineers and set_id >= 0) or (engineers and pair) or (pair and set_id < 0):
+		push_error("unit_shot: SHOT_ENGINEERS не сполучається з set=N і SHOT_PAIR; SHOT_PAIR потребує set=N")
+		get_tree().quit(1)
+		return
+	var ground: String = OS.get_environment("SHOT_GROUND")
+	if not ground in ["", "meadow", "plough"]:
+		push_error("unit_shot: SHOT_GROUND — meadow або plough, а не %s" % ground)
+		get_tree().quit(1)
+		return
+	var surface: int = -1
+	if ground != "":
+		surface = MapData.FieldSurface.PLOUGHED if ground == "plough" else MapData.FieldSurface.MEADOW
+	# type_id, власник, зсув від `p`: сусіди через дві клітинки, щоб смуги HP не лягали на відвал чи плуг
+	var plan: Array = []
+	var cam := Vector2i(2, 1)
+	if pair:
+		plan = [[11, set_id, Vector2i(0, 0)], [5, set_id, Vector2i(3, 0)]]
+		cam = Vector2i(1, 1)
+	elif engineers:
+		plan = [[11, 0, Vector2i(0, 0)], [11, 1, Vector2i(2, 0)], [11, 2, Vector2i(4, 0)], [5, 0, Vector2i(2, 2)]]
+	else:
+		# set=N: усі чотири юніти належать гравцеві з набором N, тож гармати й інженерна машина — з цього набору
+		var o: Array[int] = [0, 1, 2, 0]
+		if set_id >= 0:
+			o = [set_id, set_id, set_id, set_id]
+		plan = [[9, o[0], Vector2i(0, 0)], [10, o[1], Vector2i(2, 0)], [11, o[2], Vector2i(4, 0)], [8, o[3], Vector2i(2, 2)]]
+	# відділення гравця 0 розвідує ґрунт під чужими юнітами: активний гравець 0, а їх ховає туман
+	var spotter: bool = set_id > 0 or engineers
+	var rel: Array[Vector2i] = []
+	for e: Array in plan:
+		rel.append(e[2])
+	if spotter:
+		rel.append(Vector2i(2, 3) if not pair else Vector2i(1, 2))
+	var p: Vector2i = _group_origin(m, rel, surface)
+	if p.x < 0:
+		push_error("unit_shot: на карті нема поля без води під групу юнітів (SHOT_GROUND=%s)" % ground)
+		get_tree().quit(1)
+		return
+	m.spawns = []
+	for e: Array in plan:
+		m.spawns.append({"type_id": e[0], "owner": e[1], "pos": p + (e[2] as Vector2i), "facing": 0})
+	if spotter:
+		m.spawns.append({"type_id": 0, "owner": 0, "pos": p + rel[rel.size() - 1], "facing": 0})
+	var zooms: Array[float] = [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]
+	if OS.get_environment("SHOT_ZOOMS") != "":
+		zooms = []
+		for s: String in OS.get_environment("SHOT_ZOOMS").split(","):
+			zooms.append(float(s))
 	screen.setup(m, 3, 1)
 	var rig: IsoCameraRig = screen.get_node("%CameraRig")
 	for f in SETTLE_FRAMES:
 		await get_tree().process_frame
-	rig.center_on(c)
-	for z: float in [IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]:
+	rig.center_on(p + cam)
+	for z: float in zooms:
 		rig.zoom_by(z / rig.zoom_level)
 		for f in SETTLE_FRAMES * 2:
 			await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("%s/%s_z%d.png" % [out, tag, int(z)])
-	print("UNIT real at %s" % c)
+	print("UNIT real at %s" % p)
 	get_tree().quit()
 
 
