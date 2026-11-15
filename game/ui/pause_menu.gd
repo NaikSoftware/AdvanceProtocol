@@ -1,8 +1,9 @@
 class_name PauseMenu
 extends Control
-## Task 3.5 (скелет): меню паузи. Оверлей поверх бою. §1.2/гейт передачі:
+## Меню паузи. Оверлей поверх бою. §1.2/гейт передачі:
 ## пауза НЕ сміє показувати нічого, що належить неактивному гравцеві — тому це
-## непрозорий scrim на всю дошку, а не напівпрозора панель збоку.
+## непрозорий scrim на всю дошку з плитою карти (та сама, що на гейті, без юнітів),
+## а не напівпрозора панель збоку.
 ##
 ## Кнопки лише повідомляють сигналами; що робити — вирішує сцена бою, яка
 ## володіє станом (збереження, оверлей налаштувань). «Здатися» спершу
@@ -12,6 +13,9 @@ extends Control
 signal settings_requested
 signal save_quit_requested
 signal surrender_requested
+
+var _map_name_key: String = ""
+var _turn: int = 0
 
 @onready var _resume_button: Button = %ResumeButton
 
@@ -25,10 +29,52 @@ func _ready() -> void:
 	%ConfirmYesButton.pressed.connect(surrender_requested.emit)
 	# Повторне відкриття паузи завжди починається зі звичайних кнопок.
 	visibility_changed.connect(_set_confirming.bind(false))
+	_align_title_baseline()
+
+
+## «Пауза», «КАРТА» й назва карти — на одній базовій лінії: HBox вирівнює по краю, а кеглі різні,
+## тож кожному підпису додається верхній відступ на різницю підйому шрифту.
+func _align_title_baseline() -> void:
+	var labels: Array[Label] = [%Title, %MapCaption, %MapValue]
+	var top: float = 0.0
+	for l in labels:
+		top = maxf(top, l.get_theme_font(&"font").get_ascent(l.get_theme_font_size(&"font_size")))
+	for l in labels:
+		l.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		var pad := StyleBoxEmpty.new()
+		pad.content_margin_top = top - l.get_theme_font(&"font").get_ascent(l.get_theme_font_size(&"font_size"))
+		l.add_theme_stylebox_override(&"normal", pad)
+	(%MapBox as Control).size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+
+
+## Карта незмінна протягом матчу: сцена бою задає їх раз.
+func set_context(map_path: String, name_key: String) -> void:
+	%Plate.texture = HandoverGate.plate_for(map_path)
+	_map_name_key = name_key
+
+
+## Відкриває паузу; turn — номер кола (BattleState.turn_number) для інфо-рядка.
+func open(turn: int) -> void:
+	_turn = turn
+	_relabel()
+	show()
+
+
+## Підписи вже перекладені, тож після зміни мови з налаштувань, відкритих поверх паузи, їх пишемо наново.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSLATION_CHANGED and visible and is_node_ready():
+		_relabel()
+
+
+func _relabel() -> void:
+	%MapCaption.text = tr("hud_map").to_upper()
+	%MapValue.text = tr(_map_name_key) if _map_name_key != "" else "-"
+	%TurnCaption.text = tr("hud_turn")
+	%TurnValue.text = str(_turn)
 
 
 func _set_confirming(on: bool) -> void:
-	for b: Control in [%ResumeButton, %SettingsButton, %SaveQuitButton, %SurrenderButton]:
+	for b: Control in [%ResumeButton, %SettingsButton, %SaveQuitButton, %SurrenderButton, %Divider, %InfoLine]:
 		b.visible = not on
 	%ConfirmBox.visible = on
 	# Помилка збереження стосується лише того відкриття паузи, у якому сталася.

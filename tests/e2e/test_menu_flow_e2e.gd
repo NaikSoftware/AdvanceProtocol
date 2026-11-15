@@ -127,6 +127,7 @@ func _dict() -> String:
 
 
 func _confirm_gate() -> void:
+	_gate().entrance_tween.custom_step(HandoverGate.ENTRANCE_S + 0.01)
 	await _click(_gate().get_node("%ConfirmButton"))
 	await _e2e.wait_until(func() -> bool: return not _gate().visible, "гейт зник")
 
@@ -170,7 +171,9 @@ func _move_one_unit() -> bool:
 			assert_eq(battle.input_controller()._selected_unit, u, "тап вибрав юніт")
 			_e2e.click_at(cpos)
 			assert_false(battle.input_controller()._pending.is_empty(), "тап по тайлу дав прев'ю руху")
-			await _click(_hud().get_node("%ConfirmButton"))
+			var confirm: Button = _hud().get_node("%ConfirmButton")
+			await _e2e.wait_until(func() -> bool: return not confirm.disabled, "плита прев'ю запеклася")
+			await _click(confirm)
 			await _e2e.wait_until(func() -> bool: return u.pos != start and _idle(), "юніт дійшов")
 			return u.pos == cell
 	return false
