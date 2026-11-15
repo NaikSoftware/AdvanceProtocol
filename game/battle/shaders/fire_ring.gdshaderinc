@@ -14,6 +14,8 @@
 const float FR_LINE_W = 0.12;
 // Імпульс — підказка, звідки росте досяжність, а не спалах: ледь помітна смуга, що гасне назад до юніта.
 const float FR_PULSE_W = 0.9;
+// Передній край хвилі наростає плавно на стільки тайлів: різкий фронт читається другим кільцем, що їде.
+const float FR_PULSE_EDGE = 0.22;
 // Compatibility змішує прозоре в sRGB, а не в лінійному просторі: та сама альфа там удвічі слабша
 // на темному ґрунті, тож і альфа хвилі вища.
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
@@ -37,8 +39,10 @@ float fire_ring(vec2 p, float radius, float pulse, float band, float px) {
 	// Фронт іде від юніта до краю й за край, тож при pulse = 1 хвилі в колі вже немає; лінія
 	// з'являється, коли фронт її досягає, і далі стоїть.
 	float f = pulse * (radius + FR_PULSE_W);
-	float s = (f - d) / FR_PULSE_W;
-	float wave = s >= 0.0 && s <= 1.0 ? (1.0 - s) * (1.0 - s) * fr_cov(f - d, px) : 0.0;
+	// Наростає від фронту на FR_PULSE_EDGE до повної сили, далі гасне назад до юніта.
+	float behind = f - d;
+	float s = clamp((behind - FR_PULSE_EDGE) / (FR_PULSE_W - FR_PULSE_EDGE), 0.0, 1.0);
+	float wave = behind > 0.0 && behind <= FR_PULSE_W ? smoothstep(0.0, FR_PULSE_EDGE, behind) * (1.0 - s) * (1.0 - s) : 0.0;
 	float shown = clamp((f - radius) / 0.25 + 0.5, 0.0, 1.0);
 	return max(line * shown, band * wave * FR_PULSE_A * fr_cov(radius - d, px));
 }

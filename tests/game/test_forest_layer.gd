@@ -270,8 +270,9 @@ func test_contour_edges_reach_every_crown_but_not_the_fade() -> void:
 	var rings := PackedVector4Array([Vector4(5.0, 3.0, 3.0, 0.0)])
 	f.set_contour_rings(rings, PackedColorArray([Color(0.25, 0.5, 0.75, 0.5)]), PackedFloat32Array([0.0]))
 	f.set_line_rect(Vector4(1.0, 2.0, 8.0, 9.0))
-	f.set_broken({Vector2i(7, 6): true})
+	# Юніти — до пролому: перебудовані пролом крони мусять отримати і їхні клітинки.
 	f.set_reveal_cells([Vector2i(5, 3)] as Array[Vector2i])
+	f.set_broken({Vector2i(7, 6): true})
 	var drawn := _drawn(f)
 	assert_gt(drawn.size(), 0)
 	for n: Node in drawn:

@@ -296,6 +296,22 @@ func _mesh_height(mesh: ArrayMesh, p: Vector2) -> float:
 	return NAN
 
 
+## Висоти всіх трикутників, що накривають точку (на спільному ребрі — двох і більше).
+func _heights_at(mesh: ArrayMesh, p: Vector2) -> Array:
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var out: Array = []
+	for t in range(0, idx.size(), 3):
+		var a: Vector3 = verts[idx[t]]
+		var b: Vector3 = verts[idx[t + 1]]
+		var c: Vector3 = verts[idx[t + 2]]
+		var bc: Vector3 = _bary(p, Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z))
+		if bc.x >= -1e-5 and bc.y >= -1e-5 and bc.z >= -1e-5:
+			out.append(a.y * bc.x + b.y * bc.y + c.y * bc.z)
+	return out
+
+
 func _bary(p: Vector2, a: Vector2, b: Vector2, c: Vector2) -> Vector3:
 	var d: float = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
 	var u: float = ((b.y - c.y) * (p.x - c.x) + (c.x - b.x) * (p.y - c.y)) / d
@@ -341,6 +357,18 @@ func test_pulse_disk_is_coarse_inside_and_never_sinks_into_hills() -> void:
 			assert_true(h >= TerrainHeight.ground_y(6.0 + p.x, 6.0 + p.y) + 0.04 - 1e-4, "%s: сітка не тоне в ґрунті" % p)
 			checked += 1
 	assert_gt(checked, 1000)
+	# Межа рідшої й повної сітки без щілини: точка на спільному ребрі має одну висоту з обох боків.
+	var seams: int = 0
+	for kz in range(-3 * s, 3 * s + 1):
+		for kx in range(-3 * s, 3 * s + 1):
+			for q: Vector2 in [Vector2(0.5, 0.0), Vector2(0.0, 0.5)]:
+				var p := Vector2((kx + 0.5 + q.x) / s, (kz + 0.5 + q.y) / s)
+				if p.length() > 3.0:
+					continue
+				var hs: Array = _heights_at(mesh, p)
+				if hs.size() > 1 and hs.max() - hs.min() > 1e-4:
+					seams += 1
+	assert_eq(seams, 0, "щілин на межі рідшої сітки")
 
 
 func test_after_the_pulse_only_the_border_band_stays() -> void:
@@ -475,6 +503,11 @@ func test_only_the_outermost_ring_of_a_hold_draws_the_band() -> void:
 		bands.append((ring.material_override as ShaderMaterial).get_shader_parameter("band"))
 	assert_eq(bands, [0.0, 1.0], "гармата без хвилі, дрон — з хвилею")
 	assert_eq(view.forest().contour_ring_bands, PackedFloat32Array([0.0, 1.0]))
+	# Коло без хвилі не потребує круга: від початку — смуга межі.
+	var gun := _circle_nodes()[0].mesh as ArrayMesh
+	for v in (gun.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+		assert_true(Vector2(v.x, v.z).length() >= 3.0 - BoardView.RING_OUTER - sqrt(2.0) / TerrainHeight.SAMPLES_PER_TILE - 1e-5,
+			"менше коло — лише смуга межі")
 	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
 	assert_eq((_circle_nodes()[0].material_override as ShaderMaterial).get_shader_parameter("band"), 1.0, "одне коло — з хвилею")
 
@@ -487,9 +520,10 @@ func test_ring_draws_under_the_contours() -> void:
 	var ring: MeshInstance3D = _draw_ring(false)
 	var contour := view.get_node("Contour%d" % BoardView.LAYER_ZONES) as MultiMeshInstance3D
 	assert_eq((ring.material_override as ShaderMaterial).render_priority, contour.multimesh.mesh.surface_get_material(0).render_priority)
-	assert_eq(ring.sorting_offset, BoardView.RING_SORT_OFFSET)
-	assert_eq(contour.sorting_offset, 0.0)
-	assert_eq(BoardView.RING_SORT_OFFSET, -100.0, "далі за будь-яку різницю відстаней на дошці")
+	# Порядок прозорих — відстань до камери мінус зсув: кільце перше, навіть коли воно на дальньому кінці
+	# дошки, а контур на ближньому.
+	var board_diagonal: float = Vector2(10, 10).length()
+	assert_lt(ring.sorting_offset + board_diagonal, contour.sorting_offset, "зсув кільця більший за дошку")
 
 
 ## Палець відпущено посеред імпульсу: твін зупинено разом із вузлом, крони кільця не тримають. Новий
@@ -599,8 +633,8 @@ func test_contour_edges_composite_later_layer_over_earlier_and_cleared_layer_dis
 
 
 ## Колір лінії — у sRGB і в картці ребер, і у вершинах стрічки (vertex_color_is_srgb, sampler source_color):
-## кожен рендерер переводить його так само, як колір кільця, і Compatibility не темнить ліній. На Mobile
-## вигляд той самий, що й з лінійним кольором вершин: колір зони там читався лінійним.
+## кожен рендерер переводить його так само, як колір кільця, і Compatibility не темнить ліній. Колір зони
+## задано як лінійний, тож у sRGB він іде через linear_to_srgb().
 func test_contour_colour_is_srgb_encoded_on_the_ribbon_and_in_the_edge_card() -> void:
 	view.build(Board.create(4, 3, Terrain.GroundState.DRY))
 	var mid := Color(0.5, 0.25, 0.0)
@@ -669,7 +703,7 @@ func test_draw_circles_publishes_rings_for_the_canopy() -> void:
 func test_line_rect_bounds_every_contour_and_ring_for_the_canopy() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
 	var forest: ForestLayer = view.forest()
-	assert_eq(forest.line_rect, Vector4(1, 1, 0, 0), "без ліній — порожня")
+	assert_eq(forest.line_rect, Vector4(INF, INF, -INF, -INF), "без ліній — порожня")
 	view.draw_contour([_edge(Vector2i(1, 1), Vector2i(1, 0), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
 	_assert_vec4(forest.line_rect, Vector4(0.45, 0.45, 1.55, 1.55))
 	view.draw_circles([{"center": Vector2i(4, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
@@ -677,7 +711,7 @@ func test_line_rect_bounds_every_contour_and_ring_for_the_canopy() -> void:
 	view.clear_contour(BoardView.LAYER_ZONES)
 	_assert_vec4(forest.line_rect, Vector4(0.85, 2.85, 7.15, 9.15))
 	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
-	assert_eq(forest.line_rect, Vector4(1, 1, 0, 0))
+	assert_eq(forest.line_rect, Vector4(INF, INF, -INF, -INF))
 
 
 func _assert_vec4(got: Vector4, want: Vector4) -> void:

@@ -144,8 +144,8 @@ var contour_ring_colors := PackedColorArray()
 ## Чи несе кільце хвилю імпульсу (1) чи лише межу (0) — BoardView.draw_circles.
 var contour_ring_bands := PackedFloat32Array()
 ## Рамка всіх ліній на землі (xy — мінімум, zw — максимум): крона, чий промінь до землі її не
-## перетинає, землі під собою не шукає. Порожня — (1, 1, 0, 0).
-var line_rect := Vector4(1.0, 1.0, 0.0, 0.0)
+## перетинає, землі під собою не шукає. Порожня — (INF, INF, -INF, -INF).
+var line_rect := Vector4(INF, INF, -INF, -INF)
 ## Клітинки показаних юнітів (set_reveal_cells) картою дошки: лінію за юнітом юніт ховає, тож крона,
 ## чий промінь до землі йде крізь його клітинку, її не малює.
 var _unit_img: Image

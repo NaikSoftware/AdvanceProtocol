@@ -3,7 +3,8 @@ extends Node
 ## з дронами (обидва кільця), поруч — вигорілий слід і колія, щоб видно було, чи не ховає їх імпульс.
 ## Не входить у гру.
 ## Запуск (потрібне вікно):
-##   tools/godot_run.sh --path . res://tools/ring_shot.tscn -- <out_dir> <map>[@x,y] ... [--zooms=12,6,20]
+##   tools/godot_run.sh --path . res://tools/ring_shot.tscn -- <out_dir> <map>[@x,y] ... [--zooms=12,6,20] [--live]
+## --live: замість міток часу — кожен кадр імпульсу з кроком 1/30 с від натиску до 1,2 с (<map>_z<zoom>_live_NNN).
 ## @x,y — переставити загін на клітинку (схил, берег, будинок під кільцем); ще @sx,sy — клітинка
 ## вигорілого сліду (колія йде через неї вздовж X на ±2 клітинки), типово — поруч із загоном; ще @ux,uy —
 ## поставити туди інший юніт гравця 0 (юніт під кронами, через клітинку якого йде кільце).
@@ -15,6 +16,7 @@ extends Node
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
 const PULSE_TIMES: Array[float] = [0.15, 0.35, 0.55, 0.75]
+const LIVE_FRAMES: int = 36
 
 
 func _ready() -> void:
@@ -28,8 +30,15 @@ func _ready() -> void:
 	get_window().size = WINDOW
 	var zooms: Array[float] = [12.0, IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]
 	var maps: Array[String] = []
+	var times: Array[float] = PULSE_TIMES
+	var live: bool = false
 	for a in args.slice(1):
-		if a.begins_with("--zooms="):
+		if a == "--live":
+			live = true
+			times = []
+			for k in LIVE_FRAMES + 1:
+				times.append(k / 30.0)
+		elif a.begins_with("--zooms="):
 			zooms.assign(Array(a.trim_prefix("--zooms=").split(",")).map(func(x: String) -> float: return float(x)))
 		else:
 			maps.append(a)
@@ -111,16 +120,17 @@ func _ready() -> void:
 					pulses.append(t)
 			var at: float = 0.0
 			var mid := Vector2i.ZERO
-			for k in PULSE_TIMES.size():
+			for k in times.size():
 				for t: Tween in pulses:
-					t.custom_step(PULSE_TIMES[k] - at)
-				at = PULSE_TIMES[k]
+					t.custom_step(times[k] - at)
+				at = times[k]
 				for f in 3:
 					await get_tree().process_frame
-				if k == 1:
+				if k == 1 and not live:
 					mid = await _median_frame()
 				await RenderingServer.frame_post_draw
-				shots.append(["%s_t%03d" % [name, int(PULSE_TIMES[k] * 100.0)], get_viewport().get_texture().get_image()])
+				var label: String = ("%s_live_%03d" % [name, k]) if live else ("%s_t%03d" % [name, int(times[k] * 100.0)])
+				shots.append([label, get_viewport().get_texture().get_image()])
 			for t: Tween in pulses:
 				t.custom_step(10.0)
 			for f in 3:

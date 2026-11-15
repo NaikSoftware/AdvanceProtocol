@@ -37,6 +37,9 @@ const CONTOUR_PRIORITY: int = 4
 ## Лінія зони тонка й напівпрозора: підказка шляху на ґрунті, а не головний акцент кадру.
 const _CONTOUR_WIDTH: float = 0.02
 const _CONTOUR_ALPHA: float = 0.7
+## Compatibility змішує прозоре в sRGB: тонка лінія з альфою 0,7 там на землі й на кронах ледь
+## відрізнялась від тла. Вища альфа дає той самий контраст, що 0,7 на Mobile.
+const _CONTOUR_ALPHA_COMPAT: float = 0.85
 ## Ширина межі кільця дальності й хвилі імпульсу, тайлів — ті самі FR_LINE_W і FR_PULSE_W у
 ## fire_ring.gdshaderinc (тест звіряє). Межа ширша за лінію зон: її видно лише, поки гравець тримає
 ## палець на юніті.
@@ -347,10 +350,10 @@ func draw_contour(segments: Array[Dictionary], layer: int) -> void:
 		var from: float = _stroke_end(edges, seg, -along_i)
 		var to: float = _stroke_end(edges, seg, along_i)
 		var base: int = verts[surf].size()
-		# Колір зони читався лінійним; у вершину йде вже в sRGB (vertex_color_is_srgb): так його однаково
-		# переводять Mobile і Compatibility, що лінійний колір вершин бере як є й темнить.
+		# Колір зони — лінійний; у вершину він іде в sRGB (vertex_color_is_srgb), бо Compatibility лінійний
+		# колір вершин бере як є й темнить, а sRGB обидва рендерери переводять однаково.
 		var color: Color = (seg["color"] as Color).linear_to_srgb()
-		color.a *= _CONTOUR_ALPHA
+		color.a *= _contour_alpha()
 		for k in _CONTOUR_PIECES + 1:
 			var c: Vector3 = mid + along * lerpf(from, to, float(k) / _CONTOUR_PIECES)
 			for sgn: float in [-1.0, 1.0]:
@@ -461,7 +464,10 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
 		# Поки біжить імпульс, сітка — увесь круг; далі лише смуга межі (_set_pulse).
-		mi.mesh = _ring_grid_mesh(centre, Vector2(0.0, r + RING_OUTER), r - RING_OUTER) if animate \
+		# Хвиля біжить від юніта, тож поки вона йде, сітка кола з хвилею — увесь круг; коло без хвилі й
+		# коло після імпульсу — лише смуга межі (_set_pulse).
+		var with_band: bool = animate and bands[-1] > 0.0
+		mi.mesh = _ring_grid_mesh(centre, Vector2(0.0, r + RING_OUTER), r - RING_OUTER) if with_band \
 				else _ring_grid_mesh(centre, Vector2(r - RING_OUTER, r + RING_OUTER))
 		mi.material_override = sm
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -473,7 +479,7 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 			# Твін живе на вузлі кільця: відпустив палець — вузол звільнено, імпульс зупинився.
 			# Після нього матеріал не міняється, тож екран без руху знову стоїть.
 			var i: int = nodes.size()
-			var setter := func(v: float) -> void: _set_pulse(layer, i, mi, centre, r, v)
+			var setter := func(v: float) -> void: _set_pulse(layer, i, mi, centre, r, v, with_band)
 			mi.create_tween().tween_method(setter, 0.0, 1.0, (r + RING_PULSE_W) / PULSE_SPEED)
 		add_child(mi)
 		nodes.append(mi)
@@ -482,14 +488,15 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 	_circle_pulse[layer] = progress
 	_circle_band[layer] = bands
 	_publish_circles()
+	_publish_line_rect()
 
 
 ## Крок імпульсу: на ґрунті й під кронами той самий поступ. Добіг — диск змінює смуга межі: увесь
 ## круг тримав би тисячі трикутників, поки палець на юніті.
-func _set_pulse(layer: int, i: int, mi: MeshInstance3D, centre: Vector3, r: float, v: float) -> void:
+func _set_pulse(layer: int, i: int, mi: MeshInstance3D, centre: Vector3, r: float, v: float, disk: bool) -> void:
 	(mi.material_override as ShaderMaterial).set_shader_parameter(&"pulse", v)
 	(_circle_pulse[layer] as Array)[i] = v
-	if v >= 1.0:
+	if v >= 1.0 and disk:
 		mi.mesh = _ring_grid_mesh(centre, Vector2(r - RING_OUTER, r + RING_OUTER))
 	_publish_circles()
 
@@ -511,7 +518,7 @@ func _ring_grid_mesh(centre: Vector3, band: Vector2, coarse_to: float = -1.0) ->
 	var k0 := Vector2i(floori((c.x - band.y + 0.5) * s / 2.0) * 2, floori((c.y - band.y + 0.5) * s / 2.0) * 2)
 	var k1 := Vector2i(ceili((c.x + band.y + 0.5) * s / 2.0) * 2, ceili((c.y + band.y + 0.5) * s / 2.0) * 2)
 	# Висота вершини — прямо з відліку поля (ground_y у вузлі ґратки дає те саме), а номер вершини — з
-	# плаского масиву: круг дрона — тисячі вершин, і at() зі словником коштували десятки мс.
+	# плаского масиву: круг дрона — тисячі вершин, і будується він у мить натиску.
 	var heights: PackedFloat32Array = th.heights() if th != null else PackedFloat32Array()
 	var off: int = th.margin * si if th != null else 0
 	var cols: int = th.cols if th != null else 0
@@ -576,6 +583,24 @@ func _ring_grid_mesh(centre: Vector3, band: Vector2, coarse_to: float = -1.0) ->
 				if index_of[slot] < 0:
 					index_of[slot] = verts.size()
 					var y: float = maxf(_lattice_h(heights, cols, rows, vx + off, vz + off), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
+					# Вершина посеред ребра рідшої клітинки лягає на це ребро — середнє його піднятих кутів,
+					# що й так не нижче за ґрунт у ній: інакше між рідшою й повною сіткою щілина.
+					var rx: int = vx - k0.x
+					var rz: int = vz - k0.y
+					if coarse_to > 0.0 and (rx + rz) % 2 == 1:
+						var along_z: bool = rx % 2 == 0
+						var g: Vector2i = Vector2i(rx / 2, (rz - 1) / 2) if along_z else Vector2i((rx - 1) / 2, rz / 2)
+						var side: Vector2i = Vector2i(-1, 0) if along_z else Vector2i(0, -1)
+						var gw: int = nx / 2
+						var gh: int = coarse.size() / gw
+						var marked: bool = false
+						for cell: Vector2i in [g, g + side]:
+							if cell.x >= 0 and cell.y >= 0 and cell.x < gw and cell.y < gh and coarse[cell.y * gw + cell.x] == 1:
+								marked = true
+						if marked:
+							var a: int = slot - nx if along_z else slot - 1
+							var b: int = slot + nx if along_z else slot + 1
+							y = 0.5 * (verts[index_of[a]].y + verts[index_of[b]].y)
 					verts.append(Vector3(vx * inv - 0.5 - c.x, y, vz * inv - 0.5 - c.y))
 				q[n] = index_of[slot]
 			indices.append_array([q[0], q[1], q[2], q[1], q[3], q[2]])
@@ -614,6 +639,11 @@ static func _lattice_h(heights: PackedFloat32Array, cols: int, rows: int, ix: in
 	if cols == 0:
 		return 0.0
 	return heights[clampi(iz, 0, rows - 1) * cols + clampi(ix, 0, cols - 1)]
+
+
+## Альфа лінії зони: на Compatibility вища (див. _CONTOUR_ALPHA_COMPAT).
+static func _contour_alpha() -> float:
+	return _CONTOUR_ALPHA_COMPAT if RenderingServer.get_current_rendering_method() == "gl_compatibility" else _CONTOUR_ALPHA
 
 
 ## Чи біжить зараз імпульс якогось кола: тоді екран бою не обмежує кадри (BattleScreen._on_idle_timeout).
@@ -676,7 +706,7 @@ func _publish_contours() -> void:
 				cell += dir
 				dir = -dir
 			var color: Color = seg["color"]
-			color.a *= _CONTOUR_ALPHA
+			color.a *= _contour_alpha()
 			texels[Vector2i(2 * cell.x + 2, cell.y) if dir.x > 0 else Vector2i(2 * cell.x + 1, cell.y + 1)] = color
 		for t: Vector2i in texels:
 			# Color.blend — «поверх» із тією самою альфою, з якою стрічка шару лягає на попередні.
@@ -714,7 +744,6 @@ func _publish_circles() -> void:
 			var band: Array = _circle_band.get(layer, [])
 			bands.append(band[i] if i < band.size() else 1.0)
 	_forest.set_contour_rings(rings, colors, bands)
-	_publish_line_rect()
 
 
 ## Рамка всіх контурів і кілець у XZ світу для крон лісу: крона, чий промінь до землі її не
@@ -735,7 +764,8 @@ func _publish_line_rect() -> void:
 			var reach: float = float(c["radius"]) + RING_OUTER + 0.05
 			lo = lo.min(centre - Vector2.ONE * reach)
 			hi = hi.max(centre + Vector2.ONE * reach)
-	_forest.set_line_rect(Vector4(lo.x, lo.y, hi.x, hi.y) if lo.x <= hi.x else Vector4(1.0, 1.0, 0.0, 0.0))
+	# Без ліній лишається (INF, INF, -INF, -INF): жоден відрізок променя таку рамку не перетинає.
+	_forest.set_line_rect(Vector4(lo.x, lo.y, hi.x, hi.y))
 
 
 func _contour_material(over_bridge: bool = false) -> Material:
