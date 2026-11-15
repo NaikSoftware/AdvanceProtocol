@@ -18,13 +18,13 @@ Godot side is `unit_shot.tscn ... gate set=N` (tools/unit_shot.gd `_gate`): it p
 data, SWITCHES OFF the cloud shadows (global cloud_shadow_strength 0; they are not paused, so numbers are those of a cloud-free
 map), zooms to the farthest zoom and shoots both frames. The run fails on: a set with no model file or no _SET_SPECS row; a
 Godot error or timeout; a frame pair the Godot run announced but did not write (or an old one); a requested map with no
-place; a place where the model cannot be found (under 30 body pixels); a map with no usable meadow, ploughed or forest place.
+place; a place where the model cannot be found (under 30 body pixels, 20 for the squads of types 0 and 1); a map with no usable meadow, ploughed or forest place.
 
 Places (per map): meadow field0a..d, ploughed field1a..d, and forest sides forest{E,W,N,S}{2,3}: a field cell 2 or 3 cells from
 a forest in that direction. A place is ruled out of the gate, and printed with its reason, when
   * the model is more than a quarter hidden (a crown over it: below 0.75 of the median model size on that map), or
   * the ground ring is busy (more than 8 % of it 10 L* off its median: roofs, props) or the model body is 2 L* darker than the
-    map's typical body (a pole or wire over it).
+    map's typical body (the shade of a crown or the shadow of a pole or wire over it).
 Those are the only exclusions. The ploughed places must read at least 1.5 b* away from the meadow of the same map or the run
 says so. A sunny map (Crossroads, Ridge) with a forest place whose ground is at least 3 L* under the meadow gets that place
 named as the canopy-shade sample; with none the report says "n/a (no shaded ground)", which is not a failure.
@@ -47,6 +47,11 @@ LUMA = np.array([0.2126, 0.7152, 0.0722])
 GATE = 14.5          # the top median; 14.5 passes (section 5)
 WARN_BODY = 15.0
 MIN_BODY_PX = 30
+# A squad of slim figures (types 0 and 1) is 31-44 px at the farthest scale, so a place that lands on 27-29 px by sub-pixel
+# position is still a measurement: the median of the brighter half of 20 pixels. The vehicle floor stays 30.
+MIN_SQUAD_PX = 20
+SQUAD_TYPES = (0, 1)
+floor_px = MIN_BODY_PX
 SUNNY = ("crossroads", "ridge")
 GODOT_TIMEOUT = 900  # seconds per map, waiting for a Godot slot included
 
@@ -68,7 +73,7 @@ def dilate(mask, n):
 
 
 def measure(path_m):
-    """None when the model is not in the frame (under MIN_BODY_PX body pixels)."""
+    """None when the model is not in the frame (under `floor_px` body pixels)."""
     m = np.asarray(Image.open(path_m).convert("RGB")).astype(float)
     e = np.asarray(Image.open(path_m[:-6] + "_e.png").convert("RGB")).astype(float)
     if not os.path.exists(path_m[:-6] + "_k.png"):
@@ -85,7 +90,7 @@ def measure(path_m):
     chroma = np.abs(m / lm[..., None] - e / le[..., None]).sum(-1)
     shadow = window & ~body & (np.abs(m - e).sum(-1) > 40) & (lm < le * 0.97) & (chroma < 0.10)
     diff = body | shadow
-    if body.sum() < MIN_BODY_PX:
+    if body.sum() < floor_px:
         return None
     px = m[body]
     top = px[lm[body] >= np.median(lm[body])]
@@ -166,7 +171,7 @@ def report(out, label, maps):
     for name, mp, place, r in results:
         if r is None:
             print("%-30s model not found in the frame   FAIL" % name)
-            fails.append("%s: model not found (under %d body pixels)" % (name, MIN_BODY_PX))
+            fails.append("%s: model not found (under %d body pixels)" % (name, floor_px))
             continue
         same_map = [x["body"][0] for _, m2, _, x in results if x and m2 == mp]
         why = ""
@@ -175,7 +180,7 @@ def report(out, label, maps):
         elif r["busy"] > 0.08:
             why = "ruled out: busy ground (prop or roof in the ring)"
         elif r["body"][0] < np.median(same_map) - 2.0:
-            why = "ruled out: model shaded below the map's typical body (pole or wire over it)"
+            why = "ruled out: model shaded below the map's typical body (shade of a crown or shadow of a pole)"
         flag = ""
         if not why:
             usable.setdefault(mp, {})[place] = r
@@ -209,7 +214,9 @@ def report(out, label, maps):
             notes.append("%s canopy shade: %s" % (mp, ("measured at " + ", ".join(shaded)) if shaded else "n/a (no shaded ground)"))
     best = min((v["d_top"] for places in usable.values() for v in places.values()), default=float("nan"))
     ok = not fails
-    print("%s: tightest top dE %.1f -> %s" % (label, best, "PASS" if ok else "FAIL"))
+    every_top = [(r["d_top"], name) for name, _, _, r in results if r]
+    low = min(every_top) if every_top else (float("nan"), "")
+    print("%s: tightest top dE %.1f -> %s   (with the ruled-out places: %.1f at %s)" % (label, best, "PASS" if ok else "FAIL", low[0], low[1]))
     for n in notes:
         print("  NOTE", n)
     for fl in fails:
@@ -243,6 +250,7 @@ def main():
         if err:
             print("unit_contrast_gate: " + err, file=sys.stderr)
             sys.exit(2)
+    global floor_px
     base = a.out or os.path.join(os.path.expanduser("~/.cache/ap-scratch/units/gate"), datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
     ok = True
     for t in a.type:
@@ -251,6 +259,7 @@ def main():
             print("unit_contrast_gate: %s is not empty; pass a fresh --out (old frames would be scored)" % out, file=sys.stderr)
             sys.exit(2)
         os.makedirs(out, exist_ok=True)
+        floor_px = MIN_SQUAD_PX if t in SQUAD_TYPES else MIN_BODY_PX
         print("== set %d type %d  (%s)" % (a.set, t, out))
         fails = [] if a.analyse_only else shoot(a.set, t, a.maps, out, a.zoom)
         for fl in fails:
