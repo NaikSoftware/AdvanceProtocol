@@ -389,36 +389,74 @@ func test_gun_crew_is_two_real_figures_with_the_soldier_material() -> void:
 	plain.free()
 
 
-## Розрахунок стоїть на вільній землі: під слідом фігури (0,5 × 0,4 м) із запасом 0,3 м нема
-## жодного трикутника моделі гармати нижче 1,8 м.
+## Розрахунок стоїть на вільній землі: жодна вершина справжньої сітки бійців (`crew_mesh`: руки,
+## гвинтівка) не ближче 0,3 м (0,0375 тайла) по землі до трикутника моделі гармати нижче 1,8 м.
+## Міряється відстань від точки до трикутника, а не прямокутник-слід: той пропускав бійця, що
+## торкався станини рукою.
 func test_crew_stands_clear_of_the_shipped_gun_models() -> void:
 	UnitSilhouettes.reset_models()
-	# 0,3 м від будь-якої балки станини чи ящика: 0,0375 тайла
-	var margin: float = 0.0375
 	for set_id in UnitSilhouettes.SET_COUNT:
 		for id: int in [9, 10]:
-			if not ResourceLoader.exists(UnitSilhouettes.model_path(id, set_id)):
-				continue
-			var mesh: ArrayMesh = UnitSilhouettes._own_model(id, set_id)
-			assert_not_null(mesh, "модель типу %d набору %d" % [id, set_id])
-			var a: Array = mesh.surface_get_arrays(0)
-			var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-			var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
-			for c: Vector3 in UnitSilhouettes.spec(id, set_id).crew:
-				var half := Vector2(UnitSilhouettes.FIGURE_SIZE.x, UnitSilhouettes.FIGURE_SIZE.z) * 0.5 + Vector2.ONE * margin
-				var rot := Transform2D(-deg_to_rad(c.z), Vector2(c.x, c.y))
-				var corners: Array[Vector2] = []
-				for sx: float in [-1.0, 1.0]:
-					for sz: float in [-1.0, 1.0]:
-						corners.append(rot * Vector2(sx * half.x, sz * half.y))
-				var hits: int = 0
-				for t in range(0, idx.size(), 3):
-					var tri: Array[Vector3] = [v[idx[t]], v[idx[t + 1]], v[idx[t + 2]]]
-					if minf(tri[0].y, minf(tri[1].y, tri[2].y)) >= UnitSilhouettes.FIGURE_SIZE.y:
-						continue
-					if _tri_overlaps_rect(tri, corners):
-						hits += 1
-				assert_eq(hits, 0, "розрахунок типу %d набору %d у точці %s вільний від моделі" % [id, set_id, c])
+			assert_not_null(UnitSilhouettes._own_model(id, set_id), "модель типу %d набору %d" % [id, set_id])
+			var gun: ArrayMesh = UnitSilhouettes.model_mesh(id, set_id)
+			var crew: ArrayMesh = UnitSilhouettes.crew_mesh(id, set_id, false)
+			assert_gte(_crew_gap(crew, gun, 0.0), 0.0375 - 0.0005, "розрахунок типу %d набору %d не ближче 0,3 м до моделі" % [id, set_id])
+
+
+## Найменша відстань по землі від вершин `crew` до трикутників `gun` нижче зросту фігури; `dz`
+## зсуває гармату по z (сусідній тайл). Сітка трикутників з коміркою 0,05 — перебір усіх пар був би
+## надто повільним.
+func _crew_gap(crew: ArrayMesh, gun: ArrayMesh, dz: float) -> float:
+	var a: Array = gun.surface_get_arrays(0)
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+	var cell: float = 0.05
+	var tris: Array = []
+	var grid: Dictionary = {}
+	for t in range(0, idx.size(), 3):
+		var p: Array[Vector2] = []
+		var low: float = INF
+		for k in 3:
+			low = minf(low, v[idx[t + k]].y)
+			p.append(Vector2(v[idx[t + k]].x, v[idx[t + k]].z + dz))
+		if low >= UnitSilhouettes.FIGURE_SIZE.y:
+			continue
+		tris.append(p)
+		var lo := Vector2(minf(p[0].x, minf(p[1].x, p[2].x)), minf(p[0].y, minf(p[1].y, p[2].y)))
+		var hi := Vector2(maxf(p[0].x, maxf(p[1].x, p[2].x)), maxf(p[0].y, maxf(p[1].y, p[2].y)))
+		for gx in range(floori(lo.x / cell), floori(hi.x / cell) + 1):
+			for gz in range(floori(lo.y / cell), floori(hi.y / cell) + 1):
+				var k := Vector2i(gx, gz)
+				if not grid.has(k):
+					grid[k] = []
+				(grid[k] as Array).append(tris.size() - 1)
+	var best: float = INF
+	for c: Vector3 in (crew.surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]:
+		var q := Vector2(c.x, c.z)
+		var home := Vector2i(floori(q.x / cell), floori(q.y / cell))
+		# трикутник у комірці лежить не далі за комірку, тож дві комірки навколо накривають 0,1
+		for dx in range(-2, 3):
+			for dy in range(-2, 3):
+				for ti: int in grid.get(home + Vector2i(dx, dy), []):
+					best = minf(best, _point_to_triangle(q, tris[ti]))
+	return best
+
+
+func _point_to_triangle(q: Vector2, tri: Array) -> float:
+	var a: Vector2 = tri[0]
+	var b: Vector2 = tri[1]
+	var c: Vector2 = tri[2]
+	var d1: float = (b - a).cross(q - a)
+	var d2: float = (c - b).cross(q - b)
+	var d3: float = (a - c).cross(q - c)
+	if (d1 >= 0.0 and d2 >= 0.0 and d3 >= 0.0) or (d1 <= 0.0 and d2 <= 0.0 and d3 <= 0.0):
+		return 0.0
+	var best: float = INF
+	for e: Array in [[a, b], [b, c], [c, a]]:
+		var s: Vector2 = e[1] - e[0]
+		var u: float = clampf((q - e[0]).dot(s) / maxf(s.length_squared(), 1e-12), 0.0, 1.0)
+		best = minf(best, q.distance_to(e[0] + s * u))
+	return best
 
 
 ## Набір без власного бійця бере бійця набору 0: розрахунок є й у наборах 1 і 2, і сітка в кеші не плутається між ними.
@@ -428,34 +466,6 @@ func test_gun_crew_of_a_set_without_soldier_falls_back_to_set_zero() -> void:
 	UnitSilhouettes.use_models({9: gun, 0: man})
 	assert_not_null(UnitSilhouettes.crew_mesh(9, 1), "розрахунок набору 1")
 	assert_same(UnitSilhouettes.crew_mesh(9, 1), UnitSilhouettes.crew_mesh(9, 0), "боєць набору 0 — та сама сітка")
-
-
-## Перетин трикутника (проєкція на XZ) з опуклим чотирикутником: розділова вісь серед нормалей сторін обох.
-func _tri_overlaps_rect(tri: Array[Vector3], rect: Array[Vector2]) -> bool:
-	var t: Array[Vector2] = [Vector2(tri[0].x, tri[0].z), Vector2(tri[1].x, tri[1].z), Vector2(tri[2].x, tri[2].z)]
-	var axes: Array[Vector2] = []
-	for i in 3:
-		var e: Vector2 = t[(i + 1) % 3] - t[i]
-		axes.append(Vector2(-e.y, e.x))
-	# кути чотирикутника: (-,-), (-,+), (+,-), (+,+) — його осі це дві сторони від першого кута
-	axes.append(rect[2] - rect[0])
-	axes.append(rect[1] - rect[0])
-	for ax in axes:
-		if ax.length_squared() < 1e-12:
-			continue
-		var tmin: float = INF
-		var tmax: float = -INF
-		for p in t:
-			tmin = minf(tmin, ax.dot(p))
-			tmax = maxf(tmax, ax.dot(p))
-		var rmin: float = INF
-		var rmax: float = -INF
-		for p in rect:
-			rmin = minf(rmin, ax.dot(p))
-			rmax = maxf(rmax, ax.dot(p))
-		if tmax < rmin or rmax < tmin:
-			return false
-	return true
 
 
 ## Кожен розрахунок гармати стоїть у своєму тайлі: слід фігури (з поворотом) не виходить за ±0,5.
@@ -565,12 +575,11 @@ func _rail_inner_face(name: String) -> float:
 ## за шириною габариту, — і в тайлі. Стопа розрахунку не ближче 0,3 м до моделі гармати.
 func test_travel_pose_gun_and_crew_fit_between_the_rails_of_every_bridge() -> void:
 	UnitSilhouettes.reset_models()
-	var margin: float = 0.0375
 	for set_id in UnitSilhouettes.SET_COUNT:
-		_travel_fits_between_the_rails(set_id, margin)
+		_travel_fits_between_the_rails(set_id)
 
 
-func _travel_fits_between_the_rails(set_id: int, margin: float) -> void:
+func _travel_fits_between_the_rails(set_id: int) -> void:
 	for name: String in _BRIDGES:
 		var inner: float = _rail_inner_face(name)
 		assert_lt(inner, 0.5, "передумова: поручні міста «%s» знайдено" % name)
@@ -588,25 +597,9 @@ func _travel_fits_between_the_rails(set_id: int, margin: float) -> void:
 			for v in crew:
 				assert_lt(absf(v.x), inner, "розрахунок гармати %d набору %d між поручнями «%s»" % [id, set_id, name])
 				assert_lte(absf(v.z), 0.5, "розрахунок у тайлі")
-			# Відстань: жодна вершина розрахунку не ближче за запас до низу моделі (нижче зросту бійця).
-			var worst: float = INF
-			var low: Array[Vector2] = []
-			for v in gun:
-				if v.y < UnitSilhouettes.FIGURE_SIZE.y:
-					low.append(Vector2(v.x, v.z))
-			var bucket: Dictionary = {}
-			for p in low:
-				var k := Vector2i(floori(p.x / margin), floori(p.y / margin))
-				if not bucket.has(k):
-					bucket[k] = []
-				(bucket[k] as Array).append(p)
-			for v in crew:
-				var c := Vector2i(floori(v.x / margin), floori(v.z / margin))
-				for dx in range(-1, 2):
-					for dz in range(-1, 2):
-						for p: Vector2 in bucket.get(c + Vector2i(dx, dz), []):
-							worst = minf(worst, p.distance_to(Vector2(v.x, v.z)))
-			assert_gte(worst, margin - 0.0005, "розрахунок гармати %d набору %d не ближче 0,3 м до моделі" % [id, set_id])
+			var travel_gun: ArrayMesh = UnitSilhouettes.travel_mesh(id, set_id)
+			assert_gte(_crew_gap(UnitSilhouettes.crew_mesh(id, set_id, true), travel_gun, 0.0), 0.05 - 0.0005,
+					"розрахунок гармати %d набору %d не ближче 0,4 м до моделі" % [id, set_id])
 		# розрахунок на землі (розведені станини) — теж у своєму тайлі
 		for id: int in [9, 10]:
 			for v in (UnitSilhouettes.crew_mesh(id, set_id, false).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]:
@@ -614,9 +607,9 @@ func _travel_fits_between_the_rails(set_id: int, margin: float) -> void:
 				assert_lte(absf(v.z), 0.5, "розрахунок на землі в тайлі")
 
 
-## Розрахунок видно з камери: за напрямів 0 і 4 (вздовж настилу) гармата закриває не більше 30 % вершин
-## жодної з двох фігур, на найближчому й найдальшому нахилі камери, у кожному наборі — в похідному
-## положенні (на мосту) і розведеною.
+## Розрахунок видно з камери: за напрямів 0 і 4 (вздовж настилу) гармата закриває не більше 15 %
+## вершин жодної з двох фігур, на найближчому й найдальшому нахилі камери, у кожному наборі — в
+## похідному положенні (на мосту) і розведеною.
 func test_crew_is_visible_from_the_camera_in_both_poses_of_every_set() -> void:
 	UnitSilhouettes.reset_models()
 	for set_id in UnitSilhouettes.SET_COUNT:
@@ -640,7 +633,7 @@ func test_crew_is_visible_from_the_camera_in_both_poses_of_every_set() -> void:
 							var mesh: ArrayMesh = figures[fig] if figures[fig] != null else figures[0]
 							var pts: PackedVector3Array = (mesh.surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
 							var at := Vector2((rows[fig] as Vector3).x, (rows[fig] as Vector3).y)
-							assert_lte(CrewLegal.figure_cover(pts, at, facing, buf, pitch), 0.30,
+							assert_lte(CrewLegal.figure_cover(pts, at, facing, buf, pitch), 0.15,
 									"гармата %d набору %d не закриває бійця %d, напрям %d, нахил %d, похідна: %s" % [id, set_id, fig, facing, int(pitch), travel])
 
 
@@ -653,14 +646,5 @@ func test_field_gun_travel_crew_clears_the_spades_of_a_howitzer_ahead() -> void:
 
 
 func _field_crew_clears_howitzer_spades(set_id: int) -> void:
-	var how: PackedVector3Array = (UnitSilhouettes.travel_mesh(10, set_id).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
-	var crew: PackedVector3Array = (UnitSilhouettes.crew_mesh(9, set_id, true).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
-	var low: Array[Vector2] = []
-	for v in how:
-		if v.y < UnitSilhouettes.FIGURE_SIZE.y:
-			low.append(Vector2(v.x, v.z - 1.0))
-	var best: float = INF
-	for c in crew:
-		for p in low:
-			best = minf(best, Vector2(c.x, c.z).distance_to(p))
-	assert_gte(best, 0.0375, "розрахунок польової гармати набору %d не ближче 0,3 м до станин гаубиці" % set_id)
+	var gap: float = _crew_gap(UnitSilhouettes.crew_mesh(9, set_id, true), UnitSilhouettes.travel_mesh(10, set_id), -1.0)
+	assert_gte(gap, 0.0375 - 0.0005, "розрахунок польової гармати набору %d не ближче 0,3 м до станин гаубиці" % set_id)
