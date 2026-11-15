@@ -52,13 +52,11 @@ uniform bool contour_on = false;
 uniform sampler2D contour_edges : source_color, filter_nearest, repeat_disable;
 uniform float contour_half = 0.01;
 uniform float contour_lift = 0.04;
-// Кільця: xy — центр, z — радіус (тайли), w — поступ імпульсу (BoardView). Колір — sRGB, source_color,
+// Кільця: xy — центр, z — радіус (тайли). Колір — sRGB, source_color,
 // як ring_color кільця на землі: кожен рендерер переводить його так само, і кольори збігаються.
 uniform int ring_count = 0;
 uniform vec4 rings[4];
 uniform vec4 ring_colors[4] : source_color;
-// 1 — кільце несе хвилю імпульсу (найбільше коло огляду), 0 — лише межу (fire_ring, band).
-uniform float ring_bands[4];
 // Рельєф (`TerrainHeight.texture()`, як у UnitContacts): точка землі під пікселем уточнюється за
 // висотою в ній самій. Площина на висоті стовбура на схилі зсувала лінію на кроні від лінії на
 // землі на кілька пікселів.
@@ -280,7 +278,7 @@ void fragment() {
 			float cov = 0.0;
 			// Кільце не обрізане краєм дошки: на землі воно йде й за край, і розрив на кронах кільця читався б помилкою.
 			for (int i = 0; i < ring_count && i < 4; i++) {
-				float a = ring_colors[i].a * fire_ring(g - rings[i].xy, rings[i].z, rings[i].w, ring_bands[i], px);
+				float a = ring_colors[i].a * fire_ring(g - rings[i].xy, rings[i].z, px);
 				pre = mix(pre, ring_colors[i].rgb, a);
 				cov = a + cov * (1.0 - a);
 			}

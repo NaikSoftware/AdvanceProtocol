@@ -39,14 +39,13 @@ say: a crosshair on each marked unit. The circle is cheap to read at a glance an
 with the two movement contours, which stay tile-shaped. Like the contours, it shows through the
 forest canopy, also past the board edge, where the ring continues on the ground.
 
-**The ring appears as one pulse and ends on a crisp border.** When the hold begins, a faint band
-travels once from the unit out to the radius; it hints where the reach grows from and is never
-louder than the ground under it. The border appears as the band reaches it and then stays: a
-solid, opaque line exactly at the rule radius — the edge the player decides by. Gun and drone
-rings behave alike, and their fronts travel together at one speed; the drone ring stays distinct by
-its violet colour and its larger radius. The
-pulse runs only once per hold, nothing moves after it, and the crowns over the ring show the same
-pulse and the same border.
+**The ring is a thin line with a light gradient just inside it, and it does not move.** The line
+is solid and opaque, thin (never under about 1.5 px on screen), exactly at the rule radius — the
+edge the player decides by. Inside it a light gradient of fixed width (about 0.6 tile, not scaled
+with the radius) fades smoothly to nothing, so the hint of the reach sits at the edge and most of
+the disk, and the ground under it, stays untouched. Nothing is drawn outside the radius, and nothing
+animates. Gun and drone rings look alike; the drone ring stays distinct by its violet colour and
+its larger radius. The crowns over the ring show the same line and gradient.
 
 **Any visible unit can be inspected, including an enemy's.** This is the feature worth porting.
 Holding an enemy shows *its* range and which of **your** units stand inside it. With retaliation

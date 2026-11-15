@@ -40,16 +40,16 @@ const _CONTOUR_ALPHA: float = 0.7
 ## Compatibility змішує прозоре в sRGB: тонка лінія з альфою 0,7 там на землі й на кронах ледь
 ## відрізнялась від тла. Вища альфа дає той самий контраст, що 0,7 на Mobile.
 const _CONTOUR_ALPHA_COMPAT: float = 0.85
-## Ширина межі кільця дальності й хвилі імпульсу, тайлів — ті самі FR_LINE_W і FR_PULSE_W у
-## fire_ring.gdshaderinc (тест звіряє). Межа ширша за лінію зон: її видно лише, поки гравець тримає
-## палець на юніті.
-const RING_LINE_W: float = 0.12
-const RING_PULSE_W: float = 0.9
-## Сітка кільця виходить за радіус на стільки в обидва боки: півлінії плюс згладжування.
-const RING_OUTER: float = RING_LINE_W * 0.5 + 0.04
-## Швидкість фронту імпульсу, тайлів за секунду, однакова для всіх кілець: фронти гармати й дрона
-## біжать разом. Імпульс кінчається, коли фронт пройшов радіус і ширину хвилі: дрон (5) — за 0.84 с.
-const PULSE_SPEED: float = 7.0
+## Кільце дальності: тонка межа на радіусі й легка смуга від неї всередину, тайлів — ті самі
+## FR_LINE_W і FR_GRAD_W у fire_ring.gdshaderinc (тест звіряє). Смуга сталої ширини, не від радіуса:
+## вона гасне задовго до юніта, і більша частина круга лишається чистою.
+const RING_LINE_W: float = 0.045
+const RING_GRAD_W: float = 0.6
+## Сітка кільця виходить за радіус на стільки: на найдальшому зумі межа не тонша за 1,5 пікселя
+## (~0,05 тайла на бік) плюс згладжування.
+const RING_OUTER: float = 0.1
+## Запас сітки всередину за смугою: згладжування її внутрішнього краю.
+const RING_INNER_MARGIN: float = 0.05
 ## Зсув сортування кільця: серед прозорих того самого пріоритету воно завжди перше, тобто під
 ## контурами зон, хоч як далеко від камери кожне. Більший за будь-яку різницю відстаней на дошці.
 const RING_SORT_OFFSET: float = -100.0
@@ -133,10 +133,6 @@ var _contour_nodes: Dictionary = {}
 ## (draw_circles) і їхні вузли — той самий прийом, що й у контурів.
 var _circles: Dictionary = {}
 var _circle_nodes: Dictionary = {}
-## шар -> Array[float] поступу імпульсу кожного кола (0..1): його бачить і крона лісу.
-var _circle_pulse: Dictionary = {}
-## шар -> Array[float]: 1 — коло несе хвилю імпульсу, 0 — лише межу.
-var _circle_band: Dictionary = {}
 ## Усі шари контурів, зведені в картку ребер для крон лісу (ForestLayer.set_contour_edges): крона
 ## закрила б стрічку на землі, тож лінію під собою малює сама. Одна текстура на розмір дошки.
 var _edge_image: Image
@@ -181,8 +177,6 @@ func build(board: Board) -> void:
 	_contour_nodes.clear()
 	_circles.clear()
 	_circle_nodes.clear()
-	_circle_pulse.clear()
-	_circle_band.clear()
 
 	for y in board.height:
 		for x in board.width:
@@ -427,29 +421,20 @@ func rebuild_tiles(board: Board) -> void:
 	for layer: int in kept_circles:
 		var circles: Array[Dictionary] = []
 		circles.assign(kept_circles[layer])
-		draw_circles(circles, layer, false)
+		draw_circles(circles, layer)
 
 
 ## Кільце дальності (§3.13, docs/ui/overlays.md): одне геометричне коло, не контур
 ## тайлів — радіус у тайлах (тайл — 1.0 світу), центр у середині тайла. Радіус
 ## приходить готовим із core/ (Targeting.inspection); тут лише геометрія малювання.
-## Один вузол і один draw call на коло (§8). Замінює кола шару. Кільце з'являється слабким імпульсом
-## від юніта і стає чіткою межею (fire_ring.gdshaderinc). animate = false — ті самі кола наново
-## (rebuild_tiles): імпульс уже відбіг і вдруге не біжить.
-func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) -> void:
+## Один вузол і один draw call на коло (§8). Замінює кола шару. Кільце статичне: легка смуга
+## всередині біля радіуса й тонка межа на ньому (fire_ring.gdshaderinc).
+func draw_circles(circles: Array[Dictionary], layer: int) -> void:
 	for node: Node in _circle_nodes.get(layer, []):
 		if is_instance_valid(node):
 			node.free()
 	_circles[layer] = circles
 	var nodes: Array[Node] = []
-	var progress: Array[float] = []
-	var bands: Array[float] = []
-	# Фронти всіх кіл біжать разом, тож хвилю несе лише найбільше коло: дві хвилі одна на одній
-	# світили б удвічі, а імпульс — лише підказка. Межі менших кіл з'являються, коли фронт їх досягає.
-	var outer: int = -1
-	for i in circles.size():
-		if outer < 0 or float(circles[i]["radius"]) > float(circles[outer]["radius"]):
-			outer = i
 	for c in circles:
 		var r: float = float(c["radius"])
 		var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
@@ -458,66 +443,36 @@ func draw_circles(circles: Array[Dictionary], layer: int, animate: bool = true) 
 		sm.render_priority = CONTOUR_PRIORITY
 		sm.set_shader_parameter(&"ring_color", c["color"])
 		sm.set_shader_parameter(&"radius", r)
-		sm.set_shader_parameter(&"pulse", 0.0 if animate else 1.0)
-		bands.append(1.0 if nodes.size() == outer else 0.0)
-		sm.set_shader_parameter(&"band", bands[-1])
 		var mi := MeshInstance3D.new()
 		mi.name = "Circle%d_%d" % [layer, nodes.size()]
-		# Хвиля біжить від юніта, тож поки вона йде, сітка кола з хвилею — увесь круг; коло без хвилі й
-		# коло після імпульсу — лише смуга межі (_set_pulse).
-		var with_band: bool = animate and bands[-1] > 0.0
-		mi.mesh = _ring_grid_mesh(centre, Vector2(0.0, r + RING_OUTER), r - RING_OUTER) if with_band \
-				else _ring_grid_mesh(centre, Vector2(r - RING_OUTER, r + RING_OUTER))
+		mi.mesh = _ring_grid_mesh(centre, Vector2(maxf(r - RING_GRAD_W - RING_INNER_MARGIN, 0.0), r + RING_OUTER))
 		mi.material_override = sm
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.layers = 1 << (OVERLAY_LAYER - 1)
 		# Вершини кільця — у світі (висота за ґрунтом), тож вузол стоїть у центрі колом на y = 0.
 		mi.position = Vector3(centre.x, 0.0, centre.z)
 		mi.sorting_offset = RING_SORT_OFFSET
-		if animate:
-			# Твін живе на вузлі кільця: відпустив палець — вузол звільнено, імпульс зупинився.
-			# Після нього матеріал не міняється, тож екран без руху знову стоїть.
-			var i: int = nodes.size()
-			var setter := func(v: float) -> void: _set_pulse(layer, i, mi, centre, r, v, with_band)
-			mi.create_tween().tween_method(setter, 0.0, 1.0, (r + RING_PULSE_W) / PULSE_SPEED)
 		add_child(mi)
 		nodes.append(mi)
-		progress.append(0.0 if animate else 1.0)
 	_circle_nodes[layer] = nodes
-	_circle_pulse[layer] = progress
-	_circle_band[layer] = bands
 	_publish_circles()
 	_publish_line_rect()
 
 
-## Крок імпульсу: на ґрунті й під кронами той самий поступ. Добіг — диск змінює смуга межі: увесь
-## круг тримав би тисячі трикутників, поки палець на юніті.
-func _set_pulse(layer: int, i: int, mi: MeshInstance3D, centre: Vector3, r: float, v: float, disk: bool) -> void:
-	(mi.material_override as ShaderMaterial).set_shader_parameter(&"pulse", v)
-	(_circle_pulse[layer] as Array)[i] = v
-	if v >= 1.0 and disk:
-		mi.mesh = _ring_grid_mesh(centre, Vector2(r - RING_OUTER, r + RING_OUTER))
-	_publish_circles()
-
-
 ## Сітка під кільце: клітинки сітки висот (TerrainHeight, SAMPLES_PER_TILE на тайл), що перетинають
-## смугу band = [внутрішній, зовнішній радіус]. Вершини стоять рівно на відліках висот, тож і широкий
-## круг лягає на ґрунт, а не протинає схил хордою. Над водою — на її поверхні, як лінії зон: з дна
+## смугу band = [внутрішній, зовнішній радіус]. Вершини стоять рівно на відліках висот, тож і широка
+## смуга лягає на ґрунт, а не протинає схил хордою. Над водою — на її поверхні, як лінії зон: з дна
 ## кільце просвічувало б крізь воду зсунутим. Вершини — відносно центру в XZ.
-## coarse_to > 0: клітинки 2×2 відліки, цілком ближчі за coarse_to, — одна рідша клітинка (м'яка хвиля
-## імпульсу не потребує повної густоти). Її кути підняті до найвищого з сусідніх відліків, тож площина
-## не тоне в пагорбі; смуга межі лишається повною й точною.
-func _ring_grid_mesh(centre: Vector3, band: Vector2, coarse_to: float = -1.0) -> ArrayMesh:
+func _ring_grid_mesh(centre: Vector3, band: Vector2) -> ArrayMesh:
 	var th: TerrainHeight = TerrainHeight.active
 	var si: int = th.samples if th != null else TerrainHeight.SAMPLES_PER_TILE
 	var s: float = float(si)
 	var c := Vector2(centre.x, centre.z)
-	# Лінії відліків: x = k / s - 0.5 (поле висот починається з краю клітинки, margin цілий). Межі
-	# парні, щоб рідша клітинка 2×2 лягала на ті самі відліки.
-	var k0 := Vector2i(floori((c.x - band.y + 0.5) * s / 2.0) * 2, floori((c.y - band.y + 0.5) * s / 2.0) * 2)
-	var k1 := Vector2i(ceili((c.x + band.y + 0.5) * s / 2.0) * 2, ceili((c.y + band.y + 0.5) * s / 2.0) * 2)
+	# Лінії відліків: x = k / s - 0.5 (поле висот починається з краю клітинки, margin цілий).
+	var k0 := Vector2i(floori((c.x - band.y + 0.5) * s), floori((c.y - band.y + 0.5) * s))
+	var k1 := Vector2i(ceili((c.x + band.y + 0.5) * s), ceili((c.y + band.y + 0.5) * s))
 	# Висота вершини — прямо з відліку поля (ground_y у вузлі ґратки дає те саме), а номер вершини — з
-	# плаского масиву: круг дрона — тисячі вершин, і будується він у мить натиску.
+	# плаского масиву: смуга кола дрона — тисячі вершин, і будується вона в мить натиску.
 	var heights: PackedFloat32Array = th.heights() if th != null else PackedFloat32Array()
 	var off: int = th.margin * si if th != null else 0
 	var cols: int = th.cols if th != null else 0
@@ -529,44 +484,12 @@ func _ring_grid_mesh(centre: Vector3, band: Vector2, coarse_to: float = -1.0) ->
 	var verts := PackedVector3Array()
 	var indices := PackedInt32Array()
 	var inv: float = 1.0 / s
-	# Рідші клітинки — спершу: їхні кути підняті, і повні клітинки поруч беруть ті самі вершини.
-	var coarse := PackedByteArray()
-	coarse.resize((nx / 2) * ((k1.y - k0.y) / 2 + 1))
-	if coarse_to > 0.0:
-		for kz in range(k0.y, k1.y, 2):
-			var span: Vector2i = _row_span(kz, 2, k0.x, k1.x, c, coarse_to, s)
-			for kx in range(k0.x + (span.x - k0.x) / 2 * 2, span.y, 2):
-				var lo := Vector2(kx * inv - 0.5, kz * inv - 0.5) - c
-				var hi := lo + Vector2(2.0 * inv, 2.0 * inv)
-				if Vector2(maxf(-lo.x, hi.x), maxf(-lo.y, hi.y)).length() >= coarse_to:
-					continue
-				coarse[((kz - k0.y) / 2) * (nx / 2) + (kx - k0.x) / 2] = 1
-				var q: Array[int] = [0, 0, 0, 0]
-				for n in 4:
-					var vx: int = kx + (n & 1) * 2
-					var vz: int = kz + (n >> 1) * 2
-					var slot: int = (vz - k0.y) * nx + (vx - k0.x)
-					if index_of[slot] < 0:
-						index_of[slot] = verts.size()
-						var h: float = 0.0
-						if cols > 0:
-							h = -INF
-							for iz in range(clampi(vz + off - 1, 0, rows - 1), clampi(vz + off + 1, 0, rows - 1) + 1):
-								var row: int = iz * cols
-								for ix in range(clampi(vx + off - 1, 0, cols - 1), clampi(vx + off + 1, 0, cols - 1) + 1):
-									h = maxf(h, heights[row + ix])
-						verts.append(Vector3(vx * inv - 0.5 - c.x, maxf(h, TerrainHeight.WATER_LEVEL) + _CONTOUR_Y, vz * inv - 0.5 - c.y))
-					q[n] = index_of[slot]
-				indices.append_array([q[0], q[1], q[2], q[1], q[3], q[2]])
-	# Клітинки, що напевно всередині (рідші чи ближчі за band.x), рядок пропускає цілим відрізком.
-	var hole: float = coarse_to - 2.0 * sqrt(2.0) * inv - 1e-3 if coarse_to > 0.0 else band.x
 	for kz in range(k0.y, k1.y):
-		var span: Vector2i = _row_span(kz, 1, k0.x, k1.x, c, band.y, s)
-		var skip: Vector2i = _row_hole(kz, c, hole, s)
+		var span: Vector2i = _row_span(kz, k0.x, k1.x, c, band.y, s)
+		# Клітинки, що цілком ближчі за band.x, рядок пропускає цілим відрізком.
+		var skip: Vector2i = _row_hole(kz, c, band.x, s)
 		for kx in range(span.x, span.y):
 			if kx >= skip.x and kx < skip.y:
-				continue
-			if coarse_to > 0.0 and coarse[((kz - k0.y) / 2) * (nx / 2) + (kx - k0.x) / 2] == 1:
 				continue
 			var lo := Vector2(kx * inv - 0.5, kz * inv - 0.5) - c
 			var hi := lo + Vector2(inv, inv)
@@ -582,24 +505,6 @@ func _ring_grid_mesh(centre: Vector3, band: Vector2, coarse_to: float = -1.0) ->
 				if index_of[slot] < 0:
 					index_of[slot] = verts.size()
 					var y: float = maxf(_lattice_h(heights, cols, rows, vx + off, vz + off), TerrainHeight.WATER_LEVEL) + _CONTOUR_Y
-					# Вершина посеред ребра рідшої клітинки лягає на це ребро — середнє його піднятих кутів,
-					# що й так не нижче за ґрунт у ній: інакше між рідшою й повною сіткою щілина.
-					var rx: int = vx - k0.x
-					var rz: int = vz - k0.y
-					if coarse_to > 0.0 and (rx + rz) % 2 == 1:
-						var along_z: bool = rx % 2 == 0
-						var g: Vector2i = Vector2i(rx / 2, (rz - 1) / 2) if along_z else Vector2i((rx - 1) / 2, rz / 2)
-						var side: Vector2i = Vector2i(-1, 0) if along_z else Vector2i(0, -1)
-						var gw: int = nx / 2
-						var gh: int = coarse.size() / gw
-						var marked: bool = false
-						for cell: Vector2i in [g, g + side]:
-							if cell.x >= 0 and cell.y >= 0 and cell.x < gw and cell.y < gh and coarse[cell.y * gw + cell.x] == 1:
-								marked = true
-						if marked:
-							var a: int = slot - nx if along_z else slot - 1
-							var b: int = slot + nx if along_z else slot + 1
-							y = 0.5 * (verts[index_of[a]].y + verts[index_of[b]].y)
 					verts.append(Vector3(vx * inv - 0.5 - c.x, y, vz * inv - 0.5 - c.y))
 				q[n] = index_of[slot]
 			indices.append_array([q[0], q[1], q[2], q[1], q[3], q[2]])
@@ -612,15 +517,15 @@ func _ring_grid_mesh(centre: Vector3, band: Vector2, coarse_to: float = -1.0) ->
 	return mesh
 
 
-## Відрізок [від, до) номерів клітинок рядка kz (висотою step відліків), що можуть зачепити круг радіуса r.
-static func _row_span(kz: int, step: int, kx0: int, kx1: int, c: Vector2, r: float, s: float) -> Vector2i:
+## Відрізок [від, до) номерів клітинок рядка kz, що можуть зачепити круг радіуса r.
+static func _row_span(kz: int, kx0: int, kx1: int, c: Vector2, r: float, s: float) -> Vector2i:
 	var lo: float = kz / s - 0.5 - c.y
-	var hi: float = lo + step / s
+	var hi: float = lo + 1.0 / s
 	var minz: float = 0.0 if lo <= 0.0 and hi >= 0.0 else minf(absf(lo), absf(hi))
 	if minz > r:
 		return Vector2i(kx0, kx0)
 	var xo: float = sqrt(r * r - minz * minz)
-	return Vector2i(maxi(kx0, floori((c.x - xo + 0.5) * s) - step), mini(kx1, ceili((c.x + xo + 0.5) * s) + 1))
+	return Vector2i(maxi(kx0, floori((c.x - xo + 0.5) * s) - 1), mini(kx1, ceili((c.x + xo + 0.5) * s) + 1))
 
 
 ## Відрізок [від, до) клітинок рядка kz, що цілком лежать у крузі радіуса r (порожній, коли таких немає).
@@ -643,15 +548,6 @@ static func _lattice_h(heights: PackedFloat32Array, cols: int, rows: int, ix: in
 ## Альфа лінії зони: на Compatibility вища (див. _CONTOUR_ALPHA_COMPAT).
 static func _contour_alpha() -> float:
 	return _CONTOUR_ALPHA_COMPAT if RenderingServer.get_current_rendering_method() == "gl_compatibility" else _CONTOUR_ALPHA
-
-
-## Чи біжить зараз імпульс якогось кола: тоді екран бою не обмежує кадри (BattleScreen._on_idle_timeout).
-func is_pulsing() -> bool:
-	for layer: int in _circle_pulse:
-		for v: float in _circle_pulse[layer]:
-			if v < 1.0:
-				return true
-	return false
 
 
 func circles(layer: int) -> Array:
@@ -723,26 +619,21 @@ func _publish_contours() -> void:
 	_publish_line_rect()
 
 
-## Кола всіх шарів для крон лісу: центр і радіус у світі, у w — поступ імпульсу; колір — той самий
-## sRGB з альфою, що й ring_color кільця на ґрунті: в обох шейдерах він source_color.
+## Кола всіх шарів для крон лісу: центр і радіус у світі (xyz); колір — той самий sRGB з альфою, що й
+## ring_color кільця на ґрунті: в обох шейдерах він source_color.
 func _publish_circles() -> void:
 	if _forest == null:
 		return
 	var rings := PackedVector4Array()
 	var colors := PackedColorArray()
-	var bands := PackedFloat32Array()
 	var layers: Array = _circles.keys()
 	layers.sort()
 	for layer: int in layers:
-		var progress: Array = _circle_pulse.get(layer, [])
-		for i in (_circles[layer] as Array).size():
-			var c: Dictionary = _circles[layer][i]
+		for c: Dictionary in _circles[layer]:
 			var centre: Vector3 = IsoCameraRig.cell_to_world(c["center"])
-			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), progress[i] if i < progress.size() else 1.0))
+			rings.append(Vector4(centre.x, centre.z, float(c["radius"]), 0.0))
 			colors.append(c["color"])
-			var band: Array = _circle_band.get(layer, [])
-			bands.append(band[i] if i < band.size() else 1.0)
-	_forest.set_contour_rings(rings, colors, bands)
+	_forest.set_contour_rings(rings, colors)
 
 
 ## Рамка всіх контурів і кілець у XZ світу для крон лісу: крона, чий промінь до землі її не

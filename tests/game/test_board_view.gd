@@ -222,31 +222,18 @@ func test_rebuild_tiles_keeps_circles() -> void:
 	assert_eq(_circle_nodes().size(), 1)
 
 
-# --- Імпульс і межа кільця ----------------------------------------------------------
+# --- Вигляд кільця: світла смуга всередині й тонка межа ------------------------------
 #
-# Кільце з'являється одним слабким імпульсом від юніта до краю й стає чіткою лінією на радіусі правила.
-# Поки біжить імпульс, сітка — увесь круг; далі — лише смуга межі, щоб тримане кільце не їло трикутники.
+# Кільце статичне: легка смуга від радіуса всередину й тонка лінія рівно на радіусі. Сітка — смуга
+# ґратки висот [r − смуга − запас, r + запас], без анімації.
 
 const _R: float = 3.0
-## Імпульс триває, поки фронт не пройде радіус і ширину хвилі: (r + RING_PULSE_W) / PULSE_SPEED.
-const _T: float = (_R + BoardView.RING_PULSE_W) / BoardView.PULSE_SPEED
 
 
-var _pulse_tweens: Array[Tween] = []
-
-
-## Твіни, що з'явились із кільцем: недобіглий твін попереднього тесту ще живе до кінця кадру.
-func _draw_ring(animate: bool = true) -> MeshInstance3D:
-	var before: Array[Tween] = get_tree().get_processed_tweens()
+func _draw_ring() -> MeshInstance3D:
 	view.draw_circles([{"center": Vector2i(4, 6), "radius": int(_R), "color": Color.WHITE}] as Array[Dictionary],
-		BoardView.LAYER_INSPECT, animate)
-	_pulse_tweens = get_tree().get_processed_tweens().filter(func(t: Tween) -> bool: return not before.has(t))
+		BoardView.LAYER_INSPECT)
 	return _circle_nodes()[0]
-
-
-func _ring_tween() -> Tween:
-	assert_eq(_pulse_tweens.size(), 1, "один твін імпульсу")
-	return _pulse_tweens[0] if _pulse_tweens.size() > 0 else null
 
 
 func _point_covered(mesh: ArrayMesh, p: Vector2) -> bool:
@@ -266,177 +253,53 @@ func _point_covered(mesh: ArrayMesh, p: Vector2) -> bool:
 	return false
 
 
-func _assert_drapes(mesh: ArrayMesh) -> void:
-	for v in (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
-		var ground: float = maxf(TerrainHeight.ground_y(4.0 + v.x, 6.0 + v.z), TerrainHeight.WATER_LEVEL)
-		assert_almost_eq(v.y, ground + 0.04, 0.0001, "вершина кільця лягає на ґрунт чи воду")
-
-
-func test_pulse_mesh_covers_the_whole_disk_on_the_ground() -> void:
+func test_ring_mesh_covers_the_gradient_and_the_line_and_drapes() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
 	var mesh := _draw_ring().mesh as ArrayMesh
-	for k in 24:
-		var dir := Vector2.from_angle(TAU * k / 24.0)
-		for r: float in [0.0, _R * 0.5, _R, _R + BoardView.RING_OUTER]:
-			assert_true(_point_covered(mesh, dir * r), "імпульс: точка %s накрита" % [dir * r])
-
-
-## Висота сітки в точці XZ (відносно центру кільця): площина трикутника, що її накриває; NAN — не накрита.
-func _mesh_height(mesh: ArrayMesh, p: Vector2) -> float:
-	var arrays: Array = mesh.surface_get_arrays(0)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	for t in range(0, idx.size(), 3):
-		var a: Vector3 = verts[idx[t]]
-		var b: Vector3 = verts[idx[t + 1]]
-		var c: Vector3 = verts[idx[t + 2]]
-		var bc: Vector3 = _bary(p, Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z))
-		if bc.x >= -1e-5 and bc.y >= -1e-5 and bc.z >= -1e-5:
-			return a.y * bc.x + b.y * bc.y + c.y * bc.z
-	return NAN
-
-
-## Висоти всіх трикутників, що накривають точку (на спільному ребрі — двох і більше).
-func _heights_at(mesh: ArrayMesh, p: Vector2) -> Array:
-	var arrays: Array = mesh.surface_get_arrays(0)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	var out: Array = []
-	for t in range(0, idx.size(), 3):
-		var a: Vector3 = verts[idx[t]]
-		var b: Vector3 = verts[idx[t + 1]]
-		var c: Vector3 = verts[idx[t + 2]]
-		var bc: Vector3 = _bary(p, Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z))
-		if bc.x >= -1e-5 and bc.y >= -1e-5 and bc.z >= -1e-5:
-			out.append(a.y * bc.x + b.y * bc.y + c.y * bc.z)
-	return out
-
-
-func _bary(p: Vector2, a: Vector2, b: Vector2, c: Vector2) -> Vector3:
-	var d: float = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
-	var u: float = ((b.y - c.y) * (p.x - c.x) + (c.x - b.x) * (p.y - c.y)) / d
-	var v: float = ((c.y - a.y) * (p.x - c.x) + (a.x - c.x) * (p.y - c.y)) / d
-	return Vector3(u, v, 1.0 - u - v)
-
-
-## Хвиля м'яка, тож усередині круга сітка імпульсу рідша, а смуга межі — повна: лінія не стрибає, коли
-## круг змінює смуга. Рідша сітка не тоне в пагорбі: у кожному відліку поля висот вона не нижча за
-## ґрунт із підйомом.
-func test_pulse_disk_is_coarse_inside_and_never_sinks_into_hills() -> void:
-	var board := Board.create(12, 12, Terrain.GroundState.DRY)
-	for y in range(2, 11):
-		for x in range(2, 11):
-			board.set_kind(Vector2i(x, y), Terrain.Kind.HILL)
-	view.build(board)
-	var lo: float = INF
-	var hi: float = -INF
-	for k in 50:
-		var h: float = TerrainHeight.ground_y(3.0 + k * 0.1, 6.0)
-		lo = minf(lo, h)
-		hi = maxf(hi, h)
-	assert_gt(hi - lo, 0.05, "передумова: під кільцем рельєф")
-	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
-	var mesh := _circle_nodes()[0].mesh as ArrayMesh
-	var fine: ArrayMesh = view.call("_ring_grid_mesh", Vector3(6, 0, 6), Vector2(0.0, 3.0 + BoardView.RING_OUTER))
-	var tris: int = (mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-	var fine_tris: int = (fine.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
-	assert_lt(tris, fine_tris * 3 / 5, "рідша сітка всередині: %d проти %d" % [tris, fine_tris])
-	for v in (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
-		if Vector2(v.x, v.z).length() >= 3.0 - BoardView.RING_OUTER:
-			assert_almost_eq(v.y, maxf(TerrainHeight.ground_y(6.0 + v.x, 6.0 + v.z), TerrainHeight.WATER_LEVEL) + 0.04, 1e-4, "смуга межі — на ґрунті")
-	var s: int = TerrainHeight.SAMPLES_PER_TILE
-	var checked: int = 0
-	for kz in range(-3 * s, 3 * s + 1):
-		for kx in range(-3 * s, 3 * s + 1):
-			# Відліки поля — на x = k / s - 0.5, тож від центру тайла 6 вони зсунуті на пів кроку.
-			var p := Vector2((kx + 0.5) / s, (kz + 0.5) / s)
-			if p.length() > 3.0:
-				continue
-			var h: float = _mesh_height(mesh, p)
-			assert_false(is_nan(h), "%s накрита" % p)
-			assert_true(h >= TerrainHeight.ground_y(6.0 + p.x, 6.0 + p.y) + 0.04 - 1e-4, "%s: сітка не тоне в ґрунті" % p)
-			checked += 1
-	assert_gt(checked, 1000)
-	# Межа рідшої й повної сітки без щілини: точка на спільному ребрі має одну висоту з обох боків.
-	var seams: int = 0
-	for kz in range(-3 * s, 3 * s + 1):
-		for kx in range(-3 * s, 3 * s + 1):
-			for q: Vector2 in [Vector2(0.5, 0.0), Vector2(0.0, 0.5)]:
-				var p := Vector2((kx + 0.5 + q.x) / s, (kz + 0.5 + q.y) / s)
-				if p.length() > 3.0:
-					continue
-				var hs: Array = _heights_at(mesh, p)
-				if hs.size() > 1 and hs.max() - hs.min() > 1e-4:
-					seams += 1
-	assert_eq(seams, 0, "щілин на межі рідшої сітки")
-
-
-func test_after_the_pulse_only_the_border_band_stays() -> void:
-	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
-	var ring: MeshInstance3D = _draw_ring()
-	_ring_tween().custom_step(_T)
-
-	var mesh := ring.mesh as ArrayMesh
-	_assert_drapes(mesh)
+	var inner: float = _R - BoardView.RING_GRAD_W - BoardView.RING_INNER_MARGIN
+	var outer: float = _R + BoardView.RING_OUTER
 	# Сітка — клітинки поля висот, що зачепили смугу: вершина відходить від смуги не далі діагоналі клітинки.
 	var cell: float = sqrt(2.0) / TerrainHeight.SAMPLES_PER_TILE
 	for v in (mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
 		var d: float = Vector2(v.x, v.z).length()
-		assert_true(d >= _R - BoardView.RING_OUTER - cell - 1e-5 and d <= _R + BoardView.RING_OUTER + cell + 1e-5,
-			"вершина на %.3f — у смузі межі" % d)
+		assert_true(d >= inner - cell - 1e-5 and d <= outer + cell + 1e-5, "вершина на %.3f — у смузі кільця" % d)
+		assert_almost_eq(v.y, maxf(TerrainHeight.ground_y(4.0 + v.x, 6.0 + v.z), TerrainHeight.WATER_LEVEL) + 0.04, 0.0001,
+			"вершина кільця лягає на ґрунт чи воду")
 	for k in 24:
 		var dir := Vector2.from_angle(TAU * k / 24.0)
-		for r: float in [_R - BoardView.RING_OUTER, _R, _R + BoardView.RING_OUTER]:
-			assert_true(_point_covered(mesh, dir * r), "межа: точка %s накрита" % [dir * r])
+		for r: float in [_R - BoardView.RING_GRAD_W, _R - BoardView.RING_GRAD_W * 0.5, _R, outer]:
+			assert_true(_point_covered(mesh, dir * r), "точка %s накрита" % [dir * r])
+	assert_false(_point_covered(mesh, Vector2.ZERO), "усередині смуги — порожньо")
 
 
-## Імпульс біжить один раз: поступ 0 → 1 рівномірно за _T, далі нічого не біжить і
-## шейдер не міняється, тож статичний екран лишається статичним (TIME зробив би кадр щокадровим).
-func test_pulse_ring_runs_once_then_stands_still() -> void:
+## Кільце статичне: жодного твіну, шейдер без TIME, на кронах — так само.
+func test_ring_is_static() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
-	var mat := _draw_ring().material_override as ShaderMaterial
-	assert_eq(mat.get_shader_parameter("pulse"), 0.0, "імпульс стартує з центру")
-	var tween: Tween = _ring_tween()
-	tween.custom_step(_T * 0.5)
-	assert_almost_eq(float(mat.get_shader_parameter("pulse")), 0.5, 1e-6, "півдороги — півшляху")
-	tween.custom_step(_T * 0.5)
-	assert_eq(mat.get_shader_parameter("pulse"), 1.0, "фронт пройшов радіус і хвилю за _T")
-	assert_false(tween.is_running(), "і більше не біжить")
+	var before: Array[Tween] = get_tree().get_processed_tweens()
+	_draw_ring()
+	assert_eq(get_tree().get_processed_tweens().filter(func(t: Tween) -> bool: return not before.has(t)).size(), 0, "без твіну")
 	for path: String in ["res://game/battle/shaders/fire_ring.gdshader", "res://game/battle/shaders/fire_ring.gdshaderinc"]:
 		assert_false(FileAccess.get_file_as_string(path).contains("TIME"), path)
+	assert_false(view.has_method("is_pulsing"))
 
 
-## Кільце під лісом малює крона: поступ імпульсу йде їй разом із центром і радіусом (Vector4.w).
-func test_pulse_progress_reaches_the_canopy() -> void:
-	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
-	_draw_ring()
-	var forest: ForestLayer = view.forest()
-	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(4, 6, _R, 0)]))
-	var tween: Tween = _ring_tween()
-	tween.custom_step(_T * 0.5)
-	assert_almost_eq(forest.contour_rings[0].w, 0.5, 1e-6, "крона бачить той самий поступ")
-	tween.custom_step(_T * 0.5)
-	assert_eq(forest.contour_rings, PackedVector4Array([Vector4(4, 6, _R, 1)]))
+## Ширина лінії й смуги — у шейдері (fire_ring.gdshaderinc), сітка кільця — тут: одне число в двох
+## місцях мусить збігатися. Лінія тонка, смуга легка.
+func test_ring_widths_match_the_shader() -> void:
+	var code: String = FileAccess.get_file_as_string("res://game/battle/shaders/fire_ring.gdshaderinc")
+	var re := RegEx.create_from_string("const float (FR_LINE_W|FR_GRAD_W) = ([0-9.]+);")
+	var found: Dictionary = {}
+	for m: RegExMatch in re.search_all(code):
+		found[m.get_string(1)] = float(m.get_string(2))
+	assert_eq(found.get("FR_LINE_W"), BoardView.RING_LINE_W)
+	assert_eq(found.get("FR_GRAD_W"), BoardView.RING_GRAD_W)
+	assert_almost_eq(BoardView.RING_LINE_W, 0.045, 1e-6, "тонка лінія межі")
+	assert_almost_eq(BoardView.RING_GRAD_W, 0.6, 1e-6, "смуга на 0,6 тайла всередину")
+	# Не тонша за півтора пікселя: на найдальшому зумі вона інакше розсипається.
+	assert_true(code.contains("max(FR_LINE_W * 0.5, 0.75 * px)"), "мінімальна ширина лінії — 1,5 пікселя")
 
 
-## Перебудова тайлів (міст) малює ті самі кільця наново, але імпульс не перезапускає: одразу межа.
-func test_rebuild_tiles_does_not_replay_the_pulse() -> void:
-	var board := Board.create(10, 10, Terrain.GroundState.DRY)
-	view.build(board)
-	_draw_ring()
-	_ring_tween().custom_step(_T)
-	var before: Array[Tween] = get_tree().get_processed_tweens()
-
-	view.rebuild_tiles(board)
-
-	var ring: MeshInstance3D = _circle_nodes()[0]
-	assert_eq((ring.material_override as ShaderMaterial).get_shader_parameter("pulse"), 1.0)
-	assert_eq(get_tree().get_processed_tweens().filter(func(t: Tween) -> bool: return not before.has(t)).size(), 0, "нового імпульсу немає")
-	assert_false(_point_covered(ring.mesh as ArrayMesh, Vector2.ZERO), "без імпульсу — лише смуга межі")
-	assert_eq(view.forest().contour_rings, PackedVector4Array([Vector4(4, 6, _R, 1)]))
-
-
-## Крона малює кільце тією самою функцією, що й ґрунт: імпульс і межа під лісом ті самі.
+## Крона малює кільце тією самою функцією, що й ґрунт: смуга й межа під лісом ті самі.
 func test_canopy_and_ground_draw_the_ring_with_one_function() -> void:
 	for path: String in ["res://game/battle/shaders/fire_ring.gdshader", "res://assets/props/forest/forest_crown.gdshader"]:
 		var code: String = FileAccess.get_file_as_string(path)
@@ -463,89 +326,18 @@ func test_contour_ribbon_vertices_sit_on_the_height_lattice() -> void:
 	assert_eq(on_middle, (TerrainHeight.SAMPLES_PER_TILE - 1) * 2, "внутрішні відліки середнього ребра, по два боки стрічки")
 
 
-## Ширина межі й хвилі — у шейдері (fire_ring.gdshaderinc), сітка кільця й тривалість імпульсу — тут:
-## одне число в двох місцях мусить збігатися.
-func test_ring_widths_match_the_shader() -> void:
-	var code: String = FileAccess.get_file_as_string("res://game/battle/shaders/fire_ring.gdshaderinc")
-	var re := RegEx.create_from_string("const float (FR_LINE_W|FR_PULSE_W) = ([0-9.]+);")
-	var found: Dictionary = {}
-	for m: RegExMatch in re.search_all(code):
-		found[m.get_string(1)] = float(m.get_string(2))
-	assert_eq(found.get("FR_LINE_W"), BoardView.RING_LINE_W)
-	assert_eq(found.get("FR_PULSE_W"), BoardView.RING_PULSE_W)
-	assert_almost_eq(BoardView.RING_OUTER, BoardView.RING_LINE_W * 0.5 + 0.04, 1e-6, "півлінії плюс згладжування")
-
-
-## Фронти кільця гармати й кільця дрона біжать разом: однакова швидкість, а не однаковий час.
-func test_gun_and_drone_fronts_move_together() -> void:
-	view.build(Board.create(12, 12, Terrain.GroundState.DRY))
-	var before: Array[Tween] = get_tree().get_processed_tweens()
-	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE},
-		{"center": Vector2i(6, 6), "radius": 5, "color": Color.PURPLE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
-	for t: Tween in get_tree().get_processed_tweens():
-		if not before.has(t):
-			t.custom_step(0.3)
-	for ring: MeshInstance3D in _circle_nodes():
-		var mat := ring.material_override as ShaderMaterial
-		var front: float = float(mat.get_shader_parameter("pulse")) * (float(mat.get_shader_parameter("radius")) + BoardView.RING_PULSE_W)
-		assert_almost_eq(front, 0.3 * BoardView.PULSE_SPEED, 1e-5, "%s: фронт" % ring.name)
-
-
-## Фронти гармати й дрона біжать разом, тож дві хвилі лягли б одна на одну й удвічі яскравіше. Хвилю
-## несе лише найбільше коло огляду; менше — без хвилі (band = 0), його межа просто з'являється, коли
-## спільний фронт її досягає. Крона отримує ту саму ознаку.
-func test_only_the_outermost_ring_of_a_hold_draws_the_band() -> void:
-	view.build(Board.create(12, 12, Terrain.GroundState.DRY))
-	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE},
-		{"center": Vector2i(6, 6), "radius": 5, "color": Color.PURPLE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
-	var bands: Array = []
-	for ring: MeshInstance3D in _circle_nodes():
-		bands.append((ring.material_override as ShaderMaterial).get_shader_parameter("band"))
-	assert_eq(bands, [0.0, 1.0], "гармата без хвилі, дрон — з хвилею")
-	assert_eq(view.forest().contour_ring_bands, PackedFloat32Array([0.0, 1.0]))
-	# Коло без хвилі не потребує круга: від початку — смуга межі.
-	var gun := _circle_nodes()[0].mesh as ArrayMesh
-	for v in (gun.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
-		assert_true(Vector2(v.x, v.z).length() >= 3.0 - BoardView.RING_OUTER - sqrt(2.0) / TerrainHeight.SAMPLES_PER_TILE - 1e-5,
-			"менше коло — лише смуга межі")
-	view.draw_circles([{"center": Vector2i(6, 6), "radius": 3, "color": Color.WHITE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
-	assert_eq((_circle_nodes()[0].material_override as ShaderMaterial).get_shader_parameter("band"), 1.0, "одне коло — з хвилею")
-
-
 ## Кільце на землі завжди під контурами зон, хоч куди зсунута камера: порядок прозорих задає зсув
 ## сортування, а не відстань до камери.
 func test_ring_draws_under_the_contours() -> void:
 	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
 	view.draw_contour([_edge(Vector2i(4, 3), Vector2i(0, -1), Color.YELLOW)] as Array[Dictionary], BoardView.LAYER_ZONES)
-	var ring: MeshInstance3D = _draw_ring(false)
+	var ring: MeshInstance3D = _draw_ring()
 	var contour := view.get_node("Contour%d" % BoardView.LAYER_ZONES) as MultiMeshInstance3D
 	assert_eq((ring.material_override as ShaderMaterial).render_priority, contour.multimesh.mesh.surface_get_material(0).render_priority)
 	# Порядок прозорих — відстань до камери мінус зсув: кільце перше, навіть коли воно на дальньому кінці
 	# дошки, а контур на ближньому.
 	var board_diagonal: float = Vector2(10, 10).length()
 	assert_lt(ring.sorting_offset + board_diagonal, contour.sorting_offset, "зсув кільця більший за дошку")
-
-
-## Палець відпущено посеред імпульсу: твін зупинено разом із вузлом, крони кільця не тримають. Новий
-## натиск — імпульс наново.
-func test_release_mid_pulse_stops_it_and_a_new_hold_restarts_it() -> void:
-	view.build(Board.create(10, 10, Terrain.GroundState.DRY))
-	_draw_ring()
-	var first: Tween = _ring_tween()
-	first.custom_step(_T * 0.5)
-	assert_true(view.is_pulsing())
-
-	view.draw_circles([] as Array[Dictionary], BoardView.LAYER_INSPECT)
-
-	assert_false(view.is_pulsing())
-	assert_false(first.custom_step(_T), "твін пішов разом із вузлом кільця: кроку більше немає")
-	assert_eq(view.forest().contour_rings.size(), 0, "і крони кільця не отримали")
-	var mat := _draw_ring().material_override as ShaderMaterial
-	assert_eq(mat.get_shader_parameter("pulse"), 0.0, "новий натиск — імпульс з центру")
-	assert_eq(_pulse_tweens.size(), 1)
-	assert_true(view.is_pulsing())
-	_ring_tween().custom_step(_T)
-	assert_false(view.is_pulsing(), "добіг — більше не біжить")
 
 
 # Лінія зони суцільна й лежить на межі клітинок: на прямій ребро доходить рівно до кута, на куті

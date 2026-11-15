@@ -1,22 +1,18 @@
 extends Node
 ## Кадри кілець дальності: справжній екран бою, вибраний і оглянутий загін штурмовиків гравця 0
-## з дронами (обидва кільця), поруч — вигорілий слід і колія, щоб видно було, чи не ховає їх імпульс.
+## з дронами (обидва кільця), поруч — вигорілий слід і колія, щоб видно було, чи не ховає їх смуга.
 ## Не входить у гру.
 ## Запуск (потрібне вікно):
-##   tools/godot_run.sh --path . res://tools/ring_shot.tscn -- <out_dir> <map>[@x,y] ... [--zooms=12,6,20] [--live]
-## --live: замість міток часу — кожен кадр імпульсу з кроком 1/30 с від натиску до 1,2 с (<map>_z<zoom>_live_NNN).
+##   tools/godot_run.sh --path . res://tools/ring_shot.tscn -- <out_dir> <map>[@x,y] ... [--zooms=12,6,20]
 ## @x,y — переставити загін на клітинку (схил, берег, будинок під кільцем); ще @sx,sy — клітинка
 ## вигорілого сліду (колія йде через неї вздовж X на ±2 клітинки), типово — поруч із загоном; ще @ux,uy —
 ## поставити туди інший юніт гравця 0 (юніт під кронами, через клітинку якого йде кільце).
-## Кадри імпульсу на 0.15 / 0.35 / 0.55 / 0.75 с — справжні твіни кілець на паузі, прокручені вручну — і кінцевий.
-## Рядок RINGDC <map> z<zoom> off=… on=… tris_off=… tris_mid=… tris_on=…: медіана 9 кадрів без кілець,
-## посеред імпульсу (0.35 с) і після нього, в тому ж процесі. RINGMESH — час побудови сітки круга дрона
-## й смуги його межі. Кадр «_nolines» — кінцевий без ліній під кронами.
+## Кадри: «_norings» — до натиску, основний — з кільцями, «_nolines» — з кільцями, але без ліній під
+## кронами. Рядок RINGDC <map> z<zoom> off=… on=… tris_off=… tris_on=…: медіана 9 кадрів без кілець і з
+## ними в тому ж процесі. RINGMESH — час побудови сітки кільця дрона.
 ## Кадри тримаються в пам'яті й пишуться в кінці: save_png блокує ~1 с.
 
 const WINDOW: Vector2i = Vector2i(1600, 900)
-const PULSE_TIMES: Array[float] = [0.15, 0.35, 0.55, 0.75]
-const LIVE_FRAMES: int = 36
 
 
 func _ready() -> void:
@@ -30,15 +26,8 @@ func _ready() -> void:
 	get_window().size = WINDOW
 	var zooms: Array[float] = [12.0, IsoCameraRig.MIN_ZOOM, IsoCameraRig.MAX_ZOOM]
 	var maps: Array[String] = []
-	var times: Array[float] = PULSE_TIMES
-	var live: bool = false
 	for a in args.slice(1):
-		if a == "--live":
-			live = true
-			times = []
-			for k in LIVE_FRAMES + 1:
-				times.append(k / 30.0)
-		elif a.begins_with("--zooms="):
+		if a.begins_with("--zooms="):
 			zooms.assign(Array(a.trim_prefix("--zooms=").split(",")).map(func(x: String) -> float: return float(x)))
 		else:
 			maps.append(a)
@@ -95,48 +84,24 @@ func _ready() -> void:
 			rig.zoom_by(z / rig.zoom_level)
 			await _settle()
 			var off: Vector2i = await _median_frame()
-			var before: Array[Tween] = get_tree().get_processed_tweens()
+			var name: String = "%s_z%d" % [map, int(z)]
+			shots.append([name + "_norings", get_viewport().get_texture().get_image()])
 			var t0: int = Time.get_ticks_usec()
 			controller.peek_cell(squad.pos)
 			print("RINGBUILD %s z%d %.1f ms" % [map, int(z), (Time.get_ticks_usec() - t0) / 1000.0])
-			# Сама сітка круга дрона (імпульс) і смуги його межі — без огляду core/.
-			var c3: Vector3 = IsoCameraRig.cell_to_world(squad.pos)
+			# Сама сітка кільця дрона — без огляду core/.
 			var t1: int = Time.get_ticks_usec()
-			var disk: ArrayMesh = bv.call("_ring_grid_mesh", c3, Vector2(0.0, 5.0 + BoardView.RING_OUTER), 5.0 - BoardView.RING_OUTER)
-			var t2: int = Time.get_ticks_usec()
-			bv.call("_ring_grid_mesh", c3, Vector2(5.0 - BoardView.RING_OUTER, 5.0 + BoardView.RING_OUTER))
-			print("RINGMESH %s disk=%.1f ms (%d tris) band=%.1f ms" % [map, (t2 - t1) / 1000.0,
-				(disk.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3, (Time.get_ticks_usec() - t2) / 1000.0])
+			var band: ArrayMesh = bv.call("_ring_grid_mesh", IsoCameraRig.cell_to_world(squad.pos),
+				Vector2(5.0 - BoardView.RING_GRAD_W - BoardView.RING_INNER_MARGIN, 5.0 + BoardView.RING_OUTER))
+			print("RINGMESH %s %.1f ms (%d tris)" % [map, (Time.get_ticks_usec() - t1) / 1000.0,
+				(band.surface_get_arrays(0)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3])
 			var rings: Array = bv.circles(BoardView.LAYER_INSPECT)
 			if rings.size() != 2:
 				push_error("ring_shot: %d кілець замість 2 на %s" % [rings.size(), map])
-			var name: String = "%s_z%d" % [map, int(z)]
-			# Твіни імпульсу — ті, що з'явились з оглядом; на паузі й прокручені на мітки часу тим самим
-			# кодом, що й у грі (і на землі, і під кронами).
-			var pulses: Array[Tween] = []
-			for t: Tween in get_tree().get_processed_tweens():
-				if not before.has(t):
-					t.pause()
-					pulses.append(t)
-			var at: float = 0.0
-			var mid := Vector2i.ZERO
-			for k in times.size():
-				for t: Tween in pulses:
-					t.custom_step(times[k] - at)
-				at = times[k]
-				for f in 3:
-					await get_tree().process_frame
-				if k == 1 and not live:
-					mid = await _median_frame()
-				await RenderingServer.frame_post_draw
-				var label: String = ("%s_live_%03d" % [name, k]) if live else ("%s_t%03d" % [name, int(times[k] * 100.0)])
-				shots.append([label, get_viewport().get_texture().get_image()])
-			for t: Tween in pulses:
-				t.custom_step(10.0)
 			for f in 3:
 				await get_tree().process_frame
 			var on: Vector2i = await _median_frame()
-			print("RINGDC %s z%d off=%d on=%d tris_off=%d tris_mid=%d tris_on=%d" % [map, int(z), off.x, on.x, off.y, mid.y, on.y])
+			print("RINGDC %s z%d off=%d on=%d tris_off=%d tris_on=%d" % [map, int(z), off.x, on.x, off.y, on.y])
 			shots.append([name, get_viewport().get_texture().get_image()])
 			# Той самий кадр без ліній під кронами: що на кронах від ліній, а що — самого лісу.
 			bv.forest().set_contour_edges(null)
@@ -145,6 +110,9 @@ func _ready() -> void:
 				await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			shots.append([name + "_nolines", get_viewport().get_texture().get_image()])
+			# Лінії під кронами — назад: наступний зум знімається з ними.
+			bv.call("_publish_contours")
+			bv.call("_publish_circles")
 			controller.end_peek()
 		screen.free()
 		await get_tree().process_frame

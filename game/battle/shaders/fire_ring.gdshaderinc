@@ -4,24 +4,19 @@
 //
 // p      — точка ґрунту відносно центру тайла юніта, у тайлах (1 тайл = 1.0 світу);
 // radius — радіус правила в тайлах, рівно той, що дав core/;
-// pulse  — поступ одноразового імпульсу 0..1 (веде твін BoardView), 1 — кільце стоїть;
-// band   — 1, коли кільце несе хвилю імпульсу; 0 — лише межа (менше коло того самого огляду: фронти
-//          спільні, і дві хвилі одна на одній світили б удвічі);
 // px     — розмір пікселя на ґрунті в тайлах (рахує викликач: похідні беруться з його точки ґрунту).
 // Повертає непрозорість; колір дає викликач.
 
-// Ширина межі й хвилі — ті самі BoardView.RING_LINE_W і RING_PULSE_W (сітка кільця, тривалість імпульсу).
-const float FR_LINE_W = 0.12;
-// Імпульс — підказка, звідки росте досяжність, а не спалах: ледь помітна смуга, що гасне назад до юніта.
-const float FR_PULSE_W = 0.9;
-// Передній край хвилі наростає плавно на стільки тайлів: різкий фронт читається другим кільцем, що їде.
-const float FR_PULSE_EDGE = 0.22;
-// Compatibility змішує прозоре в sRGB, а не в лінійному просторі: та сама альфа там удвічі слабша
-// на темному ґрунті, тож і альфа хвилі вища.
+// Ширина лінії межі й світлої смуги всередині — ті самі BoardView.RING_LINE_W і RING_GRAD_W (сітка
+// кільця бере з них свою смугу).
+const float FR_LINE_W = 0.045;
+const float FR_GRAD_W = 0.6;
+// Смуга всередині — легка підказка досяжності: ґрунт і сліди бою під нею мусять читатися. Compatibility
+// змішує прозоре в sRGB, і та сама альфа там на темному ґрунті ледь видна, тож там вона вища.
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
-const float FR_PULSE_A = 0.24;
+const float FR_GRAD_A = 0.22;
 #else
-const float FR_PULSE_A = 0.13;
+const float FR_GRAD_A = 0.13;
 #endif
 
 // Покриття пікселя для відстані до краю (додатна — всередині): лінійне згладжування на один
@@ -30,19 +25,15 @@ float fr_cov(float inside, float px) {
 	return clamp(inside / px + 0.5, 0.0, 1.0);
 }
 
-float fire_ring(vec2 p, float radius, float pulse, float band, float px) {
+float fire_ring(vec2 p, float radius, float px) {
 	float d = length(p);
-	// Межа — суцільна непрозора лінія рівно на радіусі: за нею гравець і вирішує. Не тонша за
+	// Межа — тонка суцільна непрозора лінія рівно на радіусі: за нею гравець і вирішує. Не тонша за
 	// півтора пікселя: на найдальшому зумі лінія інакше розсипається.
 	float hw = max(FR_LINE_W * 0.5, 0.75 * px);
 	float line = fr_cov(hw - abs(d - radius), px);
-	// Фронт іде від юніта до краю й за край, тож при pulse = 1 хвилі в колі вже немає; лінія
-	// з'являється, коли фронт її досягає, і далі стоїть.
-	float f = pulse * (radius + FR_PULSE_W);
-	// Наростає від фронту на FR_PULSE_EDGE до повної сили, далі гасне назад до юніта.
-	float behind = f - d;
-	float s = clamp((behind - FR_PULSE_EDGE) / (FR_PULSE_W - FR_PULSE_EDGE), 0.0, 1.0);
-	float wave = behind > 0.0 && behind <= FR_PULSE_W ? smoothstep(0.0, FR_PULSE_EDGE, behind) * (1.0 - s) * (1.0 - s) : 0.0;
-	float shown = clamp((f - radius) / 0.25 + 0.5, 0.0, 1.0);
-	return max(line * shown, band * wave * FR_PULSE_A * fr_cov(radius - d, px));
+	// Смуга найсвітліша при радіусі й гасне всередину без різкого краю (квадрат спаду); поза радіусом —
+	// нічого.
+	float t = clamp((radius - d) / FR_GRAD_W, 0.0, 1.0);
+	float grad = (1.0 - t) * (1.0 - t) * FR_GRAD_A * fr_cov(radius - d, px);
+	return max(line, grad);
 }

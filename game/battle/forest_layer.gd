@@ -136,13 +136,11 @@ var _fade_zoom: float = -100.0  ## зум, з яким розчинення ра
 ## Записи плану дошки після останньої перебудови — для тестів і бюджету.
 var board_plan: Array[Dictionary] = []
 ## Лінії під кронами (BoardView): картка ребер контурів (null — контурів немає) і кільця дальності —
-## центр і радіус у Vector4.xyz, поступ імпульсу у w, колір sRGB. Розчинена крона над юнітом їх не отримує: промінь
+## центр і радіус у Vector4.xyz, колір sRGB. Розчинена крона над юнітом їх не отримує: промінь
 ## крізь неї до землі йде через юніта, і лінія лягла б на нього.
 var _contour_edges: Texture2D
 var contour_rings := PackedVector4Array()
 var contour_ring_colors := PackedColorArray()
-## Чи несе кільце хвилю імпульсу (1) чи лише межу (0) — BoardView.draw_circles.
-var contour_ring_bands := PackedFloat32Array()
 ## Рамка всіх ліній на землі (xy — мінімум, zw — максимум): крона, чий промінь до землі її не
 ## перетинає, землі під собою не шукає. Порожня — EMPTY_RECT.
 var line_rect := EMPTY_RECT
@@ -220,12 +218,10 @@ func set_contour_edges(tex: Texture2D) -> void:
 	_wire_all()
 
 
-## Кільця дальності (BoardView.draw_circles): шейдер крони бере до чотирьох. Під час імпульсу
-## кільця приходять щокадру, тож тоді оновлюються лише вони.
-func set_contour_rings(rings: PackedVector4Array, colors: PackedColorArray, bands := PackedFloat32Array()) -> void:
+## Кільця дальності (BoardView.draw_circles): шейдер крони бере до чотирьох.
+func set_contour_rings(rings: PackedVector4Array, colors: PackedColorArray) -> void:
 	contour_rings = rings
 	contour_ring_colors = colors
-	contour_ring_bands = bands
 	for mat: ShaderMaterial in _wired():
 		_wire_rings(mat)
 
@@ -276,7 +272,6 @@ func _wire_rings(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter("ring_count", mini(contour_rings.size(), 4))
 	mat.set_shader_parameter("rings", contour_rings)
 	mat.set_shader_parameter("ring_colors", contour_ring_colors)
-	mat.set_shader_parameter("ring_bands", contour_ring_bands)
 
 
 ## Клітинки показаних глядачеві юнітів: крони між ними й камерою стають напівпрозорими.

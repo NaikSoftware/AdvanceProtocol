@@ -1245,21 +1245,13 @@ func test_camera_motion_keeps_the_frame_rate_uncapped() -> void:
 	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS)
 
 
-## Імпульс кільця дрона біжить ~0.84 с від натиску, а спокій настає за секунду від останнього: поки
-## імпульс біжить, кадр без обмеження; добіг — знову спокій.
-func test_ring_pulse_keeps_the_frame_rate_uncapped() -> void:
+## Кільце дальності статичне: показане кільце спокою не відкладає, кадр обмежується як завжди.
+func test_shown_ring_does_not_keep_the_frame_rate_uncapped() -> void:
 	var screen: Node3D = _screen()
 	var bv: BoardView = screen.get_node("%BoardView")
 	bv.build(Board.create(10, 10, Terrain.GroundState.DRY))
-	var before: Array[Tween] = get_tree().get_processed_tweens()
 	bv.draw_circles([{"center": Vector2i(4, 4), "radius": 5, "color": Color.PURPLE}] as Array[Dictionary], BoardView.LAYER_INSPECT)
 	screen._input(InputEventScreenTouch.new())
-	_idle_for_a_second(screen)
-	assert_eq(Engine.max_fps, 0, "імпульс ще біжить — кадр без обмеження")
-	assert_false(screen._idle_timer.is_stopped(), "відлік спокою почався знову")
-	for t: Tween in get_tree().get_processed_tweens():
-		if not before.has(t):
-			t.custom_step(10.0)
 	_idle_for_a_second(screen)
 	assert_eq(Engine.max_fps, BattleScreen.IDLE_FPS)
 
