@@ -172,7 +172,8 @@ func _road_wheel_radius(mesh: ArrayMesh) -> float:
 	return r
 
 
-## Рядок гармат і інженерної машини (в усіх наборах) описує суцільний лафет чи корпус, а не всю модель: ширина — за колесами
+## Рядок гармат і інженерної машини (в усіх наборах) описує суцільний лафет чи корпус, а не всю
+## модель: ширина — за колесами
 ## (гармати) чи траками (машина), довжина й висота — за самою сіткою всередині сліду рядка.
 func test_rows_match_carriage_and_running_gear_in_every_set() -> void:
 	UnitSilhouettes.reset_models()
@@ -213,19 +214,45 @@ func test_rows_match_carriage_and_running_gear_in_every_set() -> void:
 			assert_gte(wz.x, -hull.z * 0.5 - 0.02, "колеса в межах довжини лафета, " + where)
 			assert_lte(wz.y, hull.z * 0.5 + 0.02, "колеса в межах довжини лафета, " + where)
 			if id == 11 and set_id > 0:
-				# рядок інженерної машини — палуба корпусу (медіана верхніх поверхонь), а не верх кабіни чи стріли
+				# рядок інженерної машини — палуба корпусу (медіана верхніх поверхонь), а не верх кабіни чи
+				# стріли
 				up_ys.sort()
 				assert_almost_eq(up_ys[up_ys.size() / 2], hull.y, 0.06, "висота рядка — палуба корпусу, " + where)
 				assert_gt(top, hull.y, "надбудова вища за палубу, " + where)
 			else:
 				assert_almost_eq(top, hull.y, 0.06, "висота рядка — верх лафета чи корпусу, " + where)
 			if id == 11:
-				# довжина рядка — довжина траків із запасом до 0,12 тайла: ні коротша за них, ні довша за корпус із ними
+				# довжина рядка: не коротша за траки й не довша за них більш ніж на 0,12 тайла
 				assert_gte(hull.z, tz.y - tz.x - 0.02, "корпус не коротший за траки, " + where)
 				assert_lte(hull.z, tz.y - tz.x + 0.12, "корпус не довший за траки більш ніж на 0,12, " + where)
-				# корма корпусу — край рядка; стріла чи маркери проходу можуть виступати за неї, але не вкорочувати
+				# корма корпусу — край рядка; стріла може виступати за неї, але не вкорочувати
 				assert_gte(rear, hull.z * 0.5 - 0.02, "корма машини не коротша за рядок, " + where)
 				if set_id == 0:
 					assert_almost_eq(rear, hull.z * 0.5, 0.02, "корма машини — край рядка, " + where)
 			checked += 1
 	assert_eq(checked, 9, "три моделі в кожному з трьох наборів")
+
+
+## Кінці станин лежать симетрично до лінії ствола: найдальші назад низькі точки лівої й правої
+## станини мають суму x не більшу за 0,04 тайла (0,3 м). Ящики гармат стоять за |x| > 0,225, тож
+## для гармат беруться точки всередині цієї смуги.
+func test_trail_ends_are_symmetric_about_the_barrel_line() -> void:
+	UnitSilhouettes.reset_models()
+	var checked: int = 0
+	for set_id in UnitSilhouettes.SET_COUNT:
+		for id: int in [9, 10]:
+			if not ResourceLoader.exists(UnitSilhouettes.model_path(id, set_id)):
+				continue
+			var v: PackedVector3Array = UnitSilhouettes._own_model(id, set_id).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			var left := Vector2(0.0, -INF)
+			var right := Vector2(0.0, -INF)
+			for p in v:
+				if p.y > 0.12 or (id == 9 and absf(p.x) > 0.225):
+					continue
+				if p.x < -0.05 and p.z > left.y:
+					left = Vector2(p.x, p.z)
+				elif p.x > 0.05 and p.z > right.y:
+					right = Vector2(p.x, p.z)
+			assert_lte(absf(left.x + right.x), 0.04, "кінці станин набору %d типу %d: %s і %s" % [set_id, id, left, right])
+			checked += 1
+	assert_eq(checked, 6, "дві гармати в кожному з трьох наборів")
