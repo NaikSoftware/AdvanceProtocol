@@ -738,6 +738,15 @@ const CrewLegal := preload("res://tools/crew_body_legal.gd")
 
 
 ## Дошки для перевірки місця тіл розрахунку: суша й вода з одного, двох боків, кутова, оточення.
+## Усі гармати з усіх наборів: (тип, набір).
+func _gun_cases() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for set_id in UnitSilhouettes.SET_COUNT:
+		for id in [9, 10]:
+			out.append(Vector2i(id, set_id))
+	return out
+
+
 func _crew_boards() -> Dictionary:
 	var out: Dictionary = {}
 	out["поле"] = Board.create(8, 8, Terrain.GroundState.DRY)
@@ -762,9 +771,10 @@ func test_ground_index_is_not_empty_and_agrees_with_brute_force() -> void:
 	UnitSilhouettes.reset_models()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
-	for id: int in [9, 10]:
-		var index: Dictionary = CrewLegal.ground_index(CrewLegal.wreck_tris(id, 0, 2, Vector2.ZERO))
-		assert_gt(CrewLegal.indexed_count(index), 100, "у сітці землі типу %d є трикутники" % id)
+	for case: Vector2i in _gun_cases():
+		var id: int = case.x
+		var index: Dictionary = CrewLegal.ground_index(CrewLegal.wreck_tris(id, case.y, 2, Vector2.ZERO))
+		assert_gt(CrewLegal.indexed_count(index), 100, "у сітці землі типу %d набору %d є трикутники" % [id, case.y])
 		var hits: int = 0
 		for n in 300:
 			var mid := Vector2(rng.randf_range(-0.5, 0.5), rng.randf_range(-0.5, 0.5))
@@ -780,26 +790,29 @@ func test_ground_index_is_not_empty_and_agrees_with_brute_force() -> void:
 ## змінилась модель гармати чи місця: тоді запустити інструмент і внести рядки.
 func test_the_stored_crew_body_table_is_current() -> void:
 	UnitSilhouettes.reset_models()
-	for id: int in [9, 10]:
-		var row: Dictionary = UnitSilhouettes.spec(id)
-		assert_gte((row.body_spots as Array).size(), 8, "місць у рядку типу %d" % id)
-		var fresh: PackedInt32Array = CrewLegal.legal_masks(id, 0)
-		assert_eq(Array(fresh), row.body_legal, "таблиця типу %d застаріла: tools/godot_run.sh --headless --path . -s tools/crew_body_table.gd -- table (перезапише body_legal у _SPECS), і закомітити" % id)
+	for case: Vector2i in _gun_cases():
+		var id: int = case.x
+		var row: Dictionary = UnitSilhouettes.spec(id, case.y)
+		assert_gte((row.body_spots as Array).size(), 8, "місць у рядку типу %d набору %d" % [id, case.y])
+		var fresh: PackedInt32Array = CrewLegal.legal_masks(id, case.y)
+		assert_eq(Array(fresh), row.body_legal, "таблиця типу %d набору %d застаріла: tools/godot_run.sh --headless --path . -s tools/crew_body_table.gd -- table (перезапише body_legal у _SPECS і _SET_SPECS), і закомітити" % [id, case.y])
 
 
 ## Кожне дозволене місце — поза уламком, яким його малює `build_wreck` (справжній нахил у різних тайлах), на тайлі й на
 ## виду: уламок, що ближче до камери, закриває не більше MAX_COVER прямокутника. Таблиця не порожня й не суцільна.
 func test_every_legal_crew_spot_is_clear_of_the_wreck_as_built_and_visible() -> void:
 	UnitSilhouettes.reset_models()
-	for id: int in [9, 10]:
-		var row: Dictionary = UnitSilhouettes.spec(id)
+	for case: Vector2i in _gun_cases():
+		var id: int = case.x
+		var set_id: int = case.y
+		var row: Dictionary = UnitSilhouettes.spec(id, set_id)
 		var spots: Array = row.body_spots
 		var illegal_total: int = 0
 		for facing in 8:
 			var legal_total: int = 0
 			var mask: int = int(row.body_legal[facing])
 			for tile in [Vector2i(1, 1), Vector2i(2, 5), Vector2i(3, 3), Vector2i(6, 2), Vector2i(7, 7)]:
-				var node: Node3D = WreckLayer.build_wreck(tile, id, facing)
+				var node: Node3D = WreckLayer.build_wreck(tile, id, facing, set_id)
 				var mesh: ArrayMesh = (node.get_node("Body") as MeshInstance3D).mesh
 				var a: Array = mesh.surface_get_arrays(0)
 				var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
@@ -814,7 +827,7 @@ func test_every_legal_crew_spot_is_clear_of_the_wreck_as_built_and_visible() -> 
 					if mask & (1 << i) == 0:
 						continue
 					var r: Array = CrewLegal.spot_rect(spots[i], facing)
-					var where: String = "тип %d, напрям %d, місце %d, тайл %s" % [id, facing, i, tile]
+					var where: String = "тип %d, набір %d, напрям %d, місце %d, тайл %s" % [id, set_id, facing, i, tile]
 					assert_false(CrewLegal.rect_hits(r[0], r[1], WreckLayer.BODY_LENGTH * 0.5, WreckLayer.BODY_WIDTH * 0.5, index), "поза уламком, " + where)
 					assert_lte(maxf(CrewLegal.covered(r[0], r[1], bufs[0], IsoCameraRig.PITCH_NEAR_DEG), CrewLegal.covered(r[0], r[1], bufs[1], IsoCameraRig.PITCH_FAR_DEG)),
 							CrewLegal.MAX_COVER, "на виду, " + where)
@@ -823,8 +836,8 @@ func test_every_legal_crew_spot_is_clear_of_the_wreck_as_built_and_visible() -> 
 					legal_total += 1
 				else:
 					illegal_total += 1
-			assert_gte(legal_total, 3, "дозволені місця є, тип %d, напрям %d" % [id, facing])
-		assert_gt(illegal_total, 0, "таблиця не суцільна, тип %d" % id)
+			assert_gte(legal_total, 3, "дозволені місця є, тип %d, набір %d, напрям %d" % [id, set_id, facing])
+		assert_gt(illegal_total, 0, "таблиця не суцільна, тип %d, набір %d" % [id, set_id])
 
 
 ## Тіла розрахунку знищеної гармати на дошках: у тайлі, не за воду з боку, де вона є, не на уламку, двоє — не одне на
@@ -834,18 +847,19 @@ func test_crew_bodies_follow_the_rules_on_land_and_shore() -> void:
 	WreckLayer.clear_deck_cache()
 	var boards: Dictionary = _crew_boards()
 	var laid_total: Dictionary = {}
-	for id: int in [9, 10]:
+	for case: Vector2i in _gun_cases():
+		var id: int = case.x
 		var plain: Dictionary = {}
 		for facing in 8:
-			plain[facing] = CrewLegal.ground_index(CrewLegal.wreck_tris(id, 0, facing, Vector2.ZERO))
+			plain[facing] = CrewLegal.ground_index(CrewLegal.wreck_tris(id, case.y, facing, Vector2.ZERO))
 		for bname: String in boards:
 			var board: Board = boards[bname]
 			for unit_id in [3, 7, 11, 19]:
 				for facing in 8:
-					var b := Casualties.Body.new(unit_id, Vector2i(3, 3), 0, id, facing, 0, Casualties.CREW_FIGURES)
+					var b := Casualties.Body.new(unit_id, Vector2i(3, 3), case.y, id, facing, 0, Casualties.CREW_FIGURES)
 					var centre: Vector3 = IsoCameraRig.cell_to_world(b.pos)
 					var dirs: Array[Vector2i] = WreckLayer._water_dirs(board, b.pos)
-					var where: String = "тип %d, юніт %d, напрям %d, %s" % [id, unit_id, facing, bname]
+					var where: String = "тип %d, набір %d, юніт %d, напрям %d, %s" % [id, case.y, unit_id, facing, bname]
 					var rects: Array = []
 					for slot in Casualties.CREW_FIGURES:
 						var xf: Transform3D = WreckLayer.body_transform(b, slot, board, [])
@@ -914,28 +928,30 @@ func test_a_wreck_on_a_bridge_stands_on_the_deck_and_its_crew_lies_on_the_span()
 	var deck: float = th.deck_y(cell)
 	assert_gt(deck - th.at(float(cell.x), float(cell.y)), 0.1, "передумова: настил вище за русло")
 	for id: int in [5, 9, 10]:
-		var wreck: Node3D = WreckLayer.build_wreck(cell, id, 0)
+		var wreck: Node3D = WreckLayer.build_wreck(cell, id, 0, id % 3)
 		assert_almost_eq(wreck.position.y, deck, 0.0001, "корінь уламка типу %d на настилі" % id)
 		wreck.free()
 	# Гармата на мосту — у похідному положенні: уламок бере модель із зведеними станинами, вона вужча за проїзд між
 	# поручнями, а тіл розрахунку не кладемо зовсім: з боків від неї менше за ширину тіла, вздовж — увесь тайл.
-	for id: int in [9, 10]:
-		var travel: ArrayMesh = UnitSilhouettes.travel_mesh(id, 0)
+	for case: Vector2i in _gun_cases():
+		var id: int = case.x
+		var set_id: int = case.y
+		var travel: ArrayMesh = UnitSilhouettes.travel_mesh(id, set_id)
 		assert_not_null(travel, "похідна модель типу %d є" % id)
 		var span: float = 2.0 * (WreckLayer.BODY_DECK_HALF_ROAD - WreckLayer.BODY_DECK_RAIL_GAP)
 		var half: float = span * 0.5
-		assert_lt(-travel.get_aabb().position.x, half, "лівий бік похідної гармати до поручня, тип %d" % id)
-		assert_lt(travel.get_aabb().end.x, half, "правий бік похідної гармати до поручня, тип %d" % id)
-		assert_gt(UnitSilhouettes.model_mesh(id, 0).get_aabb().size.x, span - 0.01, "розведені станини не вмістились би, тип %d" % id)
+		assert_lt(-travel.get_aabb().position.x, half, "лівий бік похідної гармати до поручня, тип %d, набір %d" % [id, set_id])
+		assert_lt(travel.get_aabb().end.x, half, "правий бік похідної гармати до поручня, тип %d, набір %d" % [id, set_id])
+		assert_gt(UnitSilhouettes.model_mesh(id, set_id).get_aabb().size.x, span - 0.01, "розведені станини не вмістились би, тип %d, набір %d" % [id, set_id])
 		var free_side: float = (span - travel.get_aabb().size.x) * 0.5
-		assert_lt(free_side, WreckLayer.BODY_WIDTH, "збоку від гармати тілу місця нема, тип %d" % id)
+		assert_lt(free_side, WreckLayer.BODY_WIDTH, "збоку від гармати тілу місця нема, тип %d, набір %d" % [id, set_id])
 		for facing: int in 8:
-			var body := Casualties.Body.new(5, cell, 0, id, facing, 0, Casualties.CREW_FIGURES)
+			var body := Casualties.Body.new(5, cell, set_id, id, facing, 0, Casualties.CREW_FIGURES)
 			for slot in Casualties.CREW_FIGURES:
-				assert_false(WreckLayer.body_is_laid(WreckLayer.body_transform(body, slot, b, [])), "на мосту тіл нема, тип %d, напрям %d" % [id, facing])
-		var wreck: Node3D = WreckLayer.build_wreck(cell, id, 0)
+				assert_false(WreckLayer.body_is_laid(WreckLayer.body_transform(body, slot, b, [])), "на мосту тіл нема, тип %d, набір %d, напрям %d" % [id, set_id, facing])
+		var wreck: Node3D = WreckLayer.build_wreck(cell, id, 0, set_id)
 		var mesh: ArrayMesh = (wreck.get_node("Body") as MeshInstance3D).mesh
-		assert_lt(mesh.get_aabb().size.x, span, "уламок на мосту — похідний: у поручнях, тип %d" % id)
+		assert_lt(mesh.get_aabb().size.x, span, "уламок на мосту — похідний: у поручнях, тип %d, набір %d" % [id, set_id])
 		wreck.free()
 	TerrainHeight.active = previous
 	WreckLayer.clear_deck_cache()
@@ -997,3 +1013,15 @@ func test_add_body_after_a_demolition_agrees_with_a_fresh_layer() -> void:
 	add_child_autofree(fresh)
 	fresh.rebuild_fallen(state, 0)
 	assert_eq(layer.body_transforms(), fresh.body_transforms(), "add_body без перебудови: ті самі місця, що й у свіжому розрахунку")
+
+
+## Інженерна машина не гармата: ні розрахунку, ні похідної моделі, ні тіл — у жодному наборі.
+func test_engineer_vehicle_has_no_crew_travel_pose_or_bodies_in_any_set() -> void:
+	UnitSilhouettes.reset_models()
+	assert_false(Casualties.has_crew(11), "в інженерної машини розрахунку нема")
+	for set_id in UnitSilhouettes.SET_COUNT:
+		assert_null(UnitSilhouettes.travel_mesh(11, set_id), "похідної моделі нема, набір %d" % set_id)
+		assert_null(UnitSilhouettes.crew_mesh(11, set_id, true), "меша розрахунку нема, набір %d" % set_id)
+		var wreck: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), 11, 0, set_id)
+		assert_not_null(wreck, "уламок інженерної машини будується, набір %d" % set_id)
+		wreck.free()

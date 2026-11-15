@@ -566,21 +566,27 @@ func _rail_inner_face(name: String) -> float:
 func test_travel_pose_gun_and_crew_fit_between_the_rails_of_every_bridge() -> void:
 	UnitSilhouettes.reset_models()
 	var margin: float = 0.0375
+	for set_id in UnitSilhouettes.SET_COUNT:
+		_travel_fits_between_the_rails(set_id, margin)
+
+
+func _travel_fits_between_the_rails(set_id: int, margin: float) -> void:
 	for name: String in _BRIDGES:
 		var inner: float = _rail_inner_face(name)
 		assert_lt(inner, 0.5, "передумова: поручні міста «%s» знайдено" % name)
 		for id: int in [9, 10]:
-			var gun: PackedVector3Array = (UnitSilhouettes.travel_mesh(id).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
-			var crew: PackedVector3Array = (UnitSilhouettes.crew_mesh(id, 0, true).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+			assert_not_null(UnitSilhouettes.travel_mesh(id, set_id), "похідна модель типу %d набору %d є" % [id, set_id])
+			var gun: PackedVector3Array = (UnitSilhouettes.travel_mesh(id, set_id).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+			var crew: PackedVector3Array = (UnitSilhouettes.crew_mesh(id, set_id, true).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
 			var gx_min: float = INF
 			var gx_max: float = -INF
 			for v in gun:
 				gx_min = minf(gx_min, v.x)
 				gx_max = maxf(gx_max, v.x)
-			assert_lt(-gx_min, inner, "лівий бік гармати %d до поручня «%s»" % [id, name])
-			assert_lt(gx_max, inner, "правий бік гармати %d до поручня «%s»" % [id, name])
+			assert_lt(-gx_min, inner, "лівий бік гармати %d набору %d до поручня «%s»" % [id, set_id, name])
+			assert_lt(gx_max, inner, "правий бік гармати %d набору %d до поручня «%s»" % [id, set_id, name])
 			for v in crew:
-				assert_lt(absf(v.x), inner, "розрахунок гармати %d між поручнями «%s»" % [id, name])
+				assert_lt(absf(v.x), inner, "розрахунок гармати %d набору %d між поручнями «%s»" % [id, set_id, name])
 				assert_lte(absf(v.z), 0.5, "розрахунок у тайлі")
 			# Відстань: жодна вершина розрахунку не ближче за запас до низу моделі (нижче зросту бійця).
 			var worst: float = INF
@@ -600,46 +606,55 @@ func test_travel_pose_gun_and_crew_fit_between_the_rails_of_every_bridge() -> vo
 					for dz in range(-1, 2):
 						for p: Vector2 in bucket.get(c + Vector2i(dx, dz), []):
 							worst = minf(worst, p.distance_to(Vector2(v.x, v.z)))
-			assert_gte(worst, margin - 0.0005, "розрахунок гармати %d не ближче 0,3 м до моделі" % id)
+			assert_gte(worst, margin - 0.0005, "розрахунок гармати %d набору %d не ближче 0,3 м до моделі" % [id, set_id])
 		# розрахунок на землі (розведені станини) — теж у своєму тайлі
 		for id: int in [9, 10]:
-			for v in (UnitSilhouettes.crew_mesh(id, 0, false).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]:
+			for v in (UnitSilhouettes.crew_mesh(id, set_id, false).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]:
 				assert_lte(absf(v.x), 0.5, "розрахунок на землі в тайлі")
 				assert_lte(absf(v.z), 0.5, "розрахунок на землі в тайлі")
 
 
-## Розрахунок у похідному положенні видно з камери: за напрямів 0 і 4 (вздовж настилу) гармата
-## закриває не більше 30 % вершин жодної з двох фігур, на найближчому й найдальшому нахилі камери.
-func test_travel_pose_crew_is_visible_from_the_camera() -> void:
+## Розрахунок видно з камери: за напрямів 0 і 4 (вздовж настилу) гармата закриває не більше 30 % вершин
+## жодної з двох фігур, на найближчому й найдальшому нахилі камери, у кожному наборі — в похідному
+## положенні (на мосту) і розведеною.
+func test_crew_is_visible_from_the_camera_in_both_poses_of_every_set() -> void:
 	UnitSilhouettes.reset_models()
-	var figures: Array = [UnitSilhouettes.model_mesh(UnitSilhouettes.PLAIN_FIGURE, 0), UnitSilhouettes.crouch_mesh(0)]
-	for id: int in [9, 10]:
-		var gun: ArrayMesh = UnitSilhouettes.travel_mesh(id, 0)
-		var a: Array = gun.surface_get_arrays(0)
-		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-		var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
-		var rows: Array = UnitSilhouettes.crew_rows(id, 0, true)
-		for facing: int in [0, 4]:
-			var basis := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
-			var tris := PackedVector3Array()
-			for i in idx:
-				tris.append(basis * v[i])
-			for pitch: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
-				var buf: PackedFloat32Array = CrewLegal.silhouette(tris, pitch)
-				for fig in 2:
-					var mesh: ArrayMesh = figures[fig] if figures[fig] != null else figures[0]
-					var pts: PackedVector3Array = (mesh.surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
-					var at := Vector2((rows[fig] as Vector3).x, (rows[fig] as Vector3).y)
-					assert_lte(CrewLegal.figure_cover(pts, at, facing, buf, pitch), 0.30,
-							"гармата %d не закриває бійця %d, напрям %d, нахил %d" % [id, fig, facing, int(pitch)])
+	for set_id in UnitSilhouettes.SET_COUNT:
+		var figures: Array = [UnitSilhouettes.model_mesh(UnitSilhouettes.PLAIN_FIGURE, set_id), UnitSilhouettes.crouch_mesh(set_id)]
+		for id: int in [9, 10]:
+			for travel: bool in [true, false]:
+				var gun: ArrayMesh = UnitSilhouettes.travel_mesh(id, set_id) if travel else UnitSilhouettes.model_mesh(id, set_id)
+				assert_not_null(gun, "модель типу %d набору %d, похідна: %s" % [id, set_id, travel])
+				var a: Array = gun.surface_get_arrays(0)
+				var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+				var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+				var rows: Array = UnitSilhouettes.crew_rows(id, set_id, travel)
+				for facing: int in [0, 4]:
+					var basis := Basis(Vector3.UP, deg_to_rad(UnitView._degrees_for_facing(facing)))
+					var tris := PackedVector3Array()
+					for i in idx:
+						tris.append(basis * v[i])
+					for pitch: float in [IsoCameraRig.PITCH_NEAR_DEG, IsoCameraRig.PITCH_FAR_DEG]:
+						var buf: PackedFloat32Array = CrewLegal.silhouette(tris, pitch)
+						for fig in 2:
+							var mesh: ArrayMesh = figures[fig] if figures[fig] != null else figures[0]
+							var pts: PackedVector3Array = (mesh.surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+							var at := Vector2((rows[fig] as Vector3).x, (rows[fig] as Vector3).y)
+							assert_lte(CrewLegal.figure_cover(pts, at, facing, buf, pitch), 0.30,
+									"гармата %d набору %d не закриває бійця %d, напрям %d, нахил %d, похідна: %s" % [id, set_id, fig, facing, int(pitch), travel])
 
 
 ## Польова гармата в похідному положенні стоїть у сусідньому з гаубицею тайлі (станини гаубиці виступають за її
 ## тайл): розрахунок польової не ближче 0,3 м до них.
 func test_field_gun_travel_crew_clears_the_spades_of_a_howitzer_ahead() -> void:
 	UnitSilhouettes.reset_models()
-	var how: PackedVector3Array = (UnitSilhouettes.travel_mesh(10, 0).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
-	var crew: PackedVector3Array = (UnitSilhouettes.crew_mesh(9, 0, true).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+	for set_id in UnitSilhouettes.SET_COUNT:
+		_field_crew_clears_howitzer_spades(set_id)
+
+
+func _field_crew_clears_howitzer_spades(set_id: int) -> void:
+	var how: PackedVector3Array = (UnitSilhouettes.travel_mesh(10, set_id).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
+	var crew: PackedVector3Array = (UnitSilhouettes.crew_mesh(9, set_id, true).surface_get_arrays(0) as Array)[Mesh.ARRAY_VERTEX]
 	var low: Array[Vector2] = []
 	for v in how:
 		if v.y < UnitSilhouettes.FIGURE_SIZE.y:
@@ -648,4 +663,4 @@ func test_field_gun_travel_crew_clears_the_spades_of_a_howitzer_ahead() -> void:
 	for c in crew:
 		for p in low:
 			best = minf(best, Vector2(c.x, c.z).distance_to(p))
-	assert_gte(best, 0.0375, "розрахунок польової гармати не ближче 0,3 м до станин гаубиці")
+	assert_gte(best, 0.0375, "розрахунок польової гармати набору %d не ближче 0,3 м до станин гаубиці" % set_id)
