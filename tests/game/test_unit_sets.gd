@@ -234,9 +234,10 @@ func test_rows_match_carriage_and_running_gear_in_every_set() -> void:
 
 
 ## Кінці станин і передні опори лежать симетрично до лінії ствола. Для кожного боку беруться
-## низькі точки (y < 0,2), без смуги ствола (|x| < 0,05), а в гармат — без ящиків (|x| > 0,225):
-## найдальша назад і найдальша вперед за z та найдальша вбік. Суми x кінців станин і різниці
-## вильоту лівого й правого боку не перевищують 0,04 тайла (0,3 м).
+## низькі точки (y < 0,2), без смуги ствола (|x| < 0,05), а в гармат — без ящиків (|x| > 0,225).
+## Три величини: найдальша назад точка (сума x лівої й правої станини), найдальша вперед за z і
+## найдальша вбік серед точок передньої половини (z < 0), тобто передні опори, а не станини.
+## Суми й різниці лівого та правого боку не перевищують 0,04 тайла (0,3 м).
 func test_trail_ends_are_symmetric_about_the_barrel_line() -> void:
 	UnitSilhouettes.reset_models()
 	var checked: int = 0
@@ -246,19 +247,20 @@ func test_trail_ends_are_symmetric_about_the_barrel_line() -> void:
 				continue
 			var v: PackedVector3Array = UnitSilhouettes._own_model(id, set_id).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 			var rear: Array[Vector2] = [Vector2(0.0, -INF), Vector2(0.0, -INF)]
-			var front: Array[Vector3] = [Vector3(0.0, INF, 0.0), Vector3(0.0, INF, 0.0)]
+			var front_z: Array[float] = [INF, INF]
+			var side_max: Array[float] = [0.0, 0.0]
 			for p in v:
 				if p.y > 0.2 or absf(p.x) < 0.05 or (id == 9 and absf(p.x) > 0.225):
 					continue
 				var side: int = 0 if p.x < 0.0 else 1
-				if p.y <= 0.12 and p.z > (rear[side] as Vector2).y:
+				if p.y <= 0.12 and p.z > rear[side].y:
 					rear[side] = Vector2(p.x, p.z)
-				if p.z < (front[side] as Vector3).y:
-					front[side] = Vector3(absf(p.x), p.z, 0.0)
-				front[side].z = maxf(front[side].z, absf(p.x))
+				front_z[side] = minf(front_z[side], p.z)
+				if p.z < 0.0:
+					side_max[side] = maxf(side_max[side], absf(p.x))
 			var where: String = "набору %d типу %d" % [set_id, id]
 			assert_lte(absf(rear[0].x + rear[1].x), 0.04, "кінці станин %s: %s і %s" % [where, rear[0], rear[1]])
-			assert_lte(absf(front[0].y - front[1].y), 0.04, "виліт уперед %s: %s і %s" % [where, front[0], front[1]])
-			assert_lte(absf(front[0].z - front[1].z), 0.04, "виліт убік %s: %s і %s" % [where, front[0], front[1]])
+			assert_lte(absf(front_z[0] - front_z[1]), 0.04, "виліт уперед %s: %s і %s" % [where, front_z[0], front_z[1]])
+			assert_lte(absf(side_max[0] - side_max[1]), 0.04, "виліт убік %s: %s і %s" % [where, side_max[0], side_max[1]])
 			checked += 1
 	assert_eq(checked, 6, "дві гармати в кожному з трьох наборів")
