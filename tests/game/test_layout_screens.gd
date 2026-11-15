@@ -186,7 +186,7 @@ func test_hud_preview_plate_content_fits_the_shared_width_for_every_type(p = use
 		assert_lte(plate.get_combined_minimum_size().x, 252.0, "вміст не ширший за плиту: " + where)
 
 
-## Озброєний дрон: смужка [Скасувати | озброєно] 252 × 48 унизу праворуч — на місці ряду дій, без накладання.
+## Озброєний дрон: смужка [Скасувати] [озброєно] 252 × 48 унизу праворуч — на місці ряду дій, без накладання.
 func test_hud_drone_strip_fits(p = use_parameters(_repair_cases())) -> void:
 	TranslationServer.set_locale(p[1])
 	var size: Vector2i = p[0]

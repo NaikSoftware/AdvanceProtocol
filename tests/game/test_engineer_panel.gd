@@ -82,8 +82,8 @@ func test_grid_fill_is_dense_and_skips_the_empty_cell() -> void:
 	assert_eq(p.hair_rects(), [Rect2(134, 1, 1, 97), Rect2(1, 49, 267, 1), Rect2(1, 98, 133, 1)] as Array[Rect2],
 		"роздільники лише між заповненими клітинками")
 	assert_eq(p.active_size(), Vector2(269, 148), "розмір плити для стикування не змінюється")
-	# Смужка озброєння лишається тихою, як кнопки ряду.
-	assert_almost_eq((p.strip().get_theme_stylebox(&"panel") as StyleBoxFlat).bg_color.a, 0.65, 0.001)
+	# Клітинка «озброєно» смужки лишається тихою, як кнопки ряду.
+	assert_almost_eq((p.strip().armed_cell.get_theme_stylebox(&"panel") as StyleBoxFlat).bg_color.a, 0.65, 0.001)
 
 
 ## Кожна верба в клітинці: значок, проміжок 6 і назва без обрізання, ≥ 7 dp повітря від краю клітинки

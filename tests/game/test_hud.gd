@@ -700,15 +700,18 @@ func test_armed_strip_cancel_sits_on_the_row_cancel_slot_and_clear_of_confirm() 
 	controller.arm_engineer(EngineerCommand.Action.REPAIR_UNIT)
 	var strip: ArmedStrip = (hud.get_node("%EngineerPanel") as EngineerPanel).strip()
 	await get_tree().process_frame
-	var strip_cancel := Rect2(strip.cancel_button.global_position, strip.cancel_button.size)
+	var strip_cancel: Rect2 = strip.cancel_button.get_global_rect()
+	var cell: Rect2 = strip.armed_cell.get_global_rect()
 
 	controller.tap_cell(friend.pos)
 	await get_tree().process_frame
-	var row_cancel := Rect2((hud.get_node("%CancelButton") as Control).global_position, (hud.get_node("%CancelButton") as Control).size)
-	var confirm := Rect2((hud.get_node("%ConfirmButton") as Control).global_position, (hud.get_node("%ConfirmButton") as Control).size)
+	var row_cancel: Rect2 = (hud.get_node("%CancelButton") as Control).get_global_rect()
+	var confirm: Rect2 = (hud.get_node("%ConfirmButton") as Control).get_global_rect()
 
-	assert_eq(strip_cancel.position.x, row_cancel.position.x, "«Скасувати» смужки — на слоті «Скасувати» ряду")
-	assert_eq(strip_cancel.size.x, row_cancel.size.x)
+	assert_eq(strip_cancel, row_cancel, "«Скасувати» смужки — на прямокутнику «Скасувати» ряду")
+	assert_eq(cell, confirm, "клітинка «озброєно» — на прямокутнику основної кнопки")
+	assert_eq(cell.position.x - strip_cancel.end.x, confirm.position.x - row_cancel.end.x, "той самий проміжок, що в ряду")
+	assert_eq((hud.get_node("%ActionRow") as HBoxContainer).get_theme_constant(&"separation"), int(HudDocking.ROW_GAP), "ряд бере проміжок зі сталої")
 	assert_false(strip_cancel.intersects(confirm), "«Скасувати» смужки не під «Підтвердити», що її замінює")
 	assert_true(strip.armed_cell.mouse_filter == Control.MOUSE_FILTER_STOP, "клітинка «озброєно» поглинає тап")
 

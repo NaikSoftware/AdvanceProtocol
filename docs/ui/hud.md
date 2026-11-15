@@ -143,16 +143,21 @@ preview fields; the glyph's geometry never decides a sector.
 - **Exactly one Cancel when something can be cancelled.** The row's while a preview waits
   (`InputController.has_cancelable()`); the armed strip's while armed with nothing pending
   (`is_armed_waiting()`); none for a plain selection.
-- **Armed strips** (drone or engineer verb armed) are [Cancel | armed cell], right-anchored,
-  `ArmedStrip.WIDTH` (the shared 252), **a 48-dp hit area with a 40-dp plate like the row**. Every real
-  title and hint fits in the armed cell in both locales, so the strip never widens. **Cancel sits
-  on the row's Cancel slot** with the same rect (104 × 48, no plate margin on its side; the 1-dp
-  `hair` divider, like the verb grid's, is drawn outside it) and the same centred icon-and-word
-  group, so × and the word land on the same pixels between arming and the pending row. The two text lines sit 2 dp tighter than the font's line
-  height, with an 11-dp hint, so the title caps and the hint descenders keep ≥ 6 dp to the plate edge,
-  and the inert armed cell sits where Confirm appears one tap later. With Cancel on the right, a
-  player backing out with a second tap would fire a drone or demolish a bridge. The armed cell stops
-  the tap and does nothing; it does not fall through to the board.
+- **Armed strips** (drone or engineer verb armed) have the action row's shape: two separate plates,
+  [Cancel 104][12][armed cell 136], right-anchored, `ArmedStrip.WIDTH` (the shared 252), **a 48-dp
+  hit area with 40-dp plates like the row**. The gap is `HudDocking.ROW_GAP`, the same constant the
+  row's separation is set from, and there is no divider. **Cancel is the row's Cancel**: the same
+  `HudPlateButton` plate, rect, icon colour and centred icon-and-word group, so × and the word land
+  on the same pixels between arming and the pending row. **The armed cell sits on the primary's
+  rect** with the quiet fill and soft edge (`HudPlateQuiet`), not the primary's bone frame: there is
+  nothing to confirm yet, and the cell becomes the framed primary only when the row replaces the
+  strip one tap later. It carries the verb or drone icon, the title (and the drone pips) and the
+  11-dp hint below, ≥ 7 dp from both cell edges for every real title and hint in both locales, so
+  the strip never widens. The two text lines sit 2 dp tighter than the font's line height, so the
+  title caps and the hint descenders keep ≥ 6 dp to the plate edge. With Cancel on the right, a
+  player backing out with a second tap would fire a drone or demolish a bridge. The whole 252 × 48
+  strip, the gap included, stops the tap and does nothing with it; nothing falls through to the
+  board.
 - **The Дрон button** (own squad selected, nothing armed) takes the bottom-right slot, 116 × 40 in a
   116 × 48 hit area.
 - **The engineer verb plate** is a 2 × 3 grid of 133 × 48 cells, 269 × 148 with 1-dp dividers: lay and

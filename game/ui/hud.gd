@@ -130,6 +130,8 @@ func _draw_pause_bars(mark: TextureRect) -> void:
 
 
 func _ready() -> void:
+	# Проміжок ряду — стала, а не число в сцені: смужка озброєння ставить свої плити на ті самі пікселі.
+	_row.add_theme_constant_override("separation", int(HudDocking.ROW_GAP))
 	HudKit.group_content(_confirm_button, HudKit.ICON_PX)
 	_confirm_button.pressed.connect(_on_confirm_pressed)
 	_cancel_button.pressed.connect(_on_cancel_pressed)

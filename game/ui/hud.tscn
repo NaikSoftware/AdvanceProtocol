@@ -145,7 +145,6 @@ layout_mode = 0
 offset_right = 252.0
 offset_bottom = 48.0
 mouse_filter = 2
-theme_override_constants/separation = 12
 
 [node name="CancelButton" type="Button" parent="ActionRow"]
 unique_name_in_owner = true
@@ -183,7 +182,7 @@ visible = false
 layout_mode = 3
 anchors_preset = 0
 
-[node name="DroneStrip" type="PanelContainer" parent="."]
+[node name="DroneStrip" type="HBoxContainer" parent="."]
 unique_name_in_owner = true
 visible = false
 layout_mode = 0

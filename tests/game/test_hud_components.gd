@@ -50,6 +50,7 @@ func test_drone_pips_track_remaining_and_total() -> void:
 	assert_eq(p.counts(), Vector2i(0, 2), "на нулі два контури лишаються: лічильник публічний (§3.9)")
 
 
+## Смужка має форму ряду дій: дві окремі плити [Скасувати 104][12][клітинка 136] без роздільника.
 func test_armed_strip_geometry_and_input() -> void:
 	var s := ArmedStrip.new()
 	s.theme = THEME
@@ -58,13 +59,21 @@ func test_armed_strip_geometry_and_input() -> void:
 	await get_tree().process_frame
 	assert_eq(s.size, Vector2(HudDocking.CLUSTER_W, 48), "спільна ширина × 48 тап-цілі, як ряд дій")
 	assert_eq(s.size.x, 252.0, "спільна ширина — 252 dp")
-	assert_eq(s.cancel_button.global_position.x - s.global_position.x + s.cancel_button.size.x, 104.0, "«Скасувати» — 104 dp, як у ряду")
-	var face := s.get_theme_stylebox(&"panel")
-	assert_eq(face.get_expand_margin(SIDE_BOTTOM), -8.0, "малюнок смужки — 40 dp, нижні 8 dp тап-цілі без плити")
+	var o: Vector2 = s.global_position
+	assert_eq(Rect2(s.cancel_button.global_position - o, s.cancel_button.size), Rect2(0, 0, 104, 48), "«Скасувати» — слот «Скасувати» ряду")
+	assert_eq(Rect2(s.armed_cell.global_position - o, s.armed_cell.size), Rect2(116, 0, 136, 48), "клітинка — слот основної кнопки")
+	assert_eq(s.armed_cell.global_position.x - s.cancel_button.get_global_rect().end.x, HudDocking.ROW_GAP, "проміжок ряду")
+	assert_eq(HudDocking.ROW_GAP, 12.0)
+	assert_eq(s.cancel_button.theme_type_variation, &"HudPlateButton", "«Скасувати» — та сама плита, що в ряду")
+	assert_false(s.cancel_button.flat, "«Скасувати» малює власну плиту")
+	var quiet := THEME.get_stylebox(&"panel", &"HudPlateQuiet") as StyleBoxFlat
+	var face := s.armed_cell.get_theme_stylebox(&"panel") as StyleBoxFlat
+	assert_eq(face.bg_color, quiet.bg_color, "тиха заливка")
+	assert_eq(face.border_color, quiet.border_color, "м'який край, не кістяна рамка основної")
+	assert_eq(face.get_expand_margin(SIDE_BOTTOM), -8.0, "малюнок клітинки — 40 dp, нижні 8 dp тап-цілі без плити")
+	assert_eq(s.find_children("*", "ColorRect", true, false).size(), 0, "роздільника немає")
+	assert_eq(s.mouse_filter, Control.MOUSE_FILTER_STOP, "уся смужка з проміжком поглинає тап")
 	assert_eq(s.armed_cell.mouse_filter, Control.MOUSE_FILTER_STOP)
-	var divider: ColorRect = s.cancel_button.get_parent().get_child(1) as ColorRect
-	assert_eq(divider.color, HudKit.HAIR, "роздільник — тонка лінія сітки, не світлий штрих")
-	assert_eq(divider.size.x, 1.0, "роздільник — 1 dp")
 	var presses: Array[int] = [0]
 	s.cancel_pressed.connect(func() -> void: presses[0] += 1)
 	s.cancel_button.pressed.emit()
@@ -72,7 +81,7 @@ func test_armed_strip_geometry_and_input() -> void:
 
 
 ## Смужка не розширюється під підпис: вона ділить ширину з плитою прев'ю й рядом. Кожна справжня назва
-## й підказка (дрон і п'ять верб, обома мовами) влазить у клітинку «озброєно» без обрізання.
+## й підказка (дрон і п'ять верб, обома мовами) влазить у клітинку «озброєно» 136 dp без обрізання.
 func test_armed_strip_keeps_the_shared_width_for_every_real_title() -> void:
 	var s := ArmedStrip.new()
 	s.theme = THEME
@@ -91,7 +100,9 @@ func test_armed_strip_keeps_the_shared_width_for_every_real_title() -> void:
 			for l: Label in [s.title_label, s.hint_label]:
 				var w: float = l.get_theme_font(&"font").get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, l.get_theme_font_size(&"font_size")).x
 				assert_lte(w, l.size.x, "підпис цілий: %s «%s»" % [where, l.text])
-				assert_lte(l.get_global_rect().end.x, s.get_global_rect().end.x - 7.0, "≥ 7 dp до краю смужки: %s «%s»" % [where, l.text])
+				assert_lte(l.get_global_rect().end.x, s.armed_cell.get_global_rect().end.x - 7.0, "≥ 7 dp до краю клітинки: %s «%s»" % [where, l.text])
+			var icon: TextureRect = s.armed_cell.find_children("*", "TextureRect", true, false)[0]
+			assert_eq(icon.get_global_rect().position.x - s.armed_cell.get_global_rect().position.x, 7.0, "значок — 7 dp від лівого краю клітинки: " + where)
 	TranslationServer.set_locale(locale)
 
 
@@ -105,7 +116,7 @@ func test_armed_strip_hint_keeps_4_5_contrast_on_the_strip_fill() -> void:
 	assert_eq(s.hint_label.get_theme_color(&"font_color"), ArmedStrip.HINT)
 	assert_eq(s.hint_label.get_theme_font_size(&"font_size"), 11, "підрядок 11 dp — дрібніше не можна")
 	# Поле Перехрестя під смужкою: колір, з якого заливка 65 % дає медіану фону під підказкою на кадрах.
-	var fill: Color = (s.get_theme_stylebox(&"panel") as StyleBoxFlat).bg_color
+	var fill: Color = (s.armed_cell.get_theme_stylebox(&"panel") as StyleBoxFlat).bg_color
 	var ground := Color8(104, 87, 65)
 	var under: Color = ground.lerp(Color(fill, 1.0), fill.a)
 	assert_gte(_contrast(ArmedStrip.HINT, under), 4.5, "підказка на заливці смужки")

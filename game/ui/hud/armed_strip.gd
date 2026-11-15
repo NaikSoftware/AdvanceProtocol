@@ -1,22 +1,22 @@
 class_name ArmedStrip
-extends PanelContainer
-## Смужка озброєння (дрон або верба інженера): [Скасувати | клітинка «озброєно»]
-## (docs/ui/hud.md#cancel-confirm-and-end-turn).
-## «Скасувати» стоїть ЛІВОРУЧ, на місці «Скасувати» ряду дій: один тап по цілі замінює
-## смужку рядом, і «Підтвердити» з'являється на правому кінці. Було б «Скасувати» праворуч —
+extends HBoxContainer
+## Смужка озброєння (дрон або верба інженера) має форму ряду дій: дві окремі плити
+## [Скасувати 104][12][клітинка «озброєно» 136] (docs/ui/hud.md#cancel-confirm-and-end-turn).
+## Один тап по цілі замінює смужку рядом, тож обидві плити стоять на пікселях плит ряду: «Скасувати»
+## не стрибає, а на місці майбутнього «Підтвердити» — інертна клітинка. Було б «Скасувати» праворуч —
 ## другий тап «передумав» влучав би в «Підтвердити» й запускав дрон чи підривав міст.
-## Клітинка «озброєно» поглинає тап і нічого не робить: вона не пропускає його на дошку.
+## Уся смужка 252 × 48 разом із проміжком поглинає тап: між плитами він не падає на дошку.
 
 signal cancel_pressed
 
 ## Спільна ширина з плитою прев'ю й рядом. Довший вміст розширив би смужку ліворуч і зсунув би її
-## «Скасувати» з місця «Скасувати» ряду, тож кожна справжня назва й підказка мусить влазити в цю ширину:
+## «Скасувати» з місця «Скасувати» ряду, тож кожна справжня назва й підказка мусить влазити в клітинку:
 ## це перевіряє `tests/game/test_hud_components.gd`.
 const WIDTH: float = HudDocking.CLUSTER_W
 ## Комірка «Скасувати» — той самий прямокутник 104 × 48, що й у «Скасувати» ряду дій.
 const CANCEL_WIDTH: float = 104.0
 ## Тап-ціль ряду дій: смужка підміняє ряд, тож «Скасувати» не стрибає між озброєнням і очікуванням.
-## Плита малюється на HudDocking.VISUAL_H, нижні 8 dp — лише тап-ціль.
+## Плити малюються на HudDocking.VISUAL_H, нижні 8 dp — лише тап-ціль.
 const HEIGHT: float = HudDocking.ROW_H
 ## Підказка світліша за загальний HudKit.DIM: на тихій заливці 65 % над полем DIM дає ~4,1 : 1, а дрібному
 ## тексту треба ≥ 4,5 : 1. DIM лишається для приглушених верб і підписів на щільніших плитах.
@@ -31,7 +31,7 @@ const _LIFT: float = 4.0
 const _ICON_CANCEL: Texture2D = preload("res://assets/ui/icons/btn_cancel.svg")
 
 var cancel_button: Button
-var armed_cell: HBoxContainer
+var armed_cell: PanelContainer
 var title_label: Label
 var hint_label: Label
 var _icon: TextureRect
@@ -39,39 +39,35 @@ var _pips: DronePips
 
 
 func _init() -> void:
-	theme_type_variation = &"HudPlateQuiet"
 	custom_minimum_size = Vector2(WIDTH, HEIGHT)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 0)
-	add_child(row)
+	add_theme_constant_override("separation", int(HudDocking.ROW_GAP))
+	# Контейнер типово пропускає тап крізь проміжок між плитами — тут він мусить зупинитися.
+	mouse_filter = Control.MOUSE_FILTER_STOP
 
+	# Та сама кнопка, що «Скасувати» ряду (hud.tscn): варіація, колір значка, NEAREST для краю 1 dp.
 	cancel_button = Button.new()
 	cancel_button.theme_type_variation = &"HudPlateButton"
-	cancel_button.flat = true
-	cancel_button.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	cancel_button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	cancel_button.icon = _ICON_CANCEL
 	cancel_button.text = "hud_cancel"
 	cancel_button.custom_minimum_size = Vector2(CANCEL_WIDTH, HEIGHT)
-	cancel_button.add_theme_color_override("icon_normal_color", Color("8f918a"))
+	cancel_button.add_theme_color_override("icon_normal_color", HudKit.DIM)
 	cancel_button.pressed.connect(cancel_pressed.emit)
-	row.add_child(cancel_button)
+	add_child(cancel_button)
 
-	# Роздільник — та сама тонка лінія, що між клітинками сітки дій: кістяна смуга між двома тихими
-	# комірками читалася як сторонній світлий штрих, а не як межа.
-	var bar := HudKit.divider(HudDocking.VISUAL_H)
-	# Вгору, а не по центру: плита малюється на верхніх 40 dp тап-цілі 48.
-	bar.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	row.add_child(bar)
-
-	armed_cell = HBoxContainer.new()
+	# Тиха плита, а не кістяна рамка основної кнопки: тут ще нічого підтверджувати, клітинка лише
+	# називає озброєну дію. Рамку вона отримує, коли ряд заміняє смужку після тапу по цілі.
+	armed_cell = PanelContainer.new()
+	armed_cell.theme_type_variation = &"HudPlateQuiet"
 	armed_cell.mouse_filter = Control.MOUSE_FILTER_STOP
 	armed_cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# Вміст — по центру малюнка 40 dp; нижні 8 dp тап-цілі ловить сама смужка, тап на дошку не проходить.
-	armed_cell.custom_minimum_size = Vector2(0.0, HudDocking.VISUAL_H)
-	armed_cell.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	armed_cell.add_theme_constant_override("separation", HudKit.ICON_GAP)
-	row.add_child(armed_cell)
-	armed_cell.add_child(_spacer(0.0))
+	add_child(armed_cell)
+	var content := HBoxContainer.new()
+	content.add_theme_constant_override("separation", HudKit.ICON_GAP)
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	armed_cell.add_child(content)
+	# Порожні комірки з обох кінців: проміжок 6 + край плити 1 = 7 dp повітря до значка й після підпису.
+	content.add_child(_spacer(0.0))
 	_icon = TextureRect.new()
 	_icon.custom_minimum_size = Vector2(HudKit.ICON_PX, HudKit.ICON_PX)
 	_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -80,13 +76,13 @@ func _init() -> void:
 	_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_icon.modulate = HudKit.BONE
-	armed_cell.add_child(_icon)
+	content.add_child(_icon)
 	var text := VBoxContainer.new()
 	text.add_theme_constant_override("separation", _LINE_TUCK)
 	text.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	armed_cell.add_child(text)
+	content.add_child(text)
 	var title_row := HBoxContainer.new()
 	title_row.add_theme_constant_override("separation", 7)
 	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -106,23 +102,20 @@ func _init() -> void:
 	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text.add_child(hint_label)
 	text.add_child(_spacer(0.0, _LIFT))
-	# Порожня комірка в кінці: проміжок 6 перед нею + край плити 1 = 7 dp повітря після підпису.
-	armed_cell.add_child(_spacer(0.0))
+	content.add_child(_spacer(0.0))
 
 
 func _ready() -> void:
 	# Та сама група «значок + слово» по центру, що й у «Скасувати» ряду дій. Збирається тут, а не в
 	# _init: шрифт кнопки береться з теми, яка до входу в дерево ще не діє.
 	HudKit.group_content(cancel_button, HudKit.ICON_PX)
-	# Без полів плити «Скасувати» займає той самий прямокутник, що й у ряду дій (край плити 1 dp лягає
-	# під кнопку): центр групи «значок + слово» збігається піксель у піксель, тап-ціль лишається ≥ 48.
-	# Плита малюється на 40 dp, як кнопки ряду, а нижні 8 dp тап-цілі лишаються без неї.
-	var face := get_theme_stylebox(&"panel").duplicate() as StyleBoxFlat
-	face.content_margin_left = 0.0
+	# Плита клітинки малюється на 40 dp, як кнопки ряду, а нижні 8 dp тап-цілі лишаються без неї;
+	# вміст стоїть по центру малюнка, а не всієї тап-цілі.
+	var face := armed_cell.get_theme_stylebox(&"panel").duplicate() as StyleBoxFlat
 	face.content_margin_top = 0.0
-	face.content_margin_bottom = 0.0
+	face.content_margin_bottom = HEIGHT - HudDocking.VISUAL_H
 	face.expand_margin_bottom = -(HEIGHT - HudDocking.VISUAL_H)
-	add_theme_stylebox_override(&"panel", face)
+	armed_cell.add_theme_stylebox_override(&"panel", face)
 
 
 ## icon — значок дії; pips — (лишилось, усього) для дрона, Vector2i(-1, -1) — без ромбиків.
