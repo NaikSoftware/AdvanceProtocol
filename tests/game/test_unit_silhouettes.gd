@@ -339,12 +339,13 @@ func test_crew_footprints_stay_inside_their_tile() -> void:
 ## більш ніж на 3 %, не менша за неї більш ніж на 5 %: модель не збільшена й не вкорочена.
 ## Справжні довжини — з docs/art/unit-models-research.md §5, за набором і роллю.
 ## Виняток — гаубиця набору 1: у документі лише довжина в похідному положенні (12,7 м), тож
-## межі 10,2–10,8 м — регресія довжини самої моделі (виміряно 10,5 м), а не справжній розмір.
+## межі 10,1–10,6 м — регресія довжини самої моделі (виміряно 10,36 м), а не справжній розмір.
+## Висота інженерної машини набору 1 — теж із §5 (3,43 м): не вища за 3 % і не нижча за 5 %.
 func test_set_towed_and_engineer_models_keep_real_lengths() -> void:
 	UnitSilhouettes.reset_models()
 	var bounds: Dictionary = {
 		Vector2i(1, 9): Vector2(5.42, 5.87),
-		Vector2i(1, 10): Vector2(10.2, 10.8),
+		Vector2i(1, 10): Vector2(10.1, 10.6),
 		Vector2i(1, 11): Vector2(8.85, 9.6),
 		Vector2i(2, 9): Vector2(6.0, 6.51),
 		Vector2i(2, 10): Vector2(10.17, 11.02),
@@ -358,3 +359,5 @@ func test_set_towed_and_engineer_models_keep_real_lengths() -> void:
 		var length: float = mesh.get_aabb().size.z * 8.0
 		var b: Vector2 = bounds[key]
 		assert_between(length, b.x, b.y, "довжина набору %d типу %d, м" % [key.x, key.y])
+	var height: float = UnitSilhouettes._own_model(11, 1).get_aabb().size.y * 8.0
+	assert_between(height, 3.43 * 0.95, 3.43 * 1.03, "висота інженерної машини набору 1, м")
