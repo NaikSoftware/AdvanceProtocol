@@ -9,10 +9,12 @@ extends SceneTree
 ## ті самі, що в тестах: боєць у тайлі (у похідному — між поручнями найвужчого з мостів), не ближче
 ## 0,3 м (0,0375 тайла; в похідному 0,05) до трикутників моделі нижче його зросту, а гармата
 ## закриває з камери не більше 15 % його вершин за напрямів 0 і 4 на найближчому й найдальшому
-## нахилі. Стоячи на землі (не на мосту), боєць ще й міряється тінню гармати: частка його вершин у
-## ній на напрямі 0 за сонцем Crossroads і Ridge (стовпчик shade). Тіло в тіні на темній ріллі
-## зливається із землею, і гармата читається з одним бійцем; щоб відкинути такі місця, SHADE_MAX=0.2
-## у середовищі.
+## нахилі. Відстань до моделі тут суворіша за тестову: спершу місце відкидається, якщо основа
+## фігури, розширена на запас з усіх боків (коробка), перетинає трикутник моделі, і лише потім
+## міряється відстань від вершин справжньої сітки бійця; тест міряє тільки її. Стоячи на землі (не
+## на мосту), боєць ще й міряється тінню гармати: частка його вершин у ній на напрямі 0 за сонцем
+## Crossroads і Ridge (стовпчик shade). Тіло в тіні на темній ріллі зливається із землею, і гармата
+## читається з одним бійцем; щоб відкинути такі місця, SHADE_MAX=0.2 у середовищі.
 const Legal := preload("res://tools/crew_body_legal.gd")
 ## Запас до моделі: 0,3 м на землі, 0,4 м в похідному положенні (там боєць ближче до гармати, і
 ## зливається з нею).
@@ -21,7 +23,7 @@ const MARGIN_TRAVEL: float = 0.05
 ## Гармата закриває з камери не більше цієї частки вершин бійця (на мосту й на землі).
 const MAX_COVER: float = 0.15
 const BRIDGES: Array[String] = ["west", "centre", "east"]
-## Тінь — лише відомість у звіті, поки змінна середовища SHADE_MAX не вимагає меншого.
+## Тінь — лише відомість у звіті, поки змінна середовища SHADE_MAX не знижує поріг.
 const SHADE_MAX: float = 1.0
 const SHADE_RES: float = 0.01
 const SHADE_N: int = 160
@@ -121,7 +123,7 @@ func _context(id: int, set_id: int, travel: bool) -> Dictionary:
 	return {"margin": margin, "low": low, "bucket": bucket, "shade": shade, "bufs": bufs, "figures": [stand, kneel if kneel != null else stand], "inner": inner, "travel": travel}
 
 
-## Відповідь про одного бійця в точці `row` (x, z, поворот): {pass, tile, clearance, cover}.
+## Відповідь про одного бійця в точці `row` (x, z, поворот): {pass, tile, clearance, cover, shade}.
 func report(ctx: Dictionary, fig: int, row: Vector3) -> Dictionary:
 	var half := Vector2(UnitSilhouettes.FIGURE_SIZE.x, UnitSilhouettes.FIGURE_SIZE.z) * 0.5
 	var rot := Transform2D(-deg_to_rad(row.z), Vector2(row.x, row.y))
@@ -174,14 +176,15 @@ func report(ctx: Dictionary, fig: int, row: Vector3) -> Dictionary:
 	return {"pass": tile and clear and cover <= MAX_COVER and shaded <= _shade_max(), "shade": snappedf(shaded, 0.01), "tile": tile, "clearance": snappedf(worst, 0.001), "cover": snappedf(cover, 0.01)}
 
 
-## Тінь моделі гармати на землі при сонці карти `look`: кожен трикутник зсувається від сонця на свою
-## висоту й заливається в сітку SHADE_N × SHADE_N з кроком SHADE_RES навколо середини тайла. Напрям
-## на сонце — як у `BattleScreen._apply_forest_sun`. SHADE_MAX дозволяє підняти змінна середовища
-## SHADE_MAX (для огляду кандидатів у сильній тіні).
+## Найбільша частка вершин бійця в тіні гармати: змінна середовища SHADE_MAX знижує її від типових
+## `SHADE_MAX`, щоб відкинути місця в сильній тіні.
 func _shade_max() -> float:
 	return float(OS.get_environment("SHADE_MAX")) if OS.get_environment("SHADE_MAX") != "" else SHADE_MAX
 
 
+## Тінь моделі гармати на землі при сонці карти `look`: кожен трикутник зсувається від сонця на свою
+## висоту й заливається в сітку SHADE_N × SHADE_N з кроком SHADE_RES навколо середини тайла. Напрям
+## на сонце — як у `BattleScreen._apply_forest_sun`.
 func _shadow_grid(v: PackedVector3Array, idx: PackedInt32Array, b0: Basis, look: BattleLook) -> PackedByteArray:
 	var sun: Vector3 = Basis.from_euler(Vector3(deg_to_rad(-look.light_pitch_deg), deg_to_rad(look.light_yaw_deg), 0.0)).z
 	var grid := PackedByteArray()

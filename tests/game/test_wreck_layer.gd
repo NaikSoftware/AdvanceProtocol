@@ -1026,3 +1026,26 @@ func test_engineer_vehicle_has_no_crew_travel_pose_or_bodies_in_any_set() -> voi
 		var wreck: Node3D = WreckLayer.build_wreck(Vector2i(2, 2), 11, 0, set_id)
 		assert_not_null(wreck, "уламок інженерної машини будується, набір %d" % set_id)
 		wreck.free()
+
+
+## Розклад тіл на мосту сідовий: той самий запис лягає однаково, бо кожен бросок `rng` у
+## `_deck_layout` іде в тому самому порядку. Еталони зняті до прибирання мертвої гілки «двоє уздовж»; тест ловить зсув порядку бросків.
+func test_deck_layout_is_unchanged_for_seeded_records() -> void:
+	var golden: Array = [
+		["0.000219584;-0.000364337;-0.000093418;1.569955945", "0.028000000;0.056000000;0.112000000", 0, 3],
+		["-1.569939017;0.000200351;-0.000400821;0.000373998", "0.112000000;0.028000000;0.056000000", 2, 1],
+		["1.569734573;0.000078992;-0.000257230;-0.000362836", "0.112000000;0.028000000;0.056000000", 1, 3],
+		["1.570313096;0.000098398;0.000602452;0.000056800", "0.112000000;0.056000000;0.028000000", 2, 0],
+	]
+	var got: Array = []
+	for rec: Array in [[1, Vector2i(3, 4)], [2, Vector2i(10, 7)], [9000, Vector2i(0, 0)], [17, Vector2i(5, 5)]]:
+		var b := Casualties.Body.new(rec[0], rec[1], 0, 0, 0, 0, 4)
+		var d: Dictionary = WreckLayer._deck_layout(b)
+		var turns: PackedStringArray = []
+		for t: float in d.turns:
+			turns.append("%.9f" % t)
+		var gaps: PackedStringArray = []
+		for g: float in d.gaps:
+			gaps.append("%.9f" % g)
+		got.append([";".join(turns), ";".join(gaps), d.flip, d.rail])
+	assert_eq(got, golden)

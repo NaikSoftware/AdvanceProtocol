@@ -9,7 +9,7 @@ extends Node3D
 ## `add()`/`remove()` — лише для показу щойно зіграних подій; хто викликає `add()`,
 ## той і перевіряє `seen`.
 ##
-## Ціна кадру (§8): уламок — одна сітка; усі стовпи — одна MultiMesh, усі язики полум'я —
+## Ціна кадру (§8): уламок — один меш; усі стовпи — одна MultiMesh, усі язики полум'я —
 ## друга, світла вогню — не більше чотирьох. Анімація — крок таймера 30 разів на секунду,
 ## а не вбудований час шейдера: той тримав би кадр щокадрово, і обмеження частоти кадрів у
 ## спокої ніколи б не вмикалось.
@@ -1405,11 +1405,10 @@ static func _deck_layout(b: Casualties.Body) -> Dictionary:
 		var tmp: int = order[k]
 		order[k] = order[j]
 		order[j] = tmp
-	var gaps_sum: float = 0.0
-	for g: float in BODY_DECK_GAPS:
-		gaps_sum += g
-	# двоє «уздовж» — лише якщо ряд із ними вміщається в тайл (з нинішніми проміжками — ні, тож одне)
-	var two: bool = rng.randf() < 0.5 and BODY_LENGTH * 2.0 + BODY_WIDTH * 2.0 + gaps_sum <= BODY_DECK_ROW
+	# Бросок лишається, хоч його результат не читається: без нього решта розкладу з того самого сіду
+	# зсунулась би. Двоє «уздовж» не вміщаються в тайл (дві довжини, дві ширини й проміжки більші за
+	# BODY_DECK_ROW), тож тіло «уздовж» завжди одне.
+	rng.randf()
 	var turns := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 	for k in 4:
 		turns[k] = rng.randf_range(-BODY_DECK_TURN, BODY_DECK_TURN)
@@ -1418,8 +1417,6 @@ static func _deck_layout(b: Casualties.Body) -> Dictionary:
 	# посеред ряду вона впиралась у тулуб сусіда.
 	var along_slot: int = 0 if rng.randf() < 0.5 else 3
 	turns[along_slot] = sign * (BODY_DECK_ALONG_TURN - rng.randf_range(0.0, BODY_DECK_ALONG_SPREAD))
-	if two:
-		turns[order[1] if order[1] != along_slot else order[2]] = -sign * BODY_DECK_ALONG_TURN
 	var rest: Array = BODY_DECK_GAPS.slice(0, BODY_DECK_GAPS.size() - 1)
 	if rng.randf() < 0.5:
 		rest.reverse()
@@ -1554,11 +1551,11 @@ static func build_wreck(pos: Vector2i, type_id: int, facing: int, set_id: int = 
 	var merged := MeshInstance3D.new()
 	merged.name = "Body"
 	if model != null:
-		# Модель — одна сітка: осідає цілою, ствол окремо не опустити.
+		# Модель — один меш: осідає цілим, ствол окремо не опустити.
 		merged.mesh = model
 		merged.position.y = -HULL_SAG
 	else:
-		# Усі частини — в одну сітку: один виклик малювання й одна тінь на уламки (бюджет §8).
+		# Усі частини — в один меш: один виклик малювання й одна тінь на уламки (бюджет §8).
 		var st := SurfaceTool.new()
 		for part: Node in root.get_children():
 			var m := part as MeshInstance3D

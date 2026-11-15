@@ -572,7 +572,8 @@ func _rail_inner_face(name: String) -> float:
 
 
 ## Гармата в похідному положенні й її розрахунок стоять між поручнями кожного з мостів переправи — з кожного боку, а не
-## за шириною габариту, — і в тайлі. Стопа розрахунку не ближче 0,3 м до моделі гармати.
+## за шириною габариту, — і в тайлі. Вершини розрахунку не ближче 0,05 тайла (0,4 м) до моделі
+## гармати, з допуском 0,0005 тайла.
 func test_travel_pose_gun_and_crew_fit_between_the_rails_of_every_bridge() -> void:
 	UnitSilhouettes.reset_models()
 	for set_id in UnitSilhouettes.SET_COUNT:

@@ -98,14 +98,14 @@ const MODEL_SLUGS: Array[String] = [
 ]
 const _MODEL_SHADER: Shader = preload("res://game/battle/shaders/unit_model.gdshader")
 const _FALLEN_SHADER: Shader = preload("res://game/battle/shaders/unit_fallen.gdshader")
-## Сітка моделі за (набір, тип) у системі юніта (null — файлу нема); у відділення — одна фігура.
+## Меш моделі за (набір, тип) у системі юніта (null — файлу нема); у відділення — одна фігура.
 static var _models: Dictionary = {}
-## Тести підставляють сітки самі: тоді типи поза словником — без моделі, диск не читається.
+## Тести підставляють меші самі: тоді типи поза словником — без моделі, диск не читається.
 static var _models_pinned: bool = false
 static var _model_materials: Dictionary = {}
 
 static var _materials: Dictionary = {}
-## Злита сітка тіла за типом і кольором власника: один меш на всі юніти того самого вигляду.
+## Злитий меш тіла за типом і кольором власника: один меш на всі юніти того самого вигляду.
 static var _merged_meshes: Dictionary = {}
 static var _merged_material: StandardMaterial3D
 static var _figure_mesh: BoxMesh
@@ -199,7 +199,7 @@ static func build(type_id: int, set_id: int = 0) -> Node3D:
 	return root
 
 
-## Той самий силует, але корпус, башта, ствол, ходова й фігури відділення — одна сітка `Hull` з
+## Той самий силует, але корпус, башта, ствол, ходова й фігури відділення — один меш `Hull` з
 ## кольорами у вершинах (однаковими для всіх власників):
 ## один виклик малювання й один у тіні замість трьох-п'яти на юніт (§8). `standing` — скільки
 ## фігур стоїть; `drones` — скільки з них несе трубу дрона.
@@ -530,13 +530,13 @@ static func pick_layout(seed: int) -> int:
 ## не стоячий боєць, покладений долілиць. Той самий атлас, що й у простого бійця, тож матеріал — його ж,
 ## лише з `fallen`. Без файлу — коробка-заступник плазом.
 const BODY_SLUG: String = "rifle_soldier_body"
-## Ключ сітки тіла в `use_models()` для тестів (тип такого номера не існує).
+## Ключ меша тіла в `use_models()` для тестів (тип такого номера не існує).
 const BODY_KEY: int = 100
 ## Місця, де простий боєць пригнувся (друга поза); решта стоїть.
 const CROUCH_SLOTS: Array[int] = [1, 3]
 
 
-## Сітка загиблого набору (null — файлу нема): найнижча точка на y = 0, середина тіла на початку.
+## Меш загиблого набору (null — файлу нема): найнижча точка на y = 0, середина тіла на початку.
 static func body_mesh(set_id: int, pose: int = 0) -> ArrayMesh:
 	return _figure_variant(set_id, BODY_KEY + pose * 10, BODY_SLUG + BODY_POSES[pose])
 
@@ -583,13 +583,10 @@ static var _fallen_materials: Dictionary = {}
 
 const FALLEN_SPECULAR: float = 0.1
 ## Відтінок альбедо загиблих набору — множник кольору в sRGB: `albedo_color` у шейдері має підказку
-## `source_color`, тож
-## Godot переводить колір у лінійний простір сам. Піскова тканина набору 2 темніла до тону ґрунту
-## під хмарами
-## (L* 24,5 на ґрунті 25,2), і тіло читалось грудкою землі: світліше, але не вище за ґрунт + 2 L*. У
-## набору 1 тепле
-## забарвлення загиблих зсувало тон зеленої тканини жовтіше за живих, і трохи холодніший множник
-## гасить цей зсув.
+## `source_color`, тож Godot переводить колір у лінійний простір сам. Піскова тканина набору 2
+## темніла до тону ґрунту під хмарами (L* 24,5 на ґрунті 25,2), і тіло читалось грудкою землі:
+## світліше, але не вище за ґрунт + 2 L*. У набору 1 тепле забарвлення загиблих зсувало тон зеленої
+## тканини жовтіше за живих, і трохи холодніший множник гасить цей зсув.
 const FALLEN_TINT: Dictionary = {1: Color(0.985, 1.0, 1.015), 2: Color(1.08, 1.08, 1.08)}
 
 
@@ -617,7 +614,7 @@ static func fallen_material(set_id: int) -> Material:
 	return _fallen_materials[key]
 
 
-## Перетворення сітки загиблого відносно його місця на землі: модель лежить як є, коробку кладемо плазом.
+## Перетворення меша загиблого відносно його місця на землі: модель лежить як є, коробку кладемо плазом.
 static func body_pose(set_id: int, pose: int = 0) -> Transform3D:
 	if body_mesh(set_id, pose) != null:
 		return Transform3D()
@@ -660,7 +657,7 @@ static func _resolved_set(type_id: int, set_id: int) -> int:
 	return set_id if _own_model(type_id, set_id) != null else 0
 
 
-## Сітка моделі в системі юніта (перетворення вузлів GLB уже впечені), або null, коли файлу нема.
+## Меш моделі в системі юніта (перетворення вузлів GLB уже впечені), або null, коли файлу нема.
 ## Матеріал поверхні — імпортований: з нього `model_material()` бере текстури.
 static func model_mesh(type_id: int, set_id: int = 0) -> ArrayMesh:
 	return _own_model(type_id, _resolved_set(type_id, set_id))
@@ -691,7 +688,7 @@ static func _own_model(type_id: int, set_id: int) -> ArrayMesh:
 	return _models[key]
 
 
-## Для тестів: лише ці сітки, решта — коробки, хай що лежить на диску. Ключ — тип (набір 0)
+## Для тестів: лише ці меші, решта — коробки, хай що лежить на диску. Ключ — тип (набір 0)
 ## або Vector2i(набір, тип).
 static func use_models(models: Dictionary) -> void:
 	reset_models()
@@ -739,13 +736,13 @@ static func _load_model(path: String) -> ArrayMesh:
 	return out
 
 
-## Копії поверхні 0 сітки `src` за перетвореннями в одну поверхню з усіма атрибутами: дотичні й
+## Копії поверхні 0 меша `src` за перетвореннями в одну поверхню з усіма атрибутами: дотичні й
 ## UV2 потрібні карті нормалей, гусеницям і колесам.
 static func _merge_model(src: Mesh, xfs: Array[Transform3D]) -> ArrayMesh:
 	return _merge_parts([[src, xfs]])
 
 
-## Те саме для кількох сіток: `parts` — пари [сітка, Array[Transform3D]]. Так відділення збирає в одну
+## Те саме для кількох мешів: `parts` — пари [меш, Array[Transform3D]]. Так відділення збирає в одну
 ## поверхню бійців із трубою й без неї (їхні GLB мають один атлас, тож і матеріал один).
 static func _merge_parts(parts: Array) -> ArrayMesh:
 	var v := PackedVector3Array()

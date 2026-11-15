@@ -6,37 +6,33 @@ A squad is four figures on fixed slots: the plain figure (<unit>, the rifle squa
 same figure with a drone launch tube on its back (each `variants` entry, e.g. assault_soldier). Both files come out of
 one run with one atlas layout, so the game draws a squad mixing them under one material. Config is the units.json
 entry's `figure` block:
-  out_dir, prefix  national set: the files go to assets/units/<out_dir>/ and `prefix` is cut off the
-    unit keys
+  out_dir, prefix  national set: the files go to assets/units/<out_dir>/ and `prefix` is cut off
+    the unit keys
   yaw       degrees about Blender Z that turn the source's chest onto +Y (glTF/Godot -Z, the front)
   crown_rim_m, crown_rim_scale  metres above which the head is drawn in towards its axis (the
     helmet's rim flare)
   crown_cap_m, crown_squash  metres of the 1.8 m figure above which the helmet is pressed down to
-    `crown_squash` of its
-            height before the fit (a night-vision mount would otherwise be the crown and set the
-              height)
+    `crown_squash` of its height before the fit (a night-vision mount would otherwise be the crown
+    and set the height)
   tris      triangle budget of one figure (four per squad, up to ~10 squads on screen)
   tex       atlas size, px; the right 1/16 is kept for flat kit colours (the tube)
-  paint     flat tones (sRGB 0..255): uniform, helmet, kit (plate carrier, pouches, pack), gun, boots, skin;
-            `kit_hue`, `kit_sat` pick the carrier out of the source colour; `gun_v` is the value
-              below which low-saturation
-            texels are the rifle; `rifle_capsule_m` picks a cloth-coloured rifle by position;
-              `head_h`, `boots_h` are heights as
-            fractions of the figure; `top_lift` multiplies (linear) the cloth tones of up-facing texels,
+  paint     flat tones (sRGB 0..255): uniform, helmet, kit (plate carrier, pouches, pack), gun,
+            boots, skin; `kit_hue`, `kit_sat` pick the carrier out of the source colour; `gun_v`
+            is the value below which low-saturation texels are the rifle; `rifle_capsule_m` picks
+            a cloth-coloured rifle by position; `head_h`, `boots_h` are heights as fractions of
+            the figure; `top_lift` multiplies (linear) the cloth tones of up-facing texels,
             `top_fade` (0..1) turns them towards grey
   variants  {<unit>: {tube: {length_m, diameter_m, bottom_m, colour, cap, shades, light}}}: a
-    cylinder strapped upright on the back,
-            real size, its side `colour`, its end caps `cap`; {<unit>: {body: {...}}}: the fallen soldier lying on his
-            side; {<unit>: {crouch: {hip_m, knee_m, thigh_deg, shin_deg}}}: the second pose,
-              crouched;
+            cylinder strapped upright on the back, real size, its side `colour`, its end caps
+            `cap`; {<unit>: {body: {...}}}: the fallen soldier lying on his side;
+            {<unit>: {crouch: {hip_m, knee_m, thigh_deg, shin_deg}}}: the second pose, crouched;
             {<unit>: {kneel: {hip_m, knee_m, front_sign, split_x_m, front, rear}}}: the same slot,
-              kneeling on one knee
+            kneeling on one knee
 `shades` multiplies the tube colour from lit to shaded and `light` (a vector in the figure's frame)
 says where the lit side is.
 `rifle_pose` {r_m, axis, at_m}: carry the rifle across the chest (a split-off, turned copy of its
-faces); `camo` {cell_px, threshold,
-depth, seed}: dark patches on the cloth; `crown_ring` [scale, rise_m]: an inset ring raised on the
-head plate; `ao_gain`: strength of the baked occlusion.
+faces); `camo` {cell_px, threshold, depth, seed}: dark patches on the cloth; `crown_ring` [scale,
+rise_m]: an inset ring raised on the head plate; `ao_gain`: strength of the baked occlusion.
 `--crude` skips the bake and paints the whole figure the uniform tone: the farthest-zoom shape test.
 
 Steps: import, yaw, scale to 1.8 m = 0.225 units with the body (not the rifle) centred on the origin and the soles on

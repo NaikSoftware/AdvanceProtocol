@@ -173,7 +173,7 @@ func _road_wheel_radius(mesh: ArrayMesh) -> float:
 
 
 ## Рядок гармат і інженерної машини (в усіх наборах) описує суцільний лафет чи корпус, а не всю
-## модель: ширина — за колесами (гармати) чи траками (машина), довжина й висота — за самою сіткою
+## модель: ширина — за колесами (гармати) чи траками (машина), довжина й висота — за самим мешем
 ## всередині сліду рядка.
 func test_rows_match_carriage_and_running_gear_in_every_set() -> void:
 	UnitSilhouettes.reset_models()
@@ -280,8 +280,7 @@ func _figure_mesh(set_id: int, slug: String) -> ArrayMesh:
 
 
 ## Кожен набір має всі шість файлів фігур і рядки відділень: без рядка модель набору не діє, і набір
-## тихо
-## стояв би в одязі набору 0.
+## тихо стояв би в одязі набору 0.
 func test_every_set_has_every_figure_file_and_spec_row() -> void:
 	for set_id in UnitSilhouettes.SET_COUNT:
 		for slug in _FIGURE_SLUGS:
@@ -306,8 +305,7 @@ func test_squad_figures_come_from_the_players_set() -> void:
 
 
 ## Справжній зріст: боєць 1,8 м (0,225 тайла) на кожному наборі, підошви на нулі, труба — як у
-## набору 0, загиблий
-## лежить нижче метра, кожна фігура вкладається в бюджет трикутників набору 0.
+## набору 0, загиблий лежить нижче метра, кожна фігура вкладається в бюджет трикутників набору 0.
 func test_figures_have_real_height_in_every_set() -> void:
 	for set_id in UnitSilhouettes.SET_COUNT:
 		var where: String = "набір %d" % set_id
@@ -380,12 +378,10 @@ func _faces_forward(toe: Vector2) -> bool:
 
 
 ## Обличчям вперед (−Z): носки обох ступнів лежать попереду щиколоток і більше вперед, ніж убік.
-## Труба для цього не
-## годиться (вона завжди ззаду, хоч би куди дивилась модель), а темні текселі гвинтівки зміщуються,
-## коли її перенесено
-## впоперек тулуба. Тут геометрія: модель, повернута на чверть оберту (±90°) чи на пів оберту,
-## носками вперед не дивиться
-## в жодному з трьох наборів (тест повертає вершини сам).
+## Труба для цього не годиться (вона завжди ззаду, хоч би куди дивилась модель), а темні текселі
+## гвинтівки зміщуються, коли її перенесено впоперек тулуба. Тут геометрія: модель, повернута на
+## чверть оберту (±90°) чи на пів оберту, носками вперед не дивиться в жодному з трьох наборів (тест
+## повертає вершини сам).
 func test_standing_figures_face_forward_in_every_set() -> void:
 	for set_id in UnitSilhouettes.SET_COUNT:
 		var verts: PackedVector3Array = _figure_mesh(set_id, "rifle_soldier").surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
@@ -397,8 +393,7 @@ func test_standing_figures_face_forward_in_every_set() -> void:
 
 
 ## Тон загиблих набору: набір 0 — як у живого (матеріал бійця без змін), набори 1 і 2 — рівно
-## добуток тону бійця на
-## `FALLEN_TINT`.
+## добуток тону бійця на `FALLEN_TINT`.
 func test_fallen_material_carries_the_sets_tint() -> void:
 	UnitSilhouettes.reset_models()
 	assert_eq(UnitSilhouettes.FALLEN_TINT.keys(), [1, 2], "відтінок мають набори 1 і 2")

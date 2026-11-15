@@ -24,8 +24,8 @@ extends Node
 ##     Лише разом із SHOT_GROUND; на River двох клітинок ріллі поруч нема, тож там 1.
 ##   SHOT_ENGINEERS=1 — замість гармат і танка інженерні машини наборів 0, 1, 2 поруч із
 ##     середнім танком; несумісна з set=N і SHOT_PAIR.
-##   SHOT_PAIR=1 — лише інженерна машина й середній танк набору N (потрібен set=N), клітинки
-##     через дві.
+##   SHOT_PAIR=1 — лише інженерна машина й середній танк набору N (потрібен set=N), клітинки через
+##     дві.
 ##   SHOT_ZOOMS=8,20 — зуми кадрів між найближчим і найдальшим (типово обидва крайні).
 ##   SHOT_NO_HP=1 — без смуг і чисел HP, щоб судити про силует.
 ## Шостий аргумент spin [set=N] ставить одну модель типу type_id нерухомо на найближчому зумі й знімає три кадри (_s0, _s1, _s2): перші два
@@ -846,9 +846,8 @@ func _gate(screen: BattleScreen, map: MapData, out: String, tag: String, type_id
 
 
 ## Пікселі пурпурової маски відділення у вікні виміру гейту: те саме вікно, що в
-## tools/unit_contrast_gate.py. Поріг —
-## 30, як у техніки там; відділення (типи 0 і 1) гейт міряє від 20, тож місце тут міняється, лише
-## коли воно нижче за 30.
+## tools/unit_contrast_gate.py. Поріг — 30, як у техніки там; відділення (типи 0 і 1) гейт міряє від
+## 20, тож місце тут міняється, лише коли воно нижче за 30.
 const GATE_MIN_PX: int = 30
 
 
@@ -1274,9 +1273,9 @@ func _bridge_seq(screen: BattleScreen, map: MapData, out: String, tag: String) -
 	get_tree().quit()
 
 
-## Шостий аргумент shore: два стрілецькі відділення на полі над водою (сусід по ребру — вода), одне з трьома стоячими,
-## друге з одним; тіла тих, хто впав, — поруч. Кадри _shore_z6 і _shore_z20: жодне тіло не заходить у воду й не
-## лягає під ноги стоячому.
+## Шостий аргумент shore: два стрілецькі відділення на полі над водою (сусід по ребру — вода), одне
+## з трьома стоячими, друге з одним; тіла тих, хто впав, — поруч. Кадри _shore_z6 і _shore_z20:
+## жодне тіло не заходить у воду й не лягає під ноги стоячому.
 func _shore(screen: BattleScreen, map: MapData, out: String, tag: String) -> void:
 	var m: MapData = map.duplicate(true)
 	m.take_over_path(map.resource_path)
@@ -1525,8 +1524,8 @@ func _fall(screen: BattleScreen, map: MapData, out: String, tag: String) -> void
 	get_tree().quit()
 
 
-## Пара для порівняння на поточному зумі: `<base>_nofade` (крони не гаснуть) і `<base>_noforest` (лісу нема);
-## потім усе як було.
+## Пара для порівняння на поточному зумі: `<base>_nofade` (крони не гаснуть) і `<base>_noforest`
+## (лісу нема); потім усе як було.
 func _ab_pair(screen: BattleScreen, shots: Dictionary, base: String) -> void:
 	var bv: BoardView = screen._board_view
 	var keep: Array[Vector2i] = bv._forest._reveal.duplicate()

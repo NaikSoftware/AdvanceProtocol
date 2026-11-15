@@ -14,7 +14,7 @@ var view: Node3D
 
 func before_each() -> void:
 	UnitView._travel_by_unit.clear()
-	# Коробки, хай що лежить в assets/units: тести моделей підставляють свою сітку самі.
+	# Коробки, хай що лежить в assets/units: тести моделей підставляють свій меш самі.
 	UnitSilhouettes.use_models({})
 	view = UnitViewScene.instantiate()
 	add_child_autofree(view)
@@ -48,7 +48,7 @@ func test_bind_picks_a_distinct_silhouette_per_class() -> void:
 	for type_id in type_ids:
 		view.bind(_unit(type_id))
 		var hull: MeshInstance3D = view.get_node("Silhouette/Hull")
-		assert_eq(hull.mesh.get_surface_count(), 1, "тіло — одна сітка")
+		assert_eq(hull.mesh.get_surface_count(), 1, "тіло — один меш")
 		seen_sizes[UnitSilhouettes.spec(type_id).hull] = true
 	assert_eq(seen_sizes.size(), type_ids.size(), "кожен клас мусить мати власний, ні на який інший не схожий силует")
 
@@ -214,7 +214,7 @@ func test_squad_contact_shadow_goes_with_the_squad() -> void:
 	assert_false(contacts.is_shown(0))
 
 
-## Пляма їде за юнітом: позицію вузла твін міняє щокадру, а пляма — спільна, тож її сітка
+## Пляма їде за юнітом: позицію вузла твін міняє щокадру, а пляма — спільна, тож її меш
 ## синхронізується окремо (UnitContacts._process).
 func test_contact_shadow_follows_the_unit_and_dies_with_its_node() -> void:
 	WeatherRig.unit_contact = 0.6
@@ -644,7 +644,7 @@ func test_crosshair_texture_is_a_ring_not_a_blob() -> void:
 	assert_true(opaque < total / 2, "і не мусить бути залитим квадратом")
 
 
-## Кольори вершин сітки тіла: колір власника живе в них, а не в спільному матеріалі.
+## Кольори вершин меша тіла: колір власника живе в них, а не в спільному матеріалі.
 func _hull_colors() -> PackedColorArray:
 	return (view.get_node("Silhouette/Hull") as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
 
@@ -843,7 +843,7 @@ func _figures_in_mesh() -> int:
 func test_squad_shows_one_standing_figure_per_quarter_of_hp() -> void:
 	view.bind(_unit(0))
 	assert_eq(UnitView.SQUAD_FIGURES, 4)
-	assert_eq(view.get_node("Silhouette").get_child_count(), 1, "тіло — одна сітка")
+	assert_eq(view.get_node("Silhouette").get_child_count(), 1, "тіло — один меш")
 	var cases: Dictionary = {100: 4, 76: 4, 75: 3, 74: 3, 50: 2, 26: 2, 25: 1, 1: 1, 0: 0}
 	for hp: int in cases:
 		view.set_hp(hp, 100)
@@ -952,7 +952,7 @@ func test_views_of_same_owner_share_textures_and_materials() -> void:
 	assert_same(view._crosshair.texture, other._crosshair.texture)
 	assert_same(view._hp_bar.texture, other._hp_bar.texture)
 	assert_same(view._hull_material, other._hull_material)
-	assert_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "той самий власник — та сама сітка")
+	assert_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "той самий власник — той самий меш")
 	other.bind(_unit(5, 1))
 	assert_same(view.get_node("Silhouette/Hull").mesh, other.get_node("Silhouette/Hull").mesh, "інший власник — те саме тіло")
 	other.set_hp(400, 400)
@@ -1480,7 +1480,7 @@ func test_walking_advances_travel_on_a_model_body() -> void:
 	UnitView._travel_by_unit.clear()
 
 
-## Моделі одного типу в різних власників — та сама сітка й той самий матеріал: юніт лишається
+## Моделі одного типу в різних власників — той самий меш й той самий матеріал: юніт лишається
 ## одним викликом малювання, а власника видно лише по смузі HP.
 func test_model_bodies_share_mesh_and_material_across_owners() -> void:
 	UnitSilhouettes.use_models({5: UnitModelFixture.vehicle(5)})

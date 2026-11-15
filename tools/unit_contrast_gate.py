@@ -48,9 +48,8 @@ GATE = 14.5          # the top median; 14.5 passes (section 5)
 WARN_BODY = 15.0
 MIN_BODY_PX = 30
 # A squad of slim figures (types 0 and 1) is 31-44 px at the farthest scale, so a place that lands
-# on 27-29 px by sub-pixel
-# position is still a measurement: the median of the brighter half of 20 pixels. The vehicle floor
-# stays 30.
+# on 27-29 px by sub-pixel position is still a measurement: the median of the brighter half of 20
+# pixels. The vehicle floor stays 30.
 MIN_SQUAD_PX = 20
 SQUAD_TYPES = (0, 1)
 floor_px = MIN_BODY_PX
