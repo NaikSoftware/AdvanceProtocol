@@ -37,22 +37,23 @@ def load(name, seed=True):
     cfg.setdefault("out", name)  # path under assets/units/ without .glb; sets write set2/<slug>
     cfg["source"] = os.path.expanduser(cfg["source"])
     if cfg["fwd"] in ("-y", "-x"):
-        # a source whose nose points to -Y (-X) is turned half a turn about Z by prep.py, after which every number is in "y" ("x")
+        # a source whose nose points to -Y (-X) is turned half a turn about Z by prep.py, after
+        # which every number is in "y" ("x")
         cfg["fwd"], cfg["rot180"] = cfg["fwd"][1], True
     cfg["spec"] = spec(cfg["type_id"])
     row = set_row(cfg)
     if row:
-        # the model is still fitted into the role's box (hull x, z); cfg["spec"] then takes the gun length, the hull
-        # height and bore height (a row `bore` wins over the hull-derived one) and the wheel
-        # radius from the set's own row. The row stays
-        # the one place the game reads; verify_glb.py checks the built model against it
+        # the model is still fitted into the role's box (hull x, z); cfg["spec"] then takes the
+        # gun length, the hull height and bore height (a row `bore` wins over the hull-derived
+        # one) and the wheel radius from the set's own row. The row stays the one place the game
+        # reads; verify_glb.py checks the built model against it
         cfg["spec"] = {"hull": [cfg["spec"]["hull"][0], row["hull"][1], cfg["spec"]["hull"][2]],
                        "barrel": row["barrel"], "wheel": row["wheel"], "bore": row["bore"]}
     lo, hi = cfg["hull_long"]
     sx, sz = cfg["spec"]["hull"][0], cfg.get("fit_z", cfg["spec"]["hull"][2])   # fit_z: a shorter hull than the role's box
-    # Uniform fit: the tighter of hull width and hull length governs.
-    # `k` in the config fixes the scale outright: a towed gun or a vehicle with a plough is fitted by its real size, while
-    # its row describes only the solid body (carriage, hull), which is smaller than the model
+    # Uniform fit: the tighter of hull width and hull length governs. `k` in the config fixes the
+    # scale outright: a towed gun or a vehicle with a plough is fitted by its real size, while its
+    # row describes only the solid body (carriage, hull), which is smaller than the model
     cfg["k"] = cfg.get("k") or min(sx / (2.0 * cfg["hull_lat"]), sz / (hi - lo))
     cfg["long_c"] = 0.5 * (lo + hi)
     t = cfg.get("turret")
@@ -73,8 +74,8 @@ def load(name, seed=True):
     cfg["work"] = os.path.join(SCRATCH, name)
     old = os.path.join(SHARED, name)
     if seed and not os.path.isdir(cfg["work"]) and os.path.isfile(os.path.join(old, "maps.npz")):
-        # a fresh worktree starts from the old shared bake, not from prep; copied beside the target and renamed,
-        # so a stopped copy never leaves a half-seeded directory behind
+        # a fresh worktree starts from the old shared bake, not from prep; copied beside the
+        # target and renamed, so a stopped copy never leaves a half-seeded directory behind
         tmp = "%s.tmp%d" % (cfg["work"], os.getpid())
         os.makedirs(os.path.dirname(cfg["work"]), exist_ok=True)
         shutil.copytree(old, tmp)

@@ -68,10 +68,9 @@ print(f"     hull X {hx:.4f} (spec {spec['hull'][0]}), Z {hz:.4f} (spec {spec['h
       f"height {pos[:, 1].max():.4f}, centre x {cxz[0]:+.4f} z {cxz[1]:+.4f}")
 if cfg.get("whole_model"):
     # the row describes the solid carriage or hull, not the whole model (trails, barrel, plough):
-    # the box is then
-    # compared with the model's wheels, tracks and carriage by
-    # test_rows_match_carriage_and_running_gear_in_every_set in
-    # tests/game/test_unit_sets.gd, and the muzzle and wheels below still hold
+    # the box is then compared with the model's wheels, tracks and carriage by
+    # test_rows_match_carriage_and_running_gear_in_every_set in tests/game/test_unit_sets.gd, and
+    # the muzzle and wheels below still hold
     whole = pos[:, 0].max() - pos[:, 0].min(), pos[:, 2].max() - pos[:, 2].min()
     print(f"     whole model X {whole[0]:.4f} Z {whole[1]:.4f} (z {pos[:, 2].min():+.4f}..{pos[:, 2].max():+.4f}); row hull {spec['hull'][0]} x {spec['hull'][2]}")
 else:
@@ -97,8 +96,9 @@ row = lib.set_row(cfg)
 if cfg.get("out", "").startswith("set"):
     check(row is not None, "a set model has its _SET_SPECS row")
 if row:
-    # the game reads the set's row for this model: it must describe the model as built
-    # a whole-model row is the carriage or hull alone: tests/game/test_unit_sets.gd compares it with the wheels and tracks
+    # the game reads the set's row for this model: it must describe the model as built a whole-
+    # model row is the carriage or hull alone: tests/game/test_unit_sets.gd compares it with the
+    # wheels and tracks
     if not cfg.get("whole_model"):
         check(abs(hx - row["hull"][0]) <= 0.002 and abs(hz - row["hull"][2]) <= 0.002, f"_SET_SPECS hull {row['hull'][0]} x {row['hull'][2]} matches the model ({hx:.4f} x {hz:.4f})")
     # a raised barrel carries its measured bore height

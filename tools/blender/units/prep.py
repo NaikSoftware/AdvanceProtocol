@@ -160,6 +160,38 @@ def src_edit():
         bm.to_mesh(me); bm.free(); me.update()
         print(f"PREP delete_boxes: {int(kill.sum())} faces dropped")
         co = verts(me)
+    if cfg.get("mirror"):
+        # `mirror` {box [l0, l1, a0, a1, h0, h1], keep +-1}: the faces whose centre lies in `box` (|lateral| a0..a1,
+        # on the `keep` side of the centreline) are copied to the other side and the faces already there are
+        # dropped. A generated source seldom splays its two stabiliser legs alike; one good leg is mirrored
+        mb = cfg["mirror"]; l0, l1, a0, a1, h0, h1 = mb["box"]; ks = mb["keep"]
+        li = 1 if cfg["fwd"] == "x" else 0
+        n = len(me.polygons)
+        c = np.empty(n * 3); me.polygons.foreach_get("center", c); c = c.reshape(-1, 3)
+        Lc = c[:, 0] if cfg["fwd"] == "x" else c[:, 1]
+        Hc = c[:, 2] - zmin
+        inb = (Lc >= l0) & (Lc <= l1) & (Hc >= h0) & (Hc <= h1)
+        keep = inb & (ks * c[:, li] >= a0) & (ks * c[:, li] <= a1)
+        drop = inb & (ks * c[:, li] <= -a0) & (ks * c[:, li] >= -a1)
+        bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+        uvl = bm.loops.layers.uv.active
+        copies = []
+        for i in np.nonzero(keep)[0]:
+            f = bm.faces[i]
+            vs = []
+            for v in f.verts:
+                q = v.co.copy(); q[li] = -q[li]
+                vs.append(bm.verts.new(q))
+            uvs = [lp[uvl].uv.copy() for lp in f.loops]
+            copies.append((vs[::-1], uvs[::-1]))
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i in np.nonzero(drop)[0]], context='FACES')
+        for vs, uvs in copies:
+            nf = bm.faces.new(vs)
+            for lp, uv in zip(nf.loops, uvs):
+                lp[uvl].uv = uv
+        bm.to_mesh(me); bm.free(); me.update()
+        print(f"PREP mirror: {int(keep.sum())} faces copied, {int(drop.sum())} dropped")
+        co = verts(me)
     if not cfg.get("add_boxes") and not cfg.get("add_cyls") and not cfg.get("add_discs"):
         return
     from mathutils.kdtree import KDTree
@@ -233,10 +265,11 @@ if cfg.get("plough"):
     co[m, 1 if cfg["fwd"] == "x" else 0] *= plk
     me.vertices.foreach_set("co", co.ravel()); me.update()
 if cfg.get("reach"):
-    # `reach` [from_long, to_long, shift], or a list of such triples applied one after another (each in the
-    # coordinates the previous one left): the stretch of the source between the two long coordinates is
-    # pulled out by `shift` (a negative one squeezes it) and everything ahead of it moves rigidly. A hull
-    # gets its real length, push arms their real reach, and the plough keeps its shape
+    # `reach` [from_long, to_long, shift], or a list of such triples applied one after another
+    # (each in the coordinates the previous one left): the stretch of the source between the two
+    # long coordinates is pulled out by `shift` (a negative one squeezes it) and everything ahead
+    # of it moves rigidly. A hull gets its real length, push arms their real reach, and the plough
+    # keeps its shape
     triples = cfg["reach"] if isinstance(cfg["reach"][0], list) else [cfg["reach"]]
     li = 0 if cfg["fwd"] == "x" else 1
     for r0, r1, rs in triples:
